@@ -140,6 +140,12 @@ No space appears more than once on the list.
 <<components of [[t]]>>=
 spaces:          Space.t list;
 @
+The [[reg_ix_map]] tells us how many ($n$) fixed and hardware registers are in the
+target machine and provides a mapping from these registers to integers from
+$[0..n-1]$.
+<<components of [[t]]>>=
+reg_ix_map :     int * int Register.Map.t;
+@
 Variable placers may or may not need to distinguish between integer
 and address spaces, depending on this flag.
 <<components of [[t]]>>=
@@ -226,7 +232,7 @@ named_locs:    Rtl.loc Strutil.Map.t;
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Temporaries, Register Allocation}
+\subsection{Temporaries, Register indices, and Register Allocation}
 % ------------------------------------------------------------------ 
 
 The register allocator (see \module{colorgraph.nw}) needs
@@ -245,6 +251,14 @@ val fits:    ('au, 'cc) t -> Rtl.space -> Register.t -> bool
 \item [[is_tmp t sp]] is true, if [[sp]] denotes a {\rtl} space that
       holds temporaries.  It should be partially applied for efficiency.
 \end{itemize}
+@
+We need to map hardware registers to small integers.
+The registers in fixed and hardware spaces are sorted in increasing alphanumeric order,
+first by the space identifier, then by index within the space.
+The sorted list of $n$ registers is then mapped to the integers $[0 ... n-1]$.
+The first element of the pair is the number $n$ of registers.
+<<exported functions>>=
+val mk_reg_ix_map : Space.t list -> (int * int Register.Map.t)
 @
 When the register allocator (see ~module{linscan}) must spill, it has to
 create {\rtl}s that move values from registers to memory (spill) and
@@ -306,6 +320,23 @@ let is_tmp { spaces = spaces } =
     spaces
     (fun _ -> false)
 @ 
+Given a list of spaces, it is quite easy to map the fixed or hardware registers
+to small integers.
+<<target.ml>>=
+let mk_reg_ix_map spaces =
+  let space_to_regs space =
+    let rec list_to n =
+      if n <= 0 then [0]
+      else n :: list_to (n-1) in
+    List.map (fun i -> (space.S.space, i, space.S.cellwidth))
+             (list_to (match space.S.indexlimit with
+                       | Some l -> l
+                       | None   -> 1 lsl space.S.indexwidth)) in
+  let regspaces = List.filter (fun s -> s.S.classification = S.Reg ||
+                                        s.S.classification = S.Fixed)
+                              spaces in
+  Register.reg_int_map (List.concat (List.map space_to_regs regspaces))
+@
 <<target.ml>>=
 let space_fits tmp =
   match tmp.Space.classification with
