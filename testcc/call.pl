@@ -288,7 +288,7 @@ while (defined($sig=<STDIN>)) {
        }     
     }
     # use arg list to emit C-- 
-    my $cmm = sprintf "%s-main-%03d.c--", $name, $i;
+    my $cmm = sprintf "%s-mn-%03d.c--", $name, $i;
     my $cee = sprintf "%s-callee-%03d.c", $name, $i;
     $i++;
 
