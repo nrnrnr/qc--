@@ -22,6 +22,7 @@ val cfg2ast: ('i -> Ast.stmt) -> 'i Cfgx.M.t -> name:string -> Ast.proc
 val emit  :   'i Cfgx.M.t -> ('i -> unit) -> (string -> unit) -> unit
 val delete :  'i Cfgx.M.t -> 'i Cfgx.M.node -> unit
   (* unsplice and delete a node *)
+val print_cfg : Rtl.rtl Cfgx.M.t -> unit
 @
 WHAT DO [[cfg2ast]] AND [[emit]] DO? PLEASE EXPLAIN THE PARAMETERS. --CL
 
@@ -99,7 +100,7 @@ let cfg2dot ~compress ~live ~name g =
   let edge_fwd from to' =
     let edge = nodename from ^ " -> " ^ nodename to' in
     if live then
-      edge ^ "[label=\"" ^ Register.Set.to_string (L.live_in to') ^ "\"]\n"
+      edge ^ "[label=\"" ^ Register.SetX.to_string (L.live_in to') ^ "\"]\n"
     else
       edge ^ "\n" in
   let edge_bwd from to' = nodename to'  ^ " -> " ^ nodename from ^
@@ -153,3 +154,10 @@ let delete g n =
   G.set_succ n ~succ:(G.illegal g);
   G.set_succ pred ~succ;
   G.delete g n
+@
+<<cfgutil.ml>>=
+let print_cfg cfg =
+  let () = Printf.eprintf "\n\n\nBEGIN CFG\n" in
+  let () = G.iter_nodes (fun n -> Printf.eprintf "%s\n" (G.print_node n)) cfg in
+  let () = Printf.eprintf "END CFG\n" in
+  flush stderr

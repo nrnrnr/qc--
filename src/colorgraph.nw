@@ -1094,7 +1094,7 @@ values.  The first component $r$ is true iff [[loc]] is read by
 let reads_writes rtl loc =
 	let read  reg (r,w) = (r || loc = reg, w) in
 	let write reg (r,w) = (r, w || loc = reg) in
-	Rtlutil.ReadWrite.fold ~read ~write rtl (false,false)
+	Rtlutil.ReadWrite.fold_promote ~read ~write rtl (false,false)
 @
 
 The heart of the spiller is [[update]] that is applied to every
@@ -1223,8 +1223,10 @@ let listMapAdd value key listMap =
 \subsection{Lua registration}
 
 <<colorgraph.ml>>=
-module RM = Register.Map
-module RS = Register.Set
+module R   = Register
+module RM  = R.Map
+module RS  = R.Set
+module RSX = R.SetX
 let ( ++ ) = RS.union 
 <<imperative lists>>
 module type GRAPH = sig
@@ -1281,19 +1283,21 @@ module NewG : GRAPH with type node = Rtl.rtl Cfgx.M.node
   let fold_nodes = G.fold_nodes
   let eq = G.eq
 
-  let irwk = Rtlutil.ReadWriteKill.sets
+  let irwk = Rtlutil.ReadWriteKill.sets_promote
   let defs node =
     let defs = match G.to_instr node with
     | None   -> RS.empty
     | Some i -> let uses, defs, kills = irwk i in defs ++ kills in
-    G.union_over_outedges node (fun n -> defs)
-      (fun {G.node = n'; G.defs = d; G.kills = k} -> defs ++ d ++ k)
+    R.promote_rxset
+      (G.union_over_outedges node (fun n -> R.rset_to_rxset defs)
+          (fun {G.node = n'; G.defs = d; G.kills = k} ->
+			       (R.rset_to_rxset (defs ++ d ++ k))))
       
   let uses node =
     let uses = match G.to_instr node with
     | None   -> RS.empty
     | Some i -> let uses, defs, kills = irwk i in uses in
-    G.add_inedge_uses node uses
+    R.promote_rxset (G.add_inedge_uses node (R.rset_to_rxset uses))
     
   let upd_instr n f = G.update_instr f n
   let is_call n = G.kind n = G.Call
@@ -1313,7 +1317,7 @@ end
 module NewL : LIVENESS with type node = NewG.node = struct
   module G = Cfgx.M
   type node = Rtl.rtl G.node
-  let live_out = Cfgx.Live.live_out
+  let live_out n = R.promote_rxset (Cfgx.Live.live_out n)
 end
 <<colorgraph.ml>>=
 module type PROC = sig

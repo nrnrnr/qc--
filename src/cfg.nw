@@ -327,7 +327,8 @@ module type S = sig
   type 'i cfg
   type 'i t = 'i cfg
   type 'i node
-  type regs = Register.Set.t (* sets of regs for dataflow *)
+  type regs  = Register.Set.t  (* sets of regs for dataflow *)
+  type xregs = Register.SetX.t (* sets of regs for dataflow *)
   type 'i contedge = { kills:regs; defs:regs; node:'i node }
   type kind = (* all the kinds of nodes *)
     | Join | Instruction | StackAdjust | Branch | Cbranch | Mbranch
@@ -499,8 +500,8 @@ inedges of a join point.
 In the common case, it returns its second argument.
 <<graph and node observers>>=
 val union_over_outedges : 
-  'i node -> noflow:('i node -> regs) -> flow:('i contedge -> regs) -> regs
-val add_inedge_uses  : 'i node -> regs -> regs
+  'i node -> noflow:('i node -> xregs) -> flow:('i contedge -> xregs) -> xregs
+val add_inedge_uses  : 'i node -> xregs -> xregs
 @
 We may want to print a node for debugging purposes.
 <<graph and node observers>>=
@@ -661,11 +662,14 @@ val illegal      : 'i cfg -> 'i node  (* a node that must never be reached *)
 <<cfg.ml>>=
 <<exported signatures>>
 module Make (X:X) : S with module X = X = struct
-  module RS = Register.Set
-  module SM = Strutil.Map
-  module X  = X
+  module R   = Register
+  module RS  = R.Set
+  module RSX = R.SetX
+  module SM  = Strutil.Map
+  module X   = X
 
-  type regs = Register.Set.t (* sets of regs for dataflow *)
+  type regs  = Register.Set.t  (* sets of regs for dataflow *)
+  type xregs = Register.SetX.t (* sets of regs for dataflow *)
   type label = string
   type label_supply = string -> label
   type 'i instruction_info = { goto    : (label, 'i) Ep.map
@@ -1229,16 +1233,16 @@ ACTION, WHICH IS WHY THE LIVE SETS MAKE SENSE ON THE EDGES.
 <<graph and node observers implementation>>=
 (* should this fn be defined on exi and ill?
    when there are cont edges, do we still need to cover the regular edges?*)
-let (++) = RS.union
+let (++) = RSX.union
 let union_over_outedges node ~noflow ~flow =
   let union_contedges ce =
-    Array.fold_left (fun r s -> r ++ flow s) RS.empty ce in
+    Array.fold_left (fun r s -> r ++ flow s) RSX.empty ce in
   match node with
   | Cal c -> union_contedges c.cal_contedges
   | Cut c -> union_contedges c.cut_contedges
   | Cbr c -> noflow c.cbr_true ++ noflow c.cbr_false
   | Imp i -> noflow i.imp_succ ++ noflow i.imp_exit_succ
-  | Mbr m -> Array.fold_right (fun s -> (++) (noflow s)) m.mbr_succs RS.empty
+  | Mbr m -> Array.fold_right (fun s -> (++) (noflow s)) m.mbr_succs RSX.empty
   | Ins i -> noflow i.ins_succ
   | Sta i -> noflow i.sta_succ
   | Ass a -> noflow a.ass_succ
@@ -1247,15 +1251,15 @@ let union_over_outedges node ~noflow ~flow =
   | Ret r -> noflow r.ret_succ
   | Ent e -> noflow e.ent_succ
   | Joi j -> noflow j.joi_succ
-  | Exi e -> RS.empty
-  | Ill i -> RS.empty
+  | Exi e -> RSX.empty
+  | Ill i -> RSX.empty
   | Boot  -> imposs "union_over_outedges undefined on boot nodes"
   
 let add_inedge_uses node regs = match node with
-  | Cal c -> regs ++ c.cal_uses
-  | Cut c -> regs ++ c.cut_uses
-  | Jum j -> regs ++ j.jum_uses
-  | Ret r -> regs ++ r.ret_uses
+  | Cal c -> regs ++ R.rset_to_rxset c.cal_uses
+  | Cut c -> regs ++ R.rset_to_rxset c.cut_uses
+  | Jum j -> regs ++ R.rset_to_rxset j.jum_uses
+  | Ret r -> regs ++ R.rset_to_rxset r.ret_uses
   | _     -> regs
 @ 
 Although only internally visible, teh [[remove_pred]] function is vital.

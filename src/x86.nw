@@ -183,19 +183,29 @@ let espreg = ('r', 4, 32)
 let upint32 n = Up.const (RP.Bits(Bits.U.of_int n 32))
 let upint8  n = Up.const (RP.Bits(Bits.U.of_int n 8))
 
-let insert16 dst src =
-  R.app (R.opr "bitInsert" [32; 16]) [upint32 0; dst; src]
-let store16 loc v =
-  R.store loc (insert16 (R.fetch loc 32) v) 32
+  (*
 let bitExtract lsb src w =
   R.app (R.opr "bitExtract" [32; w]) [upint32 lsb; src]
 
+let insert16 dst src =
+  Printf.eprintf "insert16 called\n";
+  R.app (R.opr "bitInsert" [32; 16]) [upint32 0; dst; src]
+let store16 loc v =
+  R.store loc (insert16 (R.fetch loc 32) v) 32
+
 let insert_h dst src =
+  Printf.eprintf "insert_h called\n";
   R.app (R.opr "bitInsert" [32; 8]) [upint32 8; dst; src]
 let store_h loc v =
   R.store loc (insert_h (R.fetch loc 32) v) 32
+  *)
 
-let ah_val = bitExtract 8 (R.fetch eax 32) 8
+let bitExtract lsb src w = R.fetch (R.slice w ~lsb src) w
+let store16 loc v = R.store (R.slice 16 ~lsb:0 loc) v 16
+let store_h loc v = R.store (R.slice 8  ~lsb:8 loc) v 8
+
+(*let ah_val = bitExtract 8 (R.fetch eax 32) 8*)
+let ah_val = bitExtract 8 eax 8
 @ 
 Here are some invented operators that hide the real truth about what
 happens to the flags.
@@ -319,7 +329,7 @@ well as the expression representation of the register pair.
 I have tried to make [[regpairv]] fairly general; we won't know if this is a success
 until we try it with other versions of the x86 divide instruction.
 <<x86 postexpander>>=
-| ("div" | "quot" | "rem") as opname ->  (* cheat until all can get it right *)
+| ("div" |"divu" | "quot" | "modu" | "rem") as opname ->  (* cheat until all can get it right *)
     let regpairv w hreg lreg =
       let rval      r = R.fetch (temploc r) w in
       let sxreg     l = R.app (R.opr "sx" [w; w*2]) [rval l] in
@@ -339,7 +349,7 @@ until we try it with other versions of the x86 divide instruction.
     let div = exp_with_flags divflags eax_reg
                              (R.app (R.opr "div" [32;32]) [regpair; tempval y])
                              regpair (tempval y) 32 in
-    let answer = if opname = "rem" then edx_reg else eax_reg in
+    let answer = if opname = "rem" || opname = "modu" then edx_reg else eax_reg in
     move_rtl x answer :: div :: is @ move_rtl eax_reg x :: move
 @ 
 I don't know why it's safe to clobber ECX here.
@@ -588,7 +598,10 @@ let stack_op op = match opclass op with
     | _ -> argvals in
     let result = R.app (Up.opr op) argvals in
     let next_st = stadd (depth-1) in
-    [R.par [ R.store (freg_at next_st) result 80; R.store st next_st 3]]
+    if depth = 1 then
+      [ R.store (freg_at next_st) result 80; R.store st next_st 3]
+    else
+      [R.par [ R.store (freg_at next_st) result 80; R.store st next_st 3]]
 @ 
 The machine from hell:
 \begin{itemize}
@@ -661,7 +674,7 @@ let bc_stack op ~tgt = match op with
         [bc_x86 (fpcmpopr opname) tgt; xor_with_eq_pat; clear_extra; fstsw; setcc]
     | _ ->
         let sahf  = R.store eflags (R.app (R.opr "x86_ah2flags" [])
-                                      [bitExtract 8 (R.fetch eax 32) 8]) 16 in
+                                      [bitExtract 8 eax 8]) 16 in
         [bc_x86 (fpcmpopr opname) tgt; sahf; fstsw; setcc])
 | _ ->
     Impossible.impossible "strange operator in x86 bc_stack"

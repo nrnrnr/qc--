@@ -53,8 +53,9 @@ and some type declarations.
 The utilities are largely uninteresting, so we leave their exposition until
 later.
 <<dls type declarations and utilities>>=
-type reg  = Register.t
-type temp = Register.t
+module R  = Register
+type reg  = R.t
+type temp = R.t
 module RP = Rtl.Private
 module RU = Rtlutil
 module G = Cfgx.M
@@ -63,8 +64,8 @@ module IS = Set.Make (IntMod)
 module IM = Map.Make (IntMod)
 module NodeMod = struct type t = Rtl.rtl G.node let compare = compare end
 module NM = Map.Make (NodeMod)
-module RM = Register.Map
-module RS = Register.Set
+module RM = R.Map
+module RS = R.Set
 
 <<register utilities>>
 <<varmap module type>>
@@ -224,10 +225,10 @@ Otherwise, the availability of registers depends on whether they have been assig
 temps (as shown by the variable map).
 <<varmap module>>=
   let classify_inregs target allregs (vm, _) node =
-    let defs          = defs node                                in
-    let uses          = uses node                                in
-    let live_in       = Cfgx.Live.live_in  node                  in
-    let live_out      = Cfgx.Live.live_out node                  in
+    let defs          = defs node                                                  in
+    let uses          = uses node                                                  in
+    let live_in       = get_live_in  node                                          in
+    let live_out      = get_live_out node                                          in
 
     let used_hw_regset       = get_hw_regs target (defs ++ live_in ++ live_out)    in
     let (used_hw_regs, regs) = part (fun r -> RS.mem r used_hw_regset) allregs     in
@@ -247,8 +248,8 @@ DOCO PAUSE HERE
   let classify_outregs target allregs (vm, _) node =
     let defs          = defs node                                in
     let uses          = uses node                                in
-    let live_in       = Cfgx.Live.live_in  node                  in
-    let live_out      = Cfgx.Live.live_out node                  in
+    let live_in       = get_live_in  node                                          in
+    let live_out      = get_live_out node                                          in
 
     let used_hw_regs    = get_hw_regs target (defs ++ live_out)       in
     let regs       = diff allregs used_hw_regs                        in
@@ -446,10 +447,10 @@ We begin by gathering some useful information about registers
 at the node.
 <<choose\_varMaps finds varIn and varOut maps for a node>>=
 let choose_varMaps state prefs node preds succs =
-  let defs              = defs node               in
-  let uses              = uses node               in
-  let live_in           = Cfgx.Live.live_in  node in
-  let live_out          = Cfgx.Live.live_out node in
+  let defs              = defs node                            in
+  let uses              = uses node                            in
+  let live_in           = get_live_in  node                    in
+  let live_out          = get_live_out node                    in
   let temp_uses,hw_uses = partition_regs target uses           in
   let temp_defs,hw_defs = partition_regs target defs           in
 
@@ -744,19 +745,24 @@ let get_copy_regs node =
        | _                       -> None)
     | None   -> None
 let ( ++ ) = RS.union 
-let irwk = Rtlutil.ReadWriteKill.sets
+let irwk = Rtlutil.ReadWriteKill.sets_promote
 let defs node =
   let defs = match G.to_instr node with
-    | None   -> RS.empty
-    | Some i -> let uses, defs, kills = irwk i in defs ++ kills in
-  G.union_over_outedges node (fun n -> defs)
-    (fun {G.defs = d; G.kills = k} -> defs ++ d ++ k)
+  | None   -> RS.empty
+  | Some i -> let uses, defs, kills = irwk i in defs ++ kills in
+  R.promote_rxset
+    (G.union_over_outedges node (fun n -> R.rset_to_rxset defs)
+        (fun {G.node = n'; G.defs = d; G.kills = k} ->
+           (R.rset_to_rxset (defs ++ d ++ k))))
+    
 let uses node =
-  let uses =
-    match G.to_instr node with
-    | None   -> RS.empty
-    | Some i -> let uses, defs, kills = irwk i in uses in
-  G.add_inedge_uses node uses
+  let uses = match G.to_instr node with
+  | None   -> RS.empty
+  | Some i -> let uses, defs, kills = irwk i in uses in
+  R.promote_rxset (G.add_inedge_uses node (R.rset_to_rxset uses))
+
+let get_live_in  n = R.promote_rxset (Cfgx.Live.live_in  n)
+let get_live_out n = R.promote_rxset (Cfgx.Live.live_out n)
 @
 <<utilities>>=
 let null = function [] -> true | _ -> false

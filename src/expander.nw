@@ -278,7 +278,7 @@ val pc_rhs : Rtl.loc                    (* program counter as captured by call *
 To create control flow, the postexpander must provide an RTL that
 includes an assignment to [[pc_lhs]].
 This RTL must be the last in the execution sequence (and therefore the
-head of the list that is returned.
+head of the list that is returned).
 We can branch to a temporary drawn from [[acontext]] or to a constant. 
 <<generic expansion operations for register machines>>=
 val br : tgt:temp -> rtl list               (* branch register *)
@@ -788,6 +788,7 @@ This fact is documented in the postexpander interface.
     let a, is = address room addr in
     assert (agg = Post.byte_order);
     temp_in_context t context (is @@ to_segment (Post.zxload t a n (upassn assn)))
+@
 <<cases for sign extending or zero extending a temporary>>=
 | RP.App (("sx", [n; w]), [RP.App(("lobits", [w'; n']), [x])]) when w = w' ->
     if n <> n' then Impossible.impossible "ill-typed %sx(%lobits(...))";
@@ -860,7 +861,10 @@ and to_stack' room e =
   if room < 1 then
     Impossible.impossible "machine stack overflow in code generation";
   if Rtlutil.Width.exp' e <> Post.stack_width then
-    Unsupported.stack_width ~have:(Rtlutil.Width.exp' e) ~want:Post.stack_width; (* START HERE *)
+     (Printf.eprintf "failing expression: %s\n" (Rtlutil.ToReadableString.exp
+                                                  (Rtl.Up.exp e));
+         Unsupported.stack_width ~have:(Rtlutil.Width.exp' e)
+         ~want:Post.stack_width);
   match e with
   | RP.Const k ->
       to_segment (Post.pushk k)
@@ -883,6 +887,10 @@ and to_stack' room e =
       let slot = exchange_slot iw in
       assign_slot room slot e iw @@
       to_stack room (RP.App (i2f, [fetch_slot slot iw; rm]))
+  | RP.App (("f2f", [w; _] as f2f), [e; rm]) ->
+      let slot = exchange_slot w in
+      assign_slot room slot e w @@
+      to_stack room (RP.App (f2f, [fetch_slot slot w; rm]))
   | RP.App (op, args) ->
       begin
         match Post.opclass op with
@@ -1328,9 +1336,7 @@ let cfg _ ({Proc.cfg = cfg} as proc) =
           ; G.set_succ  pred (expand_cbranch i (G.tsucc n) (G.fsucc n))
           ; modified := true
           )
-        | _ -> 
-          let ((xi,xf) as x) = expand_rtl i in
-          modified := replace_node n (expand_rtl i) in
+        | _ -> modified := replace_node n (expand_rtl i) in
 
   G.iter_nodes expand_node proc.Proc.cfg;
   !modified

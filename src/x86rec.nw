@@ -215,6 +215,7 @@ We've omitted the indexed modes, which use two registers.
 regl : Reg('r', n, w) {: regname w n :}
 regabcdl : Reg('r', n, w) [{: guard (n < 4) :}] {: regname w n :}
 regl8: Reg('r', n, w) {: regname 8 n :}
+regl8H  : Slice(w, i:n, regabcdl) [{: guard (w=8 && i=8) :}] {: hregname regabcdl :}
 regl_ecx: Reg('r', n, rw:w) [{: guard (n=1) :}] {: () :}
 regpairl : RegPair(reg1:regl,reg2:regl) {: reg2 :}
 meml : Mem(reg,  w)   {: "(" ^ reg ^ ")" :}  -- indir
@@ -235,6 +236,7 @@ reg     : Fetch(regl    , w) {: regl     :}
 regabcd : Fetch(regabcdl, w) {: regabcdl :}
 reg8    : Lobits(Fetch(regl8, w), nw:w) [{: guard (nw=8) :}] {: regl8     :}
 reg8H   : BitExtract(eight, regabcd, w) [{: guard (w=8) :}] {: hregname regabcd :}
+reg8H   : Fetch(regl8H, w) {: regl8H :}
 reg_cl  : Lobits(Fetch(regl_ecx, w), nw:w) [{: guard (nw=8) :}] {: () :}
 regpair : Fetch(regpairl, w) {: regpairl :}
 mem     : Fetch(meml    , w) {: meml     :}
@@ -352,6 +354,8 @@ inst : Setflags(X86_subflags(l:eaddr, r:reg))
 inst : Setflags(X86_subflags(l:reg, r:eaddr))
   {: cat ["cmp"; suffix 32; " "; r; ","; l] :} -- POSSIBLE BUG IN WIDTH
 
+inst : UnaryInPlace(dst:regl, "com", w) {: cat ["not"; suffix w; " "; dst] :} 
+
 inst : Withlflags(dst:eaddrl, logical:string, src:reg, w, "x86_logicflags")
   [{: match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]
   {: cat [logical; suffix w; " "; src; ","; dst] :}
@@ -359,6 +363,10 @@ inst : Withlflags(dst:eaddrl, logical:string, src:reg, w, "x86_logicflags")
 inst : Withlflags(dst:regl, logical:string, src:eaddr, w, "x86_logicflags")
   [{: match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]
   {: cat [logical; suffix w; " "; src; ","; dst] :}
+
+inst : Withlflags(dst:regl8H, logical:string, src:const8, w, "x86_logicflags")
+  [{: (guard (w=8)) + match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]
+  {: sprintf "%s%s %s,%s" logical (suffix 8)  src dst :}
 
 inst : Withlflags8H(dst:regabcdl, logical:string, src:reg8H, "x86_logicflags")
   [{: match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]
@@ -451,8 +459,8 @@ inst : Par(Store(fpstack1l, Fdiv(fpstacktop, fpstack1), w), fppop)
 inst : Par(Store(fpstack1l, Fmul(fpstacktop, fpstack1), w), fppop)
   {: "fmulp" :}
 <<rules>>=
-inst : Store(fpstacktopl, Fabs(fpstacktop), w) {: "fabs" :}
-inst : Store(fpstacktopl, Fneg(fpstacktop), w) {: "fchs" :}
+inst : UnaryInPlace(fpstacktopl, "fabs", w) {: "fabs" :}
+inst : UnaryInPlace(fpstacktopl, "fneg", w) {: "fchs" :}
 inst : Store(fpstacktopl, Frnd(fpstacktop), w) {: "frndint" :}
 @ 
 It will be good to remove the ugly wart on ocamlburg that makes it
@@ -475,9 +483,13 @@ inst : Par(Store(fpccl, Fcmp(fpstacktop, fpstack1), w), fppop2)
 @ 
 <<rules>>=
 eax : Reg('r', n, w) [{: guard (n = 0 && w = 32):}]  {: () :}
-ahval : BitExtract(eight, Fetch(eax, fw:w), w) [{: guard (w = 8) :}] {: () :}
+ax  : Slice(w, lsb:n, eax) [{: guard (w = 16 && lsb = 0):}]  {: "%ax" :}
+ah  : Slice(w, lsb:n, eax) [{: guard (w = 8  && lsb = 8):}]  {: "%ah" :}
+ahval : BitExtract(eight, Fetch(eax, fw:w), w) [{: guard (w = 8) :}] {: "%ah" :}
+ahval : Fetch(ah, w) [{: guard (w=8) :}] {: ah :}
 
 inst : Store(eax, BitInsert(zero, Fetch(eax, w), fpustatus), sw:w) {: "fstsw %ax" :}
+inst : Store(ax,  fpustatus, w) [{: guard (w = 16) :}] {: cat ["fstsw "; ax] :}
 inst : Setflags(Ah2flags(ahval)) {: "sahf" :}
 @ 
 \paragraph{Other instructions}
@@ -519,6 +531,7 @@ any : Fpccl() {: "Fpcc()" :}
 any : Fpustatusl() {: "Fpustatus()" :}
 any : BitInsert(x:any, y:any, z:any) {: sprintf "BitInsert(%s, %s, %s)" x y z :}
 any : BitExtract(lsb:any, y:any, n:w) {: sprintf "BitExtract(%s, %s, %d)" lsb y n :}
+any : Slice(n:w, lsb:n, y:any) {: sprintf "Slice(%d, %d, %s)" n lsb y :}
 any : Ah2flags(any) {: sprintf "Ah2flags(%s)" any :}
 
 any : Sx(any) {: "Sx(" ^ any ^ ")" :}
@@ -543,6 +556,8 @@ any : Goto(any) {: "Goto(" ^ any ^ ")" :}
 any : Setflags(any) {: "Setflags(" ^ any ^ ")" :}
 any : Llr(dst:any, string, src:any, w) 
   {: "Llr(" ^ dst ^","^string^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
+any : UnaryInPlace(dst:any, string, w) 
+  {: "UnaryInPlace(" ^ dst ^","^string^ "," ^ string_of_int w ^ ")" :}
 
 any : Withaflags(dst:any, string, src:any, w, fo:string) 
   {: "Withaflags(" ^ dst ^","^string^ "," ^ src ^ "," ^ string_of_int w ^ 
@@ -572,7 +587,7 @@ constructor for each operator.
 | RP.App(("and", [w]), [x; y]) -> conAnd (exp x) (exp y)
 | RP.App(("or",  [w]), [x; y]) -> conOr (exp x) (exp y)
 | RP.App(("xor", [w]), [x; y]) -> conXor (exp x) (exp y)
-| RP.App(("com", [w]), [x]) -> conCom (exp x)
+| RP.App(("com", [w]), [x])    -> conCom (exp x)
 | RP.App(("add", [w]), [x; y]) -> conAdd (exp x) (exp y)
 | RP.App(("sub", [w]), [x; y]) -> conSub (exp x) (exp y)
 (*| RP.App(("neg", [w]), [x])    -> conNeg (exp x)*)
@@ -626,7 +641,8 @@ and loc l = match l with
   | RP.Reg(sp, i, w)          -> conReg sp i w 
   | RP.Mem(_, _, _, _, _)     -> error "non-mem, non-reg cell"
   | RP.Var(s, i, w)           -> error "var found"
-  | RP.Slice(w,i,loc)         -> error "cannot handle slice"
+  | RP.Slice(w,i,l)           -> (*error "cannot handle slice"*)
+      conSlice w i (loc l)
 @ 
 Things start to get a bit baroque here, as we recognize different
 special forms a single effect can take.
@@ -634,6 +650,8 @@ special forms a single effect can take.
 and effect = function
   | RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w) 
     when l = l'                       -> conLlr (loc l) o (exp r) w
+  | RP.Store(l, RP.App((o, _), [RP.Fetch(l',_)]), w)
+    when l = l'                       -> conUnaryInPlace (loc l) o w
   | RP.Store(RP.Reg('c',i, w),r,_) 
     when (i = SS.indices.SS.pc)       -> conGoto (exp r)
   | RP.Store(RP.Reg('c', i, w),r,_)
@@ -718,7 +736,7 @@ RP.Store(l, RP.App(("bitInsert", [32; 8]),
                    [RP.Const (RP.Bits eightbits);
                     RP.Fetch(l', _);
                     RP.App((o, _),
-                           [RP.App(("bitExtract", [32; 8]),
+                        [ RP.App(("bitExtract", [32; 8]),
                                    [RP.Const (RP.Bits eightbits'); RP.Fetch(l'',_)]);
                             r]) as flag_left]),
          w)

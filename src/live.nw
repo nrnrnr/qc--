@@ -68,8 +68,8 @@ module type S = sig
   module G : Cfg.S
   val set_live : Rtl.rtl G.cfg -> unit
   (* following may be run only after [[set_live]] and without mutation *)
-  val live_out : Rtl.rtl G.node -> G.regs
-  val live_in  : Rtl.rtl G.node -> G.regs 
+  val live_out : Rtl.rtl G.node -> Register.SetX.t
+  val live_in  : Rtl.rtl G.node -> Register.SetX.t
 end
 module Make (A : Arg): S with module G = A.G
 @
@@ -80,12 +80,27 @@ module Make (A : Arg): S with module G = A.G
 
 Following a suggestion of John Dias, we cache live-out information at
 each node. 
+Although our liveness analysis is performed over the type [[Register.x]], we store
+only live\_out sets of type [[Register.t]].
+It is important to perform the liveness at the finer granularity of slices to
+appropriately capture liveness.
+For example, consider the code
+\begin{verbatim}
+%al = e
+...
+%ah = e'
+{use of %al}
+\end{verbatim}
+If we calculate liveness at the register level, we will think the %eax register is dead
+between the assignments.
+But if we perform liveness at the slice level, then promote the slices to registers, we
+will see that %eax is live between the assignments.
 <<live.ml>>=
-module RS = Register.Set
-module R  = Rtl
+module RSX = Register.SetX
+module R   = Rtl
 
-type info = { mutable cached_live_out : RS.t }
-let mk () = { cached_live_out = RS.empty }
+type info = { mutable cached_live_out : RSX.t }
+let mk () = { cached_live_out = RSX.empty }
 @ 
 Here are the structures promised in the interface.
 <<live.ml>>=
@@ -100,8 +115,8 @@ module type S = sig
   module G : Cfg.S
   val set_live : Rtl.rtl G.cfg -> unit
   (* following may be run only after [[set_live]] and without mutation *)
-  val live_out : Rtl.rtl G.node -> G.regs
-  val live_in  : Rtl.rtl G.node -> G.regs 
+  val live_out : Rtl.rtl G.node -> Register.SetX.t
+  val live_in  : Rtl.rtl G.node -> Register.SetX.t
 end
 
 module Make (A : Arg) = struct 
@@ -125,17 +140,17 @@ set operations.
 The [[--*]] operation expresses our expectation that a killed register should
 never be live. 
 <<liveness functions>>=
-let ( ++  ) = RS.union
-let ( --  ) = RS.diff 
+let ( ++  ) = RSX.union
+let ( --  ) = RSX.diff 
 let ( --* ) live killed =
-  if RS.exists (fun x -> RS.mem x killed) live then
+  if RSX.exists (fun x -> RSX.mem x killed) live then
     (*<complain of live variables in killed set>; live--killed *)
     Impossible.impossible "live variable is in killed set"
   else
     live 
 <<complain of live variables in killed set>>=
 let regstring (s, i, _) = Printf.sprintf "%c%d" s i in
-let bad = RS.elements (RS.filter (fun x -> RS.mem x killed) live) in
+let bad = RSX.elements (RSX.filter (fun x -> RSX.mem x killed) live) in
 let msg = "Live vars in killed set: " ^ String.concat ", " (List.map regstring bad) in
 prerr_string msg;
 prerr_string "\n"
@@ -160,14 +175,15 @@ and new_live_out node =
   G.union_over_outedges
     node
     (fun n' -> live_in n')
-    (fun {G.node = n'; G.defs = d; G.kills = k} -> live_in n' -- d --* k)
+    (fun {G.node = n'; G.defs = d; G.kills = k} ->
+       live_in n' -- Register.rset_to_rxset d --* Register.rset_to_rxset k)
 and live_in  node =
   let live = live_out node in  
   let live = match G.to_instr node with
   | None -> live
   | Some i ->
-      let uses, defs, kills = irwk i in
-      live -- defs --* kills ++ uses in
+    let uses, defs, kills = irwk i in
+    live -- defs --* kills ++ uses in
   G.add_inedge_uses node live
 @ N.B. we could operate more efficiently if, instead of using [[irwk]]
 to build sets, we simply folded over the proper functions directly.
@@ -178,7 +194,7 @@ The iteration order is unspecified, and it would probably
 be much more efficient to use a well-chosen order. 
 <<liveness functions>>=
 let set_live g =
-  G.iter_nodes (fun n -> (info n).cached_live_out <- RS.empty) g;
+  G.iter_nodes (fun n -> (info n).cached_live_out <- RSX.empty) g;
   let nodes   = List.rev (G.postorder_dfs (fun x y -> x :: y) [] g) in
   let changed = ref false                           in
   <<definition of [[update_cache]]>> in
@@ -199,11 +215,11 @@ has changed.
 let update_cache node =
   let l    = new_live_out node in
   let info = info node in
-  if RS.equal l info.cached_live_out then
+  if RSX.equal l info.cached_live_out then
     ()
   else
     ( changed := true
-    ; assert (RS.subset info.cached_live_out l)
+    ; assert (RSX.subset info.cached_live_out l)
     ; info.cached_live_out <- l
     ) 
 @ 
@@ -222,15 +238,15 @@ At a fork, we take the union.
 let split_info node = (info node).cached_live_out
 let merge node live =
   let info = info node in
-  if RS.subset live info.cached_live_out then
+  if RSX.subset live info.cached_live_out then
     false
   else
     ( info.cached_live_out <- info.cached_live_out ++ live
     ; true
     ) 
-let init_info = RS.empty
-let (with_predecessor's_outedge : Rtl.rtl G.node -> RS.t ->
-        (RS.t -> defs:RS.t -> kills:RS.t -> RS.t) -> RS.t) = fun _ -> assert false
+let init_info = RSX.empty
+let (with_predecessor's_outedge : Rtl.rtl G.node -> RSX.t ->
+        (RSX.t -> defs:RSX.t -> kills:RSX.t -> RSX.t) -> RSX.t) = fun _ -> assert false
 let propagate node live =
   (info node).cached_live_out <- live;
   let live = match G.to_instr node with

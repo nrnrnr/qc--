@@ -77,32 +77,42 @@ end
 A \emph{register} is an {\rtl} location that is addressed by a known
 (integer) value (c.f.~module \module{register}). Registers are of
 special interest for liveness analysis where it is important to know,
-the registers that read or written by an {\rtl}. We provide two methods
-to observe an {\rtl}'s registers: [[fold]] scans an [[Rtl.rtl]] value
-and reports any register in a read or write position to a function. This
+the registers that read or written by an {\rtl}.
+Because slices of registers may also be used in an {\rtl}, we maintain
+locations of type [[Register.x]].
+We provide two methods
+to observe an {\rtl}'s locations: [[fold]] scans an [[Rtl.rtl]] value
+and reports any register or slice in a read or write position to a function. This
 does not require heap allocation and is therefore efficient.  The
-slightly less efficient function [[sets]] reports registers in read and
+slightly less efficient function [[sets]] reports registers and slices in read and
 write positions as sets.
 
 \begin{quote}\it
-    The [[fold]] function is related to registers and therefore its name
+    The [[fold]] function is related to registers and slices, and therefore its name
     should imply this. We need another fold over memory locations that
     reports aliasing informations.
 \end{quote}
 
 <<rtlutil.mli>>=
 module ReadWrite: sig
-    type 'a observer = Register.t -> 'a -> 'a
-    val fold: read: 'a observer -> write: 'a observer -> Rtl.rtl -> 'a -> 'a
-    val sets: Rtl.rtl -> (Register.Set.t * Register.Set.t)
+    type 'a observert = Register.t -> 'a -> 'a
+    type 'a observerx = Register.x -> 'a -> 'a
+    val fold: read: 'a observerx -> write: 'a observerx -> Rtl.rtl -> 'a -> 'a
+    val fold_promote: read: 'a observert -> write: 'a observert -> Rtl.rtl -> 'a -> 'a
+    val sets: Rtl.rtl -> (Register.SetX.t * Register.SetX.t)
+    val sets_promote: Rtl.rtl -> (Register.Set.t * Register.Set.t)
 end
 @ 
 <<rtlutil.mli>>=
 module ReadWriteKill: sig
-    type 'a observer = Register.t -> 'a -> 'a
-    val fold: read: 'a observer -> write: 'a observer -> kill: 'a observer ->
+    type 'a observert = Register.t -> 'a -> 'a
+    type 'a observerx = Register.x -> 'a -> 'a
+    val fold: read: 'a observerx -> write: 'a observerx -> kill: 'a observerx ->
                     Rtl.rtl -> 'a -> 'a
-    val sets: Rtl.rtl -> Register.Set.t * Register.Set.t * Register.Set.t
+    val fold_promote: read: 'a observert -> write: 'a observert -> kill: 'a observert ->
+                      Rtl.rtl -> 'a -> 'a
+    val sets: Rtl.rtl -> Register.SetX.t * Register.SetX.t * Register.SetX.t
+    val sets_promote: Rtl.rtl -> Register.Set.t * Register.Set.t * Register.Set.t
 end
 @    
 
@@ -242,10 +252,13 @@ end
 % ------------------------------------------------------------------ 
 
 <<rtlutil.ml>>=
-module R  = Rtl
-module RP = Rtl.Private
-module Up = Rtl.Up
-module Dn = Rtl.Dn
+module R   = Rtl
+module RP  = Rtl.Private
+module Up  = Rtl.Up
+module Dn  = Rtl.Dn
+module Re  = Register
+module RS  = Register.Set
+module RSX = Register.SetX
 
 module Width = struct
     <<Width>>
@@ -253,6 +266,8 @@ end
 
 let fetch l   = R.fetch l   (Width.loc l)
 let store l e = R.store l e (Width.loc l)
+
+<<define common ReadWriteKill Higher Order Fns>>
 
 module ReadWrite = struct
     <<ReadWrite>>
@@ -330,34 +345,51 @@ let exp e = exp' (Rtl.Dn.exp e)
 \subsubsection{Registers read and written by an RTL}
 % ------------------------------------------------------------------ 
 
-<<ReadWrite>>=
-type 'a observer = Register.t -> 'a -> 'a
-
-let fold ~(read:'a observer) ~(write:'a observer) r z = 
+<<define common ReadWriteKill Higher Order Fns>>=
+let fold handle_reg handle_slice ~read ~write ~kill r z = 
   let rec rtl (z:'a) (RP.Rtl gs)  = List.fold_left guarded z gs
       and guarded z (g, eff) = exp (effect z eff) g
       and effect z eff = match eff with
-        | RP.Store (lhs, rhs, _)         -> loc write (exp z rhs) lhs
-        | RP.Kill lhs                    -> loc write z lhs
+        | RP.Store (lhs, rhs, _)        -> loc write (exp z rhs) lhs
+        | RP.Kill lhs                   -> loc kill z lhs
       and loc which z l = match l with
-        | RP.Mem (space, _, w, addr, _)  -> exp z addr
-        | RP.Reg r                       -> which r z
-        | RP.Slice (_, _, l)             -> loc which z l
-        | RP.Var _                       -> z
+        | RP.Mem (space, _, w, addr, _) -> exp z addr
+        | RP.Reg r                      -> handle_reg       which z r
+        | RP.Slice (w, i, l)            -> handle_slice loc which z (w, i, l)
+        | RP.Var _                      -> z
       and exp z e = match e with
-        | RP.Const _                     -> z
-        | RP.Fetch (l, w)                -> loc read z l
-        | RP.App (_, es)                 -> List.fold_left exp z es
+        | RP.Const _                    -> z
+        | RP.Fetch (l, w)               -> loc read z l
+        | RP.App (_, es)                -> List.fold_left exp z es
   in
      rtl z (Rtl.Dn.rtl r)
 
-let sets (rtl:Rtl.rtl) = 
-    let add_left  r (left,right) = 
-        (Register.Set.add r left, right) in
-    let add_right r (left,right) = 
-        (left, Register.Set.add r right) in
-    let empty = (Register.Set.empty, Register.Set.empty) in
-        fold ~read:add_left ~write:add_right rtl empty
+let fold_regx ~read ~write ~kill r z =
+  fold (fun which z r -> which (Re.Reg r) z)
+       (fun loc which z (w, i, l) -> match l with
+                        | RP.Reg r -> which (Re.Slice (w, i, r)) z
+                        | _        -> loc which z l)
+    ~read ~write ~kill r z
+
+let fold_regt ~read ~write ~kill r z =
+  fold (fun which z r -> which r z)
+       (fun loc which z (w, i, l) -> loc which z l) ~read ~write ~kill r z
+@
+
+<<ReadWrite>>=
+type 'a observert = Register.t -> 'a -> 'a
+type 'a observerx = Register.x -> 'a -> 'a
+
+let fold         ~read ~write r z = fold_regx ~read ~write ~kill:write r z
+let fold_promote ~read ~write r z = fold_regt ~read ~write ~kill:write r z
+
+let mk_sets fold add empty rtl =
+    let add_left  r (left,right) = (add r left, right) in
+    let add_right r (left,right) = (left, add r right) in
+    let empty = (empty, empty) in
+    fold ~read:add_left ~write:add_right rtl empty
+let sets         rtl = mk_sets fold         RSX.add RSX.empty rtl
+let sets_promote rtl = mk_sets fold_promote RS.add  RS.empty  rtl
 @
 
 % ------------------------------------------------------------------ 
@@ -365,31 +397,19 @@ let sets (rtl:Rtl.rtl) =
 % ------------------------------------------------------------------ 
 
 <<ReadWriteKill>>=
-type 'a observer = Register.t -> 'a -> 'a
-let fold ~read ~write ~kill r z = 
-  let rec rtl z (RP.Rtl gs) = List.fold_left guarded z gs
-      and guarded z (g, eff) = exp (effect z eff) g
-      and effect z eff = match eff with
-        | RP.Store (lhs, rhs, _)         -> loc write (exp z rhs) lhs
-        | RP.Kill lhs                    -> loc kill  z lhs
-      and loc which z l = match l with
-        | RP.Mem (space, _, w, addr, _)  -> exp z addr
-        | RP.Reg r                       -> which r z
-        | RP.Slice (_, _, l)             -> loc which z l
-        | RP.Var _                       -> z
-      and exp z e = match e with
-        | RP.Const _                     -> z
-        | RP.Fetch (l, w)                -> loc read z l
-        | RP.App (_, es)                 -> List.fold_left exp z es
-  in
-     rtl z (Rtl.Dn.rtl r)
+type 'a observert = Register.t -> 'a -> 'a
+type 'a observerx = Register.x -> 'a -> 'a
+let fold         = fold_regx
+let fold_promote = fold_regt
 
-let sets (rtl:Rtl.rtl) = 
-  let module RS = Register.Set in
-  let read  reg (r, w, k) = (RS.add reg r, w, k) in
-  let write reg (r, w, k) = (r, RS.add reg w, k) in
-  let kill  reg (r, w, k) = (r, w, RS.add reg k) in
-  fold ~read ~write ~kill rtl (RS.empty, RS.empty, RS.empty)
+let mk_sets fold add empty rtl =
+  let read  reg (r, w, k) = (add reg r, w, k) in
+  let write reg (r, w, k) = (r, add reg w, k) in
+  let kill  reg (r, w, k) = (r, w, add reg k) in
+  fold ~read ~write ~kill rtl (empty, empty, empty)
+
+let sets         rtl = mk_sets fold         RSX.add RSX.empty rtl
+let sets_promote rtl = mk_sets fold_promote RS.add  RS.empty  rtl
 @
 
 % ------------------------------------------------------------------ 
