@@ -9,11 +9,7 @@ type t = SparcTrees.M.t =
 
       open SparcTrees.M
     let imode simm13 = 
-      if not (Nativeint.shift_right (Nativeint.shift_left simm13 19) 
-              19 = simm13) then 
-        Sledlib.fail ["field simm13 does not fit in 13 signed bits"] 
-      else 
-        Imode (simm13)
+      Imode (simm13)
     
     let rmode rs2 = 
       Rmode (rs2)
@@ -22,18 +18,10 @@ type t = SparcTrees.M.t =
       Generala (rs1, reg_or_imm)
     
     let dispa rs1 simm13 = 
-      if not (Nativeint.shift_right (Nativeint.shift_left simm13 19) 
-              19 = simm13) then 
-        Sledlib.fail ["field simm13 does not fit in 13 signed bits"] 
-      else 
-        Dispa (rs1, simm13)
+      Dispa (rs1, simm13)
     
     let absolutea simm13 = 
-      if not (Nativeint.shift_right (Nativeint.shift_left simm13 19) 
-              19 = simm13) then 
-        Sledlib.fail ["field simm13 does not fit in 13 signed bits"] 
-      else 
-        Absolutea (simm13)
+      Absolutea (simm13)
     
     let indexa rs1 rs2 = 
       Indexa (rs1, rs2)
@@ -108,88 +96,40 @@ type t = SparcTrees.M.t =
       Indirectr (rs1)
     
     let ldsba regaddr asi rd = 
-      if not (Nativeint.shift_right_logical (Nativeint.shift_left asi 24) 
-              24 = asi) then 
-        Sledlib.fail ["field asi does not fit in 8 unsigned bits"] 
-      else 
-        Ldsba (regaddr, asi, rd)
+      Ldsba (regaddr, asi, rd)
     
     let ldsha regaddr asi rd = 
-      if not (Nativeint.shift_right_logical (Nativeint.shift_left asi 24) 
-              24 = asi) then 
-        Sledlib.fail ["field asi does not fit in 8 unsigned bits"] 
-      else 
-        Ldsha (regaddr, asi, rd)
+      Ldsha (regaddr, asi, rd)
     
     let lduba regaddr asi rd = 
-      if not (Nativeint.shift_right_logical (Nativeint.shift_left asi 24) 
-              24 = asi) then 
-        Sledlib.fail ["field asi does not fit in 8 unsigned bits"] 
-      else 
-        Lduba (regaddr, asi, rd)
+      Lduba (regaddr, asi, rd)
     
     let lduha regaddr asi rd = 
-      if not (Nativeint.shift_right_logical (Nativeint.shift_left asi 24) 
-              24 = asi) then 
-        Sledlib.fail ["field asi does not fit in 8 unsigned bits"] 
-      else 
-        Lduha (regaddr, asi, rd)
+      Lduha (regaddr, asi, rd)
     
     let lda regaddr asi rd = 
-      if not (Nativeint.shift_right_logical (Nativeint.shift_left asi 24) 
-              24 = asi) then 
-        Sledlib.fail ["field asi does not fit in 8 unsigned bits"] 
-      else 
-        Lda (regaddr, asi, rd)
+      Lda (regaddr, asi, rd)
     
     let ldstuba regaddr asi rd = 
-      if not (Nativeint.shift_right_logical (Nativeint.shift_left asi 24) 
-              24 = asi) then 
-        Sledlib.fail ["field asi does not fit in 8 unsigned bits"] 
-      else 
-        Ldstuba (regaddr, asi, rd)
+      Ldstuba (regaddr, asi, rd)
     
     let swapa regaddr asi rd = 
-      if not (Nativeint.shift_right_logical (Nativeint.shift_left asi 24) 
-              24 = asi) then 
-        Sledlib.fail ["field asi does not fit in 8 unsigned bits"] 
-      else 
-        Swapa (regaddr, asi, rd)
+      Swapa (regaddr, asi, rd)
     
     let ldda regaddr asi rd = 
-      if not (Nativeint.shift_right_logical (Nativeint.shift_left asi 24) 
-              24 = asi) then 
-        Sledlib.fail ["field asi does not fit in 8 unsigned bits"] 
-      else 
-        Ldda (regaddr, asi, rd)
+      Ldda (regaddr, asi, rd)
     
     let stba rd regaddr asi = 
-      if not (Nativeint.shift_right_logical (Nativeint.shift_left asi 24) 
-              24 = asi) then 
-        Sledlib.fail ["field asi does not fit in 8 unsigned bits"] 
-      else 
-        Stba (rd, regaddr, asi)
+      Stba (rd, regaddr, asi)
     
     let stha rd regaddr asi = 
-      if not (Nativeint.shift_right_logical (Nativeint.shift_left asi 24) 
-              24 = asi) then 
-        Sledlib.fail ["field asi does not fit in 8 unsigned bits"] 
-      else 
-        Stha (rd, regaddr, asi)
+      Stha (rd, regaddr, asi)
     
     let sta rd regaddr asi = 
-      if not (Nativeint.shift_right_logical (Nativeint.shift_left asi 24) 
-              24 = asi) then 
-        Sledlib.fail ["field asi does not fit in 8 unsigned bits"] 
-      else 
-        Sta (rd, regaddr, asi)
+      Sta (rd, regaddr, asi)
     
     let stda rd regaddr asi = 
-      if not (Nativeint.shift_right_logical (Nativeint.shift_left asi 24) 
-              24 = asi) then 
-        Sledlib.fail ["field asi does not fit in 8 unsigned bits"] 
-      else 
-        Stda (rd, regaddr, asi)
+      Stda (rd, regaddr, asi)
     
     let ldfsr address = 
       Ldfsr (address)
@@ -234,18 +174,10 @@ type t = SparcTrees.M.t =
       Wrtbr (rs1, reg_or_imm)
     
     let rdasr rs1i rd = 
-      if not (Nativeint.shift_right_logical (Nativeint.shift_left rs1i 27) 
-              27 = rs1i) then 
-        Sledlib.fail ["field rs1i does not fit in 5 unsigned bits"] 
-      else 
-        Rdasr (rs1i, rd)
+      Rdasr (rs1i, rd)
     
     let wrasr rs1 reg_or_imm rdi = 
-      if not (Nativeint.shift_right_logical (Nativeint.shift_left rdi 27) 
-              27 = rdi) then 
-        Sledlib.fail ["field rdi does not fit in 5 unsigned bits"] 
-      else 
-        Wrasr (rs1, reg_or_imm, rdi)
+      Wrasr (rs1, reg_or_imm, rdi)
     
     let stbar () = 
       Stbar ()
@@ -830,11 +762,7 @@ type t = SparcTrees.M.t =
       Tvc (address)
     
     let unimp imm22 = 
-      if not (Nativeint.shift_right_logical (Nativeint.shift_left imm22 10) 
-              10 = imm22) then 
-        Sledlib.fail ["field imm22 does not fit in 22 unsigned bits"] 
-      else 
-        Unimp (imm22)
+      Unimp (imm22)
     
     let sethi n rd = 
       Sethi (n, rd)

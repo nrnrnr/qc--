@@ -17,10 +17,13 @@ let pprint = <<Machine>>Syntax.pprint
 <<machine.ml>>=
 type t = <<Machine>>Trees.M.t
 module MT = <<Machine>>Trees.Rec(<<Machine>>RtlMk.M)
-let encode = MT.rec_t
+let encode x = try MT.rec_t x with Sledlib.Failure s -> Rtl.Revert.rtl(Rtl.Private.Rtl [])
 module MR = <<Machine>>RtlRec.M(<<Machine>>TreesBuild.Build)
 let recognizeInstruction =
-  OpOps.lift (fun rtl -> MR.defaultOfInstruction (Rtl.Convert.rtl rtl))
+  fun rtl ->
+    try Some(MR.defaultOfInstruction (Rtl.Convert.rtl rtl))
+    with Match_failure _ -> None
+    | Sledlib.Failure _ -> None
 let instruction = Tdpe.RR(<<Machine>>Nbe.reify_t,<<Machine>>Nbe.reflect_t)
 
 <<machine.mli>>=
