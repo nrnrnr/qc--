@@ -210,74 +210,108 @@ module Standard32 = struct
     ; classification = Reg
     } 
 
-  let t agg ws   = checked { space = 't'; doc = "general-purpose temporaries"
-                           ; cellwidth = 32
-                           ; indexwidth = 32; indexlimit = None
-                           ; aggregation = agg; widths = ws
-                           ; classification =
-                               Temp  { stands_for = 'r'
-                                     ; index_ok   = (fun _ -> true) (* lies *)
-                                     ; set_doc    = "general-purpose temporaries"
-                                     } 
-                           } 
+  let t agg ws   = checked 
+    { space         = 't'
+    ; doc           = "general-purpose temporaries"
+    ; cellwidth     = 32
+    ; indexwidth    = 32
+    ; indexlimit    = None
+    ; aggregation   = agg
+    ; widths        = ws
+    ; classification = Temp  
+        { stands_for = 'r'
+        ; index_ok   = (fun _ -> true) (* lies *)
+        ; set_doc    = "general-purpose temporaries"
+        } 
+    } 
 
-  let f ~count agg ws = checked { space = 'f'; doc = "floating-point registers"
-                           ; cellwidth = 32
-                           ; indexwidth = indexwidth count; indexlimit = Some count
-                           ; aggregation = agg; widths = ws
-                           ; classification = Reg
-                           } 
-  let u agg ws   = checked { space = 'u'; doc = "floating-point temporaries"
-                           ; cellwidth = 32
-                           ; indexwidth = 32; indexlimit = None
-                           ; aggregation = agg; widths = ws
-                           ; classification =
-                               Temp { stands_for = 'f'
-                                    ; index_ok   = (fun _ -> true) (* lies *)
-                                    ; set_doc    = "floating-point temporaries"
-                                    } 
-                           } 
+  let f ~count agg ws = checked 
+    { space         = 'f'
+    ; doc           = "floating-point registers"
+    ; cellwidth     = 32
+    ; indexwidth    = indexwidth count
+    ; indexlimit    = Some count
+    ; aggregation   = agg
+    ; widths        = ws
+    ; classification = Reg
+    }
+    
+  let u agg ws = checked 
+    { space         = 'u'
+    ; doc           = "floating-point temporaries"
+    ; cellwidth     = 32
+    ; indexwidth    = 32
+    ; indexlimit    = None
+    ; aggregation   = agg
+    ; widths        = ws
+    ; classification = Temp 
+        { stands_for = 'f'
+        ; index_ok   = (fun _ -> true) (* lies *)
+        ; set_doc    = "floating-point temporaries"
+        } 
+    } 
 
-  let a ~count agg ws = checked { space = 'a'; doc = "address registers"
-                           ; cellwidth = 32
-                           ; indexwidth = indexwidth count; indexlimit = Some count
-                           ; aggregation = agg; widths = ws
-                           ; classification = Reg
-                           } 
-  let v agg ws   = checked { space = 'v'; doc = "address temporaries"
-                           ; cellwidth = 32
-                           ; indexwidth = 32; indexlimit = None
-                           ; aggregation = agg; widths = ws
-                           ; classification =
-                               Temp { stands_for = 'a'
-                                    ; index_ok   = (fun _ -> true) (* lies *)
-                                    ; set_doc    = "address temporaries"
-                                    } 
-                           } 
+  let a ~count agg ws = checked 
+    { space         = 'a'
+    ; doc           = "address registers"
+    ; cellwidth     = 32
+    ; indexwidth    = indexwidth count
+    ; indexlimit    = Some count
+    ; aggregation   = agg
+    ; widths        = ws
+    ; classification = Reg
+    } 
+  
+  let v agg ws   = checked 
+    { space         = 'v'
+    ; doc           = "address temporaries"
+    ; cellwidth     = 32
+    ; indexwidth    = 32
+    ; indexlimit    = None
+    ; aggregation   = agg
+    ; widths        = ws
+    ; classification = Temp 
+        { stands_for = 'a'
+        ; index_ok   = (fun _ -> true) (* lies *)
+        ; set_doc    = "address temporaries"
+        } 
+    } 
 
-  let p ~count agg ws = checked { space = 'p'; doc = "predicate registers"
-                           ; cellwidth = 32
-                           ; indexwidth = indexwidth count; indexlimit = Some count
-                           ; aggregation = agg; widths = ws
-                           ; classification = Reg
-                           } 
-  let w agg ws   = checked { space = 'w'; doc = "predicate temporaries"
-                           ; cellwidth = 32
-                           ; indexwidth = 32; indexlimit = None
-                           ; aggregation = agg; widths = ws
-                           ; classification =
-                               Temp { stands_for = 'p'
-                                    ; index_ok   = (fun _ -> true) (* lies *)
-                                    ; set_doc    = "predicate temporaries"
-                                    } 
-                           } 
+  let p ~count agg ws = checked 
+    { space         = 'p'
+    ; doc           = "predicate registers"
+    ; cellwidth     = 32
+    ; indexwidth    = indexwidth count
+    ; indexlimit    = Some count
+    ; aggregation   = agg; widths = ws
+    ; classification = Reg
+    }
+    
+  let w agg ws   = checked 
+    { space         = 'w'
+    ; doc           = "predicate temporaries"
+    ; cellwidth     = 32
+    ; indexwidth    = 32
+    ; indexlimit    = None
+    ; aggregation   = agg
+    ; widths        = ws
+    ; classification = Temp 
+        { stands_for = 'p'
+        ; index_ok   = (fun _ -> true) (* lies *)
+        ; set_doc    = "predicate temporaries"
+        } 
+    } 
 
-  let c ~count agg ws = checked { space = 'c'; doc = "control and special"
-                           ; cellwidth = 32
-                           ; indexwidth = indexwidth count; indexlimit = Some count
-                           ; aggregation = agg; widths = ws
-                           ; classification = Fixed
-                           } 
+  let c ~count agg ws = checked 
+    { space         = 'c'
+    ; doc           = "control and special"
+    ; cellwidth     = 32
+    ; indexwidth    = indexwidth count
+    ; indexlimit    = Some count
+    ; aggregation   = agg
+    ; widths        = ws
+    ; classification = Fixed
+    } 
 
   type 'a locations = { pc : 'a; npc : 'a; cc : 'a }
   let locations ~c = match c with
