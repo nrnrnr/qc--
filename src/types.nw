@@ -13,66 +13,131 @@
 % l2h substitution to ->
 % l2h substitution rtl RTL
 
+%%Grades: B Central Immediate
+
 % ------------------------------------------------------------------  
 \section{Types}\label{sec:types}
 % ------------------------------------------------------------------  
 
-The static semantics of \C~require type checks:  types of arguments to
-primitive functions must match the types of their formal parameters,and
-[[if]]-statements are governed by an expression of type [[bool]].  This
-module lays out the type language for this purpose.
+Expressions in {\PAL} are type checked. This module provides types and
+type checking functions for {\rtl} operators. 
 
-The basic types in \C~are [[bool]] and [[bits]]$n$.  Values in \C~are
-monomorphic, primitive operators like [[add]] are in general polymorphic
-in the size of their operands: 
+Conditions in {\PAL} have type [[bool]], values types [[bits]]$n$. These
+two are the basic types. {\PAL} and their closely related {\rtl}
+operators have polymorphic function types. The typical case is an
+operator like [[add]]:
 
 $$[[add]]: \forall~n.[[bits]]n \times [[bits]]n \to [[bits]]n$$
- 
-A polymorphic primitive is described by a \textit{type scheme} that may
-contain bound variables for the size part of a [[bits]] type.
-\emph{Types} for values, on the other hand, contain no variables at all.
-The structure of type schema and types are covered by a parameterized
-type [[t]].  Depending on the parameter [['a]], types [[ty]] and type
-schema [[tyscheme]] can be created from [[t]].
+
+The result size of [[add]] is the size of its arguments. A concrete
+instance like $n=32$ is called a (function) type. The general scheme is
+called a (polymorphic) \emph{type scheme}.
+
+{\PAL} has a number of operators whose types are a bit more complicated
+than that of [[add]]. The first complication is illustrated by the
+[[zx]] operator. The [[zx]] operator widens a value by filling high
+biths with zeros. In {\PAL} the width of the result is encoded into the
+name: [[zx32]] widens a value to 32 bits; its type scheme can be thought
+of like this:
+
+$$[[sz32]]: \forall~n.[[bits]]n \to [[bits32]]$$
+
+However, this is not the way [[zx]] is implemented in the compiler. All
+{\PAL} operators are translated to {\rtl} operators that are allowed to
+be polymorphic in the result size. The general [[sz]] operators has the
+following type:
+
+$$[[sz]]: \forall~n,m.[[bits]]n \to [[bits]]m$$
+
+The translation (in \module{rtlop}) of [[sz32]] into [[sz]] takes care
+that $m$ is bound to $32$.
+
+The second complication is intriduced by multiplication operators like
+[[mulu]]:
+
+$$[[mulu]]: \forall~n,m.[[bits]]$n$ \times [[bits]]$n$ \to [[bits]]m, m
+= 2n$$
+
+The result of a multiplication is twice as wide a the operands. This
+constraint cannot be easily expressed in the above formalism using bound
+variables. We therefore have to employ a little hack to express it.
+
+% ------------------------------------------------------------------ 
+\subsection{Interface (Types)}
+% ------------------------------------------------------------------ 
+
+The parameterized type [['a t]] describes either a type [[ty]] when 
+[['a]] equals [[int]], or a type scheme, when [['a]] is a [[size]]. In a
+type scheme the width of a value is one of the following:
+
+\begin{itemize}
+\item A constant, like 32.
+\item A bound variable. To maximize confusion, variables are identified
+      by integers. Maybe we should switch to characters. Bound variables
+      allow to express that two values in a function type have the same
+      width.
+\item The size of a another bound variable, times two. This is a hack to
+      express the result width of a multiplocation operator, as explained
+      above.
+      
+\end{itemize}
 
 <<types>>=
-type key        = int
-
 type 'a t       = Bool
                 | Bits of 'a 
                 
+type key        = int
 type size       = Const of int
                 | Var   of key
-                | Var2  of key
+                | Var2  of key      (* see above - better name?? *)
 
 type ty         = int  t
 @
 
-A [[tyscheme]] describes a polymorphic function that takes a list of
-arguments and returns a single value as result. A [[monotype]] is a
-monomorphic function type.
+The type of a function is a pair of a list of operand types and a result
+type. A [[tyscheme]] describes a type scheme, a [[monotype]] the
+instance of a type scheme.
 
 <<types>>=
 type tyscheme   = (size t) list * (size t)
 type monotype   = (int  t) list * (int  t)
 @
 
-The [[tyscheme]] for the [[add]] primitve would be encoded as follows:
+Unlike in the formalism that uses $\forall$ to bind type variables
+explicitly, type variables in the implementation are bound implicitly:
+The [[tyscheme]] for the [[add]] and [[mulu]] primitves are encoded as
+follows:
+
 \begin{quote}
     \begin{verbatim}
-([Bits(Var 1); Bits(Var 1)], Bits(Var 1))
+add:  ([Bits(Var 1); Bits(Var 1)], Bits(Var 1))
+mulu: ([Bits(Var 1); Bits(Var 1)], Bits(Var2 1))
     \end{verbatim}
 \end{quote}
 
 The [[Var 1]] values identify the variable in the type scheme that is
-replaced by an integer when the type scheme is instantiated. 
+replaced by an integer when the type scheme is instantiated. In case of
+[[mulu]], the size of the result is twice the number of bits [[Var 1]]
+gets bound to.
 
-The [[appl]] function implements the type checking of arguments that
-are supplied to a primitive function: given the [[tyscheme]] to
-describe the primitive, and the list of argument [[ty]]s, [[appl]]
-returns the type of the primitive's result. In case the primitive's
-[[tyscheme]] can not be instantiated such that the supplied argument
-type match, a [[matchExn]] is raised.
+% ------------------------------------------------------------------ 
+\subsection{Interface (Functions)}
+% ------------------------------------------------------------------ 
+
+The [[appl]] function implements the type checking of arguments that are
+supplied to a primitive function: given the [[tyscheme]] to describe the
+primitive, and the list of argument [[ty]]s, [[appl]] returns the type
+of the primitive's result. In case the primitive's [[tyscheme]] can not
+be instantiated such that the supplied argument type match, a
+[[matchExn]] is raised.
+
+<<types>>=
+exception MatchExn
+
+<<appl>>=
+val appl      : tyscheme -> ty list -> ty       (* raises matchExn *)
+val widthlist : tyscheme -> ty list -> int list (* raises matchExn *)
+@
 
 Instantiation of a type scheme fails  when a type scheme contains a
 variable in the result position that does not also show up in an
@@ -83,21 +148,17 @@ The [[widthlist]] function takes the type of a primitive (a
 [[tyscheme]]) and a list of argument types and returns the sizes bound
 by the variables in the type scheme.
 
-<<types>>=
-exception MatchExn
-
 <<appl>>=
-val appl      : tyscheme -> ty list -> ty       (* raises matchExn *)
-val widthlist : tyscheme -> ty list -> int list (* raises matchExn *)
+val split : string -> string * int option     (* RTL op name, return width *)
 @
 
-Some operators encode the size of their return values in their name: 
-[[zx32]] is the zero-extension function that returns a 32 bit value. 
+Some operators encode the size of their return values in their name:
+[[zx32]] is the zero-extension function that returns a 32 bit value.
 The [[split]] function returns the operator name (without the numbers)
 and the size of the return value, if it exists:
 
 <<appl>>=
-val split : string -> string * int option     (* RTL op name, return width *)
+val instantiate: tyscheme -> widths:int list -> monotype
 @
 
 An operator inside an {\rtl} is monomorphic. It carries a \emph{width
@@ -106,9 +167,6 @@ polymorphic type scheme. This process is called instantiation. It is a
 checked run-time error if the width list is too short to instantiate all
 variables in the type scheme.
 
-<<appl>>=
-val instantiate: tyscheme -> widths:int list -> monotype
-@
 
 
 % ------------------------------------------------------------------ 
@@ -122,18 +180,16 @@ code pointer type [[code]], and the native data pointer type.  We
 define types for them here, but only for the moment. 
 
 <<abbrevs>>=
-val bitsc  : int -> size t              (* fixed/constant size  *)
-val bitsv  : key -> size t              (* variable size        *)
-val bitsv2 : key -> size t
-val bits   : 'a -> 'a t                 (* polymorphic size     *)
-val bool   : 'a t                       (* bool                 *)
-val proc   : size t list -> size t -> tyscheme   (* build proc type      *)
+val bitsc  : int -> size t              (* fixed/constant size       *)
+val bitsv  : key -> size t              (* variable size             *)
+val bitsv2 : key -> size t              (* doubled width - see above *)
+val bits   : 'a -> 'a t                 (* polymorphic size          *)
+val bool   : 'a t                       (* bool                      *)
+val proc   : size t list -> size t -> tyscheme   (* build proc type  *)
 @
 
 
-% ------------------------------------------------------------------  
-\subsection{Interface}
-% ------------------------------------------------------------------ 
+Finally, here we put together the interface file.
 
 <<types.mli>>=
 <<types>>
@@ -145,30 +201,31 @@ val proc   : size t list -> size t -> tyscheme   (* build proc type      *)
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
-Substitutions describe the variables of a type scheme.  The
-implementation uses a map to model substitutions.
-
-<<types.ml>>=
-module E = Error
-<<types>>
-@
-
-In addition to the functions provided by [[Map]] we define some helper
+A substitution associates a width variable (identified by an [[int]])
+with an integer bit width. We use a map to implement a substitution.  In
+addition to the functions provided by [[Map]] we define some helper
 functions. 
 
 <<types.ml>>=
+<<types>>  (* types from the interface definition *)
+module E = Error
 module S = Map.Make(struct type t=key let compare=compare end)
+
 let lookup key env = S.find key env 
 let dump env       = let f key data res = (key,data)::res in S.fold f env []
 @
 
-What is called a unification is technically a matching of a constant
-type with a variable type.  Unification in contrast deals with two
-variable terms.  These are the two non trivial cases:
+To check that the application of an operator is well typed, we
+\emph{match} the type scheme of the operator against the operand types.
+A match takes a type scheme and a type, and produces a substitution. The
+substitution records bindings for width variables, resulting from a
+match between a constant width and a variable width. These are the
+important cases:
 
 \begin{itemize}
-\item A variable width matches with a fixed width; this leads to an
-      instantiation of the variable. 
+\item A type variable width matches with a fixed width; this leads to an
+      instantiation of the variable that is recorded in the
+      substitution.
 \item A width variable might have been instantiated; thus the
       instantiation must be looked up in the substitutions and checked
       against the fixed width.
@@ -176,7 +233,16 @@ variable terms.  These are the two non trivial cases:
 
 The [[match]] function matches a [[tyscheme]] with a [[ty]] and
 returns a substitution.  In case of a mismatch, [[matchExn]] is
-raised.
+raised. 
+
+We never expect to see a [[Var2]] constructor during matching. It should
+only show up in the result position of a function type. Since only the
+argument positions are matched, we should never see it here. However,
+a succeeding match can bind a width variable that \emph{is} mentioned in
+a [[Var2]] result position.
+
+\emph{Is it possible to define a general match function where [[Var2]]
+can show up in all positions? -- CL}
 
 <<types.ml>>=
 let match' sigma = function 
@@ -188,10 +254,10 @@ let match' sigma = function
     | _              , _                             -> raise MatchExn
 @
 
-The [[subst]] function applies a substitution [[sigma]] to a [[size t]] 
-and returns a [[ty]].  In the context of C-- this must always
-succeed, because primitive operators are predefined and only their
-type schemes are used for matching and substitution.
+The [[subst]] function applies a substitution [[sigma]] to a [[size t]]
+and returns a [[ty]].  In the context of C-- this must always succeed,
+because primitive operators are predefined and only their type schemes
+are used for matching and substitution.
 
 <<types.ml>>=
 let subst sigma = function

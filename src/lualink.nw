@@ -1,3 +1,12 @@
+% vim: ts=8 sw=4 et:
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+
 % ------------------------------------------------------------------ 
 \section{Linking the Lua Interpreter}\label{sect:lua-link}
 % ------------------------------------------------------------------ 
@@ -172,31 +181,34 @@ end
 
 let init g = 
   C.register_module "Asm"
-    [ "cmm"  , V.efunc (            Map.outchan **-> V.result Map.asm) Asm.asm     
-    ; "ast"  , V.efunc (            Map.outchan **-> V.result Map.asm) Asm.asm (*alias*)
-    ; "dot"  , V.efunc (            Map.outchan **-> V.result Map.asm) Dotasm.asm
-    ; "asdl" , V.efunc (            Map.outchan **-> V.result Map.asm) Asdlasm.asm
-    ; "sparc", V.efunc (V.bool **-> Map.outchan **-> V.result Map.asm) Msparcasm.asm
+    [ "cmm"  , V.efunc (Map.outchan **-> V.result Map.asm) Asm.asm     
+    ; "ast"  , V.efunc (Map.outchan **-> V.result Map.asm) Asm.asm (*alias*)
+    ; "dot"  , V.efunc (Map.outchan **-> V.result Map.asm) Dotasm.asm
+    ; "asdl" , V.efunc (Map.outchan **-> V.result Map.asm) Asdlasm.asm
+    ; "sparc", V.efunc (V.bool **-> Map.outchan **-> V.result Map.asm) 
+                        Msparcasm.asm
     ] g;
   C.register_module "Driver" 
-    [ "assemble"      , V.efunc (Map.asm     **-> V.runit)        (fun asm -> asm#emit)
-    ; "proc_assembler", V.efunc (Map.asm     **-> V.result Map.stage) 
-                          (fun asm v p -> asm#cfg_instr p.Proc.cfg p.Proc.symbol; true)
-    ; "check"         , V.efunc (Map.ast     **-> Map.asm 
-                                        **-> V.result Map.env)   Driver2.check
-    ; "emit_asdl"     , V.efunc (Map.ast     **-> V.runit)            Driver2.emit_asdl
-    ; "parse"         , V.efunc (V.string    **-> V.result Map.ast)   Driver2.parse
-    ; "print"         , V.efunc (Map.doc     **-> V.int **-> V.runit) Driver2.print
-    ; "pretty"        , V.efunc (Map.ast     **-> V.result Map.doc)   Driver2.pretty
-    ; "scan"          , V.efunc (V.string    **-> V.runit)            Driver2.scan
-    ; "version"       , V.efunc (V.unit      **-> V.runit)            Driver2.version
-    ; "stdin"         , Map.inchan.V.embed                       stdin (* hack *)
-    ; "stdout"        , Map.outchan.V.embed                      stdout(* hack *)
-    ; "freeze"        , Map.stage.V.embed (fun v p -> Ast3ir.freeze p; true)
-    ; "compile"       , V.efunc (Map.optimize **-> Map.ast  
-                                             **-> Map.target 
-                                             **-> Map.env 
-                                             **-> V.result Map.asm) Driver2.compile
+    [ "assemble"  , V.efunc (Map.asm **-> V.runit)   (fun asm -> asm#emit)
+    ; "proc_assembler", V.efunc (Map.asm **-> V.result Map.stage) 
+                      (fun asm v p -> asm#cfg_instr p.Proc.cfg p.Proc.symbol
+                      ; true
+                      )
+    ; "check"     , V.efunc (Map.ast **-> Map.asm 
+                                     **-> V.result Map.env)   Driver2.check
+    ; "emit_asdl" , V.efunc (Map.ast **-> V.runit)            Driver2.emit_asdl
+    ; "parse"     , V.efunc (V.string**-> V.result Map.ast)   Driver2.parse
+    ; "print"     , V.efunc (Map.doc **-> V.int **-> V.runit) Driver2.print
+    ; "pretty"    , V.efunc (Map.ast **-> V.result Map.doc)   Driver2.pretty
+    ; "scan"      , V.efunc (V.string**-> V.runit)            Driver2.scan
+    ; "version"   , V.efunc (V.unit  **-> V.runit)            Driver2.version
+    ; "stdin"     , Map.inchan.V.embed                        stdin (* hack *)
+    ; "stdout"    , Map.outchan.V.embed                       stdout(* hack *)
+    ; "freeze"    , Map.stage.V.embed (fun v p -> Ast3ir.freeze p; true)
+    ; "compile"   , V.efunc (Map.optimize **-> Map.ast  
+                                          **-> Map.target 
+                                          **-> Map.env 
+                                          **-> V.result Map.asm) Driver2.compile
     ] g;
   Lua.Lib.StringList.empty
 @  
