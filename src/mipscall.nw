@@ -246,11 +246,9 @@ let broken_arguments () =
         [r 4; r 5; r 6; r 7]    (* exclude these *)
         ~memsize:8 ~byteorder ~growth:Memalloc.Up ~max_alignment:sp_align
 @ 
-
 Here is a alternative implementation for the argument automaton that
 uses the number of previously allocated bits to decide the register for
 a parameter.
-
 <<mipscall.ml>>=
 let new_arguments () =
     let bits = ref 0 in
@@ -290,10 +288,49 @@ let new_arguments () =
     A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up 
                ~max_alignment:sp_align
 
-
 let arguments = new_arguments (* what we are actually using *)
 @
+Here is a simpler alternative implementation.
+<<mipscall.ml>>=
+type belief = Manual | Lcc
+let who_do_you_believe = Lcc
+
+let newer_arguments () =
+    let bits = ref 0 in
+    let arg  = ref 0 in
+    A.widen (Aux.round_up_to ~multiple_of: 32) **>
+    A.widths [32;64] ~errormsg:(badwidth "MIPS argument") **>
+    A.bitcounter bits **>
+    A.argcounter arg  **>
+    A.first_choice 
+    [ A.is_hint "float",
+        A.choice
+        [ A.is_hint "float",
+            (match who_do_you_believe with
+            | Manual -> A.argnoregs arg [d 12; d 14]
+            | Lcc ->
+               A.choice
+               [ A.is_width 64, A.argnoregs arg [d 12; d 14]
+               ; A.is_any     , A.argnoregs arg [f 12; f 14]
+               ]) 
+        ; A.is_any,
+            A.offsetregs bits [r 4; r 5; r 6; r 7] 
+        ] 
+    ; A.is_any,
+        A.choice
+        [ (fun h w -> h = "float" && w = 64),  (* beware int/32, float/64 *)
+            A.argnoregs arg [d 12; l 6] (* d12 is a placeholder; use pair r6/r7 *)
+        ; A.is_any,
+            A.offsetregs bits [r 4; r 5; r 6; r 7] 
+        ]  
+    ] **>
+    A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up 
+               ~max_alignment:sp_align
+let arguments = newer_arguments
+@
        
+
+
 \paragraph{C~cut-to parameters}
 
 Since this is strictly internal calling convention, we can use whatever
