@@ -723,11 +723,12 @@ let uniq nodes = nodup compare (List.sort compare nodes)
 let coalesce cg ({Proc.target = target} as proc) =
     (match !(cg.moveLG WorklistMove) with
     | Some move ->
-        let x = RM.find (source move.v) cg.regToItem in
-        let y = RM.find (dest move.v)   cg.regToItem in
+        let get m = RM.find (getAlias (RM.find m cg.regToItem) cg) cg.regToItem in
+        let x = get (source move.v) in
+        let y = get (dest   move.v) in
         let (u, v) = if y.list = Precolored then (y, x) else (x, y) in
         let () =
-            if getAlias u cg = getAlias v cg
+            if u = v
             then begin
                  ilg_switch cg.moveLG CoalescedMove move
                ; addWorklist u cg
@@ -738,7 +739,7 @@ let coalesce cg ({Proc.target = target} as proc) =
                    ; addWorklist v cg
             end else if ((u.list = Precolored) &&
                      (List.fold_left (fun rst t -> (ok t u cg) && rst)
-                                    true (adjacent v.v cg) )
+                                     true (adjacent v.v cg))
                     || ((not (u.list = Precolored)) &&
                         (conservative (uniq ((adjacent u.v cg) @ (adjacent v.v cg)))
                                       cg)))
@@ -750,8 +751,7 @@ let coalesce cg ({Proc.target = target} as proc) =
 										 )
             end else
                 ilg_switch cg.moveLG ActiveMove move
-        in
-            true
+        in true
     | None -> false)
 @
 
@@ -910,8 +910,7 @@ let assignColors cg {Proc.target = target; Proc.cfg = cfg} =
    		then Impossible.impossible "Failed to color a temp?"   in
     let colorCoalescedTemps () =
         let setColor temp = 
-            cg.colorMap <-
-				RM.add temp.v (colorLookup temp.v cg.colorMap) cg.colorMap in
+            cg.colorMap <- RM.add temp.v (colorLookup temp.v cg.colorMap) cg.colorMap in
 		ilg_iter setColor (!(cg.tempLG Coalesced)) in
     let () = colorSelectStack () in
     let () = match !(cg.tempLG Spilled) with
@@ -1475,28 +1474,29 @@ function ColorGraph_init (CG, B) -- carefully don't define table
       ( CG.cgInfo
       , "cgInfo"
       , B.seq 
-                  { CG.clearCGInfo
-									, CG.pcfg
+          { CG.clearCGInfo
+          , CG.pcfg
           , B.fix 
               ( B.seq 
                   { B.ignore (B.seq
                       { CG.pcg
-									, CG.makeGraph
-									, CG.pcg
+                      , CG.makeGraph
+        							, CG.pcg
                       , CG.orderVars
                       , CG.assignColors
                       })
                   , 
-                     B.when_do
+                    B.when_do
                       ( CG.haveSpilledTemps
                       , CG.resetProgram
                       )
                   } 
-              )    
+              )
           , B.seq 
               { CG.updateProgram
               , CG.applyColors
-							, CG.pcfg
+    					, CG.pcg
+    					, CG.pcfg
               }
           }        
       )
