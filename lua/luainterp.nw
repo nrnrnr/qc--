@@ -733,6 +733,9 @@ end
 
 %type <Ast.lval> var
 
+%token COMMA LBRA RBRA LT GT COLON SEMI HAT STAR
+%token SLASH LPAR RPAR GETS PLUS MINUS DOT LSQ RSQ 
+
 %token WRONGTOKEN
 %token NIL
 %token IF THEN ELSE ELSEIF WHILE DO REPEAT UNTIL CASE GLOBMATCH OF END
@@ -744,6 +747,12 @@ end
 %token <float> NUMBER
 %token <string>  STRING
 %token <string>  NAME 
+
+%token AND OR
+%token EQ NE LE GE
+%token CONC
+%token UNARY NOT
+
 
 %left AND OR
 %left EQ NE '>' '<' LE GE
@@ -765,8 +774,8 @@ chunklist : /* empty */        { [] }
 
 function_     : FUNCTION funcname body  { $2 $3 };
 
-funcname  : var             { fun (args, body) -> A.Fundef ($1, args, body) }
-	  | varexp ':' NAME { fun (args, body) -> A.Methdef ($1, $3, args, body) }
+funcname  : var             { fun ((args, v), ss) -> A.Fundef ($1, args, v, ss) }
+	  | varexp ':' NAME { fun ((args, v), ss) -> A.Methdef ($1, $3, args, v, ss) }
           ;
 
 body :  '(' parlist ')' block END { ($2, $4 ) } ;
@@ -882,16 +891,19 @@ exprlist1 :  expr	{ [$1] }
 	  |  exprlist1 ',' expr { $1 @ [$3] }
 	  ;
 
-parlist  :	/* empty */ { [] }
-	  |	parlist1    { $1 }
+parlist   :	/* empty */ { ([], false) }
+          |  DOTS           { ([], true) }
+          |	parlist1 opt_dots   { ($1, $2) }
 	  ;
 		
 parlist1 :	par		  { [$1] }
 	  |	parlist1 ',' par  { $1 @ [$3] }
 	  ;
 
+opt_dots  : /* empty */   { false }
+          | ','  DOTS     { true  }
+
 par : NAME	{ $1 }
-    | DOTS	{ assert false (* not documented *) }
     ;
 		
 fieldlist  : lfieldlist semicolonpart { ($1, $2) }
