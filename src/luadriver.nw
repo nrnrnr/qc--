@@ -32,12 +32,19 @@ Frontends = Frontends or { }
 --
 
 backend = nil   -- initialized by command-line driver
+if Boot.arch_os == "x86-linux"       then backend = Backend.x86 end
+if Boot.arch_os == "powerpc-darwin"  then backend = Backend.ppc end
 
 -- 
 -- Everything starts from here
 --
 
 CMD.parse(Sys.argv)
+if backend == nil then error(
+    "running on unknown platform; can't select backend automatically.\n"
+ .. "Please use platform=Backend.xxx or edit luadriver.nw to select\n"
+ .. "backend based on the platform")
+end    
 CMD.whatfuns[CMD.what or "-compile"]()
 CMD.remove_derived_files()
 @ 
