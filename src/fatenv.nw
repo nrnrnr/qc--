@@ -184,14 +184,6 @@ val flagError: env -> env
 val errorFlag: env -> bool
 @
 
-For some opetional declarations in {\PAL} defaults exist. The
-[[setDefaults]] function enter the defaults into the environment if
-the user has not provided a declaration.
-
-<<>>=
-val setDefaults     : env -> env
-@
-
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
@@ -471,25 +463,3 @@ let findMemsize    env = env.target.memsize
 let findEndianness env = env.target.endianness
 @   
     
-% ------------------------------------------------------------------ 
-\subsubsection{Default-bindings}
-% ------------------------------------------------------------------ 
-
-The default [[target memsize]] is [[8]].  If the user has not
-specified a memsize we set it explicitly because the static semantic
-checks need it. 
-
-<<>>=
-let setDefaults env =
-    let env = match findMemsize env with
-        | E.Ok(Some x) -> env
-        | E.Ok(None)   -> bindMemsize Srcmap.null 8 env
-        | E.Error      -> env   in
-    let env = match findEndianness env with
-        | E.Ok(Some x) -> env
-        | E.Ok(None)   -> E.error "target endianness specification missing"
-        | E.Error      -> E.error "target endianness specification inconsistent"
-    in
-        env
-        
-@
