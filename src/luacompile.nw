@@ -512,11 +512,11 @@ function verbose(s, a, b, c, d, e, f, g, h)
       print(s,a,b,c,d,e,f,g,h)
 end
 
-function Opt.verb(stage, name) -- needs more work (want verbosity for each stage)
+function Opt.verb(stage) -- needs more work (want verbosity for each stage)
   if not stage or Options.verbose == 0 then
     return stage
   else
-    return B.seq { }
+    return stage -- actually want timed, noisy version of stage announcing stage.name
   end
 end  
 
@@ -525,14 +525,14 @@ function Opt.standard(backend, asm, B)
   Stages.null = B.stage {name="empty stage", fn=Stages.nullf}
   local assemble = Driver.proc_assembler(asm) 
   local x = B.seq
-    { backend.widen      or Stages.null
-    , backend.placevars  or Stages.null
-    , backend.expand     or Stages.null
-    , backend.liveness   or Stages.null
-    , backend.ralloc     or Stages.null
-    , backend.freeze     or Stages.null
-    , backend.rmvfp      or Stages.null
-    , B.stage { name="assemble procedure", fn = assemble }
+    { Opt.verb(backend.widen)      or Stages.null
+    , Opt.verb(backend.placevars)  or Stages.null
+    , Opt.verb(backend.expand)     or Stages.null
+    , Opt.verb(backend.liveness)   or Stages.null
+    , Opt.verb(backend.ralloc)     or Stages.null
+    , Opt.verb(backend.freeze)     or Stages.null
+    , Opt.verb(backend.rmvfp)      or Stages.null
+    , Opt.verb(B.stage { name="assemble procedure", fn = assemble })
     }
   return x
 end
