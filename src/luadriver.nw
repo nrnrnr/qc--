@@ -816,7 +816,17 @@ optional output file.
 function CMD.link(objs,out)
     local exe = out or "a.out"
     local cmd 
-    
+    if backend ~= Backend.interp then
+        cmd = format ("%s %s -o %s"
+                     , Ld.path
+                     , Ld.options
+                     , exe
+                     )
+    else
+        cmd = format ("calling qc--interp to link files into %s:"
+                     , exe
+                     )
+    end    
     local i = 1
     while i <= objs.n do
         if type(objs[i]) == "string" then
@@ -824,15 +834,7 @@ function CMD.link(objs,out)
         end    
         i = i + 1
     end
-    if backend == Backend.interp then
-        cmd = format ("%s %s -o %s"
-                     , Ld.path
-                     , Ld.options
-                     , exe
-                     )
-    else
-        error("cannot link lua files at the moment")
-    end    
+    
     CMD.exec(cmd)
     return exe
 end    
