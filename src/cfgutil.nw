@@ -32,12 +32,10 @@ val fold_fwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a
 val fold_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a
 val subst:      cfg -> (Rtl.rtl -> Rtl.rtl) -> unit
 val cfg2dot:    compress:bool -> name:string -> cfg -> string
-val emit    :   cfg -> (Rtl.rtl -> 'a -> 'a) 
-                    -> (Symbol.t -> 'a -> 'a)
-                    -> 'a
-                    -> 'a
+val emit    :   cfg -> (Rtl.rtl -> unit) -> (string -> unit) -> unit
 val new_cfg2dot:    compress:bool -> name:string -> Rtl.rtl Cfgx.M.t -> string
 val new_cfg2ast: ('i -> Ast.stmt) -> 'i Cfgx.M.t -> name:string -> Ast.proc
+val new_emit  :   'i Cfgx.M.t -> ('i -> unit) -> (string -> unit) -> unit
 @
 
 \begin{itemize}
@@ -91,13 +89,25 @@ let subst cfg (f:Rtl.rtl -> Rtl.rtl) =
 @ 
 
 <<cfgutil.ml>>=
-let emit cfg rtl_emit sym_emit unit =
+let emit cfg rtl_emit sym_emit =
     G.gm_enumerate cfg;
-    let visit node x = match G.symbol node with
-        | None   -> rtl_emit (G.instr node) x     
-        | Some s -> sym_emit s x            (* skip null rtl of label nodes *) 
+    let visit node () = match G.symbol node with
+        | None   -> rtl_emit (G.instr node) 
+        | Some s -> sym_emit (s#original_text)     (* skip null rtl of label nodes *) 
     in    
-        fold_fwd cfg visit unit
+        fold_fwd cfg visit ()
+        
+
+<<cfgutil.ml>>=
+let new_emit cfg rtl_emit sym_emit =
+  let module G = Cfgx.M in
+  let labels n = if G.kind n = G.Join then G.labels n else [] in
+  let visit node =
+    List.iter sym_emit (labels node);
+    match G.to_instr node with
+    | None   -> ()
+    | Some i -> rtl_emit i in
+  G.fold_nodes (fun n () -> visit n) () cfg
         
 
 <<cfgutil.ml>>=

@@ -36,17 +36,6 @@ let asm     fd = new asm Cfgutil.cfg2dot     fd
 let new_asm fd = new asm Cfgutil.new_cfg2dot fd
 @
 
-
-% ------------------------------------------------------------------ 
-\subsubsection{Classes for symbols}
-% ------------------------------------------------------------------ 
-
-<<Make>>=
-class symbol (n:string) : Symbol.t = object
-    method text    = n
-end
-@
-
 % ------------------------------------------------------------------ 
 \subsubsection{Name Mangling}
 % ------------------------------------------------------------------ 
@@ -86,9 +75,9 @@ object (this)
     val mutable _section = "this can't happen"
 
     (* declarations *)
-    method import s = new symbol s
-    method export s = new symbol s
-    method local  s = new symbol s
+    method import s = Symbol.unmangled s
+    method export s = Symbol.unmangled s
+    method local  s = Symbol.unmangled s
 
     (* sections *)
     method section s = _section <- s
@@ -109,7 +98,7 @@ object (this)
         let cfg = proc.Proc.cfg 
         and s   = proc.Proc.symbol in
         let mangle  = Mangle.mk spec in
-        output_string fd (cfg2dot ~compress:true ~name:(mangle s#text) cfg)
+        output_string fd (cfg2dot ~compress:true ~name:(mangle s#mangled_text) cfg)
 
     method zeroes n = ()
     method value v = ()

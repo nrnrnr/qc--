@@ -115,13 +115,13 @@ module Personality = struct
     type proc = Proc.t
     let target = Targets.dummy
     let cfg2ast proc =
-      Cfg4.ast Rtlutil.ToAST.rtl proc.Proc.cfg proc.Proc.symbol#text
+      Cfg4.ast Rtlutil.ToAST.rtl proc.Proc.cfg proc.Proc.symbol#mangled_text
 end
 module NewPersonality = struct
     type proc = Ast2ir.proc
     let target = Targets.dummy
     let cfg2ast proc =
-      Cfgutil.new_cfg2ast Rtlutil.ToAST.rtl proc.Proc.cfg proc.Proc.symbol#text
+      Cfgutil.new_cfg2ast Rtlutil.ToAST.rtl proc.Proc.cfg proc.Proc.symbol#mangled_text
 end
 @
 
@@ -161,13 +161,13 @@ module ProcType = struct
     type 'a t       = Proc.t
     let tname       = "proc"
     let eq _        = fun x y -> x = y
-    let to_string _ = fun t -> ("<proc "^t.Proc.symbol#text^">") 
+    let to_string _ = fun t -> ("<proc "^t.Proc.symbol#mangled_text^">") 
 end
 module NewProcType = struct
     type 'a t       = Ast2ir.proc
     let tname       = "new proc"
     let eq _        = fun x y -> x = y
-    let to_string _ = fun t -> ("<new proc "^t.Proc.symbol#text^">") 
+    let to_string _ = fun t -> ("<new proc "^t.Proc.symbol#mangled_text^">") 
 end
 module TargetType = struct
     type 'a t       = Target2.t
@@ -280,7 +280,8 @@ C.register_module "Asm"
   ; "dot"     , V.efunc (Map.outchan **-> V.result Map.asm) Dotasm.asm
   ; "new_dot" , V.efunc (Map.outchan **-> V.result Map.new_asm) Dotasm.new_asm
   ; "asdl"    , V.efunc (Map.outchan **-> V.result Map.asm) Asdlasm.asm 
-  ; "x86"     , V.efunc (Map.outchan **-> V.result Map.asm) X86asm.make
+  ; "x86"     , V.efunc (Map.outchan **-> V.result Map.asm) (X86asm.make Cfgutil.emit)
+  ; "new_x86" , V.efunc (Map.outchan **-> V.result Map.new_asm) (X86asm.make Cfgutil.new_emit)
   ; "interp"  , V.efunc (Map.outchan **-> V.result Map.asm) InterpAsm.asm
   ; "sparc", V.efunc (V.bool **-> Map.outchan 
                              **-> V.result Map.asm)       Msparcasm.asm

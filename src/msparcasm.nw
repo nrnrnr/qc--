@@ -34,7 +34,6 @@ let unsupported msg = raise (Unsupported msg)
 
 <<decoder>>
 <<name mangler spec>>
-<<class symbol>>
 <<class asm>>
 
 let asm solaris fd = new asm solaris fd
@@ -66,7 +65,7 @@ module RelocPrint = struct
         match normalize reloc with
         | Some s, const -> 
             List.fold_left Sledlib.String.cat (Sledlib.String.of_string "")
-                [ Sledlib.String.of_string s#text
+                [ Sledlib.String.of_string s#mangled_text
                 ; Sledlib.String.of_string "+ ("
                 ; c2s const
                 ; Sledlib.String.of_string ")"
@@ -108,21 +107,6 @@ let spec =
 
 @
 
-% ------------------------------------------------------------------ 
-\subsubsection{Classes for symbols}
-% ------------------------------------------------------------------ 
-
-We include name mangling into [[Symbol.t]] class because all assembler
-symbols like labels will be derived from them. Since the mangler is
-stateful, we have to create it outside the individual instance of a
-symbol. For now, we pass it from the assembler to here.
-
-<<class symbol>>=
-class symbol (mangle:Mangle.t) (n:string) : Symbol.t = object
-    method text    = mangle n
-end
-@
-
 
 
 % ------------------------------------------------------------------ 
@@ -139,16 +123,16 @@ object (this)
     val         _mangle  = (Mangle.mk spec)   
 
     (* declarations *)
-    method import s = new symbol _mangle s
-    method export s = new symbol _mangle s
-    method local  s = new symbol _mangle s
+    method import s = Symbol.with_mangler _mangle s
+    method export s = Symbol.with_mangler _mangle s
+    method local  s = Symbol.with_mangler _mangle s
 
     (* sections *)
     method section s = _section <- s
     method current   = _section
 
     (* definitions *)
-    method label (s: Symbol.t) = P.fprintf _fd "%s:\n" (s#text)
+    method label (s: Symbol.t) = P.fprintf _fd "%s:\n" (s#mangled_text)
     method const s b = unsupported "no assembler instruction symbol=bits"
 
     (* locations *)
@@ -165,7 +149,7 @@ object (this)
         | None, bits   -> 
             P.fprintf _fd ".word %Lx\n" (Bits.U.to_int64 bits)
         | Some s, bits -> 
-            P.fprintf _fd ".word %s + %Lx\n" s#text (Bits.U.to_int64 bits) 
+            P.fprintf _fd ".word %s + %Lx\n" s#mangled_text (Bits.U.to_int64 bits) 
 
     method value (v:Bits.bits) = 
         match Bits.width v with
@@ -192,11 +176,9 @@ object (this)
     method cfg_instr (proc:Proc.t) =
         let cfg    = proc.Proc.cfg 
         and symbol = proc.Proc.symbol in
+        let label l = this#label (Impossible.unimp "minisparc symbol lookup") in
         ( this#label symbol
-        ; GU.emit cfg
-                  (fun rtl () -> this#instruction rtl)
-                  (fun sym () -> this#label sym)
-                  ()
+        ; GU.emit cfg this#instruction label 
         )          
 
     (* etc *)

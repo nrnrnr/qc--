@@ -124,17 +124,6 @@ let spec =
 
 
 % ------------------------------------------------------------------ 
-\subsubsection{Classes for symbols}
-% ------------------------------------------------------------------ 
-
-<<Make>>=
-class symbol (n:string) : Symbol.t = 
-object(this)
-    method text    = n
-end
-@
-
-% ------------------------------------------------------------------ 
 \subsubsection{Relocatable Addresses}
 % ------------------------------------------------------------------ 
 
@@ -146,7 +135,7 @@ the same width as a pointer.
 let reladdr (a:reloc) =
     let width           = P.target.T.pointersize in
     let const (i:int64) = A.Int(Printf.sprintf "%Lx" i, Some pointer) in
-    let sym   s         = A.Fetch (A.Name(None,s#text)) in
+    let sym   s         = A.Fetch (A.Name(None,s#mangled_text)) in
         match Reloc.Simple.normalize a with
         | None  , bits -> const (Bits.U.to_int64 bits)
         | Some s, bits -> A.PrimOp("add", [(None, sym s)
@@ -196,16 +185,16 @@ object (this)
     (* declare symbols *)
     method import s =
         ( _imported <- Strutil.Set.add s _imported
-        ; new symbol (_mangle s)
+        ; Symbol.with_mangler _mangle s
         )
         
     method export s =
         ( _exported <- Strutil.Set.add s _exported
-        ; new symbol (_mangle s)
+        ; Symbol.with_mangler _mangle s
         )
         
     method local  s = 
-        new symbol (_mangle s)
+        Symbol.with_mangler _mangle s
 
     (* sections *)
     (* section closes the current section and adds it to toplevel. It is
@@ -222,12 +211,12 @@ object (this)
             
     (* define symbols *)        
     method label (s: Symbol.t) = 
-        this#append (A.Datum(A.Label s#text))
+        this#append (A.Datum(A.Label s#mangled_text))
     
     method const (s: Symbol.t) (b:Bits.bits) =
         let i = Printf.sprintf "0x%Lx" (Bits.U.to_int64 b) in 
         let bits = A.Int(i,Some (bits (Bits.width b))) in
-        this#append (A.Decl(A.Const(None,s#text,bits)))
+        this#append (A.Decl(A.Const(None,s#mangled_text,bits)))
 
     (* set location counter *)
     method org n =

@@ -388,11 +388,6 @@ because symbols are assembler specific and in particular, are
 responsible for name mangling. 
 
 <<OO>>=
-class symbol (s:string) : Symbol.t =
-object
-    method text = s
-end
-
 class  graph target nop:   cfg =
 object (this)
     val         _nop            = (nop: 'i)
@@ -484,7 +479,7 @@ method label name symbol node =
 
 method anon = 
     let l = Idgen.label "anon" in
-        (l, new symbol l)
+        (l, Symbol.unmangled l)
 @
 
 Add a node to [[this]] {\cfg}. Any enumeration is destroyed.
@@ -784,7 +779,7 @@ object(this)
         let this    = (this :> node) in
             match _symbol with
             | None   -> assert false (* undefined label! *)
-            | Some s -> A.LabelStmt (s#text)
+            | Some s -> A.LabelStmt (s#mangled_text)
     
     method test =
         let this = (this :> labl) in
@@ -797,7 +792,7 @@ object(this)
         | None   -> assert false
         | Some s -> 
             fprintf fd "CMM.define_label('%s') -- %s \n" 
-                s#text
+                s#mangled_text
                 "could be a continuation node"
 end
 @
@@ -1024,7 +1019,7 @@ object (this)
             | token, (Some s, offset) -> 
                 fprintf fd "CMM.begin_span(%d,'%s') -- offset: %d\n"
                     (Bits.S.to_int token)
-                    (s#text)
+                    (s#mangled_text)
                     (Bits.S.to_int offset)
             | token, (None  , offset) ->
                 Impossible.impossible 
@@ -1037,7 +1032,7 @@ object (this)
         (* We expect all continuation nodes to have a symbol. Is this
            correct? Believe this to be correct --CL *)
         let label n = match n#symbol with
-            | Some s -> sprintf "'%s'" (s#text)
+            | Some s -> sprintf "'%s'" (s#mangled_text)
             | None   -> Impossible.impossible 
                             "call#interp: continuation without label" in
             
@@ -1137,7 +1132,7 @@ object (this)
                     | Rtl.Private.Const(Rtl.Private.Link(s,_)) -> s
                     | _ -> assert false in
         ( Rtltolua.exp fd g
-        ; fprintf fd "CMM.cbrancht('%s')\n" s#text
+        ; fprintf fd "CMM.cbrancht('%s')\n" s#mangled_text
         )
 
 end

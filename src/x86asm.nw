@@ -19,7 +19,10 @@ It implements the
 
 The assembler constructor receices the output channel for the assembler. 
 <<x86asm.mli>>=
-val make : out_channel -> Proc.t Asm3.assembler
+val make : 
+  ('cfg -> (Rtl.rtl -> unit) -> (string -> unit) -> unit) ->
+  out_channel -> ('a, 'cfg, 'b, 'c) Proc.t' Asm3.assembler
+  (* pass Cfgutil.emit or Cfgutil.new_emit *)
 @
 
 % ------------------------------------------------------------------ 
@@ -30,14 +33,10 @@ The implementation provides no surprises. It builds up an {\AST} and
 emits it to [[stdout]] when the [[emit]] method is called.
 
 <<x86asm.ml>>=
-module T        = Target2
-module A        = Ast
-module G        = Cfg4
-module GU       = Cfgutil
-
+module SM = Strutil.Map
 <<utilities>>
 <<definitions>>
-let make fd = new asm fd
+let make emitter fd = new asm emitter fd
 @
 <<utilities>>=
 let fprintf = Printf.fprintf
@@ -54,9 +53,6 @@ stateful, we have to create it outside the individual instance of a
 symbol. For now, we pass it from the assembler to here.
 
 <<definitions>>=
-class symbol (mangle:Mangle.t) (n:string) : Symbol.t = object
-    method text    = mangle n
-end
 <<definition of [[manglespec]] (for the name mangler)>>=
 let spec =
     let reserved = [] in        (* list reserved words here so we can
@@ -95,20 +91,19 @@ The assembler maintains mutable state for:
 
 Most methods append a declaration to the current section---[[append]]
 provides a private method for this.
-
-The [[init]] argument for the constructor provides a chance to open a
-file or similar. We don't use it at the momement.
-
 <<definitions>>=
-type init = unit
-type i    = Proc.t
-
 <<definition of [[manglespec]] (for the name mangler)>>
 
-class asm (fd:out_channel): [Proc.t] Asm3.assembler = 
+class ['a, 'b, 'c, 'd] asm emitter fd : [('a, 'b, 'c, 'd) Proc.t'] Asm3.assembler = 
 object (this)
     val         _fd       = fd
     val         _mangle  = (Mangle.mk spec)   
+    val mutable _syms    = SM.empty 
+    method private new_symbol name =
+      let s = Symbol.with_mangler _mangle name in
+      _syms <- SM.add name s _syms;
+      s
+
     <<private assembly state>>
     method private print l = List.iter (output_string _fd) l
 
@@ -119,15 +114,15 @@ Importing emits nothing; identifiers that are otherwise undefined are
 automatically imported.
 Maintaining the symbol table suffices.
 <<assembly methods>>=
-method import s = new symbol _mangle s
+method import s = this#new_symbol s
 @
 Exporting requires announcing as global.
 <<assembly methods>>=
-method export s = Printf.fprintf _fd ".globl %s\n" s; new symbol _mangle s
+method export s = Printf.fprintf _fd ".globl %s\n" s; this#new_symbol s
 @ 
 Locals also require no announcement.
 <<assembly methods>>=
-method local s = new symbol _mangle s
+method local s = this#new_symbol s
 @ 
 \emph{Common seems to be missing from the Q\PAL\ version.}
 <<X86 assembly interface procedures>>=
@@ -149,7 +144,7 @@ static AsmSymbol asm_common(name, size, align, section)
 The symbol bound to a label should be made local if it isn't already.
 The name of this method should probably change to [[define_label]].
 <<assembly methods>>=
-method label (s: Symbol.t) = fprintf _fd "%s:\n" s#text
+method label (s: Symbol.t) = fprintf _fd "%s:\n" s#mangled_text
 @ 
 Gcc does this:
 <<X86 assembly interface procedures>>=
@@ -212,7 +207,7 @@ method addr a =
   | None, bits   -> 
       fprintf _fd ".word %s\n" (hexbits bits)
   | Some s, bits -> 
-      fprintf _fd ".word %s + %s\n" s#text (hexbits bits) 
+      fprintf _fd ".word %s + %s\n" s#mangled_text (hexbits bits) 
 @ 
 <<assembly methods>>=
 method emit = ()
@@ -221,7 +216,7 @@ method emit = ()
 method comment s = fprintf _fd "/* %s */\n" s
 
 method const (s: Symbol.t) (b:Bits.bits) = 
-  fprintf _fd ".set %s, %s" s#text (hexbits b)
+  fprintf _fd ".set %s, %s" s#mangled_text (hexbits b)
 @ 
 This almost certainly doesn't work---we must linearize the flow graph
 and know to emit labels.
@@ -234,15 +229,18 @@ method private instruction rtl =
   output_string _fd (X86rec.M.to_asm rtl);
   output_string _fd "\n"
 
-method cfg_instr (proc:Proc.t)  = 
+method cfg_instr proc  = 
     (* We have to emit a label/whatever for the procedure's 
        entry point. This is what symbol is for. Simply use this#label?  *)
     let cfg    = proc.Proc.cfg
     and symbol = proc.Proc.symbol in
+    let label l =
+      this#label
+        (try SM.find l _syms
+         with Not_found -> Impossible.impossible ("unannounced symbol " ^ l)) in
     this#label symbol;
-    GU.emit cfg (fun rtl ()  -> this#instruction rtl)
-                (fun sym ()  -> this#label sym)
-                ()
+    (emitter cfg (this#instruction) label : unit)
+
 <<utilities>>=
 module Asm = X86rec.M
 @

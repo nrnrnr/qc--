@@ -113,18 +113,6 @@ let spec =
             }
 @
 
-
-% ------------------------------------------------------------------ 
-\subsubsection{Classes for symbols}
-% ------------------------------------------------------------------ 
-
-<<Make>>=
-class symbol (n:string) : Symbol.t = 
-object(this)
-    method text    = n
-end
-@
-
 % ------------------------------------------------------------------ 
 \subsubsection{The assembler class}
 % ------------------------------------------------------------------ 
@@ -166,17 +154,17 @@ object (this)
     (* -- declare symbols -- *)
     method import s =
         ( _imported <- Strutil.Set.add (_mangle s) _imported
-        ; new symbol (_mangle s)
+        ; Symbol.with_mangler _mangle s
         )
         
     method export s =
         ( _exported <- Strutil.Set.add (_mangle s) _exported
-        ; new symbol (_mangle s)
+        ; Symbol.with_mangler _mangle s
         )
         
     (* FIX what is local supposed to do ? *)
     method local  s = 
-        new symbol (_mangle s)
+        Symbol.with_mangler _mangle s
 
 
     (* -- sections -- *)
@@ -191,7 +179,7 @@ object (this)
             
     (* define symbols *)        
     method label (s: Symbol.t) = 
-        this#append (luafunc "define_label" (quoted s#text))
+        this#append (luafunc "define_label" (quoted s#mangled_text))
     
     (* FIX can we ignore constants here? *)
     method const (s: Symbol.t) (b:Bits.bits) = 
@@ -215,7 +203,7 @@ object (this)
         let stackd  = Block.size proc.Proc.stackd in (* stackdata size   *)
         let fprintf = Printf.fprintf in
         ( fprintf fd "CMM.procedure ('%s',%d,%d) -- stack data size correct\n" 
-                      symbol#text
+                      symbol#mangled_text
                       vars
                       stackd
         ; G.interp cfg _fd
@@ -245,7 +233,7 @@ object (this)
 			this#append (initdata (Bits.width bits) [(hexbits bits)])
 		| Some s, bits ->
 			this#append (luafunc "emit_raddr" 
-						         ((quoted s#text) ^ "," ^ 
+						         ((quoted s#mangled_text) ^ "," ^ 
 								  (quoted (hexbits bits))))
 
     (* should we consider throwing the comments in as Lua comments? *)

@@ -550,7 +550,7 @@ and stmt props s succ =
   | A.LabelStmt n          -> G.node_labeled g n
   | A.GotoStmt (e, labels) ->
      (match Dn.exp (expr e) with
-     | RP.Const (RP.Link (sym, w)) -> G.branch g ~target:(G.node_labeled g (sym#text))
+     | RP.Const (RP.Link (sym, w)) -> G.branch g ~target:(G.node_labeled g (sym#mangled_text))
      | e -> let instr   = target.T.goto.T.embed (Up.exp e) in
             let targets = List.map (G.node_labeled g) labels in
             G.mbranch g instr targets)
@@ -768,12 +768,12 @@ let proc containing_spans (cconv,procname,args,procbody) =
 
     let exp_of_label l = R.link ((F.asm env)#local l) pointersize in
     let exp_to_label e = match Dn.exp e with
-    | RP.Const(RP.Link (l, _)) -> l # text
+    | RP.Const(RP.Link (l, _)) -> l#original_text
     | _ -> impossible "bad label projection" in
     let guarded_exp_of_label (g,l) =
      (g, (R.link ((F.asm env)#local l) pointersize)) in
     let guarded_exp_to_label (e1,e2) = match (e1, Dn.exp e2) with
-    | (g, RP.Const(RP.Link (l, _))) -> (g, l # text)
+    | (g, RP.Const(RP.Link (l, _))) -> (g, l#original_text)
     | _                           -> impossible "bad label projection" in
     let info = { G.goto = { T.embed = target.T.goto.T.embed << exp_of_label
                           ; T.project = exp_to_label << target.T.goto.T.project }
