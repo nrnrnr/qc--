@@ -48,6 +48,7 @@ type value      = CharConst     of char
 
 type kind       = Register
                 | Memory 
+                | Continuation
                 | Constant      of value
 
 type id         = string
@@ -59,13 +60,13 @@ module IDSet    = Set.Make(ID)
 module Symbol   = Env.Make(ID)
 @
 
-In \C~symbols are never re-declared.  Thus a symbol should never be
-entered into the symbol table when the same symbol is already part of
-it.  The [[enter]] function checks for this.  However, during the
-evaluation of constants an existing entry for a constant must be
-replaced with the one that holds the actual type and value of a
-constant.  The [[replace]] function allows to use the original
-semantics of [[Symbol.enter]]. 
+In \C~global symbols are never re-declared.  Thus a global symbol
+should never be entered into the symbol table when the same symbol is
+already part of it.  The [[enter]] function checks for this.  However,
+during the evaluation of constants an existing entry for a constant
+must be replaced with the one that holds the actual type and value of
+a constant.  The [[shadow]] function allows to use the original
+
 
 <<>>=
 let enter key v env =
@@ -76,8 +77,11 @@ let enter key v env =
 
 let enter_ok key v env = enter key (Ok v) env
 
-let replace key v env =
+let shadow key v env =
     Symbol.enter key v env
+
+let shadow_ok key v env =
+    Symbol.enter key (Ok v) env
 
 let lookup x env = 
     ( try Symbol.lookup x env with 
@@ -126,9 +130,10 @@ let ppValue = function
     | ExprConst(e)  -> text "<expr>"
 
 let ppKind = function
-    | Register    -> text "register"
-    | Memory      -> text "memory"
-    | Constant(v) -> text "constant:" ^/ ppValue v
+    | Register      -> text "register"
+    | Memory        -> text "memory"
+    | Continuation  -> text "continuation"
+    | Constant(v)   -> text "constant:" ^/ ppValue v
 
 
 let ppEntry (key,v) = 
@@ -384,7 +389,7 @@ let eval env =
     let eval env id = 
         ( match evalConstID IDSet.empty env id with
         | Ok(_,_,env') -> env'
-        | Error        -> replace id Error env
+        | Error        -> shadow id Error env
         ) 
      in
         foldl eval env keys    
@@ -470,7 +475,7 @@ and evalConst set env id ty = function
     | ExprConst(e)  -> 
         ( match evalExpr (IDSet.add id set) env e with
         | Error          -> Error
-        | Ok(t, x, env') -> Ok (t , x, replace id (Ok(t,Constant(x))) env)
+        | Ok(t, x, env') -> Ok (t , x, shadow id (Ok(t,Constant(x))) env)
         )
     | x             -> Ok (ty, x , env)
         
@@ -524,30 +529,6 @@ let rec ty = function
     | TyAt(x,_)       -> ty x
     | BitsTy(n)       -> Types.Bits(n)
     | FloatTy(n)      -> Types.Bits(n)
-    
-let rec lvalue env = function
-    | LValueAt(x,_)   -> Ok ()
-    | Var(x)          -> Ok ()
-    | Mem(t,e,a)      -> Ok ()
-                        
-and actual env = function
-    | ( Some hint, e) -> Ok ()
-    | ( None     , e) -> Ok ()
-
-and actuals env xs = env
-    
-and expr env = function
-    | ExprAt(x,_)             -> Ok () 
-    | Int( i, None)           -> Ok () 
-    | Int( i, Some size)      -> Ok () 
-    | Float( f, None)         -> Ok () 
-    | Float( f, Some size)    -> Ok () 
-    | Char( c, None)          -> Ok () 
-    | Char( c, Some size)     -> Ok () 
-    | Fetch(v)                -> Ok () 
-    | BinOp(l,op,r)           -> Ok () 
-    | UnOp(op,e)              -> Ok () 
-    | PrimOp(n,xs)            -> Ok () 
 
 let rec tyFetch env = function
     | LValueAt(v,_) -> tyFetch env v
@@ -630,58 +611,78 @@ let rec datum env = function
                         else error ("illegal alignment: " ^ string_of_int a)
     | MemDecl(t,m,i) -> memdecl env (ty t) m i
 
-let formal env ( h, v, t, n) = Ok ()
-let formals env xs = Ok()
-
-let register env ( v , t, n, reg) = Ok ()
-
 let rec decl env = function
     | DeclAt(x,_)    -> Ok ()
     | LRegisters(rs) -> Ok ()
     | Stackdata( dd) -> Ok ()               
 
-let targets env = function
-    | []    -> Ok ()
-    | ts    -> Ok ()
+let checkJumpTarget env x =
+    match strip (lookup x env) with
+    | t, Memory when t = pointer -> ()
+    | otherwise                  -> error (x^" is not a label")
     
+let targets env ts = List.iter (checkJumpTarget env) ts 
+
+let checkFlowTarget env x =
+    if snd (strip (lookup x env)) = Continuation then
+        ()
+    else 
+        error (x^" is not a continuation")
+       
+
 let rec flow env = function
-    | FlowAt(x,_)     -> Ok ()
-    | CutsTo(ns)      -> Ok ()
-    | UnwindsTo(ns)   -> Ok ()
-    | ReturnsTo(ns)   -> Ok ()
-    | Aborts          -> Ok ()
+    | FlowAt(x,r)     -> flow env x
+    | CutsTo(ns)      -> List.iter (checkFlowTarget env) ns 
+    | UnwindsTo(ns)   -> List.iter (checkFlowTarget env) ns 
+    | ReturnsTo(ns)   -> List.iter (checkFlowTarget env) ns 
+    | Aborts          -> ()
 
-let flows env = function
-    | []    ->  Ok ()
-    | xs    ->  Ok ()
-
+let flows env fs = List.iter (flow env) fs
 
 let conv env = function
-    | Some cc       -> Ok () 
-    | None          -> Ok ()
+    | Some cc       -> () 
+    | None          -> ()
 
 let rec stmt env = function
     | StmtAt(x,_)                         -> stmt env x
-    | IfStmt ( e, ss1, ss2)               -> Ok ()
-    | LabelStmt(n)                        -> Ok ()
-    | ContStmt(n,ns)                      -> Ok ()
-    | SpanStmt(e1,e2,ss)                  -> Ok ()
-    | AssignStmt(xs)                      -> Ok ()
-    | CallStmt( lhs, cc, e, args, ts, fs) -> Ok ()
-    | PrimStmt( lhs, cc, n, args, fs)     -> Ok ()
-    | GotoStmt(e,ts)                      -> Ok ()
-    | CutStmt(n, args, fs)                -> Ok ()
-    | ReturnStmt(cc, alt, args)           -> Ok ()
-    | JumpStmt(cc,e,args,ts)              -> Ok ()
-    | EmptyStmt                           -> Ok ()
+    | IfStmt ( e, ss1, ss2)               -> ()
+    | LabelStmt(n)                        -> ()
+    | ContStmt(n,ns)                      -> ()
+    | SpanStmt(e1,e2,ss)                  -> ()
+    | AssignStmt(xs)                      -> ()
+    | CallStmt( lhs, cc, e, args, ts, fs) -> ()
+    | PrimStmt( lhs, cc, n, args, fs)     -> ()
+    | GotoStmt(e,ts)                      -> ()
+    | CutStmt(n, args, fs)                -> ()
+    | ReturnStmt(cc, alt, args)           -> ()
+    | JumpStmt(cc,e,args,ts)              -> ()
+    | EmptyStmt                           -> ()
 
-let stmts env ss = foldl stmt env ss
+let stmts env ss = List.iter (stmt env) ss
 
-let constant env (name,expr) = Ok ()
+let formal env (hint, inv, t, name) =
+    shadow_ok name (ty t, Register) env
 
-let procedure cc fs ds ss = ()
- 
+let formals env fs = foldl formal env fs
 
+let register env (inv, t, name, reg) =
+    shadow_ok name (ty t, Register) env
+
+let registers env rs = foldl register env rs
+
+
+let rec decl env = function
+    | DeclAt (d, r)     -> decl env d
+    | LRegisters rs     -> registers env rs
+    | Stackdata ds      -> env (* XXX *)
+
+let decls env ds =
+    foldl decl env ds
+
+let procedure env cc fs ds ss =
+    let env'  = formals env fs in
+    let env'' = decls env ds   in
+        stmts env'' ss  
      
 let export_ env t n (t',kind) =
     ( match t, t', kind with
@@ -700,7 +701,7 @@ let rec section env = function
     | SSpan( e1, e2, ss)         -> List.iter (section env) ss
     | Datum( d)                  -> datum env d
     | SExport (t, ns)            -> List.iter (export env t) ns
-    | Procedure(cc,n,fs, ds, ss) -> procedure cc fs ds ss
+    | Procedure(cc,n,fs, ds, ss) -> procedure env cc fs ds ss
     
 let rec topdecl env = function
     | TopDeclAt(x,r)  -> topdecl env x
@@ -710,7 +711,7 @@ let rec topdecl env = function
     | Section( n, ss) -> List.iter (section env) ss
     | Registers( rs)  -> ()
     | Pragma          -> ()
-    | TopProcedure(n,cc,fs,ds,ss) -> ()
+    | TopProcedure(n,cc,fs,ds,ss) -> procedure env cc fs ds ss 
                                             
 let program env ds srcmap =
     ignore (List.map (topdecl env) ds) ; Ok ()  
