@@ -4,6 +4,7 @@
 # `mk INTERP=xxx update.opt' in the lua directory
 
 PATH=$PATH:../bin
+TIME=${TIME-/usr/bin/time}
 
 version=fixed_hash
 version=chose_good_sizes
@@ -87,7 +88,7 @@ PROFILE=-p
 
 while [ $# -gt 0 ]; do
   case $1 in
-    -std|-old|-stdu) INTERP=$1 ; shift ;;
+    -std|-old|-stdu|-c) INTERP=$1 ; shift ;;
     -p) PROFILE=-p ; shift ;;
     -nop) PROFILE= ; shift ;;
     *) break ;;
@@ -111,8 +112,8 @@ do
     else
       input=/dev/null
     fi
-    /usr/bin/time -f "at size $truesize, $interp took %e seconds" \
-    /usr/bin/time \
+    $TIME -f "at size $truesize, $interp took %e seconds" \
+    $TIME \
        -f "version=$version base=$base size=$truesize size2=$size INTERP=$INTERP PROFILE=$PROFILE sec=%e memmax=%M memavg=%K" \
        -o $i.stats -a \
       <$input $interp $i $truesize $size2 > $i.out$INTERP$PROFILE || fail $interp $i
