@@ -35,9 +35,7 @@ these expression to gain knowledge about their embedded constants. A
 
 
 <<const.mli>>=
-module HighLevel: sig
-    <<HighLevel interface>>        
-end
+<<HighLevel interface>>        
 
 module LowLevel: sig
     <<LowLevel interface>>
@@ -66,24 +64,34 @@ type solution =
     }
 
 val empty: width:int -> t
+
 val register:   Rtl.exp -> t -> t               (* req: Rtl.exp = Rtl.link *)
+val sym:        string -> t -> (t * Rtl.exp)    (* create symb. constant *)
 val make_equal: Rtl.exp -> Rtl.exp -> t -> t 
+val make_equal': Rtl.exp -> x:int -> Rtl.exp -> y:int-> t -> t
 
 val solve: t -> solution                        (* Can'tSolve *)
 @
 
 Symbolic compile-time constants, created by [[Rtl.link]],  must be
 [[registered]] in the equation system [[t]] that is used to find their
-values. It is a checked run-time error to pass anything but an
+values. The reason is, that {\rtl} expressions might contain other
+[[Rtl.link]] values that do not represent compile-time constants.
+Alternatively, [[sym]] creates an [[Rtl.link]] value and registers it in
+one step.  It is a checked run-time error to pass anything but an
 [[Rtl.link]] value to [[register]].
 
 Equations $e_1 = e_2$ are added to an equation system by ([[make_equal]]
-$e_1$ $e_2$). Both expressions must be of the same width, otherwise it is
-an unchecked run-time error. One of the two equations must include at
-least one symbolic (and registered) compile-time constant, otherwise
-[[solve]] will raise [[Can'tSolve]]. All expression must be of the same
-[[width]] (that is typically the native pointer size) that is announced
-when the [[empty]] set of equations is created.
+$e_1$ $e_2$). One of the two equations must include at least one
+symbolic (and registered) compile-time constant, otherwise [[solve]]
+will raise [[Can'tSolve]]. All expression must be of the same [[width]]
+(that is typically the native pointer size) that is announced when the
+[[empty]] set of equations is created.
+
+The function ([[make_equal']] $e_1$ $x$ $e_2$ $y$) adds the equation
+($e_1 + x = e_2 + y$) to the equation system. This is a special case of
+[[make_equal]] that occurs when [[Area.t]] values are overlayed
+(c.f.~module \module{area}).
 
 The [[solve]] function takes an equation system [[t]] and tries to
 determine the values of all registered symbolic constants. The
@@ -181,9 +189,7 @@ module LowLevel = struct
     end
 end
 
-module HighLevel = struct
-    <<HighLevel>>
-end
+<<HighLevel>>
 @
 
 % ------------------------------------------------------------------ 
@@ -234,6 +240,9 @@ let register exp t = match Rtl.Convert.exp exp with
     | RP.Const(RP.Link (x,_)) -> { t with symbols = Str.Set.add x t.symbols }
     | _                       -> invalid_arg "Const.HighLevel.register"
 
+
+let sym x t =
+    { t with symbols = Str.Set.add x t.symbols }, Rtl.link x t.width 
 @
 
 To convert an [[Rtl.exp]] value into an [[Eqns.exp]] value the
@@ -255,6 +264,14 @@ let rec exp t = function
     | RP.App(("sub",_),[e1;e2]) -> Eqns.sub (exp t e1) (exp t e2)
     | x                -> Eqns.const x
     
+
+let make_equal' e1 (x:int) e2 (y:int) t =
+    let e1    = Rtl.Convert.exp e1 in
+    let e2    = Rtl.Convert.exp e2 in
+    let left  = Eqns.add (exp t e1) (Eqns.int x) in
+    let right = Eqns.add (exp t e1) (Eqns.int y) in
+    let eqns  = Eqns.make_equal left right t.eqns in
+        { t with eqns = eqns }
     
 let make_equal e1 e2 t = 
     let e1   = Rtl.Convert.exp e1 in

@@ -403,7 +403,10 @@ let rec merge = function    (* merges adjacent identical terms *)
     | [_] as x -> x
     | (c1,t1 as ct1)::((c2,t2)::rest1 as rest2)  ->
         if E.compare t1 t2 = 0 then
-            merge ((c1+c2,t1)::rest1)
+            if c1+c2 <> 0 then
+                merge ((c1+c2,t1)::rest1)
+            else
+                merge rest1     (* drop zero coefficient *)
         else
             ct1 :: merge rest2
 
