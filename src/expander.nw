@@ -937,22 +937,36 @@ and guarded g left right w =
   | RP.App ((("conj" | "disj"), []), [g]) ->
       Impossible.unimp "conjunction or disjunction in generic code expander"
       (* one day to be expanded into control flow *)
-  | RP.App (cmp, [x; y]) ->
+  | RP.App (cmp, ([x; y] as args)) when left = pc_lhs ->
       begin
         match Post.opclass cmp with
         | PX.Register ->
-            if left = pc_lhs then
-              let context = cmp_context cmp in
-              let xt, xis = to_temp room context x in
-              let yt, yis = to_temp room context y in
-              match right with
-              | RP.Const c -> xis @@ yis @@ to_segment (Post.bc xt cmp yt c)
-              | _ -> Impossible.unimp "conditional branch to computed location"
-            else
-              Impossible.unimp "guard on other than conditional branch";
+            let context = cmp_context cmp in
+            let xt, xis = to_temp room context x in
+            let yt, yis = to_temp room context y in
+            (match right with
+            | RP.Const c -> xis @@ yis @@ to_segment (Post.bc xt cmp yt c)
+            | _ -> Impossible.unimp "conditional branch to computed location")
         | PX.Stack(dir, depth) ->
-            Impossible.unimp "conditional branch on machine-stack operator"
+            let args = List.filter is_not_rounding_mode args in (* cheat!!! *)
+            let args =
+              match dir with PX.LeftFirst -> args | PX.RightFirst -> List.rev args in
+            let push_args room =
+              let (is, _) =
+                List.fold_left (fun (is,r) e -> (is @@ to_stack r e, r-1))
+                (emptyseg,room) args in
+              is in
+            let compute room =
+              match right with
+              | RP.Const c -> push_args room @@ to_segment (Post.bc_stack cmp c)
+              | _ -> Impossible.unimp "conditional branch to computed location" in
+            if room >= depth then
+              compute room
+            else
+              save_stack room @@ compute Post.stack_depth @@ restore_stack 0 room
       end
+  | RP.App (cmp, [_; _]) ->
+      Impossible.unimp "guard on other than conditional branch";
   | RP.App (cmp, _) ->
       Impossible.unimp "non-binary comparison in guard"
 @ POSSIBLY  REFERENCES TO [[pc_lhs]] SHOULD BE REPLACED BY USING

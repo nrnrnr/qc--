@@ -120,6 +120,11 @@ let reg_names w = match w with
 | 32 -> r32_names
 | _  -> Impossible.impossible "x86 register width not 8/16/32"
 let regname w = Array.get (reg_names w)
+@ 
+\subsection{Other machine info}
+<<code to precede the labeler>>=
+let fpcc = Down.loc X86.fpcc
+let fpustatus = Down.loc X86.fpustatus
 @     
 
 
@@ -387,13 +392,16 @@ inst : Par(Goto(lconst),Par(Store(stacknext, Fetch(eip, x:w), y:w), push))
 @ 
 \paragraph{Floating point}
 <<rules>>=
-one3   : Bits(b:bits)
+one3  : Bits(b:bits)
     [{: guard (Bits.width b = 3 && Bits.Ops.eq (Bits.U.of_int 1 3) b) :}]
     {: () :}
-two3   : Bits(b:bits)
+two3  : Bits(b:bits)
     [{: guard (Bits.width b = 3 && Bits.Ops.eq (Bits.U.of_int 2 3) b) :}]
     {: () :}
-zero   : Bits(b:bits) [{: guard (Bits.Ops.eq (Bits.U.of_int 0 (Bits.width b)) b) :}]
+zero  : Bits(b:bits) [{: guard (Bits.Ops.eq (Bits.U.of_int 0 (Bits.width b)) b) :}]
+             {: () :}
+eight : Bits(b:bits) [{: guard (Bits.width b > 3 &&
+                                Bits.Ops.eq (Bits.U.of_int 8 (Bits.width b)) b) :}]
              {: () :}
 fpsp   : Reg('F', n, w) [{: guard (n = 0 && w = 3):}] {: () :}
 fppop  : Llr(fpsp, "add", one3, w) {: () :}
@@ -440,13 +448,23 @@ fiadd : Fadd(fpstacktop, i2f_mem) {: i2f_mem :}
 inst : Store(fpstacktopl, fiadd, w)
    {: let s, mem = fiadd in sprintf "fiadd%s %s" (suffix s) mem :}
 <<rules>>=
-fpflagsl : Reg('d', n, w) [{: guard (n=1) :}] {: () :}
-inst : Store(fpflagsl, Fcmp(fpstacktop, fpstack1), w)
+fpccl : Fpccl() {: () :}
+fpustatusl : Fpustatusl() {: () :}
+fpustatus : Fetch(fpustatusl, w) {: () :}
+inst : Store(fpccl, Fcmp(fpstacktop, fpstack1), w)
   {: "fcom" :}
-inst : Par(Store(fpflagsl, Fcmp(fpstacktop, fpstack1), w), fppop)
+inst : Par(Store(fpccl, Fcmp(fpstacktop, fpstack1), w), fppop)
   {: "fcomp" :}
-inst : Par(Store(fpflagsl, Fcmp(fpstacktop, fpstack1), w), fppop2)
+inst : Par(Store(fpccl, Fcmp(fpstacktop, fpstack1), w), fppop2)
   {: "fcompp" :}
+@ 
+<<rules>>=
+eax : Reg('r', n, w) [{: guard (n = 0 && w = 32):}]  {: () :}
+ahval : BitExtract(eight, Fetch(eax, fw:w), w) [{: guard (w = 8) :}] {: () :}
+
+inst : Store(eax, BitInsert(zero, Fetch(eax, w), fpustatus), sw:w) {: "fstsw %ax" :}
+inst : Setflags(Ah2flags(ahval)) {: "sahf" :}
+
 @ 
 \paragraph{Other instructions}
 <<rules>>=
@@ -463,7 +481,7 @@ any : True  () {: "True"  :}
 any : False () {: "False" :}
 any : Link(symbol, w) {: "Link(" ^ symbol#mangled_text ^ "," ^ string_of_int w ^ ")" :}
 any : Late(string, w) {: "Late(" ^ string ^ "," ^ string_of_int w ^")" :}
-any : Bits(bits)     {: "Bits(b)" :}
+any : Bits(bits)     {: sprintf "Bits(%s)" (Bits.to_string bits) :}
 
 any : Fetch (any, w) {: "Fetch(" ^ any ^ "," ^ string_of_int w ^ ")" :}
 
@@ -476,6 +494,12 @@ any : Fdiv(x:any, y:any) {: sprintf "Fdiv(%s, %s)" x y :}
 
 any : Fneg(any) {: sprintf "Fneg(%s)" any :}
 any : Fabs(any) {: sprintf "Fabs(%s)" any :}
+
+any : Fpccl() {: "Fpcc()" :}
+any : Fpustatusl() {: "Fpustatus()" :}
+any : BitInsert(x:any, y:any, z:any) {: sprintf "BitInsert(%s, %s, %s)" x y z :}
+any : BitExtract(lsb:any, y:any, n:w) {: sprintf "BitExtract(%s, %s, %d)" lsb y n :}
+any : Ah2flags(any) {: sprintf "Ah2flags(%s)" any :}
 
 any : Sx(any) {: "Sx(" ^ any ^ ")" :}
 any : Zx(any) {: "Zx(" ^ any ^ ")" :}
@@ -537,9 +561,16 @@ constructor for each operator.
 | RP.App(("fdiv", [w]), [x; y; rm]) -> conFdiv (exp x) (exp y) (* need to assert rm *)
 | RP.App(("fneg", [w]), [x]) -> conFneg (exp x)
 | RP.App(("fabs", [w]), [x]) -> conFabs (exp x)
+| RP.App(("fcmp", [w]), [x; y]) -> conFcmp (exp x) (exp y)
 | RP.App(("lobits", [w;n]), [x])   -> conLobits (exp x) n
 | RP.App(("x86_subflags", [w]), [x; y]) -> conX86_subflags (exp x) (exp y)
-| RP.App((("add"|"sub"|"mul_trunc"|"sx"|"zx"|"lobits"|"x86_subflags") as op, ws), xs)->
+| RP.App(("x86_ah2flags", []), [x]) -> conAh2flags (exp x)
+| RP.App(("bitInsert", [w; n]), [lsb; dst; src]) ->
+    conBitInsert (exp lsb) (exp dst) (exp src)
+| RP.App(("bitExtract", [w; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
+| RP.App((("add"|"sub"|"mul_trunc"|"sx"|"zx"|"lobits"|"x86_subflags"|"bitInsert"|
+           "bitExtract"|"fabs"|"fneg"|"fdiv"|"fmul"|"fsub"|"fadd"|"f2f"|"f2i"|
+           "i2f") as op, ws), xs)->
     Impossible.impossible
       (Printf.sprintf
          "operator %%%s specialized to %d widths & applied to %d arguments"
@@ -560,9 +591,11 @@ let rec exp = function
   <<special cases for particular operators>>
   | RP.App((o,_),_)           -> error ("unknown operator " ^ o)
 <<code to follow the labeler>>=  
-and loc = function
+and loc l = match l with
   | RP.Mem('m', aff, w, e, ass) -> conMem (exp e) w
   | RP.Mem('f', aff, w, e, ass) -> conFpreg (exp e)
+  | (RP.Reg(_, _, _) | RP.Slice(_, _, _)) when l = fpcc -> conFpccl ()
+  | RP.Reg(sp, i, w) when l = fpustatus -> conFpustatusl()
   | RP.Reg(sp, i, w)          -> conReg sp i w 
   | RP.Mem(_, _, _, _, _)     -> error "non-mem, non-reg cell"
   | RP.Var(s, i, w)           -> error "var found"

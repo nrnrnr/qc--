@@ -28,6 +28,8 @@ module Spaces : sig
   val u : Space.t
   val c : Space.t   (* PC at 0 and condition codes at 2 *)
 end
+val fpcc : Rtl.loc (* the FPU condition codes *)
+val fpustatus : Rtl.loc (* the FPU status word *)
 module Post : Postexpander.S
 module X    : Expander.S
 val target : Ast2ir.tgt
@@ -68,6 +70,7 @@ module Spaces = struct
                     ; S.classification = S.Temp all_floats
                     } 
   let c = Space.Standard32.c 3 id [32]
+(*
   let d = Space.checked
                 { Space.space          = 'd'
                 ; Space.doc            = "FP rounding mode"
@@ -78,6 +81,7 @@ module Spaces = struct
                 ; Space.widths         = [2]
                 ; Space.classification = Space.Reg
                 }
+*)
                 
 end
 @
@@ -93,9 +97,23 @@ module Up   = Rtl.Up
 module Down = Rtl.Dn
 
 let fpcond n       = Rtl.reg  ('d',n,2)  (* FP modes *)
-let rounding_modes = R.fetch (fpcond 0) 2
+let rounding_modesl   = fpcond 0
+let rounding_resultsl = fpcond 1
 
 let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
+
+let fpuc n = Rtl.reg ('e', n, 16)
+let fpuctl    = fpuc 0
+let fpustatus = fpuc 1
+let fputag    = fpuc 2
+
+let fpcc = R.slice 3 ~lsb:8 fpustatus (* ignores bit 14 == C3 [probably OK] *)
+
+let rounding_modesl = R.slice 2 ~lsb:10 fpuctl
+
+let rounding_modes  = R.fetch rounding_modesl 2
+
+
 module Post = struct
   <<x86 postexpander>>
 end
@@ -158,6 +176,15 @@ let edx = temploc edx_reg
 let ecx_reg = ('r', 1, 32)
 let esp = temploc ('r', 4, 32)
 let espreg = ('r', 4, 32)
+
+let upint32 n = Up.const (RP.Bits(Bits.U.of_int n 32))
+
+let insert16 dst src =
+  R.app (R.opr "bitInsert" [32; 16]) [upint32 0; dst; src]
+let store16 loc v =
+  R.store loc (insert16 (R.fetch loc 32) v) 32
+let bitExtract lsb src w =
+  R.app (R.opr "bitExtract" [32; w]) [upint32 lsb; src]
 @ 
 Here are some invented operators that hide the real truth about what
 happens to the flags.
@@ -299,7 +326,6 @@ until we try it with other versions of the x86 divide instruction.
     let div = exp_with_flags divflags eax_reg
                              (R.app (R.opr "div" [32;32]) [regpair; tempval y])
                              regpair (tempval y) 32 in
-    let upint n = Up.const (RP.Bits(Bits.U.of_int n 32)) in
     move_rtl x eax_reg :: div :: (is @ (move_rtl eax_reg x :: move))
 @ 
 I don't know why it's safe to clobber ECX here.
@@ -339,10 +365,9 @@ let divu_trunc icontext dst x y =
         ]  in
     let eax = ('r', 0, 32) in
     let edx = ('r', 2, 32) in
-    let upint n = Up.const (RP.Bits(Bits.U.of_int n 32)) in
     [ move_rtl eax tmpa; move_rtl edx tmpd    (* restore *)
     ; move_rtl dst eax; divmod                (* divide *)
-    ; move_rtl eax x; R.store (temploc eax) (upint 0) 32
+    ; move_rtl eax x; R.store (temploc eax) (upint32 0) 32
     ; move_rtl tmpa eax; move_rtl tmpd edx    (* save *)
     ]
 @ 
@@ -418,12 +443,13 @@ and so one, would jump.
 let cmp x y =
   R.store eflags (R.app (R.opr "x86_subflags" [32]) [tempval x; tempval y]) 32
 
+let bc_x86 opr tgt =
+  R.guard (R.app (R.opr (cmpopr opr) [32]) [R.fetch eflags 32]) 
+    (R.store pc_lhs (Up.const tgt) 32)
+
 let bc x (opr, ws) y ~tgt =
   assert (ws = [32]);
-  [ R.guard (R.app (R.opr (cmpopr opr) [32]) [R.fetch eflags 32]) 
-            (R.store pc_lhs (Up.const tgt) 32)
-  ; cmp x y
-  ]
+  [ bc_x86 opr tgt; cmp x y ]
 
 let bnegate r = match Down.rtl r with
 | RP.Rtl [RP.App((cop, [32]), [RP.Fetch (flags, 32)]), RP.Store (pc, tgt, 32)]
@@ -446,14 +472,14 @@ let cmpopr = function
   | "leu" -> "x86_be"
   | "gtu" -> "x86_a"
   | "geu" -> "x86_ae"
-  | "feq"  -> Impossible.unimp "floating-point comparison"
-  | "fne"  -> Impossible.unimp "floating-point comparison"
-  | "flt"  -> Impossible.unimp "floating-point comparison"
-  | "fle"  -> Impossible.unimp "floating-point comparison"
-  | "fgt"  -> Impossible.unimp "floating-point comparison"
-  | "fge"  -> Impossible.unimp "floating-point comparison"
-  | "fordered"   -> Impossible.unimp "floating-point comparison"
-  | "funordered" -> Impossible.unimp "floating-point comparison"
+  | "feq"  -> "x86_e"
+  | "fne"  -> "x86_ne"
+  | "flt"  -> "x86_b"
+  | "fle"  -> "x86_be"
+  | "fgt"  -> "x86_a"
+  | "fge"  -> "x86_ae"
+  | "fordered"   -> Impossible.unimp "floating-point ordered comparison"
+  | "funordered" -> Impossible.unimp "floating-point unordered comparison"
   | _ -> Impossible.impossible "non-comparison in x86 conditional branch"
 @ 
 The second important function negates an Intel operator.
@@ -484,7 +510,7 @@ let opclass (op, _) =
       PX.Stack(PX.LeftFirst, 2)
   | _ ->
       PX.Register
-
+<<x86 postexpander>>=
 let st = temploc ('F', 0, 3)
 let stval = R.fetch st 3
 let freg_at a = R.mem R.none 'f' byte_order 80 a
@@ -493,7 +519,7 @@ let stadd = Rtlutil.addk 3 stval
 let stsub n = R.app (R.opr "sub" [3]) [stval; R.bits (Bits.U.of_int n 3) 3]
 let stregplus n = freg_at (stadd n)
 let ffetch l = R.fetch l 80
-
+<<x86 postexpander>>=
 let st_pop_with f = (* rtl got by popping (f e), where e is top of floating-pt stack *)
   let top = ffetch streg in
   R.par [ f top; R.store st (stadd 1) 3 ]
@@ -505,6 +531,7 @@ let st_push e = (* effect of pushing e *)
 
 let stack_depth = 8
 let stack_width = 80
+<<x86 postexpander>>=
 let push ~addr assn = 
 (*
   let memval = R.fetch (R.mem assn 'm' byte_order 80 addr) 80 in
@@ -526,9 +553,10 @@ let store_pop_cvt op w ~addr assn =
   let memval regval = R.app (Up.opr op) [regval; rounding_modes] in
   let store regval = R.store (R.mem assn 'm' byte_order w addr) (memval regval) w in
   [st_pop_with store]
-
+<<x86 postexpander>>=
 let pushk _ = Impossible.impossible "load 80-bit floating-point constant"
 let pushk_cvt _ _ _ = Impossible.unimp "load floating-point constant"
+<<x86 postexpander>>=
 let stack_op op = match opclass op with
 | PX.Register -> Impossible.impossible "passed register operator to stack_op"
 | PX.Stack(_, depth) -> (* by lucky accident, depth is arity *)
@@ -541,14 +569,67 @@ let stack_op op = match opclass op with
     let result = R.app (Up.opr op) argvals in
     let next_st = stadd (depth-1) in
     [R.par [ R.store (freg_at next_st) result 80; R.store st next_st 3]]
+@ 
+The machine from hell:
+\begin{itemize}
+\item
+The result of a floating point comparison goes in C0--C3,
+which are respectively bits 8--10 and~11 of the FPU status word, where
+bit~0 is the least significant bit.
+\item
+The \texttt{fstsw} instruction moves the FPU status word into AX,
+which is the least significant 16~bits of EAX.
+\item
+The \texttt{sahf} instruction moves AH~into the flags:
+\begin{quote}
+\begin{tabular}{|llll|cccc|}
+\hline
+Flag& AH bit& FPU bit&FPU code&$\not\parallel$&$>$&$<$&$=$\\
+\hline
+SF&7&15& B (FPU busy)\\
+ZF&6&14& C3& 1&0&0&1\\
+AF&4&12& middle bit of TOP\\
+PF&2&10& C2& 1& 0&0&0\\
+CF&0&8& C0& 1&0&1&0\\
+\hline
+\end{tabular}
+\end{quote}
+Apparently it suffices to test ZF and CF.
+\item
+Therefore
+\begin{quote}
+\def\f#1{\mathord\mbox{\uppercase{#1F}}}
+\begin{tabular}{ll}
+Comparison& Test\\
+Float $\not\parallel$& $\f 
 
-let bc_stack op ~tgt = Impossible.unimp "branch on floating code"
+\end{itemize}
+
+<<x86 postexpander>>=
+let bc_stack op ~tgt = match op with
+| ("flt"|"fgt"|"fle"|"fge"|"feq"|"fne") as opname, [w] ->
+    let positions = Aux.from 0 1 in
+    let argvals = List.map (fun n -> ffetch (stregplus n)) positions in
+    let result = R.app (R.opr "fcmp" [w]) argvals in
+    let next_st = stadd 2 in
+    let setcc = R.par [R.store fpcc result 2; R.store st next_st 3] in
+    let fstsw = store16 eax (R.fetch fpustatus 16) in
+    let sahf  = R.store eflags (R.app (R.opr "x86_ah2flags" [])
+                                  [bitExtract 8 (R.fetch eax 32) 8]) 16 in
+    [bc_x86 opname tgt; sahf; fstsw; setcc]
+| ("fordered"|"funordered") as opname, [w] ->
+    Impossible.unimp "x86 ordered/unordered floating comparison"
+| _ ->
+    Impossible.impossible "strange operator in x86 bc_stack"
 @ 
 <<x86 postexpander>>=
 let i2f_64_80 = ("i2f", [64; 80])
 let f2i_80_64 = ("f2i", [80; 64])
 let block_copy ~dst dassn ~src sassn w =
   match w with
+  | 16 | 8 ->
+      let t = talloc 't' 32 in
+      lostore dst t w dassn @ zxload t src w sassn
   | 32 ->
       let t = talloc 't' 32 in
       store dst t dassn @ load t src sassn
@@ -671,10 +752,10 @@ let target =
             | cc -> Impossible.impossible ("unsupported calling convention "^cc))
   (* global or hardware registers *)
   ; T.globals  = globals
-  ; T.rounding_mode = fpcond 0
+  ; T.rounding_mode = rounding_modesl
   ; T.named_locs   = Strutil.assoc2map 
-                     ["IEEE 754 rounding mode",    fpcond 0
-                     ;"IEEE 754 rounding results", fpcond 1
+                     ["IEEE 754 rounding mode",    rounding_modesl
+                     ;"IEEE 754 rounding results", rounding_resultsl
                      ]
   
   (* bogosity *)
@@ -720,16 +801,22 @@ let placevars proc =
           (Printf.sprintf "%d-bit variable hinted float but will go as integer" w);
       methods.A.allocate w a h in
     {A.allocate = alloc; A.freeze = methods.A.freeze} in
+  let verbose methods =
+    let alloc ~width:w ~alignment:a ~hint:h =
+      Verbose.say 3
+        [ Printf.sprintf "Allocating width %d alignment %d hint '%s'\n" w a h];
+      methods.A.allocate w a h in
+    {A.allocate = alloc; A.freeze = methods.A.freeze} in
   Block.srelative target.T.vfp "variables placed in memory" A.at
   (
     A.wrap warn *>
     A.choice
       [ is_float,               A.widen (Aux.round_up_to ~multiple_of: 64); 
         (fun h w -> w <= 32),   A.widen (fun _ -> 32) *> from_temps proc 't';
-        A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 32);
+        A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
       ] *>
-  A.align_to (fun _ -> 4) *>
-  A.overflow ~memsize:8 ~byteorder:PX.byte_order ~growth:Memalloc.Up ~max_alignment:4)
+    A.as_stage proc.Proc.priv
+  )
 @ 
 \section{Tentative example Lua code}
 
