@@ -28,11 +28,29 @@ $$}
 
 This is not quite what a real code expander does, but it should
 suffice for experiments.
+The context has three parts, all of which require knowledge of the
+target machine:
+\begin{itemize}
+\item
+Look at a location and say whether it is memory-like.
+It is a checked run-time error to ask if a variable is memory-like
+(this is not a property of the target but is the result of decisions
+made higher up).
+\item
+Given a temporary space and a width, return a fresh temporary from
+that space, suitably aggregated to the given width.
+It is an \emph{unchecked} run-time error to ask for an unsupported
+width.
+\item
+Given an expression, return a temporary space that would be suited to
+hold the result of the expression.
+\end{itemize}
 
 <<expander.mli>>=
 type context 
   = (Rtl.Private.loc -> bool)           (* say if a location is memory-like *)
-  * (char -> int -> Rtl.loc)            (* get a temp for space and width *)
+  * (Rtl.space -> int -> Rtl.loc)       (* get a temp for space and width *)
+  * (Rtl.Private.exp -> Rtl.space)      (* find a temp space to hold this exp *)
 val context : Target2.t -> context
 val expand : context -> Rtl.rtl -> Rtl.rtl list
   (* returns *last* instruction at *head* of list (reverse execution order) *)
@@ -53,8 +71,6 @@ let downloc= Rtl.Convert.loc
 let fetch l = RP.Fetch (downloc l, RU.Width.loc l)
 
 let width e = RU.Width.exp (up e)
-
-let space_for _ = 't'  (* choose a space suitable for an expression *)
 @ 
 To avoid quadratric list append, I use John Hughes's
 continuation-passing list operations.
@@ -75,9 +91,12 @@ expression and returns a pair containing a list of instructions and a
 temporary such that executing those instructions develops the
 expression into that temporary.
 <<expander.ml>>=
-type context = (RP.loc -> bool) * (char -> int -> R.loc)
+type context 
+  = (Rtl.Private.loc -> bool)           (* say if a location is memory-like *)
+  * (Rtl.space -> int -> Rtl.loc)       (* get a temp for space and width *)
+  * (Rtl.Private.exp -> Rtl.space)      (* find a temp space to hold this exp *)
 
-let expand ((mem_like : RP.loc -> bool), (temp_for : char -> int -> R.loc)) =
+let expand ((mem_like : RP.loc -> bool), (temp_for : char -> int -> R.loc), space_for) =
   let rec to_temp e = match e with
     | RP.Const k ->
         let w = width e in
@@ -189,5 +208,51 @@ let context t =
          else
            rest)
       t.T.spaces (fun _ -> false) in
-  let get_temp char k = assert false in
-  (fun loc -> mem_like (space_of loc)), get_temp
+  <<division>>
+  let allocator space =
+    let next = ref 0 in
+    let divide = divideby space.S.cellwidth in (* premature optimization *)
+    fun width ->
+      let n = divide width in
+      (* could check to see if width is supported ... *)
+      let k = !next in
+      let _ = next := k + n in
+      let n = Bits.of_int n space.S.indexwidth in
+      let index = (Rtl.bits n space.S.indexwidth) in
+      Rtl.cell Rtl.none space.S.space space.S.aggregation width index in
+
+  let fail c =
+    prerr_string ("Space '" ^ Char.escaped c ^ "' is not a temporary space\n");
+    assert false in
+
+  let is_temp s = match s.S.classification with
+  | S.Temp _ -> true
+  | _ -> false  in
+
+  let alloc  =
+    List.fold_right
+      (fun s rest ->
+         if is_temp s then
+           let a = allocator s in
+           fun c -> if c = s.S.space then a else rest c
+         else
+           rest)
+      t.T.spaces fail in
+
+  let first_temp =
+    try (List.find is_temp t.T.spaces).S.space
+      with Not_found ->
+        prerr_string ("No temporary spaces in target " ^ t.T.name ^ "\n");
+        assert false in
+
+  (fun loc -> mem_like (space_of loc)), alloc, fun _ -> first_temp
+@ 
+This bit of cleverness may get the compiler to optimize division using
+right shifts.  If not, we could write the right shifts ourselves.
+<<division>>=
+let divideby = function
+  | 32 -> fun n -> n / 32
+  | 8  -> fun n -> n / 8
+  | 64 -> fun n -> n / 64
+  | m  -> fun n -> n / m  in
+  
