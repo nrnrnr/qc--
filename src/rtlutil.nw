@@ -161,25 +161,22 @@ end
 @
 
 <<module Subst struct>>=
-let rec subst_exp map = function
-    | RP.Fetch (loc, width) -> RP.Fetch(subst_loc map loc, width)
-    | RP.App(opr, exprs)    -> RP.App(opr, List.map (subst_exp map) exprs)
-    | x                     -> x
-    
-and subst_loc map loc  = Rtl.Convert.loc (map (Rtl.Revert.loc loc)) 
-    
-and subst_effect map = function
-    | RP.Store (loc,exp,width) -> 
-        RP.Store(subst_loc map loc, subst_exp map exp, width)
-    | RP.Kill  (loc) -> 
-        RP.Kill (subst_loc map loc)
-        
-and subst_guarded map (exp,eff) =
-    (subst_exp map exp, subst_effect map eff)
-
-and subst' map (RP.Rtl rtl) = RP.Rtl (List.map (subst_guarded map) rtl)
-
-let loc map rtl = Rtl.Revert.rtl (subst' map (Rtl.Convert.rtl rtl))
+let loc map rtl = 
+    let rec subst_exp map = function
+        | RP.Fetch (loc, width) -> RP.Fetch(subst_loc map loc, width)
+        | RP.App(opr, exprs)    -> RP.App(opr, List.map (subst_exp map) exprs)
+        | x                     -> x
+    and subst_loc map loc  = Rtl.Convert.loc (map (Rtl.Revert.loc loc)) 
+    and subst_effect map = function
+        | RP.Store (loc,exp,width) -> 
+            RP.Store(subst_loc map loc, subst_exp map exp, width)
+        | RP.Kill  (loc) -> 
+            RP.Kill (subst_loc map loc)
+    and subst_guarded map (exp,eff) =
+        (subst_exp map exp, subst_effect map eff)
+    and subst map (RP.Rtl rtl) = RP.Rtl (List.map (subst_guarded map) rtl)
+    in    
+        Rtl.Revert.rtl (subst map (Rtl.Convert.rtl rtl))
 @    
 
 The [[reg]] function substitutes registers in {\rtl}s and is
