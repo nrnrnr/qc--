@@ -965,7 +965,11 @@ let freeze (p:Proc.t) =
     let pointer  = p.Proc.target.Target2.pointersize in            
     let stack    = Block.cat_list stack in
     let eqns     = p.Proc.eqns @ (Block.constraints stack) in
-    let solution = Const2.solve pointer eqns in
+    let solution = 
+        try Const2.solve pointer eqns 
+        with Const2.Can'tSolve -> Impossible.impossible 
+                ("can't solve equations in "^ p.Proc.symbol#text)    
+    in            
     let ()       = assert (solution.Const2.dependent = []) in
     let ()       = assert (solution.Const2.known <>    []) in
     let map      = Strutil.assoc2map solution.Const2.known     in

@@ -1,4 +1,4 @@
-
+% vim:ts=8 sw=4 et:
 
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
 % Quality    ::=    A|B|C|D|E
@@ -6,6 +6,7 @@
 % Urgency    ::=    Immediate|Soon|Later
 %
 % Example (at beginning of line): %%Grades: B Central Soon
+
 % ------------------------------------------------------------------ 
 \section{Linear Equations over Integers}
 % ------------------------------------------------------------------ 
@@ -123,6 +124,7 @@ module type EXP = sig
     type t                                      (* a term *)
     val variable: t -> string option            
     val compare: t -> t -> int                  (* -1/0/1 *)
+    val print: t -> string                      (* for debugging *)
 end
 @
 
@@ -223,10 +225,7 @@ denote variables. It helped to track down some bugs, though.
 
 <<Make>>=
 let dump t =
-    let product (i,term) =
-        match E.variable term with
-        | Some x -> Printf.printf "(%d,%s) "     i x
-        | None   -> Printf.printf "(%d,<term>) " i      in
+    let product (i,term) = Printf.printf "(%d,%s)" i (E.print term) in
     let eqn s =
         ( Printf.printf "0 = "; List.iter product s; Printf.printf "\n")in
     let assoc (v,sum) =
@@ -452,6 +451,11 @@ module E = struct
         | _      -> None
         
     let compare = compare
+
+    let print = function
+        | Var(s)   -> s
+        | Unit     -> "1"
+        | Const(s) -> s
 end
 
 module S = Make(E)

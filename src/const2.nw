@@ -97,6 +97,22 @@ let add x y     = x @ y
 let sub x y     = x @ List.map (fun (i,y) -> (-i,y)) y
 @
 
+To help debugging, we like to have a printable representation of terms. 
+
+<<const2.ml>>=
+module ToString = struct
+    let term = function
+        | Const(exp) -> Rtlutil.ToString.exp exp
+        | Var(s)     -> s
+        | Unit       -> "1"
+
+    let summand (i, t) = Printf.sprintf "(%d,%s)" i (term t)
+
+    let sum s = String.concat "+" (List.map summand s)
+    let t s   = sum s    
+end
+@
+
 The real work is to parse an {\rtl} expression into a sum. This requires
 in particular to recognize certain {\rtl} operators. We traverse an
 {\rtl} expression and create a sum representation for it. Everything we
@@ -142,6 +158,7 @@ module T = struct
         | Var(s)    -> Some s
         | _         -> None
     let compare = compare           (* order over t *)    
+    let print   = ToString.term
 end
 module Solver = Eqn.Make(T)         (* equation solver over terms *)
 @
