@@ -182,10 +182,15 @@ sub c_compare {
         my $val   = shift @_;
         my $v     = shift @_;
         
-        if ($hint eq "float") {
+        if ($hint eq "float" && $w == 32) {
             print CEE <<EOF;
             if (*(unsigned*)(&$v) != $val) {printf("failed ($val)\\n"); return;}
 EOF
+        } elsif ($hint eq "float" && $w == 64) {
+            print CEE <<EOF;
+            if (*(unsigned long*)(&$v) != $val) {printf("failed ($val)\\n"); return;}
+EOF
+        
         } else {
             print CEE <<EOF;
             if ($v != $val) {printf("failed ($val)\\n"); return;}
@@ -251,7 +256,7 @@ foreach $t (@ARGV) {
     , "32/unsigned"     => "unsigned int" 
     , "32/float"        => "float"
     , "64/int"          => "long int"
-    , "64/float"        => "float"
+    , "64/float"        => "double"
     , "8/int"           => "char"
     );    
 
