@@ -21,7 +21,7 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
     type target     (* target architecture                *)
     type proc       (* procedure representation in back-end, includes
                        cfg, calling convention *)
-    type optimize  = proc -> target -> unit
+    type optimize  = proc -> unit
 
     val dummy:      target                  (* our only target right now *)
     
@@ -111,8 +111,8 @@ module Personality = struct
     
     let target = Target2.dummy
 
-    let ext (p:Proc.t) target (optimizer: Proc.t -> Target2.t -> unit) = 
-        let () = optimizer p target in
+    let ext (p:Proc.t) target (optimizer: Proc.t -> unit) = 
+        let () = optimizer p in
         let () = p.Proc.freeze p    in
             Cfg3.ast p.Proc.cfg p.Proc.name p.Proc.mangle target
 end
@@ -128,7 +128,7 @@ type env        = Fenv.Clean.env
 type doc        = Pp.doc
 type proc       = Proc.t
 type target     = Target2.t
-type optimize   = proc -> target -> unit 
+type optimize   = proc -> unit 
 
 <<Caml>>=
 
@@ -337,7 +337,7 @@ module Map = struct
     let proc      = ProcV.makemap   V.userdata V.projection
     let doc       = DocV.makemap    V.userdata V.projection
     let target    = TargetV.makemap V.userdata V.projection
-    let optimize  = V.func (proc **-> target **-> V.runit)
+    let optimize  = V.func (proc **-> V.runit)
 end
 
 let targets =

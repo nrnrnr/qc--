@@ -56,7 +56,7 @@ treating a control-flow graph as an instruction.
 
 <<ASM>>=
 Asm2.S with type instruction = Proc.t
-       and  type init        = (Proc.t -> Target2.t -> unit)
+       and  type init        = (Proc.t -> unit)
 @
 
 
@@ -64,7 +64,7 @@ Asm2.S with type instruction = Proc.t
 module Make (A: <<ASM>>) : sig
     val translate: Fenv.Clean.env 
                 -> Target2.t 
-                -> (optimizer: Proc.t -> Target2.t -> unit)
+                -> (optimizer: Proc.t -> unit)
                 -> Ast.program 
                 -> A.asm
 end
@@ -895,6 +895,7 @@ let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) =
     let i =    
         { Proc.name     = name
         ; Proc.cc       = cc
+        ; Proc.target   = target
         ; Proc.cfg      = cfg
         ; Proc.mangle   = mangle
         ; Proc.incoming = incoming   (* incoming area *)   
