@@ -46,14 +46,14 @@ typically at the following points in a source code:
 
 
 A synchronization establishes a connection between a source code
-position and a (filename, line, column) location in a source map.  The
+position and a (filename, line, column) location.  The
 point of synchronization is called a synchronization point. In
-principle synchronization points can be placed in any order into a
+principle, synchronization points can be placed in any order into a
 stream of characters. The following restriction usually does not harm
-and helps to to build efficient source maps: In the order
-synchronization points are established the affected source code
-positions are increasing. This means, that never a position to the
-left of an existing synchronization point is synchronized.
+and helps to to build efficient source maps:  source code positions
+increase in the order synchronization points are established.  This
+means, that never a position to the left of an existing
+synchronization point is synchronized.
 
 Building and using a source map involves only few operations:
 
@@ -62,7 +62,7 @@ Building and using a source map involves only few operations:
 \item Enter synchronization points into the map.
 \item As a special case, enter a sync point for a new line.
 \item Return the location of a given position.
-\item For debugging, we also provide a [[dum]] function that 
+\item For debugging, we also provide a [[dump]] function that 
       prints out the contents of a source map.
 \end{itemize}
 
@@ -86,6 +86,7 @@ val empty :         srcmap
 val sync :          srcmap -> position -> location -> unit
 val nl :            srcmap -> position -> unit
 val location :      srcmap -> position -> location
+val string :        location -> string
 val dump:           srcmap -> unit
 @
 
@@ -139,8 +140,8 @@ type srcmap =       { mutable points:       syncpoint array
 @ The [[top]] component maintains the index of the first free position
 in the [[points]] array.
 
-In \ocaml every array cell must be initialized upon creation. We use
-[[undefined]] for this. The initial size of the array is [[size]].
+In \ocaml~every array cell must be initialized upon creation.  We use
+[[undefined]] for this.  The initial size of the array is [[size]].
 
 <<srcmap.ml>>=
 
@@ -248,6 +249,9 @@ let location map position =
     let pos,(file,line,col) = search position map.points map.top cmp in
     (file,line,position - pos + col)
 
+
+let string (file, line, col) =
+    Printf.sprintf "File %s: line %d, column %d" file line col 
 
 @ To aid debugging we provide a function [[dump]] to write the
 contents of a [[srcmap]] to stdout.

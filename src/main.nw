@@ -118,17 +118,19 @@ let lex file =
     let fd          = try open_in file with Sys_error msg -> error msg  in
     let finally ()  = close_in fd                                       in
     let lexbuf      = Lexing.from_channel fd                            in
+    let map         = Srcmap.empty                                      in
+    let scanner     = Scan.scan map                                     in
     let rec loop lb = 
-        match Scan.token lb with
+        match scanner lb with
             | Parse.EOF -> ()
             | tok       -> 
-                let (file,line,col) = Scan.location lb in
+                let (file,line,col) = Scan.location lb map in
                 let tok             = Scan.tok2str tok in
                     ( Printf.printf "%-16s %3d %2d %s\n" file line col tok 
                     ; loop lb
                     )
     in
-        ( Scan.init file
+        ( Srcmap.sync map 0 (file,1,1)
         ; loop lexbuf
         ; finally ()
         ) 
@@ -142,15 +144,17 @@ let parse file =
     let fd          = try open_in file with Sys_error msg -> error msg  in
     let finally ()  = close_in fd                                       in
     let lexbuf      = Lexing.from_channel fd                            in
+    let map         = Srcmap.empty                                      in
+    let scanner     = Scan.scan map                                      in
         try
-            ( Scan.init file
-            ; let ast = Parse.program Scan.token lexbuf in
+            ( Srcmap.sync map 0 (file,1,1) 
+            ; let ast = Parse.program scanner lexbuf in
                  AstUtil.sexp_wr_program ast stdout
             ) 
         with
             | Parsing.Parse_error | Error(_) ->
               ( finally()
-              ; let (file,line,col) = Scan.location lexbuf in
+              ; let (file,line,col) = Scan.location lexbuf map in
                     error (Printf.sprintf "%3d,%2d parse error" line col)
               )
             | e ->  ( finally()
@@ -161,15 +165,17 @@ let pp file width =
     let fd          = try open_in file with Sys_error msg -> error msg  in
     let finally ()  = close_in fd                                       in
     let lexbuf      = Lexing.from_channel fd                            in
+    let map         = Srcmap.empty                                      in
+    let scanner     = Scan.scan map                                     in
         try
-            ( Scan.init file
-            ; let ast = Parse.program Scan.token lexbuf in
+            ( Srcmap.sync map 0 (file,1,1) 
+            ; let ast = Parse.program scanner lexbuf in
                  Astpp.ppToFile stdout width ast
             ) 
         with
             | Parsing.Parse_error | Error(_) ->
               ( finally()
-              ; let (file,line,col) = Scan.location lexbuf in
+              ; let (file,line,col) = Scan.location lexbuf map in
                     error (Printf.sprintf "%3d,%2d parse error" line col)
               )
             | e ->  ( finally()
