@@ -1,4 +1,4 @@
-% -*- mode: Noweb; noweb-code-mode: c-mode -*-
+% -*- mode: Noweb; noweb-code-mode: C-mode -*- %
 
 \section{Implementing a Quick~{\PAL} Interpreter}
 
@@ -9,38 +9,46 @@ This file contains a sketch of the (representation and) implementation of a Quic
 SLED definition of the bytecode:
 
 <<bytecode.sled>>=
-fields of bcode     (8) op 0:7
+fields of bcode     (8) op     0:7
 fields of byte      (8) bits8  0:7
 fields of short    (16) bits16 0:15
 fields of long     (32) bits32 0:31
 fields of longlong (64) bits64 0:63
 
 patterns
-  [ OP8 OP16 PUSH VAR8 VAR16 VARPUSH8 VARPUSH16 PUSH_ARG POP_ARG 
-    STORE_LOCAL8  STORE_GLOBAL8  FETCH_LOCAL8  FETCH_GLOBAL8
-    STORE_LOCAL16 STORE_GLOBAL16 FETCH_LOCAL16 FETCH_GLOBAL16
+  [ OP8 OP16 PUSH VAR8 VAR16 VARPUSH8 VARPUSH16 PUSH_ARG POP_ARG
+    STORE_LOCAL8  STORE_GLOBAL8  FETCH_LOCAL8   FETCH_GLOBAL8
+    STORE_LOCAL16 STORE_GLOBAL16 FETCH_LOCAL16  FETCH_GLOBAL16
+    GSTORE_LOCAL8 GSTORE_LOCAL16 GSTORE_GLOBAL8 GSTORE_GLOBAL16
+    GOTO          CBRANCHT       CBRANCHF       BRANCHTF
+    CMM_CALL      CMM_TAIL_CALL  C_CALL         RETURN
+    CUT
     HALT
     PLACECODE
-  ] is op = {0 to 18}
+  ] is op = {0 to 31}
 
 patterns 
-  any8  is OP8  | VAR8  | VARPUSH8 
-         | STORE_LOCAL8  | STORE_GLOBAL8  | FETCH_LOCAL8  | FETCH_GLOBAL8
-  any16 is OP16 | VAR16 | VARPUSH16
-         | STORE_LOCAL16 | STORE_GLOBAL16 | FETCH_LOCAL16 | FETCH_GLOBAL16
-  any32 is PUSH
-  nullary is PUSH_ARG | POP_ARG
+  any8  is OP8   |  VAR8  | VARPUSH8 
+         | STORE_LOCAL8   | STORE_GLOBAL8   | FETCH_LOCAL8  | FETCH_GLOBAL8
+         | GSTORE_LOCAL8  | GSTORE_GLOBAL8
+  any16 is OP16  | VAR16  | VARPUSH16
+         | STORE_LOCAL16  | STORE_GLOBAL16  | FETCH_LOCAL16 | FETCH_GLOBAL16
+         | GSTORE_LOCAL16 | GSTORE_GLOBAL16
+  any32   is PUSH     | CBRANCHT | CBRANCHF
+  nullary is PUSH_ARG | POP_ARG  | GOTO | CUT
 
 relocatable addr
+relocatable addr2
 
 placeholder for bcode is PLACECODE
 placeholder for long  is bits32 = 0
 
 constructors
-  any8  bits8      is  any8;  bits8
-  any16 bits16     is  any16; bits16
-  any32 bits32     is  any32; bits32
-  PUSH_SYMBOL addr is  PUSH; bits32 = addr
+  any8        bits8        is  any8;     bits8
+  any16       bits16       is  any16;    bits16
+  any32       bits32       is  any32;    bits32
+  PUSH_SYMBOL addr         is  PUSH;     bits32 = addr
+  BRANCHTF    addr addr2   is  BRANCHTF; bits32 = addr;  bits32 = addr2
   nullary
 
 # conditional assembly
@@ -56,6 +64,12 @@ constructors
   store_global bits16
     when { }  is store_global8 (bits16)
     otherwise is store_global16(bits16)
+  gstore_local bits16
+    when { }  is gstore_local8 (bits16)
+	otherwise is gstore_local16(bits16)
+  gstore_global bits16
+    when { }  is gstore_global16(bits16)
+	otherwise is gstore_global16(bits16)
   fetch_local bits16
     when { }  is fetch_local8 (bits16)
     otherwise is fetch_local16(bits16)
@@ -93,20 +107,46 @@ We will want ``short'' and ``long'' versions of many bytecodes (using
 Moving onward to C code, we will begin with some type definitions required:
 
 <<type definitions>>=
-typedef unsigned char bytecode;
+
+/* the types uintX_t are defined in <stdint.h> */
+typedef uint8_t  u_int1;
+typedef uint8_t  u_int8;
+typedef uint16_t u_int16;
+typedef uint32_t u_int32;
+typedef uint64_t u_int64;
+
+typedef u_int1   bool;
+typedef u_int1   bits1;
+typedef u_int8   bits8;
+typedef u_int16  bits16;
+typedef u_int32  bits32;
+typedef u_int64  bits64;
+
+typedef int8_t   s_int8;
+typedef int16_t  s_int16;
+typedef int32_t  s_int32;
+typedef int64_t  s_int64;
+
+/* the float types are here defined in a machine-dependent manner; */
+/* this must be fixed                                              */
+typedef float       float32;
+typedef double      float64;
+typedef long double float96;
+
+typedef u_int8 bytecode;
 
 typedef union {
-  unsigned char  bits1;
-  unsigned char  bits8;
-  unsigned short bits16;
-  unsigned long  bits32;
-  double         bits64;
+  bits1  bits1;
+  bits8  bits8;
+  bits16 bits16;
+  bits32 bits32;
+  bits64 bits64;
 } value;
 
 typedef value *stack;    /* value stack */
 typedef value *sptr;     /* stack pointer */
 
-typedef unsigned char data;
+typedef u_int8 data;
 
 typedef data *datastack;
 typedef data *dataptr;
@@ -148,23 +188,28 @@ typedef struct {
 typedef activation *actstack;
 typedef activation *actptr;
 
+typedef struct {
+  unsigned int next_frame_id;
+  unsigned int id;
+  actstack     callstackbase;
+  actptr       callstacklimit;
+  actptr       callstack;
+} thread;
 @ 
 
 Next, some initialization code for the interpreter to build its table of operators and perform other necessary tasks:
 
 <<initialization>>=
 static operator operators[] = {
-  { "mul_trunc32", 2, mul_trunc },
   /* ... */
-  /* remaining operators initialized here */
+  /* { opname, minargs, function pointer },
   /* ... */
+
   { NULL,          0, NULL      }
 };
 
-uid new_uid (void) {
-  static unsigned int i = 0;
-  uid u = { 0, i++ };
-
+uid new_uid (thread t) {
+  uid u = { t.id, t.next_frame_id++ };
   return u;
 }
 
@@ -191,17 +236,88 @@ void init(void) {
 Now, a sample operator implementation for a ``signed multiple and truncate'' operator:
 
 <<operator definitions>>=
-sptr mul_trunc (sptr values) {
-  long m = *(long *) values;
-  long n = *(long *) (values - 1);
-  *(long *) values = n * m;
-  return values - 1;
-}
 
-/* ...
- * the remaining operator definitions will go here
- * ...
+/* these will be mostly macro calls to one of:
+
+  BINARYOP(NAME, EXP, X, Y, TX, TY, T, BX, BY, B)
+   UNARYOP(NAME, EXP, X, TX, BX, B)
+ T_UNARYOP(NAME, EXP, X, T, B)
+T_BINARYOP(NAME, EXP, X, Y, T, B)
+
+   where Ts are C types   : {u_int_N, s_int_N, float_N} where N is 1/8/16/32/64
+     and Bs are C-- types : {bits1, bits8, bits16, bits32, bits64}
  */
+
+
+/* FLOAT operators begin here. */
+/* fcmp */
+/* (floating-pt comparisons?) */
+BINARYOP(feq, v1 == v2, v1, v2, float32, float32, bool, bits32, bits32, bits1)
+BINARYOP(fgt, v1 >  v2, v1, v2, float32, float32, bool, bits32, bits32, bits1)
+BINARYOP(fle, v1 <= v2, v1, v2, float32, float32, bool, bits32, bits32, bits1)
+BINARYOP(flt, v1 <  v2, v1, v2, float32, float32, bool, bits32, bits32, bits1)
+BINARYOP(fne, v1 != v2, v1, v2, float32, float32, bool, bits32, bits32, bits1)
+/* fordered */
+/* funordered */
+/* NaN */
+/* (rounding modes?) */
+/* f2f */
+/* f2i */
+/* i2f */
+/* fadd */
+/* fsub */
+/* fdiv */
+/* fmul */
+/* fmulx */
+/* fabs */
+/* fneg */
+/* fsqrt */
+/* (floating-pt constants {-inf, -0, +inf, +0}) */
+/* FLOAT operators end here. */
+
+/* INTEGER operators begin here. */
+T_BINARYOP(add,     v1 + v2           , v1, v2, s_int16, bits16)
+T_BINARYOP(and,     v1 & v2           , v1, v2, u_int16, bits16)
+T_UNARYOP (bit,     v1                , v1,     bool   , bits1 )
+/* bitExtract  */
+/* bitInsert   */
+/* bitTransfer */
+T_UNARYOP (bool,    v1                , v1,     bool   , bits1 )
+/* borrow      */
+/* carry       */
+T_UNARYOP (com,     ~v1               , v1,     u_int16, bits16)
+T_BINARYOP(conjoin, (v1 != 0 ? v2 : 0), v1, v2, bool   , bits1 )
+T_BINARYOP(disjoin, (v1 != 0 ? 1 : v2), v1, v2, bool   , bits1 )
+/* div  */
+/* divu */
+BINARYOP(eq, v1 == v2, v1, v2, u_int16, u_int16, bool  , bits16, bits16, bits1)
+BINARYOP(ge, v1 >= v2, v1, v2, s_int16, s_int16, bool  , bits16, bits16, bits1)
+BINARYOP(geu,v1 >= v2, v1, v2, u_int16, u_int16, bool  , bits16, bits16, bits1)
+BINARYOP(gt, v1 >  v2, v1, v2, s_int16, s_int16, bool  , bits16, bits16, bits1)
+BINARYOP(gtu,v1 >  v2, v1, v2, u_int16, u_int16, bool  , bits16, bits16, bits1)
+BINARYOP(le, v1 <= v2, v1, v2, s_int16, s_int16, bool  , bits16, bits16, bits1)
+BINARYOP(leu,v1 <= v2, v1, v2, u_int16, u_int16, bool  , bits16, bits16, bits1)
+/* mod  */
+/* modu */
+T_BINARYOP(mul,     v1 * v2           , v1, v2, s_int16, bits16)
+T_BINARYOP(mulu,    v1 * v2           , v1, v2, u_int16, bits16)
+BINARYOP(ne, v1 != v2, v1, v2, u_int16, u_int16, bool  , bits16, bits16, bits1)
+T_UNARYOP (neg,     -v1               , v1    , s_int16, bits16)
+T_UNARYOP (not,     !v1               , v1    , bool   , bits1 )
+T_BINARYOP(or ,     v1 | v2           , v1, v2, u_int16, bits16)
+/* popcnt */
+/* quot   */
+/* rem    */
+/* rotl   */
+/* rotr   */
+T_BINARYOP(shl,     v1 << v2          , v1, v2, u_int16, bits16)
+/* shra   */
+T_BINARYOP(shrl,    v1 >> v2          , v1, v2, u_int16, bits16)
+T_BINARYOP(sub,     v1 - v2           , v1, v2, s_int16, bits16)
+/* sx  */
+T_BINARYOP(xor,     v1 ^ v2           , v1, v2, s_int16, bits16)
+/* zx */
+/* INTEGER operators end here. */
 
 @ 
 
@@ -218,52 +334,101 @@ Finally, we get to the main part of the interpreter.  We start by initializing t
   uid      u;                /* u   */
   actptr   callstack;        /* s   */
 
-  valuesbase      = (sptr) malloc(sizeof(value) * DEF_VALUESSTACK_SIZE);
+  int      space_size = (stack_limit - stack_space) / 3;
+
+  /* we carve out areas for stackdata, callstack, locals from the memory block
+     handed into run_interp
+   */
+
+  stackdatabase    = stack_space;
+  stackdatalimit   = stack_space + space_size;
+  stackdata        = stackdatabase;
+
+  localsbase       = stack_space + space_size;
+  localslimit      = stack_space + (2 * space_size);
+  locals           = localsbase;
+
+  t.callstackbase  = stack_space + (2 * space_size);
+  t.callstacklimit = stack_limit;
+  t.callstack      = t.callstackbase;
+  callstack        = t.callstack;
+
+  /* we have to malloc new memory for the values, arguments stacks */
+
+  valuesbase       = (sptr) malloc(sizeof(value) * DEF_VALUESSTACK_SIZE);
   assert(valuesbase != NULL);
-  valueslimit     = valuesbase + DEF_VALUESSTACK_SIZE;
-  values          = valuesbase;
+  valueslimit      = valuesbase + DEF_VALUESSTACK_SIZE;
+  values           = valuesbase - 1;
 
-  localsbase      = (sptr) malloc(sizeof(value) * DEF_LOCALSSTACK_SIZE);
-  assert(localsbase != NULL);
-  localslimit     = localsbase + DEF_LOCALSSTACK_SIZE;
-  locals          = localsbase;
+  argumentsbase    = (sptr) malloc(sizeof(value) * DEF_ARGUMENTSSTACK_SIZE);
+  assert(argumentsbase != NULL);
+  argumentslimit   = argumentsbase + DEF_ARGUMENTSSTACK_SIZE;
+  arguments        = argumentsbase - 1;
 
-  stackdatabase   = (dataptr) malloc(sizeof(data) * DEF_STACKDATASTACK_SIZE);
-  assert(stackdatabase != NULL);
-  stackdatalimit  = stackdatabase + DEF_STACKDATASTACK_SIZE;
-  stackdata       = stackdatabase;
+  /* we know precisely how much to malloc for globals */
 
-  globals         = (value *) malloc(sizeof(value) * num_globals);
+  globals          = (value *) malloc(sizeof(value) * num_globals);
   assert(globals != NULL);
 
-  argumentsbase   = (sptr) malloc(sizeof(value) * DEF_ARGUMENTSSTACK_SIZE);
-  assert(argumentsbase != NULL);
-  argumentslimit  = argumentsbase + DEF_ARGUMENTSSTACK_SIZE;
-  arguments       = argumentsbase;
-
-  u = new_uid();
-
-  callstackbase   = (actptr) malloc(sizeof(activation) * DEF_CALLSTACK_SIZE);
-  assert(callstackbase != NULL);
-  callstacklimit  = callstackbase + DEF_CALLSTACK_SIZE;
-  callstack       = callstackbase;
+  u = new_uid(t);
 @ 
 
 And now for the main loop:
 
 <<main interpreter loop>>=
-void run_interp(bytecode *pc, int num_globals) {
+void run_interp(bytecode *pc, int num_globals, thread t, void *stack_space, 
+                void *stack_limit)
+{
   <<initialize interpreter internals>>
-
   for (;;) {
     match pc to
-    | operator(n)     => values = (*operators[n].f)(values);
-    /*  | var(n)          => vsp = var_funs[n](values, vsp, vlimit); */
-    | store_local(n)  => locals[n] = POP(values);
-    | fetch_local(n)  => PUSH(locals[n], values);
-    | store_global(n) => globals[n] = POP(values);
-    | fetch_global(n) => PUSH(globals[n], values);
-    | HALT            => return;
+    | operator(n)      => values = (*operators[n].f)(values);
+/*  | var(n)           => vsp = var_funs[n](values, vsp, vlimit); */
+    | store_local(n)   => UNDERFLOW_CHECK(values, 1);
+	                      locals[n] = POP(values);
+    | fetch_local(n)   => OVERFLOW_CHECK(values, 1);
+                          PUSH(locals[n], values);
+    | store_global(n)  => UNDERFLOW_CHECK(values, 1);
+                          globals[n] = POP(values);
+    | fetch_global(n)  => OVERFLOW_CHECK(values, 1);
+                          PUSH(globals[n], values);
+    | gstore_local(n)  => UNDERFLOW_CHECK(values, 2);
+                          if (bool_true(VIEW(STACK_ELT(values, 0), bool))) {
+                              STACK_ELT(values, -1) = locals[n];
+                              values--;
+                          } else {
+                              values -= 2;
+                          }
+    | gstore_global(n) => UNDERFLOW_CHECK(values, 2);
+                          if (bool_true(VIEW(STACK_ELT(values, 0), bool))) {
+                              STACK_ELT(values, -1) = globals[n];
+                              values--;
+                          } else {
+                              values -= 2;
+                          }
+    | PUSH_ARG         => UNDERFLOW_CHECK(values, 1);
+                          OVERFLOW_CHECK(arguments, 1);
+                          PUSH(POP(values), arguments);
+    | POP_ARG          => OVERFLOW_CHECK(values, 1);
+	                      UNDERFLOW_CHECK(arguments, 1);
+                          PUSH(POP(arguments), values);
+    | GOTO             => UNDERFLOW_CHECK(values, 1);
+                          pc = VIEW(POP(values), bytecode *);
+    | CBRANCHT(a)      => UNDERFLOW_CHECK(values, 1);
+                          if (bool_true(VIEW(POP(values), bool))) {
+                              pc = (bytecode *) a;
+                          }
+    | CBRANCHF(a)      => UNDERFLOW_CHECK(values, 1);
+                          if (bool_false(VIEW(POP(values), bool))) {
+                              pc = (bytecode *) a;
+                          }
+    | BRANCHTF(a, b)   => UNDERFLOW_CHECK(values, 1);
+                          if (bool_true(VIEW(POP(values), bool))) {
+                              pc = (bytecode *) a;
+                          } else {
+                              pc = (bytecode *) b;
+                          }
+    | HALT             => return;
     endmatch
   }
 }
@@ -289,6 +454,7 @@ The missing \texttt{\#include} and \texttt{\#define} directives:
 <<preprocessor directives>>=
 #include <assert.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include "interp.h"
 
 #define DEF_VALUESSTACK_SIZE    65536
@@ -297,24 +463,99 @@ The missing \texttt{\#include} and \texttt{\#define} directives:
 #define DEF_STACKDATASTACK_SIZE 65536
 #define DEF_CALLSTACK_SIZE      65536
 
-/* NEED TO IMPLEMENT UNDER/OVERFLOW checking, even if only w/assertions for now
- *
- * ALSO NOTE: don't use PUSH or POP more than once in the same statement!
+/* STACK_ELT(S, I) evaluates to the value on stack S indexed by I, such that:
+  
+   STACK_ELT(S, 0) evaluates to the top value on stack S
+   STACK_ELT(S, -1) evaluates to the next-to-top value on stack S
+   etc.
+
+   (note: STACK_ELT is only intended to work with the value stack, the argument
+    stack, and the activation stack)
  */
+#define STACK_ELT(S, I)       ((S)[(I)])
 
-/* PUSH(V, S) pushes value V onto value stack S and returns V
+/* PUSH(V, S) pushes value V onto value stack S and returns V */
+#define PUSH(V, S)            (STACK_ELT(0, (++(S))))
 
-   (note S should initially point to the top stack element, and PUSH should set
-    it to point to the value just pushed)
+/* POP(S) pops the value on top of stack S and returns it */
+#define POP(S)                (STACK_ELT(0, ((S)--)))
+
+/* UNDERFLOW_CHECK(S, N) checks to make sure that popping N elements off stack
+   S will not cause it to underflow
  */
-#define PUSH(V, S) ((++S)[0] = (V))
+#define UNDERFLOW_CHECK(S, N) (assert((S) - (S##base) > -1))
 
-/* POP(S) pops the top value off value stack S and returns the value
-
-   (note S should initially point to the top stack element, and POP should set
-    it to point to what had been the next-to-top element)
+/* OVERFLOW_CHECK(S, N) checks to make sure that pushing N elements onto stack
+   S will not cause it to overflow
  */
-#define POP(S)     ((S--)[0])
+#define OVERFLOW_CHECK(S, N)  (assert((S##limit) - (S) >= 0))
+
+/* VIEW(LVALUE, T) views LVALUE with C type T */
+#define VIEW(LVALUE, T)       (*((T *) (&(LVALUE))))
+
+/* BINARYOP(NAME, EXP, X, Y, TX, TY, T, BX, BY, B)
+
+   generates a function that takes an sptr, pops 2 values off the stack to
+   which it points, evaluates EXP and pushes the result onto the stack, and
+   returns an updated sptr
+
+   NAME is the function's name stem
+   X and Y are the names of the two values as EXP calls them
+   B is the C-- type for the result value
+   T is the C   type for the result value
+   BX and BY are the C-- types for input values X and Y, respectively
+   TX and TY are the C   types for input values X and Y, respectively
+*/
+#define BINARYOP(NAME, EXP, X, Y, TX, TY, T, BX, BY, B) \
+\
+sptr NAME##_##B (sptr values) {              \
+  TY Y;                                      \
+  TX X;                                      \
+  UNDERFLOW_CHECK(values, 2);                \
+  Y = VIEW(STACK_ELT(values,  0).BY, TY);    \
+  X = VIEW(STACK_ELT(values, -1).BX, TX);    \
+  VIEW(STACK_ELT(values, -1).B, T) = (EXP);  \
+  return values-1;                           \
+}
+
+/* UNARYOP(NAME, EXP, X, TX, BX, B)
+
+   generates a function that takes an sptr, pops 1 value off the stack to which
+   it points, evaluates EXP and pushes the result onto the stack, and returns
+   an updated sptr
+
+   NAME is the function's name stem
+   X    is the name of the input value as EXP calls it
+   B    is the C-- type for the result value
+   T    is the C   type for the result value
+   BX   is the C-- type for input value X
+   TX   is the C   type for input value X
+*/
+
+#define UNARYOP(NAME, EXP, X, TX, T, BX, B)  \
+\
+sptr NAME##_##B (sptr values) {              \
+  TX X;                                      \
+  UNDERFLOW_CHECK(values, 1);                \
+  X = VIEW(STACK_ELT(values, 0).BX, TX);     \
+  VIEW(STACK_ELT(values, 0).B, T) = (EXP);   \
+  return values;                             \
+}
+
+/* T_BINARYOP and T_UNARYOP are wrappers for cousins BINARYOP and UNARYOP
+
+   these wrappers assume that all input values are the same type as result
+   values
+*/
+
+#define T_BINARYOP(NAME, EXP, X, Y, T, B)    \
+BINARYOP(NAME, EXP, X, Y, T, T, T, B, B, B)
+
+#define T_UNARYOP(NAME, EXP, X, T, B)        \
+UNARYOP(NAME, EXP, X, T, T, B, B)
+
+#define bool_true(B)  ((B) != ((bool) 0))
+#define bool_false(B) ((B) == ((bool) 0))
 @
 
 The missing definitions of global variables:
@@ -332,9 +573,6 @@ static sptr      localslimit;
 static datastack stackdatabase;
 static dataptr   stackdatalimit;
 
-static actstack  callstackbase;
-static actptr    callstacklimit;
-
 @ 
 
 Function prototypes for code implemented here:
@@ -342,15 +580,15 @@ Function prototypes for code implemented here:
 <<interp.h>>=
 <<type definitions>>
 
-void run_interp(bytecode *pc, int num_globals);
+void run_interp(bytecode *pc, int num_globals, thread t, void *stack_space,
+                void *stack_limit);
 
 /* Initialization Helper Functions: */
-uid  new_uid(void);
+uid  new_uid(thread t);
 void check_value_types(void);
 void init(void);
 
-/* Operator Implementations: */
-sptr mul_trunc(sptr values);
+/* how about operator implementations, even though they're macro'ed ? */
 @ 
 
 And some more information for decoding bytecodes:
@@ -359,4 +597,5 @@ And some more information for decoding bytecodes:
 address type is "unsigned char *"
 fetch 8  using "*%a"
 fetch 16 using "%a[0] + (%a[1] << 8)"
+fetch 32 using "%a[0] + (%a[1] << 8) + (%a[2] << 16) + (%a[3] << 24)"
 @
