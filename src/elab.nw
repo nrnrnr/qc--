@@ -1644,8 +1644,9 @@ let rec checkFlow isCutTo env f =
 
 The [[isLabel env e]] function returns [[true]] if the expression [[e]]
 denotes a statically known label for [[goto]]. Analogously,
-[[isFunction]] is true, if an expression denotes the address of a
-function.
+[[isNoFunction]] is true, if an expression is statically known
+\emph{not} to address a function. Basically, an expression is known not
+to be a function if it is a name that does not denote a function.
 
 <<check>>=
 let rec isGotoLabel env = function
@@ -1659,15 +1660,16 @@ let rec isGotoLabel env = function
           )        
     | _                                         -> false
 
-let rec isFunction env = function
-    | A.ExprAt(x,_)                             -> isFunction env x
-    | A.Fetch(A.NameOrMemAt(x,_))                  -> isFunction env (A.Fetch x)
-    | A.Fetch(A.Name(_,x))                       -> 
+let rec isNoFunction env = function
+    | A.ExprAt(x,_)                             -> isNoFunction env x
+    | A.Fetch(A.NameOrMemAt(x,_))               -> isNoFunction env (A.Fetch x)
+    | A.Fetch(A.Name(_,x))                      -> 
           ( match F.findv x env with
-          | _       ,E.Error                    -> false
-          | scope   ,E.Ok(F.Import _,_)         -> true
-          | scope   ,E.Ok(F.Label(F.Proc(_)),_) -> true
-          | _                                   -> false
+          | _       ,E.Error                    -> false (* could be proc *)
+          | scope   ,E.Ok(F.Import _,_)         -> false
+          | scope   ,E.Ok(F.Label(F.Proc(_)),_) -> false
+          | scope   ,E.Ok(F.Register _,_)       -> false
+          | _                                   -> true
           )        
     | _                                         -> false
 
@@ -1782,14 +1784,14 @@ type of [[exp]] is used.
 
 <<check>>=
 and callStmt env (left,cc,exp,args,ts,fs) =
-    let msg1 = "a target annotation for this call is missing"     in
-    let msg2 = "call-expression is not a pointer"                 in
+    let msg1 = "call expression is not a function"                in
+    let msg2 = "call expression is not a pointer"                 in
     let left = E.Raise.list (List.map (lvalue Call env) left)     in
     let env  = foldl (checkFlow false) env fs                     in
     let env  = foldl  checkCallTarget  env ts                     in
     let args = List.map snd args (* strip hints *)                in
     let at   = E.Raise.list (List.map (tyExpr env) args)          in
-        (* if ts = [] && not (isFunction env exp) then E.error msg1 else *)
+        if isNoFunction env exp then E.error msg1 else 
         E.seq' (F.flagError env) 
                (E.Raise.quad (tyExpr env exp,left,at,pointerTy env)) 
                ( function 
@@ -1883,8 +1885,8 @@ and jumpStmt env (cc,e,args,ts) =
                | otherwise      -> E.error "jump target is not a pointer"
                )
     in
-        if ts = [] && not (isFunction env e) then
-            E.error "a target annotation for this jump is missing"
+        if isNoFunction env e then
+            E.error "jump target is not a function"
         else 
             E.seq' (F.flagError env) (E.Raise.list args) (fun x -> env)
 @
