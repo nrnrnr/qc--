@@ -246,18 +246,18 @@ Then, we emit jumps to any alternate returns.
 method private call node =
   let longjmp node =
     fprintf _fd "\t.byte 0xe9\n\t.long %s-.-%d\n" (_mangle (G.label node)) call_size in
-  let output_altret_jmps n i =
+  let output_altret_jmps n =
     let rec loop i =
       if i > n then ()
       else (longjmp (G.join_leading_to (G.succ_n node i)); loop (i+1)) in
-    loop i in
+    loop 1 in
   match G.to_executable node with
   | None     -> ()
   | Some rtl ->
      ( output_string _fd "\t"
      ; output_string _fd (X86rec.M.to_asm rtl)
      ; output_string _fd "\n"
-     ; output_altret_jmps (G.altrets node) 1
+     ; output_altret_jmps (G.altrets node)
      )
       
 

@@ -172,9 +172,13 @@ module Find : sig
   end
 end 
 @    
-We fold over locations that appear under [[Fetch]].
+We fold over locations of type [[Register.x]] or
+locations that appear under [[Fetch]].
 <<rtlutil.mli>>=
 module Fold : sig
+  module RegX : sig
+    val loc : (Register.x -> 'a -> 'a) -> Rtl.loc -> 'a -> 'a
+  end
   module LocFetched : sig
     val rtl : (Rtl.Private.loc -> 'a -> 'a) -> Rtl.Private.rtl -> 'a -> 'a
   end
@@ -1265,6 +1269,19 @@ end
 @ 
 <<rtlutil.ml>>=
 module Fold = struct
+  module RegX = struct
+    let loc f l z =
+      let rec exp z = function
+        | RP.Const _ -> z
+        | RP.Fetch (l, _) -> loc z l
+        | RP.App (_, es') -> List.fold_left exp z es'
+      and loc z = function
+        | RP.Reg   r                -> f (Re.Reg r) z
+        | RP.Slice (w, i, RP.Reg r) -> f (Re.Slice (w, i, r)) z
+        | RP.Slice (_, _, l)        -> loc z l
+        | _ -> z in
+      loc z (Rtl.Dn.loc l)
+  end
   module LocFetched = struct
     let rtl f rtl z = 
       let rec exp z e =

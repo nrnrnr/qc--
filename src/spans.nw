@@ -41,10 +41,17 @@ type rep   = { mutable sp            : Rtl.loc
              ; mutable users         : (Bits.bits * link) list
              ; mutable csregs        : (Register.t * Rtl.loc option) list
              ; mutable conts         : (label * Rtl.loc * (string * int) list) list
-                                    (* (ra, sp, (hint, var number) list) *)
+                                       (* (ra, sp, (hint, var number) list) *)
              ; mutable sds           : Rtl.loc list
              ; mutable vars          : Rtl.loc option array
              }
+@
+To walk the stack, we need to keep the stack pointer, previous stack pointer,
+and return address live.
+We provide a function to fold over live locations in the span.
+Unfortunately, the [[CFG]] needs to call this function, so it goes here.
+<<spans.mli>>=
+val fold_live_locs : (Register.x -> 'a -> 'a) -> t -> 'a -> 'a
 @
 <<spans.ml>>=
 type label = string
@@ -55,3 +62,10 @@ let to_spans ~sp ~prev_sp ~ra ~users ~csregs ~conts ~sds ~vars =
   { sp = sp;       prev_sp = prev_sp; ra = ra; users = users; csregs = csregs;
     conts = conts; sds = sds;         vars = vars }
 let expose spans = spans
+@
+We apply the input function to each of the locations we need to maintain live.
+<<spans.ml>>=
+let fold_live_locs f spans z =
+  let fold = Rtlutil.Fold.RegX.loc f in
+  fold spans.sp (fold spans.prev_sp (fold spans.ra z))
+@

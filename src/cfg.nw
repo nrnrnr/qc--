@@ -508,10 +508,14 @@ uses on the inedge to~[[n]].
 It is defined on \emph{all} nodes, because there are no uses on the
 inedges of a join point.
 In the common case, it returns its second argument.
+Calling [[add_live_spans n l]] returns the union of~[[l]] with any
+registers kept live in spans.
+Spans keep register live if they may be needed to walk the stack.
 <<graph and node observers>>=
 val union_over_outedges : 
   'i node -> noflow:('i node -> xregs) -> flow:('i contedge -> xregs) -> xregs
-val add_inedge_uses  : 'i node -> xregs -> xregs
+val add_inedge_uses: 'i node -> xregs -> xregs
+val add_live_spans : 'i node -> xregs -> xregs
 @
 We may want to print a node for debugging purposes.
 <<graph and node observers>>=
@@ -1315,11 +1319,22 @@ let union_over_outedges node ~noflow ~flow =
   | Ill i -> RSX.empty
   | Boot  -> imposs "union_over_outedges undefined on boot nodes"
   
-let add_inedge_uses node regs = match node with
-  | Cal c -> regs ++ R.rset_to_rxset c.cal_uses
-  | Cut c -> regs ++ R.rset_to_rxset c.cut_uses
-  | Jum j -> regs ++ R.rset_to_rxset j.jum_uses
-  | Ret r -> regs ++ R.rset_to_rxset r.ret_uses
+let add_inedge_uses node regs =
+  let reg_add  = RS.fold (fun r rst -> RSX.add (R.Reg r) rst) in
+  match node with
+  | Cal c -> reg_add c.cal_uses regs
+  | Cut c -> reg_add c.cut_uses regs
+  | Jum j -> reg_add j.jum_uses regs
+  | Ret r -> reg_add r.ret_uses regs
+  | _     -> regs
+
+let add_live_spans node regs =
+  let span_add spans rst = match spans with
+    | Some ss -> Spans.fold_live_locs RSX.add ss rst
+    | None    -> rst in
+  match node with
+  | Cal c -> span_add c.cal_spans regs
+  | Joi j -> span_add j.joi_spans regs
   | _     -> regs
 @ 
 Although only internally visible, the [[remove_pred]] function is vital.
@@ -1691,7 +1706,7 @@ let fold_layout f zero cfg =
     | Joi _ | Ins _ | Sta _ | Ass _ | Ret _ | Ent _ ->
       if multiple_preds (succ node) then
         set_succ node ~succ:(branch cfg (succ node))
-    | Mbr _ | Bra _ | Cut _ | Jum _ | Exi _ | Ill _ | Boot-> () in
+    | Mbr _ | Bra _ | Cut _ | Jum _ | Exi _ | Ill _ | Boot -> () in
   let () = iter_nodes ins_branch cfg in
   let snoc node build = fun tail -> build (f node tail) in
   cps_postorder_dfs [entry cfg] succs cfg snoc (fun x -> x) (fun build _ -> build zero)
@@ -1712,8 +1727,7 @@ let mk_exit cfg labels ~preds ~lpred =
                  ; exi_lpred  = cfg.ill
                  ; exi_jx     = X.jx ()
                  } in
-  let () =
-    List.iter (fun l -> cfg.label_map <- SM.add l exit cfg.label_map) labels in
+  List.iter (fun l -> cfg.label_map <- SM.add l exit cfg.label_map) labels;
   exit
 @
 With recursive types, we have to bootstrap the creation of the cfg.
@@ -1832,11 +1846,17 @@ let mk_call i ~pred ~contedges ~lsucc ~uses ~altrets ~unwinds_to ~cuts_to
 
 let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts
                ~uses ~defs ~kills ~reads ~writes ~spans =
+  let new_cedge n = {kills = kills; defs = defs; node = n} in
+  let succ = match kind succ with
+    | Exit -> let label = Idgen.label "postcall" in
+              let join = node_labeled cfg label in
+              set_succ join ~succ;
+              join
+    | _    -> join_leading_to ~succ in
+  let succ        = [new_cedge succ] in
   let altrets     = List.map join_leading_to_ce altrets in
   let unwinds_to  = List.map join_leading_to_ce unwinds_to in
   let cuts_to     = List.map join_leading_to_ce cuts_to in
-  let new_cedge n = {kills = kills; defs = defs; node = n} in
-  let succ        = [new_cedge (join_leading_to succ)] in
   let abort       = if aborts then [new_cedge cfg.exit] else [] in
   let edgelist    = List.flatten [succ; altrets; unwinds_to; cuts_to; abort] in
   (*let edgelist    = List.flatten [altrets; succ; unwinds_to; cuts_to; abort] in*)

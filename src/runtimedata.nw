@@ -97,7 +97,7 @@ module RU = Rtlutil
 module W  = Rtlutil.Width
 module Dn = Rtl.Dn
 module Up = Rtl.Up
-module S = Spans
+module S  = Spans
 module T  = Target
 module IM = Map.Make (struct type t = int let compare = compare end)
 
@@ -209,7 +209,12 @@ otherwise, we expect the argument node to have a label.
 <<define [[emit_sd_spans]] and [[emit_site_spans]]>>=
 let emit_site_spans (node, spans) =
   let stop_l = match G.kind node with
-    | G.Call -> G.label (G.succ_n node (G.altrets node))
+    | G.Call ->
+        let n = G.altrets node in
+        let succ = G.succ_n node n in
+        (match G.kind succ with
+         | G.Join -> G.label succ
+         | _ -> imposs "RTD found succ of call is non-join node")
     | G.Join -> G.label node
     | _ -> imposs "Runtimedata expected call or join node" in
   let frame_label = asm#local (Idgen.label "frame") in
