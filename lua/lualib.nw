@@ -82,11 +82,15 @@ initialization of different libraries should be independent, so this
 shouldn't be an onerous restriction.
 <<lualib.mli>>=
 <<signatures>>
-module Combine2 (L1 : FULL) (L2 : FULL) : FULL
+module Combine : sig
+  module FF (L1 : FULL) (L2 : FULL) : FULL
+end
 module AddBare  (LT : FULL) (LU : BARE) : FULL
 @ As is typical, it's less efficient to string together a bunch of
 pairs than it is to build larger tuples.
-Perhaps one day soon we will generate more alternatives automatically.
+Perhaps one day soon we will provide more alternatives---perhaps by
+generating them automatically.
+That's why we've left room for more sub-modules of [[Combine]].
 @
 \section{Implementation}
 
@@ -106,50 +110,53 @@ struct
 end
 
 
-module Combine2 (L1 : FULL) (L2 : FULL) : FULL = struct
-  module U = struct
-    type 'a t =
-      | L1 of 'a L1.U.t 
-      | L2 of 'a L2.U.t 
-    let tname = L1.U.tname ^ " or " ^ L2.U.tname
-    let eq veq x y = match x, y with
-    | L1 x,    L1 y    -> L1.U.eq veq x y
-    | L2 x,    L2 y    -> L2.U.eq veq x y
-    | _, _ -> false
-    let to_string vs = function
-      | L1 x -> L1.U.to_string vs x
-      | L2 x -> L2.U.to_string vs x
-    type 'a state = { l1 : 'a L1.U.state ; l2 : 'a L2.U.state }
-    let state () = { l1 = L1.U.state() ; l2 = L2.U.state () }
-  end
-  module M (This : FULL_VIEW with type 'a t = 'a U.t and type 'a state = 'a U.state) =
-    struct
-      module Interp = This.Interp
-      module V = Interp.V
-      module This1 = struct
-        module Interp = Interp
-        type 'a t = 'a L1.U.t
-        let map = { V.embed = (fun x -> This.map.V.embed (U.L1 x))
-                  ; V.project = (fun v -> match This.map.V.project v with
-                                        | U.L1 x -> x
-                                        | _ -> raise (V.Projection (v, L1.U.tname)))
-                }
-        type 'a state = 'a L1.U.state
-        let project_state s = (This.project_state s).U.l1
-      end
-      module This2 = struct
-        module Interp = Interp
-        type 'a t = 'a L2.U.t
-        let map = { V.embed = (fun x -> This.map.V.embed (U.L2 x))
-                  ; V.project = (fun v -> match This.map.V.project v with
-                                        | U.L2 x -> x
-                                        | _ -> raise (V.Projection (v, L2.U.tname)))
-                }
-        type 'a state = 'a L2.U.state
-        let project_state s = (This.project_state s).U.l2
-      end
-      module L1' = L1.M (This1)
-      module L2' = L2.M (This2)
-      let init g = (L1'.init g; L2'.init g)
+module Combine = struct
+  module FF (L1 : FULL) (L2 : FULL) : FULL = struct
+    module U = struct
+      type 'a t =
+        | L1 of 'a L1.U.t 
+        | L2 of 'a L2.U.t 
+      let tname = L1.U.tname ^ " or " ^ L2.U.tname
+      let eq veq x y = match x, y with
+      | L1 x,    L1 y    -> L1.U.eq veq x y
+      | L2 x,    L2 y    -> L2.U.eq veq x y
+      | _, _ -> false
+      let to_string vs = function
+        | L1 x -> L1.U.to_string vs x
+        | L2 x -> L2.U.to_string vs x
+      type 'a state = { l1 : 'a L1.U.state ; l2 : 'a L2.U.state }
+      let state () = { l1 = L1.U.state() ; l2 = L2.U.state () }
     end
+    module M (This : FULL_VIEW with type 'a t = 'a U.t and type 'a state = 'a U.state) =
+      struct
+        module Interp = This.Interp
+        module V = Interp.V
+        module This1 = struct
+          module Interp = Interp
+          type 'a t = 'a L1.U.t
+          let map = { V.embed = (fun x -> This.map.V.embed (U.L1 x))
+                    ; V.project = (fun v -> match This.map.V.project v with
+                                          | U.L1 x -> x
+                                          | _ -> raise (V.Projection (v, L1.U.tname)))
+                  }
+          type 'a state = 'a L1.U.state
+          let project_state s = (This.project_state s).U.l1
+        end
+        module This2 = struct
+          module Interp = Interp
+          type 'a t = 'a L2.U.t
+          let map = { V.embed = (fun x -> This.map.V.embed (U.L2 x))
+                    ; V.project = (fun v -> match This.map.V.project v with
+                                          | U.L2 x -> x
+                                          | _ -> raise (V.Projection (v, L2.U.tname)))
+                  }
+          type 'a state = 'a L2.U.state
+          let project_state s = (This.project_state s).U.l2
+        end
+        module L1' = L1.M (This1)
+        module L2' = L2.M (This2)
+        let init g = (L1'.init g; L2'.init g)
+      end
+  end
 end
+

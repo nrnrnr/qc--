@@ -1,0 +1,353 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Application program interface for Lua in Caml}
+
+\subsection{Values}
+
+As in Lua, we keep the value space simple and small.
+Unlike Lua, we have only one kind of function.
+The types [[userdata']] and [[userstate']] are not specified here; 
+they are intended to be supplied by user-defined libraries.
+
+The [[VALUE]] interface is a key for clients because it not only specifies what
+a Lua value is, but also provides higher-order embedding/projection
+pairs so that Caml values can be mapped to Lua values and back again.
+<<lua.mli>>=
+module type VALUE = sig
+  type 'a userdata'
+  type 'a userstate'
+  type info
+  type value
+    = Nil
+    | Number   of float
+    | String   of string
+    | Function of info * func
+    | Userdata of userdata
+    | Table    of table
+  and func  = state -> value list -> value list
+  and table = (value, value) Luahash.t
+  and userdata  = value userdata'
+  and userstate = value userstate'
+  and state = { globals : table
+              ; fallbacks : (string, value) Hashtbl.t
+              ; mutable callstack : activation list
+              ; mutable currentloc : Srcmap.location option (* supersedes top of stack *)
+              ; userstate : userstate
+              }
+  and activation = info * Srcmap.location option
+
+  val caml_func : func -> value (* each result unique *)
+  val lua_func  : file:string -> linedefined:int -> func -> value
+  val info      : file:string -> linedefined:int -> info (* must NOT be reused *)
+  val eq        : value -> value -> bool
+  val to_string : value -> string
+  val activation_strings : state -> activation -> string list
+  type objname = Fallback of string | Global of string | Element of string * value
+  val objname : state -> value -> objname option
+     (* 'fallback', 'global', or 'element', name *)
+
+  val state : unit -> state (* empty state, without even fallbacks *)
+@ 
+Lua tables are not quite like Caml tables, but they are close.
+<<lua.mli>>=
+  module Table : sig
+    val create : sizehint:int -> table
+    val find   : table -> key:value -> value
+    val bind   : table -> key:value -> data:value -> unit
+    val of_list : (string * value) list -> table
+  end
+@ 
+Now, for embedding and projection.
+This is a key, as it completely replaces the stupid stack-based
+interface found in~C.
+Instead, we use higher-order functions to whip up functionality as needed.
+If a projection fails, it raises [[Projection]] giving the value it
+tried to project and a string indicating what it tried to project to.
+<<lua.mli>>=
+  exception Projection of value * string
+  type ('a,'b) ep = { embed : 'a -> 'b; project : 'b -> 'a }
+  type 'a map  = ('a, value) ep
+  type 'a mapf  (* used to build function maps that curry/uncurry *)
+@ 
+These functions enable us to convert the basic types.
+<<lua.mli>>=
+  val float    : float  map
+  val int      : int    map
+  val bool     : bool   map
+  val string   : string map
+  val userdata : userdata map
+@ 
+To convert a value of option type, we represent [[None]] as [[Nil]].
+Woe betide you if [[Nil]] is a valid value of your type!
+We won't see it.
+<<lua.mli>>=
+  val option : 'a map -> 'a option map
+@ 
+To convert a list of values, we produce a table with a binding of the
+length to the name [[n]] and bindings of the values to the numbers $1..n$.
+We won't see it.
+<<lua.mli>>=
+  val list : 'a map -> 'a list map
+@ 
+If for some reason a Caml function operates on Lua values, we need an
+identity pair.  We also enable functions that expect tables.
+<<lua.mli>>=
+  val value  : value map
+  val table  : table map
+@
+Here is the support for converting functions.
+First, if one wants a Lua function to be curried (as the Caml
+functions are), one can simply use [[-->]].
+There's a small gotcha, in that we can't make [[-->]] right
+associative.
+That's OK, as it probably shouldn't be used for curried functions.
+
+For curried functions that should take lists of arguments in Lua,
+we use [[**->]], [[pfunc]], [[func]], and [[result]].
+The idea is this: if we have a Caml function type
+[[t -> u -> v -> w]], we can turn this into a Lua function of three
+arguments by using the embedding/projection pair produced by
+\begin{quote}
+[[pfunc (t **-> u **-> v **-> result w)]]
+\end{quote}
+<<lua.mli>>=
+  val ( -->  ) : 'a map  -> 'b map  -> ('a -> 'b) map
+  val ( **-> ) : 'a map  -> 'b mapf -> ('a -> 'b) mapf
+  val result   : 'a map  -> 'a mapf
+  val runit    : unit mapf                         (* for functions w/o results *)
+  val values   : value list mapf                   (* functions returning value lists*)
+  val pfunc    : 'a mapf -> 'a map                 (* pure functions *)
+  val func     : 'a mapf -> (state -> 'a) map      (* impure functions *)
+end
+@ 
+Here's an example: we embed the [[String.sub]] function, then apply
+it to some arguments.
+<<tests>>=
+let sub = (pfunc (string **-> int **-> int **-> result string)).embed String.sub
+let apply = function Function (_, f) -> fun args -> trim1 (f emptystate args)
+                   | v -> raise (Projection (v, "function"))
+let check = string.project (apply sub [string.embed "hello"; int.embed 0; int.embed 2])
+let _ = assert (check = "he")
+@ 
+If a function is impure (needs access to the Lua state) we use
+[[func]].
+<<tests>>=
+let setglobal {globals=g; fallbacks=f} n v = Table.bind g (String n) v
+let sg = ((func (string **-> value **-> runit)).embed setglobal : value)
+@ 
+\subsection{User-defined types and state}
+
+For the rest of the interface, we can make Lua values by supplying an
+appropriate [[userdata]] type.  
+<<lua.mli>>=
+module type USERDATA = sig
+  type 'a t                             (* type parameter will be Lua value *)
+  val tname : string  (* name of this type, for projection errors *)
+  val eq : ('a -> 'a -> bool) -> 'a t -> 'a t -> bool
+  val to_string : ('a -> string) -> 'a t -> string
+  type 'a state
+  val state : unit -> 'a state  (* may cause problems *)
+end
+@ 
+\subsection{Parsers}
+
+It is possible for users to replace the Lua parser with a parser of
+their own, but it must read the same kinds of tokens and produce the
+same kinds of ASTs as the existing parser.
+Because most users won't do this, we don't document the token and AST types
+here---you must look in the appropriate source modules.
+<<lua.mli>>=
+module type AST = Luaast.S
+module Parser : sig
+  type token = Luaparser.token
+  module type S =
+    sig
+      type chunk
+      val chunks : (Lexing.lexbuf  -> token) -> Lexing.lexbuf -> chunk list
+    end
+  module type MAKER = functor (Ast : AST) -> S with type chunk = Ast.chunk
+  module MakeStandard : MAKER
+end
+@ 
+You should never have to worry about a scanner for Lua---that should
+be taken care of for you by [[dofile]] and [[dostring]] in the basic library.
+@ 
+
+\subsection{Libraries}
+
+The module [[Lua.Lib]] provides library support.
+<<lua.mli>>=
+module Lib : sig
+  <<library support>>
+end
+@ 
+In general, a library can add new types, global mutable state, and new
+functions to an interpreter.
+Interpreters are typically built by combining multiple libraries, and
+the combination determines the [[userdata]] and [[userstate]] types
+ultimately used in the interpreter's value and state.
+
+We encourage the use of parameterized modules so that libraries can be
+combined easily.  There is some run-time cost for the generality, but
+it can be minimized as discussed below.
+
+Building the interpreter takes place in three phases:
+\begin{enumerate}
+\item
+Different libraries are combined to determine the ultimate
+[[userdata]] and [[state]] types.
+The combination is then used to build an interpreter, which matches
+signature [[INTERP]].
+This step happens at compile time.
+\item
+The full interpreter is passed back to each library, so that each
+library can build a function suitable for initializing interpreters of
+built with those types.
+This step also happens at compile time.
+\item
+A fresh state is created and all the initialization functions are
+called, building a new, fully initialized interpreter.
+This step happens at run time, as often as desired---multiple
+interpreters coexist peacefully.
+\end{enumerate}
+@
+Here is everything that a library is deemed to need to know about an
+interpreter.
+This signature could be extended if necessary.
+The information is divided in two pieces: there is one [[INTERP]]
+piece,  which looks the same to all libraries.
+But each library sees its own [[VIEW]] piece, which provides functions
+that map to and from the type and state provided by that library.
+<<library support>>=
+module type INTERP = sig
+  module V : VALUE
+  val fallback : string -> V.state -> V.value list -> V.value list
+end
+
+module type FULL_VIEW = sig
+  module Interp : INTERP
+  type 'a t   (* is this parameter needed really? *)
+  val map : Interp.V.value t Interp.V.map
+  type 'a state 
+  val project_state : Interp.V.state -> Interp.V.value state
+end
+@ 
+In principle, there could be four kinds of libraries:
+a [[BARE]] library uses only existing types and state;
+a [[FULL]] library adds both a new type and new state;
+a \emph{stateful} library could add only a new state; and
+a \emph{typeful} library could add only a new type.
+This interface currently supports only two of the four alternatives,
+but the others could be added easily enough.
+Each alternative requires its own view signature.
+<<library support>>=
+module type FULL = sig
+  module U : Luavalue.USERDATA
+  module M (This : FULL_VIEW with type 'a t = 'a U.t and type 'a state = 'a U.state) :
+      sig
+        val init : This.Interp.V.state -> unit
+      end
+end
+
+module type BARE = 
+  functor (Interp : INTERP) -> sig
+    val init : Interp.V.state -> unit
+  end
+@ 
+An interpreter requires at least one [[FULL]] library, so these two
+module combinators suffice to mix any number of any kind of libraries.
+Initialization takes place left to right, but ordinarily
+initialization of different libraries should be independent, so this
+shouldn't be an onerous restriction.
+<<library support>>=
+module Combine : sig
+  module FF (L1 : FULL) (L2 : FULL) : FULL
+end
+module AddBare  (LT : FULL) (LU : BARE) : FULL
+@ As is typical, it's less efficient to string together a bunch of
+pairs than it is to build larger tuples.
+Perhaps one day soon we will generate more alternatives automatically.
+@
+\subsection{Building an interpreter}
+
+To build an interpreter, a user must provide a user library to make
+an interpreter core, then add a basic library to this core.
+Because  the basic library includes [[dofile]] and [[dostring]], 
+one must provide a parser to make this library.
+@
+The core interpreter contains a compiler for ASTs and some other
+stuff that I might feel like documenting one day.
+<<lua.mli>>=
+module type INTERP_CORE = sig
+  module Value : VALUE
+  module Ast : AST with module Value = Value
+  type state = Value.state
+  type value = Value.value
+  exception Error of string
+  val compile : srcdbg:(Srcmap.map * bool) -> Ast.chunk list -> state -> value list
+  val test : unit -> (string * value list) list
+  val state : unit -> state  (* produce a fresh, initialized state *)
+  val error : state -> string -> unit  (* error fallback *)
+
+  val getglobal : state -> value -> value
+  val with_stack  : Value.info -> state -> ('a -> 'b) -> 'a -> 'b
+  val fallback : string -> state -> value list -> value list
+
+  val setfallback : state -> string -> value -> value
+    (* sets fallback, returns previous one *)
+end
+
+module MakeCore (Lib : Lib.FULL) : INTERP_CORE
+@ 
+
+Because building an interpreter requires a library, and because not
+every client will want to create a special library, we provide an
+empty library.
+<<lua.mli>>=
+module EmptyLibrary : Lib.FULL
+@ 
+We also provide three standard libraries:
+[[Luastrlib : Lib.BARE]],
+[[Luamathlib : Lib.BARE]],
+and
+[[Luaiolib : Lib.FULL]].
+We don't mention these here because we want you to be able to leave
+them out if you won't use them.
+@
+Finally, to make a full-blown interpreter, you need to supply a
+parser.
+We then add the basic library.
+<<lua.mli>>=
+module MakeInterp (MakeParser : Parser.MAKER) (I : INTERP_CORE) : sig
+  include INTERP_CORE
+  module Parser : Luaparser.S with type chunk = Ast.chunk
+  val do_lexbuf : sourcename:string -> state -> Lexing.lexbuf -> value list
+  val dostring  : state -> string -> value list
+  val dofile    : state -> string -> value list
+end with module Value = I.Value
+@ 
+Here is an example of how to build an interpreter that uses the three
+standard libraries:
+\begin{verbatim}
+  module I = Lua.MakeInterp (Lua.Parser.MakeStandard)
+               (Lua.MakeCore (Lua.Lib.AddBare (Lua.Lib.AddBare
+                 (Luaiolib.M) (Luastrlib.M)) (Luamathlib.M)))
+\end{verbatim}
+@
+
+\section{Implementation}
+@
+<<lua.ml>>=
+module type VALUE = Luavalue.S
+module type USERDATA = Luavalue.USERDATA
+
+module Lib = Lualib
+module Parser = Luaparser
+module type AST = Luaast.S
+
+module type INTERP_CORE = Luainterp.S
+module MakeCore = Luainterp.Make
+module MakeInterp = Luabaselib.Add
+module EmptyLibrary = Luainterp.NoLibrary
+
+let scanner map buf = Luascanner.token buf map

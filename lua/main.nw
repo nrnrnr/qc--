@@ -3,28 +3,10 @@
 \section{Main loop for testing a standalone interpreter}
 
 <<main.ml>>=
-module Lib = Lualib
-module Io = Luaiolib
-module Str = Luastrlib
-module Math = Luamathlib
-module Basics = Luabaselib
-module Parser = Luaparser
-module Lua = Luainterp
-
-module A = struct
-  module Make = Lua.Make
-  <<stuff>>
-end
-
-module B = struct
-  module Make = Newinterp.Make 
-  <<stuff>>
-end
-<<stuff>>=
-module I = Basics.Add (Parser.MakeStandard)
-             (Make (Lib.AddBare (Lib.AddBare (Io.M) (Str.M)) (Math.M)))
+module I = Lua.MakeInterp (Lua.Parser.MakeStandard)
+             (Lua.MakeCore (Lua.Lib.AddBare (Lua.Lib.AddBare
+               (Luaiolib.M) (Luastrlib.M)) (Luamathlib.M)))
 module V = I.Value
-let lex map buf = Luascanner.token buf map
 let state = I.state()
 let dumpstate = ref false
 let showresults =
@@ -52,12 +34,8 @@ let rec args = function
   | [] -> run_interactive stdin
   | files -> List.iter run files
 
-@ 
-<<main.ml>>=
-let args = if Sys.argv.(1) = "-new" then B.args else A.args
 let _ = args (List.tl (Array.to_list (Sys.argv)))
 
-(*
 let _ = if !dumpstate then
   begin
     print_endline "final state: ";
@@ -65,4 +43,3 @@ let _ = if !dumpstate then
       print_string (V.to_string k); print_string " |-> ";
       print_endline (V.to_string v)) state.V.globals
   end
-*)
