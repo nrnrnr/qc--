@@ -114,6 +114,15 @@ let width e = match Rtl.Convert.exp e with
 let assign l r = Rtl.store l r (width r)
 @
 
+Maps and sets of locations are easily defined using the [[Map]] and
+[[Set]] functors.
+
+<<rtlutil.ml>>=
+module LocCompare = struct type t = Rtl.loc let compare = compare end
+module LocMap     = Map.Make(LocCompare)
+module LocSet     = Set.Make(LocCompare)
+@
+
 <<rtlutil.ml>>=
 type 'a regfun = Rtl.space -> index:Base.std_int -> Rtl.width -> 'a -> 'a
 let read_write_lists (read:'a regfun) (write:'a regfun) = 
@@ -138,15 +147,6 @@ let read_write_lists (read:'a regfun) (write:'a regfun) =
         | RP.Fetch (l, w) -> loc read z l
         | RP.App (_, es) -> List.fold_left exp z es
   in  fun r z -> rtl z (Rtl.Convert.rtl r)
-@
-
-Maps and sets of locations are easily defined using the [[Map]] and
-[[Set]] functors.
-
-<<rtlutil.ml>>=
-module LocCompare = struct type t = Rtl.loc let compare = compare end
-module LocMap     = Map.Make(LocCompare)
-module LocSet     = Set.Make(LocCompare)
 @
 
 The [[subst map rtl]] function substitutes all locations in [[rtl]] that

@@ -278,6 +278,15 @@ value.
 val expand: cfg -> (Rtl.rtl -> Rtl.rtl list) -> cfg
 @
 
+The register allocation process substitutes temporary locations in the
+[[cfg]] with hardware registers.  Both are represented as [[Rtl.loc]]
+values.  The [[subst map cfg]] function returns a [[cfg]] where all
+locations in the domain of [[map]] are replaced by the associated
+location.
+
+<<abstract types and values>>=
+val subst: cfg -> Rtl.loc Rtlutil.LocMap.t -> cfg
+@
 
 % ################################################################## 
 \subsection{Implementation}
@@ -618,11 +627,11 @@ empty.  We use [[assert]] to secure this assumption.
 its live set.  Since register sets are mutable, we have to makes
 copies to avoid sharing.
 
-[[subst]] takes a kind and returns a similar [[kind]] value with the
-[[rtl]] replaced.
+[[subst_rtl]] takes a kind and returns a similar [[kind]] value with
+the [[rtl]] replaced.
 
 <<implementation of S>>=
-let subst_kind: kind -> Rtl.rtl -> kind = fun kind rtl -> match kind with
+let subst_rtl: kind -> Rtl.rtl -> kind = fun kind rtl -> match kind with
     | Goto   (_  ,x) -> Goto (rtl,x)
     | Call   (_  ,x) -> Call (rtl,x)
     | Assign  _      -> Assign(rtl)
@@ -642,7 +651,7 @@ the last {\rtl} replaces the {\rtl} in the node that was expanded.
 let rtls2nodes: node -> Rtl.rtl list -> node list = fun n rtls ->
     let rec loop = function
         | []    -> assert false
-        | [rtl] -> [node n.props (subst_kind n.kind rtl)]
+        | [rtl] -> [node n.props (subst_rtl n.kind rtl)]
         | r::rr -> node n.props (Assign r) :: loop rr (* not tail rec. *)
     in
         ( assert (n.live = Register.Set.empty)
@@ -679,3 +688,37 @@ let expand: cfg -> (Rtl.rtl -> Rtl.rtl list) -> cfg = fun cfg f ->
         ; index = index StrMap.empty entry
         }   
 @
+
+Substitution of locations inside an [[Rtl.rtl]] is implemented by
+[[Rtlutil.subst]]. Since each [[rtl]] is hidden in a [[kind]] we have
+to provide a substitution at the level of kinds.
+
+<<implementation of S>>=
+let subst_loc: kind -> Rtl.loc Rtlutil.LocMap.t -> kind = fun kind map -> 
+    let subst = Rtlutil.subst map in 
+        match kind with
+        | Goto   (rtl,x)    -> Goto (subst rtl,x)
+        | Call   (rtl,x)    -> Call (subst rtl,x)
+        | Assign  rtl       -> Assign(subst rtl)
+        | Branch (rtl,x)    -> Branch(subst rtl,x)
+        | Jump   (s,rtl,x)  -> Jump(s,subst rtl,x)
+        | Cutto  (s,rtl,x)  -> Cutto(s,subst rtl,x)
+        | Return (s,rtl,x)  -> Return(s,subst rtl,x)
+        | Label  _          -> kind
+        | Exit              -> kind
+@
+
+The substitution of locations in a [[cfg]] is quite simple. Because of
+the applicative nature of [[cfg]] we have to re-compute the index that
+is part of a [[cfg]]. Otherwise index entries still would point to the
+old nodes.
+
+<<implementation of S>>=
+let subst cfg map =
+    let subst_node n = { n with kind = subst_loc n.kind map } in
+    let entry        = List.map subst_node cfg.entry          in
+    let indx         = index StrMap.empty entry               in
+        { entry = entry
+        ; index = indx
+        }
+@    
