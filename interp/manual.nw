@@ -4,10 +4,93 @@ This document contains information about the interpreter.
 
 \section{The Quick~{\PAL} Interpreter Assembly Language}
 
+The Quick~{\PAL} interpreter reads source code in a Lua-based assembly
+language.
+This assembly language contains much the same structure as C code.
+For example, the code below is some {\PAL} code that prints the value [[10]], 
+computes [[10 * 10]], prints this value, and then returns to the system:
+
+\begin{verbatim}
+target byteorder little
+       memsize   8
+
+export main;
+import bits32 print_int;
+
+section "text" {
+  square(bits32 x) {
+    return (%mul_trunc(x, x));
+  }
+
+  main() {
+    bits32 n;
+    bits32 result;
+
+    n = 10::bits32;
+    foreign "C" print_int(n);
+
+    result = square(n);
+    foreign "C" print_int(n);
+
+    return;
+  }
+}
+\end{verbatim}
+
+The above code, when properly translated, would result in the following Lua
+assembly code:
+
+\begin{verbatim}
+CMM.byteorder("LITTLE")
+CMM.memsize(8)
+
+CMM.exports({ "main" })
+CMM.imports({ "print_int" })
+
+CMM.section("text")
+   CMM.procedure("square", 1, 0)
+      CMM.fetch_arg(0)
+      CMM.store_local(0)
+
+      CMM.fetch_local(0)
+      CMM.fetch_local(0)
+      CMM.apply_operator("mul_trunc", "bits32,bits32:bits32")
+      CMM.store_arg(0)
+      CMM.cmm_return(0, 0)
+   CMM.end_procedure()
+
+   CMM.procedure("main", 2, 0)
+      CMM.push_literal("0xa", 32)
+      CMM.store_local(0)
+
+      CMM.fetch_local(0)
+      CMM.store_arg(0)
+      CMM.push_symbol("print_int")
+      CMM.call({}, {}, {}, 0)
+
+      CMM.fetch_local(0)
+      CMM.store_arg(0)
+      CMM.push_symbol("square")
+      CMM.call({}, {}, {}, 0)
+
+      CMM.fetch_arg(0)
+      CMM.store_local(1)
+
+      CMM.fetch_local(1)
+      CMM.store_arg(0)
+      CMM.push_symbol("print_int")
+      CMM.call({}, {}, {}, 0)
+
+      CMM.cmm_return(0, 0)
+   CMM.end_procedure()
+CMM.end_section()
+\end{verbatim}
+
 \subsection{Source Code Functions}
-The Quick~{\PAL} Interpreter, in its present state, reads in Lua
-source code that may make use of standard Lua functions as well as the
-following {\PAL} related functions:\\ 
+
+The Quick~{\PAL} Interpreter reads in Lua source code that may make use of
+standard Lua functions as well as the following {\PAL} related functions:\\ 
+
 \newcolumntype{Y}{>{\raggedright\arraybackslash}X}%
 \begin{tabularx}{\linewidth}{|lY|Y|}\hline
 
@@ -167,22 +250,3 @@ Returns to alternate return [[index]] of the the current activation's caller, wh
 Pops an address off the value stack and cuts to the continuation located at the address.
 \\\hline
 \end{tabularx}
-
-\section{Prerequisites}
-In order to build and use the interpreter, there are a few externally available libraries that you need:
-
-\begin{itemize}
-\item We make use of an embedded Lua interpreter in our C code.  To download the source code and/or binaries for the Lua language, please visit [[http://www.lua.org]].
-We link Lua libraries [[liblua.a]] and [[liblualib.a]] together with our code.
-
-\item We make use of the New Jersey Machine-Code Toolkit to preprocess our C code on its way to the compiler.
-To download the source code and/or binaries for the toolkit, please visit [[http://www.eecs.harvard.edu/~nr/toolkit/]].
-We use the binary [[tools]] to preprocess our code, and link the library [[mclib.o]] together with our code.
-
-\item If you want to build the NJ Machine-Code Toolkit library yourself from the source code, you will need to have access to an Icon compiler or bytecode compiler.
-Visit [[http://www.cs.arizona.edu/icon/]] to download Icon.
-
-\item We make use of David Hanson's \textit{C Interfaces and Implementations} library of C coding idioms.
-Visit [[http://www.cs.princeton.edu/software/cii/]] to download the source code needed to build this library.
-
-\end{itemize}

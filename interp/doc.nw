@@ -37,16 +37,14 @@
       (assertions fail, labels are not found, translation is wrong, etc.)!
     \item  Continuations are not properly translated
       (see above; also, continuations must be specially defined with
-       [[define_continuation]] assembly instruction---[[define_label]] is not good
-       enough for interpreter as of now)!
+       [[define_continuation]] assembly instruction---[[define_label]] is not 
+       good enough for interpreter as of now)!
 
-    \item  Rounding modes are currently being translated...
     \item  Interpreter is not told correct number of global registers.
 
     \item  Multiple returns have not been tested 
       (contingent upon continuations; see above)
 
-    \item  Multiple variable assignment has not been tested.
     \item  Translation of guarded-RTLs is not tested.
 \end{itemize}
 
@@ -87,9 +85,9 @@
     \item  Not all common C function signatures are registered; this will 
       need to be modified in order to accomodate more varied sorts of C 
       functions.
-    \item  64-bit ints are not currently supported
-    \item  Cuts across different threads are 100% untested; unexpected behavior
-      might occur.
+    \item  64-bit ints are supported but there are no 64-bit int operators
+    \item  Cuts across different threads are 100 per cent untested; unexpected
+      behavior might occur.
           - Consider this situation: a procedure 'p' contains a continuation
             'cont'.  At runtime, an activation of 'p' calls itself, and
             then that activation calls itself---leaving 3 live activations.
@@ -100,16 +98,126 @@
     \item  BUG : span token must be a positive integer (0 does not work!)
 \end{itemize}
 
+% ----------------------------------------------------------------------------
+\section{Lower Level Implementation Notes}
+% ----------------------------------------------------------------------------
 
+I could probably remove \texttt{locals\_end} and \texttt{stackdata\_end} as local variables in function \texttt{run\_interp}; but they \emph{must} remain stored away in an \texttt{activation} record at all non-tail calls.
+
+How should floating-pt computation with rounding best be done?
+
+FIX FIX have to change [[ROTL]] and [[ROTR]] so they deal with the case when $d > x$.
+
+[[label_new]] does NOT copy its string argument; do NOT free anything you pass off to [[label_new]]!
+
+Use CII: maybe sequences to store closure pointers, check out Hanson's [[malloc]] interface (that allows debugging), maybe rings for the dead set, look at dvars and [[array_t]].
+
+Only procedures, declarations, and other sections may be in toplevel ``section.''
+
+Make clear that what I mean by an unnamed section is actually just the toplevel part of the assembly unit (i.e., declarations and procedures not in a section).
+
+Don't we have to free [[RBlock]]s when we've finished copying them?
+
+Consider making better use of the [[lua_State *]] in the [[table]] structure.
+
+Use ``higher-order'' macros to declare, define and register operator implementations (instead of the current [[#undef]] business).
+
+Document that tables sent to Lua function [[CMM_call]] (as call-site annotations) are used internally by the encoder/interpreter and that changing them would be dangerous.
+
+Do we have to handle [[never returns]] annotations?
+
+Do we need to make sure that continuations are not defined outside of procedures (by testing if [[curr_proc]] is [[NULL]])?
+
+Quote from manual: \emph{All separately compiled modules must have} identical \emph{top-level variable declarations}.
+
+Consider changing operator representation/implementation so that OP bytecode does not need to carry around a 32-bit value (right now it carries around an (operator *)).
+
+Use dynamic arrays!  Stop with this assertion failure business.
+
+Figure out what's up with [[curr_proc]] during interpreting time.
+
+% ----------------------------------------------------------------------------
+\chapter{Prerequisites}
+% ----------------------------------------------------------------------------
+
+In order to build and use the interpreter, there are a few externally available libraries that you need:
+
+\begin{itemize}
+\item We make use of an embedded Lua interpreter in our C code.  To download the source code and/or binaries for the Lua language, please visit [[http://www.lua.org]].
+We link Lua libraries [[liblua.a]] and [[liblualib.a]] together with our code.
+
+\item We make use of the New Jersey Machine-Code Toolkit to preprocess our C code on its way to the compiler.
+To download the source code and/or binaries for the toolkit, please visit [[http://www.eecs.harvard.edu/~nr/toolkit/]].
+We use the binary [[tools]] to preprocess our code, and link the library [[mclib.o]] together with our code.
+
+\item If you want to build the NJ Machine-Code Toolkit library yourself from the source code, you will need to have access to an Icon compiler or bytecode compiler.
+Visit [[http://www.cs.arizona.edu/icon/]] to download Icon.
+
+\item We make use of David Hanson's \textit{C Interfaces and Implementations} library of C coding idioms.
+Visit [[http://www.cs.princeton.edu/software/cii/]] to download the source code needed to build this library.
+
+\end{itemize}
+
+% ----------------------------------------------------------------------------
+% ----------------------------------------------------------------------------
+
+% ----------------------------------------------------------------------------
 \chapter{User's guide}
-\input{manual.inc}
+% ----------------------------------------------------------------------------
 
+\input{manual.inc}
+\input{formal.inc}
+
+% ----------------------------------------------------------------------------
 \chapter{Client's view}
+% ----------------------------------------------------------------------------
+
 \let\interface\section
 \let\implementation \section
 \input{client.inc}
 
+% ----------------------------------------------------------------------------
 \chapter{All the interfaces}
+% ----------------------------------------------------------------------------
+
+This chapter presents all of the interfaces for the interpreter.
+They are included to present an overall picture of the major facilities
+exported by each of the modules that comprise this application.
+The implementations of these interfaces may be found elsewhere in this
+document.
+
+The major interfaces to this interpreter include:
+
+\begin{tabularx}{\linewidth}{@{\hskip2em}lX@{}}
+   [[assemblyunit]]  & {\PAL} assembly units
+\\ [[activation]]    & {\PAL} activation frames
+\\ [[ccall]]         & {\PAL} $\rightarrow$ C calling mechanism
+\\ [[controlflow]]   & {\PAL} control flow constructs
+\\ [[disasm]]        & Bytecode disassembly
+\\ [[encoding]]      & Bytecode generation and loading
+\\ [[features]]      & C language extension interface
+\\ [[intervals]]     & Natural number sets
+\\ [[label]]         & {\PAL} labels and namespace management
+\\ [[lualink]]       & Extended Lua interface
+\\ [[operator]]      & {\PAL} primitive operators
+\\ [[runtime]]       & {\PAL} runtime system
+\\ [[span]]          & {\PAL} spans
+\\ [[stack]]         & Value stacks
+\\ [[table]]         & Dynamic, associative arrays
+\\ [[thread]]        & {\PAL} threads of execution
+\\ [[types]]         & Basic C types
+\\ [[uid]]           & Unique identifiers for activation frames
+\\ [[value]]         & {\PAL} values
+\end{tabularx}
+\\
+
+These interfaces are presented in a somewhat logical order.
+A pure top-down or bottom-up approach is not entirely possible due to the
+vast number of mutually recursive dependencies among modules, but we do
+our best to present the simple interfaces first and proceed onward to the
+more complicated depths of the interpreter.
+
+% ----------------------------------------------------------------------------
 
 \begingroup
 \let\origsubpageref\subpageref
@@ -139,13 +247,16 @@
 \input{disasm.inc}
 \input{runtime.inc}
 
-}}}}}}}}}}}}}\endgroup  % something wrong with unbalanced }
+\endgroup
 
+% ----------------------------------------------------------------------------
 \cleardoublepage
 \part{Modules with interfaces}
+% ----------------------------------------------------------------------------
 
-\let\interface\chapter
-\let\implementation \section
+\def\interface#1{\chapter{#1} \section{Module Interface}}
+\def\implementation#1{\section{Module Implementation}}
+
 \input{features.inc}
 \input{types.inc}
 \input{value.inc}
@@ -167,8 +278,11 @@
 \input{disasm.inc}
 \input{runtime.inc}
 
+% ----------------------------------------------------------------------------
 \cleardoublepage
 \part{Unused stuff}
+% ----------------------------------------------------------------------------
+
 \input{opgen.inc}
 
 %\bibliographystyle{nchicago}
