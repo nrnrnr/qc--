@@ -1,0 +1,75 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=2 sw=2 et: 
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+% 
+% $Id$
+
+% ------------------------------------------------------------------ 
+\section{Unique identifiers, maps, and sets}
+% ------------------------------------------------------------------ 
+
+<<unique.mli>>=
+type uid
+val uid : unit -> uid
+val distinguished_uid : uid    (* distinct from any other *)
+<<exposed types>>
+module Map : MAP
+module Set : SET
+@ 
+<<exposed types>>=
+module type MAP = sig
+  type 'a t
+  val empty : 'a t
+  val add   : uid -> 'a -> 'a t -> 'a t
+  val find  : uid -> 'a t -> 'a 
+  val split : uid -> 'a t -> 'a * 'a t
+    (* split k m = (find k m, remove k m) *)
+  val splitp: (uid -> 'a -> bool) -> 'a t -> 'a * 'a t
+    (* split based on predicate *)
+  val union : 'a t -> 'a t -> 'a t
+  val fold   : (uid -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
+end
+
+module type SET = sig
+  type t
+  val empty : t
+  val mem : uid -> t -> bool
+  val add : uid -> t -> t
+end
+@ 
+\subsection{Implementation}
+<<unique.ml>>=
+type uid = int
+let uid =
+  let n = Reinit.ref 1 in
+  fun () -> let u = !n in (n := u + 1; u)
+let distinguished_uid = 0
+
+<<exposed types>>
+
+module Ord = struct type t = uid let compare : t -> t -> int = compare end
+module Set = Set.Make (Ord)
+module M = Map.Make (Ord)
+module Map : MAP = struct
+  include M
+  let split u m = (find u m, remove u m)
+  let splitp p m =
+    let scan u v (yes, no) = match yes with
+    | None when p u v -> (Some v, no)
+    | _ -> (yes, add u v no) in
+    match fold scan m (None, empty) with
+    | (Some v, m) -> v, m
+    | (None, _) -> raise Not_found
+  let union m m' =
+    let add u v m =
+      if mem u m then
+        raise (Invalid_argument "Unique.Map.union")
+      else
+        add u v m in
+    fold add m m'
+end

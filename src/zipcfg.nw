@@ -150,12 +150,14 @@ val set_spans : zgraph -> Spans.t -> unit  (* set spans at focus *)
 <<zipcfg.ml>>=
 module R = Rtl
 module T = Target
+module U  = Unique
+module UM = Unique.Map
 
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
 let ( **> ) f x = f x
 
-type uid = int
+type uid = U.uid
 type label = uid * string
 type machine = { goto    : label -> Rtl.rtl;
                  cbranch : Rtl.exp * label -> Rtl.rtl;
@@ -164,13 +166,8 @@ type machine = { goto    : label -> Rtl.rtl;
                  forbidden : Rtl.rtl;
                }
 
-let uid =
-  let n = Reinit.ref 1 in
-  fun () -> let u = !n in (n := u + 1; u)
-let entry_uid = 0
-
-let address uid = R.codesym (Printf.kprintf Symbol.unmangled ".Lz%d" uid) 99
-   (* disastrous lies --- maybe need to Idgen a label for each uid, then query the graph? but then what about cycles? *) 
+let uid = U.uid
+let entry_uid = U.distinguished_uid
 
 type regs  = Register.Set.t  (* sets of regs for dataflow *)
 type xregs = Register.SetX.t (* sets of regs for dataflow *)
@@ -271,6 +268,13 @@ let goto_end =
 let zip = goto_start
 let unzip (n, ns) = Start (n, ns)
 
+let last =
+  let rec last = function (Last l) -> l | Tail (_, t) -> last t in
+  function
+    | Start (f, t) -> last t
+    | Middle (h, m, t) -> last t
+    | End (h, l) -> l
+
 let goto_start : zblock -> first * tail = goto_start
 let goto_end   : zblock -> head  * last = goto_end
 let zip   : zblock -> block  = zip
@@ -287,35 +291,22 @@ module type BLOCKS = sig
   val insert : block -> t -> t
   val find   : t -> uid -> block 
   val focus  : t -> uid -> block * t
+  val focusp : t -> (block -> bool) -> block * t
   val union  : t -> t -> t
 
   val fold   : (block -> 'a -> 'a) -> t -> 'a -> 'a
-  val focusopt : (block -> 'a option) -> t -> 'a * t
 end
 
 module Blocks : BLOCKS = struct
-  type t = block list
+  type t = block UM.t
   let id = function (Entry,_) -> entry_uid | (Label ((u, _), _, _),_) -> u
-  let empty = []
-  let insert b bs = b :: bs
-  let find blocks u = List.find (fun b -> id b = u) blocks
-  let focusopt p blocks =
-    let rec f prev' next = match next with
-    | [] -> raise Not_found
-    | b :: bs ->
-        match p b with
-        | Some x -> x, List.rev_append prev' bs
-        | None -> f (b::prev') bs in
-    f [] blocks
-  let focus blocks u = 
-    let rec f prev' next = match next with
-    | [] -> raise Not_found
-    | b :: bs ->
-        if id b = u then b, List.rev_append prev' bs
-        else f (b::prev') bs in
-    f [] blocks
-  let union = (@)
-  let fold = List.fold_right
+  let empty = UM.empty
+  let insert block = UM.add (id block) block 
+  let find blocks u = UM.find u blocks
+  let focusp blocks p = UM.splitp (fun _ b -> p b) blocks
+  let focus blocks u = UM.split u blocks
+  let union = UM.union
+  let fold f blocks z = UM.fold (fun _ b z -> f b z) blocks z
 end
 @ 
 <<zipcfg.ml>>=  
@@ -329,11 +320,13 @@ let focus uid blocks =
   let (b, bs) = Blocks.focus blocks uid in
   unzip b, bs
 let entry blocks = focus entry_uid blocks
-let exit n =
-  let is_exit b = match goto_end (unzip b) with
-  | head, (Exit n' as l) when n' = n -> Some (End (head, l))
-  | _ -> None in
-  Blocks.focusopt is_exit 
+let exit n g =
+  let is_exit b = match last (unzip b) with
+  | Exit n' -> n = n'
+  | _ -> false in
+  let (b, bs) = Blocks.focusp g is_exit in
+  let (h, l) = goto_end (unzip b) in
+  (End (h, l), bs)
   
 
 let unfocus (bz, bs) = Blocks.insert (zip bz) bs
@@ -391,9 +384,9 @@ let exit_to_head block =
   | _ -> impossf "unexpected non-exit"
 <<zipcfg.ml>>=
 let check_single_exit g =
-  let check block found = match goto_end (unzip block) with
-  | _, Exit 0 when not found -> true
-  | _, Exit _ -> impossf "multiple exits found where single exit expected"
+  let check block found = match last (unzip block) with
+  | Exit 0 when not found -> true
+  | Exit _ -> impossf "multiple exits found where single exit expected"
   | _ -> found in
   if not (Blocks.fold check g false) then
     impossf "graph does not have an exit"
