@@ -46,9 +46,15 @@ It turned out that the simpler linear scan register allocator by
 Poletto \cite{poletto:99:toplas} can not handle pre-assigned hardware
 registers as they are required by calling conventions.
 
+Linear scan register allocation requires a linear representation of a
+procedure.  This is provided by numbering nodes in the control-flow
+graph {\cfg}.  Of course, any change to the structure of the {\cfg}
+destroys a numbering.  This happens when code for spilling is inserted
+into a {\cfg}.
+
 <<linscan.mli>>=
 exception OutOfRegisters
-val allocate: Cfg2.cfg -> Cfg2.cfg (* OutOfRegisters *) 
+val allocate: Cfg3.cfg -> Cfg3.cfg (* OutOfRegisters *) 
 @
 
 % ------------------------------------------------------------------ 
@@ -58,10 +64,15 @@ val allocate: Cfg2.cfg -> Cfg2.cfg (* OutOfRegisters *)
 Liveness analysis (module \module{live}) annotates each node in the
 control-flow graph with the set of registers live \emph{before} that
 node.  From this we like to construct a global view that associates a
-variable with its lifetime.  This requires to walk over the
-control-flow graph and recognize the opening and closing of intervals
-where a particular variable is live.  These liveness intervals are
-than joined to form \emph{lifetime} values.
+variable with its lifetime.  A lifetime is a set of nodes where a
+register is life.  To make things easier, lifetimes are represented as
+sets of intervals, where an interval is a sequence of consecutive
+nodes with respect to the node numbering.  The first steps are
+therefore to establish a numbering and to construct the lifetime of
+each register.  The latter requires to walk over the control-flow
+graph and recognize the opening and closing of intervals where a
+particular variable is live.  Liveness intervals are then joined to
+form \emph{lifetime} values.
 
 Nodes in the control-flow graph are visited in a linear order and each
 node is associated with an integer [[Point.t]]. These points mark the
@@ -78,7 +89,7 @@ let allocate cfg = assert false
 module Point = struct
     type t = int
     let compare = compare
-    let zero = 0
+    let zero = 0 
 end
 
 module P = Point
@@ -108,18 +119,19 @@ respective variable.
 The lifetimes for a control-flow graph are stored in a map that
 associates registers with their lifetime.  An additional map holds the
 opening point for registers that are currently live and have a not yet
-closed liveness interval. The functions traversing the control-flow
-graph they are paired together as a value [[(op,lt)]].
+closed their liveness interval.  In the functions traversing the
+control-flow graph they are paired together as a value [[(op,lt)]].
 
 <<compute lifetimes>>=
 type lt = L.t Register.Map.t
 type op = P.t Register.Map.t
 @
 
-The [[open_intv r p state]] function records the opening of an interval
-for register [[t]] in the [[state]]. Dual to that, [[close_intv]] closes
-a previously opened interval by removing the register from [[op]] and adding
-a new interval to its lifetime in [[lt]]. 
+The [[open_intv r p state]] function records the opening of an
+interval for register [[t]] in the [[state]].  Dual to that,
+[[close_intv]] closes a previously opened interval by removing the
+register from [[op]] and adding a new interval to its lifetime in
+[[lt]]. 
 
 <<compute lifetimes>>=
 let open_intv  point (op,lt) reg = (Register.Map.add reg point op, lt)
@@ -134,8 +146,9 @@ let close_intv point (op,lt) reg =
         ) 
 @
 
-Given a list of registers that open or close an interval we must fold this
-list such that all registers in the list update the current state.
+Given a list of registers that open or close an interval we must fold
+this list such that all registers in the list update the current
+state.
 
 <<compute lifetimes>>=
 let open_regs  point regs state = List.fold_left (open_intv point)  state regs
@@ -150,21 +163,21 @@ is processed, all still open intervals must be closed.
 
 <<compute lifetimes>>=
 let lifetimes cfg lt =
-    let initial = (Register.Map.empty, lt) in
-    let point   = 1 in
-    let domain map = (* all registers in a Register.Map.t *)
-        let f k v list = k::list in
-        Register.Map.fold f map [] in
-    let scan node (oldset, point, state) =
-        let set     = Cfg2.live node in 
+    let _          = assert (Cfg3.enumerated cfg)  in
+    let initial    = (Register.Map.empty, lt)      in
+    let domain map = Register.Map.fold (fun key _ list -> key::list) map [] in
+    let scan node (oldset, state) =
+        let point   = Cfg3.number node             in
+        let set     = Cfg3.live node               in 
         let opening = Register.Set.diff set oldset in
         let closing = Register.Set.diff oldset set in
         let state   = open_regs  point (Register.Set.elements opening) state in
         let state   = close_regs point (Register.Set.elements closing) state in
-                      (set, point+1, state)
+                      (set, state)
     in (* close all open intervals after the last node *)
-    let (os,pt,(op,lt)) = Cfg2.foldl cfg scan (Register.Set.empty, point, initial) in
-    let        (_ ,lt)  = close_regs pt (domain op) (op,lt) in 
+    let (set,(op,lt)) = Cfg3.scan_fwd cfg scan (Register.Set.empty, initial) in
+    let last          = Cfg3.number (Cfg3.last cfg)         in
+    let      (_ ,lt)  = close_regs last (domain op) (op,lt) in 
         lt
                  
 @

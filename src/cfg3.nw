@@ -51,7 +51,7 @@ The {\cfg} abstraction is characterized by the following invariants:
       |\mathit{cfg}|$.  A numbering for the nodes of a {\cfg} is
       either \emph{present} or \emph{absent}.  If and only if a
       numbering is present, then every node of a {\cfg} has unique
-      number.
+      number. 
 \item A node belongs to exactly one {\cfg}.
 \item A node has a \emph{kind} that defines its behavior and contains
       a matching {\rtl} defining its semantics.  
@@ -109,16 +109,18 @@ val set_label:  cfg -> string -> node -> unit
 val lookup:     cfg -> string -> node                 (* Not_found *)
 
 (* cfg observation *)
-val entry:      cfg -> node
-val exit:       cfg -> node
+val entry:      cfg -> node (* = first ?? *)
+val exit:       cfg -> node (* = last ??  *)
 val enumerated: cfg -> bool                  (* true, iff nodes are numbered *)
 val fold:       cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
 val scan_fwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
 val scan_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
 val forward:    cfg -> node -> node option
 val backward:   cfg -> node -> node option
+val first:      cfg -> node (* wrt numbering *)
+val last:       cfg -> node (* wrt numbering *)
 
-(* add node to cfg *)
+(* add node to cfg, post: not (enumerated cfg) *)
 val gm_assign:  cfg -> Rtl.rtl -> succ:node -> node
 val gm_return:  cfg -> Rtl.rtl -> int * int -> node
 val gm_goto:    cfg -> Rtl.rtl -> node list -> node
@@ -128,16 +130,16 @@ val gm_call:    cfg -> Rtl.rtl -> conts -> succ:node -> node
 val gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
 val gm_dummy:   cfg -> node
 
-(* add linear sequence of assign nodes to cfg *) 
+(* add linear sequence of assign nodes to cfg, post: not (enumerated cfg *)
 val gm_copyi:   cfg -> formal list -> Automaton2.t -> succ:node -> node * Automaton2.t
 val gm_copyo:   cfg -> actual list -> Automaton2.t -> succ:node -> node * Automaton2.t
 
-(* cfg mutators *)
+(* cfg mutators, post: not (enumerated cfg) *)
 val gm_delete:                  node -> unit
 val gm_redirect_all:            node -> from:node -> dest:node -> unit
 val gm_insert_assign_before:    node -> Rtl.rtl -> unit (* assign node only *)
 val gm_insert_assign_after:     node -> Rtl.rtl -> unit (* assign node only *)
-val gm_enumerate:               cfg -> unit             
+val gm_enumerate:               cfg -> unit (* post: enumerated cfg *)            
 
 (* node observation *)
 val cfg:        node -> cfg
@@ -145,7 +147,7 @@ val rtl:        node -> Rtl.rtl
 val succ:       node -> node list       (* no duplicates *)
 val pred:       node -> node list       (* no duplicates *)
 val live:       node -> Register.Set.t
-val number:     node -> int             (* precond: cfg is enumerated *)
+val number:     node -> int             (* pre: enumerated cfg *)
 
 (* node mutators *)
 val set_live:   node -> Register.Set.t -> unit (* set live set *)
@@ -309,7 +311,7 @@ while traversing a graph.
 \end{description}
 
 % ------------------------------------------------------------------ 
-\subsubsection{Node Oberservation}
+\subsubsection{Node Observation}
 % ------------------------------------------------------------------ 
 
 The observation functions for nodes return the obvious values.  Every
@@ -323,9 +325,17 @@ node.
 \item[number] 
     Reports the number of a node. It is a checked run-time
     error to invoke this function if node numbering is absent,
-    i.e.~[[numbered]] is [[false]].
+    i.e.~if [[numbered]] is [[false]].
 \end{description}
 
+\begin{quote}\it
+    The register allocation phase takes a bit more abstract view 
+    for numbering nodes by using a [[Point.t]] type. A [[Point.t]]
+    must provide one value [[Point.zero]] which is never assigned to a
+    node. The current design of using integers to number nodes and let
+    numbering start at 1 is compatible with that view. Maybe the
+    connection should be made more explicit. -CL
+\end{quote}
 % ------------------------------------------------------------------ 
 \subsubsection{Node Mutators}
 % ------------------------------------------------------------------ 
@@ -369,11 +379,15 @@ module Automaton2 : sig
 end
 @
 
+Currently we have some code that expects a signature [[S]] and some
+that don't. This should be cleaned up.
+
 <<cfg3.mli>>=
 (** dummy sigs **)
 module type S = sig
     <<types and ops>>
 end
+<<types and ops>>
 @
 
 % ------------------------------------------------------------------ 
