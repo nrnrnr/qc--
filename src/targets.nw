@@ -22,6 +22,8 @@ module MakeLib  (TargetV : Lua.Lib.TYPEVIEW with type 'a t = Target2.t)
 
 <<targets.ml>>=
 module R  = Rtl
+module D  = Rtl.Convert (* Down *)
+module U  = Rtl.Revert  (* Up *)
 module RP = Rtl.Private
 module S  = Space
 module T  = Target2
@@ -355,46 +357,62 @@ let spaces =
     ]      
 @
 
-The following definitions are repeated in the code expander for the
-Sparc. I therefore suggest to factor them out into a separate module.
+The following functions encode special {\rtl}s and must be recognized by
+the code expander as such. It is not important that these {\rtl}s
+represent real machine instructions. All special instructions have are
+predicated with a value different from [[true]]. In addition, I am
+encoding the meaning of the instruction into otherwise unused {\rtl}
+spaces. This encoding is private between a target and its code expander.
 
 <<SparcTarget>>=
-let const n width = Rtl.bits (Bits.of_int n width) width
-let reg n         = Rtl.cell Rtl.none 'r' Rtl.Identity 32 (const n 5)
-let fp  n         = Rtl.cell Rtl.none 'f' Rtl.Identity 32 (const n 5)
-let pc            = Rtl.cell Rtl.none 'c' Rtl.Identity 32 (const 4 5)
-let mem addr      = Rtl.cell Rtl.none 'm' Rtl.LittleEndian 32 addr
-let assign loc e  = Rtl.store loc e (Rtlutil.Width.exp e)       
-    
-(* this is total nonsense - it's just for toying around *)
+let special sp guard exp =
+    let const n width = Rtl.bits (Bits.of_int n width) width in
+    let cell          = R.cell R.none sp R.Identity 32 (const 0 32) in
+        R.guard guard (R.store cell exp 32)
 
-let goto_embed e     = assign pc e
-let goto_project rtl = match R.Convert.rtl rtl with
-    | RP.Rtl([(_,RP.Store(loc,exp,width))]) -> R.Revert.exp exp
-    | _                                     -> assert false
+let project rtl = match D.rtl rtl with
+    | RP.Rtl([guard, RP.Store(_, exp, 32)]) -> 
+        ( U.exp guard
+        , U.exp exp
+        )
+    | _ -> assert false      
+        
+let false' = R.bool false
+let (>>) f g x = f (g x)
 
 
-let goto =
-    { embed   = goto_embed
-    ; project = goto_project
+let goto  =
+    { embed   = special 'G' false' 
+    ; project = snd >> project
     }
 
-let branch_embed (e,addr) = R.guard e (assign pc addr)
-let branch_project rtl  = match R.Convert.rtl rtl with
-    | RP.Rtl([(e,RP.Store(loc,addr,width))]) -> ( R.Revert.exp e
-                                                , R.Revert.exp addr
-                                                )
-    | _                                      -> assert false
+let jump =
+    { embed   = special 'J' false' 
+    ; project = snd >> project
+    }
+
+let cutto =
+    { embed   = special 'T' false' 
+    ; project = snd >> project
+    }
+
+let call =
+    { embed   = special 'S' false' 
+    ; project = snd >> project
+    }
 
 let branch =
-    { embed   = branch_embed
-    ; project = branch_project
+    { embed   = (fun (x,y) -> special 'B' x y)
+    ; project = project
     }
 
+let sp = 
+    let r14 = R.bits (Bits.of_int 14 5) 5 in
+    R.cell R.none 'r' R.Identity 32 r14
 
 let cc =
-    { T.sp              = reg 31
-    ; T.return          = assign pc (R.fetch (mem (R.fetch (reg 31) 32)) 32)
+    { T.sp              = sp
+    ; T.return          = special 'R' false' (R.late "return" 32)
     ; T.proc            = Automaton.dummy
     ; T.cont            = Automaton.dummy
     ; T.ret             = Automaton.dummy
@@ -415,9 +433,9 @@ let target =
     ; T.globals         = Automaton.dummy
     ; T.register        = StrUtil.lookup StrMap.empty (* no registers *)
     ; T.goto            = goto
-    ; T.jump            = goto
-    ; T.cutto           = goto
-    ; T.call            = goto
+    ; T.jump            = jump
+    ; T.cutto           = cutto
+    ; T.call            = call
     ; T.branch          = branch
     ; T.cc              = StrUtil.lookup (StrUtil.list2map [("C--",cc)])
     ; T.spaces          = spaces 

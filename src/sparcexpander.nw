@@ -5,38 +5,47 @@
 % ------------------------------------------------------------------ 
 
 This module provides an [[expand]] function that re-writes an {\rtl}
-into a sequence of {\rtl}s such that each is representable as a machine
-instruction on the {\sparc}. Hence, the code expander establishes the
-\emph{machine invariant} for the {\sparc}.
+into a sequence of Sparc machine instructions. The module is
+parameterized over a module [[I]] that provides constructor functions
+for abstract Sparc instructions [[I.t]]
 
 The code expander is implemented as a {\burg} rule set. All auxiliary
 functions are into the [[head]] and [[tail]] section of the {\burg}
 specification.
 
 <<sparcexpander.mlb>>=
+%head {: <<modules>> :}
+%head {: 
+    module Make (I: Sparc2.S) = struct 
+    module IR = I.Reloc    
+:}
+
 %head {: <<head>> :}
 <<terminal types>>
 %tail {: <<tail>> :}
+%tail {: end (* of Make *) :}
 %%
 <<rules>>
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Utilities}
+\subsection{State Monad for Instruction Stream}
 % ------------------------------------------------------------------ 
 
-<<head>>=
+<<modules>>=
+module B  = Bits
+module C  = Camlburg
+module D  = Rtl.Convert      (* Convert Down  to private repr. *)
+module G  = Cfg3             (* for expanding all RTLs in a CFG *)
+module GU = Cfgutil
 module R  = Rtl
 module RP = Rtl.Private
 module RU = Rtlutil
+module N  = Nativeint
 module S  = Space
 module T  = Target2
-module C  = Camlburg
-module D  = Rtl.Convert      (* Convert Down to private repr. *)
 module U  = Rtl.Revert       (* Convert Up    to abstract repr. *)
 module W  = Rtlutil.Width 
-module G  = Cfg3             (* for expanding all RTLs in a CFG *)
-module GU = Cfgutil
 @
 
 We raise an error exception in case things go wrong. There is no need to
@@ -47,249 +56,79 @@ exception Error of string
 let error msg = raise (Error msg)
 @
 
-Many transformations return both a list of {\rtl}s and a location where
-a certain value can be found. To avoid the constant pattern matching of
-the returned values, we use a monadic programming style. A state monad
-[[m]] holds the list of resulting {\rtl}s and a source for temporaries.
-The functions [[return]] and [[>>=]] are the two standard monadic
-functions \emph{unit} and \emph{bind}.
+Many transformations return both a list of instructions and a location
+where a certain value can be found. To avoid the constant pattern
+matching of the returned values, we use a monadic programming style. A
+state monad [[m]] holds the list of resulting instructions and a source
+for temporaries.  The functions [[return]] and [[>>=]] are the two
+standard monadic functions \emph{unit} and \emph{bind}.
 
 <<head>>=
-type state = R.rtl list * Talloc.Multiple.t
+type state = I.t list * Talloc.Multiple.t
 type 'a m  = state -> ('a * state)
 
 let return a  = fun s -> (a, s)
 let (>>=) (m: 'a m) (f: 'a -> 'b m) = fun s -> let (a,s) = m s in f a s 
 @
 
-We save an {\rtl} to the state with [[exec]]. {\rtl}s are saved in
-\emph{reverse exceution order}.
+We save an instruction to the state with [[exec]]. Instructionss are
+saved in \emph{reverse exceution order}.
 
 <<head>>=
-let exec  rtl  = fun (rtls,tmp) -> ((), (rtl :: rtls,tmp)) 
-let pair  x y  = x >>= fun x -> y >>= fun y -> return (x,y)
+let exec  i    = fun (is,tmp) -> ((), (i :: is,tmp)) 
 @
 
 New tempoaries come as integer and floating point varieties. You have to
 supply the desired with of the new temporary.
 
 <<head>>=
-let itmp w = fun (rtls,tmp as state) -> (Talloc.Multiple.loc tmp 't' w, state)
-let ftmp w = fun (rtls,tmp as state) -> (Talloc.Multiple.loc tmp 'u' w, state)
-@
+let reg (sp, i, w) = I.reg sp i (* create I.reg from Register.t *)
 
-The expander develops expressions into locations and returns them. In an
-right-hand-side context a location must be wrapped with a fetch
-instruction to form an excpetion. The [[fetch]] function is handy,
-because it takes care of the width of a location.
-
-<<head>>=
-let fetch   t = R.fetch t (W.loc t)
+let itmp w = fun (_,tmp as state) -> 
+    (reg (Talloc.Multiple.reg tmp 't' w), state)
+let ftmp w = fun (_,tmp as state) -> 
+    (reg (Talloc.Multiple.reg tmp 'u' w), state)
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Sparc Instructions}
+\subsection{Utilities}
 % ------------------------------------------------------------------ 
 
 <<head>>=
-let const n width   = R.bits (Bits.of_int n width) width
-let rd n            = R.cell R.none 'r' R.Identity 32 (const n 5)
-let fd n            = R.cell R.none 'f' R.Identity 32 (const n 5)
-let cd n            = R.cell R.none 'c' R.Identity 32 (const n 5)
+let native      = B.to_nativeint
 
-let mem addr        = R.cell R.none 'm' R.LittleEndian 32 addr
-let pc              = cd 4
-let npc             = cd 5  
-let zero            = R.fetch (rd 0) 32
+let is_imm b = 
+    let i:nativeint = native b in 
+        (N.of_int (-4096) <= i) or i <= (N.of_int 4095)
+@   
 
-let add x y         = R.app (R.opr "add" [32]) [x;y]
-let sub x y         = R.app (R.opr "sub" [32]) [x;y]
-let (<--) loc e     = R.store loc e (W.exp e)
-let sx32 w n        = R.app (R.opr "sx" [w;32]) [n]
-let zx32 w n        = R.app (R.opr "zx" [w;32]) [n]
-@
-
-Index and displacement are the two addressing modes for load and store
-instructions. 
+The [[guard]] function turns a predicate into a cost where [[n]] is the
+cost for the [[true]] case.
 
 <<head>>=
-let index r1 r2     = add (fetch r1) (fetch r2)         (* $r[r1] + $r[r2] *)
-let disp r1 imm     = add (fetch r1)  imm               (* $r[r1] + simm13 *) 
-
-(* addr = index r1 r2 | disp r1 imm *)
-
-let ld addr r       = r         <--  fetch (mem addr)
-let st r addr       = mem addr  <--  r
-let ldf addr f      = f         <--  fetch (mem addr) 
-let stf f addr      = mem addr  <--  f
-let jmpl addr r     = R.par [npc <-- addr; r <-- fetch pc]
-let jmp  addr       = jmpl addr (rd 0)
-let or' r1 rc r2    = r2 <-- R.app (R.opr "or" [32]) [r1; rc] 
-
-let mov  rc r       = r <-- rc              (* or' zero rc r *)
-let movr r1 r2      = r2 <-- fetch r1       (* or' zero (fetch r1) r2 *)
-let ret             = jmpl (disp (rd 7) (const 32 13)) (rd 0)
-let fmovs f1 f2     = f2 <-- fetch f1     
-let xnor r1 r2 r3   = 
-    let xor = R.opr "xor" [32] in
-    let com = R.opr "com" [32] in
-    r3 <-- R.app xor [fetch r1; R.app com [fetch r2]]
-@
-
-Below are the 16 conditional branches. They are represented by fairly
-complicated {\rtl}s whose guarding expressions look at the condition
-codes. 
-
-<<head>>=
-let eq1    x y = R.app (R.opr "eq" [1])  [x;y]      (* bit operations *)
-let ne1    x y = R.app (R.opr "ne" [1])  [x;y]      (* bit operations *)
-let com1   x   = R.app (R.opr "com" [1]) [x] 
-let fetch1 x   = R.fetch x 1     
-let xor1   x y = R.app (R.opr "xor" [1]) [x;y]
-let or1    x y = R.app (R.opr "or" [1]) [x;y]
-let z          = R.fetch (R.slice 1 22 (cd 0)) 1    (* condition codes *)
-let n          = R.fetch (R.slice 1 23 (cd 0)) 1
-let v          = R.fetch (R.slice 1 21 (cd 0)) 1
-let c          = R.fetch (R.slice 1 20 (cd 0)) 1
-let z'         = R.slice 1 22 (cd 0)
-let n'         = R.slice 1 23 (cd 0)
-let v'         = R.slice 1 21 (cd 0)
-let c'         = R.slice 1 20 (cd 0)
-let zero1      = R.bits (Bits.of_int 0 1) 1
-
-let branch guard target = R.guard guard (R.store (cd 5) target 32)
-
-let ba      = branch (R.bool true)
-let bn      = branch (R.bool false)
-let bne     = branch (ne1 (com1 z) zero1)
-let be      = branch (ne1 z zero1)
-let bg      = branch (ne1 (com1 (or1 z (xor1 n v))) zero1)
-let ble     = branch (ne1 (or1 z (xor1 n v)) zero1)
-let bge     = branch (ne1 (com1 (xor1 n v)) zero1)
-let bl      = branch (ne1 (xor1 n v) zero1)
-let bgu     = branch (ne1 (com1 (or1 c z)) zero1)
-let bleu    = branch (ne1 (or1 c z) zero1)
-let bcc     = branch (ne1 (com1 c) zero1)
-let bcs     = branch (ne1 c zero1)
-let bpos    = branch (ne1 (com1 n) zero1)
-let bneg    = branch (ne1 n zero1)
-let bvc     = branch (ne1 (com1 v) zero1)
-let bvs     = branch (ne1 v zero1)
-@
-
-You ain't seen nothing yet. Here comes the [[subcc]] instruction. We
-need it to implement [[cmp]].
-
-<<head>>=
-let subcc r1 rc r2 =
-    let binop32 o x y  = R.app (R.opr o [32]) [x;y] in
-    let sub32           = binop32 "sub" in
-    let lt32            = binop32 "lt"  in
-    let ge32            = binop32 "ge"  in
-    let eq32            = binop32 "eq"  in
-    let ne32            = binop32 "ne"  in
-    let bit31 y         = R.app (R.opr "bitExtract" [32;32;1]) 
-                            [R.bits (Bits.of_int 31 32) 32;y] in
-    let set   x         = R.store x (R.bits (Bits.of_int 1 1) 1) 1 in
-    let reset x         = R.store x (R.bits (Bits.of_int 0 1) 1) 1 in
-    let zero32          = R.bits (Bits.of_int 0 32) 32 in
-    let and' x y        = R.app (R.opr "conjoin" []) [x;y] in 
-    let r1'             = R.fetch r1 32 in    
-    let unknown         = zero32 in
-    let borrow32 x y z  = R.app (R.opr "borrow" [32]) [x;y;z] in
-        R.par
-        [ r2 <-- sub32 r1' rc
-        ; R.guard   (lt32 r1' zero32) (set n')
-        ; R.guard   (ge32 r1' zero32) (reset n')
-        ; R.guard   (eq32 r1' zero32) (set z')
-        ; R.guard   (ne32 r1' zero32) (reset z')
-        ; R.guard   (and' (ne1 (bit31 r1') zero1) 
-                          (ne1 (bit31 r1') (bit31 (sub32 r1' unknown))))
-                    (set v')
-        ; R.guard   (and' (ne1 (bit31 r1') zero1) 
-                          (eq1 (bit31 r1') 
-                               (bit31 (sub32 r1' unknown))))
-                    (reset v')
-        ; R.guard   (eq1 (bit31 r1') zero1) (reset v')
-        ; c' <-- borrow32 r1' unknown  zero1
-        ]
-
-let cmp r rc = subcc r rc (rd 0)
-@
-
-
-The following offset addresses a memory cell relativ to the frame
-pointer that is used to move data from floating-point registers to
-integer registers and vice versa.
-
-<<head>>=
-let mtmp            = add (fetch (rd 30)) (const 8 32)
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Cost Functions}
-% ------------------------------------------------------------------ 
-
-Check that a signed bits [[b]] value fits into [[n]] bits.
-
-<<head>>=
-let is_imm n b =
-    let rec power2 = function
-        | 0 -> 1
-        | n -> 2 * power2 (n-1)
-    in    
-        try 
-            let i = Bits.to_int b 
-            and c = power2 n in
-            (- c) <= i || i <= (c-1)
-        with
-            Bits.Overflow -> false
-
 let guard n = function
     | true  -> n
     | false -> C.inf_cost 
 @
 
-% ------------------------------------------------------------------ 
-\subsection{Operator Classes}
-% ------------------------------------------------------------------ 
-
-Some operators can be treated alike. We define some class predicates for
-them here.
+Register $rs[0]$ is special on the Sparc.
 
 <<head>>=
-module StringSet = Set.Make(struct type t = string let compare = compare end)
+let r0 = I.reg 'r' 0
+let fp = I.reg 'r' 30
+let sp = I.reg 'r' 14
+@
 
-let setof list = List.fold_right StringSet.add list StringSet.empty
+The following address is on the stack and used to move data between 
+integer and floating-point registers.
 
-let rrc op = StringSet.mem op 
-    (setof ["add"; "and"; "sub"; "shl"; "shra"; "shrl"; "sub"; "xor"])
+<<head>>=
+let tmp = I.generala fp (I.imode (N.of_int (-8)))
 @
 
 % ------------------------------------------------------------------ 
 \subsection{Code Expansion Rules}
 % ------------------------------------------------------------------ 
-
-The following table summarizes the nonterminals from the rule set. 
-
-\begin{tabular}{ll}
-    Nonterminal & Type & Meaning \\ 
-    \hline
-    [[reg]]     & [[R.loc m]] 
-                & integer computation that yields result in a register\\
-    [[freg]]    & [[R.loc m]]
-                & same as [[ireg]] for floating-point computations\\
-    [[const]]   & [[R.exp]]
-                & constant
-    [[const13]] & [[R.exp m]]
-                & constant that fits into 13 bits\\
-    [[rc]]      & [[R.exp m]]
-                & 13 bit constant or register\\ 
-    [[stmt]]    & [[R.rtl m]]
-                & side effect\\
-    [[guard]]   & [[(R.loc -> R.rtl) m]]
-                & guarding expression for a branch\\
-\end{tabular}
 
 In a {\burg} pattern variables hold either polymorphic nonterminal
 values, or monomorphic terminal ({\ocaml}) values. Terminal types must
@@ -299,52 +138,64 @@ be declared:
 %term k width opr exps agg ass index bool bits link late x symbol
 @
 
-\begin{quote}\it
-    \begin{itemize}
-    
-    \item It is not clear what width constants in {\rtl}s that represent
-    instructions should have. The recognizer assumes that constants are
-    kept in 32 bits. --CL
+The following table summarizes the nonterminals from the rule set. 
 
-    \item The recognizer does not know the [[sethi]] instruction and
-    thus we cannot load large constants into registers.
+\begin{tabular}{ll}
+    Nonterminal & Type & Meaning \\ 
+    \hline
+    [[reg]]     & [[I.reg m]] 
+                & integer computation that yields result in a register\\
+    [[freg]]    & [[I.reg m]]
+                & same as [[ireg]] for floating-point computations\\
+    [[const]]   & [[nativeint]]
+                & constant
+    [[const13]] & [[nativeint]]
+                & constant that fits into 13 bits\\
+    [[rc]]      & [[I.reg_or_imm]]
+                & 13 bit constant or register\\ 
+    [[addr]]    & [[I.address]]
+                & Memory address\\
+    [[mem]]     & [[I.address]]
+                & Memory cell\\
+    [[stmt]]    & [[unit m]]
+                & simple instruction\\
+    [[guard]]   & [[(IR.relocatable -> I.t) m]]
+                & guarding expression for a branch\\
+    [[rtl]]     & [[unit m]]
+                & complex instruction\\
+\end{tabular}
 
-    \end{itemize}
-\end{quote}
-
+An address for a call or a branch is relocatable. 
 
 <<rules>>=
-const:      Bits(b:bits)        {: R.bits b (Bits.width b)  :}
-const:      Link(symbol,width)  {: R.link symbol width      :}
+reloc:      Bits(b:bits)        {: IR.early (native b)              :}
+reloc:      Link(symbol,width)  {: IR.late (symbol#text) (N.zero)   :}
+
+<<rules>>=
+const:      Bits(b:bits)        {: native b :}
 @
 
-If a constant fits into 13 bits we create a 13-bit wide value to pass
-it. 
-
 <<rules>>=
-const13:    Bits(b:bits) [{: guard 0 (is_imm 13 b):}] 
-            {: return (R.bits b (Bits.width b))  :}
+const13:    Bits(b:bits) [{: guard 0 (is_imm b):}] {: native b :}
 @
 
 An [[rc]] nonterminal captures either a small value, or a register. To
 ensure that both have the same type, we return a monadic expression.
 
 <<rules>>=
-rc:         reg     {: reg >>= fun r -> return (fetch r) :}  
-rc:         const13 {: const13                           :}
+rc:         reg     {: reg >>= fun r -> return (I.rmode r)  :}  
+rc:         const13 {: return (I.imode const13)             :}
             
 reg:        const13 [1]
             {: 
-                const13 >>= fun k ->
                 itmp 32 >>= fun t ->
-                exec (or' zero k t) >>= fun () ->     (* set *)
+                exec (I.set const13 t) >>= fun () -> 
                 return t
             :}    
 reg:        const [1] 
             {: 
-                (* error "cannot load large constants" *)
                 itmp 32 >>= fun t ->
-                exec (t <-- const) >>= fun () ->
+                exec (I.set const t) >>= fun () -> 
                 return t
             :}
 @
@@ -358,47 +209,34 @@ addr:       App2("add", reg, rc)
             {: 
                 reg >>= fun r  ->
                 rc  >>= fun rc ->
-                return (add (fetch r) rc)
+                return (I.generala r rc)
             :}
 
-addr:       reg     {: reg     >>= fun r -> return (add zero (fetch r)) :}
-addr:       const13 {: const13 >>= fun k -> return (add zero k) :}
-addr:       const   {: error "cannot handle large constants" :}    
+addr:       reg       {: reg >>= fun r -> return (I.indirecta r) :}
+addr:       const13 {: return (I.absolutea const13) :}
 
 
-mem:        Cell('m', agg, width, addr, ass)
-            {:
-                addr >>= fun a ->
-                return (R.cell (U.assertion ass) 'm' agg width a)
-            :}    
+mem:        Cell('m', agg, width, addr, ass) {: addr :}
             
 stmt:       Store(mem, reg, width) [1]       
-            {:
-                mem  >>= fun m ->
-                reg  >>= fun r ->
-                return (m <-- fetch r)  (* st r addr *)
-            :}    
+            {: mem >>= fun m -> reg >>= fun r -> exec (I.st r m) :}    
 
 stmt:       Store(mem, freg, width) [1]       
-            {:
-                mem  >>= fun m ->
-                freg >>= fun f ->
-                return (m <-- fetch f)  (* stf f addr *)
-            :}    
+            {: mem >>= fun m -> freg >>= fun f -> exec (I.stf f m) :}
 
 reg:        Fetch(mem, width) [1]
             {:
-                mem         >>= fun m ->
-                itmp width  >>= fun t ->
-                exec (t <-- fetch m) >>= fun () -> (* ld addr t *)
+                mem             >>= fun m ->
+                itmp width      >>= fun t ->
+                exec (I.ld m t) >>= fun () ->
                 return t
             :}    
 
 freg:       Fetch(mem, width) [1]
             {:
-                mem         >>= fun m ->
-                ftmp width  >>= fun f ->
-                exec (f <-- fetch m) >>= fun () -> (* ldf addr f *)
+                mem              >>= fun m ->
+                ftmp width       >>= fun f ->
+                exec (I.ldf m f) >>= fun () -> 
                 return f
             :}    
 @
@@ -417,21 +255,11 @@ registers. Note, that temporaries are treated like hardware registers.
 <<rules>>=
 reg:        Cell(s:char, agg, width, k:const, ass) 
             [{: guard 0 (s = 'r' || s = 't') :}]
-            {:
-                return (R.cell (U.assertion ass) s agg width k)
-            :}    
+            {: return (I.reg s (N.to_int k)) :}    
             
 freg:       Cell(s:char, agg, width, k:const, ass)
             [{: guard 0 (s = 'f' || s = 'u') :}]
-            {:
-                return (R.cell (U.assertion ass) s agg width k)
-            :}    
-            
-creg:       Cell('c', agg, width, k:const, ass)
-            {:
-                return (R.cell (U.assertion ass) 'c' agg width k)
-            :}    
-
+            {: return (I.reg s (N.to_int k)) :}
 @
 
 Moves between registers. Data cannot be moved between integer and
@@ -445,34 +273,18 @@ reserved.
 
 <<rules>>=
 stmt:       Store(reg, rc, width) [1]
-            {: 
-                reg >>= fun r  ->
-                rc  >>= fun rc -> 
-                return (r <-- rc)
-            :}
+            {: reg >>= fun r  -> rc  >>= fun rc -> exec (I.mov rc r) :}
             
 stmt:       Store(f1:freg, f2:freg, width) [1]
-            {:
-                
-                f1 >>= fun f1 ->
-                f2 >>= fun f2 ->
-                return (fmovs f2 f1)
-            :}
-
-stmt:       Store(creg, reg, width) [1]     --- ??
-            {:
-                creg >>= fun c ->
-                reg  >>= fun r ->
-                return (c <-- fetch r)
-            :}
+            {: f1 >>= fun f1 -> f2 >>= fun f2 -> exec (I.fmovs f2 f1) :}
 
 <<rules>>=
 reg:        freg [10] -- penality
             {:
                 freg    >>= fun f ->
                 itmp 32 >>= fun t ->
-                exec (mem mtmp <-- fetch f) >>= fun () ->
-                exec (t <-- fetch (mem mtmp)) >>= fun () -> 
+                exec (I.stf f tmp) >>= fun () ->
+                exec (I.ld tmp t)  >>= fun () -> 
                 return t
             :}
 
@@ -480,8 +292,8 @@ freg:       reg [10] -- penality
             {:
                 reg     >>= fun r ->
                 ftmp 32 >>= fun u ->
-                exec (mem mtmp <-- fetch r)  >>= fun () ->
-                exec (u <-- fetch (mem mtmp)) >>= fun () -> 
+                exec (I.st r tmp)  >>= fun () ->
+                exec (I.ldf tmp u) >>= fun () -> 
                 return u
             :}
 @
@@ -491,95 +303,120 @@ higher-oder function [[(R.loc -> R.rtl) m]].
 
 
 <<rules>>=
-guard:      True()  {: return ba :}
-guard:      False() {: return bn :}
+guard:      True()  {: return I.ba :}
+guard:      False() {: return I.bn :}
 
 guard:      App2("eq", reg, rc) [1]
             {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (cmp reg rc) >>= fun () -> return (be)
+                exec (I.cmp reg rc) >>= fun () -> return I.be
             :}
 guard:      App2("ge", reg, rc) [1]
             {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (cmp reg rc) >>= fun () -> return (bge)
+                exec (I.cmp reg rc) >>= fun () -> return I.bge
             :}
 guard:      App2("geu", rc, reg) [1] -- reversed args!
             {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (cmp reg rc) >>= fun () -> return (bleu)
+                exec (I.cmp reg rc) >>= fun () -> return I.bleu
             :}
 guard:      App2("gt", reg, rc) [1] 
             {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (cmp reg rc) >>= fun () -> return (bg)
+                exec (I.cmp reg rc) >>= fun () -> return I.bg
             :}
 guard:      App2("gtu", reg, rc) [1] 
             {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (cmp reg rc) >>= fun () -> return (bgu)
+                exec (I.cmp reg rc) >>= fun () -> return I.bgu
             :}
 guard:      App2("le", reg, rc) [1] 
             {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (cmp reg rc) >>= fun () -> return (ble)
+                exec (I.cmp reg rc) >>= fun () -> return I.ble
             :}
 guard:      App2("leu", reg, rc) [1] 
             {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (cmp reg rc) >>= fun () -> return (bleu)
+                exec (I.cmp reg rc) >>= fun () -> return I.bleu
             :}
 guard:      App2("lt", reg, rc) [1] 
             {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (cmp reg rc) >>= fun () -> return (bl)
+                exec (I.cmp reg rc) >>= fun () -> return I.bl
             :}
 guard:      App2("ltu", rc, reg) [1] -- reversed arguments
             {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (cmp reg rc) >>= fun () -> return (bgu)
+                exec (I.cmp reg rc) >>= fun () -> return I.bgu
             :}
 guard:      App2("ne", reg, rc) [1] 
             {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (cmp reg rc) >>= fun () -> return (bne)
+                exec (I.cmp reg rc) >>= fun () -> return I.bne
             :}
-
-rtl:        Branch(guard, reg) [1]
-            {:
-                guard >>= fun branch ->
-                reg   >>= fun target ->
-                exec (branch (fetch target)) 
-            :}
-
-rtl:        Simple(stmt)
-            {:
-                stmt >>= fun s ->
-                exec (R.par [s]) 
-            :}    
-
-rtl:        Nop() {: exec (R.par []) :}        -- skip    
 @
-
 {\PAL}'s primitive operators show up in expressions and are mapped to
 {\sparc} instructions.
 
 <<rules>>=
-            -- ["add"; "and"; "sub"; "shl"; "shra"; "shrl"; "sub"; "xor"]
-reg:        App2(o:string, reg, rc) [{: guard 1 (rrc o) :}]
+reg:        App2("add", reg, rc) [1]
             {:
                 reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
-                exec (t <-- R.app (R.opr o [32]) [fetch r; rc]) >>= fun ()->
-                return t
+                exec (I.add r rc t) >>= fun () -> return t
+            :}    
+reg:        App2("and", reg, rc) [1]
+            {:
+                reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
+                exec (I.and_ r rc t) >>= fun () -> return t
+            :}    
+reg:        App2("sub", reg, rc) [1]
+            {:
+                reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
+                exec (I.sub r rc t) >>= fun () -> return t
+            :}    
+reg:        App2("shl", reg, rc) [1]
+            {:
+                reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
+                exec (I.sll r rc t) >>= fun () -> return t
+            :}    
+reg:        App2("shra", reg, rc) [1]
+            {:
+                reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
+                exec (I.sra r rc t) >>= fun () -> return t
+            :}    
+reg:        App2("shrl", reg, rc) [1]
+            {:
+                reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
+                exec (I.srl r rc t) >>= fun () -> return t
+            :}    
+reg:        App2("xor", reg, rc) [1]
+            {:
+                reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
+                exec (I.xor r rc t) >>= fun () -> return t
             :}    
 
-reg:        App1(o:string, reg) [{: guard 1 (List.mem o ["com"; "neg"]) :}]
+reg:        App1("com", reg) [1] 
             {:    
                 reg >>= fun r -> itmp 32 >>= fun t ->
-                exec 
-                    ( match o with
-                    | "com" -> xnor r (rd 0) t
-                    | "neg" -> t <-- sub zero (fetch r)
-                    | _     -> assert false
-                    ) >>= fun () ->
-                return t
-            :}      
-                    
+                exec (I.not2 r t) >>= fun () -> return t
+            :}
+
+reg:        App1("neg", reg) [1] 
+            {:    
+                reg >>= fun r -> itmp 32 >>= fun t ->
+                exec (I.neg2 r t) >>= fun () -> return t
+            :}
 
 reg:        App1(o:string, reg)     [2] {: error ("cannot handle "^o) :}
 reg:        App2(o:string, reg, rc) [2] {: error ("cannot handle "^o) :}
 reg:        App3(string, x:reg, y:reg, z:reg)  [2] {: error "app3" :}
 @
+
+Instructions are classified into branches, calls, and so on. 
+
+<<rules>>=
+rtl:        Branch(guard, reloc) [1]
+            {:
+                guard >>= fun branch ->
+                exec (branch ~target:reloc)
+            :}
+
+rtl:        Simple(stmt) [1] {: return () :}    
+rtl:        Nop() [1]        {: exec (I.nop ()):}
+@
+
 
 % ------------------------------------------------------------------ 
 \subsection{Interfacing {\rtl}s with the Expander}
@@ -612,15 +449,21 @@ and loc = function
 and stmt = function
     | RP.Store(l,e,w)           -> conStore (loc l) (exp e) w
     | RP.Kill(loc)              -> error "cannot handle kill"
+@
+
+We classify an {\rtl} here and pass it to the appropriate rule in the
+rule set. The encoding of special instructions is shared between the
+code expander and a target description. See module \module{targets}.
 
 <<tail>>=  
 and rtl = function
-    | RP.Rtl([(RP.Const(RP.Bool(true)),s)]) -> 
-            conSimple (stmt s)
-    | RP.Rtl([(e,RP.Store(loc,target,width))]) -> 
-            conBranch (exp  e) (exp target)
-    | RP.Rtl([]) -> 
-            conNop ()
+    | RP.Rtl([])                            -> conNop ()
+    | RP.Rtl([(RP.Const(RP.Bool(true)),s)]) -> conSimple (stmt s)
+    | RP.Rtl([(g,RP.Store(RP.Cell(sp,_,_,_,_),e,_))]) ->
+        ( match sp with
+        | 'B' -> conBranch (exp g) (exp e) 
+        | _   -> assert false
+        )
     | RP.Rtl(_) as rtl -> 
             ( List.iter prerr_endline
                 [ "cannot expand this RTL:"
@@ -632,14 +475,14 @@ and rtl = function
 
 The [[rtl]] function returns (the best) plan to rewrite a given {\rtl}.
 When this plan is executed, it returns a monadic value that includes the
-desired expanded {\rtl}s.
+desired expanded instructionss.
 
 <<tail>>=
 let expand tmps (r: R.rtl) = 
     let plan = rtl (D.rtl r) in
     try
         match plan.rtl.Camlburg.action () ([],tmps) with
-            | (), (rtls,_) -> rtls
+            | (), (is,_) -> is (* instructions in reverse exec order *)
     with 
         Camlburg.Uncovered -> 
             ( List.iter prerr_endline
@@ -666,7 +509,7 @@ under mutation.
 [[Cfg]] expands all {\rtl}s of a procedure and returns [[true]], if the 
 structure of the procedure's {\cfg} had to be modified.
 
-<<tail>>=
+<<tail off>>=
 let cfg proc =
     let nodes       = GU.fold_bwd proc.Proc.cfg (fun n ns -> n::ns) []
     and tmps        = proc.Proc.temps   (* source for temporaries *)
@@ -694,7 +537,7 @@ Code expansion is part of {\qcc}'s backend that is controlled by a Lua
 interpreter. To make the expander accessible for Lua code, it is
 exported as a Lua primitive [[Sparcexpand.expand]].
 
-<<tail>>=
+<<tail off>>=
 module Make (ProcT: Lua.Lib.TYPEVIEW with type 'a t = Proc.t): 
     Lua.Lib.TYPEFUL with type 'a combined = 'a ProcT.combined =
 struct
