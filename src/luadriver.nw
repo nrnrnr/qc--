@@ -21,6 +21,10 @@ $debug 1
 -- $Id$
 --
 
+<<Utility functions>>
+<<Debugging Tools>>
+<<Lua compiler configuration>> -- defined in luacompile.nw
+
 SysConfig = {}
 SysConfig["x86-linux"] =
  { Ld =
@@ -33,6 +37,7 @@ SysConfig["x86-linux"] =
               Config.install_lib .. "/pcmap.ld"
    }
  , As = { path = "as", options = "" }
+ , backend = Backend.x86
  }
 SysConfig["sparc-solaris"] =
  { Ld =
@@ -44,19 +49,27 @@ SysConfig["sparc-solaris"] =
    , rtend   = ""
    }
  , As = { path = "as", options = "-xarch=v8" }
+ , backend = Backend.sparc
+ }
+SysConfig["powerpc-darwin"] =
+ { Ld =
+   { path    = "cc"
+   , options = ""
+   , rtstart = ""
+   , objects = ""
+   , libs    = ""
+   , rtend   = "-L" .. Config.install_lib .. " -lqc-- " ..
+              Config.install_lib .. "/pcmap.ld"
+   }
+ , As = { path = "as", options = "" }
+ , backend = Backend.ppc
  }
 
-<<Utility functions>>
-<<Debugging Tools>>
-<<Lua compiler configuration>> -- defined in luacompile.nw
 <<Lua command-line driver>>
 
 Frontends = Frontends or { }
 
-Backend["x86-linux"]      = Backend.x86
-Backend["powerpc-darwin"] = Backend.ppc
-Backend["sparc-solaris"]  = Backend.sparc
-backend = Backend[Boot.arch_os]  -- can be changed on command line
+backend = SysConfig[Boot.arch_os].backend  -- can be changed on command line
 
 -- 
 -- Everything starts from here
@@ -65,7 +78,7 @@ backend = Backend[Boot.arch_os]  -- can be changed on command line
 CMD.parse(Sys.argv)
 if backend == nil then error(
     "running on unknown platform; can't select backend automatically.\n"
- .. "Please use platform=Backend.xxx or edit luadriver.nw to select\n"
+ .. "Please use backend=Backend.xxx or edit luadriver.nw to select\n"
  .. "backend based on the platform")
 end    
 CMD.whatfuns[CMD.what or "-compile"]()
