@@ -31,20 +31,21 @@ variable ($v$) or a non-zero constant ($k$): $t ::= v | k$. From a set
 of linear equations the solver determines the values for each variable
 $v = \sum_{j} c_j t_j$ where each $c_j$ is an integer.  This means, in
 the solution each variable is expressed as a linear combination of
-terms. To determine $n$ variables $n$ independent equations are
+terms. To determine $n$ variables, $n$ independent equations are
 necessary. If this condition is met, each $t_j$ in a variable's
 denotation is a constant. Otherwise $t_j$ may still be a variable. In
 that case the solution can be considered a constraint system. 
 
-The algorithm for equation solving is basically the ones suggested by
+The algorithm for equation solving is basically the one suggested by
 \cite{Derman:1984:SES} and \cite{Ramsey:1996:SSL}, which are in turn
-inspired by Knuth's incremental algorithm implemented in his Metafont
-software (\cite{Knuth:1979:TMN} Chapter 4, \cite{Knuth:1986:MP} \S~585).
-However, Knuth's algorithm assumes that coefficients $c_i$ and terms
-denote floating point values and thus it cannot be used unaltered in the
-integer domain. The solver used here works in the integer domain, but is
-incomplete, i.e.~it sometimes fails to find an existing solution. We
-believe that this does not pose a problem for the intended application.
+inspired by Knuth's incremental algorithm that is implemented in his
+Metafont software (\cite{Knuth:1979:TMN} Chapter 4, \cite{Knuth:1986:MP}
+\S~585).  However, Knuth's algorithm assumes that coefficients $c_i$ and
+terms denote floating point values and thus it cannot be used unaltered
+in the integer domain. The solver used here works in the integer domain,
+but is incomplete, i.e.~it sometimes fails to find an existing solution.
+We believe that this does not pose a problem for the intended
+application.
 
 The solver keeps two data structures: a \emph{set} of equations, and a
 \emph{map} from variables to terms. The map records solutions found for
@@ -149,6 +150,8 @@ module type S = sig
     type term
     type sum      = (int * term) list
 
+    exception Can'tSolve of t
+
     type solution = 
         { known:     (string * sum) list
         ; dependent: (string * sum) list
@@ -160,8 +163,6 @@ module type S = sig
 end
 
 <<eqn.mli>>=
-exception Can'tSolve of string    
-
 <<EXP>>
 <<S>>
 module Make (E: EXP): S with type term = E.t
@@ -179,7 +180,6 @@ following holds: $t_i \prec t_j \Rightarrow i < j$. In addition, no term
 $t$ appears twice in a sum.
 
 <<eqn.ml>>=
-exception Can'tSolve of string    
 
     
 <<EXP>>
@@ -201,7 +201,6 @@ found so far. An initially [[empty]] set has no equations, and no
 solutions.
 
 <<Make>>=
-
 type sum   = (int * E.t) list                 (* invariant: ordered *)
 type assoc = string * sum
 
@@ -220,8 +219,32 @@ let empty =
     ; env  = []
     }
 
-exception Can'tSolve of string
+exception Can'tSolve of t
 let error msg = raise (Can'tSolve msg)
+@
+
+The [[dump]] function prints a [[t]] value to [[stdout]] for debugging.
+Because terms are abstract they cannot be printed, except when they
+denote variables. It helped to track down some bugs, though.
+
+<<Make>>=
+let dump t =
+    let product (i,term) =
+        match E.variable term with
+        | Some x -> Printf.printf "(%d,%s) "     i x
+        | None   -> Printf.printf "(%d,<term>) " i      in
+    let eqn s =
+        ( Printf.printf "0 = "; List.iter product s; Printf.printf "\n")in
+    let assoc (v,sum) =
+        ( Printf.printf "%s :-> " v; List.iter product sum; Printf.printf "\n") 
+    in
+        ( Printf.printf "Eqn.t:\n"
+        ; List.iter eqn t.set    
+        ; Printf.printf "---\n"
+        ; List.iter assoc t.env
+        ; Printf.printf "---\n"
+        ; flush stdout
+        )
 @
 
 Normalizing an equation means to divide it by the greatest common
@@ -279,10 +302,10 @@ let combine (k1:int) (sum1:sum) (sum2:sum) =
 	loop (sum1,sum2)
 @
 
-For the substitution of a variable the variable must be found in a sum.
-The [[spilt]] function takes a variable $v$ and a sum $s$ and returns
+For the substitution of a variable, the variable must be found in a sum.
+The [[split]] function takes a variable $v$ and a sum $s$ and returns
 the coefficient $c$ of $v$ in $s = + \dots c v + \dots$ and $s - cv$. If
-$v$ does not appear in $s$, the $c = 0$ is assumed.
+$v$ does not appear in $s$, then $c = 0$ is assumed.
 
 <<Make>>=
 let split (v:string) (sum:sum) =
@@ -298,7 +321,7 @@ let split (v:string) (sum:sum) =
 @    
 
 Elimination of a variable $v$ in a sum $s = \dots + c t + \dots$ means
-to replace $c t$ with the value of $v$. The [[elim]] function takes a
+to replace $c t$ with the value of $c v$. The [[elim]] function takes a
 variable [[v]], its value [[vsum]] and replace it in [[sum]].
 
 <<Make>>=
@@ -370,7 +393,7 @@ let rec solver t =
         t       (* done *)
     else
         match candidate t.set with
-        | None          -> error "can't find candidate for elimination"
+        | None          -> error t
         | Some (v,vsum) -> solver (eliminate v vsum t) 
 @
 
@@ -384,7 +407,10 @@ other all other, i.e. those that still depend on other variables.
 
 <<Make>>=
 let solve t =
-    let t          = solver t in
+    (* let ()      = dump t in 
+     *)
+    let t          = try solver t with Can'tSolve x -> (dump x; error x)in
+    let ()         = dump t in
     let known  sum = List.for_all (fun (_,e) -> E.variable e = None) sum in 
     let k,d        = List.partition (fun (_,sum) -> known sum) t.env in
         { known     = k
@@ -395,10 +421,9 @@ let solve t =
 The [[make_zero]] function establishes the invariants for equations:
 coefficients are normalized and ordered by variables. Identical terms
 are merged by adding their coefficients.
-of identical terms are merged
 
 <<Make>>=
-let rec merge = function    (* merges adjacent identical terms *) 
+let rec merge sum =  match sum with
     | []       -> []
     | [_] as x -> x
     | (c1,t1 as ct1)::((c2,t2)::rest1 as rest2)  ->
@@ -414,7 +439,7 @@ let rec merge = function    (* merges adjacent identical terms *)
 let make_zero (sum:sum) (t:t) =
     let cmp (_,tx) (_,ty) = E.compare tx ty in 
     let eqn = normalize (merge (List.sort cmp sum)) in
-        { t with set = sum::t.set }
+        { t with set = eqn::t.set }
 @
 
 % ------------------------------------------------------------------ 
@@ -443,6 +468,7 @@ let test eqns =
 let eqns1 =
     [ [3,E.Var "x";5   ,E.Var "y"]
     ; [2,E.Var "y";3   ,E.Var "z"]
+    ; [3,E.Var "x";(-3),E.Var "x"]
     ; [2,E.Var "x";(-5),E.Var "z"]
     ; [3,E.Unit   ;1   ,E.Var "y"]
     ]
@@ -464,7 +490,6 @@ let _ = assert
             { S.known = ["y", [5, E.Unit]; "x", [2, E.Unit]; "z", [-4, E.Unit]]
             ; S.dependent = []
             })
-        
-*)
+*)        
         
 
