@@ -3,6 +3,7 @@
 \usepackage{array,tabularx}
 \newcolumntype{Y}{>{\raggedright\arraybackslash}X}
 
+\renewcommand\gets{\mathrel{:=}}
 \newcommand\PAL{\texttt{C-{}-}}
 \newcommand\lrtl{\mbox{$\lambda$-RTL}}
 
@@ -119,11 +120,14 @@ Recognizer
 \item
 Assembler
 \end{itemize}
-With luck, you will use a generic variable placer, but the rest of the
+With luck, you will use a generic variable placer parameterized by
+context and a generic code expander parameterized by a
+``postexpander.''
+All of these
 components will require significant effort on your part.
 
 In the long run,
-we hope to generate all these components from a \lrtl\ description,
+we hope to generate all these components from \lrtl\ and SLED descriptions,
 but this technology is still in the research stages.
 
 \section{Choose a representation of instructions}
@@ -139,6 +143,7 @@ scrupulously avoids upper-case letters.
 If such is not the case, the assembly-language string itself is a
 reasonable stopgap representation.
 
+
 \section{Ladies and gentlemen, place your variables} 
 
 
@@ -148,28 +153,29 @@ We hope instead to provide a selection of pre-written placers to
 choose from:
 \begin{itemize}
 \item
-A generic ``integer/float'' placer, which should produce useful
-results on a wide variety of machines that have only integer and
-floating-point registers.
-\item
-A stack placer, which puts each variable on the stack.
-\item
 A generic ``integer/float/address'' placer, which should produce useful
 results on a those machines that have data, address, and 
 floating-point registers, which is to say, on the 68000.
+This placer can also be used on machines without address registers.
+The code exists and can be used in Lua code as
+\texttt{Placevar.context}. 
+It has to be supplied with a machine-dependent context.
+\item
+A stack placer, which puts each variable on the stack.
+I don't know if this is implemented yet, but if not, It could be
+implemented easily.
 \item
 The FORTRAN placer, which places a variable according to the first
 letter of its name.
+It should not be used except under special circumstances.
 \end{itemize}
-As of June 14, 2002, only the FORTRAN placer is implemented.
-It's available from Lua as \texttt{Placevar.fortran}.
 
 \section{Write your code expander}
 
 Your code expander must not only establish the machine invariant, but
 must also cooperate with your recognizer.
 The expander and recognizer need not agree exactly;
-it suffices that anything the expander produces, the recognize can
+it suffices that anything the expander produces, the recognizer can
 successfully convert to assembly language.
 It is in the expander and recognizer that you are most likely to
 exploit any lies (abstractions) you may be telling about the machine.
@@ -190,8 +196,20 @@ You implement these operations as part of a \emph{postexpander}, which
 is then passed to the generic expander as a module parameter.
 The details of the interface are in \texttt{Postexpander.S} as
 defined in \texttt{src/expander.nw}.
-You can see a simple example in \texttt{src/x86.nw}.
-
+You can see several examples in the compiler.
+\begin{itemize}
+\item
+The x86 postexpander is a nightmare, because it deals with both
+registers and the floating-point stack.
+But it is also the only \emph{complete} postexpander we have (in the
+sense that it can compile C~programs).
+Its sources are in \texttt{src/x86.nw}.
+\item
+It may also be worth looking at the postexpanders for Alpha or MIPS,
+which can be found in \texttt{src/alpha.nw} and \texttt{src/mips.nw}.
+These postexpanders support no floating-point stack and so are
+slightly simpler---but they implement hardly any instructions.
+\end{itemize}
 It might also be reasonable to write a code expander by hand, using
 the ``maximal munch'' style of ML~pattern matching expounded in Andrew
 Appel's compiler text.
@@ -262,6 +280,13 @@ Here is a Caml pattern match that performs this transformation:
 | RP.App(("zx", [n;w]), [x])   -> conZx  (exp x)
 \end{verbatim}
 Further examples can be found in the $x$86 recognizer (\texttt{src/x86rec.nw}).
+This recognizer is not for the faint of heart, because it requires a
+great deal of nonlinear matching, in which the same value occurs in
+multiple places in the tree.
+For example, $r_1 \gets r_2 + r_3$ can be part of an instruction only
+if $r_1 = r_2$.
+Neither ML nor BURG copes well with this situation, and you should be
+satisfied if you can avoid running shrieking from the room.
 
 
 \paragraph{Defining BURG nonterminals}
@@ -424,6 +449,66 @@ Select and configure a register allocator.
 John Dias will provide instructions and examples for configuring his
 graph-coloring register allocator.
 
+\section{Lay out your stacks}
+
+Your back end will need a stack layout, which is defined not in Caml
+but in Lua.
+For examples, see the \texttt{src/luacompile.nw} file.
+This needs to be better documented, but the layout value is a table
+that has a function [[fn]] and is indexed by calling convention.
+For an explanation of the layout operators, you can
+try the rejected PLDI submission ``Custom Calling Conventions for a
+Portable Assembly Language.''
+\begin{verbatim}
+-- this code has never been tested
+function layoutfn(self,proc) --- dispatch on cc name
+  local fn = self[Stack.ccname(proc)] or layouterror
+  return fn(self, proc)
+end
+
+X86.layout = { creates='no late consts', fn = layoutfn }
+
+function X86.layout["C"](dummy,proc) --- for a C convention 
+    local blocks = Stack.blocks(proc)
+    blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)
+    local old, young = blocks.oldblocks, blocks.youngblocks
+
+    old.callee   = Block.overlap(32, "high", old.callee)
+    old.caller   = Block.overlap(32, "low",  old.caller)
+    young.callee = Block.overlap(32, "high", young.callee)
+    young.caller = Block.overlap(32, "low",  young.caller)
+    local layout = 
+                { old.caller       -- <-- high addresses
+                , old.callee
+                , blocks.ra
+                , blocks.vfp
+                , blocks.stackdata
+                , blocks.continuations
+                , blocks.spills
+                , young.caller
+                , blocks.sp        -- <-- low addresses 
+                , young.callee
+                }
+    if Debug.stack then
+      write('======= using stack layout for C/notail =======\n')
+      write('****** cc name = ', Stack.ccname(proc), '\n')
+      Debug.showblocks (blocks, {'oldblocks', 'ra', 'vfp',
+                                 'stackdata', 'continuations', 'spills',
+                                 'youngblocks', 'sp'})
+    end
+    local block = Block.cat(32, layout)
+    Stack.freeze(proc,block)
+    return 1
+end    
+
+X86.layout["notail"] = X86.layout["C"]
+
+function X86.layout["C--"](dummy,proc)
+   ...
+end    
+\end{verbatim}
+
+
 \section{Configure your compiler}
 
 If you have written components in Caml, export them into Lua.
@@ -432,52 +517,33 @@ For example, the $x$86 back end exports these values:\\
 Asm.x86& The assembler\\
 Expander.x86f&  The expander function\\
 Expander.x86&  The expander as a full backplane stage\\
+Placevar.x86&  A context for variable placement\\
 Targets.x86&  The $x86$ target\\
+Widen.x86\_floats& A widener for floating-point arithmetic\\
 \end{tabularx}
 The export code goes into \texttt{src/lualink.nw}.
 
 Now you can write Lua code to construct a back end for your target.
-This code goes into \texttt{src/main2.nw}.
-Here is an example from the very early days.
-Parts are missing.
+This code goes into \texttt{src/luacompile.nw}.
+Here is an example from August~21, 2003.
 \begin{verbatim}
-Backend.x86 =
+Backend.x86 =     
   { target    = Targets.x86
-  , widen     = Stages.null
-  , placevars = Placevar.fortran
+  , placevars = Placevar.context(Placevar.x86, "x86")
+  , widen     = NewBackplane.seq
+                   { Widen.x86_floats, Widen.store_const(32),
+                     Stages.assert('proper widths') }
+  , preopt    = Optimize.remove_nops
   , expand    = Expander.x86
-  , liveness  = Stages.null
+  , liveness  = Liveness.liveness
   , ralloc    = Ralloc.color
-  , freeze    = Stack.layout
+  , freeze    = X86.layout
+  , rmvfp     = Stages.replace_vfp
   , asm       = Asm.x86
   , emit      = Driver.assemble
+  , compile   = Compile.file
   }   
 \end{verbatim}
-
-
-Your back end will also need a stack layout.  
-Support for stack layout is still experimental (as of 16 July 2002), and
-the example above uses
-the one and only stack layout.
-\begin{verbatim}
-function Stack.layout(dummy,proc)
-  blocks = Stack.blocks(proc)
-  local layout = 
-     { blocks.incoming               -- <-- high addresses
-     , blocks.stackdata
-     , blocks.continuations
-     , Block.mk(blocks.sp, 24, 16)   -- size/alignment=24/16
-     , blocks.spills
-     , blocks.outgoing
-     , blocks.sp                     -- <-- low addresses 
-     }
-  local block = Block.cat(layout)
-  Stack.freeze(proc,block)
-
-  return 1    -- Backplane protocol
-end
-\end{verbatim}
-
 You should be ready to start generating assembly code.
 \end{document}
 
