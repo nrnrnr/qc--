@@ -9,60 +9,67 @@
 To allow external software to read {\rtl}s we have generated we export
 them using {\asdl}. Since the {\rtl} data type is defined as a {\ocaml}
 data type and not as a {\asdl} data type, we create an additional
-definition of an {\rtl} suign the {\asdl} specification language. We
+definition of an {\rtl} using the {\asdl} specification language. We
 then convert an existing {\rtl} into an \asdl-based {\rtl} which we can
 export.
 
-% ------------------------------------------------------------------ 
-\subsection{ASDL Definition of an RTL}
-% ------------------------------------------------------------------ 
-
-<<rtlx.asdl>>=
-module rtlx {
-    space       = (int)                 -- ascii code of space
-    width       = (int)
-    aligned     = (int)
-    assertion   = (aligned)
-    bool        = (int)                 -- false = 0
-    bits        = (string, width)  
-
-    aggregration = BigEndian | LittleEndian | Identity
-
-    opr         = (string, width*)
-
-    const       = Bool      (bool)
-                | Bits      (bits)  
-                | Link      (string, width)
-                | Late      (string, width)
-
-
-    exp         = Const     (const)
-                | Fetch     (loc, width)
-                | App       (opr, exp*)
-
-    loc         = Cell      ( space
-                            , aggregration
-                            , width
-                            , exp
-                            , assertion
-                            )
-                | Var       ( string
-                            , int
-                            , width
-                            )
-                | Slice     ( width
-                            , int
-                            , loc
-                            )
-
-    effect      = Store     (loc, exp, width)
-                | Kill      (loc)
-
-    guarded     = (exp, effect)
-
-    rtl         = (guarded*)
-    rtls        = (rtl*)
-}
+<<rtlx.mli>>=
+val rtl:        Rtl.rtl       -> out_channel -> unit
+val rtls:       Rtl.rtl list  -> out_channel -> unit
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+We translate the internal {\rtl} representation to the {\asdl} generated
+representation from module \module{rtlasdl} and write it to a file.
+
+<<rtlx.ml>>=
+module R  = Rtl
+module RP = Rtl.Private
+module X  = Rtlasdl
+
+let aggregation = function
+    | R.LittleEndian         -> X.LittleEndian
+    | R.BigEndian            -> X.BigEndian
+    | R.Identity             -> X.Identity
+
+let const = function
+    | RP.Bool(b)             -> X.Bool (if b then 1 else 0)
+    | RP.Bits(b)             -> X.Bits ( Bits.to_string None b
+                                       , Bits.width b
+                                       )
+    | RP.Link(sym,width)     -> X.Link (sym#text, width)
+    | RP.Late(name,width)    -> X.Late (name, width)  
+
+let rec loc = function
+    | RP.Cell(s,agg,w,e,a)   -> X.Cell ( Char.code s
+                                       , aggregation agg
+                                       , w
+                                       , exp e
+                                       , a
+                                       )
+    | RP.Var(n,index,width)  -> X.Var (n, index, width)
+    | RP.Slice(width,index,l)-> X.Slice (width, index, loc l)
+
+and exp = function
+    | RP.Const(c)            -> X.Const (const c)
+    | RP.Fetch(l, w)         -> X.Fetch (loc l, w)
+    | RP.App(o, e)           -> X.App (o, List.map exp e)
+
+
+and effect = function
+    | RP.Store(l,e,w)        -> X.Store(loc l, exp e, w)
+    | RP.Kill(l)             -> X.Kill(loc l)
+
+let guarded (ex,eff)         = (exp ex, effect eff)
+let rtl' r                   = match R.Convert.rtl r with
+                               | RP.Rtl(gs) -> List.map guarded gs
+
+let rtl r   file = RtlasdlUtil.sexp_wr_rtl  (rtl' r)           file
+let rtls rs file = RtlasdlUtil.sexp_wr_rtls (List.map rtl' rs) file
+@
+
 
                             
