@@ -1,3 +1,5 @@
+TOOLS=/home/lair/olinsky/bin/tools
+
 TOP=..
 INTERP=evaluating
 
@@ -49,7 +51,7 @@ machine.h:D: interp.nw
         $NOTANGLE -L -R$target $prereq > $target
 
 encode.c encode.h: bytecode.sled
-	tools -lc-cons-names -encoder encode $prereq
+	$TOOLS -lc-cons-names -encoder encode $prereq
 
 encode.o: encode.c encode.h
 	gcc -c -I/home/lair/olinsky/include/ -o encode.o encode.c
@@ -58,13 +60,13 @@ mclib.o: mclib.c
         gcc -g -c -I/home/lair/olinsky/include/ -o mclib.o mclib.c
 
 cii:    atom.c mem.c except.c assert.c
-        gcc -c -I/home/lair/olinsky/include/ -o atom.o   atom.c
-	gcc -c -I/home/lair/olinsky/include/ -o mem.o    mem.c
-	gcc -c -I/home/lair/olinsky/include/ -o except.o except.c
-	gcc -c -I/home/lair/olinsky/include/ -o assert.o assert.c
+        gcc -c -Iinclude/ -o atom.o   atom.c
+	gcc -c -Iinclude/ -o mem.o    mem.c
+	gcc -c -Iinclude/ -o except.o except.c
+	gcc -c -Iinclude/ -o assert.o assert.c
 
 %-dec.c:D: %.m bytecode.sled decode.fetch
-	tools -lc-cons-names -decoder $target -matcher $stem.m \
+	$TOOLS -lc-cons-names -decoder $target -matcher $stem.m \
 		bytecode.sled decode.fetch
 
 opgen:	opgen.icn
@@ -93,5 +95,5 @@ interp.o: interp-dec.i intervals.h encode.h machine.h
         gcc -g -c -o interp.o interp-dec.i
 
 interp: interp.o intervals.o encode.o mclib.o cii bcdis.o
-        gcc -lm -L/home/lair/olinsky/lib/ -o interp interp.o intervals.o encode.o mclib.o /home/lair/olinsky/lib/liblua.a /home/lair/olinsky/lib/liblualib.a /home/lair/olinsky/lib/libtolua.a atom.o mem.o except.o assert.o bcdis.o
+        gcc -lm -L/home/lair/olinsky/lib/ -o interp interp.o intervals.o encode.o mclib.o /home/lair/olinsky/lib/liblua.a /home/lair/olinsky/lib/liblualib.a atom.o mem.o except.o assert.o bcdis.o
 
