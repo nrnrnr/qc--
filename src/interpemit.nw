@@ -21,6 +21,8 @@ The implementation is against the ``new'' control-flow graph module
 <<interpemit.ml>>=
 module C = Cfgx.M
 module P = Proc
+module E = Rtltolua
+module T = Target2
 @
 
 \paragraph{Helper functions}.
@@ -62,10 +64,10 @@ let node fd n = match C.kind n with
         and aborts  = false
         and e       = match C.to_executable n with
                       | None   -> Impossible.impossible "call w/o instruction"
-                      | Some i -> Interp.target.Target2.call.Target2.project i
+                      | Some i -> Interp.target'.T.call.T.project i
         in
             ( List.iter (open_span fd) (List.rev spans) 
-            ; Rtltolua.exp fd e  
+            ; E.exp fd e  
             ; fprintf fd "CMM.call({%s}, {%s}, {%s}, %s) -- %s \n"
                 (String.concat "," cuts)   
                 (String.concat "," unwinds) 
@@ -75,21 +77,21 @@ let node fd n = match C.kind n with
             ; List.iter (close_span fd) spans
             ) 
     | C.CutTo ->
-        ( Rtltolua.rtl fd (instr n)
+        ( E.rtl fd (instr n)
         ; fprintf fd "CMM.cut()\n"
         )
     | C.Cbranch ->
         let t = C.tsucc n in
         let l = C.label t in
         let i = instr n   in
-        let (g,_) = Interp.target.Target2.branch.Target2.project i in
-            ( Rtltolua.exp fd g
+        let (g,_) = Interp.target'.T.branch.T.project i in
+            ( E.exp fd g
             ; fprintf fd "CMM.cbrancht('%s')\n" l
             )
     | C.Branch when C.is_br n ->
         let i = instr n in
-        let e = Interp.target.Target2.goto.Target2.project i in
-            ( Rtltolua.rtl fd i
+        let e = Interp.target'.T.goto.T.project i in
+            ( E.rtl fd i
             ; fprintf fd "CMM.goto()\n"
             )
     | C.Return ->
@@ -97,14 +99,14 @@ let node fd n = match C.kind n with
 
     | C.Jump ->
         let i = instr n in
-        let e = Interp.target.Target2.jump.Target2.project i in
-            ( Rtltolua.exp fd e
+        let e = Interp.target'.T.jump.T.project i in
+            ( E.exp fd e
             ; fprintf fd "CMM.cmm_tail_call()\n"
             )
 
     | _ ->  ( match C.to_executable n with
             | None   -> ()
-            | Some i -> Rtltolua.rtl fd i
+            | Some i -> E.rtl fd i
             )
 @            
 
