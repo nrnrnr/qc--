@@ -28,7 +28,31 @@ path.  The star [[*]] stands for the [[table]] passed to
 the table is searched the file name is used as a key.  A matching entry
 is passed to [[dostring]] and thus executed as a Lua program. If no file
 can be found the error fallback is called and is expected to return a
-string with Lua code.  
+string with Lua code.
+
+\item [[Util.catch(f,...)]]
+
+The [[catch]] function takes a function and its arguments and executes
+the function catching any [[Caml]] exceptions. If no exceptions are
+caught, then [[catch f]] returns the same as [[f]]. Otherise
+[[catch]]~returns [[nil]].
+
+\item [[Util.redirect_stdout(filename)]]
+
+The [[redirect_stdout]] function redirects standard out to the file
+whose name is given in [[filename]]. Calling [[redirect_stdout]]
+without any arguments will reset standard out the its original value.
+
+\item [[Util.redirect_stderr(filename)]]
+
+See description for [[Util.redirect_stdout(filename)]] above.
+
+\item [[Util.compare_files(file1, file2)]]
+
+The [[compare_files]] function compares two files ignoring differences
+in whitespace. If the two files are identical then [[true]] is
+returned. If the files are different or an error occurs, then
+[[false]] is returned.
 
 \end{itemize}
 
@@ -45,22 +69,24 @@ module MakeLib (C: Lua.Lib.CORE) = struct
     module V = C.V
     let ( **-> ) = V.( **-> )
 
-    <<dofile>>
+    <<utility functions>>
 
     let init g =
       C.register_module "Util"
-      [ "dosearchfile",  V.efunc (V.string **-> V.value **-> V.values) 
-                         (dosearchfile g)
-      ] g;              
+      [ "dosearchfile",    V.efunc (V.string **-> V.value **-> V.values)
+                           (dosearchfile g)
+      ; "catch",           V.caml_func catch_lua
+      ; "redirect_stdout", V.efunc (V.option V.string **-> V.runit) redirect_stdout
+      ; "redirect_stderr", V.efunc (V.option V.string **-> V.runit) redirect_stderr
+      ; "compare_files",   V.efunc (V.string **-> V.string **-> V.result V.bool) compare_files
+      ] g;
       Lua.Lib.StringList.empty (* OK? *)
 end
 @
-
 A search path is easier to handle in \ocaml~when it is represented as a
 list of strings. The [[split]] function splits a colon-separated string
 into a list. Put this into [[Strutil]]?
-
-<<dofile>>=
+<<utility functions>>=
 let split path =
     let sep    = ':'                in    (* path separator *)
     let length = String.length path in
@@ -75,11 +101,10 @@ let split path =
     in
         loop 0 
 @
-
 Try to find the installation directory for the current executable by
 searching the path. This is used to setup the default search location
 for lua files.
-<<dofile>>=
+<<utility functions>>=
 let locate_exe =
   let filename = Sys.argv.(0) in
   let rec find_in path =
@@ -93,12 +118,10 @@ let locate_exe =
   if dirname <> "" then dirname
   else find_in (split (Sys.getenv "PATH"))
 @ 
-
 The conversion of values between Lua and \ocaml~is a bit ugly. Maybe
 some expert can clean this up. Another problem was to call [[dofile]]
 and [[dostring]]. Is there a better way then [[apply]]?
-
-<<dofile>>=
+<<utility functions>>=
 let error g msg      = C.fallback "error" g [V.String msg]
 let lookup   g f     = try Luahash.find g.V.globals (V.String f)
                        with Not_found -> V.Nil
@@ -113,7 +136,6 @@ type script =
     | String of V.value list  (* string is script             *)
     | File   of V.value list  (* string is filename of script *)
 @
-
 The code below is ugly. The problem is that [[dofile]] and [[dostring]]
 both take string arguments, but one is a file name, the other a program.
 If we cannot find the named \emph{file} we take the name as key into a
@@ -121,8 +143,7 @@ table and eventually return the entry, which is a script, rather a the
 file name of a script. This also makes error recovery problematic.
 Currently the value returned by [[error]] is taken to be a Lua program,
 rather a file name, but this decision is arbitrary.
-
-<<dofile>>=
+<<utility functions>>=
 let dosearchfile g file value =
     let path = try Sys.getenv luapath with Not_found -> defaultpath in
     let rec search = function
@@ -154,5 +175,70 @@ let dosearchfile g file value =
             | String s -> dostring g s
         else
             dofile g [(V.String file)]
-@    
+@ 
+Function [[catch f]] returns whatever [[f]]~returns, except if
+[[f]]~raises an exception,  it returns the empty list of results.
+If a caller wants to detect whether an exception has been raised, it's
+up to that caller to ensure that [[f]]~returns non-nil on normal
+termination.
+<<utility functions>>=
+let catch f args =
+  try f args
+  with ex ->
+    let exstr = Printexc.to_string ex in
+    Printf.eprintf "Caml exception: %s\n" exstr;
+    []
 
+let catch_lua = function
+  | V.Function (_, f) :: args -> catch f args
+  | v                 :: args -> V.projection v     "function"
+  | []                        -> V.projection V.Nil "function"
+@
+The redirect code creates a duplicate of the original file handle and
+keeps it open forever. This simplifies the code, and file handles are
+not really that precious.
+<<utility functions>>=
+module U = Unix
+let redir fh =
+  let original_fh = U.dup fh in
+  (fun file ->
+    flush_all();
+    match file with
+      Some f ->
+        let ch = open_out f in
+        U.dup2 (U.descr_of_out_channel ch) fh;
+        close_out ch
+    | None ->
+        U.dup2 original_fh fh
+  )
+      
+let redirect_stdout = redir U.stdout
+let redirect_stderr = redir U.stderr
+@
+Compare files ignoring whitespace.
+<<utility functions>>=
+let compare_files f1 f2 =
+  let ch1 = open_in f1
+  and ch2 = open_in f2 in
+  let ws = function
+    | ' ' | '\t' | '\n' | '\r' -> true
+    | _ -> false
+  in
+  let rec get_char ch =
+    try
+      let c = input_char ch in
+      if ws c then get_char ch
+      else int_of_char c
+    with
+      End_of_file -> -1
+  in
+  let rec cmp_char() =
+    let c1 = get_char ch1
+    and c2 = get_char ch2 in
+    if c1 == c2 then
+      if c1 == -1 then true
+      else cmp_char() 
+    else false
+  in
+  try cmp_char() with _ -> false
+@
