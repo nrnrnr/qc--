@@ -25,10 +25,19 @@ CC  =               cc
 # testing them. 
 #
 
-ASM =               `ls -1 *.c-- | sed s'/\.c--/.s/'`
+# The following line can reach an internal mk(1) limit when the list of 
+# C-- files is long. 
+#
+# ASM =               `ls -1 *.c-- | sed s'/\.c--/.s/'`
+# asm:V:            $ASM
+#
+# Therefore I reverted to the more explicit asm rule below.
 
 all:V:              alpha-call x86-c-call mips-call
-asm:V:              $ASM
+asm:V:
+                    for f in *.c--; do
+                        mk `basename $f .c--`.s
+                    done    
 
 # A rule to pretty print a C-- source file
 
@@ -47,15 +56,15 @@ asm:V:              $ASM
 
 
 alpha-call.sigs:    $QCC 
-                    $QCC -e 'Debug.Alpha.proc_paths({64},{"int"})' > $target
+                    $QCC -e 'Debug.Alpha.proc_paths({64},{"int","float"})' > $target
 
-x86-c-call.sigs:    $QCC
+x86-call.sigs:      $QCC
                     t=$target
                     $QCC -e 'Debug.X86.c_proc_paths({32},{"int"})' > $t
 
 mips-call.sigs:     $QCC
                     t=$target
-                    $QCC -e 'Debug.Mips.proc_paths({32},{"int","float"})' > $t
+                    $QCC -e 'Debug.Mips.proc_paths({32},{"float","int"})' > $t
 
 #
 # Generate *.c-- files from one signature file. The test case generator
@@ -64,19 +73,21 @@ mips-call.sigs:     $QCC
 #
 
 alpha-call:V:       alpha-call.sigs
-                    $GEN  -name=$target                   -width=64 < $prereq 
+                    #$GEN  -name=$target                   -width=64 < $prereq 
                     $GEN  -name=$target-x -c              -width=64 < $prereq
-                    $GEN  -name=$target-cmm0 -conv="cmm0" -width=64 < $prereq 
-                    $GEN  -name=$target-cmm1 -conv="cmm1" -width=64 < $prereq 
-                    $GEN  -name=$target-cmm2 -conv="cmm2" -width=64 < $prereq 
-                    $GEN  -name=$target-cmm3 -conv="cmm3" -width=64 < $prereq 
+                    #$GEN  -name=$target-cmm0 -conv="cmm0" -width=64 < $prereq 
+                    #$GEN  -name=$target-cmm1 -conv="cmm1" -width=64 < $prereq 
+                    #$GEN  -name=$target-cmm2 -conv="cmm2" -width=64 < $prereq 
+                    #$GEN  -name=$target-cmm3 -conv="cmm3" -width=64 < $prereq 
 
-x86-c-call:V:       x86-c-call.sigs             
+x86-call:V:         x86-call.sigs             
+                    $GEN -name=$target-cmm  -width=32 -conv="C--" < $prereq
                     $GEN -name=$target      -width=32 < $prereq
                     $GEN -name=$target-x -c -width=32 < $prereq
+                    
 
 mips-call:V:        mips-call.sigs
-                    $GEN -name=$target      -width=32 < $prereq
+                    #$GEN -name=$target      -width=32 < $prereq
                     $GEN -name=$target-x -c -width=32 < $prereq
 
 #
@@ -101,11 +112,12 @@ alpha%.dbg:        alpha%.c--
 # Run tests. This will only work on the right platform.
 #
 
-x86-test:V:         $ASM
-                    for f in x86-c-call-main-*.s; do
+x86-test:V:         asm
+                    set -x
+                    for f in x86-call-main-*.s x86-call-cmm-main-*.s; do
                         cc $f && ./a.out
                     done
-                    for f in x86-c-call-x-main-*.s; do
+                    for f in x86-call-x-main-*.s; do
                         g=`echo $f | sed -e 's/main/callee/' -e 's/\.s/.c/'`
                         cc $f $g && ./a.out
                     done    
@@ -115,7 +127,7 @@ x86-test:V:         $ASM
 # execute manually.
 #
 
-alpha-test:V:       $ASM alpha.sh
+alpha-test:V:       asm alpha.sh
                     sh alpha.sh
 alpha.sh:
                     echo '
@@ -136,7 +148,7 @@ alpha.sh:
                     done   
                     ' > $target
 
-mips-test:          $ASM mips.sh
+mips-test:          asm mips.sh
                     sh mips.sh
 
 mips.sh:

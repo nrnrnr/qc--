@@ -235,7 +235,7 @@ foreach $t (@ARGV) {
        if ($t =~ /^-width=([0-9]+)$/)       { $w  = $1       }
     elsif ($t =~ /^-big$/)                  { $bo = "big"    } 
     elsif ($t =~ /^-little$/)               { $bo = "little" }
-    elsif ($t =~ /^-conv=([a-zA-Z0-9]+)$/)  { $conv = $1     }
+    elsif ($t =~ /^-conv=([a-zA-Z0-9-]+)$/) { $conv = $1     }
     elsif ($t =~ /^-name=(.*)$/)            { $name = $1     }             
     elsif ($t =~ /^-c$/)                    { $emitc = 1     }
     elsif ($t =~ /^-/)          { die "unknown option o: $t" }        
@@ -251,6 +251,7 @@ foreach $t (@ARGV) {
     , "32/unsigned"     => "unsigned int" 
     , "32/float"        => "float"
     , "64/int"          => "long int"
+    , "64/float"        => "float"
     , "8/int"           => "char"
     );    
 
