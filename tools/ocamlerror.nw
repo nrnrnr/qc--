@@ -121,18 +121,14 @@ offset within that module/file, or [[None]].
 type trace = Module of string
            | File   of string
            
-let rx0 = Str.regexp "Raised at module \(.*\\), character \([0-9]+\).*"  
-let rx1 = Str.regexp "Called from module \(.*\\), character \([0-9]+\).*"  
-let rx2 = Str.regexp "Re-raised at module \(.*\\), character \([0-9]+\).*" 
-let rx3 = Str.regexp ".*Assert_failure(\"\(.*\)\", \([0-9]+\),.*"            
+let rx0 = Str.regexp ".*\(at\|from\) module \(.*\), character \([0-9]+\)"   
+let rx1 = Str.regexp ".*Assert_failure(\"\(.*\)\", \([0-9]+\)"            
 
 let trace (line:string) =
     let matched n l = Str.matched_group n l in  
-    if Str.string_match rx1 line 0 || Str.string_match rx0 line 0 then
-        Some (Module(matched 1 line), int_of_string (matched 2 line))
-    else if Str.string_match rx2 line 0 then
-        Some (Module(matched 1 line), int_of_string (matched 2 line))
-    else if Str.string_match rx3 line 0 then
+    if Str.string_match rx0 line 0 then
+        Some (Module(matched 2 line), int_of_string (matched 3 line))
+    else if Str.string_match rx1 line 0 then
         Some (File(matched 1 line), int_of_string (matched 2 line))
     else    
         None 
