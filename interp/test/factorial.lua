@@ -9,7 +9,7 @@ CMM.imports({ "cmmprint" })
 CMM.procedure("main", 0, 0)
 
    CMM.push_literal("7")
-   CMM.push_arg()
+   CMM.store_arg(0)
 
    CMM.c_call("cmmprint")
 
@@ -22,10 +22,10 @@ CMM.procedure("main", 0, 0)
 
 CMM.procedure("factorial", 0, 0)
 
-   CMM.pop_arg()
+   CMM.fetch_arg(0)
    CMM.push_literal("1")
-   CMM.push_arg()
-   CMM.push_arg()
+   CMM.store_arg(0)
+   CMM.store_arg(1)
 
    CMM.push_symbol("factorial-helper")
    CMM.call({}, {}, {}, 0)
@@ -35,7 +35,7 @@ CMM.procedure("factorial", 0, 0)
 --running count, n
 CMM.procedure("factorial-helper", 1, 0)
 
-   CMM.pop_arg()
+   CMM.fetch_arg(1)
    CMM.store_local(0)
    CMM.fetch_local(0)
    CMM.push_literal("1")
@@ -43,14 +43,14 @@ CMM.procedure("factorial-helper", 1, 0)
    CMM.cbrancht("done")
 
    CMM.fetch_local(0)
-   CMM.pop_arg()
+   CMM.fetch_arg(0)
    CMM.apply_operator("mul_trunc", "bits16,bits16:bits16")
-   CMM.push_arg()
+   CMM.store_arg(0)
 
    CMM.fetch_local(0)
    CMM.push_literal("1")
    CMM.apply_operator("sub", "bits16,bits16:bits16")
-   CMM.push_arg()
+   CMM.store_arg(1)
 
    CMM.push_symbol("factorial-helper")
    CMM.call({}, {}, {}, 0)

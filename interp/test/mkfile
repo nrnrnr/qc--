@@ -20,20 +20,25 @@ TOP    =    ../..
 # high level targets
 # ------------------------------------------------------------------  
 
-SRC    = `echo *.lua`
-TEST   = ${SRC:%.lua=%.test}
-RECORD = ${SRC:%.lua=%.record}
-VERBOSE =
+LUASRC    = `echo *.lua`
+CMMSRC    = `echo *.c--`
+LUATEST   = ${LUASRC:%.lua=%.luatest}
+CMMTEST   = ${CMMSRC:%.c--=%.cmmtest}
+LUARECORD = ${LUASRC:%.lua=%.luarecord}
+CMMRECORD = ${CMMSRC:%.c--=%.cmmrecord}
+VERBOSE   =
 
-test:VQ:        $TEST
+test:VQ:        $LUATEST 
+luatest:VQ:     $LUATEST
+cmmtest:VQ:     $CMMTEST
 vtest:VQ:	mk $MKFLAGS VERBOSE=-v test
-record:VQ:      $RECORD
+record:VQ:      $LUARECORD $CMMRECORD
 
 # ------------------------------------------------------------------ 
 # useful targets to create test results
 # ------------------------------------------------------------------ 
 
-%.test:VQ:       %.lua ../interp regr
+%.luatest:VQ:       %.lua ../interp regr
 		SELF=$stem.lua
 		BASE=$stem
 		MKTARGET=$target
@@ -42,16 +47,33 @@ record:VQ:      $RECORD
                 sed -n 's!^---!!p' $SELF | sh $SHX || true
 		case "$VERBOSE$stem" in -v*) ;; *0) echo "# tested $stem" ;; esac
 
+%.cmmtest:VQ:       %.c-- ../interp ../../src/qc-- regr
+		SELF=$stem.c--
+		BASE=$stem
+		MKTARGET=$target
+		case $VERBOSE in -v) SHX=-x ;; *) SHX= ;; esac
+		export SELF BASE MKTARGET
+                sed -n 's!^///!!p' $SELF | sh $SHX || true
+		case "$VERBOSE$stem" in -v*) ;; *0) echo "# tested $stem" ;; esac
+
 # The update rule updates the expected output of a test.  Use
 # only after you have verified that the factual output is indeed the
 # expected output!
 
-%.record:VQ:     %.lua ../interp regr       
+%.luarecord:VQ:     %.lua ../interp regr       
 		SELF=$stem.lua
 		BASE=$stem
                 REGRFLAGS="-r"
 		export SELF BASE REGRFLAGS
                 sed -n 's!^---!!p' $SELF | sh -x || true
+		# why is there || true on the preceding line??
+
+%.cmmrecord:VQ:     %.c-- ../interp ../../src/qc-- regr       
+		SELF=$stem.c--
+		BASE=$stem
+                REGRFLAGS="-r"
+		export SELF BASE REGRFLAGS
+                sed -n 's!^///!!p' $SELF | sh -x || true
 		# why is there || true on the preceding line??
 
 # ------------------------------------------------------------------  
@@ -63,3 +85,4 @@ regr:           test.nw
                 chmod +x $target
 
 html:V:         test.html
+

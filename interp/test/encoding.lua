@@ -11,8 +11,8 @@ CMM.imports({ "cmmprint" })
 CMM.section("code")
   CMM.procedure("main", 0, 0)
     CMM.define_label("label2")
-      CMM.push_arg()
-      CMM.pop_arg()
+      CMM.store_arg(0)
+      CMM.fetch_arg(0)
       CMM.push_literal("1201230123")
       CMM.fetch_local(3)
       CMM.store_local(5)
@@ -37,6 +37,6 @@ CMM.section("code")
 CMM.end_section()
 
 CMM.procedure("main2", 0, 0)
-  CMM.pop_arg()
+  CMM.fetch_arg(0)
 
 -- end of code

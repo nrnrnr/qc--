@@ -13,7 +13,7 @@ CMM.section("code")
    CMM.procedure("main", 0, 0)
       CMM.push_symbol("datalabel")
       CMM.fetch(32, "little", 1)
-      CMM.push_arg()
+      CMM.store_arg(0)
       CMM.c_call("cmmprint")
 
       CMM.push_symbol("datalabel")
@@ -22,7 +22,7 @@ CMM.section("code")
 
       CMM.push_symbol("datalabel")
       CMM.fetch(32, "little", 1)
-      CMM.push_arg()
+      CMM.store_arg(0)
       CMM.c_call("cmmprint")
 
       CMM.cmm_return(0,0)

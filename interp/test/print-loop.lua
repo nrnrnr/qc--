@@ -31,9 +31,9 @@ CMM.procedure("main", 2, 0)  -- BEGIN PROCEDURE main with 2 local variable
       CMM.cbrancht("end")
 
       -- print the top value on the value stack
-      CMM.push_arg()
+      CMM.store_arg(0)
       CMM.c_call("cmmprint")
-      CMM.pop_arg()
+      CMM.fetch_arg(0)
 
       -- mutate the top value by adding 1 to it
       CMM.push_literal("1")
@@ -46,5 +46,5 @@ CMM.procedure("main", 2, 0)  -- BEGIN PROCEDURE main with 2 local variable
    -- end quasi-gracefully
    CMM.define_label("end")
   
-      CMM.push_arg()
+      CMM.store_arg(0)
       CMM.cmm_return(0, 0)

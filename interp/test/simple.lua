@@ -12,8 +12,8 @@ CMM.section("code")
         CMM.push_literal("3")
         CMM.push_symbol("label1")
 
-        CMM.push_arg()
-        CMM.pop_arg()
+        CMM.store_arg(0)
+        CMM.fetch_arg(0)
 
         CMM.store_local(0)
         CMM.store_local(1)

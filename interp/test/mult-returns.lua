@@ -9,7 +9,7 @@ CMM.imports({ "cmmprint" })
 CMM.procedure("main", 0, 0)
 
    CMM.push_literal("5")
-   CMM.push_arg()
+   CMM.store_arg(0)
 
    CMM.push_symbol("print")
    CMM.call({}, {}, { "alt-return" }, 0)

@@ -9,7 +9,7 @@ CMM.imports({ "cmmprint" })
 CMM.procedure("main", 0, 0)
 
    CMM.push_literal("0")
-   CMM.push_arg()
+   CMM.store_arg(0)
    CMM.push_symbol("subroutine")
    CMM.call({ "cont" }, {}, {}, 1)
 
@@ -18,7 +18,7 @@ CMM.procedure("main", 0, 0)
 -- this should be the destination continuation of the cut
    CMM.continuation("cont")
       CMM.push_literal("0")
-      CMM.push_arg()
+      CMM.store_arg(0)
       CMM.c_call("cmmprint")
 
       CMM.cmm_return(0, 0)
@@ -27,7 +27,7 @@ CMM.procedure("subroutine", 1, 0)
 
    CMM.c_call("cmmprint")
 
-   CMM.pop_arg()
+   CMM.fetch_arg(0)
    CMM.store_local(0)
 
    CMM.fetch_local(0)
@@ -38,14 +38,14 @@ CMM.procedure("subroutine", 1, 0)
    CMM.fetch_local(0)
    CMM.push_literal("1")
    CMM.apply_operator("add", "bits16,bits16:bits16")
-   CMM.push_arg()
+   CMM.store_arg(0)
 
    CMM.push_symbol("subroutine")
    CMM.call({ "cont" }, {}, {}, 1)
 
 -- this should not execute
    CMM.fetch_local(0)
-   CMM.push_arg()
+   CMM.store_arg(0)
    CMM.c_call("cmmprint") 
    CMM.cmm_return(0, 0)
 
