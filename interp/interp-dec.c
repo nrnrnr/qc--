@@ -771,7 +771,7 @@ void run_interp(thread *t) {
               #line 401 "interp.m"
                UNDERFLOW_CHECK(values, 2);
                                                  if (STACK_ELT(values, -1).bool) {
-                                                   STACK_ELT(values, 0) = locals[n];
+                                                   locals[n] = STACK_ELT(values, 0);
                                                  }
                                                  values -= 2;
                                                  pc = next;
@@ -793,7 +793,7 @@ void run_interp(thread *t) {
               #line 401 "interp.m"
                UNDERFLOW_CHECK(values, 2);
                                                  if (STACK_ELT(values, -1).bool) {
-                                                   STACK_ELT(values, 0) = locals[n];
+                                                   locals[n] = STACK_ELT(values, 0);
                                                  }
                                                  values -= 2;
                                                  pc = next;
@@ -815,7 +815,7 @@ void run_interp(thread *t) {
               #line 408 "interp.m"
                UNDERFLOW_CHECK(values, 2);
                                                  if (STACK_ELT(values, -1).bool) {
-                                                   STACK_ELT(values, 0) = globals[n];
+                                                   globals[n] = STACK_ELT(values, 0);
                                                  }
                                                  values -= 2;
                                                  pc = next;
@@ -836,7 +836,7 @@ void run_interp(thread *t) {
               #line 408 "interp.m"
                UNDERFLOW_CHECK(values, 2);
                                                  if (STACK_ELT(values, -1).bool) {
-                                                   STACK_ELT(values, 0) = globals[n];
+                                                   globals[n] = STACK_ELT(values, 0);
                                                  }
                                                  values -= 2;
                                                  pc = next;
