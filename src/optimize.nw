@@ -33,6 +33,13 @@ We eliminate a branch to a join point if the branch is the only predecessor of t
 point.
 <<optimize.mli>>=
 val collapse_branch_chains: 'a -> Ast2ir.proc -> bool
+@ 
+Remove any instruction that leaves the machine in the same state in
+which it started.  
+This includes not only [[Rtl.null]] but also assignments of the form 
+$x \mathbin{:=} x$.
+<<optimize.mli>>=
+val remove_nops : 'a -> Ast2ir.proc -> bool
 @
 
 % ------------------------------------------------------------------ 
@@ -42,6 +49,9 @@ val collapse_branch_chains: 'a -> Ast2ir.proc -> bool
 We provide each of the optimization in turn.
 <<optimize.ml>>=
 module G = Cfgx.M
+module RP = Rtl.Private
+module Down = Rtl.Dn
+module Up = Rtl.Up
 @
 
 A forward dfs followed by a backwards dfs will find nodes reachable from the entry
@@ -99,3 +109,17 @@ let collapse_branch_chains _ {Proc.cfg = cfg} =
   List.iter collapse to_collapse;
   to_collapse <> []
 @
+<<optimize.ml>>=
+let remove_nops _ {Proc.cfg = cfg} =
+  let changed = ref false in
+  let is_nop rtl =
+    let unneeded = function
+      | (_, RP.Kill _) -> true
+      | (_, RP.Store (l, RP.Fetch(l', w'), w)) -> assert (w=w'); l = l'
+      | _ -> false in
+    match rtl with
+    | Some r -> let RP.Rtl effs = Down.rtl r in List.for_all unneeded effs
+    | None -> false in
+  let remove n = Cfgutil.delete cfg n; changed := true in
+  G.iter_nodes (fun n -> if is_nop (G.to_executable n) then remove n) cfg;
+  !changed
