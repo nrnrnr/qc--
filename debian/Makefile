@@ -33,11 +33,12 @@ install: bin/qc--.opt manual
 	install -m644 man/man1/qc--interp.1 $(MAN1DIR)
 	gzip -9 $(MAN1DIR)/qc--interp.1
 	install -m644 lib/libqc--interp.a $(LIBDIR) 
-	install -m644 interp/libinclude/*.h $(INCDIR)
+	install -m644 interp/libinclude/qc--interp.h $(INCDIR)
+	install -m644 interp/libinclude/qc--runtime.h $(INCDIR)/qc--interp-runtime.h
 	# the runtime system 
-	install -m664 runtime/runtime.a $(LIBDIR)
+	install -m664 runtime/libqc--.a $(LIBDIR)
 	install -m664 runtime/pcmap.ld $(LIBDIR)
-	#conflict with interp# install -m664 runtime/qc--runtime.h $(INCDIR)
+	install -m664 runtime/qc--runtime.h $(INCDIR)
 	# documentation
 	install -m664 doc/release.pdf $(DOCDIR)
 	install -m664 doc/c--manual.pdf $(DOCDIR)
