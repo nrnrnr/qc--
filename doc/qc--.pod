@@ -41,6 +41,10 @@ compile each file such that in can be linked with all others into a
 final executable.  If the suffix of a file is unrecognized, the file is
 passed to the linker. 
 
+Usually B<qc--> generates machine code but it can also generate code for
+the Quick C-- interpreter qc--interp(1); see the B<-interp> option
+below. 
+
 =over 12
 
 =item C<.c--> or C<.cmm>
@@ -68,6 +72,11 @@ Assembler source: assemble, link. A file C<file.s> is taken as an
 assembly source file. It is assembled to an object file C<file.o> that
 is linked with the other files from the command line.
 
+=item C<.qs>
+
+Interpreter source: link. A C<file.qs> is source code understood by the
+qc--interp(1) interpreter. It is linked with other files into an
+executable.
 
 =item C<.lua>
 
@@ -78,8 +87,8 @@ a file is executed by the interpreter. See qc--internals(1) for details.
 =back
 
 
-If invoked with no I<file> argument, B<qc--> summarizes its options on
-the standard error and exits with exit code C<1>.
+If invoked with no arguments, B<qc--> summarizes its options on the
+standard error and exits with exit code C<1>.
 
 B<qc--> removes intermediate files, like assembly files, unless options
 specify otherwise. Linking is always the last stage, unless the B<-c> or
@@ -123,6 +132,13 @@ is passed to the linker.
 
 Add library I<name> to the list of libraries to be searched. This option
 can be repeated is passed to the linker.
+
+=item B<-interp> 
+
+Emit code for the Quick C-- interpreter qc--interp(1). When this option
+is used, the options B<-c> and B<-S> have the same effect because
+interpreter code makes no distinction between assembly code and object
+code.  The only intermediate file format I<file>C<.qs>.
 
 =item B<-v>
 
@@ -189,7 +205,11 @@ Archive file (static library).
 
 =item I<file>C<.so>
 
-Archive file (dynamic library)
+Archive file (dynamic library).
+
+=item I<file>C<.qs>
+
+Interpreter source file.
 
 =item I<file>C<.lua>
 
