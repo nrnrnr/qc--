@@ -471,7 +471,7 @@ they consist of a single offset from a location (if applicable), then by calling
 [[Simplify.exp]] on the expression.
 <<define [[simplify_exp]] to simplify rtl expressions>>=
 let simplify_exp exp =
-  let vfp             = proc.P.target.T.vfp            in
+  let vfp     = proc.P.target.T.vfp in
   let check w = if w mod wordsize <> 0 || w < 0 then
                    unimp (Printf.sprintf "unsupported size or alignment %d" w) in
   let rec flatten offset l = match l with
@@ -543,9 +543,10 @@ let var_asst_to_spans proc vars =
   let to_bits i = Bits.S.of_int i wordsize in 
   let num_span  =
     (to_bits num_locals_ix, R.bits (to_bits (List.length vars)) wordsize) in
-  num_span :: List.map (fun (var_num, loc) -> (to_bits (var_ix proc.P.nvregs var_num),
-                                               A.fetch loc wordsize))
-                       vars
+  let to_span (var_num, loc) =
+    (to_bits (var_ix proc.P.nvregs var_num),
+     R.fetch (Automatonutil.aloc loc wordsize) wordsize) in
+  num_span :: List.map to_span vars
 @
 
 % ------------------------------------------------------------------ 
