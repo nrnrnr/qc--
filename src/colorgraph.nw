@@ -1096,10 +1096,10 @@ let updateProgram cg {Proc.cfg = cfg} =
 @
 A pair of convenience functions for adding lists of \cfg nodes:
 <<insert spills>>=
-let cfg_ins_lst_before lst node =
-  ignore (List.fold_right G.gm_insert_assign_before lst node)
-let cfg_ins_lst_after lst node =
-  ignore (List.fold_left  G.gm_insert_assign_after node lst)
+let cfg_ins_lst_before cfg lst node =
+  ignore (List.fold_right (G.gm_insert_assign_before cfg) lst node)
+let cfg_ins_lst_after cfg lst node =
+  ignore (List.fold_left  (G.gm_insert_assign_after cfg) node lst)
 @
 The [[reads_writes]] function checks whether a location [[loc]] is
 read or written by an {\rtl}.  It returns a pair $(r,w)$ of [[bool]]
@@ -1118,6 +1118,7 @@ Before and after the node, [[tmp]] must be read from or written to the
 memory location [[mem]], where the value of the spillee is held.
 <<insert spills>>=
 let update proc spillee (map, newtemps as accum) node =
+  let cfg = proc.Proc.cfg in
   let target = proc.Proc.target in
   let reads, writes = reads_writes (G.instr node) spillee in
   let lookup = Target.space target in
@@ -1126,9 +1127,9 @@ let update proc spillee (map, newtemps as accum) node =
     let tmp   = Talloc.Multiple.reg_like proc.Proc.temps spillee in
     let subst = fun x -> if Register.eq x spillee then tmp else x in 
     ( if reads then 
-        (cfg_ins_lst_before (target.T.reload lookup tmp mem) node)
+        (cfg_ins_lst_before cfg (target.T.reload lookup tmp mem) node)
     ; if writes then 
-        (cfg_ins_lst_after  (target.T.spill  lookup tmp mem) node)
+        (cfg_ins_lst_after  cfg (target.T.spill  lookup tmp mem) node)
     ; G.upd_instr node (Rtlutil.Subst.reg ~map:subst)
     ; (RM.add tmp (mem, tmp::spill_regs) map, tmp::newtemps)
     )
@@ -1285,9 +1286,9 @@ module type GRAPH = sig
   val upd_instr : node -> (Rtl.rtl -> Rtl.rtl) -> unit
   val add_live_spans : node -> Register.SetX.t -> Register.SetX.t
   val is_call : node -> bool
-  val set_succ: node -> succ:node -> unit
-  val gm_insert_assign_after:     node -> Rtl.rtl -> node (* after assign! *)
-  val gm_insert_assign_before:    Rtl.rtl -> node -> node (* any node   *)
+  val set_succ: cfg -> node -> succ:node -> unit
+  val gm_insert_assign_after:     cfg -> node -> Rtl.rtl -> node (* after assign! *)
+  val gm_insert_assign_before:    cfg -> Rtl.rtl -> node -> node (* any node   *)
 
   val preds : node -> node list
   val pred  : node -> node
@@ -1356,15 +1357,15 @@ module G : GRAPH with type node = Rtl.rtl Cfgx.M.node
   let upd_instr n f = G.update_instr f n
   let is_call n = G.kind n =*= G.Call
 
-  let insert_assign splice node rtl =
+  let insert_assign splice cfg node rtl =
     let g = G.of_node node in
     let n' = G.instruction g rtl (G.illegal g) in
-    splice ~entry:n' ~exit:n' node;
+    splice cfg ~entry:n' ~exit:n' node;
     n'
 
   let set_succ = G.set_succ
   let gm_insert_assign_after = insert_assign G.splice_after
-  let gm_insert_assign_before r n = insert_assign G.splice_before n r
+  let gm_insert_assign_before cfg r n = insert_assign G.splice_before cfg n r
   let delete = G.delete
 end
 <<colorgraph.ml>>=

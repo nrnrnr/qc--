@@ -2302,7 +2302,7 @@ let cfg _ ({Proc.cfg = cfg} as proc) =
     | Some i ->
         let pred = G.pred n in
         let pred_set_succ n =
-          if Pervasives.(<>) (G.kind pred) G.Illegal then G.set_succ pred n in
+          if Pervasives.(<>) (G.kind pred) G.Illegal then G.set_succ cfg pred n in
         let ill  = G.illegal cfg in
         match G.kind n with
         | G.Assertion | G.StackAdjust | G.Join | G.Exit -> ()
@@ -2392,10 +2392,10 @@ and cbranch2cfg c ~t ~f =
   let rewrite_bc bc ktrue kfalse =
     let new_cb = G.cbranch cfg (R.bool true) ktrue kfalse in
     ( G.update_instr (fun _ -> inst bc) new_cb
-    ; G.set_tsucc new_cb ktrue
-    ; G.set_fsucc new_cb kfalse
+    ; G.set_tsucc cfg new_cb ktrue
+    ; G.set_fsucc cfg new_cb kfalse
     ; if Pervasives.(<>) (G.kind (G.pred bc)) G.Illegal then
-        G.set_succ (G.pred bc) new_cb
+        G.set_succ cfg (G.pred bc) new_cb
     ; new_cb
     ) in
 

@@ -102,7 +102,7 @@ let trim_unreachable_code _ ({Proc.cfg = cfg} as proc) =
   let nodes_from_exit  = G.reverse_podfs (fun n rst -> n :: rst) [] cfg in
   let to_delete = List.filter (fun n -> not (IS.mem (G.num n) nodes_from_entry))
                               nodes_from_exit in
-  let () = List.iter (fun n -> if G.kind n =*= G.Join then G.set_succ n (G.illegal cfg))
+  let () = List.iter (fun n -> if G.kind n =*= G.Join then G.set_succ cfg n (G.illegal cfg))
                      to_delete in
   let hanging_nodes =
     List.filter (fun n -> Pervasives.(<>) (G.kind n) G.Entry &&
@@ -129,10 +129,10 @@ let collapse_branch_chains _ {Proc.cfg = cfg} =
     let s = G.succ n in
     List.iter (fun p -> match G.kind p with
                         | G.Cbranch ->
-                          if G.eq (G.tsucc p) j then G.set_tsucc p s;
-                          if G.eq (G.fsucc p) j then G.set_fsucc p s
+                          if G.eq (G.tsucc p) j then G.set_tsucc cfg p s;
+                          if G.eq (G.fsucc p) j then G.set_fsucc cfg p s
                         | G.Mbranch -> Impossible.unimp "redirect multiway branch"
-                        | G.Branch  -> G.set_succ p s
+                        | G.Branch  -> G.set_succ cfg p s
                         | _ -> ())
               (G.preds j);
     if List.for_all (fun n -> G.kind n =*= G.Illegal) (G.preds j)

@@ -567,10 +567,13 @@ means they may insert conditional branches or join points.
 Function [[set_succ_n]] raises [[Invalid_argument]] if [[n]]~is
 negative or too large.  
 <<graph and node mutators>>=
-val set_succ      : 'i node -> succ:'i node -> unit  (* defined on non-fork *)
-val set_tsucc     : 'i node -> succ:'i node -> unit  (* defined on conditional branch *)
-val set_fsucc     : 'i node -> succ:'i node -> unit  (* defined on conditional branch *)
-val set_succ_n    : 'i node -> int -> succ:'i node -> unit  (* defined on any node *)
+val set_succ   : 'i cfg -> 'i node -> succ:'i node -> unit (* defined on non-fork *)
+val set_tsucc  : 'i cfg -> 'i node -> succ:'i node -> unit
+  (* defined on conditional branch *)
+val set_fsucc  : 'i cfg -> 'i node -> succ:'i node -> unit
+  (* defined on conditional branch *)
+val set_succ_n : 'i cfg -> 'i node -> int -> succ:'i node -> unit
+  (* defined on any node *)
 @ 
 The special function [[invert_cbr]] swaps the true and false
 successors of a conditional branch.
@@ -591,10 +594,10 @@ It is permissible that the [[entry]] and [[exit]] be the same node.
 In [[splice_on_every_edge_between]], the exit node must have only a single possible
 successor (i.e. the exit node may not be a multiway branch or a conditional branch).
 <<graph and node mutators>>=
-val splice_on_every_edge_between : entry:'i node -> exit:'i node ->
+val splice_on_every_edge_between : 'i cfg -> entry:'i node -> exit:'i node ->
                                    pred:'i node  -> succ:'i node -> unit (* node is not multiway branch, call, or cutto *)
-val splice_before : entry:'i node -> exit:'i node -> 'i node -> unit (* node is not join *)
-val splice_after  : entry:'i node -> exit:'i node -> 'i node -> unit (* node is not fork *)
+val splice_before : 'i cfg -> entry:'i node -> exit:'i node -> 'i node -> unit (* node is not join *)
+val splice_after  : 'i cfg -> entry:'i node -> exit:'i node -> 'i node -> unit (* node is not fork *)
 @
 A node may be deleted if and only if all its predecessors are illegal.
 If a node is deleted, and its successor is
@@ -1339,29 +1342,25 @@ Although only internally visible, the [[remove_pred]] function is vital.
 For join and exit nodes, we remove [[node]] from the predecessor list.
 For other nodes, we set the predecessor to the illegal node.
 <<remove node predecessors>>=
-let remove_pred node ~old_succ =
+let remove_pred cfg node ~old_succ =
   let rec rem_1_list lst = match lst with
     | [] -> imposs "remove_pred: predecessor to be removed not found"
     | n::rst when eq n node -> rst
     | n::rst -> n :: rem_1_list rst in
-  let rem_1_list l =
-    try rem_1_list l
-    with _ ->
-      imposs ("Error removing node from list with " ^ string_of_int (List.length l) ^ " nodes") in
   match old_succ with
   | Joi j -> j.joi_preds <- rem_1_list j.joi_preds
   | Exi e -> e.exi_preds <- rem_1_list e.exi_preds
-  | Ins i -> i.ins_pred  <- (get_cfg old_succ).ill
-  | Sta i -> i.sta_pred  <- (get_cfg old_succ).ill
-  | Bra b -> b.bra_pred  <- (get_cfg old_succ).ill
-  | Cbr c -> c.cbr_pred  <- (get_cfg old_succ).ill
-  | Mbr m -> m.mbr_pred  <- (get_cfg old_succ).ill
-  | Jum j -> j.jum_pred  <- (get_cfg old_succ).ill
-  | Cal c -> c.cal_pred  <- (get_cfg old_succ).ill
-  | Ret r -> r.ret_pred  <- (get_cfg old_succ).ill
-  | Cut c -> c.cut_pred  <- (get_cfg old_succ).ill
-  | Ass a -> a.ass_pred  <- (get_cfg old_succ).ill
-  | Imp i -> i.imp_pred  <- (get_cfg old_succ).ill
+  | Ins i -> i.ins_pred  <- cfg.ill
+  | Sta i -> i.sta_pred  <- cfg.ill
+  | Bra b -> b.bra_pred  <- cfg.ill
+  | Cbr c -> c.cbr_pred  <- cfg.ill
+  | Mbr m -> m.mbr_pred  <- cfg.ill
+  | Jum j -> j.jum_pred  <- cfg.ill
+  | Cal c -> c.cal_pred  <- cfg.ill
+  | Ret r -> r.ret_pred  <- cfg.ill
+  | Cut c -> c.cut_pred  <- cfg.ill
+  | Ass a -> a.ass_pred  <- cfg.ill
+  | Imp i -> i.imp_pred  <- cfg.ill
   | Ill _ -> ()
   | Ent _ -> imposs "entry node was a successor"
   | Boot  -> imposs "boot nodes should not live to remove_pred"
@@ -1415,14 +1414,14 @@ let rec join_leading_to ~succ =
     let cfg = get_cfg succ in
     if is_ill succ then 
       let join = node_labeled cfg (cfg.mk_label "join") in
-      let () = set_succ join ~succ:succ in
+      let () = set_succ cfg join ~succ:succ in
       join
     else
       let p = pred succ in (* p must not be a fork b/c succ is not a join *)
       if is_join p then p
       else let join = node_labeled cfg (cfg.mk_label "join") in
-           let () = if not (is_ill p) then set_succ p ~succ:join in
-           let () = set_succ join ~succ:succ in
+           let () = if not (is_ill p) then set_succ cfg p ~succ:join in
+           let () = set_succ cfg join ~succ:succ in
            join
 @
 [[set_succ']] takes four steps to set the successor of [[node]] to [[succ]]
@@ -1447,9 +1446,10 @@ the successor of [[node]], depending on whether [[node]] is a node with a
 single successor, multiple successors with control-flow edges, multiple
 successors with no such edges, or a conditional branch.
 <<set node successors>>=
-and set_succ' ~single ~ce_mult ~mult ~cbr ~node ~old_succ ~succ =
+and set_succ' cfg ~single ~ce_mult ~mult ~cbr ~node ~old_succ ~succ =
   if not (is_join succ) && not (is_ill succ) && not (is_ill (pred succ)) then
-    set_succ' ~single ~ce_mult ~mult ~cbr ~node ~old_succ ~succ:(join_leading_to succ)
+    set_succ' cfg ~single ~ce_mult ~mult ~cbr ~node ~old_succ
+              ~succ:(join_leading_to succ)
   else
     begin
       ( (<<modify the $n$th successor of [[node]] because [[node]] is no longer a predecessor>>)
@@ -1503,7 +1503,7 @@ match node with
 | Boot  -> undef "set_succ" "boot"
 @ 
 <<modify the $n$th successor of [[node]] because [[node]] is no longer a predecessor>>=
-remove_pred node old_succ
+remove_pred cfg node old_succ
 @
 Adding a predecessor.
 <<modify [[succ]] because [[node]] has become a predecessor>>=
@@ -1535,16 +1535,16 @@ the $0th$ successor.
 Similarly, [[set_succ]] ensures that nodes with multiple successors are never
 modified.
 <<set node successors>>=
-and set_succ_n node n ~succ:succ =
-  set_succ'
+and set_succ_n cfg node n ~succ:succ =
+  set_succ' cfg
     ~single:(if n = 0 then (fun s -> s) else (fun s -> invalid_arg "successor index"))
     ~ce_mult: (fun a f -> let s = a.(n) in a.(n) <- f s; s)
     ~mult:  (fun a f -> let s = a.(n) in a.(n) <- f s; s)
     ~cbr:   (if n = 0 then (fun () -> true) else if n = 1 then (fun () -> false)
              else fun () -> invalid_arg "successor index")
     ~node ~old_succ:(succ_n node n) ~succ
-and set_succ node ~succ:the_succ =
-  set_succ'
+and set_succ cfg node ~succ:the_succ =
+  set_succ' cfg
     ~single: (fun s -> s)
     ~ce_mult:   (fun a f -> undef "set_succ" "multiple node not o/w specified")
     ~mult:   (fun a f -> undef "set_succ" "multiple node not o/w specified")
@@ -1553,11 +1553,11 @@ and set_succ node ~succ:the_succ =
 @
 No sense wasting time going through [[set_succ']].
 <<set node successors>>=
-let set_tsucc node ~succ = match node with
-  | Cbr _ -> set_succ_n node 0 ~succ
+let set_tsucc cfg node ~succ = match node with
+  | Cbr _ -> set_succ_n cfg node 0 ~succ
   | _     -> undef "set_tsucc" "non-cond-branch"
-let set_fsucc node ~succ = match node with
-  | Cbr _ -> set_succ_n node 1 ~succ
+let set_fsucc cfg node ~succ = match node with
+  | Cbr _ -> set_succ_n cfg node 1 ~succ
   | _     -> undef "set_fsucc" "non-cond-branch"
 @
 Transactions are not usable as yet; some useful function has not been added to
@@ -1594,9 +1594,9 @@ let invert_cbr node = match node with
   | Cbr c ->
     let cfg = get_cfg node in
     let new_true = c.cbr_false in
-    ( set_fsucc node ~succ:c.cbr_true
-    ; set_tsucc node ~succ:new_true
-    ; c.cbr_i <- (get_cfg node).inst_info.bnegate c.cbr_i
+    ( set_fsucc cfg node ~succ:c.cbr_true
+    ; set_tsucc cfg node ~succ:new_true
+    ; c.cbr_i <- cfg.inst_info.bnegate c.cbr_i
     )
   | _     -> undef "invert_cbr" "non-cond-branch"
 @
@@ -1604,7 +1604,7 @@ We are careful to order the mutations to avoid inserting extra join points.
 The exit node must have only a single possible successor (i.e. multiway branches and
 conditional branches may not be the exit node).
 <<graph and node mutators implementation>>=
-let splice_on_every_edge_between ~entry ~exit ~pred ~succ =
+let splice_on_every_edge_between cfg ~entry ~exit ~pred ~succ =
   let () = if not (List.exists (eq pred) (preds succ))
            then (Printf.eprintf "Splicing between pred:%d succ:%d\n" (num pred) (num
                    succ); assert false)
@@ -1612,13 +1612,13 @@ let splice_on_every_edge_between ~entry ~exit ~pred ~succ =
   let () =
     if not (List.exists (eq succ) (succs pred))
     then imposs "splice_on_every_edge_between: succ is not a successor of pred" in
-  let update_succ () = set_succ exit ~succ in
+  let update_succ () = set_succ cfg exit ~succ in
   let update_pred () =
     match pred with
     | Cbr c ->
       let entry = join_leading_to entry in
-      if eq succ c.cbr_true  then set_tsucc pred entry; 
-      if eq succ c.cbr_false then set_fsucc pred entry
+      if eq succ c.cbr_true  then set_tsucc cfg pred entry; 
+      if eq succ c.cbr_false then set_fsucc cfg pred entry
     | Imp i ->
       let upd_succ n entry = if eq n succ then entry else n in
       ( i.imp_succ      <- upd_succ i.imp_succ      entry
@@ -1627,21 +1627,21 @@ let splice_on_every_edge_between ~entry ~exit ~pred ~succ =
     | Mbr m -> undef "splice_on_every_edge_between" "mbranch"
     | Cal c -> undef "splice_on_every_edge_between" "call"
     | Cut c -> undef "splice_on_every_edge_between" "cut-to"
-    | _     -> set_succ pred ~succ:entry in
+    | _     -> set_succ cfg pred ~succ:entry in
   (update_pred (); update_succ ())
 
-let splice_before ~entry ~exit node =
+let splice_before cfg ~entry ~exit node =
   let p = pred node in
-  if Pervasives.(<>) (kind p) Illegal then set_succ p ~succ:entry;
-  set_succ exit ~succ:node
+  if Pervasives.(<>) (kind p) Illegal then set_succ cfg p ~succ:entry;
+  set_succ cfg exit ~succ:node
 
-let splice_after ~entry ~exit node =
+let splice_after cfg ~entry ~exit node =
   let succ = succ node in
-  (set_succ node ~succ:entry ; set_succ exit ~succ)
+  (set_succ cfg node ~succ:entry ; set_succ cfg exit ~succ)
 
 let delete cfg node =
   ( if   List.for_all (fun p -> kind p =*= Illegal)           (all_incoming node) 
-    then List.iter    (fun s -> remove_pred node ~old_succ:s) (all_outgoing node)
+    then List.iter    (fun s -> remove_pred cfg node ~old_succ:s) (all_outgoing node)
   ; if kind node =*= Join
     then cfg.label_map <- List.fold_right SM.remove (labels node) cfg.label_map
   )
@@ -1694,16 +1694,16 @@ let fold_layout f zero cfg =
   let ins_branch node = match node with
     | Cbr c ->
       if multiple_preds c.cbr_false then
-        set_fsucc node ~succ:(join_leading_to (branch cfg c.cbr_false))
+        set_fsucc cfg node ~succ:(join_leading_to (branch cfg c.cbr_false))
     | Cal c ->
       if multiple_preds (succ_n node 0) then
-        set_succ_n node 0 ~succ:(join_leading_to (branch cfg (succ_n node 0)))
+        set_succ_n cfg node 0 ~succ:(join_leading_to (branch cfg (succ_n node 0)))
     | Imp i ->
       if multiple_preds i.imp_succ then
-        set_succ node ~succ:(join_leading_to (branch cfg i.imp_succ))
+        set_succ cfg node ~succ:(join_leading_to (branch cfg i.imp_succ))
     | Joi _ | Ins _ | Sta _ | Ass _ | Ret _ | Ent _ ->
       if multiple_preds (succ node) then
-        set_succ node ~succ:(branch cfg (succ node))
+        set_succ cfg node ~succ:(branch cfg (succ node))
     | Mbr _ | Bra _ | Cut _ | Jum _ | Exi _ | Ill _ | Boot -> () in
   let () = iter_nodes ins_branch cfg in
   let snoc node build = fun tail -> build (f node tail) in
@@ -1848,7 +1848,7 @@ let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts
   let succ = match kind succ with
     | Exit -> let label = Idgen.label "postcall" in
               let join = node_labeled cfg label in
-              set_succ join ~succ;
+              set_succ cfg join ~succ;
               join
     | _    -> join_leading_to ~succ in
   let succ        = [new_cedge succ] in
@@ -1864,7 +1864,7 @@ let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts
     mk_call i ~pred:cfg.ill ~contedges ~lsucc:cfg.ill ~uses ~reads ~writes
               ~altrets:(List.length altrets) ~unwinds_to:(List.length unwinds_to)
               ~cuts_to:(List.length cuts_to) ~spans in
-  let ()  = Aux.foldri (fun i n () -> set_succ_n cal i ~succ:n.node)
+  let ()  = Aux.foldri (fun i n () -> set_succ_n cfg cal i ~succ:n.node)
                        edgelist () in
   cal
 
@@ -1883,7 +1883,7 @@ let cut_to cfg i ~cuts_to ~aborts ~uses =
                 ; cut_fx        = X.fx ()
                 ; cut_uses      = uses
                 } in
-  let ()  = Aux.foldri (fun i n () -> set_succ_n cut i ~succ:n.node) edgelist () in
+  let ()  = Aux.foldri (fun i n () -> set_succ_n cfg cut i ~succ:n.node) edgelist () in
   cut
 @
 
@@ -1895,7 +1895,7 @@ let instruction cfg i ~succ =
                 ; ins_succ = cfg.ill
                 ; ins_nx   = X.nx ()
                 } in
-  let ()  = set_succ ins ~succ:succ in
+  let ()  = set_succ cfg ins ~succ:succ in
   ins
 
 let stack_adjust cfg i ~succ =
@@ -1905,7 +1905,7 @@ let stack_adjust cfg i ~succ =
                 ; sta_succ = cfg.ill
                 ; sta_nx   = X.nx ()
                 } in
-  let ()  = set_succ sta ~succ:succ in
+  let ()  = set_succ cfg sta ~succ:succ in
   sta
 
 let assertion cfg i ~succ =
@@ -1915,7 +1915,7 @@ let assertion cfg i ~succ =
                 ; ass_succ = cfg.ill
                 ; ass_nx   = X.nx ()
                 } in
-  let ()  = set_succ ass ~succ:succ in
+  let ()  = set_succ cfg ass ~succ:succ in
   ass
 
 let branch cfg ~target =
@@ -1927,7 +1927,7 @@ let branch cfg ~target =
                 ; bra_lsucc = succ
                 ; bra_nx    = X.nx ()
                 } in
-  let ()  = set_succ bra ~succ in
+  let ()  = set_succ cfg bra ~succ in
   bra
 
 (* SHOULD WE ASSERT THAT THESE TARGETS ARE JOIN POINTS? *)
@@ -1940,7 +1940,7 @@ let jump cfg i ~uses ~targets =
                 ; jum_nx    = X.nx ()
                 ; jum_uses  = uses
                 } in
-  let ()  = set_succ jum ~succ:cfg.exit in
+  let ()  = set_succ cfg jum ~succ:cfg.exit in
   jum
 
 let cbranch cfg cond ~ifso ~ifnot =
@@ -1954,8 +1954,8 @@ let cbranch cfg cond ~ifso ~ifnot =
                 ; cbr_false = cfg.ill
                 ; cbr_fx    = X.fx ()
                 } in
-  let ()  = set_tsucc cbr ~succ:so_succ  in
-  let ()  = set_fsucc cbr ~succ:not_succ in
+  let ()  = set_tsucc cfg cbr ~succ:so_succ  in
+  let ()  = set_fsucc cfg cbr ~succ:not_succ in
   cbr
 
 let mbranch cfg i ~targets =
@@ -1968,7 +1968,7 @@ let mbranch cfg i ~targets =
                     ; mbr_lsucc = cfg.ill
                     ; mbr_fx    = X.fx ()
                     } in
-  let () = Aux.foldri (fun i n () -> set_succ_n mbr i ~succ:n) targets () in
+  let () = Aux.foldri (fun i n () -> set_succ_n cfg mbr i ~succ:n) targets () in
   mbr
 
 let return cfg i ~uses =
@@ -1980,7 +1980,7 @@ let return cfg i ~uses =
                 ; ret_nx    = X.nx ()
                 ; ret_uses  = uses
                 } in
-  let ()  = set_succ ret ~succ:cfg.exit in
+  let ()  = set_succ cfg ret ~succ:cfg.exit in
   ret
 
 let impossible cfg ~succ =
@@ -1991,8 +1991,8 @@ let impossible cfg ~succ =
                  ; imp_exit_succ = cfg.ill
                  ; imp_fx        = X.fx ()
                  } in
-  let ()   = set_succ   imp   ~succ:succ     in
-  let ()   = set_succ_n imp 1 ~succ:cfg.exit in
+  let ()   = set_succ   cfg imp   ~succ:succ     in
+  let ()   = set_succ_n cfg imp 1 ~succ:cfg.exit in
   imp
 
 let illegal cfg = Ill { ill_num = new_num ()

@@ -676,9 +676,9 @@ let buffer_if_succ_is_join state node =
   match G.succs node with
   | [succ] when G.is_join succ && not (G.is_cti node) ->
     let varOut = IM.find (G.num node) state.varOutMaps in
-    G.set_succ node (G.illegal cfg);
+    G.set_succ cfg node (G.illegal cfg);
     let n' = G.assertion cfg (Rtl.par []) ~succ in
-    G.set_succ node n';
+    G.set_succ cfg node n';
     (set_varOut (set_varIn (mark_allocated state n') n' varOut) n' varOut, n')
   | _ -> (state, node) in
 @
@@ -1095,7 +1095,7 @@ We update the successor's variable map to have each inconsistent temp in memory.
   (* make the successor consistent *)
   let state, vm_out, nodes' = make_nodes' state succ_vm loads in
   let _ = List.fold_right
-            (fun node succ -> (G.splice_after ~entry:node ~exit:node succ ; node))
+            (fun node succ -> (G.splice_after cfg ~entry:node ~exit:node succ ; node))
             nodes' succ in
 
   (* make the predecessors consistent *)
@@ -1131,9 +1131,10 @@ We update the successor's variable map to have each inconsistent temp in memory.
               temps (state, []) in
     let state, pred_vm, nodes' = make_nodes' state pred_vm stores in
 
-    let _ = List.fold_right
-              (fun node pred -> (G.splice_before ~entry:node ~exit:node pred ; pred))
-              nodes' pred in
+    let _ =
+      List.fold_right
+         (fun node pred -> (G.splice_before cfg ~entry:node ~exit:node pred ; pred))
+         nodes' pred in
     (*VM.print "new maps" pred_vm;*)
     set_varIn (set_varOut state pred pred_vm) pred pred_vm in
   List.fold_left handle_pred state (List.filter (is_allocated state) (G.preds succ)) in
@@ -1204,7 +1205,7 @@ let shuffle_between state pred succ =
     let state, _, nodes' = make_nodes' state pred_vm shuffles    in
     let last =
       List.fold_right
-            (fun node pred -> (G.splice_on_every_edge_between ~entry:node ~exit:node
+            (fun node pred -> (G.splice_on_every_edge_between cfg ~entry:node ~exit:node
                                                               ~pred ~succ
                               ; node))
             nodes' pred in

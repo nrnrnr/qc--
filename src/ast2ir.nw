@@ -375,8 +375,8 @@ let insert_init_cont_nodes contmap init_node =
     else
       succ in
   let next = G.succ init_node in
-  G.set_succ init_node (G.illegal g);  (* avoid extra join before next *)
-  G.set_succ init_node (Strutil.Map.fold one_node contmap next)
+  G.set_succ g init_node (G.illegal g);  (* avoid extra join before next *)
+  G.set_succ g init_node (Strutil.Map.fold one_node contmap next)
 @ 
 When we finish compiling a continuation, we make sure any label that
 is used leads to sensible code.
@@ -405,7 +405,7 @@ stack pointer.
 <<functions that translate statements, including [[stmts]]>>=
 and generate_cut_to_entry k =
   let in' = k.K.cut_in in
-  G.set_succ (G.non_local_join_labeled g k.K.cut_pc) (
+  G.set_succ g (G.non_local_join_labeled g k.K.cut_pc) (
   G.assertion    g (in'.C.insp (Contn.rep k.K.rep))     **>
   G.stack_adjust g in'.C.pre_sp   **>
   G.instruction  g in'.C.shuffle  **>
@@ -419,7 +419,7 @@ and generate_return_to_entries k =
     let cc  = Call.get_cc target ccname in
     let in' = k.K.return_in in
     let ()  = add youngblocks cc.C.overflow_alloc.C.result_allocator in'.C.overflow in
-    G.set_succ (G.node_labeled g label) (
+    G.set_succ g (G.node_labeled g label) (
     G.assertion    g (in'.C.insp in'.C.overflow)    **>
     G.stack_adjust g in'.C.pre_sp    **>
     G.instruction  g in'.C.shuffle   **>
@@ -442,7 +442,7 @@ and generate_unwind_to_entry k =
     G.assertion g (RU.store (R.mem R.none bogus_space (R.C w)
                                    (R.bits (Bits.S.of_int 0 w) w))
                             (R.fetch (R.var "" v.FE.index w) w)) succ in
-  G.set_succ (G.non_local_join_labeled g k.K.unwind_pc)
+  G.set_succ g (G.non_local_join_labeled g k.K.unwind_pc)
   (G.assertion g (proc_cc.C.sp_on_unwind proc_cc.C.stable_sp_loc) **>
    (List.fold_right use_var k.K.formals k.K.succ))
 @
@@ -479,7 +479,7 @@ and stmt  props s  succ =
   match s with
   | S.If (e, so, not) ->
       G.cbranch g e ~ifso:(stmts props so succ) ~ifnot:(stmts props not succ)
-  | S.Label n              -> let l = G.node_labeled g n in (G.set_succ l succ; l)
+  | S.Label n              -> let l = G.node_labeled g n in (G.set_succ g l succ; l)
   | S.Switch (rg, e, arms) -> switchStmt rg e arms props succ
   | S.Cont (name, _, _)    -> contStmt2 name succ
   | S.Span (kv, bs)        -> stmts (kv :: props) bs succ
@@ -843,9 +843,9 @@ WE OUGHT TO BE ABLE TO DO WITHOUT ONE OF THESE LABEL NODES.
   let () = add oldblocks proc_cc.C.overflow_alloc.C.parameter_deallocator
                          proc_in'.C.overflow in
   let labelnode lbl ~succ =
-    let node = G.node_labeled g lbl in (G.set_succ node succ; node) in
+    let node = G.node_labeled g lbl in (G.set_succ g node succ; node) in
   let () = 
-    G.set_succ (G.entry g) (
+    G.set_succ g (G.entry g) (
     G.stack_adjust g proc_in'.C.pre_sp    **>
     G.instruction  g proc_in'.C.shuffle   **>
     G.stack_adjust g proc_in'.C.post_sp   **>
