@@ -360,9 +360,11 @@ We can ask what graph the node belongs to.
 <<graph and node observers>>=
 val of_node       : 'i node -> 'i cfg
 @ 
-We can ask about the kind of a node, and we can compare nodes for equality.
+We can ask about the kind of a node, the unique number of a node, and we can compare
+nodes for equality.
 <<graph and node observers>>=
 val kind          : 'i node -> kind
+val num           : 'i node -> int
 val eq            : 'i node -> 'i node -> bool
 @ 
 We can also ask particular predicates that relate to the kind.
@@ -710,6 +712,7 @@ Suffixes:
 \noindent
 \begin{tabular}{>{\ttfamily}ll}
 i    & Instruction
+num  & Unique Node Number
 labels & Multiple Labels
 spans & Spans
 contedges & Control-Flow Edges
@@ -726,50 +729,59 @@ nx    & Non-Branch/Fork Extension
 \end{tabular}
 \end{quote}
 <<node type>>=
-type ('i, 'n)     ent = { mutable ent_succ   : 'n 
+type ('i, 'n)     ent = {         ent_num    : int
+                        ; mutable ent_succ   : 'n 
                         ;         ent_nx     : X.nx
                         }
-type ('i, 'n, 'c) exi = { mutable exi_cfg    : 'c
+type ('i, 'n, 'c) exi = {         exi_num    : int
+                        ; mutable exi_cfg    : 'c
                         ; mutable exi_labels : label list
                         ; mutable exi_preds  : 'n list
                         ; mutable exi_lpred  : 'n
                         ;         exi_jx     : X.jx
                         }
-type ('i, 'n, 'c) joi = { mutable joi_labels : label list
+type ('i, 'n, 'c) joi = {         joi_num    : int
+                        ; mutable joi_labels : label list
                         ; mutable joi_cfg    : 'c
                         ; mutable joi_preds  : 'n list
                         ; mutable joi_succ   : 'n
                         ; mutable joi_lpred  : 'n
                         ;         joi_jx     : X.jx
                         }
-type ('i, 'n)     ins = { mutable ins_i      : 'i
+type ('i, 'n)     ins = {         ins_num    : int
+                        ; mutable ins_i      : 'i
                         ; mutable ins_pred   : 'n
                         ; mutable ins_succ   : 'n
                         ;         ins_nx     : X.nx
                         }
-type ('i, 'n)     sta = { mutable sta_i      : 'i
+type ('i, 'n)     sta = {         sta_num    : int
+                        ; mutable sta_i      : 'i
                         ; mutable sta_pred   : 'n
                         ; mutable sta_succ   : 'n
                         ;         sta_nx     : X.nx
                         }
-type ('i, 'n)     ass = { mutable ass_i      : 'i
+type ('i, 'n)     ass = {         ass_num    : int
+                        ; mutable ass_i      : 'i
                         ; mutable ass_pred   : 'n
                         ; mutable ass_succ   : 'n
                         ;         ass_nx     : X.nx
                         }
-type ('i, 'n)     bra = { mutable bra_i      : 'i
+type ('i, 'n)     bra = {         bra_num    : int
+                        ; mutable bra_i      : 'i
                         ; mutable bra_pred   : 'n
                         ; mutable bra_succ   : 'n
                         ; mutable bra_lsucc  : 'n
                         ;         bra_nx     : X.nx
                         }
-type ('i, 'n)     cbr = { mutable cbr_i      : 'i
+type ('i, 'n)     cbr = {         cbr_num    : int
+                        ; mutable cbr_i      : 'i
                         ; mutable cbr_pred   : 'n
                         ; mutable cbr_true   : 'n
                         ; mutable cbr_false  : 'n
                         ;         cbr_fx     : X.fx
                         }
-type ('i, 'n)     mbr = { mutable mbr_i      : 'i
+type ('i, 'n)     mbr = {         mbr_num    : int
+                        ; mutable mbr_i      : 'i
                         ; mutable mbr_pred   : 'n
                         ; mutable mbr_succs  : 'n array
                         ; mutable mbr_lsucc  : 'n
@@ -784,7 +796,8 @@ non-local continuations.
 In this case, the exit node is a successor of the call node.
 
 <<node type>>=
-type ('i, 'n, 'e) cal = { mutable cal_i          : 'i
+type ('i, 'n, 'e) cal = {         cal_num        : int
+                        ; mutable cal_i          : 'i
                         ;         cal_spans      : (Bits.bits * Rtl.exp) list
                         ; mutable cal_pred       : 'n
                         ; mutable cal_contedges  : 'e array
@@ -795,33 +808,38 @@ type ('i, 'n, 'e) cal = { mutable cal_i          : 'i
                         ;         cal_unwinds_to : int
                         ;         cal_cuts_to    : int
                         }
-type ('i, 'n, 'e) cut = { mutable cut_i          : 'i
+type ('i, 'n, 'e) cut = {         cut_num        : int
+                        ; mutable cut_i          : 'i
                         ; mutable cut_pred       : 'n
                         ; mutable cut_lsucc      : 'n
                         ; mutable cut_contedges  : 'e array
                         ;         cut_fx         : X.fx
                         ; mutable cut_uses       : regs
                         }
-type ('i, 'n)     jum = { mutable jum_i          : 'i
+type ('i, 'n)     jum = {         jum_num        : int
+                        ; mutable jum_i          : 'i
                         ; mutable jum_pred       : 'n
                         ; mutable jum_succ       : 'n
                         ; mutable jum_lsucc      : 'n
                         ;         jum_nx         : X.nx
                         ; mutable jum_uses       : regs
                         }
-type ('i, 'n)     ret = { mutable ret_i          : 'i
+type ('i, 'n)     ret = {         ret_num        : int
+                        ; mutable ret_i          : 'i
                         ; mutable ret_pred       : 'n
                         ; mutable ret_succ       : 'n
                         ; mutable ret_lsucc      : 'n
                         ;         ret_nx         : X.nx
                         ; mutable ret_uses       : regs
                         }
-type ('i, 'n)     imp = { mutable imp_pred       : 'n
+type ('i, 'n)     imp = {         imp_num        : int
+                        ; mutable imp_pred       : 'n
                         ; mutable imp_succ       : 'n
                         ; mutable imp_exit_succ  : 'n
                         ;         imp_fx         : X.fx
                         }
-type ('i, 'n, 'c) ill = {         ill_nx         : X.nx
+type ('i, 'n, 'c) ill = {         ill_num        : int
+                        ;         ill_nx         : X.nx
                         ; mutable ill_cfg        : 'c
                         }
 
@@ -863,6 +881,24 @@ let kind node = match node with
   | Ill _ -> Illegal
   | Imp _ -> Impossible
   | Boot  -> undef "kind" "boot"
+
+let num node = match node with
+  | Joi j -> j.joi_num
+  | Ins i -> i.ins_num
+  | Sta s -> s.sta_num
+  | Bra b -> b.bra_num
+  | Cbr c -> c.cbr_num
+  | Mbr m -> m.mbr_num
+  | Jum j -> j.jum_num
+  | Cal c -> c.cal_num
+  | Ret r -> r.ret_num
+  | Cut c -> c.cut_num
+  | Ent e -> e.ent_num
+  | Exi e -> e.exi_num
+  | Ass a -> a.ass_num
+  | Ill i -> i.ill_num
+  | Imp i -> i.imp_num
+  | Boot  -> undef "num" "boot"
 
 let is_join node = match node with
   | Joi _ | Exi _ -> true
@@ -1224,7 +1260,8 @@ The rest of the CFG implementation also uses these mutators.
 must frequently be inserted.
 <<set node successors>>=
 let mk_join cfg labels ~preds ~lpred ~succ =
-  let join = Joi { joi_labels = labels
+  let join = Joi { joi_num    = new_num ()
+                 ; joi_labels = labels
                  ; joi_cfg    = cfg
                  ; joi_preds  = preds
                  ; joi_succ   = succ
@@ -1507,11 +1544,13 @@ When we make exit nodes, we are careful to add the labels to the cfg's label
 map.
 <<graph construction and copying>>=
 let mk_entry succ =
-  Ent { ent_succ = succ
+  Ent { ent_num  = new_num ()
+      ; ent_succ = succ
       ; ent_nx   = X.nx ()
       }
 let mk_exit cfg labels ~preds ~lpred =
-  let exit = Exi { exi_cfg    = cfg
+  let exit = Exi { exi_num    = new_num ()
+                 ; exi_cfg    = cfg
                  ; exi_labels = labels
                  ; exi_preds  = []
                  ; exi_lpred  = cfg.ill
@@ -1615,7 +1654,8 @@ We have to bootstrap node construction because of the way set_succ works.
 let join_leading_to_ce ce = {ce with node = join_leading_to ce.node}
 
 let mk_call i spans ~pred ~contedges ~lsucc ~uses ~altrets ~unwinds_to ~cuts_to =
-    Cal { cal_i          = i
+    Cal { cal_num        = new_num ()
+        ; cal_i          = i
         ; cal_spans      = spans
         ; cal_pred       = pred
         ; cal_contedges  = contedges
@@ -1656,7 +1696,8 @@ let cut_to cfg i ~cuts_to ~aborts ~uses =
     (* UNKNOWN WHETHER EDGE TO EXIT MUST KILL NVR'S.  LET US HOPE NOT. *)
   let edgelist    = List.flatten [cuts_to; aborts] in
   let illedge     = fun {kills=k; defs=d; node=n} -> {kills=k; defs=d; node=cfg.ill} in
-  let cut = Cut { cut_i         = i
+  let cut = Cut { cut_num       = new_num ()
+                ; cut_i         = i
                 ; cut_pred      = cfg.ill
                 ; cut_lsucc     = cfg.ill
                 ; cut_contedges = Array.of_list (List.map illedge edgelist)
@@ -1669,7 +1710,8 @@ let cut_to cfg i ~cuts_to ~aborts ~uses =
 
 <<simple node constructors>>=
 let instruction cfg i ~succ =
-  let ins = Ins { ins_i    = i
+  let ins = Ins { ins_num  = new_num ()
+                ; ins_i    = i
                 ; ins_pred = cfg.ill 
                 ; ins_succ = cfg.ill
                 ; ins_nx   = X.nx ()
@@ -1678,7 +1720,8 @@ let instruction cfg i ~succ =
   ins
 
 let stack_adjust cfg i ~succ =
-  let sta = Sta { sta_i    = i
+  let sta = Sta { sta_num  = new_num ()
+                ; sta_i    = i
                 ; sta_pred = cfg.ill 
                 ; sta_succ = cfg.ill
                 ; sta_nx   = X.nx ()
@@ -1687,7 +1730,8 @@ let stack_adjust cfg i ~succ =
   sta
 
 let assertion cfg i ~succ =
-  let ass = Ass { ass_i    = i
+  let ass = Ass { ass_num  = new_num ()
+                ; ass_i    = i
                 ; ass_pred = cfg.ill 
                 ; ass_succ = cfg.ill
                 ; ass_nx   = X.nx ()
@@ -1697,7 +1741,8 @@ let assertion cfg i ~succ =
 
 let branch cfg ~target =
   let succ = join_leading_to ~succ:target in
-  let bra = Bra { bra_i     = cfg.inst_info.goto.Ep.embed (label succ)
+  let bra = Bra { bra_num   = new_num ()
+                ; bra_i     = cfg.inst_info.goto.Ep.embed (label succ)
                 ; bra_pred  = cfg.ill
                 ; bra_succ  = cfg.ill
                 ; bra_lsucc = succ
@@ -1708,7 +1753,8 @@ let branch cfg ~target =
 
 (* SHOULD WE ASSERT THAT THESE TARGETS ARE JOIN POINTS? *)
 let jump cfg i ~uses ~targets =
-  let jum = Jum { jum_i     = i
+  let jum = Jum { jum_num   = new_num ()
+                ; jum_i     = i
                 ; jum_pred  = cfg.ill
                 ; jum_succ  = cfg.ill
                 ; jum_lsucc = cfg.ill
@@ -1721,7 +1767,8 @@ let jump cfg i ~uses ~targets =
 let cbranch cfg cond ~ifso ~ifnot =
   let so_succ  = join_leading_to ~succ:ifso in
   let not_succ = join_leading_to ~succ:ifnot in
-  let cbr = Cbr { cbr_i     = cfg.inst_info.branch.Ep.embed
+  let cbr = Cbr { cbr_num   = new_num ()
+                ; cbr_i     = cfg.inst_info.branch.Ep.embed
                                     (cond, (label so_succ))
                 ; cbr_pred  = cfg.ill
                 ; cbr_true  = cfg.ill
@@ -1735,7 +1782,8 @@ let cbranch cfg cond ~ifso ~ifnot =
 let mbranch cfg i ~targets =
   let targets = List.map (fun succ -> join_leading_to ~succ) targets in
   let succs   = Array.make (List.length targets) cfg.ill in
-  let mbr     = Mbr { mbr_i     = i
+  let mbr     = Mbr { mbr_num   = new_num ()
+                    ; mbr_i     = i
                     ; mbr_pred  = cfg.ill
                     ; mbr_succs = succs
                     ; mbr_lsucc = cfg.ill
@@ -1745,7 +1793,8 @@ let mbranch cfg i ~targets =
   mbr
 
 let return cfg i ~uses =
-  let ret = Ret { ret_i     = i
+  let ret = Ret { ret_num   = new_num ()
+                ; ret_i     = i
                 ; ret_pred  = cfg.ill
                 ; ret_succ  = cfg.ill
                 ; ret_lsucc = cfg.ill
@@ -1757,7 +1806,8 @@ let return cfg i ~uses =
 
 let impossible cfg ~succ =
   let succ = join_leading_to succ in
-  let imp  = Imp { imp_pred      = cfg.ill
+  let imp  = Imp { imp_num       = new_num ()
+                 ; imp_pred      = cfg.ill
                  ; imp_succ      = cfg.ill
                  ; imp_exit_succ = cfg.ill
                  ; imp_fx        = X.fx ()
@@ -1766,7 +1816,8 @@ let impossible cfg ~succ =
   let ()   = set_succ_n imp 1 ~succ:cfg.exit in
   imp
 
-let illegal cfg = Ill { ill_nx  = X.nx ()
+let illegal cfg = Ill { ill_num = new_num ()
+                      ; ill_nx  = X.nx ()
                       ; ill_cfg = cfg
                       }
 @
@@ -1801,6 +1852,11 @@ let eq node node' = match node, node' with
   | Boot,  Boot   -> true
   | _,     _      -> false
 @ 
+We uniquely number each node when it is created.
+<<graph utilities>>=
+let node_num = ref 0
+let new_num ()   = let n = !node_num in node_num := n + 1; n
+@
 <<graph utilities>>=
 let imposs = Impossible.impossible
 let undef f n = imposs (Printf.sprintf "%s: undefined on %s nodes" f n)
@@ -1826,10 +1882,12 @@ We merge two join points by combining the information in the second
 We also mutate the first join point ([[j1]]) to share the fields of
 the second join point.
 NOT USED, NOT EXPOSED, NOT EXPECTED TO WORK.  
-<<graph utilities>>=
+<<UNDEFINED graph utilities>>=
+(*
 let merge_joins j1 j2 succ lpred = match j1, j2 with
   | Joi j1, Joi j2 ->
-    { joi_labels = j1.joi_labels @ j2.joi_labels
+    { joi_num    = new_num ()
+    ; joi_labels = j1.joi_labels @ j2.joi_labels
     ; joi_cfg    = j1.joi_cfg
     ; joi_preds  = j1.joi_preds  @ j2.joi_preds
     ; joi_succ   = j2.joi_succ
@@ -1837,6 +1895,7 @@ let merge_joins j1 j2 succ lpred = match j1, j2 with
     ; joi_jx     = j2.joi_jx
     }
   | _                -> undef "merge_joins" "non-join"
+*)
 @
 
 Graph heads are defined as the entry node and the join points.
