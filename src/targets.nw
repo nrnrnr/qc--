@@ -18,6 +18,7 @@ supports.
 val dummy : Target2.t 
 val sparc : Target2.t
 val dummy_automaton : Rtl.aggregation -> Automaton2.spec
+val dummy_globals   : Rtl.aggregation -> Automaton2.spec
 @
 
 The targets are exported to Lua. When the following module is initalized
@@ -406,9 +407,6 @@ object (this)
         new loc (Rtl.cell Rtl.none 'm' byte_order w addr)
     
     method private hardware hint = match hint with 
-    | "IEEE 754 rounding modes"         -> new loc (fpcond 0)
-    | "IEEE 754 rounding mode"          -> new loc (fpcond 0)
-    | "IEEE 754 comparison results"     -> new loc (fpcond 1)
     | r     -> Impossible.impossible ("unknown hardware register "^r) 
     
     method allocate width hint = 
@@ -422,8 +420,47 @@ object (this)
             ; this#memloc (Block.base slot) width
             )
 end
+@
+
+The [[simple']] automaton is ill-suited for placing global variables
+because it uses [[Block.relative]] which introduces late compile-time
+constants. 
+
+<<DummyTarget>>=
+class global' (byte_order) (base:Rtl.exp): Automaton2.automaton =
+object (this)
+    val mutable _block  = Block.at base (*size*) 0 (*align*) 8  (* block *)
+    val mutable _frozen = false
+    
+    method freeze () =
+        let _ = _frozen <- true in
+        { A.overflow = _block; A.sp_value = base } (* return block *)
+    
+    method private memloc addr w = 
+        new loc (Rtl.cell Rtl.none 'm' byte_order w addr)
+    
+    method private hardware hint = match hint with 
+    | "IEEE 754 rounding modes"         -> new loc (fpcond 0)
+    | "IEEE 754 rounding mode"          -> new loc (fpcond 0)
+    | "IEEE 754 comparison results"     -> new loc (fpcond 1)
+    | r     -> Impossible.impossible ("unknown hardware register "^r) 
+    
+    method allocate width hint = 
+        let ()      = assert (_frozen = false) in          
+        match hint with 
+        | Some x -> this#hardware x
+        | None ->
+            let ()      = assert (width mod memsize = 0) in
+            let slot    = Block.at base (width/memsize) pointersize in
+            ( _block <- Block.cathl slot _block 
+            ; this#memloc (Block.base slot) width
+            )
+end
+@
+
 <<targets.ml>>=
 let dummy_automaton order = new DummyTarget.simple' order
+let dummy_globals order   = new DummyTarget.global' order
 @
 
 The [[cc]] value describes a calling convention. It is just a toy and
@@ -494,13 +531,13 @@ let target =
     ; T.memsize         = 8
     ; T.float           = "ieee754"
     ; T.charset         = "latin1"
-    ; T.globals         = new simple' Rtl.BigEndian
+    ; T.globals         = new global' Rtl.BigEndian
     ; T.is_rounding_mode = (fun loc -> loc = fpcond 0)
     ; T.goto            = goto
     ; T.jump            = goto
     ; T.call            = goto
     ; T.branch          = branch
-    ; T.cc              = StrUtil.lookup (StrUtil.list2map [("C--",cc)])
+    ; T.cc              = (fun _ -> cc)
     ; T.spaces          = spaces 
 (*    ; T.assign          = Spill.assign *)
     ; T.spill           = Spill.spill
