@@ -727,6 +727,24 @@ Backend.alpha =
   , emit      = Driver.assemble
   , compile   = Compile.file
   }   
+
+--
+-- PPC Backend (32 bit, big endian)
+--
+Backend.ppc =
+  { target    = Targets.ppc
+  , placevars = Placevar.context(Placevar.ppc, "ppc")
+  , widen     = Stages.assert('proper widths')
+  , preopt    = Optimize.remove_nops
+  , expand    = Expander.ppc
+  , liveness  = Liveness.liveness
+  , ralloc    = Ralloc.color
+  , freeze    = Dummy.layout
+  , rmvfp     = Stages.replace_vfp
+  , asm       = Asm.cmm
+  , emit      = Driver.assemble
+  , compile   = Compile.file
+  }   
 @
 
 % ------------------------------------------------------------------ 

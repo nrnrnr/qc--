@@ -1,0 +1,262 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% $Id$
+% ---------------------------------------------------------------------------
+
+Backend for PPC
+
+% ---------------------------------------------------------------------------
+\section{Module Structure}
+% ---------------------------------------------------------------------------
+<<ppc.mli>>=
+module Post : Postexpander.S
+module X    : Expander.S
+val target : Ast2ir.tgt
+val placevars : Ast2ir.proc -> Automaton.t
+@ 
+<<ppc.ml>>=
+module R    = Rtl
+module RP   = Rtl.Private
+module Up   = Rtl.Up
+module Down = Rtl.Dn
+module PX   = Postexpander
+
+module Spaces = struct
+  module S = Space.Standard32
+  let bo = Rtl.BigEndian
+  let id = Rtl.Identity
+  let m = S.m    bo [8;16;32]
+  let r = S.r 32 id [32]
+  let t = S.t    id [32]
+  let c = S.c 3  id [32]
+end
+
+module Post = struct
+  <<ppc postexpander>>
+end
+module X = Expander.IntFloatAddr (Post)
+<<target spec>>
+<<variable placer>>
+@ 
+% ---------------------------------------------------------------------------
+\section{Post Expander}
+% ---------------------------------------------------------------------------
+<<ppc postexpander>>=
+let byte_order = R.BigEndian
+let wordsize = 32
+
+let pc = R.reg ('c', 0, 32)
+let pc_lhs = pc
+let pc_rhs = pc
+
+module Address = struct
+  type t = Rtl.exp
+  let reg (space, n, w) = R.fetch (R.reg (space, n, w)) w
+end
+
+let talloc = ref None
+let get_talloc () = match !talloc with
+  | Some s -> s
+  | None   -> Impossible.impossible "Temp allocator not registered with postexpander"
+let remember_allocator ta = talloc := Some ta
+let talloc space = Talloc.Multiple.reg space (get_talloc ())
+
+type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
+let icontext = Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't'
+let fcontext = icontext
+let acontext = icontext
+let rcontext = (fun x y -> Impossible.unimp "Unsupported soft rounding mode")
+               ,fun r -> r = ('d', 0, 2)
+let bcontext = (fun x y -> Impossible.impossible "allocate from bcontext")
+               ,fun _ -> false
+
+module SM = Strutil.Map
+let operators = Context.standard icontext fcontext rcontext acontext bcontext
+let resmap    = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators
+let argmap    = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
+let arg_contexts   (n, _) = try SM.find n argmap 
+                            with Not_found -> Impossible.impossible 
+                                    ("cannot find arg context for "^n)
+let result_context (n, _) = try SM.find n resmap
+                            with Not_found -> Impossible.impossible
+                                    ("cannot find result context for "^n)
+
+let ui s = Printf.eprintf "*** unimp %s" s; []
+
+let tloc               t = Rtl.reg t
+let tval  ((_,_,w) as t) = R.fetch (tloc t) w
+let twidth (_,_,w)       = w
+let tstore       tmp exp = R.store (tloc tmp) exp (twidth tmp)
+
+let mem    assn w addr = R.mem assn 'm' byte_order w addr
+let memval assn w addr = R.fetch (mem assn w addr) w
+
+let load ~dst ~addr assn =
+  let w = twidth dst in
+  assert (w = wordsize);
+  [R.store (tloc dst) (memval assn w addr) w]
+    
+let store ~addr ~src assn =
+  let w = twidth src in
+  assert (w = wordsize);
+  [R.store (mem assn w addr) (tval src) w]
+
+let xload op ~dst ~addr w assn =
+  let ext = R.app (R.opr op [w; twidth dst]) [memval assn w addr]
+  in [tstore dst ext]
+
+let sxload = xload "sx"
+let zxload = xload "zx"
+
+let lostore ~addr ~src w assn =
+  let ext = R.app (R.opr "lobits" [twidth src; w]) [tval src]
+  in [R.store (mem assn w addr) ext w]
+
+let move ~dst ~src = [tstore dst (tval src)]
+
+let li ~dst const = [tstore dst (Up.const const)]
+let lix ~dst exp  = [tstore dst exp]
+
+let rtlop ~dst op tmpl = [tstore dst (R.app (Up.opr op) (List.map tval tmpl))]
+
+let binop ~dst op tmp1 tmp2 = rtlop dst op [tmp1;tmp2]
+let unop  ~dst op tmp       = rtlop dst op [tmp]
+
+let block_copy ~dst assn1 ~src assn2 width = ui "block_copy"
+
+let br ~tgt = [R.store pc_lhs (R.fetch (R.reg tgt) wordsize) wordsize]
+let b ~tgt  = [R.store pc_lhs (Up.const tgt) wordsize]
+let bc tmp1 op tmp2 ~tgt = [ R.guard (R.app (Up.opr op) [R.bool true]) (List.hd (b tgt))
+                           ; R.store (R.reg tmp1)
+                               (R.app (Up.opr op) [ (R.fetch (R.reg tmp1) wordsize)
+                                                  ; (R.fetch (R.reg tmp2) wordsize)
+                                                  ] )
+                               wordsize
+                           ]
+
+
+let bnegate rtl = rtl
+let callr ~tgt ~others = br tgt
+let call ~tgt ~others = b tgt
+let cut_to effects = [R.par (List.map Up.effect effects)]
+
+let don't_touch_me effects = false
+let opclass op = PX.Register
+
+let stack_depth = 8
+let stack_width = 80
+let stack_top_proxy_reg = ('\000', 0, 80)
+let stack_top_proxy = R.reg stack_top_proxy_reg
+
+let converts_stack_to_temp op = false
+let push ~addr assn = ui "push"
+let store_pop ~addr assn = ui "store_pop"
+let push_cvt op width ~addr assn = ui "push_cvt"
+let store_pop_cvt op width ~addr assn = ui "store_pop_cvt"
+let pushk const = ui "pushk_const"
+let pushk_cvt op width const = ui "pushk_cvt"
+let stack_op op = ui "stack_op"
+let bc_stack op ~tgt = ui "bc_stack"
+let is_stack_top_proxy loc = false
+@ 
+% ---------------------------------------------------------------------------
+\section{Target Specification}
+% ---------------------------------------------------------------------------
+<<target spec>>=
+(* Target.t strucure for PPC *)
+module T = Target
+module F = Mflow.MakeStandard (
+  struct
+    let pc_lhs = Post.pc_lhs
+    let pc_rhs = Post.pc_rhs
+    let ra_reg = Rtl.reg ('?', 99, 32) (* not used *)
+    let ra_offset = 00                 (* not used *)
+  end)
+
+module A = Automaton
+let ( *> ) = A.( *> )
+let globals base = 
+  let width w = if w <= 8 then 8 else if w <= 16 then 16 else Aux.round_up_to 32 w in
+  let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
+  A.at ~start:base (A.widen width *> A.align_to align *>
+  A.overflow ~memsize:8 ~byteorder:Post.byte_order ~growth:Memalloc.Up ~max_alignment:4)
+
+let spill f r l = []
+let reload f r l = []
+
+let target =
+  { T.name = "ppc"
+
+  (* basic metrics and spaces are OK *)
+  ; T.byteorder   = Post.byte_order  
+  ; T.wordsize    = Post.wordsize
+  ; T.pointersize = Post.wordsize
+  ; T.vfp         = Space.Standard32.vfp
+  ; T.alignment = 1
+  ; T.memsize = 8
+  ; T.spaces = [ Spaces.m; Spaces.r; Spaces.t; Spaces.c ]
+  ; T.distinct_addr_sp = false
+
+  (* Does the Pentium really implement IEEE 754?  I think so *)
+  ; T.float = "ieee754"
+
+  (* spill and reload are believed OK *)
+  ; T.spill  = spill
+  ; T.reload = reload
+
+  (* control flow is solid, except [[cutto]] is a lie *)
+  ; T.bnegate = F.bnegate (R.reg ('?', 99, 32))
+  ; T.goto    = F.goto
+  ; T.jump    = F.jump
+  ; T.call    = F.call
+  ; T.branch  = F.branch
+
+  ; T.cc_specs         = Dummy.dummy32b'.T.cc_specs
+  ; T.cc_spec_to_auto  = Dummy.dummy32b'.T.cc_spec_to_auto
+
+  (* global or hardware registers *)
+  ; T.globals  = globals
+  ; T.rounding_mode = R.reg ('?', 99, 32)
+  ; T.named_locs   = Strutil.assoc2map 
+                     ["IEEE 754 rounding mode", R.reg ('?', 99, 32)
+                     ;"IEEE 754 rounding results", R.reg ('?', 99, 32)
+                     ]
+  
+  (* bogosity *)
+  ; T.data_section = "data" (* NOT REALLY A PROPERTY OF THE TARGET MACHINE... *)
+  ; T.charset = "latin1" (* THIS IS NONSENSE!! NOT A PROPERTY OF THE MACHINE?? *)
+  } 
+@ 
+% ---------------------------------------------------------------------------
+\section{Variable Placer}
+% ---------------------------------------------------------------------------
+<<variable placer>>=
+let unimp               = Impossible.unimp
+let impossible          = Impossible.impossible
+
+let vfp = Vfp.mk 23
+
+let from_temps proc space = (* stage to allocate a temporary location *)
+  let allocator = Talloc.Multiple.loc proc.Proc.temps space in
+  let alloc ~width:w ~alignment:a ~hint:h = A.of_loc (allocator w) in
+  A.wrap (fun methods -> {A.allocate = alloc; A.freeze = methods.A.freeze})
+
+let placevars proc = 
+  let is_float    hint w = w <= 32 && hint = "float" in
+  let warn methods =
+    let alloc ~width:w ~alignment:a ~hint:h =
+      if w > 32 then
+        unimp (Printf.sprintf "%d-bit values not supported"  w);
+      methods.A.allocate w a h
+    in
+    {A.allocate = alloc; A.freeze = methods.A.freeze} in
+  Block.srelative vfp "variables placed in memory" A.at
+  (
+    A.wrap warn *>
+    A.choice
+      [ is_float,               A.widen (Aux.round_up_to ~multiple_of: 32); 
+        (fun h w -> w <= 32),   A.widen (fun _ -> 32) *> from_temps proc 't';
+        A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
+      ] *>
+    A.as_stage proc.Proc.priv
+  )
+@ 
