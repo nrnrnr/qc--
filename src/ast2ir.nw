@@ -36,7 +36,7 @@ This module need a whole bunch of other modules.
 module A  = Ast
 module E  = Error
 module R  = Rtl
-module FF = Fenv
+module F  = Fenv
 module G  = Fgraph
 @
 
@@ -188,12 +188,12 @@ let program env ir ds = true
 
 <<>>=
 let check map program =
-    let env        = FF.Dirty.create map                    in
+    let env        = F.Dirty.empty map                      in
     let env        = Elab.Env.global env program            in
     let env        = Elab.Check.global env program          in
-        if   FF.Dirty.errorFlag env
+        if   F.Dirty.errorFlag env
         then E.error "compilation aborted due to errors in static semantics"
-        env  FF.Clean.create env
+        else F.clean env
 @
 
 The function [[ast2ir]] scans, parses, and checks a file before the
