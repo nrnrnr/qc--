@@ -573,15 +573,16 @@ and switchStmt range e arms props stmt_succ =
     else
       RO.conjoin (RO.leu w (Rtl.bits lo w) e) (RO.leu w e (Rtl.bits hi w)) in
   let endswitch, g = G.make_target machine stmt_succ in
-  let g = G.forbidden machine g in
+  let default,   g = G.make_target machine (G.forbidden machine g) in
   let do_arm (ranges, body) (next_test, g) =
     let condition =
       Simplify.exp (
         List.fold_left (fun cond range -> RO.disjoin (e_in_interval range) cond)
                        (Rtl.bool false) ranges) in
-    let arm, g = G.make_target machine (stmts props body (G.branch machine endswitch g))in
+    let arm, g =
+      G.make_target machine (stmts props body (G.branch machine endswitch g)) in
     G.make_target machine (G.cbranch machine condition ~ifso:arm ~ifnot:next_test g) in
-  let (first_test, g) = List.fold_right do_arm arms (endswitch, g) in
+  let (first_test, g) = List.fold_right do_arm arms (default, g) in
   g
 @
 \subsubsection{Statements that go between procedures}

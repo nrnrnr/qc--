@@ -801,7 +801,7 @@ let shuffle (blockmap, predmap) pred_id succ_id =
   <<define [[shuffle_around]] and [[shuffle_between]]>>
   match GR.last (GR.unzip (UM.find pred_id blockmap)) with
   | GR.Mbranch _ | GR.Call _ | GR.Cut _ ->
-         shuffle_around blockmap predmap pred_id succ_id
+         shuffle_around  blockmap predmap pred_id succ_id
   | _ -> shuffle_between blockmap predmap pred_id succ_id in
 @
 First, we find the temps that are placed inconsistently between the nodes.
@@ -855,26 +855,27 @@ We update the successor's variable map to have each inconsistent temp in memory.
   Printf.eprintf "\n";
 	*)
 
-  let handle_pred blockmap pid =
-    let pred = UM.find pid blockmap in
+  let handle_pred blockmap pred_id =
+    let pred = UM.find pred_id blockmap in
+    let () = Debug.eprintf "dls" "handle_pred: pred is %s\n" (blockname pred) in
     let pred_vm =
-      try getVarOut pid
+      try getVarOut pred_id
       with Not_found ->
         (Cfgutil.print_cfg cfg;
          Printf.eprintf "node %s; pred %s\n" (blockname succ) (blockname pred);
          impossf "shuffling: pred node with no outmap") in
-		(*
-    VM.print (Printf.sprintf "\npred_vm %d:" (G.num pred)) pred_vm;
-    VM.print (Printf.sprintf "\nsucc_vm %d:" (G.num succ)) succ_vm;
-    printTempSet "pred_live_out\n" (get_live_out pred);
-    printTempSet "succ_live_in\n"  (get_live_in  succ);
-		*)
+    if Debug.on "dls" then VM.print "pred:" pred_vm;
+    if Debug.on "dls" then VM.print "succ:" succ_vm;
+		(* printTempSet "pred_live_out\n" (get_live_out pred); *)
+    (* printTempSet "succ_live_in\n"  (get_live_in  succ); *)
     let stores =
       RS.fold (fun t stores ->
                  match VM.var_locs' pred_vm t with
                  | {VM.mem = Some _} -> stores
-                 | {VM.reg = Some r} -> let s = store t r in
-                                        s::stores
+                 | {VM.reg = Some r} ->
+                     let s = store t r in
+                     let () = Debug.eprintf "dls" " spilling %s\n" (printReg r) in
+                     s::stores
                  | _ -> impossf "Unallocated temp in pred's outmap")
               temps [] in
     let pred_vm, nodes' = make_nodes' pred_vm stores in
@@ -887,8 +888,9 @@ We update the successor's variable map to have each inconsistent temp in memory.
     (*VM.print "new maps" pred_vm;*)
     let () = setVarOut pred_id pred_vm in
     blockmap in
-  let handle_pred blockmap pid =
-    try ignore (getVarOut pid); handle_pred blockmap pid with Not_found -> blockmap in
+  let handle_pred blockmap pred_id =
+    try ignore (getVarOut pred_id); handle_pred blockmap pred_id
+    with Not_found -> blockmap in
   let blockmap = List.fold_left handle_pred blockmap (UM.find succ_id predmap) in
   blockmap, predmap in
 @
