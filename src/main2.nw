@@ -308,6 +308,7 @@ Default = Default or {}
 Default.target          = Targets.dummy          -- target
 Default.optimizer       = Optimizer.default
 Default.linewidth       = 72                     -- output line width
+Default.asm             = Driver.dotasm          -- function nil -> asm
 
 function Default.runopt(cfg, frame)
   local opt = Default.optimizer
@@ -332,25 +333,35 @@ function Main.check ()
     if f == nil then error("Main.check: no file in Sys.argv[1]") end
         
     local ast = Driver.parse(f)
-    local asm = Driver.cmmasm("dummy") -- should go into Default
+    local asm = Default.asm ()
     Driver.check(ast,asm)
 end
 
 -- compile
 -- compile Sys.argv[1]
--- defaults: Default.target, Optimizer.default
+-- defaults: Default.target, Default.optimizer, Default.asm
 
 function Main.compile ()
     local f = Sys.argv[1] --- should do *all* arguments!
     if f == nil then error("Main.compile: no file in Sys.argv[1]") end
 
     local ast = Driver.parse(f)
-    local asm = Driver.cmmasm("dummy argument")
+    local asm = Default.asm(nil)    -- create assembler
     local env = Driver.check(ast,asm)
     local asm = Driver.compile(Default.runopt, ast, Default.target, env)
     Driver.assemble(asm)
 end    
 Main.c = Main.compile -- abbreviation
+
+-- dot
+-- compile Sys.argv[1], output CFG as dot(1) file
+-- defaults: Default.target, Default.optimizer
+
+function Main.dot ()
+    Default.asm = Driver.dotasm
+    Main.compile ()
+end    
+Main.d = Main.dot -- abbreviation
 
 -- pretty print AST
 -- prints Sys.argv[1] to stdout
@@ -366,27 +377,6 @@ function Main.pretty ()
 end    
 Main.p = Main.pretty -- abbreviation
 @
-
-Function [[Main.dot()]] is similar, except it throws away the assembly
-programming, instead emitting a dot graph for each procedure.
-
-<<qc--.lua>>=
-compressdot=1 -- true
-function Main.dot ()
-    local f = Sys.argv[1]
-    if f == nil then error("Main.dot: no file in Sys.argv[1]") end
-    Default.optimizer = seq { Default.optimizer()
-                            , single { name="writedot"
-                                     , fn=CG.writedot(compressdot)
-                                     }
-                            }
-    local ast = Driver.parse(f)
-    local asm = Driver.cmmasm("dummy argument")
-    local env = Driver.check(ast,asm)
-    Driver.compile(Default.runopt, ast, Default.target, env) -- result ignored
-end    
-@ 
-
 
  
 % ------------------------------------------------------------------  

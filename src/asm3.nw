@@ -5,10 +5,11 @@
 
 The code generators use this interface to access text-based and binary
 assemblers. Assembler aspects like symbols and relocatable addresses
-escape the assembler and become part of symbol tables and expressions.
-To avoid that all aspects of the compiler must be functorized over the
-different assemblers we have chosen to use a very polymorphic interface
-that uses Objective Caml's object system.
+(from module \module{symbol}) escape the assembler and become part of
+symbol tables and expressions.  To avoid that all aspects of the
+compiler must be functorized over the different assemblers we have
+chosen to use a very polymorphic interface that uses Objective Caml's
+object system.
 
 <<asm3.mli>>=
 <<interface>>
@@ -16,39 +17,7 @@ that uses Objective Caml's object system.
 <<interface>>
 @
 
-% ------------------------------------------------------------------ 
-\subsection{Important Class Types}
-% ------------------------------------------------------------------ 
-
-An assembler provides four important types that are implemented as
-objects: relocatable addresses, symbols, and the assembler
-itself. The first three offer methods to represent themselves for
-different kind of assemblers. We expect these interfaces to grow as we
-add more assemblers.  In principle an object created by one assembler
-can be used by any other. However, we do not expect this and allow an
-object to fail on certain methods that are incompatible with its
-intended use.  
-
-
 <<interface>>=
-class type instruction = object
-    method ast:     Ast.proc
-    method text:    string
-end    
-
-class type reladdr = object
-    method ast:     Ast.expr    
-
-    method add: reladdr -> reladdr  (* add to this        *)
-    method sub: reladdr -> reladdr  (* subtract from this *)
-end
-
-class type symbol = object
-    method text:    string
-
-    method reladdr: reladdr         (* this as a reladdr *)
-end
-
 class type assembler = object
     <<assembler methods>>
 end
@@ -70,16 +39,16 @@ below.
 
 <<assembler methods>>=
 (* etc *)
-method reladdr : Bits.bits -> reladdr   (* purely functional *)
+method reladdr: Bits.bits -> Symbol.reladdr   (* purely functional *)
 
 (* declarations *)
-method import : string -> symbol        (* any name is legal *)
-method export : string -> symbol        (* any name is legal *)
-method local  : string -> symbol        (* any name is legal *)
+method import : string -> Symbol.symbol        (* any name is legal *)
+method export : string -> Symbol.symbol        (* any name is legal *)
+method local  : string -> Symbol.symbol        (* any name is legal *)
 
 (* definitions *)
-method label  : symbol -> unit
-method const  : symbol -> Bits.bits -> unit
+method label  : Symbol.symbol -> unit
+method const  : Symbol.symbol -> Bits.bits -> unit
 
 (* section, location counter *)
 method section : string -> unit
@@ -89,13 +58,14 @@ method org     : int -> unit            (* set location counter       *)
 method align   : int -> unit            (* align location counter     *)
 method addloc  : int -> unit            (* increment location counter *)
 
-(* emit instructions - *)
-method instr   : instruction -> unit
+(* emit instructions - add more methods for different instr types *)
+(* The symbol belongs to the procedure defined by the CFG *)
+method cfg_instr   : Cfg3.cfg -> Symbol.symbol -> unit
 
 (* emit data *)
 method zeroes : int -> unit
 method value  : Bits.bits -> unit
-method addr   : reladdr -> unit
+method addr   : Symbol.reladdr -> unit
 
 
 (* comment *)

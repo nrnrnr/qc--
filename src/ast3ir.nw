@@ -824,13 +824,6 @@ let freeze (p:Proc.t) =
         ()
 
 <<Make procedure>>=
-class instr (p:Proc.t) (t:Target2.t): Asm3.instruction = object
-    method ast  = Cfg3.ast p.Proc.cfg p.Proc.symbol#text t
-    method text = assert false
-end    
-
-
-<<Make procedure>>=
 let proc env target optimizer asm (cconv,name,args,bdy) = 
     let symbol,scope = match F.findv name env with
                       | _,(F.Label(F.Proc (sym,scope)),_) -> sym,scope
@@ -906,7 +899,8 @@ let proc env target optimizer asm (cconv,name,args,bdy) =
         } in
     let () = optimizer i in
     let () = freeze i    in
-        asm#instr (new instr i target)  (* *)
+        asm#cfg_instr i.Proc.cfg i.Proc.symbol
+        
 @
         
 % ------------------------------------------------------------------ 

@@ -166,7 +166,7 @@ val prev:       node -> node option
   (* see module Cfgutil for convenience functions: fold_fwd, fold_bwd, first, limit *)
 
 (* add node to cfg, ensures: not (enumerated cfg) *)
-val gm_label:   cfg -> string -> Asm3.symbol -> succ:node -> node 
+val gm_label:   cfg -> string -> Symbol.symbol -> succ:node -> node 
 val gm_assign:  cfg -> Rtl.rtl -> succ:node -> node
 val gm_return:  cfg -> Rtl.rtl -> int * int -> node
 val gm_goto:    cfg -> Rtl.rtl -> node list -> node
@@ -256,7 +256,7 @@ the label nodes are never modified.
 
 \begin{itemize}
 
-\item [[gm_label:  cfg -> name:string -> Asm3.symbol -> node -> node]]:
+\item [[gm_label:  cfg -> name:string -> Symbol.symbol -> node -> node]]:
 Creates a label node before a given node. The node can be found under
 its [[name]] using [[lookup]]. When transformed to an assembly program
 the node is represented by its [[symbol]]. The [[name]] is meaningless
@@ -348,7 +348,7 @@ causes a node numbering to become \emph{absent}.
 
 
 \begin{verbatim}
-gm_label:   cfg -> name:string -> Asm3.symbol -> succ:node -> node 
+gm_label:   cfg -> name:string -> Symbol.symbol -> succ:node -> node 
 gm_assign:  cfg -> Rtl.rtl -> succ:node -> node
 gm_return:  cfg -> Rtl.rtl -> int * int -> node
 gm_goto:    cfg -> Rtl.rtl -> node list -> node
@@ -609,7 +609,7 @@ let conts ~cuts ~unwinds ~returns ~aborts =
 let mk () = new X.graph
 
 <<implementation>>=
-let gm_label cfg (label:string) (sym:Asm3.symbol) (succ:node) =
+let gm_label cfg (label:string) (sym:Symbol.symbol) (succ:node) =
     cfg#label label sym succ
 
 let lookup cfg (label:string) =
@@ -809,7 +809,7 @@ class type cfg = object
     method entry:       node            (* entry node of this *)
     method exit:        node            (* exit node of this *)
     method lookup:      string -> node  (* find labeled node *)
-    method label:       string -> Asm3.symbol -> node -> node
+    method label:       string -> Symbol.symbol -> node -> node
                                         (* insert label before node *)
     
     method add:         node -> unit    (* add node to this; 
@@ -980,7 +980,7 @@ label, once this node is defined.
 class type labl = object
     inherit node 
     method set_succ:    node -> unit       (* set succ for this *)
-    method set_symbol:  Asm3.symbol -> unit
+    method set_symbol:  Symbol.symbol -> unit
 end
 @
 
@@ -1412,7 +1412,7 @@ object(this)
     inherit vnode cfg Rtl.null as super
 
     val mutable _succ   = (None: node option) 
-    val mutable _symbol = (None: Asm3.symbol option)
+    val mutable _symbol = (None: Symbol.symbol option)
 
     method set_succ node =
         ( assert (_succ = None)

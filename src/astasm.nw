@@ -118,7 +118,7 @@ we never expect them to be called.
 
 <<Make>>=
 (* relocatable addresses *)
-class addr (ast: A.expr): Asm.reladdr = object
+class addr (ast: A.expr): Symbol.reladdr = object
     val _ast     = ast
 
     method ast   = _ast
@@ -126,21 +126,21 @@ class addr (ast: A.expr): Asm.reladdr = object
     method sub x = new addr (A.PrimOp ("sub", [(None,_ast);(None,x#ast)])) 
 end
 
-class sym (s:Asm.symbol): Asm.reladdr = 
+class sym (s:Symbol.symbol): Symbol.reladdr = 
 object(this)
     inherit addr (A.Fetch (A.Var(None,s#text)))
 end
 
-class const (k:Bits.bits): Asm.reladdr = 
+class const (k:Bits.bits): Symbol.reladdr = 
 object(this)
     inherit addr (A.Int(k, Some(A.BitsTy(Bits.width k))))
 end
 
 <<Make>>=
-class symbol (n:string) : Asm.symbol = 
+class symbol (n:string) : Symbol.symbol = 
 object(this)
     method text    = n
-    method reladdr = new sym (this :> Asm.symbol)
+    method reladdr = new sym (this :> Symbol.symbol)
 end
 @
 
@@ -214,10 +214,10 @@ object (this)
         _section
             
     (* define symbols *)        
-    method label (s: Asm.symbol) = 
+    method label (s: Symbol.symbol) = 
         this#append (A.Datum(A.Label s#text))
     
-    method const (s: Asm.symbol) (b:Bits.bits) =
+    method const (s: Symbol.symbol) (b:Bits.bits) =
         let bits = A.Int(b,Some (bits (Bits.width b))) in
         this#append (A.Decl(A.Const(None,s#text,bits)))
 
@@ -235,8 +235,11 @@ object (this)
             this#append (A.Datum(A.MemDecl(ty,A.FixSize(size),None)))
 
     (* instructions *)
-    method instr (i:Asm.instruction) = 
-        this#append (A.Procedure(i#ast))
+    method cfg_instr (cfg:Cfg3.cfg) (symbol:Symbol.symbol) = 
+        let ast = Cfg3.ast cfg symbol#text P.target in
+            this#append (A.Procedure(ast))
+
+    
 
     (* emit data *)
     method zeroes (n:int) =
@@ -256,7 +259,7 @@ object (this)
         let init = A.InitExprs([A.Int(v, Some ty)]) in
             this#append (A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
             
-    method addr (a:Asm.reladdr) = 
+    method addr (a:Symbol.reladdr) = 
         let ty   = pointer          in      (* e is of native pointer type *)
         let init = A.InitExprs([a#ast]) in
             this#append (A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))

@@ -32,19 +32,47 @@ let asm () = new asm ()
 \subsubsection{Classes for symbols, instructions, and addresses}
 % ------------------------------------------------------------------ 
 
-
 <<Make>>=
-class addr: Asm.reladdr = object
+class addr: Symbol.reladdr = object
     method ast   = unsupported "Dotasm.addr#ast"
     method add x = new addr
     method sub x = new addr
 end
 
-class symbol (n:string) : Asm.symbol = object
+class symbol (n:string) : Symbol.symbol = object
     method text    = n
     method reladdr = new addr
 end
 @
+
+% ------------------------------------------------------------------ 
+\subsubsection{Name Mangling}
+% ------------------------------------------------------------------ 
+
+We have to make sure that emitted names conform to {\small dot}'s
+syntax. The [[spec]] below allows to create a name mangler that ensures
+this.
+
+<<Make>>=
+let spec =
+    let reserved = [] in
+    let id = function
+        | 'a'..'z'
+        | '0'..'9'
+        | 'A'..'Z'
+        | '_'      -> true
+        | _        -> false in
+    let replace = function
+        | x when id x -> x
+        | _           -> '_' 
+        in    
+            { Mangle.preprocess = (fun x -> x)  
+            ; Mangle.replace    = replace
+            ; Mangle.reserved   = reserved
+            ; Mangle.avoid      = (fun x -> x ^ "_")
+            }
+@
+
 
 % ------------------------------------------------------------------ 
 \subsubsection{The assembler class}
@@ -78,9 +106,9 @@ object (this)
     method addloc n = ()
 
     (* instructions *)
-    method instr (i:Asm.instruction) = 
-        print_endline i#text
-        
+    method cfg_instr (cfg:Cfg3.cfg) (s:Symbol.symbol) =
+        let mangle  = Mangle.mk spec in
+        print_endline (Cfgutil.cfg2dot true (mangle s#text) cfg)
 
     method zeroes n = ()
     method value v = ()
@@ -88,6 +116,5 @@ object (this)
     method comment s = ()
     method emit = ()
 end
-
 
 

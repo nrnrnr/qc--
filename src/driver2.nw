@@ -117,6 +117,7 @@ module E   = Error
 module L   = Live.Make(Cfg3)
 module Asm = Astasm.Make(Personality)
 module IR  = Ast3ir
+module F   = Fenv.Clean
 
 <<Caml>>=
 type asm        = Asm3.assembler
@@ -205,6 +206,38 @@ are our current assemblers.
 <<Caml>>=
 let cmmasm () = Asm.asm () 
 let dotasm () = Dotasm.asm ()
+@
+
+The user specifies in the source code some target properties. They must
+be consistent with the actual target. We check this in
+[[consistency_check]].
+
+<<Caml>>=
+let consistency_check env (t:Target2.t) =
+    let int i = string_of_int i in
+    let msg property source target = 
+        let m = Printf.sprintf 
+                "mismatch of %s between source (%s) and target (%s)"
+                property source target 
+        in Error.error (m)
+    in match F.findEndianness env, t.Target2.byteorder with
+    | F.Big,    Rtl.LittleEndian -> msg "byteorder" "little" "big"
+    | F.Little, Rtl.BigEndian    -> msg "byteorder" "big"    "little"
+    | _ -> if F.findWordsize env <> t.Target2.wordsize then
+        msg "wordsize" (int (F.findWordsize env)) (int t.Target2.wordsize)
+    else if F.findMemsize env <> t.Target2.memsize then
+        msg "memsize" (int (F.findMemsize env)) (int t.Target2.memsize)
+    else if F.findPointersize env <> t.Target2.pointersize then
+        msg "pointer size" (int (F.findPointersize env)) 
+            (int t.Target2.pointersize)
+    else if F.findFloat env <> t.Target2.float then
+        msg "floating point standard" (F.findFloat env) t.Target2.float
+    else if F.findCharset env <> t.Target2.charset then
+        msg "charset" (F.findCharset env) t.Target2.charset
+    else
+        ()
+@
+
 
 <<Caml>>=
 let check (map,ast:ast) (asm:asm) =
@@ -220,7 +253,7 @@ let check (map,ast:ast) (asm:asm) =
 
 <<Caml>>=
 let compile (opt:optimize) (map,ast:ast) (target:target) (env:env)  =
-    let ()     = Target2.check target env        in   
+    let ()     = consistency_check env target in   
         IR.translate env target opt ast 
 
 let pretty (map,ast:ast) =
@@ -342,11 +375,9 @@ let builtins =
   ; "print"     , pf (Map.doc  **-> V.int **-> V.runit) Caml.print
   ; "pretty"    , pf (Map.ast  **-> V.result Map.doc)   Caml.pretty
   ; "scan"      , pf (V.string **-> V.runit)            Caml.scan
-  ; "version"   , pf (V.string **-> V.runit)  (fun _ -> Caml.version ())
-  ; "cmmasm"    , pf (V.string **-> V.result Map.asm) 
-                  (fun _ -> Caml.cmmasm ())
-  ; "dotasm"    , pf (V.string **-> V.result Map.asm) 
-                  (fun _ -> Caml.dotasm ())
+  ; "version"   , pf (V.unit   **-> V.runit)            Caml.version
+  ; "cmmasm"    , pf (V.unit   **-> V.result Map.asm)   Caml.cmmasm     
+  ; "dotasm"    , pf (V.unit   **-> V.result Map.asm)   Caml.dotasm
   ; "compile"   , func (Map.optimize  **-> Map.ast  
                                       **-> Map.target 
                                       **-> Map.env 

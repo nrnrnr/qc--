@@ -26,7 +26,7 @@ An {\rtl} expression can denote a compile-time, link-time, or run-time
 expression. This module offers functions [[compile]] and [[link]] to
 evaluate compile-time and link-time constants respectively. A
 compile-time constant is evaluated to a [[Bits.bits]] value, a link-time
-constant to an [[Asm3.reladdr]] value. 
+constant to an [[Symbol.reladdr]] value. 
 
 \begin{quote}\it
     Should translation of run-time expression be integrated here, too?
@@ -34,14 +34,14 @@ constant to an [[Asm3.reladdr]] value.
 \end{quote}
 
 <<rtleval.mli>>=
-type symbol = Asm3.symbol 
+type symbol = Symbol.symbol 
 type value  =
     | CompileTime of Bits.bits       (* compile-time *)
-    | LinkTime    of Asm3.reladdr    (* link-time    *)
+    | LinkTime    of Symbol.reladdr    (* link-time    *)
     
 (* raise Error.ErrorExn in case of error *)
-val link:     (Bits.bits -> Asm3.reladdr) -> Rtl.exp -> Asm3.reladdr 
-val eval:     (Bits.bits -> Asm3.reladdr) -> Rtl.exp -> value   
+val link:     (Bits.bits -> Symbol.reladdr) -> Rtl.exp -> Symbol.reladdr 
+val eval:     (Bits.bits -> Symbol.reladdr) -> Rtl.exp -> value   
 val compile:  Rtl.exp -> Bits.bits                            
 @
 
@@ -70,10 +70,10 @@ module R  = Rtl
 module RP = Rtl.Private
 
 
-type symbol = Asm3.symbol 
+type symbol = Symbol.symbol 
 type value  =
     | CompileTime of Bits.bits       (* compile-time *)
-    | LinkTime    of Asm3.reladdr    (* link-time    *)
+    | LinkTime    of Symbol.reladdr    (* link-time    *)
     
 <<Make>>
 @
@@ -130,7 +130,7 @@ using [[link_time]]. This is done, when the evaluation detects that a
 value is not a compile-time value.
 
 <<Make>>=
-let link_time (k:Bits.bits ->Asm3.reladdr) = function
+let link_time (k:Bits.bits ->Symbol.reladdr) = function
     | LT x -> x
     | CT x -> k x     
 @
@@ -142,7 +142,7 @@ a list of compile-time values, if all values are compile-time values, or
 a list of link-time values, if at least on value is a link-time value.
 
 <<Make>>=
-let lift (k:Bits.bits ->Asm3.reladdr) values = 
+let lift (k:Bits.bits ->Symbol.reladdr) values = 
     let rec choose = function
         | (cts, [])                     -> CT (List.rev cts)
         | (cts, (CT x)  :: xs)          -> choose (x::cts, xs)
@@ -166,7 +166,7 @@ whether the result will be a link- or compile-time value and also which
 [[apply]] function to call.
  
 <<Make>>= 
-and exp (k:Bits.bits->Asm3.reladdr) = function
+and exp (k:Bits.bits->Symbol.reladdr) = function
     | RP.Const c           -> const c 
     | RP.Fetch (loc,width) -> E.error "register/memory access in constant"
     | RP.App(op,exps)      -> 
