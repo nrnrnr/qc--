@@ -56,7 +56,7 @@ let blocks' frozen_block block list table p =
 
 let blocks x = blocks' (fun a -> (Automaton.freeze a).Automaton.overflow) x
 
-let freeze' apply_to_cfg p (stack:Block.t) = 
+let freeze' apply_to_proc p (stack:Block.t) = 
     let pointer  = p.Proc.target.Target.pointersize in            
     let eqns     = p.Proc.eqns @ (Block.constraints stack) in
     let solution = 
@@ -86,12 +86,16 @@ let freeze' apply_to_cfg p (stack:Block.t) =
                 if false then e else Impossible.impossible ("cannot find: "^x)
             )  
         | x -> x in
-    apply_to_cfg (Rtlutil.Subst2.exp ~guard ~map:subst) p.Proc.cfg
-
+    apply_to_proc guard subst p
 
 let freeze =
   let module G = Cfgx.M in
-  freeze' (fun f g -> G.iter_nodes (G.update_instr (fun i -> Simplify.rtl (f i))) g)
+  let apply_to_proc guard subst ({Proc.cfg = g; Proc.spans = spans} as p) =
+    let subst_rtl        = Rtlutil.Subst2.exp ~guard ~map:subst                 in
+    let subst_span (b,e) = (b, Rtlutil.Subst2.exp_of_exp ~guard ~map:subst e)   in
+    G.iter_nodes (G.update_instr (fun i -> Simplify.rtl (subst_rtl i))) g;
+    p.Proc.spans <- List.map (fun (l, ss) -> (l, List.map subst_span ss)) spans in
+  freeze' apply_to_proc
   (* unsafe simplifier is not needed until vfp is replaced *)
 @
 <<complain of unsolved [[eqns]] for [[p]]>>=
