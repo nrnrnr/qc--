@@ -29,8 +29,8 @@ type 'a rr = RR of ('a -> dynamic) * (dynamic -> 'a)
 
 @ We need to make public the conrol operators as well
 <<tdpe.mli>>=
-  module Ctrl : CtrlPlus.CONTROL with type ans = dynamic
-  (*module Ctrl : CtrlJump.SELFCONTROL with type ans = dynamic*)
+  (*module Ctrl : CtrlPlus.CONTROL with type ans = dynamic*)
+  module Ctrl : CtrlJump.SELFCONTROL with type ans = dynamic
 
 @ We define the combinators for the standard type constructors.  [[a']]
 is a the RR pair for a dynamic base type. The [[arrow]] pair is
@@ -79,8 +79,8 @@ val nbe' : 'a rr -> dynamic -> 'a
 @ Typical implementation of Tdpe
 
 <<tdpe.ml>>=
-module Ctrl = CtrlPlus.Control(struct type ans = dynamic end)
-(*module Ctrl = CtrlJump.Control(struct type ans = dynamic end)*)
+(*module Ctrl = CtrlPlus.Control(struct type ans = dynamic end)*)
+module Ctrl = CtrlJump.Control(struct type ans = dynamic end)
 
 module S = Syntax
 
@@ -248,7 +248,8 @@ let arra' = arrowN(a',a')
 @ The up/down arrows.
 <<tdpe.ml>>=
 let nbe (RR (reify, reflect)) v
-    = (Tools.resetGen(); reify v)
+    = (Tools.resetGen();
+       Ctrl.run_thunk (fun () -> reify v))
 let nbe' (RR (reify, reflect)) e
     = reflect e
 

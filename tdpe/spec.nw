@@ -6,8 +6,8 @@
 \section{Introduction}
 
 In this module, we define an interface to program specialization and we
-provide several specialization instances. The specialization instances
-are the available RTL-optimization functions.
+provide several specialization targets. The specialization targets are
+the available RTL-optimization functions.
 
 For the purpose of generality, a ``specializable'' term is defined with
 a [[TEST_INSTANCE]] module.
@@ -20,8 +20,12 @@ module, with the help of a functor.
 module type TEST =
     <<specialization signature>>
 module MkTest(B : TEST_INSTANCE) : TEST
-@ All the tests that we provide at this point: identity function,
-forward substitutions, locations read and written by an instruction.
+@ 
+\section{Specialization targets}
+\label{sec:targets}
+The specialization targets that we provide at this point are the
+following: identity function, forward substitutions, locations read and
+written by an instruction.
 <<spec.mli>>=
 module IdTest            : TEST
 module IdTranslationTest : TEST
@@ -32,10 +36,11 @@ module FrwdMergeTest  : TEST
 
 module ReadWriteTest  : TEST
 module ReadWriteTest' : TEST
+(*module ReadWriteTestS : TEST*)
 
-@ A [[TEST_INSTANCE]] module, defines a specializable term by specifying
-the term, its type, its associated Tdpe combinator, and the name of
-residual value.
+@ A [[TEST_INSTANCE]] module, defines a specialization target by
+specifying the term, its type, its associated Tdpe combinator, and the
+name of residual value.
 <<specialization instance signature>>=
   sig
     type tau
@@ -97,10 +102,9 @@ module MkTest(Ts : TEST_INSTANCE) =
       print_newline()
   end
 
-@ \subsection{Test instances}
-
-The [[Id]] instance may be used to visualize the reflection over the
-[[instruction]] type.
+@ \subsection{Specialization targets} Specialization targets are defined
+as instances of the [[TEST_INSTANCE]] signature.  The [[Id]] instance
+may be used to visualize the reflection over the [[instruction]] type.
 <<test instances>>=
 module Id : TEST_INSTANCE =
   struct
@@ -123,8 +127,9 @@ module IdTranslation : TEST_INSTANCE =
   end
 
 @ \subsubsection{Forward substitution instances}
-The several instances of forward-substitution functions have the same
-type (and combinator). Therefore, we abstract over them.
+
+There are several instances of forward-substitution functions which have
+the same type (and TDPE combinator). Therefore, we abstract over them.
 <<test instances>>=
 module type FS_INSTANCE =
   sig
@@ -143,7 +148,6 @@ module MkFS(B : FS_INSTANCE) : TEST_INSTANCE =
     let termName = B.termName
   end
 @
-
 The [[FSI]] instance is associated with the first implementation of
 forward substitution on RTLs.
 <<test instances>>=
@@ -172,8 +176,8 @@ module FS = MkFS(FSI)
 module FS' = MkFS(FSI')
 module FM = MkFS(FMI)
 
-@ \subsubsection{The read-write instances}
-The two [[read_write_]] functions are also treated generically.
+@ \subsubsection{The read-write instances} There are two [[read_write_]]
+functions with the same type: they are also treated generically.
 <<test instances>>=
 module type RW_INSTANCE =
     sig
@@ -229,7 +233,7 @@ module MkRW(B : RW_INSTANCE) : TEST_INSTANCE =
 
 module RWI : RW_INSTANCE =
   struct
-    let term = G.read_write_setsInstr
+    let term = G.read_write_listsInstr
     let termName = "read_write_setsInstr"
   end
 module RWI' : RW_INSTANCE =
@@ -237,6 +241,16 @@ module RWI' : RW_INSTANCE =
     let term = G.read_write_locsInstr
     let termName = "read_write_locsInstr'"
   end
+
+(*module RWS : TEST_INSTANCE =
+  struct
+    let term = G.read_write_setsInstr
+    let termName = "read_write_locsInstr'"
+    type tau =
+        T.dynamic -> T.dynamic * T.dynamic
+    let combinator =
+      T.arrowStub("instruction",T.a',T.pair(T.a',T.a'))
+  end*)
 
 module RW = MkRW(RWI)
 module RW' = MkRW(RWI')
@@ -253,5 +267,6 @@ module FrwdMergeTest  = MkTest(FM)
 
 module ReadWriteTest = MkTest(RW)
 module ReadWriteTest' = MkTest(RW')
+(*module ReadWriteTestS = MkTest(RWS)*)
 @ 
 

@@ -35,9 +35,12 @@ val frwdInstMerge : subst_type
 val identity : Machine.t -> Machine.t
 val identInstr : Machine.t -> Machine.t option
 
-val read_write_setsInstr : 'a read_write_type
+val read_write_listsInstr : 'a read_write_type
 val read_write_locsInstr : 'a read_write_type
 
+val read_write_setsInstr : Machine.t -> Register.Set.t * Register.Set.t
+
+    
 @ \section{Implementation}
 <<generic.ml>>=
 <<type definitions>>
@@ -66,8 +69,11 @@ let identity instruction = instruction
 let identInstr i1 = M.recognizeInstruction (M.encode i1)
 
 
-let read_write_setsInstr read write instruction zero =
+let read_write_listsInstr read write instruction zero =
   Rtlutil.read_write_lists read write (M.encode instruction) zero
+
+let read_write_setsInstr instruction =
+  Rtlutil.read_write_sets (M.encode instruction)
 
 let read_write_locsInstr read write instruction zero =
   ReadWrite.read_write_sets
