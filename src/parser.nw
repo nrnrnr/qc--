@@ -897,8 +897,8 @@ property    :   MEMSIZE INT                    { A.Memsize(str2int $2)      }
 properties  :   properties property            { $2 :: $1 }
             |   /**/                           { []       }
 <<parse.mly>>=
-span        :   SPAN exprAt COMMA expr
-                LBRACE sections RBRACE         { $2, $4, rev $6 }
+span        :   SPAN sexprAt exprAt
+                LBRACE sections RBRACE         { $2, $3, rev $5 }
 <<parse.mly>>=
 datumAt     :   datum                          { A.DatumAt($1,p()) }
 datum       :   ID COLON                       { A.Label $1 }
@@ -1049,7 +1049,7 @@ returnto    :   LT sexprAt SLASH sexprAt GT    { Some($2,$4) }
 stmtAt      :   stmt                           { A.StmtAt($1,p())     }
 stmt        :   SEMI                           { A.EmptyStmt          }
             |   ID COLON                       { A.LabelStmt $1       }
-            |   SPAN exprAt COMMA exprAt body        { A.SpanStmt($2,$4,$5) }
+            |   SPAN sexprAt sexprAt body      { A.SpanStmt($2,$3,$4) }
             |   nameOrMems EQUAL exprs SEMI       
                 { A.AssignStmt($1,List.map (fun e -> None,e) $3)  }
 
@@ -1123,13 +1123,13 @@ sexpr       :   INT                            { A.Int($1, None)      }
             |   CHAR                           { A.Char($1, None)     }
             |   CHAR CCOLON tyAt               { A.Char($1, Some $3)  }
             |   nameOrMemAt0                   { A.Fetch $1           }
-            |   PRIMOP actls                   { A.PrimOp($1,$2)      }
            /*   allow to write nullary OPs like constants */
             |   PRIMOP                         { A.PrimOp($1,[]) }
+            |   LPAREN exprAt RPAREN           { $2                   }
 <<parse.mly>>=
 exprAt      :   expr                           { A.ExprAt($1, p())    }
 expr:       |   sexpr                          { $1                   }
-            |   LPAREN exprAt RPAREN           { $2                   }
+            |   PRIMOP actls                   { A.PrimOp($1,$2)      }
 
             |   exprAt PLUS       exprAt       { A.BinOp($1,$2,$3) }
             |   exprAt MINUS      exprAt       { A.BinOp($1,$2,$3) }
