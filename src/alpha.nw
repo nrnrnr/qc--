@@ -133,7 +133,7 @@ type operator   = Rtl.Private.opr
 The postexpander may need to allocate temporaries.
 <<Alpha postexpander>>=
 let talloc = ref None
-let register_talloc ta = talloc := Some ta
+let remember_allocator ta = talloc := Some ta
 @
 \paragraph{Contexts}
 There is no distinction between an integer and an address.
@@ -150,6 +150,7 @@ module Address = struct
     type t               = Rtl.exp
     let reg (_,_,w as r) = R.fetch (R.reg r) w 
 end
+include Postexpander.Nostack(Address)
 @
 
 % ------------------------------------------------------------------ 
@@ -541,7 +542,7 @@ let target =
                               | _      -> c_convention
                               )
     ; T.globals             = globals
-    ; T.is_rounding_mode    = (fun loc -> false)
+    ; T.rounding_mode       = Rtl.reg ('d', 0, 2)
     ; T.named_locs          = Strutil.Map.empty
     ; T.data_section        = "data"
     ; T.charset             = "latin1" (* REMOVE THIS FROM TARGET.T *)

@@ -673,15 +673,25 @@ let project_opt_strings v =
   with V.Projection (_, _) -> (V.optlist V.string).V.project v
 
 let stage_name g v =
+  let namestring = function
+    | V.Fallback s -> s
+    | V.Global s -> s
+    | V.Element (s, V.String n) -> s ^ "." ^ n
+    | V.Element (s, V.Number x) -> s ^ "[" ^ string_of_int (int_of_float x) ^ "]"
+    | V.Element (s, _         ) -> s ^ ".?" in
   match V.objname g v with
-  | None -> "<anonymous stage>"
-  | Some (V.Fallback s) -> s
-  | Some (V.Global s) -> s
-  | Some (V.Element (s, V.String n)) -> s ^ "." ^ n
-  | Some (V.Element (s, V.Number x)) -> s ^ "[" ^ string_of_int (int_of_float x) ^ "]"
-  | Some (V.Element (s, _         )) -> s ^ ".?"
+  | Some n -> namestring n
+  | None ->
+      match v with
+      | V.Table stage ->
+          let fn = V.Table.find stage (embedString "fn") in
+          (match V.objname g v with
+          | Some n -> namestring n
+          | None -> "<anonymous stage (as table)")
+      | _ ->
+          Printf.sprintf "<anonymous stage (as %s)>" (V.to_string v)
 
-
+<<stage map>>=
 let projectStage g stage' = match stage' with
   | V.Function (_, f) ->
     { name = stage_name g stage'
@@ -705,7 +715,7 @@ let projectStage g stage' = match stage' with
       }
   | _ -> raise (V.Projection (stage', "stage"))
 
-
+<<stage map>>=
 let isStage g stage' = match stage' with
   | V.Function (_, f) -> stageFn.V.is stage'
   | V.Table stage ->

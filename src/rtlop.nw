@@ -22,7 +22,6 @@ module Translate : sig
     val operator: op:string -> Types.ty list -> Types.ty * Rtl.opr (*ErrorExn*)
 end
 @
-
 % ------------------------------------------------------------------ 
 \subsection{Types of RTL operators}
 % ------------------------------------------------------------------ 
@@ -34,10 +33,10 @@ operator.
 [[Mono]] takes an [[Rtl.opr]] operator and reconstructs its monomorphic
 type (using the width list inside the operator). If the operator is
 unknown, [[Not_found]] is raised.
-
 <<rtlop.mli>>=
 module Types: sig
-    val mono: Rtl.opr -> Types.monotype      (* Not_found *)
+  val mono: Rtl.opr -> Types.monotype      (* Not_found *)
+  val has_floating_result : Rtl.opr -> bool
 end
 @
 
@@ -88,103 +87,110 @@ module T = Types
 
 let (-->) = T.proc 
 
-let ops = Strutil.assoc2map
-        [  "NaN"        , [T.var 1] --> T.var 2
-        ;  "add"        , [T.var 1; T.var 1] --> T.var 1
-        ;  "and"        , [T.var 1; T.var 1] --> T.var 1
-        ;  "bit"        , [T.bool] --> (T.fixbits 1)
-        ;  "bool"       , [T.fixbits 1] --> T.bool
-        ;  "borrow"     , [T.var 1; T.var 1; T.fixbits 1] --> (T.fixbits 1)
-        ;  "carry"      , [T.var 1; T.var 1; T.fixbits 1] --> (T.fixbits 1)
-        ;  "com"        , [T.var 1] --> T.var 1
-        ;  "conjoin"    , [T.bool; T.bool] --> T.bool
-        ;  "disjoin"    , [T.bool; T.bool] --> T.bool
-        ;  "div"        , [T.var 1; T.var 1] --> T.var 1
-        ;  "divu"       , [T.var 1; T.var 1] --> T.var 1
-        ;  "eq"         , [T.var 1; T.var 1] --> T.bool
-        ;  "f2f"        , [T.var 1; T.fixbits 2] --> T.var 2
-        ;  "f2f_bogus"  , [T.var 1] --> T.var 2
-        ;  "f2i"        , [T.var 1; T.fixbits 2] --> T.var 2
-        ;  "fabs"       , [T.var 1] --> T.var 1
-        ;  "fadd"       , [T.var 1; T.var 1; T.fixbits 2] --> T.var 1
-        ;  "fcmp"       , [T.var 1; T.var 1] --> (T.fixbits 2)
-        ;  "fdiv"       , [T.var 1; T.var 1; T.fixbits 2] --> T.var 1
-        ;  "feq"        , [T.var 1; T.var 1] --> T.bool
-        ;  "fge"        , [T.var 1; T.var 1] --> T.bool
-        ;  "fgt"        , [T.var 1; T.var 1] --> T.bool
-        ;  "fle"        , [T.var 1; T.var 1] --> T.bool
-        ;  "float_eq"   , [] --> (T.fixbits 2)
-        ;  "float_gt"   , [] --> (T.fixbits 2)
-        ;  "float_lt"   , [] --> (T.fixbits 2)
-        ;  "flt"        , [T.var 1; T.var 1] --> T.bool
-        ;  "fmul"       , [T.var 1; T.var 1; T.fixbits 2] --> T.var 1
-        ;  "fmulx"      , [T.var 1; T.var 1] --> T.double 1
-        ;  "fne"        , [T.var 1; T.var 1] --> T.bool
-        ;  "fneg"       , [T.var 1] --> T.var 1
-        ;  "fordered"   , [T.var 1; T.var 1] --> T.bool
-        ;  "fsqrt"      , [T.var 1; T.fixbits 2] --> T.var 1
-        ;  "fsub"       , [T.var 1; T.var 1; T.fixbits 2] --> T.var 1
-        ;  "funordered" , [T.var 1; T.var 1] --> T.bool
-        ;  "ge"         , [T.var 1; T.var 1] --> T.bool
-        ;  "geu"        , [T.var 1; T.var 1] --> T.bool
-        ;  "gt"         , [T.var 1; T.var 1] --> T.bool
-        ;  "gtu"        , [T.var 1; T.var 1] --> T.bool
-        ;  "i2f"        , [T.var 1; T.fixbits 2] --> T.var 2
-        ;  "le"         , [T.var 1; T.var 1] --> T.bool
-        ;  "leu"        , [T.var 1; T.var 1] --> T.bool
-        ;  "lobits"     , [T.var 1] --> T.var 2
-        ;  "lt"         , [T.var 1; T.var 1] --> T.bool
-        ;  "ltu"        , [T.var 1; T.var 1] --> T.bool
-        ;  "minf"       , [] --> T.var 1
-        ;  "mod"        , [T.var 1; T.var 2] --> T.var 2
-        ;  "modu"       , [T.var 1; T.var 2] --> T.var 2
-        ;  "mul"        , [T.var 1; T.var 1] --> T.double 1 
-        ;  "mul_trunc"  , [T.var 1; T.var 1] --> T.var 1 
-        ;  "mulu"       , [T.var 1; T.var 1] --> T.double 1 
-        ;  "mzero"      , [] --> T.var 1
-        ;  "ne"         , [T.var 1; T.var 1] --> T.bool
-        ;  "neg"        , [T.var 1] --> T.var 1
-        ;  "not"        , [T.bool] --> T.bool
-        ;  "or"         , [T.var 1; T.var 1] --> T.var 1
-        ;  "pinf"       , [] --> T.var 1
-        ;  "popcnt"     , [T.var 1] --> (T.fixbits 1)
-        ;  "pzero"      , [] --> T.var 1
-        ;  "quot"       , [T.var 1; T.var 1] --> T.var 1
-        ;  "rem"        , [T.var 1; T.var 1] --> T.var 1
-        ;  "rotl"       , [T.var 1; T.var 1] --> T.var 1
-        ;  "rotr"       , [T.var 1; T.var 1] --> T.var 1
-        ;  "round_down" , [] --> T.fixbits 2
-        ;  "round_nearest", [] -->T.fixbits 2
-        ;  "round_up"   , [] --> T.fixbits 2
-        ;  "round_zero" , [] --> T.fixbits 2
-        ;  "shl"        , [T.var 1; T.var 1] --> T.var 1
-        ;  "shra"       , [T.var 1; T.var 1] --> T.var 1
-        ;  "shrl"       , [T.var 1; T.var 1] --> T.var 1
-        ;  "sub"        , [T.var 1; T.var 1] --> T.var 1
-        ;  "sx"         , [T.var 1] --> T.var 2
-        ;  "unordered"  , [] --> (T.fixbits 2)
-        ;  "xor"        , [T.var 1; T.var 1] --> T.var 1
-        ;  "zx"         , [T.var 1] --> T.var 2
-           (* not C-- operators, but might show up in RTLs *)    
-        ;  "bitExtract" , [T.var 1; T.var 1] --> T.var 2
-        ;  "bitInsert"  , [T.var 1; T.var 1; T.var 2] --> T.var 1
-        ;  "bitTransfer", [T.var 1; T.var 1; T.var 1; T.var 1; T.var 1] 
-                          --> T.var 1 
-                          
-        ] 
+let optable = 
+  let float = true in
+  let int   = false in
+  let code2 = false in
+  let bool  = false in
+  [  "NaN"          , float, [T.var 1] --> T.var 2
+  ;  "add"          , int,   [T.var 1; T.var 1] --> T.var 1
+  ;  "and"          , int,   [T.var 1; T.var 1] --> T.var 1
+  ;  "bit"          , int,   [T.bool] --> T.fixbits 1
+  ;  "bool"         , bool,  [T.fixbits 1] --> T.bool
+  ;  "borrow"       , int,   [T.var 1; T.var 1; T.fixbits 1] --> T.fixbits 1
+  ;  "carry"        , int,   [T.var 1; T.var 1; T.fixbits 1] --> T.fixbits 1
+  ;  "com"          , int,   [T.var 1] --> T.var 1
+  ;  "conjoin"      , bool,  [T.bool; T.bool] --> T.bool
+  ;  "disjoin"      , bool,  [T.bool; T.bool] --> T.bool
+  ;  "div"          , int,   [T.var 1; T.var 1] --> T.var 1
+  ;  "divu"         , int,   [T.var 1; T.var 1] --> T.var 1
+  ;  "eq"           , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "f2f"          , float, [T.var 1; T.fixbits 2] --> T.var 2
+  ;  "f2f_bogus"    , float, [T.var 1] --> T.var 2
+  ;  "f2i"          , int,   [T.var 1; T.fixbits 2] --> T.var 2
+  ;  "fabs"         , float, [T.var 1] --> T.var 1
+  ;  "fadd"         , float, [T.var 1; T.var 1; T.fixbits 2] --> T.var 1
+  ;  "fcmp"         , code2, [T.var 1; T.var 1] --> T.fixbits 2
+  ;  "fdiv"         , float, [T.var 1; T.var 1; T.fixbits 2] --> T.var 1
+  ;  "feq"          , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "fge"          , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "fgt"          , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "fle"          , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "float_eq"     , code2, [] --> T.fixbits 2
+  ;  "float_gt"     , code2, [] --> T.fixbits 2
+  ;  "float_lt"     , code2, [] --> T.fixbits 2
+  ;  "flt"          , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "fmul"         , float, [T.var 1; T.var 1; T.fixbits 2] --> T.var 1
+  ;  "fmulx"        , float, [T.var 1; T.var 1] --> T.double 1
+  ;  "fne"          , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "fneg"         , float, [T.var 1] --> T.var 1
+  ;  "fordered"     , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "fsqrt"        , float, [T.var 1; T.fixbits 2] --> T.var 1
+  ;  "fsub"         , float, [T.var 1; T.var 1; T.fixbits 2] --> T.var 1
+  ;  "funordered"   , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "ge"           , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "geu"          , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "gt"           , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "gtu"          , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "i2f"          , float, [T.var 1; T.fixbits 2] --> T.var 2
+  ;  "le"           , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "leu"          , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "lobits"       , int,   [T.var 1] --> T.var 2
+  ;  "lt"           , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "ltu"          , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "minf"         , float, [] --> T.var 1
+  ;  "mod"          , int,   [T.var 1; T.var 2] --> T.var 2
+  ;  "modu"         , int,   [T.var 1; T.var 2] --> T.var 2
+  ;  "mul"          , int,   [T.var 1; T.var 1] --> T.double 1 
+  ;  "mul_trunc"    , int,   [T.var 1; T.var 1] --> T.var 1 
+  ;  "mulu"         , int,   [T.var 1; T.var 1] --> T.double 1 
+  ;  "mzero"        , float, [] --> T.var 1
+  ;  "ne"           , bool,  [T.var 1; T.var 1] --> T.bool
+  ;  "neg"          , int,   [T.var 1] --> T.var 1
+  ;  "not"          , bool,  [T.bool] --> T.bool
+  ;  "or"           , int,   [T.var 1; T.var 1] --> T.var 1
+  ;  "pinf"         , float, [] --> T.var 1
+  ;  "popcnt"       , int,   [T.var 1] --> T.fixbits 1
+  ;  "pzero"        , float, [] --> T.var 1
+  ;  "quot"         , int,   [T.var 1; T.var 1] --> T.var 1
+  ;  "rem"          , int,   [T.var 1; T.var 1] --> T.var 1
+  ;  "rotl"         , int,   [T.var 1; T.var 1] --> T.var 1
+  ;  "rotr"         , int,   [T.var 1; T.var 1] --> T.var 1
+  ;  "round_down"   , code2, [] --> T.fixbits 2
+  ;  "round_nearest", code2, [] --> T.fixbits 2
+  ;  "round_up"     , code2, [] --> T.fixbits 2
+  ;  "round_zero"   , code2, [] --> T.fixbits 2
+  ;  "shl"          , int,   [T.var 1; T.var 1] --> T.var 1
+  ;  "shra"         , int,   [T.var 1; T.var 1] --> T.var 1
+  ;  "shrl"         , int,   [T.var 1; T.var 1] --> T.var 1
+  ;  "sub"          , int,   [T.var 1; T.var 1] --> T.var 1
+  ;  "sx"           , int,   [T.var 1] --> T.var 2
+  ;  "unordered"    , code2, [] --> T.fixbits 2
+  ;  "xor"          , int,   [T.var 1; T.var 1] --> T.var 1
+  ;  "zx"           , int,   [T.var 1] --> T.var 2
+     (* not C-- operators, but might show up in RTLs *)    
+  ;  "bitExtract"   , int,   [T.var 1; T.var 1] --> T.var 2
+  ;  "bitInsert"    , int,   [T.var 1; T.var 1; T.var 2] --> T.var 1
+  ;  "bitTransfer"  , int,   [T.var 1; T.var 1; T.var 1; T.var 1; T.var 1] --> T.var 1 
+                    
+  ] 
 
-let poly op = 
-    try
-        Strutil.Map.find op ops 
-    with Not_found ->
-        ( Printf.eprintf "cannot find '%s' operator" op
-        ; raise Not_found
-        )
+let optypes  = Strutil.assoc2map (List.map (fun (o, _, t) -> (o, t)) optable)
+let opfloats = Strutil.assoc2map (List.map (fun (o, f, _) -> (o, f)) optable)
+
+let findopname name t =
+  try Strutil.Map.find name t
+  with Not_found ->
+    ( Printf.eprintf "unknown RTL operator '%%%s'" name
+    ; raise Not_found
+    )
+let findop op = findopname (fst (Rtl.Dn.opr op))
+
         
-let mono op =
-    let (o,w) = Rtl.Dn.opr op in
-    let ptype = poly o             in
-        Types.instantiate ptype w
+let poly op = findop op optypes
+let mono op = let _, ws = Rtl.Dn.opr op in Types.instantiate (findop op optypes) ws
+
+let has_floating_result op = findop op opfloats
 @
 
 
@@ -241,18 +247,16 @@ the result. Such a size always becomes the last element in the width
 list of an operator. 
 <<Translate>>=
 let operator ~op argtys =
-    try 
-        let op, retsize = T.split (unalias op)             in
-        ( match retsize with
-        | None ->   let return      = T.appl (Types.poly op) argtys    in
-                    let widthlist   = T.widthlist (Types.poly op) argtys in
-                    return, Rtl.opr op widthlist 
-        | Some n -> let return    = T.bits n in
-                    let widthlist = (T.widthlist (Types.poly op) argtys)@[n] in
-                    return, Rtl.opr op widthlist
-        )            
-    with
-    | Not_found  -> Error.error ("unknown operator "^op)
-    | T.MatchExn -> Error.error "type error in application"
+  try 
+    let op, retsize = T.split (unalias op) in
+    let opty        = Types.findopname op Types.optypes in
+    let argwidths   = T.widthlist opty argtys in
+    ( match retsize with
+    | None   -> T.appl opty argtys, Rtl.opr op argwidths
+    | Some n -> T.bits n,           Rtl.opr op (argwidths@[n])
+    )            
+  with
+  | Not_found  -> Error.error ("unknown operator "^op)
+  | T.MatchExn -> Error.error "type error in application"
 @        
 

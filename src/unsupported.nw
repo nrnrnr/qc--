@@ -1,0 +1,58 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Announcing unsupported constructs}
+
+This is a central place at which to announce all the things that a
+back end does not support.
+The virtue is that each comes with a lengthy explanation of what to do
+to fix the problem.
+<<unsupported.mli>>=
+exception Unsupported of int
+val explain : int -> unit
+
+  (* Each function below always raises Unsupported *)
+
+val widen_float : int -> 'a
+@ 
+<<unsupported.ml>>=
+exception Unsupported of int
+type state = { mutable n : int; mutable explanations : string list list }
+let state = { n = 0; explanations = [] }
+type fail = unit
+
+let rememberf f ex =
+  let n = state.n in
+  state.n <- n + 1;
+  state.explanations <- ex :: state.explanations;
+  fun x -> (
+    begin
+      Printf.eprintf "%s\n" (f x);
+      Printf.eprintf "For longer explanation run\n  %s -e 'Unsupported.explain(%d)'\n"
+        (Sys.argv.(0)) n;
+      raise (Unsupported n)
+    end : fail)
+
+let remember s = rememberf (fun () -> s)
+
+let explain n =
+  let rec ex m l = match l with
+  | [] -> Printf.printf "There is no explanation numbered %d\n" n
+  | x :: xs ->
+      if m = n then
+        List.iter print_string x
+      else
+        ex (m-1) xs
+  in ex state.n state.explanations
+@ 
+<<unsupported.ml>>=
+let nosupport s = "This back end does not support " ^ s
+let widen_float =
+  rememberf (fun d -> nosupport (Printf.sprintf "%d-bit floating-point computation" d))
+    [ "Floating-point operations are limited in width.  Our configuration software";
+      "isn't quite clever enough to get the acceptable width into this explanation;";
+      "consult your release notes, or try either 80 or 64 bits as the maximum";
+      "floating-point width on most targets.";
+    ]
+let fail () = Impossible.impossible "failure did not raise Unsupported"
+
+let widen_float d = (widen_float d; fail())

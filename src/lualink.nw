@@ -22,6 +22,8 @@ module I : Lua.INTERP
 @
 
 <<lualink.ml>>=
+module G = Cfgx.M
+
 <<Linking QC-- Types>>
 
 module Reloc        = Sledlib.MkReloc (struct type symbol = Symbol.t end)
@@ -415,7 +417,28 @@ C.register_module "Typecheck"
  [ "proc",       V.efunc (V.value **-> Map.proc **->> V.int)
                          (fun _ proc -> Typecheck.proc proc; 1)
  ] g;
- 
+<<register modules to [[g]] in alphabetical order>>=
+let floats ws _ proc =
+  let rml = proc.Proc.target.Target.rounding_mode in
+  let rm  = Rtlutil.fetch rml in
+  G.iter_nodes (G.update_instr (Widen.float ~rm ws)) proc.Proc.cfg;
+  1 in
+C.register_module "Widen" 
+ [ "x86_floats", V.efunc (V.value **-> Map.proc **->> V.int) (floats [80])
+ ] g;
+
+  let namestring = function
+    | None -> "<no name>"
+    | Some n ->
+        match n with
+        | V.Fallback s -> s
+        | V.Global s -> s
+        | V.Element (s, V.String n) -> s ^ "." ^ n
+        | V.Element (s, V.Number x) -> s ^ "[" ^ string_of_int (int_of_float x) ^ "]"
+        | V.Element (s, _         ) -> s ^ ".?" in
+C.register_module "Z" 
+ [ "objname", V.efunc (V.value **->> V.string) (fun v -> namestring (V.objname g v))
+ ] g;
 <<lua initialization>>=
 "Expander.x86 = { fn = Expander.x86f, uses = { 'proper widths', 'no vars' }, \
                   name = 'Expander.x86', creates = { 'x86 invariant' }, \

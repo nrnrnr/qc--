@@ -96,6 +96,16 @@ let suffix w = match w with
 | 16 -> "w"
 | 32 -> "l"
 | _ -> Impossible.impossible "width in x86 not 8/16/32"
+let fsuffix w = match w with
+| 32 -> "s"
+| 64 -> "l"
+| 80 | 96 -> "t"
+| _ -> Impossible.impossible "floating-point width in x86 not 32/64/80"
+let fisuffix w = match w with
+| 16 -> "w"
+| 32 -> "l"
+| 64 -> "q"
+| _ -> Impossible.impossible "int to/from fpregs width in x86 not 16/32/64"
 @
 % ------------------------------------------------------------------ 
 \subsection{Register names}
@@ -182,9 +192,11 @@ The constant~4 plays a key role because it is used to adjust the stack
 pointer. 
 <<rules>>=
 lconst : Link(symbol, w) {: symbol#mangled_text :}
-const  : Bits(b:bits)    {: native b :}
-four   : Bits(b:bits) [{: guard (Bits.Ops.eq (Bits.U.of_int 4 32) b) :}] {: native b :}
-minusfour : Bits(b:bits) [{: guard (Bits.Ops.eq (Bits.S.of_int (-4) 32) b) :}] {: native b :}
+const  : Bits(b:bits)  [{: guard (Bits.width b = 32) :}]  {: native b :}
+four   : Bits(b:bits)
+    [{: guard (Bits.Ops.eq (Bits.U.of_int 4 (Bits.width b)) b) :}] {: () :}
+minusfour : Bits(b:bits)
+    [{: guard (Bits.Ops.eq (Bits.S.of_int (-4) (Bits.width b)) b) :}] {: () :}
 @ 
 \paragraph{Locations and effective addresses}
 Here are the basic locations.
@@ -373,6 +385,69 @@ inst : Par(Goto(eaddr),Par(Store(stacknext, Fetch(eip, x:w), y:w), push))
 inst : Par(Goto(lconst),Par(Store(stacknext, Fetch(eip, x:w), y:w), push))
         {: "call " ^ lconst :}
 @ 
+\paragraph{Floating point}
+<<rules>>=
+one3   : Bits(b:bits)
+    [{: guard (Bits.width b = 3 && Bits.Ops.eq (Bits.U.of_int 1 3) b) :}]
+    {: () :}
+two3   : Bits(b:bits)
+    [{: guard (Bits.width b = 3 && Bits.Ops.eq (Bits.U.of_int 2 3) b) :}]
+    {: () :}
+zero   : Bits(b:bits) [{: guard (Bits.Ops.eq (Bits.U.of_int 0 (Bits.width b)) b) :}]
+             {: () :}
+fpsp   : Reg('F', n, w) [{: guard (n = 0 && w = 3):}] {: () :}
+fppop  : Llr(fpsp, "add", one3, w) {: () :}
+fppop2 : Llr(fpsp, "add", two3, w) {: () :}
+fppush : Llr(fpsp, "sub", one3, w) {: () :}
+<<rules>>=
+fpstacktopl  : Fpreg(Fetch(fpsp, w))            {: () :}
+fpstacktopl  : Fpreg(Add(Fetch(fpsp, w), zero)) {: () :}
+fpstack1l    : Fpreg(Add(Fetch(fpsp, w), one3)) {: () :}
+fpstacknextl : Fpreg(Sub(Fetch(fpsp, w), one3)) {: () :}
+
+fpstacktop  : Fetch(fpstacktopl,  w) [{: guard (w=80) :}] {: fpstacktopl :}
+fpstack1    : Fetch(fpstack1l,    w) [{: guard (w=80) :}] {: fpstack1l :}
+fpstacknext : Fetch(fpstacknextl, w) [{: guard (w=80) :}] {: fpstacknextl :}
+<<rules>>=
+inst : Par(Store(fpstacknextl, F2f(s:w, d:w, mem), w2:w), fppush)
+  {: sprintf "fld%s %s" (fsuffix s) mem :}
+inst : Par(Store(dst:meml, F2f(s:w, d:w, fpstacktop), w2:w), fppop)
+  {: sprintf "fstp%s %s" (fsuffix d) dst :}
+<<rules>>=
+inst : Par(Store(fpstacknextl, I2f(s:w, d:w, mem), w2:w), fppush)
+  {: sprintf "fild%s %s" (fisuffix s) mem :}
+inst : Par(Store(dst:meml, F2i(s:w, d:w, fpstacktop), w2:w), fppop)
+  {: sprintf "fistp%s %s" (fisuffix d) dst :}
+<<rules>>=
+inst : Par(Store(fpstack1l, Fadd(fpstacktop, fpstack1), w), fppop)
+  {: "faddp" :}
+inst : Par(Store(fpstack1l, Fsub(fpstacktop, fpstack1), w), fppop)
+  {: "fsubrp" :}
+inst : Par(Store(fpstack1l, Fdiv(fpstacktop, fpstack1), w), fppop)
+  {: "fdivrp" :}
+inst : Par(Store(fpstack1l, Fmul(fpstacktop, fpstack1), w), fppop)
+  {: "fmulp" :}
+<<rules>>=
+inst : Store(fpstacktopl, Fabs(fpstacktop), w) {: "fabs" :}
+inst : Store(fpstacktopl, Fneg(fpstacktop), w) {: "fchs" :}
+inst : Store(fpstacktopl, Frnd(fpstacktop), w) {: "frndint" :}
+@ 
+It will be good to remove the ugly wart on ocamlburg that makes it
+impossible to nest constructors and get to the free variables.
+<<rules>>=
+i2f_mem : I2f(s:w, d:w, mem) [{: guard (s = 32 || s = 16) :}] {: s, mem :}
+fiadd : Fadd(fpstacktop, i2f_mem) {: i2f_mem :}
+inst : Store(fpstacktopl, fiadd, w)
+   {: let s, mem = fiadd in sprintf "fiadd%s %s" (suffix s) mem :}
+<<rules>>=
+fpflagsl : Reg('d', n, w) [{: guard (n=1) :}] {: () :}
+inst : Store(fpflagsl, Fcmp(fpstacktop, fpstack1), w)
+  {: "fcom" :}
+inst : Par(Store(fpflagsl, Fcmp(fpstacktop, fpstack1), w), fppop)
+  {: "fcomp" :}
+inst : Par(Store(fpflagsl, Fcmp(fpstacktop, fpstack1), w), fppop2)
+  {: "fcompp" :}
+@ 
 \paragraph{Other instructions}
 <<rules>>=
 inst : Nop() {: "nop" :}
@@ -394,16 +469,25 @@ any : Fetch (any, w) {: "Fetch(" ^ any ^ "," ^ string_of_int w ^ ")" :}
 
 any : Add(x:any, y:any) {: "Add(" ^ x ^ ", " ^ y ^ ")" :}
 any : Mul_trunc(x:any, y:any) {: "Mul_trunc(" ^ x ^ ", " ^ y ^ ")" :}
+any : Fadd(x:any, y:any) {: sprintf "Fadd(%s, %s)" x y :}
+any : Fsub(x:any, y:any) {: sprintf "Fsub(%s, %s)" x y :}
+any : Fmul(x:any, y:any) {: sprintf "Fmul(%s, %s)" x y :}
+any : Fdiv(x:any, y:any) {: sprintf "Fdiv(%s, %s)" x y :}
+
+any : Fneg(any) {: sprintf "Fneg(%s)" any :}
+any : Fabs(any) {: sprintf "Fabs(%s)" any :}
+
 any : Sx(any) {: "Sx(" ^ any ^ ")" :}
 any : Zx(any) {: "Zx(" ^ any ^ ")" :}
+any : F2f(n:w, w, any) {: sprintf "F2f(%d, %d, %s)" n w any :}
+any : F2i(n:w, w, any) {: sprintf "F2i(%d, %d, %s)" n w any :}
+any : I2f(n:w, w, any) {: sprintf "I2f(%d, %d, %s)" n w any :}
 any : Lobits(any, w) {: "Lobits(" ^ any ^ ", " ^ string_of_int w ^ ")" :}
 any : X86_subflags(l:any, r:any) {: "X86_subflags(" ^ l ^ ", " ^ r ^ ")" :}
 
 any : Mem(any, w) {: "Mem(" ^any ^ "," ^ string_of_int w ^ ")" :}
-any : Reg(char, n, w)
-  {: "Reg('" ^ Char.escaped char ^ "'," ^ string_of_int n ^ "," ^
-               string_of_int w ^ ")"
-   :}
+any : Reg  (char, n, w) {: sprintf "Reg(%s, %d, %d)"   (Char.escaped char) n w :}
+any : Fpreg(any) {: sprintf "Fpreg(%s)" any :}
 
 any : Store (dst:any, src:any, w)
  {: "Store(" ^ dst ^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
@@ -442,8 +526,17 @@ constructor for each operator.
 | RP.App(("sub", [w]), [x; y]) -> conSub (exp x) (exp y)
 (*| RP.App(("neg", [w]), [x])    -> conNeg (exp x)*)
 | RP.App(("mul_trunc", [w]), [x; y]) -> conMul_trunc (exp x) (exp y)
-| RP.App(("sx", [n;w]), [x])   -> conSx  (exp x)
-| RP.App(("zx", [n;w]), [x])   -> conZx  (exp x)
+| RP.App(("sx",  [n;w]), [x])   -> conSx  (exp x)
+| RP.App(("zx",  [n;w]), [x])   -> conZx  (exp x)
+| RP.App(("f2f", [n;w]), [x; rm])   -> conF2f n w (exp x) (* need to assert rm *)
+| RP.App(("f2i", [n;w]), [x; rm])   -> conF2i n w (exp x) (* need to assert rm *)
+| RP.App(("i2f", [n;w]), [x; rm])   -> conI2f n w (exp x) (* need to assert rm *)
+| RP.App(("fadd", [w]), [x; y; rm]) -> conFadd (exp x) (exp y) (* need to assert rm *)
+| RP.App(("fsub", [w]), [x; y; rm]) -> conFsub (exp x) (exp y) (* need to assert rm *)
+| RP.App(("fmul", [w]), [x; y; rm]) -> conFmul (exp x) (exp y) (* need to assert rm *)
+| RP.App(("fdiv", [w]), [x; y; rm]) -> conFdiv (exp x) (exp y) (* need to assert rm *)
+| RP.App(("fneg", [w]), [x]) -> conFneg (exp x)
+| RP.App(("fabs", [w]), [x]) -> conFabs (exp x)
 | RP.App(("lobits", [w;n]), [x])   -> conLobits (exp x) n
 | RP.App(("x86_subflags", [w]), [x; y]) -> conX86_subflags (exp x) (exp y)
 | RP.App((("add"|"sub"|"mul_trunc"|"sx"|"zx"|"lobits"|"x86_subflags") as op, ws), xs)->
@@ -469,6 +562,7 @@ let rec exp = function
 <<code to follow the labeler>>=  
 and loc = function
   | RP.Mem('m', aff, w, e, ass) -> conMem (exp e) w
+  | RP.Mem('f', aff, w, e, ass) -> conFpreg (exp e)
   | RP.Reg(sp, i, w)          -> conReg sp i w 
   | RP.Mem(_, _, _, _, _)     -> error "non-mem, non-reg cell"
   | RP.Var(s, i, w)           -> error "var found"

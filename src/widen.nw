@@ -1,0 +1,102 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Widening}
+
+A simple widener for floating-point values.
+Parameter [[rm]] contains the hardware rounding modes.
+<<widen.mli>>=
+val float : rm:Rtl.exp -> int list -> Rtl.rtl -> Rtl.rtl
+@ 
+<<widen.ml>>=
+module R = Rtl
+module RP = Rtl.Private
+
+module Down = Rtl.Dn
+module Up   = Rtl.Up
+
+<<widen.ml>>=
+let float ~rm goodwidths =
+  let rm = Down.exp rm in
+  let goodwidths = List.sort compare goodwidths in
+  let bestwidth w =
+    try List.find (fun w' -> w' >= w) goodwidths
+    with Not_found -> Unsupported.widen_float w in
+  <<widening>>
+  rtl
+
+let foo = 33
+
+<<widening>>=
+let f2f srcw dstw e =
+  if srcw = dstw then
+    e
+  else
+    match e with
+    | RP.App(("f2f", [from; to']), [e; rm]) ->
+        assert (to' = srcw);
+        RP.App(("f2f", [from; dstw]), [e; rm])
+    | e -> 
+        RP.App(("f2f", [srcw; dstw]), [e; rm]) in
+let rec convert ~(from:int) ~(to':int) e =
+  let cvt = convert ~from ~to' in
+  match e with
+  | RP.Const _ ->
+      f2f from to' e
+  | RP.Fetch(l, w) ->
+      f2f from to' (RP.Fetch(loc l, w))
+  | RP.App (("f2f", [f; t]), [x; rm]) ->
+      convert ~from:f ~to' x
+  | RP.App (("i2f", [f; t]), [x; rm]) ->
+      RP.App (("i2f", [f; to']), [rewrite x; rm])
+  | RP.App ((("fabs"|"fneg") as op, [w]), [x]) -> 
+	assert (w=from);
+	RP.App((op, [to']), [cvt x])
+  | RP.App ((("fadd"|"fsub"|"fmul"|"fdiv") as op, [w]), [x; y; rm]) -> 
+	RP.App((op, [to']), [cvt x; cvt y; rm])
+  | RP.App ((("fsqrt") as op, [w]), [x; rm]) -> 
+	assert (w=from);
+	RP.App((op, [to']), [cvt x; rm])
+  | RP.App (_, _) -> Impossible.impossible "float widener widening non-float value"
+and rewrite e = match e with
+  | RP.Const _      -> e
+  | RP.Fetch (l, e) -> RP.Fetch(loc l, e)
+  | RP.App (op, args) when Rtlop.Types.has_floating_result (Up.opr op) ->
+      Impossible.impossible "asked to rewrite (not convert) floating-point result"
+  | RP.App (("f2i", [fw; iw]), [x; rm]) ->
+      let fw' = bestwidth fw in
+      RP.App (("f2i", [fw'; iw]), [convert ~from:fw ~to':fw' x; rm])
+  | RP.App ((("fcmp"|"flt"|"fle"|"fgt"|"fge"|"feq"|"fne"|"fordered"|"funordered")
+               as opname, [w]), [x; y]) ->
+      let w' = bestwidth w in
+      RP.App ((opname, [w']), [convert ~from:w ~to':w' x; convert ~from:w ~to':w' y])
+  | RP.App(op, args) ->
+      RP.App (op, List.map rewrite args)
+and loc l = match l with
+| RP.Mem(sp, agg, w, addr, assn)    -> RP.Mem(sp, agg, w, rewrite addr, assn)
+| RP.Slice(w, lsb, l)               -> RP.Slice(w, lsb, loc l)
+| RP.Reg(_, _, _) | RP.Var(_, _, _) -> l in
+<<widening>>=
+let is_floating_exp = function
+  | RP.App(op, args) -> Rtlop.Types.has_floating_result (Up.opr op)
+  | _ -> false in
+let guarded (g, eff) =
+  let eff = match eff with
+  | RP.Store(l, r, w) ->
+      if is_floating_exp r && bestwidth w <> w then
+        let r = convert ~from:w ~to':(bestwidth w) r in
+        RP.Store(loc l, f2f (bestwidth w) w r, bestwidth w)
+      else
+        RP.Store(loc l, rewrite r, w)
+  | RP.Kill l -> RP.Kill (loc l) in
+  (rewrite g, eff) in
+let rtl r = 
+  let needs_conversion op =
+    Rtlop.Types.has_floating_result op ||
+    match fst (Down.opr op) with
+    | "fcmp"|"flt"|"fle"|"fgt"|"fge"|"feq"|"fne"|"fordered"|"funordered"|"f2i" -> true
+    | _ -> false in
+  if Rtlutil.ExistsOpr.rtl needs_conversion r then
+    match Down.rtl r with
+    | RP.Rtl es -> Up.rtl (RP.Rtl (List.map guarded es))
+  else
+    r in

@@ -16,19 +16,12 @@ control-flow graphs ({\cfg}s). In order to separate essential
 functionality from nice-to-have functionality this module provides
 additional functions on {\cfg}s whose implementation do not require
 knowledge of the internal details of \module{cfg3}.
-
-\begin{quote}\it
-    As the number of functions grows it might be useful to organize them
-    in sub-modules, similar to module \module{rtlutil}. --CL
-\end{quote}
-
 <<cfgutil.mli>>=
 val cfg2dot:    compress:bool -> live:bool -> name:string -> Rtl.rtl Cfgx.M.t -> string
 val cfg2ast: ('i -> Ast.stmt) -> 'i Cfgx.M.t -> name:string -> Ast.proc
 val emit  :   'i Cfgx.M.t -> ('i -> unit) -> (string -> unit) -> unit
 @
-
-WHAT DO new_cfg2ast AND new_emit DO? PLEASE EXPLAIN THE PARAMETERS. --CL
+WHAT DO [[cfg2ast]] AND [[emit]] DO? PLEASE EXPLAIN THE PARAMETERS. --CL
 
 \begin{itemize}
 \item [[limit]], [[first]]: node numbers for {\cfg} traversing functions 
@@ -54,8 +47,11 @@ WHAT DO new_cfg2ast AND new_emit DO? PLEASE EXPLAIN THE PARAMETERS. --CL
 % ------------------------------------------------------------------ 
 
 <<cfgutil.ml>>=
+module A = Ast 
+module G = Cfgx.M 
+module L = Cfgx.Live 
+
 let emit cfg rtl_emit sym_emit =
-  let module G = Cfgx.M in
   let labels n = if G.kind n = G.Join then G.labels n else [] in
   let visit node =
     List.iter sym_emit (labels node);
@@ -67,7 +63,6 @@ let emit cfg rtl_emit sym_emit =
 
 <<cfgutil.ml>>=
 let extend_with preds nodes =
-  let module G = Cfgx.M in
   let rec add_predecessors visited candidates = match candidates with
   | [] -> visited
   | node :: candidates ->
@@ -78,8 +73,6 @@ let extend_with preds nodes =
   add_predecessors nodes (List.flatten (List.map preds nodes))
 
 let cfg2dot ~compress ~live ~name g =
-  let module G = Cfgx.M in
-  let module L = Cfgx.Live in
   let () = if live then L.set_live g in
   let original_nodes = G.fold_layout (fun x y -> x :: y) [] g in
   let nodes = extend_with G.preds original_nodes in
@@ -128,8 +121,6 @@ THE FOLLOWING CODE IS BOGUS --- IT ACTUALLY NEEDS TO VISIT THE NODES
 IN LAYOUT ORDER.
 <<cfgutil.ml>>=
 let cfg2ast instr g ~name =
-  let module G = Cfgx.M in
-  let module A = Ast in
   let node n tail = match G.to_instr n with
   | Some i ->
       let is = instr i :: tail in
@@ -152,3 +143,4 @@ let cfg2ast instr g ~name =
     , []
     , List.map (fun s -> Ast.StmtBody s) (List.rev graph)
     )
+@ 

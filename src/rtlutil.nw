@@ -30,7 +30,6 @@ not readily available.
 val fetch : Rtl.loc -> Rtl.exp
 val store : Rtl.loc -> Rtl.exp -> Rtl.rtl
 @ 
-
 % ------------------------------------------------------------------ 
 \subsection{Width}
 % ------------------------------------------------------------------ 
@@ -38,11 +37,20 @@ val store : Rtl.loc -> Rtl.exp -> Rtl.rtl
 Locations and non-boolean expressions have a \emph{width} that can be
 observed.  It is a checked run-time error to pass a boolean expression
 to [[exp]].
-
 <<rtlutil.mli>>=
 module Width: sig
     val loc:    Rtl.loc -> int
     val exp:    Rtl.exp -> int
+end 
+@ 
+% ------------------------------------------------------------------ 
+\subsection{Operator search}
+% ------------------------------------------------------------------ 
+
+We can search all the operators in sight
+<<rtlutil.mli>>=
+module ExistsOpr : sig
+  val rtl : (Rtl.opr -> bool) -> Rtl.rtl -> bool
 end 
 @
 
@@ -585,7 +593,8 @@ and location' = function
             let aligned = if ass = 1 then None else Some ass in 
             A.Mem(A.AliasTy space,expr' e,aligned, [])
         | Low ->
-            A.Mem(A.BitsTy width,expr' e, (if ass = 1 then None else Some ass), []))
+            A.Mem(A.BitsTy width,expr' e, (if ass = 1 then None else Some ass),
+                  if sp = 'm' then [] else ["'" ^ Char.escaped sp ^ "'"]))
     | R.Reg(sp,i,w) -> 
         (match !the_verbosity with
         | High ->
@@ -905,3 +914,23 @@ let add w =
   | RP.Const c -> addc w x c
   | _ -> add x y
 @ 
+\subsection{Operator search}
+<<rtlutil.ml>>=
+module ExistsOpr = struct
+  let rtl p =
+    let rec rtl (RP.Rtl gs) = List.exists guarded gs
+    and guarded (g, eff) = exp g || effect eff
+    and effect = function
+      | RP.Store (lhs, rhs, _)    -> loc lhs || exp rhs
+      | RP.Kill lhs               -> loc lhs
+    and loc = function
+      | RP.Mem (_, _, _, addr, _) -> exp addr
+      | RP.Reg r                  -> false
+      | RP.Slice (_, _, l)        -> loc l
+      | RP.Var _                  -> false
+    and exp = function
+      | RP.Const _                -> false
+      | RP.Fetch (l, w)           -> loc l
+      | RP.App (opr, es)          -> p (Rtl.Up.opr opr) || List.exists exp es in
+    fun r -> rtl (Rtl.Dn.rtl r)
+end 

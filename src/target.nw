@@ -197,11 +197,11 @@ branch:         (Rtl.exp * Rtl.exp) map; (* condition, target *)
 
 Every target has a global register for the current floating point
 rounding mode. The register is handed out by the [[globals]] automaton.
-We provide a predicate here that identifies it. Of course, the automaton
-and this predicate must agree on it.
-
+We also provide here, where it can be used to synthesize
+floating-point expressions and to identify the rounding modes:
+it must always be save to compare [[rounding_mode]] for equality.
 <<components of [[t]]>>=
-is_rounding_mode:   Rtl.loc -> bool ;
+rounding_mode : Rtl.loc;
 @
 
 % ------------------------------------------------------------------ 
@@ -237,7 +237,6 @@ val fits:    ('au, 'cc) t -> Rtl.space -> Register.t -> bool
       holds temporaries.  It should be partially applied for efficiency.
 \end{itemize}
 @
-
 When the register allocator (see ~module{linscan}) must spill, it has to
 create {\rtl}s that move values from registers to memory (spill) and
 vice versa (reloads).  Here are two functions to create such {\rtl}s:
@@ -246,12 +245,10 @@ THE FIRST ARGUMENT ALMOST CERTAINLY SHOULD BE A [[Proc.t]].
 spill:  (Rtl.space -> Space.t) -> Register.t -> Automaton.loc -> Rtl.rtl list;
 reload: (Rtl.space -> Space.t) -> Register.t -> Automaton.loc -> Rtl.rtl list;
 @ 
-
 The RTLs should be returned in \emph{execution order}, i.e., the first
 element of the list is the first to be executed.  \emph{ALERT! Perhaps
 we ought to revisit these interfaces, since the role of the first
 argument is baffling. ---NR} 
-
 @
 
 % ------------------------------------------------------------------ 

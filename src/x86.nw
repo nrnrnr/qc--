@@ -92,6 +92,9 @@ module RP   = Rtl.Private
 module Up   = Rtl.Up
 module Down = Rtl.Dn
 
+let fpcond n       = Rtl.reg  ('d',n,2)  (* FP modes *)
+let rounding_modes = R.fetch (fpcond 0) 2
+
 let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
 module Post = struct
   <<x86 postexpander>>
@@ -115,7 +118,7 @@ let talloc = ref None
 let get_talloc () = match !talloc with
   | Some s -> s
   | None   -> Impossible.impossible "Temp allocator not registered with postexpander"
-let register_talloc ta = talloc := Some ta
+let remember_allocator ta = talloc := Some ta
 @ 
 \paragraph{Contexts}
 Addresses go in the integer registers, so we use these contexts:
@@ -466,6 +469,78 @@ let cmpneg = function
   | "x86_b" -> "x86_ae"
   | _ -> Impossible.impossible "bad comparison in expanded x86 conditional branch"
 @ 
+\subsection{Stack operations}
+<<x86 postexpander>>=
+module PX = Postexpander
+let opclass (op, _) =
+  match op with
+  | "f2f" | "f2i" | "fabs" | "fneg" | "fsqrt" ->
+      PX.Stack(PX.LeftFirst, 1)
+  | "fadd" | "fcmp" | "fdiv" | "fmul" | "fmulx" | "fsub"    
+  | "feq" | "fge" | "fgt" | "fle" | "flt" | "fne"     
+  | "fordered" | "funordered" ->
+      PX.Stack(PX.LeftFirst, 2)
+  | _ ->
+      PX.Register
+
+let st = temploc ('F', 0, 3)
+let stval = R.fetch st 3
+let freg_at a = R.mem R.none 'f' byte_order 80 a
+let streg = freg_at stval
+let stadd = Rtlutil.addk 3 stval
+let stsub n = R.app (R.opr "sub" [3]) [stval; R.bits (Bits.U.of_int n 3) 3]
+let stregplus n = freg_at (stadd n)
+let ffetch l = R.fetch l 80
+
+let st_pop_with f = (* rtl got by popping (f e), where e is top of floating-pt stack *)
+  let top = ffetch streg in
+  R.par [ f top; R.store st (stadd 1) 3 ]
+
+let st_push e = (* effect of pushing e *)
+  let next_st = stsub 1 in
+  R.par [ R.store (freg_at next_st) e 80; R.store st next_st 3 ]
+
+
+let stack_depth = 8
+let push ~addr assn = 
+(*
+  let memval = R.fetch (R.mem assn 'm' byte_order 80 addr) 80 in
+  [st_push memval] (* bound to break *)
+*)
+Impossible.impossible "push 80-bit float without conversion"
+
+let store_pop ~addr assn = 
+  let store regval = R.store (R.mem assn 'm' byte_order 80 addr) regval 80 in
+  [st_pop_with store] (* bound to break *)
+(*Impossible.impossible "store 80-bit float without conversion"*)
+
+let push_cvt op w ~addr assn =
+  let memval = R.fetch (R.mem assn 'm' byte_order w addr) w in
+  let regval = R.app (Up.opr op) [memval; rounding_modes] in
+  [st_push regval]
+
+let store_pop_cvt op w ~addr assn =
+  let memval regval = R.app (Up.opr op) [regval; rounding_modes] in
+  let store regval = R.store (R.mem assn 'm' byte_order w addr) (memval regval) w in
+  [st_pop_with store]
+
+let pushk _ = Impossible.impossible "load 80-bit floating-point constant"
+let pushk_cvt _ _ _ = Impossible.unimp "load floating-point constant"
+let stack_op op = match opclass op with
+| PX.Register -> Impossible.impossible "passed register operator to stack_op"
+| PX.Stack(_, depth) -> (* by lucky accident, depth is arity *)
+    let positions = Aux.from 0 (depth-1) in
+    let argvals = List.map (fun n -> ffetch (stregplus n)) positions in
+    let argvals = match op with
+    | ("fadd"|"fsub"|"fdiv"|"fmul"|"f2f"|"f2i"|"i2f"), _ ->
+        argvals @ [rounding_modes]
+    | _ -> argvals in
+    let result = R.app (Up.opr op) argvals in
+    let next_st = stadd (depth-1) in
+    [R.par [ R.store (freg_at next_st) result 80; R.store st next_st 3]]
+
+let bc_stack op ~tgt = Impossible.unimp "branch on floating code"
+@
 \subsection{Building the target}
 With the postexpander in place, we can build a target.
 We begin with more utility functions
@@ -521,7 +596,6 @@ let downrtl = Down.rtl
 let uploc   = Up.loc
 let upexp   = Up.exp
 
-let fpcond n      = Rtl.reg  ('d',n,2)  (* FP modes *)
 @ 
 
 This is an ugly wart.  The only reason we need to distinguish [[cmm]]
@@ -586,7 +660,7 @@ let target =
             | cc -> Impossible.impossible ("unsupported calling convention "^cc))
   (* global or hardware registers *)
   ; T.globals  = globals
-  ; T.is_rounding_mode = (fun loc -> loc = fpcond 0) (* see globals value *)
+  ; T.rounding_mode = fpcond 0
   ; T.named_locs   = Strutil.assoc2map 
                      ["IEEE 754 rounding mode",    fpcond 0
                      ;"IEEE 754 rounding results", fpcond 1
