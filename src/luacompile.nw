@@ -690,36 +690,6 @@ function Compile.run_optimizer(self,proc)
 
     B.run(self.action, proc)
 end    
-@ 
-The old front end.
-<<Lua compiler configuration>>=
-Compile.Old = Compile.Old or { } 
-
-function Compile.Old.use()
-  local k, backend = next(Backend, nil)
-  while k do
-    if type(backend) == 'table' and backend.compile == Compile.file then
-      backend.compile = Compile.Old.file
-    end
-    k, backend = next(Backend, k)
-  end
-  Compile.file = Compile.Old.file
-end
-
-function Compile.Old.file(backend, emitglobals, file, out)
-    local fd  = (not out or out == "-") and Driver.stdout or open_out(out)
-    local ast = Driver.parse(file)
-    
-    local asm = backend.asm(fd) 
-    local env = Driver.check(ast,asm) -- asm is stored in env
-    local opt = { apply  = Compile.run_optimizer
-                , action = Opt.standard(backend, asm, NewBackplane) 
-                , B = NewBackplane
-                }
-    Driver.old_compile(opt, emitglobals, ast, backend.target, env)
-    if backend.emit then backend.emit(asm) end
-    if fd ~= Driver.stdout then close_out(fd) end -- close fd
-end    
 @
 
 % ------------------------------------------------------------------ 
@@ -784,8 +754,8 @@ Backend.debug_interp    = Backend.make  { target = Targets.interp
                                         , asm    = Asm.cmm
                                         , freeze = Interp.layout
                                         }
-Backend.interp.compile = Compile.Old.file
-Backend.debug_interp.compile = Compile.Old.file
+Backend.interp.compile = Compile.file
+Backend.debug_interp.compile = Compile.file
 
 --
 -- x86 backends

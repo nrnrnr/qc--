@@ -248,55 +248,7 @@ Cmm_Cont* Cmm_MakeUnwindCont(Cmm_Activation *a, Cmm_Word index, ...) {
     varnum  = decode_offset(*var);
     vartype = decode_offset(*(var+1));
 
-    switch(vartype) {
-      case CHAR:
-        *(char *)               Cmm_FindLocalVar(a, varnum) = va_arg(ap, char);
-        break;
-      case DOUBLE:
-        *(double *)             Cmm_FindLocalVar(a, varnum) = va_arg(ap, double);
-        break;
-      case FLOAT:
-        *(float *)              Cmm_FindLocalVar(a, varnum) = va_arg(ap, float);
-        break;
-      case INT:
-        *(int *)                Cmm_FindLocalVar(a, varnum) = va_arg(ap, int);
-        break;
-      case LONGDOUBLE:
-        *(long double *)        Cmm_FindLocalVar(a, varnum) = va_arg(ap, long double);
-        break;
-      case LONGINT:
-        *(long int *)           Cmm_FindLocalVar(a, varnum) = va_arg(ap, long int);
-        break;
-      case LONGLONGINT:
-        *(long long int *)      Cmm_FindLocalVar(a, varnum) = va_arg(ap, long long int);
-        break;
-      case SHORT:
-        *(short *)              Cmm_FindLocalVar(a, varnum) = va_arg(ap, short);
-        break;
-      case SIGNEDCHAR:
-        *(signed char *)        Cmm_FindLocalVar(a, varnum) = va_arg(ap, signed char);
-        break;
-      case UNSIGNEDCHAR:
-        *(unsigned char *)      Cmm_FindLocalVar(a, varnum) = va_arg(ap, unsigned char);
-        break;
-      case UNSIGNEDLONG:
-        *(unsigned long *)      Cmm_FindLocalVar(a, varnum) = va_arg(ap, unsigned long);
-        break;
-      case UNSIGNEDSHORT:
-        *(unsigned short *)     Cmm_FindLocalVar(a, varnum) =
-                                   va_arg(ap, unsigned short);
-        break;
-      case UNSIGNEDINT:
-        *(unsigned int *)       Cmm_FindLocalVar(a, varnum) = va_arg(ap, unsigned int);
-        break;
-      case UNSIGNEDLONGLONG:
-        *(unsigned long long *) Cmm_FindLocalVar(a, varnum) =
-                                   va_arg(ap, unsigned long long);
-        break;
-      case ADDRESS:
-        *(void **) Cmm_FindLocalVar(a, varnum) = va_arg(ap, void *);
-        break;
-    }
+    <<based on [[vartype]], assign to local variable [[varnum]] from [[ap]]>>
     Cmm_LocalVarWritten(a, varnum);
     var = var + 2;
   }
@@ -323,6 +275,31 @@ Cmm_Cont* Cmm_MakeUnwindCont(Cmm_Activation *a, Cmm_Word index, ...) {
   a->unwind_cont.sp = (Cmm_Word *) a->regs;
 
   return(&a->unwind_cont);
+}
+@ 
+Because passing to a varargs function involves implicit promotions, we
+do the promotions that are needed.
+The [[L]] argument is the type used internally; the [[R]]~version is
+the same type as promoted for passing to a varargs function.
+<<based on [[vartype]], assign to local variable [[varnum]] from [[ap]]>>=
+#define ASSIGN(L,R) *(L*) Cmm_FindLocalVar(a, varnum) = (L) va_arg(ap, R)
+switch(vartype) {
+  case CHAR:             ASSIGN (char,               int);                break;
+  case DOUBLE:           ASSIGN (double,             double);             break;
+  case FLOAT:            ASSIGN (float,              double);             break;
+  case INT:              ASSIGN (int,                int);                break;
+  case LONGDOUBLE:       ASSIGN (long double,        long double);        break;
+  case LONGINT:          ASSIGN (long int,           long int);           break;
+  case LONGLONGINT:      ASSIGN (long long           int, long long int); break;
+  case SHORT:            ASSIGN (short,              int);                break;
+  case SIGNEDCHAR:       ASSIGN (signed char,        int);                break;
+  case UNSIGNEDCHAR:     ASSIGN (unsigned char,      int);                break;
+  case UNSIGNEDLONG:     ASSIGN (unsigned long,      unsigned long);      break;
+  case UNSIGNEDSHORT:    ASSIGN (unsigned short,     int);                break;
+  case UNSIGNEDINT:      ASSIGN (unsigned int,       unsigned int);       break;
+  case UNSIGNEDLONGLONG: ASSIGN (unsigned long long, unsigned long long); break;
+  case ADDRESS:          ASSIGN (void *,             void *);             break;
+  default: assert(0);
 }
 @
 % ---------------------------------------------------------------------------

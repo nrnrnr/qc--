@@ -44,16 +44,12 @@ The compiler is controlled by a Lua interpreter that is build in the
 This module provides new Lua types like [[asm]] and [[ast]] for the
 interpreter, and a library that uses them. 
 <<driver.mli>>=
-val check     : 
-  Srcmap.map * Ast.program -> 'proc Asm.assembler -> 'proc Ofenv.Clean.env'
 val emit_asdl : 'a * Ast.program -> unit
 val parse     : string -> Srcmap.map * Ast.program
 val print     : Pp.doc -> int -> out_channel -> unit
 val pretty    : 'a * Ast.toplevel list -> Pp.doc
 val scan      : string -> unit
 val version   : unit -> unit
-val ocompile : (Oast2ir.proc -> unit) -> bool -> 'a * Ast.program -> Oast2ir.tgt
-                -> Oast2ir.proc Ofenv.Clean.env' -> Oast2ir.proc Asm.assembler
 val elab : 
   Srcmap.map * Ast.program -> 'proc Asm.assembler
   -> ('proc Fenv.Dirty.env' * 'proc Nelab.compunit) Error.error
@@ -68,7 +64,6 @@ val compile :
 % ------------------------------------------------------------------ 
 <<driver.ml>>=
 module E = Error
-module F = Ofenv.Clean
 module M = Metrics
 module T = Target
 <<driver.ml>>=
@@ -133,50 +128,6 @@ let parse (file:string) =
 let emit_asdl (map,ast) =
         AstUtil.sexp_wr_program ast stdout
 @
-The user specifies in the source code some target properties. They must
-be consistent with the actual target. We check this in
-[[consistency_check]].
-THIS CHECK SHOULD PROBABLY BE MOVED INTO ELAB, WHICH SHOULD ALSO CHECK FOR
-THINGS LIKE CORRECT CALLING CONVENTIONS AND HARDWARE REGISTERS.
-<<driver.ml>>=
-let consistency_check env (t:('a, 'b) Target.t) =
-    let int i = string_of_int i in
-    let msg property source target = 
-        let m = Printf.sprintf 
-                "source code specifies %s %s, but target %s specifies %s %s"
-                property source t.Target.name property target 
-        in Error.error (m)
-    in match F.findEndianness env, t.Target.byteorder with
-    | F.Big,    Rtl.LittleEndian -> msg "byteorder" "big"    "little"
-    | F.Little, Rtl.BigEndian    -> msg "byteorder" "little" "big"
-    | _ -> if F.findWordsize env <> t.Target.wordsize then
-        msg "wordsize" (int (F.findWordsize env)) (int t.Target.wordsize)
-    else if F.findMemsize env <> t.Target.memsize then
-        msg "memsize" (int (F.findMemsize env)) (int t.Target.memsize)
-    else if F.findPointersize env <> t.Target.pointersize then
-        msg "pointer size" (int (F.findPointersize env)) 
-            (int t.Target.pointersize)
-    else if F.findFloat env <> Float.name t.Target.float then
-        msg "floating-point standard" (F.findFloat env) (Float.name t.Target.float)
-    else if F.findCharset env <> t.Target.charset then
-        msg "charset" (F.findCharset env) t.Target.charset
-    else
-        ()
-@
-<<driver.ml>>=
-let check (map,ast) (asm) =
-    let env      = Ofenv.Dirty.empty map asm          in
-    let env      = Ofenv.Dirty.push env (Ofenv.Dirty.emptyscope) in
-    let env      = Oelab.Env.global   env ast         in
-    let env      = Oelab.Check.global env ast         in
-    let env      = Oelab.Env.setDefaults env          in
-    let ()       = if Ofenv.Dirty.errorFlag env then 
-                      Error.error "compilation aborted because of errors." in
-    Ofenv.clean env
-
-let ocompile opt exportglobals (map,ast) target env  =
-    let () = consistency_check env target in   
-    Oast2ir.translate target env opt exportglobals ast 
 <<driver.ml>>=
 let pretty (map,ast) = Astpp.program ast
 let print doc width channel = Pp.ppToFile channel width doc
@@ -184,6 +135,8 @@ let print doc width channel = Pp.ppToFile channel width doc
 \subsection{Driver support for the new front end}
 
 Metrics check.  Perhaps the [[Target.t]] should have a [[Metrics.t]] inside.
+PERHAPS THIS CHECK SHOULD BE MOVED INTO ELAB, WHICH SHOULD ALSO CHECK FOR
+THINGS LIKE CORRECT CALLING CONVENTIONS AND HARDWARE REGISTERS.
 <<driver.ml>>=
 let metrics_ok src tgt =
   let int i = string_of_int i in
