@@ -202,13 +202,20 @@ legal, based on the state information associated with each stage. An illegal
 control flow is one that may destroy a state property before it can reach a
 stage where the property is needed.
 
+In order to perform the semantic analysis, we walk the [[action]]'s in a
+depth-first, reverse post-order traversal. At each [[action]], we make any
+necessary recursive calls, then we return information about the state properties
+for the current [[action]]. The information we return consists of the sets of
+state properties that are either used, created, or destroyed in the current
+[[action]]. We also return a closure that will compute the set of state
+properties that must be live on entering the current [[action]] and the set
+of errors that have been found. This closure depends on the input pair of
+the errors that have already been found and the set of properties that must
+be live after the action is completed (we know this information because we
+are performing a reverse post-order traversal).
 
-
-
-A FEW WORDS ON WHAT THESE RULES ARE FOR WOULDN'T HURT
-
-
-
+The following rules determine the set of information determined from each type
+of [[action]].
 
 \noindent{Single $a$:}
 
@@ -280,9 +287,10 @@ A FEW WORDS ON WHAT THESE RULES ARE FOR WOULDN'T HURT
 The rules for Ignore and Share are the same as Single; the rules for Unless\_Do
 are the same as When\_Do.
 
+[[walk]] implements these rules, and [[stateCheck]] initializes and calls
+this traversal.
 
 <<state checking>>=
-
 let ( ++ ) = SS.union
 let ( -- ) = SS.diff
 let ( ** ) = SS.inter
@@ -293,7 +301,8 @@ let checkArg formal actual = match formal, actual with
     | _ -> SS.empty
 
 
-(* walk : action -> string option -> create * destroy * use * (live * errors -> live * errors) *)
+(* walk : action -> string option -> create * destroy * use *
+                                     (live * errors -> live * errors) *)
 let rec walk arg = function
     | Seq aList ->
         let seqWalk a (seqcreates, seqdestroys, sequses, seqanalyze) =
@@ -347,9 +356,10 @@ let stateCheck a =
 \subsubsection{Running}
 % ------------------------------------------------------------------
 
+To run a program of [[action]]'s, we first perform a semantic check, and barring
+errors, we run the program.
 
 <<run>>=
-exception Errors
 exception MismatchedParameters of string
 
 let run main cfg input =
@@ -365,6 +375,12 @@ let run main cfg input =
 
 @
 
+The backplane introduces three new types. A [[StageFn]] is the function that
+actually executes the compiler step represented by a stage. [[Stage]]'s include
+the state property information that is associated with a [[StateFn]].
+[[Action]]'s, as before, are the types that indicate a control flow between
+these stages.
+
 <<backplane types>>=
     type 'a t' = Action of 'a action
                | Stage of 'a stage
@@ -372,6 +388,7 @@ let run main cfg input =
                | CFG of cfg
 @
 
+Putting it all together:
 
 <<luabackplane.ml>>=
 module StringMod = struct
@@ -393,7 +410,15 @@ type 'a camlFunction = 'a -> cfg -> bool
 <<backplane types>>
 <<error types>>
 <<printing>>
+<<state checking>>
+<<runProgram>>
 
+<<lua library modules>>
+@
+
+To construct a Lua interpreter, we need two modules: T and Make.
+
+<<lua library modules>>=
 module T : Lua.Lib.USERTYPE with type 'a t = 'a t' = struct
     type 'a t = 'a t'
     let tname = "Backplane"
@@ -407,6 +432,7 @@ module T : Lua.Lib.USERTYPE with type 'a t = 'a t' = struct
     | StageFn _ -> "<stageFn>"
     | CFG c -> "<cfg>"
 end
+
 module Make (T : Lua.Lib.TYPEVIEW with type 'a t = 'a t')
     : Lua.Lib.TYPEFUL with type 'a combined = 'a T.combined =
   struct
@@ -416,8 +442,6 @@ module Make (T : Lua.Lib.TYPEVIEW with type 'a t = 'a t')
 combined) =
       struct
         module V = Interp.V
-        let ( **-> ) = V.( **-> )
-
         <<backplane builtins>>
 
         type state = Interp.V.state
@@ -428,6 +452,8 @@ v) backplane_builtins
   end
 @
 
+
+We provide embedding/projection pairs for each of the backplane types.
 
 <<backplane builtins>>=
 let {V.embed = embed; V.project = project} = T.makemap V.userdata V.projection
@@ -448,16 +474,20 @@ let cfg = { V.embed = (fun s -> embed (CFG s))
           }
 let inputs = { V.embed = (fun s -> (V.list V.string).V.embed (SS.elements s))
              ; V.project = (fun v ->
-                            try List.fold_left (fun a b -> SS.add b a)
+                               try List.fold_left (fun a b -> SS.add b a)
                                       SS.empty ((V.list V.string).V.project v)
-                            with _ -> raise (V.Projection (v, "inputs")))
+                               with _ -> raise (V.Projection (v, "inputs")))
              }
+<<stage map>>
+@
 
-<<runProgram>>
-<<state checking>>
+
+Finally, we make the list of builtins that will be visible in Lua.
+
+<<backplane builtins>>=
 <<run>>
 
-<<stage map>>
+let ( **-> ) = V.( **-> )
 
 let backplane_builtins =
     [ "run", (V.pfunc (action **-> cfg **-> inputs **-> V.result V.bool)).V.embed run
@@ -474,8 +504,8 @@ let backplane_builtins =
 
 
 In order to use the Lua interpreter to control the backplane, we must
-provide the embedding/projection pair. When we project a stage into Caml, we
-provide sensible defaults for unspecified members of the stage record.
+provide the embedding/projection pair for a stage. When we project a stage into
+Caml, we provide sensible defaults for unspecified members of the stage record.
 
 <<stage map>>=
 let embedString = V.string.V.embed
@@ -486,7 +516,7 @@ let projectStage stage' = match stage' with
     { name = (match V.Table.find stage (embedString "name") with
               | V.Nil ->
                   (match V.objname (V.state ()) stage' with
-                   | None -> ""
+                   | None -> "<anonymous stage>"
                    | Some (V.Fallback s) -> s
                    | Some (V.Global s) -> s
                    | Some (V.Element (s, _)) -> s)
@@ -538,7 +568,8 @@ let stage = { V.embed = embedStage
 @
 
 
-We set up Lua wrappers to create the [[action]] types.
+We set up wrappers to create the [[action]] types. These functions will
+be the primitives visible in Lua.
 
 <<stage map>>=
 let seq alst = Seq alst
@@ -567,7 +598,6 @@ a higher-order function used to print a list of any type, when passed an
 appropriate output function for that type.
 
 <<printing>>=
-(* Some printing functions. *)
 let makeIndent length =
     let blank = " " in
     let rec makeIndentHelp indent = function
