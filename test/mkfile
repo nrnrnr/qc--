@@ -9,13 +9,14 @@ LIBDIR =    ../lib
 BINDIR =    ../bin
 MANDIR =    ../man
 
+
 # ------------------------------------------------------------------  
 # high level targets
 # ------------------------------------------------------------------  
 
-test:V:         fp
+test:V:         fp regression
 
-fp:V:           fixpoint
+fp:V:           fixpoint 
                 for f in fix-*[0-9][0-9].c--; do ./fixpoint $f; done
 
 regression:V:   regr
@@ -25,6 +26,10 @@ regression:V:   regr
                     CMD="../bin/qc-- -check $g.c--"
                     ./regr "$CMD" -x 1 -err $g.stderr || true
                 done
+
+%.stderr:       %.c--
+                ./regr "../bin/qc-- -check $stem.c--" -r -err $stem.stderr 
+                head -v $stem.stderr
 
 scripts:V:      fixpoint regr        
 
