@@ -26,19 +26,19 @@
 #      If others are tried, mk `doesn't know how to mk...'
 #    * Dependencies now live in DEPEND.$INTERP
 
-INTERP=std
-
-
-
 TOP    =        ..
 LIBDIR =        ../lib
+BINDIR =        ../bin
+
+INTERP       =  std
+# interp must appear before noweb is included
 
 <../config/ocaml.mk
 <../config/noweb.mk
 
-OPTPROFILE   =  -p
+PROFILE      =  -p
 OCAMLC_FLAGS = 	-I $INTERP -I $LIBDIR -g
-OCAMLO_FLAGS =	-I $INTERP -I $LIBDIR $OPTPROFILE
+OCAMLO_FLAGS =	-I $INTERP -I $LIBDIR $PROFILE
 
 NWSRC=`echo *.nw`
 NWHTML=${NWSRC:%.nw=%.html}
@@ -50,10 +50,11 @@ NWHTML=${NWSRC:%.nw=%.html}
 # ------------------------------------------------------------------ 
 
 all:V: 		lua-$INTERP.cma  oclua-$INTERP     oclbench-$INTERP
-all.opt:V:      lua-$INTERP.cmxa oclua-$INTERP.opt oclbench-$INTERP.opt
+all.opt:V:      lua-$INTERP.cmxa oclua-$INTERP.opt oclbench-$INTERP$PROFILE.opt
 
-update:V:	update-msg $LIBDIR/lua.cma 
-update.opt:V:   update-msg $LIBDIR/lua.cmxa
+update:V:	update-msg $LIBDIR/lua.cma  $BINDIR/oclbench-$INTERP
+update.opt:V:   update-msg $LIBDIR/lua.cmxa update-bench.opt
+update-bench.opt:V: $BINDIR/oclbench-$INTERP$PROFILE.opt
 
 update-msg:VQ:
 	if [ $INTERP = std ]; then true
@@ -159,6 +160,9 @@ $LIBDIR/lua.cmxa:Q: lua-std.cmxa $LIBMLI $LIBCMI dirs
 		    cmp -s $f $LIBDIR/$f || cp -v $f $LIBDIR
 		done
 
+$BINDIR/oclbench%:Q: oclbench%
+	cp -v $prereq $target
+
 # ------------------------------------------------------------------ 
 # lua standalone interpreter (for tests)
 # ------------------------------------------------------------------ 
@@ -168,17 +172,17 @@ CMO =	${ML:%.ml=%.cmo}
 CMX =	${ML:%.ml=%.cmx}
 
 
-oclua-$INTERP: 	lua-$INTERP.cma $CMO 
-		$OCAMLC $OCAMLC_FLAGS -o $target unix.cma cllib.cma $prereq 
+oclua-$INTERP:	lua-$INTERP.cma $CMO
+	$OCAMLC $OCAMLC_FLAGS -o $target unix.cma cllib.cma lua-$INTERP.cma $CMO
 
 oclua-$INTERP.opt: 	lua-$INTERP.cmxa $CMX
-		$OCAMLO $OCAMLO_FLAGS -o $target unix.cmxa cllib.cmxa $prereq 
+	$OCAMLO $OCAMLO_FLAGS -o $target unix.cmxa cllib.cmxa $prereq 
 
 oclbench-$INTERP:	lua-$INTERP.cma bench.cmo
-		$OCAMLC $OCAMLC_FLAGS -o $target unix.cma cllib.cma $prereq 
+	$OCAMLC $OCAMLC_FLAGS -o $target unix.cma cllib.cma $prereq 
 
-oclbench-$INTERP.opt: 	lua-$INTERP.cmxa bench.cmx
-		$OCAMLO $OCAMLO_FLAGS -o $target unix.cmxa cllib.cmxa $prereq 
+oclbench-$INTERP$PROFILE.opt: 	lua-$INTERP.cmxa bench.cmx
+	$OCAMLO $OCAMLO_FLAGS -o $target unix.cmxa cllib.cmxa $prereq 
 
 
 # ------------------------------------------------------------------ 
@@ -208,10 +212,18 @@ test:V: 	oclua-$INTERP
 # main interpreter. We special rules to extract sources
 # from noweb files. 
 
-$INTERP/luainterp.ml: ${INTERP}luainterp.nw
+^(std|ast)/luainterp.ml'$':R: stdluainterp.nw xinterp-'\1'.nw
 	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R`basename $target` $prereq > $target
 
-$INTERP/luainterp.mli: ${INTERP}luainterp.nw
+^(old)/luainterp.ml'$':R: '\1'luainterp.nw 
+	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R`basename $target` $prereq > $target
+
+# see if the following two rules can be safely merged (I hope so)
+
+^(std|ast)/luainterp.mli'$':R: stdluainterp.nw
+	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R`basename $target` $prereq | cpif $target
+
+^(old)/luainterp.mli'$':R: '\1'luainterp.nw
 	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R`basename $target` $prereq | cpif $target
 
 # ------------------------------------------------------------------ 
