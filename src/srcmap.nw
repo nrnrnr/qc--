@@ -125,8 +125,17 @@ val dump:           map -> unit
 that keeps track of their origins. 
 
 <<srcmap.mli>>= 
-type position       = map * pos
+type point          = map * pos
 type region         = map * reg
+
+@ The [[Str]] module provides string representations for points and regions.
+
+<<srcmap.mli>>=
+module Str:
+sig
+    val point       : point  -> string
+    val region      : region -> string
+end
 
 @
 
@@ -177,7 +186,7 @@ type map =          { mutable points:       syncpoint array
                     ; mutable top:          int
                     ; files :               (string, string) Hashtbl.t
                     }
-type position       = map * pos
+type point          = map * pos
 type region         = map * reg
 
 @ The [[top]] component maintains the index of the first free position
@@ -313,8 +322,27 @@ let dump map =
     in
         Array.iter point map.points
 
+@ For reporting locations to the user they must be avaliable as
+strings. The [[Str]] module provides conversions.
+
+<<srcmap.ml>>=
+
+module Str = struct
+    
+    let point  (map,pos) =
+        let (file,line,column) = location map pos in
+            Printf.sprintf "%s:%d.%d" file line column   
+    
+    let region (map,(left,right)) = 
+        let (file1,l1,col1) = location map left   in
+        let (file2,l2,col2) = location map right  in
+            if file1 = file2 then
+                Printf.sprintf "%s:%d.%d - %d.%d"   
+                    file1 l1 col1 (***) l2 col2
+            else
+                Printf.sprintf "%s:%d.%d - %s:%d.%d"
+                    file1 l1 col2 file2 l2 col2
+end
+
+
 @
-
-
-
-

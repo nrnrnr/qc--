@@ -1,0 +1,186 @@
+
+% ------------------------------------------------------------------  
+\section{Error Handling}
+% ------------------------------------------------------------------ 
+
+The idea is not to stop in all cases after an error but to mark
+results as either good or bad.  Bad values can be used for further
+computation although the overall result will be bad.  The hope is, to
+detect even more errors that are \textit{not} cause by any previous
+error.  Details of this idea and the following implementation can be
+found in \textit{Eliminating Spurious Error Messages Using Exceptions,
+Polymorphism and Higher-Order Functions} \cite{ramsey:99:compj}.
+
+Technically results are raped in an [['a error]] type; good results
+are represented by the [[Ok]] constructor, bad results by [[Error]]. 
+A set of combinators helps to deal with this type of values.
+
+% ------------------------------------------------------------------  
+\subsection{Interface}
+% ------------------------------------------------------------------  
+
+<<error2.mli>>=
+
+type 'a error       = Error                     (* bad result  *)
+                    | Ok        of 'a           (* good result *)
+
+@ At some point in a program the processing is finally aborted by
+rasing the [[ErrorExn]] exception.
+
+<<error2.mli>>=
+
+type pretty         = string                    (* for the moment *)
+
+exception ErrorExn of    Srcmap.point * pretty list
+
+@ Combinators to deal with functions that do not naturally expect 
+values of type [[error]].
+
+<<error2.mli>>=
+
+val combine     : 'a error error -> 'a error
+val map         : ('a -> 'b) -> 'a error -> 'b error
+val sequence    : ('a -> 'b error) -> 'a error -> 'b error
+
+
+@ Raising combinators raise the constructors of an [[error]] value inside
+a complex value to the top-level. A complex value is bad when one
+of its components is bad and good otherwise. The raising combinators
+deal with the most important data types: options, lists, and tuples.
+
+<<error2.mli>>=
+
+module Raise :
+  sig
+    val option : 'a error option                -> 'a option error
+    val list   : 'a error list                  -> 'a list error
+    val pair   : 'a error * 'b error            -> ('a * 'b) error
+    val left   : 'a error * 'b                  -> ('a * 'b) error
+    val right  : 'a * 'b error                  -> ('a * 'b) error
+    val triple : 'a error * 'b error * 'c error -> ('a * 'b * 'c) error
+    val quad   : 'a error * 'b error * 'c error * 'd error 
+                  -> ('a * 'b * 'c * 'd) error
+  end
+
+@ Lowering functions take a complex [[error]] value and push the
+constructor from the outer level to the values inside the [[error]]
+value. 
+
+<<error2.mli>>=
+module Lower :
+  sig
+    val pair   : ('a * 'b)           error -> 'a error * 'b error
+    val triple : ('a * 'b * 'c)      error -> 'a error * 'b error * 'c error
+    val quad   : ('a * 'b * 'c * 'd) error -> 'a error 
+                                            * 'b error 
+                                            * 'c error 
+                                            * 'd error
+  end
+@
+
+
+% ------------------------------------------------------------------  
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<error2.ml>>=
+type 'a error       = Error                     (* bad result  *)
+                    | Ok        of 'a           (* good result *)
+
+type pretty         = string                    (* for the moment *)
+
+exception ErrorExn  of    Srcmap.point * pretty list
+
+let combine = function  
+    | Ok x      -> x
+    | Error     -> Error
+
+let map f = function
+    | Ok x      -> Ok (f x)
+    | Error     -> Error
+
+let sequence f = function
+    | Ok x      -> f x
+    | Error     -> Error
+
+@ Raising combinators raise the constructors of an [[error]] value inside
+a complex value to the outermost level. A complex value is bad when one
+of its components is bad and good otherwise. The raising combinators
+deal with the most important data types: options, lists, and tuples.
+
+<<error2.ml>>=    
+
+module Raise = struct
+
+    let option = function
+        | Some Error        -> Error
+        | Some (Ok x)       -> Ok (Some x)
+        | None              -> Ok (None)
+
+    let list xs =
+        let rec loop acc = function
+            | []            -> Ok (List.rev acc)
+            | (Ok x)::xs    -> loop (x::acc) xs
+            | Error::xs     -> Error 
+        in      
+            loop [] xs
+
+    let pair = function
+        | (Ok x, Ok y)          -> Ok (x,y)
+        | _                     -> Error
+            
+    let left = function
+        | (Ok x, y)             -> Ok (x,y)
+        | _                     -> Error
+
+    let right = function
+        | (x, Ok y)             -> Ok (x,y)
+        | _                     -> Error
+
+    let triple = function
+        | (Ok x, Ok y, Ok z)    -> Ok (x,y,z)
+        | _                     -> Error 
+
+    let quad = function
+        | (Ok a,Ok b,Ok c,Ok d) -> Ok (a,b,c,d)
+        | _                     -> Error
+
+end
+
+@ Lowering functions take a complex [[error]] value and push the
+constructor from the top-level to the values inside the [[error]]
+value. 
+
+<<error2.ml>>=
+
+module Lower = struct
+
+    let pair = function
+        | Ok (x,y)              -> Ok x , Ok y
+        | Error                 -> Error, Error 
+
+    let triple = function
+        | Ok (x,y,z)            -> Ok x , Ok y , Ok z
+        | Error                 -> Error, Error, Error
+
+    let quad = function
+        | Ok (a,b,c,d)          -> Ok a , Ok b , Ok c , Ok d
+        | Error                 -> Error, Error, Error, Error
+end
+
+@ We provide functions to raise the error ([[ErrorExn]]) exception and
+issue warnings.
+
+<<error2.ml>>=
+
+let error point msg = raise (ErrorExn(point,msg))
+
+let warning point msg =
+    ( prerr_string (Srcmap.Str.point point)
+    ; prerr_string " Warning: "
+    ; List.iter prerr_string msg
+    ; prerr_endline
+    )       
+
+@
+
