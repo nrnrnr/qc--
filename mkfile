@@ -161,12 +161,18 @@ clobber:V:      dirs clean
                 
 # make sure appropriate empty directories exist
 dirs:V:
-                for i in bin lib man man/man1; do
+                for i in bin lib man man/man1 lua/std; do
                     [ -d $i ] || mkdir $i
                 done
 
 # ------------------------------------------------------------------ 
 # build distribution
+#
+# It is a good idea to call tar on a freshly checked out CVS repository
+# to avoid junk being included into the tar file.
+#
+# tar       - build a *.tar.gz file
+# tar-test  - unpack *.tar.gz file and call mk
 # ------------------------------------------------------------------ 
 
 DIR =           $NAME$VERSION
@@ -193,9 +199,16 @@ FILES:          clobber
                         -o -type f -print | sort | sed "s+^\./+$DIR/+" \
                         > $target 
 
-tar:V:          FILES
+timestamps:V:   
+                touch interp/*-dec.c interp/encode.[ch]
+
+tar:V:          FILES timestamps
                 ln -s . $DIR 
                 tar czvhf $DIR.tar.gz `cat FILES` 
                 rm -f $DIR
                 
-                
+tartest:V:      $DIR.tar.gz
+                tar zxvf $DIR.tar.gz
+                ( cd $DIR && mk )
+                rm -rf $DIR
+
