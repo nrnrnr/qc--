@@ -1,0 +1,42 @@
+% vim: ts=8 sw=4 et:
+
+% ------------------------------------------------------------------ 
+\section{Type Checker for the Control-Flow Graph}
+% ------------------------------------------------------------------ 
+
+The control-flow graph (\cfg) of a procedure contains {\rtl}s. This
+module provides a stage for the compiler's backplane that allows to
+check the types of all {\rtls}.
+
+To embed the function into the back plane it takes a procedure as
+argument. The emedding into Lua is handled by the \module{lualink}
+module.
+
+
+<<typecheck.mli>>=
+val proc: Proc.t -> unit
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The implementation simply pieces together functionality: module
+\module{rtldebug} provides type checking, and module \module{cfgutil}
+traversal of a {\cfg}.
+
+<<typecheck.ml>>=
+let rtl rtl =
+    try
+        Rtldebug.typecheck rtl
+    with
+        Rtldebug.TypeCheck(rtl) ->
+            ( prerr_string "This RTL does not type check:\n"
+            ; prerr_endline (Rtlutil.ToString.rtl rtl)
+            )
+
+let proc proc =
+    let cfg         = proc.Proc.cfg in
+    let iter cfg f  = Cfgutil.fold_fwd cfg (fun n () -> f n) () in
+        iter cfg (fun node -> rtl (Cfg4.instr node))
+@
