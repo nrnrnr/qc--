@@ -874,8 +874,9 @@ typedef struct {
 We provide a convenience macro for determining if a given [[CMM_label]] has yet been defined; that is, it returns 0 if and only if the [[CMM_label]]'s associated [[RAddr]] has not been tied down to a location within an [[RBlock]].
 Additionally, we provide a macro [[CMM_label_raddr]] that, given a [[CMM_label]], returns the [[RAddr]] to which it is tied.
 <<faux prototypes>>=
-int   CMM_label_defined(CMM_label *lbl);
-RAddr CMM_label_raddr(CMM_label *lbl);
+int         CMM_label_defined(CMM_label *lbl);
+RAddr       CMM_label_raddr(CMM_label *lbl);
+bytecodeptr CMM_label_location(CMM_label *lbl);
 @ 
 \subsection{Bytecode Generation}
 To assist in generating bytecode, we use the NJ Machine-Code toolkit.  As a client of this library, we are responsible for writing a general allocation function and a closure allocation function (allocates [[RClosure]]s).  Additionally, when using certain toolkit functions we are required to supply an error printing function that takes a format string and a variable number of arguments and returns nothing.  Because the [[error]] function in [[<error.h>]] does not exactly fit this specification, we simply wrap it in [[error_wrapper]].
@@ -1948,10 +1949,14 @@ Macro [[CMM_label_defined]] simplifies testing whether or not a given [[CMM_labe
  ((LBL)->ty == CMM_LABEL     &&                           \
   block_defined((LBL)->lbl.raddr->label->block)))
 @
-Macro [[CMM_label_raddr]] returns the [[RAddr]] to which a [[CMM_label]] is tied.
+Macro [[CMM_label_raddr]] returns the [[RAddr]] to which a [[CMM_label]] is tied, and [[CMM_label_location]] returns the location to which a [[CMM_label]] is tied.
 <<macro definitions>>=
 #define CMM_label_raddr(LBL) \
 ((LBL)->ty == CMM_PROCEDURE ? (LBL)->lbl.proc->raddr : (LBL)->lbl.raddr)
+
+#define CMM_label_location(LBL) \
+((bytecodeptr) ((LBL)->ty == CMM_PROCEDURE ? location((LBL)->lbl.proc->raddr) \
+                                           : location((LBL)->lbl.raddr)))
 @ 
 [[get_label]] expects to see a string atop the Lua stack and leaves the Lua stack with one less item than it started with.
 We look to see if there is a value associated with [[name]] in the Lua label table.
@@ -2076,10 +2081,10 @@ int lua_CMM_imports(lua_State *L) {
     if (!lua_isuserdata(L, -1) ||
         lua_tag(L, -1) != lua_CMM_label_tag ||
         (imported_label = (CMM_label *) lua_touserdata(L, -1)) == NULL)
-	{
+    {
       lua_pop(L, 4);
-	  lua_error(L, "cannot import label; label was not exported by any unit");
-	}
+      lua_error(L, "cannot import label; label was not exported by any unit");
+    }
 
     lua_pop(L, 1); /* pop CMM_label */
 
@@ -2089,8 +2094,8 @@ int lua_CMM_imports(lua_State *L) {
 
     if (lbl->ty == CMM_LABEL) {
       lbl->lbl.raddr = (imported_label->ty == CMM_PROCEDURE ? 
-						imported_label->lbl.proc->raddr     : 
-						imported_label->lbl.raddr);
+                        imported_label->lbl.proc->raddr     : 
+                        imported_label->lbl.raddr);
     } else if (lbl->ty == CMM_PROCEDURE) {
       assert(lbl->lbl.proc != NULL);
       lbl->lbl.proc->raddr = (imported_label->ty == CMM_PROCEDURE ? 
@@ -2385,7 +2390,7 @@ int lua_CMM_apply_operator(lua_State *L) {
   lua_assert_isstring(L, -1, 
              "apply_operator requires a bit-width specification");
   lua_assert_isstring(L, -2,
-			 "apply_operator requires an operator stem name (in string form)");
+             "apply_operator requires an operator stem name (in string form)");
 
   <<[[op_family]] $\leftarrow$ Lua table representing [[op_stem_name]]>>
   <<[[op]] $\leftarrow$ pointer to associated [[operator]] record>>
@@ -2956,7 +2961,10 @@ For goto and branches, we simply conditionally (or unconditionally in the case o
 Although these instructions were encoded using [[RAddr]]s for arguments, the Toolkit is able to translate these addresses to actual pointers by the time we reach this matching statement.
 \useops{Goto}
 <<matching statement>>=
-    | GOTO              => pc = VIEW(POP(values), bytecodeptr);
+    | GOTO              => {
+                           CMM_label *lbl = VIEW(POP(values), CMM_label *);
+                           pc = CMM_label_location(lbl);
+                           }
 @ 
 \useops{CBranchT-True}
 \useops{CBranchT-False}
@@ -2966,15 +2974,14 @@ Although these instructions were encoded using [[RAddr]]s for arguments, the Too
     | CBRANCHT(a)       => if (VIEW(POP(values), bool)) {
                              pc = (bytecodeptr) a;
                            } else { pc = next; }
-    | CBRANCHF(a)       => if (!VIEW(POP(values), bool)) {
+    | CBRANCHF(a)       => if (!(VIEW(POP(values), bool))) {
                              pc = (bytecodeptr) a;
                            } else { pc = next; }
 @ 
 \useops{BranchTF-True}
 \useops{BranchTF-False}
 <<matching statement>>=
-    | BRANCHTF(a, b)    => pc = (VIEW(POP(values), bool) ? (bytecodeptr) a
-                                                         : (bytecodeptr) b);
+    | BRANCHTF(a, b)    => pc = (bytecodeptr) (VIEW(POP(values),bool) ? a : b);
 @ 
 To implement a {\PAL} procedure call, we must store information about the present activation in the current thread's activation stack and perform some pointer bookkeeping.
 We pop a pointer to a C [[procedure]] structure off the value stack, and dereference it to find needed information about the callee (so we can properly allocate new memory from the [[locals]] and [[stackdata]] stacks.
@@ -3105,7 +3112,7 @@ Retrieving [[call_helper]] and [[f]] simply involves some queries to Lua tables.
                            lua_pushtable(L, c_func_table);
                            lua_rawgeti(L, -1, i);
                            lua_assert_istable(L, -1, 
-							                  "internal error with c call");
+                                              "internal error with c call");
 
                            lua_pushstring(L, C_FUNC_CALLER);
                            lua_gettable(L, -2);
@@ -3170,7 +3177,7 @@ We simply copy pointers to restore information from the activation record stored
                            lua_pushtable(L, caller->kappa->also_returns_to);
 
                            /* FIX we here assert that count = |returns| */
-                           assert(count == lua_getn(L, -1));
+                           assert(count == lua_getn(L, -1) + 1);
 
                            if (i == count) {
                              pc = caller->pc;
@@ -3184,13 +3191,17 @@ We simply copy pointers to restore information from the activation record stored
                                  (lbl = lua_touserdata(L, -1)) == NULL ||
                                  !CMM_label_defined(lbl))
                              {
+                               lua_pop(L, 2); /* pop bogus label, table */
                                printf("error: invalid call-site label\n");
                                err_occurred = 1;
                                break;
                              }
+                             lua_pop(L, 1); /* pop label */
+
                              assert(location_known(CMM_label_raddr(lbl)));
                              pc = (bytecodeptr) location(CMM_label_raddr(lbl));
                            }
+                           lua_pop(L, 1); /* pop table */
 
                            locals        = caller->locals;
                            locals_end    = caller->locals_end;
@@ -3513,18 +3524,18 @@ Putting it all together, we have [[interp.m]], the C file with NJ Machine-Code T
 We left out a few minor details from the previous sections.
 First come [[#define]] constants:
 <<constant definitions>>=
-#define LUA_LOCK                1
+#define LUA_LOCK        1
 
-#define C_FUNC_CALLER           "caller"
-#define C_FUNC_POINTER          "f"
+#define C_FUNC_CALLER   "caller"
+#define C_FUNC_POINTER  "f"
 @ 
 And then come global variables:
 <<global variable definitions>>=
-static stack     values_base  = NULL;
-static sptr      values_limit = NULL;
+static stack     values_base          = NULL;
+static sptr      values_limit         = NULL;
 
-static stack     arguments_base  = NULL;
-static sptr      arguments_limit = NULL;
+static stack     arguments_base       = NULL;
+static sptr      arguments_limit      = NULL;
 
 static int       lua_assembly_unit_tag;
 static int       lua_RBlock_tag;
@@ -3539,9 +3550,9 @@ static table     operator_table       = fresh_table();
 static table     assembly_units_table = fresh_table();
 static table     exports_table        = fresh_table();
 
-static int       verbosity = 1;
+static int       verbosity            = 0;
 @
-And now for the hackery that lets us define and register operators in one shot.
+And now for the hackery that lets us define and register operators with the same piece of code.
 <<operator macro redefinition>>=
 #undef BINARYOP
 #undef UNARYOP
@@ -3655,7 +3666,7 @@ void disassemble_instructions(unsigned char *pc) {
   | APPLY_OPERATOR(op) =>
       {
         operator *o = (operator *) op;
-		asmprintf(asmprintfd, "%x: %s", pc, "APPLY_OPERATOR ");
+        asmprintf(asmprintfd, "%x: %s", pc, "APPLY_OPERATOR ");
         asmprintf(asmprintfd, "{ name = \"%s\"", o->opname);
         asmprintf(asmprintfd, ", num_args = %u", o->num_args);
         asmprintf(asmprintfd, ", f = ");
@@ -3891,9 +3902,8 @@ Do we have to handle [[never returns]] annotations?
 Do we really have to perform emptiness checks on the value stack whenever we call a procedure or return, etc.
 
 \section{To Do Immediately}
-Need some function like [[lua_CMM_define_continuation]].
-
-Need to add another type to the [[enum]] field ([[ty]]) of [[CMM_label]].
+Do we need some function like [[lua_CMM_define_continuation]]?
+Do we need to add another type to the [[enum]] field ([[ty]]) of [[CMM_label]]?
 
 Consider changing operator representation/implementation so that OP bytecode does not need to carry around a 32-bit value (right now it carries around an (operator *)).
 
