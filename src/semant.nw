@@ -161,7 +161,7 @@ let ppEnv env =
 
 In the first phase global symbols are entered into an initially empty
 symbol table.  Except for constants all global symbols are either
-given their declared type or [[pointer]] in case they denote a
+given their declared type or [[code]] in case they denote a
 procedure and [[data]] in case of a data label.  The functions that
 implement the first phase take a symbol table [[env]] as one of their
 arguments and return an enlarged symbol table that contains the global
@@ -175,8 +175,8 @@ multiple definitions of symbols can cause errors in the first phase.
     \begin{center}
     \begin{tabular}{lll}
         Object      & Kind          & Type \\ \hline
-        Procedure   & [[Memory]]    & [[pointer]]  \\
-        Code Label  & [[Memory]]    & [[pointer]]  \\
+        Procedure   & [[Memory]]    & [[code]]  \\
+        Code Label  & [[Memory]]    & [[code]]  \\
         Data Label  & [[Memory]]    & [[data]]     \\
         Register    & [[Register]]  & as declared  \\
         Import      & [[Memory]]    & as declared  \\
@@ -194,7 +194,7 @@ let bits  x         = Types.Bits(x)
 let bool            = Types.Bool
 let proc args res   = Types.Procedure(args,res)
 let word            = bits 32   (* for now *)
-let pointer         = bits 32
+let code            = bits 32
 let data            = bits 16
 let char            = bits 8
 let uchar           = bits 16
@@ -228,7 +228,7 @@ let rec stmt env = function
     | StmtAt(x,r)             -> catch' env (errorRegPrt r) (stmt env) x
     | IfStmt ( e, ss1, ss2)   -> let env' = stmts env ss1 in
                                     stmts env' ss2 
-    | LabelStmt(n)            -> enter_ok n (pointer,Memory) env
+    | LabelStmt(n)            -> enter_ok n (code,Memory) env
     | SpanStmt(e1,e2,ss)      -> stmts env ss
     | _                       -> env
     
@@ -244,7 +244,7 @@ let constant env (name,expr) =
     enter_ok name (dummy,Constant(ExprConst(expr))) env
     
 let procedure env (cc,n,fs, ds, ss) = 
-    let env' = enter_ok n (pointer,Memory) env in 
+    let env' = enter_ok n (code,Memory) env in 
         stmts env' ss 
             
 let rec section env = function
@@ -627,7 +627,7 @@ let rec stackdatum env = function
 
 let checkJumpTarget env x =
     match strip (lookup x env) with
-    | t, Memory when t = pointer -> ()
+    | t, Memory when t = code    -> ()
     | otherwise                  -> error (x^" is not a label")
     
 let targets env ts = List.iter (checkJumpTarget env) ts 
@@ -709,7 +709,7 @@ and spanStmt env e1 e2 ss =
 and gotoStmt env e ts = 
     ( targets env ts
     ; let et = tyExpr env e in
-        if et != pointer then
+        if et != code then
             error "goto-expression does not evaluate to a pointer" 
         else
             ()
@@ -727,7 +727,7 @@ and jumpStmt env cc e args ts =
     ( targets env ts
     ; let _  = List.map (tyExpr env) (List.map snd args) in
       match tyExpr env e with
-      | t when t = pointer   -> ()
+      | t when t = code      -> ()
       | otherwise            -> error "jump target is not a pointer"
     )
 
@@ -784,7 +784,7 @@ and callStmt env (l,cc,e,args,ts,fs) =
     let _     = targets env ts           in
     let _     = flows env fs             in
     let at    = List.map (tyExpr env) args' in
-        if et != pointer then
+        if et != code then
             error "call-expression is not a pointer"
         else 
             ()
