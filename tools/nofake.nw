@@ -375,22 +375,34 @@ then extracting the chunk in the [[chunk]] variable.
 
 <<process command line and extract chunk>>=
 sub usage {
+    my $arg = shift @_;
+    
     print STDERR <<EOF;
-    Unknown command line argument. See the manual page for help which is
-    also included at the end of this Perl script.
+    Unknown command line argument "$arg". See the manual page for help 
+    which is also included at the end of this Perl script.
 
     nofake [-Rchunk] [-L[format]] [file]
     nofake [-version|-v]
 EOF
 }
 
-foreach (@ARGV) {
-    if(/^\-L(.*)/){ $sync=1; if ($1 ne '') {$lineformat=$1;}}
-    elsif(/^\-R(.+)/){$chunk=$1}
-    elsif(/^\-(v|-version)$/){version();exit(0);}
-    elsif(/^\-/){usage(); exit(1);}
+while ($_ = shift(@ARGV)) {
+    if(/^\-L(.*)/)              { $sync=1; if ($1 ne '') {$lineformat=$1;}}
+    elsif(/^\-R(.+)/)           { $chunk=$1 }
+    elsif(/^\-(v|-version)$/)   { version(); exit(0); }
+    elsif(/^\-filter$/)         { shift(@ARGV) }  # ignore
+    elsif(/^(\-.*)$/)           { usage($1); exit(1);}
     else{$fname=$_}
 }
+
+
+# foreach (@ARGV) {
+#    if(/^\-L(.*)/){ $sync=1; if ($1 ne '') {$lineformat=$1;}}
+#    elsif(/^\-R(.+)/){$chunk=$1}
+#    elsif(/^\-(v|-version)$/){version();exit(0);}
+#    elsif(/^\(-.*)/){usage($1); exit(1);}
+#    else{$fname=$_}
+# }
 
 read_file($fname,$sync);
 print extract($chunk);
