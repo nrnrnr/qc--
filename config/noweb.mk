@@ -30,7 +30,7 @@ $B&.mli:D: &.nw
 	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R$stem.mli $prereq | $CPIF $target
 
 $B&.c:D: &.nw
-	$NOTANGLE -L"$LINE" -R$stem.c $prereq > $target
+	$NOTANGLE -L -R$stem.c $prereq > $target
 
 %.view:D: %.nw
 	$NOTANGLE -R$target $prereq > $target
