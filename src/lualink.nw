@@ -199,6 +199,8 @@ struct
       let ( --> )  = V.( --> )
       let ( **->> ) x y = x **-> V.result y 
       let ( *****->> ) = V.dots_arrow
+      let ( ||| ) = V.( ||| )
+      let ( >>= ) = V.( >>= )
       <<export goodies to Lua>>
     end (*M*)
 end (*MakeLib*)
@@ -273,114 +275,102 @@ C.register_module "Asm"
             (Interpasm.asm' ~byteorder:Rtl.BigEndian ~memsize:8 ~ptrsize:32)
   ] g;
 @ 
+\paragraph{Calling-convention automata}
+[[listpair : 'a map -> 'b map -> ('a * 'b) list map]]
+<<embedding/projection pairs for calling conventions>>=
+let listpair a b =
+  let values = V.list V.value in
+  { V.embed =
+      (fun ps -> values.V.embed
+          (List.fold_right (fun (x, y) t -> a.V.embed x :: b.V.embed y :: t) ps []))
+  ; V.project = (fun l ->
+      let rec cut = function
+        | x :: y :: ps -> (a.V.project x, b.V.project y) :: cut ps
+        | [] -> []
+        | [x] -> V.projection l "list of pairs" in
+      cut (values.V.project l))
+  ; V.is = (fun l -> values.V.is l && (List.length (values.V.project l) mod 2 = 0))
+  } in
+
+<<embedding/projection pairs for calling conventions>>=
+let stringtab what tbl =
+  let nameof x =     fst (List.find (fun (_, x') -> x' = x) tbl) in
+  let valof  n = try snd (List.find (fun (n', _) -> n' = n) tbl)
+                 with Not_found -> V.projection (V.String n) what in
+  let exists n = List.exists (fun (n', _) -> n' = n) tbl in
+  { V.embed   = (fun x -> V.String (nameof x))
+  ; V.project = (fun v -> valof (V.string.V.project v))
+  ; V.is      = (fun v -> V.string.V.is v && exists (V.string.V.project v))
+  } in
+
+let byteorder = stringtab "byteorder"
+  ["little", Rtl.LittleEndian; "big", Rtl.BigEndian; "identity", Rtl.Identity] in
+let growth    = stringtab "memory growth"
+  ["up", Memalloc.Up; "down", Memalloc.Down] in
+@ 
+
+<<embedding/projection pairs for calling conventions>>=
+let choice_pred =
+  (V.string >>= A.is_hint)  |||
+  (V.int    >>= A.is_width) |||
+  (V.unit   >>= (fun () -> A.is_any)) |||
+  V.func (V.string **-> V.int **->> V.bool) in
+
+let stage stages =
+  (V.list stages >>= (fun l -> List.fold_right A.( *> ) l A.unit)) |||
+  Map.ccstage in
+let stage = stage (stage (stage (stage (stage (stage Map.ccstage))))) in
+@
 For information on how we represent registers in Lua, see \module{register.nw}.
 <<register modules to [[g]] in alphabetical order>>=
-let overflow memsize bo growth max_alignment =
-  let byteorder =
-    match String.lowercase bo with
-    | "little" -> Rtl.LittleEndian
-    | "big"    -> Rtl.BigEndian
-    | _        -> raise (V.Projection (V.String bo, "byteorder")) in
-  let growth =
-    match String.lowercase growth with
-    | "down"   -> Memalloc.Down
-    | "up"     -> Memalloc.Up
-    | _        -> raise (V.Projection (V.String growth, "memory growth")) in
-  Automaton.overflow ~memsize ~byteorder ~growth ~max_alignment in
-
-let choice_funs f choices =
-  let rec choice cs = match cs with
-  | pred :: s :: rest ->
-      let camlpred = match pred with
-        | V.String   h -> Automaton.is_hint  h
-        | V.Number   _ -> Automaton.is_width (V.int.V.project pred)
-        | V.Function _ ->
-            let ff = V.func (V.string **-> V.int **->> V.bool) in
-                ff.V.project pred
-        | _            -> raise (V.Projection (pred, "choice predicate")) in
-      let stage = match s with
-        | V.Userdata _ -> Map.ccstage.V.project s
-        | _            -> List.fold_right Automaton.( *> ) 
-                             ((V.list Map.ccstage).V.project s) Automaton.unit
-      in
-        (camlpred, stage) :: (choice rest)
-  | [] -> []
-  | _  -> raise (V.Projection (V.Nil, "choice predicate/stage list"))
-  in
-  f (choice choices) in
-
+let module A = Automaton in
+<<embedding/projection pairs for calling conventions>>
 let register_cc t name tbl = 
-  let getfield f =
-     let value = V.Table.find tbl (V.String f) in
-     match value with
-     | V.Table stages ->
-         let stages = (V.list Map.ccstage).V.project value in
-         List.fold_right Automaton.( *> ) stages Automaton.unit
-     | V.Userdata _   -> Map.ccstage.V.project value
-     | _              ->
-         raise (V.Projection (value, "automaton stage/stage list")) in
+  let getfield f = stage.V.project (V.Table.find tbl (V.String f)) in
   Call.register_cc t name ~call:(getfield "call")
      ~results:(getfield "results") ~cutto:(getfield "cutto") in
 
-let widen args =
-  let rec f = function
-  | [ (V.Number _) as n ; V.String "multiple" ] ->
-     Aux.round_up_to ~multiple_of:(V.int.V.project n)
-  | [ (V.Number _) as n ; V.String "exact"    ] -> 
-     let n = V.int.V.project n in
-     fun x -> let y = Aux.round_up_to ~multiple_of:n x
-              in if   y <= n then y
-                 else Unsupported.automaton_widen ~have:x ~want:n
-  | [ (V.Number _) as n ; V.Nil ] -> f [n; V.String "exact"]
-  |	[ (V.Function _) as luafunc ; V.Nil ] ->
-     (V.func (V.int **->> V.int)).V.project luafunc
-  |	_ -> raise (V.Projection ((V.list V.value).V.embed args,
-                              "Automaton.widen stage args"))
-  in Automaton.widen (f args)
-in
+let wideni n how =
+  A.widen (
+    match how with
+    | "multiple" -> Aux.round_up_to ~multiple_of:n
+    | "exact"    -> (fun m -> if m <= n then n
+                              else Unsupported.automaton_widen ~have:m ~want:n)
+    | s -> V.projection (V.String s) "widening (should be 'multiple' or 'exact')") in
 
 let regty = RL.map in
 let counterty = V.string in
 
 C.register_module "Automaton"
   [ (* first the stage constructors ... *)
-    "align_to"    , V.efunc ((V.func (V.int **->> V.int)) **->> Map.ccstage)
-                    Automaton.align_to
-  ; "argcounter"  , V.efunc (counterty **->> Map.ccstage)
-                    Automaton.argcounter
-  ; "bitcounter"  , V.efunc (counterty **->> Map.ccstage)
-                    Automaton.bitcounter
-  ; "choice"      , V.efunc (V.list V.value **->> Map.ccstage)
-                    (choice_funs Automaton.choice)
-  ; "first_choice", V.efunc (V.list V.value **->> Map.ccstage)
-                    (choice_funs Automaton.first_choice)
-  ; "overflow"    , V.efunc (V.table **->> Map.ccstage)
+    "align_to"    , V.efunc ((V.func (V.int **->> V.int)) **->> stage) A.align_to
+  ; "argcounter"  , V.efunc (counterty                    **->> stage) A.argcounter
+  ; "bitcounter"  , V.efunc (counterty                    **->> stage) A.bitcounter
+  ; "choice"      , V.efunc (listpair choice_pred stage   **->> stage) A.choice
+  ; "first_choice", V.efunc (listpair choice_pred stage   **->> stage) A.first_choice
+  ; "overflow"    , V.efunc (V.table **->> stage)
                     (fun ovfl ->
-                        let field f = V.Table.find ovfl (V.String f) in
-                        overflow
-                          (V.int.V.project    (field "memsize"))
-                          (V.string.V.project (field "byteorder"))
-                          (V.string.V.project (field "growth"))
-                          (V.int.V.project    (field "max_alignment")))
-  ; "regs_by_args", V.efunc (counterty **-> V.list regty **->> Map.ccstage)
-                    Automaton.regs_by_args
-  ; "regs_by_bits", V.efunc (counterty **-> V.list regty **->> Map.ccstage)
-                    Automaton.regs_by_bits
-  ; "unit"        , Map.ccstage.V.embed Automaton.unit
-  ; "useregs"     , V.efunc (V.list regty **->> Map.ccstage)
-                    Automaton.useregs
-  ; "widen"       , V.efunc (V.value **-> V.value **->> Map.ccstage)
-                    (fun x y -> widen [ x ; y ])
-  ; "widths"      , V.efunc (V.list V.int **->> Map.ccstage)
-                    Automaton.widths
+                        let field p f = p.V.project (V.Table.find ovfl (V.String f)) in
+                        A.overflow
+                          ~memsize:      (field V.int     "memsize")
+                          ~byteorder:    (field byteorder "byteorder")
+                          ~growth:       (field growth    "growth")
+                          ~max_alignment:(field V.int     "max_alignment"))
+  ; "regs_by_args", V.efunc (counterty **-> V.list regty **->> stage) A.regs_by_args
+  ; "regs_by_bits", V.efunc (counterty **-> V.list regty **->> stage) A.regs_by_bits
+  ; "unit"        , stage.V.embed                                     A.unit
+  ; "useregs"     , V.efunc (V.list regty                **->> stage) A.useregs
+  ; "widen"       , V.choose
+                    [ V.alt (V.int **-> V.default "exact" V.string **->> stage) wideni
+                    ; V.alt ((V.int --> V.int)                     **->> stage) A.widen
+                    ]
+  ; "widths"      , V.efunc (V.list V.int **->> stage) A.widths
 
     (* the prewritten utils ... *)
-  ; "is_any"      , V.efunc (V.string **-> V.int **->> V.bool)
-                    Automaton.is_any
+  ; "is_any"      , V.efunc (V.string **-> V.int **->> V.bool) A.is_any
 
     (* registration, although it shouldn't necessarily be in here *)
-  ; "register_cc" , V.efunc (Map.new_target **-> V.string **-> 
-                             V.table **->> V.unit)
+  ; "register_cc" , V.efunc (Map.new_target **-> V.string **-> V.table **->> V.unit)
                     register_cc
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
