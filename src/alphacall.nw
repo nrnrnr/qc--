@@ -221,7 +221,7 @@ Position & Integer  & Floating-Point \\
 
 The implementation below uses the \emph{position} of a parameter to
 determine the register it is passed in. The [[counter]] stage counts
-the number of bits requested for allocation; the [[offsetregs]] stages
+the number of bits requested for allocation; the [[regs_by_bits]] stages
 looks at its list of registers, ignores as many registers as are
 needed to account for bits already allocated and then uses any
 remaining register to satisfy the request.
@@ -231,15 +231,15 @@ independent of the stack growth.
         
 <<alphacall.ml>>=        
 let arguments () = 
-    let ctr = "bitc" in
-    (A.bitcounter' ctr *>
+    let ctr = "bits" in
+    (A.bitcounter ctr *>
     A.choice
         [ A.is_hint "float",
           A.widths [64] ~errormsg:(badwidth "Alpha FP call") *> 
-          A.offsetregs' ctr [f 16; f 17; f 18; f 19; f 20; f 21]
+          A.regs_by_bits ctr [f 16; f 17; f 18; f 19; f 20; f 21]
         ; A.is_any,
           A.widen (Aux.round_up_to ~multiple_of:64) *>
-          A.offsetregs' ctr [r 16; r 17; r 18; r 19; r 20; r 21]
+          A.regs_by_bits ctr [r 16; r 17; r 18; r 19; r 20; r 21]
         ]) *>  
   A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up ~max_alignment:sp_align
 @          
@@ -305,7 +305,7 @@ the prolog of a procedure and set back before the procedure returns. I
 hope the code below reflects this.
 
 <<transformations>>=
-let prolog stage =
+let prolog =
   let autosp = (fun _ -> vfp) in
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at stage.A.call)
@@ -313,19 +313,19 @@ let prolog stage =
     ~postsp:(fun _ _ -> std_sp_location)
 	  ~insp:(fun a _ _ -> autosp a) in
 
-let epilog stage =
+let epilog =
   C.outgoing ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at stage.A.results)
     ~autosp:(fun r -> std_sp_location)
     ~postsp:(fun _ _ -> vfp) in
 
-let call_actuals stage =
+let call_actuals =
   C.outgoing ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at stage.A.call)
     ~autosp:(fun r  -> std_sp_location)
     ~postsp:(fun _ sp -> sp) in  
 
-let call_results stage =
+let call_results =
   let autosp = (fun r -> std_sp_location) in
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at stage.A.results)
@@ -334,7 +334,7 @@ let call_results stage =
     ~insp:(fun a _ _ -> autosp a) in
 
 
-let also_cuts_to stage =
+let also_cuts_to =
   let autosp = (fun r -> std_sp_location) in
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at stage.A.cutto)
@@ -342,7 +342,7 @@ let also_cuts_to stage =
     ~postsp:(fun _ _ -> std_sp_location)
 	  ~insp:(fun a _ _ -> autosp a) in
 
-let cut_actuals stage base  =
+let cut_actuals base  =
    C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base stage.A.cutto)
      ~autosp:(fun r -> spval)
      ~postsp:(fun _ _ -> spval) in
@@ -358,15 +358,9 @@ let new_c ~return_to cut stage =
 	; C.overflow_alloc  = { C.parameter_deallocator = C.Caller
                           ; C.result_allocator      = C.Caller
                           }
-    ; C.call_parms      = { C.in' = prolog stage      
-                          ; C.out = call_actuals stage
-                          }
-    ; C.cut_parms       = { C.in' = also_cuts_to stage
-                          ; C.out = cut_actuals stage
-                          }
-    ; C.results         = { C.in' = call_results stage
-                          ; C.out = epilog stage
-                          }
+    ; C.call_parms      = { C.in' = prolog       ; C.out = call_actuals }
+    ; C.cut_parms       = { C.in' = also_cuts_to ; C.out = cut_actuals  }
+    ; C.results         = { C.in' = call_results ; C.out = epilog       }
 
     ; C.stack_growth     = growth
     ; C.stable_sp_loc    = std_sp_location

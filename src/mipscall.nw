@@ -226,8 +226,8 @@ type belief = Manual | Lcc
 let who_do_you_believe = Lcc
 
 let arguments () =
-    let bits = ref 0 in
-    let arg  = ref 0 in
+    let bits = "bits" in
+    let arg  = "arg"  in
     A.widen (Aux.round_up_to ~multiple_of: 32) *>
     A.widths [32;64] ~errormsg:(badwidth "MIPS argument") *>
     A.bitcounter bits *>
@@ -237,22 +237,22 @@ let arguments () =
         A.choice
         [ A.is_hint "float",
             (match who_do_you_believe with
-            | Manual -> A.argnoregs arg [d 12; d 14]
+            | Manual -> A.regs_by_args arg [d 12; d 14]
             | Lcc ->
                A.choice
-               [ A.is_width 64, A.argnoregs arg [d 12; d 14]
-               ; A.is_any     , A.argnoregs arg [f 12; f 14]
+               [ A.is_width 64, A.regs_by_args arg [d 12; d 14]
+               ; A.is_any     , A.regs_by_args arg [f 12; f 14]
                ] 
             ) 
         ; A.is_any,
             A.unit
-        ] *> A.offsetregs bits [r 4; r 5; r 6; r 7] 
+        ] *> A.regs_by_bits bits [r 4; r 5; r 6; r 7] 
     ; A.is_any,
         A.choice
         [ (fun h w -> h = "float" && w = 64),  (* beware int/32, float/64 *)
-            A.argnoregs arg [d 12; l 6] (* d12 is a placeholder; use pair r6/r7 *)
+            A.regs_by_args arg [d 12; l 6] (* d12 is a placeholder; use pair r6/r7 *)
         ; A.is_any,
-            A.offsetregs bits [r 4; r 5; r 6; r 7] 
+            A.regs_by_bits bits [r 4; r 5; r 6; r 7] 
         ]  
     ] *>
     A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up 
@@ -340,7 +340,7 @@ an overflow block is always at the extreme end of a frame, which is not
 the case here.
 
 <<transformations>>=
-let prolog stage =
+let prolog =
   let autosp = (fun _  -> vfp) in
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at stage.A.call)
@@ -348,19 +348,19 @@ let prolog stage =
     ~postsp:(fun _ _ -> std_sp_location)
     ~insp:(fun a _ _ -> autosp a) in
 
-let epilog stage =
+let epilog =
   C.outgoing ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at stage.A.results)
     ~autosp:(fun r  -> std_sp_location)
     ~postsp:(fun _ _ -> vfp) in
 
-let call_actuals stage =
+let call_actuals =
   C.outgoing ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at stage.A.call)
     ~autosp:(fun r    -> std_sp_location)
     ~postsp:(fun a sp -> std_sp_location) in
 
-let call_results stage =
+let call_results =
   let autosp = (fun r   -> std_sp_location) in
   C.incoming ~growth ~sp
     ~mkauto:(fun ()  -> Block.srelative vfp "in ovfl results" A.at stage.A.results)
@@ -368,7 +368,7 @@ let call_results stage =
     ~postsp:(fun _ _ -> std_sp_location)
     ~insp:(fun a _ _ -> autosp a) in
 
-let also_cuts_to stage =
+let also_cuts_to =
   let autosp = (fun r -> std_sp_location) in
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at stage.A.cutto)
@@ -376,7 +376,7 @@ let also_cuts_to stage =
     ~postsp:(fun _ _ -> std_sp_location)
     ~insp:(fun a _ _ -> autosp a) in
 
-let cut_actuals stage base =
+let cut_actuals base =
    C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base stage.A.cutto)
      ~autosp:(fun r -> spval)
      ~postsp:(fun _ _ -> spval) in
@@ -392,15 +392,9 @@ let new_c ~return_to cut stage =
 	; C.overflow_alloc  = { C.parameter_deallocator = C.Caller
                           ; C.result_allocator      = C.Caller
 						  }
-    ; C.call_parms      = { C.in' = prolog stage
-                          ; C.out = call_actuals stage
-                          }
-    ; C.cut_parms       = { C.in' = also_cuts_to stage
-                          ; C.out = cut_actuals stage
-                          }
-    ; C.results         = { C.in' = call_results stage
-                          ; C.out = epilog stage
-                          }
+    ; C.call_parms      = { C.in' = prolog       ; C.out = call_actuals }
+    ; C.cut_parms       = { C.in' = also_cuts_to ; C.out = cut_actuals  }
+    ; C.results         = { C.in' = call_results ; C.out = epilog       }
 
     ; C.stack_growth    = growth
     ; C.stable_sp_loc   = std_sp_location

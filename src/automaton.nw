@@ -64,6 +64,7 @@ The interface exports abstract types, concrete types, and values.
 <<automaton.mli>>=
 <<abstract types>>
 <<exposed types>>
+<<registration types>>
 <<exported values>>
 @ 
 \subsection{Standard hints}
@@ -117,18 +118,6 @@ Most locations are easy.
 <<exported values>>=
 val of_loc : Rtl.loc -> loc
 @ 
-It can be useful to treat a wide location as a narrow one.
-This means inserting widening and narrowing operations on fetch and
-store.
-We provide three instances: signed narrow and widen, unsigned narrow
-and widen, and floating narrow and widen.
-If more instances are needed, there's a higher-order function lurking
-in the implementation. 
-<<exported values>>=
-val narrows : w:int -> n:int -> loc -> loc
-val narrowu : w:int -> n:int -> loc -> loc
-val narrowf : w:int -> n:int -> loc -> loc
-@ 
 \subsection{Constructor interface}
 Most clients will simply use an automaton, but some will need to
 create one.
@@ -151,11 +140,8 @@ address for the overflow block.
 (I'M CONCERNED THAT WE USE A START ADDRESS HERE BUT TYPICALLY USE A
 BASE ADDRESS ELSEWHERE.  THIS DIFFERENCE MAY CAUSE PROBLEMS FOR THINGS
 THAT GROW DOWN.) 
-<<exposed types>>=
-type counters = string -> int ref option
-type implementation = I of (start:Rtl.exp -> ctrs:counters -> methods)
 <<exported values>>=
-val at : start:Rtl.exp -> stage -> t
+val at         : start:Rtl.exp -> stage -> t
 val of_methods : methods -> t
 @ 
 The idea is that we build an implementation by a composition of
@@ -163,16 +149,16 @@ stages.
 We provide stages that change alignment, adjust widths, hand out
 locations, and so on.
 In addition, we expect that a client might write its own stages.
-<<exposed types>>=
-type stage = S of (implementation -> implementation)
+<<abstract types>>=
+type stage
 <<exported values>>=
 val ( *> ) : stage -> stage -> stage
 @ 
 Because it's a nuisance to manage the threading of the [[start]]
-parameter through the stages, we provide a function that builds
-stages.
+parameter through the stages, we provide a function that lets clients
+build their own stages.
 <<exported values>>=
-val wrap  : (methods -> methods) -> stage
+val wrap   : (methods -> methods) -> stage
 @ 
 \paragraph{The overflow block, if any}
 The final stage in any implementation is the overflow block.
@@ -235,26 +221,13 @@ val useregs : Register.t list -> errormsg:(int -> Register.t list -> string) -> 
 @ The [[useregs]] stage is stateful; a register handed out in response
 to an earlier request cannot be used to satisfy a later request.
 @
-See the paper for this, noting that [[offsetregs]] implements the
-[[regs_by_bits]] constructor discussed in the paper.
+See the paper for these.
 <<exported values>>=
-val bitcounter  : int ref -> stage
-val bitcounter' : string  -> stage
-val offsetregs  : int ref -> Register.t list -> stage
-val offsetregs' : string  -> Register.t list -> stage
-@ 
-And also see the paper for this, noting that [[argnoregs]] implements
-the [[regs_by_args]] constructor from the paper:
-<<exported values>>=
-val argcounter  : int ref -> stage
-val argcounter' : string  -> stage
-val argnoregs   : int ref -> Register.t list -> stage
-val argnoregs'  : string  -> Register.t list -> stage
-@ 
-To help Lua code get a new [[int ref]] we provide a helper function
-that creates a new counter and initializes it to the provided value.
-<<exported values>>=
-val new_counter : int -> int ref
+val bitcounter  : string  -> stage
+val regs_by_bits: string  -> Register.t list -> stage
+
+val argcounter  : string  -> stage
+val regs_by_args: string  -> Register.t list -> stage
 @ 
 And this is documented nowhere, not even in the paper.  It is used
 to post-process the results from a [[freeze]] request.  For example,
@@ -276,11 +249,11 @@ for {\PAL} conventions.
 The idea is that for an allocation, we use the first stage for which
 the predicate is satisfied.
 It is a checked run-time error if no predicate is satisfied.
-<<automaton.mli>>=
+<<exported values>>=
 val choice : ((string -> int -> bool) * stage) list -> stage
 @ To help create predicates we provide the [[is_hint]] and
 [[is_width]] functions.
-<<automaton.mli>>=
+<<exported values>>=
 val is_hint  : string -> (string -> int -> bool)
 val is_width : int    -> (string -> int -> bool)
 val is_any   :           (string -> int -> bool)
@@ -298,7 +271,7 @@ final stage in its automaton, and it has no successor.
 But when the [[outer]] automaton is frozen, it has no effect on the
 [[inner]] automaton, which can continue to satisfy allocation
 requests.
-<<automaton.mli>>=
+<<exported values>>=
 val as_stage : t -> stage
 @
 \paragraph{Other forms of history}
@@ -320,14 +293,45 @@ Thereafter \emph{the whole automaton behaves as this alternative}.
 If no choice is ever made, the automaton freezes as the first
 alternative.
 It is a checked run-time error if no predicate is satisfied.
-<<automaton.mli>>=
+<<exported values>>=
 val first_choice : ((hint -> width -> bool) * stage) list -> stage
 @ 
 
 QUESTION FOR MARK BAILEY: HAS HE CAREFULLY ANALYZED WHAT CLASS OF
 AUTOMATA CAN BE SPECIFIED IN CCL?
 
+\paragraph{The unit stage}
+The [[unit]] stage does nothing, passing on an allocation
+or freeze request straight to the stages that follow it in the pipeline.
+It may be useful either as a default stage within a [[choice]] stage
+(along with the [[is_any]] primitive) to make sure we don't fall off
+the end of the [[choice]], or with [[List.fold_right]] in OCaml to compose a
+list of stages into one stage (using the [[*>]] operator).
+
+<<exported values>>=
+val unit : stage
+@
+
+\paragraph{Lua Registration of Calling Conventions}
+Ideally it would be nice for these types to sit in some other module
+(maybe \module{call.nw}?) but there are some dependency issues that force
+it to be in here for now.
+<<registration types>>=
+type cc_spec  = { call : stage; results : stage; cutto : stage }
+type cc_specs = (string * cc_spec) list
+@
+<<exported values>>=
+val init_cc : cc_specs
+@ 
 \section{Implementation}
+
+Those internal types kept opaque in the interface:
+<<hidden types>>=
+type counters = string -> int ref option
+type implementation = I of (start:Rtl.exp -> ctrs:counters -> methods)
+
+type stage = S of (implementation -> implementation)
+@ 
 
 During a debugging session I reviewed the [[Exclude]] submodule and
 believe it is correct. However, I did not review the handling of
@@ -335,47 +339,44 @@ believe it is correct. However, I did not review the handling of
 
 <<automaton.ml>>=
 <<exposed types>>
+<<hidden types>>
 type t = methods
 
-let regstring (s, i, _) = Printf.sprintf "%c%d" s i 
-
-module R  = Rtl
-module RS = Register.Set
-module RU = Rtlutil
-module B  = Block
-module M  = Memalloc
+module R   = Rtl
+module RS  = Register.Set
+module RU  = Rtlutil
+module B   = Block
+module M   = Memalloc
 let imposs = Impossible.impossible
+let unimp  = Impossible.unimp
 @ 
 The big idea here is hooking up the end of the pipeline:
 <<automaton.ml>>=
 let ( *> ) (S f1) (S f2) = S (fun rhs -> f1 (f2 rhs))
 
-let pipeline_end =
-  I (fun ~start ~ctrs ->
-  let block = Block.at ~base:start ~size:0 ~alignment:1 in
-  { allocate = (fun ~width ~alignment ~hint ->
-                Impossible.impossible
+let pipeline_end = I (
+  fun ~start ~ctrs -> 
+    let block = Block.at ~base:start ~size:0 ~alignment:1 in
+    { allocate = (fun ~width ~alignment ~hint -> imposs
                   "fell off end of pipeline -- multiple return values from C?")
-  ; freeze   =
+    ; freeze   =
       (fun regs mems -> 
-        { overflow = block; regs_used = regs; mems_used = mems; align_state = 0 })
-  })
+       {overflow = block; regs_used = regs; mems_used = mems; align_state = 0})
+    })
 @
 All the work of the implementation is in the closures.
 <<automaton.ml>>=
 let at ~start (S s) =
   let I f = s pipeline_end in
-  let fresh_counters _ = None
-  in
-    f ~start ~ctrs:fresh_counters
+    f ~start ~ctrs:(fun _ -> None)
 
-let of_methods t = t
-let allocate t ~width ~hint = t.allocate width 1 hint
-let freeze t = t.freeze Register.Set.empty []
+let of_methods t              = t
+let allocate   t ~width ~hint = t.allocate width 1 hint
+let freeze     t              = t.freeze Register.Set.empty []
 
-let fetch loc width      = loc.fetch width
-let store loc expr width = loc.store expr width
-let of_loc loc           = { fetch = R.fetch loc; store = R.store loc }
+let fetch      loc            = loc.fetch
+let store      loc            = loc.store
+let of_loc     loc            = { fetch = R.fetch loc; store = R.store loc }
 @ 
 \subsection{Wrapping etc.}
 
@@ -386,13 +387,17 @@ implementation.
 \nwaddbox{swrap       : (methods -> ~start:Rtl.exp -> ~ctrs:counters -> methods) -> stage}
 \nwaddbox{wrap_choice : (('a*(methods->methods)) list -> methods -> methods) -> ('a * stage) list -> stage}
 <<automaton.ml>>=
-let wrap  f = S (fun (I next) -> I (fun ~start ~ctrs -> f (next ~start ~ctrs)))
-let swrap f = S (fun (I next) -> I (fun ~start ~ctrs -> f (next ~start ~ctrs) ~start ~ctrs))
+let wrap  f = S (fun (I next) -> 
+                   I (fun ~start ~ctrs -> f (next ~start ~ctrs)))
+let swrap f = S (fun (I next) -> 
+                   I (fun ~start ~ctrs -> f (next ~start ~ctrs) ~start ~ctrs))
 let wrap_choice f choices = S (fun (I next) ->
   let apply (I f) = f in
-  let downchoice c ~start ~ctrs = fun meths -> apply (c (I (fun ~start ~ctrs -> meths))) ~start ~ctrs in
+  let downchoice c ~start ~ctrs =
+      fun meths -> apply (c (I (fun ~start ~ctrs -> meths))) ~start ~ctrs in
   I (fun ~start ~ctrs ->
-      let choices = List.map (fun (p, (S c)) -> (p, downchoice c ~start ~ctrs)) choices in
+      let choices = List.map (fun (p,(S c)) -> (p, downchoice c ~start ~ctrs))
+                             choices in
       f choices (next ~start ~ctrs)))
 @
 The overflow block is slightly interesting.
@@ -405,19 +410,19 @@ let overflow ~memsize ~byteorder ~growth ~max_alignment next =
     <<functions [[allocate]] and [[freeze]] for the overflow block>>
     { allocate = allocate; freeze = freeze }
 let overflow ~memsize ~byteorder ~growth ~max_alignment = 
- swrap (overflow ~memsize ~byteorder ~growth ~max_alignment) 
+  swrap (overflow ~memsize ~byteorder ~growth ~max_alignment) 
 @ 
 To allocate, we align and increment the memory block.
 The address of the new location depends on the direction of stack growth.
 <<functions [[allocate]] and [[freeze]] for the overflow block>>=
 let allocate ~width ~alignment ~hint =
   if width mod memsize <> 0 then
-    imposs (Printf.sprintf "width %d not multiple of memsize %d" width memsize);
+   imposs (Printf.sprintf "width %d not multiple of memsize %d" width memsize);
   if max_alignment mod alignment <> 0 then
-    imposs (Printf.sprintf
-              "max alignment %d not multiple of alignment %d" max_alignment alignment);
-  if state.frozen then
-    imposs "Allocation from a frozen overflow block";
+   imposs (Printf.sprintf
+             "max alignment %d not multiple of alignment %d" 
+             max_alignment alignment);
+  if state.frozen then imposs "Allocation from a frozen overflow block";
   let size = width / memsize in
   let mem  = state.mem in
   let mem  = M.align mem alignment in
@@ -432,89 +437,175 @@ let freeze regs mems =
   state.frozen <- true;
   let mem    = state.mem in
   let astate = M.num_allocated mem mod max_alignment in
-  let mem = match growth with M.Up -> mem | M.Down -> M.align mem (M.alignment mem) in
+  let mem    = match growth with 
+               M.Up -> mem | M.Down -> M.align mem (M.alignment mem) in
   let block = M.freeze mem in
-  { overflow = block; regs_used = regs; mems_used = mems; align_state = astate } in
+  {overflow = block; regs_used = regs; mems_used = mems; align_state = astate} 
+  in
 @ 
 \paragraph{Higher-order functions for request transformers}
 
 <<automaton.ml>>=
 type allocator = width: int -> alignment: int -> hint: string -> loc
-let txstage f = wrap (fun next -> 
+let txstage f  = wrap (fun next -> 
                         { allocate = f next.allocate; freeze = next.freeze })
 let _ = (txstage : (allocator -> allocator) -> stage)
 @ 
 <<automaton.ml>>=
-let widths ws ~errormsg = txstage (
+let widths ws ~errormsg = txstage
   (fun nalloc ~width ~alignment ~hint ->
-     if   List.exists ((=) width) ws
-     then nalloc width alignment hint
-     else Impossible.impossible (errormsg width)))
-
-
+    if   List.exists ((=) width) ws
+    then nalloc width alignment hint
+    else imposs (errormsg width))
 @   
 Narrowing and widening.
 <<automaton.ml>>=
-let narrow nopname wopname ~w ~n loc =
-  let widen  = R.opr wopname [n; w] in 
-  let narrow = R.opr nopname [w; n] in 
-  { fetch = (fun n   -> R.app narrow [loc.fetch w])
-  ; store = (fun e n -> loc.store (R.app widen [e]) w)
-  } 
-let narrows = narrow "lobits" "sx"
-let narrowu = narrow "lobits" "zx"
-let narrowf = narrow "f2f_implicit_round" "f2f_implicit_round"
+let narrower = 
+  let narrow nopname wopname ~w ~n loc =
+     let widen  = R.opr wopname [n; w] in 
+     let narrow = R.opr nopname [w; n] in 
+       { fetch = (fun n   -> R.app narrow [loc.fetch w])
+       ; store = (fun e n -> loc.store (R.app widen [e]) w)
+       }
+  in
+  function
+  | "signed" -> narrow "lobits" "sx"
+  | "float"  -> narrow "f2f_implicit_round" "f2f_implicit_round"
+  | "unsigned" | "address" | "" | _ -> narrow "lobits" "zx"
+let narrowf = narrower "float"
+
+let widen f = txstage 
+  (fun nalloc ~width:n ~alignment ~hint ->
+    let w   = f n in
+    let loc = nalloc w alignment hint in
+    if w = n then loc else narrower hint ~n:n ~w loc)
+
+let align_to f =
+  txstage (fun nalloc ~width:w ~alignment ~hint -> nalloc w (f w) hint)
+@
+
+\paragraph{Choice and First Choice Stages}
+ 
+The dataflow here is kind of interesting.  
+For the [[allocate]] method, we have a fan-out and fan-in, with a fork
+and join point, so it passes through exactly \emph{one} choice.
+But for the [[freeze]] method, we thread the call straight through the
+whole list, so it passes through \emph{all} choices.
+<<automaton.ml>>=
+let choice choices next =
+    let add (p, stage) alternative =
+      let follows_choice = { allocate = next.allocate
+                           ; freeze   = alternative.freeze } in
+      let choice = stage follows_choice in
+      let alloc ~width ~alignment ~hint =
+        let alloc = if p hint width then choice.allocate 
+                                    else alternative.allocate in
+        alloc width alignment hint in
+      { allocate = alloc; freeze = choice.freeze } in
+    List.fold_right add choices
+      { allocate = (fun ~width -> imposs "missing hint choice")
+      ; freeze = next.freeze }
+let choice = wrap_choice choice
+
+let first_choice choices next =
+  let choices = List.map (fun (p, c) -> (p, c next)) choices in
+  let myself = ref next in (* temporary *)
+  let allocate ~width ~alignment ~hint = 
+    (!myself).allocate width alignment hint in
+  let freeze regs mems = (!myself).freeze regs mems in
+  let first_allocate ~width ~alignment ~hint =
+    let choice =
+      try snd (List.find (fun (p, _) -> p hint width) choices)
+      with Not_found -> imposs "missing choice" in
+    myself := choice;
+    allocate width alignment hint in
+  let () = try
+    myself := { allocate = first_allocate
+              ; freeze   = (snd (List.hd choices)).freeze }
+  with Failure _ -> imposs "no first choice" in
+  { allocate = allocate; freeze = freeze }
+let first_choice = wrap_choice first_choice
+
+let is_hint  h' h w = h = h'
+let is_width w' h w = w = w'
+let is_any      h w = true
+
+let new_counter i = ref i
 @ 
+\paragraph{Register assignment}
 <<automaton.ml>>=
-let narrower = function
-  | "signed" -> narrows
-  | "float"  -> narrowf
-  | "unsigned" | "address" | "" -> narrowu
-  | _ -> narrowu
+let counterwrap f label =
+  S (fun (I next) ->
+       I (fun ~start ~ctrs ->
+           let (ctr, ctrs) = (match ctrs label with
+           | Some n -> (n, ctrs)
+           | None   ->
+              let n = ref 0 in
+              (n, fun s -> if s = label then Some n else ctrs s)) in
+           f ctr (next ~start ~ctrs)))
 
-let widen mk_w = txstage (fun nalloc ~width:n ~alignment ~hint ->
-  let w   = mk_w n in
-  let loc = nalloc w alignment hint in
-  if w = n then loc else narrower hint ~n:n ~w loc)
+let counterstage f = 
+  counterwrap
+    (fun ctr next -> { allocate = f ctr next.allocate; freeze = next.freeze })
 
+let counter = fun of_width ctr nalloc ~width ~alignment ~hint ->
+                (ctr := !ctr + of_width width ; nalloc ~width ~alignment ~hint)
+
+let somecounter     of_width   = counterstage (counter of_width)
+let somecounter_ref of_width n = txstage      (counter of_width n)
+
+let bitcounter     = somecounter     (fun w -> w)
+let bitcounter_ref = somecounter_ref (fun w -> w)
+let argcounter     = somecounter     (fun w -> 1)
+@ 
+
+We'll probably need to add an argument to reg_placer when we implement
+register aggregation because [[regs_by_bits]] and [[regs_by_args]] should
+handle it differently (see document with formal semantics of these functions).
 <<automaton.ml>>=
-let align_to mk_align =
-  txstage (fun nalloc ~width:w ~alignment ~hint -> nalloc w (mk_align w) hint)
+type regstate = { mutable avail : Register.t list
+                ; mutable used  : Register.Set.t
+                }
 
-<<automaton.ml>>=
-type regstate = { mutable avail : Register.t list; mutable used : Register.Set.t }
-let getreg state = match state.avail with
-| [] -> raise (Failure "get register")
-| r :: rs -> (state.avail <- rs; state.used <- RS.add r state.used; r)
+let reg_placer of_width dropflag n regs next =
+  let getreg state = match state.avail with
+  |	[]      -> raise (Failure "get register")
+  |	r :: rs -> (state.avail <- rs; state.used <- RS.add r state.used; r) in
 
-let useregs regs ~errormsg next =
+  let rec drop i regs = if i <= 0 then regs else match regs with
+  |	(s, n, w) :: rest -> drop (i - of_width w) rest
+  |	[]                 -> [] in
+
   let state = { avail = regs; used = RS.empty } in
   let alloc ~width ~alignment ~hint =
+    let new_n = !n - of_width width in
+    if dropflag then state.avail <- drop new_n regs;
     try
       let (_, _, w) as r = getreg state in
-(*let () = Verbose.say 6 ["useregs automaton got reg "; regstring r; "\n"] in*)
-      if w = width then
-        of_loc (R.reg r)
-      else if w < width then
-        Impossible.unimp
-            (Printf.sprintf 
-               "register aggregation -- %d-bit register, %d-bit allocation" 
-                w width)
-      else
-        Impossible.impossible (errormsg width state.avail)
+      if      w = width then of_loc (R.reg r)
+      else if w < width then unimp "register aggregation"
+      else    unimp "auto-widening for register requests"
     with Failure _ -> next.allocate width alignment hint in
-  let freeze regs mems =
-    <<prattle about registers used by [[useregs]]>>;
-    next.freeze (RS.union state.used regs) mems in
+  let freeze regs mems = next.freeze (RS.union state.used regs) mems in
   { freeze = freeze; allocate = alloc }
-let useregs regs ~errormsg = wrap (useregs regs ~errormsg)
-<<prattle about registers used by [[useregs]]>>=
-let used = List.map regstring (RS.elements state.used) in
-Verbose.say 6 ["useregs automaton uses regs: "; String.concat ", " used; "\n"]
+
+let regs_by_bits_unwrapped  = reg_placer (fun w -> w) true
+let regs_by_bits label regs =
+  counterwrap (fun ctr -> regs_by_bits_unwrapped ctr regs) label
+let regs_by_bits_ref n regs = wrap (regs_by_bits_unwrapped n regs)
+
+let useregs                 = reg_placer (fun _ -> 0) false
+let useregs regs ~errormsg  = wrap (useregs (ref 0) regs)
+
+let regs_by_args_unwrapped  = reg_placer (fun w -> 1) true
+let regs_by_args label regs =
+    counterwrap (fun ctr -> regs_by_args_unwrapped ctr regs) label
 @ 
-Now I'll try to do it right, with proper aggregation.
-Step one is to split locations.
-<<alternative implementation of [[useregs]]>>=
+
+The code below seems like a promising start to implementing split
+allocations but might be untested.  For now, it is \em{not} included
+in [[automaton.ml]].
+<<experimental code to split locations (currently unused)>>=
 <<shift and mask functions>>
 let splitloc bo locs = match locs with
 | [l, w] -> l
@@ -546,181 +637,8 @@ let shl  w x k = R.app (R.opr "shl"  [w]) [x; const w k]
 let shrl w x k = R.app (R.opr "shrl" [w]) [x; const w k]
 let lobits w n x = R.app (R.opr "lobits" [w; n]) [x]
 @ 
-This implementation below looks newer and looks like it has at least considered
-the possibility of splitting an allocation across resources, but it still
-seems unfinished and untested. -RRO
-<<alternative implementation of [[useregs]]>>=
-let useregs' regs ~errormsg next =
-  let state = { avail = regs; used = RS.empty } in
-  let can_aggregate _ _ = false in (* not implemented yet *)
-  let aggregate _ _ = Impossible.unimp "register aggregation" in
-  let alloc ~width ~alignment ~hint =
-    let regloc ((_, _, w) as r) = of_loc (R.reg r), w in
-    let rec locs prev' w =
-      if w = 0 then
-        List.rev (List.map regloc prev')
-      else if w > 0 then
-        try
-          let (_, _, w') as r = getreg state in
-          let regs = 
-            match prev' with
-            | r' :: rs when can_aggregate r' r -> aggregate r' r :: rs
-            | _ -> r :: prev' in
-          locs regs (w - w')
-        with Failure _ ->
-          List.rev ((next.allocate w alignment hint, w) :: List.map regloc prev') 
-      else 
-        Impossible.impossible
-          (errormsg width state.avail ^ 
-           " (request should have been widened upstream of useregs?)") in
-    splitloc Rtl.Identity (locs [] width) in
-  let freeze regs mems =
-    <<prattle about registers used by [[useregs]]>>;
-    next.freeze (RS.union state.used regs) mems in
-  { freeze = freeze; allocate = alloc }
-let useregs' regs ~errormsg = wrap (useregs' regs ~errormsg)
-@ 
-
-@ 
-The dataflow here is kind of interesting.  
-For the [[allocate]] method, we have a fan-out and fan-in, with a fork
-and join point, so it passes through exactly \emph{one} choice.
-But for the [[freeze]] method, we thread the call straight through the
-whole list, so it passes through \emph{all} choices.
-<<automaton.ml>>=
-let choice choices next =
-    let add (p, stage) alternative =
-      let follows_choice = { allocate = next.allocate; freeze = alternative.freeze } in
-      let choice = stage follows_choice in
-      let alloc ~width ~alignment ~hint =
-        let alloc = if p hint width then choice.allocate else alternative.allocate in
-        alloc width alignment hint in
-      { allocate = alloc; freeze = choice.freeze } in
-    List.fold_right add choices
-      { allocate = (fun ~width -> Impossible.impossible "missing hint choice")
-      ; freeze = next.freeze }
-let hint_choice choices =
-  choice (List.map (fun (hp, s) -> ((fun h w -> hp h), s)) choices)
-let hint_choice = wrap_choice hint_choice
-let choice      = wrap_choice choice
-
-let is_hint  h' h w = h = h'
-let is_width w' h w = w = w'
-let is_any      h w = true
-
-let new_counter i = ref i
-@ 
-\paragraph{Register assignment by offset}
-<<automaton.ml>>=
-let somecounter of_width n =
-  txstage (fun nalloc ~width ~alignment ~hint ->
-             (n := !n + of_width width; nalloc ~width ~alignment ~hint))
-
-let counterwrap f label =
-  S (fun (I next) ->
-       I (fun ~start ~ctrs ->
-           let (ctr, ctrs) = (match ctrs label with
-           | Some n -> (n, ctrs)
-           | None   ->
-              let n = ref 0 in
-              (n, fun s -> if s = label then Some n else ctrs s)) in
-           let f = fun next -> f ctr next in
-           f (next ~start ~ctrs)))
-
-let counterstage f =
-  counterwrap (fun ctr next -> { allocate = f ctr next.allocate
-                               ; freeze = next.freeze
-                               })
 
 
-let somecounter' of_width label = 
-  counterstage (fun ctr nalloc ~width ~alignment ~hint ->
-                 ( ctr := !ctr + of_width width
-                 ; nalloc ~width ~alignment ~hint
-                 )) label
-
-let bitcounter = somecounter (fun w -> w)
-let argcounter = somecounter (fun w -> 1)
-
-let bitcounter' = somecounter' (fun w -> w)
-let argcounter' = somecounter' (fun w -> 1)
-<<automaton.ml>>=
-let rec drop_regs w regs =
-  if w <= 0 then
-    regs
-  else
-    match regs with
-    | (s, n, w') :: rest -> drop_regs (w - w') rest
-    | []                 -> []
-
-let offsetregs_unwrapped n regs next =
-  let state = { avail = regs; used = RS.empty } in
-  let alloc ~width ~alignment ~hint =
-    let offset = !n - width in
-    state.avail <- drop_regs offset regs;
-    try
-      let (_, _, w) as r = getreg state in
-      if w = width then
-        of_loc (R.reg r)
-      else if w < width then
-        Impossible.unimp
-            (Printf.sprintf 
-               "register aggregation -- %d-bit register, %d-bit allocation" 
-                w width)
-      else
-        Impossible.unimp "auto-widening for register requests"
-    with Failure _ -> next.allocate width alignment hint in
-  let freeze regs mems =
-    <<prattle about registers used by [[offsetregs]]>>;
-    next.freeze (RS.union state.used regs) mems in
-  { freeze = freeze; allocate = alloc }
-let offsetregs n regs = wrap (offsetregs_unwrapped n regs)
-
-let offsetregs' label regs =
-    counterwrap (fun ctr -> offsetregs_unwrapped ctr regs) label
-
-<<prattle about registers used by [[offsetregs]]>>=
-let used = List.map regstring (RS.elements state.used) in
-Verbose.say 6 ["offsetregs automaton uses regs: "; String.concat ", " used; "\n"]
-@ 
-\paragraph{Register assignment by argument count}
-<<automaton.ml>>=
-let argnoregs_unwrapped n regs next =
-  let state = { avail = regs; used = RS.empty } in
-  let alloc ~width ~alignment ~hint =
-    let argno = !n - 1 in
-    let rec list_drop n l =
-      if n = 0 then
-        l
-      else
-        match l with [] -> [] | h :: t -> list_drop (n-1) t in
-   state.avail <- list_drop argno regs;
-    try
-      let (_, _, w) as r = getreg state in
-      if w = width then
-        of_loc (R.reg r)
-      else if w < width then
-        Impossible.unimp
-            (Printf.sprintf 
-               "register aggregation -- %d-bit register, %d-bit allocation" 
-                w width)
-      else
-        narrowf w width (of_loc (R.reg r))
-    with Failure _ -> next.allocate width alignment hint in
-  let freeze regs mems =
-    <<prattle about registers used by [[argnoregs]]>>;
-    next.freeze (RS.union state.used regs) mems in
-  { freeze = freeze; allocate = alloc }
-
-let argnoregs n regs = wrap (argnoregs_unwrapped n regs)
-
-let argnoregs' label regs =
-    counterwrap (fun ctr -> argnoregs_unwrapped ctr regs) label
-
-<<prattle about registers used by [[argnoregs]]>>=
-let used = List.map regstring (RS.elements state.used) in
-Verbose.say 6 ["argnoregs automaton uses regs: "; String.concat ", " used; "\n"]
-@ 
 \paragraph{Using an automaton as a stage}
 
 To us an automaton as a stage, we pass on an allocation request but
@@ -730,44 +648,17 @@ let as_stage inner next =
   fun ~start ~ctrs ->
     let freeze regs mems =
       { regs_used = regs; mems_used = mems;
-        overflow = Block.at start 0 0; align_state = 0; } in
+        overflow = Block.at start 0 0; align_state = 0 } in
     { allocate = inner.allocate; freeze = freeze }
 let as_stage inner = swrap (as_stage inner)
 @
-\paragraph{First choice}
 
-<<automaton.ml>>=
-let first_choice choices next =
-  let choices = List.map (fun (p, c) -> (p, c next)) choices in
-  let myself = ref next in (* temporary *)
-  let allocate ~width ~alignment ~hint = (!myself).allocate width alignment hint in
-  let freeze regs mems = (!myself).freeze regs mems in
-  let first_allocate ~width ~alignment ~hint =
-    let choice =
-      try snd (List.find (fun (p, _) -> p hint width) choices)
-      with Not_found -> Impossible.impossible "missing choice" in
-    myself := choice;
-    allocate width alignment hint in
-  let () = try
-    myself := { allocate = first_allocate; freeze = (snd (List.hd choices)).freeze }
-  with Failure _ -> Impossible.impossible "no first choice" in
-  { allocate = allocate; freeze = freeze }
-let first_choice = wrap_choice first_choice
-@ 
-\paragraph{UNIT STUFF --- FIX ME}
-
-The [[unit]] stage essentially does nothing, passing on an allocation
-or freeze request straight to the stages that follow it in the pipeline.
-It is pretty much only useful as a default stage in a [[choice]] stage
-(along with the [[is_any]] primitive) to make sure we don't fall off
-the end of [[choice]], or with List.fold_right to compose a list of stages
-into one stage (using the *> operator).
-
-<<automaton.mli>>=
-val unit : stage
+\paragraph{The unit stage}
 <<automaton.ml>>=
 let unit = wrap (fun next -> next)
 @ 
+
+\paragraph{Postprocessing a result}
 <<automaton.ml>>=
 let postprocess (S stage) f = S (fun imp ->
   let I i = stage imp in
@@ -778,27 +669,9 @@ let postprocess (S stage) f = S (fun imp ->
       } ))
 @ 
 
-\subsection{Lua Registration of Calling Conventions}
-Registration.
-<<automaton.mli>>=
-type cc_spec  =
-  { call    : stage
-  ; results : stage
-  ; cutto   : stage
-  }
-type cc_specs = (string * cc_spec) list
-val init_cc : cc_specs
-@ 
-
+\paragraph{Lua Registration of Calling Conventions}
 <<automaton.ml>>=
-type cc_spec  =
-  { call    : stage
-  ; results : stage
-  ; cutto   : stage
-  }
-
+type cc_spec  = { call : stage; results : stage; cutto : stage }
 type cc_specs = (string * cc_spec) list
-
-
 let init_cc = []
 @ 
