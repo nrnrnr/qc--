@@ -141,13 +141,14 @@ method private instruction rtl =
 
 (* this better be only used for printing out functions... *)
 method cfg_instr proc  = 
-    (* We have to emit a label/whatever for the procedure's 
-       entry point. This is what symbol is for. Simply use this#label?  *)
-    let cfg    = proc.Proc.cfg
-    and symbol = proc.Proc.symbol in
-    let label l = this#label (try SM.find l _syms with Not_found -> this#local l) in
+  (* We have to emit a label/whatever for the procedure's 
+     entry point. This is what symbol is for. Simply use this#label?  *)
+  let cfg    = proc.Proc.cfg
+  and symbol = proc.Proc.symbol in
+  let label l = this#label (try SM.find l _syms with Not_found -> this#local l) in
+  let numargs = List.length (proc.Proc.formals) in
     this#label symbol;
-    output_string _fd "\talloc loc0 = ar.pfs, 0, 1, 8, 0 ;;\n";
+    fprintf _fd "\talloc loc0 = ar.pfs, %d, 1, 8, 0 ;;\n" numargs;
     (emitter cfg (this#instruction) label : unit)
 @ 
 

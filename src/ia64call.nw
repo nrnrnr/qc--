@@ -25,17 +25,28 @@ Ia64.cc["C"     ] = Ia64.cc["C"     ] or {}
 
 \paragraph{IA64 registers and their conventional uses}
 <<ia64call.ml>>=
+let f i = ('f', i, 64)
 let b i = ('a', i, 64)
 let r i = ('r', i, 64)
-let vol_regs = RS.of_list (List.map r ([2; 3; 8; 9; 10; 11] @ 
-		 							   (Aux.from 14 ~upto:31)))
-let nv_regs  = RS.of_list (List.map r [4; 5; 6; 7; 13])
+let p i = ('p', i,  1)
+let vol_regs    = RS.of_list 
+                   (List.map r ([2; 3; 8; 9; 10; 11]@(Aux.from 14 ~upto:31)))
+let nv_regs     = RS.of_list (List.map r [4; 5; 6; 7])
 let branch_regs = RS.of_list (List.map b (Aux.from 1 ~upto:7))
-let all_regs = RS.union (RS.union vol_regs nv_regs) branch_regs
+let pred_regs   = RS.of_list (List.map p (Aux.from 1 ~upto:63))
+let vol_fpregs  = RS.of_list
+                   (List.map f ((Aux.from 6 ~upto:15)@(Aux.from 32 ~upto:127)))
+let nv_fpregs   = RS.of_list
+                   (List.map f ((Aux.from 2 ~upto:5)@(Aux.from 16 ~upto:31)))
+let all_regs    = List.fold_left (fun acc e -> RS.union acc e) RS.empty
+                    [ vol_regs; nv_regs; vol_fpregs; nv_fpregs; branch_regs
+                    ; pred_regs ]
 
 let saved_nvr temps = 
-  let t = Talloc.Multiple.loc temps 't' in
-  fun (_, _, w) -> t w
+  let t sp = Talloc.Multiple.loc temps sp in
+  function
+   | ('f', _, w) -> (t 'u') w
+   | (_  , _, w) -> (t 't') w
 @ 
 
 <<IA64 calling convention automata in Lua>>=
@@ -45,8 +56,9 @@ Ia64.sp_align  = 16
 Ia64.wordsize  = 64
 
 function reg(sp, i, w) return({ space = sp, index = i, width = w }) end
-function r(i) return (reg("r", i, Ia64.wordsize)) end
-function f(i) return (reg("f", i, Ia64.wordsize)) end
+function r(i)   return (reg("r", i, Ia64.wordsize)) end
+function f(i)   return (reg("f", i, Ia64.wordsize)) end
+function out(i) return (reg("o", i, Ia64.wordsize)) end
 @ 
 
 \paragraph{Conventions governing the stack}
@@ -62,9 +74,8 @@ let bo       = R.LittleEndian
 \paragraph{Automata for passing values---C~convention}
 
 <<IA64 calling convention automata in Lua>>=
-function fpreturn(h, w)
-  return (h == "float" and w <= 82)
-end
+function fpreturn(h, w) return (h == "float" and w <= 82) end
+function lt512   (v)    return (v < 512)                  end
 
 Ia64.cc["C"].results =
   A.choice { fpreturn, { A.widths { 32, 64, 82 }
@@ -75,45 +86,19 @@ Ia64.cc["C"].results =
                        , A.useregs { r(8), r(9) }
                        } 
            } 
-@ 
 
-For the moment [[Automaton.is_counter]] does not exist.  Here's what we would
-use as a spec:
-<<would-be IA64 calling convention automata in Lua>>=
 Ia64.cc["C"].call = 
   { A.widen(64, "multiple")
   , A.bitcounter("bits")
-  , A.choice { "float", { A.bitcounter("floatbits")
-                        , A.choice { A.is_counter("bits", lt512),
-                                          A.regs_by_bits("floatbits",
-                                                         f(8) .. f(15))
-                                   , A.is_any, A.unit
-                                   } 
-                        } 
-             , A.is_any, A.regs_by_bits("bits", r(33) .. r(40))
-             } 
+  , A.choice { "float", A.choice { { "bits", lt512 }, A.useregs(f(8) .. f(15))
+                                 , A.is_any         , A.unit
+                                 }
+             , A.is_any, A.regs_by_bits("bits", out(0) .. out(7))
+             }
   , A.overflow { byteorder = Ia64.byteorder, growth = "up"
                , max_alignment = Ia64.sp_align
                } 
   }	
-@ 
-And here's what we now {\em do} use.
-<<IA64 calling convention automata in Lua>>=
-function mytestfun (b) 
-  print(b .. " bits...")
-  return nil
-end
-
-Ia64.cc["C"].call = 
-  { A.widen(64, "multiple")
-  , A.bitcounter("bits")
-  , A.choice { "float" , A.regs_by_bits("bits", f(8)  .. f(15))
-             , A.is_any, A.regs_by_bits("bits", r(33) .. r(40))
-             } 
-  , A.overflow { byteorder = Ia64.byteorder, growth = "up"
-               , max_alignment = Ia64.sp_align
-               } 
-  }
 @ 
 And now for some postprocessing magic to set aside the first 16-bytes at sp
 for ``scratch space'':
@@ -135,7 +120,7 @@ let postprocess cconv =
 <<IA64 calling convention automata in Lua>>=
 Ia64.cc["C"].cutto =
   { A.widen(64)
-  , A.useregs(r(33) .. r(40))
+  , A.useregs(out(0) .. out(7))
   , A.overflow { byteorder = Ia64.byteorder, growth = "up"
                , max_alignment = Ia64.sp_align
                }
@@ -158,7 +143,7 @@ A.register_cc(Backend.ia64.target, "C", Ia64.cc["C"])
   ; CS.sp           = r 12
   ; CS.sp_align     = sp_align
   ; CS.all_regs     = all_regs
-  ; CS.nv_regs      = nv_regs
+  ; CS.nv_regs      = RS.union nv_regs nv_fpregs
   ; CS.save_nvr     = saved_nvr
   ; CS.ra           = (ra, CS.ReturnAddress.SaveToTemp 't')
   }	

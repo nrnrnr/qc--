@@ -15,6 +15,7 @@ module RU = Rtlutil
 module RP = Rtl.Private
 module SS = Space.Standard64
 module Down = Rtl.Dn
+module Up   = Rtl.Up
 @ 
 <<ia64rec.mlb>>=
 %head {: <<modules>> 
@@ -35,10 +36,9 @@ let cat = String.concat ""
 let infinity = Camlburg.inf_cost
 let guard b = if b then 0 else infinity
 
-let native' w b = 
-  assert (Bits.width b = w);
-  Nativeint.to_string (Bits.U.to_native b)
-let native = native' 64
+let const64 b =
+  assert (Bits.width b = 64);
+  Int64.to_string (Bits.U.to_int64 b)
 
 exception Error of string
 let error msg = raise (Error msg)
@@ -55,14 +55,19 @@ n w bits symbol
 \paragraph{Constants}
 <<rules>>=
 lconst : Link(symbol, w) {: symbol#mangled_text :}
-const  : Bits(b:bits)  [{: guard (Bits.width b = 64) :}]  {: native b :}
+const  : Bits(b:bits)  [{: guard (Bits.width b = 64) :}]  {: const64 b :}
 @ 
 
 \paragraph{Location Types}
 <<rules>>=
 reg   : Fetch(regl, w) {: regl :}
-regl  : Reg('r', n, w) {: "r" ^ string_of_int n :}
-regl  : Reg('a', n, w) {: "b" ^ string_of_int n :}
+regl  : Reg('r', n, w) {: "r"   ^ string_of_int n :}
+regl  : Reg('a', n, w) {: "b"   ^ string_of_int n :}
+regl  : Reg('p', n, w) {: "p"   ^ string_of_int n :}
+regl  : Reg('o', n, w) {: "out" ^ string_of_int n :}
+
+freg  : Fetch(fregl, w) {: fregl :}
+fregl : Reg('f', n, w) {: "f" ^ string_of_int n :}
 
 eregl : regl  {: regl :}
 eregl : bregl {: bregl :}
@@ -87,33 +92,68 @@ ra    : Fetch(ral,w)   [{: guard (w = 64) :}] {: () :}
 
 \paragraph{Data movement}
 <<rules>>=
--- load immediate
+-- load symbol
 inst : Store(dst:regl, src:lconst, w)
-  {: cat ["addl"; " "; dst; " = @ltoff("; src; "), gp ;;\n"; 
+  {: cat ["addl "; dst; " = @ltoff("; src; "), gp ;;\n"; 
           "\t"; "ld8 "; dst; " = ["; dst; "]"] :}
+
 --inst : Store(dst:regl, src:target, w)
 --  {: cat ["addl "; dst; " = "; src] :}
 
+-- load immediate
+inst : Store(dst:regl, src:const, w)
+  {: cat ["movl "; dst; " = " ; src] :}
+
 -- register move
 inst : Store(dst:eregl, src:reg, w)
-  {: cat ["mov"; " " ; dst; " = " ; src] :}
+  {: cat ["mov " ; dst; " = " ; src] :}
+
+-- register move: gp -> fp
+-- AM NOT SURE OF THIS ONE OR THE ONE BELOW IT
+inst : Store(dst:fregl, src:reg, w)
+  {: cat ["setf.d "; dst; " = "; src] :}
+
+-- register move: fp -> gp
+inst : Store(dst:regl, src:freg, w)
+  {: cat ["getf.d "; dst; " = "; src] :}
+
+-- HACK! rename out -> in register
+inst : Store(dst:eregl, Fetch(Reg('o', n, wr:w), wf:w), w)
+  {: cat ["mov " ; dst; " = in"; string_of_int n] :}
 
 -- memory load
 inst : Store(dst:regl, src:mem, w)
-  {: cat ["ld8"; " "; dst; " = "; src] :}
+  {: cat ["ld8 "; dst; " = "; src] :}
 
 -- memory store
 inst : Store(dst:meml, src:reg, w)
-  {: cat ["st8"; " "; dst; " = "; src] :}
+  {: cat ["st8 "; dst; " = "; src] :}
+
+-- HACK! memory store from offset
+inst : Store(Mem(Add(x:reg, y:const),mw:w), src:reg, w)
+  {: cat [ "add "; x; " = "; y; ", "; x; " ;;\n\t"
+         ; "st8 ["; x; "] = "; src; " ;;\n\t" 
+         ; "add "; x; " = -"; y; ", "; x
+         ]
+  :}
 @ 
 
 \paragraph{Arithmetic}
 <<rules>>=
+-- addition
 inst : Store(dst:regl, Add(x:reg_or_const, y:reg), w)
-  {: cat ["add"; " "; dst; " = "; x; ", "; y] :}
+  {: cat ["add "; dst; " = "; x; ", "; y] :}
 
 inst : Store(dst:regl, Add(x:reg, y:reg_or_const), w)
-  {: cat ["add"; " "; dst; " = "; y; ", "; x] :}
+  {: cat ["add "; dst; " = "; y; ", "; x] :}
+
+-- subtraction
+inst : Store(dst:regl, Sub(x:reg_or_const, y:reg), w)
+  {: cat ["sub "; dst; " = "; x; ", "; y] :}
+
+-- ne
+inst : Store(dst:regl, Ne(x:reg, y:reg), w)
+  {: cat ["cmp.ne "; dst; ",p0 = "; x; ", "; y] :} 
 @ 
 
 \paragraph{Control Flow}
@@ -133,6 +173,10 @@ inst: Goto(target) {: "br.sptk.many " ^ target :}
 
 -- indirect branches
 inst: Goto(reg)    {: "br.sptk.many " ^ reg :}
+
+-- conditional branch
+inst: Guarded(Fetch(regl,w), Goto(target))
+  {: cat ["("; regl; ") br.cond.sptk.many "; target] :}
 @ 
 
 \paragraph{Other Instructions}
@@ -149,10 +193,11 @@ inst : Nop() {: "// " :}
 | RP.App(("or",  [w]), [x; y]) -> conOr (exp x) (exp y)
 | RP.App(("xor", [w]), [x; y]) -> conXor (exp x) (exp y)
 | RP.App(("com", [w]), [x])    -> conCom (exp x)
-| RP.App(("sub", [w]), [x; y]) -> conSub (exp x) (exp y)
 *)
 
+| RP.App(("sub", [w]), [x; y]) -> conSub (exp x) (exp y)
 | RP.App(("add", [w]), [x; y]) -> conAdd (exp x) (exp y)
+| RP.App(("ne" , [w]), [x; y]) -> conNe  (exp x) (exp y)
 
 (*| RP.App(("neg", [w]), [x])    -> conNeg (exp x)*)
 
@@ -256,12 +301,7 @@ and geffects = function
     | (g, s) :: t -> conPar (guarded g s) (geffects t)
 and guarded g eff = match g with
   | RP.Const(RP.Bool b) -> if b then effect eff else conNop()
-
-  | _ -> unimp "ia64: unimplemented guarded RTL"
-
-(* RRO temp
-| _ -> conGuarded (exp g) (effect eff)
-*)
+  | _ -> conGuarded (exp g) (effect eff)
 @ 
 
 \subsection{The exported recognizer}

@@ -42,21 +42,23 @@ module Spaces = struct
   let a = Space.Standard64.a 8   id [64]  (* these are branch registers *)
   let r = Space.Standard64.r 128 id [64]
   let t = Space.Standard64.t     id [64]
+  let p = Space.Standard64.p 64  id [ 1]  (* these are predicate registers *)
+  let w = Space.Standard64.w     id [ 1]
   let f = S.checked { S.space = 'f'; S.doc = "floating-point registers"
-                    ; S.cellwidth = 82
+                    ; S.cellwidth = 64
                     ; S.indexwidth = 7 ; S.indexlimit = Some 127
-                    ; S.aggregation = id; S.widths = [82]
+                    ; S.aggregation = id; S.widths = [64]
                     ; S.classification = S.Reg
                     }
   let all_floats = { S.stands_for = 'f'; S.index_ok = (fun _ -> true)
                    ; S.set_doc = "all floating-point registers"
                    } 
   let u = S.checked { S.space = 'u'; S.doc = "floating-point temporaries"
-                    ; S.cellwidth = 82
+                    ; S.cellwidth = 64
 
 					(* What is the significance of a 31-bit indexwidth? *)
                     ; S.indexwidth = 31; S.indexlimit = None
-                    ; S.aggregation = id; S.widths = [82]
+                    ; S.aggregation = id; S.widths = [64]
                     ; S.classification = S.Temp all_floats
                     }
   let v = Space.Standard64.v   id [64]
@@ -97,6 +99,9 @@ let get_talloc () = match !talloc with
   | None   -> Impossible.impossible 
                     "Temp allocator not registered with postexpander"
 let remember_allocator ta = talloc := Some ta
+
+(* don't eta reduce 'talloc' *)
+let talloc space = Talloc.Multiple.reg space (get_talloc ()) 
 @ 
 \paragraph{Utility Functions}
 <<ia64 postexpander>>=
@@ -114,6 +119,7 @@ Addresses go in the integer registers, so we use these contexts:
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
 let icontext = Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't'
 let fcontext = Talloc.Multiple.reg 'u', fun (c, _, _) -> c = 'f' || c = 'u'
+let bcontext = Talloc.Multiple.reg 'w', fun (c, _, _) -> c = 'p' || c = 'w'
 let acontext = icontext
 
 (* this is just bogus *)
@@ -184,8 +190,6 @@ let lix ~dst e     = [R.store (temploc dst) e                (tempwidth dst)]
 \subsubsection{Operator Contexts}
 <<ia64 postexpander>>=
 module SM = Strutil.Map
-let bcontext = (fun x y -> Impossible.impossible "allocate from bcontext")
-               ,fun _ -> false
 let operators = Context.standard icontext fcontext rcontext acontext bcontext
 let resmap    = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators
 let argmap    = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
@@ -212,10 +216,9 @@ let pc_rhs = pc
 
 (* note that instructions need to be specified in reverse order! *)
 let br ~tgt = 
-  let alloc = get_talloc () in
-  let tempr = Talloc.Multiple.loc alloc 'v' 64 in
-  [ R.store pc_lhs (R.fetch tempr 64) 64
-  ; R.store tempr (tempval tgt) 64 ]
+  let tempr = talloc 'v' 64 in
+  [ R.store pc_lhs (tempval tempr) 64
+  ; R.store (temploc tempr) (tempval tgt) 64 ]
 (* RRO temp
 [R.store pc_lhs (tempval  tgt) 64]
 *)
@@ -229,10 +232,13 @@ let callr ~tgt ~others = [R.par (R.store pc_lhs (tempval tgt) 64 :: effects othe
 let cut_to effs = [R.par (effects effs)]
 
 let bc x (opr, ws) y ~tgt =
+  let tempr = talloc 'w' 1 in
   assert (ws = [64]);
-  [R.guard (R.app (R.opr opr ws) (List.map tempval [x;y]))
-          (R.store pc_lhs (Up.const tgt) 64)]
+  [ R.guard (tempval tempr) (R.store pc_lhs (Up.const tgt) 64)
+  ; R.store (temploc tempr) (R.app (R.opr opr ws) (List.map tempval [x;y])) 64
+  ]
 
+(* RRO FIX bnegate *)
 let bnegate r = match Down.rtl r with
 | RP.Rtl [g, (RP.Store(pc, tgt, 64) as eff)] when pc = Down.loc pc_lhs ->
      Up.rtl (RP.Rtl [RP.App(("not", [64]), [g]), eff])
@@ -298,10 +304,38 @@ let ldst_expand rtl =
 					     w'), w) ]
 
   (* store from offset *)
+  (* NOTE: right now, we have a hack to rewrite stores from offsets
+   * in the recognizer; the Right Way (seen in the next code chunk)
+   * doesn't seem to actually work because the temporaries assigned
+   * don't actually get mapped to hardware regs. for some reason
+   * perhaps because this is actually outside the postexpander *)
+
+  (* default case *)
+  |	_ -> [rtl]
+@ 
+
+<<how we would prefer to write the above code>>=
+let ldst_expand rtl =
+  let extract_reg_w op = function 
+	| [_; RP.Fetch((RP.Reg _) as r,w)] -> (r,w)
+	| [RP.Fetch((RP.Reg _) as r,w); _] -> (r,w)
+	| _ -> let (opname,_) = op in
+      Impossible.impossible ("could not find base register for ld/st") in
+  match Down.rtl rtl with
+  (* load from offset *)
+  |	RP.Rtl [g,RP.Store(dst,RP.Fetch(RP.Mem(s,agg,mw,
+					       (RP.App(op,exps) as e),assn),w'),w)
+           ] -> let (reg, regw) = extract_reg_w op exps in
+                List.map (fun x -> Up.rtl (RP.Rtl [g, x]))
+                    [ RP.Store(dst, e, regw)
+                    ; RP.Store(dst, RP.Fetch(RP.Mem(s,agg,mw,
+						    RP.Fetch(dst,regw),assn),
+					     w'), w) ]
+
+  (* store from offset *)
   |	RP.Rtl [g,RP.Store(RP.Mem(s,agg,mw,(RP.App(op,exps) as e),assn), src, w)
            ] -> let (reg, regw) = extract_reg_w op exps in
-                let alloc = Post.get_talloc () in
-                let tempr = Down.loc (Talloc.Multiple.loc alloc 't' 64) in
+                let tempr = Down.loc (Post.temploc (Post.talloc 't' 64)) in
                 List.map (fun x -> Up.rtl (RP.Rtl [g, x]))
                     [ RP.Store(tempr, e, regw)
                     ; RP.Store(RP.Mem(s, agg, mw, RP.Fetch(tempr, regw), assn),
@@ -327,7 +361,7 @@ let return_to this_ra =
 <<ia64.ml>>=
 let target =
   let spaces = [ Spaces.m; Spaces.a; Spaces.r; Spaces.t; Spaces.f
-               ; Spaces.u; Spaces.v; Spaces.c ] in
+               ; Spaces.u; Spaces.v; Spaces.c; Spaces.p; Spaces.w ] in
   { T.name = "ia64"
 
   ; T.byteorder   = Post.byte_order
@@ -381,7 +415,7 @@ let placevars =
           (Printf.sprintf "%d-bit variable hinted float but will go as integer" w) in
   let mk_stage ~temps =
     A.choice
-      [ (fun _ -> is_float),    A.widen (Aux.round_up_to ~multiple_of: 82) *>
+      [ (fun _ -> is_float),    A.widen (Aux.round_up_to ~multiple_of: 64) *>
                                   temps 'u'; 
         (fun _ h w -> w <= 64), A.widen (fun _ -> 64) *> temps 't';
         A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
