@@ -996,7 +996,8 @@ let emit_global_register_area ~export =
         asm#align (Block.alignment area);
         asm#label digest;     (* ensures desired definition is present *)
         asm#label base_sym;   (* ensures no multiple inconsistent definitions *)
-        asm#addloc (Block.size area)
+        asm#addloc (Block.size area);
+        asm#globals (List.length prog.N.globals);
       end
     else
       let localref = asm#local "Cmm.ref_to_global_area" in
@@ -1004,7 +1005,7 @@ let emit_global_register_area ~export =
         asm#section (target.T.data_section);
         asm#label localref;
         asm#comment "reference to global-register signature";
-        asm#addr (Reloc.Simple.of_sum Rtl.impsym digest (Bits.zero pointersize))
+        asm#addr (Reloc.Simple.of_sum Rtl.impsym digest (Bits.zero pointersize));
       end in
   gmap
 @

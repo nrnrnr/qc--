@@ -8,7 +8,7 @@ CC =        $config_cc
 CFLAGS =    
 
 %.o:        %.c
-            $CC $CFLAGS -c $stem.c -o $stem.o
+	$CC $CFLAGS -c $stem.c -o $stem.o
 
 %.a:
-            ar cr $target $prereq
+	ar cr $target $prereq

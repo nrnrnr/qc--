@@ -177,7 +177,6 @@ class asm  ~(byteorder:Rtl.aggregation)
            (fd:out_channel): [proc] Asm.assembler =
 object (this)
     val         _fd       = fd
-
     val mutable _section  = "this can't happen"
     val mutable _exported = Strutil.Set.empty
     val mutable _imported = Strutil.Set.empty
@@ -222,6 +221,8 @@ object (this)
     method const (s: Symbol.t) (b:Bits.bits) = 
         ()
 
+    method globals n = this#append (luafunc "globals" (string_of_int n))
+
     (* set location counter *)
     method org n =
         unsupported "no location counter in this implementation"
@@ -263,7 +264,7 @@ object (this)
                                   (quoted (hexbits bits))))
 
     (* should we consider throwing the comments in as Lua comments? *)
-    method comment s = ()
+    method comment s = this#append ("-- " ^ s ^ "\n")
 
     method private imports =
         match Strutil.Set.elements _imported with
@@ -281,11 +282,6 @@ object (this)
                                         (List.map quoted
                                             (Strutil.Set.elements _exported))))
     
-    (* this is wrong!!! *)
-    method private globals =
-          luafunc "globals" "36"
-
-
     (* -- Advertise pointer sizes and such for this assembler -- *)
 
     method private personality =
@@ -298,8 +294,7 @@ object (this)
         ^ luafunc "ptrsize"   (string_of_int ptrsize)
     
     method emit = 
-        let toplevel = this#imports ^ this#exports ^ this#personality
-                     ^ this#globals                                   in
+        let toplevel = this#imports ^ this#exports ^ this#personality in
         ( _fprintf (luafunc "end_section" "")
         ; _fprintf toplevel
         )
