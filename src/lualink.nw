@@ -187,20 +187,23 @@ module Map = struct
     let compose ~lo ~hi =
        { V.embed   = (fun x -> hi.V.embed (lo.V.embed x))
        ; V.project = (fun x -> lo.V.project (hi.V.project x))
+       ; V.is      = (fun x -> hi.V.is x && lo.V.is (hi.V.project x))
        } 
-    let ast       = AstV.makemap    V.userdata V.projection
-    let proc      = ProcV.makemap   V.userdata V.projection
-    let vasm      = AsmV.makemap    V.userdata V.projection
+    let ast       = AstV.makemap  V.userdata V.projection
+    let proc      = ProcV.makemap V.userdata V.projection
+    let vasm      = AsmV.makemap  V.userdata V.projection
       (* embeds and projects a V.value assembler *)
     let asm' proc =
-      compose { V.embed =   Asm.map proc.V.project
-              ; V.project = Asm.map proc.V.embed }
+      compose { V.embed   = Asm.map proc.V.project
+              ; V.project = Asm.map proc.V.embed 
+              ; V.is      = (fun _ -> true) } (* here's a hopeful notion *)
         vasm
     let asm = asm' proc
     let venv = EnvV.makemap    V.userdata V.projection
     let env' proc =
-      compose { V.embed =   Fenv.Clean.map proc.V.project
-              ; V.project = Fenv.Clean.map proc.V.embed }
+      compose { V.embed   = Fenv.Clean.map proc.V.project
+              ; V.project = Fenv.Clean.map proc.V.embed 
+              ; V.is      = (fun _ -> true) } (* and more hope *)
       venv
     let env = env' proc
 
@@ -361,7 +364,8 @@ C.register_module "Simplify"
 C.register_module "Stack"
   [ "freeze",  V.efunc (Map.proc **-> Map.block **-> V.runit)   Stack.freeze
   ; "blocks",  V.efunc (Map.proc **->> (V.record V.value))
-                       (Stack.blocks Map.block.V.embed (V.list V.value).V.embed)
+                       (Stack.blocks Map.block.V.embed (V.list V.value).V.embed
+                                     (V.record V.value).V.embed)
   ; "ccname",  V.efunc (Map.proc **->> V.string) (fun p -> p.Proc.cc.Call.name)
   ; "procname",V.efunc (Map.proc **->> V.string) (fun p -> p.Proc.symbol#original_text)
   ] g;                    

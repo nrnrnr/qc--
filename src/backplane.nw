@@ -164,8 +164,6 @@ module type S = sig
 end
 @
 
-
-
 % ------------------------------------------------------------------
 \subsubsection{Stages and Control Flow}
 % ------------------------------------------------------------------
@@ -623,7 +621,8 @@ module MakeLua (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a action)
 
 We provide embedding/projection pairs for each of the backplane types.
 <<Lua initialization>>=
-let {V.embed = embed; V.project = project} = T1.makemap V.userdata V.projection
+let {V.embed = embed; V.project = project; V.is = is} =
+  T1.makemap V.userdata V.projection
 
 let ( **-> ) = V.( **-> )
 let ( **->> ) x y = x **-> V.result y 
@@ -648,7 +647,7 @@ of eagerly projecting a function or table into an action.
 <<run>>
 let id x = x
 let init g =
-  let action = { V.embed   = embed ; V.project = projectAction g } in
+  let action = { V.embed   = embed ; V.project = projectAction g; V.is = isStage g } in
   Interp.register_module Arg.lua_module_name
   [ "seq",       V.efunc (V.list action       **->> action) seq
   ; "when_do",   V.efunc (action  **-> action **->> action) when_do
@@ -707,6 +706,12 @@ let projectStage g stage' = match stage' with
   | _ -> raise (V.Projection (stage', "stage"))
 
 
+let isStage g stage' = match stage' with
+  | V.Function (_, f) -> stageFn.V.is stage'
+  | V.Table stage ->
+      let field f = V.Table.find stage (embedString f) in stageFn.V.is (field "fn")
+  | _ -> false
+
 let embedStage stage =
     let stageLabels =
         [ embedString "name"
@@ -731,11 +736,8 @@ let embedStage stage =
     in
         V.Table newTab
 @
-
-
 We set up wrappers to create the [[action]] types. These functions will
 be the primitives visible in Lua.
-
 <<stage map>>=
 let seq       alst     = Seq alst
 let when_do   a1 a2    = When_Do(a1, a2)
@@ -745,9 +747,6 @@ let share value name a = Share(value, name, a)
 let ignore a           = Ignore a
 let single a           = Single a
 @
-
-
-
 % ------------------------------------------------------------------
 \subsection{Miscellaneous Procedures}
 % ------------------------------------------------------------------
@@ -761,7 +760,6 @@ macro [[definition]]'s, [[program]]'s, and [[error]]'s. [[makeIndent]] is
 used to create a blank indentation of the input size, and [[printList]] is
 a higher-order function used to print a list of any type, when passed an
 appropriate output function for that type.
-
 <<printing>>=
 let makeIndent length =
     let blank = " " in
@@ -834,7 +832,6 @@ let error_string err =
     spr "  type mismatch: `%s' expects arg of type `%s' but was passed type `%s'"
         action (valOf formal) (valOf actual)
 @
-
 <<old backplane definition that can be removed from backplane.ml>>=
 module M = Make(struct
     type proc = Proc.t
@@ -847,4 +844,3 @@ module M' = Make(struct
     let lua_module_name = "NewBackplane"
     let lua_type_name = "new backplane action"
   end)
-
