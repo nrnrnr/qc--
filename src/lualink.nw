@@ -604,14 +604,16 @@ C.register_module "Debug"
   ; "printcfg", Map.stage.V.embed (fun _ p -> Cfgutil.print_cfg (fst p); (p, false))
   ] g;
 @
-<<old register modules to [[g]] in alphabetical order>>=
+<<register modules to [[g]] in alphabetical order>>=
 C.register_module "Expander"
   [ "x86f" , Map.stage.V.embed X86.X.cfg
+(*
   ; "ppc"  , Map.stage.V.embed Ppc.X.cfg
   ; "ia64f", Map.stage.V.embed Ia64.X.cfg
   ; "mips" , Map.stage.V.embed Mips.X.cfg
   ; "alpha", Map.stage.V.embed Alpha.X.cfg
   ; "sparc", Map.stage.V.embed Sparc.X.cfg
+*)
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 let rset s = Printf.sprintf "{ %s }" (Register.SetX.to_string s) in
@@ -732,7 +734,7 @@ C.register_module "Typecheck"
  [ "proc",       V.efunc (V.value **-> Map.proc **->> V.int)
                          (fun _ proc -> Typecheck.proc proc; 1)
  ] g;
-<<old register modules to [[g]] in alphabetical order>>=
+<<register modules to [[g]] in alphabetical order>>=
 C.register_module "Unsupported" 
  [ "explain", V.efunc (V.int **-> V.int *****->> V.unit) Unsupported.explain
  ] g;
@@ -856,10 +858,10 @@ C.register_module "Pic"
         | V.Element (s, V.Number x) -> s ^ "[" ^ string_of_int (int_of_float x) ^ "]"
         | V.Element (s, _         ) -> s ^ ".?" in
 <<lua initialization>>=
-"_ = [[ \
- Expander.x86 = { fn = Expander.x86f, uses = { 'proper widths', 'no vars' }, \
+"Expander.x86 = { fn = Expander.x86f, uses = { 'proper widths', 'no vars' }, \
                   name = 'Expander.x86', creates = { 'x86 invariant' }, \
                   doc = 'A prototype code expander for the x86' } \
+ _ = [[ \
  Expander.ia64 = { fn = Expander.ia64f, uses = { 'proper widths', 'no vars' }, \
                    name = 'Expander.ia64', creates = { 'ia64 invariant' }, \
                    doc = 'A code expander for the ia64' } \

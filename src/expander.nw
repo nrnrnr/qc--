@@ -1182,7 +1182,7 @@ The expander needs a supply of temporaries, which is part of the
 [[Ast2ir.proc]]. 
 <<expander.mli>>=
 module type S = sig
-  val cfg: 'a -> Ast2ir.old_proc -> bool
+  val cfg: 'a -> Ast2ir.proc -> Ast2ir.proc * bool
 end 
 module IntFloatAddr (Post : Postexpander.S) : S
 @ 
@@ -1190,11 +1190,13 @@ module IntFloatAddr (Post : Postexpander.S) : S
 Here are some abbreviations and utilities.
 <<expander.ml>>=
 module type S = sig
-  val cfg: 'a -> Ast2ir.old_proc -> bool
+  val cfg: 'a -> Ast2ir.proc -> Ast2ir.proc * bool
 end 
 
 module A  = Automaton
 module BO = Bits.Ops
+module G  = Zipcfg
+module GR = Zipcfg.Rep
 module O  = Opshape 
 module PX = Postexpander
 module R  = Rtl
@@ -1209,6 +1211,7 @@ module Dn = Rtl.Dn
 
 let upassn = Rtl.Up.assertion
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
+let unimpf  fmt = Printf.kprintf Impossible.unimp fmt
 @ 
 <<expander.ml>>=
 let fetch l = RP.Fetch (Dn.loc l, RU.Width.loc l)
@@ -1216,11 +1219,6 @@ let width e = RU.Width.exp (Up.exp e)
 @ 
 Sometimes, we may require that a node have an instruction.
 <<expander.ml>>=
-module G = Cfgx.M
-let inst n =
-  match G.to_instr n with
-  | Some i -> i
-  | None   -> impossf "Expanded node must have instruction"
 @ 
 We provide three kinds of composition: blocks with blocks, blocks
 with branches, and blocks with conditional branches.
@@ -2292,42 +2290,32 @@ Before and after expansion we must tie and untie the knot that
 establishes the mutual recursion between the generic expander and the
 machine-specific postexpander.
 <<generic flow-graph expander>>=
-let cfg _ ({Proc.cfg = cfg} as proc) =
+let cfg _ (cfg, proc) =
   let modified = ref false in
+  let machine = proc.Proc.machine in
   <<block-conversion functions>>
   let expand_block, expand_branch, expand_cbranch = expand proc in
-  let expand_node n =
-    match G.to_instr n with
-    | None -> ()
-    | Some i ->
-        let pred = G.pred n in
-        let pred_set_succ n =
-          if Pervasives.(<>) (G.kind pred) G.Illegal then G.set_succ cfg pred n in
-        let ill  = G.illegal cfg in
-        match G.kind n with
-        | G.Assertion | G.StackAdjust | G.Join | G.Exit -> ()
-        | G.Instruction ->
-            pred_set_succ ill;
-            pred_set_succ (block_replace (expand_block (PX.Rtl i)) n)
-        | G.Cbranch ->
-          let bi   = (Up.exp (branch_condition i), PX.Exit true, PX.Exit false) in
-          let b    = expand_cbranch (PX.Test (PX.Nop, bi)) in
-          ( pred_set_succ ill
-          ; G.delete    cfg n
-          ; pred_set_succ (cbranch2cfg b (G.tsucc n) (G.fsucc n))
-          )
-        | _ ->
-            pred_set_succ ill;
-            let b, i = expand_branch (PX.Nop, i) in
-            G.update_instr (fun _ -> i) n;
-            pred_set_succ (block_before b n) in
+  let expand_middle n = match n with
+  | GR.Instruction i -> block2cfg (expand_block (PX.Rtl i))
+  | GR.Stack_adjust _ | GR.Assertion _ -> G.single_middle n in
+  let expand_last n = match n with
+  | GR.Cbranch (i, ifso, ifnot) ->
+      let bi = (Up.exp (branch_condition i), PX.Exit true, PX.Exit false) in
+      let b  = expand_cbranch (PX.Test (PX.Nop, bi)) in
+      let g  = cbranch2cfg b ifso ifnot (G.entry G.empty) in
+      let g  = G.of_block_list (G.postorder_dfs (G.unfocus g)) in (* trim exit node *)
+      g
+  | _ ->
+      let b, i = expand_branch (PX.Nop, GR.last_instr n) in
+      let last = G.rtl_mapl (fun _ -> i) n in
+      G.unfocus (block_before b (G.entry (G.single_last last))) in
 
   Postexpander.remember_allocators proc.Proc.temps proc.Proc.priv;
   Postexpander.remember_expanders expand_block expand_branch expand_cbranch;
-  G.iter_nodes expand_node proc.Proc.cfg;
+  let g = G.expand expand_middle expand_last cfg in
   Postexpander.forget_allocators();
   Postexpander.forget_expanders();
-  !modified
+  (g, proc), !modified
 <<internal utilities for the generic expander>>=
 let branch_condition rtl = match Dn.rtl rtl with
 | RP.Rtl [(g, RP.Store (left, right, w))] ->
@@ -2340,70 +2328,45 @@ Free reference [[modified]] is set only if a new node is added to the graph.
 IT MAY BE NECESSARY TO REASSOCIATE TO AVOID REPLACING INSTRUCTION $i$
 WITH $i; \mathtt{Nop}$. 
 <<block-conversion functions>>=
-let rec branch2cfg (block, branch) bnode =
-  G.update_instr (fun _ -> branch) bnode;
-  block_before block bnode 
+let rec block2cfg block = G.unfocus (block_before block (G.entry G.empty))
 and block_before block succ =
   let rec before b = match b with
   | PX.Seq (PX.Nop, b) -> before b
   | PX.Seq (b, PX.Nop) -> before b
-  | PX.Rtl i -> modified := true; G.instruction cfg i ~succ
+  | PX.Rtl i -> modified := true; G.instruction i succ
   | PX.Seq (b, b') -> block_before b (before b')
   | PX.If (c, t, f) ->
-      let t = block_before t succ in
-      let f = block_before f succ in
-      cbranch2cfg c ~t ~f
-  | PX.While _ -> Impossible.unimp "PX.While"
+      G.if_then_else (cbranch2cfg c) machine ~t:(block_before t) ~f:(block_before f) succ
+  | PX.While (c, b) -> G.while_do (cbranch2cfg c) machine ~body:(block_before b) succ
   | PX.Nop -> succ in
   before block 
-and block_replace block n =
-  let rec repl b = match b with
-  | PX.Seq (PX.Nop, b) -> repl b
-  | PX.Seq (b, PX.Nop) -> repl b
-  | PX.Rtl i -> G.update_instr (fun _ -> i) n; n
-  | PX.Seq (b, b') -> block_before b (repl b')
-  | PX.If _ | PX.While _ -> block_before b (block_replace PX.Nop n)
-  | PX.Nop -> G.update_instr (fun _ -> R.par []) n; n in
-  repl block 
+<<block-conversion functions>>=
 @ 
 N.B. the sharing works only for a DAG---the graph must be acyclic.
 (Guaranteed by the rep.)
 <<block-conversion functions>>=
-and cbranch2cfg c ~t ~f =
+and cbranch2cfg c ~ifso ~ifnot succ =
   let nodemap = ref PX.empty in
-  let rec cbi (e, tk, fk)  =
-    let tn = cbranch tk in
-    let fn = cbranch fk in
-    G.cbranch cfg e ~ifso:tn ~ifnot:fn
-  and cbranch c = match c with
-  | PX.Exit p        -> (if p then t else f)
-  | PX.Test   (b, i) -> let c = cbi i in block_before b c
-  | PX.Shared (u, c) -> shared u c
-  and shared u c =
-    try PX.lookup u (!nodemap) with
+  let rec cbi (e, tk, fk) succ =
+    let tlbl, succ = cbranch tk succ in
+    let flbl, succ = cbranch fk succ in
+    G.cbranch machine e ~ifso:tlbl ~ifnot:flbl succ
+  and cbranch c succ = match c with
+  | PX.Exit p        -> (if p then ifso else ifnot), succ
+  | PX.Test   (b, i) -> G.make_target machine (block_before b (cbi i succ))
+  | PX.Shared (u, c) -> shared u c succ
+  and shared u c succ =
+    try PX.lookup u (!nodemap), succ with
     | Not_found ->
-        let n = cbranch c in
-        nodemap := PX.insert u n (!nodemap);
-        n in
+        let lbl, succ = cbranch c succ in
+        nodemap := PX.insert u lbl (!nodemap);
+        (lbl, succ) in
   modified := true;
-  cbranch c in
-
-(* got to keep this around somehow *)
-  let rewrite_bc bc ktrue kfalse =
-    let new_cb = G.cbranch cfg (R.bool true) ktrue kfalse in
-    ( G.update_instr (fun _ -> inst bc) new_cb
-    ; G.set_tsucc cfg new_cb ktrue
-    ; G.set_fsucc cfg new_cb kfalse
-    ; if Pervasives.(<>) (G.kind (G.pred bc)) G.Illegal then
-        G.set_succ cfg (G.pred bc) new_cb
-    ; new_cb
-    ) in
-
+  let lbl, g = cbranch c succ in
+  G.branch machine lbl g in
 @ 
 
 \subsubsection{Compilation of Boolean expressions into control flow.}
-
-THIS CODE SHOULD BE MOVED TO THE GENERIC CODE EXPANDER.
 
 An if-statement is governed by a boolean expression that has no side
 effects. A simple translation is to use this expression as a guard for a

@@ -138,6 +138,15 @@ val return       : Rtl.rtl -> exit:int -> uses:regs -> zgraph -> zgraph
 val forbidden    : machine -> zgraph -> zgraph
   (* control should not reach; causes checked RTE *)
 @ 
+As a convenience, we provide code generation for if-then-else.
+<<zipcfg.mli>>=
+val if_then_else :
+      (ifso:label -> ifnot:label -> zgraph -> zgraph) -> machine ->
+        t:(zgraph->zgraph) -> f:(zgraph->zgraph) -> zgraph -> zgraph
+val while_do :
+      (ifso:label -> ifnot:label -> zgraph -> zgraph) -> machine ->
+        body:(zgraph->zgraph) -> zgraph -> zgraph
+@ 
 Sometimes we need to make the current focus (which must be the entry)
 a branch target to be used later.
 Calling [[make_target gz]] returns a new graph and a unique identifier
@@ -148,6 +157,11 @@ val make_target : machine -> zgraph -> label * zgraph
 Mutation---ugh!
 <<zipcfg.mli>>=
 val set_spans : zgraph -> Spans.t -> unit  (* set spans at focus *)
+@ 
+We can also make a graph out of a single [[middle]] or [[last]] node.
+<<zipcfg.mli>>=
+val single_middle : Rep.middle -> graph
+val single_last   : Rep.last   -> graph
 @ 
 \subsubsection{Exposure}
 
@@ -212,7 +226,8 @@ type block = first * tail
 @ 
 We expose some utility functions:
 <<declarations of [[Rep]]'s public functions>>=
-val id : block -> uid
+val id  : block -> uid
+val fid : first -> uid
 val entry_uid : uid
 
 val zip   : zblock -> block
@@ -251,6 +266,9 @@ We can also fold and iterate over blocks.
 val fold_blocks : (Rep.block -> 'a -> 'a) -> 'a -> graph -> 'a
 val iter_blocks : (Rep.block -> unit) -> graph -> unit
 @ 
+<<zipcfg.mli>>=
+val expand : (Rep.middle -> graph) -> (Rep.last -> graph) -> graph -> graph
+@ 
 \paragraph{Observing nodes}
 Successors.
 <<declarations of [[Rep]]'s public functions>>=
@@ -280,7 +298,8 @@ val iter_nodes :
   (Rep.first -> unit) -> (Rep.middle -> unit) -> (Rep.last -> unit) -> graph -> unit
 @ 
 <<zipcfg.mli>>=
-val rtl_map : (Rtl.rtl -> Rtl.rtl) -> graph -> graph
+val rtl_map  : (Rtl.rtl -> Rtl.rtl) -> graph    -> graph
+val rtl_mapl : (Rtl.rtl -> Rtl.rtl) -> Rep.last -> Rep.last
 @ 
 \paragraph{Observing data flow}
 As noted above a node can contribute defs, uses, and kills to each
@@ -366,7 +385,8 @@ type call = {         cal_i          : Rtl.rtl
 @
 \paragraph{Block manipulations}
 <<definitions of [[Rep]]'s public functions>>=
-let id = function (Entry,_) -> entry_uid | (Label ((u, _), _, _),_) -> u
+let fid = function Entry -> entry_uid | Label ((u, _), _, _) -> u
+let id (f, t) = fid f
 @ 
 Convert block between forms.
 These functions are tail-recursive, so we can go as deep as we like
@@ -587,6 +607,21 @@ let make_target machine ((b, bs) as gz) = match b with
 | _ -> impossf "focus not on entry"
 @ 
 <<zipcfg.ml>>=
+let if_then_else cbranch machine ~t ~f g =
+  let endif, g = make_target machine g in
+  let not,   g = make_target machine (f g) in
+  let        g = branch      machine endif g in
+  let so,    g = make_target machine (t g) in
+  cbranch ~ifso:so ~ifnot:not g
+<<zipcfg.ml>>=
+let while_do cbranch machine ~body g =
+  let lbl = (uid (), Idgen.label "loop head") in
+  let endwhile, g = make_target machine g in
+  let body,     g = make_target machine (body (branch machine lbl g)) in
+  let g = cbranch ~ifso:body ~ifnot:endwhile g in
+  label machine lbl g
+@ 
+<<zipcfg.ml>>=
 let call machine exp ~altrets ~unwinds_to ~cuts_to ~aborts
                ~uses ~defs ~kills ~reads ~writes ~spans succ =
   let new_cedge lbl = { kills = kills; defs = defs; node = lbl } in
@@ -708,23 +743,24 @@ let iter_nodes first middle last g =
 let fold_blocks f z bs = UM.fold (fun _ -> f) bs z
 let iter_blocks = UM.iter
 <<zipcfg.ml>>=
+let rtl_mapl map l = match l with
+| Exit    _ -> l
+| Branch  (r, l) -> Branch (map r, l)
+| Cbranch (r, t, f) -> Cbranch (map r, t, f)
+| Mbranch (r, tgts) -> Mbranch (map r, tgts)
+| Call    c -> Call { c with cal_i = map c.cal_i }
+| Cut     (r, es, uses) -> Cut (map r, es, uses)
+| Return  (i, r, uses) -> Return (i, map r, uses)
+| Jump    (r, uses, tgts) -> Jump (map r, uses, tgts)
+| Forbidden r -> Forbidden (map r)
+
 let rtl_map map g =
   let block (f, t) =
     let rec tail t = match t with
     | Tail (Instruction r, t) -> Tail (Instruction (map r), tail t)
     | Tail (Assertion r, t) -> Tail (Assertion (map r), tail t)
     | Tail (Stack_adjust r, t) -> Tail (Stack_adjust (map r), tail t)
-    | Last l -> Last (last l)
-    and last l = match l with
-    | Exit    _ -> l
-    | Branch  (r, l) -> Branch (map r, l)
-    | Cbranch (r, t, f) -> Cbranch (map r, t, f)
-    | Mbranch (r, tgts) -> Mbranch (map r, tgts)
-    | Call    c -> Call { c with cal_i = map c.cal_i }
-    | Cut     (r, es, uses) -> Cut (map r, es, uses)
-    | Return  (i, r, uses) -> Return (i, map r, uses)
-    | Jump    (r, uses, tgts) -> Jump (map r, uses, tgts)
-    | Forbidden r -> Forbidden (map r) in
+    | Last l -> Last (rtl_mapl map l) in
     (f, tail t) in
   UM.map block g
 @ 
@@ -790,3 +826,63 @@ let last_instr l = match l with
 <<zipcfg.ml>>=
 let of_block_list blocks =
   List.fold_left (fun m b -> Blocks.insert b m) Blocks.empty blocks 
+@ 
+\paragraph{Graph expansion}
+
+This probably duplicates some other splicing stuff.
+And I'm not too happy even with the local redundancy.
+<<zipcfg.ml>>=
+let must_be_empty g =
+  if not (UM.is_empty g) then
+    impossf "entry connects to exit, but there are more blocks"
+
+let splice_in_forward head graph tail expanded =
+  let rec revapp head tail = match tail with
+  | Last l -> head, l
+  | Tail (m, t) -> revapp (Head (head, m)) t in
+  let gentry, gblocks = entry graph in
+  let gf, gt = goto_start gentry in
+  (match gf with Entry -> () | _ -> impossf "entry is not entry?!");
+  let h, l = revapp head gt in
+  match l with
+  | Exit 0 ->
+      must_be_empty gblocks;
+      h, tail, expanded
+  | _ ->
+      unreachable tail;
+      let gexit, gblocks = exit 0 gblocks in
+      let gh, gl = goto_end gexit in
+      (match gl with Exit 0 -> () | _ -> impossf "exit is not exit?!");
+      gh, tail, (Blocks.union gblocks (Blocks.insert (zip (End (h, l))) expanded))
+
+let finish_splice_forward head graph expanded = 
+  let rec revapp head tail = match head with
+  | First f -> f, tail
+  | Head (h, m) -> revapp h (Tail (m, tail)) in
+  let gentry, gblocks = entry graph in
+  let gf, gt = goto_start gentry in
+  (match gf with Entry -> () | _ -> impossf "entry is not entry?!");
+  Blocks.union gblocks (Blocks.insert (revapp head gt) expanded)
+
+let expand expand_middle expand_last graph =
+  let expand_block block expanded =
+    let rec expand_tail h t expanded = match t with
+    | Tail (m, t) ->
+        let g = expand_middle m in
+        let h, t, expanded = splice_in_forward h g t expanded in
+        expand_tail h t expanded
+    | Last l ->
+        let g = expand_last l in
+        finish_splice_forward h g expanded in
+    let (f, t) = block in
+    expand_tail (First f) t expanded in
+  Blocks.fold expand_block graph empty
+@ 
+<<zipcfg.ml>>=
+let single_middle m =
+  let block = (Entry, Tail (m, Last (Exit 0))) in
+  Blocks.insert block Blocks.empty
+
+let single_last l =
+  let block = (Entry, Last l) in
+  Blocks.insert block Blocks.empty

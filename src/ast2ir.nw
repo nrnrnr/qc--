@@ -527,12 +527,9 @@ and stmt' props s  succ =
 and stmt  props s  succ =
   <<supporting functions for translating statements>> in
   match s with
-  | S.If (e, so, not) ->
-      let endif, g = G.make_target machine succ in
-      let not,   g = G.make_target machine (stmts props not g) in
-      let        g = G.branch      machine endif g in
-      let so,    g = G.make_target machine (stmts props so  g) in
-      G.cbranch machine e ~ifso:so ~ifnot:not g
+  | S.If (e, so, not)      ->
+      G.if_then_else (G.cbranch machine e) machine
+          ~t:(stmts props so) ~f:(stmts props not) succ
   | S.Label n              -> G.label machine (uid_of n, n) succ 
   | S.Switch (rg, e, arms) -> switchStmt rg e arms props succ
   | S.Cont (name, _, _)    -> contStmt2 name succ
@@ -951,6 +948,7 @@ The main thing here is dealing with all the blocks.
     ; Proc.temps       = temps
     ; Proc.mk_symbol   = Fenv.Clean.symbol env
     ; Proc.cfg         = ()
+    ; Proc.machine     = machine
     ; Proc.oldblocks   = (* parms must be first, so call List.rev *)
         { C.callee = List.rev (oldblocks.callee); 
           C.caller = List.rev (oldblocks.caller); }
