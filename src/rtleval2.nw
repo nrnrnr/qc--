@@ -37,6 +37,9 @@ type reloc     = Bits.bits RS.relocatable
 let impossible = Impossible.impossible
 
 module Private = struct
+    exception Error of string
+    let error msg = raise (Error msg)
+
     <<RTL operator implementations>>
     <<traverse RTL>>
 end    
@@ -45,8 +48,12 @@ end
 The exported function work on the public representation of {\rtl}s
 
 <<rtleval2.ml>>=
-let rtl r  = U.rtl (Private.rtl (D.rtl r))
-let exp e  = U.exp (Private.exp (D.exp e))
+let rtl r  = try U.rtl (Private.rtl (D.rtl r))
+             with Private.Error msg -> Impossible.impossible msg
+
+let exp e  = try U.exp (Private.exp (D.exp e))
+             with Private.Error msg -> Impossible.impossible msg
+
 let bits e = match Private.exp (D.exp e) with
              | RP.Const(RP.Bits(b)) -> b
              | _                    -> Error.error "not a constant value"
@@ -54,10 +61,6 @@ let bits e = match Private.exp (D.exp e) with
 let bool e = match Private.exp (D.exp e) with
              | RP.Const(RP.Bool(b)) -> b
              | _                    -> Error.error "not a constant condition"
-             
-            
-@
-            
 @
 
 % ------------------------------------------------------------------ 
@@ -121,13 +124,14 @@ let app o w args = match o with
     |  "xor"        -> xor w args
     |  "zx"         -> zx w args
     |  "bitExtract" -> bitExtract w args
-    |  o            -> Impossible.impossible ("unknown RTL operator: "^o)
+    |  "undef"      -> undef w args
+    |  o            -> error ("unknown operator: "^o) 
     
 
 let rec exp = function
     | RP.Const _ as c               -> c
     | RP.Fetch (l, w)               -> RP.Fetch (loc l, w)
-    | RP.App ((o,w),args)           -> app o w args 
+    | RP.App ((o,w),args)           -> app o w (List.map exp args) 
         
 and loc = function    
     | RP.Cell(sp, agg, w, e, ass)   -> RP.Cell(sp, agg, w, exp e, ass)
@@ -173,8 +177,13 @@ let add w args = match (w,args) with
     | _         -> default "add" w args
     
 
+let undef w args = default "undef" w args       (* questionable *)
 
-let and' w args = default "and" w args
+let and' w args = match (w,args) with
+    | [w],[x;y] when is_bits x && is_bits y
+                -> to_bits (Int64.logand (int64 x) (int64 y)) w
+    | _ -> default "and" w args
+
 let bit w args  = default "bit" w args
 let bool w args = default "bool" w args
 let borrow w args = default "borrow" w args

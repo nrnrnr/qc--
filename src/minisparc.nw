@@ -525,6 +525,20 @@ let decode rtl = match Rtl.Convert.rtl rtl with
          )
 @        
 
+The machine generated code does not define a pattern for [[sethi]]. I
+will just take clues from the encoding function and define a matching
+pattern here.
+
+<<instructions>>=
+| RP.Rtl [(RP.Const (RP.Bool true), 
+        RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
+          RP.Const(RP.Bits n), 32))] ->
+          Instruction.sethi (Bits.U.to_native n) (Bits.U.to_native rd)
+@
+
+The patterns below are machine generated and manually modified where
+noted.
+
 <<instructions>>=
 | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 

@@ -154,6 +154,25 @@ let set (i: nativeint) (reg: I.reg) =
             exec (I.or_ reg (I.imode (lo i)) reg)
 @
 
+The code to expand contains \emph{late compile-time} constants. They are
+treated as 32-bit wide integers. Unfortunately, the {\sparc} has no
+single instruction to a load a 32bit value into a register. The
+synthetic [[set]] instruction splits a large value into two and loads
+these with two instructions. This is not possible for late values
+because a late value is symbolic and cannot be split and compile-time.
+For a late value our instruction set abstraction provides [[lmode]] and
+[[sethi_late]] to implement [[set_late]] analogously to [[set]]. The
+generated {\rtl}s \emph{do not} machine instructions. However,
+\emph{after} the late compile-time values are replaced by integers,
+\emph{and} expressions inside {\rtl}s have been constant-folded, each
+{\rtl} represents a machine instruction. At least, that is the plan.
+
+<<head>>=
+let set_late (late: I.late) (reg: I.reg) =
+    exec (I.sethi_late late reg) >>= fun () ->
+    exec (I.or_ reg (I.lmode late) reg)
+@
+
 % ------------------------------------------------------------------ 
 \subsection{Code Expansion Rules}
 % ------------------------------------------------------------------ 
@@ -226,6 +245,12 @@ reg:        const [1]
                 set const t >>= fun () -> 
                 return t
             :}
+reg:        Late(string,width) [2]
+            {:
+                itmp 32 >>= fun t ->
+                set_late (Rtl.late string width) t >>= fun () ->
+                return t
+            :}    
 @
 
 Memory cell addresses are of either form: $\$r[r_1] + \$r[r_2]$, or
@@ -468,7 +493,7 @@ let const = function
     | RP.Bool(true)             -> conTrue  ()
     | RP.Bool(false)            -> conFalse ()
     | RP.Link(s,w)              -> conLink s w
-    | RP.Late(s,w)              -> error ("late compile-time constant: "^s) 
+    | RP.Late(s,w)              -> conLate s w
     | RP.Bits(b)                -> conBits(b)
 
 let rec exp = function

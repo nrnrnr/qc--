@@ -934,7 +934,8 @@ let init_cont (cfg:G.rtlcfg) (c:Cont.t) =
 In the [[freeze]] function we fix the stack layout. The results in an
 equation system whose solution determines the values of symbolic
 compile-time constants. A substitution replaces all these symbolic
-values with expressions in the body of the procedure.
+values with expressions in the body of the procedure. In another step,
+all {\rtl}s in a {\cfg} are simplified, using constant folding.
 
 <<Make procedure>>=
 let freeze (p:Proc.t) = 
@@ -964,8 +965,8 @@ let freeze (p:Proc.t) =
                 if false then e else Impossible.impossible ("cannot find: "^x)
             )  
         | x -> x in
-    let ()       = Cfgutil.subst p.Proc.cfg 
-                        (Rtlutil.Subst2.exp ~guard ~map:subst)
+    let () = Cfgutil.subst p.Proc.cfg (Rtlutil.Subst2.exp ~guard ~map:subst)
+    and () = Cfgutil.subst p.Proc.cfg Rtleval2.rtl (* const folding *)
     in
         ()
 
@@ -981,10 +982,11 @@ let proc env target optimizer asm (cconv,name,args,bdy) =
     let cfg         = G.mk (Rtl.par [])   in      (* empty control-flow graph *)
     (* symbolic compile-time constants to be used for stack areas *)
     let eqns        = Const.empty pointer          in (* eqns over pointers *)
-    let stack       = Rtl.late "stackdata" pointer in
-    let inb         = Rtl.late "inbase"    pointer in
-    let outb        = Rtl.late "outbase"   pointer in
-    let privb       = Rtl.late "private"   pointer in
+    let sp_offset k = Rtl.app (Rtl.opr "add" [pointer]) [sp;k] in
+    let stack       = sp_offset (Rtl.late "stackdata" pointer) in
+    let inb         = sp_offset (Rtl.late "inbase"    pointer) in
+    let outb        = sp_offset (Rtl.late "outbase"   pointer) in
+    let privb       = sp_offset (Rtl.late "private"   pointer) in
     let eqns        = Const.make_equal sp outb eqns in
     (* calculate amount of user stack data - updates env! *)
     let stackd      = Area.mk stack in

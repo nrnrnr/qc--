@@ -170,6 +170,7 @@ machine-readable.
 <<rtlutil.mli>>=
 module ToString: sig
     val rtl: Rtl.rtl -> string
+    val exp: Rtl.exp -> string
 end
 @
 
@@ -444,7 +445,12 @@ let const = function
     | R.Late(name,w) -> A.Fetch(A.Var(None, name)) (*XXX ok? *)
 @
 
+
+
 <<ToAST>>=
+let opr op w =
+    Printf.sprintf "%s[%s]" op (String.concat "," (List.map string_of_int w))
+
 let rec expr' = function
     | R.Const c         -> const c
     | R.Fetch(loc,_)    -> A.Fetch(location' loc)
@@ -453,7 +459,7 @@ let rec expr' = function
                            | [l; r] when op = "add" || op = "sub" ->
                                   let op = if op = "add" then "+" else "-" in
                                   A.BinOp(expr' l, op, expr' r)
-                           | _ -> A.PrimOp(op, List.map actual ee)
+                           | _ -> A.PrimOp(opr op ww, List.map actual ee)
 @
 
 N.B. This code might possibly look up the location in a machine-dependent map
@@ -604,6 +610,10 @@ let rtl' (RP.Rtl x) =
     
 let rtl r =
     let pp = rtl' (R.Convert.rtl r) in
+        Pp.ppToString 66 (* line width *) pp
+
+let exp e =
+    let pp = exp (R.Convert.exp e) in
         Pp.ppToString 66 (* line width *) pp
 @
 
