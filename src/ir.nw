@@ -2,6 +2,15 @@
 
 \input{macros.tex}
 
+
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
 % ------------------------------------------------------------------ 
 \section{Abstract \PAL}
 % ------------------------------------------------------------------ 
@@ -160,10 +169,9 @@ val  extern_graph : graph  -> xgraph
 @ 
 
 A [[label]] is either a name or a number.  Numbers will be typically
-used for automatically generated labels where names in the source file
-can be used for labels, too.  A list of labels is used for lists of
-goto-targets and continuations; these are uniformly called
-[[targets]].
+used for automatically generated labels where names come from source
+file labels.  A list of labels is used for lists of goto-targets and
+continuations; these are uniformly called [[targets]].
 
 <<module fgraph>>=
 label       = Name      (string)
@@ -177,6 +185,7 @@ corresponding node exists. Procedures are represented by [[CopyIn]]
 and [[CopyOut]] nodes which model parameter passing into and out of
 procedures. 
 
+
 <<>>=
 node        = Branch    (rtl.expr, label, label)
             | Exit      
@@ -187,6 +196,7 @@ node        = Branch    (rtl.expr, label, label)
             | Call      (rtl.expr, cont)
             | CopyIn    (formal*,context,convention,node)
             | CopyOut   (actual*,context,convention,node)
+           -- Label     (label,node) -- should make code generation easier
 @
 
 A [[context]] describes where parameters are passed: into a procedure, out
@@ -206,6 +216,8 @@ formal      = (variable, rtl.width, hint?)
 actual      = (rtl.expr, rtl.width, hint?)
 @
 
+Continutations [[cont]] come in bundles. 
+ 
 <<>>=
 boolean     = (int)  -- view
 cont        = ( node    normal
@@ -275,7 +287,7 @@ let of_bool       = function true -> 1 | false -> 0
 The flow graph is internally represented as a mapping from labels to
 nodes.  This representation is never used directly when a flow graph
 is built but only through an interface like [[Agraph]] (module
-\module{agraph)) that provides an abstract view.  We have chosen to
+\module{agraph}) that provides an abstract view.  We have chosen to
 use an imperative approach, i.e.~the graph is manipulated with side
 effects. 
 

@@ -260,7 +260,6 @@ let body env props graph s =
 
 <<cases for translating statements>>=
 | A.LabelStmt(n)                       -> props (GM.label n after)
-    
 @
 
 A call [[x,y = f()]] is translated into a [[Call]]-node, followed by a
@@ -278,13 +277,30 @@ is guaranteed to be a variable.  It must be translated into a
         | A.Mem _         -> assert false
     in     
     let cc   = Aux.Option.get default_convention cc in
-    let copy = GM.copy_in (List.map lvalue lhs) Fgraph.ProcResults cc after in 
-    let cont = GM.empty_cont (props copy)           in
+    let copy = if lhs <> [] 
+               then props (GM.copy_in (List.map lvalue lhs) 
+                                      Fgraph.ProcResults cc after)  
+               else after                           in
+    let cont = GM.empty_cont copy                   in
     let call = GM.call (expr env e) cont            in
         props call
+@
+
+A continuation is represented by a labeled node.  This node is a
+[[CopyIn]] node in case the continuation receives parameters. 
+        
+<<cases for translating statements>>=
+| A.ContStmt(n,ns) -> 
+    let hint  = None                                          in
+    let cc    = default_convention                            in
+    let args  = List.map (fun n -> (n, tyOf n env, hint )) ns in
+    let copy  = if ns <> []
+                then props (GM.copy_in args Fgraph.ContParameters cc after)
+                else after                           
+    in
+        props (GM.label n copy)
     
 <<more cases for translating statements>>=
-| A.ContStmt(n,ns)                     -> true
 | A.SpanStmt(e1,e2,ss)                 -> true
 | A.PrimStmt(lhs, cc, n, args, fs)     -> true
 | A.GotoStmt(e,ts)                     -> true
