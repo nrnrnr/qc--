@@ -702,8 +702,19 @@ and assignStmt state (lhs,rhs) =
     in
     let rtl = Rtl.par (List.map2 effect lhs rhs) in
         { state with node = G.gm_assign state.cfg rtl state.node }
+@
+
+If the {\AST} does not mention any labels, we know that the expression
+must be a label.
              
+<<Make statements>>=
 and gotoStmt state (e,labels) =
+    let rec label_of = function
+        | A.ExprAt(x,_)             -> label_of x
+        | A.Fetch(A.LValueAt(x,_))  -> label_of (A.Fetch x)
+        | A.Fetch(A.Var(_,x))       -> x
+        | _                         -> assert false in
+    let labels = if labels <> [] then labels else [label_of e] in
     let exp   = expr state.env state.target e  in
     let rtl   = state.target.Target.goto.Target.embed exp    in
     let nodes = List.map (G.lookup state.cfg) labels         in

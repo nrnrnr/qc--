@@ -1631,22 +1631,35 @@ let rec checkFlow isCutTo env f =
     | A.Aborts          -> env
 @
 
-The [[isLabel env e]] function returns [[true]] if the expression
-[[e]] denotes a statically known address. This means it must be a
-label or an imported symbol.
+The [[isLabel env e]] function returns [[true]] if the expression [[e]]
+denotes a statically known label for [[goto]]. Analogously,
+[[isFunction]] is true, if an expression denotes the address of a
+function.
 
 <<check>>=
-let rec isLabel env = function
-    | A.ExprAt(x,_)                     -> isLabel env x
-    | A.Fetch(A.LValueAt(x,_))          -> isLabel env (A.Fetch x)
-    | A.Fetch(A.Var(_,x))               -> 
+let rec isGotoLabel env = function
+    | A.ExprAt(x,_)                             -> isGotoLabel env x
+    | A.Fetch(A.LValueAt(x,_))                  -> isGotoLabel env (A.Fetch x)
+    | A.Fetch(A.Var(_,x))                       -> 
           ( match F.findv x env with
-          | _       ,E.Error            -> false
-          | scope   ,E.Ok(F.Label(_),_) -> true
-          | scope   ,E.Ok(F.Import _,_) -> true
-          | _                           -> false
+          | _       ,E.Error                    -> false
+          | scope   ,E.Ok(F.Label(F.Code(_)),_) -> true
+          | _                                   -> false
           )        
-    | _                                 -> false
+    | _                                         -> false
+
+let rec isFunction env = function
+    | A.ExprAt(x,_)                             -> isFunction env x
+    | A.Fetch(A.LValueAt(x,_))                  -> isFunction env (A.Fetch x)
+    | A.Fetch(A.Var(_,x))                       -> 
+          ( match F.findv x env with
+          | _       ,E.Error                    -> false
+          | scope   ,E.Ok(F.Import _,_)         -> true
+          | scope   ,E.Ok(F.Label(F.Proc(_)),_) -> true
+          | _                                   -> false
+          )        
+    | _                                         -> false
+
 @
 
 The expression of an [[if]] statement must be a boolean value. Errors
@@ -1741,7 +1754,7 @@ and gotoStmt env (e,ts) =
         | _              -> E.error msg1
         )
     in
-        if ts = [] && not (isLabel env e)
+        if ts = [] && not (isGotoLabel env e)
         then E.error msg2
         else env
 @
@@ -1765,7 +1778,7 @@ and callStmt env (left,cc,exp,args,ts,fs) =
     let env  = foldl  checkCallTarget  env ts                     in
     let args = List.map snd args (* strip hints *)                in
     let at   = E.Raise.list (List.map (tyExpr env) args)          in
-        (* if ts = [] && not (isLabel env exp) then E.error msg1 else *)
+        (* if ts = [] && not (isFunction env exp) then E.error msg1 else *)
         E.seq' (F.flagError env) 
                (E.Raise.quad (tyExpr env exp,left,at,pointerTy env)) 
                ( function 
@@ -1860,7 +1873,7 @@ and jumpStmt env (cc,e,args,ts) =
                | otherwise      -> E.error "jump target is not a pointer"
                )
     in
-        if ts = [] && not (isLabel env e) then
+        if ts = [] && not (isFunction env e) then
             E.error "a target annotation for this jump is missing"
         else 
             E.seq' (F.flagError env) (E.Raise.list args) (fun x -> env)

@@ -491,7 +491,8 @@ method test =
 method ast i2ast =
     let this = (this :> 'i cfg) in
         ( if not this#enumerated then this#enumerate else ()
-        ; let f node result = node#ast i2ast:: result in
+        ; let f node result = (*debug: A.CommentStmt(node#comment) :: *) 
+                              node#ast i2ast :: result in
             Array.fold_right f this#enumeration []
         )
 @
@@ -667,17 +668,7 @@ object(this)
         match _succ with
             | None   -> ()
             | Some n -> _succ <- Some (map n)
-    method succ =
-        match _succ with
-            | None   -> assert false (* must not happen *)
-            | Some n -> [n]
-    
-    method upd_succ map =
-        let map = upd (this :> 'i node) map in
-        match _succ with
-            | None   -> ()
-            | Some n -> _succ <- Some (map n)
-
+        
     method linorder = 
         ( match _succ with
           | None -> assert false (* must not happen *)
@@ -693,7 +684,7 @@ object(this)
     method test =
         let this = (this :> 'i labl) in
             ( super#test
-            ; assert ((List.length this#pred <= 1) || (_symbol <> None)) 
+            ; assert (List.length this#pred <= 1 || _symbol <> None)
             )
 end
 @
@@ -823,7 +814,8 @@ object (this)
     val mutable _targets = targets
 
     initializer
-        List.iter (fun n -> n#link_pred (this :> 'i node)) _targets
+        List.iter (fun n -> n#link_pred (this :> 'i node)) _targets;
+        assert (_targets <> [])
 
     method succ = uniq _targets      
     
