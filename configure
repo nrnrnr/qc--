@@ -52,7 +52,8 @@ $x{endian}     = ""   ;         # big/little
 $x{sizeof_int} = ""   ;         # 4  
 $x{sizeof_ptr} = ""   ;         # 4
 $x{sizeof_char}= ""   ;         # 1
-$x{stdc_version}= ""  ;         # 199409 - from __STDC_VERSION__
+$x{stdc_version}= ""  ;         # 199409 - from     __STDC_VERSION__
+$x{stdc_iec559}= ""  ;          # defined/undefined __STDC_IEC_559__
 $x{arch}       = ""   ;         # x86-linux  
 $x{ocamlv}     = ""   ;         # OCaml Version
 
@@ -188,7 +189,8 @@ EOF
 
 $x{ocamlc}     = $x{ocamlc}       || search("ocamlc",@path);
 $x{ocamlyacc}  = $x{ocamlyacc}    || search("ocamlyacc",@path);
-$x{ocamlv}     = $x{ocamlv}       && (`$x{ocamlc} -v` =~ /(\d\.\d\d)/) && $1;
+$x{ocamlv}     = $x{ocamlc}       && (`$x{ocamlc} -v 2>&1` =~ /(\d\.\d\d)/) 
+                                  && $1;
 $x{notangle}   = $x{notangle}     || search("notangle",@path); 
 $x{cpif}       = $x{cpif}         || search("cpif", @path);
 $x{awk}        = $x{awk}          || search("awk", @path);
@@ -212,7 +214,7 @@ $x{lua_lib}    = $x{lua_lib}      || "-L" . dirname($x{liblua});
 # variables, hence the output is eval'ed.
 # ------------------------------------------------------------------ 
 
-chdir("config/aux") || die "$!";
+chdir("config/aux") || die "cannot cd to config/aux: $!";
 
 $result = $x{cc} && runtest($x{cc}, "$x{lua_inc} config.c");
 $result && eval($result);
@@ -226,7 +228,7 @@ $x{arch} && chop($x{arch});
 @missing = ();
 foreach my $v (keys %x) {
     if (not defined($x{$v})) { print "undefined: $v\n" }
-    if ($x{$v} eq '') { push(@missing,$v) }
+    if ($x{$v} eq '')        { push(@missing,$v)       }
 }
 
 # ------------------------------------------------------------------ 
@@ -254,6 +256,7 @@ print <<EOF;
     ------------------------------------------------------------------ 
     cc:             $x{cc}
     C Standard:     $x{stdc_version}
+    IEC 60559       $x{stdc_iec559}
     
     
     Documentation
@@ -341,4 +344,21 @@ if ($x{lua_version} !~ /4\./) {
 EOF
     exit 1;
 }
-    
+   
+# ------------------------------------------------------------------ 
+# Emit configuration variables in Mk syntax
+# ------------------------------------------------------------------ 
+
+my @export = ( "arch"
+             , "endian"
+             , "cc"
+             , "stdc_version"
+             , "stdc_iec559"
+             , "lua_inc"
+             , "lua_lib"
+             , "prefix"
+             );
+             
+foreach $v (@export) {
+    printf ("config_%-20s = \"%s\"\n", $v, $x{$v});
+}

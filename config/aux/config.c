@@ -22,8 +22,15 @@ main(int argc, char **argv)
 #if defined(__STDC_VERSION__)
     printf("$x{stdc_version}=%d;\n", __STDC_VERSION__);
 #else
-    printf("$x{stdc_version}='';\n");
+    printf("$x{stdc_version}='undefined';\n");
 #endif    
+
+#if defined(__STDC_IEC_559__)
+    printf("$x{stdc_iec559}='1';\n");
+#else
+    printf("$x{stdc_iec559}='0';\n");
+#endif    
+
 
     fflush(stdout);
     exit(0);
