@@ -423,9 +423,16 @@ Because passing to a varargs function involves implicit promotions, we
 do the promotions that are needed.
 The [[L]] argument is the type used internally; the [[R]]~version is
 the same type as promoted for passing to a varargs function.
+Because somebody might generate code in which a formal parameter of a
+continuation is not used, we have to consider the possibility that 
+the variable being assigned to is dead.
+In that case, we consume the actual parameter but make no assignment.
 <<assign [[block->vars[i]]] from [[ap]]>>=
 #define ASSIGN(L,R) \
-  *(L*) Cmm_FindLocalVar(a, block->vars[i].localnum) = (L) va_arg(ap, R)
+  { L *formalp = (L*) Cmm_FindLocalVar(a, block->vars[i].localnum); \
+    R actual   = va_arg(ap, R); \
+    if (formalp) *formalp = (L) actual; \
+  } 
 switch(block->vars[i].ctype) {
   case CHAR:             ASSIGN (char,               int);                break;
   case DOUBLE:           ASSIGN (double,             double);             break;
