@@ -33,7 +33,8 @@ module Make
     (G      : Agraph.S) 
     (Asm    : Asm2.S with type instruction = G.graph) :
 sig
-    type program = Automaton.location Target.StrMap.t * Asm.asm
+    module StrMap: Map.S with type key = string
+    type program = Automaton.location StrMap.t * Asm.asm
     val translate: Fenv.Clean.env -> Target.info -> Ast.program -> program  
 end
 @
@@ -54,6 +55,7 @@ module T  = Types
 module E  = Error
 module F  = Fenv.Clean
 
+
 <<auxiliaries>>
 
 module R = struct
@@ -69,8 +71,9 @@ module Make
   (G         : Agraph.S)
   (Asm       : Asm2.S   with type instruction  = G.graph) =
 struct
-    module GM = G.Make
-    module AG = Agraph
+    module GM     = G.Make
+    module AG     = Agraph
+    module StrMap = Map.Make(struct type t=string let compare=compare end)
     <<module Make>> 
 end
 @
@@ -206,9 +209,9 @@ The following function translates an [[Ast.actual]] parameter into a
 [[Fgraph.actual]].
 
 <<>>=
-let rec actual env (target: Target.info) (hint, e) = 
+let rec actual env (target: Target.info) globals (hint, e) = 
     let width = bits (Expr.tyExpr env target e) in
-    let e     = expr env target e               in
+    let e     = expr env target globals e       in
         (e, width, hint)
 @
 
@@ -223,11 +226,11 @@ of an assignment becomes a {\rtl} [[location]].  We currently ignore
 alignments and hints. The only names on the left hand side of an
 assignment are registers; all syntactically possible names (like
 labels, continuations) must have been rejected by the static semantics
-check.
+check. 
 
 <<>>=
-and lvalue env (target: Target.info) = function
-    | A.LValueAt(x,_)          -> lvalue env target x
+and lvalue env (target: Target.info) globals = function
+    | A.LValueAt(x,_)          -> lvalue env target globals x
     | A.Var(hint,x)            -> 
         let ((_,s),(denot,t)) = F.findv x env in 
             ( match denot with
@@ -241,7 +244,6 @@ and lvalue env (target: Target.info) = function
                   | _        ->
                       Rtl.Var
                           ( x
-                          , scope s
                           , r.F.index
                           , width
                           )
@@ -254,23 +256,21 @@ and lvalue env (target: Target.info) = function
                                       ( default_memory
                                       , target.Target.byteorder
                                       , width
-                                      , expr env target e
+                                      , expr env target globals e
                                       , default_assertion
                                       )
 @
 
-Not all variables as part of a {\PAL} expression are equal:  we have
-to look at a variable's denotation to check wheter they are constant
-values or locations from wich a value must be fetched. 
-
-During this first code generation step we do not translate anything
-inside of procedures to {\rtl}s. This means, only global variables
-must be translated and inparticular variables denoting stackdata and
-continuations can't show up here.
+A variable as part of an expression denotes a value; it is translated
+into a [[Rtl.expr]].  Depending on the denotation of the variable it
+becomes a constant of either link-time or compile-time, or something
+more complicated.  If the variable is a local register, it becomes a
+[[Rtl.Var]] value, if it is global, it can be looked up in
+[[globals]].
 
 <<>>=
-and variable (env: F.env) (target: Target.info) = function
-    | A.LValueAt(x,_) -> variable env target x
+and variable (env: F.env) (target: Target.info) globals = function
+    | A.LValueAt(x,_) -> variable env target globals x
     | A.Var(hint,x)   ->
         let ((_,s),(denot,t)) = F.findv x env in 
             ( match denot with
@@ -281,23 +281,21 @@ and variable (env: F.env) (target: Target.info) = function
             | F.Import(None)   -> Rtl.Const(Rtl.Link(x, bits t))
             | F.Import(Some n) -> Rtl.Const(Rtl.Link(n, bits t))
             | F.Register(r)    -> 
-                let width = bits t in
-                let loc = 
-                  ( match r.F.rhint with
-                  | F.RReg r ->
-                        ( try Target.StrMap.find r target.Target.regmap with 
-                        | Not_found -> assert false
-                        )
-                  | _        ->
-                      Rtl.Var
-                          ( x
-                          , scope s
-                          , r.F.index
-                          , width
-                          )
-                  ) 
-                in Rtl.Fetch(loc,width)
-                                  
+                ( match s with
+                | F.Global -> let (write,read) = 
+                                ( try StrMap.find x globals with
+                                | Not_found -> assert false
+                                )
+                              in read
+                | F.Local ->  
+                    let width = bits t in
+                    let loc   = Rtl.Var
+                              ( x
+                              , r.F.index
+                              , width
+                              )
+                    in Rtl.Fetch(loc,width)
+                )                  
             | F.Label(F.Stack x) -> assert false (* impossible *)
             | F.Continuation     -> assert false (* impossible *)
             )
@@ -306,30 +304,30 @@ and variable (env: F.env) (target: Target.info) = function
                                       ( default_memory
                                       , target.Target.byteorder
                                       , width
-                                      , expr env target e
+                                      , expr env target globals e
                                       , default_assertion
                                       ) in 
                                    Rtl.Fetch(cell,width)
                                     
             
 <<>>=
-and primOp env (target: Target.info) op args =
+and primOp env (target: Target.info) globals op args =
     let o = Expr.op env target op args 
     in
-        Rtl.App(o, List.map (expr env target) args)
+        Rtl.App(o, List.map (expr env target globals) args)
 
-and expr env (target: Target.info) = function 
-    | A.ExprAt(x,_)         -> expr env target x
+and expr env (target: Target.info) globals = function 
+    | A.ExprAt(x,_)         -> expr env target globals x
     | A.Int( i, None)       -> Rtl.Const(Rtl.Bits(i,target.Target.wordsize))
     | A.Int( i, Some t)     -> Rtl.Const(Rtl.Bits(i,ty env t))
     | A.Float( f, None)     -> Rtl.Const(Rtl.Bits(f,target.Target.wordsize))
     | A.Float( f, Some t)   -> Rtl.Const(Rtl.Bits(f,ty env t))
     | A.Char( c, None)      -> Rtl.Const(Rtl.Bits(c,target.Target.wordsize))
     | A.Char( c, Some t)    -> Rtl.Const(Rtl.Bits(c,ty env t))
-    | A.Fetch(v)            -> variable env target v
-    | A.BinOp(l,op,r)       -> primOp env target op [l;r]
-    | A.UnOp(op,e)          -> primOp env target op [e]
-    | A.PrimOp(op,xs)       -> primOp env target op (List.map snd xs) (* ignore hints*)
+    | A.Fetch(v)            -> variable env target globals v
+    | A.BinOp(l,op,r)       -> primOp env target globals op [l;r]
+    | A.UnOp(op,e)          -> primOp env target globals op [e]
+    | A.PrimOp(op,xs)       -> primOp env target globals op (List.map snd xs) (* ignore hints*)
 @    
 
 % ------------------------------------------------------------------ 
@@ -371,7 +369,7 @@ environment, which doesn't change.  [[s]] is the statement being
 translated.  We return a new flow-graph node. 
 
 <<>>=
-let rec body env target props graph after bb =
+let rec body env target globals props graph after bb =
     let decorate n       = G.bind props n           in
     let rec stmt s after = match s with
         | A.StmtAt(x,_)     -> stmt x after
@@ -389,8 +387,8 @@ let rec body env target props graph after bb =
 | A.AssignStmt(lhs,rhs) ->
     let effects = 
         List.map2 (fun lhs rhs -> 
-                   R.assign (lvalue env target lhs) 
-                            (expr env target rhs)) lhs rhs
+                   R.assign (lvalue env target globals lhs) 
+                            (expr env target globals rhs)) lhs rhs
     in 
         decorate (GM.assign (R.par effects) after) 
 
@@ -398,7 +396,7 @@ let rec body env target props graph after bb =
 | A.IfStmt ( e, ss1, ss2) ->
     let node1 = List.fold_right stmt ss1 after  in
     let node2 = List.fold_right stmt ss2 after  in
-        decorate (GM.branch (expr env target e) node1 node2)
+        decorate (GM.branch (expr env target globals e) node1 node2)
 @
 
 <<cases for translating statements>>=
@@ -406,7 +404,7 @@ let rec body env target props graph after bb =
     let const n      = A.Int (Bits.of_int n Bits.maxwidth, None)             in
     let (cont,count) = Aux.Option.get (const 0, const 0) alt                 in
     let cc           = find_cc (Aux.Option.get default_convention cc) target in
-    let actuals      = List.map (actual env target) args                     in
+    let actuals      = List.map (actual env target globals) args             in
     let cout a       = decorate (GM.copy_out actuals AG.ProcResults cc a)     in
     let ret  a       = decorate (GM.return graph
                                  (un_const cont) (un_const count))           in
@@ -440,11 +438,11 @@ node.
     let cc         = find_cc (Aux.Option.get default_convention cc) target in
     let cout after = if args <> []
                      then decorate (GM.copy_out 
-                                   (List.map (actual env target) args)
+                                   (List.map (actual env target globals) args)
                                     AG.ProcParameters cc after)
                      else after                                   in
     let cont after = GM.make_cont after (flows fs)                in
-    let call after = decorate (GM.call (expr env target e) (cont after)) in
+    let call after = decorate (GM.call (expr env target globals e) (cont after)) in
     let cin  after = if lhs <> []
                      then decorate (GM.copy_in (List.map lvalue lhs)
                                        AG.ProcResults cc after)
@@ -479,11 +477,11 @@ sequence of statements.
 <<cases for translating statements>>=
 | A.JumpStmt(cc,e,args,ts) ->
     let cc         = find_cc (Aux.Option.get default_convention cc) target in
-    let args       = List.map (actual env target) args               in
+    let args       = List.map (actual env target globals) args             in
     let cout after = if args <> [] then 
                         decorate (GM.copy_out args AG.ProcParameters cc after)
                      else after                               in
-    let jump after = decorate (GM.jump graph (expr env target e) ts) in
+    let jump after = decorate (GM.jump graph (expr env target globals e) ts) in
         (cout << jump) after 
 @
 
@@ -491,7 +489,7 @@ The translation of a [[goto]] statement is straight forward; the
 [[after]] node is unused because it can't be reached.
 
 <<cases for translating statements>>=
-| A.GotoStmt(e,ts) -> decorate (GM.goto graph (expr env target e) ts) 
+| A.GotoStmt(e,ts) -> decorate (GM.goto graph (expr env target globals e) ts) 
 @
 
 A [[span]]'s attributes are a compile-time constant value and a
@@ -507,7 +505,8 @@ link-time constant.
                 | Rtl.Const(c)                -> c
                 | _                           -> assert false
                 ) in
-        body env target (G.Props.add_span key value props) graph after ss
+        body env target globals 
+            (G.Props.add_span key value props) graph after ss
 @
 
 
@@ -547,7 +546,7 @@ environment belonging to a procedure.  The local environment [[env]]
 for a procedure is found in its entry in the fat environment.
 
 <<module Make>>=
-and proc env (target: Target.info) props (asm: Asm.asm) (cc,n,fs,bb) =  
+and proc env (target: Target.info) globals props (asm: Asm.asm) (cc,n,fs,bb) =  
     let decorate n = G.bind props n                                        in
     let env        = match F.findv n env with
                      | _,(F.Label(F.Proc {F.env = e}),_) -> e
@@ -558,7 +557,7 @@ and proc env (target: Target.info) props (asm: Asm.asm) (cc,n,fs,bb) =
     let copy  a    = decorate (GM.copy_in                                  
                         (List.map (fun (_,_,_,n) -> formal env n) fs)
                         AG.ProcParameters cc a)                            in
-    let bdy   a    = body env target props graph a  bb                     in
+    let bdy   a    = body env target globals props graph a  bb             in
     let exit       = decorate (GM.exit graph)                              in
     let node       = (entry << copy << bdy) exit                           in
          asm ++ Asm.instr (GM.graph_of node)
@@ -656,7 +655,7 @@ accordingly.  The next time we come across a procedure, the properties
 including the span will be used.
 
 <<module Make>>=
-let rec sspan env target props asm (e1,e2,ss) =    
+let rec sspan env target globals props asm (e1,e2,ss) =    
     let key   = ( match dummy_expression with (* constant eval *)
                 | Rtl.Const(Rtl.Bits(bits,w)) -> bits
                 | _                           -> assert false
@@ -667,15 +666,15 @@ let rec sspan env target props asm (e1,e2,ss) =
                 ) in
     let props = G.Props.add_span key value props 
     in
-        foldl (section env target props) asm ss 
+        foldl (section env target globals props) asm ss 
 
 <<>>=
-and section env target props (asm: Asm.asm) = function
-    | A.SectionAt(x,_)     -> section env target props asm x
+and section env target globals props (asm: Asm.asm) = function
+    | A.SectionAt(x,_)     -> section env target globals props asm x
     | A.Decl(d)            -> asm
     | A.Datum( d)          -> datum env target asm d
-    | A.Procedure(p)       -> proc env target props asm p
-    | A.SSpan ss           -> sspan env target props asm ss
+    | A.Procedure(p)       -> proc env target globals props asm p
+    | A.SSpan ss           -> sspan env target globals props asm ss
 @            
 
 What to do with top-level procedures? They should go into some section
@@ -683,14 +682,14 @@ because otherwise they will end up in whatever section is currently
 active which just seems wrong.
 
 <<module Make>>=
-let rec toplevel env target asm = function
-    | A.ToplevelAt(x, _)  -> toplevel env target asm x
-    | A.Section(name, ss) -> let asm = asm ++ Asm.section name  
-                             in  foldl (section env target G.Props.empty) 
-                                       asm ss
+let rec toplevel env target globals asm = function
+    | A.ToplevelAt(x, _)  -> toplevel env target globals asm x
+    | A.Section(name, ss) -> 
+        let asm = asm ++ Asm.section name in  
+            foldl (section env target globals G.Props.empty) asm ss
     | A.TopDecl(d)        -> asm (* nothing to do here *)
     | A.TopProcedure(p)   -> let asm = asm ++ Asm.section toplevel_section  
-                             in proc env target G.Props.empty asm p
+                             in proc env target globals G.Props.empty asm p
 @
 
 
@@ -740,42 +739,42 @@ let globals target decls =
         | []                          -> map
         | (name, F.RNone  , ty) :: rr -> (* no hint, no h/w register *)
             let (loc,dfa) = Automaton.Run.next dfa (ty,None) in
-            let map       = Target.StrMap.add name loc map in
+            let map       = StrMap.add name loc map in
                 loop map dfa rr
             
         | (name, F.RHint h, ty) :: rr -> (* hint, no h/w register *)
             let (loc,dfa) = Automaton.Run.next dfa (ty, Some h) in
-            let map       = Target.StrMap.add name loc map in
+            let map       = StrMap.add name loc map in
                 loop map dfa rr
         
         | (name, F.RReg  h, ty) :: rr -> (* hardware register! *)
             let reg = try Target.StrMap.find name target.Target.regmap
                       with Not_found -> unknown name in
-            let map = Target.StrMap.add name (reg2loc reg) map in
+            let map = StrMap.add name (reg2loc reg) map in
                 loop map dfa rr in
     let dfa = target.Target.globals in
-    let map = Target.StrMap.empty in
+    let map = StrMap.empty in
         loop map dfa decls
 
 
 <<>>=
-let program env target asm tt = 
+let program env target globals asm tt = 
     let asm = exports env asm                     in
     let asm = imports env asm                     in
-        foldl (toplevel env target) asm tt
+        foldl (toplevel env target globals) asm tt
 @
 
 An assembly program is initialized with a list of strings.  These are
 probably target dependent and should be provided by [[target]].
 
 <<>>=
-type program = Automaton.location Target.StrMap.t * Asm.asm
+type program = Automaton.location StrMap.t * Asm.asm
 
 let translate env target prog =
     let regs   = globals target (F.regdecls env) in
     let asm    = Asm.init [] in
         ( regs                         (* global register map *)
-        , program env target asm prog  (* asm                 *)
+        , program env target regs asm prog  (* asm                 *)
         )
 @    
 
