@@ -248,9 +248,9 @@ val findEndianness  : env -> endianness partial info
 
 The implementation tries to exploit the commonalities between the
 [[Clean]] and [[Dirty]] module by using a functor [[Env]].  The
-facored out differences between [[Clean]] and [[Dirty]] are supplied
+factored out differences between [[Clean]] and [[Dirty]] are supplied
 as an argument [[Arg]] of type [[Arg]].  The main part of the
-impplementation is thus the generic functor [[Env]] which is described
+implementation is thus the generic functor [[Env]] which is described
 in the following section.
 
 <<fenv.ml>>=
@@ -272,7 +272,32 @@ position that is used to describe the place where an error is located.
 let error r map msg = E.errorRegionPrt (map,r) msg 
 
 <<module type Env>>
+@
 
+The [[Arg]] modules captures the aspects not common to [[Clean]] and
+[[Dirty]]:
+
+\begin{itemize}
+    \item First of all, are information more vaguely represented in
+    [[Dirty]] than in [[Clean]]: a [[partial]] information might be
+    absent in [[Dirty]], but not in [[Clean]]. And an information
+    [[info]] can be marked as [[bad]] in [[Dirty]], but not in
+    [[Clean]]. Functions help to create [[good]] and [[bad]] values. 
+
+    \item The [[update x y f]] function compares a [[partial info]]
+    value [[x]] with a plain one [[y]].  In case they differ, [[f]] is
+    called.  This is used to implement the update of values in the
+    target environment.  The [[Dirty]] module checks the new [[y]]
+    value to be consistent with the old value [[x]]. 
+    
+    \item The default value is used to create an initial target record
+    as part of a [[Dirty.empty]] and [[Clean.empty]]. In [[Dirty]]
+    nothing is known about a target yet and thus all fields are
+    considered as good, but unknown.
+
+\end{itemize} 
+
+<<>>=
 module type Arg = sig
     type 'a partial
     type 'a info
