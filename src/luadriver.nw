@@ -440,19 +440,29 @@ function Backend.make(b)
     , widen     = b.widen     or Stages.null
     , placevars = b.placevars or Stages.null
     , expand    = b.expand    or Stages.null
-    , liveness  = b.liveness  or Liveness.liveness
+    , liveness  = b.liveness  or Stages.null
     , ralloc    = b.ralloc    or Stages.null
     , freeze    = b.freeze    or Stack.layout
+    , rmvfp     = b.rmvfp     or nil -- Stages.replace_vfp  
     , asm       = b.asm       or Asm.cmm
     , emit      = b.emit      or Driver.assemble
     }   
 end
 
-Backend.dummy32l = Backend.make {target=Targets.dummy32l}
-Backend.dummy32b = Backend.make {target=Targets.dummy32b}
-Backend.dummy    = Backend.dummy32b -- alias
+Backend.dummy32l        = Backend.make { target = Targets.dummy32l}
+Backend.dummy32b        = Backend.make { target = Targets.dummy32b}
+Backend.dummy           = Backend.dummy32b      -- alias
 
-Backend.interp = Backend.make {target=Targets.interp, asm=Asm.interp}
+Backend.new_dummy32l    = Backend.make { target = Targets.new_dummy32l }
+Backend.new_dummy32b    = Backend.make { target = Targets.new_dummy32b }
+Backend.new_dummy       = Backend.new_dummy32b  -- alias
+
+Backend.interp          = Backend.make { target = Targets.interp
+                                       , asm    = Asm.interp
+                                       }
+Backend.new_interp      = Backend.make { target = Targets.new_interp
+                                       , asm    = Asm.interp
+                                       }
 
 Backend.x86 =     
   { target    = Targets.x86
@@ -479,6 +489,9 @@ Backend.new_x86 =
   , asm       = Asm.new_x86
   , emit      = Driver.assemble
   }   
+
+
+
 @
 
 % ------------------------------------------------------------------ 
@@ -762,7 +775,7 @@ function CMD.run ()
         local i = 1
         local obj
         local objs= {}
-        objs.n = 0      -- save in OCaml implementation?
+        objs.n = 0      -- safe in OCaml implementation?
 
         if not CMD.dispatch then -- wizards can set CMD.dispatch
             if O.interp or backend == Backend.interp then
