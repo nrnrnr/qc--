@@ -25,6 +25,8 @@ the user to control the compiler. We build here an interpreter with our
 extensions.
 
 <<main2.ml>>=
+module E = Error
+
 module T    = Lua.Lib.Combine.T9                         (* types *)
                 (Driver2.Export.AsmT)       (* T1 *)
                 (Driver2.Export.AstT)       (* T2 *)
@@ -52,6 +54,8 @@ module L    = Lua.Lib.Combine.L8                        (* libraries *)
 module I    = Lua.MakeInterp                            (* our interpreter *)
                 (Lua.Parser.MakeStandard)
                 (Lua.MakeCore (T) (L))
+
+module V    = I.Value
 @
 
 % ------------------------------------------------------------------ 
@@ -88,46 +92,26 @@ let run_interactive state infile =
 \subsection{Command Line Processing}
 % ------------------------------------------------------------------ 
 
-The [[main]] function gets the command line arguments and tries to
-parse them. We expect a single string argument that is evaluated by the
-Lua interpreter.
-
-<<main2.ml>>=
-module E = Error
-module V = I.Value
-@ 
-
-
-We export some command line arguments to the Lua value [[Sys.argv]]. The
-[[Sys]] table is created, if it does not exist.
-<<main2.ml>>=
-let export_argv g strings =
-    let list = V.list V.string in
-    I.register_module "Sys" ["argv", list.V.embed strings] g
-@
-
-At start-up, we load the file [[qc--.lua]] into the interpreter. It
-defines commonly used functions. Later we will compile the corresponding
-string into the compiler such that it is always available. During
-development it is easier to have an external file.
-
-Command line arguments are evaluated as follows:
+The [[main]] function gets the command line arguments and tries to parse
+them.  Command line arguments are evaluated as follows:
 
 \begin{itemize}
 \item From left to right, all arguments of the form [[-]]$a$, where
 $a$~is not [[e]] or [[i]], are converted to [[-e Main.]]$a$[[()]].
+
 <<main2.ml>>=
 let expandable_regexp = Str.regexp "-[a-zA-Z][a-zA-Z0-9_]*$"
 let is_expandable opt = Str.string_match expandable_regexp opt 0
 let rec expand_args = function
   | "-e" :: a :: args -> "-e" :: a :: expand_args args
-  | "-i" :: args -> "-i" :: expand_args args
+  | "-i" :: args      -> "-i" :: expand_args args
   | opt  :: args when is_expandable opt ->
-      "-e" :: ("Main." ^ String.sub opt 1 (String.length opt - 1) ^ "()") ::
-      expand_args args
-  | opt :: _ when String.get opt 0 = '-' -> E.error ("Unrecognized option " ^ opt)
-  | a :: args -> a :: expand_args args
-  | [] -> []
+        "-e" :: ("Main." ^ String.sub opt 1 (String.length opt - 1) ^ "()") 
+             :: expand_args args
+  | opt  :: _   when String.get opt 0 = '-' -> 
+        E.error ("Unrecognized option " ^ opt)
+  | a    :: args      -> a :: expand_args args
+  | []                -> []
 @                
                                        
 \item From left to right, all arguments to [[-e]] are collected.
@@ -143,6 +127,20 @@ let rec expand_args = function
     \item The collected arguments to [[-e]] are evaluated from left to right. 
     \end{itemize}
 \end{itemize}
+
+We export some command line arguments to the Lua value [[Sys.argv]]. The
+[[Sys]] table is created, if it does not exist.
+
+<<main2.ml>>=
+let export_argv g strings =
+    let list = V.list V.string in
+    I.register_module "Sys" ["argv", list.V.embed strings] g
+@
+
+At start-up, we load the file [[qc--.lua]] into the interpreter. It
+defines commonly used functions. Later we will compile the corresponding
+string into the compiler such that it is always available. During
+development it is easier to have an external file.
 
 <<main2.ml>>=
 let main () =
@@ -336,11 +334,11 @@ end
 
 -- compile
 -- compile Sys.argv[1]
--- defaults: Default.target, Optimizer.default, Default.linewidth
+-- defaults: Default.target, Optimizer.default
 
 function Main.compile ()
     local f = Sys.argv[1] --- should do *all* arguments!
-    if f == nil then error("Main.check: no file in Sys.argv[1]") end
+    if f == nil then error("Main.compile: no file in Sys.argv[1]") end
 
     local ast = Driver.parse(f)
     local asm = Driver.cmmasm("dummy argument")
@@ -349,16 +347,35 @@ function Main.compile ()
     Driver.assemble(asm)
 end    
 Main.c = Main.compile -- abbreviation
+
+-- pretty print AST
+-- prints Sys.argv[1] to stdout
+--
+
+function Main.pretty ()
+    local f = Sys.argv[1]
+    if f == nil then error("Main.pretty: no file in Sys.argv[1]") end
+
+    local ast = Driver.parse(f)
+    local doc = Driver.pretty(ast)
+    Driver.print(doc,Default.linewidth)
+end    
+Main.p = Main.pretty -- abbreviation
 @
+
 Function [[Main.dot()]] is similar, except it throws away the assembly
 programming, instead emitting a dot graph for each procedure.
+
 <<qc--.lua>>=
 compressdot=1 -- true
 function Main.dot ()
     local f = Sys.argv[1]
     if f == nil then error("Main.check: no file in Sys.argv[1]") end
-    Default.optimizer = seq {Default.optimizer(),
-                             single {name="writedot", fn=CG.writedot(compressdot)}}
+    Default.optimizer = seq { Default.optimizer()
+                            , single { name="writedot"
+                                     , fn=CG.writedot(compressdot)
+                                     }
+                            }
     local ast = Driver.parse(f)
     local asm = Driver.cmmasm("dummy argument")
     local env = Driver.check(ast,asm)

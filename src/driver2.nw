@@ -1,4 +1,5 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 sts=4 sw=4 et
 
 % ------------------------------------------------------------------ 
 \section{Driver}
@@ -29,6 +30,7 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
     val version:    unit -> unit            (* print version to stdout   *)
     val scan:       file:string -> unit     (* for debugging the scanner *)
     val parse:      file:string -> ast      (* parse file                *)
+    val pretty:     ast -> doc              (* pretty print *)
 
     val emit_asdl:  ast -> unit             (* emit AST in ASDL format *)
     val check:      ast -> asm -> env       (* check semantics of AST  *)
@@ -215,6 +217,9 @@ let compile (opt:optimize) (map,ast:ast) (target:target) (env:env)  =
     let ()     = Target2.check target env        in   
         IR.translate env target opt ast 
 
+let pretty (map,ast:ast) =
+    Astpp.program ast
+
 <<Caml>>=
 let assemble (asm:asm) = asm#emit
 
@@ -329,6 +334,7 @@ let builtins =
   ; "emit_asdl" , pf (Map.ast  **-> V.runit)            Caml.emit_asdl
   ; "parse"     , pf (V.string **-> V.result Map.ast)   Caml.parse
   ; "print"     , pf (Map.doc  **-> V.int **-> V.runit) Caml.print
+  ; "pretty"    , pf (Map.ast  **-> V.result Map.doc)   Caml.pretty
   ; "scan"      , pf (V.string **-> V.runit)            Caml.scan
   ; "version"   , pf (V.string **-> V.runit)  (fun _ -> Caml.version ())
   ; "cmmasm"    , pf (V.string **-> V.result Map.asm) 
