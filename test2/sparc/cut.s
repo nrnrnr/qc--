@@ -9,7 +9,7 @@ Cmm.global_area:
 .section ".data"
 .align 4
 Cmm_stack_growth:
-.word 0xffffffffffffffff
+.word 0xffffffff
 .section ".data"
 nocut:
 .byte 110
@@ -37,43 +37,40 @@ main:
 	save %sp, -128, %sp
 	mov %i0, %g1
 	mov %i1, %g1
-	mov %i7, %g1
 Linitialize_continuations_l14:
-	set k_C10, %g2
-	add %sp, 128, %g3
-	set -16, %g4
-	add %g3, %g4, %g3
-	st %g2, [%g3]
+	set k_C10, %g1
 	add %sp, 128, %g2
-	set -128, %g3
+	set -16, %g3
 	add %g2, %g3, %g2
-	add %sp, 128, %g3
-	set -12, %g4
-	add %g3, %g4, %g3
-	st %g2, [%g3]
+	st %g1, [%g2]
+	add %sp, 128, %g1
+	set -128, %g2
+	add %g1, %g2, %g1
+	add %sp, 128, %g2
+	set -12, %g3
+	add %g2, %g3, %g2
+	st %g1, [%g2]
 Lproc_body_start_l13:
-	set 0, %g2
-	add %sp, 128, %g3
-	set -16, %g4
-	add %g3, %g4, %g3
-	mov %g3, %o0
-	st %i7, [%sp+104]
+	set 0, %g1
+	add %sp, 128, %g2
+	set -16, %g3
+	add %g2, %g3, %g2
+	mov %g2, %o0
+	st %i7, [%sp+100]
 	st %g1, [%sp+96]
-	st %g2, [%sp+100]
 	call f, 0
 	nop
 Ljoin_l25:
 	set nocut, %g1
 	mov %g1, %o0
-	ld [%sp+100], %g1
+	ld [%sp+96], %g1
 	mov %g1, %o1
 	call printf, 0
 	nop
 Ljoin_l22:
 	set 1, %l7
 	mov %l7, %i0
-	ld [%sp+96], %i7
-	ld [%sp+104], %i7
+	ld [%sp+100], %i7
 	! Evil recognizer deleted add %sp, 128, %sp
 	ret
 	restore
@@ -89,8 +86,7 @@ k_C10:
 Ljoin_l18:
 	set 0, %l7
 	mov %l7, %i0
-	ld [%sp+96], %i7
-	ld [%sp+104], %i7
+	ld [%sp+100], %i7
 	! Evil recognizer deleted add %sp, 128, %sp
 	ret
 	restore
@@ -104,17 +100,15 @@ Lstackdata_l32:
 Lframe_l33:
 .word 0x8000005c
 .word 0xffffffdc
-.word 0xffffffe0
+.word 0xffffffe4
 .word Lstackdata_l32
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
-.word 0xffffffe8
 .word 0
 .word 0
-.word 0xffffffe4
+.word 0xffffffe0
 .word 0
 .section ".pcmap"
 .word Ljoin_l22
@@ -123,14 +117,12 @@ Lframe_l33:
 Lframe_l34:
 .word 0x8000005c
 .word 0xffffffdc
-.word 0xffffffe0
+.word 0xffffffe4
 .word Lstackdata_l32
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
-.word 0xffffffe8
 .word 0
 .word 0
 .word 0
@@ -142,14 +134,12 @@ Lframe_l34:
 Lframe_l35:
 .word 0x8000005c
 .word 0xffffff80
-.word 0xffffffe0
+.word 0xffffffe4
 .word Lstackdata_l32
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
-.word 0xffffffe8
 .word 0
 .word 0
 .word 0
@@ -161,14 +151,12 @@ Lframe_l35:
 Lframe_l36:
 .word 0x8000005c
 .word 0xffffffdc
-.word 0xffffffe0
+.word 0xffffffe4
 .word Lstackdata_l32
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
-.word 0xffffffe8
 .word 0
 .word 0
 .word 0
@@ -178,12 +166,10 @@ Lframe_l36:
 f:
 	save %sp, -112, %sp
 	mov %i0, %g1
-	mov %i7, %g2
 Linitialize_continuations_l40:
 Lproc_body_start_l39:
 	mov %g1, %o0
-	st %i7, [%sp+100]
-	st %g2, [%sp+96]
+	st %i7, [%sp+96]
 	call g, 0
 	nop
 Ljoin_l47:
@@ -193,7 +179,6 @@ Ljoin_l47:
 	nop
 Ljoin_l44:
 	ld [%sp+96], %i7
-	ld [%sp+100], %i7
 	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
@@ -209,12 +194,10 @@ Lframe_l56:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l55
-.word 1
+.word 0
 .word 1
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .section ".pcmap"
@@ -226,12 +209,10 @@ Lframe_l57:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l55
-.word 1
+.word 0
 .word 1
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .section ".text"
@@ -239,12 +220,10 @@ Lframe_l57:
 g:
 	save %sp, -112, %sp
 	mov %i0, %g1
-	mov %i7, %g2
 Linitialize_continuations_l61:
 Lproc_body_start_l60:
 	mov %g1, %o0
-	st %i7, [%sp+100]
-	st %g2, [%sp+96]
+	st %i7, [%sp+96]
 	call h, 0
 	nop
 Ljoin_l68:
@@ -254,7 +233,6 @@ Ljoin_l68:
 	nop
 Ljoin_l65:
 	ld [%sp+96], %i7
-	ld [%sp+100], %i7
 	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
@@ -270,12 +248,10 @@ Lframe_l77:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l76
-.word 1
+.word 0
 .word 1
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .section ".pcmap"
@@ -287,12 +263,10 @@ Lframe_l78:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l76
-.word 1
+.word 0
 .word 1
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .section ".text"
@@ -300,7 +274,6 @@ Lframe_l78:
 h:
 	save %sp, -96, %sp
 	mov %i0, %l5
-	mov %i7, %l4
 Linitialize_continuations_l82:
 Lproc_body_start_l81:
 	set 99, %i7

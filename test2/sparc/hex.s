@@ -9,7 +9,7 @@ Cmm.global_area:
 .section ".data"
 .align 4
 Cmm_stack_growth:
-.word 0xffffffffffffffff
+.word 0xffffffff
 .section ".data"
 notzero:
 .byte 10
@@ -19,13 +19,11 @@ main:
 	save %sp, -112, %sp
 	mov %i0, %g1
 	mov %i1, %g1
-	mov %i7, %g1
 Linitialize_continuations_l5:
 Lproc_body_start_l4:
-	set notzero, %g2
-	mov %g2, %o0
-	st %i7, [%sp+100]
-	st %g1, [%sp+96]
+	set notzero, %g1
+	mov %g1, %o0
+	st %i7, [%sp+96]
 	call strlen, 0
 	nop
 Ljoin_l12:
@@ -42,7 +40,6 @@ Ljoin_l9:
 	set 0, %l7
 	mov %l7, %i0
 	ld [%sp+96], %i7
-	ld [%sp+100], %i7
 	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
@@ -58,12 +55,10 @@ Lframe_l21:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l20
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0
@@ -77,12 +72,10 @@ Lframe_l22:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l20
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0

@@ -9,27 +9,26 @@ Cmm.global_area:
 .section ".data"
 .align 4
 Cmm_stack_growth:
-.word 0xffffffffffffffff
+.word 0xffffffff
 .section ".text"
 foo:
-	save %sp, -112, %sp
+	save %sp, -96, %sp
 	mov %i0, %l7
-	mov %i7, %l6
 Linitialize_continuations_l6:
 Lproc_body_start_l5:
-	set 1, %l5
-	subcc %l7, %l5, %g0
+	set 1, %l6
+	subcc %l7, %l6, %g0
 	bne Ljoin_l14
 	nop
-Ljoin_l20:
+Ljoin_l21:
 	ba Ljoin_l10
 	nop
 Ljoin_l14:
-	set 0, %l5
-	subcc %l7, %l5, %g0
+	set 0, %l6
+	subcc %l7, %l6, %g0
 	bne Ljoin_l9
 	nop
-Ljoin_l21:
+Ljoin_l20:
 	ba Ljoin_l10
 	nop
 Ljoin_l10:
@@ -42,10 +41,7 @@ Ljoin_l9:
 	nop
 Ljoin_l8:
 	mov %l7, %i0
-	st %i7, [%sp+96]
-	mov %l6, %i7
-	ld [%sp+96], %i7
-	! Evil recognizer deleted add %sp, 112, %sp
+	! Evil recognizer deleted add %sp, 96, %sp
 	ret
 	restore
 .section ".text"
@@ -54,36 +50,34 @@ main:
 	save %sp, -112, %sp
 	mov %i0, %g1
 	mov %i1, %g1
-	mov %i7, %g1
 Linitialize_continuations_l26:
 Lproc_body_start_l25:
-	set 0, %g2
-	mov %g2, %o0
-	st %i7, [%sp+100]
-	st %g1, [%sp+96]
+	set 0, %g1
+	mov %g1, %o0
+	st %i7, [%sp+96]
 	call foo, 0
 	nop
 Ljoin_l39:
 	mov %o0, %g1
 	set 1, %g2
 	mov %g2, %o0
-	st %g1, [%sp+104]
+	st %g1, [%sp+100]
 	call foo, 0
 	nop
 Ljoin_l36:
 	mov %o0, %g1
 	set 2, %g2
 	mov %g2, %o0
-	st %g1, [%sp+108]
+	st %g1, [%sp+104]
 	call foo, 0
 	nop
 Ljoin_l33:
 	mov %o0, %g1
 	set fmt, %g2
 	mov %g2, %o0
-	ld [%sp+104], %g2
+	ld [%sp+100], %g2
 	mov %g2, %o1
-	ld [%sp+108], %g2
+	ld [%sp+104], %g2
 	mov %g2, %o2
 	mov %g1, %o3
 	call printf, 0
@@ -92,7 +86,6 @@ Ljoin_l30:
 	set 0, %l7
 	mov %l7, %i0
 	ld [%sp+96], %i7
-	ld [%sp+100], %i7
 	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
@@ -108,12 +101,10 @@ Lframe_l48:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l47
-.word 1
+.word 0
 .word 5
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0
@@ -129,15 +120,13 @@ Lframe_l49:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l47
-.word 1
+.word 0
 .word 5
 .word 0
 .word 1
-.word 49
+.word 0
+.word 0
 .word 0xfffffff4
-.word 0
-.word 0
-.word 0xfffffff8
 .word 0
 .word 0
 .word 0
@@ -150,16 +139,14 @@ Lframe_l50:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l47
-.word 1
+.word 0
 .word 5
 .word 0
 .word 1
-.word 49
+.word 0
+.word 0
 .word 0xfffffff4
-.word 0
-.word 0
 .word 0xfffffff8
-.word 0xfffffffc
 .word 0
 .word 0
 .section ".pcmap"
@@ -171,12 +158,10 @@ Lframe_l51:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l47
-.word 1
+.word 0
 .word 5
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0

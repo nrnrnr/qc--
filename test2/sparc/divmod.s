@@ -9,25 +9,21 @@ Cmm.global_area:
 .section ".data"
 .align 4
 Cmm_stack_growth:
-.word 0xffffffffffffffff
+.word 0xffffffff
 .section ".text"
 divmod:
-	save %sp, -112, %sp
+	save %sp, -96, %sp
 	mov %i0, %l7
 	mov %i1, %l6
-	mov %i7, %l5
 Linitialize_continuations_l6:
 Lproc_body_start_l5:
+	udiv %l7, %l6, %l5
 	udiv %l7, %l6, %l4
-	udiv %l7, %l6, %l3
-	smul %l6, %l3, %l6
+	smul %l6, %l4, %l6
 	sub %l7, %l6, %l7
-	mov %l4, %i0
+	mov %l5, %i0
 	mov %l7, %i1
-	st %i7, [%sp+96]
-	mov %l5, %i7
-	ld [%sp+96], %i7
-	! Evil recognizer deleted add %sp, 112, %sp
+	! Evil recognizer deleted add %sp, 96, %sp
 	ret
 	restore
 .section ".text"
@@ -36,17 +32,15 @@ main:
 	save %sp, -128, %sp
 	mov %i0, %g1
 	mov %i1, %g1
-	mov %i7, %g1
 Linitialize_continuations_l20:
 Lproc_body_start_l19:
-	set 987, %g2
-	set 33, %g3
-	mov %g2, %o0
-	mov %g3, %o1
-	st %i7, [%sp+124]
+	set 987, %g1
+	set 33, %g2
+	mov %g1, %o0
+	mov %g2, %o1
+	st %i7, [%sp+120]
 	st %g1, [%sp+112]
 	st %g2, [%sp+116]
-	st %g3, [%sp+120]
 	call divmod, 0
 	nop
 Ljoin_l27:
@@ -54,9 +48,9 @@ Ljoin_l27:
 	mov %o1, %g2
 	set answer, %g3
 	mov %g3, %o0
-	ld [%sp+116], %g3
+	ld [%sp+112], %g3
 	mov %g3, %o1
-	ld [%sp+120], %g4
+	ld [%sp+116], %g4
 	mov %g4, %o2
 	mov %g1, %o3
 	mov %g3, %o4
@@ -76,8 +70,7 @@ Ljoin_l27:
 Ljoin_l24:
 	set 0, %l7
 	mov %l7, %i0
-	ld [%sp+112], %i7
-	ld [%sp+124], %i7
+	ld [%sp+120], %i7
 	! Evil recognizer deleted add %sp, 128, %sp
 	ret
 	restore
@@ -91,20 +84,18 @@ Lstackdata_l35:
 Lframe_l36:
 .word 0x8000005c
 .word 0xffffffdc
-.word 0xfffffff0
+.word 0xfffffff8
 .word Lstackdata_l35
-.word 1
+.word 0
 .word 6
 .word 0
 .word 1
-.word 49
-.word 0xfffffffc
 .word 0
 .word 0
 .word 0
 .word 0
+.word 0xfffffff0
 .word 0xfffffff4
-.word 0xfffffff8
 .word 0
 .section ".pcmap"
 .word Ljoin_l24
@@ -113,14 +104,12 @@ Lframe_l36:
 Lframe_l37:
 .word 0x8000005c
 .word 0xffffffdc
-.word 0xfffffff0
+.word 0xfffffff8
 .word Lstackdata_l35
-.word 1
+.word 0
 .word 6
 .word 0
 .word 1
-.word 49
-.word 0xfffffffc
 .word 0
 .word 0
 .word 0

@@ -9,19 +9,17 @@ Cmm.global_area:
 .section ".data"
 .align 4
 Cmm_stack_growth:
-.word 0xffffffffffffffff
+.word 0xffffffff
 .section ".text"
 main:
 	save %sp, -112, %sp
 	mov %i0, %g1
 	mov %i1, %g1
-	mov %i7, %g1
 Linitialize_continuations_l6:
 Lproc_body_start_l5:
-	set 3, %g2
-	mov %g2, %o0
-	st %i7, [%sp+100]
-	st %g1, [%sp+96]
+	set 3, %g1
+	mov %g1, %o0
+	st %i7, [%sp+96]
 	call tryout, 0
 	nop
 Ljoin_l13:
@@ -33,7 +31,6 @@ Ljoin_l10:
 	set 0, %l7
 	mov %l7, %i0
 	ld [%sp+96], %i7
-	ld [%sp+100], %i7
 	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
@@ -49,12 +46,10 @@ Lframe_l22:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l21
-.word 1
+.word 0
 .word 2
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0
@@ -67,12 +62,10 @@ Lframe_l23:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l21
-.word 1
+.word 0
 .word 2
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0
@@ -81,33 +74,30 @@ Lframe_l23:
 tryout:
 	save %sp, -112, %sp
 	mov %i0, %g1
-	mov %i7, %g2
 Linitialize_continuations_l27:
 Lproc_body_start_l26:
-	set 1, %g3
-	and %g3, %g1, %g3
-	set 0, %g4
-	subcc %g3, %g4, %g0
+	set 1, %g2
+	and %g2, %g1, %g2
+	set 0, %g3
+	subcc %g2, %g3, %g0
 	bne Ljoin_l33
 	nop
 Ljoin_l34:
-	set z, %g3
+	set z, %g2
 	ba Ljoin_l32
 	nop
 Ljoin_l33:
-	set nz, %g3
+	set nz, %g2
 	ba Ljoin_l32
 	nop
 Ljoin_l32:
-	mov %g3, %o0
+	mov %g2, %o0
 	mov %g1, %o1
-	st %i7, [%sp+100]
-	st %g2, [%sp+96]
+	st %i7, [%sp+96]
 	call printf, 0
 	nop
 Ljoin_l31:
 	ld [%sp+96], %i7
-	ld [%sp+100], %i7
 	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
@@ -123,12 +113,10 @@ Lframe_l43:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l42
-.word 1
+.word 0
 .word 2
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0

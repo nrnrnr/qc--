@@ -9,19 +9,17 @@ Cmm.global_area:
 .section ".data"
 .align 4
 Cmm_stack_growth:
-.word 0xffffffffffffffff
+.word 0xffffffff
 .section ".text"
 main:
 	save %sp, -112, %sp
 	mov %i0, %g1
 	mov %i1, %g1
-	mov %i7, %g1
 Linitialize_continuations_l6:
 Lproc_body_start_l5:
-	set 1, %g2
-	mov %g2, %o0
-	st %i7, [%sp+100]
-	st %g1, [%sp+96]
+	set 1, %g1
+	mov %g1, %o0
+	st %i7, [%sp+96]
 	call sw, 0
 	nop
 Ljoin_l25:
@@ -53,7 +51,6 @@ Ljoin_l10:
 	set 0, %l7
 	mov %l7, %i0
 	ld [%sp+96], %i7
-	ld [%sp+100], %i7
 	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
@@ -69,12 +66,10 @@ Lframe_l34:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l33
-.word 1
+.word 0
 .word 2
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0
@@ -87,12 +82,10 @@ Lframe_l35:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l33
-.word 1
+.word 0
 .word 2
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0
@@ -105,12 +98,10 @@ Lframe_l36:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l33
-.word 1
+.word 0
 .word 2
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0
@@ -123,12 +114,10 @@ Lframe_l37:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l33
-.word 1
+.word 0
 .word 2
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0
@@ -141,12 +130,10 @@ Lframe_l38:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l33
-.word 1
+.word 0
 .word 2
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0
@@ -159,12 +146,10 @@ Lframe_l39:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l33
-.word 1
+.word 0
 .word 2
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0
@@ -173,78 +158,77 @@ Lframe_l39:
 sw:
 	save %sp, -112, %sp
 	mov %i0, %l7
-	mov %i7, %l6
 Linitialize_continuations_l43:
 Lproc_body_start_l42:
-	set 1, %l5
-	subcc %l7, %l5, %g0
+	set 1, %l6
+	subcc %l7, %l6, %g0
 	be Ljoin_l67
 	nop
 Ljoin_l68:
 	ba Ljoin_l63
 	nop
 Ljoin_l63:
-	set 2, %l5
-	subcc %l5, %l7, %g0
-	bleu Ljoin_l76
+	set 2, %l6
+	subcc %l6, %l7, %g0
+	bleu Ljoin_l72
 	nop
-Ljoin_l86:
+Ljoin_l81:
 	ba Ljoin_l62
 	nop
-Ljoin_l76:
-	set 3, %l5
-	subcc %l7, %l5, %g0
+Ljoin_l72:
+	set 3, %l6
+	subcc %l7, %l6, %g0
 	bleu Ljoin_l61
 	nop
-Ljoin_l85:
+Ljoin_l82:
 	ba Ljoin_l62
 	nop
 Ljoin_l62:
 	ba Ljoin_l57
 	nop
 Ljoin_l57:
-	set 4, %l5
-	subcc %l7, %l5, %g0
+	set 4, %l6
+	subcc %l7, %l6, %g0
 	be Ljoin_l55
 	nop
 Ljoin_l56:
 	ba Ljoin_l51
 	nop
 Ljoin_l51:
-	set 5, %l5
-	subcc %l5, %l7, %g0
-	bleu Ljoin_l75
-	nop
-Ljoin_l84:
-	ba Ljoin_l74
-	nop
-Ljoin_l75:
-	set -1, %l5
-	subcc %l7, %l5, %g0
-	bleu Ljoin_l49
+	set 5, %l6
+	subcc %l6, %l7, %g0
+	bleu Ljoin_l76
 	nop
 Ljoin_l83:
-	ba Ljoin_l74
+	ba Ljoin_l75
 	nop
-Ljoin_l74:
-	set 0, %l5
-	subcc %l7, %l5, %g0
-	be Ljoin_l49
-	nop
-Ljoin_l73:
-	set -2147483648, %l5
-	subcc %l5, %l7, %g0
-	bleu Ljoin_l72
-	nop
-Ljoin_l82:
-	ba Ljoin_l50
-	nop
-Ljoin_l72:
-	set -1, %l5
-	subcc %l7, %l5, %g0
+Ljoin_l76:
+	set -1, %l6
+	subcc %l7, %l6, %g0
 	bleu Ljoin_l49
 	nop
-Ljoin_l81:
+Ljoin_l84:
+	ba Ljoin_l75
+	nop
+Ljoin_l75:
+	set 0, %l6
+	subcc %l7, %l6, %g0
+	be Ljoin_l49
+	nop
+Ljoin_l74:
+	set -2147483648, %l6
+	subcc %l6, %l7, %g0
+	bleu Ljoin_l73
+	nop
+Ljoin_l85:
+	ba Ljoin_l50
+	nop
+Ljoin_l73:
+	set -1, %l6
+	subcc %l7, %l6, %g0
+	bleu Ljoin_l49
+	nop
+Ljoin_l86:
 	ba Ljoin_l50
 	nop
 Ljoin_l50:
@@ -254,58 +238,47 @@ Ljoin_l49:
 	set def, %g1
 	mov %g1, %o0
 	mov %l7, %o1
-	st %i7, [%sp+100]
-	st %l6, [%sp+96]
+	st %i7, [%sp+96]
 	call printf, 0
 	nop
 Ljoin_l48:
-	ld [%sp+100], %i7
-	ld [%sp+96], %l6
+	ld [%sp+96], %i7
 	ba Ljoin_l45
 	nop
 Ljoin_l55:
 	set third, %g1
 	mov %g1, %o0
 	mov %l7, %o1
-	st %i7, [%sp+100]
-	st %l6, [%sp+96]
+	st %i7, [%sp+96]
 	call printf, 0
 	nop
 Ljoin_l54:
-	ld [%sp+100], %i7
-	ld [%sp+96], %l6
+	ld [%sp+96], %i7
 	ba Ljoin_l45
 	nop
 Ljoin_l61:
 	set second, %g1
 	mov %g1, %o0
 	mov %l7, %o1
-	st %i7, [%sp+100]
-	st %l6, [%sp+96]
+	st %i7, [%sp+96]
 	call printf, 0
 	nop
 Ljoin_l60:
-	ld [%sp+100], %i7
-	ld [%sp+96], %l6
+	ld [%sp+96], %i7
 	ba Ljoin_l45
 	nop
 Ljoin_l67:
 	set first, %g1
 	mov %g1, %o0
 	mov %l7, %o1
-	st %i7, [%sp+100]
-	st %l6, [%sp+96]
+	st %i7, [%sp+96]
 	call printf, 0
 	nop
 Ljoin_l66:
-	ld [%sp+100], %i7
-	ld [%sp+96], %l6
+	ld [%sp+96], %i7
 	ba Ljoin_l45
 	nop
 Ljoin_l45:
-	st %i7, [%sp+100]
-	mov %l6, %i7
-	ld [%sp+100], %i7
 	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
@@ -321,12 +294,10 @@ Lframe_l88:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l87
-.word 1
+.word 0
 .word 1
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .section ".pcmap"
@@ -338,12 +309,10 @@ Lframe_l89:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l87
-.word 1
+.word 0
 .word 1
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .section ".pcmap"
@@ -355,12 +324,10 @@ Lframe_l90:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l87
-.word 1
+.word 0
 .word 1
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .section ".pcmap"
@@ -372,12 +339,10 @@ Lframe_l91:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l87
-.word 1
+.word 0
 .word 1
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .section ".text"

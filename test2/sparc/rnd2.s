@@ -9,53 +9,47 @@ Cmm.global_area:
 .section ".data"
 .align 4
 Cmm_stack_growth:
-.word 0xffffffffffffffff
+.word 0xffffffff
 .section ".text"
 p:
 	save %sp, -112, %sp
-	mov %i7, %l7
 Linitialize_continuations_l6:
 Lproc_body_start_l5:
-	set 3, %l6
-	st %l6, [%sp+96]
+	set 3, %l7
+	st %l7, [%sp+96]
 	ld [%sp+96], %f7
 	fitos %f7, %f0
-	st %i7, [%sp+100]
-	mov %l7, %i7
-	ld [%sp+100], %i7
 	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
 .section ".text"
 .section ".text"
 main:
-	save %sp, -128, %sp
+	save %sp, -112, %sp
 	mov %i0, %g1
 	mov %i1, %g1
-	mov %i7, %g1
 Linitialize_continuations_l20:
 Lproc_body_start_l19:
-	st %i7, [%sp+112]
-	st %g1, [%sp+108]
+	st %i7, [%sp+108]
 	call p, 0
 	nop
 Ljoin_l27:
-	add %sp, 128, %g1
-	set -32, %g2
+	add %sp, 112, %g1
+	set -16, %g2
 	add %g1, %g2, %g1
 	st %f0, [%g1]
 	set answer, %g1
 	mov %g1, %o0
-	add %sp, 128, %g1
-	set -32, %g2
+	add %sp, 112, %g1
+	set -16, %g2
 	add %g1, %g2, %g1
 	ld [%g1], %f0
 	fstod %f0, %f8
 	st %f9, [%sp+104]
 	ld [%sp+104], %g1
 	mov %g1, %o2
-	add %sp, 128, %g1
-	set -32, %g2
+	add %sp, 112, %g1
+	set -16, %g2
 	add %g1, %g2, %g1
 	ld [%g1], %f0
 	fstod %f0, %f8
@@ -68,8 +62,7 @@ Ljoin_l24:
 	set 0, %l7
 	mov %l7, %i0
 	ld [%sp+108], %i7
-	ld [%sp+112], %i7
-	! Evil recognizer deleted add %sp, 128, %sp
+	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
 .section ".pcmap_data"
@@ -81,18 +74,16 @@ Lstackdata_l35:
 .section ".pcmap_data"
 Lframe_l36:
 .word 0x8000005c
-.word 0xffffffdc
 .word 0xffffffec
+.word 0xfffffffc
 .word Lstackdata_l35
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
+.word 0
+.word 0
 .word 0xfffffff0
-.word 0
-.word 0
-.word 0xffffffe0
 .word 0
 .section ".pcmap"
 .word Ljoin_l24
@@ -100,18 +91,16 @@ Lframe_l36:
 .section ".pcmap_data"
 Lframe_l37:
 .word 0x8000005c
-.word 0xffffffdc
 .word 0xffffffec
+.word 0xfffffffc
 .word Lstackdata_l35
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
+.word 0
+.word 0
 .word 0xfffffff0
-.word 0
-.word 0
-.word 0xffffffe0
 .word 0
 .section ".text"
 .section ".data"

@@ -9,23 +9,19 @@ Cmm.global_area:
 .section ".data"
 .align 4
 Cmm_stack_growth:
-.word 0xffffffffffffffff
+.word 0xffffffff
 .section ".text"
 p:
-	save %sp, -112, %sp
-	mov %i7, %l7
+	save %sp, -96, %sp
 Linitialize_continuations_l6:
 Lproc_body_start_l5:
-	set 1, %l6
-	set 2, %l5
-	set 3, %l4
-	add %l6, %l5, %l6
-	add %l6, %l4, %l6
-	mov %l6, %i0
-	st %i7, [%sp+96]
-	mov %l7, %i7
-	ld [%sp+96], %i7
-	! Evil recognizer deleted add %sp, 112, %sp
+	set 1, %l7
+	set 2, %l6
+	set 3, %l5
+	add %l7, %l6, %l7
+	add %l7, %l5, %l7
+	mov %l7, %i0
+	! Evil recognizer deleted add %sp, 96, %sp
 	ret
 	restore
 .section ".text"
@@ -34,11 +30,9 @@ main:
 	save %sp, -112, %sp
 	mov %i0, %g1
 	mov %i1, %g1
-	mov %i7, %g1
 Linitialize_continuations_l20:
 Lproc_body_start_l19:
-	st %i7, [%sp+100]
-	st %g1, [%sp+96]
+	st %i7, [%sp+96]
 	call p, 0
 	nop
 Ljoin_l27:
@@ -52,7 +46,6 @@ Ljoin_l24:
 	set 0, %l7
 	mov %l7, %i0
 	ld [%sp+96], %i7
-	ld [%sp+100], %i7
 	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
@@ -68,12 +61,10 @@ Lframe_l36:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l35
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0
@@ -87,12 +78,10 @@ Lframe_l37:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l35
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0

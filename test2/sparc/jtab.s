@@ -9,7 +9,7 @@ Cmm.global_area:
 .section ".data"
 .align 4
 Cmm_stack_growth:
-.word 0xffffffffffffffff
+.word 0xffffffff
 .section ".data"
 .align 4
 jump_tab:
@@ -18,66 +18,56 @@ jump_tab:
 .word L3
 .section ".text"
 f:
-	save %sp, -112, %sp
+	save %sp, -96, %sp
 	mov %i0, %l6
-	mov %i7, %l5
 Linitialize_continuations_l6:
 Lproc_body_start_l5:
-	set jump_tab, %l4
-	set 4, %l3
-	smul %l3, %l6, %l6
-	add %l4, %l6, %l6
-	set 0, %l4
-	add %l6, %l4, %l4
-	ldub [%l4], %l4
-	set 8, %l3
-	sll %l7, %l3, %l7
-	or %l4, %l7, %l7
-	set 1, %l4
-	add %l6, %l4, %l4
-	ldub [%l4], %l4
-	set 8, %l3
-	sll %l7, %l3, %l7
-	or %l4, %l7, %l7
-	set 2, %l4
-	add %l6, %l4, %l4
-	ldub [%l4], %l4
-	set 8, %l3
-	sll %l7, %l3, %l7
-	or %l4, %l7, %l7
-	set 3, %l4
-	add %l6, %l4, %l6
-	ldub [%l6], %l6
+	set jump_tab, %l5
+	set 4, %l4
+	smul %l4, %l6, %l6
+	add %l5, %l6, %l6
+	set 0, %l5
+	add %l6, %l5, %l5
+	ldub [%l5], %l5
 	set 8, %l4
 	sll %l7, %l4, %l7
+	or %l5, %l7, %l7
+	set 1, %l5
+	add %l6, %l5, %l5
+	ldub [%l5], %l5
+	set 8, %l4
+	sll %l7, %l4, %l7
+	or %l5, %l7, %l7
+	set 2, %l5
+	add %l6, %l5, %l5
+	ldub [%l5], %l5
+	set 8, %l4
+	sll %l7, %l4, %l7
+	or %l5, %l7, %l7
+	set 3, %l5
+	add %l6, %l5, %l6
+	ldub [%l6], %l6
+	set 8, %l5
+	sll %l7, %l5, %l7
 	or %l6, %l7, %l7
 	jmp %l7
 	nop
 L1:
 	set 1, %l7
 	mov %l7, %i0
-	st %i7, [%sp+96]
-	mov %l5, %i7
-	ld [%sp+96], %i7
-	! Evil recognizer deleted add %sp, 112, %sp
+	! Evil recognizer deleted add %sp, 96, %sp
 	ret
 	restore
 L2:
 	set 2, %l7
 	mov %l7, %i0
-	st %i7, [%sp+96]
-	mov %l5, %i7
-	ld [%sp+96], %i7
-	! Evil recognizer deleted add %sp, 112, %sp
+	! Evil recognizer deleted add %sp, 96, %sp
 	ret
 	restore
 L3:
 	set 3, %l7
 	mov %l7, %i0
-	st %i7, [%sp+96]
-	mov %l5, %i7
-	ld [%sp+96], %i7
-	! Evil recognizer deleted add %sp, 112, %sp
+	! Evil recognizer deleted add %sp, 96, %sp
 	ret
 	restore
 .section ".text"
@@ -86,13 +76,11 @@ main:
 	save %sp, -112, %sp
 	mov %i0, %g1
 	mov %i1, %g1
-	mov %i7, %g1
 Linitialize_continuations_l22:
 Lproc_body_start_l21:
-	set 0, %g2
-	mov %g2, %o0
-	st %i7, [%sp+100]
-	st %g1, [%sp+96]
+	set 0, %g1
+	mov %g1, %o0
+	st %i7, [%sp+96]
 	call f, 0
 	nop
 Ljoin_l41:
@@ -130,7 +118,6 @@ Ljoin_l26:
 	set 0, %l7
 	mov %l7, %i0
 	ld [%sp+96], %i7
-	ld [%sp+100], %i7
 	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
@@ -146,12 +133,10 @@ Lframe_l50:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l49
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0
@@ -165,12 +150,10 @@ Lframe_l51:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l49
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0
@@ -184,12 +167,10 @@ Lframe_l52:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l49
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0
@@ -203,12 +184,10 @@ Lframe_l53:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l49
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0
@@ -222,12 +201,10 @@ Lframe_l54:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l49
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0
@@ -241,12 +218,10 @@ Lframe_l55:
 .word 0xffffffec
 .word 0xfffffff0
 .word Lstackdata_l49
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
-.word 0xfffffff4
 .word 0
 .word 0
 .word 0

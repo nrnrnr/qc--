@@ -9,44 +9,40 @@ Cmm.global_area:
 .section ".data"
 .align 4
 Cmm_stack_growth:
-.word 0xffffffffffffffff
+.word 0xffffffff
 .section ".text"
 q:
-	save %sp, -112, %sp
+	save %sp, -96, %sp
 	mov %i0, %l6
-	mov %i7, %l5
 Linitialize_continuations_l6:
 Lproc_body_start_l5:
 	add %l6, %l6, %l6
-	set 0, %l4
-	add %l6, %l4, %l4
-	ldub [%l4], %l4
-	set 8, %l3
-	sll %l7, %l3, %l7
-	or %l4, %l7, %l7
-	set 1, %l4
-	add %l6, %l4, %l4
-	ldub [%l4], %l4
-	set 8, %l3
-	sll %l7, %l3, %l7
-	or %l4, %l7, %l7
-	set 2, %l4
-	add %l6, %l4, %l4
-	ldub [%l4], %l4
-	set 8, %l3
-	sll %l7, %l3, %l7
-	or %l4, %l7, %l7
-	set 3, %l4
-	add %l6, %l4, %l6
-	ldub [%l6], %l6
+	set 0, %l5
+	add %l6, %l5, %l5
+	ldub [%l5], %l5
 	set 8, %l4
 	sll %l7, %l4, %l7
+	or %l5, %l7, %l7
+	set 1, %l5
+	add %l6, %l5, %l5
+	ldub [%l5], %l5
+	set 8, %l4
+	sll %l7, %l4, %l7
+	or %l5, %l7, %l7
+	set 2, %l5
+	add %l6, %l5, %l5
+	ldub [%l5], %l5
+	set 8, %l4
+	sll %l7, %l4, %l7
+	or %l5, %l7, %l7
+	set 3, %l5
+	add %l6, %l5, %l6
+	ldub [%l6], %l6
+	set 8, %l5
+	sll %l7, %l5, %l7
 	or %l6, %l7, %l7
 	mov %l7, %i0
-	st %i7, [%sp+96]
-	mov %l5, %i7
-	ld [%sp+96], %i7
-	! Evil recognizer deleted add %sp, 112, %sp
+	! Evil recognizer deleted add %sp, 96, %sp
 	ret
 	restore
 .section ".text"
@@ -55,22 +51,20 @@ main:
 	save %sp, -128, %sp
 	mov %i0, %g1
 	mov %i1, %g1
-	mov %i7, %g1
 Linitialize_continuations_l20:
 Lproc_body_start_l19:
-	set -559038737, %g2
-	add %sp, 128, %g3
-	set -16, %g4
-	add %g3, %g4, %g3
-	st %g2, [%g3]
+	set -559038737, %g1
 	add %sp, 128, %g2
 	set -16, %g3
 	add %g2, %g3, %g2
-	set 2, %g3
-	udiv %g2, %g3, %g2
-	mov %g2, %o0
-	st %i7, [%sp+100]
-	st %g1, [%sp+96]
+	st %g1, [%g2]
+	add %sp, 128, %g1
+	set -16, %g2
+	add %g1, %g2, %g1
+	set 2, %g2
+	udiv %g1, %g2, %g1
+	mov %g1, %o0
+	st %i7, [%sp+96]
 	call q, 0
 	nop
 Ljoin_l27:
@@ -84,7 +78,6 @@ Ljoin_l24:
 	set 0, %l7
 	mov %l7, %i0
 	ld [%sp+96], %i7
-	ld [%sp+100], %i7
 	! Evil recognizer deleted add %sp, 128, %sp
 	ret
 	restore
@@ -101,12 +94,10 @@ Lframe_l36:
 .word 0xffffffdc
 .word 0xffffffe0
 .word Lstackdata_l35
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
-.word 0xffffffe4
 .word 0
 .word 0
 .word 0
@@ -120,12 +111,10 @@ Lframe_l37:
 .word 0xffffffdc
 .word 0xffffffe0
 .word Lstackdata_l35
-.word 1
+.word 0
 .word 3
 .word 0
 .word 1
-.word 49
-.word 0xffffffe4
 .word 0
 .word 0
 .word 0
