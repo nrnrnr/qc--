@@ -25,6 +25,9 @@ let assign left right =
     in
         loop (left,right)
 
+(* not used - we will do this check later in oder to create better
+   error messages *)
+
 let rec varsOnly = function
     | []                 -> []
     | (Var(_) as v)::vv  -> v :: varsOnly vv
@@ -151,9 +154,9 @@ decl        :   register                          { map localReg $1 }
             |   STACKDATA LBRACE data RBRACE      { [Stackdata(p(),rev $3)] }
 
 register    :   INVARIANT ty regs SEMI 
-                { map (fun (id,hint) -> (p(),Variant  ,$2,id,hint)) (rev $3) }
+                { map (fun (id,hint) -> (p(),Invariant,$2,id,hint)) (rev $3) }
             |   /*******/ ty regs SEMI       
-                { map (fun (id,hint) -> (p(),Invariant,$1,id,hint)) (rev $2) } 
+                { map (fun (id,hint) -> (p(),Variant  ,$1,id,hint)) (rev $2) } 
 
 regs        :   regs COMMA ID STR         { ($3,Some $4)::$1                  }
             |   regs COMMA ID             { ($3,None   )::$1                  }
@@ -253,21 +256,21 @@ stmt        :   SEMI                         { EmptyStmt(p())               }
             |   lvalues EQUAL exprs SEMI     { AssignStmt(p(),assign $1 $3) }
 
             |   lvalues EQUAL conv PPERCENT ID actls flows SEMI  
-                            { PrimStmt(p(),varsOnly $1, $3, $5, $6, $7)       }
+                        { PrimStmt(p(), (*varsOnly*) $1, $3, $5, $6, $7)       }
             |                 conv PPERCENT ID actls flows SEMI
-                            { PrimStmt(p(), []        , $1, $3, $4, $5)       }
+                        { PrimStmt(p(), []        , $1, $3, $4, $5)            }
             |   lvalues EQUAL conv expr actls targets flows SEMI
-                            { CallStmt(p(),varsOnly $1, $3, $4, $5, $6, $7)   }
+                        { CallStmt(p(), (*varsOnly*) $1, $3, $4, $5, $6, $7)   }
             |                 conv expr actls targets flows SEMI
-                            { CallStmt(p(), []        , $1, $2, $3, $4, $5)   }
+                        { CallStmt(p(), []        , $1, $2, $3, $4, $5)        }
             |   lvalues EQUAL      PPERCENT ID actls flows SEMI
-                            { PrimStmt(p(),varsOnly $1, None, $4, $5, $6)     }
+                        { PrimStmt(p(), (*varsOnly*) $1, None, $4, $5, $6)     }
             |                      PPERCENT ID actls flows SEMI
-                            { PrimStmt(p(), []        , None, $2, $3, $4)     }
+                        { PrimStmt(p(), []        , None, $2, $3, $4)          }
             |   lvalues EQUAL      expr actls targets flows SEMI
-                            { CallStmt(p(),varsOnly $1, None, $3, $4, $5, $6) }
+                        { CallStmt(p(), (*varsOnly*) $1, None, $3, $4, $5, $6) }
             |                      expr actls targets flows SEMI
-                            { CallStmt(p(), []        , None, $1, $2, $3, $4) }
+                        { CallStmt(p(), []        , None, $1, $2, $3, $4)      }
            
             |   IF expr block                     { IfStmt(p(),$2,$3,[])      }
             |   IF expr block ELSE block          { IfStmt(p(),$2,$3,$5)      }

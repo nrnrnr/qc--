@@ -36,6 +36,7 @@ type cmd =        | CMDhelp
                   | CMDversion                                  
                   | CMDlex      of string
                   | CMDparse    of string
+                  | CMDpp       of string
 
 @ The concrete syntax of the command line is specified through the
 parser combinators that recognizes them. The [[Pc]] module defines
@@ -50,8 +51,9 @@ a flag [[-c]] is passed to a function that injects the string into a
 <<main.ml>>=
 let cmd_help      = literal "-help"         --> return CMDhelp
 let cmd_version   = literal "-version"      --> return CMDversion
-let cmd_lex       = literal "-l" **> any    --> fun s -> CMDlex(s) 
-let cmd_parse     = literal "-c" **> any    --> fun s -> CMDparse(s) 
+let cmd_lex       = literal "-lex" **> any  --> fun s -> CMDlex(s) 
+let cmd_parse     = literal "-asdl" **> any --> fun s -> CMDparse(s) 
+let cmd_pp        = literal "-pp" **> any   --> fun s -> CMDpp(s) 
 let cmd_default   = any                     --> fun s -> CMDlex(s)
 
 @ The basic parsers recognize a complete command line. As an
@@ -69,6 +71,7 @@ let cmdline       = (  cmd_version
                    ||| cmd_help 
                    ||| cmd_lex
                    ||| cmd_parse
+                   ||| cmd_pp
                    ||| cmd_default 
                     ) **< eof
 
@@ -139,6 +142,25 @@ let parse file =
             | e ->  ( finally()
                     ; raise e
                     )
+
+let pp file =
+    let fd          = try open_in file with Sys_error msg -> error msg  in
+    let finally ()  = close_in fd                                       in
+    let lexbuf      = Lexing.from_channel fd                            in
+        try
+            ( Scan.init file
+            ; let ast = Parse.program Scan.token lexbuf in
+                 Pp.ppToFile stdout 72 (Astpp.program ast)
+            ) 
+        with
+            | Parsing.Parse_error | Error(_) ->
+              ( finally()
+              ; let (file,line,col) = Scan.pos lexbuf in
+                    error (Printf.sprintf "%3d,%2d parse error" line col)
+              )
+            | e ->  ( finally()
+                    ; raise e
+                    )
  
 @ The [[main]] function gets the command line arguments and tries to
 parse them using the [[cmdline]] parser.  It returns the abstract
@@ -164,7 +186,8 @@ let main () =
             | CMDhelp               -> usage this
 	    | CMDversion	    -> version ()
             | CMDlex(f)             -> lex f 
-            | CMDparse(f)           -> ignore(parse f) 
+            | CMDparse(f)           -> parse f 
+            | CMDpp(f)              -> pp f 
             );
             exit 0
        with 
@@ -209,9 +232,11 @@ B<qcc -version>
 
 B<qcc -help>
 
-B<qcc -l> I<file>
+B<qcc -lex> I<file>
 
-B<qcc -c> I<file>
+B<qcc -asdl> I<file>
+
+B<qcc -pp> I<file>
 
 =head1 DESCRIPTION
 
@@ -230,11 +255,15 @@ Report the version of B<qcc> to stdout.
 
 Print short usage to stdout.
 
-=item B<-c> I<file>
+=item B<-asdl> I<file>
 
-Parse I<file> and write the abstract syntax in ASDL format to stdout.
+Parse I<file> and print the abstract syntax in ASDL format to stdout.
 
-=item B<-l> I<file>
+=item B<-pp> I<file>
+
+Parse I<file> and pretty print the abstract syntax in ASDL format to stdout.
+
+=item B<-lex> I<file>
 
 Scan (lex) I<file> and write a representation of the tokens in I<file> 
 to stdout.

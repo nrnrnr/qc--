@@ -31,6 +31,13 @@ align       = (int)     -- power of 2
 aligned     = (int)     -- power of 2
 op          = (string)
 
+@ Every important node includes source code position [[pos]]. This is
+the character span in the input character sequence that covers the
+node. The first character in the stream has index 0. The first number
+in a [[pos]] denotes the first character covered by the node, the
+second number the first character \textit{after} the node.
+
+<<ast declaration>>=
 pos         = (int,int) -- source code positions span
 
 program     = (pos,topdecl*)
@@ -42,6 +49,13 @@ topdecl     = Import  (pos, ty, name*)
             | Global  (pos, register*)
             | Pragma  (pos)                   -- just for testing
 
+@ Extensions to the language are syntactically covered by [[pragma]]s. 
+Extensions that are recognized by this implementation cover them in
+the abstract syntax.  For testing purposes currently a meaningless
+[[Pragma]] constructor is returned by the parser for recognized
+pragmas. 
+
+<<ast declaration>>=
 
 const       = (pos, name, expr)
 
@@ -64,9 +78,9 @@ datum       = Label (pos, name)
             | Align (pos, align)
             | MemDecl (pos, ty, memsize, init?)
 
-@ Escape sequence in the concrete syntax are removed during the
-translation to the abstract syntax.  So [[InitStr]] and [[InitUStr]]
-do not contain escaped characters.
+@ Escape sequence in the concrete syntax of strings and charaxter
+literals are removed during the translation to the abstract syntax. 
+So [[InitStr]] and [[InitUStr]] do not contain escaped characters.
 
 <<ast declaration>>=
 init        = InitExprs (expr*)
@@ -105,6 +119,13 @@ stmts       = (stmt*)
 targets     = (target*)
 flows       = (flow*)
 lvalues     = (lvalue*)
+
+@ The abstract syntax does not make a difference between an empty list
+of statements and an absent optional list of statements. An [[if]]
+statement without an [[else]] block looks on this level like an [[if]]
+with an empty [[else]] block.
+
+<<ast declaration>>=
 
 stmt        = IfStmt     (pos, expr, stmts, stmts)
             | LabelStmt  (pos, name)
