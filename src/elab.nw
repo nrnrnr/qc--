@@ -463,22 +463,28 @@ let rec body r env = function
     | A.DataBody _      -> env
 <<module Targets>>=
 and stmt r env = function
-    | A.StmtAt(x,r)     -> stmt r env x
-    | A.SpanStmt(_,_,bb)-> foldl (body r) env bb
-    | A.IfStmt  _       -> env
-    | A.SwitchStmt _    -> env
-    | A.LabelStmt _     -> env
-    | A.ContStmt _      -> env
-    | A.AssignStmt _    -> env
-    | A.CallStmt _      -> env
-    | A.PrimStmt _      -> env
-    | A.GotoStmt _      -> env
-    | A.JumpStmt _      -> env
-    | A.CutStmt _       -> env
-    | A.ReturnStmt _    -> env
-    | A.EmptyStmt       -> env
-    | A.CommentStmt _   -> env
+    | A.StmtAt(x,r)        -> stmt r env x
+    | A.SpanStmt(_,_,bb)   -> foldl (body r) env bb
+    | A.IfStmt (_,b1,b2)   -> let env = foldl (body r) env b1 in
+                                foldl (body r) env b2
+    | A.SwitchStmt (_,_,aa)-> foldl (arm r) env aa
+    | A.LabelStmt _        -> env
+    | A.ContStmt _         -> env
+    | A.AssignStmt _       -> env
+    | A.CallStmt _         -> env
+    | A.PrimStmt _         -> env
+    | A.GotoStmt _         -> env
+    | A.JumpStmt _         -> env
+    | A.CutStmt _          -> env
+    | A.ReturnStmt _       -> env
+    | A.EmptyStmt          -> env
+    | A.CommentStmt _      -> env
 
+and arm r env = function
+    | A.ArmAt (x,r) -> arm r env x
+    | A.Case (_,bb) -> foldl (body r) env bb
+    
+    
 <<module Targets>>=
 and import r env (s,name) =
     let sym = Aux.Option.get name s
@@ -553,10 +559,11 @@ let rec body r dd = function
     | A.DataBody _      -> dd
 <<collect type decls>>=
 and stmt r dd = function
-    | A.StmtAt(x,r)     -> stmt r dd x
-    | A.SpanStmt(_,_,bb)-> foldl (body r) dd bb
-    | A.IfStmt _     -> dd
-    | A.SwitchStmt _ -> dd
+    | A.StmtAt(x,r)         -> stmt r dd x
+    | A.SpanStmt(_,_,bb)    -> foldl (body r) dd bb
+    | A.IfStmt (_,b1,b2)    -> let env = foldl (body r) dd b1 in
+                                    foldl (body r) dd b2
+    | A.SwitchStmt (_,_,aa) -> foldl (arm r) dd aa
     | A.LabelStmt _  -> dd
     | A.ContStmt _   -> dd
     | A.AssignStmt _ -> dd
@@ -568,6 +575,11 @@ and stmt r dd = function
     | A.ReturnStmt _ -> dd
     | A.EmptyStmt    -> dd
     | A.CommentStmt _-> dd 
+
+and arm r dd = function
+    | A.ArmAt (x,r) -> arm r dd x
+    | A.Case (_,bb) -> foldl (body r) dd bb
+
 <<collect type decls>>=
 and decl r dd = function
     | A.DeclAt(x,r)     -> decl r dd x
@@ -762,10 +774,11 @@ declarations.
 
 <<module Collect>>=
 and stmt r dd = function
-    | A.StmtAt(x,r)     -> stmt r dd x
-    | A.SpanStmt(_,_,bb)-> foldl (body r) dd bb
-    | A.IfStmt      _   -> dd
-    | A.SwitchStmt  _   -> dd
+    | A.StmtAt(x,r)         -> stmt r dd x
+    | A.SpanStmt(_,_,bb)    -> foldl (body r) dd bb
+    | A.IfStmt (_,b1,b2)    -> let env = foldl (body r) dd b1 in
+                                    foldl (body r) dd b2
+    | A.SwitchStmt (_,_,aa) -> foldl (arm r) dd aa
     | A.LabelStmt   _   -> dd
     | A.ContStmt    _   -> dd
     | A.AssignStmt  _   -> dd
@@ -777,6 +790,10 @@ and stmt r dd = function
     | A.ReturnStmt  _   -> dd
     | A.EmptyStmt       -> dd
     | A.CommentStmt _   -> dd
+
+and arm r dd = function
+    | A.ArmAt (x,r) -> arm r dd x
+    | A.Case (_,bb) -> foldl (body r) dd bb
 
 <<module Collect>>=
 let rec section r dd = function
@@ -1139,7 +1156,7 @@ let rec stmt r scope env = function
     | A.StmtAt(x,r)               ->
         E.catch' env (error r env) (stmt r scope env) x
     | A.IfStmt ( e, ss1, ss2)     ->
-        foldl (stmt r scope) (foldl (stmt r scope) env ss1) ss2
+        foldl (body r scope) (foldl (body r scope) env ss1) ss2
     | A.LabelStmt(n) ->
         bindv n (r) (E.ematch (pointerTy env) (fun p -> F.Label(F.Code),p)) env
     | A.SpanStmt(e1,e2,ss)        ->
@@ -1153,7 +1170,7 @@ let rec stmt r scope env = function
 
 and arm r range scope env = function
     | A.ArmAt(x,r)      -> E.catch' env (error r env) (arm r range scope env) x
-    | A.Case(ranges, ss)-> foldl (stmt r scope) env ss
+    | A.Case(ranges, ss)-> foldl (body r scope) env ss
 @
 
 We have two functions to deal with declarations:  [[gdecl]] for
@@ -1627,8 +1644,8 @@ in any of the two statement blocks are recorded in the environment.
 <<check>>=
 let rec ifStmt env (e,ss1,ss2) =
     let msg = "if-condition must be of type bool" in           
-    let env = foldl stmt env ss1 in
-    let env = foldl stmt env ss2 in
+    let env = foldl body env ss1 in
+    let env = foldl body env ss2 in
         E.seq' env (tyExpr env e)
         ( function 
         | t when t = T.Bool -> env 
@@ -1876,7 +1893,7 @@ All ranges that guard a [[switch]] arm must match the type of the
 and arm t env = function
     | A.ArmAt(x,r)   -> E.catch' (F.flagError env) (error r env) (arm t env) x
     | A.Case(rr, ss) ->
-        let env = foldl stmt env ss              in 
+        let env = foldl body env ss              in 
         let env = foldl (range t) env rr         in 
             ( match rr with 
             | [] -> E.error "must specify range for this arm"

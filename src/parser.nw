@@ -1046,8 +1046,6 @@ ty          :   sty                            { $1             }
 
 sty         :   BITSn                          { A.BitsTy($1)     }
 
-block       :   LBRACE stmts RBRACE            { rev $2 }
-
 returnto    :   LT sexprAt SLASH sexprAt GT    { Some($2,$4) }
             |   /**/                           { None        }
 <<parse.mly>>=
@@ -1082,8 +1080,8 @@ stmt        :   SEMI                           { A.EmptyStmt          }
             |                      expr actls targets flows SEMI
                 { A.CallStmt([], None, $1, $2, $3, rev $4)}
  
-            |   IF exprAt block                     {A.IfStmt($2,$3,[])}
-            |   IF exprAt block ELSE block          {A.IfStmt($2,$3,$5)}
+            |   IF exprAt body                      {A.IfStmt($2,$3,[])}
+            |   IF exprAt body  ELSE body           {A.IfStmt($2,$3,$5)}
             |   GOTO exprAt targets SEMI            {A.GotoStmt($2,$3)}
             |   CONTINUATION ID LPAREN cformals RPAREN COLON
                                                     {A.ContStmt($2,$4)}
@@ -1117,10 +1115,7 @@ arms        :   arms armAt                     { $2 :: $1  }
             |   /**/                           { []        }
 
 armAt       :   arm                            { A.ArmAt($1,p()) }
-arm         :   CASE ranges COLON block        { A.Case($2,$4)   } 
-
-stmts       :   stmts stmtAt                   { $2 :: $1 }
-            |   /**/                           { []       }
+arm         :   CASE ranges COLON body         { A.Case($2,$4)   } 
 
 <<parse.mly>>=
 sexprAt     :   sexpr                          { A.ExprAt($1, p())    }

@@ -374,20 +374,20 @@ arguments that we need for all statements:  [[env]] is the clean
 environment, which doesn't change.  [[s]] is the statement being
 translated.  We return a new flow-graph node. 
 
+
 <<module Make>>=
 let rec body env target globals props graph after bb =
     let decorate n       = G.bind props n           in
-    let rec stmt s after = match s with
-        | A.StmtAt(x,_)     -> stmt x after
-        <<cases for translating statements>>        in
-    let rec body b after = match b with
-        | A.BodyAt(x, _)    -> body x after
+    let rec bdy b after = match b with
+        | A.BodyAt(x, _)    -> bdy x after
         | A.DeclBody(d)     -> ldecl d after
         | A.StmtBody(s)     -> stmt s after
         | A.DataBody(dd)    -> after (* can be ignored *)
+    and stmt s after = match s with
+        | A.StmtAt(x,_)     -> stmt x after
+        <<cases for translating statements>>
     in
-        List.fold_right body bb after
-@
+        List.fold_right bdy bb after
 
 <<cases for translating statements>>=
 | A.AssignStmt(lhs,rhs) ->
@@ -405,9 +405,9 @@ The first branch of a [[branch]] node must be a label. So we have to
 invent one.
         
 <<cases for translating statements>>=
-| A.IfStmt ( e, ss1, ss2) ->
-    let node1  = List.fold_right stmt ss1 after  in
-    let node2  = List.fold_right stmt ss2 after  in
+| A.IfStmt ( e, bb1, bb2) ->
+    let node1  = List.fold_right bdy bb1 after  in
+    let node2  = List.fold_right bdy bb2 after  in
     let label1 = GM.label (Idgen.id ()) node1    in 
     let e      = expr env target globals e       in
     let unode  = GM.branch e (decorate label1) node2 in
@@ -514,11 +514,11 @@ link-time constant.
 
 \emph{Something is very wrong here, but NR is not sure what\ldots}
 <<cases for translating statements>>=
-| A.SpanStmt(e1,e2,ss) ->
+| A.SpanStmt(e1,e2,bb) ->
     let key   = Consteval.compile (ignore e1; assert false) in
     let value = Consteval.link    (ignore e2; assert false) in
         body env target globals 
-            (G.Props.add_span key value props) graph after ss
+            (G.Props.add_span key value props) graph after bb
 @
 
 
@@ -557,7 +557,7 @@ let range env ir = function
 <<unused>>=
 and arm env ir = function
     | A.ArmAt(x,_)          -> arm env ir x
-    | A.Case(ranges, stmts) -> true
+    | A.Case(ranges, bb)    -> true
 @
 
 % ------------------------------------------------------------------ 
@@ -592,7 +592,7 @@ and proc env (target: Target.t) globals props (asm: Asm.asm) (cc,n,fs,bb) =
                         AG.ProcParameters cc a)                        in
     let bdy   a    = body env target globals props graph a  bb         in
     let exit       = decorate (GM.exit graph)                          in
-    let node       = (entry @<< copy @<< bdy) exit                       in
+    let node       = (entry @<< copy @<< bdy) exit                     in
          asm ++ Asm.instr (GM.cfg_of node)
 @
 

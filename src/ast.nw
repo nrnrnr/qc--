@@ -169,7 +169,7 @@ range       = Point         (expr)
             | Range         (expr,expr)
 
 arm         = ArmAt         (arm, region)
-            | Case          (range*,stmt*)
+            | Case          (range*,body*)
 @
 
 We like to represent guarded multiple assignments. The guards are paired
@@ -192,7 +192,7 @@ the parser.  They are used for code generation back ends that emit
  
 <<ast declaration>>=
 stmt        = StmtAt        (stmt, region)
-            | IfStmt        (expr, stmt*, stmt*)
+            | IfStmt        (expr, body*, body*)
             | SwitchStmt    (range?, expr, arm*)
             | LabelStmt     (name)
             | ContStmt      (name, cformal*)
@@ -616,10 +616,10 @@ let rec stmt = function
     | A.IfStmt ( e, ss1, ss2)    ->
         P.agrp begin
         ~~ P.agrp (P.text "if" ^/ expr e)
-        ^/ P.block stmt ss1
+        ^/ P.block (body false) ss1
         ^^ begin match ss2 with
            | []     -> P.empty
-           | ss     -> P.break ^^ P.text "else" ^/ P.block stmt ss
+           | ss     -> P.break ^^ P.text "else" ^/ P.block (body false) ss
            end
         end
     | A.LabelStmt(n)            -> 
@@ -894,7 +894,7 @@ and arm = function
         ~~ P.text "case"
         ^/ P.agrp (P.list (P.text "," ^^ P.break) range ranges)
         ^^ P.text ":"
-        ^/ P.block stmt stmts
+        ^/ P.block (body false) stmts
         end 
 <<astpp.ml>>=
 let rec toplevel = function

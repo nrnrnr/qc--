@@ -176,7 +176,7 @@ but sequences of [[assign]] nodes.  Analysis functions for a {\cfg}
 will thus never report a [[copyi]] node.
 
 % ------------------------------------------------------------------ 
-\subsection{Analysis}\label{sect:cfgliveness}
+\subsection{Inspection}\label{sect:cfgliveness}
 % ------------------------------------------------------------------ 
 
 The following functions allow to inspect a {\cfg}.  One of the most
@@ -228,6 +228,18 @@ stored in every node and can be updated by side effect using
 
 <<abstract types and values>>=
 val live:     node' -> set
+@
+
+A [[cfg]] is created from a list of nodes.  The function 
+[[foldl cfg f]] 
+walks over the list from head to tail and applies [[f]] to each node. 
+At each node, [[f]] receives the current [[node']] and an intermediate
+result [['a]] which it combines to a new result [['a]].  The
+intermediate result for the first node is the 3rd argument to
+[[foldl]]. \emph{This is a rather clumsy description.}
+  
+<<abstract types and values>>=
+val foldl: cfg -> (node' -> 'a -> 'a) -> 'a -> 'a
 @
 
 \begin{quote}\it
@@ -483,7 +495,7 @@ let freeze = function
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Analysis}
+\subsection{Inspection}
 % ------------------------------------------------------------------     
 
 Analysis functions return [[node']] values, which are actually list of
@@ -548,8 +560,21 @@ let succ cfg = function
         | Exit             -> []
         )                           
 @
-        
-% ------------------------------------------------------------------ 
+
+To implement [[foldl]] we can't use [[List.foldl]] because a [[node']]
+is a [[node list]] and not a [[node]]. So we implement our own version
+of a [[fold]].
+
+<<implementation of S>>=
+let foldl cfg f z =
+    let rec fold  r = function
+        | []             -> r
+        | n::nn as node' -> fold (f node' r) nn
+    in
+        fold z cfg.entry
+@
+
+ ------------------------------------------------------------------ 
 \subsection{Manipulation}
 % ------------------------------------------------------------------ 
         
