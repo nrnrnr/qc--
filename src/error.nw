@@ -24,54 +24,52 @@ A set of combinators helps to deal with this type of values.
 % ------------------------------------------------------------------  
 
 <<error.mli>>=
-
 type 'a error       = Error                     (* bad result  *)
                     | Ok        of 'a           (* good result *)
+@
 
-@ At some point in a program the processing is finally aborted by
+At some point in a program the processing is finally aborted by
 raising an exception.  We expect to find most errors while checking
 the static semantics of a \C~program.  However, the way the abstract
-syntax is organized the location information is ususally \textit{not}
-available where the exception is raised but where it is caught.
+syntax is organized the location information is usually \textit{not}
+available where the exception is raised but where it is caught. 
 Because of this we do not attach any informations about the origin of
-an error the the exception. 
+an error to an exception. 
 
 <<error.mli>>=
-
 type pretty         = string                    (* for the moment *)
 
 exception ErrorExn  of pretty
 val error :         pretty -> 'a
+@
 
-@ Combinators to deal with functions that do not naturally expect 
+Combinators to deal with functions that do not naturally expect 
 values of type [[error]].
 
 <<error.mli>>=
-
 val combine     : 'a error error -> 'a error
 val emap        : ('a -> 'b) -> 'a error -> 'b error
 val sequence    : ('a -> 'b error) -> 'a error -> 'b error
+@
 
-
-@ Raising combinators raise the constructors of an [[error]] value
+Raising combinators raise the constructors of an [[error]] value
 inside a complex value to the top-level.  A complex value is bad when
 one of its components is bad and good otherwise.  The raising
 combinators deal with the most important data types:  options, lists,
 and tuples.
 
 <<error.mli>>=
-
 module Raise :
   sig
     val option : 'a error option                -> 'a option error
     val list   : 'a error list                  -> 'a list error
     val pair   : 'a error * 'b error            -> ('a * 'b) error
+@
 
-@ The [[left]] and [[right]] functions consider only one component of
+The [[left]] and [[right]] functions consider only one component of
 a pair when raising the constructor.
 
 <<error.mli>>=
-
     val left   : 'a error * 'b                  -> ('a * 'b) error
     val right  : 'a * 'b error                  -> ('a * 'b) error
     
@@ -79,8 +77,9 @@ a pair when raising the constructor.
     val quad   : 'a error * 'b error * 'c error * 'd error 
                   -> ('a * 'b * 'c * 'd) error
   end
+@
 
-@ Lowering functions take a complex [[error]] value and push the
+Lowering functions take a complex [[error]] value and push the
 constructor from the top-level to the values inside the [[error]]
 value. 
 
@@ -133,19 +132,19 @@ val catch   :       (pretty -> unit)
                     -> ('a -> 'b error) -> 'a -> 'b error
 val catch'  : 'b -> (pretty -> unit) 
                     -> ('a -> 'b      ) -> 'a -> 'b 
+@
 
-@ The first argument in [[catch printer f x]] is an error reporting
+The first argument in [[catch printer f x]] is an error reporting
 function; [[f]] is applied to [[x]] and in case of an error [[Error]]
 is returned. The first argument to [[catch']] is the value to return
 in case of an error.
 
-@ The [[warningPrt]] and [[errorPrt]] functions can be passed to
+The [[warningPrt]] and [[errorPrt]] functions can be passed to
 [[catch]] and [[catch']] as error printing functions. However, in most
 cases specialized functions for error reporting will be used to include
 some source code locations.
 
 <<>>=
-
 val warningPrt : pretty -> unit
 val errorPrt   : pretty -> unit
 @
@@ -161,8 +160,8 @@ val errorPointPrt : Srcmap.point -> string -> unit
 val errorRegionPrt : Srcmap.region -> string -> unit
 val errorPosPrt : Srcmap.pos -> string -> unit
 val errorRegPrt : Srcmap.reg -> string -> unit
-
 @
+
 % ------------------------------------------------------------------  
 \subsection{Implementation}
 % ------------------------------------------------------------------ 

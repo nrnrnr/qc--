@@ -1,19 +1,50 @@
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
 
 % ------------------------------------------------------------------ 
 \section{Checking Static Semantics}
 % ------------------------------------------------------------------ 
 
-Checking the static semantics of a {\PAL} program is a multi-step
-approach:  a program declares symbols in the global scope (made up by
-the toplevel and its sections) and in local scopes made up by
-individual procedures.  Because symbols in {\PAL} are visible inside
-their scope before there declaration, checking a scope requires the
-following steps:
+To check the static semantics of a {\PAL} program the meaning of all
+names used by it must be determined and their correct usage verified. 
+The visibility of names in {\PAL} is controlled by name spaces and
+scopes.  There are four name spaces:
+
+\begin{enumerate}
+\item Values (Procedures, Constants, Registers, Imports, \dots).
+\item Types (names defined by [[typedef]]).
+\item Constant operators ([[%add]], \dots).
+\item Runtime operators; this a superset of the constant name space.
+\end{enumerate}
+
+Since operators are predefined they are visible everywhere and have no
+further scoping rules.  Values and types are scoped:
+
+\begin{enumerate}
+\item The scope of the compilation unit is called \textit{global}. It
+      includes the top-level and all sections. Labels at the statement
+      level of procedures have additionally global scope.
+      
+\item The procedure scope, called \textit{local}.  Values and types
+      declared inside a procedure have local scope.  Entries in the
+      local scope shadow entries in the global scope.
+\end{enumerate} 
+
+A name is visible inside its whole scope, even before its declaration.
+Type declarations can refer to each other, constant declarations can
+refer to type declarations and each other. All non-constant values can
+only refer to type declarations. Before the static semantics of a
+scope can be checked all names must be resolved in a multi-step approach:
 
 \begin{enumerate}
 \item All type declarations of the current scope are collected. They
-      are topologically sorted with respect to the use of each other and
-      entered into the type environment.
+      are topologically sorted with respect to the use of each other
+      and entered into the type environment.
+
+\item All non-constant values are entered into the environment.
 
 \item All constant declarations are collected, topologically sorted
       and processed. Processing includes inferring their types and
@@ -21,16 +52,18 @@ following steps:
       the value environment.
 
 \item Now the environment in complete to check the static semantics of
-      the current section or procedure. This involves checking the types
+      the current scope. This involves checking the types
       and all the other constraints defined by the static semantics.
 \end{enumerate}
+
 
 % ------------------------------------------------------------------ 
 \subsection{Interface}
 % ------------------------------------------------------------------ 
 
 Currently the interface only allows to check the static semantics of a
-named file. When the chek succeeds [[Error.Ok()]] is returned.
+named file.  When the check succeeds [[Error.Ok()]] is returned, and
+[[Error.Error]] otherwise.
 
 <<check.mli>>=
 val check : string -> unit Error.error
@@ -83,9 +116,18 @@ let rec evalTy env = function
     | A.BitsTy(size) -> E.Ok(Types.Bits size)
     | A.AliasTy(n)   -> snd (F.findt n env)
 
+<<>>=
 <<building the type environment>>
 <<building the value environment>>
 <<checking the static semantics>>
+
+<<>>=
+let checkProgram env program =
+    let env1       = TypeEnv.doGlobalTypes env  program            in
+    let env2       = ValueEnv.Bind.globals env1 program            in
+    let env3       = ValueEnv.EvalConst.doGlobalConst env2 program in
+        Semantics.program env3 program
+
 <<check file>>
 @
 
@@ -93,36 +135,12 @@ let rec evalTy env = function
 \subsection{Building the type environment}
 % ------------------------------------------------------------------ 
 
-Before the values of a scope are entered into the environment all type
-declarations are processed. Type declarations can refer to each other
-and thus they must be processed in a topological order: declarations
-must depend only on declarations that have been already processed.
-
-Topological sort is implemented by the [[TSort]] module.  The
-[[TSort.sort]] function knows very few things about (type)
-declarations:  it can ask for the names a declaration [[defines]], and
-the declared names it [[uses]].  For error reporting declarations are
-enriched with optional source code positions.
-
-<<module TT>>=
-type decl = A.decl * A.region option
-
-let rec defines = function
-    | A.DeclAt(d,r)      , _   -> defines (d,Some r)
-    | A.Typedef(t,names) , _   -> names
-    | _                  , _   -> []
-<<>>=
-let rec uses = function     
-    | A.DeclAt(d,r)                 , _   -> uses (d,Some r)
-    | A.Typedef(A.BitsTy(_),names)  , _   -> []
-    | A.Typedef(A.AliasTy(x),names) , _   -> [x]
-    | _                             , _   -> []
-@
-
-To build the type environment type declarations must be collected. 
-Type declarations ([[typedef]]) on the top-level and the section-level
-are global; [[foldGlobalTypeDecls]] collects them from the abstract
-syntax.
+Because type declarations can refer to each other they can not be
+simply processed in source code order.  They are collected, then
+sorted, and finally processed. The sort function is provided by the
+[[Topsort.Make]] functor, which is parameterized over the declarations
+being sorted.  In this case module [[TT]] provides the necessary
+informations about type declarations. 
 
 <<building the type environment>>=
 module TypeEnv = struct
@@ -131,20 +149,26 @@ module TypeEnv = struct
     end
     module TSort = Topsort.Make(TT)
     
-    <<build type env>>
+    <<collect type decls>>
+    <<process type decls>>
+
+    let foldGlobalTypeDecls program =
+        foldl (toplevel None) [] program
+
+    let foldLocalTypeDecls b =
+        foldl (body None) [] b
 end
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Collecting Type Declarations}
+\subsubsection{Collecting Type declarations}
 % ------------------------------------------------------------------ 
 
-The type declarations of a scope are first collected, then sorted, and
-finally processed.  The functions collecting them walk over the
-abstract syntax and return declarations in a list.  The top-level and
-its sections declare global types, the body of procedures local types. 
+The functions collecting type declarations walk over the abstract
+syntax and return them in a list.  The top-level and its sections
+declare global types, the body of procedures local types. 
         
-<<build type env>>=
+<<collect type decls>>=
 let rec body r dd = function
     | A.BodyAt(x,r)     -> body (Some r) dd x
     | A.DeclBody(d)     -> decl r dd d
@@ -182,6 +206,36 @@ let foldLocalTypeDecls b =
 @
 
 % ------------------------------------------------------------------ 
+\subsubsection{Sorting type declarations}
+% ------------------------------------------------------------------ 
+
+Before the values of a scope are entered into the environment all type
+declarations are processed. Type declarations can refer to each other
+and thus they must be processed in a topological order: declarations
+must depend only on declarations that have been already processed.
+
+Topological sort is implemented by the [[TSort]] module.  The
+[[TSort.sort]] function knows very few things about (type)
+declarations:  it can ask for the names a declaration [[defines]], and
+the declared names it [[uses]].  For error reporting declarations are
+enriched with optional source code positions.
+
+<<module TT>>=
+type decl = A.decl * A.region option
+
+let rec defines = function
+    | A.DeclAt(d,r)      , _   -> defines (d,Some r)
+    | A.Typedef(t,names) , _   -> names
+    | _                  , _   -> []
+<<>>=
+let rec uses = function     
+    | A.DeclAt(d,r)                 , _   -> uses (d,Some r)
+    | A.Typedef(A.BitsTy(_),names)  , _   -> []
+    | A.Typedef(A.AliasTy(x),names) , _   -> [x]
+    | _                             , _   -> []
+@
+
+% ------------------------------------------------------------------ 
 \subsubsection{Processing type declarations}
 % ------------------------------------------------------------------ 
 
@@ -195,12 +249,10 @@ names for types of the actual scope.
 Names defined by declarations found in cycles are bound to [[E.Error]]
 in the (fat) environment.
 
-<<>>=
+<<process type decls>>=
 let bindError scope env decls = 
     let names = List.concat (List.map TT.defines decls) in 
         foldl (fun env name -> F.bindtError name scope env) env names
-@
-
 
 <<>>=
 let bindt names ty scope env =
@@ -257,8 +309,6 @@ let doLocalTypes  env body    = doTypes false env (foldLocalTypeDecls body)
 \subsection{Building the value environment}
 % ------------------------------------------------------------------ 
 
-
-
 The top-level scope of a compilation unit includes the top-level
 itself and all sections.  Values declared on either level are visible
 in the entire compilation unit.  Before the static semantics of a
@@ -267,23 +317,22 @@ environment.  Additionally constant declarations are type checked and
 evaluated.  The values for them are also bound in the environment,
 too. 
 
-
 Except for constants all other values like labels, continuations, or
 registers, are completely known at the place where they are defined or
 declared.  Constants can refer to other constants and thus processing
-them takes some care.  Like for type declarations constants must be
+them takes some care.  Like type declarations, constants must be
 processed in a (topological) order such that less dependent
 declarations are processed first. 
 
 Conceptually all declarations and language constructs that create a
-named value could be treated as a declaration -- most of them
-depending on no other.  But to improve performance constant
-declarations are treated separately because only they require a
-topological sort.  We thus traverse the abstract syntax and bind all
-non-constant values into the environment.  Then we collect all
-constant declarations, sort and process them.  Because sorting fails
-in the presence of cyclic declarations and must be re-done, keeping
-the list to be sorted small is also advantageous.
+named value could be treated as a declaration--most of them depending
+on no other.  But to improve performance constant declarations are
+treated separately because only they require a topological sort.  We
+thus traverse the abstract syntax and bind all non-constant values
+into the environment.  Then we collect all constant declarations, sort
+and process them.  Because sorting fails in the presence of cyclic
+declarations and must be re-done, keeping the list to be sorted small
+is also advantageous.
 
 <<building the value environment>>=
 module ValueEnv = struct
@@ -306,55 +355,9 @@ module ValueEnv = struct
 end
 @
 
-% ------------------------------------------------------------------ 
-\subsubsection{Preparing Constant Declarations for Sorting}
-% ------------------------------------------------------------------  
-
-Module [[T]] captures what is important to sort declarations:  A
-declaration defines a name (multiple in general) and refers to other
-names.  As said before we only sort constant declarations. 
-
-<<module TV>>=
-type decl = A.decl * A.region option
-
-let rec defines = function
-    | A.DeclAt(d,r)        , _   -> defines (d,Some r)
-    | A.Const(t,name,expr) , _   -> [name]
-    | _                    , _   -> []
-@
-
-A constant expression can refer to other constant and link-time
-constants.  To find the right topological order it is only important
-to find other constants.  Of course, these can not be syntactically
-distinguished and so we will collect all free variables of an
-expression.  This leads to used names, that are not constants and that
-appear to be unddefined from the perspective of the topological [[sort]]
-function.  But [[sort]] assumes that these undeclared names do not
-depend on any constant---which is correct.
-
-<<>>=
-let rec freeExprVars = function
-    | A.ExprAt(x,r)     -> freeExprVars x
-    | A.Fetch(lvalue)   -> freeLValueVars lvalue
-    | A.BinOp(e1,_,e2)  -> (freeExprVars e1) @ (freeExprVars e2)
-    | A.UnOp(_,e)       -> freeExprVars e
-    | A.PrimOp(_,args)  -> 
-        List.concat (List.map (fun (_,e) -> freeExprVars e) args)
-    | _                 -> []
-<<>>=
-and freeLValueVars = function
-    | A.LValueAt(x,r)   -> freeLValueVars x
-    | A.Mem(_,e,_)      -> freeExprVars e
-    | A.Var(name)       -> [name]
-       
-let rec uses = function
-    | A.DeclAt(d,r)        , _   -> uses (d,Some r)
-    | A.Const(t,name,expr) , _   -> freeExprVars expr
-    | _                    , _   -> []
-@
     
 % ------------------------------------------------------------------ 
-\subsubsection{Binding Value Symbols}
+\subsubsection{Binding non-constant values}
 % ------------------------------------------------------------------ 
 
 Labels and procedures have fixed types that can be entered into the
@@ -411,13 +414,15 @@ let target env = function
 <<>>=
 let imports  scope env t ii         = foldl (import scope t) env ii
 let register scope env (_,t,name,_) = F.bindv name (regt scope (ty env t)) env
+@
+
+The [[datum]] function binds global data-labels and local
+[[stackdata]] labels when called from [[body]].
 
 <<>>=
 let rec datum scope env = function
     | A.DatumAt(x,r)        -> E.catch' env (error r env) (datum scope env) x
-    | A.Label(n)            -> if scope=F.Global then 
-                                  F.bindv n (datat scope) env 
-                               else env
+    | A.Label(n)            -> F.bindv n (datat scope) env 
     | _                     -> env
 @
 
@@ -484,14 +489,14 @@ let locals  env bb   = foldl (body F.Local) env bb
 @ 
 
 % ------------------------------------------------------------------ 
-\subsection{Collecting constant declarations}
+\subsubsection{Collecting constant declarations}
 % ------------------------------------------------------------------ 
 
 Constant declarations are a bit special because every declaration's
 type and value can depend on other declarations. They thus must be
 topologically sorted before their types and values can be computed.
 The following functions walk over the abstract syntax and collect
-constant delclarations in a list. 
+constant declarations in a list. 
 
 <<collecting const declarations>>=
 let rec body r dd = function
@@ -529,7 +534,54 @@ let foldLocalConstDecls b =
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Evaluating constant declarations}
+\subsubsection{Sorting Constant Declarations}
+% ------------------------------------------------------------------  
+
+Module [[T]] captures what is important to sort declarations:  A
+declaration defines a name (multiple in general) and refers to other
+names.  As said before we only sort constant declarations. 
+
+<<module TV>>=
+type decl = A.decl * A.region option
+
+let rec defines = function
+    | A.DeclAt(d,r)        , _   -> defines (d,Some r)
+    | A.Const(t,name,expr) , _   -> [name]
+    | _                    , _   -> []
+@
+
+A constant expression can refer to other constant and link-time
+constants.  To find the right topological order it is only important
+to find other constants.  Of course, these can not be syntactically
+distinguished and so we will collect all free variables of an
+expression.  This leads to used names, that are not constants and that
+appear to be undefined from the perspective of the topological
+[[sort]] function.  But [[sort]] assumes that these undeclared names
+do not depend on any constant---which is correct.
+
+<<>>=
+let rec freeExprVars = function
+    | A.ExprAt(x,r)     -> freeExprVars x
+    | A.Fetch(lvalue)   -> freeLValueVars lvalue
+    | A.BinOp(e1,_,e2)  -> (freeExprVars e1) @ (freeExprVars e2)
+    | A.UnOp(_,e)       -> freeExprVars e
+    | A.PrimOp(_,args)  -> 
+        List.concat (List.map (fun (_,e) -> freeExprVars e) args)
+    | _                 -> []
+<<>>=
+and freeLValueVars = function
+    | A.LValueAt(x,r)   -> freeLValueVars x
+    | A.Mem(_,e,_)      -> freeExprVars e
+    | A.Var(name)       -> [name]
+       
+let rec uses = function
+    | A.DeclAt(d,r)        , _   -> uses (d,Some r)
+    | A.Const(t,name,expr) , _   -> freeExprVars expr
+    | _                    , _   -> []
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Evaluating constant declarations}
 % ------------------------------------------------------------------ 
 
 Constant declarations must be sorted topologically before they can be
@@ -550,11 +602,8 @@ declaration depends on is already processed and the name is bound in
 the environment.  The following functions type check and evaluate
 constants in a single step.  Each function returns a pair of a type
 and a value.
- 
-<<processing const declarations>>=
-@
 
-<<>>=
+<<processing const declarations>>=
 let rec evalFetch env = function
     | A.LValueAt(x,r) -> E.catch (error r env) (evalFetch env) x
     | A.Mem (_,_,_)   -> E.error "memory access in const declaration"
@@ -605,6 +654,12 @@ and evalExpr env = function
 | A.BinOp(l,op,r)                -> evalPrimOp env op [l;r]
 | A.UnOp(op,expr)                -> evalPrimOp env op [expr]
 | A.PrimOp(op,args)              -> evalPrimOp env op (List.map snd args)
+@
+
+A constant declaration must declare a value of type [[bits]]; although
+it is syntactically and type-wise possible to declare a boolean value
+this is not permitted. The optionally provided type must match the
+actual type of the defining expression.
 
 <<>>=
 let doConstDecl scope env = function
@@ -638,7 +693,6 @@ let doConstDecl scope env = function
 let doConstDecls scope env dd =
     foldl (doConstDecl scope) env dd
 @
-
 
 Names defined by declarations found in cycles are bound to [[E.Error]]
 in the (fat) environment.
@@ -676,7 +730,13 @@ let doConst is_global env dd =
                 )
                                                                  in
         bindAll env dd
+@
 
+Procedures open a new scope where they declare they own types and
+constants. These are processed by [[doLocalConst]] which is called
+during the check of the static semantics below.
+
+<<>>=
 let doGlobalConst env program = 
         doConst true  env (CollectConst.foldGlobalConstDecls program)
 let doLocalConst  env body    = 
@@ -687,9 +747,17 @@ let doLocalConst  env body    =
 \subsection{Checking the static semantics}
 % ------------------------------------------------------------------ 
 
+After all global names for types and values are bound in the fat
+environment the static semantics can be checked.  This essentially
+means to walk over the abstract syntax and check all the constraints
+defined by the static semantics.  In case of an error we like to
+report it but continue to check the rest of a program.  The success of
+a check is therefore expressed by an [[Error.error]] value.
 
 <<checking the static semantics>>=
 module Semantics = struct
+    <<utilities>>
+    <<type check expression>>
     <<check>>
 end
 @
@@ -697,19 +765,23 @@ end
 Alignments must be a power of two. This predicates is true, iff its argument
 is a positive power of two.
 
-<<check>>=
+<<utilities>>=
 let rec is2power = function
     | 1 -> true
     | x -> x > 0 && (x mod 2) = 0 && is2power (x/2)
 @
 
-Expressions are type checked.  In [[ValueEnv.EvalCOnst]] constant
+% ------------------------------------------------------------------ 
+\subsubsection{Expression types}
+% ------------------------------------------------------------------ 
+
+Expressions are type checked.  In [[ValueEnv.EvalConst]] constant
 definitions were already type checked and there is some code for this. 
 But the evaluation of constants interlaced type checking and
 evaluations. It is easier and cleaner to implement the type checking
 functions again.
 
-<<>>=
+<<type check expression>>=
 let rec tyFetch env = function
     | A.LValueAt(x,r) -> E.catch (error r env) (tyFetch env) x
     | A.Var(id)       -> ( match F.findv' id env with
@@ -745,9 +817,9 @@ and tyAppl' opTy argTys =
 and tyAppl opTy argTys = E.emap (tyAppl' opTy) argTys
 @
 
-For now we are using the types of the primitive constant operators.
+For now we are using the types of the primitive constant operators. 
 All primitive runtime operators will go into their own module
-[[Primitives]]. So we have to fix the [[lookup]] later.
+[[Primitives]].  So we have to fix the [[lookup]] later.
 
 <<>>=
 and tyPrimOp env op args =
@@ -770,6 +842,10 @@ and tyExpr env = function
     | A.PrimOp(op,args)              -> tyPrimOp env op (List.map snd args)
 @
 
+% ------------------------------------------------------------------ 
+\subsubsection{Checking the static semantics}
+% ------------------------------------------------------------------ 
+
 Checking the static semantics really starts here.  We traverse the
 abstract syntax and check all the constrains.  The overall result is
 either [[E.Ok()]] or [[E.Error]].  The reduce the correctness of a
@@ -779,9 +855,13 @@ module heavily.
 To evaluate constant expressions we use the code from
 [[ValueEnv.EvalConst]]:
 
-<<>>=
+<<check>>=
 let constExpr env e = ValueEnv.EvalConst.evalExpr env e
-    
+@    
+
+Initial values for memory must be either compile-time constants or
+link-time constants.  Currently we only check the types which is not
+enough; have to fix this.
 
 <<>>=
 let rec init env = function
@@ -821,6 +901,11 @@ let memdecl env ty size = function
                  | E.Error                 -> E.Error
                  )
         )
+@
+
+Labels must not be processed because they have been already entered
+into the environment during previous steps.
+        
 <<>>=
 let rec datum env = function
     | A.DatumAt(x,r)   -> E.catch (error r env) (datum env) x
@@ -843,7 +928,7 @@ let checkJumpTarget env x =
     | _       ,E.Error                 ->  E.Error
     | F.Local ,E.Ok(F.Label(F.Code),_) ->  E.Ok ()
     | F.Global,E.Ok(F.Label(F.Code),_) ->  E.error (x^" not a local label")
-    | scope   ,E.Ok(F.Label(_)     ,_) ->  E.error (x^" not a goto  label")
+    | _       ,E.Ok(F.Label(_)     ,_) ->  E.error (x^" not a goto  label")
     | otherwise                        ->  E.error (x^" is not a label")
 <<>>=
 let targets env ts = E.Implode.map (checkJumpTarget env) ts 
@@ -851,9 +936,10 @@ let targets env ts = E.Implode.map (checkJumpTarget env) ts
 <<>>=
 let checkFlowTarget env x =
     match F.findv x env with
-    | _, E.Error                -> E.Error
-    | _, E.Ok(F.Continuation,_) -> E.Ok()
-    | _                         -> E.error (x^" is not a continuation")
+    | _      , E.Error                -> E.Error
+    | F.Local, E.Ok(F.Continuation,_) -> E.Ok()
+    | _      , E.Ok(F.Continuation,_) -> assert false
+    | _                               -> E.error (x^" is not a continuation")
 
 <<>>=
 let rec flow env = function
@@ -867,14 +953,16 @@ let flows env fs = E.Implode.map (flow env) fs
 @
 An \textit{lvalue} must be a memory location or a register. We check
 the types of both sides of an assignment and therefore return the type
-of the \textit{lvalue}. 
+of the \textit{lvalue}. The results of a call can be only assigned to
+registers, but not memory. References to memory in that case are thus
+an error.
 
 <<>>=
 let rec lvalue is_call env lv =
     let align = function
-        | Some a when not (is2power a) -> E.error "alignment not a power of 2"
-        | Some _ (* ok *)              -> E.Ok()
-        | None                         -> E.Ok()
+        | Some a when not (is2power a)  -> E.error "alignment not a power of 2"
+        | Some _ (* properly aligned *) -> E.Ok()
+        | None                          -> E.Ok()
     in match lv with 
     | A.LValueAt (lv, r)   -> E.catch (error r env) (lvalue is_call env) lv
     | A.Var(name)          -> 
@@ -1033,7 +1121,7 @@ and arm t env = function
             ( match E.Raise.list (List.map (range env) rr) with
             | E.Ok([])     -> t
             | E.Ok(t::tt)  -> if    List.for_all ((=) t) tt then E.Ok(t)
-                              else E.error "type inconstencies in ranges"
+                              else E.error "type inconsistencies in ranges"
             | E.Error      -> E.Error
             )
         in
@@ -1172,12 +1260,7 @@ let check file =
         try
             ( Srcmap.sync map 0 (file,1,1)
             ; let ast        = Parse.program scanner lexbuf              in
-              let env0       = F.create map                              in
-              let env1       = TypeEnv.doGlobalTypes env0 ast            in
-              let env2       = ValueEnv.Bind.globals env1 ast            in
-              let env3       = ValueEnv.EvalConst.doGlobalConst env2 ast in
-                    Semantics.program env3 ast 
-                 
+                checkProgram (F.create map) ast   
             )
         with
             | Parsing.Parse_error ->
