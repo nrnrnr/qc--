@@ -178,6 +178,10 @@ let spaces =
   | 'r' -> r
   | 'f' -> f
   | _   -> Impossible.impossible "register space in parameter passing"
+@
+
+Note that the direction of [[growth]] in the overflow block is
+independent of the stack growth. 
 
 let arguments () =
   (* N.B. exc is mutable and must be made fresh each time *)
@@ -195,7 +199,7 @@ let arguments () =
           A.widen (Aux.round_up_to ~multiple_of:64)        *>
           A.sharedregs exc [r 16; r 17; r 18; r 19; r 20; r 21] ~errormsg:fatal
       ] **>
-  A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
+  A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up ~max_alignment:sp_align
 @
         
 \paragraph{C~cut-to parameters}
