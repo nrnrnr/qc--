@@ -726,7 +726,8 @@ combined = 'a T1.combined)
         <<graph coloring builtins>>
 
         let init g =
-            List.iter (fun (k, v) -> V.Table.bind g.V.globals (V.String k) v) graph_coloring_builtins
+          Interp.register_globals graph_coloring_globals    g;
+          Interp.register_module "CG" graph_coloring_module g
 	end
   end
 @
@@ -763,34 +764,31 @@ let dgraph = [dnode1; dnode2; dnode3; dnode4; dnode5; dnode6; dnode7;
               dnode8; dnode9; dnode10; dnodeLiveOut]
 *)
 
-let cgTable = V.Table.create 10
 let ( **-> ) = V.( **-> )
 let cfg = T3'.map
 let cfg = { V.embed = (fun _ -> assert false)
           ; V.project = (fun x -> (T3'.map.V.project x).Proc.cfg)
           }
-let stageFn = V.pfunc (V.value **-> cfg **-> V.result V.bool)
+let stageFn = (V.pfunc (V.value **-> cfg **-> V.result V.bool)).V.embed
 
-let _ = List.iter (fun (k, v) -> V.Table.bind cgTable k v)
-        [ V.string.V.embed "liveness", stageFn.V.embed liveness
-        ; V.string.V.embed "build", stageFn.V.embed build
-        ; V.string.V.embed "makeWorklist", stageFn.V.embed makeWorklist
-        ; V.string.V.embed "simplify", stageFn.V.embed simplify
-        ; V.string.V.embed "coalesce", stageFn.V.embed coalesce
-        ; V.string.V.embed "freeze", stageFn.V.embed freeze
-        ; V.string.V.embed "selectSpill", stageFn.V.embed selectSpill
-        ; V.string.V.embed "assignColors", stageFn.V.embed assignColors
-        ; V.string.V.embed "haveSpilledNodes", stageFn.V.embed haveSpilledNodes
-        ; V.string.V.embed "rewriteProgram", stageFn.V.embed rewriteProgram
+let graph_coloring_module =
+        [ "liveness",         stageFn liveness
+        ; "build",            stageFn build
+        ; "makeWorklist",     stageFn makeWorklist
+        ; "simplify",         stageFn simplify
+        ; "coalesce",         stageFn coalesce
+        ; "freeze",           stageFn freeze
+        ; "selectSpill",      stageFn selectSpill
+        ; "assignColors",     stageFn assignColors
+        ; "haveSpilledNodes", stageFn haveSpilledNodes
+        ; "rewriteProgram",   stageFn rewriteProgram
         ]
 
-    let graph_coloring_builtins =
+let graph_coloring_globals =
         [ "initInfo", T2'.map.V.embed (CGInfo initInfo)
 (*
         ; "dgraph", T3'.map.V.embed dgraph
 *)
-
-        ; "CG", V.table.V.embed cgTable
         ]
 @
 
