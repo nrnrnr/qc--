@@ -25,10 +25,11 @@ module type VALUE = sig
     = Nil
     | Number   of float
     | String   of string
-    | Function of (value list -> value)
+    | Function of (state -> value list -> value)
     | Userdata of userdata
     | Table    of table  (* should use a hash table *)
   and table = (value, value) Hashtbl.t
+  and state = { globals : table; fallbacks : (string, value) Hashtbl.t }
 @ 
 Lua tables are not quite like Caml tables, but they are close.
 <<signatures>>=
@@ -56,6 +57,17 @@ These functions enable us to convert the basic types.
   val int    : int    map
   val bool   : bool   map
   val string : string map
+@ 
+To convert a value of option type, we represent [[None]] as [[Nil]].
+Woe betide you if [[Nil]] is a valid value of your type!
+We won't see it.
+<<signatures>>=
+  val option : 'a map -> 'a option map
+@ 
+If for some reason a Caml function operates on Lua values, we need an
+identity pair.
+<<signatures>>=
+  val value  : value map
 @
 Here is the support for converting functions.
 First, if one wants a Lua function to be curried (as the Caml
@@ -76,13 +88,15 @@ arguments by using the embedding/projection pair produced by
   val ( -->  ) : 'a map  -> 'b map  -> ('a -> 'b) map
   val ( **-> ) : 'a map  -> 'b mapf -> ('a -> 'b) mapf
   val result   : 'a map  -> 'a mapf
-  val func     : 'a mapf -> 'a map
+  val pfunc    : 'a mapf -> 'a map                 (* pure functions *)
+  val func     : 'a mapf -> (state -> 'a) map      (* impure functions *)
 end
 @ Here's an example: we embed the [[String.sub]] function, then apply
 it to some arguments.
 <<tests>>=
-let sub = (func (string **-> int **-> int **-> result string)).embed String.sub
-let apply = function Function f -> f | v -> raise (Projection (v, "function"))
+let sub = (pfunc (string **-> int **-> int **-> result string)).embed String.sub
+let apply = function Function f -> f emptystate
+                   | v -> raise (Projection (v, "function"))
 let check = string.project (apply sub [string.embed "hello"; int.embed 0; int.embed 2])
 let _ = assert (check = "he")
 @ 
@@ -109,10 +123,11 @@ type value
   = Nil
   | Number   of float
   | String   of string
-  | Function  of (value list -> value)
+  | Function  of (state -> value list -> value)
   | Userdata of userdata
   | Table    of table
   and table = (value, value) Hashtbl.t
+  and state = { globals : table; fallbacks : (string, value) Hashtbl.t }
 @ 
 Now, for embedding and projection.  More repeats.
 <<value toplevel>>=
@@ -124,6 +139,8 @@ type 'a mapf = ('a, value list -> value) ep
 Here are the embedding/projection pairs for the simple types.
 There are subtle mismatches between Caml types and Lua types, so I do
 my best to patch them.
+These functions should probably do more generous conversions, e.g.,
+between strings and numbers.
 <<value toplevel>>=
 let string = { embed = (fun s -> String s)
              ; project = function String s -> s | v -> raise (Projection (v, "string"))
@@ -147,6 +164,14 @@ let bool  = { embed = (fun b -> if b then String "t" else Nil)
             ; project = function Nil -> false | _ -> true
             } 
 @ 
+<<value toplevel>>=
+let option t = { embed = (function None -> Nil | Some x -> t.embed x)
+               ; project = (function Nil -> None | v -> Some (t.project v))
+               }
+@
+<<value toplevel>>=
+let value = { embed = (fun x -> x); project = (fun x -> x) }
+@ 
 Here is a simple function from one argument to one result.
 We implement the usual Lua game of ``adjusting'' the argument list.
 <<value toplevel>>=
@@ -154,10 +179,13 @@ let trim1 = function  (* trim list of arguments to a single argument *)
   | [] -> Nil
   | h::t -> h
 
+let const f s = f
+let emptystate = { globals = Hashtbl.create 0; fallbacks = Hashtbl.create 0 }
+
 let (-->) arg result =
   { embed =   (fun f -> 
-               Function (fun args -> result.embed (f (arg.project (trim1 args)))))
-  ; project = function Function f -> fun x -> result.project (f [arg.embed x])
+               Function (fun _ args -> result.embed (f (arg.project (trim1 args)))))
+  ; project = function Function f -> fun x -> result.project (f emptystate [arg.embed x])
                      | v -> raise (Projection (v, "function"))
   } 
 @ 
@@ -183,9 +211,15 @@ let result (r : 'a map) : ('a mapf) =
   ; project = (fun f -> r.project (f []))
   } 
 
-let func (arrow : 'a mapf) : ('a map) =
-  { embed   = (fun f -> Function (arrow.embed f))
-  ; project = (function Function f -> arrow.project f 
+let pfunc (arrow : 'a mapf) : ('a map) =
+  { embed   = (fun (f : 'a) -> Function (fun s -> arrow.embed f))
+  ; project = (function Function f -> (arrow.project (f emptystate) : 'a)
+                      | v -> raise (Projection (v, "function")))
+  } 
+
+let func (arrow : 'a mapf) : ((state -> 'a) map) =
+  { embed   = (fun (f : state -> 'a) -> Function (fun s -> arrow.embed (f s)))
+  ; project = (function Function f -> (fun s -> arrow.project (f s) : state -> 'a)
                       | v -> raise (Projection (v, "function")))
   } 
 @ 
