@@ -25,6 +25,8 @@ $debug 1
 <<Lua compiler configuration>> -- defined in luacompile.nw
 <<Lua command-line driver>>
 
+Frontends = Frontends or { }
+
 --
 -- Global Variables
 --
@@ -202,12 +204,14 @@ Ld.options  = ""            -- options
 Ld.rtstart  = ""            -- initial run-time system
 Ld.objects  = ""            -- object files from this compilation
 Ld.libs     = ""            -- libraries and library options
-Ld.rtend    = ""            -- trailing run-time system
+Ld.rtend    = "-L" .. Config.install_lib .. " -lqc-- " ..
+              Config.install_lib .. "/pcmap.ld"
+                            -- trailing run-time system
 
 function Ld.cmd(exe)
   return
-    format ("%s%s -o %s%s%s%s%s",
-            Ld.path , Ld.options , exe , Ld.rtstart, Ld.objects, Ld.libs, Ld.rtend)
+    format ("%s %s -o %s %s %s %s %s",
+            Ld.path, Ld.options, exe, Ld.rtstart, Ld.objects, Ld.libs, Ld.rtend)
 end
 @
 \subsection{The driver and its supporting functions}

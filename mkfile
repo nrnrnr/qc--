@@ -148,7 +148,7 @@ count:V:
 # delegate to subdirs
 # ------------------------------------------------------------------ 
 
-INST_DIRS=camlburg tools doc src $config_build_interp
+INST_DIRS=camlburg tools doc src runtime $config_build_interp
 
 # SHOULDN'T THESE TARGETS ALSO MK DEPEND???  ---NR
 

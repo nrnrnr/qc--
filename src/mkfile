@@ -453,8 +453,15 @@ ${B}this.mli:D:     main.nw
 ${B}this.in:D:      main.nw
 	$NOTANGLE -L"$LINE" -Rthis.in  $prereq > $target
 
-qc--.lua:D:     luadriver.nw luacompile.nw colorgraph.nw luautil.nw $CALL_LUA
-	$NOTANGLE -L'$file "%F"%N$line %L%N' -Rqc--.lua $prereq > $target
+qc--.lua:DQ:     luadriver.nw luacompile.nw colorgraph.nw luautil.nw $CALL_LUA
+	echo "# building qc--.lua from source and config"
+	echo "Config = Config or { }" > $target
+	for i in install_bin install_lib install_lua install_inc install_man1; do
+	  varname='$'"$i"
+	  dir=`eval "echo $varname"`
+	  echo "Config.$i = '$dir'" >> $target
+	done
+	$NOTANGLE -L'$file "%F"%N$line %L%N' -Rqc--.lua $prereq >> $target
 
 ${B}parse.mly:D:    parser.nw
 	$NOTANGLE -Rparse.mly $prereq > $target

@@ -14,6 +14,7 @@
 
 \clearpage
 
+
 \section{Delivery on promises made in specification}
 
 \emph{Yeah, right.}
@@ -25,17 +26,79 @@ Floating-point literals are availabe in types [[bits32]] and
 Integer literals may be any width up to [[bits64]].
 \end{itemize}
 
+\section{Using the Quick~{\PAL} driver}
+
+Quick~{\PAL} is scripted using version~2.5 of the programming language
+Lua (see \url{lua.org}).
+Most of the benefits of scripting are realized by the developers of
+the compiler, not by end users, but there is one advantage for end
+users: you can easily teach the driver about your source files and
+front end.
+To do so, you need to tell the driver several things:
+how to find your front end, when to use it, and what sort of run-time
+system to link with your code.
+You can do all this by creating a small Lua file.
+
+Here is an example from the Tiger front end.
+We begin by creating a Lua table to hold Tiger-related functions and
+private data:
+<<tiger.lua>>=
+Frontends.Tiger = Frontends.Tiger or { }  -- initialize table
+@ 
+For our next step, here is a convenience function that makes it easier
+to find tiger-related files in \url{/usr/local/lib/tiger}.
+<<tiger.lua>>=
+Frontends.Tiger.dir = "/usr/local/lib/tiger" --- where the front end lives
+
+function Frontends.Tiger.file(name)
+  return Frontends.Tiger.dir .. '/' .. name -- not portable
+end
+@ The [[..]] symbol means string concatentation.
+@
+Our next step is to make sure that the libraries passed to the linker
+include the Tiger run-time system and standard library.
+<<tiger.lua>>=
+Ld.libs = Ld.libs .. " " .. Frontends.Tiger.file("runtime.o") 
+                  .. " " .. Frontends.Tiger.file("stdlib.a")
+@ 
+Finally, we need to teach the driver that a file with extension
+\texttt{.tig} means a Tiger file, and that it should be translated
+into a \texttt{.c--} file using the Tiger front end.
+We do this by defining a function [[CMD.compilertab[".tig"]]],
+which is where the driver will look when compiling a file with
+extension [[".tig"]].
+<<tiger.lua>>=
+function CMD.compilertab[".tig"](file)
+  local tmp = CMD.outfilename(file, ".c--")
+  CMD.exec(Frontends.Tiger.file("tigerc") .. " " .. file .. " > " .. tmp)
+  return tmp
+end
+@ Function [[CMD.exec]] executes a string as a shell command,
+where the call to [[CMD.outfilename]] gives the local variable [[tmp]]
+a file name with extension~[[.c--]]. 
+\emph{Returning} [[tmp]] is key, because it is by returning the
+     [[.c--]] file that we tell the driver to continue translating:
+it will translate the {\PAL} code into assembly language, then object
+code. 
+@
+Finally, so that we can not only compile Tiger code but also
+interpret it or prettyprint it, we assign the same function to two
+more table entries.
+<<tiger.lua>>=
+CMD.interptab[".tig"] = CMD.compilertab[".tig"]
+CMD.prettytab[".tig"] = CMD.compilertab[".tig"]
+@ 
+
+
 \section{Unpleasant surprises}
 
 \subsection{Floating-point computation}
 
 \begin{itemize}
 \item
-Floating-point literals aren't implemented.
-\item
-The manual presents two styles of doing floating-point comparisons,
-but only one style (\texttt{feq}, \texttt{flt}, \ldots) is actually
-implemented---you can't usefully use \texttt{fcmp}.
+For the semantics of floating-point literals, we trust the Objective
+Caml compiler implicitly.
+This means we don't know exactly what guaranteeds are provided.
 \item
 The only rounding modes that are supported are the hardware rounding
 modes of the target machine.

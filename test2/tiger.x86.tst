@@ -7,8 +7,7 @@ Test.results = "tiger/x86"
 
 function Test.tigertest(filename, stdin)
   return { source = filename, stdin = stdin,
-           other = "tiger/tigermain-x86.o tiger/stdlib-x86.a " ..
-                   "../runtime/runtime.a ../runtime/pcmap.ld"}
+           other = "tiger/tigermain-x86.o tiger/stdlib-x86.a" }
 end
 
 -- source files live in src directory
