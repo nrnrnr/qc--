@@ -31,6 +31,7 @@ type context
   = (Rtl.Private.loc -> bool)           (* say if a location is memory-like *)
   * (char -> int -> Rtl.loc)            (* get a temp for space and width *)
 val expand : context -> Rtl.rtl -> Rtl.rtl list
+  (* returns *last* instruction at *head* of list (reverse execution order) *)
 @ 
 Here are some abbreviations and utilities.
 <<expander.ml>>=
@@ -48,6 +49,20 @@ let width e = RU.Width.exp (up e)
 
 let space_for _ = 't'  (* choose a space suitable for an expression *)
 @ 
+To avoid quadratric list append, I use John Hughes's
+continuation-passing list operations.
+<<expander.ml>>=
+let empty = fun l -> l
+let unit x = fun l -> x :: l
+let (@::) x f = fun l -> x :: f l
+let (@@) f1 f2 = fun l -> f1 (f2 l)
+let rec concat = function
+  | [] -> empty
+  | [x] -> x  (* premature optimization is the root of all evil *)
+  | [x; y] -> x @@ y  (* premature optimization is the root of all evil *)
+  | [x; y; z] -> x @@ y @@ z (* premature optimization is the root of all evil *)
+  | h::t -> h @@ concat t
+@ 
 The core of the expander is a function [[to_temp]], which takes an
 expression and returns a pair containing a list of instructions and a
 temporary such that executing those instructions develops the
@@ -60,24 +75,24 @@ let expand ((mem_like : RP.loc -> bool), (temp_for : char -> int -> R.loc)) =
     | RP.Const k ->
         let w = width e in
         let t = temp_for (space_for e) w in
-        (t:R.loc), [R.store t (up e) w]
+        (t:R.loc), unit (R.store t (up e) w)
     | RP.Fetch (l, w) ->
         if mem_like l then
           let t = temp_for (space_for e) w in
           (t:R.loc), rtl (R.store t (up e) w)
         else
-          uploc l, []
+          uploc l, empty
     | RP.App (op, args) ->
         let (temps, is) = List.split (List.map to_temp args) in
         let w = width e in
         let t = temp_for (space_for e) w in
-        t, (R.store t (up (RP.App (op, List.map fetch temps))) w :: List.concat is)
+        t, (R.store t (up (RP.App (op, List.map fetch temps))) w @:: concat is)
   <<other expander functions>>
   and rtl r = match Rtl.Convert.rtl r with
   | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (left, right, w))] ->
       assign left right w
-  | _ -> [r] (* no expansion takes place *)
-  in rtl
+  | _ -> unit r (* no expansion takes place *)
+  in fun r -> rtl r []
 @ It would be good to do something with multiple assignments and with
 guards, but for now I keep things very simple.
 @
@@ -86,7 +101,7 @@ The remaining functions are simple.
 and assign left right w =
   let r, is  = to_temp right in
   let l, is' = loc left in
-  R.store l (R.fetch r w) w :: is @ is'
+  R.store l (R.fetch r w) w @:: is @@ is'
 
 and loc l =
   if mem_like l then
@@ -96,5 +111,5 @@ and loc l =
         uploc (RP.Cell (space, agg, w, fetch addr, prop)), is
     | _ -> assert false (* any mem-like location must be a cell *)
   else
-    uploc l, []
+    uploc l, empty
 
