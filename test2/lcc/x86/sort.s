@@ -811,7 +811,7 @@ Lframe_l131:
 .long 0xffffffd8
 .long 0x4000000b
 .long 0xffffffbc
-.long 0x4000000a
+.long 0xffffffb8
 .long 0xffffffc4
 .long 0xffffffdc
 .long 0xffffffc8

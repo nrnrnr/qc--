@@ -544,7 +544,7 @@ Lframe_l64:
 .long 0x4000000b
 .long 0xffffffc8
 .long 0xffffffe4
-.long 0x4000000a
+.long 0xffffffe8
 .long 0
 .long 0
 .section .pcmap
@@ -569,7 +569,7 @@ Lframe_l65:
 .long 0x4000000b
 .long 0xffffffc8
 .long 0xffffffe4
-.long 0x4000000a
+.long 0xffffffe8
 .long 0
 .long 0
 .section .pcmap
