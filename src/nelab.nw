@@ -315,7 +315,7 @@ undefined and therefore an [[E.error]] type is used.
 let rec evalTy env = function
     | A.TyAt(x,r)    -> E.catch (error r env) (evalTy env) x
     | A.BitsTy(size) -> E.Ok(Types.Bits size)
-    | A.AliasTy(n)   -> snd (F.findt n env)
+    | A.TypeSynonym(n) -> snd (F.findt n env)
 @
 The static semantics of procedures are checked after everything
 else has been checked. The following function returns the list of
@@ -342,17 +342,6 @@ let bindv name x y env = F.bindv name (x,y) env
 let bindt name x y env = F.bindt name (x,y) env 
 let findv name     env = let (_,scope),entry = F.findv name env in scope,entry
 let findt name     env = let (_,scope),entry = F.findt name env in scope,entry
-@
-The fat environment [[Ofenv]] holds informations about the size of
-pointers and words as number of bits.  For type checking purposes the
-[[Types.ty]] type is more adequate.  The following functions
-[[wordTy]] and [[pointerTy]] provide types for words and pointers. 
-When these functions are called types for words and pointers must be
-either established by defaults, or defined by the user using
-[[target]].  An unknown size is an internal error.
-<<auxiliaries>>=
-let wordTy    env = unimp "word"
-let pointerTy env = unimp "pointer"
 @
 Project a [[Rtl.exp]] value to a [[Bits.bits]] value.
 <<auxiliaries>>=
@@ -434,7 +423,7 @@ module Type = struct
     let uses    (_, (t,_    )) =
       let rec u = function 
         | A.BitsTy _    -> []
-        | A.AliasTy x   -> [x]
+        | A.TypeSynonym x   -> [x]
         | A.TyAt (t, _) -> u t in
       u t
   end
@@ -443,7 +432,7 @@ module Type = struct
   let rec evalTy env = function
     | A.TyAt(x,r)    -> E.catch (error r env) (evalTy env) x
     | A.BitsTy(size) -> E.Ok(Types.Bits size)
-    | A.AliasTy(n)   -> snd (F.findt n env)
+    | A.TypeSynonym(n)   -> snd (F.findt n env)
   let eval env (_, (t, _)) = evalTy env t
   let bind = F.bindt
 end
@@ -516,7 +505,7 @@ and freeLValueVars l tail = match l with
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection {Evaluating constant declarations}
+\paragraph  {Evaluating constant declarations}
 % ------------------------------------------------------------------ 
 
 \begin{quote}\it
@@ -597,7 +586,9 @@ know the exact type and thus are able to parse the literal into a
 [[Bits.bits]] value.
 <<utility functions for constants>>=
 and evalExprs env es = E.Raise.list (List.map (evalExpr env) es)
-and evalExpr env = function
+and evalExpr env =
+  let wordTy env = E.Ok (Types.Bits (F.metrics env).Metrics.wordsize) in
+  function
     | A.ExprAt(x,r)       -> E.catch (error r env) (evalExpr env) x
     | A.Int  (n  , Some t)-> literalExpr env n (evalTy env t) B.U.of_string
     | A.Int  (n  , None)  -> literalExpr env n (wordTy env)   B.U.of_string
@@ -613,9 +604,58 @@ and evalExpr env = function
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Binding names for values like procedures and registers}
+\subsection{Building the environment}
 % ------------------------------------------------------------------ 
 
+We assume here the elaboration of expressions and lvalues.
+<<nelab.ml>>=
+let elab lvalue typed_expr srcmap asm ast =
+  E.ematch (Metrics.of_ast srcmap ast.N.target) (fun metrics ->
+    let errorf r =
+      Printf.kprintf (fun s -> E.errorRegionPrt (srcmap, r) s; E.Error) in
+    let pointerty = Types.Bits metrics.Metrics.pointersize in
+    let wordty    = Types.Bits metrics.Metrics.wordsize in
+    <<definitions of name-binding functions>>
+    let env = F.empty srcmap metrics asm in
+    let env = TypeSortBind. bind_sortable_definitions env ast.N.udecls.N.types in
+    let env = ConstSortBind.bind_sortable_definitions env ast.N.udecls.N.constants in
+    let env = foldl bind_import env ast.N.imports in
+    let env = foldl bind_reg env (registers_from 0 ast.N.globals) in
+    let env = foldl bind_code_label env ast.N.code_labels in
+    let env = foldl bind_section_labels env ast.N.sections in
+    let env = check_exports env ast.N.exports in
+    env)
+@ 
+<<definitions of name-binding functions>>=
+let bind_import env (r, ty, imports) = 
+  let import env (foreign,name) =
+    let sym = F.symbol env name in
+    let den = F.Import (Aux.Option.get name foreign, sym) in
+    let ty  = <<convert optional importing [[ty]] as long as it is pointer size>> in
+    F.bindv name (r, E.Raise.right (den, ty)) env in
+  foldl import env imports in
+<<convert optional importing [[ty]] as long as it is pointer size>>=
+match ty with None -> E.Ok pointerty
+| Some t -> E.seq (Type.evalTy env t) (fun t ->
+    if t = pointerty then E.Ok pointerty
+    else errorf r "imported type %s is inconsistent with native pointer type %s"
+        (Types.to_string t) (Types.to_string pointerty))
+@ 
+<<definitions of name-binding functions>>=
+let bind_code_label env (r, n) = unimp "code-label binding" in
+@ 
+<<definitions of name-binding functions>>=
+let bind_reg env _ = unimp "register binding" in
+let registers_from n rs = unimp "register elaboration and numbering" in
+@ 
+<<definitions of name-binding functions>>=
+let bind_section_labels env _ = unimp "section-label binding" in
+@ 
+<<definitions of name-binding functions>>=
+let check_exports env _ = unimp "export checking" in
+@ 
+================================================================
+@ 
 Labels and names for procedures have fixed types.  Types of register
 and import declarations on the other hand can refer to named types
 which may be undefined. A declaration which refers to an undefined type
@@ -624,7 +664,7 @@ is bound to [[Error.Error]].
 let rec ty r env = function
     | A.TyAt(x,r)       -> E.catch (error r env) (ty r env) x
     | A.BitsTy(n)       -> E.Ok(T.bits n)
-    | A.AliasTy(n)      -> snd (F.findt n env)
+    | A.TypeSynonym(n)      -> snd (F.findt n env)
 @
 <<module Env>>=
 type scope = Local | Global
@@ -645,11 +685,6 @@ An imported symbol always has global scope. This was changed during
 the development of the compiler to make the mapping between {\PAL}
 names and assembly level names easier.
 <<module Env>>=
-let import r t env (foreign,name) =
-    let sym    = F.symbol env name in
-    let ventry = E.ematch (ty r env t) (fun t -> F.Import(foreign,sym),t) in
-    F.bindv name (r,ventry)  env
-let imports r env t ii = foldl (import r t) env ii
 @ 
 <<module Env>>=
 let register r scope env = function
@@ -666,7 +701,7 @@ let register r scope env = function
                             ) 
                 ; F.loc   = None
                 } in
-        bindv name (r) (E.ematch (ty r env t)
+        F.bindv name (r, E.ematch (ty r env t)
                           (fun t -> F.Variable i, t)) (F.nextIndex env)
 @
 A [[datum]] label is a [[F.Label(F.Data)]] when the datum belongs to a
@@ -690,9 +725,9 @@ THIS CHANGE WOULD SIMPLIFY THE DATA TYPE.
 <<module Env>>=
 let rec stackdatum r scope env = function
     | A.DatumAt(x,r) -> E.catch' env (error r env) (stackdatum r scope env) x
-    | A.Label(n)     -> bindv n r
+    | A.Label(n)     -> F.bindv n (r,
                                 (E.ematch (pointerTy env) 
-                                    (fun p ->  F.Label(F.Stack(None)),p)) 
+                                    (fun p ->  F.Label(F.Stack(None)),p)))
                                 env
     | _              -> env
 @
