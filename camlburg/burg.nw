@@ -146,17 +146,28 @@ let nonterms rules =
 @
 
 [[Generate]] is the only exported function. It normalizes the rules,
-inferrres the type of every constructor, collects all nonterminals, and
+inferres the type of every constructor, collects all nonterminals, and
 finally triggers code generation.
 
+We sort nonterminals such that names starting with an underscore come
+last. Otherwise names are sorted alphabetically. The hope is, that this
+makes debugging a little bit easier.
+
 <<burg logic>>=
+let cmp x y =
+    if x = "" || y = "" then compare x y else match x.[0], y.[0] with
+    | '_', '_' -> compare x y
+    | '_',  y' -> 1
+    | x' , '_' -> -1
+    | _        -> compare x y
+
 let generate spec ~fd:chan =
     let top def   = Pp.ppToFile chan 77 (Code.Print.toplevel def) in
     let exp def   = Pp.ppToFile chan 77 (Code.Print.exp def) in
     let tydecl d  = Pp.ppToFile chan 77 (Code.Print.tydecl d) in
     let rules     = Norm.rules spec.S.rules in
     let types     = try S.con_types rules with S.Error msg -> error msg in
-    let nts       = List.sort (fun x y -> - (compare x y)) (nonterms rules) in
+    let nts       = List.sort cmp (nonterms rules) in
     let maps      = split rules in
     let nl n      = for i=1 to n do print_newline () done in     
         if rules <> [] then     
