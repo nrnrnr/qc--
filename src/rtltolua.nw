@@ -1,7 +1,10 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*- %
-\section{RTL to Lua}
 
-This file provides functions that convert an RTL to Lua code, readable by 
+% ------------------------------------------------------------------ 
+\section{RTL to Lua}
+% ------------------------------------------------------------------ 
+
+This file provides functions that convert an RTL to Lua code readable by 
 the {\PAL} interpreter.
 
 % ------------------------------------------------------------------ 
@@ -34,44 +37,55 @@ val proc: Proc.t -> unit            (* to stdout, for debugging *)
 % ------------------------------------------------------------------ 
 
 <<ToLua>>=
-module R    = Rtl.Private
-let fprintf = Printf.fprintf
+module R     = Rtl.Private
+let fprintf  = Printf.fprintf
 @ 
 
 <<ToLua>>=
 let quoted        q = "\"" ^ q ^ "\""
+
 let parenthesized p = "("  ^ p ^ ")"
-let luafunc       f args = "CMM." ^ f ^ parenthesized args
+let luafunc       f args = "CMM." ^ f ^ parenthesized args ^ "\n"
 
-let const = function
-    | R.Bool(true)    -> quoted "1"
-    | R.Bool(false)   -> quoted "0"
-    | R.Bits b        -> quoted (string_of_int (Bits.U.to_int b))
+let push   kind c = luafunc ("push_" ^ kind) (quoted c)
+let nopush kind c = c
 
-    | R.Link(sym, w)  -> quoted sym#text
-    | R.Late(name, w) -> quoted name
+let const f c =
+	match c with
+    | R.Bool(true)    -> f "literal" "1"
+    | R.Bool(false)   -> f "literal" "0"
+    | R.Bits b        -> f "literal" (string_of_int (Bits.U.to_int b))
+
+    | R.Link(sym, w)  -> f "symbol" sym#text
+    | R.Late(name, w) -> f "symbol" name
 @ 
 
 <<ToLua>>=
 (* but what about the operator's return type? *)
-let opr op w = luafunc "apply_operator" 
-                       (String.concat "," (List.map string_of_int w))
+let opr op w = 
+  luafunc "apply_operator" 
+          ((quoted op) ^ "," ^ (quoted (String.concat "," 
+						   (List.map (fun b -> "bits" ^ string_of_int b) w))))
+
+
+(* string_of_int w))) *)
 
 let byteorder = function
-  |	Rtl.BigEndian    -> "big"
-  |	Rtl.LittleEndian -> "little"
-  |	Rtl.Identity     -> ""
+  |	Rtl.BigEndian    -> quoted "BIG"
+  |	Rtl.LittleEndian -> quoted "LITTLE"
+  |	Rtl.Identity     -> quoted "NotImplemented"
 
 (* what is identity? *)
 
 let alignment = string_of_int
 
-let rec expr' = function
-    | R.Const c           -> const c
+let rec expr' f e =
+	match e with
+    | R.Const c           -> const f c
     | R.Fetch(loc, _)     -> 
 		let (prefix, func_suffix, args) = location' loc in
 		prefix ^ luafunc ("fetch" ^ func_suffix) args
-    | R.App((op, ww), ee) -> (String.concat "\n" (List.map expr' ee)) ^ 
+    | R.App((op, ww), ee) -> (String.concat "\n" (List.map (expr' push) ee)) ^ 
 		                     opr op ww
 @ 
 
@@ -79,22 +93,22 @@ let rec expr' = function
 and location' = function
     | R.Cell (sp, agg, width, e, ass) ->
 		(match sp with
-        | 'm' -> (expr' e,
+        | 'm' -> (expr' push e,
 				  "",
 				  string_of_int width ^ "," ^ byteorder agg ^ "," ^ 
 				     alignment ass)
-		| 'g' -> ("",
-				  "_global",
-				  expr' e)
-        | s   -> ("", "", ""))
+        | r   -> ("", 
+				  "_register",
+				  "'" ^ String.make 1 r ^ "'," ^ expr' nopush e))
     | R.Var   (name, index, width)     -> ("", "_local", string_of_int index)
-    | R.Slice (w, i, loc)              -> location' loc
+    | R.Slice (w, i, loc)              -> 
+        let (p, s, a) = location' loc in ("-- slice\n" ^ p, s, a)
 
 (* the last case of Cell is not being properly handled *)
 (* NOTE: R.Slice is not yet being properly handled     *)
 
 let (<<) f g = fun x -> f (g x)
-let expr     = expr'     << Rtl.Convert.exp
+let expr     = (expr' nopush) << Rtl.Convert.exp
 let location = location' << Rtl.Convert.loc
 @ 
 
@@ -104,7 +118,7 @@ let effect eff func_prefix =
     | R.Kill loc            -> ""
     | R.Store (loc, exp, w) -> 
 		let (prefix, func_suffix, args) = location' loc in
-		prefix ^ expr' exp ^ 
+		prefix ^ expr' push exp ^ 
 		(luafunc (func_prefix ^ "store" ^ func_suffix) args)
 
 let guard = function
@@ -115,7 +129,7 @@ let print_guarded fd (g, eff) = fprintf fd "%s" (effect eff (guard g))
 
 let rtl' (R.Rtl gg) fd = 
   match gg with
-  | []     -> fprintf fd "-- skip"
+  | []     -> fprintf fd "-- skip\n"
   | _ :: _ -> List.iter (print_guarded fd) gg
 let rtl = rtl' << Rtl.Convert.rtl
 let exp = expr
@@ -135,5 +149,3 @@ let proc proc =
     let iter cfg f  = Cfgutil.fold_fwd cfg (fun n () -> f n) () in
         iter cfg (fun node -> rtl (Cfg4.instr node) stdout)
 @
-
-
