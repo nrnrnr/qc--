@@ -6,10 +6,15 @@
 # ------------------------------------------------------------------ 
 #
 # To add a new module to the library:
-# (1) add it to SRC
-# (2) add it to LIBML		if it is a .ml  file
-# (3) add it to LIBMLI		if it is a .mli file	
-# 
+# (1) add it to LIBML		if it is a .ml  file
+# (2) add it to LIBMLI		if it is a .mli file	
+#
+# If your module must be scanned for dependencies but is not covered
+# by (1) or (2), add it to SCAN
+#
+# If you have trouble with depdencies check LIBML, LIBMLI, and SCAN.
+# Rebuild dependencies with "mk depend".
+
 
 TOP    =        ..
 LIBDIR =        ../lib
@@ -132,39 +137,12 @@ oclua.opt: 	lua.cmxa $CMX
 		$OCAMLO $OCAMLO_FLAGS -o $target unix.cmxa cllib.cmxa $prereq 
 
 # ------------------------------------------------------------------ 
-# source files
-# all sources are in noweb files. We have to extract them before we
-# build the DEPEND file to get the right dependencies. In alphabetical
-# order.
-#
+# Source files
+# The following files are scanned for dependencies. We have to list them
+# here to make sure they get extracted from Noweb files and generated if
+# neccessary.
 
-SRC = 		lua.ml         \
-		lua.mli	       \
-		luaast.ml      \
-		luaast.mli     \
-		luabaselib.ml  \
-		luabaselib.mli \
-		luafloat.ml    \
-		luafloat.mll   \
-		luahash.ml     \
-		luahash.mli    \
-		luainterp.ml   \
-		luainterp.mli  \
-		luaiolib.ml    \
-		luaiolib.mli   \
-		lualib.ml      \
-		lualib.mli     \
-		luamathlib.ml  \
-		luamathlib.mli \
-		luaparser.ml   \
-		luaparser.mli  \
-		luascanner.ml  \
-		luastrlib.ml   \
-		luastrlib.mli  \
-		luavalue.ml    \
-		luavalue.mli   \
-		main.ml        \
-
+SCAN = 		$LIBML $LIBMLI main.ml
 
 # ------------------------------------------------------------------ 
 # tests
@@ -228,8 +206,8 @@ dirs:V:
 	    fi
 	done    
 
-DEPEND: $SRC
-	$OCAMLDEP *.ml *.mli > $target
+DEPEND: $SCAN
+	$OCAMLDEP $prereq > $target
 
 
 <DEPEND
