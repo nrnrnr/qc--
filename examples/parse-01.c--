@@ -39,6 +39,8 @@ section "text"
         float64     j ;
         float32     k;
 
+        j, k = foreign "c++" %%cout (j,k) also cuts to foo;
+
         if foo == bar {
             bar:
             bar:
@@ -60,8 +62,18 @@ section "text"
             loop:
                 j = j+1;
                 goto loop targets loop;
+                goto loop;
+
+                foreign "c" jump bits32[i+j] (j,k) targets foo,bar;
+                foreign "java" (bits32[i]) (j,k) also cuts to foo;
+                foreign "c++" %%cout (j,k) also cuts to foo;
             k = 1; 
         }
+
+        cut to mycont ("x" 1+2, "y" 3+2) also aborts;
+
+        foreign "c" return < a / b > (x, y);
+        return (x);
     }
 
     foo()
