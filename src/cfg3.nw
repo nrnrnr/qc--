@@ -152,9 +152,10 @@ val gm_copyo:   cfg -> actual list -> Automaton2.t -> succ:node -> node * Automa
 
 (* cfg mutators, ensures: not (enumerated cfg) *)
 val gm_delete:                  node -> unit
-val gm_redirect_all:            node -> from:node -> dest:node -> unit
+val gm_redirect_all:            node -> src:node -> dst:node -> unit
 val gm_insert_assign_before:    node -> Rtl.rtl -> unit (* any node *)
 val gm_insert_assign_after:     node -> Rtl.rtl -> unit (* assign node only *)
+val gm_insert_assign_between:   node -> Rtl.rtl -> src:node -> dst:node -> unit
 val gm_enumerate:               cfg -> unit (* post: enumerated cfg *)
 
 (* node observation *)
@@ -202,9 +203,15 @@ val set_rtl:    node -> (Rtl.rtl -> Rtl.rtl) -> unit
     than [[last]]. It is an unchecked run-time error when the supplied
     function uses any graph mutator.
 
-\item[scan\_bwd]]
+\item[scan\_bwd]
     Like [[scan_fwd]], except that the interval in reverse order,
     from [[last]] to [[first]].
+
+\item[prev/next]
+    Returns the previous/next node with respect to node numbering, or
+    [[None]] if there is no such.  It is a checked run-time error to
+    use this function when numbering is \emph{absent}.
+    
 \end{description}
 
 % ------------------------------------------------------------------     
@@ -310,6 +317,13 @@ while traversing a graph.
     placed after the node.  Since the node must be an [[assign]] node,
     it has only one outgoing edge and therefore this operation is well
     defined.  
+
+\item[insert\_assign\_between]
+    Inserts an assign node on every edge leading from [[src]] to
+    [[dst]]. The predecessor/successor relationship of all nodes is
+    updated to reflect the insertion of the assign node on all
+    affected edges. Nothing happens, if no edge between [[src]] and
+    [[dst]] exists.
 
 \item[enumerate]
     Establishes a numbering for all nodes of a {\cfg}; until a
