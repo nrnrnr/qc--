@@ -42,7 +42,7 @@ install: bin/qc--.opt man/man1/qc--.1 man/man1/qc--internals.1
 	install -m664 doc/release.pdf $(DOCDIR)
 
 debian:	mkfile
-	dch -v `date +%Y%m%d` "nightly build"
+	dch -v `cat src/DATE` "nightly build"
 	dpkg-buildpackage -us -uc -rfakeroot -elindig@eecs.harvard.edu
 
 distclean: mkfile
