@@ -48,6 +48,7 @@ module Down = Rtl.Dn
 module Up   = Rtl.Up
 
 let print_debug = false
+let imposs = Impossible.impossible
 
 exception Abort_unknown
 exception Doesn't_need_widening
@@ -400,7 +401,7 @@ let apply_rules soln =
 <<combine solutions>>=
 let mksolutions_lit_bool e = match e with 
 | (RP.Const (RP.Bool b)) -> [{e = e; cost = 0; e' = e; fill = Z; n = 1; w = 1}]
-| _ -> failwith "mksolutions_lit_bool requires a bool const"
+| _ -> imposs "mksolutions_lit_bool requires a bool const"
 
 let mksolutions_lit_bits tau e = match e with
 | (RP.Const (RP.Bits b)) ->
@@ -410,7 +411,7 @@ let mksolutions_lit_bits tau e = match e with
     let ext = if tau = S then Bits.Ops.sx else Bits.Ops.zx in
     {e = e; cost = 0; e' = RP.Const(RP.Bits (ext w' b)); fill = tau; n = n; w = w'} in
   List.map f litwidths
-| _ -> failwith "mksolutions_lit_bits requires a bitvector const"
+| _ -> imposs "mksolutions_lit_bits requires a bitvector const"
 @ 
 
 Assume that each use of a variable is garbage type with index same as width.
@@ -495,7 +496,7 @@ let ast_combine solns = function
   | RP.App((("sx"|"zx" as ext),   ws), [arg]) -> mksolutions_ext ext ws solns
   | RP.App(("lobits",             ws), [arg]) -> mksolutions_trunc ws solns
   | RP.App((opname,               ws), args) -> mksolutions_op solns opname ws args
-  | _  -> failwith "Widen.ast_combine couldn't handle the rtl"
+  | _  -> imposs "Widen.ast_combine couldn't handle the rtl"
 @ 
 
 <<bottom-up transform>>=
@@ -573,17 +574,17 @@ let cross_list_all xss =
 
 <<solution utilities>>=
 let rec minimum_cost = function
-  | [] -> failwith "can't take minimum of empty list"
+  | [] -> imposs "can't take minimum of empty list"
   | [x] -> x
   | x :: rest -> let m = minimum_cost rest in if cost x < cost m then x else m
 
 let rec maximum_cost = function
-  | [] -> failwith "can't take maximum of empty list"
+  | [] -> imposs "can't take maximum of empty list"
   | [x] -> x
   | x :: rest -> let m = minimum_cost rest in if cost x > cost m then x else m
 
 let minimum = function
-  | [] -> failwith "empty list"
+  | [] -> imposs "empty list"
   | x :: rest -> List.fold_left min x rest
 @ 
 WHAT IS THE [[monomorphic]] FUNCTION SUPPOSED TO BE DOING??
@@ -758,12 +759,12 @@ let machine_widths menv opname =
 let find_exts_from w extname =
   let ext_widths = machine_widths m extname in
   List.find_all (function [w1;_] -> w1 = w
-                        | _ -> failwith "ill formed machine env") ext_widths
+                        | _ -> imposs "ill formed machine env") ext_widths
 
 let find_exts_to w extname =
   let ext_widths = machine_widths m extname in
   List.find_all (function [_;w2] -> w2 = w
-                        | _ -> failwith "ill formed machine env") ext_widths
+                        | _ -> imposs "ill formed machine env") ext_widths
 @ 
 
 <<widen.ml>>=
@@ -860,7 +861,7 @@ let widenlocs r =
     | l                        -> l
   and widen_exp = function
     | (RP.Fetch(RP.Var(name, i, vw), fw)) as e ->
-        if vw <> fw then failwith "Shouldn't fetch and var widths be the same?"
+        if vw <> fw then imposs "Shouldn't fetch and var widths be the same?"
         else if vw < targetwidth
         then lo vw (RP.Fetch(RP.Var(name, i, targetwidth), targetwidth))
         else e
@@ -872,7 +873,7 @@ let widenlocs r =
     let eff' = 
       match eff with
       | RP.Store(RP.Var(name, i, vw), r, sw) ->
-          if vw <> sw then failwith "Shouldn't store and var widths be the same?"
+          if vw <> sw then imposs "Shouldn't store and var widths be the same?"
           else if vw < targetwidth
           then RP.Store(RP.Var(name, i, targetwidth),
                         RP.App(("zx", [vw; targetwidth]), [widen_exp r]),
@@ -900,7 +901,7 @@ let width_cost r =
   let rec count_loc c = function
     | RP.Mem(_,_,_,e,_) -> do_count c e
     | RP.Slice(_,_,l)   -> count_loc c l
-    | _                 -> failwith "count_loc can only handle mem and slice"
+    | _                 -> imposs "count_loc can only handle mem and slice"
   and do_count ((sx, zx, lo) as c) = function
     | RP.Const _ -> c
     | RP.Fetch(l, w) -> c
@@ -935,7 +936,7 @@ let app_count r =
   let rec count_loc c = function
     | RP.Mem(_,_,_,e,_) -> do_count c e
     | RP.Slice(_,_,l)   -> count_loc c l
-    | _                 -> failwith "count_loc can only handle mem and slice"
+    | _                 -> imposs "count_loc can only handle mem and slice"
   and do_count c = function
     | RP.Const _     -> c
     | RP.Fetch(l, w) -> c
@@ -1015,11 +1016,11 @@ let badwiden r =
   let targetwidth = 64 in
   let extract1 f x = match x with
   | ([t1'], t') -> f t1' t'
-  | _ -> failwith "expected singleton"
+  | _ -> imposs "expected singleton"
   in
   let extract2 f x = match x with
   | ([t1';t2'], t') -> f t1' t2' t'
-  | _ -> failwith "expected singleton"
+  | _ -> imposs "expected singleton"
   in
   let best_fill1 tau fills =
     try List.find (extract1 (fun t1 t -> t1 = G && t = tau)) fills
@@ -1100,7 +1101,7 @@ let badwiden r =
         if t = tau then r'
         else RP.App((ext_of_fill tau, [n;w']),
                     [RP.App(("lobits", [w';n]), [r'])])
-    | _ -> failwith "find_best_soln couldn't match"
+    | _ -> imposs "find_best_soln couldn't match"
   in
   let rec widen_loc = function
     | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,targetwidth,find_best_soln e Z w targetwidth,a)
