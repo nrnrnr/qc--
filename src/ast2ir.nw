@@ -151,6 +151,11 @@ and lvalue env = function
                              , default_assertion
                              )
 @
+
+% ------------------------------------------------------------------ 
+\paragraph{Expressions}
+% ------------------------------------------------------------------ 
+
 [[expr]] translates an {\small AST} expression into an [[Rtl.expr]].  
 
 <<>>=
@@ -172,7 +177,11 @@ and expr env = function
     | A.BinOp(l,op,r)       -> primOp env op [l;r]
     | A.UnOp(op,e)          -> primOp env op [e]
     | A.PrimOp(op,xs)       -> primOp env op (List.map snd xs) (* ignore hints*)
-    
+@    
+   
+% ------------------------------------------------------------------ 
+\paragraph{Memory declarations}
+% ------------------------------------------------------------------ 
 
 
 <<>>=
@@ -196,17 +205,14 @@ let rec datum env ir = function
     | A.MemDecl(t,m,Some i) -> true
     | A.MemDecl(t,m,None)   -> true
 
-<<>>=
-let formal (h, v, t, n) = true
 
 <<>>=
 let register env ir (v , t, n, reg)  = true
+@
 
-<<>>=
-let range env ir = function
-    | A.Point(e)        -> true
-    | A.Range(e1,e2)    -> true
-@ 
+% ------------------------------------------------------------------ 
+\paragraph{Flow Annotations}
+% ------------------------------------------------------------------     
 
 Flow annotations are translated to continuation bundles of type
 [[Fgraph.cont]].  The [[flows]] function takes a list of flow
@@ -359,6 +365,16 @@ The following statements are just skipped for the moment.
 | A.SwitchStmt (r,e,arms)              -> after
 @
 
+<<unused>>=
+let range env ir = function
+    | A.Point(e)        -> true
+    | A.Range(e1,e2)    -> true
+@ 
+<<>>=
+and arm env ir = function
+    | A.ArmAt(x,_)          -> arm env ir x
+    | A.Case(ranges, stmts) -> true
+
 % ------------------------------------------------------------------ 
 \paragraph{Procedures}
 % ------------------------------------------------------------------ 
@@ -411,17 +427,23 @@ and section env ir = function
     | A.Procedure(p)       -> true
     | A.SSpan( e1, e2, ss) -> true
             
-<<>>=
-and arm env ir = function
-    | A.ArmAt(x,_)          -> arm env ir x
-    | A.Case(ranges, stmts) -> true
     
+% ------------------------------------------------------------------ 
+\paragraph{Toplevel}
+% ------------------------------------------------------------------ 
+
 <<>>=
 let rec toplevel env ir = function
     | A.ToplevelAt(x, _)  -> toplevel env ir x
     | A.Section(name, ss) -> true
     | A.TopDecl(d)        -> true
     | A.TopProcedure(p)   -> true
+@
+
+
+% ------------------------------------------------------------------ 
+\paragraph{Program}
+% ------------------------------------------------------------------ 
 
 <<>>=
 let program env ir ds = true
