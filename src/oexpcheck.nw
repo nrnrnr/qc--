@@ -85,9 +85,9 @@ let rec astFetch env = function
 @
 
 <<oexpcheck.ml>>=
-and primOp env op args =
+and primOp tx env op args =
     let argtys = (E.Raise.list @<< List.map (expr env)) args in
-        E.ematch argtys (fun tys -> fst (Rtlop.Translate.operator op tys))
+        E.ematch argtys (fun tys -> fst (tx op tys))
             
 and expr env exp =
     let optty default cvt x ty =
@@ -109,9 +109,9 @@ and expr env exp =
         | A.Float (x,ty)    -> optty env.wordsize         Bits.U.of_string x ty
         | A.Char  (x,ty)    -> optty (E.Ok(Types.bits 8)) Bits.U.of_int    x ty
         | A.Fetch (v)       -> astFetch env v
-        | A.BinOp (l,op,r)  -> primOp env op [l;r]
-        | A.UnOp  (op,e)    -> primOp env op [e]
-        | A.PrimOp(op,args) -> primOp env op (List.map snd args)
+        | A.BinOp (l,op,r)  -> primOp Rtlop.Translate.binary env op [l;r]
+        | A.UnOp  (op,e)    -> primOp Rtlop.Translate.unary  env op [e]
+        | A.PrimOp(op,args) -> primOp Rtlop.Translate.prefix env op (List.map snd args)
 
 let check = expr
 @

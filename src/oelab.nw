@@ -986,11 +986,11 @@ type check passes we apply the values to the implementation [[f]] of the
 operator and get the result.  Both result and type are returned.
 
 <<module Eval>>=
-and evalPrimOp env op args =
+and evalPrimOp tx env op args =
     E.ematch (E.Raise.list (List.map (evalExpr env) args))
     (fun args ->
         let t,v    = List.split args                 in
-        let rt,opr = Rtlop.Translate.operator op t   in
+        let rt,opr = tx op t   in
         let e      = Simplify.exp (Rtl.app opr v)    in
             ( match D.exp e with
             | RP.Const(RP.Bits _) -> rt, e
@@ -1018,9 +1018,9 @@ and evalExpr env = function
     | A.Char (n  , None)  -> literalExpr env n (E.Ok(T.bits 8)) B.U.of_int
     
     | A.Fetch  (v)        -> evalFetch env v
-    | A.BinOp  (l,op,r)   -> evalPrimOp env op [l;r]
-    | A.UnOp   (op,expr)  -> evalPrimOp env op [expr]
-    | A.PrimOp (op,args)  -> evalPrimOp env op (List.map snd args)
+    | A.BinOp  (l,op,r)   -> evalPrimOp Rtlop.Translate.binary env op [l;r]
+    | A.UnOp   (op,expr)  -> evalPrimOp Rtlop.Translate.unary  env op [expr]
+    | A.PrimOp (op,args)  -> evalPrimOp Rtlop.Translate.prefix env op (List.map snd args)
 @
 
 Names defined by declarations found in cycles are bound to [[E.Error]]
@@ -1831,7 +1831,7 @@ and primStmt env (left,cc,op,args,fs) =
     let env    = foldl (checkFlow false) env fs                     in
     let args   = List.map snd args                                  in
     let t      = E.Raise.list (List.map (tyExpr env) args)          in 
-    let right  = E.ematch t (fun t -> fst (Rtlop.Translate.operator op t)) in
+    let right  = E.ematch t (fun t -> fst (Rtlop.Translate.prefix op t)) in
         E.seq' (F.flagError env) (E.Raise.pair (left,right)) (fun _ -> env)
 @
 

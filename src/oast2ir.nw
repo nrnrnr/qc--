@@ -272,9 +272,9 @@ the RTL at one time.
 \nwaddbox{typed_expr : Ast.exp -> Rtl.exp * Types.t}
 <<mutually recursive nest of [[typed_expr]] and [[lvalue]]>>=
 and typed_expr exp = 
-  let apply op args =
+  let apply tx op args =
     let arges, argtys = List.split (List.map typed_expr args) in
-    let resty,  opr   = Rtlop.Translate.operator op argtys    in
+    let resty,  opr   = tx op argtys    in
     Rtl.app opr arges, resty in
   let literal v width cvt = Rtl.bits (cvt v width) width, Types.Bits width in
   let const default_width = function
@@ -290,9 +290,9 @@ and typed_expr exp =
          literal formats. Update: I have changed the type of A.Char, it
          now contains an integer. -- CL *)
   | A.Fetch(v)        -> rvalue_name_or_mem v
-  | A.BinOp (l,op,r)  -> apply op [l;r]
-  | A.UnOp  (op,e)    -> apply op [e]
-  | A.PrimOp(op,args) -> apply op (List.map snd args)
+  | A.BinOp (l,op,r)  -> apply Rtlop.Translate.binary op [l;r]
+  | A.UnOp  (op,e)    -> apply Rtlop.Translate.unary  op [e]
+  | A.PrimOp(op,args) -> apply Rtlop.Translate.prefix op (List.map snd args)
 @
 
 \paragraph{Special contexts for expressions}

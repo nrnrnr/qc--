@@ -897,8 +897,8 @@ property    :   MEMSIZE INT                    { A.Memsize(str2int $2)      }
 properties  :   properties property            { $2 :: $1 }
             |   /**/                           { []       }
 <<parse.mly>>=
-span        :   SPAN exprAt expr
-                LBRACE sections RBRACE         { $2, $3, rev $5 }
+span        :   SPAN exprAt COMMA expr
+                LBRACE sections RBRACE         { $2, $4, rev $6 }
 <<parse.mly>>=
 datumAt     :   datum                          { A.DatumAt($1,p()) }
 datum       :   ID COLON                       { A.Label $1 }
@@ -1049,7 +1049,7 @@ returnto    :   LT sexprAt SLASH sexprAt GT    { Some($2,$4) }
 stmtAt      :   stmt                           { A.StmtAt($1,p())     }
 stmt        :   SEMI                           { A.EmptyStmt          }
             |   ID COLON                       { A.LabelStmt $1       }
-            |   SPAN exprAt exprAt body        { A.SpanStmt($2,$3,$4) }
+            |   SPAN exprAt COMMA exprAt body        { A.SpanStmt($2,$4,$5) }
             |   nameOrMems EQUAL exprs SEMI       
                 { A.AssignStmt($1,List.map (fun e -> None,e) $3)  }
 
@@ -1148,10 +1148,8 @@ expr:       |   sexpr                          { $1                   }
             |   exprAt GEQ        exprAt       { A.BinOp($1,$2,$3) }
             |   exprAt GT         exprAt       { A.BinOp($1,$2,$3) }
             |   exprAt INFIXOP    exprAt       { A.BinOp($1,$2,$3) }
-            |   TILDE  exprAt  %prec TILDE     { A.UnOp($1,$2)     }
-           /*
+            |   TILDE exprAt %prec TILDE       { A.UnOp($1,$2)     }
             |   MINUS exprAt %prec UMINUS      { A.UnOp($1,$2)     }
-            */
 
 exprs       :   exprs_ optcomma                { rev $1   }
 exprs_      :   exprs_ COMMA exprAt            { $3 :: $1 }

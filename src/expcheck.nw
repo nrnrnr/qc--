@@ -91,11 +91,11 @@ let elab env =
 @
 <<expcheck.ml>>=
 and typed_expr env exp =
-  let apply op args =
+  let apply tx op args =
     E.ematch (E.Raise.list (List.map (typed_expr env) args))
     (fun args ->
       let arges, argtys = List.split args in
-      let resty,  opr   = Rtlop.Translate.operator op argtys    in
+      let resty,  opr   = tx op argtys    in
       Rtl.app opr arges, resty) in
             
   let nofloat x = Impossible.unimp "floating-point literals" in
@@ -117,9 +117,9 @@ and typed_expr env exp =
          literal formats. Update: I have changed the type of A.Char, it
          now contains an integer. -- CL *)
   | A.Fetch (v)       -> rvalue_name_or_mem v
-  | A.BinOp (l,op,r)  -> apply op [l;r]
-  | A.UnOp  (op,e)    -> apply op [e]
-  | A.PrimOp(op,args) -> apply op (List.map snd args)
+  | A.BinOp (l,op,r)  -> apply Rtlop.Translate.binary op [l;r]
+  | A.UnOp  (op,e)    -> apply Rtlop.Translate.unary  op [e]
+  | A.PrimOp(op,args) -> apply Rtlop.Translate.prefix op (List.map snd args)
  
 in typed_expr env
 
@@ -271,11 +271,11 @@ the RTL at one time.
 \nwaddbox{typed_expr : Ast.exp -> Rtl.exp * Types.t}
 <<mutually recursive nest of [[typed_expr]] and [[lvalue]]>>=
 and typed_expr exp = 
-  let apply op args =
+  let apply tx op args =
     E.ematch (E.Raise.list (List.map typed_expr args))
     (fun args ->
       let arges, argtys = List.split args in
-      let resty,  opr   = Rtlop.Translate.operator op argtys    in
+      let resty,  opr   = tx op argtys    in
       Rtl.app opr arges, resty) in
   let literal cvt v width = Rtl.bits (cvt v width) width, Types.Bits width in
   let literal cvt v = emap (literal cvt v) in
@@ -291,8 +291,8 @@ and typed_expr exp =
          literal formats. Update: I have changed the type of A.Char, it
          now contains an integer. -- CL *)
   | A.Fetch(v)        -> rvalue_name_or_mem v
-  | A.BinOp (l,op,r)  -> apply op [l;r]
-  | A.UnOp  (op,e)    -> apply op [e]
-  | A.PrimOp(op,args) -> apply op (List.map snd args)
+  | A.BinOp (l,op,r)  -> apply Rtlop.Translate.binary op [l;r]
+  | A.UnOp  (op,e)    -> apply Rtlop.Translate.unary  op [e]
+  | A.PrimOp(op,args) -> apply Rtlop.Translate.prefix op (List.map snd args)
 <<utilities>>=
 
