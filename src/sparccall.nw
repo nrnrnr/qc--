@@ -19,6 +19,7 @@ module RS = Register.Set
 module A  = Automaton
 module C  = Call
 let sprintf = Printf.sprintf
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 @ 
 <<SPARC calling convention automata in Lua>>=
 A                  = Automaton
@@ -28,11 +29,18 @@ Sparc.cc["C"     ] = Sparc.cc["C"     ] or {}
 @ 
 
 \paragraph{SPARC registers and their conventional uses}
+Cheats, cheats, and more cheats...
 <<sparccall.ml>>=
-let r i = ('r', i, 32)
-let s i = ('s', i, 64)
-let f i = ('f', i, 32)
-let x i = ('x', i, 64)
+let rspace = ('r', Rtl.Identity, Cell.of_size 32)
+let sspace = ('s', Rtl.Identity, Cell.of_size 64)
+let fspace = ('f', Rtl.Identity, Cell.of_size 32)
+let xspace = ('x', Rtl.Identity, Cell.of_size 64)
+let dspace = ('d', Rtl.Identity, Cell.of_size 2)  (* rounding modes *)
+
+let r i = (rspace, i, R.C 1)
+let s i = (sspace, i, R.C 1)
+let f i = (fspace, i, R.C 1)
+let x i = (xspace, i, R.C 1)
 
 let vol_regs    = RS.of_list (List.map r ([1;4]@(Aux.from 20 ~upto:23)))
 let vol_regs2   = RS.of_list (List.map s [0;1;2])
@@ -50,17 +58,10 @@ let saved_nvr temps =
     let j = Talloc.Multiple.loc temps 'j' in
     let u = Talloc.Multiple.loc temps 'u' in
     let q = Talloc.Multiple.loc temps 'q' in
-        function
-        | ('r', _, w) -> t w
-        | ('s', _, w) -> j w
-        | ('f', _, w) -> u w
-        | ('x', _, w) -> q w
-        | (s, i, _) -> Impossible.impossible (sprintf "cannot save $%c%d" s i)
-(*
-  let t sp = Talloc.Multiple.loc temps sp in
-  function
-   | (_  , _, w) -> (t 't') w
-*)
+    fun (((sp, _, _), i, _) as reg) ->
+      let bad () = impossf "cannot save $%c%d" sp i in
+      let w = Register.width reg in
+      (match sp with 'r' -> t | 's' -> j | 'f' -> u | 'x' -> q | _ -> bad()) w
 @ 
 
 Stack pointer is doubleword-aligned.
@@ -68,7 +69,9 @@ Stack pointer is doubleword-aligned.
 Sparc.sp_align  = 16
 Sparc.wordsize  = 32
 
-function reg(sp, i, w) return({ space = sp, index = i, width = w }) end
+function reg(sp, i, w)
+  return { space = sp, index = i, cellsize = w, count = 1 }
+end
 function r(i) return (reg("r", i, Sparc.wordsize)) end
 function f(i) return (reg("f", i, Sparc.wordsize)) end
 function x(i) return (reg("x", i, Sparc.wordsize * 2)) end
@@ -131,10 +134,11 @@ A.register_cc(Backend.sparc.target, "C", Sparc.cc["C"])
 let wordsize  = 32
 let memsize   = 8
 let byteorder = bo
+let mspace    = ('m', byteorder, Cell.of_size memsize)
 let vfp       = Vfp.mk wordsize
 let std_sp_location = RU.add wordsize vfp (R.late "minus frame size" wordsize)
 let mk_automaton block_name automaton () =
-  Block.srelative vfp block_name (A.at ~memsize ~byteorder) automaton
+  Block.srelative vfp block_name (A.at mspace) automaton
 
 let old_end   block = RU.addk wordsize (Block.base block) (Block.size block)
 let young_end block = Block.base block
@@ -201,8 +205,7 @@ let also_cuts_to auto =
 
 let cut_actuals auto base =
     C.outgoing ~growth:growth ~sp:sp
-        ~mkauto:(fun ()  -> (A.at ~memsize:memsize) 
-                             ~byteorder:byteorder ~start:base auto.A.cutto)
+        ~mkauto:(fun ()  -> A.at mspace ~start:base auto.A.cutto)
         ~autosp:(fun r   -> R.fetch sp wordsize)
         ~postsp:(fun _ _ -> R.fetch sp wordsize)
 @ 

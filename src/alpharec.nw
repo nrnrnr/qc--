@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 % vim: ts=8 sw=4 et:
 
 % ------------------------------------------------------------------ 
@@ -120,14 +121,14 @@ symbol:     Link(x, w:int)      {: x#mangled_text       :}
 \paragraph{Registers}
 
 <<rules>>=
-regl:       Reg('r', n:int, w:int)  {: reg  n :}
-fregl:      Reg('f', n:int, w:int)  {: freg n :}
+regl:       Reg('r', n:int)  {: reg  n :}
+fregl:      Reg('f', n:int)  {: freg n :}
 
-pcl:        Reg('c',  0, w:int) {: () :}
-spl:        Reg('r', 30, w:int) {: () :}
-ral:        Reg('r', 26, w:int) {: () :}
-pvl:        Reg('r', 27, w:int) {: () :}
-gpl:        Reg('r', 29, w:int) {: () :}
+pcl:        Reg('c',  0) {: () :}
+spl:        Reg('r', 30) {: () :}
+ral:        Reg('r', 26) {: () :}
+pvl:        Reg('r', 27) {: () :}
+gpl:        Reg('r', 29) {: () :}
 
 
 reg:        Fetch(regl,w:int)   {: regl    :}
@@ -144,7 +145,7 @@ gp:         Fetch(gpl,64)       {: () :}
 \paragraph{Addresses}
 
 <<rules>>=
-meml:       Mem(addr,w:int)     {: addr :}
+meml:       Mem(addr)           {: addr :}
 mem:        Fetch(meml,w:int)   {: meml :}
 
 addr:       reg                 {: sprintf "(%s)" reg       :}
@@ -314,10 +315,8 @@ any : Sx(any)           {: cat [ "Sx(";any;")" ] :}
 any : Zx(any)           {: cat [ "Zx(";any;")" ] :}
 any : Lobits(any)       {: cat [ "Lobits(";any;")" ] :}
 
-any : Mem(any, w:int)   {: cat [ "Mem(";any;",";width w;")" ] :}
-any : Reg(char, n:int, w:int) 
-                        {: cat [ "Reg('";Char.escaped char;"',"
-                               ;width n;","; width w;")" ] :}
+any : Mem(any)          {: cat [ "Mem(";any;")" ] :}
+any : Reg(char, n:int)  {: cat [ "Reg('";Char.escaped char;"',";width n;")" ] :}
 
 any : Store (dst:any, src:any, w:int)
                         {: cat [ "Store(";dst;",";src;",";width w;")" ] :}
@@ -362,9 +361,9 @@ let rec exp = function
     | RP.App((o,_),_)           -> error (sprintf "unknown operator %s" o)
 
 and loc = function
-    | RP.Reg(sp,i,w)            -> conReg sp i w
-    | RP.Mem('m',a,w,e,ass)     -> conMem (exp e) w
-    | RP.Mem(sp,_,_,_,_)        -> error (sprintf "mem-space space %c" sp)
+    | RP.Reg((sp,_,_),i,_)      -> conReg sp i
+    | RP.Mem(('m',_,_),w,e,ass) -> conMem (exp e) 
+    | RP.Mem((sp,_,_),_,_,_)    -> error (sprintf "mem-space space %c" sp)
     | RP.Var   (s,i,w)          -> error (sprintf "var %s found" s)
     | RP.Global(s,i,w)          -> error (sprintf "var %s found" s)
     | RP.Slice _                -> error "cannot handle slice"
@@ -395,15 +394,11 @@ let rtl (RP.Rtl es) = geffects es
 % ------------------------------------------------------------------ 
 
 <<special cases for [[Store]]>>=
-| RP.Store(RP.Reg('c',i,w),r,_)
-  when i = SS.indices.SS.pc   -> conGoto (exp r)
+| RP.Store(RP.Reg(('c',_,_),i,_),r,_) when i = SS.indices.SS.pc   -> conGoto (exp r)
 @
-
 <<helpers for [[exp]] and [[loc]]>>=
-let cmp = 
-    Strutil.from_list ["eq";"ge";"geu";"gt";"gtu";"le";"leu";"lt";"ltu";"ne"] 
+let cmp = Strutil.from_list ["eq";"ge";"geu";"gt";"gtu";"le";"leu";"lt";"ltu";"ne"] 
 @
-    
 <<special cases for [[App]]>>=
 | RP.App(("add", [w]), [x; y])            -> conAdd (exp x) (exp y)
 | RP.App(("sub", [w]), [x; y])            -> conSub (exp x) (exp y)

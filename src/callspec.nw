@@ -24,7 +24,6 @@ type nvr_saver = Talloc.Multiple.t -> Register.t -> Rtl.loc
  * val save_nvrs: Space.t list -> nvr_saver
  *)
 @
-
 \paragraph{Return Address} The return address is the address a procedure
 returns to. It needs to be saved accross calls if it is in a register.
 We have two basic policies:
@@ -32,19 +31,19 @@ We have two basic policies:
 \begin{itemize}
 \item [[KeepInPlace]] leaves the return address where it is, which is
       probably on the stack.
-\item [[SaveToTemp(s)]] save the return address to a temporay of space
-      [[s]].  Upon return, the return address is loaded into a fresh,
-      short-lived temporay in [[s]].   
+\item [[SaveToTemp c]] save the return address to a temporary of the
+     space named~[[c]].
+      Upon return, the return address is loaded into a fresh,
+      short-lived temporary in the space with that name.
 \end{itemize}
 
 The basic policy cannot express to use coventional location for the
 return address.
-
 <<callspec.mli>>=
 module ReturnAddress: sig
     type style  =
-        | KeepInPlace               (* leave RA where it is     *)
-        | SaveToTemp  of Rtl.space  (* save RA in a temporary of this space  *)
+        | KeepInPlace           (* leave RA where it is     *)
+        | SaveToTemp  of char   (* save RA in a temporary of this space  *)
     (* <<suggested functions>> *)
 end     
 @
@@ -75,8 +74,7 @@ type t =
     { name              : string            (* name this CC *)
     ; stack_growth      : Memalloc.growth   (* up or down *)
     ; overflow          : Call.overflow     (* overflow handling *)
-    ; memsize           : int
-    ; byteorder         : Rtl.aggregation
+    ; memspace          : Register.space
     ; sp                : Register.t        (* stack pointer register *)
     ; sp_align          : int               (* alignment of sp *)
     ; all_regs          : Register.Set.t    (* regs visible to allocator *)
@@ -131,35 +129,33 @@ type nvr_saver = Talloc.Multiple.t -> Register.t -> Rtl.loc
 module ReturnAddress = struct
     type style  =
         | KeepInPlace                   (* leave RA where it is     *)
-        | SaveToTemp of Rtl.space       (* save RA in a temporary   *)
+        | SaveToTemp of char            (* save RA in a temporary   *)
 end    
 
 <<type t>>
 @
-
 We want to abstract from the direction of stack growth. Therefore, we
 rather talking about the high and low end of a block we want to talk
 about its young or old end.
-
 <<callspec.ml>>=
 let old_end wordsize growth block = match growth with
-    | Memalloc.Down -> RU.addk wordsize (Block.base block) (Block.size block)
-    | Memalloc.Up   -> Block.base block
+| Memalloc.Down -> RU.addk wordsize (Block.base block) (Block.size block)
+| Memalloc.Up   -> Block.base block
 
 let young_end wordsize growth block = match growth with
-    | Memalloc.Down -> Block.base block
-    | Memalloc.Up   -> RU.addk wordsize (Block.base block) (Block.size block) 
+| Memalloc.Down -> Block.base block
+| Memalloc.Up   -> RU.addk wordsize (Block.base block) (Block.size block) 
 
 
-let wordsize t = match t.sp with (_,_,w) -> w
-let memsize  t = t.memsize
-let byteorder t = t.byteorder
+let wordsize t = match t.sp with ((_,_,ms),_,c) -> Cell.to_width ms c
+let memspace t = t.memspace
+let byteorder t = let (_, b, _) = t.memspace in b
 let vfp wordsize             = Vfp.mk wordsize
 let std_sp_location wordsize = 
     RU.add wordsize (vfp wordsize) (R.late "minus frame size" wordsize)
 
-let mk_automaton wordsize memsize byteorder block_name automaton = fun () ->
-    Block.srelative (vfp wordsize) block_name (A.at ~memsize ~byteorder)
+let mk_automaton wordsize memspace block_name automaton = fun () ->
+    Block.srelative (vfp wordsize) block_name (A.at memspace)
       automaton
 @
 
@@ -180,8 +176,7 @@ allocated by the caller.
 let prolog t auto = 
   let autosp = (fun a -> young_end (wordsize t) t.stack_growth a.A.overflow) in
   C.incoming ~growth:t.stack_growth ~sp:(R.reg t.sp)
-    ~mkauto:(mk_automaton (wordsize t) (memsize t) (byteorder t) 
-              "in call parms" auto.A.call)
+    ~mkauto:(mk_automaton (wordsize t) (memspace t) "in call parms" auto.A.call)
                         
     (* ~autosp:(fun _ -> vfp (wordsize t)) *)
     ~autosp:autosp
@@ -204,7 +199,7 @@ deallocate the parameter block completely.
 <<callspec.ml>>=
 let epilog t auto =
     C.outgoing ~growth:t.stack_growth ~sp:(R.reg t.sp)
-        ~mkauto:(mk_automaton (wordsize t) (memsize t) (byteorder t) 
+        ~mkauto:(mk_automaton (wordsize t) (memspace t) 
                    "out ovfl results" auto.A.results)
         ~autosp:(fun r -> std_sp_location (wordsize t))
         ~postsp:(match t.overflow with
@@ -229,8 +224,7 @@ redundant but we cannot test for it here.
 <<callspec.ml>>=
 let call_actuals t auto =
     C.outgoing ~growth:t.stack_growth ~sp:(R.reg t.sp)
-        ~mkauto:(mk_automaton (wordsize t) (memsize t) (byteorder t) 
-                    "out call parms" auto.A.call)
+        ~mkauto:(mk_automaton (wordsize t) (memspace t) "out call parms" auto.A.call)
         ~autosp:(fun r  -> std_sp_location (wordsize t))
         ~postsp:(fun a sp -> young_end (wordsize t) t.stack_growth a.A.overflow)
 @
@@ -244,11 +238,10 @@ callee-allocated result block.
 let call_results t auto =
     let autosp = (fun a   -> young_end (wordsize t) t.stack_growth a.A.overflow) in
     C.incoming ~growth:t.stack_growth ~sp:(R.reg t.sp)
-        ~mkauto:(mk_automaton (wordsize t) (memsize t) (byteorder t) 
-                    "in ovfl results" auto.A.results)
-        ~autosp
-        ~postsp:(fun _ _ -> std_sp_location (wordsize t)) 
-        ~insp:(fun a _ _ -> autosp a)
+      ~mkauto:(mk_automaton (wordsize t) (memspace t) "in ovfl results" auto.A.results)
+      ~autosp
+      ~postsp:(fun _ _ -> std_sp_location (wordsize t)) 
+      ~insp:(fun a _ _ -> autosp a)
 @
 
 Parameter passing for cuts is independent of parameter passing for
@@ -258,16 +251,14 @@ procedures.
 let also_cuts_to t auto =
     let autosp = (fun r   -> std_sp_location (wordsize t)) in
     C.incoming ~growth:t.stack_growth ~sp:(R.reg t.sp)
-        ~mkauto:(mk_automaton (wordsize t) (memsize t) (byteorder t)
-                    "in cont parms" auto.A.cutto)
-        ~autosp
-        ~postsp:(fun _ _ -> std_sp_location (wordsize t)) 
-        ~insp:(fun a _ _ -> autosp a)
+      ~mkauto:(mk_automaton (wordsize t) (memspace t) "in cont parms" auto.A.cutto)
+      ~autosp
+      ~postsp:(fun _ _ -> std_sp_location (wordsize t)) 
+      ~insp:(fun a _ _ -> autosp a)
 
 let cut_actuals t auto base =
     C.outgoing ~growth:t.stack_growth ~sp:(R.reg t.sp) 
-        ~mkauto:(fun ()  -> (A.at ~memsize:(memsize t)) 
-                             ~byteorder:(byteorder t) ~start:base auto.A.cutto)
+        ~mkauto:(fun ()  -> A.at (memspace t) ~start:base auto.A.cutto)
         ~autosp:(fun r   -> R.fetch (R.reg t.sp) (wordsize t))
         ~postsp:(fun _ _ -> R.fetch (R.reg t.sp) (wordsize t))
 

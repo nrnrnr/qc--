@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 %
 % vim: ts=8 sw=4 et:
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
@@ -56,13 +57,13 @@ let rec const = function
 and kind = function RP.Data -> X.Data | RP.Code -> X.Code | RP.Imported -> X.Imported
 
 let rec loc = function
-    | RP.Mem(s,agg,w,e,a)    -> X.Mem ( Char.code s
-                                       , aggregation agg
-                                       , w
-                                       , exp e
-                                       , a
-                                       )
-    | RP.Reg(sp,i,width)     -> X.Reg(Char.code sp,i,width)                                   
+    | RP.Mem((s,agg,ms),c,e,a) -> X.Mem ( Char.code s
+                                        , aggregation agg
+                                        , Cell.to_width ms c
+                                        , exp e
+                                        , a
+                                        )
+    | RP.Reg((sp,_,ms),i,c)    -> X.Reg(Char.code sp,i,Cell.to_width ms c)
     | RP.Var   (n,index,width) -> X.Var    (n, index, width)
     | RP.Global(n,index,width) -> X.Global (n, index, width)
     | RP.Slice(width,index,l)  -> X.Slice (width, index, loc l)

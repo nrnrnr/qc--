@@ -62,13 +62,13 @@ const  : Bits(b:bits)  [{: guard (Bits.width b = 64) :}]  {: const64 b :}
 \paragraph{Location Types}
 <<rules>>=
 reg   : Fetch(regl, w) {: regl :}
-regl  : Reg('r', n, w) {: "r"   ^ string_of_int n :}
-regl  : Reg('a', n, w) {: "b"   ^ string_of_int n :}
-regl  : Reg('p', n, w) {: "p"   ^ string_of_int n :}
-regl  : Reg('o', n, w) {: "out" ^ string_of_int n :}
+regl  : Reg('r', n) {: "r"   ^ string_of_int n :}
+regl  : Reg('a', n) {: "b"   ^ string_of_int n :}
+regl  : Reg('p', n) {: "p"   ^ string_of_int n :}
+regl  : Reg('o', n) {: "out" ^ string_of_int n :}
 
 freg  : Fetch(fregl, w) {: fregl :}
-fregl : Reg('f', n, w) {: "f" ^ string_of_int n :}
+fregl : Reg('f', n) {: "f" ^ string_of_int n :}
 
 eregl : regl  {: regl :}
 eregl : bregl {: bregl :}
@@ -84,10 +84,10 @@ target : lconst {: lconst ^ "#" :}
 
 \paragraph{Special Locations}
 <<rules>>=
-pcl   : Reg('c', n, w) [{: guard (n = 0 && w = 64):}] {: () :}
+pcl   : Reg('c', n)    [{: guard (n = 0)  :}] {: () :}
 pc    : Fetch(pcl,w)   [{: guard (w = 64) :}] {: () :}
 
-ral   : Reg('a', n, w) [{: guard (n = 0 && w = 64):}] {: () :}
+ral   : Reg('a', n)    [{: guard (n = 0)  :}] {: () :}
 ra    : Fetch(ral,w)   [{: guard (w = 64) :}] {: () :}
 @ 
 
@@ -122,7 +122,7 @@ inst : Store(dst:regl, src:freg, w)
   {: cat ["getf.sig "; dst; " = "; src] :}
 
 -- HACK! rename out -> in register
-inst : Store(dst:eregl, Fetch(Reg('o', n, wr:w), wf:w), w)
+inst : Store(dst:eregl, Fetch(Reg('o', n), wf:w), w)
   {: cat ["mov " ; dst; " = in"; string_of_int n] :}
 
 -- memory load
@@ -294,9 +294,9 @@ and loc l = match l with
   | RP.Mem('f', aff, w, e, ass) -> conFpreg (exp e)
 *)
 
-  | RP.Mem('m', aff, w, e, ass) -> conMem (exp e) w
-  | RP.Reg(sp, i, w)          -> conReg sp i w 
-  | RP.Mem(_, _, _, _, _)     -> error "non-mem, non-reg cell"
+  | RP.Mem(('m',_,_), RP.C c, e, ass) -> conMem (exp e) (8 * c)
+  | RP.Reg((sp,_,_), i, RP.C c)          -> conReg sp i 
+  | RP.Mem(_, _, _, _)     -> error "non-mem, non-reg cell"
   | RP.Var _ | RP.Global _    -> error "var found"
 
   | RP.Slice(w,i,l)           -> unimp "ia64: slice locations"
@@ -308,9 +308,9 @@ and loc l = match l with
 We recognize some special forms of single effects:
 <<code to follow the labeler>>=  
 and effect = function
-  | RP.Store(RP.Reg('c',i, w),r,_) 
+  | RP.Store(RP.Reg(('c',_,_),i, w),r,_) 
     when (i = SS.indices.SS.pc)       -> conGoto (exp r)
-  | RP.Store(RP.Reg('c',i, _), r, w)  -> error ("set $c["^string_of_int i^"]")
+  | RP.Store(RP.Reg(('c',_,_),i, _), r, w)  -> error ("set $c["^string_of_int i^"]")
   | RP.Store(l,e,w)                   -> conStore (loc l) (exp e) w
 
   | RP.Kill(l)                        -> unimp "ia64: kill effect"

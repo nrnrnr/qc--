@@ -323,71 +323,70 @@ Lproc_body_start_l81:
 	movl $0,%edx
 	movl $0,%edx
 	leal i,%edx
-	movl (%edx),%ecx
-	movl $3,%edx
-	movl %ebx,24(%esp)
-	movl %ecx,%ebx
-	movl %ecx,28(%esp)
-	movl %edx,%ecx
-	shll %cl, %ebx
+	movl (%edx),%eax
+	movl $3,%ecx
+	movl %eax,%edx
+	shll %cl, %edx
 	leal a,%ecx
-	movl %ebx,%edx
-	addl %ecx,%edx
+	movl %ebx,24(%esp)
+	movl %edx,%ebx
+	addl %ecx,%ebx
 	movl $-36,%ecx
-	movl %ebp,32(%esp)
+	movl %ebp,28(%esp)
 	leal 36(%esp), %ebp
 	addl %ecx,%ebp
-	fildq (%edx)
+	fildq (%ebx)
 	fistpq (%ebp)
 	leal b,%ebp
-	addl %ebp,%ebx
+	addl %ebp,%edx
 	movl $-28,%ebp
-	leal 36(%esp), %edx
-	addl %ebp,%edx
-	fildq (%ebx)
-	fistpq (%edx)
-	leal f_33,%edx
-	movl $-20,%ebx
-	leal 36(%esp), %ebp
-	addl %ebx,%ebp
+	leal 36(%esp), %ebx
+	addl %ebp,%ebx
 	fildq (%edx)
-	fistpq (%ebp)
-	movl $-20,%ebp
-	leal 36(%esp), %edx
-	addl %ebp,%edx
-	fldl (%edx)
-	movl $-28,%edx
+	fistpq (%ebx)
+	leal f_33,%ebx
+	movl $-20,%edx
 	leal 36(%esp), %ebp
 	addl %edx,%ebp
+	fildq (%ebx)
+	fistpq (%ebp)
+	movl $-20,%ebp
+	leal 36(%esp), %ebx
+	addl %ebp,%ebx
+	fldl (%ebx)
+	movl $-28,%ebx
+	leal 36(%esp), %ebp
+	addl %ebx,%ebp
 	fldl (%ebp)
 	movl $-36,%ebp
-	leal 36(%esp), %edx
-	addl %ebp,%edx
-	fldl (%edx)
+	leal 36(%esp), %ebx
+	addl %ebp,%ebx
+	fldl (%ebx)
 	faddp
 	fcompp
+	movl %eax,32(%esp)
 	fstsw %ax
 	andb $69,%ah
 	xorb $64,%ah
 	jz Ljoin_l89
 Ljoin_l90:
-	movl $0,%edx
-	movl 28(%esp),%ebp
-	cmpl %edx,%ebp
+	movl $0,%eax
+	movl 32(%esp),%ebx
+	cmpl %eax,%ebx
 	je Ljoin_l87
 Ljoin_l88:
-	movl $-20,%edx
-	leal 36(%esp), %ebp
-	addl %edx,%ebp
-	fldl (%ebp)
-	movl $-28,%ebp
-	leal 36(%esp), %edx
-	addl %ebp,%edx
-	fldl (%edx)
-	movl $-36,%edx
-	leal 36(%esp), %ebp
-	addl %edx,%ebp
-	fldl (%ebp)
+	movl $-20,%eax
+	leal 36(%esp), %ebx
+	addl %eax,%ebx
+	fldl (%ebx)
+	movl $-28,%ebx
+	leal 36(%esp), %eax
+	addl %ebx,%eax
+	fldl (%eax)
+	movl $-36,%eax
+	leal 36(%esp), %ebx
+	addl %eax,%ebx
+	fldl (%ebx)
 	fsubp
 	fcompp
 	fstsw %ax
@@ -407,17 +406,17 @@ L.31:
 	movl $0,%eax
 	jmp L.32
 L.32:
-	leal i,%ebp
-	movl %eax,(%ebp)
+	leal i,%ebx
+	movl %eax,(%ebx)
 	movl $0,%eax
-	leal 36(%esp), %ebp
-	movl $0,%edx
 	leal 36(%esp), %ebx
-	addl %edx,%ebx
-	movl (%ebp),%edx
-	movl %edx,(%ebx)
+	movl $0,%ebp
+	leal 36(%esp), %edx
+	addl %ebp,%edx
+	movl (%ebx),%ebp
+	movl %ebp,(%edx)
 	movl 24(%esp),%ebx
-	movl 32(%esp),%ebp
+	movl 28(%esp),%ebp
 	leal 36(%esp), %esp
 	ret
 .section .text

@@ -93,6 +93,7 @@ A number of shorthands are used throughout the implementation.
 <<runtimedata.ml>>=
 type tgt   = ((Rtl.exp -> Automaton.t), Call.t) Target.t
 let imposs = Impossible.impossible
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let unimp  = Impossible.unimp
 
 type label = string
@@ -378,13 +379,12 @@ value in the proper format.
 let emit_loc l =
   let mklink kind s w = Up.exp (RP.Const (RP.Link(s, kind, w))) in
   match Dn.loc (simplify_loc l) with
-  | RP.Mem (_,_,_, RP.Const (RP.Link (sym,kind,_)),_)  ->
+  | RP.Mem (_,_, RP.Const (RP.Link (sym,kind,_)),_)  ->
      emit_link_const (mklink kind) sym
-  | RP.Mem (_,_,_, RP.Const (RP.Bits bs),_)            -> emit_offset   bs
-  | RP.Reg r                                           -> emit_reg  (reg_ix r) 0
-  | RP.Slice (_, i, RP.Reg r)                          -> emit_reg  (reg_ix r) i
-  | _ -> imposs (Printf.sprintf "unexpected location for span data: %s"
-                                (RU.ToString.loc l))  in
+  | RP.Mem (_,_, RP.Const (RP.Bits bs),_)            -> emit_offset   bs
+  | RP.Reg r                                         -> emit_reg  (reg_ix r) 0
+  | RP.Slice (_, i, RP.Reg r)                        -> emit_reg  (reg_ix r) i
+  | _ -> impossf "unexpected location for span data: %s" (RU.ToString.loc l)  in
 let emit_maybe_loc l = match l with
   | Some l -> emit_loc l
   | None   -> emit_dead_loc () in
@@ -445,26 +445,27 @@ let simplify_loc loc =
       | RP.App (_,exps) -> List.fold_left (fun v e -> v || exp e) false exps
       | RP.Const _      -> false
     and loc = function
-      | RP.Mem   (_,_,_,e,_) -> exp e
-      | RP.Slice (_,_,l)     -> loc l
-      | _                    -> false in
+      | RP.Mem   (_,_,e,_) -> exp e
+      | RP.Slice (_,_,l)   -> loc l
+      | _                  -> false in
     exp e in
   let rec flatten offset l = match l with
-    | RP.Mem (s,agg,w,e,ass) when is_vfp_offset e ->
-       let w = Rtlutil.Width.exp (Up.exp e) in
-       check offset; check w;
-       (*V.eprintf verb "Adding an offset %d of width %d\n" offset w;*)
-       let e' = Rtlutil.add w (R.app (R.opr "sub" [w]) [Up.exp e; vfp])
-                              (R.bits (Bits.S.of_int offset w) w) in
-       R.mem (Up.assertion ass) s agg w (Simplify.exp e')
-    | RP.Mem (s,agg,w,e,ass) -> (* not a VFP offset *)
-       R.mem (Up.assertion ass) s agg w (Simplify.exp (Up.exp e))
-    | RP.Reg (_,_,w) ->
-       check w; check offset;
-       let l_up = Up.loc l in
-       if offset <> 0 then
-         R.slice w offset l_up
-       else l_up
+    | RP.Mem ((_,_,mcell as ms),_,e,ass) when is_vfp_offset e ->
+        let w = Rtlutil.Width.exp (Up.exp e) in
+        check offset; check w;
+        (*V.eprintf verb "Adding an offset %d of width %d\n" offset w;*)
+        let e' = Rtlutil.add w (R.app (R.opr "sub" [w]) [Up.exp e; vfp])
+                               (R.bits (Bits.S.of_int offset w) w) in
+        R.mem (Up.assertion ass) ms (Cell.to_count mcell w) (Simplify.exp e')
+    | RP.Mem (ms,w,e,ass) -> (* not a VFP offset *)
+        R.mem (Up.assertion ass) ms w (Simplify.exp (Up.exp e))
+    | RP.Reg r ->
+        let w = Register.width r in
+        check w; check offset;
+        let l_up = Up.loc l in
+        if offset <> 0 then
+          R.slice w offset l_up
+        else l_up
     | RP.Slice (_,i,l)       -> flatten (offset + i) l
     | RP.Var _ | RP.Global _ -> Up.loc l in
   flatten 0 (Dn.loc loc) in
@@ -480,5 +481,5 @@ The run-time system needs to know how the register are mapped to constants.
 let print_reg_map tgt =
   let (n, map) = tgt.T.reg_ix_map in
   Printf.printf "Target has %d registers:\n" n;
-  RM.iter (fun (s,i,_) n -> Printf.printf "  %c[%d] -> %d\n" s i n) map
+  RM.iter (fun ((s,_,_),i,_) n -> Printf.printf "  %c[%d] -> %d\n" s i n) map
 @

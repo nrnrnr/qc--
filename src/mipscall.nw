@@ -22,13 +22,11 @@ val cconv :
   string -> Automaton.cc_spec ->
   Call.t
 @
-
 The book \emph{mips Risc Architecture} by Gerry Kane, published by
 Prentice Hall describes the calling convention. However, the calling
 convention specification on page D-22 seens outdated in comparision to
 what compiler expect.  A better source for the calling convention is the
 LCC compiler, which implements it in this short function:
-
 <<implementation of {\mips} calling convention in LCC>>=
 static Symbol argreg(int argno, int offset, int ty, int sz, int ty0) {
         assert((offset&3) == 0);
@@ -44,16 +42,13 @@ static Symbol argreg(int argno, int offset, int ty, int sz, int ty0) {
                 return ireg[(offset/4) + 4];
 }
 @
-
 [[argno]] is the zero-based index of the parameter, and [[ty0]] the type
 of argument zero. Offset is the total size of all preceding arguments,
 each a multiple of 4 bytes. This is crucial, because the last line
 chooses a register not by the argument index, but by the total size of
 preceding arguments.
-
-% ------------------------------------------------------------------ 
+@
 \subsection{Implementation of {\mips} calling conventions}
-% ------------------------------------------------------------------ 
 
 <<mipscall.ml>>=
 module A  = Automaton
@@ -64,11 +59,8 @@ module RS = Register.Set
 module RU = Rtlutil
 module T  = Target
 
-let impossible = Impossible.impossible
-let unimp      = Impossible.unimp
-let sprintf    = Printf.sprintf
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 @
-
 \paragraph{Registers}
 
 A non-volatile register can be used in a procedure if its initial value
@@ -80,10 +72,14 @@ allocation.
 The return address [[ra]] is volatile.
 It can be used for register allocation, but the call instruction
 always writes it (and it is live on entry).
-
 <<mipscall.ml>>=
-let r n     = ('r',n,32)
-let f n     = ('f',n,32)
+let byteorder = R.LittleEndian         
+let mspace = ('m', byteorder, Cell.of_size 8)
+let rspace = ('r', byteorder, Cell.of_size 32)
+let fspace = ('f', byteorder, Cell.of_size 32)
+
+let r n     = (rspace, n, R.C 1)
+let f n     = (fspace, n, R.C 1)
 let vfp     = Vfp.mk 32
 @
 Calling conventions treat floating point registers specially; therefore
@@ -101,9 +97,9 @@ let saved_nvr temps =
     let t = Talloc.Multiple.loc temps 't' in
     let u = Talloc.Multiple.loc temps 'u' in
         function
-        | ('r',_,w) -> t w
-        | ('f',_,w) -> u w
-        | (s  ,i,_) -> impossible (sprintf "cannot save $%c%d" s i)
+        | (('r', _, _),_,_) as reg -> t (Register.width reg)
+        | (('f', _, _),_,_) as reg -> u (Register.width reg)
+        | ((s, _, _), i, _) -> impossf "cannot save $%c%d" s i
 @
 And in Lua:
 <<MIPS calling convention automata in Lua>>=
@@ -115,27 +111,26 @@ Mips.cc["C"] = Mips.cc["C"] or {}
 Mips.sp_align  = 16
 Mips.wordsize  = 32
 
-function reg(sp,i) return({ space = sp, index = i, width = Mips.wordsize }) end
+function reg(sp,i) 
+  return { space = sp, index = i, cellsize = Mips.wordsize, count=1 }
+end
 function f(i) return (reg("f", i)) end
 function r(i) return (reg("r", i)) end
 
 Mips.vol_fp  = (f(0) .. f(18))
 Mips.vol_int = (r(2) .. r(15)) .. { r(24), r(25), r(31) }
 @ 
-
 \paragraph{Conventions}
 
 Stack pointer alignment is tricky. It is not mentioned in the
 architecture manual and also seems to depend on the operating system.
 The SGI IRIX 5.x requires 8-byte alignment, SGI IRIX 6.x 16-byte
 alignment. LCC therefore always uses 16-byte alignment.
-
 <<mipscall.ml>>=
 let ra        = R.reg (r 31)            (* return address *)
 let sp        = R.reg (r 29)            (* stack pointer  *)
 let spval     = R.fetch sp 32
 let growth    = Memalloc.Down           (* stack grows down *)
-let byteorder = R.LittleEndian         
 let sp_align  = 16                      (* SP always 16-byte aligned *)
 
 let std_sp_location = 
@@ -143,13 +138,11 @@ let std_sp_location =
 
 let ( *> ) = A.( *> )
 
-let badwidth (msg:string) (w:int) = 
-    impossible (sprintf "unsupported (rounded) width %d in MIPS: %s" w msg)
+let badwidth (msg:string) (w:int) =
+  impossf "unsupported (rounded) width %d in MIPS: %s" w msg
 
-let fatal _ = 
-    impossible "fatal error in MIPS automaton"
+let fatal _ = impossf "fatal error in MIPS automaton"
 @
-
 \paragraph{C~return results}
 
 A C~function returns an integer (up to 64 bits wide) in [[$2]] and
@@ -165,7 +158,6 @@ Mips.cc["C"].results =
              }
   }
 @ 
-
 \paragraph{C~procedure parameters}
 
 <<MIPS calling convention automata in Lua>>=
@@ -205,7 +197,6 @@ let prefix16bytes result =
 let postprocess cconv =
     { cconv with A.call = A.postprocess cconv.A.call prefix16bytes }
 @
-
 \paragraph{C~cut-to parameters}
 
 Since this is strictly internal calling convention, we can use whatever
@@ -219,19 +210,15 @@ Mips.cc["C"].cutto =
   , A.overflow { growth = "up", max_alignment = Mips.sp_align }
   }
 @
-
-% ------------------------------------------------------------------ 
 \subsection{Putting it together} 
-% ------------------------------------------------------------------ 
 
 Attention: the current implementation of [[Callspec]] cannot express the
 {\mips} calling convention because of the reserved 16-byte block that is
 part of the frame layout. The [[Callspec]] implementation assumes that
 an overflow block is always at the extreme end of a frame, which is not
 the case here.
-
 <<transformations>>=
-let autoAt = A.at ~memsize:8 ~byteorder in
+let autoAt = A.at mspace in
 let prolog =
   let autosp = (fun _  -> vfp) in
   C.incoming ~growth ~sp
@@ -279,7 +266,7 @@ let c ~return_to cut stage =
     <<transformations>>
     let return k n ~ra =
         if k = 0 & n = 0 then return_to ra
-        else impossible "alternate return using C calling convention" in
+        else impossf "alternate return using C calling convention" in
     { C.name            = "C"
     ; C.overflow_alloc  = { C.parameter_deallocator = C.Caller
                           ; C.result_allocator      = C.Caller
@@ -311,17 +298,14 @@ A.register_cc(Backend.mips.target, "C" , Mips.cc["C"])
 A.register_cc(Backend.mips.target, "C'", Mips.cc["C"])
 A.register_cc(Backend.mips.target, "C--", Mips.cc["C"])
 @ 
-
-% ------------------------------------------------------------------ 
 \subsection{Implementation using [[Callspec]]}
-% ------------------------------------------------------------------ 
 
 <<mipscall.ml>>=
 module CS = Callspec
 
 let rtn return_to k n ~ra =
     if k = 0 & n = 0 then return_to ra
-    else impossible "alternate return using C calling convention" 
+    else impossf "alternate return using C calling convention" 
 @
 <<callspec specification>>=
 let spec = 
@@ -330,8 +314,7 @@ let spec =
         ; CS.overflow       = CS.overflow C.Caller C.Caller
         ; CS.sp             = r 29
         ; CS.sp_align       = sp_align
-        ; CS.memsize        = 8
-        ; CS.byteorder      = byteorder
+        ; CS.memspace       = mspace
         ; CS.all_regs       = RS.of_list (List.concat [nvl_int; nvl_fp;
                                                        vol_int; vol_fp])
         ; CS.nv_regs        = RS.of_list (nvl_int @ nvl_fp)
@@ -339,7 +322,6 @@ let spec =
         ; CS.ra             = (ra, CS.ReturnAddress.SaveToTemp 't')
         }
 @
-
 <<mipscall.ml>>=
 let c' ~return_to cut auto =
     <<callspec specification>> in
@@ -349,8 +331,6 @@ let c' ~return_to cut auto =
         ;   C.sp_on_unwind = (fun e -> RU.store sp e)
         }
 @
-
-
 And finally our lookup function.
 <<mipscall.ml>>=
 let cconv ~return_to cut ccname stage = 

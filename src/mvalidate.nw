@@ -27,8 +27,7 @@ let rtl t r =
   let imposs = Impossible.impossible in
   let remove_bits = function
     | Types.Bits n -> n
-    | Types.Bool   -> 1
-  in
+    | Types.Bool   -> 1 in
   let m  = t.Target.machine_env.Target.ops in
   let m  = List.map (fun (s, bs) -> (s, List.map remove_bits bs)) m in
   let w  = t.Target.wordsize in
@@ -38,8 +37,7 @@ let rtl t r =
   let name   = t.Target.name in
   let machine_widths opname =
     let all = List.find_all (fun (opname',_) -> opname = opname') m in
-    List.map (fun (opname, ws) -> ws) all
-  in
+    List.map (fun (opname, ws) -> ws) all in
   let xy_or_z tostr xyz =
     match List.rev xyz with
     | []    -> impossf "No literal sizes specified for target '%s'" name
@@ -47,23 +45,22 @@ let rtl t r =
     | z::yx ->
         let xy  = List.rev (List.map tostr yx) in
         let xy' = String.concat ", " xy in
-          xy'^" or "^tostr z
-  in
+          xy'^" or "^tostr z in
   let sprintf = Printf.sprintf in
   let reject fmt = Printf.kprintf (fun s -> raise (RTLInvalid s)) fmt in
+  let spacename (s, _, _) = s in
   let reg s n p1 p2 =
     let space =
-      try List.find (fun x -> x.Space.space = s) spaces
-      with Not_found -> reject "%s" (p1 s name)
-    in
+      try List.find (fun x -> spacename x.Space.space = s) spaces
+      with Not_found -> reject "%s" (p1 s name) in
     List.mem n space.Space.widths
-    || reject "%s" (p2 s (xy_or_z string_of_int space.Space.widths) n)
-  in
+    || reject "%s" (p2 s (xy_or_z string_of_int space.Space.widths) n) in
   let rec loc = function
-    | RP.Mem(_,_,n,e,_) -> exp e (* not clear what else to do *)
-    | RP.Reg(s,_,n) as e ->
-        reg s n (sprintf "Space '%c' not found in target '%s'")
-                (sprintf "Space '%c' only supports width %s; asked for %d")
+    | RP.Mem(_,n,e,_) -> exp e (* not clear what else to do *)
+    | RP.Reg((s,_,cell),_,c) as e ->
+        reg s (Cell.to_width cell c)
+          (sprintf "Space '%c' not found in target '%s'")
+          (sprintf "Space '%c' only supports width %s; asked for %d")
     | RP.Var(x,_,n) -> n <= w || n mod t.Target.memsize == 0 
       || reject 
           "variable %s of type bits%d should either be at most %d bits wide or else have a width a multiple of %d bits" x n w t.Target.memsize

@@ -34,14 +34,10 @@ module M : sig
   val is_instruction : Rtl.rtl -> bool
   val to_asm         : Rtl.rtl -> string
 end
-val fpcc      : Rtl.loc (* the FPU condition codes *)
-val fpustatus : Rtl.loc (* the FPU status word *)
 @ 
 <<x86rec.mlb>>=
 %head {: 
   <<modules>> 
-  let fpustatus = Rtl.reg ('e', 1, 16)
-  let fpcc = Rtl.slice 3 ~lsb:8 fpustatus (* ignores bit 14 == C3 [probably OK] *)
   module M = struct
     <<code to precede the labeler>>
 :}
@@ -121,11 +117,12 @@ val fpustatus : Rtl.loc (* the FPU status word *)
 @
 A few abbreviations.
 <<modules>>=
+module Rg = X86regs
 module RP = Rtl.Private
 module RU = Rtlutil
 module SS = Space.Standard32
-module Down  = Rtl.Dn      (* Convert Down  to private repr. *)
-module Up    = Rtl.Up       (* Convert Up    to abstract repr. *)
+module Dn = Rtl.Dn      (* Convert Dn  to private repr. *)
+module Up = Rtl.Up       (* Convert Up    to abstract repr. *)
 @
 If something goes wrong during recognition, we raise this exception.
 It's different from merely ``unrecognized;'' it means something
@@ -196,8 +193,8 @@ let hregname r = sprintf "%%%ch" r.[2]  (* pass %eax, get back %ah *)
 @ 
 \subsection{Other machine info}
 <<code to precede the labeler>>=
-let fpcc = Down.loc fpcc
-let fpustatus = Down.loc fpustatus
+let fpcc = Dn.loc Rg.fpcc
+let fpustatus = Dn.loc Rg.fpustatus
 @     
 
 
@@ -211,8 +208,9 @@ symbol or a monomorphic terminal symbol.
 We distinguish terminals from nonterminals by name, so we have to
 announce the names of the nonterminals.
 <<names of types of terminals>>=
-n w bits symbol
+n w c bits symbol
 @ Terminals [[n]] and [[w]] are an index and width; both are integers.
+Terminal [[c]] is an integer count (of cells).
 Terminal [[bits]] is a constant of types [[Bits.bits]]; terminal
 [[symbol]] is a string.
 @
@@ -284,21 +282,23 @@ We can't refer to just any location in memory, but only to one that is
 accessible using the standard addressing modes.
 We've omitted the indexed modes, which use two registers.
 <<rules>>=
-regl : Reg('r', n, w) {: regname w n :}
-regabcdl : Reg('r', n, w) [{: guard (n < 4) :}] {: regname w n :}
-regl8: Reg('r', n, w) {: regname 8 n :}
+bare_reg : Reg('r', n) {: n :}
+regl : bare_reg {: regname 32 bare_reg :}
+bare_regabcd : Reg('r', n) [{: guard (n < 4) :}] {: n :}
+regabcdl : bare_regabcd {: regname 32 bare_regabcd :}
+regl8: Slice(w, i:n, bare_regabcd) [{: guard (w=8) :}] {: Rg.regname8 i bare_regabcd :}
 regl8H  : Slice(w, i:n, regabcdl) [{: guard (w=8 && i=8) :}] {: hregname regabcdl :}
-regl_ecx: Reg('r', n, rw:w) [{: guard (n=1) :}] {: () :}
+regl_ecx: Reg('r', n) [{: guard (n=1) :}] {: () :}
 regpairl : RegPair(reg1:regl,reg2:regl) {: reg2 :}
-meml : Mem(reg,  w)   {: "(" ^ reg ^ ")" :}  -- indir
-meml : Mem(disp, w)   {: disp :}
-meml : Mem(lconst, w) {: lconst :}
+meml : Mem(reg,  c)   {: "(" ^ reg ^ ")" :}  -- indir
+meml : Mem(disp, c)   {: disp :}
+meml : Mem(lconst, c) {: lconst :}
 disp : Add(reg, const) {:  const ^ "(" ^ reg ^ ")" :}
 disp : Add(const, reg) {:  const ^ "(" ^ reg ^ ")" :}
 @ 
 <<rules>>=
-regl : Reg('t', n, w) {: sprintf "temporary register %d of width %d" n w :}
-vfpl : Reg('V', n, w) [{: guard (n=0 && w=32) :}] {: () :}
+regl : Reg('t', n) {: sprintf "temporary register %d" n :}
+vfpl : Reg('V', n) [{: guard (n=0) :}] {: () :}
 esp  : Fetch(espl, w)  {: espl   :}
 vfp  : Fetch(vfpl, w)  {: vfpl   :}
 @ 
@@ -316,6 +316,8 @@ reg8    : Lobits(Fetch(regl8, w), nw:w) [{: guard (nw=8) :}] {: regl8     :}
 reg8H   : BitExtract(eight, regabcd, w) [{: guard (w=8) :}] {: hregname regabcd :}
 reg8H   : Fetch(regl8H, w) {: regl8H :}
 reg_cl  : Lobits(Fetch(regl_ecx, w), nw:w) [{: guard (nw=8) :}] {: () :}
+reg_cll : Slice(sw:w, n, regl_ecx) [{: guard (sw=8 && n=0) :}] {: () :}
+reg_cl  : Fetch(reg_cll, w)  {: () :}
 regpair : Fetch(regpairl, w) {: regpairl :}
 mem     : Fetch(meml    , w) {: meml     :}
 eaddr   : Fetch(eaddrl  , w) {: eaddrl   :}
@@ -390,7 +392,7 @@ inst : Store(dst:regl, Zx(Fetch(src:eaddrl, nw:w)), w)
   {: cat ["movz"; suffix nw; suffix w; " "; src; ","; dst] :}
 
 -- moving low bits (relies on proper name of source)
-inst : Store(dst:eaddrl, Lobits(Fetch(Reg('r', n, rw:w), fw:w), lw:w), nw:w)
+inst : Store(dst:eaddrl, Lobits(Fetch(Reg('r', n), fw:w), lw:w), nw:w)
   {: cat ["mov"; suffix nw; " "; regname nw n; ","; dst] :}
 
 inst : Store(dst:regl, Lobits(src:mem, sw:w), nw:w)
@@ -400,8 +402,8 @@ inst : Store(dst:regl, Lobits(src:mem, sw:w), nw:w)
 inst : Par(Llr(ecx1:ecx, "sub", n0:const, w1:w),
        Par(Llr(esi1:esi, "sub", n1:const, w2:w),
        Par(Llr(edi1:edi, "sub", n2:const, w3:w),
-       Par(Store(Mem(Fetch(esi2:esi, w4:w), w11:w),
-                 Fetch(Mem(Fetch(edi2:edi, w5:w), w6:w),w7:w),w8:w),
+       Par(Store(Mem(Fetch(esi2:esi, w4:w), c11:c),
+                 Fetch(Mem(Fetch(edi2:edi, w5:w), c6:c),w7:w),w8:w),
            Guarded(Fetch(ecx2:ecx,w9:w),Goto(Fetch(eip, w10:w)))
           ))))
   {: "rep movsb" :}
@@ -507,8 +509,8 @@ Call, [[cut to]],  and return require manipulating the stack pointer
 [[esp]] and 
 program counter [[eip]].
 <<rules>>=
-espl : Reg('r', n, w) [{: guard (n = 4 && w = 32):}]                {: () :}
-eip  : Reg('c', n, w) [{: guard (n = SS.indices.SS.pc && w = 32):}] {: () :}
+espl : Reg('r', n) [{: guard (n = 4):}]                {: () :}
+eip  : Reg('c', n) [{: guard (n = SS.indices.SS.pc):}] {: () :}
 @ 
 The [[cut to]] is supposed to look atomic, but it is a sequence of two
 instructions. 
@@ -523,8 +525,8 @@ pop  : Store(espl, Add(esp, four), sw:w) {: () :}
 pop  :  Llr(espl, "add", four, w) {: () :}
 push : Llr(espl, "sub", four, w) {: () :}
 push : Llr(espl, "add", minusfour, w) {: () :}
-stacktop  : Mem(esp, mw:w)            [{:guard (mw = 32):}] {: () :}
-stacknext : Mem(Sub(esp, four), mw:w) [{:guard (mw = 32):}] {: () :}
+stacktop  : Mem(esp, mc:c)            [{:guard (mc = 4):}] {: () :}
+stacknext : Mem(Sub(esp, four), mc:c) [{:guard (mc = 4):}] {: () :}
 inst : Par(Goto(Fetch(stacktop, w)),pop) 
         {: "ret" :}
 inst : Par(Goto(eaddr),Par(Store(stacknext, Fetch(eip, x:w), y:w), push))
@@ -545,7 +547,7 @@ zero  : Bits(b:bits) [{: guard (Bits.Ops.eq (Bits.U.of_int 0 (Bits.width b)) b) 
 eight : Bits(b:bits) [{: guard (Bits.width b > 3 &&
                                 Bits.Ops.eq (Bits.U.of_int 8 (Bits.width b)) b) :}]
              {: () :}
-fpsp   : Reg('F', n, w) [{: guard (n = 0 && w = 3):}] {: () :}
+fpsp   : Reg('F', n) [{: guard (n = 0):}] {: () :}
 fppop  : Llr(fpsp, "add", one3, w) {: () :}
 fppop2 : Llr(fpsp, "add", two3, w) {: () :}
 fppush : Llr(fpsp, "sub", one3, w) {: () :}
@@ -601,11 +603,11 @@ inst : Par(Store(fpccl, Fcmp(fpstacktop, fpstack1), w), fppop2)
   {: "fcompp" :}
 @ 
 <<rules>>=
-eax : Reg('r', n, w) [{: guard (n = 0 && w = 32):}]  {: () :}
-ecx : Reg('r', n, w) [{: guard (n = 1 && w = 32):}]  {: () :}
-edx : Reg('r', n, w) [{: guard (n = 2 && w = 32):}]  {: () :}
-esi : Reg('r', n, w) [{: guard (n = 6 && w = 32):}]  {: () :}
-edi : Reg('r', n, w) [{: guard (n = 7 && w = 32):}]  {: () :}
+eax : Reg('r', n) [{: guard (n = 0):}]  {: () :}
+ecx : Reg('r', n) [{: guard (n = 1):}]  {: () :}
+edx : Reg('r', n) [{: guard (n = 2):}]  {: () :}
+esi : Reg('r', n) [{: guard (n = 6):}]  {: () :}
+edi : Reg('r', n) [{: guard (n = 7):}]  {: () :}
 ax  : Slice(w, lsb:n, eax) [{: guard (w = 16 && lsb = 0):}]  {: "%ax" :}
 ah  : Slice(w, lsb:n, eax) [{: guard (w = 8  && lsb = 8):}]  {: "%ah" :}
 ahval : BitExtract(eight, Fetch(eax, fw:w), w) [{: guard (w = 8) :}] {: "%ah" :}
@@ -671,8 +673,8 @@ any : X86op(string) {: "X86op(" ^ string ^ ")" :}
 
 any : NonLlrOp(string) {: "NonLlrOp(" ^ string ^ ")" :}
 
-any : Mem(any, w) {: "Mem(" ^any ^ "," ^ string_of_int w ^ ")" :}
-any : Reg  (char, n, w) {: sprintf "Reg(%s, %d, %d)"   (Char.escaped char) n w :}
+any : Mem(any, c) {: "Mem(" ^any ^ "," ^ string_of_int c ^ ")" :}
+any : Reg  (char, n) {: sprintf "Reg(%s, %d)"   (Char.escaped char) n :}
 any : Fpreg(any) {: sprintf "Fpreg(%s)" any :}
 
 any : Store (dst:any, src:any, w)
@@ -780,15 +782,14 @@ let rec exp = function
   | RP.App((o,_),_)           -> error ("unknown operator " ^ o)
 <<code to follow the labeler>>=  
 and loc l = match l with
-  | RP.Mem('m', aff, w, e, ass) -> conMem (exp e) w
-  | RP.Mem('f', aff, w, e, ass) -> conFpreg (exp e)
+  | RP.Mem(('m',_,_), (RP.C c), e, ass) -> conMem (exp e) c
+  | RP.Mem(('f',_,_), c, e, ass) -> conFpreg (exp e)
   | (RP.Reg(_, _, _) | RP.Slice(_, _, _)) when l = fpcc -> conFpccl ()
   | RP.Reg(sp, i, w) when l = fpustatus -> conFpustatusl()
-  | RP.Reg(sp, i, w)          -> conReg sp i w 
-  | RP.Mem(_, _, _, _, _)     -> error "non-mem, non-reg cell"
-  | RP.Var _ | RP.Global _    -> error "var found"
-  | RP.Slice(w,i,l)           -> (*error "cannot handle slice"*)
-      conSlice w i (loc l)
+  | RP.Reg((sp,_,_), i, _) -> conReg sp i
+  | RP.Mem(_, _, _, _)     -> error "non-mem, non-reg cell"
+  | RP.Var _ | RP.Global _ -> error "var found"
+  | RP.Slice(w,i,l)        -> conSlice w i (loc l)
 @ 
 Things start to get a bit baroque here, as we recognize different
 special forms a single effect can take.
@@ -798,11 +799,11 @@ and effect = function
     when l = l'                       -> conLlr (loc l) o (exp r) w
   | RP.Store(l, RP.App((o, [w']), [RP.Fetch(l',_)]), w)
     when l = l' && w = w'             -> conUnaryInPlace (loc l) o w
-  | RP.Store(RP.Reg('c',i, w),r,_) 
+  | RP.Store(RP.Reg(('c',_,_),i, w),r,_) 
     when (i = SS.indices.SS.pc)       -> conGoto (exp r)
-  | RP.Store(RP.Reg('c', i, w),r,_)
+  | RP.Store(RP.Reg(('c', _, _), i, w),r,_)
     when (i = SS.indices.SS.cc)       -> conSetflags (exp r)
-  | RP.Store(RP.Reg('c', i, _), r, w) -> error ("set $c["^string_of_int i^"]")
+  | RP.Store(RP.Reg(('c', _, _), i, _), r, w) -> error ("set $c["^string_of_int i^"]")
   | RP.Store(l,e,w)                   -> conStore (loc l) (exp e) w
   | RP.Kill(l)                        -> conKill (loc l)
 @
@@ -834,10 +835,10 @@ the recognizer (which currently falls on the floor).
 <<code to follow the labeler>>=  
 and guarded g eff = match g with
 | RP.Const(RP.Bool b) -> if b then effect eff else conNop()
-| RP.App((compare, [32]), [RP.Fetch(RP.Reg('c', n, _), _)])
+| RP.App((compare, [32]), [RP.Fetch(RP.Reg(('c', _, _), n, _), _)])
     when n = SS.indices.SS.cc && begins_x86_ compare ->
       (match eff with
-      | RP.Store(RP.Reg('c', i, _), r, w)
+      | RP.Store(RP.Reg(('c', _, _), i, _), r, w)
         when (i = SS.indices.SS.pc) ->
           conJcc (String.sub compare 4 (String.length compare - 4)) (exp r)
       | _ -> error "guard on x86 non-branch")
@@ -913,9 +914,9 @@ RP.Store(l, RP.App(("bitInsert", [32; 8]),
                             r]) as flag_left]),
          w)
 <<pattern for flags := [[%x86_undefflags()]]>>=
-RP.Store(RP.Reg('c', flag_index, _), RP.App(("x86_undefflags", _), []), _)
+RP.Store(RP.Reg(('c', _, _), flag_index, _), RP.App(("x86_undefflags", _), []), _)
 <<pattern for flags := [[fo]] [[flag_left']]>>=
-RP.Store(RP.Reg('c', flag_index, _), RP.App((fo, _), [flag_left']), _)
+RP.Store(RP.Reg(('c', _, _), flag_index, _), RP.App((fo, _), [flag_left']), _)
 <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>=
 RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w) 
 <<pattern for [[l2]] := [[l2']] [[o2]] [[r2]] at [[w2]]>>=
@@ -923,13 +924,13 @@ RP.Store(l2, RP.App((o2, _), [RP.Fetch(l2',_); r2]), w2)
 <<pattern for [[l]] := [[l']] at [[w]]>>=
 RP.Store(l, RP.Fetch(l',_), w) 
 <<pattern for flags := [[fo]] ([[l'']], [[r']])>>=
-RP.Store(RP.Reg('c', flag_index, _),
+RP.Store(RP.Reg(('c', _, _), flag_index, _),
          RP.App((fo, _), [RP.Fetch(l'',_); r']), _)
 <<pattern for flags := [[fo]] ([[l'']], [[Const b]])>>=
-RP.Store(RP.Reg('c', flag_index, _),
+RP.Store(RP.Reg(('c', _, _), flag_index, _),
          RP.App((fo, _), [RP.Fetch(l'',_); RP.Const (RP.Bits b)]), _)
 <<pattern for flags := [[fo]] ([[l'']], [[r'']])>>=
-RP.Store(RP.Reg('c', flag_index, _),
+RP.Store(RP.Reg(('c', _, _), flag_index, _),
          RP.App((fo, _), [RP.Fetch(l'',_); r'']), _)
 <<pattern for [[l]] := [[o]] [[l']] at [[w]]>>=
 RP.Store(l, RP.App((o, _), [RP.Fetch(l',_)]), w) 
@@ -941,7 +942,7 @@ RP.Store(hi, RP.App (("lobits", [64;32]),
 <<pattern for [[lo]] := lo32([[l']] [[o']] [[r']] at 32)>>=
 RP.Store(lo, RP.App (("lobits", [64;32]), [RP.App((o', _), [l'; r'])]), 32)
 <<pattern for flags := [[fo]] [[l'']])>>=
-RP.Store(RP.Reg('c', flag_index, _),
+RP.Store(RP.Reg(('c', _, _), flag_index, _),
          RP.App((fo, _), [RP.Fetch(l'',_)]), _)
 <<pattern for [[d]] := rp:[[l1/l2]] [[o]] [[r]] at [[w]]>>=
 RP.Store(d, RP.App((o, _),
@@ -956,14 +957,14 @@ RP.Store(d', RP.App((o', _),
                                 RP.App(("zx",_), [RP.Fetch(l2',_)])]) as rp');
     r']), w')
 <<pattern for flags := [[fo]] ([[l1'/l2']], [[r']])>>=
-RP.Store(RP.Reg('c', flag_index, _),
+RP.Store(RP.Reg(('c', _, _), flag_index, _),
          RP.App((fo, _), 
               [ RP.App(("or",_), [ RP.App(("shl",_),
                                      [RP.App(("zx",_), [RP.Fetch(l1',_)]);_])
                      ;                RP.App(("zx",_), [RP.Fetch(l2',_)])])
               ; r']), _)
 <<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>=
-RP.Store(RP.Reg('c', flag_index, _),
+RP.Store(RP.Reg(('c', _, _), flag_index, _),
          RP.App((fo, _), [RP.App ((o', _), [RP.Fetch(l'',_); r'])]), _)
 @
 \subsection{The exported recognizers}
@@ -979,7 +980,7 @@ let errmsg r msg =
 
 let to_asm r =
   try
-    let plan = rtl (Down.rtl r) in
+    let plan = rtl (Dn.rtl r) in
     plan.inst.Camlburg.action ()
   with 
   | Camlburg.Uncovered -> cat [" not an instruction: " ; RU.ToString.rtl r]
@@ -989,7 +990,7 @@ let () = Debug.register "x86rec" "diagnose rejected instructions in x86 recogniz
 
 let is_instruction r =
   try
-    let plan = rtl (Down.rtl r) in
+    let plan = rtl (Dn.rtl r) in
     if plan.inst.Camlburg.cost < 100 then  (* should be true, but shade this... *)
       true
     else

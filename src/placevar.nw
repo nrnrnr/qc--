@@ -18,9 +18,8 @@ the stack.
 <<placevar.mli>>=
 val mk_automaton : warn:(width:int -> alignment:int -> hint:string -> unit) ->
                    vfp:Rtl.exp ->
-                   memsize:int ->
-                   byteorder:Rtl.aggregation ->
-                   (temps:(Rtl.space -> Automaton.stage) -> Automaton.stage) ->
+                   memspace:Rtl.space ->
+                   (temps:(char -> Automaton.stage) -> Automaton.stage) ->
                    (Ast2ir.proc -> Automaton.t)
 val context   : (Ast2ir.proc -> Automaton.t) -> 'e -> Ast2ir.proc -> bool
 @
@@ -52,11 +51,11 @@ The interesting case is [[RP.Fetch]] in [[walkExp]]; we apply the function.
 let id x = x in
 let rec walkLoc loc =
   match loc with
-  | RP.Mem   (sp, ag, w, e, ass) -> RP.Mem (sp, ag, w, walkExp e, ass)
-  | RP.Reg   (sp, i, w) as r     -> r
-  | RP.Var   (s, i, w)           -> Impossible.unimp "slice of variable"
-  | RP.Global(s, i, w)           -> Impossible.unimp "slice of global variable"
-  | RP.Slice (w, i, l)           -> RP.Slice (w, i, walkLoc l)
+  | RP.Mem   (sp, w, e, ass) -> RP.Mem (sp, w, walkExp e, ass)
+  | RP.Reg   (sp, i, w) as r -> r
+  | RP.Var   (s, i, w)       -> Impossible.unimp "slice of variable"
+  | RP.Global(s, i, w)       -> Impossible.unimp "slice of global variable"
+  | RP.Slice (w, i, l)       -> RP.Slice (w, i, walkLoc l)
 
 and walkExp exp = match exp with
   | RP.Const _                      -> exp
@@ -178,11 +177,11 @@ Counting arguments to an operator is easy (see [[count_exp]]), but counting the 
 of the operator requires a special case in [[count_effect]].
 <<define counting functions>>=
 let rec count_loc loc ctxt = match loc with
-  | RP.Mem   (_, _, _, e, _) -> count_exp e (Some inc_addr)
-  | RP.Slice (_, _, l)       -> count_loc l ctxt
-  | RP.Reg    _              -> ()
-  | RP.Global _              -> ()  (* cannot be placed based on context *)
-  | RP.Var   (_, i, _)       ->
+  | RP.Mem   (_, _, e, _) -> count_exp e (Some inc_addr)
+  | RP.Slice (_, _, l)    -> count_loc l ctxt
+  | RP.Reg    _           -> ()
+  | RP.Global _           -> ()  (* cannot be placed based on context *)
+  | RP.Var   (_, i, _)    ->
     (match ctxt with
      | None   -> ()
      | Some c -> c i (get_exec_count node))
@@ -302,13 +301,13 @@ let from_temps proc space = (* stage to allocate a temporary location *)
 let debug lbl w h a ctr =
   Printf.eprintf "Placevar %s w=%d h=%s a=%d ctr=%d\n" lbl w h a ctr
 
-let mk_automaton ~warn ~vfp ~memsize ~byteorder mk_stage proc =
+let mk_automaton ~warn ~vfp ~memspace mk_stage proc =
   let warn methods =
     let alloc ~width:w ~alignment:a ~hint:h =
       warn ~width:w ~alignment:a ~hint:h;
       methods.A.allocate w a h in
     {A.allocate = alloc; A.freeze = methods.A.freeze} in
-  Block.srelative vfp "variables placed in memory" (A.at ~memsize ~byteorder)
+  Block.srelative vfp "variables placed in memory" (A.at memspace)
   ( A.wrap warn *> mk_stage ~temps:(from_temps proc) *> A.as_stage proc.Proc.priv )
 @
 After we have placed the variables, we record their locations in the spans.

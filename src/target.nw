@@ -124,6 +124,7 @@ wordsize:       int               ; (* bits *)
 pointersize:    int               ; (* bits *)
 alignment:      int               ; (* alignment of word access *)
 memsize:        int               ; (* smallest addressable unit, typically 8 *)
+memspace:       Rtl.space         ; (* redundant with byte order, word size *)
 float:          Float.t           ; (* floating pt name and semantics    *)
 charset:        string            ; (* "latin1"  character encoding      *)
 globals:        'automaton   ; (* Automaton to allocate global vars *)
@@ -311,14 +312,16 @@ module RP      = Rtl.Private
 <<type map>>
 <<type cc>>
 <<type t>>
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 
 @
 
 <<target.ml>>=
 let space t s = 
-  try List.find (fun x -> x.Space.space = s) t.spaces with Not_found ->
-  Impossible.impossible
-      (Printf.sprintf "Space '%c' not found in target '%s'\n" s t.name)
+  try List.find (fun x -> x.Space.space = s) t.spaces
+  with Not_found ->
+    let (s, _, _) = s in
+    impossf "Space '%c' not found in target '%s'\n" s t.name
 @
 <<target.ml>>=
 let is_tmp { spaces = spaces } =
@@ -338,7 +341,7 @@ let mk_reg_ix_map spaces =
     let rec list_to n =
       if n <= 0 then [0]
       else n :: list_to (n-1) in
-    List.map (fun i -> (space.S.space, i, space.S.cellwidth))
+    List.map (fun i -> (space.S.space, i, R.C 1))
              (list_to (match space.S.indexlimit with
                        | Some l -> l
                        | None   -> 1 lsl space.S.indexwidth)) in
@@ -353,8 +356,8 @@ let space_fits tmp =
   | Space.Temp {Space.stands_for=hw; Space.index_ok=locset} ->
       fun (hw', idx, width) -> hw = hw' && locset idx
   | _ ->
-        Impossible.impossible
-            ("space_fits called on non-temp of space " ^ String.make 1 tmp.Space.space)
+      let (sp, _, _) = tmp.Space.space in
+      impossf "space_fits called on non-temp of space '%c'" sp
 
 let fits t space =
   try

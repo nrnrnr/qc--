@@ -67,7 +67,6 @@ let b i = Types.Bits i
 
 module Make(A: ARCH) = struct
     let id          = Rtl.Identity
-    let wordsize    = A.wordsize
     let pointersize = A.pointersize
     let memsize     = A.memsize
 
@@ -82,7 +81,10 @@ module Make(A: ARCH) = struct
     let fp_mode     = locations.SS32.fp_mode
     let fp_fcmp     = locations.SS32.fp_fcmp
 
-    let reg n       = R.reg ('r',n,A.wordsize)
+    let rspace = ('r', Rtl.Identity, Cell.of_size A.wordsize)
+    let fspace = ('f', Rtl.Identity, Cell.of_size A.wordsize)
+    let mspace = ('m', A.byte_order, Cell.of_size 8)
+    let reg n       = R.reg (rspace,n,R.C 1)
     let sp          = reg 31                    (* stack pointer  *)
     let ra          = reg 30                    (* return address *)
 
@@ -165,6 +167,7 @@ module Make(A: ARCH) = struct
         ; T.wordsize     = A.wordsize
         ; T.pointersize  = A.pointersize
         ; T.vfp          = SS32.vfp
+        ; T.memspace     = mspace
         ; T.alignment    = 1
         ; T.memsize      = 8
         ; T.float        = Float.ieee754
@@ -224,7 +227,7 @@ with them.}
 let globals base = 
     let width w     = if w <= 8 then 8 else if w <= 16 then 16 else
                       Aux.round_up_to 32 w in
-        AN.at ~start:base ~memsize ~byteorder:A.byte_order
+        AN.at ~start:base mspace
               (AN.widen width 
                *> AN.align_to (function 8 -> 1 | 16 -> 2 | _ -> 4)
                *> AN.overflow ~growth:Memalloc.Down ~max_alignment:4)
@@ -254,7 +257,7 @@ module Flow = Mflow.MakeStandard
     (struct
         let pc_lhs      = pc
         let pc_rhs      = pc
-        let ra_reg      = R.reg ('r', 30, A.wordsize)
+        let ra_reg      = R.reg (rspace, 30, R.C 1)
         let ra_offset   = 4 (* just guessing *)
     end)
 
@@ -281,23 +284,21 @@ let cutto =
 
 <<module Spill>>=
 module Spill = struct
-    let assign lookup ~src:(src_sp,_,src_w as src) 
-                      ~dst:(dst_sp,_,dst_w as dst) =
-        if src_w <> dst_w then
-            invalid_arg 
-                "Dummy.assign source and destination width don't match"
-        else
-            let src_loc = Rtl.reg src  in
-            let dst_loc = Rtl.reg dst  in
-                Rtl.store dst_loc (Rtl.fetch src_loc src_w)  dst_w
+  let assign lookup ~src ~dst =
+    if Register.width src <> Register.width dst then
+      Impossible.impossible "Dummy.assign source and destination width don't match"
+    else
+      let src_loc = Rtl.reg src  in
+      let dst_loc = Rtl.reg dst  in
+      Rtl.store dst_loc (Rtl.fetch src_loc (Register.width src)) (Register.width dst)
 
-    let spill lookup (_,_,w as reg) loc = 
-        let rtl = Automaton.store loc (Rtl.fetch (Rtl.reg reg) w) w 
-        in [rtl]
-    
-    let reload lookup (_,_,w as reg) loc =
-        let rtl = Rtl.store (Rtl.reg reg) (Automaton.fetch loc w) w
-        in [rtl]
+  let spill lookup reg loc =
+    let w = Register.width reg in
+    [Automaton.store loc (Rtl.fetch (Rtl.reg reg) w) w]
+
+  let reload lookup reg loc =
+    let w = Register.width reg in
+    [Rtl.store (Rtl.reg reg) (Automaton.fetch loc w) w]
 end
 @        
 
@@ -319,16 +320,14 @@ end
 \paragraph{Important registers}
 
 <<calling convention>>=
-let reg  n   = ('r', n, A.wordsize)
-let freg n   = ('f', n, A.wordsize)
+let reg  n   = (rspace, n, R.C 1)
+let freg n   = (fspace, n, R.C 1)
 let vfp      = Vfp.mk A.wordsize
 let regs     = List.map reg  [0;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15]
 let fregs    = List.map freg [0;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15] 
 @
-
 Volatile and non-volatile registers. For simplicity, all registers are
 volatile.
-
 <<calling convention>>=
 let volregs  = RS.union (RS.of_list regs) (RS.of_list fregs)
 let nvolregs = RS.empty     
@@ -380,19 +379,20 @@ let return k n ~ra =
 How to save callee-saved registers. 
 
 <<calling convention>>=
-let save_regs temps =
+let saved_nvr temps =
     let t = Talloc.Multiple.loc temps 't' in
     let u = Talloc.Multiple.loc temps 'u' in
-        function 
-        | ('r',_,w) -> t w
-        | ('f',_,w) -> u w
-        | _         -> Impossible.impossible "cannot save register"
+        function
+        | (('r', _, _),_,_) as reg -> t (Register.width reg)
+        | (('f', _, _),_,_) as reg -> u (Register.width reg)
+        | ((s,_,_),i,_) ->
+            Impossible.impossible (Printf.sprintf "cannot save $%c%d" s i)
 @
 
 I have to admit, that I don't know what I am doing here.
 
 <<transformations>>=
-let autoAt = AN.at ~memsize ~byteorder:A.byte_order in
+let autoAt = AN.at mspace in
 let call_actuals  =
   C.outgoing ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "out call parms" autoAt specs.AN.call)
@@ -451,7 +451,7 @@ let conv name jump specs =
   ; C.sp_align         = sp_align    (* alignment of stack pointer at call/cut *)
   ; C.pre_nvregs       = nvolregs    (* registers preserved across calls *)
   ; C.volregs          = volregs     (* registers not preserved across calls *)
-  ; C.saved_nvr        = save_regs
+  ; C.saved_nvr        = saved_nvr
   ; C.cutto            = cutto
   ; C.return           = return
   ; C.ra_on_entry      = (fun _     -> R.fetch ra A.wordsize)

@@ -26,10 +26,16 @@ Ia64.cc["C"     ] = Ia64.cc["C"     ] or {}
 
 \paragraph{IA64 registers and their conventional uses}
 <<ia64call.ml>>=
-let f i = ('f', i, 64)
-let b i = ('a', i, 64)
-let r i = ('r', i, 64)
-let p i = ('p', i,  1)
+let fspace = ('f', Rtl.Identity, Cell.of_size 64)
+let aspace = ('a', Rtl.Identity, Cell.of_size 64)
+let rspace = ('r', Rtl.Identity, Cell.of_size 64)
+let pspace = ('p', Rtl.Identity, Cell.of_size 1)
+let uspace = ('u', Rtl.Identity, Cell.of_size 64)
+let tspace = ('t', Rtl.Identity, Cell.of_size 64)
+let f i = (fspace, i, Rtl.C 1)
+let b i = (aspace, i, Rtl.C 1)
+let r i = (rspace, i, Rtl.C 1)
+let p i = (pspace, i, Rtl.C 1)
 let vol_regs    = RS.of_list 
                    (List.map r ([2; 3; 8; 9; 10; 11]@(Aux.from 14 ~upto:31)))
 let nv_regs     = RS.of_list (List.map r [4; 5; 6; 7])
@@ -46,15 +52,15 @@ let all_regs    = List.fold_left (fun acc e -> RS.union acc e) RS.empty
 let saved_nvr temps = 
   let t sp = Talloc.Multiple.loc temps sp in
   function
-   | ('f', _, w) -> (t 'u') w
-   | (_  , _, w) -> (t 't') w
+    | (('f', _, ms), _, c) -> t 'u' (Cell.to_width ms c)
+    | ((_,   _, ms), _, c) -> t 't' (Cell.to_width ms c)
 @ 
 
 <<IA64 calling convention automata in Lua>>=
 Ia64.sp_align  = 16
 Ia64.wordsize  = 64
 
-function reg(sp, i, w) return({ space = sp, index = i, width = w }) end
+function reg(sp, i, w) return({ space = sp, index = i, cellsize = w, count = 1 }) end
 function r(i)   return (reg("r", i, Ia64.wordsize)) end
 function f(i)   return (reg("f", i, Ia64.wordsize)) end
 function out(i) return (reg("o", i, Ia64.wordsize)) end
@@ -131,8 +137,7 @@ A.register_cc(Backend.ia64.target, "C", Ia64.cc["C"])
   { CS.name         = "C"
   ; CS.stack_growth = Memalloc.Down
   ; CS.overflow     = CS.overflow C.Caller C.Caller
-  ; CS.memsize      = 8
-  ; CS.byteorder    = bo
+  ; CS.memspace     = ('m', bo, Cell.of_size 8)
   ; CS.sp           = r 12
   ; CS.sp_align     = sp_align
   ; CS.all_regs     = all_regs

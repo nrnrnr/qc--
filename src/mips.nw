@@ -56,7 +56,8 @@ module Spaces = struct
 
     (* should we have spaces for int and fp register pairs? *)
 
-    let x  = { S.space          = 'x'
+(*
+    let x  = { S.space          = ('x', R.Identity, 64)
              ; S.doc            = "64-bit general-purpose temporaries"
              ; S.cellwidth      = 64
              ; S.indexwidth     = 32
@@ -82,6 +83,7 @@ module Spaces = struct
                 ; S.set_doc     = "64-bit temporaries"
                 }
              }   
+*)
 end
 @
 
@@ -98,11 +100,13 @@ let fp_mode     = locations.SS.fp_mode
 let fp_fcmp     = locations.SS.fp_fcmp
 let vfp         = Vfp.mk wordsize
 
-let reg n       = ('r',n,32)
+let rspace = ('r', Rtl.Identity, Cell.of_size 32)
+let dspace = ('d', Rtl.Identity, Cell.of_size 2)  (* rounding modes *)
+let reg n       = (rspace,n,Rtl.C 1)
 let sp          = reg 29        (* stack pointer    *)
 let ra          = reg 31        (* return address   *)
 let r0          = reg 0         (* register 0       *)
-let rm_reg      = ('d', 0, 2)
+let rm_reg      = (dspace, 0, Rtl.C 1)
 @
 
 % ------------------------------------------------------------------ 
@@ -115,8 +119,10 @@ let impossible          = Impossible.impossible
 
 let fetch_word l        = R.fetch l   wordsize
 let store_word l e      = R.store l e wordsize
-let mem w addr          = R.mem R.none 'm' byteorder w  addr
-let reg_width (_,_,w)   = w
+let mcell = Cell.of_size 8
+let mspace = ('m', byteorder, mcell)
+let mcount = Cell.to_count mcell
+let mem w addr          = R.mem R.none mspace (mcount w) addr
 @
 % ------------------------------------------------------------------ 
 \subsection{Control-flow {\rtl}s}
@@ -177,8 +183,8 @@ There is no distinction between an integer and an address.
 @
 <<MIPS postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-let icontext = Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't'
-let fcontext = Talloc.Multiple.reg 'u', fun (c, _, _) -> c = 'f' || c = 'u'
+let icontext = Talloc.Multiple.reg 't', fun ((c,_,_), _, _) -> c = 'r' || c = 't'
+let fcontext = Talloc.Multiple.reg 'u', fun ((c,_,_), _, _) -> c = 'f' || c = 'u'
 let acontext = icontext
 let rcontext = (fun x y -> unimp "unsupported soft rounding mode"), fun r -> r = rm_reg
 let itempwidth = 32
@@ -186,8 +192,8 @@ let itempwidth = 32
 \paragraph{Addressing modes}
 <<MIPS postexpander>>=
 module Address = struct
-    type t               = Rtl.exp
-    let reg (_,_,w as r) = R.fetch (R.reg r) w 
+    type t    = Rtl.exp
+    let reg r = R.fetch (R.reg r) (Register.width r)
 end
 include Postexpander.Nostack(Address)
 @
@@ -201,9 +207,9 @@ also have 64-bit floating point values. Therefore we want to avoid
 hard coding [[wordsize]] into loads and stores.
 
 <<MIPS postexpander>>=
-let tloc t              = Rtl.reg t
-let tval (_,_,w as t)   = R.fetch (tloc t) w
-let twidth              = reg_width
+let tloc t = Rtl.reg t
+let tval t = R.fetch (tloc t) (Register.width t)
+let twidth = Register.width
 
 let load ~dst ~addr assn =
     let w = twidth dst in
@@ -233,15 +239,15 @@ let xload op ~dst ~addr n assn =
     let w = twidth dst in
         assert (w = wordsize); 
         [R.store (tloc dst)
-                 (extend op n (R.fetch (R.mem assn 'm' byteorder n addr) n)) 
+                 (extend op n (R.fetch (R.mem assn mspace (mcount n) addr) n)) 
                  w]
 
 let sxload = xload "sx"
 let zxload = xload "zx"
 
 let lostore ~addr ~src n assn =
-    assert (reg_width src = wordsize);
-    [R.store (R.mem assn 'm' byteorder n addr) (lobits n (tval src)) n]
+    assert (Register.width src = wordsize);
+    [R.store (R.mem assn mspace (mcount n) addr) (lobits n (tval src)) n]
 @
 
 The general move operation only works between temporaries of the same
@@ -249,7 +255,7 @@ width. Load immediate loads a constant into a temorary.
 
 <<MIPS postexpander>>=
 let move ~dst ~src =
-    assert (reg_width src = reg_width dst);
+    assert (Register.width src = Register.width dst);
     if src = dst then [] else [R.store (tloc dst) (tval src) (twidth src)]
 @
 
@@ -430,7 +436,7 @@ let globals base =
                 else if w <= 16 then 16 
                 else Aux.round_up_to 32 w in
   let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
-  A.at ~start:base ~memsize:8 ~byteorder 
+  A.at ~start:base mspace 
     (A.widen width *> A.align_to align *>
      A.overflow ~growth:Memalloc.Up ~max_alignment:4)
 @
@@ -446,7 +452,7 @@ let placevars =
         (fun w h _ -> w <= 32), A.widen (fun _ -> 32) *> temps 't';
         A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
       ] in
-  Placevar.mk_automaton ~warn ~vfp ~memsize:8 ~byteorder mk_stage     
+  Placevar.mk_automaton ~warn ~vfp ~memspace:mspace mk_stage     
 @ 
 % ------------------------------------------------------------------ 
 \subsection{The target record}
@@ -462,6 +468,7 @@ let target =
                  ; Spaces.c
                  ] in
     { T.name                = "mips"
+    ; T.memspace            = mspace
     ; T.byteorder           = byteorder
     ; T.wordsize            = wordsize
     ; T.pointersize         = wordsize

@@ -11,18 +11,36 @@
 \section{Register}
 % ------------------------------------------------------------------ 
 
-A [[Register.t]] describes a target-specific register-like location.
+A [[Register.t]] describes a register-like location.
 Such a location includes hardware-registers or temporaries, but not
 spill locations.  The distinguishing feature of a register is a fixed
 address within its space: the address is an integer rather than a
 general expression.
 
-A [[t]] value includes the target-specific [[space]], its address
-within that space, and the [[width]] of the addressed cell.  Other
-details, like the width of of addressing expression or the aggregation
-scheme of multiple cells is associated with the [[space]], but not
-included in a [[t]] value.  They can, however, obtained from the
-[[Target.t]] description of the target the register belongs to.
+A~[[space]] is identified by a single [[char]], but its representation
+includes its aggregation semantics and the width of a single cell in
+the space.
+The cell width is described by a value of type [[Cell.t]], chosen
+because it the [[Cell.t]] handles common arithmetic operations using
+shifts instead of multiplies and divides.
+Within any single back end, the value of the [[char]] completely
+identifies the space and therefore determines the corresponding
+aggregation and [[Cell.t]].
+This means that a postexpander and recognizer may safely scrutinize
+only the [[char]] in order to identify and use the space.
+But different back ends may use different aggregations or cell sizes,
+so any machine-independent code, such as alias analysis, must look
+explicitly to determine cell size and aggregation.
+
+A [[t]] value is an aggregate of cells, so it can represent a register
+pair or quad as well as a single register.
+The representation includes the target-specific [[space]], 
+the address (index) 
+within the space of the lowest cell in the aggregate,
+and the [[count]] of the number of cells aggregated.
+To compute the width of register requires looking at the space to find
+the width of a single cell (cf [[Cell.to_width]]);
+the function [[Register.width]] is provided for this purpose.
 
 We also define a type [[Register.x]], which is a sum type that may be
 either a register or a slice of a register.
@@ -32,8 +50,14 @@ slice level.
 We cannot refer to types in module \module{rtl} because this would
 create a cyclic dependency,
 <<exported types>>=
+type aggregation = 
+    | BigEndian
+    | LittleEndian
+    | Identity
+type space = char * aggregation * Cell.t   (* name, byte order, cell size *)
+type count = Cell.count = C of int
 type width = int
-type reg = char * int * width (* Rtl.space, index, Rtl.width *)
+type reg = space * int * count (* Rtl.space, index, number of cells *)
 type t = reg
 type x = Reg   of t
        | Slice of width * int * t
@@ -46,8 +70,13 @@ module type SETX = sig
   val to_string : t -> string    (* elements sep. by commas (no braces) *)
 end
 @
+We can ask the width of a register.
 <<register.mli>>=
 <<exported types>>
+val width : t -> int
+@ 
+We have two kinds of sets.
+<<register.mli>>=
 module SetX: SETX  with type elt = x
 module MapX: Map.S with type key = x
 module Set:  SETX  with type elt = t
@@ -83,22 +112,36 @@ end
 \section{Implementation of registers}
 % ------------------------------------------------------------------ 
 
-Profiling showed that register are compared frequently; a monomorphic
-[[compare]] function improved compile time by over 10\%. (CL)
-
+We can't use the built-in [[compare]] because it is not safe to
+[[compare]] values of type [[Cell.t]].
+In any case,
+profiling showed that registers are compared frequently; 
+in an earlier version of code that could safely use the polymorphic
+[[compare]], 
+a monomorphic version improved compile time by over~10\%.
 <<register.ml>>=
 <<exported types>>
 module Compare = struct
     type t = reg 
-    let compare ((xs,xi,xw):t) ((ys,yi,yw):t) =
+    let compare (((xs,_,_),xi,C xc):t) (((ys,_,_),yi,C yc):t) =
         let x = compare xs ys in
         if x <> 0 then x
         else let i = compare xi yi in if i <> 0 then i 
-        else compare xw yw
+        else compare xc yc
 end
 module CompareX = struct
     type t = x
-    let compare = compare
+    let compare x y = match x, y with
+    | Slice (w, lsb, r), Slice (w', lsb', r') ->
+        let x = compare w w' in
+        if x <> 0 then x
+        else
+          let x = compare lsb lsb' in
+          if x <> 0 then x
+          else Compare.compare r r'
+    | Slice _, Reg _  ->  1
+    | Reg _, Slice _  -> -1
+    | Reg r, Reg r'   -> Compare.compare r r'
 end
 <<register.ml>>=
 module SetX = struct
@@ -106,9 +149,9 @@ module SetX = struct
   include S
   let of_list l = List.fold_right add l empty
   let to_string s =
-    let elt = function | Reg   (s, i, w) -> Printf.sprintf "%c%d" s i
-                       | Slice (w, i, (s, i' ,_)) ->
-											    Printf.sprintf "Slice(%d,%d,%c%d)" w i s i' in
+    let elt = function Reg   ((s,_,_), i, w) -> Printf.sprintf "%c%d" s i
+                     | Slice (w, i, ((s,_,_), i', _)) ->
+                         Printf.sprintf "%c%d@[%d..%d]" s i' i (i + w - 1) in
     String.concat ", " (List.map elt (elements s))
 end
 module Set = struct
@@ -116,7 +159,7 @@ module Set = struct
   include S
   let of_list l = List.fold_right add l empty
   let to_string s =
-    let elt (s, i, w) = Printf.sprintf "%c%d" s i in
+    let elt ((s,_,_), i, w) = Printf.sprintf "%c%d" s i in
     String.concat ", " (List.map elt (elements s))
 end
 <<register.ml>>=
@@ -124,10 +167,10 @@ module MapX = Map.Make(CompareX)
 module Map  = Map.Make(Compare)
 @
 <<register.ml>>=
-let promote_x = function | Reg r | Slice (_, _, r) -> r
+let promote_x = function Reg r | Slice (_, _, r) -> r
 let rset_to_rxset set = Set.fold (fun r rst -> SetX.add (Reg r) rst) set SetX.empty
 let promote_rxset set =
-  SetX.fold (fun r rst -> match r with | Reg r | Slice (_,_,r) -> Set.add r rst)
+  SetX.fold (fun r rst -> match r with Reg r | Slice (_,_,r) -> Set.add r rst)
             set Set.empty
 @
 Creating the integer map is rather simple.
@@ -144,20 +187,33 @@ The [[RT]] module creates an embedding/projection pair for registers.
 module RT (C : Lua.Lib.CORE) = struct
     module V = C.V
 
-    let embedRegister (s,i,w) =
+   let agg =
+     V.default Identity
+       (V.enum "aggregation"
+          ["big", BigEndian; "little", LittleEndian; "identity", Identity]) 
+
+    let embedRegister ((s,a,cell),i,C c) =
       (V.record V.value).V.embed
       [ "space", V.string.V.embed (Char.escaped s)
+      ; "agg",   agg.V.embed a
+      ; "cellsize", V.int.V.embed (Cell.size cell)
       ; "index", V.int.V.embed i
-      ; "width", V.int.V.embed w
+      ; "width", V.int.V.embed (Cell.to_width cell (C c))
+      ; "count", V.int.V.embed c
       ] 
 
     let projectRegister reg = match reg with
       | V.Table reg ->
           let field f = V.Table.find reg (V.String f) in
           let s = String.get (V.string.V.project (field "space")) 0 in
+          let cell = Cell.of_size (V.int.V.project (field "cellsize")) in
           let i = V.int.V.project (field "index") in
-          let w = V.int.V.project (field "width") in
-          (s,i,w)
+          let a = agg.V.project (field "agg") in
+          let c = match field "count" with
+          | V.Nil -> let w = V.int.V.project (field "width") in
+                     Cell.to_count cell w
+          | cf    -> C (V.int.V.project cf) in
+          ((s,a,cell),i,c)
       | _ -> raise (V.Projection (reg, "register"))
 
     let map = {
@@ -167,5 +223,24 @@ module RT (C : Lua.Lib.CORE) = struct
 end
 @ 
 <<register.ml>>=
-let contains ~outer ~inner = outer = inner
+let width ((_, _, ms), _, c) = Cell.to_width ms c
 
+@ 
+If somebody tries to take a slice of a register pair,
+we will go to their house and spit in their food.
+If nobody does such a bad thing, a slice contains a register if and
+only if the slice is the whole register.
+<<register.ml>>=
+let contains ~outer ~inner = match outer, inner with
+| Reg ((s, _, _), i, C c), Reg ((s', _, _), i', C c') ->
+    s = s' && i' >= i && i' + c' <= i + c
+| Reg ((s, _, _), i, C c), Slice (w', lsb', ((s', _, _), i', C c')) ->
+    s = s' && i' >= i && i' + c' <= i + c
+| Slice (w, lsb, ((s, _, _), i, C c)), Reg ((s', _, cell), i', C c') ->
+    if c <> 1 then
+      Impossible.impossible "slice of register aggregate";
+    lsb = 0 && w = Cell.to_width cell (C c') && s = s' && i = i' && c = c'
+| Slice (w, lsb, ((s, _, _), i, C c)), Slice (w', lsb', ((s', _, _), i', C c')) ->
+    if c <> 1 || c' <> 1 then
+      Impossible.impossible "slice of register aggregate";
+    s = s' && i = i' && lsb <= lsb' && lsb+w >= lsb'+w'

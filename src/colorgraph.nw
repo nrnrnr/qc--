@@ -994,7 +994,7 @@ module CallVarMap = Map.Make (struct type t = G.node let compare = compare end)
 let applyColors cg
                 ({Proc.cfg = cfg; Proc.target = target; Proc.var_map = vMap} as proc) =
   let () = print_cgInfo cg in
-  let find ((s, i, _) as t) =
+  let find (((s,_,_), i, _) as t) =
     try RM.find t cg.colorMap
     with
       Not_found -> Impossible.impossible (Printf.sprintf "Uncolored temp %c%d" s i) in
@@ -1014,7 +1014,7 @@ let rewrite_spans (node, ss as rst) =
  	     with Not_found -> raise RTD.DeadValue in
      let rec try_temps tmps = match tmps with
        | t::ts -> (try RP.Reg (RM.find t cg.colorMap) with Not_found -> try_temps ts)
-       | []    -> let (_, _, w) = tmp in Dn.loc (Automatonutil.aloc mem w) in
+       | []    -> Dn.loc (Automatonutil.aloc mem (Register.width tmp)) in
      try_temps spilltemps in
    let map l = match l with
      | RP.Reg tmp -> (try  RP.Reg (RM.find tmp cg.colorMap)
@@ -1177,7 +1177,7 @@ let dest inst =
 let isMoveInstruction t inst =
   (* WE NEED TO DISCUSS HOW TO HANDLE THIS PROPERLY: V IS NOT A SPACE
      IN THE TARGET, WHICH MEANS THE FUNCTIONS IN TARGET2.NW DON'T WORK *)
-  let isVFP (s,_,_) = s = 'V' in
+  let isVFP ((s,_,_),_,_) = s = 'V' in
   match Rtlutil.RTLType.singleAssignment (G.instr inst) with
   | Some (((s1,_,_) as r1), ((s2,_,_) as r2)) ->
     (not (isVFP r1 || isVFP r2)) &&
@@ -1379,7 +1379,8 @@ module Proc = struct
   type tgt = (automatonspec, cc) Target.t
   type t = (automaton, cfg, cc, tgt) Proc.t
   let allocatable cc = RS.elements (cc.C.pre_nvregs ++ cc.C.volregs)
-  let spill_slot_for proc (_, _, w)  = Automaton.allocate proc.Proc.priv w ""
+  let spill_slot_for proc ((_,_,ms), _, c)  =
+    Automaton.allocate proc.Proc.priv (Cell.to_width ms c) ""
 end
 
 module All = PreMake (G) (L) (Proc) (struct let name = "ColorGraph" end)
@@ -1533,7 +1534,7 @@ Several helper functions are provided for printing parts of the cgInfo
 record.
 
 <<print CGInfo>>=
-let printReg (s, i, w) = Printf.sprintf "%c%d" s i
+let printReg ((s,_,_), i, w) = Printf.sprintf "%c%d" s i
 let printMove node = printReg (source node)
                    ^ " -> "
                    ^ printReg (dest node)

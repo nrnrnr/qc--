@@ -76,8 +76,9 @@ module Standard64: Standard
 @ 
 
 A [[Rtl.space]] denotes a memory space, the details of a particular
-space are covered by a space descriptor [[t]]:  
-
+space are covered by a space descriptor [[t]].
+A~legacy: the [[cellwidth]] and [[aggregation]] fields duplicate
+information in [[Rtl.space]].
 <<type t>>=
 type t  =
     { space:            Rtl.space       (* space being described *)
@@ -200,6 +201,11 @@ let checked s =
     (match s.indexlimit with
     | Some n -> assert (indexwidth n <= s.indexwidth)
     | _ -> ());
+    let (_, agg, cell) = s.space in
+      begin
+        assert (agg = s.aggregation);
+        assert (Cell.to_width cell (Cell.C 1) = s.cellwidth);
+      end;
     s
   end
 @
@@ -212,7 +218,7 @@ architectures.
 module Standard(A:sig val width: int end) = struct
   type generator = Rtl.aggregation -> Rtl.width list -> t
   let m agg ws = checked 
-    { space          = 'm'
+    { space          = ('m', agg, Cell.of_size 8)
     ; doc            = "memory"
     ; cellwidth      = 8
     ; indexwidth     = A.width 
@@ -223,7 +229,7 @@ module Standard(A:sig val width: int end) = struct
     } 
 
   let r ~count agg ws = checked 
-    { space          = 'r'
+    { space          = ('r', agg, Cell.of_size A.width)
     ; doc            = "general-purpose registers"
     ; cellwidth      = A.width
     ; indexwidth     = indexwidth count
@@ -234,7 +240,7 @@ module Standard(A:sig val width: int end) = struct
     } 
 
   let t agg ws   = checked 
-    { space         = 't'
+    { space         = ('t', agg, Cell.of_size A.width)
     ; doc           = "general-purpose temporaries"
     ; cellwidth     = A.width
     ; indexwidth    = A.width
@@ -242,14 +248,14 @@ module Standard(A:sig val width: int end) = struct
     ; aggregation   = agg
     ; widths        = ws
     ; classification = Temp  
-        { stands_for = 'r'
+        { stands_for = ('r', agg, Cell.of_size A.width)
         ; index_ok   = (fun _ -> true) (* lies *)
         ; set_doc    = "general-purpose temporaries"
         } 
     } 
 
   let f ~count agg ws = checked 
-    { space         = 'f'
+    { space         = ('f', agg, Cell.of_size A.width)
     ; doc           = "floating-point registers"
     ; cellwidth     = A.width
     ; indexwidth    = indexwidth count
@@ -260,7 +266,7 @@ module Standard(A:sig val width: int end) = struct
     }
     
   let u agg ws = checked 
-    { space         = 'u'
+    { space         = ('u', agg, Cell.of_size A.width)
     ; doc           = "floating-point temporaries"
     ; cellwidth     = A.width
     ; indexwidth    = A.width
@@ -268,14 +274,14 @@ module Standard(A:sig val width: int end) = struct
     ; aggregation   = agg
     ; widths        = ws
     ; classification = Temp 
-        { stands_for = 'f'
+        { stands_for = ('f', agg, Cell.of_size A.width)
         ; index_ok   = (fun _ -> true) (* lies *)
         ; set_doc    = "floating-point temporaries"
         } 
     } 
 
   let a ~count agg ws = checked 
-    { space         = 'a'
+    { space         = ('a', agg, Cell.of_size A.width)
     ; doc           = "address registers"
     ; cellwidth     = A.width
     ; indexwidth    = indexwidth count
@@ -286,7 +292,7 @@ module Standard(A:sig val width: int end) = struct
     } 
   
   let v agg ws   = checked 
-    { space         = 'v'
+    { space         = ('v', agg, Cell.of_size A.width)
     ; doc           = "address temporaries"
     ; cellwidth     = A.width
     ; indexwidth    = A.width
@@ -294,14 +300,14 @@ module Standard(A:sig val width: int end) = struct
     ; aggregation   = agg
     ; widths        = ws
     ; classification = Temp 
-        { stands_for = 'a'
+        { stands_for = ('a', agg, Cell.of_size A.width)
         ; index_ok   = (fun _ -> true) (* lies *)
         ; set_doc    = "address temporaries"
         } 
     } 
 
   let p ~count agg ws = checked 
-    { space         = 'p'
+    { space         = ('p', agg, Cell.of_size 1)
     ; doc           = "predicate registers"
     ; cellwidth     = 1
     ; indexwidth    = indexwidth count
@@ -311,7 +317,7 @@ module Standard(A:sig val width: int end) = struct
     }
     
   let w agg ws   = checked 
-    { space         = 'w'
+    { space         = ('w', agg, Cell.of_size 1)
     ; doc           = "predicate temporaries"
     ; cellwidth     = 1
     ; indexwidth    = A.width
@@ -319,7 +325,7 @@ module Standard(A:sig val width: int end) = struct
     ; aggregation   = agg
     ; widths        = ws
     ; classification = Temp 
-        { stands_for = 'p'
+        { stands_for = ('p', agg, Cell.of_size 1)
         ; index_ok   = (fun _ -> true) (* lies *)
         ; set_doc    = "predicate temporaries"
         } 
@@ -327,7 +333,7 @@ module Standard(A:sig val width: int end) = struct
 
     (* CHECK THAT count IS LARGE ENOUGH TO COVER indicies BELOW -- CL*)
   let c ~count agg ws = checked 
-    { space         = 'c'
+    { space         = ('c', agg, Cell.of_size A.width)
     ; doc           = "control and special"
     ; cellwidth     = A.width
     ; indexwidth    = indexwidth count
@@ -346,24 +352,25 @@ module Standard(A:sig val width: int end) = struct
     }
   
   let locations ~c = match c with    
-    |   { space       = 'c'
+    |   { space       = ('c',_,_) as space
         ; cellwidth   = cw
         ; aggregation = bo
         ; indexwidth  = iw 
         } ->
-            let reg n = Rtl.reg ('c', n, cw) in
+            let reg n = Rtl.reg (space, n, Rtl.C 1) in
             { pc      = reg 0
             ; npc     = reg 1
             ; cc      = reg 2 
             ; fp_mode = Rtl.slice 2 0 (reg 4)   
             ; fp_fcmp = Rtl.slice 2 0 (reg 5) 
             }
-    |   { space = s } -> Impossible.impossible 
+    |   { space = (s,_,_) } -> Impossible.impossible 
             ( "Standard locations from space " ^ Char.escaped s)
                                  
   
   let indices = { pc = 0; npc = 1; cc = 2; fp_mode = 4 ; fp_fcmp = 5 }
-  let vfp = Rtl.fetch (Rtl.reg ('V', 0, A.width)) A.width
+  let vfpcell = Cell.of_size A.width
+  let vfp = Rtl.fetch (Rtl.reg (('V',Rtl.Identity,vfpcell), 0, Rtl.C 1)) A.width
 end
 module Standard32 = Standard(struct let width = 32 end)
 module Standard64 = Standard(struct let width = 64 end)

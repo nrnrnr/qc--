@@ -7,28 +7,25 @@
 
 This module defines a back end for the {\PAL} interpreter in directory
 [[../interp]]. 
-
 <<interp.mli>>=
-val target':    Ast2ir.tgt
+val target' : Ast2ir.tgt
 @
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
-
 <<interp.ml>>=
 let arch        = "interp"
-let byte_order  = Rtl.LittleEndian       (* byte order *)
+let byteorder   = Rtl.LittleEndian       (* byte order *)
 let wordsize    = 32
 let pointersize = wordsize
 let memsize     = 8
+let mspace      = ('m', byteorder, Cell.of_size memsize)
 @
-
 The interpreter at the moment knows only the memory space [[m]].  We use
 in {\rtl}s the [[C]] space to encode jumps, gotos, and the like.
 However, these {\rtl}s never reach the interpreter but are recognized
 and translated to control-flow instructions the interpreter knows.
-
 <<interp.ml>>=
 module AN     = Automaton
 module SS32   = Space.Standard32
@@ -46,9 +43,9 @@ let uploc   = R.Up.loc
 let upexp   = R.Up.exp
 
 module Spaces = struct
-    let m   = SS32.m   byte_order    [8; 16; 32]
+    let m   = SS32.m   byteorder    [8; 16; 32]
     let c   = Space.checked
-                { Space.space          = 'c'
+                { Space.space          = ('c', Rtl.Identity, Cell.of_size wordsize)
                 ; Space.doc            = "control registers"
                 ; Space.cellwidth      = wordsize
                 ; Space.indexwidth     = 2 
@@ -58,27 +55,27 @@ module Spaces = struct
                 ; Space.classification = Space.Reg
                 } 
     let a   = Space.checked
-                { Space.space          = 'A'
+                { Space.space          = ('A', byteorder, Cell.of_size 1)
                 ; Space.doc            = "argument passing area"
                 ; Space.cellwidth      = 1  (* hack *)
                 ; Space.indexwidth     = wordsize
                 ; Space.indexlimit     = None
-                ; Space.aggregation    = byte_order
+                ; Space.aggregation    = byteorder
                 ; Space.widths         = [8;16;32]
                 ; Space.classification = Space.Mem
                 }
     let g   = Space.checked
-                { Space.space          = 'G'
+                { Space.space          = ('G', byteorder, Cell.of_size 1)
                 ; Space.doc            = "global register variables"
                 ; Space.cellwidth      = 1  (* hack *)
                 ; Space.indexwidth     = wordsize
                 ; Space.indexlimit     = None
-                ; Space.aggregation    = byte_order
+                ; Space.aggregation    = byteorder
                 ; Space.widths         = [8;16;32]
                 ; Space.classification = Space.Mem
                 }
     let d   = Space.checked
-                { Space.space          = 'd'
+                { Space.space          = ('d', Rtl.Identity, Cell.of_size 2)
                 ; Space.doc            = "FP rounding mode"
                 ; Space.cellwidth      = 2  
                 ; Space.indexwidth     = 1
@@ -89,23 +86,22 @@ module Spaces = struct
                 }
 end
 @
-
 % ------------------------------------------------------------------ 
 \subsection{Registers}
 % ------------------------------------------------------------------ 
-
 <<interp.ml>>=
-let pc:Rtl.loc            = Rtl.reg ('c',0, wordsize)  (* pc pointer     *)
-let sp:Rtl.loc            = Rtl.reg ('c',1, wordsize)  (* stack pointer  *)
-let ap:Rtl.loc            = Rtl.reg ('c',2, wordsize)  (* arg pointer    *)
-let ra:Rtl.loc            = Rtl.reg ('c',3, wordsize)  (* return address *)
+let c = Spaces.c.Space.space
+let pc:Rtl.loc            = Rtl.reg (c,0,Rtl.C 1)  (* pc pointer     *)
+let sp:Rtl.loc            = Rtl.reg (c,1,Rtl.C 1)  (* stack pointer  *)
+let ap:Rtl.loc            = Rtl.reg (c,2,Rtl.C 1)  (* arg pointer    *)
+let ra:Rtl.loc            = Rtl.reg (c,3,Rtl.C 1)  (* return address *)
 
-let arg_reg  x            = ('A', x, 1)
-let glb_reg  x            = ('G', x, 1)
+let arg_reg  x            = (Spaces.a.Space.space, x, Rtl.C 1)
+let glb_reg  x            = (Spaces.g.Space.space, x, Rtl.C 1)
 let argument x            = R.reg (arg_reg x)          (* arguments *) 
 let global   x            = R.reg (glb_reg x)          (* globals   *) 
 
-let fp_mode               = Rtl.reg('d',0,2)           (* FP rounding mode *) 
+let fp_mode               = Rtl.reg(Spaces.d.Space.space,0,Rtl.C 1) (* rounding mode *) 
 let spval                 = Rtl.fetch sp wordsize
 let vfp                   = Vfp.mk wordsize          
 let std_sp_location       = vfp
@@ -238,7 +234,7 @@ let seq (reg: int -> Register.t) next =
 let seq reg = AN.wrap (seq reg)
 
 let params      = seq arg_reg                       
-let globls base = AN.at ~start:base ~memsize ~byteorder:byte_order (seq glb_reg)
+let globls base = AN.at ~start:base mspace (seq glb_reg)
 
 let ccspecs     = { AN.call = params; AN.results = params; AN.cutto = params }
 @
@@ -253,7 +249,7 @@ interpreter does not work like a CPU.
 I have to admit, that I don't know what I am doing here.
 
 <<transformations>>=
-let autoAt = AN.at ~memsize ~byteorder:byte_order in
+let autoAt = AN.at mspace in
 let call_actuals  =
   C.outgoing ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "out call parms" autoAt params) 
@@ -320,8 +316,8 @@ let cc' = (* new style *)
     ; C.ra_on_entry      = (fun _     -> R.fetch ra wordsize)
     ; C.where_to_save_ra = (fun _ t   -> ra)
     ; C.ra_on_exit       = (fun t b _ -> ra)
-    ; C.sp_on_unwind     = (fun e ->   RU.store sp e)
     ; C.sp_on_jump       = (fun _ _ -> Rtl.null)
+    ; C.sp_on_unwind     = (fun e ->   RU.store sp e)
     }
 @
 
@@ -338,16 +334,16 @@ compiler.
 let target' = (* new style *)
       let spaces = [ Spaces.m ; Spaces.c ;  Spaces.a ; Spaces.g ] in
       { T.name     = arch
-
+      ; T.machine_env       = {T.ops=[]; T.literal=[]}  (* SEEMS UNLIKELY *)
       ; T.cc_specs = [ "C", ccspecs ; "C--", ccspecs ]
       ; T.cc_spec_to_auto   = (fun _ _ -> cc')
       ; T.is_instruction    = (fun _ -> true)   (* wildly optimistic *)
-      ; T.machine_env       = {T.ops=[]; T.literal=[]}
-      ; T.byteorder         = byte_order
+      ; T.byteorder         = byteorder
       ; T.wordsize          = wordsize
       ; T.pointersize       = wordsize
       ; T.vfp               = Vfp.mk wordsize
       ; T.alignment         = 1
+      ; T.memspace          = mspace
       ; T.memsize           = memsize
       ; T.float             = Float.ieee754
       ; T.charset           = "latin1" 

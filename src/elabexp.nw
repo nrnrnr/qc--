@@ -89,10 +89,12 @@ let loc_region r l = match l with A.NameOrMemAt(_, r) -> r | _ -> r
 let exp_region r l = match l with A.ExprAt     (_, r) -> r | _ -> r
 
 let exprfuns env =
-  let metrics     = F.metrics env in
-  let eprint r    = E.errorRegionPrt (F.srcmap env, r) in
-  let errorf fmt  = Printf.kprintf E.error fmt in
-  let catch r f x = E.catch (eprint r) f x in
+  let metrics       = F.metrics env in
+  let mspace        = ('m', metrics.M.byteorder, Cell.of_size metrics.M.memsize) in
+  let (_, _, mcell) = mspace in
+  let eprint r      = E.errorRegionPrt (F.srcmap env, r) in
+  let errorf fmt    = Printf.kprintf E.error fmt in
+  let catch r f x   = E.catch (eprint r) f x in
   <<definition of [[lvalue_name]]>>
   <<definition of [[rvalue_name]]>>
   <<mutually recursive nest of [[typed_expr]] and [[lvalue]]>> in
@@ -212,10 +214,10 @@ let rec lvalue lhs = match lhs with
       E.ematch2 w (typed_expr addr) (fun w (addre, addrt) ->
         if tywidth "address" addrt <> metrics.M.pointersize then
           E.error "address's type is not the machine's pointer size"
-        else if w mod metrics.M.memsize <> 0 then
+        else if not (Cell.divides mcell w) then
           E.error "reference's type is not a multiple of target memsize"
         else
-          Rtl.mem (assertion aligned) 'm' metrics.M.byteorder w addre, w)
+          Rtl.mem (assertion aligned) mspace (Cell.to_count mcell w) addre, w)
 and expr e = emap fst (typed_expr e) 
 and rvalue_name_or_mem nm = match nm with
   | A.NameOrMemAt(v, r) -> catch r rvalue_name_or_mem v

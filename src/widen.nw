@@ -82,6 +82,7 @@ module Up   = Rtl.Up
 
 let print_debug = false
 let imposs = Impossible.impossible
+let null = function [] -> true | _ :: _ -> false
 
 exception Abort_unknown
 exception Doesn't_need_widening
@@ -209,10 +210,11 @@ Function [[loc]] rewrites all subexpressions that appear in a location
 (i.e., in an addressing expression).
 <<floating-point widening>>=
 and loc l = match l with
-| RP.Mem(sp, agg, w, addr, assn)    -> RP.Mem(sp, agg, w, rewrite addr, assn)
-| RP.Slice(w, lsb, l)               -> RP.Slice(w, lsb, loc l)
-| RP.Reg(_, _, _) | RP.Var(_, _, _)
-| RP.Global(_,_,_)                  -> l in
+| RP.Mem(sp, w, addr, assn)  -> RP.Mem(sp, w, rewrite addr, assn)
+| RP.Slice(w, lsb, l)        -> RP.Slice(w, lsb, loc l)
+| RP.Reg(_, _, _) 
+| RP.Var(_, _, _)
+| RP.Global(_,_,_) -> l in
 @ 
 Assignment requires that we know whether the right-hand side is a
 floating-point expression.  If so, [[convert]], otherwise [[rewrite]].
@@ -928,17 +930,17 @@ let ast_combine m solns = function
       (mksolutions_lit_bits m.literals Z e) @
       (mksolutions_lit_bits m.literals S e) @
       (mksolutions_lit_bits m.literals H e)
-  | (RP.Fetch(RP.Mem(s,agg,w,addr,a),_)) as e ->
-      let all = List.concat solns in
+  | (RP.Fetch(RP.Mem(_, _, mcell as ms,c,addr,a),_)) as e ->
+      let all  = List.concat solns in
       let best = List.find_all (fun s -> fill s = Z && s.w = m.pointer) all in
-      if best = [] then
-          imposs ("Couldn't widen "^(Rtlutil.ToString.exp (Up.exp e)))
-      else
-        let best = minimum_cost best in
-        [{best with e  = e;
-                    e' = RP.Fetch(RP.Mem(s,agg,w,best.e',a),w);
-                    w  = w;
-                    n  = w}]
+      let () = if null best then
+                 imposs ("Couldn't widen "^(Rtlutil.ToString.exp (Up.exp e))) in
+      let best = minimum_cost best in
+      let w = Cell.to_width mcell c in
+      [{best with e  = e;
+                  e' = RP.Fetch(RP.Mem(ms,c,best.e',a),w);
+                  w  = w;
+                  n  = w}]
   | (RP.Const(RP.Link(_,_,w)|RP.Late(_,w)) | RP.Fetch(_,w)) as e ->
       mksolutions_var (var_name e) e w
   | RP.App((("sx"|"zx" as ext),   ws), [arg]) -> mksolutions_ext ext ws solns
@@ -950,7 +952,7 @@ let ast_combine m solns = function
 <<bottom-up transform>>=
 let rec bottom_up f = function
   | RP.App(_,es) as e -> f (List.map (bottom_up f) es) e
-  | RP.Fetch(RP.Mem(_, _, _, addr, _), _) as e -> f [bottom_up f addr] e
+  | RP.Fetch(RP.Mem(_, _, addr, _), _) as e -> f [bottom_up f addr] e
   | e -> f [] e
 @ 
 
@@ -1140,7 +1142,6 @@ let find_exts_to m w extname =
   List.find_all (function [_;w2] -> w2 = w
                         | _ -> imposs "ill formed machine env") ext_widths
 @ 
-
 <<widen.ml>>=
 <<types>>
 <<solution utilities>>
@@ -1156,8 +1157,8 @@ let find_exts_to m w extname =
 let needs_widening t r =
   let targetwidth = t.Target.wordsize in
   let rec loc = function
-    | RP.Mem(_,_,w,e,_) -> w < targetwidth || exp e
-    | RP.Reg(_,_,w)     -> w < targetwidth
+    | RP.Mem((_, _, ms),c,e,_) -> Cell.to_width ms c < targetwidth || exp e
+    | RP.Reg((_,_,ms),_,c) -> Cell.to_width ms c < targetwidth
     | RP.Var(_,_,w)     -> w < targetwidth
     | RP.Global(_,_,w)  -> w < targetwidth
     | RP.Slice(w,_,l)   -> w < targetwidth || loc l
@@ -1202,15 +1203,13 @@ let dpwiden t r =
   let find_best_soln r tau w =
     let solns  = all_solutions m r in
     let solns  = List.find_all (fun s -> width s = w && fill s = tau) solns in
-    if solns = [] then
-      imposs ("Couldn't widen "^Rtlutil.ToString.exp (Up.exp r))
-    else
-      let soln   = minimum_cost solns in
-      if print_debug then Printf.eprintf "cost: %i\n" soln.cost;
-      soln.e'
-  in
+    let () = if null solns then
+               imposs ("Couldn't widen "^Rtlutil.ToString.exp (Up.exp r)) in
+    let soln   = minimum_cost solns in
+    if print_debug then Printf.eprintf "cost: %i\n" soln.cost;
+    soln.e' in
   let rec widen_loc = function
-    | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,w,find_best_soln e Z ptrwidth, a)
+    | RP.Mem(sp,w,e,a) -> RP.Mem(sp,w,find_best_soln e Z ptrwidth, a)
 (* the following might be wrong...shouldn't we update w? *)
     | RP.Slice(w,i,l)      -> RP.Slice(w,i, widen_loc l)
     | l                    -> l
@@ -1264,9 +1263,9 @@ let widenlocs t r =
   let tostr = Rtlutil.ToString.rtl in
   let lo n e = RP.App(("lobits", [targetwidth; n]), [e]) in
   let rec widen_loc = function
-    | RP.Mem(sp, agg, w, e, a) -> RP.Mem(sp, agg, w, widen_exp e, a)
-    | RP.Slice(w, i, l)        -> RP.Slice(w, i, widen_loc l)
-    | l                        -> l
+    | RP.Mem(sp, w, e, a) -> RP.Mem(sp, w, widen_exp e, a)
+    | RP.Slice(w, i, l)   -> RP.Slice(w, i, widen_loc l)
+    | l                   -> l
   and widen_exp = function
     | (RP.Fetch(RP.Var(name, i, vw), fw)) as e ->
         if vw <> fw then imposs "Shouldn't fetch and var widths be the same?"
@@ -1325,8 +1324,8 @@ let update_gamma_counts t r =
     | (RP.Var(s,_,w)) -> 
         if w < targetwidth then
           (if Debug.on "gamma" then Printf.eprintf "Updating count of %s\n" s; update gamma_counts s w fty)
-    | RP.Mem(_, _, _, e, _) -> ignore(exp fty e)
-    | RP.Slice(_, _, l)     -> loc fty l
+    | RP.Mem(_, _, e, _) -> ignore(exp fty e)
+    | RP.Slice(_, _, l)  -> loc fty l
     | _ -> ()
   and exp fty = function
     | RP.Fetch(l, w) -> loc fty l; [fty]
@@ -1371,9 +1370,9 @@ let create_gamma () =
 <<widen.ml>>=
 let width_cost r =
   let rec count_loc c = function
-    | RP.Mem(_,_,_,e,_) -> do_count c e
-    | RP.Slice(_,_,l)   -> count_loc c l
-    | _                 -> imposs "count_loc can only handle mem and slice"
+    | RP.Mem(_,_,e,_) -> do_count c e
+    | RP.Slice(_,_,l) -> count_loc c l
+    | _               -> imposs "count_loc can only handle mem and slice"
   and do_count ((sx, zx, lo) as c) = function
     | RP.Const _ -> c
     | RP.Fetch(l, w) -> c
@@ -1406,9 +1405,9 @@ let width_cost r =
 <<widen.ml>>=
 let app_count r =
   let rec count_loc c = function
-    | RP.Mem(_,_,_,e,_) -> do_count c e
-    | RP.Slice(_,_,l)   -> count_loc c l
-    | _                 -> imposs "count_loc can only handle mem and slice"
+    | RP.Mem(_,_,e,_) -> do_count c e
+    | RP.Slice(_,_,l) -> count_loc c l
+    | _               -> imposs "count_loc can only handle mem and slice"
   and do_count c = function
     | RP.Const _     -> c
     | RP.Fetch(l, w) -> c

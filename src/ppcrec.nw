@@ -189,19 +189,19 @@ Terminal [[bits]] is a constant of types [[Bits.bits]]; terminal
 const:  Bits(bits) [{: guard (Bits.width bits = 32) :}] {: native bits :}
 lconst: Link(symbol, w:int)        {: symbol#mangled_text :}
 pic:    Diff(c1:lconst, c2:lconst) {: c1 ^ "-" ^ c2 :}
-pic:    Fetch(Mem(Diff(c1:lconst, c2:lconst), w1:int), w2:int)
-                                   {: c1 ^ "-" ^ c2 :}
+pic:    Fetch(Mem(Diff(c1:lconst, c2:lconst)), w2:int) {: c1 ^ "-" ^ c2 :}
 @ 
 \paragraph{Registers}
 <<rules>>=
-regl: Reg('r', n:int, w:int) [{: guard (n<>0) :}] {: regname n :}
+regl: Reg('r', n:int) [{: guard (n<>0) :}] {: regname n :}
 
-pcl:  Reg('c', 0, w:int) {: () :}
-cial: Reg('c', 1, w:int) {: () :}
-crl:  Reg('c', 2, w:int) {: () :}
-xerl: Reg('c', 4, w:int) {: () :}
-lrl:  Reg('c', 5, w:int) {: () :}
-spl:  Reg('r', 14, w:int) {: () :}
+pcl:  Reg('c', 0) {: () :}
+cial: Reg('c', 1) {: () :}
+crl:  Reg('c', 2) {: () :}
+xerl: Reg('c', 4) {: () :}
+lrl:  Reg('c', 5) {: () :}
+spl:  Reg('r', 14) {: () :}
+
 
 reg:                  Fetch(regl, w:int)         {: regl :}
 reg:  BitExtract(any, Fetch(regl, w:int), n:int) {: regl :}
@@ -214,7 +214,7 @@ sp:   Fetch(spl,  32) {: () :}
 @
 \paragraph{Addresses}
 <<rules>>=
-meml: Mem(addr, w:int)       {: addr :}
+meml: Mem(addr)              {: addr :}
 mem:  Sx(Fetch(meml, w:int)) {: (suffix w, "a", meml) :}
 mem:  Zx(Fetch(meml, w:int)) {: (suffix w, "z", meml) :}
 mem:     Fetch(meml, w:int)  {: (suffix w, "z", meml) :}
@@ -401,8 +401,8 @@ any : BitExtract(lsb:any, y:any, n:int) {: sprintf "BitExtract(%s, %s, %d)" lsb 
 
 any : Slice(n:w, lsb:n, y:any) {: sprintf "Slice(%d, %d, %s)" n lsb y :}
 
-any : Mem(any, w:int) {: "Mem(" ^any ^ "," ^ string_of_int w ^ ")" :}
-any : Reg(char, n:int, w:int) {: sprintf "Reg(%s, %d, %d)"   (Char.escaped char) n w :}
+any : Mem(any) {: "Mem(" ^any ^ ")" :}
+any : Reg(char, n:int) {: sprintf "Reg(%s, %d)" (Char.escaped char) n :}
 
 any : Store (dst:any, src:any, w:int)
  {: "Store(" ^ dst ^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
@@ -473,11 +473,11 @@ For the x86, when [[loc]] is [[fpcc]] (the FPU condition codes) or
 Finally, [[loc]] cannot be [[RP.Var]].}
 <<code to follow the labeler>>=  
 and loc l = match l with
-  | RP.Mem('m', aff, w, e, ass) -> conMem (exp e) w
-  | RP.Reg(sp, i, w)          -> conReg sp i w 
-  | RP.Mem(_, _, _, _, _)     -> error "non-mem, non-reg cell"
-  | RP.Var _ | RP.Global _    -> error "var found"
-  | RP.Slice(w,i,l)           -> conSlice w i (loc l)
+  | RP.Mem(('m',_,_), Rtl.C c, e, ass) -> conMem (exp e)
+  | RP.Reg((sp, _,_), i, w)            -> conReg sp i 
+  | RP.Mem(_, _, _, _)     -> error "non-mem, non-reg cell"
+  | RP.Var _ | RP.Global _ -> error "var found"
+  | RP.Slice(w,i,l)        -> conSlice w i (loc l)
 @ 
 Things start to get a bit baroque here, as we recognize different
 special forms a single effect can take.
@@ -497,8 +497,8 @@ respectively.
 }
 <<code to follow the labeler>>=  
 and effect = function
-  | RP.Store(RP.Reg('c', i, w),r,_) 
-    when (i = SS.indices.SS.pc)       -> conGoto (exp r)
+  | RP.Store(RP.Reg(('c',_,_), i, w),r,_) 
+    when i = SS.indices.SS.pc         -> conGoto (exp r)
   | RP.Store(l,e,w)                   -> conStore (loc l) (exp e) w
   | RP.Kill(l)                        -> conKill (loc l)
 @

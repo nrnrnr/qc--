@@ -34,8 +34,10 @@ let impossible          = Impossible.impossible
 <<utilities that depend on [[byteorder]] or [[wordsize]]>>=
 let fetch_word l        = R.fetch l   wordsize
 let store_word l e      = R.store l e wordsize
-let mem w addr          = R.mem R.none 'm' byteorder w  addr
-let reg_width (_,_,w)   = w
+let mcell = Cell.of_size 8
+let mspace = ('m', byteorder, mcell)
+let mcount = Cell.to_count mcell
+let mem w addr          = R.mem R.none mspace (mcount w) addr
 @
 
 % ------------------------------------------------------------------ 
@@ -74,7 +76,8 @@ let pc          = locations.SS.pc
 let cc          = locations.SS.cc
 let vfp         = Vfp.mk wordsize
 
-let reg n       = ('r',n,32)
+let rspace = ('r', Rtl.Identity, Cell.of_size 32)
+let reg n       = (rspace,n,Rtl.C 1)
 let sp          = reg 13        (* stack pointer    *)
 let ra          = reg 14        (* return address   *)
 @
@@ -93,7 +96,7 @@ let placevars =
       [ (fun w h _ -> w <= 32),   A.widen (fun _ -> 32) *> temps 't';
         A.is_any,                 A.widen (Aux.round_up_to ~multiple_of: 8);
       ] in
-  Placevar.mk_automaton ~warn ~vfp ~memsize:8 ~byteorder mk_stage
+  Placevar.mk_automaton ~warn ~vfp ~memspace:mspace mk_stage
 @ 
 % ------------------------------------------------------------------ 
 \subsection{Control-flow {\rtl}s}
@@ -150,15 +153,15 @@ There is no distinction between an integer and an address.
 @
 <<ARM postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-let icontext = Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't'
+let icontext = Talloc.Multiple.reg 't', fun ((c,_,_), _, _) -> c = 'r' || c = 't'
 let acontext = icontext
 let itempwidth = 32
 @
 \paragraph{Addressing modes}
 <<ARM postexpander>>=
 module Address = struct
-    type t               = Rtl.exp
-    let reg (_,_,w as r) = R.fetch (R.reg r) w 
+    type t    = Rtl.exp
+    let reg r = R.fetch (R.reg r) (Register.width r)
 end
 include Postexpander.Nostack(Address)
 @
@@ -169,9 +172,9 @@ include Postexpander.Nostack(Address)
 
 All temporaries are 32~bit wide.
 <<ARM postexpander>>=
-let tloc t              = Rtl.reg t
-let tval (_,_,w as t)   = R.fetch (tloc t) w
-let twidth              = reg_width
+let tloc t = Rtl.reg t
+let tval t = R.fetch (tloc t) (Register.width t)
+let twidth = Register.width
 
 let load ~dst ~addr assn =
     let w = twidth dst in
@@ -199,21 +202,21 @@ let xload op ~dst ~addr n assn =
     let w = twidth dst in
         assert (w = wordsize); 
         [R.store (tloc dst)
-                 (extend op n (R.fetch (R.mem assn 'm' byteorder n addr) n)) 
+                 (extend op n (R.fetch (R.mem assn mspace (mcount n) addr) n)) 
                  w]
 
 let sxload = xload "sx"
 let zxload = xload "zx"
 
 let lostore ~addr ~src n assn =
-    assert (reg_width src = wordsize);
-    [R.store (R.mem assn 'm' byteorder n addr) (lobits n (tval src)) n]
+    assert (Register.width src = wordsize);
+    [R.store (R.mem assn mspace (mcount n) addr) (lobits n (tval src)) n]
 @
 The general move operation only works between temporaries of the same
 width. Load immediate loads a constant into a temorary.
 <<ARM postexpander>>=
 let move ~dst ~src =
-    assert (reg_width src = reg_width dst);
+    assert (Register.width src = Register.width dst);
     if src = dst then [] else [R.store (tloc dst) (tval src) (twidth src)]
 @
 Immediate load, and extended immediate load. An extended load-immediate
@@ -418,7 +421,7 @@ let globals base =
                 else if w <= 16 then 16 
                 else Aux.round_up_to 32 w in
   let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
-  A.at ~start:base ~memsize:8 ~byteorder (A.widen width *> A.align_to align *>
+  A.at mspace ~start:base (A.widen width *> A.align_to align *>
   A.overflow ~growth:Memalloc.Up ~max_alignment:4)
 @
 % ------------------------------------------------------------------ 
@@ -433,6 +436,7 @@ let target : Ast2ir.tgt =
                  ; Spaces.c
                  ] in
     { T.name                = "arm"
+    ; T.memspace            = mspace
     ; T.byteorder           = byteorder
     ; T.wordsize            = wordsize
     ; T.pointersize         = wordsize
@@ -463,7 +467,7 @@ let target : Ast2ir.tgt =
                                 (F.cutto (Rtl.reg sp))
 *)                    
     ; T.globals             = globals
-    ; T.rounding_mode       = R.reg ('?', 99, 32)
+    ; T.rounding_mode       = R.reg (('?', Rtl.Identity, Cell.of_size 32), 99, R.C 1)
     ; T.named_locs          = Strutil.assoc2map []
     ; T.data_section        = "data"
     ; T.charset             = "latin1" (* REMOVE THIS FROM TARGET.T *)

@@ -242,23 +242,23 @@ let app o w args = match o with
                       
 let rec exp e =
     match e with
-    | RP.Const _ as c               -> c
-    | RP.Fetch (l, w)               -> RP.Fetch (loc l, w)
-    | RP.App ((o,w),args)           -> app o w (List.map exp args) 
-        
-and loc = function    
-    | RP.Mem(sp, agg, w, e, ass)    -> RP.Mem(sp, agg, w, exp e, ass)
-    | RP.Slice(w,i,l)               -> RP.Slice(w, i, loc l)
-    | RP.Reg(sp, i, w) as v         -> v
-    | RP.Var   (s,i,w) as v         -> v
-    | RP.Global(s,i,w) as v         -> v
-
-let effect = function
-    | RP.Store(l,e,w)               -> RP.Store(loc l, exp e, w)
-    | RP.Kill(l)                    -> RP.Kill(loc l)
-
-let guarded (e, eff)                = (exp e, effect eff)
-let rtl (RP.Rtl(es))                = RP.Rtl(List.map guarded es)
+    | RP.Const _ as c       -> c
+    | RP.Fetch (l, w)       -> RP.Fetch (loc l, w)
+    | RP.App ((o,w),args)   -> app o w (List.map exp args) 
+                            
+and loc = function          
+    | RP.Mem(sp, w, e, ass) -> RP.Mem(sp, w, exp e, ass)
+    | RP.Slice(w,i,l)       -> RP.Slice(w, i, loc l)
+    | RP.Reg(sp, i, w) as v -> v
+    | RP.Var   (s,i,w) as v -> v
+    | RP.Global(s,i,w) as v -> v
+                            
+let effect = function       
+    | RP.Store(l,e,w)       -> RP.Store(loc l, exp e, w)
+    | RP.Kill(l)            -> RP.Kill(loc l)
+                            
+let guarded (e, eff)        = (exp e, effect eff)
+let rtl (RP.Rtl(es))        = RP.Rtl(List.map guarded es)
 @
 
 % ------------------------------------------------------------------ 
@@ -271,10 +271,9 @@ and $k$ a constant, and returns either boths as a pair, or [[None]].
 <<unsafe RTL simplification>>=
 let zero w = RP.Const(RP.Bits (Bits.U.of_int 0 w))
 let reg_offset = function
-    | RP.App(("add", _), [RP.Fetch(RP.Reg(r),_); RP.Const(_) as k]) -> 
-        Some (r,k)
-    | RP.Fetch(RP.Reg r, w) -> Some (r, zero w)
-    | _                     -> None
+  | RP.App(("add", _), [RP.Fetch(RP.Reg r,_); RP.Const _ as k]) -> Some (r,k)
+  | RP.Fetch(RP.Reg r, w) -> Some (r, zero w)
+  | _                     -> None
 @
 <<unsafe RTL simplification>>=
 let rec app o w args = match Safe.app o w args with
@@ -294,21 +293,21 @@ let rec app o w args = match Safe.app o w args with
     | x -> x
 
 let rec exp = function
-    | RP.Const _ as c               -> c
-    | RP.Fetch (l, w)               -> RP.Fetch (loc l, w)
-    | RP.App ((o,w),args)           -> app o w (List.map exp args) 
-        
-and loc = function
-    | RP.Mem(sp, agg, w, e, ass)    -> RP.Mem(sp, agg, w, exp e, ass)
-    | RP.Slice(w,i,l)               -> RP.Slice(w, i, loc l)
-    | RP.Reg(sp, i, w) as v         -> v
-    | RP.Var   (s,i,w) as v         -> v
-    | RP.Global(s,i,w) as v         -> v
-
-let effect = Safe.effect
-
-let guarded (e, eff)                = (exp e, effect eff)
-let rtl' (RP.Rtl(es))               =
+    | RP.Const _ as c       -> c
+    | RP.Fetch (l, w)       -> RP.Fetch (loc l, w)
+    | RP.App ((o,w),args)   -> app o w (List.map exp args) 
+                            
+and loc = function          
+    | RP.Mem(sp, w, e, ass) -> RP.Mem(sp, w, exp e, ass)
+    | RP.Slice(w,i,l)       -> RP.Slice(w, i, loc l)
+    | RP.Reg(sp, i, w) as v -> v
+    | RP.Var   (s,i,w) as v -> v
+    | RP.Global(s,i,w) as v -> v
+                            
+let effect = Safe.effect    
+                            
+let guarded (e, eff)        = (exp e, effect eff)
+let rtl' (RP.Rtl(es))       =
   let add_guarded e es = match guarded e with
     | RP.Const(RP.Bool false), _ -> es
     | e                          -> e :: es in
@@ -436,38 +435,35 @@ assume that the memsize is~8.
 <<RTL operator implementations>>=
 let rec lobits ws args   = match (ws,args) with
 | [i;j],[RP.Const(RP.Bits x)] -> const (Bits.Ops.lobits j x)
-| [w;n],[<<little-endian memory fetch>>] ->
-    RP.Fetch (RP.Mem (sp, Rtl.LittleEndian, n, addr, assn), n)
-| [w;n],[<<big-endian memory fetch>>] ->
-    let memsize = 8 in
-    let offset  = (w - n) / memsize in
+| [w;n],[<<little-endian memory fetch>>] when Cell.divides mcell n ->
+    RP.Fetch (RP.Mem (mspace, Cell.to_count mcell n, addr, assn), n)
+| [w;n],[<<big-endian memory fetch>>] when Cell.divides mcell (w - n) ->
+    let R.C offset = Cell.to_count mcell (w - n) in
     let addr    = Dn.exp (RU.addk (RU.Width.exp' addr) (Up.exp addr) offset) in
-    RP.Fetch (RP.Mem (sp, Rtl.BigEndian, n, addr, assn), n)
+    RP.Fetch (RP.Mem (mspace, Cell.to_count mcell n, addr, assn), n)
 | [w;n],[RP.App(("shrl", [_]),
                 [<<little-endian memory fetch>>; RP.Const(RP.Bits b)])] ->
     let shamt = Bits.U.to_int b in
-    let memsize = 8 in
-    if shamt mod memsize = 0 then
-      let offset = shamt / memsize in
+    if Cell.divides mcell shamt then
+      let R.C offset = Cell.to_count mcell shamt in
       let addr    = Dn.exp (RU.addk (RU.Width.exp' addr) (Up.exp addr) offset) in
       lobits [w-shamt; n]
-        [RP.Fetch (RP.Mem (sp, Rtl.LittleEndian, w-shamt, addr, assn), w-shamt)]
+        [RP.Fetch (RP.Mem (mspace, Cell.to_count mcell (w-shamt), addr, assn),w-shamt)]
     else
       default "lobits" ws args
 | [w;n],[RP.App(("shrl", [_]), [<<big-endian memory fetch>>; RP.Const(RP.Bits b)])] ->
     let shamt = Bits.U.to_int b in
-    let memsize = 8 in
-    if shamt mod memsize = 0 then
+    if Cell.divides mcell shamt then
       lobits [w-shamt; n]
-        [RP.Fetch (RP.Mem (sp, Rtl.BigEndian, w-shamt, addr, assn), w-shamt)]
+        [RP.Fetch (RP.Mem (mspace, Cell.to_count mcell (w-shamt), addr, assn),w-shamt)]
     else
       default "lobits" ws args
 | [i;j], [x] when i = j -> x
 | _         -> default "lobits" ws args
 <<little-endian memory fetch>>=
-RP.Fetch(RP.Mem (sp, Rtl.LittleEndian, w', addr, assn), w'')
+RP.Fetch(RP.Mem ((sp, Rtl.LittleEndian, mcell) as mspace, w', addr, assn), w'')
 <<big-endian memory fetch>>=
-RP.Fetch(RP.Mem (sp, Rtl.BigEndian, w', addr, assn), w'')
+RP.Fetch(RP.Mem ((sp, Rtl.BigEndian, mcell) as mspace, w', addr, assn), w'')
 @ 
 <<RTL operator implementations>>=
 let unsigned n w = RP.Const (RP.Bits (Bits.U.of_int n w))

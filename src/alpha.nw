@@ -9,28 +9,22 @@ The Alpha is a 64 bit little-endian architecture. For informations about
 he architecture, we consulted the \textit{True64 {\small UNIX} Assembly
 Language Programmer's Guide}, Version 5.1, published by Compaq Computer,
 Houston.
-
-
 <<alpha.mli>>=
 module Post : Postexpander.S
 module X    : Expander.S
 
 val target: Ast2ir.tgt
 @
-
 % ------------------------------------------------------------------ 
 \subsection{Name and storage spaces}
 % ------------------------------------------------------------------ 
-
 <<alpha.ml>>=
 let arch        = "alpha"                    (* architecture *)
 let byteorder   = Rtl.LittleEndian 
 let wordsize    = 64
 @
-
 We use the standard storage spaces, including the spaces for PC and
 condition codes. 
-
 <<alpha.ml>>=
 module SS   = Space.Standard64
 module A    = Automaton
@@ -52,11 +46,9 @@ module Spaces = struct
     let c  = SS.c  6 id [64]    (* pc, npc, cc, _, fp_mode, fp_fcmp *)
 end
 @
-
 % ------------------------------------------------------------------ 
 \subsection{Registers}
 % ------------------------------------------------------------------ 
-
 <<alpha.ml>>=
 let locations   = SS.locations Spaces.c
 let pc          = locations.SS.pc
@@ -66,7 +58,8 @@ let fp_mode     = locations.SS.fp_mode
 let fp_fcmp     = locations.SS.fp_fcmp
 let vfp         = Vfp.mk wordsize
 
-let reg n       = ('r',n,wordsize)
+let rspace = Spaces.r.Space.space
+let reg n       = (rspace,n,R.C 1)
 let sp          = reg 30        (* stack pointer    *)
 let ra          = reg 26        (* return address   *)
 let zero        = reg 31        (* always zero      *)
@@ -74,7 +67,7 @@ let gp          = reg 29        (* global pointer   *)
 let pv          = reg 27        (* procedure value  *)
 
 let pv_loc      = R.reg pv
-let rm_reg      = ('d', 0, 2)
+let rm_reg      = (('d', Rtl.Identity, Cell.of_size 2), 0, Rtl.C 1)
 @
 
 % ------------------------------------------------------------------ 
@@ -85,10 +78,11 @@ let rm_reg      = ('d', 0, 2)
 let unimp               = Impossible.unimp
 let impossible          = Impossible.impossible
 
+let (_, _, mcell) as mspace = Spaces.m.Space.space
 let fetch_word l        = R.fetch l   wordsize
 let store_word l e      = R.store l e wordsize
-let mem w addr          = R.mem R.none 'm' byteorder w  addr
-let reg_width (_,_,w)   = w
+let mem w addr          = R.mem R.none mspace (Cell.to_count mcell w)  addr
+let reg_width           = Register.width
 @
 % ------------------------------------------------------------------ 
 \subsection{Control-flow {\rtl}s}
@@ -146,8 +140,8 @@ There is no distinction between an integer and an address.
 @
 <<Alpha postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-let icontext = Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't'
-let fcontext = Talloc.Multiple.reg 'u', fun (c, _, _) -> c = 'f' || c = 'u'
+let icontext = Talloc.Multiple.reg 't', fun ((c, _, _), _, _) -> c = 'r' || c = 't'
+let fcontext = Talloc.Multiple.reg 'u', fun ((c, _, _), _, _) -> c = 'f' || c = 'u'
 let acontext = icontext
 let rcontext = (fun x y -> unimp "Unsupported soft rounding mode"), fun r -> r = rm_reg
 let itempwidth = 64
@@ -155,8 +149,8 @@ let itempwidth = 64
 \paragraph{Addressing modes}
 <<Alpha postexpander>>=
 module Address = struct
-    type t               = Rtl.exp
-    let reg (_,_,w as r) = R.fetch (R.reg r) w 
+    type t    = Rtl.exp
+    let reg r = R.fetch (R.reg r) (Register.width r)
 end
 include Postexpander.Nostack(Address)
 @
@@ -170,9 +164,9 @@ can handle 32 bit floating point values in its 64 bit floating point
 registers. I belive that one would always spill the 64 bit register.
 
 <<Alpha postexpander>>=
-let tloc t              = Rtl.reg t
-let tval (_,_,w as t)   = R.fetch (tloc t) w
-let twidth              = reg_width
+let twidth = reg_width
+let tloc t = Rtl.reg t
+let tval t = R.fetch (tloc t) (twidth t)
 
 let load ~dst ~addr assn =
     let w = twidth dst in
@@ -199,38 +193,35 @@ let extend  op n e = R.app (R.opr op       [n; wordsize]) [e]
 let lobits     n e = R.app (R.opr "lobits" [wordsize; n]) [e]
 
 let xload op ~dst ~addr n assn =
-    let w = twidth dst in
-        assert (w = wordsize); 
-        [R.store (tloc dst)
-                 (extend op n (R.fetch (R.mem assn 'm' byteorder n addr) n)) 
-                 w]
+  let w = twidth dst in
+  assert (w = wordsize);
+  assert (Cell.divides mcell n);
+  [R.store (tloc dst)
+     (extend op n (R.fetch (R.mem assn mspace (Cell.to_count mcell n) addr) n))
+     w]
 
 let sxload = xload "sx"
 let zxload = xload "zx"
 
 let lostore ~addr ~src n assn =
-    assert (reg_width src = wordsize);
-    [R.store (R.mem assn 'm' byteorder n addr) (lobits n (tval src)) n]
+  assert (reg_width src = wordsize);
+  assert (Cell.divides mcell n);
+  [R.store (R.mem assn mspace (Cell.to_count mcell n) addr) (lobits n (tval src)) n]
 @
-
 The general move operation only works between temporaries of the same
 width. Load immediate loads a constant into a temporary.
-
 <<Alpha postexpander>>=
 let move ~dst ~src =
     assert (reg_width src = reg_width dst);
     if src = dst then [] else [R.store (tloc dst) (tval src) (twidth src)]
 @
-
 Immediate load, and extended immediate load. An extended load-immediate
 can take sums and differences of compile-time constants (including late
 compile-time constants). 
-
 <<Alpha postexpander>>=
 let li  ~dst const = [R.store (tloc dst) (Up.const const) (twidth dst)]
 let lix ~dst e     = [R.store (tloc dst) e                (twidth dst)]  
 @
-
 
 % ------------------------------------------------------------------ 
 \subsubsection{Operator contexts}
@@ -238,7 +229,6 @@ let lix ~dst e     = [R.store (tloc dst) e                (twidth dst)]
 
 We have no boolean context because boolean operations are rewritten into
 control flow.
-
 <<Alpha postexpander>>=
 let bcontext = (fun x y -> impossible "allocate from bcontext"), fun _ -> false
 let operators = Context.standard icontext fcontext rcontext acontext bcontext
@@ -246,10 +236,8 @@ let operators = Context.standard icontext fcontext rcontext acontext bcontext
 let resmap = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators
 let argmap = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
 @
-
 We have two maps: from operator to argument context, and from operator
 to result context.
-
 <<Alpha postexpander>>=
 let arg_contexts   (n, _) = try SM.find n argmap with Not_found -> assert false
 let result_context (n, _) = try SM.find n resmap with Not_found -> assert false
@@ -263,7 +251,6 @@ let constant_context w = icontext
 None of the operators below expect or return boolean values. This
 implies, that comparison operators are not expanded here before they are
 used as guards for branches.
-
 <<Alpha postexpander>>=
 let unop ~dst op x =
     [R.store (tloc dst) (R.app (Up.opr op) [tval x]) (twidth dst)]
@@ -280,7 +267,6 @@ let rtlop ~dst op args =
 % ------------------------------------------------------------------ 
 
 On the Alpha, we can read and write the program counter.
-
 <<Alpha postexpander>>=
 let pc_lhs = pc         (* PC as assigned by branch *)
 let pc_rhs = pc         (* PC as captured by call   *)
@@ -308,30 +294,24 @@ Not all comparion operators are provided as primitives on the Alpha. We
 thus have to implement them as an instruction sequence. The rusult is in
 all cases stored in [[x]].
 
-
 [[com]] complements a temporay bitwise. As above, we could like to
 assign the result to a new temporary, but cannot allocate one. We thus
 mutate the argument.
-
 <<Alpha postexpander>>=
 let bit = R.opr "bit" [wordsize] 
 let com x =
     let o = R.opr "com" [wordsize] in
         R.store (tloc x)  (R.app o [tval x]) wordsize
 @
-
 [[relation]] implements a binary relation, where the result is
 stored in [[x]] \emph{as a value}. 
-
 <<Alpha postexpander>>=
 let relation op x y = 
     let o   = R.opr op    [wordsize] in
         R.store (tloc x) (R.app bit [R.app o [tval x;tval y]]) wordsize 
 @
-
 [[cmp]] implements the {\rtl} comparision operators where the result is
 stored in the first argument. 
-
 <<Alpha postexpander>>=
 let cmp op x y = match op with
     | "eq"          -> [relation "eq"  x y;]
@@ -354,10 +334,8 @@ let cmp op x y = match op with
     | _               -> impossible 
                         "bad comparison in expanded Alpha conditional branch"
 @
-
 A conditional branch is a sequence of relational operators, followed by
 a [[cbranch]] on the result. 
-
 <<Alpha postexpander>>=
 let cbranch op x tgt =
     R.guard (R.app (R.opr op [wordsize]) [tval x; R.bits (Bits.zero 64) 64])
@@ -367,11 +345,9 @@ let bc x (opr, ws as op) y ~tgt =
     assert (ws = [wordsize]);
     (cbranch "eq" x tgt) :: (cmp opr x y)  
 @
-
 [[bnegate]] inverts the condition in a conditional branch. Since we only
 compare for equality or inequality, this is easy. All the real work is
 done in the relational operators preceding the branch.
-
 <<Alpha postexpander>>=
 let bnegate r = 
     let zero   = R.bits (Bits.zero 64) 64 in    
@@ -389,7 +365,6 @@ let bnegate r =
                 (R.store pc_lhs (Up.exp tgt) wordsize)
     | _ -> Impossible.impossible "ill-formed Alpha conditional branch"
 @
-
 \paragraph{Calls}\label{alpha:call} 
 
 Calls and returns must follow a protocol to allow a procedure to
@@ -397,7 +372,6 @@ maintain its global pointer: on entry, register \$27 contains the
 procedure's address, on exit \$26 contains the return address. Both
 registers are used to load the global pointer on entry and after a
 return:
-
 <<example for calling convention>>=
     ...
     lda $27, foo
@@ -410,7 +384,6 @@ foo:
     ...
     ret ($26)
 @    
-
 The call and return instructions in general do not use the conventional
 registers. Here we expand them such that they do. We also add the
 [[ldgp]] instruction after a [[jsr]]. The [[ldgp]] instruction at the
@@ -499,7 +472,7 @@ let globals base =
                 else if w <= 32 then 32
                 else Aux.round_up_to wordsize w in
   let align = function _ -> 8 in
-  A.at ~start:base ~memsize:8 ~byteorder (A.widen width *> A.align_to align *>
+  A.at ~start:base mspace (A.widen width *> A.align_to align *>
   A.overflow ~growth:Memalloc.Up ~max_alignment:8)
 @
 
@@ -517,6 +490,7 @@ let target =
                  ; Spaces.c
                  ] in
     { T.name                = "alpha"
+    ; T.memspace            = mspace
     ; T.byteorder           = byteorder
     ; T.wordsize            = wordsize
     ; T.pointersize         = wordsize

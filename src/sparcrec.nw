@@ -9,6 +9,7 @@ val is_instruction : Rtl.rtl -> bool
 
 A few abbreviations.
 <<modules>>=
+module R  = Rtl
 module RU = Rtlutil
 module RP = Rtl.Private
 module SS = Space.Standard32
@@ -49,9 +50,10 @@ exception Error of string
 let sprintf   = Printf.sprintf
 let error msg = raise (Error msg)
 
-let spl = RP.Reg('r', 14, 32)
+let rspace = ('r', R.BigEndian, Cell.of_size 32)
+let spl = RP.Reg(rspace, 14, R.C 1)
 let sp  = RP.Fetch(spl, 32)
-let ral = RP.Reg('r', 31, 32)
+let ral = RP.Reg(rspace, 31, R.C 1)
 let ra  = RP.Fetch(ral, 32)
 
 let idiomatic_reg_name n =
@@ -611,9 +613,9 @@ let rec exp = function
   | RP.App((o,_),_)           -> error ("unknown operator " ^ o)
 <<code to follow the labeler>>=  
 and loc l = match l with
-  | RP.Mem('m', aff, w, e, ass) -> conMem (exp e) w
-  | RP.Reg(sp, i, w)          -> conReg sp i w 
-  | RP.Mem(_, _, _, _, _)     -> error "non-mem, non-reg cell"
+  | RP.Mem(('m', aff, _), w, e, ass) -> conMem (exp e) w
+  | RP.Reg((sp, _, _), i, w)         -> conReg sp i w 
+  | RP.Mem(_, _, _, _)        -> error "non-mem, non-reg cell"
   | RP.Var _ | RP.Global _    -> error "var found"
   | RP.Slice(w,i,l)           -> unimp "sparc: slice locations"
 @ 
@@ -635,7 +637,7 @@ call.  For now, we will just be using the ``ret'' instruction because
 we don't do the so-called ``leaf optimization''.
 <<code to follow the labeler>>=  
 and effect = function
-  | RP.Store(RP.Reg('c', i, w), r, _)
+  | RP.Store(RP.Reg(('c',_,_), i, c), r, _)
     when (i = 1 (* i = npc *)) ->
        if r = ra then conReturn () else conGoto (exp r)
 (*

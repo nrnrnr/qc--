@@ -60,14 +60,15 @@ Calling conventions refer to registers frequently, so it is
 appropriate to be able to refer to them by name.
 Lua code would do something similar.
 <<x86call.ml>>=
-let eax = ('r', 0, 32)
-let ecx = ('r', 1, 32)
-let edx = ('r', 2, 32)
-let ebx = ('r', 3, 32)
-let esp = ('r', 4, 32)
-let ebp = ('r', 5, 32)
-let esi = ('r', 6, 32)
-let edi = ('r', 7, 32)
+let rspace = X86regs.rspace
+let eax = X86regs.eax 
+let ecx = X86regs.ecx 
+let edx = X86regs.edx 
+let ebx = X86regs.ebx 
+let esp = X86regs.esp 
+let ebp = X86regs.ebp 
+let esi = X86regs.esi 
+let edi = X86regs.edi 
 let vfp = Vfp.mk 32
 @ 
 Here are the volatile and nonvolatile registers.
@@ -90,17 +91,17 @@ For now, we save a nonvolatile register anywhere.
 Later, we may want mechanisms for saving them in conventional locations.
 <<x86call.ml>>=
 let saved_nvr temps =
-  let t = Talloc.Multiple.loc temps 't' in
-  fun (_, _, w) -> t w
+  let t = Talloc.Multiple.loc temps 't' in fun r -> t (Register.width r)
 @
-
 And in Lua:
 <<x86 calling convention automata in Lua>>=
 X86.sp_align  = 4
 X86.wordsize  = 32
 
-function reg(sp, i, w) return({ space = sp, index = i, width = w }) end
-function r(i) return (reg("r", i, X86.wordsize)) end
+function reg(sp, i, w)
+   return { space = sp, cellsize = w, index = i, count = 1 }
+end
+function r(i) return reg("r", i, X86.wordsize) end
 
 X86.eax = r(0)  X86.ecx = r(1)  X86.edx = r(2)
 X86.ebx = r(3)  X86.esp = r(4)  X86.ebp = r(5)
@@ -146,8 +147,8 @@ strictly more permissive than~C, as it permits returning one integer
 Any floating-point result is automatically widened to 80~bits, and
 an integer result is widened to 32~bits.
 <<x86call.ml>>=
-let stack_top_proxy_reg = ('\000', 0, 80)
-
+let stack_top_proxy_reg = (('\000', Rtl.Identity, Cell.of_size 80), 0, Rtl.C 1)
+@ 
 <<x86 calling convention automata in Lua>>=
 X86.cc["C"].results =
   A.choice { "float" , { A.widen(80)
@@ -252,7 +253,8 @@ is really a synonym for an existing convention.
 On entry, the stack pointer points to the return address.
 This needs some aliasing info?
 <<x86call.ml>>=
-let amem = R.mem (R.aligned 4) 'm' bo 32 
+let mspace = ('m', bo, Cell.of_size 8)
+let amem = R.mem (R.aligned 4) mspace (R.C 4)
 let ra = amem vfp
 let const x _ = x
 @ 
@@ -273,7 +275,7 @@ OR FOR BOTH.
 
 N.B. the call instruction moves the stack pointer.
 <<functions to transform automata>>=
-let autoAt = A.at ~memsize ~byteorder:bo in
+let autoAt = A.at mspace in
 let call_actuals  =
   C.outgoing ~growth ~sp
    ~mkauto:(fun () -> Block.srelative vfp "out call parms" autoAt specs.A.call)
@@ -422,8 +424,7 @@ let template = (* conservative spec *)
         { CS.name           = "callspec"    (* override this! *)
         ; CS.stack_growth   = Memalloc.Down
         ; CS.overflow       = CS.overflow C.Caller C.Caller
-        ; CS.memsize        = memsize
-        ; CS.byteorder      = bo
+        ; CS.memspace       = mspace
         ; CS.sp             = esp
         ; CS.sp_align       = 4
         ; CS.all_regs       = RS.union volregs nvregs

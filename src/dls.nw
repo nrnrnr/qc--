@@ -357,9 +357,10 @@ let print_prefs msg prefs =
   Printf.eprintf "%s\nPreferences VarMap:\n" msg;
   VM.print "" prefs.varMap;
   Printf.eprintf "Preferences RegQueue:\n";
-  SM.iter (fun s regs -> Printf.eprintf "Space %c: " s;
-                          List.iter (fun r -> Printf.eprintf "%s " (printReg r)) regs)
-          prefs.regs;
+  SM.iter (fun (s,_,_) regs ->
+             Printf.eprintf "Space %c: " s;
+             List.iter (fun r -> Printf.eprintf "%s " (printReg r)) regs)
+    prefs.regs;
   Printf.eprintf "\n" in
 @
 The preferences come in two forms: the register order and the variable map.
@@ -550,13 +551,18 @@ let rpo_dfs (state, prefs) =
 <<dls algorithm>>=
 let dls () ({Proc.cfg = cfg; Proc.cc = cc; Proc.target = tgt} as proc) =
   ignore (Optimize.trim_unreachable_code () proc);
-(*
-  Cfgutil.print_cfg cfg;
-  G.iter_nodes
-    (fun n -> printTempSet (Printf.sprintf "%d live_out\n" (G.num n)) (get_live_out n);
-              printTempSet (Printf.sprintf "%d live_in\n"  (G.num n)) (get_live_in n))
-    cfg;
-*)
+  if Debug.on "dls" then
+    begin
+      Cfgutil.print_cfg cfg;
+      G.iter_nodes
+        (fun n ->
+          let set = Register.SetX.to_string in
+          Printf.eprintf
+            "%4d live_out = { %s }\n" (G.num n) (set (Cfgx.Live.live_out n));
+          Printf.eprintf
+            "%4d live_in  = { %s }\n" (G.num n) (set (Cfgx.Live.live_in n)))
+        cfg
+    end;
   let alloc_regset = cc.Call.volregs ++ cc.Call.pre_nvregs      in
   <<define spill functions>>
   <<define [[buffer_if_succ_is_join]] to insert a nop after instr leading to join>>
@@ -802,10 +808,10 @@ let () = List.iter check_map pred_maps in
 Spilling a temp from a register requires that we modify the state in addition to the
 varmaps because we may have to set a spill location for the temp.
 <<define spill functions>>=
-  let get_spill_loc state (_,_,w as temp) =
+  let get_spill_loc state ((_, _, ms),_,c as temp) =
     try state,RM.find temp state.spillMap
     with Not_found ->
-      let l = Automaton.allocate proc.Proc.priv w "" in
+      let l = Automaton.allocate proc.Proc.priv (Cell.to_width ms c) "" in
       ({state with spillMap = RM.add temp l state.spillMap},l) in
   let spill state temp reg map =
     let (state,spill_loc) = get_spill_loc state temp in
@@ -1109,7 +1115,8 @@ let make_loc_empty loc vm =
              | Some t -> VM.remove t loc vm
              | None   -> vm                 in
 let space = Target.space tgt in
-let move temp (_,_,w as dst) src =
+let move temp ((_,_,ms),_,c as dst) src =
+  let w = Cell.to_width ms c in
   ((fun vm -> VM.add temp (Reg dst) (make_loc_empty (Reg dst) vm)),
    [Rtl.store (Rtl.reg dst) (Rtl.fetch (Rtl.reg src) w) w]) in
 let store state temp src =
@@ -1157,7 +1164,7 @@ let rewrite_spans (node, ss as rst) =
        | RP.Reg r ->
            (try match VM.var_locs vm r with
                 | Reg r :: _ -> RP.Reg r
-                | Mem l :: _ -> let (_, _, w) = r in Dn.loc (Automatonutil.aloc l w)
+                | Mem l :: _ -> Dn.loc (Automatonutil.aloc l (Register.width r))
                 | [] -> raise RTD.DeadValue
             with Not_found -> raise RTD.DeadValue)
        | _          -> imposs "DLS reg allocator emitting RT data: guard failed\n" in
@@ -1191,7 +1198,7 @@ Most of the functions are not even specific to this particular algorithm.
 <<register utilities>>=
 let setFromList l = List.fold_left (fun set r -> RS.add r set) RS.empty l
 let part = List.partition
-let printReg (s, i, w) = Printf.sprintf "%c%d" s i
+let printReg ((s,_,_), i, w) = Printf.sprintf "%c%d" s i
 let true_fun _ = true
 let diff  lst set = List.filter (fun r -> not (RS.mem r set)) lst
 let inter lst set = List.filter (fun r -> RS.mem r set) lst

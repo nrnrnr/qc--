@@ -64,8 +64,8 @@ module Multiple : sig
   type t       (* an allocator for multiple spaces -- a mutable type *)
 
   val for_spaces : Space.t list -> t            (* a fresh allocator *)
-  val reg : Rtl.space -> t -> (*width*) int -> Register.t
-  val loc : t -> Rtl.space -> (*width*) int -> Rtl.loc
+  val reg : char -> t -> (*width*) int -> Register.t
+  val loc : t -> char -> (*width*) int -> Rtl.loc
   val reg_like : t -> Register.t -> Register.t
 end
 @ 
@@ -85,10 +85,12 @@ module Single = struct
     let divide = divideby space.S.cellwidth in (* premature optimization *)
     (fun width ->
       <<use [[width]] to make [[k]] be the next index, updating [[next]]>>
-      (space.S.space, k, width)),
+      (space.S.space, k, Rtl.C (divide width))),
     (fun width ->
       <<use [[width]] to make [[k]] be the next index, updating [[next]]>>
-      Rtl.reg (space.S.space, k, width))
+      Rtl.reg (space.S.space, k, Rtl.C (divide width)))
+
+  let _ = (for_space : Space.t -> t)
 
   let reg (reg, _) = reg
   let loc (_, loc) = loc
@@ -120,22 +122,26 @@ module Multiple = struct
   | S.Temp _ -> true
   | _ -> false
 
-  type t = Rtl.space -> Single.t
+  type t = char -> Single.t
 
   let for_spaces spaces =
     List.fold_right
       (fun s rest ->
          if is_temp s then
            let a = Single.for_space s in
-           fun c -> if c = s.S.space then a else rest c
+           let named_by (c', _, _) c = c = c' in
+           fun c -> if named_by s.S.space c then a else rest c
          else
            rest)
       spaces fail
 
+  let _ = (for_spaces : Space.t list -> t)
+
   let reg c t = Single.reg (t c)
   let loc t c = Single.loc (t c)
 
-  let reg_like t (space, _, width) = Single.reg (t space) width
+  let reg_like (t:t) ((c, _, ms) as space, _, ct) =
+    Single.reg (t c) (Cell.to_width ms ct)
 end
 @ 
 This bit of cleverness may get the compiler to optimize division using

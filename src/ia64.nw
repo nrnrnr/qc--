@@ -44,19 +44,20 @@ module Spaces = struct
   let t = Space.Standard64.t     id [64]
   let p = Space.Standard64.p 64  id [ 1]  (* these are predicate registers *)
   let w = Space.Standard64.w     id [ 1]
-  let f = S.checked { S.space = 'f'; S.doc = "floating-point registers"
+  let f = S.checked { S.space = ('f', id, Cell.of_size 64)
+                    ; S.doc = "floating-point registers"
                     ; S.cellwidth = 64
                     ; S.indexwidth = 7 ; S.indexlimit = Some 127
                     ; S.aggregation = id; S.widths = [64]
                     ; S.classification = S.Reg
                     }
-  let all_floats = { S.stands_for = 'f'; S.index_ok = (fun _ -> true)
+  let all_floats = { S.stands_for = f.S.space; S.index_ok = (fun _ -> true)
                    ; S.set_doc = "all floating-point registers"
                    } 
-  let u = S.checked { S.space = 'u'; S.doc = "floating-point temporaries"
+  let u = S.checked { S.space = ('u', id, Cell.of_size 64)
+                    ; S.doc = "floating-point temporaries"
                     ; S.cellwidth = 64
-
-					(* What is the significance of a 31-bit indexwidth? *)
+                         (* What is the significance of a 31-bit indexwidth? *)
                     ; S.indexwidth = 31; S.indexlimit = None
                     ; S.aggregation = id; S.widths = [64]
                     ; S.classification = S.Temp all_floats
@@ -65,12 +66,16 @@ module Spaces = struct
   let c = Space.Standard64.c 1 id [64]
 end
 
-let locations = SS.locations Spaces.c
+let (_, _, mcell) as mspace = Spaces.m.Space.space
+let rspace = Spaces.r.Space.space
+let fspace = Spaces.f.Space.space
+let aspace = Spaces.a.Space.space
 
+let locations = SS.locations Spaces.c
 let pc    = locations.SS.pc  (* instruction pointer / program counter *)
 let cc    = locations.SS.cc
-let sp    = R.reg ('r', 12, 64)
-let ra    = R.reg ('a',  0, 64)
+let sp    = R.reg (rspace, 12, R.C 1)
+let ra    = R.reg (aspace,  0, R.C 1)
 let raloc = R.fetch ra 64
 @ 
 
@@ -107,10 +112,10 @@ let talloc space = Talloc.Multiple.reg space (get_talloc ())
 \paragraph{Utility Functions}
 <<ia64 postexpander>>=
 let temploc  t = Rtl.reg t
-let tempval  ((space, n, w) as t) = R.fetch (temploc t) w
-let tempwidth (space, n, w)       = w
+let tempwidth  = Register.width
+let tempval  t = R.fetch (temploc t) (tempwidth t)
 let tempstore tmp exp = R.store (temploc tmp) exp (tempwidth tmp)
-let mem addr = R.mem R.none 'm' byte_order 64 addr
+let mem addr = R.mem R.none mspace (R.C 8) addr
 
 let ui s = Printf.eprintf "*** unimp %s" s; []
 @ 
@@ -118,22 +123,23 @@ let ui s = Printf.eprintf "*** unimp %s" s; []
 Addresses go in the integer registers, so we use these contexts:
 <<ia64 postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-let icontext = Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't'
-let fcontext = Talloc.Multiple.reg 'u', fun (c, _, _) -> c = 'f' || c = 'u'
-let bcontext = Talloc.Multiple.reg 'w', fun (c, _, _) -> c = 'p' || c = 'w'
+let icontext = Talloc.Multiple.reg 't', fun ((c, _, _), _, _) -> c = 'r' || c = 't'
+let fcontext = Talloc.Multiple.reg 'u', fun ((c, _, _), _, _) -> c = 'f' || c = 'u'
+let bcontext = Talloc.Multiple.reg 'w', fun ((c, _, _), _, _) -> c = 'p' || c = 'w'
 let acontext = icontext
 let itempwidth = 64
 
 (* this is just bogus *)
-let rcontext = (fun x y -> Impossible.unimp "Unsupported soft rounding mode")
-               ,fun r -> r = ('d', 0, 2)
+let rcontext = 
+  (fun x y -> Impossible.unimp "Unsupported soft rounding mode"),
+  (function (('d', _, _), 0, R.C 1) -> true | _ -> false)
 @ 
 \paragraph{Addressing modes}
 The only addressing mode is the obvious one.
 <<ia64 postexpander>>=
 module Address = struct
   type t = Rtl.exp
-  let reg (space, n, w) = R.fetch (R.reg (space, n, w)) w
+  let reg r = R.fetch (R.reg r) (Register.width r)
 end
 @ 
 There is no x86-like stack in the IA64.
@@ -145,19 +151,19 @@ include Postexpander.Nostack(Address)
 We treat the Itanium strictly as a 64-bit machine, so we assume the width of
 everything is~64.
 <<ia64 postexpander>>=
-let load ~dst:((_, _, w) as dst) ~addr assn =
-  assert (w = 64);
+let load ~dst ~addr assn =
+  assert (tempwidth dst = 64);
   match Down.exp addr with
-  |	RP.App(op, [RP.Fetch(RP.Reg(s,i,w), _); opnd]) ->
+  |	RP.App(op, [RP.Fetch(RP.Reg r, _); opnd]) ->
          [R.store (temploc dst)
-            (R.fetch (R.mem assn 'm' byte_order 64 (tempval (s,i,w))) 64) 64
-         ;R.store (temploc (s,i,w)) addr 64]
+            (R.fetch (R.mem assn mspace (R.C 8) (tempval r)) 64) 64
+         ;R.store (temploc r) addr 64]
   |	_ -> [R.store (temploc dst) 
-			(R.fetch (R.mem assn 'm' byte_order 64 addr) 64) 64]
+			(R.fetch (R.mem assn mspace (R.C 8) addr) 64) 64]
 
-let store ~addr ~src:((_, _, w) as src) assn =
-  assert (w = 64);
-  [R.store (R.mem assn 'm' byte_order 64 addr) (tempval src) 64]
+let store ~addr ~src assn =
+  assert (tempwidth src = 64);
+  [R.store (R.mem assn mspace (R.C 8) addr) (tempval src) 64]
 @ 
 We also provide sign-extending loads and stores:
 NOTE THAT WE PROBABLY NEED TO FIX THIS UP TOO WITH RESPECT TO LOADS AND
@@ -165,18 +171,21 @@ STORES FROM OFFSETS.
 <<ia64 postexpander>>=
 let extend opname n e = R.app (R.opr opname   [n; 64]) [e]
 let lobits        n e = R.app (R.opr "lobits" [64; n]) [e]
-let sxload ~dst:((_, _, w) as dst) ~addr n assn =
-  if w <> 64 then Impossible.unimp "widening of temporaries";
+let sxload ~dst ~addr n assn =
+  if tempwidth dst <> 64 then Impossible.unimp "widening of temporaries";
+  assert (Cell.divides mcell n);
   [R.store (temploc dst)
-             (extend "sx" n (R.fetch (R.mem assn 'm' byte_order n addr) n)) 64]
-let zxload ~dst:((_, _, w) as dst) ~addr n assn =
-  assert (w = 64);
+     (extend "sx" n (R.fetch (R.mem assn mspace (Cell.to_count mcell n) addr) n)) 64]
+let zxload ~dst ~addr n assn =
+  assert (tempwidth dst = 64);
+  assert (Cell.divides mcell n);
   [R.store (temploc dst)
-             (extend "zx" n (R.fetch (R.mem assn 'm' byte_order n addr) n)) 64]
-let lostore ~addr ~src:((_, _, w) as src) n assn =
-  assert (w = 64);
-  [ R.store (R.mem assn 'm' byte_order n addr) 
-            (lobits n (R.fetch (temploc src) n)) n
+     (extend "zx" n (R.fetch (R.mem assn mspace (Cell.to_count mcell n) addr) n)) 64]
+let lostore ~addr ~src n assn =
+  assert (tempwidth src = 64);
+  assert (Cell.divides mcell n);
+  [ R.store (R.mem assn mspace (Cell.to_count mcell n) addr) 
+            (lobits n (R.fetch (temploc src) 64)) n
             (* we diverge from Pentium here; don't understand *)
   ]
 @ 
@@ -214,7 +223,7 @@ let binop ~dst op tmp1 tmp2 = match op with
     let f1 = talloc 'u' 64 in
     let f2 = talloc 'u' 64 in
     let ops = [move_rtl f1 tmp1; move_rtl f2 tmp2]
-      @ (rtlop f1 ("fmul", ws) [f1; f2; ('f',0,64)])
+      @ (rtlop f1 ("fmul", ws) [f1; f2; (fspace,0,R.C 1)])
       @ move dst f1
     in List.rev ops
 | _ -> rtlop dst op [tmp1;tmp2]
@@ -293,7 +302,7 @@ let globals base =
   let width w = if   w <= 8 then 8 else if w <= 16 then 16 else if w <= 32 then 32
                 else Aux.round_up_to 64 w in
   let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
-  A.at ~start:base ~memsize:8 ~byteorder:Post.byte_order 
+  A.at mspace ~start:base 
    (A.widen width *> A.align_to align *>
     A.overflow ~growth:Memalloc.Up ~max_alignment:16)
 @ 
@@ -308,12 +317,12 @@ let ldst_expand rtl =
       Impossible.impossible ("could not find base register for ld/st") in
   match Down.rtl rtl with
   (* load from offset *)
-  |	RP.Rtl [g,RP.Store(dst,RP.Fetch(RP.Mem(s,agg,mw,
+  |	RP.Rtl [g,RP.Store(dst,RP.Fetch(RP.Mem(ms,mc,
 					       (RP.App(op,exps) as e),assn),w'),w)
            ] -> let (reg, regw) = extract_reg_w op exps in
                 List.map (fun x -> Up.rtl (RP.Rtl [g, x]))
                     [ RP.Store(dst, e, regw)
-                    ; RP.Store(dst, RP.Fetch(RP.Mem(s,agg,mw,
+                    ; RP.Store(dst, RP.Fetch(RP.Mem(ms,mc,
 						    RP.Fetch(dst,regw),assn),
 					     w'), w) ]
 
@@ -380,7 +389,7 @@ let target =
                ; Spaces.u; Spaces.v; Spaces.c; Spaces.p; Spaces.w ] in
   let b i = Types.Bits i in
   { T.name = "ia64"
-
+  ; T.memspace    = mspace
   ; T.byteorder   = Post.byte_order
   ; T.wordsize    = Post.wordsize
   ; T.pointersize = Post.wordsize
@@ -448,7 +457,7 @@ let target =
   ; T.globals     = globals
 
   (* there is bogosity below *)
-  ; T.rounding_mode = R.reg ('?', 99, 64)
+  ; T.rounding_mode = R.reg (('?', Rtl.Identity, Cell.of_size 64), 99, R.C 1)
   ; T.named_locs    = Strutil.assoc2map []
   ; T.data_section  = "data"
   ; T.charset       = "latin1"
@@ -478,7 +487,5 @@ let placevars =
         (fun w h _ -> w <= 64), A.widen (fun _ -> 64) *> temps 't';
         A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
       ] in
-  Placevar.mk_automaton
-     ~warn ~vfp:target.T.vfp ~memsize:target.T.memsize
-     ~byteorder:Post.byte_order mk_stage
+  Placevar.mk_automaton ~warn ~vfp:target.T.vfp ~memspace:target.T.memspace mk_stage
 @ 

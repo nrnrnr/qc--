@@ -141,42 +141,43 @@ a store.
 (* location' : Rtl.Private.loc -> string * (string -> string -> string) *
                                   string * string                            *)
 and location' = function
-    | R.Mem (sp, agg, width, e, ass) -> 
+    | R.Mem ((sp, agg, ms), c, e, ass) -> 
         ( expr' e
         , valstack
         , ""
-        , string_of_int width ^ "," ^ byteorder agg ^ "," ^ alignment ass
+        , string_of_int (Cell.to_width ms c) ^ "," ^ byteorder agg ^ "," ^ alignment ass
         )
 
-    | R.Reg   ('A', i, width)        ->  (* argument-passing register space *)
+    | R.Reg   (('A',_,_), i, _)        ->  (* argument-passing register space *)
         ( ""
         , argspace
         , "_arg"
         , string_of_int i
         )
 
-    | R.Reg   ('G', i, width)        ->  (* global register space           *)
+    | R.Reg   (('G',_,_), i, _)        ->  (* global register space           *)
         ( ""
         , globalspace
         , "_global"
         , string_of_int i
         )
 
-	| R.Reg   ('V', 0, _)            ->  (* VFP space                       *)
+	| R.Reg   (('V',_,_), 0, _)            ->  (* VFP space *)
         ( ""
         , valstack
         , "_sp"
         , ""
         )
 
-    | R.Reg   ('d', 0, 2)            ->  (* floating-pt rounding mode space *)
+    | R.Reg (('d',_,ms), 0, R.C 1) when Cell.size ms = 2 ->
+        (* floating-pt rounding mode space *)
         ( ""
         , valstack
         , "_rounding"
         , ""
         )
 
-    | R.Reg   (sp, i, width)         ->
+    | R.Reg   ((sp,_,ms), i, c)         ->
         ( ""
         , commentout
         , "_register"
@@ -255,8 +256,8 @@ counter, etc.) and ignores them; all else is sent to [[rtl']].
 (* exported functions *)
 let rtl printer r = 
    let clean = fun glist g -> match (glist, g) with
-     | (glist, (gd, R.Store (R.Reg('c', _, _), exp, w))) -> glist
-     | (glist, (gd, R.Store (R.Reg('t', _, _), exp, w))) -> glist
+     | (glist, (gd, R.Store (R.Reg(('c',_,_), _, _), exp, w))) -> glist
+     | (glist, (gd, R.Store (R.Reg(('t',_,_), _, _), exp, w))) -> glist
      | (glist, g                                       ) -> g::glist
 
    in let (R.Rtl guardeds) = Rtl.Dn.rtl r

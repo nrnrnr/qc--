@@ -416,12 +416,10 @@ let get_cc tgt name =
 
 let dump what autofun target ccname =
   let wordsize  = target.Target.wordsize  in
-  let memsize   = target.Target.memsize   in
-  let byteorder = target.Target.byteorder in
   let automaton = autofun (get_ccspec target ccname) in
    what ~mk:(fun () -> 
              A.at ~start:(R.bits (Bits.zero wordsize) wordsize) 
-                  ~memsize ~byteorder  automaton)
+                  target.Target.memspace  automaton)
         
 let dump_proc    = dump Automatongraph.print (fun s -> s.A.call)
 let dump_return  = dump Automatongraph.print (fun s -> s.A.results)
@@ -436,12 +434,10 @@ to end up in an overflow block.
 <<call.ml>>=
 let findpath_1_in_overflow autofun target ccname =
   let wordsize  = target.Target.wordsize  in
-  let memsize   = target.Target.memsize   in
-  let byteorder = target.Target.byteorder in
   let automaton = autofun (get_ccspec target ccname) in
   let rec find_overflow_1 tys =
     let an  = A.at ~start:(R.bits (Bits.zero wordsize) wordsize) 
-                   ~memsize ~byteorder automaton in
+                   target.Target.memspace automaton in
     let tys = (wordsize, "unsigned") :: tys in
     let _   = List.map (fun (w,h) -> A.allocate an ~width:w ~hint:h) tys in
     let res = A.freeze an in
@@ -457,23 +453,20 @@ let path_2_in_overflow target ccname =
     (findpath_2_in_overflow (fun s -> s.A.call) target ccname);
   Printf.printf "\n"
 
-let locs tgt aloc w =
+let locs aloc w =
   let RP.Rtl gs = Dn.rtl (A.store aloc (Rtl.bits (Bits.zero w) w) w) in
   let getloc = function RP.Store (l, _, _) -> l | RP.Kill l -> l in
-  let cellsize s = (Target.space tgt s).Space.cellwidth in
   let rec add_locs l locs = match l with
-  | RP.Reg (s, n, w) when w <= 0 -> locs
-  | RP.Reg (s, n, w) -> Up.loc l :: add_locs (RP.Reg (s, n+1, w-cellsize s)) locs
+  | RP.Reg (s, n, RP.C c) when c <= 0 -> locs
+  | RP.Reg (s, n, RP.C c) -> Up.loc l :: add_locs (RP.Reg (s, n+1, RP.C (c-1))) locs
   | l -> Up.loc l :: locs in
   List.fold_right (fun (_,  e) locs -> add_locs (getloc e) locs) gs []
 
 let run_cc_on_sig_and_return autofun target ccname tys =
-  let loc2strs l (h, w) = List.map Rtlutil.ToString.loc (locs target l w) in
+  let loc2strs l (h, w) = List.map Rtlutil.ToString.loc (locs l w) in
   let wordsize  = target.Target.wordsize  in
-  let memsize   = target.Target.memsize   in
-  let byteorder = target.Target.byteorder in
   let auto      = autofun (get_ccspec target ccname) in
-  let an        = A.at ~start:(Rtl.late "ovflw" wordsize) ~memsize ~byteorder auto in
+  let an        = A.at ~start:(Rtl.late "ovflw" wordsize) target.Target.memspace auto in
   let allocs    = List.map (fun (h,w) -> A.allocate an ~width:w ~hint:h) tys in
   List.map2 loc2strs allocs tys
 

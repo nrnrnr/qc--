@@ -239,22 +239,21 @@ transforms all of the [[Link]] constants in an RTL depending on the
 value of the predicate.
 <<RTL transformations>>=
 let rtl trns_sym ~import wkr wkl rtl =
-  let regwidth (_, _, w) = w in
   let const c = match c with
   | RP.Link (s, k, w) when trns_sym s k ->
-      RP.App (("add", [w]), [ RP.Fetch (RP.Reg wkr, regwidth wkr)
+      RP.App (("add", [w]), [ RP.Fetch (RP.Reg wkr, Register.width wkr)
                             ; RP.Const (RP.Diff(c, RP.Link (wkl, k, w)))])
   | _ -> RP.Const c in
   let rec loc l = match l with
-  | RP.Mem  (s, a, w, e, a') -> RP.Mem  (s, a, w, exp e, a')
-  | RP.Slice(w, i, l')       -> RP.Slice(w, i, loc l')
+  | RP.Mem  (s, c, e, a') -> RP.Mem  (s, c, exp e, a')
+  | RP.Slice(w, i, l')    -> RP.Slice(w, i, loc l')
   | _ -> l
   and exp e = match e with
   | RP.Const c       -> const c
   | RP.Fetch (l,  w) -> RP.Fetch (loc l, w)
   | RP.App   (o, es) -> RP.App   (o, List.map exp es) in
   let effect eff = match eff with
-  | RP.Store(RP.Reg('c',_,_), _, _) -> eff
+  | RP.Store(RP.Reg(('c',_,_),_,_), _, _) -> eff
   | RP.Store(l, e, w)               -> RP.Store(loc l, exp e, w)
   | _ -> eff in
   let guarded (g, eff) = (exp g, effect eff) in

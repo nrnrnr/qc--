@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 % vim: ts=8 et sw=4
 %
 % $Id$
@@ -164,7 +165,7 @@ represent all our types as strings. Feel free to improve this.
 
 <<automatongraph.ml>>=
 module ToString = struct
-    let register (sp,i,_) = sprintf "$%c%i" sp i
+    let register ((sp,_,_),i,_) = sprintf "$%c%i" sp i
     let ty (width,hint)   = sprintf "%d/%s" width hint
     let align n           = sprintf "%i:" n
     let node s            = let regs = Register.Set.elements s.regs in
@@ -193,7 +194,7 @@ module ToDot = struct
         | 64 -> "q"
         | n  -> sprintf ":%d" n
         
-    let register (sp,i,w) = sprintf "$%c%i%s" sp i (size w)
+    let register ((sp,_,ms),i,c) = sprintf "$%c%i%s" sp i (size (Cell.to_width ms c))
     let ty (width,hint)   = sprintf "%d/%s" width hint
     let node s            = let regs = Register.Set.elements s.regs in
                             sprintf "\"%i:%s\"" 

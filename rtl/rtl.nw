@@ -32,7 +32,7 @@ share \emph{common} types.  The public part includes function that
 converts public values into private values and thus makes their details
 accessible. 
 <<rtl.mli>>=
-<<COMMON>>
+<<definitions of exported, exposed types>>
 
 module Private: sig
     <<representation exposed in the private interface>>
@@ -63,14 +63,14 @@ property of a target architecture and thus can not be fixed here with
 a sum type.  The [[char]] type provides a big enough cardinality and
 is nice to print and remember.  A [[width]] is a number of bits which
 corresponds to the {\PAL} [[bits]]$k$ types. 
-<<COMMON>>=
-type space      = char  (* see module Space for details *)
-type width      = int   (* width in bits                *)
-
-type aggregation = 
+<<definitions of exported, exposed types>>=
+type aggregation = Register.aggregation = 
     | BigEndian
     | LittleEndian
     | Identity
+
+type space = char * aggregation * Cell.t   (* name, byte order, cell size *)
+type width = int
 @
 
 % ------------------------------------------------------------------ 
@@ -122,10 +122,16 @@ A [[loc]] may be:
       A \emph{slice} from a location at a known width and least-significant
       bit.
 \end{itemize}
+An [[assertion]] is a claim about alignment or placement of an address~$a$.
+We can [[shift]] an assertion by an integer~$k$ in order to get a
+claim about the address $a+k$. 
+<<definitions of exported, exposed types>>=
+type count = Register.count = C of int
 <<types and functions exported at top level>>=
 val none     : assertion
 val aligned  : int -> assertion
-val mem      : assertion -> space -> aggregation -> width -> exp -> loc
+val shift    : int -> assertion -> assertion
+val mem      : assertion -> space -> count -> exp -> loc
 val reg      : Register.t -> loc
 val var      : string -> index:int -> width -> loc
 val global   : string -> index:int -> width -> loc
@@ -162,10 +168,15 @@ val null      : rtl
 We provide special versions of [[fetch]] and [[store]] that convert a
 slice to something without a slice.
 They use [[lobits]], [[bitExtract]], or [[bitInsert]].
-It's not clear if they're useful
+It's not clear if they're useful.
 <<types and functions exported at top level>>=
 val fetch_cvt : loc -> width -> exp
 val store_cvt : loc -> exp -> width -> rtl
+@ 
+We also, because we have it here already, export a function to compute
+the width of a location.
+<<types and functions exported at top level>>=
+val locwidth : loc -> width
 @
 % ------------------------------------------------------------------ 
 \subsubsection{Conversion between Private and Public Views}
@@ -254,12 +265,12 @@ bit fetch must aggregate 4 8-bit values when the memory space is made
 by 8-bit bytes. The aggregation is described by a value of the type
 [[aggregation]]. 
 <<representation exposed in the private interface>>=
+and  count     = Register.count = C of int
 and  loc       = Mem        of space 
-                            *  aggregation
-                            *  width
+                            *  count
                             *  exp 
                             *  assertion
-                | Reg       of Register.t (* space * int * width *)         
+                | Reg       of Register.t (* space * int * count *)         
           
                 | Var       of string    (* name from C-- source   *)
                             *  int       (* index for run-time API *)
@@ -299,7 +310,7 @@ definitions to obtain the implementation.  The same is true for common
 data types. 
 
 <<rtl.ml>>=
-<<COMMON>>
+<<definitions of exported, exposed types>>
 
 module Private = struct
     <<Private>>
@@ -348,6 +359,13 @@ type assertion = Private.assertion
 @
 <<definitions of types and functions exported at top level>>=
 let aligned k = k
+let shift k' k = 
+  let rec gcd (m:int) (n:int) =
+    let rec g m n = if n = 0 then m else g n (m mod n) in
+    if  n < 0 then gcd m (- n)
+    else if m < n then gcd n m
+    else g m n in
+  gcd k k'
 let none = aligned 1
 @
 
@@ -414,10 +432,10 @@ let app op exprs            = App(op,exprs)
 let opr name widths         = (name,widths)
 
 (* location *)
-let mem assertion sp agg width expr = Mem(sp,agg,width,expr,assertion)
-let var    name ~index width        = Var (name,index,width)
-let global name ~index width        = Global (name,index,width)
-let reg r                           = Reg r
+let mem assertion sp count expr = Mem(sp,count,expr,assertion)
+let var    name ~index width    = Var (name,index,width)
+let global name ~index width    = Global (name,index,width)
+let reg r                       = Reg r
 
 (* effect *)
 let rtl effect              = Rtl [(bool true, effect)]
@@ -429,11 +447,11 @@ Fetch and store could convert slices, but I'm not sure if this code is
 really useful.
 <<definitions of types and functions exported at top level>>=
 let locwidth = function
-  | Mem(_,_,w,_,_)     -> w
-  | Reg(_,_,w)         -> w
-  | Var(_,_,w)         -> w
-  | Global(_,_,w)      -> w
-  | Slice(w, _, _)     -> w 
+  | Mem((_,_,ms),c,_,_) -> Cell.to_width ms c
+  | Reg((_,_,ms),_,c)   -> Cell.to_width ms c
+  | Var(_,_,w)            -> w
+  | Global(_,_,w)         -> w
+  | Slice(w, _, _)        -> w 
 
 let rec fetch_cvt loc n = 
   match loc with

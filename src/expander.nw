@@ -431,7 +431,7 @@ module Nostack (Address : sig type t val reg : temp -> t end) = struct
   let pushk_cvt _ _ _           = Impossible.impossible "stack op on register machine"
   let stack_op _                = Impossible.impossible "stack op on register machine"
   let bc_stack _ ~tgt           = Impossible.impossible "stack op on register machine"
-  let stack_top_proxy = Rtl.reg ('\000', 0, 0)
+  let stack_top_proxy = Rtl.reg (('\000', Rtl.Identity, Cell.of_size 0), 0, Rtl.C 0)
   let is_stack_top_proxy _ = false
 end
 @ 
@@ -557,8 +557,8 @@ module D = struct (* debugging *)
     let rtl r = Rtlutil.ToString.rtl r 
     let pr_is   is = List.iter (fun r -> strings ["  "; rtl r; "\n"]) (seg_to_list is)
     let pr_rtls rs = List.iter (fun r -> strings ["  "; rtl r; "\n"]) (List.rev rs)
-    let temp (s, n, w) =
-      "$" ^ Char.escaped s ^ "[" ^ int n ^ "] : " ^ int w ^ " loc" 
+    let temp ((s, _, ms), n, c) =
+      "$" ^ Char.escaped s ^ "[" ^ int n ^ "] : " ^ int (Cell.to_width ms c) ^ " loc" 
 end
 @ 
 This little hack
@@ -644,11 +644,11 @@ Function [[temp_in_context]] takes an existing temporary and a
 context, and returns a (possibly new) temporary that is OK for the
 context (along with instructions that make it so). 
 <<flow-graph functions>>=
-let temp_in_context ((space, n, w) as t) context instructions =
+let temp_in_context ((space, n, _) as t) context instructions =
   if ok context t then
     t, instructions
   else
-    let t' = alloc context w in
+    let t' = alloc context (Register.width t) in
     t', instructions @@ to_segment (Post.move t' t) in
 @ 
 Within the expander, we eagerly build some dynamic contexts:
@@ -689,7 +689,7 @@ right-hand side.
 let guess_context = function
   | RP.Const (RP.Bits b) -> contextmap (Post.constant_context (Bits.width b))
   | RP.Const k -> icontext
-  | RP.Fetch(RP.Reg (('f'|'u'), _, _),_) -> fcontext
+  | RP.Fetch(RP.Reg ((('f'|'u'), _, _), _, _),_) -> fcontext
   | RP.Fetch _ -> icontext
   | RP.App (op, args) -> contextmap (Post.result_context op) in
 @ 
@@ -744,15 +744,15 @@ let rec to_temp' room context e =
       let slot = exchange_slot w in
       let t, is = to_temp room context (fetch_slot slot w) in
       t, assign_slot room slot e w @@ is
-  | RP.Fetch (RP.Mem ('m', agg, w, addr, assn), w') ->
+  | RP.Fetch (RP.Mem (('m', agg, ms), c, addr, assn), w) ->
       let t = alloc context w in
       let a, is = address room addr in
       assert (agg = Post.byte_order);
-      assert (w = w');
+      assert (w = Cell.to_width ms c);
       t, is @@ to_segment (Post.load t a (upassn assn))
-  | RP.Fetch (RP.Reg (space, i ,w), w') ->
-      assert (w = w');
-      temp_in_context (space, i, w) context emptyseg
+  | RP.Fetch (RP.Reg r, w) ->
+      assert (w = Register.width r);
+      temp_in_context r context emptyseg
   | RP.Fetch _ ->
       Impossible.impossible "memory-like access to non-memory space"
   <<cases for sign extending or zero extending a temporary>>
@@ -805,14 +805,14 @@ On the other hand, we could just rely on peephole optimization\ldots
 Sign-extending and zero-extending loads are done into integer registers only.
 This fact is documented in the postexpander interface.
 <<cases for sign-extending and zero-extending loads>>=
-| RP.App (("sx", [n; w]), [RP.Fetch (RP.Mem ('m', agg, n', addr, assn), n'')]) ->
-    assert (n = n' && n' = n'');
+| RP.App (("sx", [n;w]), [RP.Fetch (RP.Mem (('m',agg,ms), c, addr, assn), n')]) ->
+    assert (n = n' && n' = Cell.to_width ms c);
     let t = alloc icontext w in
     let a, is = address room addr in
     assert (agg = Post.byte_order);
     temp_in_context t context (is @@ to_segment (Post.sxload t a n (upassn assn)))
-| RP.App (("zx", [n; w]), [RP.Fetch (RP.Mem ('m', agg, n', addr, assn), n'')]) ->
-    assert (n = n' && n' = n'');
+| RP.App (("zx", [n;w]), [RP.Fetch (RP.Mem (('m',agg,ms), c, addr, assn), n')]) ->
+    assert (n = n' && n' = Cell.to_width ms c);
     let t = alloc icontext w in
     let a, is = address room addr in
     assert (agg = Post.byte_order);
@@ -898,12 +898,12 @@ and to_stack' room e =
       to_segment (Post.pushk k)
   | RP.Fetch (l, _) when Post.is_stack_top_proxy l ->
       emptyseg
-  | RP.Fetch (RP.Mem ('m', agg, w, addr, assn), w') ->
+  | RP.Fetch (RP.Mem (('m', agg, ms), c, addr, assn), w) ->
       let a, is = address room addr in
       assert (agg = Post.byte_order);
-      assert (w = w');
+      assert (w = Cell.to_width ms c);
       is @@ to_segment (Post.push a (upassn assn))
-  | RP.Fetch (RP.Reg (space, i ,w), w') ->
+  | RP.Fetch (RP.Reg (space, i, c), w) ->
       let slot = exchange_slot w in
       assign_slot room slot e w @@ to_stack room (fetch_slot slot w)
   | RP.Fetch _ ->
@@ -937,8 +937,8 @@ and to_stack' room e =
             else
               save_stack room @@ compute Post.stack_depth @@ restore_stack 1 room
         | PX.Register ->
-            let (space, n, w), is = to_temp room (guess_context e) e in
-            is @@ to_stack room (RP.Fetch (RP.Reg (space, n ,w), w))
+            let r, is = to_temp room (guess_context e) e in
+            is @@ to_stack room (RP.Fetch (RP.Reg r, Register.width r))
       end
 @ 
 <<rounding-mode checking>>=
@@ -959,14 +959,14 @@ and restore_stack number_to_keep number_to_restore =
 @ 
 <<cases for converting pushes>>=
 | RP.App ((("sx"|"zx"), [n; w]) as op,
-          [RP.Fetch (RP.Mem ('m', agg, n', addr, assn), n'')]) ->
-    assert (n = n' && n' = n'');
+          [RP.Fetch (RP.Mem (('m',agg,ms), c, addr, assn), n')]) ->
+    assert (n = n' && n' = Cell.to_width ms c);
     assert (agg = Post.byte_order);
     let a, is = address room addr in
     is @@ to_segment (Post.push_cvt op n a (upassn assn))
 | RP.App ((("f2f"|"f2i"|"i2f"), [n; w]) as op,
-          [RP.Fetch (RP.Mem ('m', agg, n', addr, assn), n''); roundingmode]) ->
-    assert (n = n' && n' = n'');
+          [RP.Fetch (RP.Mem (('m',agg,ms), c, addr, assn), n'); roundingmode]) ->
+    assert (n = n' && n' = Cell.to_width ms c);
     assert (agg = Post.byte_order);
     let a, is = address room addr in
     is @@ to_segment (Post.push_cvt op n a (upassn assn))
@@ -1155,7 +1155,8 @@ and assign_room room left right w =
         to_stack room right
       else
         match left with
-        | RP.Mem ('m', agg, w, addr, assn) ->  (* some kind of store *)
+        | RP.Mem (('m',agg,memsize) as mspace, c, addr, assn) ->  (* a store *)
+            let w = Cell.to_width memsize c in
             assert (agg = Post.byte_order || agg = Rtl.Identity);
             <<definition of [[split_assignment]]>>
             let a, is' = address room addr in
@@ -1171,14 +1172,14 @@ and assign_room room left right w =
                       is @@ is' @@ to_segment (Post.store_pop a (upassn assn)))
                 else
                   match right with
-                  | RP.Fetch (RP.Mem('m', agg', w', addr', assn'), _) ->
+                  | RP.Fetch (RP.Mem(('m', _, _), ct, addr', assn'), w) ->
                       let a', is = address room addr' in
                       is @@ is' @@
                       to_segment (Post.block_copy a (upassn assn) a' (upassn assn') w)
                   | _ ->
                       let r, is = to_temp room (guess_context right) right in
                       is @@ is' @@ to_segment (Post.store a r (upassn assn)))
-        | RP.Mem (_, _, _, _, _) ->
+        | RP.Mem (_, _, _, _) ->
             Impossible.unimp "memory space other than 'm'"
         | RP.Reg dst -> (* computation *)
             (match right with
@@ -1236,19 +1237,19 @@ We split an assignment into a least significant word [[lsw]] of
 width~[[lw]] and a most significant word [[msw]] of width~[[mw]].
 <<definition of [[split_assignment]]>>=
 let split_assignment ~lsw ~lw ~msw ~mw =
-  let memsize = proc.Proc.target.T.memsize in
-  assert (w mod memsize = 0 && lw mod memsize = 0 && w = lw + mw);
+  let lc, mc = Cell.to_count memsize lw, Cell.to_count memsize mw in
+  assert (Cell.divides memsize lw && w = lw + mw);
   let addr = Up.exp addr in
   let assn = Up.assertion assn in
   let lsw, msw = Up.exp lsw, Up.exp msw in
-  let offset nn = RU.addk proc.Proc.target.T.pointersize addr (nn / memsize) in
+  let offset (R.C n) = RU.addk proc.Proc.target.T.pointersize addr n in
   match agg with
   | Rtl.LittleEndian ->
-      rtl (R.par [R.store (R.mem assn 'm' agg lw addr) lsw lw;
-                  R.store (R.mem assn 'm' agg mw (offset lw)) msw mw])
-  | Rtl.BigEndian ->
-      rtl (R.par [R.store (R.mem assn 'm' agg mw addr) msw mw;
-                  R.store (R.mem assn 'm' agg lw (offset mw)) lsw lw])
+      rtl (R.par [R.store (R.mem assn mspace lc addr) lsw lw;
+                  R.store (R.mem assn mspace mc (offset lc)) msw mw])
+  | Rtl.BigEndian ->                           
+      rtl (R.par [R.store (R.mem assn mspace mc addr) msw mw;
+                  R.store (R.mem assn mspace lc (offset mc)) lsw lw])
   | Rtl.Identity ->
       Impossible.impossible "bad aggregation in split assignment" in
 @ 
@@ -1416,9 +1417,9 @@ let rec old_general_guard g left right w =
   is @@ is' @@ nunit (R.guard (Up.exp g) (R.store l (R.fetch (temploc r) w) w))
 and old_loc l =
   match l with
-  | RP.Mem ('m', agg, w, addr, assn) ->
+  | RP.Mem (('m',_,_) as mspace, w, addr, assn) ->
       let addr, is = to_temp Post.stack_depth (acontext) addr in
-      Up.loc (RP.Mem ('m', agg, w, fetch (temploc addr), assn)), is
+      Up.loc (RP.Mem (mspace, w, fetch (temploc addr), assn)), is
   | _ -> Up.loc l, emptyseg in
 @
 \subsection{The flow-graph expander}

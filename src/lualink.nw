@@ -715,17 +715,18 @@ let pic load_wkr use_return proc =
   Pic.transform ~import ~load_wkr ~use_return proc;
   1
 in
+(* THESE WELL-KNOWN PIC REGISTERS SHOULD PROBABLY BE CONFIGURABLE IN LUA *)
+let regc5 = (('c', Rtl.Identity, Cell.of_size 32), 5, Rtl.C 1) in
 let pic_ppc _ proc = 
-  let load_wkr l = Rtl.store l (Rtl.fetch (Rtl.reg ('c',5,32)) 32) 32 in
-  pic load_wkr false proc
-in
+  let load_wkr l = Rtl.store l (Rtl.fetch (Rtl.reg regc5) 32) 32 in
+  pic load_wkr false proc in
+let x86_mspace = ('m', Rtl.LittleEndian, Cell.of_size 8) in
 let pic_x86 _ proc =
-  let amem       = Rtl.mem (Rtl.aligned 4) 'm' Rtl.LittleEndian 32 in
-  let esp        = Rtl.reg ('r',4,32) in
+  let amem       = Rtl.mem (Rtl.aligned 4) x86_mspace (Rtl.C 4) in
+  let esp        = Rtl.reg X86regs.esp in
   let espval     = Rtl.fetch esp 32 in
   let load_wkr l = Rtl.store l (Rtl.fetch (amem espval) 32) 32 in
-  pic load_wkr true proc
-in
+  pic load_wkr true proc in
 C.register_module "Pic"
  [ "ppc", V.efunc (V.value **-> Map.proc **->> V.int) pic_ppc
  ; "x86", V.efunc (V.value **-> Map.proc **->> V.int) pic_x86

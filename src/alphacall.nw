@@ -39,12 +39,9 @@ module RS = Register.Set
 module RU = Rtlutil
 module T  = Target
 
-let impossible = Impossible.impossible
-let unimp      = Impossible.unimp
-let sprintf    = Printf.sprintf
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let wordsize   = 64
 @
-
 \paragraph{Registers}
 
 A non-volatile register can be used in a procedure if its initial value
@@ -58,12 +55,15 @@ allocation, but the call instruction always writes it (and it is live on
 entry).
 
 <<alphacall.ml>>=
-let r n     = ('r',n,wordsize)
-let f n     = ('f',n,wordsize)
-let d n     = ('f',n,wordsize)
+let byteorder = R.LittleEndian         
+let mspace = ('m', byteorder, Cell.of_size 8)
+let rspace = ('r', byteorder, Cell.of_size 64)
+let fspace = ('f', byteorder, Cell.of_size 64)
+
+let r n     = (rspace, n, R.C 1)
+let f n     = (fspace, n, R.C 1)
 let vfp     = Vfp.mk wordsize
 @
-
 Calling conventions treat floating point registers specially; therefore
 we have separate lists for them.
 
@@ -79,28 +79,24 @@ let nvl_fp   = List.map f (Aux.from 2 ~upto:9)
 @
 Non-volatile registers are saved somewhere in the frame. Currently, we
 cannnot provide dedicated locations as they are demanded in \S 6.3.3.5.
-
 <<alphacall.ml>>=
 let saved_nvr temps =
     let t = Talloc.Multiple.loc temps 't' in
     let u = Talloc.Multiple.loc temps 'u' in
         function
-        | ('r',_,w) -> t w
-        | ('f',_,w) -> u w
-        | (s  ,i,_) -> impossible (sprintf "cannot save $%c%d" s i)
+        | (('r', _, _),_,_) as reg -> t (Register.width reg)
+        | (('f', _, _),_,_) as reg -> u (Register.width reg)
+        | ((s,_,_),i,_) -> impossf "cannot save $%c%d" s i
 @
-
 \paragraph{Conventions}
 
 The size of the Alpha frame must be a multiple of 16. This cannot be
 specified here.
-
 <<alphacall.ml>>=
 let ra        = R.reg (r 26)            (* return address *)
 let sp        = R.reg (r 30)            (* stack pointer  *)
 let spval     = R.fetch sp wordsize
 let growth    = Memalloc.Down           (* stack grows down *)
-let byteorder = R.LittleEndian         
 let sp_align  = 16                      (* SP always 16-byte aligned *)
 
 let std_sp_location = 
@@ -109,10 +105,10 @@ let std_sp_location =
 let ( *> ) = A.( *> )
 
 let badwidth (msg:string) (w:int) = 
-    impossible (sprintf "unsupported (rounded) width %d in Alpha: %s" w msg)
+    impossf "unsupported (rounded) width %d in Alpha: %s" w msg
 
 let fatal _ = 
-    impossible "fatal error in Alpha automaton"
+    impossf "fatal error in Alpha automaton"
 @
 
 And in Lua:
@@ -127,7 +123,9 @@ Alpha.cc["cmm"] = Alpha.cc["cmm"] or {}
 Alpha.sp_align  = 16
 Alpha.wordsize  = 64
 
-function reg(sp,i) return({space = sp, index = i, width = Alpha.wordsize}) end
+function reg(sp,i) 
+  return {space = sp, index = i, cellsize = Alpha.wordsize, count = 1}
+end
 function f(i) return(reg("f", i)) end
 function r(i) return(reg("r", i)) end
 
@@ -239,7 +237,7 @@ the prolog of a procedure and set back before the procedure returns. I
 hope the code below reflects this.
 
 <<transformations>>=
-let autoAt = A.at ~memsize:8 ~byteorder in
+let autoAt = A.at mspace in
 let prolog =
   let autosp = (fun _ -> vfp) in
   C.incoming ~growth ~sp
@@ -285,7 +283,7 @@ let cut_actuals base  =
 <<alphacall.ml>>=
 let rtn return_to k n ~ra =
     if k = 0 & n = 0 then return_to ra
-    else impossible "alternate return using C calling convention" 
+    else impossf "alternate return using C calling convention" 
 
 let c ~return_to cut spec = 
     <<transformations>>
@@ -339,8 +337,7 @@ let template = (* conservative spec *)
         { CS.name           = "cmm"
         ; CS.stack_growth   = Memalloc.Down
         ; CS.overflow       = CS.overflow C.Caller C.Caller
-        ; CS.memsize        = 8
-        ; CS.byteorder      = byteorder
+        ; CS.memspace       = mspace
         ; CS.sp             = r 30
         ; CS.sp_align       = sp_align
         ; CS.all_regs       = RS.of_list (List.concat [nvl_int; nvl_fp;

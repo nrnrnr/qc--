@@ -49,7 +49,7 @@ windows.  Nyarggg.  We pretend that it's actually split between 32 and
 <<SPARC spaces>>=
   let r = SS.r 32 id [32]
 
-  let s = S.checked { S.space          = 's'
+  let s = S.checked { S.space          = ('s', Rtl.Identity, Cell.of_size 64)
                     ; S.doc            = "64-bit integer registers"
                     ; S.cellwidth      = 64
                     ; S.indexwidth     = 32
@@ -60,8 +60,9 @@ windows.  Nyarggg.  We pretend that it's actually split between 32 and
                     }
 @ [[f]] is the general purpose floating-point register file with 32
 32-bit registers.  Unlike the [[r]] space, these are all globals.
+(We have lies and more lies!!!)
 <<SPARC spaces>>=
-  let f = S.checked { S.space          = 'f'
+  let f = S.checked { S.space          = ('f', Rtl.Identity, Cell.of_size 32)
                     ; S.doc            = "floating-point registers"
                     ; S.cellwidth      = 32
                     ; S.indexwidth     = 32
@@ -71,7 +72,7 @@ windows.  Nyarggg.  We pretend that it's actually split between 32 and
                     ; S.classification = S.Reg
                     }
 
-  let x = S.checked { S.space           = 'x'
+  let x = S.checked { S.space           = ('x', Rtl.Identity, Cell.of_size 64)
                     ; S.doc            = "64-bit floating-point registers"
                     ; S.cellwidth      = 64
                     ; S.indexwidth     = 32
@@ -88,7 +89,7 @@ windows.  Nyarggg.  We pretend that it's actually split between 32 and
 <<SPARC spaces>>=
   let t = SS.t    id [32]
 
-  let j = S.checked { S.space          = 'j'
+  let j = S.checked { S.space          = ('j', Rtl.BigEndian, Cell.of_size 64)
                     ; S.doc            = "64-bit integer temporaries"
                     ; S.cellwidth      = 64
                     ; S.indexwidth     = 32
@@ -96,14 +97,14 @@ windows.  Nyarggg.  We pretend that it's actually split between 32 and
                     ; S.aggregation    = Rtl.BigEndian
                     ; S.widths         = [64]
                     ; S.classification =
-                        S.Temp { S.stands_for = 's'
+                        S.Temp { S.stands_for = s.S.space
                                ; S.index_ok   = (fun _ -> true) (* lies *)
                                ; S.set_doc    = "64-bit integer temporaries"
                                }
                     }
 @ [[u]] is the temporary space for the [[f]] space.
 <<SPARC spaces>>=
-  let u = S.checked { S.space          = 'u'
+  let u = S.checked { S.space          = ('u', Rtl.BigEndian, Cell.of_size 32)
                     ; S.doc            = "floating-point temporaries"
                     ; S.cellwidth      = 32
                     ; S.indexwidth     = 32
@@ -111,13 +112,13 @@ windows.  Nyarggg.  We pretend that it's actually split between 32 and
                     ; S.aggregation    = Rtl.BigEndian
                     ; S.widths         = [32]
                     ; S.classification =
-                        S.Temp { S.stands_for = 'f'
+                        S.Temp { S.stands_for = f.S.space
                                ; S.index_ok   = (fun _ -> true) (* lies *)
                                ; S.set_doc    = "floating-point temporaries"
                                }
                     }
 
-  let q = S.checked { S.space          = 'q'
+  let q = S.checked { S.space          = ('q', Rtl.BigEndian, Cell.of_size 64)
                     ; S.doc            = "64-bit floating-point temporaries"
                     ; S.cellwidth      = 64
                     ; S.indexwidth     = 32
@@ -125,7 +126,7 @@ windows.  Nyarggg.  We pretend that it's actually split between 32 and
                     ; S.aggregation    = Rtl.BigEndian
                     ; S.widths         = [64]
                     ; S.classification =
-                        S.Temp { S.stands_for = 'x'
+                        S.Temp { S.stands_for = x.S.space
                                ; S.index_ok   = (fun _ -> true) (* lies *)
                                ; S.set_doc    = "64-bit floating-point temporaries"
                                }
@@ -143,7 +144,7 @@ increment and decrement when saving and restoring windows.  The rest
 of the space will eventually be used to represent saved window
 registers.
 <<SPARC spaces>>=
-  let k = S.checked { Space.space          = 'k'
+  let k = S.checked { Space.space          = ('k', Rtl.Identity, Cell.of_size 32)
                     ; Space.doc            = "register windows"
                     ; Space.cellwidth      = 32
                     ; Space.indexwidth     = 32     (* what is indexwidth? *)
@@ -169,7 +170,15 @@ let npc       = locations.SS.npc
 *)
 let vfp     = Vfp.mk wordsize
 
-let r n  = ('r', n, wordsize)
+let mcell = Cell.of_size 8
+let mspace = ('m', Rtl.BigEndian, mcell)
+let rspace = ('r', Rtl.Identity, Cell.of_size 32)
+let sspace = ('s', Rtl.Identity, Cell.of_size 64)
+let fspace = ('f', Rtl.Identity, Cell.of_size 32)
+let xspace = ('x', Rtl.Identity, Cell.of_size 64)
+let dspace = ('d', Rtl.Identity, Cell.of_size 2)  (* rounding modes *)
+
+let r n  = (rspace, n, R.C 1)
 
 let zero = r 0  (* always zero, r[0] is sames as global[0] *)
 let ra   = r 31 (* return address set by CALL instruction, same as %o7 *)
@@ -177,10 +186,10 @@ let ra   = r 31 (* return address set by CALL instruction, same as %o7 *)
 let fp   = r 30 (* conventionally the same as %fp or %i6 *)
 let sp   = r 14 (* conventionally the same as %sp or %o6 *)
 
-let cwp  = ('k', 0, 32)
+let cwp  = (('k', Rtl.Identity, Cell.of_size 32), 0, R.C 1)
 
-let rounding_modesl   = Rtl.reg ('d', 0, 2)
-let rounding_resultsl = Rtl.reg ('d', 1, 2)
+let rounding_modesl   = Rtl.reg (dspace, 0, R.C 1)
+let rounding_resultsl = Rtl.reg (dspace, 1, R.C 1)
 @ 
 
 % ------------------------------------------------------------------
@@ -189,12 +198,11 @@ let rounding_resultsl = Rtl.reg ('d', 1, 2)
 
 <<sparc.ml>>=
 let imposs     = Impossible.impossible
-let unimp      = Impossible.unimp
-let mem w addr = R.mem R.none 'm' byteorder w  addr
-let reg_width  (_, _, w) = w
+let unimpf fmt = Printf.kprintf Impossible.unimp fmt
+let mem w addr = R.mem R.none mspace (Cell.to_count mcell w) addr
+let reg_width  = Register.width
 
-let rreg t = R.reg t
-let rfetch (_,_,w as t) = R.fetch (rreg t) w
+let rfetch t = R.fetch (R.reg t) (Register.width t)
 @ 
 
 % ------------------------------------------------------------------
@@ -215,7 +223,7 @@ module F = Mflow.MakeStandard
 let return e =
   let one = R.bits (Bits.S.of_int 1 32) 32 in
   R.par [R.store npc e wordsize;
-         R.store (rreg cwp) (R.app (R.opr "add" [32]) [rfetch cwp; one]) wordsize]
+         R.store (R.reg cwp) (R.app (R.opr "add" [32]) [rfetch cwp; one]) wordsize]
 @ 
 
 % ------------------------------------------------------------------
@@ -227,8 +235,8 @@ module Post = struct
   let byte_order = byteorder
   let wordsize   = wordsize
   module Address = struct
-    type t               = R.exp
-    let reg (_,_,w as r) = R.fetch (R.reg r) w 
+    type t    = R.exp
+    let reg r = R.fetch (R.reg r) (Register.width r) 
   end
   type temp      = Register.t
   type rtl       = R.rtl
@@ -258,23 +266,23 @@ let icontext = (* Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't' *
   (fun t w ->
     if w = 32 then Talloc.Multiple.reg 't' t 32
     else Talloc.Multiple.reg 'j' t 64),
-  fun (c, _, _) -> c = 'r' || c = 't' || c = 'j' || c = 's'
+  fun ((c,_,_), _, _) -> c = 'r' || c = 't' || c = 'j' || c = 's'
 
 let fcontext = (* Talloc.Multiple.reg 'u', fun (c, _, _) -> c = 'f' || c = 'u' *)
   (fun t w ->
     if w = 32 then Talloc.Multiple.reg 'u' t 32
     else Talloc.Multiple.reg 'q' t 64), 
-  fun (c, _, _) -> c = 'f' || c = 'u' || c = 'x' || c = 'q'
+  fun ((c,_,_), _, _) -> c = 'f' || c = 'u' || c = 'x' || c = 'q'
 let acontext = icontext
-let rcontext = (fun x y -> unimp "Unsupported soft rounding mode")
-               ,fun r -> r = ('d', 0, 2)
+let rcontext = (fun x y -> unimpf "Unsupported soft rounding mode")
+               ,fun ((sp,_,_), i, _) -> sp = 'd' && i = 0
 let itempwidth = 32
 @ 
 <<SPARC postexpander>>=
 let load ~dst ~addr assn =
   let w = reg_width dst in
   assert (w = wordsize || w = wordsize * 2); 
-  [R.store (rreg dst) (R.fetch (mem w addr) w) w]
+  [R.store (R.reg dst) (R.fetch (mem w addr) w) w]
 @ 
 <<SPARC postexpander>>=
 let store ~addr ~src assn =
@@ -288,16 +296,16 @@ let lobits     w n e = R.app (R.opr "lobits" [w; n]) [e]
 let xload op ~dst ~addr n assn =
   let w = reg_width dst in
   assert (w = wordsize || w = wordsize * 2); 
-  [R.store (rreg dst)
-             (extend op n w (R.fetch (R.mem assn 'm' byteorder n addr) n)) w]
+  [R.store (R.reg dst)
+     (extend op n w (R.fetch (R.mem assn mspace (Cell.to_count mcell n) addr) n)) w]
 
 let sxload = xload "sx"
 let zxload = xload "zx"
 
 let lostore ~addr ~src n assn =
   let w = reg_width src in
-  assert (w = wordsize || w = wordsize * 2);
-  [R.store (R.mem assn 'm' byteorder n addr)
+  assert (w = wordsize || w = 2 * wordsize);
+  [R.store (R.mem assn mspace (Cell.to_count mcell n) addr)
              (lobits w n (rfetch src)) n]
 @ Block copies are only implemented in powers of 2 up to 64-bits.
 <<SPARC postexpander>>=
@@ -312,8 +320,8 @@ let block_copy ~dst dassn ~src sassn w =
   | 64 ->
       let q = talloc 'q' 64 in
       [R.store (mem w dst) (rfetch q) w;
-       R.store (rreg q) (R.fetch (mem w src) w) w]
-  | _  -> unimp "general block copies on SPARC"
+       R.store (R.reg q) (R.fetch (mem w src) w) w]
+  | _  -> unimpf "general block copies on SPARC"
 @ 
 
 <<SPARC postexpander>>=
@@ -321,33 +329,33 @@ let move ~dst ~src =
   let w = reg_width src in
   assert (w = reg_width dst);
   match src, dst with
-  | ('u', _, 32), ('t', _, 32)
-  | ('t', _, 32), ('u', _, 32) ->
+  | (('u', _, _), _, R.C 1), (('t', _, _), _, R.C 1)
+  | (('t', _, _), _, R.C 1), (('u', _, _), _, R.C 1) ->
       let offset = R.bits (Bits.S.of_int (23*4) 32) 32 in
       let addr   = R.app (R.opr "add" [32]) [rfetch sp; offset] in
-      [ R.store (rreg dst)   (R.fetch (mem w addr) w) w
+      [ R.store (R.reg dst)   (R.fetch (mem w addr) w) w
       ; R.store (mem w addr) (rfetch src) w ]
-  | ('j', _, 64), ('q', _, 64)
-  | ('q', _, 64), ('j', _, 64) ->
+  | (('j', _, _), _, R.C 1), (('q', _, _), _, R.C 1)
+  | (('q', _, _), _, R.C 1), (('j', _, _), _, R.C 1) ->
       let offset = R.bits (Bits.S.of_int (24*4) 32) 32 in
       let addr   = R.app (R.opr "add" [32]) [rfetch sp; offset] in
-      [ R.store (rreg dst)   (R.fetch (mem w addr) w) w
+      [ R.store (R.reg dst)   (R.fetch (mem w addr) w) w
       ; R.store (mem w addr) (rfetch src) w ]
-  | _, _ -> if src = dst then [] else [R.store (rreg dst) (rfetch src) w]  
+  | _, _ -> if src = dst then [] else [R.store (R.reg dst) (rfetch src) w]  
 @ 
 
 <<SPARC postexpander>>=
 let li  ~dst const =
   match dst, const with
-  | ('u', _, 32), _ -> (* we are forced to go through memory *)
+  | (('u', _, _), _, R.C 1), _ -> (* we are forced to go through memory *)
       let t = talloc 't' 32 in
       let offset = R.bits (Bits.S.of_int (23*4) 32) 32 in
       let addr   = R.app (R.opr "add" [32]) [rfetch sp; offset] in
-      [ R.store (rreg dst)    (R.fetch (mem 32 addr) 32) 32
+      [ R.store (R.reg dst)    (R.fetch (mem 32 addr) 32) 32
       ; R.store (mem 32 addr) (rfetch t) 32
-      ; R.store (rreg t)      (Up.const const) 32
+      ; R.store (R.reg t)      (Up.const const) 32
       ]
-  | ('q', _, 64), RP.Bits b -> (* we are forced to go through memory *)
+  | (('q', _, _), _, R.C 1), RP.Bits b -> (* we are forced to go through memory *)
       let t1 = talloc 't' 32 in
       let t2 = talloc 't' 32 in
       let offset1 = R.bits (Bits.S.of_int (24*4) 32) 32 in
@@ -357,31 +365,31 @@ let li  ~dst const =
       (* now split the 64-bit literal into high and low 32 bits *)
       let hi = Bits.Ops.lobits 32 (Bits.Ops.shrl b (Bits.U.of_int 32 32)) in
       let lo = Bits.Ops.lobits 32 b in
-      [ R.store (rreg dst)     (R.fetch (mem 64 addr1) 64) 64
+      [ R.store (R.reg dst)     (R.fetch (mem 64 addr1) 64) 64
       ; R.store (mem 32 addr2) (rfetch t2)                 32
-      ; R.store (rreg t2)      (Up.const (RP.Bits lo))     32
+      ; R.store (R.reg t2)      (Up.const (RP.Bits lo))     32
       ; R.store (mem 32 addr1) (rfetch t1)                 32
-      ; R.store (rreg t1)      (Up.const (RP.Bits hi))     32
+      ; R.store (R.reg t1)      (Up.const (RP.Bits hi))     32
       ]
-  | ('t', _, 32), _ ->
-      [R.store (rreg dst) (Up.const const) 32]
-  | ('j', _, 64), RP.Bits b ->
+  | (('t', _, _), _, R.C 1), _ ->
+      [R.store (R.reg dst) (Up.const const) 32]
+  | (('j', _, _), _, R.C 1), RP.Bits b ->
       let t1 = talloc 't' 32 in
       let t2 = talloc 't' 32 in
       (* now split the 64-bit literal into high and low 32 bits *)
       let hi = Bits.Ops.lobits 32 (Bits.Ops.shrl b (Bits.U.of_int 32 32)) in
       let lo = Bits.Ops.lobits 32 b in
-      [ R.store (rreg dst)     (R.app (R.opr "sparc_mkj" []) [rfetch t1; rfetch t2]) 64
-      ; R.store (rreg t2)      (Up.const (RP.Bits lo))     32
-      ; R.store (rreg t1)      (Up.const (RP.Bits hi))     32
+      [ R.store (R.reg dst)     (R.app (R.opr "sparc_mkj" []) [rfetch t1; rfetch t2]) 64
+      ; R.store (R.reg t2)      (Up.const (RP.Bits lo))     32
+      ; R.store (R.reg t1)      (Up.const (RP.Bits hi))     32
       ]      
-  | (r, _, w), RP.Bits b ->
-      unimp (Printf.sprintf "loading immediate %s to a %d-bit register in space %%%c"
-                     (Bits.to_string b) w r)
-  | (r, _, w), _ ->
-      unimp (Printf.sprintf "loading symbolic immediate to a %d-bit register in space %%%c"
-                      w r)
-let lix ~dst e     = [R.store (rreg dst) e                (reg_width dst)]
+  | ((s, _, _), _, _) as r, RP.Bits b ->
+      unimpf "loading immediate %s to a %d-bit register in space %%%c"
+        (Bits.to_string b) (Register.width r) s
+  | ((s, _, _), _, _) as r, _ ->
+      unimpf "loading symbolic immediate to a %d-bit register in space %%%c"
+        (Register.width r) s
+let lix ~dst e     = [R.store (R.reg dst) e                (reg_width dst)]
 @ 
 
 What do argmap and resmap actually do??
@@ -407,30 +415,30 @@ let constant_context w = icontext
 
 <<SPARC postexpander>>=
 let unop ~dst op x =
-  [R.store (rreg dst)
+  [R.store (R.reg dst)
              (R.app (Up.opr op) [rfetch x]) (reg_width dst)]
 
 let binop ~dst op x y =
   let dstw = reg_width dst in
   match op with
   | ("modu", ws) ->
-    [ R.store (rreg dst) (R.app (R.opr "sub"  ws) [rfetch x; rfetch dst]) dstw
-    ; R.store (rreg dst) (R.app (R.opr "mul"  ws) [rfetch y; rfetch dst]) dstw
-    ; R.store (rreg dst) (R.app (R.opr "divu" ws) [rfetch x; rfetch y])   dstw
+    [ R.store (R.reg dst) (R.app (R.opr "sub"  ws) [rfetch x; rfetch dst]) dstw
+    ; R.store (R.reg dst) (R.app (R.opr "mul"  ws) [rfetch y; rfetch dst]) dstw
+    ; R.store (R.reg dst) (R.app (R.opr "divu" ws) [rfetch x; rfetch y])   dstw
     ]
   | ("rem", ws) ->
-    [ R.store (rreg dst) (R.app (R.opr "sub"  ws) [rfetch x; rfetch dst]) dstw
-    ; R.store (rreg dst) (R.app (R.opr "mul"  ws) [rfetch y; rfetch dst]) dstw
-    ; R.store (rreg dst) (R.app (R.opr "quot" ws) [rfetch x; rfetch y])   dstw
+    [ R.store (R.reg dst) (R.app (R.opr "sub"  ws) [rfetch x; rfetch dst]) dstw
+    ; R.store (R.reg dst) (R.app (R.opr "mul"  ws) [rfetch y; rfetch dst]) dstw
+    ; R.store (R.reg dst) (R.app (R.opr "quot" ws) [rfetch x; rfetch y])   dstw
     ]
   | ("shrl", [64]) -> (* TOTALLY WRONG *)
-      [ R.store (rreg dst) (R.app (R.opr "sparc_hi2lo" [64]) [rfetch x; rfetch y]) 64 ]
+      [ R.store (R.reg dst) (R.app (R.opr "sparc_hi2lo" [64]) [rfetch x; rfetch y]) 64 ]
 
   | ("shl", [64]) -> (* TOTALLY WRONG *)
-      [ R.store (rreg dst) (R.app (R.opr "sparc_lo2hi" [64]) [rfetch x; rfetch y]) 64 ]
+      [ R.store (R.reg dst) (R.app (R.opr "sparc_lo2hi" [64]) [rfetch x; rfetch y]) 64 ]
 
 (*
-      [ R.store (rreg dst) (R.app (R.opr "sparc_shrl64" [])
+      [ R.store (R.reg dst) (R.app (R.opr "sparc_shrl64" [])
           [x; y; talloc 't' 32]) 32 ]
 *)
       (* OK, we'll just do a shrl by yl or 32, whichever is smaller *)
@@ -439,9 +447,9 @@ let binop ~dst op x y =
       let (xh, xl) = (talloc 't' 32, talloc 't' 32) in
       let yl       = talloc 't' 32 in
       
-      R.store (rreg xl) (lobits _ 32 (rfetch x)) 32
-      R.store (rreg xh) (R.app (R.opr "sparc_hibits" [64;32]) (rfetch x)) 32
-      R.store (rreg yl) (lobits _ 32 (rfetch y)) 32
+      R.store (R.reg xl) (lobits _ 32 (rfetch x)) 32
+      R.store (R.reg xh) (R.app (R.opr "sparc_hibits" [64;32]) (rfetch x)) 32
+      R.store (R.reg yl) (lobits _ 32 (rfetch y)) 32
 *)
       (*
        dh = xh >> yl
@@ -459,10 +467,10 @@ let binop ~dst op x y =
           x+(((31-x) sra 31) & (31-x))
        *)
   | _ ->
-      [R.store (rreg dst) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw]
+      [R.store (R.reg dst) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw]
 
 let rtlop ~dst op args =
-  [R.store (rreg dst)
+  [R.store (R.reg dst)
              (R.app (Up.opr op) (List.map rfetch args)) (reg_width dst)]
 @ 
 
@@ -552,7 +560,7 @@ module X = Expander.IntFloatAddr(Post)
 let spill  p t l = (* assert (reg_width t = Rtlutil.Width.loc l); *)
   [A.store l (rfetch t) (reg_width t)]
 let reload p t l = 
-    let w = reg_width t in [R.store (rreg t) (A.fetch l w) w]
+    let w = reg_width t in [R.store (R.reg t) (A.fetch l w) w]
 @ 
 
 <<sparc.ml>>=
@@ -562,7 +570,7 @@ let globals base =
                 else if w <= 16 then 16 
                 else Aux.round_up_to ~multiple_of:wordsize w in
   let align = function _ -> 8 in
-  A.at ~start:base ~memsize:8 ~byteorder (A.widen width *> A.align_to align *>
+  A.at mspace ~start:base (A.widen width *> A.align_to align *>
   A.overflow ~growth:Memalloc.Up ~max_alignment:8)
 @ 
 
@@ -581,6 +589,7 @@ let target =
                  ; Spaces.k
                  ] in
     { T.name                = "sparc"
+    ; T.memspace            = mspace
     ; T.byteorder           = byteorder
     ; T.wordsize            = wordsize
     ; T.pointersize         = wordsize
@@ -645,7 +654,5 @@ let placevars =
       ; A.is_any,
            A.widen (Aux.round_up_to ~multiple_of: 8)
       ] in
-  Placevar.mk_automaton
-     ~warn ~vfp:target.T.vfp ~memsize:target.T.memsize
-     ~byteorder:Post.byte_order mk_stage
+  Placevar.mk_automaton ~warn ~vfp:target.T.vfp ~memspace:mspace mk_stage
 @ 

@@ -441,11 +441,14 @@ To ensure that each argument has been placed somewhere (and is live into the
 continuation), we assert an assignment to a bogus location, using each of the
 variables.
 The assignment to the bogus location is probably somewhat bogus.
+THIS ALL LOOKS EXTREMELY BOGUS TO ME.  SHOULDN'T THIS BE DEALT WITH BY
+A LIVENESS EDGE OUT OF THE CALL NODE?
 <<functions that translate statements, including [[stmts]]>>=
 and generate_unwind_to_entry k = 
+  let bogus_space = ('z', Rtl.Identity, Cell.of_size 1) in
   let use_var (h,v) succ =
     let w = RU.Width.loc v.FE.loc in
-    G.assertion g (RU.store (R.mem R.none 'z' R.Identity w
+    G.assertion g (RU.store (R.mem R.none bogus_space (R.C w)
                                    (R.bits (Bits.S.of_int 0 w) w))
                             (R.fetch (R.var "" v.FE.index w) w)) succ in
   G.set_succ (G.non_local_join_labeled g k.K.unwind_pc)
@@ -633,7 +636,8 @@ all in one go, we could overlap the two areas---except for spills.
 <<verbosely announce the registers used by the return>>=
 let () =
   if Debug.on "return-regs" then
-    let regstring (s, i, _) = Printf.sprintf "%c%d" s i in
+    let regstring ((s,_,_), i, R.C c) =
+      if c = 1 then Printf.sprintf "%c%d" s i else Printf.sprintf "%c%d:%d" s i c in
     let used = List.map regstring (RS.elements out.C.regs) in
     Printf.eprintf "return statement uses regs: %s\n" (String.concat ", " used) in
 <<ast2ir.ml>>=
@@ -731,9 +735,11 @@ However, some spans, such as stackdata information, are accessible globally with
 the procedure; for these spans, we associate them with the current procedure's label.
 <<definition of [[proc]], which translates one procedure>>=
   let spans        = ref [] in
-  let add_spans s  = spans := s :: !spans              in
-  let to_mloc exp  = R.mem (R.aligned target.T.alignment) 'm'
-                           target.T.byteorder target.T.pointersize exp in
+  let add_spans s  = spans := s :: !spans in
+  let ptrcount =
+    let _, _, c = target.T.memspace in Cell.to_count c target.T.pointersize in
+  let to_mloc exp =
+    R.mem (R.aligned target.T.alignment) target.T.memspace ptrcount exp in
 @   
 \paragraph{Setting up the environment and functions that use it (stack
 data, continuations, expressions, parameters)}
@@ -925,7 +931,7 @@ We define an automaton to allocate suitably aligned locations.
 <<utilities>>=
 let aligned_mem ~align ~base target = 
   let ( *> ) = AT.( *> ) in
-  AT.at ~start:base ~memsize:target.T.memsize ~byteorder:target.T.byteorder (
+  AT.at target.T.memspace ~start:base (
     AT.align_to (fun w -> min align (w / target.T.memsize)) *>
     AT.overflow ~growth:Memalloc.Up ~max_alignment:align)
 @

@@ -149,9 +149,9 @@ module Make (Arg : ARG) : S with module G = Arg.G
 @ 
 <<vfp.ml>>=
 module RP = Rtl.Private
-let mk w = Rtl.fetch (Rtl.reg ('V', 0, w)) w
+let mk w = Rtl.fetch (Rtl.reg (('V', Rtl.Identity, Cell.of_size w), 0, Rtl.C 1)) w
 let is_vfp = function
-  | RP.Reg ('V', 0, _) -> true
+  | RP.Reg (('V', _, _), 0, _) -> true
   | _ -> false
 @ 
 <<vfp.ml>>=
@@ -233,7 +233,7 @@ let () = Debug.register "vfp" "stack adjustments for virtual frame pointer"
 <<supporting functions>>=
 let replace_vfp value =
   let is_vfp = function
-    | RP.Fetch (RP.Reg ('V', 0, _), _) -> true
+    | RP.Fetch (v, _) -> is_vfp v
     | _ -> false in
   RU.Subst.exp ~guard:is_vfp ~map:(fun _ -> value) in
 @ 
@@ -287,7 +287,7 @@ and find_k'_added_to_sp (RP.Rtl ges) =
 @ 
 <<vfp.ml>>=
 let mk_space w = 
-    { Space.space = 'V'
+    { Space.space = ('V', Rtl.Identity, Cell.of_size w)
     ; Space.doc = "holds the virtual frame pointer"
     ; Space.cellwidth = w
     ; Space.indexwidth = w

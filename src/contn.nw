@@ -93,10 +93,11 @@ let rep t = t.block
 let offset base n w  = Rtlutil.addk w base n
 
 let pc_sp base t =
-  let ptrcells = t.T.pointersize / t.T.memsize in
-  let mem addr = Rtl.mem Rtl.none 'm' t.T.byteorder t.T.pointersize  addr in
-  let pc       = mem (offset base 0        t.T.pointersize) in
-  let sp       = mem (offset base ptrcells t.T.pointersize) in
+  let (_, _, cell)    = t.T.memspace in
+  let (Rtl.C n) as ct = Cell.to_count cell t.T.pointersize in
+  let mem addr        = Rtl.mem Rtl.none t.T.memspace ct addr in
+  let pc              = mem (offset base 0 t.T.pointersize) in
+  let sp              = mem (offset base n t.T.pointersize) in
   pc, sp
 
 let ovblock_exp e memsize ptrsize alignment = 
