@@ -39,40 +39,62 @@ area.  \emph{Addresses always point to the lowest addressed byte, as
 in the value returned from [[malloc]].} This address may contain
 unbound compile-time constants (see \module{const}).
 
+A mutable automaton [[t]] is made from a specification [[spec]].  When
+run, the automaton returns abstract locations [[loc]].  The type
+abbreviations for alignment, width, and size are only for
+documentation purposes.
+
+<<type abbreviations>>=
+type align = int
+type width = int
+type size  = int
+
 <<new.mli>>=
 <<type abbreviations>>
-
-(* module Automaton *)
-
 type spec  (* specification of an automaton (immutable) *)
+type t     (* an automaton (mutable) *)
+type loc   (* a location provided by an automaton *)
+@
 
-type t   (* an automaton (mutable) *)
-type loc (* a location provided by an automaton *)
+Supply an address of the overflow area, and get back an automaton in
+its initial state.
 
+<<new.mli>>=
 val mk : spec -> Rtl.exp -> t
-  (* supply an address of the overflow area, and get back an
-     automaton in its initial state *)
+@
 
-  (* get a location and change the automaton's internal state *)
+To allocate a new resource slot, call [[ty]] or [[block]]. Both return
+a location [[[loc]] and change the automaton's internal state.
+
+<<new.mli>>=
 val ty    : t -> Types.ty * string option -> loc    
 val block : t -> width    * align         -> loc    
-
-
-type area = { address : Rtl.exp    (* address of memory block *)
-            ; align   : align       (* at run time, must have address mod align = 0 *)
-            ; size    : int
-            } 
-
-  (* stop getting locations and found out about the overflow area *)
-val freeze : t -> area
 @
-Here's what we do with locations:
+
+Location's as returned by an automaton can't be used directly because
+they are abstract. To use them to store and fetch data, use the
+following two functions:
+
 <<new.mli>>=
 val fetch : loc -> width -> Rtl.exp
 val store : loc -> Rtl.exp -> width -> Rtl.rtl
 @
+
+When all allocations are done. [[freeze]] the automaton. In response
+it returns the space allocated in the overflow [[area]]. 
+
+<<new.mli>>=
+type area = 
+    { address : Rtl.exp (* address of memory block *)
+    ; align   : align   (* at run time, must have address mod align = 0 *)
+    ; size    : int
+    } 
+val freeze : t -> area
+@
+
 It's possible that several overflow areas, with disjoint lifetimes,
-can be overlapped in a single location in memory.
+can be overlapped in a single location in memory. The result is a new
+[[area]] with more constraints in general. The [[placement]] value deter
 
 <<new.mli>>=
 type placement = EqualHighEnds | EqualLowEnds
@@ -82,15 +104,8 @@ val overlap : placement -> area list -> area
      otherwise has no side effects.  It is a checked run-time error to
      overlap areas at the high end unless the size of every area is a
      multiple of its alignment.  N.B. may raise Const.Cannot_solve. *)
-
 @
 
-Maybe this chunk should be inlined?
-<<type abbreviations>>=
-type align = int
-type width = int
-type size  = int
-@
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
@@ -121,7 +136,7 @@ type t = automaton
 @
 
 The [[bottumup]] class returns locations of the form $\mathit{base}+k$
-where $k \ge 0$ is increased accoring to the size and alignment
+where $k \ge 0$ is increased according to the size and alignment
 requirements of requests.
 
 <<new.ml>>=
@@ -131,10 +146,10 @@ class bottomup (base: Rtl.exp) (target: Target.t) =
     let agg = target#byteorder                                        in
     let mem = target#memsize                                          in
 
-    let add           = Rtl.op "add" [ptr]                            in
+    let add           = Rtl.opr "add" [ptr]                           in
     let addptr    x y = Rtl.app add [x;y]                             in
     let constptr  k   = Rtl.bits (Bits.of_int k ptr) ptr              in
-    let offset    k w = Rtl.cell 'm' agg w (addptr base (constptr k)) in
+    let offset    k w = Rtl.cell Rtl.none 'm' agg w (addptr base (constptr k)) in
     let write     k w = fun e -> Rtl.store (offset k w) e w           in
     let read      k w = Rtl.fetch (offset k w) w                      in
     let align x k     = if x mod k = 0 
@@ -188,6 +203,4 @@ let store loc expr width = loc.store expr
 type placement = EqualHighEnds | EqualLowEnds
 
 let overlap placement areas = assert false
-            
-
 @
