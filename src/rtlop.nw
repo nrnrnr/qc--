@@ -85,71 +85,72 @@ $$[[%mul@]](x,y) = [[%lobits]]$n$([[%mul$n$]](x,y))$$
 
 <<Types>>=
 module T = Types
-(**) (* == result size is polymorphic *)
+(**)  (* == result size is polymorphic             *)
+(***) (* == result size is twice of argument width *) 
 let ops = Strutil.assoc2map
-    [  "add"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
-    ;  "and"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
-    ;  "bit"        , T.proc [T.bool] (T.bitsc 1)
-    ;  "bool"       , T.proc [T.bitsc 1] T.bool
-    ;  "borrow"     , T.proc [T.bitsv 1; T.bitsv 1; T.bitsc 1] (T.bitsc 1)
-    ;  "carry"      , T.proc [T.bitsv 1; T.bitsv 1; T.bitsc 1] (T.bitsc 1)
-    ;  "com"        , T.proc [T.bitsv 1] (T.bitsv 1)
-    ;  "conjoin"    , T.proc [T.bool; T.bool] T.bool
-    ;  "disjoin"    , T.proc [T.bool; T.bool] T.bool
-    ;  "div"        , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
-    ;  "divu"       , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
-    ;  "eq"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
-(**);  "f2f"        , T.proc [T.bitsv 1; T.bitsc 2] (T.bitsv 2)
-(**);  "f2i"        , T.proc [T.bitsv 1; T.bitsc 2] (T.bitsv 2)
-    ;  "fadd"       , T.proc [T.bitsv 1; T.bitsv 1; T.bitsc 2] (T.bitsv 1)
-    ;  "fcmp"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsc 2)
-    ;  "fdiv"       , T.proc [T.bitsv 1; T.bitsv 1; T.bitsc 2] (T.bitsv 1)
-    ;  "float_eq"   , T.proc [] (T.bitsc 2)
-    ;  "float_gt"   , T.proc [] (T.bitsc 2)
-    ;  "float_lt"   , T.proc [] (T.bitsc 2)
-    ;  "fmul"       , T.proc [T.bitsv 1; T.bitsv 1; T.bitsc 2] (T.bitsv 1)
-    ;  "fneg"       , T.proc [T.bitsv 1] (T.bitsv 1)
-    ;  "fsub"       , T.proc [T.bitsv 1; T.bitsv 1; T.bitsc 2] (T.bitsv 1)
-    ;  "ge"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
-    ;  "geu"        , T.proc [T.bitsv 1; T.bitsv 1] T.bool
-    ;  "gt"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
-    ;  "gt"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
-    ;  "gtu"        , T.proc [T.bitsv 1; T.bitsv 1] T.bool
-(**);  "i2f"        , T.proc [T.bitsv 1; T.bitsc 2] (T.bitsv 2)
-    ;  "le"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
-    ;  "leu"        , T.proc [T.bitsv 1; T.bitsv 1] T.bool
-(**);  "lobits"     , T.proc [T.bitsv 1] (T.bitsv 2)
-    ;  "lt"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
-    ;  "lt"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
-    ;  "ltu"        , T.proc [T.bitsv 1; T.bitsv 1] T.bool
-    ;  "mod"        , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
-    ;  "modu"       , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
-    ;  "mul@"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1) (* see above *)
-(**);  "mul"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 2) 
-(**);  "mulu"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 2) 
-    ;  "neg"        , T.proc [T.bitsv 1] (T.bitsv 1)
-    ;  "ne"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
-    ;  "not"        , T.proc [T.bool] T.bool
-    ;  "or"         , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
-    ;  "parity"     , T.proc [T.bitsv 1] (T.bitsc 1)
-    ;  "quot"       , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 1)
-    ;  "rem"        , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
-    ;  "rotl"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
-    ;  "rotr"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
-    ;  "shl"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
-    ;  "shra"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
-    ;  "shrl"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
-    ;  "sub"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
-    ;  "sub"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
-(**);  "sx"         , T.proc [T.bitsv 1] (T.bitsv 2)
-    ;  "unordered"  , T.proc [] (T.bitsc 2)
-    ;  "xor"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
-(**);  "zx"         , T.proc [T.bitsv 1] (T.bitsv 2)
-    (* the operators below are not legal C-- operators but they
-       show up in generated RTLs. In order to typecheck these, we
-       have to include them. We need a better solution. XXX *)
-    ;  "bitExtract" , T.proc [T.bitsv 1; T.bitsv 2; T.bitsv 3] (T.bitsv 3) 
-    ] 
+        [  "add"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
+        ;  "and"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
+        ;  "bit"        , T.proc [T.bool] (T.bitsc 1)
+        ;  "bool"       , T.proc [T.bitsc 1] T.bool
+        ;  "borrow"     , T.proc [T.bitsv 1; T.bitsv 1; T.bitsc 1] (T.bitsc 1)
+        ;  "carry"      , T.proc [T.bitsv 1; T.bitsv 1; T.bitsc 1] (T.bitsc 1)
+        ;  "com"        , T.proc [T.bitsv 1] (T.bitsv 1)
+        ;  "conjoin"    , T.proc [T.bool; T.bool] T.bool
+        ;  "disjoin"    , T.proc [T.bool; T.bool] T.bool
+        ;  "div"        , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
+        ;  "divu"       , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
+        ;  "eq"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
+    (**);  "f2f"        , T.proc [T.bitsv 1; T.bitsc 2] (T.bitsv 2)
+    (**);  "f2i"        , T.proc [T.bitsv 1; T.bitsc 2] (T.bitsv 2)
+        ;  "fadd"       , T.proc [T.bitsv 1; T.bitsv 1; T.bitsc 2] (T.bitsv 1)
+        ;  "fcmp"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsc 2)
+        ;  "fdiv"       , T.proc [T.bitsv 1; T.bitsv 1; T.bitsc 2] (T.bitsv 1)
+        ;  "float_eq"   , T.proc [] (T.bitsc 2)
+        ;  "float_gt"   , T.proc [] (T.bitsc 2)
+        ;  "float_lt"   , T.proc [] (T.bitsc 2)
+        ;  "fmul"       , T.proc [T.bitsv 1; T.bitsv 1; T.bitsc 2] (T.bitsv 1)
+        ;  "fneg"       , T.proc [T.bitsv 1] (T.bitsv 1)
+        ;  "fsub"       , T.proc [T.bitsv 1; T.bitsv 1; T.bitsc 2] (T.bitsv 1)
+        ;  "ge"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
+        ;  "geu"        , T.proc [T.bitsv 1; T.bitsv 1] T.bool
+        ;  "gt"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
+        ;  "gt"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
+        ;  "gtu"        , T.proc [T.bitsv 1; T.bitsv 1] T.bool
+    (**);  "i2f"        , T.proc [T.bitsv 1; T.bitsc 2] (T.bitsv 2)
+        ;  "le"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
+        ;  "leu"        , T.proc [T.bitsv 1; T.bitsv 1] T.bool
+    (**);  "lobits"     , T.proc [T.bitsv 1] (T.bitsv 2)
+        ;  "lt"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
+        ;  "lt"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
+        ;  "ltu"        , T.proc [T.bitsv 1; T.bitsv 1] T.bool
+        ;  "mod"        , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
+        ;  "modu"       , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
+        ;  "mul_truc"   , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1) 
+   (***);  "mul"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv2 1) 
+   (***);  "mulu"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv2 1) 
+        ;  "neg"        , T.proc [T.bitsv 1] (T.bitsv 1)
+        ;  "ne"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
+        ;  "not"        , T.proc [T.bool] T.bool
+        ;  "or"         , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
+        ;  "parity"     , T.proc [T.bitsv 1] (T.bitsc 1)
+        ;  "quot"       , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 1)
+        ;  "rem"        , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
+        ;  "rotl"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
+        ;  "rotr"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
+        ;  "shl"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
+        ;  "shra"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
+        ;  "shrl"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
+        ;  "sub"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
+        ;  "sub"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
+    (**);  "sx"         , T.proc [T.bitsv 1] (T.bitsv 2)
+        ;  "unordered"  , T.proc [] (T.bitsc 2)
+        ;  "xor"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
+    (**);  "zx"         , T.proc [T.bitsv 1] (T.bitsv 2)
+        (* the operators below are not legal C-- operators but they
+           show up in generated RTLs. In order to typecheck these, we
+           have to include them. We need a better solution. XXX *)
+        ;  "bitExtract" , T.proc [T.bitsv 1; T.bitsv 2; T.bitsv 3] (T.bitsv 3) 
+        ] 
 
 let poly op = 
     try
@@ -193,7 +194,7 @@ value in the \emph{width list} of an {\rtl} operator.
 let alias = Strutil.assoc2map 
     [  "+"      , "add"
     ;  "-"      , "sub"
-    ;  "*"      , "mul@"    (* see discussion of %mul above *)
+    ;  "*"      , "mul_truc"    (* see discussion of %mul above *)
     ;  "/"      , "div"
     ;  "<<"     , "shl"
     ;  ">>"     , "shrl"

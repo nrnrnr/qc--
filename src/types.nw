@@ -23,17 +23,17 @@ primitive functions must match the types of their formal parameters,and
 module lays out the type language for this purpose.
 
 The basic types in \C~are [[bool]] and [[bits]]$n$.  Values in \C~are
-monomorphic, primitive operators like [[add]] are polymorphic in
-general in the size of their operands: 
+monomorphic, primitive operators like [[add]] are in general polymorphic
+in the size of their operands: 
 
 $$[[add]]: \forall~n.[[bits]]n \times [[bits]]n \to [[bits]]n$$
  
-A polymorphic primitive is described by a \textit{type scheme} that
-may contain bound variables for the size part of a [[bits]] type. 
-Types (for values), on the other hand, contain no variables at all. 
+A polymorphic primitive is described by a \textit{type scheme} that may
+contain bound variables for the size part of a [[bits]] type.
+\emph{Types} for values, on the other hand, contain no variables at all.
 The structure of type schema and types are covered by a parameterized
-type [[t]].  Depending on the parameter [['a]] types [[ty]] and type schema
-[[tyscheme]] can be created from [[t]].
+type [[t]].  Depending on the parameter [['a]], types [[ty]] and type
+schema [[tyscheme]] can be created from [[t]].
 
 <<types>>=
 type key        = int
@@ -43,9 +43,11 @@ type 'a t       = Bool
                 
 type size       = Const of int
                 | Var   of key
+                | Var2  of key
 
 type ty         = int  t
 @
+
 A [[tyscheme]] describes a polymorphic function that takes a list of
 arguments and returns a single value as result. A [[monotype]] is a
 monomorphic function type.
@@ -122,6 +124,7 @@ define types for them here, but only for the moment.
 <<abbrevs>>=
 val bitsc  : int -> size t              (* fixed/constant size  *)
 val bitsv  : key -> size t              (* variable size        *)
+val bitsv2 : key -> size t
 val bits   : 'a -> 'a t                 (* polymorphic size     *)
 val bool   : 'a t                       (* bool                 *)
 val proc   : size t list -> size t -> tyscheme   (* build proc type      *)
@@ -179,10 +182,10 @@ raised.
 let match' sigma = function 
     | Bool           , Bool                          -> sigma
     | Bits(Const(x)) , Bits(y) when x = y            -> sigma
-    | Bits(Var(x))   , Bits(y) when (S.mem x sigma) ->
+    | Bits(Var(x))   , Bits(y) when (S.mem x sigma)  ->
         if (lookup x sigma) = y then sigma else (raise MatchExn)
     | Bits(Var(x))   , Bits(y)                       -> S.add x y sigma
-    | _              , _ -> raise MatchExn
+    | _              , _                             -> raise MatchExn
 @
 
 The [[subst]] function applies a substitution [[sigma]] to a [[size t]] 
@@ -194,8 +197,10 @@ type schemes are used for matching and substitution.
 let subst sigma = function
     | Bool              -> Bool
     | Bits(Const(x))    -> Bits(x)
-    | Bits(Var(x))      -> try Bits(lookup x sigma)
-                           with Not_found -> assert false
+    | Bits(Var(x))      -> (try Bits(lookup x sigma) with Not_found -> 
+                                E.error "internal error (1) in application")
+    | Bits(Var2(x))     -> (try Bits(2*(lookup x sigma)) with Not_found ->
+                                E.error "internal error (2) in application")
 @
 
 The [[appl]] function matches the argument types with the [[size t]]
@@ -277,6 +282,9 @@ let instantiate ((args,ret):tyscheme) ~widths  =
         | Bits (Var i)   -> ( try Bits (List.nth widths (i-1)) with 
                             | Failure _ -> assert false
                             ) 
+        | Bits (Var2 i)  -> ( try Bits (2 * (List.nth widths (i-1))) with 
+                            | Failure _ -> assert false
+                            )
         | Bits (Const k) -> Bits k
         | Bool           -> Bool
     in (List.map inst args, inst ret)
@@ -287,9 +295,10 @@ let instantiate ((args,ret):tyscheme) ~widths  =
 The implementation of the abbreviations is trivial:
 
 <<types.ml>>=
-let bitsc x         = Bits(Const(x))
-let bitsv x         = Bits(Var(x))
-let bits  x         = Bits(x)
+let bitsc  x         = Bits(Const(x))
+let bitsv  x         = Bits(Var(x))
+let bitsv2 x         = Bits(Var2(x))
+let bits   x         = Bits(x)
 let bool            = Bool
 let proc args res   = (args,res)
 @
