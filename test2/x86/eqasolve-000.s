@@ -23,8 +23,6 @@ _main:
 	movl %ebx,(%esp)
 initialize_continuations_l3:
 	nop
-	nop
-	nop
 	leal _i_18,%eax
 	movl (%eax),%eax
 	nop
@@ -32,7 +30,6 @@ initialize_continuations_l3:
 	movl (%ecx),%ecx
 	call %ecx
 join_l92:
-	nop
 	nop
 	nop
 	leal -8(%esp), %esp
@@ -55,7 +52,6 @@ join_l92:
 	movl (%ecx),%ecx
 	call %ecx
 join_l89:
-	nop
 	nop
 	nop
 	nop
@@ -88,13 +84,10 @@ join_l81:
 	nop
 	nop
 	nop
-	nop
-	nop
 	leal _osfinish,%eax
 	movl (%eax),%eax
 	call %eax
 join_l78:
-	nop
 	nop
 	nop
 	nop
@@ -106,19 +99,16 @@ join_l78:
 join_l75:
 	nop
 	nop
-	nop
 	jmp _i_19
 join_l82:
 	jmp _i_19
 _i_19:
 	nop
 	nop
-	nop
 	leal _xlinit,%eax
 	movl (%eax),%eax
 	call %eax
 join_l72:
-	nop
 	nop
 	nop
 	nop
@@ -131,7 +121,6 @@ join_l72:
 	movl (%ecx),%ecx
 	call %ecx
 join_l69:
-	nop
 	nop
 	nop
 	leal -8(%esp), %esp
@@ -156,7 +145,6 @@ join_l69:
 	movl (%ecx),%ecx
 	call %ecx
 join_l66:
-	nop
 	nop
 	nop
 	nop
@@ -194,7 +182,6 @@ join_l60:
 	movl (%ecx),%ecx
 	call %ecx
 join_l58:
-	nop
 	nop
 	nop
 	jmp _i_23
@@ -272,7 +259,6 @@ join_l47:
 join_l45:
 	nop
 	nop
-	nop
 	jmp _i_34
 join_l46:
 	jmp _i_34
@@ -299,7 +285,6 @@ _i_27:
 	movl (%ecx),%ecx
 	call %ecx
 join_l41:
-	nop
 	nop
 	nop
 	jmp _i_38
@@ -339,7 +324,6 @@ join_l33:
 join_l31:
 	nop
 	nop
-	nop
 	jmp _i_43
 join_l32:
 	jmp _i_43
@@ -363,12 +347,10 @@ _i_43:
 	movl %ecx,(%eax)
 	nop
 	nop
-	nop
 	leal _xlflush,%eax
 	movl (%eax),%eax
 	call %eax
 join_l28:
-	nop
 	nop
 	nop
 	jmp _i_40
@@ -422,13 +404,10 @@ join_l14:
 	nop
 	nop
 	nop
-	nop
-	nop
 	leal _osfinish,%eax
 	movl (%eax),%eax
 	call %eax
 join_l11:
-	nop
 	nop
 	nop
 	nop
@@ -438,7 +417,6 @@ join_l11:
 	movl (%ecx),%ecx
 	call %ecx
 join_l8:
-	nop
 	nop
 	nop
 	nop
@@ -484,7 +462,6 @@ join_l20:
 join_l17:
 	nop
 	nop
-	nop
 	jmp _i_38
 _stdprint:
 	leal -20(%esp), %esp
@@ -527,7 +504,6 @@ join_l107:
 	nop
 	nop
 	nop
-	nop
 	movl $8,%ecx
 	leal _s_stdout,%eax
 	movl (%eax),%eax
@@ -541,9 +517,7 @@ join_l107:
 join_l104:
 	nop
 	nop
-	nop
 _i_48:
-	nop
 	nop
 	movl $0,%ecx
 	leal 20(%esp), %eax
@@ -579,9 +553,7 @@ initialize_continuations_l114:
 join_l118:
 	nop
 	nop
-	nop
 _i_49:
-	nop
 	nop
 	movl $0,%ecx
 	leal 8(%esp), %eax

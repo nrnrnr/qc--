@@ -40,10 +40,6 @@ main:
 	addl %ecx,%edx
 	movl (%edx),%ecx
 	nop
-	leal 4(%esp), %ecx
-	leal 4(%esp), %edx
-	movl (%ecx),%ecx
-	movl %ecx,(%edx)
 initialize_continuations_l3:
 	movl $1,%ecx
 	cmpl %ecx,%eax
@@ -63,8 +59,6 @@ join_l8:
 	nop
 	call printf
 join_l7:
-	nop
-	nop
 	nop
 	nop
 	nop

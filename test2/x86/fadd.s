@@ -31,11 +31,6 @@ fmt:
 main:
 	leal -28(%esp), %esp
 	nop
-	nop
-	leal 28(%esp), %ecx
-	leal 28(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l3:
 	leal y,%eax
 	flds (%eax)
@@ -71,8 +66,6 @@ initialize_continuations_l3:
 	nop
 	call printf
 join_l7:
-	nop
-	nop
 	nop
 	nop
 	nop

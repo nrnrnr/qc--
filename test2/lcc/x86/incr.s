@@ -13,11 +13,6 @@ Cmm.global_area:
 main:
 	leal -4(%esp), %esp
 	nop
-	nop
-	leal 4(%esp), %ecx
-	leal 4(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l3:
 	nop
 	movl $0,%eax
@@ -34,11 +29,6 @@ initialize_continuations_l3:
 memchar:
 	leal -52(%esp), %esp
 	nop
-	nop
-	leal 52(%esp), %ecx
-	leal 52(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l15:
 	movl $-4,%ecx
 	leal 52(%esp), %eax
@@ -143,11 +133,6 @@ initialize_continuations_l15:
 memint:
 	leal -60(%esp), %esp
 	nop
-	nop
-	leal 60(%esp), %ecx
-	leal 60(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l27:
 	movl $-4,%ecx
 	leal 60(%esp), %eax
@@ -260,11 +245,6 @@ initialize_continuations_l27:
 regchar:
 	leal -4(%esp), %esp
 	nop
-	nop
-	leal 4(%esp), %ecx
-	leal 4(%esp), %edx
-	movl (%ecx),%ecx
-	movl %ecx,(%edx)
 initialize_continuations_l39:
 	movl %eax,%edx
 	movl $1,%eax
@@ -305,11 +285,6 @@ initialize_continuations_l39:
 regint:
 	leal -4(%esp), %esp
 	nop
-	nop
-	leal 4(%esp), %ecx
-	leal 4(%esp), %edx
-	movl (%ecx),%ecx
-	movl %ecx,(%edx)
 initialize_continuations_l51:
 	movl %eax,%edx
 	movl $4,%eax

@@ -24,11 +24,6 @@ Cmm.global_area:
 main:
 	leal -4(%esp), %esp
 	nop
-	nop
-	leal 4(%esp), %ecx
-	leal 4(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l3:
 	nop
 	movl $0,%eax
@@ -50,20 +45,14 @@ f:
 	movl (%eax),%eax
 	movl %eax,(%esp)
 	nop
-	leal 12(%esp), %ecx
-	leal 12(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 	movl %ebx,8(%esp)
 initialize_continuations_l15:
-	nop
 	nop
 	nop
 	call f
 join_l23:
 	nop
 	movl %eax,%ebx
-	nop
 	nop
 	nop
 	nop
@@ -94,13 +83,8 @@ f2:
 	movl (%eax),%eax
 	movl %eax,4(%esp)
 	nop
-	leal 8(%esp), %ecx
-	leal 8(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 	movl %ebx,(%esp)
 initialize_continuations_l32:
-	nop
 	nop
 	nop
 	call f
@@ -113,7 +97,6 @@ join_l42:
 	cmpl %eax,%ecx
 	je join_l38
 join_l39:
-	nop
 	nop
 	nop
 	call f
@@ -141,51 +124,38 @@ L.8:
 	leal 8(%esp), %esp
 	ret
 f3:
-	leal -20(%esp), %esp
+	leal -4(%esp), %esp
 	movl $4,%ecx
-	leal 20(%esp), %eax
+	leal 4(%esp), %eax
 	addl %ecx,%eax
 	movl (%eax),%eax
 	movl $8,%ecx
-	leal 20(%esp), %edx
+	leal 4(%esp), %edx
 	addl %ecx,%edx
 	movl (%edx),%ecx
-	movl %ecx,16(%esp)
 	nop
-	leal 20(%esp), %ecx
-	movl %ecx,4(%esp)
-	leal 20(%esp), %ecx
-	movl %ecx,12(%esp)
-	movl 4(%esp),%ecx
-	movl (%ecx),%ecx
-	movl %ecx,8(%esp)
-	movl 8(%esp),%ecx
-	movl 12(%esp),%edx
-	movl %ecx,(%edx)
 	movl %ebx,(%esp)
 	movl %ebp,%ebx
 	movl %esi,%esi
 initialize_continuations_l51:
-	movl $0,%ecx
-	movl $0,%ecx
-	movl $0,%ecx
-	movl $0,%ecx
-	movl $0,%ecx
-	movl $0,%ecx
-	movl $0,%ecx
-	movl $0,%ecx
-	movl $0,%ecx
-	movl $0,%ecx
-	movl 16(%esp),%ebp
+	movl $0,%edx
+	movl $0,%edx
+	movl $0,%edx
+	movl $0,%edx
+	movl $0,%edx
+	movl $0,%edx
+	movl $0,%edx
+	movl $0,%edx
+	movl $0,%edx
+	movl $0,%edx
+	movl %ecx,%ebp
 	movl $4,%edx
 	movl %ebp,%ecx
 	addl %edx,%ecx
-	movl %ecx,16(%esp)
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je join_l57
 join_l58:
-	nop
 	nop
 	nop
 	call f
@@ -202,25 +172,20 @@ L.15:
 	movl %eax,(%ebp)
 	nop
 	movl $0,%eax
-	leal 20(%esp), %ecx
+	leal 4(%esp), %ecx
 	movl $0,%edx
-	leal 20(%esp), %ebp
+	leal 4(%esp), %ebp
 	addl %edx,%ebp
 	movl (%ecx),%ecx
 	movl %ecx,(%ebp)
 	movl %ebx,%ebp
 	movl (%esp),%ebx
 	movl %esi,%esi
-	leal 20(%esp), %esp
+	leal 4(%esp), %esp
 	ret
 f4:
 	leal -108(%esp), %esp
 	nop
-	nop
-	leal 108(%esp), %ecx
-	leal 108(%esp), %edx
-	movl (%ecx),%ecx
-	movl %ecx,(%edx)
 initialize_continuations_l67:
 	movl $0,%ecx
 	movl $0,%ecx
@@ -383,11 +348,6 @@ L.32:
 f5:
 	leal -108(%esp), %esp
 	nop
-	nop
-	leal 108(%esp), %ecx
-	leal 108(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l85:
 	leal x,%eax
 	leal k,%ecx

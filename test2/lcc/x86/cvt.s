@@ -23,11 +23,6 @@ Cmm.global_area:
 print:
 	leal -60(%esp), %esp
 	nop
-	nop
-	leal 60(%esp), %ecx
-	leal 60(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l3:
 	nop
 	leal i_2,%eax
@@ -106,9 +101,7 @@ initialize_continuations_l3:
 join_l7:
 	nop
 	nop
-	nop
 L.1:
-	nop
 	nop
 	leal 60(%esp), %eax
 	movl $0,%ecx
@@ -121,11 +114,6 @@ L.1:
 main:
 	leal -656(%esp), %esp
 	nop
-	nop
-	leal 656(%esp), %ecx
-	leal 656(%esp), %edx
-	movl (%ecx),%ecx
-	movl %ecx,(%edx)
 initialize_continuations_l16:
 	leal c,%ecx
 	movl $1,%edx
@@ -210,10 +198,8 @@ initialize_continuations_l16:
 	fistpq (%ecx)
 	nop
 	nop
-	nop
 	call print
 join_l75:
-	nop
 	nop
 	nop
 	leal s,%ecx
@@ -299,10 +285,8 @@ join_l75:
 	fistpq (%ecx)
 	nop
 	nop
-	nop
 	call print
 join_l72:
-	nop
 	nop
 	nop
 	leal i,%ecx
@@ -388,10 +372,8 @@ join_l72:
 	fistpq (%ecx)
 	nop
 	nop
-	nop
 	call print
 join_l69:
-	nop
 	nop
 	nop
 	leal l,%ecx
@@ -477,10 +459,8 @@ join_l69:
 	fistpq (%ecx)
 	nop
 	nop
-	nop
 	call print
 join_l66:
-	nop
 	nop
 	nop
 	leal C,%ecx
@@ -567,10 +547,8 @@ join_l66:
 	fistpq (%ecx)
 	nop
 	nop
-	nop
 	call print
 join_l63:
-	nop
 	nop
 	nop
 	leal S,%ecx
@@ -657,10 +635,8 @@ join_l63:
 	fistpq (%ecx)
 	nop
 	nop
-	nop
 	call print
 join_l60:
-	nop
 	nop
 	nop
 	leal I,%ecx
@@ -762,10 +738,8 @@ join_l60:
 	fistpq (%ecx)
 	nop
 	nop
-	nop
 	call print
 join_l57:
-	nop
 	nop
 	nop
 	leal L,%ecx
@@ -871,10 +845,8 @@ join_l57:
 	fistpq (%ecx)
 	nop
 	nop
-	nop
 	call print
 join_l54:
-	nop
 	nop
 	nop
 	leal f,%ecx
@@ -1188,10 +1160,8 @@ L.18:
 	fistpq (%ecx)
 	nop
 	nop
-	nop
 	call print
 join_l43:
-	nop
 	nop
 	nop
 	leal d,%ecx
@@ -1530,10 +1500,8 @@ L.32:
 	fistpq (%ecx)
 	nop
 	nop
-	nop
 	call print
 join_l32:
-	nop
 	nop
 	nop
 	leal D,%ecx
@@ -1868,10 +1836,8 @@ L.46:
 	fistpq (%ecx)
 	nop
 	nop
-	nop
 	call print
 join_l21:
-	nop
 	nop
 	nop
 	leal p,%eax

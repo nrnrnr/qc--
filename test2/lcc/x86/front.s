@@ -40,11 +40,6 @@ Cmm.global_area:
 main:
 	leal -8(%esp), %esp
 	nop
-	nop
-	leal 8(%esp), %ecx
-	leal 8(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l3:
 	nop
 	movl $0,%eax
@@ -55,7 +50,6 @@ initialize_continuations_l3:
 	nop
 	call exit
 join_l8:
-	nop
 	nop
 	nop
 	nop
@@ -71,35 +65,23 @@ join_l8:
 	leal 8(%esp), %esp
 	ret
 nested:
-	leal -20(%esp), %esp
+	leal -4(%esp), %esp
 	movl $4,%ecx
-	leal 20(%esp), %eax
+	leal 4(%esp), %eax
 	addl %ecx,%eax
 	movl (%eax),%eax
 	movl $8,%ecx
-	leal 20(%esp), %edx
+	leal 4(%esp), %edx
 	addl %ecx,%edx
 	movl (%edx),%ecx
-	movl %ecx,16(%esp)
 	nop
-	leal 20(%esp), %ecx
-	movl %ecx,(%esp)
-	leal 20(%esp), %ecx
-	movl %ecx,12(%esp)
-	movl (%esp),%ecx
-	movl (%ecx),%ecx
-	movl %ecx,4(%esp)
-	movl 4(%esp),%ecx
-	movl 12(%esp),%edx
-	movl %ecx,(%edx)
 initialize_continuations_l17:
-	movl $4,%ecx
-	cmpl %ecx,%eax
+	movl $4,%edx
+	cmpl %edx,%eax
 	jge join_l31
 join_l32:
-	movl $114,%ecx
-	movl 16(%esp),%edx
-	cmpl %ecx,%edx
+	movl $114,%edx
+	cmpl %edx,%ecx
 	je join_l30
 join_l42:
 	jmp L.6
@@ -108,18 +90,16 @@ join_l30:
 join_l31:
 	jmp L.6
 L.6:
-	movl $1,%ecx
-	cmpl %ecx,%eax
+	movl $1,%edx
+	cmpl %edx,%eax
 	jne join_l28
 join_l29:
-	movl $104,%ecx
-	movl 16(%esp),%edx
-	cmpl %ecx,%edx
+	movl $104,%edx
+	cmpl %edx,%ecx
 	je join_l26
 join_l27:
-	movl $105,%ecx
-	movl 16(%esp),%edx
-	cmpl %ecx,%edx
+	movl $105,%edx
+	cmpl %edx,%ecx
 	je join_l25
 join_l41:
 	jmp L.8
@@ -130,17 +110,15 @@ join_l26:
 join_l28:
 	jmp L.8
 L.8:
-	movl $2,%ecx
-	cmpl %ecx,%eax
+	movl $2,%edx
+	cmpl %edx,%eax
 	jne join_l23
 join_l24:
 	movl $111,%eax
-	movl 16(%esp),%ecx
 	cmpl %eax,%ecx
 	je join_l21
 join_l22:
 	movl $121,%eax
-	movl 16(%esp),%ecx
 	cmpl %eax,%ecx
 	jne join_l20
 join_l40:
@@ -150,22 +128,22 @@ join_l20:
 join_l21:
 	jmp L.9
 L.9:
-	movl 16(%esp),%eax
+	movl %ecx,%eax
 	jmp L.3
 join_l23:
 	jmp L.3
 L.3:
 	nop
 	movl $0,%eax
-	leal 20(%esp), %ecx
-	movl %ecx,8(%esp)
+	leal 4(%esp), %ecx
+	movl %ecx,(%esp)
 	movl $0,%ecx
-	leal 20(%esp), %edx
+	leal 4(%esp), %edx
 	addl %ecx,%edx
-	movl 8(%esp),%ecx
+	movl (%esp),%ecx
 	movl (%ecx),%ecx
 	movl %ecx,(%edx)
-	leal 20(%esp), %esp
+	leal 4(%esp), %esp
 	ret
 s:
 	nop
@@ -174,13 +152,8 @@ s:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l45:
 L.12:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -203,13 +176,7 @@ Dz:
 Dfunc:
 	nop
 	nop
-	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l56:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -222,13 +189,7 @@ initialize_continuations_l56:
 f:
 	nop
 	nop
-	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l67:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -241,13 +202,7 @@ initialize_continuations_l67:
 f1:
 	nop
 	nop
-	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l78:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -268,12 +223,7 @@ f2:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l89:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -290,12 +240,7 @@ g:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l100:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -312,12 +257,7 @@ h:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l111:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -338,12 +278,7 @@ h1:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l122:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -356,13 +291,7 @@ initialize_continuations_l122:
 h2:
 	nop
 	nop
-	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l133:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -380,13 +309,7 @@ L.23:
 set1:
 	nop
 	nop
-	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l144:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -404,13 +327,7 @@ L.25:
 set2:
 	nop
 	nop
-	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l155:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -423,13 +340,7 @@ initialize_continuations_l155:
 i_goo:
 	nop
 	nop
-	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l166:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -442,13 +353,7 @@ initialize_continuations_l166:
 sss:
 	nop
 	nop
-	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l177:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -470,12 +375,7 @@ rrr:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l188:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -488,13 +388,7 @@ initialize_continuations_l188:
 setstatic:
 	nop
 	nop
-	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l199:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -515,12 +409,7 @@ gx1:
 	fildq (%eax)
 	fistpq (%edx)
 	nop
-	leal 16(%esp), %ecx
-	leal 16(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l210:
-	nop
 	nop
 	leal 16(%esp), %eax
 	movl $0,%ecx
@@ -545,12 +434,7 @@ ff1:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	nop
-	leal 8(%esp), %ecx
-	leal 8(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l221:
-	nop
 	nop
 	leal 8(%esp), %eax
 	movl $0,%ecx
@@ -571,12 +455,7 @@ gg1:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l232:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -593,12 +472,7 @@ hh1:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l243:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -619,12 +493,7 @@ cmp:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l254:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -637,13 +506,7 @@ initialize_continuations_l254:
 sort:
 	nop
 	nop
-	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l265:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx
@@ -656,13 +519,7 @@ initialize_continuations_l265:
 onearg:
 	nop
 	nop
-	nop
-	movl %esp,%ecx
-	movl %esp,%eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l276:
-	nop
 	nop
 	movl %esp,%eax
 	movl $0,%ecx

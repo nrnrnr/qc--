@@ -8,43 +8,34 @@ Cmm.global_area:
 .section .data
 .section .text
 main:
-	leal -108(%esp), %esp
+	leal -96(%esp), %esp
 	movl $4,%ecx
-	leal 108(%esp), %edx
+	leal 96(%esp), %edx
 	addl %ecx,%edx
 	movl (%edx),%ecx
-	movl %ecx,100(%esp)
+	movl %ecx,92(%esp)
 	movl $8,%ecx
-	leal 108(%esp), %edx
-	movl %edx,48(%esp)
-	movl 48(%esp),%edx
-	addl %ecx,%edx
-	movl %edx,48(%esp)
+	movl %ecx,88(%esp)
+	leal 96(%esp), %ecx
+	movl %ecx,48(%esp)
+	movl 48(%esp),%ecx
+	movl 88(%esp),%edx
+	addl %edx,%ecx
+	movl %ecx,48(%esp)
 	movl 48(%esp),%ecx
 	movl (%ecx),%ecx
-	movl %ecx,104(%esp)
 	nop
-	leal 108(%esp), %ecx
-	movl %ecx,56(%esp)
-	leal 108(%esp), %ecx
-	movl %ecx,52(%esp)
-	movl 56(%esp),%ecx
-	movl (%ecx),%ecx
-	movl %ecx,60(%esp)
-	movl 60(%esp),%ecx
-	movl 52(%esp),%edx
-	movl %ecx,(%edx)
 	movl %ebx,40(%esp)
 initialize_continuations_l3:
-	movl $1,%ecx
-	movl 100(%esp),%edx
-	cmpl %ecx,%edx
+	movl $1,%edx
+	movl 92(%esp),%ebx
+	cmpl %edx,%ebx
 	jg join_l36
 join_l37:
 	leal f_4,%ecx
 	flds (%ecx)
-	movl $-88,%edx
-	leal 108(%esp), %ecx
+	movl $-76,%edx
+	leal 96(%esp), %ecx
 	addl %edx,%ecx
 	fstpl (%ecx)
 	jmp L.3
@@ -53,10 +44,9 @@ join_l36:
 L.2:
 	nop
 	movl $4,%edx
-	movl 104(%esp),%ecx
 	addl %edx,%ecx
-	movl $-108,%edx
-	leal 108(%esp), %ebx
+	movl $-96,%edx
+	leal 96(%esp), %ebx
 	addl %edx,%ebx
 	movl (%ecx),%ecx
 	movl %ecx,(%ebx)
@@ -64,20 +54,20 @@ L.2:
 	call atof
 join_l35:
 	nop
-	movl $-96,%edx
-	leal 108(%esp), %ecx
+	movl $-84,%edx
+	leal 96(%esp), %ecx
 	addl %edx,%ecx
 	fstpl (%ecx)
 	nop
 	leal f_5,%ecx
 	flds (%ecx)
-	movl $-96,%edx
-	leal 108(%esp), %ecx
+	movl $-84,%edx
+	leal 96(%esp), %ecx
 	addl %edx,%ecx
 	fldl (%ecx)
 	fdivp
-	movl $-88,%edx
-	leal 108(%esp), %ecx
+	movl $-76,%edx
+	leal 96(%esp), %ecx
 	addl %edx,%ecx
 	fstpl (%ecx)
 	jmp L.3
@@ -90,18 +80,18 @@ L.6:
 	movl %edx,%ebx
 	addl %ecx,%ebx
 	leal f_4,%ecx
-	movl %ecx,72(%esp)
+	movl %ecx,60(%esp)
 	leal f,%ecx
-	movl %ecx,68(%esp)
+	movl %ecx,56(%esp)
 	movl $2,%ecx
-	movl %edx,64(%esp)
-	movl 64(%esp),%edx
+	movl %edx,52(%esp)
+	movl 52(%esp),%edx
 	shll %cl, %edx
-	movl %edx,64(%esp)
-	movl 64(%esp),%ecx
-	movl 68(%esp),%edx
+	movl %edx,52(%esp)
+	movl 52(%esp),%ecx
+	movl 56(%esp),%edx
 	addl %edx,%ecx
-	movl 72(%esp),%edx
+	movl 60(%esp),%edx
 	movl (%edx),%edx
 	movl %edx,(%ecx)
 L.7:
@@ -115,7 +105,6 @@ join_l32:
 L.11:
 	nop
 	nop
-	nop
 	call getchar
 join_l30:
 	nop
@@ -127,8 +116,8 @@ join_l30:
 join_l27:
 	nop
 	leal i_14,%ecx
-	movl $-108,%edx
-	leal 108(%esp), %ebx
+	movl $-96,%edx
+	leal 96(%esp), %ebx
 	addl %edx,%ebx
 	movl %ecx,(%ebx)
 	nop
@@ -136,26 +125,25 @@ join_l27:
 join_l25:
 	nop
 	nop
-	nop
 	movl $0,%ebx
 	jmp L.15
 L.15:
 	leal f,%ecx
-	movl %ecx,80(%esp)
+	movl %ecx,68(%esp)
 	movl $2,%ecx
 	movl %ebx,%edx
 	shll %cl, %edx
-	movl 80(%esp),%ecx
+	movl 68(%esp),%ecx
 	addl %ecx,%edx
 	flds (%edx)
-	movl $-80,%ecx
-	leal 108(%esp), %edx
+	movl $-68,%ecx
+	leal 96(%esp), %edx
 	addl %ecx,%edx
 	fstpl (%edx)
 	leal f_4,%ecx
 	flds (%ecx)
-	movl $-80,%ecx
-	leal 108(%esp), %edx
+	movl $-68,%ecx
+	leal 96(%esp), %edx
 	addl %ecx,%edx
 	fldl (%edx)
 	fcompp
@@ -164,22 +152,22 @@ L.15:
 	xorb $64,%ah
 	jz join_l21
 join_l22:
-	movl $-72,%ecx
-	leal 108(%esp), %edx
+	movl $-60,%ecx
+	leal 96(%esp), %edx
 	addl %ecx,%edx
 	movl 44(%esp),%ecx
 	movl %ecx,(%edx)
-	movl $-72,%ecx
-	leal 108(%esp), %edx
+	movl $-60,%ecx
+	leal 96(%esp), %edx
 	addl %ecx,%edx
 	fildl (%edx)
-	movl $-80,%ecx
-	leal 108(%esp), %edx
+	movl $-68,%ecx
+	leal 96(%esp), %edx
 	addl %ecx,%edx
 	fldl (%edx)
 	fdivp
-	movl $-88,%ecx
-	leal 108(%esp), %edx
+	movl $-76,%ecx
+	leal 96(%esp), %edx
 	addl %ecx,%edx
 	fldl (%edx)
 	fcompp
@@ -193,20 +181,19 @@ join_l20:
 join_l18:
 	nop
 	leal i_23,%ecx
-	movl %ecx,96(%esp)
-	movl $-108,%ecx
-	leal 108(%esp), %edx
+	movl %ecx,84(%esp)
+	movl $-96,%ecx
+	leal 96(%esp), %edx
 	addl %ecx,%edx
-	movl 96(%esp),%ecx
+	movl 84(%esp),%ecx
 	movl %ecx,(%edx)
-	movl $-104,%ecx
-	leal 108(%esp), %edx
+	movl $-92,%ecx
+	leal 96(%esp), %edx
 	addl %ecx,%edx
 	movl %ebx,(%edx)
 	nop
 	call printf
 join_l16:
-	nop
 	nop
 	nop
 	jmp L.22
@@ -215,14 +202,14 @@ join_l17:
 L.21:
 	nop
 	leal i_24,%ecx
-	movl %ecx,92(%esp)
-	movl $-108,%ecx
-	leal 108(%esp), %edx
+	movl %ecx,80(%esp)
+	movl $-96,%ecx
+	leal 96(%esp), %edx
 	addl %ecx,%edx
-	movl 92(%esp),%ecx
+	movl 80(%esp),%ecx
 	movl %ecx,(%edx)
-	movl $-104,%ecx
-	leal 108(%esp), %edx
+	movl $-92,%ecx
+	leal 96(%esp), %edx
 	addl %ecx,%edx
 	movl %ebx,(%edx)
 	nop
@@ -230,46 +217,44 @@ L.21:
 join_l13:
 	nop
 	nop
-	nop
 	jmp L.22
 L.22:
 	nop
-	movl $-72,%ecx
-	leal 108(%esp), %edx
+	movl $-60,%ecx
+	leal 96(%esp), %edx
 	addl %ecx,%edx
 	movl 44(%esp),%ecx
 	movl %ecx,(%edx)
-	movl $-72,%ecx
-	leal 108(%esp), %edx
+	movl $-60,%ecx
+	leal 96(%esp), %edx
 	addl %ecx,%edx
 	fildl (%edx)
 	leal f,%ecx
-	movl %ecx,88(%esp)
+	movl %ecx,76(%esp)
 	movl $2,%ecx
 	movl %ebx,%edx
 	shll %cl, %edx
-	movl 88(%esp),%ecx
+	movl 76(%esp),%ecx
 	addl %ecx,%edx
 	flds (%edx)
 	leal f_5,%ecx
 	flds (%ecx)
 	fmulp
 	fdivp
-	movl $-104,%ecx
-	leal 108(%esp), %edx
+	movl $-92,%ecx
+	leal 96(%esp), %edx
 	addl %ecx,%edx
 	fstpl (%edx)
 	leal i_25,%ecx
-	movl %ecx,84(%esp)
-	movl $-108,%ecx
-	leal 108(%esp), %edx
+	movl %ecx,72(%esp)
+	movl $-96,%ecx
+	leal 96(%esp), %edx
 	addl %ecx,%edx
-	movl 84(%esp),%ecx
+	movl 72(%esp),%ecx
 	movl %ecx,(%edx)
 	nop
 	call printf
 join_l10:
-	nop
 	nop
 	nop
 	jmp L.19
@@ -287,14 +272,14 @@ L.16:
 join_l7:
 	nop
 	movl $0,%eax
-	leal 108(%esp), %ecx
+	leal 96(%esp), %ecx
 	movl $0,%edx
-	leal 108(%esp), %ebx
+	leal 96(%esp), %ebx
 	addl %edx,%ebx
 	movl (%ecx),%ecx
 	movl %ecx,(%ebx)
 	movl 40(%esp),%ebx
-	leal 108(%esp), %esp
+	leal 96(%esp), %esp
 	ret
 join_l6:
 	jmp L.15
@@ -302,10 +287,10 @@ join_l26:
 	jmp L.10
 L.10:
 	leal f,%ecx
-	movl %ecx,76(%esp)
+	movl %ecx,64(%esp)
 	movl $2,%ecx
 	shll %cl, %edx
-	movl 76(%esp),%ecx
+	movl 64(%esp),%ecx
 	addl %ecx,%edx
 	leal f_13,%ecx
 	flds (%ecx)

@@ -19,7 +19,6 @@ loop:
 	jge join_l5
 join_l6:
 	nop
-	nop
 	movl $0,%eax
 	movl %esp,%edx
 	addl %eax,%edx

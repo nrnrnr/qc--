@@ -38,10 +38,6 @@ main:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	nop
-	leal 4(%esp), %ecx
-	leal 4(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l3:
 	nop
 	movl $-1420500317,%eax
@@ -52,8 +48,6 @@ initialize_continuations_l3:
 	nop
 	call callee
 join_l7:
-	nop
-	nop
 	nop
 	nop
 	nop
@@ -73,10 +67,6 @@ callee:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	nop
-	leal 4(%esp), %ecx
-	leal 4(%esp), %edx
-	movl (%ecx),%ecx
-	movl %ecx,(%edx)
 initialize_continuations_l16:
 	movl $-1420500317,%ecx
 	cmpl %ecx,%eax
@@ -91,8 +81,6 @@ join_l26:
 	nop
 	call printf
 join_l20:
-	nop
-	nop
 	nop
 	nop
 	nop
@@ -114,8 +102,6 @@ join_l25:
 	nop
 	call printf
 join_l24:
-	nop
-	nop
 	nop
 	nop
 	nop

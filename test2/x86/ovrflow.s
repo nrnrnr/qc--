@@ -107,7 +107,6 @@ join_l40:
 join_l34:
 	nop
 	nop
-	nop
 	jmp join_l37
 join_l39:
 	nop
@@ -138,7 +137,6 @@ join_l39:
 	nop
 	call printf
 join_l38:
-	nop
 	nop
 	nop
 	jmp join_l37
@@ -181,7 +179,6 @@ join_l31:
 join_l25:
 	nop
 	nop
-	nop
 	jmp join_l28
 join_l30:
 	nop
@@ -212,7 +209,6 @@ join_l30:
 	nop
 	call printf
 join_l29:
-	nop
 	nop
 	nop
 	jmp join_l28
@@ -260,7 +256,6 @@ join_l22:
 join_l16:
 	nop
 	nop
-	nop
 	jmp join_l19
 join_l21:
 	nop
@@ -291,7 +286,6 @@ join_l21:
 	nop
 	call printf
 join_l20:
-	nop
 	nop
 	nop
 	jmp join_l19
@@ -334,7 +328,6 @@ join_l13:
 join_l7:
 	nop
 	nop
-	nop
 	jmp join_l10
 join_l12:
 	nop
@@ -367,10 +360,8 @@ join_l12:
 join_l11:
 	nop
 	nop
-	nop
 	jmp join_l10
 join_l10:
-	nop
 	nop
 	movl $4,%ecx
 	leal 36(%esp), %eax
@@ -392,10 +383,6 @@ main:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	nop
-	leal 60(%esp), %ecx
-	leal 60(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l48:
 	leal -4(%esp), %esp
 	movl $2147483647,%eax
@@ -409,7 +396,6 @@ initialize_continuations_l48:
 	nop
 	call test_ovrfl
 join_l94:
-	nop
 	nop
 	nop
 	leal -4(%esp), %esp
@@ -426,7 +412,6 @@ join_l94:
 join_l91:
 	nop
 	nop
-	nop
 	leal -4(%esp), %esp
 	movl $-2147483648,%eax
 	movl $1,%ecx
@@ -439,7 +424,6 @@ join_l91:
 	nop
 	call test_ovrfl
 join_l88:
-	nop
 	nop
 	nop
 	leal -4(%esp), %esp
@@ -456,7 +440,6 @@ join_l88:
 join_l85:
 	nop
 	nop
-	nop
 	leal -4(%esp), %esp
 	movl $2147483647,%eax
 	movl $-1,%ecx
@@ -469,7 +452,6 @@ join_l85:
 	nop
 	call test_ovrfl
 join_l82:
-	nop
 	nop
 	nop
 	leal -4(%esp), %esp
@@ -486,7 +468,6 @@ join_l82:
 join_l79:
 	nop
 	nop
-	nop
 	leal -4(%esp), %esp
 	movl $-1,%eax
 	movl $-2147483648,%ecx
@@ -499,7 +480,6 @@ join_l79:
 	nop
 	call test_ovrfl
 join_l76:
-	nop
 	nop
 	nop
 	leal -4(%esp), %esp
@@ -516,7 +496,6 @@ join_l76:
 join_l73:
 	nop
 	nop
-	nop
 	leal -4(%esp), %esp
 	movl $2,%eax
 	movl $2147483647,%ecx
@@ -529,7 +508,6 @@ join_l73:
 	nop
 	call test_ovrfl
 join_l70:
-	nop
 	nop
 	nop
 	leal -4(%esp), %esp
@@ -546,7 +524,6 @@ join_l70:
 join_l67:
 	nop
 	nop
-	nop
 	leal -4(%esp), %esp
 	movl $2,%eax
 	movl $-2147483648,%ecx
@@ -559,7 +536,6 @@ join_l67:
 	nop
 	call test_ovrfl
 join_l64:
-	nop
 	nop
 	nop
 	leal -4(%esp), %esp
@@ -576,7 +552,6 @@ join_l64:
 join_l61:
 	nop
 	nop
-	nop
 	leal -4(%esp), %esp
 	movl $-2,%eax
 	movl $2147483647,%ecx
@@ -591,7 +566,6 @@ join_l61:
 join_l58:
 	nop
 	nop
-	nop
 	leal -4(%esp), %esp
 	movl $-2147483648,%eax
 	movl $-2,%ecx
@@ -604,7 +578,6 @@ join_l58:
 	nop
 	call test_ovrfl
 join_l55:
-	nop
 	nop
 	nop
 	leal -4(%esp), %esp
@@ -622,11 +595,6 @@ join_l52:
 	nop
 	nop
 	nop
-	nop
 	movl $0,%eax
-	leal 60(%esp), %ecx
-	leal 60(%esp), %edx
-	movl (%ecx),%ecx
-	movl %ecx,(%edx)
 	leal 60(%esp), %esp
 	ret

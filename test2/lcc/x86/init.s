@@ -79,11 +79,6 @@ y:
 main:
 	leal -20(%esp), %esp
 	nop
-	nop
-	leal 20(%esp), %ecx
-	leal 20(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 	movl %ebx,8(%esp)
 initialize_continuations_l3:
 	movl $0,%ebx
@@ -101,10 +96,8 @@ L.8:
 join_l13:
 	nop
 	nop
-	nop
 	call f
 join_l11:
-	nop
 	nop
 	nop
 	nop
@@ -117,7 +110,6 @@ join_l11:
 	nop
 	call g
 join_l8:
-	nop
 	nop
 	nop
 	nop
@@ -163,7 +155,6 @@ join_l18:
 join_l16:
 	nop
 	nop
-	nop
 L.6:
 	movl $1,%eax
 	addl %eax,%ebx
@@ -200,7 +191,6 @@ L.9:
 join_l21:
 	nop
 	nop
-	nop
 L.10:
 	movl $1,%ecx
 	movl 12(%esp),%eax
@@ -219,11 +209,6 @@ L.20:
 f:
 	leal -12(%esp), %esp
 	nop
-	nop
-	leal 12(%esp), %ecx
-	leal 12(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 	movl %ebx,8(%esp)
 initialize_continuations_l30:
 	leal L.20,%ebx
@@ -264,7 +249,6 @@ L.25:
 join_l37:
 	nop
 	nop
-	nop
 L.26:
 	movl $4,%eax
 	addl %eax,%ebx
@@ -277,10 +261,6 @@ g:
 	movl (%eax),%eax
 	movl %eax,12(%esp)
 	nop
-	leal 16(%esp), %ecx
-	leal 16(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 	movl %ebx,8(%esp)
 initialize_continuations_l46:
 	jmp L.35
@@ -293,10 +273,8 @@ L.35:
 join_l53:
 	nop
 	nop
-	nop
 	call h
 join_l51:
-	nop
 	nop
 	nop
 	nop
@@ -338,7 +316,6 @@ join_l58:
 join_l56:
 	nop
 	nop
-	nop
 L.33:
 	movl $20,%ecx
 	movl 12(%esp),%eax
@@ -369,7 +346,6 @@ L.36:
 join_l61:
 	nop
 	nop
-	nop
 L.37:
 	movl $1,%eax
 	addl %eax,%ebx
@@ -377,11 +353,6 @@ L.37:
 h:
 	leal -120(%esp), %esp
 	nop
-	nop
-	leal 120(%esp), %ecx
-	leal 120(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 	movl %ebx,20(%esp)
 initialize_continuations_l70:
 	movl $0,%ebx
@@ -513,7 +484,6 @@ L.43:
 	nop
 	call printf
 join_l77:
-	nop
 	nop
 	nop
 L.44:

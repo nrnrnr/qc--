@@ -29,11 +29,6 @@ in:
 main:
 	leal -16(%esp), %esp
 	nop
-	nop
-	leal 16(%esp), %ecx
-	leal 16(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 	movl %ebx,8(%esp)
 initialize_continuations_l3:
 	nop
@@ -50,7 +45,6 @@ initialize_continuations_l3:
 	nop
 	call sort
 join_l16:
-	nop
 	nop
 	nop
 	movl $0,%ebx
@@ -95,7 +89,6 @@ join_l13:
 	nop
 	nop
 	nop
-	nop
 	movl $10,%eax
 	movl $-16,%ecx
 	leal 16(%esp), %edx
@@ -104,7 +97,6 @@ join_l13:
 	nop
 	call putchar
 join_l10:
-	nop
 	nop
 	nop
 L.3:
@@ -119,10 +111,6 @@ putd:
 	movl (%eax),%eax
 	movl %eax,8(%esp)
 	nop
-	leal 12(%esp), %ecx
-	leal 12(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 	movl %ebx,4(%esp)
 initialize_continuations_l25:
 	movl $0,%eax
@@ -139,7 +127,6 @@ join_l40:
 	nop
 	call putchar
 join_l38:
-	nop
 	nop
 	nop
 	movl 8(%esp),%eax
@@ -173,7 +160,6 @@ join_l35:
 join_l33:
 	nop
 	nop
-	nop
 	jmp L.10
 join_l34:
 	jmp L.10
@@ -197,7 +183,6 @@ join_l30:
 	nop
 	nop
 	nop
-	nop
 	movl $0,%eax
 	leal 12(%esp), %ecx
 	movl $0,%edx
@@ -209,58 +194,45 @@ join_l30:
 	leal 12(%esp), %esp
 	ret
 sort:
-	leal -48(%esp), %esp
+	leal -32(%esp), %esp
 	movl $4,%ecx
-	leal 48(%esp), %eax
+	leal 32(%esp), %eax
 	addl %ecx,%eax
 	movl (%eax),%eax
 	movl $8,%ecx
-	leal 48(%esp), %edx
+	leal 32(%esp), %edx
 	addl %ecx,%edx
 	movl (%edx),%ecx
-	movl %ecx,40(%esp)
 	nop
-	leal 48(%esp), %ecx
-	movl %ecx,12(%esp)
-	leal 48(%esp), %ecx
-	movl %ecx,32(%esp)
-	movl 12(%esp),%ecx
-	movl (%ecx),%ecx
-	movl %ecx,16(%esp)
-	movl 16(%esp),%ecx
-	movl 32(%esp),%edx
-	movl %ecx,(%edx)
 initialize_continuations_l49:
-	leal xx,%ecx
-	movl %eax,(%ecx)
-	movl $1,%ecx
-	movl 40(%esp),%edx
-	subl %ecx,%edx
-	movl %edx,44(%esp)
-	movl 44(%esp),%ecx
-	movl %ecx,40(%esp)
+	leal xx,%edx
+	movl %eax,(%edx)
+	movl $1,%edx
+	subl %edx,%ecx
+	movl %ecx,28(%esp)
+	movl 28(%esp),%ecx
 	nop
-	movl $-48,%ecx
+	movl $-32,%ecx
+	movl %ecx,16(%esp)
+	leal 32(%esp), %ecx
 	movl %ecx,24(%esp)
-	leal 48(%esp), %ecx
-	movl %ecx,36(%esp)
-	movl 24(%esp),%ecx
-	movl 36(%esp),%edx
+	movl 16(%esp),%ecx
+	movl 24(%esp),%edx
 	addl %ecx,%edx
-	movl %edx,36(%esp)
-	movl 36(%esp),%ecx
+	movl %edx,24(%esp)
+	movl 24(%esp),%ecx
 	movl %eax,(%ecx)
 	movl $0,%eax
-	movl %eax,20(%esp)
-	movl $-44,%ecx
-	leal 48(%esp), %eax
+	movl %eax,12(%esp)
+	movl $-28,%ecx
+	leal 32(%esp), %eax
 	addl %ecx,%eax
-	movl 20(%esp),%ecx
+	movl 12(%esp),%ecx
 	movl %ecx,(%eax)
-	movl $-40,%ecx
-	leal 48(%esp), %eax
+	movl $-24,%ecx
+	leal 32(%esp), %eax
 	addl %ecx,%eax
-	movl 44(%esp),%ecx
+	movl 28(%esp),%ecx
 	movl %ecx,(%eax)
 	nop
 	call quick
@@ -268,17 +240,16 @@ join_l54:
 	nop
 	nop
 	nop
-	nop
 	movl $0,%eax
-	leal 48(%esp), %ecx
-	movl %ecx,28(%esp)
+	leal 32(%esp), %ecx
+	movl %ecx,20(%esp)
 	movl $0,%ecx
-	leal 48(%esp), %edx
+	leal 32(%esp), %edx
 	addl %ecx,%edx
-	movl 28(%esp),%ecx
+	movl 20(%esp),%ecx
 	movl (%ecx),%ecx
 	movl %ecx,(%edx)
-	leal 48(%esp), %esp
+	leal 32(%esp), %esp
 	ret
 quick:
 	leal -28(%esp), %esp
@@ -298,10 +269,6 @@ quick:
 	movl (%eax),%eax
 	movl %eax,24(%esp)
 	nop
-	leal 28(%esp), %ecx
-	leal 28(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 	movl %ebx,12(%esp)
 initialize_continuations_l63:
 	movl 24(%esp),%eax
@@ -369,7 +336,6 @@ join_l71:
 	nop
 	nop
 	nop
-	nop
 	movl $-28,%ecx
 	leal 28(%esp), %eax
 	addl %ecx,%eax
@@ -389,7 +355,6 @@ join_l71:
 	nop
 	call quick
 join_l68:
-	nop
 	nop
 	nop
 	nop
@@ -421,10 +386,6 @@ partition:
 	movl (%eax),%eax
 	movl %eax,20(%esp)
 	nop
-	leal 32(%esp), %ecx
-	leal 32(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 	movl %ebx,8(%esp)
 initialize_continuations_l86:
 	movl $1,%ecx
@@ -466,7 +427,6 @@ join_l93:
 	nop
 	call exchange
 join_l91:
-	nop
 	nop
 	nop
 	nop
@@ -547,7 +507,6 @@ join_l98:
 join_l96:
 	nop
 	nop
-	nop
 	jmp L.30
 join_l97:
 	jmp L.30
@@ -582,10 +541,6 @@ exchange:
 	movl (%eax),%eax
 	movl %eax,20(%esp)
 	nop
-	leal 36(%esp), %ecx
-	leal 36(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 	movl %ebx,12(%esp)
 initialize_continuations_l111:
 	leal xx,%eax
@@ -624,7 +579,6 @@ initialize_continuations_l111:
 	nop
 	call printf
 join_l116:
-	nop
 	nop
 	nop
 	movl $-4,%ecx

@@ -7,7 +7,6 @@ Cmm.global_area:
 p:
 	leal -44(%esp), %esp
 	nop
-	nop
 	leal 44(%esp), %eax
 	movl (%eax),%eax
 	movl %eax,40(%esp)

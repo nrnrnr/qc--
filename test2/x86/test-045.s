@@ -10,7 +10,6 @@ str:
 f:
 	leal -64(%esp), %esp
 	nop
-	nop
 	leal 64(%esp), %eax
 	movl (%eax),%eax
 initialize_continuations_l3:

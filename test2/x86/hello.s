@@ -34,10 +34,6 @@ main:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	nop
-	leal 4(%esp), %ecx
-	leal 4(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l3:
 	nop
 	leal my_data,%eax
@@ -48,8 +44,6 @@ initialize_continuations_l3:
 	nop
 	call printf
 join_l7:
-	nop
-	nop
 	nop
 	nop
 	nop

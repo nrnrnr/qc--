@@ -9,11 +9,6 @@ Cmm.global_area:
 main:
 	leal -72(%esp), %esp
 	nop
-	nop
-	leal 72(%esp), %ecx
-	leal 72(%esp), %eax
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
 initialize_continuations_l3:
 	movl $255,%eax
 	nop
@@ -35,7 +30,6 @@ initialize_continuations_l3:
 	nop
 	call printf
 join_l47:
-	nop
 	nop
 	nop
 	movl $65535,%eax
@@ -60,7 +54,6 @@ join_l47:
 join_l44:
 	nop
 	nop
-	nop
 	movl $-1,%eax
 	nop
 	leal i_4,%ecx
@@ -81,7 +74,6 @@ join_l44:
 	nop
 	call printf
 join_l41:
-	nop
 	nop
 	nop
 	movl $-1,%eax
@@ -106,7 +98,6 @@ join_l41:
 join_l38:
 	nop
 	nop
-	nop
 	movl $127,%eax
 	nop
 	leal i_6,%ecx
@@ -127,7 +118,6 @@ join_l38:
 	nop
 	call printf
 join_l35:
-	nop
 	nop
 	nop
 	movl $127,%eax
@@ -152,7 +142,6 @@ join_l35:
 join_l32:
 	nop
 	nop
-	nop
 	movl $32767,%eax
 	nop
 	leal i_8,%ecx
@@ -173,7 +162,6 @@ join_l32:
 	nop
 	call printf
 join_l29:
-	nop
 	nop
 	nop
 	movl $2147483647,%eax
@@ -198,7 +186,6 @@ join_l29:
 join_l26:
 	nop
 	nop
-	nop
 	movl $2147483647,%eax
 	nop
 	leal i_10,%ecx
@@ -219,7 +206,6 @@ join_l26:
 	nop
 	call printf
 join_l23:
-	nop
 	nop
 	nop
 	movl $-128,%eax
@@ -244,7 +230,6 @@ join_l23:
 join_l20:
 	nop
 	nop
-	nop
 	movl $-128,%eax
 	nop
 	leal i_12,%ecx
@@ -265,7 +250,6 @@ join_l20:
 	nop
 	call printf
 join_l17:
-	nop
 	nop
 	nop
 	movl $-32768,%eax
@@ -290,7 +274,6 @@ join_l17:
 join_l14:
 	nop
 	nop
-	nop
 	movl $-2147483648,%eax
 	nop
 	leal i_14,%ecx
@@ -313,7 +296,6 @@ join_l14:
 join_l11:
 	nop
 	nop
-	nop
 	movl $-2147483648,%eax
 	nop
 	leal i_15,%ecx
@@ -334,7 +316,6 @@ join_l11:
 	nop
 	call printf
 join_l8:
-	nop
 	nop
 	nop
 	nop
