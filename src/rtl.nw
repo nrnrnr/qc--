@@ -31,25 +31,44 @@ target architecture because no hidden assumptions exist.
 \subsection{Interface}
 % ------------------------------------------------------------------ 
 
+The interface is divided into two parts:  \emph{public} and
+\emph{private}.  The public part provides constructor functions to
+build {\rtl}s but hides their actual implementation.  The private part
+reveals these and is intended only for parts of the back end that does
+re-writing of {\rtl}s.  The private part includes function that
+converts a public values into private values and thus makes their
+details accessible.  Both parts make use of some common types which
+are factored out.
+
+<<rtl.mli>>=
+<<COMMON>>
+
+module Public: sig
+    <<PUBLIC>>
+end
+
+module Private: sig
+    <<PRIVATE types>>
+    <<PRIVATE values>>
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{The Private View}
+% ------------------------------------------------------------------ 
+
+The private view defines {\rtl}s in terms of data structures which are
+defined here.  In addition, the common data types are also defined in
+this section although they are not strictly private.
+
 A [[space]] describes some kind of memory, like a set of registers or
 main memory.  The number of [[spaces]] is a property of a target
 architecture and thus can not be fixed here with a sum type.  The
 [[char]] type provides a big enough cardinality and is nice to print
-and remember.
-
-<<rtl.mli>>=
-<<abstract types>>
-<<concrete types>>
-@
-
-% ------------------------------------------------------------------ 
-\subsubsection{The {\rtl} data type}
-% ------------------------------------------------------------------ 
-
-[[register]] represents a named {\PAL} register and [[width]] a number
-of bits which corresponds to the {\PAL} [[bits]]$k$ types.
+and remember.  A [[width]] is a number of bits which corresponds to
+the {\PAL} [[bits]]$k$ types.
   
-<<concrete types>>=
+<<COMMON>>=
 type space       = char         (* 'm'=memory, 'r'=register, 't'=temp,..*)
 type width       = int          (* bits *)
 @
@@ -58,8 +77,10 @@ We want to represent assertions for specific properties but have not
 yet found a representation. Todo: replace all $-1$ values in the code
 with [[Rtl.none]]. 
 
-<<abstract types>>=
+<<PRIVATE types>>=
 type assertion   = int
+
+<<PRIVATE values>>=
 val  none:         assertion
 @
 
@@ -69,7 +90,7 @@ variable in the type scheme of the operator's type.  From the type
 scheme and the [[width list]] a monomorphic type of the operator can
 be deduced.
 
-<<concrete types>>=
+<<COMMON>>=
 type op          = string * width list
 @
 
@@ -79,7 +100,7 @@ values and values fetched from memory.  A fetch from memory makes the
 [[width]] number of fetched bits explicit.  A label denotes a {\PAL}
 data- or goto-label and its type. 
 
-<<>>=
+<<PRIVATE types>>=
 type const      = Bool      of bool
                 | Bits      of Bits.bits * width
                 | Link      of string * width         (* link time constant *)
@@ -99,7 +120,7 @@ bit fetch must aggregate 4 8-bit values when the memory space is made
 by 8-bit bytes. The aggregation is described by a value of the type
 [[aggregation]]. 
 
-<<>>=
+<<PRIVATE types>>=
 and  location  = Cell       of space 
                             *  aggregation
                             *  width
@@ -109,8 +130,8 @@ and  location  = Cell       of space
                 | Var       of string    (* name from C-- source   *)
                             *  int       (* index for run-time API *)
                             *  width
-<<>>=
-and  aggregation            = BigEndian
+<<COMMON>>=
+type  aggregation           = BigEndian
                             | LittleEndian
                             | Identity
 @
@@ -119,7 +140,7 @@ An [[effect]] is describes an assignment of a [[width]] bits value obtained
 from an expression [[expr]], or a [[Kill]]. A killed location contains an
 undefined value.
 
-<<>>=
+<<PRIVATE types>>=
 type effect     = Store     of location * expr * width
                 | Kill      of location
 @
@@ -127,7 +148,7 @@ type effect     = Store     of location * expr * width
 A guarded effect is pair of an expression and an effect. The effect takes
 place, if and only if the expression evaluates to [[true]].      
 
-<<>>=
+<<PRIVATE types>>=
 type guarded    = expr * effect
 @
 
@@ -136,68 +157,87 @@ effects. When a {\rtl} is evaluated, first all guarding expressions
 are evaluated and then all effects of the guards that evaluated to
 true become effective simultaneously.
 
-<<>>=
+<<PRIVATE types>>=
 type rtl        = Rtl of guarded list
 @
 
+The purpose of the private interface is to exploit the implementation
+details by pattern matching, for example. Values created by the public
+interface per se are not compatible with the private types. Conversion
+functions provide access to these values. Each function is named after
+the type it converts.
+
+<<PRIVATE values>>=
+val const:      Public.const    -> const
+val expr:       Public.expr     -> expr
+val location:   Public.location -> location
+val effect:     Public.effect   -> effect
+val rtl:        Public.rtl      -> rtl
+@
+
+<<>>=
+val width:      expr -> int     (* width of expression *)
+val assign:     location -> expr -> rtl
+@
+
 % ------------------------------------------------------------------ 
-\subsubsection{Constructors}
+\subsubsection{Public View}
 % ------------------------------------------------------------------ 
 
 The [[Public]] sub-module provides constructor functions for {\rtl}s.
 Using them should be the \emph{only} way to create {\rtl}s when
 translating from the abstract syntax tree.
 
-<<rtl.mli>>=
-module Public : sig
-    <<sig Public body>>
-end
-@
+Constants [[const]] are part of expressions.  A constant can be a
+boolean value, a number of bits, or a link-time value, which has a
+name.
 
-\begin{itemize}
-\item Constants.
+<<PUBLIC>>=
+type const
+type expr
+type location
+type effect
+type rtl
 
-<<sig Public body>>=
 val truth     : const
 val falsehood : const
 val bits      : Bits.bits -> width -> const
 val linkconst : string -> width -> const
 @
 
-\item Expressions
+An expression [[expr]] is either a constant, an expression fetched from a
+location, or an application of value to an operand [[op]].
 
-<<>>=
+<<PUBLIC>>=
 val const     : const -> expr
 val fetch     : location -> width -> expr
 val app       : op -> expr list -> expr
 @
 
-\item Locations: cells and variables.
+A [[location]] is either a \emph{cell} that belongs to some [[space]],
+where it has an address [[expr]], or it represents a named {\PAL}
+variable.
 
-Currently all locations created by [[cloc]] contain the [[none]]
-assertion. 
-
-<<>>=
+<<PUBLIC>>=
 val cloc      : space -> aggregation -> width -> expr -> location
 val vloc      : string -> int -> width -> location
 @
 
-\item Effects
+An [[effect]] alters a [[location]]:  a [[store]] puts the value of
+[[expr]] into a location, a [[kill]] invalidates a location's content.
 
-<<>>=
+<<PUBLIC>>=
 val store     : location -> expr -> width -> effect
 val kill      : location -> effect
 @
 
-\item {\rtl}s
+A register transfer list {\rtl} is a list of guarded effects. The
+guard [[expr]] must be a boolean expression. 
 
 <<>>=
 val guarded   : expr -> effect -> expr * effect
-val rtl       : guarded list -> rtl
+val rtl       : (expr * effect) list -> rtl
 @
-
-\end{itemize}
-
 
 Code that builds or manipulates {\rtl}s tends to use the same
 functionality over and over again. We try to define some useful values
@@ -209,9 +249,6 @@ in an assertion failure.
 
 <<>>=
 val width:      expr -> int     (* width of expression *)
-@
-
-<<>>=
 val assign:     location -> expr -> rtl
 @
 
@@ -219,101 +256,52 @@ val assign:     location -> expr -> rtl
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
-The implementation consists provides the concrete types already
-defined in the interface and defines representations for the abstract types.
+The interface of [[Private]] defines only data types; we re-use the
+definitions to obtain the implementation.  The same is true for common
+data types. 
 
 <<rtl.ml>>=
-<<abstract types implementation>>
-<<concrete types>>
-@
+<<COMMON>>
 
-<<abstract types implementation>>=
-type assertion = int            (* dummy *)
-let  none      = (-1)
-@
-
-% ------------------------------------------------------------------ 
-\subsubsection{Constructors}
-% ------------------------------------------------------------------ 
-
-As far as possible, we would like to avoid constucting {\rtl} values
-directly but use constructor functions instead.  This hopefully allows
-to alter the implementation of {\rtl}s without touching client code. 
-However, code in the back end of the compiler makes heavy use of
-pattern matching to re-write {\rtl}s to target specific code and thus
-needs to know the details of the implementation.  The ideal solution
-can not be expressed in {\ocaml}:  two different views of the same
-implementation where values created in one view are compatible with
-the other.  A public view would leave data types abstract and provide
-construction functions to create them.  A private view would give
-access to all the details. 
-
-The desired effect could be achieved without the compatibility: 
-values created in one view are not compatible with the other. 
-Conversion functions would be required that basically copy one
-representation into the other.
-
-\begin{quote}
-\begin{verbatim}
-module type PRIVATE = sig
-    type t
-    val one: t
+module Private = struct
+    <<Private>>
 end
 
-module type PUBLIC = sig
-    type t = int
-    val one: t
-end
-
-module X = struct
-    type t  = int
-    let one = 1
-end
-
-module Public:  PUBLIC  = X
-module Private: PRIVATE = X
-\end{verbatim}
-\end{quote}
-
-In order to avoid the costly conversion we have chosen a simpler,
-albeit less secure approach:  we have just one implementation that
-offers construction functions in a sub-module [[Public]].  It is still
-possible for a client to access and construct values directly, which
-is discouraged, of course.
-
-<<rtl.ml>>=
 module Public = struct
-    <<module Public body>>
+    <<Public>>
 end
 @
+% ------------------------------------------------------------------ 
+\subsubsection{The Private View}
+% ------------------------------------------------------------------ 
 
-<<module Public body>>=
-(* constant *)
-let truth                   = Bool true
-let falsehood               = Bool false
-let bits bits width         = Bits(bits,width) 
-let linkconst name width    = Link(name,width)
+The implementation of the private view must repeat the type
+definitions from the interface. 
 
-(* expression *)
-let const c                 = Const(c)
-let fetch loc width         = Fetch(loc,width)
-let app op exprs            = App(op,exprs)
-
-(* location *)
-let cloc sp agg width expr  = Cell(sp,agg,width,expr,none)
-let vloc name index width   = Var(name,index,width)
-
-(* effect *)
-let store loc expr width    = Store(loc,expr,width)
-let kill  loc               = Kill(loc)
-
-(* rtl *)
-let guarded expr effect     = expr, effect
-let rtl guards              = Rtl(guards)
+<<Private>>=
+<<PRIVATE types>>
 @
 
-Below are the simple, nontheless frequently used functions and simple
-values on {\rtl}s.
+The empty assertion is provided as a value [[none]].
+
+<<>>=
+let none: assertion = (-1)     
+@
+
+All conversion functions are the identity [[id]] because [[Public]]
+values are really [[Private]] values.
+
+<<>>=
+let id          = fun x -> x
+let const       = id
+let expr        = id
+let location    = id
+let effect      = id
+let rtl         = id
+@
+
+Below are simple, nonetheless frequently used functions values on
+{\rtl}s.
 
 <<>>=
 let width = function
@@ -323,8 +311,51 @@ let width = function
     | Fetch(_,w)        -> w
     | App _             -> assert false (* not implemented *)
     
-let assign l r = Rtl [(const truth, Store(l, r, width r))]
+let assign l r = Rtl [(Const(Bool true), Store(l, r, width r))]
 @
 
 
+% ------------------------------------------------------------------ 
+\subsubsection{The Public View}
+% ------------------------------------------------------------------ 
 
+The implementation of the [[Public]] view basically uses the
+[[Private]] definitions such that they become compatible. However,
+this fact is hidden by the interface.
+
+<<Public>>=
+type const    = Private.const
+type expr     = Private.expr
+type location = Private.location
+type effect   = Private.effect
+type rtl      = Private.rtl
+@
+
+
+<<Public>>=
+let truth                   = Private.Bool true
+let falsehood               = Private.Bool false
+let bits bits width         = Private.Bits(bits,width) 
+let linkconst name width    = Private.Link(name,width)
+
+(* expression *)
+let const c                 = Private.Const(c)
+let fetch loc width         = Private.Fetch(loc,width)
+let app op exprs            = Private.App(op,exprs)
+
+(* location *)
+let cloc sp agg width expr  = Private.Cell(sp,agg,width,expr,Private.none)
+let vloc name index width   = Private.Var(name,index,width)
+
+(* effect *)
+let store loc expr width    = Private.Store(loc,expr,width)
+let kill  loc               = Private.Kill(loc)
+
+(* rtl *)
+let guarded expr effect     = expr, effect
+let rtl guards              = Private.Rtl(guards)
+
+(* utilities *)
+let width  = Private.width
+let assign = Private.assign
+@

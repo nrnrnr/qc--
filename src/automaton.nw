@@ -144,8 +144,8 @@ thus is by far too specific.
 
 <<automaton.ml>>=
 type ty         =  Types.ty * string option
-type location   =  (Rtl.expr -> Rtl.effect)
-                    * Rtl.expr
+type location   =  (Rtl.Private.expr -> Rtl.Private.effect)
+                    * Rtl.Private.expr
 
 let memsize     = 8  (* assumption for now, must be obtained from Fenv *)
 let pointer     = 32 (* ditto for pointer size *)
@@ -169,8 +169,8 @@ and [[write]]:
 
 <<type t>>=
 type t        =     { offset:       int
-                    ; read:         (int -> int -> Rtl.expr)
-                    ; write:        (int -> int -> Rtl.expr -> Rtl.effect)
+                    ; read:         (int -> int -> Rtl.Private.expr)
+                    ; write:        (int -> int -> Rtl.Private.expr -> Rtl.Private.effect)
                     }
 @
 
@@ -219,28 +219,28 @@ let overflow dfa = { size  = dfa.offset
 % ------------------------------------------------------------------ 
 
 <<module build>>=
-let offset k        = Rtl.Const(Rtl.Bits(Bits.of_int k word,word)) 
+let offset k        = Rtl.Private.Const(Rtl.Private.Bits(Bits.of_int k word,word)) 
 let add             = ("add",[word])                          
-let sum x y         = Rtl.App (add,[x;y])                       
+let sum x y         = Rtl.Private.App (add,[x;y])                       
 
-let regsp = Rtl.Cell( 'm'
+let regsp = Rtl.Private.Cell( 'm'
                     , agg
                     , pointer
-                    , Rtl.Const(Rtl.Link("sp ",pointer))
+                    , Rtl.Private.Const(Rtl.Private.Link("sp ",pointer))
                     , -1
                     )
 
-let globs = Rtl.Cell( 'm'
+let globs = Rtl.Private.Cell( 'm'
                     , agg
                     , pointer
-                    , Rtl.Const(Rtl.Link("globals ",pointer))
+                    , Rtl.Private.Const(Rtl.Private.Link("globals ",pointer))
                     , -1
                     )
                         
-let sp loc          = Rtl.Fetch(loc,word)
-let stack loc k w   = Rtl.Cell('m',agg,w,sum (sp loc) (offset k),-1)    
-let read  loc k w   = Rtl.Fetch(stack loc k w, w)                 
-let write loc k w   = fun e -> Rtl.Store(stack loc k w, e, w)    
+let sp loc          = Rtl.Private.Fetch(loc,word)
+let stack loc k w   = Rtl.Private.Cell('m',agg,w,sum (sp loc) (offset k),-1)    
+let read  loc k w   = Rtl.Private.Fetch(stack loc k w, w)                 
+let write loc k w   = fun e -> Rtl.Private.Store(stack loc k w, e, w)    
 @
 
 The following automaton places parameters relative to some link time
