@@ -93,7 +93,7 @@ dvi:V:          dirs
                 done
 
 test:V:         all
-                cd test2 && mk $MKFLAGS $target
+                cd test2 && mk $MKFLAGS all
 
 clean:V:        dirs
                 for i in $SUBDIRS; do (cd $i && mk $MKFLAGS $target); done
