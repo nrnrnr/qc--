@@ -1,0 +1,57 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 sw=4 et sts=4
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+% inc: \usepackage{alltt}
+
+
+% ------------------------------------------------------------------ 
+\section{Representing spans, including internal spans}
+% ------------------------------------------------------------------ 
+
+This module would love to hide the representation of spans, but for
+reasons involving horrid circular dependencies, it doesn't hide the
+represntation very well. 
+All the truth about what the representation means lives off in the
+[[Runtimedata]] module.
+<<spans.mli>>=
+type t
+type label = string
+type link  = Bits.bits Reloc.Simple.relocatable
+val to_spans : sp:Rtl.loc -> prev_sp:Rtl.loc -> ra:Rtl.loc ->
+               users:((Bits.bits * link) list) ->
+               csregs:((Register.t * Rtl.loc option) list) ->
+               conts:((label * Rtl.loc * (string * int) list) list) ->
+               sds:(Rtl.loc list)                          ->
+               vars:(Rtl.loc option array)                 ->
+               t
+<<regrettably exposed [[rep]] type>>
+val expose : t -> rep
+@ 
+That was the fig leaf.  Now we expose it.
+<<regrettably exposed [[rep]] type>>=
+type rep   = { mutable sp            : Rtl.loc
+             ; mutable prev_sp       : Rtl.loc
+             ; mutable ra            : Rtl.loc
+             ; mutable users         : (Bits.bits * link) list
+             ; mutable csregs        : (Register.t * Rtl.loc option) list
+             ; mutable conts         : (label * Rtl.loc * (string * int) list) list
+                                    (* (ra, sp, (hint, var number) list) *)
+             ; mutable sds           : Rtl.loc list
+             ; mutable vars          : Rtl.loc option array
+             }
+@
+<<spans.ml>>=
+type label = string
+type link  = Bits.bits Reloc.Simple.relocatable
+<<regrettably exposed [[rep]] type>>
+type t = rep
+let to_spans ~sp ~prev_sp ~ra ~users ~csregs ~conts ~sds ~vars =
+  { sp = sp;       prev_sp = prev_sp; ra = ra; users = users; csregs = csregs;
+    conts = conts; sds = sds;         vars = vars }
+let expose spans = spans

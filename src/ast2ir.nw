@@ -597,10 +597,13 @@ and call lhs cconv e args targets(*unused*) conts alias succ =
                  ~altrets:conts.S.areturns ~unwinds_to:conts.S.unwinds
                  ~cuts_to:conts.S.cuts ~aborts:conts.S.aborts
                  ~reads:alias.S.reads ~writes:alias.S.writes           **>
-  G.assertion    g (in'.C.insp in'.C.overflow)                         **>
-  G.stack_adjust g in'.C.pre_sp                (* DOUBTS ABOUT THIS *) **>
-  G.instruction  g in'.C.shuffle                                       **>
-  G.stack_adjust g in'.C.post_sp ~succ
+  (if conts.S.returns then
+    G.assertion    g (in'.C.insp in'.C.overflow)                       **>
+    G.stack_adjust g in'.C.pre_sp              (* DOUBTS ABOUT THIS *) **>
+    G.instruction  g in'.C.shuffle                                     **>
+    G.stack_adjust g in'.C.post_sp ~succ
+   else
+    G.exit g)
 @
 \paragraph{Returns}
 In the presence of tail calls, [[f]] might call [[g]] with

@@ -308,6 +308,46 @@ type capabilities = {
     fwiden      : bool;            (* use float ops literals at narrow widths? *)
   }
 @ 
+The capability record is intended as information for front ends.
+We also use it to generate test code.
+But information in the capability record also has implications for the
+promises made in a back end:
+\begin{itemize}
+\item
+[[itemps]] means the postexpander promises to handle integer
+operations on temporaries of these widths.
+\item
+[[ftemps]] means the postexpander promises to handle floating-point
+operations on temporaries of these widths.
+\item
+[[iwiden]] means we promise to widen integer operators up to the
+largest width in [[itemps]] (should be replaced with a list of
+operator names)
+\item
+[[fwiden]] means we promise to widen floating-point operators up to the
+largest width in [[ftemps]] (should be replaced with a list of
+operator names)
+\item
+[[block_copy]] means we can generate copies between any two locations
+of type [[bits]]$k$, where $k$~is a multiple of the target
+[[memsize]].
+By ``location'' we mean either a memory reference or a declared
+variable.
+\item
+[[memory]] lists the widths at which the postexpander promises to
+compile either ordinary loads and stores or extending loads and
+low-bit stores.
+\item
+[[literals]] presumably identifies what size literals the postexpander
+can handle in [[li]].
+\item
+[[operators]] means all the operators the postexpander can handle,
+\emph{plus} operators that are handled in the generic expander or the
+simplifier.
+For some ideas about what operator is what, see the [[Opshape]]
+module.
+\end{itemize}
+@
 An incapable back end has no capabilities whatever.
 IT WOULD BE GOOD TO HAVE A ``STANDARD'' BACK END THAT TAKES A NATURAL
 WIDTH (OR PERHAPS INT AND FLOATING WIDTHS?) AND RETURNS A CAPABILITY
