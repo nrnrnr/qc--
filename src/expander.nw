@@ -365,6 +365,32 @@ We may branch conditionally based on the result of a stack operation.
 <<generic expansion operations for stack machines>>=
 val bc_stack : operator -> tgt:Rtl.Private.const -> rtl list
 @ 
+To support a calling convention that passes arguments or results on
+the stack, we have to support push and pop instructions.
+But a calling-convention automaton knows nothing of push and pop---in
+particular, an automaton expects to be able to fetch a value using
+only an RTL expression, so it has no way to create the side effect on
+the stack pointer.
+We resolve this problem by introducing a \emph{proxy} for the location
+on the top of the stack.
+This proxy may be used before code expansion with the expectation that
+the code expander will rewrite it away:
+\begin{itemize}
+\item
+If the proxy appears in an rvalue context, the expander replaces it
+with whatever is on top of the stack (which is popped off).
+\item
+If the proxy appears on the left of a store, the expander pushes the
+right-hand side.
+\item 
+If the proxy is killed, the expander complains bitterly.
+\end{itemize}
+Because not every postexpander supports stack operations, we provide
+[[is_stack_top_proxy]] so that it can always return [[false]].
+<<generic expansion operations for stack machines>>=
+val stack_top_proxy    : Rtl.loc
+val is_stack_top_proxy : Rtl.Private.loc -> bool
+@ 
 \subsubsection{A placeholder for register-only machines}
 A postexpander for a register-only machine can simply include a
 [[Nostack]] module.
@@ -385,6 +411,8 @@ module Nostack (Address : sig type t val reg : temp -> t end) = struct
   let pushk_cvt _ _ _           = Impossible.impossible "stack op on register machine"
   let stack_op _                = Impossible.impossible "stack op on register machine"
   let bc_stack _ ~tgt           = Impossible.impossible "stack op on register machine"
+  let stack_top_proxy = Rtl.reg ('\000', 0, 0)
+  let is_stack_top_proxy _ = false
 end
 @ 
 
@@ -646,6 +674,7 @@ let looks_like_stack_rhs = function
         | PX.Stack (_, _) -> true
         | PX.Register -> false
       end
+  | RP.Fetch (l, _) -> Post.is_stack_top_proxy l
   | _ -> false in
 @ 
 \subsection{Expanding an expression into a temporary}
@@ -682,6 +711,8 @@ let rec to_temp' room context e =
       let w = width e in
       let t = alloc context w in
       t, to_segment (Post.lix t (Up.exp e))
+  | RP.Fetch (l, _) when Post.is_stack_top_proxy l ->
+      Impossible.unimp "moving stack top to temporary"
   | RP.Fetch (RP.Mem ('m', agg, w, addr, assn), w') ->
       let t = alloc context w in
       let a, is = address room addr in
@@ -693,9 +724,12 @@ let rec to_temp' room context e =
       temp_in_context (space, i, w) context emptyseg
   | RP.Fetch _ ->
       Impossible.impossible "memory-like access to non-memory space"
+  <<cases for sign extending or zero extending a temporary>>
   <<cases for sign-extending and zero-extending loads>>
   <<cases for sign-extending and zero-extending divides>>
   <<cases for converting a Boolean to a value>>
+  | RP.App (("f2f_implicit_round", ws), [x]) ->
+      to_temp room context (RP.App (("f2f", ws), [x; RP.Fetch(rounding_mode, 2)]))
   | RP.App (op, args) ->
       begin
         match Post.opclass op with
@@ -745,6 +779,17 @@ This fact is documented in the postexpander interface.
     let a, is = address room addr in
     assert (agg = Post.byte_order);
     temp_in_context t context (is @@ to_segment (Post.zxload t a n (upassn assn)))
+<<cases for sign extending or zero extending a temporary>>=
+| RP.App (("sx", [n; w]), [RP.App(("lobits", [w'; n']), [x])]) when w = w' ->
+    if n <> n' then Impossible.impossible "ill-typed %sx(%lobits(...))";
+    let sh_amt = RP.Const (RP.Bits (Bits.U.of_int (w-n) w)) in
+    to_temp' room context
+      (RP.App (("shra", [w]), [RP.App(("shl", [w]), [x; sh_amt]); sh_amt]))
+| RP.App (("zx", [n; w]), [RP.App(("lobits", [w'; n']), [x])]) when w = w' ->
+    if n <> n' then Impossible.impossible "ill-typed %sx(%lobits(...))";
+    let sh_amt = RP.Const (RP.Bits (Bits.U.of_int (w-n) w)) in
+    to_temp' room context
+      (RP.App (("shrl", [w]), [RP.App(("shl", [w]), [x; sh_amt]); sh_amt]))
 @ 
 Division is going to be a real problem; I can just tell.
 Here's a hack which is untested and probably useless.
@@ -808,7 +853,10 @@ and to_stack' room e =
   if Rtlutil.Width.exp' e <> Post.stack_width then
     Unsupported.stack_width ~have:(Rtlutil.Width.exp' e) ~want:Post.stack_width;
   match e with
-  | RP.Const k -> to_segment (Post.pushk k)
+  | RP.Const k ->
+      to_segment (Post.pushk k)
+  | RP.Fetch (l, _) when Post.is_stack_top_proxy l ->
+      emptyseg
   | RP.Fetch (RP.Mem ('m', agg, w, addr, assn), w') ->
       let a, is = address room addr in
       assert (agg = Post.byte_order);
@@ -821,6 +869,8 @@ and to_stack' room e =
       (*Impossible.unimp "pushing a register onto the machine stack"*)
   | RP.Fetch _ ->
       Impossible.impossible "memory-like access to non-memory space"
+  | RP.App (("f2f_implicit_round", ws), [x]) ->
+      to_stack room (RP.App (("f2f", ws), [x; RP.Fetch(rounding_mode, 2)]))
   <<cases for converting pushes>>
   | RP.App (op, args) ->
       begin
@@ -845,8 +895,9 @@ and to_stack' room e =
       end
 @ 
 <<rounding-mode checking>>=
+let rounding_mode = Down.loc proc.Proc.target.Target.rounding_mode in
 let is_not_rounding_mode arg = match arg with
-| RP.Fetch (loc, 2) -> proc.Proc.target.Target.rounding_mode <> Up.loc loc
+| RP.Fetch (loc, 2) -> loc <> rounding_mode
 | _ -> true in
 <<junk>>=
 let insist_rounding_mode arg =
@@ -1028,45 +1079,51 @@ something in a temporary.
 <<other generic expander functions>>=
 and assign left right w =
   let room = Post.stack_depth in
-  if left = pc_lhs then  (* unconditional branch *)
-    match right with
-    | RP.Const c -> to_segment (Post.b c)
-    | _ ->
-        let r, is = to_temp room acontext right in
-        is @@ to_segment (Post.br r)
-  else
-    match left with
-    | RP.Mem ('m', agg, w, addr, assn) ->  (* some kind of store *)
-        assert (agg = Post.byte_order || agg = Rtl.Identity);
-        let a, is' = address room addr in
-        (match right with
-        | <<\emph{pattern [[->]] action} for low-bit store>>
+  match right with
+  | RP.App (("f2f_implicit_round", ws), [x]) ->
+      assign left (RP.App (("f2f", ws), [x; RP.Fetch(rounding_mode, 2)])) w
+  | _ ->
+      if left = pc_lhs then  (* unconditional branch *)
+        match right with
+        | RP.Const c -> to_segment (Post.b c)
         | _ ->
-            if looks_like_stack_rhs right then
-              (match right with
-              | <<\emph{pattern [[->]] action} for converting store-pop>>
-              | _ -> 
-                  let is = to_stack room right in
-                  is @@ is' @@ to_segment (Post.store_pop a (upassn assn)))
-            else
-              match right with
-              | RP.Fetch (RP.Mem('m', agg', w', addr', assn'), _) ->
-                  let a', is = address room addr' in
-                  is @@ is' @@
-                  to_segment (Post.block_copy a (upassn assn) a' (upassn assn') w)
-              | _ ->
-                  let r, is = to_temp room (guess_context right) right in
-                  is @@ is' @@ to_segment (Post.store a r (upassn assn)))
-    | RP.Mem (_, _, _, _, _) ->
-        Impossible.unimp "memory space other than 'm'"
-    | RP.Reg dst -> (* computation *)
-        (match right with
-        | RP.Fetch (RP.Reg src, _) -> to_segment (Post.move ~dst ~src)
-        | _ -> let r, is = to_temp room (guess_context right) right in
-               is @@ to_segment (Post.move ~dst ~src:r)
-        )
-    | RP.Var (_,_,_) -> Impossible.impossible "variable passed to code expander"
-    | RP.Slice (_,_,_) -> Impossible.unimp "slice"
+            let r, is = to_temp room acontext right in
+            is @@ to_segment (Post.br r)
+      else if Post.is_stack_top_proxy left then
+        to_stack room right
+      else
+        match left with
+        | RP.Mem ('m', agg, w, addr, assn) ->  (* some kind of store *)
+            assert (agg = Post.byte_order || agg = Rtl.Identity);
+            let a, is' = address room addr in
+            (match right with
+            | <<\emph{pattern [[->]] action} for low-bit store>>
+            | _ ->
+                if looks_like_stack_rhs right then
+                  (match right with
+                  | <<\emph{pattern [[->]] action} for converting store-pop>>
+                  | _ -> 
+                      let is = to_stack room right in
+                      is @@ is' @@ to_segment (Post.store_pop a (upassn assn)))
+                else
+                  match right with
+                  | RP.Fetch (RP.Mem('m', agg', w', addr', assn'), _) ->
+                      let a', is = address room addr' in
+                      is @@ is' @@
+                      to_segment (Post.block_copy a (upassn assn) a' (upassn assn') w)
+                  | _ ->
+                      let r, is = to_temp room (guess_context right) right in
+                      is @@ is' @@ to_segment (Post.store a r (upassn assn)))
+        | RP.Mem (_, _, _, _, _) ->
+            Impossible.unimp "memory space other than 'm'"
+        | RP.Reg dst -> (* computation *)
+            (match right with
+            | RP.Fetch (RP.Reg src, _) -> to_segment (Post.move ~dst ~src)
+            | _ -> let r, is = to_temp room (guess_context right) right in
+                   is @@ to_segment (Post.move ~dst ~src:r)
+            )
+        | RP.Var (_,_,_) -> Impossible.impossible "variable passed to code expander"
+        | RP.Slice (_,_,_) -> Impossible.unimp "slice"
 <<\emph{pattern [[->]] action} for low-bit store>>=
 RP.App (("lobits", [w; n]), [rhs]) ->
   let r, is = to_temp room icontext rhs in
@@ -1173,6 +1230,7 @@ These wrapper functions show what the expander [[rtl]] and register
 targeter [[to_temp]] are doing.
 <<other generic expander functions>>=
 and rtl r =
+  let _ = D.strings ["Expanding "; D.rtl r; "\n"] in
   let is = rtl' r in
   let _ = D.strings ["Expanded "; D.rtl r; " into\n"]; D.pr_is is in
   is
