@@ -92,7 +92,7 @@ module Clean : Env
     with type 'a info    = 'a 
     with type 'a partial = 'a 
 
-val clean: Dirty.env -> Clean.env
+val clean: 'proc Dirty.env' -> 'proc Clean.env'
 @
 
 The only way to obtain a clean environment is by cleaning a dirty
@@ -119,13 +119,15 @@ IT IS NOT CLEAR TO ME WHY THE TYPE OF THE ASSEMBLER SYMBOL IS ALLOWED
 TO LEAK INTO THE FAT ENVIRONMENT. ---NR
 
 <<signature Env>>=
-type env 
+type 'proc env'
+type env = Proc.t env'
 type scope
 <<types>>
+val map : ('b -> 'a) -> 'a env' -> 'b env'
 
-val empty:      Srcmap.map -> Proc.t Asm3.assembler -> env   (* empty scope stack *)
-val srcmap:     env -> Srcmap.map
-val asm:        env -> Proc.t Asm3.assembler
+val empty:      Srcmap.map -> 'proc Asm3.assembler -> 'proc env'   (* empty scope stack *)
+val srcmap:     'proc env' -> Srcmap.map
+val asm:        'proc env' -> 'proc Asm3.assembler
 @
 
 
@@ -167,9 +169,9 @@ re-used, by [[pop]]'ing it later.
 
 <<signature Env>>=
 val emptyscope: scope   
-val top:        env -> scope            (* top empty = assert false *)
-val pop:        env -> env              (* pop empty = assert false *)
-val push:       env -> scope -> env
+val top:        'p env' -> scope            (* top empty = assert false *)
+val pop:        'p env' -> 'p env'              (* pop empty = assert false *)
+val push:       'p env' -> scope -> 'p env'
 @
 
 This sounds more complicated than it is.  Since everything is part of
@@ -339,11 +341,11 @@ replaced.  If no binding for the given name is found, the environment
 is returned unaltered.
  
 <<signature Env>>=
-val bindv           : string -> ventry  -> env -> env
-val rebindv         : string -> ventry  -> env -> env
-val bindt           : string -> tentry  -> env -> env
-val findv           : string -> env -> ventry   (* Error.ErrorExn *)
-val findt           : string -> env -> tentry   (* Error.ErrorExn *)
+val bindv           : string -> ventry  -> 'p env' -> 'p env'
+val rebindv         : string -> ventry  -> 'p env' -> 'p env'
+val bindt           : string -> tentry  -> 'p env' -> 'p env'
+val findv           : string -> 'p env' -> ventry   (* Error.ErrorExn *)
+val findt           : string -> 'p env' -> tentry   (* Error.ErrorExn *)
 @
 
 \emph{Think of algebraic rules that describe the interaction of bind
@@ -356,7 +358,7 @@ scope at the same time.  It is an assertion failure to supply an
 unknown value.
 
 <<signature Env>>=
-val is_localv       : string -> env -> bool     (* *)
+val is_localv       : string -> 'p env' -> bool     (* *)
 @
 
 % ------------------------------------------------------------------ 
@@ -376,8 +378,8 @@ to the following law:
 \end{tabular}
 
 <<signature Env>>=
-val flagError       : env -> env
-val errorFlag       : env -> bool
+val flagError       : 'p env' -> 'p env'
+val errorFlag       : 'p env' -> bool
 @
 
 % ------------------------------------------------------------------ 
@@ -401,19 +403,19 @@ functions receive a source code position.
 and  endianness     = Big | Little
 
 <<signature Env>>=
-val bindMemsize     : Srcmap.rgn -> int        -> env -> env
-val bindEndianness  : Srcmap.rgn -> endianness -> env -> env 
-val bindWordsize    : Srcmap.rgn -> int        -> env -> env
-val bindPointersize : Srcmap.rgn -> int        -> env -> env
-val bindFloat       : Srcmap.rgn -> string     -> env -> env
-val bindCharset     : Srcmap.rgn -> string     -> env -> env
+val bindMemsize     : Srcmap.rgn -> int        -> 'p env' -> 'p env'
+val bindEndianness  : Srcmap.rgn -> endianness -> 'p env' -> 'p env' 
+val bindWordsize    : Srcmap.rgn -> int        -> 'p env' -> 'p env'
+val bindPointersize : Srcmap.rgn -> int        -> 'p env' -> 'p env'
+val bindFloat       : Srcmap.rgn -> string     -> 'p env' -> 'p env'
+val bindCharset     : Srcmap.rgn -> string     -> 'p env' -> 'p env'
 
-val findMemsize     : env -> int        partial info 
-val findEndianness  : env -> endianness partial info
-val findWordsize    : env -> int        partial info
-val findPointersize : env -> int        partial info
-val findFloat       : env -> string     partial info
-val findCharset     : env -> string     partial info
+val findMemsize     : 'p env' -> int        partial info 
+val findEndianness  : 'p env' -> endianness partial info
+val findWordsize    : 'p env' -> int        partial info
+val findPointersize : 'p env' -> int        partial info
+val findFloat       : 'p env' -> string     partial info
+val findCharset     : 'p env' -> string     partial info
 @
 
 % ------------------------------------------------------------------ 
@@ -433,8 +435,8 @@ the index is advanced by [[nextIndex]]:
 [[env]]?}
 
 <<signature Env>>=
-val getIndex: env -> int
-val nextIndex: env -> env
+val getIndex: 'p env' -> int
+val nextIndex: 'p env' -> 'p env'
 @
 
 The above functions obey to the following rules:
@@ -460,8 +462,8 @@ error messages, both function receive the region of the statement at
 hand in the source code. 
 
 <<signature Env>>=
-val import: Srcmap.rgn -> string -> string -> env -> env (* import g as f *)
-val export: Srcmap.rgn -> string -> string -> env -> env (* export f as g *)
+val import: Srcmap.rgn -> string -> string -> 'p env' -> 'p env' (* import g as f *)
+val export: Srcmap.rgn -> string -> string -> 'p env' -> 'p env' (* export f as g *)
 @
 
 The [[symbol env n]] function returns the assembly level symbol for a
@@ -471,7 +473,7 @@ return it. Since every {\PAL} name should have exactly one associated
 symbol it is an unchecked error to call [[symbol]] twice with the same name.
 
 <<signature Env>>=
-val symbol:   env -> string -> Symbol.t
+val symbol:   'p env' -> string -> Symbol.t
 @
 
 % ------------------------------------------------------------------ 
@@ -484,7 +486,7 @@ determine the assignment of register to hardware register or memory,
 [[globals]] returns the (unique) names of global registers.
 
 <<signature Env>>=
-val globals : env -> string list
+val globals : 'p env' -> string list
 @
 
 % ------------------------------------------------------------------ 
@@ -795,9 +797,9 @@ denotation of values and types. Of course, these types must be defined
 in the implementation as well.
 
 <<module Env>>=
-type env           =  { scopes     :    scope list (* top = hd scopes *)
+type 'proc env'    =  { scopes     :    scope list (* top = hd scopes *)
                       ; srcmap     :    Srcmap.map
-                      ; asm        :    Proc.t Asm.assembler
+                      ; asm        :    'proc Asm.assembler
                       ; error      :    bool
                       ; target     :    target
                       ; extern     :    extern
@@ -809,6 +811,7 @@ and stackdata =       { soffset    :    int    (* current offset *)
                       ; smaxalign  :    int    (* max stackdata align constr*)
                       ; sname      :    string (* label for offset *)
                       }
+and env = Proc.t env'
 <<types>>
 @
                        
@@ -861,6 +864,31 @@ position that is used to describe the place where an error is located.
 <<module Env>>=
 let error r map msg = E.errorRegionPrt (map,r) msg 
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Mapping}
+% ------------------------------------------------------------------ 
+
+<<module Env>>=
+let map f { scopes      = scopes     
+          ; srcmap      = srcmap     
+          ; asm         = asm        
+          ; error       = error      
+          ; target      = target     
+          ; extern      = extern     
+          ; globals     = globals    
+          ; stackdata   = stackdata  
+          } =
+          { scopes      = scopes     
+          ; srcmap      = srcmap     
+          ; asm         = Asm3.map f asm        
+          ; error       = error      
+          ; target      = target     
+          ; extern      = extern     
+          ; globals     = globals    
+          ; stackdata   = stackdata  
+          }
+@ 
 
 % ------------------------------------------------------------------ 
 \subsection{Creating \texttt{env} and \texttt{scope} values}

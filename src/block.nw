@@ -26,24 +26,32 @@ and a size $s$. It covers the open address interval $[b, b+s)$. The base
 address $b$ respects the alignment requirement $a$: at run time, $b
 \bmod a = 0$ is known to hold. The base, size, and alignment are used to
 construct a block and can be observed as well.
-
-PLEASE EXPLAIN [[relative]]. WHY DOES IT NOT RETURN A [[t]] VALUE? --CL
-
 <<block.mli>>=
 type t
 
 (* constructors *)
 val at:       base:Rtl.exp -> size:int -> alignment:int -> t
   (* block is fixed at base *)
-val relative: Rtl.exp -> string -> (base:Rtl.exp -> 'a) -> 'a
-  (* block's base is at an unknown offset from anchor; offset is a late 
-     compile-time constant whose name includes dbg *)
 
 (* observers *)
 val base:           t -> Rtl.exp
 val size:           t -> int
 val alignment:      t -> int
 val constraints:    t -> Const2.t list
+@ 
+We often wish to create a block at an unknown offset from a known
+place.
+Function [[relative]] is a higher-order function that we use to solve
+this problem.
+Calling [[relative e s f]] builds an address at unknown offset from [[e]],
+     where the name [[s]] is used somehow in constructing the address
+     (for debugging).  It then calls function [[f]] on this address.
+Example use is
+[[relative vfp "slot" at ~size:0 ~alignment:1]].
+This function might more properly live in module [[Idgen]]
+<<block.mli>>=
+val relative: Rtl.exp -> string -> (base:Rtl.exp -> 'a) -> 'a
+  (* construct address at unknown offset and call function *)
 @
 
 The base address of a block is typically not fixed, but contains some

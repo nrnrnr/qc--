@@ -29,21 +29,29 @@ module Reloc             = Sledlib.MkReloc
 module MSparcRtlEncoder  = Msparcenc.Mk(Reloc)
 module MSparcRtlExpander = Sparcexpander.Make (Reloc) (MSparcRtlEncoder)
 
+module OldBackplane = Backplane.M
+module NewBackplane = Backplane.Make(
+  struct
+    type proc = Ast2ir.proc
+    let lua_module_name = "NewBackplane"
+    let lua_type_name = "new backplane action"
+  end)
+
 module T1 = Lua.Lib.Combine.T4
                 (DocType)                   (* T1.T1 *)
                 (Luaiolib.T)                (* T1.T2 *)
                 (AsmType)                   (* T1.T3 *)
-                (NewAsmType)                (* T1.T4 *)
+                (AstType)                   (* T1.T4 *)
 
 module T    = Lua.Lib.Combine.T10           (* types *)
                 (T1)
-                (AstType)                   (* T2 *)
+                (NewBackplane.T)
                 (EnvType)                   (* T3 *)
                 (ProcType)                  (* T4 *)
                 (TargetType)                (* T5 *)
                 (NewProcType)               (* T6 *)
                 (NewTargetType)             (* T7 *)
-                (Backplane.T)               (* T8 *)
+                (OldBackplane.T)            (* T8 *)
                 (Colorgraph.GCT)            (* T9 *)
                 (BlockType)                 (* T10 *)
 
@@ -53,9 +61,9 @@ module T1V = Lua.Lib.Lift (T1) (T.T1)
 module DocT        = T1V.T1
 module LuaioT      = T1V.T2
 module AsmT        = T1V.T3
-module NewAsmT     = T1V.T4
+module AstT        = T1V.T4
 
-module AstT        = T.T2
+module NewBackplaneT = T.T2
 module EnvT        = T.T3
 module ProcT       = T.T4
 module TargetT     = T.T5
@@ -68,15 +76,14 @@ module BlockT      = T.T10
 module IO = Lua.Lib.Extend (LuaioT)
 
 module L1 = 
-  Lua.Lib.Combine.L10                   (* up to 10 libraries *)
+  Lua.Lib.Combine.L9                   (* up to 10 libraries *)
     (Luaiolib.Make (LuaioT))
     (IO (Luastrlib.M))
     (IO (Luamathlib.M))
-    (MakeLib (AsmT) (NewAsmT) (AstT) (EnvT) (ProcT) (TargetT) (NewProcT) (NewTargetT) (DocT) (LuaioT) (BlockT))
-    (Backplane.Make  (BackplaneT) (ProcT))
+    (MakeLib (AsmT) (AstT) (EnvT) (ProcT) (TargetT) (NewProcT) (NewTargetT) (DocT) (LuaioT) (BlockT))
+    (OldBackplane.MakeLua  (BackplaneT) (ProcT))
     (Colorgraph.Make (BackplaneT) (ColorgraphT) (ProcT))
     (Targets.MakeLib (TargetT))
-    (Placevar.Make (BackplaneT) (ProcT))
     (Linscan.Make (ProcT))
     (IO (Luautil.MakeLib))
                 
@@ -85,11 +92,12 @@ module XXX = MSparcRtlExpander.Lua
 
 
 module L2 = 
-  Lua.Lib.Combine.L4                    (* up to 9 more libs *)
+  Lua.Lib.Combine.L5                    (* up to 9 more libs *)
     (L1)
     (Dummyexpander.Make          (ProcT))
     (MSparcRtlExpander.Lua       (ProcT))
     (IO (Rtleval2.Lua)) 
+    (NewBackplane.MakeLua  (NewBackplaneT) (NewProcT))
 
 module I = 
   Lua.MakeInterp                            (* our interpreter *)
@@ -132,13 +140,7 @@ module InterpAsm = Interpasm.Make(Interp)
      type 'a t = 'a Asm3.assembler
    AND CONTINUE FROM THERE *)
 module AsmType = struct
-    type 'a t       = Proc.t Asm3.assembler
-    let tname       = "asm"
-    let eq _        = fun x y -> x = y
-    let to_string _ = fun t -> "<asm>" 
-end
-module NewAsmType = struct
-    type 'a t       = Ast2ir.proc Asm3.assembler
+    type 'a t       = 'a Asm3.assembler
     let tname       = "asm"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<asm>" 
@@ -150,7 +152,7 @@ module AstType = struct
     let to_string _ = fun t -> "<ast>" 
   end
 module EnvType = struct
-    type 'a t       = Fenv.Clean.env
+    type 'a t       = 'a Fenv.Clean.env'
     let tname       = "env"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<env>" 
@@ -194,8 +196,6 @@ end
 
 module MakeLib
   (AsmV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AsmType.t)
-  (NewAsmV : Lua.Lib.TYPEVIEW with type 'a t        = 'a NewAsmType.t
-                              and  type 'a combined = 'a AsmV.combined)
   (AstV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AstType.t 
                               and  type 'a combined = 'a AsmV.combined)
   (EnvV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a EnvType.t 
@@ -234,116 +234,151 @@ can call Lua functions while it is active.
 
 <<export goodies to Lua>>=
 module Map = struct
+    let compose ~lo ~hi =
+       { V.embed   = (fun x -> hi.V.embed (lo.V.embed x))
+       ; V.project = (fun x -> lo.V.project (hi.V.project x))
+       } 
     let ast       = AstV.makemap    V.userdata V.projection
-    let asm       = AsmV.makemap    V.userdata V.projection
-    let new_asm   = NewAsmV.makemap    V.userdata V.projection
-    let env       = EnvV.makemap    V.userdata V.projection
     let proc      = ProcV.makemap   V.userdata V.projection
     let new_proc  = NewProcV.makemap   V.userdata V.projection
+    let vasm      = AsmV.makemap    V.userdata V.projection
+      (* embeds and projects a V.value assembler *)
+    let asm' proc =
+      compose { V.embed =   Asm3.map proc.V.project
+              ; V.project = Asm3.map proc.V.embed }
+        vasm
+    let new_asm = asm' new_proc
+    let asm   = asm' proc
+    let venv = EnvV.makemap    V.userdata V.projection
+    let env' proc =
+      compose { V.embed =   Fenv.Clean.map proc.V.project
+              ; V.project = Fenv.Clean.map proc.V.embed }
+      venv
+    let new_env = env' new_proc
+    let env   = env' proc
+
     let doc       = DocV.makemap    V.userdata V.projection
     let target    = TargetV.makemap V.userdata V.projection
     let new_target= NewTargetV.makemap V.userdata V.projection
-    let optimize  = V.closure (proc **-> V.runit)
-    let new_optimize  = V.closure (new_proc **-> V.runit)
+    let optimize proc = V.closure (proc **-> V.runit)
     let channel   = InOutV.makemap  V.userdata V.projection
     let inchan    = Luaiolib.in'    channel    V.projection
     let outchan   = Luaiolib.out    channel    V.projection
-    let stage     = V.func (V.value **-> proc **-> V.result V.bool)
+    let stage proc = V.func (V.value **-> proc **-> V.result V.bool)
     let block     = BlockV.makemap  V.userdata V.projection
 end
-
+<<export goodies to Lua>>=
 let init g = 
-  C.register_module "Asm"
-    [ "cmm"     , V.efunc (Map.outchan **-> V.result Map.asm) AstAsm.asm     
-    ; "new_cmm" , V.efunc (Map.outchan **-> V.result Map.new_asm) NewAstAsm.asm     
-    ; "ast"     , V.efunc (Map.outchan **-> V.result Map.asm) AstAsm.asm
-    ; "dot"     , V.efunc (Map.outchan **-> V.result Map.asm) Dotasm.asm
-    ; "new_dot" , V.efunc (Map.outchan **-> V.result Map.new_asm) Dotasm.new_asm
-    ; "asdl"    , V.efunc (Map.outchan **-> V.result Map.asm) Asdlasm.asm 
-    ; "x86"     , V.efunc (Map.outchan **-> V.result Map.asm) X86asm.make
-    ; "interp"  , V.efunc (Map.outchan **-> V.result Map.asm) InterpAsm.asm
-    ; "sparc", V.efunc (V.bool **-> Map.outchan 
-                               **-> V.result Map.asm)       Msparcasm.asm
-    ] g;
-  C.register_module "Driver" 
-    [ "assemble"  , V.efunc (Map.asm **-> V.runit)   (fun asm -> asm#emit)
-    ; "proc_assembler", V.efunc (Map.asm **-> V.result Map.stage) 
-                      (fun asm v p -> asm#cfg_instr p ; true)
-    ; "check"     , V.efunc (Map.ast **-> Map.asm 
-                                     **-> V.result Map.env)   Driver2.check
-    ; "emit_asdl" , V.efunc (Map.ast **-> V.runit)            Driver2.emit_asdl
-    ; "parse"     , V.efunc (V.string**-> V.result Map.ast)   Driver2.parse
-    ; "print"     , V.efunc (Map.doc **-> V.int 
-                                     **-> Map.outchan
-                                     **-> V.runit)            Driver2.print
-    ; "pretty"    , V.efunc (Map.ast **-> V.result Map.doc)   Driver2.pretty
-    ; "scan"      , V.efunc (V.string**-> V.runit)            Driver2.scan
-    ; "version"   , V.efunc (V.unit  **-> V.runit)            Driver2.version
-    ; "stdin"     , Map.inchan.V.embed                        stdin (* hack *)
-    ; "stdout"    , Map.outchan.V.embed                       stdout(* hack *)
-    ; "compile"   , V.efunc (Map.optimize 
-                            **-> Map.ast  **-> Map.target 
-                            **-> Map.env  **-> V.result Map.asm) Driver2.compile
-    ; "new_compile"   , V.efunc (Map.new_optimize 
-                            **-> Map.ast  **-> Map.new_target 
-                            **-> Map.env  **-> V.result Map.asm) Driver2.new_compile
-    ] g;
-  C.register_module "Expander"
-    [ "x86f" , V.efunc (V.value **-> Map.proc **-> V.result V.bool) X86.X.cfg
-    ] g;
-  C.register_module "Liveness"
-    [ "liveness", V.efunc (V.value **-> Map.proc **-> V.result V.bool)
-         (fun _ p -> 
-            let module LI = Olive.Make(Cfg4) in LI.liveness p.Proc.cfg; true)
-    ] g;
-  C.register_module "Targets"
-    [ "dummy",      Map.target.V.embed Targets.dummy 
-    ; "dummy2",     Map.target.V.embed Dummy.target  (* will be new dummy *)
-    ; "sparc",      Map.target.V.embed Targets.sparc
-    ; "x86",        Map.target.V.embed X86.target
-    ; "new_x86",    Map.new_target.V.embed X86.new_target
-    ; "interp",     Map.target.V.embed Interp.target
-    ] g;
-  C.register_module "Block" 
-    [ "size",       V.efunc (Map.block **-> V.result V.int)  Block.Lua.size
-    ; "alignment",  V.efunc (Map.block **-> V.result V.int)  Block.Lua.alignment
-    ; "adjust",     V.efunc (Map.block **-> V.result Map.block) Block.Lua.adjust
-    ; "cat",        V.efunc (V.int **-> V.list Map.block **-> V.result Map.block) 
-                        Block.Lua.cat
-    ; "overlap",    V.efunc (V.int **-> V.string **-> V.list Map.block
-                                   **-> V.result Map.block)
-                            (Block.Lua.overlap (C.error g))
-    ; "mk",         V.efunc (Map.block **-> V.int **-> V.int 
-                                       **-> V.option V.string
-                                       **-> V.result Map.block) Block.Lua.at
-    ; "at",         V.efunc (Map.block **-> V.int **-> V.int 
-                                       **-> V.option V.string
-                                       **-> V.result Map.block) Block.Lua.at
-    ] g;
-  (* someone who groks the Lua map mechanism could rewrite the embedding
-     below of Stack.blocks: Proc.t -> (string * Block.t) list. I don't know
-     how to map string * Block.t into a table easily -- CL *)
-  C.register_module "Stack"
-    [ "freeze",     V.efunc (Map.proc **-> Map.block **-> V.result V.unit) 
-                        Stack.freeze
-    ; "blocks",     V.efunc (Map.proc **-> V.result V.table)
-                    (let embed (str,blk) = (str, Map.block.V.embed blk)
-                     in fun p -> 
-                        V.Table.of_list (List.map embed (Stack.blocks p)))
-    ] g;                    
-  C.register_module "Typecheck" 
-    [ "proc",       V.efunc (V.value **-> Map.proc **-> V.result V.int)
-                            (fun _ proc -> Typecheck.proc proc; 1)
-    ] g;                        
- C.register_module "Boot" 
-    [ "qc--.lua",   V.String                            This.boot
-    ; "version",    V.efunc (Map.outchan **-> V.runit)  This.version
-    ] g;                        
- C.register_module "Dataflow" 
-    [ "emit_dot",   V.efunc (V.unit **-> V.runit)  Dataflow.Test.emit_dot
-    ] g;                        
-  
+  <<register modules to [[g]] in alphabetical order>>
   Lua.Lib.StringList.of_list [ <<lua initialization>> ]
+
+<<register modules to [[g]] in alphabetical order>>=
+C.register_module "Asm"
+  [ "cmm"     , V.efunc (Map.outchan **-> V.result Map.asm) AstAsm.asm     
+  ; "new_cmm" , V.efunc (Map.outchan **-> V.result Map.new_asm) NewAstAsm.asm     
+  ; "ast"     , V.efunc (Map.outchan **-> V.result Map.asm) AstAsm.asm
+  ; "dot"     , V.efunc (Map.outchan **-> V.result Map.asm) Dotasm.asm
+  ; "new_dot" , V.efunc (Map.outchan **-> V.result Map.new_asm) Dotasm.new_asm
+  ; "asdl"    , V.efunc (Map.outchan **-> V.result Map.asm) Asdlasm.asm 
+  ; "x86"     , V.efunc (Map.outchan **-> V.result Map.asm) X86asm.make
+  ; "interp"  , V.efunc (Map.outchan **-> V.result Map.asm) InterpAsm.asm
+  ; "sparc", V.efunc (V.bool **-> Map.outchan 
+                             **-> V.result Map.asm)       Msparcasm.asm
+  ] g;
+<<register modules to [[g]] in alphabetical order>>=
+C.register_module "Block" 
+  [ "size",       V.efunc (Map.block **-> V.result V.int)  Block.Lua.size
+  ; "alignment",  V.efunc (Map.block **-> V.result V.int)  Block.Lua.alignment
+  ; "adjust",     V.efunc (Map.block **-> V.result Map.block) Block.Lua.adjust
+  ; "cat",        V.efunc (V.int **-> V.list Map.block **-> V.result Map.block) 
+                      Block.Lua.cat
+  ; "overlap",    V.efunc (V.int **-> V.string **-> V.list Map.block
+                                 **-> V.result Map.block)
+                          (Block.Lua.overlap (C.error g))
+  ; "mk",         V.efunc (Map.block **-> V.int **-> V.int 
+                                     **-> V.option V.string
+                                     **-> V.result Map.block) Block.Lua.at
+  ; "at",         V.efunc (Map.block **-> V.int **-> V.int 
+                                     **-> V.option V.string
+                                     **-> V.result Map.block) Block.Lua.at
+  ] g;
+<<register modules to [[g]] in alphabetical order>>=
+C.register_module "Boot" 
+   [ "qc--.lua",   V.String                            This.boot
+   ; "version",    V.efunc (Map.outchan **-> V.runit)  This.version
+   ] g;                        
+<<register modules to [[g]] in alphabetical order>>=
+C.register_module "Dataflow" 
+   [ "emit_dot",   V.efunc (V.unit **-> V.runit)  Dataflow.Test.emit_dot
+   ] g;                        
+<<register modules to [[g]] in alphabetical order>>=
+C.register_module "Driver" 
+  [ "assemble"  , V.efunc (Map.vasm **-> V.runit)   (fun asm -> asm#emit)
+  ; "proc_assembler", V.efunc (Map.vasm **-> V.result (Map.stage V.value)) 
+                    (fun asm v p -> asm#cfg_instr p ; true)
+  ; "check"     , V.efunc (Map.ast **-> Map.asm 
+                                   **-> V.result Map.env)   Driver2.check
+  ; "new_check"     , V.efunc (Map.ast **-> Map.new_asm 
+                                   **-> V.result Map.new_env)   Driver2.check
+  ; "emit_asdl" , V.efunc (Map.ast **-> V.runit)            Driver2.emit_asdl
+  ; "parse"     , V.efunc (V.string**-> V.result Map.ast)   Driver2.parse
+  ; "print"     , V.efunc (Map.doc **-> V.int 
+                                   **-> Map.outchan
+                                   **-> V.runit)            Driver2.print
+  ; "pretty"    , V.efunc (Map.ast **-> V.result Map.doc)   Driver2.pretty
+  ; "scan"      , V.efunc (V.string**-> V.runit)            Driver2.scan
+  ; "version"   , V.efunc (V.unit  **-> V.runit)            Driver2.version
+  ; "stdin"     , Map.inchan.V.embed                        stdin (* hack *)
+  ; "stdout"    , Map.outchan.V.embed                       stdout(* hack *)
+  ; "compile"   , V.efunc (Map.optimize Map.proc
+                          **-> Map.ast  **-> Map.target 
+                          **-> Map.env  **-> V.result Map.asm) Driver2.compile
+  ; "new_compile"   , V.efunc (Map.optimize Map.new_proc
+                          **-> Map.ast  **-> Map.new_target 
+                          **-> Map.new_env  **-> V.result Map.new_asm) Driver2.new_compile
+  ] g;
+<<register modules to [[g]] in alphabetical order>>=
+C.register_module "Expander"
+  [ "x86f" , V.efunc (V.value **-> Map.proc **-> V.result V.bool) X86.X.cfg
+  ] g;
+<<register modules to [[g]] in alphabetical order>>=
+C.register_module "Liveness"
+  [ "liveness", V.efunc (V.value **-> Map.proc **-> V.result V.bool)
+       (fun _ p -> 
+          let module LI = Olive.Make(Cfg4) in LI.liveness p.Proc.cfg; true)
+  ] g;
+<<register modules to [[g]] in alphabetical order>>=
+C.register_module "Placevar"
+  [ "fortran", V.efunc (V.value **-> Map.proc **-> V.result V.bool) Placevar.fortran
+  ; "new_fortran", V.efunc (V.value **-> Map.new_proc **-> V.result V.bool) Placevar.fortran'
+  ] g;
+
+<<register modules to [[g]] in alphabetical order>>=
+(* someone who groks the Lua map mechanism could rewrite the embedding
+   below of Stack.blocks: Proc.t -> (string * Block.t) list. I don't know
+   how to map string * Block.t into a table easily -- CL *)
+C.register_module "Stack"
+  [ "freeze",     V.efunc (Map.proc **-> Map.block **-> V.result V.unit) 
+                      Stack.freeze
+  ; "blocks",     V.efunc (Map.proc **-> V.result V.table)
+                  (let embed (str,blk) = (str, Map.block.V.embed blk)
+                   in fun p -> 
+                      V.Table.of_list (List.map embed (Stack.blocks p)))
+  ] g;                    
+<<register modules to [[g]] in alphabetical order>>=
+C.register_module "Targets"
+  [ "dummy",      Map.target.V.embed Targets.dummy 
+  ; "dummy2",     Map.target.V.embed Dummy.target  (* will be new dummy *)
+  ; "sparc",      Map.target.V.embed Targets.sparc
+  ; "x86",        Map.target.V.embed X86.target
+  ; "new_x86",    Map.new_target.V.embed X86.new_target
+  ; "interp",     Map.target.V.embed Interp.target
+  ] g;
+<<register modules to [[g]] in alphabetical order>>=
+C.register_module "Typecheck" 
+  [ "proc",       V.efunc (V.value **-> Map.proc **-> V.result V.int)
+                          (fun _ proc -> Typecheck.proc proc; 1)
+  ] g;                        
 @  
 <<lua initialization>>=
 "Expander.x86 = { fn = Expander.x86f, uses = { 'proper widths', 'no vars' }, \

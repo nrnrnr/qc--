@@ -28,6 +28,7 @@ object system.
 
 <<asm3.mli>>=
 <<interface>>
+val map : ('a -> 'b) -> 'b assembler -> 'a assembler
 <<asm3.ml>>=
 <<interface>>
 @
@@ -142,4 +143,38 @@ After all instructions and data has been passed to an [[assembler]]
 object the [[emit]] method must be called. It finishes any remaining
 business. It is an unchecked run-time error to invoke any [[assembler]]
 method subsequently.
+
+@
+<<asm3.ml>>=
+class ['proc] mapped_asm f (asm : 'a assembler) : ['proc] assembler =
+object
+    (* declarations *)
+    method import s = asm#import s
+    method export s = asm#export s
+    method local  s = asm#local s
+
+    (* sections *)
+    method section s = asm#section s
+    method current   = asm#current 
+
+    (* definitions *)
+    method label s   = asm#label s
+    method const s b = asm#const s b
+
+    (* locations *)
+
+    method org n    = asm#org n
+    method align n  = asm#align n
+    method addloc n = asm#addloc n
+
+    (* instructions *)
+    method cfg_instr proc = asm#cfg_instr (f proc)
+
+    method zeroes n = asm#zeroes n
+    method value v = asm#value v
+    method addr  a = asm#addr a
+    method comment s = asm#comment s
+    method emit = asm#emit
+end
+let map f asm = new mapped_asm f asm
 

@@ -101,7 +101,7 @@ no temps&
   This property is established by the \emph{stack-frame freezer}.
   \\ 
 varmap& 
-  The [[varmap]] field in the [[Proc.t]] is initialized.
+  The [[varmap]] field in the [[proc]] is initialized.
   This property should be established by the variable placer.
   \\ 
 live sets&
@@ -127,25 +127,38 @@ linear code&
   \\
 \end{longtable}
 @
-
-
+IT WOULD BE NICE TO AVOID THE FUNCTORIZATION BY MAKING EVERYTHING
+POLYMORPHIC IN THE TYPE OF PROCEDURE, BUT IT SEEMS NOT COMPLETELY
+TRIVIAL TO DO.
 <<backplane.mli>>=
 module SS : Set.S with type elt = string
-type inputs = SS.t
-type outputs = SS.t
-type proc = Proc.t
-
-type 'a camlFunction = 'a -> proc -> bool
-<<stage type>>
-<<action type>>
-
 val list2SSet : string list -> SS.t
 
-module T : Lua.Lib.USERTYPE with type 'a t = 'a action
-module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a action)
-            (T2 : Lua.Lib.TYPEVIEW with type 'a t = Proc.t with type 'a combined
-= 'a T1.combined)
+type inputs = SS.t
+type outputs = SS.t
+
+<<exported module types>>
+module Make (Arg : ARG) : S with type proc = Arg.proc
+module M : S with type proc = Proc.t
+<<exported module types>>=
+module type ARG = sig
+  type proc
+  val lua_module_name : string
+  val lua_type_name   : string
+end
+module type S = sig
+  type proc
+  type 'a camlFunction = 'a -> proc -> bool
+  <<stage type>>
+  <<action type>>
+
+  module T : Lua.Lib.USERTYPE with type 'a t = 'a action
+  module MakeLua
+      (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a action)
+      (T2 : Lua.Lib.TYPEVIEW with type 'a t = proc
+                             with type 'a combined = 'a T1.combined)
     : Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined
+end
 @
 
 
@@ -273,6 +286,8 @@ compiler stage):
      {\langle [[Single]](f) , x , \sigma \rangle \Downarrow \langle v, \sigma' \rangle}
 \]
 
+
+@ 
 
 Here's the code that implements the execution rules:
 <<runProgram>>=
@@ -568,20 +583,25 @@ module SP = Set.Make(StringPairMod)
 
 let list2SSet lst = List.fold_right SS.add lst SS.empty
 
-type inputs = SS.t
+type inputs  = SS.t
 type outputs = SS.t
 
-type proc = Proc.t
-type 'a camlFunction = 'a -> proc -> bool
+<<exported module types>>
 
-let backSay = Verbose.say 10
-<<stage type>>
-<<action type>>
-<<error types>>
-<<printing>>
-<<runProgram>>
+module Make (Arg : ARG) = struct
 
-<<lua library modules>>
+  type proc = Arg.proc
+  type 'a camlFunction = 'a -> proc -> bool
+
+  let backSay = Verbose.say 10
+  <<stage type>>
+  <<action type>>
+  <<error types>>
+  <<printing>>
+  <<runProgram>>
+
+  <<lua library modules>>
+end
 @
 
 To construct a Lua interpreter, we need two modules: T and Make.
@@ -594,13 +614,13 @@ that stage.
 <<lua library modules>>=
 module T : Lua.Lib.USERTYPE with type 'a t = 'a action = struct
     type 'a t = 'a action
-    let tname = "Backplane"
+    let tname = Arg.lua_type_name
     let eq veq x y = x = y
     let to_string vs a = printAction  (makeIndent 26) a
 end
 
-module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a action)
-            (T2 : Lua.Lib.TYPEVIEW with type 'a t = Proc.t with type 'a combined
+module MakeLua (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a action)
+               (T2 : Lua.Lib.TYPEVIEW with type 'a t = proc with type 'a combined
 = 'a T1.combined)
     : Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined =
   struct
@@ -646,7 +666,7 @@ let ( **-> ) = V.( **-> )
 let id x = x
 let init g =
   let action = { V.embed   = embed ; V.project = projectAction g } in
-  Interp.register_module "Backplane" 
+  Interp.register_module Arg.lua_module_name
   [ "seq",       (V.func ((V.list action)     **-> V.result action)).V.embed seq
   ; "when_do",   (V.func (action  **-> action **-> V.result action)).V.embed when_do
   ; "unless_do", (V.func (action  **-> action **-> V.result action)).V.embed unless_do
@@ -868,5 +888,10 @@ let printError err =
 
 
 @
-
+<<backplane.ml>>=
+module M = Make(struct
+    type proc = Proc.t
+    let lua_module_name = "Backplane"
+    let lua_type_name = "original backplane action"
+  end)
 

@@ -68,10 +68,10 @@ will all go away once the new flow graph ([[Cfg]]) takes over the compiler.
 type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target2.t'
 type proc = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t'
 val translate :  tgt
-                -> Fenv.Clean.env 
+                -> proc Fenv.Clean.env'
                 -> optimizer: (proc -> unit)
                 -> Ast.program 
-                -> Proc.t Asm3.assembler
+                -> proc Asm3.assembler
 @
 
 % ------------------------------------------------------------------ 
@@ -108,13 +108,13 @@ The first instantiation is visible here; the second appears in
 <<ast2ir.ml>>=
 module G = Cfgx.M
 module C = Call
+type tgt = ((Rtl.exp -> Automaton.t), C.t) Target2.t'
+type proc = (Automaton.t, Rtl.rtl G.cfg, C.t, tgt) Proc.t'
 <<statement-related types>>
 <<module [[K]], for continution info>>
 <<types for gathering stack and continuation info>>
 type 'a nvr = { reg : 'a; tmp : 'a; w : int }   (* for callee-saves info *)
 
-type tgt = ((Rtl.exp -> Automaton.t), C.t) Target2.t'
-type proc = (Automaton.t, Rtl.rtl G.cfg, C.t, tgt) Proc.t'
 
 let translate target env ~optimizer =
   let pointersize = target.T.pointersize in
@@ -195,7 +195,14 @@ let lvalue_name_in_env env x =
         AT.of_loc (Rtl.var x i w), w
       else 
         impossible "global variable without location"
-  | _ -> impossible "asked for lvalue of non-register name"
+  | _ -> 
+      let what = match denot with
+      | F.Constant _ -> "constant"
+      | F.Label    _ -> "label"
+      | F.Import   _ -> "imported symbol"
+      | F.Continuation _ -> "continuation"
+      | F.Register _ -> "register" in
+      impossible ("asked for lvalue of " ^ what ^ " " ^ x)
 @ 
 Any name can be meaningful in an rvalue context.
 The environment is implicit.
@@ -233,6 +240,10 @@ let rec lvalue lhs = match lhs with
       let w    = astwidth env t in
       let assn = match align with None -> Rtl.none | Some n -> Rtl.aligned n in
       AT.of_loc (Rtl.mem assn default_space target.T.byteorder w (expr addr)), w
+and rvalue_name_or_mem nm = match nm with
+  | A.NameOrMemAt(v, _) -> rvalue_name_or_mem v
+  | A.Name(hint, x) -> rvalue_name x
+  | A.Mem(_, _, _) -> atfetch (lvalue nm)
 @ 
 
 % ------------------------------------------------------------------ 
@@ -315,7 +326,7 @@ and expr exp =
   | A.Float(str,t)    -> literal str (const word t) Bits.U.of_string
   | A.Char(str,t)     -> literal str (const word t) Bits.U.of_string
      (*FLOAT AND CHARACTER LITERALS LOOK SUSPICIOUS TO ME*)
-  | A.Fetch(v)        -> atfetch (lvalue v)
+  | A.Fetch(v)        -> rvalue_name_or_mem v
   | A.BinOp (l,op,r)  -> prim op [l;r]
   | A.UnOp  (op,e)    -> prim op [e]
   | A.PrimOp(op,args) -> prim op (List.map snd args)
@@ -951,7 +962,7 @@ tracked with a [[Memalloc.t]] value in the [[mem]] field of a [[state]]
 value.
 <<types for gathering stack and continuation info>>=
 type 'i stackdata_state = 
-    { env:    F.env 
+    { env:    proc F.env'
     ; mem:    Memalloc.t
     ; conts:  'i K.t Strutil.Map.t
     }

@@ -9,45 +9,21 @@
 
 \section{Placing variables into suitable temporary locations}
 <<placevar.mli>>=
-module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.action)
-            (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Proc.t and type 'a
-                                             combined = 'a BackplaneT.combined)
-    : Lua.Lib.TYPEFUL with type 'a combined = 'a BackplaneT.combined
-
+val fortran  : 'a -> Proc.t      -> bool
+val fortran' : 'a -> Ast2ir.proc -> bool
 @ 
 Boilerplate for linking to Lua.
 <<placevar.ml>>=
-module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.action)
-            (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Proc.t and type 'a
-combined = 'a BackplaneT.combined)
-    : Lua.Lib.TYPEFUL with type 'a combined = 'a BackplaneT.combined =
-  struct
-    type 'a combined = 'a BackplaneT.combined
-    module M (Interp : Lua.Lib.CORE with type 'a V.userdata' = 'a BackplaneT.combined) = struct
-      module V = Interp.V
-      module G = Cfg4
-    
-      let proc = ProcT.makemap V.userdata V.projection
-      let ( **-> ) = V.( **-> )
-      <<builtins>>
-
-      let init g =
-        Interp.register_module "Placevar"
-          [ "fortran", V.efunc (V.value **-> proc **-> V.result V.bool) fortran
-          ] g;
-        Lua.Lib.StringList.empty (* FIX -- proper stage *)
-    end
-  end
+module G = Cfg4
+module RP = Rtl.Private
+module TM = Proc.VarMap
 @
 \subsection{Fortran-style variable placer}
 The key datastructure is [[tMap]], which maps the index of a variable
 to the temporary cell that the variable will occupy.
 Function [[walkRtl]] at once builds up the map and replaces each
 variable with its temporary location.
-<<builtins>>=
-module RP = Rtl.Private
-module TM = Proc.VarMap
-
+<<placevar.ml>>=
 let fortran _
 	({Proc.cfg = cfg; Proc.target = target; Proc.temps = temps} as proc) =
 	<<walk RTL>>
@@ -59,6 +35,22 @@ let fortran _
 	let () = proc.Proc.varMap <- tMap in
         let is_not_empty = TM.fold (fun _ _ _ -> true) tMap false in (* ugh *)
         is_not_empty
+@ 
+<<placevar.ml>>=
+let fortran' _ ({Proc.cfg = g; Proc.target = target; Proc.temps = temps} as proc) =
+  let module G = Cfgx.M in
+  <<walk RTL>>
+  let updateNode node tMap =
+    match G.to_instr node with
+    | None -> tMap
+    | Some rtl ->
+        let newRtl, tMap' = walkRtl rtl tMap in
+  	G.update_instr (fun _ -> newRtl) node;
+  	tMap' in
+  let tMap = G.fold_nodes updateNode TM.empty g in
+  let is_not_empty = TM.fold (fun _ _ _ -> true) tMap false in (* ugh *)
+  proc.Proc.varMap <- tMap;
+  is_not_empty
 @
 We use the Fortran convention for placing variables: anything named
 with I~through~N is an INteger, and anything else is floating point.

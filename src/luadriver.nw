@@ -171,9 +171,9 @@ function Debug.prettyprint(file,out)
     local linewidth = 72
     local ast       = Driver.parse(file)
     local doc       = Driver.pretty(ast)
-    fd              = (not out or out == "-") and Driver.stdout or writeto(out)
+    fd              = (not out or out == "-") and Driver.stdout or open_out(out)
     Driver.print(doc,linewidth,fd)
-    if fd ~= Driver.stdout then writeto() end
+    if fd ~= Driver.stdout then close_out(fd) end
 end  
 @
 
@@ -202,13 +202,15 @@ than functions. we simply patch the binding in the Lua interpreter here.
 
 <<Lua Boot Script>>=
 
-function Stages.make_stage(t, short, long)
+function Stages.make_stage(t, short, long, B)
+  B = B or Backplane
   if type(t[short]) == 'function' then
     t[short] = B.stage { name=long, fn = t[short] }
   end
 end
 
 Stages.make_stage(Placevar,  'fortran', "fortran variable placer")
+Stages.make_stage(Placevar,  'new_fortran', "new fortran variable placer", NewBackplane)
 Stages.make_stage(Expander,  'dummy',   'dummy expander')
 Stages.make_stage(Expander,  'sparc',   'sparc expander')
 Stages.make_stage(Typecheck, 'proc',    'type check RTLs')
@@ -336,7 +338,22 @@ backend and an assembler.
 <<Lua Boot Script>>=
 Opt = Opt and error('Opt not empty') or {}
 
-function Opt.standard(backend, asm)
+function whichB(B)
+  if B == Backplane then return "original backplane"
+  elseif B == NewBackplane then return "new backplane"
+  else return "not a backplane"
+  end
+end
+
+-- function verbose(s, a, b, c, d, e, f, g, h)
+--    return
+-- end
+
+function Opt.standard(backend, asm, B)
+--verbose('running Opt.standard with third argument ', whichB(B), '\n')
+  B = B or Backplane
+--verbose('running Opt.standard with ', whichB(B), '\n')
+  Stages.null = B.stage {name="empty stage for " .. whichB(B), fn=Stages.nullf}
   local x = B.seq
     { backend.widen      or Stages.null
     , backend.placevars  or Stages.null
@@ -346,6 +363,7 @@ function Opt.standard(backend, asm)
     , backend.freeze     or Stages.null
     , B.stage { name="assemble procedure", fn = Driver.proc_assembler(asm) }
     } 
+--verbose('built a standard optimizer with ', whichB(B), '\n')
   return x
 end
 @
@@ -439,24 +457,21 @@ compile the file.
 \emph{I do not understand how the optimizer is run here. Maybe some
 clarifying words by the designer are in order. -- CL} 
 
-Lua 2.5 does not suffer from insanity, it enjoys every minute of it.
-Witness the absence of a traditional [[open()]] to obtain a file
-descriptor. We here have to use [[writeto]] to open a file, which at the
-same time takes or [[stdout]] away.
-
 There is some inconsistency how we deal with files. The [[Driver.parse]]
 function takes a file name, while an assembler expects a file
 descriptor.
-
 <<Lua Boot Script>>=
 Compile = Compile and error('Compile not empty') or {}
 
+
 function Compile.run_optimizer(self,proc)
+    local B = self.B or Backplane
+--verbose('running Compile.run_optimizer with ', whichB(B), '\n')
     B.run(self.action, proc)
 end    
 
 function Compile.file(backend, file, out)
-    local fd  = (not out or out == "-") and Driver.stdout or writeto(out)
+    local fd  = (not out or out == "-") and Driver.stdout or open_out(out)
     local ast = Driver.parse(file) 
     local asm = backend.asm(fd)
     local env = Driver.check(ast,asm) -- asm is stored in env
@@ -465,7 +480,24 @@ function Compile.file(backend, file, out)
                 }
     Driver.compile(opt, ast, backend.target, env)
     if backend.emit then backend.emit(asm) end
-    if fd ~= Driver.stdout then writeto() end -- close fd
+    if fd ~= Driver.stdout then close_out(fd) end
+end    
+
+function Compile.new_file(backend, file, out)
+    local fd  = (not out or out == "-") and Driver.stdout or open_out(out)
+    local ast = Driver.parse(file) 
+--verbose('about to call asm\n')
+    local asm = backend.asm(fd)
+--verbose('about to call Driver.new_check\n')
+    local env = Driver.new_check(ast,asm) -- asm is stored in env
+--verbose('about to call Opt.standard\n')
+    local opt = { apply  = Compile.run_optimizer
+                , action = Opt.standard(backend, asm, NewBackplane) 
+                , B = NewBackplane
+                }
+    Driver.new_compile(opt, ast, backend.target, env)
+    if backend.emit then backend.emit(asm) end
+    if fd ~= Driver.stdout then close_out(fd) end -- close fd
 end    
 @
 

@@ -65,18 +65,17 @@ let readfrom g =
               
 let open_out_append s =
   open_out_gen [Open_wronly; Open_creat; Open_trunc; Open_text] 0o666 s  in
+
+let open_out_string append s =
+  match String.get s 0 with
+  | '|' -> if append then raise (Sys_error "tried to appendto() a pipe")
+           else Unix.open_process_out (String.sub s 1 (String.length s - 1))
+  | _   -> if append then open_out_append s else open_out s in
+
 let writeto' append g = 
   let finish f = io.currentout <- f; [outfile.V.embed f] in
   function
-  | [V.String s] ->
-      (match String.get s 0 with
-       | '|' ->
-           wrap_err (fun () ->
-            if append then raise (Sys_error "tried to appendto() a pipe")
-            else finish (Unix.open_process_out (String.sub s 1 (String.length s - 1))))
-       | _   ->
-           wrap_err (fun () ->
-                     finish (if append then open_out_append s else open_out s)))
+  | [V.String s] -> wrap_err (fun () -> finish (open_out_string append s))
   | [] ->
       ( close_out io.currentout; io.currentout <- stdout; [])
   | [v] -> (io.currentout <- outfile.V.project v; [v])
@@ -120,24 +119,26 @@ let tmpname _ =
   in tmp false 238  in
 
 let io_builtins g =
-  [ "readfrom", V.caml_func (readfrom g)
-  ; "writeto",  V.caml_func (writeto' false g)
-  ; "appendto", V.caml_func (writeto' true g)
-  ; "remove",   V.efunc (V.string **-> V.values)
-                (fun s -> wrap_err (fun () -> Sys.remove s; success))
-  ; "rename",   V.efunc (V.string **-> V.string **-> V.values)
-                (fun s1 s2 -> wrap_err (fun () -> Sys.rename s1 s2; success))
-  ; "tmpname",  V.caml_func tmpname
-  ; "read",     V.efunc (V.option V.string **-> V.values) (read g)
-  ; "write",    V.caml_func (fun l -> wrap_err (fun () ->
-                             List.iter (write_string g) l;
-                             flush io.currentout;
-                             []))
-  ; "date",     V.efunc (V.option V.string **-> V.values) (date g)
-  ; "exit",     V.efunc (V.option V.int **-> V.runit) (fun n -> exit (getopt n 0))
-  ; "getenv",   V.efunc (V.string **-> V.values)
-                (fun s -> try [V.String (Sys.getenv s)] with Not_found -> [V.Nil])
-  ; "execute",  V.efunc (V.string **-> V.result V.int) Sys.command
+  [ "readfrom",  V.caml_func (readfrom g)
+  ; "open_out",  V.efunc (V.string **-> V.result outfile) (open_out_string false)
+  ; "close_out", V.efunc (outfile **-> V.runit)  close_out
+  ; "writeto",   V.caml_func (writeto' false g)
+  ; "appendto",  V.caml_func (writeto' true g)
+  ; "remove",    V.efunc (V.string **-> V.values)
+                 (fun s -> wrap_err (fun () -> Sys.remove s; success))
+  ; "rename",    V.efunc (V.string **-> V.string **-> V.values)
+                 (fun s1 s2 -> wrap_err (fun () -> Sys.rename s1 s2; success))
+  ; "tmpname",   V.caml_func tmpname
+  ; "read",      V.efunc (V.option V.string **-> V.values) (read g)
+  ; "write",     V.caml_func (fun l -> wrap_err (fun () ->
+                              List.iter (write_string g) l;
+                              flush io.currentout;
+                              []))
+  ; "date",      V.efunc (V.option V.string **-> V.values) (date g)
+  ; "exit",      V.efunc (V.option V.int **-> V.runit) (fun n -> exit (getopt n 0))
+  ; "getenv",    V.efunc (V.string **-> V.values)
+                 (fun s -> try [V.String (Sys.getenv s)] with Not_found -> [V.Nil])
+  ; "execute",   V.efunc (V.string **-> V.result V.int) Sys.command
   ] in
 @ 
 <<luaiolib.ml>>=
