@@ -105,7 +105,8 @@ let expand temps (mem_like, space_for) =
     | RP.Fetch (l, w) ->
         if mem_like l then
           let t = temp_for (space_for e) w in
-          (t:R.loc), rtl (R.store t (up e) w)
+          let l, is = loc l in
+          (t:R.loc), (R.store t (R.fetch l w) w @:: is)
         else
           uploc l, empty
     | RP.App (op, args) ->
