@@ -343,63 +343,73 @@ let show_locals rho = ()
   prerr_endline ""
 *)
 
+<<interp toplevel>>=
 let rec extend rho = function
   | A.Stmt' (_, s) -> extend rho s
   | A.Local (vs, _) -> List.rev_append vs rho
   | _ -> rho
-
+@ 
+For statements (although not for expressions), the ordinary and return
+continuations can be static parameters.  This setup approximates
+direct threaded code.  A little ref-cell jujitsu is needed to make
+loops work.
+<<interp toplevel>>=
 let compilers (srcmap, debug) =
-  let rec stmt rho = function
+  let rec stmt rho s theta ret = match s with
     | A.Stmt' (charpos, s) ->
         if debug then
-          let s = stmt rho s in
           let where = Srcmap.location srcmap charpos in
-          fun theta ret g l ->
-            let n = g.V.currentloc in
-            let _ = g.V.currentloc <- Some where in
-            let restore () = g.V.currentloc <- n in
-            s (fun g l -> restore(); theta g l) (fun ans -> restore(); ans) g l
+          let n = ref None in
+          let restore g = g.V.currentloc <- !n in
+          let restore_cont g l = (restore g; theta g l) in
+          let run_cont =
+            fun g l -> stmt rho s restore_cont (fun ans -> restore g; ret ans) g l in
+          fun g l -> ( n := g.V.currentloc
+                     ; g.V.currentloc <- Some where
+                     ; run_cont g l
+                     ) 
               (* hard to maintain current line if exn raised ... *)
         else
-          stmt rho s
+          stmt rho s theta ret
     | A.WhileDo (cond, body) ->
+        let loop_cont = ref theta in  (* to become loop continuation *)
+        let goto_head g l = !loop_cont g l in
         let cond = exp (lookup rho) cond in
-        let body = block rho body in
-        fun theta ret ->
-          let rec loop (g:V.state) l =
-            cond g l (fun v -> if notnil v then body loop ret g l else theta g l)  in
-          loop
+        let body = block rho body goto_head ret in
+        let loop g l = cond g l (fun v -> if notnil v then body g l else theta g l) in
+        let _ = loop_cont := loop in
+        loop
     | A.RepeatUntil (body, cond) ->
+        let loop_test = ref theta in (* to become loop-end continuation *)
+        let goto_test g l = !loop_test g l in
         let cond = exp (lookup rho) cond in
-        let body = block rho body in
-        fun theta ret ->
-          let rec loop g l =
-            body (fun g l -> cond g l (fun v -> 
-                  if notnil v then theta g l else loop g l)) ret g l
-          in loop
+        let body = block rho body goto_test ret in
+        let loop g l = cond g l (fun v -> if notnil v then theta g l else body g l) in
+        let _ = loop_test := loop in
+        body
     | A.If (c, t, alts, f) ->
         let alts = (c, t) :: alts in
-        let f = block rho (match f with None -> [] | Some ss -> ss) in
+        let f = block rho (match f with None -> [] | Some ss -> ss) theta ret in
         let add (cond, body) f =
           let cond = exp (lookup rho) cond in
-          let body = block rho body in
-          fun theta ret g l -> cond g l (fun v -> if notnil v then body theta ret g l
-                                                  else f theta ret g l)  in
+          let body = block rho body theta ret in
+          fun g l -> cond g l (fun v -> if notnil v then body g l else f g l)  in
         List.fold_right add alts f
     | A.Return es ->
         let es = explist (lookup rho) es in
-        fun theta ret g l -> es g l ret
+        fun g l -> es g l ret
     | A.Local (vs, es) ->
         show_locals (List.rev_append vs rho);
         stmt (List.rev_append vs rho) (A.Assign (List.map (fun x -> A.Lvar x) vs, es))
+        theta ret
     | A.Assign (vs, [A.Call c]) ->
-        assign (lvars (lookup rho) vs) (call c (lookup rho))
+        assign (lvars (lookup rho) vs) (call c (lookup rho)) theta ret
     | A.Assign (vs, es) ->
-        assign (lvars (lookup rho) vs) (explist (lookup rho) es)
-    | A.Callstmt c -> fun theta ret g l -> call c (lookup rho) g l (fun _ -> theta g l)
-  and block rho = function
-    | [] -> fun theta ret -> theta
-    | s :: ss -> fun theta ret -> stmt rho s (block (extend rho s) ss theta ret) ret
+        assign (lvars (lookup rho) vs) (explist (lookup rho) es) theta ret
+    | A.Callstmt c -> fun g l -> call c (lookup rho) g l (fun _ -> theta g l)
+  and block rho body theta ret = match body with
+    | [] -> theta
+    | s :: ss -> stmt rho s (block (extend rho s) ss theta ret) ret
   and lvar rho : A.lval -> V.state -> V.value array -> V.value -> unit = function
     | A.Lvar x -> (match rho x with
                    | Global  -> fun g l v -> V.Table.bind g.V.globals (V.String x) v
@@ -418,8 +428,8 @@ let compilers (srcmap, debug) =
           let t = t g l in
           fun vs ->
             let hv, tv = match vs with h::t -> h, t | [] -> V.Nil, [] in (h hv; t tv)
-  and assign left right =
-    fun theta ret g l ->
+  and assign left right theta ret =
+    fun g l ->
       let left = left g l in
       (right g l left; theta g l)
   in stmt, block
