@@ -82,11 +82,20 @@ val to_string: bits -> string
 
 <<bits.mli ((evaluating))>>=
 module Ops : sig
-  val add : bits -> bits -> bits
-  val lt  : bits -> bits -> bool
-  val gt  : bits -> bits -> bool
-  val ltu : bits -> bits -> bool
-  val gtu : bits -> bits -> bool
+  val add       : bits -> bits -> bits
+  val sub       : bits -> bits -> bits
+  val shra      : bits -> bits -> bits
+  val mul_trunc : bits -> bits -> bits
+
+  val sx        : int  -> bits -> bits
+  val zx        : int  -> bits -> bits
+  
+  val eq        : bits -> bits -> bool
+  val ne        : bits -> bits -> bool
+  val lt        : bits -> bits -> bool
+  val gt        : bits -> bits -> bool
+  val ltu       : bits -> bits -> bool
+  val gtu       : bits -> bits -> bool
 end
 @
 
@@ -311,7 +320,9 @@ let zero w      = check w; (I.zero, w)
 let to_string (i,w) = Printf.sprintf "%Lx::bits%d" i w 
 @
 
+% ------------------------------------------------------------------ 
 \subsection{Sign and zero extension}
+% ------------------------------------------------------------------ 
 
 The [[sx64]] operation takes an [[int64]] value and masks the $w$ least
 significant bits ($w-1, \dots, 0$) such that the remaining $64 - w$ most
@@ -327,6 +338,10 @@ let zx64 i w =
     let w' = 64-w in
     I.shift_right_logical (I.shift_left i w') w'
 @
+
+% ------------------------------------------------------------------ 
+\subsection Arithmetic}
+% ------------------------------------------------------------------ 
 
 <<bits.ml ((evaluating))>>=
 module Ops = struct
@@ -351,6 +366,42 @@ let ltu (b, w) (b', w') =
   let n' = zx64 b' w' in
   n < n'
 let gtu x y = ltu y x
+
+let sub (b,w) (b', w') =
+    assert (w = w');
+    let n  = sx64 b  w  in
+    let n' = sx64 b' w' in
+        (Int64.sub n n', w)
+
+let mul_trunc (b,w) (b', w') =
+    assert (w = w');
+    let n  = sx64 b  w  in
+    let n' = sx64 b' w' in
+        (Int64.mul n n', w)
+
+let eq (b,w) (b',w') =
+    assert (w = w');
+    let n  = zx64 b w  in
+    let n' = zx64 b' w' in
+        n = n'
+
+let ne x y = not (eq x y)
+
+let sx k (b,w) =
+    assert (k >= w);
+    let n  = sx64 b w in
+        (n ,k)
+
+let zx k (b,w) =
+    assert (k >= w);
+    let n = zx64 b w in
+        (n, k)
+
+let shra (b,w) (b',w') =
+    assert (w = w');
+    let n  = zx64 b w in
+        (Int64.shift_right b (Int64.to_int b'), w)
+
 @
 <<bits.ml ((evaluating))>>=
 <<string scanning>>

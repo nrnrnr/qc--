@@ -118,8 +118,8 @@ let default op w args = RP.App((op,w),args)
 <<traverse RTL>>=   
 let app o w args = match o with
     |  "NaN" 		-> default o w args
-    |  "add" 		-> add w args
-    |  "and" 		-> and' w args
+    |  "add" 		-> default o w args
+    |  "and" 		-> default o w args
     |  "bit" 		-> default o w args
     |  "bool" 		-> default o w args
     |  "borrow" 	-> default o w args
@@ -127,8 +127,8 @@ let app o w args = match o with
     |  "com" 		-> default o w args
     |  "conjoin" 	-> default o w args
     |  "disjoin" 	-> default o w args
-    |  "div" 		-> div w args
-    |  "divu" 		-> divu w args
+    |  "div" 		-> default o w args
+    |  "divu" 		-> default o w args
     |  "eq" 		-> eq w args
     |  "f2f" 		-> default o w args
     |  "f2i" 		-> default o w args
@@ -165,12 +165,12 @@ let app o w args = match o with
     |  "minf" 		-> default o w args
     |  "mod" 		-> default o w args
     |  "modu" 		-> default o w args
-    |  "mul" 		-> mul w args
+    |  "mul" 		-> default o w args
     |  "mul_trunc" 	-> mul_trunc w args
-    |  "mulu" 		-> mulu w args
+    |  "mulu" 		-> default o w args
     |  "mzero" 		-> default o w args
-    |  "ne" 		-> ne w args
-    |  "neg" 		-> neg w args
+    |  "ne" 		-> ne  w args
+    |  "neg" 		-> default o w args
     |  "not" 		-> default o w args
     |  "or" 		-> default o w args
     |  "pinf" 		-> default o w args
@@ -186,12 +186,12 @@ let app o w args = match o with
     |  "round_zero" 	-> round_zero w args
     |  "shl" 		-> shl w args
     |  "shra" 		-> shra w args
-    |  "shrl" 		-> shrl w args
+    |  "shrl" 		-> default o w args
     |  "sub" 		-> sub w args
     |  "sx" 		-> sx w args
     |  "unordered" 	-> default o w args
     |  "xor" 		-> default o w args
-    |  "zx" 		-> default o w args
+    |  "zx" 		-> zx w args
     |  "bitExtract" 	-> default o w args
     |  "bitInsert" 	-> default o w args
     |  "bitTransfer" 	-> default o w args
@@ -233,29 +233,20 @@ let reg_offset = function
     | _                     -> None
 @
 
-<<unsafe RTL simplification old>>=
-let rec app o w args = match Safe.app o w args with
-    | RP.App (("eq"|"ltu"|"gtu"|"lt"|"gt" as op, w),
-        [ RP.App(("add", _), [RP.Fetch(RP.Reg(r1),_); RP.Const(_) as k1 ])
-        ; RP.App(("add", _), [RP.Fetch(RP.Reg(r2),_); RP.Const(_) as k2 ])
-        ]) when r1 = r2 -> app op w [k1;k2]
-    | x -> x    
-        
 <<unsafe RTL simplification>>=
 let rec app o w args = match Safe.app o w args with
     | RP.App (("eq"|"ltu"|"gtu"|"lt"|"gt" as op, w), [left;right]) as x ->
         ( match reg_offset left, reg_offset right with
         | Some(r1,k1), Some(r2,k2) when r1 = r2 -> 
-            let r = app op w [k1;k2] in
-                ( Printf.eprintf "Rtleval2.app %s `%s` %s = %s\n"
-                    (Rtlutil.ToReadableString.exp (Rtl.Up.exp k1))
-                    op
-                    (Rtlutil.ToReadableString.exp (Rtl.Up.exp k2))
-                    (Rtlutil.ToReadableString.exp (Rtl.Up.exp r))
-                ; flush stderr    
-                ; r
-                )    
-        | _                                     -> x
+            let r      = app op w [k1;k2] in
+            let dbg () = Printf.eprintf "Rtleval2.Unsafe.app: %s `%s` %s = %s\n"
+                        (Rtlutil.ToReadableString.exp (Rtl.Up.exp k1))
+                        op
+                        (Rtlutil.ToReadableString.exp (Rtl.Up.exp k2))
+                        (Rtlutil.ToReadableString.exp (Rtl.Up.exp r))
+            in r
+               
+        | _  -> x
         )
     | x -> x
 
@@ -302,6 +293,8 @@ let int = function
 let to_bits i w = RP.Const(RP.Bits(Bits.S.of_int64 i w))
 let to_bool b   = RP.Const(RP.Bool(b)) 
 
+let const k     = RP.Const(RP.Bits(k))
+
 let is_bits = function
     | RP.Const(RP.Bits(_)) -> true
     | _                    -> false
@@ -317,99 +310,74 @@ let round_nearest w args = RP.Const(RP.Bits(Bits.U.of_int 1 2))
 let round_zero    w args = RP.Const(RP.Bits(Bits.U.of_int 0 2))
 
 
-let rec add w args = match (w,args) with
-    | [w],[RP.App(("add", [w']), [x; RP.Const (RP.Bits k)]); RP.Const (RP.Bits k')] 
-                -> assert (w=w');
-                   add [w] [x; RP.Const (RP.Bits (Bits.Ops.add k k'))]
-    | [w],[RP.Const (RP.Bits x); RP.Const (RP.Bits y)]
-                -> RP.Const (RP.Bits (Bits.Ops.add x y))
-    | _         -> default "add" w args
+let rec add w = function
+    | [ RP.App(("add", w'), [x ; RP.Const (RP.Bits k)])
+      ; RP.Const (RP.Bits k') ] ->  
+                assert (w=w');
+                add w [x; RP.Const (RP.Bits (Bits.Ops.add k k'))]
+    | [RP.Const (RP.Bits x); RP.Const (RP.Bits y)] ->  
+                RP.Const (RP.Bits (Bits.Ops.add x y))
+    | args  ->  default "add" w args
     
 
-let and' w args = match (w,args) with
-    | [w],[x;y] when is_bits x && is_bits y
-                -> to_bits (Int64.logand (int64 x) (int64 y)) w
-    | _ -> default "and" w args
+let shra w = function
+    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
+                 -> const (Bits.Ops.shra x y)
+    | args       -> default "shra" w args
 
-let div w args  = match (w,args) with
-    | [w],[x;y] when is_bits x && is_bits y 
-                -> to_bits (Int64.div (int64 x) (int64 y)) w
-    | _         -> default "div" w args
+let mul_trunc w = function
+    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
+                -> const (Bits.Ops.mul_trunc x y)
+    | args      -> default "mul_trunc" w args  
+
+let eq w = function
+    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
+                -> to_bool (Bits.Ops.eq x y)
+    | args      -> default "eq" w args
     
-let divu w args = default "divu" w args
-
-let eq w args   = match (w,args) with
-    | [w],[x;y] when is_bits x && is_bits y 
-                -> to_bool ((int64 x) = (int64 y)) 
-    | _         -> default "eq" w args
-    
-
-let mul w args  = match (w,args) with
-    | [_;r],[x;y] when is_bits x && is_bits y 
-                -> to_bits (Int64.add (int64 x) (int64 y)) r
-    | _         -> default "mul" w args
-
-let mul_trunc w args  = match (w,args) with 
-    | [n],[x;y] when is_bits x && is_bits y 
-                -> to_bits (Int64.add (int64 x) (int64 y)) n
-    | _         -> default "mul_trunc" w args  
-
-let mulu w args = default "mulu" w args
-
-let neg w args  = match (w,args) with
-    | [w], [x]  when is_bits x 
-                -> to_bits (Int64.neg (int64 x)) w
-    | _         -> default "neg" w args
-
-let ne w args = match (w,args) with
-    | [w], [x;y]  when is_bits x && is_bits y 
-                -> to_bool ((int64 x) <> (int64 y))
-    | _         -> default "ne" w args
+let ne w = function
+    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
+                -> to_bool (Bits.Ops.ne x y)
+    | args      -> default "ne" w args
     
 let shl w args  = match (w,args) with
     | [w], [x;y] when is_bits x && is_bits y 
                 -> to_bits (Int64.shift_left (int64 x) (int y)) w 
     | _         -> default "shl" w args
-
-let shra w args  = match (w,args) with
-    | [w], [x;y] when is_bits x && is_bits y 
-                 -> to_bits (Int64.shift_right (int64 x) (int y)) w 
-    | _          -> default "shra" w args
-
-let shrl w args  = match (w,args) with
-    | [w], [x;y] when is_bits x && is_bits y 
-                 -> to_bits (Int64.shift_right_logical (int64 x) (int y)) w 
-    | _          -> default "shrl" w args
-
-let sub w args  = match (w,args) with
-    | [w],[x;y] when is_bits x && is_bits y  
-                -> to_bits (Int64.sub (int64 x) (int64 y)) w
-    | _         -> default "sub" w args
+let sub w = function
+    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
+                -> const (Bits.Ops.sub x y)
+    | args      -> default "sub" w args
     
 let sx w args   = match (w,args) with
-    | [i;j],[x] when is_bits x
-                -> to_bits (int64 x) j
+    | [i;j],[RP.Const(RP.Bits(x))]
+                -> const (Bits.Ops.sx j x)
     | _         -> default "sx" w args
 
-let ltu w args  = match args with
+let zx w args   = match (w,args) with
+    | [i;j],[RP.Const(RP.Bits(x))]
+                -> const (Bits.Ops.zx j x)
+    | _         -> default "zx" w args
+
+let ltu w = function 
     | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
                 -> to_bool (Bits.Ops.ltu x y)
-    | _         -> default "ltu" w args
+    | args      -> default "ltu" w args
 
-let gtu w args  = match args with
+let gtu w = function
     | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
                 -> to_bool (Bits.Ops.gtu x y)
-    | _         -> default "gtu" w args
+    | args      -> default "gtu" w args
 
-let lt w args  = match args with
+let lt w = function
     | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
                 -> to_bool (Bits.Ops.lt x y)
-    | _         -> default "lt" w args
+    | args      -> default "lt" w args
 
-let gt w args  = match args with
+let gt w = function
     | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))]
                 -> to_bool (Bits.Ops.gt x y)
-    | _         -> default "gt" w args
+    | args      -> default "gt" w args
     
 
 @
