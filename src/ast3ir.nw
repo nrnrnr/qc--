@@ -37,10 +37,12 @@ module Make
     (Asm:   Asm2.S with type instruction = G.t
                    with type init        = unit) = 
 struct
-    <<Make auxilliaries>>
     <<Make expressions>>
+    <<Make auxilliaries>>
     <<Make continuation bundles>>
     <<Make assignment>>    
+    <<Make global registers>>    
+    <<Make statements>>
     <<Make>>
 end
 @
@@ -190,10 +192,7 @@ and variable env target globals hint x =
             let w = width t in
             Rtl.fetch (Rtl.var x i w) w
         else (* global register in memory *)
-            ( try
-                Automaton2.fetch (StrMap.find x globals) (width t)
-              with Not_found -> assert false
-            )
+            Automaton2.fetch (globals x) (width t)
     )
     
 and prim env target globals op args =
@@ -264,10 +263,7 @@ let rec assign env target globals lhs exp = match lhs with
                 if F.is_localv x env then
                     Rtl.store (Rtl.var x i w) exp w
                 else (* global register in memory *)
-                    ( try
-                        Automaton2.store (StrMap.find x globals) exp w
-                      with Not_found -> assert false
-                    )
+                        Automaton2.store (globals x) exp w
             | _ -> assert false (* impossible *)
             )
     | A.Mem(t,addr,align) ->
@@ -281,6 +277,84 @@ let rec assign env target globals lhs exp = match lhs with
                 (expr env target globals addr)                        
         in
             Rtl.store cell exp w
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Global Registers}
+% ------------------------------------------------------------------ 
+
+The global registers of a {\PAL} program are assigned to hardware
+register or memory locations using a target specific automaton.  Each
+assignment results in an abstract [[Automaton2.loc]] value that is
+entered under the name of the register to a map.  If a global register
+declaration specifies a hardware register the register \emph{is not}
+entered into said map.  Since the hardware register is part of the
+declaration the [[Rtl.loc]] corresponding to the register can be
+looked where it is used.
+ 
+The [[globals]] function returns a map from registers to abstract
+locations and the overflow area used to represent global registers.
+
+<<Make global registers>>=
+let globals target (base:Rtl.exp) decls =
+    let atm = Automaton2.mk target.Target.globals base in
+    let rec loop map = function
+        | [] -> map
+        | (name, F.RNone, t) :: rr -> (* no hint, no h/w register *)
+            let loc = Automaton2.ty atm (width t) None  in
+            let map = StrMap.add name loc map           in  
+                loop map rr
+        | (name, F.RHint h, t) :: rr -> (* hint, no h/w register *)
+            let loc = Automaton2.ty atm (width t) (Some h)  in
+            let map = StrMap.add name loc map               in
+                loop map rr
+        | (name, F.RReg _, t) :: rr -> (* hardware register - ignore *)
+                loop map rr
+    in
+        loop StrMap.empty decls, Automaton2.freeze atm  
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Statements}
+% ------------------------------------------------------------------ 
+
+<<Make statements>>=
+let rec stmt env target globals after = function
+    | A.StmtAt(x,r)        -> stmt env target globals after x
+    | A.SpanStmt    x      -> spanStmt      env target globals after x
+    | A.IfStmt      x      -> ifStmt        env target globals after x
+    | A.SwitchStmt  x      -> switchStmt    env target globals after x
+    | A.LabelStmt   x      -> labelStmt     env target globals after x
+    | A.ContStmt    x      -> contStmt      env target globals after x
+    | A.AssignStmt  x      -> assignStmt    env target globals after x
+    | A.CallStmt    x      -> callStmt      env target globals after x
+    | A.PrimStmt    x      -> primStmt      env target globals after x
+    | A.GotoStmt    x      -> gotoStmt      env target globals after x
+    | A.JumpStmt    x      -> jumpStmt      env target globals after x
+    | A.CutStmt     x      -> cutStmt       env target globals after x
+    | A.ReturnStmt  x      -> returnStmt    env target globals after x 
+    | A.EmptyStmt          -> after     
+    | A.CommentStmt _      -> after    
+
+and body env target globals after = function
+    | A.BodyAt(x, _)        -> body env target globals after x
+    | A.DeclBody(d)         -> after (*XXX*)
+    | A.StmtBody(s)         -> stmt env target globals after s
+    | A.DataBody(dd)        -> after (*XXX*)
+    
+and spanStmt      env target globals after x  = assert false 
+and ifStmt        env target globals after x  = assert false 
+and switchStmt    env target globals after x  = assert false 
+and labelStmt     env target globals after x  = assert false 
+and contStmt      env target globals after x  = assert false 
+and assignStmt    env target globals after x  = assert false 
+and callStmt      env target globals after x  = assert false 
+and primStmt      env target globals after x  = assert false 
+and gotoStmt      env target globals after x  = assert false    
+and jumpStmt      env target globals after x  = assert false 
+and cutStmt       env target globals after x  = assert false 
+and returnStmt    env target globals after x  = assert false            
 @
 
 % ------------------------------------------------------------------ 
