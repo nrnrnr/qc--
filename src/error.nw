@@ -112,11 +112,38 @@ module Lower :
                                             * 'd error
   end
 
+@ At the point where an error occurs the first time the [[errorExn]]
+is raised. When the exception is caught is is turned into an
+[[Error]] value and from there on the [[Error]] value is propagated.
+Catching the exception is done with [[catch]] in the special case, and
+[[catch']] in the general case. [[catch']] permits to specify the
+value that is returned when an exception is caught whereas [[catch]]
+always uses [[Error]] for this.
+
+<<>>=
+val catch   :       (Srcmap.point -> pretty list -> unit) 
+                    -> ('a -> 'b error) -> 'a -> 'b error
+val catch'  : 'b -> (Srcmap.point -> pretty list -> unit) 
+                    -> ('a -> 'b      ) -> 'a -> 'b 
+
+@ The first argument in [[catch printer f x]] is an error reporting
+function; [[f]] is applied to [[x]] and in case of an error [[Error]]
+is returned. The first argument to [[catch']] is the value to return
+in case of an error.
+
+<<>>=
+
 val errorExn : Srcmap.point -> pretty list -> 'a
 val parseExn : Srcmap.pos   -> string      -> 'a
 val fatalExn : string -> 'a
 
+@ The [[warning]] and [[error]] functions can be passed to [[catch]]
+and [[catch']] as error printing functions.
+
+<<>>=
+
 val warning : Srcmap.point -> string list -> unit
+val error   : Srcmap.point -> string list -> unit
 
   
 @
@@ -218,6 +245,14 @@ issue warnings.
 
 <<error.ml>>=
 
+let catch' default printer f arg =
+    try f arg with
+    | ErrorExn(p,msg) -> ( printer p msg 
+                         ; default
+                         )
+    
+let catch printer f arg = catch' Error printer f arg
+                         
 let errorExn point msg = raise (ErrorExn(point,msg))
 let parseExn pos   msg = raise (ParseExn(pos,msg))
 let fatalExn msg       = raise (FatalExn(msg)) 
@@ -228,6 +263,14 @@ let warning point msg =
     ; List.iter prerr_string msg
     ; prerr_newline ()
     )       
+
+let error point msg =
+    ( prerr_string (Srcmap.Str.point point)
+    ; prerr_string " Error: "
+    ; List.iter prerr_string msg
+    ; prerr_newline ()
+    )       
+
 
 @
 
