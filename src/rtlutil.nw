@@ -33,9 +33,8 @@ in an assertion failure.
 
 <<rtlutil.mli>>=
 val locwidth  : Rtl.loc -> Rtl.width
-val locwidth' : Rtl.Private.loc -> Rtl.width
-  (* always succeeds *)
-@ 
+val locwidth' : Rtl.Private.loc -> Rtl.width (* always succeeds *)
+@
 
 For liveness analysis, we need to know what registers are read and
 written.  We provide a suitable catamorphism (folding operator).  This
@@ -60,8 +59,33 @@ val read_write_lists : read:'a regfun -> write:'a regfun -> Rtl.rtl -> 'a -> 'a
     let (readlist, writelist) = rws rtl (empty, empty) in
     fold_left read (fold_left write z writelist) readlist
 *)
-@ 
+@
+
+Liveness analysis and register allocation deal with [[Rtl.loc]]
+locations.  Sets and maps of locations are essential data structures.
+
+<<rtlutil.mli>>=
+module LocSet: Set.S with type elt = Rtl.loc
+module LocMap: Map.S with type key = Rtl.loc
+@
+
+The [[subst map rtl]] function substitutes locations in [[rtl]].  The
+[[map]] argument associates locations to be substituted and the
+respective substitutes.  Locations not in the domain of [[map]] are
+left untouched by the [[subst]].
+
+<<rtlutil.mli>>=
+val subst: Rtl.loc LocMap.t -> Rtl.rtl -> Rtl.rtl
+@
     
+The predicate [[uses locs rtl]] is true, if and only if [[rtl]]
+contains any of the locations in the set [[locs]].
+
+<<rtlutil.mli>>=
+val uses : LocSet.t -> Rtl.rtl -> bool
+@
+
+
 <<obsolete and deprecated?>>=
 val width:      Rtl.exp -> int                 (* width of expression *)
   (* often faults with assertion failure *)
@@ -88,7 +112,7 @@ let width e = match Rtl.Convert.exp e with
     | RP.App _                -> assert false (* not implemented *)
     
 let assign l r = Rtl.store l r (width r)
-@ 
+@
 
 <<rtlutil.ml>>=
 type 'a regfun = Rtl.space -> index:Base.std_int -> Rtl.width -> 'a -> 'a
@@ -114,5 +138,59 @@ let read_write_lists (read:'a regfun) (write:'a regfun) =
         | RP.Fetch (l, w) -> loc read z l
         | RP.App (_, es) -> List.fold_left exp z es
   in  fun r z -> rtl z (Rtl.Convert.rtl r)
+@
 
+Maps and sets of locations are easily defined using the [[Map]] and
+[[Set]] functors.
 
+<<rtlutil.ml>>=
+module LocCompare = struct type t = Rtl.loc let compare = compare end
+module LocMap     = Map.Make(LocCompare)
+module LocSet     = Set.Make(LocCompare)
+@
+
+The [[subst map rtl]] function substitutes all locations in [[rtl]] that
+have an entry in [[map]].
+
+<<rtlutil.ml>>=
+let rec subst_exp map = function
+    | RP.Fetch (loc, width) -> RP.Fetch(subst_loc map loc, width)
+    | RP.App(opr, exprs)    -> RP.App(opr, List.map (subst_exp map) exprs)
+    | x                     -> x
+    
+and subst_loc map loc  =  
+    try Rtl.Convert.loc (LocMap.find (Rtl.Revert.loc loc) map)
+    with Not_found -> loc
+    
+and subst_effect map = function
+    | RP.Store (loc,exp,width) -> 
+        RP.Store(subst_loc map loc, subst_exp map exp, width)
+    | RP.Kill  (loc) -> 
+        RP.Kill (subst_loc map loc)
+        
+and subst_guarded map (exp,eff) =
+    (subst_exp map exp, subst_effect map eff)
+
+and subst' map (RP.Rtl rtl) = RP.Rtl (List.map (subst_guarded map) rtl)
+
+let subst map rtl = Rtl.Revert.rtl (subst' map (Rtl.Convert.rtl rtl))
+@    
+    
+The predicate [[uses locs rtl]] is true, if and only if [[rtl]]
+contains any of the locations in the set [[locs]].
+
+<<rtlutil.ml>>=
+let rec uses_exp locs = function
+    | RP.Fetch (loc, _    ) -> uses_loc locs loc
+    | RP.App(opr, exprs)    -> List.exists (uses_exp locs) exprs
+    | x                     -> false
+    
+and uses_effect locs = function
+    | RP.Store (loc,exp,_ ) -> uses_loc locs loc || uses_exp locs exp
+    | RP.Kill  (loc)        -> uses_loc locs loc 
+        
+and uses_loc locs loc           = LocSet.mem (Rtl.Revert.loc loc) locs
+and uses_guarded locs (exp,eff) = uses_exp locs exp || uses_effect locs eff
+and uses' locs (RP.Rtl rtl)     = List.exists (uses_guarded locs) rtl
+let uses locs rtl               = uses' locs (Rtl.Convert.rtl rtl)
+@
