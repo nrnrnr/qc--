@@ -271,6 +271,6 @@ $DIR.tar.gz:    FILES timestamps
                 
 tar-test:V:     $DIR.tar.gz
                 tar zxvf $DIR.tar.gz
-                ( cd $DIR && mk )
+                ( cd $DIR && ./configure && mk )
                 rm -rf $DIR
 
