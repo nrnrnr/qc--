@@ -13,14 +13,14 @@ encoding and decoding functions.
 The types of the machine-dependent functions may be:
 <<type definitions>>=
 type subst_type =
-    Machine.instruction ->
-      Machine.instruction ->
-        Machine.instruction option
+    Machine.t ->
+      Machine.t ->
+        Machine.t option
 
 type 'a read_write_type = 
     'a Rtlutil.regfun ->
       'a Rtlutil.regfun ->
-        Machine.instruction ->
+        Machine.t ->
           'a -> 'a
 
 @ \section{Interface}
@@ -32,8 +32,8 @@ val frwdSubstInst : subst_type
 val frwdSubstInst' : subst_type
 val frwdInstMerge : subst_type
 
-val identity : Machine.instruction -> Machine.instruction
-val identInstr : Machine.instruction -> Machine.instruction option
+val identity : Machine.t -> Machine.t
+val identInstr : Machine.t -> Machine.t option
 
 val read_write_setsInstr : 'a read_write_type
 val read_write_locsInstr : 'a read_write_type
@@ -44,7 +44,7 @@ val read_write_locsInstr : 'a read_write_type
 module M = Machine
 
 let mkMachineSubst f =
-  fun i1 -> fun i2 -> 
+  fun i1 -> fun i2 ->
     OpOps.bind
       M.recognizeInstruction
       (f (M.encode i1) (M.encode i2))

@@ -15,15 +15,19 @@ type exp = One01Syntax.exp
 let pprint = One01Syntax.pprint
 
 <<one01Machine.ml>>=
-type instruction = One01.instruction
-let encode = One01Encode.encode
-let recognizeInstruction = One01Recognize.recognizeInstruction
-let instruction = One01Nbe.instruction
+type t = One01Trees.M.t
+module MT = One01Trees.Rec(One01RtlMk.M)
+let encode = MT.rec_t
+module MR = One01RtlRec.M(One01TreesBuild.Build)
+let recognizeInstruction =
+  OpOps.lift (fun rtl -> MR.defaultOfInstruction (Rtl.Convert.rtl rtl))
+let instruction = One01Nbe.t
+
 <<one01Machine.mli>>=
-type instruction = One01.instruction
-val instruction : One01.instruction Tdpe.rr
-val encode : instruction -> Rtl.rtl
-val recognizeInstruction : Rtl.rtl -> instruction option
-    
+type t = One01Trees.M.t
+val instruction : t Tdpe.rr
+val encode : t -> Rtl.rtl
+val recognizeInstruction : Rtl.rtl -> t option
+
 @
 
