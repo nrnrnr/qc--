@@ -1,12 +1,43 @@
-% -*- mode: Noweb; noweb-code-mode: C-mode -*- %
+% -*- mode: Noweb; noweb-code-mode: c-mode -*- %
+
+\section{The Quick~{\PAL} Interpreter's Assembly Language}
+
+The table below includes all commands currently available in the assembly language of the Quick~{\PAL} Interpreter:\\
+\\
+\begin{tabularx}{\linewidth}{@{\hskip2em}llX@{}}
+[[push]]                &$(value)$              &\\
+[[push_symbol]]         &$(address)$            &\\
+% [[fetch]]             &                       &\\
+[[fetch_local]]         &$(index)$              &\\
+[[fetch_global]]        &$(index)$              &\\
+% [[store]]             &                       &\\
+[[store_local]]         &$(index)$              &\\
+[[store_global]]        &$(index)$              &\\
+% [[guarded_store]]     &                       &\\
+[[guarded_store_local]] &$(index)$              &\\
+[[guarded_store_global]]&$(index)$              &\\
+[[push_arg]]            &$()$                   &\\
+[[pop_arg]]             &$()$                   &\\
+[[apply_operator]]      &$(opIndex)$            &\\
+[[goto_]]               &$()$                   &\\
+[[cbrancht]]            &$(destAddress)$        &\\
+[[cbranchf]]            &$(destAddress)$        &\\
+[[branchtf]]            &$(addressT, addressF)$ &\\
+[[cmm_call]]            &$(\kappa_c Address, \kappa_u Address, \kappa_r Address, aborts)$ &\\
+[[cmm_tail_call]]       &$()$                   &\\
+% [[c_call]]            &                       &\\
+[[return]]              &$(index, count)$       &\\
+[[cut]]                 &$()$                   &\\
+\end{tabularx}
 
 \section{Implementing a Quick~{\PAL} Interpreter}
 
-This file contains a sketch of the (representation and) implementation of a Quick~{\PAL} interpreter in C, using the New Jersey Machine-Code toolkit.
+Here, we implement the Quick~{\PAL} Interpreter.  It reads in Lua source files written in the style of the interpreter's assembly language.
+The interpreter is implemented in C, using the New Jersey Machine-Code toolkit, and constructs a bytecode representation of its assembly language.
 
 \subsection{Bytecode Representation}
 
-SLED definition of the bytecode:
+Here is the SLED definition of the bytecode instruction set of the interpreter:
 
 <<bytecode.sled>>=
 fields of bcode     (8) op     0:7
@@ -35,24 +66,27 @@ patterns
          | STORE_LOCAL16  | STORE_GLOBAL16  | FETCH_LOCAL16 | FETCH_GLOBAL16
          | GSTORE_LOCAL16 | GSTORE_GLOBAL16
   any32   is PUSH     | CBRANCHT | CBRANCHF
-  nullary is PUSH_ARG | POP_ARG  | GOTO | CUT
+  nullary is PUSH_ARG | POP_ARG  | GOTO | CUT | CMM_TAIL_CALL
 
 relocatable addr
 relocatable addr2
+relocatable addr3
 
 placeholder for bcode is PLACECODE
 placeholder for long  is bits32 = 0
 
 constructors
-  any8        bits8        is  any8;     bits8
-  any16       bits16       is  any16;    bits16
-  any32       bits32       is  any32;    bits32
-  PUSH_SYMBOL addr         is  PUSH;     bits32 = addr
-  BRANCHTF    addr addr2   is  BRANCHTF; bits32 = addr;  bits32 = addr2
+  any8        bits8            is  any8;     bits8
+  any16       bits16           is  any16;    bits16
+  any32       bits32           is  any32;    bits32
+  PUSH_SYMBOL addr             is  PUSH;     bits32 = addr
+  BRANCHTF    addr addr2       is  BRANCHTF; bits32 = addr; bits32 = addr2
+  CMM_CALL  addr; addr2; addr3 is  CMM_CALL; bits32 = addr; bits32 = addr2; bits32 = addr3
+  RETURN      bits8 bits16     is  RETURN;   bits8;          bits16
   nullary
 
 # conditional assembly
-  operator bits16
+  apply_operator bits16
     when { }  is op8 (bits16)
     otherwise is op16(bits16)
   var bits16
@@ -68,7 +102,7 @@ constructors
     when { }  is gstore_local8 (bits16)
 	otherwise is gstore_local16(bits16)
   gstore_global bits16
-    when { }  is gstore_global16(bits16)
+    when { }  is gstore_global8 (bits16)
 	otherwise is gstore_global16(bits16)
   fetch_local bits16
     when { }  is fetch_local8 (bits16)
@@ -102,7 +136,7 @@ We will want ``short'' and ``long'' versions of many bytecodes (using
 \end{itemize}
 @
 
-\subsection{C Code}
+\subsection{Interpreting Bytecode}
 
 Moving onward to C code, we will begin with some type definitions required:
 
@@ -127,20 +161,34 @@ typedef int16_t  s_int16;
 typedef int32_t  s_int32;
 typedef int64_t  s_int64;
 
-/* the float types are here defined in a machine-dependent manner; */
-/* this must be fixed                                              */
+/* FIX :  the float types are here defined in a machine-dependent manner; */
 typedef float       float32;
 typedef double      float64;
 typedef long double float96;
 
+typedef enum {
+  ROUND_DOWN    = 00U,
+  ROUND_UP      = 01U,
+  ROUND_NEAREST = 02U,
+  ROUND_ZERO    = 03U
+} rounding_mode;
+
+typedef enum {
+  LITTLE,
+  BIG
+} byte_order;
+
 typedef u_int8 bytecode;
 
 typedef union {
-  bits1  bits1;
-  bits8  bits8;
-  bits16 bits16;
-  bits32 bits32;
-  bits64 bits64;
+  bits1   bits1;
+  bits8   bits8;
+  bits16  bits16;
+  bits32  bits32;
+  bits64  bits64;
+  float32 float32;
+  float64 float64;
+  float96 float96;
 } value;
 
 typedef value *stack;    /* value stack */
@@ -163,24 +211,32 @@ typedef struct {
 } operator;
 
 typedef struct {
-  unsigned int thread;
+  void         *thread;
   unsigned int frame;
 } uid;
 
+/* FIX for now, we leave these annotation elements as pointers to bytecode
+   pointers; for example, also_cuts_to should point to an array of
+   (bytecode *)'s.  it will be (\0)-terminated to signify the end.
+ */
+
 typedef struct {
-  bytecode *pc;
+  bytecode **also_cuts_to;
+  bytecode **also_unwinds_to;
+  bytecode **also_returns_to;
+  u_int1     also_aborts;
+} annotations;
 
-  /* take care of rho */
-  /* stack localbase; */
-  sptr *localsp;
-  /* sptr *locallimit; */
- 
-  /* take care of sp */
-  /* datastack stackdatabase; */
-  dataptr stackdatasp;
-  /* dataptr stackdatalimit; */
+typedef struct activation_t {
+  bytecode  *pc;
 
-  /* missing field: annotations */
+  stack     locals;
+  sptr      locals_end;
+
+  datastack stackdata;
+  dataptr   stackdata_end;
+
+  annotations kappa;
 
   uid u;
 } activation;
@@ -190,11 +246,39 @@ typedef activation *actptr;
 
 typedef struct {
   unsigned int next_frame_id;
-  unsigned int id;
-  actstack     callstackbase;
-  actptr       callstacklimit;
-  actptr       callstack;
+
+  actstack      callstack_base;
+  actptr        callstack_limit;
+  actptr        callstack_free;
+
+  stack         locals_base;
+  sptr          locals_limit;
+  sptr          locals_free;
+
+  datastack     stackdata_base;
+  dataptr       stackdata_limit;
+  dataptr       stackdata_free;
+
+  interval_list *live_list;
 } thread;
+
+typedef struct {
+  bytecode     *pc;
+  unsigned int num_locals;
+  unsigned int stackdata_size;
+} procedure;
+
+typedef struct {
+  bytecode *pc;
+  actptr   dest_act;   /* pointer to destination activation */
+} continuation;
+
+typedef struct {
+  byte_order byte_order;
+  unsigned   int memsize;
+  unsigned   int wordsize;
+  unsigned   int ptrsize;
+} assembly_unit;
 @ 
 
 Next, some initialization code for the interpreter to build its table of operators and perform other necessary tasks:
@@ -208,9 +292,27 @@ static operator operators[] = {
   { NULL,          0, NULL      }
 };
 
-uid new_uid (thread t) {
-  uid u = { t.id, t.next_frame_id++ };
+uid new_uid (thread *t) {
+  uid u = { (void *) t, t->next_frame_id++ };
   return u;
+}
+
+void dies_uid(uid u) {
+  thread *t = find_thread(u);
+  assert(t != NULL);
+
+  t->live_list = interval_list_remove(t->live_list, u.frame);
+}
+
+int islive_uid(uid u) {
+  thread *t = find_thread(u);
+  assert(t != NULL);
+
+  return interval_list_member(t->live_list, u.frame);
+}
+
+thread *find_thread(uid u) {
+  return (thread *) u.thread;
 }
 
 /* ...
@@ -229,7 +331,34 @@ void check_value_types (void) {
 
 void init(void) {
   check_value_types();
-  /* register_operators(operators); */
+  /* FIX : register_operators(operators); */
+}
+
+thread *init_thread(void *stack_space, void *stack_limit) {
+  int    space_size;
+  thread *t = (thread *) malloc(sizeof(thread));
+  assert(t != NULL);
+
+  t->next_frame_id = 0;
+  
+  space_size = (stack_limit - stack_space) / 3;
+
+  /* we carve out areas for stackdata, callstack, locals from the memory block
+     handed into init_thread */
+
+  t->callstack_base  = (actstack)  stack_space;
+  t->callstack_limit = (actptr)    (stack_space + space_size);
+  t->callstack_free  = t->callstack_base;
+
+  t->locals_base     = (stack)     (stack_space + space_size);
+  t->locals_limit    = (sptr)      (stack_space + (2 * space_size));
+  t->locals_free     = t->locals_base;
+
+  t->stackdata_base  = (datastack) (stack_space + (2 * space_size));
+  t->stackdata_limit = (dataptr)   stack_limit;
+  t->stackdata_free  = t->stackdata_base;
+
+  t->live_list       = interval_list_new();
 }
 @ 
 
@@ -240,11 +369,11 @@ Now, a sample operator implementation for a ``signed multiple and truncate'' ope
 /* these will be mostly macro calls to one of:
 
   BINARYOP(NAME, EXP, X, Y, TX, TY, T, BX, BY, B)
-   UNARYOP(NAME, EXP, X, TX, BX, B)
+   UNARYOP(NAME, EXP, X, TX, T, BX, B)
  T_UNARYOP(NAME, EXP, X, T, B)
 T_BINARYOP(NAME, EXP, X, Y, T, B)
 
-   where Ts are C types   : {u_int_N, s_int_N, float_N} where N is 1/8/16/32/64
+   where Ts are C types   : {u_int_N, s_int_N, floatN} where N is 1/8/16/32/64
      and Bs are C-- types : {bits1, bits8, bits16, bits32, bits64}
  */
 
@@ -252,15 +381,19 @@ T_BINARYOP(NAME, EXP, X, Y, T, B)
 /* FLOAT operators begin here. */
 /* fcmp */
 /* (floating-pt comparisons?) */
-BINARYOP(feq, v1 == v2, v1, v2, float32, float32, bool, bits32, bits32, bits1)
-BINARYOP(fgt, v1 >  v2, v1, v2, float32, float32, bool, bits32, bits32, bits1)
-BINARYOP(fle, v1 <= v2, v1, v2, float32, float32, bool, bits32, bits32, bits1)
-BINARYOP(flt, v1 <  v2, v1, v2, float32, float32, bool, bits32, bits32, bits1)
-BINARYOP(fne, v1 != v2, v1, v2, float32, float32, bool, bits32, bits32, bits1)
-/* fordered */
+BINARYOP(feq, v1 == v2, v1,v2, float32, float32, bool, float32, float32, bits1)
+BINARYOP(fge, v1 >= v2, v1,v2, float32, float32, bool, float32, float32, bits1)
+BINARYOP(fgt, v1 >  v2, v1,v2, float32, float32, bool, float32, float32, bits1)
+BINARYOP(fle, v1 <= v2, v1,v2, float32, float32, bool, float32, float32, bits1)
+BINARYOP(flt, v1 <  v2, v1,v2, float32, float32, bool, float32, float32, bits1)
+BINARYOP(fne, v1 != v2, v1,v2, float32, float32, bool, float32, float32, bits1)
+/* fordered   */
 /* funordered */
 /* NaN */
-/* (rounding modes?) */
+NULLARYOP(round_down,    { v1 = ROUND_DOWN;    }, v1, u_int8, bits8)
+NULLARYOP(round_up,      { v1 = ROUND_UP;      }, v1, u_int8, bits8)
+NULLARYOP(round_nearest, { v1 = ROUND_NEAREST; }, v1, u_int8, bits8)
+NULLARYOP(round_zero,    { v1 = ROUND_ZERO;    }, v1, u_int8, bits8)
 /* f2f */
 /* f2i */
 /* i2f */
@@ -269,10 +402,13 @@ BINARYOP(fne, v1 != v2, v1, v2, float32, float32, bool, bits32, bits32, bits1)
 /* fdiv */
 /* fmul */
 /* fmulx */
-/* fabs */
-/* fneg */
+T_UNARYOP(fabs, fabsf(v1), v1, float, float32)
+T_UNARYOP(fneg, -(v1),     v1, float, float32)
 /* fsqrt */
-/* (floating-pt constants {-inf, -0, +inf, +0}) */
+/* minf  */
+/* mzero */
+/* pinf  */
+/* pzero */
 /* FLOAT operators end here. */
 
 /* INTEGER operators begin here. */
@@ -284,39 +420,40 @@ T_UNARYOP (bit,     v1                , v1,     bool   , bits1 )
 /* bitTransfer */
 T_UNARYOP (bool,    v1                , v1,     bool   , bits1 )
 /* borrow      */
+
 /* carry       */
 T_UNARYOP (com,     ~v1               , v1,     u_int16, bits16)
 T_BINARYOP(conjoin, (v1 != 0 ? v2 : 0), v1, v2, bool   , bits1 )
 T_BINARYOP(disjoin, (v1 != 0 ? 1 : v2), v1, v2, bool   , bits1 )
 /* div  */
-/* divu */
-BINARYOP(eq, v1 == v2, v1, v2, u_int16, u_int16, bool  , bits16, bits16, bits1)
-BINARYOP(ge, v1 >= v2, v1, v2, s_int16, s_int16, bool  , bits16, bits16, bits1)
-BINARYOP(geu,v1 >= v2, v1, v2, u_int16, u_int16, bool  , bits16, bits16, bits1)
-BINARYOP(gt, v1 >  v2, v1, v2, s_int16, s_int16, bool  , bits16, bits16, bits1)
-BINARYOP(gtu,v1 >  v2, v1, v2, u_int16, u_int16, bool  , bits16, bits16, bits1)
-BINARYOP(le, v1 <= v2, v1, v2, s_int16, s_int16, bool  , bits16, bits16, bits1)
-BINARYOP(leu,v1 <= v2, v1, v2, u_int16, u_int16, bool  , bits16, bits16, bits1)
+BINARYOP(divu,v1 / v2,  v1, v2, u_int16, u_int8,  u_int8,bits16, bits8,  bits8)
+BINARYOP(eq,  v1 == v2, v1, v2, u_int16, u_int16, bool , bits16, bits16, bits1)
+BINARYOP(ge,  v1 >= v2, v1, v2, s_int16, s_int16, bool , bits16, bits16, bits1)
+BINARYOP(geu, v1 >= v2, v1, v2, u_int16, u_int16, bool , bits16, bits16, bits1)
+BINARYOP(gt,  v1 >  v2, v1, v2, s_int16, s_int16, bool , bits16, bits16, bits1)
+BINARYOP(gtu, v1 >  v2, v1, v2, u_int16, u_int16, bool , bits16, bits16, bits1)
+BINARYOP(le,  v1 <= v2, v1, v2, s_int16, s_int16, bool , bits16, bits16, bits1)
+BINARYOP(leu, v1 <= v2, v1, v2, u_int16, u_int16, bool , bits16, bits16, bits1)
 /* mod  */
-/* modu */
+BINARYOP(modu,v1 % v2, v1, v2, u_int16, u_int8,  u_int8, bits16, bits8,  bits8)
 T_BINARYOP(mul,     v1 * v2           , v1, v2, s_int16, bits16)
 T_BINARYOP(mulu,    v1 * v2           , v1, v2, u_int16, bits16)
-BINARYOP(ne, v1 != v2, v1, v2, u_int16, u_int16, bool  , bits16, bits16, bits1)
+  BINARYOP(ne, v1 != v2, v1, v2, u_int16, u_int16, bool, bits16, bits16, bits1)
 T_UNARYOP (neg,     -v1               , v1    , s_int16, bits16)
 T_UNARYOP (not,     !v1               , v1    , bool   , bits1 )
 T_BINARYOP(or ,     v1 | v2           , v1, v2, u_int16, bits16)
 /* popcnt */
-/* quot   */
-/* rem    */
+BINARYOP(quot, v1 / v2, v1, v2, u_int16, u_int8, u_int8, bits16, bits8, bits8)
+BINARYOP(rem,  v1 % v2, v1, v2, u_int16, u_int8, u_int8, bits16, bits8, bits8)
 /* rotl   */
 /* rotr   */
-T_BINARYOP(shl,     v1 << v2          , v1, v2, u_int16, bits16)
+T_BINARYOP(shl ,    v1 << v2          , v1, v2, u_int16, bits16)
 /* shra   */
 T_BINARYOP(shrl,    v1 >> v2          , v1, v2, u_int16, bits16)
-T_BINARYOP(sub,     v1 - v2           , v1, v2, s_int16, bits16)
-/* sx  */
-T_BINARYOP(xor,     v1 ^ v2           , v1, v2, s_int16, bits16)
-/* zx */
+T_BINARYOP(sub ,    v1 - v2           , v1, v2, s_int16, bits16)
+UNARYOP   (sx  ,    (s_int16) v1      , v1, s_int8, s_int16, bits8, bits16)
+T_BINARYOP(xor ,    v1 ^ v2           , v1, v2, s_int16, bits16)
+UNARYOP   (zx  ,    (u_int16) v1      , v1, u_int8, u_int16, bits8, bits16)
 /* INTEGER operators end here. */
 
 @ 
@@ -324,51 +461,54 @@ T_BINARYOP(xor,     v1 ^ v2           , v1, v2, s_int16, bits16)
 Finally, we get to the main part of the interpreter.  We start by initializing the internal state of the interpreter:
 
 <<initialize interpreter internals>>=
-  /* pc is passed in!               */
+  bytecode *pc;              /* pc  */
   sptr     values;           /* V   */
+
   sptr     locals;           /* rho */
+  sptr     locals_end;
+
   dataptr  stackdata;        /* sp  */
+  dataptr  stackdata_end;
+
   value    *globals;         /* g   */
   /* sigma is left implicit!        */
   sptr     arguments;        /* A   */
   uid      u;                /* u   */
-  actptr   callstack;        /* s   */
 
-  int      space_size = (stack_limit - stack_space) / 3;
+  /* s is kept in t->stackdata_X */
+  thread   *t = init_thread(stack_space, stack_limit);
 
-  /* we carve out areas for stackdata, callstack, locals from the memory block
-     handed into run_interp
-   */
-
-  stackdatabase    = stack_space;
-  stackdatalimit   = stack_space + space_size;
-  stackdata        = stackdatabase;
-
-  localsbase       = stack_space + space_size;
-  localslimit      = stack_space + (2 * space_size);
-  locals           = localsbase;
-
-  t.callstackbase  = stack_space + (2 * space_size);
-  t.callstacklimit = stack_limit;
-  t.callstack      = t.callstackbase;
-  callstack        = t.callstack;
+  assert(start != NULL);
+  pc = start->pc;
 
   /* we have to malloc new memory for the values, arguments stacks */
 
-  valuesbase       = (sptr) malloc(sizeof(value) * DEF_VALUESSTACK_SIZE);
-  assert(valuesbase != NULL);
-  valueslimit      = valuesbase + DEF_VALUESSTACK_SIZE;
-  values           = valuesbase - 1;
+  values_base        = (sptr) malloc(sizeof(value) * DEF_VALUESSTACK_SIZE);
+  assert(values_base != NULL);
+  values_limit       = values_base + DEF_VALUESSTACK_SIZE;
+  values             = values_base - 1;
 
-  argumentsbase    = (sptr) malloc(sizeof(value) * DEF_ARGUMENTSSTACK_SIZE);
-  assert(argumentsbase != NULL);
-  argumentslimit   = argumentsbase + DEF_ARGUMENTSSTACK_SIZE;
-  arguments        = argumentsbase - 1;
+  arguments_base     = (sptr) malloc(sizeof(value) * DEF_ARGUMENTSSTACK_SIZE);
+  assert(arguments_base != NULL);
+  arguments_limit    = arguments_base + DEF_ARGUMENTSSTACK_SIZE;
+  arguments          = arguments_base - 1;
 
   /* we know precisely how much to malloc for globals */
 
-  globals          = (value *) malloc(sizeof(value) * num_globals);
+  globals            = (value *) malloc(sizeof(value) * num_globals);
   assert(globals != NULL);
+
+  /* we allocate locals-space and stackdata-space for the current activation */
+
+  locals             = t->locals_free;
+  t->locals_free    += start->num_locals;
+  locals_end         = t->locals_free;
+
+  stackdata          = t->stackdata_free;
+  t->stackdata_free += start->stackdata_size;
+  stackdata_end      = t->stackdata_free;
+
+  /* generate new uid in thread t */
 
   u = new_uid(t);
 @ 
@@ -376,68 +516,338 @@ Finally, we get to the main part of the interpreter.  We start by initializing t
 And now for the main loop:
 
 <<main interpreter loop>>=
-void run_interp(bytecode *pc, int num_globals, thread t, void *stack_space, 
+void run_interp(procedure *start, int num_globals, void *stack_space, 
                 void *stack_limit)
 {
   <<initialize interpreter internals>>
   for (;;) {
     match pc to
-    | operator(n)      => values = (*operators[n].f)(values);
-/*  | var(n)           => vsp = var_funs[n](values, vsp, vlimit); */
-    | store_local(n)   => UNDERFLOW_CHECK(values, 1);
-	                      locals[n] = POP(values);
-    | fetch_local(n)   => OVERFLOW_CHECK(values, 1);
-                          PUSH(locals[n], values);
-    | store_global(n)  => UNDERFLOW_CHECK(values, 1);
-                          globals[n] = POP(values);
-    | fetch_global(n)  => OVERFLOW_CHECK(values, 1);
-                          PUSH(globals[n], values);
-    | gstore_local(n)  => UNDERFLOW_CHECK(values, 2);
-                          if (bool_true(VIEW(STACK_ELT(values, 0), bool))) {
-                              STACK_ELT(values, -1) = locals[n];
-                              values--;
-                          } else {
-                              values -= 2;
-                          }
-    | gstore_global(n) => UNDERFLOW_CHECK(values, 2);
-                          if (bool_true(VIEW(STACK_ELT(values, 0), bool))) {
-                              STACK_ELT(values, -1) = globals[n];
-                              values--;
-                          } else {
-                              values -= 2;
-                          }
-    | PUSH_ARG         => UNDERFLOW_CHECK(values, 1);
-                          OVERFLOW_CHECK(arguments, 1);
-                          PUSH(POP(values), arguments);
-    | POP_ARG          => OVERFLOW_CHECK(values, 1);
-	                      UNDERFLOW_CHECK(arguments, 1);
-                          PUSH(POP(arguments), values);
-    | GOTO             => UNDERFLOW_CHECK(values, 1);
-                          pc = VIEW(POP(values), bytecode *);
-    | CBRANCHT(a)      => UNDERFLOW_CHECK(values, 1);
-                          if (bool_true(VIEW(POP(values), bool))) {
-                              pc = (bytecode *) a;
-                          }
-    | CBRANCHF(a)      => UNDERFLOW_CHECK(values, 1);
-                          if (bool_false(VIEW(POP(values), bool))) {
-                              pc = (bytecode *) a;
-                          }
-    | BRANCHTF(a, b)   => UNDERFLOW_CHECK(values, 1);
-                          if (bool_true(VIEW(POP(values), bool))) {
-                              pc = (bytecode *) a;
-                          } else {
-                              pc = (bytecode *) b;
-                          }
-    | HALT             => return;
+    | PUSH(v)           => OVERFLOW_CHECK(values, 1);
+                           PUSH(v, values);
+
+    | apply_operator(n) => values = (*operators[n].f)(values);
+
+    | store_local(n)    => UNDERFLOW_CHECK(values, 1);
+	                       locals[n] = POP(values);
+
+    | fetch_local(n)    => OVERFLOW_CHECK(values, 1);
+                           PUSH(locals[n], values);
+
+    | store_global(n)   => UNDERFLOW_CHECK(values, 1);
+                           globals[n] = POP(values);
+
+    | fetch_global(n)   => OVERFLOW_CHECK(values, 1);
+                           PUSH(globals[n], values);
+
+    | gstore_local(n)   => UNDERFLOW_CHECK(values, 2);
+                           if (bool_true(VIEW(STACK_ELT(values, 0), bool))) {
+                               STACK_ELT(values, -1) = locals[n];
+                               values--;
+                           } else {
+                               values -= 2;
+                           }
+
+    | gstore_global(n)  => UNDERFLOW_CHECK(values, 2);
+                           if (bool_true(VIEW(STACK_ELT(values, 0), bool))) {
+                               STACK_ELT(values, -1) = globals[n];
+                               values--;
+                           } else {
+                               values -= 2;
+                           }
+
+    | PUSH_ARG          => UNDERFLOW_CHECK(values, 1);
+                           OVERFLOW_CHECK(arguments, 1);
+                           PUSH(POP(values), arguments);
+
+    | POP_ARG           => OVERFLOW_CHECK(values, 1);
+	                       UNDERFLOW_CHECK(arguments, 1);
+                           PUSH(POP(arguments), values);
+
+    | GOTO              => UNDERFLOW_CHECK(values, 1);
+                           pc = VIEW(POP(values), bytecode *);
+
+    | CBRANCHT(a)       => UNDERFLOW_CHECK(values, 1);
+                           if (bool_true(VIEW(POP(values), bool))) {
+                               pc = (bytecode *) a;
+                           }
+
+    | CBRANCHF(a)       => UNDERFLOW_CHECK(values, 1);
+                           if (bool_false(VIEW(POP(values), bool))) {
+                               pc = (bytecode *) a;
+                           }
+
+    | BRANCHTF(a, b)    => UNDERFLOW_CHECK(values, 1);
+                           if (bool_true(VIEW(POP(values), bool))) {
+                               pc = (bytecode *) a;
+                           } else {
+                               pc = (bytecode *) b;
+                           }
+
+    | CMM_CALL(kc,ku,kr) =>procedure  *proc;
+                           actptr      saved;
+
+                           ASSERT_EMPTY(values);
+                           UNDERFLOW_CHECK(values, 1);
+                           proc = VIEW(POP(values), procedure *);
+                           assert(proc != NULL);
+
+                           /* save necessary info in activation record */
+                           saved = t->callstack_free++;
+                           assert(t->callstack_free <= t->callstack_limit);
+
+                           saved->pc            = pc;
+                           saved->locals        = locals;
+                           saved->locals_end    = locals_end;
+                           saved->stackdata     = stackdata;
+                           saved->stackdata_end = stackdata_end;
+
+                           saved->kappa.also_cuts_to    = (bytecode **) kc;
+						   saved->kappa.also_unwinds_to = (bytecode **) ku;
+						   saved->kappa.also_returns_to = (bytecode **) kr;
+						   /* FIX need to save aborts as well!!
+                              NOTE that ``also aborts'' defaults to 1 (true) */
+
+                           saved->u             = u;
+
+                           /* allocate memory, update state of the machine */
+                           pc            = proc->pc;
+
+                           locals        = t->locals_free;
+                           locals_end    = (t->locals_free +=
+														proc->num_locals);
+                           assert(t->locals_free <= t->locals_limit);
+
+                           stackdata     = t->stackdata_free;
+                           stackdata_end = (t->stackdata_free += 
+														proc->stackdata_size);
+                           assert(t->stackdata_free <= t->stackdata_limit);
+
+                           u             = new_uid(t);
+
+    | CMM_TAIL_CALL     => procedure *proc;
+
+                           ASSERT_EMPTY(values);
+                           UNDERFLOW_CHECK(values, 1);
+                           proc = VIEW(POP(values), procedure *);
+                           assert(proc != NULL);
+
+                           pc   = proc->pc;
+
+                           /* for now, make sure there's enough room on locals
+                              and stackdata stacks
+                            */
+                           assert(locals_end    <= t->locals_limit);
+                           assert(stackdata_end <= t->stackdata_limit);
+
+                           /* locals ptr stays because we throw out old rho */
+                           /* stackdata ptr stays for same reason */
+
+                           t->locals_free = locals_end = locals + 
+	 													 proc->num_locals;
+                           t->stackdata_free = stackdata_end = stackdata + 
+				 										 proc->stackdata_size;
+
+                           /* deal with uid : */
+                           dies_uid(u);
+                           u = new_uid(t);
+
+    | RETURN(i, count)  => activation *caller;
+
+						   ASSERT_EMPTY(values);
+						   assert(i <= count);
+						   
+						   /* FIX for now, assert we don't walk off stack */
+						   assert(t->callstack_free > t->callstack_base);
+
+                           caller = t->callstack_free--;
+						   
+						   /* FIX for now we don't assert that m = |returns| */
+						   
+                           pc     = caller->kappa.also_returns_to[i];
+
+						   locals        = caller->locals;
+						   locals_end    = caller->locals_end;
+						   stackdata     = caller->stackdata;
+                           stackdata_end = caller->stackdata_end;
+						   
+						   /* reclaim freed space */
+						   t->locals_free    = locals_end;
+					   	   t->stackdata_free = stackdata_end;
+
+                           dies_uid(u);
+						   u = caller->u;
+						   
+    | CUT               => continuation *cont;
+                           actptr a, saved;
+
+                           ASSERT_EMPTY(values);
+                           UNDERFLOW_CHECK(values, 1);
+                           cont = VIEW(POP(values), continuation *);
+                           assert(cont != NULL);
+                           assert(cont->dest_act != NULL);
+
+                           assert(islive_uid(cont->dest_act->u));
+
+                           /* FIX : look in kappa annotations in activation 
+                              pointed to by called_by to make sure that
+                              cont->pc is in kappa.also_cuts_to
+                            */
+
+                           if (cont->dest_act->u.thread != u.thread) {
+                               /* save needed info in activation record */
+                               saved = t->callstack_free++;
+                               assert(t->callstack_free <= t->callstack_limit);
+ 
+                               saved->pc            = pc;
+                               saved->locals        = locals;
+                               saved->locals_end    = locals_end;
+                               saved->stackdata     = stackdata;
+                               saved->stackdata_end = stackdata_end;
+                               /* FIX : store call-site annotations here ?? */
+                               saved->u             = u;
+ 
+                               /* jump over to destination thread */
+                               t = find_thread(u);
+                           } else if (cont->dest_act->u.frame == u.frame) {
+                               /* if we're here, then we're cutting to a
+                                  continuation in the current activation */
+                               /* FIX : for now, just treat like GOTO */
+                               pc = cont->pc;
+                               continue;
+                           }
+                           for (a = t->callstack_free - 1; a > cont->dest_act;
+                                a--)
+                           {
+                               /* FIX : update when annotations are figured out
+                                */
+                               assert(a - 1 >= t->callstack_base);
+                               /* assert((a - 1)->annotations.also_aborts); */
+                               dies_uid(a->u);
+                           }
+ 
+                           /* a should now equal cont->dest_act */
+                           /* update state of machine */
+                           pc            = cont->pc;
+                           locals        = cont->dest_act->locals;
+                           locals_end    = cont->dest_act->locals_end;
+                           stackdata     = cont->dest_act->stackdata;
+                           stackdata_end = cont->dest_act->stackdata_end;
+                           u             = cont->dest_act->u;
+ 
+                           /* recover freed memory */
+                           t->callstack_free = cont->dest_act;
+                           t->locals_free    = cont->dest_act->locals_end;
+                           t->stackdata_free = cont->dest_act->stackdata_end;
+ 
+    | HALT              => return;
     endmatch
   }
+
+  <<shut down interpreter>>
 }
 @ 
 
-And now we can put it all together:
+\section{Generating the Bytecode to Interpret}
+
+In this section, we see how to generate bytecode from an external Lua file.  First, our code is obligated to define functions [[mc_alloc]] and [[mc_alloc_closure]] for the NJ Machine-Code Toolkit; these functions simply must allocate memory to be used by Toolkit-generated code as ``relocatable memory blocks.''
+
+<<bytecode generation>>=
+extern void *mc_alloc(int size, Mc_alloc_pool pool) {
+  void *a = (void *) malloc(size);
+  assert(a != NULL);
+  return a;
+}
+
+extern RClosure mc_alloc_closure(unsigned size, RBlock dest_block, 
+								 unsigned dest_lc)
+{
+  /* FIX this function doesn't do what it's supposed to do */
+
+  /* note: RClosure is a typedef'd struct pointer */
+  RClosure a = (RClosure) malloc(size);
+  assert(a != NULL);
+  return a;
+}
+
+@ 
+
+Next, we proceed onto our [[main]] function, in which we will read assembly code from an external Lua source file and emit instruction bytecode into memory.  Our previously defined [[run_interp]] function should be able to properly interpret this bytecode, given a program counter and sufficient memory resources.
+
+<<bytecode generation>>=
+int main(int argc, char *argv[])
+{
+  int       err_code;
+  lua_State *lua_interp;
+  RBlock    program_memory;
+
+  if (argc != 2) {
+    printf("For now, interp accepts only one argument.\n");
+	printf("usage: interp <filename>\n");
+	return 1;
+  }
+
+  <<prepare for encoding library>>
+  <<initialize a Lua interpreter>>
+
+  <<run Lua source file>>
+
+  /* call run_interp here */
+
+  <<gracefully shut down>>
+
+  return 0;
+}
+@ 
+
+Before using the encoding library, we must first prepare:
+
+<<prepare for encoding library>>=
+/* FIX for now we use size of 0 */
+program_memory = block_new(0);
+assert(block_defined(program_memory));
+
+set_block(program_memory);
+@ 
+
+To initialize the Lua interpreter:
+
+<<initialize a Lua interpreter>>=
+
+/* FIX : for now, send lua_open 0; it will default to a stacksize of 1024 */
+lua_interp = lua_open(0);
+tolua_encode_open(lua_interp);
+
+@ 
+
+And then to run a Lua source file:
+
+<<run Lua source file>>=
+err_code = lua_dofile(lua_interp, argv[1]);
+switch (err_code) {
+ case 0:
+   break;
+ case LUA_ERRRUN:
+   printf("error: run-time error while interpreting %s\n", argv[1]);
+   break;
+ case LUA_ERRSYNTAX:
+   printf("error: a syntax error was found in %s\n", argv[1]);
+   break;
+ case LUA_ERRMEM:
+   printf("error: memory allocation error [%s]\n", argv[1]);
+   break;
+ case LUA_ERRERR:
+   printf("error: unrecoverable internal error [%s]\n", argv[1]);
+   break;
+ case LUA_ERRFILE:
+   printf("error: cannot open file %s\n", argv[1]);
+}
+
+@ 
+
+And finally, we can put it all together:
 
 <<decode.m>>=
-<<preprocessor directives>>
+#include "interp.h"
 
 <<global variable definitions>>
 
@@ -445,6 +855,8 @@ And now we can put it all together:
 <<initialization>>
 
 <<main interpreter loop>>
+
+<<bytecode generation>>
 @ 
 
 \section{Missing Details}
@@ -455,13 +867,15 @@ The missing \texttt{\#include} and \texttt{\#define} directives:
 #include <assert.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include "interp.h"
+#include <math.h>
+#include <lua.h>
+#include <lualib.h>
+#include "intervals.h"
+#include "mclib.h"
+#include "encode.h"
 
 #define DEF_VALUESSTACK_SIZE    65536
 #define DEF_ARGUMENTSSTACK_SIZE 65536
-#define DEF_LOCALSSTACK_SIZE    65536
-#define DEF_STACKDATASTACK_SIZE 65536
-#define DEF_CALLSTACK_SIZE      65536
 
 /* STACK_ELT(S, I) evaluates to the value on stack S indexed by I, such that:
   
@@ -483,15 +897,34 @@ The missing \texttt{\#include} and \texttt{\#define} directives:
 /* UNDERFLOW_CHECK(S, N) checks to make sure that popping N elements off stack
    S will not cause it to underflow
  */
-#define UNDERFLOW_CHECK(S, N) (assert((S) - (S##base) > -1))
+#define UNDERFLOW_CHECK(S, N) (assert((S) - (S##_base) > -1))
 
 /* OVERFLOW_CHECK(S, N) checks to make sure that pushing N elements onto stack
    S will not cause it to overflow
  */
-#define OVERFLOW_CHECK(S, N)  (assert((S##limit) - (S) >= 0))
+#define OVERFLOW_CHECK(S, N)  (assert((S##_limit) - (S) >= 0))
 
 /* VIEW(LVALUE, T) views LVALUE with C type T */
 #define VIEW(LVALUE, T)       (*((T *) (&(LVALUE))))
+
+
+
+/* FLOAT_BINARY(NAME, EXP, X, Y, TX, TY, T, BX, BY, B, ROUNDMODE)
+
+   generates a function that takes an sptr, pops 2 values off the stack to
+   which it points, evaluates floating-point computation EXP with rounding
+   mode ROUNDMODE and pushes the result onto the stack, and returns an updated
+   sptr
+
+   NAME is the function's name stem
+   EXP  is the expression to be evaluated
+   X and Y are the names of the two values as EXP calls them
+   B is the C-- type for the result value
+   T is the C   type for the result value
+   BX and BY are the C-- types for input values X and Y, respectively
+   TX and TY are the C   types for input values X and Y, respectively
+   ROUNDMODE is one of { round_down, round_up, 
+*/
 
 /* BINARYOP(NAME, EXP, X, Y, TX, TY, T, BX, BY, B)
 
@@ -500,6 +933,7 @@ The missing \texttt{\#include} and \texttt{\#define} directives:
    returns an updated sptr
 
    NAME is the function's name stem
+   EXP  is the expression to be evaluated
    X and Y are the names of the two values as EXP calls them
    B is the C-- type for the result value
    T is the C   type for the result value
@@ -525,6 +959,7 @@ sptr NAME##_##B (sptr values) {              \
    an updated sptr
 
    NAME is the function's name stem
+   EXP  is the expression to be evaluated
    X    is the name of the input value as EXP calls it
    B    is the C-- type for the result value
    T    is the C   type for the result value
@@ -542,6 +977,40 @@ sptr NAME##_##B (sptr values) {              \
   return values;                             \
 }
 
+/* IUNARYOP is an imperative form of UNARYOP; destroys value at values */
+#define IUNARYOP(NAME, STMS, X, TX, T, BX, B)  \
+\
+sptr NAME##_##B (sptr values) {              \
+  TX X;                                      \
+  UNDERFLOW_CHECK(values, 1);                \
+  X = VIEW(STACK_ELT(values, 0).BX, TX);     \
+  STMS;                                      \
+  VIEW(STACK_ELT(values, 0).B, T) = X;       \
+  return values;                             \
+}
+
+/* NULLARYOP(NAME, STMS, X, T, B)
+
+   generates a function that takes an sptr, evaluates EXP and pushes the result
+   onto the stack pointed to by sptr, and returns an updated sptr
+
+   NAME is the function's name stem
+   STMS are the C statements to be evaluated to compute the return value
+   X    is the name of the variable to be used to compute the return value
+   T    is the C   type for the result value
+   B    is the C-- type for the result value
+*/
+
+#define NULLARYOP(NAME, STMS, X, T, B) \
+\
+sptr NAME##_##B (sptr values) {            \
+  T X;                                     \
+  OVERFLOW_CHECK(values, 1);               \
+  STMS                                     \
+  VIEW(STACK_ELT(values, 1).B, T) = X;     \
+  return values + 1;                       \
+}
+
 /* T_BINARYOP and T_UNARYOP are wrappers for cousins BINARYOP and UNARYOP
 
    these wrappers assume that all input values are the same type as result
@@ -554,41 +1023,75 @@ BINARYOP(NAME, EXP, X, Y, T, T, T, B, B, B)
 #define T_UNARYOP(NAME, EXP, X, T, B)        \
 UNARYOP(NAME, EXP, X, T, T, B, B)
 
+/* same for below */
+
+#define T_IUNARYOP(NAME, STMS, X, T, B)  \
+IUNARYOP(NAME, STMS, X, T, T, B, B)
+
 #define bool_true(B)  ((B) != ((bool) 0))
 #define bool_false(B) ((B) == ((bool) 0))
+
+#define ASSERT_EMPTY(V) (assert((V) == (V##_base)))
 @
 
 The missing definitions of global variables:
 
 <<global variable definitions>>=
-static stack     valuesbase;
-static sptr      valueslimit;
+static stack     values_base  = NULL;
+static sptr      values_limit = NULL;
 
-static stack     argumentsbase;
-static sptr      argumentslimit;
-
-static stack     localsbase;
-static sptr      localslimit;
-
-static datastack stackdatabase;
-static dataptr   stackdatalimit;
+static stack     arguments_base  = NULL;
+static sptr      arguments_limit = NULL;
 
 @ 
 
 Function prototypes for code implemented here:
 
 <<interp.h>>=
+<<preprocessor directives>>
+
 <<type definitions>>
 
-void run_interp(bytecode *pc, int num_globals, thread t, void *stack_space,
+void run_interp(procedure *start, int num_globals, void *stack_space,
                 void *stack_limit);
 
 /* Initialization Helper Functions: */
-uid  new_uid(thread t);
-void check_value_types(void);
-void init(void);
+void   check_value_types(void);
+
+void   init(void);
+thread *init_thread(void *stack_space, void *stack_limit);
+thread *find_thread(uid u);
+
+uid    new_uid(thread *t);
+void   dies_uid(uid u);
+int    islive_uid(uid u);
 
 /* how about operator implementations, even though they're macro'ed ? */
+@ 
+
+Here is how we shut down the interpreter:
+
+<<shut down interpreter>>=
+
+/* free malloc'd space */
+
+free(values_base);
+values_base = NULL;
+
+free(arguments_base);
+arguments_base = NULL;
+
+free(globals);
+@ 
+
+Here is how we gracefully shut down the whole program:
+
+<<gracefully shut down>>=
+tolua_encode_close(lua_interp);
+lua_close(lua_interp);
+
+/* FIX do we have to shut down the encoder somehow?  free memory? */
+
 @ 
 
 And some more information for decoding bytecodes:
@@ -599,3 +1102,13 @@ fetch 8  using "*%a"
 fetch 16 using "%a[0] + (%a[1] << 8)"
 fetch 32 using "%a[0] + (%a[1] << 8) + (%a[2] << 16) + (%a[3] << 24)"
 @
+
+\section{Personal Notes}
+
+I could probably remove \texttt{locals\_end} and \texttt{stackdata\_end} as local variables in function \texttt{run\_interp}; but they \emph{must} remain stored away in an \texttt{activation} record at all non-tail calls.
+
+Can probably find a better way of uniquely identifying threads.
+
+Do nullary operations have to have a type appended to their names?  (e.g., [[round\_down\_bits32]])
+
+NOW DO floating-pt computation with rounding
