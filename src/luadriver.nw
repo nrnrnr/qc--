@@ -615,7 +615,7 @@ linking.
 
 We have to be careful when using tables as lists, as tables do not
 guarantee any order when traversed using [[next()]]. Therefore we rely
-on indices. All out tables are indexed by consecutive numbers $1 \dots
+on indices. All our tables are indexed by consecutive numbers $1 \dots
 n$.
 
 <<Lua Boot Script>>=
@@ -774,14 +774,24 @@ end
 
 function CMD.asm2obj(file,out)
     local obj = out or Util.chopsuffix(file) .. ".o"
-    local cmd = format ("%s %s -o %s %s"
-                       , As.path
-                       , As.options
-                       , obj
-                       , file
-                       )
+    local cmd
+    
+    if backend == Backend.interp then
+        cmd = format ("cp %s %s"
+                     , file
+                     , obj
+                     )
+    else -- regular case
+        cmd = format ("%s %s -o %s %s"
+                     , As.path
+                     , As.options
+                     , obj
+                     , file
+                     )
+    end 
     CMD.exec(cmd)
     return obj
+    
 end
 @
 
@@ -805,11 +815,8 @@ optional output file.
 <<Lua Boot Script>>=
 function CMD.link(objs,out)
     local exe = out or "a.out"
-    local cmd = format ("%s %s -o %s"
-                       , Ld.path
-                       , Ld.options
-                       , exe
-                       )
+    local cmd 
+    
     local i = 1
     while i <= objs.n do
         if type(objs[i]) == "string" then
@@ -817,6 +824,15 @@ function CMD.link(objs,out)
         end    
         i = i + 1
     end
+    if backend == Backend.interp then
+        cmd = format ("%s %s -o %s"
+                     , Ld.path
+                     , Ld.options
+                     , exe
+                     )
+    else
+        error("cannot link lua files at the moment")
+    end    
     CMD.exec(cmd)
     return exe
 end    

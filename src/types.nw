@@ -62,6 +62,9 @@ The result of a multiplication is twice as wide a the operands. This
 constraint cannot be easily expressed in the above formalism using bound
 variables. We therefore have to employ a little hack to express it.
 
+The same goes the other way round, the result of a [[div]] operator is
+half the width of its operands.
+
 % ------------------------------------------------------------------ 
 \subsection{Interface (Types)}
 % ------------------------------------------------------------------ 
@@ -87,9 +90,10 @@ type 'a t       = Bool
                 | Bits of 'a 
                 
 type key        = int
-type size       = Const of int
-                | Var   of key
-                | Var2  of key      (* see above - better name?? *)
+type size       = Const     of int
+                | Var       of key
+                | Double    of key      
+                | Half      of key
 
 type ty         = int  t
 @
@@ -188,12 +192,13 @@ code pointer type [[code]], and the native data pointer type.  We
 define types for them here, but only for the moment. 
 
 <<abbrevs>>=
-val bitsc  : int -> size t              (* fixed/constant size       *)
-val bitsv  : key -> size t              (* variable size             *)
-val bitsv2 : key -> size t              (* doubled width - see above *)
-val bits   : 'a -> 'a t                 (* polymorphic size          *)
-val bool   : 'a t                       (* bool                      *)
-val proc   : size t list -> size t -> tyscheme   (* build proc type  *)
+val fixbits : int -> size t              (* fixed/constant size       *)
+val var     : key -> size t              (* variable size             *)
+val double  : key -> size t              (* doubled width - see above *)
+val half    : key -> size t              (* halfed width  - see above *)
+val bool    : 'a t                       (* bool                      *)
+val bits    : 'a -> 'a t
+val proc    : size t list -> size t -> tyscheme   (* build proc type  *)
 @
 
 
@@ -243,13 +248,13 @@ The [[match]] function matches a [[tyscheme]] with a [[ty]] and
 returns a substitution.  In case of a mismatch, [[matchExn]] is
 raised. 
 
-We never expect to see a [[Var2]] constructor during matching. It should
+We never expect to see a [[Double]] constructor during matching. It should
 only show up in the result position of a function type. Since only the
 argument positions are matched, we should never see it here. However,
 a succeeding match can bind a width variable that \emph{is} mentioned in
 a [[Var2]] result position.
 
-\emph{Is it possible to define a general match function where [[Var2]]
+\emph{Is it possible to define a general match function where [[Double]]
 can show up in all positions? -- CL}
 
 <<types.ml>>=
@@ -273,8 +278,10 @@ let subst sigma = function
     | Bits(Const(x))    -> Bits(x)
     | Bits(Var(x))      -> (try Bits(lookup x sigma) with Not_found -> 
                                 E.error "internal error (1) in application")
-    | Bits(Var2(x))     -> (try Bits(2*(lookup x sigma)) with Not_found ->
+    | Bits(Double(x))   -> (try Bits(2*(lookup x sigma)) with Not_found ->
                                 E.error "internal error (2) in application")
+    | Bits(Half(x))     -> (try Bits((lookup x sigma)/2) with Not_found ->
+                                E.error "internal error (3) in application")
 @
 
 The [[appl]] function matches the argument types with the [[size t]]
@@ -315,7 +322,7 @@ The implementation of [[spilt]] uses regular expressions to split off
 a trailing number.
 
 <<types.ml>>=
-let rtlop = Str.regexp "^\([a-z0-9_]*[a-z_]\)\([0-9]+\)?$"
+let rtlop = Str.regexp "^\([A-Za-z0-9_]*[A-Za-z_]\)\([0-9]+\)?$"
 
 let split op =
     let matched n l = Str.matched_group n l in  
@@ -326,23 +333,7 @@ let split op =
             (basename, size)
     else
         Impossible.impossible ("illegal operator? '"^op^"'")
-            
-
-<<old implementation of split>>=
-let split op =
-    let ( *** ) = Lc.seq                              in
-    let isnum c = '0' <= c && c <= '9'                in
-    let num     = Lc.satisfy isnum                    in
-    let alpha   = Lc.satisfy (fun c -> not (isnum c)) in
-    let op'     =     Lc.saveStr (Lc.some alpha)
-                  *** Lc.saveStr (Lc.many num)
-                  *** Lc.eof                          in
-        try match Lc.scan op op' with
-            | l, ["";op]   -> op, None
-            | l, [n ;op]   -> op, Some (int_of_string n)
-            | _            -> assert false
-        with Lc.Error msg  -> assert false
-@
+@            
 
 [[Instantiate]] computes a monomorphic function type from a width list
 and a polymorphic [[tyscheme]] by instantiating it. The $n$-th element
@@ -356,7 +347,10 @@ let instantiate ((args,ret):tyscheme) ~widths  =
         | Bits (Var i)   -> ( try Bits (List.nth widths (i-1)) with 
                             | Failure _ -> assert false
                             ) 
-        | Bits (Var2 i)  -> ( try Bits (2 * (List.nth widths (i-1))) with 
+        | Bits (Double i)-> ( try Bits (2 * (List.nth widths (i-1))) with 
+                            | Failure _ -> assert false
+                            )
+        | Bits (Half i)  -> ( try Bits ((List.nth widths (i-1))/2) with 
                             | Failure _ -> assert false
                             )
         | Bits (Const k) -> Bits k
@@ -369,11 +363,12 @@ let instantiate ((args,ret):tyscheme) ~widths  =
 The implementation of the abbreviations is trivial:
 
 <<types.ml>>=
-let bitsc  x         = Bits(Const(x))
-let bitsv  x         = Bits(Var(x))
-let bitsv2 x         = Bits(Var2(x))
-let bits   x         = Bits(x)
-let bool            = Bool
-let proc args res   = (args,res)
+let fixbits x        = Bits(Const(x))
+let var    x         = Bits(Var(x))
+let double x         = Bits(Double(x))
+let half   x         = Bits(Half(x))
+let bool             = Bool
+let bits x           = Bits(x)
+let proc args res    = (args,res)
 @
 
