@@ -63,9 +63,9 @@ end
 When up to ten types are combined into a single type, 
 the result provides views of all ten:
 <<signatures>>=
-module type COMBINED_TYPE = sig
-  include USERTYPE
-  module type VIEW = TYPEVIEW with type 'a combined = 'a t
+module type COMBINED_CORE = sig
+  type 'a also_t
+  module type VIEW = TYPEVIEW with type 'a combined = 'a also_t
   module T1  : VIEW
   module T2  : VIEW
   module T3  : VIEW
@@ -77,6 +77,14 @@ module type COMBINED_TYPE = sig
   module T9  : VIEW
   module T10 : VIEW
 end
+module type COMBINED_VIEWS = sig
+  type 'a t
+  include COMBINED_CORE with type 'a also_t = 'a t
+end
+module type COMBINED_TYPE = sig
+  include USERTYPE
+  include COMBINED_CORE with type 'a also_t = 'a t
+end
 @ 
 A library module needs zero or more views, plus an \emph{interpreter
 core}, which enables libraries to use some of the capabilities of the
@@ -84,7 +92,7 @@ interpreter.
 <<signatures>>=
 module type CORE = sig
   module V : Luavalue.S
-  val error : V.state -> string -> unit  (* error fallback *)
+  val error : V.state -> string -> 'a  (* error fallback *)
   val getglobal : V.state -> V.value -> V.value
   val fallback : string -> V.state -> V.value list -> V.value list
   val setfallback : V.state -> string -> V.value -> V.value
@@ -158,6 +166,22 @@ module Combine : sig
   <<similar specifications for [[L1]] to [[L9]]>>
 end
 @ 
+If a user needs more than 10~types, it's necessary to lift a nested
+view.
+<<lualib.mli>>=
+module Lift (T : COMBINED_TYPE) (View : TYPEVIEW with type 'a t = 'a T.t) :
+  COMBINED_VIEWS with type 'a t = 'a View.combined
+     and type 'a T1.t = 'a T.T1.t
+     and type 'a T2.t = 'a T.T2.t
+     and type 'a T3.t = 'a T.T3.t
+     and type 'a T4.t = 'a T.T4.t
+     and type 'a T5.t = 'a T.T5.t
+     and type 'a T6.t = 'a T.T6.t
+     and type 'a T7.t = 'a T.T7.t
+     and type 'a T8.t = 'a T.T8.t
+     and type 'a T9.t = 'a T.T9.t
+     and type 'a T10.t = 'a T.T10.t
+@ 
 Finally, this is a convenient place to export empty libraries and
 types, for those interpreters that won't use libraries or types.
 <<lualib.mli>>=
@@ -165,6 +189,7 @@ module Empty : sig
   module Type : COMBINED_TYPE
   module Library : TYPEFUL with type 'a combined = 'a Type.t
 end
+@ 
 @
 \section{Implementation}
 
@@ -234,7 +259,7 @@ module Extend (T : TYPEVIEW) (L : BARE) : TYPEFUL with type 'a combined = 'a T.c
       | T8 of 'a T8.t
       | T9 of 'a T9.t
       | T10 of 'a T10.t
-    type 'a alias_for_t = 'a t
+    type 'a also_t = 'a t
     let allnames = [T1.tname; T2.tname; T3.tname; T4.tname; T5.tname;
                     T6.tname; T7.tname; T8.tname; T9.tname; T10.tname]
     let tname =
@@ -274,7 +299,7 @@ module Extend (T : TYPEVIEW) (L : BARE) : TYPEFUL with type 'a combined = 'a T.c
   module type VIEW = TYPEVIEW with type 'a combined = 'a t
   module V = Luavalue
   module T1 = struct
-    type 'a combined = 'a alias_for_t
+    type 'a combined = 'a also_t
     type 'a t = 'a T1.t
     let makemap (upper : ('a combined, 'b) V.ep) fail =
       { V.embed   = (fun x -> upper.V.embed (T1 x))
@@ -334,7 +359,7 @@ end
 
 <<nested [[T2]]..[[T10]] in [[Combine.T10]]>>=
   module T2 = struct
-    type 'a combined = 'a alias_for_t
+    type 'a combined = 'a also_t
     type 'a t = 'a T2.t
     let makemap upper fail =
       { V.embed   = (fun x -> upper.V.embed (T2 x))
@@ -345,7 +370,7 @@ end
   end
 
   module T3 = struct
-    type 'a combined = 'a alias_for_t
+    type 'a combined = 'a also_t
     type 'a t = 'a T3.t
     let makemap upper fail =
       { V.embed   = (fun x -> upper.V.embed (T3 x))
@@ -356,7 +381,7 @@ end
   end
 
   module T4 = struct
-    type 'a combined = 'a alias_for_t
+    type 'a combined = 'a also_t
     type 'a t = 'a T4.t
     let makemap upper fail =
       { V.embed   = (fun x -> upper.V.embed (T4 x))
@@ -367,7 +392,7 @@ end
   end
 
   module T5 = struct
-    type 'a combined = 'a alias_for_t
+    type 'a combined = 'a also_t
     type 'a t = 'a T5.t
     let makemap upper fail =
       { V.embed   = (fun x -> upper.V.embed (T5 x))
@@ -378,7 +403,7 @@ end
   end
 
   module T6 = struct
-    type 'a combined = 'a alias_for_t
+    type 'a combined = 'a also_t
     type 'a t = 'a T6.t
     let makemap upper fail =
       { V.embed   = (fun x -> upper.V.embed (T6 x))
@@ -389,7 +414,7 @@ end
   end
 
   module T7 = struct
-    type 'a combined = 'a alias_for_t
+    type 'a combined = 'a also_t
     type 'a t = 'a T7.t
     let makemap upper fail =
       { V.embed   = (fun x -> upper.V.embed (T7 x))
@@ -400,7 +425,7 @@ end
   end
 
   module T8 = struct
-    type 'a combined = 'a alias_for_t
+    type 'a combined = 'a also_t
     type 'a t = 'a T8.t
     let makemap upper fail =
       { V.embed   = (fun x -> upper.V.embed (T8 x))
@@ -411,7 +436,7 @@ end
   end
 
   module T9 = struct
-    type 'a combined = 'a alias_for_t
+    type 'a combined = 'a also_t
     type 'a t = 'a T9.t
     let makemap upper fail =
       { V.embed   = (fun x -> upper.V.embed (T9 x))
@@ -422,7 +447,7 @@ end
   end
 
   module T10 = struct
-    type 'a combined = 'a alias_for_t
+    type 'a combined = 'a also_t
     type 'a t = 'a T10.t
     let makemap upper fail =
       { V.embed   = (fun x -> upper.V.embed (T10 x))
@@ -431,6 +456,44 @@ end
                     | _ -> fail x T10.tname)
       } 
   end
+@ 
+<<lualib.ml>>=
+module Lift (T : COMBINED_TYPE) (View : TYPEVIEW with type 'a t = 'a T.t) :
+  COMBINED_VIEWS with type 'a t = 'a View.combined
+     and type 'a T1.t = 'a T.T1.t
+     and type 'a T2.t = 'a T.T2.t
+     and type 'a T3.t = 'a T.T3.t
+     and type 'a T4.t = 'a T.T4.t
+     and type 'a T5.t = 'a T.T5.t
+     and type 'a T6.t = 'a T.T6.t
+     and type 'a T7.t = 'a T.T7.t
+     and type 'a T8.t = 'a T.T8.t
+     and type 'a T9.t = 'a T.T9.t
+     and type 'a T10.t = 'a T.T10.t =
+  struct
+    type 'a t = 'a View.combined
+    type 'a also_t = 'a t
+    module type VIEW = TYPEVIEW with type 'a combined = 'a also_t
+    module Lift (T : T.VIEW) : VIEW with type 'a t = 'a T.t = struct
+      type 'a combined = 'a also_t
+      type 'a t = 'a T.t
+      let makemap upper fail =
+        let fail' x y = ignore(fail x y); assert false in
+        let upper = View.makemap upper fail' in
+        T.makemap upper fail
+    end
+
+    module T1 = Lift(T.T1)
+    module T2 = Lift(T.T2)
+    module T3 = Lift(T.T3)
+    module T4 = Lift(T.T4)
+    module T5 = Lift(T.T5)
+    module T6 = Lift(T.T6)
+    module T7 = Lift(T.T7)
+    module T8 = Lift(T.T8)
+    module T9 = Lift(T.T9)
+    module T10 = Lift(T.T10)
+  end (* Lift *)
 @ 
 This Icon code was used to generate L1 through L9
 <<lspecl.icn>>=

@@ -29,7 +29,7 @@ module type S = sig
   val compile : srcdbg:(Srcmap.map * bool) -> Ast.chunk list -> state -> value list
   val test : unit -> (string * value list) list
   val state : unit -> state  (* produce a fresh, initialized state *)
-  val error : state -> string -> unit  (* error fallback *)
+  val error : state -> string -> 'a  (* error fallback *)
 
   val getglobal : state -> value -> value
   val with_stack  : Value.info -> state -> ('a -> 'b) -> 'a -> 'b
@@ -95,7 +95,9 @@ module A = Ast
 module V = Ast.Value
 @
 <<interp fallbacks>>=
-let error g s = ignore (fallback "error" g [V.String s])
+let error g s =
+  ignore (fallback "error" g [V.String s]);
+  raise (Error "Error fallback returned a value")
 <<interp fallbacks>>=
 let errorfallback s = fun g args -> fallback "error" g [V.String s]
 let arithfallback g = function

@@ -241,11 +241,12 @@ module type TYPEVIEW = sig
 end
 @ 
 When up to ten types are combined into a single type, 
-the result provides views of all ten:
+the result provides views of all ten.
+This code would be a lot cleaner with a better calculus of signatures.
 <<library support>>=
-module type COMBINED_TYPE = sig
-  include USERTYPE
-  module type VIEW = TYPEVIEW with type 'a combined = 'a t
+module type COMBINED_CORE = sig
+  type 'a also_t
+  module type VIEW = TYPEVIEW with type 'a combined = 'a also_t
   module T1  : VIEW
   module T2  : VIEW
   module T3  : VIEW
@@ -257,6 +258,14 @@ module type COMBINED_TYPE = sig
   module T9  : VIEW
   module T10 : VIEW
 end
+module type COMBINED_VIEWS = sig
+  type 'a t
+  include COMBINED_CORE with type 'a also_t = 'a t
+end
+module type COMBINED_TYPE = sig
+  include USERTYPE
+  include COMBINED_CORE with type 'a also_t = 'a t
+end
 @ 
 A library module needs zero or more views, plus an \emph{interpreter
 core}, which enables libraries to use some of the capabilities of the
@@ -264,7 +273,7 @@ interpreter.
 <<library support>>=
 module type CORE = sig
   module V : Luavalue.S
-  val error : V.state -> string -> unit  (* error fallback *)
+  val error : V.state -> string -> 'a  (* error fallback *)
   val getglobal : V.state -> V.value -> V.value
   val fallback : string -> V.state -> V.value list -> V.value list
   val setfallback : V.state -> string -> V.value -> V.value
@@ -336,6 +345,24 @@ module Combine : sig
     TYPEFUL with type 'a combined = 'a L1.combined
   <<similar specifications for [[L1]] to [[L9]]>>
 end
+@ 
+If a user needs more than 10~types, it's necessary to lift a nested
+view.  See [[main.nw]] in the source distribution for an example of lifting.
+<<lualib.mli>>=
+module Lift (T : COMBINED_TYPE) (View : TYPEVIEW with type 'a t = 'a T.t) :
+  COMBINED_VIEWS with type 'a t = 'a View.combined
+     and type 'a T1.t = 'a T.T1.t
+     and type 'a T2.t = 'a T.T2.t
+     and type 'a T3.t = 'a T.T3.t
+     and type 'a T4.t = 'a T.T4.t
+     and type 'a T5.t = 'a T.T5.t
+     and type 'a T6.t = 'a T.T6.t
+     and type 'a T7.t = 'a T.T7.t
+     and type 'a T8.t = 'a T.T8.t
+     and type 'a T9.t = 'a T.T9.t
+     and type 'a T10.t = 'a T.T10.t
+@
+
 @
 \subsection{Building an interpreter}
 
@@ -356,7 +383,7 @@ module type INTERP_CORE = sig
   val compile : srcdbg:(Srcmap.map * bool) -> Ast.chunk list -> state -> value list
   val test : unit -> (string * value list) list
   val state : unit -> state  (* produce a fresh, initialized state *)
-  val error : state -> string -> unit  (* error fallback *)
+  val error : state -> string -> 'a  (* error fallback *)
 
   val getglobal : state -> value -> value
   val with_stack  : Value.info -> state -> ('a -> 'b) -> 'a -> 'b

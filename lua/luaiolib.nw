@@ -45,20 +45,21 @@ let readfrom g = function
               
 let open_out_append s =
   open_out_gen [Open_wronly; Open_creat; Open_trunc; Open_text] 0o666 s  in
-let writeto' append g = function
+let writeto' append g = 
+  let finish f = io.currentout <- f; [outfile.V.embed f] in
+  function
   | [V.String s] ->
       (match String.get s 0 with
        | '|' ->
            wrap_err (fun () ->
             if append then raise (Sys_error "tried to appendto() a pipe")
-            else [outfile.V.embed
-                    (Unix.open_process_out (String.sub s 1 (String.length s - 1)))])
+            else finish (Unix.open_process_out (String.sub s 1 (String.length s - 1))))
        | _   ->
            wrap_err (fun () ->
-             [outfile.V.embed (if append then open_out_append s else open_out s)]))
+                     finish (if append then open_out_append s else open_out s)))
   | [] ->
       ( close_out io.currentout; io.currentout <- stdout; [])
-  | [v] -> (io.currentout <- outfile.V.project v; [])
+  | [v] -> (io.currentout <- outfile.V.project v; [v])
   | _ -> C.fallback "error" g [V.String "bad args to writeto"]  in
               
 let pf t = (V.pfunc t).V.embed in
