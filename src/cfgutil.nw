@@ -25,7 +25,8 @@ val limit   :   cfg -> int              (* limiting number      -- req enumerate
 val fold_fwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a
 val fold_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a
 val subst:      cfg -> (Rtl.rtl -> Rtl.rtl) -> unit
-val cfg2dot:    cfg -> string
+val cfg2dot:    compress:bool -> name:string -> cfg -> string
+val number_and_rtl : node -> string
 @
 
 \begin{itemize}
@@ -66,28 +67,33 @@ let fold_bwd cfg f zero =
 let subst cfg (f: Rtl.rtl -> Rtl.rtl) = 
     fold_fwd cfg (fun node () -> G.set_rtl node f) () 
 
+@ 
+<<cfgutil.ml>>=
+module Cfg = Cfg3
+let number_and_rtl node =
+  string_of_int (Cfg.number node) ^ ": " ^ Rtldebug.rtl_to_string (Cfg.rtl node)
 
-let cfg2dot cfg =
-	let node2dot node = string_of_int (Cfg3.number node) in
-	let node2labeled_dot node = string_of_int (Cfg3.number node) ^
-    	                        " [label=\"" ^ Cfg3.number_and_rtl node ^
-								"\"]" in
-	let node2dotEdges node =
-		let succ = Cfg3.succ node in
-			List.fold_left (fun rst s -> rst ^ node2dot node ^ " -> " ^
-											   node2dot s ^ "[label=\"s\"]\n" ^
-										 if List.mem node (Cfg3.pred s)
-										 then  node2dot node ^ " -> " ^
-											   node2dot s ^
-											   "[dir=back,label=\"p\"]\n"
-										 else "") "" succ in
-    let _ = Cfg3.gm_enumerate cfg in
-    let dotOpenGraph = "digraph G {\n" in
-    let dotCloseGraph = "}\n" in
-    let dotnodes = fold_fwd cfg (fun node rst -> rst ^ node2labeled_dot node ^ "\n") "" in
-    let dotedges = fold_fwd cfg (fun node rst -> rst ^ node2dotEdges node) ""
-    in
-        dotOpenGraph ^ dotnodes ^ dotedges ^ dotCloseGraph
+let cfg2dot compress name cfg =
+  let nodename node = "N" ^ string_of_int (Cfg.number node) in
+  let dotnode  node = nodename node ^ " [label=\"" ^ number_and_rtl node ^ "\"]" in
+  let edge_fwd from to' = nodename from ^ " -> " ^ nodename to'  ^ "\n" in
+  let edge_bwd from to' = nodename to'  ^ " -> " ^ nodename from ^
+                         "[dir=back,style=dotted]\n" in
+  let edges_leaving node = (* quadratic! *)
+    let add_edge dir edges n = dir node n ^ edges in
+    let fwd = List.fold_left (add_edge edge_fwd) ""  (Cfg.succ node) in
+    let bwd = List.fold_left (add_edge edge_bwd) "" (Cfg.pred node) in
+    fwd ^ bwd in
+  let _ = Cfg.gm_enumerate cfg in
+  let oldv = Rtl2ast.verbosity Rtl2ast.Low in
+  let dotOpenGraph = "digraph " ^ name ^ " {\n" in
+  let pagesize = "  size=\"8,10.5\"\n" in
+  let compress = if compress then "  ratio=compress\n" else "" in
+  let dotCloseGraph = "}\n" in
+  let dotnodes = fold_bwd cfg (fun node rst -> dotnode node ^ "\n" ^ rst) "" in
+  let dotedges = fold_bwd cfg (fun node rst -> edges_leaving node ^ rst) "" in
+  let _ = Rtl2ast.verbosity oldv in
+    dotOpenGraph ^ pagesize ^ compress ^ dotnodes ^ dotedges ^ dotCloseGraph
 @
 
         

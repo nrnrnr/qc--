@@ -202,7 +202,6 @@ val number:     node -> int             (* pre: enumerated cfg *)
 val defs:       node -> locs            (* locs defined by node *)
 val uses:       node -> locs            (* locs used by node    *)
 val kills:      node -> locs            (* locs killed by node  *)
-val number_and_rtl: node -> string
 
 (* node mutators *)
 val set_rtl:        node -> (Rtl.rtl -> Rtl.rtl) -> unit
@@ -754,7 +753,6 @@ let number      (node:node) = node#number
 let defs        (node:node) = node#defs
 let uses        (node:node) = node#uses
 let kills       (node:node) = node#kills
-let number_and_rtl  (node:node) = node#number_and_rtl
 @
 
 <<implementation>>=
@@ -899,7 +897,6 @@ and node = object
     method insert_assign_on_edges_from: Rtl.rtl -> before:node -> node (* new node *)
 
     method comment:     string          (* included into ast *)
-    method number_and_rtl:  string
     method ast:         mangle:(string->string) 
                         -> Target2.t
                         -> Ast.body list
@@ -1341,10 +1338,6 @@ object(this)
             )
     
     (* comment about node kind *)
-    method number_and_rtl =
-        let this = (this :> node) in
-            string_of_int _num ^ " " ^ Rtldebug.rtl_to_string _rtl
-
     method comment = ""
         (**) ^ 
         let this = (this :> node) in

@@ -95,30 +95,15 @@ Lua interpreter.
 <<main2.ml>>=
 module E = Error
 module V = I.Value
-@
-
-We add members  to an existing or new Lua table [[tabname]] with
-[[bind_table]]. The table is created, if it does not already exist.
-
-<<main2.ml>>=
-let bind_table g tabname members =
-  let t = I.getglobal g (V.String tabname) in
-  let t = match t with
-  | V.Nil       -> V.Table.create (List.length members)
-  | V.Table t   -> t
-  | _           -> I.error g ("Global value " ^ tabname ^ " is not a table") in
-  let _ = V.Table.bind g.V.globals (V.String tabname) (V.Table t) in
-      List.iter (fun (k, v) -> V.Table.bind t (V.String k) v) members
 @ 
 
 
 We export some command line arguments to the Lua value [[Sys.argv]]. The
 [[Sys]] table is created, if it does not exist.
-
 <<main2.ml>>=
 let export_argv g strings =
     let list = V.list V.string in
-    bind_table g "Sys" ["argv", list.V.embed strings]
+    I.register_module "Sys" ["argv", list.V.embed strings] g
 @
 
 At start-up, we load the file [[qc--.lua]] into the interpreter. It
@@ -132,7 +117,7 @@ Command line arguments are evaluated as follows:
 \item From left to right, all arguments of the form [[-]]$a$, where
 $a$~is not [[e]] or [[i]], are converted to [[-e Main.]]$a$[[()]].
 <<main2.ml>>=
-let expandable_regexp = Str.regexp "-[a-zA-Z0-9_]$"
+let expandable_regexp = Str.regexp "-[a-zA-Z][a-zA-Z0-9_]*$"
 let is_expandable opt = Str.string_match expandable_regexp opt 0
 let rec expand_args = function
   | "-e" :: a :: args -> "-e" :: a :: expand_args args
@@ -140,6 +125,7 @@ let rec expand_args = function
   | opt  :: args when is_expandable opt ->
       "-e" :: ("Main." ^ String.sub opt 1 (String.length opt - 1) ^ "()") ::
       expand_args args
+  | opt :: _ when String.get opt 0 = '-' -> E.error ("Unrecognized option " ^ opt)
   | a :: args -> a :: expand_args args
   | [] -> []
 @                
@@ -303,13 +289,11 @@ prCFG = seq({codeExpand, live})
 
 colors = {1,2,3}
 
-Optimize = Optimize or {}
-function Optimize.default (cfg, frame) run(pcfg, cfg, {}) end
---function Optimize.default (cfg, frame) run(graphColoring(colors), cfg, {}) end
---function Optimize.default (cfg, frame) run(codeExpand, cfg, {}) end
-function Optimize.default (cfg, frame) run(fullRun(colors), cfg, {}) end
---function Optimize.default (cfg, frame) run(prCFG, cfg, {}) end
--- function Optimize.default () return end
+Optimizer = Optimizer or {}
+  -- `run' should be delayed
+function Optimizer.default () return fullRun(colors) end
+Optimizer.prCFG = prCFG
+Optimizer.codeExpand = codeExpand
 
 ------------------------------------------------------------------ 
 -- Defaults
@@ -317,8 +301,16 @@ function Optimize.default (cfg, frame) run(fullRun(colors), cfg, {}) end
 
 Default = Default or {}
 Default.target          = Targets.dummy          -- target
-Default.optimizer       = Optimize.default
+Default.optimizer       = Optimizer.default
 Default.linewidth       = 72                     -- output line width
+
+function Default.runopt(cfg, frame)
+  local opt = Default.optimizer
+  if type(opt) == "function" then
+    opt = opt()
+  end
+  run(opt, cfg, {})
+end
 
 ------------------------------------------------------------------ 
 -- Main
@@ -340,20 +332,35 @@ end
 
 -- compile
 -- compile Sys.argv[1]
--- defaults: Default.target, Default.optimizer, Default.linewidth
+-- defaults: Default.target, Optimizer.default, Default.linewidth
 
 function Main.compile ()
-    local f = Sys.argv[1]
+    local f = Sys.argv[1] --- should do *all* arguments!
     if f == nil then error("Main.check: no file in Sys.argv[1]") end
 
     local ast = Driver.parse(f)
     local env = Driver.check(ast)
-    local asm = Driver.compile(Default.optimizer, ast, Default.target, env)
+    local asm = Driver.compile(Default.runopt, ast, Default.target, env)
     local doc = Driver.assemble(asm)
     Driver.print(doc,Default.linewidth)
 end    
 Main.c = Main.compile -- abbreviation
 @
+Function [[Main.dot()]] is similar, except it throws away the assembly
+programming, instead emitting a dot graph for each procedure.
+<<qc--.lua>>=
+compressdot=1 -- true
+function Main.dot ()
+    local f = Sys.argv[1]
+    if f == nil then error("Main.check: no file in Sys.argv[1]") end
+    Default.optimizer = seq {Default.optimizer(),
+                             single {name="writedot", fn=CG.writedot(compressdot)}}
+    local ast = Driver.parse(f)
+    local env = Driver.check(ast)
+    Driver.compile(Default.runopt, ast, Default.target, env) -- result ignored
+end    
+@ 
+
 
  
 % ------------------------------------------------------------------  

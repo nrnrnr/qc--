@@ -43,6 +43,8 @@ See also module \module{mangle}.
 <<rtl2ast.mli>>=
 val expr:      (string -> string) -> Rtl.exp  -> Ast.expr 
 val rtl:       (string -> string) -> Rtl.rtl  -> Ast.stmt 
+type verbosity = Low | High  (* default is High --- more accurate *)
+val verbosity : verbosity -> verbosity (* returns old value *)
 @
 
 % ------------------------------------------------------------------ 
@@ -56,11 +58,20 @@ module T = Types
 @
 
 <<rtl2ast.ml>>=
+type verbosity = Low | High  (* default is High --- more accurate *)
+let the_verbosity = ref High
+let verbosity v =
+  let v' = !the_verbosity in
+  the_verbosity := v;
+  v'
+
+<<rtl2ast.ml>>=
 let bits n             = A.BitsTy n
 
 let const mangle = function
     | R.Bool(_)      -> assert false    (* impossible *)
-    | R.Bits(b,w)    -> A.Int((b,w), Some (bits w))
+    | R.Bits(b,w)    -> A.Int((b,w), if !the_verbosity = High then Some (bits w)
+                                     else None)
     | R.Link(name,w) -> A.Fetch(A.Var(None, mangle name))
 @
 
@@ -68,9 +79,12 @@ let const mangle = function
 let rec expr' mangle = function
     | R.Const c         -> const mangle c
     | R.Fetch(loc,_)    -> A.Fetch(location' mangle loc)
-    | R.App((op,ww),ee) -> let actual e = (None, expr' mangle e)
-                           in 
-                                A.PrimOp(op, List.map actual ee)
+    | R.App((op,ww),ee) -> let actual e = (None, expr' mangle e) in
+                           match ee with
+                           | [l; r] when op = "add" || op = "sub" ->
+                                  let op = if op = "add" then "+" else "-" in
+                                  A.BinOp(expr' mangle l, op, expr' mangle r)
+                           | _ -> A.PrimOp(op, List.map actual ee)
 @
 
 N.B. This code might possibly look up the location in a machine-dependent map
@@ -114,6 +128,9 @@ let guard mangle = function
 let guarded mangle (g, eff) = effect mangle (guard mangle g) eff
 
 let rtl' mangle (R.Rtl gg) = 
+  match gg with
+  | [] -> A.EmptyStmt
+  | _ :: _ ->
     let pairs    = List.map (guarded mangle) gg in
     let lhs, rhs = List.split pairs             in
         A.AssignStmt(lhs,rhs)

@@ -351,9 +351,11 @@ This algorithm annotates each node in the (\cfg) with a live-in set.
 
 <<livenessAnalysis>>=
 (* dummy implementation *)
-let liveness _ {Proc.cfg = cfg} =
-	cfgSay [Cfgutil.cfg2dot cfg];
-	LI.liveness cfg; true
+let liveness _ proc = LI.liveness proc.Proc.cfg; true
+let writedot compress _ proc =
+  print_string (Cfgutil.cfg2dot compress proc.Proc.name proc.Proc.cfg);
+  flush stdout;
+  false
 
 (*
 let livenessStage = { Backplane.name = "liveness"
@@ -925,13 +927,14 @@ let proc = T3'.map
 let ( **-> ) = V.( **-> )
 let stageFnType = V.value **-> proc **-> V.result V.bool
 let stageFn = (V.pfunc stageFnType).V.embed
-let param2StageFn =
-        (V.pfunc (V.value **->
-                V.result (V.pfunc stageFnType))).V.embed
+let pf ty = (V.pfunc ty).V.embed
+let stage_maker ty = 
+  (V.pfunc (ty **-> V.result (V.pfunc stageFnType))).V.embed
 
 let graph_coloring_module =
         [ "liveness",         stageFn liveness
-        ; "makeBuild",        param2StageFn makeBuildStage
+        ; "writedot",         stage_maker (V.bool) writedot
+        ; "makeBuild",        stage_maker (V.value) makeBuildStage
         ; "makeWorklist",     stageFn makeWorklist
         ; "simplify",         stageFn simplify
         ; "coalesce",         stageFn coalesce
@@ -939,8 +942,8 @@ let graph_coloring_module =
         ; "selectSpill",      stageFn selectSpill
         ; "assignColors",     stageFn assignColors
         ; "haveSpilledNodes", stageFn haveSpilledNodes
-        ; "resetProgram",   stageFn resetProgram
-        ; "updateProgram",   stageFn updateProgram
+        ; "resetProgram",     stageFn resetProgram
+        ; "updateProgram",    stageFn updateProgram
         ; "applyColors",      stageFn applyColors
         ; "printCG",          stageFn printCGInfo
         ; "printCFGLive",     stageFn printCFGLive
