@@ -463,38 +463,38 @@ proc_body_start_l85:
 	leal 68(%esp), %eax
 	addl %edx,%eax
 	movl %ecx,(%eax)
-	leal -36(%esp), %esp
-	movl $-4,%eax
-	leal 104(%esp), %ecx
-	addl %eax,%ecx
-	movl %ecx,%eax
-	movl $4,%ecx
-	movl $-104,%edx
-	movl %ebx,68(%esp)
-	leal 104(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	leal Lgbl_35,%ecx
-	movl $-100,%ebx
-	leal 104(%esp), %edx
-	addl %ebx,%edx
-	movl %ecx,(%edx)
-	call fa_25
-join_l97:
-	leal 28(%esp), %esp
 	leal -32(%esp), %esp
 	movl $-4,%eax
 	leal 100(%esp), %ecx
 	addl %eax,%ecx
 	movl %ecx,%eax
-	movl $1,%ecx
+	movl $4,%ecx
 	movl $-100,%edx
+	movl %ebx,64(%esp)
 	leal 100(%esp), %ebx
+	addl %edx,%ebx
+	movl %ecx,(%ebx)
+	leal Lgbl_35,%ecx
+	movl $-96,%ebx
+	leal 100(%esp), %edx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
+	call fa_25
+join_l97:
+	leal 24(%esp), %esp
+	leal -28(%esp), %esp
+	movl $-4,%eax
+	leal 96(%esp), %ecx
+	addl %eax,%ecx
+	movl %ecx,%eax
+	movl $1,%ecx
+	movl $-96,%edx
+	leal 96(%esp), %ebx
 	addl %edx,%ebx
 	movl %ecx,(%ebx)
 	call fb_26
 join_l94:
-	leal 28(%esp), %esp
+	leal 24(%esp), %esp
 	leal Lgbl_36,%eax
 	movl $-68,%ecx
 	leal 68(%esp), %edx
@@ -540,7 +540,7 @@ stackdata_l103:
 .long frame_l104
 .section .pcmap_data
 frame_l104:
-.long 0xffffffa0
+.long 0xffffffa4
 .long 0x80000004
 .long 0x80000000
 .long stackdata_l103
@@ -565,7 +565,7 @@ frame_l104:
 .long frame_l105
 .section .pcmap_data
 frame_l105:
-.long 0xffffffa0
+.long 0xffffffa4
 .long 0x80000004
 .long 0x80000000
 .long stackdata_l103

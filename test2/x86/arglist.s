@@ -676,67 +676,19 @@ main:
 	movl (%edx),%ecx
 initialize_continuations_l89:
 proc_body_start_l88:
-	leal -32(%esp), %esp
+	leal -20(%esp), %esp
 	leal numbers,%ecx
 	movl (%ecx),%eax
 	movl $4,%ecx
 	leal numbers,%edx
 	addl %ecx,%edx
-	movl $-36,%ecx
-	movl %ebx,32(%esp)
-	leal 36(%esp), %ebx
-	addl %ecx,%ebx
-	movl (%edx),%ecx
-	movl %ecx,(%ebx)
-	movl $8,%ecx
-	leal numbers,%ebx
-	addl %ecx,%ebx
-	movl $-32,%ecx
-	leal 36(%esp), %edx
-	addl %ecx,%edx
-	movl (%ebx),%ecx
-	movl %ecx,(%edx)
-	movl $12,%ecx
-	leal numbers,%edx
-	addl %ecx,%edx
-	movl $-28,%ecx
-	leal 36(%esp), %ebx
-	addl %ecx,%ebx
-	movl (%edx),%ecx
-	movl %ecx,(%ebx)
-	movl $16,%ecx
-	leal numbers,%ebx
-	addl %ecx,%ebx
 	movl $-24,%ecx
-	leal 36(%esp), %edx
-	addl %ecx,%edx
-	movl (%ebx),%ecx
-	movl %ecx,(%edx)
-	movl $20,%ecx
-	leal numbers,%edx
-	addl %ecx,%edx
-	movl $-20,%ecx
-	leal 36(%esp), %ebx
-	addl %ecx,%ebx
-	movl (%edx),%ecx
-	movl %ecx,(%ebx)
-	call f
-join_l96:
-	leal 12(%esp), %esp
-	leal -20(%esp), %esp
-	movl $20,%eax
-	leal numbers,%ecx
-	addl %eax,%ecx
-	movl (%ecx),%eax
-	movl $16,%ecx
-	leal numbers,%edx
-	addl %ecx,%edx
-	movl $-24,%ecx
+	movl %ebx,20(%esp)
 	leal 24(%esp), %ebx
 	addl %ecx,%ebx
 	movl (%edx),%ecx
 	movl %ecx,(%ebx)
-	movl $12,%ecx
+	movl $8,%ecx
 	leal numbers,%ebx
 	addl %ecx,%ebx
 	movl $-20,%ecx
@@ -744,9 +696,55 @@ join_l96:
 	addl %ecx,%edx
 	movl (%ebx),%ecx
 	movl %ecx,(%edx)
+	movl $12,%ecx
+	leal numbers,%edx
+	addl %ecx,%edx
+	movl $-16,%ecx
+	leal 24(%esp), %ebx
+	addl %ecx,%ebx
+	movl (%edx),%ecx
+	movl %ecx,(%ebx)
+	movl $16,%ecx
+	leal numbers,%ebx
+	addl %ecx,%ebx
+	movl $-12,%ecx
+	leal 24(%esp), %edx
+	addl %ecx,%edx
+	movl (%ebx),%ecx
+	movl %ecx,(%edx)
+	movl $20,%ecx
+	leal numbers,%edx
+	addl %ecx,%edx
+	movl $-8,%ecx
+	leal 24(%esp), %ebx
+	addl %ecx,%ebx
+	movl (%edx),%ecx
+	movl %ecx,(%ebx)
+	call f
+join_l96:
+	leal -8(%esp), %esp
+	movl $20,%eax
+	leal numbers,%ecx
+	addl %eax,%ecx
+	movl (%ecx),%eax
+	movl $16,%ecx
+	leal numbers,%edx
+	addl %ecx,%edx
+	movl $-12,%ecx
+	leal 12(%esp), %ebx
+	addl %ecx,%ebx
+	movl (%edx),%ecx
+	movl %ecx,(%ebx)
+	movl $12,%ecx
+	leal numbers,%ebx
+	addl %ecx,%ebx
+	movl $-8,%ecx
+	leal 12(%esp), %edx
+	addl %ecx,%edx
+	movl (%ebx),%ecx
+	movl %ecx,(%edx)
 	call g
 join_l93:
-	leal 12(%esp), %esp
 	movl $0,%eax
 	movl (%esp),%ebx
 	leal 4(%esp), %esp
@@ -759,7 +757,7 @@ stackdata_l102:
 .long frame_l103
 .section .pcmap_data
 frame_l103:
-.long 0xfffffff0
+.long 0xfffffffc
 .long 0x80000004
 .long 0x80000000
 .long stackdata_l102
@@ -782,7 +780,7 @@ frame_l103:
 .long frame_l104
 .section .pcmap_data
 frame_l104:
-.long 0xfffffff0
+.long 0xfffffffc
 .long 0x80000004
 .long 0x80000000
 .long stackdata_l102

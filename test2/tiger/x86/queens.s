@@ -979,27 +979,27 @@ join_l81:
 	addl %ebp,%eax
 	movl (%edx),%ebp
 	movl %ebp,(%eax)
-	leal -36(%esp), %esp
+	leal -32(%esp), %esp
 	movl $1,%eax
 	movl $4,%ebp
 	movl $-12,%edx
-	leal 112(%esp), %ecx
+	leal 108(%esp), %ecx
 	addl %edx,%ecx
 	addl %ebp,%ecx
 	movl (%ecx),%ebp
 	addl %eax,%ebp
-	movl $-112,%eax
-	leal 112(%esp), %ecx
+	movl $-108,%eax
+	leal 108(%esp), %ecx
 	addl %eax,%ecx
 	movl %ebp,(%ecx)
 	movl $-12,%ecx
-	leal 112(%esp), %ebp
+	leal 108(%esp), %ebp
 	addl %ecx,%ebp
 	movl (%ebp),%ecx
 	movl %ecx,%eax
 	call try_52
 join_l78:
-	leal 32(%esp), %esp
+	leal 28(%esp), %esp
 	movl $8,%eax
 	movl $-12,%ecx
 	leal 76(%esp), %edx
@@ -1214,14 +1214,14 @@ killer_C61:
 join_l111:
 	jmp LifTrue_82
 LifTrue_82:
-	leal -32(%esp), %esp
+	leal -28(%esp), %esp
 	movl $-12,%ebx
-	leal 108(%esp), %ecx
+	leal 104(%esp), %ecx
 	addl %ebx,%ecx
 	movl (%ecx),%eax
 	call printboard_51
 join_l110:
-	leal 32(%esp), %esp
+	leal 28(%esp), %esp
 	jmp LifEnd_84
 LifEnd_84:
 	movl $0,%eax
@@ -1242,7 +1242,7 @@ stackdata_l133:
 .long frame_l134
 .section .pcmap_data
 frame_l134:
-.long 0xffffff94
+.long 0xffffff98
 .long 0x80000008
 .long 0xffffffdc
 .long stackdata_l133
@@ -1466,7 +1466,7 @@ frame_l141:
 .long frame_l142
 .section .pcmap_data
 frame_l142:
-.long 0xffffff94
+.long 0xffffff98
 .long 0x80000008
 .long 0xffffffdc
 .long stackdata_l133

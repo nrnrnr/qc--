@@ -2497,14 +2497,14 @@ proc_body_start_l314:
 	addl %edx,%ebx
 	addl %ecx,%ebx
 	movl %eax,(%ebx)
-	leal -36(%esp), %esp
+	leal -28(%esp), %esp
 	movl $-8,%eax
-	leal 108(%esp), %ebx
+	leal 100(%esp), %ebx
 	addl %eax,%ebx
 	movl (%ebx),%eax
 	call getword_39
 join_l334:
-	leal 36(%esp), %esp
+	leal 28(%esp), %esp
 	movl $4,%ecx
 	movl $-8,%edx
 	leal 72(%esp), %ebx
@@ -2577,32 +2577,32 @@ join_l320:
 join_l327:
 	jmp Lloop_body_106
 Lloop_body_106:
-	leal -40(%esp), %esp
+	leal -32(%esp), %esp
 	movl $4,%ebx
 	movl $-8,%ebp
-	leal 112(%esp), %esi
+	leal 104(%esp), %esi
 	addl %ebp,%esi
 	addl %ebx,%esi
-	movl $-112,%ebx
-	leal 112(%esp), %ebp
+	movl $-104,%ebx
+	leal 104(%esp), %ebp
 	addl %ebx,%ebp
 	movl (%esi),%ebx
 	movl %ebx,(%ebp)
 	movl $-8,%ebx
-	leal 112(%esp), %ebp
+	leal 104(%esp), %ebp
 	addl %ebx,%ebp
 	movl (%ebp),%eax
 	call add_word_36
 join_l326:
-	leal 36(%esp), %esp
-	leal -32(%esp), %esp
+	leal 28(%esp), %esp
+	leal -28(%esp), %esp
 	movl $-8,%eax
-	leal 104(%esp), %ecx
+	leal 100(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
 	call getword_39
 join_l323:
-	leal 32(%esp), %esp
+	leal 28(%esp), %esp
 	movl $4,%ecx
 	movl $-8,%edx
 	leal 72(%esp), %ebp
@@ -2637,7 +2637,7 @@ stackdata_l343:
 .long frame_l344
 .section .pcmap_data
 frame_l344:
-.long 0xffffff94
+.long 0xffffff9c
 .long 0x80000004
 .long 0xffffffdc
 .long stackdata_l343
@@ -2693,7 +2693,7 @@ frame_l345:
 .long frame_l346
 .section .pcmap_data
 frame_l346:
-.long 0xffffff94
+.long 0xffffff9c
 .long 0x80000004
 .long 0xffffffdc
 .long stackdata_l343
@@ -2721,7 +2721,7 @@ frame_l346:
 .long frame_l347
 .section .pcmap_data
 frame_l347:
-.long 0xffffff98
+.long 0xffffff9c
 .long 0x80000004
 .long 0xffffffdc
 .long stackdata_l343

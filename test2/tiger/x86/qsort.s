@@ -4351,27 +4351,27 @@ Lloop_end_46:
 	addl %ebx,%esi
 	addl %edi,%esi
 	movl %eax,(%esi)
-	leal -32(%esp), %esp
+	leal -28(%esp), %esp
 	movl $-12,%eax
-	leal 108(%esp), %esi
+	leal 104(%esp), %esi
 	addl %eax,%esi
 	movl %esi,%eax
 	call initlist_49
 join_l435:
-	leal 32(%esp), %esp
-	leal -36(%esp), %esp
+	leal 28(%esp), %esp
+	leal -32(%esp), %esp
 	movl $-12,%eax
-	leal 112(%esp), %ecx
+	leal 108(%esp), %ecx
 	addl %eax,%ecx
 	movl %ecx,%eax
 	movl $1,%ecx
-	movl $-112,%edx
-	leal 112(%esp), %esi
+	movl $-108,%edx
+	leal 108(%esp), %esi
 	addl %edx,%esi
 	movl %ecx,(%esi)
 	call sort_51
 join_l432:
-	leal 32(%esp), %esp
+	leal 28(%esp), %esp
 	leal -32(%esp), %esp
 	movl $-12,%eax
 	leal 108(%esp), %ecx
@@ -4538,7 +4538,7 @@ frame_l452:
 .long frame_l453
 .section .pcmap_data
 frame_l453:
-.long 0xffffff94
+.long 0xffffff98
 .long 0x80000004
 .long 0x80000000
 .long stackdata_l450
@@ -4566,7 +4566,7 @@ frame_l453:
 .long frame_l454
 .section .pcmap_data
 frame_l454:
-.long 0xffffff94
+.long 0xffffff98
 .long 0x80000004
 .long 0x80000000
 .long stackdata_l450
