@@ -34,25 +34,30 @@ simple invariants, then returns that argument.
 <<type location set>>
 <<type classification>>
 <<type t>>
-val checked : t -> t
+val checked  : t -> t
 @
 The module [[Standard]] provides support for common spaces with
 standard names.  Memory uses 8-bit cells, and other units use 32-bit
 cells.  
 Byte order and available aggregate widths must be specified by the
 client. 
+As of October 2004, temporary registers cannot be aggregated; the byte
+order specified for 
+a temporary space is the byte order of the underlying hardware space,
+and exactly one width is supported.
 <<module type Standard>>=
 module type Standard = sig
-  type generator = Rtl.aggregation -> Rtl.width list -> t
+  type generator  = Rtl.aggregation -> Rtl.width list -> t
+  type tgenerator = Rtl.aggregation -> Rtl.width      -> t
   val m :               generator          (* standard 8-bit memory *)
   val r :  count:int -> generator          (* registers *)
-  val t :               generator          (* register temps *)
+  val t :               tgenerator         (* register temps *)
   val f :  count:int -> generator          (* floats *)
-  val u :               generator          (* float temps *)
+  val u :               tgenerator         (* float temps *)
   val a :  count:int -> generator          (* address registers *)
-  val v :               generator          (* address temps *)
+  val v :               tgenerator         (* address temps *)
   val p :  count:int -> generator          (* predicate registers *)
-  val w :               generator          (* predicate temps *)
+  val w :               tgenerator         (* predicate temps *)
   val c :  count:int -> generator          (* control and special registers *)
   
   type 'a locations = 
@@ -74,39 +79,29 @@ end
 module Standard32: Standard
 module Standard64: Standard
 @ 
-
 A [[Rtl.space]] denotes a memory space, the details of a particular
 space are covered by a space descriptor [[t]].
-A~legacy: the [[cellwidth]] and [[aggregation]] fields duplicate
-information in [[Rtl.space]].
 <<type t>>=
 type t  =
     { space:            Rtl.space       (* space being described *)
     ; doc:              string          (* informal doc string *)       
-    ; cellwidth:        int             (* bits *)
     ; indexwidth:       int             (* bits *)
     ; indexlimit:       int option      (* None = 2 ** indexwidth *)
-    ; aggregation:      Rtl.aggregation      
     ; widths:           int list        (* bit widths of supported aggregates *)
     ; classification:   classification  
     }
 @
-
 \begin{itemize}
 \item [[doc]]:          Informal documentation string.
-\item [[cellwidth]]:    Width of cell in this space. A register space 
-                        could be 32 bits wide, a memory space 8 bits.
 \item [[indexwidth]]:   Width of an address in this space. A memory
                         space could have 32 bit wide addresses, a
                         register space 5 bit wide addresses.
 \item [[indexlimit]]:   Upper bound for an address in this space: $0,
                         \dots, [[indexlimit]]$. 
-\item [[aggregation]]:  Supported aggregation.
 \item [[widths]]:       Widths of supported aggregates. For example, 
                         if an  memory space 8~bits wide supports 8-, 16-, and
                         32-bit words, [[widths]] would be [[[8;16;32]]].
 \item [[classification]]: Classification of a space, see below.
-
 \end{itemize}
 @
 A space falls into one of the following classifications: memory-like,
@@ -194,19 +189,15 @@ let indexwidth n =
   wid (n-1)
 let checked s =
   begin
+    let (_, agg, cell) = s.space in
     assert (match s.widths with [] -> false | _ :: _ -> true);
-    List.iter (fun w -> assert (w mod s.cellwidth = 0)) s.widths;
-    (match s.aggregation with
-    | Rtl.Identity -> assert(s.widths =*= [s.cellwidth])
+    List.iter (fun w -> assert (Cell.divides cell w)) s.widths;
+    (match agg with
+    | Rtl.Identity -> assert(s.widths =*= [Cell.to_width cell (Cell.C 1)])
     | _ -> ());
     (match s.indexlimit with
     | Some n -> assert (indexwidth n <= s.indexwidth)
     | _ -> ());
-    let (_, agg, cell) = s.space in
-      begin
-        assert (agg =*= s.aggregation);
-        assert (Cell.to_width cell (Cell.C 1) = s.cellwidth);
-      end;
     s
   end
 let stands_for s agg w =
@@ -220,14 +211,13 @@ architectures.
 
 <<space.ml>>=
 module Standard(A:sig val width: int end) = struct
-  type generator = Rtl.aggregation -> Rtl.width list -> t
+  type generator  = Rtl.aggregation -> Rtl.width list -> t
+  type tgenerator = Rtl.aggregation -> Rtl.width      -> t
   let m agg ws = checked 
     { space          = ('m', agg, Cell.of_size 8)
     ; doc            = "memory"
-    ; cellwidth      = 8
     ; indexwidth     = A.width 
     ; indexlimit     = None
-    ; aggregation    = agg
     ; widths         = ws
     ; classification = Mem
     } 
@@ -235,113 +225,65 @@ module Standard(A:sig val width: int end) = struct
   let r ~count agg ws = checked 
     { space          = ('r', agg, Cell.of_size A.width)
     ; doc            = "general-purpose registers"
-    ; cellwidth      = A.width
     ; indexwidth     = indexwidth count
     ; indexlimit     = Some count
-    ; aggregation    = agg
     ; widths         = ws
     ; classification = Reg
     } 
-
-  let t agg ws   = checked 
-    { space         = ('t', agg, Cell.of_size A.width)
-    ; doc           = "general-purpose temporaries"
-    ; cellwidth     = A.width
-    ; indexwidth    = A.width
-    ; indexlimit    = None
-    ; aggregation   = agg
-    ; widths        = ws
-    ; classification = Temp  
-        { stands_for = stands_for 'r' agg A.width
-        ; set_doc    = "general-purpose temporaries"
-        } 
-    } 
-
   let f ~count agg ws = checked 
     { space         = ('f', agg, Cell.of_size A.width)
     ; doc           = "floating-point registers"
-    ; cellwidth     = A.width
     ; indexwidth    = indexwidth count
     ; indexlimit    = Some count
-    ; aggregation   = agg
     ; widths        = ws
     ; classification = Reg
     }
     
-  let u agg ws = checked 
-    { space         = ('u', agg, Cell.of_size A.width)
-    ; doc           = "floating-point temporaries"
-    ; cellwidth     = A.width
-    ; indexwidth    = A.width
-    ; indexlimit    = None
-    ; aggregation   = agg
-    ; widths        = ws
-    ; classification = Temp 
-        { stands_for = stands_for 'f' agg A.width
-        ; set_doc    = "floating-point temporaries"
-        } 
-    } 
-
   let a ~count agg ws = checked 
     { space         = ('a', agg, Cell.of_size A.width)
     ; doc           = "address registers"
-    ; cellwidth     = A.width
     ; indexwidth    = indexwidth count
     ; indexlimit    = Some count
-    ; aggregation   = agg
     ; widths        = ws
     ; classification = Reg
     } 
   
-  let v agg ws   = checked 
-    { space         = ('v', agg, Cell.of_size A.width)
-    ; doc           = "address temporaries"
-    ; cellwidth     = A.width
-    ; indexwidth    = A.width
-    ; indexlimit    = None
-    ; aggregation   = agg
-    ; widths        = ws
-    ; classification = Temp 
-        { stands_for = stands_for 'a' agg A.width
-        ; set_doc    = "address temporaries"
-        } 
-    } 
-
   let p ~count agg ws = checked 
-    { space         = ('p', agg, Cell.of_size 1)
-    ; doc           = "predicate registers"
-    ; cellwidth     = 1
-    ; indexwidth    = indexwidth count
-    ; indexlimit    = Some count
-    ; aggregation   = agg; widths = ws
+    { space          = ('p', agg, Cell.of_size 1)
+    ; doc            = "predicate registers"
+    ; indexwidth     = indexwidth count
+    ; indexlimit     = Some count
     ; classification = Reg
+    ; widths         = ws
     }
     
-  let w agg ws   = checked 
-    { space         = ('w', agg, Cell.of_size 1)
-    ; doc           = "predicate temporaries"
-    ; cellwidth     = 1
-    ; indexwidth    = A.width
-    ; indexlimit    = None
-    ; aggregation   = agg
-    ; widths        = ws
-    ; classification = Temp 
-        { stands_for = stands_for 'p' agg 1
-        ; set_doc    = "predicate temporaries"
-        } 
-    } 
 
     (* CHECK THAT count IS LARGE ENOUGH TO COVER indicies BELOW -- CL*)
   let c ~count agg ws = checked 
     { space         = ('c', agg, Cell.of_size A.width)
     ; doc           = "control and special"
-    ; cellwidth     = A.width
     ; indexwidth    = indexwidth count
     ; indexlimit    = Some count
-    ; aggregation   = agg
     ; widths        = ws
     ; classification = Fixed
     } 
+
+  let tempspace letter ~forspace doc agg w = checked 
+    { space         = (letter, Rtl.Identity, Cell.of_size w);
+      doc           = doc;
+      indexwidth    = A.width;
+      indexlimit    = None;
+      widths        = [w];
+      classification = Temp  
+        { stands_for = stands_for forspace agg w;
+          set_doc    = doc;
+        };
+    } 
+
+  let t = tempspace 't' ~forspace:'r' "general-purpose temporaries"
+  let u = tempspace 'u' ~forspace:'f' "floating-point temporaries"
+  let v = tempspace 'v' ~forspace:'a' "address temporaries"
+  let w = tempspace 'w' ~forspace:'p' "predicate temporaries"
 
   type 'a locations = 
     { pc:       'a
@@ -352,9 +294,7 @@ module Standard(A:sig val width: int end) = struct
     }
   
   let locations ~c = match c with    
-    |   { space       = ('c',_,_) as space
-        ; cellwidth   = cw
-        ; aggregation = bo
+    |   { space       = ('c',bo,_) as space
         ; indexwidth  = iw 
         } ->
             let reg n = Rtl.reg (space, n, Rtl.C 1) in

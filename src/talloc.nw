@@ -82,13 +82,14 @@ module Single = struct
         
   let for_space space =
     let next = ref 1 in
-    let divide = divideby space.S.cellwidth in (* premature optimization *)
+    let (_, _, cell) = space.S.space in
+    let to_count = Cell.to_count cell in
     (fun width ->
       <<use [[width]] to make [[k]] be the next index, updating [[next]]>>
-      (space.S.space, k, Rtl.C (divide width))),
+      (space.S.space, k, to_count width)),
     (fun width ->
       <<use [[width]] to make [[k]] be the next index, updating [[next]]>>
-      Rtl.reg (space.S.space, k, Rtl.C (divide width)))
+      Rtl.reg (space.S.space, k, to_count width))
 
   let _ = (for_space : Space.t -> t)
 
@@ -101,7 +102,7 @@ let () = if not (existsEq width space.S.widths) then
            Impossible.impossible ("Asked for temporary in space `" ^
                                   space.S.doc ^ "' with unsupported width " ^
                                   string_of_int width) in
-let n = divide width in
+let Cell.C n = to_count width in
 let k = !next in
 let _ = next := k + n in
 <<auxiliaries>>=

@@ -37,114 +37,25 @@ let wordsize  = 32
 \subsection{Storage spaces}
 % ------------------------------------------------------------------
 <<sparc.ml>>=
-module Spaces = struct
-  let id = R.Identity
-  <<SPARC spaces>>
-end
-@ [[m]] is a big-endian memory space with byte, halfword, word, and
-doubleword accesses.
-<<SPARC spaces>>=
-  let m = SS.m byteorder [8; 16; 32]
-@ [[r]] is the general purpose integer register file with 32-bit
-registers.  Some of these may be managed specially by register
-windows.  Nyarggg.  We pretend that it's actually split between 32 and
-64 bit registers.
-<<SPARC spaces>>=
-  let r = SS.r 32 id [32]
-@ [[f]] is the general purpose floating-point register file with 32
-32-bit registers.  Unlike the [[r]] space, these are all globals.
-(We have lies and more lies!!!)
-<<SPARC spaces>>=
-  let f = S.checked { S.space          = ('f', Rtl.Identity, Cell.of_size 32)
-                    ; S.doc            = "floating-point registers"
-                    ; S.cellwidth      = 32
-                    ; S.indexwidth     = 32
-                    ; S.indexlimit     = Some 8
-                    ; S.aggregation    = Rtl.Identity
-                    ; S.widths         = [32]
-                    ; S.classification = S.Reg
-                    }
-
-(*
- let f = SS.f 32 id [32]
-*)
-@ [[t]] is the temporary space for the [[r]] space.
-<<SPARC spaces>>=
-  let t = SS.t    id [32]
-@ [[u]] is the temporary space for the [[f]] space.
-<<SPARC spaces>>=
-  let u = S.checked { S.space          = ('u', 
-                                          Rtl.BigEndian,
-                                          Cell.of_size 32)
-                    ; S.doc            = "floating-point temporaries"
-                    ; S.cellwidth      = 32
-                    ; S.indexwidth     = 32
-                    ; S.indexlimit     = None
-                    ; S.aggregation    = Rtl.BigEndian
-                    ; S.widths         = [32]
-                    ; S.classification =
-                        S.Temp { S.stands_for = S.stands_for 'f' Rtl.BigEndian 32
-                                   (* lies about index? *)
-                               ; S.set_doc    = "floating-point temporaries"
-                               }
-                    }
-
-  let q = S.checked { S.space          = ('q', Rtl.Identity, Cell.of_size 64)
-                    ; S.doc            = "64-bit floating-point temporaries"
-                    ; S.cellwidth      = 64
-                    ; S.indexwidth     = 32
-                    ; S.indexlimit     = None
-                    ; S.aggregation    = Rtl.Identity
-                    ; S.widths         = [64]
-                    ; S.classification =
-                        S.Temp { S.stands_for =
-                                   (fun ((c, _, _), i, R.C n) ->
-                                      i land 0x1 = 0 && c =<= 'f' && n = 2)
-                               ; S.set_doc    = "64-bit floating-point temporaries"
-                               }
-                    }
-
-(*
-  let u = SS.u    id [32]
-*)
-@ [[c]] is the space for condition codes and the program counter.
-<<SPARC spaces>>=
-  let c = SS.c  6 id [32]  (* pc, npc, cc, ???, fp_mode, fp_fcmp *)
-@ [[k]] is the space for register windows.  The first cell represents
-the CWP (current window pointer), which is just a counter that we
-increment and decrement when saving and restoring windows.  The rest
-of the space will eventually be used to represent saved window
-registers.
-<<SPARC spaces>>=
-  let k = S.checked { Space.space          = ('k', Rtl.Identity, Cell.of_size 32)
-                    ; Space.doc            = "register windows"
-                    ; Space.cellwidth      = 32
-                    ; Space.indexwidth     = 32     (* what is indexwidth? *)
-                    ; Space.indexlimit     = Some 1
-                    ; Space.aggregation    = Rtl.Identity
-                    ; Space.widths         = [32]
-                    ; Space.classification = Space.Fixed
-                    }
+module Spaces = Sparcregs.Spaces
 @ 
 % ------------------------------------------------------------------
 \subsection{Registers}
 % ------------------------------------------------------------------
 <<sparc.ml>>=
-let locations = SS.locations Spaces.c
-let pc        = locations.SS.pc
-let cc        = locations.SS.cc
-let npc       = locations.SS.npc
+let pc  = Sparcregs.pc
+let cc  = Sparcregs.cc
+let npc = Sparcregs.npc
 (* Do we use this?
    let fp_mode = locations.SS.fp_mode
    let fp_fcmp = locations.SS.fcmp
 *)
 let vfp     = Vfp.mk wordsize
 
-let mcell = Cell.of_size 8
-let mspace = ('m', Rtl.BigEndian, mcell)
-let rspace = ('r', Rtl.BigEndian, Cell.of_size 32)
-let fspace = ('f', Rtl.BigEndian, Cell.of_size 32)
-let dspace = ('d', Rtl.Identity, Cell.of_size 2)  (* rounding mode *)
+let (_, _, mcell) as mspace = Spaces.m.S.space
+let rspace = Spaces.r.S.space
+let fspace = Spaces.f.S.space
+let dspace = Spaces.d.S.space
 
 let r n  = (rspace, n, R.C 1)
 
@@ -154,7 +65,7 @@ let ra   = r 31 (* return address set by CALL instruction, same as %o7 *)
 let fp   = r 30 (* conventionally the same as %fp or %i6 *)
 let sp   = r 14 (* conventionally the same as %sp or %o6 *)
 
-let cwp  = (('k', Rtl.Identity, Cell.of_size 32), 0, R.C 1)
+let cwp = Sparcregs.cwp
 
 let rounding_mode_reg = (dspace, 0, R.C 1)
 let rounding_model   = Rtl.reg rounding_mode_reg

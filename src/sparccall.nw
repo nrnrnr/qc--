@@ -9,13 +9,12 @@ val cconv :
   string -> Automaton.cc_spec ->
   Call.t
 @ 
-
 \section{Implementation of SPARC calling conventions}
-
 <<sparccall.ml>>=
 module R  = Rtl
 module RU = Rtlutil
 module RS = Register.Set
+module Rg = Sparcregs
 module A  = Automaton
 module C  = Call
 let sprintf = Printf.sprintf
@@ -27,13 +26,12 @@ Sparc              = Sparc              or {}
 Sparc.cc           = Sparc.cc           or {}
 Sparc.cc["C"     ] = Sparc.cc["C"     ] or {}
 @ 
-
 \paragraph{SPARC registers and their conventional uses}
 Cheats, cheats, and more cheats...
 <<sparccall.ml>>=
-let rspace = ('r', Rtl.Identity, Cell.of_size 32)
-let fspace = ('f', Rtl.BigEndian, Cell.of_size 32)
-let dspace = ('d', Rtl.Identity, Cell.of_size 2)  (* rounding modes *)
+let rspace = Rg.Spaces.r.Space.space
+let fspace = Rg.Spaces.f.Space.space
+let dspace = Rg.Spaces.d.Space.space
 
 let r i = (rspace, i, R.C 1)
 let f i = (fspace, i, R.C 1)
@@ -57,7 +55,6 @@ let saved_nvr temps =
       let w = Register.width reg in
       (match sp with 'r' -> t | 'f' -> u | 'x' -> q | _ -> bad()) w
 @ 
-
 Stack pointer is doubleword-aligned (which we actually force to be
 quad word aligned in case we are really on a sparc 9)
 <<SPARC calling convention automata in Lua>>=
@@ -75,7 +72,6 @@ function i(i) return (reg("i", i, Sparc.wordsize)) end
 
 Sparc.vol_fp  = (f(0)..f(7)) .. (x(0)..x(7))
 @ 
-
 \paragraph{Conventions governing the stack}
 <<sparccall.ml>>=
 let ra       = R.reg (r 31)
@@ -86,9 +82,7 @@ let sp_align = 16
 let growth   = Memalloc.Down
 let bo       = R.BigEndian
 @ 
-
 \paragraph{Automata for passing values---C~convention}
-
 <<SPARC calling convention automata in Lua>>=
 Sparc.cc["C"].results =
   A.choice { "float",  A.useregs (f(0)..f(7)),
@@ -119,7 +113,7 @@ A.register_cc(Backend.sparc.target, "C", Sparc.cc["C"])
 let wordsize  = 32
 let memsize   = 8
 let byteorder = bo
-let mspace    = ('m', byteorder, Cell.of_size memsize)
+let mspace    = Rg.Spaces.m.Space.space
 let vfp       = Vfp.mk wordsize
 let std_sp_location = RU.add wordsize vfp (R.late "minus frame size" wordsize)
 let mk_automaton block_name automaton () =
