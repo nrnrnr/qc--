@@ -234,9 +234,11 @@ each individual C~routine to worry about type mismatches.
    It is unclear whether CL means he wants a Caml stack trace or a Lua
    stack trace. ---NR
 \end{quote}
+Using [[with_stack]] here instead of in the definition of [[lambda]]
+ensures that we get a stack-trace entry even for Caml functions.
 <<interp toplevel>>=
 let apply f g args = match f with
-  | V.Function (info, f) -> (* NOT SURE IF THIS with_stack IS NEEDED *)
+  | V.Function (info, f) ->
          ( try (with_stack info g f args) with
          | V.Projection (v, what) -> <<projection error fallback>>
          | Errorfallback vs -> catcherrorfallback g vs
@@ -783,6 +785,7 @@ Too bad Caml doesn't have try-finally.
 let with_stack info g f x =
   let _ = currentloc_tostack g in
   let _ = g.V.callstack <- (info, None) :: g.V.callstack in
+  let _ = currentloc_fromstack g in
   let pop () = g.V.callstack <- List.tl g.V.callstack; currentloc_fromstack g in
   let answer = try f x with e -> (pop(); raise e) in
   let _ = pop() in
@@ -798,8 +801,8 @@ We return a dynamic function suitable for use as a Lua function value.
 It takes state and arguments, allocates an array for locals and temporaries,
 initializes the array with the values of the actual parameters,
 then applies body continuation to the state to get the answer.
-There is extra bookkeeping using [[info]] and [[with_stack]] to
-maintain the stack.  
+We don't have to maintain the stack because that is done in function
+application above.
 \nwaddbox{lambda : Srcmap.map * bool -> Srcmap.location -> string list -> bool -> A.block -> V.srcloc * V.func}
 \deeperbox{14pt}
 <<compiler ((std))>>=
@@ -819,7 +822,7 @@ let lambda (src, debug) (file, line, col) args varargs body state =
           let a, a's = match actuals with [] -> V.Nil, [] | h :: t -> h, t in
           (Array.set locals n a; walk (n+1) fs a's)  in
     let _ = walk 0 args argv in
-    with_stack srcloc state body locals
+    body locals
 
 let (_ : Srcmap.map * bool -> Srcmap.location -> string list -> bool -> A.block -> V.state -> V.srcloc * V.func) = lambda
 @ 
