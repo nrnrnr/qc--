@@ -565,24 +565,6 @@ let dump f =
     luafun
 in
 
-let nobadrtl _ proc =
-  let check (Rtl.Private.Rtl r) =
-    let (_, effs) = List.split r in
-    List.iter (function
-      | (Rtl.Private.Store(Rtl.Private.Reg(('t', _, _), _, _),
-                           Rtl.Private.Fetch(Rtl.Private.Reg(('u', _, _), _, _), 32),
-                           32))
-      | (Rtl.Private.Store(Rtl.Private.Reg(('r', _, _), _, _),
-                           Rtl.Private.Fetch(Rtl.Private.Reg(('f', _, _), _, _), 32),
-                           32))
-        -> Printf.eprintf "bad rtl: %s\n" (Rtlutil.ToString.rtl (Rtl.Up.rtl (Rtl.Private.Rtl r)))
-      | _ -> ()) effs
-  in
-  let () = G.iter_nodes (G.update_instr (fun r -> check (Rtl.Dn.rtl r); r)) proc.Proc.cfg
-  in
-  true
-in
-
 C.register_module "Debug"
   [ "explain",      V.efunc (V.unit **->> V.unit) Debug.explain
   ; "paths_proc"  , dump Call.paths_proc
@@ -603,8 +585,6 @@ C.register_module "Debug"
                                listpair V.string V.int **->> V.list (V.list V.string))
                       (Call.run_cc_on_sig_and_return (fun s -> s.Automaton.call))
   ; "printcfg", backplane_stage (fun _ proc -> Cfgutil.print_cfg proc.Proc.cfg; true)
-  (* REMOVE *)
-  ; "nobadrtl", backplane_stage nobadrtl
   ] g;
 @
 <<register modules to [[g]] in alphabetical order>>=
