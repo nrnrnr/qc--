@@ -77,23 +77,57 @@ let creg n = R.reg ('c',n,32)
 let cia    = creg 0  (* current instr address (pc)       *)
 let nia    = creg 1  (* new (next) instr address         *)
 let cr     = creg 2  (* condition register               *)
-let fpcr   = creg 3  (* flt point condition register     *)
+let fpscr  = creg 3  (* flt point condition register     *)
 let xer    = creg 4  (* XER register                     *)
 let lr     = creg 5  (* link register                    *)
 let ctr    = creg 6  (* counter register                 *)
 @ 
-The condition registers are divided into several identical fields.
+Setting bits in the control registers is handled by this utility
+function. The [[flag_map]] function shold convert the flag parameter
+to a bit number.
 <<spaces>>=
-let crf    n = R.slice 4 (n*4) cr
-let crfval n = R.fetch (crf n) 4
-let crLT  = crf 0
-and crGT  = crf 1
-and crEQ  = crf 2
-and crSO  = crf 3
-and crFX  = crf 4
-and crFEX = crf 5
-and crVX  = crf 6
-and crOX  = crf 7
+let set_flag reg flag_map v flag =
+  R.store (R.slice 1 (flag_map flag) reg)
+          (R.bits (Bits.U.of_int v 1) 1) 1
+@ 
+The condition register is divided into eight identical fields, and the
+first eight bits have special names. The third bit is a copy of the
+[[SO]] flag from the [[XER]] register. The bits 4-7 are copies of
+flags from the [[FRSCR]] register.
+<<spaces>>=
+let crf    n = R.slice 4 (n*4) cr  (* CR field       *)
+let crfval n = R.fetch (crf n) 4   (* CR field value *)
+
+type cr_flag = LT | GT | EQ | SO | FX | FEX | VX | OX
+let cr_flag_to_bit = function
+    LT  -> 0 | GT  -> 1 | EQ  -> 2 | SO  -> 3
+  | FX  -> 4 | FEX -> 5 | VX  -> 6 | OX  -> 7
+let set_cr_flag = set_flag cr cr_flag_to_bit 1
+let clr_cr_flag = set_flag cr cr_flag_to_bit 0
+@ 
+Almost all of the bits in the floating point status register have special
+names. I omit their complete definitions for now.
+<<spaces>>=
+(*
+type fpscr_flag =
+    FX | FEX | VX | OX | UX | ZX | XX
+  | VXSNAN | VXISI | VXIDI | VXZDZ | VXIMZ | VXVC
+  | FR | FI | VXSOFT | VXSQRT | VXCVI
+  | VE | OE | UE | ZE | XE | NI | RN
+*)
+@ 
+Three bits in the [[XER]] register have special names. The [[XER_SO]]
+bit is copied to the [[CR]] register whenever it is set.
+<<spaces>>=
+type xer_flag = XER_SO | OV | CA
+let xer_flag_to_bit = function XER_SO -> 0 | OV -> 1 | CA -> 2
+let set_xer' = set_flag xer xer_flag_to_bit
+let set_xer_flag fl = function
+    XER_SO -> R.par [ set_cr_flag SO ; set_xer' 1 fl ]
+  | _      -> set_xer' 1 fl
+let clr_xer_flag fl = function
+    XER_SO -> R.par [ clr_cr_flag SO ; set_xer' 0 fl ]
+  | _  -> set_xer' 0 fl
 @ 
 % ---------------------------------------------------------------------------
 \section{Post Expander}
@@ -149,8 +183,10 @@ let memval assn w addr = R.fetch (mem assn w addr) w
 let load ~dst ~addr assn =
   let w = twidth dst in
   assert (w = wordsize);
-  [R.store (tloc dst) (memval assn w addr) w]
-    
+  [R.par [ R.store (tloc dst) (memval assn w addr) w
+         ; tstore dst addr
+         ] ]
+
 let store ~addr ~src assn =
   let w = twidth src in
   assert (w = wordsize);
