@@ -50,16 +50,17 @@ in a [[pos]] denotes the first character covered by the node, the
 second number the first character \textit{after} the node.
 
 <<ast declaration>>=
-pos         = (int,int) -- source code positions span
+region      = (int,int) -- source code positions span
 
-program     = (pos,topdecl*)
+program     = (topdecl*)
 
-topdecl     = Import  (pos, ty, name*)
-            | Export  (pos, name*)
-            | Const   (pos, const*)
-            | Section (pos, name, section*)
-            | Global  (pos, register*)
-            | Pragma  (pos)                   -- just for testing
+topdecl     = TopDeclAt (topdecl, region)
+            | Import  (ty, name*)
+            | Export  (name*)
+            | Const   (const*)
+            | Section (name, section*)
+            | Global  (register*)
+            | Pragma                          -- just for testing
 
 @ Extensions to the language are syntactically covered by [[pragma]]s. 
 Extensions that are recognized by this implementation cover them in
@@ -69,14 +70,14 @@ pragmas.
 
 <<ast declaration>>=
 
-const       = (pos, name, expr)
+const       = (name, expr)
 
-register    = (pos, invariant, ty, name, reg?)
+register    = (invariant, ty, name, reg?)
 
-section     = SSpan (pos, expr key, expr value, section*)
-            | Datum (pos, datum)
-            | Procedure ( pos
-                        , conv?
+section     = SectionAt(section, region)
+            | SSpan (expr key, expr value, section*)
+            | Datum (datum)
+            | Procedure ( conv?
                         , name
                         , formal*
                         , decl*
@@ -86,21 +87,24 @@ memsize     = NoSize
             | DynSize
             | FixSize (expr)
                        
-datum       = Label (pos, name)
-            | Align (pos, align)
-            | MemDecl (pos, ty, memsize, init?)
+datum       = DatumAt (datum, region)
+            | Label (name)
+            | Align (align)
+            | MemDecl (ty, memsize, init?)
 
 @ Escape sequence in the concrete syntax of strings and charaxter
 literals are removed during the translation to the abstract syntax. 
 So [[InitStr]] and [[InitUStr]] do not contain escaped characters.
 
 <<ast declaration>>=
-init        = InitExprs (expr*)
+init        = InitAt (init, region)
+            | InitExprs (expr*)
             | InitStr   (string)
             | InitUStr  (string)
 
-ty          = BitsTy  (pos, size)
-            | FloatTy (pos, size)
+ty          = TyAt (ty, region)
+            | BitsTy  (size)
+            | FloatTy (size)
 
 @ To encode the [[invariant]] keyword a boolean value would suffice.
 But this type is not provided by \asdl.
@@ -110,19 +114,22 @@ But this type is not provided by \asdl.
 invariant   = Invariant
             | Variant
 
-formal      = (pos, hint?, invariant, ty, name)
-actual      = (pos, hint?, expr)
+formal      = (hint?, invariant, ty, name)
+actual      = (hint?, expr)
 
-decl        = Register  (pos, invariant, ty, name)
-            | Stackdata (pos, datum*)
+decl        = DeclAt (decl, region)
+            | Register  (invariant, ty, name)
+            | Stackdata (datum*)
            
-flow        = CutsTo    (pos, name*)
-            | UnwindsTo (pos, name*)
-            | ReturnsTo (pos, name*)
-            | Aborts    (pos)
+flow        = FlowAt (flow, region)
+            | CutsTo    (name*)
+            | UnwindsTo (name*)
+            | ReturnsTo (name*)
+            | Aborts    
 
-lvalue      = Var (pos, name)
-            | Mem (pos, ty, expr, aligned?)
+lvalue      = LValueAt (lvalue, region)
+            | Var (name)
+            | Mem (ty, expr, aligned?)
 
 assign      = (lvalue,expr)
 altcont     = (expr, expr)
@@ -139,26 +146,28 @@ with an empty [[else]] block.
 
 <<ast declaration>>=
 
-stmt        = IfStmt     (pos, expr, stmts, stmts)
-            | LabelStmt  (pos, name)
-            | ContStmt   (pos, name, name*)
-            | SpanStmt   (pos, expr key, expr value, stmts)
-            | AssignStmt (pos, assign*)
-            | CallStmt   (pos, lvalue*, conv?, expr, actual*, targets, flows)
-            | PrimStmt   (pos, lvalue*, conv?, name, actual*, flows)
-            | GotoStmt   (pos, expr, targets)
-            | JumpStmt   (pos, conv?, expr, actual*, targets)
-            | CutStmt    (pos, name, actual*, flows)
-            | ReturnStmt (pos, conv?, altcont?, actual*)
-            | EmptyStmt  (pos)
+stmt        = StmtAt (stmt, region)
+            | IfStmt     (expr, stmts, stmts)
+            | LabelStmt  (name)
+            | ContStmt   (name, name*)
+            | SpanStmt   (expr key, expr value, stmts)
+            | AssignStmt (assign*)
+            | CallStmt   (lvalue*, conv?, expr, actual*, targets, flows)
+            | PrimStmt   (lvalue*, conv?, name, actual*, flows)
+            | GotoStmt   (expr, targets)
+            | JumpStmt   (conv?, expr, actual*, targets)
+            | CutStmt    (name, actual*, flows)
+            | ReturnStmt (conv?, altcont?, actual*)
+            | EmptyStmt  
 
-expr        = Int    (pos, int,size?)
-            | Float  (pos, string,size?)
-            | Char   (pos, string,size?)
-            | Fetch  (pos, lvalue)
-            | BinOp  (pos, expr, op, expr)
-            | UnOp   (pos, op, expr)
-            | PrimOp (pos, name, actual*)
+expr        = ExprAt (expr, region)
+            | Int    (int,size?)
+            | Float  (string,size?)
+            | Char   (string,size?)
+            | Fetch  (lvalue)
+            | BinOp  (expr, op, expr)
+            | UnOp   (op, expr)
+            | PrimOp (name, actual*)
 
 @ Infix operators are abbreviations for primitive operations. The
 parser could perform this translation right away. But we want to
@@ -301,13 +310,15 @@ escape rules of \C. We must replace them with our own.
 let str s       = text ("\"" ^ String.escaped s ^ "\"")
 let char c      = text ("'"  ^ String.escaped c   ^ "'" )
 
-let ty = function
-    | BitsTy(_,n)       -> text "bits"  ^^ int n
-    | FloatTy(_,n)      -> text "float" ^^ int n
+let rec ty = function
+    | TyAt(x,_)       -> ty x
+    | BitsTy(n)       -> text "bits"  ^^ int n
+    | FloatTy(n)      -> text "float" ^^ int n
     
 let rec lvalue = function
-    | Var(_,x)          -> id x
-    | Mem(_,t,e,a)      -> 
+    | LValueAt(x,_)   -> lvalue x
+    | Var(x)          -> id x
+    | Mem(t,e,a)      -> 
         ~~ ty t 
         ^^ text "["
         ^^ expr e 
@@ -318,20 +329,21 @@ let rec lvalue = function
         ^^ text "]"
                         
 and actual = function
-    | (_, Some hint, e) -> agrp (str hint ^/ expr e)
-    | (_, None     , e) -> expr e
+    | ( Some hint, e) -> agrp (str hint ^/ expr e)
+    | ( None     , e) -> expr e
 
 and actuals xs = agrp (text "(" ^^ commalist actual xs ^^ text ")")
     
 and expr = function
-    | Int(_, i, None)           -> int i
-    | Int(_, i, Some size)      -> int i ^^ text ":" ^^ int size
-    | Float(_, f, None)         -> float f
-    | Float(_, f, Some size)    -> float f ^^ text ":" ^^ int size
-    | Char(_, c, None)          -> char c 
-    | Char(_, c, Some size)     -> char c ^^ text ":" ^^ int size
-    | Fetch(_,v)                -> lvalue v
-    | BinOp(_,l,op,r)           -> agrp begin
+    | ExprAt(x,_)             -> expr x
+    | Int( i, None)           -> int i
+    | Int( i, Some size)      -> int i ^^ text ":" ^^ int size
+    | Float( f, None)         -> float f
+    | Float( f, Some size)    -> float f ^^ text ":" ^^ int size
+    | Char( c, None)          -> char c 
+    | Char( c, Some size)     -> char c ^^ text ":" ^^ int size
+    | Fetch(v)                -> lvalue v
+    | BinOp(l,op,r)           -> agrp begin
                                      ~~ text "(" ^^ expr l
                                      ^^ nest begin
                                         ~~ text op
@@ -341,10 +353,10 @@ and expr = function
                                      ^^ text ")"
                                    end
 
-    | UnOp(_,op,e)              -> agrp (str op ^^ expr e)
-    | PrimOp(_,n,xs)            -> agrp (text "%" ^^ id n ^^ actuals xs)
+    | UnOp(op,e)              -> agrp (str op ^^ expr e)
+    | PrimOp(n,xs)            -> agrp (text "%" ^^ id n ^^ actuals xs)
 
-let constant (_,name,e) =       agrp begin 
+let constant (name,e) =       agrp begin 
                                 ~~ id name 
                                 ^/ text "="
                                 ^/ nest begin
@@ -358,7 +370,8 @@ let memsize = function
     | DynSize       -> text "[]"
     | FixSize(e)    -> text "[" ^^ expr e ^^ text "]"
 
-let init = function
+let rec init = function
+    | InitAt(x,_) -> init x
     | InitExprs(es) -> 
             fgrp begin
                 ~~ text "{"
@@ -378,13 +391,14 @@ let init = function
                 ^/ text ")"
             end
 
-let datum = function
-    | Label(_,n)            -> id n ^^ text ":"
-    | Align(_,a)            -> agrp (text "align" ^/ int a ^^ semi)
-    | MemDecl(_,t,m,Some i) -> agrp (ty t ^^ memsize m ^/ init i ^^ semi)
-    | MemDecl(_,t,m,None)   -> agrp (ty t ^^ memsize m ^^ semi) 
+let rec datum = function
+    | DatumAt(x,_)        -> datum x
+    | Label(n)            -> id n ^^ text ":"
+    | Align(a)            -> agrp (text "align" ^/ int a ^^ semi)
+    | MemDecl(t,m,Some i) -> agrp (ty t ^^ memsize m ^/ init i ^^ semi)
+    | MemDecl(t,m,None)   -> agrp (ty t ^^ memsize m ^^ semi) 
 
-let formal (_, h, v, t, n) =
+let formal ( h, v, t, n) =
         agrp begin
             ~~ (match h with Some hint -> str hint ^^ break | None -> empty)
             ^^ (if v = Invariant then text "invariant" ^^ break else empty)
@@ -394,8 +408,9 @@ let formal (_, h, v, t, n) =
 
 let formals xs = agrp (text "(" ^^ commalist formal xs ^^ text ")")
 
-let decl = function
-    | Register(_, Invariant, t, n) ->   
+let rec decl = function
+    | DeclAt(x,_)   -> decl x
+    | Register( Invariant, t, n) ->   
             agrp begin
                 ~~ text "invariant"
                 ^/ ty t
@@ -403,14 +418,14 @@ let decl = function
                 ^^ semi
             end
 
-    | Register(_, Variant  , t, n) ->   
+    | Register( Variant  , t, n) ->   
             agrp begin 
                 ~~ ty t
                 ^/ id n
                 ^^ semi
             end
     
-    | Stackdata(_, dd) ->                
+    | Stackdata( dd) ->                
             agrp begin
                 ~~ text "stackdata"
                 ^/ block datum dd
@@ -430,14 +445,15 @@ let targets = function
     | []    -> empty
     | ts    -> agrp (text "targets" ^/ nest (commalist id ts))
     
-let flow f =
+let rec flow f =
     let also s ns = agrp (text "also" ^/ text s ^/ text "to" 
                          ^/ nest (commalist id ns))
     in match f with
-    | CutsTo(_,ns)      -> also "cuts"    ns
-    | UnwindsTo(_,ns)   -> also "unwinds" ns
-    | ReturnsTo(_,ns)   -> also "returns" ns
-    | Aborts(_)         -> text "also aborts"
+    | FlowAt(x,_)     -> flow x
+    | CutsTo(ns)      -> also "cuts"    ns
+    | UnwindsTo(ns)   -> also "unwinds" ns
+    | ReturnsTo(ns)   -> also "returns" ns
+    | Aborts          -> text "also aborts"
 
 let flows = function
     | []    -> empty
@@ -451,7 +467,8 @@ let conv = function
 let dummy = text "<stmt>;"
 
 let rec stmt = function
-    | IfStmt (_, e, ss1, ss2)    -> 
+    | StmtAt(x,_)   -> stmt x
+    | IfStmt ( e, ss1, ss2)    -> 
         agrp begin
             ~~ agrp (text "if" ^/ expr e)
             ^/ block stmt ss1
@@ -460,12 +477,12 @@ let rec stmt = function
                | ss     -> break ^^ text "else" ^/ block stmt ss
                end
         end
-    | LabelStmt(_,n)            -> 
+    | LabelStmt(n)            -> 
         agrp begin
             ~~ id n ^^ text ":"
         end
         
-    | ContStmt(_,n,ns)          ->
+    | ContStmt(n,ns)          ->
         agrp begin
             ~~ text "continuation"
             ^/ id n
@@ -473,13 +490,13 @@ let rec stmt = function
             ^^ text ":"
         end
 
-    | SpanStmt(_,e1,e2,ss)      -> 
+    | SpanStmt(e1,e2,ss)      -> 
         agrp begin
             ~~ agrp (text "span" ^/ expr e1 ^/ expr e2)
             ^/ block stmt ss
         end
     
-    | AssignStmt(_,xs)          -> 
+    | AssignStmt(xs)          -> 
         let lhs,rhs = unzip xs in
         agrp begin
             fgrp begin 
@@ -496,23 +513,24 @@ let rec stmt = function
             end
         end
     
-    | CallStmt(_, lhs, cc, e, args, ts, fs) -> dummy
-    | PrimStmt(_, lhs, cc, n, args, fs) -> dummy
-    | GotoStmt(_,e,ts)          -> dummy
-    | CutStmt(_,n, args, fs)    -> dummy
-    | ReturnStmt(_,cc, alt, args) -> dummy
-    | JumpStmt(_,cc,e,args,ts)  -> dummy
-    | EmptyStmt(_)              -> text ";"
+    | CallStmt( lhs, cc, e, args, ts, fs) -> dummy
+    | PrimStmt( lhs, cc, n, args, fs)     -> dummy
+    | GotoStmt(e,ts)                      -> dummy
+    | CutStmt(n, args, fs)                -> dummy
+    | ReturnStmt(cc, alt, args)           -> dummy
+    | JumpStmt(cc,e,args,ts)              -> dummy
+    | EmptyStmt                           -> text ";"
 
 let rec section = function
-    | SSpan(_, e1, e2, ss) ->  
+    | SectionAt(x,_) -> section x
+    | SSpan( e1, e2, ss) ->  
             agrp begin
                 agrp (text "span" ^/ expr e1 ^/ expr e2)
                 ^/ block section ss
             end
-    | Datum(_, d) ->  
+    | Datum( d) ->  
             datum d
-    | Procedure(_,cc,n,fs, ds, ss)  ->  
+    | Procedure(cc,n,fs, ds, ss)  ->  
             agrp begin 
                 agrp begin
                     begin match cc with 
@@ -532,7 +550,7 @@ let rec section = function
                 ^/ text "}" 
             end
                  
-let register (_, v , t, n, reg) = 
+let register ( v , t, n, reg) = 
     agrp begin 
         ~~ (if v = Invariant then text "invariant" ^^ break else empty)
         ^^ ty t
@@ -541,40 +559,42 @@ let register (_, v , t, n, reg) =
         ^^ semi
     end 
 
-let topdecl = function
-    | Import(_, t, ns) -> 
+let rec topdecl = function
+    | TopDeclAt(x,_) -> topdecl x
+    | Import( t, ns) -> 
             agrp begin 
                 agrp (text "import" ^/ ty t)
                 ^/ commablock id ns
                 ^^ semi
             end
-    | Export(_, ns) ->
+    | Export( ns) ->
             agrp begin 
                 ~~ text "export"
                 ^/ commablock id ns
                 ^^ semi
             end 
-    | Const (_, cs) ->
+    | Const ( cs) ->
             agrp begin 
                 ~~ text "const"
                 ^/ block constant cs
             end
-    | Section(_, n, ss) ->
+    | Section( n, ss) ->
             agrp begin 
                 agrp (text "section" ^/ str n)
                 ^/ block section ss
             end
                    
-    | Global(_, rs) ->
+    | Global( rs) ->
             agrp begin 
                 ~~ text "global"
                 ^/ block register rs
             end
-    | Pragma(_) ->
+    | Pragma ->
             text "<pragma>"
 
-let program(_,ds) = vgrp begin
-                        list (break ^^ break) topdecl ds
+let program(ds) = vgrp begin
+                        ~~ list (break ^^ break) topdecl ds
+                        ^^ break
                     end
             
                                             
