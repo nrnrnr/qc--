@@ -9,7 +9,8 @@ This module defines a back end for the {\PAL} interpreter in directory
 [[../interp]]. 
 
 <<interp.mli>>=
-val target: Target2.t
+val target:     Target2.t
+val target':    Ast2ir.tgt
 @
 
 % ------------------------------------------------------------------ 
@@ -20,6 +21,7 @@ val target: Target2.t
 let arch        = "interp"
 let byte_order  = Rtl.LittleEndian       (* byte order *)
 let wordsize    = 32
+let pointersize = wordsize
 @
 
 The interpreter at the moment knows only the memory space [[m]].  We use
@@ -29,13 +31,20 @@ and translated to control-flow instructions the interpreter knows.
 
 <<interp.ml>>=
 module A      = Automaton2
+module AN     = Automaton
 module SS32   = Space.Standard32
 module T      = Target2
-module D      = Rtl.Dn (* Down *)
+module D      = Rtl.Dn  (* Down *)
 module U      = Rtl.Up  (* Up   *)
 module R      = Rtl
 module RP     = Rtl.Private
 module RU     = Rtlutil
+module C      = Call
+module RS     = Register.Set
+
+let downrtl = R.Dn.rtl
+let uploc   = R.Up.loc
+let upexp   = R.Up.exp
 
 module Spaces = struct
     let m   = SS32.m   byte_order    [8; 16; 32]
@@ -82,7 +91,32 @@ module Spaces = struct
                 
 end
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Registers}
+% ------------------------------------------------------------------ 
+
+<<interp.ml>>=
+let pc:Rtl.loc            = Rtl.reg ('c',0, wordsize)  (* pc pointer     *)
+let sp:Rtl.loc            = Rtl.reg ('c',1, wordsize)  (* stack pointer  *)
+let ap:Rtl.loc            = Rtl.reg ('c',2, wordsize)  (* arg pointer    *)
+let ra:Rtl.loc            = Rtl.reg ('c',3, wordsize)  (* return address *)
+
+let arg_reg  x            = ('A', x, 1)
+let glb_reg  x            = ('G', x, 1)
+let argument x            = R.reg (arg_reg x)          (* arguments *) 
+let global   x            = R.reg (glb_reg x)          (* globals   *) 
+
+let fp_mode               = Rtl.reg('d',0,2)           (* FP rounding mode *) 
+let spval                 = Rtl.fetch sp wordsize
+let vfp                   = Vfp.mk wordsize          
+let std_sp_location       = RU.add pointersize 
+                            vfp (R.late "minus frame size" pointersize)
+@
                 
+% ------------------------------------------------------------------ 
+\subsection{Control Flow and Instructions}
+% ------------------------------------------------------------------ 
 
 Module [[Flow]]  provides us with {\rtl}s that encode control transfer.
 They are part of the [[target]] value that describes this target
@@ -99,12 +133,6 @@ ANOTHER SPACE SHOULD BE CHOSEN.
 <<module Flow>>=
 let ewidth                = RU.Width.exp 
 let lwidth                = RU.Width.loc 
-
-let pc:Rtl.loc            = Rtl.reg ('c',0, wordsize)  (* pc pointer     *)
-let sp:Rtl.loc            = Rtl.reg ('c',1, wordsize)  (* stack pointer  *)
-let ap:Rtl.loc            = Rtl.reg ('c',2, wordsize)  (* arg pointer    *)
-let ra:Rtl.loc            = Rtl.reg ('c',3, wordsize)  (* return address *)
-
 @
 
 We are now defining instructions that model instructions in the
@@ -125,7 +153,7 @@ let dec loc       = R.store loc (sub1 loc) wordsize
 let error         = Impossible.impossible
 @
 
-For most control-flow related {\rtl}s [[Target2.t]] demands we provide
+For most control-flow related {\rtl}s, [[Target2.t]] demands we provide
 embedding and projection functions. \emph{As far as I can tell the
 projections are never used and we could simplify [[Target2.t]].}
 
@@ -140,17 +168,16 @@ let goto =
     }
     
 let cutto =
-    { T.embed   = (fun (sp,newsp,newpc) -> 
-                       let assign loc e  =
-                           Rtl.store loc e (Rtlutil.Width.exp e) in
-                       Rtl.par [assign sp newsp; assign pc newpc])
-    ; T.project = (fun r -> match D.rtl r with
-                  | RP.Rtl [ (_, RP.Store(sp, nsp, _))
-                           ; (_, RP.Store(_ , npc, _))] ->
-                       (U.loc sp, U.exp nsp, U.exp npc)
-                  | _ -> error "projected non-cutto")
-    }
-
+    { T.embed   = (fun {Mflow.new_pc=newpc; Mflow.new_sp= newsp} ->
+                        let assign loc e =
+                            Rtl.store loc e (Rtlutil.Width.exp e) in
+                        Rtl.par [assign sp newsp; assign pc newpc])
+     ; T.project = (fun r -> match downrtl r with
+                      | RP.Rtl [ (_, RP.Store(_, nsp, _))
+                               ; (_, RP.Store(_ , npc, _))] ->
+                        {Mflow.new_sp=upexp nsp; Mflow.new_pc= upexp npc}
+                      | _ -> Impossible.impossible "projected non-cutto")
+     }
 let call = 
     { T.embed   = (fun e -> R.par [store ra (fetch pc); store pc e])
     ; T.project = (fun r -> match D.rtl r with
@@ -172,23 +199,11 @@ let cutto  = cutto
 let return = store pc (fetch ra)    (* no embed/project needed *)
 @
 
-We are defining two instructions [[push_arg]] and [[pop_arg]] to
-describe the corresponding instructions in the interpreter. The
-description is quite inaccurate \emph{and need to be improved.}
-
-\begin{itemize}
-\item The instructions in the interpreter take arguments of any width.
-      This is not properly reflected in the {\rtl}s defined here. Maybe
-      we should use operators.
-\item The [[pop_arg]] instruction is not an effect but just an
-      expression. The reason is, that the [[Automaton2.location#fetch]]
-      method requires to return an expression.
-\end{itemize}
+What do the two instructions below? I realize then have to do with 
+fetching and storing values in the global and local register sets.
+Please explain the [[sp]] paramter. --CL
 
 <<module Flow>>=
-let argument x  = R.reg ('A', x, 1)
-let global   x  = R.reg ('G', x, 1)
-
 let store_space sp i e = R.store (sp i) e (ewidth e)
 let fetch_space sp i w = R.fetch (sp i) w
 @
@@ -198,12 +213,11 @@ let fetch_space sp i w = R.fetch (sp i) w
 % ------------------------------------------------------------------ 
 
 <<interp.ml>>=
-let fp_mode               = Rtl.reg('d',0,2)           (* FP rounding mode *) 
 
 class argument_location (index:int): Automaton2.location =
 object
-    method store expr width = Flow.store_space Flow.argument index expr
-    method fetch width      = Flow.fetch_space Flow.argument index width
+    method store expr width = Flow.store_space argument index expr
+    method fetch width      = Flow.fetch_space argument index width
 end
 
 class arguments (base:Rtl.exp): Automaton2.automaton =
@@ -232,8 +246,8 @@ class global_location (index:int) (width:int): Automaton2.location =
         let s = Printf.sprintf "global_%d" index in 
         R.var s index width
 in object
-    method store expr width = Flow.store_space Flow.global index expr
-    method fetch width      = Flow.fetch_space Flow.global index width
+    method store expr width = Flow.store_space global index expr
+    method fetch width      = Flow.fetch_space global index width
 end
 
 
@@ -260,6 +274,135 @@ end
 @
 
 % ------------------------------------------------------------------ 
+\subsection{Automata for Calling Conventions and Globals}
+% ------------------------------------------------------------------ 
+
+Our automata hand out \rtl-based locations. We simply need to wrap them
+such that they become [[Automaton.loc]] locations. [[loc_of]] takes an
+{\rtl} location and returns an [[Automaton.loc]] location.
+
+<<interp.ml>>=
+let loc_of (l:Rtl.loc): AN.loc  =
+    { AN.fetch = (Rtl.fetch l)
+    ; AN.store = (Rtl.store l)
+    }
+@
+
+The interpreter hands out registers for globals and arguments, assuming
+that we have an endless supply for each. We have just one automaton
+[[seq]] that does this. It is parameterized over a function [[reg]]
+that supplies the register.
+
+<<interp.ml>>=
+let seq (reg: int -> Register.t) ~(base:Rtl.exp) =
+    let index = ref (-1)                  in
+    let regs  = ref ([]: Register.t list) in
+    let allocate ~width ~alignment ~hint =
+        ( index := !index + 1
+        ; regs  := (reg !index) :: !regs
+        ; loc_of (Rtl.reg (reg !index))
+        ) in
+    let freeze rs locs   = 
+        { AN.overflow    = Block.at ~base ~size:0 ~alignment:1
+        ; AN.regs_used   = RS.union rs (RS.of_list !regs)
+        ; AN.mems_used   = locs
+        ; AN.align_state = 1
+        } 
+    in
+        { AN.allocate = allocate
+        ; AN.freeze   = freeze
+        }
+
+let params      = seq arg_reg               (* for parameters  *)
+let globls base = AN.mk (seq glb_reg base)  (* for global regs *)
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Calling Conventions}
+% ------------------------------------------------------------------ 
+
+Allmost every aspects of the calling convention is irrelevant because the
+interpreter does not work like a CPU. 
+
+<<interp.ml>>=
+let cc = (* old style *)
+    { T.sp           = sp
+    ; T.return       = Flow.return
+    ; T.proc         = new arguments
+    ; T.cont         = new arguments
+    ; T.ret          = new arguments
+    ; T.allocatable  = []
+    ; T.cutto        = Flow.cutto
+    ; T.stack_slots  = new globals 
+    }
+@
+
+I have to admit, that I don't know what I am doing here.
+
+<<transformations>>=
+let call_actuals  =
+  C.outgoing ~growth ~sp
+    ~mkauto:(fun () -> Block.relative vfp "out call parms" params) 
+    ~autosp:(fun r  -> Block.base r.AN.overflow)
+    ~postsp:(fun sp -> sp) in  
+
+let prolog  =
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> params vfp)
+    ~autosp:(fun _ -> vfp)
+    ~postsp:(fun _ -> std_sp_location) in
+
+let call_results  =
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> Block.relative vfp "in ovfl results" params)
+    ~autosp:(fun r -> Block.base r.AN.overflow)
+    ~postsp:(fun _ -> std_sp_location) in
+
+let epilog  =
+  C.outgoing ~growth ~sp
+    ~mkauto:(fun () -> Block.relative vfp "out ovfl results" params)
+    ~autosp:(fun r -> Block.base r.AN.overflow)
+    ~postsp:(fun _ -> vfp) in
+
+let also_cuts_to =
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> Block.relative vfp "in cont parms" params)
+    ~autosp:(fun r -> std_sp_location)
+    ~postsp:(fun _ -> std_sp_location) in
+
+let cut_actuals base  =
+   C.outgoing ~growth ~sp ~mkauto:(fun () -> params base)
+     ~autosp:(fun r -> spval)
+     ~postsp:(fun _ -> spval) in
+
+
+<<interp.ml>>=
+let cc' = (* new style *)
+    let growth = Memalloc.Down            in (* irrelevant *) 
+    <<transformations>>
+    { C.name            = "interp"
+    ; C.jump_ok         = true
+    ; C.call_parms      = { C.in' = prolog;       C.out = call_actuals}
+    ; C.cut_parms       = { C.in' = also_cuts_to; C.out = cut_actuals}
+    ; C.results         = { C.in' = call_results; C.out = epilog}
+
+    ; C.stack_growth    = growth
+    ; C.stable_sp_loc   = std_sp_location
+    ; C.replace_vfp     = (fun _ -> ())
+    ; C.sp_align        = 1             
+    ; C.ra              = ra            
+    ; C.pre_nvregs      = Register.Set.empty
+    ; C.volregs         = Register.Set.empty
+    ; C.saved_nvr       = (fun _ _ -> Impossible.impossible "saved regs")
+    ; C.cutto           = Flow.cutto
+    ; C.saved_ra        = (fun _ -> ra)
+    ; C.return          = (fun k n ~ra -> Flow.return)
+    }
+@
+
+
+
+% ------------------------------------------------------------------ 
 \subsection{Target Value}
 % ------------------------------------------------------------------ 
 
@@ -267,32 +410,9 @@ The [[target]] value is the essential information for the rest of the
 compiler.
 
 <<interp.ml>>=
-let downrtl = R.Dn.rtl
-let uploc   = R.Up.loc
-let upexp   = R.Up.exp
-let target =
+let target = (* old style *)
     { T.name = arch
-      ; T.cc = (fun _ -> 
-               { T.sp     = Flow.sp
-               ; T.return = Flow.return
-               ; T.proc   = new arguments
-               ; T.cont   = new arguments
-               ; T.ret    = new arguments
-               ; T.allocatable = []
-               ; T.cutto  = 
-                 { T.embed   =
-                   (fun {Mflow.new_pc=newpc; Mflow.new_sp= newsp} ->
-                     let assign loc e =
-                       Rtl.store loc e (Rtlutil.Width.exp e) in
-                       Rtl.par [assign Flow.sp newsp; assign Flow.pc newpc])
-                 ; T.project = (fun r -> match downrtl r with
-                                  | RP.Rtl [ (_, RP.Store(_, nsp, _))
-                                           ; (_, RP.Store(_ , npc, _))] ->
-                                    {Mflow.new_sp=upexp nsp; Mflow.new_pc= upexp npc}
-                                  | _ -> Impossible.impossible "projected non-cutto")
-                 }
-               ; T.stack_slots  = new globals (* bogus *)
-               }) 
+      ; T.cc = (fun _ -> cc) 
       ; T.byteorder    = byte_order
       ; T.wordsize     = wordsize
       ; T.pointersize  = wordsize
@@ -313,4 +433,29 @@ let target =
       ; T.spill        = (fun _ -> assert false)
       ; T.reload       = (fun _ -> assert false)
       }
+
+let target' = (* new style *)
+      { T.name = arch
+      ; T.cc =           (fun _ -> cc') 
+      ; T.byteorder    = byte_order
+      ; T.wordsize     = wordsize
+      ; T.pointersize  = wordsize
+      ; T.vfp          = Vfp.mk wordsize
+      ; T.alignment    = 1
+      ; T.memsize      = 8
+      ; T.float        = "ieee754"
+      ; T.charset      = "latin1" 
+      ; T.globals      = globls
+      ; T.is_rounding_mode = (fun loc -> loc = fp_mode)
+      ; T.spaces       = [ Spaces.m ; Spaces.c ;  Spaces.a ; Spaces.g ]
+      ; T.data_section = "data"
+      ; T.bnegate      = Flow.bnegate
+      ; T.goto         = Flow.goto
+      ; T.jump         = Flow.jump
+      ; T.call         = Flow.call 
+      ; T.branch       = Flow.branch
+      ; T.spill        = (fun _ -> assert false)
+      ; T.reload       = (fun _ -> assert false)
+      }
 @
+
