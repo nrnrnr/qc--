@@ -79,14 +79,16 @@ into the generated names to avoid name clashes with existing names.
 type generator = string -> string
 let count = Reinit.ref 0
 @
-
 Names returned by [[id]] use the supplied name as a prefix, followed
 by a unique number. 
-
+For a label, the prefix is chosen to be \texttt{.L}, which magically
+causes the GNU assembler, linker and debugger to ignore the symbol.
+(Contrary to the documentation, which claims that a bare~\texttt{L} is
+the magic prefix.)
 <<idgen.ml>>=
 let id kind s =
     ( incr count
-    ; Printf.sprintf "%s%s:%c%d" (if kind == 'l' then "L" else "") s kind !count
+    ; Printf.sprintf "%s%s:%c%d" (if kind == 'l' then ".L" else "") s kind !count
     )
 @
 The kind of a name is encoded by a single letter in the name.

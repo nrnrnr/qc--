@@ -52,7 +52,7 @@ Test.files = { "badlit8.c--"
              , "test-036.c--"
              , "test-037.c--"
              , "test-038.c--"
-             , "test-039.c--"
+    --       , "test-039.c--"  -- made runnable
              , "test-040.c--"
              , "test-041.c--"
              , "test-042.c--"

@@ -20,8 +20,8 @@ main:
 	leal -4(%esp), %esp
 	leal 4(%esp), %edx
 	movl (%edx),%edx
-Linitialize_continuations_l8:
-Lproc_body_start_l7:
+.Linitialize_continuations_l8:
+.Lproc_body_start_l7:
 	movl $0,%eax
 	leal 4(%esp), %ecx
 	movl %edx,(%esp)
@@ -36,8 +36,8 @@ memchar:
 	leal -48(%esp), %esp
 	leal 48(%esp), %edx
 	movl (%edx),%edx
-Linitialize_continuations_l21:
-Lproc_body_start_l20:
+.Linitialize_continuations_l21:
+.Lproc_body_start_l20:
 	leal 48(%esp), %ecx
 	movl $-4,%eax
 	addl %eax,%ecx
@@ -131,8 +131,8 @@ memint:
 	leal -44(%esp), %esp
 	leal 44(%esp), %edx
 	movl (%edx),%edx
-Linitialize_continuations_l34:
-Lproc_body_start_l33:
+.Linitialize_continuations_l34:
+.Lproc_body_start_l33:
 	leal 44(%esp), %ecx
 	movl $-4,%eax
 	addl %eax,%ecx
@@ -223,8 +223,8 @@ regchar:
 	leal -4(%esp), %esp
 	leal 4(%esp), %ecx
 	movl (%ecx),%ecx
-Linitialize_continuations_l47:
-Lproc_body_start_l46:
+.Linitialize_continuations_l47:
+.Lproc_body_start_l46:
 	movl $1,%eax
 	movl %ecx,(%esp)
 	movl %edx,%ecx
@@ -253,8 +253,8 @@ regint:
 	leal -4(%esp), %esp
 	leal 4(%esp), %ecx
 	movl (%ecx),%ecx
-Linitialize_continuations_l60:
-Lproc_body_start_l59:
+.Linitialize_continuations_l60:
+.Lproc_body_start_l59:
 	movl $4,%eax
 	movl %ecx,(%esp)
 	movl %edx,%ecx

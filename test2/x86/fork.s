@@ -24,7 +24,7 @@ run_thread:
 	movl (%eax),%eax
 	leal 40(%esp), %ecx
 	movl (%ecx),%ecx
-Linitialize_continuations_l11:
+.Linitialize_continuations_l11:
 	leal cutback_C8,%edx
 	movl %eax,(%esp)
 	leal 40(%esp), %eax
@@ -43,7 +43,7 @@ Linitialize_continuations_l11:
 	movl $-4,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-Lproc_body_start_l10:
+.Lproc_body_start_l10:
 	leal 40(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax
@@ -74,17 +74,17 @@ cutback_C8:
 	leal 40(%esp), %esp
 	ret
 .section .pcmap_data
-Lstackdata_l19:
+.Lstackdata_l19:
 .long 0
 .section .pcmap
 .long cutback_C8
-.long Lframe_l20
+.long .Lframe_l20
 .section .pcmap_data
-Lframe_l20:
+.Lframe_l20:
 .long 0x80000004
 .long 0xffffffd8
 .long 0xffffffe4
-.long Lstackdata_l19
+.long .Lstackdata_l19
 .long 4
 .long 2
 .long 0
@@ -106,8 +106,8 @@ cmm_threadfun:
 	leal -12(%esp), %esp
 	leal 12(%esp), %ecx
 	movl (%ecx),%ecx
-Linitialize_continuations_l23:
-Lproc_body_start_l22:
+.Linitialize_continuations_l23:
+.Lproc_body_start_l22:
 	leal 12(%esp), %edi
 	movl $-12,%esi
 	addl %esi,%edi
@@ -119,7 +119,7 @@ Lproc_body_start_l22:
 	movl %edi,(%esi)
 	movl %ecx,8(%esp)
 	call fib
-Ljoin_l26:
+.Ljoin_l26:
 	movl %eax,%edx
 	leal comeback,%edi
 	movl (%edi),%edi
@@ -131,17 +131,17 @@ Ljoin_l26:
 	movl (%esi),%esi
 	movl %edi, %esp; jmp *%esi
 .section .pcmap_data
-Lstackdata_l33:
+.Lstackdata_l33:
 .long 0
 .section .pcmap
-.long Ljoin_l26
-.long Lframe_l34
+.long .Ljoin_l26
+.long .Lframe_l34
 .section .pcmap_data
-Lframe_l34:
+.Lframe_l34:
 .long 0x80000004
 .long 0xfffffff4
 .long 0xfffffffc
-.long Lstackdata_l33
+.long .Lstackdata_l33
 .long 4
 .long 2
 .long 0

@@ -25,8 +25,8 @@ main:
 	movl (%eax),%eax
 	leal 16(%esp), %eax
 	movl (%eax),%eax
-Linitialize_continuations_l4:
-Lproc_body_start_l3:
+.Linitialize_continuations_l4:
+.Lproc_body_start_l3:
 	movl $99,%ecx
 	leal Cmm.global_area,%edx
 	movl %ecx,(%edx)
@@ -44,16 +44,16 @@ Lproc_body_start_l3:
 	movl %edi,(%ecx)
 	movl %eax,12(%esp)
 	call printf
-Ljoin_l17:
+.Ljoin_l17:
 	leal callincn,%edi
 	leal 16(%esp), %eax
 	movl $-16,%ecx
 	addl %ecx,%eax
 	movl %edi,(%eax)
 	call printf
-Ljoin_l14:
+.Ljoin_l14:
 	call incn
-Ljoin_l11:
+.Ljoin_l11:
 	leal nvalue,%edi
 	leal 16(%esp), %eax
 	movl $-16,%ecx
@@ -66,7 +66,7 @@ Ljoin_l11:
 	movl (%edi),%edi
 	movl %edi,(%eax)
 	call printf
-Ljoin_l8:
+.Ljoin_l8:
 	movl $0,%eax
 	leal 16(%esp), %edx
 	movl $0,%ecx
@@ -77,17 +77,17 @@ Ljoin_l8:
 	leal 16(%esp), %esp
 	ret
 .section .pcmap_data
-Lstackdata_l23:
+.Lstackdata_l23:
 .long 0
 .section .pcmap
-.long Ljoin_l17
-.long Lframe_l24
+.long .Ljoin_l17
+.long .Lframe_l24
 .section .pcmap_data
-Lframe_l24:
+.Lframe_l24:
 .long 0x80000004
 .long 0xfffffff0
 .long 0xfffffffc
-.long Lstackdata_l23
+.long .Lstackdata_l23
 .long 1
 .long 2
 .long 0
@@ -98,14 +98,14 @@ Lframe_l24:
 .long 0
 .long 0
 .section .pcmap
-.long Ljoin_l14
-.long Lframe_l25
+.long .Ljoin_l14
+.long .Lframe_l25
 .section .pcmap_data
-Lframe_l25:
+.Lframe_l25:
 .long 0x80000004
 .long 0xfffffff0
 .long 0xfffffffc
-.long Lstackdata_l23
+.long .Lstackdata_l23
 .long 1
 .long 2
 .long 0
@@ -116,14 +116,14 @@ Lframe_l25:
 .long 0
 .long 0
 .section .pcmap
-.long Ljoin_l11
-.long Lframe_l26
+.long .Ljoin_l11
+.long .Lframe_l26
 .section .pcmap_data
-Lframe_l26:
+.Lframe_l26:
 .long 0x80000004
 .long 0xfffffff0
 .long 0xfffffffc
-.long Lstackdata_l23
+.long .Lstackdata_l23
 .long 1
 .long 2
 .long 0
@@ -134,14 +134,14 @@ Lframe_l26:
 .long 0
 .long 0
 .section .pcmap
-.long Ljoin_l8
-.long Lframe_l27
+.long .Ljoin_l8
+.long .Lframe_l27
 .section .pcmap_data
-Lframe_l27:
+.Lframe_l27:
 .long 0x80000004
 .long 0xfffffff0
 .long 0xfffffffc
-.long Lstackdata_l23
+.long .Lstackdata_l23
 .long 1
 .long 2
 .long 0

@@ -15,8 +15,8 @@ f:
 	leal -24(%esp), %esp
 	leal 24(%esp), %ecx
 	movl (%ecx),%ecx
-Linitialize_continuations_l4:
-Lproc_body_start_l3:
+.Linitialize_continuations_l4:
+.Lproc_body_start_l3:
 	movl $-559038737,%edx
 	leal 24(%esp), %eax
 	movl %ecx,8(%esp)

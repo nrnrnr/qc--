@@ -32,21 +32,21 @@ section "text"
         $r31 = ($r31+-24);
         i = $r0;
         $t1 = $r30;
-        Linitialize continuations:l5:
-        Lproc body start:l4:
-        $c0 when %eq[32](i, 1) = sym@Ljoin@l11;
-        Ljoin:l12:
-        $c0 = sym@Ljoin@l9;
-        Ljoin:l9:
+        .Linitialize continuations:l5:
+        .Lproc body start:l4:
+        $c0 when %eq[32](i, 1) = sym@.Ljoin@l11;
+        .Ljoin:l12:
+        $c0 = sym@.Ljoin@l9;
+        .Ljoin:l9:
         $c0 when %conjoin[](%leu[32](2, i), %leu[32](i, 3))
-            = sym@Ljoin@l7;
-        Ljoin:l8:
-        $c0 = sym@Lexit@l2;
-        Ljoin:l7:
+            = sym@.Ljoin@l7;
+        .Ljoin:l8:
+        $c0 = sym@.Lexit@l2;
+        .Ljoin:l7:
         $r0 = i;
         $r31 = ($r31+24);
         $c0 = $t1;
-        Ljoin:l11:
+        .Ljoin:l11:
         $r0 = i;
         $r31 = ($r31+24);
         $c0 = $t1;

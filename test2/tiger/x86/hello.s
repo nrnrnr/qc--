@@ -36,8 +36,8 @@ tiger_main:
 	leal -24(%esp), %esp
 	leal 24(%esp), %ecx
 	movl (%ecx),%ecx
-Linitialize_continuations_l4:
-Lproc_body_start_l3:
+.Linitialize_continuations_l4:
+.Lproc_body_start_l3:
 	leal 24(%esp), %edx
 	movl %edi,4(%esp)
 	movl $-8,%edi
@@ -65,7 +65,7 @@ Lproc_body_start_l3:
 	movl %edi,(%edx)
 	movl %ecx,12(%esp)
 	call tig_print
-Ljoin_l8:
+.Ljoin_l8:
 	leal Cmm.global_area,%edx
 	movl 8(%esp),%ecx
 	movl %ecx,(%edx)
@@ -78,18 +78,18 @@ Ljoin_l8:
 	leal 24(%esp), %esp
 	ret
 .section .pcmap_data
-Lstackdata_l14:
+.Lstackdata_l14:
 .long 1
 .long 0xfffffff8
 .section .pcmap
-.long Ljoin_l8
-.long Lframe_l15
+.long .Ljoin_l8
+.long .Lframe_l15
 .section .pcmap_data
-Lframe_l15:
+.Lframe_l15:
 .long 0x80000004
 .long 0xffffffe8
 .long 0xfffffff4
-.long Lstackdata_l14
+.long .Lstackdata_l14
 .long 1
 .long 4
 .long 2

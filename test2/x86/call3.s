@@ -22,8 +22,8 @@ call3:
 	movl (%ecx),%edx
 	leal 28(%esp), %ecx
 	movl (%ecx),%ecx
-Linitialize_continuations_l4:
-Lproc_body_start_l3:
+.Linitialize_continuations_l4:
+.Lproc_body_start_l3:
 	movl %eax,8(%esp)
 	movl (%esp),%eax
 	movl %edx,12(%esp)

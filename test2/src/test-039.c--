@@ -13,7 +13,7 @@ section "text"
     {
         bits32 s,p;
         if n == 0 {
-           return (1,1);
+           return (0,1);
         } else {
             s, p = sp1(n-1);
             return (s+n, p*n);
@@ -52,4 +52,38 @@ section "text"
             goto loop;
         }
     }
+
+
+  sptest1 ("address" bits32 spfun, "address" bits32 name, bits32 n) {
+    bits32 s, p;
+    s, p = spfun (n);
+    foreign "C" printf ("address" fmt, "address" name, n, s, p);
+    return;
+  }
+
+  sptest (bits32 n) {
+    sptest1(sp1, sp1lbl, n);
+    sptest1(sp2, sp2lbl, n);
+    sptest1(sp3, sp3lbl, n);
+    return;
+  }
+
+  foreign "C" main (bits32 argc, "address" bits32 argv) {
+    sptest(1);
+    sptest(4); 
+    sptest(10);
+    foreign "C" return(0);
+  }
+
+}
+
+export main;
+import printf;
+
+section "data" {
+  sp1lbl: bits8[] "sp1\0";
+  sp2lbl: bits8[] "sp2\0";
+  sp3lbl: bits8[] "sp3\0";
+  
+  fmt: bits8[] "%s(%d) == (%d, %d)\n\0";
 }

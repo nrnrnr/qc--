@@ -32,8 +32,8 @@ mod_36:
 	movl (%edx),%ecx
 	leal 48(%esp), %edx
 	movl (%edx),%edx
-Linitialize_continuations_l7:
-Lproc_body_start_l6:
+.Linitialize_continuations_l7:
+.Lproc_body_start_l6:
 	movl %ecx,4(%esp)
 	leal 48(%esp), %ecx
 	movl %ecx,8(%esp)
@@ -123,8 +123,8 @@ mark_multiples_37:
 	movl (%edx),%edx
 	leal 64(%esp), %ecx
 	movl (%ecx),%ecx
-Linitialize_continuations_l18:
-Lproc_body_start_l17:
+.Linitialize_continuations_l18:
+.Lproc_body_start_l17:
 	movl %edx,12(%esp)
 	leal 64(%esp), %edx
 	movl %edx,16(%esp)
@@ -170,8 +170,8 @@ Lloop_start_50:
 	addl %eax,%ecx
 	movl (%ecx),%ecx
 	cmpl %ecx,%edx
-	jl Ljoin_l31
-Ljoin_l32:
+	jl .Ljoin_l31
+.Ljoin_l32:
 	jmp Lloop_end_40
 Lloop_end_40:
 	movl $0,%eax
@@ -182,7 +182,7 @@ Lloop_end_40:
 	movl %ecx,(%edx)
 	leal 68(%esp), %esp
 	ret
-Ljoin_l31:
+.Ljoin_l31:
 	jmp Lloop_body_51
 Lloop_body_51:
 	leal Cmm.global_area,%ecx
@@ -222,25 +222,25 @@ Lloop_body_51:
 	movl %esi,(%edi)
 	movl %ecx,56(%esp)
 	call mod_36
-Ljoin_l30:
+.Ljoin_l30:
 	leal 64(%esp), %edi
 	movl $-64,%esi
 	addl %esi,%edi
 	movl %eax,(%edi)
 	call tig_not
-Ljoin_l27:
+.Ljoin_l27:
 	leal Cmm.global_area,%edi
 	movl 48(%esp),%esi
 	movl %esi,(%edi)
 	movl $0,%edi
 	cmpl %edi,%eax
-	jne Ljoin_l23
-Ljoin_l24:
+	jne .Ljoin_l23
+.Ljoin_l24:
 	jmp LifFalse_48
 LifFalse_48:
 	movl $0,%edi
 	jmp LifEnd_49
-Ljoin_l23:
+.Ljoin_l23:
 	jmp LifTrue_47
 LifTrue_47:
 	leal Cmm.global_area,%edi
@@ -272,7 +272,7 @@ LifTrue_47:
 	addl %ecx,%eax
 	movl %esi,(%eax)
 	call tig_bounds_check
-Ljoin_l22:
+.Ljoin_l22:
 	leal Cmm.global_area,%esi
 	movl %edi,(%esi)
 	movl $1,%edi
@@ -317,24 +317,24 @@ LifEnd_49:
 	movl $8,%edx
 	addl %edx,%esi
 	movl %edi,(%esi)
-	jmp Ljoin_l36
-Ljoin_l36:
+	jmp .Ljoin_l36
+.Ljoin_l36:
 	movl 28(%esp),%edi
 	movl 44(%esp),%esi
 	jmp Lloop_start_50
 .section .pcmap_data
-Lstackdata_l38:
+.Lstackdata_l38:
 .long 1
 .long 0xfffffff4
 .section .pcmap
-.long Ljoin_l30
-.long Lframe_l39
+.long .Ljoin_l30
+.long .Lframe_l39
 .section .pcmap_data
-Lframe_l39:
+.Lframe_l39:
 .long 0x80000008
 .long 0xffffffc0
 .long 0xffffffd8
-.long Lstackdata_l38
+.long .Lstackdata_l38
 .long 2
 .long 9
 .long 2
@@ -356,14 +356,14 @@ Lframe_l39:
 .long 0
 .long mark_multiples_37_gc_data
 .section .pcmap
-.long Ljoin_l27
-.long Lframe_l40
+.long .Ljoin_l27
+.long .Lframe_l40
 .section .pcmap_data
-Lframe_l40:
+.Lframe_l40:
 .long 0x80000008
 .long 0xffffffc0
 .long 0xffffffd8
-.long Lstackdata_l38
+.long .Lstackdata_l38
 .long 2
 .long 9
 .long 2
@@ -385,14 +385,14 @@ Lframe_l40:
 .long 0
 .long mark_multiples_37_gc_data
 .section .pcmap
-.long Ljoin_l22
-.long Lframe_l41
+.long .Ljoin_l22
+.long .Lframe_l41
 .section .pcmap_data
-Lframe_l41:
+.Lframe_l41:
 .long 0x80000008
 .long 0xffffffc0
 .long 0xffffffd8
-.long Lstackdata_l38
+.long .Lstackdata_l38
 .long 2
 .long 9
 .long 2
@@ -439,8 +439,8 @@ step_38:
 	movl (%ecx),%ecx
 	leal 56(%esp), %edx
 	movl (%edx),%edx
-Linitialize_continuations_l44:
-Lproc_body_start_l43:
+.Linitialize_continuations_l44:
+.Lproc_body_start_l43:
 	movl %edi,12(%esp)
 	leal 56(%esp), %edi
 	movl %edi,16(%esp)
@@ -495,7 +495,7 @@ Lproc_body_start_l43:
 	movl %eax,(%edi)
 	movl %edx,44(%esp)
 	call tig_bounds_check
-Ljoin_l62:
+.Ljoin_l62:
 	leal Cmm.global_area,%edi
 	movl 40(%esp),%esi
 	movl %esi,(%edi)
@@ -523,19 +523,19 @@ Ljoin_l62:
 	movl (%edi),%edi
 	movl %edi,(%esi)
 	call tig_not
-Ljoin_l59:
+.Ljoin_l59:
 	leal Cmm.global_area,%edx
 	movl 28(%esp),%ecx
 	movl %ecx,(%edx)
 	movl $0,%edx
 	cmpl %edx,%eax
-	jne Ljoin_l55
-Ljoin_l56:
+	jne .Ljoin_l55
+.Ljoin_l56:
 	jmp LifFalse_64
 LifFalse_64:
 	movl $0,%eax
 	jmp LifEnd_65
-Ljoin_l55:
+.Ljoin_l55:
 	jmp LifTrue_63
 LifTrue_63:
 	leal Cmm.global_area,%edi
@@ -551,7 +551,7 @@ LifTrue_63:
 	movl (%esi),%esi
 	movl %esi,(%eax)
 	call tig_printi
-Ljoin_l54:
+.Ljoin_l54:
 	leal Cmm.global_area,%esi
 	movl %edi,(%esi)
 	leal Cmm.global_area,%edi
@@ -562,7 +562,7 @@ Ljoin_l54:
 	addl %ecx,%eax
 	movl %esi,(%eax)
 	call tig_print
-Ljoin_l51:
+.Ljoin_l51:
 	leal Cmm.global_area,%esi
 	movl %edi,(%esi)
 	leal -4(%esp), %esp
@@ -581,7 +581,7 @@ Ljoin_l51:
 	movl (%edi),%edi
 	movl %edi,(%esi)
 	call mark_multiples_37
-Ljoin_l48:
+.Ljoin_l48:
 	jmp LifEnd_65
 LifEnd_65:
 	leal 56(%esp), %edx
@@ -594,18 +594,18 @@ LifEnd_65:
 	leal 60(%esp), %esp
 	ret
 .section .pcmap_data
-Lstackdata_l67:
+.Lstackdata_l67:
 .long 1
 .long 0xfffffff8
 .section .pcmap
-.long Ljoin_l62
-.long Lframe_l68
+.long .Ljoin_l62
+.long .Lframe_l68
 .section .pcmap_data
-Lframe_l68:
+.Lframe_l68:
 .long 0x80000008
 .long 0xffffffc8
 .long 0xfffffff4
-.long Lstackdata_l67
+.long .Lstackdata_l67
 .long 2
 .long 12
 .long 2
@@ -630,14 +630,14 @@ Lframe_l68:
 .long 0
 .long step_38_gc_data
 .section .pcmap
-.long Ljoin_l59
-.long Lframe_l69
+.long .Ljoin_l59
+.long .Lframe_l69
 .section .pcmap_data
-Lframe_l69:
+.Lframe_l69:
 .long 0x80000008
 .long 0xffffffc8
 .long 0xfffffff4
-.long Lstackdata_l67
+.long .Lstackdata_l67
 .long 2
 .long 12
 .long 2
@@ -662,14 +662,14 @@ Lframe_l69:
 .long 0
 .long step_38_gc_data
 .section .pcmap
-.long Ljoin_l54
-.long Lframe_l70
+.long .Ljoin_l54
+.long .Lframe_l70
 .section .pcmap_data
-Lframe_l70:
+.Lframe_l70:
 .long 0x80000008
 .long 0xffffffc8
 .long 0xfffffff4
-.long Lstackdata_l67
+.long .Lstackdata_l67
 .long 2
 .long 12
 .long 2
@@ -694,14 +694,14 @@ Lframe_l70:
 .long 0
 .long step_38_gc_data
 .section .pcmap
-.long Ljoin_l51
-.long Lframe_l71
+.long .Ljoin_l51
+.long .Lframe_l71
 .section .pcmap_data
-Lframe_l71:
+.Lframe_l71:
 .long 0x80000008
 .long 0xffffffc8
 .long 0xfffffff4
-.long Lstackdata_l67
+.long .Lstackdata_l67
 .long 2
 .long 12
 .long 2
@@ -726,14 +726,14 @@ Lframe_l71:
 .long 0
 .long step_38_gc_data
 .section .pcmap
-.long Ljoin_l48
-.long Lframe_l72
+.long .Ljoin_l48
+.long .Lframe_l72
 .section .pcmap_data
-Lframe_l72:
+.Lframe_l72:
 .long 0x80000008
 .long 0xffffffc8
 .long 0xfffffff4
-.long Lstackdata_l67
+.long .Lstackdata_l67
 .long 2
 .long 12
 .long 2
@@ -781,8 +781,8 @@ tiger_main:
 	leal -36(%esp), %esp
 	leal 36(%esp), %ecx
 	movl (%ecx),%ecx
-Linitialize_continuations_l75:
-Lproc_body_start_l74:
+.Linitialize_continuations_l75:
+.Lproc_body_start_l74:
 	leal 36(%esp), %edx
 	movl %edi,(%esp)
 	movl $-16,%edi
@@ -811,15 +811,15 @@ Lproc_body_start_l74:
 	leal space_end,%eax
 	movl (%eax),%eax
 	cmpl %eax,%edi
-	jg Ljoin_l87
-Ljoin_l88:
+	jg .Ljoin_l87
+.Ljoin_l88:
 	jmp Lalc_gc_33
-Ljoin_l87:
+.Ljoin_l87:
 	jmp Lalc_gc_33
 Lalc_gc_33:
 	movl %ecx,4(%esp)
 	call tig_call_gc
-Ljoin_l86:
+.Ljoin_l86:
 Lalc_34:
 	leal 36(%esp), %edx
 	movl $-16,%ecx
@@ -887,8 +887,8 @@ Linit_start_30:
 	movl $1,%edi
 	addl %edi,%edx
 	cmpl %edx,%ecx
-	jle Ljoin_l82
-Ljoin_l83:
+	jle .Ljoin_l82
+.Ljoin_l83:
 	jmp Linit_end_31
 Linit_end_31:
 	leal 36(%esp), %edx
@@ -921,8 +921,8 @@ Lloop_start_68:
 	movl $1,%edi
 	subl %edi,%ecx
 	cmpl %ecx,%edx
-	jle Ljoin_l80
-Ljoin_l81:
+	jle .Ljoin_l80
+.Ljoin_l81:
 	jmp Lloop_end_67
 Lloop_end_67:
 	movl $0,%eax
@@ -934,7 +934,7 @@ Lloop_end_67:
 	movl (%esp),%edi
 	leal 36(%esp), %esp
 	ret
-Ljoin_l80:
+.Ljoin_l80:
 	jmp Lloop_body_69
 Lloop_body_69:
 	leal -4(%esp), %esp
@@ -952,7 +952,7 @@ Lloop_body_69:
 	movl (%edi),%edi
 	movl %edi,(%ecx)
 	call step_38
-Ljoin_l79:
+.Ljoin_l79:
 	leal 36(%esp), %edi
 	movl $-16,%edx
 	addl %edx,%edi
@@ -968,24 +968,24 @@ Ljoin_l79:
 	addl %ecx,%edx
 	movl %edi,(%edx)
 	jmp Lloop_start_68
-Ljoin_l82:
-	jmp Ljoin_l92
-Ljoin_l92:
+.Ljoin_l82:
+	jmp .Ljoin_l92
+.Ljoin_l92:
 	movl %eax,%edx
 	jmp Linit_start_30
 .section .pcmap_data
-Lstackdata_l94:
+.Lstackdata_l94:
 .long 1
 .long 0xfffffff0
 .section .pcmap
-.long Ljoin_l86
-.long Lframe_l95
+.long .Ljoin_l86
+.long .Lframe_l95
 .section .pcmap_data
-Lframe_l95:
+.Lframe_l95:
 .long 0x80000004
 .long 0xffffffdc
 .long 0xffffffe0
-.long Lstackdata_l94
+.long .Lstackdata_l94
 .long 1
 .long 5
 .long 2
@@ -1001,14 +1001,14 @@ Lframe_l95:
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
-.long Ljoin_l79
-.long Lframe_l96
+.long .Ljoin_l79
+.long .Lframe_l96
 .section .pcmap_data
-Lframe_l96:
+.Lframe_l96:
 .long 0x80000004
 .long 0xffffffdc
 .long 0xffffffe0
-.long Lstackdata_l94
+.long .Lstackdata_l94
 .long 1
 .long 5
 .long 2

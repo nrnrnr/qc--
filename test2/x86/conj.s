@@ -15,26 +15,26 @@ foo:
 	leal -4(%esp), %esp
 	leal 4(%esp), %edx
 	movl (%edx),%edx
-Linitialize_continuations_l5:
-Lproc_body_start_l4:
+.Linitialize_continuations_l5:
+.Lproc_body_start_l4:
 	movl $1,%ecx
 	cmpl %ecx,%eax
-	jne Ljoin_l13
-Ljoin_l18:
-	jmp Ljoin_l9
-Ljoin_l13:
+	jne .Ljoin_l13
+.Ljoin_l18:
+	jmp .Ljoin_l9
+.Ljoin_l13:
 	movl $0,%ecx
 	cmpl %ecx,%eax
-	jne Ljoin_l8
-Ljoin_l17:
-	jmp Ljoin_l9
-Ljoin_l9:
+	jne .Ljoin_l8
+.Ljoin_l17:
+	jmp .Ljoin_l9
+.Ljoin_l9:
 	movl $0,%eax
-	jmp Ljoin_l7
-Ljoin_l8:
+	jmp .Ljoin_l7
+.Ljoin_l8:
 	movl $999,%eax
-	jmp Ljoin_l7
-Ljoin_l7:
+	jmp .Ljoin_l7
+.Ljoin_l7:
 	leal 4(%esp), %ecx
 	movl %edx,(%esp)
 	movl $0,%edx
@@ -57,22 +57,22 @@ main:
 	movl (%ecx),%ecx
 	leal 32(%esp), %ecx
 	movl (%ecx),%ecx
-Linitialize_continuations_l22:
-Lproc_body_start_l21:
+.Linitialize_continuations_l22:
+.Lproc_body_start_l21:
 	movl $0,%eax
 	movl %ecx,16(%esp)
 	call foo
-Ljoin_l35:
+.Ljoin_l35:
 	movl $1,%ecx
 	movl %eax,20(%esp)
 	movl %ecx,%eax
 	call foo
-Ljoin_l32:
+.Ljoin_l32:
 	movl $2,%ecx
 	movl %eax,24(%esp)
 	movl %ecx,%eax
 	call foo
-Ljoin_l29:
+.Ljoin_l29:
 	leal fmt,%ecx
 	leal 32(%esp), %edx
 	movl %edi,28(%esp)
@@ -94,7 +94,7 @@ Ljoin_l29:
 	addl %ecx,%edi
 	movl %eax,(%edi)
 	call printf
-Ljoin_l26:
+.Ljoin_l26:
 	movl $0,%eax
 	leal 32(%esp), %edx
 	movl $0,%ecx
@@ -105,17 +105,17 @@ Ljoin_l26:
 	leal 32(%esp), %esp
 	ret
 .section .pcmap_data
-Lstackdata_l41:
+.Lstackdata_l41:
 .long 0
 .section .pcmap
-.long Ljoin_l35
-.long Lframe_l42
+.long .Ljoin_l35
+.long .Lframe_l42
 .section .pcmap_data
-Lframe_l42:
+.Lframe_l42:
 .long 0x80000004
 .long 0xffffffe0
 .long 0xfffffff0
-.long Lstackdata_l41
+.long .Lstackdata_l41
 .long 0
 .long 5
 .long 0
@@ -127,14 +127,14 @@ Lframe_l42:
 .long 0
 .long 0
 .section .pcmap
-.long Ljoin_l32
-.long Lframe_l43
+.long .Ljoin_l32
+.long .Lframe_l43
 .section .pcmap_data
-Lframe_l43:
+.Lframe_l43:
 .long 0x80000004
 .long 0xffffffe0
 .long 0xfffffff0
-.long Lstackdata_l41
+.long .Lstackdata_l41
 .long 0
 .long 5
 .long 0
@@ -146,14 +146,14 @@ Lframe_l43:
 .long 0
 .long 0
 .section .pcmap
-.long Ljoin_l29
-.long Lframe_l44
+.long .Ljoin_l29
+.long .Lframe_l44
 .section .pcmap_data
-Lframe_l44:
+.Lframe_l44:
 .long 0x80000004
 .long 0xffffffe0
 .long 0xfffffff0
-.long Lstackdata_l41
+.long .Lstackdata_l41
 .long 0
 .long 5
 .long 0
@@ -165,14 +165,14 @@ Lframe_l44:
 .long 0
 .long 0
 .section .pcmap
-.long Ljoin_l26
-.long Lframe_l45
+.long .Ljoin_l26
+.long .Lframe_l45
 .section .pcmap_data
-Lframe_l45:
+.Lframe_l45:
 .long 0x80000004
 .long 0xffffffe0
 .long 0xfffffff0
-.long Lstackdata_l41
+.long .Lstackdata_l41
 .long 1
 .long 5
 .long 0

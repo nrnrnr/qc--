@@ -7,8 +7,8 @@ Cmm.ref_to_global_area:
 incn:
 	movl %esp,%edx
 	movl (%edx),%edx
-Linitialize_continuations_l4:
-Lproc_body_start_l3:
+.Linitialize_continuations_l4:
+.Lproc_body_start_l3:
 	leal Cmm.global_area,%ecx
 	movl (%ecx),%ecx
 	movl $1,%eax

@@ -15,8 +15,8 @@ f3:
 	leal -64(%esp), %esp
 	leal 64(%esp), %edx
 	movl (%edx),%edx
-Linitialize_continuations_l4:
-Lproc_body_start_l3:
+.Linitialize_continuations_l4:
+.Lproc_body_start_l3:
 	jmp f3_label
 f3_label:
 	movl $18,%edi

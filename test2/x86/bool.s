@@ -23,15 +23,15 @@ main:
 	movl (%ecx),%ecx
 	leal 4(%esp), %ecx
 	movl (%ecx),%ecx
-Linitialize_continuations_l5:
-Lproc_body_start_l4:
+.Linitialize_continuations_l5:
+.Lproc_body_start_l4:
 	movl $3,%eax
 	movl %ecx,(%esp)
 	call tryout
-Ljoin_l12:
+.Ljoin_l12:
 	movl $4,%eax
 	call tryout
-Ljoin_l9:
+.Ljoin_l9:
 	movl $0,%eax
 	leal 4(%esp), %edx
 	movl $0,%ecx
@@ -41,17 +41,17 @@ Ljoin_l9:
 	leal 4(%esp), %esp
 	ret
 .section .pcmap_data
-Lstackdata_l18:
+.Lstackdata_l18:
 .long 0
 .section .pcmap
-.long Ljoin_l12
-.long Lframe_l19
+.long .Ljoin_l12
+.long .Lframe_l19
 .section .pcmap_data
-Lframe_l19:
+.Lframe_l19:
 .long 0x80000004
 .long 0xfffffffc
 .long 0xfffffffc
-.long Lstackdata_l18
+.long .Lstackdata_l18
 .long 0
 .long 2
 .long 0
@@ -60,14 +60,14 @@ Lframe_l19:
 .long 0
 .long 0
 .section .pcmap
-.long Ljoin_l9
-.long Lframe_l20
+.long .Ljoin_l9
+.long .Lframe_l20
 .section .pcmap_data
-Lframe_l20:
+.Lframe_l20:
 .long 0x80000004
 .long 0xfffffffc
 .long 0xfffffffc
-.long Lstackdata_l18
+.long .Lstackdata_l18
 .long 0
 .long 2
 .long 0
@@ -81,22 +81,22 @@ tryout:
 	leal -20(%esp), %esp
 	leal 20(%esp), %ecx
 	movl (%ecx),%ecx
-Linitialize_continuations_l23:
-Lproc_body_start_l22:
+.Linitialize_continuations_l23:
+.Lproc_body_start_l22:
 	movl $1,%edx
 	movl %edi,8(%esp)
 	movl %eax,%edi
 	andl %edx,%edi
 	movl $0,%edx
 	cmpl %edx,%edi
-	jne Ljoin_l29
-Ljoin_l30:
+	jne .Ljoin_l29
+.Ljoin_l30:
 	leal z,%edi
-	jmp Ljoin_l28
-Ljoin_l29:
+	jmp .Ljoin_l28
+.Ljoin_l29:
 	leal nz,%edi
-	jmp Ljoin_l28
-Ljoin_l28:
+	jmp .Ljoin_l28
+.Ljoin_l28:
 	leal 20(%esp), %edx
 	movl %edi,12(%esp)
 	movl $-20,%edi
@@ -109,7 +109,7 @@ Ljoin_l28:
 	movl %eax,(%edi)
 	movl %ecx,16(%esp)
 	call printf
-Ljoin_l27:
+.Ljoin_l27:
 	leal 20(%esp), %edx
 	movl $0,%ecx
 	addl %ecx,%edx
@@ -119,17 +119,17 @@ Ljoin_l27:
 	leal 20(%esp), %esp
 	ret
 .section .pcmap_data
-Lstackdata_l36:
+.Lstackdata_l36:
 .long 0
 .section .pcmap
-.long Ljoin_l27
-.long Lframe_l37
+.long .Ljoin_l27
+.long .Lframe_l37
 .section .pcmap_data
-Lframe_l37:
+.Lframe_l37:
 .long 0x80000004
 .long 0xffffffec
 .long 0xfffffffc
-.long Lstackdata_l36
+.long .Lstackdata_l36
 .long 1
 .long 2
 .long 0

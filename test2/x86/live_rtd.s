@@ -15,8 +15,8 @@ main:
 	leal -8(%esp), %esp
 	leal 8(%esp), %eax
 	movl (%eax),%eax
-Linitialize_continuations_l4:
-Lproc_body_start_l3:
+.Linitialize_continuations_l4:
+.Lproc_body_start_l3:
 	movl $0,%edi
 	leal 8(%esp), %esi
 	movl $-8,%ebp
@@ -24,19 +24,19 @@ Lproc_body_start_l3:
 	movl %edi,(%esi)
 	movl %eax,4(%esp)
 	call exit
-Lpostcall_l7:
+.Lpostcall_l7:
 .section .pcmap_data
-Lstackdata_l14:
+.Lstackdata_l14:
 .long 0
 .section .pcmap
-.long Lpostcall_l7
-.long Lframe_l15
+.long .Lpostcall_l7
+.long .Lframe_l15
 .section .pcmap_data
-Lframe_l15:
+.Lframe_l15:
 .long 0x80000004
 .long 0xfffffff8
 .long 0xfffffffc
-.long Lstackdata_l14
+.long .Lstackdata_l14
 .long 4
 .long 0
 .long 0

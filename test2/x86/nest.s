@@ -15,7 +15,7 @@ nest:
 	leal -32(%esp), %esp
 	leal 32(%esp), %eax
 	movl (%eax),%eax
-Linitialize_continuations_l10:
+.Linitialize_continuations_l10:
 	leal k_C7,%ecx
 	leal 32(%esp), %edx
 	movl %eax,4(%esp)
@@ -29,7 +29,7 @@ Linitialize_continuations_l10:
 	movl $-4,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-Lproc_body_start_l9:
+.Lproc_body_start_l9:
 	leal 32(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax
@@ -42,7 +42,7 @@ Lproc_body_start_l9:
 	movl %ebp,12(%esp)
 	movl %ebx,8(%esp)
 	call trace
-Ljoin_l15:
+.Ljoin_l15:
 	movl $0,%eax
 	leal 32(%esp), %edx
 	movl $0,%ecx
@@ -69,17 +69,17 @@ k_C7:
 	leal 32(%esp), %esp
 	ret
 .section .pcmap_data
-Lstackdata_l21:
+.Lstackdata_l21:
 .long 0
 .section .pcmap
-.long Ljoin_l15
-.long Lframe_l22
+.long .Ljoin_l15
+.long .Lframe_l22
 .section .pcmap_data
-Lframe_l22:
+.Lframe_l22:
 .long 0x80000004
 .long 0xffffffe0
 .long 0xffffffe4
-.long Lstackdata_l21
+.long .Lstackdata_l21
 .long 4
 .long 0
 .long 2
@@ -97,13 +97,13 @@ Lframe_l22:
 .long inner
 .section .pcmap
 .long k_C7
-.long Lframe_l23
+.long .Lframe_l23
 .section .pcmap_data
-Lframe_l23:
+.Lframe_l23:
 .long 0x80000004
 .long 0xffffffe0
 .long 0xffffffe4
-.long Lstackdata_l21
+.long .Lstackdata_l21
 .long 4
 .long 0
 .long 2

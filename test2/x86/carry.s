@@ -37,8 +37,8 @@ lladd:
 	fistpq (%edx)
 	leal 60(%esp), %ecx
 	movl (%ecx),%ecx
-Linitialize_continuations_l6:
-Lproc_body_start_l5:
+.Linitialize_continuations_l6:
+.Lproc_body_start_l5:
 	leal 60(%esp), %edx
 	movl %ecx,32(%esp)
 	movl $-40,%ecx
@@ -130,8 +130,8 @@ llsub:
 	fistpq (%edx)
 	leal 60(%esp), %ecx
 	movl (%ecx),%ecx
-Linitialize_continuations_l18:
-Lproc_body_start_l17:
+.Linitialize_continuations_l18:
+.Lproc_body_start_l17:
 	leal 60(%esp), %edx
 	movl %ecx,32(%esp)
 	movl $-40,%ecx
@@ -219,8 +219,8 @@ llmul:
 	fistpq (%edx)
 	leal 56(%esp), %ecx
 	movl (%ecx),%ecx
-Linitialize_continuations_l30:
-Lproc_body_start_l29:
+.Linitialize_continuations_l30:
+.Lproc_body_start_l29:
 	leal 56(%esp), %edx
 	movl $-36,%eax
 	addl %eax,%edx

@@ -32,16 +32,16 @@ section "data"
         $r31 = ($r31+-24);
         i = $r0;
         $t1 = $r30;
-        Linitialize continuations:l5:
-        Lproc body start:l4:
+        .Linitialize continuations:l5:
+        .Lproc body start:l4:
         $c0 = sym@loop;
         loop:
         i = (i-1);
-        $c0 when %geu[32](i, 0) = sym@Ljoin@l7;
-        Ljoin:l8:
+        $c0 when %geu[32](i, 0) = sym@.Ljoin@l7;
+        .Ljoin:l8:
         $r31 = ($r31+24);
         $c0 = $t1;
-        Ljoin:l7:
+        .Ljoin:l7:
         $c0 = sym@loop;
     }
 }
