@@ -51,15 +51,10 @@ type builder
 val mk          : address:Rtl.exp -> builder
 val align       : builder -> int -> builder
 val alloc       : builder -> int -> builder
-val location    : builder -> Rtl.exp         (* Rtl.loc ?? *)
+val adjust      : builder -> int -> builder
+val location    : builder -> Rtl.exp     
 val freeze      : builder -> t
 @
-
-\begin{quote}\it
-    For generality I would like to add an [[adjust n]] function that
-    makes the size of the area a multiple of [[n]]. The is a constraint
-    that some stack layouts require.
-\end{quote}
 
 \begin{itemize}
 \item An initial (empty) block is created by prividing a
@@ -77,7 +72,12 @@ val freeze      : builder -> t
 
 \item A call to [[allign n t]] also increases the size of the block
       such that after the call $\mathit{base}+\mathit{size}$ is
-      $t$-aligned.
+      $t$-aligned. It is a checked run-time error if [[n]] is not a
+      power of two.
+
+\item [[Adjust b n]] increases area [[b]] such that its size becomes 
+      a multiple on [[n]]. This is different from [[align]] because it
+      does not affect the alignment constraints of the base address.
 
 \item After allocation is complete a block can be frozen to obtain its
       definitve size and alignment.  It is a checked run-time error to
@@ -95,7 +95,7 @@ end.
 Of course, overlapping requires some flexibility on the side of the
 involved areas: if all areas have fixed base addresses there is no way
 to align them. Flexibility comes from \emph{symbolic compile time
-constants} (c.f. module \module{const}). These are variables whose
+constants} (c.f.~module \module{const}). These are variables whose
 values are known at compile time, which however, can be used before
 these excat values are known. A symbolic compile-time value is
 represented by an [[Rtl.link]] value and must be registered with
@@ -181,6 +181,12 @@ let location b =
     let offset = RP.Const(RP.Bits (Bits.of_int b.offset b.width))    in
     let sum    = RP.App (("add",[b.width]), [b.base;offset])         in
         Rtl.Revert.exp sum
+
+let adjust b n =
+    if b.offset mod n > 0 then    
+        { b with offset = n * ((b.offset mod n) + 1) }
+    else
+        b
 
 let freeze b = 
     let b = align b b.basealign in
