@@ -333,8 +333,8 @@ end
 -- here to make assemblers more uniform.
 ------------------------------------------------------------------ 
 
-function Driver.sparc_solaris(io) Driver.sparc(1,io) end
-function Driver.sparc_sunos(io)   Driver.sparc(0,io) end
+function Driver.sparc_solaris(io) return Driver.sparcasm(1  ,io) end
+function Driver.sparc_sunos(io)   return Driver.sparcasm(nil,io) end
 
 ------------------------------------------------------------------ 
 -- Defaults
@@ -345,7 +345,7 @@ Default.target          = Targets.dummy          -- target
 Default.optimizer       = graphColoringAllocator --
 Default.linewidth       = 72                     -- output line width
 Default.asm             = Driver.cmmasm          -- function io -> asm
-Default.solaris         = 1                      -- for SPARC
+Default.solaris         = not nil                -- nil for SunOS
 
 ------------------------------------------------------------------ 
 -- Main
@@ -405,7 +405,7 @@ Main.a = Main.asdl -- abbreviation
 --
 
 function Main.sparc ()
-    if Default.solaris then 
+    if Default.solaris ~= nil then 
         Default.asm = Driver.sparc_solaris 
     else 
         Default.asm = Driver.sparc_sunos
@@ -627,7 +627,7 @@ Code optimizer.
 =item B<asm>(I<io>): I<asm>. Function that creates the default
 assembler. The assembler writes its output to I<io>.
 
-=item B<solaris>: I<bool>. Flag for the I<sparc> assembler; zero on
+=item B<solaris>: I<bool>. Flag for the I<sparc> assembler; B<nil> on
 SunOS systems.
 
 =back
