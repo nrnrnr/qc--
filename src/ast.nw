@@ -281,6 +281,22 @@ let commablock f xs =
         ^^ list (text "," ^^ break) f xs
     end
 
+let angrp x =
+    agrp begin 
+       ~~ nest begin
+          ~~ x
+          end
+       (* *)
+    end
+
+let fngrp x =
+    fgrp begin 
+       ~~ nest begin
+          ~~ x
+          end
+       (* *)
+    end
+
 @ Most of the names used below refer directly to the grammar or
 abstract syntax. Since the overall purpose of this is clear we don't
 comment the code much.
@@ -486,9 +502,13 @@ let rec stmt = function
     | ContStmt(n,ns)          ->
         agrp begin
             ~~ text "continuation"
-            ^/ id n
-            ^/ fgrp (text "(" ^^ commalist id ns ^^ text ")")
-            ^^ text ":"
+            ^^ angrp begin
+               ~~ break
+               ^^ id n
+               ^^ fngrp (break ^^ text "(" ^^ commalist id ns ^^ text ")")
+               ^^ text ":"
+               end
+            (* *)
         end
 
     | SpanStmt(e1,e2,ss)      -> 
@@ -500,26 +520,121 @@ let rec stmt = function
     | AssignStmt(xs)          -> 
         let lhs,rhs = unzip xs in
         agrp begin
-            fgrp begin 
-                ~~ commalist lvalue lhs 
-                ^/ text "="
+            fngrp begin 
+            ~~ commalist lvalue lhs 
+            ^/ text "="
             end
             ^^
-            fgrp begin 
-                nest begin
-                ~~ break
-                ^^ commalist expr rhs
-                ^^ semi
-                end
+            fngrp begin
+            ~~ break
+            ^^ commalist expr rhs
+            ^^ semi
             end
         end
     
-    | CallStmt( lhs, cc, e, args, ts, fs) -> dummy
-    | PrimStmt( lhs, cc, n, args, fs)     -> dummy
-    | GotoStmt(e,ts)                      -> dummy
-    | CutStmt(n, args, fs)                -> dummy
-    | ReturnStmt(cc, alt, args)           -> dummy
-    | JumpStmt(cc,e,args,ts)              -> dummy
+    | CallStmt( lhs, cc, e, args, ts, fs) -> 
+        angrp begin
+            ~~ ( if lhs <> [] 
+                 then fngrp begin 
+                      ~~ commalist lvalue lhs 
+                      ^/ text "="
+                      ^^ break
+                     end
+                 else empty
+               )
+            ^^ ( match cc with 
+               | Some c -> agrp (text "foreign" ^/ str c ^^ break)
+               | None   -> empty
+               ) 
+            ^^ angrp begin 
+               ~~ expr e
+               ^^ fngrp begin 
+                  ~~ break 
+                  ^^ text "(" 
+                  ^^ commalist actual args 
+                  ^^ text ")"
+                  end
+               end
+            ^^ (if ts <> [] then break ^^ targets ts else empty)
+            ^^ (if fs <> [] then break ^^ flows fs else empty)
+            ^^ semi
+        end
+        
+    | PrimStmt( lhs, cc, n, args, fs)     -> 
+        angrp begin
+            ~~ ( if lhs <> [] 
+                 then fngrp begin 
+                      ~~ commalist lvalue lhs 
+                      ^/ text "="
+                      ^^ break
+                     end
+                 else empty
+               )
+            ^^ ( match cc with 
+               | Some c -> agrp (text "foreign" ^/ str c ^^ break)
+               | None   -> empty
+               ) 
+            ^^ angrp begin 
+               ~~ text "%%" 
+               ^^ id n
+               ^^ fngrp begin 
+                  ~~ break 
+                  ^^ text "(" 
+                  ^^ commalist actual args 
+                  ^^ text ")"
+                  end
+               end
+            ^^ (if fs <> [] then break ^^ flows fs else empty)
+            ^^ semi
+        end
+    | GotoStmt(e,ts)                      -> 
+        agrp begin
+            ~~ text "goto"
+            ^/ expr e
+            ^^ (if ts <> [] then break ^^ targets ts else empty)
+            ^^ semi
+        end
+    | CutStmt(n, args, fs)                -> 
+        angrp begin
+            ~~ text "cut to"
+            ^/ id n
+            ^^ fngrp (break ^^ text "(" ^^ commalist actual args ^^ text ")")
+            ^^ (if fs <> [] then break ^^ flows fs else empty)
+            ^^ semi
+        end
+    | ReturnStmt(cc, alt, args)           -> 
+        angrp begin
+            ~~ ( match cc with 
+               | Some c -> text "foreign" ^/ str c ^^ break
+               | None   -> empty
+               )
+            ^^ text "return"
+            ^^ ( match alt with
+               | Some a -> break ^^ altcont a ^^ break
+               | None   -> empty
+               )
+            ^^ fngrp (break ^^ text "(" ^^ commalist actual args ^^ text ")") 
+            ^^ semi 
+        end
+    | JumpStmt(cc,e,args,ts)              -> 
+        angrp begin
+            ~~ ( match cc with 
+               | Some c -> agrp (text "foreign" ^/ str c) ^^ break
+               | None   -> empty
+               )
+            ^^ angrp (text "jump" ^/ expr e)
+            ^^ ( if args <> [] 
+                 then fngrp begin 
+                            ~~ break 
+                            ^^ text "(" 
+                            ^^ commalist actual args 
+                            ^^ text ")"
+                            end
+                 else empty
+               )
+            ^^ (if ts <> [] then break ^^ targets ts else empty)
+            ^^ semi
+        end
     | EmptyStmt                           -> text ";"
 
 let rec section = function

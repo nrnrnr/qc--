@@ -28,15 +28,16 @@ very simple:  the command line can ask the program for different actions:
 \item Display a usage information.
 \item Display a version information.
 \item Scan a file and show the token stream.
-\item Parse a file. 
+\item Parse a file and serialize it in \asdl~format.
+\item Parse a file and pretty print it for a given line width.
 \end{enumerate}
 
 <<cmdline.mli>>=
 type cmd =        | CMDhelp                                               
                   | CMDversion                                  
                   | CMDlex      of string
-                  | CMDparse    of string
-                  | CMDpp       of string
+                  | CMDasdl     of string
+                  | CMDpp       of string * int
 
 @ The concrete syntax of the command line is specified through the
 parser combinators that recognizes them. The [[Pc]] module defines
@@ -49,12 +50,23 @@ a flag [[-c]] is passed to a function that injects the string into a
 [[CMDparse]] constructor that asks to parse a file.
   
 <<main.ml>>=
+
+let default_width = 72 
+
 let cmd_help      = literal "-help"         --> return CMDhelp
 let cmd_version   = literal "-version"      --> return CMDversion
 let cmd_lex       = literal "-lex" **> any  --> fun s -> CMDlex(s) 
-let cmd_parse     = literal "-asdl" **> any --> fun s -> CMDparse(s) 
-let cmd_pp        = literal "-pp" **> any   --> fun s -> CMDpp(s) 
-let cmd_default   = any                     --> fun s -> CMDpp(s)
+let cmd_asdl      = literal "-asdl" **> any --> fun s -> CMDasdl(s) 
+let cmd_default   = any                     --> fun s -> CMDpp(s,default_width)
+
+let cmd_width     = literal "-w" **> any    --> fun s -> 
+                    (try int_of_string s with Failure(_) -> default_width)
+                    
+let cmd_pp        = (literal "-pp" **> cmd_width *** any --> fun (width,file) -> 
+                    CMDpp(file,width)) 
+                ||| literal "-pp" **> any --> fun (file) -> 
+                    CMDpp(file,default_width)
+                    
 
 @ Each parser recognizes a complete command line.  As an abbreviation
 a single file name without flags is interpreted as an argument to the
@@ -70,7 +82,7 @@ for [[cmdline]] to be successful.
 let cmdline       = (  cmd_version 
                    ||| cmd_help 
                    ||| cmd_lex
-                   ||| cmd_parse
+                   ||| cmd_asdl 
                    ||| cmd_pp
                    ||| cmd_default 
                     ) **< eof
@@ -94,7 +106,7 @@ let usage this =
   ;   "\t -version                   (version to stdout)"
   ;   "\t -lex file                  (scan file)"
   ;   "\t -asdl file                 (parse file)"
-  ;   "\t -pp file                   (parse and pretty print file)"
+  ;   "\t -pp [-w width] file        (parse and pretty print file for width)"
   ;   "\t file                       (same as -pp file)"
   ] in
     Printf.printf "%s version %s command line syntax\n" this This.version;
@@ -144,14 +156,14 @@ let parse file =
                     ; raise e
                     )
 
-let pp file =
+let pp file width =
     let fd          = try open_in file with Sys_error msg -> error msg  in
     let finally ()  = close_in fd                                       in
     let lexbuf      = Lexing.from_channel fd                            in
         try
             ( Scan.init file
             ; let ast = Parse.program Scan.token lexbuf in
-                 Astpp.ppToFile stdout 72 ast
+                 Astpp.ppToFile stdout width ast
             ) 
         with
             | Parsing.Parse_error | Error(_) ->
@@ -186,9 +198,9 @@ let main () =
             ( match cmd with
             | CMDhelp               -> usage this
 	    | CMDversion	    -> version ()
-            | CMDlex(f)             -> lex f 
-            | CMDparse(f)           -> parse f 
-            | CMDpp(f)              -> pp f 
+            | CMDlex(file)          -> lex file 
+            | CMDasdl(file)         -> parse file 
+            | CMDpp(file,width)     -> pp file width
             );
             exit 0
        with 
@@ -237,7 +249,7 @@ B<qc-- -lex> I<file>
 
 B<qc-- -asdl> I<file>
 
-B<qc-- -pp> I<file>
+B<qc-- -pp> [ B<-w> I<width> ] I<file>
 
 =head1 DESCRIPTION
 
@@ -260,9 +272,11 @@ Print short usage to stdout.
 
 Parse I<file> and print the abstract syntax in ASDL format to stdout.
 
-=item B<-pp> I<file>
+=item B<-pp> [ B<-w> I<width> ]I<file>
 
-Parse I<file> and write a pretty printed concrete syntax to stdout.
+Parse I<file> and write a pretty printed concrete syntax to stdout. 
+The default width for output is 72 characters can be changed with the
+B<-w> flag. 
 
 =item B<-lex> I<file>
 

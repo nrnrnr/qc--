@@ -240,6 +240,7 @@ rule token = parse
   | "}"         { RBRACE       }
   | "["         { LBRACKET     }
   | "]"         { RBRACKET     }
+  | "%%"        { PPERCENT     }
 
   | "="         { EQUAL        }
   
@@ -718,7 +719,7 @@ init        :   LBRACE   exprs RBRACE       { InitExprs($2)   }
 size        :   LBRACKET exprAt RBRACKET    { FixSize $2      }
             |   LBRACKET       RBRACKET     { DynSize         }
 
-conv        :   FOREIGN ID                  { Some $2         }
+conv        :   FOREIGN STR                 { Some $2         }
 
 aligned     :   ALIGNED INT                 { Some $2         }
 
@@ -830,6 +831,7 @@ expr        :   INT                              { Int($1, None)      }
             |   CHAR COLON INT                   { Char($1, Some $3)  }
             |   lvalueAt                         { Fetch($1)          }
             |   PERCENT ID actls                 { PrimOp($2, $3)     }
+            |   LPAREN exprAt RPAREN             { $2                 }
 
             |   exprAt PLUS       exprAt         { BinOp($1,$2,$3)    }
             |   exprAt MINUS      exprAt         { BinOp($1,$2,$3)    }
