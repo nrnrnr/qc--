@@ -248,7 +248,7 @@ FILES:D:          clobber
                         -o -type f -print | sort   > $target 
 
 timestamps:V:   
-                cd interp; mk -t *-dec.c encode.[ch]
+                cd interp; mk -t -a disasm-dec interp-dec.c encode.[ch]
 
 tar:V:          $DIR.tar.gz
                 
