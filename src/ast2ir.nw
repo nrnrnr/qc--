@@ -55,7 +55,6 @@ module A  = Ast
 module T  = Types
 module E  = Error
 module F  = Fenv.Clean
-module RP = Rtl.Private
 
 <<auxiliaries>>
 
@@ -516,15 +515,8 @@ link-time constant.
 \emph{Something is very wrong here, but NR is not sure what\ldots}
 <<cases for translating statements>>=
 | A.SpanStmt(e1,e2,ss) ->
-    let key   = ( match Rtl.Convert.expr dummy_expression with (* constant eval *)
-                | RP.Const(RP.Bits(bits,w)) -> bits
-                | _                           -> assert false
-                ) in
-    let value = ( match Rtl.Convert.expr dummy_expression with (* link-time constant *)
-                | RP.Const(c)                -> c
-                | _                           -> assert false
-                ) in
-    let key, value = Bits.of_int 0 32, Rtl.link "you must be joking" 32  in
+    let key   = Consteval.compile (ignore e1; assert false) in
+    let value = Consteval.link    (ignore e2; assert false) in
         body env target globals 
             (G.Props.add_span key value props) graph after ss
 @
@@ -695,15 +687,8 @@ including the span will be used.
 
 <<module Make>>=
 let rec sspan env target globals props asm (e1,e2,ss) =    
-    let key   = ( match Rtl.Convert.expr dummy_expression with (* constant eval *)
-                | RP.Const(RP.Bits(bits,w)) -> bits
-                | _                           -> assert false
-                ) in
-    let value = ( match Rtl.Convert.expr dummy_expression with (* link-time constant *)
-                | RP.Const(c)                -> c
-                | _                           -> assert false
-                ) in
-    let key, value = Bits.of_int 0 32, Rtl.link "you must be joking" 32  in
+    let key   = Consteval.compile (e1; assert false) in
+    let value = Consteval.link    (e2; assert false) in
     let props = G.Props.add_span key value props 
     in
         foldl (section env target globals props) asm ss 
@@ -768,12 +753,11 @@ an [[Automaton.location]]. The function [[reg2loc]] constructs an
 [[Automaton.location]] for a hardware register.
 
 <<>>=
-let reg2loc loc = match Rtl.Convert.location loc with
-    | RP.Cell (_,_,width,_,_) -> 
-        ( (fun e -> Rtl.store loc e width)  (* store e to loc         *)
-        , Rtl.fetch loc width               (* value fetched from loc *)
-        )
-    | _                                     -> assert false
+let reg2loc loc =
+  let width = Rtlutil.locwidth loc in
+    ( (fun e -> Rtl.store loc e width)  (* store e to loc         *)
+    , Rtl.fetch loc width               (* value fetched from loc *)
+    )
 
 let globals (target:Target.t) decls =
     let unknown reg  = raise (E.ErrorExn ("unknown h/w reg: "^reg)) in

@@ -410,11 +410,10 @@ hardware registers names must be extended by a space and then mangled.
 
 
 <<>>=
-let decl name loc dd = match Rtl.Convert.location loc with 
-    | Rtl.Private.Cell ('r', _, w, _, _) ->
-        let r = (A.Variant, None, A.BitsTy w ,P.mangle (name^" "), Some name) 
-        in  r::dd
-    | _ -> assert false
+let decl name loc dd = 
+  let w = Rtlutil.locwidth loc in
+  let r = (A.Variant, None, A.BitsTy w, P.mangle (name^" "), Some name) 
+  in  r::dd
 
 let decls = Target.StrMap.fold decl P.target#registers []
     

@@ -1,0 +1,18 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% ----------------------------------------------------------------
+\section{Utility functions on RTLs}
+% ----------------------------------------------------------------
+
+<<rtlutil.mli>>=
+val locwidth  : Rtl.location -> Rtl.width
+val locwidth' : Rtl.Private.location -> Rtl.width
+  (* always succeeds *)
+@ 
+<<rtlutil.ml>>=
+module RP = Rtl.Private
+let locwidth' = function
+    | RP.Cell(_,_,w,_,_) -> w
+    | RP.Var(_,_,w)      -> w
+    | RP.Slice(w, _, _)  -> w
+let locwidth l = locwidth' (Rtl.Convert.location l)

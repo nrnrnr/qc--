@@ -66,10 +66,6 @@ let const mangle = function
 @
 
 <<>>=
-let locwidth = function
-    | R.Cell(_,_,w,_,_) -> w
-    | R.Var(_,_,w)      -> w
-    | R.Slice(w, _, _)  -> w
 @
     
 Primitive operators in {\PAL} are monomorphic, whereas they are
@@ -109,7 +105,7 @@ A [[kill]] is translated into an assignment of [[%undef()]].
 <<>>=
 let rec effect mangle guard = function
     | R.Kill   loc       -> 
-        let width = locwidth loc                in
+        let width = Rtlutil.locwidth' loc                in
         let undef = R.App(("undef",[width]),[]) in
             effect mangle guard (R.Store(loc, undef, width))
     | R.Store  (loc,e,w) -> 

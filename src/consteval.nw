@@ -1,0 +1,30 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% ------------------------------------------------------------------ 
+\section{Evaluating constant expressions}
+% ------------------------------------------------------------------ 
+
+This code will one day be replaced by a small interpreter for constant
+expressions.
+
+<<consteval.mli>>=
+exception Not_constant of Rtl.expr
+
+type relexpr
+  (* a relocatable expression, suitable for using as a link-time
+     constant in an assembler---needs to be connected with Asm2.S *)
+  = Rtl.expr (* a temporary expedient *)
+
+val compile : Rtl.expr -> Bits.bits   (* a compile-time constant *)
+val link    : Rtl.expr -> relexpr
+@ 
+<<consteval.ml>>=
+type relexpr = Rtl.expr (* a flagrant cheat *)
+
+let compile e = match Rtl.Convert.expr e with
+  | Rtl.Private.Const(Rtl.Private.Bits(bits,w)) -> bits
+  | _ -> assert false
+    (* should really try to use Const.lookup to evaluate ``link-time''
+      constants, but we don't yet *)
+
+let link e = e (* damn lie *)
