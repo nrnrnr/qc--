@@ -49,6 +49,10 @@ type t = Rtl.space * Base.std_int * Rtl.width
 <<type t>>
 module Set: Set.S with type elt = t
 module Map: Map.S with type key = t
+
+module RT (C : Lua.Lib.CORE) : sig
+	val map : t C.V.map
+end
 @
 
 A register is a special case of a [[Rtl.loc]] location.  We would like
@@ -110,6 +114,37 @@ let of_loc loc = match Rtl.Convert.loc loc with
         in
             (sp,index,width)
     | _                         -> invalid_arg "Register.of_loc"
+@
+
+The [[RT]] module creates an embedding/projection pair for registers.
+
+<<register.ml>>=
+module RT (C : Lua.Lib.CORE) =
+struct
+	module V = C.V
+	let embedString = V.string.V.embed
+
+	let embedRegister (s,i,w) =
+		let labels = [ embedString "space"; embedString "index"; embedString "width" ] in
+		let values = [ embedString (Char.escaped s); V.int.V.embed i; V.int.V.embed w] in
+		let newTab = (V.Table.create (List.length labels)) in
+		let () = List.iter2 (fun key data -> V.Table.bind newTab ~key ~data)
+							labels values in
+		V.Table newTab
+
+	let projectRegister reg = match reg with
+		| V.Table reg ->
+		    let field f = V.Table.find reg (embedString f) in
+			let s = String.get (V.string.V.project (field "space")) 0 in
+			let i = V.int.V.project (field "index") in
+			let w = V.int.V.project (field "width") in
+			(s,i,w)
+	    | _ -> raise (V.Projection (reg, "register"))
+
+	let map = { C.V.embed = embedRegister
+		      ; C.V.project = projectRegister
+	          }
+end
 @
 
 \iffalse

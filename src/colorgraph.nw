@@ -321,6 +321,8 @@ Additional information is also stored:
 \begin{itemize}
 \item [[regToItem]] - map from temps to list-group items
 \item [[spills]]    - short-living temps introduced for spilling (spill temps)
+
+\item [[luaColorOverride]] - value set in Lua to override the standard register list
 \item [[allColors]] - list of all registers
 \item [[colors]]    - map from register spaces to a list of available registers
 \item [[k]]         - the number of physical registers
@@ -328,19 +330,20 @@ Additional information is also stored:
 
 <<graph coloring types>>=
 type color = Register.t
-type colorGraph = { mutable adjSet : EdgeSet.t
+type 'a colorGraph = { mutable adjSet : EdgeSet.t
                   ; mutable adjListMap : (tempList,Register.t) impListItem list RM.t
                   ; mutable degreeMap : int RM.t
                   ; mutable moveListMap : (moveList,G.node) impListItem list RM.t
                   ; mutable aliasMap : Register.t RM.t
                   ; mutable colorMap : color RM.t
+                  ; mutable spills : Register.Set.t
 
                   ; mutable regToItem : (tempList,Register.t) impListItem RM.t
                   ; mutable tempLG : (tempList, Register.t) impListGroup
 
                   ; mutable moveLG : (moveList, move) impListGroup
 
-                  ; mutable spills : Register.Set.t
+                  ; mutable luaColorOverride : 'a
                   ; mutable allColors : color list
                   ; mutable colors : RS.t SpaceMap.t
                   ; mutable k : int
@@ -394,6 +397,8 @@ let cgInfo =
        ; tempLG = tempFn
        ; spills = RS.empty
        ; moveLG = moveFn
+
+	   ; luaColorOverride = V.Nil
        ; colors = SpaceMap.empty
        ; allColors = []
        ; k = 0
@@ -440,8 +445,21 @@ let clearCGInfo cg {Proc.cc = colors} =
     let () = cg.tempLG <- tempFn in
     let () = cg.spills <- RS.empty in
     let () = cg.moveLG <- moveFn in
+
     let () = cg.allColors <- colors.Target2.allocatable in
-    let () = cg.k <- List.length colors.Target2.allocatable in
+    let () =
+		(match cg.luaColorOverride with
+		 | V.Nil      -> ()
+		 | V.Number x ->
+			let rec firstn n lst =
+				if n <= 0 then []
+				else (match lst with 
+					  | [] -> []
+					  | a::rst -> a :: firstn (n - 1) rst) in
+			cg.allColors <- firstn (V.int.V.project cg.luaColorOverride) cg.allColors
+		| _ -> cg.allColors <- (V.list register).V.project cg.luaColorOverride) in
+
+    let () = cg.k <- List.length cg.allColors in
     false
 @
 
@@ -1188,8 +1206,8 @@ let listMapAdd value key listMap =
 <<colorgraph.ml>>=
 <<imperative lists>>
 <<graph coloring types>>
-module GCT : Lua.Lib.USERTYPE with type 'a t = colorGraph = struct
-    type 'a t = colorGraph
+module GCT : Lua.Lib.USERTYPE with type 'a t = 'a colorGraph = struct
+    type 'a t = 'a colorGraph
     let tname = "Graph Coloring"
     let eq _ x y = x = y
     let to_string vs _ = "<cgInfo>"
@@ -1207,11 +1225,14 @@ module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.action)
         module V = Interp.V
         let cgmap = GCT.makemap V.userdata V.projection
 
+		module RT = Register.RT (Interp)
+		let register = RT.map
+
         <<graph coloring builtins>>
 
         let init g =
           (* PLEASE CHANGE 'CG' TO 'Colorgraph' *)
-          Interp.register_module "CG" graph_coloring_module g;
+          Interp.register_module "ColorGraph" graph_coloring_module g;
           Lua.Lib.StringList.empty (* FIX -- replace with init code *)
     end
   end
@@ -1270,9 +1291,12 @@ let graph_coloring_module =
   ; "pCFG",             V.efunc stageFn pCFG
   ; "writedot",         V.efunc (V.bool **-> V.result (V.func stageFn)) writedot
   ; "cgInfo",           cgmap.V.embed cgInfo
+  ; "setRegisters",     V.efunc (V.value **-> V.result V.unit)
+						(fun value -> cgInfo.luaColorOverride <- value
+									; cgInfo.colors           <- SpaceMap.empty)
   ]
-
 @
+
 \subsubsection{Lua startup code}
 This startup code sets up the right passes.
 <<Lua startup code for [[Colorgraph]] module>>=
@@ -1280,53 +1304,53 @@ This startup code sets up the right passes.
 -- Graph-Coloring Register Allocator
 ------------------------------------------------------------------ 
 
-CG = CG or error('predefined CG is nil??') -- has some primitives
+ColorGraph = ColorGraph or error('predefined ColorGraph is nil??') -- has some primitives
 B  = Backplane
 
-CG.makeGraph = B.seq 
-    { CG.liveness
-    , CG.build 
+ColorGraph.makeGraph = B.seq 
+    { ColorGraph.liveness
+    , ColorGraph.build 
     }
     
-CG.orderVars = B.seq 
-    { CG.makeWorklist
-    , B.fix(B.unless_do(CG.simplify,
-                            B.unless_do(CG.coalesce,
-                                B.unless_do(CG.freeze,
-                                    CG.selectSpill))))
+ColorGraph.orderVars = B.seq 
+    { ColorGraph.makeWorklist
+    , B.fix(B.unless_do(ColorGraph.simplify,
+                            B.unless_do(ColorGraph.coalesce,
+                                B.unless_do(ColorGraph.freeze,
+                                    ColorGraph.selectSpill))))
     }
 
-CG.pcg = 
-    B.ignore(CG.printCG)
-CG.pcfg = 
-    B.ignore(CG.pCFG)
+ColorGraph.pcg = 
+    B.ignore(ColorGraph.printCG)
+ColorGraph.pcfg = 
+    B.ignore(ColorGraph.pCFG)
 
-CG.color = 
-    B.share
-    ( CG.cgInfo
+ColorGraph.color = 
+  B.share
+    ( ColorGraph.cgInfo
     , "cgInfo"
     , B.seq 
-        { CG.clearCGInfo
+		{ ColorGraph.clearCGInfo
         , B.fix 
             ( B.seq 
                 { B.ignore (B.seq
-                    { CG.makeGraph
-                    , CG.orderVars
-                    , CG.assignColors
+                    { ColorGraph.makeGraph
+                    , ColorGraph.orderVars
+                    , ColorGraph.assignColors
                     })
                 , 
                    B.when_do
-                    ( CG.haveSpilledTemps
-                    , CG.resetProgram
+                    ( ColorGraph.haveSpilledTemps
+                    , ColorGraph.resetProgram
                     )
                 } 
             )    
         , B.seq 
-            { CG.updateProgram
-            , CG.applyColors
+            { ColorGraph.updateProgram
+            , ColorGraph.applyColors
             }
         }        
-    )       
+    )
 @
 
 \subsection{Debugging support}
