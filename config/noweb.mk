@@ -82,7 +82,7 @@ OCAMLDEFS =     $TOP/config/autodefs.ocaml
 %.bbl:  %.bib %.aux
         bibtex $stem 
                     
-%.dvi:  %.tex macros.tex
+%.dvi:  %.tex 
         $LATEX "\\scrollmode \\input $stem.tex"
         ltxcount=3
         while egrep -s "$RERUN" $stem.log && [ $ltxcount -gt 0 ]
