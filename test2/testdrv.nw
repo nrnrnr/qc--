@@ -31,6 +31,15 @@ Ld.rtend = "../runtime/libqc--.a ../runtime/pcmap.ld"
 @ 
 \subsection{Utility functions}
 
+\paragraph{Command lines}
+To spit out a command line, be a bit clever about variables.
+<<testdrv.lua>>=
+function Test.cmd_string(verbose)
+  local v = (verbose and " -v") or ""
+  local force = (Test.force and " Test.force=1") or ""
+  return format("%s%s testdrv.lua%s", Test.qc, v, force)
+end
+@ 
 \paragraph{Lists}
 Lua does not have a function to get the number of entries in a table/list.
 <<testdrv.lua>>=
@@ -402,12 +411,12 @@ The output.
 if inputs.diffs ~= "" then
   if Test.verbose then
     print(format("\n## To update these files {%s } run:", inputs.diffs))
-    print(format("%s testdrv.lua %s %s.record",
-                 Test.qc, Test.tst_file, inputs.name))
+    print(format("%s %s %s.record", Test.cmd_string(), 
+                 Test.tst_file, inputs.name))
   else
     local stat = (status == 0) and "PASSED" or "FAILED"
-    print(format("%s -v testdrv.lua %s %s.test \t# %s {%s } differ",
-                 Test.qc, Test.tst_file, inputs.name, stat, inputs.diffs))
+    print(format("%s %s %s.test \t# %s {%s } differ", Test.cmd_string(1),
+	         Test.tst_file, inputs.name, stat, inputs.diffs))
   end
 end
 @ 
@@ -937,8 +946,8 @@ function Test.compare_front_ends(inputs)
       else                        why = "msgs only"
       end      
       Test.clear_status_line()
-      print(format("%s -v testdrv.lua newfe.lua %s %s.test \t# %s",
-                   Test.qc, Test.tst_file, inputs.name, why))
+      print(format("%s newfe.lua %s %s.test \t# %s",
+                   Test.cmd_string(1), Test.tst_file, inputs.name, why))
     else
       if diff then Test.on_error[".s"](old, new) end
       if Test.compare_failed then
