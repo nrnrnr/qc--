@@ -12,16 +12,8 @@ Revisions Copyright © 2001 Norman Ramsey.  All rights reserved.
 static void
 statconv(Dir *dir, struct stat *s)
 {
-	struct passwd *p;
-	struct group *g;
 	ulong q;
 
-	p = getpwuid(s->st_uid);
-	if (p)
-		strncpy(dir->uid, p->pw_name, NAMELEN);
-	g = getgrgid(s->st_gid);
-	if (g)
-		strncpy(dir->gid, g->gr_name, NAMELEN);
 	q = 0;
 	if(S_ISDIR(s->st_mode))
 		q = CHDIR;

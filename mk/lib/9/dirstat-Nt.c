@@ -14,21 +14,6 @@ statconv(Dir *dir, struct stat *s)
 {
 	ulong q;
 
-#ifdef NO
-	extern char* GetNameFromID(int);
-
-	strncpy(dir->uid, GetNameFromID(s->st_uid), NAMELEN);
-	strncpy(dir->gid, GetNameFromID(s->st_gid), NAMELEN);
-	p = getpwuid(s->st_uid);
-	if (p)
-		strncpy(dir->uid, p->pw_name, NAMELEN);
-	g = getgrgid(s->st_gid);
-	if (g)
-		strncpy(dir->gid, g->gr_name, NAMELEN);
-#else
-	strcpy(dir->uid, "unknown");
-	strcpy(dir->gid, "unknown");
-#endif
 	q = 0;
 	if(ISTYPE(s, _S_IFDIR))
 		q = CHDIR;

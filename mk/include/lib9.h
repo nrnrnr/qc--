@@ -106,8 +106,6 @@ typedef
 struct Dir
 {
 	char	name[NAMELEN];
-	char	uid[NAMELEN];
-	char	gid[NAMELEN];
 	Qid	qid;
 	unsigned long	mode;
 	int	atime;
