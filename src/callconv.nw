@@ -21,14 +21,67 @@
 
 Each target platform requires an implementation of its procedure
 calling convention:  which arguments goes into registers and which are
-passed on the stack. Mark W.~Bailey and Jack W.~Davidson have shown in
-\cite{bailey:davidson:95} that calling conventions can be modeled with 
-finite state automata. The automaton receives a stream of enriched
-{\PAL} types and the automaton responds for each data type with a
-location that the parameter is passed in. 
+passed on the stack.  Calling convetions also exists for returning
+values and passing them to a continuation.  Mark W.~Bailey and Jack
+W.~Davidson have shown in \cite{bailey:davidson:95} that the process of
+choosing registers to pass values can be modeled with finite state
+automata.  The automaton receives a stream of enriched {\PAL} types
+and the automaton responds for each data type with a location that the
+parameter is passed in.  However, the calling convention includes much
+more details like which registers to use as a stack pointer and so on. 
+This module provides an unified interface to calling conventions for
+all targets.
+
 
 % ------------------------------------------------------------------ 
 \subsection{Interface}
+% ------------------------------------------------------------------ 
+
+The interface to calling conventions is divided in two parts:  a
+general part and a part for using automata for passing values from and
+to procedures.  The interface to automata is used to describe the
+general interface and thus comes first in the file describing the
+interface.
+
+<<callconv.mli>>=
+module type S = sig 
+    <<module type s>>   (* trick; we don't have an implementation yet *)
+end
+@
+
+<<module type s>>=
+module Automaton : sig
+    <<sig automaton>>
+end
+<<sig general>>
+@
+
+% ------------------------------------------------------------------ 
+\subsection{General Calling Convention Interface}
+% ------------------------------------------------------------------ 
+
+The various aspects of a calling convention are bundled into one type
+[[convention]]. The individual components are:
+
+\begin{itemize}
+\item The stack pointer [[sp]]. The stack pointer is used to address
+      elements of a procedure's activation record at run-time. 
+\end{itemize}
+
+<<sig general>>=
+type convention = { sp:     Rtl.location
+                    (* more to come *)
+                  }
+@
+
+A platform's calling convention can be accessed directly as a value. 
+
+<<>>=                  
+val convention:   convention (* the actual convention *)
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Interface to Automaton}
 % ------------------------------------------------------------------ 
 
 The interface for the calling convention automata serves two purposes: 
@@ -41,10 +94,11 @@ procedures and continuations.  The difference between these two
 aspects of the interface are expressed by using sub-modules for them
 in the interface.
 
-<<callconv.mli>>=
+<<sig automaton>>=
 <<basic types>>
-<<run>>
-<<build>>
+
+module Run  : sig <<signature run>>   end
+module Make : sig <<signature build>> end
 @
 
 % ------------------------------------------------------------------ 
@@ -90,12 +144,6 @@ This sub-module defines everything an automaton's client needs to
 know.  Especially all details about a calling convention is left
 abstract.
 
-<<run>>=
-module Run : sig
-    <<signature run>>
-end
-@
-
 Use [[reset]], to get an automaton that is in its initial state.  See
 below for equations describing the actual state of an automaton
 partially.
@@ -132,7 +180,7 @@ val overflow: automaton -> overflow
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{Building an Automaton}
+\subsubsection{Building an Automaton -- preliminary}
 % ------------------------------------------------------------------ 
 
 Creating an automaton for an existing calling conventions is not a
@@ -140,12 +188,6 @@ straight forward task.  This interface is rather low-level and does
 not go beyond the automaton perspective.  An additional high-level
 approach may be adequate that provides a domain specific notation that
 ultimately can be converted into an automaton using this interface.
- 
-<<build>>=
-module Make : sig
-    <<signature build>>
-end
-@
 
 A state captures which locations have been used for parameter passing
 and where the next parameter goes, depending on its type.
@@ -213,29 +255,3 @@ info     (add a s1 t f s2) = info a
 
 An implementation is postponed.
 
-<<callconv.ml>>=
-type ty = Types.ty * Ast.hint
-type location = Rtl.expr -> Rtl.location        (* pass parameter *)
-              * Rtl.expr                        (* get  parameter *)
-type automaton = unit
-
-module Run = struct
-    let reset a         = assert false
-    let next a t        = assert false
-
-    type overflow       = { size:   int   (* overflow area in memsize units *)
-                          ; align:  int   (* alignment in memsize units     *)
-                          }
-    let overflow a      = assert false
-end
-
-module Make = struct
-    type info
-    type state
-    let info a          = assert false
-
-    let make s i        = assert false
-    let state_of a      = assert false
-    let add a s1 t f s2 = assert false
-end
-@
