@@ -17,248 +17,121 @@
 % l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
 
 % ------------------------------------------------------------------ 
-\section{Automaton for Calling Conventions}
+\section{Resource Allocation for {\PAL} Variables}
 % ------------------------------------------------------------------ 
 
-Each target platform requires an implementation of its procedure
-calling convention:  which arguments goes into registers and which are
-passed on the stack.  Calling convetions also exists for returning
-values and passing them to a continuation.  Mark W.~Bailey and Jack
-W.~Davidson have shown in \cite{bailey:davidson:95} that the process of
-choosing registers to pass values can be modeled with finite state
+{\PAL} registers, global variables and formal parameters are
+represented either as memory locations or hardware registers.  The
+mapping between these {\PAL} objects and their hardware oriented
+representations is controlled by this module. 
+
+For passing parameter between procedures and continuations, a target
+specific calling conventions describes which argument is passed into a
+register, and which in memory.  Mark W.~Bailey and Jack W.~Davidson
+have shown in \cite{bailey:davidson:95} that the process of choosing
+registers and memory to pass values can be modeled with finite state
 automata.  The automaton receives a stream of enriched {\PAL} types
-and the automaton responds for each data type with a location that the
-parameter is passed in.
+and the automaton responds for each data type with a register-like
+location that the parameter is passed in.
+
+Memory used for parameter passing can be shared by all calls inside a
+procedure because it is never used by two calls at the same time.  The
+memory requirement of the most complicated call thus determines the
+amount and alignment of memory that must be reserved for parameter
+passing.  When each call results in an \emph{area} that describes its
+memory requirement, an \emph{overlay} operation over two areas allows
+to compute a new area that can hold both.
 
 % ------------------------------------------------------------------ 
-\subsection{Interface to Automaton}
+\section{Allocation of register-like Locations}
 % ------------------------------------------------------------------ 
 
-Calling conventions in the {\qcc} compiler are at least in prinicple
-constructed at run-time of the compiler.  An interface thus must
-provide methods to construct automata to represent calling
-conventions, and means to use them.  For the moment however, we like
-to hard-code some calling conventions in order to gain experience for
-the design of an interface to construct automata at run-time. For the
-time being, this interface only defines how an automaton is run but
-not, how it is defined.
+Register-like locations are maintained by automatons.  An automaton
+encapsulates the ability to assign locations.  Every automaton has a
+private collection of locations (e.g., registers) that it may use at
+will, plus an ``overflow area.'' The overflow area is located in
+memory, and it must be contiguous.
 
+Automata are imperative; the type [[t]] encapsulates mutable state. 
+This state is primarily the private internal state of the automaton,
+but there is one part of state that is public.  When an automaton is
+``frozen,'' it is no longer possible to get new locations from it, but
+in exchange, one can get the size and alignment requirement (and also
+the address) of its overflow area.
+
+Although an \emph{automaton} is imperative, the \emph{specification}
+of the automaton is not.  To create an automaton, one needs a
+specification, plus the address to be used to point to the overflow
+area.  \emph{Addresses always point to the lowest addressed byte, as
+in the value returned from [[malloc]].} This address may contain
+unbound compile-time constants (see \module{const}).
+
+A mutable automaton [[t]] is made from a specification [[spec]].  When
+run, the automaton returns abstract locations [[loc]].  The type
+abbreviations for alignment, width, and size are only for
+documentation purposes.
 
 <<automaton.mli>>=
-<<basic types>>
-module Run   : sig <<signature run>>   end
-module Build : sig <<signature build>> end
+type spec  (* specification of an automaton (immutable) *)
+type t     (* an automaton (mutable) *)
+type loc   (* a location provided by an automaton *)
+
+val dummy: spec    (* spec to create a dummy automaton *)
+@
+
+Supply an address of the overflow area, and get back an automaton in
+its initial state.
+
+<<automaton.mli>>=
+val mk : spec -> address:Rtl.exp -> t           
+@
+
+To allocate a new resource slot, call [[ty]].  It returns a location
+[[[loc]] and change the automaton's internal state.
+
+<<automaton.mli>>=
+val ty: t -> width:int -> hint:(string option) -> loc    
+@
+
+Location's as returned by an automaton can't be used directly because
+they are abstract.  To use them to store and fetch data, use the
+following two functions:
+
+<<automaton.mli>>=
+val fetch : loc -> width:int -> Rtl.exp
+val store : loc -> Rtl.exp -> width:int -> Rtl.rtl
+@
+
+When all allocations are done [[freeze]] the automaton. In response
+it returns the space allocated in the overflow [[area]]. 
+
+<<automaton.mli>>=
+val freeze : t -> Area.t
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{Basic Types}
+\subsection{Implementation}
 % ------------------------------------------------------------------ 
-
-Pure {\PAL} data types like [[bits32]] are usually not descriptive
-enough to find the location a parameter of that value is passed in. 
-Calling conventions usually not rely on the size of a
-parameter, but also to some degree on its purpose.  A type from the
-perspective of calling conventions is thus a tuple of a {\PAL} type
-and a hint. 
-
-<<basic types>>=
-type ty = Types.ty * string option
-@
-
-An automaton is used at a caller's side to find the locations values
-to be passed are stored in, and at the callee's side to find the
-location incoming parameters are read from.  The same situation arises
-at a [[return]] and when [[cut]]'ing to a continuation.  A
-[[location]] thus includes two values:  a function that returns an
-effect of storing a value to a location, and an expression that
-fetches a value from that location.
-
-<<basic types>>=
-type location = (Rtl.exp -> Rtl.rtl)          (* write value *)
-              * Rtl.exp                       (* read  parameter *)
-@
-
-Of course, there is the automaton itself.  An automaton maintains an
-internal state that changes when the automaton is run. 
-
-<<basic types>>=
-type t
-@
-
-% ------------------------------------------------------------------ 
-\subsubsection{Running an Automaton}
-% ------------------------------------------------------------------ 
-
-This sub-module defines everything an automaton's client needs to
-know.  Especially all details about a calling convention is left
-abstract.
-
-Running an automaton means to ask for the [[location]] of a [[ty]]. 
-This advances an automaton to its [[next]] state.  The answers to the
-question includes the desired [[location]] and the automaton in its
-new (internal) state.  When the automaton lacks a transition from its
-current state for the requested type, the [[Error.ErrorExn]] exception
-is raised.
-
-<<signature run>>=
-val next: t -> ty -> location * t (* Error.ErrorExn *)
-@
-
-The code generator not only needs to know where parameters are stored,
-but also the overall size of the area (overflow) parameters are stored
-in and its alignment.  This information is captured by the
-[[overflow]] type and function.  The memory requirements for
-overflowing parameters are determined by the \emph{state} of an
-automaton and thus can be obtained from it.  In contrast, the
-[[location]] for a parameter is determined by the \emph{transition}
-between two states and thus it is returned by the [[next]] function.
-
-<<signature run>>=
-type overflow   = { size:   int   (* overflow area in memsize units *)
-                  ; align:  int   (* alignment in memsize units     *)
-                  }
-val overflow: t -> overflow
-@
-
-% ------------------------------------------------------------------ 
-\subsubsection{Building an Automaton}
-% ------------------------------------------------------------------ 
-
-An interface to build an automaton systematically is postponed. We
-provide some hard-coded automata here.
-
-<<signature build>>=
-val cc:         t           (* calling convention *)
-val globals:    t           (* global register placement *)
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Dummy Implementation}
-% ------------------------------------------------------------------ 
-
-The following implementation can only represent very simple calling
-conventions that place every parameter into some memory location.  The
-implementation does not model a finite automaton, but only counter
-that keeps track of the memorory consumed for passing parameters. The
-implementation depends on the target's size of pointers and words and
-thus is by far too specific.
 
 <<automaton.ml>>=
-type ty         =  Types.ty * string option
-type location   =  (Rtl.exp -> Rtl.rtl)
-                    * Rtl.exp
+type spec = unit
+type t    = unit
+type loc  = unit
 
-let memsize     = 8  (* assumption for now, must be obtained from Fenv *)
-let pointer     = 32 (* ditto for pointer size *)
-let word        = 32
-let agg         = Rtl.BigEndian
+let dummy                = ()
+let mk () loc            = ()
+let ty () ~width ~hint   = ()
 
-<<type t>>
+let fetch () ~width      = Impossible.unimp "Automaton.fetch"
+let store () expr ~width = Impossible.unimp "Automaton.store"
 
-module Run = struct
-    module T = Types
-    <<module run>>
-end
-
-module Build = struct
-    <<module build>>
-end 
-@
-
-An ``automaton'' [[t]] is a counter [[offset]] and two funtions [[read]]
-and [[write]]: 
-
-<<type t>>=
-type t        =     { offset:       int
-                    ; read:         (int -> int -> Rtl.exp)
-                    ; write:        (int -> int -> Rtl.exp -> Rtl.rtl)
-                    }
-@
-
-The functions [[read]] and [[write]] provide access to values stored
-at some [[offset]] from a location only known to them.
-
-\begin{itemize}
-    \item [[read k w]] returns a [[w]] memsize value from offset [[k]].
-    \item [[write k w]] returns a function, that writes a [[w]] memsize
-          value to offset [[k]].
-\end{itemize}
-
-The two functions are sufficient to implement the [[next]] function,
-that returns a [[location]] for a [[ty]]:  the parameter is placed at
-the point the current offset points to and the offset is incremented
-by the size of the type.
-               
-<<module run>>=
-let next dfa (ty,hint) =
-    let width = match ty with
-        | T.Bits(n) when n mod memsize = 0 -> n 
-        | _                                -> assert false in
-    let words = width / memsize in
-    let loc   = (dfa.write dfa.offset width, dfa.read dfa.offset width) in
-    let dfa   = { dfa with offset = dfa.offset + words } in
-        (loc, dfa)
-@
-
-The [[overflow]] function returns the amount of consumed memory. Since we
-don't care about alignment of the [[offset]], we always have an alignment
-of one. 
-
-<<module run>>=
-type overflow =     { size:  int
-                    ; align: int
-                    }
-
-<<module run>>=
-let overflow dfa = { size  = dfa.offset
-                   ; align = 1
-                   }
+let freeze ()            = Impossible.unimp "Alloc.Reg.freeze"
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Dummy Automata}
+\subsubsection{Overlapping Areas}
 % ------------------------------------------------------------------ 
 
-<<module build>>=
-let offset k        = Rtl.bits (Bits.of_int k word) word
-let add             = Rtl.opr "add" [word]
-let sum x y         = Rtl.app add [x;y]
-
-let regsp = Rtl.cell Rtl.none
-                     'm'
-                     agg
-                     pointer
-                     (Rtl.link "sp " pointer)
-
-let globs = Rtl.cell Rtl.none
-                     'm'
-                     agg
-                     pointer
-                     (Rtl.link "globals " pointer)
-                        
-let sp loc          = Rtl.fetch loc word
-let stack loc k w   = Rtl.cell Rtl.none 'm' agg w (sum (sp loc) (offset k))
-let read  loc k w   = Rtl.fetch (stack loc k w) w
-let write loc k w   = fun e -> Rtl.store (stack loc k w) e w
+<<overlapping areas implementation>>=
+let overlap place areas = Impossible.unimp "Alloc.overlap"
 @
-
-The following automaton places parameters relative to some link time
-constant ``sp ''.
-
-<<module build>>=
-let cc = 
-    { offset = 0
-    ; read   = read  regsp
-    ; write  = write regsp
-    }
-@
-
-Here is an automaton that places global registers relative to some
-link-time constanat named ``globals ''.
-
-<<module build>>=
-let globals = 
-    { offset = 0
-    ; read   = read  globs
-    ; write  = write globs
-    }    
