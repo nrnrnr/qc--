@@ -21,7 +21,7 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
     type doc        (* printable document                 *)
     type target     (* target architecture                *)
     type frame      (* container for stack slots          *)
-    type lua  = Lua.Parser.token      (* fake - lua interpreter *)    
+    type optimize  = cfg -> frame -> unit 
 
     val dummy:      target                  (* our only target right now *)
     
@@ -32,8 +32,8 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
     val emit_asdl:  ast -> unit             (* emit AST in ASDL format *)
     val check:      ast -> env              (* check semantics of AST  *)
 
-    val compile:    lua -> ast -> target -> env -> asm
-                    (* calls optimize: cfg -> frame -> unit *)
+    val compile:    optimize -> ast -> target -> env -> asm
+                    (* calls optimize *)
                 
     val assemble:   asm -> doc
     val print:      doc -> width:int -> unit (* print doc to stdout *)
@@ -114,8 +114,8 @@ module Personality = struct
     
     let target = Target2.dummy
 
-    let ext (p:Proc.t) target (lua:Lua.Parser.token (*dummy*)) = 
-        (* call lua function using value lua*)
+    let ext (p:Proc.t) target optimizer = 
+        (* call optimizer *)
         let () = p.Proc.freeze p in
             Cfg3.ast p.Proc.cfg p.Proc.name p.Proc.mangle target
 end
@@ -125,14 +125,14 @@ module Asm = Asm2ast.Make(Personality)
 module IR  = Ast3ir.Make(Asm)
 
 <<Caml>>=
-type asm    = Asm.asm 
-type ast    = Srcmap.map * Ast.program
-type env    = Fenv.Clean.env
-type doc    = Pp.doc
-type cfg    = Cfg3.cfg
-type target = Target2.t
-type frame  = Automaton.t
-type lua    = Lua.Parser.token (* fake *)
+type asm        = Asm.asm 
+type ast        = Srcmap.map * Ast.program
+type env        = Fenv.Clean.env
+type doc        = Pp.doc
+type cfg        = Cfg3.cfg
+type target     = Target2.t
+type frame      = Automaton.t
+type optimize   = cfg -> frame -> unit
 
 <<Caml>>=
 
@@ -218,9 +218,9 @@ let check (map,ast:ast) =
         Fenv.clean env
 
 <<Caml>>=
-let compile (lua:lua) (map,ast:ast) (target:target) (env:env)  =
+let compile (opt:optimize) (map,ast:ast) (target:target) (env:env)  =
     let ()     = Target2.check target env        in   
-        IR.translate env target lua ast 
+        IR.translate env target opt ast 
 
 <<Caml>>=
 let assemble (asm:asm) = 
@@ -293,15 +293,15 @@ module MakeLib
   (AstV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AstT.t 
                               and  type 'a combined = 'a AsmV.combined)
   (EnvV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a EnvT.t 
-                              and  type 'a combined = 'a AstV.combined)
+                              and  type 'a combined = 'a AsmV.combined)
   (CfgV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a CfgT.t 
-                              and  type 'a combined = 'a EnvV.combined)
+                              and  type 'a combined = 'a AsmV.combined)
   (TargetV : Lua.Lib.TYPEVIEW with type 'a t        = 'a TargetT.t 
-                              and  type 'a combined = 'a CfgV.combined)
+                              and  type 'a combined = 'a AsmV.combined)
   (DocV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a DocT.t 
-                              and  type 'a combined = 'a TargetV.combined)
+                              and  type 'a combined = 'a AsmV.combined)
   (FrameV  : Lua.Lib.TYPEVIEW with type 'a t        = 'a FrameT.t 
-                              and  type 'a combined = 'a DocV.combined)
+                              and  type 'a combined = 'a AsmV.combined)
     : Lua.Lib.TYPEFUL with type 'a combined = 'a FrameV.combined =
 
 struct
@@ -351,15 +351,16 @@ module Map = struct
 end
 
 let builtins =
-  [ "parse"     , pf (V.string **-> V.result Map.ast)   Caml.parse
-  ; "version"   , pf (V.string **-> V.runit)  (fun _ -> Caml.version ())
-  ; "scan"      , pf (V.string **-> V.runit)            Caml.scan
-  ; "check"     , pf (Map.ast  **-> V.result Map.env)   Caml.check
+  [ "dummy"     , Map.target.V.embed                    Caml.dummy
   ; "assemble"  , pf (Map.asm  **-> V.result Map.doc)   Caml.assemble
-  ; "print"     , pf (Map.doc  **-> V.int **-> V.runit) Caml.print
+  ; "check"     , pf (Map.ast  **-> V.result Map.env)   Caml.check
   ; "emit_asdl" , pf (Map.ast  **-> V.runit)            Caml.emit_asdl
+  ; "parse"     , pf (V.string **-> V.result Map.ast)   Caml.parse
+  ; "print"     , pf (Map.doc  **-> V.int **-> V.runit) Caml.print
+  ; "scan"      , pf (V.string **-> V.runit)            Caml.scan
+  ; "version"   , pf (V.string **-> V.runit)  (fun _ -> Caml.version ())
   ; "compile"   
     , pf (Map.ast  **-> Map.target **-> Map.env **-> V.result Map.asm) 
-      (Caml.compile Luaparser.EOF)
+      (Caml.compile (fun _ _ -> ()))
   ] 
 @  

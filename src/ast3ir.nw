@@ -56,7 +56,7 @@ treating a control-flow graph as an instruction.
 
 <<ASM>>=
 Asm2.S with type instruction = Proc.t
-       and  type init        = Lua.Parser.token (*will change*)
+       and  type init        = (Cfg3.cfg -> Automaton.t -> unit)
 @
 
 
@@ -64,7 +64,7 @@ Asm2.S with type instruction = Proc.t
 module Make (A: <<ASM>>) : sig
     val translate: Fenv.Clean.env 
                 -> Target2.t 
-                -> lua:Lua.Parser.token  (* dummy - will change *)
+                -> (optimizer: Cfg3.cfg -> Automaton.t -> unit)
                 -> Ast.program 
                 -> A.asm
 end
@@ -1164,7 +1164,7 @@ should be exported but currently it is not.
 \end{quote}
 
 <<Make translate program>>=
-let translate env target (lua:Lua.Parser.token) prog =
+let translate env target (optimizer: Cfg3.cfg -> Automaton.t -> unit) prog =
     let mangle   = Asm.mangle (F.nam2sym env) in 
     let base_sym = mangle "global base" in
     let base     = Rtl.link base_sym target.Target.pointersize in (*XXX*)
@@ -1172,7 +1172,7 @@ let translate env target (lua:Lua.Parser.token) prog =
        ,area
        ,digest   = globals env target base (F.globals env) in
     let digest   = mangle (String.escaped digest) in
-    let asm      = Asm.init lua in
+    let asm      = Asm.init optimizer in
     let asm      = asm ++ Asm.section (target.Target.data_section)
                        ++ Asm.comment "memory for global registers"
                        ++ Asm.align area.Area.align
