@@ -30,6 +30,7 @@ type width      = int
 <<>>=
 exception Overflow
 exception Size
+@
 
 A [[bits]] value can be created from and represented as a string.  The
 string representation can use a decimal, octal, or hexadecimal radix. 
@@ -49,9 +50,8 @@ shown below.  Conversion to and from strings always considers a
 @
 
 <<>>=
-type radix      = 
-                | Octal
-                | Decimal
+type radix      = Oct
+                | Dec
                 | Hex
 @
 
@@ -69,13 +69,13 @@ characters:
 
 \begin{itemize}
 \item A string starting with [[0x]] or [[0X]] is considered a
-      dexadecimal number.
+      hexadecimal number.
 \item A string starting with [[0]] is considered a string of octal
       numbers.
 \item All other strings are considered as strings with decimal numbers.
 \end{itemize}
 
-A [[Failure "of_string"]] excpetion is raised when the string contains illegal
+A [[Failure "of_string"]] exception is raised when the string contains illegal
 characters. 
 
 <<>>=
@@ -102,14 +102,16 @@ C [[float]] value of 64 bits for which floating point operations are
 available.
 
 <<bits.ml>>=
-module I = Int64
-module U = Uint64
+module I = Int64        (* signed   operations *)
+module U = Uint64       (* unsigned operations *)
 
 exception Overflow
 exception Size
+@
 
 Values of type [[bits]] are represented as pairs of width and value.
 
+<<>>=
 type width      = int
 type bits       = width * int64
 @
@@ -135,6 +137,7 @@ The value converted by [[of_int]] must fit into [[width]] bits.
 let of_int width uint64 =
     check width uint64;
     (width,uint64)
+@
 
 The value obtained from a string must fit into [[width]] bits.  The
 function raises [[Failure]] in case of syntactical errors in the
@@ -146,6 +149,7 @@ let of_string str width =
         ( check width uint64
         ; (width,uint64)
         )
+@
 
 The [[to_int]] function checks that the [[bits]] value can be
 represented as a positive integer and raises [[Overflow]] otherwise. 
@@ -156,10 +160,11 @@ let to_int (width,uint64) =
         raise (Overflow)
     else
         I.to_int uint64
-
+@
 This is buggy: the [[I.to_string]] function considers the [[bits]]
 value as a signed integer. We also ignore the radix for the moment.
-        
+
+<<>>=        
 let to_string radix (width,uint64) = I.to_string uint64 (* wrong *)
 @
 
