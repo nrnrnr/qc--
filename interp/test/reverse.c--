@@ -16,7 +16,7 @@ target
 ;
 
 export main;
-import bits32 cmmprint, alloc;
+import bits32 cmmprint, alloc, gc_helper;
 
 import bits32 SaveGlobals, RestoreGlobals;
 
@@ -28,11 +28,23 @@ const GC_globals_backup = 3;
 const nil       = 0;
 
 section "data" {
-  // needed by front-end runtime system
+  // needed by front-end runtime system to store globals backup
   globals_backup:  bits32[1];
 
+  // GC information -- what types are used here
+
+  // there are 4 bytes in a symbol, none of which are parts of pointers
+  TY_symbol:     bits8[] {4::bits8}; // 4 bytes in a symbol
+                 bits8[] {0::bits8, 0::bits8, 0::bits8, 0::bits8};
+
+  // there are 8 bytes in a cons, and pointers begin at bytes 0 and 3
+  TY_cons:       bits8[] {8::bits8};
+                 bits8[] {1::bits8, 0::bits8, 0::bits8, 0::bits8,
+                          1::bits8, 0::bits8, 0::bits8, 0::bits8};
+
   // GC information -- which variables are pointers
-  GC_allocate:     bits8[] {0::bits8, 1::bits8};
+  GC_allocate:     bits8[] {1::bits8, 1::bits8};
+  GC_gc:
   GC_symbolify:    bits8[] {0::bits8, 1::bits8};
   GC_cons:         bits8[] {1::bits8, 1::bits8};
   GC_car:          bits8[] {1::bits8};
@@ -48,21 +60,29 @@ section "data" {
 section "text" {
 
   span GC GC_allocate {
-    allocate( bits32 size ) {
+    allocate( bits32 ty ) {
       bits32 new;
 
       SaveGlobals(bits32[globals_backup]);
-      new = foreign "C" alloc(size / 8);
+      new = foreign "C" alloc(ty);
       RestoreGlobals(bits32[globals_backup]);
 
       return( new );
     }
   }
 
+  span GC GC_gc {
+    gc() {
+      SaveGlobals(bits32[globals_backup]);
+      foreign "C" gc_helper();
+      RestoreGlobals(bits32[globals_backup]);
+    }
+  }
+
   span GC GC_symbolify {
     symbolify( bits32 s ) {
       bits32 new;
-      new = allocate(32);
+      new         = allocate(TY_symbol);
       bits32[new] = s;
       return( new );
     }
@@ -71,7 +91,7 @@ section "text" {
   span GC GC_cons {
     cons( bits32 car, bits32 cdr ) {
       bits32 new;
-      new             = allocate(64);
+      new             = allocate(TY_cons);
       bits32[new]     = car;
       bits32[new + 1] = cdr;
       return( new );
