@@ -18,7 +18,11 @@ clients, it exports nothing.
 
 <<main.ml>>=
 module S = Spec
-let rcsid = "$Id$"
+let rcsid   = "$Id$"
+let version = [ "mlburg 0.1" 
+              ; "(c) 2002 Christian Lindig <lindig@eecs.harvard.edu>"
+              ; "         Norman Ramsey <nr@eecs.harvard.edu>"
+              ]
 
 exception Error of string
 let error msg = raise (Error msg)
@@ -67,21 +71,32 @@ The main function expects the file name of the specification on the
 command line. It reads the file and calls the code generator.
 
 <<main.ml>>=
+let help = 
+    [ "usage: mlburg file.mlb"
+    ; "       mlburg -version       show version, authors"
+    ; "       mlburg -norm          for debugging, show normalized rules"
+    ; "       mlburg -help          this"
+    ]
+    
 let main () =
     let argv        = Array.to_list Sys.argv in
     let this        = Filename.basename (List.hd argv) in
         match List.tl argv with
-        | [file] -> 
-            let spec = read file in
-                (try Burg.generate spec stdout 
-                 with Burg.Error msg -> error ("semantic error: "^msg))
         | ["-norm"; file] ->
             let spec  = read file               in
             let rules = Norm.rules spec.S.rules in
             let doc   = Spec.PrettyPrint.rules rules in
                 Code.Print.doc doc
+        | ["-version"] -> 
+            List.iter print_endline version
+        | ["-help"] | ["--help"] ->
+            List.iter print_endline help            
+        | [file] -> 
+            let spec = read file in
+                (try Burg.generate spec stdout 
+                 with Burg.Error msg -> error ("semantic error: "^msg))
         | _ -> 
-            error (Printf.sprintf "usage: %s spec.mlb" this)
+            error (Printf.sprintf "try `mlburg -help'") 
 @
 
 At program startup the expression below is evaluated and thus the
@@ -127,13 +142,21 @@ cost.
 
 =over
 
+=item B<-version>
+
+Prints some version information to stdout.
+
+=item B<-help>
+
+Prints a short options summary to stdout.
+
 =item B<-norm> I<spec.mlb>
 
 This is an option for debugging B<mlburg>. B<Mlburg> normalizes rules
 during the translation process. In a normalized rule no constructor
 pattern has another constructor pattern as argument. When the B<-norm>
 flag is present, B<mlburg> emits the normalized rule set to stdout.
-
+=back
 
 =head1 BURG SPECIFICATION
 
@@ -161,7 +184,7 @@ are nonterminals.
 
 In addition to the grammar above, a rule pattern must not be a literal
 number, literal string, or a terminal variable. Those can only appear as
-constructor arguments. 
+constructor arguments like in C<Int(23)>. 
 
     alpha       = ['a'-'z' 'A'-'Z']
     digit       = ['0'-'9']
@@ -169,7 +192,7 @@ constructor arguments.
     number      = digit+
 
 A I<string> is enclosed in double quotes, a I<number> is a non-negative
-integer, a I<char> enclosed in single quotes. Use escapes for newline
+integer, a I<char> is enclosed in single quotes. Use escapes for newline
 C<\n>, return C<\r>, tabs C<\n>, and single quotes C<\'> in character
 constants.  I<Camlcode> is arbitrary code that may include properly
 nested pairs of C<{:> and C<:}>. An identifier must start with a
@@ -324,6 +347,11 @@ value. This allows to obtain a string value as well:
     ...
     let t = conADD(left,right) in
         t.str.Camlburg.action ()        (* an string value *)
+
+=head1 FILES
+
+The generated code relies on the small module C<Camlburg> that comes as
+C<camlburg.mli> and C<camlburg.ml> with B<mlburg>. 
 
 =head1 SEE ALSO
 
