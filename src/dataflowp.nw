@@ -131,7 +131,8 @@ let backward_anal (fact, comp) graph =
         let show_block (f, t) = match f with
         | GR.Entry -> "<entry>"
         | GR.Label ((_, l), _, _) -> l in
-        Debug.eprintf "dataflow" "Dataflow fact changed at block %s\n" (show_block b);
+        Debug.eprintf "dataflow" "Dataflow fact '%s' changed at block %s\n"
+          fact.fact_name (show_block b);
         P.set fact.prop u block_in;
         match (fst b) with
         | GR.Entry -> () (* does not count as a change for fixed-point purposes *)
@@ -145,9 +146,9 @@ let backward_anal (fact, comp) graph =
     let () = List.iter set_block_fact blocks in
     if !changed then
       if n < 1000 then iterate (n + 1)
-      else impossf "%s didn't converge in %n iterations" comp.name n
+      else impossf "%s didn't converge in %n backward iterations" comp.name n
     else
-      Debug.eprintf comp.name "%s converged in %d iterations\n" comp.name n in
+      Debug.eprintf comp.name "%s converged in %d backward iterations\n" comp.name n in
   init();
   iterate 1
 @ 
@@ -196,7 +197,8 @@ and general_backward fact comp graph =
         let show_block b = match fst b with
         | GR.Entry -> "<entry>"
         | GR.Label ((_, l), _, _) -> l in
-        Debug.eprintf "dataflow" "Dataflow fact changed at block %s\n" (show_block b);
+        Debug.eprintf "dataflow" "Dataflow fact '%s' changed at block %s\n"
+          fact.fact_name (show_block b);
         P.set fact.prop u block_in;
         match (fst b) with
         | GR.Entry -> () (* does not count as a change for fixed-point purposes *)
