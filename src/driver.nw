@@ -187,13 +187,14 @@ passed.
 <<driver.ml>>=
 module Personality = struct
     let target                             = Target2.dummy
-    type instr                             = Cfg3.t * string * (string->string)
-    let ext (cfg,name,mangle) target init  = Cfg3.ast cfg name mangle target
+    type instr                             = Proc.t
+    let ext p target init  
+        = Cfg3.ast p.Proc.cfg p.Proc.name p.Proc.mangle target
 end    
 
     
 module Asm = Asm2ast.Make(Personality)
-module IR  = Ast3ir.Make (Cfg3) (Asm)
+module IR  = Ast3ir.Make (Asm)
 
 let compile target file =
     let ast, map = ast_of file                       in
