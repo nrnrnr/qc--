@@ -1,3 +1,4 @@
+% vim: ts=8 sw=4 et:
 
 % ------------------------------------------------------------------ 
 \section{Sparc Code Expander}
@@ -66,6 +67,7 @@ We save an {\rtl} to the state with [[exec]]. {\rtl}s are saved in
 
 <<head>>=
 let exec  rtl  = fun (rtls,tmp) -> ((), (rtl :: rtls,tmp)) 
+let pair  x y  = x >>= fun x -> y >>= fun y -> return (x,y)
 @
 
 New tempoaries come as integer and floating point varieties. You have to
@@ -101,10 +103,10 @@ let npc             = cd 5
 let zero            = R.fetch (rd 0) 32
 
 let add x y         = R.app (R.opr "add" [32]) [x;y]
+let sub x y         = R.app (R.opr "sub" [32]) [x;y]
 let (<--) loc e     = R.store loc e (W.exp e)
 let sx32 w n        = R.app (R.opr "sx" [w;32]) [n]
 let zx32 w n        = R.app (R.opr "zx" [w;32]) [n]
-let or' r1 rc r2    = r2 <-- R.app (R.opr "or" [32]) [r1; rc] 
 @
 
 Index and displacement are the two addressing modes for load and store
@@ -122,12 +124,99 @@ let ldf addr f      = f         <--  fetch (mem addr)
 let stf f addr      = mem addr  <--  f
 let jmpl addr r     = R.par [npc <-- addr; r <-- fetch pc]
 let jmp  addr       = jmpl addr (rd 0)
+let or' r1 rc r2    = r2 <-- R.app (R.opr "or" [32]) [r1; rc] 
 
 let mov  rc r       = r <-- rc              (* or' zero rc r *)
 let movr r1 r2      = r2 <-- fetch r1       (* or' zero (fetch r1) r2 *)
 let ret             = jmpl (disp (rd 7) (const 32 13)) (rd 0)
 let fmovs f1 f2     = f2 <-- fetch f1     
+let xnor r1 r2 r3   = 
+    let xor = R.opr "xor" [32] in
+    let com = R.opr "com" [32] in
+    r3 <-- R.app xor [fetch r1; R.app com [fetch r2]]
 @
+
+Below are the 16 conditional branches. They are represented by fairly
+complicated {\rtl}s whose guarding expressions look at the condition
+codes. 
+
+<<head>>=
+let eq1    x y = R.app (R.opr "eq" [1])  [x;y]      (* bit operations *)
+let ne1    x y = R.app (R.opr "ne" [1])  [x;y]      (* bit operations *)
+let com1   x   = R.app (R.opr "com" [1]) [x] 
+let fetch1 x   = R.fetch x 1     
+let xor1   x y = R.app (R.opr "xor" [1]) [x;y]
+let or1    x y = R.app (R.opr "or" [1]) [x;y]
+let z          = R.fetch (R.slice 1 22 (cd 0)) 1    (* condition codes *)
+let n          = R.fetch (R.slice 1 23 (cd 0)) 1
+let v          = R.fetch (R.slice 1 21 (cd 0)) 1
+let c          = R.fetch (R.slice 1 20 (cd 0)) 1
+let z'         = R.slice 1 22 (cd 0)
+let n'         = R.slice 1 23 (cd 0)
+let v'         = R.slice 1 21 (cd 0)
+let c'         = R.slice 1 20 (cd 0)
+let zero1      = R.bits (Bits.of_int 0 1) 1
+
+let branch guard target = R.guard guard (R.store (cd 5) target 32)
+
+let ba      = branch (R.bool true)
+let bn      = branch (R.bool false)
+let bne     = branch (ne1 (com1 z) zero1)
+let be      = branch (ne1 z zero1)
+let bg      = branch (ne1 (com1 (or1 z (xor1 n v))) zero1)
+let ble     = branch (ne1 (or1 z (xor1 n v)) zero1)
+let bge     = branch (ne1 (com1 (xor1 n v)) zero1)
+let bl      = branch (ne1 (xor1 n v) zero1)
+let bgu     = branch (ne1 (com1 (or1 c z)) zero1)
+let bleu    = branch (ne1 (or1 c z) zero1)
+let bcc     = branch (ne1 (com1 c) zero1)
+let bcs     = branch (ne1 c zero1)
+let bpos    = branch (ne1 (com1 n) zero1)
+let bneg    = branch (ne1 n zero1)
+let bvc     = branch (ne1 (com1 v) zero1)
+let bvs     = branch (ne1 v zero1)
+@
+
+You ain't seen nothing yet. Here comes the [[subcc]] instruction. We
+need it to implement [[cmp]].
+
+<<head>>=
+let subcc r1 rc r2 =
+    let binop32 o x y  = R.app (R.opr o [32]) [x;y] in
+    let sub32           = binop32 "sub" in
+    let lt32            = binop32 "lt"  in
+    let ge32            = binop32 "ge"  in
+    let eq32            = binop32 "eq"  in
+    let ne32            = binop32 "ne"  in
+    let bit31 y         = R.app (R.opr "bitExtract" [32;32;1]) 
+                            [R.bits (Bits.of_int 31 32) 32;y] in
+    let set   x         = R.store x (R.bits (Bits.of_int 1 1) 1) 1 in
+    let reset x         = R.store x (R.bits (Bits.of_int 0 1) 1) 1 in
+    let zero32          = R.bits (Bits.of_int 0 32) 32 in
+    let and' x y        = R.app (R.opr "conjoin" []) [x;y] in 
+    let r1'             = R.fetch r1 32 in    
+    let unknown         = zero32 in
+    let borrow32 x y z  = R.app (R.opr "borrow" [32]) [x;y;z] in
+        R.par
+        [ r2 <-- sub32 r1' rc
+        ; R.guard   (lt32 r1' zero32) (set n')
+        ; R.guard   (ge32 r1' zero32) (reset n')
+        ; R.guard   (eq32 r1' zero32) (set z')
+        ; R.guard   (ne32 r1' zero32) (reset z')
+        ; R.guard   (and' (ne1 (bit31 r1') zero1) 
+                          (ne1 (bit31 r1') (bit31 (sub32 r1' unknown))))
+                    (set v')
+        ; R.guard   (and' (ne1 (bit31 r1') zero1) 
+                          (eq1 (bit31 r1') 
+                               (bit31 (sub32 r1' unknown))))
+                    (reset v')
+        ; R.guard   (eq1 (bit31 r1') zero1) (reset v')
+        ; c' <-- borrow32 r1' unknown  zero1
+        ]
+
+let cmp r rc = subcc r rc (rd 0)
+@
+
 
 The following offset addresses a memory cell relativ to the frame
 pointer that is used to move data from floating-point registers to
@@ -141,7 +230,7 @@ let mtmp            = add (fetch (rd 30)) (const 8 32)
 \subsection{Cost Functions}
 % ------------------------------------------------------------------ 
 
-Check that a bits [[b]] value fits into [[n]] bits.
+Check that a signed bits [[b]] value fits into [[n]] bits.
 
 <<head>>=
 let is_imm n b =
@@ -156,40 +245,25 @@ let is_imm n b =
         with
             Bits.Overflow -> false
 
-
-module StringSet = Set.Make(struct type t = string let compare = compare end)
-
-let float_ops = 
-    List.fold_right 
-        StringSet.add 
-        ["fcmp"; "fadd"; "fsub"; "fdiv"; "fmul"; "fabs"; "fneg"; "fsqrt"]
-        StringSet.empty
+let guard n = function
+    | true  -> n
+    | false -> C.inf_cost 
 @
 
-To simplify guarded effects we have to know which operators return
-boolean values. All operators that take \emph{and} return boolean values
-have been re-written into control-flow structures and do not show up
-here. The operators listed here all take non-boolean arguments.
+% ------------------------------------------------------------------ 
+\subsection{Operator Classes}
+% ------------------------------------------------------------------ 
+
+Some operators can be treated alike. We define some class predicates for
+them here.
 
 <<head>>=
-let bool_ops = (* boolean valued primitive with non-boolean args *)
-    List.fold_right
-        StringSet.add
-        ["bool"; "eq"; "ge"; "geu"; "gt"; "gtu"; "le"; "leu"; "lt"; "ltu";
-         "ne"]
-         StringSet.empty
+module StringSet = Set.Make(struct type t = string let compare = compare end)
 
-let is_float_op (op,_) = StringSet.mem op float_ops
-let is_bool_op  (op,_) = StringSet.mem op bool_ops
-let is_int_op   opr    = not (is_float_op opr || is_bool_op opr) 
+let setof list = List.fold_right StringSet.add list StringSet.empty
 
-let is_add_op = function
-    | ("add",_)     -> true
-    | _             -> false
-
-let cost = function
-    | true  ->  0
-    | false ->  C.inf_cost 
+let rrc op = StringSet.mem op 
+    (setof ["add"; "and"; "sub"; "shl"; "shra"; "shrl"; "sub"; "xor"])
 @
 
 % ------------------------------------------------------------------ 
@@ -199,13 +273,22 @@ let cost = function
 The following table summarizes the nonterminals from the rule set. 
 
 \begin{tabular}{ll}
-    Nonterminal & Meaning \\ 
+    Nonterminal & Type & Meaning \\ 
     \hline
-    [[ireg]]    & integer computation that yields result in a register\\
-    [[freg]]    & same as [[ireg]] for floating-point computations\\
-    [[const]]   & constant
-    [[const13]] & constant that fits into 13 bits\\
-    [[guard]]   & boolean guard for effect\\
+    [[reg]]     & [[R.loc m]] 
+                & integer computation that yields result in a register\\
+    [[freg]]    & [[R.loc m]]
+                & same as [[ireg]] for floating-point computations\\
+    [[const]]   & [[R.exp]]
+                & constant
+    [[const13]] & [[R.exp m]]
+                & constant that fits into 13 bits\\
+    [[rc]]      & [[R.exp m]]
+                & 13 bit constant or register\\ 
+    [[stmt]]    & [[R.rtl m]]
+                & side effect\\
+    [[guard]]   & [[(R.loc -> R.rtl) m]]
+                & guarding expression for a branch\\
 \end{tabular}
 
 In a {\burg} pattern variables hold either polymorphic nonterminal
@@ -239,9 +322,17 @@ If a constant fits into 13 bits we create a 13-bit wide value to pass
 it. 
 
 <<rules>>=
-const13:    Bits(b:bits) [{: cost (is_imm 13 b):}] 
+const13:    Bits(b:bits) [{: guard 0 (is_imm 13 b):}] 
             {: return (R.bits b (Bits.width b))  :}
+@
 
+An [[rc]] nonterminal captures either a small value, or a register. To
+ensure that both have the same type, we return a monadic expression.
+
+<<rules>>=
+rc:         reg     {: reg >>= fun r -> return (fetch r) :}  
+rc:         const13 {: const13                           :}
+            
 reg:        const13 [1]
             {: 
                 const13 >>= fun k ->
@@ -259,39 +350,19 @@ reg:        const [1]
 @
 
 Memory cells addresses are of either form: $\$r[r_1] + \$r[r_2]$, or
-$\$r[r_1] + c$. The [[addr]] nonterminal captures these addresses. Chain
-rules cover conversions.
+$\$r[r_1] + c$. The [[addr]] nonterminal captures these addresses and
+chain rules the conversions.
 
 <<rules>>=
-disp:       Add(reg, const13)
-            {:
-                reg     >>= fun r ->
-                const13 >>= fun k ->
-                return (disp r k)       (* exp m *)
-            :}    
-                
-index:      Add(r1:reg, r2:reg)
+addr:       App2("add", reg, rc)
             {: 
-                r1 >>= fun r1 ->
-                r2 >>= fun r2 ->
-                return (index r1 r2)    (* exp m *)
+                reg >>= fun r  ->
+                rc  >>= fun rc ->
+                return (add (fetch r) rc)
             :}
 
-reg:        Add(r1:reg, r2:reg) [1] -- escape for Add
-            {:
-                r1 >>= fun r1 -> 
-                r2 >>= fun r2 -> 
-                let fetches = List.map fetch [r1;r2] in
-                let exp     = R.app (R.opr "add" [32]) fetches in
-                itmp 32 >>= fun t ->
-                exec (t <-- exp) >>= fun () ->
-                return t
-            :}
-
-addr:       reg     {: reg >>= fun r -> return (index (rd 0) r) :}
-addr:       const13 {: const13 >>= fun k -> return (disp (rd 0) k) :}
-addr:       disp    {: disp  :}
-addr:       index   {: index :}
+addr:       reg     {: reg     >>= fun r -> return (add zero (fetch r)) :}
+addr:       const13 {: const13 >>= fun k -> return (add zero k) :}
 addr:       const   {: error "cannot handle large constants" :}    
 
 
@@ -330,7 +401,6 @@ freg:       Fetch(mem, width) [1]
                 exec (f <-- fetch m) >>= fun () -> (* ldf addr f *)
                 return f
             :}    
-
 @
 
 Fetches from registers.
@@ -340,39 +410,22 @@ reg:        Fetch(reg, width)  {: reg :}
 freg:       Fetch(freg, width) {: freg :}
 @
 
-We categorize operands into floating-point, boolean, and integer
-operands. We need this to decided when to use floating-point registers.
-
-<<rules>>=
-fop:        Op(opr) [{: cost (is_float_op opr) :}]
-            {: U.opr opr :}
-
-iop:        Op(opr) [{: cost (is_int_op opr) :}]
-            {: U.opr opr :}
-
-bop:        Op(opr) [{: cost (is_bool_op opr) :}]
-            {: U.opr opr :}
-
-add:        Op(opr) [{: cost (is_add_op opr) :}]
-            {: U.opr opr :}
-@
 
 Registers are categorized into interger, floating point, and control
 registers. Note, that temporaries are treated like hardware registers.
 
 <<rules>>=
 reg:        Cell(s:char, agg, width, k:const, ass) 
-            [{: cost (s = 'r' || s = 't') :}]
+            [{: guard 0 (s = 'r' || s = 't') :}]
             {:
                 return (R.cell (U.assertion ass) s agg width k)
             :}    
             
 freg:       Cell(s:char, agg, width, k:const, ass)
-            [{: cost (s = 'f' || s = 'u') :}]
+            [{: guard 0 (s = 'f' || s = 'u') :}]
             {:
                 return (R.cell (U.assertion ass) s agg width k)
             :}    
-            
             
 creg:       Cell('c', agg, width, k:const, ass)
             {:
@@ -391,11 +444,11 @@ register allocator. For the moment I assume that $\textit{fp}-8$ is
 reserved.
 
 <<rules>>=
-stmt:       Store(r1:reg, r2:reg, width) [1]
+stmt:       Store(reg, rc, width) [1]
             {: 
-                r1 >>= fun r1 ->
-                r2 >>= fun r2 ->
-                return (movr r2 r1)
+                reg >>= fun r  ->
+                rc  >>= fun rc -> 
+                return (r <-- rc)
             :}
             
 stmt:       Store(f1:freg, f2:freg, width) [1]
@@ -406,13 +459,12 @@ stmt:       Store(f1:freg, f2:freg, width) [1]
                 return (fmovs f2 f1)
             :}
 
-stmt:       Store(creg, reg, width) [1]
+stmt:       Store(creg, reg, width) [1]     --- ??
             {:
                 creg >>= fun c ->
                 reg  >>= fun r ->
                 return (c <-- fetch r)
             :}
-
 
 <<rules>>=
 reg:        freg [10] -- penality
@@ -432,108 +484,109 @@ freg:       reg [10] -- penality
                 exec (u <-- fetch (mem mtmp)) >>= fun () -> 
                 return u
             :}
-            
-            
 @
 
-Small constants can be loaded directly.
+A guard is the conditional expression of a branch and return a
+higher-oder function [[(R.loc -> R.rtl) m]].
+
 
 <<rules>>=
-stmt:       Store(reg, const13, width) [1]
-            {:  
-                reg     >>= fun r ->
-                const13 >>= fun k ->
-                return (r <-- k)(* mov rc r *)
+guard:      True()  {: return ba :}
+guard:      False() {: return bn :}
+
+guard:      App2("eq", reg, rc) [1]
+            {:  reg >>= fun reg -> rc >>= fun rc ->
+                exec (cmp reg rc) >>= fun () -> return (be)
+            :}
+guard:      App2("ge", reg, rc) [1]
+            {:  reg >>= fun reg -> rc >>= fun rc ->
+                exec (cmp reg rc) >>= fun () -> return (bge)
+            :}
+guard:      App2("geu", rc, reg) [1] -- reversed args!
+            {:  reg >>= fun reg -> rc >>= fun rc ->
+                exec (cmp reg rc) >>= fun () -> return (bleu)
+            :}
+guard:      App2("gt", reg, rc) [1] 
+            {:  reg >>= fun reg -> rc >>= fun rc ->
+                exec (cmp reg rc) >>= fun () -> return (bg)
+            :}
+guard:      App2("gtu", reg, rc) [1] 
+            {:  reg >>= fun reg -> rc >>= fun rc ->
+                exec (cmp reg rc) >>= fun () -> return (bgu)
+            :}
+guard:      App2("le", reg, rc) [1] 
+            {:  reg >>= fun reg -> rc >>= fun rc ->
+                exec (cmp reg rc) >>= fun () -> return (ble)
+            :}
+guard:      App2("leu", reg, rc) [1] 
+            {:  reg >>= fun reg -> rc >>= fun rc ->
+                exec (cmp reg rc) >>= fun () -> return (bleu)
+            :}
+guard:      App2("lt", reg, rc) [1] 
+            {:  reg >>= fun reg -> rc >>= fun rc ->
+                exec (cmp reg rc) >>= fun () -> return (bl)
+            :}
+guard:      App2("ltu", rc, reg) [1] -- reversed arguments
+            {:  reg >>= fun reg -> rc >>= fun rc ->
+                exec (cmp reg rc) >>= fun () -> return (bgu)
+            :}
+guard:      App2("ne", reg, rc) [1] 
+            {:  reg >>= fun reg -> rc >>= fun rc ->
+                exec (cmp reg rc) >>= fun () -> return (bne)
+            :}
+
+rtl:        Branch(guard, reg) [1]
+            {:
+                guard >>= fun branch ->
+                reg   >>= fun target ->
+                exec (branch (fetch target)) 
+            :}
+
+rtl:        Simple(stmt)
+            {:
+                stmt >>= fun s ->
+                exec (R.par [s]) 
             :}    
-@            
 
-Lists of registers. Nothing to see here.
+rtl:        Nop() {: exec (R.par []) :}        -- skip    
+@
 
-<<rules>>=
-regs:       Nil() {: return [] :}
-regs:       Cons(reg, regs) 
-            {: reg >>= fun r -> regs >>= fun rs -> return (r::rs) :}
-
-fregs:      Nil() {: return [] :}
-fregs:      Cons(freg, fregs) 
-            {: freg >>= fun r -> fregs >>= fun rs -> return (r::rs) :}
-@            
-
-Expressions are devleoped into register locations which are then passed
-around.
+{\PAL}'s primitive operators show up in expressions and are mapped to
+{\sparc} instructions.
 
 <<rules>>=
-reg:        App(iop, regs) [1]
+            -- ["add"; "and"; "sub"; "shl"; "shra"; "shrl"; "sub"; "xor"]
+reg:        App2(o:string, reg, rc) [{: guard 1 (rrc o) :}]
             {:
-                regs >>= fun rs ->
-                let fetches = List.map fetch rs in
-                let exp     = R.app iop fetches in
-                let width   = W.exp exp         in
-                itmp width >>= fun t ->
-                exec (t <-- exp) >>= fun () ->
+                reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
+                exec (t <-- R.app (R.opr o [32]) [fetch r; rc]) >>= fun ()->
                 return t
-            :}
+            :}    
 
-freg:       App(fop, fregs) [1]
-            {:
-                fregs >>= fun fs ->
-                let fetches = List.map fetch fs in
-                let exp     = R.app fop fetches in
-                let width   = W.exp exp         in
-                ftmp width >>= fun f ->
-                exec (f <-- exp) >>= fun () ->
-                return f
-            :}
+reg:        App1(o:string, reg) [{: guard 1 (List.mem o ["com"; "neg"]) :}]
+            {:    
+                reg >>= fun r -> itmp 32 >>= fun t ->
+                exec 
+                    ( match o with
+                    | "com" -> xnor r (rd 0) t
+                    | "neg" -> t <-- sub zero (fetch r)
+                    | _     -> assert false
+                    ) >>= fun () ->
+                return t
+            :}      
+                    
 
-<<rules>>=
-guard:      True()  {: return (R.bool true) :}
-guard:      False() {: return (R.bool false) :}
-guard:      App(bop, regs) 
-            {:
-                regs >>= fun rs ->
-                let fetches = List.map fetch rs in
-                let exp     = R.app bop fetches in
-                return exp
-            :}
-
-
-gstmt:      GStmt(guard,stmt)
-            {: 
-                guard >>= fun g ->
-                stmt  >>= fun s ->      
-                return (R.guard g s)    (* rtl m *)
-            :}
-
-
-gstmts:     Nil() {:  return [] :}
-gstmts:     Cons(gstmt,gstmts)
-            {: gstmt  >>= fun s  -> gstmts >>= fun ss -> return (s::ss) :}
-
-rtl:        Rtl(gstmts) [1]
-            {:
-                gstmts            >>= fun rtls ->
-                exec (R.par rtls) >>= fun ()  ->
-                return ()
-            :}
+reg:        App1(o:string, reg)     [2] {: error ("cannot handle "^o) :}
+reg:        App2(o:string, reg, rc) [2] {: error ("cannot handle "^o) :}
+reg:        App3(string, x:reg, y:reg, z:reg)  [2] {: error "app3" :}
 @
 
 % ------------------------------------------------------------------ 
 \subsection{Interfacing {\rtl}s with the Expander}
 % ------------------------------------------------------------------ 
 
-<<tail>>=
-let rec map f = function
-    | []                        -> conNil ()
-    | x::xs                     -> conCons (f x) (map f xs)
-@    
-  
-Make sure that the above function [[map]] is \emph{not} in the same
-[[letrec]] as the functions below. In that case it becomes monomorphic
-and the code below will not type check! This mistake has taken me some
-time to spot.
-
-Because it is much easier in {\ocaml}, we decompose applications of the
-[[add]] primitive here.
+Because it is much easier in {\ocaml} than in {\burg}, we
+decompose applications and complex {\rtl}s here.
 
 <<tail>>=  
 let const = function
@@ -546,8 +599,10 @@ let const = function
 let rec exp = function
     | RP.Const(k)               -> const (k)
     | RP.Fetch(l,w)             -> conFetch (loc l) w
-    | RP.App(("add",_),[x;y])   -> conAdd (exp x) (exp y)
-    | RP.App(opr,exps)          -> conApp (conOp opr) (map exp exps)
+    | RP.App((o,_),[x])         -> conApp1 o (exp x)
+    | RP.App((o,_),[x;y])       -> conApp2 o (exp x) (exp y)
+    | RP.App((o,_),[x;y;z])     -> conApp3 o (exp x) (exp y) (exp z)
+    | RP.App(_,_)               -> error "too many arguments in application"
 
 and loc = function
     | RP.Cell(char, aff, w, e, ass) -> conCell char aff w (exp e) ass 
@@ -558,11 +613,21 @@ and stmt = function
     | RP.Store(l,e,w)           -> conStore (loc l) (exp e) w
     | RP.Kill(loc)              -> error "cannot handle kill"
 
-and guarded (e,eff)             =  conGStmt (exp e) (stmt eff)
-
 <<tail>>=  
 and rtl = function
-    | RP.Rtl(gs)                -> conRtl (map guarded gs)
+    | RP.Rtl([(RP.Const(RP.Bool(true)),s)]) -> 
+            conSimple (stmt s)
+    | RP.Rtl([(e,RP.Store(loc,target,width))]) -> 
+            conBranch (exp  e) (exp target)
+    | RP.Rtl([]) -> 
+            conNop ()
+    | RP.Rtl(_) as rtl -> 
+            ( List.iter prerr_endline
+                [ "cannot expand this RTL:"
+                ; RU.ToString.rtl (U.rtl rtl)
+                ]
+            ; assert false
+            )        
 @
 
 The [[rtl]] function returns (the best) plan to rewrite a given {\rtl}.
