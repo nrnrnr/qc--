@@ -1,0 +1,1372 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 sw=4 et sts=4
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+%%Grades: C Central Soon
+
+% inc: \usepackage{alltt}
+
+
+% Table of Contents
+% egrep '^\\(sub)*section' ast2ir.nw 
+%
+% \section{Translation to Intermediate Representation}
+% \subsection{Implementation}
+% \subsection{Auxiliaries}
+% \subsection{Expression Types}
+% \subsection{Expression Translation}
+% \subsection{Constant Evaluation}
+% \subsection{Auxiliaries for Make}
+% \subsection{Continuation Bundles}
+% \subsection{Assignment}
+% \subsection{Formal and Actual Parameters}
+% \subsection{Global Registers}
+% \subsection{Statements}
+% \subsection{Procedure Translation}
+% \subsection{Global Memory declarations}
+% \subsection{Stack Data Declarations}
+% \subsection{Toplevel}
+% \subsubsection{Program}
+
+
+
+
+% ------------------------------------------------------------------ 
+\section{Translation to Intermediate Representation}
+% ------------------------------------------------------------------ 
+
+The [[translate]] function takes an environment, the actual target and
+a program and translates it into an abstract assembler program.  The
+assembler is functorized over the data type of instructions. This module
+puts a whole procedure body into a single instruction by basically
+treating a control-flow graph as an instruction. 
+
+We put the [[Target.t]] parameter first always because we first put
+the less-specific information before the more-specific information.
+<<ast2ir.mli>>=
+module Make (G : Cfg.S) (Call : Call.S with type node = Rtl.rtl G.node) : sig
+val translate: Target2.t
+            -> Fenv.Clean.env 
+            -> (string -> Call.t)
+            -> optimizer: (Proc.t -> unit)
+            -> Ast.program 
+            -> Asm3.assembler
+end
+@
+
+TODO: RESTRUCTURE CODE SO THAT FAT ENVIRONMENT AND TARGET ARE SIMPLY
+CAPTURED AT TOP LEVEL AND NEED NOT BE PASSED HITHER AND YON.
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+<<ast2ir.ml>>=
+module T  = Target2
+module A  = Ast
+module E  = Error
+module F  = Fenv.Clean
+module AT = Automaton2
+
+<<auxiliaries>>
+
+module G  = Cfg
+module IO = struct end 
+module R  = Rtl
+module RP = Rtl.Private
+module RU = Rtlutil
+module Up = Rtl.Revert
+module Dn = Rtl.Convert
+
+module Make (G : Cfg.S) (C : Call.S with type node = Rtl.rtl G.node) = struct
+  <<statement-related types>>
+  <<definition of module [[StackData]]>>
+  let translate target env ccs =
+    (* BINDING THE FLOW GRAPH TO g HERE WOULD BE A FINE IDEA *)
+    <<definition of function [[exprtype]]>> in
+    <<meanings of variables as [[lvalue_name]] and [[rvalue_name]]>> in
+    <<mutually recursive nest of [[expr]] and [[lvalue]]>> in
+    <<Make constant evaluation>> in
+    <<Make continuation bundles>> in
+    <<Make global registers>> in
+    <<Make formals and actuals>> in    
+    
+    <<Make statements>> in
+    <<definition of [[init_cont]]>> in
+    <<Make procedure>> in
+    <<Make memory declarations>> in
+    <<Make toplevel>> in
+    <<Make translate program>> in
+  translate
+end
+@
+
+% ------------------------------------------------------------------
+\subsection{Auxiliaries}
+% ------------------------------------------------------------------ 
+
+<<auxiliaries>>=
+let default_cc          = "C--"
+let default_space       = ('m':Rtl.space)
+let default_section     = "text"
+
+let (<<) f g = fun x -> f (g x) (* function composition *)
+
+(* val width : 'a Types.t -> 'a *)
+let width = function
+    | Types.Bits n -> n
+    | Types.Bool   -> Impossible.impossible "ast2ir.width of type bool"
+
+(* val astty : F.env -> A.ty -> Types.ty *)
+let rec astty env = function
+    | A.TyAt(x,r)  -> astty env x
+    | A.BitsTy(n)  -> Types.bits n
+    | A.AliasTy(x) -> snd (F.findt x env)
+
+(* val astwidth : F.env -> A.ty -> int *)
+let astwidth env = width << (astty env) 
+
+let foldl = List.fold_left
+let foldr = List.fold_right
+@
+
+We often know that the address of a block has the form $b+k$, where $b$
+is a known address and $k$ some unkown offset. The function [[offset]]
+provides returns an {\rtl} address of this form, where $k$ is
+represented as a fresh late compile time constant.
+<<auxiliaries>>=
+let offset base ptrwidth =
+    let k = Rtl.late (Idgen.offset "Ast2ir.offset") ptrwidth in
+        Rtl.app (Rtl.opr "add" [ptrwidth]) [base;k] 
+@
+
+
+@
+\subsection{Names}
+
+Only the name of a {\PAL} register variable is meaningful in an lvalue
+context;
+other names names are meaningful only in rvalue contexts.
+\nwaddbox{val lvalue_name : env -> target -> name -> AT.loc * Rtl.width}
+\nwaddbox{val rvalue_name : env -> target -> name -> Rtl.exp}
+\deeperbox{28pt}
+<<meanings of variables as [[lvalue_name]] and [[rvalue_name]]>>=
+let rec lvalue_name x = 
+  let (_,(denot,t)) = F.findv x env in
+  let w = width t                   in
+  match denot with
+  | F.Register({F.loc=Some l}) -> l, w
+  | F.Register({F.index=i;F.loc=None}) ->
+      if F.is_localv x env then
+        AT.of_loc (Rtl.var x i w), w
+      else 
+        Impossible.impossible "global variable without location"
+  | _ -> Impossible.impossible "asked for lvalue of non-register name"
+and rvalue_name x =
+    let (_,(denot,t)) = F.findv x env in
+    let w = width t in
+    match denot with
+    | F.Constant(bits)          -> Rtl.bits bits w
+    | F.Label(F.Proc (s,_,_))   -> Rtl.link s w
+    | F.Label(F.Code s)         -> Rtl.link s w
+    | F.Label(F.Data s)         -> Rtl.link s w
+    | F.Import(_,s)             -> Rtl.link s w
+    | F.Continuation(st,s)      ->
+        Rtl.link (F.symbol env ("bogus continuation for " ^ st)) w
+        (* SHOULD CALL [[Contn]] here *)
+        (* CHECK -- DOES CONTINUATION NEED TO BEAR CALLING CONVENTION? *)
+(*
+        let cc     = target.T.cc default_cc          in
+        let offset = Rtl.late st w                in
+        let sp     = cc.Target2.sp                        in
+        Rtl.app (Rtl.opr "add" [target.T.pointersize])
+                [Rtl.fetch sp (Rtlutil.Width.loc sp);offset]
+*)
+    | F.Label(F.Stack(None))      -> Impossible.impossible "Ast2ir.Make.variable"
+    | F.Label(F.Stack(Some addr)) -> addr  (* a fetch would be wrong *)
+    | F.Register _                -> atfetch (lvalue_name x)
+<<auxiliaries>>=
+let atfetch (loc, w) = loc#fetch w
+let atstore (loc, w) exp = loc#store exp w
+@ 
+\subsubsection{Lvalues}
+
+\nwaddbox{lvalue : Ast.lvalue -> AT.loc * Rtl.width}
+\deeperbox{14pt}
+<<mutually recursive nest of [[expr]] and [[lvalue]]>>=
+let rec lvalue lhs = match lhs with
+    | A.LValueAt(lhs,_)   -> lvalue lhs
+    | A.Var(hint,x)       -> lvalue_name x 
+    | A.Mem(t,addr,align) ->
+        let w    = astwidth env t in
+        let assn = match align with None -> Rtl.none | Some n -> Rtl.aligned n in
+        AT.of_loc (Rtl.cell assn default_space target.T.byteorder w (expr addr)), w
+@ 
+
+% ------------------------------------------------------------------ 
+\subsection{Expression Types}
+% ------------------------------------------------------------------ 
+
+We use the generic [[Expcheck]] module to find an expression's type.
+Values from the environment are always [[Ok]] because at this stage we
+have a clean environment.
+IT SEEMS TO ME THAT THIS CODE IS A HEAVY-DUTY WRAPPER AROUND
+[[Expcheck.check]]. 
+CAN ANYTHING BE DONE, E.G., BY FUNCTORIZING [[Expcheck]]?
+<<definition of function [[exprtype]]>>=
+let exprtype exp =
+    let word      = Error.Ok (Types.bits target.T.wordsize)    in
+    let pointer   = Error.Ok (Types.bits target.T.pointersize) in
+    let tlookup   = fun x -> Error.Ok (snd (F.findt x env))         in
+    let vlookup   = fun x -> Error.Ok (match (F.findv x env) with
+                                      | (_,(_,t)) -> t 
+                                      ) in
+    let e = { Expcheck.wordsize    = word
+            ; Expcheck.pointersize = pointer
+            ; Expcheck.tlookup     = tlookup
+            ; Expcheck.vlookup     = vlookup
+            } 
+    in try ( match Expcheck.check e exp with
+           | Error.Ok(t) -> t
+           | Error.Error -> Impossible.impossible "error exp post checking"
+           )
+       with Error.ErrorExn msg -> Impossible.impossible "error exn post checking"
+@
+
+
+
+
+% ------------------------------------------------------------------ 
+\subsection{Expression Translation}
+% ------------------------------------------------------------------ 
+
+Each expressions denotes a value.
+It may be possible to evalute an expression at compile time, link time, or
+run time.  The translation of a variable depends on its
+denotation. (DO WE MEAN BINDING TIME HERE?)
+
+We should evaluate constant expressions as EARLY as possible. Module
+\module{rtleval} does this for link-time expressions and could possibly
+be extended.
+@
+
+A continuation has two labels: one for its code ([[x]]), and one that is
+used as its value ([[label]]). The label is later re-written to a
+pointer expression that denotes a pair of values in the activation
+record. The label is part of the continuation's denotation.
+\begin{quote}\it
+    The translation of continuations in \path|Ast2ir| is bogus. A
+    continuation \emph{value} is a pointer into the stack where two values
+    are stored: a pointer to the code of the continuation, and a stack
+    pointer. The current representation of a continuation value is a
+    link-time constant, which is wrong. A continuation \emph{value} is a
+    late compile-time expression: a sum of the stack pointer value and some
+    late compile-time constant. The stack pointer in turn, depends on the
+    currently active calling convention. -- CL (Wed May 15 16:58:46 EDT 2002)
+\end{quote}
+
+For example, we expect the following C--:
+\begin{alltt}
+p () {
+    continuation k():
+}
+\end{alltt}
+to be translated into the following:
+\begin{alltt}
+sym@p()
+{
+    $m[sp + sym@k + 4] = sym@k;
+    $m[sp + sym@k]     = sp;
+    sym@k:
+}
+\end{alltt}
+
+<<definition of function [[variable]]>>=
+@
+
+\begin{quote}\it
+    Since evaluation and type-checking are separated, types in nested
+    expressions are checked multiple times. This introduces a
+    quadratic complexity. QUADRATIC IN WHAT SIZE??
+    The only way to avoid this, as far as I can
+    see, is a combined bottom-up evaluation and type checking. --CL
+
+    Link-time constants are not atomic but have an expression structure.
+    We should try to push some operators down into link time constants:
+    The sum of a symbol and a constant can be represented as a link-time
+    constant. This requires that [[Rtl.Link]] values carry a
+    [[Reladdr.t]] value rather just a [[Reladdr.symbol]]. --CL
+    RECOMMEND: TREAT LINK-TIME CONSTANT EXPRESSION AS AN ORDINARY [[Rtl.exp]].
+    THE LINK-TIME CONSTANT NATURE OF THE EXPRESSION IS A DYNAMIC
+    PROPERTY THAT SHOULD BE DEALT WITH BY THE ASSEMBLER OR CODE
+    EXPANDER.  THIS MODULE WILL NEED SOME TARGET-DEPENDENT HELP TO
+    IDENTIFY WHICH LINK-TIME CONSTANT EXPRESSIONS CAN BE EMITTED AS
+    INIIALIZED DATA. ---NR
+\end{quote}
+    
+<<mutually recursive nest of [[expr]] and [[lvalue]]>>=
+and expr exp = 
+  let prim op args =
+    let argtys  = List.map exprtype args in
+    let _,opr   = Rtlop.Translate.operator op argtys   in
+    Rtl.app opr (List.map expr args) in
+  let word = target.T.wordsize in
+  let literal str width cvt = Rtl.bits (cvt str width) width in
+  let const default_width = function
+    | Some ty -> astwidth env ty
+    | None    -> default_width in
+  match exp with
+  | A.ExprAt(x,_)     -> expr x
+  | A.Int(str,t)      -> literal  str (const word t) Bits.U.of_string
+  | A.Float(str,t)    -> literal  str (const word t) Bits.U.of_string
+  | A.Char(str,t)     -> literal  str (const word t) Bits.U.of_string
+     (*FLOAT AND CHARACTER LITERALS LOOK VERY BOGUS TO ME*)
+  | A.Fetch(v)        -> atfetch (lvalue v)
+  | A.BinOp (l,op,r)  -> prim op [l;r]
+  | A.UnOp  (op,e)    -> prim op [e]
+  | A.PrimOp(op,args) -> prim op (List.map snd args)
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Constant Evaluation}
+% ------------------------------------------------------------------ 
+
+We translate constants to {\rtl} expressions which we then evaluate.
+
+THE TRANSLATION OF THE LINK-TIME CONSTANTS SHOULD BE DELEGATED TO THE
+ASSEMBLER.
+ONLY AN ASSEMBLER KNOWS WHAT LINK-TIME CONSTANTS IT CAN SUPPORT.
+<<Make constant evaluation>>=
+let compile_const exp     = Rtleval2.bits (expr exp)
+and eval_const    asm exp = Rtleval2.exp  (expr exp)  
+and link_const    asm exp = 
+    match Dn.exp (Rtleval2.exp  (expr exp)) with
+    | RP.Const(RP.Bits(b))   -> Reloc.Simple.of_const b
+    | RP.Const(RP.Link(l,w)) -> Reloc.Simple.of_sum l (Bits.zero w)
+    | RP.App(("add",_),[RP.Const(RP.Link(l,w)); RP.Const(RP.Bits(b))]) ->
+        Reloc.Simple.of_sum l b
+    | RP.App(("sub",_),[RP.Const(RP.Link(l,w)); RP.Const(RP.Link(l',w'))]) ->
+        Impossible.unimp "difference of link-time constants"
+    | e ->
+        Impossible.impossible
+          ("Bad link-time constant " ^ Rtlutil.ToReadableString.exp (Up.exp e))
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Continuation Bundles}
+% ------------------------------------------------------------------ 
+
+A continuation bundle on the {\AST} level is a record of names, and an
+asbtract type at the {\cfg} level.  The continuations function
+translates from the former to the latter.
+PERHAPS IT LOSES TOO MUCH INFORMATION TO GET JUST THE NODES?
+
+<<statement-related types>>=
+type 'i conts = { cuts    : 'i G.node list
+                ; unwinds : 'i G.node list
+                ; returns : 'i G.node list
+                ; aborts  : bool
+                }
+@ 
+THERE IS A PROBLEM HERE.  A CONTINUATION NEEDS A DIFFERENT ENTRY POINT
+DEPENDING ON HOW IT IS USED.  NR HAS SOME HANDWRITTEN NOTES ON THIS
+TOPIC.  SEE ALSO MODULE [[Call]].
+<<Make continuation bundles>>=
+let continuations ast cfg =
+    let lookup = List.map (G.node_labeled cfg)  in
+    let rec loop conts = function
+        | A.FlowAt (f,_) :: ff -> 
+            loop conts (f::ff)
+        | (A.CutsTo n)   :: ff -> 
+            loop {conts with cuts    = lookup n @ conts.cuts   } ff
+        | (A.UnwindsTo n):: ff -> 
+            loop {conts with unwinds = lookup n @ conts.unwinds} ff
+        | (A.ReturnsTo n):: ff -> 
+            loop {conts with returns = lookup n @ conts.returns} ff
+        | (A.Aborts)     :: ff -> 
+            loop {conts with aborts  = true                     } ff 
+        | []                   -> conts in
+    let empty = { cuts = []; unwinds = []; returns = [] ; aborts = false } in
+    loop empty ast
+@
+
+% ------------------------------------------------------------------
+\subsection{Formal and Actual Parameters}
+% ------------------------------------------------------------------ 
+
+An actual parameter is an expression and must be translated to the
+format expected by the [[IO.copyout]] function.  A formal procedure
+parameter denotes a local variable, a formal continuation parameter
+either a local or \emph{global} variable.  Both are translated to the
+format expected by the [[IO.copyin]] function.
+
+<<Make formals and actuals>>=
+let actuals l =
+  List.fold_right
+    (fun (h, e) (hw's, e's) -> (h, width (exprtype e)) :: hw's, e::e's) l ([],[])
+@
+
+\begin{quote}\it
+    As NR pointed out, hints on global registers have no semantics in 
+    {\qcc}. They thus must be ignored when computing parameter
+    passing. --CL
+\end{quote} 
+
+<<Make formals and actuals>>=
+and formal _ _ = assert false
+and procformal _ _ = assert false
+<<junk>>=
+let formal env (khint, n) = (* for continuations *)
+    ( match snd (F.findv n env) with 
+    | (F.Register {F.index=i;F.loc=None},ty) when F.is_localv n env  -> 
+        { IO.repr  = IO.Local (n,i)
+        ; IO.width = width ty
+        ; IO.hint  = khint  
+        } 
+    | (F.Register {F.loc=Some l},ty) -> 
+        { IO.repr  = IO.Global (l)
+        ; IO.width = width ty
+        ; IO.hint  = khint  
+        } 
+    | _ -> assert false
+    )
+
+let procformal env (hint, inv, ty, name) = 
+    ( match snd (F.findv name env) with 
+    | (F.Register {F.index=i;F.loc=None},ty) -> 
+        { IO.repr  = IO.Local (name,i)
+        ; IO.width = width ty
+        ; IO.hint  = hint  
+        } 
+    | _ -> assert false
+    )
+@
+    
+
+% ------------------------------------------------------------------ 
+\subsection{Global Registers}
+% ------------------------------------------------------------------ 
+
+The global registers of a {\PAL} program are assigned to hardware
+register or memory locations using a target specific automaton.  Each
+assignment results in an abstract [[AT.loc]] value that is
+entered under the name of the register to a map.
+ 
+The [[globals]] function pushes all global registers through a target
+specific automaton to obtain locations for each of them.  A location
+is added to a register's denoation in the environment.  The updated
+environment plus the area of memory that hold global registersi are
+returned as a pair.
+
+When different compilation units are linked together they all must
+declare exactly the same global registers. We compute a cryptographic
+hash value for all global register declarations as a finger print. The
+finger print is a string of 16 characters which are not guaranteed to be
+printable.
+
+<<Make global registers>>=
+let globals (base:Rtl.exp) names =
+    let t = AT.mk target.T.globals base in
+    let decls = Buffer.create 128 in (* initial size - grows as needed *)
+    let rec assign env n =
+        try 
+            ( match F.findv n env with
+            | (rgn,(F.Register(reg),ty)) ->
+                let h,h'  = match reg.F.rhint with
+                            | F.RReg x -> Some x, x     (* h/w register *)
+                            | _        -> None  , "" in
+                let w     = width ty in
+                (* sig is string representation of this declaration *)
+                let sign  = Printf.sprintf "[%d <%s>]" w h' in
+                let ()    = Buffer.add_string decls sign    in
+                let loc   = AT.allocate t w h in
+                let entry = ( rgn
+                            , (F.Register({reg with F.loc = Some loc}),ty)
+                            ) in F.rebindv n entry env
+            | _ -> Impossible.impossible "Ast2ir.Make.globals"
+            )
+        with Error.ErrorExn msg -> Impossible.impossible msg
+    in
+    let env = List.fold_left assign env names in
+        env, AT.freeze t, Digest.string (Buffer.contents decls)    
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Statements}
+% ------------------------------------------------------------------ 
+
+The translation of statements in a procedure body requires a bunch of
+value that are passed as a functional [[state]] value around. Using
+\ocaml's functional record update this allows to add more informations
+as needed without breaking any code.
+
+<<statement-related types>>=
+type cfg = R.rtl G.cfg
+type node = R.rtl G.node
+type state =
+    { proc:         string           (* proc under translation (const) *)
+    ; env:          F.env            (* fat environment        (const) *)
+    ; target:       T.t         (* current target         (const) *)
+    ; cfg:          cfg            (* CFG under construction (const) *)
+    ; node:         node           (* node following current unit  (WHY?)  *)   
+    ; outbase:      Rtl.exp          (* addr of OUTGOING area          *)   
+    ; inbase:       Rtl.exp          (* addr of INCOMING ares          *)
+    ; outgoing:     Block.t list     (* areas to be overlayed in OUTGOING *)   
+    ; incoming:     Block.t list     (* ditto for INCOMING *)
+    ; conts:        Contn.t Strutil.Map.t   (* local continuations *)    
+    }
+@
+    
+\begin{itemize}
+\item [[proc]] is the name of the procedure under translation. The
+      name is used to generate labels with the name inside. Constant.
+\item [[env]] is the fat environment to resolve the meaning of names.
+      Constant. 
+\item [[target]] is the current target architecture. This provides
+      target-specific pointer sizes, {\rtl}s and so forth. Constant.
+\item [[cfg]] is the control-flow graph under construction. It
+      represents the body of the procedure. Constant.
+\item [[node]] is the node in the {\cfg} following the current unit
+      under translation.
+\item [[outbase]] is the run-time expression for the base-address of
+      the \emph{outgoing} area on the stack. See also \module{stack}.
+\item [[inbase]] is the run-time expression for the base-address of the
+      \emph{incoming} area.
+\item [[outgoing]] contains areas of disjoint lifetimes that are overlaid
+      in the \emph{outgoing} area.
+\item [[incoming]] overlaid areas in the \emph{incoming} area.        
+\end{itemize}
+
+It is important that all areas in the [[outgoing]] list have a base
+address that is related to [[outbase]], and analogously for [[incoming]]
+and [[inbase]]. Otherwise the equations (c.f.~modules \module{eqn},
+\module{const}) that are generated when areas are arranged to form an
+activation record will be unsolvable.
+
+TODO: PERSUADE ASDLGEN TO DROP BOGUS PARENS???
+
+<<Make statements>>=
+let rec bodiesxxx state next = 
+  let expr = expr in
+  let g    = state.cfg in
+  <<definition of [[bodies]]>>
+  and stmt s succ =
+  match s with
+  | A.StmtAt(x,r)        -> stmt x succ
+  | A.SpanStmt    x      -> Impossible.unimp "span"
+  | A.IfStmt (e, ifso, ifnot) ->
+      G.cbranch g (expr e) ~ifso:(bodies ifso succ) ~ifnot:(bodies ifnot succ)
+  | A.SwitchStmt  x      -> Impossible.unimp "switch"
+  | A.LabelStmt   n      -> G.node_labeled g n
+  | A.ContStmt    x      -> contStmt state x
+  | A.AssignStmt (lhs, rhs) ->
+      let effect lhs (guard,rhs) =
+        let rtl = atstore (lvalue lhs) (expr rhs) in
+        ( match guard with
+        | None   -> rtl
+        | Some g -> Rtl.guard (expr g) rtl
+        ) in
+      G.instruction g (Rtl.par (List.map2 effect lhs rhs)) succ
+  | A.CallStmt    x      -> callStmt      state x succ
+  | A.PrimStmt    x      -> primStmt      state x succ
+  | A.GotoStmt (e, labels) ->
+     let e = expr e in
+     (match Dn.exp e with
+     | RP.Const (RP.Link (sym, w)) ->
+         G.branch g ~target:(G.node_labeled g (sym#text))
+     | _ ->
+         let i = target.T.goto.T.embed e in
+         let targets = List.map (G.node_labeled g) labels in
+         G.mbranch g i targets
+     )
+  | A.JumpStmt    x      -> jumpStmt g x
+  | A.CutStmt     x      -> cutStmt       state x 
+  | A.ReturnStmt  x      -> returnStmt    state x 
+  | A.EmptyStmt          -> succ
+  | A.CommentStmt _      -> succ
+in fun bs -> bodies bs next
+<<definition of [[bodies]]>>=
+let rec bodies bs succ = foldr body bs succ
+and body   b  succ = match b with
+    | A.BodyAt(x, _)        -> body x succ
+    | A.DeclBody(d)         -> succ (* nothing to be done *)
+    | A.StmtBody(s)         -> stmt s succ
+    | A.DataBody(dd)        -> succ (* already done *)
+@
+
+\subsection{Compilation of Boolean expressions into control flow.}
+
+THIS CODE SHOULD BE MOVED TO THE GENERIC CODE EXPANDER.
+
+An if-statement is governed by a boolean expression that has no side
+effects. A simple translation is to use this expression as a guard for a
+conditional branch to implement the if-statement. The guard finally
+becomes a guard in the {\rtl} that implements the conditional branch.
+The problem is, that the guarding expression can be quite complex and
+must be simplified before a machine instruction can be found that
+implements it. We translate a boolean expression $e$ into a sequence of
+nodes. If $e$ evaluates to true, the control flow reaches the end of the
+sequence, otherwise it branches to a provided label. 
+
+
+\begingroup % keeps definitions local
+\def\C#1{{\cal C}[\![#1]\!]}
+\let\i\textit
+
+The translation is summarized by the following function $\C{\cdot}~f$
+that takes a boolean expression $e$ and a continuation $f$ to branch if
+the expression evaluates to false. The result is a sequence of nodes,
+that branches to $f$ if $e$ is false, and falls through otherwise.
+
+\begin{center}
+\begin{eqnarray*}
+    \C{\i{true}}~f              & \to & \i{nop}\\
+    \C{\i{false}}~f             & \to & \i{goto}~f\\
+    \C{x \vee y}~f              & \to & \C x~l; l: \C y~f\\
+    \C{x \wedge y}~f            & \to & \C x~f; \C y~f\\
+    \C{\lnot x}~f               & \to & \C x~l; \i{goto}~f; l:\\
+    \C{\oplus(e_1, \dots, e_n)} & \to & 
+        \i{if}(\lnot \oplus(e_1, \dots, e_n)\{\i{goto}~f\}
+\end{eqnarray*}
+\end{center}
+
+The last line covers the case of an application with a boolean result
+but non-boolean arguments. Currently only the logical operators $\lnot$,
+$\vee$, and $\wedge$ \emph{take} boolean arguments.
+
+The implementation first translates the governing expression into an
+{\rtl} and then tranlate it into the sequence of nodes.
+
+\begin{quote}\it
+    I think the code below shows a design weakness: we have decided to
+    have explicit label nodes in the {\cfg}. In order to jump or branch
+    to a node one needs the symbol associated with the label. This,
+    however, cannot be observed. This means, labels can only be used
+    where they are constructed. In the implementation of the {\cfg}
+    labels could be made a sub-class of nodes. However, since we shield
+    the object-oriented nature of nodes behind standard types, this is
+    not easily possible. Nodes must be more abstract or labels must
+    become special.  --CL
+\end{quote}
+
+\endgroup
+
+<<old Make statements>>=
+and guard state succ fail e = 
+    let rec guard' succ fail = function
+
+    | RP.Const(RP.Bool(true))         -> succ
+    | RP.Const(RP.Bool(false))        -> fail
+    | RP.Const(_)                     -> assert false
+    | RP.Fetch(_)                     -> assert false
+    <<special cases that match floating-point comparisons>>
+    | RP.App(("conjoin",_), [x;y])    -> 
+        let ll    = Idgen.label state.proc    in
+        let ls    = F.symbol env ll     in
+        let fail  = G.gm_label state.cfg ll ls fail in
+            let tail = guard' succ fail y in
+            let head = guard' tail fail x in
+                head
+    | RP.App(("not",_), [x])          -> guard' fail succ x
+    | RP.App(("disjoin",_), [x;y])    ->
+        let ll    = Idgen.label state.proc    in
+        let ls    = F.symbol env ll     in
+        let succ  = G.gm_label state.cfg ll ls succ in
+        let y     = guard' succ fail y    in
+        let lexp  = Rtl.link ls state.target.T.pointersize in
+        let lrtl  = state.target.T.goto.T.embed lexp in
+        let succ  = G.gm_goto state.cfg lrtl [G.lookup state.cfg ll] in
+                guard' succ y x              
+    | RP.App(opr, args) as e -> 
+        let sl    = Idgen.label state.proc    in
+        let ss    = F.symbol env sl     in
+        let succ  = G.gm_label state.cfg sl ss succ in
+        
+        let fl    = Idgen.label state.proc    in
+        let fs    = F.symbol env fl     in
+        let fail  = G.gm_label state.cfg fl fs fail in
+        
+        let oexp  = Rtl.link fs state.target.T.pointersize in
+        let ortl  = state.target.T.goto.T.embed oexp in
+        let fail  = G.gm_goto state.cfg ortl [G.lookup state.cfg fl] in
+        
+        let e     = R.Revert.exp e in
+        let link  = Rtl.link ss state.target.T.pointersize in
+        let rtl   = state.target.T.branch.T.embed (e,link)  in
+            G.gm_branch state.cfg rtl succ fail 
+    in
+        { state with node = guard' succ fail e }
+        
+@
+<<special cases that match floating-point comparisons>>=
+(* the evil empire *)
+@
+
+
+An if-statement is translated into a seqence of nodes such that the
+two branches are linearized.  The branch is taken if the governing
+expression is evaluated to [[false]].  The fall-through-branch is
+taken otherwise and ends with a [[goto]] around the other branch. 
+
+\begin{enumerate}
+\item A branch node holding the governing expression and a label [[l1]].
+      If the expression evaluates to true at run-time, the branch is taken
+      to [[l1]]. Otherwise the branch falls trough.
+\item Nodes for the [[ifnot]] branch of the statement.
+\item A jump to label [[l2]].
+\item A label [[l1]] that marks the entry to the node for the [[ifso]] branch.
+\item Nodes for the [[ifso]] branch.
+\item A label [[l2]] in front of the code following the [[if]] statement. 
+\end{enumerate}
+
+@
+        
+The overflowing outgoing parameters passed by a tail-call go into the
+\emph{incoming} area of the current activation, but the \emph{copyout}
+mechanism is used. 
+
+\begin{quote}\it
+    I believe the [[labels]] for jump targets should not be translated
+    into nodes because they do not belong to the current procedure. --CL
+\end{quote}
+
+<<Make statements>>=
+and jumpStmt g (cconv,e,args,targets) = 
+    let cc      = target.T.cc (Aux.Option.get default_cc cconv) in
+    let args    = assert false (*List.map actual args*) in
+    let rtl     = target.T.jump.T.embed (expr e) in
+    let jmp     = G.jump g rtl targets           in
+        if args = [] then (* no copyout nodes *)
+            jmp
+        else
+(*
+            let node,area,defs = IO.copyout state.cfg args cc.T.proc 
+                                       state.inbase jmp in
+            let result = 
+                { state with node     = node
+                ;            incoming = area :: state.incoming
+                } in 
+ *)
+          let defs = assert false in 
+          let df = G.dataflow ~defs:noregs ~uses:defs
+                              ~kills:noregs ~succ:(G.exit g) in
+          let () = G.set_succ jmp df in
+          jmp
+<<auxiliaries>>=
+let noregs = Register.Set.empty
+@
+
+
+% \begin{quote}\small
+% \begin{verbatim}
+% 
+%             /   |
+%             |   o  r0 = x  
+%  copy-out:  |   |                      
+%  defs r0,r1 |   o  r1 = y 
+%             \   |
+%              ------
+%             | call | x = f(x,y) call: kills y, ... 
+%            ///-----
+%           ///   |
+%          ///    o               data-flow: uses r0, r1; defs x 
+%  continuations  |
+%                 o  x = r0       copy-in:   uses r0
+%                 |
+%                         
+% \end{verbatim}
+% \end{quote}
+
+\begin{figure}
+\centerline{\includegraphics[width=\hsize]{../figures/callstmt}}
+\caption{\label{fig:ast2ir:call} Principle translation of a call
+statement. A data-flow node expresses inter-procedural data-flow.}
+\end{figure}
+
+\begin{quote}\it
+    We need data-flow-edges for the conintuations, too. --CL
+\end{quote}
+
+
+THIS CODE NEEDS RE-DOING.  IT MAY MAKE MORE SENSE TO GRAB THE
+DENOTATIONS OF THE ANNOTATIONS AND NOT THE NODES.
+<<Make statements>>=
+and callStmt state (lhs,cconv, e, args, targets (*unused*), conts) succ = 
+    let g = state.cfg in
+    let hw's, actuals = actuals args in
+    let pieces = (ccs (Aux.Option.get default_cc cconv)).C.call_actuals hw's in
+
+
+    let rec lvalue = function
+        | A.LValueAt(x,_) -> lvalue x
+        | A.Var x         -> formal env x 
+        | A.Mem _         -> assert false                        in
+    let ptrsize = target.T.pointersize in    
+
+    let rtl     = target.T.call.T.embed (expr e)   in
+    let args    = assert false (*List.map actual args*)  in
+    let conts   = continuations conts g                  in
+    (* linking nodes from back to front: copyin<-call<-copyout *) 
+    let copyi,areai,uses = assert false (*IO.copyin g (List.map lvalue lhs) 
+                      cc.T.ret (offset state.inbase ptrsize) state.node*)  in
+    let call = G.call g rtl ~altrets:conts.returns ~ret:copyi
+               ~unwinds_to:conts.unwinds ~cuts_to:conts.cuts ~aborts:conts.aborts in
+    let copyo,areao,actual_defs = assert false (*IO.copyout g args cc.T.proc 
+                        (offset state.outbase ptrsize) call*) in
+    let result = { state with
+                     node     = copyo
+                 ;   outgoing = areao :: state.outgoing
+                 ;   incoming = areai :: state.incoming
+                 } in
+    (* fix data-flow *)
+    let callee_saves = assert false in
+    let volatile = assert false in
+    begin
+      <<insert dataflow nodes on every alternate-return edge>>;
+      <<insert a dataflow node on the normal return edge>>;
+      <<insert dataflow nodes on every unwind edge>>;
+      <<insert dataflow nodes on every cut-to edge>>;
+      copyo
+    end
+@ 
+Those probably ought not to be done by insertion; it ought to be done
+at the time the call is built.
+<<insert dataflow nodes on every alternate-return edge>>=
+assert false
+<<insert a dataflow node on the normal return edge>>=
+let df = G.dataflow ~defs:uses ~uses:actual_defs ~kills:volatile ~succ:copyi in
+G.set_succ_n call (List.length conts.returns) df
+@
+<<insert dataflow nodes on every unwind edge>>=
+assert false
+@
+<<insert dataflow nodes on every cut-to edge>>=
+let cut_killed = Register.Set.union callee_saves volatile in
+let exit = G.exit g in
+let regs_defined_by_cut_to node = assert false in 
+let csr_df node =
+  let defs = regs_defined_by_cut_to node in
+  let kills = Register.Set.diff cut_killed defs in
+  G.dataflow ~defs ~uses:actual_defs ~kills in
+assert false
+@
+
+A procedure returns value in the \emph{incoming} area of its
+activation but uses the \emph{copy-out} method.  Don't get confused
+and refer to the big picture in \module{stack}. 
+
+\begin{quote}\it
+    Does the {\rtl} used for the return depend on $(x,y)$. I believe
+    so and this means the [[Target]] interface should be changed. --CL
+\end{quote}
+
+<<Make statements>>=
+and returnStmt state (cconv, kont, args) = 
+    let g       = state.cfg in
+    let const e = Bits.S.to_int (compile_const e) in
+(* RETURN SHOULD NOT BEAR A CALLING CONVENTION --- IT GETS THE CONVENTION OF THE BODY *)
+    let cc      = target.T.cc (Aux.Option.get default_cc cconv) in
+    let (x,y)   = match kont with
+                  | None       -> (0,0) (* default *)
+                  | Some (x,y) -> (const x, const y) in
+    let rtl     = cc.T.return (* NEEDS PARAMETERS x AND y *) in
+    let args    = assert false (*List.map actual args*) in
+    let ret     = G.return g rtl ~cont:x ~alts:y in
+    let ptr     = target.T.pointersize in
+    let copy, area, defs = assert false (*
+                  IO.copyout g args cc.T.ret 
+                    (offset state.inbase ptr) ret*) in
+    let result  = {state with node = copy; incoming = area :: state.incoming} in
+		  (* fix data-flow *)
+    let df = G.dataflow ~defs:noregs ~uses:defs ~kills:noregs ~succ:(G.exit g) in
+    let () = G.set_succ ret df in
+    ret
+@
+
+Each continuation receives its parameters in its own area.
+For the moment we assume that all continuations escape
+and collect them in [[state.conts]]. Therefore we simply add the
+[[label]] of this continuation to the list.
+
+<<Make statements>>=
+and contStmt state (label,args)  = assert false
+(* THIS GOO NEEDS TO BE PRIMARILY ABSTRACTED INTO CONTN.  SKETCH SHOULD LOOK
+   LIKE THIS:
+     let actuals = result of running automaton in
+     let shuffle = R.par (List2.map (fun f a -> R.store f (fetch a)) args actuals) in
+     let lbl = G.node_labeled g label in
+     let go  = G.instruction shuffle succ in
+     let ()  = G.set_succ lbl go in
+     lbl
+   THE REST SHOULD NOT HAPPEN HERE *)     
+ 
+(*
+    let ptr     = target.T.pointersize in
+    let cc      = target.T.cc default_cc      in
+    let sp      = Rtl.fetch cc.T.sp  ptr in
+    let args    = List.map (formal env) args in
+
+    let contID =
+        match F.findv label env with
+        | (_,(F.Continuation (n,_),_)) -> n
+        | _                          -> Idgen.cont label in
+    let variable  = Rtl.late contID ptr in
+    let add       = Rtl.opr "add" [ptr] in
+    let offset    = Rtl.app add [sp; variable] in
+    let newBase   = Rtl.late (Idgen.block "contParams") ptr   in
+    let copy,area,uses = IO.copyin state.cfg args 
+                  cc.T.cont newBase state.node in
+    let cont      = Contn.with_overflow target offset area in
+
+    let symbol  = match F.findv label env with
+                  | _,(F.Continuation(_,s),_) -> s
+                  | _ -> assert false                            in
+    let copy    = G.gm_label state.cfg label symbol copy         in
+    let result  = { state with node     = copy
+                  ;            conts    = Strutil.Map.add label cont state.conts
+                  } in
+        result
+*)
+@
+
+A [[cut to]] instruction passes arguments according to a calling convention.
+Each continuation has its own overflow area. The [[copyout]] routine returns
+an [[area]] that corresponds to the overflow area. Since this area may
+not belong on this stack, we will discard it. Because we discard
+the area, late compile-time constants indexed into this area must be replaced
+immediately.
+We solve the constraints on the area and use the resulting substitution
+to replace the late compile-time constants in the rtl's returned from
+[[copyout]].
+
+ALSO SHOULD USE [[Contn]]!!
+
+
+NEED A SYSTEMATIC APPROACH TO ARGS/RESULTS, AS WELL AS TO DATAFLOW NODES.
+
+<<Make statements>>=
+and cutStmt state (e, args, conts) = 
+  let g     = state.cfg in
+  let cc    = target.T.cc default_cc                  in
+  let args  = assert false (*List.map actual args*)      in
+  let exp   = expr e                      in
+  let rtl   = target.T.cutto.T.embed exp         in
+  let conts = continuations conts g                      in
+  let cut   = G.cut_to g rtl ~cuts_to:conts.cuts ~aborts: conts.aborts in
+  let ptr   = target.T.pointersize                    in
+  let size  = ptr / target.T.memsize                  in
+  let oflow = Rtl.app (Rtl.opr "add" [ptr])
+                          [exp; Rtl.bits (Bits.S.of_int (2 * size) ptr) ptr] in
+  let copy,area,uses = assert false (* IO.copyout g args cc.T.cont oflow cut*)    in
+
+  (* solve the equations *)
+  let solution =
+      try Const2.solve ptr (Block.constraints area)
+      with Const2.Can'tSolve -> Impossible.impossible 
+              ("can't solve equations in "^ state.proc)              in            
+  let ()       = assert (solution.Const2.dependent = [])             in
+  let ()       = assert (solution.Const2.known <>    [])             in
+
+  (* substitute for the compile-time constants *)
+  let map      = Strutil.assoc2map solution.Const2.known             in
+  let guard    = function
+      | RP.Const(RP.Late(_)) -> true
+      | _                    -> false in
+  let rec subst (e:RP.exp) = match e with              
+      | RP.Const(RP.Late(x,_)) -> 
+          ( try Rtl.Convert.exp (Strutil.Map.find x map) with 
+          | Not_found -> e   (* we don't know all the constants yet *)
+          )  
+      | x -> x in
+  let () = G.update_instr (Rtlutil.Subst2.exp ~guard ~map:subst) copy in
+  let () = G.update_instr Rtleval2.rtl copy in
+
+  let df = G.dataflow ~defs:noregs ~uses ~kills:noregs ~succ:(G.exit g) in
+  let () = G.set_succ cut df in
+  copy
+
+and primStmt      state x  = Impossible.unimp "primitive"
+and switchStmt    state x  = Impossible.unimp "switch"
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Procedure Translation}
+% ------------------------------------------------------------------ 
+
+\begin{quote}\it
+    Todo: callee saved registers, data-flow-nodes. Do we put a label here
+    for the procedure or is this handled on the assembler level? --CL
+\end{quote}
+
+For each continuation we have reserved memory on the stack that must be
+initialized when the procedure is entered. The following function
+inserts this code into the procedure.
+
+<<definition of [[init_cont]]>>=
+let init_cont g (cc:T.cc) label (c:Contn.t) = 
+    let ptr  = target.T.pointersize in
+    let sp   = cc.T.sp in
+    let sym  = match F.findv label env with
+         | (_, (F.Continuation(r,s),_)) -> s
+         | _                            -> assert false in
+    let pc   = Rtl.link sym ptr in
+    let asgn rtl succ = G.instruction g rtl ~succ in
+    let rtls = Contn.init_code c sp pc in
+    G.set_succ (G.entry g) (List.fold_right asgn rtls (G.succ (G.entry g)))
+    
+@
+<<Make procedure>>=
+let proc optimizer (cconv,name,args,bdy) = 
+    let ( symbol
+        , scope
+        , vars )    = match F.findv name env with
+                      | _,(F.Label(F.Proc (sym,scope,i)),_) -> sym,scope,i
+                      | _                          -> assert false in
+    let env         = F.push env scope  in  (* activate local scope *)
+    let pointer     = target.T.pointersize in
+    let cc          = target.T.cc (Aux.Option.get default_cc cconv) in
+    let sp          = Rtl.fetch (cc.T.sp) pointer in (* stack pointer *)
+    let info        = {G.goto = assert false} in
+    let cfg         = G.mk info Idgen.label in (* empty control-flow graph *)
+    (* symbolic late compile-time constants to be used for stack areas *)
+    let sp_offset k = Rtl.app (Rtl.opr "add" [pointer]) [sp;k] in
+    let stack       = sp_offset (Rtl.late "stackdata" pointer) in
+    let inb         = sp_offset (Rtl.late "inbase"    pointer) in
+    let outb        = sp_offset (Rtl.late "outbase"   pointer) in
+    let privb       = sp_offset (Rtl.late "private"   pointer) in
+    (* calculate amount of user stack data - updates env! *)
+    let stackd      = Memalloc.mk stack in
+    let ( env, stackd, conts) = StackData.proc target env stackd cc bdy in
+    (* priv provides spill slots etc *)    
+    let priv        = AT.mk cc.T.stack_slots privb in
+    (* build CFG for body *)                    
+    let exit        = G.exit cfg in
+    (* dummy area in outgoing area because the the body of the procedure
+       might not create any. This would confuse Area.overlap below *)
+    let dummy       = Block.mk outb 0 1 in   
+    let state = (* this is needed for translation of the body *)
+        { proc      = name       (* name of this procedure *)
+        ; env       = env        (* fat environment *)
+        ; target    = target     (* current target  *)
+        ; cfg       = cfg        (* cfg we are building *)
+        ; node      = exit       (* what follows current element in cfg *)
+        ; incoming  = []         (* overlapping areas in incoming area *)
+        ; outgoing  = [dummy]    (* overlapping areas in outgoing area *)
+        ; inbase    = inb
+        ; outbase   = outb
+        ; conts     = conts
+        } in  
+    (* translate body of procedure *)
+    let first = bodiesxxx state (G.exit cfg) bdy in
+    (* add nodes for incoming parameters *)
+    let atmi  = AT.mk cc.T.proc  (offset state.outbase pointer) in
+    let args  = List.map (procformal env) args in
+    let copy,area,uses = (*IO.copyin g args cc.T.proc state.inbase first*) assert false in
+    let state = 
+        { state with    
+          node     = copy
+        ; incoming = area :: state.incoming
+        } in
+    let () = G.set_succ (G.entry cfg) copy in
+    (* insert initializing assignments for continuations *)
+    let () = Strutil.Map.iter (init_cont cfg cc) state.conts in
+
+    let incoming = Block.overlap_list Block.Low  state.incoming in
+    let outgoing = Block.overlap_list Block.High state.outgoing in
+    
+    let conts    =
+        match Strutil.Map.fold (fun _ c rst -> c :: rst) state.conts [] with
+        | [] -> Block.mk (Rtl.late "bogus" pointer) 0 1 (*XXX*)
+        | conts -> List.fold_left (fun b c -> Block.cathl c.Contn.block b) 
+                        (List.hd conts).Contn.block (List.tl conts) in 
+    (* order cfg *)
+    let i =    
+        { Proc.symbol   = symbol
+        ; Proc.cc       = cc
+        ; Proc.target   = target
+        ; Proc.temps    = Talloc.Multiple.for_spaces target.T.spaces
+        ; Proc.cfg      = assert false (*cfg*)
+        ; Proc.incoming = incoming   (* incoming   block *)   
+        ; Proc.outgoing = outgoing   (* outgoing   block *)   
+        ; Proc.stackd   = stackd     (* stack data block *)
+        ; Proc.priv     = priv       (* Automaton for spill loc, etc *)
+        ; Proc.eqns     = []
+        ; Proc.conts    = conts
+        ; Proc.vars     = vars       (* number of variables *)
+        } in
+    optimizer i (* runs optimizer, freezes, and assembles proc *)
+@
+        
+% ------------------------------------------------------------------ 
+\subsection{Stack Data Declarations and Continuations}
+% ------------------------------------------------------------------ 
+
+Stack data declarations may appear everywhere in a procedure body. We
+process them in a single descent into the body. Allocated memory is
+tracked with a [[Memalloc.t]] value in the [[mem]] field of a [[state]]
+value.
+
+A procedure must create entries for all continuations in its body that
+escape it. We simply collect all continuations and thus assume that they
+all escape. This is a gross simplification - a more detailed escape
+analysis would traverse all expressions in the body of a procedure and
+report only those continuations that appear in expressions. 
+
+WE SHOULD INVESTIGATE CONVERGING THIS CODE WITH THE CODE IN MODULE [[Ast2ir]].
+SUCH A CONVERGENCE COULD AVOID DUPLICATION OF EFFORT AND REDUCE OUR
+OVERALL MAINTENANCE BURDEN.
+<<definition of module [[StackData]]>>=
+module StackData = struct 
+
+    let compile_const _ = assert false
+
+    type state = 
+        { env:    F.env
+        ; mem:    Memalloc.t
+        ; target: T.t
+        ; cc:     T.cc     (* current calling convention *)  
+        ; conts:  Contn.t Strutil.Map.t
+        }
+
+    let rec stackdatum state = function
+        | A.DatumAt(x,_) -> stackdatum state x
+        | A.Label(l) -> 
+            let loc = Memalloc.current state.mem in
+                let x = F.findv l state.env in
+                ( match x with
+                | (r,(F.Label(F.Stack(None)),t)) ->
+                    { state with env = 
+                        F.rebindv l (r,(F.Label(F.Stack(Some loc)),t)) 
+                                  state.env
+                    }
+                | _ -> assert false
+                )
+        | A.Align n -> { state with mem = Memalloc.align state.mem n} 
+        | A.MemDecl(ty,size,None) ->
+            let w = astwidth state.env ty in
+            let s = ( match size with 
+                    | A.NoSize     -> 1 
+                    | A.DynSize    -> assert false (* impossible *)
+                    | A.FixSize(e) -> 
+                        Bits.U.to_int (compile_const e)
+                    ) in
+            let n = s * w / state.target.T.memsize in
+                { state with mem = Memalloc.allocate state.mem n} 
+                    
+        | _ -> assert false (* illegal memory initializer *)
+
+    let rec stmt state = function 
+        | A.StmtAt(x,r)        -> stmt state x
+        | A.SpanStmt    x      -> spanStmt      state x
+        | A.IfStmt      x      -> ifStmt        state x
+        | A.SwitchStmt  x      -> switchStmt    state x
+        | A.ContStmt(n,args)   -> state
+        | _                    -> state
+
+    and body state = function 
+        | A.BodyAt(x, _)        -> body state x
+        | A.DeclBody(d)         -> state (* nothing to be done *)
+        | A.StmtBody(s)         -> stmt state s 
+        | A.DataBody(data)      -> foldl stackdatum state data
+
+    and ifStmt state (e,ifso,ifnot) =
+        let left  = foldl body state  ifso  in
+        let right = foldl body left   ifnot in
+            state
+
+    and spanStmt      state x  = Impossible.unimp "span"
+    and switchStmt    state x  = Impossible.unimp "switch"
+
+    let proc target env priv cc bb =
+        let state = 
+            { env    = env
+            ; target = target
+            ; mem    = priv
+            ; conts  = Strutil.Map.empty
+            ; cc     = cc
+            } in
+        let state = foldl body state bb in 
+                (env, Memalloc.freeze state.mem, state.conts)
+
+end (* of module StackData *)
+@
+      
+% ------------------------------------------------------------------ 
+\subsection{Global Memory declarations}
+% ------------------------------------------------------------------ 
+
+\begin{quote}\it
+    The [[Asm]] interface for emitting link-time expressions is
+    incompatible with the [[Rtl]]s that represent link-time expressions.
+    --CL
+\end{quote}
+
+<<Make memory declarations>>=
+let rec initialized_data asm expr = 
+        asm#addr (link_const asm expr)
+
+and init asm = function
+    | A.InitAt(x,_)   -> init asm x
+    | A.InitExprs(es) -> List.iter (initialized_data asm) es
+    | A.InitUStr(_)      (*XXX*)
+    | A.InitStr(_)    -> (*XXX*)
+        Impossible.unimp "strings as initialized data not implemented"
+@
+
+In order to reserve memory for data we have to know how many objects
+an sequence of initializing expressions defined. This number is
+returned by [[init_size]].
+
+<<Make memory declarations>>=
+and init_size = function
+    | None   -> 1
+    | Some i -> let rec loop = function 
+                    | A.InitAt(x,_)   -> loop x
+                    | A.InitExprs(es) -> List.length es
+                    | A.InitStr(s)    -> assert false
+                    | A.InitUStr(s)   -> assert false
+                in 
+                    loop i 
+@
+
+Data can be declared initialized or un-initialized. The amount of
+memory used by a declaration is the size of the base-type times the
+number of values of this type. 
+
+<<Make memory declarations>>=
+and memdecl asm t size ini = 
+    let sizeof  = astwidth env t / target.T.memsize          in
+    let const e = Bits.U.to_int (compile_const e)     in
+    let n      = ( match size with
+                 | A.DynSize    -> init_size ini
+                 | A.NoSize     -> 1
+                 | A.FixSize(e) -> const e
+                 ) in
+        ( match ini with
+        | None    -> asm#zeroes (n * sizeof)
+        | Some ii -> init asm ii
+        )
+@
+
+Data can be declared globally inside a section or a section-level
+[[span]] and locally, inside a procedure as [[stackdata]].  The former
+is directly translated into assembly action that reserve memory inside
+a section, the latter becomes just an amount of memory that is
+allocated inside a procedure's activation record.  Since the amount of
+stack allocated data and the offsets associated with labels inside of
+it are already entered into the fat environment (by
+[[Elab.Check.stackdatum]]), stack data declaration can be ignored. 
+Global data declarations, on the other hand, must be translated to
+assembly actions.
+ 
+<<Make memory declarations>>=
+and datum asm = function
+    | A.DatumAt(x,_)        -> datum asm x
+    | A.Label(n)            -> let s = match F.findv n env with
+                               | _,(F.Label(F.Data(s)),_) -> s 
+                               | _ -> assert false in 
+                               asm#label s
+    | A.Align(a)            -> asm#align a 
+    | A.MemDecl(t,m,init)   -> memdecl asm t m init
+@
+
+ 
+% ------------------------------------------------------------------ 
+\subsection{Toplevel}
+% ------------------------------------------------------------------ 
+
+All global declarations have been processed at this stage and thus can
+be ignored.  The only exception are (global) register declarations. 
+Global registers can name a hardware register they are placed in.  We
+need ia way to record such an assignment.  All other locations for
+global registers are determined by an automaton, see module
+\module{callconv}. 
+
+A [[span]] on the section level must be pushed to the statement level: 
+when we come across a [[span]] we modify the properties [[props]]
+accordingly.  The next time we come across a procedure, the properties
+including the span will be used.
+
+<<Make toplevel>>=
+let rec sspan optimizer asm (e1,e2,ss) =    
+    let key   = compile_const     e1 in
+    let value = link_const    asm e2 in
+    (* construct props value, pass it to section. not implemented *)
+        List.iter (section optimizer asm) ss 
+
+<<Make toplevel>>=
+and section optimizer asm = function
+    | A.SectionAt(x,_)     -> section optimizer asm x
+    | A.Decl(d)            -> ()
+    | A.Datum( d)          -> datum   asm d
+    | A.Procedure(p)       -> proc    optimizer p
+    | A.SSpan ss           -> sspan   optimizer asm ss
+@            
+
+What to do with top-level procedures? They should go into some section
+because otherwise they will end up in whatever section is currently
+active which just seems wrong.
+
+<<Make toplevel>>=
+and toplevel optimizer asm = function
+    | A.ToplevelAt(x, _)  -> toplevel optimizer asm x
+    | A.Section(name, ss) -> 
+        let () = asm#section (name)in  
+            List.iter (section (*props*) optimizer asm) ss
+    | A.TopDecl(d)        -> ()
+    | A.TopProcedure(p)   -> let () = asm#section default_section  in 
+                             proc optimizer p
+@
+
+
+% ------------------------------------------------------------------ 
+\subsubsection{Program}
+% ------------------------------------------------------------------ 
+
+The assembler maintains a current section. To guarantee that
+everything goes into a meaningful section, the first action is to
+start the [[text]] section.
+                      
+<<Make translate program>>=
+let rec program asm optimizer tt = 
+    let () = asm#section "text"           in
+        List.iter (toplevel optimizer asm) tt
+@
+
+The finger print [[disgest]] for global register declarations is a 16
+character long string of unprintable characters. We make it printable by
+applying the {\ocaml} escaping rules. Note: this symbol
+should be exported but currently it is not.
+
+\begin{quote}\it
+    The memory block for global registers should go into one compilation
+    unit and be imported by all others. Currently we just emit it
+    because we are far from linking several {\PAL} compilation units.
+    This has to be fixed. --CL
+\end{quote}
+
+<<Make translate program>>=
+and translate ~optimizer prog =
+    let base_sym = F.symbol env "Cmm_private_global_area" in
+    let base     = Rtl.link base_sym target.T.pointersize in 
+    let env
+       ,area    
+       ,digest   = globals base (F.globals env) in
+    let digest   = String.escaped digest in
+    let asm      = F.asm env in
+    let ()       = ( () (* asm#export digest *)
+                   ; asm#section (target.T.data_section)
+                   ; asm#comment "memory for global registers"
+                   ; asm#align (Block.alignment area)
+                   ; asm#label base_sym
+                   ; asm#addloc (Block.size area)
+                   )
+    in   
+        ( program asm optimizer prog 
+        ; asm
+        )
+@    

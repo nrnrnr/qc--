@@ -1,0 +1,172 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 sw=4 et sts=4
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+%%Grades: C Peripheral Soon
+
+\section{Calling conventions}
+
+\subsection{Discussion}
+
+Here's what needs to be done at various sorts of places in the code.
+\begin{itemize}
+\item
+\emph{Outgoing parameters at a call site}
+\begin{enumerate}
+\item
+Run convention feeding widths/hints and get locations plus block.
+(Stack layout must fit block into frame in the right place.)
+\item
+Provide binding of where stack pointer must be just before the call
+instruction. 
+\item
+Emit conditional assignment to the stack pointer.
+The move is required if it will enlarge the stack, and to compute the
+condition we must know the direction of stack growth.
+For example, if the stack is to point at~$L$ and the stack is growing
+down, we emit the conditional assignment 
+$\sp>L \rightarrow \sp \gets L$. 
+Although the condition mentions the contents of a run-time location
+($\sp$), it should be possible to evaluate the condition once late
+compile-time constants are known.
+It may
+help the simplifier to write the condition as as $\sp-L>0$. 
+\item
+Emit shuffle for putting actuals into locations.
+\item
+Take locations defined by shuffle and retain them so we can create a
+dataflow node asserting that these locations are used by the call.
+(Will go on the call's \emph{outgoing} edges for reasons I've
+forgotten.) 
+\item
+Unconditionally set the stack pointer to where it must be.
+In the example above, this means $\sp \gets L$.
+\end{enumerate}
+\item
+\emph{Normal return from a call site.}
+\begin{enumerate}
+\item
+Run convention feeding widths/hints and get locations plus block.
+(Stack layout must fit block into frame in the right place.)
+\item
+Provide binding of where stack pointer will be left just after return.
+\item
+Emit conditional assignment to the stack pointer.
+\item
+Emit shuffle for putting result locations into LHS variables.
+\item
+Take locations read during the shuffle and retain them so we can
+assert (on the edge out of the call) that these locations are defined
+by the call.
+\item
+Emit assertion node asserting location of stack pointer where left by
+callee. 
+\end{enumerate}
+\item
+\emph{Alternate return to a continuation}.
+Each continuation will have one entry point for each calling
+convention for which it is used as an alternate return continuation.
+On this entry point:
+\begin{enumerate}
+\item
+Dataflow node asserting definition of locations in which incoming parameters
+are delivered.
+\item
+Shuffle to move actuals from the conventional locations into their
+variables.
+\item
+Flow into the code following the continuation label.
+\end{enumerate}
+\item
+\emph{Unwind to a continuation}.
+If unwound to, a continuation will have an entry point unwinding calls.
+On this entry point:
+\begin{enumerate}
+\item
+Dataflow node asserting definition of the variables that are the
+continuation's formal parameters.
+\item
+No shuffling code is needed; it is up to the {\PAL} run-time system to
+put parameters in their conventional locations.
+\item
+Flow into the code following the continuation label.
+\end{enumerate}
+\item
+\emph{Cut to a continuation}.
+If cut to, a continuation will have an entry point that goes into the
+PC/SP pair that represents the continuation.
+On this entry point:
+\begin{enumerate}
+\item
+Run convention feeding widths/hints and get locations plus block.
+(Stack layout must fit block into frame in the right place.)
+\item
+Provide binding of where stack pointer must be just before the call
+instruction.  (????? senseless?????)
+\item
+Emit shuffle for putting actuals into locations.
+\item
+Take locations defined by shuffle and retain them so we can create a
+dataflow node asserting that these locations are used by the call.
+(Will go on the call's \emph{outgoing} edges for reasons I've
+forgotten.) 
+\item
+Set stack pointer to where it must be.
+MORE TO COME.
+\end{enumerate}
+\end{itemize}
+@
+\subsection{Interface}
+<<call.mli>>=
+<<exported signatures>>
+@ 
+<<exported signatures>>=
+module type S = sig
+  type hint  = string option
+  type width = int
+  type parms = (hint * width) list
+
+  type growth_by = Increment | Decrement
+
+  type node (* CFG node for alternate return table *)
+
+  type 'a answer = 
+    { locs     : Automaton2.loc list  (* where passed values reside *)
+    ; overflow : Block.t              (* includes all locs for values passed in mem *)
+    ; sploc    : Rtl.exp              (* where sp is required when values are passed *)
+    ; defs_or_uses : Register.Set.t   (* set of locations defined (used) by partner *)
+    ; pre_sp   : Rtl.rtl              (* conditional SP adjustment pre-shuffle *)
+    ; shuffle  : 'a list -> Rtl.rtl   (* support for creating shuffle *)
+    ; post_sp  : Rtl.rtl              (* unconditional SP adjustment post-shuffle *)
+    }
+
+  type outgoing = parms -> Rtl.exp answer
+  type incoming = parms -> Rtl.loc answer
+
+  type t = (* part of a calling convention *)
+    { prolog          : incoming   (* arg = procedure formals *)
+    ; epilog          : outgoing   (* arg = results returned *)
+    ; call_actuals    : outgoing
+    ; call_results    : incoming   (* normal return cont *)
+    ; cut_to_actuals  : outgoing
+    ; also_cuts_to    : incoming
+    ; also_returns_to : incoming
+
+    ; sp : Rtl.loc                      (* stack pointer *)
+    ; return : int -> int -> Rtl.rtl    (* alternate return *)
+    ; alt_return_table : node list -> node
+    ; stack_layout : unit
+    } 
+end
+@ 
+\subsection{Implementation}
+
+A consummation most devoutly to be wished.
+<<call.ml>>=
+<<exported signatures>>
