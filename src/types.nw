@@ -261,9 +261,19 @@ can show up in all positions? -- CL}
 let match' sigma = function 
     | Bool           , Bool                          -> sigma
     | Bits(Const(x)) , Bits(y) when x = y            -> sigma
+    
     | Bits(Var(x))   , Bits(y) when (S.mem x sigma)  ->
         if (lookup x sigma) = y then sigma else (raise MatchExn)
     | Bits(Var(x))   , Bits(y)                       -> S.add x y sigma
+    
+    | Bits(Double(x)), Bits(y) when (S.mem x sigma)  ->
+        if (lookup x sigma) * 2 = y then sigma else (raise MatchExn)
+    | Bits(Double(x)), Bits(y)                       -> S.add x (y/2) sigma
+    
+    | Bits(Half(x))  , Bits(y) when (S.mem x sigma)  ->
+        if (lookup x sigma) / 2 = y then sigma else (raise MatchExn)
+    | Bits(Half(x))  , Bits(y)                      -> S.add x (y*2) sigma
+    
     | _              , _                             -> raise MatchExn
 @
 
