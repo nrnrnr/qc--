@@ -28,7 +28,7 @@ x86-linux.test:V: all.x86.tst rt.x86.tst lcc.x86.tst tiger.x86.tst norun.x86.tst
 powerpc-darwin.test:V: all.ppc.tst
 # sparc-solaris.test:V: all.sparc8.tst lcc.sparc8.tst
 
-test-lua:V: testdrv.lua limited
+test-lua:V: testdrv.lua limited sign-runtime
 	$NOTANGLE -L'$file "%F"%N$line %L%N' -Rexample.tst testdrv.nw > example.tst
 	$QC testdrv.lua $QCFLAGS example.tst
 
@@ -46,7 +46,7 @@ clobber:V: clean
 # Rules for test components
 # ------------------------------------------------------------------ 
 
-testdrv.lua:D:  testdrv.nw limited
+testdrv.lua:D:  testdrv.nw limited sign-runtime
 	$NOTANGLE -L'$file "%F"%N$line %L%N' -R$target testdrv.nw > $target
 
 testdrv.inc:D: testdrv.nw
@@ -57,6 +57,10 @@ limited.c:D:  testdrv.nw
 
 limited: limited.c
 	$CC $CFLAGS -o $target $prereq
+
+sign-runtime:D:  testdrv.nw
+	$NOTANGLE -L -R$target $prereq > $target
+	chmod +x $target
 
 %.tst:VQ: testdrv.lua limited
 	echo "# $QC testdrv.lua $QCFLAGS $target"

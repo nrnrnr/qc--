@@ -296,7 +296,7 @@ function Test.sign_runtimes(inputs)
   local sig = Test.temp_name(".5")
   if strfind(files, "%S") then
     Test.log("computing signature of files %s", files)
-    local cmd = format("md5sum %s > %s", files, sig)
+    local cmd = format("./sign-runtime %s > %s", files, sig)
     Test.log(cmd)
     execute(cmd)
   else
@@ -304,6 +304,18 @@ function Test.sign_runtimes(inputs)
   end
   return sig
 end
+@ 
+We can't use \texttt{md5sum} on an \texttt{ar} file because it is full
+of timestamps, userids, and similar rot.
+<<sign-runtime>>=
+#!/bin/sh
+for i
+do
+  case $i in
+    *.a) ar p $i | md5sum | sed "s@-@$i@" ;;
+    *)   md5sum $i
+  esac
+done
 @ 
 \paragraph{Build an executable}
 Call [[cc]] to build a final executable file. Calling the [[qc--]]
