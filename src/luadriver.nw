@@ -11,6 +11,7 @@ searched along a search path by an {\ocaml} function in module
 \module{main.nw}. As a default, the script presented here is compiled
 into the {\qcc} binary and executed unless the user has made special
 arrangements.
+
 <<qc--.lua>>=
 $debug 1
 -- 
@@ -19,6 +20,31 @@ $debug 1
 --
 -- $Id$
 --
+
+SysConfig = {}
+SysConfig["x86-linux"] =
+ { Ld =
+   { path    = "cc"
+   , options = ""
+   , rtstart = ""
+   , objects = ""
+   , libs    = ""
+   , rtend   = "-L" .. Config.install_lib .. " -lqc-- " ..
+              Config.install_lib .. "/pcmap.ld"
+   }
+ , As = { path = "as", options = "" }
+ }
+SysConfig["sparc-solaris"] =
+ { Ld =
+   { path    = "gcc"
+   , options = ""
+   , rtstart = ""
+   , objects = ""
+   , libs    = "-lm"
+   , rtend   = ""
+   }
+ , As = { path = "as", options = "-xarch=v8" }
+ }
 
 <<Utility functions>>
 <<Debugging Tools>>
@@ -31,7 +57,6 @@ Backend["x86-linux"]      = Backend.x86
 Backend["powerpc-darwin"] = Backend.ppc
 Backend["sparc-solaris"]  = Backend.sparc
 backend = Backend[Boot.arch_os]  -- can be changed on command line
-
 
 -- 
 -- Everything starts from here
@@ -189,8 +214,8 @@ WE OUGHT TO BE USING [[Caml.Filename.quote]] HERE AND ELSEWHERE.
 <<Lua command-line driver>>=
 As = As and error ('As not empty') or {}
 
-As.path    = "as"           -- binary 
-As.options = ""             -- options passed to binary
+As.path    = SysConfig[Boot.arch_os].As.path    -- binary 
+As.options = SysConfig[Boot.arch_os].As.options -- options passed to binary
 function As.cmd(out, in)
   return format('%s %s -o %s %s', As.path, As.options, out, in)
 end
@@ -204,13 +229,12 @@ The fields [[rtstart]], [[rtend]], and [[libs]] are there for
 front-end [[.lua]] files to assign to.
 <<Lua command-line driver>>=
 Ld = Ld and error ('Ld not empty') or {}
-Ld.path     = "cc"          -- binary
-Ld.options  = ""            -- options
-Ld.rtstart  = ""            -- initial run-time system
-Ld.objects  = ""            -- object files from this compilation
-Ld.libs     = ""            -- libraries and library options
-Ld.rtend    = "-L" .. Config.install_lib .. " -lqc-- " ..
-              Config.install_lib .. "/pcmap.ld"
+Ld.path     = SysConfig[Boot.arch_os].Ld.path -- binary
+Ld.options  = SysConfig[Boot.arch_os].Ld.options -- options
+Ld.rtstart  = SysConfig[Boot.arch_os].Ld.rtstart -- initial run-time system
+Ld.objects  = SysConfig[Boot.arch_os].Ld.objects -- object files from this compilation
+Ld.libs     = SysConfig[Boot.arch_os].Ld.libs -- libraries and library options
+Ld.rtend    = SysConfig[Boot.arch_os].Ld.rtend
                             -- trailing run-time system
 
 function Ld.cmd(exe)

@@ -581,9 +581,21 @@ function Sparc.layout["C"](dummy,proc) --- really for a C convention only
     blocks.oldblocks.caller   = Block.overlap_low (32, blocks.oldblocks.caller)
     blocks.youngblocks.callee = Block.overlap_high(32, blocks.youngblocks.callee)
     blocks.youngblocks.caller = Block.overlap_low (32, blocks.youngblocks.caller)
+
+    -- the linkage area is complicated
+    -- 23 words of this space are simply required by the sparc convention.
+    -- we start with space for the register window to be saved and then
+    -- have room for 6 outgoing parameters, etc.
+    -- however, we also need some scratch space dedicated for moving
+    -- values through memory.  unfortunately there is not float to int
+    -- or int to float register move, so it needs the memory.  furthermore,
+    -- double precision floats require doubleword aligned memory stores and
+    -- loads, so...
+    -- also we have to make sure, somehow, that the size of the stack that
+    -- we allocate is a multiple of 8 (I think).
     local linkage =
-      { caller = Block.relative(blocks.vfp, "caller's linkage area", 23*4, 16)
-      , callee = Block.relative(blocks.sp , "our linkage area"     , 23*4, 16)
+      { caller = Block.relative(blocks.vfp, "caller's linkage area", 26*4, 16)
+      , callee = Block.relative(blocks.sp , "our linkage area"     , 26*4, 16)
       }
     local old_end = Block.cat(32, { blocks.oldblocks.caller
                                   , linkage.caller
@@ -688,8 +700,7 @@ function Opt.standard(backend, asm, B)
   end
   local x = B.seq
     { 
-      Opt.verb(backend.gamma)      or Stages.null
-    , Opt.verb(backend.intwiden)   or Stages.null
+      Opt.verb(backend.intwiden)   or Stages.null
     , Opt.verb(backend.placevars)  or Stages.null
     , Opt.verb(backend.floatwiden) or Stages.null
     , Opt.verb(Optimize.simplify_exps) or Stages.null
@@ -978,7 +989,7 @@ Backend.ia64 =
   }
 
 --
--- Sparc Backend (32 bit, big-endian)
+-- Sparc-(V8?) Backend (32 bit, big-endian)
 --
 Backend.sparc =
   { target     = Targets.sparc

@@ -146,7 +146,13 @@ let remove_nops _ {Proc.cfg = cfg} =
   let is_nop rtl =
     let unneeded = function
       | (_, RP.Kill _) -> true
-      | (_, RP.Store (l, RP.Fetch(l', w'), w)) -> assert (w=w'); l = l'
+      | (_, RP.Store (l, RP.Fetch(l', w'), w)) as r -> (* assert (w=w'); *)
+          if w<>w' then
+            match rtl with
+            | Some r ->
+                Impossible.impossible (Printf.sprintf "width of fetch and store don't match in %s" (RU.ToString.rtl r))
+            | None -> Impossible.impossible "width of fetch and store don't match"
+          else l = l'
       | _ -> false in
     match rtl with
     | Some r -> let RP.Rtl effs = Dn.rtl r in List.for_all unneeded effs

@@ -97,7 +97,9 @@ let freeze =
     let subst_rtl        = Rtlutil.Subst.exp ~guard ~map:subst                 in
     let subst_span ss =
       Runtimedata.upd_spans (Rtlutil.Subst.exp_of_loc ~guard ~map:subst) ss in
-    G.iter_nodes (G.update_instr (fun i -> Simplify.rtl (subst_rtl i))) g;
+    (*G.iter_nodes (G.update_instr (fun i -> Simplify.rtl (subst_rtl i))) g;*)
+    G.iter_nodes (G.update_instr (fun i -> (subst_rtl i))) g;
+    G.iter_nodes (G.update_instr (fun i -> Simplify.rtl i)) g;
     List.iter (fun (_, ss) -> subst_span ss) spans in
   freeze' apply_to_proc
   (* unsafe simplifier is not needed until vfp is replaced *)

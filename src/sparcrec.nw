@@ -38,6 +38,13 @@ let const32 b =
   assert (Bits.width b = 32);
   Nativeint.to_string (Bits.U.to_native b)
 
+let const64 b =
+  assert (Bits.width b = 64);
+  let hi32 = Bits.Ops.lobits 32 (Bits.Ops.shrl b (Bits.U.of_int 32 64)) in
+  let lo32 = Bits.Ops.lobits 32 b in
+  (Nativeint.to_string (Bits.U.to_native hi32),
+   Nativeint.to_string (Bits.U.to_native lo32))
+
 exception Error of string
 let sprintf   = Printf.sprintf
 let error msg = raise (Error msg)
@@ -57,7 +64,6 @@ let idiomatic_reg_name n =
   else Impossible.impossible (sprintf "Register %%r%i doesn't exist" n)
 
 let positive b = Bits.Ops.gt b (Bits.zero 32)
-
 let negative b = Bits.Ops.lt b (Bits.zero 32)
 
 let in_proc = ref false
@@ -77,6 +83,9 @@ lconst : Link(symbol, w) {: symbol#mangled_text :}
 const  : Bits(b:bits) [{: guard (Bits.width b = 32) :}]  {: const32 b :}
 pos    : Bits(b:bits) [{: guard (Bits.width b = 32 && positive b) :}]  {: const32 b :}
 neg    : Bits(b:bits) [{: guard (Bits.width b = 32 && negative b) :}]  {: const32 b :}
+
+constx : Bits(b:bits) [{: guard (Bits.width b = 64) :}] {: const64 b :}
+
 four   : Bits(bits)   [{: guard (bits = Bits.S.of_int 4 32) :}] {:():}
 one    : Bits(bits)   [{: guard (bits = Bits.S.of_int 1 32) :}] {:():}
 @ 
@@ -86,11 +95,20 @@ one    : Bits(bits)   [{: guard (bits = Bits.S.of_int 1 32) :}] {:():}
 rreg   : Fetch(rregl, w) {: rregl :}
 rregl  : Reg('r', n:int, w:int) {: idiomatic_reg_name n :}
 
+sreg   : Fetch(sregl, w) {: sregl :}
+sregl  : Reg('s', n:int, w:int) {: 
+  match n with
+  | 0 -> ("%g2", "%g3")
+  | 1 -> ("%l0", "%l1")
+  | 2 -> ("%l2", "%l3")
+  | _ -> Impossible.impossible "Unknown s register" :}
+
 freg   : Fetch(fregl, w) {: fregl :}
 fregl  : Reg('f', n:int, w:int) {: sprintf "%%f%i" n :}
 
 xreg   : Fetch(xregl, w) {: xregl :}
-xregl  : Reg('x', n:int, w:int) {: sprintf "%%f%i" (n+8) :}
+xregl  : Reg('x', n:int, w:int)
+    {: (sprintf "%%f%i" ((n*2)+8), sprintf "%%f%i" ((n*2)+9)) :}
 
 -- this is stupid, but we don't know how to deal with
 -- changing register windows at this point, so this allows
@@ -115,9 +133,6 @@ meml  : Mem(reg, w)    {: "[" ^ reg ^ "]" :} -- indirect
 reg_or_const : reg   {: reg :}
 reg_or_const : const {: const :}
 
-freg_or_const : freg {: freg :}
-freg_or_const : const {: const :}
-
 target : lconst {: lconst :}
 @ 
 
@@ -140,6 +155,33 @@ cwp: Fetch(cwpl, w) {: () :}
 
 \paragraph{Data movement}
 <<rules>>=
+-- Seems like the wrong thing to do....
+-- should probably be calling fstoi before the move?
+inst : Store(dst:regl, Ftoi(src:freg), w)
+  {: sprintf "! %s := ftoi(%s)\n\tst %s, [%%sp+%i]\n\tld [%%sp+%i], %s" dst src src (23*4) (23*4) dst :}
+
+inst : Store(dst:fregl, Ftoi(src:freg), w)
+  {: sprintf "fstoi %s, %s" src dst :}
+
+-- not sure about this either: fdtoi will it try to
+-- store into a register pair?
+inst : Store(dst:fregl, Ftoi(src:xreg), w)
+  {: sprintf "! dubios ftoi\n\tfdtoi %s, %s" (fst src) dst :}
+
+inst : Store(dst:fregl, Itof(src:reg), w)
+  {: sprintf "st %s, [%%sp+%i]\n\tld [%%sp+%i], %s" src (23*4) (23*4) dst :}
+inst : Store(dst:fregl, Itof(src:freg), w)
+  {: sprintf "fitos %s, %s" src dst :}
+inst : Store(dst:xregl, Itof(src:freg), w)
+  {: sprintf "fitod %s, %s" src (fst dst) :}
+
+inst : Store(dst:fregl, Ftof(src:freg), w)
+  {: sprintf "fmovs %s, %s" src dst :}
+inst : Store(dst:xregl, Ftof(src:freg), w)
+  {: sprintf "fstod %s, %s" src (fst dst) :}
+inst : Store(dst:fregl, Ftof(src:xreg), w)
+  {: sprintf "fdtos %s, %s" (fst src) dst :}
+
 -- load symbol
 inst : Store(dst:regl, src:lconst, w)
   {: sprintf "set %s, %s" src dst :}
@@ -148,14 +190,46 @@ inst : Store(dst:regl, src:lconst, w)
 inst : Store(dst:regl, src:const, w)
   {: sprintf "set %s, %s" src dst :}
 
+inst : Store(dst:sregl, src:constx, w)
+  {: let (dst1, dst2) = dst in
+     let (src1, src2) = src in
+     sprintf "set %s, %s\n\tset %s, %s" src1 dst1 src2 dst2
+  :}
+
+inst : Store(dst:sregl, Sparcmkj(x:reg, y:reg), w)
+  {: let (dh, dl) = dst in
+     sprintf "mov %s, %s\n\tmov %s, %s" x dh y dl :}
+
 -- register move
 inst : Store(dst:regl, src:reg, w)
   {: sprintf "mov %s, %s" src dst :}
 -- here we start cheating...
 inst : Store(dst:fregl, src:reg, w)
-  {: sprintf "st %s, [%%sp+%i]\n\tld [%%sp+%i], %s" src (23*4) (23*4) dst :}
+  {: sprintf "! cheating move\n\tst %s, [%%sp+%i]\n\tld [%%sp+%i], %s" src (23*4) (23*4) dst :}
 inst : Store(dst:regl, src:freg, w)
-  {: sprintf "st %s, [%%sp+%i]\n\tld [%%sp+%i], %s" src (23*4) (23*4) dst :}
+  {: sprintf "! cheating move\n\tst %s, [%%sp+%i]\n\tld [%%sp+%i], %s" src (23*4) (23*4) dst :}
+inst : Store(dst:sregl, src:xreg, w)
+  {: let (dst, _) = dst in
+     let (src, _) = src in
+     sprintf "! cheating move\n\tstd %s, [%%sp+%i]\n\tldd [%%sp+%i], %s" src (24*4) (24*4) dst :}
+inst : Store(dst:regl, Loword(src:sreg), w)
+  {: let (_, src) = src in
+     sprintf "mov %s, %s" src dst :}
+
+inst : Store(dst:sregl, Sparchitolo(x:sreg, y:sreg), w)
+  {: let (xh, xl) = x in
+     let (yh, yl) = y in (* unnecessary *)
+     let (dh, dl) = dst in
+     sprintf "! shrl %s, %s, %s\n\tmov %s, %s\n\tmov %%g0, %s" xh yh dh xh dl dh :}
+
+inst : Store(dst:sregl, Sparclotohi(x:sreg, y:sreg), w)
+  {: let (xh, xl) = x in
+     let (yh, yl) = y in (* unnecessary *)
+     let (dh, dl) = dst in
+     sprintf "! shl %s, %s, %s\n\tmov %s, %s\n\tmov %%g0, %s" xh yh dh xl dh dl :}
+
+inst : Store(dst:sregl, Zxword(x:reg), w)
+  {: sprintf "mov %s, %s\n\tmov %%g0, %s" x (snd dst) (fst dst) :}
 
 -- memory load
 inst : Store(dst:regl, src:mem, w)
@@ -165,6 +239,10 @@ inst : Store(dst:regl, Zxbyte(src:mem), w)
   {: sprintf "ldub %s, %s" src dst :}
 inst : Store(dst:regl, Zxhalf(src:mem), w)
   {: sprintf "lduh %s, %s" src dst :}
+inst : Store(dst:sregl, Zxword(src:mem), w)
+  {: let (dh, dl) = dst in
+     sprintf "ld %s, %s\n\tset %%g0, %s" src dl dh :}
+
 inst : Store(dst:regl, Sxbyte(src:mem), w)
   {: sprintf "ldsb %s, %s" src dst :}
 inst : Store(dst:regl, Sxhalf(src:mem), w)
@@ -173,33 +251,51 @@ inst : Store(dst:regl, Sxhalf(src:mem), w)
 inst : Store(dst:fregl, src:mem, w)
   {: sprintf "ld %s, %s" src dst :}
 inst : Store(dst:xregl, src:mem, w)
-  {: sprintf "ldd %s, %s" src dst :}
+  {: sprintf "ldd %s, %s" src (fst dst) :}
+inst : Store(dst:sregl, src:mem, w)
+  {: sprintf "ldd %s, %s" src (fst dst) :}
 
 -- memory store
 inst : Store(dst:meml, src:reg, w)
-  {: if w = 64 then sprintf "stx %s, %s" src dst
-     else sprintf "st %s, %s" src dst :}
+  {: sprintf "st %s, %s" src dst :}
 inst : Store(dst:meml, Lobyte(src:reg), w)
   {: sprintf "stb %s, %s" src dst :}
 inst : Store(dst:meml, Lohalf(src:reg), w)
   {: sprintf "sth %s, %s" src dst :}
 
+inst : Store(dst:meml, Loword(src:sreg), w)
+  {: let (_, src) = src in
+     sprintf "st %s, %s" src dst :}
+
 inst : Store(dst:meml, src:freg, w)
   {: sprintf "st %s, %s" src dst :}
 inst : Store(dst:meml, src:xreg, w)
-  {: sprintf "std %s, %s" src dst :}
+  {: sprintf "std %s, %s" (fst src) dst :}
+inst : Store(dst:meml, src:sreg, w)
+  {: sprintf "std %s, %s" (fst src) dst :}
 
 -- memory store to offset
 -- note that y must be a 13-bit constant...probably need a different
 -- rule that can split 32-bit constants.
 inst : Store(Mem(Add(x:reg, y:const),mw:w), src:reg, w)
-  {: if w = 64 then sprintf "stx %s, [%s+%s]" src x y
-     else sprintf "st %s, [%s+%s]" src x y :}
+  {: sprintf "st %s, [%s+%s]" src x y :}
+inst : Store(Mem(Add(x:reg, y:const),mw:w), src:freg, w)
+  {: sprintf "st %s, [%s+%s]" src x y :}
+inst : Store(Mem(Add(x:reg, y:const),mw:w), src:sreg, w)
+  {: sprintf "std %s, [%s+%s]" (fst src) x y :}
+inst : Store(Mem(Add(x:reg, y:const),mw:w), src:xreg, w)
+  {: sprintf "std %s, [%s+%s]" (fst src) x y :}
 
 -- memory load from offset
 inst : Store(dst:regl, Fetch(Mem(Add(x:reg, y:const), mw:w), w), w)
-  {: if w = 64 then sprintf "ldx [%s+%s], %s" x y dst
-     else sprintf "ld [%s+%s], %s" x y dst :}
+  {: sprintf "ld [%s+%s], %s" x y dst :}
+inst : Store(dst:fregl, Fetch(Mem(Add(x:reg, y:const), mw:w), w), w)
+  {: sprintf "ld [%s+%s], %s" x y dst :}
+
+inst : Store(dst:sregl, Fetch(Mem(Add(x:reg, y:const), mw:w), w), w)
+  {: sprintf "ldd [%s+%s], %s" x y (fst dst) :}
+inst : Store(dst:xregl, Fetch(Mem(Add(x:reg, y:const), mw:w), w), w)
+  {: sprintf "ldd [%s+%s], %s" x y (fst dst) :}
 @ 
 
 \paragraph{Arithmetic}
@@ -214,7 +310,7 @@ inst : Store(dst:regl, Add(x:reg, y:reg_or_const), w)
 inst : Store(dst:regl, Sub(x:reg, y:reg_or_const), w)
   {: sprintf "sub %s, %s, %s" x y dst :}
 
--- mul (only 32->32->32)
+-- mul
 inst : Store(dst:regl, Mul(x:reg_or_const, y:reg), w)
   {: sprintf "smul %s, %s, %s" y x dst :}
 inst : Store(dst:regl, Mul(x:reg, y:reg_or_const), w)
@@ -223,6 +319,10 @@ inst : Store(dst:regl, Mul(x:reg, y:reg_or_const), w)
 -- quot
 inst : Store(dst:regl, Quot(x:reg, y:reg_or_const), w)
   {: sprintf "sdiv %s, %s, %s" x y dst :}
+
+-- divu
+inst : Store(dst:regl, Divu(x:reg, y:reg_or_const), w)
+  {: sprintf "udiv %s, %s, %s" x y dst :}
 
 -- neg
 inst : Store(dst:regl, Neg(x:reg_or_const), w)
@@ -239,6 +339,13 @@ inst : Store(dst:regl, Or(x:reg, y:reg_or_const), w)
   {: sprintf "or %s, %s, %s" x y dst :}
 inst : Store(dst:regl, Or(x:reg_or_const, y:reg), w)
   {: sprintf "or %s, %s, %s" y x dst :}
+
+inst : Store(dst:sregl, Or(x:sreg, y:sreg), w)
+  {: let (dh, dl) = dst in
+     let (xh, xl) = x in
+     let (yh, yl) = y in
+     sprintf "or %s, %s, %s\n\tor %s, %s, %s" xh yh dh xl yl dl
+   :}
 
 -- xor
 inst : Store(dst:regl, Xor(x:reg, y:reg_or_const), w)
@@ -258,6 +365,30 @@ inst : Store(dst:regl, Shl(x:reg, y:reg_or_const), w)
 inst : Store(dst:regl, Shrl(x:reg, y:reg_or_const), w)
   {: sprintf "srl %s, %s, %s" x y dst :}
 
+-- Note this doesn't work because sparc srl takes its argument
+-- mod 32.  Also we needed temporaries for scratch space.
+-- inst : Store(dst:sregl, Shrl(x:sreg, y:sreg), w)
+-- {: let (dh, dl) = dst in
+--     let (xh, xl) = x in
+--     let (yh, yl) = y in
+--     String.concat "\n\t"
+--      [ sprintf "srl %s, %s, %s" xl yl dl (* dl = xl >> yl *)
+--      ; sprintf "neg %s, %s"     yl dh    (* dh = -yl *)
+--      ; sprintf "add %s, 32, %s" dh dh    (* dh = 32-yl *)
+--      ; sprintf "sll %s, %s, %s" xh dh dh (* dh = xh << (32-yl) *)
+--      ; sprintf "or  %s, %s, %s" dl dh dl (* dl = (xl >> yl) | xh << (32-yl) *)
+--      ; sprintf "srl %s, %s, %s" xh yl dh (* dh = xh >> yl *)
+--      ]
+--(*
+--     dl = xl >> yl
+--     dh = -yl
+--     dh = dh + 32
+--     dh = xh << dh
+--     dl = dl | dh
+--     dh = xh >> yl
+--*)
+--  :}
+
 -- shra
 inst : Store(dst:regl, Shra(x:reg, y:reg_or_const), w)
   {: sprintf "sra %s, %s, %s" x y dst :}
@@ -267,8 +398,38 @@ inst : Store(dst:regl, Shra(x:reg, y:reg_or_const), w)
 inst : Store(dst:regl, Popcnt(x:reg), w)
   {: sprintf "popc %s, %s" x dst :}
 
-inst : Store(dst:fregl, Fdiv(x:freg, y:freg_or_const), w)
+-- fdiv
+inst : Store(dst:fregl, Fdiv(x:freg, y:freg), w)
   {: sprintf "fdivs %s, %s, %s" x y dst :}
+inst : Store(dst:xregl, Fdiv(x:xreg, y:xreg), w)
+  {: sprintf "fdivd %s, %s, %s" (fst x) (fst y) (fst dst) :}
+
+-- fmul
+inst : Store(dst:fregl, Fmul(x:freg, y:freg), w)
+  {: sprintf "fmuls %s, %s, %s" x y dst :}
+inst : Store(dst:xregl, Fmul(x:xreg, y:xreg), w)
+  {: sprintf "fmuld %s, %s, %s" (fst x) (fst y) (fst dst) :}
+
+-- fadd
+inst : Store(dst:fregl, Fadd(x:freg, y:freg), w)
+  {: sprintf "fadds %s, %s, %s" x y dst :}
+inst : Store(dst:xregl, Fadd(x:xreg, y:xreg), w)
+  {: sprintf "faddd %s, %s, %s" (fst x) (fst y) (fst dst) :}
+
+-- fsub
+inst : Store(dst:fregl, Fsub(x:freg, y:freg), w)
+  {: sprintf "fsubs %s, %s, %s" x y dst :}
+inst : Store(dst:xregl, Fsub(x:xreg, y:xreg), w)
+  {: sprintf "fsubd %s, %s, %s" (fst x) (fst y) (fst dst) :}
+
+-- fneg
+inst : Store(dst:fregl, Fneg(x:freg), w)
+  {: sprintf "fnegs %s, %s" x dst :}
+
+     -- gcc thinks this is okay...
+inst : Store(dst:xregl, Fneg(x:xreg), w)
+  {: sprintf "fnegs %s, %s\n\tfmovs %s, %s" (fst x) (fst dst)
+                                            (snd x) (snd dst) :}
 @ 
 
 \paragraph{Control Flow}
@@ -277,6 +438,8 @@ inst : Store(dst:fregl, Fdiv(x:freg, y:freg_or_const), w)
 next: Store(regl, Add(pc, four), w) {: regl :}
 inst: Par(Goto(target), next)
   {: sprintf "call %s, 0\n\tnop" target :}
+inst: Par(Goto(reg), next)
+  {: sprintf "call %s, 0\n\tnop" reg :}
 
 -- decrement register window and allocate space on the stack
 inst : Save(x:sp, y:neg)
@@ -307,6 +470,10 @@ inst: Goto(reg)    {: sprintf "jmp %s\n\tnop" reg :}
 -- conditional branches
 inst: Store(ccl, Sparcsubcc(x:reg, y:reg_or_const), w)
    {: sprintf "subcc %s, %s, %%g0" x y :}
+inst: Store(ccl, Sparcsubcc(x:freg, y:freg), w)
+   {: sprintf "fcmps %s, %s\n\tnop" x y :}
+inst: Store(ccl, Sparcsubcc(x:xreg, y:xreg), w)
+   {: sprintf "fcmpd %s, %s\n\tnop" (fst x) (fst y) :}
 
 inst: Guarded(Sparceq(cc), Goto(target))
    {: sprintf "be %s\n\tnop" target :}
@@ -330,6 +497,21 @@ inst: Guarded(Sparclt(cc), Goto(target))
    {: sprintf "bl %s\n\tnop" target :}
 inst: Guarded(Sparcltu(cc), Goto(target))
    {: sprintf "blu %s\n\tnop" target :}
+
+inst: Guarded(Sparcfeq(cc), Goto(target))
+   {: sprintf "fbe %s\n\tnop" target :}
+inst: Guarded(Sparcfne(cc), Goto(target))
+   {: sprintf "fbne %s\n\tnop" target :}
+
+inst: Guarded(Sparcfge(cc), Goto(target))
+   {: sprintf "fbge %s\n\tnop" target :}
+inst: Guarded(Sparcfgt(cc), Goto(target))
+   {: sprintf "fbg %s\n\tnop" target :}
+
+inst: Guarded(Sparcfle(cc), Goto(target))
+   {: sprintf "fble %s\n\tnop" target :}
+inst: Guarded(Sparcflt(cc), Goto(target))
+   {: sprintf "fbl %s\n\tnop" target :}
 @ 
 
 \paragraph{Other Instructions}
@@ -346,6 +528,7 @@ inst : Nop() {: "! Why do you think there should be a nop? " :}
 | RP.App(("mul",   [32]), [x; y]) -> conMul    (exp x) (exp y)
 | RP.App(("neg",   [w]), [x])     -> conNeg    (exp x)
 | RP.App(("quot",  [w]), [x; y])  -> conQuot   (exp x) (exp y)
+| RP.App(("divu",  [w]), [x; y])  -> conDivu   (exp x) (exp y)
 (* maybe can be implemented with mulx instruction for SPARC 9
 | RP.App(("mulx",  [32;64]), [x; y]) -> conMulx (exp x) (exp y)
 *)
@@ -363,10 +546,12 @@ inst : Nop() {: "! Why do you think there should be a nop? " :}
 
 | RP.App(("lobits",[32;8]),  [x]) -> conLobyte (exp x)
 | RP.App(("lobits",[32;16]), [x]) -> conLohalf (exp x)
-| RP.App(("zx", [8; 32]),     [x]) -> conZxbyte (exp x)
-| RP.App(("zx", [16;32]),     [x]) -> conZxhalf (exp x)
-| RP.App(("sx", [8; 32]),     [x]) -> conSxbyte (exp x)
-| RP.App(("sx", [16;32]),     [x]) -> conSxhalf (exp x)
+| RP.App(("lobits",[64;32]), [x]) -> conLoword (exp x)
+| RP.App(("zx", [8; 32]),    [x]) -> conZxbyte (exp x)
+| RP.App(("zx", [16;32]),    [x]) -> conZxhalf (exp x)
+| RP.App(("zx", [32;64]),    [x]) -> conZxword (exp x)
+| RP.App(("sx", [8; 32]),    [x]) -> conSxbyte (exp x)
+| RP.App(("sx", [16;32]),    [x]) -> conSxhalf (exp x)
 
 | RP.App(("sparc_subcc", [w]), [x; y]) -> conSparcsubcc (exp x) (exp y)
 | RP.App(("sparc_eq",    [w]), [x]) -> conSparceq  (exp x)
@@ -380,15 +565,34 @@ inst : Nop() {: "! Why do you think there should be a nop? " :}
 | RP.App(("sparc_lt",    [w]), [x]) -> conSparclt  (exp x)
 | RP.App(("sparc_ltu",   [w]), [x]) -> conSparcltu (exp x)
 
+| RP.App(("sparc_feq",    [w]), [x]) -> conSparcfeq  (exp x)
+| RP.App(("sparc_fne",    [w]), [x]) -> conSparcfne  (exp x)
+| RP.App(("sparc_fge",    [w]), [x]) -> conSparcfge  (exp x)
+| RP.App(("sparc_fgt",    [w]), [x]) -> conSparcfgt  (exp x)
+| RP.App(("sparc_fle",    [w]), [x]) -> conSparcfle  (exp x)
+| RP.App(("sparc_flt",    [w]), [x]) -> conSparcflt  (exp x)
+
 | RP.App(("fdiv", [w]), [x; y; rm]) -> conFdiv (exp x) (exp y)
+| RP.App(("fmul", [w]), [x; y; rm]) -> conFmul (exp x) (exp y)
+| RP.App(("fadd", [w]), [x; y; rm]) -> conFadd (exp x) (exp y)
+| RP.App(("fsub", [w]), [x; y; rm]) -> conFsub (exp x) (exp y)
+| RP.App(("fneg", [w]), [x])        -> conFneg (exp x)
+
+| RP.App(("i2f", [w;w']), [x; rm]) -> conItof (exp x)
+| RP.App(("f2i", [w;w']), [x; rm]) -> conFtoi (exp x)
+| RP.App(("f2f", [w;w']), [x; rm]) -> conFtof (exp x)
+
+| RP.App(("sparc_hi2lo", [64]), [x;y]) -> conSparchitolo (exp x) (exp y)
+| RP.App(("sparc_lo2hi", [64]), [x;y]) -> conSparclotohi (exp x) (exp y)
+| RP.App(("sparc_mkj", []), [x;y]) -> conSparcmkj (exp x) (exp y)
 
 | RP.App((("add"|"sub"|"mul"|"sx"|"zx"|"lobits"|"bitInsert"|
            "bitExtract"|"fabs"|"fneg"|"fdiv"|"fmul"|"fsub"|"fadd"|"f2f"|"f2i"|
            "i2f"|"and"|"or"|"xor"|"com") as op, ws), xs)->
     Impossible.impossible
       (Printf.sprintf
-         "operator %%%s specialized to %d widths & applied to %d arguments"
-         op (List.length ws) (List.length xs))
+         "operator %%%s specialized to [%s] & applied to %d arguments"
+         op (String.concat "; " (List.map string_of_int ws)) (List.length xs))
 @
 And now we convert between RTLs and Burg constructors.
 <<code to follow the labeler>>=  
