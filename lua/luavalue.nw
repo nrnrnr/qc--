@@ -169,11 +169,35 @@ If a function is impure (needs access to the Lua state) we use
 let setglobal {globals=g; fallbacks=f} n v = Table.bind g (String n) v
 let sg s = ((func (string **-> value **-> runit)).embed (setglobal s) : value)
 @ 
-And finally, type-based dispatch
+\paragraph{Support for dynamically typed Lua functions}
+Type-based dispatch defines several alternatives for a function and
+at each call, chooses the right function based on the types of the
+arguments. 
 <<signatures>>=
   type alt                              (* an alternative *)
   val alt    : 'a mapf -> 'a -> alt     (* create an alternative *)
   val choose : alt list -> value        (* dispatch on type/number of args *)
+@ 
+It's also possible to combine multiple types for a single argument.
+The idea is just like parsing combinators.
+We can use the choice operator [[|||]] to combine two maps.
+To project, map [[t ||| t']] projects using [[t]] if~[[t]] claims to
+recognize the argument.  
+If [[t]]~does not recognize the argument, the map projects
+using~[[t']].
+To embed, map [[t ||| t']] always embeds using [[t']].
+
+We can use the continuation operator [[>>=]] to apply a function to a
+value after projection.
+To project, the map [[t >>= f]] applies~[[f]] to the result of
+projecting with~[[t]].
+Because function~[[f]] cannot be inverted, the map [[t >>= f]] is not
+capable of embedding.
+It is therefore useful primarily on the left-hand side of the [[|||]]
+operator. 
+<<signatures>>=
+  val ( ||| ) : 'a map -> 'a map -> 'a map 
+  val ( >>= ) : 'a map -> ('a -> 'b) -> 'b map   (* apply continuation after project *)
 end
 @
 For the rest of the interface, we can make Lua values by supplying an
@@ -490,8 +514,7 @@ let runit = { embed = (fun () args -> [])
 let values : value list mapf =
   { embed = (fun l args -> l); project = (fun f -> assert false); is = runit.is
   } 
-
-
+<<value toplevel>>=
 let dots_arrow (varargs : 'a map) (result : 'b map) : ( ('a list -> 'b) mapf ) =
   let apply (f : 'a list -> 'b) args = 
     [result.embed (f (List.map varargs.project args))] in
@@ -518,6 +541,7 @@ let closure (arrow : 'a mapf) : ('a map) =
   } 
 
 let efunc t f = (closure t).embed f
+<<value toplevel>>=
 type alt = (value list -> value list) * (value list -> bool)
 let alt t f = (t.embed f, t.is)
 let choose alts =
@@ -530,6 +554,18 @@ let choose alts =
   caml_func run
 
 let lf = efunc (list value **-> result (list value)) List.rev
+<<value toplevel>>=
+let ( ||| ) t t' =
+  { project = (fun v -> if t.is v then t.project v else t'.project v)
+  ; embed   = t'.embed
+  ; is      = (fun v -> t.is v || t'.is v)
+  }
+
+let ( >>= ) t k =
+  { project = (fun v -> k (t.project v))
+  ; embed   = (fun _ -> assert false)
+  ; is      = t.is
+  }
 @
 A table is a function if it has an apply method that is a function.
 <<project table [[t]] into a function>>=
