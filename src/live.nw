@@ -138,12 +138,12 @@ let process changed node =
 
 First, we make sure we clear the [[liveout]] sets for all the nodes -
 this ensures that any obsolete liveness information is discarded before
-we begin.  The [[process]] function, which updates the live set of a node,
-is repeatedly applied to all nodes in [[cfg]].  This is done until
+we begin.  The [[process]] function, which updates the live set of a
+node, is repeatedly applied to all nodes in [[cfg]].  This is done until
 [[process]] does not change any live set which means the fix point is
-reached.  We use [[G.scan_bwd]] to implement an iteration function
-that iterates mostly backwards (reverse control-flow direction) over
-the {\cfg}.
+reached.  We use [[G.scan_bwd]] to implement an iteration function that
+iterates mostly backwards (reverse control-flow direction) over the
+{\cfg}.
 
 <<struct Make>>=
 let liveness cfg =
@@ -152,8 +152,8 @@ let liveness cfg =
         let first = G.number (G.first cfg)     in
         let limit = G.number (G.last  cfg) + 1 in
             G.scan_bwd cfg first limit f z     in
-    let _ = fold cfg 
-                (fun n () -> (G.property n).P.liveout <- Register.Set.empty) () in
+    let empty = Register.Set.empty             in
+    let _ = fold cfg (fun n () -> (G.property n).P.liveout <- empty) () in
     let changed     = ref false                           in
     let iter cfg f  = fold cfg (fun node () -> f node) () in
     let rec loop n = 

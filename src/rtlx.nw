@@ -1,0 +1,68 @@
+%
+% vim: ts=8 sw=4 et:
+%
+
+% ------------------------------------------------------------------ 
+\section{Export of RTLs}
+% ------------------------------------------------------------------ 
+
+To allow external software to read {\rtl}s we have generated we export
+them using {\asdl}. Since the {\rtl} data type is defined as a {\ocaml}
+data type and not as a {\asdl} data type, we create an additional
+definition of an {\rtl} suign the {\asdl} specification language. We
+then convert an existing {\rtl} into an \asdl-based {\rtl} which we can
+export.
+
+% ------------------------------------------------------------------ 
+\subsection{ASDL Definition of an RTL}
+% ------------------------------------------------------------------ 
+
+<<rtlx.asdl>>=
+module rtlx {
+    space       = (string)              -- one character long
+    width       = (int)
+    aligned     = (int)
+    assertion   = (aligned)
+    bool        = (int)                 -- false = 0
+    bits        = (string, width)  
+
+    aggregration = BigEndian | LittleEndian | Identity
+
+    opr         = (string, width*)
+
+    const       = Bool      (bool)
+                | Bits      (bits)  
+                | Link      (string, width)
+                | Late      (string, width)
+
+
+    exp         = Const     (const)
+                | Fetch     (loc, width)
+                | App       (opr, exp*)
+
+    loc         = Cell      ( space
+                            , aggregration
+                            , width
+                            , exp
+                            , assertion
+                            )
+                | Var       ( string
+                            , int
+                            , width
+                            )
+                | Slice     ( width
+                            , int
+                            , loc
+                            )
+
+    effect      = Store     (loc, exp, width)
+                | Kill      (loc)
+
+    guarded     = (exp, effect)
+
+    rtl         = (guarded*)
+    rtls        = (rtl*)
+}
+@
+
+                            

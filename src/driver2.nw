@@ -27,6 +27,7 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
     val dummy:      target                  (* our only target right now *)
     val cmmasm:     out_channel -> asm      (* C-- emitting assembler *)
     val dotasm:     out_channel -> asm      (* DOT emitting assembler *)
+    val asdlasm:    out_channel -> asm      (* ASDL emitting assembler *)
     
     val version:    unit -> unit            (* print version to stdout   *)
     val scan:       file:string -> unit     (* for debugging the scanner *)
@@ -206,8 +207,9 @@ Assemblers are objects. We therefore need function to create them, Here
 are our current assemblers.
 
 <<Caml>>=
-let cmmasm (c:out_channel) = Asm.asm    c 
-let dotasm (c:out_channel) = Dotasm.asm c
+let cmmasm  (c:out_channel) = Asm.asm     c 
+let dotasm  (c:out_channel) = Dotasm.asm  c
+let asdlasm (c:out_channel) = Asdlasm.asm c
 @
 
 The user specifies in the source code some target properties. They must
@@ -387,6 +389,7 @@ let builtins =
   ; "cmmasm"    , pf (Map.outchan **-> V.result Map.asm)   Caml.cmmasm     
   ; "astasm"    , pf (Map.outchan **-> V.result Map.asm)   Caml.cmmasm (*alias*)
   ; "dotasm"    , pf (Map.outchan **-> V.result Map.asm)   Caml.dotasm
+  ; "asdlasm"   , pf (Map.outchan **-> V.result Map.asm)   Caml.asdlasm
   ; "stdin"     , Map.inchan.V.embed    stdin   (* hack, for now *)
   ; "stdout"    , Map.outchan.V.embed   stdout  (* hack, for now *)
   ; "compile"   , func (Map.optimize  **-> Map.ast  

@@ -57,6 +57,9 @@ module Revert: sig
     <<REV>>
 end
 
+module Export: sig
+    <<EXPORT>>
+end    
 @
 
 % ------------------------------------------------------------------ 
@@ -183,18 +186,29 @@ outside of [[Private]] from inside [[Private]] that is also declared
 inside [[Private]]. 
 
 <<CONV>>=
-val exp:        exp      -> Private.exp
-val loc:        loc      -> Private.loc       
-val rtl:        rtl      -> Private.rtl
-val opr:        opr      -> Private.opr
+val exp:        exp         -> Private.exp
+val loc:        loc         -> Private.loc       
+val rtl:        rtl         -> Private.rtl
+val opr:        opr         -> Private.opr
 
 <<REV>>=
-val exp:        Private.exp      -> exp
-val loc:        Private.loc      -> loc
-val rtl:        Private.rtl      -> rtl
-val opr:        Private.opr      -> opr
+val exp:        Private.exp -> exp
+val loc:        Private.loc -> loc
+val rtl:        Private.rtl -> rtl
+val opr:        Private.opr -> opr
 @
 
+% ------------------------------------------------------------------ 
+\subsubsection{Export of RTLs}
+% ------------------------------------------------------------------ 
+
+We export {\rtL}s in a cross-platform {\asdl} format, defined in module
+\ref{rtlx}.
+
+<<EXPORT>>=
+val rtl:        rtl       -> out_channel -> unit
+val rtls:       rtl list  -> out_channel -> unit
+@
 
 % ------------------------------------------------------------------ 
 \subsubsection{The Private View}
@@ -322,6 +336,11 @@ end
 module Revert = struct    
     <<Rev>>
 end
+
+module Export = struct
+    <<Export>>
+end
+
 @
 % ------------------------------------------------------------------ 
 \subsubsection{The Private View}
@@ -442,4 +461,58 @@ let loc         = id
 let rtl         = id
 let opr         = id
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Export of RTLs}
+% ------------------------------------------------------------------ 
+
+We translate the internal {\rtl} representation to the {\asdl} generated
+representation from module \module{rtlx} and write it to a file.
+
+<<Export>>=
+module P = Private
+module X = Rtlx
+
+let aggregation = function
+    | LittleEndian          -> X.LittleEndian
+    | BigEndian             -> X.BigEndian
+    | Identity              -> X.Identity
+
+let const = function
+    | P.Bool(b)             -> X.Bool (if b then 1 else 0)
+    | P.Bits(b)             -> X.Bits ( Bits.to_string None b
+                                      , Bits.width b
+                                      )
+    | P.Link(sym,width)     -> X.Link (sym#text, width)
+    | P.Late(name,width)    -> X.Late (name, width)  
+
+let rec loc = function
+    | P.Cell(s,agg,w,e,a)   -> X.Cell ( String.make 1 s
+                                      , aggregation agg
+                                      , w
+                                      , exp e
+                                      , a
+                                      )
+    | P.Var(n,index,width)  -> X.Var (n, index, width)
+    | P.Slice(width,index,l)-> X.Slice (width, index, loc l)
+
+and exp = function
+    | P.Const(c)            -> X.Const (const c)
+    | P.Fetch(l, w)         -> X.Fetch (loc l, w)
+    | P.App(o, e)           -> X.App (o, List.map exp e)
+
+
+and effect = function
+    | P.Store(l,e,w)        -> X.Store(loc l, exp e, w)
+    | P.Kill(l)             -> X.Kill(loc l)
+
+let guarded (ex,eff)        = (exp ex, effect eff)
+let rtl' r                  = match Convert.rtl r with
+                              | P.Rtl(gs) -> List.map guarded gs
+
+
+let rtl r   file = RtlxUtil.sexp_wr_rtl  (rtl' r)           file
+let rtls rs file = RtlxUtil.sexp_wr_rtls (List.map rtl' rs) file
+@
+
 
