@@ -47,7 +47,7 @@ type ventry     = scope * (denotation * ty) Error.error
 type tentry     = scope * ty                Error.error
 
 <<function signatures>>=                
-val empty           : env
+val create          : Srcmap.map -> env
 
 val bindv           : string -> ventry  -> env -> env
 val bindt           : string -> tentry  -> env -> env
@@ -58,6 +58,7 @@ val findt           : string -> env     -> tentry
 val findv'          : string -> env     -> (denotation * ty) Error.error
 val findt'          : string -> env     -> ty Error.error
 
+val srcmap          : env -> Srcmap.map
 @
 
 <<>>=
@@ -85,17 +86,19 @@ type arch           = { memsize:      int option
                       ; endianness:   endianness option
                       }
 <<>>=
-type env            = { tenv :      tenv
-                      ; venv :      venv
-                      ; arch :      arch
+type env            = { tenv   :      tenv
+                      ; venv   :      venv
+                      ; arch   :      arch
+                      ; srcmap :      Srcmap.map
                       }    
 
-let empty = { tenv = StrMap.empty
-            ; venv = StrMap.empty
-            ; arch = { memsize    = None
-                     ; endianness = None
-                     }
-            }
+let create map      = { tenv = StrMap.empty
+                      ; venv = StrMap.empty
+                      ; arch = { memsize    = None
+                               ; endianness = None
+                               }
+                      ; srcmap = map
+                      }
 @
 
  
@@ -135,6 +138,9 @@ let bindt name (scope, _ as x) env =
 <<>>=
 let bindvError name scope env = bindv name (scope, E.Error) env
 let bindtError name scope env = bindt name (scope, E.Error) env
+
+<<>>=
+let srcmap env = env.srcmap
 
 @
 The functions to lookup a value [[findv]] and a type [[findt]] raise

@@ -50,13 +50,22 @@ let exclude xx yy =
     xx'
 @
 
+For error reports we need a source code map to resolve character
+positions into meaningful file, line, column triples. The source map
+can be obtained from the fat environment. Here is a suitable error
+reporting function for [[E.catch]]:
+
+<<>>=
+let error r env msg = E.errorRegionPrt (F.srcmap env,r) msg 
+@
+
 Types in the abstract syntax may be names and must be evaluated before
 they can be used. The evaluation can fail in case the name is
 undefined and therefore an [[E.error]] type is used.
 
 <<>>=
 let rec evalTy env = function
-    | A.TyAt(x,r)    -> E.catch (E.errorRegPrt r) (evalTy env) x
+    | A.TyAt(x,r)    -> E.catch (error r env) (evalTy env) x
     | A.BitsTy(size) -> E.Ok(Types.Bits size)
     | A.AliasTy(n)   -> snd (F.findt n env)
 
@@ -171,7 +180,7 @@ let bindt names ty scope env =
 
 <<>>=
 let rec doTypeDecl env = function
-    | A.DeclAt(x,r)      -> E.catch' env (E.errorRegPrt r) (doTypeDecl env) x
+    | A.DeclAt(x,r)      -> E.catch' env (error r env) (doTypeDecl env) x
     | A.Typedef(t,names) -> bindt names (evalTy env t) F.Global env
     | _                  -> env
 
@@ -184,10 +193,10 @@ Their source code positions were attached to them during their
 collection. 
 
 <<>>=
-let reportCycle decls = 
+let reportCycle env decls = 
     let report = function
         | A.Typedef(t,n::nn), Some r -> 
-            E.errorRegPrt r ("typedef for "^n^" is cyclic")
+            error r env ("typedef for "^n^" is cyclic")
         | A.Typedef(t,n::nn), None   -> 
             E.errorPrt      ("typedef for "^n^" is cyclic")
         | _                     -> assert false
@@ -206,7 +215,7 @@ let doTypes is_global env dd =
             let scope = if is_global then F.Global 
                         else F.Local                     in
             let env'  = bindError scope env offending in
-                ( reportCycle offending
+                ( reportCycle env' offending
                 ; bindAll dd'
                 )
                                                         in
@@ -338,7 +347,7 @@ let importt = function
     | E.Error -> (F.Global, E.Error)
 <<>>=
 let rec ty env = function
-    | A.TyAt(x,r)       -> E.catch (E.errorRegPrt r) (ty env) x
+    | A.TyAt(x,r)       -> E.catch (error r env) (ty env) x
     | A.BitsTy(n)       -> E.Ok(T.bits n)
     | A.AliasTy(n)      -> F.findt' n env
 @
@@ -367,13 +376,13 @@ let register env (_,t,name,_) = F.bindv name (regt (ty env t)) env
 
 <<>>=
 let rec datum env = function
-    | A.DatumAt(x,r)        -> E.catch' env (E.errorRegPrt r) (datum env) x
+    | A.DatumAt(x,r)        -> E.catch' env (error r env) (datum env) x
     | A.Label(n)            -> F.bindv n codet env 
     | _                     -> env
 
 <<>>=
 let rec stmt env = function 
-    | A.StmtAt(x,r)           -> E.catch' env (E.errorRegPrt r) (stmt env) x
+    | A.StmtAt(x,r)           -> E.catch' env (error r env) (stmt env) x
     | A.IfStmt ( e, ss1, ss2) -> foldl stmt (foldl stmt env ss1) ss2
     | A.LabelStmt(n)          -> F.bindv n codet env
     | A.SpanStmt(e1,e2,ss)    -> foldl (body false) env ss
@@ -381,18 +390,18 @@ let rec stmt env = function
     | _                       -> env
 
 and arm env = function
-    | A.ArmAt(x,r)            -> E.catch' env (E.errorRegPrt r) (arm env) x
+    | A.ArmAt(x,r)            -> E.catch' env (error r env) (arm env) x
     | A.Case(ranges, ss)      -> foldl stmt env ss
 <<>>=
 and decl is_global env = function
-    | A.DeclAt(x,r)    -> E.catch' env (E.errorRegPrt r) (decl is_global env) x
+    | A.DeclAt(x,r)    -> E.catch' env (error r env) (decl is_global env) x
     | A.Import(ty,ii)  -> if is_global then imports env ty ii     else env
     | A.Registers(rr)  -> if is_global then foldl register env rr else env
     | A.Target(aa)     -> if is_global then foldl target env aa   else env
     | _                -> env
 
 and body is_global env = function
-    | A.BodyAt(x, r) -> E.catch' env (E.errorRegPrt r) (body is_global env) x
+    | A.BodyAt(x, r) -> E.catch' env (error r env) (body is_global env) x
     | A.DeclBody(d)  -> if is_global then decl is_global env d else env
     | A.DataBody(dd) -> if is_global then foldl datum env dd   else env 
     | A.StmtBody(s)  -> stmt env s
@@ -402,7 +411,7 @@ let proc is_global env (_,name,_,bb) =
         foldl (body is_global) env' bb
 <<>>=
 let rec section env = function
-    | A.SectionAt(x,r)     -> E.catch' env (E.errorRegPrt r) (section env) x
+    | A.SectionAt(x,r)     -> E.catch' env (error r env) (section env) x
     | A.Decl(d)            -> decl true env d
     | A.SSpan( e1, e2, ss) -> foldl section env ss
     | A.Datum( d)          -> datum env d
@@ -410,7 +419,7 @@ let rec section env = function
 
 <<>>=
 let rec toplevel env = function 
-    | A.ToplevelAt(x, r)  -> E.catch' env (E.errorRegPrt r) (toplevel env) x
+    | A.ToplevelAt(x, r)  -> E.catch' env (error r env) (toplevel env) x
     | A.Section(name, ss) -> foldl section env ss
     | A.TopDecl(d)        -> decl true env d
     | A.TopProcedure(p)   -> proc true env p 
@@ -490,7 +499,7 @@ and a value.
 
 <<>>=
 let rec evalFetch env = function
-    | A.LValueAt(x,r) -> E.catch (E.errorRegPrt r) (evalFetch env) x
+    | A.LValueAt(x,r) -> E.catch (error r env) (evalFetch env) x
     | A.Mem (_,_,_)   -> E.error "memory access in const declaration"
     | A.Var(id)       -> ( match F.findv' id env with
                          | E.Error                -> E.Error
@@ -528,7 +537,7 @@ and evalExprs env ee =
 
 <<>>=
 and evalExpr env = function
-| A.ExprAt(x,r) -> E.catch (E.errorRegPrt r) (evalExpr env) x
+| A.ExprAt(x,r) -> E.catch (error r env) (evalExpr env) x
 | A.Int (str,(Some size as s))   -> E.Ok(T.bits size, Const.int2value str s)
 | A.Int (str,(None      as s))   -> E.Ok(T.word     , Const.int2value str s)
 | A.Float (str,(Some size as s)) -> E.Ok(T.bits size, Const.float2value str s)
@@ -574,10 +583,10 @@ let bindError scope env decls =
         foldl (fun env name -> F.bindvError name scope env) env names
 @
 <<>>=
-let reportCycle decls = 
+let reportCycle env decls = 
     let report = function
         | A.Const(t,n,_), Some r -> 
-            E.errorRegPrt r ("const declaration for "^n^" is cyclic")
+            error r env ("const declaration for "^n^" is cyclic")
         | A.Const(t,n,_), None   ->
             E.errorPrt      ("const declaration for "^n^" is cyclic")
         | _                     -> assert false
@@ -596,7 +605,7 @@ let doConst is_global env dd =
             let dd'   = exclude dd offending                     in
             let scope = if is_global then F.Global else F.Local  in
             let env'  = bindError scope env offending            in
-                ( reportCycle offending
+                ( reportCycle env offending
                 ; bindAll env' dd'
                 )
                                                                  in
@@ -627,7 +636,7 @@ let check file =
         try
             ( Srcmap.sync map 0 (file,1,1)
             ; let ast        = Parse.program scanner lexbuf              in
-              let env0       = F.empty                                   in
+              let env0       = F.create map                              in
               let env1       = TypeEnv.doGlobalTypes env0 ast            in
               let env2       = ValueEnv.BindGlobals.program env1 ast     in
               let env3       = ValueEnv.EvalConst.doGlobalConst env2 ast in
