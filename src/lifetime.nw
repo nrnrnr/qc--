@@ -73,8 +73,8 @@ overlaps x y  = overlaps x y
 overlaps (mk x y) (mk v w) = $\neg$ (precedes (mk x y) (mk v w) 
                              $\vee$ precedes (mk v w) (mk x y))
 
-inside \_ empty    = false
-inside p  (mk x y) = x <= p && p < y 
+member \_ empty    = false
+member p  (mk x y) = x <= p && p < y 
 
 ahead empty  \_                 = false
 behind empty \_                 = false
@@ -99,7 +99,9 @@ module type S = sig
     (* constructors *)
     val union : t -> t -> t
     (* observers *)
-    val inside   : Point.t -> t -> bool
+    val left     : t -> Point.t
+    val right    : t -> Point.t
+    val member   : Point.t -> t -> bool
     val isempty  : t -> bool
     val overlaps : t -> t -> bool
     val precedes : t -> t -> bool
@@ -254,8 +256,10 @@ let mk x y = match x, y with
     | x, y when Order.le y Point.zero -> empty
     | _                               -> (x,y)
 
+let left  (x,y) = x
+let right (x,y) = y
 
-let inside p (x,y as i) =
+let member p (x,y as i) =
     if isempty i 
     then false
     else x <= p && p < y

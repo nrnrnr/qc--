@@ -73,6 +73,24 @@ val ty    : t -> width -> string option -> loc
 val block : t -> width -> align         -> loc    
 @
 
+\begin{quote}\it
+    The above model is well suited to implement calling conventions: 
+    each parameter has a size, an alignment requirement and an
+    address.  Within initialized or uninitialized data specifications
+    alignment, size and addresses are separated.  To support the
+    translation of these specifications a more imperative style is
+    needed.  Unfortunately this conflicts with abstract locations: 
+    each abstract locations is customized to fetch a certain number of
+    bits from a location.  A {\PAL} program, however, is free to use
+    labels from initialized or initialized data in any way it wants.
+
+<<automaton2.mli proposal>>=
+val align    : t -> align -> unit     
+val allocate : t -> size  -> unit
+val loc      : t -> loc                 
+@      
+\end{quote}
+
 Location's as returned by an automaton can't be used directly because
 they are abstract. To use them to store and fetch data, use the
 following two functions:
@@ -82,7 +100,7 @@ val fetch : loc -> width -> Rtl.exp
 val store : loc -> Rtl.exp -> width -> Rtl.rtl
 @
 
-When all allocations are done. [[freeze]] the automaton. In response
+When all allocations are done [[freeze]] the automaton. In response
 it returns the space allocated in the overflow [[area]]. 
 
 <<automaton2.mli>>=

@@ -38,18 +38,18 @@ module Make
                    with type init        = unit) = 
 struct
     <<Make expressions>>
+    <<Make constant evaluation>>
     <<Make auxilliaries>>
     <<Make continuation bundles>>
     <<Make assignment>>    
     <<Make global registers>>    
     <<Make formals and actuals>>    
     <<Make statements>>
-    <<Make>>
+    <<Make procedure>>
+    <<Make memory declarations>>
+    <<Make toplevel>>
+    <<Make translate program>>
 end
-@
-
-<<Make>>=
-(*Make*)
 @
 
 % ------------------------------------------------------------------
@@ -80,10 +80,6 @@ let astwidth env = width @<< (astty env)
 
 let foldl = List.fold_left
 let foldr = List.fold_right
-
-(* evaluation of constant expressions - bogus *)
-
-let eval_const e = 123 (*XXX*)
 @
 
 % ------------------------------------------------------------------ 
@@ -225,6 +221,22 @@ and expr env target globals exp =
         | A.PrimOp(op,args) -> prim env target globals op (List.map snd args)
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Constant Evaluation}
+% ------------------------------------------------------------------ 
+
+<<Make constant evaluation>>=
+let compile_const env target exp =
+    let lookup n = raise Consteval.Not_constant in   
+        try 
+            Consteval.compile (expr env target lookup exp)
+        with 
+            Consteval.Not_constant -> assert false (* we need a better way!*)
+        
+let link_const env target globals exp =
+    Consteval.link (expr env target globals exp)
+@
+
 
 % ------------------------------------------------------------------ 
 \subsection{Continuation Bundles}
@@ -297,15 +309,18 @@ let actual env target globals (hint, e) =
     let exp = expr env target globals e           in
         (exp, w, hint) 
 
-let formal env n =
+(* don't know how to deal with hints on registers that are used
+   as formal parameters for continuations which also might be hinted *)
+        
+let kformal env (khint, n) = 
     ( match snd (F.findv n env) with 
     | (F.Register {F.index=i; F.rhint=h},ty) when F.is_localv n env  -> 
         { G.name  = n
         ; G.width = width ty
-        ; G.hint  = ( match h with
-                    | F.RReg _  -> assert false (* impossible *)
-                    | F.RHint s -> Some s
-                    | F.RNone   -> None
+        ; G.hint  = ( match h, khint with
+                    | F.RReg _ , _  -> assert false (* impossible *)
+                    | F.RHint s, _  -> Some s
+                    | F.RNone  , _  -> None
                     )
         ; G.index = i
         } 
@@ -313,6 +328,7 @@ let formal env n =
         (* don't how to to translate global registers *)
     | _ -> assert false
     )
+let formal env n = kformal env (None,n)
 @
     
 
@@ -349,6 +365,10 @@ let globals target (base:Rtl.exp) decls =
                 loop map rr
     in
         loop StrMap.empty decls, Automaton2.freeze atm  
+
+let lookup_global map x = 
+    try StrMap.find x map
+    with Not_found -> Impossible.impossible ("lookup_global "^x)
 @
 
 
@@ -357,7 +377,6 @@ let globals target (base:Rtl.exp) decls =
 % ------------------------------------------------------------------ 
 
 <<Make statements>>=
-
 type state =
     { env:      F.env
     ; target:   Target.t
@@ -480,14 +499,16 @@ and callStmt state (lhs,cconv, e, args, targets, conts) =
  *)         
         
 and returnStmt state (cconv, kont, args) =
+    let const e   = Bits.to_int (compile_const state.env state.target e)     in
     let cc        = state.target.Target.cc (Aux.Option.get default_cc cconv) in
     let atm       = Automaton2.mk cc.Target.ret state.inbase                 in
-    let const n   = A.Int (Bits.of_int n Bits.maxwidth, None) in (*XXX*)
-    let (x,y)     = Aux.Option.get (const 0, const 0) kont    in (*XXX*)
+    let (x,y)     = match kont with
+                    | None       -> (0,0) (*XXX*)
+                    | Some (x,y) -> (const x, const y) in
     let rtl       = cc.Target.return                                         in
     let args      = List.map
                     (actual state.env state.target state.globals) args       in
-    let ret       = G.gm_return state.cfg rtl (eval_const x, eval_const y)   in
+    let ret       = G.gm_return state.cfg rtl (x, y)   in
     let copyo,atm = G.gm_copyo state.cfg args atm ret                        in
         { state with
             node     = ret
@@ -503,20 +524,32 @@ and returnStmt state (cconv, kont, args) =
  *)
 
 and contStmt state (label,args)  =
-    let cc        = state.target.Target.cc default_cc               in
-    let args      = List.map (fun (_,n) -> formal state.env n) args in
-    let atm       = Automaton2.mk cc.Target.cont state.inbase       in
-    let copyi,atm = G.gm_copyi state.cfg args atm state.node        in
-    let _         = G.set_label state.cfg label copyi               in
+    let cc        = state.target.Target.cc default_cc         in
+    let args      = List.map (kformal state.env) args (*XXX*) in
+    let atm       = Automaton2.mk cc.Target.cont state.inbase in
+    let copyi,atm = G.gm_copyi state.cfg args atm state.node  in
+    let _         = G.set_label state.cfg label copyi         in
         { state with
             node     = copyi
         ;   incoming = Automaton2.freeze atm :: state.incoming
         }
 
+and cutStmt state (e, args, conts) = 
+    let cc        = state.target.Target.cc default_cc                  in
+    let args      = List.map 
+                    (actual state.env state.target state.globals) args in
+    let atm       = Automaton2.mk cc.Target.cont state.outbase         in
+    let exp       = expr state.env state.target state.globals e        in
+    let rtl       = state.target.Target.mkCutto exp                    in
+    let conts     = continuations conts state.cfg                      in
+    let cut       = G.gm_cutto state.cfg rtl conts                     in
+    let copyo,atm = G.gm_copyo state.cfg args atm cut                  in
+        { state with
+            node     = cut
+        ;   incoming = Automaton2.freeze atm :: state.outgoing
+        }
 
-and primStmt      state x  = assert false 
-and cutStmt       state x  = assert false 
-
+and primStmt      state x  = Impossible.unimp "primitive"
 and spanStmt      state x  = Impossible.unimp "span"
 and switchStmt    state x  = Impossible.unimp "switch"
 @
@@ -525,7 +558,167 @@ and switchStmt    state x  = Impossible.unimp "switch"
 \subsection{Procedure Translation}
 % ------------------------------------------------------------------ 
 
+<<Make procedure>>=
+let proc env target globals (*props*) asm (cconv,name,args,bdy) = 
+assert false
+@
+   
 % ------------------------------------------------------------------ 
-\subsection{Program Translation}
+\subsection{Global Memory declarations}
 % ------------------------------------------------------------------ 
 
+<<Make memory declarations>>=
+(*XXX*)
+let initialized_data asm expr = 
+    Impossible.unimp "initialized data in global memory declaration"
+
+(*XXX*)    
+let rec init env target asm = function
+    | A.InitAt(x,_)   -> init env target asm x
+    | A.InitExprs(es) -> foldl initialized_data asm es
+    | A.InitStr(s)    -> Impossible.unimp "initialized data in global memory declaration"
+    | A.InitUStr(s)   -> Impossible.unimp "initialized data in global memory declaration"
+@
+
+In order to reserve memory for data we have to know how many objects
+an sequence of initializing expressions defined. This number is
+returned by [[init_size]].
+
+<<Make memory declarations>>=
+let rec init_size = function
+    | None   -> 1
+    | Some i -> let rec loop = function 
+                    | A.InitAt(x,_)   -> loop x
+                    | A.InitExprs(es) -> List.length es
+                    | A.InitStr(s)    -> assert false
+                    | A.InitUStr(s)   -> assert false
+                in 
+                    loop i 
+@
+
+Data can be declared initialized or un-initialized. The amount of
+memory used by a declaration is the size of the base-type times the
+number of values of this type. 
+
+<<Make memory declarations>>=
+let memdecl (env:F.env) target asm t size ini = 
+    let sizeof  = astwidth env t / target.Target.memsize          in
+    let const e = Bits.to_int (compile_const env target e)     in
+    let n      = ( match size with
+                 | A.DynSize    -> init_size ini
+                 | A.NoSize     -> 1
+                 | A.FixSize(e) -> const e
+                 ) in
+        ( match ini with
+        | None    -> asm ++ Asm.zeroes (n * sizeof)
+        | Some ii -> init env target asm ii
+        )
+@
+
+Data can be declared globally inside a section or a section-level
+[[span]] and locally, inside a procedure as [[stackdata]].  The former
+is directly translated into assembly action that reserve memory inside
+a section, the latter becomes just an amount of memory that is
+allocated inside a procedure's activation record.  Since the amount of
+stack allocated data and the offsets associated with labels inside of
+it are already entered into the fat environment (by
+[[Elab.Check.stackdatum]]), stack data declaration can be ignored. 
+Global data declarations, on the other hand, must be translated to
+assembly actions.
+ 
+<<Make memory declarations>>=
+let rec datum env target asm = function
+    | A.DatumAt(x,_)        -> datum env target asm x
+    | A.Label(n)            -> asm ++ Asm.define_local (Asm.mksym n)
+    | A.Align(a)            -> asm ++ Asm.align a 
+    | A.MemDecl(t,m,init)   -> memdecl env target asm t m init
+@
+    
+% ------------------------------------------------------------------ 
+\subsection{Toplevel}
+% ------------------------------------------------------------------ 
+
+All global declarations have been processed at this stage and thus can
+be ignored.  The only exception are (global) register declarations. 
+Global registers can name a hardware register they are placed in.  We
+need ia way to record such an assignment.  All other locations for
+global registers are determined by an automaton, see module
+\module{callconv}. 
+
+A [[span]] on the section level must be pushed to the statement level: 
+when we come across a [[span]] we modify the properties [[props]]
+accordingly.  The next time we come across a procedure, the properties
+including the span will be used.
+
+<<Make toplevel>>=
+let rec sspan env target globals asm (e1,e2,ss) =    
+    let key   = compile_const env target e1 in
+    let value = link_const    env target globals e2 in
+    (* construct props value, pass it to section. not implemented *)
+        foldl (section env target globals) asm ss 
+
+<<Make toplevel>>=
+and section env target globals (asm: Asm.asm) = function
+    | A.SectionAt(x,_)     -> section env target globals asm x
+    | A.Decl(d)            -> asm
+    | A.Datum( d)          -> datum   env target         asm d
+    | A.Procedure(p)       -> proc    env target globals asm p
+    | A.SSpan ss           -> sspan   env target globals asm ss
+@            
+
+What to do with top-level procedures? They should go into some section
+because otherwise they will end up in whatever section is currently
+active which just seems wrong.
+
+<<Make toplevel>>=
+let rec toplevel env target globals asm = function
+    | A.ToplevelAt(x, _)  -> toplevel env target globals asm x
+    | A.Section(name, ss) -> 
+        let asm = asm ++ Asm.section name in  
+            foldl (section env target globals (*props*)) asm ss
+    | A.TopDecl(d)        -> asm (* nothing to do here *)
+    | A.TopProcedure(p)   -> let asm = asm ++ Asm.section default_section  
+                             in proc env target globals (*props*) asm p
+@
+
+
+% ------------------------------------------------------------------ 
+\subsubsection{Program}
+% ------------------------------------------------------------------ 
+
+Imports and exports of assembly symbols are announced once at the top
+of the assembly program.  The sets of imported and exported symbols
+are registered in the fat environment.  For details, see modules
+\module{mangle}, and \module{elab}. 
+
+<<Make translate program>>=
+let exports env asm = 
+    Fenv.StrSet.fold (fun s asm -> asm ++ Asm.export (Asm.mksym s)) 
+    (F.exported env) asm
+
+let imports env asm =
+    Fenv.StrSet.fold (fun s asm -> asm ++ Asm.import (Asm.mksym s)) 
+    (F.imported env) asm
+@
+
+The assembler maintains a current section. To guarantee that
+everything goes into a meaningful section, the first action is to
+start the [[text]] section.
+
+
+<<Make translate program>>=
+let program env target globals asm tt = 
+    let asm = asm ++ Asm.section "text"           in
+    let asm = exports env asm                     in
+    let asm = imports env asm                     in
+        foldl (toplevel env target globals) asm tt
+
+let translate env target prog =
+    let base     = Rtl.link "global base" target.Target.pointersize in (*XXX*)
+    let map,area = globals target base (F.regdecls env) in
+    let lookup   = lookup_global map in
+    let asm      = Asm.init () in
+        ( lookup
+        , program env target lookup asm prog  (* asm *)
+        )
+@    
