@@ -74,8 +74,8 @@ effect of storing a value to a location, and an expression that
 fetches a value from that location.
 
 <<basic types>>=
-type location = (Rtl.expr -> Rtl.rtl)          (* write value *)
-              * Rtl.expr                       (* read  parameter *)
+type location = (Rtl.exp -> Rtl.rtl)          (* write value *)
+              * Rtl.exp                       (* read  parameter *)
 @
 
 Of course, there is the automaton itself.  An automaton maintains an
@@ -145,8 +145,8 @@ thus is by far too specific.
 
 <<automaton.ml>>=
 type ty         =  Types.ty * string option
-type location   =  (Rtl.expr -> Rtl.rtl)
-                    * Rtl.expr
+type location   =  (Rtl.exp -> Rtl.rtl)
+                    * Rtl.exp
 
 let memsize     = 8  (* assumption for now, must be obtained from Fenv *)
 let pointer     = 32 (* ditto for pointer size *)
@@ -170,8 +170,8 @@ and [[write]]:
 
 <<type t>>=
 type t        =     { offset:       int
-                    ; read:         (int -> int -> Rtl.expr)
-                    ; write:        (int -> int -> Rtl.expr -> Rtl.rtl)
+                    ; read:         (int -> int -> Rtl.exp)
+                    ; write:        (int -> int -> Rtl.exp -> Rtl.rtl)
                     }
 @
 
@@ -221,7 +221,7 @@ let overflow dfa = { size  = dfa.offset
 
 <<module build>>=
 let offset k        = Rtl.bits (Bits.of_int k word) word
-let add             = Rtl.op "add" [word]
+let add             = Rtl.opr "add" [word]
 let sum x y         = Rtl.app add [x;y]
 
 let regsp = Rtl.cell Rtl.none

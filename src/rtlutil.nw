@@ -32,8 +32,8 @@ but not for conditions.  Applying [[width]] to a condition will result
 in an assertion failure.  
 
 <<rtlutil.mli>>=
-val locwidth  : Rtl.location -> Rtl.width
-val locwidth' : Rtl.Private.location -> Rtl.width
+val locwidth  : Rtl.loc -> Rtl.width
+val locwidth' : Rtl.Private.loc -> Rtl.width
   (* always succeeds *)
 @ 
 
@@ -54,9 +54,9 @@ type 'a regfun = Rtl.space -> index:int -> Rtl.width -> 'a -> 'a
 val read_write_sets : read:'a regfun -> write:'a regfun -> Rtl.rtl -> 'a -> 'a
 @ 
 <<obsolete and deprecated?>>=
-val width:      Rtl.expr -> int                 (* width of expression *)
+val width:      Rtl.exp -> int                 (* width of expression *)
   (* often faults with assertion failure *)
-val assign:     Rtl.location -> Rtl.expr -> Rtl.rtl
+val assign:     Rtl.loc -> Rtl.exp -> Rtl.rtl
 @
 <<rtlutil.ml>>=
 module RP = Rtl.Private
@@ -64,9 +64,9 @@ let locwidth' = function
     | RP.Cell(_,_,w,_,_) -> w
     | RP.Var(_,_,w)      -> w
     | RP.Slice(w, _, _)  -> w
-let locwidth l = locwidth' (Rtl.Convert.location l)
+let locwidth l = locwidth' (Rtl.Convert.loc l)
 
-let width e = match Rtl.Convert.expr e with
+let width e = match Rtl.Convert.exp e with
     | RP.Const(RP.Bool _)     -> assert false
     | RP.Const(RP.Bits (_,w)) -> w
     | RP.Const(RP.Link (_,w)) -> w

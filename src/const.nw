@@ -27,19 +27,19 @@ We want to borrow the notion of ``link-time constant'' but use it for
 compile-time constants.
 
 <<const.mli>>=
-val register : string -> int -> Rtl.expr
+val register : string -> int -> Rtl.exp
   (* Creates a named value of a given width. The name is registered in
      the interface such that it can be refined by calls to [[make_equal]].
    *) 
 
-val lookup : string -> Rtl.expr
+val lookup : string -> Rtl.exp
   (* Returns the RTL expression denoting the value of the constant
      with the given name.  Does *not* always return the
      same value; for example, if the name gets bound to a constant,
      that may change the result returned by value. *)
 
-exception Cannot_solve of Rtl.expr * Rtl.expr
-val make_equal : Rtl.expr -> Rtl.expr -> unit
+exception Cannot_solve of Rtl.exp * Rtl.exp
+val make_equal : Rtl.exp -> Rtl.exp -> unit
 
   (* updates internal bindings for compile-time constants to force these two
      expressions equal.  Raises Cannot_solve if equating the 
@@ -76,7 +76,7 @@ let lookup id =
     try Hashtbl.find bindings id
     with Not_found -> assert false
 
-exception Cannot_solve of Rtl.expr * Rtl.expr
+exception Cannot_solve of Rtl.exp * Rtl.exp
 @
 
 The [[make_equal]] function is extremely limited: it can only be used
@@ -84,7 +84,7 @@ to replace a link-time constant with another value.
 
 <<const.ml>>=
 let make_equal x y =
-    match Rtl.Convert.expr x with
+    match Rtl.Convert.exp x with
     | Rtl.Private.Const (Rtl.Private.Link(id,w)) -> Hashtbl.add bindings id y
     | _                                          -> raise (Cannot_solve(x,y))
 @

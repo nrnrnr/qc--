@@ -110,7 +110,7 @@ type formal =   { name:      string
                 ; index:     int             (* run-time API *)
                 } 
 
-type actual     = Rtl.expr 
+type actual     = Rtl.exp 
                 * Rtl.width 
                 * string option               (* hint *)
 @
@@ -152,7 +152,7 @@ module Props : sig
     type t          (* properties *)
 
     val empty       : t
-    val add_span    : Bits.bits -> Rtl.expr -> t -> t
+    val add_span    : Bits.bits -> Rtl.exp -> t -> t
     val add_comment : string -> t -> t 
 end    
     
@@ -188,9 +188,9 @@ continuation at its point of return.
 <<signature S>>=
 (* 0 successor nodes *)
 val exit:       cfg -> unode
-val goto:       cfg -> Rtl.expr -> label list -> unode
-val jump:       cfg -> Rtl.expr -> label list -> unode
-val cutto:      cfg -> Rtl.expr -> cuts       -> unode
+val goto:       cfg -> Rtl.exp -> label list -> unode
+val jump:       cfg -> Rtl.exp -> label list -> unode
+val cutto:      cfg -> Rtl.exp -> cuts       -> unode
 val return:     cfg -> int -> int             -> unode
 @
 
@@ -208,7 +208,7 @@ val entry:      node -> unode                   (* unique entry node *)
 val assign:     Rtl.rtl -> node -> unode
 val copyi:      formal list -> context -> Target.cc -> node -> unode
 val copyo:      actual list -> context -> Target.cc -> node -> unode
-val call:       Rtl.expr -> node -> cuts -> unode 
+val call:       Rtl.exp -> node -> cuts -> unode 
 @
 
 A [[branch]] node has two successors: the first is taken when its
@@ -218,7 +218,7 @@ branching point is reached.
 
 <<signature S>>=
 (* 2 successor nodes *)
-val branch  : Rtl.expr -> node -> node -> unode
+val branch  : Rtl.exp -> node -> node -> unode
 @
 
 
@@ -316,17 +316,17 @@ informations will be added.
 and  kind       = Deferred
                 (* end of a path *) 
                 | Exit
-                | Goto              of Rtl.expr * node list     
-                | Jump              of Rtl.expr * node list
-                | Cutto             of Rtl.expr * cuts
+                | Goto              of Rtl.exp * node list     
+                | Jump              of Rtl.exp * node list
+                | Cutto             of Rtl.exp * cuts
                 | Return            of int * int
                 (* one default successor *)
                 | Entry             of node
-                | Call              of Rtl.expr * node * cuts
+                | Call              of Rtl.exp * node * cuts
                 | Assign            of Rtl.rtl * node
                 | Label             of Acfg.label * node
                 (* two successors *)
-                | Branch            of Rtl.expr * node * node
+                | Branch            of Rtl.exp * node * node
 @
 
 Continuations, that a [[call] or [[cutto]] node may reach, are
@@ -357,7 +357,7 @@ number of comments and can be part of any number of spans.
 
 <<module Props>>=
 type t =        { comments:         string list
-                ; spans:            (Bits.bits * Rtl.expr) list
+                ; spans:            (Bits.bits * Rtl.exp) list
                 }
                         
 let empty           = { comments = []; spans = [] }
@@ -899,7 +899,7 @@ as follows:
 \begin{itemize}
 \item A function [[expand_rtl]] expands a single {\rtl} into a list
       of {\rtl}s. The single {\rtl} is taken from the node being
-      expanded. In case this node contains a [[Rtl.expr]] value, it is
+      expanded. In case this node contains a [[Rtl.exp]] value, it is
       converted to an {\rtl} using one of the [[target#mk*]] methods.
       
 \item The last {\rtl} in the list returned by [[expand_rtl]] is used to
@@ -1135,7 +1135,7 @@ control to code that receives the values.
 
 Constructing the {\rtl} that assigns the value of an actual parameter
 to a location is easy:  the calling convention automaton returns a
-function [[write:  Rtl.expr -> Rtl.effect]] that
+function [[write:  Rtl.exp -> Rtl.effect]] that
 assigns a supplied value to the right location.
               
 <<copyio>>=

@@ -26,21 +26,21 @@ This code will one day be replaced by a small interpreter for constant
 expressions.
 
 <<consteval.mli>>=
-exception Not_constant of Rtl.expr
+exception Not_constant of Rtl.exp
 
 type relexpr
   (* a relocatable expression, suitable for using as a link-time
      constant in an assembler---needs to be connected with Asm2.S *)
-  = Rtl.expr (* a temporary expedient *)
+  = Rtl.exp (* a temporary expedient *)
 
-val compile : Rtl.expr -> Bits.bits   (* a compile-time constant *)
-val link    : Rtl.expr -> relexpr
+val compile : Rtl.exp -> Bits.bits   (* a compile-time constant *)
+val link    : Rtl.exp -> relexpr
 @
 <<consteval.ml>>=
-exception Not_constant of Rtl.expr
-type relexpr = Rtl.expr (* a flagrant cheat *)
+exception Not_constant of Rtl.exp
+type relexpr = Rtl.exp (* a flagrant cheat *)
 
-let compile e = match Rtl.Convert.expr e with
+let compile e = match Rtl.Convert.exp e with
   | Rtl.Private.Const(Rtl.Private.Bits(bits,w)) -> bits
   | _ -> raise (Not_constant e)
     (* should really try to use Const.lookup to evaluate ``link-time''

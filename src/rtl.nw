@@ -82,31 +82,31 @@ from the abstract syntax tree.
 
 A constant expression can be a boolean value, a number of bits, or a
 link-time value, which has a name. A [[fetch]] creates an expression
-that represents the value stored in a [[location]]. Operators [[op]]
+that represents the value stored in a [[loc]]. Operators [[op]]
 can be applied to values and return a value.
 
 <<types and functions exported at top level>>=
-type expr         (* denotes a compile-time or run-time value *)
-type location     (* mutable container of a bit vector *)
+type exp          (* denotes a compile-time or run-time value *)
+type loc          (* mutable container of a bit vector *)
 type rtl          (* effect of a computation *)
-type op           (* a pure function on values *)
+type opr          (* a pure function on values *)
 type assertion    (* a claim about the run-time value of an address *)
 
-val bool      : bool -> expr                    (* const *)
-val bits      : Bits.bits -> width -> expr      (* const *)
-val link      : string -> width -> expr         (* const *)
-val fetch     : location -> width -> expr
-val app       : op -> expr list -> expr
+val bool      : bool -> exp                    (* const *)
+val bits      : Bits.bits -> width -> exp      (* const *)
+val link      : string -> width -> exp         (* const *)
+val fetch     : loc -> width -> exp
+val app       : opr -> exp list -> exp
 
-val op        : string -> width list -> op
+val opr       : string -> width list -> opr
 @
 
 
-A [[location]] may be
+A [[loc]] may be
 \begin{itemize}
 \item
 A \emph{cell} that belongs to some [[space]],
-where it has an address [[expr]].
+where it has an address [[exp]].
 We always have an [[assertion]] that tells us facts about the possible
 run-time values of the address.
 These assertions represent guarantees made by the front end.
@@ -120,24 +120,24 @@ width and least-significant bit.
 <<types and functions exported at top level>>=
 val none     : assertion
 val aligned  : int -> assertion
-val cell     : assertion -> space -> aggregation -> width -> expr -> location
-val var      : string -> int -> width -> location
-val slice    : width -> lsb:int -> location -> location
+val cell     : assertion -> space -> aggregation -> width -> exp -> loc
+val var      : string -> int -> width -> loc
+val slice    : width -> lsb:int -> loc -> loc
 @
 
-An effect alters one or more [[location]]s.  A [[store]] puts the value of
-[[expr]] into a location; a [[kill]] invalidates a location's content.
+An effect alters one or more [[loc]]s.  A [[store]] puts the value of
+[[exp]] into a location; a [[kill]] invalidates a location's content.
 Effects are represented as {\rtl}s.
 %
 <<types and functions exported at top level>>=
-val store     : location -> expr -> width -> rtl
-val kill      : location -> rtl
+val store     : loc -> exp -> width -> rtl
+val kill      : loc -> rtl
 @
 
 A register-transfer list {\rtl} may be guarded; to execute a guarded
 \rtl, if the guard is false, do nothing, otherwise perform the \rtl.
 A guard must be a boolean expression.  The function [[guard]] takes a
-boolean expression [[expr]] and an [[rtl]] and produces a guarded \rtl.
+boolean expression [[exp]] and an [[rtl]] and produces a guarded \rtl.
 
 The function [[par]] composes \rtl s in parallel.
 A parallel composition simultaneously performs the effects of all
@@ -148,7 +148,7 @@ more RTLs that assign to the same location; such a parallel
 composition is not meaningful.
 
 <<types and functions exported at top level>>=
-val guard     : expr -> rtl -> rtl
+val guard     : exp -> rtl -> rtl
 val par       : rtl list -> rtl
 @
 
@@ -168,10 +168,10 @@ outside of [[Private]] from inside [[Private]] that is also declared
 inside [[Private]]. 
 
 <<CONV>>=
-val expr:       expr     -> Private.expr
-val location:   location -> Private.location
+val exp:        exp      -> Private.exp
+val loc:        loc      -> Private.loc       
 val rtl:        rtl      -> Private.rtl
-val op:         op       -> Private.op
+val opr:        opr      -> Private.opr
 @
 
 % ------------------------------------------------------------------ 
@@ -198,10 +198,10 @@ scheme and the [[width list]] a monomorphic type of the operator can
 be deduced.
 
 <<representation exposed in the private interface>>=
-type op          = string * width list
+type opr         = string * width list
 @
 
-Expressions provide values to be stored in [[locations]] as well as
+Expressions provide values to be stored in [[loc]]s as well as
 addresses local to a [[space]].  An expression can access constant
 values and values fetched from memory.  A fetch from memory makes the
 [[width]] number of fetched bits explicit.  A label denotes a {\PAL}
@@ -212,35 +212,35 @@ type const      = Bool      of bool
                 | Bits      of Bits.bits * width
                 | Link      of string * width         (* link time constant *)
 
-type expr       = Const     of const               
-                | Fetch     of location * width 
-                | App       of op * expr list
+type exp        = Const     of const               
+                | Fetch     of loc * width 
+                | App       of opr * exp  list
 @
 
 A location describes a memory location or register on the target
 architecture or a {\PAL} register. The code generation will remove all
 {\PAL} registers and provide memory locations for them. A memory
 [[cell]] lives in an address [[space]] at the address denoted by
-[[expr]]. In order to fetch [[width]] bits at once several memory
+[[exp]]. In order to fetch [[width]] bits at once several memory
 units from the chosen [[space]] must be aggregated. For example, a 32
 bit fetch must aggregate 4 8-bit values when the memory space is made
 by 8-bit bytes. The aggregation is described by a value of the type
 [[aggregation]]. 
 
 <<representation exposed in the private interface>>=
-and  location  = Cell       of space 
+and  loc       = Cell       of space 
                             *  aggregation
                             *  width
-                            *  expr
+                            *  exp 
                             *  assertion
                         
                 | Var       of string    (* name from C-- source   *)
                             *  int       (* index for run-time API *)
                             *  width
 
-                | Slice     of width    (* number of bits in location *)
+                | Slice     of width    (* number of bits in loc *)
                             *  int      (* index of least-significant bit of slice *)
-                            * location  (* location from which slice is drawn *)
+                            *  loc  (* location from which slice is drawn *)
 @ Bits are numbered with the least-significant bit as bit~0.
 @
 
@@ -252,19 +252,19 @@ type  aggregation           = BigEndian
 @
 
 An [[effect]] is describes an assignment of a [[width]] bits value obtained
-from an expression [[expr]], or a [[Kill]]. A killed location contains an
+from an expression [[exp]], or a [[Kill]]. A killed location contains an
 undefined value.
 
 <<representation exposed in the private interface>>=
-type effect     = Store     of location * expr * width
-                | Kill      of location
+type effect     = Store     of loc * exp  * width
+                | Kill      of loc
 @
 
 A guarded effect is pair of an expression and an effect. The effect takes
 place, if and only if the expression evaluates to [[true]].      
 
 <<representation exposed in the private interface>>=
-type guarded    = expr * effect
+type guarded    = exp  * effect
 @
 
 And finally, a \emph{register-transfer list} is a list of guarded
@@ -320,10 +320,10 @@ hidden by the interface.
 
 <<definitions of types and functions exported at top level>>=
 open Private
-type expr      = Private.expr     
-type location  = Private.location   
+type exp       = Private.exp     
+type loc       = Private.loc   
 type rtl       = Private.rtl        
-type op        = Private.op         
+type opr       = Private.opr        
 type assertion = Private.assertion  
 @
 <<definitions of types and functions exported at top level>>=
@@ -370,7 +370,7 @@ let bits bits width         =
 let link name width         = Const (Link(name,width))
 let fetch loc width         = Fetch(loc,width)
 let app op exprs            = App(op,exprs)
-let op name widths          = (name,widths)
+let opr name widths         = (name,widths)
 
 (* location *)
 let cell assertion sp agg width expr  = Cell(sp,agg,width,expr,assertion)
@@ -388,9 +388,9 @@ private values have the same representation.
 
 <<Conv>>=
 let id          = fun x -> x
-let expr        = id
-let location    = id
+let exp         = id
+let loc         = id
 let rtl         = id
-let op          = id
+let opr         = id
 @
 

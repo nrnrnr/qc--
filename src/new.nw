@@ -49,7 +49,7 @@ type spec  (* specification of an automaton (immutable) *)
 type t   (* an automaton (mutable) *)
 type loc (* a location provided by an automaton *)
 
-val mk : spec -> Rtl.expr -> t
+val mk : spec -> Rtl.exp -> t
   (* supply an address of the overflow area, and get back an
      automaton in its initial state *)
 
@@ -58,7 +58,7 @@ val ty    : t -> Types.ty * string option -> loc
 val block : t -> width    * align         -> loc    
 
 
-type area = { address : Rtl.expr    (* address of memory block *)
+type area = { address : Rtl.exp    (* address of memory block *)
             ; align   : align       (* at run time, must have address mod align = 0 *)
             ; size    : int
             } 
@@ -68,8 +68,8 @@ val freeze : t -> area
 @
 Here's what we do with locations:
 <<new.mli>>=
-val fetch : loc -> width -> Rtl.expr
-val store : loc -> Rtl.expr -> width -> Rtl.rtl
+val fetch : loc -> width -> Rtl.exp
+val store : loc -> Rtl.exp -> width -> Rtl.rtl
 @
 It's possible that several overflow areas, with disjoint lifetimes,
 can be overlapped in a single location in memory.
@@ -101,13 +101,13 @@ type size  = int
 
 type spec       = BottomUp of Target.t
 
-type area =     { address:      Rtl.expr
+type area =     { address:      Rtl.exp
                 ; align:        align
                 ; size:         size
                 }
 
-type loc =      { store:    (Rtl.expr -> Rtl.rtl)
-                ; fetch:    Rtl.expr
+type loc =      { store:    (Rtl.exp -> Rtl.rtl)
+                ; fetch:    Rtl.exp
                 }
                 
 class type automaton = object
@@ -125,7 +125,7 @@ where $k \ge 0$ is increased accoring to the size and alignment
 requirements of requests.
 
 <<new.ml>>=
-class bottomup (base: Rtl.expr) (target: Target.t) =
+class bottomup (base: Rtl.exp) (target: Target.t) =
     let wrd = target#wordsize                                         in
     let ptr = target#pointersize                                      in
     let agg = target#byteorder                                        in

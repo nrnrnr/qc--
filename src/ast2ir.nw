@@ -220,10 +220,10 @@ let rec actual env (target: Target.t) globals (hint, e) =
 \subsubsection{Expressions}
 % ------------------------------------------------------------------ 
 
-[[expr]] translates an {\small AST} expression into an [[Rtl.expr]].  
+[[expr]] translates an {\small AST} expression into an [[Rtl.exp]].  
 
 A variable as part of an expression denotes a value; it is translated
-into a [[Rtl.expr]].  Depending on the denotation of the variable it
+into a [[Rtl.exp]].  Depending on the denotation of the variable it
 becomes a constant of either link-time or compile-time, or something
 more complicated.  If the variable is a local register, it becomes a
 [[Rtl.var]] value, if it is global, it can be looked up in
@@ -273,7 +273,7 @@ and variable (env: F.env) (target: Target.t) globals = function
 and primOp env (target: Target.t) globals op args =
     let (o, ws) = Expr.op env target op args 
     in
-        Rtl.app (Rtl.op o ws) (List.map (expr env target globals) args)
+        Rtl.app (Rtl.opr o ws) (List.map (expr env target globals) args)
 
 and expr env (target: Target.t) globals = function 
     | A.ExprAt(x,_)         -> expr env target globals x
@@ -332,7 +332,7 @@ computing the value to be stores.  The expression is already an
 [[variable]], but I haven't checked carefully. ---NR}
 
 <<module Make>>=
-let rec assign env target globals lhs (e: Rtl.expr) = match lhs with
+let rec assign env target globals lhs (e: Rtl.exp) = match lhs with
     | A.LValueAt(x,_)  -> assign env target globals x e
     | A.Var(hint,x)    ->
         let (_,(denot,t)) = F.findv x env in
@@ -748,7 +748,7 @@ with an [[Automaton.location]].  Such a value consists of a function
 to write a value to a register, and an expression to read a register's
 value.
 
-Hardware registers are known as [[Rtl.locations]], which differ from
+Hardware registers are known as [[Rtl.locs]], which differ from
 an [[Automaton.location]]. The function [[reg2loc]] constructs an
 [[Automaton.location]] for a hardware register.
 
