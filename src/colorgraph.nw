@@ -343,6 +343,8 @@ These lists are collected in the [[moveLG]] list-group.
 Additional information is also stored:
 \begin{itemize}
 \item [[regToItem]] - map from temps to list-group items
+\item [[numUses]] - map from temps to number of uses
+\item [[liveRange]] - map from temps to number of nodes over which it is live
 \item [[spills]]    - short-living temps introduced for spilling (spill temps)
 \item [[spillMap]]  - map from the original temps to spill temps
 
@@ -380,6 +382,8 @@ type 'a colorGraph = { mutable adjSet : EdgeSet.t
                      ; mutable luaColorOverride : 'a
                      ; mutable allColors : color list
                      ; mutable colors : RS.t SpaceMap.t
+                     ; mutable numUses   : int RM.t
+                     ; mutable liveRange : int RM.t
                      ; mutable k : int
                      }
 @
@@ -437,6 +441,8 @@ let cgInfo =
      ; colors = SpaceMap.empty
      ; allColors = []
      ; k = 0
+     ; numUses   = RM.empty
+     ; liveRange = RM.empty
      }
 
 let allocatable cc = RS.elements (cc.C.pre_nvregs ++ cc.C.volregs)
@@ -484,6 +490,8 @@ let clearCGInfo cg (cfg, ({Proc.cc = colors} as proc)) =
   let () = cg.moveLG <- moveFn in
 
   let () = cg.allColors <- allocatable colors in
+  let () = cg.numUses   <- RM.empty in
+  let () = cg.liveRange <- RM.empty in
   let () =
   (match cg.luaColorOverride with
    | V.Nil      -> ()
@@ -603,6 +611,8 @@ let build cg (cfg, ({Proc.target = target} as proc)) =
   (*Debug.eprintf "color" "build regs: %s" (Register.Set.to_string regs);*)
   let regMap =
     RS.fold (fun r map -> resetDegree target cg r;
+                          cg.numUses <- RM.add r 0 cg.numUses;
+                          cg.liveRange <- RM.add r 0 cg.liveRange;
                           let lst = if is_tmp target r then Initial else Precolored in
                           RM.add r (ilg_add cg.tempLG lst r) map)
             regs cg.regToItem in
@@ -620,7 +630,10 @@ coalescing.
 
 TEST CASE: try an instruction with multiple defs. Each def must interfere with the
 other defs.
+
+IT WOULD REALLY BE GREAT TO HAVE REAL EXECUTION COUNTS FOR THE numUses ADJUSTMENT.
 <<addInterference>>=
+let intMapAdd t v map = RM.add t ((try RM.find t map with Not_found -> 0) + v) map in
 let addInterference block =
   let (head, last) = GR.goto_end (GR.unzip block) in
   let addEdges live defs uses =
@@ -628,7 +641,12 @@ let addInterference block =
     let addAllEdges def =
       RS.iter (fun liveNode -> addEdge target cg liveNode def) live in
     RS.iter addAllEdges defs in
-  let add_and_upd live defs uses = (addEdges live defs uses; uses ++ (live -- defs)) in
+  let add_and_upd live defs uses =
+    ( RS.iter (fun t -> cg.numUses   <- intMapAdd t 1 cg.numUses)   uses
+    ; RS.iter (fun t -> cg.liveRange <- intMapAdd t 1 cg.liveRange) live
+    ; addEdges live defs uses
+    ; uses ++ (live -- defs)
+    ) in
   let rec vis_head h live = match h with
     | GR.First f -> ()
     | GR.Head (h, m) ->
@@ -928,20 +946,23 @@ The choice of which node to spill here is an important policy decision.
 <<selectSpill>>=
 let selectSpill cg (cfg, proc) =
   Debug.eprintf "color" "color::selectSpill()\n"; flush stderr;
-  let rec findSpill lst =
-    match lst with
-    | Some t when not (RS.mem t.v cg.spills) ->
-      let () = ilg_switch cg.tempLG SimplifyWorklist t in
-      let () = freezeMoves t cg in
-      true
-    | Some t -> findSpill t.next
-    | None when Aux.Option.is_none (!(cg.tempLG SpillWorklist)) -> false
-    | None ->    (* only spill temps on spillworklist -> bug!!! *)
-      ( Cfgutil.print_cfg cfg
-      ; print_cgInfo cg
-      ; Impossible.impossible ("only spill temps remain on spillworklist!")
-      ) in
-  ((cfg, proc), findSpill (!(cg.tempLG SpillWorklist)))
+  let lst = !(cg.tempLG SpillWorklist) in
+  match lst with
+  | None   -> ((cfg, proc), false)
+  | Some t ->
+    let cheaper ({v = v} as t) (cost, _ as best) =
+      let i2f = float_of_int in
+      let cost' = (i2f (RM.find v cg.numUses)) /.
+                  (i2f (RM.find v cg.liveRange) *. i2f (RM.find v cg.degreeMap)) in
+      if cost' <. cost then (cost', t) else best in
+    let (_, spillee) = ilg_fold cheaper lst (infinity, t) in
+    if RS.mem spillee.v cg.spills then
+      imposs "Graph coloring ralloc chose to spill a previously spilled temp...."
+    else
+      ( ilg_switch cg.tempLG SimplifyWorklist spillee
+      ; freezeMoves spillee cg
+      ; ((cfg, proc), true)
+      )
 @
 
 %-------------------------------------------------------------------
