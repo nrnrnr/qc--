@@ -46,6 +46,7 @@ describe the location.
 type pretty         = string                    (* for the moment *)
 
 type location       = Pos    of Srcmap.pos
+                    | Reg    of Srcmap.reg
                     | Point  of Srcmap.point
                     | NoPos  
 
@@ -54,6 +55,7 @@ exception ErrorAt  of    location * pretty
 val errorAt :      location     -> pretty -> 'a
 val errorAtPoint : Srcmap.point -> pretty -> 'a
 val errorAtPos :   Srcmap.pos   -> pretty -> 'a
+val errorAtReg :   Srcmap.reg   -> pretty -> 'a
 val error :                        pretty -> 'a
 
 @ Combinators to deal with functions that do not naturally expect 
@@ -149,6 +151,7 @@ type 'a error       = Error                     (* bad result  *)
 type pretty         = string                    (* for the moment *)
 
 type location       = Pos    of Srcmap.pos
+                    | Reg    of Srcmap.reg
                     | Point  of Srcmap.point
                     | NoPos  
 
@@ -246,13 +249,15 @@ let catch printer f arg = catch' Error printer f arg
                          
 let errorAt      loc msg = raise (ErrorAt(loc,msg))
 let errorAtPos   pos msg = raise (ErrorAt(Pos(pos),msg))
+let errorAtReg   reg msg = raise (ErrorAt(Reg(reg),msg))
 let errorAtPoint pnt msg = raise (ErrorAt(Point(pnt),msg))
 let error            msg = raise (ErrorAt(NoPos,msg))
 
 let warningPrt pos msg = 
     ( match pos with
     | Point(p) ->  prerr_string (Srcmap.Str.point p)
-    | Pos(p)   ->  prerr_string (string_of_int p)
+    | Reg(l,r) ->  Printf.eprintf "%d-%d" l r
+    | Pos(p)   ->  Printf.eprintf "%d" p
     | NoPos    ->  ()
     )
     ; prerr_string " Warning: "
@@ -263,7 +268,8 @@ let warningPrt pos msg =
 let errorPrt pos msg = 
     ( match pos with
     | Point(p) ->  prerr_string (Srcmap.Str.point p)
-    | Pos(p)   ->  prerr_string (string_of_int p)
+    | Reg(l,r) ->  Printf.eprintf "%d-%d" l r
+    | Pos(p)   ->  Printf.eprintf "%d" p
     | NoPos    ->  ()
     )
     ; prerr_string " Error: "

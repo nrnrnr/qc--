@@ -22,7 +22,6 @@ type id         = string
 module ID       = struct type t=id let compare=compare end
 module IDSet    = Set.Make(ID)
 module Symbol   = Env.Make(ID)
-open Symbol
 
 (* implement: error for duplicate entries *)
         
@@ -37,6 +36,19 @@ let rec ty = function
     | TyAt(x,_)       -> ty x
     | BitsTy(n)       -> Types.Bits(n)
     | FloatTy(n)      -> Types.Bits(n)
+
+(* environments *)
+
+let ok x = Ok(x)
+
+let enter key v env =
+    if Symbol.domain key env then
+        error ("identifier already declared: " ^ key)
+    else
+        Symbol.enter key v env        
+
+let lookup = Symbol.lookup
+
 
 (* ------------------------------------------------------------------ *)
     
@@ -53,12 +65,12 @@ module Phase1 = struct
     let register env ( v , t, n, reg) = enter n (ty t, Register) env
 
     let rec stmt env = function
-        | StmtAt(x,_)                         -> stmt env x
-        | IfStmt ( e, ss1, ss2)               -> let env' = stmts env ss1 in
-                                                    stmts env' ss2 
-        | LabelStmt(n)                        -> enter n (pointer,Memory) env
-        | SpanStmt(e1,e2,ss)                  -> stmts env ss
-        | _                                   -> env
+        | StmtAt(x,_)                 -> stmt env x
+        | IfStmt ( e, ss1, ss2)       -> let env' = stmts env ss1 in
+                                            stmts env' ss2 
+        | LabelStmt(n)                -> enter n (pointer,Memory) env
+        | SpanStmt(e1,e2,ss)          -> stmts env ss
+        | _                           -> env
         
     and stmts env ss = foldl stmt env ss
 
@@ -85,8 +97,8 @@ module Phase1 = struct
         | Pragma          -> env
 
     let program ds srcmap = 
-        let env = empty     in
-            List.fold_left topdecl env ds  
+        let env = Symbol.empty     in
+            foldl topdecl env ds  
 
 end
 
@@ -121,7 +133,7 @@ module Print = struct
         end
      
     let ppEnv env =
-        let entries = dump env in
+        let entries = Symbol.dump env in
         vgrp begin
         ~~ list break ppEntry entries
         ^^ break
@@ -157,11 +169,11 @@ let eq    = function
     | [IntConst(x);IntConst(y)] -> BoolConst(x=y)
     | _                         -> assert false
 
-let primOps = enterList
+let primOps = Symbol.enterList
     [  "add"    , (add  , proc [bitsv 1; bitsv 1] (bitsv 1))
     ;  "mult"   , (mult , proc [bitsv 1; bitsv 1] (bitsv 1))
     ;  "eq"     , (eq   , proc [bitsv 1; bitsv 1] bool)
-    ] empty
+    ] Symbol.empty
     
 let dummy env   = bool, BoolConst(true), env 
 let atoi        = int_of_string
@@ -178,7 +190,8 @@ and evalPrimOp set env op args =
     let f, t     = lookup op primOps       in 
     let xt       = List.map fst xs         in
     let xv       = List.map snd xs         in
-    let sigma    = ( try Types.unify t (proc xt bool) Types.empty with 
+    let unused   = bool                    in
+    let sigma    = ( try Types.unify t (proc xt unused) Types.empty with 
                    | Types.UnifyExn -> error "type mismatch"
                    ) in
     let rt       = ( match Types.subst sigma t with
@@ -225,7 +238,7 @@ let eval env =
         | _, Constant(ExprConst(_))   -> id::l
         | _                           -> l
         ) in
-    let keys = fold accConst env [] in
+    let keys = Symbol.fold accConst env [] in
     let eval env id = trd3 (evalConst IDSet.empty env id) in
         foldl eval env keys    
 
