@@ -210,7 +210,7 @@ Cmm_Cont Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n,
 
                       "CMM.define_label('_boot_f_%u')\n"
                       "CMM.skip(%d)\n"
-                      "CMM.procedure('_boot_proc_%u',1,0)\n"
+                      "CMM.procedure('_boot_proc_%u',1,0, {})\n"
                       "CMM.push_symbol('_boot_x_%u')\n"
 
                       "CMM.fetch(%d,%s,%d)\n"
@@ -339,7 +339,7 @@ the given activation is at the beginning of the thread's stack (is located
 at [[t->stack_base]]).
 <<stack-walking functions>>=
 int Cmm_isOldestActivation(const Cmm_Activation *a) {
-  return (a->caller == NULL);
+  return (a->caller->caller == NULL);
 }
 @ 
 
@@ -363,7 +363,7 @@ conditionally changes a given activation handle--depending on whether we
 have walked off the stack or not.
 <<stack-walking functions>>=
 int Cmm_ChangeActivation(Cmm_Activation *a) {
-  if (a->caller == NULL)
+  if (a->caller->caller == NULL)
     return 0;
   else {
     (*a) = *(a->caller);
@@ -409,13 +409,29 @@ void *Cmm_FindDeadLocalVar(const Cmm_Activation *a, unsigned n) {
 
 [[Cmm_FindStackData]] should return a pointer to the location in memory
 associated with the given activation's [[n]]th stackdata label.
-\emph{This function is unimplemented and causes an error message for now.}
+
 <<stack-walking functions>>=
 void *Cmm_FindStackData(const Cmm_Activation *a, unsigned n) {
-  runtime_sys_err("[runtime system] Cmm_FindStackData unimplemented");
+  table t = a->proc->stackdata_labels;
+  lua_State *L = t.L;
+  int nlabels;
+  unsigned offset;
 
-  /* we should not get down here for now */
-  return NULL;
+  /* look in table */
+  lua_pushtable(L, t);
+  nlabels = lua_getn(L, -1);
+  if (n >= nlabels)
+    runtime_sys_err("Cmm_FindStackData received too big of an 'n' for "
+                    "activation 'a' of procedure [%s]", a->name);
+
+  /* grab offset and pop Lua stack elements */
+  lua_rawgeti(L, -1, n+1);
+  lua_assert_isnumber(L, -1, "runtime system encountered bogus stackdata "
+                             "label offsets");
+  offset = (unsigned) lua_tonumber(L, -1);
+  lua_pop(L, 2); /* pop offset and table */
+
+  return (void *) ((dataptr)(a->stackdata) + offset);
 }
 @ 
 

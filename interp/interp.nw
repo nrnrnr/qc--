@@ -996,6 +996,7 @@ We start by initializing the internal state of the interpreter:
   uid          u;
 
   actptr       caller;
+  procedure   *curr_proc = NULL;
   const char  *name = NULL;
 
   assert(t != NULL);
@@ -1011,7 +1012,6 @@ We start by initializing the internal state of the interpreter:
   <<allocate memory for globals>>
 
   /* reset global variables */
-  curr_proc     = NULL;
   values.s_free = values.s_base - 1;
 @ 
 
@@ -1037,6 +1037,7 @@ frame record.
   u             = act->u;
   caller        = act->caller;
   name          = act->name;
+  curr_proc     = act->proc;
 @
 
 By now we should know how many globals are used in the source {\PAL} code;
@@ -1439,6 +1440,7 @@ To save the caller's activation record, we simply use the next free [[activation
                            saved->u             = u;
 						   saved->caller        = caller;
                            saved->name          = name;
+                           saved->proc          = curr_proc;
 
 						   /* also save pc in thread record */ 
 						   t->pc                = saved->pc;
@@ -1507,6 +1509,7 @@ Unfortunately we cannot support an infinite number of C function types.
                              saved->u             = u;
                              saved->caller        = caller;
                              saved->name          = name;
+                             saved->proc          = curr_proc;
 
                              /* also save pc in t */
                              t->pc                = saved->pc;
@@ -1534,6 +1537,7 @@ Unfortunately we cannot support an infinite number of C function types.
                              u             = saved->u;
                              caller        = saved->caller;
                              name          = saved->name;
+                             curr_proc     = saved->proc;
                            }
 
                            pc = next;
@@ -1847,6 +1851,7 @@ away [[next]] so that we do not end up in an infinite loop.
                                saved->u             = u;
                                saved->caller        = caller;
                                saved->name          = name;
+                               saved->proc          = curr_proc;
 
 						       /* also save pc in thread record */ 
 						       t->pc                = saved->pc;
@@ -1875,6 +1880,7 @@ Finally, restoring information from the destination activation is as simple as c
                            u             = dest_act->u;
                            caller        = dest_act->caller;
                            name          = dest_act->name;
+                           curr_proc     = dest_act->proc;
 
                            dest_act->callee = NULL;
 @

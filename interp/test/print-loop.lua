@@ -3,7 +3,7 @@
 CMM.exports({ "main" })
 CMM.imports({ "cmmprint16" })
 
-CMM.procedure("main", 2, 0)  -- BEGIN PROCEDURE main with 2 local variable
+CMM.procedure("main", 2, 0, {})  -- BEGIN PROCEDURE main with 2 local variable
 
 -- locals[0] := 10
    CMM.push_literal("0xa", 16)

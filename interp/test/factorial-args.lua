@@ -9,7 +9,7 @@ CMM.define_label("globals_backup")
 CMM.data(8,{"0","0","0","0"})
 CMM.end_section()
 CMM.section("text")
-CMM.procedure ('print',1,0) -- stack data size correct
+CMM.procedure ('print',1,0,{}) -- stack data size correct
 CMM.fetch_arg(0)
 CMM.store_local(0)
 CMM.fetch_local(0)
@@ -20,7 +20,7 @@ CMM.call({}, {}, {}, 0) -- cuts, unwinds, returns, aborts
 CMM.cmm_return(0,0)
 -- data flow node
 CMM.end_procedure()
-CMM.procedure ('factorial',1,0) -- stack data size correct
+CMM.procedure ('factorial',1,0,{}) -- stack data size correct
 CMM.fetch_arg(0)
 CMM.store_local(0)
 CMM.fetch_local(0)
@@ -31,7 +31,7 @@ CMM.push_symbol("factorial_helper")
 CMM.cmm_tail_call()
 -- data flow node
 CMM.end_procedure()
-CMM.procedure ('factorial_helper',2,0) -- stack data size correct
+CMM.procedure ('factorial_helper',2,0,{}) -- stack data size correct
 CMM.fetch_arg(1)
 CMM.store_local(1)
 CMM.fetch_arg(0)
@@ -71,7 +71,7 @@ CMM.cmm_tail_call()
 -- data flow node
 -- data flow node
 CMM.end_procedure()
-CMM.procedure ('main',2,0) -- stack data size correct
+CMM.procedure ('main',2,0,{}) -- stack data size correct
 CMM.fetch_arg(0)
 CMM.store_local(0)
 CMM.fetch_local(0)

@@ -1,7 +1,8 @@
 % -*- mode: Noweb; noweb-code-mode: c-mode -*- %
 
-\ifx\nointro\undefined
-This document contains the interface and implementation of the C  representations of {\PAL} control flow structures.
+\ifx\nointro\undefined 
+This document contains the interface and implementation of the C
+representations of {\PAL} control flow structures.
 \fi
 
 % ----------------------------------------------------------------------------
@@ -18,7 +19,6 @@ This document contains the interface and implementation of the C  representation
 #include "uid.h"
 
 <<type definitions>>
-<<global variable declarations>>
 
 <<function prototypes>>
 
@@ -29,16 +29,21 @@ This document contains the interface and implementation of the C  representation
 \subsection{Procedures}
 % ----------------------------------------------------------------------------
 
-The operational semantics for procedure-calling instructions require more information about procedures than simply program counters.  
-We create the type [[procedure]] to encapsulate the necessary information for representing procedures.  
-Note that we use [[RAddr]]s to represent addresses in program memory, for these structures are used during the interpretation of the input Lua script before sections of program memory are permanently located at addresses.  
-An [[RAddr]] is a relocatable address and is defined by the NJ Machine-Code Toolkit.
+The operational semantics for procedure-calling instructions require
+more information about procedures than simply program counters.  We
+create the type [[procedure]] to encapsulate the necessary information
+for representing procedures.  Note that we use [[RAddr]]s to represent
+addresses in program memory, for these structures are used during the
+interpretation of the input Lua script before sections of program
+memory are permanently located at addresses.  An [[RAddr]] is a
+relocatable address and is defined by the NJ Machine-Code Toolkit.
 
 <<type definitions>>=
-typedef struct {
+typedef struct procedure {
   RAddr         raddr;
   unsigned int  num_locals;
   unsigned int  stackdata_size;
+  table         stackdata_labels;
 } procedure;
 @
 
@@ -92,35 +97,20 @@ structures.
 #include "interp.h"
 #include <cii/arena.h>
 
-<<global variable definitions>>
 <<internal static variable definitions>>
 
 <<function definitions>>
-@
-
-To keep track of the current procedure, we use a global pointer.
-Note that this should be updated both at load-time \emph{and} at runtime,
-wherever possible.
-With debugging in mind, you can determine the name of the currently executing
-{\PAL} procedure by examining the string [[curr_proc->raddr->label->name]].
-
-<<global variable declarations>>=
-extern procedure *curr_proc;
-@ 
-
-<<global variable definitions>>=
-procedure *curr_proc = NULL;
 @
 
 % ----------------------------------------------------------------------------
 \subsection{Memory Allocation}
 % ----------------------------------------------------------------------------
 
-We make use of Hanson's ``arenas'' (see \emph{C Interfaces and Implementations})
-to assist in allocating and de-allocating memory for control-flow related
-structures.
-We use one shared arena for [[procedure]]s and 
-[[annotations]] because they usually die all at once anyway.
+We make use of Hanson's ``arenas'' (see \emph{C Interfaces and
+Implementations}) to assist in allocating and de-allocating memory for
+control-flow related structures.  We use one shared arena for
+[[procedure]]s and [[annotations]] because they usually die all at
+once anyway.
 
 <<internal static variable definitions>>=
 static Arena_T controlflow_arena = NULL;

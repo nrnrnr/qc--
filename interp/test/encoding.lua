@@ -18,7 +18,7 @@ CMM.end_section()
 CMM.section("text")
  CMM.begin_span(1, "GC_main", 0)
 
-   CMM.procedure("main", 5, 5)
+   CMM.procedure("main", 5, 5, {})
       CMM.define_label("label1")
       CMM.comment("nothing-to-see-here")
 
@@ -75,7 +75,7 @@ CMM.section("text")
 
    CMM.end_procedure()
 
-   CMM.procedure("przero", 300, 2)
+   CMM.procedure("przero", 300, 2, {})
       CMM.push_literal("0x44", 8)
       CMM.store_local(280)
 

@@ -10,7 +10,7 @@ CMM.section("data")
 CMM.end_section()
 
 CMM.section("code")
-   CMM.procedure("main", 0, 0)
+   CMM.procedure("main", 0, 0, {})
       CMM.push_symbol("datalabel")
       CMM.fetch(32, "NATIVE", 0)
       CMM.store_arg(0)

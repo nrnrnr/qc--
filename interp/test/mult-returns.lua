@@ -6,7 +6,7 @@
 CMM.exports({ "main" })
 CMM.imports({ "cmmprint32" })
 
-CMM.procedure("main", 0, 8)
+CMM.procedure("main", 0, 8, {})
    -- set up continuations
    CMM.fetch_sp()
    CMM.push_literal("0x4",32)
@@ -32,7 +32,7 @@ CMM.procedure("main", 0, 8)
       CMM.c_call("cmmprint32")
       CMM.cmm_return(0, 0)
 
-CMM.procedure("print", 0, 0)
+CMM.procedure("print", 0, 0, {})
 
   CMM.c_call("cmmprint32")
   CMM.cmm_return(0, 1)

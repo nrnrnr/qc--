@@ -6,7 +6,7 @@
 CMM.exports({ "main" })
 CMM.imports({ "cmmprint16" })
 
-CMM.procedure("main", 0, 0)
+CMM.procedure("main", 0, 0, {})
 
    CMM.push_literal("0x7", 16)
    CMM.store_arg(0)
@@ -20,7 +20,7 @@ CMM.procedure("main", 0, 0)
 
    CMM.cmm_return(0, 0)
 
-CMM.procedure("factorial", 0, 0)
+CMM.procedure("factorial", 0, 0, {})
 
    CMM.fetch_arg(0)
    CMM.push_literal("0x1", 16)
@@ -33,7 +33,7 @@ CMM.procedure("factorial", 0, 0)
    CMM.cmm_return(0, 0)
 
 --running count, n
-CMM.procedure("factorial-helper", 1, 0)
+CMM.procedure("factorial-helper", 1, 0, {})
 
    CMM.fetch_arg(1)
    CMM.store_local(0)

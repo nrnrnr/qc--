@@ -103,15 +103,13 @@ int lua_CMM_end_section(lua_State *L);
 \subsection{Externally Defined Globals}
 % ----------------------------------------------------------------------------
 
-During encoding, we need to be able to find the current [[assembly_unit]] 
-as well as the current procedure we are in ([[curr_proc]]).  
+During encoding, we need to be able to find the current [[assembly_unit]] .
 These global variables are defined in other files, and are declared as
 [[extern]]s in header files [[assemblyunit.h]] and [[controlflow.h]].
 We write faux declarations for them here so we do not forget about them.
 
 <<faux declarations for external definitions>>=
 extern assembly_unit *unit;
-extern procedure     *curr_proc;
 @ 
 
 % ----------------------------------------------------------------------------
@@ -377,19 +375,20 @@ int lua_CMM_procedure(lua_State *L) {
      1. the procedure's name
      2. the number of local vars in the proc
      3. the size of stackdata in the proc
+     4. table of offsets for stackdata labels
    */
-  lua_assert_isnumber(L, -1, 
+  lua_assert_istable (L, -1,
+                     "must specify offsets for stackdata labels");
+  lua_assert_isnumber(L, -2, 
                     "must specify size of stackdata within C-- procedure");
-  lua_assert_isnumber(L, -2,
+  lua_assert_isnumber(L, -3,
                     "must specify number of local variables in C-- procedure");
-  lua_assert_isstring(L, -3,
+  lua_assert_isstring(L, -4,
                     "cannot define anonymous procedures in C--");
 
   <<[[lbl]] $\leftarrow$ [[CMM_label]] for the procedure>>  
 
-  lua_pop(L, 3);  /* pop off 3 arguments */
-
-  curr_proc = proc;
+  lua_pop(L, 4);  /* pop off 4 arguments */
 
   /* emit instruction */
   define_proc((unsigned) proc);
@@ -398,10 +397,10 @@ int lua_CMM_procedure(lua_State *L) {
 }
 @ 
 <<[[lbl]] $\leftarrow$ [[CMM_label]] for the procedure>>=
-  name = Atom_string(lua_tostring(L, -3));
+  name = Atom_string(lua_tostring(L, -4));
   proc = procedure_new();
 
-  lua_pushvalue(L, -3);       /* make copy of procedure name */
+  lua_pushvalue(L, -4);       /* make copy of procedure name */
   lbl  = get_label(L, name);
 
   if (CMM_label_defined(lbl)) {
@@ -411,13 +410,34 @@ int lua_CMM_procedure(lua_State *L) {
 
   proc->raddr          = lbl->lbl.raddr;
   label_define(proc->raddr->label, 0);
-  proc->num_locals     = (unsigned int) lua_tonumber(L, -2);
-  proc->stackdata_size = (unsigned int) lua_tonumber(L, -1);
+  proc->num_locals     = (unsigned int) lua_tonumber(L, -3);
+  proc->stackdata_size = (unsigned int) lua_tonumber(L, -2);
+
+  <<copy stackdata label table into [[proc->stackdata_labels]]>>
 
   lbl->unit = unit;
   lbl->ty = CMM_PROCEDURE;
   lbl->lbl.proc = proc;
 @
+
+Nothing too interesting happens to copy the table.
+<<copy stackdata label table into [[proc->stackdata_labels]]>>=
+{
+  int i, n;
+
+  proc->stackdata_labels = fresh_table();
+  n = lua_getn(L, -1);
+  lua_pushtable(L, proc->stackdata_labels);
+
+  for (i = 1; i <= n; i++) { 
+    lua_rawgeti(L, -2, i);
+    lua_assert_isnumber(L, -1, "stackdata label offsets must be numbers");
+    lua_rawseti(L, -2, i);
+  }
+
+  lua_pop(L, 1);  /* pop off proc->stackdata_labels */
+} 
+@ 
 
 To define a label, we call on helper function [[get_label]] to take care of
 namespace bookkeeping.
