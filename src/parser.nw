@@ -152,7 +152,7 @@ returns the matching token or raises [[Not_found]].
 
         (* pragmas *)
 
-        ; ("line"           , LINE)
+        ; ("line"           , LINE_)
         |]
 
 } (* end of prolog *)
@@ -409,8 +409,11 @@ and pragma1 = parse
   | nl                  { fun map -> nl lexbuf map;  pragma1 lexbuf map } 
   | id                  { fun map -> 
                           let s  = get lexbuf in 
-                          try keyword s with 
-                              Not_found -> pragma2 lexbuf map 
+                          try ( match keyword s with 
+                              | LINE_ -> LINE(map)
+                              | _     -> pragma2 lexbuf map
+                              )
+                          with Not_found -> pragma2 lexbuf map 
                         }
   | _                   { fun map -> 
                           lexerror lexbuf map "id for pragma expected" 
@@ -548,7 +551,8 @@ all tokens for a file together with their positions.
 
     (* pragmas *)
 
-    | LINE              -> "LINE"
+    | LINE(_)           -> "LINE" 
+    | LINE_             -> "LINE" 
 
     | AMPERSAND(s)      -> "AMPERSAND(" ^ s ^ ")"
     | BAR(s)            -> "BAR(" ^       s ^ ")"
@@ -662,7 +666,6 @@ let pn n  = (Parsing.rhs_start n, Parsing.rhs_end n)
 %token LBRACKET
 %token LPAREN
 %token PPERCENT
-%token PRAGMA
 %token RBRACE
 %token RBRACKET
 %token RETURN
@@ -679,7 +682,16 @@ let pn n  = (Parsing.rhs_start n, Parsing.rhs_end n)
 
 /* pragmas */
 
-%token LINE
+%token PRAGMA
+
+@ We need two tokens for [[pragma line]]:  [[LINE_]] is only used
+inside the scanner while detecting that the [[line]] pragma is known. 
+Then [[LINE]] is returned with the current source location map
+attached.
+
+<<parse.mly>>= 
+%token <Srcmap.map> LINE
+%token LINE_
 
 /* infix and prefix operators */
 
@@ -728,9 +740,20 @@ program     :   toplevels                         { rev $1 }
 toplevels   :   toplevels toplevelAt              { $2::$1 }
             |   /**/                              { []     }
 
-pragma      :   LINE LBRACE INT RBRACE            { Pragma }
-            |   PRAGMA LBRACE RBRACE              { Pragma } 
+pragma      :   PRAGMA LBRACE RBRACE              { Pragma } 
+            |   line                              { Pragma }
 
+line        :   LINE LBRACE STR INT RBRACE        
+                    { let pos = Parsing.rhs_start 1 in
+                      let map = $1 in
+                        Srcmap.sync map pos ($3,$4,1) 
+                    }  
+                     
+            |   LINE LBRACE STR INT INT RBRACE
+                    { let pos = Parsing.rhs_start 1 in
+                      let map = $1 in
+                        Srcmap.sync map  pos ($3,$4,$5) 
+                    }
             
 toplevelAt  :   toplevel                          { TopDeclAt($1,p())   }
 toplevel    :   IMPORT ty names  SEMI             { Import($2,rev $3)   }
