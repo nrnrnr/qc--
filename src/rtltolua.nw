@@ -165,34 +165,34 @@ let location  = location' << Rtl.Dn.loc
 @ 
 
 <<ToLua>>=
-let effect eff func_prefix =
-    match eff with
-    | R.Kill loc            -> assert false;
-    | R.Store (loc, exp, w) -> 
-        let (prefix, func_f, func_suffix, args) = location' loc in
-        prefix ^ expr' push exp ^ 
-        (luafunc (func_prefix ^ func_f "store" func_suffix) args)
-
 let guard = function
-  | R.Const (R.Bool true) -> ""
-  | g                     -> "g"
+  | R.Const (R.Bool true) -> (""          , "" )
+  | g                     -> (expr' push g, "g")
 
-let print_guarded fd (g, eff) = fprintf fd "%s" (effect eff (guard g))
+let print_rtl fd gg =
+   let get_store = function
+                 | (_ , R.Kill _)              -> 
+                     Impossible.impossible "rtltolua : Rtl.Kill"
+                 | (gd, R.Store (loc, exp, w)) ->
+                     (guard gd, location' loc, exp, w)                     in
+   let gg_locs   = List.map get_store gg                                   in
+   let gg_stores = List.rev_map
+                     (fun ((gd_prefix, gd_f_prefix), 
+                           (prefix, func_f, func_suffix, args), exp, w
+                          ) -> 
+                       ( output_string fd (gd_prefix ^ prefix ^ expr' push exp)
+                       ; luafunc (gd_f_prefix ^ func_f "store" func_suffix)
+                                 args
+                       )
+                     )
+                     gg_locs                                               in
+    List.iter (output_string fd) gg_stores
 @
-
-We recognize special {\rtl}s that encode control-flow transfers and
-other special instructions. The encoding of these instructions is shared
-with module \module{interp}. 
-
-I know realize that this does not allow me to recover all informations I
-need. Therefore I will comment out this code for now.
 
 <<ToLua>>=
 let rec rtl' fd (R.Rtl gg) = match gg with
     | [] -> fprintf fd "-- skip\n"    
-
-    | _  -> List.iter (print_guarded fd) gg   (* standard RTL *)
-
+    | _  -> print_rtl fd gg
 
 (* exported functions *)
 
