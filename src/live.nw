@@ -68,6 +68,7 @@ end
 <<CFG>>
 module Make (G: CFG) = struct 
     module R = Register.Set
+    module P = Cfgprop (* node properties *)
     <<struct Make>>
 end
 @
@@ -108,7 +109,7 @@ let rec live (node:G.node) =
     let live         = Register.Set.diff (after node) defs in
     let live         = Register.Set.diff live kills        in 
     let live         = Register.Set.union live uses        in 
-        Register.Set.union (G.get_live node) live
+        Register.Set.union (G.property node).P.live live
 @
 
 The [[after]] function computes the union of the live sets of a node's
@@ -116,7 +117,7 @@ successors.
 
 <<struct Make>>=
 and after node = 
-    List.fold_left (fun set x -> R.union (G.get_live x) set) R.empty
+    List.fold_left (fun set x -> R.union (G.property x).P.live set) R.empty
                    (G.succ node)
 @
 
@@ -129,12 +130,12 @@ flag is set.
 <<struct Make>>=
 let process changed node =
     let l  = live node in
-    let _  = assert (Register.Set.subset (G.get_live node) l) in 
-        if Register.Set.equal l (G.get_live node) then
+    let _  = assert (Register.Set.subset (G.property node).P.live l) in 
+        if Register.Set.equal l (G.property node).P.live then
            ()   (* changed := false *)
         else
            ( changed := true
-           ; G.set_live node l
+           ; (G.property node).P.live <- l
            (* Printf.printf "id=%d\n" (G.number node) *)
            ) 
 @

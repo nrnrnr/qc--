@@ -106,6 +106,7 @@ module CompareMoves = struct
 	let compare = compare
 end
 module MS = Set.Make(CompareMoves)
+module P  = Cfgprop
 module RM = Register.Map
 module RS = Register.Set
 
@@ -277,7 +278,7 @@ let build cgInfo cfg =
 match T2'.map.V.project cgInfo with
     CGInfo cg ->
             let addInterference node () =
-                let live = G.get_live node in
+                let live = (G.property node).P.live in
                 let defs = G.defs node in
                 let uses = G.uses node in
                 let live =

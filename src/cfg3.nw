@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 \input{../config/macros.tex}
 
@@ -141,7 +142,7 @@ type t = cfg                    (* Cfg.t looks JustBetter *)
 type node                       (* control-flow node *)
 type locs = Register.Set.t      (* locations for liveness analysis *)
 type conts                      (* continuation bundle *)
-type property                   (* abstract type for data inside nodes *)
+type property = Cfgprop.t       (* data inside nodes *)
 
 (* cfg creation *)
 val mk:         unit -> cfg
@@ -196,10 +197,6 @@ val kills:      node -> locs            (* locs killed by node  *)
 (* node mutators *)
 val set_rtl:        node -> (Rtl.rtl -> Rtl.rtl) -> unit
 
-(* property is mutable!
- * val set_property:   node -> property -> unit 
- *)
- 
 (* continuation bundle constructor *)
 val conts: cuts:node list -> unwinds:node list -> 
            returns:node list -> aborts: bool -> conts 
@@ -419,8 +416,11 @@ mutator is called the numbering is \emph{present}.
 
 \item [[val property: node -> property]]:
       The property associated with this node.
+      Because the [[property]] type is intended to be mutable, there
+      is no need for a corresponding mutator.
+ 
 
-\item [[number:  node -> int]]:  Reports the number of a node.  It is
+\Item [[number:  node -> int]]:  Reports the number of a node.  It is
       a checked run-time error to invoke this function if node numbering is
       absent.
 
@@ -482,26 +482,6 @@ Construct a continuation bundle from the arguments.
 
 \end{itemize}
 
-% ------------------------------------------------------------------ 
-\subsection{Extras}
-% ------------------------------------------------------------------ 
-
-Below are functions listed that are outside of the module type [[S]]
-that this module implements. This indicates that they may change in the
-future. 
-
-\begin{quote}
-\emph{
-    How to deal with node properties? The properties module could be
-    supplied as a functor argument. For the moment being I would like to
-    keep things simple. There is not second {\cfg} or properties
-    implementation and therefore everything is kept together. This needs
-    a review. --CL}
-\end{quote}
-
-<<extras>>=
-val get_live: node -> locs
-val set_live: node -> locs -> unit
 @
 
 % ------------------------------------------------------------------ 
@@ -514,10 +494,8 @@ by the module.
 <<cfg3.mli>>=
 module type S = sig
     <<types and ops>>
-    <<extras>>  
 end
 <<types and ops>>
-<<extras>>      
 @
 
 % ------------------------------------------------------------------ 
@@ -542,13 +520,12 @@ oo-implementation lives in its own sub-module [[X]].
 <<cfg3.ml>>=
 module type S = sig
     <<types and ops>>
-    <<extras>>
 end
 
 module Property = Cfgprop
 
 type locs       = Register.Set.t    (* defs/uses/kills *)
-type property   = Property.t        (* functorize over property? *)  
+type property   = Property.t
 
 module X = struct                   (* the OO implementation *)
     module A   = Ast
@@ -779,16 +756,6 @@ let ast (cfg:cfg) (name:string) (mangle:string->string) (target:Target2.t) =
     , []
     , cfg#ast mangle target
     )
-@
-
-<<implementation>>=
-let set_live (node:node) locs =
-    let p     = node#property in
-    let locs' = p.Property.live in
-    let ()    = assert (Register.Set.subset locs' locs) in
-        p.Property.live <- locs
-
-let get_live node = node#property.Property.live
 @ 
 % ------------------------------------------------------------------ 
 \subsection{Object-Oriented Implementation}

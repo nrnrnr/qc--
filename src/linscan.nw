@@ -179,6 +179,7 @@ end
 module I        = Interval.Make(P)
 module LT       = Lifetime.Make(I)
 module LI       = Live.Make(G)
+module Pr       = Cfgprop
 module RM       = Register.Map
 module RS       = Register.Set
 module T        = Target2
@@ -273,7 +274,7 @@ let lifetimes cfg registers =
     let domain map  = RM.fold (fun key _ list -> key::list) map [] in
     let scan node (oldset, state) =
         let point   = G.number node                                in
-        let set     = G.get_live node                              in
+        let set     = (G.property node).Pr.live                    in
         let opening = RS.diff set oldset                           in
         let closing = RS.diff oldset set                           in
         let state   = open_regs  point (RS.elements opening) state in
