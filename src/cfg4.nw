@@ -158,7 +158,8 @@ val defs:       node -> locs         (* locs defined by node *)
 val uses:       node -> locs         (* locs used by node    *)
 val kills:      node -> locs         (* locs killed by node  *)
 
-val node_info_string:      node -> string
+val node_info_string: node -> string
+val is_call:    node -> bool         (* identify call nodes *)
 @
 
 The instruction inside a node can be updated using [[upd_instr]]. The
@@ -287,6 +288,7 @@ and  node = object
     method insert_assign_on_edges_from: Rtl.rtl -> before:node -> node 
 
     method node_info_string:     string          (* included into ast *)
+    method is_call:     bool         (* identify call nodes *)
     method ast:         (Rtl.rtl -> Ast.stmt) -> Ast.stmt
     method linorder:    node option * node list (* default/other succs *)
 
@@ -677,6 +679,8 @@ object (this)
                 (String.concat "," 
                     (List.map (fun n -> string_of_int n#id) this#succ))
 
+    method is_call = false
+
     method ast i2ast = i2ast _instr
     method virtual linorder: node option * node list
 
@@ -1027,6 +1031,8 @@ object (this)
             (if _aborts then "1" else "0")
             "cuts, unwinds, returns, aborts"
         )   
+
+    method is_call = true
 end
 @
 
@@ -1278,7 +1284,8 @@ let pred        (node:node) = node#pred
 let property    (node:node) = node#property
 let number      (node:node) = node#number
 
-let node_info_string     (node: node) = node#node_info_string
+let node_info_string (node: node) = node#node_info_string
+let is_call          (node: node) = node#is_call
 
 let kills (node:node) = Register.Set.empty
 let defs  (node:node) = 

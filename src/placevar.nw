@@ -46,15 +46,17 @@ Function [[walkRtl]] at once builds up the map and replaces each
 variable with its temporary location.
 <<builtins>>=
 module RP = Rtl.Private
-module TM = Map.Make(struct type t = int let compare = compare end)
+module TM = Proc.VarMap
 
-let fortran _ {Proc.cfg = cfg; Proc.target = target; Proc.temps = temps} =
+let fortran _
+	({Proc.cfg = cfg; Proc.target = target; Proc.temps = temps} as proc) =
 	<<walk RTL>>
 	let updateNode node tMap = 
 		let newRtl, tMap' = walkRtl (G.instr node) tMap in
 		let _ = G.upd_instr node (fun _ -> newRtl) in
 			tMap' in
 	let tMap = Cfgutil.fold_fwd cfg updateNode TM.empty in
+	let () = proc.Proc.varMap <- tMap in
         let is_not_empty = TM.fold (fun _ _ _ -> true) tMap false in (* ugh *)
         is_not_empty
 @

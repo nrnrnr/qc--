@@ -553,7 +553,8 @@ We also build a map ([[regToItem]]) from a register to a listgroup item.
 
 <<build>>=
 let build cg {Proc.cfg = cfg; Proc.target = target} =
-    let () = assert (!(cg.tempLG Initial) = None) in
+    let () = if not (!(cg.tempLG Initial) = None)
+			 then Impossible.impossible "Temps on initial list prematurely" in
     let regs = fold_fwd cfg
                 (fun node rst ->
                     (Register.Set.union
@@ -905,7 +906,8 @@ let assignColors cg {Proc.target = target} =
     <<colorTemp>>
     let colorSelectStack () =
         let () = ilg_iter colorTemp (!(cg.tempLG SelectStack)) in
-		assert (!(cg.tempLG SelectStack) = None) in
+		if not (!(cg.tempLG SelectStack) = None)
+   		then Impossible.impossible "No temporaries??"	in
     let colorCoalescedTemps () =
         let setColor temp = 
             cg.colorMap <-
@@ -948,7 +950,8 @@ let colorTemp temp =
 	then Impossible.impossible ("No hardware register available for " ^ (printReg temp.v))
 	else if RS.is_empty okColors
 	then begin
-		assert (not (RS.mem temp.v cg.spills))
+		if (RS.mem temp.v cg.spills)
+		then Impossible.impossible "Spilling a spill temp"
 	  ; ilg_switch cg.tempLG Spilled temp
 	end else begin
 		cg.colorMap <- RM.add temp.v (RS.choose okColors) cg.colorMap
@@ -961,24 +964,39 @@ let colorTemp temp =
 %-------------------------------------------------------------------
 
 [[applyColors]] is used to replace the temps in the \cfg with the colors they
-are assigned. If a temp has not been assigned a color yet, the [[UncoloredTemp]]
+are assigned. If a temp has not been assigned a color yet, the impossible
 exception will be raised; This indicates an error in the graph coloring
 implementation.
 
 <<applyColors>>=
-exception UncoloredTemp of Register.t
-let applyColors cg {Proc.cfg = cfg; Proc.target = target} =
+module CallVarMap = Map.Make (struct type t = G.node let compare = compare end)
+module VM = Proc.VarMap
+
+let applyColors cg ({Proc.cfg = cfg; Proc.target = target;
+		             Proc.varMap = vMap} as proc) =
     let lookup = Target2.space target in
     let subst = function
       | temp when is_tmp target temp ->
             (try RM.find temp cg.colorMap
-			 with Not_found -> assert false)
-      | t -> t
-    in begin
-        fold_fwd cfg
-            (fun node () -> G.upd_instr node (Rtlutil.Subst2.reg ~map:subst)) ()
-      ; true
-	end
+			 with Not_found -> Impossible.impossible "Uncolored temp")
+      | t -> t in
+
+	let new_placement var loc rst =
+ 		match loc with
+		| Rtl.Private.Reg t when is_tmp target t ->
+			VM.add var (RM.find t cg.colorMap) rst
+		| _ -> rst in
+	let subst_rtl node call_varMap =
+		begin
+		    G.upd_instr node (Rtlutil.Subst2.reg ~map:subst)
+		  ; if G.is_call node 
+			then
+				CallVarMap.add node (VM.fold new_placement vMap VM.empty)
+					call_varMap
+			else call_varMap
+		end in
+        let _ = fold_fwd cfg subst_rtl CallVarMap.empty in
+        true
 @
 
 %-------------------------------------------------------------------
@@ -995,7 +1013,8 @@ the \cfg and resets the [[cg]] structure for another round of graph coloring.
 let resetProgram cg proc =
     (* handle addition of new temps to the cfg (those in spilledTemps) *)
     let newTemps = rewrite proc (!(cg.tempLG Spilled)) in
-    let () = assert (!(cg.tempLG Initial) = None) in
+    let () = if not (!(cg.tempLG Initial) = None)
+             then Impossible.impossible "temps still on initial list" in
 
     let () = List.iter (fun t -> cg.spills <- RS.add t cg.spills) newTemps in
 
@@ -1134,11 +1153,11 @@ where both are in the same register space.
 let source inst =
 	match Rtlutil.RTLType.singleAssignment (G.instr inst) with
 	| Some (s, _) -> s
-	| _           -> assert false
+	| _           -> Impossible.impossible "bug in singleAssignment()"
 let dest inst =
 	match Rtlutil.RTLType.singleAssignment (G.instr inst) with
 	| Some (_, d) -> d
-	| _           -> assert false
+	| _           -> Impossible.impossible "bug in singleAssignment()"
 
 (*
  * singleAssignment returns a (Register.t * Register.t) option

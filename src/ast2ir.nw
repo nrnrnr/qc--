@@ -741,7 +741,11 @@ and cutStmt (e, args, conts) =
      AND FOR CONTINUATION? *)
   let cc = ccs default_cc in
   let out, actuals = actuals cc.C.cut_to_actuals args in
-  let cuti  = target.T.cutto.T.embed (expr e) in
+  let contn = expr e in
+  let ptr       = target.T.pointersize                    in
+  let mem       = target.T.memsize                        in
+  let cuti  = target.T.cutto.T.embed
+      (cc.C.sp, Contn.sp_exp ptr mem contn,Contn.pc_exp ptr mem contn) in
   let ()    = add_constraints (Block.constraints out.C.overflow) in
   let conts = continuations cc conts in
   G.instruction g (out.C.shuffle actuals) **>
@@ -881,6 +885,7 @@ let proc (cconv,procname,args,procbody) =
         ; Proc.eqns     = List.concat (!constraints)
         ; Proc.conts    = contblocks
         ; Proc.vars     = vars       (* number of variables *)
+        ; Proc.varMap   = Proc.VarMap.empty
         } in
     optimizer i (* runs optimizer, freezes, and assembles proc *)
 @

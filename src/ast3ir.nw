@@ -966,16 +966,19 @@ to replace the late compile-time constants in the rtl's returned from
 <<Make statements>>=
 and cutStmt state (e, args, conts) = 
     let cc        = state.target.Target.cc default_cc                  in
+    let ptr       = state.target.Target.pointersize                    in
+    let mem       = state.target.Target.memsize                        in
+    let sp        = cc.Target2.sp                                      in
     let args      = List.map (actual state.env state.target) args      in
-    let exp       = expr state.env state.target e                      in
-    let rtl       = state.target.Target.cutto.Target.embed exp         in
+    let contn     = expr state.env state.target e                      in
+    let rtl       = state.target.Target.cutto.Target.embed
+          (sp, Contn.sp_exp ptr mem contn, Contn.pc_exp ptr mem contn) in
     let conts     = continuations conts state.cfg                      in
     let cut       = G.gm_cutto state.cfg rtl conts                     in
 
-    let ptr       = state.target.Target.pointersize                    in
     let size      = ptr / state.target.Target.memsize                  in
     let oflow     = Rtl.app (Rtl.opr "add" [ptr])
-                    [exp; Rtl.bits (Bits.S.of_int (2 * size) ptr) ptr] in
+                    [contn; Rtl.bits (Bits.S.of_int (2 * size) ptr) ptr] in
     let rtls,area = IO.copyout args cc.Target.cont oflow in
 
     (* solve the equations *)
@@ -1121,6 +1124,7 @@ let proc env target optimizer (cconv,name,args,bdy) =
         ; Proc.eqns     = []
         ; Proc.conts    = conts
         ; Proc.vars     = vars       (* number of variables *)
+        ; Proc.varMap   = Proc.VarMap.empty
         } in
     optimizer i (* runs optimizer, freezes, and assembles proc *)
 @

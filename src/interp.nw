@@ -124,6 +124,18 @@ let goto =
                   )
     }
     
+let cutto =
+    { T.embed   = (fun (sp,newsp,newpc) -> 
+                       let assign loc e  =
+                           Rtl.store loc e (Rtlutil.Width.exp e) in
+                       Rtl.par [assign sp newsp; assign pc newpc])
+    ; T.project = (fun r -> match D.rtl r with
+                  | RP.Rtl [ (_, RP.Store(sp, nsp, _))
+                           ; (_, RP.Store(_ , npc, _))] ->
+                       (U.loc sp, U.exp nsp, U.exp npc)
+                  | _ -> error "projected non-cutto")
+    }
+
 let call = 
     { T.embed   = (fun e -> R.par [store ra (fetch pc); store pc e])
     ; T.project = (fun r -> match D.rtl r with
@@ -141,7 +153,7 @@ let branch =
     }              
 
 let jump   = goto                   (* must be different from goto!  *)
-let cutto  = goto                   (* must be different from cutto! *)
+let cutto  = cutto
 let return = store pc (fetch ra)    (* no embed/project needed *)
 @
 

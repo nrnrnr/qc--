@@ -34,9 +34,10 @@ module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.action)
 @
 <<builtins>>=
 module RP = Rtl.Private
-module TM = Map.Make(struct type t = int let compare = compare end)
+module TM = Proc.VarMap
 
-let placeVars _ {Proc.cfg = cfg; Proc.target = target; Proc.temps = temps} =
+let placeVars _
+		({Proc.cfg = cfg; Proc.target = target; Proc.temps = temps} as proc) =
   <<walk RTL>>
   let updateNode node tMap =
     let (newRtl, tMap2) = walkRtl tMap (Rtl.Convert.rtl (G.instr node)) in
@@ -44,6 +45,7 @@ let placeVars _ {Proc.cfg = cfg; Proc.target = target; Proc.temps = temps} =
        tMap2)
   in
   let tMap = Cfgutil.fold_fwd cfg updateNode TM.empty in
+  let () = proc.Proc.varMap <- tMap in
   let changed = (tMap = TM.empty) in
     changed
 @ Presumably the return value of placeVars indicates whether anything

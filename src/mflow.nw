@@ -64,7 +64,7 @@ end
 module type S = sig (* see types Target2.t and Target2.map for doco *)
   val goto  : Rtl.exp Target2.map
   val jump  : Rtl.exp Target2.map
-  val cutto : Rtl.exp Target2.map
+  val cutto : (Rtl.loc * Rtl.exp * Rtl.exp) Target2.map
   val call  : Rtl.exp Target2.map
   val branch : (Rtl.exp * Rtl.exp) Target2.map
 end
@@ -85,6 +85,7 @@ end
 <<standard machine-level control flow>>=
 let w = RU.Width.loc P.pc_lhs
 let downrtl = R.Convert.rtl
+let uploc   = R.Revert.loc
 let upexp   = R.Revert.exp
 let goto = { T.embed   = (fun e -> R.store P.pc_lhs e w)
            ; T.project = (fun r -> match downrtl r with
@@ -92,7 +93,16 @@ let goto = { T.embed   = (fun e -> R.store P.pc_lhs e w)
                                    | _ -> Impossible.impossible "projected non-goto")
            } 
 let jump = goto
-let cutto = goto (* LIES AND DAMN LIES *)
+let cutto = { T.embed   = (fun (sp,newsp,newpc) -> 
+                               let assign loc e  =
+                                   Rtl.store loc e (Rtlutil.Width.exp e) in
+                               Rtl.par [assign sp newsp; assign P.pc_lhs newpc])
+            ; T.project = (fun r -> match downrtl r with
+                                    | RP.Rtl [ (_, RP.Store(sp, nsp, _))
+                                             ; (_, RP.Store(_ , npc, _))] ->
+                                         (uploc sp, upexp nsp, upexp npc)
+                                    | _ -> Impossible.impossible "projected non-cutto")
+            }
 
 let ra_val =
   let pc = R.fetch P.pc_rhs w in

@@ -38,7 +38,10 @@ type t
 (* observers *)
 val value:   t -> Rtl.exp            (* the value (pointer to pair) *)
 val ov_base: t -> Rtl.exp
-val init_code:    t -> sp:Rtl.loc -> pc:Rtl.exp -> Rtl.rtl list    
+
+val pc_exp:       int -> int -> Rtl.exp -> Rtl.exp
+val sp_exp:       int -> int -> Rtl.exp -> Rtl.exp
+val init_code:     t -> sp:Rtl.loc -> pc:Rtl.exp -> Rtl.rtl list    
 val with_overflow: Target2.t -> Rtl.exp -> Block.t -> t
   (* EXPLANATION OF ARGUMENTS CONSIDERED HELPFUL *)
   (* IN PARTICULAR, I'D LIKE TO SEE THE FOLLOWING:
@@ -81,6 +84,12 @@ let rep t = t.block
 let value t = Block.base t.block        (* pointer to block *)
 
 let ov_base t = t.overflow        (* pointer to block *)
+
+let pc_exp ptrsize memsize contn = contn
+
+let sp_exp ptrsize memsize contn =
+	Rtl.app (Rtl.opr "add" [ptrsize])
+        [ contn ; Rtl.bits (Bits.S.of_int (ptrsize/memsize) ptrsize) ptrsize ]
 
 let init_code t ~(sp:Rtl.loc) ~(pc:Rtl.exp) =
     let width = Rtlutil.Width.loc t.sp in
