@@ -165,7 +165,7 @@ val label:  label                  -> Props.t -> node (*succ*)
 
 val copyi:  formal list -> New.t -> Props.t -> node list * New.area (*succ*)
 
-val return: int*int               -> actual list -> New.t -> Props.t -> node list * New.area
+val return: int*int    -> Rtl.rtl -> actual list -> New.t -> Props.t -> node list * New.area
 val jump:   label list -> Rtl.rtl -> actual list -> New.t -> Props.t -> node list * New.area
 val cutto:  cuts       -> Rtl.rtl -> actual list -> New.t -> Props.t -> node list * New.area
 @
@@ -213,7 +213,7 @@ type  kind      = Goto          of Rtl.rtl * label list
                 | Exit
                 | Jump          of set * Rtl.rtl * label list 
                 | Cutto         of set * Rtl.rtl * cuts       
-                | Return        of set * (int*int)             
+                | Return        of set * Rtl.rtl * (int*int)             
 @
 
 <<abstract types and values>>=
@@ -402,14 +402,15 @@ let rw rtls =
 The [[return]] function generates a list of assign nodes for actual
 parameters plus a return node with liveness annotation:  all locations
 defined by the assign nodes are considered to be used by the
-[[return]] node in order to keep them live.
+[[return]] node in order to keep them live. The same applies for the
+other nodes that exit a precedure: [[jump]] and [[cutto]].
         
 <<implementation of S>>=
-let return xy actuals cc props = 
+let return xy rtl actuals cc props = 
     let rtls      = List.map (store_actual cc) actuals          in
     let assigns   = List.map (fun rtl -> assign rtl props) rtls in
     let (use,def) = rw rtls                                     in
-    let ret       = node props (Return (def,xy))                in  
+    let ret       = node props (Return (def,rtl,xy))            in  
     let area      = A.freeze cc                                 in
         assigns@[ret], area
 @
@@ -428,7 +429,7 @@ let cutto cuts rtl actuals cc props =
     let rtls      = List.map (store_actual cc) actuals          in
     let assigns   = List.map (fun rtl -> assign rtl props) rtls in
     let (use,def) = rw rtls                                     in
-    let jump      = node props (Cutto(def,rtl,cuts))           in  
+    let jump      = node props (Cutto(def,rtl,cuts))            in  
     let area      = A.freeze cc                                 in
         assigns@[jump], area
 
@@ -582,10 +583,10 @@ let subst_kind: kind -> Rtl.rtl -> kind = fun kind rtl -> match kind with
     | Call   (_  ,x) -> Call (rtl,x)
     | Assign  _      -> Assign(rtl)
     | Branch (_  ,x) -> Branch(rtl,x)
-    | Label  _       -> kind
     | Jump   (s,_,x) -> Jump(s,rtl,x)
     | Cutto  (s,_,x) -> Cutto(s,rtl,x)
-    | Return _       -> kind
+    | Return (s,_,x) -> Return(s,rtl,x)
+    | Label  _       -> kind
     | Exit           -> kind
 @
 
@@ -618,8 +619,8 @@ let exp: (Rtl.rtl -> Rtl.rtl list) -> node -> node list = fun f n ->
     | Branch (rtl,_)   -> rtls2nodes n (f rtl)  
     | Jump   (_,rtl,_) -> rtls2nodes n (f rtl)  
     | Cutto  (_,rtl,_) -> rtls2nodes n (f rtl)  
+    | Return (_,rtl,_) -> rtls2nodes n (f rtl)
     | Label  _         -> [n]
-    | Return _         -> [n]
     | Exit             -> [n]
 @
 

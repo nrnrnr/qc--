@@ -129,18 +129,24 @@ successors.
 and after cfg node = union (List.map (live cfg) (G.succ cfg node)) 
 @
 
+Not all liveness information can be deduced from nodes' {\rtl}s.  Some
+nodes have additional liveness informations attached, like the
+[[jump]], [[cutto]] and [[return]] node.  They are taken into account
+by the [[live]] function.  In this particular case nodes advertise
+which registers are used such that they are kept live.
+
 <<struct Make>>=
 and live: G.cfg -> G.node' -> Register.Set.t = fun cfg node -> 
     match G.kind node with
-    | G.Goto   (rtl,_) -> standard  cfg node rtl
-    | G.Call   (rtl,_) -> standard  cfg node rtl (* wrong *)
-    | G.Assign  rtl    -> standard  cfg node rtl
-    | G.Branch (rtl,_) -> standard  cfg node rtl
-    | G.Label _        -> after cfg node
-    | G.Jump   (rtl,_) -> standard  cfg node rtl 
-    | G.Cutto  (rtl,_) -> standard  cfg node rtl
-    | G.Return _       -> Register.Set.empty
-    | G.Exit           -> Register.Set.empty
+    | G.Goto   (rtl,_)     -> standard  cfg node rtl
+    | G.Call   (rtl,_)     -> standard  cfg node rtl (* wrong *)
+    | G.Assign  rtl        -> standard  cfg node rtl
+    | G.Branch (rtl,_)     -> standard  cfg node rtl
+    | G.Label _            -> after cfg node
+    | G.Jump   (use,rtl,_) -> Register.Set.union use (standard  cfg node rtl) 
+    | G.Cutto  (use,rtl,_) -> Register.Set.union use (standard  cfg node rtl)
+    | G.Return (use,rtl,_) -> Register.Set.union use (standard  cfg node rtl)
+    | G.Exit               -> Register.Set.empty
 @
 
 Computing the live sets of a control-flow graph (\cfg) is a fix-point
@@ -158,29 +164,10 @@ let process cfg changed node =
             ()
 @
 
-A return, jump, or cutto statement on the {\PAL} level in translated
-into a sequence of assignment nodes, representing a copy-out node, and
-a return, jump, or cutto node, respectively.  This creates a problem,
-because from the final node it can't be deduced that the register's
-used for passing arguments should be live.  They are read by the
-preceding nodes but not by the final node.  We therefore must correct
-the live sets for these somehow by propagating liveness information
-from predecessors to jump, return, and cutto nodes.  However, we don't
-know how far to look back for this since we we don't know which of the
-previous nodes resulted from the translation of a copy node.
-
-The data flow rules implemented in [[live]] state, that no variables
-are live before a jump, return, or cutto. These nodes are preceded by
-copy-out nodes, i.e. assign nodes, which read 
-
 The [[process]] function, which updates the live set of a node, is
 repeatedly applied to all nodes in [[cfg]].  This is done until
 [[process]] does not change any live set which means the fix point is
 reached. 
-
-\begin{quote}\it
-    Propagate live sets from [[return]], [[cutto]], [[jump]] to [[exit]].
-\end{quote}
 
 <<struct Make>>=
 let liveness cfg =
