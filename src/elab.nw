@@ -1401,15 +1401,22 @@ let tyAppl opTy argTys = E.ematch argTys (Types.appl opTy)
 % ------------------------------------------------------------------ 
 
 Checking the static semantics really starts here.  We traverse the
-abstract syntax and check all the constrains.  The result of checking
+abstract syntax and check all the constraints.  The result of checking
 the static semantics is an environment; in case error are found by the
 check they are manifest in the returned environment.  So every
 function that takes part in checking the static semantics receives and
 returns an environment.
 
+THERE IS AN IMPORTANT PIECE MISSING HERE: THE CONTROL-FLOW
+RESTRICTIONS ARE NOT CHECKED.  IT WILL BE NECESSARY TO EXTEND THE
+ENVIRONMENT SO THAT WHEN A STATEMENT IS CHECKED, THE CHECKER KNOWS
+WHETHER CONTROL CAN FALL THROUGH TO THAT STATEMENT.
+IF THE ANSWER IS YES, THE STATEMENT HAD BETTER NOT BE A CONTINUATION.
+SIMILARLY, IT HAD BETTER NOT BE THE END OF THE PROCEDURE BODY EITHER.
+
+
 To evaluate constant expressions we use the code from [[Const.Eval]];
 the returned value has type [[(Types.ty * F.value) E.error]]
-
 <<check>>=
 let constExpr env e = Consts.Eval.evalExpr env e
 @    
