@@ -31,8 +31,8 @@ section "text"
         initialize continuations:l4:
         ;
         $r0 = bits32[(x+x)];
-        ;
         $t1 = $t1;
+        ;
         $r31 = ($r31+24);
         $c0 = $t1;
     }

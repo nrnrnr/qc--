@@ -35,8 +35,8 @@ section "data"
         join:l7:
         ;
         ;
-        ;
         $t1 = $t1;
+        ;
         $r31 = ($r31+24);
         $c0 = $t1;
         join:l6:

@@ -35,8 +35,8 @@ section "text"
         total = ((x+y)+z);
         ;
         $r0 = total;
-        ;
         $t1 = $t1;
+        ;
         $r31 = ($r31+24);
         $c0 = $t1;
     }

@@ -44,8 +44,8 @@ section "text"
         iitotal = (((ii+ij)+ik)+il);
         ;
         $r0 = iitotal;
-        ;
         $t1 = $t1;
+        ;
         $r31 = ($r31+24);
         $c0 = $t1;
     }

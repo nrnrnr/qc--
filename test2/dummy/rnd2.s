@@ -28,8 +28,8 @@ section "text"
         initialize continuations:l4:
         ;
         ;
-        ;
         $t1 = $t1;
+        ;
         $r31 = ($r31+24);
         $c0 = $t1;
     }

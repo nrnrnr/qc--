@@ -40,8 +40,8 @@ section "text"
         ntotal = ((i+j)+k);
         ;
         $r0 = ntotal;
-        ;
         $t1 = $t1;
+        ;
         $r31 = ($r31+24);
         $c0 = $t1;
     }

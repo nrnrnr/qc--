@@ -90,16 +90,16 @@ join_l18:
 	nop
 	nop
 	nop
+	leal 36(%esp), %eax
+	movl (%eax),%edx
+	movl $0,%ecx
+	leal 36(%esp), %eax
+	addl %ecx,%eax
+	movl %edx,(%eax)
 	movl 16(%esp),%ebp
 	movl 20(%esp),%ebx
 	movl 12(%esp),%esi
 	movl 8(%esp),%edi
-	leal 36(%esp), %eax
-	movl (%eax),%eax
-	movl $0,%ecx
-	leal 36(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
 	leal 36(%esp), %esp
 	ret
 k_C8:
@@ -127,16 +127,16 @@ join_l14:
 	nop
 	nop
 	nop
+	leal 36(%esp), %eax
+	movl (%eax),%edx
+	movl $0,%ecx
+	leal 36(%esp), %eax
+	addl %ecx,%eax
+	movl %edx,(%eax)
 	movl 16(%esp),%ebp
 	movl 20(%esp),%ebx
 	movl 12(%esp),%esi
 	movl 8(%esp),%edi
-	leal 36(%esp), %eax
-	movl (%eax),%eax
-	movl $0,%ecx
-	leal 36(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
 	leal 36(%esp), %esp
 	ret
 .text
