@@ -88,6 +88,7 @@ module Make  (T : Lualib.COMBINED_TYPE)
     module V = Ast.Value
     <<interp utility functions>>
     <<interp toplevel>>
+    <<compiler>>
     <<interp fallbacks>>
     <<interp registration>>
     <<interp tests>>
@@ -373,7 +374,7 @@ Compilation uses continuation-passing style, and to support type
 constraints, we define the type of continuation.
 A standard continuation takes an interpreter state (for globals,
 fallbacks, etc) and an array of locals and temporaries.
-<<interp toplevel>>=
+<<compiler ((std))>>=
 type 'a cont = V.state -> V.value array -> 'a
 <<definitions of [[exp]], [[explist]], and friends>>
 @ 
@@ -574,7 +575,7 @@ The function [[block_compiler]] is a sort of pre-compiler; it strings things tog
 It returns two functions:
 [[bcomp]] can be used to compile a block, and afterward,
 [[local_size]] can be used to find out how many locals are used in the block.
-<<interp toplevel>>=
+<<compiler ((std))>>=
 <<old debugging code>>
 let block_compiler srcmap =
   let high_local_limit = ref 0 in
@@ -764,7 +765,7 @@ the machine's call stack.
 The [[with_stack]] function handles the stack: it pushes new info, and
 it pops on both normal and exceptional termination.
 To bad Caml doesn't have try-finally.
-<<interp toplevel>>=
+<<compiler ((std))>>=
 let with_stack info g f x =
   let _ = currentloc_tostack g in
   let _ = g.V.callstack <- (info, None) :: g.V.callstack in
@@ -787,7 +788,7 @@ There is extra bookkeeping using [[info]] and [[with_stack]] to
 maintain the stack.  
 \nwaddbox{lambda : Srcmap.map * bool -> Srcmap.location -> string list -> bool -> A.block -> V.info * V.func}
 \deeperbox{14pt}
-<<interp toplevel>>=
+<<compiler ((std))>>=
 let value_list = V.list V.value
 let lambda (src, debug) (file, line, col) args varargs body =
   let rho = let args' = List.rev args in if varargs then "arg" :: args' else args' in
@@ -810,7 +811,7 @@ let (_ : Srcmap.map * bool -> Srcmap.location -> string list -> bool -> A.block 
 @ 
 Chunk compilation is not too exciting.
 We have a statement or a function.
-<<interp toplevel>>=
+<<compiler ((std))>>=
 let func (info, f) = V.Function (info, f)
 let chunk ((smap, dbg) as srcdbg) block rho = function
   | A.Debug _ -> assert false (* must never get here *)
@@ -825,7 +826,7 @@ let chunk ((smap, dbg) as srcdbg) block rho = function
 @ 
 Compiling a list of chunks is a lot like compiling a function, except
 we also have to keep track of whether debugging is turned on.
-<<interp toplevel>>=
+<<compiler ((std))>>=
 let extendchunk rho = function
   | A.Statement s -> extend rho s
   | _ -> rho
