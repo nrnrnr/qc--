@@ -100,7 +100,6 @@ the {\cfg} design: it is neccessary to create new nodes inside the
 give up the polymorphism of the {\cfg} which wasn't working anyway. --CL
 (Tue May  7 16:44:58 EDT 2002)}.
 
-
 Targets provide code that spills and reloads registers. This code must
 respect the machine invariant, but currently does not. Machine specific
 spilling and reloading code must be defined. This code might be tied to
@@ -166,6 +165,18 @@ lacks proper edges to indicate the data flow in the presence of
 continuations. Some continuations cannot escape a given procedure and
 thus do not require a run-time representation on the stack. An escape
 analysis is missing to find non-escaping continuations.
+
+The translation of continuations in \path|Ast3ir| is bogus. A
+continuation \emph{value} is a pointer into the stack where two values
+are stored: a pointer to the code of the continuation, and a stack
+pointer. The current representation of a continuation value is a
+link-time constant, which is wrong. A continuation \emph{value} is a
+late compile-time expression: a sum of the stack pointer value and some
+late compile-time constant. The stack pointer in turn, depends on the
+currently active calling convention. \emph{I have introduced a new
+abstraction \path|Contn| that addresses some of the problems. However,
+most things are not yet integrated and the translation of expressions
+with included continuation values is still wrong. -- CL}
 
 The implementation of \path|cutto| currently lacks all details to find
 the activation for the continuation and thus the \emph{incoming} area in
