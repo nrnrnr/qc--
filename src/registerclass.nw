@@ -1,0 +1,245 @@
+%-------------------------------------------------------------------
+\section{Register classes}
+%-------------------------------------------------------------------
+
+A register class is simply a set of hardware registers.  We would like to 
+be able to ask things such as
+\begin{itemize}
+\item What is the alias set of a class, ie what is the set of registers that the
+class overlaps with in hardware?
+\item Are two classes alias equivalent?  ie $alias(C_1) = alias(C_2)$?
+\item Is one class a subset of another under aliasing?  ie 
+$alias(C_1) \subset alias(C_2)$?
+\item Is it possible two assignments from two different classes to alias?  ie 
+\[alias(class_{n1}) \cap class_{n2} \neq \emptyset \vee class_{n1} 
+\cap alias(class_{n2}) \neq \emptyset\] 
+\end{itemize}
+
+<<exported types>>=
+module type REGISTERCLASS = sig
+  type t
+  val alias: t -> t -> t
+  val alias_eq: t -> t -> t -> bool
+  val alias_contained: t -> t -> t -> bool
+  val intersection: t -> t -> t
+  val eq: t -> t -> bool
+  val may_alias: t -> t -> bool
+  val fromList: Register.Set.elt list -> t
+  val mkClass: Rtl.space -> ('a, 'b) Target.t -> Register.t list -> t
+  val isEmpty: t -> bool
+  val to_string: t -> string
+  val cardinal: t -> int
+end
+
+module RegisterClass : REGISTERCLASS 
+@
+
+<<register classes>>=
+module type REGISTERCLASS = sig
+  type t
+  val alias: t -> t -> t
+  val alias_eq: t -> t -> t -> bool
+  val alias_contained: t -> t -> t -> bool
+  val intersection: t -> t -> t
+  val eq: t -> t -> bool
+  val may_alias: t -> t -> bool
+  val fromList: Register.Set.elt list -> t
+  val mkClass: Rtl.space -> ('a, 'b) Target.t -> Register.t list -> t
+  val isEmpty: t -> bool
+  val to_string: t -> string
+  val cardinal: t -> int
+end
+
+module RegisterClass:REGISTERCLASS = struct
+   type t = RS.t 
+
+   let aliases c1 allregs = 
+       let regToAliases reg = RS.filter (RU.MayAlias.regs reg) allregs in
+       RS.fold (fun reg set -> RS.union (regToAliases reg) set) c1 RS.empty
+   
+   let alias c1 allRegs = aliases c1 allRegs
+   
+   let alias_eq c1 c2 allRegs = RS.equal (alias c1 allRegs) (alias c2 allRegs)
+   
+   let alias_contained c1 c2 allRegs = RS.subset (alias c1 allRegs) 
+                                                 (alias c2 allRegs)
+   
+  let isEmpty = RS.is_empty
+  let intersection c1 c2 = RS.inter c1 c2
+  let eq c1 c2 = RS.equal c1 c2
+@
+
+(Smith Ramsey Holloway 04) Since we define [[aliases]] to determine an alias 
+set given a universe of registers to consider, [[may_alias]] can be simplified
+from 
+\[
+alias(class_{n1}) \cap class_{n2} \neq \emptyset \  \vee \ 
+class_{n1} \cap alias(class_{n2}) \neq \emptyset
+\] 
+to
+\[
+\mathit{aliases}(class_{n1}, class_{n2}) \neq \emptyset \  \vee \ 
+\mathit{aliases}(class_{n2}, class_{n1}) \neq \emptyset
+\]
+(Double check with yourself that this is indeed equivalent)
+
+<<register classes>>=
+let may_alias c1 c2 = 
+    let a1 = aliases c1 c2 in
+    let a2 = aliases c2 c1 in
+    if Debug.on "colorgraph" then begin
+      Printf.eprintf "alias %s given %s = %s\n" (RS.to_string c1)(RS.to_string c2)
+      (if eq RS.empty a1 then "empty" else (RS.to_string a1))  ;
+      Printf.eprintf "alias %s given %s = %s\n" (RS.to_string c2)(RS.to_string c1) 
+      (if eq RS.empty a2 then "empty" else (RS.to_string a2));
+      not (RS.is_empty a1) || not (RS.is_empty a2)
+    end else
+      not (RS.is_empty a1) || not (RS.is_empty a2)
+  
+  let mkClass space target allRegs = 
+    List.fold_left 
+      (fun set reg -> if Target.fits target space reg then 
+        RS.add reg set 
+      else set)
+      RS.empty allRegs
+      
+  let fromList l = List.fold_left (fun set reg -> RS.add reg set) RS.empty l
+  let to_string = RS.to_string
+  let cardinal = RS.cardinal
+end
+
+@ 
+
+%-------------------------------------------------------------------
+\subsection{Register Class Trees}
+%-------------------------------------------------------------------
+
+We represent the register classes in a tree structure to better compute the 
+squeeze estimate.  I'm sure that the list operations I'm doing are horribly slow;
+if this worries you and you have suggestions please let me know!
+
+<<class trees>>=
+  module ClassTree = struct
+    type t = Vertex of RegisterClass.t list ref * t list ref
+    let classes = function Vertex(c, _) -> !c 
+    let rec down = function Vertex(c, kids) ->
+      List.flatten (!c::List.map down !kids)
+   <<make tree>>
+  end
+@
+
+A good class tree should have the following properties:
+\begin{itemize}
+\item Each vertex should contain \emph{only} alias equivalent classes
+\item There should be no empty vertex.
+\item If two vertices have the same parent, their alias sets are disjoint
+\item The alias set of a child node should be a subset of the alias set
+      of its parent node.
+\end{itemize}
+
+When classes can overlap without being equivalent or contained (with respect
+to aliasing), then we do not know how to construct a class tree that always
+gives the best approximation.  For now, we punt this issue (it is not a 
+realistic issue in actual architectures) since eventually we want to move
+the class tree construction to be part of the target.
+
+Alias equivalence is transitive, therefore we only check the head of 
+the vertex list.
+
+<<make tree>>=
+let mkTree (regs:RegisterClass.t) (xs:RegisterClass.t list) = match xs with
+(x::classL) ->
+  let first = Vertex(ref [x], ref []) in 
+  let rec addToTree root c = match root with 
+    Vertex(classes, children) -> let rep = List.hd (!classes) in 
+    if RegisterClass.alias_eq c rep regs then begin
+      classes := c::(!classes);
+      root
+    end else if RegisterClass.alias_contained rep c regs then
+      Vertex (ref [c], ref [root])
+    else if RegisterClass.alias_contained c rep regs then begin
+      match (!children) with 
+        [] -> let () = children := [Vertex(ref [c], ref [])] in root
+      |  _ -> let eqNode = function Vertex(cs, _) -> 
+          RegisterClass.alias_eq c (List.hd !cs) regs in
+        let eqCd = function Vertex(cs, _) ->
+          RegisterClass.alias_contained c (List.hd !cs) regs in
+        let eqCs = function Vertex(cs, _) ->
+          RegisterClass.alias_contained (List.hd !cs) c regs in
+        let newKids = 
+          if List.exists (fun n -> eqNode n || eqCd n || eqCs n) 
+              !children then
+            (List.map (fun r -> addToTree r c) !children)
+          else Vertex(ref [c], ref [])::!children in
+        children := newKids;
+        root
+    end
+    else begin 
+      Impossible.impossible "Adding a space to a class tree it doesn't belong in"
+    end
+  in List.fold_left addToTree first classL
+| [] -> Impossible.impossible "Cannot build class tree from empty list" 
+@
+
+[[mkTreeList]] creates a list of class trees given a target. 
+The class trees and register classes
+should hold the information about what registers a temp can be assigned to now
+rather than cginfo.
+
+<<make tree>>=
+let mkTreeList spaces allRegs target = 
+  let uSet = RegisterClass.fromList allRegs in
+  let splitAliases classLl space = 
+    let rClass = RegisterClass.mkClass space target allRegs in 
+    let belongs c l = List.exists 
+    (fun elt -> RegisterClass.isEmpty (RegisterClass.intersection c elt)) l in
+    let rec addToList l2 = match l2 with
+      [] -> [[rClass]]
+    | head::rest -> if belongs rClass head then 
+        let newList = rClass::head in newList::rest
+    else head::(addToList rest)
+    in
+    addToList classLl
+  in
+  let partitionedList = List.fold_left splitAliases [] spaces in
+  List.map (mkTree uSet) partitionedList
+@
+
+%-------------------------------------------------------------------
+\subsection{Utilities to implement}
+%-------------------------------------------------------------------
+
+%-------------------------------------------------------------------
+\subsubsection{Estimating worst}
+%-------------------------------------------------------------------
+
+In order to efficiently estimate $\mathit{worst}^m(N,C)$ we observe that
+\begin{math}\mathit{worst}^n(N,C) \leq \mathit{worst}^1(N,C)\end{math}
+or more simply, the number of registers that can be blocked for a node
+of class $N$ by $m$ temporaries is no more than the number of registers that
+can be blocked for a node of class $N$ by one temporary, multiplied by $m$.
+
+We need to create a table of $\mathit{worst}^1(N,C)$
+
+
+<<registerclass.mli>>=
+  <<exported types>>
+@
+
+\subsection{Lua registration}
+
+<<registerclass.ml>>=
+module R   = Register
+module RM  = R.Map
+module RS  = R.Set
+module RSX = R.SetX
+module RU  = Rtlutil
+let imposs = Impossible.impossible
+
+let () = Debug.register "registerclass" "generalized register classes"
+@
+
+<<registerclass.ml>>=
+  <<register classes>>
+  <<class trees>>
+@
