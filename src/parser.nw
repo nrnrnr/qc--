@@ -318,29 +318,39 @@ passed to the [[character_end]] leser which should recognize the end of
 the literal and return the value. This way we can write a lexer for
 escape sequences that we can re-use for strings.
 
+The first two rules match each one character. Since [[printable]]
+includes the backslash it is critical that the rule for backslash comes
+first, because in the case of two matches of the same length the first
+one is chosen!
+
 <<scan.mll>>=
 and character = parse
-    printable                   { fun map -> 
-                                  let c = getchar lexbuf 0 in
-                                  character_end lexbuf map (Char.code c)   
-                                }
-  
-  | '\\'                        { fun map ->
+    '\\'                        { fun map ->
                                   let i = escape lexbuf in
                                   if i >= 256 then
                                     error lexbuf "character literal too large"
                                   else  
                                     character_end lexbuf map i
                                 }  
+  | printable                   { fun map -> 
+                                  let c = getchar lexbuf 0 in
+                                  character_end lexbuf map (Char.code c)   
+                                }
                                   
   | _                           { fun map ->
-                                  error lexbuf "illegal character literal" 
+                                  error lexbuf 
+                                    ( "illegal character literal: "
+                                    ^  get lexbuf
+                                    )
                                 }
 
 and character_end = parse
     "'"                         { fun map i -> P.CHAR(i)           }
   | _                           { fun map i -> 
-                                  error lexbuf "illegal character literal" 
+                                  error lexbuf 
+                                    ( "illegal character literal: "
+                                    ^  get lexbuf
+                                    ) 
                                 }  
 @
 
