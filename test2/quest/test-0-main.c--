@@ -15,15 +15,15 @@ i@errors:
 bits32[] {0x0};
 }
 section "text" {
-foreign "C" i@failed(bits32 i@line, ) {
+foreign "C" i@failed(bits32 i@line aligned 4, ) {
   stackdata {
   }
   bits32 i@1.4;
-  foreign "C" (i@printf)("address" i@2, "address" i@3, i@line);
+  foreign "C" (i@printf)("address" i@2 aligned 4, "address" i@3 aligned 4, i@line aligned 4);
   i@1.4 = i@errors;
   bits32[i@1.4] = %add(bits32[i@1.4],1);
   L.1:
-foreign "C" return();
+  foreign "C" return();
 }
 }
 section "data" {
@@ -44,10 +44,10 @@ foreign "C" i@caller_bf1() {
   "float" f@1.9 = foreign "C" (i@callee_af1)();
   bits64[f@bv1.8] = f@1.9;
   if (%feq(bits64[i@av1], bits64[f@bv1.8])) { goto L.6; }
-  foreign "C" (i@failed)(17);
+  foreign "C" (i@failed)(17 aligned 4);
   L.6:
   L.5:
-foreign "C" return();
+  foreign "C" return();
 }
 }
 section "data" {
@@ -73,13 +73,13 @@ foreign "C" i@caller_bf2() {
     i@dv2.13: bits16;
   }
   bits32 i@1.14;
-  i@1.14 = foreign "C" (i@callee_af2)("float" bits64[i@bv2], bits32[i@cv2]);
+  i@1.14 = foreign "C" (i@callee_af2)("float" bits64[i@bv2] aligned 4, bits32[i@cv2] aligned 4);
   bits16[i@dv2.13] = %lobits16(i@1.14);
   if (%eq(%sx32(bits16[i@av2]), %sx32(bits16[i@dv2.13]))) { goto L.11; }
-  foreign "C" (i@failed)(30);
+  foreign "C" (i@failed)(30 aligned 4);
   L.11:
   L.10:
-foreign "C" return();
+  foreign "C" return();
 }
 }
 section "data" {
@@ -112,13 +112,13 @@ foreign "C" i@caller_bf3() {
     f@fv3.18: bits32;
   }
   bits32 f@1.19;
-  "float" f@1.19 = foreign "C" (i@callee_af3)(bits32[i@bv3], "float" bits64[i@cv3], "float" bits32[i@dv3], %sx32(bits8[i@ev3]));
+  "float" f@1.19 = foreign "C" (i@callee_af3)(bits32[i@bv3] aligned 4, "float" bits64[i@cv3] aligned 4, "float" bits32[i@dv3] aligned 4, %sx32(bits8[i@ev3]) aligned 4);
   bits32[f@fv3.18] = f@1.19;
   if (%feq(bits32[i@av3], bits32[f@fv3.18])) { goto L.16; }
-  foreign "C" (i@failed)(48);
+  foreign "C" (i@failed)(48 aligned 4);
   L.16:
   L.15:
-foreign "C" return();
+  foreign "C" return();
 }
 }
 section "data" {
@@ -156,13 +156,13 @@ foreign "C" i@caller_bf4() {
     i@hv4.23: bits8;
   }
   bits32 i@1.24;
-  i@1.24 = foreign "C" (i@callee_af4)(%zx32(bits16[i@bv4]), "float" bits64[i@cv4], bits32[i@dv4], bits32[i@ev4], %sx32(bits8[i@fv4]), %zx32(bits8[i@gv4]));
+  i@1.24 = foreign "C" (i@callee_af4)(%zx32(bits16[i@bv4]) aligned 4, "float" bits64[i@cv4] aligned 4, bits32[i@dv4] aligned 4, bits32[i@ev4] aligned 4, %sx32(bits8[i@fv4]) aligned 4, %zx32(bits8[i@gv4]) aligned 4);
   bits8[i@hv4.23] = %lobits8(i@1.24);
   if (%eq(%sx32(bits8[i@av4]), %sx32(bits8[i@hv4.23]))) { goto L.21; }
-  foreign "C" (i@failed)(79);
+  foreign "C" (i@failed)(79 aligned 4);
   L.21:
   L.20:
-foreign "C" return();
+  foreign "C" return();
 }
 }
 section "data" {
@@ -183,13 +183,13 @@ foreign "C" i@caller_bf5() {
   "float" f@1.29 = foreign "C" (i@callee_af5)();
   bits32[f@bv5.28] = f@1.29;
   if (%feq(bits32[i@av5], bits32[f@bv5.28])) { goto L.26; }
-  foreign "C" (i@failed)(87);
+  foreign "C" (i@failed)(87 aligned 4);
   L.26:
   L.25:
-foreign "C" return();
+  foreign "C" return();
 }
 export i@main as "main";
-foreign "C" i@main(bits32 i@argc, "address" bits32 i@argv, ) {
+foreign "C" i@main(bits32 i@argc aligned 4, "address" bits32 i@argv aligned 4, ) {
   stackdata {
   }
   foreign "C" (i@caller_bf1)();
@@ -197,9 +197,9 @@ foreign "C" i@main(bits32 i@argc, "address" bits32 i@argv, ) {
   foreign "C" (i@caller_bf3)();
   foreign "C" (i@caller_bf4)();
   foreign "C" (i@caller_bf5)();
-  foreign "C" return (bits32[i@errors]);
+  foreign "C" return (bits32[i@errors] aligned 4);
   L.30:
-foreign "C" return();
+  foreign "C" return();
 }
 import bits32 "callee_af5" as i@callee_af5;
 import bits32 "callee_af4" as i@callee_af4;

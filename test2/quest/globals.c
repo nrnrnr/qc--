@@ -1,0 +1,1 @@
+int globals_placeholder;

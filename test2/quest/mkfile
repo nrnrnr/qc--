@@ -12,64 +12,69 @@ PATH = 		$PATH:/scratch/lindig/lcc
 <$TOP/config/config.mk
 <$TOP/config/c.mk
 
-LCC	=	lcc
-LCCFLAGS=	-target=c-- -Wf-c--=x86/linux -Wf-c--segLIT=data 
 
-QCMM	=	$TOP/bin/qc--
+LCC	=	lcc
+LCCFLAGS=	-target=c-- -Wf-c--=x86/linux -Wf-c--segLIT=data
+
+QCMM	=	`if [ -x $TOP/bin/qc--.opt ]; then echo $TOP/bin/qc--.opt; else echo $TOP/bin/qc--; fi`
 QCMMFLAGS =	Ld.path=\"$CC\" 
 
 LDFLAGS = 	-L$TOP/runtime -lqc-- $TOP/runtime/pcmap.ld	
 
 QUEST =		quest
 
+# -- generating
+
+TESTBASIS=0 1 2
+
+TESTS=${TESTBASIS:%=test-%-main} ${TESTBASIS:%=test-%-callee}
+TESTS_C =	${TESTS:%=%.c}
+TESTS_CMM =	${TESTS:%=%.c--}
+
+
+
+HALFEXECS=${TESTBASIS:%=test-%-cmm} ${TESTBASIS:%=test-%-lcc} ${TESTBASIS:%=test-%-gcc}
+EXECS=${HALFEXECS:%=%-cmm} ${HALFEXECS:%=%-lcc} ${HALFEXECS:%=%-gcc}
+
+# -- high-level targets		
+
+all:VQ:		$EXECS
+		for f in $EXECS; do
+			./$f || echo "==== $f failed ===="
+		done	2> /dev/null
+		echo "Completed `echo $EXECS | wc -w` tests"
+
+bin:V:		$EXECS
+generate:V:	$TESTS_C $TESTS_CMM
+
+clean:V:
+		rm -f *.o *-[glc][cm][cm]-[glc][cm][cm]
+clobber:V:	clean
+		rm -f *.c-- *.c
+
+globals.o:	globals.c--
+		$QCMM -c -globals $prereq
+
 # -- rules
 
-%.c--: 		%.c
-		$LCC $LCCFLAGS -o $target -S $prereq
+
+%.c--: 		%.c /usr/local/lcc/rcc
+		$LCC $LCCFLAGS -o $target -S $stem.c
 
 %-gcc.o:	%.c
 		$CC -g -c -o $target $prereq
 
-%-main-cmm.o:	%-main.c--		
-		$QCMM $QCMMFLAGS -globals -c -o $target $prereq
+%-lcc.o:	%.c /usr/local/lcc/rcc
+		$LCC -g -c -o $target $stem.c
 
-%-callee-cmm.o: %-callee.c--
-		$QCMM $QCMMFLAGS -globals -c -o $target $prereq
+%-cmm.o:	%.c-- $QCMM
+		$QCMM -c -o $target $stem.c--
 
-%-gcc-cmm:	%-callee-gcc.o %-main-cmm.o
-		$CC $LDFLAGS -o $target $prereq
-
-%-cmm-gcc:	%-callee-cmm.o %-main-gcc.o
-		$CC $LDFLAGS -o $target $prereq
-
-# -- generating
-
-TESTS =		test-0-main test-0-callee	\
-		test-1-main test-1-callee	\
-		test-2-main test-2-callee	\
-
-TESTS_C =	${TESTS:%=%.c}
-TESTS_CMM =	${TESTS:%=%.c--}
+^test-([0-9]*)-(gcc|lcc|cmm)-(gcc|lcc|cmm)'$':R: test-'\1'-main-'\2'.o test-'\1'-callee-'\3'.o globals.o
+		$QCMM $LDFLAGS -globals -o $target $prereq 
 
 $TESTS_C:	
 		$QUEST -seed 12345 -lua quest.lua -n 5 -2 -s 0 -o test-0
 		$QUEST -seed 12345 -lua quest.lua -n 5 -2 -s 1 -o test-1
 		$QUEST -seed 12345 -lua quest.lua -n 5 -2 -s 2 -o test-2
 		
-EXECS =		test-0-cmm-gcc test-0-gcc-cmm	\
-		test-1-cmm-gcc test-1-gcc-cmm	\
-		test-2-cmm-gcc test-2-gcc-cmm	\
-
-# -- high-level targets		
-
-all:V:		$EXECS
-		for f in $EXECS; do
-			./$f || true
-		done	
-
-generate:V:	$TESTS_C $TESTS_CMM
-
-clean:V:
-		rm -f *.o *-cmm-gcc *-gcc-cmm
-clobber:V:	clean
-		rm -f *.c-- *.c
