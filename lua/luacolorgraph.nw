@@ -1,0 +1,835 @@
+%cg. -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+%-------------------------------------------------------------------
+\section{Graph Coloring Register Allocation}
+%-------------------------------------------------------------------
+
+
+
+<<luacolorgraph.mli>>=
+(*
+module Layer : Newlib.Client.TT with module T1 = Luabackplane.Layer.T
+*)
+module T : Lua.Lib.USERTYPE
+module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a Luabackplane.t')
+            (T2 : Lua.Lib.TYPEVIEW with type 'a t = 'a T.t and type 'a
+combined = 'a T1.combined)
+	: Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined
+@
+
+
+%-------------------------------------------------------------------
+\subsection{Data Structures}
+%-------------------------------------------------------------------
+Information stored for each node:
+\begin{itemize}
+\item AdjListMap - a map to the adjacency list of nodes that interfere with
+                   each node
+\item degreeMap - a map containing the current degree of each node
+\item moveListMap - a map from a node to the list of moves it's associated with
+\item aliasMap - when a move is coalesced, the "discarded" node must be aliased
+              to the one we keep
+\item colorMap - map from node to assigned color
+\end{itemize}
+
+Every node is always in one and only one of these lists:
+\begin{itemize}
+\item precolored - machine registers, preassigned a color
+        \begin{quote}\it does this apply to us? \end{quote}
+\item initial - temporary registers, not yet processed
+\item simplifyWorklist - list of low-degree non-move-related nodes
+\item freezeWorklist - low-degree move-related nodes
+\item spillWorklist - high-degree nodes
+\item spilledNodes - potential spills
+\item coalescedNodes - nodes that have been coalesced out of the graph
+\item coloredNodes - nodes successfully colored
+\item selectStack - stack of temps removed from the graph
+\end{itemize}
+
+Every move instruction is in one and only one of these lists:
+\begin{itemize}
+\item coalescedMoves - moves that have been coalesced
+\item constrainedMoves - moves whose source and target interfere
+\item frozenMoves - move that will no longer be considered for coalescing
+\item worklistMoves - moves enabled for possible coalescing
+\item activeMoves - moves not yet ready for coalescing
+\end{itemize}
+
+<<graph coloring types>>=
+module Register = Dummyreg
+module G = Dummygraph
+    type regt = G.regt
+    module CompareRegPair = struct
+        type t = regt * regt
+        let compare = compare
+    end
+    module RegPairSet = Set.Make(CompareRegPair)
+    module CompareMoves = struct
+        type t = G.node
+        let compare = compare
+    end
+    module MS = Set.Make(CompareMoves)
+    module RM = Register.Map
+    module RS = Register.Set
+
+type temp = int
+type move = G.node
+type color = int
+type colorGraph = {mutable adjSet : RegPairSet.t
+                  ;mutable adjListMap : Register.t list RM.t
+                  ;mutable degreeMap : int RM.t
+                  ;mutable moveListMap : G.node list RM.t
+                  ;mutable aliasMap : Register.t RM.t
+                  ;mutable colorMap : color RM.t
+                  ;mutable precolored : Register.t list
+                  ;mutable initial : Register.t list
+                  ;mutable spills : Register.t list
+                  ;mutable simplifyWorklist : Register.t list
+                  ;mutable freezeWorklist : Register.t list
+                  ;mutable spillWorklist : Register.t list
+                  ;mutable spilledNodes : Register.t list
+                  ;mutable coalescedNodes : Register.t list
+                  ;mutable coloredNodes : Register.t list
+                  ;mutable selectStack : Register.t list
+                  ;mutable coalescedMoves : move list
+                  ;mutable constrainedMoves : move list
+                  ;mutable frozenMoves : move list
+                  ;mutable worklistMoves : move list
+                  ;mutable activeMoves : move list
+                  ;        k : int
+                  }
+@
+
+%-------------------------------------------------------------------
+\subsection{Coloring Algorithm}
+%-------------------------------------------------------------------
+
+
+from Appel 244:
+\begin{quote}
+\begin{tabbing}
+xx\=xx\=xx\=xx\=xx\=xx\=xx\=xx\=\kill
+procedure Main()\\
+    LivenessAnalysis()\\
+    Build()\\
+    MakeWorklist()\\
+    [[repeat]]\\
+\>      [[if]] simplifyWorklist != \{\} [[then]] Simplify()\\
+\>      [[else if]] worklistMoves != \{\} [[then]] Coalesce()\\
+\>      [[else if]] freezeWorklist != \{\} [[then]] Freeze()\\
+\>      [[else if]] spillWorklist != \{\} [[then]] SelectSpill()\\
+    [[until]] simplifyWorklist = \{\} [[and]] worklistMoves = \{\}\\
+\>            [[and]] simplifyWorklist = \{\} [[and]] spillWorklist = \{\}\\
+    AssignColors()\\
+    [[if]] spilledNodes != \{\} [[then]]\\
+\>      RewriteProgram(spilledNodes)\\
+\>      Main()\\
+\end{tabbing}
+\end{quote}
+
+
+A loose translation into our control flow language:
+
+<<color graph algorithm>>=
+let initInfo = {adjSet = RegPairSet.empty
+               ;adjListMap = RM.empty
+               ;degreeMap = RM.empty
+               ;moveListMap = RM.empty
+               ;aliasMap = RM.empty
+               ;colorMap = RM.empty
+               ;precolored = []
+               ;initial = []
+               ;spills = []
+               ;simplifyWorklist = []
+               ;freezeWorklist = []
+               ;spillWorklist = []
+               ;spilledNodes = []
+               ;coalescedNodes = []
+               ;coloredNodes = []
+               ;selectStack = []
+               ;coalescedMoves = []
+               ;constrainedMoves = []
+               ;frozenMoves = []
+               ;worklistMoves = []
+               ;activeMoves = []
+               ;k = 3
+               }
+
+
+let haveSpilledNodes param _ =
+match T2'.map.V.project param with
+    | CGInfo cg -> not (empty cg.spilledNodes)
+
+let haveSpilledNodesStage = { Luabackplane.name = "haveSpilledNodes"
+                            ; Luabackplane.fn = haveSpilledNodes
+                            ; Luabackplane.paramExpected = Some "cgInfo"
+                            ; Luabackplane.stateCreated = Luabackplane.list2SSet []
+                            ; Luabackplane.stateDestroyed = Luabackplane.list2SSet []
+                            ; Luabackplane.stateUsed = Luabackplane.list2SSet ["cfg"]
+                            }
+
+let rename _ cfg = G.rename cfg; true
+let renameStage = { Luabackplane.name = "rename"
+                  ; Luabackplane.fn = rename
+                  ; Luabackplane.paramExpected = None
+                  ; Luabackplane.stateCreated = Luabackplane.list2SSet []
+                  ; Luabackplane.stateDestroyed = Luabackplane.list2SSet []
+                  ; Luabackplane.stateUsed = Luabackplane.list2SSet ["cfg"]
+                  }
+
+let info = initInfo
+let cg =
+  Luabackplane.Share(T2'.map.V.embed (CGInfo info), "cgInfo",
+      Luabackplane.Fix (
+          Luabackplane.Seq [ Luabackplane.Ignore(Luabackplane.Single livenessStage)
+                        ; Luabackplane.Ignore (Luabackplane.Single buildStage)
+                        ; Luabackplane.Ignore (Luabackplane.Single makeWorklistStage)
+                        ; Luabackplane.Ignore (
+                            Luabackplane.Fix (
+                               Luabackplane.Unless_Do (Luabackplane.Single simplifyStage,
+                               Luabackplane.Unless_Do (Luabackplane.Single coalesceStage,
+                               Luabackplane.Unless_Do (Luabackplane.Single freezeStage,
+                               Luabackplane.Single selectSpillStage)))))
+                        ; Luabackplane.Ignore (Luabackplane.Single assignColorsStage)
+                        ; Luabackplane.When_Do (Luabackplane.Single haveSpilledNodesStage,
+                             Luabackplane.Single rewriteProgramStage)
+                        ]))
+
+
+(*
+let color graph info =
+    in
+        Luabackplane.run cg graph (Luabackplane.list2SSet ["cfg"])
+*)
+@
+
+
+%-------------------------------------------------------------------
+\subsubsection{LivenessAnalysis}
+%-------------------------------------------------------------------
+
+The liveness analysis algorithm is implemented in the [[live]] module.
+This algorithm annotates each node in the (\cfg) with a live-in set.
+
+<<livenessAnalysis>>=
+(* dummy implementation *)
+let liveness _ cfg = G.liveness cfg; true
+
+let livenessStage = { Luabackplane.name = "liveness"
+                    ; Luabackplane.fn = liveness
+                    ; Luabackplane.paramExpected = None
+                    ; Luabackplane.stateCreated = Luabackplane.list2SSet ["live_in sets"]
+                    ; Luabackplane.stateDestroyed = Luabackplane.list2SSet []
+                    ; Luabackplane.stateUsed = Luabackplane.list2SSet ["cfg"]
+                    }
+@
+
+%-------------------------------------------------------------------
+\subsubsection{Build}
+%-------------------------------------------------------------------
+
+Each node in the CFG corresponds to one machine instruction - this is the
+machine invariant.
+
+<<build>>=
+let numMapFind key listMap =
+    try RM.find key listMap with Not_found -> 0
+let listMapFind key listMap =
+    try RM.find key listMap with Not_found -> []
+let listMapAdd value key listMap =
+    RM.add key (value::(listMapFind key listMap)) listMap
+let listMapUnion value key listMap =
+    RM.add key (value @ (listMapFind key listMap)) listMap
+
+
+let addEdge u v cg =
+    if not ((RegPairSet.mem (u, v) cg.adjSet) || (u = v))
+    then
+        let _ = cg.adjSet <- List.fold_right RegPairSet.add [(u, v); (v, u)]
+                                             cg.adjSet in
+        let _ =
+            if not (List.mem u cg.precolored)
+            then
+                cg.adjListMap <- listMapAdd v u cg.adjListMap;
+                cg.degreeMap <- RM.add u (numMapFind u cg.degreeMap + 1)
+                                        cg.degreeMap in
+        let _ =
+            if not (List.mem v cg.precolored)
+                 then
+                    cg.adjListMap <- listMapAdd u v cg.adjListMap;
+                     cg.degreeMap <- RM.add v (numMapFind v cg.degreeMap + 1)
+                                           cg.degreeMap
+            in ()
+
+let resetDegree cg temp =
+    cg.degreeMap <- RM.add temp (cg.k - (G.regSpaceSize temp)) cg.degreeMap
+
+let build cgInfo cfg =
+(*
+    match cgInfo with
+        | U.Other (P.CGInfo cg) ->
+*)
+match T2'.map.V.project cgInfo with
+    CGInfo cg ->
+            let addInterference node () =
+                let live = G.get_live node in
+                let defs = G.defs node in
+                let uses = G.uses node in
+                let live =
+                    if G.isMoveInstruction node
+                    then
+                        (cg.moveListMap <- RS.fold (listMapAdd node)
+                                            (RS.union defs uses) cg.moveListMap;
+                        cg.worklistMoves <- node::cg.worklistMoves;
+                        RS.fold RS.remove uses live)
+                    else live in
+                let live = RS.union live defs in
+                let _ = RS.iter (resetDegree cg) defs in
+                let addAllEdges def =
+                    RS.iter (fun liveNode -> addEdge liveNode def cg) live
+                in
+                    RS.iter addAllEdges defs in
+            let _ = G.fold_fwd cfg addInterference () in
+            let _ = cg.initial <- G.fold_fwd cfg
+                        (fun node rst -> (Register.Set.elements (G.defs node))
+                                         @ rst) []
+            in
+                true
+        
+
+let buildStage = {Luabackplane.name = "build"
+                 ; Luabackplane.fn = build
+                 ; Luabackplane.paramExpected = Some "cgInfo"
+                 ; Luabackplane.stateCreated = Luabackplane.list2SSet ["interferenceGraph"]
+                 ; Luabackplane.stateDestroyed = Luabackplane.list2SSet []
+                 ; Luabackplane.stateUsed = Luabackplane.list2SSet ["cfg"; "live_in sets"]
+                 }
+@
+
+%-------------------------------------------------------------------
+\subsubsection{MakeWorkList}
+%-------------------------------------------------------------------
+
+<<makeWorklist>>=
+let filterOut el lst =
+    List.fold_right (fun x rst -> if x = el then rst else x::rst) lst []
+
+let setFromList lst = List.fold_right RS.add lst RS.empty
+let moveSetFromList lst = List.fold_right MS.add lst MS.empty
+
+let adjacent temp cg =
+    RS.diff (setFromList (listMapFind temp cg.adjListMap))
+            (setFromList (cg.selectStack @ cg.coalescedNodes))
+
+let nodeMoves temp cg =
+    MS.inter (moveSetFromList (listMapFind temp cg.moveListMap))
+             (moveSetFromList (cg.activeMoves @ cg.worklistMoves))
+
+let moveRelated temp cg =
+    not (MS.is_empty (nodeMoves temp cg))
+
+let makeWorklist param _ = 
+match T2'.map.V.project param with
+    | CGInfo cg ->
+        let addToLists = function
+            | temp when numMapFind temp cg.degreeMap >= cg.k ->
+                cg.spillWorklist <- temp::cg.spillWorklist
+            | temp when moveRelated temp cg ->
+                cg.freezeWorklist <- temp::cg.freezeWorklist
+            | temp ->
+                cg.simplifyWorklist <- temp::cg.simplifyWorklist in
+        let _ = List.iter addToLists cg.initial in
+        let _ = cg.initial <- [] in
+            true
+             
+
+let makeWorklistStage = { Luabackplane.name = "makeWorklist"
+                        ; Luabackplane.fn = makeWorklist
+                        ; Luabackplane.paramExpected = Some "cgInfo"
+                        ; Luabackplane.stateCreated = Luabackplane.list2SSet ["worklists"]
+                        ; Luabackplane.stateDestroyed = Luabackplane.list2SSet []
+                        ; Luabackplane.stateUsed = Luabackplane.list2SSet ["interferenceGraph"]
+                       }
+@
+
+%-------------------------------------------------------------------
+\subsubsection{Simplify}
+%-------------------------------------------------------------------
+
+<<simplify>>=
+let enableMoves temps cg =
+    let enableMovesForTemp temp =
+        let enableMove move =
+            if List.mem move cg.activeMoves
+            then cg.activeMoves <- filterOut move cg.activeMoves;
+                 cg.worklistMoves <- union move cg.worklistMoves
+        in
+            MS.iter enableMove (nodeMoves temp cg)
+    in
+        RS.iter enableMovesForTemp temps
+
+let listAdd el lst = if not (List.mem el lst) then el::lst else lst
+
+let decrementDegree cg temp =
+    let d = RM.find temp cg.degreeMap in
+    let _ = cg.degreeMap <- RM.add temp (d - 1) cg.degreeMap in
+        if d = cg.k
+        then
+            enableMoves (RS.add temp (adjacent temp cg)) cg;
+            cg.spillWorklist <- filterOut temp cg.spillWorklist;
+            if moveRelated temp cg
+            then cg.freezeWorklist <- listAdd temp cg.freezeWorklist
+            else cg.simplifyWorklist <- listAdd temp cg.simplifyWorklist
+        
+exception GraphColoring
+
+let simplify param _ = (*match param with*)
+match T2'.map.V.project param with
+    | CGInfo cg ->
+        (match cg.simplifyWorklist with
+        | temp::rst ->
+            let _ = cg.simplifyWorklist <- rst in
+            let _ = cg.selectStack <- temp::cg.selectStack in
+            let _ = RS.iter (decrementDegree cg) (adjacent temp cg) in
+                true
+        | _ -> false)
+
+
+
+let simplifyStage = { Luabackplane.name = "simplify"
+                    ; Luabackplane.fn = simplify
+                    ; Luabackplane.paramExpected = Some "cgInfo"
+                    ; Luabackplane.stateCreated = Luabackplane.list2SSet []
+                    ; Luabackplane.stateDestroyed = Luabackplane.list2SSet []
+                    ; Luabackplane.stateUsed = Luabackplane.list2SSet []
+                    }
+@
+
+
+%-------------------------------------------------------------------
+\subsubsection{Coalesce}
+%-------------------------------------------------------------------
+
+<<coalesce>>=
+let addWorklist temp cg =
+    if not ((List.mem temp cg.precolored) || (moveRelated temp cg) ||
+            (numMapFind temp cg.degreeMap >= cg.k))
+    then
+        cg.freezeWorklist <- filterOut temp cg.freezeWorklist;
+        cg.simplifyWorklist <- temp::cg.simplifyWorklist
+
+let ok tempt tempr cg =
+    (numMapFind tempt cg.degreeMap < cg.k) || (List.mem tempt cg.precolored) ||
+    (RegPairSet.mem (tempt, tempr) cg.adjSet)
+
+let conservative nodes cg =
+    cg.k > (List.fold_left
+           (fun k node -> if numMapFind node cg.degreeMap >= cg.k then k + 1 else k)
+            0 nodes)
+
+let rec getAlias node cg =
+    if List.mem node cg.coalescedNodes
+    then getAlias (RM.find node cg.aliasMap) cg
+    else node
+
+let combine u v cg =
+    let _ = if List.mem v cg.freezeWorklist
+            then cg.freezeWorklist <- filterOut v cg.freezeWorklist
+            else cg.spillWorklist <- filterOut v cg.spillWorklist in
+    let _ = cg.coalescedNodes <- v::cg.coalescedNodes in
+    let _ = cg.aliasMap <- RM.add v u cg.aliasMap in
+    let _ = cg.moveListMap <- listMapUnion (listMapFind v cg.moveListMap)
+                                           u cg.moveListMap in
+    let _ = enableMoves (RS.add v RS.empty) cg in
+    let _ = RS.iter (fun temp -> addEdge temp u cg; decrementDegree cg temp)
+                      (adjacent v cg) in
+        if (numMapFind u cg.degreeMap >= cg.k) && (List.mem u cg.freezeWorklist)
+        then
+            cg.freezeWorklist <- filterOut u cg.freezeWorklist;
+            cg.spillWorklist <- filterOut u cg.spillWorklist
+
+
+let coalesce param _ =
+match T2'.map.V.project param with
+    | CGInfo cg ->
+        (match cg.worklistMoves with
+        | move::rstMoves ->
+            let x = G.source move in
+            let y = G.dest move in
+            let (u, v) = if List.mem y cg.precolored then (y, x) else (x, y) in
+            let _ = cg.worklistMoves <- rstMoves in
+            let _ =
+                if u = v
+                then
+                    (cg.coalescedMoves <- union move cg.coalescedMoves;
+                     addWorklist u cg)
+                else if (List.mem v cg.precolored) || (RegPairSet.mem (u, v) cg.adjSet)
+                     then
+                        (cg.constrainedMoves <- move::cg.constrainedMoves;
+                         addWorklist u cg;
+                         addWorklist v cg)
+                else if ((List.mem u cg.precolored) &&
+                         (RS.fold (fun t rst -> (ok t u cg) && rst)
+                                        (adjacent v cg) true)
+                        || ((not (List.mem u cg.precolored)) &&
+                        (conservative (RS.elements (RS.union (adjacent u cg)
+                                                           (adjacent v cg))))
+                                          cg))
+                     then
+                        (cg.coalescedMoves <- union move cg.coalescedMoves;
+                         combine u v cg;
+                         addWorklist u cg)
+                else
+                    cg.activeMoves <- move::cg.activeMoves
+            in
+                true
+        | _ -> false)
+
+let recklessCoalesce param _ =
+match T2'.map.V.project param with
+    | CGInfo cg ->
+        (match cg.worklistMoves with
+        | move::rstMoves ->
+            let x = G.source move in
+            let y = G.dest move in
+            let (u, v) = if List.mem y cg.precolored then (y, x) else (x, y) in
+            let _ = cg.worklistMoves <- rstMoves in
+                (cg.coalescedMoves <- union move cg.coalescedMoves;
+                 combine u v cg;
+                 addWorklist u cg;
+                 true)
+        | _ -> false)
+
+let coalesceStage = { Luabackplane.name = "coalesce"
+                    ; Luabackplane.fn = coalesce
+                    ; Luabackplane.paramExpected = Some "cgInfo"
+                    ; Luabackplane.stateCreated = Luabackplane.list2SSet []
+                    ; Luabackplane.stateDestroyed = Luabackplane.list2SSet []
+                    ; Luabackplane.stateUsed = Luabackplane.list2SSet []
+                    }
+
+let recklessCoalesceStage = { Luabackplane.name = "recklessCoalesce"
+                            ; Luabackplane.fn = recklessCoalesce
+                            ; Luabackplane.paramExpected = Some "cgInfo"
+                            ; Luabackplane.stateCreated = Luabackplane.list2SSet []
+                            ; Luabackplane.stateDestroyed = Luabackplane.list2SSet []
+                            ; Luabackplane.stateUsed = Luabackplane.list2SSet []
+                            }
+@
+
+%-------------------------------------------------------------------
+\subsubsection{Freeze}
+%-------------------------------------------------------------------
+
+<<freeze>>=
+let freezeMoves temp cg =
+    let freezeMove move =
+        let x = G.source move in
+        let y = G.source move in
+        let v = if (getAlias y cg) = (getAlias temp cg)
+                then getAlias x cg
+                else getAlias y cg in
+        let _ = cg.activeMoves <- filterOut move cg.activeMoves in
+        let _ = cg.frozenMoves <- move::cg.frozenMoves in
+            if (MS.is_empty (nodeMoves v cg)) &&
+               (numMapFind v cg.degreeMap < cg.k)
+            then
+                cg.freezeWorklist <- filterOut v cg.freezeWorklist;
+                cg.simplifyWorklist <- v::cg.simplifyWorklist 
+    in MS.iter freezeMove (nodeMoves temp cg)
+        
+let freeze param _ =
+match T2'.map.V.project param with
+    | CGInfo cg -> (match cg.freezeWorklist with
+        | temp::rst ->
+            (cg.freezeWorklist <- rst;
+             cg.simplifyWorklist <- temp::cg.simplifyWorklist;
+             freezeMoves temp cg;
+             true)
+        | _ -> false)
+    
+
+let freezeStage = { Luabackplane.name = "freeze"
+                  ; Luabackplane.fn = freeze
+                  ; Luabackplane.paramExpected = Some "cgInfo"
+                  ; Luabackplane.stateCreated = Luabackplane.list2SSet []
+                  ; Luabackplane.stateDestroyed = Luabackplane.list2SSet []
+                  ; Luabackplane.stateUsed = Luabackplane.list2SSet []
+                  }
+@
+
+
+%-------------------------------------------------------------------
+\subsubsection{SelectSpill}
+%-------------------------------------------------------------------
+
+<<selectSpill>>=
+let selectSpill param _ =
+match T2'.map.V.project param with
+    | CGInfo cg ->
+        (match List.fold_right filterOut cg.spills cg.spillWorklist with
+         | temp::rst ->
+            let _ = cg.spillWorklist <- rst in
+            let _ = cg.simplifyWorklist <- temp::cg.simplifyWorklist in
+            let _ = freezeMoves temp cg in
+                true
+         | _ -> false)
+
+let assignColors param _ =
+match T2'.map.V.project param with
+    | CGInfo cg ->
+        let colorTemp temp =
+            let removeUsedColor colors temp =
+                if List.mem (getAlias temp cg) (cg.coloredNodes @ cg.precolored)
+                then
+                    filterOut (RM.find (getAlias temp cg) cg.colorMap) colors
+                else colors in
+            let okColors =
+                List.fold_left removeUsedColor (G.possibleColors temp)
+                               (listMapFind temp cg.adjListMap)
+            in
+                (match okColors with
+                 | [] -> cg.spilledNodes <- temp::cg.spilledNodes
+                 | color::rst ->
+                    cg.coloredNodes <- union temp cg.coloredNodes;
+                    cg.colorMap <- RM.add temp color cg.colorMap) in
+        let colorSelectStack () =
+            let _ = List.iter colorTemp cg.selectStack in
+                cg.selectStack <- [] in
+        let colorCoalescedNodes () =
+            let setColor temp = 
+                cg.colorMap <- RM.add temp (RM.find (getAlias temp cg)
+                                            cg.colorMap) cg.colorMap
+            in
+                List.iter setColor cg.coalescedNodes in
+        let _ = colorSelectStack () in
+        let _ = colorCoalescedNodes () in
+            (* remove short spill temps from the spill list *)
+        let _ = match cg.spilledNodes with
+            | [] -> ()
+            | _ -> cg.spilledNodes <- List.fold_right filterOut cg.spills
+                                                      cg.spilledNodes;
+                   if empty cg.spilledNodes then raise GraphColoring
+        in
+            true
+
+
+let rewriteProgram param cfg =
+match T2'.map.V.project param with
+    | CGInfo cg ->
+    (* handle addition of temps (those in spilledNodes) *)
+    let (newTemps, newGraph) = G.rewrite cfg cg.spilledNodes in (* set of all new temps added *)
+    let _ = cg.adjSet <- RegPairSet.empty in
+    let _ = cg.adjListMap <- RM.empty in
+    let _ = cg.degreeMap <- RM.empty in
+    let _ = cg.moveListMap <- RM.empty in
+    let _ = cg.aliasMap <- RM.empty in
+    let _ = cg.colorMap <- RM.empty in
+    let _ = cg.simplifyWorklist <- [] in
+    let _ = cg.freezeWorklist <- [] in
+    let _ = cg.spillWorklist <- [] in
+    let _ = cg.spilledNodes <- [] in
+    let _ = cg.initial <- cg.coloredNodes @ cg.coalescedNodes @ newTemps in
+    let _ = cg.coloredNodes <- [] in
+    let _ = cg.coalescedNodes <- [] in
+    let _ = cg.selectStack <- [] in
+    let _ = cg.coalescedMoves <- [] in
+    let _ = cg.constrainedMoves <- [] in
+    let _ = cg.frozenMoves <- [] in
+    let _ = cg.worklistMoves <- [] in
+    let _ = cg.spills <- cg.spills @ newTemps in
+    let _ = cg.activeMoves <- [] in
+        true
+
+let selectSpillStage = { Luabackplane.name = "selectSpill"
+                       ; Luabackplane.fn = selectSpill
+                       ; Luabackplane.paramExpected = Some "cgInfo"
+                       ; Luabackplane.stateCreated = Luabackplane.list2SSet []
+                       ; Luabackplane.stateDestroyed = Luabackplane.list2SSet []
+                       ; Luabackplane.stateUsed = Luabackplane.list2SSet []
+                       }
+
+let assignColorsStage = { Luabackplane.name = "assignColors"
+                        ; Luabackplane.fn = assignColors
+                        ; Luabackplane.paramExpected = Some "cgInfo"
+                        ; Luabackplane.stateCreated = Luabackplane.list2SSet []
+                        ; Luabackplane.stateDestroyed = Luabackplane.list2SSet []
+                        ; Luabackplane.stateUsed = Luabackplane.list2SSet ["interferenceGraph"]
+                        }
+
+let rewriteProgramStage = { Luabackplane.name = "rewriteProgram"
+                          ; Luabackplane.fn = rewriteProgram
+                          ; Luabackplane.paramExpected = Some "cgInfo"
+                          ; Luabackplane.stateCreated = Luabackplane.list2SSet []
+                          ; Luabackplane.stateDestroyed = Luabackplane.list2SSet []
+                          ; Luabackplane.stateUsed = Luabackplane.list2SSet []
+                          }
+@
+
+
+<<luacolorgraph.ml>>=
+    exception IllegalParam of string
+    let empty lst = match lst with
+        | [] -> true
+        | _ -> false
+    let union move lst = if List.mem move lst then lst else move::lst
+
+
+    <<graph coloring types>>
+
+    type 'a t' = CGInfo of colorGraph
+module T : Lua.Lib.USERTYPE with type 'a t = 'a t' = struct
+	type 'a t = 'a t'
+	let tname = "Graph Coloring"
+	let eq _ x y = match x, y with
+	| CGInfo x, CGInfo y -> x = y
+	let to_string vs = function
+	| CGInfo g -> "<cgInfo>"
+end
+(*
+module Make (T1 : Lua.Lib.TYPEVIEW with type 'a U.t = 'a Luabackplane.t')
+            (T2 : Lua.Lib.TYPEVIEW with type 'a U.t = 'a t' and type 'a t = 'a T1.t)
+	: Lua.Lib.Lib.TYPEFUL with type 'a T.t = 'a T1.t =
+*)
+module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a Luabackplane.t')
+            (T2 : Lua.Lib.TYPEVIEW with type 'a t = 'a T.t and type 'a
+combined = 'a T1.combined)
+	: Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined =
+  struct
+	type 'a combined = 'a T1.combined
+	module T = T1
+	module M (Interp : Lua.Lib.CORE with type 'a V.userdata' = 'a T.combined) = struct
+        module V = Interp.V
+		module T1' = struct
+			let map = T1.makemap V.userdata V.projection
+		end
+		module T2' = struct
+			let map = T2.makemap V.userdata V.projection
+		end
+
+        <<graph coloring builtins>>
+
+        let init g =
+            List.iter (fun (k, v) -> V.Table.bind g.V.globals (V.String k) v) graph_coloring_builtins
+	end
+  end
+
+(*
+module Layer : Newlib.Client.TT with module T1 = Luabackplane.Layer.T = struct
+    type 'a t' = CGInfo of colorGraph
+    module T1 = Luabackplane.Layer.T
+    module T2 : Newlib.USERTYPE with type 'a t = 'a t' = struct
+        type 'a t = 'a t'
+        let tname = "Graph Coloring"
+        let eq _ x y = match x, y with
+        | CGInfo x, CGInfo y -> x = y
+        let to_string vs = function
+        | CGInfo g -> "<cgInfo>"
+    end
+
+
+    module Make (Interp : Newlib.INTERP)
+                (T1' : Newlib.TYPEVIEW with module U = T1 and module I = Interp)
+                (T2' : Newlib.TYPEVIEW with module U = T2 and module I = Interp)
+                : Newlib.INIT with type state = Interp.V.state =
+    struct
+        module V = Interp.V
+
+        <<graph coloring builtins>>
+
+        type state = Interp.V.state
+        let init g =
+            List.iter (fun (k, v) -> V.Table.bind g.V.globals (V.String k)
+v) graph_coloring_builtins
+    end
+end
+*)
+@
+
+
+
+<<graph coloring builtins>>=
+let {V.embed = embed; V.project = project} = T2.makemap V.userdata V.projection
+(*
+let embed = T2'.map.V.embed
+let project = T2'.map.V.project
+    let cgInfo = { V.embed = (fun a -> embed (U.Other (P.CGInfo a)))
+                 ; V.project = (fun v -> match project v with
+                                       | U.Other (P.CGInfo a) -> a
+                                       | _ -> raise (V.Projection (v, "cgInfo")))
+                 }
+*)
+
+    <<livenessAnalysis>>
+    <<build>>
+    <<makeWorklist>>
+    <<simplify>>
+    <<coalesce>>
+    <<freeze>>
+    <<selectSpill>>
+    <<color graph algorithm>>
+
+
+
+    let inputs = Luabackplane.SS.empty
+let dnode1 = G.makeNode "1" ["g"] ["j"] false
+let dnode2 = G.makeNode "2" ["h"] ["k"] false
+let dnode3 = G.makeNode "3" ["f"] ["g";"h"] false
+let dnode4 = G.makeNode "4" ["e"] ["j"] false
+let dnode5 = G.makeNode "5" ["m"] ["j"] false
+let dnode6 = G.makeNode "6" ["b"] ["f"] false
+let dnode7 = G.makeNode "7" ["c"] ["e"] false
+let dnode8 = G.makeNode "8" ["d"] ["c"] true
+let dnode9 = G.makeNode "9" ["k"] ["m"] false
+let dnode10 = G.makeNode "10" ["j"] ["b"] true
+let dnodeLiveOut = G.makeNode "liveOut" [] ["d"; "k"; "j"] false
+let dgraph = [dnode1; dnode2; dnode3; dnode4; dnode5; dnode6; dnode7;
+              dnode8; dnode9; dnode10; dnodeLiveOut]
+
+let liveness' _ cfg = prerr_string "woo-hoo!\n"; flush stderr; false
+
+let livenessStage = { Luabackplane.name = "liveness"
+                    ; Luabackplane.fn = liveness'
+                    ; Luabackplane.paramExpected = None
+                    ; Luabackplane.stateCreated = Luabackplane.list2SSet ["live_in sets"]
+                    ; Luabackplane.stateDestroyed = Luabackplane.list2SSet []
+                    ; Luabackplane.stateUsed = Luabackplane.list2SSet ["cfg"]
+                    }
+(*
+let cg = Luabackplane.Single livenessStage 
+*)
+
+let cgTable = V.Table.create 10
+let _ = List.iter (fun (k, v) -> V.Table.bind cgTable k v)
+        [ V.string.V.embed "liveness", T1'.map.V.embed (Luabackplane.StageFn liveness)
+        ; V.string.V.embed "build", T1'.map.V.embed (Luabackplane.StageFn build)
+        ; V.string.V.embed "makeWorklist", T1'.map.V.embed (Luabackplane.StageFn makeWorklist)
+        ; V.string.V.embed "simplify", T1'.map.V.embed (Luabackplane.StageFn simplify)
+        ; V.string.V.embed "coalesce", T1'.map.V.embed (Luabackplane.StageFn coalesce)
+        ; V.string.V.embed "freeze", T1'.map.V.embed (Luabackplane.StageFn freeze)
+        ; V.string.V.embed "selectSpill", T1'.map.V.embed (Luabackplane.StageFn selectSpill)
+        ; V.string.V.embed "assignColors", T1'.map.V.embed (Luabackplane.StageFn assignColors)
+        ; V.string.V.embed "haveSpilledNodes", T1'.map.V.embed (Luabackplane.StageFn haveSpilledNodes)
+        ; V.string.V.embed "rewriteProgram", T1'.map.V.embed (Luabackplane.StageFn rewriteProgram)
+        ]
+
+    let graph_coloring_builtins =
+        [ "initInfo", T2'.map.V.embed (CGInfo initInfo)
+        ; "cg", T1'.map.V.embed (Luabackplane.Action cg)
+        ; "dgraph", T1'.map.V.embed (Luabackplane.CFG dgraph)
+(*
+        ; "inputs", T1'.map.V.embed (Luabackplane.Inputs inputs)
+*)
+
+        ; "CG", V.table.V.embed cgTable
+        ]
+@
+
+
+
+
+
+
+
+
+
