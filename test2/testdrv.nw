@@ -124,7 +124,6 @@ end
 % ------------------------------------------------------------------
 \section{Driver Implementation}
 % ------------------------------------------------------------------
-
 <<testdrv.lua>>=
 $debug 1
 Test = Test and error("Test already defined") or {}
@@ -135,14 +134,22 @@ Test.trust_exe = nil    -- trust exe output for test status
 Test.on_error = {}      -- error handlers
 Test.files = {}         -- input source files
 Test.tst_file = ""      -- name of config file
-
+@ 
+Lua doee not have a function to get the number of entries in a table/list.
+<<testdrv.lua>>=
 function Test.list_len(l)
   local i = 1
   while l[i] do i = i + 1 end
   return i - 1
 end
-
-function Test.status_line(left, right)
+@ 
+The status line is printed during a batch process.
+In the case of an error, we may need to clear the status line before,
+anything else is printed.
+<<testdrv.lua>>=
+function Test.status_line(i, len)
+  local left = format("Processing test %d of %d", i, len)
+  local right = format("[ %0.2f %% ]", 100 * (i-1) / len)
   local len = 80 - strlen(left)
   local fmt = format('%%s%%%ds\r', len)
   write(format(fmt, left, right))
@@ -152,10 +159,12 @@ function Test.clear_status_line()
   if Test.verbose then
     print("") -- for pager programs
   else
-    Test.status_line("", "")
+    write(format("%-80s\r", ""))
   end
 end
-
+@ 
+Lua does not have a printf like function.
+<<testdrv.lua>>=
 function Test.log(...)
   if not Test.verbose then return end
   local i = 2
@@ -171,8 +180,9 @@ function Test.log(...)
   cmd = "print(\"## \" .. format(" .. cmd .. "))"
   dostring(cmd)
 end
-
--- tmpname's placement of files is unpredictable
+@ 
+Lua tmpname places files all around the filesystem.
+<<testdrv.lua>>=
 function Test.temp_name(ext)
   local name = Caml.Filename.basename(tmpname())
   return Caml.Filename.concat("/tmp", name .. ext)
@@ -197,7 +207,10 @@ function Test.on_error[".s"](expected, output)
   Test.log(cmd)
   execute(cmd)
 end
-
+@ 
+This function handles dispatching to the correct error handler.
+All errors are reported by calling this function.
+<<testdrv.lua>>=
 function Test.error(file, expected, actual)
   Test.clear_status_line()
   Test.errors = Test.errors + 1
@@ -219,6 +232,8 @@ end
 % -------------------------------------------------------------------
 \subsubection{Compile and test functions}
 % -------------------------------------------------------------------
+In order to catch exceptions from Caml code, we have to write a small
+function that will not return nil.
 <<testdrv.lua>>=
 function Test.translate(f, tab)
   CMD.translate_files(f, tab)
@@ -249,7 +264,11 @@ function Test.compile_file(file)
 
   return { s_file, so, se }
 end
-
+@ 
+Call [[cc]] to build a final executable file. Calling the [[qc--]]
+compiler may not work correctly if the additional files specified by
+the user are handled by a frontend we do not know about.
+<<testdrv.lua>>=
 -- XXX fix me XXX
 function Test.build_exe(inputs, s_file)
   local exe_file = Test.temp_name(".exe")
@@ -264,7 +283,7 @@ function Test.build_exe(inputs, s_file)
   end
   return exe_file
 end
-
+<<testdrv.lua>>=
 function Test.run_exe(exe_file, stdin)
   local so = exe_file .. ".1"
   local se = exe_file .. ".2"
@@ -275,8 +294,9 @@ function Test.run_exe(exe_file, stdin)
 
   return { so, se }
 end
-
--- rename does not work across filesystem boundaries
+@ 
+Rename does not work across filesystem boundaries.
+<<testdrv.lua>>=
 function Test.copy_file(src, dest)
   if not readfrom(src) then return nil end
   if not writeto(dest) then readfrom(); return nil end
@@ -293,7 +313,11 @@ function Test.copy_file(src, dest)
   readfrom()
   return 1
 end
-
+@ 
+The [[check_update_file]] function compares two files. If the files
+differ, then either the expected file is updated, or an error message
+is generated.
+<<testdrv.lua>>=
 function Test.check_update_file(inputs, file, update)
   local  ext = Caml.Filename.extension(file)
   if     ext == ".s"  then exp = inputs["asm"]
@@ -324,7 +348,16 @@ function Test.check_update_file(inputs, file, update)
   end
   return 0
 end
+@ 
+For a given test case, we first compile the course file down to
+assembly language by calling the [[qc--]] compiler. If the assembly
+output matches the expected output, then the test is passed. Otherwise
+if the [[trust_exe]] flag is set, we build and run the executable and
+compare the output to what is expected.
 
+If the expected files are being updated or the [[verbose]] flag is set
+then all outputs are generated.
+<<testdrv.lua>>=
 function Test.run_test_case(inputs, update)
   local file = inputs["source"]
   local files = Test.compile_file(file)
@@ -376,7 +409,10 @@ function Test.run_test_case(inputs, update)
     end
   end
 end
-
+@ 
+These two function fill in defaults for any options not specified for
+a test case, before running the test case.
+<<testdrv.lua>>=
 function Test.compute_filename(files, entry, dir, name)
   if not files[entry] then
     files[entry] = Caml.Filename.concat(dir, name)
@@ -386,7 +422,7 @@ function Test.compute_filename(files, entry, dir, name)
     end
   end
 end
-
+<<testdrv.lua>>=
 function Test.process_file(files, update)
   if type(files) == "string" then
     files = { source = files }
@@ -421,6 +457,8 @@ end
 % -------------------------------------------------------------------
 \subsubection{Compiler Table Entries}
 % -------------------------------------------------------------------
+When a test case name is given on the command line, we need to look it
+up in the configuration file to get all of the options specified.
 <<testdrv.lua>>=
 function Test.find_entry(name)
   local i = 1
@@ -440,7 +478,7 @@ function Test.find_entry(name)
   end
   return nil
 end
-
+<<testdrv.lua>>=
 if CMD.compilertab[".record"] then
   error("CMD.compilertab[.record] already defined")
 end
@@ -452,7 +490,7 @@ function CMD.compilertab[".record"](file)
   end
   Test.process_file(entry, 1)
 end
-
+<<testdrv.lua>>=
 if CMD.compilertab[".test"] then
   error("CMD.compilertab[.test] already defined")
 end
@@ -464,7 +502,7 @@ function CMD.compilertab[".test"](file)
   end
   Test.process_file(entry)
 end
-
+<<testdrv.lua>>=
 if CMD.compilertab[".tst"] then
   error("CMD.compilertab[.tst] already defined")
 end
@@ -475,18 +513,15 @@ function CMD.compilertab[".tst"](file)
   local len = Test.list_len(Test.files)
   local i = 1
   while Test.files[i] do
-    Test.status_line(format("Processing test %d of %d", i, len),
-                     format("[ %0.2f %% ]", 100 * (i-1) / len))
-
-    --local filename = Caml.Filename.concat(Test.source, Test.files[i])
+    Test.status_line(i, len);
     Test.process_file(Test.files[i])
-
     i = i + 1
   end
   Test.clear_status_line()
   print(format("%d errors detected.", Test.errors))
 end
 @ 
+Overrides for standard compiler actions.
 <<testdrv.lua>>=
 function CMD.whatfuns["-compile"]()
   backend = backend or Backend.x86
@@ -504,6 +539,8 @@ end
 % -------------------------------------------------------------------
 \subsubection{Startup}
 % -------------------------------------------------------------------
+The test suite relies on the Util module working correctly. For extra
+safety, we test the Util module before each run.
 <<testdrv.lua>>=
 function Test.test_redir()
   local str = "my test output"
@@ -519,14 +556,21 @@ function Test.test_redir()
     error("Unix.redirect_* does not seem to be working properly!")
   end
 end
-
+@ 
+When the driver file is loaded, we steal the [[-v]] flag from the
+compiler.
+<<testdrv.lua>>=
 Test.test_redir()
 Test.log("Running Regression Tests %s", date())
 if Options.verbose > 0 then
   Test.verbose = 1
   Options.verbose = 0
 end
-
+@
+... and then we do some basic checking of command line arguments. We
+are depending on the fact that the command line arguments have been
+fully processed before the driver is loaded.
+<<testdrv.lua>>=
 local i = 1
 while i <= Options.argc do
   local ext = CMD.canonical_extension(Options.argv[i])
