@@ -1,0 +1,44 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+\section{Cells}
+
+We describe a cell size and provide conversions between widths in bits
+and a cell count.
+<<cell.mli>>=
+type t
+type count = C of int   (* a number of cells *)
+type width = int        (* a number of bits *)
+
+val to_width : t -> count -> width
+val to_count : t -> width -> count
+val size     : t -> width (* number of bits in one cell *)
+
+val of_size : int -> t
+@ 
+<<cell.ml>>=
+type count = C of int   (* a number of cells *)
+type width = int        (* a number of bits *)
+
+type t = int * (count -> width) * (width -> count)
+let to_width (_, f, _) = f
+let to_count (_, _, f) = f
+let size     (w, _, _) = w
+
+let c8  = ( 8, (fun (C c) ->  8 * c), (fun w -> C (w / 8)))
+let c16 = (16, (fun (C c) -> 16 * c), (fun w -> C (w / 16)))
+let c32 = (32, (fun (C c) -> 32 * c), (fun w -> C (w / 32)))
+let c64 = (64, (fun (C c) -> 64 * c), (fun w -> C (w / 64)))
+
+let of_size n = match n with
+| 8  -> c8
+| 16 -> c16
+| 32 -> c32
+| 64 -> c64
+|  _ -> (n, (fun (C c) -> n * c), (fun w -> C (w / n)))
