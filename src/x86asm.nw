@@ -1,0 +1,590 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 sw=4 et:
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+% ------------------------------------------------------------------ 
+\section{Intel $x$86 Recognizer}
+% ------------------------------------------------------------------ 
+
+This module provides an [[expand]] function that re-writes an {\rtl}
+into a sequence of Sparc machine instructions. The module is
+parameterized over a module [[I]] that provides constructor functions
+for abstract Sparc instructions [[I.t]]
+
+The code expander is implemented as a {\burg} rule set. All auxiliary
+functions are into the [[head]] and [[tail]] section of the {\burg}
+specification.
+
+<<sparcexpander.mlb>>=
+%head {: <<modules>> :}
+%head {: 
+    module Make 
+        (Reloc: Sledlib.RELOCATABLE with type symbol = Symbol.t) 
+        (I:     Msparcenc.S with type t      = Rtl.rtl
+                            with type target = nativeint Reloc.relocatable         
+        ) =
+    struct    
+:}
+
+%head {: <<head>> :}
+%tail {: <<tail>> :}
+%tail {: end (* of Make *) :}
+
+%term <<terminal types>>
+%%
+<<rules>>
+@
+
+% ------------------------------------------------------------------ 
+\subsection{State Monad for Instruction Stream}
+% ------------------------------------------------------------------ 
+
+<<modules>>=
+module B  = Bits
+module C  = Camlburg
+module D  = Rtl.Convert      (* Convert Down  to private repr. *)
+module G  = Cfg4             (* for expanding all RTLs in a CFG *)
+module GU = Cfgutil
+module R  = Rtl
+module RP = Rtl.Private
+module RU = Rtlutil
+module N  = Nativeint
+module S  = Space
+module T  = Target2
+module U  = Rtl.Revert       (* Convert Up    to abstract repr. *)
+module W  = Rtlutil.Width 
+@
+
+We raise an error exception in case things go wrong. There is no need to
+chatch the exception because all errors are fatal.
+
+<<head>>=
+exception Error of string
+let error msg     = raise (Error msg)
+let error_rtl rtl = error (RU.ToString.rtl rtl) 
+@
+
+Many transformations return both a list of instructions and a location
+where a certain value can be found. To avoid the constant pattern
+matching of the returned values, we use a monadic programming style. A
+state monad [[m]] holds the list of resulting instructions and a source
+for temporaries.  The functions [[return]] and [[>>=]] are the two
+standard monadic functions \emph{unit} and \emph{bind}.
+
+<<head>>=
+type state = I.t list * Talloc.Multiple.t
+type 'a m  = state -> ('a * state)
+
+let return a  = fun s -> (a, s)
+let (>>=) (m: 'a m) (f: 'a -> 'b m) = fun s -> let (a,s) = m s in f a s 
+@
+
+We save an instruction to the state with [[exec]]. Instructionss are
+saved in \emph{reverse exceution order}.
+
+<<head>>=
+let exec  i    = fun (is,tmp) -> ((), (i :: is,tmp)) 
+@
+
+New tempoaries come as integer and floating point varieties. You have to
+supply the desired with of the new temporary.
+
+<<head>>=
+let reg (sp, i, w) = I.reg sp i (* create I.reg from Register.t *)
+
+let itmp w = fun (_,tmp as state) -> 
+    (reg (Talloc.Multiple.reg tmp 't' w), state)
+let ftmp w = fun (_,tmp as state) -> 
+    (reg (Talloc.Multiple.reg tmp 'u' w), state)
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Utilities}
+% ------------------------------------------------------------------ 
+
+<<head>>=
+let native      = B.U.to_native
+
+let is_imm b = 
+    let i:nativeint = native b in 
+        (N.of_int (-4096) <= i) or i <= (N.of_int 4095)
+@   
+
+The [[guard]] function turns a predicate into a cost where [[n]] is the
+cost for the [[true]] case.
+
+<<head>>=
+let guard n = function
+    | true  -> n
+    | false -> C.inf_cost 
+@
+
+Register $rs[0]$ is special on the Sparc.
+
+<<head>>=
+let r0 = I.reg 'r' 0
+let fp = I.reg 'r' 30   (* frame pointer *)
+let sp = I.reg 'r' 14   (* stack pointer *)
+@
+
+The following address is on the stack and used to move data between 
+integer and floating-point registers. How can we reserve a stack slot
+here? I believe we need access to slots here, not just temporaries.
+
+<<head>>=
+let tmp = I.generala fp (I.imode (N.of_int (8))) (* XXX bogus *)
+@
+
+A synthetic instruction that might be represented by a sequence of
+instructions cannot be defined by the instruction encoder [[I]] but only
+here. In particular, we have to implement the [[set]] instruction, which
+can expand into two instructions, depending on the size of the argument
+[[i]]. See the {\sparc} manual, Section A.3 for details.
+
+<<head>>=
+let set (i: nativeint) (reg: I.reg) =
+    let hi i = N.shift_right_logical i 10           (* 22 msb *)
+    and lo i = N.logand i (N.of_int 0b1111111111)   (* 10 lsb *)
+    in
+        if (N.logor i (N.of_int 0x1fff)) = N.zero then
+            exec (I.sethi (hi i) reg)
+        else if N.of_int (-4096) <= i or i <= (N.of_int 4096) then
+            exec (I.or_ r0 (I.imode i) reg)
+        else
+            exec (I.sethi (hi i) reg) >>= fun () ->
+            exec (I.or_ reg (I.imode (lo i)) reg)
+@
+
+The code to expand contains \emph{late compile-time} constants. They are
+treated as 32-bit wide integers. Unfortunately, the {\sparc} has no
+single instruction to a load a 32bit value into a register. The
+synthetic [[set]] instruction splits a large value into two and loads
+these with two instructions. This is not possible for late values
+because a late value is symbolic and cannot be split and compile-time.
+For a late value our instruction set abstraction provides [[lmode]] and
+[[sethi_late]] to implement [[set_late]] analogously to [[set]]. The
+generated {\rtl}s \emph{do not} machine instructions. However,
+\emph{after} the late compile-time values are replaced by integers,
+\emph{and} expressions inside {\rtl}s have been constant-folded, each
+{\rtl} represents a machine instruction. At least, that is the plan.
+
+<<head>>=
+let set_late (late: I.late) (reg: I.reg) =
+    exec (I.sethi_late late reg) >>= fun () ->
+    exec (I.or_ reg (I.lmode late) reg)
+@
+
+We model the synthetic [[ret]] instruction here, although we could
+inline it as well.
+
+<<head>>=
+let ret = I.jmpl (I.dispa (I.reg 'r' 31) (N.of_int 8)) r0
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Code Expansion Rules}
+% ------------------------------------------------------------------ 
+
+In a {\burg} pattern variables hold either polymorphic nonterminal
+values, or monomorphic terminal ({\ocaml}) values. Terminal types must
+be declared:
+
+<<terminal types>>=
+k width opr exps agg ass index bool bits link late x symbol
+@
+
+The following table summarizes the nonterminals from the rule set. \\
+\begin{tabularx}{\linewidth}{@{\hskip1.5em}llX@{}}
+    Nonterminal & Type & Meaning \\ 
+    \hline
+    [[reg]]     & [[I.reg m]] 
+                & integer computation that yields result in a register\\
+    [[freg]]    & [[I.reg m]]
+                & same as [[ireg]] for floating-point computations\\
+    [[const]]   & [[nativeint]]
+                & constant\\
+    [[const13]] & [[nativeint]]
+                & constant that fits into 13 bits\\
+    [[rc]]      & [[I.reg_or_imm]]
+                & 13 bit constant or register\\ 
+    [[addr]]    & [[I.address]]
+                & Memory address\\
+    [[mem]]     & [[I.address]]
+                & Memory cell\\
+    [[stmt]]    & [[unit m]]
+                & simple instruction\\
+    [[guard]]   & [[(IR.relocatable -> I.t) m]]
+                & guarding expression for a branch\\
+    [[rtl]]     & [[unit m]]
+                & complex instruction\\
+\end{tabularx}
+
+An address for a call or a branch is relocatable. 
+
+<<rules>>=
+reloc:      Bits(b:bits)        {: Reloc.of_const (native b)        :}
+reloc:      Link(symbol,width)  {: Reloc.of_sum   symbol N.zero     :} 
+
+<<rules>>=
+const:      Bits(b:bits)        {: native b :}
+@
+
+<<rules>>=
+const13:    Bits(b:bits) [{: guard 0 (is_imm b):}] {: native b :}
+@
+
+An [[rc]] nonterminal captures either a small value, or a register. To
+ensure that both have the same type, we return a monadic expression.
+
+<<rules>>=
+rc:         reg     {: reg >>= fun r -> return (I.rmode r)  :}  
+rc:         const13 {: return (I.imode const13)             :}
+            
+reg:        const13 [1]
+            {: 
+                itmp 32 >>= fun t ->
+                set const13 t >>= fun () -> 
+                return t
+            :}    
+reg:        const [1] 
+            {: 
+                itmp 32 >>= fun t ->
+                set const t >>= fun () -> 
+                return t
+            :}
+reg:        Late(string,width) [2]
+            {:
+                itmp 32 >>= fun t ->
+                set_late (Rtl.late string width) t >>= fun () ->
+                return t
+            :}    
+@
+
+Memory cell addresses are of either form: $\$r[r_1] + \$r[r_2]$, or
+$\$r[r_1] + c$. The [[addr]] nonterminal captures these addresses, and
+chain rules their conversions.
+
+<<rules>>=
+addr:       App2("add", reg, rc)
+            {: 
+                reg >>= fun r  ->
+                rc  >>= fun rc ->
+                return (I.generala r rc)
+            :}
+
+addr:       reg         {: reg >>= fun r -> return (I.indirecta r) :}
+addr:       const13     {: return (I.absolutea const13) :}
+
+
+mem:        Cell('m', agg, width, addr, ass) {: addr :}
+            
+stmt:       Store(mem, reg, width) [1]       
+            {: mem >>= fun m -> reg >>= fun r -> exec (I.st r m) :}    
+
+stmt:       Store(mem, freg, width) [1]       
+            {: mem >>= fun m -> freg >>= fun f -> exec (I.stf f m) :}
+
+reg:        Fetch(mem, width) [1]
+            {:
+                mem             >>= fun m ->
+                itmp width      >>= fun t ->
+                exec (I.ld m t) >>= fun () ->
+                return t
+            :}    
+
+freg:       Fetch(mem, width) [1]
+            {:
+                mem              >>= fun m ->
+                ftmp width       >>= fun f ->
+                exec (I.ldf m f) >>= fun () -> 
+                return f
+            :}    
+@
+
+Fetches from registers.
+
+<<rules>>=
+reg:        Fetch(rcell, width)     {: rcell :}
+freg:       Fetch(fcell, width)     {: fcell :}
+@
+
+
+Registers are categorized into interger, floating point, and control
+registers. Note, that temporaries are treated like hardware registers.
+
+<<rules>>=
+rcell:      Cell(s:char, agg, width, k:const, ass) 
+            [{: guard 0 (s = 'r' || s = 't') :}]
+            {: return (I.reg s (N.to_int k)) :}    
+            
+fcell:      Cell(s:char, agg, width, k:const, ass)
+            [{: guard 0 (s = 'f' || s = 'u') :}]
+            {: return (I.reg s (N.to_int k)) :}
+@
+
+Moves between registers.
+
+<<rules>>=
+stmt:       Store(rcell, rc, width) [1]
+            {: rcell >>= fun r  -> rc  >>= fun rc -> exec (I.mov rc r) :}
+            
+stmt:       Store(fcell, freg, width) [1]
+            {: fcell >>= fun f1 -> freg >>= fun f2 -> exec (I.fmovs f2 f1) :}
+@ 
+
+Data cannot be moved between integer and floating-point registers
+directly but has to go trough memory. I would like to use a fixed memory
+cell for this on the stack that is part of the frame layout. The problem
+is, that I cannot know the offset for this slot. A different possibility
+would be the introduction of temporaries that stand for memory
+locations. But this would cause changes in the register allocator. For
+the moment I assume that $\textit{fp}-8$ is reserved.
+
+<<rules>>=
+reg:        freg [10] -- penality
+            {:
+                freg    >>= fun f ->
+                itmp 32 >>= fun t ->
+                exec (I.stf f tmp) >>= fun () ->
+                exec (I.ld tmp t)  >>= fun () -> 
+                return t
+            :}
+
+freg:       reg [10] -- penality
+            {:
+                reg     >>= fun r ->
+                ftmp 32 >>= fun u ->
+                exec (I.st r tmp)  >>= fun () ->
+                exec (I.ldf tmp u) >>= fun () -> 
+                return u
+            :}
+@
+
+A guard is the conditional expression of a branch and returns a
+higher-oder function [[(R.loc -> R.rtl) m]].
+
+<<head>>=
+let branch i reg rc =
+    reg >>= fun reg -> rc >>= fun rc ->
+    exec (I.cmp reg rc) >>= fun () ->
+    return i
+
+<<rules>>=
+guard:      True()  {: return I.ba :}
+guard:      False() {: return I.bn :}
+
+<<rules>>=
+guard:      App2("eq",  reg, rc) [1]     {: branch I.be      reg rc :}
+guard:      App2("ge",  reg, rc) [1]     {: branch I.bge     reg rc :}
+guard:      App2("geu", rc, reg) [1]     {: branch I.bleu    reg rc :}
+guard:      App2("gt",  reg, rc) [1]     {: branch I.bg      reg rc :}
+guard:      App2("gtu", reg, rc) [1]     {: branch I.bgu     reg rc :}
+guard:      App2("le",  reg, rc) [1]     {: branch I.ble     reg rc :}
+guard:      App2("leu", reg, rc) [1]     {: branch I.bleu    reg rc :}
+guard:      App2("lt",  reg, rc) [1]     {: branch I.bl      reg rc :}
+guard:      App2("ltu", rc, reg) [1]     {: branch I.bgu     reg rc :}
+guard:      App2("ne",  reg, rc) [1]     {: branch I.bne     reg rc :}
+@
+
+{\PAL}'s primitive operators show up in expressions and are mapped to
+{\sparc} instructions.
+
+<<head>>=
+let iprim2 i reg rc =
+    reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
+    exec (i r rc t) >>= fun () ->
+    return t
+
+let iprim1 i reg =
+    reg >>= fun r -> itmp 32 >>= fun t ->
+    exec (i r t) >>= fun () ->
+    return t
+
+<<rules>>=
+reg:        App2("add", reg, rc) [1]    {: iprim2  I.add   reg rc :}
+reg:        App2("and", reg, rc) [1]    {: iprim2  I.and_  reg rc :}
+reg:        App2("sub", reg, rc) [1]    {: iprim2  I.sub   reg rc :}
+reg:        App2("shl", reg, rc) [1]    {: iprim2  I.sll   reg rc :}
+reg:        App2("shra", reg, rc) [1]   {: iprim2  I.sra   reg rc :}
+reg:        App2("shrl", reg, rc) [1]   {: iprim2  I.srl   reg rc :}
+reg:        App2("xor", reg, rc) [1]    {: iprim2  I.xor   reg rc :}
+reg:        App1("com", reg) [1]        {: iprim1  I.not2  reg :}
+reg:        App1("neg", reg) [1]        {: iprim1  I.neg2  reg :}
+@
+
+Here are rule to cover opeartors we cannot handle.
+
+<<rules>>=
+reg:        App1(o:string, reg)     [2] {: error ("cannot handle "^o) :}
+reg:        App2(o:string, reg, rc) [2] {: error ("cannot handle "^o) :}
+reg:        App3(string, x:reg, y:reg, z:reg)  [2] {: error "app3" :}
+@
+
+Instructions are classified into branches, calls, and so on. 
+
+<<rules>>=
+rtl:        Branch(guard, reloc) [1]
+            {:
+                guard >>= fun branch ->
+                exec (branch reloc) >>= fun () ->
+                exec (I.nop)    (* delay slot *)
+            :}
+
+rtl:        Goto(reloc) [1]     {: exec (I.ba reloc) >>= fun () ->
+                                   exec (I.nop) (* delay slot *)
+                                :}
+rtl:        Return()            {: exec (ret) (* jmpl %r31+8, %g0 *) :}
+rtl:        Simple(stmt) [1]    {: stmt >>= fun s -> return ()   :}    
+rtl:        Nop() [1]           {: exec I.nop  :}
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Interfacing {\rtl}s with the Expander}
+% ------------------------------------------------------------------ 
+
+Because it is much easier in {\ocaml} than in {\burg}, we
+decompose applications and complex {\rtl}s here.
+
+<<tail>>=  
+let const = function
+    | RP.Bool(true)             -> conTrue  ()
+    | RP.Bool(false)            -> conFalse ()
+    | RP.Link(s,w)              -> conLink s w
+    | RP.Late(s,w)              -> conLate s w
+    | RP.Bits(b)                -> conBits(b)
+
+let rec exp = function
+    | RP.Const(k)               -> const (k)
+    | RP.Fetch(l,w)             -> conFetch (loc l) w
+    | RP.App((o,_),[x])         -> conApp1 o (exp x)
+    | RP.App((o,_),[x;y])       -> conApp2 o (exp x) (exp y)
+    | RP.App((o,_),[x;y;z])     -> conApp3 o (exp x) (exp y) (exp z)
+    | RP.App(_,_)               -> error "too many arguments in application"
+
+and loc = function
+    | RP.Cell(char, aff, w, e, ass) -> conCell char aff w (exp e) ass 
+    | RP.Var(s, i, w)           -> error "var found"
+    | RP.Slice(w,i,loc)         -> error "cannot handle slice"
+    
+and stmt = function
+    | RP.Store(l,e,w)           -> conStore (loc l) (exp e) w
+    | RP.Kill(loc)              -> error "cannot handle kill"
+@
+
+We classify an {\rtl} here and pass it to the appropriate rule in the
+rule set. The encoding of special instructions is shared between the
+code expander and a target description. See module \module{targets}.
+The ``special'' instructions are identified by a false guard and capital
+letters in a cell.
+
+<<tail>>=  
+and rtl = function
+    | RP.Rtl([])                            -> conNop ()
+    | RP.Rtl([(RP.Const(RP.Bool(true)),s)]) -> conSimple (stmt s)
+    | RP.Rtl([(g,RP.Store(RP.Cell(sp,_,_,_,_),e,_))]) as rtl ->
+        ( match sp with
+        | 'B' -> conBranch (exp g) (exp e) 
+        | 'G' -> conGoto   (exp e)
+        | 'R' -> conReturn ()
+        | _   -> error_rtl (U.rtl rtl)
+        )
+    | RP.Rtl(_) as rtl -> error "cannot expand this RTL"
+@
+
+The [[rtl]] function returns (the best) plan to rewrite a given {\rtl}.
+When this plan is executed, it returns a monadic value that includes the
+desired expanded instructionss.
+
+<<tail>>=
+let expand tmps (r: R.rtl) = 
+    try
+        let plan = rtl (D.rtl r) in
+        match plan.rtl.Camlburg.action () ([],tmps) with
+            | (), (is,_) -> is (* instructions in reverse exec order *)
+    with 
+        | Camlburg.Uncovered -> 
+            ( List.iter prerr_endline
+                [ "cannot expand this RTL:"
+                ; RU.ToString.rtl r
+                ]
+            ; assert false
+            )
+        | Error(msg) ->
+            ( List.iter prerr_endline
+                [ msg
+                ; RU.ToString.rtl r
+                ]
+            ; assert false
+            )
+
+@                        
+
+% ------------------------------------------------------------------ 
+\subsection{Expanding an entire {\cfg}}
+% ------------------------------------------------------------------ 
+
+{\rtl}s do not live in isolation but belong to a procedure's {\cfg}.
+Since procedures are the basic units of compilation we want to expand
+all the {\rtl}s of a procedure. This requires to re-write the {\cfg}.
+
+Re-writing the {\cfg} mutates its structure and therefore we have to
+obtain first all the nodes whose {\rtl}s we want to expand. We cannot
+use the iterator provided by the {\cfg} module because it does not work
+under mutation.
+
+[[Cfg]] expands all {\rtl}s of a procedure and returns [[true]], if the 
+structure of the procedure's {\cfg} had to be modified.
+
+<<tail>>=
+let cfg proc =
+    let nodes       = GU.fold_bwd proc.Proc.cfg (fun n ns -> n::ns) []
+    and tmps        = proc.Proc.temps   (* source for temporaries *)
+    and insert n i  = G.gm_insert_assign_before i n
+    and modified    = ref false in
+    let expnd node =
+        match expand tmps (G.instr node) with
+        | last :: preds ->
+            ( ignore (List.fold_left insert node preds)
+            ; G.upd_instr node (fun _ -> last)
+            ; modified := (preds <> [])
+            )
+        | [] -> assert false 
+    in    
+        ( List.iter expnd nodes
+        ; !modified
+        )
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Exporting the Expander to Lua}
+% ------------------------------------------------------------------ 
+
+Code expansion is part of {\qcc}'s backend that is controlled by a Lua
+interpreter. To make the expander accessible for Lua code, it is
+exported as a Lua primitive [[Sparcexpand.expand]].
+
+<<tail>>=
+module Lua (ProcT: Lua.Lib.TYPEVIEW with type 'a t = Proc.t): 
+    Lua.Lib.TYPEFUL with type 'a combined = 'a ProcT.combined =
+struct
+    type 'a combined = 'a ProcT.combined
+    module M (C : Lua.Lib.CORE with type 'a V.userdata' = 'a combined) =
+    struct
+      module V  = C.V
+
+      let ( **-> ) = V.( **-> )
+      let proc     = ProcT.makemap V.userdata V.projection
+      let init g =
+        C.register_module "Expander" 
+        [ "sparc", V.efunc (V.value **-> proc **-> V.result V.bool) (fun _ -> cfg)
+        ] g;
+	Lua.Lib.StringList.empty
+    end (*M*)    
+end (*Make*)            
+@ 

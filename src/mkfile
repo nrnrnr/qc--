@@ -152,6 +152,7 @@ ML =            impossible.ml    \
 		postexpander.ml	 \
                 expander.ml      \
 		x86.ml		 \
+		x86rec.ml	 \
                 dummyexpander.ml \
                 msparcenc.ml     \
                 msparcdec.ml     \
@@ -324,7 +325,7 @@ html:V:         $HTML
 # modules.tex can be used in qc--.tex where documentation for
 # individual modules is included
 
-modules.tex:V: $INC
+modules.tex:VD: $INC
     echo $INC | sed 's!\([a-z0-9./]*inc\)!\\input{\1}!g' | fmt -w 10 > $target
 
 # ------------------------------------------------------------------ 
@@ -336,54 +337,54 @@ modules.tex:V: $INC
 # we don't use the nocond filter here because currently all our
 # conditional code happens to be in the general case.
 
-interval.mli:   lifetime.nw
+interval.mli:D: lifetime.nw
                 $NOTANGLE -L"$LINE" -R$target $prereq > $target
-interval.ml:    lifetime.nw
-                $NOTANGLE -L"$LINE" -R$target $prereq > $target
-
-postexpander.mli:   expander.nw
-                $NOTANGLE -L"$LINE" -R$target $prereq > $target
-postexpander.ml:    expander.nw
+interval.ml:D:  lifetime.nw
                 $NOTANGLE -L"$LINE" -R$target $prereq > $target
 
-x86target.ml:    x86.nw
+postexpander.mli:D: expander.nw
+                $NOTANGLE -L"$LINE" -R$target $prereq > $target
+postexpander.ml:D:  expander.nw
+                $NOTANGLE -L"$LINE" -R$target $prereq > $target
+
+x86target.ml:D:  x86.nw
                 $NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 
-uint64p.c:      uint64.nw
+uint64p.c:D:    uint64.nw
                 $NOTANGLE -L -R$target $prereq > $target
 
-topsorttest.ml: topsort.nw
+topsorttest.ml:D: topsort.nw
                 $NOTANGLE -L"$LINE" -R$target $prereq > $target
 
-this.mli:       main2.nw
+this.mli:D:     main2.nw
                 $NOTANGLE -L"$LINE" -R$target $prereq > $target
-this.in:        main2.nw
+this.in:D:      main2.nw
                 $NOTANGLE -L"$LINE" -R$target $prereq > $target
-qc--.lua:       main2.nw colorgraph.nw
+qc--.lua:D:     main2.nw colorgraph.nw
                 $NOTANGLE -L'$file "%F"%N$line %L%N' -R$target $prereq > $target
 
 
-astpp.mli:      ast.nw
+astpp.mli:D:    ast.nw
                 $NOTANGLE -L"$LINE" -R$target $prereq > $target
-astpp.ml:       ast.nw
+astpp.ml:D:     ast.nw
                 $NOTANGLE -L"$LINE" -R$target $prereq > $target
 
-parse.mly:      parser.nw
+parse.mly:D:    parser.nw
                 $NOTANGLE -R$target $prereq > $target
-scan.mll:       parser.nw
+scan.mll:D:     parser.nw
                 $NOTANGLE -R$target $prereq > $target
-scan.mli:       parser.nw
+scan.mli:D:     parser.nw
                 $NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 #
 # include the yacc grammar in the manual for reference
 #
 
-$NAME.pod:      main2.nw 
+$NAME.pod:D:    main2.nw 
     $NOTANGLE -R$target $prereq > $target
 
-${NAME}grammar.pod:      main2.nw parse.output
+${NAME}grammar.pod:D:    main2.nw parse.output
     $NOTANGLE  -R$target $prereq > $target
     echo '/##grammar##/d
     .r !grep "^  *[0-9]" parse.output
@@ -393,39 +394,45 @@ ${NAME}grammar.pod:      main2.nw parse.output
 # MLburg generated files
 # ------------------------------------------------------------------ 
 
-dummyexpander.ml:   dummyexpander.mlb $MLBURG
+dummyexpander.ml:D:   dummyexpander.mlb $MLBURG
                     $MLBURG dummyexpander.mlb > $target
 
-dummyexpander.mlb:  dummyexpander.nw
+dummyexpander.mlb:D:  dummyexpander.nw
                     $NOTANGLE -L"$LINE" -R$target $prereq > $target
 
-sparcexpander.ml:   sparcexpander.mlb $MLBURG
+sparcexpander.ml:D:   sparcexpander.mlb $MLBURG
                     $MLBURG sparcexpander.mlb > $target
 
-sparcexpander.mlb:  sparcexpander.nw
+sparcexpander.mlb:D:  sparcexpander.nw
                     $NOTANGLE -L"$LINE" -R$target $prereq > $target
+
+x86rec.ml:D:   x86rec.mlb $MLBURG
+	$MLBURG x86rec.mlb > $target
+
+x86rec.mlb:D:  x86rec.nw
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 # ------------------------------------------------------------------ 
 # The Minisparc Encoder, Decoder -- experimental for CL
 # ------------------------------------------------------------------ 
 
-msparcenc.mli:      minisparc.nw
+msparcenc.mli:D:    minisparc.nw
                     $NOTANGLE -L"$LINE" -R$target $prereq > $target
 
-msparcenc.ml:       minisparc.nw
+msparcenc.ml:D:     minisparc.nw
                     $NOTANGLE -L"$LINE" -R$target $prereq > $target
                     
-msparcdec.mli:      minisparc.nw
+msparcdec.mli:D:    minisparc.nw
                     $NOTANGLE -L"$LINE" -R$target $prereq > $target
                     
-msparcdec.ml:       minisparc.nw
+msparcdec.ml:D:     minisparc.nw
                     $NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 # ------------------------------------------------------------------
 # include version and name information
 # ------------------------------------------------------------------
 
-this.ml:        this.in qc--.lua
+this.ml:D:      this.in qc--.lua
                 sed     -e "s/@this@/$NAME-$VERSION/"   \
                         -e "s/@arch@/$ARCH/"            \
                         this.in                         > $target
