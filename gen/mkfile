@@ -2,6 +2,20 @@
 # $Id$
 # ------------------------------------------------------------------ 
 
+#                           READ ME FIRST
+#
+# This mkfile can be used in two modes.  In `gen' mode, the Lambda-RTL
+# Translator is used to generate .ml and .mli files from .sled and .rtl
+# descriptions.  In `normal' mode, the .ml and .mli files are taken as
+# given, and there is no reference to Lambda-RTL.
+#
+# To use the mkfile in `gen' mode, run `mk MODE=gen'.
+
+MODE=normal
+
+
+
+
 # ------------------------------------------------------------------ 
 # paths
 # ------------------------------------------------------------------ 
@@ -68,42 +82,18 @@ install:V:      all.opt
 
 MACHINEREGEX=sparc
 
-<../config/lrtl.mk
+<mkfile.$MODE
 
 # compiler flags used by the rules just included
 
 OCAMLC_FLAGS =  -g -I $LIBDIR
 OCAMLO_FLAGS =     -I $LIBDIR
 
-# ------------------------------------------------------------------ 
-# gather ye specifications where ye may
-# ------------------------------------------------------------------ 
-
-$SLEDSPECDIR/&.spec: $SLEDSPECDIR/&.nw
-	(cd `dirname $target`; mk `basename $target`)
-
-$SLEDSPECDIR/&-names.spec: $SLEDSPECDIR/&.nw
-	(cd `dirname $target`; mk `basename $target`)
-
-$TKRTL/&.rtl: $TKRTL/&.nw
-	(cd `dirname $target`; mk `basename $target`)
-
-&.sled: $SLEDSPECDIR/&.spec $SLEDSPECDIR/&-names.spec
-	cat $prereq > $target
-
-&.rtl: $TKRTL/&.rtl
-	cat $prereq > $target
 
 
 # ------------------------------------------------------------------ 
 # important file sets
 # ------------------------------------------------------------------ 
-
-sledlib.mli: $TKDIR/caml-lib.nw
-	notangle -L"$LINE" -R$target $prereq > $target
-
-sledlib.ml: $TKDIR/caml-lib.nw
-	notangle -L"$LINE" -R$target $prereq > $target
 
 LOCAL =         sledlib.ml	\
 		sparc.ml	\
