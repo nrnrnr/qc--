@@ -282,10 +282,27 @@ beginning of the next line; thus [[position]] must point to this first
 character of the new line.  The new line is in the same file as the
 last sync point.
 
-<<srcmap.ml>>=
+Since [[last]] already returns the shared instance of the file name, the
+hash table lookup in [[sync]] is superficial. Because [[nl]] is the most
+frequently called sync function it is worth implementing it as a
+specialed version of [[sync]] instead of calling [[sync]]:
+
+<<nl specification>>=
 let nl map pos = 
     let (file, line, _) = last map in
         sync map pos (file, line+1, 1)
+@
+
+<<srcmap.ml>>=
+let nl srcmap pos =
+    let _               = alloc srcmap  in
+    let (file, line, _) = last srcmap   in
+    let location' = (file, line+1,1) in
+    let top   = srcmap.top   in
+        ( assert ((pos = 0) || (fst srcmap.points.(top-1) < pos))
+        ; srcmap.points.(top) <- (pos,location')
+        ; srcmap.top <- srcmap.top + 1
+        )
 @
         
 Function [[cmp]] compares a [[pos]] with a [[(pos,location)]]
