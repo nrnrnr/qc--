@@ -46,8 +46,7 @@ Its implementation is split across files [[gc.h]] and [[gc.c]].
 #ifndef _GC_H
 #define _GC_H
 
-#include "runtime.h"
-#include "types.h"
+#include <qc--interp.h>
 
 <<constant definitions>>
 <<type definitions>>
@@ -61,9 +60,8 @@ Its implementation is split across files [[gc.h]] and [[gc.c]].
 #include "gc.h"
 
 #include <stdlib.h>
-#include <string.h>
-#include "ccall.h"
-#include "span.h"
+#include <stdio.h>
+#include <assert.h>
 
 <<global variable definitions>>
 
@@ -97,6 +95,9 @@ To manage heap-allocated space, we need to use special heap tags (to keep
 track of heap object sizes, etc.).
 
 <<type definitions>>=
+typedef unsigned char u_int8;
+typedef unsigned int  u_int32;
+
 typedef struct {
   unsigned int size    : 31;
   unsigned int forward : 1;
@@ -119,11 +120,10 @@ void     TCB_free(Cmm_TCB *tcb);
 
 <<utility functions>>=
 Cmm_TCB *TCB_new(void) {
-  Cmm_Dataptr  data;
   Cmm_TCB     *tcb = (Cmm_TCB *) malloc(sizeof(Cmm_TCB));
   assert(tcb != NULL);
 
-  tcb->stack_space       = (Cmm_Dataptr) malloc(STACK_SIZE * sizeof(*data));
+  tcb->stack_space       = (Cmm_Dataptr) malloc(STACK_SIZE);
   mem_assert(tcb->stack_space);
   tcb->stack_space_size  = STACK_SIZE;
 
@@ -694,9 +694,11 @@ static unsigned int gc_verbosity = 0;
     }
   }
 
+  /* removed temporarily RRO -- 6/18/03
   if (gc_verbosity > 1) {
     span_verbosity = 1;
   }
+  */
 }
 @ 
 

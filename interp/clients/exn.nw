@@ -47,8 +47,7 @@ Its implementation is split across files [[exn.h]] and [[exn.c]].
 #ifndef _EXN_H
 #define _EXN_H
 
-#include "runtime.h"
-#include "types.h"
+#include <qc--interp.h>
 
 <<constant definitions>>
 <<type definitions>>
@@ -60,9 +59,10 @@ Its implementation is split across files [[exn.h]] and [[exn.c]].
 <<exn.c>>=
 #include "exn.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "ccall.h"
+#include <assert.h>
 
 <<global variable definitions>>
 
@@ -82,6 +82,9 @@ A [[Cmm_TCB]] ({\PAL} thread control block) contains the actual thread given us 
 We use this cookie to tell if we've gone off the end of a stack (perhaps by returning or unwinding from the oldest activation on the stack).
 
 <<type definitions>>=
+typedef unsigned char u_int8;
+typedef unsigned int  u_int32;
+
 typedef struct {
   Cmm_Cont *cont;
 
@@ -107,11 +110,10 @@ void     TCB_free(Cmm_TCB *tcb);
 
 <<utility functions>>=
 Cmm_TCB *TCB_new(void) {
-  Cmm_Dataptr  data;
   Cmm_TCB     *tcb = (Cmm_TCB *) malloc(sizeof(Cmm_TCB));
   assert(tcb != NULL);
 
-  tcb->stack_space       = (Cmm_Dataptr) malloc(STACK_SIZE * sizeof(*data));
+  tcb->stack_space       = (Cmm_Dataptr) malloc(STACK_SIZE);
   mem_assert(tcb->stack_space);
   tcb->stack_space_size  = STACK_SIZE;
 
