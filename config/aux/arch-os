@@ -1,11 +1,19 @@
 #!/bin/sh
 #
 
-if uname -p >/dev/null 2>/dev/null; then
-  PROC=`uname -p`
-else
-  PROC=unknown
-fi
+case `uname 2>/dev/null` in
+  Linux )
+    # linux kernel sometimes has patches that make uname -p output unusable
+    PROC=unknown
+    ;;
+  * )
+    if uname -p >/dev/null 2>/dev/null; then
+      PROC=`uname -p`
+    else
+      PROC=unknown
+    fi
+    ;;
+esac
 
 if [ "x$PROC" != xunknown ]; then
   : do nothing
@@ -26,7 +34,7 @@ elif uname >/dev/null 2>/dev/null; then
       OS=linux;
       if uname -m >/dev/null 2>/dev/null; then
         case `uname -m` in
-          i586|i486|i386) PROC=x86 ;;
+          i586|i486|i386|i686) PROC=x86 ;;
           *) PROC=`uname -m` ;;
         esac
       else
