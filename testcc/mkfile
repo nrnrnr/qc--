@@ -59,14 +59,16 @@ asm :V: alpha-asm  x86-asm  mips-asm
 # MIPS. This creates 64-bit floats, but no 64-bit integers, which are
 # unknown on the MIPS.
 
-alpha-call.sigs: $QCC 
-	$QCC -e 'Debug.Alpha.proc_paths({64},{"int","float"}) exit(0)' > $target
+alpha-call.sigs:D:
+  $QCC -e 'Debug.paths_proc(Backend.alpha.target, "C", {64}, {"int","float"})'\
+    > $target
 
-x86-call.sigs:   $QCC
-	$QCC -e 'Debug.X86.c_proc_paths({32},{"int"}) exit(0)' > $target
+x86-call.sigs:D:
+  $QCC -e 'Debug.paths_proc(Backend.x86.target, "C", {32}, {"int"})' > $target
 
-mips-call.sigs:  $QCC
-	$QCC -e 'Debug.Mips.proc_paths({32},{"float","int"}) exit(0)' > $target
+mips-call.sigs:D:
+  $QCC -e 'Debug.paths_proc(Backend.mips.target, "C", {32},{"float","int"})' \
+    > $target
 
 #
 # Generate *.c-- files from one signature file. The test case generator
@@ -86,7 +88,7 @@ x86-call:V:   x86-call.sigs
                $GEN -name=x86                             -width=32 < $prereq
                $GEN -name=x86-cmm         -conv="notail"  -width=32 < $prereq
                $GEN -name=x86-x        -c                 -width=32 < $prereq
-               $GEN -name=x86-x-cspec  -c -conv="c'"      -width=32 < $prereq
+              #$GEN -name=x86-x-cspec  -c -conv="c'"      -width=32 < $prereq
 
 mips-call:V:  mips-call.sigs
                $GEN -name=mips                            -width=32 < $prereq
@@ -103,13 +105,13 @@ ALPHA_NUMS = 0 1 2 3 4 5 6 7
 ALPHA_CMM  = ${ALPHA_NUMS:%=alpha\\[%]??.c--}
 MIPS_CMM   = mips*.c--
 
-x86-asm:V: $QCC
+x86-asm:V:
 	for f in "`echo "$X86_CMM" | tr ' ' '\n'`" ; do
 		$QCC -e 'Options.globals=2' backend=Backend.x86 $QCCFLAGS \
 	    	 -stop .s `echo $f`
 	done
 
-alpha-asm:V: $QCC
+alpha-asm:V:
     for f in $ALPHA_CMM; do
         PATTERN=`echo $f | tr '\\\\' '*'`
         FILES=`echo $PATTERN`
@@ -117,7 +119,7 @@ alpha-asm:V: $QCC
               -stop .s $FILES
 	done
 
-mips-asm:V: $QCC
+mips-asm:V:
 	for f in "`echo "$MIPS_CMM" | tr ' ' '\n'`" ; do
 		$QCC -e 'Options.globals=2' backend=Backend.mips $QCCFLAGS \
         	 -stop .s `echo $f`
@@ -161,12 +163,12 @@ x86.sh:Q:
     I=$((I + 1))
     echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
   done    
-  for f in x86-x-cspec-mn-*.s; do
-    g=`echo $f | sed -e "s/mn/callee/" -e "s/\.s/.c/"`
-    (cc $f $g && ./a.out) | tee -a x86.log | grep -v success
-    I=$((I + 1))
-    echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
-  done
+  #for f in x86-x-cspec-mn-*.s; do
+  #  g=`echo $f | sed -e "s/mn/callee/" -e "s/\.s/.c/"`
+  #  (cc $f $g && ./a.out) | tee -a x86.log | grep -v success
+  #  I=$((I + 1))
+  #  echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
+  #done
   echo Completed testing x86 architecture.  Log file x86.log created.
   ' > $target  
   chmod +x $target
