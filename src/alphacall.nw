@@ -30,6 +30,9 @@ arguments are the width and hints to try in every state of an automaton.
 val dump_proc:      int list -> string list -> unit
 val dump_return:    int list -> string list -> unit
 val dump_cutto:     int list -> string list -> unit
+val paths_proc:      int list -> string list -> unit
+val paths_return:    int list -> string list -> unit
+val paths_cutto:     int list -> string list -> unit
 @
 
 % ------------------------------------------------------------------ 
@@ -292,14 +295,17 @@ such that it is available for all calling conventions. The polymorphic
 nature of [[Call.t]] make this difficult rigth now.
 
 <<alphacall.ml>>=
-let dump automaton widths hints = 
-    Automatongraph.print 
+let dump what automaton widths hints = 
+        what 
         ~mk:(fun () -> A.at (Rtl.bits (Bits.zero wordsize) wordsize) 
                             (automaton ()))
         ~widths ~hints
         
-let dump_proc     = dump  arguments
-let dump_return   = dump (fun () -> results)
-let dump_cutto    = dump (fun () -> cut_args)
+let dump_proc     = dump Automatongraph.print arguments
+let dump_return   = dump Automatongraph.print (fun () -> results)
+let dump_cutto    = dump Automatongraph.print (fun () -> cut_args)
+let paths_proc     = dump Automatongraph.paths arguments
+let paths_return   = dump Automatongraph.paths (fun () -> results)
+let paths_cutto    = dump Automatongraph.paths (fun () -> cut_args)
 @
 

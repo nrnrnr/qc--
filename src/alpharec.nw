@@ -265,7 +265,13 @@ inst:       Store(dst:regl,Bit(cmp),64)
             {: match cmp with (op, x, y) -> 
                 sprintf "cmp%s %s, %s" op x y 
             :}
+
+inst:       Store(dst:regl,Com(reg),64)
+            {: sprintf "not %s, %s" dst reg :}
+
 @
+
+
 
 \paragraph{Arithmetic}
 
@@ -321,6 +327,7 @@ any : Guarded(guard:any, any)
 any : Cmp(op:string, x:any, y:any)     
                         {: cat [ "Cmp(";op;",";x;",";y;")"] :}
 any : GP(any)           {: cat [ "GP(";any;")"] :}
+any : Com(any)          {: cat [ "Com(";any;")"] :}
 any : Bit(any)          {: cat [ "Bit(";any;")"] :}
 any : Par(l:any, r:any) {: cat [ "Par(";l;",";r;")" ] :}
 any : Goto(any)         {: cat [ "Goto(";any;")" ] :}
@@ -401,6 +408,7 @@ let cmp =
     when Strutil.Set.mem op cmp           -> conCmp op (exp x) (exp y)
 | RP.App(("bit", [64]), [x])              -> conBit (exp x)  
 | RP.App(("alpha_gp", []), [x])           -> conGP  (exp x)  
+| RP.App(("com", [64]), [x])              -> conCom  (exp x)  
 @
 
 <<special cases for [[guarded]]>>=

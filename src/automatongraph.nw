@@ -25,8 +25,16 @@ and hints are used to construct requests: in every state of the
 automaton, every combination of a width and a hint are explored to reach
 a new state.
 
+Function [[paths]] works like [[print]] but emits all ``interesting''
+argument lists. An argument list corresponds to a path in an automaton.
+Together, all argument lists cover every pair of an incoming and
+outgoing edge at a node.
+
 <<automatongraph.mli>>=
 val print:  mk:(unit -> Automaton.t) 
+                     -> widths:int list -> hints:string list 
+                     -> unit
+val paths:  mk:(unit -> Automaton.t) 
                      -> widths:int list -> hints:string list 
                      -> unit
 @
@@ -36,7 +44,7 @@ basically an isomorphism of the automaton defined in
 \module{automaton}. Given the graph, the underlying automaton can be
 simulated.  After this realization I changed the type definition of
 [[graph]] to make simulation easy. This should help to apply Bailey's
-algorithm to find interesting paths.
+algorithm to find automatongraph.ml.
 
 
 % ------------------------------------------------------------------ 
@@ -176,7 +184,7 @@ module ToDot = struct
                                 (ty    label)
     
     let path p            = String.concat " "  (List.map ty p) 
-    let paths ps          = List.iter (fun s -> printf "// %s\n" s)
+    let paths ps          = List.iter (fun s -> printf "%s\n" s)
                                                 (List.map path ps)
     
     let graph g = 
@@ -255,7 +263,6 @@ contains the node corresponding to the initial state and is otherwise
 empty.
   
 <<automatongraph.ml>>=
-<<interesting paths>>
 let print ~mk ~widths ~hints = 
     let dump g  = print_endline (ToString.graph g) in
     let dirs    = combine widths hints in
@@ -263,17 +270,15 @@ let print ~mk ~widths ~hints =
     let g       = graph init           in
     let g       = dfs mk dirs g [] {regs=[]; align=0} in
         ( ToDot.graph g
-        ; printf "// Interesting paths:\n"
-        ; ToDot.paths (interesting_paths g)
         )
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Interesting Paths}
+\subsection{automatongraph.ml}
 % ------------------------------------------------------------------ 
 
 To test a calling convention, we like to find interesting parameter
-lists, which correspond to interesting paths in a [[graph]]. The goal is
+lists, which correspond to automatongraph.ml in a [[graph]]. The goal is
 to find enough paths such that for any node, each pair of incoming and
 outgoing edge is covered by at leat one path. This criterion was
 proposed by Bailey in his Ph.D.~thesis. The parameter list that
@@ -296,14 +301,14 @@ algorithm could also use global state.
 
 [[next]] returns the [[node]] at the end of an edge.
 
-<<interesting paths>>=
+<<automatongraph.ml>>=
 let next graph edge = T.find edge graph.edges
 @
 
 [[outgoing]] returns the labels (types) on outgoing edges of a given
 [[node]].
 
-<<interesting paths>>=
+<<automatongraph.ml>>=
 let outgoing graph node =
     let add_label (src, label) dst labels =
         if src = node then label :: labels else labels
@@ -333,7 +338,7 @@ current edge is already marked, it is not followed, but the current
 result is just returned. Otherwise the edge is marked, the current path
 extened and the reached recursively explored.
 
-<<interesting paths>>=
+<<automatongraph.ml>>=
 let rec explore graph (visited:ES.t) (path:path) (paths:path list list) node =
     let labels  = outgoing graph node in
     let paths  = (List.map (fun l -> l::path) labels) :: paths in
@@ -360,8 +365,18 @@ paths, the result was correct.
 The main function extracts the parameter lists, flattens and reverses
 them.
 
-<<interesting paths>>=
+<<automatongraph.ml>>=
 let interesting_paths graph = 
     let (paths,_) = explore graph ES.empty [] [] graph.start in
         List.map List.rev (List.concat paths)
-@            
+
+let paths ~mk ~widths ~hints = 
+    let dump g  = print_endline (ToString.graph g) in
+    let dirs    = combine widths hints in
+    let init    = {regs=[]; align=0}   in
+    let g       = graph init           in
+    let g       = dfs mk dirs g [] {regs=[]; align=0} in
+        ToDot.paths (interesting_paths g)
+@
+
+            

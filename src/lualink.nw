@@ -310,32 +310,27 @@ C.register_module "Driver"
                           Driver.compile
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
-C.register_module "Debug"
+let dump =   V.efunc ((V.list V.int)    **-> (* widths *)
+                      (V.list V.string) **-> (* hints  *)
+                       V.result V.unit)  
+in C.register_module "Debug"
     ["Mips" , V.Table (V.Table.of_list 
-        [ "proc",   V.efunc ((V.list V.int)    **-> (* widths *)
-                             (V.list V.string) **-> (* hints  *)
-                             V.result V.unit) Mipscall.dump_proc
-        ; "cutto",  V.efunc ((V.list V.int)    **-> (* widths *)
-                             (V.list V.string) **-> (* hints  *)
-                             V.result V.unit) Mipscall.dump_cutto
+        [ "proc",           dump Mipscall.dump_proc
+        ; "cutto",          dump Mipscall.dump_cutto
+        ; "proc_paths",     dump Mipscall.paths_proc
+        ; "cutto_paths",    dump Mipscall.paths_cutto
         ])
      ;"Alpha" , V.Table (V.Table.of_list 
-        [ "proc",   V.efunc ((V.list V.int)    **-> (* widths *)
-                             (V.list V.string) **-> (* hints  *)
-                             V.result V.unit) Alphacall.dump_proc
-        ; "cutto",  V.efunc ((V.list V.int)    **-> (* widths *)
-                             (V.list V.string) **-> (* hints  *)
-                             V.result V.unit) Alphacall.dump_cutto
+        [ "proc",           dump Alphacall.dump_proc
+        ; "cutto",          dump Alphacall.dump_cutto
+        ; "proc_paths",     dump Alphacall.paths_proc
+        ; "cutto_paths",    dump Alphacall.paths_cutto
         ])
-    
- 
     ;"X86" , V.Table (V.Table.of_list 
-        [ "c_proc",   V.efunc ((V.list V.int)    **-> (* widths *)
-                               (V.list V.string) **-> (* hints  *)
-                               V.result V.unit) X86call.dump_c_proc
-        ; "c_cutto", V.efunc ((V.list V.int)    **-> (* widths *)
-                              (V.list V.string) **-> (* hints  *)
-                              V.result V.unit) X86call.dump_c_cutto
+        [ "c_proc",         dump X86call.dump_c_proc
+        ; "c_cutto",        dump X86call.dump_c_cutto
+        ; "c_proc_paths",   dump X86call.paths_c_proc
+        ; "c_cutto_paths",  dump X86call.paths_c_cutto
         ])
     ] g;
 @
