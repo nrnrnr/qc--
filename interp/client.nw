@@ -26,8 +26,9 @@ void register_c_func(const char *name, void *f, const char *sig);
 \paragraph{Loading Source Code}
 To load a source file (in Lua style) into memory, [[load_assembly_unit]] should be called with the name of the source file.
 Note that code cannot be interpreted until it has been loaded into memory.
+[[load_assembly_unit]] returns 0 if and only if [[filename]] was successfully loaded.
 <<available exported C functions>>=
-void load_assembly_unit (char *filename);
+int load_assembly_unit (char *filename);
 @ 
 \paragraph{Examining Source Code}
 To find the {\PAL} code associated with a certain {\PAL} label (be it a procedure, continuation, or simple code), call on [[cmm_find_export]] with the label in string form.
@@ -47,7 +48,7 @@ To shut down the interpreter, [[Cmm_close]] should be called; this will someday 
 void Cmm_close (void);
 @ 
 \subsection{Functions Exported by the Runtime System}
-DOCUMENT
+DOCUMENT \emph{For now, look at {\PAL} manual.}
 \section{A Sample Client Implementation}
 Below is a sample client implentation; it should be useful for demonstration as well as testing.
 Its implementation is split across files [[client.h]] and [[client.c]].
@@ -132,18 +133,19 @@ To register this function, the client simply calls [[register_c_func]].
   register_c_func("cmmprint", cmmprint, "int:int");
 @ 
 \subsection{Application Driver}
-DOCUMENT
+To drive our sample client application, we have a loop that prompts the user for a command, and acts accordingly--exiting when the user types [[quit]] or an [[EOF]] is sent to the program.
 <<constant definitions>>=
 #define BUFF_SIZE     256
 #define VALSTACK_SIZE 256
 #define ARGSTACK_SIZE 256
 @
+We parameterize activation stack size, and allow the user to modify the size at runtime.
+We thus keep [[stack_size]] (as well as a [[verbosity]] flag available globally.
 <<global variable definitions>>=
 extern int      verbosity;
-
 static unsigned stack_size = 65536;
 @ 
-DOCUMENT
+The driver opens transactions with the {\PAL} interpreter (passing it sizes for the interpreter's value and argument-passing stacks), registers a few C functions with the interpreter (so they may be called from {\PAL}, loops through user commands, and closes interaction with the interpreter.
 <<application driver>>=
 int main(int argc, char *argv[]) {
   char        buff[BUFF_SIZE], *c;
@@ -155,10 +157,68 @@ int main(int argc, char *argv[]) {
   }
 
   <<register needed C functions with the interpreter>>
-  <<loop and act according to user commands>>
+
+  if (argc > 1) {
+    <<process command line arguments>>
+  } else {
+    <<loop and act according to user commands>>
+  }
 
   Cmm_close();
 }
+@ 
+\subsubsection{Command Line Arguments}
+This client allows a small number of command line arguments.
+If any such arguments are given, we do \emph{not} enter the interactive mode defined below (the command loop).
+The table below lists and explains the arguments supported.\\
+\\
+\begin{tabularx}{\linewidth}{|l|X|}\hline
+\textbf{Argument}   & \textbf{Description}\\\hline\hline
+
+[[--help]] & lists and explains arguments supported
+\\\hline
+
+[[-]]  & reads in a source file from [[stdin]] and runs its [[main]] procedure
+\\\hline
+
+[[<filename>]] & reads in source file [[<filename>]]
+\end{tabularx}
+\\
+Note that if any source files are read in using command line arguments, the interpreter goes ahead and tries to execute exported {\PAL} procedure [[main]] after loading all files.
+<<process command line arguments>>=
+  {
+    int i, files_loaded = 0;
+    for (i = 1; i < argc; i++) {
+      if        (strcasecmp(argv[i], "--help") == 0) {
+        printf("Usage: %s {[--help] | [-] | [<filename>]*}\n");
+        printf("Interprets a C-- program as converted into Lua code\n");
+        printf("Enters interactive mode unless command line arguments are "
+               "given.\n\n");
+
+        printf("  --help       Display this help screen\n");
+        printf("  -            Read source file from stdin\n");
+        printf("  <filename>*  Read in source files named\n");
+
+        break;
+      } else if (strcasecmp(argv[i], "-") == 0) {
+        fprintf(stderr, "feature not yet implemented.\n");
+        break;
+      } else {
+        /* assume we're given a filename */
+        files_loaded = (!load_assembly_unit(argv[i])) || files_loaded;
+      }
+    }
+
+    if (files_loaded) {
+      /* if we're here, then we've loaded in files; let's run them now */
+      loc = cmm_find_export("main");
+      if (loc == NULL) {
+        fprintf(stderr, "error: cannot find procedure \"main\"\n");
+      } else {
+        <<run code at address [[loc]]>>
+      }
+    }
+  }
 @ 
 \subsubsection{The Command Loop}
 We loop: read characters in from [[stdin]] into a buffer until we reach a newline character or an [[EOF]].
@@ -186,6 +246,7 @@ We then tokenize the line read in and act appropriately.
 @ 
 We process [[command]] with an [[if]] statement.
 We compare strings in a case-insensitive manner.
+Special commands [[verbosity]] and [[stacksize]] allow the user to slightly alter the behavior of the interpreter.
 <<process [[command]]>>=
 
     if        (strcasecmp(command, "help") == 0) {
@@ -232,13 +293,14 @@ To find a label, we call on [[cmm_find_export]].
 <<[[loc]] $\leftarrow$ address of label [[arg]]>>=
   loc = cmm_find_export(arg);
   if (loc == NULL) {
-    printf("error: cannot find specified exported C-- label: %s\n", arg);
+    fprintf(stderr, "error: cannot find specified exported C-- label: %s\n", 
+                    arg);
     break;
   }
 @ 
 \paragraph{Disassembling Bytecode}
 Disassembling the bytecode for a sequence of instructions should yield the instructions originally encoded.
-For now, we send all output to [[stdout]].
+For now [[disassemble_instructions]] sends all output to [[stdout]].
 <<disassemble code at label [[arg]] (address [[loc]])>>=
   /* disassemble instructions */
   printf("BEGIN LABEL \"%s\" (<address %x>)\n\n", arg, loc);
@@ -265,4 +327,3 @@ Creating and running a {\PAL} thread with a continuation to execute the code at 
 <<run continuation in [[tcb]]>>=
   tcb->cont = Cmm_RunThread(tcb->cont);
 @
-
