@@ -988,13 +988,14 @@ calling [[idcode]]; using [[String.escaped]] produces identifiers that
 are too long for the linker.
 <<supporting functions for fooling with the global-register area>>=
 let emit_global_register_area ~export =
-  let base_sym     = F.symbol env "Cmm.global_area" in
-  let base         = Rtl.datasym base_sym pointersize in 
+  let areaname = "Cmm.global_area" in
+  let base_sym = if export then asm#export areaname else F.symbol env areaname in
+  let base     = Rtl.datasym base_sym pointersize in 
   let gmap, area, digest = globals base prog.N.globals in
-  let area         = area.AT.overflow in
-  let digest       = "Cmm.globalsig." ^ Idcode.encode digest in
-  let asm          = F.asm env in
-  let digest       = if export then asm#export digest else asm#import digest in
+  let area     = area.AT.overflow in
+  let digest   = "Cmm.globalsig." ^ Idcode.encode digest in
+  let asm      = F.asm env in
+  let digest   = if export then asm#export digest else asm#import digest in
   (* must move to placevars and use gmap as a replacement map *)
   let _ = 
     if export then 

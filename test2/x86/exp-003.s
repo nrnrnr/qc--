@@ -24,6 +24,7 @@
 .globl _Perl_sharepvn
 .globl _Perl_unsharepvn
 .globl _Perl_share_hek
+.globl Cmm.global_area
 .globl Cmm.globalsig.LPcHEVFbOZHbAHHMQTLHQeIQVI
 .section .data
 /* memory for global registers */

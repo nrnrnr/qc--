@@ -6,6 +6,7 @@
 .globl partition
 .globl exchange
 .globl xx
+.globl Cmm.global_area
 .globl Cmm.globalsig.LPcHEVFbOZHbAHHMQTLHQeIQVI
 .section .data
 /* memory for global registers */

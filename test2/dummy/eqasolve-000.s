@@ -532,7 +532,8 @@ _Class,
     _xzerop;
 
 export bits32
-Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY,
+Cmm.global_area,
+    Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY,
     _main,
     _stdprint,
     _stdputstr;

@@ -6,7 +6,7 @@ target
     charset "latin1"
     float "ieee754";
 
-export bits32 Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY;
+export bits32 Cmm.global_area, Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY;
 
 section "data" { align 1; }
 

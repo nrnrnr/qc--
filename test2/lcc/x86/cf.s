@@ -1,5 +1,6 @@
 .globl main
 .globl f
+.globl Cmm.global_area
 .globl Cmm.globalsig.LPcHEVFbOZHbAHHMQTLHQeIQVI
 .section .data
 /* memory for global registers */

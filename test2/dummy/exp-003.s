@@ -1524,7 +1524,8 @@ _PL_Argv,
     memcpy;
 
 export bits32
-Cmm.globalsig.LPcHEVFbOZHbAHHMQTLHQeIQVI,
+Cmm.global_area,
+    Cmm.globalsig.LPcHEVFbOZHbAHHMQTLHQeIQVI,
     _Perl_hv_clear,
     _Perl_hv_delayfree_ent,
     _Perl_hv_delete,

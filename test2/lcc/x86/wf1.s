@@ -7,6 +7,7 @@
 .globl strcmp
 .globl next
 .globl words
+.globl Cmm.global_area
 .globl Cmm.globalsig.LPcHEVFbOZHbAHHMQTLHQeIQVI
 .section .data
 /* memory for global registers */

@@ -6,6 +6,7 @@
 .globl y
 .globl odd
 .globl main
+.globl Cmm.global_area
 .globl Cmm.globalsig.LPcHEVFbOZHbAHHMQTLHQeIQVI
 .section .data
 /* memory for global registers */

@@ -8,7 +8,10 @@ target
 
 import  bits32 printf, strlen;
 
-export bits32 Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY, main;
+export bits32
+Cmm.global_area,
+    Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY,
+    main;
 
 section "data" { align 1; }
 

@@ -3,6 +3,7 @@
 .globl memint
 .globl regchar
 .globl regint
+.globl Cmm.global_area
 .globl Cmm.globalsig.LPcHEVFbOZHbAHHMQTLHQeIQVI
 .section .data
 /* memory for global registers */

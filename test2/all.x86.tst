@@ -31,6 +31,7 @@ Test.files = { "add.c--"
              , 'float-002.c--'
              , 'float-003.c--'
 	     , 'f2.c--'
+             , { source = { 'global.c--', 'incn.c--' } }
              , "hello.c--"
 	     , "hex.c--"
 	     , { source='ladd.c--', other='src/ops64.c' }

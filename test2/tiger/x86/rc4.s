@@ -1,4 +1,5 @@
 .globl tiger_main
+.globl Cmm.global_area
 .globl Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY
 .section .data
 /* memory for global registers */

@@ -8,7 +8,11 @@ target
 
 import  bits32 printf;
 
-export bits32 Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY, main, my_data;
+export bits32
+Cmm.global_area,
+    Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY,
+    main,
+    my_data;
 
 section "data" { align 1; }
 

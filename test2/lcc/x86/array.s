@@ -3,6 +3,7 @@
 .globl g
 .globl y
 .globl x
+.globl Cmm.global_area
 .globl Cmm.globalsig.LPcHEVFbOZHbAHHMQTLHQeIQVI
 .section .data
 /* memory for global registers */

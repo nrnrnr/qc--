@@ -5,6 +5,7 @@
 .globl rows
 .globl down
 .globl up
+.globl Cmm.global_area
 .globl Cmm.globalsig.LPcHEVFbOZHbAHHMQTLHQeIQVI
 .section .data
 /* memory for global registers */
