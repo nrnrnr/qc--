@@ -34,7 +34,7 @@ module T    = Lua.Lib.Combine.T9                         (* types *)
                 (Driver2.Export.DocT)       (* T6 *)
                 (Luaiolib.T)                (* T7 *)
                 (Backplane.T)               (* T8 *)
-                (Colorgraph.T)              (* T9 *)
+                (Colorgraph.GCT)            (* T9 *)
 
 module IO   = Lua.Lib.Extend (T.T7)
 
@@ -47,6 +47,9 @@ module L    = Lua.Lib.Combine.L7                        (* libraries *)
                 (Backplane.Make  (T.T8) (T.T4))
                 (Colorgraph.Make (T.T8) (T.T9) (T.T4))
                 (Targets.MakeLib (T.T5))
+(*
+                (Placevar.Make (T.T8) (T.4))
+*)
                 
 module I    = Lua.MakeInterp                            (* our interpreter *)
                 (Lua.Parser.MakeStandard)
@@ -221,27 +224,30 @@ CGStages = { liveness = mkS("liveness", CG.liveness)
            , assignColors = mkS("assignColors", CG.assignColors)
            , haveSpilledNodes = mkS("haveSpilledNodes", CG.haveSpilledNodes)
            , rewriteProgram = mkS("rewriteProgram", CG.rewriteProgram)
+           , applyColors = mkS("applyColors", CG.applyColors)
            }
 
 graphColoring =
   share(initInfo, "cgInfo",
-      fix(
-          seq({ ignore(single(CGStages.liveness))
-              , ignore(single(CGStages.build))
-              , ignore(single(CGStages.makeWorklist))
-              , ignore(
-                   fix(
-                     unless_do(single(CGStages.simplify),
-                               unless_do(single(CGStages.coalesce),
-                                  unless_do(single(CGStages.freeze),
-                                     single(CGStages.selectSpill))))))
-              , ignore(single(CGStages.assignColors))
-              , when_do(single(CGStages.haveSpilledNodes),
-                        single(CGStages.rewriteProgram))
-              })))
+      seq({fix(
+               seq({ ignore(single(CGStages.liveness))
+                   , ignore(single(CGStages.build))
+                   , ignore(single(CGStages.makeWorklist))
+                   , ignore(
+                        fix(
+                          unless_do(single(CGStages.simplify),
+                                    unless_do(single(CGStages.coalesce),
+                                       unless_do(single(CGStages.freeze),
+                                          single(CGStages.selectSpill))))))
+                   , ignore(single(CGStages.assignColors))
+                   , when_do(single(CGStages.haveSpilledNodes),
+                             single(CGStages.rewriteProgram))
+                   }))
+          , single(CGStages.applyColors)
+          }))
 
 Optimize = Optimize or {}
-function Optimize.default (proc) run(graphColoring, proc, {}) end
+function Optimize.default (cfg, frame) run(graphColoring, cfg, {}) end
 
 ------------------------------------------------------------------ 
 -- Defaults
