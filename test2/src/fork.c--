@@ -1,0 +1,23 @@
+target byteorder little wordsize 32 ;
+
+export cmm_threadfun, run_thread;
+import fib;
+
+section "data" {
+  align 4;
+  comeback: bits32;
+}
+
+foreign "C" run_thread(bits32 k) {
+  bits32[comeback] = cutback;
+  cut to k() also cuts to cutback;
+  continuation cutback(n):
+    bits32 n;
+    foreign "C" return (n);
+}
+
+cmm_threadfun(bits32 x) {
+  bits32 n;
+  n = foreign "C" fib("address" x, 10);
+  cut to bits32[comeback](n);
+}

@@ -109,7 +109,7 @@ function Debug.showblocks(blocks, keys, prefix)
     local block = blocks[keys[i]]
     if type(block) == 'table' then
       Debug.showblocks(block, {'caller', 'callee'}, keys[i] .. '.')
-    else
+    elseif block then
       write(format('block %17s is %2d bytes aligned %2d at %s\n',
                    (prefix or '') .. keys[i], Block.size(block),
 		   Block.alignment(block), Block.base(block)))
@@ -119,12 +119,13 @@ function Debug.showblocks(blocks, keys, prefix)
         write(format('  where %s\n', constraints[j]))
         j = j + 1
       end
+    else
+      write(format('no block %s?!\n', (prefix or '') .. keys[i]))
     end
     i = i + 1
   end
 end
 @ 
-
 <<Lua compiler configuration>>=
 function Debug.showframesize(frame,proc)
     write(format('function %17s convention %10s framesize %d\n'
@@ -134,7 +135,6 @@ function Debug.showframesize(frame,proc)
                 ))
 end
 @
-
 % ------------------------------------------------------------------ 
 \paragraph{Stack Layout for the Dummy Target} 
 % ------------------------------------------------------------------ 
@@ -142,7 +142,7 @@ end
 \module{dummy.nw} module
 that defines the dummy target.
 
-<<Lua compiler configuration>>=
+<<stack-frame layout functions>>=
 Dummy = {} or Dummy
 Dummy.layout = { creates='no late consts' }
 
@@ -181,7 +181,7 @@ end
 \paragraph{Stack Layout for the \mips}
 % ------------------------------------------------------------------ 
 
-<<Lua compiler configuration>>=
+<<stack-frame layout functions>>=
 Mips = {} or Mips
 Mips.layout = { creates='no late consts' }
 
@@ -287,7 +287,7 @@ Alpha.layout = { creates='no late consts' } -- what is this for? -CL
 The following layout assumes the stack pointer does not move,
 i.e.~argument and result overflow blocks are allocated by the caller.
 
-<<Lua compiler configuration>>=
+<<stack-frame layout functions>>=
 function Alpha.layout["C"](dummy, proc)
     local blocks              = Stack.blocks(proc)
     blocks.oldblocks.callee   = Block.overlap_low(64,blocks.oldblocks.callee)
@@ -329,7 +329,7 @@ end
 The [[cmm]] conventions are part of an experimental setup to test the
 [[callspec]] interface to define calling conventions.
 
-<<Lua compiler configuration>>=
+<<stack-frame layout functions>>=
 Alpha.layout["cmm"]  = Alpha.layout["C"]    -- defaults
 Alpha.layout["cmm0"] = Alpha.layout["C"]
 Alpha.layout["cmm1"] = Alpha.layout["C"]
@@ -386,133 +386,13 @@ function Alpha.layout.fn(dummy,proc)
     end    
 end
 @
-  
-% ------------------------------------------------------------------ 
-\paragraph{Stack Layout for the $x$86} 
-% ------------------------------------------------------------------ 
-
-This code should probably move to the x86 module.
-
-<<Lua compiler configuration>>=
-X86 = X86 or {}
-X86.layout = { creates='no late consts' }
-
-function X86.layout.fn(dummy,proc) --- dispatch on cc name
-  return X86.layout[Stack.ccname(proc)](dummy, proc)
-end
-
-function X86.layout["C"](dummy,proc) --- really for a C convention only
-    local blocks = Stack.blocks(proc)
-    blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)
-
-    -- OVERLAP_HIGH CONSIDERED SUSPECT
-    blocks.oldblocks.callee   = Block.overlap_high(32, blocks.oldblocks.callee)
-    blocks.oldblocks.caller   = Block.overlap_low (32, blocks.oldblocks.caller)
-    blocks.youngblocks.callee = Block.overlap_high(32, blocks.youngblocks.callee)
-    blocks.youngblocks.caller = Block.overlap_low (32, blocks.youngblocks.caller)
-
-    -- It is _vital_ that there be no padding inserted between the stack pointer
-    -- and the overflow areas. If there is padding, then the callee has no hope
-    -- of matching the caller's expectations.
-    -- Hence, we concatenate these blocks before attaching them to the rest of the
-    -- procedure, which might introduce strange alignment requirements.
-    local old_end   = Block.cat(32, { blocks.oldblocks.caller
-                                    , blocks.ra
-                                    , blocks.vfp
-                                    , blocks.oldblocks.callee
-                                    })
-    local young_end = Block.cat(32, { blocks.youngblocks.caller
-                                    , blocks.sp
-                                    , blocks.youngblocks.callee
-                                    })
-    local layout = 
-                { old_end                       -- <-- high addresses
-                , blocks.stackdata
-                , blocks.continuations
-                , blocks.spills
-                , young_end                     -- <-- low addresses
-                }
-    if Debug.stack then
-      write('======= using stack layout for C/notail =======\n')
-      write('****** cc name = ', Stack.ccname(proc), '\n')
-      Debug.showblocks (blocks, {'oldblocks', 'ra', 'vfp',
-                                 'stackdata', 'continuations', 'spills',
-                                 'youngblocks', 'sp'})
-    end
-    local block = Block.cat(32, layout)
-    if Debug.stack then
-      Debug.showblocks({frame=block}, {'frame'})
-    end
-    if Debug.framesize then Debug.showframesize(block,proc) end
-        
-    Stack.freeze(proc,block)
-    return 1
-end    
-
-X86.layout["notail"] = X86.layout["C"]
-
-function X86.layout["C--"](dummy,proc)
-    local blocks = Stack.blocks(proc)
-
-    if Debug.stack then
-      write('======= using stack layout for C-- with tail calls =======\n')
-      local i = 1
-      local keys = { }
-      while blocks.oldblocks.callee[i] do keys[i] = i; i = i + 1 end
-      write('oldblocks.callee (before ra is added):\n')
-      Debug.showblocks(blocks.oldblocks.callee, keys)
-      write('................\n')
-    end
-
-    blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)
-    -- first old block is always the incoming parms
-    blocks.oldblocks.callee[1] =
-                    Block.cat(32, {blocks.oldblocks.callee[1], blocks.ra, blocks.vfp})
-    blocks.oldblocks.caller    = Block.overlap_low (32, blocks.oldblocks.caller)
-    blocks.oldblocks.callee    = Block.overlap_high(32, blocks.oldblocks.callee)
-    blocks.youngblocks.caller  = Block.overlap_low (32, blocks.youngblocks.caller)
-    blocks.youngblocks.callee  = Block.overlap_high(32, blocks.youngblocks.callee)
-
-    -- It is _vital_ that there be no padding inserted between the stack pointer
-    -- and the overflow areas. If there is padding, then the callee has no hope
-    -- of matching the caller's expectations.
-    -- Hence, we concatenate these blocks before attaching them to the rest of the
-    -- procedure, which might introduce strange alignment requirements.
-    local old_end   = Block.cat(32, { blocks.oldblocks.caller
-                                    -- On return, the ra must end up here,
-                                    -- immediately followed by the sp
-                                    , blocks.oldblocks.callee
-                                    -- , blocks.ra  -- joined to incoming block
-                                    -- , blocks.vfp
-                                    })
-    local young_end = Block.cat(32, { blocks.youngblocks.caller
-                                    , blocks.sp
-                                    , blocks.youngblocks.callee
-                                    })
-    local layout = 
-                { old_end               -- <-- high addresses
-                , blocks.stackdata
-                , blocks.continuations
-                , blocks.spills
-                , young_end             -- <-- low addresses
-                }
-    if Debug.stack then
-      Debug.showblocks (blocks, {'oldblocks', 'ra', 'vfp',
-                                 'stackdata', 'continuations', 'spills',
-                                 'youngblocks', 'sp'})
-    end
-    local block = Block.cat(32, layout)
-    if Debug.framesize then Debug.showframesize(block,proc) end
-    Stack.freeze(proc,block)
-    return 1
-end    
 @
 
 % ------------------------------------------------------------------ 
 \paragraph{Stack Layout for the Ia64}
 % ------------------------------------------------------------------ 
 
-<<Lua compiler configuration>>=
+<<stack-frame layout functions>>=
 Ia64 = Ia64 or {}
 Ia64.layout = { creates='no late consts' }
 
@@ -547,7 +427,7 @@ end
 \paragraph{Stack Layout for the SPARC}
 % ------------------------------------------------------------------ 
 
-<<Lua compiler configuration>>=
+<<stack-frame layout functions>>=
 Sparc = Sparc or {}
 Sparc.layout = { creates='no late consts' }
 
@@ -626,7 +506,7 @@ Sparc.layout["C--"] = Sparc.layout["C"]
 \paragraph{Stack Layout for the Interpreter}
 % ------------------------------------------------------------------ 
 
-<<Lua compiler configuration>>=
+<<stack-frame layout functions>>=
 Interp = Interp or {}
 function Interp.layout(dummy, proc)
     local blocks = Stack.blocks(proc)
@@ -652,6 +532,7 @@ end
 % ------------------------------------------------------------------ 
  
 <<Lua compiler configuration>>=
+<<stack-frame layout functions>>
 <<PPC stack layout in Lua>>
 @ 
 

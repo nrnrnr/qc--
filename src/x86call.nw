@@ -24,6 +24,7 @@ We use these abbreviations:
 module A  = Automaton
 module C  = Call
 module R  = Rtl
+module RO = Rewrite.Ops
 module RP = Rtl.Private
 module RS = Register.Set
 module RU = Rtlutil
@@ -39,6 +40,7 @@ X86.cc["C"     ] = X86.cc["C"     ] or {}
 X86.cc["C--"   ] = X86.cc["C--"   ] or {}
 X86.cc["notail"] = X86.cc["notail"] or {}
 X86.cc["gc"]     = X86.cc["gc"]     or {}
+X86.cc["C-- thread"] = X86.cc["C-- thread"] or {}
 @ 
 \paragraph{General information}
 Information on the C~calling convention is from the SYSV ABI, Third
@@ -208,7 +210,15 @@ X86.cc["C--"].call =
 -- all the calling conventions share the same cutto automaton specs.
 X86.cc["C--"].cutto = X86.cc["C"].cutto
 @
+\paragraph{Automata for starting a thread}
 
+The thread convention may only receive parameters.
+It may never return or cut.
+<<x86 calling convention automata in Lua>>=
+X86.cc["C-- thread"].results = { }
+X86.cc["C-- thread"].call = A.overflow { growth = "up", max_alignment = 4 }
+X86.cc["C-- thread"].cutto = { }
+@
 \paragraph{Automata for calling a garbage
 collection---\texttt{gc}~convention} We want to make the call for the
 caller as cheap as possible because a garbage collection will dominate
@@ -370,17 +380,66 @@ let conv ~preserved ~jump ~altret name specs ~return_to cut =
   ; C.cutto            = cut
   ; C.return           = return
   } 
+@ 
+We could even just eliminate the automaton here and compute stuff directly.
+<<x86call.ml>>=
+let thread cut specs =
+  let outgoing _ _ = impossf "called out using thread convention" in
+  let nocut    _ _ = impossf "cut to or continuation using thread convention" in
+  let noreturn _ _ = impossf "return using thread convention" in
+  let incoming types formals = match types, formals with
+    | [_; _], [_; _] ->
+        let a = A.at mspace vfp specs.A.call in
+        let crank effects' (h, w) formal =
+          let l = A.allocate a w h in
+          A.store formal (A.fetch l w) w :: effects' in
+        let shuffle = R.par (List.rev (List.fold_left2 crank [] types formals)) in
+        let a = A.freeze a in
+        let autosp = vfp in
+        let postsp = std_sp_location in
+        let insp   = vfp in
+        let setsp  = RU.store sp postsp in
+        { C.overflow = a.A.overflow
+        ; C.insp     = (fun b -> RU.store sp vfp)
+        ; C.regs     = a.A.regs_used
+        ; C.shuffle  = shuffle
+        ; C.post_sp  = R.guard (RO.ne 32 spval postsp) setsp
+        ; C.pre_sp   = R.guard (RO.gt 32 spval postsp) setsp
+        }
+    | _ -> impossf "thread convention with %d parameters" (List.length formals) in
+  let nvregs  = RS.empty in
+  let volregs = allregs in
+  { C.name  = "C-- thread"
+  ; C.overflow_alloc  = 
+      { C.parameter_deallocator = C.Caller
+      ; C.result_allocator      = C.Caller
+      }
+  ; C.call_parms = { C.in' = incoming; C.out = outgoing}
+  ; C.cut_parms  = { C.in' = nocut;    C.out = (fun _ -> nocut)}
+  ; C.results    = { C.in' = noreturn; C.out = noreturn }
+  ; C.stack_growth     = Memalloc.Down
+  ; C.stable_sp_loc    = std_sp_location
+  ; C.replace_vfp      = Cfgx.Vfp.replace_with ~sp
+  ; C.sp_align         = 4               (* alignment of stack pointer at call/cut *)
+  ; C.ra_on_entry      = const (R.fetch ra 32)   (* where return address is on entry *)
+  ; C.where_to_save_ra = (fun _ t -> Talloc.Multiple.loc t 't' 32)
+  ; C.ra_on_exit       = (fun _ _ t -> Talloc.Multiple.loc t 't' 32)
+  ; C.sp_on_unwind     = (fun exp -> RU.store sp exp)
+  ; C.sp_on_jump       = (fun _ _ ->impossf "tail calls not supported by C-- thread calling convention")
+  ; C.pre_nvregs       = RS.empty        (* registers preserved across calls *)
+  ; C.volregs          = allregs         (* registers not preserved across calls *)
+  ; C.saved_nvr        = saved_nvr
+  ; C.cutto            = cut
+  ; C.return           = (fun _ _ ~ra -> impossf "return in C-- thread convention")
+  } 
 @
-
 And in Lua: register the new calling conventions. From the perspective
 of automata, some calling conventions are identical. Despite this, they
 may differ because of the additional OCaml code that defines the calling
 convention.
-
 <<x86 calling convention automata in Lua>>=
 X86.cc["paranoid C"]        = X86.cc["C"]
 X86.layout["paranoid C"]    = X86.layout["C"]
-
 
 -- layout for "notail" is defined in luacompile.nw (uses the "C" layout)
 X86.cc["notail"]            = X86.cc["C--"]
@@ -389,10 +448,10 @@ A.register_cc(Backend.x86.target,"C"     ,    X86.cc["C"     ])
 A.register_cc(Backend.x86.target,"paranoid C",X86.cc["paranoid C"])
 A.register_cc(Backend.x86.target,"C'"    ,    X86.cc["C"     ])
 A.register_cc(Backend.x86.target,"C--"   ,    X86.cc["C--"   ])
+A.register_cc(Backend.x86.target,"C-- thread",    X86.cc["C-- thread"])
 A.register_cc(Backend.x86.target,"notail",    X86.cc["notail"])
 A.register_cc(Backend.x86.target,"gc",        X86.cc["gc"])
 @ 
-
 And finally, our lookup function; parameter [[preserved]] takes the list
 of registers preserved accross calls, i.e. non-volatile or callee-saved
 registers.
@@ -401,6 +460,7 @@ let cconv ~return_to cut ccname stage =
   let f =
     match ccname with
     | "C--"         -> conv ~jump:true  ~altret:true  ~preserved:nvregs
+    | "C-- thread"  -> (fun ccname stage ~return_to cut -> thread cut stage)
     | "lightweight" -> conv ~jump:true  ~altret:true  ~preserved:nvregs
     | "notail"      -> conv ~jump:false ~altret:true  ~preserved:nvregs
     | "paranoid C"  -> conv ~jump:false ~altret:false ~preserved:RS.empty
@@ -446,4 +506,162 @@ let cc auto return_to cut spec =
 let c' ccname auto ~return_to cut = cc auto return_to cut
     { template with CS.name = ccname }
 @
+\paragraph{Stack Layout} 
+<<stack-frame layout functions>>=
+X86 = X86 or {}
+X86.layout = { creates='no late consts' }
 
+function X86.layout.fn(dummy,proc) --- dispatch on cc name
+  return X86.layout[Stack.ccname(proc)](dummy, proc)
+end
+<<stack-frame layout functions>>=
+function X86.layout["C"](dummy,proc) --- really for a C convention only
+    local blocks = Stack.blocks(proc)
+    blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)
+
+    -- OVERLAP_HIGH CONSIDERED SUSPECT
+    blocks.oldblocks.callee   = Block.overlap_high(32, blocks.oldblocks.callee)
+    blocks.oldblocks.caller   = Block.overlap_low (32, blocks.oldblocks.caller)
+    blocks.youngblocks.callee = Block.overlap_high(32, blocks.youngblocks.callee)
+    blocks.youngblocks.caller = Block.overlap_low (32, blocks.youngblocks.caller)
+
+    -- It is _vital_ that there be no padding inserted between the stack pointer
+    -- and the overflow areas. If there is padding, then the callee has no hope
+    -- of matching the caller's expectations.
+    -- Hence, we concatenate these blocks before attaching them to the rest of the
+    -- procedure, which might introduce strange alignment requirements.
+    local old_end   = Block.cat(32, { blocks.oldblocks.caller
+                                    , blocks.ra
+                                    , blocks.vfp
+                                    , blocks.oldblocks.callee
+                                    })
+    local young_end = Block.cat(32, { blocks.youngblocks.caller
+                                    , blocks.sp
+                                    , blocks.youngblocks.callee
+                                    })
+    local layout = 
+                { old_end                       -- <-- high addresses
+                , blocks.stackdata
+                , blocks.continuations
+                , blocks.spills
+                , young_end                     -- <-- low addresses
+                }
+    if Debug.stack then
+      write('======= using stack layout for C/notail =======\n')
+      write('****** cc name = ', Stack.ccname(proc), '\n')
+      Debug.showblocks (blocks, {'oldblocks', 'ra', 'vfp',
+                                 'stackdata', 'continuations', 'spills',
+                                 'youngblocks', 'sp'})
+    end
+    local block = Block.cat(32, layout)
+    if Debug.stack then
+      Debug.showblocks({frame=block}, {'frame'})
+    end
+    if Debug.framesize then Debug.showframesize(block,proc) end
+        
+    Stack.freeze(proc,block)
+    return 1
+end    
+
+X86.layout["notail"] = X86.layout["C"]
+<<stack-frame layout functions>>=
+function X86.layout["C--"](dummy,proc)
+    local blocks = Stack.blocks(proc)
+
+    if Debug.stack then
+      write('======= using stack layout for C-- with tail calls =======\n')
+      local i = 1
+      local keys = { }
+      while blocks.oldblocks.callee[i] do keys[i] = i; i = i + 1 end
+      write('oldblocks.callee (before ra is added):\n')
+      Debug.showblocks(blocks.oldblocks.callee, keys)
+      write('................\n')
+    end
+
+    blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)
+    -- first old block is always the incoming parms
+    blocks.oldblocks.callee[1] =
+                    Block.cat(32, {blocks.oldblocks.callee[1], blocks.ra, blocks.vfp})
+    blocks.oldblocks.caller    = Block.overlap_low (32, blocks.oldblocks.caller)
+    blocks.oldblocks.callee    = Block.overlap_high(32, blocks.oldblocks.callee)
+    blocks.youngblocks.caller  = Block.overlap_low (32, blocks.youngblocks.caller)
+    blocks.youngblocks.callee  = Block.overlap_high(32, blocks.youngblocks.callee)
+
+    -- It is _vital_ that there be no padding inserted between the stack pointer
+    -- and the overflow areas. If there is padding, then the callee has no hope
+    -- of matching the caller's expectations.
+    -- Hence, we concatenate these blocks before attaching them to the rest of the
+    -- procedure, which might introduce strange alignment requirements.
+    local old_end   = Block.cat(32, { blocks.oldblocks.caller
+                                    -- On return, the ra must end up here,
+                                    -- immediately followed by the sp
+                                    , blocks.oldblocks.callee
+                                    -- , blocks.ra  -- joined to incoming block
+                                    -- , blocks.vfp
+                                    })
+    local young_end = Block.cat(32, { blocks.youngblocks.caller
+                                    , blocks.sp
+                                    , blocks.youngblocks.callee
+                                    })
+    local layout = 
+                { old_end               -- <-- high addresses
+                , blocks.stackdata
+                , blocks.continuations
+                , blocks.spills
+                , young_end             -- <-- low addresses
+                }
+    if Debug.stack then
+      Debug.showblocks (blocks, {'oldblocks', 'ra', 'vfp',
+                                 'stackdata', 'continuations', 'spills',
+                                 'youngblocks', 'sp'})
+    end
+    local block = Block.cat(32, layout)
+    if Debug.framesize then Debug.showframesize(block,proc) end
+    Stack.freeze(proc,block)
+    return 1
+end    
+<<stack-frame layout functions>>=
+function X86.layout["C-- thread"](dummy,proc)
+    local blocks = Stack.blocks(proc)
+
+    if Debug.stack then
+      write('======= using stack layout for C-- thread =======\n')
+      local i = 1
+      local keys = { }
+      while blocks.oldblocks.callee[i] do keys[i] = i; i = i + 1 end
+      write('oldblocks.callee (before ra is added):\n')
+      Debug.showblocks(blocks.oldblocks.callee, keys)
+      write('................\n')
+    end 
+
+    -- first old block is always the incoming parms
+    blocks.oldblocks.caller[1] =
+                    Block.cat(32, {blocks.oldblocks.caller[1], blocks.vfp})
+    blocks.oldblocks.caller    = Block.overlap_low (32, blocks.oldblocks.caller)
+    blocks.oldblocks.callee    = Block.overlap_high(32, blocks.oldblocks.callee)
+    blocks.youngblocks.caller  = Block.overlap_low (32, blocks.youngblocks.caller)
+    blocks.youngblocks.callee  = Block.overlap_high(32, blocks.youngblocks.callee)
+    local old_end   = Block.cat(32, { blocks.oldblocks.caller
+                                    , blocks.oldblocks.callee
+                                    })
+    local young_end = Block.cat(32, { blocks.youngblocks.caller
+                                    , blocks.sp
+                                    , blocks.youngblocks.callee
+                                    })
+    local layout = 
+                { old_end               -- <-- high addresses
+                , blocks.stackdata
+                , blocks.continuations
+                , blocks.spills
+                , young_end             -- <-- low addresses
+                }
+    if Debug.stack then
+      Debug.showblocks (blocks, {'oldblocks', 'ra', 'vfp',
+                                 'stackdata', 'continuations', 'spills',
+                                 'youngblocks', 'sp'})
+    end
+    local block = Block.cat(32, layout)
+    if Debug.framesize then Debug.showframesize(block,proc) end
+    Stack.freeze(proc,block)
+    return 1
+end    

@@ -8,5 +8,6 @@ Ld.rtend = Ld.rtend  --- do need the run-time system
 -- source files live in src directory
 Test.source  = "src"
 Test.files = { { source = 'unwind.c--', other = 'src/unwindt.c' }
+             , { source = 'fork.c--',   other = 'src/forkmain.c' }
              }
 

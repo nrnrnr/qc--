@@ -5,7 +5,6 @@
 NAME = libqc--
 TOP  = ..
 <      $TOP/config/config.mk
-<      $TOP/config/install.mk
 B=""
 
 LIBA   = ${B}$NAME.a
@@ -103,8 +102,8 @@ pcmap.ld:D: pcmap.nw
 &.o: &.s
 	as -o $target $stem.s
 
-&.s: &.c
-	gcc -Wall -S $stem.c
+'^'(runtime|pcmap|gcc-linux).s'$':R: '\1'.c
+	gcc -Wall -S -g $stem1.c
 
 # ------------------------------------------------------------------ 
 # machine-dependent code
@@ -138,8 +137,10 @@ ${B}cut.c--:D: runtime.nw
 ${B}thread.c--:D: runtime.nw
 	$NOTANGLE -L $prereq -R$target > $target
 
-${B}&.s:D: ${B}&.c--
-	tmp=/tmp/$stem$$
-	$QCMM $config_swapopt -S -o $tmp ${B}$stem.c--
+'^'${B}(cut|thread).s'$':DR: ${B}'\1'.c-- $QCMM
+	tmp=/tmp/$stem1$$
+	$QCMM $config_swapopt -S -o $tmp ${B}$stem1.c--
 	sed '/globalsig/d;/ref_to_global_area/d' $tmp > $target
 	rm -f $tmp
+
+<      $TOP/config/install.mk
