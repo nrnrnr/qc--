@@ -26,6 +26,7 @@ Test.files = { "add.c--"
              , { source = { 'global.c--', 'incn.c--' } }
              , "hello.c--"
 	     , "hex.c--"
+             , "jtab.c--"    -- computed goto with jump table
 	     , { source='ladd.c--', other='src/ops64.c' }
 	           , "live_rtd.c--"
              , "not.c--"

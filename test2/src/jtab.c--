@@ -1,0 +1,25 @@
+  section "data" { align 4; jump_tab: bits32[] { L1, L2, L3 }; }
+  f (bits32 x) {
+    goto bits32[jump_tab + 4*x] targets L1, L2, L3;
+    L1: return (1);
+    L2: return (2);
+    L3: return (3);
+  }
+
+target byteorder little;
+import printf; export main;
+
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+  bits32 n;
+  n = f(0);
+  foreign "C" printf("address" fmt, n);
+  n = f(1);
+  foreign "C" printf("address" fmt, n);
+  n = f(2);
+  foreign "C" printf("address" fmt, n);
+  foreign "C" return (0);
+}
+
+section "data" {
+  align 4; fmt: bits8[] "Counting %d\n\0";
+}
