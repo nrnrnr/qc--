@@ -93,10 +93,15 @@ let emit cfg rtl_emit sym_emit unit =
 
 <<cfgutil.ml>>=
 let number_and_rtl node =
-  string_of_int (G.number node) ^ ": " ^ Rtlutil.ToString.rtl (G.instr node)
+    ( string_of_int (G.number node)
+    ^ ": " 
+   (**) 
+    ^ String.escaped (Rtlutil.ToString.rtl (G.instr node))
+    (**)
+    )
 
 let cfg2dot ~compress ~name cfg =
-  let nodename node = Printf.sprintf "N\"%d\"" (G.number node) in
+  let nodename node = Printf.sprintf "\"N%d\"" (G.number node) in
   let dotnode  node = nodename node ^ " [label=\"" ^ number_and_rtl node ^ "\"]" in
   let edge_fwd from to' = nodename from ^ " -> " ^ nodename to'  ^ "\n" in
   let edge_bwd from to' = nodename to'  ^ " -> " ^ nodename from ^
