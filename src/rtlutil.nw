@@ -340,16 +340,16 @@ module Subst = struct
     <<Subst>>
 end
 
+module ToString = struct
+    <<ToString>>
+end
+
 module ToAST = struct
     <<ToAST>>
 end
 
 module ToUnreadableString = struct
     <<ToUnreadableString>>
-end
-
-module ToString = struct
-    <<ToString>>
 end
 
 module Time = struct
@@ -708,7 +708,7 @@ let opr op w =
 
 let rec expr' = function
     | R.Const c         -> const c
-    | R.Fetch(loc,_)    -> A.Fetch(location' loc)
+    | R.Fetch(loc,_)    -> rvalue loc
     | R.App((op,ww),ee) -> let actual e = (None, expr' e) in
                            match ee with
                            | [l; r] when op = "add" || op = "sub" ->
@@ -725,6 +725,16 @@ because {\PAL} has no notion of spaces. The translation here turns a
 space into a (named) type, which is neither wrong nor right.
 
 <<ToAST>>=
+and rvalue = function
+  | R.Slice (w, i, loc) ->
+      let e = rvalue loc in
+      let e = if i = 0 then e
+              else A.PrimOp("shrl", [None, e;
+                                     None, A.Int (string_of_int i, None)]) in
+      let e = A.PrimOp("lobits" ^ string_of_int w, [None, e]) in
+      e
+  | loc -> A.Fetch(location' loc) 
+
 and location' = function 
     | R.Mem (sp,agg,width,e,ass) ->
         (match !the_verbosity with
@@ -748,8 +758,8 @@ and location' = function
         | Low -> A.Name(None, Printf.sprintf "$%c%d" sp i))
     | R.Var    (name,_,width)   -> A.Name(None,name)
     | R.Global (name,_,width)    -> A.Name(None,name)
-    | R.Slice (w,i,loc)          -> location' loc (*XXX*)
-    
+    | R.Slice (w,i,loc)          ->
+        A.Name(None, Printf.sprintf "Slice(%d, %d, %s)" w i (ToString.location' loc))
 
 let (<<) f g  = fun x -> f (g x)
 let expr       = expr'     << Rtl.Dn.exp
