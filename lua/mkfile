@@ -1,43 +1,188 @@
+# 
+# Lua interpreter - library and standalone binary
+#
+# ------------------------------------------------------------------ 
+# call 'mk depend' after sources have been checked out of CVS!
+# ------------------------------------------------------------------ 
+#
+# To add a new module to the library:
+# (1) add it to SRC
+# (2) add it to LIBML		if it is a .ml  file
+# (3) add it to LIBMLI		if it is a .mli file	
+# 
+
 TOP    =        ..
 LIBDIR =        ../lib
 
 <../config/ocaml.mk
 <../config/noweb.mk
 
-OCAMLC_FLAGS=-I $LIBDIR -g
-OCAMLO_FLAGS=-I $LIBDIR
+OCAMLC_FLAGS = 	-I $LIBDIR -g
+OCAMLO_FLAGS =	-I $LIBDIR
 
-SRC=luaast.ml luaast.mli luabaselib.ml luabaselib.mli luafloat.ml luafloat.mll \
-	luaiolib.ml luaiolib.mli luainterp.ml luainterp.mli main.ml luaparser.ml luaparser.mli luascanner.ml \
-	luahash.ml luahash.mli luavalue.ml luavalue.mli lualib.mli lualib.ml \
-	luastrlib.mli luastrlib.ml luamathlib.mli luamathlib.ml newinterp.mli newinterp.ml
+# ------------------------------------------------------------------ 
+# high level (virtual) targets
+# ------------------------------------------------------------------ 
+
+all:V: 		oclua
+
+update:V:	$LIBDIR/lua.cma $LIBDIR/lua.cmxa
+
+depend:V:	DEPEND
+
+clean:V:
+		rm -f *.cmi *.cmo *.ml *.mli *.mly *.cmx *.o
 
 
-OBJ=luahash.cmo luafloat.cmo luavalue.cmo luaast.cmo luaparser.cmo luascanner.cmo \
-	lualib.cmo luabaselib.cmo luainterp.cmo newinterp.cmo \
-	luastrlib.cmo luamathlib.cmo luaiolib.cmo main.cmo
-OPT=`echo $OBJ | sed 's/\.cmo/.cmx/g'`
+# ------------------------------------------------------------------ 
+# lua library
+# ------------------------------------------------------------------ 
+# The order of files determines the link order. No file must use any
+# of its successors
 
-all:V: oclua
+LIBML = 	luahash.ml	\
+		luafloat.ml	\
+		luavalue.ml	\
+		luaast.ml	\
+		luaparser.ml	\
+		luascanner.ml	\
+		lualib.ml	\
+		luabaselib.ml	\
+		luainterp.ml	\
+		luastrlib.ml	\
+		luamathlib.ml	\
+		luaiolib.ml	\
 
-oclua: $OBJ
-	ocamlc $OCAMLC_FLAGS -o $target unix.cma cllib.cma $prereq 
+LIBCMO =	`echo $LIBML | sed 's/\.ml/.cmo/g'`
+LIBCMX =	`echo $LIBML | sed 's/\.ml/.cmx/g'`
+LIBOBJ =	`echo $LIBML | sed 's/\.ml/.o/g'`
 
-oclua.opt: $OPT
-	ocamlopt $OCAMLO_FLAGS -o $target unix.cmxa cllib.cmxa $prereq 
+# order does not matter here - so keep it alphabetical
+# we wan't easily deduce LIBMLI from LIBML because there might be
+# interfaces with no implementation and vice versa.
 
-bin:V: $OBJ 
-src:V: $SRC
+LIBMLI = 	luaast.mli	\
+		luabaselib.mli	\
+		luainterp.mli	\
+		luaiolib.mli	\
+		lualib.mli	\
+		luamathlib.mli	\
+		luaparser.mli	\
+		luastrlib.mli	\
+		luavalue.mli	\
+		luahash.mli	\
 
-TEST=03 04 05 06 07 08 10 12 02
+LIBCMI =	`echo $LIBMLI | sed 's/\.mli/.cmi/g'`
+
+
+lua.cma:	$LIBCMO $LIBCMI
+		$OCAMLC $OCAMLC_FLAGS -a -o $target $LIBCMO
+
+# this target also creates *.o files and a lua.a library
+lua.cmxa:	$LIBCMX	$LIBCMI 
+		$OCAMLO $OCAMLO_FLAGS -a -o $target $LIBCMX
+
+
+# copy library and interfaces to $LIBDIR. Note that lua.a is
+# implicitly built when lua.cmxa is built.
+
+$LIBDIR/lua.cma: lua.cma dirs
+		for f in lua.cma $LIBCMI $LIBMLI
+		do
+		    cmp -s $f $LIBDIR/$i || cp $i $LIBDIR
+		done
+
+$LIBDIR/lua.cmxa: lua.cmxa dirs
+		for f in lua.cmxa lua.a $LIBCMI $LIBMLI 
+		do
+		    cmp -s $f $LIBDIR/$i || cp $i $LIBDIR
+		done
+		
+# ------------------------------------------------------------------ 
+# lua standalone interpreter (for tests)
+# ------------------------------------------------------------------ 
+
+ML =    	newinterp.ml main.ml 
+CMO =		`echo $ML | sed 's/\.ml/.cmo/g'`
+CMX =		`echo $ML | sed 's/\.ml/.cmx/g'`
+
+
+oclua: 		lua.cma $CMO 
+		$OCAMLC $OCAMLC_FLAGS -o $target unix.cma cllib.cma $prereq 
+
+oclua.opt: 	lua.cmxa $CMX
+		$OCAMLO $OCAMLO_FLAGS -o $target unix.cmxa cllib.cmxa $prereq 
+
+# ------------------------------------------------------------------ 
+# source files
+# all sources are in noweb files. We have to extract them before we
+# build the DEPEND file to get the right dependencies. In alphabetical
+# order.
+#
+
+SRC = 		luaast.ml      \
+		luaast.mli     \
+		luabaselib.ml  \
+		luabaselib.mli \
+		luafloat.ml    \
+		luafloat.mll   \
+		luahash.ml     \
+		luahash.mli    \
+		luainterp.ml   \
+		luainterp.mli  \
+		luaiolib.ml    \
+		luaiolib.mli   \
+		lualib.ml      \
+		lualib.mli     \
+		luamathlib.ml  \
+		luamathlib.mli \
+		luaparser.ml   \
+		luaparser.mli  \
+		luascanner.ml  \
+		luastrlib.ml   \
+		luastrlib.mli  \
+		luavalue.ml    \
+		luavalue.mli   \
+		main.ml        \
+		newinterp.mli  \
+		newinterp.ml   \
+
+
+# ------------------------------------------------------------------ 
+# tests
+# ------------------------------------------------------------------ 
+
 # 09 needs I/O library -- dofile needs to return nil on error
-test:V: oclua.opt
-	for i in $TEST; do ./$prereq test/$i.lua; done	
+TEST=03 04 05 06 07 08 10 12 02
+
+test:V: 	oclua.opt
+		for i in $TEST; do ./$prereq test/$i.lua; done	
+
+# ------------------------------------------------------------------ 
+# lua scanner and parser. We need some extra rules to extract sources
+# from noweb files. 
 
 luaparsex.mly: luasyntax.nw
 	[ -r $target ] && chmod +w $target
 	notangle -Rluaparser.mly $prereq | 
-	sed "s/','/COMMA/g;s/'{'/LBRA/g;s/'}'/RBRA/g;s/'<'/LT/g;s/'>'/GT/g;s/':'/COLON/g;s/';'/SEMI/g;s/'^'/HAT/g;s/'\*'/STAR/g;s@'/'@SLASH@g;s/'('/LPAR/g;s/')'/RPAR/g;s/'='/GETS/g;s/'+'/PLUS/;s/'-'/MINUS/g;s/'\.'/DOT/g;s/'\['/LSQ/g;s/'\]'/RSQ/g" > $target
+        sed "s/','/COMMA/g;	\
+            s/'{'/LBRA/g;	\
+            s/'}'/RBRA/g;	\
+            s/'<'/LT/g;		\
+            s/'>'/GT/g;		\
+            s/':'/COLON/g;	\
+            s/';'/SEMI/g;	\
+            s/'\\^'/HAT/g;	\
+            s/'\\*'/STAR/g;	\
+            s@'/'@SLASH@g;	\
+            s/'('/LPAR/g;	\
+            s/')'/RPAR/g;	\
+            s/'='/GETS/g;	\
+            s/'+'/PLUS/g;	\
+            s/'-'/MINUS/g;	\
+            s/'\\.'/DOT/g;	\
+            s/'\\['/LSQ/g;	\
+            s/'\\]'/RSQ/g" > $target
 	chmod -w $target
 
 luascanner.mll: luasyntax.nw
@@ -52,10 +197,18 @@ luaparser.ml: luaparsex.ml
 luaparser.mli: luaparsex.mli luasyntax.nw
 	(sed '/^val /,$d' luaparsex.mli; notangle -L"$LINE" -R$target luasyntax.nw) > $target
 
-depend:V: DEPEND
 
-clean:V:
-	rm -f *.cmi *.cmo *.ml *.mli *.mly *.cmx *.o
+# ------------------------------------------------------------------ 
+
+dirs:V:
+	for i in $LIBDIR; do
+	    if [ ! -d $i ]; then
+		echo "missing directory $i"
+		echo "invoke mk from the toplevel the first time"
+		echo "to create all directories"
+		false
+	    fi
+	done    
 
 DEPEND: $SRC
 	$OCAMLDEP *.ml *.mli > $target
