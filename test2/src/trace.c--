@@ -1,0 +1,113 @@
+target byteorder little;
+
+import bits32 printf;
+import bits32 rt_check;
+import bits32 c_b;
+import bits32 Cmm_show_map;
+export main;
+export f,g,h;
+
+section "data" {
+   s_lbl: bits8[] "stack_trace: sd=13,14,15  x=7, y=4\000";
+   f_lbl: bits8[] "f args=10..30 sd=1,2,3 x=5\000";
+   g_lbl: bits8[] "g args=10..40 sd='added dead face'\000";
+  gt_lbl: bits8[] "gt args=10..50 sd='added dead face'\000";
+  gp_lbl: bits8[] "gp args=10..50 sd='bad beef baaed'\000";
+   h_lbl: bits8[] "h sd=23,24,25\000";
+   m_lbl: bits8[] "main sd='effaced bad facade', n=DEAD\000";
+
+   msg: bits8[] "calling run-time system...\n\000";
+
+   f_fmt: bits8[] "counting stackdata: %d %d %d\n\0";
+}
+
+section "text" {
+span 1 s_lbl {
+stack_trace() {
+  stackdata {
+    align 32;
+    data1: bits32;
+    data2: bits32;
+    data3: bits32;
+  }
+  bits32 x;
+  bits32 y;
+  x = 7;
+  y = 4;
+  bits32[data1] = 13;
+  bits32[data2] = 14;
+  bits32[data3] = 15;
+  foreign "paranoid C" printf(msg);
+  foreign "paranoid C" rt_check(j) also cuts to j;
+  x = x + y;
+  return();
+
+  continuation j():
+  x = x + y;
+  return();
+}}
+
+span 1 h_lbl {
+foreign "C"
+h() {
+ stackdata { align 32; data: bits32[3]; }
+  bits32[data] = 23;
+  bits32[data+4] = 24;
+  bits32[data+8] = 25;
+ stack_trace(); foreign "C" return();
+}}
+
+span 1 g_lbl {
+foreign "C"
+g(bits32 a, bits32 b, bits32 c, bits32 d) {
+ stackdata { align 32; data: bits32[3]; }
+ bits32[data]   = 0xadded;
+ bits32[data+4] = 0xdead;
+ bits32[data+8] = 0xface;
+  jump gt(a, b, c, d, d+10); 
+}}
+
+span 1 gt_lbl {
+gt(bits32 a, bits32 b, bits32 c, bits32 d, bits32 e) {
+ stackdata { align 32; data: bits32[3]; }
+ bits32[data]   = 0xadded;
+ bits32[data+4] = 0xdead;
+ bits32[data+8] = 0xface;
+ a = gp(a, b, c, d, e);
+ foreign "C"  return(a);
+}}
+
+span 1 gp_lbl {
+gp(bits32 a, bits32 b, bits32 c, bits32 d, bits32 e) {
+ stackdata { align 32; data: bits32[3]; }
+ bits32[data]   = 0xbad;
+ bits32[data+4] = 0xbeef;
+ bits32[data+8] = 0xbaaed;
+ foreign "paranoid C" c_b();
+ return (a + b + c + d + e);
+}}
+
+span 1 f_lbl {
+f(bits32 a, bits32 b, bits32 c) {
+ stackdata { align 32; data: bits32[3]; }
+ bits32 x;
+ x = 5;
+ bits32[data]   = 1;
+ bits32[data+4] = 2;
+ bits32[data+8] = 3;
+ a = foreign "C" g(a, b, c, c+10);
+ b = foreign "C" printf("address" f_fmt, bits32[data], bits32[data+4], bits32[data+8]);
+ return(x);
+}}
+
+span 1 m_lbl {
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+  stackdata { align 32; data: bits32[3]; }
+  bits32[data] = 0xeffaced;
+  bits32[data+4] = 0xbad;
+  bits32[data+8] = 0xfacade;
+  n = f(10, 20, 30);
+  bits32 n;
+  foreign "C" return(n - 5);
+}}
+}
