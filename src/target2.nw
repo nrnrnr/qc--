@@ -202,7 +202,8 @@ lookup-function that provides information about the spaces the source
 and destination registers live in.
 
 <<components of t>>=
-assign: (Rtl.space -> Rtl.spacedescr) -> src:Register.t -> dst:Register.t -> Rtl.rtl;
+assign: (Rtl.space -> Rtl.spacedescr) 
+    -> src:Register.t -> dst:Register.t -> Rtl.rtl;
 @
 
 When the register allocator (see ~module{linscan}) must spill, it has
@@ -213,6 +214,19 @@ and vice versa (reloads).  Here are two functions to create such
 <<components of t>>=
 spill:  (Rtl.space -> Rtl.spacedescr) -> Register.t -> Rtl.loc ->Rtl.rtl list;
 reload: (Rtl.space -> Rtl.spacedescr) -> Register.t -> Rtl.loc ->Rtl.rtl list;
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Resource Allocation on the Stack}
+% ------------------------------------------------------------------ 
+
+Continuations, spill locations and other private data of a procedures
+lives on the run-time stack. These locations are register-like and
+issued by an [[Automaton.t]] value. The specification for that automaton
+is provided by the target.
+
+<<components of t>>=
+stack_slots:    Automaton.spec
 @
 
 % ------------------------------------------------------------------ 
@@ -454,6 +468,7 @@ let t =
     ; spill           = spill
     ; reload          = reload
     ; data_section    = "data"
+    ; stack_slots     = Automaton.dummy
     }
 @
         

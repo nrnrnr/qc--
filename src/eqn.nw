@@ -1,0 +1,442 @@
+
+\input{macros.tex}
+
+% l2h substitution cfg CFG
+% l2h substitution dots ...
+% l2h substitution AST AST
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+% l2h substitution pm +/-
+% l2h substitution S Paragraph
+
+% ------------------------------------------------------------------ 
+\section{Linear Equations over Integers}
+% ------------------------------------------------------------------ 
+
+This module provides a solver for linear equations: the solver takes a
+set of linear equations as input and finds the values of the embedded
+variables. A linear equation has the form $\sum_{i} c_i t_i = 0$ where
+each coefficient $c_i$ is an integer and each term $t_i$ is either a
+variable ($v$) or a non-zero constant ($k$): $t ::= v | k$. From a set
+of linear equations the solver determines the values for each variable
+$v = \sum_{j} c_j t_j$ where each $c_j$ is an integer.  This means, in
+the solution each variable is expressed as a linear combination of
+terms. To determine $n$ variables $n$ independent equations are
+necessary. If this condition is met, each $t_j$ in a variable's
+denotation is a constant. Otherwise $t_j$ may still be a variable. In
+that case the solution can be considered a constraint system. 
+
+The algorithm for equation solving is basically the ones suggested by
+\cite{Derman:1984:SES} and \cite{Ramsey:1996:SSL}, which are in turn
+inspired by Knuth's incremental algorithm implemented in his Metafont
+software (\cite{Knuth:1979:TMN} Chapter 4, \cite{Knuth:1986:MP} \S~585).
+However, Knuth's algorithm assumes that coefficients $c_i$ and terms
+denote floating point values and thus it cannot be used unaltered in the
+integer domain. The solver used here works in the integer domain, but is
+incomplete, i.e.~it sometimes fails to find an existing solution. We
+believe that this does not pose a problem for the intended application.
+
+The solver keeps two data structures: a \emph{set} of equations, and a
+\emph{map} from variables to terms. The map records solutions found for
+variables and is initially empty. The set consists of terms that are
+known to be zero. In the example below terms are variables $v$ or
+unit constants:
+
+\begin{eqnarray*}
+    3 v_1 + 5 v_2 &=& 0 \\
+    2 v_2 + 3 v_3 &=& 0 \\
+    2 v_1 - 5 v_3 &=& 0 \\
+      v_2 + 3     &=& 0
+\end{eqnarray*}
+
+The equations in the set are kept in \emph{normal form}: each equation
+is divided by the greatest common divisor of its coefficients. In the
+example above, equations are in normal form. If the first equation were
+$9 v_1 + 15 v_2 = 0$ it would have been divided by
+$\mathrm{gcd}(9,15)=3$ before it were entered into the set. To make
+progress, the solver scans all equations in the set for a variable with
+unit ($\pm 1$) coefficient: if it cannot find a unit variable it
+considers the equations unsolvable. In the example above it finds $v_2 +
+3 = 0$ and rewrites it to $v_2 = -3$. This solution is recorded in the
+map, applied to the (empty map), and the set, which is subsequently
+normalized. Redundant equations ($0=0$) are removed.
+
+\begin{eqnarray*}
+      v_2           &\mapsto& -3 \\ 
+      v_1 - 5       &=& 0  \\ % 3 v1 + 5 v2 = 3 v1 - 15 = v1-5
+      -2 + v_3      &=& 0  \\ % 2 v2 + 3 v3 = -6 + 3 v3 = -2+v3
+      2 v_1 - 5 v_3 &=& 0 
+\end{eqnarray*}
+
+In the next round the solver finds $v_1 -5 = 0$ and rewrites it to
+$v_1 = 5$:
+
+\begin{eqnarray*}
+      v_2         &\mapsto& -3 \\
+      v_1         &\mapsto& 5  \\
+      -2 + v_3    &=& 0 \\ 
+      2 - v_3     &=& 0  
+\end{eqnarray*}
+
+And finally: $v_3 = 2$, which yields the solution: $v_2 = -3$, $v_1 =
+5$, and $v_3 = 2$.
+
+In the general case the intermediate solutions in the map are also sums
+containing variables: variables on the left hand side of the map are
+\emph{dependent} on the \emph{independent} variables on the right hand
+side. Initially all variables and independent; during the solving
+process more and more variables become dependent, and later \emph{known}
+when their right hand side contains no longer variables.  Whenever a new
+term for a variable is found it must be used to rewrite the set
+\emph{and} the map. However, only the set is normalized after such a
+step.
+
+Here is a set of equations that the solver cannot find the solution $v_1
+= 3$, $v_2 = -5$ for:
+
+\begin{eqnarray*}
+    8 v_1 - 9 v_2 - 69 &=& 0 \\
+    5 v_1 + 3 v_2      &=& 0
+\end{eqnarray*}
+
+The equations are in normal form but there is no unit coefficient the
+solver could use to rewrite one equation. To overcome this, one could
+take the normalization one step further and subtract equations from each
+other in a directed way to create unit coefficients.
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+The equation solver is parameterized over the representation of terms.
+Observation functions are used by the solver to inspect a term.
+If and only if a term [[t]] is a variable the function [[variable]]
+returns a [[string]] representing the variable, and [[None]] otherwise.
+For efficiency, a total order [[compare]] must be defined on terms.
+
+<<EXP>>=
+module type EXP = sig
+    type t                                      (* a term *)
+    val variable: t -> string option            
+    val compare: t -> t -> int                  (* -1/0/1 *)
+end
+@
+
+The solver maintains a set [[t]] of equations. A [[sum]] is a linear
+combination of [[terms]] with integers as coefficients.  An equation is
+added to [[t]] by [[make_zero]]: it takes a set [[t]], a [[sum]]  $s$,
+and adds the equation $s=0$ to the set [[t]]. The solver reports its
+results as a list that associates each variable with its term. If too
+few equations are given to eliminate all variables the terms found for
+the variables still contain variables. These can be considered
+constraints of the solution.  If the solver fails to find a solution,
+[[Can'tSolve]] is raised with a message that hints at the problem.
+
+<<S>>=
+module type S = sig
+    exception Can'tSolve of string
+    
+    type t                                      (* set of equations *)
+    type term
+    type sum    = (int * term) list
+    
+    val empty:          t                       (* empty set of equations *)
+    val make_zero:      sum -> t -> t           (* add equation *)
+    val solve:          t -> (string * sum) list (* Can'tSolve *)
+end
+
+<<eqn.mli>>=
+<<EXP>>
+<<S>>
+module Make (E: EXP): S with type term = E.t
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The implementation works almost as explained at the beginning of this
+section. An equation $\sum_i c_i t_i = 0$ is represented as the [[sum]]
+$\sum c_i t_i$ where the components are ordered with respect to the
+total term order: if $\prec$ represents the order of terms, the
+following holds: $t_i \prec t_j \Rightarrow i < j$. In addition, no term
+$t$ appears twice in a sum.
+
+<<eqn.ml>>=
+<<EXP>>
+<<S>>
+module Make (E: EXP) = struct
+    type term = E.t
+    
+    <<Make>>
+end    
+
+module Test = struct
+    <<Test>>
+end
+@
+
+Type [[t]] represents a set of equations and the solutions for variables
+found so far. An initially [[empty]] set has no equations, and no
+solutions.
+
+<<Make>>=
+
+type sum   = (int * E.t) list                 (* invariant: ordered *)
+type assoc = string * sum
+
+type t   = 
+    { set:      sum   list        (* invariant: normalized *)
+    ; env:      assoc list
+    }
+
+let empty = 
+    { set  = []
+    ; env  = []
+    }
+
+exception Can'tSolve of string
+let error msg = raise (Can'tSolve msg)
+@
+
+Normalizing an equation means to divide it by the greatest common
+divisor (gcd) of its coefficients. The gcd of two numbers is found by
+the following algorithm \cite{Knuth:ACP68-1}:
+
+<<Make>>=
+let rec gcd (m:int) (n:int) =
+    let rec g m n = if n = 0 then m else g n (m mod n) in
+        if  n < 0 then
+            gcd m (- n)
+        else if m < n then gcd n m
+        else g m n
+
+let normalize = function
+    | [] -> []
+    | ((c,_)::rest) as sum ->
+        let g = List.fold_left (fun k (c,_) -> gcd k c) c rest in
+            if g > 1 then
+                List.map (fun (c,t) -> (c / g, t)) sum
+            else
+                sum
+@            
+
+The central operation on sums $s_1$, $s_2$ is the computation of their
+linear combination $c s_1 + s_2$.  The function [[combine]] does this by
+taking advantage of the ordering or terms. Any component with a
+coefficient of zero does not appear in the result.
+
+<<Make>>=
+let combine (k1:int) (sum1:sum) (sum2:sum) =
+    let rec loop = function 
+	| []                 , [] -> []
+	| ((c1,x1)::s1 as x) , ((c2,x2)::s2 as y) when E.compare x1 x2 < 0 ->
+            let k = k1 * c1 in
+            if k = 0 then loop (s1, y) else
+            (k, x1) :: loop (s1, y) 
+	| ((c1,x1)::s1 as x) , ((c2,x2)::s2 as y) when E.compare x1 x2 = 0 -> 
+            let k = k1 * c1 + c2 in 
+            if k = 0 then loop (s1, s2) else
+	    (k, x1) :: loop (s1, s2)
+	| ((c1,x1)::s1 as x) , ((c2,x2)::s2 as y)  (*   x1 > x2 *) ->
+            let k = c2 in
+            if k = 0 then loop (x, s2) else
+            (k, x2) :: loop (x, s2)
+	| ((c1,x1)::s1 as x) , [] ->
+            let k = k1 * c1 in
+            if k = 0 then loop (s1, []) else
+            (k, x1) :: loop (s1, [])
+	| []                 ,  ((c2,x2)::s2 as y) ->
+            let k = c2 in
+            if k = 0 then loop ([], s2) else
+            (k, x2) :: loop ([], s2)
+    in
+	loop (sum1,sum2)
+@
+
+For the substitution of a variable the variable must be found in a sum.
+The [[spilt]] function takes a variable $v$ and a sum $s$ and returns
+the coefficient $c$ of $v$ in $s = + \dots c v + \dots$ and $s - cv$. If
+$v$ does not appear in $s$, the $c = 0$ is assumed.
+
+<<Make>>=
+let split (v:string) (sum:sum) =
+    let rec loop a = function
+        | []             -> (0, sum)
+        | (c,t as ct)::s -> 
+            ( match E.variable t with
+            | Some v' when v = v' -> (c, List.rev a @ s)
+            | _                   -> loop (ct::a) s
+            )
+    in 
+        loop [] sum
+@    
+
+Elimination of a variable $v$ in a sum $s = \dots + c t + \dots$ means
+to replace $c t$ with the value of $v$. The [[elim]] function takes a
+variable [[v]], its value [[vsum]] and replace it in [[sum]].
+
+<<Make>>=
+let elim (v:string) (vsum:sum) (sum:sum) =  
+    match split v sum with
+    | (0,_)    -> sum
+    | (c,sum') -> combine c vsum sum'
+@
+
+To make progress, the solver scans the set of equation and tries to find
+a variable $v$ with a unit ($\pm 1$) coefficient. If this succeeds the
+equation $s=0$ that the variable is part of is rewritten to $v=\mathit{vsum}$
+and the pair $(v, \mathit{vsum})$ is returned. 
+
+<<Make>>=
+let candidate (eqns: sum list) =
+    let negate        = List.map (fun (c,t) -> (-c,t))            in
+    let unitvar (c,t) = E.variable t <> None && (c = 1 || c = -1) in
+    let rec loop = function
+       | []        -> None (* all eqns scanned *)
+       | sum::sums -> 
+        try let v      = match E.variable (snd (List.find unitvar sum)) with
+                         | Some v -> v
+                         | None   -> assert false in   
+            let c,vsum = split v sum in 
+                match c with
+                | -1 -> Some (v, vsum)
+                |  1 -> Some (v, negate vsum)
+                | _  -> assert false    (* c is a unit, i.e. +/-1 *)
+        with Not_found -> loop sums (* check next equation *)
+    in
+        loop eqns
+@
+
+A [[sum]] is zero, only if it is empty or all coefficients are zero.
+
+<<Make>>=
+let rec zero = function
+   | []                        -> true
+   | (0,_)::rest               -> zero rest
+   | _                         -> false
+@
+
+An elimination step on the level of all equations replaces a variable by
+its value in all equations and all found solutions. Equations are
+normalized, and redundant equations ($0 = 0$) are removed. The new
+solution $v \mapsto \mathit{vsum}$ is recorded.
+
+<<Make>>=
+let eliminate (v:string) (vsum:sum) (t:t) =
+   let set  = List.fold_right
+                (fun sum p -> 
+                    let sum' = normalize (elim v vsum sum) in
+                    if zero sum' then p else sum'::p)
+                t.set [] in
+   let env  = List.map (fun (x,xsum) -> x, elim v vsum xsum) t.env in
+   let env  = (v,vsum):: env               in
+        { set  = set
+        ; env  = env
+        }
+@
+
+The [[solver]] iterates over [[t]] as long as it can find a candidate
+variable for elimination. 
+
+<<Make>>=
+let rec solver t =
+    if t.set = [] then
+        t       (* done *)
+    else
+        match candidate t.set with
+        | None          -> error "can't find candidate for elimination"
+        | Some (v,vsum) -> solver (eliminate v vsum t) 
+@
+
+After all equations have been eliminated the solution can be found in
+the [[t.env]] value. To eliminate $n$ variables $n$ independent
+equations are necessary. If this condition is not met the problem is
+under-specified and the terms of variables still contain independent
+variables.  
+
+<<Make>>=
+let solve t =
+    let t     = solver t in
+        t.env
+@        
+   
+The [[make_zero]] function establishes the invariants for equations:
+coefficients are normalized and ordered by variables. Identical terms
+are merged by adding their coefficients.
+of identical terms are merged
+
+<<Make>>=
+let rec merge = function    (* merges adjacent identical terms *) 
+    | []       -> []
+    | [_] as x -> x
+    | (c1,t1 as ct1)::((c2,t2)::rest1 as rest2)  ->
+        if E.compare t1 t2 = 0 then
+            merge ((c1+c2,t1)::rest1)
+        else
+            ct1 :: merge rest2
+
+
+let make_zero (sum:sum) (t:t) =
+    let cmp (_,tx) (_,ty) = E.compare tx ty in 
+    let eqn = normalize (merge (List.sort cmp sum)) in
+        { t with set = sum::t.set }
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Test}
+% ------------------------------------------------------------------ 
+
+<<Test>>=   
+module E = struct
+    type t = Var of string
+           | Unit
+
+    let variable = function
+        | Var s  -> Some s 
+        | _      -> None
+        
+    let compare = compare
+end
+
+module S = Make(E)
+
+let test eqns =
+    let t = List.fold_left (fun t eqn -> S.make_zero eqn t) S.empty eqns
+    in
+        S.solve t
+
+let eqns1 =
+    [ [3,E.Var "x";5   ,E.Var "y"]
+    ; [2,E.Var "y";3   ,E.Var "z"]
+    ; [2,E.Var "x";(-5),E.Var "z"]
+    ; [3,E.Unit   ;1   ,E.Var "y"]
+    ]
+let eqns2 =
+    [ [-3,E.Unit;1, E.Var "x"; 1, E.Var "y"; 1, E.Var "z"]
+    ; [-1,E.Unit;1, E.Var "x";-1, E.Var "y";-1, E.Var "z"]
+    ; [4, E.Unit;1, E.Var "z"]
+    ]
+
+(*
+let _ = assert 
+        (test eqns1 = ["x", [5, E.Unit]; "z", [2, E.Unit]; "y", [-3, E.Unit]])    
+let _ = assert 
+        (test eqns2 = ["y", [5, E.Unit]; "x", [2, E.Unit]; "z", [-4, E.Unit]])
+*)
+@
+        
+        
+
+        
+

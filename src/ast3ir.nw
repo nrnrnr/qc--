@@ -189,7 +189,9 @@ run-time values.  The translation of a variable depends on its
 denotation. 
 
 Lookup for operations is a hack; we need a module for primitive
-operators.
+operators. We should also evaluate constant expressions as far as
+possible. Module \module{rtleval} does this for link-time
+expressions and could possibly extended.
 
 <<Make expressions>>=
 let rec fetch env target = function
@@ -479,7 +481,6 @@ type state =
     ; node:         G.node           (* node following current unit    *)   
     ; outbase:      Rtl.exp          (* addr of OUTGOING area          *)   
     ; inbase:       Rtl.exp          (* addr of INCOMING ares          *)
-    ; priv:         Area.builder     (* private area on stack          *)   
     ; outgoing:     Area.t list      (* areas to be overlayed in OUTGOING *)   
     ; incoming:     Area.t list      (* ditto for INCOMING *)
     }
@@ -500,8 +501,6 @@ type state =
       the \emph{outgoing} area on the stack. See also \module{stack}.
 \item [[inbase]] is the run-time expression for the base-address of the
       \emph{incoming} area.
-\item [[priv]] is a handler for the \emph{private} area on the stack which
-      is still under construction.
 \item [[outgoing]] contains areas of disjoint lifetimes that are overlaid
       in the \emph{outgoing} area.
 \item [[incoming]] overlaid areas in the \emph{incoming} area.        
@@ -785,10 +784,18 @@ let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) =
                       | _,(F.Label(F.Proc p),_) -> p
                       | _                        -> assert false in
     let env         = F.push env p.F.scope in  (* activate local scope *)
+    let pointer     = target.Target.pointersize in
     let cfg         = G.mk ()   in 
+    (* calculate amount of user stack data - updates env! *)
     let stackd      = Area.mk (Rtl.link "stackd" target.Target.pointersize) in
-    let priv        = Area.mk (Rtl.link "private" target.Target.pointersize) in
-    let env, stackd = StackData.proc env target priv bdy in
+    let env, 
+        stackd,
+        conts       = StackData.proc env target stackd bdy in
+    (* priv provides spill slots etc *)    
+    let priv        = Automaton.mk 
+                        target.Target.stack_slots
+                        (Rtl.link "private" pointer) in
+    (* build CFG for body *)                    
     let exit        = G.set_label cfg (Idgen.exit name) (G.exit cfg) in
     let state = 
         { proc      = name       (* name of this procedure *)
@@ -796,13 +803,14 @@ let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) =
         ; target    = target     (* current target  *)
         ; cfg       = cfg        (* cfg we are building *)
         ; node      = exit       (* what follows current element in cfg *)
-        ; priv      = priv
         ; incoming  = []         (* overlapping areas in incoming area *)
         ; outgoing  = []         (* overlapping areas in outgoing area *)
-        ; inbase    = Rtl.link "inbase" target.Target.pointersize (*XXX*)
-        ; outbase   = Rtl.link "outbase" target.Target.pointersize (*XXX*)
+        ; inbase    = Rtl.link "inbase" pointer (*XXX*)
+        ; outbase   = Rtl.link "outbase" pointer (*XXX*)
         } in  
+    (* insert code that create stack slots for continuations *)
     let state = foldr body bdy state in
+    (* add nodes for incoming parameters *)
     let cc    = state.target.Target.cc (Aux.Option.get default_cc cconv) in
     let atmi  = Automaton.mk cc.Target.proc  state.outbase   in
     let args  = List.map (procformal state.env) args in
@@ -820,19 +828,26 @@ let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) =
         ; Proc.mangle   = mangle
         ; Proc.incoming = Area.overlap Area.EqualLowEnds state.incoming
         ; Proc.outgoing = Area.overlap Area.EqualLowEnds state.outgoing
-        ; Proc.stackd   = stackd
-        ; Proc.priv     = state.priv
+        ; Proc.stackd   = stackd        (* stack data *)
+        ; Proc.priv     = priv          (* Automaton for spill loc, etc *)
         } 
     in
         asm ++ Asm.instr i
 @
         
 % ------------------------------------------------------------------ 
-\subsection{Stack Data Declarations}
+\subsection{Stack Data Declarations and Continuations}
 % ------------------------------------------------------------------ 
 
 Stack data declarations may appear everywhere in a procedure body. We
-process them in a single descent into the body.
+process them in a single descent into the body. Each stack data
+declaration allocates memory in the [[mem]] field of the [[state]] record
+that is passed around. A procedure must create entries for all
+continuations in its body that escape it. We simply collect all
+continuations and thus assume that they all escape. This is a gross
+simplification - a more detailed escape analysis would traverse all
+expressions in the body of a procedure and report only those
+continuations that appear in expressions. 
 
 <<Make stack data declarations>>=
 module StackData = struct 
@@ -841,6 +856,7 @@ module StackData = struct
         { env:    F.env
         ; mem:    Area.builder
         ; target: Target.t
+        ; conts:  string list
         }
 
     let rec stackdatum state = function
@@ -875,6 +891,8 @@ module StackData = struct
         | A.SpanStmt    x      -> spanStmt      state x
         | A.IfStmt      x      -> ifStmt        state x
         | A.SwitchStmt  x      -> switchStmt    state x
+        | A.ContStmt(n,_)      -> { state with 
+                                    conts = n :: state.conts }
         | _                    -> state
 
     and body state = function 
@@ -896,9 +914,10 @@ module StackData = struct
             { env    = env
             ; target = target
             ; mem    = priv
+            ; conts  = []
             } in
         let state = foldl body state bb in 
-                (state.env, Area.freeze state.mem)
+                (state.env, Area.freeze state.mem, state.conts)
 
 end (* of module StackData *)
 @
