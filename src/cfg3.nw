@@ -132,8 +132,9 @@ val live:       node -> Register.Set.t
 val number:     node -> int             (* precond: cfg is enumerated *)
 
 (* node mutators *)
-val set_live:   node -> Register.Set.t -> unit
-val set_rtl:    node -> Rtl.rtl        -> unit
+val set_live:   node -> bool            (* update live set, true iff changed *)
+(** val reset_live: node -> unit *)     (* set live set empty *) 
+val set_rtl:    node -> Rtl.rtl -> unit
 @
 
 % ------------------------------------------------------------------ 
@@ -149,8 +150,6 @@ val set_rtl:    node -> Rtl.rtl        -> unit
 % ------------------------------------------------------------------ 
 \subsection{Graph observation}
 % ------------------------------------------------------------------ 
-
-
 
 \begin{description}
 \item[entry]
@@ -303,9 +302,13 @@ node contains a (mutable) set of registers; this set is empty in a new
 node. 
 
 \begin{description}
-\item[number] Reports the number of a node. It is a checked run-time
-error to invoke this function if node numbering is absent,
-i.e.~[[numbered]] is [[false]].
+\item[live] 
+    Registers live \emph{before} this node.
+
+\item[number] 
+    Reports the number of a node. It is a checked run-time
+    error to invoke this function if node numbering is absent,
+    i.e.~[[numbered]] is [[false]].
 \end{description}
 
 % ------------------------------------------------------------------ 
@@ -317,7 +320,9 @@ interact with other functions.
 
 \begin{description}
 \item[set\_live] 
-    Set the register set of a node.
+    Updates the live-set of a node which is based on the live sets of
+    its neighbors. Returns [[true]], if the live-set has changed.
+    
 \item[set\_rtl]
     Set the {\rtl} of a node to a new value.
 \end{description}
@@ -326,6 +331,10 @@ interact with other functions.
 % ------------------------------------------------------------------ 
 \subsection{Putting the Interface together}
 % ------------------------------------------------------------------ 
+
+Here are some dummy signatures to make the interface self-contained. 
+This can be used to play with implementation in the {\ocaml}
+interpreter. 
 
 <<dummy sigs>>=
 module Rtl : sig 
@@ -347,6 +356,17 @@ end
 @
 
 <<cfg3.mli>>=
-<<dummy sigs>>
-<<types and ops>>
+(** dummy sigs **)
+module type S = sig
+    <<types and ops>>
+end
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<cfg3.ml>>=
+(* postponed *)
+@
+
