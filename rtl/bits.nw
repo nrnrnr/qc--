@@ -300,7 +300,6 @@ exception Overflow
 exception Syntax of string
 
 let syntax msg  = raise (Syntax msg)
-let overflow () = raise Overflow
 @
 
 Values of type [[bits]] are represented as pairs of width and [[bits64]]
@@ -439,27 +438,27 @@ let fits_signed i w =
 let of_int i w =
     check w;
     let i' = I.of_int i in
-    if fits_signed i' w then (i',w) else overflow () 
+    if fits_signed i' w then (i',w) else raise Overflow 
     
 let of_native i w =
     check w;
     let i' = I.of_nativeint i in
-    if fits_signed i' w then (i',w) else overflow ()
+    if fits_signed i' w then (i',w) else raise Overflow
 
 let of_int64 i w =
     check w;
-    if fits_signed i w then (i,w) else overflow ()
+    if fits_signed i w then (i,w) else raise Overflow
 
 let of_string str w =
     check w;
     let i = string str w in
-        if fits_signed i w then (i,w) else overflow ()
+        if fits_signed i w then (i,w) else raise Overflow
 
 let to_int (i,w) =
     if I.of_int min_int <= i && i <= I.of_int max_int then
         I.to_int i
     else
-        overflow ()
+        raise Overflow
 
 let to_native (i,w) =
     if  I.of_nativeint Nativeint.min_int <= i && 
@@ -467,7 +466,7 @@ let to_native (i,w) =
     then
         I.to_nativeint i
     else
-        overflow ()
+        raise Overflow
 
 let to_int64 (i,w) = i
 @
@@ -507,7 +506,7 @@ let of_int i w =
              then I.sub i' (I.shift_left (I.of_int min_int) 1)  
              else i' 
     in
-        if fits_unsigned i' w then (sx64 i' w, w) else overflow ()
+        if fits_unsigned i' w then (sx64 i' w, w) else raise Overflow
 
 let of_native i w =
     check w;
@@ -517,16 +516,16 @@ let of_native i w =
              then I.sub i' (I.shift_left (I.of_nativeint Nativeint.min_int) 1) 
              else i' 
     in
-        if fits_unsigned i' w then (sx64 i' w, w) else overflow ()
+        if fits_unsigned i' w then (sx64 i' w, w) else raise Overflow
 
 let of_int64 i w =
     check w;
-    if fits_unsigned i w then (sx64 i w, w) else overflow ()
+    if fits_unsigned i w then (sx64 i w, w) else raise Overflow
 
 let of_string str w =
     check w;
     let i = string str w in
-        if fits_unsigned i w then (i, w) else overflow ()
+        if fits_unsigned i w then (i, w) else raise Overflow
 
 let to_int (i,w) = 
     let i = mask i w in
@@ -537,7 +536,7 @@ let to_int (i,w) =
         if i' < I.of_int max_int then
             I.to_int i'
         else
-            overflow ()
+            raise Overflow
  
 let to_native (i,w) = 
     let i = mask i w in
@@ -548,7 +547,7 @@ let to_native (i,w) =
         if i' < I.of_nativeint Nativeint.max_int then
             I.to_nativeint i'
         else
-            overflow ()
+            raise Overflow
 
 let to_int64 (i,w) = 
     let i = mask i w in
