@@ -1,0 +1,299 @@
+% vim: ts=8 sw=4 et:
+
+% ------------------------------------------------------------------ 
+\section{The Dummy Target}
+% ------------------------------------------------------------------ 
+
+\emph{This is work in progress to replace the defintion for the Dummy
+      target in module \module{targets.nw}. Before it can be deployed
+      the code expander in \module{dummyexpander.nw} must be adapted to
+      recognize the {\rtl}s control-flow transfer (jump, branch, and so
+      on).}
+
+This target describes a purely fuctional target. We use it for
+debugging. 
+
+<<dummy.mli>>=
+val target: Target2.t
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<dummy.ml>>=
+module A        = Automaton2
+module R        = Rtl
+module RP       = Rtl.Private
+module RU       = Rtlutil
+module Up       = Rtl.Up
+module Dn       = Rtl.Dn
+module SS32     = Space.Standard32
+module T        = Target2
+
+let arch        = "dummy"
+let byte_order  = Rtl.BigEndian
+let wordsize    = 32
+let pointersize = 32
+let memsize     = 8
+let id          = Rtl.Identity
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Spaces}
+% ------------------------------------------------------------------ 
+
+<<dummy.ml>>=
+module Spaces = struct
+    let m   = SS32.m byte_order [8; 16; 32]
+    let c   = SS32.c 2  id [32]
+    let r   = SS32.r 32 id [32]
+    let f   = SS32.f 32 id [32]
+    let t   = SS32.t    id [32]
+    let u   = SS32.u    id [32]
+
+    let d   = Space.checked
+                { Space.space          = 'd'
+                ; Space.doc            = "FP rounding mode"
+                ; Space.cellwidth      = 2  
+                ; Space.indexwidth     = 1
+                ; Space.indexlimit     = Some 2
+                ; Space.aggregation    = Rtl.Identity
+                ; Space.widths         = [2]
+                ; Space.classification = Space.Reg
+                }
+    let g   = Space.checked
+                { Space.space          = 'g'   (* SHOULD BE CHANGED -CL*) 
+                ; Space.doc            = "8-bit general purpose registers"
+                ; Space.cellwidth      = 8
+                ; Space.indexwidth     = 5
+                ; Space.indexlimit     = None
+                ; Space.aggregation    = Rtl.Identity
+                ; Space.widths         = [32]
+                ; Space.classification = Space.Reg
+                }
+    let v   = Space.checked
+                { Space.space          = 'v'    (* SHOULD BE CHANGED -CL*)
+                ; Space.doc            = "8 bit temporaries"
+                ; Space.cellwidth      = 8  
+                ; Space.indexwidth     = 16
+                ; Space.indexlimit     = None
+                ; Space.aggregation    = Rtl.Identity
+                ; Space.widths         = [2]
+                ; Space.classification = Space.Temp
+                    { Space.stands_for = 'g'
+                    ; Space.index_ok   = (fun _ -> true)
+                    ; Space.set_doc    = "any register"
+                    }
+                }
+end                 
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Control Flow}
+% ------------------------------------------------------------------ 
+
+<<dummy.ml>>=
+let locations   = SS32.locations Spaces.c
+let pc          = locations.SS32.pc
+let cc          = locations.SS32.cc
+let npc         = locations.SS32.npc
+let fp_mode     = R.reg ('d',0,2)           (* FP rounding mode *)
+let fp_result   = R.reg ('d',1,2)           (* FP fcmp result   *)
+let reg n       = R.reg ('r',n,wordsize)
+let sp          = reg 32                    (* stack pointer  *)
+let ra          = reg 30                    (* return address *)
+
+let fetch l     = R.fetch l   wordsize
+let store l e   = R.store l e wordsize
+let assign      = store
+let return      = store pc (fetch ra)
+
+module Flow = Mflow.MakeStandard
+    (struct
+        let pc_lhs      = pc
+        let pc_rhs      = pc
+        let ra_reg      = R.reg ('r', 30, wordsize)
+        let ra_offset   = 4 (* just guessing *)
+    end)
+
+
+let cutto =                 
+    { T.embed   = (fun (newpc, newsp) ->
+                       Rtl.par [assign (reg 31) newsp; assign pc newpc])
+    ; T.project = (fun r -> match Dn.rtl r with
+                    | RP.Rtl [ (_, RP.Store(_, nsp, _)) 
+                             ; (_, RP.Store(_, npc, _))] -> 
+                                (Up.exp nsp, Up.exp npc)
+                    | _ -> Impossible.impossible "projected non-cutto")
+    }
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Spills and Reloads}
+% ------------------------------------------------------------------ 
+
+\emph{What is the [[lookup]] parameter for? We should expunge it.}
+
+<<dummy.ml>>=
+module Spill = struct
+    let assign lookup ~src:(src_sp,_,src_w as src) 
+                      ~dst:(dst_sp,_,dst_w as dst) =
+        if src_w <> dst_w then
+            invalid_arg 
+                "Dummy.assign source and destination width don't match"
+        else
+            let src_loc = Rtl.reg src  in
+            let dst_loc = Rtl.reg dst  in
+                Rtl.store dst_loc (Rtl.fetch src_loc src_w)  dst_w
+
+    let spill lookup (_,_,w as reg) loc = 
+        let rtl = Rtl.store loc (Rtl.fetch (Rtl.reg reg) w) w 
+        in [rtl]
+    
+    let reload lookup (_,_,w as reg) loc =
+        let rtl = Rtl.store (Rtl.reg reg) (Rtl.fetch loc w) w
+        in [rtl]
+end
+@        
+
+% ------------------------------------------------------------------ 
+\subsection{Calling Conventions}
+% ------------------------------------------------------------------ 
+
+<<dummy.ml>>=
+class loc (loc:Rtl.loc): Automaton2.location =
+object
+    val _loc   = loc
+    
+    method store expr width = Rtl.store _loc expr width 
+    method fetch width      = Rtl.fetch _loc width
+    method to_loc           = _loc
+end
+
+class memory (byte_order) (base:Rtl.exp): Automaton2.automaton =
+object (this)
+    val mutable _block  = Block.at base (*size*) 0 (*align*) 8  (* block *)
+    val mutable _frozen = false
+    
+    method freeze () =
+        let _ = _frozen <- true in
+        { A.overflow = _block; A.sp_value = base } (* return block *)
+    
+    method private memloc addr w = 
+        new loc (Rtl.mem Rtl.none 'm' byte_order w addr)
+    
+    method private hardware hint = match hint with 
+    | r     -> Impossible.impossible ("unknown hardware register "^r) 
+    
+    method allocate width hint = 
+        assert (_frozen = false);          
+        match hint with 
+        | Some x -> this#hardware x
+        | None ->
+            let ()      = assert (width mod memsize = 0) in
+            let slot    = Block.relative base "slots" 
+                            (width / memsize) pointersize in
+            ( _block <- Block.cathl slot _block 
+            ; this#memloc (Block.base slot) width
+            )
+end
+@
+
+The automaton below is used only for placing global registers.
+
+<<dummy.ml>>=
+class globals (byte_order) (base:Rtl.exp): Automaton2.automaton =
+object (this)
+    val mutable _block  = Block.at base (*size*) 0 (*align*) 8  (* block *)
+    val mutable _frozen = false
+    
+    method freeze () =
+        let _ = _frozen <- true in
+            { A.overflow = _block
+            ; A.sp_value = base 
+            }
+    
+    method private memloc addr w = 
+        new loc (Rtl.mem Rtl.none 'm' byte_order w addr)
+    
+    method private hardware hint = match hint with 
+        | "IEEE 754 rounding mode"          -> new loc fp_mode
+        | "IEEE 754 comparision results"    -> new loc fp_result
+        | r     -> Impossible.impossible ("unknown hardware register "^r) 
+
+    method allocate width hint = 
+        assert (_frozen = false);          
+        match hint with 
+        | Some x -> this#hardware x
+        | None ->
+            let ()      = assert (width mod memsize = 0) in
+            let slot    = Block.at base (width / memsize) pointersize in
+            ( _block <- Block.cathl slot _block 
+            ; this#memloc (Block.base slot) width
+            )
+end
+
+
+let cc =
+    { T.sp              = sp
+    ; T.return          = return
+    ; T.proc            = new memory byte_order
+    ; T.cont            = new memory byte_order
+    ; T.ret             = new memory byte_order
+    ; T.stack_slots     = new memory byte_order
+    ; T.cutto           = cutto
+    ; T.allocatable = List.concat 
+          [ List.map (fun n -> ('r', n, wordsize))
+            [0;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15;16;17;18;19;20;21;22;23]
+          ; List.map (fun n -> ('r', n, wordsize))
+            [0;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15;16;17;18;19;20;21;22;23]
+          ]  
+                       
+    }
+ 
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Target Value}
+% ------------------------------------------------------------------ 
+
+<<dummy.ml>>=
+let target =
+    { T.name = arch
+      ; T.cc           = (fun _ -> cc)  
+      ; T.byteorder    = byte_order
+      ; T.wordsize     = wordsize
+      ; T.pointersize  = wordsize
+      ; T.vfp          = Vfp.mk wordsize
+      ; T.alignment    = 1
+      ; T.memsize      = 8
+      ; T.float        = "ieee754"
+      ; T.charset      = "latin1" 
+      ; T.globals      = new globals byte_order
+      ; T.is_rounding_mode = (fun loc -> loc = fp_mode)
+      ; T.spaces       = [ Spaces.m 
+                         ; Spaces.c 
+                         ; Spaces.r 
+                         ; Spaces.f
+                         ; Spaces.t
+                         ; Spaces.u
+                         ; Spaces.g
+                         ; Spaces.v
+                         ; Spaces.d
+                         ]
+      ; T.data_section = "data"
+      ; T.goto         = Flow.goto
+      ; T.jump         = Flow.jump
+      ; T.call         = Flow.call 
+      ; T.branch       = Flow.branch
+      ; T.spill        = Spill.spill
+      ; T.reload       = Spill.reload
+      }
+@
+
+
+
+
+    
