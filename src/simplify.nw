@@ -197,7 +197,8 @@ let app o w args = match o with
     |  "bitTransfer" 	-> default o w args
     |  o                -> default o w args
                       
-let rec exp = function
+let rec exp e =
+    match e with
     | RP.Const _ as c               -> c
     | RP.Fetch (l, w)               -> RP.Fetch (loc l, w)
     | RP.App ((o,w),args)           -> app o w (List.map exp args) 
@@ -356,10 +357,19 @@ let shl w args  = match (w,args) with
     | [w], [x;y] when is_bits x && is_bits y 
                 -> to_bits (Int64.shift_left (int64 x) (int y)) w 
     | _         -> default "shl" w args
-let sub w = function
+let sub ws args =
+    let w = match ws with [w] -> w | _ -> Impossible.impossible "ill-typed add" in
+    match args with
     | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
                 -> const (Bits.Ops.sub x y)
-    | args      -> default "sub" w args
+    | [RP.App(("add",ws'),args); e] when List.mem e args ->
+      (match List.filter ((<>) e) args  with
+      | _::_::_ as rst -> RP.App(("add",ws'),rst)
+      | [a]            -> a
+      | []             -> RP.Const(RP.Bits(Bits.zero w))
+      )
+    | [x; y] when x = y -> D.exp (R.bits (Bits.U.of_int 0 w) w)
+    | args      -> default "sub" ws args
     
 let sx w args   = match (w,args) with
     | [i;j],[RP.Const(RP.Bits(x))]
