@@ -11,7 +11,7 @@ Ld.rtend = ""  --- don't need the run-time system
 Test.source  = "src"
 Test.files = { "add.c--"
              , "altret.c--"
-             , "altret2.c--"
+             , { source="altret2.c--", stdin="altret2.0" }
              , { source="altret3.c--", argv='src/altret3.c-- nonexists .' }
              , "bits-bug.c--"
              , "bool.c--"

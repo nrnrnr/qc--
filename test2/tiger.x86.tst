@@ -11,16 +11,16 @@ function Test.tigertest(filename, stdin)
 end
 
 -- source files live in src directory
-Test.files = { Test.tigertest("arrays.c--", "/dev/null"),
-               Test.tigertest("colmajor.c--"),
-               Test.tigertest("exceptions.c--", "/dev/null"),
-               Test.tigertest("forloop.c--", "/dev/null"),
-               Test.tigertest("funcall.c--", "/dev/null"),
-               Test.tigertest("hello.c--", "/dev/null"),
-               Test.tigertest("merge.c--", "/dev/null"),
-               Test.tigertest("qsort.c--", "/dev/null"),
-               Test.tigertest("queens.c--", "/dev/null"),
-               Test.tigertest("rc4.c--"),
-               Test.tigertest("sieve.c--", "/dev/null"),
-               Test.tigertest("wf.c--", "/dev/null")
+Test.files = { Test.tigertest("arrays.c--"),
+               Test.tigertest("colmajor.c--", "colmajor.0"),
+               Test.tigertest("exceptions.c--"),
+               Test.tigertest("forloop.c--"),
+               Test.tigertest("funcall.c--"),
+               Test.tigertest("hello.c--"),
+               Test.tigertest("merge.c--"),
+               Test.tigertest("qsort.c--"),
+               Test.tigertest("queens.c--"),
+               Test.tigertest("rc4.c--", "rc4.0"),
+               Test.tigertest("sieve.c--"),
+               Test.tigertest("wf.c--", "wf.0")
 	     }
