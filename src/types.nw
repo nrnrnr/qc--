@@ -1,6 +1,9 @@
 % l2h substitution C C--
 % l2h substitution asdl ASDL
 % l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h substitution to ->
+
 
 % ------------------------------------------------------------------  
 \section{Types}\label{sec:types}
@@ -26,10 +29,11 @@ on the parameter types [[ty]] and type schema [[tyscheme]] can be
 created from [[t]].
 
 <<types>>=
-type key        = string
+type key        = int
 
 type 'a t       = Bool
                 | Bits of 'a 
+                | Procedure of 'a t list * 'a t
 
 type size       = Const of int
                 | Var   of key
@@ -105,12 +109,13 @@ let substExn ()  = raise SubstExn
 
 <<>>=
 let rec unify ts t sigma = match ts, t with
-    | Bool          , Bool                          -> sigma
-    | Bits(Const(x)), Bits(y) when x = y            -> sigma
-    | Bits(Var(x))  , Bits(y) when (domain x sigma) && 
-                              (lookup x sigma) = y  -> sigma
-    | Bits(Var(x))  , Bits(y)                       -> enter x y sigma
-    | _             , _                             -> unifyExn "sorry"
+    | Bool           , Bool                          -> sigma
+    | Bits(Const(x)) , Bits(y) when x = y            -> sigma
+    | Bits(Var(x))   , Bits(y) when (domain x sigma) && 
+                              (lookup x sigma) = y   -> sigma
+    | Bits(Var(x))   , Bits(y)                       -> enter x y sigma
+    | Procedure(xs,x), Procedure(ys,y)  -> unify' (x::xs) (y::ys) sigma 
+    | _              , _                             -> unifyExn "sorry"
 
 and unify' xs ys sigma = match xs, ys with
     | []            , []        -> sigma
@@ -118,9 +123,10 @@ and unify' xs ys sigma = match xs, ys with
     | xs            , []        -> unifyExn "arity mismatch"
     | x::xs         , y::ys     -> unify' xs ys (unify x y sigma)
 
-let subst sigma = function
+let rec subst sigma = function
     | Bool              -> Bool
     | Bits(Const(x))    -> Bits(x)
+    | Procedure(xs,x)   -> Procedure (List.map (subst sigma) xs, subst sigma x)
     | Bits(Var(x))      -> try Bits(lookup x sigma)
                            with Not_found -> substExn ()
 @

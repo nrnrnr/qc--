@@ -160,7 +160,7 @@ stmt        = StmtAt (stmt, region)
             | EmptyStmt  
 
 expr        = ExprAt (expr, region)
-            | Int    (int,size?)
+            | Int    (string,size?)
             | Float  (string,size?)
             | Char   (string,size?)
             | Fetch  (lvalue)
@@ -340,6 +340,7 @@ let unzip pairs =
 
 let id i        = text i
 let int n       = text (string_of_int n)
+let intlit n    = text n
 let float f     = text f
 let semi        = text ";"
 
@@ -379,8 +380,8 @@ and actuals xs = agrp (text "(" ^^ commalist actual xs ^^ text ")")
     
 and expr = function
     | ExprAt(x,_)             -> expr x
-    | Int( i, None)           -> int i
-    | Int( i, Some size)      -> int i ^^ text ":" ^^ int size
+    | Int( i, None)           -> intlit i
+    | Int( i, Some size)      -> intlit i ^^ text ":" ^^ int size
     | Float( f, None)         -> float f
     | Float( f, Some size)    -> float f ^^ text ":" ^^ int size
     | Char( c, None)          -> char c 
@@ -735,7 +736,7 @@ let rec topdecl = function
     | Pragma ->
             comment "<pragma>"
 
-let program(ds) = vgrp begin
+let program ds = vgrp begin
                   ~~ list (break ^^ break) topdecl ds
                   ^^ break
                   end
