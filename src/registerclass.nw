@@ -35,6 +35,8 @@ module type REGISTERCLASS = sig
   val eq: t -> t -> bool
   val to_string: t -> string
   val cardinal: t -> int
+  val space_to_class: Rtl.space -> t
+  val map_class: Rtl.space -> t -> unit
   val mkClass: Rtl.space -> ('a, 'b) Target.t -> t
   val init: Register.t list -> unit
 end
@@ -50,6 +52,9 @@ module RegisterClass:REGISTERCLASS = struct
   let eq c1 c2 = RS.equal c1 c2
   let to_string = RS.to_string
   let cardinal = RS.cardinal
+  let class_map = Spacetbl.create 5
+  let map_class s c = Spacetbl.add class_map s c
+  let space_to_class s = Spacetbl.find class_map s
 @
 
 We need to keep around the universe of registers.  Sigh.
@@ -100,6 +105,7 @@ if this worries you and you have suggestions please let me know!
     type t = Vertex of RegisterClass.t list ref * t list ref
     val classes: t -> RegisterClass.t list
     val down: t -> RegisterClass.t list
+    val children: t -> t list
     val mkTree: RegisterClass.t list -> t
     val mkTreeList:  Rtl.space list -> Register.t list ->('a, 'b) Target.t -> t list
     val space_to_tree: Rtl.space -> t
@@ -115,6 +121,7 @@ if this worries you and you have suggestions please let me know!
     let classes = function Vertex(c, _) -> !c 
     let rec down = function Vertex(c, kids) ->
       List.flatten (!c::List.map down !kids)
+    let children = function Vertex(c, kids) -> !kids
    <<make tree>>
   end
 @
@@ -182,7 +189,7 @@ let mkTreeList spaces allRegs target =
   RegisterClass.init allRegs;
   let splitAliases classLl space = 
     let rClass = RegisterClass.mkClass space target in 
-    Spacetbl.add class_map space rClass;
+    RegisterClass.map_class space rClass;
     let belongs c l = List.exists 
         (fun elt -> RegisterClass.is_empty (RegisterClass.inter c elt)) l in
     let rec addToList l2 = match l2 with
@@ -203,7 +210,7 @@ tree that contains class [[c]].
 
 <<make tree>>=
    List.iter 
-    (fun s -> let sClass = space_to_class s in
+    (fun s -> let sClass = RegisterClass.space_to_class s in
               let tree = List.find (fun aTree -> 
                 RegisterClass.alias_contained sClass 
                   (List.hd (classes aTree))) treeList in
@@ -214,6 +221,7 @@ tree that contains class [[c]].
 %-------------------------------------------------------------------
 \subsection{Utilities to implement}
 %-------------------------------------------------------------------
+
 We keep a mapping from each space to the register class for that space.
 
 <<tracked state>>=
@@ -225,9 +233,6 @@ module HashableSpace = struct
 end
 
 module Spacetbl = Hashtbl.Make(HashableSpace)
-
-let class_map = Spacetbl.create 5
-let space_to_class s = Spacetbl.find class_map s
 
 @ 
 %-------------------------------------------------------------------
@@ -242,6 +247,61 @@ can be blocked for a node of class $N$ by one temporary, multiplied by $m$.
 
 We need to create a table of $\mathit{worst}^1(N,C)$
 
+We don't want to form dependencies with the register allocation scheme, so
+perhaps the best interface is to present the node to measure and a list of 
+its neighbors, having the register allocator decide what set of neighbors
+to use for worst.
+
+First split the neighbors up by register class.  Since the classes in the tree
+were determined from the spaces on the target architecture, we know that for 
+any temporary, its space (and resulting class) is in the tree, and will
+get counted.
+
+If it turns out the [[eq]] comparison here is getting costly, we know that
+any two tmps coming from the same space have the same class.  We could either
+identify classes with an optional space tag, or associate each class with its
+space in some way.
+<<worst>>=
+let temp_to_space (s, _, _) = s
+
+let degree neighbors c = 
+  List.length 
+    (List.filter (fun tmp -> RegisterClass.eq 
+        (RegisterClass.space_to_class(temp_to_space tmp)) 
+        c) neighbors)
+@ 
+
+[[worst_1]] computes the worst case number of [[tmp]]'s
+registers that could be blocked by a coloring of 1 neighbor of class
+[[c]]. This needs to be cached once everything is working!
+
+We could compute this very early (static table in the target early) rather
+than computing it once and caching the result.  
+<<worst>>=
+let worst_1 (s,_,_) c = 
+  let n_ = RegisterClass.space_to_class s in
+  RS.fold (fun reg worst -> 
+    let blocked = RegisterClass.inter n_ (RegisterClass.aliases (RS.singleton reg)) in
+    max (RegisterClass.cardinal blocked) worst) 
+    c 0
+
+let bound (s,_,_ as tmp) classes = 
+  let alias_sets = List.fold_left (fun union rClass -> RS.union (RegisterClass.aliases rClass) union) RS.empty classes in
+  RS.cardinal (RS.inter (RegisterClass.space_to_class s) alias_sets)
+
+
+let rec rawZ tmp neighbors vertex = 
+  let rawZ_sum tmp neighbors vertex = 
+    List.fold_left (fun sum c_ -> let degree_n_C = degree neighbors c_ in
+                                  let term = degree_n_C * (worst_1 tmp c_) in
+                                  sum + term)
+                   0 (ClassTree.classes vertex) in
+  let z tmp neighbors vertex =
+    min (bound tmp (ClassTree.down vertex)) (rawZ tmp neighbors vertex) in
+  let filtered_children tmp neighbors vertex = 
+    List.fold_left (fun sum v -> (z tmp neighbors v) + sum) 0 (ClassTree.children vertex) in
+  rawZ_sum tmp neighbors vertex + (filtered_children tmp neighbors vertex)
+@ 
 
 <<registerclass.mli>>=
   <<register class interface>>
@@ -269,4 +329,5 @@ let () = Debug.register "registerclass" "generalized register classes"
   <<register classes>>
   <<class tree interface>>
   <<class trees>>
+  <<worst>>
 @
