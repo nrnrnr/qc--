@@ -49,6 +49,10 @@ tar:		$(FILE).tar.gz
 www:		$(FILE).tar.gz
 		cp $(FILE).tar.gz $(HOME)/../cminusminus/www/download
 
+tartest:	$(FILE).tar.gz
+		gunzip -c $(FILE).tar.gz | tar xvf -
+		cd $(FILE) && make && cd .. && rm -rf $(FILE)
+
 $(FILE).tar.gz:	Makefile    
 		ln -s . $(FILE)
 		tar czvhf $(FILE).tar.gz           \
