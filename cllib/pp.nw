@@ -1,0 +1,387 @@
+
+\def\ocaml{\textsc{ocaml}}
+% l2h substitute ocaml OCaml
+
+% ------------------------------------------------------------------  
+\section{Pretty Printer}
+% ------------------------------------------------------------------ 
+
+
+Pretty printing is the problem of finding a good layout for structured
+text under some constraints.  John Huges has advanced the design of
+pretty printers considerably by taking an algebraic approach
+\cite{HughesJohn1995c}:  Pretty printers are a set of operators like
+horizontal or vertical concatenation which obey algebraic rules.  This
+has lead to a consistent pretty printing library; a variant of
+his library is part of some Haskell \cite{HughesJohn1995c}
+implementations.  Based on Hughes' work Philip Wadler has proposed
+another algebraic pretty printer \cite{wadler:98:pp,wadler:99:pp}.  It
+uses only six operators and a uniform document model that is well
+suited for pretty printing tree structures like source code.  Like
+Hughes' he has also suggested an implementation of his approach in the
+functional language Haskell.  It relies heavily on the lazy evaluation
+of Haskell and can not be easily ported to a strict language without
+loss of efficiency.  This module implements the pretty printer as
+proposed by Wadler but adopted for the strict evaluation of \ocaml. 
+
+
+% ------------------------------------------------------------------  
+\subsection{Interface}
+% ------------------------------------------------------------------  
+
+The pretty printer provided by the [[Pp]] module is intended for
+tree-like structures.  Documents are represented by an abstract type
+[[doc]].  A document can be printed to a file or a string and during
+this process the pretty printer decides about the final outcome of the
+document.  The only parameter it takes into account is the total line
+width and the number of characters a sub-document occupies.
+
+A document of type [[doc]] can be very small entity like a single
+word.  Functions combine small documents to larger ones which then can
+be pretty printed.
+
+<<pp.mli>>=
+type doc
+
+@ The empty document is pretty printed to the empty string. Typically
+[[empty]] is used in one branch of an [[if]] statement.
+
+<<>>=    
+val empty : doc
+
+@ The infix operator [[x ^^ y]] concatenates two documents [[x]] and
+[[y]] into a larger one.  It does not introduce any space or other
+separation between the two original documents. 
+
+<<>>=    
+val (^^) : doc -> doc -> doc
+
+@ The [[text]] function turns a string into a document. The pretty printed
+representation of the resulting document is exactly the string [[text]]
+was applied to. 
+
+<<>>=    
+val text : string -> doc
+
+@ The important points in a document are so-called [[break]]s.  A
+[[break]] can be either represented by a single space or a newline
+followed by a number of spaces.  The pretty printer makes this
+decision based on the available space.  So think of a [[break]] as a
+space that might come out as a newline.  To give the pretty printer
+enough flexibility documents must be joined with [[break]]s:  [[x ^^
+break ^^ y]]. 
+   
+<<>>=    
+val break : doc
+
+@ The space character used by [[break]] my be not always appropriate. 
+The function [[breakWith s]] behaves like [[break]] except that it
+uses a user supplied string [[s]] instead of the space.
+
+<<>>=    
+val breakWith : string -> doc
+
+@ ------------------------------------------------------------------  
+\subsubsection{Nesting and Grouping}
+% ------------------------------------------------------------------  
+
+When the pretty printer decides to represent a [[break]] as a
+newline it also prints some spaces after it to indent the following
+line.  The number of spaces is controlled by the [[nest]] operator
+that takes a document as argument:  [[nest n d]].  All breaks turned
+to newlines inside document [[d]] are followed by [[n]] spaces.  The
+[[nest]] operator nests properly such that it takes the spaces
+introduced by [[nest]]s on the outer level also into account.
+
+<<>>=
+val nest : int -> doc -> doc
+
+@ The pretty printer considers the representation of [[break]]s not
+one by one but looks at all [[break]]s of a sub-document. Documents
+are structured into sub-documents by group-operators. Different group
+operators exist to control the behavior of the pretty printer. 
+
+A group operator takes a document and let it become a group.  The
+[[hgrp]] operator creates a \textit{horizontal} group.  Breaks inside
+a [[hgrp]] are never turned into newlines but always come out as
+spaces.  This group has a very limited usefulness because it easily
+overruns any given line length. 
+
+<<>>=   
+val hgrp : doc -> doc
+    
+@ The [[vgrp]] operator creates a \textit{vertical} group.  All
+[[break]]s inside a [[vgrp]] are represented as newlines followed by
+spaces.  Although all [[break]]s come out as newlines the indentation
+of lines inside the group may differ:  nesting is independent of
+grouping and thus different nesting levels can be active in the same
+group.  Because of the fixed pretty printing strategy [[hgrp]]s are
+used mostly at the top level of documents only.
+
+<<>>=
+val vgrp : doc -> doc
+
+@ The \textit{automatic} group [[agrp]] is the most versatile.  Breaks
+inside this group are either all turned into newlines (followed by
+spaces), or into spaces.  Subgroups are, of course, not affected but
+considered individually. 
+   
+To determine whether to turn [[break]]s into spaces or newlines the
+pretty printer looks at the length of the document when all [[breaks]]
+inside are printed as spaces, included those inside sub-groups.  In
+case the documents fits into the rest of the current line the pretty
+printer will print [[break]]s as spaces.  Otherwise [[break]]s will
+become newlines.
+
+Typically [[agrp]]s are nested into each other.  Because the larger
+groups on the outer levels typically do not fit into one line their
+[[break]]s are turned into spaces.  This keeps lines short and makes
+room for the smaller inner groups.  Chances are good that these
+will fit into a line and thus their [[break]]s come out as spaces.
+
+<<>>=
+val agrp : doc -> doc
+
+@ The break policy inside an [[agrp]] is fixed for all breaks of the
+group.  Inside a \textit{flexible} group [[fgrp]] each [[break]] is
+considered individually:  when the document up to the next [[break]]
+fits into the current line the [[break]] comes out as space. 
+Otherwise it comes out as newline followed by spaces. 
+
+<<>>=
+val fgrp : doc -> doc
+
+@ ------------------------------------------------------------------  
+\subsubsection{Pretty Printing}
+% ------------------------------------------------------------------  
+
+After small documents have been assembled to a larger one this finally
+can be printed either to a string, or a file.  Printing to a string is
+a costly operation and should be avoided for large documents.  Both
+functions for pretty printing take a line width as argument.  The
+pretty printer tries hard not to overrun this limit.  However, very
+long [[text]] documents or [[hgrp]]s can cause overruns anyway. 
+
+It is usually a good idea to stress test your document by looking at
+output printed for a small line width.  This helps to detect flaws in
+the document creation.
+
+The documents passed to the pretty printing functions are wrapped by
+a virtual [[agrp]]. To escape from this default behavior you can
+easily wrap your document on the outer level with another group such
+that the [[agrp]] will have no effect.
+
+<<>>=
+val ppToString : int -> doc -> string
+val ppToFile : out_channel -> int -> doc -> unit
+@
+
+% ------------------------------------------------------------------  
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+Users buld document of type [[doc]].  The different kinds of documents
+are mapped to different constructors. 
+
+<<pp.ml>>=
+<<auxiliaries>>
+<<gmode>>
+
+type doc =
+    | DocNil
+    | DocCons           of doc * doc
+    | DocText           of string
+    | DocNest           of int * doc
+    | DocBreak          of string
+    | DocGroup          of gmode * doc
+
+@ There are four different kinds of groups or modes at the user level;
+they are captured by [[gmode]]. The names used for the different
+groups do not match the names of the functions in the interface---this
+is a historic legacy.
+
+<<gmode>>=
+type gmode =
+    | GFlat             (* hgrp *)
+    | GBreak            (* vgrp *)
+    | GFill             (* fgrp *)
+    | GAuto             (* agrp *)
+
+@ The constructor functions are mapped straight to the [[doc]] type.
+When [[debug]] is [[true]] additional markup for the groups with
+run time computed pretty printing is added.
+
+<<pp.ml>>=
+
+let (^^) x y            = DocCons(x,y)
+let empty               = DocNil
+let text s              = DocText(s)
+let nest i x            = DocNest(i,x)
+let break               = DocBreak(" ")
+let breakWith s         = DocBreak(s)
+
+let hgrp d              = DocGroup(GFlat, d)
+let vgrp d              = DocGroup(GBreak,d)
+let agrp d              = if   debug
+                          then DocGroup(GAuto, text "[" ^^ d ^^ text "]")
+                          else DocGroup(GAuto, d)
+let fgrp d              = if   debug
+                          then DocGroup(GFill, text "{" ^^ d ^^ text "}")
+                          else DocGroup(GFill, d)
+                          
+@ Pretty printing takes two steps:  users build documents of type
+[[doc]].  The pretty printer transforms a [[doc]] value into a simple
+document of type [[sdoc]].  The transformation from [[doc]] to
+[[sdoc]] decides about the representation of each [[break]] in the
+original document.  A [[sdoc]] value can be easily printed into a
+string or file.  The algebraic properties of the pretty printer
+guarantee that every [[doc]] value can be turned into a much more
+restricted [[sdoc]] value. 
+
+A [[sdoc]] value is either an empty document ([[SNil]]), or a literal
+text followed by some [[sdoc]] ([[SText]]), or a newline, followed by
+a number of spaces and another [[sdoc]] value. 
+
+<<>>=
+type sdoc =
+    | SNil
+    | SText             of string * sdoc
+    | SLine             of int    * sdoc    (* newline + spaces *)
+
+@ Printing a [[sdoc]] value to a string or file is straight forward. 
+The [[oc]] parameter for [[sdocToFile]] is an open file channel.
+
+<<>>=
+let rec sdocToString = function
+    | SNil              -> ""
+    | SText(s,d)        -> s ^ sdocToString d
+    | SLine(i,d)        -> let prefix = String.make i ' ' 
+                           in  nl ^ prefix ^ sdocToString d
+
+let sdocToFile oc doc = 
+    let pstr = output_string oc in
+    let rec loop = function
+        | SNil          -> () 
+        | SText(s,d)    -> pstr s; loop d
+        | SLine(i,d)    -> let prefix = String.make i ' ' 
+                           in  pstr nl;
+                               pstr prefix;
+                               loop d
+    in
+        loop doc
+
+@ During pretty printing [[break]]s in [[agrp]]s are either turned
+into spaces or newlines.  After this decision is made only three
+groups or modes remain:
+
+\begin{itemize}
+\item [[Flat]]:  every [[break]] is printed as space.
+\item [[Break]]: every [[break]] is printed as newline.
+\item [[Fill]]:  a [[break]] at the end of the line is printed as
+                 newline and as space otherwise. 
+\end{itemize}
+
+<<>>=
+type mode =
+    | Flat
+    | Break
+    | Fill
+
+@ Pretty printing means do decide whether an [[agrp]]'s [[break]]s are
+spaces or newlines.  This is done by [[format]] that takes three
+arguments:  the (maximal) line width [[w]], the number of characters
+used already used on the current line [[k]], and a list of documents. 
+The list results from flattening the tree-structure introduced by the
+[[DocCons]] constructor. 
+
+Each document in the list comes with two more informations:  the
+number [[i]] of spaces that are to be printed after a newline, and the
+[[mode]] (or group) the document is part of.  The mode [[m]] dictates
+the appearance of [[break]]s:  inside a [[Flat]] group a
+[[DocBreak(s)]] just becomes [[s]] (usually a space), inside a
+[[Break]] group a [[DocBreak(s)]] becomes a newline followed by [[i]]
+spaces.  When in [[Fill]] mode [[break]]s only become a newline in
+case otherwise the current line length would be exceeded. 
+
+The mode [[m]] is derived from the original group which is straight
+forward except for an [[agrp]].  To decide about the mode for the
+contents of an [[agrp]] [[format]] uses [[fit]] to check, whether the
+whole group fits into the rest of the line.  In case it does, the mode
+will be [[Flat]] which means its [[break]]s will be spaces. 
+
+<<>>=
+<<fits>>
+
+let rec format w k = function
+    | []                             -> SNil
+    | (i,m,DocNil)              :: z -> format w k z
+    | (i,m,DocCons(x,y))        :: z -> format w k ((i,m,x)::(i,m,y)::z)
+    | (i,m,DocNest(j,x))        :: z -> format w k ((i+j,m,x)::z)
+    | (i,m,DocText(s))          :: z -> SText(s ,format w (k + strlen s) z)
+    | (i,Flat, DocBreak(s))     :: z -> SText(s ,format w (k + strlen s) z)
+    | (i,Fill, DocBreak(s))     :: z -> let l = strlen s in
+                                            if   fits (w - k - l) z 
+                                            then SText(s, format w (k+l) z)
+                                            else SLine(i, format w  i    z)
+    | (i,Break,DocBreak(s))     :: z -> SLine(i,format w i z)
+    | (i,m,DocGroup(GFlat ,x))  :: z -> format w k ((i,Flat ,x)::z)
+    | (i,m,DocGroup(GFill ,x))  :: z -> format w k ((i,Fill ,x)::z)
+    | (i,m,DocGroup(GBreak,x))  :: z -> format w k ((i,Break,x)::z)
+    | (i,m,DocGroup(GAuto, x))  :: z -> if fits (w-k) ((i,Flat,x)::z)
+                                        then format w k ((i,Flat ,x)::z)
+                                        else format w k ((i,Break,x)::z)
+
+@
+
+The [[fits]] predicate treats all groups it encounters as flat groups. 
+This implements just the policy that a group including all its sub
+groups must fit into the current line in order to have its [[break]]s
+rendered as spaces.  The predicate is efficient because it can stop
+whenever it encounters a real new line (from a [[vgrp]])i, or it
+exceeds the current line width, or it reaches the end of the
+group---whatever happens first. 
+
+<<fits>>=
+
+let rec fits w = function
+    | _ when w < 0                   -> false
+    | []                             -> true
+    | (i,m,DocNil)              :: z -> fits w z
+    | (i,m,DocCons(x,y))        :: z -> fits w ((i,m,x)::(i,m,y)::z)
+    | (i,m,DocNest(j,x))        :: z -> fits w ((i+j,m,x)::z)
+    | (i,m,DocText(s))          :: z -> fits (w - strlen s) z
+    | (i,Flat, DocBreak(s))     :: z -> fits (w - strlen s) z
+    | (i,Fill, DocBreak(_))     :: z -> true 
+    | (i,Break,DocBreak(_))     :: z -> true
+    | (i,m,DocGroup(_,x))       :: z -> fits w ((i,Flat,x)::z)
+
+@ The pretty printing functions called by the user just enclose the
+user document with a virtual [[agrp]] and start [[format]]'ing.
+
+<<pp.ml>>=
+
+let ppToString w doc =
+    sdocToString  (format w 0 [0,Flat,agrp(doc)])
+
+let ppToFile oc w doc =
+    sdocToFile oc (format w 0 [0,Flat,agrp(doc)])
+
+@ ------------------------------------------------------------------  
+\subsubsection{Auxiliaries}
+% ------------------------------------------------------------------  
+
+To make groups more visible during debugging set [[debug]] to
+[[true]].
+
+<<auxiliaries>>=
+let debug   = false 
+let strlen  = String.length
+
+@ Unix uses a single character to represent a newline.  Other
+operating systems use different or more characters.  So we better
+abstract from this.
+
+<<>>=
+let nl      = "\n"
+
+@
