@@ -14,44 +14,47 @@ use File::Basename;
 # What we are looking for
 # ------------------------------------------------------------------ 
 
-#
 # The script tries to find the correct value for the following
-# variables. You can set these from the command line, if the script
-# cannot find them, or edit this sript directly.
-#
+# variables. You can set them here directly, if the script cannot find
+# them.
 
-$lua_h      = undef;  # "/path/to/lua.h"
-$lualib_h   = undef;  # /path/to/lualib.h    
-$liblua     = undef;  # /path/to/liblua.a  
-$liblualib  = undef;  # /path/to/liblualib.a
-$lua_inc    = undef;  # like "-I/usr/local/include/lua"
-$lua_lib    = undef;  # like "-L/usr/local/lib"
+$verbose = 0;                   # set to 1 for more output
+%x = ();                        # hash for all the values we are looking for
+
+$x{prefix}     = "/usr/local";  # where we install
+
+$x{lua_h}      = ""   ;         # "/path/to/lua.h"
+$x{lualib_h}   = ""   ;         # "/path/to/lualib.h"    
+$x{liblua}     = ""   ;         # "/path/to/liblua.a"  
+$x{liblualib}  = ""   ;         # "/path/to/liblualib.a"
+$x{lua_inc}    = ""   ;         # cc(1) option for lua.h    "-I/usr/local/include/lua"
+$x{lua_lib}    = ""   ;         # cc(1) option for liblua.a "-L/usr/local/lib"
 
 # the binaries below are expeced to be on $PATH. It does not make
 # sense to set them since we never use the full PATH. Extend PATH
 # instead.
 
-$ocamlc     = undef; # /path/to/binary
-$ocamlc     = undef;
-$ocamlyacc  = undef;
-$notangle   = undef;
-$cpif       = undef;
-$awk        = undef;
-$cc         = undef;
-$mk         = undef;
-$latex      = undef;
-$pod2html   = undef;
+$x{ocamlc}     = ""   ;         # "/path/to/binary"
+$x{ocamlc}     = ""   ;
+$x{ocamlyacc}  = ""   ;
+$x{notangle}   = ""   ;
+$x{cpif}       = ""   ;
+$x{awk}        = ""   ;
+$x{cc}         = ""   ;
+$x{mk}         = ""   ;
+$x{latex}      = ""   ;
+$x{pod2html}   = ""   ;
 
 # these values are always tested, you cannot set them
 
-$lua_version= undef;  # from LUA_VERSION macro
-$endian     = undef;  # big/little
-$sizeof_int = undef;  # 4  
-$sizeof_ptr = undef;  # 4
-$sizeof_char= undef;  # 1
-$stdc_version= undef; # 199409 - from __STDC_VERSION__
-$arch       = undef;  # x86-linux  
-$ocamlv     = undef;  # OCaml Version, always tested
+$x{lua_version}= ""   ;         # from LUA_VERSION macro
+$x{endian}     = ""   ;         # big/little
+$x{sizeof_int} = ""   ;         # 4  
+$x{sizeof_ptr} = ""   ;         # 4
+$x{sizeof_char}= ""   ;         # 1
+$x{stdc_version}= ""  ;         # 199409 - from __STDC_VERSION__
+$x{arch}       = ""   ;         # x86-linux  
+$x{ocamlv}     = ""   ;         # OCaml Version
 
 # ------------------------------------------------------------------ 
 # important search paths
@@ -78,10 +81,26 @@ $ocamlv     = undef;  # OCaml Version, always tested
 # command line handling
 # ------------------------------------------------------------------ 
 
+sub usage {
+    print <<EOF
+    
+    ./configure [options]
+
+        -v, --verbose           be more verbose
+        --prefix=/usr/local     install into the /usr/local hierarchy
+        -h, --help              this summary
+
+    Various variables can be set at the top of this script, in
+    particular lists of directories that are searched.
+EOF
+
+}
+
 foreach (@ARGV) {
-    if       (/^-([a-z0-9_]+)=([0-9]+)$/)   { eval "\$$1=$2"   }
-    elsif    (/^-([a-z0-9_]+)=(.*)$/)       { eval "\$$1='$2'" }
-    else     { die "unkown option $_" }
+    if       (/^--?v(erbose)?$/)              { $verbose=1        }
+    elsif    (/^--?prefix=(.*)$/)             { $x{prefix}=$1     }
+    elsif    (/^--?h(elp?)$/)                 { usage(); exit 0   }  
+    else     { usage(); exit 1 }
 }
 
 # ------------------------------------------------------------------ 
@@ -96,12 +115,17 @@ foreach (@ARGV) {
 
 sub search {
     my $file = shift (@_);
-
+    
+    if ($verbose) { printf("searching for %-20s", $file) }
     while ($f = shift (@_)) {
         my $x = "$f/$file";
-        if (-f $x) { return $x }
+        if (-f $x) { 
+            if ($verbose) { print "found $x\n" }
+            return $x 
+        }
     }
-    return undef;
+    if ($verbose) { print "not found!\n" }
+    return "";
 }
 
 #
@@ -109,14 +133,46 @@ sub search {
 #
 
 sub runtest {
-    unless ($cc) { die "no C compiler to run test @_" }
+    my $cc = shift(@_) || die "no C compiler available?";
+    my $args = shift(@_);
     
-    my $cmd   = "$cc -o tst @_ || exit 100";
+    my $cmd   = "$cc -o tst $args || exit 100";
     my $rc    = system($cmd);
     my $signo = $rc & 127;
     if ($signo) { die "killed by signal $signo" }
-    if ($rc >> 8 eq 100) { die "cannot run '$cmd'; no C compiler?" }
+    if ($rc >> 8 eq 100) { 
+        print <<EOF;
     
+    Failed to run this test in config/aux: 
+    
+        $cmd.
+    
+    This can have several reasons:
+
+    (1) The header file lua.h was not found.
+    (2) The C compiler is not ANSI compliant.
+
+    Reason (1) is the most likely. The script tries to provide the C
+    compiler with the right -I option by searching these directories
+    for the header file:
+    
+        @include
+    
+    This might have failed because the script could not find the
+    header file. If you know you have Lua 4.0 installed, please add
+    the right directory to the variable \@include in this script and
+    run the script again. 
+    
+    If you don't have Lua 4.0 installed, please install it and try
+    again. Lua is available from http://www.lua.org/.
+
+    If your C compiler could not be found, please make sure it is on
+    your PATH. Your current PATH is:
+
+        $ENV{PATH}
+EOF
+        return "";
+    }
     # run test and capture output
     return `./tst`;
 }
@@ -130,26 +186,26 @@ sub runtest {
 # compiler also won't find it. The SUN compiler comes to mind.
 #
 
-$ocamlc     = $ocamlc       || search("ocamlc",@path);
-$ocamlyacc  = $ocamlyacc    || search("ocamlyacc",@path);
-$ocamlv     = $ocamlv       || (`$ocamlc -v` =~ /(\d\.\d\d)/) && $1;
-$notangle   = $notangle     || search("notangle",@path); 
-$cpif       = $cpif         || search("cpif", @path);
-$awk        = $awk          || search("awk", @path);
-$cc         = $cc           || search("gcc",@path)
-                            || search("cc",@path) 
-                            || search("lcc",@path);
-$mk         = $mk           || search("mk",@path); 
-$latex      = $latex        || search("latex",@path); 
-$pod2html   = $pod2html     || search("pod2html",@path);
-$lua_h      = $lua_h        || search("lua.h", @include);
-$lualib_h   = $lualib_h     || search("lualib.h", @include);
-$liblua     = $liblua       || search("liblua.a", @libs) 
-                            || search("liblua40.a", @libs);
-$liblualib  = $liblualib    || search("liblualib.a", @libs) 
-                            || search("liblualib40.a", @libs);
-$lua_inc    = $lua_inc      || "-I" . dirname($lua_h);
-$lua_lib    = $lua_lib      || "-L" . dirname($liblua);
+$x{ocamlc}     = $x{ocamlc}       || search("ocamlc",@path);
+$x{ocamlyacc}  = $x{ocamlyacc}    || search("ocamlyacc",@path);
+$x{ocamlv}     = $x{ocamlv}       && (`$x{ocamlc} -v` =~ /(\d\.\d\d)/) && $1;
+$x{notangle}   = $x{notangle}     || search("notangle",@path); 
+$x{cpif}       = $x{cpif}         || search("cpif", @path);
+$x{awk}        = $x{awk}          || search("awk", @path);
+$x{cc}         = $x{cc}           || search("gcc",@path)
+                                  || search("cc",@path) 
+                                  || search("lcc",@path);
+$x{mk}         = $x{mk}           || search("mk",@path); 
+$x{latex}      = $x{latex}        || search("latex",@path); 
+$x{pod2html}   = $x{pod2html}     || search("pod2html",@path);
+$x{lua_h}      = $x{lua_h}        || search("lua.h", @include);
+$x{lualib_h}   = $x{lualib_h}     || search("lualib.h", @include);
+$x{liblua}     = $x{liblua}       || search("liblua.a", @libs) 
+                                  || search("liblua40.a", @libs);
+$x{liblualib}  = $x{liblualib}    || search("liblualib.a", @libs) 
+                                  || search("liblualib40.a", @libs);
+$x{lua_inc}    = $x{lua_inc}      || "-I" . dirname($x{lua_h});
+$x{lua_lib}    = $x{lua_lib}      || "-L" . dirname($x{liblua});
 
 # ------------------------------------------------------------------ 
 # Run tests. The config.c test script emits Perl code that sets
@@ -157,42 +213,132 @@ $lua_lib    = $lua_lib      || "-L" . dirname($liblua);
 # ------------------------------------------------------------------ 
 
 chdir("config/aux") || die "$!";
-$result = runtest("$lua_inc config.c");
-eval($result) || die "cannot evaluate result from config.c"; 
-$arch=`./arch-os`;
-chop($arch);
+
+$result = $x{cc} && runtest($x{cc}, "$x{lua_inc} config.c");
+$result && eval($result);
+$x{arch}=`./arch-os`;
+$x{arch} && chop($x{arch});
+
+# ------------------------------------------------------------------ 
+# Collect undefined configuration variables
+# ------------------------------------------------------------------ 
+
+@missing = ();
+foreach my $v (keys %x) {
+    if (not defined($x{$v})) { print "undefined: $v\n" }
+    if ($x{$v} eq '') { push(@missing,$v) }
+}
 
 # ------------------------------------------------------------------ 
 # report
 # ------------------------------------------------------------------ 
 
 print <<EOF;    
-    Results
+
+    Here is what the script has found:
     
-    OCaml Version:  $ocamlv
-    ocamlc:         $ocamlc
-    ocamlyacc:      $ocamlyacc
+    OCAML
+    ------------------------------------------------------------------ 
+    OCaml Version:  $x{ocamlv}
+    ocamlc:         $x{ocamlc}
+    ocamlyacc:      $x{ocamlyacc}
     
-    notangle:       $notangle
-    cpif:           $cpif
-    awk:            $awk
+    NOWEB and tools
+    ------------------------------------------------------------------ 
+    notangle:       $x{notangle}
+    cpif:           $x{cpif}
+    awk:            $x{awk}
+    mk:             $x{mk}
     
-    cc:             $cc
-    mk:             $mk
-    latex:          $latex
-    pod2html:       $pod2html
+    C Compiler
+    ------------------------------------------------------------------ 
+    cc:             $x{cc}
+    C Standard:     $x{stdc_version}
     
-    lua.h:          $lua_h
-    lualib.h:       $lualib_h
-    liblua:         $liblua
-    liblualib:      $liblualib
-    Lua -I          $lua_inc
-    Lua -L          $lua_lib
-    Lua Version:    $lua_version
     
-    Architecture:   $arch
-    Endianness:     $endian
-    Sizes:          int:$sizeof_int int*:$sizeof_ptr char:$sizeof_char
-    C Standard:     $stdc_version
+    Documentation
+    ------------------------------------------------------------------ 
+    LaTeX:          $x{latex}
+    pod2html:       $x{pod2html}
+    
+    Lua
+    ------------------------------------------------------------------ 
+    Lua Version:    $x{lua_version}
+    lua.h:          $x{lua_h}
+    lualib.h:       $x{lualib_h}
+    liblua:         $x{liblua}
+    liblualib:      $x{liblualib}
+    Lua -I          $x{lua_inc}
+    Lua -L          $x{lua_lib}
+    
+    Architecture
+    ------------------------------------------------------------------ 
+    Architecture:   $x{arch}
+    Endianness:     $x{endian}
+    Sizes:          int:$x{sizeof_int} int*:$x{sizeof_ptr} char:$x{sizeof_char}
+
+    Installation
+    ------------------------------------------------------------------
+    Install to:     $x{prefix}
 EOF
+
+if (@missing) {
+    print <<EOF;
+
+    The following configuration variables could not be inferred:
+
+    @missing
+
+    This does not have to mean you cannot compile Quick C--. However,
+    don't be surprised if compilation fails. You have several options to
+    correct the problem:
+
+    (1) Enlarge your PATH such that all tools can be found. Your
+        current PATH is:
+
+            $ENV{PATH}
+
+        pod2html(1) is part of the Perl system
+        mk(1)       is in mk/. It must be installed before
+                    compilation.
+        notangle(1) is part of NoWEB.
+
+    (2) If Lua-related variables are undefined, try to enlarge the 
+        list of searched directories at the top of this script.
+        Currently, these directories are searched for header files:
+
+            @include
+
+        And these directories are searched for library files:
+
+            @libs
+        
+    (3) Edit the config/*.mk files directly. These files contain
+        variables for tools and their options. If your problem is
+        Lua, try config/lua.mk.
+EOF
+    exit 1;
+}
+    
+
+# ------------------------------------------------------------------ 
+# Check Versions
+# ------------------------------------------------------------------ 
+
+
+if ($x{ocamlv} !~ /3\.0[456]/) {
+    print <<EOF;
+    
+    You need OCaml 3.0[456] to compile Quick C--. We found $x{ocamlv}.
+EOF
+    exit 1;
+}
+
+if ($x{lua_version} !~ /4\./) {
+    print <<EOF;
+
+    You need an installation of Lua 4.x, we found $x{lua_version}.
+EOF
+    exit 1;
+}
     
