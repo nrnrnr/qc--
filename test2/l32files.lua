@@ -20,6 +20,8 @@ Test.files = { "add.c--"
 	     , { source="fargres.c--", other='src/double.c' }
              , "float-000.c--"
              , "float-001.c--"
+             , "float-001-hero.c--"
+             , "float-001-coward.c--"
              , 'float-002.c--'
              , { source='float-003.c--' }  -- .outdir will be modified for sparc
 	     , 'f2.c--'
