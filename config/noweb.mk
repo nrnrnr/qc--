@@ -99,4 +99,5 @@ NOWEBBREAKCODE=no
         ps2pdf $prereq
 
 clean-tex:V:
-	rm -f *.blg *.log *.dvi *.inc
+	rm -f *.blg *.log *.dvi *.inc *.toc
+
