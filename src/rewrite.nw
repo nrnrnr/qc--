@@ -82,6 +82,13 @@ Get the value of an expression composed of high and low parts.
 This is just [[zx hi << w | zx lo]] where [[w = width lo]].
 <<rewrite.mli>>=
 val regpair : hi:exp -> lo:exp -> exp
+@ 
+A~slice of a value, implementing using the standard [[lobits]] and
+[[shrl]] operators.
+The first width is the width of the expression; the second is the
+width of the slice (as in [[lobits]]).
+<<rewrite.mli>>=
+val slice : width -> width -> lsb:int -> exp -> exp
 @
 \subsection{Implementation}
 <<rewrite.ml>>=
@@ -159,6 +166,12 @@ let regpair ~hi ~lo =
   let lw = RU.Width.exp lo in
   let w = hw + lw in
   O.(or) w (O.shl w (O.zx hw w hi) (O.unsigned w lw)) (O.zx lw w lo)
+<<rewrite.ml>>=
+let slice w n ~lsb e =
+  if lsb = 0 then
+    O.lobits w n e
+  else
+    O.lobits w n (O.shrl w e (O.unsigned w lsb))
 @
 
 \section{Things not to be looked at}

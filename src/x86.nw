@@ -84,6 +84,8 @@ end
 @
 \subsection{Postexpander}
 
+
+
 Program counter and condition codes (called [[eflags]] on the Pentium)
 are standard.
 The rounding mode is part of the floating-point control register. 
@@ -119,6 +121,20 @@ type operator  = Rtl.Private.opr
 The postexpander sometimes needs to allocate a temporary.
 <<x86 postexpander>>=
 let talloc = Postexpander.Alloc.temp
+@ 
+\paragraph {Important note about hardware registers}
+
+This postexpander freely assumes the right to clobber EAX, EBX, ECX,
+and EDX at will.
+It is therefore unsafe for any of these registers to be used as a
+global register.
+Among other restrictions, this means these registers must not be
+exposed by name.
+
+An alternative would be to save and restore each register before using it,
+but at present we don't have an optimization pass capable of
+eliminating all those dead saves and restores.
+Even if we did, one might question the wisdom.
 @ 
 \paragraph{Contexts}
 Addresses go in the integer registers.
@@ -305,6 +321,7 @@ let at32 = function
   | opr, [n]  -> Impossible.unimp ("%" ^ opr ^ string_of_int n ^ "(...)")
   | opr, ws   -> impossf "operator %%%s specialized to %d widths" opr (List.length ws)
 @ 
+\paragraph{Binary operators}
 We start our implementation with a function that provides binary
 operators in $L \mathrel{:=} L \oplus R$ form. 
 <<x86 postexpander>>=
@@ -349,48 +366,54 @@ until we try it with other versions of the x86 divide instruction.
     | _ -> move_rtl x Rg.eax in
     move_rtl Rg.eax x <:> sethi Rg.edx Rg.eax <:> rtl div <:> finish
 @ 
-I don't know why it's safe to clobber ECX here.
-The problem would arise if the {\PAL} source mentioned ECX, perhaps
-because it wants to use ECX as the heap pointer or somethign like
-that.
-
-The safe thing to do would be to save and restore ECX before using it,
-but at present we don't have an optimization pass capable of
-eliminating all those dead saves and restores.  So we live dangerously.
+Shifts and rotates use register~CL.
+One awkward property of the machine: immediate shifts don't set the
+flags, which means a simple peephole optimizer is incapable of
+substituting immediate values for shifts (because a simple optimizer
+doesn't know the effect on the flags is dead).
 <<more cases for [[llr]]>>=
 | ("shl" | "shrl" | "shra" | "rotl" | "rotr") as shop ->
     let cl = R.fetch Rg.cl 8 in
     let sh = exp_with_flags (shflags shop) x (R.app (Up.opr op) [tempval x; cl])
               (tempval x) cl 32 in
     move_rtl Rg.ecx y <:> sh
+@ 
 <<more cases for [[llr]]>>=
 | ("and"|"or"|"xor") -> with_lflags x (Up.opr op) (tempval x) (tempval y) 32 
-| _  ->
-    rtl (R.store (temploc x) (R.app (Up.opr op) [tempval x; tempval y]) (tempwidth x))
+@ 
+A~good person would check the list of operators to see if they are
+exhaustive, and thereby issue an error message here.
+<<more cases for [[llr]]>>=
+| op  -> impossf "non-binary operator %%%s in x86 binop" op
 @ 
 NOTE THERE IS NO REAL REASON THAT DIVISION SHOULD BE HANDLED AS LLR
 SINCE WE USE SPECIAL REGISTERS ANYWAY!  
 <<x86 postexpander>>=
 let binop ~dst op x y = match at32 op with
-| _     -> move dst x <:> llr op dst y
+| _ -> move dst x <:> llr op dst y
 @ 
-Other operators are surely wrong.
+\paragraph{Unary operators}
+Unary operators are done in place, except for [[popcnt]], which must
+be synthesized using a rewrite rule.
 <<x86 postexpander>>=
 let inplace op op32 x = match op32 with
-| "neg" ->
-    rtl (R.par [R.store (temploc x) (R.app (Up.opr op) [tempval x]) 32;
-                         negflags (tempval x) 32])
+| "neg"    -> rtl (R.par [R.store (temploc x) (R.app (Up.opr op) [tempval x]) 32;
+                          negflags (tempval x) 32])
 | "lobits" -> PX.Nop  (* lobits32 is identity *)
-| _ -> rtl (R.store (temploc x) (R.app (Up.opr op) [tempval x]) (tempwidth x))
+| "com"    -> rtl (R.store (temploc x) (R.app (Up.opr op) [tempval x]) (tempwidth x))
+| op       -> impossf "non-unary operator %%%s in x86 unop" op
 
 let unop ~dst op x = match at32 op with
 | "popcnt" -> PX.Expand.block (Rewrite.popcnt 32 ~dst:(temploc dst) (tempval x))
-| op32 -> move dst x <:> inplace op op32 dst
+| op32     -> move dst x <:> inplace op op32 dst
 @ 
+Floating-point operations use the stack, not registers, so these
+functions should never be called.
 <<x86 postexpander>>=
 let unrm  ~dst op x   = impossf "operator %%%s in register" (fst op)
 let binrm ~dst op x y = impossf "operator %%%s in register" (fst op)
 @ 
+\paragraph{Extended multiply}
 <<x86 postexpander>>=
 let extended_multiply op y =
   let opfun, flagfun = match op with
@@ -398,8 +421,8 @@ let extended_multiply op y =
   | "mulux" -> RO.mulux, muluxflags
   | _ -> impossf "non-multiplying dblop" in
   let product = opfun 32 (tempval Rg.eax) (tempval y) in
-  rtl (R.par [R.store edx (RO.lobits 64 32 (RO.shrl 64 product (RO.unsigned 64 32)))32;
-              R.store eax (RO.lobits 64 32 product) 32;
+  rtl (R.par [R.store edx (Rewrite.slice 64 32 ~lsb:32 product) 32;
+              R.store eax (Rewrite.slice 64 32 ~lsb:0  product) 32;
               flagfun (tempval Rg.eax) (tempval y) 32])
 @               
 <<x86 postexpander>>=
