@@ -66,11 +66,17 @@ let guard p = if p then 0 else Camlburg.inf_cost
 Some utilities for building strings.
 
 <<head>>=
-let native b =
+let const32 b =
     assert (Bits.width b = 32);
     Nativeint.to_string (Bits.U.to_native b)
 
-let cat = String.concat ""
+let const64 b =
+    assert (Bits.width b = 64);
+    Int64.to_string (Bits.U.to_int64 b)     (* signed or unsigned? *)
+
+let cat     = String.concat ""
+let printf  = Printf.printf
+let sprintf = Printf.sprintf
 
 let reg n   = "$"  ^ string_of_int n
 let freg n  = "$f" ^ string_of_int n
@@ -111,7 +117,8 @@ bits n x w
 @
 
 <<rules>>=
-const:      Bits(bits)          {: native bits :}
+const64:    Bits(bits) [{: guard (Bits.width bits = 64)  :}]{: const64 bits :}
+const:      Bits(bits) [{: guard (Bits.width bits = 32)  :}]{: const32 bits :}
 symbol:     Link(x, w:int)      {: x#mangled_text :}
 @
 
@@ -131,8 +138,6 @@ freg:       Fetch(fregl,w:int)  {: fregl  :}
 pc:         Fetch(pcl,32)       {: () :}
 sp:         Fetch(spl,32)       {: () :}
 ra:         Fetch(ral,32)       {: () :}
-
-
 @
 
 \paragraph{Addresses}

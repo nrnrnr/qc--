@@ -34,6 +34,7 @@ temporaries.
 
 <<mips.ml>>=
 module SS   = Space.Standard32
+module S    = Space
 module A    = Automaton
 module R    = Rtl
 module RP   = Rtl.Private
@@ -46,10 +47,39 @@ module Spaces = struct
     let id = Rtl.Identity
     let m  = SS.m byteorder [8; 16; 32]
     let r  = SS.r 32 id [32]
-    let f  = SS.f 32 id [32]    (* what about 64-bit FP? *)
+    let f  = SS.f 32 id [32]    
     let t  = SS.t    id [32]    
     let u  = SS.u    id [32]
     let c  = SS.c  6 id [32]    (* pc, npc, cc, _, fp_mode, fp_fcmp *)
+
+    (* should we have spaces for int and fp register pairs? *)
+
+    let x  = { S.space          = 'x'
+             ; S.doc            = "64-bit general-purpose temporaries"
+             ; S.cellwidth      = 64
+             ; S.indexwidth     = 32
+             ; S.indexlimit     = None
+             ; S.aggregation    = R.Identity
+             ; S.widths         = [64]
+             ; S.classification = S.Temp
+                { S.stands_for  = 'r'
+                ; S.index_ok    = (fun _ -> true)
+                ; S.set_doc     = "64-bit temporaries"
+                }
+             }   
+    let y  = { S.space          = 'y'
+             ; S.doc            = "64-bit floating-point temporaries"
+             ; S.cellwidth      = 64
+             ; S.indexwidth     = 32
+             ; S.indexlimit     = None
+             ; S.aggregation    = R.Identity
+             ; S.widths         = [64]
+             ; S.classification = S.Temp
+                { S.stands_for  = 'f'
+                ; S.index_ok    = (fun _ -> true)
+                ; S.set_doc     = "64-bit temporaries"
+                }
+             }   
 end
 @
 
