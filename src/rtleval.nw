@@ -18,165 +18,217 @@
 % l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
 
 % ------------------------------------------------------------------ 
-\section{Evaluation of {\small RTL}s}
+\section{Evaluation of RTL-Expressions}
 % ------------------------------------------------------------------ 
 
-This modules allows to evaluate compile- and link-time
-\rtl-expressions.  Expressions must not contain references to
-\rtl-locations but may contain variables.  The meaning of these
-variables is provided by a [[lookup]] function that is passed into the
-evaluator.  A lookup on a variable must return a {\rtl}
-\emph{constant} expression.  Only a minimal number of checks is
-performed because it is assumed that expression have been type-checked
-before.  Errors are reported in conformance with the policy outlined
-in the \module{error} module.  In short, computing with bad values
-lead to a bad value, detection of a new error leads to an exception.
+An {\rtl} expression can denote a compile-time, link-time, or run-time
+expression. This module offers functions [[compile]] and [[link]] to
+evaluate compile-time and and link-time constants respectively. A
+compile-time constant is evaluated to a [[Bits.bits]] value, a link-time
+constant to an [[EXP.t]] value. 
 
-In particular, any of the following conditions lead to
-checked run-time error:
+\begin{quote}\it
+    Should translation of run-time expression be integrated here, too?
+    This would allow to do contant-folding. --CL
+\end{quote}
 
-\begin{itemize}
-\item Typing error
-\item Use of an unknown primitive
-\item Use of a link-time value in a compile-time expression
-\item Use of an undefined variable.
-\item Circular variable definitions.
-\end{itemize}
+The module type [[EXP]] provides a target and back-end dependent way of
+constructing link-time expressions. All link-time expressions must be of
+the native pointer type, otherwise it is an unchecked run-time error.
 
-The functions [[compile]] and [[link]] evaluate compile-time and
-link-time expressions respectively.  The variants [[compile]] and
-[[compile']] differ in that [[compile]] is intended for expressions
-that evaluate to a [[Bits.bits]] value, where [[compile']] evaluates
-expressions that also can have a boolean value. 
+Since compile-time values are compile to [[Bits.bits]] value they can
+not denote a boolean value. This is no restriction because there are no
+compile-time boolean values in the {\PAL} language. Of course, no
+compile-time constant expression must access memory or registers.
+References to {\rtl} variables are currently also unsupported.
 
-<<types and exceptions>>=
-type 'a lookup = string -> 'a Error.error       (* look up constant(!) *)
+Checked compile-time errors are reported as [[Error.ErrorExn]]
+exceptions.
 
-type relexp  
-  (* a relocatable expression, suitable for using as a link-time
-     constant in an assembler---needs to be connected with Asm2.S *)
-  = Rtl.exp (* a temporary expedient *)
+<<module type EXP>>=    
+module type EXP = sig                       (* fits to Asm2 *)   
+    type t
+
+    val sym:        string    -> t          (* symbol of native pointer type *)
+    val const:      Bits.bits -> t          (* req: natove pointer size *)
+    val add:        t -> t -> t             (* t + t *)     
+    val sub:        t -> t -> t             (* t - t *)     
+end
+
+<<module type S>>=
+module type S = sig
+    type t
+    val link:           Rtl.exp -> t            (* Error.ErrorExn *)
+    val compile:        Rtl.exp -> Bits.bits    (* Error.ErrorExn *)
+end    
+@
+
+The evaluation of link-time expressions depends on the representation of
+link-time values. It is provided as a functor argument. Some clients
+like to evaluate compile-time {\rtl} expression but lack an [[EXP]]
+module to supply the functor. For them we provide a dummy [[EXP]]
+implementation [[Dummy]].
 
 <<rtleval.mli>>=
-<<types and exceptions>>  
-val empty    : Rtl.exp lookup (* empty lookup table *)
-val compile  : Rtl.exp lookup -> Rtl.exp -> Bits.bits Error.error
-val compile' : Rtl.exp lookup -> Rtl.exp -> Rtl.exp   Error.error
-val link     : Rtl.exp lookup -> Rtl.exp -> relexp    Error.error
+<<module type EXP>>
+<<module type S>>
+module Dummy: EXP
+module Make (Exp: EXP): S with type t = Exp.t
 @
+
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
+The implementation tries to evaluate an expression as a compile-time
+expressions as far as possible. If this fails because it encounters a
+link-time sub-expression the whole expression is promoted as a link-time
+expression. The distinction between compile-time and link-time values is
+done with two tags [[CT]] and [[LT]] respectively, that are attached to
+values and list of values.
+
 <<rtleval.ml>>=
+<<module type EXP>>
+<<module type S>>
+
 module E  = Error
 module R  = Rtl
 module RP = Rtl.Private
 
-<<types and exceptions>> (* from interface *)
-
-module CompileTime = struct
-    <<CompileTime>>
+module Dummy: EXP = struct
+    type t      = unit
+    let sym   _ = ()
+    let const _ = ()
+    let add _ _ = ()
+    let sub _ _ = ()
 end
 
+module Make (Exp: EXP) = struct
+    type t = Exp.t
+    <<Make>>
+end
+@
+
+Compile-time and link-time expressions include different operators.
+Their implementation and the corresponding [[apply]] function is defined
+in two sub-modules, [[LinkTime]] and [[CompileTime]]. 
+
+<<Make>>=
 module LinkTime = struct
-    <<LinkTime>>
+    let add = function
+        | [x;y] -> Exp.add x y
+        | _     -> E.error "wrong number of arguments to link-time add"
+
+    let sub = function
+        | [x;y] -> Exp.sub x y
+        | _     -> E.error "wrong number of arguments to link-time sub"
+
+    let rec apply (op,wl) exps =
+        let f    = match op with
+                   | "add" | "+" -> add
+                   | "sub" | "-" -> sub
+                   | x           -> E.error ("unknown link-time op "^x)
+        in
+            f exps
 end
-
-let empty    = fun _ -> E.Error
-let compile  = CompileTime.eval
-let compile' = CompileTime.eval'
-let link     = LinkTime.eval
 @
 
-% ------------------------------------------------------------------ 
-\subsubsection{Compile-Time Expressions}
-% ------------------------------------------------------------------ 
+Since compile-time values in {\PAL} contain no boolean expression only
+compile-time functions over [[Bits.bits]] are defined.
 
-<<CompileTime>>=
-module StrMap = Map.Make(struct type t=string let compare=compare end)
+<<Make>>=
+module CompileTime = struct
+    let zero = function (* damn lies *)
+        | [x;y] -> Bits.zero (Bits.width x)
+        | _     -> E.error "wrong number of arguments"
 
+    let ops =
+        let ops = 
+            [  "add"    , zero  
+            ;  "+"      , zero  
+            ;  "sub"    , zero  
+            ;  "-"      , zero  
+            ;  "mult"   , zero  
+            ;  "shl"    , zero  
+            ;  "shra"   , zero  
+            ;  "shrl"   , zero  
+            ;  "<<"     , zero  
+            ;  ">>"     , zero  
+            ;  "*"      , zero  
+            ]
+        in
+            List.fold_left (fun map (key,f) -> Str.Map.add key f map)
+                           Str.Map.empty 
+                           ops
 
-let zero = function (* damn lies *)
-    | [RP.Bits(x);RP.Bits(y)] -> E.Ok(RP.Bits(Bits.zero (Bits.width x)))
-    | _                       -> E.Error
+    let apply (op,wl) exps =
+        let f    = try Str.Map.find op ops 
+                   with Not_found -> E.error ("unknown operator "^op)
+        in
+            f exps
+end
+@
 
-let true' = function (* more damn lies *)
-    | [RP.Bits(_);RP.Bits(_)] -> E.Ok(RP.Bool(true))
-    | _                       -> E.Error
+During the evaluation of an expression, results are either tagged as a
+compile-time ([[CT]]) or link-time ([[LT]]) value.
 
-let ops =
-    let ops = 
-        [  "add"    , zero  
-        ;  "+"      , zero  
-        ;  "sub"    , zero  
-        ;  "-"      , zero  
-        ;  "mult"   , zero  
-        ;  "shl"    , zero  
-        ;  "shra"   , zero  
-        ;  "shrl"   , zero  
-        ;  "<<"     , zero  
-        ;  ">>"     , zero  
-        ;  "*"      , zero  
-        ;  "eq"     , true' 
-        ;  "=="     , true' 
-        ;  "<="     , true' 
-        ;  ">="     , true' 
-        ;  ">"      , true' 
-        ;  "<"      , true' 
-        ;  "!="     , true' 
-        ]
+<<Make>>=
+type ('a, 'b) choice    = CT of 'a      (* compile-time *)
+                        | LT of 'b      (* link-time    *)
+
+type value = (Bits.bits, Exp.t) choice
+@
+
+Every compile-time value can be transformed into a linke-time value
+using [[link_time]]. This is done, when the evaluation detects that a
+value is not a compile-time value.
+
+<<Make>>=
+let link_time (v:value) = match v with
+    | LT x -> x
+    | CT x -> Exp.const x     
+@
+
+A function application can either apply a compile-time or a link-time
+function. It must be a link-time function if any of the arguments is a
+link-time value. The [[lift]] function takes a list of value and returns
+a list of compile-time values, if all values are compile-time values, or
+a list of link-time values, if at least on value is a link-time value.
+
+<<Make>>=
+let lift (values: value list) = (* (Bits.bits list, Exp.t list) choice *)
+    let rec choose = function
+        | (cts, [])                     -> CT (List.rev cts)
+        | (cts, (CT x)  :: xs)          -> choose (x::cts, xs)
+        | (cts, ((LT _) :: _ as xs))    -> 
+            LT (List.map Exp.const (List.rev cts) @ List.map link_time xs)
     in
-        List.fold_left 
-                (fun map (key,f) -> StrMap.add key f map)
-                StrMap.empty 
-                ops
+        choose ([], values)
 
-let rec app lookup (op,wl) exps =
-    let f    = try E.Ok(StrMap.find op ops) 
-               with Not_found -> E.error ("unknown operator "^op)  in
-    let args = Error.Raise.list (List.map (exp lookup) exps)       in    
-        Error.seqPair (f,args) (fun (f,args) -> f args)
-@
+let const = function
+    | RP.Bool _      -> E.error "boolean in compile- or link-time expression"
+    | RP.Bits b      -> CT(b)
+    | RP.Link (l,w)  -> LT(Exp.sym l)
+@    
 
-The [[lookup x]] function is allowed to return an expression which
-must be evaluated.  In order to detect circular bindings a new
-[[lookup']] function is created that excludes a binding for [[x]].
-        
-<<CompileTime>>=
-and fetch lookup = function
-    | RP.Var(x,index,w)   -> 
-        let lookup' x' = if x = x' then E.error ("circular defintion of "^x) 
-                         else lookup x' in
-            E.sequence (lookup x) (fun x -> exp lookup' (Rtl.Convert.exp x))
-    | RP.Cell _           -> E.error "memory or register access"
-    | RP.Slice _          -> E.error "slices not supported"
-
-and exp lookup = function
-    | RP.Const c          -> E.Ok(c)
-    | RP.Fetch(loc,width) -> fetch lookup loc 
-    | RP.App(opr,exps)    -> app lookup opr exps
-
-let eval' lookup e =
-    match exp lookup (R.Convert.exp e) with
-    | E.Error 
-    | E.Ok(RP.Link _) -> E.error "not a compile-time value"
-    | E.Ok(x)         -> E.Ok(Rtl.Revert.exp (RP.Const x))    
-
-let eval  lookup e =
-    match exp lookup (R.Convert.exp e) with
-    | E.Error as x         -> x          
-    | E.Ok(RP.Link _)      -> E.error "not a compile-time value"
-    | E.Ok(RP.Bool _)      -> E.error "boolean value, expected bits value"
-    | E.Ok(RP.Bits b)      -> E.Ok(b)
-@
-
+The [[exp]] function evaluates an expression. The point is the
+translation of an application: lifting the list of arguments indicates
+whether the result will be a link- or compile-time value and also which
+[[apply]] function to call.
  
-% ------------------------------------------------------------------ 
-\subsubsection{Link-Time Expressions}
-% ------------------------------------------------------------------ 
+<<Make>>= 
+let rec exp = function
+    | RP.Const c           -> const c 
+    | RP.Fetch (loc,width) -> E.error "register/memory access in constant"
+    | RP.App(op,exps)      -> 
+        match lift (List.map exp exps) with
+        | CT args       -> CT (CompileTime.apply op args)
+        | LT args       -> LT (LinkTime.apply    op args)
 
-<<LinkTime>>=
-let eval lookup exp = Error.Ok(exp) (* damn lie *)
+let link    e = link_time (exp (Rtl.Convert.exp e))
+let compile e = match exp (Rtl.Convert.exp e) with
+    | CT x      -> x
+    | LT _      -> E.error "not a compile-time constant expression"
 @
+

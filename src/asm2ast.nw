@@ -76,7 +76,6 @@ module Make (P: PERSONALITY): sig
 end
     with type instruction = P.instr 
     with type init        = <<init type>>
-    with type offset      = unit
 @
 
 % ------------------------------------------------------------------ 
@@ -378,16 +377,19 @@ let define_const (n,c) b    =
 let define_local (Sym n)    = CurSection(A.Datum(A.Label n))
 @
 
-This implementation does not support relocatable addresses. 
 
 <<module make>>=
-type reladdr = sym
-type offset  = unit
+module RelAddr = struct
+    <<RelAddr>>
+end
 
-let offset i        = unsupported "relocatable addresses unsupported"
-let diff s s        = unsupported "relocatable addresses unsupported"
-let reladdr (n,c) () = (Sym n) 
-@
+<<RelAddr>>=
+type t = A.expr
+
+let sym   l = A.Fetch (A.Var(None,l))   (*XXX ?? *)
+let const k = A.Int(k, Some(A.BitsTy(P.target.Target2.pointersize))) 
+let add x y = A.PrimOp ("add", [(None,x);(None,y)])
+let sub x y = A.PrimOp ("sub", [(None,x);(None,y)])
 
 <<module make>>=
 let instr i = Instruction i
@@ -415,9 +417,9 @@ let value  v =
     let init = A.InitExprs([A.Int(v, Some ty)]) in
         CurSection(A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
 <<module make>>=
-let addr (Sym a)   =
-    let ty   = pointer in
-    let init = A.InitExprs([A.Fetch(A.Var(None,a))]) in
+let addr e  =
+    let ty   = pointer          in
+    let init = A.InitExprs([e]) in
         CurSection(A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
 
 <<module make>>=

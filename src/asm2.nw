@@ -220,18 +220,18 @@ instantly binds it to the current value of the location counter.
 \subsection{Relocatable Addresses}
 % ------------------------------------------------------------------ 
 
-A relocatable address [[reladdr]] $r$ is defined relative to an existing
-address which is taken from a [[symbol]] $s$: $r= s+o$ where $o$ is
-the [[offset]] from the symbol $s$. An offset can be specified
-directly, or taken from the difference of two symbols.
+A relocatable address [[RelAddr.t]] is either a constant of the native
+pointer type, a symbol, or a sum of relocatable addresses.
 
 <<module type s>>=
-type reladdr
-type offset
+module RelAddr: sig     (* matches Rtleval.EXP *)
+    type t
 
-val offset          : int -> offset               (* create offset directly *)
-val diff            : symbol -> symbol -> offset  (* difference *)
-val reladdr         : symbol -> offset -> reladdr
+    val sym:    string    -> t          (* ok? *)
+    val const:  Bits.bits -> t          (* native pointer size! *)
+    val add:    t -> t  -> t
+    val sub:    t -> t  -> t
+end
 @
 
 % ------------------------------------------------------------------ 
@@ -257,7 +257,7 @@ and [[value]] emits a value.  The assembler takes care of the
 <<module type s>>=
 val zeroes          : int -> action
 val value           : Bits.bits -> action
-val addr            : reladdr -> action
+val addr            : RelAddr.t -> action
 @
 
 % ------------------------------------------------------------------ 

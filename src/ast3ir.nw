@@ -275,21 +275,10 @@ For constant evaluation constants are translated to {\rtl} expressions
 which then are evaluated.
 
 <<Make constant evaluation>>=
-let compile_const env target exp =
-    try ( match Rtleval.compile Rtleval.empty (expr env target exp) with
-        | Error.Ok(b) -> b
-        | Error.Error -> assert false
-        )
-    with 
-        Error.ErrorExn m -> assert false
-        
-let link_const env target exp =
-    try ( match Rtleval.link Rtleval.empty (expr env target exp) with
-        | Error.Ok(x) -> x
-        | Error.Error -> assert false
-        )
-    with 
-        Error.ErrorExn m -> assert false
+module Eval = Rtleval.Make(Asm.RelAddr)
+
+let compile_const env target exp = Eval.compile (expr env target exp)
+let link_const    env target exp = Eval.link    (expr env target exp)
 @
 
 % ------------------------------------------------------------------ 
@@ -1075,6 +1064,12 @@ character long string of unprintable characters. We make it printable by
 applying the {\ocaml} escaping rules and [[mangle]]. Note: this symbol
 should be exported but currently it is not.
 
+\begin{quote}\it
+    The memory block for global registers should go into one compilation
+    unit and be imported by all others. Currently we just emit it
+    because we are far from linking several {\PAL} compilation units.
+    This has to be fixed. --CL
+\end{quote}
 
 <<Make translate program>>=
 let translate env target prog =
@@ -1083,7 +1078,6 @@ let translate env target prog =
     let env
        ,area
        ,digest   = globals env target base (F.globals env) in
-                   (*XXX where does area go?*)
     let mangle   = Asm.mangle (F.nam2sym env) in 
     let digest   = mangle (String.escaped digest) in
     let asm      = Asm.init () in
