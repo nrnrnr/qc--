@@ -610,10 +610,13 @@ let rec datum env = function
                         else error ("illegal alignment: " ^ string_of_int a)
     | MemDecl(t,m,i) -> memdecl env (ty t) m i
 
-let rec decl env = function
-    | DeclAt(x,_)    -> Ok ()
-    | LRegisters(rs) -> Ok ()
-    | Stackdata( dd) -> Ok ()               
+let rec stackdatum env = function
+    | DatumAt(x,_)      -> stackdatum env x
+    | Label(n)          -> env
+    | Align(a)          -> if is2power a then env
+                           else error ("illegal alignment: " ^ string_of_int a)
+    | MemDecl(t,m,None) -> let _ = memsize env m in env
+    | MemDecl(t,m,_   ) -> error "no initial values allowed for stackdata"
 
 let checkJumpTarget env x =
     match strip (lookup x env) with
@@ -814,7 +817,7 @@ let registers env rs = foldl register env rs
 let rec decl env = function
     | DeclAt (d, r)     -> decl env d
     | LRegisters rs     -> registers env rs
-    | Stackdata ds      -> env (* XXX *)
+    | Stackdata ds      -> foldl stackdatum env ds
 
 let decls env ds =
     foldl decl env ds
