@@ -425,7 +425,9 @@ The [[L]] argument is the type used internally; the [[R]]~version is
 the same type as promoted for passing to a varargs function.
 <<assign [[block->vars[i]]] from [[ap]]>>=
 #define ASSIGN(L,R) \
-  *(L*) Cmm_FindLocalVar(a, block->vars[i].localnum) = (L) va_arg(ap, R)
+  { L *varp = (L*) Cmm_FindLocalVar(a, block->vars[i].localnum); \
+    if (varp) *varp = (L) va_arg(ap, R); \
+  } 
 switch(block->vars[i].ctype) {
   case CHAR:             ASSIGN (char,               int);                break;
   case DOUBLE:           ASSIGN (double,             double);             break;

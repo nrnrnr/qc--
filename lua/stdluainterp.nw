@@ -254,10 +254,42 @@ let apply f g args = match f with
          ) 
   | v -> fallback "function" g (v :: args)
 
+let indent = ref 0
+let apply' f g args =
+  let str = proj_string g in
+  let ind = String.make (!indent) '-' in
+  Printf.eprintf
+    "%sApply %s(%s)\n" ind (str f) (String.concat ", " (List.map str args));
+  indent := !indent + 2;
+  let answer = try apply f g args with e -> indent := !indent - 2; raise e in
+  indent := !indent - 2;
+  Printf.eprintf "%sResults %s(%s) = \n\t%s\n" ind
+    (str f) (String.concat ", " (List.map str args))
+    (String.concat ", " (List.map str answer));
+  answer
+
 <<projection error fallback>>=
-fallback "error" g [V.String ("cannot convert value " ^ V.to_string v ^ " to " ^ what)]
+fallback "error" g
+         [V.String ("cannot convert value " ^ proj_string g v ^ " to " ^ what)]
 <<argument error fallback>>=
 fallback "error" g [V.String ("Function raised Invalid_argument " ^ msg)]
+<<interp utility functions>>=
+let proj_string g v =
+  let what = match v with
+  | V.Table t ->
+      let l = try (V.list V.value).V.project v with _ -> [] in
+      let not_nil = function V.Nil -> false | _ -> true in
+      if Luahash.population t = List.length l && List.for_all not_nil l then
+        "{ " ^ String.concat ", " (List.map V.to_string l) ^ " }"
+      else
+        V.to_string v
+  | _ -> V.to_string v in
+  let spr = Printf.sprintf in
+  match V.objname g v with
+  | Some (V.Fallback n)     -> spr "%s (fallback %s)" what n
+  | Some (V.Global n)       -> spr "'%s %s'" what n
+  | Some (V.Element (s, v)) -> spr "'%s %s[%s]'" what s (V.to_string v)
+  | None -> what
 @      
 To use a fallback or function call in a situation where we expect
 exactly one result, we adjust the results.

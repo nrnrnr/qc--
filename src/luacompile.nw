@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: lua-mode -*-
 
 % ------------------------------------------------------------------ 
 \section{Lua Compiler Configuration}
@@ -39,12 +40,16 @@ back end phases in the compiler. For notational brevity, we introduce an
 alias here. See \module{backplane.nw} for details.
 <<Lua compiler configuration>>=
 Stages = Stages or {}
-function Stages.nullf () return nil end
+function Stages.nullf (_, proc) return proc, nil end
 
 function Stages.assert(prop)
   return Backplane.stage { name='assert ' .. prop, creates={prop},
                               fn = Stages.nullf}
 end
+
+function Stages.hellof (_, proc) write('reached Stages.hello\n'); return proc, nil end
+
+Stages.hello = Backplane.stage { name='hello', fn = Stages.hellof}
 @
 
 % ------------------------------------------------------------------ 
@@ -72,6 +77,7 @@ function Stages.of_table(fn, tbl, B)
   return B.stage(stage)
 end
 
+_ = [[
 Stages.make_stage( Stages
                  , 'replace_vfp'
                  , {name='replace VFP', uses='no late consts' }
@@ -83,6 +89,7 @@ function Placevar.context(placer, targetname)
                          , creates='no vars'
                          })
 end
+]]
 @ 
 <<add every key-value pair in [[tbl]] to [[stage]]>>=
 local k, v = next(tbl, nil)
@@ -553,7 +560,9 @@ backend and an assembler.
 Opt = Opt and error('Opt not empty') or {}
 
 function verbose(s, a, b, c, d, e, f, g, h)
-      print(s,a,b,c,d,e,f,g,h)
+  if Options.verbose > 0 then
+    write(s,a or '',b or '',c or '',d or '',e or '',f or '',g or '',h or '')
+  end
 end
 
 function Opt.verb(stage) -- needs more work (want verbosity for each stage)
@@ -565,10 +574,11 @@ function Opt.verb(stage) -- needs more work (want verbosity for each stage)
 end  
 
 function Opt.standard(backend, asm, B)
+  write('entered Opt.standard\n')
   if not B then error("Opt.standard called without backplane argument") end
   Stages.null = B.stage {name="empty stage", fn=Stages.nullf}
   local assemble  = Driver.proc_assembler(asm) 
-	local emit_data = nil
+  local emit_data = nil
   if backend.emit_data then
     emit_data = Opt.verb(B.stage { name = "emit_data", fn = backend.emit_data(asm)})
   end
@@ -581,7 +591,6 @@ function Opt.standard(backend, asm, B)
     , Opt.verb(Optimize.simplify_exps) or Stages.null
     , Opt.verb(backend.preopt)     or Stages.null
     , Opt.verb(backend.pic)        or Stages.null
-    ----  , print_cfg -- diagnostics for Paul
     , Opt.verb(backend.expand)     or Stages.null
            --- Optimize.validate could be appropriate here, provided the recognizer
            --- can deal with temporaries...
@@ -596,8 +605,10 @@ function Opt.standard(backend, asm, B)
   return x
 end
 
+_ = [[
 Liveness.liveness =
   Backplane.stage { name='liveness', creates='liveness', fn = Liveness.livenessfn }
+]]
 
 Backplane.register ('no dead assignments', {
   'The program does not contain any dead assignments.',
@@ -609,10 +620,11 @@ Backplane.register ('proper pic', {
   'What is this second line for.',
 })
 
+_ = [[
 Optimize.dead = 
   Backplane.stage { name='dead', creates={'no dead assignments'},
                        uses='liveness', fn = Optimize.deadfn }
-
+]]
 @
 % ------------------------------------------------------------------ 
 \subsection{Graph-Coloring Register Allocator}
@@ -620,7 +632,9 @@ Optimize.dead =
 
 Defined in file \texttt{colorgraph.nw}.
 <<Lua compiler configuration>>=
+_ = [[
 <<Lua startup code for [[Colorgraph]] module>>
+]]
 @
 
 % ------------------------------------------------------------------ 
@@ -630,8 +644,10 @@ Defined in file \texttt{colorgraph.nw}.
 All register allocators are made available in the table [[Ralloc]].
 <<Lua compiler configuration>>=
 Ralloc           = Ralloc and error('Ralloc not empty') or {}
+_ = [[
 Ralloc.color     = ColorGraph.color
 Ralloc.dls       = DLS.dls
+]]
 @
 % ------------------------------------------------------------------ 
 \subsection{Compiler}
@@ -655,6 +671,8 @@ function Compile.file(backend, emitglobals, file, out)
                 , action = Opt.standard(backend, asm, Backplane) 
                 , B = Backplane
                 }
+--    Inspect.show('target = ', backend.target)
+--    Inspect.show('opt = ', opt)
     Driver.compile(backend.target, opt, emitglobals, ast, asm,
                    Options.validate, Options.swap)
     if backend.emit then backend.emit(asm) end
@@ -666,8 +684,15 @@ and a procedure, then runs the given [[self.action]] in the
 optimization backplane.
 <<Lua compiler configuration>>=
 function Compile.run_optimizer(self,proc)
+--  write('hello: Compile.run_optimizer\n')
     local B = self.B or error("missing backplane")
-    -- verbose('running Compile.run_optimizer with ', whichB(B), '\n')
+--    write('got B\n')
+--    verbose('running Compile.run_optimizer with backplane ', tostring(B),
+--            ' and proc ', tostring(proc), '\n')
+--    verbose('action is ', tostring(self.action), '\n')
+--    verbose('type of proc is ', type(proc), '\n')
+
+    -- disastrous lua bug: local proc,changed = B.run(Stages.hello, proc)
     B.run(self.action, proc)
 end    
 @
@@ -710,6 +735,8 @@ end
 -- Dummy backends
 --
 
+Optimize = Optimize or { }; _ = [[ ]]
+
 Backend.dummy32l        = Backend.make  { target = Targets.dummy32l 
                                         , rmvfp  = Backplane.seq
 						      { Stages.replace_vfp,
@@ -726,6 +753,8 @@ Backend.dummy           = Backend.dummy32l  -- alias
 -- Interpreter backends, for new and old backplane
 --
 
+_ = [[
+
 Backend.interp          = Backend.make  { target = Targets.interp
                                         , placevars = Placevar.replace_globals
                                         , asm    = Asm.interp32l 
@@ -737,11 +766,13 @@ Backend.debug_interp    = Backend.make  { target = Targets.interp
                                         }
 Backend.interp.compile = Compile.file
 Backend.debug_interp.compile = Compile.file
+]]
 
 --
 -- x86 backends
 --
 
+_ = [[
 Backend.x86 =
   { target    = Targets.x86
   , intwiden  = Backplane.seq
@@ -898,6 +929,7 @@ Backend.sparc =
   , emit_data  = Runtime.emit_data
   , compile    = Compile.file
   }
+]]
 @
 
 % ------------------------------------------------------------------ 
@@ -912,12 +944,14 @@ even though they all come together in [[qc--.lua]].
 <<Lua compiler configuration>>=
 <<calling convention utilities>>
 
+_ = [[
 <<x86 calling convention automata in Lua>>
 <<Alpha calling convention automata in Lua>>
 <<MIPS calling convention automata in Lua>>
 <<PPC calling convention automata in Lua>>
 <<IA64 calling convention automata in Lua>>
 <<SPARC calling convention automata in Lua>>
+]]
 @ 
 <<calling convention utilities>>=
 Util = Util or {}

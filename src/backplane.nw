@@ -329,10 +329,10 @@ let rec runProgram arg proc = function
   | Ignore action ->
       let proc, _ = runProgram arg proc action in proc, false
   | Single {fn = func; name = name} -> 
-    begin
-      Debug.eprintf "backplane" "Backplane running stage %s\n" name;
-      func arg proc
-    end
+      Debug.eprintf "backplane" "Backplane running stage '%s'\n" name;
+      let ans = func arg proc in
+      Debug.eprintf "backplane" "Backplane stage '%s' completed\n" name;
+      ans
   | Share (param, _, action) -> runProgram param proc action
 
 let _ = Debug.register "backplane" "print each stage of backplane as run"
@@ -557,8 +557,9 @@ errors, we run the program.
 exception MismatchedParameters of string
 
 let run main proc =
+  Debug.eprintf "backplane" "checking backplane action\n";
   match stateErrors main with
-  | []   -> runProgram V.Nil proc main
+  | []   -> Debug.eprintf "backplane" "running action\n"; runProgram V.Nil proc main
   | errs -> let msg = String.concat "\n" (List.map error_string errs) in
             let pgm = printAction "  " main in
             impossf "incorrect backplane configuration:\n%s\n  ... program is:\n    %s"
@@ -621,7 +622,7 @@ that stage.
 module T : Lua.Lib.USERTYPE with type 'a t = 'a action = struct
     type 'a t = 'a action
     let tname = Arg.lua_type_name
-    let eq veq x y = x =*= y  (* flagrantly wrong *)
+    let eq veq x y = false (* safe, if flagrantly wrong *)
     let to_string vs a = printAction (makeIndent 0) a
 end
 
