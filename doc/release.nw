@@ -50,13 +50,31 @@ This document is not complete by itself;
 you also need to read the man page for \texttt{qc--}.
 
 
-\section{Portability}
+\section{Portability (target-specific features)}
 
 \label{sec:portability}
 
-As of release 20040601, Quick~{\PAL} supports only one back end, for
+As of release 20041004, Quick~{\PAL} provides some target-specific
+information at run time; to get this information try
+\begin{verbatim}
+  qc-- -e 'Target.explain()'
+\end{verbatim}
+It is also possible to pass a particular back end, e.g.,
+\begin{verbatim}
+  qc-- -e 'Target.explain(Backend.ppc)'
+\end{verbatim}
+If you want to process this information in a program, you can get it
+in different form by using Lua~2.5, which is the scripting language of the
+Quick~{\PAL} compiler.
+
+In addition to the information emitted by the compiler, we provide the
+further information below.
+
+\subsection {Intel x86}
+As of release 20041004, Quick~{\PAL} supports only one back end, for
 Intel x86 running Linux.
-This back end has the following properties:
+(Other back ends are in the late experimental stages.)
+The x86 back end has the following properties:
 \begin{description}
 \item[Supported data types:] 
 Quick~{\PAL} supports these types:
@@ -93,8 +111,15 @@ for memory references, variables,
 and parameters, but the only computation available is assignment,
 which translates to block copy.
 \item
-The types [[bits2]] is supported for a reference to the floating-point
+The type [[bits2]] is supported for a reference to the floating-point
 rounding mode. 
+\item
+Variables of type [[bits1]] are supported for addition and subtraction
+with carry and borrow
+operations.
+They can also be sign- or zero-extended out to 32~bits,
+and similarly, one can use [[%lobits1]] to extract a bit to feed into
+carry, if desired.
 \end{itemize}
 \item[Target metrics:]
 The native word and pointer types are [[bits32]].
@@ -107,11 +132,10 @@ target byteorder little
 \end{verbatim}
 All but byte order can be defaulted.
 \item[Primitive operators:]
-Release 20040601 supports essentially the same primitives as are in~C.
-Overflow-checking primitives such as [[%add_overflows]] are also
-implemented. 
-Signed division supports [[%quot]] and [[%rem]], not [[%div]] and
-[[%mod]]. 
+Release 20041004 supports almost all the primitives in the {\PAL}
+specification, but not all have yet been tested.
+For details, run \verb+qc-- -e 'Target.explain()'+.
+
 Integer primitives are supported at 32~bits.
 Floating-point primitives are nominally supported at 32, 64, and
 80~bits, but in fact all floating-point operations are widened to

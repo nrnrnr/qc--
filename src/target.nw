@@ -298,7 +298,7 @@ The capability record says what source code a back end promises to handle.
 capabilities: capabilities;
 <<auxiliary types used to define type [[t]]>>=
 type capabilities = {
-    ops         : Rtl.opr   list;  (* operators that can be used *)
+    operators   : Rtl.opr   list;  (* operators that can be used *)
     literals    : Rtl.width list;  (* literals that can be used *)
     memory      : Rtl.width list;  (* memory refs that can be used *)
     block_copy  : bool;            (* OK to copy large variables, large refs? *)
@@ -333,7 +333,7 @@ module RU = Rtlutil
 <<auxiliary types used to define type [[t]]>>
 <<type t>>
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
-let incapable = { ops = []; literals = []; memory = []; itemps = []; ftemps = [];
+let incapable = { operators = []; literals = []; memory = []; itemps = []; ftemps = [];
                   block_copy = false; iwiden = false; fwiden = false; }
 @
 <<target.ml>>=
@@ -383,3 +383,130 @@ let fits t space =
   try
     space_fits (List.find (fun s -> RU.Eq.space s.Space.space space) t.spaces)
   with Not_found -> assert false
+@ 
+\subsection{Lua support for exposing target capabilities}
+
+Our main goal here is to explain the target informally to a front-end writer.
+<<Lua utility functions written in Lua>>=
+function w (...)  -- a valuable abbreviation
+  write(Util.call(format, arg))
+end
+
+function Target.explain(t)
+  t = t or backend or error('default back end did not get set')
+  if type(t) == 'table' then t = t.target end
+  if type(t) ~= 'userdata' then
+    error(tostring(t) .. ' is not a target')
+  end
+  local cap = Target.capabilities(t)
+  local name = Target.name(t)
+
+  local ops = cap.operators
+  w('==== Advertised capabilities of target %s ====\n\n', name)
+
+  w('target %s supports memory references in these sizes:\n', name)
+  Target.showtypes('  %-6s[...]\n', cap.memory, '\n')
+
+  w('target %s supports literal bit vectors in these sizes:\n', name)
+  Target.showtypes('  nnnn :: %-6s\n', cap.literals, '\n')
+
+  w('target %s can compute with C-- variables declared at these sizes:\n', name)
+  Target.showtypes('  %-6s n;    // integer variable\n', cap.itemps);  
+  Target.showtypes('  %-6s x;    // floating-point variable\n', cap.ftemps, '\n');  
+
+  w('target %s implements these operators:\n', name)
+  local defined = { }
+  local i = 1
+  while ops[i] do
+    defined[ops[i].name] = 1
+    Target.showop(ops[i])
+    i = i + 1
+  end
+  w('\n')
+
+  w('target %s does *not* implement these operators:\n', name)
+  i = 1
+  local allops = Rtlop.opnames
+  while allops[i] do
+    if not defined[allops[i]] then
+      write(format('  %%%s\n', allops[i]))
+    end
+    i = i + 1
+  end
+
+  if cap.iwiden then Target.widen_ok (name, 'integer')        end
+  if cap.fwiden then Target.widen_ok (name, 'floating-point') end
+  if cap.block_copy then <<announce block-copy support>> end
+end
+@ 
+These utility functions help us emit repetitive messages.
+<<Lua utility functions written in Lua>>=
+function Target.showtypes(fmt, ts, s)
+  local i = 1
+  while ts[i] do
+    w(fmt, Target.showty(ts[i]))
+    i = i + 1
+  end
+  w(s or '')
+end
+<<Lua utility functions written in Lua>>=
+function Target.widen_ok(name, kind)
+  w([[
+The %s back end includes a 'widener' that allows you to declare %s
+variables and write %s computations at widths smaller than the
+natural widths shown above.  Your code is automatically rewritten to use
+the natural width of the machine.
+]], name, kind, kind)
+end
+<<announce block-copy support>>=
+w([[
+The %s back end supports block copies.  This means you can declare
+very wide variables and very wide memory references, but the only
+thing you can do with them is copy the bits from one place to another.
+For example, here is a mighty big swap operation:
+  bits128 n, m;
+  n = bits128[p];
+  m = bits128[p+16];
+  bits128[p]    = m;
+  bits128[p+16] = n;
+It should also be possible to pass such large variables as parameters
+and return them as results.  Attempts to do arithmetic or other operations
+very wide variables are doomed to failure.
+]], name)
+@ 
+Return the source-language representation of a type.
+<<Lua utility functions written in Lua>>=
+function Target.showty(t)
+  if type(t) == 'number' then
+    return 'bits' .. t
+  else
+    return t
+  end
+end
+@ 
+To show an operator, we show its argument and result types.
+If the argument is a width changer, we need to make the result width
+part of its name, so we build the set of width changers.
+<<Lua utility functions written in Lua>>=
+Target.width_changers =
+  Util.set { 'NaN', 'sx', 'zx', 'lobits', 'f2f', 'f2i', 'i2f' }
+
+function Target.showop(op)
+  local result, args = Rtlop.Types.mono(op)
+  if result then
+    local ty = Target.showty
+    w('  %-6s %%%s', ty(result), op.name)
+    if Target.width_changers[op.name] then w(result) end
+    w('(')
+    local i = 1
+    local pfx = ""
+    while args[i] do
+      w('%s%s', pfx, ty(args[i]))
+      pfx = ', '
+      i = i + 1
+    end
+    w(')\n')
+  else
+    w('  nonstandard operator %%%s\n', op.name)
+  end
+end

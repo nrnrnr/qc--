@@ -64,6 +64,12 @@ as values within it.
 
 Concatenates the contents of two tables, treating them as lists.
 
+\item [[Util.set(table)]]
+
+Treats the table as a list and returns a table in which each element
+of the list appears as a key (the associated value is the list index,
+but its main property is to be non-nil).
+
 \end{itemize}
 
 We also overload the [[..]] operator (Lua string concatenation operator)
@@ -228,7 +234,6 @@ let files_nonwhite_equivalent f1 f2 =
     cmp_char()
   with _ -> false
 @
-
 The code below is actually implemented in Lua.  We stick this code into
 [[qc--.lua]] to install it.  This might change in the future if we decide
 that it would be better to implement the functions in OCaml.
@@ -287,3 +292,13 @@ end
 
 Util.old_concat_fallback = setfallback("concat", Util.concat_fallback)
 @ 
+<<Lua utility functions written in Lua>>=
+function Util.set(t)
+  local u = { }
+  local i = 1
+  while t[i] do
+    u[t[i]] = i
+    i = i + 1
+  end
+  return u
+end

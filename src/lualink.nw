@@ -219,68 +219,96 @@ HOW ARE THE DIFFERENT ASSEMBLERS [[asm]], [[vasm]], [[new_asm]] SUPPOSED TO
 BE USED?  SOME DOCUMENTATION WOULD BE WELCOME. --CL
 <<export goodies to Lua>>=
 module Map = struct
-    let compose ~lo ~hi =
-       { V.embed   = (fun x -> hi.V.embed (lo.V.embed x))
-       ; V.project = (fun x -> lo.V.project (hi.V.project x))
-       ; V.is      = (fun x -> hi.V.is x && lo.V.is (hi.V.project x))
-       } 
-    let error t =
-      { V.embed = (function Error.Error -> V.Nil | Error.Ok v -> t.V.embed v);
-        V.project = (function V.Nil -> Error.Error | v -> Error.Ok (t.V.project v));
-        V.is = (function V.Nil -> true | v -> t.V.is v);
-      }
-        
-    let ast       = AstV.makemap  V.userdata V.projection
-    let proc      = ProcV.makemap V.userdata V.projection
-    let vasm      = AsmV.makemap  V.userdata V.projection
-      (* embeds and projects a V.value assembler *)
-    let asm' proc =
-      compose { V.embed   = Asm.map proc.V.project
-              ; V.project = Asm.map proc.V.embed 
-              ; V.is      = (fun _ -> true) } (* here's a hopeful notion *)
-        vasm
-    let asm = asm' proc
-    let venv = EnvV.makemap    V.userdata V.projection
-    let env' proc =
-      compose { V.embed   = Fenv.Clean.map proc.V.project
-              ; V.project = Fenv.Clean.map proc.V.embed 
-              ; V.is      = (fun _ -> true) } (* and more hope *)
-      venv
-    let env = env' proc
+  let compose ~lo ~hi =
+     { V.embed   = (fun x -> hi.V.embed (lo.V.embed x))
+     ; V.project = (fun x -> lo.V.project (hi.V.project x))
+     ; V.is      = (fun x -> hi.V.is x && lo.V.is (hi.V.project x))
+     } 
+  let error t =
+    { V.embed = (function Error.Error -> V.Nil | Error.Ok v -> t.V.embed v);
+      V.project = (function V.Nil -> Error.Error | v -> Error.Ok (t.V.project v));
+      V.is = (function V.Nil -> true | v -> t.V.is v);
+    }
+      
+  let ast       = AstV.makemap  V.userdata V.projection
+  let proc      = ProcV.makemap V.userdata V.projection
+  let vasm      = AsmV.makemap  V.userdata V.projection
+    (* embeds and projects a V.value assembler *)
+  let asm' proc =
+    compose { V.embed   = Asm.map proc.V.project
+            ; V.project = Asm.map proc.V.embed 
+            ; V.is      = (fun _ -> true) } (* here's a hopeful notion *)
+      vasm
+  let asm = asm' proc
+  let venv = EnvV.makemap    V.userdata V.projection
+  let env' proc =
+    compose { V.embed   = Fenv.Clean.map proc.V.project
+            ; V.project = Fenv.Clean.map proc.V.embed 
+            ; V.is      = (fun _ -> true) } (* and more hope *)
+    venv
+  let env = env' proc
 
-    let doc           = DocV.makemap       V.userdata V.projection
-    let target        = TargetV.makemap V.userdata V.projection
-    let capabilities   =
-      let module T = Target in
-      let table l = V.Table (V.Table.of_list l) in
-      let ty = { V.embed = (function Types.Bits n -> V.int.V.embed n
-                                   | Types.Bool -> V.string.V.embed "bool");
-                 V.project = (fun v -> Types.Bits (V.int.V.project v)); (* lies *)
-                 V.is = (fun _ -> true); (* more lies *)
-               } in
-      let noproj _ = Impossible.unimp "project back-end capabilities" in
-      let eop o =
-        let (s, ws) = Rtl.Dn.opr o in
-        table ["name",   V.string.V.embed s;
-               "widths", (V.list V.int).V.embed ws;] in
-      let op = { V.embed = eop; V.project = noproj; V.is = (fun _ -> true); } in
-      let embed cap =
-        table [ "literals", (V.list V.int).V.embed cap.T.literals;
-                "ops",      (V.list op)   .V.embed cap.T.ops;
-                "memory",   (V.list V.int).V.embed cap.T.memory;
-              ] in
-      { V.embed = embed; V.project = noproj; V.is = (fun _ -> true); }
-    let optimize proc = V.closure (proc **->> V.unit)
-    let channel       = InOutV.makemap     V.userdata V.projection
-    let inchan        = Luaiolib.in'       channel    V.projection
-    let outchan       = Luaiolib.out       channel    V.projection
-    let stage proc    = V.func (V.value **-> proc **->> V.bool)
-    let block         = BlockV.makemap     V.userdata V.projection
-    let placement     = V.enum "placement" ["high", Block.High; "low", Block.Low]
-    let automaton     = AutomatonV.makemap V.userdata V.projection
+  let doc           = DocV.makemap       V.userdata V.projection
+  let target        = TargetV.makemap V.userdata V.projection
 
-    let ccstage       = CCStageV.makemap    V.userdata V.projection
-    let counterenv    = CounterenvV.makemap V.userdata V.projection
+  let popr = (* RTL operator, private representation *)
+    let eop (s, ws) =
+      V.Table (V.Table.of_list ["name",   V.string.V.embed s;
+                                "widths", (V.list V.int).V.embed ws;]) in
+    let proj v = match v with
+    | V.Table t ->
+        let name = V.Table.find t (V.String "name")   in
+        let ws   = V.Table.find t (V.String "widths") in
+        let name = V.string.V.project name in
+        let ws   = (V.default [] (V.list V.int)).V.project ws in
+        (name, ws)
+    | _ -> raise (V.Projection (v, "Rtl.opr")) in
+    { V.embed = eop; V.project = proj;
+      V.is = (fun v -> try (ignore (proj v); true) with _ -> false); }
+          
+  let opr =
+    compose { V.embed = Rtl.Dn.opr; V.project = Rtl.Up.opr; V.is = (fun _ -> true); }
+            popr
+    
+  let ty = { V.embed = (function Types.Bits n -> V.int.V.embed n
+                               | Types.Bool -> V.string.V.embed "bool");
+             V.project = (fun v -> Types.Bits (V.int.V.project v)); (* lies *)
+             V.is = (fun _ -> true); (* more lies *)
+           } 
+
+  let monotype_resultvs (args, result) =
+    [ty.V.embed result; (V.list ty).V.embed args] 
+  let monotype_results =
+    V.results monotype_resultvs (fun _ -> Impossible.unimp "project monotype") 
+
+  let capabilities   =
+    let module T = Target in
+    let table l = V.Table (V.Table.of_list l) in
+    let noproj _ = Impossible.unimp "project back-end capabilities" in
+    let sort l = List.sort Pervasives.compare l in
+    let embed cap =
+      let e f x = f.V.embed x in
+      table [ "literals",   e (V.list V.int) cap.T.literals;
+              "operators",  e (V.list opr)   (sort cap.T.operators);
+              "memory",     e (V.list V.int) cap.T.memory;
+              "block_copy", e V.bool         cap.T.block_copy;
+              "iwiden",     e V.bool         cap.T.iwiden;
+              "fwiden",     e V.bool         cap.T.fwiden;
+              "itemps",     e (V.list V.int) cap.T.itemps;
+              "ftemps",     e (V.list V.int) cap.T.ftemps;
+            ] in
+    { V.embed = embed; V.project = noproj; V.is = (fun _ -> true); }
+  let optimize proc = V.closure (proc **->> V.unit)
+  let channel       = InOutV.makemap     V.userdata V.projection
+  let inchan        = Luaiolib.in'       channel    V.projection
+  let outchan       = Luaiolib.out       channel    V.projection
+  let stage proc    = V.func (V.value **-> proc **->> V.bool)
+  let block         = BlockV.makemap     V.userdata V.projection
+  let placement     = V.enum "placement" ["high", Block.High; "low", Block.Low]
+  let automaton     = AutomatonV.makemap V.userdata V.projection
+
+  let ccstage       = CCStageV.makemap    V.userdata V.projection
+  let counterenv    = CounterenvV.makemap V.userdata V.projection
 end
 @ 
 We also need to import Lua projection/embedding pairs defined in other modules.
@@ -592,7 +620,12 @@ C.register_module "Rtlop"
   [ "Emit", (V.record V.value).V.embed
       [ "creators", V.efunc (V.unit **->> V.unit) Rtlop.Emit.creators;
       ];
-    "opnames", (V.list V.string).V.embed Rtlop.opnames;
+    "Types", (V.record V.value).V.embed
+      [ "mono", V.efunc (Map.opr **-> V.resultvs)
+          (fun t -> try Map.monotype_resultvs (Rtlop.Types.mono t)
+                    with Not_found -> [V.Nil])
+      ];
+    "opnames", (V.list V.string).V.embed (List.sort Pervasives.compare Rtlop.opnames);
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Runtime"
@@ -632,6 +665,7 @@ C.register_module "Stages"
 C.register_module "Target"
   [ "capabilities", V.efunc (Map.target **->> Map.capabilities)
                                  (fun (t:Ast2ir.tgt) -> t.Target.capabilities);
+    "name",         V.efunc (Map.target **->> V.string) (fun t -> t.Target.name);
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Targets"
