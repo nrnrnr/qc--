@@ -172,12 +172,17 @@ Here are some important locations.
 <<x86 postexpander>>=
 let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
 let eax_reg = ('r', 0, 32)
-let eax = temploc eax_reg
-let edx_reg = ('r', 2, 32)
-let edx = temploc edx_reg
+let eax     = temploc eax_reg
 let ecx_reg = ('r', 1, 32)
-let esp = temploc ('r', 4, 32)
-let espreg = ('r', 4, 32)
+let ecx     = temploc ecx_reg
+let edx_reg = ('r', 2, 32)
+let edx     = temploc edx_reg
+let esp_reg = ('r', 4, 32)
+let esp     = temploc ('r', 4, 32)
+let esi_reg = ('r', 6, 32)
+let esi     = temploc esi_reg
+let edi_reg = ('r', 7, 32)
+let edi     = temploc edi_reg
 
 let upint32 n = Up.const (RP.Bits(Bits.U.of_int n 32))
 let upint8  n = Up.const (RP.Bits(Bits.U.of_int n 8))
@@ -443,7 +448,7 @@ let don't_touch_me =
   | [ RP.Store (pc', _, _)
     ; RP.Store (RP.Reg sp, RP.App (("add", [32]), [RP.Fetch (RP.Reg sp2, _);
                                                       RP.Const (RP.Bits b)]), _)] ->
-      pc' = lowpc & sp = espreg & sp2 = espreg & Bits.S.to_int b = 4
+      pc' = lowpc & sp = esp_reg & sp2 = esp_reg & Bits.S.to_int b = 4
   | _ -> false
 @
 To implement the comparisons, we define new operators that are private
@@ -720,6 +725,12 @@ let bc_stack op ~tgt = match op with
 | _ ->
     Impossible.impossible "strange operator in x86 bc_stack"
 @ 
+The general block copy is implemented with the ``x86_repmovs''
+operator which translates to and [[rep movs]] in the recognizer. This
+implementation assumes that the direction flag is set properly. The
+emitted code could be improved by using [[movsw]] or [[movsd]] if the
+number of bytes to copy is a multiple of 2 or 4 respectively. However,
+I am not sure where this optimization should take place. -PG
 <<x86 postexpander>>=
 let i2f_64_80 = ("i2f", [64; 80])
 let f2i_80_64 = ("f2i", [80; 64])
@@ -733,8 +744,27 @@ let block_copy ~dst dassn ~src sassn w =
       store dst t dassn @ load t src sassn
   | 64 ->
       store_pop_cvt f2i_80_64 64 dst dassn @ push_cvt i2f_64_80 64 src sassn
-  | _ ->
-      Impossible.unimp "general block copies on x86"
+  | n ->
+      let bytes = n / 8 in
+      let const n = R.bits (Bits.S.of_int n 32) 32 in
+      let sub r c = R.app (R.opr "sub" [32]) [R.fetch r 32; c] in
+      let repmovs =
+        R.par [ R.store ecx (const 0) 32
+              ; R.store esi (sub esi (const bytes)) 32
+              ; R.store edi (sub edi (const bytes)) 32
+              ; R.store ecx (R.app (R.opr "x86_repmovs" [32])
+                               [ R.fetch esi 32
+                               ; R.fetch edi 32
+                               ; R.fetch ecx 32
+                               ]) 32
+              ]
+      in
+      List.rev
+        [ R.store esi src 32
+        ; R.store edi dst 32
+        ; R.store ecx (const bytes) 32
+        ; repmovs
+        ]
 @
 \subsection{Building the target}
 With the postexpander in place, we can build a target.

@@ -293,6 +293,16 @@ inst : Store(dst:eaddrl, Lobits(Fetch(Reg('r', n, rw:w), fw:w), lw:w), nw:w)
 
 inst : Store(dst:regl, Lobits(src:mem, sw:w), nw:w)
   {: cat ["mov"; suffix nw; " "; src; ","; dst] :}
+
+-- block copy
+inst : Par(Store(ecx1:ecx, n0:const, w1:w),
+           Par(Llr(esi1:esi, "sub", n1:const, w2:w),
+           Par(Llr(edi1:edi, "sub", n2:const, w3:w),
+           Store(ecx2:ecx,
+                 Repmovs(Fetch(esi,w4:w), Fetch(edi,w5:w), Fetch(ecx,w6:w)),
+                 w7:w))))
+  {: "rep movsb" :}
+
 @ 
 \paragraph{Simple arithmetic}
 These are the well-behaved instructions, which don't require hairy
@@ -483,6 +493,9 @@ inst : Par(Store(fpccl, Fcmp(fpstacktop, fpstack1), w), fppop2)
 @ 
 <<rules>>=
 eax : Reg('r', n, w) [{: guard (n = 0 && w = 32):}]  {: () :}
+ecx : Reg('r', n, w) [{: guard (n = 1 && w = 32):}]  {: () :}
+esi : Reg('r', n, w) [{: guard (n = 6 && w = 32):}]  {: () :}
+edi : Reg('r', n, w) [{: guard (n = 7 && w = 32):}]  {: () :}
 ax  : Slice(w, lsb:n, eax) [{: guard (w = 16 && lsb = 0):}]  {: "%ax" :}
 ah  : Slice(w, lsb:n, eax) [{: guard (w = 8  && lsb = 8):}]  {: "%ah" :}
 ahval : BitExtract(eight, Fetch(eax, fw:w), w) [{: guard (w = 8) :}] {: "%ah" :}
@@ -550,6 +563,9 @@ any : Store (dst:any, src:any, w)
  {: "Store(" ^ dst ^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
 any : Kill(any) {: "Kill(" ^ any ^ ")" :}
 
+any : Repmovs(esi:any, edi:any, ecx:any)
+ {: "Repmovs(" ^ esi ^ "," ^ edi ^ "," ^ ecx ^ ")" :}
+
 any : Guarded(guard:any, any) {: "Guarded(" ^ guard ^ "," ^ any ^ ")" :}
 any : Par(l:any, r:any) {: "Par(" ^ l ^ "," ^ r ^ ")" :}
 any : Goto(any) {: "Goto(" ^ any ^ ")" :}
@@ -607,6 +623,7 @@ constructor for each operator.
 | RP.App(("lobits", [w;n]), [x])   -> conLobits (exp x) n
 | RP.App(("x86_subflags", [w]), [x; y]) -> conX86_subflags (exp x) (exp y)
 | RP.App(("x86_ah2flags", []), [x]) -> conAh2flags (exp x)
+| RP.App(("x86_repmovs",   [w]), [x;y;z]) -> conRepmovs (exp x) (exp y) (exp z)
 | RP.App(("bitInsert", [w; n]), [lsb; dst; src]) ->
     conBitInsert (exp lsb) (exp dst) (exp src)
 | RP.App(("bitExtract", [w; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
