@@ -177,12 +177,13 @@ module type S = sig
 end
 @ 
 A postexpander may need to allocate a temporary or a slot in the stack
-frame, or it
-may need to emit initialized data (e.g., for a floating-point load).
-It keeps these allocators in mutable state (once per procedure).
-At present, only allocation of a temporary is supported.
+frame, or it may need to emit initialized data (e.g., for a
+floating-point load). It keeps these allocators in mutable state (once
+per procedure). At present, only allocation of a temporary or a stack
+slot is supported.
 <<operations that enable the postexpander to allocate>>=
-val remember_allocator : Talloc.Multiple.t -> unit 
+val remember_allocator : Talloc.Multiple.t -> unit
+val remember_slot_allocator : Automaton.t -> unit
 @ 
 \subsubsection{Postexpander operations for register machines}
 We provide basic load and store.
@@ -660,6 +661,7 @@ let expand ({Proc.cfg = cfg} as proc) =
   <<flow-graph functions>>
   <<definitions of [[to_temp]], [[rtl]] and all the other generic expander functions>>
   (Post.remember_allocator proc.Proc.temps;
+   Post.remember_slot_allocator proc.Proc.priv;
   (expand_cbranch,rtl))
 @ 
 To find the context for the operands of a comparison, I use the

@@ -165,6 +165,15 @@ let get_talloc () = match !talloc with
   | None   -> Impossible.impossible "Temp allocator not registered with postexpander"
 let remember_allocator ta = talloc := Some ta
 let talloc space = Talloc.Multiple.reg space (get_talloc ())
+
+let salloc = ref None
+let get_salloc () = match !salloc with
+  | Some s -> s
+  | None   -> Impossible.impossible "Slot allocator not registered with postexpander"
+let remember_slot_allocator sa = salloc := Some sa
+let salloc w = A.allocate (get_salloc()) w ""
+let sfetch aloc w = A.fetch aloc w
+let sstore aloc exp w = A.store aloc exp w
 @ 
 Contexts.
 <<ppc postexpander>>=
@@ -207,12 +216,12 @@ allocator about register 0, so we don't have to worry about that here.
 <<ppc postexpander>>=
 let load ~dst ~addr assn =
   let w = twidth dst in
-  assert (w = 1 || w = 2 || w = 4 || w = 8);
+  assert (w = 8 || w = 16 || w = 32 || w = 64);
   [R.store (tloc dst) (memval assn w addr) w]
 
 let store ~addr ~src assn =
   let w = twidth src in
-  assert (w = 1 || w = 2 || w = 4 || w = 8);
+  assert (w = 8 || w = 16 || w = 32 || w = 64);
   [R.store (mem assn w addr) (tval src) w]
 @ 
 The [[xload]] and [[xstore]] functions apply an operator to an
@@ -463,12 +472,7 @@ function PPC.f(i) return({ space = "f", index = i, width = 64 }) end
 
 PPC.overflow = A.overflow { growth = "down", max_alignment = 4 }
 @ 
-For the C convention, the overflow block should contain space
-corresponding to all of the parameters allocated into registers. I
-want something like regs_by_bits for the overflow block. The Mips
-backend uses a postprocess stage to handle something similar (see
-mipscall.nw). In absence of a nicer solution, something like this will
-have to be employed here.
+The C calling convention.
 <<PPC calling convention automata in Lua>>=
 PPC.cc["C"].call =
   { A.widen(32, "multiple")
