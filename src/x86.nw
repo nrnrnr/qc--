@@ -461,6 +461,8 @@ let cmm_convention =
   X86call.cmm    (fun ra -> pop_with (fun ra -> store pc ra)) (F.cutto PX.esp)
 let notail_convention =
   X86call.notail (fun ra -> pop_with (fun ra -> store pc ra)) (F.cutto PX.esp)
+let c'_convention = (* uses Callspec implementation *)
+  X86call.c'     (fun ra -> pop_with (fun ra -> store pc ra)) (F.cutto PX.esp)
 
 module A = Automaton
 let ( **> ) f x = f x
@@ -500,6 +502,7 @@ let target =
 
   ; T.cc = (function "C" | "c" -> c_convention
             | "C--" | "c--"    -> cmm_convention
+            | "C'"  | "c'"     -> c'_convention (* uses Callspec *) 
             | "notail"         -> notail_convention
             | cc -> Impossible.impossible ("unsupported calling convention "^cc))
   (* global or hardware registers *)

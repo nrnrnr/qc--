@@ -14,6 +14,13 @@ val notail: return_to:(Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.
   (* C-- calling convention without tail calls *)
 @ 
 
+Here are implementation of the same conventions that use internally the
+[[Callspec]] module. We keep them both for comparison.
+
+<<x86call.mli>>=
+val c' : return_to:(Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
+@
+
 \paragraph{Debugging support}
 
 Dumps automata to [[stdout]]. The two arguments are the widths and hints
@@ -276,7 +283,13 @@ let c   = conv "C"   false { call = c_arguments;   results=c_results;   cutto=cu
 let cmm = conv "C--" true  { call = cmm_arguments; results=cmm_results; cutto=cut_args}
 let notail= conv "notail" false
               { call = cmm_arguments; results=cmm_results; cutto=cut_args}
+@
 
+% ------------------------------------------------------------------ 
+\subsection{Debugging Support}
+% ------------------------------------------------------------------ 
+
+<<x86call.ml>>=
 let dump what automaton widths hints = 
         what
         ~mk:(fun () -> A.at (Rtl.bits (Bits.zero 32) 32) automaton)
@@ -289,4 +302,51 @@ let paths_c_proc  = dump Automatongraph.paths c_arguments
 let paths_c_cutto = dump Automatongraph.paths cut_args
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Implementation using [[Callspec]]}
+% ------------------------------------------------------------------ 
+
+<<x86call.ml>>=
+module CS = Callspec
+
+let overflow x y = { CS.parameter_deallocator = x
+                   ; CS.result_allocator      = y
+                   }
               
+let template = (* conservative spec *)
+        { CS.name           = "callspec"    (* override this! *)
+        ; CS.wordsize       = 32
+        ; CS.call           = (fun () -> assert false)
+        ; CS.results        = (fun () -> assert false)   
+        ; CS.cutto          = (fun () -> assert false)
+        ; CS.stack_growth   = Memalloc.Down
+        ; CS.overflow       = overflow CS.Caller CS.Caller
+        ; CS.sp             = esp
+        ; CS.sp_align       = 4
+        ; CS.all_regs       = RS.union volregs nvregs
+        ; CS.nv_regs        = nvregs
+        ; CS.save_nvr       = saved_nvr
+        ; CS.ra             = (ra, CS.ReturnAddress.KeepInPlace)
+        }
+
+let rtn return_to k n ~ra =
+    if k = 0 && n = 0 then return_to ra
+    else Impossible.impossible "alternate return using C calling convention" 
+
+let cc return_to cut spec =
+    let t    = CS.to_call cut (rtn return_to) spec                   in  
+    let jump = spec.CS.overflow.CS.parameter_deallocator = CS.Callee in 
+        { t with (* fix what Callspec got wrong *)
+            C.ra_on_exit = if jump 
+                           then (fun _ b _ -> amem (addk (Block.base b) (-4)))
+                           else (fun _ _ _ -> ra)
+        }
+
+let c' ~return_to cut = cc return_to cut
+    { template with CS.name    = "C'" 
+                  ; CS.call    = (fun () -> c_arguments)
+                  ; CS.results = (fun () -> c_results)
+                  ; CS.cutto   = (fun () -> cut_args)
+    }
+@
+
