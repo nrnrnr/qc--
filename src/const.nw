@@ -1,0 +1,45 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% ------------------------------------------------------------------ 
+\section{Compile-time constants}
+% ------------------------------------------------------------------ 
+
+There are a bunch of values, such as ``the size of the stack frame,''
+which are compile-time constants whose values aren't known until late
+in compilation. 
+We want to borrow the notion of ``link-time constant'' but use it for
+compile-time constants.
+
+<<const.mli>>=
+(* module Const *)
+
+val gensym : string -> string
+  (* gensym s  returns a string that
+       (a) is not the name of any C-- identifier
+       (b) is not the name of any existing compile-time constant
+       (c) probably contains s (or some mangling of s)
+   *)
+
+val value : string -> Rtl.expr
+  (* Returns the RTL expression denoting the value of the constant
+     with the given name.  May create a new binding for this name if
+     the name is new to the interface.  Does *not* always return the
+     same value; for example, if the name gets bound to a constant,
+     that may change the result returned by value. *)
+
+exception Cannot_solve of Rtl.expr * Rtl.expr
+val make_equal : Rtl.expr -> Rtl.expr -> unit
+
+  (* updates internal bindings for compile-time constants to force these two
+     expressions equal.  Raises Cannot_solve if equating the 
+     two expressions does not lead to a binding.
+
+     Expressions in the following forms are guaranteed to work:
+         make_equal (value s) (Rtl.Bits b)
+         make_equal (value s) (value s')
+
+     Note that after a call to [[make_equal (value s) (value s')]], we
+     are guaranteed that [[value s = value s']] (because [[value]] is
+     not purely applicative but depends on the global state that is
+     mutated by [[make_equal]]).
+   *)
