@@ -616,6 +616,18 @@ here, so for example we could always insert [[r := m]] or [[m := r]]
 on edges that cross region boundaries, and then remove the unnecessary
 instructions with a post-pass.
 
+\begin{quote}\it Spilling hardware registers is not save: if [[spillee]]
+    is a hardware register, it is re-loaded into a new temporary that
+    substitutes the hardware register in nodes. However, the hardware
+    register might the there because a calling convention demands it.
+    Therefore the implemented algorithm spills the spillee to memory and
+    reloads it into the spillee, rather into a temporary. This
+    eliminates the substitution step as well. --CL
+\end{quote}
+
+
+
+
 % ------------------------------------------------------------------ 
 \subsection{Spilling Implementation}
 % ------------------------------------------------------------------ 
@@ -699,22 +711,6 @@ read from or written to memory [[mem]] where the value of the spillee
 is held inside the [[interval]].  Edges entering or leaving the
 interval must be also updated such that the spillee's value is written
 to and read from [[mem]]. 
-    
-\begin{quote}
-\emph{Question: is it really safe to use [[insert_before]] and
-[[insert_after]] in these cases, or are we better off using
-[[insert_between]]?}
-\end{quote}
-
-<<update>>=
-and tmp_for spaces temps (sp,_,w) =
-    let is_tmp = function
-        | S.Temp {Space.stands_for = sp} -> true
-        | _                              -> false in
-    let space = try List.find (fun s -> is_tmp s.S.classification) spaces 
-                with Not_found -> assert false in
-    let sp'   = space.S.space in 
-        Talloc.Multiple.reg temps sp' w
 
 <<update>>=
 and update proc interval nodes spillee mem node = 
@@ -725,27 +721,14 @@ and update proc interval nodes spillee mem node =
     let target = proc.Proc.target in
     let lookup = Target2.space target in
         if reads || writes then 
-            ( let tmp   = tmp_for proc.Proc.target.Target2.spaces 
-                                  proc.Proc.temps spillee in
-              let subst = fun x -> if x = spillee then tmp else x in 
-              ( if reads  then 
-                    ignore (List.fold_right G.gm_insert_assign_before
-                              (target.T.reload (T.space target) tmp mem) node)
-              ; if writes then 
-                    ignore (List.fold_left G.gm_insert_assign_after node
-                              (target.T.spill  (T.space target) tmp mem))
-              ; G.set_rtl node (Rtlutil.Subst2.reg lookup subst)
-              )
-            );
+            ( if reads  then 
+                ignore (List.fold_right G.gm_insert_assign_before
+                          (target.T.reload (T.space target) spillee mem) node)
+            ; if writes then 
+                ignore (List.fold_left G.gm_insert_assign_after node
+                          (target.T.spill  (T.space target) spillee mem))
+            )
 @
-
-\begin{quote}\it
-    Spilling hardware registers is not save: if [[spillee]] is a
-    hardware register, it is re-loaded into a new temporary that
-    substitutes the hardware register in nodes. However, the hardware
-    register might the there because a calling convention demands it.
-    --CL
-\end{quote}
 
 % ------------------------------------------------------------------ 
 \section{Backplane Interface}
