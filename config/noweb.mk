@@ -48,6 +48,29 @@ OCAMLDEFS =     $TOP/config/autodefs.ocaml
 NOWEBBREAKCODE=no
 
 %.tex:Q: %.inc
+	(tr '\n' ' ' <<EOF
+	\documentclass{article}
+	\usepackage{noweb}
+	\usepackage{tabularx}
+	\usepackage{hyperref}
+	\usepackage[dvips]{graphicx}
+	\pagestyle{noweb}
+	`if [ $NOWEBBREAKCODE = yes ]; then echo '\noweboptions{breakcode}'; fi`
+	\begin{document}
+	\nwfilename{$stem.nw}
+	\tableofcontents
+	\nwbegindocs{}
+	\input{$TOP/config/macros.tex}
+	EOF
+	cat $stem.inc
+	tr '\n' ' ' <<EOF
+	\bibliographystyle{alpha}
+	\bibliography{qc--}
+	\end{document}
+	EOF
+	) > $target
+
+old-%.tex-old:Q: %.inc
 	cp $stem.inc $stem.tex
 	> /dev/null ed -s $stem.tex <<EOF 
 	1
