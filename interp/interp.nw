@@ -1,4 +1,4 @@
-% -*- mode: Noweb; noweb-code-mode: C-mode -*- %
+% -*- mode: Noweb; noweb-code-mode: c-mode -*- %
 \documentclass{article}
 \usepackage{noweb}
 \usepackage{amsmath}
@@ -28,8 +28,8 @@ To build the interpreter, simply type [[mk interp]] at the command prompt.
 For now, the interpreter takes no command line arguments so it may be run simply by typing [[./interp]] at the command line.
 
 The interpreter will present you with a [[>]] prompt.
-The following table describes the commands that the interpreter currently understands.
-
+The following table describes the commands that the interpreter currently understands.\\
+\\
 \begin{tabularx}{\linewidth}{|l|X|}\hline
 [[help]] & prints a list of available commands
 \\\hline
@@ -62,12 +62,29 @@ Defines a the label [[name]] at the current location in the bytecode stream.
 \\\hline
 [[CMM_procedure]]           &$(string$ [[name]]$, number$ [[numLocals]]$, number$ [[stackdataSize]]$)$ &
 Defines the procedure [[name]] with a number of local variables equal to [[numLocals]] and stack-data of size of [[stackdataSize]] at the present location.
+\\\hline\hline
+[[CMM_imports]] &$(stringTable$ [[imports]]$)$&
+Imports the externally defined labels stored as strings in numerically-indexed table [[imports]].
 \\\hline
+[[CMM_exports]] &$(stringTable$ [[exports]]$)$&
+Exports from this assembly unit the labels stored as strings in numerically-indexed table [[exports]].
+\\\hline\hline
+[[CMM_memsize]] &$(number$ [[memsize]]$)$&
+Specifies the size of the smallest addressable piece of memory on the target architecture.
+\\\hline
+[[CMM_ptrsize]] &$(number$ [[ptrsize]]$)$&
+Specifies the size of a pointer on the target architecture.
+\\\hline
+[[CMM_byteorder]] &$(string$ [[byteorder]]$)$&
+Specifies the byte-order of the target architecture (is either [["LITTLE"]] or [["BIG"]]).
+\\\hline\hline
 [[CMM_push]]                &$(string$ [[value]]$)$                 &
 Pushes literal [[value]] onto the value stack.
 \\\hline
-% [[CMM_push_symbol]]       &$(address)$                            &\\
-[[CMM_fetch]]               &$(number$ [[size]]$, number$ [[byte_order]]$, number$ [[align]]$)$ &
+[[CMM_push_symbol]]         &$(string$ [[label]]$)$                 &
+Pushes the value of [[label]] onto the value stack.
+\\\hline
+[[CMM_fetch]]               &$(number$ [[size]]$, string$ [[byte_order]]$, number$ [[align]]$)$ &
 Pops an address off the value stack and fetches [[size]] bits from that address in memory space, using [[byte_order]] byte-order and [[align]] alignment.
 \\\hline
 [[CMM_fetch_local]]         &$(number$ [[index]]$)$                 &
@@ -76,6 +93,9 @@ Fetches local variable [[index]] and pushes it onto the value stack.
 [[CMM_fetch_global]]        &$(number$ [[index]]$)$                 &
 Fetches global variable [[index]] and pushes it onto the value stack.
 \\\hline
+\end{tabularx}
+
+\begin{tabularx}{\linewidth}{|lY|Y|}\hline
 [[CMM_store]]               &$(number$ [[size]]$, number$ [[byte_order]]$, number$ [[align]]$)$ &
 Pops a value and an address off the value stack, and then stores that value at that address in memory space, using [[byte_order]] byte-order and [[align]] alignment.
 \\\hline
@@ -88,9 +108,6 @@ Pops a value off the value stack and stores it in global variable [[index]].
 [[CMM_gstore]]              &$(number$ [[size]]$, number$ [[byte_order]]$, number$ [[align]]$)$ &
 Pops a value, an address, and a boolean off the value stack; if the boolean is true, the value is stored at that address in memory space, using [[byte_order]] byte-order and [[align]] alignment.
 \\\hline
-\end{tabularx}
-
-\begin{tabularx}{\linewidth}{|lX|X|}\hline
 [[CMM_gstore_local]]        &$(number$ [[index]]$)$                 &
 Pops a value and a boolean off the value stack; if the boolean is true, the value is stored in local variable [[index]].
 \\\hline
@@ -103,10 +120,12 @@ Pops a value off the value stack and pushes it onto the argument stack.
 [[CMM_pop_arg]]             &$()$                                   &
 Pops a value off the argument stack and pushes it onto the value stack.
 \\\hline
-% [[CMM_apply_operator]]    &$(opIndex)$                            &\\
+[[CMM_apply_operator]]      &$(string$ [[op]]$, \{number$ [[argwidth]]$\}^{*}, number$ [[retwidth]]$)$&
+Applies operator [[op]] to some nonnegative number of values atop the value stack (popping any such values off), and pushes the result onto the stack; this function is called with one [[argwidth]] argument for each argument the operator has.
+\\\hline
 \end{tabularx}
 
-\begin{tabularx}{\linewidth}{|lX|X|}\hline
+\begin{tabularx}{\linewidth}{|lY|Y|}\hline
 [[CMM_goto]]                &$()$                                   &
 Pops an address off the value stack and sets the program counter to the address.
 \\\hline
@@ -607,6 +626,7 @@ We choose to use tables (dynamic, associative arrays) in our representation of v
 The [[table]] data structure allows us to encapsulate all information we need to know about a given table.
 <<abstract types for storing internal state>>=
 typedef struct {
+  lua_State  *L;      /* the Lua interpreter in which this reference works */
   int        data;    /* this is a Lua reference to a Lua table */
 } table;
 @ 
@@ -682,6 +702,11 @@ BINARYOP(leu, v1 <= v2, v1,v2, u_int16, u_int16, bool, bits16, bits16, bool)
 T_UNARYOP(com, ~v1, v1, u_int16, bits16)
 @
 Additionally, a few other macros help with simplifying the macro calls to construct operators: [[ROTL(T, B)]] and [[ROTR(T, B)]] generate binary operator definitions of left and right bitwise rotation, respectively; and [[POPCNT(T, B)]] generates the unary operator definition of the [[popcnt]] operator (counts the number of 1-bits in a value).
+Helping to register C function implementations of {\PAL} operators is helper [[register_operator]].
+This helper takes the string description of the operator (as it would be called from {\PAL}), a pointer to the implementing C function, and the number of arguments the operator takes.
+<<function prototypes>>=
+void register_operator(const char *name, operator_fun f, unsigned num_args);
+@ 
 \paragraph{{\PAL} Call-site Annotations}
 We make use of Lua tables in storing call-site annotations, and thus represent the members of type [[annotations]] with C references to Lua objects (which are stored as [[int]]s).
 <<abstract types for storing internal state>>=
@@ -825,20 +850,17 @@ int lua_CMM_section(lua_State *L);
 int lua_CMM_end_section(lua_State *L);
 @ 
 \paragraph{Assembly Units}
-Finally, to represent an assembly unit in the interpreter, we create the type [[assembly_unit]] to keep track of all information that is common to code in an assembly unit yet not global to the interpreter.  \emph{NOTE: This is still unfinished.  It needs work and is not used.}
+Finally, to represent an assembly unit in the interpreter, we create the type [[assembly_unit]] to keep track of all information that is common to code in an assembly unit yet not global to the interpreter.
 <<abstract types for storing internal state>>=
 typedef struct {
   unsigned   int id;
 
   byte_order byte_order;
-  unsigned   int memsize;
-  unsigned   int wordsize;
-  unsigned   int ptrsize;
+  unsigned   memsize;
+  unsigned   ptrsize;
 
-  table      import_table;
   RBlock     def_section;
   table      section_table;
-  /* table   procedure_table; */
   table      label_table;
 } assembly_unit;
 @
@@ -867,7 +889,7 @@ void lua_assert_isnumber  (lua_State *L, int i, const char *err_msg);
 void lua_assert_isstring  (lua_State *L, int i, const char *err_msg);
 void lua_assert_istable   (lua_State *L, int i, const char *err_msg);
 @ 
-\paragraph{Exporting Encoding Functions to Lua}
+\paragraph{Encoding Helpers}
 Most of the bytecode instruction encoding occurs within Lua functions that in turn call C functions.
 [[get_label]] is a helper function to these C functions.
 It takes a [[lua_State]] and a string [[name]], expects this string to also be atop the Lua stack within the specified [[lua_State]], pops the string off the Lua stack, and returns the [[CMM_label]] structure associated with the label named [[name]].
@@ -884,6 +906,7 @@ For this, we use helper [[lua_copy_block_contents]], which takes a [[lua_State]]
 <<function prototypes>>=
 int    lua_copy_block_contents(lua_State *L);
 @ 
+\paragraph{Exporting Encoding Functions to Lua}
 The C functions that implement bytecode encoding are tied to the Lua functions described at the beginning of this document.
 These functions are all of the same general format: they take in a [[lua_State]], expect some number of elements (perhaps even 0) atop the Lua stack, emit an instruction bytecode into the [[RBlock]] representing the current {\PAL} [[section]], and return the number of values they push atop the Lua stack (which happens to be 0 in every case).  
 In our actual [[interp.h]] header file, we use macros to deal with these functions, some of which also happen to be macro-generated.
@@ -924,11 +947,15 @@ Error handler [[lua_error_handle]] assists, properly interpeting Lua library err
 <<function prototypes>>=
 void   lua_error_handle(int err_code, const char *fn);
 @
-Additionally, we make use of helper function [[check_value_types]] to perform some assertions about the basic C types used in the interpreter's implementation; and we use [[init_interp]] to perform basic interpreter initialization (including operator registration, etc.).
+We make use of helper function [[check_value_types]] to perform some assertions about the basic C types used in the interpreter's implementation; and we use [[init_interp]] to perform basic interpreter initialization (including operator registration, etc.).
 <<function prototypes>>=
 /* Initialization Helper Functions: */
 void   check_value_types(void);
 void   init_interp(lua_State *L);
+@ 
+For the sake of this interpreter's implementation and execution, we also make sure that defined [[MEMSIZE]]s and [[PTRSIZE]]s will work with the current architecture.
+<<function prototypes>>=
+void   check_architecture(assembly_unit *au);
 @ 
 \section{Implementation}
 
@@ -1087,15 +1114,28 @@ void print_value_stack(stack s, sptr s_base, const char *s_name) {
 @ 
 \subsubsection{Operator Implementation}
 Operators are mostly implemented through macro-generated functions and are instantiated at specific types.
+<<operator definitions>>=
+  <<floating-point operator definitions>>
+  <<integer operator definitions>>
+@ 
 We use a Lua table represented in C by global variable [[operator_table]] (of type [[table]]) to store associate operator names with the C functions that implement them.
 \emph{NOTE: I've yet to code up how the operators are actually registered with the interpreter and stored in the Lua table.  It would be nice if we didn't have to write a registration call for each operator function in addition to the current macro calls that generate the operator function implementations.}
 The actual initial registration of operators occupies the body of helper function [[init_interp]].
+With some preprocessor exploitation, we are able to reuse the same operator definitions to both implement the operators as functions and to register these functions with the interpreter at runtime.
+\emph{NOTE: great care must be taken to make sure that the implementation operator definitions stay above the definition of [[init_interp]]; we redefine the same macros to do different things within [[init_interp]].}
 <<utility functions>>=
 void init_interp(lua_State *L) {
-  /* FIX register operators here */
+  /* initialize the lua_State field of global tables */
+  assembly_units_table.L = L;
+  exports_table.L        = L;
+  operator_table.L       = L;
+ 
+  /* register operators */
+  <<operator macro redefinition>>
+  <<floating-point operator definitions>>
+  <<integer operator definitions>>
 }
 @ 
-
 \paragraph{Operator-Generating Macros}
 An operator implementation function must do the following: take in a pointer to a value stack, pop some number of values off the stack (possibly 0), perform some computations, and push the result value atop the stack.
 Most operators fall into three categories: binary operators, unary operators, and nullary operators.
@@ -1187,10 +1227,9 @@ T_BINARYOP(rotl, (x @<< d) + (((~(((T) ~0) >> d)) & x) @>> (sizeof(T)*8 - d)),\
 T_BINARYOP(rotr, (x >>  d) + (((~(((T) ~0) << d)) & x) << (sizeof(T)*8 - d)),\
                  x, d, T, B);
 @ 
-
 \paragraph{Floating-Point Operations}
 We use one macro call per operation to generate the implementations of the IEEE 594 floating-point operations called for in the {\PAL} language specification.
-<<operator definitions>>=
+<<floating-point operator definitions>>=
 /* FLOAT operators begin here. */
 /* fcmp */
 /* (floating-pt comparisons?) */
@@ -1226,7 +1265,7 @@ T_UNARYOP(fneg, -(v1),     v1, float, float32)
 @ 
 \paragraph{Integer Operations}
 As with the floating-point operations, we write one macro call per integer operation specified in the {\PAL} documentation.
-<<operator definitions>>=
+<<integer operator definitions>>=
 /* INTEGER operators begin here. */
 T_BINARYOP(add,     v1 + v2           , v1, v2, s_int16, bits16)
 T_BINARYOP(and,     v1 & v2           , v1, v2, u_int16, bits16)
@@ -1271,7 +1310,30 @@ T_BINARYOP(xor ,    v1 ^ v2           , v1, v2, s_int16, bits16)
 UNARYOP   (zx  ,    (u_int16) v1      , v1, u_int8, u_int16, bits8, bits16)
 /* INTEGER operators end here. */
 @ 
+\paragraph{Operator Registration}
+The main method of registering operators is through the use of helper function [[register_operator]].
+This function takes the name of an operator, a pointer to its implementation, and the number of arguments it takes, and creates an [[operator]] structure to represent it.
+This [[operator]] is then stored away in the global (Lua) table [[operator_table]].
+<<utility functions>>=
+void register_operator(const char *name, operator_fun f, unsigned num_args) {
+  static unsigned op_index = 1;
 
+  lua_State *L  = operator_table.L;
+  operator  *op = (operator *) malloc(sizeof(operator));
+  assert(op != NULL);
+
+  op->opname   = Atom_string(name);
+  op->f        = f;
+  op->num_args = num_args;
+
+  lua_pushtable(L, operator_table);
+  lua_pushnumber(L, (double) op_index++);
+  lua_pushusertag(L, (void *) op, lua_C_func_tag);
+  lua_settable(L, -3);
+
+  lua_pop(L, 1);
+}
+@ 
 \subsubsection{Utility Functions}
 The utility helper functions assist in managing threads and $\uid$'s, as well as doing some sanity checks on the [[typedef]]'d basic types.
 <<utility functions>>=
@@ -1285,6 +1347,8 @@ To create and initialize an [[assembly_unit]] struct, we must make sure to creat
 We use the constants [[#define]]d in [[machine.h]] to initialize the architecture information.
 <<[[assembly_unit]] helpers>>=
 assembly_unit *new_assembly_unit(lua_State *L) {
+  static unsigned next_au_id = 1;
+
   assembly_unit *au;
 
   au = (assembly_unit *) malloc(sizeof(assembly_unit));
@@ -1293,14 +1357,11 @@ assembly_unit *new_assembly_unit(lua_State *L) {
   au->id         = next_au_id++;
   au->byte_order = DEF_BYTE_ORDER;
   au->memsize    = DEF_MEMSIZE;
-  au->wordsize   = DEF_WORDSIZE;
   au->ptrsize    = sizeof(void *) * 8;
 
-  au->import_table    = (table) { LUA_NOREF };
   au->def_section     = NULL;
-  au->section_table   = (table) { LUA_NOREF };
-  /* au->procedure_table = (table) { LUA_NOREF }; */
-  au->label_table     = (table) { LUA_NOREF };
+  au->section_table   = (table) { NULL, LUA_NOREF };
+  au->label_table     = (table) { NULL, LUA_NOREF };
 
   /* store assembly_unit in table */
   lua_pushtable(L, assembly_units_table);
@@ -1414,6 +1475,21 @@ void check_value_types (void) {
 
   assert(sizeof(void *)   == sizeof(v.bits32));
 }
+
+void check_architecture(assembly_unit *au) {
+  if (au->memsize != 8) {
+    printf("this interpreter can only handle a MEMSIZE of 8");
+    exit(1);
+  }
+  if (au->ptrsize != 32) {
+    printf("this interpreter can only handle a PTRSIZE of 32");
+    exit(1);
+  }
+  if (au->byte_order != LITTLE) {
+    printf("this interpreter can only handle LITTLE-ENDIAN memory access");
+    exit(1);
+  }
+}
 @
 \subsection{Bytecode Generation}
 The main plan with bytecode generation is this: a Lua source file written using the functions listed at the top of this document is run using an embedded Lua interpreter that is extended with C functions implementing the {\PAL} Lua functions.  These C functions are more or less wrappers for C encoding functions that are automatically generated when the SLED definition of the interprer's instruction set ([[bytecode.sled]]) is run through the NJ Machine-Code Toolkit.  These generated functions emit bytecode into relocatable memory blocks ([[RBlock]]s), which we use to represent {\PAL} sections.
@@ -1471,6 +1547,7 @@ Note that a [[table]] structure must be passed in, not a [[table *]] pointer to 
 #define lua_pushtable(L, TAB) \
 if ((TAB).data == LUA_NOREF || (TAB).data == LUA_REFNIL) { \
   lua_newtable((L)); \
+  (TAB).L    = (L); \
   (TAB).data = lua_ref((L), LUA_LOCK); \
   assert((TAB).data != LUA_NOREF && (TAB).data != LUA_REFNIL); \
 } \
@@ -1482,6 +1559,7 @@ Here also, a [[table]] structure itself must be passed in, and not a [[table *]]
 #define free_table_data(L, TAB) \
 if ((TAB).data != LUA_NOREF && (TAB).data != LUA_REFNIL) { \
   lua_unref((L), (TAB).data);  \
+  (TAB).L    = NULL;           \
   (TAB).data = LUA_NOREF;      \
 }
 @
@@ -1491,6 +1569,8 @@ int  lua_table_foreach(lua_State *L, table t, const char *str) {
   if (t.data == LUA_NOREF || t.data == LUA_REFNIL) {
     return 0;
   }
+
+  assert(L == t.L);
 
   lua_getglobal(L, "foreach");
   lua_assert_isfunction(L, -1, "cannot find foreach function in Lua library");
@@ -1539,6 +1619,13 @@ F(section) \
 F(end_section) \
 F(define_label) \
 F(procedure) \
+\
+F(ptrsize) \
+F(memsize) \
+F(byteorder) \
+F(imports) \
+F(exports) \
+\
 F(push_literal) \
 F(push_symbol) \
 F(fetch) \
@@ -1565,6 +1652,8 @@ F(cut)
 [[ITERATE_UNFINISHED_CMM_FUNCS]] merely keeps the unfinished functions separate for later inclusion in the actual iteration macro.
 <<macro definitions>>=
 #define ITERATE_UNFINISHED_CMM_FUNCS(F) \
+F(globals)\
+\
 F(apply_operator)
 @ 
 Now we write macros that may be used with [[ITERATE_CMM_FUNCS]]: one to generate a prototype for each function and the other to register the functions with Lua.
@@ -1578,6 +1667,7 @@ lua_register(lua_interp, "CMM_"#X, (lua_CFunction) lua_CMM_##X);
 \subsubsection{Exported Encoding Functions}
 Now, we must export the encoding functions the Toolkit provides us to Lua.
 
+\paragraph{Structure Related Encoding}
 Each {\PAL} section is given its own relocatable block, with all code from the toplevel unnamed section being placed in a special relocatable block.  
 In [[lua_CMM_section]], we maintain a Lua table that maps section labels to their respective blocks.  
 Remember also that sections with the same label are effectively concatenated and placed together in memory.
@@ -1719,7 +1809,7 @@ CMM_label *get_label(lua_State *L, const char *name) {
   lua_gettable(L, -3);  /* look up string to see if is defined          */
   if (lua_isuserdata(L, -1) && 
       lua_tag(L, -1) == lua_CMM_label_tag && 
-      (lbl = lua_touserdata(L, -1)) != NULL)
+      (lbl = (CMM_label *) lua_touserdata(L, -1)) != NULL)
   {
     lua_pop(L, 3); /* pop userdata, key string, table */
   } else {
@@ -1782,6 +1872,197 @@ int lua_CMM_define_label(lua_State *L) {
   return 0;
 }
 @ 
+\paragraph{Toplevel Declaration Encoding}
+There are a number of declarations that may be made no more than once per assembly unit, and only so at the toplevel of a source file (not within a section).
+
+[[lua_CMM_imports]] and [[lua_CMM_exports]] define the {\PAL} symbols imported into and exported from the current assembly unit, respectively.
+<<bytecode generation>>=
+int lua_CMM_imports(lua_State *L) {
+  static assembly_unit *last_au = NULL;
+  unsigned imports, exports;
+
+  if (last_au == unit)
+    lua_error(L, "cannot declare imports more than once per assembly unit");
+  if (crb() != unit->def_section)
+    lua_error(L, "cannot declare imports from within a C-- section");
+  
+  last_au = unit;
+
+  lua_assert_istable(L, -1, "imports expects a table of symbols as strings");
+
+  /* add imports to the current unit's label table */
+  imports = lua_gettop(L);
+  lua_pushtable(L, exports_table);
+  exports = lua_gettop(L);
+  lua_pushnil(L);
+  while (lua_next(L, imports) != 0) {
+    CMM_label *lbl, *imported_label;
+
+    /* key is at -2, value is at -1 */
+    lua_pushvalue(L, -1); /* duplicate value (label) atop the stack */
+
+    lbl = get_label(L, lua_tostring(L, -1));
+    if (CMM_label_defined(lbl)) {
+      lua_pop(L, 4);
+      lua_error(L, "cannot import label; label by that name already exists");
+    }
+
+    lua_gettable(L, exports);
+    
+    if (!lua_isuserdata(L, -1) ||
+        lua_tag(L, -1) != lua_CMM_label_tag ||
+        (imported_label = (CMM_label *) lua_touserdata(L, -1)) == NULL)
+	{
+      lua_pop(L, 4);
+	  lua_error(L, "cannot import label; label was not exported by any unit");
+	}
+
+    lua_pop(L, 1); /* pop CMM_label */
+
+    if (lbl->ty == CMM_LABEL) {
+      lbl->lbl.raddr = (imported_label->ty == CMM_PROCEDURE ? 
+						imported_label->lbl.proc->raddr     : 
+						imported_label->lbl.raddr);
+    } else if (lbl->ty == CMM_PROCEDURE) {
+      assert(lbl->lbl.proc != NULL);
+      lbl->lbl.proc->raddr = (imported_label->ty == CMM_PROCEDURE ? 
+                              imported_label->lbl.proc->raddr     :
+                              imported_label->lbl.raddr);
+    } else
+      lua_error(L, "encountered unknown internal CMM label form");
+  }
+
+  lua_pop(L, 2); /* pop 2 tables */
+  assert(lua_gettop(L) == 0);
+
+  return 0;
+} 
+@ 
+[[lua_CMM_exports]] expects a table to be atop the Lua stack; the table should contain the symbols (in string form) to be exported from this assembly unit.
+<<bytecode generation>>=
+int lua_CMM_exports(lua_State *L) {
+  static assembly_unit *last_au = NULL;
+  unsigned new_exports, old_exports;
+
+  if (last_au == unit)
+    lua_error(L, "cannot declare exports more than once per assembly unit");
+   if (crb() != unit->def_section)
+    lua_error(L, "cannot declare exports from within a C-- section");
+
+  last_au = unit;
+
+  lua_assert_istable(L, -1, "exports expects a table of symbols as strings");
+
+  /* add exports to global export table */
+  new_exports = lua_gettop(L);
+  lua_pushtable(L, exports_table);
+  old_exports = lua_gettop(L);
+  lua_pushnil(L);
+  while (lua_next(L, new_exports) != 0) {
+    CMM_label *lbl;
+
+    /* key is at -2, value is at -1 */
+    lua_pushvalue(L, -1); /* duplicate value (label) atop the stack */
+    
+    lua_gettable(L, old_exports);
+    if (!lua_isnil(L, -1)) {
+      lua_pop(L, 5); /* pop all */
+      lua_error(L, "cannot export label; label by that name already exists");
+    }
+
+    lua_pop(L, 1);   /* pop nil */
+    lua_pushvalue(L, -1); /* duplicate value (label) atop the stack again */
+    lbl = get_label(L, lua_tostring(L, -1));
+
+    lua_pushusertag(L, (void *) lbl, lua_CMM_label_tag);
+    lua_settable(L, old_exports);
+  }
+
+  lua_pop(L, 2); /* pop 2 tables */
+  assert(lua_gettop(L) == 0);
+
+  return 0;
+}
+@
+[[lua_CMM_ptrsize]], [[lua_CMM_memsize]], and [[lua_byteorder]] inform the interpreter about the desired target architecture to be simulated.
+For now, we simply generate an error and fail if a target architecture other than the current one (of the machine on which this code is running) is specified.
+<<bytecode generation>>=
+int lua_CMM_ptrsize(lua_State *L) {
+  static assembly_unit *last_au = NULL;
+
+  unsigned ptrsize;
+
+  if (last_au == unit)
+    lua_error(L, "cannot declare PTRSIZE more than once per assembly unit");
+  if (crb() != unit->def_section)
+    lua_error(L, "cannot declare PTRSIZE from within a C-- section");
+
+  last_au = unit;
+
+  lua_assert_isnumber(L, -1, "PTRSIZE must be given as a number");
+  ptrsize = (unsigned) lua_tonumber(L, -1);
+  lua_pop(L, 1);
+
+  unit->ptrsize = ptrsize;
+
+  /* make sure we can handle this ptrsize */
+  check_architecture(unit);
+
+  return 0;
+}
+int lua_CMM_memsize(lua_State *L) {
+  static assembly_unit *last_au = NULL;
+
+  unsigned memsize;
+
+  if (last_au == unit)
+    lua_error(L, "cannot declare MEMSIZE more than once per assembly unit");
+  if (crb() != unit->def_section)
+    lua_error(L, "cannot declare MEMSIZE from within a C-- section");
+
+  last_au = unit;
+
+  lua_assert_isnumber(L, -1, "MEMSIZE must be given as a number");
+  memsize = (unsigned) lua_tonumber(L, -1);
+  lua_pop(L, 1);
+
+  unit->memsize = memsize;
+
+  /* make sure we can handle this memsize */
+  check_architecture(unit);
+
+  return 0;
+}
+int lua_CMM_byteorder(lua_State *L) {
+  static assembly_unit *last_au = NULL;
+
+  byte_order b;
+
+  if (last_au == unit)
+    lua_error(L, "cannot declare BYTEORDER more than once per assembly unit");
+  if (crb() != unit->def_section)
+    lua_error(L, "cannot declare BYTEORDER from within a C-- section");
+
+  last_au = unit;
+
+  lua_assert_isstring(L, -1, "BYTEORDER must be either \"LITTLE\" or \"BIG\"");
+
+  if (strcasecmp(lua_tostring(L, -1), "LITTLE") == 0)
+    b = LITTLE;
+  else if (strcasecmp(lua_tostring(L, -1), "BIG") == 0)
+    b = BIG;
+  else
+    lua_error(L, "BYTEORDER must be either \"LITTLE\" or \"BIG\"");
+  
+  unit->byte_order = b;
+
+  /* make sure we can handle this byteorder */
+  check_architecture(unit);
+
+  return 0;
+}
+@ 
+\paragraph{Instruction Encoding}
 We need to wrap the actual instruction encoding functions in simple Lua-style C functions.
 [[lua_CMM_push_literal]] looks for a string atop the Lua stack, pops it off, parses it as a [[long]], casts it to an unsigned 32-bit C integer, calls the encoding function [[push]] with the value, pops the string from the Lua stack, and returns 0 to signify it returns no value to Lua.
 <<bytecode generation>>=
@@ -2432,13 +2713,19 @@ We pop a pointer to a C [[procedure]] structure off the value stack, and derefer
 <<matching statement>>=
     | CMM_CALL(a)       => {
                            annotations *ann = (annotations *) ann;
+                           CMM_label   *lbl;
                            procedure   *proc;
                            actptr       saved;
 
                            assert(ann  != NULL);
 
                            ASSERT_EMPTY(values);
-                           proc = VIEW(POP(values), procedure *);
+                           lbl  = VIEW(POP(values), CMM_label *);
+                           if (lbl->ty != CMM_PROCEDURE) {
+                             printf("target label is not a procedure");
+                             exit(1);
+                           }
+                           proc = lbl->lbl.proc;
                            assert(proc != NULL);
 
                            <<save current activation info in a stack record>>
@@ -2485,10 +2772,17 @@ Once more, we pop a [[procedure]] struct pointer off the value stack for informa
 \useops{CMMTailCall}
 <<matching statement>>=
     | CMM_TAIL_CALL     => {
+                           CMM_label *lbl;
                            procedure *proc;
 
                            ASSERT_EMPTY(values);
-                           proc = VIEW(POP(values), procedure *);
+                           lbl  = VIEW(POP(values), CMM_label *);
+
+                           if (lbl->ty != CMM_PROCEDURE) {
+                             printf("target label is not a procedure");
+                             exit(1);
+                           }
+                           proc = lbl->lbl.proc;
                            assert(proc != NULL);
 
                            assert(location_known(proc->raddr));
@@ -2683,7 +2977,6 @@ int main(int argc, char *argv[])
 \subsubsection{Preparation and Initialization}
 Initializing the {\PAL} interpreter involves a simple call to helper [[init_interp]].
 This helper initializes the operator table and a few other things.
-We need to send [[init_interp]] a [[lua_State]] so it can properly access Lua tables.
 <<initialize the {\PAL} interpreter>>= 
   init_interp(lua_interp);
 @ 
@@ -2707,7 +3000,6 @@ We also have to create user-defined Lua tags for the non-standard userdata we st
   lua_assembly_unit_tag = lua_newtag(lua_interp);
   lua_RBlock_tag        = lua_newtag(lua_interp);
   lua_CMMlabel_tag      = lua_newtag(lua_interp);
-  lua_RAddr_tag         = lua_newtag(lua_interp);
   lua_C_func_tag        = lua_newtag(lua_interp);
 @ 
 Now we must register all C functions that we wish to be exported to Lua.
@@ -2806,7 +3098,7 @@ For now, we send all output to [[stdout]].
   printf("BEGIN LABEL \"%s\" (<address %x>)\n\n", arg, loc);
   asmprintfd = stdout;
   disassemble_instructions((unsigned char *) loc);
-  printf("\nEND LABEL \"%s\"\n", arg);
+  printf("\n[END OF SECTION]\n");
 @
 \paragraph{Interpreting the Bytecode}
 Running the interpreter involves allocation of memory for stacks and a few other details, but [[run_interp]] takes care of most of the work.
@@ -2862,14 +3154,32 @@ static int       lua_assembly_unit_tag;
 static int       lua_RBlock_tag;
 static int       lua_C_func_tag;
 static int       lua_CMM_label_tag;
-static int       lua_RAddr_tag;
 
-static table     operator_table       = { LUA_NOREF };
-static table     assembly_units_table = { LUA_NOREF };
-static table     exports_table        = { LUA_NOREF };
+static table     operator_table       = { NULL, LUA_NOREF };
+static table     assembly_units_table = { NULL, LUA_NOREF };
+static table     exports_table        = { NULL, LUA_NOREF };
+@
+And now for the hackery that lets us define and register operators in one shot.
+<<operator macro redefinition>>=
+#undef BINARYOP
+#undef UNARYOP
+#undef IUNARYOP
+#undef NULLARYOP
+#undef POPCNT
 
-/* next assembly_unit id to be handed out */
-static unsigned int next_au_id = 1;
+#define BINARYOP(NAME, EXP, X, Y, TX, TY, T, BX, BY, B) \
+register_operator(#NAME, op##_##NAME##_##BX, 2);
+
+#define UNARYOP(NAME, EXP, X, TX, T, BX, B) \
+register_operator(#NAME, op##_##NAME##_##BX, 1);
+
+#define IUNARYOP(NAME, STMS, X, TX, T, BX, B) \
+register_operator(#NAME, op##_##NAME##_##BX, 1);
+
+#define NULLARYOP(NAME, STMS, X, T, B) \
+register_operator(#NAME, op##_##NAME##_##B,  0);
+
+#define POPCNT(T, B) register_operator("popcnt", op_popcnt##_##B, 1);
 @ 
 \paragraph{Machine-Dependent Details}
 Next, we must also remember to define aggregated fetch functions for the NJ Machine-Code Toolkit so it can read more than 8 bits of bytecode from memory at a time:
@@ -2882,7 +3192,6 @@ fetch 32 using "%a[0] + (%a[1] << 8) + (%a[2] << 16) + (%a[3] << 24)"
 We also define a few constants in [[machine.h]] to provide information about the architecture on which the interpreter is currently being run.
 <<machine.h>>=
 #define DEF_MEMSIZE    8
-#define DEF_WORDSIZE   32
 #define DEF_BYTE_ORDER LITTLE
 @ 
 Finally, we have to properly shut down the interpreter as well as the whole program:
@@ -3166,8 +3475,6 @@ void disassemble_instructions(unsigned char *pc) {
 
 I could probably remove \texttt{locals\_end} and \texttt{stackdata\_end} as local variables in function \texttt{run\_interp}; but they \emph{must} remain stored away in an \texttt{activation} record at all non-tail calls.
 
-Can probably find a better way of uniquely identifying threads.
-
 Do nullary operations have to have a type appended to their names?  (e.g., [[round_down_bits32]])
 
 How should floating-pt computation with rounding best be done?
@@ -3191,8 +3498,6 @@ Need to add citations!!!
 Try removing [[addr2]] and [[addr3]] from [[relocatable]] definition in [[bytecode.sled]].  They might not be needed if [[addr]] is defined as relocatable.
 
 Assert that the correct byte-order is chosen.  Otherwise, we won't bother doing it.
-
-Deal with operator initialization. 
 
 Document the two 0's sent to [[error]] within [[error_wrapper]].
 
@@ -3225,22 +3530,22 @@ When we store annotations, shouldn't we convert the labels to [[RAddr]]s at comp
 How should we handle [[return]]s from the first procedure interpreterd; that is, if our interpreter starts code execution by running a procedure named [[main]], how should it handle a [[return]] from procedure main?
 Right now, it would fail an assertion when trying to pop an element off the empty [[callstack]].
 
-Probably don't need [[lua_assembly_unit_tag]].
-
 Consider adding assertions to [[lua_CMM_cbrancht]] and its siblings; what if [[get_label]] returns the [[CMM_label]] for a procedure?
 
 \section{To Do Immediately}
-Have to implement the imports table, etc.
-
-Have to make looking up a procedure work (in the [[main]] function).
-
-Describe the commands available in the program.
-
-Have [[get_label]] look in exports table as well as imports table!
-
 Fix matching statement; it assumes old form of labels?
 
 Change the elements of [[annotations]] to be [[table]]s instead of plain [[int]]s?
+
+Need to make sure the label lookup in [[main]] is only able to lookup exported labels.
+
+Need to implement [[lua_CMM_apply_operator]].
+
+Need some function like [[lua_CMM_define_continuation]].
+
+Need to add another type to the [[enum]] field ([[ty]]) of [[CMM_label]].
+
+Need to change operator representation to allow for multiple instantiations of the same operator.
 
 % end file
 \nwfilename{interp.nw}
