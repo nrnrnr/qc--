@@ -35,15 +35,14 @@ to a {\PAL} statement.
 
 The [[translate]] function takes an {\rtl} and produces a statement
 list, describing the effect of the {\rtl}.  When a variable name is
-created from a name found in an {\rtl}, it is passed through a
-mangling function that is also passed to [[rtl]].  This gives [[rtl]]
-a chance to re-write names such that they obey to the {\PAL} syntax. 
+created from a name found in an {\rtl}, it is passed through a mangling
+function that is also passed to [[translate]].  This gives [[translate]]
+a chance to re-write names such that they obey to the {\PAL} syntax.
 See also module \module{mangle}.
 
 <<rtl2ast.mli>>=
 val expr:      (string -> string) -> Rtl.exp  -> Ast.expr 
-(*val const:     (string -> string) -> Rtl.const -> Ast.expr *)
-val rtl:       (string -> string) -> Rtl.rtl   -> Ast.stmt 
+val rtl:       (string -> string) -> Rtl.rtl  -> Ast.stmt 
 @
 
 % ------------------------------------------------------------------ 
@@ -60,18 +59,10 @@ module T = Types
 let bits n             = A.BitsTy n
 
 let const mangle = function
-    | R.Bool(_)      -> assert false
+    | R.Bool(_)      -> assert false    (* impossible *)
     | R.Bits(b,w)    -> A.Int((b,w), Some (bits w))
     | R.Link(name,w) -> A.Fetch(A.Var(None, mangle name))
 @
-
-<<rtl2ast.ml>>=
-@
-    
-Primitive operators in {\PAL} are monomorphic, whereas they are
-polymorphic in {\rtl}s.  The translatation to {\PAL} thus must
-specialize an operator if it is polymorphic.  Currently not
-implemented.
 
 <<rtl2ast.ml>>=
 let rec expr' mangle = function
@@ -83,19 +74,24 @@ let rec expr' mangle = function
 @
 
 N.B. This code might possibly look up the location in a machine-dependent map
-in case it needs to mangle as the name of a hardware register variable.
+in case it needs to mangle the name of a hardware register variable.
+
+A translation of {\rtl} locations to {\PAL} is not semantic preserving
+because {\PAL} has no notion of spaces. The translation here turns a
+space into a (named) type, which is neither wrong nor right.
+
 <<rtl2ast.ml>>=
 and location' mangle = function 
-    | R.Cell('m',agg,width,e,_)  -> A.Mem(bits width, expr' mangle e, None)
-    | R.Cell('r',agg,width,R.Const(R.Bits(n,w)),_) ->  
-        let r = Printf.sprintf "r%d " (Bits.to_int (n,w)) in
-            A.Var(None, mangle r)
-    | R.Cell _                   -> assert false
+    | R.Cell (sp,agg,width,e,ass) ->
+        let space   = mangle (Printf.sprintf "$%c" sp) in
+        let aligned = if ass = 1 then None else Some ass in 
+        A.Mem(A.AliasTy space,expr' mangle e,aligned)
     | R.Var (name,_,width)       -> A.Var(None,mangle name)
-    | R.Slice _                  -> assert false (*should convert as special reg name*)
+    | R.Slice _                  -> assert false 
+                                    (*should convert as special reg name*)
 
-let (@<<) f g   = fun x -> f (g x)
-let expr m = expr' m @<< Rtl.Convert.exp
+let (@<<) f g  = fun x -> f (g x)
+let expr m     = expr' m @<< Rtl.Convert.exp
 let location m = location' m @<< Rtl.Convert.loc
 
 @
@@ -105,10 +101,10 @@ A [[kill]] is translated into an assignment of [[%undef()]].
 <<rtl2ast.ml>>=
 let rec effect mangle guard = function
     | R.Kill   loc       -> 
-        let width = Rtlutil.locwidth' loc                in
+        let width = Rtlutil.locwidth' loc       in
         let undef = R.App(("undef",[width]),[]) in
             effect mangle guard (R.Store(loc, undef, width))
-    | R.Store  (loc,e,w) -> 
+    | R.Store  (loc,e,w) ->
             (location' mangle loc,(guard, expr' mangle e))
 
 let guard mangle = function
