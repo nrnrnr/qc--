@@ -22,8 +22,8 @@ Cmm.global_area:
 .section .text
 print:
 	leal -60(%esp), %esp
-initialize_continuations_l4:
-proc_body_start_l3:
+initialize_continuations_l5:
+proc_body_start_l4:
 	leal i_2,%eax
 	movl $-60,%ecx
 	leal 60(%esp), %edx
@@ -96,7 +96,7 @@ proc_body_start_l3:
 	fildq (%ecx)
 	fistpq (%eax)
 	call printf
-join_l8:
+join_l9:
 L.1:
 	leal 60(%esp), %eax
 	movl $0,%ecx
@@ -107,17 +107,17 @@ L.1:
 	leal 60(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l15:
+stackdata_l16:
 .long 0
 .section .pcmap
-.long join_l8
-.long frame_l16
+.long join_l9
+.long frame_l17
 .section .pcmap_data
-frame_l16:
+frame_l17:
 .long 0xffffffc4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l15
+.long stackdata_l16
 .long 0x80000008
 .long 0x80000000
 .long 0x80000000

@@ -13,8 +13,8 @@ divmod:
 	movl (%edx),%ecx
 	leal 20(%esp), %edx
 	movl (%edx),%edx
-initialize_continuations_l4:
-proc_body_start_l3:
+initialize_continuations_l5:
+proc_body_start_l4:
 	movl %ecx,(%esp)
 	movl %eax,%ecx
 	movl %eax,4(%esp)
@@ -39,7 +39,7 @@ proc_body_start_l3:
 	leal 24(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l12:
+stackdata_l13:
 .long 0
 .section .text
 .section .text

@@ -1586,17 +1586,17 @@ section "text"
     {
         $r31 = ($r31+-24);
         $t1 = $r30;
-        initialize continuations:l5:
-        proc body start:l4:
+        initialize continuations:l37:
+        proc body start:l36:
         $c0 when %ne[32](bits32[bits32[sym@_PL_he_root]], 0)
-            = sym@join@l11;
-        join:l12:
+            = sym@join@l43;
+        join:l44:
         $c0, $r30 = bits32[sym@@i_more_he], ($c0+4);
-        join:l10:
+        join:l42:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_21;
-        join:l11:
+        join:l43:
         $c0 = sym@@i_21;
         @i_21:
         @i_@1i_1 = bits32[sym@_PL_he_root];
@@ -1615,8 +1615,8 @@ section "text"
         $r31 = ($r31+-24);
         @i_p = $r0;
         $t1 = $r30;
-        initialize continuations:l20:
-        proc body start:l19:
+        initialize continuations:l51:
+        proc body start:l50:
         bits32[@i_p] = bits32[bits32[sym@_PL_he_root]];
         bits32[sym@_PL_he_root] = @i_p;
         @i_23:
@@ -1631,11 +1631,11 @@ section "text"
     {
         $r31 = ($r31+-24);
         $t1 = $r30;
-        initialize continuations:l30:
-        proc body start:l29:
+        initialize continuations:l60:
+        proc body start:l59:
         $r0 = 1008;
         $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        join:l36:
+        join:l66:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@5i_1 = $r0;
@@ -1644,13 +1644,13 @@ section "text"
         @i_@4i_heend = (@i_@3i_he+996);
         $c0 = sym@@i_26;
         @i_26:
-        $c0 when %ltu[32](@i_@3i_he, @i_@4i_heend) = sym@join@l32;
-        join:l33:
+        $c0 when %ltu[32](@i_@3i_he, @i_@4i_heend) = sym@join@l62;
+        join:l63:
         bits32[@i_@3i_he] = 0;
         @i_24:
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l32:
+        join:l62:
         $c0 = sym@@i_25;
         @i_25:
         bits32[@i_@3i_he] = (@i_@3i_he+12);
@@ -1666,12 +1666,12 @@ section "text"
         $r31 = ($r31+-24);
         @i_str, @i_len, @i_hash = $r0, $r1, $r2;
         $t1 = $r30;
-        initialize continuations:l44:
-        proc body start:l43:
+        initialize continuations:l73:
+        proc body start:l72:
         @i_@9i_1 = 1;
         $r0 = %mul[32](@i_@9i_1, ((@i_len+8)+@i_@9i_1));
         $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        join:l52:
+        join:l81:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@10i_2 = $r0;
@@ -1679,7 +1679,7 @@ section "text"
         @i_@7i_hek = @i_@8i_k;
         $r0, $r1, $r2 = @i_str, (@i_@7i_hek+8), %mul[32](1, @i_len);
         $c0, $r30 = bits32[sym@_Perl_my_bcopy], ($c0+4);
-        join:l49:
+        join:l78:
         $r31 = $r31;
         // the preceding node is merely asserted
         bits8[(@i_len+(@i_@7i_hek+8))] = 0;
@@ -1698,11 +1698,11 @@ section "text"
         $r31 = ($r31+-24);
         @i_hek = $r0;
         $t1 = $r30;
-        initialize continuations:l60:
-        proc body start:l59:
+        initialize continuations:l88:
+        proc body start:l87:
         $r0, $r1, $r2 = (@i_hek+8), bits32[(@i_hek+4)], bits32[@i_hek];
         $c0, $r30 = bits32[sym@_Perl_unsharepvn], ($c0+4);
-        join:l64:
+        join:l92:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_29:
@@ -1718,36 +1718,36 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_key, @i_klen, @i_lval = $r0, $r1, $r2, $r3;
         $t1 = $r30;
-        initialize continuations:l72:
-        proc body start:l71:
-        $c0 when %ne[32](@i_hv, 0) = sym@join@l124;
-        join:l125:
+        initialize continuations:l99:
+        proc body start:l98:
+        $c0 when %ne[32](@i_hv, 0) = sym@join@l151;
+        join:l152:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l124:
+        join:l151:
         $c0 = sym@@i_31;
         @i_31:
         $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@join@l121;
-        join:l122:
+            = sym@join@l148;
+        join:l149:
         $r0, $r1 = @i_hv, 80;
         $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        join:l120:
+        join:l147:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@16i_1 = $r0;
-        $c0 when %eq[32](@i_@16i_1, 0) = sym@join@l116;
-        join:l117:
+        $c0 when %eq[32](@i_@16i_1, 0) = sym@join@l143;
+        join:l144:
         $c0, $r30 = bits32[sym@_Perl_sv_newmortal], ($c0+4);
-        join:l115:
+        join:l142:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@17i_2 = $r0;
         @i_@15i_sv = @i_@17i_2;
         $r0, $r1, $r2, $r3 = @i_hv, @i_@15i_sv, @i_key, @i_klen;
         $c0, $r30 = bits32[sym@_Perl_mg_copy], ($c0+4);
-        join:l112:
+        join:l139:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@18i_3 = bits32[sym@_PL_hv_fetch_sv];
@@ -1755,24 +1755,24 @@ section "text"
         $r0 = @i_@18i_3;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l116:
+        join:l143:
         $c0 = sym@@i_35;
         @i_35:
         $c0 = sym@@i_33;
-        join:l121:
+        join:l148:
         $c0 = sym@@i_33;
         @i_33:
         @i_@12i_xhv = bits32[@i_hv];
-        $c0 when %ne[32](bits32[@i_@12i_xhv], 0) = sym@join@l107;
-        join:l108:
-        $c0 when %eq[32](@i_lval, 0) = sym@join@l105;
-        join:l106:
+        $c0 when %ne[32](bits32[@i_@12i_xhv], 0) = sym@join@l134;
+        join:l135:
+        $c0 when %eq[32](@i_lval, 0) = sym@join@l132;
+        join:l133:
         $r0
             =
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@12i_xhv+8)]+1), 2), 1)-16));
         $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        join:l104:
+        join:l131:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@20i_5 = $r0;
@@ -1782,19 +1782,19 @@ section "text"
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@12i_xhv+8)]+1), 2), 1)-16));
         $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        join:l101:
+        join:l128:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_40;
         @i_40:
         $c0 = sym@@i_37;
-        join:l105:
+        join:l132:
         $c0 = sym@@i_39;
         @i_39:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l107:
+        join:l134:
         $c0 = sym@@i_37;
         @i_37:
         @i_41:
@@ -1805,8 +1805,8 @@ section "text"
         @i_45:
         @i_@26i_8 = @i_@23i_i_PeRlHaSh;
         @i_@23i_i_PeRlHaSh = (@i_@26i_8-1);
-        $c0 when %ne[32](@i_@26i_8, 0) = sym@join@l96;
-        join:l97:
+        $c0 when %ne[32](@i_@26i_8, 0) = sym@join@l123;
+        join:l124:
         @i_@13i_hash = @i_@24i_hash_PeRlHaSh;
         @i_42:
         @i_@14i_entry
@@ -1817,13 +1817,13 @@ section "text"
                 bits32[@i_@12i_xhv])];
         $c0 = sym@@i_50;
         @i_50:
-        $c0 when %ne[32](@i_@14i_entry, 0) = sym@join@l84;
-        join:l85:
-        $c0 when %eq[32](@i_lval, 0) = sym@join@l82;
-        join:l83:
+        $c0 when %ne[32](@i_@14i_entry, 0) = sym@join@l111;
+        join:l112:
+        $c0 when %eq[32](@i_lval, 0) = sym@join@l109;
+        join:l110:
         $r0 = 0;
         $c0, $r30 = bits32[sym@_Perl_newSV], ($c0+4);
-        join:l81:
+        join:l108:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@30i_12 = $r0;
@@ -1831,29 +1831,29 @@ section "text"
         $r0, $r1, $r2, $r3, $r4
             = @i_hv, @i_key, @i_klen, @i_@15i_sv, @i_@13i_hash;
         $c0, $r30 = bits32[sym@_Perl_hv_store], ($c0+4);
-        join:l78:
+        join:l105:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@31i_13 = $r0;
         $r0 = @i_@31i_13;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l82:
+        join:l109:
         $c0 = sym@@i_57;
         @i_57:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l84:
+        join:l111:
         $c0 = sym@@i_47;
         @i_47:
         $c0
             when
             %eq[32](bits32[bits32[(@i_@14i_entry+4)]], @i_@13i_hash)
-            = sym@join@l94;
-        join:l95:
+            = sym@join@l121;
+        join:l122:
         $c0 = sym@@i_48;
-        join:l94:
+        join:l121:
         $c0 = sym@@i_51;
         @i_51:
         @i_@28i_10 = 4;
@@ -1861,31 +1861,31 @@ section "text"
             when
             %eq[32](bits32[(bits32[(@i_@14i_entry+@i_@28i_10)]+
                 @i_@28i_10)],
-            @i_klen) = sym@join@l92;
-        join:l93:
+            @i_klen) = sym@join@l119;
+        join:l120:
         $c0 = sym@@i_48;
-        join:l92:
+        join:l119:
         $c0 = sym@@i_53;
         @i_53:
         $r0, $r1, $r2 = (bits32[(@i_@14i_entry+4)]+8), @i_key, @i_klen;
         $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        join:l91:
+        join:l118:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@29i_11 = $r0;
-        $c0 when %eq[32](@i_@29i_11, 0) = sym@join@l87;
-        join:l88:
+        $c0 when %eq[32](@i_@29i_11, 0) = sym@join@l114;
+        join:l115:
         $c0 = sym@@i_48;
         @i_48:
         @i_@14i_entry = bits32[@i_@14i_entry];
         $c0 = sym@@i_50;
-        join:l87:
+        join:l114:
         $c0 = sym@@i_55;
         @i_55:
         $r0 = (@i_@14i_entry+8);
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l96:
+        join:l123:
         $c0 = sym@@i_44;
         @i_44:
         @i_@25i_7 = @i_@22i_s_PeRlHaSh;
@@ -1905,64 +1905,64 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_keysv, @i_lval, @i_hash = $r0, $r1, $r2, $r3;
         $t1 = $r30;
-        initialize continuations:l133:
-        proc body start:l132:
-        $c0 when %ne[32](@i_hv, 0) = sym@join@l202;
-        join:l203:
+        initialize continuations:l159:
+        proc body start:l158:
+        $c0 when %ne[32](@i_hv, 0) = sym@join@l228;
+        join:l229:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l202:
+        join:l228:
         $c0 = sym@@i_60;
         @i_60:
         $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@join@l199;
-        join:l200:
+            = sym@join@l225;
+        join:l226:
         $r0, $r1 = @i_hv, 80;
         $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        join:l198:
+        join:l224:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@37i_1 = $r0;
-        $c0 when %eq[32](@i_@37i_1, 0) = sym@join@l194;
-        join:l195:
+        $c0 when %eq[32](@i_@37i_1, 0) = sym@join@l220;
+        join:l221:
         $c0, $r30 = bits32[sym@_Perl_sv_newmortal], ($c0+4);
-        join:l193:
+        join:l219:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@38i_2 = $r0;
         @i_@36i_sv = @i_@38i_2;
         $r0 = @i_keysv;
         $c0, $r30 = bits32[sym@_Perl_newSVsv], ($c0+4);
-        join:l190:
+        join:l216:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@39i_3 = $r0;
         $r0 = @i_@39i_3;
         $c0, $r30 = bits32[sym@_Perl_sv_2mortal], ($c0+4);
-        join:l187:
+        join:l213:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@40i_4 = $r0;
         @i_keysv = @i_@40i_4;
         $r0, $r1, $r2, $r3 = @i_hv, @i_@36i_sv, @i_keysv, -2;
         $c0, $r30 = bits32[sym@_Perl_mg_copy], ($c0+4);
-        join:l184:
+        join:l210:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 when %ne[32](bits32[bits32[(sym@_PL_hv_fetch_ent_mh+4)]], 0)
-            = sym@join@l180;
-        join:l181:
+            = sym@join@l206;
+        join:l207:
         $r0 = 12;
         $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        join:l179:
+        join:l205:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@42i_5 = $r0;
         @i_@41i_k = @i_@42i_5;
         bits32[(sym@_PL_hv_fetch_ent_mh+4)] = @i_@41i_k;
         $c0 = sym@@i_66;
-        join:l180:
+        join:l206:
         $c0 = sym@@i_66;
         @i_66:
         bits32[(bits32[bits32[(sym@_PL_hv_fetch_ent_mh+4)]]+4)] = -2;
@@ -1972,24 +1972,24 @@ section "text"
         $r0 = bits32[sym@_PL_hv_fetch_ent_mh];
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l194:
+        join:l220:
         $c0 = sym@@i_64;
         @i_64:
         $c0 = sym@@i_62;
-        join:l199:
+        join:l225:
         $c0 = sym@@i_62;
         @i_62:
         @i_@32i_xhv = bits32[@i_hv];
-        $c0 when %ne[32](bits32[@i_@32i_xhv], 0) = sym@join@l174;
-        join:l175:
-        $c0 when %eq[32](@i_lval, 0) = sym@join@l172;
-        join:l173:
+        $c0 when %ne[32](bits32[@i_@32i_xhv], 0) = sym@join@l200;
+        join:l201:
+        $c0 when %eq[32](@i_lval, 0) = sym@join@l198;
+        join:l199:
         $r0
             =
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@32i_xhv+8)]+1), 2), 1)-16));
         $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        join:l171:
+        join:l197:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@44i_7 = $r0;
@@ -1999,34 +1999,34 @@ section "text"
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@32i_xhv+8)]+1), 2), 1)-16));
         $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        join:l168:
+        join:l194:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_76;
         @i_76:
         $c0 = sym@@i_73;
-        join:l172:
+        join:l198:
         $c0 = sym@@i_75;
         @i_75:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l174:
+        join:l200:
         $c0 = sym@@i_73;
         @i_73:
         $c0 when %eq[32](%and[32](bits32[(@i_keysv+8)], 262144), 0)
-            = sym@join@l163;
-        join:l164:
+            = sym@join@l189;
+        join:l190:
         @i_@47i_9 = @i_keysv;
         bits32[($r31+24)] = bits32[(bits32[@i_@47i_9]+4)];
         @i_@46i_77 = bits32[bits32[@i_@47i_9]];
         $c0 = sym@@i_79;
-        join:l163:
+        join:l189:
         $c0 = sym@@i_78;
         @i_78:
         $r0, $r1 = @i_keysv, bits32[($r31+24)];
         $c0, $r30 = bits32[sym@_Perl_sv_2pv], ($c0+4);
-        join:l162:
+        join:l188:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@48i_10 = $r0;
@@ -2034,7 +2034,7 @@ section "text"
         $c0 = sym@@i_79;
         @i_79:
         @i_@33i_key = @i_@46i_77;
-        $c0 when %ne[32](@i_hash, 0) = sym@join@l159;
+        $c0 when %ne[32](@i_hash, 0) = sym@join@l185;
         @i_82:
         @i_@49i_s_PeRlHaSh = @i_@33i_key;
         @i_@50i_i_PeRlHaSh = bits32[bits32[($r31+24)]];
@@ -2043,12 +2043,12 @@ section "text"
         @i_86:
         @i_@53i_12 = @i_@50i_i_PeRlHaSh;
         @i_@50i_i_PeRlHaSh = (@i_@53i_12-1);
-        $c0 when %ne[32](@i_@53i_12, 0) = sym@join@l157;
-        join:l158:
+        $c0 when %ne[32](@i_@53i_12, 0) = sym@join@l183;
+        join:l184:
         @i_hash = @i_@51i_hash_PeRlHaSh;
         @i_83:
         $c0 = sym@@i_80;
-        join:l157:
+        join:l183:
         $c0 = sym@@i_85;
         @i_85:
         @i_@52i_11 = @i_@49i_s_PeRlHaSh;
@@ -2058,7 +2058,7 @@ section "text"
             (%mul[32](33, @i_@51i_hash_PeRlHaSh)+
                 %sx[8,32](bits8[@i_@52i_11]));
         $c0 = sym@@i_86;
-        join:l159:
+        join:l185:
         $c0 = sym@@i_80;
         @i_80:
         @i_@34i_entry
@@ -2068,40 +2068,40 @@ section "text"
                 bits32[@i_@32i_xhv])];
         $c0 = sym@@i_91;
         @i_91:
-        $c0 when %ne[32](@i_@34i_entry, 0) = sym@join@l145;
-        join:l146:
-        $c0 when %eq[32](@i_lval, 0) = sym@join@l143;
-        join:l144:
+        $c0 when %ne[32](@i_@34i_entry, 0) = sym@join@l171;
+        join:l172:
+        $c0 when %eq[32](@i_lval, 0) = sym@join@l169;
+        join:l170:
         $r0 = 0;
         $c0, $r30 = bits32[sym@_Perl_newSV], ($c0+4);
-        join:l142:
+        join:l168:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@57i_16 = $r0;
         @i_@36i_sv = @i_@57i_16;
         $r0, $r1, $r2, $r3 = @i_hv, @i_keysv, @i_@36i_sv, @i_hash;
         $c0, $r30 = bits32[sym@_Perl_hv_store_ent], ($c0+4);
-        join:l139:
+        join:l165:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@58i_17 = $r0;
         $r0 = @i_@58i_17;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l143:
+        join:l169:
         $c0 = sym@@i_98;
         @i_98:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l145:
+        join:l171:
         $c0 = sym@@i_88;
         @i_88:
         $c0 when %eq[32](bits32[bits32[(@i_@34i_entry+4)]], @i_hash)
-            = sym@join@l155;
-        join:l156:
+            = sym@join@l181;
+        join:l182:
         $c0 = sym@@i_89;
-        join:l155:
+        join:l181:
         $c0 = sym@@i_92;
         @i_92:
         @i_@55i_14 = 4;
@@ -2109,27 +2109,27 @@ section "text"
             when
             %eq[32](bits32[(bits32[(@i_@34i_entry+@i_@55i_14)]+
                 @i_@55i_14)],
-            bits32[bits32[($r31+24)]]) = sym@join@l153;
-        join:l154:
+            bits32[bits32[($r31+24)]]) = sym@join@l179;
+        join:l180:
         $c0 = sym@@i_89;
-        join:l153:
+        join:l179:
         $c0 = sym@@i_94;
         @i_94:
         $r0, $r1, $r2
             = (bits32[(@i_@34i_entry+4)]+8), @i_@33i_key,
             bits32[bits32[($r31+24)]];
         $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        join:l152:
+        join:l178:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@56i_15 = $r0;
-        $c0 when %eq[32](@i_@56i_15, 0) = sym@join@l148;
-        join:l149:
+        $c0 when %eq[32](@i_@56i_15, 0) = sym@join@l174;
+        join:l175:
         $c0 = sym@@i_89;
         @i_89:
         @i_@34i_entry = bits32[@i_@34i_entry];
         $c0 = sym@@i_91;
-        join:l148:
+        join:l174:
         $c0 = sym@@i_96;
         @i_96:
         $r0 = @i_@34i_entry;
@@ -2145,49 +2145,49 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_needs_copy, @i_needs_store = $r0, $r1, $r2;
         $t1 = $r30;
-        initialize continuations:l211:
-        proc body start:l210:
+        initialize continuations:l236:
+        proc body start:l235:
         @i_@59i_mg = bits32[(bits32[@i_hv]+20)];
         bits32[@i_needs_copy] = 0;
         bits32[@i_needs_store] = 1;
         $c0 = sym@@i_102;
         @i_102:
-        $c0 when %ne[32](@i_@59i_mg, 0) = sym@join@l213;
+        $c0 when %ne[32](@i_@59i_mg, 0) = sym@join@l238;
         @i_100:
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l213:
+        join:l238:
         $c0 = sym@@i_101;
         @i_101:
         @i_@60i_1 = %sx[8,32](bits8[(@i_@59i_mg+12)]);
-        $c0 when %lt[32](@i_@60i_1, 65) = sym@join@l221;
-        join:l222:
-        $c0 when %gt[32](@i_@60i_1, 90) = sym@join@l219;
-        join:l220:
+        $c0 when %lt[32](@i_@60i_1, 65) = sym@join@l246;
+        join:l247:
+        $c0 when %gt[32](@i_@60i_1, 90) = sym@join@l244;
+        join:l245:
         bits32[@i_needs_copy] = 1;
         @i_@61i_108 = %sx[8,32](bits8[(@i_@59i_mg+12)]);
         @i_@63i_3 = 80;
-        $c0 when %eq[32](@i_@61i_108, @i_@63i_3) = sym@join@l217;
-        join:l218:
-        $c0 when %lt[32](@i_@61i_108, @i_@63i_3) = sym@join@l216;
+        $c0 when %eq[32](@i_@61i_108, @i_@63i_3) = sym@join@l242;
+        join:l243:
+        $c0 when %lt[32](@i_@61i_108, @i_@63i_3) = sym@join@l241;
         @i_110:
-        $c0 when %eq[32](@i_@61i_108, 83) = sym@join@l214;
-        join:l215:
+        $c0 when %eq[32](@i_@61i_108, 83) = sym@join@l239;
+        join:l240:
         $c0 = sym@@i_106;
-        join:l214:
+        join:l239:
         $c0 = sym@@i_109;
-        join:l216:
+        join:l241:
         $c0 = sym@@i_106;
-        join:l217:
+        join:l242:
         $c0 = sym@@i_109;
         @i_109:
         bits32[@i_needs_store] = 0;
         $c0 = sym@@i_106;
         @i_106:
         $c0 = sym@@i_104;
-        join:l219:
+        join:l244:
         $c0 = sym@@i_104;
-        join:l221:
+        join:l246:
         $c0 = sym@@i_104;
         @i_104:
         @i_@59i_mg = bits32[@i_@59i_mg];
@@ -2203,54 +2203,54 @@ section "text"
         @i_hv, @i_key, @i_klen, @i_val, @i_hash
             = $r0, $r1, $r2, $r3, $r4;
         $t1 = $r30;
-        initialize continuations:l231:
-        proc body start:l230:
-        $c0 when %ne[32](@i_hv, 0) = sym@join@l294;
-        join:l295:
+        initialize continuations:l255:
+        proc body start:l254:
+        $c0 when %ne[32](@i_hv, 0) = sym@join@l318;
+        join:l319:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l294:
+        join:l318:
         $c0 = sym@@i_112;
         @i_112:
         @i_@68i_1 = @i_hv;
         @i_@64i_xhv = bits32[@i_@68i_1];
         $c0 when %eq[32](%and[32](bits32[(@i_@68i_1+8)], 57344), 0)
-            = sym@join@l291;
-        join:l292:
+            = sym@join@l315;
+        join:l316:
         $r0, $r1, $r2 = @i_hv, bits32[($r31+24)], bits32[($r31+28)];
         $c0, $r30 = bits32[sym@@i_hv_magic_check], ($c0+4);
-        join:l290:
+        join:l314:
         $r31 = $r31;
         // the preceding node is merely asserted
-        $c0 when %eq[32](bits32[bits32[($r31+24)]], 0) = sym@join@l286;
-        join:l287:
+        $c0 when %eq[32](bits32[bits32[($r31+24)]], 0) = sym@join@l310;
+        join:l311:
         $r0, $r1, $r2, $r3 = @i_hv, @i_val, @i_key, @i_klen;
         $c0, $r30 = bits32[sym@_Perl_mg_copy], ($c0+4);
-        join:l285:
+        join:l309:
         $r31 = $r31;
         // the preceding node is merely asserted
-        $c0 when %ne[32](bits32[@i_@64i_xhv], 0) = sym@join@l281;
-        join:l282:
-        $c0 when %ne[32](bits32[bits32[($r31+28)]], 0) = sym@join@l279;
-        join:l280:
+        $c0 when %ne[32](bits32[@i_@64i_xhv], 0) = sym@join@l305;
+        join:l306:
+        $c0 when %ne[32](bits32[bits32[($r31+28)]], 0) = sym@join@l303;
+        join:l304:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l279:
+        join:l303:
         $c0 = sym@@i_118;
-        join:l281:
+        join:l305:
         $c0 = sym@@i_118;
         @i_118:
         $c0 = sym@@i_116;
-        join:l286:
+        join:l310:
         $c0 = sym@@i_116;
         @i_116:
         $c0 = sym@@i_114;
-        join:l291:
+        join:l315:
         $c0 = sym@@i_114;
         @i_114:
-        $c0 when %ne[32](@i_hash, 0) = sym@join@l277;
+        $c0 when %ne[32](@i_hash, 0) = sym@join@l301;
         @i_122:
         @i_@71i_s_PeRlHaSh = @i_key;
         @i_@72i_i_PeRlHaSh = @i_klen;
@@ -2259,12 +2259,12 @@ section "text"
         @i_126:
         @i_@75i_3 = @i_@72i_i_PeRlHaSh;
         @i_@72i_i_PeRlHaSh = (@i_@75i_3-1);
-        $c0 when %ne[32](@i_@75i_3, 0) = sym@join@l275;
-        join:l276:
+        $c0 when %ne[32](@i_@75i_3, 0) = sym@join@l299;
+        join:l300:
         @i_hash = @i_@73i_hash_PeRlHaSh;
         @i_123:
         $c0 = sym@@i_120;
-        join:l275:
+        join:l299:
         $c0 = sym@@i_125;
         @i_125:
         @i_@74i_2 = @i_@71i_s_PeRlHaSh;
@@ -2274,17 +2274,17 @@ section "text"
             (%mul[32](33, @i_@73i_hash_PeRlHaSh)+
                 %sx[8,32](bits8[@i_@74i_2]));
         $c0 = sym@@i_126;
-        join:l277:
+        join:l301:
         $c0 = sym@@i_120;
         @i_120:
-        $c0 when %ne[32](bits32[@i_@64i_xhv], 0) = sym@join@l273;
-        join:l274:
+        $c0 when %ne[32](bits32[@i_@64i_xhv], 0) = sym@join@l297;
+        join:l298:
         $r0
             =
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@64i_xhv+8)]+1), 2), 1)-16));
         $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        join:l272:
+        join:l296:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@77i_5 = $r0;
@@ -2294,11 +2294,11 @@ section "text"
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@64i_xhv+8)]+1), 2), 1)-16));
         $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        join:l269:
+        join:l293:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_128;
-        join:l273:
+        join:l297:
         $c0 = sym@@i_128;
         @i_128:
         @i_@67i_oentry
@@ -2309,31 +2309,31 @@ section "text"
         @i_@66i_entry = bits32[@i_@67i_oentry];
         $c0 = sym@@i_133;
         @i_133:
-        $c0 when %ne[32](@i_@66i_entry, 0) = sym@join@l252;
-        join:l253:
+        $c0 when %ne[32](@i_@66i_entry, 0) = sym@join@l276;
+        join:l277:
         $c0, $r30 = bits32[sym@@i_new_he], ($c0+4);
-        join:l251:
+        join:l275:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@82i_10 = $r0;
         @i_@66i_entry = @i_@82i_10;
         $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 536870912), 0)
-            = sym@join@l247;
-        join:l248:
+            = sym@join@l271;
+        join:l272:
         $r0, $r1, $r2 = @i_key, @i_klen, @i_hash;
         $c0, $r30 = bits32[sym@_Perl_share_hek], ($c0+4);
-        join:l246:
+        join:l270:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@83i_11 = $r0;
         bits32[(@i_@66i_entry+4)] = @i_@83i_11;
         $c0 = sym@@i_141;
-        join:l247:
+        join:l271:
         $c0 = sym@@i_140;
         @i_140:
         $r0, $r1, $r2 = @i_key, @i_klen, @i_hash;
         $c0, $r30 = bits32[sym@@i_save_hek], ($c0+4);
-        join:l243:
+        join:l267:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@84i_12 = $r0;
@@ -2345,39 +2345,39 @@ section "text"
         bits32[@i_@67i_oentry] = @i_@66i_entry;
         @i_@85i_13 = (@i_@64i_xhv+12);
         bits32[@i_@85i_13] = (bits32[@i_@85i_13]+1);
-        $c0 when %eq[32](@i_@65i_i, 0) = sym@join@l239;
-        join:l240:
+        $c0 when %eq[32](@i_@65i_i, 0) = sym@join@l263;
+        join:l264:
         @i_@86i_14 = (@i_@64i_xhv+4);
         bits32[@i_@86i_14] = (bits32[@i_@86i_14]+1);
         $c0
             when
             %leu[32](bits32[(@i_@64i_xhv+12)], bits32[(@i_@64i_xhv+8)])
-            = sym@join@l237;
-        join:l238:
+            = sym@join@l261;
+        join:l262:
         $r0 = @i_hv;
         $c0, $r30 = bits32[sym@@i_hsplit], ($c0+4);
-        join:l236:
+        join:l260:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_144;
-        join:l237:
+        join:l261:
         $c0 = sym@@i_144;
         @i_144:
         $c0 = sym@@i_142;
-        join:l239:
+        join:l263:
         $c0 = sym@@i_142;
         @i_142:
         $r0 = (@i_@66i_entry+8);
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l252:
+        join:l276:
         $c0 = sym@@i_130;
         @i_130:
         $c0 when %eq[32](bits32[bits32[(@i_@66i_entry+4)]], @i_hash)
-            = sym@join@l265;
-        join:l266:
+            = sym@join@l289;
+        join:l290:
         $c0 = sym@@i_131;
-        join:l265:
+        join:l289:
         $c0 = sym@@i_134;
         @i_134:
         @i_@80i_8 = 4;
@@ -2385,31 +2385,31 @@ section "text"
             when
             %eq[32](bits32[(bits32[(@i_@66i_entry+@i_@80i_8)]+
                 @i_@80i_8)],
-            @i_klen) = sym@join@l263;
-        join:l264:
+            @i_klen) = sym@join@l287;
+        join:l288:
         $c0 = sym@@i_131;
-        join:l263:
+        join:l287:
         $c0 = sym@@i_136;
         @i_136:
         $r0, $r1, $r2 = (bits32[(@i_@66i_entry+4)]+8), @i_key, @i_klen;
         $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        join:l262:
+        join:l286:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@81i_9 = $r0;
-        $c0 when %eq[32](@i_@81i_9, 0) = sym@join@l258;
-        join:l259:
+        $c0 when %eq[32](@i_@81i_9, 0) = sym@join@l282;
+        join:l283:
         $c0 = sym@@i_131;
         @i_131:
         @i_@65i_i = 0;
         @i_@66i_entry = bits32[@i_@66i_entry];
         $c0 = sym@@i_133;
-        join:l258:
+        join:l282:
         $c0 = sym@@i_138;
         @i_138:
         $r0 = bits32[(@i_@66i_entry+8)];
         $c0, $r30 = bits32[sym@_Perl_sv_free], ($c0+4);
-        join:l257:
+        join:l281:
         $r31 = $r31;
         // the preceding node is merely asserted
         bits32[(@i_@66i_entry+8)] = @i_val;
@@ -2426,49 +2426,49 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_keysv, @i_val, @i_hash = $r0, $r1, $r2, $r3;
         $t1 = $r30;
-        initialize continuations:l303:
-        proc body start:l302:
-        $c0 when %ne[32](@i_hv, 0) = sym@join@l388;
-        join:l389:
+        initialize continuations:l326:
+        proc body start:l325:
+        $c0 when %ne[32](@i_hv, 0) = sym@join@l411;
+        join:l412:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l388:
+        join:l411:
         $c0 = sym@@i_147;
         @i_147:
         @i_@94i_1 = @i_hv;
         @i_@88i_xhv = bits32[@i_@94i_1];
         $c0 when %eq[32](%and[32](bits32[(@i_@94i_1+8)], 57344), 0)
-            = sym@join@l385;
-        join:l386:
+            = sym@join@l408;
+        join:l409:
         $r0, $r1, $r2 = @i_hv, bits32[($r31+28)], bits32[($r31+32)];
         $c0, $r30 = bits32[sym@@i_hv_magic_check], ($c0+4);
-        join:l384:
+        join:l407:
         $r31 = $r31;
         // the preceding node is merely asserted
-        $c0 when %eq[32](bits32[bits32[($r31+28)]], 0) = sym@join@l380;
-        join:l381:
+        $c0 when %eq[32](bits32[bits32[($r31+28)]], 0) = sym@join@l403;
+        join:l404:
         @i_@97i_save_taint = bits32[bits32[sym@_PL_tainted]];
         $c0 when %eq[32](bits32[bits32[sym@_PL_tainting]], 0)
-            = sym@join@l378;
-        join:l379:
+            = sym@join@l401;
+        join:l402:
         @i_@99i_2 = @i_keysv;
         $c0 when %eq[32](%and[32](bits32[(@i_@99i_2+8)], 57344), 0)
-            = sym@join@l376;
-        join:l377:
+            = sym@join@l399;
+        join:l400:
         $r0 = @i_@99i_2;
         $c0, $r30 = bits32[sym@_Perl_sv_tainted], ($c0+4);
-        join:l375:
+        join:l398:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@100i_3 = $r0;
-        $c0 when %eq[32](@i_@100i_3, 0) = sym@join@l371;
-        join:l372:
+        $c0 when %eq[32](@i_@100i_3, 0) = sym@join@l394;
+        join:l395:
         @i_@98i_155 = 1;
         $c0 = sym@@i_157;
-        join:l371:
+        join:l394:
         $c0 = sym@@i_156;
-        join:l376:
+        join:l399:
         $c0 = sym@@i_156;
         @i_156:
         @i_@98i_155 = 0;
@@ -2476,67 +2476,67 @@ section "text"
         @i_157:
         bits32[sym@_PL_tainted] = @i_@98i_155;
         $c0 = sym@@i_153;
-        join:l378:
+        join:l401:
         $c0 = sym@@i_153;
         @i_153:
         $r0 = @i_keysv;
         $c0, $r30 = bits32[sym@_Perl_newSVsv], ($c0+4);
-        join:l370:
+        join:l393:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@101i_4 = $r0;
         $r0 = @i_@101i_4;
         $c0, $r30 = bits32[sym@_Perl_sv_2mortal], ($c0+4);
-        join:l367:
+        join:l390:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@102i_5 = $r0;
         @i_keysv = @i_@102i_5;
         $r0, $r1, $r2, $r3 = @i_hv, @i_val, @i_keysv, -2;
         $c0, $r30 = bits32[sym@_Perl_mg_copy], ($c0+4);
-        join:l364:
+        join:l387:
         $r31 = $r31;
         // the preceding node is merely asserted
-        $c0 when %eq[32](@i_@97i_save_taint, 0) = sym@join@l360;
-        join:l361:
+        $c0 when %eq[32](@i_@97i_save_taint, 0) = sym@join@l383;
+        join:l384:
         bits32[sym@_PL_tainted] = 1;
         $c0 = sym@@i_158;
-        join:l360:
+        join:l383:
         $c0 = sym@@i_158;
         @i_158:
-        $c0 when %ne[32](bits32[@i_@88i_xhv], 0) = sym@join@l358;
-        join:l359:
-        $c0 when %ne[32](bits32[bits32[($r31+32)]], 0) = sym@join@l356;
-        join:l357:
+        $c0 when %ne[32](bits32[@i_@88i_xhv], 0) = sym@join@l381;
+        join:l382:
+        $c0 when %ne[32](bits32[bits32[($r31+32)]], 0) = sym@join@l379;
+        join:l380:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l356:
+        join:l379:
         $c0 = sym@@i_160;
-        join:l358:
+        join:l381:
         $c0 = sym@@i_160;
         @i_160:
         $c0 = sym@@i_151;
-        join:l380:
+        join:l403:
         $c0 = sym@@i_151;
         @i_151:
         $c0 = sym@@i_149;
-        join:l385:
+        join:l408:
         $c0 = sym@@i_149;
         @i_149:
         $c0 when %eq[32](%and[32](bits32[(@i_keysv+8)], 262144), 0)
-            = sym@join@l353;
-        join:l354:
+            = sym@join@l376;
+        join:l377:
         @i_@104i_6 = @i_keysv;
         bits32[($r31+24)] = bits32[(bits32[@i_@104i_6]+4)];
         @i_@103i_162 = bits32[bits32[@i_@104i_6]];
         $c0 = sym@@i_164;
-        join:l353:
+        join:l376:
         $c0 = sym@@i_163;
         @i_163:
         $r0, $r1 = @i_keysv, bits32[($r31+24)];
         $c0, $r30 = bits32[sym@_Perl_sv_2pv], ($c0+4);
-        join:l352:
+        join:l375:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@105i_7 = $r0;
@@ -2544,7 +2544,7 @@ section "text"
         $c0 = sym@@i_164;
         @i_164:
         @i_@89i_key = @i_@103i_162;
-        $c0 when %ne[32](@i_hash, 0) = sym@join@l349;
+        $c0 when %ne[32](@i_hash, 0) = sym@join@l372;
         @i_167:
         @i_@106i_s_PeRlHaSh = @i_@89i_key;
         @i_@107i_i_PeRlHaSh = bits32[bits32[($r31+24)]];
@@ -2553,12 +2553,12 @@ section "text"
         @i_171:
         @i_@110i_9 = @i_@107i_i_PeRlHaSh;
         @i_@107i_i_PeRlHaSh = (@i_@110i_9-1);
-        $c0 when %ne[32](@i_@110i_9, 0) = sym@join@l347;
-        join:l348:
+        $c0 when %ne[32](@i_@110i_9, 0) = sym@join@l370;
+        join:l371:
         @i_hash = @i_@108i_hash_PeRlHaSh;
         @i_168:
         $c0 = sym@@i_165;
-        join:l347:
+        join:l370:
         $c0 = sym@@i_170;
         @i_170:
         @i_@109i_8 = @i_@106i_s_PeRlHaSh;
@@ -2568,17 +2568,17 @@ section "text"
             (%mul[32](33, @i_@108i_hash_PeRlHaSh)+
                 %sx[8,32](bits8[@i_@109i_8]));
         $c0 = sym@@i_171;
-        join:l349:
+        join:l372:
         $c0 = sym@@i_165;
         @i_165:
-        $c0 when %ne[32](bits32[@i_@88i_xhv], 0) = sym@join@l345;
-        join:l346:
+        $c0 when %ne[32](bits32[@i_@88i_xhv], 0) = sym@join@l368;
+        join:l369:
         $r0
             =
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@88i_xhv+8)]+1), 2), 1)-16));
         $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        join:l344:
+        join:l367:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@112i_11 = $r0;
@@ -2588,11 +2588,11 @@ section "text"
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@88i_xhv+8)]+1), 2), 1)-16));
         $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        join:l341:
+        join:l364:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_173;
-        join:l345:
+        join:l368:
         $c0 = sym@@i_173;
         @i_173:
         @i_@92i_oentry
@@ -2603,31 +2603,31 @@ section "text"
         @i_@91i_entry = bits32[@i_@92i_oentry];
         $c0 = sym@@i_178;
         @i_178:
-        $c0 when %ne[32](@i_@91i_entry, 0) = sym@join@l324;
-        join:l325:
+        $c0 when %ne[32](@i_@91i_entry, 0) = sym@join@l347;
+        join:l348:
         $c0, $r30 = bits32[sym@@i_new_he], ($c0+4);
-        join:l323:
+        join:l346:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@117i_16 = $r0;
         @i_@91i_entry = @i_@117i_16;
         $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 536870912), 0)
-            = sym@join@l319;
-        join:l320:
+            = sym@join@l342;
+        join:l343:
         $r0, $r1, $r2 = @i_@89i_key, bits32[bits32[($r31+24)]], @i_hash;
         $c0, $r30 = bits32[sym@_Perl_share_hek], ($c0+4);
-        join:l318:
+        join:l341:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@118i_17 = $r0;
         bits32[(@i_@91i_entry+4)] = @i_@118i_17;
         $c0 = sym@@i_186;
-        join:l319:
+        join:l342:
         $c0 = sym@@i_185;
         @i_185:
         $r0, $r1, $r2 = @i_@89i_key, bits32[bits32[($r31+24)]], @i_hash;
         $c0, $r30 = bits32[sym@@i_save_hek], ($c0+4);
-        join:l315:
+        join:l338:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@119i_18 = $r0;
@@ -2639,39 +2639,39 @@ section "text"
         bits32[@i_@92i_oentry] = @i_@91i_entry;
         @i_@120i_19 = (@i_@88i_xhv+12);
         bits32[@i_@120i_19] = (bits32[@i_@120i_19]+1);
-        $c0 when %eq[32](@i_@90i_i, 0) = sym@join@l311;
-        join:l312:
+        $c0 when %eq[32](@i_@90i_i, 0) = sym@join@l334;
+        join:l335:
         @i_@121i_20 = (@i_@88i_xhv+4);
         bits32[@i_@121i_20] = (bits32[@i_@121i_20]+1);
         $c0
             when
             %leu[32](bits32[(@i_@88i_xhv+12)], bits32[(@i_@88i_xhv+8)])
-            = sym@join@l309;
-        join:l310:
+            = sym@join@l332;
+        join:l333:
         $r0 = @i_hv;
         $c0, $r30 = bits32[sym@@i_hsplit], ($c0+4);
-        join:l308:
+        join:l331:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_189;
-        join:l309:
+        join:l332:
         $c0 = sym@@i_189;
         @i_189:
         $c0 = sym@@i_187;
-        join:l311:
+        join:l334:
         $c0 = sym@@i_187;
         @i_187:
         $r0 = @i_@91i_entry;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l324:
+        join:l347:
         $c0 = sym@@i_175;
         @i_175:
         $c0 when %eq[32](bits32[bits32[(@i_@91i_entry+4)]], @i_hash)
-            = sym@join@l337;
-        join:l338:
+            = sym@join@l360;
+        join:l361:
         $c0 = sym@@i_176;
-        join:l337:
+        join:l360:
         $c0 = sym@@i_179;
         @i_179:
         @i_@115i_14 = 4;
@@ -2679,33 +2679,33 @@ section "text"
             when
             %eq[32](bits32[(bits32[(@i_@91i_entry+@i_@115i_14)]+
                 @i_@115i_14)],
-            bits32[bits32[($r31+24)]]) = sym@join@l335;
-        join:l336:
+            bits32[bits32[($r31+24)]]) = sym@join@l358;
+        join:l359:
         $c0 = sym@@i_176;
-        join:l335:
+        join:l358:
         $c0 = sym@@i_181;
         @i_181:
         $r0, $r1, $r2
             = (bits32[(@i_@91i_entry+4)]+8), @i_@89i_key,
             bits32[bits32[($r31+24)]];
         $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        join:l334:
+        join:l357:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@116i_15 = $r0;
-        $c0 when %eq[32](@i_@116i_15, 0) = sym@join@l330;
-        join:l331:
+        $c0 when %eq[32](@i_@116i_15, 0) = sym@join@l353;
+        join:l354:
         $c0 = sym@@i_176;
         @i_176:
         @i_@90i_i = 0;
         @i_@91i_entry = bits32[@i_@91i_entry];
         $c0 = sym@@i_178;
-        join:l330:
+        join:l353:
         $c0 = sym@@i_183;
         @i_183:
         $r0 = bits32[(@i_@91i_entry+8)];
         $c0, $r30 = bits32[sym@_Perl_sv_free], ($c0+4);
-        join:l329:
+        join:l352:
         $r31 = $r31;
         // the preceding node is merely asserted
         bits32[(@i_@91i_entry+8)] = @i_val;
@@ -2722,85 +2722,85 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_key, @i_klen, @i_flags = $r0, $r1, $r2, $r3;
         $t1 = $r30;
-        initialize continuations:l397:
-        proc body start:l396:
-        $c0 when %ne[32](@i_hv, 0) = sym@join@l459;
-        join:l460:
+        initialize continuations:l419:
+        proc body start:l418:
+        $c0 when %ne[32](@i_hv, 0) = sym@join@l481;
+        join:l482:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l459:
+        join:l481:
         $c0 = sym@@i_192;
         @i_192:
         $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@join@l456;
-        join:l457:
+            = sym@join@l478;
+        join:l479:
         $r0, $r1, $r2 = @i_hv, bits32[($r31+24)], bits32[($r31+28)];
         $c0, $r30 = bits32[sym@@i_hv_magic_check], ($c0+4);
-        join:l455:
+        join:l477:
         $r31 = $r31;
         // the preceding node is merely asserted
-        $c0 when %eq[32](bits32[bits32[($r31+24)]], 0) = sym@join@l451;
-        join:l452:
+        $c0 when %eq[32](bits32[bits32[($r31+24)]], 0) = sym@join@l473;
+        join:l474:
         $r0, $r1, $r2, $r3 = @i_hv, @i_key, @i_klen, 1;
         $c0, $r30 = bits32[sym@_Perl_hv_fetch], ($c0+4);
-        join:l450:
+        join:l472:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@132i_1 = $r0;
         @i_@129i_svp = @i_@132i_1;
-        $c0 when %eq[32](@i_@132i_1, 0) = sym@join@l446;
-        join:l447:
+        $c0 when %eq[32](@i_@132i_1, 0) = sym@join@l468;
+        join:l469:
         @i_@128i_sv = bits32[@i_@129i_svp];
         $r0 = @i_@128i_sv;
         $c0, $r30 = bits32[sym@_Perl_mg_clear], ($c0+4);
-        join:l445:
+        join:l467:
         $r31 = $r31;
         // the preceding node is merely asserted
-        $c0 when %ne[32](bits32[bits32[($r31+28)]], 0) = sym@join@l441;
-        join:l442:
+        $c0 when %ne[32](bits32[bits32[($r31+28)]], 0) = sym@join@l463;
+        join:l464:
         $r0, $r1 = @i_@128i_sv, 112;
         $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        join:l440:
+        join:l462:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@133i_2 = $r0;
-        $c0 when %eq[32](@i_@133i_2, 0) = sym@join@l436;
-        join:l437:
+        $c0 when %eq[32](@i_@133i_2, 0) = sym@join@l458;
+        join:l459:
         $r0, $r1 = @i_@128i_sv, 112;
         $c0, $r30 = bits32[sym@_Perl_sv_unmagic], ($c0+4);
-        join:l435:
+        join:l457:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = @i_@128i_sv;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l436:
+        join:l458:
         $c0 = sym@@i_200;
         @i_200:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l441:
+        join:l463:
         $c0 = sym@@i_198;
         @i_198:
         $c0 = sym@@i_196;
-        join:l446:
+        join:l468:
         $c0 = sym@@i_196;
-        join:l451:
+        join:l473:
         $c0 = sym@@i_196;
         @i_196:
         $c0 = sym@@i_194;
-        join:l456:
+        join:l478:
         $c0 = sym@@i_194;
         @i_194:
         @i_@123i_xhv = bits32[@i_hv];
-        $c0 when %ne[32](bits32[@i_@123i_xhv], 0) = sym@join@l429;
-        join:l430:
+        $c0 when %ne[32](bits32[@i_@123i_xhv], 0) = sym@join@l451;
+        join:l452:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l429:
+        join:l451:
         $c0 = sym@@i_202;
         @i_202:
         @i_204:
@@ -2811,8 +2811,8 @@ section "text"
         @i_208:
         @i_@138i_4 = @i_@135i_i_PeRlHaSh;
         @i_@135i_i_PeRlHaSh = (@i_@138i_4-1);
-        $c0 when %ne[32](@i_@138i_4, 0) = sym@join@l426;
-        join:l427:
+        $c0 when %ne[32](@i_@138i_4, 0) = sym@join@l448;
+        join:l449:
         @i_@125i_hash = @i_@136i_hash_PeRlHaSh;
         @i_205:
         @i_@127i_oentry
@@ -2824,21 +2824,21 @@ section "text"
         @i_@124i_i = 1;
         $c0 = sym@@i_213;
         @i_213:
-        $c0 when %ne[32](@i_@126i_entry, 0) = sym@join@l400;
-        join:l401:
+        $c0 when %ne[32](@i_@126i_entry, 0) = sym@join@l422;
+        join:l423:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l400:
+        join:l422:
         $c0 = sym@@i_210;
         @i_210:
         $c0
             when
             %eq[32](bits32[bits32[(@i_@126i_entry+4)]], @i_@125i_hash)
-            = sym@join@l424;
-        join:l425:
+            = sym@join@l446;
+        join:l447:
         $c0 = sym@@i_211;
-        join:l424:
+        join:l446:
         $c0 = sym@@i_214;
         @i_214:
         @i_@140i_6 = 4;
@@ -2846,52 +2846,52 @@ section "text"
             when
             %eq[32](bits32[(bits32[(@i_@126i_entry+@i_@140i_6)]+
                 @i_@140i_6)],
-            @i_klen) = sym@join@l422;
-        join:l423:
+            @i_klen) = sym@join@l444;
+        join:l445:
         $c0 = sym@@i_211;
-        join:l422:
+        join:l444:
         $c0 = sym@@i_216;
         @i_216:
         $r0, $r1, $r2 = (bits32[(@i_@126i_entry+4)]+8), @i_key, @i_klen;
         $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        join:l421:
+        join:l443:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@141i_7 = $r0;
-        $c0 when %eq[32](@i_@141i_7, 0) = sym@join@l417;
-        join:l418:
+        $c0 when %eq[32](@i_@141i_7, 0) = sym@join@l439;
+        join:l440:
         $c0 = sym@@i_211;
         @i_211:
         @i_@124i_i = 0;
         @i_@127i_oentry = @i_@126i_entry;
         @i_@126i_entry = bits32[@i_@127i_oentry];
         $c0 = sym@@i_213;
-        join:l417:
+        join:l439:
         $c0 = sym@@i_218;
         @i_218:
         bits32[@i_@127i_oentry] = bits32[@i_@126i_entry];
-        $c0 when %eq[32](@i_@124i_i, 0) = sym@join@l415;
-        join:l416:
-        $c0 when %ne[32](bits32[@i_@127i_oentry], 0) = sym@join@l413;
-        join:l414:
+        $c0 when %eq[32](@i_@124i_i, 0) = sym@join@l437;
+        join:l438:
+        $c0 when %ne[32](bits32[@i_@127i_oentry], 0) = sym@join@l435;
+        join:l436:
         @i_@142i_8 = (@i_@123i_xhv+4);
         bits32[@i_@142i_8] = (bits32[@i_@142i_8]-1);
         $c0 = sym@@i_220;
-        join:l413:
+        join:l435:
         $c0 = sym@@i_220;
-        join:l415:
+        join:l437:
         $c0 = sym@@i_220;
         @i_220:
-        $c0 when %eq[32](%and[32](@i_flags, 2), 0) = sym@join@l411;
-        join:l412:
+        $c0 when %eq[32](%and[32](@i_flags, 2), 0) = sym@join@l433;
+        join:l434:
         @i_@128i_sv = 0;
         $c0 = sym@@i_223;
-        join:l411:
+        join:l433:
         $c0 = sym@@i_222;
         @i_222:
         $r0 = bits32[(@i_@126i_entry+8)];
         $c0, $r30 = bits32[sym@_Perl_sv_mortalcopy], ($c0+4);
-        join:l410:
+        join:l432:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@143i_9 = $r0;
@@ -2899,18 +2899,18 @@ section "text"
         $c0 = sym@@i_223;
         @i_223:
         $c0 when %ne[32](@i_@126i_entry, bits32[(@i_@123i_xhv+32)])
-            = sym@join@l406;
-        join:l407:
+            = sym@join@l428;
+        join:l429:
         @i_@144i_10 = (@i_hv+8);
         bits32[@i_@144i_10]
             = %or[32](bits32[@i_@144i_10], 0x40000000::bits32);
         $c0 = sym@@i_225;
-        join:l406:
+        join:l428:
         $c0 = sym@@i_224;
         @i_224:
         $r0, $r1 = @i_hv, @i_@126i_entry;
         $c0, $r30 = bits32[sym@_Perl_hv_free_ent], ($c0+4);
-        join:l405:
+        join:l427:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_225;
@@ -2920,7 +2920,7 @@ section "text"
         $r0 = @i_@128i_sv;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l426:
+        join:l448:
         $c0 = sym@@i_207;
         @i_207:
         @i_@137i_3 = @i_@134i_s_PeRlHaSh;
@@ -2940,100 +2940,100 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_keysv, @i_flags, @i_hash = $r0, $r1, $r2, $r3;
         $t1 = $r30;
-        initialize continuations:l468:
-        proc body start:l467:
-        $c0 when %ne[32](@i_hv, 0) = sym@join@l536;
-        join:l537:
+        initialize continuations:l489:
+        proc body start:l488:
+        $c0 when %ne[32](@i_hv, 0) = sym@join@l557;
+        join:l558:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l536:
+        join:l557:
         $c0 = sym@@i_227;
         @i_227:
         $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@join@l533;
-        join:l534:
+            = sym@join@l554;
+        join:l555:
         $r0, $r1, $r2 = @i_hv, bits32[($r31+28)], bits32[($r31+32)];
         $c0, $r30 = bits32[sym@@i_hv_magic_check], ($c0+4);
-        join:l532:
+        join:l553:
         $r31 = $r31;
         // the preceding node is merely asserted
-        $c0 when %eq[32](bits32[bits32[($r31+28)]], 0) = sym@join@l528;
-        join:l529:
+        $c0 when %eq[32](bits32[bits32[($r31+28)]], 0) = sym@join@l549;
+        join:l550:
         $r0, $r1, $r2, $r3 = @i_hv, @i_keysv, 1, @i_hash;
         $c0, $r30 = bits32[sym@_Perl_hv_fetch_ent], ($c0+4);
-        join:l527:
+        join:l548:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@155i_1 = $r0;
         @i_@149i_entry = @i_@155i_1;
-        $c0 when %eq[32](@i_@155i_1, 0) = sym@join@l523;
-        join:l524:
+        $c0 when %eq[32](@i_@155i_1, 0) = sym@join@l544;
+        join:l545:
         @i_@152i_sv = bits32[(@i_@149i_entry+8)];
         $r0 = @i_@152i_sv;
         $c0, $r30 = bits32[sym@_Perl_mg_clear], ($c0+4);
-        join:l522:
+        join:l543:
         $r31 = $r31;
         // the preceding node is merely asserted
-        $c0 when %ne[32](bits32[bits32[($r31+32)]], 0) = sym@join@l518;
-        join:l519:
+        $c0 when %ne[32](bits32[bits32[($r31+32)]], 0) = sym@join@l539;
+        join:l540:
         $r0, $r1 = @i_@152i_sv, 112;
         $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        join:l517:
+        join:l538:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@156i_2 = $r0;
-        $c0 when %eq[32](@i_@156i_2, 0) = sym@join@l513;
-        join:l514:
+        $c0 when %eq[32](@i_@156i_2, 0) = sym@join@l534;
+        join:l535:
         $r0, $r1 = @i_@152i_sv, 112;
         $c0, $r30 = bits32[sym@_Perl_sv_unmagic], ($c0+4);
-        join:l512:
+        join:l533:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = @i_@152i_sv;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l513:
+        join:l534:
         $c0 = sym@@i_235;
         @i_235:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l518:
+        join:l539:
         $c0 = sym@@i_233;
         @i_233:
         $c0 = sym@@i_231;
-        join:l523:
+        join:l544:
         $c0 = sym@@i_231;
-        join:l528:
+        join:l549:
         $c0 = sym@@i_231;
         @i_231:
         $c0 = sym@@i_229;
-        join:l533:
+        join:l554:
         $c0 = sym@@i_229;
         @i_229:
         @i_@146i_xhv = bits32[@i_hv];
-        $c0 when %ne[32](bits32[@i_@146i_xhv], 0) = sym@join@l506;
-        join:l507:
+        $c0 when %ne[32](bits32[@i_@146i_xhv], 0) = sym@join@l527;
+        join:l528:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l506:
+        join:l527:
         $c0 = sym@@i_237;
         @i_237:
         $c0 when %eq[32](%and[32](bits32[(@i_keysv+8)], 262144), 0)
-            = sym@join@l503;
-        join:l504:
+            = sym@join@l524;
+        join:l525:
         @i_@158i_3 = @i_keysv;
         bits32[($r31+24)] = bits32[(bits32[@i_@158i_3]+4)];
         @i_@157i_239 = bits32[bits32[@i_@158i_3]];
         $c0 = sym@@i_241;
-        join:l503:
+        join:l524:
         $c0 = sym@@i_240;
         @i_240:
         $r0, $r1 = @i_keysv, bits32[($r31+24)];
         $c0, $r30 = bits32[sym@_Perl_sv_2pv], ($c0+4);
-        join:l502:
+        join:l523:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@159i_4 = $r0;
@@ -3041,7 +3041,7 @@ section "text"
         $c0 = sym@@i_241;
         @i_241:
         @i_@148i_key = @i_@157i_239;
-        $c0 when %ne[32](@i_hash, 0) = sym@join@l499;
+        $c0 when %ne[32](@i_hash, 0) = sym@join@l520;
         @i_244:
         @i_@160i_s_PeRlHaSh = @i_@148i_key;
         @i_@161i_i_PeRlHaSh = bits32[bits32[($r31+24)]];
@@ -3050,12 +3050,12 @@ section "text"
         @i_248:
         @i_@164i_6 = @i_@161i_i_PeRlHaSh;
         @i_@161i_i_PeRlHaSh = (@i_@164i_6-1);
-        $c0 when %ne[32](@i_@164i_6, 0) = sym@join@l497;
-        join:l498:
+        $c0 when %ne[32](@i_@164i_6, 0) = sym@join@l518;
+        join:l519:
         @i_hash = @i_@162i_hash_PeRlHaSh;
         @i_245:
         $c0 = sym@@i_242;
-        join:l497:
+        join:l518:
         $c0 = sym@@i_247;
         @i_247:
         @i_@163i_5 = @i_@160i_s_PeRlHaSh;
@@ -3065,7 +3065,7 @@ section "text"
             (%mul[32](33, @i_@162i_hash_PeRlHaSh)+
                 %sx[8,32](bits8[@i_@163i_5]));
         $c0 = sym@@i_248;
-        join:l499:
+        join:l520:
         $c0 = sym@@i_242;
         @i_242:
         @i_@150i_oentry
@@ -3076,19 +3076,19 @@ section "text"
         @i_@147i_i = 1;
         $c0 = sym@@i_253;
         @i_253:
-        $c0 when %ne[32](@i_@149i_entry, 0) = sym@join@l471;
-        join:l472:
+        $c0 when %ne[32](@i_@149i_entry, 0) = sym@join@l492;
+        join:l493:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l471:
+        join:l492:
         $c0 = sym@@i_250;
         @i_250:
         $c0 when %eq[32](bits32[bits32[(@i_@149i_entry+4)]], @i_hash)
-            = sym@join@l495;
-        join:l496:
+            = sym@join@l516;
+        join:l517:
         $c0 = sym@@i_251;
-        join:l495:
+        join:l516:
         $c0 = sym@@i_254;
         @i_254:
         @i_@166i_8 = 4;
@@ -3096,54 +3096,54 @@ section "text"
             when
             %eq[32](bits32[(bits32[(@i_@149i_entry+@i_@166i_8)]+
                 @i_@166i_8)],
-            bits32[bits32[($r31+24)]]) = sym@join@l493;
-        join:l494:
+            bits32[bits32[($r31+24)]]) = sym@join@l514;
+        join:l515:
         $c0 = sym@@i_251;
-        join:l493:
+        join:l514:
         $c0 = sym@@i_256;
         @i_256:
         $r0, $r1, $r2
             = (bits32[(@i_@149i_entry+4)]+8), @i_@148i_key,
             bits32[bits32[($r31+24)]];
         $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        join:l492:
+        join:l513:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@167i_9 = $r0;
-        $c0 when %eq[32](@i_@167i_9, 0) = sym@join@l488;
-        join:l489:
+        $c0 when %eq[32](@i_@167i_9, 0) = sym@join@l509;
+        join:l510:
         $c0 = sym@@i_251;
         @i_251:
         @i_@147i_i = 0;
         @i_@150i_oentry = @i_@149i_entry;
         @i_@149i_entry = bits32[@i_@150i_oentry];
         $c0 = sym@@i_253;
-        join:l488:
+        join:l509:
         $c0 = sym@@i_258;
         @i_258:
         bits32[@i_@150i_oentry] = bits32[@i_@149i_entry];
-        $c0 when %eq[32](@i_@147i_i, 0) = sym@join@l486;
-        join:l487:
-        $c0 when %ne[32](bits32[@i_@150i_oentry], 0) = sym@join@l484;
-        join:l485:
+        $c0 when %eq[32](@i_@147i_i, 0) = sym@join@l507;
+        join:l508:
+        $c0 when %ne[32](bits32[@i_@150i_oentry], 0) = sym@join@l505;
+        join:l506:
         @i_@168i_10 = (@i_@146i_xhv+4);
         bits32[@i_@168i_10] = (bits32[@i_@168i_10]-1);
         $c0 = sym@@i_260;
-        join:l484:
+        join:l505:
         $c0 = sym@@i_260;
-        join:l486:
+        join:l507:
         $c0 = sym@@i_260;
         @i_260:
-        $c0 when %eq[32](%and[32](@i_flags, 2), 0) = sym@join@l482;
-        join:l483:
+        $c0 when %eq[32](%and[32](@i_flags, 2), 0) = sym@join@l503;
+        join:l504:
         @i_@152i_sv = 0;
         $c0 = sym@@i_263;
-        join:l482:
+        join:l503:
         $c0 = sym@@i_262;
         @i_262:
         $r0 = bits32[(@i_@149i_entry+8)];
         $c0, $r30 = bits32[sym@_Perl_sv_mortalcopy], ($c0+4);
-        join:l481:
+        join:l502:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@169i_11 = $r0;
@@ -3151,18 +3151,18 @@ section "text"
         $c0 = sym@@i_263;
         @i_263:
         $c0 when %ne[32](@i_@149i_entry, bits32[(@i_@146i_xhv+32)])
-            = sym@join@l477;
-        join:l478:
+            = sym@join@l498;
+        join:l499:
         @i_@170i_12 = (@i_hv+8);
         bits32[@i_@170i_12]
             = %or[32](bits32[@i_@170i_12], 0x40000000::bits32);
         $c0 = sym@@i_265;
-        join:l477:
+        join:l498:
         $c0 = sym@@i_264;
         @i_264:
         $r0, $r1 = @i_hv, @i_@149i_entry;
         $c0, $r30 = bits32[sym@_Perl_hv_free_ent], ($c0+4);
-        join:l476:
+        join:l497:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_265;
@@ -3182,89 +3182,89 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_key, @i_klen = $r0, $r1, $r2;
         $t1 = $r30;
-        initialize continuations:l545:
-        proc body start:l544:
-        $c0 when %ne[32](@i_hv, 0) = sym@join@l610;
-        join:l611:
+        initialize continuations:l565:
+        proc body start:l564:
+        $c0 when %ne[32](@i_hv, 0) = sym@join@l630;
+        join:l631:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l610:
+        join:l630:
         $c0 = sym@@i_267;
         @i_267:
         $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@join@l607;
-        join:l608:
+            = sym@join@l627;
+        join:l628:
         $r0, $r1 = @i_hv, 80;
         $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        join:l606:
+        join:l626:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@176i_1 = $r0;
-        $c0 when %eq[32](@i_@176i_1, 0) = sym@join@l602;
-        join:l603:
+        $c0 when %eq[32](@i_@176i_1, 0) = sym@join@l622;
+        join:l623:
         $c0, $r30 = bits32[sym@_Perl_sv_newmortal], ($c0+4);
-        join:l601:
+        join:l621:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@177i_2 = $r0;
         @i_@175i_sv = @i_@177i_2;
         $r0, $r1, $r2, $r3 = @i_hv, @i_@175i_sv, @i_key, @i_klen;
         $c0, $r30 = bits32[sym@_Perl_mg_copy], ($c0+4);
-        join:l598:
+        join:l618:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0, $r1 = @i_@175i_sv, 112;
         $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        join:l595:
+        join:l615:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@178i_3 = $r0;
         $r0, $r1 = @i_@175i_sv, @i_@178i_3;
         $c0, $r30 = bits32[sym@_Perl_magic_existspack], ($c0+4);
-        join:l592:
+        join:l612:
         $r31 = $r31;
         // the preceding node is merely asserted
-        $c0 when %ne[32](@i_@175i_sv, 0) = sym@join@l588;
-        join:l589:
+        $c0 when %ne[32](@i_@175i_sv, 0) = sym@join@l608;
+        join:l609:
         @i_@179i_279 = 0;
         $c0 = sym@@i_281;
-        join:l588:
+        join:l608:
         $c0 = sym@@i_280;
         @i_280:
         $c0 when %eq[32](%and[32](bits32[(@i_@175i_sv+8)], 262144), 0)
-            = sym@join@l586;
-        join:l587:
+            = sym@join@l606;
+        join:l607:
         @i_@186i_4 = bits32[sym@_PL_Xpv];
         @i_@187i_5 = bits32[@i_@175i_sv];
         bits32[@i_@186i_4] = @i_@187i_5;
-        $c0 when %eq[32](@i_@187i_5, 0) = sym@join@l584;
-        join:l585:
+        $c0 when %eq[32](@i_@187i_5, 0) = sym@join@l604;
+        join:l605:
         @i_@188i_6 = bits32[@i_@186i_4];
         @i_@189i_7 = %sx[8,32](bits8[bits32[@i_@188i_6]]);
         @i_@190i_8 = 48;
-        $c0 when %gt[32](@i_@189i_7, @i_@190i_8) = sym@join@l582;
-        join:l583:
+        $c0 when %gt[32](@i_@189i_7, @i_@190i_8) = sym@join@l602;
+        join:l603:
         @i_@191i_9 = bits32[(@i_@188i_6+4)];
-        $c0 when %gtu[32](@i_@191i_9, 1) = sym@join@l580;
-        join:l581:
-        $c0 when %eq[32](@i_@191i_9, 0) = sym@join@l578;
-        join:l579:
-        $c0 when %eq[32](@i_@189i_7, @i_@190i_8) = sym@join@l577;
-        join:l615:
+        $c0 when %gtu[32](@i_@191i_9, 1) = sym@join@l600;
+        join:l601:
+        $c0 when %eq[32](@i_@191i_9, 0) = sym@join@l598;
+        join:l599:
+        $c0 when %eq[32](@i_@189i_7, @i_@190i_8) = sym@join@l597;
+        join:l635:
         $c0 = sym@@i_287;
-        join:l577:
+        join:l597:
         $c0 = sym@@i_284;
-        join:l578:
+        join:l598:
         $c0 = sym@@i_284;
-        join:l580:
+        join:l600:
         $c0 = sym@@i_287;
-        join:l582:
+        join:l602:
         $c0 = sym@@i_287;
         @i_287:
         @i_@181i_273 = 1;
         $c0 = sym@@i_285;
-        join:l584:
+        join:l604:
         $c0 = sym@@i_284;
         @i_284:
         @i_@181i_273 = 0;
@@ -3272,18 +3272,18 @@ section "text"
         @i_285:
         @i_@180i_278 = @i_@181i_273;
         $c0 = sym@@i_283;
-        join:l586:
+        join:l606:
         $c0 = sym@@i_282;
         @i_282:
         $c0 when %eq[32](%and[32](bits32[(@i_@175i_sv+8)], 65536), 0)
-            = sym@join@l575;
-        join:l576:
+            = sym@join@l595;
+        join:l596:
         $c0 when %eq[32](bits32[(bits32[@i_@175i_sv]+12)], 0)
-            = sym@join@l573;
-        join:l574:
+            = sym@join@l593;
+        join:l594:
         @i_@183i_277 = 1;
         $c0 = sym@@i_291;
-        join:l573:
+        join:l593:
         $c0 = sym@@i_290;
         @i_290:
         @i_@183i_277 = 0;
@@ -3291,21 +3291,21 @@ section "text"
         @i_291:
         @i_@182i_276 = @i_@183i_277;
         $c0 = sym@@i_289;
-        join:l575:
+        join:l595:
         $c0 = sym@@i_288;
         @i_288:
         $c0 when %eq[32](%and[32](bits32[(@i_@175i_sv+8)], 131072), 0)
-            = sym@join@l571;
-        join:l572:
+            = sym@join@l591;
+        join:l592:
         $c0
             when
             %eq[2](%fcmp[32](bits32[(bits32[@i_@175i_sv]+16)],
             bits32[bits32[sym@@f_296]]),
-            %float_eq[]()) = sym@join@l569;
-        join:l570:
+            %float_eq[]()) = sym@join@l589;
+        join:l590:
         @i_@185i_275 = 1;
         $c0 = sym@@i_295;
-        join:l569:
+        join:l589:
         $c0 = sym@@i_294;
         @i_294:
         @i_@185i_275 = 0;
@@ -3313,12 +3313,12 @@ section "text"
         @i_295:
         @i_@184i_274 = @i_@185i_275;
         $c0 = sym@@i_293;
-        join:l571:
+        join:l591:
         $c0 = sym@@i_292;
         @i_292:
         $r0 = @i_@175i_sv;
         $c0, $r30 = bits32[sym@_Perl_sv_2bool], ($c0+4);
-        join:l568:
+        join:l588:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@192i_10 = $r0;
@@ -3337,20 +3337,20 @@ section "text"
         $r0 = @i_@179i_279;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l602:
+        join:l622:
         $c0 = sym@@i_271;
         @i_271:
         $c0 = sym@@i_269;
-        join:l607:
+        join:l627:
         $c0 = sym@@i_269;
         @i_269:
         @i_@172i_xhv = bits32[@i_hv];
-        $c0 when %ne[32](bits32[@i_@172i_xhv], 0) = sym@join@l563;
-        join:l564:
+        $c0 when %ne[32](bits32[@i_@172i_xhv], 0) = sym@join@l583;
+        join:l584:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l563:
+        join:l583:
         $c0 = sym@@i_297;
         @i_297:
         @i_299:
@@ -3361,8 +3361,8 @@ section "text"
         @i_303:
         @i_@197i_12 = @i_@194i_i_PeRlHaSh;
         @i_@194i_i_PeRlHaSh = (@i_@197i_12-1);
-        $c0 when %ne[32](@i_@197i_12, 0) = sym@join@l560;
-        join:l561:
+        $c0 when %ne[32](@i_@197i_12, 0) = sym@join@l580;
+        join:l581:
         @i_@173i_hash = @i_@195i_hash_PeRlHaSh;
         @i_300:
         @i_@174i_entry
@@ -3373,21 +3373,21 @@ section "text"
                 bits32[@i_@172i_xhv])];
         $c0 = sym@@i_308;
         @i_308:
-        $c0 when %ne[32](@i_@174i_entry, 0) = sym@join@l548;
-        join:l549:
+        $c0 when %ne[32](@i_@174i_entry, 0) = sym@join@l568;
+        join:l569:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l548:
+        join:l568:
         $c0 = sym@@i_305;
         @i_305:
         $c0
             when
             %eq[32](bits32[bits32[(@i_@174i_entry+4)]], @i_@173i_hash)
-            = sym@join@l558;
-        join:l559:
+            = sym@join@l578;
+        join:l579:
         $c0 = sym@@i_306;
-        join:l558:
+        join:l578:
         $c0 = sym@@i_309;
         @i_309:
         @i_@199i_14 = 4;
@@ -3395,31 +3395,31 @@ section "text"
             when
             %eq[32](bits32[(bits32[(@i_@174i_entry+@i_@199i_14)]+
                 @i_@199i_14)],
-            @i_klen) = sym@join@l556;
-        join:l557:
+            @i_klen) = sym@join@l576;
+        join:l577:
         $c0 = sym@@i_306;
-        join:l556:
+        join:l576:
         $c0 = sym@@i_311;
         @i_311:
         $r0, $r1, $r2 = (bits32[(@i_@174i_entry+4)]+8), @i_key, @i_klen;
         $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        join:l555:
+        join:l575:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@200i_15 = $r0;
-        $c0 when %eq[32](@i_@200i_15, 0) = sym@join@l551;
-        join:l552:
+        $c0 when %eq[32](@i_@200i_15, 0) = sym@join@l571;
+        join:l572:
         $c0 = sym@@i_306;
         @i_306:
         @i_@174i_entry = bits32[@i_@174i_entry];
         $c0 = sym@@i_308;
-        join:l551:
+        join:l571:
         $c0 = sym@@i_313;
         @i_313:
         $r0 = 1;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l560:
+        join:l580:
         $c0 = sym@@i_302;
         @i_302:
         @i_@196i_11 = @i_@193i_s_PeRlHaSh;
@@ -3439,102 +3439,102 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_keysv, @i_hash = $r0, $r1, $r2;
         $t1 = $r30;
-        initialize continuations:l620:
-        proc body start:l619:
-        $c0 when %ne[32](@i_hv, 0) = sym@join@l697;
-        join:l698:
+        initialize continuations:l639:
+        proc body start:l638:
+        $c0 when %ne[32](@i_hv, 0) = sym@join@l716;
+        join:l717:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l697:
+        join:l716:
         $c0 = sym@@i_316;
         @i_316:
         $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@join@l694;
-        join:l695:
+            = sym@join@l713;
+        join:l714:
         $r0, $r1 = @i_hv, 80;
         $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        join:l693:
+        join:l712:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@206i_1 = $r0;
-        $c0 when %eq[32](@i_@206i_1, 0) = sym@join@l689;
-        join:l690:
+        $c0 when %eq[32](@i_@206i_1, 0) = sym@join@l708;
+        join:l709:
         $c0, $r30 = bits32[sym@_Perl_sv_newmortal], ($c0+4);
-        join:l688:
+        join:l707:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@207i_2 = $r0;
         @i_@205i_sv = @i_@207i_2;
         $r0 = @i_keysv;
         $c0, $r30 = bits32[sym@_Perl_newSVsv], ($c0+4);
-        join:l685:
+        join:l704:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@208i_3 = $r0;
         $r0 = @i_@208i_3;
         $c0, $r30 = bits32[sym@_Perl_sv_2mortal], ($c0+4);
-        join:l682:
+        join:l701:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@209i_4 = $r0;
         @i_keysv = @i_@209i_4;
         $r0, $r1, $r2, $r3 = @i_hv, @i_@205i_sv, @i_keysv, -2;
         $c0, $r30 = bits32[sym@_Perl_mg_copy], ($c0+4);
-        join:l679:
+        join:l698:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0, $r1 = @i_@205i_sv, 112;
         $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        join:l676:
+        join:l695:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@210i_5 = $r0;
         $r0, $r1 = @i_@205i_sv, @i_@210i_5;
         $c0, $r30 = bits32[sym@_Perl_magic_existspack], ($c0+4);
-        join:l673:
+        join:l692:
         $r31 = $r31;
         // the preceding node is merely asserted
-        $c0 when %ne[32](@i_@205i_sv, 0) = sym@join@l669;
-        join:l670:
+        $c0 when %ne[32](@i_@205i_sv, 0) = sym@join@l688;
+        join:l689:
         @i_@211i_328 = 0;
         $c0 = sym@@i_330;
-        join:l669:
+        join:l688:
         $c0 = sym@@i_329;
         @i_329:
         $c0 when %eq[32](%and[32](bits32[(@i_@205i_sv+8)], 262144), 0)
-            = sym@join@l667;
-        join:l668:
+            = sym@join@l686;
+        join:l687:
         @i_@218i_6 = bits32[sym@_PL_Xpv];
         @i_@219i_7 = bits32[@i_@205i_sv];
         bits32[@i_@218i_6] = @i_@219i_7;
-        $c0 when %eq[32](@i_@219i_7, 0) = sym@join@l665;
-        join:l666:
+        $c0 when %eq[32](@i_@219i_7, 0) = sym@join@l684;
+        join:l685:
         @i_@220i_8 = bits32[@i_@218i_6];
         @i_@221i_9 = %sx[8,32](bits8[bits32[@i_@220i_8]]);
         @i_@222i_10 = 48;
-        $c0 when %gt[32](@i_@221i_9, @i_@222i_10) = sym@join@l663;
-        join:l664:
+        $c0 when %gt[32](@i_@221i_9, @i_@222i_10) = sym@join@l682;
+        join:l683:
         @i_@223i_11 = bits32[(@i_@220i_8+4)];
-        $c0 when %gtu[32](@i_@223i_11, 1) = sym@join@l661;
-        join:l662:
-        $c0 when %eq[32](@i_@223i_11, 0) = sym@join@l659;
-        join:l660:
-        $c0 when %eq[32](@i_@221i_9, @i_@222i_10) = sym@join@l658;
-        join:l702:
+        $c0 when %gtu[32](@i_@223i_11, 1) = sym@join@l680;
+        join:l681:
+        $c0 when %eq[32](@i_@223i_11, 0) = sym@join@l678;
+        join:l679:
+        $c0 when %eq[32](@i_@221i_9, @i_@222i_10) = sym@join@l677;
+        join:l721:
         $c0 = sym@@i_336;
-        join:l658:
+        join:l677:
         $c0 = sym@@i_333;
-        join:l659:
+        join:l678:
         $c0 = sym@@i_333;
-        join:l661:
+        join:l680:
         $c0 = sym@@i_336;
-        join:l663:
+        join:l682:
         $c0 = sym@@i_336;
         @i_336:
         @i_@213i_322 = 1;
         $c0 = sym@@i_334;
-        join:l665:
+        join:l684:
         $c0 = sym@@i_333;
         @i_333:
         @i_@213i_322 = 0;
@@ -3542,18 +3542,18 @@ section "text"
         @i_334:
         @i_@212i_327 = @i_@213i_322;
         $c0 = sym@@i_332;
-        join:l667:
+        join:l686:
         $c0 = sym@@i_331;
         @i_331:
         $c0 when %eq[32](%and[32](bits32[(@i_@205i_sv+8)], 65536), 0)
-            = sym@join@l656;
-        join:l657:
+            = sym@join@l675;
+        join:l676:
         $c0 when %eq[32](bits32[(bits32[@i_@205i_sv]+12)], 0)
-            = sym@join@l654;
-        join:l655:
+            = sym@join@l673;
+        join:l674:
         @i_@215i_326 = 1;
         $c0 = sym@@i_340;
-        join:l654:
+        join:l673:
         $c0 = sym@@i_339;
         @i_339:
         @i_@215i_326 = 0;
@@ -3561,21 +3561,21 @@ section "text"
         @i_340:
         @i_@214i_325 = @i_@215i_326;
         $c0 = sym@@i_338;
-        join:l656:
+        join:l675:
         $c0 = sym@@i_337;
         @i_337:
         $c0 when %eq[32](%and[32](bits32[(@i_@205i_sv+8)], 131072), 0)
-            = sym@join@l652;
-        join:l653:
+            = sym@join@l671;
+        join:l672:
         $c0
             when
             %eq[2](%fcmp[32](bits32[(bits32[@i_@205i_sv]+16)],
             bits32[bits32[sym@@f_296]]),
-            %float_eq[]()) = sym@join@l650;
-        join:l651:
+            %float_eq[]()) = sym@join@l669;
+        join:l670:
         @i_@217i_324 = 1;
         $c0 = sym@@i_344;
-        join:l650:
+        join:l669:
         $c0 = sym@@i_343;
         @i_343:
         @i_@217i_324 = 0;
@@ -3583,12 +3583,12 @@ section "text"
         @i_344:
         @i_@216i_323 = @i_@217i_324;
         $c0 = sym@@i_342;
-        join:l652:
+        join:l671:
         $c0 = sym@@i_341;
         @i_341:
         $r0 = @i_@205i_sv;
         $c0, $r30 = bits32[sym@_Perl_sv_2bool], ($c0+4);
-        join:l649:
+        join:l668:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@224i_12 = $r0;
@@ -3607,35 +3607,35 @@ section "text"
         $r0 = @i_@211i_328;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l689:
+        join:l708:
         $c0 = sym@@i_320;
         @i_320:
         $c0 = sym@@i_318;
-        join:l694:
+        join:l713:
         $c0 = sym@@i_318;
         @i_318:
         @i_@201i_xhv = bits32[@i_hv];
-        $c0 when %ne[32](bits32[@i_@201i_xhv], 0) = sym@join@l644;
-        join:l645:
+        $c0 when %ne[32](bits32[@i_@201i_xhv], 0) = sym@join@l663;
+        join:l664:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l644:
+        join:l663:
         $c0 = sym@@i_345;
         @i_345:
         $c0 when %eq[32](%and[32](bits32[(@i_keysv+8)], 262144), 0)
-            = sym@join@l641;
-        join:l642:
+            = sym@join@l660;
+        join:l661:
         @i_@226i_13 = @i_keysv;
         bits32[($r31+24)] = bits32[(bits32[@i_@226i_13]+4)];
         @i_@225i_347 = bits32[bits32[@i_@226i_13]];
         $c0 = sym@@i_349;
-        join:l641:
+        join:l660:
         $c0 = sym@@i_348;
         @i_348:
         $r0, $r1 = @i_keysv, bits32[($r31+24)];
         $c0, $r30 = bits32[sym@_Perl_sv_2pv], ($c0+4);
-        join:l640:
+        join:l659:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@227i_14 = $r0;
@@ -3643,7 +3643,7 @@ section "text"
         $c0 = sym@@i_349;
         @i_349:
         @i_@202i_key = @i_@225i_347;
-        $c0 when %ne[32](@i_hash, 0) = sym@join@l637;
+        $c0 when %ne[32](@i_hash, 0) = sym@join@l656;
         @i_352:
         @i_@228i_s_PeRlHaSh = @i_@202i_key;
         @i_@229i_i_PeRlHaSh = bits32[bits32[($r31+24)]];
@@ -3652,12 +3652,12 @@ section "text"
         @i_356:
         @i_@232i_16 = @i_@229i_i_PeRlHaSh;
         @i_@229i_i_PeRlHaSh = (@i_@232i_16-1);
-        $c0 when %ne[32](@i_@232i_16, 0) = sym@join@l635;
-        join:l636:
+        $c0 when %ne[32](@i_@232i_16, 0) = sym@join@l654;
+        join:l655:
         @i_hash = @i_@230i_hash_PeRlHaSh;
         @i_353:
         $c0 = sym@@i_350;
-        join:l635:
+        join:l654:
         $c0 = sym@@i_355;
         @i_355:
         @i_@231i_15 = @i_@228i_s_PeRlHaSh;
@@ -3667,7 +3667,7 @@ section "text"
             (%mul[32](33, @i_@230i_hash_PeRlHaSh)+
                 %sx[8,32](bits8[@i_@231i_15]));
         $c0 = sym@@i_356;
-        join:l637:
+        join:l656:
         $c0 = sym@@i_350;
         @i_350:
         @i_@203i_entry
@@ -3678,19 +3678,19 @@ section "text"
                 bits32[@i_@201i_xhv])];
         $c0 = sym@@i_361;
         @i_361:
-        $c0 when %ne[32](@i_@203i_entry, 0) = sym@join@l623;
-        join:l624:
+        $c0 when %ne[32](@i_@203i_entry, 0) = sym@join@l642;
+        join:l643:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l623:
+        join:l642:
         $c0 = sym@@i_358;
         @i_358:
         $c0 when %eq[32](bits32[bits32[(@i_@203i_entry+4)]], @i_hash)
-            = sym@join@l633;
-        join:l634:
+            = sym@join@l652;
+        join:l653:
         $c0 = sym@@i_359;
-        join:l633:
+        join:l652:
         $c0 = sym@@i_362;
         @i_362:
         @i_@234i_18 = 4;
@@ -3698,27 +3698,27 @@ section "text"
             when
             %eq[32](bits32[(bits32[(@i_@203i_entry+@i_@234i_18)]+
                 @i_@234i_18)],
-            bits32[bits32[($r31+24)]]) = sym@join@l631;
-        join:l632:
+            bits32[bits32[($r31+24)]]) = sym@join@l650;
+        join:l651:
         $c0 = sym@@i_359;
-        join:l631:
+        join:l650:
         $c0 = sym@@i_364;
         @i_364:
         $r0, $r1, $r2
             = (bits32[(@i_@203i_entry+4)]+8), @i_@202i_key,
             bits32[bits32[($r31+24)]];
         $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        join:l630:
+        join:l649:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@235i_19 = $r0;
-        $c0 when %eq[32](@i_@235i_19, 0) = sym@join@l626;
-        join:l627:
+        $c0 when %eq[32](@i_@235i_19, 0) = sym@join@l645;
+        join:l646:
         $c0 = sym@@i_359;
         @i_359:
         @i_@203i_entry = bits32[@i_@203i_entry];
         $c0 = sym@@i_361;
-        join:l626:
+        join:l645:
         $c0 = sym@@i_366;
         @i_366:
         $r0 = 1;
@@ -3734,8 +3734,8 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv = $r0;
         $t1 = $r30;
-        initialize continuations:l707:
-        proc body start:l706:
+        initialize continuations:l725:
+        proc body start:l724:
         @i_@236i_xhv = bits32[@i_hv];
         @i_@244i_oldsize = (bits32[(@i_@236i_xhv+8)]+1);
         @i_@237i_newsize = %shl[32](@i_@244i_oldsize, 1);
@@ -3747,49 +3747,49 @@ section "text"
             %mul[32](1,
             (%shl[32](%shl[32](@i_@237i_newsize, 2), @i_@245i_1)-16));
         $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        join:l739:
+        join:l757:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@246i_2 = $r0;
         @i_@239i_a = @i_@246i_2;
-        $c0 when %ne[32](@i_@239i_a, 0) = sym@join@l735;
-        join:l736:
+        $c0 when %ne[32](@i_@239i_a, 0) = sym@join@l753;
+        join:l754:
         bits32[sym@_PL_nomemok] = 0;
         $c0 = sym@@i_368;
-        join:l735:
+        join:l753:
         $c0 = sym@@i_369;
         @i_369:
         $r0, $r1, $r2
             = bits32[@i_@236i_xhv], @i_@239i_a,
             %mul[32](1, %shl[32](@i_@244i_oldsize, 2));
         $c0, $r30 = bits32[sym@_Perl_my_bcopy], ($c0+4);
-        join:l734:
+        join:l752:
         $r31 = $r31;
         // the preceding node is merely asserted
-        $c0 when %lt[32](@i_@244i_oldsize, 64) = sym@join@l731;
+        $c0 when %lt[32](@i_@244i_oldsize, 64) = sym@join@l749;
         @i_373:
         $c0 when %ne[32](bits32[bits32[sym@_PL_nice_chunk]], 0)
-            = sym@join@l729;
-        join:l730:
+            = sym@join@l747;
+        join:l748:
         bits32[sym@_PL_nice_chunk] = bits32[@i_@236i_xhv];
         bits32[sym@_PL_nice_chunk_size]
             = (%shl[32](%shl[32](@i_@244i_oldsize, 2), 1)-16);
         $c0 = sym@@i_372;
-        join:l729:
+        join:l747:
         $c0 = sym@@i_376;
         @i_376:
         $r0 = bits32[@i_@236i_xhv];
         $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        join:l728:
+        join:l746:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_372;
-        join:l731:
+        join:l749:
         $c0 = sym@@i_371;
         @i_371:
         $r0 = bits32[@i_@236i_xhv];
         $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        join:l725:
+        join:l743:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_372;
@@ -3803,7 +3803,7 @@ section "text"
             %mul[32](1,
             %shl[32]((@i_@237i_newsize-@i_@244i_oldsize), @i_@249i_5));
         $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        join:l722:
+        join:l740:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@250i_6 = (@i_@237i_newsize-1);
@@ -3814,19 +3814,19 @@ section "text"
         @i_@238i_i = 0;
         $c0 = sym@@i_381;
         @i_381:
-        $c0 when %lt[32](@i_@238i_i, @i_@244i_oldsize) = sym@join@l709;
-        join:l743:
+        $c0 when %lt[32](@i_@238i_i, @i_@244i_oldsize) = sym@join@l727;
+        join:l761:
         $c0 = sym@@i_368;
         @i_368:
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l709:
+        join:l727:
         $c0 = sym@@i_378;
         @i_378:
-        $c0 when %ne[32](bits32[@i_@240i_aep], 0) = sym@join@l718;
-        join:l719:
+        $c0 when %ne[32](bits32[@i_@240i_aep], 0) = sym@join@l736;
+        join:l737:
         $c0 = sym@@i_379;
-        join:l718:
+        join:l736:
         $c0 = sym@@i_382;
         @i_382:
         @i_@241i_bep = (%shl[32](@i_@244i_oldsize, 2)+@i_@240i_aep);
@@ -3834,14 +3834,14 @@ section "text"
         @i_@242i_entry = bits32[@i_@240i_aep];
         $c0 = sym@@i_387;
         @i_387:
-        $c0 when %ne[32](@i_@242i_entry, 0) = sym@join@l712;
-        join:l713:
-        $c0 when %ne[32](bits32[@i_@240i_aep], 0) = sym@join@l710;
-        join:l711:
+        $c0 when %ne[32](@i_@242i_entry, 0) = sym@join@l730;
+        join:l731:
+        $c0 when %ne[32](bits32[@i_@240i_aep], 0) = sym@join@l728;
+        join:l729:
         @i_@253i_9 = (@i_@236i_xhv+4);
         bits32[@i_@253i_9] = (bits32[@i_@253i_9]-1);
         $c0 = sym@@i_392;
-        join:l710:
+        join:l728:
         $c0 = sym@@i_392;
         @i_392:
         $c0 = sym@@i_379;
@@ -3849,28 +3849,28 @@ section "text"
         @i_@238i_i = (@i_@238i_i+1);
         @i_@240i_aep = (@i_@240i_aep+4);
         $c0 = sym@@i_381;
-        join:l712:
+        join:l730:
         $c0 = sym@@i_384;
         @i_384:
         $c0
             when
             %eq[32](%and[32](bits32[bits32[(@i_@242i_entry+4)]],
             @i_@237i_newsize),
-            @i_@238i_i) = sym@join@l716;
-        join:l717:
+            @i_@238i_i) = sym@join@l734;
+        join:l735:
         bits32[@i_@243i_oentry] = bits32[@i_@242i_entry];
         bits32[@i_@242i_entry] = bits32[@i_@241i_bep];
-        $c0 when %ne[32](bits32[@i_@241i_bep], 0) = sym@join@l714;
-        join:l715:
+        $c0 when %ne[32](bits32[@i_@241i_bep], 0) = sym@join@l732;
+        join:l733:
         @i_@252i_8 = (@i_@236i_xhv+4);
         bits32[@i_@252i_8] = (bits32[@i_@252i_8]+1);
         $c0 = sym@@i_390;
-        join:l714:
+        join:l732:
         $c0 = sym@@i_390;
         @i_390:
         bits32[@i_@241i_bep] = @i_@242i_entry;
         $c0 = sym@@i_385;
-        join:l716:
+        join:l734:
         $c0 = sym@@i_388;
         @i_388:
         @i_@243i_oentry = @i_@242i_entry;
@@ -3888,42 +3888,42 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_newmax = $r0, $r1;
         $t1 = $r30;
-        initialize continuations:l748:
-        proc body start:l747:
+        initialize continuations:l765:
+        proc body start:l764:
         @i_@254i_xhv = bits32[@i_hv];
         @i_@262i_oldsize = (bits32[(@i_@254i_xhv+8)]+1);
         @i_@255i_newsize = @i_newmax;
         @i_@263i_1 = @i_newmax;
-        $c0 when %ne[32](@i_@255i_newsize, @i_@263i_1) = sym@join@l798;
-        join:l799:
-        $c0 when %gt[32](@i_@263i_1, @i_@262i_oldsize) = sym@join@l797;
-        join:l804:
+        $c0 when %ne[32](@i_@255i_newsize, @i_@263i_1) = sym@join@l815;
+        join:l816:
+        $c0 when %gt[32](@i_@263i_1, @i_@262i_oldsize) = sym@join@l814;
+        join:l821:
         $c0 = sym@@i_397;
-        join:l797:
+        join:l814:
         $c0 = sym@@i_399;
         @i_399:
         $c0
             when
             %ne[32](%and[32](@i_@255i_newsize,
             (%com[32](@i_@255i_newsize)+1)),
-            @i_@255i_newsize) = sym@join@l795;
-        join:l796:
-        $c0 when %ge[32](@i_@255i_newsize, @i_newmax) = sym@join@l793;
-        join:l794:
+            @i_@255i_newsize) = sym@join@l812;
+        join:l813:
+        $c0 when %ge[32](@i_@255i_newsize, @i_newmax) = sym@join@l810;
+        join:l811:
         @i_@255i_newsize = %shl[32](@i_@255i_newsize, 1);
         $c0 = sym@@i_401;
-        join:l793:
+        join:l810:
         $c0 = sym@@i_401;
         @i_401:
-        $c0 when %ge[32](@i_@255i_newsize, @i_newmax) = sym@join@l791;
-        join:l792:
+        $c0 when %ge[32](@i_@255i_newsize, @i_newmax) = sym@join@l808;
+        join:l809:
         $c0 = sym@@i_394;
-        join:l791:
+        join:l808:
         $c0 = sym@@i_403;
         @i_403:
         @i_@258i_a = bits32[@i_@254i_xhv];
-        $c0 when %eq[32](@i_@258i_a, 0) = sym@join@l789;
-        join:l790:
+        $c0 when %eq[32](@i_@258i_a, 0) = sym@join@l806;
+        join:l807:
         @i_@266i_4 = 1;
         bits32[sym@_PL_nomemok] = @i_@266i_4;
         $r0
@@ -3931,49 +3931,49 @@ section "text"
             %mul[32](1,
             (%shl[32](%shl[32](@i_@255i_newsize, 2), @i_@266i_4)-16));
         $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        join:l788:
+        join:l805:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@267i_5 = $r0;
         @i_@258i_a = @i_@267i_5;
-        $c0 when %ne[32](@i_@258i_a, 0) = sym@join@l784;
-        join:l785:
+        $c0 when %ne[32](@i_@258i_a, 0) = sym@join@l801;
+        join:l802:
         bits32[sym@_PL_nomemok] = 0;
         $c0 = sym@@i_394;
-        join:l784:
+        join:l801:
         $c0 = sym@@i_407;
         @i_407:
         $r0, $r1, $r2
             = bits32[@i_@254i_xhv], @i_@258i_a,
             %mul[32](1, %shl[32](@i_@262i_oldsize, 2));
         $c0, $r30 = bits32[sym@_Perl_my_bcopy], ($c0+4);
-        join:l783:
+        join:l800:
         $r31 = $r31;
         // the preceding node is merely asserted
-        $c0 when %lt[32](@i_@262i_oldsize, 64) = sym@join@l780;
+        $c0 when %lt[32](@i_@262i_oldsize, 64) = sym@join@l797;
         @i_411:
         $c0 when %ne[32](bits32[bits32[sym@_PL_nice_chunk]], 0)
-            = sym@join@l778;
-        join:l779:
+            = sym@join@l795;
+        join:l796:
         bits32[sym@_PL_nice_chunk] = bits32[@i_@254i_xhv];
         bits32[sym@_PL_nice_chunk_size]
             = (%shl[32](%shl[32](@i_@262i_oldsize, 2), 1)-16);
         $c0 = sym@@i_410;
-        join:l778:
+        join:l795:
         $c0 = sym@@i_414;
         @i_414:
         $r0 = bits32[@i_@254i_xhv];
         $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        join:l777:
+        join:l794:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_410;
-        join:l780:
+        join:l797:
         $c0 = sym@@i_409;
         @i_409:
         $r0 = bits32[@i_@254i_xhv];
         $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        join:l774:
+        join:l791:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_410;
@@ -3987,11 +3987,11 @@ section "text"
             %mul[32](1,
             %shl[32]((@i_@255i_newsize-@i_@262i_oldsize), @i_@270i_8));
         $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        join:l771:
+        join:l788:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_406;
-        join:l789:
+        join:l806:
         $c0 = sym@@i_405;
         @i_405:
         $r0
@@ -3999,7 +3999,7 @@ section "text"
             %mul[32](1,
             (%shl[32](%shl[32](@i_@255i_newsize, 2), 1)-16));
         $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        join:l768:
+        join:l785:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@271i_9 = $r0;
@@ -4009,7 +4009,7 @@ section "text"
             %mul[32](1,
             (%shl[32](%shl[32](@i_@255i_newsize, 2), 1)-16));
         $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        join:l765:
+        join:l782:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_406;
@@ -4018,40 +4018,40 @@ section "text"
         @i_@255i_newsize = @i_@272i_10;
         bits32[(@i_@254i_xhv+8)] = @i_@272i_10;
         bits32[@i_@254i_xhv] = @i_@258i_a;
-        $c0 when %ne[32](bits32[(@i_@254i_xhv+4)], 0) = sym@join@l761;
-        join:l762:
+        $c0 when %ne[32](bits32[(@i_@254i_xhv+4)], 0) = sym@join@l778;
+        join:l779:
         $c0 = sym@@i_394;
-        join:l761:
+        join:l778:
         $c0 = sym@@i_416;
         @i_416:
         @i_@259i_aep = @i_@258i_a;
         @i_@256i_i = 0;
         $c0 = sym@@i_421;
         @i_421:
-        $c0 when %lt[32](@i_@256i_i, @i_@262i_oldsize) = sym@join@l750;
-        join:l803:
+        $c0 when %lt[32](@i_@256i_i, @i_@262i_oldsize) = sym@join@l767;
+        join:l820:
         $c0 = sym@@i_394;
-        join:l750:
+        join:l767:
         $c0 = sym@@i_418;
         @i_418:
-        $c0 when %ne[32](bits32[@i_@259i_aep], 0) = sym@join@l759;
-        join:l760:
+        $c0 when %ne[32](bits32[@i_@259i_aep], 0) = sym@join@l776;
+        join:l777:
         $c0 = sym@@i_419;
-        join:l759:
+        join:l776:
         $c0 = sym@@i_422;
         @i_422:
         @i_@261i_oentry = @i_@259i_aep;
         @i_@260i_entry = bits32[@i_@259i_aep];
         $c0 = sym@@i_427;
         @i_427:
-        $c0 when %ne[32](@i_@260i_entry, 0) = sym@join@l753;
-        join:l754:
-        $c0 when %ne[32](bits32[@i_@259i_aep], 0) = sym@join@l751;
-        join:l752:
+        $c0 when %ne[32](@i_@260i_entry, 0) = sym@join@l770;
+        join:l771:
+        $c0 when %ne[32](bits32[@i_@259i_aep], 0) = sym@join@l768;
+        join:l769:
         @i_@277i_15 = (@i_@254i_xhv+4);
         bits32[@i_@277i_15] = (bits32[@i_@277i_15]-1);
         $c0 = sym@@i_432;
-        join:l751:
+        join:l768:
         $c0 = sym@@i_432;
         @i_432:
         $c0 = sym@@i_419;
@@ -4059,7 +4059,7 @@ section "text"
         @i_@256i_i = (@i_@256i_i+1);
         @i_@259i_aep = (@i_@259i_aep+4);
         $c0 = sym@@i_421;
-        join:l753:
+        join:l770:
         $c0 = sym@@i_424;
         @i_424:
         @i_@274i_12
@@ -4067,23 +4067,23 @@ section "text"
             %and[32](bits32[bits32[(@i_@260i_entry+4)]],
             @i_@255i_newsize);
         @i_@257i_j = @i_@274i_12;
-        $c0 when %eq[32](@i_@274i_12, @i_@256i_i) = sym@join@l757;
-        join:l758:
+        $c0 when %eq[32](@i_@274i_12, @i_@256i_i) = sym@join@l774;
+        join:l775:
         @i_@257i_j = (@i_@257i_j-@i_@256i_i);
         bits32[@i_@261i_oentry] = bits32[@i_@260i_entry];
         @i_@275i_13 = bits32[(%shl[32](@i_@257i_j, 2)+@i_@259i_aep)];
         bits32[@i_@260i_entry] = @i_@275i_13;
-        $c0 when %ne[32](@i_@275i_13, 0) = sym@join@l755;
-        join:l756:
+        $c0 when %ne[32](@i_@275i_13, 0) = sym@join@l772;
+        join:l773:
         @i_@276i_14 = (@i_@254i_xhv+4);
         bits32[@i_@276i_14] = (bits32[@i_@276i_14]+1);
         $c0 = sym@@i_430;
-        join:l755:
+        join:l772:
         $c0 = sym@@i_430;
         @i_430:
         bits32[(%shl[32](@i_@257i_j, 2)+@i_@259i_aep)] = @i_@260i_entry;
         $c0 = sym@@i_425;
-        join:l757:
+        join:l774:
         $c0 = sym@@i_428;
         @i_428:
         @i_@261i_oentry = @i_@260i_entry;
@@ -4091,7 +4091,7 @@ section "text"
         @i_425:
         @i_@260i_entry = bits32[@i_@261i_oentry];
         $c0 = sym@@i_427;
-        join:l795:
+        join:l812:
         $c0 = sym@@i_398;
         @i_398:
         @i_@255i_newsize
@@ -4100,7 +4100,7 @@ section "text"
             %com[32](%and[32](@i_@255i_newsize,
             (%com[32](@i_@255i_newsize)+1))));
         $c0 = sym@@i_399;
-        join:l798:
+        join:l815:
         $c0 = sym@@i_397;
         @i_397:
         $c0 = sym@@i_394;
@@ -4116,18 +4116,18 @@ section "text"
     {
         $r31 = ($r31+-24);
         $t1 = $r30;
-        initialize continuations:l809:
-        proc body start:l808:
+        initialize continuations:l825:
+        proc body start:l824:
         $r0 = 0;
         $c0, $r30 = bits32[sym@_Perl_newSV], ($c0+4);
-        join:l820:
+        join:l836:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@280i_1 = $r0;
         @i_@278i_hv = @i_@280i_1;
         $r0, $r1 = @i_@278i_hv, 11;
         $c0, $r30 = bits32[sym@_Perl_sv_upgrade], ($c0+4);
-        join:l817:
+        join:l833:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@279i_xhv = bits32[@i_@278i_hv];
@@ -4142,7 +4142,7 @@ section "text"
         bits32[(@i_@279i_xhv+36)] = 0;
         $r0 = @i_@278i_hv;
         $c0, $r30 = bits32[sym@_Perl_hv_iterinit], ($c0+4);
-        join:l814:
+        join:l830:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = @i_@278i_hv;
@@ -4158,24 +4158,24 @@ section "text"
         $r31 = ($r31+-24);
         @i_ohv = $r0;
         $t1 = $r30;
-        initialize continuations:l828:
-        proc body start:l827:
-        $c0 when %eq[32](@i_ohv, 0) = sym@join@l855;
-        join:l856:
+        initialize continuations:l843:
+        proc body start:l842:
+        $c0 when %eq[32](@i_ohv, 0) = sym@join@l870;
+        join:l871:
         @i_@288i_436 = bits32[(bits32[@i_ohv]+8)];
         $c0 = sym@@i_438;
-        join:l855:
+        join:l870:
         $c0 = sym@@i_437;
         @i_437:
         @i_@288i_436 = 0;
         $c0 = sym@@i_438;
         @i_438:
         @i_@286i_hv_max = @i_@288i_436;
-        $c0 when %eq[32](@i_ohv, 0) = sym@join@l853;
-        join:l854:
+        $c0 when %eq[32](@i_ohv, 0) = sym@join@l868;
+        join:l869:
         @i_@289i_439 = bits32[(bits32[@i_ohv]+4)];
         $c0 = sym@@i_441;
-        join:l853:
+        join:l868:
         $c0 = sym@@i_440;
         @i_440:
         @i_@289i_439 = 0;
@@ -4183,62 +4183,62 @@ section "text"
         @i_441:
         @i_@287i_hv_fill = @i_@289i_439;
         $c0, $r30 = bits32[sym@_Perl_newHV], ($c0+4);
-        join:l852:
+        join:l867:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@290i_1 = $r0;
         @i_@285i_hv = @i_@290i_1;
         $c0 = sym@@i_443;
         @i_443:
-        $c0 when %eq[32](@i_@286i_hv_max, 0) = sym@join@l848;
-        join:l849:
+        $c0 when %eq[32](@i_@286i_hv_max, 0) = sym@join@l863;
+        join:l864:
         $c0
             when
             %geu[32]((@i_@286i_hv_max+1), %shl[32](@i_@287i_hv_fill, 1))
-            = sym@join@l847;
-        join:l860:
+            = sym@join@l862;
+        join:l875:
         $c0 = sym@@i_445;
-        join:l847:
+        join:l862:
         $c0 = sym@@i_442;
         @i_442:
         @i_@286i_hv_max = %shrl[32](@i_@286i_hv_max, 1);
         $c0 = sym@@i_443;
-        join:l848:
+        join:l863:
         $c0 = sym@@i_445;
         @i_445:
         bits32[(bits32[@i_@285i_hv]+8)] = @i_@286i_hv_max;
-        $c0 when %ne[32](@i_@287i_hv_fill, 0) = sym@join@l845;
-        join:l846:
+        $c0 when %ne[32](@i_@287i_hv_fill, 0) = sym@join@l860;
+        join:l861:
         $r0 = @i_@285i_hv;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l845:
+        join:l860:
         $c0 = sym@@i_446;
         @i_446:
         @i_@293i_hv_riter = bits32[(bits32[@i_ohv]+28)];
         @i_@294i_hv_eiter = bits32[(bits32[@i_ohv]+32)];
         $r0 = @i_ohv;
         $c0, $r30 = bits32[sym@_Perl_hv_iterinit], ($c0+4);
-        join:l843:
+        join:l858:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_449;
         @i_449:
         $r0 = @i_ohv;
         $c0, $r30 = bits32[sym@_Perl_hv_iternext], ($c0+4);
-        join:l835:
+        join:l850:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@301i_9 = $r0;
         @i_@292i_entry = @i_@301i_9;
-        $c0 when %ne[32](@i_@301i_9, 0) = sym@join@l831;
-        join:l832:
+        $c0 when %ne[32](@i_@301i_9, 0) = sym@join@l846;
+        join:l847:
         bits32[(bits32[@i_ohv]+28)] = @i_@293i_hv_riter;
         bits32[(bits32[@i_ohv]+32)] = @i_@294i_hv_eiter;
         $r0 = @i_@285i_hv;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l831:
+        join:l846:
         $c0 = sym@@i_448;
         @i_448:
         @i_@296i_4 = 4;
@@ -4246,12 +4246,12 @@ section "text"
         @i_@298i_6 = 8;
         bits32[sym@_PL_Sv] = bits32[(@i_@292i_entry+@i_@298i_6)];
         @i_@299i_7 = bits32[bits32[sym@_PL_Sv]];
-        $c0 when %eq[32](@i_@299i_7, 0) = sym@join@l839;
-        join:l840:
+        $c0 when %eq[32](@i_@299i_7, 0) = sym@join@l854;
+        join:l855:
         @i_@300i_8 = (@i_@299i_7+4);
         bits32[@i_@300i_8] = (bits32[@i_@300i_8]+1);
         $c0 = sym@@i_452;
-        join:l839:
+        join:l854:
         $c0 = sym@@i_452;
         @i_452:
         $r0, $r1, $r2, $r3, $r4
@@ -4259,7 +4259,7 @@ section "text"
             bits32[(@i_@297i_5+@i_@296i_4)], bits32[bits32[sym@_PL_Sv]],
             bits32[bits32[(@i_@292i_entry+4)]];
         $c0, $r30 = bits32[sym@_Perl_hv_store], ($c0+4);
-        join:l838:
+        join:l853:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_449;
@@ -4273,28 +4273,28 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_entry = $r0, $r1;
         $t1 = $r30;
-        initialize continuations:l865:
-        proc body start:l864:
-        $c0 when %ne[32](@i_entry, 0) = sym@join@l899;
-        join:l900:
+        initialize continuations:l879:
+        proc body start:l878:
+        $c0 when %ne[32](@i_entry, 0) = sym@join@l913;
+        join:l914:
         $c0 = sym@@i_453;
-        join:l899:
+        join:l913:
         $c0 = sym@@i_454;
         @i_454:
         @i_@302i_val = bits32[(@i_entry+8)];
-        $c0 when %eq[32](@i_@302i_val, 0) = sym@join@l897;
-        join:l898:
+        $c0 when %eq[32](@i_@302i_val, 0) = sym@join@l911;
+        join:l912:
         $c0 when %ne[32](%and[32](bits32[(@i_@302i_val+8)], 255), 13)
-            = sym@join@l895;
-        join:l896:
+            = sym@join@l909;
+        join:l910:
         $c0
             when
             %eq[32](bits32[(bits32[(bits32[@i_@302i_val]+28)]+32)], 0)
-            = sym@join@l893;
-        join:l894:
+            = sym@join@l907;
+        join:l908:
         @i_@303i_458 = 0;
         $c0 = sym@@i_460;
-        join:l893:
+        join:l907:
         $c0 = sym@@i_459;
         @i_459:
         @i_@305i_2 = 28;
@@ -4305,63 +4305,63 @@ section "text"
         $c0 = sym@@i_460;
         @i_460:
         @i_@306i_3 = 0;
-        $c0 when %eq[32](@i_@303i_458, @i_@306i_3) = sym@join@l891;
-        join:l892:
+        $c0 when %eq[32](@i_@303i_458, @i_@306i_3) = sym@join@l905;
+        join:l906:
         $c0 when %eq[32](bits32[(bits32[@i_hv]+40)], @i_@306i_3)
-            = sym@join@l889;
-        join:l890:
+            = sym@join@l903;
+        join:l904:
         @i_@307i_4 = bits32[sym@_PL_sub_generation];
         bits32[@i_@307i_4] = (bits32[@i_@307i_4]+1);
         $c0 = sym@@i_456;
-        join:l889:
+        join:l903:
         $c0 = sym@@i_456;
-        join:l891:
+        join:l905:
         $c0 = sym@@i_456;
-        join:l895:
+        join:l909:
         $c0 = sym@@i_456;
-        join:l897:
+        join:l911:
         $c0 = sym@@i_456;
         @i_456:
         $r0 = @i_@302i_val;
         $c0, $r30 = bits32[sym@_Perl_sv_free], ($c0+4);
-        join:l888:
+        join:l902:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@308i_5 = 4;
         $c0
             when
             %ne[32](bits32[(bits32[(@i_entry+@i_@308i_5)]+@i_@308i_5)],
-            -2) = sym@join@l884;
-        join:l885:
+            -2) = sym@join@l898;
+        join:l899:
         $r0 = bits32[(bits32[(@i_entry+4)]+8)];
         $c0, $r30 = bits32[sym@_Perl_sv_free], ($c0+4);
-        join:l883:
+        join:l897:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = bits32[(@i_entry+4)];
         $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        join:l880:
+        join:l894:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_462;
-        join:l884:
+        join:l898:
         $c0 = sym@@i_461;
         @i_461:
         $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 536870912), 0)
-            = sym@join@l876;
-        join:l877:
+            = sym@join@l890;
+        join:l891:
         $r0 = bits32[(@i_entry+4)];
         $c0, $r30 = bits32[sym@_Perl_unshare_hek], ($c0+4);
-        join:l875:
+        join:l889:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_464;
-        join:l876:
+        join:l890:
         $c0 = sym@@i_463;
         @i_463:
         $r0 = bits32[(@i_entry+4)];
         $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        join:l872:
+        join:l886:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_464;
@@ -4370,7 +4370,7 @@ section "text"
         @i_462:
         $r0 = @i_entry;
         $c0, $r30 = bits32[sym@@i_del_he], ($c0+4);
-        join:l869:
+        join:l883:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_453;
@@ -4387,12 +4387,12 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_entry = $r0, $r1;
         $t1 = $r30;
-        initialize continuations:l908:
-        proc body start:l907:
-        $c0 when %ne[32](@i_entry, 0) = sym@join@l940;
-        join:l941:
+        initialize continuations:l921:
+        proc body start:l920:
+        $c0 when %ne[32](@i_entry, 0) = sym@join@l953;
+        join:l954:
         $c0 = sym@@i_465;
-        join:l940:
+        join:l953:
         $c0 = sym@@i_466;
         @i_466:
         @i_@310i_1 = 8;
@@ -4400,16 +4400,16 @@ section "text"
         $c0
             when
             %ne[32](%and[32](bits32[(@i_@311i_2+@i_@310i_1)], 255), 13)
-            = sym@join@l938;
-        join:l939:
+            = sym@join@l951;
+        join:l952:
         $c0
             when
             %eq[32](bits32[(bits32[(bits32[@i_@311i_2]+28)]+32)], 0)
-            = sym@join@l936;
-        join:l937:
+            = sym@join@l949;
+        join:l950:
         @i_@309i_470 = 0;
         $c0 = sym@@i_472;
-        join:l936:
+        join:l949:
         $c0 = sym@@i_471;
         @i_471:
         @i_@312i_3 = 28;
@@ -4420,61 +4420,61 @@ section "text"
         $c0 = sym@@i_472;
         @i_472:
         @i_@313i_4 = 0;
-        $c0 when %eq[32](@i_@309i_470, @i_@313i_4) = sym@join@l934;
-        join:l935:
+        $c0 when %eq[32](@i_@309i_470, @i_@313i_4) = sym@join@l947;
+        join:l948:
         $c0 when %eq[32](bits32[(bits32[@i_hv]+40)], @i_@313i_4)
-            = sym@join@l932;
-        join:l933:
+            = sym@join@l945;
+        join:l946:
         @i_@314i_5 = bits32[sym@_PL_sub_generation];
         bits32[@i_@314i_5] = (bits32[@i_@314i_5]+1);
         $c0 = sym@@i_468;
-        join:l932:
+        join:l945:
         $c0 = sym@@i_468;
-        join:l934:
+        join:l947:
         $c0 = sym@@i_468;
-        join:l938:
+        join:l951:
         $c0 = sym@@i_468;
         @i_468:
         $r0 = bits32[(@i_entry+8)];
         $c0, $r30 = bits32[sym@_Perl_sv_2mortal], ($c0+4);
-        join:l931:
+        join:l944:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@315i_6 = 4;
         $c0
             when
             %ne[32](bits32[(bits32[(@i_entry+@i_@315i_6)]+@i_@315i_6)],
-            -2) = sym@join@l927;
-        join:l928:
+            -2) = sym@join@l940;
+        join:l941:
         $r0 = bits32[(bits32[(@i_entry+4)]+8)];
         $c0, $r30 = bits32[sym@_Perl_sv_2mortal], ($c0+4);
-        join:l926:
+        join:l939:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = bits32[(@i_entry+4)];
         $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        join:l923:
+        join:l936:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_474;
-        join:l927:
+        join:l940:
         $c0 = sym@@i_473;
         @i_473:
         $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 536870912), 0)
-            = sym@join@l919;
-        join:l920:
+            = sym@join@l932;
+        join:l933:
         $r0 = bits32[(@i_entry+4)];
         $c0, $r30 = bits32[sym@_Perl_unshare_hek], ($c0+4);
-        join:l918:
+        join:l931:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_476;
-        join:l919:
+        join:l932:
         $c0 = sym@@i_475;
         @i_475:
         $r0 = bits32[(@i_entry+4)];
         $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        join:l915:
+        join:l928:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_476;
@@ -4483,7 +4483,7 @@ section "text"
         @i_474:
         $r0 = @i_entry;
         $c0, $r30 = bits32[sym@@i_del_he], ($c0+4);
-        join:l912:
+        join:l925:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_465;
@@ -4500,46 +4500,46 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv = $r0;
         $t1 = $r30;
-        initialize continuations:l949:
-        proc body start:l948:
-        $c0 when %ne[32](@i_hv, 0) = sym@join@l964;
-        join:l965:
+        initialize continuations:l961:
+        proc body start:l960:
+        $c0 when %ne[32](@i_hv, 0) = sym@join@l976;
+        join:l977:
         $c0 = sym@@i_477;
-        join:l964:
+        join:l976:
         $c0 = sym@@i_478;
         @i_478:
         @i_@317i_1 = @i_hv;
         @i_@316i_xhv = bits32[@i_@317i_1];
         $r0 = @i_@317i_1;
         $c0, $r30 = bits32[sym@@i_hfreeentries], ($c0+4);
-        join:l963:
+        join:l975:
         $r31 = $r31;
         // the preceding node is merely asserted
         bits32[(@i_@316i_xhv+4)] = 0;
         bits32[(@i_@316i_xhv+12)] = 0;
-        $c0 when %eq[32](bits32[@i_@316i_xhv], 0) = sym@join@l959;
-        join:l960:
+        $c0 when %eq[32](bits32[@i_@316i_xhv], 0) = sym@join@l971;
+        join:l972:
         $r0, $r1, $r2
             = bits32[@i_@316i_xhv], 0,
             %shl[32]((bits32[(@i_@316i_xhv+8)]+1), 2);
         $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        join:l958:
+        join:l970:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_480;
-        join:l959:
+        join:l971:
         $c0 = sym@@i_480;
         @i_480:
         $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@join@l954;
-        join:l955:
+            = sym@join@l966;
+        join:l967:
         $r0 = @i_hv;
         $c0, $r30 = bits32[sym@_Perl_mg_clear], ($c0+4);
-        join:l953:
+        join:l965:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_482;
-        join:l954:
+        join:l966:
         $c0 = sym@@i_482;
         @i_482:
         $c0 = sym@@i_477;
@@ -4556,19 +4556,19 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv = $r0;
         $t1 = $r30;
-        initialize continuations:l973:
-        proc body start:l972:
+        initialize continuations:l984:
+        proc body start:l983:
         @i_@321i_oentry = 0;
-        $c0 when %ne[32](@i_hv, 0) = sym@join@l989;
-        join:l990:
+        $c0 when %ne[32](@i_hv, 0) = sym@join@l1000;
+        join:l1001:
         $c0 = sym@@i_484;
-        join:l989:
+        join:l1000:
         $c0 = sym@@i_485;
         @i_485:
-        $c0 when %ne[32](bits32[bits32[@i_hv]], 0) = sym@join@l987;
-        join:l988:
+        $c0 when %ne[32](bits32[bits32[@i_hv]], 0) = sym@join@l998;
+        join:l999:
         $c0 = sym@@i_484;
-        join:l987:
+        join:l998:
         $c0 = sym@@i_487;
         @i_487:
         @i_@322i_riter = 0;
@@ -4578,43 +4578,43 @@ section "text"
         @i_@320i_entry = bits32[@i_@319i_array];
         $c0 = sym@@i_489;
         @i_489:
-        $c0 when %eq[32](@i_@320i_entry, 0) = sym@join@l985;
-        join:l986:
+        $c0 when %eq[32](@i_@320i_entry, 0) = sym@join@l996;
+        join:l997:
         @i_@321i_oentry = @i_@320i_entry;
         @i_@320i_entry = bits32[@i_@320i_entry];
         $r0, $r1 = @i_hv, @i_@321i_oentry;
         $c0, $r30 = bits32[sym@_Perl_hv_free_ent], ($c0+4);
-        join:l984:
+        join:l995:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_493;
-        join:l985:
+        join:l996:
         $c0 = sym@@i_493;
         @i_493:
-        $c0 when %ne[32](@i_@320i_entry, 0) = sym@join@l980;
-        join:l981:
+        $c0 when %ne[32](@i_@320i_entry, 0) = sym@join@l991;
+        join:l992:
         @i_@326i_3 = (@i_@322i_riter+1);
         @i_@322i_riter = @i_@326i_3;
-        $c0 when %le[32](@i_@326i_3, @i_@323i_max) = sym@join@l978;
-        join:l979:
+        $c0 when %le[32](@i_@326i_3, @i_@323i_max) = sym@join@l989;
+        join:l990:
         $c0 = sym@@i_491;
         @i_491:
         $r0 = @i_hv;
         $c0, $r30 = bits32[sym@_Perl_hv_iterinit], ($c0+4);
-        join:l977:
+        join:l988:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_484;
         @i_484:
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l978:
+        join:l989:
         $c0 = sym@@i_497;
         @i_497:
         @i_@320i_entry
             = bits32[(%shl[32](@i_@322i_riter, 2)+@i_@319i_array)];
         $c0 = sym@@i_489;
-        join:l980:
+        join:l991:
         $c0 = sym@@i_489;
     }
 }
@@ -4626,37 +4626,37 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv = $r0;
         $t1 = $r30;
-        initialize continuations:l998:
-        proc body start:l997:
-        $c0 when %ne[32](@i_hv, 0) = sym@join@l1016;
-        join:l1017:
+        initialize continuations:l1008:
+        proc body start:l1007:
+        $c0 when %ne[32](@i_hv, 0) = sym@join@l1026;
+        join:l1027:
         $c0 = sym@@i_499;
-        join:l1016:
+        join:l1026:
         $c0 = sym@@i_500;
         @i_500:
         @i_@328i_1 = @i_hv;
         @i_@327i_xhv = bits32[@i_@328i_1];
         $r0 = @i_@328i_1;
         $c0, $r30 = bits32[sym@@i_hfreeentries], ($c0+4);
-        join:l1015:
+        join:l1025:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = bits32[@i_@327i_xhv];
         $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        join:l1012:
+        join:l1022:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 when %eq[32](bits32[(bits32[@i_hv]+40)], 0)
-            = sym@join@l1008;
-        join:l1009:
+            = sym@join@l1018;
+        join:l1019:
         $r0 = bits32[(bits32[@i_hv]+40)];
         $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        join:l1007:
+        join:l1017:
         $r31 = $r31;
         // the preceding node is merely asserted
         bits32[(bits32[@i_hv]+40)] = 0;
         $c0 = sym@@i_502;
-        join:l1008:
+        join:l1018:
         $c0 = sym@@i_502;
         @i_502:
         bits32[@i_@327i_xhv] = 0;
@@ -4664,15 +4664,15 @@ section "text"
         bits32[(@i_@327i_xhv+4)] = 0;
         bits32[(@i_@327i_xhv+12)] = 0;
         $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@join@l1003;
-        join:l1004:
+            = sym@join@l1013;
+        join:l1014:
         $r0 = @i_hv;
         $c0, $r30 = bits32[sym@_Perl_mg_clear], ($c0+4);
-        join:l1002:
+        join:l1012:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_504;
-        join:l1003:
+        join:l1013:
         $c0 = sym@@i_504;
         @i_504:
         $c0 = sym@@i_499;
@@ -4689,40 +4689,40 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv = $r0;
         $t1 = $r30;
-        initialize continuations:l1025:
-        proc body start:l1024:
-        $c0 when %ne[32](@i_hv, 0) = sym@join@l1038;
-        join:l1039:
+        initialize continuations:l1034:
+        proc body start:l1033:
+        $c0 when %ne[32](@i_hv, 0) = sym@join@l1047;
+        join:l1048:
         $r0 = bits32[sym@@i_509];
         $c0, $r30 = bits32[sym@_Perl_croak], ($c0+4);
-        join:l1037:
+        join:l1046:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_507;
-        join:l1038:
+        join:l1047:
         $c0 = sym@@i_507;
         @i_507:
         @i_@329i_xhv = bits32[@i_hv];
         @i_@330i_entry = bits32[(@i_@329i_xhv+32)];
-        $c0 when %eq[32](@i_@330i_entry, 0) = sym@join@l1033;
-        join:l1034:
+        $c0 when %eq[32](@i_@330i_entry, 0) = sym@join@l1042;
+        join:l1043:
         $c0
             when
             %eq[32](%and[32](bits32[(@i_hv+8)], 0x40000000::bits32), 0)
-            = sym@join@l1031;
-        join:l1032:
+            = sym@join@l1040;
+        join:l1041:
         @i_@331i_1 = (@i_hv+8);
         bits32[@i_@331i_1]
             = %and[32](bits32[@i_@331i_1], 0xffffffffbfffffff::bits32);
         $r0, $r1 = @i_hv, @i_@330i_entry;
         $c0, $r30 = bits32[sym@_Perl_hv_free_ent], ($c0+4);
-        join:l1030:
+        join:l1039:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_510;
-        join:l1031:
+        join:l1040:
         $c0 = sym@@i_510;
-        join:l1033:
+        join:l1042:
         $c0 = sym@@i_510;
         @i_510:
         bits32[(@i_@329i_xhv+28)] = -1;
@@ -4740,17 +4740,17 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv = $r0;
         $t1 = $r30;
-        initialize continuations:l1047:
-        proc body start:l1046:
-        $c0 when %ne[32](@i_hv, 0) = sym@join@l1137;
-        join:l1138:
+        initialize continuations:l1055:
+        proc body start:l1054:
+        $c0 when %ne[32](@i_hv, 0) = sym@join@l1145;
+        join:l1146:
         $r0 = bits32[sym@@i_509];
         $c0, $r30 = bits32[sym@_Perl_croak], ($c0+4);
-        join:l1136:
+        join:l1144:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_513;
-        join:l1137:
+        join:l1145:
         $c0 = sym@@i_513;
         @i_513:
         @i_@337i_1 = @i_hv;
@@ -4759,59 +4759,59 @@ section "text"
         @i_@333i_entry = @i_@338i_2;
         @i_@334i_oldentry = @i_@338i_2;
         $c0 when %eq[32](%and[32](bits32[(@i_@337i_1+8)], 32768), 0)
-            = sym@join@l1132;
-        join:l1133:
+            = sym@join@l1140;
+        join:l1141:
         $r0, $r1 = @i_hv, 80;
         $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        join:l1131:
+        join:l1139:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@339i_3 = $r0;
         @i_@336i_517 = @i_@339i_3;
         $c0 = sym@@i_519;
-        join:l1132:
+        join:l1140:
         $c0 = sym@@i_518;
         @i_518:
         @i_@336i_517 = 0;
         $c0 = sym@@i_519;
         @i_519:
         @i_@335i_mg = @i_@336i_517;
-        $c0 when %eq[32](@i_@336i_517, 0) = sym@join@l1127;
-        join:l1128:
+        $c0 when %eq[32](@i_@336i_517, 0) = sym@join@l1135;
+        join:l1136:
         $c0, $r30 = bits32[sym@_Perl_sv_newmortal], ($c0+4);
-        join:l1126:
+        join:l1134:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@342i_5 = $r0;
         @i_@341i_key = @i_@342i_5;
-        $c0 when %eq[32](@i_@333i_entry, 0) = sym@join@l1122;
-        join:l1123:
+        $c0 when %eq[32](@i_@333i_entry, 0) = sym@join@l1130;
+        join:l1131:
         $c0 when %eq[32]((bits32[(@i_@333i_entry+4)]+8), 0)
-            = sym@join@l1120;
-        join:l1121:
+            = sym@join@l1128;
+        join:l1129:
         @i_@345i_6 = 4;
         $c0
             when
             %ne[32](bits32[(bits32[(@i_@333i_entry+@i_@345i_6)]+
                 @i_@345i_6)],
-            -2) = sym@join@l1118;
-        join:l1119:
+            -2) = sym@join@l1126;
+        join:l1127:
         @i_@344i_522 = bits32[(bits32[(@i_@333i_entry+4)]+8)];
         $c0 = sym@@i_527;
-        join:l1118:
+        join:l1126:
         $c0 = sym@@i_526;
         @i_526:
         @i_@346i_7 = 4;
         @i_@347i_8 = bits32[(@i_@333i_entry+@i_@346i_7)];
         $r0, $r1 = (@i_@347i_8+8), bits32[(@i_@347i_8+@i_@346i_7)];
         $c0, $r30 = bits32[sym@_Perl_newSVpv], ($c0+4);
-        join:l1117:
+        join:l1125:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@348i_9 = $r0;
         $r0 = @i_@348i_9;
         $c0, $r30 = bits32[sym@_Perl_sv_2mortal], ($c0+4);
-        join:l1114:
+        join:l1122:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@349i_10 = $r0;
@@ -4820,7 +4820,7 @@ section "text"
         @i_527:
         @i_@343i_523 = @i_@344i_522;
         $c0 = sym@@i_525;
-        join:l1120:
+        join:l1128:
         $c0 = sym@@i_524;
         @i_524:
         @i_@343i_523 = bits32[sym@_PL_sv_undef];
@@ -4828,21 +4828,21 @@ section "text"
         @i_525:
         $r0, $r1 = @i_@341i_key, @i_@343i_523;
         $c0, $r30 = bits32[sym@_Perl_sv_setsv], ($c0+4);
-        join:l1111:
+        join:l1119:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@351i_11 = 4;
         @i_@352i_12 = bits32[(@i_@333i_entry+@i_@351i_11)];
-        $c0 when %eq[32]((@i_@352i_12+8), 0) = sym@join@l1107;
-        join:l1108:
+        $c0 when %eq[32]((@i_@352i_12+8), 0) = sym@join@l1115;
+        join:l1116:
         $c0 when %ne[32](bits32[(@i_@352i_12+@i_@351i_11)], -2)
-            = sym@join@l1105;
-        join:l1106:
+            = sym@join@l1113;
+        join:l1114:
         @i_@350i_528 = bits32[(bits32[(@i_@333i_entry+4)]+8)];
         $c0 = sym@@i_530;
-        join:l1105:
+        join:l1113:
         $c0 = sym@@i_529;
-        join:l1107:
+        join:l1115:
         $c0 = sym@@i_529;
         @i_529:
         @i_@350i_528 = 0;
@@ -4850,15 +4850,15 @@ section "text"
         @i_530:
         $r0 = @i_@350i_528;
         $c0, $r30 = bits32[sym@_Perl_sv_free], ($c0+4);
-        join:l1104:
+        join:l1112:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_521;
-        join:l1122:
+        join:l1130:
         $c0 = sym@@i_520;
         @i_520:
         $c0, $r30 = bits32[sym@@i_new_he], ($c0+4);
-        join:l1101:
+        join:l1109:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@355i_13 = $r0;
@@ -4866,19 +4866,19 @@ section "text"
         bits32[(@i_@332i_xhv+32)] = @i_@355i_13;
         $r0, $r1, $r2 = @i_@333i_entry, 0, 12;
         $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        join:l1098:
+        join:l1106:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = 12;
         $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        join:l1095:
+        join:l1103:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@356i_14 = $r0;
         @i_@353i_k = @i_@356i_14;
         $r0, $r1, $r2 = @i_@353i_k, 0, 12;
         $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        join:l1092:
+        join:l1100:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@354i_hek = @i_@353i_k;
@@ -4889,24 +4889,24 @@ section "text"
         @i_521:
         $r0, $r1, $r2 = @i_hv, @i_@335i_mg, @i_@341i_key;
         $c0, $r30 = bits32[sym@_Perl_magic_nextpack], ($c0+4);
-        join:l1089:
+        join:l1097:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0
             when
             %eq[32](%and[32](bits32[(@i_@341i_key+8)], 118423552), 0)
-            = sym@join@l1085;
-        join:l1086:
+            = sym@join@l1093;
+        join:l1094:
         @i_@358i_16 = 4;
         bits32[(bits32[(@i_@333i_entry+@i_@358i_16)]+@i_@358i_16)] = -2;
         bits32[sym@_PL_Sv] = @i_@341i_key;
         @i_@359i_17 = bits32[bits32[sym@_PL_Sv]];
-        $c0 when %eq[32](@i_@359i_17, 0) = sym@join@l1083;
-        join:l1084:
+        $c0 when %eq[32](@i_@359i_17, 0) = sym@join@l1091;
+        join:l1092:
         @i_@360i_18 = (@i_@359i_17+4);
         bits32[@i_@360i_18] = (bits32[@i_@360i_18]+1);
         $c0 = sym@@i_534;
-        join:l1083:
+        join:l1091:
         $c0 = sym@@i_534;
         @i_534:
         bits32[(bits32[(@i_@333i_entry+4)]+8)]
@@ -4914,47 +4914,47 @@ section "text"
         $r0 = @i_@333i_entry;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l1085:
+        join:l1093:
         $c0 = sym@@i_531;
         @i_531:
         $c0 when %eq[32](bits32[(@i_@333i_entry+8)], 0)
-            = sym@join@l1080;
-        join:l1081:
+            = sym@join@l1088;
+        join:l1089:
         $r0 = bits32[(@i_@333i_entry+8)];
         $c0, $r30 = bits32[sym@_Perl_sv_free], ($c0+4);
-        join:l1079:
+        join:l1087:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_535;
-        join:l1080:
+        join:l1088:
         $c0 = sym@@i_535;
         @i_535:
         $r0 = bits32[(@i_@333i_entry+4)];
         $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        join:l1076:
+        join:l1084:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = @i_@333i_entry;
         $c0, $r30 = bits32[sym@@i_del_he], ($c0+4);
-        join:l1073:
+        join:l1081:
         $r31 = $r31;
         // the preceding node is merely asserted
         bits32[(@i_@332i_xhv+32)] = 0;
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l1127:
+        join:l1135:
         $c0 = sym@@i_515;
         @i_515:
-        $c0 when %ne[32](bits32[@i_@332i_xhv], 0) = sym@join@l1068;
-        join:l1069:
+        $c0 when %ne[32](bits32[@i_@332i_xhv], 0) = sym@join@l1076;
+        join:l1077:
         $r0
             =
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@332i_xhv+8)]+1), 2), 1)-
                 16));
         $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        join:l1067:
+        join:l1075:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@362i_20 = $r0;
@@ -4965,24 +4965,24 @@ section "text"
             (%shl[32](%shl[32]((bits32[(@i_@332i_xhv+8)]+1), 2), 1)-
                 16));
         $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        join:l1064:
+        join:l1072:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_537;
-        join:l1068:
+        join:l1076:
         $c0 = sym@@i_537;
         @i_537:
-        $c0 when %eq[32](@i_@333i_entry, 0) = sym@join@l1060;
-        join:l1061:
+        $c0 when %eq[32](@i_@333i_entry, 0) = sym@join@l1068;
+        join:l1069:
         @i_@333i_entry = bits32[@i_@333i_entry];
         $c0 = sym@@i_542;
-        join:l1060:
+        join:l1068:
         $c0 = sym@@i_542;
         @i_542:
-        $c0 when %eq[32](@i_@333i_entry, 0) = sym@join@l1057;
-        join:l1142:
+        $c0 when %eq[32](@i_@333i_entry, 0) = sym@join@l1065;
+        join:l1150:
         $c0 = sym@@i_543;
-        join:l1057:
+        join:l1065:
         $c0 = sym@@i_541;
         @i_541:
         @i_@364i_22 = (@i_@332i_xhv+28);
@@ -4990,37 +4990,37 @@ section "text"
         $c0
             when
             %leu[32](bits32[(@i_@332i_xhv+28)],
-            bits32[(@i_@332i_xhv+8)]) = sym@join@l1058;
-        join:l1059:
+            bits32[(@i_@332i_xhv+8)]) = sym@join@l1066;
+        join:l1067:
         bits32[(@i_@332i_xhv+28)] = -1;
         $c0 = sym@@i_543;
         @i_543:
-        $c0 when %eq[32](@i_@334i_oldentry, 0) = sym@join@l1055;
-        join:l1056:
+        $c0 when %eq[32](@i_@334i_oldentry, 0) = sym@join@l1063;
+        join:l1064:
         $c0
             when
             %eq[32](%and[32](bits32[(@i_hv+8)], 0x40000000::bits32), 0)
-            = sym@join@l1053;
-        join:l1054:
+            = sym@join@l1061;
+        join:l1062:
         @i_@367i_25 = (@i_hv+8);
         bits32[@i_@367i_25]
             = %and[32](bits32[@i_@367i_25], 0xffffffffbfffffff::bits32);
         $r0, $r1 = @i_hv, @i_@334i_oldentry;
         $c0, $r30 = bits32[sym@_Perl_hv_free_ent], ($c0+4);
-        join:l1052:
+        join:l1060:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_546;
-        join:l1053:
+        join:l1061:
         $c0 = sym@@i_546;
-        join:l1055:
+        join:l1063:
         $c0 = sym@@i_546;
         @i_546:
         bits32[(@i_@332i_xhv+32)] = @i_@333i_entry;
         $r0 = @i_@333i_entry;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l1058:
+        join:l1066:
         $c0 = sym@@i_544;
         @i_544:
         @i_@333i_entry
@@ -5038,14 +5038,14 @@ section "text"
         $r31 = ($r31+-24);
         @i_entry, @i_retlen = $r0, $r1;
         $t1 = $r30;
-        initialize continuations:l1147:
-        proc body start:l1146:
+        initialize continuations:l1154:
+        proc body start:l1153:
         @i_@368i_1 = 4;
         $c0
             when
             %ne[32](bits32[(bits32[(@i_entry+@i_@368i_1)]+@i_@368i_1)],
-            -2) = sym@join@l1156;
-        join:l1157:
+            -2) = sym@join@l1163;
+        join:l1164:
         @i_@372i_2 = 8;
         $c0
             when
@@ -5053,8 +5053,8 @@ section "text"
                 @i_@372i_2)]+
                 @i_@372i_2)],
             262144),
-            0) = sym@join@l1154;
-        join:l1155:
+            0) = sym@join@l1161;
+        join:l1162:
         @i_@373i_3 = 4;
         @i_@374i_4 = (@i_entry+@i_@373i_3);
         @i_@375i_5 = 8;
@@ -5065,12 +5065,12 @@ section "text"
         @i_@371i_551
             = bits32[bits32[bits32[(bits32[@i_@374i_4]+@i_@375i_5)]]];
         $c0 = sym@@i_553;
-        join:l1154:
+        join:l1161:
         $c0 = sym@@i_552;
         @i_552:
         $r0, $r1 = bits32[(bits32[(@i_entry+4)]+8)], bits32[($r31+24)];
         $c0, $r30 = bits32[sym@_Perl_sv_2pv], ($c0+4);
-        join:l1153:
+        join:l1160:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@376i_6 = $r0;
@@ -5082,7 +5082,7 @@ section "text"
         $r0 = @i_@370i_p;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l1156:
+        join:l1163:
         $c0 = sym@@i_549;
         @i_549:
         @i_@377i_7 = 4;
@@ -5101,35 +5101,35 @@ section "text"
         $r31 = ($r31+-24);
         @i_entry = $r0;
         $t1 = $r30;
-        initialize continuations:l1165:
-        proc body start:l1164:
+        initialize continuations:l1171:
+        proc body start:l1170:
         @i_@378i_1 = 4;
         $c0
             when
             %ne[32](bits32[(bits32[(@i_entry+@i_@378i_1)]+@i_@378i_1)],
-            -2) = sym@join@l1180;
-        join:l1181:
+            -2) = sym@join@l1186;
+        join:l1187:
         $r0 = bits32[(bits32[(@i_entry+4)]+8)];
         $c0, $r30 = bits32[sym@_Perl_sv_mortalcopy], ($c0+4);
-        join:l1179:
+        join:l1185:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@379i_2 = $r0;
         $r0 = @i_@379i_2;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l1180:
+        join:l1186:
         $c0 = sym@@i_555;
         @i_555:
         @i_@381i_3 = 4;
         $c0
             when
             %eq[32](bits32[(bits32[(@i_entry+@i_@381i_3)]+@i_@381i_3)],
-            0) = sym@join@l1174;
-        join:l1175:
+            0) = sym@join@l1180;
+        join:l1181:
         @i_@380i_558 = (bits32[(@i_entry+4)]+8);
         $c0 = sym@@i_560;
-        join:l1174:
+        join:l1180:
         $c0 = sym@@i_559;
         @i_559:
         @i_@380i_558 = bits32[sym@@i_557];
@@ -5140,13 +5140,13 @@ section "text"
             = @i_@380i_558,
             bits32[(bits32[(@i_entry+@i_@382i_4)]+@i_@382i_4)];
         $c0, $r30 = bits32[sym@_Perl_newSVpv], ($c0+4);
-        join:l1173:
+        join:l1179:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@383i_5 = $r0;
         $r0 = @i_@383i_5;
         $c0, $r30 = bits32[sym@_Perl_sv_2mortal], ($c0+4);
-        join:l1170:
+        join:l1176:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@384i_6 = $r0;
@@ -5163,21 +5163,21 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_entry = $r0, $r1;
         $t1 = $r30;
-        initialize continuations:l1189:
-        proc body start:l1188:
+        initialize continuations:l1194:
+        proc body start:l1193:
         $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@join@l1209;
-        join:l1210:
+            = sym@join@l1214;
+        join:l1215:
         $r0, $r1 = @i_hv, 80;
         $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        join:l1208:
+        join:l1213:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@385i_1 = $r0;
-        $c0 when %eq[32](@i_@385i_1, 0) = sym@join@l1204;
-        join:l1205:
+        $c0 when %eq[32](@i_@385i_1, 0) = sym@join@l1209;
+        join:l1210:
         $c0, $r30 = bits32[sym@_Perl_sv_newmortal], ($c0+4);
-        join:l1203:
+        join:l1208:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@387i_2 = $r0;
@@ -5186,16 +5186,16 @@ section "text"
         $c0
             when
             %ne[32](bits32[(bits32[(@i_entry+@i_@388i_3)]+@i_@388i_3)],
-            -2) = sym@join@l1199;
-        join:l1200:
+            -2) = sym@join@l1204;
+        join:l1205:
         $r0, $r1, $r2, $r3
             = @i_hv, @i_@386i_sv, bits32[(bits32[(@i_entry+4)]+8)], -2;
         $c0, $r30 = bits32[sym@_Perl_mg_copy], ($c0+4);
-        join:l1198:
+        join:l1203:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_567;
-        join:l1199:
+        join:l1204:
         $c0 = sym@@i_566;
         @i_566:
         @i_@389i_4 = 4;
@@ -5204,7 +5204,7 @@ section "text"
             = @i_hv, @i_@386i_sv, (@i_@390i_5+8),
             bits32[(@i_@390i_5+@i_@389i_4)];
         $c0, $r30 = bits32[sym@_Perl_mg_copy], ($c0+4);
-        join:l1195:
+        join:l1200:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_567;
@@ -5212,11 +5212,11 @@ section "text"
         $r0 = @i_@386i_sv;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l1204:
+        join:l1209:
         $c0 = sym@@i_564;
         @i_564:
         $c0 = sym@@i_562;
-        join:l1209:
+        join:l1214:
         $c0 = sym@@i_562;
         @i_562:
         $r0 = bits32[(@i_entry+8)];
@@ -5232,33 +5232,33 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_key, @i_retlen = $r0, $r1, $r2;
         $t1 = $r30;
-        initialize continuations:l1218:
-        proc body start:l1217:
+        initialize continuations:l1222:
+        proc body start:l1221:
         $r0 = @i_hv;
         $c0, $r30 = bits32[sym@_Perl_hv_iternext], ($c0+4);
-        join:l1232:
+        join:l1236:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@392i_1 = $r0;
         @i_@391i_he = @i_@392i_1;
-        $c0 when %ne[32](@i_@392i_1, 0) = sym@join@l1228;
-        join:l1229:
+        $c0 when %ne[32](@i_@392i_1, 0) = sym@join@l1232;
+        join:l1233:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l1228:
+        join:l1232:
         $c0 = sym@@i_569;
         @i_569:
         $r0, $r1 = @i_@391i_he, @i_retlen;
         $c0, $r30 = bits32[sym@_Perl_hv_iterkey], ($c0+4);
-        join:l1226:
+        join:l1230:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@393i_2 = $r0;
         bits32[@i_key] = @i_@393i_2;
         $r0, $r1 = @i_hv, @i_@391i_he;
         $c0, $r30 = bits32[sym@_Perl_hv_iterval], ($c0+4);
-        join:l1223:
+        join:l1227:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@394i_3 = $r0;
@@ -5275,11 +5275,11 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_gv, @i_how = $r0, $r1, $r2;
         $t1 = $r30;
-        initialize continuations:l1240:
-        proc body start:l1239:
+        initialize continuations:l1243:
+        proc body start:l1242:
         $r0, $r1, $r2, $r3, $r4 = @i_hv, @i_gv, @i_how, 0, 0;
         $c0, $r30 = bits32[sym@_Perl_sv_magic], ($c0+4);
-        join:l1244:
+        join:l1247:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_571:
@@ -5295,11 +5295,11 @@ section "text"
         $r31 = ($r31+-24);
         @i_sv, @i_len, @i_hash = $r0, $r1, $r2;
         $t1 = $r30;
-        initialize continuations:l1252:
-        proc body start:l1251:
+        initialize continuations:l1254:
+        proc body start:l1253:
         $r0, $r1, $r2 = @i_sv, @i_len, @i_hash;
         $c0, $r30 = bits32[sym@_Perl_share_hek], ($c0+4);
-        join:l1257:
+        join:l1259:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@395i_1 = $r0;
@@ -5316,8 +5316,8 @@ section "text"
         $r31 = ($r31+-24);
         @i_str, @i_len, @i_hash = $r0, $r1, $r2;
         $t1 = $r30;
-        initialize continuations:l1265:
-        proc body start:l1264:
+        initialize continuations:l1266:
+        proc body start:l1265:
         @i_@399i_i = 1;
         @i_@400i_found = 0;
         @i_@396i_xhv = bits32[bits32[bits32[sym@_PL_strtab]]];
@@ -5328,17 +5328,17 @@ section "text"
         @i_@397i_entry = bits32[@i_@398i_oentry];
         $c0 = sym@@i_577;
         @i_577:
-        $c0 when %ne[32](@i_@397i_entry, 0) = sym@join@l1272;
-        join:l1297:
+        $c0 when %ne[32](@i_@397i_entry, 0) = sym@join@l1273;
+        join:l1298:
         $c0 = sym@@i_576;
-        join:l1272:
+        join:l1273:
         $c0 = sym@@i_574;
         @i_574:
         $c0 when %eq[32](bits32[bits32[(@i_@397i_entry+4)]], @i_hash)
-            = sym@join@l1292;
-        join:l1293:
+            = sym@join@l1293;
+        join:l1294:
         $c0 = sym@@i_575;
-        join:l1292:
+        join:l1293:
         $c0 = sym@@i_578;
         @i_578:
         @i_@402i_2 = 4;
@@ -5346,73 +5346,73 @@ section "text"
             when
             %eq[32](bits32[(bits32[(@i_@397i_entry+@i_@402i_2)]+
                 @i_@402i_2)],
-            @i_len) = sym@join@l1290;
-        join:l1291:
+            @i_len) = sym@join@l1291;
+        join:l1292:
         $c0 = sym@@i_575;
-        join:l1290:
+        join:l1291:
         $c0 = sym@@i_580;
         @i_580:
         $r0, $r1, $r2 = (bits32[(@i_@397i_entry+4)]+8), @i_str, @i_len;
         $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        join:l1289:
+        join:l1290:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@403i_3 = $r0;
-        $c0 when %eq[32](@i_@403i_3, 0) = sym@join@l1285;
-        join:l1286:
+        $c0 when %eq[32](@i_@403i_3, 0) = sym@join@l1286;
+        join:l1287:
         $c0 = sym@@i_575;
         @i_575:
         @i_@399i_i = 0;
         @i_@398i_oentry = @i_@397i_entry;
         @i_@397i_entry = bits32[@i_@398i_oentry];
         $c0 = sym@@i_577;
-        join:l1285:
+        join:l1286:
         $c0 = sym@@i_582;
         @i_582:
         @i_@400i_found = 1;
         @i_@404i_4 = (@i_@397i_entry+8);
         @i_@405i_5 = (bits32[@i_@404i_4]+-12);
         bits32[@i_@404i_4] = @i_@405i_5;
-        $c0 when %ne[32](@i_@405i_5, 0) = sym@join@l1283;
-        join:l1284:
+        $c0 when %ne[32](@i_@405i_5, 0) = sym@join@l1284;
+        join:l1285:
         bits32[@i_@398i_oentry] = bits32[@i_@397i_entry];
-        $c0 when %eq[32](@i_@399i_i, 0) = sym@join@l1281;
-        join:l1282:
-        $c0 when %ne[32](bits32[@i_@398i_oentry], 0) = sym@join@l1279;
-        join:l1280:
+        $c0 when %eq[32](@i_@399i_i, 0) = sym@join@l1282;
+        join:l1283:
+        $c0 when %ne[32](bits32[@i_@398i_oentry], 0) = sym@join@l1280;
+        join:l1281:
         @i_@406i_6 = (@i_@396i_xhv+4);
         bits32[@i_@406i_6] = (bits32[@i_@406i_6]-1);
         $c0 = sym@@i_586;
-        join:l1279:
+        join:l1280:
         $c0 = sym@@i_586;
-        join:l1281:
+        join:l1282:
         $c0 = sym@@i_586;
         @i_586:
         $r0 = bits32[(@i_@397i_entry+4)];
         $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        join:l1278:
+        join:l1279:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = @i_@397i_entry;
         $c0, $r30 = bits32[sym@@i_del_he], ($c0+4);
-        join:l1275:
+        join:l1276:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_@407i_7 = (@i_@396i_xhv+12);
         bits32[@i_@407i_7] = (bits32[@i_@407i_7]-1);
         $c0 = sym@@i_576;
-        join:l1283:
+        join:l1284:
         $c0 = sym@@i_576;
         @i_576:
-        $c0 when %ne[32](@i_@400i_found, 0) = sym@join@l1270;
-        join:l1271:
+        $c0 when %ne[32](@i_@400i_found, 0) = sym@join@l1271;
+        join:l1272:
         $r0 = bits32[sym@@i_590];
         $c0, $r30 = bits32[sym@_Perl_warn], ($c0+4);
-        join:l1269:
+        join:l1270:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_588;
-        join:l1270:
+        join:l1271:
         $c0 = sym@@i_588;
         @i_588:
         @i_573:

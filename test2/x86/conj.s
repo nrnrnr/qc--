@@ -9,26 +9,26 @@ foo:
 	leal -4(%esp), %esp
 	leal 4(%esp), %edx
 	movl (%edx),%ecx
-initialize_continuations_l4:
-proc_body_start_l3:
+initialize_continuations_l5:
+proc_body_start_l4:
 	movl $1,%edx
 	cmpl %edx,%eax
-	jne conj_true_l12
-join_l16:
-	jmp join_l8
-conj_true_l12:
+	jne conj_true_l13
+join_l17:
+	jmp join_l9
+conj_true_l13:
 	movl $0,%edx
 	cmpl %edx,%eax
-	jne join_l7
-join_l17:
-	jmp join_l8
-join_l8:
+	jne join_l8
+join_l18:
+	jmp join_l9
+join_l9:
 	movl $0,%eax
-	jmp join_l6
-join_l7:
+	jmp join_l7
+join_l8:
 	movl $999,%eax
-	jmp join_l6
-join_l6:
+	jmp join_l7
+join_l7:
 	movl $0,%edx
 	movl %ecx,(%esp)
 	leal 4(%esp), %ecx
@@ -38,7 +38,7 @@ join_l6:
 	leal 4(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l18:
+stackdata_l19:
 .long 0
 .section .text
 .section .text

@@ -12,8 +12,8 @@ Cmm.global_area:
 .section .text
 main:
 	leal -4(%esp), %esp
-initialize_continuations_l4:
-proc_body_start_l3:
+initialize_continuations_l8:
+proc_body_start_l7:
 	movl $0,%eax
 	leal 4(%esp), %edx
 	movl $0,%ecx
@@ -26,13 +26,13 @@ proc_body_start_l3:
 	leal 4(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l14:
+stackdata_l18:
 .long 0
 .section .text
 memchar:
 	leal -16(%esp), %esp
-initialize_continuations_l18:
-proc_body_start_l17:
+initialize_continuations_l21:
+proc_body_start_l20:
 	movl $-4,%edx
 	leal 16(%esp), %ecx
 	addl %edx,%ecx
@@ -107,15 +107,15 @@ proc_body_start_l17:
 	leal 16(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l28:
+stackdata_l31:
 .long 2
 .long 0xfffffff8
 .long 0xfffffffc
 .section .text
 memint:
 	leal -16(%esp), %esp
-initialize_continuations_l32:
-proc_body_start_l31:
+initialize_continuations_l34:
+proc_body_start_l33:
 	movl $-4,%edx
 	leal 16(%esp), %ecx
 	addl %edx,%ecx
@@ -190,15 +190,15 @@ proc_body_start_l31:
 	leal 16(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l42:
+stackdata_l44:
 .long 2
 .long 0xfffffff8
 .long 0xfffffffc
 .section .text
 regchar:
 	leal -4(%esp), %esp
-initialize_continuations_l46:
-proc_body_start_l45:
+initialize_continuations_l47:
+proc_body_start_l46:
 	movl $1,%ecx
 	movl %edx,%eax
 	addl %ecx,%eax
@@ -225,7 +225,7 @@ proc_body_start_l45:
 	leal 4(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l56:
+stackdata_l57:
 .long 0
 .section .text
 regint:

@@ -47,8 +47,8 @@ a_a_27:
 	movl (%eax),%edx
 	leal 76(%esp), %eax
 	movl (%eax),%eax
-initialize_continuations_l14:
-proc_body_start_l13:
+initialize_continuations_l16:
+proc_body_start_l15:
 	movl %ecx,36(%esp)
 	movl $-12,%ecx
 	movl %edx,40(%esp)
@@ -86,7 +86,7 @@ proc_body_start_l13:
 	movl %ebp,52(%esp)
 	movl %ebx,48(%esp)
 	call tig_print
-join_l22:
+join_l24:
 	leal -32(%esp), %esp
 	movl $-12,%edi
 	leal 108(%esp), %esi
@@ -104,7 +104,7 @@ join_l22:
 	movl (%ebx),%edi
 	movl %edi,(%esi)
 	call fb_26
-join_l19:
+join_l21:
 	leal 28(%esp), %esp
 	movl $8,%ecx
 	leal 76(%esp), %edx
@@ -117,7 +117,7 @@ join_l19:
 	movl 60(%esp),%edi
 	leal 84(%esp), %esp
 	ret
-killer_C11:
+killer_C13:
 	movl $0,%eax
 	movl $8,%ecx
 	leal 76(%esp), %edx
@@ -131,18 +131,18 @@ killer_C11:
 	leal 84(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l27:
+stackdata_l29:
 .long 1
 .long 0xfffffff4
 .section .pcmap
-.long join_l22
-.long frame_l28
+.long join_l24
+.long frame_l30
 .section .pcmap_data
-frame_l28:
+frame_l30:
 .long 0xffffffb4
 .long 0x8000000c
 .long 0xffffffe0
-.long stackdata_l27
+.long stackdata_l29
 .long 0x80000008
 .long 0x80000004
 .long 0x80000002
@@ -162,14 +162,14 @@ frame_l28:
 .long 0
 .long a_a_27_gc_data
 .section .pcmap
-.long join_l19
-.long frame_l29
+.long join_l21
+.long frame_l31
 .section .pcmap_data
-frame_l29:
+frame_l31:
 .long 0xffffff98
 .long 0x8000000c
 .long 0xffffffe0
-.long stackdata_l27
+.long stackdata_l29
 .long 0x80000008
 .long 0x80000004
 .long 0x80000002
@@ -361,8 +361,8 @@ fb_26:
 	movl (%edx),%ecx
 	leal 40(%esp), %edx
 	movl (%edx),%edx
-initialize_continuations_l65:
-proc_body_start_l64:
+initialize_continuations_l63:
+proc_body_start_l62:
 	movl %eax,(%esp)
 	movl $-8,%eax
 	movl %ecx,4(%esp)
@@ -400,7 +400,7 @@ proc_body_start_l64:
 	addl %ecx,%ebx
 	movl %edx,(%ebx)
 	call fa_25
-join_l70:
+join_l68:
 	leal 24(%esp), %esp
 	movl $4,%ecx
 	leal 40(%esp), %edx
@@ -411,18 +411,18 @@ join_l70:
 	leal 44(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l75:
+stackdata_l73:
 .long 1
 .long 0xfffffff8
 .section .pcmap
-.long join_l70
-.long frame_l76
+.long join_l68
+.long frame_l74
 .section .pcmap_data
-frame_l76:
+frame_l74:
 .long 0xffffffc0
 .long 0x80000008
 .long 0xffffffe0
-.long stackdata_l75
+.long stackdata_l73
 .long 0x80000008
 .long 0x80000003
 .long 0x80000002
@@ -457,8 +457,8 @@ tiger_main:
 	leal 68(%esp), %edx
 	addl %ecx,%edx
 	movl (%edx),%ecx
-initialize_continuations_l86:
-proc_body_start_l85:
+initialize_continuations_l82:
+proc_body_start_l81:
 	movl $-4,%edx
 	leal 68(%esp), %eax
 	addl %edx,%eax
@@ -480,7 +480,7 @@ proc_body_start_l85:
 	addl %ebx,%edx
 	movl %ecx,(%edx)
 	call fa_25
-join_l97:
+join_l93:
 	leal 24(%esp), %esp
 	leal -28(%esp), %esp
 	movl $-4,%eax
@@ -493,7 +493,7 @@ join_l97:
 	addl %edx,%ebx
 	movl %ecx,(%ebx)
 	call fb_26
-join_l94:
+join_l90:
 	leal 24(%esp), %esp
 	leal Lgbl_36,%eax
 	movl $-68,%ecx
@@ -504,7 +504,7 @@ join_l94:
 	movl %esi,40(%esp)
 	movl %ebp,36(%esp)
 	call tig_print
-join_l91:
+join_l87:
 	leal 68(%esp), %edx
 	movl $0,%ecx
 	leal 68(%esp), %edi
@@ -517,7 +517,7 @@ join_l91:
 	movl 44(%esp),%edi
 	leal 68(%esp), %esp
 	ret
-killer_C83:
+killer_C79:
 	movl $0,%eax
 	leal 68(%esp), %ecx
 	movl $0,%edx
@@ -532,18 +532,18 @@ killer_C83:
 	leal 68(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l103:
+stackdata_l99:
 .long 1
 .long 0xfffffffc
 .section .pcmap
-.long join_l97
-.long frame_l104
+.long join_l93
+.long frame_l100
 .section .pcmap_data
-frame_l104:
+frame_l100:
 .long 0xffffffa4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l103
+.long stackdata_l99
 .long 0x80000008
 .long 0x80000002
 .long 0x80000002
@@ -561,14 +561,14 @@ frame_l104:
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
-.long join_l94
-.long frame_l105
+.long join_l90
+.long frame_l101
 .section .pcmap_data
-frame_l105:
+frame_l101:
 .long 0xffffffa4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l103
+.long stackdata_l99
 .long 0x80000008
 .long 0x80000002
 .long 0x80000002
@@ -586,14 +586,14 @@ frame_l105:
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
-.long join_l91
-.long frame_l106
+.long join_l87
+.long frame_l102
 .section .pcmap_data
-frame_l106:
+frame_l102:
 .long 0xffffffbc
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l103
+.long stackdata_l99
 .long 0x80000008
 .long 0x80000002
 .long 0x80000002

@@ -33,8 +33,8 @@ tiger_main:
 	leal 72(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
-initialize_continuations_l11:
-proc_body_start_l10:
+initialize_continuations_l10:
+proc_body_start_l9:
 	movl $-8,%ecx
 	leal 72(%esp), %edx
 	addl %ecx,%edx
@@ -61,7 +61,7 @@ proc_body_start_l10:
 	movl %esi,40(%esp)
 	movl %ebp,36(%esp)
 	call tig_print
-join_l16:
+join_l15:
 	leal 72(%esp), %edx
 	movl $0,%ecx
 	leal 72(%esp), %edi
@@ -74,7 +74,7 @@ join_l16:
 	movl 44(%esp),%edi
 	leal 72(%esp), %esp
 	ret
-killer_C8:
+killer_C7:
 	movl $0,%eax
 	leal 72(%esp), %ecx
 	movl $0,%edx
@@ -89,18 +89,18 @@ killer_C8:
 	leal 72(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l23:
+stackdata_l22:
 .long 1
 .long 0xfffffff8
 .section .pcmap
-.long join_l16
-.long frame_l24
+.long join_l15
+.long frame_l23
 .section .pcmap_data
-frame_l24:
+frame_l23:
 .long 0xffffffb8
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l23
+.long stackdata_l22
 .long 0x80000008
 .long 0x80000002
 .long 0x80000002

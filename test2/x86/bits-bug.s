@@ -37,15 +37,15 @@ main:
 	leal 4(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
-initialize_continuations_l4:
-proc_body_start_l3:
+initialize_continuations_l5:
+proc_body_start_l4:
 	movl $-1420500317,%eax
 	movl $-4,%ecx
 	leal 4(%esp), %edx
 	addl %ecx,%edx
 	movl %eax,(%edx)
 	call callee
-join_l8:
+join_l9:
 	leal 4(%esp), %eax
 	movl $0,%ecx
 	leal 4(%esp), %edx
@@ -55,17 +55,17 @@ join_l8:
 	leal 4(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l15:
+stackdata_l16:
 .long 0
 .section .pcmap
-.long join_l8
-.long frame_l16
+.long join_l9
+.long frame_l17
 .section .pcmap_data
-frame_l16:
+frame_l17:
 .long 0xfffffffc
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l15
+.long stackdata_l16
 .long 0x80000008
 .long 0x80000002
 .long 0x80000000

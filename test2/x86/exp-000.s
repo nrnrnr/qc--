@@ -9,8 +9,8 @@ q:
 	leal -4(%esp), %esp
 	leal 4(%esp), %edx
 	movl (%edx),%ecx
-initialize_continuations_l4:
-proc_body_start_l3:
+initialize_continuations_l5:
+proc_body_start_l4:
 	movl %eax,%edx
 	addl %eax,%edx
 	movl (%edx),%eax
@@ -23,7 +23,7 @@ proc_body_start_l3:
 	leal 4(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l12:
+stackdata_l13:
 .long 0
 .section .text
 .section .text

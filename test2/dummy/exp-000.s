@@ -25,8 +25,8 @@ section "text"
         $r31 = ($r31+-24);
         x = $r0;
         $t1 = $r30;
-        initialize continuations:l5:
-        proc body start:l4:
+        initialize continuations:l6:
+        proc body start:l5:
         $r0 = bits32[(x+x)];
         $r31 = ($r31+24);
         $c0 = $t1;

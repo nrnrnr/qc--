@@ -14,28 +14,28 @@ main:
 	movl %esp,%edx
 	addl %ecx,%edx
 	movl (%edx),%ecx
-initialize_continuations_l4:
-proc_body_start_l3:
+initialize_continuations_l5:
+proc_body_start_l4:
 	movl $3,%eax
 	call tryout
-join_l11:
+join_l12:
 	movl $4,%eax
 	call tryout
-join_l8:
+join_l9:
 	movl $0,%eax
 	ret
 .section .pcmap_data
-stackdata_l17:
+stackdata_l18:
 .long 0
 .section .pcmap
-.long join_l11
-.long frame_l18
+.long join_l12
+.long frame_l19
 .section .pcmap_data
-frame_l18:
+frame_l19:
 .long 0x80000000
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l17
+.long stackdata_l18
 .long 0x80000008
 .long 0x80000002
 .long 0x80000000
@@ -51,14 +51,14 @@ frame_l18:
 .long 0
 .long 0
 .section .pcmap
-.long join_l8
-.long frame_l19
+.long join_l9
+.long frame_l20
 .section .pcmap_data
-frame_l19:
+frame_l20:
 .long 0x80000000
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l17
+.long stackdata_l18
 .long 0x80000008
 .long 0x80000002
 .long 0x80000000

@@ -32,7 +32,7 @@ section "text"
         $c0 when %conjoin[](%leu[32](2, i), %leu[32](i, 3))
             = sym@join@l7;
         join:l8:
-        $c0 = sym@exit@l1;
+        $c0 = sym@exit@l2;
         join:l7:
         $r0 = i;
         $r31 = ($r31+24);
