@@ -1,0 +1,661 @@
+% -*- mode: Noweb; noweb-code-mode: c-mode -*- %
+
+% ------------------------------------------------------------------ 
+\section{A Garbage-Collecting Client}
+%  ------------------------------------------------------------------ 
+
+This file implements a simple garbage-collecting client of the {\PAL} runtime
+system and interpreter.
+
+Implemented here is a front-end runtime system as well as some sample {\PAL}
+code to be run through the interpreter.
+
+% ------------------------------------------------------------------ 
+\subsection{Using the Client}
+% ------------------------------------------------------------------ 
+
+To run a {\PAL} program in file [[foo.c--]] through this front-end, the
+{\PAL} code must first be passed through the front-end of the {\qcc} compiler:
+
+\begin{verbatim}
+collie% qc-- -e 'backend=Backend.interp' -c foo.c-- > foo.lua
+collie% ./gc_client -v foo.lua
+\end{verbatim}
+
+where [[foo.c--]] is the {\PAL} source file, [[qc--]] is the {\qcc} compiler
+executable, and [[gc_client]] is the compiled version of [[gc.c]] (which
+is implemented in this file).
+
+The [[-v]] switch to [[gc_client]] turns on high verbosity.
+
+% ------------------------------------------------------------------ 
+\section{Implementation}
+% ------------------------------------------------------------------ 
+
+Below is an implementation of a garbage-collecting {\PAL} client.
+It should be useful for demonstration as well as testing.
+
+Its implementation is split across files [[gc.h]] and [[gc.c]].
+
+<<gc.h>>=
+#ifndef _GC_H
+#define _GC_H
+
+#include "runtime.h"
+
+<<constant definitions>>
+<<type definitions>>
+<<macro definitions>>
+
+<<function prototypes>>
+#endif /* _GC_H */
+@ 
+
+<<gc.c>>=
+#include "gc.h"
+
+<<global variable definitions>>
+
+<<garbage collection functions>>
+<<interpreter interaction functions>>
+<<utility functions>>
+
+<<application driver>>
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Type Definitions}
+% ------------------------------------------------------------------ 
+
+To manage threads returned by the {\PAL} runtime system, we use a [[typedef]]'d structure: [[Cmm_TCB]].
+A [[Cmm_TCB]] ({\PAL} thread control block) contains the actual thread given us by the {\PAL} runtime system, pointers to the space handed off to the system for use as an activation stack, and a ``cookie'' that points to the limit of the thread's activation stack.
+We use this cookie to tell if we've gone off the end of a stack (perhaps by returning or unwinding from the oldest activation on the stack).
+
+<<type definitions>>=
+typedef struct {
+  Cmm_Cont    *cont;
+
+  Cmm_Dataptr stack_space;
+  unsigned    stack_space_size;
+
+  Cmm_Dataptr limit_cookie;
+} Cmm_TCB;
+@ 
+
+To manage heap-allocated space, we need to use special heap tags (to keep
+track of heap object sizes, etc.).
+
+<<type definitions>>=
+typedef struct {
+  unsigned int size    : 31;
+  unsigned int forward : 1;
+  u_int8       *ty;
+} heap_tag;
+@ 
+
+% ------------------------------------------------------------------ 
+\subsection{Utility Functions}
+% ------------------------------------------------------------------ 
+
+We create a few helper functions to create and destroy [[Cmm_TCB]]s.
+
+<<function prototypes>>=
+Cmm_TCB *TCB_new(void);
+void     TCB_free(Cmm_TCB *tcb);
+@ 
+
+[[TCB_new]] allocates space for the interpreter to use as activation stack space; the space is of size [[stack_space]].
+
+<<utility functions>>=
+Cmm_TCB *TCB_new(void) {
+  Cmm_Dataptr  data;
+  Cmm_TCB     *tcb = (Cmm_TCB *) malloc(sizeof(Cmm_TCB));
+  assert(tcb != NULL);
+
+  tcb->stack_space       = (Cmm_Dataptr) malloc(STACK_SIZE * sizeof(*data));
+  mem_assert(tcb->stack_space);
+  tcb->stack_space_size  = STACK_SIZE;
+
+  return tcb;
+}
+@ 
+
+[[TCB_free]] frees the space [[TCB_new]] allocated for activation stack space.
+
+<<utility functions>>=
+void TCB_free(Cmm_TCB *tcb) {
+  free(tcb->stack_space);
+
+  /* FIX make sure that 'cont' is freed? */
+  free(tcb);
+}
+@ 
+ 
+We also throw in a few macros to ease the notational burden of peeking into
+heap tags.
+
+<<faux macro prototypes>>=
+void         *tag     (void *m);
+unsigned int  objsize (void *m);
+unsigned int  fullsize(void *m);
+@ 
+
+<<macro definitions>>=
+#define tag(M)      (((heap_tag *) (M)) - 1)
+#define objsize(M)  (tag(M)->size)
+#define fullsize(M) (objsize(M) + sizeof(heap_tag))
+@ 
+
+% ------------------------------------------------------------------ 
+\subsection{Interpreter Interaction}
+% ------------------------------------------------------------------ 
+
+In this client, we register a printing function with the interpreter: a simple 
+C function that takes an [[int]], prints it, and returns it.
+
+<<function prototypes>>=
+int cmmprint(int i);
+@ 
+
+<<interpreter interaction functions>>=
+int cmmprint(int i) {
+  printf("[CMMPRINT] %u\n", i);
+  return i;
+}
+@ 
+To register this function, the client simply calls [[register_c_func]].
+<<register needed C functions with the interpreter>>=
+  register_c_func("cmmprint", cmmprint, "int:int");
+@ 
+
+% ------------------------------------------------------------------ 
+\subsection{Garbage Collector}
+% ------------------------------------------------------------------ 
+
+The idea here is this: {\PAL} programs may allocate space on the heap, but
+must do so through a call to C function [[alloc]].  [[alloc]] is the allocator
+portion of a garbage-collecting memory management system; when it feels it
+is necessary, the allocator will make a call to C helper function [[gc]].
+
+[[gc]] is able to find all root pointers into heap-allocated space through
+the use of functions in the {\PAL} runtime system and the cooperation of the
+{\PAL} code (tables placed in it to distinguish pointers from non-pointers).
+
+The collector is a copying collector.
+
+% ------------------------------------------------------------------ 
+\subsubsection{Initialization and Deconstruction}
+% ------------------------------------------------------------------ 
+
+Garbage collection services must be explicitly started before the allocator
+may be used.
+
+<<constant definitions>>=
+#define GROWTH_UNIT 48
+@ 
+
+<<global variable definitions>>=
+static void     *fromspace,              /* used only at GC time */
+                *tospace;
+static unsigned  semispacesize;          /* size of each semi-space */
+static void     *hp = NULL, *heaplimit;  /* used for every allocation */
+
+/* statistics */
+static unsigned int nalloc;
+static unsigned int ncollections;
+static unsigned int ncopied;
+@ 
+
+<<start garbage collection services>>=
+  semispacesize = GROWTH_UNIT;
+
+  fromspace = malloc(semispacesize);  assert(fromspace);
+  tospace   = malloc(semispacesize);  assert(tospace);
+
+  heaplimit = fromspace + semispacesize;
+  hp        = fromspace;
+
+  nalloc    = ncollections = ncopied = 0;
+@ 
+
+Explicitly shutting down the garbage collector allows us to free heap-allocated
+space used by the alllocator.
+
+<<shut down garbage collection services>>=
+  semispacesize = 0;
+
+  free(fromspace);
+  free(tospace);
+
+  fromspace = tospace = heaplimit = hp = NULL;
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{The Allocator}
+% ------------------------------------------------------------------ 
+
+DOCUMENTATION HERE
+
+<<function prototypes>>=
+void *alloc(void *ty);
+@ 
+
+DOCUMENTATION HERE
+
+<<garbage collection functions>>=
+void *alloc(void *ty) {
+  void     *m;
+  heap_tag *tag;
+
+  unsigned  size = (unsigned) (((u_int8 *) ty)[0]);
+
+  /* we have minimum size requirements for heap objects */
+  if (size < sizeof(void *)) { size = sizeof(void *); }
+  size += sizeof(heap_tag);
+
+  if (hp + size > heaplimit)
+    gc();
+
+  if (hp + size > heaplimit)
+    gc_growheap(semispacesize + GROWTH_UNIT);
+
+  assert(hp < heaplimit);
+
+  m   = hp;
+  hp += size;
+
+  tag = (heap_tag *) m;
+  tag->forward = 0;
+  tag->size    = size - sizeof(heap_tag);
+  tag->ty      = (u_int8 *) ty;
+
+  /* update stats */
+  nalloc++;
+
+  return m + sizeof(heap_tag);
+}
+@ 
+
+% ------------------------------------------------------------------ 
+\subsubsection{The Collector}
+% ------------------------------------------------------------------ 
+
+DOCUMENTATION HERE
+
+<<function prototypes>>=
+void gc(void);
+@ 
+
+DOCUMENTATION HERE
+
+<<garbage collection functions>>=
+void gc(void) {
+  void *temp;
+
+  /* update stats */
+  ncollections++;
+
+  /* perform copy */
+  gc_copy();
+
+  /* swap pointers into semispaces */
+  temp      = fromspace;
+  fromspace = tospace;
+  tospace   = temp;
+
+  /* OPTIONAL add code to conditionally enlarge heap */
+
+  /* output stats if gc verbosity level is high */
+  if (gc_verbosity) {
+    printf("-- the garbage collector was called --");
+    gc_printstats();
+    printf("\n");
+  }
+}
+@ 
+
+% ------------------------------------------------------------------ 
+\subsubsection{Utility Functions}
+% ------------------------------------------------------------------ 
+
+DOCUMENTATION HERE
+
+<<function prototypes>>=
+void  gc_growheap       (unsigned new_semispacesize);
+void  gc_copy           (void);
+void *gc_forward        (void *rootptr);
+@ 
+
+DOCUMENTATION HERE
+
+<<garbage collection functions>>=
+void gc_growheap(unsigned new_semispacesize) {
+  void *newfromspace, *newtospace;
+
+  free(tospace);
+
+  /* allocate new memory */
+  newfromspace  = malloc(new_semispacesize);  assert(newfromspace);
+  newtospace    = malloc(new_semispacesize);  assert(newtospace);
+
+  /* copy data */
+  tospace       = newfromspace;
+  gc_copy();
+
+  /* realign pointers */
+  free(fromspace);
+  fromspace     = newfromspace;
+  tospace       = newtospace;
+  semispacesize = new_semispacesize;
+  heaplimit     = fromspace + semispacesize;
+}
+@ 
+
+DOCUMENTATION HERE
+
+<<garbage collection functions>>=
+void gc_copy(void) {
+  void           *scanp;
+  Cmm_Activation *a = Cmm_YoungestActivation(curr_thread);
+
+  scanp     = hp = tospace;
+  heaplimit = tospace + semispacesize;
+
+  /* scan roots */
+  <<scan roots in local activations>>
+  <<scan roots in globals>>
+
+  /* scan object *scanp */
+  <<scan objects [[*scanp]]>>
+}
+@ 
+
+<<constant definitions>>=
+#define GC                1
+#define GC_GLOBALS        2
+#define GC_globals_backup 3
+@ 
+
+<<scan roots in local activations>>=
+{
+  do {
+    Cmm_Dataptr d = Cmm_GetDescriptor(a, GC);
+
+    if (d != NULL) {
+      unsigned  var_count = Cmm_LocalVarCount(a);
+
+	  unsigned i;
+      for (i = 0; i < var_count; i++) {
+        if (d[i]) {
+          /* we've found a root pointer... */
+		  void **var = Cmm_FindLocalVar(a, i); /* var is ptr to the rootptr */
+		  if (var != NULL) {
+			*var = gc_forward(*var);           /* update rootptr            */
+		  }
+        }
+      }
+    }
+  } while (Cmm_ChangeActivation(&a));
+}
+@ 
+
+<<scan roots in globals>>=
+{
+  unsigned    var_count = Cmm_GlobalCount();
+  Cmm_Dataptr d         = Cmm_GetDescriptor(a, GC_GLOBALS);
+
+  unsigned i;
+  for (i = 0; i < var_count; i++) {
+    assert(globals_backup);
+    if (d[i]) {
+      /* we've found a root pointer... */
+      void **var = (void **) Cmm_FindGlobalVar(globals_backup, i);
+      if (var != NULL) {
+        *var = gc_forward(*var);
+      }
+	}
+  }
+}
+@ 
+
+<<scan objects [[*scanp]]>>=
+for (; scanp < hp; scanp += fullsize(scanp)) {
+  u_int8   *ty_info = tag(scanp)->ty;
+
+  unsigned  i;
+  for (i = 0; i < ty_info[0]; i++) {
+    /* scan the object at *scanp */
+    if (ty_info[i + 1]) {
+      void **ptr = (void **) (&(ty_info[i + 1]));
+
+      if (ptr != NULL) {
+        /* we've found a pointer... */
+        *ptr = gc_forward(*ptr);
+      }
+    }
+  }
+}
+@ 
+
+DOCUMENTATION
+
+<<faux macro prototypes>>=
+int isinspace(void *ptr, void *semispace);
+@ 
+
+DOCUMENTATION
+
+<<macro definitions>>=
+#define isinspace(LOC, SPACE) ((SPACE) <= (LOC) && \
+                               (LOC) < (SPACE) + semispacesize)
+@ 
+
+DOCUMENTATION
+
+[[gc_forward]] receives as its argument a pointer into the heap.
+
+<<garbage collection functions>>=
+void *gc_forward(void *rootptr) {
+  if (isinspace(rootptr, tospace)) {
+    return rootptr;
+  } else {
+    assert(isinspace(rootptr, fromspace));
+    if (tag(rootptr)->forward) {
+      assert(isinspace(*((void **) rootptr), tospace));
+      return *((void **) rootptr);
+    } else {
+      void *m;
+
+      assert(isinspace(hp, tospace));
+
+      /* copy data pointed to */
+      hp = memcpy(hp, (void *) tag(rootptr), fullsize(rootptr));
+
+      /* overwrite *rootptr with a new forwarding pointer = hp */
+      tag(rootptr)->forward = 1;
+      tag(rootptr)->size    = sizeof(void *);
+      *((void **) rootptr)  = hp + sizeof(heap_tag);
+
+      /* increase hp by copied data's size, and return pointer to new data */
+      m   = hp + sizeof(heap_tag);
+      hp += fullsize(m);
+
+      /* update stats */
+      ncopied++;
+
+      return m;
+    }
+  }
+}
+@
+
+DOCUMENTATION
+
+<<function prototypes>>=
+void gc_printstats(void);
+@ 
+
+<<garbage collection functions>>=
+void gc_printstats(void) {
+  printf("[Mem stats:     allocated %d heap size %d ratio %.2f]\n",
+		 nalloc, 2 * semispacesize, (float) nalloc / (2 * semispacesize));
+  printf("[Total GC work: %d collections ; copied %d objects ; "
+         "%.2f copies/allocation]\n",
+		 ncollections, ncopied, (float) ncopied / nalloc);
+}
+@ 
+
+% ------------------------------------------------------------------ 
+\subsubsection{Interfacing with {\PAL}}
+% ------------------------------------------------------------------ 
+
+To let {\PAL} code allocate space from the heap, we export [[alloc]] using
+[[register_c_func]].
+
+For testing purposes, we also make [[gc]] explicitly callable from {\PAL}.
+
+<<register needed C functions with the interpreter>>=
+  register_c_func("alloc",     (void *) alloc, "pointer:pointer");
+  register_c_func("gc_helper", (void *) gc,    "void:void"      );
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Application Driver}
+% ------------------------------------------------------------------ 
+
+To drive our application, we do some simple tests, print some results, and
+quit--at least for now.
+
+<<constant definitions>>=
+#define VALSTACK_SIZE   256
+#define ARGSTACK_SIZE   256
+#define STACK_SIZE      65536
+@
+
+<<global variable definitions>>=
+static char     *filename = NULL;
+@ 
+
+The driver opens transactions with the {\PAL} interpreter (passing it sizes for the interpreter's value and argument-passing stacks), registers a few C functions with the interpreter, flexes its muscles a bit, and closes interaction 
+with the interpreter.
+
+<<application driver>>=
+int main(int argc, char *argv[]) {
+  assert(sizeof(void *) * 8 == 32);
+
+  <<start garbage collection services>>
+
+  if (Cmm_open(VALSTACK_SIZE, ARGSTACK_SIZE) != 0) {
+    exit(1);
+  }
+
+  <<register needed C functions with the interpreter>>
+
+  if (argc > 1) {
+    <<process command line arguments>>
+  }
+
+  <<run {\PAL} code>>
+
+  Cmm_close();
+
+  <<shut down garbage collection services>>
+}
+@ 
+
+% ------------------------------------------------------------------ 
+\subsubsection{Command Line Arguments}
+% ------------------------------------------------------------------ 
+
+This client allows two command line arguments: a garbage collection frequency
+parameter, and an input file.
+
+<<global variable definitions>>=
+static unsigned int gc_verbosity = 0;
+@ 
+
+<<process command line arguments>>=
+{
+  int i;
+  for (i = 1; i < argc; i++) {
+    if (strcasecmp(argv[i], "-v") == 0) {
+      gc_verbosity = 1;
+    } else {
+      if (filename != NULL) {
+        fprintf(stderr, "error: cannot load more than one file\n");
+        exit(1);
+      }
+      filename = argv[i];
+    }
+  }
+}
+@ 
+
+% ------------------------------------------------------------------ 
+\subsubsection{Flexing the {\PAL} Muscles}
+% ------------------------------------------------------------------ 
+
+<<global variable definitions>>=
+static Cmm_Cont *curr_thread = NULL;
+static void     *globals_backup = NULL;
+@ 
+
+DOCUMENTATION HERE
+
+<<run {\PAL} code>>=
+if (filename == NULL) {
+  fprintf(stderr, "error: nothing to do\n");
+  exit(1);
+}
+
+if (load_assembly_unit(filename, SRC_FILE) != 0)
+  exit(1);
+
+<<lookup and run procedure [[main]] in {\PAL} code>>
+@ 
+
+To run procedure [[main]] in the given {\PAL} code, we use interpreter
+function [[cmm_find_export]] and runtime functions [[Cmm_CreateThread]]
+and [[Cmm_RunThread]].
+
+We create a TCB (thread control block) even though we do not intend to use
+more than one {\PAL} thread.
+
+<<lookup and run procedure [[main]] in {\PAL} code>>=
+{
+  Cmm_Codeptr  loc = cmm_find_export("sym@main");
+  Cmm_TCB     *tcb;
+
+  if (loc == NULL) {
+    fprintf(stderr, "error: cannot find procedure main\n");
+    exit(1);
+  }
+
+  tcb            = TCB_new();
+  tcb->cont      = Cmm_CreateThread(loc, tcb->stack_space, 
+									tcb->stack_space_size, 
+									&(tcb->limit_cookie));
+  curr_thread    = tcb->cont;
+
+  globals_backup = malloc(Cmm_GlobalSize());
+  assert(globals_backup);
+  <<pass [[globals_backup]] pointer off to {\PAL} code>>
+
+  tcb->cont      = Cmm_RunThread(tcb->cont);
+  curr_thread    = NULL;
+
+  free(globals_backup);
+  TCB_free(tcb);
+}
+@ 
+
+DOCUMENTATION HERE
+
+<<pass [[globals_backup]] pointer off to {\PAL} code>>=
+  {
+    Cmm_Dataptr d = Cmm_GetDescriptor(Cmm_YoungestActivation(curr_thread), 
+                                      GC_globals_backup);
+    assert(d);
+    *((void **) d) = globals_backup;
+  }
+@
