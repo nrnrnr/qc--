@@ -374,17 +374,34 @@ registers.
 fun node -> assert false
 @
 
-The [[replace_temporary]] function replaces temporaries
-in a control-flow graph with hardware registers.  The function is
-implemented in a continuation-passing style and expects two
-continuations, [[succeed]] and [[spill]].  The latter is used when no
-hardware register can be found to replace the chosen [[temporary]].
+% ------------------------------------------------------------------ 
+% Building blocks for an allocator
+% ------------------------------------------------------------------ 
 
 
 <<Make>>=
 let lookup table x       = M.find x table       (* lookup lifetime *)
 let replace_temp tmp reg = fun t -> if t = tmp then reg else t
 @
+
+The [[find_tmp]] function returns a temporary used in [[node]] that
+should be replaced by a hardware register. [[None]] is returned, if no
+such register can be found.
+
+\begin{quote}\it
+    An alternative design would be to return a sorted list of all
+    temporaries that need to be replaced.  Lists at the head of the
+    list should be replaced first.  However, if we re-write all nodes
+    in every allocation step, including the node at hand, the list may
+    contain some temporaries no longer used by that node.  --CL
+\end{quote}
+
+Our implementation is simple and just returns the first temporary it
+finds. 
+
+<<Make>>=
+let find_tmp node = assert false
+@   
 
 The [[first_fit]] function searches the domain of [[lifetimes]] to
 find a (hardware) register that can hold temporary [[t]].  It returns
