@@ -45,6 +45,7 @@ struct
     <<Make global registers>>    
     <<Make formals and actuals>>    
     <<Make statements>>
+    <<Make stack data declarations>>
     <<Make procedure>>
     <<Make memory declarations>>
     <<Make toplevel>>
@@ -80,6 +81,8 @@ let astwidth env = width @<< (astty env)
 
 let foldl = List.fold_left
 let foldr = List.fold_right
+@
+
 
 % ------------------------------------------------------------------ 
 \subsection{Expression Types}
@@ -173,8 +176,6 @@ let rec fetch env target = function
         in
             Rtl.fetch cell width     
 
-(* XXX stack data labels don't work *)
-            
 and variable env target hint x =
     let (_,(denot,t)) = F.findv x env in
     ( match denot with
@@ -374,14 +375,15 @@ let globals env target (base:Rtl.exp) names =
 
 <<Make statements>>=
 type state =
-    { env:      F.env
-    ; target:   Target.t
-    ; cfg:      G.t
-    ; node:     G.node
-    ; outbase:  Rtl.exp
-    ; inbase:   Rtl.exp
-    ; outgoing: Alloc.area list
-    ; incoming: Alloc.area list
+    { env:          F.env
+    ; target:       Target.t
+    ; cfg:          G.t
+    ; node:         G.node
+    ; outbase:      Rtl.exp
+    ; inbase:       Rtl.exp
+    ; stackdata:    Alloc.area
+    ; outgoing:     Alloc.area list
+    ; incoming:     Alloc.area list
     }
 
 let rec stmt s state = match s with
@@ -403,7 +405,7 @@ let rec stmt s state = match s with
 
 and body b state = match b with
     | A.BodyAt(x, _)        -> body x state
-    | A.DeclBody(d)         -> state (*XXX*)
+    | A.DeclBody(d)         -> state (* nothing to be done *)
     | A.StmtBody(s)         -> stmt s state 
     | A.DataBody(dd)        -> state (*XXX*)
     
@@ -509,13 +511,6 @@ and returnStmt state (cconv, kont, args) =
         ;   outgoing = Alloc.Reg.freeze atm :: state.outgoing
         }
 
-(*
- * args = [(hint option,name)]
- * 
- * We have two sources for hints: register declartion AND formal
- * parameters for continuations. Which one should be used/ignored?
- * If there is a problem it must be also corrected in the Eval module.
- *)
 
 and contStmt state (label,args)  =
     let cc        = state.target.Target.cc default_cc               in
@@ -554,7 +549,20 @@ and switchStmt    state x  = Impossible.unimp "switch"
 
 <<Make procedure>>=
 let proc env target (*props*) asm (cconv,name,args,bdy) = 
-assert false
+    let cfg            = G.mk ()   in 
+    let sdbase         = Rtl.link "stack data" target.Target.pointersize in
+    let env, stackdata = StackData.proc env target sdbase bdy in
+    let state = 
+        { env       = env
+        ; target    = target
+        ; cfg       = cfg
+        ; node      = G.exit cfg
+        ; stackdata = stackdata
+        ; incoming  = []    
+        ; outgoing  = []
+        ; inbase    = Rtl.link "inbase" target.Target.pointersize (*XXX*)
+        ; outbase   = Rtl.link "outbase" target.Target.pointersize (*XXX*)
+        } in  assert false (*XXX*)
 @
    
 % ------------------------------------------------------------------ 
@@ -626,6 +634,77 @@ let rec datum env target asm = function
     | A.Label(n)            -> asm ++ Asm.define_local (Asm.mksym n)
     | A.Align(a)            -> asm ++ Asm.align a 
     | A.MemDecl(t,m,init)   -> memdecl env target asm t m init
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Stack Data Declarations}
+% ------------------------------------------------------------------ 
+
+<<Make stack data declarations>>=
+module StackData = struct 
+
+    type state = 
+        { env:    F.env
+        ; mem:    Alloc.Mem.t
+        ; target: Target.t
+        }
+
+    let stackdatum state = function
+        | A.Label(l) -> 
+            let loc = Alloc.Mem.location state.mem in
+                ( match F.findv l state.env with
+                | (r,(F.Label(F.Stack(None)),t)) ->
+                    { state with env = 
+                        F.rebindv l (r,(F.Label(F.Stack(Some loc)),t)) 
+                                  state.env
+                    }
+                | _ -> assert false
+                )
+        | A.Align n -> { state with mem = Alloc.Mem.align n state.mem} 
+        | A.MemDecl(ty,size,None) ->
+            let w = astwidth state.env ty in
+            let s = ( match size with 
+                    | A.NoSize     -> 1 
+                    | A.DynSize    -> assert false (* impossible *)
+                    | A.FixSize(e) -> 
+                        Bits.to_int (compile_const state.env state.target e)
+                    ) in
+            let n = s * w / state.target.Target.memsize in
+                { state with mem = Alloc.Mem.alloc n state.mem} 
+                    
+        | _ -> assert false (* illegal memory initializer *)
+
+    let rec stmt state = function 
+        | A.StmtAt(x,r)        -> stmt state x
+        | A.SpanStmt    x      -> spanStmt      state x
+        | A.IfStmt      x      -> ifStmt        state x
+        | A.SwitchStmt  x      -> switchStmt    state x
+        | _                    -> state
+
+    and body state = function 
+        | A.BodyAt(x, _)        -> body state x
+        | A.DeclBody(d)         -> state (* nothing to be done *)
+        | A.StmtBody(s)         -> stmt state s 
+        | A.DataBody(data)      -> foldl stackdatum state data
+
+    and ifStmt state (e,ifso,ifnot) =
+        let left  = foldl body state  ifso  in
+        let right = foldl body left   ifnot in
+            state
+
+    and spanStmt      state x  = Impossible.unimp "span"
+    and switchStmt    state x  = Impossible.unimp "switch"
+
+    let proc env target base bb =
+        let state = 
+            { env    = env
+            ; target = target
+            ; mem    = Alloc.Mem.mk base
+            } in
+        let state' = foldl body state bb in 
+                (state.env, Alloc.Mem.freeze state.mem)
+
+end (* of module StackData *)
 @
     
 % ------------------------------------------------------------------ 
