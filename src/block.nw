@@ -72,16 +72,15 @@ gap to fulfill the alignment requirements of both blocks.
 Two blocks whose data are never live at the same time can be overlapped
 into one block where the two blocks share memory. In the resulting block
 the two original blocks can either share their [[Low]] or [[High]] end.
-Both blocks must be \emph{adjusted}: their size is a multiple of their
-alignment requirement. The [[adjust]] function enlarges a block if
-necessary to make it adjusted.
+The [[adjust]] function enlarges a block if necessary to make it
+size a multiple of its alignment.
 
 <<block.mli>>=
 type placement = High | Low
 
 val cathl:      t -> t -> t                  (* cat x y : x and y adjacent 
                                                 with x at *higher* address *)  
-val overlap:    placement -> t -> t -> t     (* req: arguments are adjusted *)
+val overlap:    placement -> t -> t -> t     
 val adjust:     t -> t                       (* result is adjusted *)
 @
 
@@ -215,13 +214,9 @@ ends align, or the higher ends.
 
 <<block.ml>>=
 let overlap place x y = 
-    (* assert ((size x) mod (alignment x) = 0)
-     * assert ((size y) mod (alignment y) = 0)
-     *) 
-    
-    let x = adjust x        (* to avoid trouble for now *)
-    and y = adjust y in
-    match place with
+    let x = adjust x        
+    and y = adjust y 
+    in match place with
     | Low ->      
         { base          = base x
         ; size          = max (size x) (size y)
@@ -237,7 +232,6 @@ let overlap place x y =
                                    (add (base y) (size y))
                           :: (constraints x) @ (constraints y)
         }           
-
 @        
 
 Not essential, but convenient functions.
