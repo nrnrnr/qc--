@@ -65,6 +65,7 @@ NOWEBBREAKCODE=no
 	\usepackage{path}
 	\usepackage[dvips]{graphicx}
 	\usepackage{noweb}
+	\noweboptions{smallcode}
 	`if [ $NOWEBBREAKCODE = yes ]; then echo '\noweboptions{breakcode}'; fi`
 	\input{$TOP/config/macros.tex}
 	EOF

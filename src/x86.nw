@@ -31,16 +31,35 @@ module X    : Expander.S
 val target : Ast2ir.tgt
 val placevars : Ast2ir.proc -> Automaton.t
 @ 
+\section{Implementation}
+
+Here are some abbreviations.
 <<x86.ml>>=
 module PX = Postexpander
+module R  = Rtl
+module RP = Rtl.Private
+module RU = Rtlutil
+module Up = Rtl.Up
+module Dn = Rtl.Dn
+module Rg = X86regs
+module RO = Rewrite.Ops
+
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
+
+let ( =$  ) = Register.eq
+let ( =/  ) = RU.Eq.loc
+let ( =// ) = RU.Eq.exp
+
 let (<:>) = PX.(<:>)
 let rtl r = PX.Rtl r
-
+@ 
+At initialization, we register the x86 machine invariant as a property
+for the optimization backplane.
+<<x86.ml>>=
 let _ = Backplane.M.register "x86 invariant"
     ["The x86 machine invariant.  For more explanation, see '<machine> invariant'."]
 @ 
-
-\subsection{Name and storage spaces}
+\subsection{Architecture name and storage spaces}
 <<x86.ml>>=
 module SS = Space.Standard32
 let arch = "x86"                (* architecture name *)
@@ -61,49 +80,31 @@ module Spaces = struct
   let c = Space.Standard32.c 3 id [32]
 end
 @
-                
-end
-
-@ 
 \subsection{Postexpander}
+
+Program counter and condition codes (called [[eflags]] on the Pentium)
+are standard.
+We ignore the floating-point control register except for two bits that
+represent the rounding mode.
 <<x86.ml>>=
-module R    = Rtl
-module RP   = Rtl.Private
-module RU   = Rtlutil
-module Up   = Rtl.Up
-module Down = Rtl.Dn
-module Rg   = X86regs
-module RO   = Rewrite.Ops
-
-let impossf fmt = Printf.kprintf Impossible.impossible fmt
-
-let ( =$  ) = Register.eq
-let ( =/  ) = RU.Eq.loc
-let ( =// ) = RU.Eq.exp
-
-let dspace = ('d', Rtl.Identity, Cell.of_size 2)
-
-let fpcond n          = Rtl.reg  (dspace,n,R.C 1)  (* FP modes *)
-let rounding_modesl   = fpcond 0
-let rounding_resultsl = fpcond 1
-
 let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
-
-let rounding_modesl = R.slice 2 ~lsb:10 Rg.fpuctl  (* OK, SO WHICH IS IT??? *)
-let rounding_modes  = R.fetch rounding_modesl 2
+let rounding_model = R.slice 2 ~lsb:10 Rg.fpuctl
+let rounding_mode  = R.fetch rounding_model 2
 
 module Post = struct
   <<x86 postexpander>>
 end
 @ 
+We ought to find a good way to tie this information into the target
+metrics, so as to avoid duplication and potential inconsistency.
 <<x86 postexpander>>=
 let byte_order = Rtl.LittleEndian
 let wordsize   = 32
 let memsize    = 8
 let _, _, mcell as mspace = ('m', byte_order, Cell.of_size memsize)
-let mcount = Cell.to_count mcell
+let mcount     = Cell.to_count mcell
 @ 
-These copies are a nuisance.
+These synonyms, which are required by the postexpander interface, are a nuisance.
 <<x86 postexpander>>=
 type temp      = Register.t
 type rtl       = Rtl.rtl
@@ -116,19 +117,28 @@ The postexpander may need to allocate temporaries.
 let talloc = Postexpander.Alloc.temp
 @ 
 \paragraph{Contexts}
-Addresses go in the integer registers, so we use these contexts:
+Addresses go in the integer registers.
+The floating-point registers are treated as a stack, so anything that
+actually gets allocated through a context should go in the integer
+registers as well, even if it would be in a floating-point register on
+an ordinary machine.
+Hence there is only one context: the integer context.
 <<x86 postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
 let icontext = Talloc.Multiple.reg 't', fun ((c, _, _), _, _) -> c =<= 'r' || c =<= 't'
-let fcontext = Talloc.Multiple.reg 'u', fun ((c, _, _), _, _) -> c =<= 'f' || c =<= 'u'
-let fcontext = icontext  (* should be better with the stack?? *)
+let fcontext = icontext  (* required by interface *)
 let acontext = icontext
 let rcontext = (fun x y -> Impossible.unimp "Unsupported soft rounding mode")
-               ,(function (('d',_,_), 0, R.C 1) -> true | _ -> false)
+               ,(fun _ -> false)
 let itempwidth = 32
-@ 
+@ IT WOULD BE GOOD TO RESTRUCTURE THE CONTEXTS AND THE
+[[Talloc.Multiple]] INTERFACE SO THAT REQUESTING A BAD WIDTH COULD
+MAKE A SUITABLE CALL INTO [[Unsupported]].  
+AN EVEN MORE AMBITIOUS PLAN MIGHT MAKE THE WIDTHS EXPLICIT IN THE
+CONTEXT.
+@
 \paragraph{Addressing modes}
-The only addressing mode is the obvious one.
+The only addressing mode is the obvious one: register direct.
 <<x86 postexpander>>=
 module Address = struct
   type t = Rtl.exp
@@ -143,9 +153,12 @@ Here are some utility functions for computing locations, values, and widths.
 let tempwidth = Register.width
 let temploc t = Rtl.reg t
 let tempval t = R.fetch (temploc t) (tempwidth t)
-let mem addr = R.mem R.none mspace (R.C 4) addr
+let mem addr  = R.mem R.none mspace (R.C 4) addr  (* single word in memory *)
+
+let upint32 n = RO.unsigned 32 n
+let upint8  n = RO.unsigned 8  n
 @ 
-Here are some important locations.
+Here are some important locations and values.
 <<x86 postexpander>>=
 let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
 let eax = temploc Rg.eax
@@ -155,38 +168,42 @@ let esp = temploc Rg.esp
 let esi = temploc Rg.esi
 let edi = temploc Rg.edi
 
-let upint32 n = RO.unsigned 32 n
-let upint8  n = RO.unsigned 8  n
-
 let ah_val = R.fetch Rg.ah 8
 let carrybit = R.app (R.opr "x86_carrybit" []) [RU.fetch eflags]
-
-let sahf = rtl (R.store eflags (R.app (R.opr "x86_ah2flags" []) [ah_val]) 16)
-let lahf =
-  rtl (R.store Rg.ah (R.app (R.opr "x86_flags2ah" []) [R.fetch eflags 16]) 8)
 @ 
-Here are some invented operators that hide the real truth about what
-happens to the flags.
-IF WE WANT TO MAKE BORROW AND CARRY WORK, WE WILL NEED TO PASS A THIRD
-ARGUMENT TO SUBFLAGS AND ADDFLAGS.  THIS WILL MEAN CHANGES IN THE
-RECOGNIZER, OF COURSE.
-@ 
+Code to transfer flags between [[eflags]] and [[ah]].
+We invent a couple of operators.
+EVENTUALLY, WE WILL WANT TO TELL THE SIMPLIFIER THAT THESE OPERATORS
+ARE HALF-INVERSES.
+IT WOULD BE GOOD TO BE ABLE TO WRITE THE CODE HERE AND REGISTER IT
+SOMEHOW. 
 <<x86 postexpander>>=
-let negflags   x   w = R.store eflags (R.app (R.opr "x86_negflags"   [w]) [x])    32
-let subflags   x y w = R.store eflags (R.app (R.opr "x86_subflags"   [w]) [x; y]) 32
-let addflags   x y w = R.store eflags (R.app (R.opr "x86_addflags"   [w]) [x; y]) 32
-let mulflags   x y w = R.store eflags (R.app (R.opr "x86_mulflags"   [w]) [x; y]) 32
-let muluxflags x y w = R.store eflags (R.app (R.opr "x86_muluxflags" [w]) [x; y]) 32
-let mulxflags  x y w = R.store eflags (R.app (R.opr "x86_mulxflags"  [w]) [x; y]) 32
-let undefflags       = R.store eflags (R.app (R.opr "x86_undefflags" [])  [])     32
-let logicflags exp w = R.store eflags (R.app (R.opr "x86_logicflags" [w]) [exp])  32
+let sahf = rtl (R.store eflags (R.app (R.opr "x86_ah2flags" []) [ah_val]) 16)
+let lahf = rtl (R.store Rg.ah (R.app (R.opr "x86_flags2ah" []) [R.fetch eflags 16]) 8)
+@ 
+These invented operators hide the real truth about what
+happens to the flags.
+It's up to the recognizer to know such facts as
+$\mathtt{x86\_adcflags}(x, y, 0) = \mathtt{x86\_adcflags}(x, y)$.
+<<x86 postexpander>>=
+let c = carrybit
+let addflags   x y w = R.store eflags (R.app (R.opr "x86_addflags"   [w]) [x; y])    32
+let adcflags   x y w = R.store eflags (R.app (R.opr "x86_adcflags"   [w]) [x; y; c]) 32
+let logicflags exp w = R.store eflags (R.app (R.opr "x86_logicflags" [w]) [exp])     32
+let mulflags   x y w = R.store eflags (R.app (R.opr "x86_mulflags"   [w]) [x; y])    32
+let muluxflags x y w = R.store eflags (R.app (R.opr "x86_muluxflags" [w]) [x; y])    32
+let mulxflags  x y w = R.store eflags (R.app (R.opr "x86_mulxflags"  [w]) [x; y])    32
+let negflags   x   w = R.store eflags (R.app (R.opr "x86_negflags"   [w]) [x])       32
+let subflags   x y w = R.store eflags (R.app (R.opr "x86_subflags"   [w]) [x; y])    32
+let sbbflags   x y w = R.store eflags (R.app (R.opr "x86_sbbflags"   [w]) [x; y; c]) 32
+let undefflags       = R.store eflags (R.app (R.opr "x86_undefflags" [])  [])        32
 let shflags sh x y w =
   let flagsop = "x86_" ^ sh ^ "flags" in
   R.store eflags (R.app (R.opr flagsop [w]) [x; y]) 32
 @ 
 \subsubsection{Data movement}
 Most data movement is simple assignment; the MOV instruction is quite powerful.
-Because we're treating the Penitum as a 32-bit machine, we assert the
+Because we're treating the Pentium as a 32-bit machine, we assert the
 width of everything is~32. 
 <<x86 postexpander>>=
 let load ~dst ~addr assn =
@@ -399,8 +416,7 @@ let wrdop  ~dst op x y z =
   let dv, yv = tempval dst, tempval y in
   let is_add =
     match at32 op with "addc" -> true | "subb" -> false | _ -> impossf "wrdop" in
-  let flagop = if is_add then "x86_adcflags" else "x86_sbbflags" in
-  let flags  = R.store eflags (R.app (R.opr flagop []) [dv;yv;carrybit]) 32 in
+  let flags  = (if is_add then adcflags else sbbflags) dv yv 32 in
   let arith  = R.store (temploc dst) (R.app (Up.opr op) [dv; yv; carrybit]) 32 in
   set_carry ~tmp:dst z <:> move dst x <:> rtl (R.par [arith; flags])
 <<x86 postexpander>>=
@@ -450,7 +466,7 @@ We don't touch anything that pops the PC.
 That means the return instruction!
 <<x86 postexpander>>=
 let don't_touch_me = 
-  let lowpc = Down.loc pc in
+  let lowpc = Dn.loc pc in
   function
   | [ RP.Store (pc', _, _)
     ; RP.Store (RP.Reg sp, RP.App (("add", [32]), [RP.Fetch (RP.Reg sp2, _);
@@ -493,9 +509,9 @@ let bc x (opr, ws) y ~ifso ~ifnot =
   | _ ->
       PX.Test (cmpfun opr x y, bc_x86 (cmpopr opr) ifso ifnot)
 
-let bnegate r = match Down.rtl r with
+let bnegate r = match Dn.rtl r with
 | RP.Rtl [RP.App((cop, [32]), [RP.Fetch (flags, 32)]), RP.Store (pc, tgt, 32)]
-  when RU.Eq.loc pc (Down.loc pc_lhs) && RU.Eq.loc flags (Down.loc eflags) ->
+  when RU.Eq.loc pc (Dn.loc pc_lhs) && RU.Eq.loc flags (Dn.loc eflags) ->
     Up.rtl (RP.Rtl [RP.App((cmpneg cop, [32]), [RP.Fetch (flags, 32)]),
                    RP.Store (pc, tgt, 32)])
 | _ -> impossf "ill-formed x86 conditional branch"
@@ -641,12 +657,12 @@ let store_pop ~addr assn =
 let push_cvt op w ~addr assn =
   assert (Cell.divides mcell w);
   let memval = R.fetch (R.mem assn mspace (mcount w) addr) w in
-  let regval = R.app (Up.opr op) [memval; rounding_modes] in
+  let regval = R.app (Up.opr op) [memval; rounding_mode] in
   rtl (st_push regval)
 
 let store_pop_cvt op w ~addr assn =
   assert (Cell.divides mcell w);
-  let memval regval = R.app (Up.opr op) [regval; rounding_modes] in
+  let memval regval = R.app (Up.opr op) [regval; rounding_mode] in
   let store regval = R.store (R.mem assn mspace (mcount w) addr) (memval regval) w in
   rtl (st_pop_with store)
 <<x86 postexpander>>=
@@ -662,7 +678,7 @@ let stack_op op = match opclass op with
     let argvals = List.map (fun n -> ffetch (stregplus n)) positions in
     let argvals = match op with
     | ("fadd"|"fsub"|"fdiv"|"fmul"|"f2f"|"f2i"|"i2f"), _ ->
-        argvals @ [rounding_modes]
+        argvals @ [rounding_mode]
     | _ -> argvals in
     let result = R.app (Up.opr op) argvals in
     let next_st = stadd (depth-1) in
@@ -743,7 +759,7 @@ let bc_stack op ~ifso ~ifnot = match op with
         PX.Test (setcc <:> fstsw <:> sahf, bc_x86 (fpcmpopr opname) ifso ifnot))
 | _ -> impossf "strange operator in x86 bc_stack"
 @ 
-The general block copy is implemented with the ``x86_repmovs''
+The general block copy is implemented with the ``[[x86_repmovs]]''
 operator which translates to and [[rep movs]] in the recognizer. This
 implementation assumes that the direction flag is set properly. The
 emitted code could be improved by using [[movsw]] or [[movsd]] if the
@@ -841,7 +857,7 @@ Parts of the target record are reasonable.
 Parts are lies.
 Parts are baffling---why is character set characterized by the target?
 <<x86.ml>>=
-let downrtl = Down.rtl
+let downrtl = Dn.rtl
 let uploc   = Up.loc
 let upexp   = Up.exp
 
@@ -1001,11 +1017,9 @@ let target =
 
   (* global or hardware registers *)
   ; T.globals  = globals
-  ; T.rounding_mode = rounding_modesl
+  ; T.rounding_mode = rounding_model
   ; T.named_locs   = Strutil.assoc2map 
-                     ["IEEE 754 rounding mode",    rounding_modesl
-                     ;"IEEE 754 rounding results", rounding_resultsl
-                     ]
+                     ["IEEE 754 rounding mode",    rounding_model]
   
   (* bogosity *)
   ; T.data_section = "data" (* NOT REALLY A PROPERTY OF THE TARGET MACHINE... *)
