@@ -1,17 +1,22 @@
 \documentclass{article}
 \usepackage[hypertex]{hyperref}
+\usepackage{noweb} 
 \def\PAL{\mbox{C{\texttt{-{}-}}}}
 % l2h substitution PAL C--
 \title{Release notes for the Quick~{\PAL} compiler}
 \author{The Quick~{\PAL} Team}
 
 \begin{document}
-
+@
 \maketitle
 
 \tableofcontents
 
 \clearpage
+
+\section{Delivery on promises made in specification}
+
+\emph{Yeah, right.}
 
 \section{Unpleasant surprises}
 
@@ -108,12 +113,96 @@ Quick~{\PAL} compiler.
 In case of such a message, please send a bug report.
 
 
+Any error message that begins with the phrase 
+``\texttt{Not implemented in qc--}'' indicates a feature of {\PAL}
+that the 
+Quick~{\PAL} compiler does not yet support.
+If you want such a feature supported, please send a bug report.
+
+
 Send bug reports to \texttt{bugs@cminusminus.org}.
 To view the status of a bug you have sent, you can visit
 \url{http://www.cminusminus.org/qc--bugs}.
 
+\section{Experimental features}
 
-\section{Notes for release 20040514}
+\subsection{Thread support}
+
+The front-end runtime can create a {\PAL} thread using
+[[Cmm_CreateStack]], 
+then get {\PAL} to transfer control to it using [[cut to]].  
+
+This interface will certainly change once we have support for a
+stack-limit check.
+
+\mbox{[[Cmm_Cont *Cmm_CreateStack(Cmm_CodePtr f, Cmm_DataPtr x, void *stack, unsigned n)]]}
+\hfil\penalty-5000
+returns a {\PAL} continuation that, when [[cut to]], will execute
+the {\PAL} call [[f(x)]] on the stack [[stack]].
+\begin{itemize} 
+\item 
+The parameter [[f]] must be the address of a {\PAL} procedure that
+ takes exactly one argument, which is a value of the native pointer
+ type.
+To pass any other [[f]] to [[Cmm_CreateStack]] is an \emph{unchecked}
+ run-time error.
+
+\emph{It is a \emph{checked} run-time error for
+the procedure addressed by~[[f]] to return}---this procedure should
+instead finish execution with a [[cut to]].
+\item
+When queried using the {\PAL} run-time interface, a continuation
+returned by [[Cmm_CreateStack]] looks like a stack with one
+activation.
+That activation makes the two parameters [[f]]~and~[[x]] visible
+through [[Cmm_FindLocalVar]]; these parameters can be changed using
+the run-time interface (for example, if a garbage collection
+intervenes between the time the continuation is created and it is
+used).
+\item
+When a continuation returned by [[Cmm_CreateStack]] is [[cut to]], it
+is as if the stack makes a tail call [[jump f(x)]].
+In particular, the activation of~[[f]] now appears as the oldest
+activation on the stack.
+As noted, it is a checked run-time error for this activation to
+return. 
+\item
+The parameter [[stack]] is the address of the stack, which is
+[[n]]~bytes in size.
+After calling [[Cmm_CreateStack]], the stack belongs to~{\PAL}, so it
+is an \emph{unchecked} run-time error for the front end to read or
+write any part of this stack except through [[stackdata]] areas in
+active procedures (or through pointers provided by the {\PAL} run-time
+interface). 
+
+Although this experimental thread support does no checking for stack
+overflow, we nevertheless need the size of the stack as well as its
+address, because it is a machine-dependent property whether the oldest
+activation goes at the high end or the low end of the stack.
+\end{itemize}
+%%%% 
+%%%% The result [[limit]] is assigned a ``cookie'' that encodes the stack limit.
+%%%% It is the responsibility of the {\PAL} client to arrange that this limit
+%%%% cookie is passed to each call to [[limitcheck]] in that thread.
+
+To implement threads, a front end will typically allocate a large
+thread-control block
+to represent a thread, and the {\PAL} stack will be just a part of
+this block.
+The rest of the block may contain a {\PAL}
+continuation for the thread, 
+thread-local data,
+the priority of the
+thread, links to other threads, and so on.
+All of this information is outside the purview of
+{\PAL}, however.
+
+
+\section{Notes for particular releases}
+
+In reverse chronological order.
+
+\subsection{Notes for release 20040514}
 
 We now have a very simple peephole optimizer.
 It can reduce the size of a program by~30\% or so.
@@ -124,7 +213,7 @@ You can try it out by running
 If you find a program that breaks the optimizer, please send it to us.
 
 
-\section{Notes for release 20040504}
+\subsection{Notes for release 20040504}
 
 Here's what you can do with a narrow variable or memory location:
 \begin{itemize}
@@ -139,7 +228,7 @@ natural width of the target machine
 \end{itemize}
 
 
-\section{Notes for release 20040501}
+\subsection{Notes for release 20040501}
 
 We've added limited support for 64-bit variables on 32-bit platforms.
 You can perform the following operations on a 64-bit {\PAL} variable:
@@ -184,7 +273,7 @@ The 64-bit variables are not actually stored in 32-bit register pairs,
 but that optimization will probably come in a future release.
 
 
-\section{Notes for release 20040427}
+\subsection{Notes for release 20040427}
 
 Quick~{\PAL} has a new front end.
 Error messages should be more informative, and the front end now
@@ -200,7 +289,7 @@ Any problems with the new front end should be reported to
 \texttt{bugs@cminusminus.org}. 
 
 
-\section{Notes for release 20040405}
+\subsection{Notes for release 20040405}
 \begin{itemize}
 \item
 Unicode string literals are not implemented
@@ -220,7 +309,7 @@ integer widen properly for x86.
 
 
 
-\section{Notes for release 20031021}
+\subsection{Notes for release 20031021}
 \begin{itemize}
 \item
 The compiler now generates runtime data. The native runtime system now
@@ -242,7 +331,7 @@ qc-- backend=Backend.x86 backend.ralloc=color ...
 
 \end{itemize}
 
-\section{Notes for more recent releases}
+\subsection{Notes for more recent releases}
 
 \begin{itemize}
 \item
@@ -251,7 +340,7 @@ declarations, the error manifests as a failure to link.
 \end{itemize}
 
 
-\section{Notes for release 20030711}
+\subsection{Notes for release 20030711}
 
 
 This is the first major release that includes a native-code back end.
@@ -306,5 +395,5 @@ command line, as in the following example:
   qc-- Backend.x86.ralloc=Ralloc.color hello.c--
 \end{verbatim}
 \end{itemize}
-
+@
 \end{document}
