@@ -13,7 +13,6 @@ Cmm.global_area:
 Cmm_stack_growth:
 .word 0xffffffffffffffff
 .section ".data"
-.align 8
 x:
 .word 0x400921fb
 .word 0x54411744

@@ -16,7 +16,7 @@
 <<alignment.mli>>=
 type t
 
-val init  : t
+val init  : int -> t
 
 val add   : int -> t -> t
 val align : int -> t -> t
@@ -33,13 +33,12 @@ alignment type is the last enforced alignment boundary.
 type t = int * int
 @
 <<alignment.ml>>=
-let init = (0, 1)
+let init k = (0, k)
 let add i (n, k) = (n + i, k)
 let align k (n', k') = (0, k)
-let alignment (n, k) =
-  let rec gcd n m =
-    if n = 0 then m
-    else if n >= m then gcd (n - m) m
-    else gcd m n
-  in gcd n k
+let rec gcd n m =
+  if n = 0 then m
+  else if n >= m then gcd (n - m) m
+  else gcd m n
+let alignment (n, k) = gcd n k
 @

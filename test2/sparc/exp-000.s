@@ -5,18 +5,48 @@
 ! memory for global registers
 Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
+.global Cmm_stack_growth
+.section ".data"
+.align 4
+Cmm_stack_growth:
+.word 0xffffffffffffffff
 .section ".text"
 q:
-	save %sp, -96, %sp
-	mov %i0, %g2
-	mov %i7, %g1
+	save %sp, -112, %sp
+	mov %i0, %l6
+	mov %i7, %l5
 Linitialize_continuations_l6:
 Lproc_body_start_l5:
-	add %g2, %g2, %g2
-	ld [%g2], %g2
-	mov %g2, %i0
-	mov %g1, %i7
-	! Evil recognizer deleted add %sp, 96, %sp
+	add %l6, %l6, %l6
+	set 0, %l4
+	add %l6, %l4, %l4
+	ldub [%l4], %l4
+	set 8, %l3
+	sll %l7, %l3, %l7
+	or %l4, %l7, %l7
+	set 1, %l4
+	add %l6, %l4, %l4
+	ldub [%l4], %l4
+	set 8, %l3
+	sll %l7, %l3, %l7
+	or %l4, %l7, %l7
+	set 2, %l4
+	add %l6, %l4, %l4
+	ldub [%l4], %l4
+	set 8, %l3
+	sll %l7, %l3, %l7
+	or %l4, %l7, %l7
+	set 3, %l4
+	add %l6, %l4, %l6
+	ldub [%l6], %l6
+	set 8, %l4
+	sll %l7, %l4, %l7
+	or %l6, %l7, %l7
+	mov %l7, %i0
+	st %i7, [%sp+96]
+	mov %l5, %i7
+	ld [%sp+96], %i7
+	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
 .section ".text"
@@ -25,21 +55,22 @@ main:
 	save %sp, -128, %sp
 	mov %i0, %g1
 	mov %i1, %g1
-	st %i7, [%sp+100]
-	st %i7, [%sp+96]
+	mov %i7, %g1
 Linitialize_continuations_l20:
 Lproc_body_start_l19:
-	set -559038737, %g3
-	add %sp, 128, %g1
-	set -16, %g2
-	add %g1, %g2, %g1
-	st %g3, [%g1]
-	add %sp, 128, %g1
-	set -16, %g2
-	add %g1, %g2, %g1
-	set 2, %g2
-	udiv %g1, %g2, %g1
-	mov %g1, %o0
+	set -559038737, %g2
+	add %sp, 128, %g3
+	set -16, %g4
+	add %g3, %g4, %g3
+	st %g2, [%g3]
+	add %sp, 128, %g2
+	set -16, %g3
+	add %g2, %g3, %g2
+	set 2, %g3
+	udiv %g2, %g3, %g2
+	mov %g2, %o0
+	st %i7, [%sp+100]
+	st %g1, [%sp+96]
 	call q, 0
 	nop
 Ljoin_l27:
@@ -50,139 +81,55 @@ Ljoin_l27:
 	call printf, 0
 	nop
 Ljoin_l24:
-	set 0, %g1
-	mov %g1, %i0
-	ld [%sp+100], %i7
+	set 0, %l7
+	mov %l7, %i0
 	ld [%sp+96], %i7
+	ld [%sp+100], %i7
 	! Evil recognizer deleted add %sp, 128, %sp
 	ret
 	restore
 .section ".pcmap_data"
 Lstackdata_l35:
-.byte 0
-.byte 0
-.byte 0
-.byte 1
-.byte -1
-.byte -1
-.byte -1
-.byte -16
+.word 1
+.word 0xfffffff0
 .section ".pcmap"
 .word Ljoin_l27
 .word Lframe_l36
 .section ".pcmap_data"
 Lframe_l36:
-.byte -1
-.byte -1
-.byte -1
-.byte -36
-.byte -128
-.byte 0
-.byte 0
-.byte 92
-.byte -1
-.byte -1
-.byte -1
-.byte -28
+.word 0x8000005c
+.word 0xffffffdc
+.word 0xffffffe0
 .word Lstackdata_l35
-.byte 0
-.byte 0
-.byte 0
-.byte 2
-.byte 0
-.byte 0
-.byte 0
-.byte 3
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 1
-.byte 64
-.byte 0
-.byte 0
-.byte 49
-.byte -1
-.byte -1
-.byte -1
-.byte -32
-.byte 64
-.byte 0
-.byte 0
-.byte 19
-.byte 64
-.byte 0
-.byte 0
-.byte 19
-.byte 64
-.byte 0
-.byte 0
-.byte 19
-.byte 0
-.byte 0
-.byte 0
-.byte 0
+.word 1
+.word 3
+.word 0
+.word 1
+.word 49
+.word 0xffffffe4
+.word 0
+.word 0
+.word 0
+.word 0
 .section ".pcmap"
 .word Ljoin_l24
 .word Lframe_l37
 .section ".pcmap_data"
 Lframe_l37:
-.byte -1
-.byte -1
-.byte -1
-.byte -36
-.byte -128
-.byte 0
-.byte 0
-.byte 92
-.byte -1
-.byte -1
-.byte -1
-.byte -28
+.word 0x8000005c
+.word 0xffffffdc
+.word 0xffffffe0
 .word Lstackdata_l35
-.byte 0
-.byte 0
-.byte 0
-.byte 2
-.byte 0
-.byte 0
-.byte 0
-.byte 3
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 1
-.byte 64
-.byte 0
-.byte 0
-.byte 49
-.byte -1
-.byte -1
-.byte -1
-.byte -32
-.byte 64
-.byte 0
-.byte 0
-.byte 19
-.byte 64
-.byte 0
-.byte 0
-.byte 19
-.byte 64
-.byte 0
-.byte 0
-.byte 19
-.byte 0
-.byte 0
-.byte 0
-.byte 0
+.word 1
+.word 3
+.word 0
+.word 1
+.word 49
+.word 0xffffffe4
+.word 0
+.word 0
+.word 0
+.word 0
 .section ".text"
 .section ".data"
 fmt:

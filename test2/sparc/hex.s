@@ -5,6 +5,11 @@
 ! memory for global registers
 Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
+.global Cmm_stack_growth
+.section ".data"
+.align 4
+Cmm_stack_growth:
+.word 0xffffffffffffffff
 .section ".data"
 notzero:
 .byte 10
@@ -14,12 +19,13 @@ main:
 	save %sp, -112, %sp
 	mov %i0, %g1
 	mov %i1, %g1
-	st %i7, [%sp+100]
-	st %i7, [%sp+96]
+	mov %i7, %g1
 Linitialize_continuations_l5:
 Lproc_body_start_l4:
-	set notzero, %g1
-	mov %g1, %o0
+	set notzero, %g2
+	mov %g2, %o0
+	st %i7, [%sp+100]
+	st %g1, [%sp+96]
 	call strlen, 0
 	nop
 Ljoin_l12:
@@ -33,135 +39,54 @@ Ljoin_l12:
 	call printf, 0
 	nop
 Ljoin_l9:
-	set 0, %g1
-	mov %g1, %i0
-	ld [%sp+100], %i7
+	set 0, %l7
+	mov %l7, %i0
 	ld [%sp+96], %i7
+	ld [%sp+100], %i7
 	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
 .section ".pcmap_data"
 Lstackdata_l20:
-.byte 0
-.byte 0
-.byte 0
-.byte 0
+.word 0
 .section ".pcmap"
 .word Ljoin_l12
 .word Lframe_l21
 .section ".pcmap_data"
 Lframe_l21:
-.byte -1
-.byte -1
-.byte -1
-.byte -20
-.byte -128
-.byte 0
-.byte 0
-.byte 92
-.byte -1
-.byte -1
-.byte -1
-.byte -12
+.word 0x8000005c
+.word 0xffffffec
+.word 0xfffffff0
 .word Lstackdata_l20
-.byte 0
-.byte 0
-.byte 0
-.byte 2
-.byte 0
-.byte 0
-.byte 0
-.byte 3
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 1
-.byte 64
-.byte 0
-.byte 0
-.byte 49
-.byte -1
-.byte -1
-.byte -1
-.byte -16
-.byte 64
-.byte 0
-.byte 0
-.byte 19
-.byte 64
-.byte 0
-.byte 0
-.byte 19
-.byte 64
-.byte 0
-.byte 0
-.byte 19
-.byte 0
-.byte 0
-.byte 0
-.byte 0
+.word 1
+.word 3
+.word 0
+.word 1
+.word 49
+.word 0xfffffff4
+.word 0
+.word 0
+.word 0
+.word 0
 .section ".pcmap"
 .word Ljoin_l9
 .word Lframe_l22
 .section ".pcmap_data"
 Lframe_l22:
-.byte -1
-.byte -1
-.byte -1
-.byte -20
-.byte -128
-.byte 0
-.byte 0
-.byte 92
-.byte -1
-.byte -1
-.byte -1
-.byte -12
+.word 0x8000005c
+.word 0xffffffec
+.word 0xfffffff0
 .word Lstackdata_l20
-.byte 0
-.byte 0
-.byte 0
-.byte 2
-.byte 0
-.byte 0
-.byte 0
-.byte 3
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 1
-.byte 64
-.byte 0
-.byte 0
-.byte 49
-.byte -1
-.byte -1
-.byte -1
-.byte -16
-.byte 64
-.byte 0
-.byte 0
-.byte 19
-.byte 64
-.byte 0
-.byte 0
-.byte 19
-.byte 64
-.byte 0
-.byte 0
-.byte 19
-.byte 0
-.byte 0
-.byte 0
-.byte 0
+.word 1
+.word 3
+.word 0
+.word 1
+.word 49
+.word 0xfffffff4
+.word 0
+.word 0
+.word 0
+.word 0
 .section ".text"
 .section ".data"
 answer:

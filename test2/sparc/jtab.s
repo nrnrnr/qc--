@@ -2,9 +2,14 @@
 .global Cmm.global_area
 .global Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY
 .section ".data"
-/* memory for global registers */
+! memory for global registers
 Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
+.global Cmm_stack_growth
+.section ".data"
+.align 4
+Cmm_stack_growth:
+.word 0xffffffffffffffff
 .section ".data"
 .align 4
 jump_tab:
@@ -13,37 +18,66 @@ jump_tab:
 .word L3
 .section ".text"
 f:
-	save %sp, -96, %sp
-	mov %i0, %g2
-	mov %i7, %g1
+	save %sp, -112, %sp
+	mov %i0, %l6
+	mov %i7, %l5
 Linitialize_continuations_l6:
 Lproc_body_start_l5:
-	set jump_tab, %g3
-	set 4, %g4
-	smul %g4, %g2, %g2
-	add %g3, %g2, %g2
-	ld [%g2], %g2
-	jmp %g2
+	set jump_tab, %l4
+	set 4, %l3
+	smul %l3, %l6, %l6
+	add %l4, %l6, %l6
+	set 0, %l4
+	add %l6, %l4, %l4
+	ldub [%l4], %l4
+	set 8, %l3
+	sll %l7, %l3, %l7
+	or %l4, %l7, %l7
+	set 1, %l4
+	add %l6, %l4, %l4
+	ldub [%l4], %l4
+	set 8, %l3
+	sll %l7, %l3, %l7
+	or %l4, %l7, %l7
+	set 2, %l4
+	add %l6, %l4, %l4
+	ldub [%l4], %l4
+	set 8, %l3
+	sll %l7, %l3, %l7
+	or %l4, %l7, %l7
+	set 3, %l4
+	add %l6, %l4, %l6
+	ldub [%l6], %l6
+	set 8, %l4
+	sll %l7, %l4, %l7
+	or %l6, %l7, %l7
+	jmp %l7
 	nop
 L1:
-	set 1, %g2
-	mov %g2, %i0
-	mov %g1, %i7
-	! Evil recognizer deleted add %sp, 96, %sp
+	set 1, %l7
+	mov %l7, %i0
+	st %i7, [%sp+96]
+	mov %l5, %i7
+	ld [%sp+96], %i7
+	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
 L2:
-	set 2, %g2
-	mov %g2, %i0
-	mov %g1, %i7
-	! Evil recognizer deleted add %sp, 96, %sp
+	set 2, %l7
+	mov %l7, %i0
+	st %i7, [%sp+96]
+	mov %l5, %i7
+	ld [%sp+96], %i7
+	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
 L3:
-	set 3, %g2
-	mov %g2, %i0
-	mov %g1, %i7
-	! Evil recognizer deleted add %sp, 96, %sp
+	set 3, %l7
+	mov %l7, %i0
+	st %i7, [%sp+96]
+	mov %l5, %i7
+	ld [%sp+96], %i7
+	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
 .section ".text"
@@ -52,12 +86,13 @@ main:
 	save %sp, -112, %sp
 	mov %i0, %g1
 	mov %i1, %g1
-	st %i7, [%sp+100]
-	st %i7, [%sp+96]
+	mov %i7, %g1
 Linitialize_continuations_l22:
 Lproc_body_start_l21:
-	set 0, %g1
-	mov %g1, %o0
+	set 0, %g2
+	mov %g2, %o0
+	st %i7, [%sp+100]
+	st %g1, [%sp+96]
 	call f, 0
 	nop
 Ljoin_l41:
@@ -92,10 +127,10 @@ Ljoin_l29:
 	call printf, 0
 	nop
 Ljoin_l26:
-	set 0, %g1
-	mov %g1, %i0
-	ld [%sp+100], %i7
+	set 0, %l7
+	mov %l7, %i0
 	ld [%sp+96], %i7
+	ld [%sp+100], %i7
 	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
@@ -107,114 +142,114 @@ Lstackdata_l49:
 .word Lframe_l50
 .section ".pcmap_data"
 Lframe_l50:
-.word 0xffffffec
 .word 0x8000005c
-.word 0xfffffff4
+.word 0xffffffec
+.word 0xfffffff0
 .word Lstackdata_l49
-.word 2
+.word 1
 .word 3
 .word 0
 .word 1
-.word 0x40000031
-.word 0xfffffff0
-.word 0x40000013
-.word 0x40000013
-.word 0x40000013
+.word 49
+.word 0xfffffff4
+.word 0
+.word 0
+.word 0
 .word 0
 .section ".pcmap"
 .word Ljoin_l38
 .word Lframe_l51
 .section ".pcmap_data"
 Lframe_l51:
-.word 0xffffffec
 .word 0x8000005c
-.word 0xfffffff4
+.word 0xffffffec
+.word 0xfffffff0
 .word Lstackdata_l49
-.word 2
+.word 1
 .word 3
 .word 0
 .word 1
-.word 0x40000031
-.word 0xfffffff0
-.word 0x40000013
-.word 0x40000013
-.word 0x40000013
+.word 49
+.word 0xfffffff4
+.word 0
+.word 0
+.word 0
 .word 0
 .section ".pcmap"
 .word Ljoin_l35
 .word Lframe_l52
 .section ".pcmap_data"
 Lframe_l52:
-.word 0xffffffec
 .word 0x8000005c
-.word 0xfffffff4
+.word 0xffffffec
+.word 0xfffffff0
 .word Lstackdata_l49
-.word 2
+.word 1
 .word 3
 .word 0
 .word 1
-.word 0x40000031
-.word 0xfffffff0
-.word 0x40000013
-.word 0x40000013
-.word 0x40000013
+.word 49
+.word 0xfffffff4
+.word 0
+.word 0
+.word 0
 .word 0
 .section ".pcmap"
 .word Ljoin_l32
 .word Lframe_l53
 .section ".pcmap_data"
 Lframe_l53:
-.word 0xffffffec
 .word 0x8000005c
-.word 0xfffffff4
+.word 0xffffffec
+.word 0xfffffff0
 .word Lstackdata_l49
-.word 2
+.word 1
 .word 3
 .word 0
 .word 1
-.word 0x40000031
-.word 0xfffffff0
-.word 0x40000013
-.word 0x40000013
-.word 0x40000013
+.word 49
+.word 0xfffffff4
+.word 0
+.word 0
+.word 0
 .word 0
 .section ".pcmap"
 .word Ljoin_l29
 .word Lframe_l54
 .section ".pcmap_data"
 Lframe_l54:
-.word 0xffffffec
 .word 0x8000005c
-.word 0xfffffff4
+.word 0xffffffec
+.word 0xfffffff0
 .word Lstackdata_l49
-.word 2
+.word 1
 .word 3
 .word 0
 .word 1
-.word 0x40000031
-.word 0xfffffff0
-.word 0x40000013
-.word 0x40000013
-.word 0x40000013
+.word 49
+.word 0xfffffff4
+.word 0
+.word 0
+.word 0
 .word 0
 .section ".pcmap"
 .word Ljoin_l26
 .word Lframe_l55
 .section ".pcmap_data"
 Lframe_l55:
-.word 0xffffffec
 .word 0x8000005c
-.word 0xfffffff4
+.word 0xffffffec
+.word 0xfffffff0
 .word Lstackdata_l49
-.word 2
+.word 1
 .word 3
 .word 0
 .word 1
-.word 0x40000031
-.word 0xfffffff0
-.word 0x40000013
-.word 0x40000013
-.word 0x40000013
+.word 49
+.word 0xfffffff4
+.word 0
+.word 0
+.word 0
 .word 0
 .section ".text"
 .section ".data"

@@ -5,21 +5,26 @@
 ! memory for global registers
 Cmm.globalsig.LPcHEVFbOZHbAHHMQTLHQeIQVI:
 Cmm.global_area:
+.global Cmm_stack_growth
+.section ".data"
+.align 4
+Cmm_stack_growth:
+.word 0xffffffffffffffff
 .section ".text"
 main:
-	save %sp, -96, %sp
-	mov %i0, %g1
-	mov %i1, %g1
-	mov %i7, %g1
+	save %sp, -112, %sp
+	mov %i0, %l7
+	mov %i1, %l7
+	mov %i7, %l7
 Linitialize_continuations_l5:
 Lproc_body_start_l4:
-	ba Ljoin_l8
-	nop
 Ljoin_l8:
-	set 0, %g2
-	mov %g2, %i0
-	mov %g1, %i7
-	! Evil recognizer deleted add %sp, 96, %sp
+	set 0, %l6
+	mov %l6, %i0
+	st %i7, [%sp+96]
+	mov %l7, %i7
+	ld [%sp+96], %i7
+	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
 .section ".text"

@@ -98,23 +98,22 @@ method zeroes (n:int) =
 method value (v:Bits.bits) = 
   let altfmt = Bits.to_hex_or_decimal_string ~declimit:256 in
   let w      = Bits.width v in
-  if w / 8 <= Alignment.alignment _a then
+  if w / 8 <= Alignment.alignment _a && w <= 32 then
     (* we can emit the value directly *)
-    if w <= 32 then 
-      (* assume it is a power of 2 *)
-      match Bits.width v with
-      |  8 -> fprintf _fd ".byte %Ld\n" (Bits.S.to_int64 v)
-      | 16 -> fprintf _fd ".half %s\n"  (altfmt v)
-      | 32 -> fprintf _fd ".word %s\n"  (altfmt v)
-      | w  -> unimpf "emission width %s in SPARC assembler" (string_of_int w)
+    match Bits.width v with
+    |  8 -> fprintf _fd ".byte %Ld\n" (Bits.S.to_int64 v)
+    | 16 -> fprintf _fd ".half %s\n"  (altfmt v)
+    | 32 -> fprintf _fd ".word %s\n"  (altfmt v)
+    | w  -> unimpf "emission width %s in SPARC assembler" (string_of_int w)
+  else
+    (* have to emit as smaller chunks, assuming it is a power of 2 *)
+    (this#value (Bits.Ops.lobits (w/2) (Bits.Ops.shrl v (Bits.U.of_int (w/2) w)));
+     this#value (Bits.Ops.lobits (w/2) v))
+(*
     else
       (this#value (Bits.Ops.lobits 32 (Bits.Ops.shrl v (Bits.U.of_int (w - 32) w)));
        this#value (Bits.Ops.lobits (w - 32) v))
-  else
-    (* ex: try to emit word, on half-word boundary *)
-    (* have to emit as smaller chunks *)
-    (this#value (Bits.Ops.lobits 8 (Bits.Ops.shrl v (Bits.U.of_int (w - 8) w)));
-     this#value (Bits.Ops.lobits (w - 8) v))
+*)
 @ 
 
 <<assembly methods>>=
@@ -168,6 +167,6 @@ method cfg_instr proc  =
 @ 
 
 <<private assembly state>>=
-val mutable _a = Alignment.init
+val mutable _a = Alignment.init 32
 val mutable _section = "bogus section"
 @ 

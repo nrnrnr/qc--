@@ -18,23 +18,41 @@ main:
 	mov %i7, %g1
 Linitialize_continuations_l5:
 Lproc_body_start_l4:
+	set 2146435072, %g2
+	add %sp, 112, %g3
+	set -16, %g4
+	add %g3, %g4, %g3
+	st %g2, [%g3]
+	set 0, %g2
+	add %sp, 112, %g3
+	set -12, %g4
+	add %g3, %g4, %g3
+	st %g2, [%g3]
+	set 2146435072, %g2
+	add %sp, 112, %g3
+	set -16, %g4
+	add %g3, %g4, %g3
+	st %g2, [%g3]
+	set 18, %g2
+	add %sp, 112, %g3
+	set -12, %g4
+	add %g3, %g4, %g3
+	st %g2, [%g3]
 	set 1, %g2
-	set -1067450368, %g2
-	st %g2, [%sp+96]
-	ld [%sp+96], %f0
-	fstoi %f0, %f0
-	st %f0, [%sp+100]
-	ld [%sp+100], %g2
-	set 1, %g3
-	subcc %g2, %g3, %g0
-	be Ljoin_l10
-	nop
-Ljoin_l18:
-	ba Ljoin_l10
-	nop
-Ljoin_l10:
-	set fmt, %g2
-	mov %g2, %o0
+Ljoin_l11:
+	set fmt, %g3
+	mov %g3, %o0
+	add %sp, 112, %g3
+	set -12, %g4
+	add %g3, %g4, %g3
+	ld [%g3], %g3
+	mov %g3, %o2
+	add %sp, 112, %g3
+	set -16, %g4
+	add %g3, %g4, %g3
+	ld [%g3], %g3
+	mov %g3, %o1
+	mov %g2, %o3
 	st %i7, [%sp+108]
 	st %g1, [%sp+104]
 	call printf, 0
@@ -60,7 +78,7 @@ Lframe_l20:
 .word 0xfffffff8
 .word Lstackdata_l19
 .word 1
-.word 3
+.word 4
 .word 0
 .word 1
 .word 49
@@ -68,55 +86,26 @@ Lframe_l20:
 .word 0
 .word 0
 .word 0
+.word 0xfffffff0
 .word 0
 .section ".text"
 .section ".data"
 fmt:
-.byte 68
-.byte 105
-.byte 115
-.byte 106
-.byte 117
-.byte 110
-.byte 99
-.byte 116
-.byte 105
-.byte 111
-.byte 110
-.byte 44
-.byte 32
-.byte 99
-.byte 111
-.byte 110
-.byte 118
-.byte 101
-.byte 114
-.byte 115
-.byte 105
-.byte 111
-.byte 110
-.byte 44
-.byte 32
-.byte 101
-.byte 109
-.byte 112
-.byte 116
-.byte 121
-.byte 32
-.byte 105
 .byte 102
-.byte 45
-.byte 98
-.byte 111
-.byte 100
-.byte 121
-.byte 58
 .byte 32
-.byte 119
-.byte 111
-.byte 114
-.byte 107
-.byte 115
-.byte 46
+.byte 61
+.byte 61
+.byte 32
+.byte 37
+.byte 102
+.byte 59
+.byte 32
+.byte 120
+.byte 32
+.byte 61
+.byte 61
+.byte 32
+.byte 37
+.byte 100
 .byte 10
 .byte 0

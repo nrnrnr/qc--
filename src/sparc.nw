@@ -157,18 +157,6 @@ let arg_contexts, result_context = Context.functions operators
 let constant_context w = icontext
 @ 
 <<SPARC postexpander>>=
-let load ~dst ~addr assn =
-  let w = rwidth dst in
-  assert (w = wordsize || w = wordsize * 2); 
-  rtl (R.store (R.reg dst) (R.fetch (mem w addr) w) w)
-@ 
-<<SPARC postexpander>>=
-let store ~addr ~src assn =
-  let w = rwidth src in
-  assert (w = wordsize || w = wordsize * 2);
-  rtl (R.store (mem w addr) (rfetch src) w)
-@ 
-<<SPARC postexpander>>=
 let extend  op n w e = R.app (R.opr op       [n; w]) [e]
 let lobits     w n e = R.app (R.opr "lobits" [w; n]) [e]
 let xload op ~dst ~addr n assn =
@@ -185,6 +173,55 @@ let lostore ~addr ~src n assn =
   assert (w = wordsize || w = 2 * wordsize);
   rtl (R.store (R.mem assn mspace (Cell.to_count mcell n) addr)
                (lobits w n (rfetch src)) n)
+@
+<<SPARC postexpander>>=
+let rec load ~dst ~addr assn =
+  let w = rwidth dst in
+  assert (w = wordsize || w = wordsize * 2);
+  let a = Dn.assertion assn in
+  let align_a_plus n = Alignment.alignment (Alignment.add n (Alignment.init a)) in
+  let addr_plus n = RO.add 32 addr (R.bits (Bits.S.of_int n 32) 32) in
+  if a >= w / 8 then rtl (R.store (R.reg dst) (R.fetch (mem w addr) w) w)
+  else
+    (* warn about expensive unaligned loads? *)
+    match dst with
+    | (('t', _, cell), _, R.C 1) when Cell.to_width cell (R.C 1) = 32 ->
+        let fit    = align_a_plus (w / 8) in
+        let w'     = fit * 8 in
+        let nloads = w / w' in
+        let t, d   = talloc 't' 32, talloc 't' 32 in
+        let ld1 offset =
+          zxload ~dst:t ~addr:(addr_plus offset) w' assn <:>
+          rtl (tstore d (RO.shl 32 (rfetch d) (RO.unsigned 32 w'))) <:>
+          rtl (R.store (R.reg d) (RO.(or) 32 (rfetch d) (rfetch t)) 32)
+        in
+        let rec f acc n = if n = -1 then acc else f (ld1 (fit * n) <:> acc) (n - 1) in
+        PX.Expand.block (f (rtl (R.store (R.reg dst) (rfetch d) 32)) (nloads - 1))
+    | (('u', _, cell), _, R.C 1) when Cell.to_width cell (R.C 1) = 32 ->
+        (* MUST go through memory *)
+        (* NOTE THE STACK SLOT SHOULD BE WORD ALIGNED! *)
+        let slot = salloc w in
+        let d    = talloc 't' 32 in
+        load ~dst:d ~addr assn <:>
+        rtl (A.store slot (rfetch d) w) <:>
+        rtl (R.store (R.reg dst) (A.fetch slot w) w)
+    | (('q', _, cell), i, R.C 1) ->
+        assert (Cell.to_width cell (R.C 1) = 64);
+        let u1, u2 = talloc 'u' 32, talloc 'u' 32 in
+        let q1, q2 = R.slice 32 32 (R.reg dst), R.slice 32 0 (R.reg dst) in
+(* THIS CAUSES A HW REG TO BE SET ?!?! PX.Expand.block *)
+        (load ~dst:u1 ~addr assn <:>
+        load ~dst:u2 ~addr:(addr_plus 4) (Up.assertion (align_a_plus 4)) <:>
+        rtl (R.store q1 (rfetch u1) 32) <:>
+        rtl (R.store q2 (rfetch u2) 32))
+    | _ -> unimpf "SPARC unaligned load: %s := bits%i[%s]"
+          (RU.ToString.reg dst) w (RU.ToString.exp addr)
+@ 
+<<SPARC postexpander>>=
+let store ~addr ~src assn =
+  let w = rwidth src in
+  assert (w = wordsize || w = wordsize * 2);
+  rtl (R.store (mem w addr) (rfetch src) w)
 @ 
 <<SPARC postexpander>>=
 let rec block_copy ~dst dassn ~src sassn w =
@@ -241,6 +278,7 @@ let move ~dst ~src =
   assert (w = rwidth dst);
   if (if is_int src then is_float dst else is_float src && is_int dst) then
     (* move through stack *)
+    (* WHAT ABOUT ALIGNMENT FOR THE STACK SLOT---SHOULD BE DOUBLEWORD ALIGNED! *)
     let slot = salloc w in
     rtl (A.store slot (rfetch src) w) <:> rtl (R.store (R.reg dst) (A.fetch slot w) w)
   else if Register.eq src dst then
@@ -261,6 +299,7 @@ let extract ~dst ~lsb ~src =
       impossf "bad lsb in sparc extract" in
   if is_int dst && is_float src then
     (* move through stack *)
+    (* WHAT ABOUT ALIGNMENT FOR THE STACK SLOT---SHOULD BE DOUBLEWORD ALIGNED! *)
     let slot = salloc n in
     rtl (A.store slot srcval n) <:> rtl (R.store (R.reg dst) (A.fetch slot n) n)
   else if is_float dst && is_float src then
@@ -510,7 +549,7 @@ let target =
     ; T.byteorder           = byteorder
     ; T.wordsize            = wordsize
     ; T.pointersize         = wordsize
-    ; T.alignment           = 8             (* sparc 9 *)
+    ; T.alignment           = 4
     ; T.memsize             = 8
     ; T.spaces              = spaces
     ; T.reg_ix_map          = T.mk_reg_ix_map spaces

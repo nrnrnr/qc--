@@ -188,6 +188,13 @@ inst : Store(dst:regl, src:const, w)
 inst : Store(dst:regl, src:reg, w)
   {: sprintf "mov %s, %s" src dst :}
 
+inst : Store(dst:fregl, src:freg, w)
+  {: sprintf "fmovs %s, %s" src dst :}
+
+-- THIS SHOULD BE DONE IN THE POSTEXPANDER
+inst : Store(dst:dregnuml, src:dregnum, w)
+  {: sprintf "fmovs %%f%d, %%f%d\nfmovs %%f%d, %%f%d" src dst (src+1) (dst+1):}
+
 -- memory load
 inst : Store(dst:regl, src:mem, w)
   {: if w = 64 then sprintf "ldx %s, %s" src dst
@@ -264,14 +271,14 @@ inst : Par(Store(dst:regl, Mul(x:reg_or_const, y:reg), w),
            Store(yregl, Sparcmulxhi(x2:reg_or_const, y2:reg), w))
 --  [{: guard (x = x2 && y = y2) :}]
 -- I'd like to check this, but Burg won't let me!
-  {: sprintf "smulx %s, %s, %s" x y dst :}
+  {: sprintf "smul %s, %s, %s" x y dst :}
 
 -- mulux
 inst : Par(Store(dst:regl, Mul(x:reg_or_const, y:reg), w),
            Store(yregl, Sparcmuluxhi(x2:reg_or_const, y2:reg), w))
 --  [{: guard (x = x2 && y = y2) :}]
 -- I'd like to check this, but Burg won't let me!
-  {: sprintf "umulx %s, %s, %s" x y dst :}
+  {: sprintf "umul %s, %s, %s" x y dst :}
 
 -- quot
 inst : Store(dst:regl, Quot(x:reg, y:reg_or_const), w)
@@ -494,7 +501,8 @@ any : F2i(n:w, w, any) {: sprintf "F2i(%d, %d, %s)" n w any :}
 any : I2f(n:w, w, any) {: sprintf "I2f(%d, %d, %s)" n w any :}
 any : Lobits(any, w) {: s "Lobits(%s, %d)" any w :}
 any : Mem(any, w) {: s "Mem(%s)" any :}
-any : Reg  (char, n:int) {: sprintf "Reg(%s, %d)"   (Char.escaped char) n :}
+any : Reg  (char, n:int) {: sprintf "Reg(%s, %d)" (Char.escaped char) n :}
+any : RegPair(char, n:int) {: sprintf "RegPair(%s, %d)" (Char.escaped char) n :}
 any : Store (dst:any, src:any, w)
  {: s "Store(%s,%s,%d)" dst src w :}
 any : Kill(any) {: s "Kill(%s)" any :}

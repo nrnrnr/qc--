@@ -5,18 +5,20 @@ Cmm.ref_to_global_area:
 .word Cmm.globalsig.VKSBdZcIGPIUdLCTLDKJKdWRec
 .section ".text"
 incn:
-	save %sp, -96, %sp
-	mov %i7, %g1
+	save %sp, -112, %sp
+	mov %i7, %l7
 Linitialize_continuations_l5:
 Lproc_body_start_l4:
-	set Cmm.global_area, %g2
-	ld [%g2], %g2
-	set 1, %g3
-	add %g2, %g3, %g3
-	set Cmm.global_area, %g2
-	st %g3, [%g2]
-	mov %g1, %i7
-	! Evil recognizer deleted add %sp, 96, %sp
+	set Cmm.global_area, %l6
+	ld [%l6], %l6
+	set 1, %l5
+	add %l6, %l5, %l6
+	set Cmm.global_area, %l5
+	st %l6, [%l5]
+	st %i7, [%sp+96]
+	mov %l7, %i7
+	ld [%sp+96], %i7
+	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
 .section ".text"
