@@ -1089,7 +1089,7 @@ let mksolutions_trunc ws arg_solnss =
   let arg_solns = List.filter ok_soln arg_solns in
   List.map drop_lo_copy arg_solns @ List.map drop_lo_ignore arg_solns
 @ 
-The following rule doesn't occure because we don't really have a sxlo
+The following rule doesn't occur because we don't really have a sxlo
 or zxlo operator.
 \[\inferrule [Extlo \sidecond{n\leq n'\leq w\leq w'}]
 {\xxlo{w'}{w} \in \menv \\
@@ -1468,27 +1468,63 @@ let dpwiden proc r =
            ftemps=t.Target.capabilities.Target.ftemps;
            rm=rm;
            is_hardware_register=is_hardware_register proc} in
-  let find_best_soln r tau w =
-    let solns  = all_solutions m r in
-    let solns  = List.filter (fun s -> width s = w && fill s =*= tau) solns in
+
+  let find_best_soln' r filter =
+    let construct r =
+      let solns  = all_solutions m r in
+      List.filter filter solns in
+    let solns = construct r in
+    let solns =
+      if null solns then construct (Dn.exp (Simplify.exp (Up.exp r)))
+      else solns in
     let () = if null solns then
-      impossf "dpwiden couldn't widen %s" (Rtlutil.ToString.exp (Up.exp r)) in
+      impossf "dpwiden couldn't widen %s" (Rtlutil.ToString.exp (Up.exp r))
+    in
     let soln = minimum_cost solns in
     if print_debug then Printf.eprintf "cost: %i\n" soln.cost;
-    soln.e' in
+    soln.e'
+  in
+
   let find_best_soln_index r tau n w =
-    let solns  = all_solutions m r in
-    let solns  = List.filter (fun s -> index s = n && width s = w && fill s =*= tau) solns in
-    let () = if null solns then
-      impossf "dpwiden couldn't widen %s" (Rtlutil.ToString.exp (Up.exp r)) in
-    let soln   = minimum_cost solns in
-    if print_debug then Printf.eprintf "cost: %i\n" soln.cost;
-    soln.e' in
+    find_best_soln' r (fun s -> index s = n && width s = w && fill s =*= tau) in
+  let find_best_soln r tau w =
+    find_best_soln' r (fun s -> width s = w && fill s =*= tau) in
+
   let rec widen_loc = function
     | RP.Mem(sp,w,e,a) -> RP.Mem(sp,w,find_best_soln e Z ptrwidth, a)
     | RP.Slice(w,i,l)  -> RP.Slice(w,i, widen_loc l)
     | l                -> l in
 @ 
+
+(*
+  let find_best_soln_index r tau n w =
+    let solns  = all_solutions m r in
+    let solns  = List.filter (fun s -> index s = n && width s = w && fill s =*= tau) solns in
+    let () = if null solns then
+      (* try simplifier and run again *)
+      impossf "dpwiden couldn't widen %s" (Rtlutil.ToString.exp (Up.exp r)) in
+    let soln   = minimum_cost solns in
+    if print_debug then Printf.eprintf "cost: %i\n" soln.cost;
+    soln.e' in
+  let find_best_soln r tau w =
+    let construct r = 
+      let solns  = all_solutions m r in
+      let solns  = List.filter (fun s -> width s = w && fill s =*= tau) solns in
+      solns
+    in
+    let solns = construct r in
+    let solns =
+      if null solns then (* try the simplifier and run again *)
+        construct (simplify r)
+      else solns
+    in
+    let () = if null solns then
+      impossf "dpwiden couldn't widen %s" (Rtlutil.ToString.exp (Up.exp r)) in
+    let soln = minimum_cost solns in
+    if print_debug then Printf.eprintf "cost: %i\n" soln.cost;
+    soln.e' in
+*)
+
 \[
 \inferrule [Assign \sidecond{n\leq w\leq w', x_w \text{ is a hardware reg}}]
 {\tenv(x_w)=\fty{n} \\
