@@ -277,7 +277,8 @@ val don't_touch_me : Rtl.Private.effect list -> bool
 The [[Proc.t]] gives the expander a supply of temporaries.
 <<expander.mli>>=
 module type S = sig
-  val expand : ('a, 'b, 'c, 'd) Proc.t -> Rtl.rtl -> Rtl.rtl list
+  val expand : ('a, Rtl.rtl Cfgx.M.cfg, 'c, 'd) Proc.t -> Rtl.rtl ->
+               Rtl.rtl Cfgx.M.node * Rtl.rtl Cfgx.M.node
   (* support for old code
    * val cfg    : 'a -> Proc.t ->      bool
    *)
@@ -288,7 +289,8 @@ module IntFloatAddr (Post : Postexpander.S) : S
 Here are some abbreviations and utilities.
 <<expander.ml>>=
 module type S = sig
-  val expand : ('a, 'b, 'c, 'd) Proc.t -> Rtl.rtl -> Rtl.rtl list
+  val expand : ('a, Rtl.rtl Cfgx.M.cfg, 'c, 'd) Proc.t -> Rtl.rtl ->
+               Rtl.rtl Cfgx.M.node * Rtl.rtl Cfgx.M.node
   (* support for old code
    * val cfg    : 'a -> Proc.t -> bool
    *)
@@ -311,21 +313,53 @@ let upassn = Rtl.Up.assertion
 let fetch l = RP.Fetch (Down.loc l, RU.Width.loc l)
 let width e = RU.Width.exp (Up.exp e)
 @ 
-To avoid quadratric list append, I use John Hughes's
-continuation-passing list representation.
+Sometimes, we may require that a node have an instruction.
 <<expander.ml>>=
-let empty       = fun l -> l
-let unit x      = fun l -> x :: l
-let (@::) x f   = fun l -> x :: f l
-let (@@) f1 f2  = fun l -> f1 (f2 l)
-let to_hughes l = fun l' -> l @ l'
-let rec concat = function
-  | [] -> empty
-  | [x] -> x  (* premature optimization is the root of all evil *)
-  | [x; y] -> x @@ y  (* premature optimization is the root of all evil *)
-  | [x; y; z] -> x @@ y @@ z (* premature optimization is the root of all evil *)
-  | h::t -> h @@ concat t
-@ 
+module G = Cfgx.M
+let inst n =
+  match G.to_instr n with
+  | Some i -> i
+  | None   -> Impossible.impossible "Expanded node must have instruction"
+@
+The code expander returns a segment of a cfg with an entry node and an exit node.
+We represent such a segment with a pair $(entry\_node, exit\_node)$.
+We have two constructors for creating an empty segment and creating a segment with
+one instruction.
+<<expander.ml>>=
+let nempty g  = let ill = G.illegal     g                       in (ill,ill)
+let nunit g r = let n   = G.instruction g r ~succ:(G.illegal g) in (n,n)
+@
+To properly concatenate segments, we need to recognize (and ignore) empty segments.
+<<expander.ml>>=
+let is_empty (xi,xf) = G.kind xi = G.Illegal && G.kind xf = G.Illegal
+
+let (@@) ((xi,xf) as x) ((yi,yf) as y) =
+  match is_empty x, is_empty y with
+  | true, _    -> y
+  | _   , true -> x
+  | _   , _    -> G.set_succ xf ~succ:yi; (xi, yf)
+@
+We include constructors to create a segment from a reversed list of instructions and
+to concatenate a list of segments.
+<<expander.ml>>=
+let to_segment g l  = List.fold_left (@@) (G.illegal g, G.illegal g)
+                                     (List.rev (List.map (nunit g) l))
+let rec seg_concat g = function
+  | [] -> nempty g
+  | h::t -> h @@ seg_concat g t
+@
+For debugging purposes, it's sometimes easier to look at a segment as a flat list;
+obviously, the list loses the structure of the segment.
+<<expander.ml>>=
+let seg_to_list (xi,xf)  =
+  let rec to_list' n =
+    if G.kind n = G.Illegal then []
+    else let rst = if G.eq n xf then [] else List.concat (List.map to_list' (G.succs n))
+         in  match G.to_instr n with
+             | Some i -> i :: rst
+             | None   -> rst
+  in to_list' xi
+@
 Some debugging code is most helpful.
 The expander writes debugging information as it goes;
 to activate it, try \texttt{VERBOSITY=5~qc--}.
@@ -335,7 +369,7 @@ module D = struct (* debugging *)
     let int n = string_of_int n
     let exp e = Rtlutil.ToReadableString.exp (Up.exp e) 
     let rtl r = Rtlutil.ToReadableString.rtl r 
-    let pr_is   is = List.iter (fun r -> strings ["  "; rtl r; "\n"]) (List.rev (is[]))
+    let pr_is   is = List.iter (fun r -> strings ["  "; rtl r; "\n"]) (seg_to_list is)
     let pr_rtls rs = List.iter (fun r -> strings ["  "; rtl r; "\n"]) (List.rev rs)
     let temp (s, n, w) =
       "$" ^ Char.escaped s ^ "[" ^ int n ^ "] : " ^ int w ^ " loc" 
@@ -417,12 +451,12 @@ Function [[temp_in_context]] takes an existing temporary and a
 context, and returns a (possibly new) temporary that is OK for the
 context (along with instructions that make it so). 
 <<generic expander>>=
-let temp_in_context ((space, n, w) as t) context instructions =
+let temp_in_context cfg ((space, n, w) as t) context instructions =
   if ok context t then
     t, instructions
   else
     let t' = alloc context w in
-    t', to_hughes (Post.move t' t) @@ instructions
+    t', instructions @@ to_segment cfg (Post.move t' t)
 @ 
 Within the expander, we eagerly build some dynamic contexts:
 [[icontext]], [[acontext]], and [[fcontext]].
@@ -439,7 +473,7 @@ let expand proc =
   <<context guessing>>
   let alloc_direct (space, _) = Talloc.Multiple.reg proc.Proc.temps space in
   <<definitions of [[to_temp]], [[rtl]] and all the other generic expander functions>>
-  in fun r -> rtl r []
+  in rtl proc.Proc.cfg
 @ 
 To find the context for the operands of a comparison, I use the
 dreadful hack that every floating-point 
@@ -483,34 +517,71 @@ But if a left-hand side is already a temporary, we fail to ``target''
 the right-hand side into that temporary.
 It is not obvious to NR how to write an expander that achieves both.}
 <<definitions of [[to_temp]], [[rtl]] and all the other generic expander functions>>=
-let rec to_temp' context e = match e with
+let rec to_temp' cfg context e =
+  let temp_in_context = temp_in_context cfg in
+  match e with
   | RP.Const k ->
       let w = width e in
       let t = alloc context w in
-      t, to_hughes (Post.li t k)
+      t, to_segment cfg (Post.li t k)
   | RP.App (_, _) when is_compile_time_constant e ->
       let w = width e in
       let t = alloc context w in
-      t, to_hughes (Post.lix t (Up.exp e))
+      t, to_segment cfg (Post.lix t (Up.exp e))
   | RP.Fetch (RP.Mem ('m', agg, w, addr, assn), w') ->
       let t = alloc context w in
-      let a, is = address addr in
+      let a, is = address cfg addr in
       assert (agg = Post.byte_order);
       assert (w = w');
-      t, to_hughes (Post.load t a (upassn assn)) @@ is
+      t, is @@ to_segment cfg (Post.load t a (upassn assn))
   | RP.Fetch (RP.Reg (space, i ,w), w') ->
       assert (w = w');
-      temp_in_context (space, i, w) context empty
+      temp_in_context (space, i, w) context (nempty cfg)
   | RP.Fetch _ ->
       Impossible.impossible "memory-like access to non-memory space"
   <<cases for sign-extending and zero-extending loads>>
   <<cases for sign-extending and zero-extending divides>>
-  | RP.App (("bit", _), [RP.App (cmp,[x; y])]) ->
-    Impossible.unimp "Bit operator unimplemented"
+  | RP.App (("sx", [n; w]), [RP.App (("bit", []), [e])]) ->
+      assert (n = 1);
+      let t       = alloc context w in
+      (* JD HACK *)
+      let (ti,tf) = to_segment cfg (Post.li t (RP.Bits (Bits.S.of_int 1 w))) in
+      let (fi,ff) = to_segment cfg (Post.li t (RP.Bits (Bits.S.of_int 0 w))) in
+
+      let tlabel = Idgen.label "if_true" in
+      let tsym   = Rtl.Dn.exp (Rtl.link (proc.Proc.mk_symbol tlabel)
+                                        (RU.Width.loc (Rtl.Up.loc pc_lhs))) in
+      let tjoin  = G.node_labeled cfg tlabel in
+      let elabel = Idgen.label "end_if" in
+      let esym   = Rtl.Dn.exp (Rtl.link (proc.Proc.mk_symbol elabel)
+                                        (RU.Width.loc (Rtl.Up.loc pc_lhs))) in
+      let ejoin  = G.node_labeled cfg elabel in
+      let comp = guarded cfg e pc_lhs tsym w in
+
+      G.set_succ ff    ~succ:(G.branch cfg ~target:ejoin);
+      G.set_succ tjoin ~succ:ti;
+      G.set_succ tf    ~succ:ejoin;
+
+      (* The last instruction must be the jump instruction. *)
+      let branch  = G.cbranch cfg (R.Up.exp e) ~ifso:ti ~ifnot:fi in
+      let (bi,bf) =
+          match guarded cfg e pc_lhs tsym w with
+          | ((bi,bf) as b) when is_empty b -> nempty cfg (* Is this case legal? *)
+          | (bi,bf) when G.eq bi bf -> G.update_instr (fun _ -> inst bf) branch ;
+                                       (branch,branch)
+          | (bi,bf) ->
+               let last_new = G.pred bf in
+                 begin
+                   G.set_succ last_new branch;
+                   G.update_instr (fun _ -> inst bf) branch;
+                   (bi,branch)
+                 end
+          in
+      t, (bi,ejoin)
   | RP.App (op, args) ->
       let (temps, is) =
         try
-          List.split (List.map2 (fun c e -> to_temp (contextmap c) e)
+          List.split (List.map2 (fun c e -> to_temp cfg (contextmap c) e)
                         (Post.arg_contexts op) args)
         with Invalid_argument (_) ->
           Impossible.impossible 
@@ -524,7 +595,7 @@ let rec to_temp' context e = match e with
       | [x]    -> Post.unop  t op x
       | _      -> Post.rtlop t op temps
       in
-      temp_in_context t context (to_hughes compute @@ concat is)
+      temp_in_context t context (seg_concat cfg (List.rev is) @@ to_segment cfg compute)
 <<other generic expander functions>>
 @ The note on binary operators is that eventually the generic expander
 might be extended so it can deal with a two-address target machine.
@@ -539,15 +610,15 @@ This fact is documented in the postexpander interface.
 | RP.App (("sx", [n; w]), [RP.Fetch (RP.Mem ('m', agg, n', addr, assn), n'')]) ->
     assert (n = n' && n' = n'');
     let t = alloc icontext w in
-    let a, is = address addr in
+    let a, is = address cfg addr in
     assert (agg = Post.byte_order);
-    temp_in_context t context (to_hughes (Post.sxload t a n (upassn assn)) @@ is)
+    temp_in_context t context (is @@ to_segment cfg (Post.sxload t a n (upassn assn)))
 | RP.App (("zx", [n; w]), [RP.Fetch (RP.Mem ('m', agg, n', addr, assn), n'')]) ->
     assert (n = n' && n' = n'');
     let t = alloc icontext w in
-    let a, is = address addr in
+    let a, is = address cfg addr in
     assert (agg = Post.byte_order);
-    temp_in_context t context (to_hughes (Post.zxload t a n (upassn assn)) @@ is)
+    temp_in_context t context (is @@ to_segment cfg (Post.zxload t a n (upassn assn)))
 @ 
 Division is going to be a real problem; I can just tell.
 Here's a hack which is untested and probably useless.
@@ -555,15 +626,15 @@ Here's a hack which is untested and probably useless.
 | RP.App ((("divu"|"modu") as divmod, [w; n]), [RP.App (("zx", [n'; w']), [x]); y])
   when w = w' && n = n' ->
     let t = alloc icontext n in
-    let tx, isx = to_temp icontext x in
-    let ty, isy = to_temp icontext y in
+    let tx, isx = to_temp cfg icontext x in
+    let ty, isy = to_temp cfg icontext y in
     let divmod = Post.binop t ((divmod ^ "_trunc"), [n]) tx ty in
-    temp_in_context t context (to_hughes (divmod) @@ isy @@ isx)
+    temp_in_context t context (isx @@ isy @@ to_segment cfg (divmod))
 @
 We might one day support multiple addressing modes, but for now, just registers. 
 <<other generic expander functions>>=
-and address exp =
-  let t, is = to_temp acontext exp
+and address cfg exp =
+  let t, is = to_temp cfg acontext exp
   in  Post.Address.reg t, is
 @
 A compile-time constant is a sum or difference of compile-time constants.
@@ -605,10 +676,10 @@ Function [[assign]] expands an assignment with no guard.
 Because there's no support for multiple assignment yet, the [[rtl']]
 function is trivial.
 <<other generic expander functions>>=
-and rtl' r = match Down.rtl r with
-| RP.Rtl [(g, RP.Store (left, right, w))] -> guarded g left right w
-| RP.Rtl [(g, RP.Kill _)] -> unit (R.par []) (* IS THIS A CHEAT? *)
-| RP.Rtl [] -> unit r  (* a nop is a nop is a nop *)
+and rtl' cfg r = match Down.rtl r with
+| RP.Rtl [(g, RP.Store (left, right, w))] -> guarded cfg g left right w
+| RP.Rtl [(g, RP.Kill _)] -> nunit cfg (R.par []) (* IS THIS A CHEAT? *)
+| RP.Rtl [] -> nunit cfg r (* a nop is a nop is a nop *)
 | RP.Rtl ((_::_::_) as effs) -> (<<handle RTL with multiple effects [[effs]]>>)
 @ 
 The type system tells us that anything in a guard must be a Boolean
@@ -620,26 +691,26 @@ a guarded effect with a nontrivial guard always be expanded into
 a sequence that ends in a conditional branch.
 To compile a comparison, we rely on the postexpander.
 <<other generic expander functions>>=
-and guarded g left right w =
+and guarded cfg g left right w =
   match g with
-  | RP.Const (RP.Bool b) -> if b then assign left right w else empty
+  | RP.Const (RP.Bool b) -> if b then assign cfg left right w else nempty cfg
   | RP.Const _ -> Impossible.impossible "non-Bool constant as guard"
   | RP.Fetch _ -> Impossible.impossible "fetch as guard"
   | RP.App (("not", []), [g]) ->
-      let is = guarded g left right w in
-      (match is [] with
-      | h :: t -> to_hughes (Post.bnegate h :: t)
-      | [] -> Impossible.impossible "empty list of instructions for cond. branch")
+      let ((ii,_) as is) = guarded cfg g left right w in
+      if G.kind ii = G.Illegal
+      then Impossible.impossible "empty list of instructions for cond. branch"
+      else G.update_instr (Post.bnegate) ii ; is
   | RP.App ((("conj" | "disj"), []), [g]) ->
       Impossible.unimp "conjunction or disjunction in generic code expander"
       (* one day to be expanded into control flow *)
   | RP.App (cmp, [x; y]) ->
       if left = pc_lhs then
         let context = cmp_context cmp in
-        let xt, xis = to_temp context x in
-        let yt, yis = to_temp context y in
+        let xt, xis = to_temp cfg context x in
+        let yt, yis = to_temp cfg context y in
         match right with
-        | RP.Const c -> to_hughes (Post.bc xt cmp yt c) @@ yis @@ xis
+        | RP.Const c -> xis @@ yis @@ to_segment cfg (Post.bc xt cmp yt c)
         | _ -> Impossible.unimp "conditional branch to computed location"
       else
         Impossible.unimp "guard on other than conditional branch";
@@ -653,37 +724,37 @@ ABOUT MERGING SIMILAR INFORMATION IN THE [[Target]] AND
 An assignment is either a goto, a store, or a computation where we put
 something in a temporary.
 <<other generic expander functions>>=
-and assign left right w =
+and assign cfg left right w =
   if left = pc_lhs then  (* unconditional branch *)
     match right with
-    | RP.Const c -> to_hughes (Post.b c)
+    | RP.Const c -> to_segment cfg (Post.b c)
     | _ ->
-        let r, is = to_temp acontext right in
-        to_hughes (Post.br r) @@ is
+        let r, is = to_temp cfg acontext right in
+        is @@ to_segment cfg (Post.br r)
   else
     match left with
     | RP.Mem ('m', agg, w, addr, assn) ->  (* some kind of store *)
         assert (agg = Post.byte_order || agg = Rtl.Identity);
-        let a, is' = address addr in
+        let a, is' = address cfg addr in
         (match right with
         | <<\emph{pattern [[->]] action} for low-bit store>>
         | _ ->
-            let r, is = to_temp (guess_context right) right in
-            to_hughes (Post.store a r (upassn assn)) @@ is' @@ is)
+            let r, is = to_temp cfg (guess_context right) right in
+            is @@ is' @@ to_segment cfg (Post.store a r (upassn assn)))
     | RP.Mem (_, _, _, _, _) ->
         Impossible.unimp "memory space other than 'm'"
     | RP.Reg dst -> (* computation *)
         (match right with
-        | RP.Fetch (RP.Reg src, _) -> to_hughes (Post.move ~dst ~src)
-        | _ -> let r, is = to_temp (guess_context right) right in
-               to_hughes (Post.move ~dst ~src:r) @@ is
+        | RP.Fetch (RP.Reg src, _) -> to_segment cfg (Post.move ~dst ~src)
+        | _ -> let r, is = to_temp cfg (guess_context right) right in
+               is @@ to_segment cfg (Post.move ~dst ~src:r)
         )
     | RP.Var (_,_,_) -> Impossible.impossible "variable passed to code expander"
     | RP.Slice (_,_,_) -> Impossible.unimp "slice"
 <<\emph{pattern [[->]] action} for low-bit store>>=
 RP.App (("lobits", [w; n]), [rhs]) ->
-  let r, is = to_temp icontext rhs in
-  to_hughes (Post.lostore a r n (upassn assn)) @@ is' @@ is
+  let r, is = to_temp cfg icontext rhs in
+  is @@ is' @@ to_segment cfg (Post.lostore a r n (upassn assn))
 @ 
 Something with multiple effects is either a call, a [[cut to]], or a
 shuffle.
@@ -703,7 +774,7 @@ let has_pc_on_right = function
 <<support for call, [[cut to]], and shuffle>>
 let effs = strip_trivial_guards effs in
 if Post.don't_touch_me effs then
-  R.par (List.map Up.effect effs) @:: empty
+  nunit cfg (R.par (List.map Up.effect effs))
 else
   if List.exists has_pc_on_left effs then
     if List.exists has_pc_on_right effs then
@@ -718,21 +789,22 @@ let (<<) f g x = f (g x) in
 let make_call effs = 
   let others = List.filter (not << has_pc_on_left) effs in
   match List.filter has_pc_on_left effs with
-  | [RP.Store(pc, RP.Const c, _)] -> to_hughes (Post.call c others)
+  | [RP.Store(pc, RP.Const c, _)] -> to_segment cfg (Post.call c others)
   | [RP.Store(pc, e, _)] ->
-      let t, is = to_temp acontext e in
-      to_hughes (Post.callr t others) @@ is
+      let t, is = to_temp cfg acontext e in
+      let is_type = (is : R.rtl G.node * R.rtl G.node) in
+      is @@ to_segment cfg (Post.callr t others)
   | _ -> Impossible.impossible "multiple pc := e in call" in
 @ 
 <<support for call, [[cut to]], and shuffle>>=
 let make_cut_to effs =
   let expand e (preds, effs) = match e with
     | RP.Store (l, r, w) ->
-        let t, is = to_temp (guess_context r) r in
-        (is @@ preds, RP.Store(l, RP.Fetch(RP.Reg t, w), w) :: effs)
+        let t, is = to_temp cfg (guess_context r) r in
+        (preds @@ is, RP.Store(l, RP.Fetch(RP.Reg t, w), w) :: effs)
     | RP.Kill l -> (preds, RP.Kill l :: effs) in
-  let preds, effs = List.fold_right expand effs (empty, []) in
-  to_hughes (Post.cut_to effs) @@ preds in
+  let preds, effs = List.fold_right expand effs (nempty cfg, []) in
+  preds @@ to_segment cfg (Post.cut_to effs) in
 @ 
 Shuffle would be cooler if we carefully arranged to make things
 push-like, but never mind.
@@ -747,17 +819,17 @@ let make_shuffle effs =
   let rec shuffle =
     let assign = noisy_assign in
     function
-    | [(l, r, w)] -> assign l r w
-    | [] -> empty
+    | [(l, r, w)] -> assign cfg l r w
+    | [] -> nempty cfg
     | ((l, (r:RP.exp), w) :: rest) as effs ->
         <<definition of [[try_first_effect]]>>
         try_first_effect effs
-          (fun (l, r, w) rest -> shuffle rest @@ assign l r w)
+          (fun (l, r, w) rest -> assign cfg l r w @@ shuffle rest)
           (fun () ->
             let t = alloc (guess_context r) w in
-            assign l (RP.Fetch (RP.Reg t, w)) w @@
-            shuffle rest @@
-            assign (RP.Reg t) r w)
+            (assign cfg (RP.Reg t) r w @@
+             shuffle rest @@
+             assign cfg l (RP.Fetch (RP.Reg t, w)) w))
   in shuffle (List.map strip_store effs) in
 <<definition of [[try_first_effect]]>>=
 let try_first_effect effects succ fail =
@@ -775,18 +847,18 @@ let try_first_effect effects succ fail =
 These wrapper functions show what the expander [[rtl]] and register
 targeter [[to_temp]] are doing.
 <<other generic expander functions>>=
-and rtl r =
-  let is = rtl' r in
+and rtl cfg r =
+  let is = rtl' cfg r in
   let _ = D.strings ["Expanded "; D.rtl r; " into\n"]; D.pr_is is in
   is
-and noisy_assign l r w =
-  let is = assign l r w in
+and noisy_assign cfg l r w =
+  let is = assign cfg l r w in
   let r = R.store (Up.loc l) (Up.exp r) w in
   let _ = D.strings ["Shuffling "; D.rtl r; " into\n"]; D.pr_is is in
   is
-and to_temp context e =
+and to_temp cfg context e =
   let _ = D.strings ["Targeting "; D.exp e; "...\n"] in
-  let t, is = to_temp' context e in
+  let t, is = to_temp' cfg context e in
   let _ = D.strings ["Targeted "; D.exp e; " => "; D.temp t; " by \n"] in
   let _ = D.pr_is is in
   t, is
@@ -795,22 +867,22 @@ and to_temp context e =
 This is old stuff left over, which I might want to resurrect some day
 when I try to expand general guards.
 <<definitions of [[to_temp]], [[rtl]] and all the other generic expander functions>>=
-in let rec old_general_guard g left right w =
+in let rec old_general_guard cfg g left right w =
   (* this case is bogus *)
-  let r, is  = to_temp (guess_context right) right in
-  let l, is' = old_loc left in
-  R.guard (Up.exp g) (R.store l (R.fetch (temploc r) w) w) @:: is @@ is'
-and old_loc l =
+  let r, is  = to_temp cfg (guess_context right) right in
+  let l, is' = old_loc cfg left in
+  is @@ is' @@ nunit cfg (R.guard (Up.exp g) (R.store l (R.fetch (temploc r) w) w))
+and old_loc cfg l =
   match l with
   | RP.Mem ('m', agg, w, addr, assn) ->
-      let addr, is = to_temp (acontext) addr in
+      let addr, is = to_temp cfg (acontext) addr in
       Up.loc (RP.Mem ('m', agg, w, fetch (temploc addr), assn)), is
-  | _ -> Up.loc l, empty
+  | _ -> Up.loc l, nempty cfg
 @
 \subsection{The flow-graph expander}
 Here we expand every RTL in a flow graph.
 <<support for old code that can be removed from generic flow-graph expander>>=
-module G  = Cfg4
+module G  = Cfgx.M
 module GU = Cfgutil
 let cfg _ proc =
   let g = proc.Proc.cfg in
@@ -830,10 +902,9 @@ let cfg _ proc =
   in
   List.iter exp nodes;
   !modified
-
+@
 <<generic flow-graph expander>>=
 let cfg _ proc =
-  let module G = Cfgx.M in
   let g = proc.Proc.cfg in
   let t = proc.Proc.target in
   let modified = ref false in
@@ -841,19 +912,20 @@ let cfg _ proc =
     match G.to_instr n with
     | None -> ()
     | Some i ->
-        match G.kind n with G.Assertion | G.StackAdjust -> ()
+        match G.kind n with G.Assertion | G.StackAdjust | G.Join | G.Exit-> ()
         | _ -> 
-          match expand proc i with
-          | []     -> G.update_instr (fun _ -> R.par []) n
-          | [last] -> G.update_instr (fun _ -> last)     n
-          | last :: last_new :: preds ->
-              let last_new = G.instruction g last_new ~succ:(G.illegal g) in
-              let insert   =
-                List.fold_left (fun next i -> G.instruction g i ~succ:next)
-                last_new preds in
-              G.splice_before ~entry:insert ~exit:last_new n;
-              G.update_instr (fun _ -> last) n;
-              modified := true in
+          let ((xi,xf) as x) = expand proc i in
+              if is_empty x then
+                   G.update_instr (fun _ -> R.par []) n
+              else if G.eq xi xf then
+                   G.update_instr (fun _ -> inst xf) n
+              else
+                   let last_new = G.pred xf in
+                     begin
+                       G.splice_before ~entry:xi ~exit:last_new n;
+                       G.update_instr (fun _ -> inst xf) n;
+                       modified := true
+                     end in
   G.iter_nodes exp g;
   !modified
 @
