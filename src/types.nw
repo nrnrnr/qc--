@@ -3,16 +3,16 @@
 % l2h substitution ocaml OCaml
 % l2h substitution forall forall
 % l2h substitution to ->
-
+% l2h substitution rtl RTL
 
 % ------------------------------------------------------------------  
 \section{Types}\label{sec:types}
 % ------------------------------------------------------------------  
 
-The static semantics of \C~require some type checks:  types of
-arguments to primitive functions must match the types of their formal
-parameters, if-statements are governed by an expression of type
-[[bool]].  This module lays out the type language for this purpose.
+The static semantics of \C~require type checks:  types of arguments to
+primitive functions must match the types of their formal parameters,and
+[[if]]-statements are governed by an expression of type [[bool]].  This
+module lays out the type language for this purpose.
 
 The basic types in \C~are [[bool]] and [[bits]]$n$.  Values in \C~are
 monomorphic, primitive operators like [[add]] are polymorphic in
@@ -21,10 +21,10 @@ general in the size of their operands:
 $$[[add]]: \forall~n.[[bits]]n \times [[bits]]n \to [[bits]]n$$
  
 A polymorphic primitive is described by a \textit{type scheme} that
-may contains bound variables for the size part of a [[bits]] type. 
+may contain bound variables for the size part of a [[bits]] type. 
 Types (for values), on the other hand, contain no variables at all. 
 The structure of type schema and types are covered by a parameterized
-type [[t]].  Depending on the parameter types [[ty]] and type schema
+type [[t]].  Depending on the parameter [['a]] types [[ty]] and type schema
 [[tyscheme]] can be created from [[t]].
 
 <<types>>=
@@ -39,10 +39,14 @@ type size       = Const of int
 type ty         = int  t
 @
 A [[tyscheme]] describes a polymorphic function that takes a list of
-arguments and returns a single value as result.
+arguments and returns a single value as result. A [[monotype]] is a
+monomorphic function type.
+
 <<types>>=
 type tyscheme   = (size t) list * (size t)
+type monotype   = (int  t) list * (int  t)
 @
+
 The [[tyscheme]] for the [[add]] primitve would be encoded as follows:
 \begin{quote}
     \begin{verbatim}
@@ -60,11 +64,10 @@ returns the type of the primitive's result. In case the primitive's
 [[tyscheme]] can not be instantiated such that the supplied argument
 type match, a [[matchExn]] is raised.
 
-When a type scheme contains a variable in the result position that
-does not also show up in an argument position, instantiation of a type
-scheme fails.  This indicates an error in the type specification of a
-primitive and should never happen.  In case it does, an assertion will
-be violated.
+Instantiation of a type scheme fails  when a type scheme contains a
+variable in the result position that does not also show up in an
+argument position. This indicates a checked run-time error in the type
+specification of a primitive and should never happen.  
 
 <<types>>=
 exception MatchExn
@@ -82,6 +85,17 @@ present) as an [[int option]] value.
 <<appl>>=
 val retsize : string -> int option
 @
+
+An operator inside an {\rtl} is monomorphic. It carries a \emph{width
+list} that allows to reconstruct the monomorphic type from its
+polymorphic type scheme. This process is called instantiation. It is a
+checked run-time error if the width list is too short to instantiate all
+variables in the type scheme.
+
+<<appl>>=
+val instantiate: tyscheme -> widths:int list -> monotype
+@
+
 
 % ------------------------------------------------------------------ 
 \subsection{Useful abbreviations}
@@ -228,6 +242,24 @@ let retsize op =
         with Lc.Error msg  -> assert false
 @
 
+[[Instantiate]] computes a monomorphic function type from a width list
+and polymorphic [[tyscheme]] by instantiating it. The $n$-th element in
+the (zero based) width list instantiates [[Var]] $n+1$ in the
+[[tyscheme]]. It is a checked run-time error if [[tyscheme]] contains a
+variable [[Var]] $x$ where $x > |[[width]]|$. 
+
+<<types.ml>>=
+let instantiate ((args,ret):tyscheme) widths  =
+    let inst = function
+        | Bits (Var i)   -> ( try Bits (List.nth widths (i-1)) with 
+                            | Failure _ -> assert false
+                            ) 
+        | Bits (Const k) -> Bits k
+        | Bool           -> Bool
+    in (List.map inst args, inst ret)
+@        
+        
+        
 
 The implementation of the abbreviations is trivial:
 

@@ -149,9 +149,9 @@ module Consts : sig
              
     module Eval: sig
         val evalExpr  : Fenv.Dirty.env -> Ast.expr 
-                        -> (Types.ty * Value.value) Error.error
+                        -> (Types.ty * Rtlop.Impl.value) Error.error
         val evalExprs : Fenv.Dirty.env -> Ast.expr list 
-                        -> (Types.ty * Value.value) list Error.error
+                        -> (Types.ty * Rtlop.Impl.value) list Error.error
         val doConst   : Fenv.Dirty.env -> Decl.decl list 
                         -> Fenv.Dirty.env
     end
@@ -943,7 +943,7 @@ let rec evalFetch env = function
     | A.Var(hint,id)  -> 
             ( match snd (F.findv id env) with
             | E.Error                -> E.Error
-            | E.Ok(F.Constant(bits),ty) -> E.Ok(ty, Value.Bits bits)
+            | E.Ok(F.Constant(bits),ty) -> E.Ok(ty, Rtlop.Impl.Bits bits)
             | _ -> E.error ("access of non-constant "^id)
             ) 
 @
@@ -960,7 +960,8 @@ Both result and type are returned.
 and evalPrimOp env op args =
     E.ematch (E.Raise.list (List.map (evalExpr env) args))
     (fun args ->
-        let f , t   = Value.lookup op Value.ops in
+        let  t      = Rtlop.Types.poly op   in
+        let  f      = Rtlop.Impl.lookup op  in
         let at, av  = List.split args in
         let rt      = Types.appl t at in
             rt, f av
@@ -975,7 +976,7 @@ and literalExpr env n ty =
     ( function 
     | T.Bool       -> E.error "a value must have type bitsXX"
     | T.Bits width when Bits.fits n width -> 
-        let n = Bits.setSize n width in (T.bits width, Value.Bits n)
+        let n = Bits.setSize n width in (T.bits width, Rtlop.Impl.Bits n)
     | _            -> E.error "literal too large for this type"
     )
     
@@ -1033,9 +1034,11 @@ let doConstDecl env ((ty,name,expr),r) =
     let reg          = F.srcmap env, r                              in
     let entry = E.seq (evalExpr env expr) 
         ( function
-        | (t,Value.Bits bits) when t <> Types.bool -> E.Ok(F.Constant(bits),t)
+        | (t,Rtlop.Impl.Bits bits) when t <> Types.bool 
+                -> E.Ok(F.Constant(bits),t)
         | (t,v) -> 
-            ( E.errorRegionPrt reg "constant has type bool but must have type bits"
+            ( E.errorRegionPrt reg 
+                    "constant has type bool but must have type bits"
             ; E.Error
             )
         ) in
@@ -1340,7 +1343,7 @@ let tyExpr env exp =
                     ) in
     let tlookup   = fun x -> snd (F.findt x env)                  in
     let vlookup   = fun x -> E.ematch (snd (F.findv x env)) (snd) in 
-    let olookup   = fun x -> E.Ok(snd (Value.lookup x Value.ops)) in 
+    let olookup   = fun x -> E.Ok(Rtlop.Types.poly x) in
                     
     let e = { Expcheck.wordsize    = word
             ; Expcheck.pointersize = pointer
@@ -1427,7 +1430,7 @@ let memsize env = function
     | A.NoSize        -> E.Ok(Some 1)
     | A.FixSize(e)    -> E.ematch (Consts.Eval.evalExpr env e)
         ( function 
-        | Types.Bits(_), Value.Bits(bits) ->
+        | Types.Bits(_), Rtlop.Impl.Bits(bits) ->
             let size = try Bits.to_int bits with
                        Bits.Overflow -> E.error "size too big"
             in 
@@ -1753,7 +1756,7 @@ change.
 and primStmt env (left,cc,op,args,fs) =
     let left   = E.Raise.list (List.map (lvalue PrimCall env) left) in
     let env    = foldl (checkFlow false) env fs                     in
-    let opTy   = snd (Value.lookup op Value.ops)                in
+    let opTy   = Rtlop.Types.poly op                                in
     let args   = List.map snd args                                  in
     let at     = List.map (tyExpr env) args                         in
     let rTy    = tyAppl opTy (E.Raise.list at)                      in
@@ -1808,7 +1811,7 @@ and returnStmt env (cc,alt,args) =
             let e2' = constExpr env e2 in
                 E.seq' (F.flagError env) (E.Raise.triple (e1',e2',wordTy env))
                 ( function 
-                | (tx, Value.Bits(x)),(ty, Value.Bits(y)),w -> if
+                | (tx, Rtlop.Impl.Bits(x)),(ty, Rtlop.Impl.Bits(y)),w -> if
                    (  tx = w
                    && ty = w
                    && Bits.to_int x >= 0 

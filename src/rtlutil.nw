@@ -23,9 +23,9 @@
 
 This module provides functions to observe and transform {\rtl}s. 
 
-Locations and expressions have a \emph{width} that can be observed. The
-exception are expressions that use primitive functions on the outermost
-level; therefore the use of [[Width.exp]] is deprecated.
+Locations and non-boolean expressions have a \emph{width} that can be
+observed.  It is a checked run-time error to pass a boolean expression
+to [[exp]].
 
 <<rtlutil.mli>>=
 module Width: sig
@@ -96,13 +96,23 @@ let loc l = match (Rtl.Convert.loc l) with
     | RP.Cell(_,_,w,_,_) -> w
     | RP.Var(_,_,w)      -> w
     | RP.Slice(w, _, _)  -> w
+@
 
+A named {\rtl} operator has a type and semantics that is independent of
+its implementation. We have to look it up for expressions that have an
+application on the outermost level.
+
+<<Width>>=
 let exp e = match Rtl.Convert.exp e with
     | RP.Const(RP.Bool _)     -> assert false
     | RP.Const(RP.Bits (_,w)) -> w
     | RP.Const(RP.Link (_,w)) -> w
     | RP.Fetch(_,w)           -> w
-    | RP.App _                -> assert false (* not implemented *)
+    | RP.App (op,_)           -> 
+        ( match snd (Rtlop.Types.mono (Rtl.Revert.opr op)) with
+        | Types.Bits(n) -> n
+        | Types.Bool    -> assert false 
+        ) 
 @
 
 % ------------------------------------------------------------------ 

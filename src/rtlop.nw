@@ -1,0 +1,130 @@
+
+% ------------------------------------------------------------------ 
+\section{Primitive RTL operators}
+% ------------------------------------------------------------------ 
+
+This module provides  types and implementations for {\rtl} operators.
+The semantics of an {\rtl} operator is independent of its
+implementation. Therefore run-time and compile-time implementations of
+an operator share the same type. 
+
+[[Poly]] returns the polymorphic type of an operator. It is a checked
+run-time error to look up an unknown operator. [[Mono]] takes an
+[[Rtl.opr]] operator and reconstructs its monomorphic type (using the
+width list inside the operator).
+
+<<rtlop.mli>>=
+module Types: sig
+    val poly: string  -> Types.tyscheme      
+    val mono: Rtl.opr -> Types.monotype      
+end
+@
+
+Module [[CT]] provides compile-time implementations of {\rtl} operators. 
+
+<<rtlop.mli>>=
+module Impl : sig
+    type value  = Bits of Bits.bits
+                | Bool of bool
+
+    val lookup: string -> (value list -> value)
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<rtlop.ml>>=
+
+module Types = struct
+    <<Types>>
+end
+
+module Impl  = struct
+    <<CT>>
+end    
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{RTL-Op Types}
+% ------------------------------------------------------------------ 
+
+<<Types>>=
+module T = Types
+
+let ops = Str.assoc2map
+    [  "add"    , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "+"      , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "sub"    , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "-"      , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "mult"   , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "shl"    , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "shra"   , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "shrl"   , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "<<"     , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  ">>"     , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "*"      , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "eq"     , (T.proc [T.bitsv 1; T.bitsv 1] T.bool)
+    ;  "=="     , (T.proc [T.bitsv 1; T.bitsv 1] T.bool)
+    ;  "<="     , (T.proc [T.bitsv 1; T.bitsv 1] T.bool)
+    ;  ">="     , (T.proc [T.bitsv 1; T.bitsv 1] T.bool)
+    ;  ">"      , (T.proc [T.bitsv 1; T.bitsv 1] T.bool)
+    ;  "<"      , (T.proc [T.bitsv 1; T.bitsv 1] T.bool)
+    ;  "!="     , (T.proc [T.bitsv 1; T.bitsv 1] T.bool)
+    ] 
+
+let poly op = try Str.Map.find op ops with Not_found -> assert false    
+let mono op =
+    let (o,w) = Rtl.Convert.opr op in
+    let ptype = poly o             in
+        Types.instantiate ptype w
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{RTL-Op Compile-Time Implementation}
+% ------------------------------------------------------------------ 
+
+This is totally bogus.
+
+<<CT>>=
+module B = Bits
+
+type value  = Bits of Bits.bits
+            | Bool of bool
+
+let zero = function
+    | [Bits(x);Bits(y)] -> Bits(B.zero (B.width x))
+    | _                 -> assert false
+
+let true' = function
+    | [Bits(_);Bits(_)] -> Bool(true)
+    | _                 -> assert false
+
+let ops = Str.assoc2map
+    [  "add"    , (zero  )
+    ;  "+"      , (zero  )
+    ;  "sub"    , (zero  )
+    ;  "-"      , (zero  )
+    ;  "mult"   , (zero  )
+    ;  "shl"    , (zero  )
+    ;  "shra"   , (zero  )
+    ;  "shrl"   , (zero  )
+    ;  "<<"     , (zero  )
+    ;  ">>"     , (zero  )
+    ;  "*"      , (zero  )
+    ;  "eq"     , (true' )
+    ;  "=="     , (true' )
+    ;  "<="     , (true' )
+    ;  ">="     , (true' )
+    ;  ">"      , (true' )
+    ;  "<"      , (true' )
+    ;  "!="     , (true' )
+    ]
+
+let lookup op = try Str.Map.find op ops with Not_found -> assert false
+@
+
+
