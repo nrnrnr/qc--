@@ -41,8 +41,8 @@ standard names.  Memory uses 8-bit cells, and other units use 32-bit
 cells.  
 Byte order and available aggregate widths must be specified by the
 client. 
-<<space.mli>>=
-module Standard32 : sig
+<<module type Standard>>=
+module type Standard = sig
   type generator = Rtl.aggregation -> Rtl.width list -> t
   val m :               generator          (* standard 8-bit memory *)
   val r :  count:int -> generator          (* registers *)
@@ -68,6 +68,10 @@ module Standard32 : sig
   val indices : int locations (* standard indices in c space *)
   val vfp : Rtl.exp  (* the virtual frame pointer, $V[0] *)
 end
+
+<<space.mli>>=
+<<module type Standard>>
+module Standard32: Standard
 @ 
 
 A [[Rtl.space]] denotes a memory space, the details of a particular
@@ -175,6 +179,7 @@ type location_set =
 <<type location set>>
 <<type classification>>
 <<type t>>
+<<module type Standard>>
 @
 
 <<space.ml>>=
@@ -195,14 +200,20 @@ let checked s =
     | _ -> ());
     s
   end
+@
+
+A set of standard spaces can now be constructed from a simple functor
+argument. Maybe we need to extend the argument signature for 64-bit
+architectures.
+
 <<space.ml>>=
-module Standard32 = struct
+module Standard(A:sig val width: int end) = struct
   type generator = Rtl.aggregation -> Rtl.width list -> t
   let m agg ws = checked 
     { space          = 'm'
     ; doc            = "memory"
     ; cellwidth      = 8
-    ; indexwidth     = 32 
+    ; indexwidth     = A.width 
     ; indexlimit     = None
     ; aggregation    = agg
     ; widths         = ws
@@ -212,7 +223,7 @@ module Standard32 = struct
   let r ~count agg ws = checked 
     { space          = 'r'
     ; doc            = "general-purpose registers"
-    ; cellwidth      = 32
+    ; cellwidth      = A.width
     ; indexwidth     = indexwidth count
     ; indexlimit     = Some count
     ; aggregation    = agg
@@ -223,8 +234,8 @@ module Standard32 = struct
   let t agg ws   = checked 
     { space         = 't'
     ; doc           = "general-purpose temporaries"
-    ; cellwidth     = 32
-    ; indexwidth    = 32
+    ; cellwidth     = A.width
+    ; indexwidth    = A.width
     ; indexlimit    = None
     ; aggregation   = agg
     ; widths        = ws
@@ -238,7 +249,7 @@ module Standard32 = struct
   let f ~count agg ws = checked 
     { space         = 'f'
     ; doc           = "floating-point registers"
-    ; cellwidth     = 32
+    ; cellwidth     = A.width
     ; indexwidth    = indexwidth count
     ; indexlimit    = Some count
     ; aggregation   = agg
@@ -249,8 +260,8 @@ module Standard32 = struct
   let u agg ws = checked 
     { space         = 'u'
     ; doc           = "floating-point temporaries"
-    ; cellwidth     = 32
-    ; indexwidth    = 32
+    ; cellwidth     = A.width
+    ; indexwidth    = A.width
     ; indexlimit    = None
     ; aggregation   = agg
     ; widths        = ws
@@ -264,7 +275,7 @@ module Standard32 = struct
   let a ~count agg ws = checked 
     { space         = 'a'
     ; doc           = "address registers"
-    ; cellwidth     = 32
+    ; cellwidth     = A.width
     ; indexwidth    = indexwidth count
     ; indexlimit    = Some count
     ; aggregation   = agg
@@ -275,8 +286,8 @@ module Standard32 = struct
   let v agg ws   = checked 
     { space         = 'v'
     ; doc           = "address temporaries"
-    ; cellwidth     = 32
-    ; indexwidth    = 32
+    ; cellwidth     = A.width
+    ; indexwidth    = A.width
     ; indexlimit    = None
     ; aggregation   = agg
     ; widths        = ws
@@ -290,7 +301,7 @@ module Standard32 = struct
   let p ~count agg ws = checked 
     { space         = 'p'
     ; doc           = "predicate registers"
-    ; cellwidth     = 32
+    ; cellwidth     = A.width
     ; indexwidth    = indexwidth count
     ; indexlimit    = Some count
     ; aggregation   = agg; widths = ws
@@ -300,8 +311,8 @@ module Standard32 = struct
   let w agg ws   = checked 
     { space         = 'w'
     ; doc           = "predicate temporaries"
-    ; cellwidth     = 32
-    ; indexwidth    = 32
+    ; cellwidth     = A.width
+    ; indexwidth    = A.width
     ; indexlimit    = None
     ; aggregation   = agg
     ; widths        = ws
@@ -315,7 +326,7 @@ module Standard32 = struct
   let c ~count agg ws = checked 
     { space         = 'c'
     ; doc           = "control and special"
-    ; cellwidth     = 32
+    ; cellwidth     = A.width
     ; indexwidth    = indexwidth count
     ; indexlimit    = Some count
     ; aggregation   = agg
@@ -349,7 +360,9 @@ module Standard32 = struct
                                  
   
   let indices = { pc = 0; npc = 1; cc = 2; fp_mode = 4 ; fp_fcmp = 5 }
-  let vfp = Rtl.fetch (Rtl.reg ('V', 0, 32)) 32
+  let vfp = Rtl.fetch (Rtl.reg ('V', 0, A.width)) A.width
 end
+module Standard32 = Standard(struct let width = 32 end)
+
 @
 
