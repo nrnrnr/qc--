@@ -1,0 +1,52 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+<<luastrlib.mli>>=
+module M : Lualib.BARE
+<<string builtins>>=
+let unimp s =
+  V.caml_func (fun g _ ->
+    I.fallback "error" g [V.String ("string library does not implement `" ^ s ^ "'")])
+
+let getopt x y = match x with None -> y | Some x -> x
+
+let string_builtins =
+  [ "strfind", unimp "strfind"
+  ; "strlen", (V.pfunc (V.string **-> V.result V.int)).V.embed String.length
+  ; "strsub",
+    (V.pfunc (V.string **-> V.int **-> V.option V.int **-> V.result V.string)).V.embed
+    (fun s start last ->
+      let start = start - 1 in (* caml strings are 0-indexed *)
+      let last = match last with None -> String.length s
+                               | Some n -> min n (String.length s) in
+      let len = last - start in
+      String.sub s start len)
+  ; "strlower", (V.pfunc (V.string **-> V.result V.string)).V.embed String.lowercase
+  ; "strupper", (V.pfunc (V.string **-> V.result V.string)).V.embed String.uppercase
+  ; "strrep",   (V.pfunc (V.string **-> V.int **-> V.result V.string)).V.embed
+                (fun s n ->
+                  if n < 0 then
+                    raise (Invalid_argument ("number of replicas " ^ string_of_int n ^
+                                             " is negative"))
+                  else
+                    let rec list l = function 0 -> l | n -> list (s::l) (n-1) in
+                    String.concat "" (list [] n))
+  ; "ascii",   (V.pfunc (V.string **-> V.option V.int **-> V.result V.int)).V.embed
+               (fun s i -> Char.code (String.get s (getopt i 1 - 1)))
+  ; "format",  unimp "format"
+  ; "gsub",    unimp "gsub"
+  ] 
+@ 
+Escape character is [[%]].
+Specials include [[^$*?.([%]].
+<<pattern matching>>=
+le
+@ 
+<<luastrlib.ml>>=
+module M (I : Lualib.INTERP) = struct
+  module V = I.V
+  let ( **-> ) = V.( **-> )
+  <<string builtins>>
+  let init g =
+    List.iter (fun (k, v) -> V.Table.bind g.V.globals (V.String k) v) string_builtins
+end
+
+

@@ -1,0 +1,41 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+<<luamathlib.mli>>=
+module M : Lualib.BARE
+<<math builtins>>=
+let unimp s =
+  V.caml_func (fun g _ ->
+    I.fallback "error" g [V.String ("math library does not implement `" ^ s ^ "'")])
+
+let rfloat = V.result V.float
+let float = V.float
+let pf x = (V.pfunc x).V.embed
+let binary = pf
+let math_builtins =
+  [ "abs",   pf (float **-> rfloat)            abs_float
+  ; "acos",  pf (float **-> rfloat)            acos
+  ; "asin",  pf (float **-> rfloat)            asin
+  ; "atan",  pf (float **-> rfloat)            atan
+  ; "atan2", pf (float **-> float **-> rfloat) atan2
+  ; "ceil",  pf (float **-> rfloat)            ceil
+  ; "cos",   pf (float **-> rfloat)            cos
+  ; "floor", pf (float **-> rfloat)            floor
+  ; "log",   pf (float **-> rfloat)            log
+  ; "log10", pf (float **-> rfloat)            log10
+  ; "max",   pf (float **-> float **-> rfloat) max
+  ; "min",   pf (float **-> float **-> rfloat) min
+  ; "mod",   pf (float **-> float **-> rfloat) mod_float
+  ; "sin",   pf (float **-> rfloat)            sin
+  ; "sqrt",  pf (float **-> rfloat)            sqrt
+  ; "tan",   pf (float **-> rfloat)            tan
+  ; "random", V.caml_func (fun _ _ -> [V.Number (Random.float 1.0)])
+  ; "randomseed", pf (V.int **-> V.runit)        Random.init
+  ] 
+@ 
+<<luamathlib.ml>>=
+module M (I : Lualib.INTERP) = struct
+  module V = I.V
+  let ( **-> ) = V.( **-> )
+  <<math builtins>>
+  let init g =
+    List.iter (fun (k, v) -> V.Table.bind g.V.globals (V.String k) v) math_builtins
+end

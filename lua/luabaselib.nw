@@ -1,0 +1,105 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+<<luabaselib.mli>>=
+module Add (MakeParser : Luaparser.MAKER) (I : Luainterp.S) : sig
+  include Luainterp.S
+  module Parser : Luaparser.S with type chunk = Ast.chunk
+  val do_lexbuf : sourcename:string -> state -> Lexing.lexbuf -> value list
+  val dostring  : state -> string -> value list
+  val dofile    : state -> string -> value list
+end with module Value = I.Value
+<<luabaselib.ml>>=
+module Add (MakeParser : Luaparser.MAKER) (I : Luainterp.S) = struct
+  module Parser = MakeParser (I.Ast)
+  module P = Parser
+  module V = I.Value
+  <<toplevel>>
+  let ( **-> ) = V.( **-> )
+
+  let next t key =
+    let k, v =
+      try match key with
+      | V.Nil -> Luahash.first t
+      | _   -> Luahash.next t key
+      with Not_found -> V.Nil, V.Nil
+    in [k; v]
+
+  let luabaselib =
+
+    [ "dofile", (V.func (V.string **-> V.values)).V.embed dofile
+    ; "dostring", (V.func (V.string **-> V.values)).V.embed dostring
+        (* should catch Sys_error and turn into an error fallback... *)
+    ; "next",   (V.pfunc (V.table **-> V.value **-> V.values)).V.embed next
+    ; "nextvar", (V.func (V.value **-> V.values)).V.embed
+                 (fun g x -> next g.V.globals x)
+    ; "tostring", (V.pfunc (V.value **-> V.result V.string)).V.embed V.to_string
+    ; "print",    V.caml_func (fun g args ->
+                               List.iter (fun x -> print_endline (V.to_string x)) args;
+                               flush stdout;
+                               [])
+    ; "tonumber", (V.pfunc (V.float **-> V.result V.float)).V.embed (fun x -> x)
+    ; "type",     (V.pfunc (V.value **-> V.result V.string)).V.embed
+                  (function
+                    | V.Nil -> "nil"
+                    | V.Number _ -> "number"
+                    | V.String _ -> "string"
+                    | V.Table _  -> "table"
+                    | V.Function (_,_) -> "function"
+                    | V.Userdata _ -> "userdata")
+    ; "assert",  (V.func (V.value **-> V.runit)).V.embed
+                 (fun g -> function V.Nil -> I.error g "assertion failed!"
+                                  | _ -> ())
+    ; "error",   (V.func (V.string **-> V.runit)).V.embed I.error
+    ; "setglobal", (V.func (V.value **-> V.value **-> V.runit)).V.embed
+                   (fun g k v -> V.Table.bind g.V.globals k v)
+    ; "getglobal", (V.func (V.value **-> V.result V.value)).V.embed I.getglobal
+    ; "setfallback", (V.func (V.string **-> V.value **-> V.result V.value)).V.embed
+                     I.setfallback
+    ] 
+
+  include I
+  let state () =
+    let g = I.state () in
+    List.iter (fun (k, v) -> V.Table.bind g.V.globals (V.String k) v) luabaselib;
+    g
+end
+<<toplevel>>=
+let lex map buf = Luascanner.token buf map
+let do_lexbuf filename g buf =
+  let map = Srcmap.mk () in
+  let _ = Srcmap.sync map 0 (filename, 1, 1) in
+  let chunks =
+    try P.chunks (lex map) buf
+    with Parsing.Parse_error ->
+      let file, line, _ = Srcmap.last map in begin
+        prerr_string file;
+        prerr_string ", line ";
+        prerr_int line;
+        prerr_endline ": syntax error";
+        []
+      end in
+  let pgm = I.compile (map, true) chunks in
+  try
+    match pgm g with
+    | [] -> [I.Value.String "executed without errors"]
+    | answers -> answers
+  with
+  | I.Error s -> (prerr_endline "Lua interpreter halted with error"; [])
+  | I.Value.Projection (v, w) -> (prerr_endline ("error projecting to " ^ w); [])
+let dostring g s = 
+  I.with_stack (V.info ("dostring('" ^ s ^ "')") 0) g
+    (do_lexbuf "<string>" g) (Lexing.from_string s)
+
+let dofile g infile =
+  try
+    let f = match infile with "-" -> stdin | _ -> open_in infile in
+    let close () = if infile <> "-" then close_in f else () in
+    try 
+      let answer = I.with_stack (V.info ("dofile('" ^ infile ^ "')") 0) g
+                     (do_lexbuf infile g) (Lexing.from_channel f)
+      in  (close(); answer)
+    with e -> (close (); raise e)
+  with Sys_error msg ->
+    I.fallback "error" g [V.String ("dofile: System error " ^ msg)]
+@ 
+
+
