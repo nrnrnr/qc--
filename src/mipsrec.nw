@@ -167,7 +167,6 @@ zero
 [[imm]] nonterminal is ill-defined. --CL}
 
 <<rules>>=
-
 inst:       Store(regl,imm,32)
             {: cat ["la"; " "; regl; ","; imm] :}
 
@@ -190,6 +189,8 @@ inst:       Store(regl, Zx(Fetch(mem,x:int)), w:int)
             {: cat ["l"; suffix w; zx; " "; regl; ","; mem] :}
 @
 
+
+
 Store register to memory. No extension here; the 8, 16, or 32 bits are
 simply written to memory.
 
@@ -198,7 +199,8 @@ inst:       Store(meml, reg, w:int)
             {: cat ["s"; suffix w; " "; reg; ","; meml] :}
 @
 
-Moves between registers.
+Moves between registers. For the [[move]] and [[mov]] instruction, we
+assume the destination is the first argument.
 
 <<rules>>=
 inst:       Store(regl, reg, 32)
@@ -210,6 +212,21 @@ inst:       Store(fregl, freg, 32)
 inst:       Store(fregl, freg, 64)
             {: cat ["mov.d"; " "; fregl; ","; freg] :}
 @
+
+I'm not sure I need the [[nop]]. The IRIX assembler complained about the
+lack of it and indeed it affects results. I guess it really needs to go
+\emph{after} some operation.
+
+<<rules>>=
+inst:       Store(fregl, reg, 32)
+            {: cat ["nop; mtc1"; " "; reg; ","; fregl] :}
+
+inst:       Store(regl, freg, 32)
+            {: cat ["nop; mfc1"; " "; regl; ","; freg] :}
+
+
+@
+
 
 \paragraph{Control Flow}
 
