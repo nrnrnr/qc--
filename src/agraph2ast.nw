@@ -162,7 +162,8 @@ rules determine, which nodes start and end a basic block:
       successors of a [[branch]] start basic blocks.
 
 \item The following nodes end a basic block: [[jump]], [[return]],
-      [[exit]], and [[goto]].
+      [[exit]], and [[goto]]. A [[call]] ends a basic block because it
+      may not return to the next node.
 \end{itemize}
 
 Since a flow graph is built from back to front, a node ending a basic
@@ -205,13 +206,23 @@ let return g x y p          = terminal g
 let jump g expr labels p    = terminal g
 @
 
-Copy-out and copy-out nodes are skipped, together with call nodes:
+Copy-out and copy-out nodes are skipped.
+
+<<>>=
+let copy_in formals context cc node p   = skip node p
+let copy_out actuals context cc node p  = skip node p
+@
+
+A continuation [[cont]] contains the normal return continuation as a
+[[node]]. Since a [[call]] might not return, it starts and ends a
+basic block. 
 
 <<>>=
 let make_cont node cuts                 = node
-let copy_in formals context cc node p   = skip node p
-let copy_out actuals context cc node p  = skip node p
-let call expr cont p                    = skip cont p 
+let call expr cont p =
+    ( bblock cont
+    ; terminal (graph_of cont)
+    ) 
 @
 
 An [[assign]] node contributes an {\rtl} to the basic block
