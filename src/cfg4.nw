@@ -39,8 +39,8 @@ The [[mk]] function that creates a {\cfg} receives an instruction
 denoting a no-op instruction.
 
 <<interface>>=
-val mk:         nop:'i -> 'i cfg                (* create empty cfg *)
-val lookup:     'i cfg -> string -> 'i node     (* lookup label *)
+val mk:         nop:'i -> 'i cfg   (* create empty cfg *)
+val lookup:     'i cfg -> string -> 'i node        (* lookup label *)
 @
 
 Every {\cfg} has two special nodes: [[entry]] and [[exit]]. They cannot
@@ -202,6 +202,7 @@ class type ['i] cfg = object
     method test:        unit                (* test integrity of this *)
     method ast:         ('i -> Ast.stmt) -> Ast.stmt list 
     method nodes:       'i node list        (* for debugging *)
+    method anon:        string * Reladdr.symbol (* anon name/symbol pair *)
 end
 @
 
@@ -318,11 +319,17 @@ defined. In that case a label node is created, but is successor is
 unknown. It is patched in by the method that defines labels. 
 
 <<OO>>=
-class ['i] graph nop : ['i] cfg =
+class symbol (s:string) : Reladdr.symbol =
+object
+    method text = s
+end
+
+class ['i] graph nop:  ['i] cfg =
 object (this)
     val         _nop            = (nop: 'i)
     val         _labels         = (Hashtbl.create 47: 
-                                    (string,'i labl) Hashtbl.t)
+                                        (string,'i labl) Hashtbl.t)
+                                    
     val mutable _nodes          = ([]: 'i node list) 
     val mutable _id             = 0
     val mutable _enumeration    = (None: 'i node array option)
@@ -392,6 +399,10 @@ method label name symbol node =
         ; label#set_symbol symbol
         ; (label :> 'i node)
         )
+
+method anon = 
+    let l = Idgen.label "anon" in
+        (l, new symbol l)
 @
 
 Add a node to [[this]] {\cfg}. Any enumeration is destroyed.
@@ -1017,7 +1028,7 @@ let conts ~cuts ~unwinds ~returns ~aborts =
     ; OO.aborts  = aborts
     }
 
-let mk ~nop:n    = new OO.graph n
+let mk ~nop:n   = new OO.graph n 
 let gm_return   = new OO.return
 let gm_goto     = new OO.goto
 let gm_jump     = new OO.jump
