@@ -637,7 +637,7 @@ where the leftmost symbol has index 1.
 let p  () = (Parsing.symbol_start (), Parsing.symbol_end())
 let pn n  = (Parsing.rhs_start n, Parsing.rhs_end n)
 let px () = (Parsing.symbol_start ())
-
+let atoi  = int_of_string
 %}
 
 /* keywords, symbols, flags */
@@ -748,13 +748,13 @@ pragma      :   PRAGMA LBRACE RBRACE              { Pragma }
 line        :   LINE LBRACE STR INT RBRACE        
                     { let pos = Parsing.rhs_start 1 in
                       let map = $1 in
-                        Srcmap.sync map pos ($3,$4,1) 
+                        Srcmap.sync map pos ($3,atoi $4,1) 
                     }  
                      
             |   LINE LBRACE STR INT INT RBRACE
                     { let pos = Parsing.rhs_start 1 in
                       let map = $1 in
-                        Srcmap.sync map  pos ($3,$4,$5) 
+                        Srcmap.sync map  pos ($3,atoi $4,atoi $5) 
                     }
             
 toplevelAt  :   toplevel                          { TopDeclAt($1,p())        }
@@ -813,7 +813,7 @@ regs        :   regs COMMA ID STR           { ($3,Some $4)::$1              }
 
 datumAt     :   datum                       { DatumAt($1, p())              }
 datum       :   ID COLON                    { Label($1)                     }
-            |   ALIGN INT SEMI              { Align($2)                     }
+            |   ALIGN INT SEMI              { Align(atoi $2)                }
             |   tyAt size initAt SEMI       { MemDecl($1, $2     , Some $3) }
             |   tyAt size        SEMI       { MemDecl($1, $2     , None)    }
             |   tyAt      initAt SEMI       { MemDecl($1, NoSize , Some $2) }
@@ -834,7 +834,7 @@ size        :   LBRACKET exprAt RBRACKET    { FixSize $2      }
 
 conv        :   FOREIGN STR                 { Some $2         }
 
-aligned     :   ALIGNED INT                 { Some $2         }
+aligned     :   ALIGNED INT                 { Some(atoi $2)   }
 
 procedure   :   conv ID frmls body      { let (dec,stmt) = $4 in
                                           Procedure($1  ,$2,$3,dec,stmt) 
@@ -939,15 +939,15 @@ restricted to [[sexpr]] this ambiguity is gone.
 
 <<parse.mly>>= 
 
-sexprAt     :   sexpr                            { ExprAt($1, p())    }
-sexpr       :   INT                              { Int($1, None)      }
-            |   INT COLON INT                    { Int($1, Some $3)   }
-            |   FLT                              { Float($1, None)    }
-            |   FLT COLON INT                    { Float($1, Some $3) }
-            |   CHAR                             { Char($1,None)      }
-            |   CHAR COLON INT                   { Char($1, Some $3)  }
-            |   lvalueAt                         { Fetch($1)          }
-            |   PERCENT ID actls                 { PrimOp($2, $3)     }
+sexprAt     :   sexpr                            { ExprAt($1, p())           }
+sexpr       :   INT                              { Int($1, None)             }
+            |   INT COLON INT                    { Int($1, Some (atoi $3))   }
+            |   FLT                              { Float($1, None)           }
+            |   FLT COLON INT                    { Float($1, Some (atoi $3)) }
+            |   CHAR                             { Char($1,None)             }
+            |   CHAR COLON INT                   { Char($1, Some (atoi $3))  }
+            |   lvalueAt                         { Fetch($1)                 }
+            |   PERCENT ID actls                 { PrimOp($2, $3)            }
 
 exprAt      :   expr                             { ExprAt($1, p())    }
 expr:       |   sexpr                            { $1 }
