@@ -9,7 +9,51 @@
 
 \pagestyle{empty}
 
-\input{state_macros.tex}
+%% beginning of macros
+
+% render a state
+% \newcommand\state[6]{\langle #1, #2, #3, #4, #5, #6 \rangle}
+\newcommand\dash{\texttt{-}}
+\newcommand\state[9]{\langle (#1, #2), (#3, #4), (#5, #6), #7, #8, #9 \rangle}
+\newcommand\act[3]{\langle #1, #2, #3 \rangle}
+
+\newcommand\pc{{\mathit{PC}}} % program counter
+\newcommand\uid{{\mathit{uid}}}
+
+% give state of data stack as parameter, other components standard
+% \newcommand\dstate[1]{\state I \pc {#1} l s A}
+\newcommand\dstate{\state \pc I V L M R A \uid s}
+\newcommand\dact{\act \rho \kappa \uid}
+
+% give state of arg-passing area as parameter, other components standard
+%\newcommand\astate[1]{\state I \pc d l s #1}
+
+% for building inference rules
+\newcommand{\xfrac}[3][c]{{\displaystyle\genfrac{}{}{0pt}{}{%
+  \strut\ifx r#1\hfill\fi#2\ifx l#1\hfill\fi}{#3}}%
+  \kern-\nulldelimiterspace}
+\def\twoline#1#2{\xfrac{#1}{#2}}
+\def\threeline#1#2#3{\xfrac{\xfrac{#1}{#2}}{#3}}
+\def\fourline#1#2#3#4{\xfrac{\xfrac{\xfrac{#1}{#2}}{#3}}{#4}}
+\def\fiveline#1#2#3#4#5{\xfrac{\xfrac{\xfrac{\xfrac{#1}{#2}}{#3}}{#4}}{#5}}
+\def\sixline#1#2#3#4#5#6{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{#1}{#2}}{#3}}{#4}}{#5}}{#6}}
+\def\sevenline#1#2#3#4#5#6#7{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{#1}{#2}}{#3}}{#4}}{#5}}{#6}}{#7}}
+\def\eightline#1#2#3#4#5#6#7#8{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{#1}{#2}}{#3}}{#4}}{#5}}{#6}}{#7}}{#8}}
+\def\nineline#1#2#3#4#5#6#7#8#9{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{#1}{#2}}{#3}}{#4}}{#5}}{#6}}{#7}}{#8}}{#9}}
+\newcommand\twoquad  [2]{{#1}\qquad{#2}}
+\newcommand\threequad[1]{{#1}\qquad\twoquad}
+\newcommand\fourquad [1]{{#1}\qquad\threequad}
+\newcommand\fivequad [1]{{#1}\qquad\fourquad}
+\newcommand\sixquad  [1]{{#1}\qquad\fivequad}
+
+\newcommand\cons{\mathbin{::}}
+
+\newcommand\yields{\rightarrow}
+
+% evaluation judgment \step{s1}{s2}
+\newcommand\step[2]{#1 \yields #2}
+
+%% end of macros
 
 \begin{document}
 
@@ -250,6 +294,19 @@ $
 }
 $\\
 \\ \\
-And there's more to come \ldots
+And now for the operational semantics of control-flow related instructions: \\
+\\
+
+$
+\threeline
+{I[\pc] = \mathtt{goto-}label}
+{a = label\_lookup(label)}
+{\step
+  {\dstate}
+  {\state a I V L M R A \uid s}
+}
+$\\
+\\ \\
+And the rest is yet to come \ldots
 
 \end{document}
