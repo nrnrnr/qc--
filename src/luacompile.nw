@@ -127,17 +127,30 @@ Dummy = {} or Dummy
 Dummy.layout = { creates='no late consts' }
 
 function Dummy.layout.fn(dummy, proc)
-    local blocks = Stack.blocks(proc)
+    local blocks       = Stack.blocks(proc)
+    blocks.oldblocks   = Block.overlap(32,"low" , blocks.oldblocks)  
+    blocks.youngblocks = Block.overlap(32,"high", blocks.youngblocks)
     local layout =
-        { Block.overlap(32,"low",  blocks.oldblocks)  
+        { blocks.oldblocks
         , blocks.stackdata
         , blocks.vfp
         , blocks.continuations
         , Block.relative(blocks.sp, "six words", 24, 16)
         , blocks.spills
-        , Block.overlap(32,"high", blocks.youngblocks)
+        , blocks.youngblocks
         , blocks.sp
         }
+    if Debug.stack then
+        write('****** cc name = ', Stack.ccname(proc), '\n')
+        Debug.showblocks (blocks, { 'oldblocks'
+                                  , 'stackdata'
+                                  , 'vfp'
+                                  , 'continuations'
+                                  , 'spills'
+                                  , 'youngblocks'
+                                  , 'sp'
+                                  })
+    end
     local block = Block.cat(32, layout)
     Stack.freeze(proc, block)
     return 1
