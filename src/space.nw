@@ -1,0 +1,104 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=4 et:
+
+% ------------------------------------------------------------------ 
+\section{RTL-Spaces}
+% ------------------------------------------------------------------ 
+
+The {\rtl} framework groups memory cells (main memory, registers,
+temporaries) into spaces that are named with a single character. The
+cells forming a space share properties but the {\rtl} framework does not
+announce them. This module provides a type to describe an {\rtl} space. 
+
+\begin{quote}\it
+    I feel that the type to describe a space should go into the
+    \module{rtl} module. Values for different spaces could be still
+    defined somewhere else. NR suggested to have this separate module.
+    --CL
+\end{quote}
+
+
+<<space.mli>>=
+<<type location_set>>
+<<type classification>>
+<<type t>>
+@
+
+A [[Rtl.space]] denotes a memory space, the details of a particular
+space are covered by a space descriptor [[t]]:  
+
+<<type t>>=
+type t  =
+    { doc:              string          (* informal doc string *)       
+    ; cellwidth:        int             (* bits *)
+    ; indexwidth:       int             (* bits *)
+    ; indexlimit:       int option      (* None = 2^indexwidth *)
+    ; aggregation:      Rtl.aggregation      
+    ; aggsize:          int list        (* supported aggregates *)
+    ; classification:   classification  
+    }
+@
+
+\begin{itemize}
+\item [[doc]]:          Informal documentation string.
+\item [[cellwidth]]:    Width of cell in this space. A register space 
+                        could be 32 bits wide, a memory space 8 bits.
+\item [[indexwidth]]:   Width of an address in this space. A memory
+                        space could have 32 bit wide addresses, a
+                        register space 5 bit wide addresses.
+\item [[indexlimit]]:   Upper bound for an address in this space: $0,
+                        \dots, [[indexlimit]]$. 
+\item [[aggregation]]:  Supported aggregation.
+\item [[aggsize]]:      List of supported aggregat-sizes. For example, 
+                        is a 8 bit wide memory space supports 8, 16, and
+                        32 bit words, [[aggsize]] would be [1, 2, 4].
+\item [[classification]]: Classification of a space, see below.
+
+\end{itemize}
+
+A space falls into one of the following categories: memory-like,
+register-like, fixed, or temporary. 
+
+<<type classification>>=
+type classification = 
+    | Mem               
+    | Reg               
+    | Fixed
+    | Temp of location_set
+@
+
+\begin{itemize}
+\item A space is memory-like, if {\rtl} operands that address this space 
+      take complex expressions as addresses.
+\item A space is memory-like, if {\rtl} operands that address this space
+      only take integers as adresses.
+\item A space is fixed, if it can not be addresses explicitly, but
+      {\rtl} operators address it implicitly. Typical example: status
+      register.
+\item A temporary space denotes a subset of another space that is
+      characterized by a [[location_set]] value. Example: \texttt{t} is
+      a space over \texttt{r}, where the address of an \texttt{r} cell
+      is not zero.  However, currently we do not plan to use this
+      recursively: \texttt{x} is a space over \texttt{y}, that is a
+      space over \texttt{z}. Don't do that.
+\end{itemize}
+
+<<type location_set>>=
+type predicate    = Rtl.exp -> bool
+type location_set =
+    { space    : Rtl.space  (* space we form a subset of *)
+    ; index_ok : predicate  (* predicate to check the qualifying condition *)
+    ; set_doc  : string     (* informal description *)    
+    }
+@    
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<space.ml>>=
+<<type location_set>>
+<<type classification>>
+<<type t>>
+@
+

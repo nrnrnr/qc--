@@ -111,7 +111,7 @@ a checked run-time error to ask for the description of an unknown
 space.
 
 <<components of t>>=
-space:          Rtl.space -> Rtl.spacedescr;
+space:          Rtl.space -> Space.t;
 @
 
 \begin{quote}\it
@@ -202,7 +202,7 @@ lookup-function that provides information about the spaces the source
 and destination registers live in.
 
 <<components of t>>=
-assign: (Rtl.space -> Rtl.spacedescr) 
+assign: (Rtl.space -> Space.t) 
     -> src:Register.t -> dst:Register.t -> Rtl.rtl;
 @
 
@@ -212,8 +212,8 @@ and vice versa (reloads).  Here are two functions to create such
 {\rtl}s:
 
 <<components of t>>=
-spill:  (Rtl.space -> Rtl.spacedescr) -> Register.t -> Rtl.loc ->Rtl.rtl list;
-reload: (Rtl.space -> Rtl.spacedescr) -> Register.t -> Rtl.loc ->Rtl.rtl list;
+spill:  (Rtl.space -> Space.t) -> Register.t -> Rtl.loc ->Rtl.rtl list;
+reload: (Rtl.space -> Space.t) -> Register.t -> Rtl.loc ->Rtl.rtl list;
 @
 
 % ------------------------------------------------------------------ 
@@ -252,6 +252,7 @@ to implement lookup tables for registers and calling conventions.
 
 <<target2.ml>>=
 module R       = Rtl
+module S       = Space
 module RP      = Rtl.Private
 module StrMap  = Map.Make(struct type t=string let compare=compare end)
 module CharMap = Map.Make(struct type t=char   let compare=compare end)
@@ -378,50 +379,50 @@ let cc =
 
 
 let spaces = CharUtil.list2map
-    [('r',{ R.cellwidth   = 32
-          ; R.aggregation = Rtl.Identity
-          ; R.indexwidth  = 5
-          ; R.indexlimit  = None
-          ; R.aggsize     = [1]
-          ; R.classification = R.Reg
-          ; R.doc         = "hardware register"
+    [('r',{ S.cellwidth   = 32
+          ; S.aggregation = Rtl.Identity
+          ; S.indexwidth  = 5
+          ; S.indexlimit  = None
+          ; S.aggsize     = [1]
+          ; S.classification = S.Reg
+          ; S.doc         = "hardware register"
           }) 
 
-    ;('m',{ R.cellwidth   = Dummy.wordsize
-          ; R.aggregation = Dummy.byteorder 
-          ; R.indexwidth  = Dummy.pointersize
-          ; R.indexlimit  = None
-          ; R.aggsize     = [1;2;4]
-          ; R.classification = R.Mem
-          ; R.doc         = "main memory"
+    ;('m',{ S.cellwidth   = Dummy.wordsize
+          ; S.aggregation = Dummy.byteorder 
+          ; S.indexwidth  = Dummy.pointersize
+          ; S.indexlimit  = None
+          ; S.aggsize     = [1;2;4]
+          ; S.classification = S.Mem
+          ; S.doc         = "main memory"
           
           })
           
-    ;('t',{ R.cellwidth   = 32
-          ; R.aggregation = Rtl.Identity
-          ; R.indexwidth  = 16
-          ; R.indexlimit  = None
-          ; R.aggsize     = [1]
-          ; R.classification = R.Reg
-          ; R.doc         = "32 bit temporaries"
+    ;('t',{ S.cellwidth   = 32
+          ; S.aggregation = Rtl.Identity
+          ; S.indexwidth  = 16
+          ; S.indexlimit  = None
+          ; S.aggsize     = [1]
+          ; S.classification = S.Reg
+          ; S.doc         = "32 bit temporaries"
           })
           
-    ;('u',{ R.cellwidth   = 16
-          ; R.aggregation = Rtl.Identity
-          ; R.indexwidth  = 16
-          ; R.indexlimit  = None
-          ; R.aggsize     = [1]
-          ; R.classification = R.Reg
-          ; R.doc         = "16 bit temporaries"
+    ;('u',{ S.cellwidth   = 16
+          ; S.aggregation = Rtl.Identity
+          ; S.indexwidth  = 16
+          ; S.indexlimit  = None
+          ; S.aggsize     = [1]
+          ; S.classification = S.Reg
+          ; S.doc         = "16 bit temporaries"
           })
           
-    ;('v',{ R.cellwidth   = 8
-          ; R.aggregation = Rtl.Identity
-          ; R.indexwidth  = 16
-          ; R.indexlimit  = None
-          ; R.aggsize     = [1]
-          ; R.classification = R.Reg
-          ; R.doc         = "8 bit temporaries"
+    ;('v',{ S.cellwidth   = 8
+          ; S.aggregation = Rtl.Identity
+          ; S.indexwidth  = 16
+          ; S.indexlimit  = None
+          ; S.aggsize     = [1]
+          ; S.classification = S.Reg
+          ; S.doc         = "8 bit temporaries"
           })
 
     ]      

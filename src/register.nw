@@ -51,7 +51,7 @@ to have functions that converts between these two.  Of course, a
 can be converted.  Applying other values is a checked run-time error.
 
 <<register.mli>>=
-val to_loc: (Rtl.space -> Rtl.spacedescr) -> t -> Rtl.loc   
+val to_loc: (Rtl.space -> Space.t) -> t -> Rtl.loc   
 val of_loc: Rtl.loc -> t                     (* Invalid_argument *)
 @
 
@@ -70,6 +70,7 @@ val print_set: Set.t -> string
 
 <<register.ml>>=
 module R    = Rtl
+module S    = Space
 module RP   = Rtl.Private
 module Eval = Rtleval.Make(Rtleval.Dummy) 
 
@@ -84,10 +85,10 @@ module Map = Map.Make(Compare)
 
 let to_loc lookup (sp,index,width) =
     let spec  = lookup sp                                     in
-    let agg   = spec.R.aggregation                            in
-    let bits  = Bits.of_std_int index spec.R.indexwidth       in
-    let addr  = Rtl.bits bits spec.R.indexwidth               in
-        Rtl.cell Rtl.none sp spec.R.aggregation width addr
+    let agg   = spec.S.aggregation                            in
+    let bits  = Bits.of_std_int index spec.S.indexwidth       in
+    let addr  = Rtl.bits bits spec.S.indexwidth               in
+        Rtl.cell Rtl.none sp spec.S.aggregation width addr
 
 let of_loc loc = match Rtl.Convert.loc loc with
     | RP.Cell(sp,_,width,exp,_) -> 
