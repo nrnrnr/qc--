@@ -24,7 +24,6 @@ module Spaces : sig
   val m : Space.t
   val r : Space.t
   val t : Space.t
-  val f : Space.t
   val u : Space.t
   val c : Space.t   (* PC at 0 and condition codes at 2 *)
 end
@@ -52,14 +51,8 @@ module Spaces = struct
   let bo = Rtl.LittleEndian
   let id = Rtl.Identity
   let m = Space.Standard32.m bo [8; 16; 32]
-  let r = Space.Standard32.r 8 id [32]
+  let r = Space.Standard32.r 7 id [32]
   let t = Space.Standard32.t   id [32]
-  let f = S.checked { S.space = 'f'; S.doc = "floating-point registers"
-                    ; S.cellwidth = 80
-                    ; S.indexwidth = 3; S.indexlimit = Some 8
-                    ; S.aggregation = id; S.widths = [80]
-                    ; S.classification = S.Reg
-                    } 
   let all_floats = { S.stands_for = 'f'; S.index_ok = (fun _ -> true)
                    ; S.set_doc = "all floating-point registers"
                    } 
@@ -828,6 +821,7 @@ let globals base =
   A.overflow ~memsize:8 ~byteorder:PX.byte_order ~growth:Memalloc.Up ~max_alignment:4)
 
 let target =
+  let spaces = [Spaces.m; Spaces.r; Spaces.t; Spaces.u; Spaces.c] in
   { T.name = "x86"
 
   (* basic metrics and spaces are OK *)
@@ -837,7 +831,8 @@ let target =
   ; T.vfp         = SS.vfp
   ; T.alignment = 1
   ; T.memsize = 8
-  ; T.spaces = [Spaces.m; Spaces.r; Spaces.t; Spaces.f; Spaces.u; Spaces.c]
+  ; T.spaces = spaces
+  ; T.reg_ix_map          = T.mk_reg_ix_map spaces
   ; T.distinct_addr_sp = false
 
   (* Does the Pentium really implement IEEE 754?  I think so *)
