@@ -56,7 +56,7 @@ OCAMLDEFS =     $TOP/config/autodefs.ocaml
 	\usepackage{hyperref}
 	\usepackage[dvips]{graphicx}
 	\pagestyle{noweb}
-	\noweboptions{}
+	\noweboptions{breakcode}
 	\begin{document}
 	\nwfilename{$stem.nw}
 	\tableofcontents
