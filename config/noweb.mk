@@ -45,7 +45,7 @@ OCAMLDEFS =     $TOP/config/autodefs.ocaml
 # The here-document ended by EOF relies on a single TAB character at
 # the beginning of a line - so don't substitute spaces for it .
 
-%.tex:	%.inc
+%.tex:Q: %.inc
 	cp $stem.inc $stem.tex
 	ed -s $stem.tex <<EOF 
 	1
@@ -54,6 +54,7 @@ OCAMLDEFS =     $TOP/config/autodefs.ocaml
 	\usepackage{noweb}
 	\usepackage{tabularx}
 	\usepackage{hyperref}
+        \usepackage[dvips]{graphicx}
 	\pagestyle{noweb}
 	\noweboptions{}
 	\begin{document}
