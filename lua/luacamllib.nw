@@ -16,22 +16,10 @@ module Make (TV : Lua.Lib.TYPEVIEW with type 'a t = 'a Luaiolib.t)
 <<luacamllib.ml>>=
 module IO = Luaiolib
 @ 
-It ought to be possible to reuse code from the I/O~library here.
 <<Caml library support>>=
-let {V.embed= embed; V.project=project} = T.makemap V.userdata V.projection in
-let infile = { V.embed = (fun f -> embed (IO.In f))
-             ; V.project = (fun v -> match project v with
-                                     | IO.In f -> f
-                                     | _ -> raise (V.Projection (v, "input file")))} in
-let outfile = { V.embed = (fun f -> embed (IO.Out f))
-              ; V.project = (fun v -> match project v with
-                                      | IO.Out f -> f
-                                      | _ -> raise (V.Projection (v, "output file")))}
-    in
-
-let wrap_err f = try f () with Sys_error s -> [V.Nil; V.String s] in
-
-<<Caml library support>>=
+let file    = T.makemap V.userdata V.projection in
+let infile  = IO.in' file V.projection in
+let outfile = IO.out file V.projection in
 let ( **->> ) x y = x **-> V.result y in
 let a      = V.value in
 let b      = V.value in

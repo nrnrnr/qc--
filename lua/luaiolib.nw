@@ -11,13 +11,13 @@
 <<luaiolib.mli>>=
 type 'a t = In of in_channel | Out of out_channel
 val out :
-    ('a t, 'b) Luavalue.ep ->
+    ('a t, 'b, 'b) Luavalue.ep ->
     ('b -> string -> out_channel) ->
-    (out_channel, 'b) Luavalue.ep
+    (out_channel, 'b, 'b) Luavalue.ep
 val in' :
-    ('a t, 'b) Luavalue.ep ->
+    ('a t, 'b, 'b) Luavalue.ep ->
     ('b -> string -> in_channel) ->
-    (in_channel, 'b) Luavalue.ep
+    (in_channel, 'b, 'b) Luavalue.ep
 
 module T : Lua.Lib.USERTYPE  with type 'a t = 'a t
 module Make (TV : Lua.Lib.TYPEVIEW with type 'a t = 'a t)
@@ -32,37 +32,40 @@ type 'a alias_for_t = 'a t
 type 'a alias_for_state = 'a state
 @ 
 <<i/o builtins>>=
-let {V.embed= embed; V.project=project} = T.makemap V.userdata V.projection in
-let infile = { V.embed = (fun f -> embed (In f))
-             ; V.project = (fun v -> match project v with
-                                     | In f -> f
-                                     | _ -> raise (V.Projection (v, "input file")))} in
-let outfile = { V.embed = (fun f -> embed (Out f))
-              ; V.project = (fun v -> match project v with
-                                      | Out f -> f
-                                      | _ -> raise (V.Projection (v, "output file")))}
-    in
+let file = T.makemap V.userdata V.projection in
+let infile  = in' file V.projection in
+let outfile = out file V.projection in
 
-let wrap_err f = try f () with Sys_error s -> [V.Nil; V.String s] in
+let wrap_err = function
+  | V.Function (l, f) ->
+      V.Function(l, fun args -> try f args with Sys_error s -> [V.Nil; V.String s])
+  | v -> raise (V.Projection (v, "function")) in
 
-let readfrom g =
-  let finish_new file =
-    io.currentin <- file;
-    [infile.V.embed file] in
-  function
-  | [V.String s] ->
-      (match String.get s 0 with
-       | '|' ->
-           wrap_err (fun () -> finish_new
-                       (Unix.open_process_in (String.sub s 1 (String.length s - 1))))
-       | _   -> wrap_err (fun () -> finish_new (open_in s)))
-  | [] ->
-      let c = io.currentin in
-      io.currentin <- stdin;
-      wrap_err (fun () -> close_in c; [])
-  | [v] -> (io.currentin <- infile.V.project v; [])
-  | _ -> C.fallback "error" g [V.String "bad args to readfrom"] in
-              
+(* errfunc -- a function that returns nil, string on error *)
+let errfunc   ty f = wrap_err (V.efunc ty f)  in
+let errchoose alts = wrap_err (V.choose alts) in
+
+(* succeed, succeed2: return non-nil on success *)
+let succeed (f : 'a -> unit) (x : 'a) = (f x; "OK") in
+let succeed2 f x y = ((f x y : unit); "OK") in
+
+let setglobal s v = V.Table.bind g.V.globals (V.String s) v in
+
+let readfrom =
+  let setinput file = 
+    (io.currentin <- file; setglobal "_INPUT" (infile.V.embed file); file) in
+  let from_string s =
+    if String.get s 0 = '|' then
+      setinput (Unix.open_process_in (String.sub s 1 (String.length s - 1)))
+    else
+      setinput (open_in s) in
+  let from_other _ = C.fallback "error" g [V.String "bad args to readfrom"] in
+  [ V.alt (V.string **->> infile)   from_string
+  ; V.alt (V.unit   **->> infile)   (fun () -> (close_in io.currentin; setinput stdin))
+  ; V.alt (infile   **->> infile)   setinput
+  ; V.alt (V.value  **->  V.values) from_other
+  ]  in
+
 let open_out_append s =
   open_out_gen [Open_wronly; Open_creat; Open_trunc; Open_text] 0o666 s  in
 
@@ -72,17 +75,19 @@ let open_out_string append s =
            else Unix.open_process_out (String.sub s 1 (String.length s - 1))
   | _   -> if append then open_out_append s else open_out s in
 
-let writeto' append g = 
-  let finish f = io.currentout <- f; [outfile.V.embed f] in
-  function
-  | [V.String s] -> wrap_err (fun () -> finish (open_out_string append s))
-  | [] ->
-      ( close_out io.currentout; io.currentout <- stdout; [])
-  | [v] -> (io.currentout <- outfile.V.project v; [v])
-  | _ -> C.fallback "error" g [V.String "bad args to writeto"]  in
-              
-let success = [V.String "OK"] in
-
+let writeto' append = 
+  let setoutput file = 
+    (io.currentout <- file; setglobal "_OUTPUT" (outfile.V.embed file); file) in
+  let to_nil () = (close_out io.currentout; setoutput stdout) in
+  let to_other _ = 
+    let funname = if append then "appendto" else "writeto" in
+    C.fallback "error" g [V.String ("bad args to " ^ funname)] in
+  [ V.alt (V.string **->> outfile)   (fun s -> setoutput (open_out_string append s))
+  ; V.alt (V.unit   **->> outfile)   to_nil
+  ; V.alt (outfile  **->> outfile)   setoutput
+  ; V.alt (V.value  **->  V.values)  to_other
+  ]  in
+    
 let unimp g s =
   V.caml_func (fun _ ->
     C.fallback "error" g [V.String ("string library does not implement `" ^ s ^ "'")]) in
@@ -90,10 +95,7 @@ let unimp g s =
 let read g = function
   | None -> [try V.String (input_line io.currentin) with End_of_file -> V.Nil]
   | Some _ -> C.fallback "error" g
-              [V.String ("string library does not implement read patterns")]  in
-
-let write_string g v =
-  output_string io.currentout (V.string.V.project v)  in
+              [V.String ("I/O library does not implement read patterns")]  in
 
 let getopt x d = match x with Some v -> v | None -> d  in
 
@@ -108,39 +110,45 @@ let date g = function
       let dd = t.Unix.tm_mday in
       [V.String (s mm ^ "/" ^ s dd ^ "/" ^ s yyyy)]  in
 
-let tmpname _ =
+let tmpname () =
   let rec tmp here n =
     let s = "luatmp" ^ string_of_int n in
     let s = if here then s else "/tmp/" ^ s in
     if Sys.file_exists s then
       tmp (not here) (n+1)
     else
-      [V.String s]
+      s
   in tmp false 238  in
 
+let write_strings file l = (List.iter (output_string file) l; flush file; 1) in
+
 let io_builtins g =
-  [ "readfrom",  V.caml_func (readfrom g)
-  ; "open_out",  V.efunc (V.string **-> V.result outfile) (open_out_string false)
-  ; "close_out", V.efunc (outfile **-> V.runit)  close_out
-  ; "open_in",  V.efunc (V.string **-> V.result infile) open_in
-  ; "close_in", V.efunc (infile **-> V.runit)  close_in
-  ; "writeto",   V.caml_func (writeto' false g)
-  ; "appendto",  V.caml_func (writeto' true g)
-  ; "remove",    V.efunc (V.string **-> V.values)
-                 (fun s -> wrap_err (fun () -> Sys.remove s; success))
-  ; "rename",    V.efunc (V.string **-> V.string **-> V.values)
-                 (fun s1 s2 -> wrap_err (fun () -> Sys.rename s1 s2; success))
-  ; "tmpname",   V.caml_func tmpname
+  [ "readfrom",  errchoose readfrom
+  ; "open_out",  V.efunc (V.string **->> outfile) (open_out_string false)
+  ; "close_out", V.efunc (outfile  **->> V.unit)  close_out
+  ; "open_in",   V.efunc (V.string **->> infile)  open_in
+  ; "close_in",  V.efunc (infile   **->> V.unit)  close_in
+  ; "writeto",   errchoose (writeto' false)
+  ; "appendto",  errchoose (writeto' true)
+  ; "remove",    errfunc (V.string **->> V.string) (succeed Sys.remove)
+  ; "rename",    errfunc (V.string **-> V.string **->> V.string) (succeed2 Sys.rename)
+  ; "tmpname",   V.efunc (V.unit **->> V.string) tmpname
   ; "read",      V.efunc (V.option V.string **-> V.values) (read g)
-  ; "write",     V.caml_func (fun l -> wrap_err (fun () ->
-                              List.iter (write_string g) l;
-                              flush io.currentout;
-                              []))
+  ; "write",     errchoose 
+                 [ V.alt (V.string *****->> V.int)
+                                               (fun l -> write_strings io.currentout l)
+                 ; V.alt (outfile **-> V.string *****->> V.int) write_strings
+                 ]                          
   ; "date",      V.efunc (V.option V.string **-> V.values) (date g)
   ; "exit",      V.efunc (V.option V.int **-> V.runit) (fun n -> exit (getopt n 0))
-  ; "getenv",    V.efunc (V.string **-> V.values)
-                 (fun s -> try [V.String (Sys.getenv s)] with Not_found -> [V.Nil])
-  ; "execute",   V.efunc (V.string **-> V.result V.int) Sys.command
+  ; "getenv",    V.efunc (V.string **->> V.option V.string)
+                 (fun s -> try Some (Sys.getenv s) with Not_found -> None)
+  ; "execute",   V.efunc (V.string **->> V.int) Sys.command
+  ; "_STDIN",    infile.V.embed  stdin
+  ; "_STDOUT",   outfile.V.embed stdout
+  ; "_STDERR",   outfile.V.embed stderr
+  ; "_INPUT",    infile.V.embed  io.currentin
+  ; "_OUTPUT",   outfile.V.embed io.currentout
   ] in
 @ 
 <<luaiolib.ml>>=
@@ -156,6 +164,24 @@ module T = struct
     | Out _ -> "<output>"
 end
 <<luaiolib.ml>>=
+module V = Luavalue
+let out upper fail =
+      { V.embed   = (fun x -> upper.V.embed (Out x))
+      ; V.project = (fun x -> match upper.V.project x with
+                    | Out x -> x
+                    | _ -> fail x "output file")
+      ; V.is      = (fun x -> upper.V.is x && match upper.V.project x with
+                                              | Out x -> true | _ -> false)
+      } 
+let in' upper fail =
+      { V.embed   = (fun x -> upper.V.embed (In x))
+      ; V.project = (fun x -> match upper.V.project x with
+                    | In x -> x
+                    | _ -> fail x "input file")
+      ; V.is      = (fun x -> upper.V.is x && match upper.V.project x with
+                                              | In x -> true | _ -> false)
+      } 
+<<luaiolib.ml>>=
 module Make (T : Lua.Lib.TYPEVIEW with type 'a t = 'a t)
     : Lua.Lib.USERCODE with type 'a userdata' = 'a T.combined =
   struct
@@ -164,6 +190,8 @@ module Make (T : Lua.Lib.TYPEVIEW with type 'a t = 'a t)
      struct
        module V = C.V
        let ( **-> ) = V.( **-> )
+       let ( **->> ) x y = x **-> V.result y
+       let ( *****->> ) = V.dots_arrow
        let init g = 
          let io = {currentin = stdin; currentout = stdout} in
          <<i/o builtins>>
@@ -172,18 +200,3 @@ module Make (T : Lua.Lib.TYPEVIEW with type 'a t = 'a t)
      end (*M*)
   end (*Make*)
 @ 
-<<luaiolib.ml>>=
-module V = Luavalue
-let out (upper) fail =
-      { V.embed   = (fun x -> upper.V.embed (Out x))
-      ; V.project = (fun x -> match upper.V.project x with
-                    | Out x -> x
-                    | _ -> fail x "out_channel")
-      } 
-let in' (upper) fail =
-      { V.embed   = (fun x -> upper.V.embed (In x))
-      ; V.project = (fun x -> match upper.V.project x with
-                    | In x -> x
-                    | _ -> fail x "out_channel")
-      } 
-

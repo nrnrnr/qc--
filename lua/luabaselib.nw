@@ -22,6 +22,7 @@ module Add (MakeParser : Luaparser.MAKER) (I : Luainterp.S) = struct
   module V = I.Value
   <<toplevel>>
   let ( **-> ) = V.( **-> )
+  let ( **->> ) x y = x **-> V.result y
 
   let next t key =
     let k, v =
@@ -35,17 +36,17 @@ module Add (MakeParser : Luaparser.MAKER) (I : Luainterp.S) = struct
     [ "dofile",      V.efunc (V.string **-> V.values) (dofile g)
     ; "dostring",    V.efunc (V.string **-> V.values) (dostring g)
         (* should catch Sys_error and turn into an error fallback... *)
-    ; "size",        V.efunc (V.table **-> V.result V.int) Luahash.population
-    ; "next",        V.efunc (V.table **-> V.value **-> V.values) next
-    ; "nextvar",     V.efunc (V.value **-> V.values) (fun x -> next g.V.globals x)
-    ; "tostring",    V.efunc (V.value **-> V.result V.string)     V.to_string
+    ; "size",        V.efunc (V.table **->> V.int) Luahash.population
+    ; "next",        V.efunc (V.table **->  V.value **-> V.values) next
+    ; "nextvar",     V.efunc (V.value **->  V.values) (fun x -> next g.V.globals x)
+    ; "tostring",    V.efunc (V.value **->> V.string) V.to_string
     ; "print",       V.caml_func 
                         (fun args ->
                           List.iter (fun x -> print_endline (V.to_string x)) args;
                           flush stdout;
                           [])
-    ; "tonumber",    V.efunc (V.float **-> V.result V.float) (fun x -> x)
-    ; "type",        V.efunc (V.value **-> V.result V.string)
+    ; "tonumber",    V.efunc (V.float **->> V.float) (fun x -> x)
+    ; "type",        V.efunc (V.value **->> V.string)
                      (function
                      | V.Nil            -> "nil"
                      | V.Number _       -> "number"
@@ -59,9 +60,8 @@ module Add (MakeParser : Luaparser.MAKER) (I : Luainterp.S) = struct
     ; "error",       V.efunc (V.string **-> V.runit) (I.error g)
     ; "setglobal",   V.efunc (V.value **-> V.value **-> V.runit)
                      (fun k v -> V.Table.bind g.V.globals k v)
-    ; "getglobal",   V.efunc (V.value **-> V.result V.value) (I.getglobal g)
-    ; "setfallback", V.efunc (V.string **-> V.value **-> V.result V.value)
-                     (I.setfallback g)
+    ; "getglobal",   V.efunc (V.value **->> V.value) (I.getglobal g)
+    ; "setfallback", V.efunc (V.string **-> V.value **->> V.value) (I.setfallback g)
     ] 
 
   include I
@@ -107,8 +107,5 @@ let dofile g infile =
                      (do_lexbuf ~sourcename:infile g) (Lexing.from_channel f)
       in  (close(); answer)
     with e -> (close (); raise e)
-  with Sys_error msg ->
-    I.fallback "error" g [V.String ("dofile: System error " ^ msg)]
+  with Sys_error msg -> [V.Nil; V.String ("System error: " ^ msg)]
 @ 
-
-

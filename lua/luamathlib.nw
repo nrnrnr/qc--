@@ -9,41 +9,33 @@
 <<luamathlib.mli>>=
 module M : Lua.Lib.BARECODE
 <<math builtins>>=
-let rfloat = V.result V.float
 let float = V.float
 let math_builtins =
-  [ "abs",   V.efunc (float **-> rfloat)            abs_float
-  ; "acos",  V.efunc (float **-> rfloat)            acos
-  ; "asin",  V.efunc (float **-> rfloat)            asin
-  ; "atan",  V.efunc (float **-> rfloat)            atan
-  ; "atan2", V.efunc (float **-> float **-> rfloat) atan2
-  ; "ceil",  V.efunc (float **-> rfloat)            ceil
-  ; "cos",   V.efunc (float **-> rfloat)            cos
-  ; "floor", V.efunc (float **-> rfloat)            floor
-  ; "log",   V.efunc (float **-> rfloat)            log
-  ; "log10", V.efunc (float **-> rfloat)            log10
-  ; "max",   V.efunc (float **-> float **-> rfloat) max
-  ; "min",   V.efunc (float **-> float **-> rfloat) min
-  ; "mod",   V.efunc (float **-> float **-> rfloat) mod_float
-  ; "sin",   V.efunc (float **-> rfloat)            sin
-  ; "sqrt",  V.efunc (float **-> rfloat)            sqrt
-  ; "tan",   V.efunc (float **-> rfloat)            tan
+  [ "abs",   V.efunc (float **->> float)            abs_float
+  ; "acos",  V.efunc (float **->> float)            acos
+  ; "asin",  V.efunc (float **->> float)            asin
+  ; "atan",  V.efunc (float **->> float)            atan
+  ; "atan2", V.efunc (float **-> float **->> float) atan2
+  ; "ceil",  V.efunc (float **->> float)            ceil
+  ; "cos",   V.efunc (float **->> float)            cos
+  ; "floor", V.efunc (float **->> float)            floor
+  ; "log",   V.efunc (float **->> float)            log
+  ; "log10", V.efunc (float **->> float)            log10
+  ; "max",   V.efunc (float **-> float **->> float) max
+  ; "min",   V.efunc (float **-> float **->> float) min
+  ; "mod",   V.efunc (float **-> float **->> float) mod_float
+  ; "sin",   V.efunc (float **->> float)            sin
+  ; "sqrt",  V.efunc (float **->> float)            sqrt
+  ; "tan",   V.efunc (float **->> float)            tan
   ; "random", V.caml_func (fun _ -> [V.Number (Random.float 1.0)])
-  ; "randomseed", V.efunc (V.int **-> V.runit)        Random.init
+  ; "randomseed", V.efunc (V.int **-> V.runit)      Random.init
   ] 
-@ 
-<<random test cases for paper>>=
-
-
-; "rev", 
-  let efunc = V.efunc in let list = V.list in let value = V.value in let result = V.result in
-  efunc (list value **-> result (list value)) List.rev
-
 @ 
 <<luamathlib.ml>>=
 module M (I : Lua.Lib.CORE) = struct
   module V = I.V
   let ( **-> ) = V.( **-> )
+  let ( **->> ) x y = x **-> V.result y
   <<math builtins>>
   let init g = I.register_globals math_builtins g; Lua.Lib.StringList.empty
 end

@@ -17,36 +17,41 @@ type 'a parser = int -> (int -> (unit -> 'a) -> 'a) -> (unit -> 'a) -> 'a
 
 let strindex = { V.embed = (fun n -> V.int.V.embed (n+1))
                ; V.project = (fun v -> V.int.V.project v - 1)
+               ; V.is = V.int.V.is
                } 
 
 let string_builtins g =
   let error s = I.error g s in
   let invalid f x =
     try f x with Invalid_argument m -> error ("Invalid argument: " ^ m) in
+  let wrap_inv = function
+    | V.Function (l, f) -> V.Function(l, invalid f)
+    | v -> raise (V.Projection (v, "function")) in
+  let ifunc ty f = wrap_inv (V.efunc ty f) in
   <<support for matching>> 
+  let quote_char c t = if alnum c then c :: t else '%' :: c :: t in
+  let quote_pat p = List.fold_right quote_char (explode p) [] in
   let strfind s pat init plain =
     let int    i = V.int.V.embed    i in
     let string s = V.string.V.embed s in
-    match plain with
-    | Some _ -> error "string library does not implement `plain' strfind"
-    | None ->
-        find pat s init
-          (fun caps i j _ -> int (i+1) :: int j :: List.map string caps)
-          (fun () -> [V.Nil]) in
+    let pat = match plain with Some _ -> quote_pat pat | None -> explode pat in
+    find pat s init
+      (fun caps i j _ -> int (i+1) :: int j :: List.map string caps)
+      (fun () -> [V.Nil]) in
   [ "strfind", V.efunc (V.string **-> V.string **-> V.default 0 strindex **->
                         V.option V.int **-> V.values) strfind
-  ; "strlen",  V.efunc (V.string **-> V.result V.int) String.length
+  ; "strlen",  V.efunc (V.string **->> V.int) String.length
   ; "strsub",
-    (V.efunc (V.string **-> strindex **-> V.option strindex **-> V.result V.string))
+    (V.efunc (V.string **-> strindex **-> V.option strindex **->> V.string))
     (fun s start last ->
       let maxlast = String.length s - 1 in
       let last = match last with None -> maxlast
                                | Some n -> min n maxlast in
       let len = last - start + 1 in
       invalid (String.sub s start) len)
-  ; "strlower", V.efunc (V.string **-> V.result V.string) String.lowercase
-  ; "strupper", V.efunc (V.string **-> V.result V.string) String.uppercase
-  ; "strrep",   V.efunc (V.string **-> V.int **-> V.result V.string)
+  ; "strlower", V.efunc (V.string **->> V.string) String.lowercase
+  ; "strupper", V.efunc (V.string **->> V.string) String.uppercase
+  ; "strrep",   V.efunc (V.string **-> V.int **->> V.string)
                 (fun s n ->
                   if n < 0 then
                     raise (Invalid_argument ("number of replicas " ^ string_of_int n ^
@@ -54,9 +59,9 @@ let string_builtins g =
                   else
                     let rec list l = function 0 -> l | n -> list (s::l) (n-1) in
                     String.concat "" (list [] n))
-  ; "ascii",   V.efunc (V.string **-> V.default 0 strindex **-> V.result V.int)
+  ; "ascii",   V.efunc (V.string **-> V.default 0 strindex **->> V.int)
                (fun s i -> Char.code (String.get s i))
-  ; "format",  V.caml_func (invalid (format g))
+  ; "format",  ifunc (V.string **-> V.value *****->> V.string) (format g)
   ; "gsub",    unimp g "gsub"
   ] 
 @ 
@@ -64,6 +69,8 @@ let string_builtins g =
 module M (I : Lua.Lib.CORE) = struct
   module V = I.V
   let ( **-> ) = V.( **-> )
+  let ( **->> ) x y = x **-> V.result y
+  let ( *****->> ) = V.dots_arrow
   <<string builtins>>
   let init g = I.register_globals (string_builtins g) g; Lua.Lib.StringList.empty
 end
@@ -148,9 +155,7 @@ let bprintf_internal g buf format =
 
   in doprn 0
 
-let format g args =
-  let fmt, args = match args with h :: t -> h, t | [] -> V.Nil, [] in
-  [V.String (bprintf_internal g (Buffer.create 16) (V.string.V.project fmt) args)]
+let format g fmt args = bprintf_internal g (Buffer.create 16) fmt args
 @ 
 A recognizer takes as arguments a position and success and failure continuations.
 <<support for matching>>=
@@ -213,7 +218,7 @@ let find pat s =
       | ')', c :: cs -> rparen     >> comp lps     c cs
       | ')', []      -> rparen
       | c  , cs      -> finish (char ((==) c), cs) in
-    match explode pat with
+    match pat with
     | [] -> fun i succ fail -> if i <= length then succ i i fail else fail ()
     | '^' :: [] -> atzero atstart
     | '^' :: c :: cs -> atzero (atstart >> comp 0 c cs)
@@ -261,6 +266,3 @@ let cclass cs =
   match cs with
   | '^' :: cs -> let p, cs = pos cs in non p, cs
   | _ -> pos cs   in
-
-
-

@@ -62,8 +62,8 @@ such as
 module type TYPEVIEW = sig
   type 'a combined
   type 'a t  (* the individual type of which this is a view *)
-  val makemap : ('a combined, 'b) Luavalue.ep -> ('b -> string -> 'a t)
-                -> ('a t, 'b) Luavalue.ep
+  val makemap : ('a combined, 'b, 'b) Luavalue.ep -> ('b -> string -> 'a t)
+                -> ('a t, 'b, 'b) Luavalue.ep
 end
 @ 
 When up to ten types are combined into a single type, 
@@ -325,11 +325,13 @@ module WithType (T : USERTYPE) (L : BARECODE) : USERCODE with type 'a userdata' 
   module TV1 = struct
     type 'a combined = 'a also_t
     type 'a t = 'a T1.t
-    let makemap (upper : ('a combined, 'b) V.ep) fail =
+    let makemap (upper : ('a combined, 'b, 'b) V.ep) fail =
       { V.embed   = (fun x -> upper.V.embed (T1 x))
       ; V.project = (fun x -> match upper.V.project x with
                     | T1 x -> x
                     | _ -> fail x T1.tname)
+      ; V.is      = (fun x -> upper.V.is x &&
+                              match upper.V.project x with T1 x -> true | _ -> false)
       } 
   end
   <<nested [[T2]]..[[T10]] in [[Combine.T10]]>>
@@ -401,6 +403,8 @@ end
       ; V.project = (fun x -> match upper.V.project x with
                     | T2 x -> x
                     | _ -> fail x T2.tname)
+      ; V.is      = (fun x -> upper.V.is x &&
+                              match upper.V.project x with T2 x -> true | _ -> false)
       } 
   end
 
@@ -412,6 +416,8 @@ end
       ; V.project = (fun x -> match upper.V.project x with
                     | T3 x -> x
                     | _ -> fail x T3.tname)
+      ; V.is      = (fun x -> upper.V.is x &&
+                              match upper.V.project x with T3 x -> true | _ -> false)
       } 
   end
 
@@ -423,6 +429,8 @@ end
       ; V.project = (fun x -> match upper.V.project x with
                     | T4 x -> x
                     | _ -> fail x T4.tname)
+      ; V.is      = (fun x -> upper.V.is x &&
+                              match upper.V.project x with T4 x -> true | _ -> false)
       } 
   end
 
@@ -434,6 +442,8 @@ end
       ; V.project = (fun x -> match upper.V.project x with
                     | T5 x -> x
                     | _ -> fail x T5.tname)
+      ; V.is      = (fun x -> upper.V.is x &&
+                              match upper.V.project x with T5 x -> true | _ -> false)
       } 
   end
 
@@ -445,6 +455,8 @@ end
       ; V.project = (fun x -> match upper.V.project x with
                     | T6 x -> x
                     | _ -> fail x T6.tname)
+      ; V.is      = (fun x -> upper.V.is x &&
+                              match upper.V.project x with T6 x -> true | _ -> false)
       } 
   end
 
@@ -456,6 +468,8 @@ end
       ; V.project = (fun x -> match upper.V.project x with
                     | T7 x -> x
                     | _ -> fail x T7.tname)
+      ; V.is      = (fun x -> upper.V.is x &&
+                              match upper.V.project x with T7 x -> true | _ -> false)
       } 
   end
 
@@ -467,6 +481,8 @@ end
       ; V.project = (fun x -> match upper.V.project x with
                     | T8 x -> x
                     | _ -> fail x T8.tname)
+      ; V.is      = (fun x -> upper.V.is x &&
+                              match upper.V.project x with T8 x -> true | _ -> false)
       } 
   end
 
@@ -478,6 +494,8 @@ end
       ; V.project = (fun x -> match upper.V.project x with
                     | T9 x -> x
                     | _ -> fail x T9.tname)
+      ; V.is      = (fun x -> upper.V.is x &&
+                              match upper.V.project x with T9 x -> true | _ -> false)
       } 
   end
 
@@ -489,6 +507,8 @@ end
       ; V.project = (fun x -> match upper.V.project x with
                     | T10 x -> x
                     | _ -> fail x T10.tname)
+      ; V.is      = (fun x -> upper.V.is x &&
+                              match upper.V.project x with T10 x -> true | _ -> false)
       } 
   end
 @ 

@@ -35,7 +35,7 @@ assert(strfind("1234567890123456789", ".45", 9) == 13)
 assert(strfind("", "") == 1)
 assert(strfind('', 'aaa', 1) == nil)
 assert(strfind('alo(.)alo', '(.)', 1) == 1)
--- assert(strfind('alo(.)alo', '(.)', 1, 1) == 4)
+assert(strfind('alo(.)alo', '(.)', 1, 1) == 4)
 print('+')
 
 assert(strlen("") == 0)

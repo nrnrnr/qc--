@@ -1,4 +1,6 @@
+$debug 1
 print('testando i/o')
+assert(_INPUT == _STDIN and _OUTPUT == _STDOUT)
 file = tmpname()
 otherfile = tmpname()
 
@@ -6,13 +8,13 @@ otherfile = tmpname()
 
 readfrom()
 writeto()
---assert(_INPUT == _STDIN and _OUTPUT == _STDOUT)
+assert(_INPUT == _STDIN and _OUTPUT == _STDOUT)
 
 remove(file)
 assert(dofile(file) == nil)
 assert(readfrom(file) == nil)
 assert(type(writeto(file)) == 'userdata')
---assert(_OUTPUT ~= _STDOUT)
+assert(_OUTPUT ~= _STDOUT)
 
 -- assert(seek(_OUTPUT) == 0)
 -- assert(write("alo alo"))
@@ -26,7 +28,7 @@ assert(type(writeto(file)) == 'userdata')
 assert(write('"álo"', "{a}\n", "second line\n", "third line \n"))
 assert(write('çfourth_line', "\n\n"))
 assert(writeto())
---assert(_INPUT == _STDIN and _OUTPUT == _STDOUT)
+assert(_INPUT == _STDIN and _OUTPUT == _STDOUT)
 print('+')
 
 assert(rename(file, otherfile))
@@ -130,7 +132,7 @@ readfrom(otherfilehandle)
 readfrom()  -- close otherfilehandle
 assert(remove(file))
 assert(remove(otherfile))
--- assert(_INPUT == _STDIN)
+assert(_INPUT == _STDIN)
 
 assert(writeto(file))
 write([[
