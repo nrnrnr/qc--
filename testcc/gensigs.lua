@@ -1,0 +1,7 @@
+$debug 1
+   Inspect.show(tgt)
+   Debug.paths_proc(tgt, "C",
+                    { { type = "int"  , widths = iwidths }
+                    , { type = "float", widths = fwidths }
+                    })
+   Debug.path_2_in_overflow(tgt, "C")
