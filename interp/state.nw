@@ -1,7 +1,9 @@
 % -*- mode: Noweb; noweb-code-mode: sml-mode -*-
-\documentclass{article}
+\documentclass[letterpaper]{article}
 \usepackage{noweb}
-\usepackage{amsmath,tabularx}
+\usepackage{amsmath,tabularx,geometry}
+
+\geometry{letterpaper,tmargin=2.5cm,bmargin=2.5cm,lmargin=2.5cm,rmargin=2.5cm}
 
 \title{C-- Interpreter Internals}
 \author{Reuben Olinsky}
@@ -14,19 +16,24 @@
 % render a state
 % \newcommand\state[6]{\langle #1, #2, #3, #4, #5, #6 \rangle}
 \newcommand\dash{\texttt{-}}
-\newcommand\state[9]{\langle (#1, #2), (#3, #4), (#5, #6), #7, #8, #9 \rangle}
-\newcommand\act[3]{\langle #1, #2, #3 \rangle}
+\newcommand\state[8]{\langle #1, #2, #3, #4, #5, #6, #7, #8 \rangle}
+\newcommand\act[4]{\langle #1, #2, #3, #4 \rangle}
 
-\newcommand\pc{{\mathit{PC}}} % program counter
-\newcommand\uid{{\mathit{uid}}}
+\newcommand\pc{{\mathit{PC}}}   % program counter
+\newcommand\ls{{\mathit{ls}}}   % location stack
+\newcommand\uid{{\mathit{uid}}} % unique identifier
+
+\newcommand\newpc{\widehat{\pc}}
+\newcommand\cmm{\texttt{C-- }}
 
 % give state of data stack as parameter, other components standard
 % \newcommand\dstate[1]{\state I \pc {#1} l s A}
-\newcommand\dstate{\state \pc I V L M R A \uid s}
-\newcommand\dact{\act \rho \kappa \uid}
+\newcommand\dstate{\state \pc V \ls \rho \sigma A u s}
+% \newcommand\dstate{\state \pc i V \ls M r A \uid s}
+\newcommand\dact{\act \pc \rho \kappa u}
 
 % give state of arg-passing area as parameter, other components standard
-%\newcommand\astate[1]{\state I \pc d l s #1}
+%\newcommand\astate[1]{\state i \pc d l s #1}
 
 % for building inference rules
 \newcommand{\xfrac}[3][c]{{\displaystyle\genfrac{}{}{0pt}{}{%
@@ -48,10 +55,40 @@
 
 \newcommand\cons{\mathbin{::}}
 
-\newcommand\yields{\rightarrow}
+\def\andalso{\qquad}
+\def\YIELDS{\Downarrow}
+\def\yields{\rightarrow}
 
 % evaluation judgment \step{s1}{s2}
 \newcommand\step[2]{#1 \yields #2}
+
+%%% newmacros
+
+\makeatletter
+\def\doops[#1]#2#3#4{%
+  \global\@namedef{ops-#1}{\showops{#2}{#3}{#4}}\@nameuse{ops-#1}}
+\newcommand\ops{\@ifnextchar[{\doops}{\dblops}}
+\newcommand\dblops[1]{\doops[#1]{#1}}
+\newcommand\useops[1]{%
+   \@ifundefined{ops-#1}%
+     {\@latex@error{No rule `#1' defined in operational
+     semantics}\@opshelp}
+     {\@nameuse{ops-#1}}}
+\gdef\@opshelp{I never saw a rule by that name.\@ehc}
+
+\makeatother
+\newcommand\rulename{\textsc}
+
+\newcommand\showrule[2]{%
+    \renewcommand{\theequation}{\mbox{{\rulename{#1}}}}%
+                         % dubious \llap hoped to make rules centered...
+    \begin{equation}
+    #2
+    \end{equation}
+}
+\newcommand\showops[3]{\showrule{#1}{\frac{#2}{#3}}}
+
+%%% end_newmacros
 
 %% end of macros
 
@@ -69,18 +106,52 @@ First, some type definitions:
 datatype 'a stack    = STACK of 'a * stack
                      | NIL
 type uid             = int
-type value           = bit vector
+
+datatype value       = BOOLEAN of boolean
+                     | BITS    of bit vector
 
 type address         = bit vector      (* width of vector = PTRSIZE *)
 datatype location    = REGISTERS of int
                      | DATA_MEMORY of address
                      | PROGRAM_MEMORY of address
 type argument        = value
-type instruction     = int             (* index into table of instructions *)
+datatype space       = REGISTERS
+                     | MEMORY
+datatype instruction = (* RTL instructions *)
+                     | LITERAL      of value
+                     | PUSH_SYMBOL  of symbol
+                     | FETCH        of size
+                     | STORE        of size
+                     | FETCH_LOCAL  of int
+                     | STORE_LOCAL  of int
+                     | PUSH_ARG
+                     | POP_ARG
+                     | OPERATOR     of operator * size list
+                     | LOCATION     of space * size
+                     | LITERAL      of value
+
+                       (* CFG instructions *)
+                     | GOTO         (* pops target PC off location stack *)
+                     | CBRANCH      of location (* in PROGRAM_MEMORY *)
+                     | BRANCH2      of location * location
+                     | CMM_CALL     of annotations
+                     | C_CALL       of symbol
+                     | RETURN       of value list
+                     | CUT_TO
+withtype label       = string
+     and symbol      = string
+     and size        = int
+     and index       = int
+     and operator    = int
+     and annotations = label list * label list * label list * boolean
+
 type register        = word            (* width of word defined in WORDSIZE *)
 
 type memoryCell      = bit vector      (* width of vector = MEMSIZE *)
 type memoryPage      = memoryCell array
+
+type memory          = (location * memoryPage) table
+type register_set    = register array
 
                     (* these locations will all be PROGRAM_MEMORY locations *)
 type contAnnotations = location list * location list * location list * boolean
@@ -96,39 +167,36 @@ type machine = (location * instruction array) *
 
 State will be represented by a tuple of the form: $\dstate$, where: \\
 \\
-\begin{tabularx}{\linewidth}{@{\hskip2em}lX@{}}
-$\pc$ : \texttt{location}& program counter\\
-$I$ : \texttt{instruction array}& program space (instructions)\\
-$V$ : \texttt{value stack}& value data stack\\
-$L$ : \texttt{location stack}& location data stack\\
-$M$ : \texttt{(location * memoryPage) table}& C-- memory\\
-$R$ : \texttt{register array}& C-- hardware registers\\
-$A$ : \texttt{argument stack}& argument-passing area\\
-$\uid$ : \texttt{uid}& unique identifier\\
-$s$ : \texttt{activation stack}& activation stack\\
+\begin{tabularx}{\linewidth}{@{\hskip2em}llX@{}}
+$\pc$&:    \texttt{location}& program counter\\
+$V$&:      \texttt{value stack}& value data stack\\
+$\ls$&:    \texttt{location stack}& location data stack\\
+$\rho$&:   \texttt{location array}& the current local environment\\
+$\sigma$&: \texttt{memory * register\_set}& the store (\cmm memory and \cmm hardware registers)\\
+$A$&:      \texttt{argument stack}& argument-passing area\\
+$u$&:      \texttt{uid}& a unique identifier\\
+$s$&:      \texttt{activation stack}& the activation stack\\
 \end{tabularx}\\
 \\
-An activation will be represented by a tuple of the form: $\dact$, where: \\
+Note that there is an instruction array present in our state (the program space), but we will not explicitly include it in our tuple; no rules require the modification of the array at any time.  An activation will be represented by a tuple of the form: $\dact$, where: \\
 \\
-\begin{tabularx}{\linewidth}{@{\hskip2em}lX@{}}
-$\rho$ : \texttt{location array}& local environment\\
-$\kappa$ : \texttt{contAnnotations}& continuation bundle that indicates to which continuations this activation may cut, unwind, or return; also indicates if this continuation may abort\\
-$\uid$ : \texttt{uid}& unique identifier\\
+\begin{tabularx}{\linewidth}{@{\hskip2em}llX@{}}
+$\pc$&:    \texttt{location}& program counter for this activation\\
+$\rho$&:   \texttt{location array}& local environment for this activation\\
+$\kappa$&: \texttt{contAnnotations}& continuation bundle that indicates to which continuations this activation may cut, unwind, or return; also indicates if this continuation may abort\\
+$u$&:   \texttt{uid}& unique identifier for this activation\\
 \end{tabularx}\\
 \\
 Additional representation required: \\
 \\
 \begin{tabularx}{\linewidth}{@{\hskip2em}lX@{}}
+instructions to interpret (i)& \texttt{instruction array}\\
 symbol table to manage labels& \texttt{(string * location) table}\\
 symbol table to manage external symbols& \texttt{(string * value) table}\\
 \end{tabularx}\\
 
-\subsubsection*{Lingering Questions}
-
-What's missing?
-
 \subsection*{Instructions}
-Here is a list of the RTL instructions available in the abstract C-- machine:\\
+Here is a list of the RTL instructions available in the abstract \cmm machine:\\
 \\
 \begin{tabularx}{\linewidth}{@{\hskip2em}lX@{}}
 \texttt{\#t}& Push true\\
@@ -149,164 +217,171 @@ Here is a list of the RTL instructions available in the abstract C-- machine:\\
   Push location on stack (index taken from value stack).\\
 \end{tabularx}\\
 \\
-Here is a list of the control-flow related instructions available in the abstract C-- machine:\\
+Here is a list of the control-flow related instructions available in the abstract \cmm machine:\\
 \\
 \begin{tabularx}{\linewidth}{@{\hskip2em}lX@{}}
-\texttt{branch-}\emph{test}\dash\emph{label}& branch to \emph{label} if \emph{test} is true\\
-\texttt{call-}\emph{label}\{\dash\emph{param}\}& call continuation \emph{label} with given parameters\\
-\texttt{return}\{\dash\emph{value}\}& return with any given values\\
-\texttt{goto-}\emph{label}& goto \emph{label}\\
-\texttt{cutto-}\emph{label}\{\dash\emph{param}\}& cut to continuation \emph{label} with given parameters\\
-\texttt{unwindto-}\emph{label}\{\dash\emph{param}\}& unwind to continuation \emph{label} with given parameters\\
+\texttt{goto}& pop location, goto it\\
+\texttt{cbranch-}\emph{PC}& pop value and branch to \emph{PC} if value is \texttt{\#t}\\
+\texttt{branch2-}$\pc_{t}$\dash$\pc_{f}$& pop value \emph{v}; if \emph{v} is \texttt{\#t} then branch to $\pc_{t}$ else if \emph{v} is \texttt{\#f} branch to $\pc_{f}$\\
+\texttt{cmm-call-}$\kappa$& pop location $\ell$; call \cmm continuation at $\ell$, asserting call annotations $\kappa$\\
+\texttt{c-call-}\emph{symbol}& call C function named \emph{symbol}\\
+\texttt{return}\{\dash\emph{PC}\}& return to continuation \emph{PC} (or default return location if no specified \emph{PC})\\
+\texttt{cut}& pop location $\ell$ and cut to continuation at $\ell$\\
 \end{tabularx}\\
 \\
-There will also be directives for blocks of data to be stored in memory, possibly ways of specifying WORDSIZE, MEMSIZE, PTRSIZE, and byte order, and ways to import and export symbols.  They are on the way \ldots
-
+There will also be a small group of directives for data blocks found within the source code as well as methods of specifying information about the target hardware, etc.:\\
+\\
+\begin{tabularx}{\linewidth}{@{\hskip2em}lX@{}}
+\texttt{byte-}\emph{byte}& store \emph{byte} in \cmm memory\\
+\texttt{word-}\emph{word}& store \emph{word} in \cmm memory\\
+\texttt{byte-order-}\emph{option}& inform \cmm of the target machine's byte order\\
+\texttt{memsize-}\emph{size}& inform \cmm of the target machine's smallest addressable unit of memory (bit width)\\
+\texttt{ptrsize-}\emph{size}& inform \cmm of the target machine's pointer size (bit width)\\
+\texttt{wordsize-}\emph{size}& inform \cmm of the target machine's word size (bit width)\\
+\end{tabularx}\\
+\\
 And that's it for now. \emph{Is there anything huge missing or wrong?}
 
 \subsection*{Operational Semantics}
 
-Below is a sketch of the operational semantics of the legal instructions in the C-- interpreter \emph{(NOTE: far from complete!)} \ldots \\ \\
-
-$
-\twoline
-{I[\pc] = \mathtt{\#t}}
-{\step
-  {\dstate}
-  {\state {\pc{}+?} I {\mathtt{\#t}\cons{}V} L M R A \uid s}
-}
-$ \\ \\
-
-$
-\twoline
-{I[\pc] = \mathtt{\#f}}
-{\step
-  {\dstate}
-  {\state {\pc{}+?} I {\mathtt{\#f}\cons{}V} L M R A \uid s}
-}
-$\\ \\
-
-$
-\twoline
-{I[\pc] = digits}
-{\step
-  {\dstate}
-  {\state {\pc{}+?} I {digits\cons{}V} L M R A \uid s}
-}
-$\\ \\
-
-$
-\threeline
-{I[\pc] = .name}
-{a = lookup\_symbol(name)}
-{\step
-  {\dstate}
-  {\state {\pc{}+?} I {a\cons{}V} L M R A \uid s}
-}
-$\\ \\
-
-$
-\threeline
-{I[\pc] = \mathtt{fetch-}size}
-{v=aggregate(M,\ell,size,\mathtt{byte-order})}
-{\step
-  {\state \pc I V {\ell\cons{}L} M R A \uid s}
-  {\state {\pc{}+?} I {v\cons{}V} L M R A \uid s}
-}
-$\\ \\
-
-$
-\threeline
-{I[\pc] = \mathtt{store-}size}
-{store(M,\ell,v,size,\mathtt{byte-order})}
-{\step
-  {\state \pc I {v\cons{}V} {\ell\cons{}L} M R A \uid s}
-  {\state {\pc{}+?} I V L M R A \uid s}
-}
-$\\ \\
-
-$
-\threeline
-{I[\pc] = \mathtt{fetch-local-}i}
-{s=\dact}
-{\step
-  {\dstate}
-  {\state {\pc{}+?} I {\rho[i]\cons{}V} L M R {v\cons{}A} \uid s}
-}
-$\\ \\
-
-$
-\fourline
-{I[\pc] = \mathtt{store-local-}i}
-{s=\dact}
-{s'={\act {\rho\{i\mapsto{}v\}} \kappa \uid}}
-{\step
-  {\state \pc I {v\cons{}V} L M R A \uid {s\cons{}S}}
-  {\state {\pc{}+?} I V L M R A \uid {s'\cons{}S}}
-}
-$\\ \\
-
-$
-\twoline
-{I[\pc] = \mathtt{push-arg}}
-{\step
-  {\state \pc I {v\cons{}V} L M R A \uid s}
-  {\state {\pc{}+?} I V L M R {v\cons{}A} \uid s}
-}
-$\\ \\
-
-$
-\twoline
-{I[\pc] = \mathtt{pop-arg}}
-{\step
-  {\state \pc I V L M R {v\cons{}A} \uid s}
-  {\state {\pc{}+?} I {v\cons{}V} L M R A \uid s}
-}
-$\\ \\
-
-$
-\fiveline
-{I[\pc] = operator{-size}}
-{n = arity(operator)}
-{(v,V')=popn(V,n)}
-{v'=operator(v)}
-{\step
-  {\dstate}
-  {\state {\pc{}+?} I {v\cons{}V'} L M R A \uid s}
-}
-$\\ \\
-
-$
-\twoline
-{I[\pc] = \$r}
-{\step
-  {\state \pc I {v\cons{}V} L M R A \uid s}
-  {\state \pc I V {(REGISTERS,v)\cons{}L} M R A \uid s}
-}
-$\\ \\
-
-$
-\twoline
-{I[\pc] = \$M}
-{\step
-  {\state \pc I {v\cons{}V} L M R A \uid s}
-  {\state \pc I V {(DATA\_MEMORY,v)\cons{}L} M R A \uid s}
-}
-$\\
-\\ \\
-And now for the operational semantics of control-flow related instructions: \\
+Below is a sketch of the operational semantics of the legal instructions in the \cmm interpreter \emph{(NOTE: it is far from complete!)}, but first we must wave our hands about some helper functions:\\
 \\
+\begin{tabularx}{\linewidth}{@{\hskip2em}lX@{}}
+\texttt{lookup\_symbol}(\emph{name})& lookup the value of symbol \emph{symbol}\\
+\texttt{aggregate}(\emph{space, location, size, byte-order})& fetch the (\emph{size} div MEMSIZE) bytes found at \emph{location} in \emph{space} and aggregate them into one value, according to the given byte-order \\
+\texttt{store}(\emph{space, location, value, size, byte-order})& split \emph{value} up into multiple pieces of size MEMSIZE and store pieces according to the given byte-order at \emph{location} in \emph{space}\\
+\texttt{arity}(\emph{operator-name})& return the arity of operator \emph{operator-name}\\
+\texttt{popn}(\emph{stack, n})& pops \emph{n} values off \emph{stack} and returns (list of popped values, stack of remaining values)\\
+\texttt{lookup\_label}(\emph{name})& lookup the value (address) of label \emph{label}\\
+\end{tabularx}\\
+\\
+Also, one notational comment: if $\pc$ is the index into the instruction array representing the current instruction, then we write $\newpc$ to mean the index of the immediately next instruction (following along the array linearly).  And now onward to the operational semantics: \\
 
-$
-\threeline
-{I[\pc] = \mathtt{goto-}label}
-{a = label\_lookup(label)}
+\ops{Literal}
+{i[\pc] = (literal) x}
 {\step
   {\dstate}
-  {\state a I V L M R A \uid s}
+  {\state \newpc {x\cons{}V} \ls \rho \sigma A u s}
 }
-$\\
-\\ \\
+\\
+\ops{PushSymbol}
+{i[\pc] = .name \andalso a = lookup\_symbol(name)}
+{\step
+  {\dstate}
+  {\state \newpc {a\cons{}V} \ls \rho \sigma A u s}
+}
+\\
+\ops{Fetch}
+{i[\pc] = \mathtt{fetch-}size \andalso v=aggregate(M,\ell,size,\mathtt{byte-order})}
+{\step
+  {\state \pc V {\ell\cons{}\ls} \rho \sigma A u s}
+  {\state \newpc {v\cons{}V} \ls \rho \sigma A u s}
+}
+\\
+\ops{Store}
+{i[\pc] = \mathtt{store-}size \andalso {\sigma'} = store(\sigma,\ell,v,size,\mathtt{byte-order})}
+{\step
+  {\state \pc {v\cons{}V} {\ell\cons{}\ls} \rho \sigma A u s}
+  {\state \newpc V \ls \rho {\sigma'} A u s}
+}
+\\
+\ops{Fetch-Local}
+{i[\pc] = \mathtt{fetch-local-}x}
+{\step
+  {\dstate}
+  {\state \newpc {\rho[x]\cons{}V} \ls \rho \sigma A u s}
+}
+\\
+\ops{Store-Local}
+{i[\pc] = \mathtt{store-local-}x \andalso {\rho'} = \rho\{x\mapsto{}v\}}
+{\step
+  {\state \pc {v\cons{}V} \ls \rho \sigma A u s}
+  {\state \newpc V \ls {\rho'} \sigma A u s}
+}
+\\
+\ops{Push-Arg}
+{i[\pc] = \mathtt{push-arg}}
+{\step
+  {\state \pc {v\cons{}V} \ls \rho \sigma A u s}
+  {\state \newpc V \ls \rho \sigma {v\cons{}A} u s}
+}
+\\
+\ops{Pop-Arg}
+{i[\pc] = \mathtt{pop-arg}}
+{\step
+  {\state \pc V \ls \rho \sigma {v\cons{}A} u s}
+  {\state \newpc {v\cons{}V} \ls \rho \sigma A u s}
+}
+\\
+\ops{ApplyOp}
+{\threeline{i[\pc] = operator{-size} \andalso n = arity(operator)}{(v,V')=popn(V,n)}{v'=operator(v)}}
+{\step
+  {\dstate}
+  {\state \newpc {v\cons{}V'} \ls \rho \sigma A u s}
+}
+\\
+\ops{Location}
+{i[\pc] = \mathtt{\$}c}
+{\step
+  {\state \pc {v\cons{}V} \ls \rho \sigma A u s}
+  {\state \newpc V {('c',v)\cons{}\ls} \rho \sigma A u s}
+}
+\\
+And now for the operational semantics of control-flow related instructions: \\
+
+\ops{Goto}
+{i[\pc] = \mathtt{goto}}
+{\step
+  {\state \pc V {\ell\cons\ls} \rho \sigma A u s}
+  {\state \ell V \ls \rho \sigma A u s}
+}
+\\
+\ops{CBranchTrue}
+{i[\pc] = \mathtt{cbranch-}\pc'}
+{\step
+  {\state \pc {\mathtt{\#t}\cons{}V} \ls \rho \sigma A u s}
+  {\state {\pc'} V \ls \rho \sigma A u s}
+}
+\\
+\ops{CBranchFalse}
+{i[\pc] = \mathtt{cbranch-}\pc'}
+{\step
+  {\state \pc {\mathtt{\#f}\cons{}V} \ls \rho \sigma A u s}
+  {\state \newpc V \ls \rho \sigma A u s}
+}
+\\
+\ops{Branch2True}
+{i[\pc] = \mathtt{branch2-}\pc_{t}\dash\pc_{f}}
+{\step
+  {\state \pc {\mathtt{\#t}\cons{}V} \ls \rho \sigma A u s}
+  {\state {\pc_{t}} V \ls \rho \sigma A u s}
+}
+\\
+\ops{Branch2False}
+{i[\pc] = \mathtt{branch2-}\pc_{t}\dash\pc_{f}}
+{\step
+  {\state \pc {\mathtt{\#f}\cons{}V} \ls \rho \sigma A u s}
+  {\state {\pc_{f}} V \ls \rho \sigma A u s}
+}
+\\
+\ops{CMMCall}
+{\fiveline
+{i[\pc] = \mathtt{cmm-call-}\kappa}
+{V,\ls\textrm{ are empty}}
+{P \rightarrow procPC = \pc' \andalso P \rightarrow numLocals = n}
+{\rho' = new\_env(n) \andalso u' \textrm{ is a fresh, unique identifier}}
+{s' = {\act \pc \rho \kappa u}}
+}
+{\step
+  {\state \pc V {P\cons\ls} \rho \sigma A u s}
+  {\state {\pc'} V \ls {\rho'} \sigma A {u'} {s'}}
+}
+\\
+%\ops{CCall}
+%{i[\pc] = \mathtt{c-call-}f \andalso a = }
+%{\step
+%  {\state \pc V {P\cons\ls
+
 And the rest is yet to come \ldots
 
 \end{document}
