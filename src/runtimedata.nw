@@ -466,7 +466,13 @@ The remaining bits store the magnitude of the offset from the virtual frame poin
 First, we define a slew of helpers to emit the different types of values.
 <<define helpers to emit different values>>=
 <<define [[simplify_exp]] to simplify rtl expressions>>
-let reg_ix proc r = RM.find r (snd proc.P.target.T.reg_ix_map) in
+let reg_ix proc r =
+  try RM.find r (snd proc.P.target.T.reg_ix_map)
+  with Not_found -> imposs ("Register not found in map. If you are using the " ^
+                            "graph-coloring register allocator, it is not yet " ^
+                            "run-time system compatible. You must turn off " ^
+                            "the emission of runtime data by setting " ^
+                            "backend.emit_data=nil") in
 let emit_dead_var      ()    = asm#value zero in
 let emit_link_const    sym   = asm#addr (Reloc.Simple.of_sum sym zero) in
 let emit_offset bits =
