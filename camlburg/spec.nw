@@ -1,0 +1,125 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{A BURG specification}
+
+<<exported type definitions>>=
+type nonterm = string  (* the *type* (not the name) of a nonterminal symbol *)
+type term    = string  (* ditto for terminals *)
+
+type constant =
+  | Int of int
+  | String of string
+
+type tree =
+  | Tree  of string * tree list
+  | Var   of string * nonterm
+  | Const of constant
+
+type cost = Code.exp
+type code = Code.exp
+
+type rule = nonterm * tree * cost * code
+
+type arg_type = (* type of argument to catamorphism parameter *)
+  | Polymorphic    (* standard argument/result type *)
+  | Fixed of term  (* nonterminal or constant of fixed type *)
+type signature = arg_type list
+
+type ty = string
+type t = { terminals    : StringSet.t
+         ; nonterminals : (string * ty) list   (* explain this! *)
+         ; start        : string
+         ; rules        : rule list
+         ; signatures   : signature StringMap.t   (* signature of each constructor *)
+         } 
+<<exported values>>=
+val arg_type : terminals:StringSet.t -> tree -> arg_type
+val sig_string : signature -> string
+val sig_type   : signature -> Syntax.Ty.ty
+val fold_tree_types : ('a -> string -> 'a) -> 'a -> tree -> 'a
+val fold_rule_types : ('a -> string -> 'a) -> 'a -> rule -> 'a
+
+val fold_tree_constructors : ('a -> string -> tree list -> 'a) -> 'a -> tree -> 'a
+val fold_rule_constructors : ('a -> string -> tree list -> 'a) -> 'a -> rule -> 'a
+<<exported modules>>=
+module StringSet : Set.S with type elt = string
+module StringMap : Map.S with type key = string
+<<more exported modules>>=
+module TreeComp  : Map.OrderedType with type t = string * tree list
+@ 
+<<spec.mli>>=
+<<exported modules>>
+<<exported type definitions>>
+<<more exported modules>>
+<<exported values>>
+@ 
+The implementation is uninteresting.
+<<spec.ml>>=
+module StringSet = Set.Make(struct type t = string let compare = compare end)
+module StringMap = Map.Make(struct type t = string let compare = compare end)
+<<exported type definitions>>
+let rec fold_tree_types f zero = function
+  | Var (_, nt) -> f zero nt
+  | Tree (_, args) -> List.fold_left (fold_tree_types f) zero args
+  | Const _ -> zero
+
+let fold_rule_types f zero (nt, tree, _, _) = fold_tree_types f (f zero nt) tree
+
+let rec fold_tree_constructors f zero = function
+  | Var _ -> zero
+  | Tree (c, args) -> List.fold_left (fold_tree_constructors f) (f zero c args) args
+  | Const _ -> zero
+
+let fold_rule_constructors f zero (_, tree, _, _) = fold_tree_constructors f zero tree
+@ 
+<<spec.ml>>=
+module TreeComp = struct
+  type t = string * tree list
+  let listcmp c =
+    let rec cmp l1 l2 = match l1, l2 with
+      | [], [] -> 0
+      | h1::t1, h2::t2 ->
+          let n = cmp t1 t2 in
+          if n <> 0 then n else c h1 h2
+      | _::_, [] -> 1
+      | [], _::_ -> -1
+    in cmp 
+
+  let nodecmp t1 t2 = match t1, t2 with
+  | Tree _, _ -> assert false
+  | _, Tree _ -> assert false
+  | Var (_, nt), Var(_, nt') -> compare nt nt'
+  | Var _, _ -> -1
+  | Const _, Var _ -> 1
+  | Const c, Const c' -> compare c c'
+
+  let compare (c1, kids1) (c2, kids2) =
+    let n = compare c1 c2 in
+    if n <> 0 then n
+    else listcmp nodecmp kids1 kids2
+end
+@ 
+<<spec.ml>>=
+let const_type = function
+  | Int _ -> "int"
+  | String _ -> "string"
+
+let arg_type terminals = function
+  | Tree _ -> Polymorphic
+  | Var (v, ty) -> if StringSet.mem ty terminals then Fixed ty else Polymorphic
+  | Const c -> Fixed (const_type c)
+@ 
+<<spec.ml>>=
+let sig_string args = 
+  let add t s = match t with
+  | Polymorphic -> "'a -> " :: s
+  | Fixed t     -> t :: " -> " :: s
+  in String.concat "" (List.fold_right add args ["'a"])
+
+module Ty = Syntax.Ty
+let sig_type args = 
+  let alpha = Ty.Var "a" in
+  let add t s = match t with
+  | Polymorphic -> Ty.arrow alpha            s
+  | Fixed t     -> Ty.arrow (Ty.App (t, [])) s
+  in List.fold_right add args alpha

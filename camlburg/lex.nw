@@ -1,0 +1,43 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+<<lex.mll>>=
+{
+module T = Token
+let brace_depth = ref 0
+}
+let alpha       = ['a'-'z' 'A'-'Z' '_']
+let delim       = ['(' ')' ',' ':' ';' '[' ']' '<' '>' '{' '}']
+let symbol      = ['.' '_' '$' '@' '%' '!' '#' '^' '&' '*' '+' '=' '~' '`' '|' 
+                   '/' '?' '-']
+let digit       = ['0'-'9']
+
+rule token = parse
+    [' ' '\t']          { token lexbuf }     (* skip blanks *)
+  | ['\n' ]             { T.Eol }
+  | digit+              { T.Int(int_of_string(Lexing.lexeme lexbuf)) }
+  | alpha(digit|alpha)* { T.alnum  (Lexing.lexeme lexbuf) }
+  | symbol+             { T.symbol (Lexing.lexeme lexbuf) }
+  | delim               { T.delim  (Lexing.lexeme lexbuf) }
+  | "{:"                { brace_depth := 1; T.Code (String.concat "" (braces lexbuf)) }
+  | eof                 { T.Eof }
+and braces = parse
+  | [^ ':' '{' '}']+    { let t = Lexing.lexeme lexbuf in t :: braces lexbuf }
+  | "{:"                { incr brace_depth;
+                          let t = Lexing.lexeme lexbuf in t :: braces lexbuf }
+  | ":}"                { decr brace_depth;
+                          if !brace_depth = 0 then []
+                          else let t = Lexing.lexeme lexbuf in t :: braces lexbuf }
+  | [':' '{' '}']       { let t = Lexing.lexeme lexbuf in t :: braces lexbuf }
+<<token.ml>>=
+type t = Eol | Eof | Int of int | Name of string | Reserved of string | Code of string
+let alnum s = Name s
+let reserved = ["%"; "%%"]
+let symbol s = if List.exists ((=) s) reserved then Reserved s else Name s
+let delim s = Reserved s
+let to_string = function
+  | Eol -> "<newline>"
+  | Eof -> "<end of file>"
+  | Int n -> string_of_int n
+  | Name s -> s
+  | Reserved s -> s
+  | Code s -> "<code fragment>"
+@ 

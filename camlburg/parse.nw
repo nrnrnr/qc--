@@ -1,0 +1,100 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+<<parse.mli>>=
+type decls = { start : Spec.nonterm list
+             ; types : (Spec.ty * Spec.nonterm list) list
+             ; terms : string list
+             }
+val spec : Token.t list -> (decls * Spec.rule list) * Token.t list
+<<parse.ml>>=
+open Pc
+module T = Token
+module S = Spec
+let satisfy = Pc.satisfy' T.to_string
+type 'a producer = ('a, Token.t) Pc.parse
+let some f = Pc.some' T.to_string f
+
+let quote s = "`" ^ s ^ "'"
+
+let name   = satisfy "name" (function T.Name _ -> true | _ -> false) >> T.to_string
+let is_name n =
+  satisfy (quote n) (function T.Name n' when n = n' -> true | _ -> false)
+  >> const ()
+let (!* ) s = satisfy (quote s) ((=) (T.Reserved s)) >> T.to_string
+let newline = satisfy "newline" ((=) T.Eol)
+let int  = some "integer"   (function T.Int n  -> Some n | _ -> None)
+let xxx = Some "gi"
+
+let exp_of_code c = Code.Raw [Code.Line c]
+let some_code = function T.Code c -> Some c | _ -> None
+let code = (some "{: ... :}" some_code : string producer) >> exp_of_code
+
+
+let ( *$-- ) a p = !* a -- !!p >> snd
+let ( *--$ ) p a = p -- !! (!* a) >> fst
+
+let rec commas p tokens = (p -- ("," *$-- commas p || empty) >> cons) tokens
+
+let getOpt o default = match o with
+  | Some x -> x
+  | None -> default
+    
+let rec tree tokens = (
+  name --> (  "(" *$-- commas tree *--$ ")" >> (fun l n -> S.Tree (n, l))
+           || optional (":" *$-- name) >> (fun nt n -> S.Var (n, getOpt nt n))
+           )
+  || int >> (fun n -> S.Const (S.Int n))
+) tokens
+
+
+let (-^-) x y = x -- y >> (fun (x, y) -> x ^ " " ^ y)
+
+let rec multi      p toks = (p -^- (multi p || empty >> const "")) toks
+let rec ssep comma p toks = (p -^- (!* comma -^- ssep "," p || empty >> const "")) toks
+
+let rec mlexp toks =
+  multi (  name 
+        || int >> string_of_int
+        || !* "(" -^- ssep "," mlexp -^- !* ")"
+        || !* "[" -^- ssep ";" mlexp -^- !* "]"
+        ) toks
+
+let cost = "[" *$-- (mlexp >> exp_of_code) *--$ "]"
+
+
+let zero = Code.Int 0
+
+let (rule : S.rule producer) = 
+  name *--$ ":" -- !!tree -- !!(optional cost >> (fun c -> getOpt c zero)) -- !!code
+  >> (fun (((nt, t), cost), code) -> (nt, t, cost, code))
+
+let rule = rule -<- newline -<- repeat newline
+
+let nonterm = name
+
+let key n p = !*"%" ->- is_name n ->- !! p
+
+type decl = Start of S.nonterm | Type of S.ty * S.nonterm list | Newline
+
+let ty = name
+
+type decls = { start : S.nonterm list
+             ; types : (S.ty * S.nonterm list) list
+             ; terms : string list
+             }
+let decl =
+  let start nt ({ start=s; types=tys; terms=ts } as state) =
+    if List.exists ((=) nt) s then state else {start=nt::s; types=tys; terms=ts}  in
+  let addty (t, nts) { start=s; types=tys; terms=ts } =
+    { start=s; types=(t, nts)::tys; terms=ts }  in
+  let addterms terms { start=s; types=tys; terms=ts } =
+    { start=s; types=tys; terms=terms@ts }  in
+  
+     key "start" nonterm                                  >> start
+  || key "type"  ("<" *$-- ty *--$ ">" -- repeat nonterm) >> addty
+  || key "term"  (repeat name)                            >> addterms
+  || newline                                              >> (fun _ s -> s)
+
+let decls = fold decl {start=[]; types=[]; terms=[]}
+
+let spec = !! (decls *--$ "%%" -<- repeat newline -- repeat rule -<- eof T.to_string)
+

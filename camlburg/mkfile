@@ -1,0 +1,92 @@
+SRC=myList.ml pprint.ml syntax.ml code.ml spec.ml pc.ml token.ml lex.ml parse.ml norm.ml burg.ml main.ml 
+BIN=`echo $SRC | sed 's/\.mli/.cmi/g;s/\.ml /.cmo /g;s/.ml$/.cmo/'`
+TEST=test.ml test2.ml
+
+
+LINE =          '# %L "%F"%N'
+
+%.tex: %.nw
+	noweave -autodefs ocaml -index $prereq > $target
+
+%.ml: %.nw
+	notangle -L"$LINE" -R$target $prereq > $target
+
+%.mli: %.nw
+	notangle -L"$LINE" -R$target $prereq > $target
+
+%.mll: %.nw
+	notangle -R$target $prereq > $target
+
+%.cmi:          %.mli
+                ocamlc -c $stem.mli
+
+%.cmo:          %.ml
+                ocamlc -c $stem.ml
+
+all:V: mlburg
+
+main.ml: burg.nw
+	notangle -L"$LINE" -R$target $prereq > $target
+
+mlburg: $BIN
+	ocamlc -o $target $prereq
+
+clean:V:
+	rm -f *.cmi *.cmo
+	rm -f *~
+
+clobber:V: clean
+	rm -f mlburg
+
+bin:V: $BIN
+
+lex.ml: lex.mll
+	ocamllex $prereq
+
+test:V: a.out
+	./a.out
+
+a.out:	test.cmo test2.cmo
+	ocamlc -o $target $prereq
+
+test.ml: ss.ml gen.ml
+	cat $prereq > $target
+
+gen.ml: sample.mlb mlburg
+	mlburg sample.mlb > $target
+
+token.ml: lex.nw
+        notangle -L"$LINE" -R$target $prereq > $target
+
+## syntax.ml: syntax.nw
+##         notangle -L"$LINE" -R$target $prereq > $target
+## 
+## syntax.mli: syntax.nw
+##         notangle -L"$LINE" -R$target $prereq > $target
+## 
+## code.ml: code.nw
+##         notangle -L"$LINE" -R$target $prereq > $target
+## 
+## code.mli: code.nw
+##         notangle -L"$LINE" -R$target $prereq > $target
+## 
+## pprint.ml: pprint.nw
+##         notangle -L"$LINE" -R$target $prereq > $target
+## 
+## pprint.mli: pprint.nw
+##         notangle -L"$LINE" -R$target $prereq > $target
+## 
+## myList.ml: myList.nw
+##         notangle -L"$LINE" -R$target $prereq > $target
+## 
+## myList.mli: myList.nw
+##         notangle -L"$LINE" -R$target $prereq > $target
+
+<DEPEND
+
+depend:V: DEPEND
+DEPEND: $SRC 
+	ocamldep *.ml *.mli > DEPEND
+
+ss.ml:
+	# do nothing

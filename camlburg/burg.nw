@@ -1,0 +1,350 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+@ 
+<<burg.mli>>=
+type name = string
+type argument =
+  | Nonterm of name * Spec.nonterm
+  | Term    of name * Spec.term
+  | Const   of Spec.constant
+type labeller = Spec.nonterm -> (argument list * Spec.cost * Spec.code) list
+val error : string list -> 'a
+val labeller  : Spec.t -> string -> labeller
+val labellers : Spec.t -> (string * labeller) list
+val labeller_pair : arity:(string -> int) ->
+  (Spec.nonterm * 'a) list -> string * labeller -> string * Code.exp
+
+<<burg.ml>>=
+type flags = { trace : bool; coverage : bool }
+
+let flip f x y = f y x
+
+@
+<<burg.ml>>=
+module S = Spec
+type name = string
+type argument =
+  | Nonterm of name * Spec.nonterm
+  | Term    of name * Spec.term
+  | Const   of Spec.constant
+type labeller = Spec.nonterm -> (argument list * Spec.cost * Spec.code) list
+
+let rec mapPartial f = function
+  | [] -> []
+  | h::t -> match f h with None -> mapPartial f t
+                         | Some x -> x :: mapPartial f t
+
+let matchc c' = function
+  | (nt, S.Tree (c, l), cost, code) when c = c' -> Some (nt, l, cost, code)
+  | _ -> None
+let eqnt nt' = function
+  | (nt, _, _, _) -> nt = nt'
+
+let error s = (prerr_endline (String.concat "" s); exit 1)
+@ 
+Here's where we map tree stuff to argument stuff.
+<<burg.ml>>=
+let labeller (spec : S.t) constructor =
+  let choices = mapPartial (matchc constructor) spec.S.rules in
+  fun nt ->
+    let choices = List.filter (eqnt nt) choices in
+    let arg = function
+      | S.Tree _ -> error ["grammar not in normal form"]
+      | S.Var (v, ty) ->
+          if S.StringSet.mem ty spec.S.terminals then
+            Term (v, ty)
+          else
+            Nonterm (v, ty)
+      | S.Const c -> Const c
+    in List.map (fun (_, args, cost, code) -> (List.map arg args, cost, code)) choices
+
+module StringSet = S.StringSet
+module StringMap = S.StringMap
+let labellers spec =
+  let constructors = StringMap.fold (fun k v l -> k :: l) spec.S.signatures [] in
+  List.map (fun c -> c, labeller spec c) constructors
+
+@ 
+Here's where we make choices.  
+\begin{itemize}
+\item
+Cost of matching a nonterminal [[nt]] is $x$[[.nt.cost]] or
+thereabouts.
+\item
+Cost of matching a terminal is zero.
+\item
+Cost of matching a constant is zero if the argument matches that
+constant and infinity otherwise.
+We use [[Camlburg.matches c arg]] to represent that cost.
+\end{itemize}
+
+<<burg.ml>>=
+module C = Code
+let const = function
+  | Spec.Int n -> C.Int n
+  | Spec.String s -> C.String s
+
+let argstring k = "arg" ^ string_of_int k
+let burgmatches c k =
+  C.Apply (C.Apply (C.Qualid ["Camlburg"; "matches"], const c), C.Qualid [argstring k])
+let ntcost   nt k = C.Qualid [argstring k; nt; "Camlburg"; "cost"]
+let ntaction nt k = C.Qualid [argstring k; nt; "Camlburg"; "action"]
+
+let choice (args, cost, code) =
+  let rec addcost prev args k = match args with
+      | []   -> prev
+      | Nonterm (name, nt) :: t -> addcost (C.plus prev (ntcost nt k)) t (k+1)
+      | Term (name, nt)    :: t -> addcost prev t (k+1)
+      | Const c            :: t -> addcost (C.plus prev (burgmatches c k)) t (k+1)   in
+  let let' bs e = match bs with [] -> e | _ -> C.Let (bs, e) in
+  let rec letbs args k = match args with
+      | [] -> []
+      | Nonterm (name, nt) :: t ->
+          (C.Var name, C.Apply (ntaction nt k, C.Tuple[])) :: letbs t (k+1)
+      | Term (name, ty) :: t ->
+          (C.Var name, C.Qualid[argstring k])              :: letbs t (k+1)
+      | Const _ :: t -> letbs t (k+1)    in
+  (* old code, which forces orders on let binding *)
+  let rec addlet args k = match args with
+      | [] -> code
+      | Nonterm (name, nt) :: t ->
+          C.Let ([C.Var name, C.Apply (ntaction nt k, C.Tuple[])], addlet t (k+1))
+      | Term (name, ty) :: t ->
+          C.Let ([C.Var name, C.Qualid[argstring k]], addlet t (k+1))
+      | Const _ :: t -> addlet t (k+1)    in
+  C.Tuple [addcost cost args 1; C.Fun (["xxx"], (*addlet args 1*) let' (letbs args 1) code)]
+  
+let choices l =
+  C.Apply (C.Qualid ["Camlburg"; "choice"], C.List (List.map choice l))
+
+let funwrap arity e =
+  let rec arglist k tail = match k with
+  | 0 -> tail
+  | k -> arglist (k-1) (("arg"^string_of_int k) :: tail)
+  in if arity = 0 then e else C.Fun (arglist arity [], e)
+
+
+<<burg.ml>>=
+let labeller_pair arity nts (c, (lfun : labeller)) =
+  let ntrec = C.Record (List.map (fun (nt, ty) -> nt, choices (lfun nt)) nts) in
+  (String.lowercase c, funwrap (arity c) ntrec)
+@ 
+This new version of [[labeller_pair]] creates a placeholder spot where
+we can add bindings for chain rules.
+<<burg.ml>>=
+let add_chains e = e  (* placeholder to rebind using chain rules *)
+let labeller_pair arity nts (c, (lfun : labeller)) =
+  let ntbindings = List.map (fun (nt, ty) -> C.Var nt, choices (lfun nt)) nts in
+  let ntrec = C.Let (ntbindings, C.Record (List.map (fun (nt, _) -> nt, C.id nt) nts))
+  in  (String.lowercase c, funwrap (arity c) ntrec)
+@ 
+@ 
+<<main.ml>>=
+let printl = List.iter print_string
+
+let read filename =
+  let buf = Lexing.from_channel (open_in filename) in
+  let showme t = (printl ["Read token "; Token.to_string t]; print_newline(); t) in
+  let showme t = t in
+  let rec read toks = match Lex.token buf with
+  | Token.Eof -> List.rev_append toks []
+  | t -> read (showme t :: toks)                                   in
+  let pspec = fst (Parse.spec (read [])) in
+  pspec
+@ 
+So here we convert from what we can parse to the nicer format.
+
+We get the type of a nonterminal.
+But this is unnecessary in an ML burg, because we can infer those
+types (though we might want them as valuable documentation).
+What we really need are the types of the \emph{terminal} symbols,
+because these govern the type of the argument to the folding function.
+<<main.ml>>=
+module StringSet = Spec.StringSet
+module StringMap = Spec.StringMap
+let error = Burg.error
+let typeof tys nt =
+  match List.filter (fun (ty', nts) -> List.exists ((=) nt) nts) tys with
+  | [] -> String.concat "" ["type for nonterminal "; nt; " not specified"]
+  | (ty, _) :: rest ->
+      if List.for_all (fun (ty', _) -> ty = ty') rest then ty
+      else error ["inconsistent types for nonterminal "; nt]
+
+
+let flip f x y = f y x
+
+let cvt ({Parse.start=s; Parse.types=tys; Parse.terms=terms}, rules) = 
+  let rules = Norm.normalize rules (* must do now to see new nt's *)           in
+  let terms = List.fold_left (flip StringSet.add) StringSet.empty terms        in
+  let nts = List.fold_left (Spec.fold_rule_types (flip StringSet.add))
+                           StringSet.empty rules                               in
+  let nts = StringSet.diff nts terms                                           in
+  let nts = List.map (fun nt -> (nt, typeof tys nt)) (StringSet.elements nts)  in
+  let add_constructor map c args =
+    let sign = List.map (Spec.arg_type terms) args in
+    try if StringMap.find c map = sign then map
+        else error ["Inconsistant signatures for constructor "; c; " (";
+                    Spec.sig_string sign; " and ";
+                    Spec.sig_string (StringMap.find c map);
+                    ")"]
+    with Not_found -> StringMap.add c sign map       in
+  let sigs = List.fold_left (Spec.fold_rule_constructors add_constructor)
+             StringMap.empty rules in
+  <<binding of [[first_sym]]>>
+  let start = match s with [s] -> s
+                         | [] -> first_sym rules
+                         | _ -> error ["Inconsistent start symbols"]             in
+  { Spec.terminals = terms
+  ; Spec.nonterminals = nts
+  ; Spec.start = start
+  ; Spec.rules = rules
+  ; Spec.signatures = sigs
+  }
+
+<<emission of phi type>>
+<<emission of nonterminals type>>
+
+let write spec =
+  let _ = emit_phi spec.Spec.signatures in
+  let _ = Format.print_newline() in
+  let _ = emit_nts_type spec.Spec.nonterminals in
+  let _ = Format.print_newline() in
+  let ls = Burg.labellers spec in
+  let arity c = try List.length (StringMap.find c spec.Spec.signatures)
+                with Not_found -> error ["Unknown arity for constructor "; c]   in
+  let codes = List.map (Burg.labeller_pair arity spec.Spec.nonterminals) ls in
+  let body = [Syntax.Defn.Let ("burgrec", Code.to_syntax (Code.Record codes))] in
+  List.iter (Syntax.defn (fun _ -> assert false)) body
+
+let (>>) f g x = g (f x)
+
+let run () =
+  List.map (read>>cvt>>write) (List.tl (Array.to_list Sys.argv))
+ 
+let _ = run()
+
+<<binding of [[first_sym]]>>=
+let first_sym = function (nt, _, _, _) :: _ -> nt
+                       | [] -> error ["No start symbol and no rules!"]         in
+@ 
+@
+<<emission of phi type>>=
+module Ty = Syntax.Ty
+let emit_phi sigs =
+  let _ = print_string "type 'a foldarg =\n" in
+  let emit c s pfx =
+    (List.iter print_string ["  "; pfx; String.lowercase c;
+                             " : "; Spec.sig_string s; "\n"]; "; ") in
+  let _ = StringMap.fold emit sigs "{ " in
+  print_string "  }\n\n"
+
+let emit_phi sigs =
+  let add c s tail = (String.lowercase c, Spec.sig_type s) :: tail in
+  Syntax.tydef {Ty.parms = ["a"]; Ty.name = "foldarg"; Ty.eqn = None;
+                Ty.rep = Some (Ty.Product (StringMap.fold add sigs [])) }
+@ 
+<<emission of nonterminals type>>=
+let emit_nts_type nts =
+  let nts = List.fold_left (fun s (nt, _) -> StringSet.add nt s) StringSet.empty nts in
+  let nts = StringSet.elements nts in
+  let rec transform k = function
+    | h :: t -> let v = "t" ^ string_of_int k in (v, (h,Ty.Var v)) :: transform (k+1) t
+    | [] -> []  in
+  let (vs, members) = List.split (transform 1 nts) in
+  Syntax.tydef {Ty.parms = vs; Ty.name = "nonterms"; Ty.eqn = None;
+                Ty.rep = Some (Ty.Product members)}
+
+<<*>>=
+global rules
+record rule (
+  nt,				# nonterminal on LHS
+  tree,				# tree matching
+  iflag,			# consider it an `instruction'?
+  template,			# code to exec on match
+  cost,				# code to compute cost of match
+  n,				# number of this rule
+  ntcode,			# code for set of nonterms as leaves
+  packed_index,			# packed index of this rule on per-nt basis
+  treetable			# map args to paths
+)
+  # ntcode codes for the set of nonterminals appearing as leaves in tree
+
+<<test2.ml>>=
+let eval e = (Test.expfold Test.burgrec (fun x -> x) e).Test.number.Test.action()
+
+open Test
+let e = Add (Con 3, Mul (Con 2, Con 99))
+let n = eval e
+let _ = List.iter print_string ["e99 = "; string_of_int n; "\n"]
+let e = Add (Con 3, Mul (Con 2, Con 33))
+let n = eval e
+let _ = List.iter print_string ["e33 = "; string_of_int n; "\n"]
+@ 
+\subsection{Closing costs}
+The [[closure]] functions use chain rules to adjust costs after
+labelling.
+They are described in the LOPLAS paper.
+<<*>>=
+global chainrules, treerules
+global chains # map nonterms to rules that chain that NT 
+global chaintable # RHS -> LHS -> best rule
+
+procedure emit_chain_closure_funs()
+  local r, nt, lhs, t
+
+  <<partition [[rules]] into [[chainrules]] and [[treerules]]>>
+  chaintable := table()
+  every nt := !ntlist do
+    chaintable[nt] := delete(chainnts(nt, chainrules, table(), 0), nt)
+
+  every nt := !ntlist & *chaintable[nt] > 0 do
+    write("static void ", prefix, "_closure_", nt, " ARGS((NODEPTR_TYPE, int));")
+  write()
+  every nt := !ntlist & *chaintable[nt] > 0 do {
+    write("static void ", prefix, "_closure_", nt, "(a, c) NODEPTR_TYPE a; int c; {")
+    iwrite(2, "struct ", prefix, "_state *p = STATE_LABEL(a);")
+    every b := !chaintable[nt] & b.rule.tree == nt do
+      emit_action(2, b.rule, b.cost, b.rule.cost)
+    write("}\n")
+  }
+end
+@ 
+<<*>>=
+procedure emit_action(pre, rule, cost, cost2)
+  iwrites(pre, "if (")
+  if \Tflag then
+    writes(prefix, "_trace(", prefix, "a, ", rule.n, ", c + ", cost, ", p->cost[", 
+ 	   emitted_code(rule.nt), "]), ")
+  write("c + ", cost, " < p->cost[", emitted_code(rule.nt), "]) {  /* ", 
+	rule.nt, " : ", treestring(rule.tree), " */")
+  iwrite(pre+2, "p->cost[", emitted_code(rule.nt), "] = c + ", cost, ";")
+  iwrite(pre+2, "p->rule.", prefix, "_", rule.nt, " = ", rule.packed_index, ";")
+  if *chaintable[rule.nt] > 0 then
+    iwrite(pre+2, prefix, "_closure_", rule.nt, "(a, c + ", cost2, ");")
+  iwrite(pre, "}")
+end
+@ 
+Return (chain) rules with the nonterminal on the \emph{right} side.
+What's returned is a mapping for each \emph{left} nonterminal to the
+cheapest rule for producing [[nonterm]], together with its cost.
+<<*>>=
+record bestrule(rule, cost)
+
+procedure chainnts(nonterm, rules, result, cost)
+  local r
+
+  every r := !rules & r.tree == nonterm &
+    (/result[r.nt] | cost + r.cost < result[r.nt].cost)
+  do {
+    result[r.nt] := bestrule(r, cost + r.cost)
+    chainnts(r.nt, rules, result, cost + r.cost)
+  }
+  return result
+end
+@ 
+<<partition [[rules]] into [[chainrules]] and [[treerules]]>>=
+chainrules := []
+treerules := []
+chaintable := table()
+every r := !rules do
+  put(if member(nonterms, r.tree) then chainrules else treerules, r)

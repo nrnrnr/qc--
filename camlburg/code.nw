@@ -1,0 +1,77 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+Here we export code types.
+Values of these types represent expressions, programs, etc.
+<<exported types>>=
+type fragment = Line of string | Synch of string * int
+type exp =
+  | Record of (string * exp) list
+  | Tuple  of exp list
+  | List   of exp list
+  | Case   of exp * (pat * exp) list
+  | Fun    of string list * exp
+  | Apply  of exp * exp
+  | Qualid of string list
+  | Let    of (pat * exp) list * exp
+  | Raw    of fragment list
+  | Int    of int
+  | String of string
+and pat =
+  | Con    of string * pat list
+  | Var    of string
+  | Any
+@ 
+<<code.mli>>=
+<<exported types>>
+val pprint : exp -> unit
+val id     : string -> exp
+
+val plus : exp -> exp -> exp
+val let' : pat -> exp -> exp -> exp
+
+val to_syntax : exp -> 'a Syntax.bExp
+@ 
+<<code.ml>>=
+<<exported types>>
+
+<<prettyprinting>>
+
+let id x = Qualid [x]
+
+let plus n m = Apply (Apply (id "+", n), m)
+let let' p e' e = Let ([p, e'], e)
+@ 
+
+<<prettyprinting>>=
+module S = Syntax
+let error s = (prerr_endline s; exit 1)
+let synch_string file line = "# " ^ string_of_int line ^ " \"" ^ file ^ "\""
+let raw_to_string l =
+  String.concat "\n"
+  (List.map (function Line n -> n | Synch (f, l) -> synch_string f l) l)
+
+let rec to_syntax = function
+  | Record l -> S.RECORD (List.map (fun (n, e) -> n, to_syntax e) l)
+  | Tuple  l -> S.TUPLE  (List.map to_syntax l)
+  | List   l -> S.LIST   (List.map to_syntax l)
+  | Case   (e, arms) ->
+      (let unvar = function Var v -> v | _ -> error "non-var in case" in
+       let cvt (p, rhs) = match p with
+       | Con (c, args) -> (c,  List.map unvar args, to_syntax rhs)
+       | _ -> error "non-Con in case"  in
+       S.CASEGEN (to_syntax e, List.map cvt arms, None))
+  | Fun    (args, e) ->
+      List.fold_right (fun x e -> S.LAM (S.ID x, e)) args (to_syntax e)
+  | Apply  (f, a) -> S.APP (to_syntax f, to_syntax a)
+  | Qualid l -> S.VAR (String.concat "." l)
+  | Let (bs, e') -> S.LET (List.map (fun (p, e) -> pat_syntax p, to_syntax e) bs,
+                           to_syntax e')
+  | Raw c -> S.VAR ("(" ^ raw_to_string c ^ ")")
+  | Int n -> S.INT n
+  | String s -> S.STR s
+and pat_syntax = function
+  | Con (c, args) -> error "constructor as pat"
+  | Var v -> S.ID v
+  | Any -> S.ID "_"
+
+let pprint e = S.pprint (fun _ -> ()) (to_syntax e)

@@ -1,0 +1,378 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+% l2h macro exfile 1 <a href="#$1"><tt>#1</tt></a>
+
+\input{macros.tex}
+
+\section{Core syntax of residual terms}
+
+We define the core abstract syntax of the residual language. The core
+syntax defines representations for most of the OCaml base types and
+constructs (lambda abstraction, application, let-bindings, case
+expressions, pairs, etc). However, the abstract syntax of residual
+expressions is parametric. We will have the posibility to add
+represntations for more base types (or constructs).
+
+We have some limited fancy features as pattern-matching and generic case
+statements with optional wildcards.
+<<core syntax>>=
+type id = string
+type pat = ID of id | TUPLEPAT of pat list
+type 'a bExp =
+    VAR of id
+  | LAM of pat * 'a bExp
+  | APP of 'a bExp * 'a bExp
+  | BOOL of bool
+  | INT of int
+  | INT64 of int64
+  | NINT of nativeint
+  | STR of string
+  | CHR of char
+  | LIST of 'a bExp list
+  | CONS of 'a bExp * 'a bExp
+  | NIL
+  | UNIT
+  | COND of  'a bExp *  'a bExp * 'a bExp
+  | LET of (pat * 'a bExp) list * 'a bExp
+  | PAIR of 'a bExp * 'a bExp
+  | TRIPLE of 'a bExp * 'a bExp * 'a bExp
+  | TUPLE of 'a bExp list
+  | RECORD of (string * 'a bExp) list
+  | SEQ of 'a bExp * 'a bExp
+  | FST of 'a bExp
+  | SND of  'a bExp
+  | FST3 of 'a bExp
+  | SND3 of  'a bExp
+  | TRD3 of  'a bExp
+  | X_Some of  'a bExp
+  | X_None
+  | CASEoption of 'a bExp * (id * 'a bExp) * 'a bExp
+  | CASEGEN of 'a bExp * (string * id list * 'a bExp) list * 'a bExp option
+  | XTRA of 'a
+@ 
+<<core types>>=
+type ty =
+  | App of string * ty list
+  | Tuple of ty list
+  | Arrow of string option * ty * ty
+  | Var of string
+type rep = 
+  | Product of (string * ty       ) list
+  | Sum     of (string * ty option) list
+type defn =
+  { parms : string list
+  ; name  : string
+  ; eqn   : ty option
+  ; rep   : rep option
+  } 
+@
+\section{Interface}
+We provide a pretty-printing function.
+<<syntax.mli>>=
+  <<core syntax>>
+module Ty : sig
+  <<core types>>
+  val arrow : ty -> ty -> ty   (* no optional string *)
+end
+module Defn : sig
+  type 'a t = Let of string * 'a bExp
+end
+val pprint : ('a -> unit) -> 'a bExp -> unit
+val defn   : ('a -> unit) -> 'a Defn.t -> unit
+val tydef  : Ty.defn -> unit
+@
+
+[[filterNones]] is a hack which merges the braches returning [[None]]
+in a case statement. Should be really useful to get shorter residual code.
+<<syntax.mli>>=
+val filterNones : 'a bExp -> (string * id list * 'a bExp) list -> 'a bExp
+
+@ \section{Implementation} The pretty-printing function takes an
+argument a function pretty-printing of additional types.
+
+<<syntax.ml>>=
+<<core syntax>>
+module Defn = struct
+  type 'a t = Let of string * 'a bExp
+end
+
+module Ty = struct
+  <<core types>>
+  let arrow f a = Arrow (None, f, a)
+end
+
+
+
+open Pprint
+let pre_open f x = (ps "[."; f x)
+let post_close f x = (f x; ps ".]")
+
+(* following turns off debugging *)
+let pre_open f = f
+let post_close f = f
+
+let print_open i x = pre_open (print_open i) x
+let print_close  x = post_close print_close x
+module F = struct
+  open Format
+  let open_hovbox i = pre_open open_hovbox i
+  let open_hvbox i = pre_open open_hvbox i
+  let open_vbox i = pre_open open_vbox i
+  let close_box x = post_close close_box x
+end
+
+let rec pp_pat pat =
+    match pat with
+      ID x -> ps x
+    | TUPLEPAT pats -> 
+        let _ =
+          MyList.mapM
+            pp_pat
+            (fun () -> ps "(")
+            (fun () -> ps ",")
+            (fun () -> ps ")") pats
+        in ()
+
+let pprint pxtra t =
+
+  let rec pp_fun t =
+    match t with
+      LAM _  -> (print_open 1 "("; pp_top t; print_close ")")
+    | FST _  -> (print_open 1 "("; pp_top t; print_close ")")
+    | SND _  -> (print_open 1 "("; pp_top t; print_close ")")
+    | LET ([], e) -> pp_fun e
+    | _        -> pp_top t 
+  
+  and pp_arg t =
+    match t with
+      APP _ -> (print_open 1 "("; pp_top t; print_close ")")
+    | LAM _ -> (print_open 1 "("; pp_top t; print_close ")")
+    | FST _ -> (print_open 1 "("; pp_top t; print_close ")")
+    | SND _ -> (print_open 1 "("; pp_top t; print_close ")")
+    | LET ([], e) -> pp_arg e
+    | _        -> pp_top t
+
+  and pp_fst t =
+    match t with
+      LAM _ -> (print_open 1 "("; pp_top t; print_close ")")
+    | LET ([], e) -> pp_fst e
+    | LET _ -> (print_open 1 "("; pp_top t; print_close ")")
+    | _       -> pp_top t
+
+  and pp_top t =
+    match t with 
+      VAR x          -> (ps x)
+    | INT i          -> if i < 0 then (ps "("; pi i; ps ")") else pi i
+    | INT64 i64      -> (ps "("; pi64 i64; ps ")")
+    | NINT ni        -> (ps "("; pni ni; ps ")")
+    | STR s           -> ps "\""; ps s; ps "\"";
+    | CHR s           -> ps "'"; pc s; ps "'";
+    | BOOL true       -> ps "true"
+    | BOOL false      -> ps "false"
+    | UNIT           -> ps "()"
+    | LIST []        -> ps "[]"
+    | LIST exs       ->
+        let _ = MyList.mapM''
+            pp_top
+            (fun () -> print_open 0 "[")
+            (fun () -> ps ";";pbk())
+            (fun () -> print_close "]") exs in ()
+    | CONS (e1,e2)       ->
+        print_open 1 "(";
+        pp_top e1;
+        ps "::";
+        pbk();
+        pp_top e2;
+        print_close ")"
+    | NIL -> ps "[]";
+    | APP(APP(VAR "+",t1),t2) -> (pp_fun t1; psp();ps "+";psp();pp_arg t2)
+    | APP(APP(VAR "=",t1),t2) -> (pp_fun t1; psp();ps "=";psp();pp_arg t2)
+    | APP(APP(VAR "<",t1),t2) -> (pp_fun t1; psp();ps "<";psp();pp_arg t2)
+    | APP(APP(VAR "&&",t1),t2) -> (pp_fun t1; psp();ps "&&";psp();pp_arg t2)
+    | APP(t1, t2)    -> (pp_fun t1; psp(); pp_arg t2)
+    | COND(e1,e2,e3) ->
+        (print_open 0 "if "; pp_top e1;
+         psp();
+         ps "then ";
+         pp_top e2;
+         psp();
+         ps "else ";
+         pp_top e3;
+         F.close_box();
+        )
+    | LAM(pat, t)      -> 
+        (print_open 2 "fun ";
+         let rec pats pat t = begin
+           pp_pat pat;
+           match t with LAM(p, t) -> (ps " "; pats p t)
+           | _ -> ps " ->"; psp(); pp_top t
+         end
+         in pats pat t;
+         F.close_box())
+    | PAIR(t1, t2)   -> 
+        (print_open 1 "("; pp_top t1; ps ","; psp(); pp_top t2;
+         print_close ")") 
+    | TRIPLE(t1, t2, t3)   -> 
+        (print_open 1 "("; pp_top t1; ps ","; psp(); pp_top t2;
+         ps ","; psp(); pp_top t3;
+         print_close ")") 
+    | TUPLE [] -> ps "()"
+    | TUPLE (h::t) -> 
+        (print_open 1 "("; pp_fun h;
+         List.iter (fun e -> ps ","; psp(); pp_fun e) t;
+         print_close ")") 
+    | RECORD [] -> ps "()"
+    | RECORD (h::t) -> 
+        let pair (n, e) = (print_open 1 n; psp(); ps "="; psp(); pp_fun e;
+                           print_close "") in
+        (print_open 1 "{"; pair h;
+         List.iter (fun e -> ps ";"; psp(); pbk(); pair e) t;
+         print_close "}") 
+    | FST e     -> (ps "Tools.fst"; psp(); pp_arg e)
+    | SND e     -> (ps "Tools.snd"; psp(); pp_arg e)
+    | FST3 e     -> (ps "Tools.fst3"; psp(); pp_arg e)
+    | SND3 e     -> (ps "Tools.snd3"; psp(); pp_arg e)
+    | TRD3 e     -> (ps "Tools.trd3"; psp(); pp_arg e)
+    | LET([], e) -> pp_top e
+    | LET(binding::bindings, e) ->
+        let print_binding pfx (pat, e) =
+          (print_open 0 pfx; pp_pat pat; ps " = ";
+           F.open_hovbox 0;
+           pp_top e;
+           F.close_box();
+           F.close_box()) in
+         (F.open_vbox 0;
+          print_binding "let " binding;
+          List.iter (fun x -> (psp(); print_binding "and " x)) bindings;
+          ps " in"; psp();
+          pp_top e; 
+          F.close_box())
+    | X_Some e -> ps "(Some ";pp_top e;ps ")"
+    | X_None -> ps "None"
+    | CASEoption  (e,(x1,s1),s2) ->
+        print_open 2 "(match ";pp_top e; ps " with";psp();
+        print_open 2 "  Some "; ps x1; ps " -> "; pp_top s1; psp (); print_close "";
+        print_open 2 "| None -> "; pp_top s2; print_close ")";print_close ""
+    | CASEGEN  (e,ls,wild) ->
+        print_open 2 "(match ";pp_top e; ps " with";psp();
+        List.iter
+          (fun (tag,ids,e) ->
+            (print_open 2 " | ";
+             ps tag;
+             let _ = MyList.mapM' ps
+                 (fun () -> ps "(")
+                 (fun () -> ps ",")
+                 (fun () -> ps ")") ids in 
+             ps " ->"; psp();pp_top e; psp (); print_close "";nl()))
+          ls;
+        (*print_close "";*)
+        (match wild with
+          Some e -> print_open 2 "| _ ->"; psp();pp_top e;print_close ""
+        | None -> ());
+        print_close ")"
+    | SEQ(e1,e2) -> pp_top e1;ps ";";pbk();pp_top e2
+    | XTRA x -> pxtra x
+
+  in
+  Format.set_max_boxes(32000);
+  Format.set_ellipsis_text("PPELLIPSIS");
+  pp_top t
+
+let filterNones e ls =
+  let rec walk ls =
+    match ls with
+      [] -> (false,[])
+    | branch::ls ->
+        let (succ,branches) = walk ls in 
+        (match branch with
+          (_,_,X_None) -> (true,branches)
+        | _ -> (succ,branch::branches)) in
+  match walk ls with
+    (true,[]) -> X_None
+  | (true,ls) -> CASEGEN(e,ls,Some(X_None))
+  | (_,ls) -> CASEGEN(e,ls,None)
+@
+<<syntax.ml>>=
+let defn ppx =
+  let pp_top = pprint ppx in
+  function
+  | Defn.Let (x, e) ->
+      let rec peel = function
+        | LAM (p, e) -> let (ps, e) = peel e in (p::ps, e)
+        | e -> ([], e)       in
+      let (pats, e) = peel e in
+      ( print_open 2 "let "; ps x;
+        List.iter (fun p -> psp(); pp_pat p) pats;
+        ps " = ";
+        F.open_hovbox 0;
+        pp_top e;
+        F.close_box();
+        F.close_box();
+        Format.print_newline())
+@ 
+Contexts for prettyprinting:
+\begin{itemize}
+\item
+[[top]]: top-level or where no parens needed
+\item
+[[arg]]: argument of constructor application
+\item
+[[left]]: left child of arrow
+\item
+[[right]]: right child of arrow
+\item
+[[star]]: child of star
+\end{itemize}
+
+
+<<syntax.ml>>=
+let tydef =
+  let printf = Format.fprintf Format.std_formatter in
+  let bracket' l sep r f = function
+    | [] -> (ps l; r())
+    | [x] -> (ps l; f x; r())
+    | h::t -> (ps l; f h; List.iter (fun x -> (sep(); f x)) t; r())   in
+  let bracket l s r = bracket' l (fun () -> ps s) (fun () -> ps r)    in
+  let xyz () = printf "@," in
+  let box' k f x = (F.open_hovbox k; f x; F.close_box())      in
+  let box f = box' 0 f in
+  let cbox' k f x = (F.open_hvbox k; f x; F.close_box())      in
+  let cbox f = cbox' 0 f in
+  let rec parens = fun x -> (print_open 1 "("; top x; print_close ")")
+  and top = function
+    | Ty.App (c, [])   -> ps c
+    | Ty.App (c, [a])  -> (arg a; psp(); ps c)
+    | Ty.App (c, args) -> (bracket "(" ", " ")" (box top) args; psp(); ps c)
+    | Ty.Tuple l -> bracket "" " * " "" (box star) l
+    | Ty.Arrow (None, f, a) -> (box left f; ps " -> "; right a)
+    | Ty.Arrow (Some id, f, a) -> assert false
+    | Ty.Var v -> (ps "'"; ps v)
+  and arg t = match t with
+    | Ty.Tuple _ -> parens t
+    | Ty.Arrow _ -> parens t
+    | _ -> top t
+  and star t = arg t 
+  and left t = match t with
+    | Ty.Arrow _ -> parens t
+    | _ -> top t
+  and right t = top t  in
+  let eqn t = (ps " = "; box' 2 top t) in
+  let rep = function
+    | Ty.Product fs -> bracket' "{ " (fun () -> printf "@,; ") (fun () -> printf "@,}")
+                       (box (fun (n, t) -> (ps n; ps " : "; box top t))) fs
+    | Ty.Sum alts   ->
+        let alt = function
+          | (n, None)   -> (ps "| "; ps n)
+          | (n, Some t) -> (ps "| "; ps n; ps " of "; box top t)  in
+        List.iter (box alt) alts  in
+  let opt f = function
+    | None -> ()
+    | Some x -> (ps " = "; f x)  in
+  fun { Ty.parms=p; Ty.name=n; Ty.eqn=e; Ty.rep=r } ->
+    ( ps "type "
+    ; box top (Ty.App (n, List.map (fun x -> Ty.Var x) p))
+    ; opt eqn e
+    ; opt (cbox rep) r
+    ; Format.print_newline ()
+    )
+

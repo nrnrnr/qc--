@@ -1,0 +1,24 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+<<camlburg.mli>>=
+type cost = int
+type 'a ntrec = { cost : cost; action : unit -> 'a }
+val infinity : 'a ntrec
+val choice : (cost * (unit -> 'a)) list -> 'a ntrec
+val matches : 'a -> 'a -> cost
+<<camlburg.ml>>=
+type cost = int
+type 'a ntrec = { cost : cost; action : unit -> 'a }
+let infinity = { cost = 32767; action = fun () -> assert false }
+
+let rec choice = function
+  | [] -> infinity
+  | [(c, a)] -> { cost = c; action = a }
+  | (c, a) :: t ->
+      let t = choice t in
+      if c < t.cost then { cost = c; action = a } else t
+
+let choice = (choice : (cost * (unit -> 'a)) list -> 'a ntrec)
+
+let matches c k = if c = k then 0 else infinity.cost
+

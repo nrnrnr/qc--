@@ -1,0 +1,92 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Putting rules into normal form}
+
+The normal form says that children of constructor applications are
+never constructor applications.
+
+To put a set of rules into normal form, we introduce new nonterminals
+to stand for subtrees.  The cost of matching the subtree is zero, and
+the semantics are to produce a tuple of free variables.
+<<norm.mli>>=
+val normalize : Spec.rule list -> Spec.rule list
+@ 
+<<norm.ml>>=
+module S = Spec
+module TreeMap = Map.Make (Spec.TreeComp)
+
+type state
+  = S.nonterm TreeMap.t (* for each tree, what is its nonterminal *)
+  * S.rule list         (* new rules introduced for nonterminal *)
+  
+type 'a m = state -> 'a * state
+let unit x = fun s -> x, s
+let (>>=) m f = fun s -> let (x, s) = m s in f x s
+let fetch = fun s -> s, s
+let rec lift_list = function
+  | [] -> unit []
+  | h :: t -> h >>= fun h -> lift_list t >>= fun t -> unit (h::t)
+
+<<norm.ml>>=
+let mkgen n pfx () = let k = !n in (n := k+1; "_gen" ^ pfx ^ string_of_int k)
+let gensym = mkgen (ref 1) "sym" 
+let gennt = let gen = mkgen (ref 1) in fun s -> gen s ()
+
+<<norm.ml>>=
+let lookup c kids = fun ((ntmap, rules) as s) ->
+  try (TreeMap.find (c, kids) ntmap, s)
+  with Not_found ->
+    let nt = gennt c  in
+    let ntmap = TreeMap.add (c, kids) nt ntmap  in
+    let addVar node vars = match node with
+    | S.Tree _ -> assert false
+    | S.Const _ -> vars
+    | S.Var (name, _) -> name :: vars
+    in let vars = List.fold_right addVar kids []  in
+    let rule = nt, S.Tree (c, kids), Code.Int 0, Code.Tuple (List.map Code.id vars) in
+    (nt, (ntmap, rule :: rules))
+
+<<norm.ml>>=
+let codelet = function
+  | Code.Var x, e, Code.Qualid [x'] when x == x' -> e
+  | Code.Var x, Code.Qualid [x'], e when x == x' -> e
+  | pat, rhs, e -> Code.let' pat rhs e
+
+let rebind kids code =
+  let tuplepat = function [p] -> p | ps -> Code.Con ("", ps) in
+  let tupleval = function [v] -> v | vs -> Code.Tuple vs  in
+  let finish pat rhs = match pat, rhs with
+    | [], [] -> code
+    | _ -> codelet (tuplepat pat, tupleval rhs, code)  in
+  let rec bind pat rhs = function
+    | [] -> finish pat rhs
+    | (_, []) :: t -> bind pat rhs t
+    | (S.Var (v, _), kfree) :: t -> bind (tuplepat kfree::pat) (Code.id v::rhs) t
+    | _ -> assert false (* non-var with free variables *)
+  in bind [] [] kids
+
+<<norm.ml>>=
+let normalize rules =
+  (* put node in normal form, and return that form plus rebinding function *)
+  let rec normnode = function
+    | S.Var _   as t -> unit (t, [])
+    | S.Const _ as t -> unit (t, [])
+    | S.Tree (c, kids) ->
+        lift_list (List.map normnode kids) >>= fun kids ->
+        let ktrees, kfree = List.split kids in
+        lookup c ktrees >>= fun nt ->
+        let name = gensym() in
+        unit (S.Var (name, nt), List.concat kfree)  in
+  let normrule (nt, tree, cost, code) = match tree with
+    | S.Tree (c, kids) ->
+        lift_list (List.map normnode kids) >>= fun kids ->
+          let ktrees, kfree = List.split kids in
+          let code = rebind kids code in
+          let tree = S.Tree (c, ktrees) in
+          unit (nt, tree, cost, code)
+    | _ -> unit (nt, tree, cost, code)  in
+  let m = lift_list (List.map normrule rules) in
+  let (rules, (ntmap, newrules)) = m (TreeMap.empty, []) in
+  rules @ newrules
+    
+@ 
