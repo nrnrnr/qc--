@@ -219,35 +219,43 @@ let cut_args =
 \subsection{Putting it together} 
 % ------------------------------------------------------------------ 
 
-The Alpha demands (\S 6.3.3.2) that a precedure loads the global pointer
+The Alpha demands (\S 6.3.3.2) that a procedure loads the global pointer
 value ($\$27$) into $\$gp$, if the procedure uses large constants. We
 have to assume that this is always the case. How do we implement this
-requirement?
+requirement? Update: currently there is no appropriate mechanism. For
+the Alpha, work is distributed over the code expander, the assembler,
+and the recognizer.
+
+I don't understand the meaning of [[autosp]] and [[postsp]]. On the
+Alpha, the stack pointer does not move during calls. It is once set in
+the prolog of a procedure and set back before the procedure returns. I
+hope the code below reflects this.
 
 <<transformations>>=
-let call_actuals  =
-  C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at (arguments ()))
-    ~autosp:(fun r  -> Block.base r.A.overflow)
-    ~postsp:(fun sp -> sp) in  
-
 let prolog  =
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at (arguments ()))
     ~autosp:(fun _ -> vfp)
     ~postsp:(fun _ -> std_sp_location) in
 
-let call_results  =
-  C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at results)
-    ~autosp:(fun r -> Block.base r.A.overflow)
-    ~postsp:(fun _ -> std_sp_location) in
-
 let epilog  =
   C.outgoing ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at results)
-    ~autosp:(fun r -> Block.base r.A.overflow)
+    ~autosp:(fun r -> std_sp_location)
     ~postsp:(fun _ -> vfp) in
+
+let call_actuals  =
+  C.outgoing ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at (arguments ()))
+    ~autosp:(fun r  -> std_sp_location)
+    ~postsp:(fun sp -> sp) in  
+
+let call_results  =
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at results)
+    ~autosp:(fun r -> std_sp_location)
+    ~postsp:(fun _ -> std_sp_location) in
+
 
 let also_cuts_to =
   C.incoming ~growth ~sp
