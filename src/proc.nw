@@ -22,24 +22,23 @@ main purpose of this module is to provide a centralized defintion and
 documentation for it.
 
 <<type t>>=
+type overflow = (Block.t list, Block.t list) Call.split_blocks
 type ('automaton, 'cfg, 'cc, 'tgt) t = 
-    { symbol:             Symbol.t           (* of procedure *)
-    ; cc:                 'cc                (* calling convention                   *)
-    ; target:             'tgt               (* target of this procedure             *)
-    ; temps:              Talloc.Multiple.t  (* allocator for temporaries            *)
-    ; mk_symbol:          string -> Symbol.t (* allocator for symbols            *)
-    ; cfg:                'cfg               (* control-flow graph                   *)
-    ; oldblocks_caller:   Block.t list    (* stack - incoming parms, outgoing results *)
-    ; oldblocks_callee:   Block.t list    (* stack - incoming parms, outgoing results *)
-    ; youngblocks_callee: Block.t list    (* stack - outgoing parms, incoming results *)
-    ; youngblocks_caller: Block.t list    (* stack - outgoing parms, incoming results *)
-    ; stackd:             Block.t            (* stack - user stack data              *)
-    ; conts:              Block.t            (* pairs of pointers for conts *)
-    ; sp:                 Block.t            (* the `standard' location of sp in body *)
-    ; priv:               'automaton         (* stack - spill slots etc - still open *)
-    ; eqns:               Rtleqn.t list      (* eqns for compile time consts *)
-    ; vars:               int                (* number of local vars + parameters *)
-    ; mutable varMap:     Rtl.Private.loc VarMap.t
+    { symbol:         Symbol.t           (* of procedure *)
+    ; cc:             'cc                (* calling convention                   *)
+    ; target:         'tgt               (* target of this procedure             *)
+    ; temps:          Talloc.Multiple.t  (* allocator for temporaries            *)
+    ; mk_symbol:      string -> Symbol.t (* allocator for symbols            *)
+    ; cfg:            'cfg               (* control-flow graph                   *)
+    ; oldblocks:      overflow           (* stack - incoming parms, outgoing results *)
+    ; youngblocks:    overflow           (* stack - outgoing parms, incoming results *)
+    ; stackd:         Block.t            (* stack - user stack data              *)
+    ; conts:          Block.t            (* pairs of pointers for conts *)
+    ; sp:             Block.t            (* the `standard' location of sp in body *)
+    ; priv:           'automaton         (* stack - spill slots etc - still open *)
+    ; eqns:           Rtleqn.t list      (* eqns for compile time consts *)
+    ; vars:           int                (* number of local vars + parameters *)
+    ; mutable varMap: Rtl.Private.loc VarMap.t
     }
 @
 
@@ -50,14 +49,12 @@ type ('automaton, 'cfg, 'cc, 'tgt) t =
 \item [[temps]]:               an allocator for temporaries
 \item [[mk_symbol]]:           an allocator for symbols
 \item [[cfg]]:                 the control-flow graph of the procedure.
-\item [[oldblocks_caller]]:    stack area for incoming parameters, allocated by the
-                               caller.
-\item [[oldblocks_callee]]:    stack area for incoming parameters, allocated by the
-                               callee.
-\item [[youngblocks_caller]]:  stack area for outgoing parameters, deallocated by the
-                               caller.
-\item [[youngblocks_callee]]:  stack area for outgoing parameters, deallocated by the
-                               callee.
+\item [[oldblocks]]:    stack area for incoming overflow parameters or
+outgoing overflow results, some allocated by the
+                               caller and some by the callee
+\item [[youngblocks]]:  stack area for outgoing overflow parameters or
+incoming overflow results, some deallocated by the
+                               caller and some by the callee.
 \item [[incoming]]:            stack area for incoming parameters.
 \item [[outgoing]]:            stack area for outgoing parameters.
 \item [[stackd]]:              User stack data, from the [[stack data]] construct.
