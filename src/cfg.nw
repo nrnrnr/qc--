@@ -1,0 +1,1002 @@
+
+\input{macros.tex}
+
+% l2h substitution dots ...
+% l2h substitution ast AST
+% l2h substitution AST AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Abstract CFG Interface}
+% ------------------------------------------------------------------ 
+
+The dynamic part of a procedure is represented by a control flow
+graph:  nodes represent statements, and edges possible flow of control
+between statements.  This interface allows to build a control flow
+graph for a procedure.  Many aspects are left abstract to foster
+different implementations.
+
+The interface is divided into two parts:  the first defines types that
+are used in the interface and also shared among all implementations. 
+The second part defines a module type [[S]] that describes the
+interface to functions for building a flow graph. 
+
+<<acfg.mli>>=
+<<shared types>>
+module type S = sig
+    <<signature S>>
+end
+@
+
+<<acfg.ml>>=
+<<shared types>>
+module type S = sig
+    <<signature S>>
+end
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Shared Types}
+% ------------------------------------------------------------------ 
+
+The abstract interface defines some types that are used in the
+interface and that are shared among all implementations of the
+interface.  The goal is to have no generative type declarations in the
+main signature [[S]] in order to allow the stack implementations onto
+each other.
+
+A control flow graph contains shared nodes.  To express this sharing
+at the level of the interface, some nodes are referred to by name.  A
+name can be used as a reference even \emph{before} the node labeled
+with that name is defined.  The interface demands nodes to be labeled
+that are likely to be labeled in the {\PAL} source code as well.
+
+Usually a control flow graph contains no labels:  edges between nodes
+express the connection between nodes and there is no need to use names
+for this.  In this particular case however, labels are represented as
+nodes with one successor.  The purpose of these nodes is to store
+names for labels in the [[cfg]] which can be used when the [[cfg]] is
+transformed or visualized.  Since a label $l$ and its successor $x$
+are two different nodes, $x$ can be reached directly in the graph and
+not only by paths via $l$.  This is completely legal. 
+
+Continuations can be used to model exception handling. Nodes that can
+transfer control to a continuation are annotated with a [[cuts]] value
+that lists the different possible nodes/continuations.
+
+<<shared types>>=
+type label      = string
+type cuts =     { cuts    : label list
+                ; unwinds : label list
+                ; returns : label list
+                ; aborts  : bool
+                }
+@
+
+When arguments and results to and from procedure are passed around
+with [[copy]] nodes a [[context]] value identifies the exact purpose of
+a copy.  This information is necessary to find the right calling
+convention to implement the copying. 
+                           
+<<>>=
+type context    = ProcParameters
+                | ProcResults
+                | ContParameters
+@
+
+
+A formal parameter is a variable, an actual parameter an expression. 
+Both can have optional hints, and have a [[width]], i.e.~a type. 
+
+<<>>=
+type formal =   { name:      string 
+                ; width:     Rtl.width       (* bits *)
+                ; hint:      string option   (* C-- hint *)
+                ; index:     int             (* run-time API *)
+                } 
+
+type actual     = Rtl.expr 
+                * Rtl.width 
+                * string option               (* hint *)
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Constructor Functions}
+% ------------------------------------------------------------------ 
+
+The constructor functions below build a flow graph [[cfg]].  A flow
+graph is initialized with an implementation dependent value [[init]]. 
+Every [[node]] belongs to exactly one flow graph that is returned by
+[[cfg_of]] when applied to the [[node]]. 
+
+<<signature S>>=
+type cfg        (* control flow graph *)
+type node       (* a node in a cfg    *)
+type unode      (* unmarked node      *)
+type init       (* initializes a cfg  *)
+
+val create:     init -> cfg
+val cfg_of:     node -> cfg
+@
+
+Nodes have to have properties---notably, span bindings.  We don't want
+to have to pass properties to every node-creation function.  So
+instead, we add a new type:  [[unode]], for ``unmarked node.'' We then
+use [[bind]] to add properties.
+
+\begin{itemize}
+\item Span bindings allow to mark regions of source code with a
+      compile-time constant key, and a link-time constant value.
+\item Comments attached to nodes by [[add_comment]] help to debug
+      generated code. A comment must not contain a newline character. 
+\end{itemize}
+
+<<>>=
+module Props : sig 
+    type t          (* properties *)
+
+    val empty       : t
+    val add_span    : Bits.bits -> Rtl.const -> t -> t
+    val add_comment : string -> t -> t 
+end    
+    
+val bind : Props.t -> unode -> node
+@
+
+A labeled node can be referenced by name (using a [[label]] value)
+that must be unique within a [[cfg]].  As noted above, a [[label]] can
+be used before it is attached to a node and thus allows to express
+sharing of nodes. 
+
+<<>>=
+(* label *)
+val label:      label -> node -> unode
+@
+
+A control flow graph is built from back to front, starting with the
+unique [[exit]] node of a procedure, and moving to the unique
+[[entry]] node.  The following functions create nodes that change the
+flow of control or end a procedure.  Target nodes for jumps and
+exceptions are referenced by name. 
+
+All construction functions take [[nodes]] as arguments but create
+[[unode]] values, that is, unmarked nodes.  An [[unode]] is
+transformed into a [[node]] by [[bind]]'ing properties [[Props.t]] to
+it.
+
+A [[return]] node denotes which return-continuation to be used upon
+its return.  The first [[int]] value is the number of the continuation
+to be used at its point of return, the other the total number of
+continuation at its point of return.
+
+<<>>=
+(* 0 successor nodes *)
+val exit:       cfg -> unode
+val goto:       cfg -> Rtl.expr -> label list -> unode
+val jump:       cfg -> Rtl.expr -> label list -> unode
+val cutto:      cfg -> Rtl.expr -> cuts       -> unode
+val return:     cfg -> int -> int             -> unode
+@
+
+The following nodes are lying on a control flow path and thus have a
+single successor.  For calls the normal point of return is given as a
+[[node]], all exceptional points of return by name inside a [[cuts]]
+value. 
+
+Copy-in and copy-out nodes carry informations about formal and actual
+parameters, the calling convention to be used and their context. 
+
+<<>>=
+(* 1 successor node *)
+val entry:      node -> unode                   (* unique entry node *)
+val assign:     Rtl.rtl -> node -> unode
+val copyi:      formal list -> context -> Target.conv -> node -> unode
+val copyo:      actual list -> context -> Target.conv -> node -> unode
+val call:       Rtl.expr -> node -> cuts -> unode 
+@
+
+A [[branch]] node has two successors: the first is taken when its
+expression evaluates to true, and the other otherwise. Since a control flow
+graph is built from the bottom up, both successors are known when the
+branching point is reached.
+
+<<>>=
+(* 2 successor nodes *)
+val branch  : Rtl.expr -> node -> node -> unode
+@
+
+
+% ------------------------------------------------------------------ 
+\section{CFG Implementation}
+% ------------------------------------------------------------------ 
+
+This module implements the abstract CFG interface and provides the
+lowest level implementation for the {\qcc} compiler.  Despite what the
+interface says, this implementation does not provide [[copyi/o]]
+nodes.  We expect them to be implemented as a sequence of [[assign]]
+nodes by a higher level implementation.
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+This module implements the abstract CFG interface plus some extras.
+The latter include a way to translate a control flow graph back into
+abstract {\PAL} syntax to make is visible via pretty-printing. This
+translation requires some knowledge about the sizes of pointers and
+the like and is provided as a functor argument of type [[TARGET]] to
+functor [[Make]].
+
+<<cfg.mli>>=
+module type TARGET = sig
+    val t: Target.info
+end
+
+module Make (T: TARGET): sig
+    include Acfg.S
+
+    (* extras *)
+
+    module Map:     Map.S with type key = node
+    val init:       cfg -> init
+    val stmts:      cfg -> (string -> string) -> Ast.stmt list
+    
+end with
+    type init = string * Fenv.Clean.proc
+    
+@
+
+
+
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation - Building the CFG}
+% ------------------------------------------------------------------ 
+
+Nodes are identified by integer [[id]]s. A [[cfg] maintains a counter
+[[nid]] which is used to generate fresh [[id]]s for nodes. Every node 
+includes the [[cfg]] it belongs to. 
+
+<<cfg.ml>>=
+module type TARGET = sig
+    val t: Target.info
+end
+
+module Make (T: TARGET) = struct
+    <<module Make>>
+end
+
+<<module Make>>=
+type init       = string * Fenv.Clean.proc
+type id         = int
+
+module Props = struct
+    <<module Props>>
+end
+
+type cfg =      { init:             init
+                ; mutable entry:    node option
+                ; mutable exit:     node option
+                ; by_label:         (string,node) Hashtbl.t
+                ; mutable nid:      id          (* counter for node id *)
+                }
+
+and node =      { cfg:              cfg         (* cfg this b!}elongs to *)
+                ; id:               id          (* unique with cfg       *)
+                ; mutable pred:     node list   (* predecessors          *)
+                ; mutable props:    Props.t     (* properties            *)
+                ; mutable kind:     kind        (* details               *)
+                }
+and unode =     Props.t -> node
+
+
+@
+
+The [[kind]] field of a [[node]] details the node's purpose.  A
+special kind [[Deferred]] is uses for nodes which are referenced by
+name, but haven't yet defined.  They are entered into the [[by_label]]
+table of the [[cfg]] and given the [[Deferred]] kind.  When the
+corresponding node is defined, all missing informations will be added.
+
+<<>>=
+and  kind       = Deferred
+                (* end of a path *) 
+                | Exit
+                | Goto              of Rtl.expr * node list     
+                | Jump              of Rtl.expr * node list
+                | Cutto             of Rtl.expr * cuts
+                | Return            of int * int
+                (* one successor *)
+                | Entry             of node
+                | Call              of Rtl.expr * node * cuts
+                | Assign            of Rtl.rtl * node
+                | Label             of Acfg.label * node
+                (* two successors *)
+                | Branch            of Rtl.expr * node * node
+@
+
+Continuations that a [[call] or [[cutto]] node may reach are
+represented as nodes and no longer as labels as they are in the
+interface.
+
+<<>>=
+and cuts =      { cuts:             node list
+                ; unwinds:          node list
+                ; returns:          node list
+                ; aborts:           bool
+                }
+
+module Compare = struct
+    type t = node
+    let compare x y = compare x.id y.id
+end
+@
+
+Properties are modeled as functional records. A [[node]] can have any
+number of comments are be part of any number of spans.
+
+<<module Props>>=
+type t =        { comments:         string list
+                ; spans:            (Bits.bits * Rtl.const) list
+                }
+                        
+let empty           = { comments = []; spans = [] }
+let add_comment s t = { t with comments = s::t.comments  }
+let add_span x y  t = { t with spans    = (x,y)::t.spans }                   
+@
+
+A [[unode]], as returned by all construction functions, is a function
+taking a [[Props.t]] value and returning a [[node]] value.  Binding
+thus is a simple application of the function to the [[Props.t]] value.
+ 
+<<module Make>>=
+let bind props unode = unode props
+@
+
+The [[unode]] construction functions below benefit from some helper
+functions defined here.  All nodes are constructed by [[newNode]];
+this function assigns a fresh [[id]] to the new node and initializes
+the list of predecessors to be empty.
+
+<<>>=
+let newNode cfg kind props =
+    let _ = cfg.nid <- cfg.nid + 1 in
+        { cfg   = cfg
+        ; id    = cfg.nid
+        ; pred  = []
+        ; kind  = kind
+        ; props = props
+        }
+@
+
+When a node is referenced by name, it must be looked up.  In case the
+node is not yet defined, a new [[Deferred]] node is created.  When
+later a node of that name is defined, the [[kind]] field is updated.
+
+<<>>=        
+let lookup cfg label =
+    try  Hashtbl.find cfg.by_label label
+    with Not_found ->
+        let n = newNode cfg Deferred Props.empty in
+        let _ = Hashtbl.add cfg.by_label label n in
+            n
+@
+
+The [[cuts]] bundle in the interface references by name.  The
+implementation references nodes directly and thus must look them up.
+
+<<>>=
+let lookup_cuts cfg c =
+    { cuts    = List.map (lookup cfg) c.Acfg.cuts
+    ; unwinds = List.map (lookup cfg) c.Acfg.unwinds
+    ; returns = List.map (lookup cfg) c.Acfg.returns
+    ; aborts  = c.Acfg.aborts
+    }
+@
+
+Finally, here are the exported functions that create the graph.  An
+empty [[cfg]] has neither entry, nor exit node and just stores the
+[[init]] value.
+
+<<>>=
+let create init = 
+    { init      = init
+    ; entry     = None
+    ; exit      = None
+    ; by_label  = Hashtbl.create 100
+    ; nid       = 0
+    }
+@
+
+Each node contains its graph; the [[cfg_of]] functions returns a node's
+[[cfg]]. 
+    
+<<>>=    
+let cfg_of { cfg=g } = g
+@
+
+Below are all the functions that create nodes in the control flow
+graph. Each function must update the list of predecessors of nodes it
+refers to.
+
+<<>>=
+let exit cfg props = 
+    let node = newNode cfg Exit props  in
+    let _    = cfg.exit <- Some node   in       (* record exit in cfg *)
+        node
+@
+
+An [[entry]] node is also registered in the [[graph]] and has a
+successor, which is back-linked to the node at hand. 
+
+<<>>=
+let entry next props  = 
+    let cfg   = cfg_of next                    in
+    let node  = newNode cfg (Entry next) props in
+    let _     = cfg.entry <- Some node         in
+    let _     = next.pred <- node::next.pred   in
+        node
+@
+
+A [[goto]] node links to all its successors. Successors are given by
+name and thus must be looked up first.
+
+<<>>=
+let goto g expr labels props = 
+    let succ = List.map (lookup g) labels                     in
+    let n    = newNode g (Goto(expr,succ)) props              in
+    let _    = List.iter (fun x -> x.pred <- n::x.pred) succ  in
+        n
+@
+
+A [[branch]] has two successors, which are both back-linked via their
+[[pred]] components.
+
+<<>>=
+let branch expr t f props =
+    let node  = newNode (cfg_of t) (Branch (expr, t, f)) props   in
+    let _     = t.pred <- node::t.pred                           in
+    let _     = f.pred <- node::f.pred                           in
+        node
+@
+
+An assignment is simple; is has a successor that must be linked in.
+
+<<>>=
+let assign rtl next props = 
+    let node = newNode (cfg_of next) (Assign (rtl, next)) props in
+    let _    = next.pred <- node::next.pred                       in
+        node
+@
+
+No [[copy]] nodes are available, as explained above in the interface
+section. 
+
+<<>>=
+let copyi  formals context cc next p = assert false
+let copyo  actuals context cc next p = assert false
+@
+
+A [[return]] node has no successors.
+
+<<>>=
+let return g x y props = newNode g (Return (x,y)) props
+@
+
+A [[call]] takes an expression and a continuation bundle. The normal point
+of return is the successor of the [[call]] node.
+
+<<>>= 
+let call expr next cuts props =
+    let g    = cfg_of next      in
+    let cuts = lookup_cuts g cuts in
+    let node = newNode g (Call(expr,next,cuts)) props in
+    let succ = next :: (List.flatten [cuts.cuts; cuts.unwinds; cuts.returns])in
+    let _    = List.iter (fun x -> x.pred <- node :: x.pred) succ in
+        node
+@
+
+A [[cutto]] and a [[jump]] node have no included successors.  All
+successors are referenced by name and thus must be looked up.
+
+<<>>=
+let cutto g expr cuts props =
+    let cuts = lookup_cuts g cuts                                   in
+    let node = newNode g (Cutto(expr,cuts)) props                   in
+    let succ = List.flatten [cuts.cuts; cuts.unwinds; cuts.returns] in
+    let _    = List.iter (fun x -> x.pred <- node :: x.pred) succ   in
+        node
+
+let jump g expr labels props =
+    let succ = List.map (lookup g) labels                      in
+    let n    = newNode g (Jump (expr,succ)) props              in
+    let _    = List.iter (fun x -> x.pred <- n :: x.pred) succ in
+        n
+@
+
+A labeled node is registered in the graph's [[by_label]] table.  This
+allows to find nodes which are referenced by name, like continuations
+and targets for [[goto]].  When the label was used before its
+definition there is a [[Deferred]] node in the [[by_label]] map.  We
+simply update the [[Deferred]] kind of that node to [[Label]] and are
+done. If the label was never used before, we directly create a
+[[Label]] node and put it into the [[by_label]] map of the [[cfg]].
+
+<<>>=
+let label l node props =
+    let g    = cfg_of node in
+        try let n = Hashtbl.find g.by_label l in
+            ( match n.kind with
+            | Deferred -> 
+                ( n.kind    <- Label(l,node)
+                ; node.pred <- n :: node.pred 
+                (* add props -  todo *)
+                ; n
+                )
+            | _ -> assert false (* defined twice *)
+            )
+        with Not_found -> (* enter node to map and return node *)
+            let n = newNode g (Label(l,node)) props in
+            let _ = Hashtbl.add g.by_label l n      in
+            let _ = node.pred <- n :: node.pred     in
+                n
+@                
+    
+% ------------------------------------------------------------------ 
+\subsection{Implementation - Translation to {\AST}}
+% ------------------------------------------------------------------ 
+
+For debugging we would like to visualize the control flow graph. One
+way of doing this is to translate a [[cfg]] back into {\PAL} syntax.
+Technically is a [[cfg]] translated to {\PAL} abstract syntax (defined
+in module \module{ast}).
+
+The translation functions are grouped together in an internal module
+[[Export]].  The traversal of the control flow graph requires to
+remember the visited nodes.  Module [[NSet]] provides a set of nodes;
+the identity of nodes is based on their (integer) [[id]]s. 
+ 
+
+<<>>=
+module Export = struct
+    module NSet = Set.Make(Compare)
+    module A    = Ast
+
+    <<module Export>>
+end
+@
+
+The main problem of translating a [[cfg]] to an [[Ast.stmt]] [[list]]
+is to express the sharing that is inherent in a [[cfg]].  Sharing is
+expressed by introducing labels at points where control flow paths
+join, and [[goto]]s, where paths split.  Consequently, labels for
+nodes must be invented.  The function [[label_of]] returns a label for
+a node.  In case the node is a [[Label]], it includes a label and this
+one is used.  Otherwise, a label is generated from the node's [[id]]. 
+
+<<module Export>>=
+let label_of mangle node = 
+    let proc = fst (cfg_of node).init in
+    let x = match node.kind with
+        | Label(l,n) -> l
+        | _          -> Printf.sprintf "%s %d" proc node.id 
+    in
+        mangle x
+@
+
+A [[cuts]] value bundles a number of nodes. These are identified by
+names in the {\AST} and as such, names must be generated for them.
+[[flows]] creates an [[Ast.cuts]] value from a [[cuts]] value.
+
+<<>>=
+let flows mangle cuts = 
+        [ A.CutsTo     (List.map (label_of mangle) cuts.cuts)
+        ; A.UnwindsTo  (List.map (label_of mangle) cuts.unwinds)
+        ; A.ReturnsTo  (List.map (label_of mangle) cuts.returns)
+        ]  @ if   cuts.aborts
+             then [A.Aborts]
+             else [] 
+@
+
+The translation of a [[cfg]] to a [[stmt]] [[list]] works from a
+[[cfg]]'s entry node in a depth-first search.  The current node is
+translated, and any newly discovered node put onto a [[todo]] stack. 
+This stack is then processed by either calling [[nextstmt]] or
+[[termstmt]].  When the current node does end the current path of
+control, like [[goto]], [[return]], or [[jump]] it is a terminating
+node and [[termstmt]] is called, and [[nextstmt]] otherwise.  The
+reason for having these two different functions are shared nodes: 
+when the next node on the [[todo]] stack is shared, the current path
+of control must be closed with a [[goto]] to that node.  When the
+current path is already closed, no such [[goto]] must be created
+(although it would not harm).  Below are the functions for the
+translation of the different kind of nodes.
+
+Because of the depth-first processing of the [[cfg]], the exit node is
+usually \emph{not} processed last.  The [[exit]] node is therefore
+translated to a generic [[return]] statement.  \emph{Is [[0/0]] legal
+{\PAL}?}
+             
+<<>>=
+let rec exitStmt visited mangle todo = 
+    A.CommentStmt "exit" :: returnStmt visited mangle todo (0,0) 
+@
+
+Given the introduction above, the translation of most nodes is
+straight forward.
+
+<<>>=
+and entryStmt visited mangle todo next = 
+    A.CommentStmt "entry" :: nextstmt visited mangle (next :: todo)
+
+and gotoStmt visited mangle todo (expr, nodes) =
+    let f n  = label_of mangle n in
+    let goto = A.GotoStmt (Rtl2ast.expr mangle expr, List.map f nodes) in
+    goto :: termstmt visited mangle (nodes @ todo)
+@    
+ 
+We do not try to recover the large scale control flow structure of the
+original program.  A branch is translated into an [[if]] with one
+[[goto]] and a fall-trough case. 
+
+This code relied on the fact that the left node is labeled. Since the
+left node is not necessarily shared, it otherwise won't be labeled in
+the output and thus the goto 
+   
+<<>>=
+and branchStmt visited mangle (todo: node list) (expr,(left: node),(right: node)) = 
+    let _      = assert ( match left.kind with
+                        | Label _ -> true
+                        | _       -> false
+                        ) in
+    let id     = label_of mangle left in
+    let goto   = A.GotoStmt (A.Fetch(A.Var(None,id)),[])            in
+    let s      = A.IfStmt (Rtl2ast.expr mangle expr , [goto] , [])  in
+        s :: nextstmt visited mangle (right :: left :: todo)
+
+and assignStmt visited mangle todo (rtl,next) =
+    let ast = Rtl2ast.translate mangle rtl 
+    in 
+        ast :: nextstmt visited mangle (next :: todo)
+
+and jumpStmt visited mangle todo (expr,labels) =
+    let jmp = A.JumpStmt( None 
+                        , Rtl2ast.expr mangle expr
+                        , [] (* actual parameters *)
+                        , List.map (label_of mangle) labels
+                        ) 
+    in
+        jmp :: termstmt visited mangle (labels @ todo)
+        
+
+and labelStmt visited mangle todo (label,next) =
+    let l = A.LabelStmt(mangle label) in
+        l :: nextstmt visited mangle (next :: todo)
+
+and returnStmt visited mangle todo (x,y) =
+    let e1  = A.Int(Bits.of_int x T.t.Target.wordsize,None) in
+    let e2  = A.Int(Bits.of_int y T.t.Target.wordsize,None) in
+    let ret = A.ReturnStmt(None, Some (e1,e2), [])               in
+        ret :: termstmt visited mangle todo
+
+and callStmt visited mangle todo (expr,next,cuts) =
+    let call = A.CallStmt ( []   (* lvalues *)
+                          , None (* calling conv *)
+                          , Rtl2ast.expr mangle expr
+                          , []   (* actuals *)
+                          , []   (* targets *)
+                          , flows mangle cuts
+                          ) in
+        call :: nextstmt visited mangle (next :: todo)
+
+and cutStmt visited mangle todo (expr,cuts) =
+    let cut = A.CutStmt( Rtl2ast.expr mangle expr
+                       , []
+                       , flows mangle cuts
+                       ) in
+        cut :: termstmt visited mangle todo
+@
+
+The [[dispatch]] function handles all the different kind of nodes and
+calls the respective function from above. No magic involved.
+
+<<>>=
+and dispatch visited mangle todo = function        
+    | Exit                  -> exitStmt    visited mangle todo 
+    | Entry (x)             -> entryStmt   visited mangle todo x
+    | Goto  (e,ll)          -> gotoStmt    visited mangle todo (e,ll)
+    | Branch (e,t,f)        -> branchStmt  visited mangle todo (e,t,f)
+    | Assign (rtl,next)     -> assignStmt  visited mangle todo (rtl,next)
+    | Jump (e,ll)           -> jumpStmt    visited mangle todo (e,ll)
+    | Label (l,next)        -> labelStmt   visited mangle todo (l,next)
+    | Return (x,y)          -> returnStmt  visited mangle todo (x,y)
+    | Call (expr,n,cuts)    -> callStmt    visited mangle todo (expr,n,cuts)
+    | Cutto (expr,cuts)     -> cutStmt     visited mangle todo (expr,cuts)
+    | _                     -> assert false
+@
+
+When a shared node is visited the first time, it must be labeled such
+that all other paths into this node generate a [[goto]] towards it. 
+The [[label]] function returns a label-statement for such a node. 
+When a shared node and previously visited node is encountered, a
+[[goto]] to this node must be generated.  Since the node was visited
+before, the corresponding label was already generated.  The [[goto]]
+function creates the [[goto]] Statement.
+
+
+<<>>=
+and label mangle node =
+    A.LabelStmt(label_of mangle node)         
+
+and goto mangle node =
+    let x    = label_of mangle node in
+    let expr = A.Fetch(A.Var(None,x)) in
+        A.GotoStmt(expr,[])
+@
+
+As explained above, the translation of a [[cfg]] into a [[Ast.stmt]]
+[[list]] is a depth-first traversal of the [[cfg]]. The details are
+handled by the [[stmt]] function.
+
+\begin{itemize}
+\item The first argument [[terminal]] is [[true]], if the statement generated
+      last ends a control flow path and control flow thus never falls
+      through into the node on top of the [[todo]] stack. 
+
+\item The translation of a [[cfg]] is complete, if the [[todo]] stack
+      is empty.
+
+\item Otherwise, the top element is removed from the stack and added
+      to the set of [[visited']] set.
+
+\item Most nodes lie on a path and have exactly one predecessors, that
+      is, they are not on different paths. These are simply passed to
+      [[dispatch]] to be translated. 
+
+\item A node with more that one predecessor is shared between
+      different paths and requires special treatment. If it is visited
+      the first time, a label must be generated, before it can be
+      [[dispatch]]'ed. 
+
+\item A shared node that has been visited before must not be visited again
+      to not generate the same code twice.  When such a node is
+      encountered, it must not be processed but a [[goto]] to this
+      node must be generated instead.  However, if the previously
+      generated statement never passes control to the node at hand
+      ([[terminal]] is [[true]]), this [[goto]] can be omitted. 
+
+\item A node with just one predecessor on the [[todo]] stack can never
+      been visited twice:  after it was processed the first time, any
+      second path trough this node must enter a shared note dominating
+      the node at hand.  Because the shared node was also visited, it
+      is not entered a second time on the [[todo]] stack, but a
+      [[goto]] to it is generated instead.  Consequently, the node at
+      hand never gets pushed a second time on the [[todo]] stack.
+      
+\end{itemize} 
+        
+<<>>=
+and stmt terminal visited mangle = function
+    | []    -> []
+    | n::nn ->  
+        let todo     = nn                 in
+        let visited' = NSet.add n visited in
+            if List.length n.pred > 1 then (* shared node *)
+                if NSet.mem n visited then (* node has been labeled *)
+                        if terminal then 
+                            termstmt visited' mangle todo
+                        else (* goto the node *)
+                            goto mangle n :: termstmt visited' mangle todo 
+                else (* label this node *)
+                    label mangle n :: dispatch visited' mangle todo n.kind
+            else (* regular node *)
+                ( assert (not (NSet.mem n visited))
+                ; dispatch visited' mangle todo n.kind
+                )
+
+and nextstmt visited mangle todo = stmt false visited mangle todo
+and termstmt visited mangle todo = stmt true  visited mangle todo
+@
+
+The [[stmts]] function translates a [[cfg]] into a list of statements
+by pushing the [[entry]] node on the [[todo]] stack. 
+
+<<>>=
+let stmts cfg mangle = 
+    match cfg.entry with
+        | None      -> []
+        | Some node -> nextstmt NSet.empty mangle [node]
+@
+        
+% ------------------------------------------------------------------ 
+\subsection{Extras}
+% ------------------------------------------------------------------ 
+
+This module implements some extras, which are announced in the
+interface.  This is polymorphic map that allows to attach informations
+to nodes.  The [[stmts]] function translates a [[cfg]] to a list of
+statements such that it can be visualized via pretty printing the
+{\AST}.  And [[init]] provides access to the value stored in a [[cfg]]
+when it is created.
+ 
+
+<<module Make>>=
+module Map = Map.Make(Compare)
+
+let stmts         = Export.stmts
+let init {init=i} = i
+@
+
+
+% ------------------------------------------------------------------ 
+\section{Lowering Copy-In and Copy-Out Nodes}
+% ------------------------------------------------------------------ 
+
+The flow graph of a procedure, as part of the assembly program emitted
+by the \module{ast2ir} module, contains so-called copy-in and copy-out
+nodes.  They represent the conventions for parameter passing on an
+abstract level.  When the calling conventions are known, these nodes
+can be replaced by sequences of nodes that pass parameters in
+registers and memory.  This module transforms a flow graph to a
+slightly different flow-graph without copy-nodes.
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+This module provides a functor [[Make]] that creates a
+module, that implements an abstract flow graph. The implementation of
+[[MakeLowerCopy]] has itself a (lower-level) implementation of an
+abstract flow-graph available. 
+
+The flow-graph implementation created by [[Make]] will represent
+[[copy_in]] and [[copy_out]] nodes in terms of simpler nodes.  We
+reveal some facts of the implementation using [[with]] constraints.
+
+<<lowercopy.mli>>=
+module Make(G: Acfg.S): Acfg.S 
+    with type cfg        = G.cfg
+    with type init       = G.init
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The implementation for the most part just uses the lower level
+implementation [[G]] to define the new one. Only two functions
+actually differ from the implementation in [[G]]: [[copy_in]] and
+[[copy_out]]. 
+
+<<lowercopy.ml>>=
+module Make(G: Acfg.S) = struct
+    module A  = Automaton
+    module T  = Target
+    <<module make>>
+end
+@
+
+A [[copy]] node is implemented as a sequence of [[G.node]]s from the
+lower-level implementation.  Since properties can be bound later to a
+node we have a problem:  the [[bind]] function must bind the
+properties to all nodes that represent a [[copy]] node.  We solve the
+problem by escaping to higher order functions:  a [[unode]] is
+represented as a function.  A typical call like [[exit g]] creates a
+function [[unode]] that expects properties.  Only after the properties
+are supplied, the implementation is invoked.  This permits the
+implementation to use the properties.  In case of the [[copy]] nodes
+the properties can be passed to all primitive nodes that implement a
+[[copy]] node. 
+ 
+<<module make>>=
+type init       = G.init
+type cfg        = G.cfg
+type node       = G.node
+type unode      = G.Props.t -> G.node
+
+module Props    = G.Props
+
+let bind props unode = unode props
+
+let create          = G.create
+let cfg_of          = G.cfg_of
+let exit g p        = G.bind p (G.exit g) 
+let entry n p       = G.bind p (G.entry n)
+let goto g e l p    = G.bind p (G.goto g e l)
+let branch e x y p  = G.bind p (G.branch e x y)
+let assign r n p    = G.bind p (G.assign r n)
+let call e n c p    = G.bind p (G.call e n c)
+let jump g e l p    = G.bind p (G.jump g e l)
+let cutto g e c p   = G.bind p (G.cutto g e c)
+let label l n p     = G.bind p (G.label l n)
+let return g x y p  = G.bind p (G.return g x y)
+
+<<copyio>>      
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Copy-In}
+% ------------------------------------------------------------------ 
+
+The [[copy_in]] node is responsible for receiving parameters passed
+from a call to a procedure, from a return to the point of return, or
+from a cut to a continuation.  The location of the parameters are
+determined by an [[Automaton.t]] that is part of the calling
+convention [[conv]].  The formal parameters [[formals]] are pushed
+through the automaton to obtain the locations of the incoming
+parameters.  An incoming value is assigned to its corresponding
+variable from the list of formal parameters.
+
+<<copyio>>=
+let copyi formals context conv after props =
+    let dfa = ( match context with
+              | Acfg.ProcParameters -> conv.T.proc_param
+              | Acfg.ProcResults    -> conv.T.proc_result
+              | Acfg.ContParameters -> conv.T.proc_param
+              ) in
+    let rec loop dfa = function  
+        | []         -> after
+        | frml :: ff ->
+            let (write,read),dfa = A.Run.next dfa (Types.bits frml.Acfg.width
+                                                  , frml.Acfg.hint
+                                                  ) in
+            let var = Rtl.Var ( frml.Acfg.name
+                              , frml.Acfg.index
+                              , frml.Acfg.width
+                              )        in
+            let t     = Rtl.Const(Rtl.Bool(true))         in
+            let store = Rtl.Store(var,read,frml.Acfg.width) in
+            let rtl   = Rtl.Rtl [t,store]                 in
+                assign rtl (loop dfa ff) props
+    in
+        loop dfa formals
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Copy-Out}
+% ------------------------------------------------------------------ 
+
+A [[copy_out]] node takes the values of actual parameters and puts
+them into locations determined by calling conventions.  A [[copy_out]]
+node is typically followed by a call, or a [[cut to]] that transfers
+control to code that receives the values. 
+
+Constructing the {\rtl} that assigns the value of an actual parameter
+to a location is easy: the calling convention automaton returns a
+function [[write: Rtl.expr -> Rtl.effect]] that assigns a supplied
+value to the right location.
+              
+<<copyio>>=
+let copyo actuals context conv after props = 
+    let dfa = ( match context with
+              | Acfg.ProcParameters -> conv.T.proc_param
+              | Acfg.ProcResults    -> conv.T.proc_result
+              | Acfg.ContParameters -> conv.T.proc_param
+              ) in
+    let rec loop dfa = function  
+        | []                     -> after
+        | (expr,width,hint):: ff ->
+            let (write,read),dfa = A.Run.next dfa ( Types.bits width
+                                                  , hint
+                                                  )       in
+            let t     = Rtl.Const(Rtl.Bool(true))         in
+            let rtl   = Rtl.Rtl [t,write expr]            in
+                assign rtl (loop dfa ff) props
+    in
+        loop dfa actuals
+@
+
+
+
