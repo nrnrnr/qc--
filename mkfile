@@ -16,13 +16,18 @@ SUBDIRS =       cllib asdl src
 # high level targets
 # ------------------------------------------------------------------ 
 
-update all:V:
+update all:V: dirs
                 for i in $SUBDIRS; do (cd $i && mk $target); done
 
 clean:V:
                 for i in $SUBDIRS; do (cd $i && mk $target); done
                 rm -f bin/* lib/* man/man*/*
 
+# make sure appropriate empty directories exist
+dirs:V:
+        for i in bin lib man man/man1; do
+          [ -d $i ] || mkdir $i
+        done
 
 # ------------------------------------------------------------------ 
 # build distributions
