@@ -28,7 +28,7 @@ create(char *f, int mode, int perm)
 	m |= O_CREAT|O_TRUNC;
 
 	if(perm & CHDIR){
-		if(mkdir(f,0) < 0)
+		if(mkdir(f, perm) < 0)
 			return -1;
 		perm &= CHDIR;
 		m &= 3;
