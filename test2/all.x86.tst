@@ -10,6 +10,7 @@ function norun(file) return { source = file, runnable="false" } end
 Test.source  = "src"
 Test.files = { "add.c--"
              , "bits-bug.c--"
+             , "bool.c--"
              , "blockcpy.c--"
              , "cut.c--"
              , "arglist.c--"

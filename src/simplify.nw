@@ -435,11 +435,16 @@ let lobits w args   = match (w,args) with
 | [i;j], [x] when i = j -> x
 | _         -> default "lobits" w args
 <<RTL operator implementations>>=
+let unsigned n w = RP.Const (RP.Bits (Bits.U.of_int n w))
+
 let zero1 = Bits.U.of_int 0 1
 let one1  = Bits.U.of_int 1 1
 let bool w args = assert (w = []); match args with
 | [RP.Const (RP.Bits x)] -> RP.Const (RP.Bool (Bits.Ops.ne x zero1))
+| [RP.App (("lobits", [w; 1]), [x])] ->
+    RP.App (("ne", [w]), [RP.App (("and", [w]), [x; unsigned 1 w]); unsigned 0 w])
 | _ -> default "bool" w args
+
 
 let bit w args = assert (w = []); match args with
 | [RP.Const (RP.Bool b)] -> RP.Const (RP.Bits (if b then one1 else zero1))
