@@ -41,10 +41,157 @@ module F = Fatenv
 module G = Fgraph
 @
 
+<<>>=
+let rec ty env = function
+    | A.TyAt(x,_)       -> ty env x
+    | A.BitsTy(n)       -> true
+    | A.AliasTy(name)   -> true
+
+<<>>=
+let rec lvalue env = function
+    | A.LValueAt(x,_)   -> lvalue env x
+    | A.Var(None,x)     -> true
+    | A.Var(Some h,x)   -> true
+    | A.Mem(t,e,a)      -> true
+     
+
+<<>>=
+and actual env = function
+    | (Some hint, e) -> true
+    | (None     , e) -> true
+
+<<>>=
+and actuals env xs = true
+
+<<>>=
+and expr env = function
+    | A.ExprAt(x,_)             -> expr env x
+    | A.Int( i, None)           -> true
+    | A.Int( i, Some t)         -> true
+    | A.Float( f, None)         -> true
+    | A.Float( f, Some t)       -> true
+    | A.Char( c, None)          -> true
+    | A.Char( c, Some t)        -> true
+    | A.Fetch(v)                -> true
+    | A.BinOp(l,op,r)           -> true
+    | A.UnOp(op,e)              -> true
+    | A.PrimOp(n,xs)            -> true
+
+
+<<>>=
+let memsize env = function
+    | A.NoSize        -> true
+    | A.DynSize       -> true
+    | A.FixSize(e)    -> true
+
+<<>>=
+let rec init env = function
+    | A.InitAt(x,_)   -> init env x
+    | A.InitExprs(es) -> true
+    | A.InitStr(s)    -> true
+    | A.InitUStr(s)   -> true
+
+<<>>=
+let rec datum env = function
+    | A.DatumAt(x,_)        -> datum env x
+    | A.Label(n)            -> true
+    | A.Align(a)            -> true
+    | A.MemDecl(t,m,Some i) -> true
+    | A.MemDecl(t,m,None)   -> true
+
+<<>>=
+let formal (h, v, t, n) = true
+
+<<>>=
+let formals  env xs               = true
+let register env (v , t, n, reg)  = true
+let altcont  env (e1,e2)          = true   
+let targets env                   = true 
+    
+<<>>=
+let rec flow env = function
+    | A.FlowAt(x,_)     -> flow env x
+    | A.CutsTo(ns)      -> true
+    | A.UnwindsTo(ns)   -> true
+    | A.ReturnsTo(ns)   -> true
+    | A.Aborts          -> true
+
+<<>>=
+let flows env       = true
+let conv env        = true
+let export env t ns = true
+
+<<>>=
+let range env = function
+    | A.Point(e)        -> true
+    | A.Range(e1,e2)    -> true
+
+<<>>=
+let rec stmt env = function
+    | A.StmtAt(x,_)                        -> stmt env x
+    | A.IfStmt ( e, ss1, ss2)              -> true
+    | A.LabelStmt(n)                       -> true
+    | A.ContStmt(n,ns)                     -> true
+    | A.SpanStmt(e1,e2,ss)                 -> true
+    | A.AssignStmt(lhs,rhs)                -> true
+    | A.CallStmt(lhs, cc, e, args, ts, fs) -> true
+    | A.PrimStmt(lhs, cc, n, args, fs)     -> true
+    | A.GotoStmt(e,ts)                     -> true
+    | A.CutStmt(e, args, fs)               -> true
+    | A.ReturnStmt(cc, alt, args)          -> true
+    | A.JumpStmt(cc,e,args,ts)             -> true
+    | A.EmptyStmt                          -> true
+    | A.SwitchStmt (r,e,arms)              -> true
+        
+<<>>=
+and body env = function
+    | A.BodyAt(x, _)    -> body env x
+    | A.DeclBody(d)     -> true
+    | A.StmtBody(s)     -> true
+    | A.DataBody(dd)    -> true
+    
+<<>>=
+and proc env (cc,n,fs,ss) =  true
+
+<<>>=
+and decl env = function
+    | A.DeclAt(x,_)    -> decl env x
+    | A.Import( t, ns) -> true
+    | A.Export( t, ns) -> true
+    | A.Const (t,n,e)  -> true
+    | A.Registers( rs) -> true
+    | A.Typedef (t,nn) -> true
+    | A.Target (arch)  -> true
+    | A.Pragma         -> true
+
+<<>>=
+and section env = function
+    | A.SectionAt(x,_)     -> section env x
+    | A.Decl(d)            -> true
+    | A.Datum( d)          -> true
+    | A.Procedure(p)       -> true
+    | A.SSpan( e1, e2, ss) -> true
+            
+<<>>=
+and arm env = function
+    | A.ArmAt(x,_)          -> arm env x
+    | A.Case(ranges, stmts) -> true
+    
+<<>>=
+let rec toplevel env = function
+    | A.ToplevelAt(x, _)  -> toplevel env x
+    | A.Section(name, ss) -> true
+    | A.TopDecl(d)        -> true
+    | A.TopProcedure(p)   -> true
+
+<<>>=
+let program env ds = true
+@
+
 The function [[ast2ir]] scans, parses, and checks a file before the
 translation in this module can start.
 
-<<>>=
+<<ast2ir.ml>>=
 let ast2ir file =
     let fd          = try open_in file
                       with Sys_error(msg) -> E.error msg    in
