@@ -50,7 +50,7 @@ int             Cmm_ChangeActivation(Cmm_Activation *a);
 void           *Cmm_FindLocalVar(const Cmm_Activation *a, unsigned n);
 unsigned        Cmm_LocalVarCount(const Cmm_Activation *a);
 void           *Cmm_FindDeadLocalVar(const Cmm_Activation *a, unsigned n);
-void           *Cmm_FindStackData(const Cmm_Activation *a, unsigned n);
+void           *Cmm_FindStackLabel(const Cmm_Activation *a, unsigned n);
 Cmm_Dataptr     Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token);
 Cmm_Cont        Cmm_GetUnwindCont(const Cmm_Activation *a, Cmm_Word index);
 @ 
@@ -408,11 +408,11 @@ void *Cmm_FindDeadLocalVar(const Cmm_Activation *a, unsigned n) {
 }
 @ 
 
-[[Cmm_FindStackData]] should return a pointer to the location in memory
+[[Cmm_FindStackLabel]] should return a pointer to the location in memory
 associated with the given activation's [[n]]th stackdata label.
 
 <<stack-walking functions>>=
-void *Cmm_FindStackData(const Cmm_Activation *a, unsigned n) {
+void *Cmm_FindStackLabel(const Cmm_Activation *a, unsigned n) {
   table t = a->proc->stackdata_labels;
   lua_State *L = t.L;
   int nlabels;
@@ -422,7 +422,7 @@ void *Cmm_FindStackData(const Cmm_Activation *a, unsigned n) {
   lua_pushtable(L, t);
   nlabels = lua_getn(L, -1);
   if (n >= nlabels) {
-    fprintf(stderr, "Cmm_FindStackData received too big of an 'n' for "
+    fprintf(stderr, "Cmm_FindStackLabel received too big of an 'n' for "
                     "activation 'a' of procedure [%s]\n", a->name);
     runtime_sys_err();
   }
