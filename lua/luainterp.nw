@@ -154,12 +154,22 @@ Everybody else can use a call that falls back to the fallback.
 If the types don't match, we have to do something.
 This problem has no counterpart in the C~version, in which it's up to
 each individual C~routine to worry about type mismatches.
+
+\begin{quote}\it
+    I'm not sure that the [[Invalid_argument]] excpetion should be
+    caught here. It is hard to find the cause of the problem without a
+    stack trace. --CL
+\end{quote}
+
 <<interp toplevel>>=
 let cpscall f args g k = match f with
   | V.Function (_, f) ->
-      k (try (f g args) with
+      k  ( try (f g args) with
          | V.Projection (v, what) -> <<projection error fallback>>
-         | Invalid_argument msg -> <<argument error fallback>>)
+        (*** need the stack trace
+         | Invalid_argument msg -> <<argument error fallback>>
+         ***)
+         ) 
   | v -> k (fallback "function" g (v :: args))
 
 let apply f g args = cpscall f args g (fun x -> x)
