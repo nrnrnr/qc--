@@ -1,0 +1,84 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>(<a href="#$1.dvi">.dvi</a>)
+% l2h macro exfile 1 <a href="#$1"><tt>#1</tt></a>
+% l2h macro image 1 <img alt="Dependency graph" src="#1.gif" ALIGN=right></img>
+
+\input{../macros.tex}
+
+The Control Operators.
+<<ctrlJump.mli>>=
+(* ctrl-plus.ml
+   Shift and reset in ocaml.
+   Transliteration of Andrzej Filinski's specification in SML/NJ, POPL'94.
+   Vincent Balat, Olivier Danvy, and Andrzej Filinski, August 5, 1997 *)
+
+module type SELFCONTROL =
+  sig
+    type ans
+    val run_thunk : (unit -> ans) -> ans
+    val reset : (unit -> ans) -> ans
+    val shift : (('a -> ans) -> ans) -> 'a
+  end
+
+module Control(A : sig type ans end):
+    SELFCONTROL with type ans = A.ans
+
+@ And their implementation
+
+<<ctrlJump.ml>>=
+(* ctrl-plus.ml
+   Shift and reset in ocaml.
+   Transliteration of Andrzej Filinski's specification in SML/NJ, POPL'94.
+   Vincent Balat, Olivier Danvy, and Andrzej Filinski, August 5, 1997 *)
+
+(* ctrl-jump.ml
+   Shift and reset in ocaml in terms of jumpcc (instead of callcc).
+   Olivier Danvy, August 26, 1997
+   Based on Andrzej Filinski's specification in SML/NJ, POPL'94.
+   Vincent Balat, Olivier Danvy, and Andrzej Filinski, August 5, 1997 *)
+
+module type SELFCONTROL =
+  sig
+    type ans
+    val run_thunk : (unit -> ans) -> ans
+    val reset : (unit -> ans) -> ans
+    val shift : (('a -> ans) -> ans) -> 'a
+  end;;
+
+module Control = functor (A : sig type ans end) ->
+  (struct
+    type ans = A.ans
+    exception JumpccInternal of (unit -> ans)
+    exception JumpccExternal of ans
+    exception NaturalResult of ans
+
+    let rec eval_thunk_at_current_level t
+            = try t ()
+	      with (JumpccInternal t)
+	           -> (eval_thunk_at_current_level t)
+
+    let jumpcc f
+        = Callcc.callcc (fun k -> (raise (JumpccInternal (fun () -> f k))))
+
+    let run_thunk t
+        = try t ()
+	  with (JumpccInternal t)
+	       -> raise (JumpccExternal (eval_thunk_at_current_level t))
+
+    exception MissingReset
+    type void = VOID of void
+    let rec coerce (VOID v) = coerce v
+    let mk  = ((ref (fun _ -> raise MissingReset)) : (A.ans -> void) ref)
+    let abort x = coerce (!mk x) 
+
+    let escape f = jumpcc (fun k -> f (fun x -> Callcc.throw k x))
+
+    let reset t = escape (fun k -> let m = !mk 
+				   in mk := (fun r -> (mk := m; k r)); 
+				      abort (t ()))
+    let shift h = escape (fun k -> 
+      abort (h (fun v -> reset (fun () -> coerce (k v)))))
+
+  end : SELFCONTROL with type ans = A.ans);;
+
+@ 
