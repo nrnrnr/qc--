@@ -1,3 +1,38 @@
+* We suspect an impedance mismatch between various representations of
+  link-time constants.  Observation #1: an RTL is built with a
+  Reladdr.symbol, not a full Reladdr.t.  It is unclear to us which is
+  better.
+
+     * To emit assembly language, the recognizer must see an entire
+       link-time expression at the RTL level and convert it to a
+       relocatable address.  The choice of using Reladdr.symbol puts
+       the entire burden on the recognizer to find the larger
+       relocatable address of which the symbol is a part.
+
+   Reladdr.t has few clients.  Rtleval.eval can create one from
+   source.  Assemblers can use a Reladdr.t in an address-emission
+   procedure. 
+
+* Assuming we have an implementation of Sparc.S that properly uses the
+  sub-module Reloc : Sledlib.RELOCATABLE, we know how to write BURG
+  rules that properly emit instructions that use *symbols* (as opposed
+  to full-blown Reladdr.t):
+
+      PC := reloc   {: Sparc.ba reloc :}
+      PC := address {: Sparc.jmp address :}
+
+      reloc : symbol {: Sparc.Reloc.late ...  :}
+      reloc : const  {: Sparc.Reloc.early ... :}
+
+      address : symbol {: special hand-crafted instruction seq
+                          involving sethi and ori (really Sparc.set) :}
+
+  There are some mismatches in the details, but we believe the general
+  outlines are right.  It's possible one wants an intermediate
+  abstraction over the Sparc.Reloc.t  
+
+  Tentatively we might proceed with this plan and avoid Reladdr.t
+
 * We need escape analysis for continuations. Should have an entry node
   to escaping continuations that are otherwise not mentioned?
 
