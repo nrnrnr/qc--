@@ -18,6 +18,7 @@ type loc = Rtl.loc
 type convention = string
 type hint = string
 type name = string
+type linktime = Bits.bits Reloc.Simple.relocatable
 type 'a hinted = hint * 'a
 type range = int * int   (* lo <= x < hi *)
 type procname = string
@@ -28,7 +29,7 @@ type stmt =
   | Label  of name
   | Switch of range option * exp * (range list * stmt list) list
   | Cont   of name * name hinted list
-  | Span   of Bits.bits * exp * stmt list
+  | Span   of Bits.bits * linktime * stmt list
   | Assign of rtl
   | Call   of loc hinted list * convention * exp * exp hinted list * procname list
             * flow
@@ -84,6 +85,8 @@ let elab_stmts env =
   let eprint r = E.errorRegionPrt (F.srcmap env, r) in
   let errorf r = Printf.kprintf (fun s -> eprint r s; E.Error) in
   let exp = Elabexp.elab_exp env in
+  let loc = Elabexp.elab_loc env in
+  let metrics = F.metrics env in
   let rec full_stmt r reachable s =
     <<definitions of elaboration functions>>
     let rec stmt s = match s with
@@ -96,11 +99,14 @@ let elab_stmts env =
     | N.Switch (range, e, arms) -> switch range e arms
     | N.Label n -> E.Ok (Label n)
     | N.Cont (name, formals) ->
+        let c = E.ematch (E.Raise.list (List.map cformal formals)) (fun formals ->
+                  Cont (name, formals)) in
         if reachable then
           E.error "control can fall through to continuation"
         else
-          E.ematch (E.Raise.list (List.map cformal formals)) (fun formals ->
-            Cont (name, formals))
+          c
+    | N.Span (k, v, ss) -> span k v ss
+    | N.Assign (lhs, rhs) -> assign lhs rhs
     | _ -> unimp "statements" in
     stmt s
   and stmts r ss =
@@ -115,9 +121,6 @@ let elab_stmts env =
                      | N.Span (_, _, ss) -> jumps (Aux.last ss)
                      | _ -> false in
 (*
-  | N.Label  of name
-  | N.Cont   of name * cformal list
-  | N.Span   of 'e * 'e * ('l, 'e, 'a) stmt list
   | N.Assign of 'a
   | N.Call   of 'l list * convention * 'e   * 'e actual list * procname list * flow
   | N.Prim   of 'l list * convention * name * 'e actual list * flow
@@ -125,23 +128,6 @@ let elab_stmts env =
   | N.Jump   of convention * 'e * 'e actual list * procname list
   | N.Cut    of 'e * 'e actual list * cflow 
   | N.Return of convention * ('e * 'e) option * 'e actual list
-
-    | A.StmtAt(x,r)     -> E.catch' (F.flagError env) (error r env) (stmt env) x
-    | A.IfStmt  x       -> ifStmt     env x
-    | A.SpanStmt x      -> spanStmt   env x
-    | A.AssignStmt x    -> assignStmt env x
-    | A.CallStmt x      -> callStmt   env x
-    | A.PrimStmt x      -> primStmt   env x
-    | A.GotoStmt x      -> gotoStmt   env x
-    | A.CutStmt x       -> cutStmt    env x
-    | A.ReturnStmt x    -> returnStmt env x
-    | A.JumpStmt x      -> jumpStmt   env x
-    | A.ContStmt x      -> contStmt   env x
-    | A.SwitchStmt x    -> switchStmt env x
-    | A.LabelStmt x     -> env        (* nothing to do *)
-    | A.EmptyStmt       -> env        (* nothing to do *)  
-    | A.CommentStmt _   -> env
-
 *)
   stmts Srcmap.null
 <<definitions of elaboration functions>>=
@@ -160,3 +146,60 @@ let switch range e arms =
   match arms with
   | [] -> E.error "empty switch statement"
   | _ :: _ -> unimp "switch statements" in
+@ 
+A [[span]] statement has key and value expressions.
+The key must be a constant native word and the value a link-time (data)
+pointer.  Of course, all statement inside the span must be checked as
+well. Currently we don't check the link-time property of [[e2]].
+<<definitions of elaboration functions>>=
+let span k v ss =
+  let ok f x = E.Ok (f x) in
+  let const k = E.seq (exp k) (fun (k, kt) ->
+    let k = E.catch (eprint r) (ok Simplify.bits) k in
+    match kt with
+    | Types.Bits n when n = metrics.Metrics.wordsize -> k
+    | _ -> errorf r "span token (key) must be a bit vector of native word size") in
+  let linktime v = E.seq (exp v) (fun (v, vt) ->
+    let v = E.catch (eprint r) (ok Simplify.link) v in
+    match vt with
+    | Types.Bits n when n = metrics.Metrics.pointersize -> v
+    | _ -> errorf r "span value must be a bit vector of native pointer size") in
+  E.ematch3 (const k) (linktime v) (stmts r ss) (fun k v ss ->
+    Span (k, v, ss)) in
+@
+Two two sides of an assign statement must match: the number and types
+of lvalues and expressions are checked against each other.  For
+improved error messages [[List.combine]] is re-implemented. Details
+of the left hand side are handled by the [[lvalue]] function.
+
+The right hand side may contain optional guarding expressions of type
+[[bool]].
+<<definitions of elaboration functions>>=
+let assign lhs rhs =
+  <<definitions of assignment functions>>
+  try E.ematch (E.Raise.list (List.map2 effect lhs rhs)) (fun es -> Assign(Rtl.par es))
+  with Invalid_argument _ -> <<complain about length mismatch in assignment>> in
+<<definitions of assignment functions>>=
+let effect lhs (guard,rhs) =
+  let guard = Aux.Option.map exp guard in
+  E.seq2 (loc lhs) (exp rhs) (fun (loc, w) (e, ty) ->
+    if ty <> Types.Bits w then
+      errorf r "location of type bits%d cannot hold value of type %s" w
+        (Types.to_string ty)
+    else
+      let rtl = loc.AT.store e w in
+      match guard with
+      | None   -> E.Ok rtl
+      | Some g -> E.seq g (fun (g, ty) ->
+          if ty = Types.Bool then E.Ok (Rtl.guard g rtl)
+          else errorf r "guard must have type bool, not %s" (Types.to_string ty))) in
+@ 
+<<complain about length mismatch in assignment>>=
+if List.length lhs < List.length rhs then
+  errorf r
+    "assignment has %d expressions on the right but only %d locations on the left"
+    (List.length rhs) (List.length lhs)
+else
+  errorf r
+    "assignment has %d locations on the left but only %d expressions on the right"
+    (List.length lhs) (List.length rhs)
