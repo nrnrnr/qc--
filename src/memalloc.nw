@@ -1,30 +1,32 @@
 
-% ------------------------------------------------------------------ 
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
 % Quality    ::=    A|B|C|D|E
 % Importance ::=    Central|Subsystem|Peripheral
 % Urgency    ::=    Immediate|Soon|Later
 %
 % Example (at beginning of line): %%Grades: B Central Soon
+
+% ------------------------------------------------------------------ 
 \section{Automaton-Based Memory Allocation}
 % ------------------------------------------------------------------ 
 
-This module provides an applicate abstraction to allocate a memory block
-incrementally by a sequence of [[allocate]] and [[align]] directives.
-The abstraction is similar to a pointer that is advanced and aligned to
-reserver memory. At any point the value of the  pointer can be uesed as
-an address. After allocation is complete, the automaton is [[frozen]]
-and the allocated block is returned. A [[t]] value should not be used
-after it was frozen (allthough it is technically possible and safe).
+This module provides an applicative abstraction [[t]] to allocate a
+memory block incrementally by a sequence of [[allocate]] and [[align]]
+directives.  The abstraction is similar to a pointer that is advanced
+and aligned to reserve memory. At any point the value of the  pointer
+can be uesed as an address. After allocation is complete, the automaton
+is [[frozen]] and the allocated block is returned. A [[t]] value should
+not be used after it was frozen (allthough it is technically possible
+and safe).
 
 <<memalloc.mli>>=
 type t          (* mutable state *)
 
-val mk:         base:Rtl.exp -> t
-val allocate:   t -> size:int -> t
-val align:      t -> int -> t
-val current:    t -> Rtl.exp
-val freeze:     t -> Block.t
+val mk:         base:Rtl.exp -> t       (* provide base address *)
+val allocate:   t -> size:int -> t      (* increase block *)
+val align:      t -> int -> t           (* align cursor *)
+val current:    t -> Rtl.exp            (* obtain cursor *)
+val freeze:     t -> Block.t            (* return allocated block *)
 @
 
 % ------------------------------------------------------------------ 
