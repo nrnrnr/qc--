@@ -161,7 +161,7 @@ cause errors in the first phase.
 \begin{table}
     \begin{center}
     \begin{tabular}{lll}
-        Object      & Kind          & Type \\ \hrule
+        Object      & Kind          & Type \\ \hline
         Procedure   & [[Memory]]    & [[pointer]]  \\
         Code Label  & [[Memory]]    & [[pointer]]  \\
         Data Label  & [[Memory]]    & [[pointer]]  \\
@@ -286,7 +286,7 @@ value and updated symbol table.  Passing around the symbol table
 implements the tricky part mentioned above. 
 
 This evaluation technique could be called \textit{lazy} because
-evaluation are driven by demand.  However, the driving function
+evaluation is driven by demand.  However, the driving function
 [[eval]] makes sure all constant definitions are evaluated even those,
 which are never used.
 
@@ -382,7 +382,6 @@ values are applied to the implementation [[f]] of the primitive and
 the result is returned together with its type [[rt]].
 
 <<>>=
-    
 and evalPrimOp set env op args = 
     let env', xs = evalExprs set env args  in
     let f, t     = lookup op primOps       in 
@@ -407,7 +406,7 @@ and evalExprs set env es =
         loop set env [] es
 
 and evalExpr set env = function 
-    | ExprAt(e,r)         -> evalExpr set env e
+    | ExprAt(e,r)         -> evalExpr set env e 
     | Int(i, None)        -> word     , IntConst(atoi i), env 
     | Int(i, Some size)   -> bits size, IntConst(atoi i), env
     | Float(f, None)      -> word     , FloatConst(atof f), env
@@ -424,11 +423,12 @@ and evalConst set env id =
     if IDSet.mem id set then 
         error "circular definition" 
     else match lookup id env with
-    | (_,(Constant(ExprConst(e)) as c)) -> 
-        let (t,x,env') = evalExpr (IDSet.add id set) env e in 
-            (t,x, replace id (t,Constant(x)) env')
-    | (t, Constant(x))                  -> (t,x,env)
-    | x -> error (Printf.sprintf "reference to non-constant %s" id) 
+        | (_,(Constant(ExprConst(e)) as c)) ->
+            let (t,x,env') = evalExpr (IDSet.add id set) env e in 
+                (t,x, replace id (t,Constant(x)) env')
+    
+        | (t, Constant(x))                  -> (t,x,env)
+        | x -> error (Printf.sprintf "reference to non-constant %s" id) 
 
 <<driver>>
 @
@@ -474,7 +474,7 @@ let check file =
 @
 
 % ------------------------------------------------------------------  
-\ubsection{Interface}
+\subsection{Interface}
 % ------------------------------------------------------------------  
 
 <<semant.mli>>=
