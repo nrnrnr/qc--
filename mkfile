@@ -13,12 +13,6 @@ VERSION =       `date +%Y%m%d`
 
 <               config/config.mk    
 
-prefix =        $config_prefix
-bindir =        $prefix/bin
-libdir =        $prefix/lib/qc--
-incdir =        $prefix/include/qc--
-man1dir =       $prefix/man/man1
-
 # ------------------------------------------------------------------ 
 # SUBDIRS are made from left to right - order matters
 # ------------------------------------------------------------------ 
@@ -106,7 +100,7 @@ tools.opt:V:    lib dirs
 
 interp:V:       dirs
 	echo "# cd interp" && cd interp && mk $MKFLAGS update
-	
+
 doc:V:          dirs
 	echo "# cd doc" && cd doc && mk $MKFLAGS update 
 
@@ -125,37 +119,12 @@ count:V:
 # ------------------------------------------------------------------
 # installation
 #
-# This is rudimentary install target. Refine as you see fit.
-# Should 'all' be a prerequiste? Or 'all' and 'all.opt'?
+# delegate to subdirs
 # ------------------------------------------------------------------ 
 
-INSTALL =       bin/qc--                    \
-                bin/qc--interp              \
-                man/man1/qc--.1             \
-                man/man1/qc--internals.1    \
-                man/man1/qc--interp.1       \
-                lib/libqc--interp.a         \
-
-install-dirs:VQ:
-	for dir in $prefix $bindir $libdir $incdir $man1dir
+install:QV: all all.opt
+	for d in camlburg tools doc src interp
 	do
-	  if [ ! -d $dir ]; then
-	    echo "  mkdir -p -m 755 $dir"
-	    mkdir -p $dir
-	  fi
-	done
-
-install:V:      $INSTALL install-dirs
-	cp bin/qc--                             $bindir
-	[ -x bin/qc--.opt ] && cp bin/qc--.opt  $bindir
-	cp bin/qc--interp                       $bindir
-	cp man/man1/qc--.1                      $man1dir
-	cp man/man1/qc--internals.1             $man1dir
-	cp man/man1/qc--interp.1                $man1dir
-	cp lib/libqc--interp.a                  $libdir
-	# XXX copy header files to $incdir
-	for d in camlburg tools
-	do 
 	  (echo "# cd $d" && cd $d && mk $MKFLAGS install) || exit 1
 	done
 
@@ -178,7 +147,7 @@ DEPENDFILES =   cllib/DEPEND.evaluating \
 
 graph.dot:D:	$DEPENDFILES
 	cat $prereq | ocamldot -landscape > $target
-	
+
 # ------------------------------------------------------------------ 
 # Devleoper's Documentation
 # ------------------------------------------------------------------ 
@@ -289,13 +258,13 @@ timestamps:V:
 	cd interp; mk -t -a disasm-dec.c interp-dec.c encode.[ch]
 
 tar:V:          $DIR.tar.gz
-	
+
 $DIR.tar.gz:    FILES timestamps
 	ln -s . $DIR 
 	tar czvhf $DIR.tar.gz `sed "s+^\./+$DIR/+" FILES` 
 	rm -f $DIR
 	rm -f FILES
-	
+
 tar-test:V:     $DIR.tar.gz
 	tar zxvf $DIR.tar.gz
 	( cd $DIR && ./configure && mk )

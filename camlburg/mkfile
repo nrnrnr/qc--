@@ -24,7 +24,6 @@ BINDIR =    ../bin
 MANDIR =    ../man
 
 < ../config/config.mk
-prefix = $config_prefix
 
 # ------------------------------------------------------------------ 
 # (high level) virtual targets
@@ -61,7 +60,14 @@ update.opt:V:   $RTCMX all.opt
 	cp ocamlburg.1      $MANDIR/man1
 	cp ocamlburgfix     $BINDIR
 	cp ocamlburgfix.1   $MANDIR/man1
-	
+
+install:V: all all.opt
+	install        -D -s ocamlburg.opt  $install_bin/ocamlburg.opt
+	install        -D    ocamlburg      $install_bin/ocamlburg
+	install        -D    ocamlburgfix   $install_bin/camlburgfix
+	install -m 644 -D    ocamlburg.1    $install_man1/camlburg.1
+	install -m 644 -D    ocamlburgfix.1 $install_man1/camlburgfix.1
+
 dvi:V:          $DVI
 html:V:         $HTML
 ps:V:           $PS
@@ -81,7 +87,7 @@ clean.opt:V:
 
 clean:V:        clean.opt
 	rm -f *.cmo *.cmi 
-	
+
 clobber:V:      clean
 	rm -f ocamlburg ocamlburg.opt 
 	rm -f nofake
@@ -95,14 +101,6 @@ clobber:V:      clean
 	rm -f pp.*
 	rm -f srcmap.*
 	rm -f pod2htm*
-
-install:V:      ocamlburg ocamlburg.1 ocamlburgfix ocamlburgfix.1
-	[ -x ocamlburg.opt ] && \
-	install -s ocamlburg.opt  $prefix/bin/ocamlburg.opt
-	install    ocamlburg      $prefix/bin/ocamlburg
-	install    ocamlburg.1    $prefix/man/man1                
-	install    ocamlburgfix   $prefix/bin
-	install    ocamlburgfix.1 $prefix/man/man1
 
 # ------------------------------------------------------------------ 
 # rules and tools for OCaml
@@ -132,7 +130,7 @@ ML =            code.ml         \
                 burg.ml         \
                 noguardscheck.ml\
                 main.ml         \
-                
+
 
 MLI =           burg.mli        \
                 code.mli        \
@@ -157,7 +155,7 @@ CMX =           `echo $ML       | sed 's/\.ml/.cmx/g'`
 
 ocamlburg:      $LIBDIR/cllib.cma  $CMO 
 	$OCAMLC $OCAMLC_FLAGS -o $target $prereq
-	
+
 ocamlburg.opt:  $LIBDIR/cllib.cmxa $CMX
 	$OCAMLO $OCAMLO_FLAGS -o $target $prereq
 
@@ -190,7 +188,7 @@ ocamlburgfix.1:D: ocamlburgfix
 
 ocamlburgfix-man.html:D: ocamlburgfix
 	$POD2HTML ocamlburgfix > $target
-	
+
 # ------------------------------------------------------------------ 
 # Examples
 # ------------------------------------------------------------------ 

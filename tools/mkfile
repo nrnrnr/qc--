@@ -35,7 +35,7 @@ update:V:       all
 	cp grades         $BINDIR
 	cp grades.1       $MANDIR/man1  
 	cp newer          $BINDIR  
-	
+
 update.opt:V:   all.opt
 	cp ocamlerror.opt $BINDIR
 	cp ocamlerror.1   $MANDIR/man1
@@ -44,6 +44,12 @@ update.opt:V:   all.opt
 	cp grades         $BINDIR
 	cp grades.1       $MANDIR/man1  
 	cp newer          $BINDIR  
+
+install:V: all all.opt
+	install        -D -s ocamlerror.opt $install_bin/ocamlerror
+	install -m 644 -D    ocamlerror.1   $install_man1/ocamlerror.1
+	install        -D    nofake         $install_bin/nofake
+	install -m 644 -D    nofake.1       $install_man1/nofake.1
 
 dvi:V:          $INC
 html:V:         $HTML
@@ -62,7 +68,7 @@ clean.opt:V:
 clean:V:        clean.opt
 	rm -f *.cmi *.cmo
 	rm -f *.cma 
-	
+
 clobber:V:      clean
 	rm -f *.output
 	rm -f *.ml *.mli
@@ -76,15 +82,6 @@ clobber:V:      clean
 	rm -f grades 
 	rm -f newer
 	rm -f $DEPEND
-
-install:V:      all
-	[ -x ocamlerror.opt ] && \
-	install -s ocamlerror.opt $prefix/bin/ocamlerror.opt
-	install    ocamlerror     $prefix/bin/ocamlerror
-	install    ocamlerror.1   $prefix/man/man1  
-	install    nofake         $prefix/bin/nofake
-	install    nofake.1       $prefix/man/man1
-
 
 # ------------------------------------------------------------------ 
 # rules and tools for OCaml
@@ -126,7 +123,7 @@ CMXLIBS =       str.cmxa cllib.cmxa
 
 ocamlerror:     ocamlscan.cmo ocamlerror.cmo 
 	$OCAMLC $OCAMLC_FLAGS -custom -o $target $CMOLIBS $prereq
-	
+
 
 ocamlerror.opt: ocamlscan.cmx ocamlerror.cmx 
 	$OCAMLO $OCAMLO_FLAGS         -o $target $CMXLIBS $prereq
@@ -197,10 +194,10 @@ $FILE.tar.gz:   $EXPORT tidy mkfile
 tartest:V:      $FILE.tar.gz
 	( tar zxvf $prereq && cd $FILE && make )
 	rm -rf $FILE
-	
+
 www:V:          $FILE.tar.gz
 	cp $prereq $HOME/../cminusminus/www/download
-	
+
 
 # ------------------------------------------------------------------ 
 # recalculate dependencies
