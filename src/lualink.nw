@@ -328,6 +328,9 @@ can call Lua functions while it is active.
 <<export goodies to Lua>>=
 let init g = 
   let proc = Map.proc in
+  let dataflow_stage d =
+    let f _ (g, p) = let g, changed = d g in (g, p), changed in
+    Map.stage.V.embed f in
   <<register modules to [[g]] in alphabetical order>>
   V.at_init g [ <<lua initialization>> ]
 
@@ -610,12 +613,19 @@ C.register_module "Expander"
   ; "alpha", Map.stage.V.embed Alpha.X.cfg
   ; "sparc", Map.stage.V.embed Sparc.X.cfg
   ] g;
-<<old register modules to [[g]] in alphabetical order>>=
+<<register modules to [[g]] in alphabetical order>>=
+let rset s = Printf.sprintf "{ %s }" (Register.SetX.to_string s) in
+let live = Dataflowp.anal Live.live_in in
+let live = if Debug.on "live" then Dataflowp.debug rset live else live in
 C.register_module "Liveness"
-  [ "livenessfn", Map.stage.V.embed 
-       (fun _ p -> Cfgx.Live.set_live p.Proc.cfg; true)
+  [ "livenessfn", dataflow_stage (Dataflowp.backward_rewrite live)
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
+let live_dead =
+  let rset s = Printf.sprintf "{ %s }" (Register.SetX.to_string s) in
+  let dead = Dataflowp.a_t Live.live_in Dead.elim_assignments in
+  let dead = if Debug.on "dead" then Dataflowp.debug rset dead else dead in
+  dead in
 C.register_module "Optimize"
   [ "simplify_exps"         , Map.stage.V.embed Optimize.simplify_exps
   ; "collapse_branch_chains", Map.stage.V.embed Optimize.collapse_branch_chains
@@ -624,20 +634,20 @@ C.register_module "Optimize"
   ; "trim_unreachable_code" , Map.stage.V.embed Optimize.trim_unreachable_code
 (*
   ; "peephole"              , Map.stage.V.embed Peephole.subst_forward
-  ; "deadfn"                , Map.stage.V.embed Dead.elim_assignments
 *)
+  ; "deadfn"                , dataflow_stage (Dataflowp.backward_rewrite live_dead)
   ] g;
-<<old register modules to [[g]] in alphabetical order>>=
+<<register modules to [[g]] in alphabetical order>>=
 C.register_module "Placevar"
-  [ "contextfn", V.efunc ((Map.proc --> Map.automaton) **->>  (* currying *)
-                        V.func (V.value **-> Map.proc **->> V.bool)) Placevar.context
+  [ "contextfn", V.efunc ((Map.proc --> Map.automaton) **->> Map.stage) Placevar.context
   ; "x86",     V.efunc (Map.proc **->> Map.automaton)       X86.placevars
+(*
   ; "ppc",     V.efunc (Map.proc **->> Map.automaton)       Ppc.placevars
   ; "mips",    V.efunc (Map.proc **->> Map.automaton)       Mips.placevars
   ; "ia64",    V.efunc (Map.proc **->> Map.automaton)       Ia64.placevars
   ; "sparc",   V.efunc (Map.proc **->> Map.automaton)       Sparc.placevars
-  ; "replace_globals",
-               V.efunc (V.value **-> Map.proc **->> V.bool) Placevar.replace_globals
+*)
+  ; "replace_globals", Map.stage.V.embed Placevar.replace_globals
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Rtlop"

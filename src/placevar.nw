@@ -21,17 +21,19 @@ val mk_automaton : warn:(width:int -> alignment:int -> kind:string -> unit) ->
                    memspace:Rtl.space ->
                    (temps:(char -> Automaton.stage) -> Automaton.stage) ->
                    (Ast2ir.proc -> Automaton.t)
-val context : (Ast2ir.proc -> Automaton.t) -> 'e -> Ast2ir.proc -> bool
+val context : (Ast2ir.proc -> Automaton.t) -> 'e -> Ast2ir.proc -> Ast2ir.proc * bool
 @ 
 The [[replace_globals]] placer replaces global variables with the
 locations in the procedure's [[global_map]], and otherwise it does
 nothing. 
 <<placevar.mli>>=
-val replace_globals : 'a -> Ast2ir.proc -> bool
+val replace_globals : 'a -> Ast2ir.proc -> Ast2ir.proc * bool
 @
 Boilerplate for linking to Lua.
 <<placevar.ml>>=
 module A  = Automaton
+module G  = Zipcfg
+module GR = Zipcfg.Rep
 module P  = Proc
 module R  = Rtl
 module RT = Runtimedata
@@ -93,13 +95,9 @@ We weight each context of a variable by the number of times the instruction is
 executed.
 We place the variable in the context in which it is used most often in the procedure.
 <<placevar.ml>>=
-module G = Cfgx.M
 module IntMod  = struct type t = int            let compare = compare end
-module NodeMod = struct type t = Rtl.rtl G.node
-                        let compare = (fun n1 n2 -> compare (G.num n1) (G.num n2))
-                 end
 module IM = Map.Make (IntMod)
-module NM = Map.Make (NodeMod)
+module NM = Unique.Map
 module SM = Strutil.Map
 @
 The first argument to the variable placer is a function that takes a [[proc.t]] and
@@ -110,10 +108,10 @@ In the variable placer, we rely on this guarantee; for an automaton used in call
 conventions, we have no such guarantees.
 <<placevar.ml>>=
 <<define context count structures>>
-let context autmtn _ ({ Proc.cfg = g; Proc.target = tgt; Proc.formals = formals
-                      ; Proc.var_map = tMap} as proc) =
+let context autmtn _ (g, ({ Proc.target = tgt; Proc.formals = formals;
+                            Proc.var_map = tMap} as proc)) =
   let changed = ref false in
-  let autmtn  = autmtn proc in
+  let autmtn  = autmtn (g, proc) in
   <<initialize context count structures>>
   <<get operator contexts>>
   <<estimate [[exec_counts]] for graph nodes>>
@@ -122,7 +120,7 @@ let context autmtn _ ({ Proc.cfg = g; Proc.target = tgt; Proc.formals = formals
   <<replace variables with temps>>
   <<freeze [[autmtn]] and make sure its overflow block is empty>>
   <<add variable placements to spans>>
-  !changed
+  (g, proc), !changed
 @
 For each variable, we keep track of how many times it is used in each context.
 We use mutable state to store the counts for each variable, and we keep the records
@@ -161,20 +159,22 @@ let ctxt_result op = try Some (snd (SM.find op ops)) with Not_found -> None in
 @
 For now, we don't estimate execution counts; we assume each node is executed once.
 <<estimate [[exec_counts]] for graph nodes>>=
-let exec_counts      = G.fold_nodes (fun n map -> NM.add n 1.0 map) NM.empty g  in
-let get_exec_count n = try NM.find n exec_counts
+let exec_counts = G.fold_blocks (fun b map -> NM.add (GR.id b) 1.0 map) NM.empty g  in
+let get_exec_count b = try NM.find (GR.id b) exec_counts
                        with Not_found -> Impossible.impossible "node not counted" in 
 @
 We use the execution counts and the table of operator contexts to estimate how many
 times each variable is used in each context.
 The function [[count]] calls [[count_rtl]] to walk the rtl's and count uses.
 <<count uses in each context>>=
-let count node =
+let count (block : GR.block) =
   <<define counting functions>>
-  match G.to_instr node with
-  | None   -> ()
-  | Some i -> count_rtl i in
-let () = G.iter_nodes count g in
+  let rec count = function
+    | GR.Tail (m, t) -> begin count_rtl (GR.mid_instr m); count t end
+    | GR.Last l -> count_rtl (GR.last_instr l) in
+  let (first, tail) = block in
+  count tail in
+let () = G.iter_blocks count g in
 @
 The function [[count_rtl]] walks an rtl in a top-down fashion, looking for the use of
 an operator.
@@ -192,7 +192,7 @@ let rec count_loc loc ctxt = match loc with
   | RP.Var   (_, i, _)    ->
     (match ctxt with
      | None   -> ()
-     | Some c -> c i (get_exec_count node))
+     | Some c -> c i (get_exec_count block))
 
 and count_exp exp ctxt = match exp with
   | RP.Const _        -> ()
@@ -282,7 +282,7 @@ proper context.
 <<context replace var>>
 <<fetch and store globals>>
 let update rtl = replace_var store_var fetch_var store_global fetch_global rtl in
-G.iter_nodes (fun n -> G.update_instr update n) g;
+let g = G.rtl_map update g in
 <<verbosely dump [[tMap]]>>
 @ 
 <<verbosely dump [[tMap]]>>=
@@ -312,7 +312,7 @@ let from_temps proc space = (* stage to allocate a temporary location *)
 let debug lbl w h a ctr =
   Printf.eprintf "Placevar %s w=%d h=%s a=%d ctr=%d\n" lbl w h a ctr
 
-let mk_automaton ~warn ~vfp ~memspace mk_stage proc =
+let mk_automaton ~warn ~vfp ~memspace mk_stage (g, proc) =
   let warn methods =
     let alloc ~width:w ~alignment:a ~kind:h =
       warn ~width:w ~alignment:a ~kind:h;
@@ -328,11 +328,10 @@ let upd_var e = match R.Dn.loc e with
                        | None   -> raise RT.DeadValue
                        | Some l -> (Automatonutil.aloc l tgt.Target.wordsize))
   | _              -> e in
-RT.upd_all_spans upd_var proc.Proc.cfg;
+RT.upd_all_spans upd_var g;
 @
 <<placevar.ml>>=
-let replace_globals _ ({ Proc.cfg = g; Proc.target = tgt; 
-                         Proc.global_map = gmap} as proc) =
+let replace_globals _ (g, ({ Proc.target = tgt; Proc.global_map = gmap} as proc)) =
   let subst = RU.Subst.aloc ~guard:(function RP.Global _ -> true | _ -> false)
                 ~map:(function RP.Global (_, i, _) -> gmap.(i)
                              | l -> Impossible.impossible "global replacement") in
@@ -345,5 +344,4 @@ let replace_globals _ ({ Proc.cfg = g; Proc.target = tgt;
         rtl')
     else
       subst in
-  G.iter_nodes (G.update_instr subst) g;
-  true (* probably changed :-) *)
+  (G.rtl_map subst g, proc), true (* probably changed :-) *)

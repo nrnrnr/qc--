@@ -13,10 +13,10 @@
 \section{Dead-assignment elimination}
 
 <<dead.mli>>=
-val elim_assignments : Live.liveset Dataflowp.transformation
+val elim_assignments : Live.liveset Dataflow.transformation
 @
 <<dead.ml>>=
-module D  = Dataflowp
+module D  = Dataflow
 module G  = Zipcfg
 module GR = Zipcfg.Rep
 module R  = Register
@@ -30,12 +30,11 @@ let debug fmt = Debug.eprintf "dead" fmt
 let epr = Printf.eprintf 
 
 <<utilities>>
-@ 
-We must not elimnate potentially dead stack adjustments!
-<<dead.ml>>=
-let last_in l = None
-let middle_in live m = match m with
-| GR.Instruction rtl ->
+
+let last_in _ l = None
+let middle_in live m =
+  if GR.is_executable m then
+    let rtl = GR.mid_instr m in
     all_regs_assigned rtl
       (fun regs ->
         if List.for_all (fun r -> not (RS.mem (R.Reg r) live)) regs then
@@ -43,8 +42,8 @@ let middle_in live m = match m with
         else
           (<<announce dead non-elimination>>; None))
       (fun () -> None)
-| _ -> None
-
+  else
+    None
 let first_in live f = None
 
 <<announce dead elimination>>=
@@ -62,9 +61,7 @@ let first_in live f = None
   end)
 @ 
 <<dead.ml>>=
-let elim_assignments =
-  { D.name = "dead";
-    D.last_in = last_in; D.middle_in = middle_in; D.first_in = first_in; }
+let elim_assignments = D.transformation "dead" last_in middle_in first_in
 @ 
 CPS to find if an RTL assigns only registers.
 We're making pessimistic assumptions, because if we do see a slice, we

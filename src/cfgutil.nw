@@ -60,6 +60,10 @@ module G  = Zipcfg
 module GR = Zipcfg.Rep
 module OG = Cfgx.M 
 
+let matches next = match next with
+| None -> (fun _ -> false)
+| Some (u, l) -> (fun (u', l') -> Unique.eq u u')
+
 let emit cfg call_emit rtl_emit sym_emit =
   let block b next () =
     let first f () = match f with
@@ -69,7 +73,7 @@ let emit cfg call_emit rtl_emit sym_emit =
       if GR.is_executable m then
         rtl_emit (GR.mid_instr m) in
     let last l () = match l with
-    | GR.Branch (_, tgt) when next =*= Some tgt -> ()
+    | GR.Branch (_, tgt) when matches next tgt -> ()
     | GR.Call c -> call_emit c
     | _ -> rtl_emit (GR.last_instr l) in
     GR.fold_fwd_block first middle last b () in
@@ -157,7 +161,7 @@ let cfg2ast instr g ~name =
     let last n prev' = match n with
     | GR.Exit 0 -> A.CommentStmt "exit node!" :: prev'
     | GR.Exit n -> A.CommentStmt "nonzero exit number?!" :: prev'
-    | GR.Branch (_, lbl) when next =*= Some lbl -> prev'
+    | GR.Branch (_, lbl) when matches next lbl -> prev'
     | GR.Forbidden _ -> A.CommentStmt "forbidden to reach this point" :: prev'
     | _ -> instr (GR.last_instr n) :: prev' in
     let rec tail t prev' = match t with

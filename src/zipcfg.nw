@@ -246,6 +246,11 @@ block that flows directly to its layout successor.
 <<zipcfg.mli>>=
 val fold_layout : (Rep.block -> label option -> 'a -> 'a) -> 'a -> graph -> 'a
 @ 
+We can also fold and iterate over blocks.
+<<zipcfg.mli>>=
+val fold_blocks : (Rep.block -> 'a -> 'a) -> 'a -> graph -> 'a
+val iter_blocks : (Rep.block -> unit) -> graph -> unit
+@ 
 \paragraph{Observing nodes}
 Successors.
 <<declarations of [[Rep]]'s public functions>>=
@@ -698,6 +703,10 @@ let iter_nodes first middle last g =
     | Last l -> last l in
     tail t in
   UM.iter block g
+@ 
+<<zipcfg.ml>>=
+let fold_blocks f z bs = UM.fold (fun _ -> f) bs z
+let iter_blocks = UM.iter
 <<zipcfg.ml>>=
 let rtl_map map g =
   let block (f, t) =

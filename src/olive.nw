@@ -50,12 +50,12 @@ Here's the new stuff; what's below is old stuff.
 type uid = Zipcfg.uid
 type liveset = Register.SetX.t
 
-val live_in : liveset Dataflowp.analysis  (* live in to each block *)
-val live_in_last   : Zipcfg.Rep.last -> liveset
+val live_in_block  : Zipcfg.graph -> (uid -> liveset)   (* live in to each block *)
+val live_in_last   : (uid -> liveset) -> Zipcfg.Rep.last -> liveset
 val live_in_middle : liveset -> Zipcfg.Rep.middle -> liveset
       (* map live out to live in *)
 
-val live_out_last  : Zipcfg.Rep.last -> liveset
+val live_out_last  : (uid -> liveset) -> Zipcfg.Rep.last -> liveset
 @
 
 % ------------------------------------------------------------------ 
@@ -80,10 +80,9 @@ between the assignments.
 But if we perform liveness at the slice level, then promote the slices to registers, we
 will see that %eax remains live between the assignments.
 <<live.ml>>=
-module D   = Dataflowp
+module D   = Dataflow
 module G   = Zipcfg
 module GR  = Zipcfg.Rep
-module P   = Property
 module RSX = Register.SetX
 module R   = Rtl
 
@@ -114,15 +113,11 @@ let ( --  ) = diff
 let ( --* ) live killed =
   let is_killed r = RSX.exists (fun r' -> Register.contains r' r) killed in
   if RSX.exists is_killed live then
-    (<<complain of live variables in killed set>>; live--killed)
-    (*Impossible.impossible "live variable is in killed set"*)
+    (*<complain of live variables in killed set>; live--killed *)
+    Impossible.impossible "live variable is in killed set"
   else
     live 
 <<complain of live variables in killed set>>=
-Printf.eprintf "Live vars %s in killed set { %s }\n"
-  (RSX.to_string (RSX.filter (fun x -> RSX.mem x killed) live))
-  (RSX.to_string killed)
-<<old complain of live variables in killed set>>=
 let regstring (s, i, _) = Printf.sprintf "%c%d" s i in
 let bad = RSX.elements (RSX.filter (fun x -> RSX.mem x killed) live) in
 let msg = "Live vars in killed set: " ^ String.concat ", " (List.map regstring bad) in
@@ -144,25 +139,17 @@ $$\mathit{live}_{\mathit{in}} =
     ) \cup \mathit{used}.
 $$
 <<live.ml>>=
-let matcher = { P.embed = (fun a -> P.Live_in a);
-                P.project = (function P.Live_in a -> Some a | _ -> None);
-                P.is = (function P.Live_in a -> true | _ -> false);
-              }
-
-let prop = Unique.Prop.prop matcher
-let get = Unique.Prop.get prop
-
 let live_in_middle out mid =
   let uses, defs, kills = irwk (GR.mid_instr mid) in
   out -- defs --* kills ++ uses 
 
-let live_out_last last =
-  G.union_over_outedges last get
-  (fun {G.node = (u, l); G.defs = d; G.kills = k} -> get u -- d --* k) 
+let live_out_last blocks last =
+  G.union_over_outedges last blocks
+  (fun {G.node = (u, l); G.defs = d; G.kills = k} -> blocks u -- d --* k) 
 
-let live_in_last last =
+let live_in_last blocks last =
   let uses, defs, kills = irwk (GR.last_instr last) in
-  let live = live_out_last last -- defs --* kills ++ uses in
+  let live = (live_out_last blocks last) -- defs --* kills ++ uses in
   G.add_live_spansl last (G.add_inedge_uses last live)
 
 let live_in_first out first =
@@ -171,15 +158,15 @@ let live_in_first out first =
 to build sets, we simply folded over the proper functions directly.
 @
 <<live.ml>>=
-let live_in =
- { D.add_info  = (++);
+let liveness =
+ { D.name      = "liveness";
+   D.add_info  = (++);
    D.changed   = (fun ~old ~new' -> RSX.cardinal new' > RSX.cardinal old);
    D.init_info = RSX.empty;
-   D.prop      = prop
- },
- { D.name      = "liveness";
    D.last_in   = live_in_last;
    D.middle_in = live_in_middle;
    D.first_in  = live_in_first;
  } 
+
+let live_in_block = D.backward_anal liveness
 @ 
