@@ -141,8 +141,6 @@ procedure Main()\\
 \subsection{Data Structures}
 %-------------------------------------------------------------------
 
-let () = Debug.register "colorgraph" "generalized graph coloring allocator"
-
 <<graph coloring types>>=
 module T = Target
 @
@@ -199,14 +197,20 @@ type ('a,'b) impListItem = { v : 'b
 
 type ('a,'b) impListGroup = 'a -> ('a,'b) impListItem option ref
 @
+We must not loop forever chasing pointers in a doubly-linked list.
+I'm pretty sure that with the new [[eq_item]], the stack never gets
+more than three frames deep.
 <<imperative lists>>=
 let rec eq_item a b i i' =
-  let opt o o' = match o, o' with
-  | None, None -> true
-  | Some i, Some i' -> eq_item a b i i'
-  | None, Some _ -> false
-  | Some _, None -> false in
-  a i.list i'.list &&  b i.v i'.v && opt i.next i'.next && opt i.prev i'.prev
+  let eq_here i i' = a i.list i'.list && b i.v i'.v in
+  let opt eq o o' = match o, o' with
+  | None,   None    -> true
+  | Some i, Some i' -> eq i i'
+  | None,   Some _  -> false
+  | Some _, None    -> false in
+  let rec eq_left  i i' = eq_here i i' && opt eq_left  i.prev i'.prev in
+  let rec eq_right i i' = eq_here i i' && opt eq_right i.next i'.next in
+  eq_here i i' && opt eq_right i.next i'.next && opt eq_left i.prev i'.prev
 @ 
 [[ilg_add]] makes a new item and adds it to the front of the given [[list]]. 
 The new list item is returned.
@@ -1203,7 +1207,8 @@ let rec uniq nodes =
   | [] -> []
   | x :: xs -> x :: uniq (List.filter (fun y -> not (eq x y)) xs) 
 let uniq nodes = 
-  if List.length nodes > 20 then
+  if List.length nodes > 200 ||
+     (Debug.on "colorgraph" && List.length nodes > 20) then
     Printf.eprintf "colorgraph.nw: scary quadratic algorithm with N = %d\n"
       (List.length nodes);
   uniq nodes
@@ -1247,6 +1252,8 @@ module RSX = R.SetX
 module RU  = Rtlutil
 let ( ++ ) = RS.union 
 let imposs = Impossible.impossible
+
+let () = Debug.register "colorgraph" "generalized graph coloring allocator"
 <<imperative lists>>
 module type GRAPH = sig
   type cfg
