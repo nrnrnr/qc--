@@ -1,0 +1,248 @@
+% vim: ts=8 sw=4 et:
+
+\documentclass[11pt]{article}
+\usepackage{path,noweb}
+
+\author{Norman Ramsey}
+\title{Refactoring the Quick C-{}- Compiler}
+
+\newcommand\PAL{{\small C-{}-}}
+\newcommand\AST{{\small AST}}
+\newcommand\CFG{{\small CFG}}
+\newcommand\qcc{{\small QC-{}-}}
+\newcommand\rtl{{\small RTL}}
+\newcommand\lrtl{\mbox{$\lambda$-{\small RTL}}}
+\newcommand\burg{{\small BURG}}
+
+\def\nwdocspar{\relax}
+\def\nwendcode{\endtrivlist\endgroup}
+
+\parindent0pt
+\parskip1.5ex
+% ------------------------------------------------------------------ 
+\begin{document}
+% ------------------------------------------------------------------ 
+
+\maketitle
+
+This document responds both to my own observations and to Christian
+Lindig's \emph{Roadmap to a Better Quick~{\PAL} Compiler}.
+Its purpose is to set out a plan for refactoring the compiler.
+The plan, like the compiler, is incomplete.
+In particular, the plan has not yet generate any ``action items.''
+\begin{enumerate}
+\item
+\emph{Flow-graph refactoring}.
+Still under development, but:
+\begin{enumerate}
+\item
+Use term ``layout'' (Machine SUIF) for mapping of nodes to addresses
+in memory.
+\item
+Use one data structure whose invariants change over time.
+\item
+Free clients from ordering constraints by making predecessor and
+successor fields mutable.
+\item
+Probably expose representation (may make code less ``heavy'').
+\item
+Use separate kind of node for join point: the only node that may have
+multiple precedessors, carry a label, or be the target of a jump.
+Predecessor may not fall through to a join point unless the graph has
+layout and the fallthrough respects that layout.
+\item
+Provide isomorphic copy function for changing representation of
+instruction.
+\item
+Graph traversal in specific order most likely to be left to the
+client.
+\item
+Other graph traversal to be based not on higher-order functions but on
+a \emph{node cursor}.
+Specification for same to be derived from Machine SUIF ``handle.''
+\item
+Enumeration of graph nodes to be dropped.
+\item
+Code expander to generate single-entry, single-exit subgraph, to be
+spliced in by mutation.
+\item
+A CFG node to represent at most one instruction.\footnote
+{Except the recognizer and assembler may conspire to hide some
+two-instruction sequences from the rest of the back end.}
+A~join point or a dataflow node to contain no executable code and thus
+no instruction.
+\item
+Distinction between normal and exceptional edges to be encoded in the
+tail of the edge, i.e., the node where the flow originates.
+\end{enumerate}
+%%%%%%%%%%%%%%%%
+\item
+\emph{Difficulty creating node that branches to a labeled node not
+created locally}.
+Not understood.
+\item
+\emph{CFG forced to be built bottom-up}.
+Fix by making predecessor and successor fields mutable.
+\item
+\emph{Heavy implementation of nodes}.
+Not understood.
+Perhaps the question is this: how much knowledge about the nodes
+should be encoded in the static ML type system?
+The only possible way to answer this question is empirically.
+
+A tentative plan is to expose the representation but continue to
+provide convenience functions (e.g., [[predecessors]]).
+
+\emph{A priori} I'm not too concerned if the implementation of the CFG
+appears ``heavy.''
+\item
+\emph{Change of representation of instructions difficult.}
+I~find it acceptable to create an isomorphic copy of a flow graph.
+Techniques for making an isomorphic copy of a mutable linked data
+structure are well understood.
+\item
+\emph{Adding a jump requires knowing the target-specific jump
+instruction}.
+Should not be a problem; can be embedded in a [[Proc.t]]\footnote
+{``The fat environment of the back end.''}
+\item
+\emph{Assembler symbols pervade CFG}.
+Problem is not clear, but I'm happy to use strings within CFG, at
+least provisionally.
+\item
+\emph{Dataflow information to be represented by artificial nodes for
+which no code is generated.} Yes.
+\item
+\emph{Make every transfer to a join point an explicit goto.} Yes.
+\item
+\label{new-RTL-loc}%
+\emph{[[Register.t]] to be a supported location.}
+Yes.  Constructor [[Cell]] to be removed from [[Rtl.loc]] and replaced
+by
+<<new rtl code>>=
+and  loc       = Mem       of space  (* must be retained to distinguish code/data *)
+                            *  aggregation
+                            *  width
+                            *  exp 
+                            *  assertion
+               | Reg       of Register.t
+@ Unclear whether [[Reg]] should carry [[Register.t]] or 
+[[space * index * width]].
+@
+\item
+[[Talloc]] width is not redundant, as some temporary spaces can be used at
+multiple widths (e.g., register or register pair).
+\item
+It is not a problem that there is only one implementation of
+[[Automaton.t]].
+One ML type should be sufficient to define automata for all targets.
+\item
+\emph{Code expansion limited to list of RTLs}.
+Problem should be corrected by enabling expander to produce
+single-entry, single-exit flow-graph region, to be spliced into
+existing graph by mutation.
+\item
+\emph{Performance improvements to BURS code}. 
+To await profiling.
+\item
+\emph{Alternatives for registering Lua code}.
+Central registry in [[Lualink]] module clarifies namespace and reduces
+amount of boilerplate code in compiler.
+\item
+\emph{Two sets of floating-point comparisons}.
+Implementation of [[fcmp]] to be delayed.
+\item
+\emph{Large RTL representations}.
+To be lived with until profiling measurements show extent of problem.
+\item
+\emph{Bit vector not matchable in RTL pattern}.
+Will be fixed for registers as noted above (item~\ref{new-RTL-loc}).
+Not fixable in general as the matchable native integers provide
+insufficient precision (only 31~bits on many hosts).
+\item
+\emph{Machine-generated RTL constructor functions and recognizers do not support
+temporaries or relocatable addresses.}
+The short-term solution is to write code by hand.
+In the long term, it will be up to the \lrtl\ tools to generate useful
+code instead of the current useless code.
+\item
+\emph{Relocatable addresses not representable directly in RTL}.
+This is a feature, not a bug.  
+The ``relocatable address'' supported by many assemblers and linkers
+is a limited form of link-time constant expression.
+Since RTL supports expressions and link-time constants, \emph{a
+fortiori} it supports relocatable addresses in a target-independent
+way.
+Management of the target-specific notion of relocatable address is a
+job for the recognizer and assembler.
+\item
+\emph{No support for small arithmetic.}
+Kevin
+Redwine's work should apply.
+In any case, this problem is not urgent.
+\item
+\emph{No precise characterization of which programs a back end can accept.}
+An important problem, but one whose solution will have to await more
+experience.
+\item
+\emph{Representation of RTL operators should be a sum type.}
+Yes.  Not urgent, but a good project for Kevin Redwine, using the
+\lrtl\ codes as a model.
+\item
+\emph{Replacement of late compile-time constants might violate machine
+invariant.}
+No.
+It is the job of the code expander to make sure the machine invariant
+holds, no matter what the value of any compile-time constant.
+This goal can be achieved by careful engineering of the expander or by
+careful redefinition of the machine invariant as noted in my draft on
+stack layout.
+\item
+\emph{Role of relocatable addresses in compiler not clear.}
+A relocatable address is an assembly-level representation of a
+link-time constant expression. 
+Regrettably, the precise characterization of such expressions depends
+on the capabilities of the assembler and linker.
+It is therefore target-dependent.
+
+This information should not permeate the compiler.
+It should be limited to four componenets: expander, recognizer,
+assembler, and initialized data.
+\begin{itemize}
+\item
+The expander and recognizer must cooperate to decide which expressions
+are evaluated at link time and which at run time.
+\item
+The recognizer must communicate to the assembler which expressions are
+evaluated at link time.
+\item
+Link-time expressions may also occur in initialized data.
+\end{itemize}
+It would be possible to use an RTL expression to represent a
+relocatable address, but I don't know what the implication would be.
+At some point, such an expression must be mapped to the assembler's
+representation, e.g., string or [[Sledlib.reloc]].
+\item
+\emph{Handling of continuations unclear}.
+The representation of continuations should be private to module
+[[Contn]].
+It will be parameterized by three properties of the target:
+byte order, pointer size, and pointer alignment.
+\item
+\emph{Expression evaluation to be unified.}
+Yes.
+\item
+\emph{[[Rtlutil.ToString]] too verbose in [[Asm.dot]]}.
+Yes. Believed fixed by [[Rtlutil.ToReadableString]], but not tested.
+\item
+\emph{Too much code in [[Target2]] and [[Targets]].}
+Need to study how to make it easy to specify a new target.
+It may be sufficient to do it
+from Lua only.
+\end{enumerate}
+
+
+% ------------------------------------------------------------------ 
+\end{document}
+% ------------------------------------------------------------------ 
+

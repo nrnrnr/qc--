@@ -3,12 +3,22 @@
 
 TOP     = ..
 
-all:V:          cfg.ps better.ps working.ps newtarget.ps modules.ps backend.ps
+NOWEAVE = noweave
 
-<../config/noweb.mk
+<../config/latex.mk
 
-cfg.tex:        cfg.nw
-                $NOWEAVE -delay cfg.nw > $target 
+
+PS=cfg.ps better.ps working.ps newtarget.ps modules.ps backend.ps 	\
+	refactor.ps	\
+
+all:V:          $PS
+
+
+'^'(cfg|refactor)'\.'tex'$':RD:        '\1'.nw
+                $NOWEAVE -delay $prereq > $target 
+
+'^'(index|stack)'\.'tex'$':RD:        '\1'.nw
+                $NOWEAVE        $prereq > $target 
 
 modules.ps:     modules.txt
                 a2ps -B -9 -r -f 12 -o $target modules.txt
@@ -17,3 +27,4 @@ clean:V:
                 rm -f *.dvi *.aux *.log *.toc *.ps               
                 rm -f cfg.tex modules.ps*
                 rm -f stack.tex stack.inc
+		rm -f refactor.tex refactor.inc
