@@ -516,12 +516,31 @@ deprecated.
 view OCaml {
   module Asm <= interface_prologue
 %%
-    type instruction
+    module type Instruction = sig
+      type instruction
+    end
+
+    module type S = sig
+      type instruction
+%%
+  module Asm <= interface_epilogue
+%%
+    end (* module type S *) 
 %%
   module Asm <= implementation_prologue
 %%
+
+  <<automatically generated asm.mli>>
+
+  module Make (I : Instruction) : S = struct
+
+  type instruction = I.instruction
   let wrap_instruction i = assert false
   let unwrap_instruction i = assert false
+%%
+  module Asm <= implementation_epilogue
+%%
+  end (* module Make *)
 %%
   Asm.concrete_instruction <= {
     natural_type:   instruction
@@ -530,6 +549,74 @@ view OCaml {
   }
 }
 @
+
+<<automatically generated asm.mli>>=
+(*
+  Machine generated. Edit at your own risk 
+  Reproduce with the following
+ --line_width=74
+ --no_action=false
+ --output_directory=.
+ --pickler=sexp
+ --view=OCaml
+ *)
+(* module type Asm*)
+  
+    module type Instruction = sig
+      type instruction
+    end
+
+    module type S = sig
+      type instruction
+type concrete_instruction = (StdPrims.std_string)
+  and symbol =
+        Import of (StdPrims.std_string)
+      | Export of (StdPrims.std_string)
+      | Local of (StdPrims.std_string)
+      | Common of (StdPrims.std_string *
+          StdPrims.std_int *
+          StdPrims.std_int *
+          StdPrims.std_string)
+      | Lookup of (StdPrims.std_string)
+      | Offset of (StdPrims.std_string * symbol * StdPrims.std_int)
+  
+  and label =
+        Symlabel of (symbol)
+  
+  and reladdr =
+        Newaddr of (label * StdPrims.std_int)
+      | Shiftaddr of (reladdr * StdPrims.std_int)
+      | Symreloc of (StdPrims.std_string)
+  
+  and action =
+        DefineSymbolHere of (symbol)
+      | DefineSymbolConst of (symbol * StdPrims.std_int)
+      | Function of (symbol)
+      | Section of (StdPrims.std_string)
+      | Org of (StdPrims.std_int)
+      | Align of (StdPrims.std_int)
+      | Addlc of (StdPrims.std_int)
+      | EmitZeroes of (StdPrims.std_int)
+      | EmitInstruction of (instruction)
+      | Emit of (StdPrims.std_int * StdPrims.std_int)
+      | Emita of (reladdr)
+      | Emitf32 of (StdPrims.std_int *
+          StdPrims.std_int *
+          StdPrims.std_int)
+      | Emitf64 of (StdPrims.std_int *
+          StdPrims.std_int *
+          StdPrims.std_int *
+          StdPrims.std_int)
+      | Emitf32s of (StdPrims.std_string)
+      | Emitf64s of (StdPrims.std_string)
+      | Comment of (StdPrims.std_string)
+      | Asmtext of (StdPrims.std_string)
+  
+  and program = (StdPrims.std_string list * action list)
+  
+    end (* module type S *) 
+@
+
 
 
 
