@@ -206,22 +206,22 @@ let arguments () =
         A.choice
         [ A.is_hint "float",
             (match who_do_you_believe with
-            | Manual -> A.regs_by_args arg [d 12; d 14]
+            | Manual -> A.regs_by_args arg [d 12; d 14] false
             | Lcc ->
                A.choice
-               [ A.is_width 64, A.regs_by_args arg [d 12; d 14]
-               ; A.is_any     , A.regs_by_args arg [f 12; f 14]
+               [ A.is_width 64, A.regs_by_args arg [d 12; d 14] false
+               ; A.is_any     , A.regs_by_args arg [f 12; f 14] false
                ] 
             ) 
         ; A.is_any,
             A.unit
-        ] *> A.regs_by_bits bits [r 4; r 5; r 6; r 7] 
+        ] *> A.regs_by_bits bits [r 4; r 5; r 6; r 7] false
     ; A.is_any,
         A.choice
         [ (fun _ h w -> h = "float" && w = 64),  (* beware int/32, float/64 *)
-            A.regs_by_args arg [d 12; l 6] (* d12 is a placeholder; use pair r6/r7 *)
+            A.regs_by_args arg [d 12; l 6] false (* d12 is a placeholder; use pair r6/r7 *)
         ; A.is_any,
-            A.regs_by_bits bits [r 4; r 5; r 6; r 7] 
+            A.regs_by_bits bits [r 4; r 5; r 6; r 7]  false
         ]  
     ] *>
     A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up 

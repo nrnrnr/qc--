@@ -234,10 +234,10 @@ type counter = string
 type counterenv
 <<exported values>>=
 val bitcounter  : counter -> stage
-val regs_by_bits: counter -> Register.t list -> stage
+val regs_by_bits: counter -> Register.t list -> bool -> stage
 
 val argcounter  : counter -> stage
-val regs_by_args: counter -> Register.t list -> stage
+val regs_by_args: counter -> Register.t list -> bool -> stage
 @ 
 And this is documented nowhere, not even in the paper.  It is used
 to post-process the results from a [[freeze]] request.  For example,
@@ -586,7 +586,7 @@ handle it differently (see document with formal semantics of these functions).
 <<automaton.ml>>=
 type regstate = { mutable used  : Register.Set.t }
 
-let reg_placer of_width n regs next =
+let reg_placer of_width n regs reserve next =
   let state = { used = RS.empty } in
   let getreg = function
   |	[]      -> raise (Failure "get register")
@@ -599,25 +599,30 @@ let reg_placer of_width n regs next =
   let alloc ~width ~alignment ~hint =
     try
       let (_, _, w) as r = getreg (drop !n regs) in
-      if      w = width then of_loc (R.reg r)
+      if      w = width then
+         let allocated = of_loc (R.reg r) in
+         ( if reserve then ignore (next.allocate width alignment hint)
+         ; allocated )
       else if w < width then unimp "register aggregation"
       else    unimp "auto-widening for register requests"
     with Failure _ -> next.allocate width alignment hint in
   let freeze regs mems = next.freeze (RS.union state.used regs) mems in
   { freeze = freeze; allocate = alloc }
 
-let bitcounter            = counter    (fun w -> w)
-let regs_by_bits          = reg_placer (fun w -> w)
+let bitcounter                    = counter    (fun w -> w)
+let regs_by_bits                  = reg_placer (fun w -> w)
 
-let useregs regs          = wrap (fun next -> let c = ref 0 in
-                                   (bitcounter c) ((regs_by_bits c regs) next))
+let useregs regs = wrap (fun next -> let c = ref 0 in
+                           (bitcounter c) ((regs_by_bits c regs false) next))
 
-let bitcounter            = wrap_counter bitcounter
-let regs_by_bits label rs = wrap_counter (fun ctr -> regs_by_bits ctr rs) label
+let bitcounter                    = wrap_counter bitcounter
+let regs_by_bits label rs reserve =
+    wrap_counter (fun ctr -> regs_by_bits ctr rs reserve) label
 
-let argcounter            = wrap_counter (counter (fun w -> 1))
-let regs_by_args          = reg_placer (fun w -> 1)
-let regs_by_args label rs = wrap_counter (fun ctr -> regs_by_args ctr rs) label
+let argcounter                    = wrap_counter (counter (fun w -> 1))
+let regs_by_args                  = reg_placer (fun w -> 1)
+let regs_by_args label rs reserve = 
+    wrap_counter (fun ctr -> regs_by_args ctr rs reserve) label
 @ 
 
 The code below seems like a promising start to implementing split

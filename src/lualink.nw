@@ -343,6 +343,14 @@ let wideni n how =
                               else Unsupported.automaton_widen ~have:m ~want:n)
     | s -> V.projection (V.String s) "widening (should be 'multiple' or 'exact')") in
 
+let regalloc stage ctr regs reserve =
+  stage ctr regs (
+    match reserve with
+    | "reserve" -> true
+    | "normal"  -> false
+    | s -> V.projection (V.String reserve)
+               "regs_by_XXX (should be 'reserve' or 'normal')") in 
+
 let regty = RL.map in
 let counterty = V.string in
 
@@ -361,8 +369,12 @@ C.register_module "Automaton"
                           ~byteorder:    (field byteorder "byteorder")
                           ~growth:       (field growth    "growth")
                           ~max_alignment:(field V.int     "max_alignment"))
-  ; "regs_by_args", V.efunc (counterty **-> V.list regty **->> stage) A.regs_by_args
-  ; "regs_by_bits", V.efunc (counterty **-> V.list regty **->> stage) A.regs_by_bits
+  ; "regs_by_args", V.efunc
+                    (counterty **-> V.list regty **-> V.default "normal" V.string **->> stage)
+                    (regalloc A.regs_by_args)
+  ; "regs_by_bits", V.efunc
+                    (counterty **-> V.list regty **-> V.default "normal" V.string **->> stage)
+                    (regalloc A.regs_by_bits)
   ; "unit"        , stage.V.embed                                     A.unit
   ; "useregs"     , V.efunc (V.list regty                **->> stage) A.useregs
   ; "widen"       , V.choose
