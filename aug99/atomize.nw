@@ -1,0 +1,128 @@
+\section{Atomization --- an approximation of instruction selection}
+
+\providecommand\gets{\mathrel{:=}}
+% l2h substitution gets :=
+
+This module converts complicated RTLs to simple ones, by introducing
+temporaries.
+<<interface>>=
+type allocator = RTL.ty -> RTL.location (* give me a temporary *)
+
+val atomize : allocator -> IRNode.node -> RTL.rtl -> IRNode.node
+  (* given a successor and an RTL, return sequence of atomized RTLs *)
+@ The following assignments are atomic:
+\begin{itemize}
+\item $t_1 \gets \mathit{primop}(t_2, \ldots, t_n)$
+\item $t_1 \gets t_2$
+\item $t_2 \gets \$m[t_2]$
+\item $\$m[t_1] \gets [t_2]$
+\item $t_1 \gets k$
+\item $t_1 \gets v$
+\item $v \gets t_1$
+\item $t_1 \mathrel{\mathit{relop}} t_2 \rightarrow a$, where $a$~is
+an atomic assignment.
+\end{itemize}
+An RTL is atomic if all the assignments therein are atomic.
+
+[[atomize]] produces a sequence of atomic RTLs with the additional
+property that every temporary is dead after its first use.
+@
+\subsection{Implementation}
+
+A typical function takes a value of type~[['a]] and returns a new
+value of type~[['a]], \emph{plus} a sequence of RTLs  that,
+when executed first, establish the invariant that the (run-time) value
+of the result is the same as the value of the argument.
+For example, given an expression $x+y$, we might return a new
+expression $t_3$, plus the sequence of RTLs $t_1 \gets x; t_2 \gets y;
+t_3 \gets t_1 + t2$.
+We actually return this list in reverse order.
+<<implementation>>=
+type 'a preceded = 'a * RTL.rtl list
+@ Looks to me like a monad.
+We define a whole set of combinators for this.
+<<implementation>>=
+module New = struct
+  <<monad operations>>
+  let app operator args =
+    let (args, p') = Lift.list args
+    in  (RTL.APP(operator, args), p')
+  let fetch (loc, p') ty = (RTL.FETCH (loc, ty), p')
+  let agg a (cell, p')  = (RTL.AGG (a, cell), p')
+  let cell space (addr, p') = (RTL.CELL (space, addr), p')
+  let const k = (RTL.CONST k, [])
+  let var v ty = (RTL.VAR (v, ty), [])
+  let store (loc, p1') (src, p2') ty = (RTL.STORE(loc, src, ty), p2' @ p1')
+  let guard (g, p1') (e, p2') = (RTL.GUARD (g, e), p2' @ p1')
+  let rtl gs = let (gs, p') = Lift.list gs in (RTL.RTL gs, p')
+end
+@ 
+Dunno if we need these\ldots
+<<monad operations>>=
+let map f (x, l) = (f x, l)
+let unit x = (x, [])
+let join ((x, l), l') = (x, l' @ l)
+module Lift = struct
+  let list =
+    let cons (h, p1') (t, p2') = (h :: t, p2' @ p1')
+    in  Listutil.foldr cons ([], [])    
+  let list : 'a preceded list -> 'a list preceded = list
+end
+@ 
+<<implementation>>=
+module Temp = struct
+  type temp = RTL.location * RTL.ty
+  let rvalue (t, ty) = RTL.FETCH(t, ty)
+  let store (t, ty) e = RTL.STORE (t, e, ty)
+end
+@ 
+[[exp]] develops an [[RTL.exp]] into a temporary.
+<<implementation>>=
+<<type utilities>>
+let atomize alloc =
+  let rec exp : RTL.exp -> RTL.exp preceded =
+            <<function to atomize expression>>
+      and effect = function
+            | RTL.STORE (l, src, ty) -> New.store (loc l) (exp src) ty
+            | eff -> New.unit eff
+      and guarded (RTL.GUARD (g, e)) = New.guard (guard g) (effect e)
+      and guard = <<function to atomize guard>>
+      and loc = function RTL.VAR _ as v -> New.unit v
+                       | RTL.AGG (a, c) -> New.agg a (cell c)
+      and cell (RTL.CELL (space, addr)) = New.cell space (exp addr)
+      and rtl (RTL.RTL guardeds) = New.rtl (List.map guarded guardeds)
+  in  rtl
+@ 
+<<function to atomize expression>>=
+   let truth = RTL.CONST (RTL.BOOL true, None)
+in let always eff : RTL.rtl = RTL.RTL [RTL.GUARD (truth, eff)]
+in function 
+   | RTL.CONST k as e -> 
+       let t = alloc (const_ty k)
+       in  (Temp.rvalue t, [always (Temp.store t e)])
+   | RTL.FETCH (l, ty) ->
+       let t = alloc ty in
+       let (l, p) = loc l 
+       in  (Temp.rvalue t, always (Temp.store t (RTL.FETCH(l, ty))) :: p)
+   | RTL.APP (rator, args) ->
+       let t = alloc (result_ty rator)  in
+       let (rhs, p') = New.app rator (List.map exp args)
+       in  (Temp.rvalue t, always (Temp.store t rhs) :: p')
+@ 
+<<function to atomize guard>>=
+function
+| RTL.CONST k as e -> (e, [])
+| RTL.FETCH _ -> assert false
+| RTL.APP (rator, args) -> New.app rator (List.map exp args)
+@ 
+
+<<type utilities>>=
+let const_ty = function
+    | (_, Some t) -> t
+    | (RTL.INT        (_, t), _) -> t
+    | (RTL.LINK_CONST (_, t), _) -> t
+    | (RTL.BOOL _, _) -> assert false
+@ 
+<<type utilities>>=
+let result_ty rator = 32 (* bogus *)
+
