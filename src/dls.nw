@@ -314,8 +314,10 @@ let update_prefs_at_node prefs node =
                          temp_defs (RS.inter hw_defs alloc_regset)              in
   let vm = match get_copy_regs node with
            | Some (d, s) when is_tmp target s ->
-              (try VM.add s (Reg (choose_reg prefs.varMap d)) prefs.varMap
-               with Not_found -> prefs.varMap)
+               if is_tmp target d then 
+                  try VM.add s (Reg (choose_reg prefs.varMap d)) prefs.varMap
+                  with Not_found  -> prefs.varMap
+               else VM.add s (Reg d) prefs.varMap
            | _ -> prefs.varMap in
   { regs   = diff prefs.regs to_avoid @ RS.elements to_avoid
   ; varMap = vm
@@ -368,9 +370,16 @@ let rpo_dfs (state, prefs) =
     let prefs = update_prefs_at_node prefs node                                      in
     let preds = G.preds node                                                         in
     let unvis_preds = List.filter (fun p -> not (is_visited state p)) preds          in
-    let node_num = NM.find node postorder                                            in
+    (* Not_found case only for nodes unreachable from entry node... *)
+    let node_num = try NM.find node postorder with Not_found -> 0                    in
     let (to_vis, to_delay) =
-      List.partition (fun p -> NM.find p postorder > node_num) unvis_preds           in
+      let comparep p =
+        try NM.find p postorder > node_num
+        with Not_found -> Printf.eprintf "node %d not found\n" (G.num p);
+                false
+                (*Impossible.impossible "node accessible from proc exit but not
+                 entry"*) in
+      List.partition comparep unvis_preds           in
 
     let visit_pred (state, delays) node =
       let prefs = update_pref_varmap state prefs
@@ -431,7 +440,12 @@ let cleanup cfg =
     match get_copy_regs node with
     | Some (r1,r2) when r1 = r2 -> node::rst
     | _                         -> rst in
-  List.iter G.delete (G.fold_nodes visit_node [] cfg) in
+  let delete_move n =
+    let succ = G.succ n in
+    G.set_succ n ~succ:(G.illegal cfg);
+    G.set_succ (G.pred n) ~succ;
+    G.delete cfg n                      in
+  List.iter delete_move (G.fold_nodes visit_node [] cfg) in
 @
 
 [[choose_varMaps]] is responsible for choosing the varMaps in and
@@ -644,7 +658,7 @@ let shuffle state pred succ =
   let pred_vm   = IM.find (G.num pred) state.varOutMaps in
   let succ_vm   = IM.find (G.num succ) state.varInMaps  in
   let handle_locs temp succ_locs ((ms,ls,ss) as sets) =
-    match (VM.var_locs pred_vm temp, succ_locs) with
+    match (get_locs pred_vm temp, succ_locs) with
     | ([Reg p], [Reg s]) when p = s -> sets
     | ([Reg p], [Reg s])            -> (RS.add temp ms,ls,ss)
     | ([Mem p], [Reg s])            -> (ms,RS.add temp ls,ss)
@@ -652,6 +666,10 @@ let shuffle state pred succ =
     | ([Mem p], [Mem s])            ->
       Impossible.impossible "Temp uses multiple memory locations"
     | ([Reg p], [Mem s])            -> (ms,ls,RS.add temp ss)
+    | ([]     , [Reg _]) | ([]     , [Mem _]) ->
+       Printf.eprintf "Warning: Temp used without being initialized in proc %s\n"
+                      (proc.Proc.symbol#original_text);
+       (ms,ls,ss) (* temp undef in pred *)
     | (_      , _      )            ->
         Impossible.impossible "Varmap has temp in unexpected locations" in
   let moves, loads, stores = VM.fold handle_locs succ_vm (RS.empty,RS.empty,RS.empty) in
@@ -698,18 +716,18 @@ let make_shuffle () =
 let indent = "  "
 let printTempSet msg set =
   Printf.eprintf msg;
-  RS.iter (fun t -> Printf.fprintf stderr "%s%s\n" indent (printReg t)) set;
+  RS.iter (fun t -> Printf.eprintf "%s%s\n" indent (printReg t)) set;
   flush stderr
 let printTempMap msg map =
   Printf.eprintf msg;
-  RM.iter (fun t r -> Printf.fprintf stderr "%s%s -> %s\n" indent (printReg t)
-                                                                  (printReg r)) map;
+  RM.iter (fun t r -> Printf.eprintf "%s%s -> %s\n" indent (printReg t)
+                                                           (printReg r)) map;
   flush stderr
 
 let print_cfg cfg =
-  let () = Printf.fprintf stderr "\n\n\nBEGIN CFG\n" in
-  let () = G.iter_nodes (fun n -> Printf.fprintf stderr "%s\n" (G.print_node n)) cfg in
-  let () = Printf.fprintf stderr "END CFG\n" in
+  let () = Printf.eprintf "\n\n\nBEGIN CFG\n" in
+  let () = G.iter_nodes (fun n -> Printf.eprintf "%s\n" (G.print_node n)) cfg in
+  let () = Printf.eprintf "END CFG\n" in
   flush stderr
 @
 
@@ -752,9 +770,10 @@ let uses node =
 <<utilities>>=
 let null = function [] -> true | _ -> false
 
+let get_locs vm t = try VM.var_locs vm t with Not_found -> []
 let get_regs vm t =
   List.fold_left (fun rst l -> match l with Reg r -> r::rst | _ -> rst)
-                 [] (try VM.var_locs vm t with Not_found -> [])
+                 [] (get_locs vm t)
 let choose_reg vm t =
   match get_regs vm t with
   | r::_ -> r
