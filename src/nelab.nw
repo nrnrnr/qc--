@@ -20,18 +20,14 @@ type convention = string
 type procname   = string
 type label      = string
 
-type ty = Ty of int  (* bits$n$ *)
+type oty = Ty of int  (* bits$n$ *)
+type ty = Types.ty
 @ 
 Initialized and uninitialized data have the same type.
 <<exposed types>>=
 type init =
   | ExpData    of exp list
   | StringData of string
-
-type datum =
-  | Datalabel of name
-  | Align of int
-  | ReserveMem of ty * size * init option  (* init always none on stackdata *)
 
 @ 
 Here we have register variables (which double as formal parameters),
@@ -87,15 +83,18 @@ type proc =
     code          : (Rtl.loc, Rtl.exp, Rtl.rtl) Nast.stmt list;
   } 
 
-type content =
-  | Datum of datum
-  | Procedure of proc
+type datum =
+  | Datalabel         of name
+  | Align             of int
+  | InitializedData   of (exp * ty) list
+  | UninitializedData of int  (* counts the number of mems *)
+  | Procedure         of proc
 
 type spans = (bits * exp) list
 
 type section = {
     sname : string;
-    contents: (content * spans) list;
+    contents: (datum * spans) list;
   }
 @ 
 And last, the target and compilation unit.
@@ -615,13 +614,17 @@ and evalExpr env =
 
 We assume here the elaboration of expressions and lvalues.
 Because of mutual recursion, we have to make two passes over procedures
+
+In addition to being bound and checked,
+imports and exports have two effects
+
 <<nelab.ml>>=
 type scope = Local | Global
 let elab lvalue typed_expr srcmap asm ast =
   E.ematch (Metrics.of_ast srcmap ast.N.target) (fun metrics ->
     let flag = function E.Error -> F.flagError | E.Ok _ -> (fun env -> env) in
-    let errorf r =
-      Printf.kprintf (fun s -> E.errorRegionPrt (srcmap, r) s; E.Error) in
+    let eprint r s = E.errorRegionPrt (srcmap, r) s in
+    let errorf r   = Printf.kprintf (fun s -> eprint r s; E.Error) in
     let pointerty = Types.Bits metrics.Metrics.pointersize in
     let wordty    = Types.Bits metrics.Metrics.wordsize in
     let vfp       = Vfp.mk metrics.Metrics.wordsize in
@@ -631,14 +634,15 @@ let elab lvalue typed_expr srcmap asm ast =
     let env = F.empty srcmap metrics asm in
     let env = TypeSortBind. bind_sortable_definitions env ast.N.udecls.N.types in
     let env = ConstSortBind.bind_sortable_definitions env ast.N.udecls.N.constants in
-    let env = foldl bind_import env ast.N.imports in
+    let env = foldl bind_and_remember_import env ast.N.imports in
+    let env = foldl remember_export          env ast.N.exports in
     let env = registers_from Global 0 ast.N.globals env in
     let env = foldl (foldl bind_code_label) env ast.N.code_labels in
     let env = foldl bind_section_names env ast.N.sections in
-    let secs = E.Raise.list (List.map (section env) ast.N.sections) in
-    let env  = flag secs env in
-    let env = check_exports env ast.N.exports in
-    env)
+    let ss  = E.Raise.list (List.map (section env) ast.N.sections) in
+    let env = flag ss env in
+    let env = foldl check_export env ast.N.exports in
+    env, ss)
 @
 In a procedure, labels have global scope, but they are bound a
 second time in the local environment. This has the following advantages:
@@ -659,9 +663,10 @@ let proc env p =
   let env = foldl bind_code_label env p.N.labels in  (* odd -- explain *)
   let env = foldl bind_continuation env p.N.continuations in
   let stackmem, stacklabels, env = stackdata env p.N.stackdata in
+  E.Ok (Procedure
   { env = env; cc = p.N.cc; name = p.N.name; formals = formals;
     locals = unimp "locals"; continuations = unimp "continuations";
-    stackmem = stackmem; stacklabels = stacklabels; code = unimp "code"; } in
+    stackmem = stackmem; stacklabels = stacklabels; code = unimp "code"; }) in
 @ 
 Continuations have an empty denotation (for now) because all that work
 is done in [[Ast2ir]]. 
@@ -673,10 +678,11 @@ let bind_continuation env (r, name) =
 
 \paragraph{Imports}
 Imports have to be the native pointer size.
-I SUSPECT THAT ``IMPORT AS'' IS IMPLEMENTED INCORRECTLY.
+Code [[F.import]] remembers the [[import as]] relationship.
 <<definitions of name-binding functions>>=
-let bind_import env (r, ty, imports) = 
+let bind_and_remember_import env (r, ty, imports) = 
   let import env (foreign,name) =
+    let env = F.import r (Aux.Option.get name foreign) name env in
     let sym = F.symbol env name in
     let den = F.Import (Aux.Option.get name foreign, sym) in
     let ty  = <<convert optional importing [[ty]] as long as it is pointer size>> in
@@ -699,22 +705,17 @@ let bind_code_label env (r, n) =
 \subsubsection{Register variables and formal parameters}
 <<definitions of name-binding functions>>=
 let rec registers_from scope n rs env =
-  let register env (rgn, r) k = match r with
-  | (_,Some h,t,name,Some x) -> E.error "can't have hint and hardware register"
-  | (_,h,t,name,Some x) when scope = Local ->
-      E.error "local registers can't be mapped to hardware"
-  | (v,h,t,name,reg) ->
-      let i = { F.index = n
-              ; F.rhint = ( match h,reg with
-                          | None  , None   -> F.RNone
-                          | Some h, None   -> F.RHint h
-                          | None  , Some r -> F.RReg r
-                          | _ -> assert false
-                          ) 
-              ; F.loc   = None
-              ; F.variance = v
-              } in
-      k (F.bindv name (rgn, E.Raise.right (F.Variable i, Type.evalTy env t)) env) in
+  let register env (rgn, (v,hint,t,name,hwreg)) k =
+    let reg h = { F.index = n; F.rhint = h; F.loc = None; F.variance = v } in
+    let den h = E.Ok (F.Variable (reg h)) in
+    let den = match hint, hwreg with
+    | Some _, Some _ -> errorf rgn "can't have hint and hardware register"
+    | None,   Some r ->
+        if scope = Local then errorf rgn "local register can't be mapped to hardware"
+        else den (F.RReg r)
+    | Some _, None   -> errorf rgn "hints permissible only on formal parameters" 
+    | None,   None   -> den F.RNone in
+    k (F.bindv name (rgn, E.Raise.pair (den, Type.evalTy env t)) env) in
   match rs with
   | [] -> env
   | r :: rs -> register env r (registers_from scope (n+1) rs) in
@@ -735,15 +736,13 @@ let formals_from n rs env =
 @ 
 <<definitions of name-binding functions>>=
 let bind_section_names env (secname, ds) = 
-  <<definitions of data functions>>
+  <<definitions of name-binding functions for data>>
   foldl datum env ds in
 <<definitions of elaboration functions>>=
 let section env (secname, ds) =
   <<definitions of procedure-processing functions>>
+  <<definitions of elaboration functions for data>>
   unimp "elaboration of section" in
-@ 
-<<definitions of name-binding functions>>=
-let check_exports env _ = unimp "export checking" in
 @ 
 \subsection{Translation of \texttt{stackdata} declarations, accumulating labels}
 
@@ -778,7 +777,7 @@ alignment must be a power of two.
 <<definitions of stack-data functions>>=
 and stackdatum mem stacklabels' env (r, d) k =
   let errorf fmt = Printf.kprintf
-      (fun s -> error r env s; k mem stacklabels' (F.flagError env)) fmt in
+      (fun s -> eprint r s; k mem stacklabels' (F.flagError env)) fmt in
   match d with
   | N.Datalabel l ->
       let loc = Memalloc.current mem in
@@ -812,6 +811,41 @@ and stackdatum mem stacklabels' env (r, d) k =
   | N.Procedure _ -> impossf "nested procedures"
   | N.SSpan (_, _, _) -> impossf "span in stackdata"
 @
+\paragraph{Export checking}
+
+Not all named values can be exported: registers, continuations, and
+stack labels are values that can't be exported. Export declarations
+optionally can specify the type of declared symbols. Such a type must
+match the actual type of an exported symbol.
+<<definitions of name-binding functions>>=
+let remember_export env (r, _, exports) = 
+  let export env (name,foreign) =
+    F.export r name (Aux.Option.get name foreign) env in
+  foldl export env exports in
+@ 
+The only thing that can happen to the environment here is that it gets
+flagged with an error.
+<<definitions of name-binding functions>>=
+let check_export env (r, ty, pairs) = 
+  let errorf fmt = Printf.kprintf (fun s -> eprint r s; F.flagError env) fmt in
+  let check_pair env (name, foreign) =
+    E.seq' env (snd (F.findv name env)) (fun (den, ty) ->
+      if ty <> pointerty then
+        errorf "exported value must have native pointer type"
+      else
+        match den with
+        | F.Label (F.Proc _ | F.Code _ | F.Data _) -> env
+        | _ -> errorf "%s can't be exported" name) in
+  let env = match ty with
+  | Some t ->
+      E.seq' env (Type.evalTy env t) (fun ty ->
+        if ty <> pointerty then
+          errorf "exported value must have native pointer type"
+        else
+          env)
+  | None -> env in
+  foldl check_pair env pairs in
+@
 
 \subsubsection{Initialized data and other sectionish things}
 
@@ -820,9 +854,9 @@ Top-level data are more complicated than stackdata.
 Any error flags the environment and continues.
 The only environment operation for a toplevel datum is to bind labels.
 The rest should be drawn from ast2ir.
-<<definitions of data functions>>=
+<<definitions of name-binding functions for data>>=
 let datum env (r, d) =
-  let errorf fmt = Printf.kprintf (fun s -> error r env s; F.flagError env) fmt in
+  let errorf fmt = Printf.kprintf (fun s -> eprint r s; F.flagError env) fmt in
   match d with
   | N.Datalabel l ->
       F.bindv l (r, E.Ok (F.Label (F.Data (F.symbol env l)), pointerty)) env
@@ -835,24 +869,90 @@ let datum env (r, d) =
       F.bindv p.N.name (r, E.Ok (den, pointerty)) env
   | N.SSpan (_, _, _) -> unimp "section span" in
 @ 
+<<definitions of elaboration functions for data>>=
+let rec data prev' ds = match ds with
+| [] -> List.rev prev'
+| (r, d) :: ds ->
+    let finish x = data (x::prev') ds in
+    match d with
+    | N.Datalabel l -> finish (E.Ok (Datalabel l))
+    | N.Align n     -> finish (E.Ok (Align n))      (* checked earlier *)
+    | N.Procedure p -> finish (proc env p)
+    | N.ReserveMem(ty,size,init) -> finish (reserve_mem r ty size init)
+    | N.SSpan (_, _, _) -> unimp "section span" 
+@
+A memory declaration has a type, a type, and optionally a number of
+expressions to initialize the memory.  The number of expressions must
+match the size specification, and the type of the expressions must
+match the declared type.
+<<definitions of elaboration functions for data>>=
+and reserve_mem r ty size idata =
+    E.seq2 (Type.evalTy env ty) (init_size r size) (fun ty n ->
+      match idata with
+      | None ->
+          (match ty with
+          | Types.Bits w when w mod memsize = 0 ->
+              E.Ok (UninitializedData (Aux.Option.get 1 n * (w / memsize)))
+          | Types.Bits w ->
+              errorf r "width %d of initialized data is not a multiple of memsize = %d"
+                w memsize
+          | Types.Bool -> Impossible.impossible "boolean type from ast")
+      | Some i ->
+          E.seq (init r ty i) (fun inits ->
+            let rcount = List.length inits in
+            let lcount = Aux.Option.get rcount n in
+            if      rcount > lcount then errorf r "too many initial values"
+            else if rcount < rcount then errorf r "too few initial values"
+            else E.Ok (InitializedData inits)))
+@
+The [[init_size]] function returns the number of objects to reserve
+memory for. Any given number must be nonnegative.
+<<definitions of elaboration functions for data>>=
+and init_size r = function
+  | A.DynSize   -> E.Ok (None)
+  | A.NoSize    -> E.Ok (Some 1)
+  | A.FixSize e ->
+      E.seq (Const.evalExpr env e) (fun (bits, ty) -> 
+        match ty with
+        | Types.Bits _ ->
+            (try
+              let size = Bits.S.to_int bits in
+              if size >= 0 then E.Ok (Some size)
+              else errorf r "negative count for initialized data"
+            with Bits.Overflow -> errorf r "overflow computing size")
+        | _ -> errorf r "Boolean count for initialized data")
+@    
+All initial values for a memory declaration must match the declared
+type [[t]] of the memory declaration. The [[init]] function checks for
+this and returns the number of initial expressions.
+<<definitions of elaboration functions for data>>=
+and init r ty i = 
+  match i with
+  | A.InitAt (x,r) -> E.catch (error r env) (init r ty) x
+  | A.InitExprs(es)  ->
+      E.seq (E.Raise.list (List.map (typed_expr env) es)) (fun tes ->
+        if List.for_all (fun (e, t) -> t = ty) tes then
+          E.Ok tes
+        else
+          errorf r "typeof an initial value does not match declared type")
+  | A.InitStr s ->
+      let to_texpr c = R.bits (Bits.U.of_int (Char.code c) 8) 8, ty in
+      if ty = T.Bits 8 then
+        E.Ok (Aux.String.foldr (fun c l -> to_texpr c :: l) s [])
+      else
+        errorf r "initialized string must specify type bits8"
+  | A.InitUStr(s) ->
+      if ty = T.Bits 16 then
+        unimp "Unicode"
+      else
+        errorf r "initialized Unicode string must specify type bits16" in
+@ 
 ================================================================
-
-<<module Env>>=
 @
 A procedure opens a local scope:  the procedure's parameters and all
 local [[typedef]], [[const]], [[continuation]] belong to the local
 scope.  When collecting the global values only the procedure's name is
 bound in the environment and the [[goto]] labels in its body.
-<<module Env>>=
-@
-<<module Env>>=
-let proc r env (_,name,ff,bb as p) =
-    let sym     = F.symbol env name in
-    let ventry  = E.ematch (pointerTy env) 
-                           (fun p -> F.Label(F.Proc(sym,None,0)),p) in
-    let env     = foldl (body r Global) env bb     in 
-    let env     = F.bindv name (r,ventry) env    in
-        env
 @
 
 % ------------------------------------------------------------------ 
@@ -953,105 +1053,6 @@ let rec lvalue context env = function
               when t' = p                       -> t
             | _                                 -> E.error msg4
             ))
-@
-The [[memsize]] function returns the number of objects to reserve
-memory for. Any given number must be a positive value.
-<<check>>=
-let memsize env = function
-    | A.DynSize       -> E.Ok(None)
-    | A.NoSize        -> E.Ok(Some 1)
-    | A.FixSize(e)    -> E.ematch (Consts.evalExpr env e)
-        ( function 
-        | Types.Bits(_), exp ->
-            let size = try Bits.U.to_int (to_bits exp) with
-                       Bits.Overflow -> E.error "size too big"
-            in 
-                if size > 0 then Some (size)
-                else E.error "invalid memory size"
-        | _ ->       E.error "invalid memory size"
-        )
-@    
-All initial values for a memory declaration must match the declared
-type [[t]] of the memory declaration. The [[init]] function checks for
-this and returns the number of initial expressions.
-<<check>>=
-let rec init env ty i = 
-    let msg1 = "types of initial values do not match declared type" in
-    E.seq ty
-    ( fun t -> match i with
-    | A.InitAt(x,r)    -> E.catch (error r env) (init env ty) x
-    | A.InitExprs(es)  -> E.seq (E.Raise.list (List.map (tyExpr env) es))
-                          ( fun ts -> (* check type consistency *)
-                            if   (foldl (fun res t' -> res && t' = t) true ts)
-                            then E.Ok(List.length es)
-                            else E.error msg1
-                          )
-    | A.InitStr(s)      
-      when t = T.bits 8 -> E.Ok(String.length s)
-    | A.InitUStr(s)   
-      when t = T.bits 16 -> E.Ok(String.length s)
-    | _                -> E.error msg1
-    )
-@
-A memory declaration has a type, a type, and optionally a number of
-expressions to initialize the memory.  The number of expressions must
-match the size specification, and the type of the expressions must
-match the declared type.
-<<check>>=
-let memdecl env ty size init_exprs =
-    let t = evalTy env ty    in
-    let n = memsize env size in
-    match init_exprs with
-    | None   -> E.seq' (F.flagError env) (E.Raise.pair   (t,n)) (fun _ -> env)
-    | Some i -> E.seq' (F.flagError env) (E.Raise.triple (t,n,init env t i))
-        ( function 
-        | t, Some n, m when m > n -> E.error "too many initial values"
-        | t, Some n, m when m < n -> E.error "foo few initial values"
-        | t, Some n, _            -> env
-        | t, None  , _            -> env
-        )
-@
-@
-Labels as part of memory data must not be processed because they have been
-already entered into the fat environment in a previous step. This leaves
-alignments and memory declarations to be checked.
-<<check>>=
-let rec datum env = function
-    | A.DatumAt(x,r)  -> E.catch' (F.flagError env) (error r env) (datum env) x
-    | A.Label(n)      -> env
-    | A.Align(a)      -> if   is2power a 
-                         then env 
-                         else E.error "illegal alignment"
-    | A.MemDecl(t,s,i)-> memdecl env t s i
-@
-Not all named values can be exported: registers, continuations, and
-stack labels are values that can't be exported. Export declarations
-optionally can specify the type of declared symbols. Such a type must
-match the actual type of an exported symbol.
-<<check>>=
-let export' env = function
-    | None, name   -> 
-        E.seq' (F.flagError env) (snd (F.findv name env))
-        ( function
-        | F.Label(F.Proc _), _ -> env
-        | F.Label(F.Code _), _ -> env
-        | F.Label(F.Data _), _ -> env
-        | _                    -> E.error (name^" can't be exported")
-        )
-    | Some t, name -> 
-        let t = evalTy env t in
-        E.seq' (F.flagError env) (E.Raise.pair (snd (F.findv name env), t))
-        ( function
-        | (F.Label(F.Proc _ ),t), t' when t = t' -> env
-        | (F.Label(F.Code _ ),t), t' when t = t' -> env
-        | (F.Label(F.Data _ ),t), t' when t = t' -> env
-        | (F.Label(F.Proc _ ),_), _ 
-        | (F.Label(F.Data _ ),_), _ 
-        | (F.Label(F.Code _ ),_), _  -> E.error (name^" has not declared type")
-        | _                          -> E.error (name^" can't be exported")
-        )
-
-let export env (t,ns) = foldl (fun env (n,_) -> export' env (t,n)) env ns
 @
 A target for a [[goto]] statement must be a local code pointer.
 <<check>>=
@@ -1401,28 +1402,6 @@ and stmt env = function
     | A.LabelStmt x     -> env        (* nothing to do *)
     | A.EmptyStmt       -> env        (* nothing to do *)  
     | A.CommentStmt _   -> env
-@
-A [[body]] belongs either to a procedure or a [[span]] statement. Data
-declarations as part of a [[body]] always declare data on the stack.
-<<check>>=
-and body env = function
-    | A.BodyAt (x,r)   -> E.catch' (F.flagError env) (error r env) (body env) x
-    | A.DeclBody x     -> decl env x
-    | A.StmtBody x     -> stmt env x
-    | A.DataBody x     -> foldl stackdatum env x
-@    
-Declarations for values and types have already been processed at this
-stage. Only the [[export]] declaration must be checked.
-<<check>>=
-and decl env = function
-    | A.DeclAt(x,r)   -> E.catch' (F.flagError env) (error r env) (decl env) x
-    | A.Import      x -> env
-    | A.Export      x -> export env x
-    | A.Const       x -> env
-    | A.Registers   x -> env
-    | A.Typedef     x -> env
-    | A.Target      x -> env
-    | A.Pragma        -> env
 @
 A top level [[span]] contains [[section]]s but otherwise behaves like a
 [[span]] statement: the two expressions [[e1]] and [[e2]] must denote a
