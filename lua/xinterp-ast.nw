@@ -5,18 +5,31 @@ let compile ~srcdbg cs =
 
 exception NotWritten of string
 exception Return of value list
+exception NotFound
 
+let rec setlocal2 rho n v = (match rho with
+     | [] -> raise NotFound
+     | (n', _)::rho' -> if n = n' then (n, v)::rho 
+                        else setlocal2 rho' n v)
 
-let rec exp e rho xi = 
+let rec getlocal2 rho n = (match rho with
+     | [] -> raise NotFound
+     | (n', v)::rho' -> if n = n' then v else getlocal2 rho' n)
+
+let rec exp e rho sto xi = 
    (match e with
        | A.Lit v  -> v
-       (*| A.Var x -> (match lookup rho x with
+       | A.Var x -> (try getlocal2 rho x with NotFound -> 
+	                 getglobal xi (V.String x))
+       (*
+       			(match lookup rho x with
                      | Global  -> getglobal xi (V.String x)
-                     | Local n -> getlocal rho n)*) 
+                     | Local n -> getlocal2 rho n) *)
+       
        (* problem with rho as an array and list above. I need a new lookup
 	function *) 
-       | A.Index (tab, key) -> let tabval = exp tab rho xi in
-                               let keyval = exp key rho xi in
+       | A.Index (tab, key) -> let tabval = exp tab rho sto xi in
+                               let keyval = exp key rho sto xi in
 			       index xi tabval keyval
       (* | A.Table (lists, bindings) ->
                 (* check with list bindings *)
@@ -27,27 +40,24 @@ let rec exp e rho xi =
 
        | A.Binop (e1, op, e2) ->
                (match op with
-	        | A.And -> let v1 = exp e1 rho xi in
+	        | A.And -> let v1 = exp e1 rho sto xi in
 		           (match v1 with
 			   | V.Nil -> v1
-			   | _ -> exp e2 rho xi)
-		| A.Or  -> let v1 = exp e1 rho xi in
+			   | _ -> exp e2 rho sto xi)
+		| A.Or  -> let v1 = exp e1 rho sto xi in
 		           (match v1 with
-			   | V.Nil -> exp e2 rho xi
+			   | V.Nil -> exp e2 rho sto xi
 			   | _ -> v1)
 	        | _  ->
                    let op = binop op in
-		   let v1 = exp e1 rho xi in
-		   let v2 = exp e2 rho xi in
+		   let v1 = exp e1 rho sto xi in
+		   let v2 = exp e2 rho sto xi in
 		   op v1 v2 xi)
        | A.Unop (op, e) -> 
                    let op = unop op in
-		   let v = exp e rho xi in
+		   let v = exp e rho sto xi in
 		   op v xi
 
-      (* why are the results in the std interp trimmed? Is there ever a place
-       where the multiple returns will be seen? The stmt disregards the results,
-       only calling funcs for side effects... *)
        | A.Call c -> trim1 (call c rho xi)
        | _ -> raise Unimplemented )
 
@@ -66,8 +76,8 @@ and call c rho xi = (match c with
        let f = index xi obj meth in
        let args = List.map (fun x -> exp x rho xi) args in
        (try apply f args with Return v -> v) *)
-and explist es rho xi = 
-       List.map (fun x -> exp x rho xi) es
+and explist es rho sto xi = 
+       List.map (fun x -> exp x rho sto xi) es
        (*List.fold_left (function (x, _) -> exp x rho xi) es V.Nil *)
 
 
@@ -81,28 +91,28 @@ xi propagated.
 When do local variables go out of scope?
 
 <<compiler ((ast))>>=
-let rec stmt s rho xi = (match s with
+let rec stmt s rho sto xi = (match s with
   | A.Stmt' _ -> raise (NotWritten "Stmt'")
   | A.WhileDo (cond, body) -> 
-            if notnil (exp cond rho xi) then  
+            if notnil (exp cond rho sto xi) then  
 	      let rho = block body rho xi in
-	      stmt s rho xi 
+	      stmt s rho sto xi 
 	    else rho
   | A.RepeatUntil (body, cond) -> 
 	    let rho = block body rho xi in
-            if notnil (exp cond rho xi) then stmt s rho xi
+            if notnil (exp cond rho sto xi) then stmt s rho sto xi
 	    else rho
   | A.If (cond, t, alts, f) -> 
             let alts = (cond, t)::alts in
 	    let f = (match f with None -> [] | Some ss -> ss) in 
             let rec ifeval testlist fail = match testlist with
 	        | [] ->              fail
-	        | (cond, t)::rest -> let cond = exp cond rho xi in
+	        | (cond, t)::rest -> let cond = exp cond rho sto xi in
 	                             if notnil cond then t 
 		   		     else ifeval rest fail in
 	    block (ifeval alts f) rho xi
   | A.Return es ->
-            let vs = explist es rho xi in
+            let vs = explist es rho sto xi in
             raise (Return vs)
        
 @
@@ -113,23 +123,22 @@ call to [[call]] directly.
 
 <<compiler ((ast))>>=
   | A.Assign (lvs, res) ->
-       let rec assign lvs res rho = (match (lvs, res) with
-           | ([], res) -> List.map (function x -> exp x rho xi) res;
-	   		  rho
-	   | (lvs, []) -> let nil_assign x rho = lvar x V.Nil rho xi in
-	                  List.fold_right nil_assign rho lvs
-	   (* | (lvs, [A.Call c]) -> let rvs = try call c rho xi with 
-	                                   Return rvs' -> rvs' in
-				  stmt (A.Assign (lvs, rvs)) rho xi *)
-	   (* for above and below I have to do some sort of map or lavrs 
-	    function, not stmt Assign and assign *)
-	   (* | (lv::lvs, re::res) -> assign lvs res (lvar lv (exp re rho xi))
-	    *)
-           | _ -> raise Unimplemented)
-        in assign lvs res rho
+      let rec assign rho = function 
+          | ([], _) -> rho
+	  | (l::ls, []) -> assign (lvar l V.Nil rho sto xi) (ls, [])
+	  | (l::ls, r::rs) -> assign (lvar l r rho sto xi) (ls, rs)  
+      in (match (lvs, res) with
+          | ([], res) -> rho
+	  | (lvs, []) -> assign rho (lvs, [])
+	  | (lv::lvs, [A.Call c]) -> 
+	   	let res = call c rho xi in
+		assign rho (lv::lvs, res) 
+	  | (lv::lvs, re::res) -> 
+	       let res = explist (re::res) rho sto xi in
+	       assign rho (lv::lvs, res))
 
   (* | A.Local (vs, es) -> stmt (x::rho) (A.Assign ((A.Lvar x), es)) theta ret
-           stmt (A.Assign (List.map (function x -> A.Lvar x) vs, es)) 
+           stmt (A.Assign (List.map (function x -> A.Lvar x) vs, es))
                 (List.rev_append vs rho) xi *) (* just not right *)
 
 @
@@ -137,22 +146,26 @@ Why does call not take the global environment
 <<compiler ((ast))>>=
   | A.Callstmt c -> call c rho xi; rho
   | _ -> raise Unimplemented)
-and lvar lv rv rho xi = (match lv with 
+and lvar lv rv rho sto xi = (match lv with 
   | A.Lindex (tab, key) ->
-           let tabval = exp tab rho xi in
-           let keyval = exp key rho xi in
-      	   settable xi tabval key rv
-  | A.Lvar x ->
-           (match lookup rho x with
-	    | Global  -> setglobal xi (V.String x) rv
-	    | Local n -> setlocal rho n rv))
-  ; rho
+           let tab = exp tab rho sto xi in
+           let key = exp key rho sto xi in
+      	   settable xi tab key rv ; rho
+  | A.Lvar x -> (match lookup sto x with
+                      | Global  -> setglobal xi (V.String x) rv
+		      | Local n -> setlocal l n x) ; sto
+   
+
+  
+  (try setlocal2 rho x rv with NotFound ->
+      setglobal xi (V.String x) rv ; rho))
 and block body rho xi =
   match body with
   | [] -> rho
-  | s :: ss -> let rho = stmt s (extend rho s) xi in
+  | s :: ss -> let rho = stmt s (extend rho s) sto xi in
                block ss rho xi
 
+	       (* define extend ! *)
   
   
 
@@ -168,6 +181,6 @@ and block body rho xi =
            let v = exp e rho xi in
            (match lookup rho x with
 	    | Global  -> setglobal xi (V.String x) v
-	    | Local n -> setlocal rho n v) *)
+	    | Local n -> setlocal2 rho n v) *)
   
 @ 
