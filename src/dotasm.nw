@@ -1,0 +1,115 @@
+
+% ------------------------------------------------------------------ 
+\section{Assembler Interface to DOT}
+% ------------------------------------------------------------------ 
+
+This module implements an assembler that emits every procedure as a
+graph in \textsc{dot} format.
+
+<<dotasm.mli>>=
+module Make: Asm3.ASM with type i    = Proc.t
+                      with type init = unit
+@                      
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+Most assembler directives do nothing. We are only interested in the
+control-flow-graphs that are part of an instruction. 
+
+<<dotasm.ml>>=
+module Make = struct
+    module Asm = Asm3
+
+    type init   = unit
+    type i      = Proc.t
+
+    exception Unsupported of string
+    let unsupported msg = raise (Unsupported msg)
+
+    <<Make>>
+end    
+@
+
+
+% ------------------------------------------------------------------ 
+\subsubsection{Classes for symbols, instructions, and addresses}
+% ------------------------------------------------------------------ 
+
+
+<<Make>>=
+class symbol (n:string) : Asm.symbol = object
+    method text = n
+end
+
+<<Make>>=
+class instr (p:i): Asm.instruction = object
+    method ast  = unsupported "instruction.ast"
+    method text =
+        Cfgutil.cfg2dot ~compress:true p.Proc.symbol#text p.Proc.cfg
+end    
+@
+
+<<Make>>=
+module RelAddr:Asm.RELADDR = struct
+    class sym (s:Asm.symbol): Asm.reladdr = object
+        method ast = unsupported "reladdr.ast"
+    end
+    
+    class const (k:Bits.bits): Asm.reladdr = object
+        method ast = unsupported "reladdr.ast"
+    end
+
+    class add (x:Asm.reladdr) (y:Asm.reladdr): Asm.reladdr = object
+        method ast = unsupported "reladdr.ast"
+    end
+
+    class sub (x:Asm.reladdr) (y:Asm.reladdr): Asm.reladdr = object
+        method ast = unsupported "reladdr.ast"
+    end
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{The assembler class}
+% ------------------------------------------------------------------ 
+
+<<Make>>=
+class asm () : Asm.assembler =
+object (this)
+    val mutable _section = "this can't happen"
+
+    (* declarations *)
+    method import s = new symbol s
+    method export s = new symbol s
+    method local  s = new symbol s
+
+    (* sections *)
+    method section s = _section <- s
+    method current   = _section
+
+    (* definitions *)
+    method label s   = ()
+    method const s b = ()
+
+    (* locations *)
+
+    method org n    = ()
+    method align n  = ()
+    method addloc n = ()
+
+    (* instructions *)
+    method instr (i:Asm.instruction) = 
+        print_endline i#text
+        
+
+    method zeroes n = ()
+    method value v = ()
+    method addr  a = ()
+    method comment s = ()
+    method emit = ()
+end
+
+
+

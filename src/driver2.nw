@@ -25,7 +25,8 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
     type optimize  = proc -> unit
 
     val dummy:      target                  (* our only target right now *)
-    val cmmasm:     unit -> asm             (* an assembler *)
+    val cmmasm:     unit -> asm             (* C-- emitting assembler *)
+    val dotasm:     unit -> asm             (* DOT emitting assembler *)
     
     val version:    unit -> unit            (* print version to stdout   *)
     val scan:       file:string -> unit     (* for debugging the scanner *)
@@ -196,9 +197,14 @@ let parse (file:string) =
 <<Caml>>=
 let emit_asdl (map,ast:ast) =
         AstUtil.sexp_wr_program ast stdout
+@
 
+Assemblers are objects. We therefore need function to create them, Here
+are our current assemblers.
+
+<<Caml>>=
 let cmmasm () = new Asm.asm ()
-
+let dotasm () = new Dotasm.Make.asm ()
 
 <<Caml>>=
 let check (map,ast:ast) (asm:asm) =
@@ -339,6 +345,8 @@ let builtins =
   ; "version"   , pf (V.string **-> V.runit)  (fun _ -> Caml.version ())
   ; "cmmasm"    , pf (V.string **-> V.result Map.asm) 
                   (fun _ -> Caml.cmmasm ())
+  ; "dotasm"    , pf (V.string **-> V.result Map.asm) 
+                  (fun _ -> Caml.dotasm ())
   ; "compile"   , func (Map.optimize  **-> Map.ast  
                                       **-> Map.target 
                                       **-> Map.env 
