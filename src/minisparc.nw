@@ -1,0 +1,373 @@
+% vim: ts=8 sw=4 et:
+
+% ------------------------------------------------------------------ 
+\section{Sparc Instruction Subset}
+% ------------------------------------------------------------------ 
+
+Until we can generate constructor functions for {\sparc} instructions I
+will use these hand-coded constructors. All {\rtl}s are derived from the
+automatically generated {\rtl}s but altered to work accept both
+temporaries and registers.
+
+
+<<minisparc.mli>>=
+module Reloc:  sig
+  type ('sym, 'const) relocatable   
+  (* constructors *)
+  val of_const : 'c       -> ('s, 'c) relocatable    (* a known constant *)
+  val of_sum   : 's -> 'c -> ('s, 'c) relocatable    (* label + offset *)
+  val add_const :
+      ('c -> 'c -> 'c) -> ('s, 'c) relocatable -> 'c -> ('s, 'c) relocatable
+
+  (* observer *)
+  val normalize : ('s, 'c) relocatable -> 's option * 'c
+end
+
+type t          = Rtl.rtl
+type reg_or_imm = Rtl.exp
+type address    = Rtl.exp
+type regaddr    = Rtl.exp
+type reg        = Rtl.loc
+type target     = (Reladdr.symbol, nativeint) Reloc.relocatable
+
+val reg         : Rtl.space -> int -> reg
+
+(* addressing modes *)
+val imode       : nativeint (*[~4096..4095]*) -> reg_or_imm
+val rmode       : reg -> reg_or_imm
+val generala    : reg -> reg_or_imm -> address
+val dispa       : reg -> nativeint (*[~4096..4095]*) -> address
+val absolutea   : nativeint (*[~4096..4095]*) -> address
+val indexa      : reg -> reg -> address
+
+(* instructions *)
+val add : reg -> Rtl.exp -> reg -> t
+val and_ : reg -> Rtl.exp -> reg -> t
+val ba : target -> t
+val be : target -> t
+val bg : target -> t
+val bge : target -> t
+val bgu : target -> t
+val bl : target -> t
+val ble : target -> t
+val bleu : target -> t
+val bn : target -> t
+val subcc : reg -> reg_or_imm -> reg -> t
+val cmp : reg -> reg_or_imm -> t
+val fmovs : reg -> reg -> t
+val ld : address -> reg -> t
+val ldf : address -> reg -> t
+val or_ : reg -> reg_or_imm -> reg -> t
+val mov : reg_or_imm -> reg -> t
+val sub : reg -> reg_or_imm -> reg -> t
+val neg2 : reg -> reg -> t
+val xnor : reg -> reg_or_imm -> reg -> t
+val not2 : reg -> reg -> t
+val nop : t
+val sethi : Base.std_nativeint -> reg -> t
+val sll : reg -> reg_or_imm -> reg -> t
+val sra : reg -> reg_or_imm -> reg -> t
+val srl : reg -> reg_or_imm -> reg -> t
+val st : reg -> address -> t
+val stf : reg -> address -> t
+val xor : reg -> reg_or_imm -> reg -> t
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<minisparc.ml>>=
+module R  = Rtl
+module NI = Nativeint
+
+module Reloc = struct
+  type ('s, 'c) relocatable = 's option * 'c
+  type t                    = (Reladdr.symbol, nativeint) relocatable
+  
+  let of_const c    = (None, c)
+  let of_sum s c    = (Some s, c)
+  let add_const (+) = fun (s, c) c' -> (s, c + c')
+  let normalize r   = r
+end
+
+type t          = Rtl.rtl
+type reg_or_imm = Rtl.exp
+type address    = Rtl.exp
+type regaddr    = Rtl.exp
+type reg        = Rtl.loc
+type target     = Reloc.t
+
+let r n = (R.cell R.none 'r' R.Identity 32 (R.bits (Bits.of_nativeint n 5) 5))
+let f n = (R.cell R.none 'f' R.Identity 32 (R.bits (Bits.of_nativeint n 5) 5))
+let t n = (R.cell R.none 't' R.Identity 32 (R.bits (Bits.of_nativeint n 16) 16))
+let u n = (R.cell R.none 'u' R.Identity 32 (R.bits (Bits.of_nativeint n 16) 16))
+
+let reg sp n = match sp with
+    | 'r' -> r (NI.of_int n)
+    | 'f' -> f (NI.of_int n)
+    | 't' -> t (NI.of_int n)
+    | 'u' -> u (NI.of_int n)
+    | _   -> assert false
+
+let zero = Rtl.fetch (r NI.zero) 32 
+let r0   = r NI.zero
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Adressing Modes}
+% ------------------------------------------------------------------ 
+
+<<minisparc.ml>>=
+exception Failure of string list (* raised on failure to encode *)
+
+let fail l                  = raise (Failure l)
+let fail_unless condition l = if condition then () else fail l
+
+let check_simm13 simm13 =
+    fail_unless (NI.shift_right (NI.shift_left simm13 19) 19 = simm13) 
+    ["field simm13 does not fit in 13 signed bits"]
+   
+let imode simm13 = 
+    ( check_simm13 simm13     
+    ; Rtl.bits (Bitops.sx (Bits.of_nativeint simm13 13) 32) 32
+    )
+
+let rmode rs2     = Rtl.fetch rs2 32
+let indirecta rs1 = Rtl.fetch rs1 32
+
+let generala rs1 reg_or_imm = 
+    Rtl.app (Rtl.opr "add" [32]) [Rtl.fetch rs1 32; reg_or_imm]
+
+let dispa rs1 simm13 = 
+    ( check_simm13 simm13
+    ; Rtl.app (Rtl.opr "add" [32]) 
+        [ Rtl.fetch rs1 32
+        ; Rtl.bits (Bitops.sx (Bits.of_nativeint simm13 13) 32) 32
+        ]
+    )
+
+let absolutea simm13 = 
+    ( check_simm13 simm13
+    ; Rtl.bits (Bitops.sx (Bits.of_nativeint simm13 13) 32) 32
+    )
+
+let indexa rs1 rs2 = 
+  Rtl.app (Rtl.opr "add" [32]) [Rtl.fetch rs1 32; Rtl.fetch rs2 32]
+
+let target t =
+    match Reloc.normalize t with
+    | None  , c -> Rtl.bits (Bits.of_nativeint c 32)  32
+    | Some s, c -> Rtl.app (Rtl.opr "add" [32]) 
+                    [ Rtl.link s 32
+                    ; Rtl.bits (Bits.of_nativeint c 32) 32
+                    ]
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Instructions}
+% ------------------------------------------------------------------ 
+
+We only implement instructions we actually use.
+
+<<minisparc.ml>>=
+let add rs1 reg_or_imm rd = 
+    Rtl.store rd 
+        (Rtl.app (Rtl.opr "add" [32]) [Rtl.fetch rs1 32; reg_or_imm]) 32
+
+let and_ rs1 reg_or_imm rd = 
+    Rtl.store rd (Rtl.app (Rtl.opr "and" [32]) 
+        [Rtl.fetch rs1 32; reg_or_imm]) 32
+
+let ba t = 
+    Rtl.store (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits 
+        (Bits.of_int 5 3) 3)) (target t) 32
+
+let be t = 
+  Rtl.guard (Rtl.app (Rtl.opr "ne" [1]) [Rtl.fetch (Rtl.slice 1 22 (Rtl.cell 
+            Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3) 3))) 1; 
+      Rtl.bits (Bits.of_int 0 1) 1]) (Rtl.store 
+      (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 5 3) 3)) 
+      (target t) 32)
+
+let bg t = 
+  Rtl.guard (Rtl.app (Rtl.opr "ne" [1]) [Rtl.app (Rtl.opr "com" [1]) [Rtl.app 
+          (Rtl.opr "or" [1]) [Rtl.fetch (Rtl.slice 1 22 (Rtl.cell Rtl.none 
+                'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3) 3))) 1; 
+          Rtl.app (Rtl.opr "xor" [1]) [Rtl.fetch (Rtl.slice 1 23 (Rtl.cell 
+                  Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3) 
+                    3))) 1; Rtl.fetch (Rtl.slice 1 21 (Rtl.cell Rtl.none 'i' 
+                  Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3) 3))) 1]]]; 
+      Rtl.bits (Bits.of_int 0 1) 1]) (Rtl.store 
+      (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 5 3) 3)) 
+      (target t) 32)
+
+let bge t = 
+  Rtl.guard (Rtl.app (Rtl.opr "ne" [1]) [Rtl.app (Rtl.opr "com" [1]) 
+        [Rtl.app (Rtl.opr "xor" [1]) [Rtl.fetch (Rtl.slice 1 23 (Rtl.cell 
+                Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3) 3))) 
+            1; Rtl.fetch (Rtl.slice 1 21 (Rtl.cell Rtl.none 'i' Rtl.Identity 
+                32 (Rtl.bits (Bits.of_int 0 3) 3))) 1]]; Rtl.bits 
+        (Bits.of_int 0 1) 1]) (Rtl.store 
+      (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 5 3) 3)) 
+      (target t) 32)
+
+let bgu t = 
+  Rtl.guard (Rtl.app (Rtl.opr "ne" [1]) [Rtl.app (Rtl.opr "com" [1]) 
+        [Rtl.app (Rtl.opr "or" [1]) [Rtl.fetch (Rtl.slice 1 20 (Rtl.cell 
+                Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3) 3))) 
+            1; Rtl.fetch (Rtl.slice 1 22 (Rtl.cell Rtl.none 'i' Rtl.Identity 
+                32 (Rtl.bits (Bits.of_int 0 3) 3))) 1]]; Rtl.bits 
+        (Bits.of_int 0 1) 1]) (Rtl.store 
+      (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 5 3) 3)) 
+      (target t) 32)
+
+let bl t = 
+  Rtl.guard (Rtl.app (Rtl.opr "ne" [1]) [Rtl.app (Rtl.opr "xor" [1]) 
+        [Rtl.fetch (Rtl.slice 1 23 (Rtl.cell Rtl.none 'i' Rtl.Identity 32 
+              (Rtl.bits (Bits.of_int 0 3) 3))) 1; Rtl.fetch 
+          (Rtl.slice 1 21 (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits 
+                (Bits.of_int 0 3) 3))) 1]; Rtl.bits (Bits.of_int 0 1) 1]) 
+    (Rtl.store (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 
+            5 3) 3)) (target t) 32)
+
+let ble t = 
+  Rtl.guard (Rtl.app (Rtl.opr "ne" [1]) [Rtl.app (Rtl.opr "or" [1]) 
+        [Rtl.fetch (Rtl.slice 1 22 (Rtl.cell Rtl.none 'i' Rtl.Identity 32 
+              (Rtl.bits (Bits.of_int 0 3) 3))) 1; Rtl.app (Rtl.opr "xor" [1]) 
+          [Rtl.fetch (Rtl.slice 1 23 (Rtl.cell Rtl.none 'i' Rtl.Identity 32 
+                (Rtl.bits (Bits.of_int 0 3) 3))) 1; Rtl.fetch 
+            (Rtl.slice 1 21 (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits 
+                  (Bits.of_int 0 3) 3))) 1]]; Rtl.bits (Bits.of_int 0 1) 1]) 
+    (Rtl.store (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 
+            5 3) 3)) (target t) 32)
+
+let bleu t = 
+  Rtl.guard (Rtl.app (Rtl.opr "ne" [1]) [Rtl.app (Rtl.opr "or" [1]) 
+        [Rtl.fetch (Rtl.slice 1 20 (Rtl.cell Rtl.none 'i' Rtl.Identity 32 
+              (Rtl.bits (Bits.of_int 0 3) 3))) 1; Rtl.fetch 
+          (Rtl.slice 1 22 (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits 
+                (Bits.of_int 0 3) 3))) 1]; Rtl.bits (Bits.of_int 0 1) 1]) 
+    (Rtl.store (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 
+            5 3) 3)) (target t) 32)
+
+let bn t = 
+  Rtl.guard (Rtl.bool false) (Rtl.store 
+      (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 5 3) 3)) 
+      (target t) 32)
+
+let subcc rs1 reg_or_imm rd = Rtl.par [Rtl.store rd (Rtl.app
+    (Rtl.opr "sub" [32]) [Rtl.fetch rs1 32; reg_or_imm]) 32;
+    Rtl.guard (Rtl.app (Rtl.opr "lt" [32]) [Rtl.app (Rtl.opr "sub" [32])
+    [Rtl.fetch rs1 32; reg_or_imm]; Rtl.bits (Bits.of_int 0 32) 32])
+    (Rtl.store (Rtl.slice 1 23 (Rtl.cell Rtl.none 'i' Rtl.Identity 32
+    (Rtl.bits (Bits.of_int 0 3) 3))) (Rtl.bits (Bits.of_int 1 1) 1) 1);
+    Rtl.guard (Rtl.app (Rtl.opr "ge" [32]) [Rtl.app (Rtl.opr "sub" [32])
+    [Rtl.fetch rs1 32; reg_or_imm]; Rtl.bits (Bits.of_int 0 32) 32])
+    (Rtl.store (Rtl.slice 1 23 (Rtl.cell Rtl.none 'i' Rtl.Identity 32
+    (Rtl.bits (Bits.of_int 0 3) 3))) (Rtl.bits (Bits.of_int 0 1) 1) 1);
+    Rtl.guard (Rtl.app (Rtl.opr "eq" [32]) [Rtl.app (Rtl.opr "sub" [32])
+    [Rtl.fetch rs1 32; reg_or_imm]; Rtl.bits (Bits.of_int 0 32) 32])
+    (Rtl.store (Rtl.slice 1 22 (Rtl.cell Rtl.none 'i' Rtl.Identity 32
+    (Rtl.bits (Bits.of_int 0 3) 3))) (Rtl.bits (Bits.of_int 1 1) 1) 1);
+    Rtl.guard (Rtl.app (Rtl.opr "ne" [32]) [Rtl.app (Rtl.opr "sub" [32])
+    [Rtl.fetch rs1 32; reg_or_imm]; Rtl.bits (Bits.of_int 0 32) 32])
+    (Rtl.store (Rtl.slice 1 22 (Rtl.cell Rtl.none 'i' Rtl.Identity 32
+    (Rtl.bits (Bits.of_int 0 3) 3))) (Rtl.bits (Bits.of_int 0 1) 1) 1);
+    Rtl.guard (Rtl.app (Rtl.opr "conjoin" []) [Rtl.app (Rtl.opr "ne"
+    [1]) [Rtl.app (Rtl.opr "bitExtract" [32; 32; 1]) [Rtl.bits
+    (Bits.of_int 31 32) 32; Rtl.fetch rs1 32]; Rtl.app (Rtl.opr
+    "bitExtract" [32; 32; 1]) [Rtl.bits (Bits.of_int 31 32) 32;
+    reg_or_imm]]; Rtl.app (Rtl.opr "ne" [1]) [Rtl.app (Rtl.opr
+    "bitExtract" [32; 32; 1]) [Rtl.bits (Bits.of_int 31 32) 32;
+    Rtl.fetch rs1 32]; Rtl.app (Rtl.opr "bitExtract" [32; 32; 1])
+    [Rtl.bits (Bits.of_int 31 32) 32; Rtl.app (Rtl.opr "sub" [32])
+    [Rtl.fetch rs1 32; reg_or_imm]]]]) (Rtl.store (Rtl.slice 1 21
+    (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3)
+    3))) (Rtl.bits (Bits.of_int 1 1) 1) 1); Rtl.guard (Rtl.app (Rtl.opr
+    "conjoin" []) [Rtl.app (Rtl.opr "ne" [1]) [Rtl.app (Rtl.opr
+    "bitExtract" [32; 32; 1]) [Rtl.bits (Bits.of_int 31 32) 32;
+    Rtl.fetch rs1 32]; Rtl.app (Rtl.opr "bitExtract" [32; 32; 1])
+    [Rtl.bits (Bits.of_int 31 32) 32; reg_or_imm]]; Rtl.app (Rtl.opr
+    "eq" [1]) [Rtl.app (Rtl.opr "bitExtract" [32; 32; 1]) [Rtl.bits
+    (Bits.of_int 31 32) 32; Rtl.fetch rs1 32]; Rtl.app (Rtl.opr
+    "bitExtract" [32; 32; 1]) [Rtl.bits (Bits.of_int 31 32) 32; Rtl.app
+    (Rtl.opr "sub" [32]) [Rtl.fetch rs1 32; reg_or_imm]]]])
+    (Rtl.store (Rtl.slice 1 21 (Rtl.cell Rtl.none 'i' Rtl.Identity 32
+    (Rtl.bits (Bits.of_int 0 3) 3))) (Rtl.bits (Bits.of_int 0 1) 1) 1);
+    Rtl.guard (Rtl.app (Rtl.opr "eq" [1]) [Rtl.app (Rtl.opr "bitExtract"
+    [32; 32; 1]) [Rtl.bits (Bits.of_int 31 32) 32; Rtl.fetch rs1
+    32]; Rtl.app (Rtl.opr "bitExtract" [32; 32; 1]) [Rtl.bits
+    (Bits.of_int 31 32) 32; reg_or_imm]]) (Rtl.store (Rtl.slice 1 21
+    (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3)
+    3))) (Rtl.bits (Bits.of_int 0 1) 1) 1); Rtl.store (Rtl.slice 1 20
+    (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3)
+    3))) (Rtl.app (Rtl.opr "borrow" [32]) [Rtl.fetch rs1 32;
+    reg_or_imm; Rtl.bits (Bits.of_int 0 1) 1]) 1]
+
+let cmp rs1 reg_or_imm = 
+    subcc rs1 reg_or_imm r0
+
+let fmovs fs2 fd = 
+  Rtl.store fd (Rtl.fetch fs2 32) 32
+
+
+let ld address rd = 
+    Rtl.store rd 
+        (Rtl.fetch (Rtl.cell Rtl.none 'm' Rtl.Identity 32 address) 32) 32
+
+let ldf address fd = 
+    Rtl.store fd 
+        (Rtl.fetch (Rtl.cell Rtl.none 'm' Rtl.Identity 32 address) 32) 32
+
+let or_ rs1 reg_or_imm rd = 
+    Rtl.store rd 
+        (Rtl.app (Rtl.opr "or" [32]) [Rtl.fetch rs1 32; reg_or_imm]) 32
+
+let mov reg_or_imm rd = or_ r0 reg_or_imm rd
+
+let sub rs1 reg_or_imm rd = 
+    Rtl.store rd (Rtl.app (Rtl.opr "sub" [32]) 
+        [Rtl.fetch rs1 32; reg_or_imm]) 32
+
+let neg2 rs2 rd = sub r0 (rmode rs2) rd
+
+let xnor rs1 reg_or_imm rd = 
+    Rtl.store rd (Rtl.app (Rtl.opr "xor" [32]) [Rtl.fetch 
+        rs1 32; Rtl.app (Rtl.opr "com" [32]) [reg_or_imm]]) 32
+
+let not2 rs1 rd = xnor rs1 zero rd
+
+let nop = Rtl.par []    (* XXX just guessed *)
+
+let sethi n rd = 
+    Rtl.store rd (Rtl.bits 
+        (Bitops.bitInsert 0 (Bits.of_nativeint n 32) (Bits.of_int 0 10)) 32) 32
+
+let sll rs1 reg_or_imm rd = 
+    Rtl.store rd (Rtl.app (Rtl.opr "shl" [32; 5]) 
+        [Rtl.fetch rs1 32; Rtl.app (Rtl.opr "bitExtract" 
+            [32; 32; 5]) [Rtl.bits (Bits.of_int 0 32) 32; reg_or_imm]]) 32
+
+let sra rs1 reg_or_imm rd = 
+    Rtl.store rd (Rtl.app (Rtl.opr "shra" [32; 5]) 
+        [Rtl.fetch rs1 32; Rtl.app (Rtl.opr "bitExtract" 
+            [32; 32; 5]) [Rtl.bits (Bits.of_int 0 32) 32; reg_or_imm]]) 32
+
+let srl rs1 reg_or_imm rd = 
+    Rtl.store rd (Rtl.app (Rtl.opr "shrl" [32; 5]) 
+        [Rtl.fetch rs1 32; Rtl.app (Rtl.opr "bitExtract" 
+            [32; 32; 5]) [Rtl.bits (Bits.of_int 0 32) 32; reg_or_imm]]) 32
+
+let st rd address = 
+    Rtl.store (Rtl.cell Rtl.none 'm' Rtl.Identity 32 address) 
+        (Rtl.fetch rd 32) 32
+
+let stf fd address = 
+    Rtl.store (Rtl.cell Rtl.none 'm' Rtl.Identity 32 address) 
+        (Rtl.fetch fd 32) 32
+
+let xor rs1 reg_or_imm rd = 
+    Rtl.store rd (Rtl.app (Rtl.opr "xor" [32]) 
+      [Rtl.fetch rs1 32; reg_or_imm]) 32
+@
