@@ -139,23 +139,14 @@ Linear-scan register allocation requires a linear representation of a
 procedure.  This is provided by numbering nodes in the control-flow
 graph {\cfg}.  Of course, any change to the structure of the {\cfg}
 destroys a numbering.  This happens when code for spilling is inserted
-into a {\cfg}.
+into a {\cfg}. The [[Automaton.t]] argument supplies spill locations in a
+procedure's activation record.
 
-Module type [[S]] summarizes the functionality we implement and export
-for clients.  
-
-<<exported module types>>=
-module type G = sig
-    include Cfg3.S
-
-    val get_live: node -> locs          (* access to live sets *)
-    val set_live: node -> locs -> unit
-end
 
 <<linscan.mli>>=
 <<exported module types>>
-module Make (A: Args) (G: G): sig
-    val linscan: G.t -> Target2.t -> unit
+module Make (A: Args): sig
+    val linscan: Cfg3.t -> Target2.t -> Automaton.t -> unit
 end
 @
 
@@ -203,7 +194,8 @@ here.  Points mark the opening and closing of liveness intervals.
 <<linscan.ml>>=
 <<exported module types>>
 
-module Make (A: Args) (G: G) = struct
+module Make (A: Args)  = struct
+    module G = Cfg3
 
     module P = struct
         type t = int
@@ -361,20 +353,21 @@ of a {\cfg}, register allocation starts over after spilling.
 \end{quote}
 
 <<linscan>>=
-let rec linscan cfg target =
+let rec linscan cfg target automaton =
     let _          = LI.liveness cfg     in
     let _          = G.gm_enumerate cfg  in
     let rec next_node lifetimes node = match node with 
         | None      -> ()
-        | Some node -> alloc target node lifetimes next_node spill
+        | Some node -> alloc target automaton node lifetimes next_node spill
     in
         next_node (lifetimes cfg target.T.allocatable) (Some (G.first cfg))
 @
 <<alloc>>=
-let alloc target node lifetimes next_node spill =
+let alloc target automaton node lifetimes next_node spill =
     let rec next_tmp lifetimes = match find_tmp target node with
         | None     -> next_node lifetimes (G.next node)
-        | Some tmp -> replace_tmp target node tmp lifetimes next_tmp spill      
+        | Some tmp -> replace_tmp 
+                        target automaton node tmp lifetimes next_tmp spill      
     in
         next_tmp lifetimes 
 @
@@ -404,8 +397,8 @@ livetime, and all occurrences of [[tmp]] substituted by [[r]] in the
 <<replace>>=
 let replace tmp reg      = fun t -> if t = tmp then reg else t
 
-let replace_tmp target node tmp lifetimes next_tmp spill =
-  let iter cfg f = G.fold_fwd cfg (fun node () -> G.set_rtl node f) () in
+let replace_tmp target automaton node tmp lifetimes next_tmp spill =
+  let iter cfg f = Cfgutil.fold_fwd cfg (fun node () -> G.set_rtl node f) () in
   let lifetime   = lookup lifetimes                                    in
   let cfg         = G.cfg node                                         in
   match find_reg target lifetimes tmp with
@@ -418,7 +411,7 @@ let replace_tmp target node tmp lifetimes next_tmp spill =
   | None -> (* out of register - must spill *)
       let spillee, interval = find_spillee lifetimes tmp node          in
       let mem               = A.mkMem spillee                          in
-          spill target cfg spillee mem interval
+          spill target cfg automaton spillee mem interval
 @
 
 % ------------------------------------------------------------------ 
@@ -601,16 +594,16 @@ instructions with a post-pass.
 % ------------------------------------------------------------------ 
 
 The spiller walks over a region [[interval]] of nodes and updates it
-such that the [[spillee]] is help in memory [[mem]] most of the time. 
+such that the [[spillee]] is held in memory [[mem]] most of the time. 
 When the spillee is used, it is re-loaded into a temporary.
 
 <<spill>>=
-and spill target cfg spillee mem interval = 
+and spill target cfg automaton spillee mem interval = 
     let first = I.left  interval in
     let last  = I.right interval in 
         ( G.scan_fwd cfg first last 
                 (fun n () -> update target interval spillee mem n) ()
-        ; linscan cfg target (* start over *)
+        ; linscan cfg target automaton (* start over *)
         )
 @
 
