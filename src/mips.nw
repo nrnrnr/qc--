@@ -358,10 +358,9 @@ let bc x (opr, ws as op) y ~tgt =
 [[bnegate]] inverts the condition in a conditional branch.
 <<MIPS postexpander>>=
 let bnegate r = match Dn.rtl r with
-    | RP.Rtl [ RP.App( (op,[32]), [x; y]), RP.Store (pc, tgt, 32)]
+    |           RP.Rtl [ RP.App( (op,       [32]), [x; y]), RP.Store (pc, tgt, 32)]
       when pc = Dn.loc pc_lhs ->
-        R.guard (R.app (R.opr (negate op) [32]) [x; y]) 
-                (R.store pc_lhs (Up.exp tgt) wordsize)
+        Up.rtl (RP.Rtl [ RP.App( (negate op,[32]), [x; y]), RP.Store (pc, tgt, 32)])
     | _ -> impossible "ill-formed MIPS conditional branch"
 @
 
