@@ -10,21 +10,642 @@
 % inc: \usepackage{alltt}
 
 % ------------------------------------------------------------------ 
-\section{Collecting and Emitting Data for Runtime Services}
+\section{Collecting and emitting data for the run-time system}
 % ------------------------------------------------------------------ 
-For each call site, we maintain information about the locations of variables,
-the offset to stackdata labels, and span data, as well as the call node itself.
-For now, we don't actually have any of this data.
-<<info types>>=
-type call_site_info = { node : unit }
-@
+The run-time system needs to examine stack frames that are suspended at call
+sites or at continuations.
+We refer to these locations collectively as {\em stopping points}.
+For each stopping point, we emit information to tell the run-time system about
+the stack frame.
+
+The run-time system needs to know:
+\begin{itemize}
+\item the size of the frame,
+\item the size of the incoming overflow block that must be deallocated by the
+procedure,
+\item the location of the return address,
+\item the locations of stackdata,
+\item the locations of values stored in callee-save registers on entry to the procedure,
+\item the locations of local variables,
+\item the locations of span data declared in the \pal~source, and
+\item the locations of unwind continuations (currently unimplemented).
+\end{itemize}
+
+In order to avoid complications in threading this data through the compiler, 
+we convert each type of data to spans.
+Later, when we are ready to emit assembly code (compile-time constants have been
+computed, etc.), we emit the spans as assembly code.
+
+This module hides the representation of data as spans, as well as the encoding
+of the spans as assembly.
+The interface of the module provides functions to convert the different types of
+data to spans and a single function to emit all the spans as assembly.
+
+% ------------------------------------------------------------------ 
+\subsection{The interface}
+% ------------------------------------------------------------------ 
+We expose two types of functions:
+\begin{itemize}
+\item Functions that convert data to a span.
+\item A function that emits the spans as assembly.
+\end{itemize}
+The conversion functions for frame size and overflow-block size use
+the number of variables and the virtual frame pointer in addition to
+the expression representing the size.
+These functions cannot ask for a record of type [[Ast2ir.proc]] because
+they may be used before such a record exists. 
 <<runtimedata.mli>>=
-<<info types>>
-val to_data: (call_site_info * 'i Cfgx.M.node) list -> Ast.datum list
+type span = Bits.bits * Rtl.exp
+val frame_size_to_span    : nvars:int -> vfp:Rtl.exp -> Rtl.exp -> span
+val overflow_size_to_span : nvars:int -> vfp:Rtl.exp -> Rtl.exp -> span
+@
+Occasionally, it is useful to represent a value as being dead at a stopping point.
+For example, if a variable is not live, we represent it with the [[dead_value]].
+<<runtimedata.mli>>=
+val dead_value            : Rtl.exp
+@
+To facilitate unwinding the stack, we must be able to look up unwind continuations.
+UNFORTUNATELY, WE DO NOT YET HAVE A USEFUL IMPLEMENTATION.
+<<runtimedata.mli>>=
+val conts_to_spans : unit -> span
+@
+The locations of stackdata labels must be exposed through the run-time system.
+<<runtimedata.mli>>=
+val stackdata_to_spans : wordsize:int -> vfp:Rtl.exp -> Rtl.exp list -> span list
+@
+Any run-time data that relies on the locations of variables or temporaries
+requires information from a variable map.
+There are three kinds of run-time data that require this information:
+the return address, callee-save registers, and variables.
+The callee-save register are special because we emit consecutive spans, one indicating
+the callee-save register, and the next indicating where it is stored.
+<<runtimedata.mli>>=
+val ra_to_span       : wordsize:int -> nvars:int -> Rtl.loc -> span
+val csregs_to_spans  : wordsize:int -> nvars:int -> Register.Set.t ->
+                       (Register.t * Rtl.loc) list -> span list
+val var_asst_to_span : Ast2ir.proc -> int -> Automaton.loc -> span
+@
+After we have placed all the data in spans, we emit
+the data as assembly by calling [[emit_as_asm]].
+The function should be partially applied to an assembler, then added
+to the optimization pipeline.
+<<runtimedata.mli>>=
+val emit_as_asm : Ast2ir.proc Asm.assembler -> 'v -> Ast2ir.proc-> bool
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Imports, type definitions, and utilities}
+% ------------------------------------------------------------------ 
+A number of shorthands are used throughout the implementation.
+<<runtimedata.ml>>=
+let verb   = 20
+let imposs = Impossible.impossible
+let unimp  = Impossible.unimp
+
+type span  = Bits.bits * Rtl.exp
+
+module A  = Automaton
+module B  = Bits
+module C  = Call
+module RM = Register.Map
+module RS = Register.Set
+module R  = Rtl
+module RP = Rtl.Private
+module RU = Rtlutil
+module S  = Space
+module W  = Rtlutil.Width
+module Dn = Rtl.Dn
+module Up = Rtl.Up
+module P  = Proc
+module T  = Target
+module V  = Verbose
+@
+We represent a dead value as the constant rtl expression [[false]].
+<<runtimedata.ml>>=
+let dead_value = R.bool false
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Converting data to spans and emitting spans as assembly}
+% ------------------------------------------------------------------ 
+This module hides three secrets:
+\begin{itemize}
+\item When a type of data is encoded as a span, what index is used?
+\item When a type of data is encoded as a span, what expression is used?
+\item How is assembly emitted for spans of each type of data?
+\end{itemize}
+We answer the first question in the next section.
+The answers to the second and third questions are intertwined, so the
+following section answers both together.
+
+NOTE: IN A (NEAR) FUTURE REVISION, WE CAN SAVE A LOT OF EFFORT BY ARRANGING
+TO CREATE THE SPANS SUCH THAT THEIR INDICES ARE THE ORDER IN WHICH THEY
+ARE EMITTED AS ASSEMBLY.
+THIS TRICK REQUIRES ADDING SOME COUNTS (I.E. NUMBER OF LOCALS) TO THE SPANS,
+AS WELL AS PLACING THE SOURCE-LEVEL SPANS AT THE END.
+
+% ------------------------------------------------------------------ 
+\subsubsection{Mapping data to span indices}
+% ------------------------------------------------------------------ 
+Spans defined in the source code may only be indexed by whole numbers.
+Consequently, the compiler can use the negative indices to store private data.
+Given the maximum span index ([[max_span]]), the number of local variables ([[nvars]]),
+the number of unwind continuations ([[num_conts]]),
+and the number of callee-save registers ([[nregs]]), we layout the span
+indices as follows:
+\begin{verbatim}
+                                     +-----------------------+
+                           max_span: |                       |
+                                     | source spans          |
+                                  0: |                       |
+                                     +-----------------------+
+                                 -1: |                       |
+                                     | local variables       |
+                             -nvars: |                       |
+                                     +-----------------------+
+                       -(nvars + 1): | frame size            |
+                                     +-----------------------+
+                       -(nvars + 2): | overflow size         |
+                                     +-----------------------+
+                       -(nvars + 3): | return address        |
+                                     +-----------------------+
+                       -(nvars + 4): |                       |
+                                     | callee-save registers |
+             -(2*nregs + nvars + 3): |                       |
+                                     +-----------------------+
+             -(2*nregs + nvars + 4): |                       |
+                                     | continuations         |
+    -(nconts + 2*nregs + nvars + 3): |                       |
+                                     +-----------------------+
+\end{verbatim}
+
+For each callee-save register, we use two slots: one for the register and the next
+for the location in which it has been stored.
+
+The careful reader will notice that we have not included stackdata in this mapping.
+We handle stackdata separately because the stackdata values are visible throughout
+the procedure.
+We associate the stackdata with the procedure's label; the stackdata items are
+0-indexed, in the order they appear in the procedure.
+
+For most of the indices, the mapping is trivial; only the registers require
+some work. We omit the identity function on source span indices.
+
+The local variables, frame size, overflow size, and return-address location are simple:
+<<runtimedata.ml>>=
+let var_ix             i       = -(i + 1)
+let frame_size_ix      nvars   = -(nvars + 1)
+let overflow_size_ix   nvars   = -(nvars + 2)
+let ra_ix              nvars   = -(nvars + 3)
+@
+We also define predicates to determine whether an index is of a given type.
+Note that the predicates correspond directly to the diagram above.
+<<define span index predicates>>=
+let var_pred           i = i <= -1 && i >= -nvars in
+let frame_size_pred    i = i = -(nvars+1) in
+let overflow_size_pred i = i = -(nvars+2) in
+let ra_pred            i = i = -(nvars+3) in
+@
+The callee-save registers are indexed in sorted order, where the order is defined
+over the (space, index, width) type of a register.
+Registers are sorted first by space (increasing alphanumeric order), then by index
+(also increasing alphanumeric order).
+IT MAY JUST BE WORTH USING THE ORDERING DEFINED OVER ALL HARDWARE REGISTERS IN THE
+[[target.t]] RECORD.
+<<runtimedata.ml>>=
+let mk_csreg_ix_map nvregs = snd (Register.reg_int_map nvregs)
+@
+Using a map from registers to indices, we can easily look up the index for a
+callee-save register.
+<<runtimedata.ml>>=
+let csreg_ix nvars r regmap = -(nvars + 4 + 2 * (RM.find r regmap))
+@
+The rest of the indices and predicates are straightforward.
+<<define span index predicates>>=
+let csreg_pred i = i <= -(nvars + 4) && i >= -(2*nregs + nvars + 3) in
 @
 <<runtimedata.ml>>=
-<<info types>>
+let cont_ix   nregs nvars  cn  = -(2*nregs + nvars + 4 + cn)
 @
+<<define span index predicates>>=
+let cont_pred i = i <= -(2*nregs + nvars + 4) in
+let source_pred i = i >= 0 in
+@
+We also support the opposite operation: taking a list of spans and grouping
+them by the type of data they store.
+THIS CODE IS HIDEOUS.
+FORTUNATELY, IF WE FIX THE CODE TO FOLLOW MY SUGGESTION ABOVE (INDEXING THE SPANS IN
+THE RIGHT ORDER), THIS CODE WILL DISAPPEAR (AS IF BY MAGIC).
 <<runtimedata.ml>>=
-let to_data i = Impossible.unimp "not emitting runtime system data yet"
+type pseudo_span = int * Rtl.exp
+type span_groups = { frame    : pseudo_span option
+                   ; overflow : pseudo_span option
+                   ; return   : pseudo_span option
+                   ; register : pseudo_span list
+                   ; local    : pseudo_span list
+                   ; source   : pseudo_span list
+                   ; cont     : pseudo_span list
+                   }
+let pspan conv (b,e) =
+  V.eprintf verb "span: (%d,%s)\n" (conv b) (RU.ToReadableString.exp e)
+let print_span        = pspan Bits.S.to_int
+let print_pseudo_span = pspan (fun x -> x)
+let split_spans proc spans =
+  (*V.eprintf verb "\n%d Spans in proc %s:\n" (List.length spans)*)
+  proc.Proc.symbol#original_text;
+  List.iter print_span spans;
+  let nvars = proc.Proc.vars in
+  let nregs = RS.cardinal proc.Proc.cc.C.pre_nvregs in
+  <<define span index predicates>>
+  let spans = List.map (fun (n,e) -> (Bits.S.to_int n,e)) spans in
+  let add_span spans (i,_ as s) =
+    match (frame_size_pred i, overflow_size_pred i, ra_pred i, var_pred i,
+           csreg_pred i,      cont_pred i, source_pred i) with
+    | true, _, _, _, _, _, _       ->
+      (match spans.frame with None -> {spans with frame = Some s}
+                            | _    -> imposs "multiple frame sizes at one site")
+    | _, true, _, _, _, _, _       ->
+      (match spans.frame with None -> {spans with overflow = Some s}
+                            | _    -> imposs "multiple overflow sizes at one site")
+    | _, _, true, _, _, _, _       ->
+      (match spans.frame with None -> {spans with return = Some s}
+                            | _    -> imposs "multiple return addresses at one site")
+    | _, _, _, true, _, _, _       -> {spans with local    = s :: spans.local}
+    | _, _, _, _, true, _, _       -> {spans with register = s :: spans.register}
+    | _, _, _, _, _, true, _       -> {spans with cont     = s :: spans.cont}
+    | _, _, _, _, _, _, true       -> {spans with source   = s :: spans.source}
+    | _, _, _, _, _, _, _          -> imposs "unrecognized span" in
+  let empty = { frame = None; overflow = None; return = None; register = []
+              ; local = [];   source   = [];   cont   = []} in
+  let split_spans = List.fold_left add_span empty spans in
+  match split_spans.frame, split_spans.overflow, split_spans.return with
+  | None, _, _ -> imposs "0 frame spans"
+  | _, None, _ -> imposs "0 overflow spans"
+  | _, _, None -> imposs "0 return spans"
+  | _, _, _    -> split_spans
+@
+Before emitting spans, we should always be sure to sort them in the proper order.
+<<runtimedata.ml>>=
+let sort_spans     ss = List.sort (fun (i1,_) (i2,_) -> compare i1 i2) ss
+let sort_neg_spans ss = List.sort (fun (i1,_) (i2,_) -> compare i2 i1) ss
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Mapping data to expressions and emitting emitting spans as assembly}
+% ------------------------------------------------------------------ 
+At each stopping point, we emit information to tell the run-time system about
+the stack frame.
+We first separate out the spans that are visible throughout a procedure (stackdata).
+The stackdata spans ([[sd_spans]]) are emitted in a separate table.
+Then, for each stopping point, we emit the associated spans by calling
+[[emit_site_spans]].
+<<runtimedata.ml>>=
+let emit_as_asm asm _ proc =
+  let wordsize   = proc.P.target.T.wordsize in
+  let to_bits  i = Bits.S.of_int i wordsize  in 
+  let zero       = Bits.zero wordsize in
+  let one        = to_bits 1 in
+  <<define functions for emitting data>>
+  <<define [[partition_site_spans]] [[emit_sd_spans]] and [[emit_site_spans]]>>
+  let sd_spans, site_spans = partition_site_spans proc.P.spans in
+  let prev_section = asm#current in
+  emit_sd_spans sd_spans;
+  List.iter emit_site_spans site_spans;
+  asm#section prev_section;
+  true
+@
+Stackdata spans have been paired with the label for the current procedure.
+We separate out these spans from the spans that are valid only at particular stopping
+points within the procedure.
+<<define [[partition_site_spans]] [[emit_sd_spans]] and [[emit_site_spans]]>>=
+let partition_site_spans spans =
+  (*V.eprintf verb "partitioning in proc %s with %d vars\n" (proc.P.symbol#original_text)
+     proc.Proc.vars;*)
+  List.partition (fun (site,_) -> site = proc.P.symbol#original_text) spans in
+@
+\paragraph{Emitting Stackdata Spans}
+A stackdata map for $n$ stackdata labels is of size $n + 1$ words.
+The first word gives the number of stackdata labels.
+The next $n$ words give the stackdata labels in order.
+<<define [[partition_site_spans]] [[emit_sd_spans]] and [[emit_site_spans]]>>=
+let sd_label = asm#local (Idgen.label "stackdata") in
+let emit_sd_spans sd_spans =
+  match sd_spans with
+  | [(_,spans)] ->
+    asm#section "pcmap_data";
+    asm#label   sd_label;
+    asm#value   (Bits.U.of_int (List.length spans) proc.P.target.T.wordsize);
+    List.iter   (fun (_,e) -> emit_val_loc e) (sort_spans spans)
+  | _ -> imposs "More than one set of stackdata spans found for a procedure" in
+@
+\paragraph{Emitting Stopping-Point Spans}
+For each stopping point labelled [[stop_l]], we must emit the information stored in
+the [[spans]].
+The information is organized in two distinct areas.
+The first area is a map from stopping points in the procedure to run-time
+data associated with the stopping points.
+The run-time data for each stopping point begins at the label [[frame_label]].
+This map is placed in the [[pcmap]] section of the assembly code.
+
+The second area is the collection of run-time data for each stopping point.
+This data is placed in the [[pcmap_data]] section of the assembly code.
+<<define [[partition_site_spans]] [[emit_sd_spans]] and [[emit_site_spans]]>>=
+let emit_site_spans (stop_l, spans) =
+  let frame_label = asm#local (Idgen.label "frame") in
+  <<emit proc to run-time data map>>
+  <<emit frame data>>   in
+@
+The first area consist of two consecutive pointers, one to the stopping point
+and the other to the data associated with the stopping point:
+\begin{verbatim}
+.section pcmap
++--------------------+
+| stopping_point_lbl |
++--------------------+
+| frame_data_lbl     |
++--------------------+
+\end{verbatim}
+<<emit proc to run-time data map>>=
+  asm#section "pcmap";
+  asm#addr (Reloc.Simple.of_sum (asm#local stop_l) zero);
+  asm#addr (Reloc.Simple.of_sum frame_label        zero);
+@
+The second area keeps track of the size of the frame, the size of the incoming overflow
+block that the procedure must deallocate, the location of the return address,
+a pointer to the stackdata table, the locations of registers, the local variables,
+the spans, and the continuations (CONTINUATIONS ARE NOT YET IMPLEMENTED).
+The layout looks like:
+\begin{verbatim}
+.section pcmap_data
+frame_data_lbl:
++--------------------+
+| frame_size         |
++--------------------+
+| overflow_size      |
++--------------------+
+| return_address     |
++--------------------+
+| stackdata_table    |
++--------------------+
+| num registers      |
++--------------------+
+| num locals         |
++--------------------+
+| num spans          |
++--------------------+
+| num continuations  |
++--------------------+
+| registers          |
++--------------------+
+| locals             |
++--------------------+
+| spans              |
++--------------------+
+| continuations      |
++--------------------+
+\end{verbatim}
+The compiler keeps track of all this information through the use of spans, which are
+(index, Rtl.exp) pairs.
+Because the frontend can only use whole numbers to index spans, we can easily
+distinguish between user-defined spans and compiler-defined spans.
+<<emit frame data>>=
+asm#section "pcmap_data";
+asm#label frame_label;
+let spans = split_spans proc spans in
+<<emit [[frame_size]] and [[overflow_size]]>>
+<<emit return address>>
+<<emit [[sd_table]] location>>
+<<emit nums: registers, locals, source-level spans, continuations>>
+<<emit registers>>
+<<emit locals>>
+<<emit spans>>
+<<emit continuations>>
+@
+We cover each section of the frame data in detail.
+In addition to emitting spans as assembly data, we provide functions
+to convert each type of data (frame size, register contents, locals, etc.)
+to spans.
+
+% ------------------------------------------------------------------ 
+\subsubsection{Conversion to/from spans}
+% ------------------------------------------------------------------ 
+We provide conversion functions to store a value in a span,
+and we provide the functions to emit the expressions in these spans as 
+assembly.
+
+We provide conversion functions from an offset from the vfp to an integral size.
+<<runtimedata.ml>>=
+let offset_to_span ix vfp exp =
+  let w = W.exp exp in
+  Bits.S.of_int ix w, R.app (R.opr "sub" [w]) [exp; vfp]
+@
+We define functions for emitting two possible types of data in a single word:
+link-time constants and value locations.
+A link-time constant can be emitted directly.
+As a special case, we may encounter a constant false value when we expect a link-time
+constant.
+This case indicates that there the value is never used, so we emit 0.
+
+A value location, on the other hand, is one of three types: dead, register, or
+stack offset.
+We distinguish between the three cases by using the two high bits as tags and using the
+rest of the word to indicate the value's location.
+\begin{enumerate}
+\item Dead - The value is dead at this point in the procedure.
+The two high bits are 0b00. Since a dead value has no location, we just emit 0x0.
+\item Register - The value is stored in a register.
+The two high bits are 0b01. Of the remaining $n$ bits, the low $n/2$
+bits hold an index indicating the register, and the high $n/2$ bits hold an offset into
+the register (in case the value is not stored in the low bits of the register).
+\item Offset - The value is stored on the stack, at a fixed offset from the virtual
+frame pointer.
+The two high bits are 0b1s, where s is a sign bit.
+The remaining bits store the magnitude of the offset from the virtual frame pointer.
+\end{enumerate}
+
+First, we define a slew of helpers to emit the different types of values.
+<<define helpers to emit different values>>=
+<<define [[simplify_exp]] to simplify rtl expressions>>
+let reg_ix proc r = RM.find r (snd proc.P.target.T.reg_ix_map) in
+let emit_dead_var      ()    = asm#value zero in
+let emit_link_const    sym   = asm#addr (Reloc.Simple.of_sum sym zero) in
+let emit_offset bits =
+  let value    = Bits.S.to_int bits in
+  let offset_w = wordsize - 1 in
+  (try ignore (Bits.S.of_int value offset_w)
+   with Bits.Overflow -> imposs "Offset from vfp is too large for run-time encoding");
+  asm#value (B.Ops.logor (B.Ops.shl  one (to_bits offset_w))
+                         (B.Ops.shrl (B.Ops.shl (to_bits value) one) one)) in
+let emit_reg ix offset =
+  let offset_w = wordsize - 2 in
+  let w'       = offset_w / 2 in
+  (try ignore (Bits.S.of_int ix w'); ignore(Bits.S.of_int offset w')
+   with Bits.Overflow -> imposs "Reg ix or offset is too large for run-time encoding");
+  asm#value (B.Ops.logor (B.Ops.shl one (to_bits offset_w))
+                         (B.Ops.logor (B.Ops.shl (to_bits offset) (to_bits w'))
+                                      (to_bits ix))) in
+@  
+Then, we check the type of value (as encoded in the [[Rtl.exp]] type) and emit the
+value in the proper format.
+<<define functions for emitting data>>=
+let emit_val_loc e =
+  <<define helpers to emit different values>>
+  match Dn.exp (simplify_exp e) with
+  | RP.Const (RP.Bool false)               -> emit_dead_var ()
+  | RP.Const (RP.Link (sym,_))             -> emit_link_const sym
+  | RP.Const (RP.Bits bs)                  -> emit_offset   bs
+  | RP.Fetch (RP.Reg r, _)                 -> emit_reg  (reg_ix proc r) 0
+  | RP.Fetch (RP.Slice (_,i, RP.Reg r), _) -> emit_reg  (reg_ix proc r) i
+  | _ -> imposs (Printf.sprintf "unexpected exp for span data: %s"
+                                (RU.ToReadableString.exp e))  in
+@
+We provide a function to simplify an expression first by flattening slices such that
+they consist of a single offset from a location (if applicable), then by calling
+[[Simplify.exp]] on the expression.
+<<define [[simplify_exp]] to simplify rtl expressions>>=
+let simplify_exp exp =
+  let vfp             = proc.P.target.T.vfp            in
+  let check w = if w mod wordsize <> 0 || w < 0 then
+                   unimp (Printf.sprintf "unsupported size or alignment %d" w) in
+  let rec flatten offset l = match l with
+    | RP.Mem (_,_,_,e,_) ->
+       let w = Rtlutil.Width.exp (Up.exp e) in
+       check offset; check w;
+       (*V.eprintf verb "Adding an offset %d of width %d\n" offset w;*)
+       Rtlutil.add w (R.app (R.opr "sub" [w]) [Up.exp e; vfp])
+                            (Rtl.bits (Bits.S.of_int offset w) w)
+    | RP.Reg (_,_,w) ->
+       check w; check offset;
+       let l_up = Up.loc l in
+       if offset <> 0 then
+         R.fetch (R.slice w offset l_up) w
+       else R.fetch l_up w
+    | RP.Slice (_,i,l)   -> flatten (offset + i) l
+    | RP.Var _ -> imposs "Var after variable placement" in
+  match Dn.exp exp with
+  | RP.Fetch (loc,_) -> Simplify.exp (flatten 0 loc)
+  | _                -> Simplify.exp exp in
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Frame size and overflow size}
+% ------------------------------------------------------------------ 
+We encode the frame size and overflow size as offsets from the virtual frame pointer.
+<<runtimedata.ml>>=
+let frame_size_to_span    ~nvars ~vfp = offset_to_span (frame_size_ix    nvars) vfp
+let overflow_size_to_span ~nvars ~vfp = offset_to_span (overflow_size_ix nvars) vfp
+@
+We emit the frame size and overflow sizes as integer offsets.
+<<emit [[frame_size]] and [[overflow_size]]>>=
+let just = function Some x -> x | None -> imposs "expected value but found None" in
+emit_val_loc (snd (just spans.frame));
+emit_val_loc (snd (just spans.overflow));
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Return Address and Stackdata Table Label}
+% ------------------------------------------------------------------ 
+The return address is some location.
+<<runtimedata.ml>>=
+let ra_to_span ~wordsize ~nvars loc =
+  let to_bits i = Bits.S.of_int i wordsize in
+  (to_bits (ra_ix nvars), RU.fetch loc)
+@
+<<emit return address>>=
+emit_val_loc (snd (just spans.return));
+@
+The [[sd_label]] is ... just a label.
+<<emit [[sd_table]] location>>=
+asm#addr (Reloc.Simple.of_sum sd_label zero);
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Numer of registers, locals, spans, and continuations}
+% ------------------------------------------------------------------ 
+We emit the number of register, locals, spans, and continuations, as constants.
+<<emit nums: registers, locals, source-level spans, continuations>>=
+emit_val_loc (R.bits (to_bits (List.length spans.register)) wordsize);
+emit_val_loc (R.bits (to_bits (List.length spans.local))    wordsize);
+@
+For source-level spans, we assume a compact set of spans indexed by small
+whole numbers, so we emit all of them.
+<<emit nums: registers, locals, source-level spans, continuations>>=
+(*V.eprintf verb "Source-level spans:\n";
+List.iter print_pseudo_span spans.source;*)
+let max_span_ix = List.fold_left (fun best (i,_) -> max i best) (-1) spans.source in
+emit_val_loc (R.bits (to_bits (max_span_ix + 1)) wordsize);
+@
+<<emit nums: registers, locals, source-level spans, continuations>>=
+emit_val_loc (R.bits (to_bits (List.length spans.cont)) wordsize);
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Locations of stored registers}
+% ------------------------------------------------------------------ 
+Callee-save registers are stored as pairs of consecutive spans.
+The first span indicates the callee-save register.
+The second span indicates where it has been stored.
+<<runtimedata.ml>>=
+let csregs_to_spans ~wordsize ~nvars nvregs csregs =
+  let to_bits i     = Bits.S.of_int i wordsize         in 
+  let csreg_map     = mk_csreg_ix_map (RS.elements nvregs) in
+  let to_span rst (r,loc) =
+    let ix = csreg_ix nvars r csreg_map in
+    (to_bits (ix-1), RU.fetch loc) ::
+    (to_bits (ix-1), RU.fetch (R.reg r)) ::
+    rst in
+  List.fold_left to_span [] csregs
+@
+<<emit registers>>=
+(*V.eprintf verb "NVR's:\n";
+List.iter print_pseudo_span spans.register;*)
+List.iter (fun (_, e) -> emit_val_loc e) (sort_neg_spans spans.register);
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Location of stored locals}
+% ------------------------------------------------------------------ 
+Locals are stored as fetches from simple locations.
+<<runtimedata.ml>>=
+let var_asst_to_span proc var_num loc =
+  let to_bits i        = Bits.S.of_int i proc.Proc.target.T.wordsize    in 
+  (to_bits (var_ix var_num), RU.fetch (A.simple loc))
+@
+<<emit locals>>=
+(*V.eprintf verb "Local spans:\n";
+List.iter print_pseudo_span spans.local;*)
+List.iter (fun (_, e) -> emit_val_loc e) (sort_neg_spans spans.local);
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Location of stackdata}
+% ------------------------------------------------------------------ 
+Stackdata locations are offsets from the virtual frame pointer.
+<<runtimedata.ml>>=
+let stackdata_to_spans ~wordsize ~vfp sd_exps =
+  snd (List.fold_left (fun (i,rst) e -> (i+1, offset_to_span i vfp e :: rst))
+                      (0,[]) sd_exps)
+@
+% ------------------------------------------------------------------ 
+\subsubsection{Location of source-level spans}
+% ------------------------------------------------------------------ 
+We initialize an array of expressions for local variables to the dead
+variable value.
+Then, we set the live variables to their actual locations.
+<<emit spans>>=
+let span_arr = Array.make (max_span_ix + 1) (R.bool false) in
+List.iter  (fun (i,span) -> span_arr.(i) <- span) (sort_spans spans.source);
+Array.iter emit_val_loc span_arr;
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Location of continuations}
+% ------------------------------------------------------------------ 
+DUMMY IMPLEMENTATION
+<<runtimedata.ml>>=
+let conts_to_spans () = unimp "Run-time system not yet ready for getting continuations"
+@
+
+<<emit continuations>>=
+();
 @
