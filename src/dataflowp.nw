@@ -24,22 +24,15 @@ is [['a answer]].
 \end{itemize}
 The dataflow engine computes a least solution to a set of dataflow
 equations defined by a pass.
+
+WE NEED TO TRACK THINGS TO DISCOVER WHETHER ANYTHING HAS CHANGED AS A
+RESULT OF RUNNING A PASS.
 @
 <<dataflowp.mli>>=
 <<exported module types>>
-module Make (Proplist : PROPLIST with type t = Zipcfg.uid) : S
+module M : S
 <<exported module types>>=
-module type PROPLIST = sig
-  type t
-  type 'a prop = {
-    get : t -> 'a;   (* raises Not_found *)
-    set : t -> 'a -> unit;
-  }
-  val clear : t -> unit (* clear all properties *)
-end
-
 module type S = sig
-  module P : PROPLIST with type t = Zipcfg.uid
   <<exported types>>
   <<declarations of exported values>>
 end
@@ -49,7 +42,7 @@ type 'a answer = Dataflow of 'a | Rewrite of Zipcfg.graph
 
 type ('i, 'a, 'o) pass' =
  { name      : string;
-   prop      : 'a P.prop;
+   prop      : 'a Unique.Prop.t;
    add_info  : 'a -> 'a -> 'a;  (* lattice join (least upper bound) *)
    changed   : old:'a -> new':'a -> bool;  (* is new one bigger? *)
    init_info : 'a;  (* lattice bottom element *)
@@ -62,11 +55,21 @@ type 'a analysis = ('a, 'a, 'a) pass'
 type 'a transformation = ('a, unit, Zipcfg.graph option) pass'
 type 'a pass = ('a, 'a, 'a answer) pass'
 @ 
-An analysis sets properties.
-A~full pass sets properties and also rewrites the graph.
+These two functions only set properties.
 <<declarations of exported values>>=
 val backward_anal : 'a analysis -> Zipcfg.graph -> unit
 val backward_pass : 'a pass -> Zipcfg.graph -> unit
+@ 
+The rewrite pass sets properties and also rewrites the graph.
+<<declarations of exported values>>=
+val backward_rewrite : 'a pass -> Zipcfg.graph -> Zipcfg.graph
+@ 
+<<declarations of exported values>>=
+val a_t : 'a analysis -> 'a transformation -> 'a pass
+@ 
+Diagnostic help:
+<<declarations of exported values>>=
+val debug : ('a -> string) -> 'a pass -> 'a pass
 @
 \section{Implementation}
 
@@ -80,8 +83,8 @@ let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
 <<utilities>>
 
 <<exported module types>>
-module Make (Proplist : PROPLIST with type t = Zipcfg.uid) : S = struct
-  module P = Proplist
+module M : S = struct
+  module P = Unique.Prop
   <<exported types>>
   <<definitions of exported functions>>
 end
@@ -91,8 +94,8 @@ We go from each head to the next join.
 <<definitions of exported functions>>=
 let backward anal graph =
   let blocks = List.rev (G.postorder_dfs graph) in
-  let () = List.iter (fun b -> anal.prop.P.set (GR.id b) anal.init_info) blocks in
-  let find = anal.prop.P.get in
+  let () = List.iter (fun b -> P.set anal.prop (GR.id b) anal.init_info) blocks in
+  let find = P.get anal.prop in
   let changed = ref false in
   let block b =
     let h, l = GR.goto_end (GR.unzip b) in
@@ -105,7 +108,7 @@ let backward anal graph =
     let old_in = find u in
     if anal.changed ~old:old_in ~new':in' then
       begin
-        anal.prop.P.set u in';
+        P.set anal.prop u in';
         changed := true
       end in
   let rec iterate n =
@@ -127,11 +130,11 @@ let rec solve_graph anal graph exit_fact =
   | _ -> anal.last_in l in
   let anal' = { anal with last_in = last' } in
   let () = general_backward anal' graph in
-  anal.prop.P.get GR.entry_uid 
+  P.get anal.prop GR.entry_uid 
 and general_backward anal graph =
   let blocks = List.rev (G.postorder_dfs graph) in
-  let () = List.iter (fun b -> anal.prop.P.set (GR.id b) anal.init_info) blocks in
-  let find = anal.prop.P.get in
+  let () = List.iter (fun b -> P.set anal.prop (GR.id b) anal.init_info) blocks in
+  let find = P.get anal.prop in
   let solve_graph = solve_graph anal in
   <<definition of [[answer]]>>
   let changed = ref false in
@@ -146,7 +149,7 @@ and general_backward anal graph =
     let old_in = find u in
     if anal.changed ~old:old_in ~new':in' then
       begin
-        anal.prop.P.set u in';
+        P.set anal.prop u in';
         changed := true
       end in
   let rec iterate n =
@@ -175,6 +178,7 @@ let answerl l = match anal.last_in l with
 @
 <<definitions of exported functions>>=
 let rec solve_rewrite anal graph exit_fact =
+  let _a = solve_graph anal graph exit_fact in
   let last' l = match l with
   | GR.Exit 0 -> Dataflow exit_fact
   | _ -> anal.last_in l in
@@ -182,11 +186,11 @@ let rec solve_rewrite anal graph exit_fact =
   backward_rewrite anal' graph 
 and backward_rewrite anal graph =
   let check_property_match a f =
-    let a' = anal.prop.P.get (GR.id f) in
+    let a' = P.get anal.prop (GR.id f) in
     if anal.changed a a' or anal.changed a' a then
       impossf "property changed after supposedly reaching fixed point" in
   let blocks = List.rev (G.postorder_dfs graph) in
-  let find = anal.prop.P.get in
+  let find = P.get anal.prop in
   let solve_rewrite = solve_rewrite anal in
   let rec block rewritten fresh : G.graph = match fresh with
   | [] -> G.of_block_list rewritten 
@@ -218,6 +222,8 @@ and backward_rewrite anal graph =
       let h, l = GR.goto_end (GR.unzip b) in
       answerl h l in
   block [] blocks
+
+let backward_rewrite anal g = solve_rewrite anal g anal.init_info
 @
 <<utilities>>=
 module UM = Unique.Map
@@ -247,3 +253,52 @@ let splice_in_backward head graph tail oldblocks =
       match GR.zip gentry with
       | GR.Entry, t -> head, t, ((f, t) :: add_blocks gblocks oldblocks)
       | _ -> impossf "entry is not entry?!"
+@ 
+<<utilities>>=
+let ( << ) f g = fun x -> f (g x)
+<<definitions of exported functions>>=
+let debug s anal =
+  let pr = Printf.eprintf in
+  let module RS = Rtlutil.ToString in
+  let fact dir node a = pr "%s %s for %s = %s\n" anal.name dir node (s a) in
+  let rewr node g = pr "%s rewrites %s to <not-shown>\n" anal.name node in
+  let wrap f nodestring node =
+    let answer = f node in
+    let () = match answer with
+    | Dataflow a -> fact "in " (nodestring node) a
+    | Rewrite g  -> rewr (nodestring node) g in
+    answer in
+  let wrapout f nodestring out node =
+    fact "out" (nodestring node) out;
+    wrap (f out) nodestring node in
+  let last_in = wrap anal.last_in (RS.rtl << GR.last_instr) in
+  let middle_in = wrapout anal.middle_in (RS.rtl << GR.mid_instr) in
+  let first_in  =
+    let first = function GR.Entry -> "<entry>" | GR.Label ((u, l), _, _) -> l in
+    wrapout anal.first_in first in
+  { anal with last_in = last_in; middle_in = middle_in; first_in = first_in; }
+@ 
+<<definitions of exported functions>>=
+let a_t anal tx =
+ let last_in l =
+   match tx.last_in l with
+   | Some g -> Rewrite g
+   | None   -> Dataflow (anal.last_in l) in
+ let middle_in out m =
+   match tx.middle_in out m with
+   | Some g -> Rewrite g
+   | None   -> Dataflow (anal.middle_in out m) in
+ let first_in out f =
+   match tx.first_in out f with
+   | Some g -> Rewrite g
+   | None   -> Dataflow (anal.first_in out f) in
+
+ { name      = Printf.sprintf "%s and %s" anal.name tx.name;
+   prop      = anal.prop;
+   add_info  = anal.add_info;
+   changed   = anal.changed;
+   init_info = anal.init_info;
+   last_in   = last_in;
+   middle_in = middle_in;
+   first_in  = first_in;
+ }

@@ -22,6 +22,7 @@ val distinguished_uid : uid    (* distinct from any other *)
 module Map : MAP
 module Set : SET
 module Array : ARRAY
+module Prop : Property.S with type list = uid
 @ 
 <<exposed types>>=
 module type MAP = sig
@@ -59,15 +60,19 @@ end
 @ 
 \subsection{Implementation}
 <<unique.ml>>=
-type uid = int
+module P = Property.M
+type uid = int * P.list
 let uid =
   let n = Reinit.ref 1 in
-  fun () -> let u = !n in (n := u + 1; u)
-let distinguished_uid = 0
+  fun () -> let u = !n in (n := u + 1; (u, P.list()))
+let distinguished_uid = (0, P.list())
 
 <<exposed types>>
 
-module Ord = struct type t = uid let compare : t -> t -> int = compare end
+module Ord = struct
+  type t = uid
+  let compare : t -> t -> int = fun (u, _) (u', _) -> compare u u'
+end
 module Set = Set.Make (Ord)
 module M = Map.Make (Ord)
 module Map : MAP = struct
@@ -106,4 +111,16 @@ module Array : ARRAY = struct
     Array.set a i (f (Array.get a i))
 end
 
-let eq (u:uid) u' = u = u'
+let eq ((u,_):uid) (u',_) = u = u'
+
+module Prop = struct
+  type 'a t = 'a P.t
+  type list = uid
+  let list = uid
+  let clear (_, l) = P.clear l
+  let get p (_, l) = P.get p l
+  let set p (_, l) v = P.set p l v
+  let remove p (_, l) = P.remove p l
+  let prop = P.prop
+end
+

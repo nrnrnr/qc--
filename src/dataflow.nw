@@ -47,6 +47,14 @@ type 'a pass = ('a, 'a, 'a answer) pass'
 <<dataflow.mli>>=
 val backward_anal : 'a analysis -> Zipcfg.graph -> (uid -> 'a)
 val backward_pass : 'a pass -> Zipcfg.graph -> (uid -> 'a)
+@ 
+<<dataflow.mli>>=
+val transformation :
+    name:string ->
+    last_in:((uid -> 'a) -> Zipcfg.Rep.last -> Zipcfg.graph option) ->
+    middle_in:('a -> Zipcfg.Rep.middle -> Zipcfg.graph option) ->
+    first_in:('a -> Zipcfg.Rep.first -> Zipcfg.graph option) ->
+    'a transformation
 @
 \section{Implementation}
 
@@ -148,6 +156,13 @@ let answerl l = match anal.last_in find l with
 | Dataflow a -> a
 | Rewrite g -> solve_graph g anal.init_info in
 @
+<<dataflow.ml>>=
+let transformation ~name ~last_in ~middle_in ~first_in = {
+  name = name;
+  add_info = (fun () () -> ()); changed = (fun ~old ~new' -> false); init_info = ();
+  last_in = last_in; middle_in = middle_in; first_in = first_in;
+}
+@
 \clearpage
 We're playing fast and loose with polymorphic equality---cyclic
 comparisons might not terminate.  
@@ -206,3 +221,4 @@ end
 module Test : sig
   val emit_dot : unit -> unit
 end
+@ 
