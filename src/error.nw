@@ -22,12 +22,10 @@ Polymorphism and Higher-Order Functions} \cite{ramsey:99:compj}.
 Technically, results are wrapped in an [['a error]] type; good results
 are represented by the [[Ok]] constructor, bad results by [[Error]]. 
 A set of combinators helps to deal with this type of values.
-
 <<error.mli>>=
 type 'a error       = Error                     (* bad result  *)
                     | Ok        of 'a           (* good result *)
 @
-
 At some point in a program the processing is finally aborted by
 raising an exception.  We expect to find most errors while checking
 the static semantics of a \C~program.  However, the way the abstract
@@ -35,29 +33,24 @@ syntax is organized the location information is usually \textit{not}
 available where the exception is raised but where it is caught. 
 Because of this we do not attach any informations about the origin of
 an error to an exception. 
-
 <<error.mli>>=
 type pretty         = string                    (* for the moment *)
 
 exception ErrorExn  of pretty
 val error :         pretty -> 'a
 @
-
 Combinators to deal with functions that do not naturally expect 
 values of type [[error]].
-
 <<error.mli>>=
 val combine     : 'a error error -> 'a error
 val emap        : ('a -> 'b) -> 'a error -> 'b error
 val sequence    : ('a -> 'b error) -> 'a error -> 'b error
 @
-
 Raising combinators raise the constructors of an [[error]] value
 inside a complex value to the top-level.  A complex value is bad when
 one of its components is bad and good otherwise.  The raising
 combinators deal with the most important data types:  options, lists,
 and tuples.
-
 <<error.mli>>=
 module Raise :
   sig
@@ -65,10 +58,8 @@ module Raise :
     val list   : 'a error list                  -> 'a list error
     val pair   : 'a error * 'b error            -> ('a * 'b) error
 @
-
 The [[left]] and [[right]] functions consider only one component of
 a pair when raising the constructor.
-
 <<error.mli>>=
     val left   : 'a error * 'b                  -> ('a * 'b) error
     val right  : 'a * 'b error                  -> ('a * 'b) error
@@ -78,11 +69,16 @@ a pair when raising the constructor.
                   -> ('a * 'b * 'c * 'd) error
   end
 @
-
+The following functions offer some more convenient syntax for common
+idioms.  
+<<error.mli>>=
+val ematch    : 'a error -> ('a -> 'b) -> 'b error       (* ematch v f = emap f e *)
+val matchPair : 'a error * 'b error -> ('a * 'b -> 'c) -> 'c error
+                      (* matchPair p f = emap f (Raise.pair p) *)
+@ 
 Lowering functions take a complex [[error]] value and push the
 constructor from the top-level to the values inside the [[error]]
 value. 
-
 <<error.mli>>=
 module Lower :
   sig
@@ -94,7 +90,6 @@ module Lower :
                                             * 'd error
   end
 @ 
-
 The functions of the [[Implode]] module destroy informations by
 reducing complex [['a error]] values to [[unit error]]. They come in
 handy when are there are only good and bad results. Whenever an
@@ -106,7 +101,6 @@ The [[list]] function is similar to [[Raise.list]] as is raises the
 does not stop when it encounters the first [[Error]] but traverses the
 whole list.  The motivation is to give detect possible bad values in
 the list such that the [[ErrorExn]] can be raised for them. 
-
 <<>>=
 module Implode :
   sig
@@ -126,7 +120,6 @@ Catching the exception is done with [[catch]] in the special case, and
 [[catch']] in the general case.  [[catch']] permits to specify the
 value that is returned when an exception is caught whereas [[catch]]
 always uses [[Error]] for this.
-
 <<>>=
 val catch   :       (pretty -> unit) 
                     -> ('a -> 'b error) -> 'a -> 'b error
@@ -239,6 +232,11 @@ let quad = function
     | (Ok a,Ok b,Ok c,Ok d) -> Ok (a,b,c,d)
     | _                     -> Error
 @
+Here come the convenience functions.
+<<error.ml>>=
+let ematch v f = emap f v
+let matchPair p f = emap f (Raise.pair p)
+@ 
 
 Lowering functions take a complex [[error]] value and push the
 constructor from the top-level to the values inside the [[error]]
