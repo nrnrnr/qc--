@@ -375,18 +375,18 @@ exception MismatchedParameters of string
 
 let run main proc input =
 (*
-    let _ = prerr_string "Running stateCheck()\n"; flush stderr in
+    let _ = backSay ["Running stateCheck()\n"] in
 *)
     let (liveIn, errors) = stateCheck main
     in
         if ES.is_empty errors
         then
 (*
-            (prerr_string "No Errors. Running runProgram()\n"; flush stderr;
+            (backSay ["No Errors. Running runProgram()\n"]
 *)
              runProgram V.Nil proc main
         else
-            (prerr_string "Errors in control flow.\n"; flush stderr; false)
+            (backSay ["Errors in control flow.\n"]; false)
 
 @
 
@@ -418,6 +418,7 @@ type outputs = SS.t
 type proc = Proc.t
 type 'a camlFunction = 'a -> proc -> bool
 
+let backSay = Verbose.say 10
 <<stage type>>
 <<action type>>
 <<backplane types>>

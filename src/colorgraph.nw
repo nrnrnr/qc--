@@ -162,8 +162,7 @@ let print_cgInfo cgInfo =
 	    printAdjListMap cgInfo.adjListMap;
         List.iter printReglist (regLists cgInfo);
         List.iter printMovelist (moveLists cgInfo);
-	    printColorMap cgInfo.colorMap;
-		flush stderr
+	    printColorMap cgInfo.colorMap
 
 let printCGInfo param _ = match T2'.map.V.project param with
     | CGInfo cg -> print_cgInfo cg; true
@@ -215,8 +214,7 @@ module Cheats = struct
     let print_cfg cfg =
         cfgSay ["CFG\n===\n"];
         fold_fwd cfg (fun n () -> cfgSay [Cfg3.print_node n; "\n"]) ();
-        cfgSay ["END CFG\n===\n"];
-        flush stderr
+        cfgSay ["END CFG\n===\n"]
     let pCFG _ {Proc.cfg = cfg} = print_cfg cfg; false
 
     let rewrite ({Proc.cfg = cfg; Proc.priv = a; Proc.target = target}
@@ -763,7 +761,9 @@ cfgSay ["coloring temp: "; Register.print temp ^ "\n"];
                 List.iter setColor cg.coalescedNodes in
         let _ = colorSelectStack () in
 let _ = print_cgInfo cg in
-        let _ = colorCoalescedNodes () in
+        let _ = match cg.spilledNodes with
+			  | [] -> colorCoalescedNodes ()
+	          | _ -> () in
             (* remove short spill temps from the spill list *)
 		let _ = cg.spilledNodes <- (List.fold_right filterOut cg.spills
 		           	                        cg.spilledNodes @ cg.spills) in
@@ -784,14 +784,14 @@ let applyColors param {Proc.cfg = cfg; Proc.mangle = mangle; Proc.target = targe
     let subst = function
       | temp when Cheats.is_tmp temp target ->
   		  (try RM.find temp cg.colorMap
-                     with Not_found -> print_cgInfo cg;prerr_string "\n";
-prerr_string (Register.print temp); prerr_newline(); flush stderr;raise
+                     with Not_found -> print_cgInfo cg; cfgSay ["\n";
+(Register.print temp); "\n"];raise
 (UncoloredTemp temp))
 	  | t -> t
     in
         ( Cheats.fold_fwd cfg
-            (fun node () -> prerr_int (G.number node);
-			 prerr_string (": " ^ Rtldebug.rtl_to_string (Cfg3.rtl node) ^ "\n"); flush stderr; G.set_rtl node (Rtlutil.Subst.reg subst)) ()
+            (fun node () -> cfgSay [string_of_int (G.number node)];
+			 cfgSay [ ": " ; Rtldebug.rtl_to_string (Cfg3.rtl node) ; "\n"]; G.set_rtl node (Rtlutil.Subst.reg subst)) ()
         ; true)
 
 

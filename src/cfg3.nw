@@ -1216,15 +1216,8 @@ object (this)
 
     method delete node =
         ( _nodes <- NodeSet.remove node _nodes
-;prerr_string ("\n" ^ node#comment ^ "\n")
-; flush stderr
         ; _enumeration <- None
-; prerr_string "Succ: "
-; List.iter (fun n -> prerr_int n#id) node#succ
-; prerr_string "\n"
-; flush stderr
         ; node#unlink
-;prerr_string "done unlinking\n"; flush stderr
         )
     
     (* test integrity of CFG *)
@@ -1373,7 +1366,7 @@ object(this)
         let label l = stmt (A.LabelStmt (mangle l)) in
         let labels  = List.map label _labels in
         (**) let comment = stmt (A.CommentStmt (this#comment)) in 
-       prerr_string this#comment; prerr_newline();
+       Verbose.say 5 [ this#comment; "\n"];
          (**)  
           (* comment :: *) labels
 
@@ -1557,8 +1550,6 @@ link to its successor, but is not linked from any other node.
 
 <<module X>>=    
     method unlink =
-let _ = prerr_string "unlink succ: "; prerr_int _succ#id; prerr_string "\n";
-flush stderr in 
         let this = (this :> node) in
         let pred = NodeSet.min_elt _pred                in
         let ()   = assert (pred = NodeSet.max_elt _pred) in
