@@ -104,7 +104,7 @@ module Personality = struct
     let float       = "ieee754"
 
     let cfg2ast (g, proc) =
-      Zipcfgutil.cfg2ast Rtlutil.ToAST.rtl g proc.Proc.symbol#mangled_text
+      Cfgutil.cfg2ast Rtlutil.ToAST.rtl g proc.Proc.symbol#mangled_text
 end
 @
 The assemblers for the {\AST} and the interpreter are polymorphic. We
@@ -334,10 +334,10 @@ let init g =
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Asm"
   [ "cmm" , V.efunc (Map.outchan **->> Map.asm) AstAsm.asm     
-(*
   ; "dot" , V.efunc (Map.outchan **->> Map.asm) (Dotasm.asm ~compress:true ~live:false)
   ; "big_dot" , V.efunc (Map.outchan **->> Map.asm) 
                             (Dotasm.asm ~compress:false ~live:true)
+(*
   ; "x86" ,  V.efunc (Map.outchan **->> Map.asm) (X86asm.make Cfgutil.emit)
   ; "ppc",   V.efunc (Map.outchan **->> Map.asm) (Ppcasm.make Cfgutil.emit)
   ; "mips",  V.efunc (Map.outchan **->> Map.asm) (Mipsasm.make Cfgutil.emit)
@@ -598,32 +598,34 @@ C.register_module "Debug"
   ; "run_cc_return", V.efunc (Map.target **-> V.string **->
                                listpair V.int V.string **->> V.list (V.list V.string))
                       (run_cc_wrap Call.run_cc_on_sig_and_return)
-  ; "printcfg", Map.stage.V.embed (fun _ p -> Zipcfgutil.print_cfg (fst p); (p, false))
+  ; "printcfg", Map.stage.V.embed (fun _ p -> Cfgutil.print_cfg (fst p); (p, false))
   ] g;
 @
 <<old register modules to [[g]] in alphabetical order>>=
 C.register_module "Expander"
-  [ "x86f" , backplane_stage X86.X.cfg
-  ; "ppc"  , backplane_stage Ppc.X.cfg
-  ; "ia64f", backplane_stage Ia64.X.cfg
-  ; "mips" , backplane_stage Mips.X.cfg
-  ; "alpha", backplane_stage Alpha.X.cfg
-  ; "sparc", backplane_stage Sparc.X.cfg
+  [ "x86f" , Map.stage.V.embed X86.X.cfg
+  ; "ppc"  , Map.stage.V.embed Ppc.X.cfg
+  ; "ia64f", Map.stage.V.embed Ia64.X.cfg
+  ; "mips" , Map.stage.V.embed Mips.X.cfg
+  ; "alpha", Map.stage.V.embed Alpha.X.cfg
+  ; "sparc", Map.stage.V.embed Sparc.X.cfg
   ] g;
 <<old register modules to [[g]] in alphabetical order>>=
 C.register_module "Liveness"
-  [ "livenessfn", backplane_stage 
+  [ "livenessfn", Map.stage.V.embed 
        (fun _ p -> Cfgx.Live.set_live p.Proc.cfg; true)
   ] g;
-<<old register modules to [[g]] in alphabetical order>>=
+<<register modules to [[g]] in alphabetical order>>=
 C.register_module "Optimize"
-  [ "simplify_exps"         , backplane_stage Optimize.simplify_exps
-  ; "collapse_branch_chains", backplane_stage Optimize.collapse_branch_chains
-  ; "remove_nops"           , backplane_stage Optimize.remove_nops
-  ; "validate"              , backplane_stage Optimize.validate
-  ; "trim_unreachable_code" , backplane_stage Optimize.trim_unreachable_code
-  ; "peephole"              , backplane_stage Peephole.subst_forward
-  ; "deadfn"                , backplane_stage Dead.elim_assignments
+  [ "simplify_exps"         , Map.stage.V.embed Optimize.simplify_exps
+  ; "collapse_branch_chains", Map.stage.V.embed Optimize.collapse_branch_chains
+  ; "remove_nops"           , Map.stage.V.embed Optimize.remove_nops
+  ; "validate"              , Map.stage.V.embed Optimize.validate
+  ; "trim_unreachable_code" , Map.stage.V.embed Optimize.trim_unreachable_code
+(*
+  ; "peephole"              , Map.stage.V.embed Peephole.subst_forward
+  ; "deadfn"                , Map.stage.V.embed Dead.elim_assignments
+*)
   ] g;
 <<old register modules to [[g]] in alphabetical order>>=
 C.register_module "Placevar"
@@ -674,14 +676,14 @@ C.register_module "Stack"
 PERHAPS THIS CODE SHOULD REPLACE THE SOMEWHAT HEAVYWEIGHT [[Asm.dot]]???
 <<old register modules to [[g]] in alphabetical order>>=
 C.register_module "Stages"
-  [ "writedot", backplane_stage
+  [ "writedot", Map.stage.V.embed
       (fun _ proc -> 
         prerr_string
           (Cfgutil.cfg2dot ~compress:true ~live:true
              ~name:proc.Proc.symbol#mangled_text proc.Proc.cfg);
         flush stderr;
         true)
-  ; "replace_vfp", backplane_stage
+  ; "replace_vfp", Map.stage.V.embed
       (fun _ proc -> proc.Proc.cc.Call.replace_vfp proc.Proc.cfg; true)
   ]  g;
 <<register modules to [[g]] in alphabetical order>>=
@@ -844,10 +846,12 @@ C.register_module "Pic"
         | V.Element (s, V.Number x) -> s ^ "[" ^ string_of_int (int_of_float x) ^ "]"
         | V.Element (s, _         ) -> s ^ ".?" in
 <<lua initialization>>=
-"Expander.x86 = { fn = Expander.x86f, uses = { 'proper widths', 'no vars' }, \
+"_ = [[ \
+ Expander.x86 = { fn = Expander.x86f, uses = { 'proper widths', 'no vars' }, \
                   name = 'Expander.x86', creates = { 'x86 invariant' }, \
                   doc = 'A prototype code expander for the x86' } \
  Expander.ia64 = { fn = Expander.ia64f, uses = { 'proper widths', 'no vars' }, \
                    name = 'Expander.ia64', creates = { 'ia64 invariant' }, \
-                   doc = 'A code expander for the ia64' }"
+                   doc = 'A code expander for the ia64' } \
+]]"
 @

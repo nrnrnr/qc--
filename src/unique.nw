@@ -15,6 +15,7 @@
 
 <<unique.mli>>=
 type uid
+val eq : uid -> uid -> bool
 val uid : unit -> uid
 val distinguished_uid : uid    (* distinct from any other *)
 <<exposed types>>
@@ -36,6 +37,8 @@ module type MAP = sig
   val fold  : (uid -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
   val iter  : ('a -> unit) -> 'a t -> unit
   val size  : 'a t -> int
+
+  val map   : ('a -> 'b) -> ('a t -> 'b t)
 end
 <<exposed types>>=
 module type SET = sig
@@ -101,3 +104,5 @@ module Array : ARRAY = struct
     let i = Map.find u map in
     Array.set a i (f (Array.get a i))
 end
+
+let eq (u:uid) u' = u = u'

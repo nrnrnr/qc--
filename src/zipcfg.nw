@@ -236,6 +236,15 @@ first-to-last order, as suitable for use in a forward dataflow problem.
 <<zipcfg.mli>>=
 val postorder_dfs : graph -> Rep.block list
 @ 
+For layout, we fold over pairs of type [[block * label aoption]] in
+layout order.
+The [[label]], if any, identifies the block that will be the layout
+successor of the current block.
+This may be useful to help an emitter omit the final [[goto]] of a
+block that flows directly to its layout successor.
+<<zipcfg.mli>>=
+val fold_layout : (Rep.block -> label option -> 'a -> 'a) -> 'a -> graph -> 'a
+@ 
 \paragraph{Observing nodes}
 Successors.
 <<declarations of [[Rep]]'s public functions>>=
@@ -245,9 +254,27 @@ val succs : last -> uid list
 val mid_instr  : middle -> Rtl.rtl
 val last_instr : last -> Rtl.rtl  (* may be nop for, e.g., [[Exit]] *)
 @ 
+No [[first]] node is executable, some [[middle]] nodes are executable,
+and all [[last]] nodes are executable.
+<<declarations of [[Rep]]'s public functions>>=
+val is_executable : middle -> bool
+@ 
 <<zipcfg.mli>>=
 val iter_spans : (Spans.t -> unit) -> graph -> unit
 val fold_spans : (Spans.t -> 'a -> 'a) -> graph -> 'a -> 'a
+@ 
+Fold from first to last
+<<declarations of [[Rep]]'s public functions>>=
+val fold_fwd_block :
+  (first -> 'a -> 'a) -> (middle -> 'a -> 'a) -> (last -> 'a -> 'a) ->
+  block -> 'a -> 'a
+@ 
+<<zipcfg.mli>>=
+val iter_nodes :
+  (Rep.first -> unit) -> (Rep.middle -> unit) -> (Rep.last -> unit) -> graph -> unit
+@ 
+<<zipcfg.mli>>=
+val rtl_map : (Rtl.rtl -> Rtl.rtl) -> graph -> graph
 @ 
 \paragraph{Observing data flow}
 As noted above a node can contribute defs, uses, and kills to each
@@ -436,8 +463,15 @@ let assertion    rtl g = consm (Assertion    rtl) g
 let stack_adjust rtl g = consm (Stack_adjust rtl) g
 
 let unreachable = function
-  | Last (Branch _ | Forbidden _) -> ()
-  | _ -> Printf.eprintf "warning: unreachable code?\n"
+  | Last (Branch _ | Forbidden _ | Exit _) -> ()
+  | t ->
+      let pr = Printf.eprintf in
+      pr "warning: unreachable code?\n";
+      let rec warn = function
+        | Tail (Assertion r, t) -> pr "  Assert %s\n" (Rtlutil.ToString.rtl r); warn t
+        | Tail (m, t) -> pr "  %s\n" (Rtlutil.ToString.rtl (mid_instr m)); warn t
+        | Last l -> pr "  %s\n"  (Rtlutil.ToString.rtl (last_instr l)) in
+      warn t
 
 let consl last g = match g with
 | (Start (Entry, tail), blocks) ->
@@ -637,7 +671,52 @@ let postorder_dfs g =
   vnode (zip entry) (fun acc _visited -> acc) [] US.empty
 @ 
 <<zipcfg.ml>>=
-
+let fold_layout f z g =
+  let nextlabel (f, t) = match f with
+    | Entry -> impossf "entry as successor"
+    | Label (l, _, _) -> Some l in
+  let rec fold blocks z = match blocks with
+  | [] -> z
+  | [b] -> f b None z
+  | b1 :: b2 :: bs -> fold (b2 :: bs) (f b1 (nextlabel b2) z) in
+  fold (postorder_dfs g) z
+<<definitions of [[Rep]]'s public functions>>=
+let fold_fwd_block first middle last (f, t) z =
+  let z = first f z in
+  let rec tail t z = match t with
+  | Tail (m, t) -> tail t (middle m z)
+  | Last l      -> last l z in
+  tail t z
+<<zipcfg.ml>>=
+let iter_nodes first middle last g =
+  let block (f, t) =
+    let () = first f in
+    let rec tail t = match t with
+    | Tail (m, t) -> (middle m; tail t)
+    | Last l -> last l in
+    tail t in
+  UM.iter block g
+<<zipcfg.ml>>=
+let rtl_map map g =
+  let block (f, t) =
+    let rec tail t = match t with
+    | Tail (Instruction r, t) -> Tail (Instruction (map r), tail t)
+    | Tail (Assertion r, t) -> Tail (Assertion (map r), tail t)
+    | Tail (Stack_adjust r, t) -> Tail (Stack_adjust (map r), tail t)
+    | Last l -> Last (last l)
+    and last l = match l with
+    | Exit    _ -> l
+    | Branch  (r, l) -> Branch (map r, l)
+    | Cbranch (r, t, f) -> Cbranch (map r, t, f)
+    | Mbranch (r, tgts) -> Mbranch (map r, tgts)
+    | Call    c -> Call { c with cal_i = map c.cal_i }
+    | Cut     (r, es, uses) -> Cut (map r, es, uses)
+    | Return  (i, r, uses) -> Return (i, map r, uses)
+    | Jump    (r, uses, tgts) -> Jump (map r, uses, tgts)
+    | Forbidden r -> Forbidden (map r) in
+    (f, tail t) in
+  UM.map block g
+@ 
 <<zipcfg.ml>>=
 (* should this fn be defined on exi and ill?
    when there are cont edges, do we still need to cover the regular edges?*)
@@ -682,6 +761,8 @@ let mid_instr m = match m with
 | Instruction  r -> r
 | Stack_adjust r -> r
 | Assertion    r -> r
+
+let is_executable = function Assertion _ -> false | _ -> true
 
 let nop = Rtl.par [] 
 let last_instr l = match l with
