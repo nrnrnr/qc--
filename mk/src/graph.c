@@ -5,14 +5,21 @@ Revisions Copyright © 2001 Norman Ramsey.  All rights reserved.
 */
 #include	"mk.h"
 
+typedef struct cycle {
+        Node *n;
+        struct cycle *prev;
+} Cycle;
+
 static Node *applyrules(char *, char *);
 static void togo(Node *);
 static int vacuous(Node *);
 static Node *newnode(char *);
 static void trace(char *, Arc *);
-static void cyclechk(Node *);
+static void cyclechk(Node *, Cycle *);
 static void ambiguous(Node *);
 static void attribute(Node *);
+static int safe_regexec(Reprog*, char*, Resub*, int);
+
 
 Node *
 graph(char *target)
@@ -23,7 +30,7 @@ graph(char *target)
 	cnt = rulecnt();
 	node = applyrules(target, cnt);
 	free(cnt);
-	cyclechk(node);
+	cyclechk(node, NULL);
 	node->flags |= PROBABLE;	/* make sure it doesn't get deleted */
 	vacuous(node);
 	ambiguous(node);
@@ -86,7 +93,7 @@ applyrules(char *target, char *cnt)
 			stem[0] = 0;
 			patrule = r;
 			memset((char*)rmatch, 0, sizeof(rmatch));
-			if(regexec(r->pat, node->name, rmatch, NREGEXP) == 0)
+			if(safe_regexec(r->pat, node->name, rmatch, NREGEXP) == 0)
 				continue;
 		} else {
 			if(!match(node->name, r->target, stem)) continue;
@@ -209,18 +216,25 @@ trace(char *s, Arc *a)
 }
 
 static void
-cyclechk(Node *n)
+cyclechk(Node *n, Cycle *prev)
 {
 	Arc *a;
+        Cycle c;
 
+        c.n = n;
+        c.prev = prev;
 	if((n->flags&CYCLE) && n->prereqs){
-		fprintf(stderr, "mk: cycle in graph detected at target %s\n", n->name);
-		Exit();
+                Cycle *cycle;
+		fprintf(stderr, "mk: cycle in graph detected:\n");
+                for (cycle = &c; cycle; cycle = cycle->prev)
+                  fprintf(stderr, "  %s (%s, line %d)\n", cycle->n->name,
+                          cycle->n->prereqs->r->file, cycle->n->prereqs->r->line);
+                Exit();
 	}
 	n->flags |= CYCLE;
 	for(a = n->prereqs; a; a = a->next)
 		if(a->n)
-			cyclechk(a->n);
+			cyclechk(a->n, &c);
 	n->flags &= ~CYCLE;
 }
 
@@ -281,4 +295,13 @@ attribute(Node *n)
 	}
 	if(n->flags&VIRTUAL)
 		n->time = 0;
+}
+
+
+static int safe_regexec(Reprog* p, char* s, Resub* sub, int k) {
+  int n = regexec(p, s, sub, k);
+  if (n < 0) {
+    fprintf(stderr, "mk ran out of relist space; must rebuild regexec.c\n");
+    Exit();
+  }
 }
