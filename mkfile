@@ -41,6 +41,7 @@ SUBDIRS =       cllib lua asdl rtl gen camlburg tools src interp doc
 # clobber:      remove all non-source file
 #
 # test:         run test suite
+# install:      simple-minded install to $prefix, need to call 'all' first
 
 
 all:V:          qc--     interp doc
@@ -227,6 +228,7 @@ FILES:          clobber
                         -o -path "./bin/*"         \
                         -o -path "./man/*"         \
                         -o -path "./lib/*"         \
+                        -o -path "./lua-bench/*"   \ 
                         -o -name "*.tar*"          \
                         -o -type l                 \
                         \) -prune                  \
