@@ -308,7 +308,7 @@ Default = Default or {}
 Default.target          = Targets.dummy          -- target
 Default.optimizer       = Optimizer.default
 Default.linewidth       = 72                     -- output line width
-Default.asm             = Driver.dotasm          -- function nil -> asm
+Default.asm             = Driver.cmmasm          -- function nil -> asm
 
 function Default.runopt(cfg, frame)
   local opt = Default.optimizer
@@ -333,7 +333,7 @@ function Main.check ()
     if f == nil then error("Main.check: no file in Sys.argv[1]") end
         
     local ast = Driver.parse(f)
-    local asm = Default.asm ()
+    local asm = Default.asm (nil)
     Driver.check(ast,asm)
 end
 
@@ -346,7 +346,7 @@ function Main.compile ()
     if f == nil then error("Main.compile: no file in Sys.argv[1]") end
 
     local ast = Driver.parse(f)
-    local asm = Default.asm(nil)    -- create assembler
+    local asm = Default.asm(nil)    
     local env = Driver.check(ast,asm)
     local asm = Driver.compile(Default.runopt, ast, Default.target, env)
     Driver.assemble(asm)
