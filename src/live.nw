@@ -27,41 +27,70 @@
 \section{Liveness Analysis}
 % ------------------------------------------------------------------ 
 
-Liveness analysis determines for every node in a flow graph (see
-module \module{cfg3}) the set of locations that will be used in that
-node's successors.  More formally a location $x$ is live after a node
-$n$, if and only if there exists a path to a node that uses $x$
-without crossing a definition or kill of $x$. A set of live variables
-is called the \emph{liveout set}. Since nodes use, define, and kill
-variables, liveness is actually only defined \emph{between} adjacent
-notes.  Therefore, the set of liveout variables associated with each
-node in a control flow graph denotes the variables that are live
-\emph{after} the node at hand.
+Liveness analysis determines what locations are live on entry to and
+exit from every node in a flow graph.
+Precisely speaking, a location~$x$ is live on an edge~$e$ iff that
+edge flows to a use of~$x$ without crossing a definition or kill of
+$x$. 
+Liveness information should be attached to each
+edge, but since our edges are simple pointers, 
+we instead provide  for live-in and live-out information at each node;
+the liveness of an edge is the live-in set of that edge's head.
+The live-out set is the union of the live sets on all the edges
+flowing out of a node.
+
 
 % ------------------------------------------------------------------ 
 \subsection{Interface}
 % ------------------------------------------------------------------ 
 
-The [[liveness]] function annotates the nodes in a control-flow graph
-[[cfg]] with the set of live registers \emph{after} that node.
-
+Function [[set_live]] computes liveness information and caches the
+results in node extensions.
+The functions [[live_in]] and [[live_out]] use the cached information.
+One day we hope to get extremely clever about minimizing the amount of
+cached information while still making [[live_in]] and [[live_out]]
+cost constant time, but that day is not yet.
 <<live.mli>>=
-module Make(G: Cfg4.S): sig
-    val liveness: G.cfg -> unit
+type live_info
+val mk : unit -> live_info
+
+module type Arg = sig
+  module G : Cfg.S
+  val jx : G.X.jx -> live_info 
+  val nx : G.X.nx -> live_info   
+  val fx : G.X.fx -> live_info   
+end
+
+module Make (A : Arg): sig
+  val set_live : Rtl.rtl A.G.cfg -> unit
+  (* following may be run only after [[set_live]] and without mutation *)
+  val live_out : Rtl.rtl A.G.node -> A.G.regs
+  val live_in  : Rtl.rtl A.G.node -> A.G.regs 
 end
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Implementation}
+\section{Implementation of liveness}
 % ------------------------------------------------------------------ 
 
-
-
 <<live.ml>>=
-module Make (G: Cfg4.S) = struct 
-    module R = Register.Set
-    module P = Cfgprop (* node properties *)
-    <<struct Make>>
+module RS = Register.Set
+module R  = Rtl
+
+type live_info = { mutable cached_live_out : RS.t }
+let mk () = { cached_live_out = RS.empty }
+
+module type Arg = sig
+  module G : Cfg.S
+  val jx : G.X.jx -> live_info 
+  val nx : G.X.nx -> live_info   
+  val fx : G.X.fx -> live_info   
+end
+
+module Make (A : Arg) = struct 
+  module G = A.G
+  let irwk = Rtlutil.ReadWriteKill.sets
+  <<struct Make>>
 end
 @
 
@@ -77,86 +106,76 @@ live after this node as well.  The details depend on the kind of [[node]].
 \item minus the variables that are killed by the rtl,
 \item plus the variables that are used by the rtl.
 \end{itemize}
-
-% \begin{quote}\it
-%     What is the difference of \emph{def} and \emph{kill} from the
-%     liveness analysis point of view. It seems that both define a
-%     location but in the case of a kill the value is unknown. However,
-%     the value does not matter for liveness analysis which would make
-%     them equivalent. --CL
-% \end{quote}
-
 $$\mathit{live} = 
     ( \mathit{after} 
       \setminus \mathit{defined} \setminus \mathit{killed}
     ) \cup \mathit{used}
 $$
-
-<<struct Make>>=
-let rec live node =
-    let ( ++ ) = Register.Set.union in
-    let ( -- ) = Register.Set.diff in
-    let live_in n =
-        let defs         = G.defs    node                      in
-        let uses         = G.uses    node                      in
-        let kills        = G.kills   node                      in
-             (((G.property n).P.liveout -- (G.defs n)) -- (G.kills n))
-                        ++ G.uses n
-    in
-        List.fold_left (fun set x -> R.union (live_in x) set) R.empty
-                       (G.succ node)
 @
-
-The [[after]] function computes the union of the live-in sets of a node's
-successors. This union forms the live-out set for the current node.
-
-Computing the live sets of a control-flow graph (\cfg) is a fix-point
-problem:  you have to do it as long as it changes the result.  After
-computing a new live set for a node we compare it to the set currently
-stored in the node.  If both differ the mutable [[changed]] flag is set. 
-
+Set operations.
 <<struct Make>>=
-let process changed node =
-    let l  = live node in
-    let _  = assert (Register.Set.subset (G.property node).P.liveout l) in 
-        if Register.Set.equal l (G.property node).P.liveout then
-           ()   (* changed := false *)
-        else
-           ( changed := true
-           ; (G.property node).P.liveout <- l
-           (* Printf.printf "id=%d\n" (G.number node) *)
-           ) 
-@
-
-First, we make sure we clear the [[liveout]] sets for all the nodes -
-this ensures that any obsolete liveness information is discarded before
-we begin.  The [[process]] function, which updates the live set of a
-node, is repeatedly applied to all nodes in [[cfg]].  This is done until
-[[process]] does not change any live set which means the fix point is
-reached.  We use [[G.scan_bwd]] to implement an iteration function that
-iterates mostly backwards (reverse control-flow direction) over the
-{\cfg}.
-
+let ( ++  ) = RS.union
+let ( --  ) = RS.diff 
+let ( --* ) live killed =
+  if RS.exists (fun x -> RS.mem x killed) live then
+    Impossible.impossible "live variable is in killed set"
+  else
+    live 
+@ 
 <<struct Make>>=
-let liveness cfg =
-    let () = G.gm_enumerate cfg in
-    let fold cfg f z =
-        let first = G.number (G.first cfg)     in
-        let limit = G.number (G.last  cfg) + 1 in
-            G.scan_bwd cfg ~first ~limit f z     in
-    let empty = Register.Set.empty             in
-    let _ = fold cfg (fun n () -> (G.property n).P.liveout <- empty) () in
-    let changed     = ref false                           in
-    let iter cfg f  = fold cfg (fun node () -> f node) () in
-    let rec loop n = 
-        ( changed := false
-        ; iter cfg (process changed) 
-        ; if !changed && n < 1000 then 
-            loop (n+1) 
-          else if n >= 1000 then
-                assert false    (* does not terminate? *)
-          else
-                ()              (* ok *)        
-        )
-    in loop 0
+let info node =
+  if      G.is_join node then A.jx (G.jx node)
+  else if G.is_fork node then A.fx (G.fx node)
+  else                        A.nx (G.nx node)
+
+@ 
+<<struct Make>>=
+let rec new_live_out node =
+  G.union_over_outedges
+    node
+    (fun n' -> live_in n')
+    (fun {G.node = n'; G.defs = d; G.kills = k} -> live_in n' -- d --* k)
+and live_out node = (info node).cached_live_out
+and live_in  node =
+  let live = live_out node in  
+  let live = match G.to_instr node with
+  | None -> live
+  | Some i ->
+      let uses, defs, kills = irwk i in
+      live -- defs --* kills ++ uses in
+  G.add_inedge_uses node live
 @
+@
+To compute liveness, we empty all cached live sets and iterate until
+we reach a fixed point.
+The iteration order is completely unspecified, and it would probably
+be much more efficient to use a well-chosen order. 
+<<struct Make>>=
+let set_live g =
+  G.iter_nodes (fun n -> (info n).cached_live_out <- RS.empty) g;
+  let changed     = ref false                           in
+  <<definition of [[update_cache]]>> in
+  let rec loop n = (* would be sensible to choose a *good* order here *)
+    ( changed := false
+    ; G.iter_nodes update_cache g
+    ; if !changed then
+        if n < 1000 then loop (n+1) 
+        else Impossible.impossible "more than 1000 iterations for liveness to converge"
+    ) in
+  loop 0
+@
+To update the cache we call [[new_live_out]] and note whether anything
+has changed.
+<<definition of [[update_cache]]>>=
+let update_cache node =
+  let l  = new_live_out node in
+  let info = info node in
+  if RS.equal l info.cached_live_out then
+    ()   (* changed := false *)
+  else
+    ( changed := true
+    ; assert (RS.subset info.cached_live_out l)
+    ; info.cached_live_out <- l
+    ) 
+@ 
+
