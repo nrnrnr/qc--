@@ -27,6 +27,8 @@ SUBDIRS =       $LIBSRC $SRC
 # depend:       update dependencies (recursive)
 # clean:        remove non-source files (recursive)
 # test:         run test suite
+# precompile:   pre-compile some sources because they depend on special
+#               tools
 
 all:V:          lib
                 for i in $SRC; 
@@ -51,6 +53,13 @@ lib.opt:V:      depend
                 do 
                     (echo "# entering $i" && cd $i && mk $MKFLAGS update.opt)
                 done
+
+precompile:V:
+                for i in $SRC
+                do 
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS $target)
+                done
+                    
 
 depend          \
 html            \
