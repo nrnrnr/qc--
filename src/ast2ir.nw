@@ -6,7 +6,8 @@
 % Urgency    ::=    Immediate|Soon|Later
 %
 % Example (at beginning of line): %%Grades: B Central Soon
-%%Grades: C Central Soon
+
+%%Grades: C Central Immediate
 
 % inc: \usepackage{alltt}
 
@@ -123,10 +124,10 @@ module Make (G : Cfg.S) (C : Call.S with type node = Rtl.rtl G.node) = struct
       <<definition of [[rvalue_name]]>> in
       <<mutually recursive nest of [[expr]] and [[lvalue]]>> in
       expr, exprtype, lvalue  in
-    let impcont _ _ _ = impossible "continuation at top level" in
-    let expr, exprtype, lvalue = exprfuns env Strutil.Map.empty impcont in
+    let expr, exprtype, lvalue = 
+      let impcont _ _ _ = impossible "continuation at top level" in
+      exprfuns env Strutil.Map.empty impcont in
     <<definitions of [[compile_const]], [[eval_const]], and [[link_const]]>> in
-    <<definition of [[proc]], which translates one procedure>> in
     <<definition of [[proc]], which translates one procedure>> in
     <<definition of [[globals]]>> in
     <<function [[datum]], for initialized and uninitialized data>> in
@@ -361,20 +362,23 @@ let continuations cc ast =
   let volregs = cc.C.volregs in                 (* volatile registers *)
   let allregs = RS.union volregs cc.C.nvregs in (* all registers *)
   let entry n = G.node_labeled g n in
+  let (--)    = RS.diff in
   let as_cut_to k =
     k.K.cut_to <- true;
-    { G.defs = k.K.cut_in.C.regs; G.kills = allregs ; G.node = entry k.K.cut_pc } in
+    let defs = k.K.cut_in.C.regs in
+    { G.defs = defs;   G.kills = allregs -- defs; G.node = entry k.K.cut_pc    } in
   let as_unwinds k =
     k.K.unwound_to <- true;
-    { G.defs = noregs; G.kills = volregs; G.node = entry k.K.unwind_pc } in
+    { G.defs = noregs; G.kills = volregs;         G.node = entry k.K.unwind_pc } in
     (* defs are variables and so can't be a register set.  NEED ANOTHER MECHANISM *)
   let as_returns k =
     k.K.returned_to <- true;
-    { G.defs = k.K.return_in.C.regs; G.kills = volregs; G.node=entry k.K.return_pc } in
+    let defs = k.K.return_in.C.regs in
+    { G.defs = defs;   G.kills = volregs -- defs; G.node=entry k.K.return_pc   } in
   let contmap f = List.map (f << continuation) in
   let rec add f cs = match f with (* avoid list reversal! *)
     | A.FlowAt(f,_)  -> add f cs
-    | A.CutsTo ns    -> { cs with cuts    = contmap as_cut_to  ns @ cs.cuts    }
+    | A.CutsTo    ns -> { cs with cuts    = contmap as_cut_to  ns @ cs.cuts    }
     | A.UnwindsTo ns -> { cs with unwinds = contmap as_unwinds ns @ cs.unwinds }
     | A.ReturnsTo ns -> { cs with returns = contmap as_returns ns @ cs.returns }
     | A.Aborts       -> { cs with aborts  = true                               } in
@@ -549,10 +553,10 @@ N.B.~We don't use the [[targets]] list, which is there for future
 interprocedural optimization and call-graph analysis.
 <<supporting functions for translating statements>>=
 let rec jumpStmt (cconv,e,args,targets (*unused*)) = 
-    let cc = ccs (Aux.Option.get default_cc cconv)    in
+    let cc           = ccs (Aux.Option.get default_cc cconv) in
     let out, actuals = actuals cc.C.call_actuals args in
-    let jumpi   = target.T.jump.T.embed (expr e) in
-    let () = add_inparms out.C.overflow in  (* outgoing jump overflow = incoming *)
+    let jumpi        = target.T.jump.T.embed (expr e) in
+    let ()           = add_oldblock out.C.overflow    in  (* jump overflow = old *)
     G.instruction g out.C.pre_sp            **>
     G.instruction g (out.C.shuffle actuals) **>
     G.instruction g restore_csrs            **>
@@ -583,21 +587,15 @@ let noregs = Register.Set.empty
 % \end{verbatim}
 % \end{quote}
 
-\begin{figure}
-\centerline{\includegraphics[width=\hsize]{../figures/callstmt}}
-\caption{Principal translation of a call statement. A dataflow node
-         expresses interprocedural dataflow.} 
-\label{fig:ast2ir:call} 
-\end{figure}
 <<supporting functions for translating statements>>=
 and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ = 
-  let cc = ccs (Aux.Option.get default_cc cconv)    in
-  let out, actuals = actuals cc.C.call_actuals args in
-  let in', results = results cc.C.call_results lhs  in
-  let calli = target.T.call.T.embed (expr e)        in
-  let conts = continuations cc conts                in
-  let () = add_outparms out.C.overflow in  (* outgoing overflow parms *)
-  let () = add_outparms in'.C.overflow in  (* incoming overflow res = out parms *)
+  let cc           = ccs (Aux.Option.get default_cc cconv) in
+  let out, actuals = actuals cc.C.call_actuals args        in
+  let in', results = results cc.C.call_results lhs         in
+  let calli = target.T.call.T.embed (expr e)               in
+  let conts = continuations cc conts                       in
+  let () = add_youngblock out.C.overflow in  (* outgoing overflow parms *)
+  let () = add_youngblock in'.C.overflow in  (* incoming overflow results *)
   G.instruction g out.C.pre_sp            **>
   G.instruction g (out.C.shuffle actuals) **>
   G.instruction g out.C.post_sp           **>
@@ -627,7 +625,7 @@ and returnStmt (cconv, kont, args) =
       | Some (i,n) ->
           let k e = Bits.S.to_int (compile_const e) in cc.C.return (k i) (k n) in
           (* WHY IS THIS Bits.S AND NOT Bits.U ??? *)
-    let () = add_inparms out.C.overflow in  (* outgoing jump overflow = incoming *)
+    let () = add_oldblock out.C.overflow in  (* outgoing jump overflow = incoming *)
     G.instruction g out.C.pre_sp            **>
     G.instruction g (out.C.shuffle actuals) **>
       (* SHOULD JUMP TO SHARED EPILOG HERE -- RESTORE REGS AND SP *)
@@ -694,7 +692,7 @@ and generate_cut_to_entry k =
 and generate_return_to_entry k = 
   let cc = ccs default_cc in
   let in', formals = k.K.return_in, k.K.formals in
-  let () = add_outparms in'.C.overflow in
+  let () = add_youngblock in'.C.overflow in
   G.set_succ (G.node_labeled g k.K.return_pc) (
   G.instruction g in'.C.pre_sp              **>
   G.instruction g (in'.C.shuffle formals)   **>
@@ -764,10 +762,10 @@ let proc containing_spans (cconv,procname,args,procbody) =
       stackdata target (F.push env scope) (Memalloc.mk stack) procbody in
 
     (* define all the mutable state here *)
-    let outblocks = ref [] in
-    let inblocks  = ref [] in
-    let add_outparms b = (outblocks := b :: !outblocks) in
-    let add_inparms  b = (inblocks  := b :: !inblocks ) in
+    let youngblocks = ref [] in
+    let oldblocks  = ref [] in
+    let add_youngblock b = (youngblocks := b :: !youngblocks) in
+    let add_oldblock   b = (oldblocks  := b :: !oldblocks ) in
     let constraints = ref [] in
     let add_constraints c = (constraints := c :: !constraints) in
 
@@ -814,8 +812,8 @@ let proc containing_spans (cconv,procname,args,procbody) =
 
     let () = insert_init_cont_nodes contenv initcont in
       (* THESE PLACEMENTS ARE WRONG.  THEY DEPEND ON THE DIRECTION OF STACK GROWTH *)
-    let incoming = Block.overlap_list pointersize Block.Low  (!inblocks)  in
-    let outgoing = Block.overlap_list pointersize Block.High (!outblocks) in
+    let incoming = Block.overlap_list pointersize Block.Low  (!oldblocks)  in
+    let outgoing = Block.overlap_list pointersize Block.High (!youngblocks) in
     
     let contblocks =
       let addblock name k blocks =
