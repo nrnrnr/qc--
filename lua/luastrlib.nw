@@ -159,6 +159,7 @@ let bprintf_internal g buf format =
 let format g fmt args = bprintf_internal g (Buffer.create 16) fmt args
 @ 
 A recognizer takes as arguments a position and success and failure continuations.
+The implementation is based on standard parser combinators.
 <<support for matching>>=
 let explode s =
   let rec add n cs = if n = 0 then cs else add (n-1) (s.[n-1] :: cs) in
@@ -185,8 +186,8 @@ let find pat s =
       | (i', _, _) as p' :: ps -> if i < i' then p :: p' :: ps else p' :: insert p ps
     in let pairs = List.fold_right insert (!pairs) [] in
     List.map (fun (_, l, r) -> String.sub s l (r-l)) pairs in
-  let atend i   succ fail = if i == length then succ i fail else fail () in
-  let atstart i succ fail = if i == 0      then succ i fail else fail () in
+  let atend i   succ fail = if i = length then succ i fail else fail () in
+  let atstart i succ fail = if i = 0      then succ i fail else fail () in
   let opt  r i succ fail = r i succ (fun () -> succ i fail) in
   let (||) r r' i succ fail =
     r i succ (fun () -> r' i succ fail) in
@@ -218,7 +219,7 @@ let find pat s =
       | '(', c :: cs -> lparen lps >> comp (lps+1) c cs
       | ')', c :: cs -> rparen     >> comp lps     c cs
       | ')', []      -> rparen
-      | c  , cs      -> finish (char ((==) c), cs) in
+      | c  , cs      -> finish (char ((=) c), cs) in
     match pat with
     | [] -> fun i succ fail -> if i <= length then succ i i fail else fail ()
     | '^' :: [] -> atzero atstart
@@ -233,7 +234,7 @@ let range l h c = l <= c && c <= h    in
 let lower = range 'a' 'z'   in
 let upper = range 'A' 'Z'   in
 let digit = range '0' '9'   in
-let space c = c == ' ' || c == '\t' || c == '\r' || c == '\n'   in
+let space c = c = ' ' || c = '\t' || c = '\r' || c = '\n'   in
 let letter = orp lower upper   in
 let alnum  = orp letter digit   in
 let non p c = not (p c)   in
@@ -244,25 +245,25 @@ let percent = function
   | 's' -> space  | 'S' -> non space
   | 'u' -> upper  | 'U' -> non upper
   | 'w' -> alnum  | 'W' -> non alnum
-  | c when non alnum c -> (==) c
+  | c when non alnum c -> (=) c
   | _ -> error "bad % escape in pattern"   in
 @ 
 <<character-matching functions>>=
 let cclass cs = 
   let orr p (p', cs) = orp p p', cs in
   let rec pos cs = match cs with
-    | ']' :: cs -> orr ((==) ']') (pos2 cs)
+    | ']' :: cs -> orr ((=) ']') (pos2 cs)
     | cs -> pos2 cs
   and pos2 cs = match cs with
-  | '-' :: cs -> orr ((==) '-') (pos3 cs)
+  | '-' :: cs -> orr ((=) '-') (pos3 cs)
   | ']' :: cs -> (fun _ -> false), cs
   | _         -> pos3 cs
   and pos3 cs = match cs with
   | '%' :: c :: cs -> orr (percent c) (pos3 cs)
   | ']' :: cs      -> (fun _ -> false), cs
-  | c   :: '-' :: ']' :: cs -> orp ((==) c) ((==) '-'), cs
+  | c   :: '-' :: ']' :: cs -> orp ((=) c) ((=) '-'), cs
   | c   :: '-' :: c'  :: cs -> orr (range c c') (pos3 cs)
-  | c   :: cs               -> orr ((==) c) (pos3 cs)
+  | c   :: cs               -> orr ((=) c) (pos3 cs)
   | [] -> error "Bad character class in pattern" in
   match cs with
   | '^' :: cs -> let p, cs = pos cs in non p, cs
