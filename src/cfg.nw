@@ -875,23 +875,7 @@ type 'i node =
 @
 The observers are straightforward.
 <<graph and node observers implementation>>=
-let kind node = match node with
-  | Joi _ -> Join
-  | Ins _ -> Instruction
-  | Sta _ -> StackAdjust
-  | Bra _ -> Branch
-  | Cbr _ -> Cbranch
-  | Mbr _ -> Mbranch
-  | Jum _ -> Jump
-  | Cal _ -> Call
-  | Ret _ -> Return
-  | Cut _ -> CutTo
-  | Ent _ -> Entry
-  | Exi _ -> Exit
-  | Ass _ -> Assertion
-  | Ill _ -> Illegal
-  | Imp _ -> Impossible
-  | Boot  -> undef "kind" "boot"
+let kind = kind_util
 
 let num node = match node with
   | Joi j -> j.joi_num
@@ -1188,12 +1172,15 @@ let fold_heads f zero cfg = List.fold_right f (heads cfg) zero
 @ 
 The trick in [[fold_nodes]] is to visit every node \emph{without}
 taking the successor of the exit node.
+Note that we are careful to take the successors before applying the function to a node;
+this way, we allow deletion of a node during the folding.
 <<graph and node observers implementation>>=
 let fold_nodes f zero cfg =
-  let fold_over_nonjoin_succs f n zero =
-    List.fold_right (fun n z -> if is_join n then z else f n z) (succs n) zero in
+  let fold_over_nonjoin_succs f n nsuccs zero =
+    List.fold_right (fun n z -> if is_join n then z else f n z) nsuccs zero in
   let rec fold_bb node zero =
-    fold_over_nonjoin_succs fold_bb node (f node zero) in
+    let nsuccs = succs node
+    in  fold_over_nonjoin_succs fold_bb node nsuccs (f node zero) in
   fold_heads fold_bb (f cfg.exit zero) cfg
 
 let iter_nodes f = fold_nodes (fun n () -> f n) ()
@@ -1878,7 +1865,52 @@ let illegal cfg = Ill { ill_num = new_num ()
                       ; ill_cfg = cfg
                       }
 @
+We use some simple shorthands for raising exceptions.
+<<graph utilities>>=
+let imposs = Impossible.impossible
+let undef f n = imposs (Printf.sprintf "%s: undefined on %s nodes" f n)
+let undef_with_node node_num f n =
+  imposs (Printf.sprintf "%s: undefined on %s node %d" f n node_num)
+@
+Some of the utilities need to check the kind of a node (before the observers have
+been defined).
+<<graph utilities>>=
+let kind_util = function
+  | Joi _ -> Join
+  | Ins _ -> Instruction
+  | Sta _ -> StackAdjust
+  | Bra _ -> Branch
+  | Cbr _ -> Cbranch
+  | Mbr _ -> Mbranch
+  | Jum _ -> Jump
+  | Cal _ -> Call
+  | Ret _ -> Return
+  | Cut _ -> CutTo
+  | Ent _ -> Entry
+  | Exi _ -> Exit
+  | Ass _ -> Assertion
+  | Ill _ -> Illegal
+  | Imp _ -> Impossible
+  | Boot  -> undef "kind" "boot"
 
+let name = function
+  | Joi _ -> "Join"
+  | Ins _ -> "Instruction"
+  | Sta _ -> "StackAdjust"
+  | Bra _ -> "Branch"
+  | Cbr _ -> "Cbranch"
+  | Mbr _ -> "Mbranch"
+  | Jum _ -> "Jump"
+  | Cal _ -> "Call"
+  | Ret _ -> "Return"
+  | Cut _ -> "CutTo"
+  | Ent _ -> "Entry"
+  | Exi _ -> "Exit"
+  | Ass _ -> "Assertion"
+  | Ill _ -> "Illegal"
+  | Imp _ -> "Impossible"
+  | Boot  -> "Boot"
+@
 Node equality is the most important utility of all.
 We cannot safely compare nodes with [[==]], because the node type is
 an algebraic data type, and the Caml implementation is free to
@@ -1923,7 +1955,8 @@ let show_rtl = function
 let printReg (s, i, w) = Printf.sprintf "%c%d" s i
 let print_node node = 
       String.concat "" (List.flatten
-       [ List.flatten [ [ string_of_int (num node)
+       [ [ name node; ": "]
+       ; List.flatten [ [ string_of_int (num node)
                         ; ": "
 	                      ]
                       ; if is_join node then labels node
@@ -1938,10 +1971,6 @@ let print_node node =
        ])
 @
 <<graph utilities>>=
-let imposs = Impossible.impossible
-let undef f n = imposs (Printf.sprintf "%s: undefined on %s nodes" f n)
-let undef_with_node node_num f n =
-  imposs (Printf.sprintf "%s: undefined on %s node %d" f n node_num)
 let log m = ()
 let uniq lst =
   List.fold_left (fun rst n1 -> if List.exists (eq n1) rst
@@ -1983,7 +2012,8 @@ let merge_joins j1 j2 succ lpred = match j1, j2 with
 Graph heads are defined as the entry node and the join points.
 <<graph utilities>>=
 let heads cfg =
-  uniq (cfg.entry :: SM.fold (fun _ h rst -> h::rst) cfg.label_map [])
+  List.filter (fun n -> kind_util n <> Exit)
+              (uniq (cfg.entry :: SM.fold (fun _ h rst -> h::rst) cfg.label_map []))
 @
 
 <<join node set operations>>=
