@@ -236,7 +236,7 @@ module Map = struct
 
     let doc           = DocV.makemap       V.userdata V.projection
     let new_target    = NewTargetV.makemap V.userdata V.projection
-    let optimize proc = V.closure (proc **-> V.runit)
+    let optimize proc = V.closure (proc **->> V.unit)
     let channel       = InOutV.makemap     V.userdata V.projection
     let inchan        = Luaiolib.in'       channel    V.projection
     let outchan       = Luaiolib.out       channel    V.projection
@@ -389,7 +389,7 @@ C.register_module "Block"
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Boot" 
    [ "qc--.lua",   V.String                            This.boot
-   ; "version",    V.efunc (Map.outchan **-> V.runit)  This.version
+   ; "version",    V.efunc (Map.outchan **->> V.unit)  This.version
    ; "manual",     V.String                            This.manual 
    ; "byteorder",  V.String                            This.byteorder
    ; "arch_os",    V.String                            This.arch_os
@@ -425,27 +425,27 @@ C.register_module "Caml"
 
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Dataflow" 
-   [ "emit_dot",   V.efunc (V.unit **-> V.runit)  Dataflow.Test.emit_dot
+   [ "emit_dot",   V.efunc (V.unit **->> V.unit)  Dataflow.Test.emit_dot
    ] g;                        
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Driver" 
-  [ "assemble"  , V.efunc (Map.vasm **-> V.runit)   (fun asm -> asm#emit)
+  [ "assemble"  , V.efunc (Map.vasm **->> V.unit)   (fun asm -> asm#emit)
   ; "proc_assembler", V.efunc (Map.vasm **->> (Map.stage V.value)) 
                     (fun asm v p -> asm#cfg_instr p ; true)
   ; "check"     , V.efunc (Map.ast **-> Map.asm **->> Map.env) Driver.check
-  ; "emit_asdl" , V.efunc (Map.ast **-> V.runit)               Driver.emit_asdl
+  ; "emit_asdl" , V.efunc (Map.ast **->> V.unit)               Driver.emit_asdl
   ; "parse"     , V.efunc (V.string**->> Map.ast)              Driver.parse
-  ; "print"     , V.efunc (Map.doc **-> V.int **-> Map.outchan **-> V.runit)
+  ; "print"     , V.efunc (Map.doc **-> V.int **-> Map.outchan **->> V.unit)
                     Driver.print
   ; "pretty"    , V.efunc (Map.ast **->> Map.doc) Driver.pretty
-  ; "scan"      , V.efunc (V.string**-> V.runit)  Driver.scan
-  ; "version"   , V.efunc (V.unit  **-> V.runit)  Driver.version
+  ; "scan"      , V.efunc (V.string**->> V.unit)  Driver.scan
+  ; "version"   , V.efunc (V.unit  **->> V.unit)  Driver.version
   ; "stdin"     , Map.inchan.V.embed              stdin (* hack *)
   ; "stdout"    , Map.outchan.V.embed             stdout(* hack *)
   ; "compile"   , V.efunc (Map.optimize Map.proc **-> V.bool **->
                            Map.ast **-> Map.new_target **-> Map.env **->> Map.asm) 
                           Driver.compile
-  ; "reinit"    , V.efunc (V.unit  **-> V.runit)  Driver.reinit
+  ; "reinit"    , V.efunc (V.unit  **->> V.unit)  Driver.reinit
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 let dump f =
@@ -500,7 +500,7 @@ C.register_module "Simplify"
 
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Stack"
-  [ "freeze",  V.efunc (Map.proc **-> Map.block **-> V.runit)   Stack.freeze
+  [ "freeze",  V.efunc (Map.proc **-> Map.block **->> V.unit)   Stack.freeze
   ; "blocks",  V.efunc (Map.proc **->> (V.record V.value))
                        (Stack.blocks Map.block.V.embed (V.list V.value).V.embed
                                      (V.record V.value).V.embed)
