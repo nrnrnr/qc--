@@ -425,6 +425,9 @@ function X86.layout["C"](dummy,proc) --- really for a C convention only
                                  'youngblocks', 'sp'})
     end
     local block = Block.cat(32, layout)
+    if Debug.stack then
+      Debug.showblocks({frame=block}, {'frame'})
+    end
     Stack.freeze(proc,block)
     return 1
 end    
@@ -439,9 +442,9 @@ function X86.layout["C--"](dummy,proc)
       local i = 1
       local keys = { }
       while blocks.oldblocks.callee[i] do keys[i] = i; i = i + 1 end
-      write('oldblocks.callee:\n')
+      write('oldblocks.callee (before ra is added):\n')
       Debug.showblocks(blocks.oldblocks.callee, keys)
-      write('\n')
+      write('................\n')
     end
 
     blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)

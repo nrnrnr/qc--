@@ -63,28 +63,31 @@ specific values:
   Test.files   - list of source files to test.
   Test.update  - force differing files to be updated.
 
-Test.files is a table containing information about each test case.
-Each entry in Test.files can be either the name of a source file for a
-test case, or a table containing detailed information about the test
-case. Any fields not provided will be given reasonable default values.
-A list of the available fields and their default values is given
-below.
+Test.files is a table containing information about each test case.  A
+`test case' consists of multiple `source files', which are linked
+together and then run.  The test driver supports the common case in
+which a test cases has a single source file.  Each entry in Test.files
+can be either the name of a source file, for this common case, or a
+table containing detailed information about the test case. Any fields
+not provided will be given reasonable default values.  A list of the
+available fields and their default values is given below.
 
 field  default    description
 --------------------------------------------------------------------
-name   basename   name for this test case.
-source nil        source file as above (required field).
-stdin  <name>.0   standard input file.
-stdout <name>.1   expected standard output file.
-stderr <name>.2   standard error file.
-asm    <name>.s   assembly output file.
-asmout <name>.s1  expected compiler standard output file.
-asmerr <name>.s2  expected compiler standard error file.
-other  nil        additional sources to link with.
+name     basename   name for this test case
+runnable "true"     "true" if test case produces runnable program
+source   N/A        source file or list of source files (required field)
+stdin    <name>.0   standard input file (one per test)
+stdout   <name>.1   expected standard output file (one per test)
+stderr   <name>.2   standard error file (one per test)
+asm      <name>.s   list of assembly output files (one per source file)
+asmout   <name>.s1  list of expected compiler standard output files (one per source)
+asmerr   <name>.s2  list of expected compiler standard error files (one per source)
+other    nil        additional sources to link with.
 
 All of the table entries are optional except for source. If the name
 field is omitted, then it will be assigned to the basename of the
-source files. If the source file is called "/a/b/c/test.c", then the
+first source file. If the source file is called "/a/b/c/test.c", then the
 default name field will be "test". If a filename contains a '/' then
 it will be treated a a path relative to the current directory. If the
 filename does not contain a '/', then the file is assumed to be in the

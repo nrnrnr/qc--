@@ -31,6 +31,9 @@ Test.files = { "add.c--"
              , norun("rnd2.c--")
              , norun("sub.c--")
 	     , "switch.c--"
+	     , "tail.c--"
+             , { source = {'tail2.c--', 'call3.c--'} }
+             , { source = {'tailnot.c--', 'call3.c--'} }
              , norun("x86-000.c--")
              , norun("x86-001.c--")
              }
