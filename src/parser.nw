@@ -37,12 +37,16 @@ sync point for the following character into the source map.
 
 <<scan.mll>>=
 {
-    module P = Parse    (* tokens are defined here *)
-    module E = Error
+    <<prolog>>
+}
 
-    let nl lexbuf map =
-        let next = (Lexing.lexeme_start lexbuf) + 1     in
-            Srcmap.nl map next
+<<prolog>>=
+module P = Parse    (* tokens are defined here *)
+module E = Error
+
+let nl lexbuf map =
+    let next = (Lexing.lexeme_start lexbuf) + 1     in
+        Srcmap.nl map next
     
 @ The tab character is one byte long, but moves the cursor additional
 $x$ positions to the right.  The number $x$ of virtual spaces depends
@@ -56,27 +60,27 @@ ignore tabs by not placing a sync point in the [[map]].  Sync points
 are explained in section \ref{srcmap} about source code position
 tracking.
 
-<<scan.mll>>=
-    let tab lexbuf map = ()
+<<>>=
+let tab lexbuf map = ()
         
 @ The current location can be obtained by passing the current position
 to [[Srcmap.location]]:
 
-<<scan.mll>>= 
-    let location lexbuf map =
-        Srcmap.location map (Lexing.lexeme_start lexbuf)
+<<>>= 
+let location lexbuf map =
+    Srcmap.location map (Lexing.lexeme_start lexbuf)
      
-    let error lexbuf map msg = Error.error msg
+let error lexbuf map msg = Error.error msg
 
 @ We define some helpers; [[get]] returns the matched string and is
 quite intuitive when called as [[get lexbuf]].
 
-<<scan.mll>>=
-    let get         = Lexing.lexeme
-    let getchar     = Lexing.lexeme_char
-    let strlen      = String.length
-    let pos_start   = Lexing.lexeme_start
-    let pos_end     = Lexing.lexeme_end
+<<>>=
+let get         = Lexing.lexeme
+let getchar     = Lexing.lexeme_char
+let strlen      = String.length
+let pos_start   = Lexing.lexeme_start
+let pos_end     = Lexing.lexeme_end
 
 @ Some lexemes contain data that we like to extract.  Here is a
 substring extraction function (inspired by Python's [[slice]]) that
@@ -87,7 +91,8 @@ the beginning.  It is best to think about the [[start]] and [[stop]]
 indices as pointing between the characters; some examples makes this
 clear:
 
-<<substr example>>=
+\begin{quote}
+\begin{verbatim}
           h  e  l  l  o  _  w  o  r  l  d
         0  1  2  3  4  5  6  7  8  9  10 11
      -11 -10 -9 -8 -7 -6 -5 -4 -3 -2 -1  0
@@ -97,12 +102,14 @@ clear:
     substr 0 (-1) "hello world"         ;; - : string = "hello worl"
     substr (-3) (-1) "hello world"      ;; - : string = "rl"
     substr (0) (3) "hello world"        ;; - : string = "hel"
+\end{verbatim}
+\end{quote}
 
-<<scan.mll>>=
-    let substr start stop str = 
-        let start = if start <  0 then String.length str + start else start in
-        let stop  = if stop  <= 0 then String.length str + stop  else stop  in
-            String.sub str start (stop - start)
+<<>>=
+let substr start stop str = 
+    let start = if start <  0 then String.length str + start else start in
+    let stop  = if stop  <= 0 then String.length str + stop  else stop  in
+        String.sub str start (stop - start)
 @
 
 All keywords are stored in a hash table that maps them to tokens;
@@ -112,56 +119,56 @@ directly encoded into the automaton of the scanner because this is
 notorious for overflowing the tables of the automaton's
 implementation.
 
-<<scan.mll>>=
-    let keywords    = Hashtbl.create 127
-    let keyword s   = Hashtbl.find keywords s
+<<>>=
+let keywords    = Hashtbl.create 127
+let keyword s   = Hashtbl.find keywords s
 
-    let _ = Array.iter (fun (str,tok) -> Hashtbl.add keywords str tok)
-        [|("aborts"         , P.ABORTS)
-        ; ("align"          , P.ALIGN)
-        ; ("aligned"        , P.ALIGNED)
-        ; ("also"           , P.ALSO)
-        ; ("as"             , P.AS)
-        ; ("big"            , P.BIG)
-        ; ("byteorder"      , P.BYTEORDER)
-        ; ("case"           , P.CASE)
-        ; ("const"          , P.CONST)
-        ; ("continuation"   , P.CONTINUATION)
-        ; ("cut"            , P.CUT)
-        ; ("cuts"           , P.CUTS)
-        ; ("else"           , P.ELSE)
-        ; ("equal"          , P.EQUAL)
-        ; ("export"         , P.EXPORT)
-        ; ("foreign"        , P.FOREIGN)
-        ; ("goto"           , P.GOTO)
-        ; ("if"             , P.IF)
-        ; ("import"         , P.IMPORT)
-        ; ("invariant"      , P.INVARIANT)
-        ; ("jump"           , P.JUMP)
-        ; ("little"         , P.LITTLE)
-        ; ("memsize"        , P.MEMSIZE)
-        ; ("pragma"         , P.PRAGMA)
-        ; ("register"       , P.REGISTER)
-        ; ("return"         , P.RETURN)
-        ; ("returns"        , P.RETURNS)
-        ; ("section"        , P.SECTION)
-        ; ("semi"           , P.SEMI)
-        ; ("span"           , P.SPAN)
-        ; ("stackdata"      , P.STACKDATA)
-        ; ("switch"         , P.SWITCH)
-        ; ("target"         , P.TARGET)
-        ; ("targets"        , P.TARGETS)
-        ; ("to"             , P.TO)
-        ; ("typedef"        , P.TYPEDEF)
-        ; ("unicode"        , P.UNICODE)
-        ; ("unwinds"        , P.UNWINDS)
+let _ = Array.iter (fun (str,tok) -> Hashtbl.add keywords str tok)
+    [|("aborts"         , P.ABORTS)
+    ; ("align"          , P.ALIGN)
+    ; ("aligned"        , P.ALIGNED)
+    ; ("also"           , P.ALSO)
+    ; ("as"             , P.AS)
+    ; ("big"            , P.BIG)
+    ; ("byteorder"      , P.BYTEORDER)
+    ; ("case"           , P.CASE)
+    ; ("const"          , P.CONST)
+    ; ("continuation"   , P.CONTINUATION)
+    ; ("cut"            , P.CUT)
+    ; ("cuts"           , P.CUTS)
+    ; ("else"           , P.ELSE)
+    ; ("equal"          , P.EQUAL)
+    ; ("export"         , P.EXPORT)
+    ; ("foreign"        , P.FOREIGN)
+    ; ("goto"           , P.GOTO)
+    ; ("if"             , P.IF)
+    ; ("import"         , P.IMPORT)
+    ; ("invariant"      , P.INVARIANT)
+    ; ("jump"           , P.JUMP)
+    ; ("little"         , P.LITTLE)
+    ; ("memsize"        , P.MEMSIZE)
+    ; ("pragma"         , P.PRAGMA)
+    ; ("register"       , P.REGISTER)
+    ; ("return"         , P.RETURN)
+    ; ("returns"        , P.RETURNS)
+    ; ("section"        , P.SECTION)
+    ; ("semi"           , P.SEMI)
+    ; ("span"           , P.SPAN)
+    ; ("stackdata"      , P.STACKDATA)
+    ; ("switch"         , P.SWITCH)
+    ; ("target"         , P.TARGET)
+    ; ("targets"        , P.TARGETS)
+    ; ("to"             , P.TO)
+    ; ("typedef"        , P.TYPEDEF)
+    ; ("unicode"        , P.UNICODE)
+    ; ("unwinds"        , P.UNWINDS)
 
-        ; ("float"          , P.FLOATREPR)
-        ; ("charset"        , P.CHARSET)
-        ; ("pointersize"    , P.PTRSIZE)
-        ; ("wordsize"       , P.WRDSIZE)
+    ; ("float"          , P.FLOATREPR)
+    ; ("charset"        , P.CHARSET)
+    ; ("pointersize"    , P.PTRSIZE)
+    ; ("wordsize"       , P.WRDSIZE)
 
-        |]
+    |]
 @
 
 Literals (integer, floating point, character) are stored as
@@ -171,7 +178,6 @@ are conversion functions that take strings as arguments and returns a
 [[Bits.bits]] value using the maximum width [[Bits.maxwidth]].
 
 <<>>=
-
 let str2bits f str =
     try f str Bits.maxwidth with
     | Bits.Size     -> E.error "literal too large for this implementation"
@@ -180,8 +186,6 @@ let str2bits f str =
 let stri2bits str = str2bits Bits.of_stringi str
 let strf2bits str = str2bits Bits.of_stringf str
 let strc2bits str = str2bits Bits.of_stringc str 
-
-} (* end of prolog *)
 @
 
 % ------------------------------------------------------------------  
@@ -770,6 +774,7 @@ module [[Ast]].
 <<parse.mly>>=
 %{
     module A = Ast
+    module E = Error
 
     <<helper functions>>            
 %}
@@ -784,7 +789,6 @@ attached to important nodes in the abstract syntax.  The function
 where the leftmost symbol has index 1.
 
 <<helper functions>>=
-
 let p  ()  = (Parsing.symbol_start (), Parsing.symbol_end())
 let pn n   = (Parsing.rhs_start n, Parsing.rhs_end n)
 let px ()  = (Parsing.symbol_start ())
@@ -800,6 +804,17 @@ let mkRegs v (ty,regs) =
 let mkTypedefs ty names =
     List.map (fun n -> A.Typedef(n,ty)) names
 @            
+
+The [[[bits2int]] function takes a [[bits]] value and returns its integer
+value; additionally it takes care of possible overflows.
+
+<<>>=
+let bits2int b = 
+    try
+        Bits.to_int b
+    with
+        Bits.Overflow -> E.error "Constant exceeds implementation limits"
+@ 
 
 <<parse.mly>>=
 %token ABORTS ALIGN ALIGNED ALSO AS AMPERSAND BIG BYTEORDER CASE COLON CCOLON
@@ -896,13 +911,13 @@ decl        :   INVARIANT REGISTER registers SEMI
             |   TYPEDEF ty names SEMI          { A.Typedef($2,rev $3)      }
             |   TARGET properties SEMI         { A.Target(rev $2)          }
 <<>>=
-property    :   MEMSIZE INT                    { A.Memsize(Bits.to_int $2)      }
+property    :   MEMSIZE INT                    { A.Memsize(bits2int $2)      }
             |   BYTEORDER BIG                  { A.ByteorderBig                 }
             |   BYTEORDER LITTLE               { A.ByteorderLittle              }
             |   FLOATREPR STR                  { A.FloatRepr $2                }
             |   CHARSET STR                    { A.Charset $2                   }
-            |   PTRSIZE INT                    { A.PointerSize (Bits.to_int $2) }
-            |   WRDSIZE INT                    { A.WordSize (Bits,to_int $2)    }
+            |   PTRSIZE INT                    { A.PointerSize (bits2int $2) }
+            |   WRDSIZE INT                    { A.WordSize (bits2int $2)    }
 
 <<>>=
 properties  :   properties property            { $2 :: $1 }
@@ -913,7 +928,7 @@ span        :   SPAN exprAt expr
 <<>>=
 datumAt     :   datum                          { A.DatumAt($1,p()) }
 datum       :   ID COLON                       { A.Label $1 }
-            |   ALIGN INT SEMI                 { A.Align (Bits.to_int $2) }
+            |   ALIGN INT SEMI                 { A.Align (bits2int $2) }
             |   tyAt size initAt SEMI          { A.MemDecl($1,$2,Some $3)}
             |   tyAt size        SEMI          { A.MemDecl($1,$2,None)}
             |   tyAt      initAt SEMI          { A.MemDecl($1,A.NoSize,Some $2)}
@@ -990,7 +1005,7 @@ data        :   data  datumAt                  { $2 :: $1 }
 
 conv        :   FOREIGN STR                    { Some $2 }
 
-aligned     :   ALIGNED INT                    { Some (Bits.to_int $2) }
+aligned     :   ALIGNED INT                    { Some (bits2int $2) }
 
 flowAt      :   flow                           { A.FlowAt($1,p()) }
 flow        :   ALSO CUTS     TO names         { A.CutsTo($4)     }
