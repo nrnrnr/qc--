@@ -1090,15 +1090,15 @@ module RU = Rtlutil
 module S  = Space
 module T  = Target
 
-module Up   = Rtl.Up
-module Down = Rtl.Dn
+module Up = Rtl.Up
+module Dn = Rtl.Dn
 
 let upassn = Rtl.Up.assertion
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 @ 
 \subsection{Utilities and debugging code}
 <<expander.ml>>=
-let fetch l = RP.Fetch (Down.loc l, RU.Width.loc l)
+let fetch l = RP.Fetch (Dn.loc l, RU.Width.loc l)
 let width e = RU.Width.exp (Up.exp e)
 @ 
 Sometimes, we may require that a node have an instruction.
@@ -1216,8 +1216,8 @@ It will also work with integer/float machines, since we can make
 address registers a synonym for integer registers.
 <<expander.ml>>=
 module IntFloatAddr (Post : Postexpander.S) = struct
-  let pc_lhs = Down.loc Post.pc_lhs
-  let pc_rhs = Down.loc Post.pc_rhs
+  let pc_lhs = Dn.loc Post.pc_lhs
+  let pc_rhs = Dn.loc Post.pc_rhs
   <<internal utilities for the generic expander>>
   <<generic expander>>
   <<generic flow-graph expander>>
@@ -1372,32 +1372,11 @@ It is not obvious to NR how to write an expander that achieves both.}
 <<definitions of [[to_temp]], [[rtl]] and all the other generic expander functions>>=
 let rec to_temp' room context e =
   match e with
-  | RP.Const k ->
-      let w = width e in
-      let t = alloc context w in
-      t, Post.li t k
-  | RP.App (_, _) when is_compile_time_constant e ->
-      let w = width e in
-      let t = alloc context w in
-      t, Post.lix t (Up.exp e)
-  | RP.Fetch (l, w) when Post.is_stack_top_proxy l ->
-      let slot = exchange_slot w in
-      let t, is = to_temp room context (fetch_slot slot w) in
-      t, assign_slot room slot e w <:> is
-  | RP.Fetch (RP.Mem (('m', agg, ms), c, addr, assn), w) ->
-      let t = alloc context w in
-      let a, is = address room addr in
-      assert (agg =*= Post.byte_order);
-      assert (w = Cell.to_width ms c);
-      t, is <:> Post.load t a (upassn assn)
-  | RP.Fetch (RP.Reg r, w) ->
-      assert (w = Register.width r);
-      temp_in_context r context PX.Nop
-  | RP.Fetch _ ->
-      impossf "memory-like access to non-memory space"
+  <<cases for converting a compile-time constant to a temporary>>
+  <<cases for converting a bare [[Fetch]] to a temporary>>
   <<cases for sign extending or zero extending a temporary>>
   <<cases for sign-extending and zero-extending loads>>
-  <<cases for sign-extending and zero-extending divides>>
+  <<cases for extending a narrow register (such as rounding mode)>>
   <<cases for narrow weird value operators>>
   <<cases for converting a Boolean to a value>>
   | RP.App ((_, [stackw; tempw]) as cvt, _) as e
@@ -1407,37 +1386,66 @@ let rec to_temp' room context e =
       t, assign_slot room slot e tempw <:> is 
   | RP.App (("f2f_implicit_round", ws), [x]) ->
       to_temp room context (RP.App (("f2f", ws), [x; RP.Fetch(rounding_mode, 2)]))
-  | RP.App (op, args) ->
-      begin
-        match Post.opclass op with
-        | PX.Stack(dir, depth) ->
-            let w = Post.stack_width in
-            let slot = exchange_slot w in
-            let t, is = to_temp room context (fetch_slot slot w) in
-            t, assign_slot room slot e w <:> is
-        | PX.Register ->
-            let (temps, is) =
-              try
-                List.split (List.map2 (fun c e -> to_temp room (contextmap c) e)
-                              (Post.arg_contexts op) args)
-              with Invalid_argument (_) ->
-                impossf "bad arity for operator %s (args %d vs context %d)"
-                  (fst op) (List.length args) (List.length (Post.arg_contexts op)) in
-            let w = width e in
-            let t = alloc_direct (Post.result_context op) w in
-            let compute = match temps with
-            | [x; y] -> Post.binop t op x y  (* see note on binary operators below *)
-            | [x]    -> Post.unop  t op x
-            | _      -> Post.rtlop t op temps in
-            temp_in_context t context (block_concat (List.rev is) <:> compute)
-      end
+  | RP.App (op, args) -> (<<action for expanding [[op(args)]] into a temporary>>)
 <<other generic expander functions>> in
+@ 
+Details depend on whether the operator is a stack operator or a
+register operator.
+<<action for expanding [[op(args)]] into a temporary>>=
+match Post.opclass op with
+| PX.Stack(dir, depth) ->
+    let w = Post.stack_width in
+    let slot = exchange_slot w in
+    let t, is = to_temp room context (fetch_slot slot w) in
+    t, assign_slot room slot e w <:> is
+| PX.Register ->
+    let (temps, is) =
+      try
+        List.split (List.map2 (fun c e -> to_temp room (contextmap c) e)
+                      (Post.arg_contexts op) args)
+      with Invalid_argument (_) ->
+        impossf "bad arity for operator %s (args %d vs context %d)"
+          (fst op) (List.length args) (List.length (Post.arg_contexts op)) in
+    let w = width e in
+    let t = alloc_direct (Post.result_context op) w in
+    let compute = match temps with
+    | [x; y] -> Post.binop t op x y  (* see note on binary operators below *)
+    | [x]    -> Post.unop  t op x
+    | _      -> Post.rtlop t op temps in
+    temp_in_context t context (block_concat (List.rev is) <:> compute)
 @ The note on binary operators is that eventually the generic expander
 might be extended so it can deal with a two-address target machine.
 The generic expander might (somehow) divine whether the operation is 
 in $L \mathrel{:=} L \oplus R$ form or in $R \mathrel{:=} L \oplus R$ form,
 and it could call appropriate supporting functions in the target.
 On the other hand, we could just rely on peephole optimization\ldots
+@
+<<cases for converting a compile-time constant to a temporary>>=
+| RP.Const k ->
+    let w = width e in
+    let t = alloc context w in
+    t, Post.li t k
+| RP.App (_, _) when is_compile_time_constant e ->
+    let w = width e in
+    let t = alloc context w in
+    t, Post.lix t (Up.exp e)
+@
+<<cases for converting a bare [[Fetch]] to a temporary>>=
+| RP.Fetch (l, w) when Post.is_stack_top_proxy l ->
+    let slot = exchange_slot w in
+    let t, is = to_temp room context (fetch_slot slot w) in
+    t, assign_slot room slot e w <:> is
+| RP.Fetch (RP.Mem (('m', agg, ms), c, addr, assn), w) ->
+    let t = alloc context w in
+    let a, is = address room addr in
+    assert (agg =*= Post.byte_order);
+    assert (w = Cell.to_width ms c);
+    t, is <:> Post.load t a (upassn assn)
+| RP.Fetch (RP.Reg r, w) ->
+    assert (w = Register.width r);
+    temp_in_context r context PX.Nop
+| RP.Fetch _ ->
+    impossf "memory-like access to non-memory space"
 @
 Sign-extending and zero-extending loads are done into integer registers only.
 This fact is documented in the postexpander interface.
@@ -1458,14 +1466,10 @@ This fact is documented in the postexpander interface.
 <<cases for sign extending or zero extending a temporary>>=
 | RP.App (("sx", [n; w]), [RP.App(("lobits", [w'; n']), [x])]) when w = w' ->
     if n <> n' then Impossible.impossible "ill-typed %sx(%lobits(...))";
-    let sh_amt = RP.Const (RP.Bits (Bits.U.of_int (w-n) w)) in
-    to_temp' room context
-      (RP.App (("shra", [w]), [RP.App(("shl", [w]), [x; sh_amt]); sh_amt]))
+    to_temp' room context (Dn.exp (Rewrite.sxlo n w (Up.exp x)))
 | RP.App (("zx", [n; w]), [RP.App(("lobits", [w'; n']), [x])]) when w = w' ->
-    if n <> n' then Impossible.impossible "ill-typed %sx(%lobits(...))";
-    let sh_amt = RP.Const (RP.Bits (Bits.U.of_int (w-n) w)) in
-    to_temp' room context
-      (RP.App (("shrl", [w]), [RP.App(("shl", [w]), [x; sh_amt]); sh_amt]))
+    if n <> n' then Impossible.impossible "ill-typed %zx(%lobits(...))";
+    to_temp' room context (Dn.exp (Rewrite.zxlo n w (Up.exp x)))
 @ 
 To get a result of normal width, 
 we can see a weird value operator in two contexts: a weird result is
@@ -1512,17 +1516,24 @@ and to_warg room context e = match e with
 | RP.Fetch _ -> Impossible.unimp "narrow argument straight from location"
 | e -> impossf "trying to put %s into a weird temporary" (RU.ToString.exp (Up.exp e))
 @ 
-\paragraph{Division}
-Division is going to be a real problem; I can just tell.
-Here's a hack which is untested and probably useless.
-<<cases for sign-extending and zero-extending divides>>=
-| RP.App ((("divu"|"modu") as divmod, [w; n]), [RP.App (("zx", [n'; w']), [x]); y])
-  when w = w' && n = n' ->
-    let t = alloc icontext n in
-    let tx, isx = to_temp room icontext x in
-    let ty, isy = to_temp room icontext y in
-    let divmod = Post.binop t ((divmod ^ "_trunc"), [n]) tx ty in
-    temp_in_context t context (isx <:> isy <:> divmod)
+<<cases for extending a narrow register (such as rounding mode)>>=
+@ 
+Eventually, [[with_rounding_mode rm f]] should
+\begin{enumerate}
+\item
+Save the current hardware rounding mode if necessary
+\item
+Set the hardware rounding mode to [[rm]] (if necessary)
+\item 
+Execute the code represented by applying [[f]] to the hardware
+rounding mode
+\item
+Restore  the hardware rounding mode if necessary.
+\end{enumerate}
+\emph{And} it should be a utility function, because some hardware
+might have rounding-mode information in the instruction word itself.
+So instead, operators that take rounding modes have to become weird
+value operators.
 @ 
 For the bit operator, we generate two branches of control flow, create an rtl for a
 conditional branch, and pass everything over to [[expand_cbranch]].
@@ -1562,20 +1573,8 @@ and to_stack' room e =
          ~want:Post.stack_width);
   Debug.eprintf "expander" "to_stack %s\n" (RU.ToString.exp (Up.exp e));
   match e with
-  | RP.Const k ->
-      Post.pushk k
-  | RP.Fetch (l, _) when Post.is_stack_top_proxy l ->
-      PX.Nop
-  | RP.Fetch (RP.Mem (('m', agg, ms), c, addr, assn), w) ->
-      let a, is = address room addr in
-      assert (agg =*= Post.byte_order);
-      assert (w = Cell.to_width ms c);
-      is <:> Post.push a (upassn assn)
-  | RP.Fetch (RP.Reg (space, i, c), w) ->
-      let slot = exchange_slot w in
-      assign_slot room slot e w <:> to_stack room (fetch_slot slot w)
-  | RP.Fetch _ ->
-      impossf "memory-like access to non-memory space"
+  | RP.Const k -> Post.pushk k
+  <<cases for getting a [[Fetch]] on the stack>>
   | RP.App (("f2f_implicit_round", ws), [x]) ->
       to_stack room (RP.App (("f2f", ws), [x; RP.Fetch(rounding_mode, 2)]))
   <<cases for converting pushes>>
@@ -1587,32 +1586,45 @@ and to_stack' room e =
       let slot = exchange_slot w in
       assign_slot room slot e w <:>
       to_stack room (RP.App (f2f, [fetch_slot slot w; rm]))
-  | RP.App (op, args) ->
-      begin
-        Debug.eprintf "expander" "to_stack generic case for %s\n"
-          (RU.ToString.exp (Up.exp e));
-        match Post.opclass op with
-        | PX.Stack(dir, depth) ->
-            let args = List.filter is_not_rounding_mode args in (* cheat!!! *)
-            let args =
-              match dir with PX.LeftFirst -> args | PX.RightFirst -> List.rev args in
-            let push_args room =
-              let (is, _) =
-                List.fold_left (fun (is,r) e -> (is <:> to_stack r e, r-1))
-                (PX.Nop,room) args in
-              is in
-            let compute room = push_args room <:> Post.stack_op op in
-            if room >= depth then
-              compute room
-            else
-              save_stack room <:> compute Post.stack_depth <:> restore_stack 1 room
-        | PX.Register ->
-            let r, is = to_temp room (guess_context e) e in
-            is <:> to_stack room (RP.Fetch (RP.Reg r, Register.width r))
-      end
+  | RP.App (op, args) -> (<<action for expanding [[op(args)]] onto the stack>>)
+@ 
+<<cases for getting a [[Fetch]] on the stack>>=
+| RP.Fetch (l, _) when Post.is_stack_top_proxy l ->
+    PX.Nop
+| RP.Fetch (RP.Mem (('m', agg, ms), c, addr, assn), w) ->
+    let a, is = address room addr in
+    assert (agg =*= Post.byte_order);
+    assert (w = Cell.to_width ms c);
+    is <:> Post.push a (upassn assn)
+| RP.Fetch (RP.Reg (space, i, c), w) ->
+    let slot = exchange_slot w in
+    assign_slot room slot e w <:> to_stack room (fetch_slot slot w)
+| RP.Fetch _ ->
+    impossf "memory-like access to non-memory space"
+@ 
+<<action for expanding [[op(args)]] onto the stack>>=
+Debug.eprintf "expander" "to_stack generic case for %s\n" (D.exp e);
+match Post.opclass op with
+| PX.Stack(dir, depth) ->
+    let args = List.filter is_not_rounding_mode args in (* cheat!!! *)
+        (* ROUNDING *)
+    let args = match dir with PX.LeftFirst -> args | PX.RightFirst -> List.rev args in
+    let push_args room =
+      let (is, _) = List.fold_left (fun (is,r) e -> (is <:> to_stack r e, r-1))
+                    (PX.Nop,room) args in
+      is in
+    let compute room = push_args room <:> Post.stack_op op in
+    (* ROUNDING *)
+    if room >= depth then
+      compute room
+    else
+      save_stack room <:> compute Post.stack_depth <:> restore_stack 1 room
+| PX.Register ->
+    let r, is = to_temp room (guess_context e) e in
+    is <:> to_stack room (RP.Fetch (RP.Reg r, Register.width r))
 @ 
 <<rounding-mode checking>>=
-let rounding_mode = Down.loc proc.Proc.target.Target.rounding_mode in
+let rounding_mode = Dn.loc proc.Proc.target.Target.rounding_mode in
 let is_not_rounding_mode arg = match arg with
 | RP.Fetch (l, 2) -> not (RU.Eq.loc l rounding_mode)
 | _ -> true in
@@ -1635,11 +1647,12 @@ and restore_stack number_to_keep number_to_restore =
     let a, is = address room addr in
     is <:> Post.push_cvt op n a (upassn assn)
 | RP.App ((("f2f"|"f2i"|"i2f"), [n; w]) as op,
-          [RP.Fetch (RP.Mem (('m',agg,ms), c, addr, assn), n'); roundingmode]) ->
+          [RP.Fetch (RP.Mem (('m',agg,ms), c, addr, assn), n'); rm]) ->
     assert (n = n' && n' = Cell.to_width ms c);
     assert (agg =*= Post.byte_order);
     let a, is = address room addr in
     is <:> Post.push_cvt op n a (upassn assn)
+    (*ROUNDING*)
 @ 
 \subsection{Expanding RTLs}
 
@@ -1678,7 +1691,7 @@ Conditional branches should never be called by the [[rtl']] or
 the [[???]] function.
 <<other generic expander functions>>=
 and rtl' hr =
-  let RP.Rtl gs = Down.rtl hr in
+  let RP.Rtl gs = Dn.rtl hr in
   if trivially Post.don't_touch_me gs then
     PX.Rtl hr
   else
@@ -1688,7 +1701,7 @@ and rtl' hr =
     | [] -> PX.Nop (* a nop is a nop is a nop *)
     | ((_::_::_) as effs) -> (<<handle RTL with multiple effects [[effs]] (as RTL)>>)
 and rtl_to_branch' hr =
-  let RP.Rtl gs = Down.rtl hr in
+  let RP.Rtl gs = Dn.rtl hr in
   if trivially Post.don't_touch_me gs then
     PX.Nop, hr
   else
@@ -1755,6 +1768,7 @@ and expand_cbinst g ktrue kfalse =
               xis <:> yis <:::> Post.bc xt cmp yt ktrue kfalse
           | PX.Stack(dir, depth) ->
               let args = List.filter is_not_rounding_mode args in (* cheat!!! *)
+                  (* ROUNDING *)
               let args =
                 match dir with PX.LeftFirst -> args | PX.RightFirst -> List.rev args in
               let push_args room =
@@ -1776,6 +1790,7 @@ and expand_cbinst g ktrue kfalse =
        Printf.eprintf "rtl exp: %s\n" (Rtlutil.ToString.exp (Up.exp g));
         Impossible.unimp "non-binary comparison in conditional guard" in
   expand g ktrue kfalse
+<<other generic expander functions>>=
 and expand_cbranch' c = match c with
 | PX.Exit _ -> c
 | PX.Shared (u, c) -> PX.Shared(u, expand_cbranch' c)
@@ -1785,7 +1800,7 @@ and expand_cbranch' c = match c with
     | PX.Exit p -> PX.Exit p
     | PX.Test (b', c) -> PX.Test (b <:> b', c)
     | PX.Shared (u, c) -> PX.Shared(u, extend c) in
-    extend (expand_cbinst (Down.exp g) ktrue kfalse)
+    extend (expand_cbinst (Dn.exp g) ktrue kfalse)
 @
 An assignment is either a goto, a store, or a computation where we put
 something in a temporary.
@@ -1836,6 +1851,7 @@ and assign_room room left right w =
             | _ -> let r, is = to_temp room (guess_context right) right in
                    is <:> Post.move ~dst ~src:r
             )
+            (* ROUNDING --- narrow register *)
         | RP.Slice (_,_,_) -> Impossible.unimp "slice"
         | RP.Var (_,_,_) | RP.Global(_,_,_) ->
             impossf "variable passed to code expander"
@@ -1927,9 +1943,9 @@ let split_assignment ~lsw ~lw ~msw ~mw =
       impossf "bad aggregation in split assignment" in
 @ 
 <<other generic expander functions>>=
-and fetch_slot slot w = Down.exp (A.fetch slot w)
+and fetch_slot slot w = Dn.exp (A.fetch slot w)
 and assign_slot room slot right w =
-  match Down.rtl (A.store slot (Up.exp right) w) with
+  match Dn.rtl (A.store slot (Up.exp right) w) with
   | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (left, right, w))] ->
       assign_room room left right w
   | _ -> impossf "stack slot is not a simple store"
@@ -1971,6 +1987,7 @@ When we know guards should be trivial, we just strip them off.
 When we don't know, we use the [[trivial]] function, which if guards
 are trivial applies a predicate and if not returns [[false]].
 \nwaddbox{trivially : (RP.effect list -> bool) -> RP.guarded list -> bool}
+\deeperbox{16pt}
 <<functions for dealing with trivial guards>>=
 let strip_trivial_guards l =
   List.fold_right
@@ -2169,7 +2186,7 @@ let cfg _ ({Proc.cfg = cfg} as proc) =
   Postexpander.forget_expanders();
   !modified
 <<internal utilities for the generic expander>>=
-let branch_condition rtl = match Down.rtl rtl with
+let branch_condition rtl = match Dn.rtl rtl with
 | RP.Rtl [(g, RP.Store (left, right, w))] ->
     if not (RU.Eq.loc left pc_lhs) then
       impossf "conditional branch assigns to non-PC";

@@ -14,28 +14,24 @@ let () =
   Debug.register "gamma"      "show how Gamma is constructed"
 let not_null = function [] -> false | _ :: _ -> true 
 @ 
-
 [[float]] is a simple widener for floating-point values.
 Parameter [[rm]] contains the hardware rounding modes.
 <<widen.mli>>=
 val float : rm:Rtl.exp -> int list -> Rtl.rtl -> Rtl.rtl
   (* widen all floating-point operations *)
 @ 
-
 <<widen.mli>>=
 val store_const : int -> Rtl.rtl -> Rtl.rtl
   (* l := k   =>   l := lobits(k') *)
 @ 
-
 A dynamic programming implementation of integer widening.
 <<widen.mli>>=
-val dpwiden : ('a, 'b) Target.t -> Rtl.rtl -> Rtl.rtl
+val dpwiden : Ast2ir.proc -> Rtl.rtl -> Rtl.rtl
 @ Before running the integer widener, [[widenlocs]] should be called
 to make each store and fetch an acceptable width.
 <<widen.mli>>=
 val widenlocs : ('a, 'b) Target.t -> Rtl.rtl -> Rtl.rtl
 @ 
-
 Check if widths are less than the target width.  The [[lualink.nw]]
 file uses [[Doesn't_need_widening]] to avoid updating RTLs that don't
 need integer widening.  The [[needs_widening]] function is called to
@@ -44,7 +40,6 @@ determine if an RTL needs integer widening.
 exception Doesn't_need_widening
 val needs_widening : ('a, 'b) Target.t -> Rtl.rtl -> bool
 @ 
-
 [[init_gamma_counts]] and [[update_gamma_counts]] are used by
 [[lualink.nw]] to count the context in which local variables are used
 in a procedure.  The function [[create_gamma]] is called after
@@ -83,7 +78,7 @@ module Dn = Rtl.Dn
 module Up = Rtl.Up
 
 let print_debug = false
-let imposs = Impossible.impossible
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let null = function [] -> true | _ :: _ -> false
 
 exception Abort_unknown
@@ -390,7 +385,7 @@ let rec redundant_given1 a b =
         if index a = index b then cost a >= cost b
         else false
       else if a.m <= index a then false
-      else imposs "comparing solutions for redundancy: missing case"
+      else impossf "comparing solutions for redundancy: missing case"
     else (* a is H *)
       (* pretend we have converted back to some sigma type and compare *)
       redundant_given1 {a with n = width a - index a; fill = S}
@@ -547,7 +542,7 @@ let widen_sigma m soln =
             e' = RP.App((ext, ws), [soln.e']);
             cost = soln.cost + 1;
             w = w' }
-      | _ -> imposs (ext^" operator should have some type bits#n->bits#w")
+      | _ -> impossf "%s operator should have some type bits#n->bits#w" ext
     in
     List.map create ext_widths
   else []
@@ -569,8 +564,7 @@ let widen_garbage m soln =
             e' = RP.App((ext, ws), [soln.e']);
             cost = soln.cost + 1;
             w = w' }
-      | _ -> imposs (ext^" operator should have some type bits#n->bits#w")
-    in
+      | _ -> impossf "%s operator should have some type bits#n->bits#w" ext in
     List.map (create Z "zx") zx_widths @ List.map (create S "sx") sx_widths
   | _ -> []
 @ 
@@ -593,7 +587,7 @@ let narrow_rule m soln =
             e' = RP.App(("lobits", ws), [soln.e']);
             cost = soln.cost + 1;
             w = w }
-      | _ -> imposs "lobits operator should have some type bits#w->bits#n"
+      | _ -> impossf "lobits operator should have some type bits#w->bits#n"
     in
     List.filter (fun s -> s.n <= s.w) (List.map create trunc_widths)
   else []
@@ -707,7 +701,7 @@ let apply_rules m soln =
 <<combine solutions>>=
 let mksolutions_lit_bool e = match e with 
 | (RP.Const (RP.Bool b)) -> [{e = e; m = 1; cost = 0; e' = e; fill = Z; n = 1; w = 1}]
-| _ -> imposs "mksolutions_lit_bool requires a bool const"
+| _ -> impossf "mksolutions_lit_bool requires a bool const"
 
 let mksolutions_lit_bits litwidths tau e = match e with
 | (RP.Const (RP.Bits b)) ->
@@ -725,8 +719,8 @@ let mksolutions_lit_bits litwidths tau e = match e with
         {e = e; m = n; cost = 0; e' = RP.Const(RP.Bits ext); fill = H; n = w' - n; w = w'}
       in
       List.map f litwidths
-  | G -> imposs "widening failed: literals cannot have garbage type")
-| _ -> imposs "mksolutions_lit_bits requires a bitvector const"
+  | G -> impossf "widening failed: literals cannot have garbage type")
+| _ -> impossf "mksolutions_lit_bits requires a bitvector const"
 @ 
 
 % Assume that each use of a variable is garbage type with index same
@@ -741,9 +735,13 @@ Use [[gamma]] to find the appropriate fill type for this variable.
 let lookup_gamma name w =
   try
     let (fill, n) = Hashtbl.find gamma name in
-    if Debug.on "gamma" then Printf.eprintf "Found %s :: %s[%i]\n" name (string_of_fill fill) n;
+    if Debug.on "gamma" then
+      Printf.eprintf "Found %s :: %s[%i]\n" name (string_of_fill fill) n;
     (fill, n)
-  with Not_found -> (G, w)
+  with Not_found ->
+    if Debug.on "gamma" then
+      Printf.eprintf "%s not found in gamma\n" name;
+    (G, w)
 
 let mksolutions_var name e w =
   let (fill, n) = lookup_gamma name w in
@@ -837,7 +835,7 @@ More flexible revised rule that is implemented:
 \]
 <<combine solutions>>=
 let mksolutions_ext ext ws arg_solnss =
-  let arg_solns = List.hd arg_solnss in
+  let arg_solns = match arg_solnss with [s] -> s | _ -> impossf "extension arity" in
 
   (* find all solutions that have the appropriate sigma *)
   let sigma = fill_of_ext ext in
@@ -847,8 +845,7 @@ let mksolutions_ext ext ws arg_solnss =
   let (n, n'') =
     match Rtlop.Types.mono (Rtl.opr ext ws) with
     | ([Types.Bits n], Types.Bits n'') -> (n, n'')
-    | _ -> imposs (ext^" operator should have some type bits#n->bits#w")
-  in
+    | _ -> impossf "%s operator should have some type bits#n->bits#w" ext in
   (* assert that n <= n'' *)
 
   let arg_solns = List.filter (fun s -> subsume_index s n && n <= s.w) arg_solns in
@@ -859,7 +856,6 @@ let mksolutions_ext ext ws arg_solnss =
                           m = n''; n = n''} in
   List.map create2 arg_solns @ List.map create1 arg_solns
 @ 
-
 Implementation of the drop rules for truncation.
 
 These rules need to be revised, I think.  They are sound in the paper,
@@ -895,7 +891,7 @@ let mksolutions_trunc ws arg_solnss =
   let (n'', n) =
     match Rtlop.Types.mono (Rtl.opr "lobits" ws) with
     | ([Types.Bits n''], Types.Bits n) -> (n'', n)
-    | _ -> imposs "lobits operator should have some type bits#w->bits#n"
+    | _ -> impossf "lobits operator should have some type bits#w->bits#n"
   in
   let drop_lo_copy arg_soln = { arg_soln with e = e arg_soln.e; m = n} in
   let drop_lo_ignore arg_soln = 
@@ -933,8 +929,8 @@ let ast_combine m solns = function
   | (RP.Fetch(RP.Mem(_, _, mcell as ms,c,addr,a),_)) as e ->
       let all  = List.concat solns in
       let best = List.filter (fun s -> fill s =*= Z && s.w = m.pointer) all in
-      let () = if null best then
-                 imposs ("Couldn't widen "^(Rtlutil.ToString.exp (Up.exp e))) in
+      if null best then
+        impossf "ast_combine couldn't widen %s" (Rtlutil.ToString.exp (Up.exp e));
       let best = minimum_cost best in
       let w = Cell.to_width mcell c in
       [{best with e  = e;
@@ -946,16 +942,14 @@ let ast_combine m solns = function
   | RP.App((("sx"|"zx" as ext),   ws), [arg]) -> mksolutions_ext ext ws solns
   | RP.App(("lobits",             ws), [arg]) -> mksolutions_trunc ws solns
   | RP.App((opname,               ws), args)  -> mksolutions_op m solns opname ws args
-  | _  -> imposs "Widen.ast_combine couldn't handle the rtl"
+  | _  -> impossf "Widen.ast_combine couldn't handle the rtl"
 @ 
-
 <<bottom-up transform>>=
 let rec bottom_up f = function
   | RP.App(_,es) as e -> f (List.map (bottom_up f) es) e
   | RP.Fetch(RP.Mem(_, _, addr, _), _) as e -> f [bottom_up f addr] e
   | e -> f [] e
 @ 
-
 [[all_solutions]] is where the two phases of the dynamic programming
 algorithm are applied bottom-up on each AST node.
 <<dynamic programming>>=
@@ -964,7 +958,6 @@ let all_solutions m =
     (find_reachable m []) (solutions_unique (ast_combine m known e)) in
   bottom_up solve_node
 @ 
-
 <<solution utilities>>=
 let cost  s = s.cost
 let index s = s.n
@@ -1034,17 +1027,17 @@ let cross_list_all xss =
 
 <<solution utilities>>=
 let rec minimum_cost = function
-  | [] -> imposs "can't take minimum of empty list"
+  | [] -> impossf "can't take minimum of empty list"
   | [x] -> x
   | x :: rest -> let m = minimum_cost rest in if cost x < cost m then x else m
 
 let rec maximum_cost = function
-  | [] -> imposs "can't take maximum of empty list"
+  | [] -> impossf "can't take maximum of empty list"
   | [x] -> x
   | x :: rest -> let m = minimum_cost rest in if cost x > cost m then x else m
 
 let minimum = function
-  | [] -> imposs "empty list"
+  | [] -> impossf "empty list"
   | x :: rest -> List.fold_left min x rest
 @ 
 <<helpers>>=
@@ -1135,12 +1128,12 @@ let machine_widths m opname =
 let find_exts_from m w extname =
   let ext_widths = machine_widths m extname in
   List.filter (function [w1;_] -> w1 = w
-                        | _ -> imposs "ill formed machine env") ext_widths
+                        | _ -> impossf "ill formed machine env") ext_widths
 
 let find_exts_to m w extname =
   let ext_widths = machine_widths m extname in
   List.filter (function [_;w2] -> w2 = w
-                        | _ -> imposs "ill formed machine env") ext_widths
+                        | _ -> impossf "ill formed machine env") ext_widths
 @ 
 <<widen.ml>>=
 <<types>>
@@ -1153,6 +1146,29 @@ let find_exts_to m w extname =
 <<dynamic programming>>
 @ 
 
+@ 
+To know if a global variable is a hardware register, we have to look
+it up in the map associated with the procedure.
+We are careful to avoid infinite recursion for the case in which a global
+variable is mapped to itself, as is done by the interpreter back end,
+for example.
+
+The general idea is that if a back end allows something to get into a
+hardware register, the expander will assume the obligation of
+extending it if needed.
+<<helpers>>=
+let is_hardware_register proc loc =
+  let rec bare_hardware = function
+    | RP.Reg _ -> true
+    | RP.Slice (_, _, l) -> bare_hardware l
+    | _ -> false in
+  match loc with
+  | RP.Global (_, i, w) ->
+      (match Dn.exp (proc.Proc.global_map.(i).Automaton.fetch w) with
+      | RP.Fetch (l, _) -> bare_hardware l
+      | _ -> false)
+  | _ -> bare_hardware loc
+@ 
 <<widen.ml>>=
 let needs_widening t r =
   let targetwidth = t.Target.wordsize in
@@ -1187,9 +1203,14 @@ let needs_widening t r =
 @ 
 
 I'll choose in the [[widen_guard]] code to find a solution of type Z,
-just to match what some C-- frontends seem to want to do...not that it matters.
+just to match what some C-- frontends seem to want to do...not that it
+matters.
+Calling [[widen_loc]] never changes the width of the location---it
+simply fixes up any code in an addressing expression that might need
+widening. 
 <<widen.ml>>=
-let dpwiden t r =
+let dpwiden proc r =
+  let t           = proc.Proc.target in
   let targetwidth = t.Target.wordsize in
   let ptrwidth    = t.Target.pointersize in
   let ops         = List.map Dn.opr t.Target.capabilities.Target.operators in
@@ -1199,16 +1220,14 @@ let dpwiden t r =
     let solns  = all_solutions m r in
     let solns  = List.filter (fun s -> width s = w && fill s =*= tau) solns in
     let () = if null solns then
-               imposs ("Couldn't widen "^Rtlutil.ToString.exp (Up.exp r)) in
+               impossf "dpwiden couldn't widen %s" (Rtlutil.ToString.exp (Up.exp r)) in
     let soln   = minimum_cost solns in
     if print_debug then Printf.eprintf "cost: %i\n" soln.cost;
     soln.e' in
   let rec widen_loc = function
     | RP.Mem(sp,w,e,a) -> RP.Mem(sp,w,find_best_soln e Z ptrwidth, a)
-(* the following might be wrong...shouldn't we update w? *)
-    | RP.Slice(w,i,l)      -> RP.Slice(w,i, widen_loc l)
-    | l                    -> l
-  in
+    | RP.Slice(w,i,l)  -> RP.Slice(w,i, widen_loc l)
+    | l                -> l in
 @ 
 \[
 \inferrule [Assign \sidecond{n\leq w}]
@@ -1261,7 +1280,7 @@ let widenlocs t r =
     | l                   -> l
   and widen_exp = function
     | (RP.Fetch(RP.Var(name, i, vw), fw)) as e ->
-        if vw <> fw then imposs "Shouldn't fetch and var widths be the same?"
+        if vw <> fw then impossf "Shouldn't fetch and var widths be the same?"
         else if vw < targetwidth
         then lo vw (RP.Fetch(RP.Var(name, i, targetwidth), targetwidth))
         else e
@@ -1273,7 +1292,7 @@ let widenlocs t r =
     let eff' = 
       match eff with
       | RP.Store(RP.Var(name, i, vw), r, sw) ->
-          if vw <> sw then imposs "Shouldn't store and var widths be the same?"
+          if vw <> sw then impossf "Shouldn't store and var widths be the same?"
           else if vw < targetwidth
           then
             let ext =
@@ -1362,7 +1381,7 @@ let width_cost r =
   let rec count_loc c = function
     | RP.Mem(_,_,e,_) -> do_count c e
     | RP.Slice(_,_,l) -> count_loc c l
-    | _               -> imposs "count_loc can only handle mem and slice"
+    | _               -> impossf "count_loc can only handle mem and slice"
   and do_count ((sx, zx, lo) as c) = function
     | RP.Const _ -> c
     | RP.Fetch(l, w) -> c
@@ -1397,7 +1416,7 @@ let app_count r =
   let rec count_loc c = function
     | RP.Mem(_,_,e,_) -> do_count c e
     | RP.Slice(_,_,l) -> count_loc c l
-    | _               -> imposs "count_loc can only handle mem and slice"
+    | _               -> impossf "count_loc can only handle mem and slice"
   and do_count c = function
     | RP.Const _     -> c
     | RP.Fetch(l, w) -> c
