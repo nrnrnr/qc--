@@ -341,6 +341,19 @@ let rec some = function
     | Some x :: xs -> x :: some xs
     | None   :: xs -> some xs
 @
+ 
+The specification for the cost of a rule is either a fixed number or a
+user-provided Objective Caml expression. Such an expression can refer to
+the values of terminal variables, which bind the actual value in the
+subject tree. The [[bindcost]] function creates a binding for a pattern.
+
+<<CodeGen>>=
+let codebind pat = getpos >>= fun n ->
+    match pat with
+    | S.Var(v, S.Term _) -> return (Some(C.var' v, C.id (arg n)))
+    | _                  -> return None
+@
+
 
 [[Con_record]] constructs a cost/action record for a rule with a
 constructor pattern. The action let-binds all variables defined by the
@@ -350,11 +363,16 @@ constructor arguments and puts the user-supplied code into the let-body.
 let con_record (r:S.rule) =
     let args = match r.S.pattern with
         | S.Con(_,args) -> args
-        | _             -> assert false (* not a constructor rule *)
+        | _             -> assert false (* not a constructor rule *) in
+    let rulecost = match r.S.cost with
+        | C.Int _ as fixed   -> fixed
+        | C.Raw _ as dynamic -> C.let' (some (fst (mmap codebind args 1)))
+                                       dynamic     
+        | _                  -> assert false (* impossible *)
     in
         C.record 
             [ path [camlburg;"cost"]  
-                , sum (r.S.cost :: fst (mmap cost args 1))  
+                , sum (rulecost :: fst (mmap cost args 1))  
             ; path [camlburg;"action"]
                 , action (C.let' (some (fst (mmap bind args 1))) r.S.code)
             ]                         

@@ -285,17 +285,21 @@ and func formals e =
     ^^ indent (exp e)
     end
 
+and recordbinding (x,e) = 
+    let par e = P.text "(" ^^ exp e ^^ P.text ")" in
+        P.agrp (P.text x ^^ P.text " =" ^^ indent (par e)) 
+
 and record bindings =
     P.agrp begin
     ~~ P.text "{"
-    ^^ (P.list (P.break ^^ P.text ";") binding bindings)
+    ^^ (P.list (P.break ^^ P.text ";") recordbinding bindings)
     ^/ P.text "}"
     end
 
 and recordwith r bindings =
     P.agrp begin
     ~~ P.text "{" ^/ P.text r ^/ P.text "with"
-    ^^ indent (P.list (P.text ";" ^^ P.break) binding bindings)
+    ^^ indent (P.list (P.text ";" ^^ P.break) recordbinding bindings)
     ^/ P.text "}"
     end
 
