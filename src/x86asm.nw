@@ -208,7 +208,11 @@ let decbits b = Int64.format "%d"   (Bits.S.to_int64 b)
 method addr a =
   match Reloc.Simple.normalize a with
   | None, bits   -> this#value bits
-  | Some s, bits -> fprintf _fd ".word %s + %s\n" s#mangled_text (hexbits bits) 
+  | Some s, bits -> 
+      if Bits.Ops.eq bits (Bits.zero 32) then
+        fprintf _fd ".long %s\n" s#mangled_text
+      else
+        fprintf _fd ".long %s + %s\n" s#mangled_text (hexbits bits) 
 @ 
 <<assembly methods>>=
 method emit = ()
