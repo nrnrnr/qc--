@@ -58,13 +58,18 @@ function Stages.make_stage(t, short, long, B)
   if not B then error("Stages.make_stages called without Backplane") end
   if type(t[short]) == 'function' then
     if type(long) == 'table' then
-      local stage = { fn = t[short] }
-      <<add every key-value pair in [[long]] to [[stage]]>>
-      t[short] = B.stage(stage)
+      t[short] = Stages.of_table(t[short], long, B)
     else
       t[short] = B.stage { name=long, fn = t[short] }
     end
   end
+end
+
+function Stages.of_table(fn, tbl, B)
+  B = B or NewBackplane
+  local stage = { fn = fn }
+  <<add every key-value pair in [[tbl]] to [[stage]]>>
+  return B.stage(stage)
 end
 
 Stages.make_stage( Stages
@@ -77,19 +82,18 @@ Stages.make_stage( Placevar
                  , {name="new fortran variable placer",creates='no vars'}
                  , NewBackplane)
 
-Stages.make_stage( Placevar
-                 , 'context'
-                 , {name="context-based variable placer"
-                   , fn=Placevar.context(Placevar.x86)
-                   , creates='no vars'
-                   }
-                 , NewBackplane)
-
-<<add every key-value pair in [[long]] to [[stage]]>>=
-local k, v = next(long, nil)
+function Placevar.context(placer, targetname)
+  return Stages.of_table(Placevar.contextfn(placer), 
+          	         { name="context-based variable placer for " .. targetname
+	                 , creates='no vars'
+	                 })
+end
+@ 
+<<add every key-value pair in [[tbl]] to [[stage]]>>=
+local k, v = next(tbl, nil)
 while k do
   stage[k] = v
-  k, v = next(long, k)
+  k, v = next(tbl, k)
 end
 @
 
@@ -670,7 +674,7 @@ Backend.debug_interp    = Backend.make  { target = Targets.interp
 
 Backend.x86 =     
   { target    = Targets.x86
-  , placevars = Placevar.context
+  , placevars = Placevar.context(Placevar.x86, "x86")
   , widen     = NewBackplane.seq
                    { Widen.x86_floats, Widen.store_const(32),
                      Stages.assert('proper widths') }
@@ -692,7 +696,7 @@ Backend.x86 =
 Backend.mips =     
   { target    = Targets.mips
   , widen     = Stages.assert('proper widths')
-  , placevars = Placevar.context
+  , placevars = Placevar.context(Placevar.x86, "x86") -- wrong!
   , expand    = Expander.mips
   , liveness  = Liveness.liveness
   , ralloc    = Ralloc.color
@@ -710,7 +714,7 @@ Backend.mips =
 Backend.alpha =     
   { target    = Targets.alpha
   , widen     = Stages.assert('proper widths')
-  , placevars = Placevar.context
+  , placevars = Placevar.context(Placevar.x86, "x86") -- wrong!
   , expand    = Expander.alpha
   , liveness  = Liveness.liveness
   , ralloc    = Ralloc.color
