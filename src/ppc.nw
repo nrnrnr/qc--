@@ -169,7 +169,7 @@ Contexts.
 <<ppc postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
 let icontext = Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't'
-let fcontext = icontext
+let fcontext = Talloc.Multiple.reg 'u', fun (c, _, _) -> c = 'f' || c = 'u'
 let acontext = icontext
 let rcontext = (fun x y -> Impossible.unimp "Unsupported soft rounding mode")
                ,fun r -> r = ('d', 0, 2)
@@ -186,6 +186,7 @@ let arg_contexts   (n, _) = try SM.find n argmap
 let result_context (n, _) = try SM.find n resmap
                             with Not_found -> Impossible.impossible
                                     ("cannot find result context for "^n)
+let constant_context w = if w > wordsize then fcontext else icontext
 @ 
 A few utility functions for building common RTL's.
 <<ppc postexpander>>=
@@ -205,12 +206,12 @@ allocator about register 0, so we don't have to worry about that here.
 <<ppc postexpander>>=
 let load ~dst ~addr assn =
   let w = twidth dst in
-  assert (w = wordsize);
+  assert (w = 1 || w = 2 || w = 4 || w = 8);
   [R.store (tloc dst) (memval assn w addr) w]
 
 let store ~addr ~src assn =
   let w = twidth src in
-  assert (w = wordsize);
+  assert (w = 1 || w = 2 || w = 4 || w = 8);
   [R.store (mem assn w addr) (tval src) w]
 @ 
 The [[xload]] and [[xstore]] functions apply an operator to an

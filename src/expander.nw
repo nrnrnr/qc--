@@ -255,8 +255,9 @@ type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
 val icontext : context (* for ints *)
 val fcontext : context (* for floats *)
 val acontext : context (* for addresses *)
-val arg_contexts   : operator -> context list
-val result_context : operator -> context
+val constant_context : width    -> context
+val arg_contexts     : operator -> context list
+val result_context   : operator -> context
 @
 Every machine should be able to do a block copy.
 <<generic expansion operations for register machines>>=
@@ -674,6 +675,7 @@ In other situations, we may have to guess a context based on a
 right-hand side. 
 <<context guessing>>=
 let guess_context = function
+  | RP.Const (RP.Bits b) -> contextmap (Post.constant_context (Bits.width b))
   | RP.Const k -> icontext
   | RP.Fetch(RP.Reg (('f'|'u'), _, _),_) -> fcontext
   | RP.Fetch _ -> icontext
