@@ -1784,8 +1784,8 @@ LifFalse_127:
 	movl $0,%eax
 	movl %esi,32(%esp)
 	movl %ebp,28(%esp)
-	movl %ebx,12(%esp)
-	movl %edx,16(%esp)
+	movl %ebx,16(%esp)
+	movl %edx,12(%esp)
 	jmp LifEnd_128
 Ljoin_l188:
 	jmp LifTrue_126
@@ -1802,14 +1802,13 @@ LifTrue_126:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	movl $10,%ecx
-	movl %ebx,16(%esp)
-	movl %eax,%ebx
-	sarl $31, %ebx
-	movl %edx,20(%esp)
-	movl %ebx,%edx
+	movl %edx,16(%esp)
+	movl %eax,%edx
+	sarl $31, %edx
 	idivl %ecx, %eax
 	movl %eax,%ecx
 	leal 56(%esp), %edx
+	movl %ebx,20(%esp)
 	movl $-56,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
@@ -1832,10 +1831,9 @@ Ljoin_l187:
 	movl $10,%edx
 	movl %eax,20(%esp)
 	movl %ebx,%eax
-	movl %eax,%ebx
-	sarl $31, %ebx
 	movl %edx,24(%esp)
-	movl %ebx,%edx
+	movl %eax,%edx
+	sarl $31, %edx
 	movl 24(%esp),%ebx
 	idivl %ebx, %eax
 	movl $10,%edx
@@ -1876,9 +1874,9 @@ LifEnd_128:
 	leal 52(%esp), %ecx
 	movl $4,%edx
 	addl %edx,%ecx
-	movl 16(%esp),%edx
+	movl 12(%esp),%edx
 	movl %edx,(%ecx)
-	movl 12(%esp),%ebx
+	movl 16(%esp),%ebx
 	movl 28(%esp),%ebp
 	movl 32(%esp),%esi
 	leal 56(%esp), %esp
@@ -1894,14 +1892,14 @@ Lstackdata_l194:
 Lframe_l195:
 .long 0xffffffcc
 .long 0x80000008
-.long 0xffffffdc
+.long 0xffffffd8
 .long Lstackdata_l194
 .long 0x80000008
 .long 0x8000000a
 .long 0x80000002
 .long 0x80000001
 .long 0x40000007
-.long 0xffffffd8
+.long 0xffffffdc
 .long 0x40000009
 .long 0x40000009
 .long 0x4000000a
@@ -1928,14 +1926,14 @@ Lframe_l195:
 Lframe_l196:
 .long 0xffffffcc
 .long 0x80000008
-.long 0xffffffdc
+.long 0xffffffd8
 .long Lstackdata_l194
 .long 0x80000008
 .long 0x8000000a
 .long 0x80000002
 .long 0x80000001
 .long 0x40000007
-.long 0xffffffd8
+.long 0xffffffdc
 .long 0x40000009
 .long 0xffffffe8
 .long 0x4000000a
@@ -1962,14 +1960,14 @@ Lframe_l196:
 Lframe_l197:
 .long 0xffffffcc
 .long 0x80000008
-.long 0xffffffdc
+.long 0xffffffd8
 .long Lstackdata_l194
 .long 0x80000008
 .long 0x8000000a
 .long 0x80000002
 .long 0x80000001
 .long 0x40000007
-.long 0xffffffd8
+.long 0xffffffdc
 .long 0x40000009
 .long 0xffffffe8
 .long 0x4000000a
@@ -1996,14 +1994,14 @@ Lframe_l197:
 Lframe_l198:
 .long 0xffffffcc
 .long 0x80000008
-.long 0xffffffdc
+.long 0xffffffd8
 .long Lstackdata_l194
 .long 0x80000008
 .long 0x8000000a
 .long 0x80000002
 .long 0x80000001
 .long 0x40000007
-.long 0xffffffd8
+.long 0xffffffdc
 .long 0x40000009
 .long 0xffffffe8
 .long 0x4000000a

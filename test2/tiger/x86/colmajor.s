@@ -209,10 +209,9 @@ Lproc_body_start_l19:
 	movl $20,%edx
 	addl %edx,%ecx
 	movl (%ecx),%edx
-	movl %eax,%ecx
-	sarl $31, %ecx
 	movl %edx,16(%esp)
-	movl %ecx,%edx
+	movl %eax,%edx
+	sarl $31, %edx
 	movl 16(%esp),%ecx
 	idivl %ecx, %eax
 	leal 40(%esp), %ecx
@@ -1435,10 +1434,9 @@ Lloop_end_108:
 	movl $2,%eax
 	addl %eax,%edx
 	movl %ecx,%eax
-	movl %eax,%ecx
-	sarl $31, %ecx
 	movl %edx,32(%esp)
-	movl %ecx,%edx
+	movl %eax,%edx
+	sarl $31, %edx
 	movl 32(%esp),%ecx
 	idivl %ecx, %eax
 	leal 120(%esp), %ecx

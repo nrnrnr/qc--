@@ -225,9 +225,8 @@ L.10:
 	movl 4(%esp),%ecx
 	movl %eax,12(%esp)
 	movl %ecx,%eax
-	movl %eax,%ecx
-	sarl $31, %ecx
-	movl %ecx,%edx
+	movl %eax,%edx
+	sarl $31, %edx
 	movl 12(%esp),%ecx
 	idivl %ecx, %eax
 	movl $48,%eax
@@ -842,9 +841,8 @@ Lproc_body_start_l133:
 	subl %ecx,%ebx
 	movl %eax,28(%esp)
 	movl %ebx,%eax
-	movl %eax,%ebx
-	sarl $31, %ebx
-	movl %ebx,%edx
+	movl %eax,%edx
+	sarl $31, %edx
 	movl 28(%esp),%ebx
 	idivl %ebx, %eax
 	leal 36(%esp), %edx

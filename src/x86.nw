@@ -34,6 +34,7 @@ val placevars : Ast2ir.proc -> Automaton.t
 \section{Implementation}
 
 Here are some abbreviations.
+Note especially the use of the [[X86regs]] module, internally known as~[[Rg]].
 <<x86.ml>>=
 module A  = Automaton
 module PX = Postexpander
@@ -85,8 +86,7 @@ end
 
 Program counter and condition codes (called [[eflags]] on the Pentium)
 are standard.
-We ignore the floating-point control register except for two bits that
-represent the rounding mode.
+The rounding mode is part of the floating-point control register. 
 <<x86.ml>>=
 let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
 let rounding_model = R.slice 2 ~lsb:10 Rg.fpuctl
@@ -102,7 +102,7 @@ end
 We ought to find a good way to tie this information into the target
 metrics, so as to avoid duplication and potential inconsistency.
 <<x86 postexpander>>=
-let byte_order = Rtl.LittleEndian
+let byte_order = Spaces.bo
 let wordsize   = 32
 let memsize    = 8
 let _, _, mcell as mspace = ('m', byte_order, Cell.of_size memsize)
@@ -116,7 +116,7 @@ type width     = Rtl.width
 type assertion = Rtl.assertion
 type operator  = Rtl.Private.opr
 @
-The postexpander may need to allocate temporaries.
+The postexpander sometimes needs to allocate a temporary.
 <<x86 postexpander>>=
 let talloc = Postexpander.Alloc.temp
 @ 
@@ -132,8 +132,7 @@ type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
 let icontext = Talloc.Multiple.reg 't', fun ((c, _, _), _, _) -> c =<= 'r' || c =<= 't'
 let fcontext = icontext  (* required by interface *)
 let acontext = icontext
-let rcontext = (fun x y -> Impossible.unimp "Unsupported soft rounding mode")
-               ,(fun _ -> false)
+let rcontext = icontext
 let itempwidth = 32
 @ IT WOULD BE GOOD TO RESTRUCTURE THE CONTEXTS AND THE
 [[Talloc.Multiple]] INTERFACE SO THAT REQUESTING A BAD WIDTH COULD
@@ -150,7 +149,6 @@ module Address = struct
 end
 @ 
 \subsubsection{Basic locations, flags, and helper functions}
-We need to record the various side effects.
 
 Here are some utility functions for computing locations, values, and widths.
 <<x86 postexpander>>= 
@@ -175,20 +173,23 @@ let edi = temploc Rg.edi
 let ah_val = R.fetch Rg.ah 8
 let carrybit = R.app (R.opr "x86_carrybit" []) [RU.fetch eflags]
 @ 
-Code to transfer flags between [[eflags]] and [[ah]].
-We invent a couple of operators.
+In order to write code that transfers flags between [[eflags]] and
+[[ah]],  
+we invent a couple of machine-specific operators.
 EVENTUALLY, WE WILL WANT TO TELL THE SIMPLIFIER THAT THESE OPERATORS
 ARE HALF-INVERSES.
 IT WOULD BE GOOD TO BE ABLE TO WRITE THE CODE HERE AND REGISTER IT
 SOMEHOW. 
 <<x86 postexpander>>=
 let sahf = rtl (R.store eflags (R.app (R.opr "x86_ah2flags" []) [ah_val]) 16)
-let lahf = rtl (R.store Rg.ah (R.app (R.opr "x86_flags2ah" []) [R.fetch eflags 16]) 8)
+let lahf = rtl (R.store Rg.ah  (R.app (R.opr "x86_flags2ah" []) [R.fetch eflags 16]) 8)
 @ 
-These invented operators hide the real truth about what
+Here are more invented operators, this time to hide the real truth
+about what 
 happens to the flags.
 It's up to the recognizer to know such facts as
 $\mathtt{x86\_adcflags}(x, y, 0) = \mathtt{x86\_adcflags}(x, y)$.
+\nextchunklabel{x86.flagfuns}
 <<x86 postexpander>>=
 let c = carrybit
 let addflags   x y w = R.store eflags (R.app (R.opr "x86_addflags"   [w]) [x; y])    32
@@ -236,7 +237,8 @@ let lostore ~addr ~src n assn =
   rtl (R.store eax (tempval src) 32) <:>
   rtl (R.store (R.mem assn mspace (mcount n) addr) (lobits n (R.fetch eax n)) n)
 @ 
-This code hasn't yet been checked for compatility with floating point.
+Register-register moves involve only integer registers, so life is
+easy and good.
 <<x86 postexpander>>=
 let move_rtl dst src = rtl (R.store (temploc dst) (tempval src) (tempwidth src))
 let move ~dst ~src   = if Register.eq dst src then PX.Nop else move_rtl dst src
@@ -244,8 +246,8 @@ let move ~dst ~src   = if Register.eq dst src then PX.Nop else move_rtl dst src
 Because there's only one size of temporary in this back end, we don't
 need [[extract]] or [[aggregate]].
 <<x86 postexpander>>=
-let extract ~dst ~lsb ~src = impossf "extract on x86"
-let aggregate ~dst ~src = impossf "aggregate on x86"
+let extract   ~dst ~lsb ~src = impossf "extract on x86"
+let aggregate ~dst      ~src = impossf "aggregate on x86"
 @ 
 Load immediate is also a simple move.
 <<x86 postexpander>>=
@@ -253,8 +255,11 @@ let li  ~dst const = rtl (R.store (temploc dst) (Up.const const) (tempwidth dst)
 let lix ~dst e     = rtl (R.store (temploc dst) e                (tempwidth dst))
 @ 
 \subsubsection{Operator contexts}
-Here are tentative contexts for all the operators.
-Anything that has to do with rounding modes is surely wrong.
+Here are contexts for all the operators.
+One of the oddities of the [[Context.standard]] function is that it
+requires a context for Boolean values, despite our certain knowledge
+that we never place a Boolean value in a temporary.
+PERHAPS THE [[Context]] INTERFACE SHOULD BE CHANGED, THEN?
 <<x86 postexpander>>=
 let bcontext = (fun x y -> impossf "allocate from bcontext")
                ,fun _ -> false
@@ -272,9 +277,11 @@ let constant_context w = icontext
 @ 
 \subsubsection{Operator implementations (with flags)}
 Operator hell (or heaven).
-We support (so far) two kinds of abstract operations on the flags.
-An arithmetic-like or comparison instruction needs {two} \emph{operands}
-to set the flags; a logical instruction needs only the \emph{result}.
+Here are three functions that help combine useful effects with side
+effects on flags (from functions defined in
+chunk~\subpageref{x86.flagfuns}. 
+These functions don't cover all cases; sometimes we have to get down
+and dirty with the raw effects.
 <<x86 postexpander>>=
 let exp_with_flags setflags dst exp x y w =
   rtl (R.par [R.store (temploc dst) exp w; setflags x y w])
@@ -305,49 +312,42 @@ let llr op x y = match at32 op with
 | "add" -> with_flags addflags x (Up.opr op) x y 32
 | "sub" -> with_flags subflags x (Up.opr op) x y 32
 | "mul" -> with_flags mulflags x (Up.opr op) x y 32
+<<more cases for [[llr]]>>
 @
-Division is rather painful on the x86.
-We have to place the dividend in the EDX:EAX register pair, and we have to represent
+Division is rather painful.
+We place the dividend in the EDX:EAX register pair, and we represent
 the destination as a register pair.
-[[regpairv]] does most of the work, creating the rtl's to form the register pair, as
+[[regpairv]] does most of the work, creating the RTLs  to form the register pair, as
 well as the expression representation of the register pair.
 I have tried to make [[regpairv]] fairly general; we won't know if this is a success
 until we try it with other versions of the x86 divide instruction.
-<<x86 postexpander>>=
+<<more cases for [[llr]]>>=
 | "mod" ->
     let modexp = Rewrite.(mod) 32 (tempval x) (tempval y) in
     PX.Expand.block (rtl (R.store (temploc x) modexp 32))
 | ("div" | "divu" | "quot" | "modu" | "rem") as opname ->
     let unsigned = opname =$= "divu" || opname =$= "modu" in
-    let regpairv w hreg lreg =
-      let rval  r = R.fetch (temploc r) w in
-      let sh op l r = R.app (R.opr op [w]) [l; R.bits (Bits.U.of_int r w) w] in
-      let zxreg l = RO.zx w (w*2) (rval l) in
-      let pairval = RO.(or) (w*2) (sh "shl" (zxreg hreg) w) (zxreg lreg) in
-            (* notice the ill-typed shift-left *)
-      let sethi =
-        if unsigned then
-          rtl (R.store (temploc hreg) (R.bits (Bits.zero w) w) w)
-        else
-          let sbit = temploc (talloc 't' w) in
-          let sbitval = R.fetch sbit w in
-          rtl (R.store sbit (rval lreg) w) <:>
-          rtl (R.store sbit (sh "shra" sbitval (w-1)) w) <:>
-          rtl (R.store (temploc hreg) sbitval w) in
-      sethi, pairval in
-    let (is, regpair) = regpairv 32 Rg.edx Rg.eax in
-    let q, r = if unsigned then "divu", "modu" else "quot", "rem" in
-    let div = R.par [R.store eax (R.app (R.opr q [32]) [regpair; tempval y]) 32;
-                     R.store edx (R.app (R.opr r [32]) [regpair; tempval y]) 32;
-                     undefflags] in
+    let w = 32 in
+    let sethi hreg lreg = (* set hreg to make divide come out right *)
+      let hloc = temploc hreg in
+      if unsigned then
+        rtl (R.store hloc (RO.unsigned w 0) w)
+      else
+        rtl (R.store hloc (tempval lreg) w) <:>
+        rtl (R.store hloc (RO.shra w (R.fetch hloc w) (RO.unsigned w (w-1))) w) in
+    let regpair = Rewrite.regpair ~hi:(tempval Rg.edx) ~lo:(tempval Rg.eax) in
+    let q, r    = if unsigned then "divu", "modu" else "quot", "rem" in
+    let div     = R.par [R.store eax (R.app (R.opr q [w]) [regpair; tempval y]) w;
+                         R.store edx (R.app (R.opr r [w]) [regpair; tempval y]) w;
+                         undefflags] in
     let finish = match opname with
     | "rem" | "modu" -> move_rtl x Rg.edx
     | "div" ->
-        let d = Rewrite.div' 32 ~dst:(R.reg x) (tempval x) (tempval y)
+        let d = Rewrite.div' w ~dst:(R.reg x) (tempval x) (tempval y)
                   ~quot:(tempval Rg.eax) ~rem:(tempval Rg.edx) in
         PX.Expand.block d
     | _ -> move_rtl x Rg.eax in
-    move_rtl Rg.eax x <:> is <:> rtl div <:> finish
+    move_rtl Rg.eax x <:> sethi Rg.edx Rg.eax <:> rtl div <:> finish
 @ 
 I don't know why it's safe to clobber ECX here.
 The problem would arise if the {\PAL} source mentioned ECX, perhaps
@@ -357,13 +357,13 @@ that.
 The safe thing to do would be to save and restore ECX before using it,
 but at present we don't have an optimization pass capable of
 eliminating all those dead saves and restores.  So we live dangerously.
-<<x86 postexpander>>=
+<<more cases for [[llr]]>>=
 | ("shl" | "shrl" | "shra" | "rotl" | "rotr") as shop ->
     let cl = R.fetch Rg.cl 8 in
     let sh = exp_with_flags (shflags shop) x (R.app (Up.opr op) [tempval x; cl])
               (tempval x) cl 32 in
     move_rtl Rg.ecx y <:> sh
-<<x86 postexpander>>=
+<<more cases for [[llr]]>>=
 | ("and"|"or"|"xor") -> with_lflags x (Up.opr op) (tempval x) (tempval y) 32 
 | _  ->
     rtl (R.store (temploc x) (R.app (Up.opr op) [tempval x; tempval y]) (tempwidth x))

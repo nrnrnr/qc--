@@ -7,7 +7,7 @@
 %
 % Example (at beginning of line): %%Grades: B Central Soon
 
-\section{Rewriting RTL operators}
+\section{Rewriting RTL operators (and related utilities)}
 
 This module has rewrite rules that help postexpanders implement
 unsupported operators in terms of supported operators.
@@ -22,6 +22,7 @@ type temp  = Register.t
 <<rewrite.mli>>=
 <<exported type abbreviations>>
 @ 
+\subsection{Basic operator interface}
 <<rewrite.mli>>=
 module Ops : sig
   <<type signatures for applying standard operators>>
@@ -29,6 +30,7 @@ module Ops : sig
   val unsigned : width -> int -> exp
 end
 @ 
+\subsection{Rewriting functions}
 There are too many options for rewriting division.
 We assume the common case is that arguments have the same sign (i.e.,
 both positive).
@@ -74,12 +76,20 @@ val sxlo : width -> width -> exp -> exp
 val zxlo : width -> width -> exp -> exp
   (* uses : shl, shrl *)
 @
+\subsection{Other related utilities}
+
+Get the value of an expression composed of high and low parts.
+This is just [[zx hi << w | zx lo]] where [[w = width lo]].
+<<rewrite.mli>>=
+val regpair : hi:exp -> lo:exp -> exp
+@
 \subsection{Implementation}
 <<rewrite.ml>>=
 module B  = Bits
 module BO = Bits.Ops
 module PX = Postexpander
 module R  = Rtl
+module RU = Rtlutil
 
 let (<:>) = PX.(<:>)
 
@@ -142,6 +152,13 @@ let popcnt w ~dst x =
   tmploc @:= tmploc + (tmploc >> 16) <:>
   tmploc @:= (tmploc & u 0x3F)
 \end{verbatim}
+@
+<<rewrite.ml>>=
+let regpair ~hi ~lo =
+  let hw = RU.Width.exp hi in
+  let lw = RU.Width.exp lo in
+  let w = hw + lw in
+  O.(or) w (O.shl w (O.zx hw w hi) (O.unsigned w lw)) (O.zx lw w lo)
 @
 
 \section{Things not to be looked at}
