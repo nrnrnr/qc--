@@ -1,6 +1,7 @@
 # things we can do using \-RTL
 
 # imports LRTLHEAP and MACHINEREGEX
+# please provide a path to 'lrtl'.
 
 LRTL=lrtl -lower
 
@@ -14,5 +15,5 @@ LRTL=lrtl -lower
 	$LRTL -lower -qc--rtl $stem1
 
 ^($MACHINEREGEX)mkasm.ml'$' ($MACHINEREGEX)mkasm.mli'$':R: '\1'.sled $LRTLHEAP
-	$LRTL -emitasm $stem1
+	$LRTL -lower -emitasm $stem1
 
