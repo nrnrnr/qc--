@@ -122,7 +122,7 @@ let usage this =
 
 let lex file =
     let fd          = try open_in file 
-                      with Sys_error(msg) -> fatalExn msg               in
+                      with Sys_error(msg) -> error msg                  in
     let finally ()  = close_in fd                                       in
     let lexbuf      = Lexing.from_channel fd                            in
     let map         = Srcmap.empty                                      in
@@ -149,7 +149,7 @@ to stdout.
 
 let asdl file =
     let fd          = try open_in file 
-                      with Sys_error(msg) -> fatalExn msg               in
+                      with Sys_error(msg) -> error msg                  in
     let finally ()  = close_in fd                                       in
     let lexbuf      = Lexing.from_channel fd                            in
     let map         = Srcmap.empty                                      in
@@ -162,11 +162,11 @@ let asdl file =
         with
             | Parsing.Parse_error -> 
               ( finally()
-              ; errorExn (map, Lexing.lexeme_start lexbuf) ["parse error"]
+              ; errorAtPoint (map, Lexing.lexeme_start lexbuf) "parse error"
               )
-            | ParseExn(pos,msg) ->
+            | ErrorAt(Pos(pos),msg) ->
               ( finally()
-              ; errorExn (map,pos) [msg]
+              ; errorAtPoint (map,pos) msg
               )   
             | e ->  
               ( finally()
@@ -175,7 +175,7 @@ let asdl file =
 
 let pp file width =
     let fd          = try open_in file 
-                      with Sys_error(msg) -> fatalExn msg               in
+                      with Sys_error(msg) -> error msg                  in
     let finally ()  = close_in fd                                       in
     let lexbuf      = Lexing.from_channel fd                            in
     let map         = Srcmap.empty                                      in
@@ -190,11 +190,11 @@ let pp file width =
         with
             | Parsing.Parse_error -> 
               ( finally()
-              ; errorExn (map, Lexing.lexeme_start lexbuf) ["parse error"]
+              ; errorAtPoint (map, Lexing.lexeme_start lexbuf) "parse error"
               )
-            | ParseExn(pos,msg) ->
+            | ErrorAt(Pos(pos),msg) ->
               ( finally()
-              ; errorExn (map,pos) [msg]
+              ; errorAtPoint (map,pos) msg
               )   
             | e ->  
               ( finally()
@@ -230,7 +230,7 @@ let main () =
         | Cmdline.Pp(file,width)-> pp file width
         | Cmdline.Check(file)   -> Semant.check file
     in
-        match catch error (ok dispatch) cmd with
+        match catch errorPrt (ok dispatch) cmd with
             | Error -> exit 1
             | Ok _  -> exit 0
                 

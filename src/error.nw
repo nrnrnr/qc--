@@ -38,27 +38,23 @@ raising an exception.  We expect to find most errors while checking
 the static semantics of a \C~program.  In that situation we have a
 source map to point the user to the the location of the error. 
 However, there are other situations where we can not attribute an
-error to a specific location.  We thus have different exceptions. 
-Function named after the exceptions help to raise them.
-
-The [[ErrorExn]] deals with errors that we can attribute to a specific
-location and that we have a source map for.  The [[FatalExn]] is for
-situation without context information --- for example during command
-line processing. 
-
-The [[ParseExn]] should be defined inside the parser.  But the
-generated interface file for the parser does hide it to the outside so
-that it must be defined somewhere else.  Parse errors are special
-because a position the error can be attributed to is available, but no
-location map.  
+error to a specific location.  We thus have different values to
+describe the location. 
 
 <<error.mli>>=
 
 type pretty         = string                    (* for the moment *)
 
-exception ErrorExn of    Srcmap.point * pretty list
-exception ParseExn of    Srcmap.pos * string
-exception FatalExn of    string
+type location       = Pos    of Srcmap.pos
+                    | Point  of Srcmap.point
+                    | NoPos  
+
+exception ErrorAt  of    location * pretty
+
+val errorAt :      location     -> pretty -> 'a
+val errorAtPoint : Srcmap.point -> pretty -> 'a
+val errorAtPos :   Srcmap.pos   -> pretty -> 'a
+val error :                        pretty -> 'a
 
 @ Combinators to deal with functions that do not naturally expect 
 values of type [[error]].
@@ -121,9 +117,9 @@ value that is returned when an exception is caught whereas [[catch]]
 always uses [[Error]] for this.
 
 <<>>=
-val catch   :       (Srcmap.point -> pretty list -> unit) 
+val catch   :       (location -> pretty -> unit) 
                     -> ('a -> 'b error) -> 'a -> 'b error
-val catch'  : 'b -> (Srcmap.point -> pretty list -> unit) 
+val catch'  : 'b -> (location -> pretty -> unit) 
                     -> ('a -> 'b      ) -> 'a -> 'b 
 
 @ The first argument in [[catch printer f x]] is an error reporting
@@ -131,21 +127,14 @@ function; [[f]] is applied to [[x]] and in case of an error [[Error]]
 is returned. The first argument to [[catch']] is the value to return
 in case of an error.
 
-<<>>=
 
-val errorExn : Srcmap.point -> pretty list -> 'a
-val parseExn : Srcmap.pos   -> string      -> 'a
-val fatalExn : string -> 'a
-
-@ The [[warning]] and [[error]] functions can be passed to [[catch]]
-and [[catch']] as error printing functions.
+@ The [[warningPrt]] and [[errorPrt]] functions can be passed to
+[[catch]] and [[catch']] as error printing functions.
 
 <<>>=
 
-val warning : Srcmap.point -> string list -> unit
-val error   : Srcmap.point -> string list -> unit
-
-  
+val warningPrt : location -> pretty -> unit
+val errorPrt   : location -> pretty -> unit
 @
 
 
@@ -159,9 +148,11 @@ type 'a error       = Error                     (* bad result  *)
 
 type pretty         = string                    (* for the moment *)
 
-exception ErrorExn of    Srcmap.point * pretty list
-exception ParseExn of    Srcmap.pos * string
-exception FatalExn of    string
+type location       = Pos    of Srcmap.pos
+                    | Point  of Srcmap.point
+                    | NoPos  
+
+exception ErrorAt  of    location * pretty
 
 let combine = function  
     | Ok x      -> x
@@ -247,30 +238,37 @@ issue warnings.
 
 let catch' default printer f arg =
     try f arg with
-    | ErrorExn(p,msg) -> ( printer p msg 
+    | ErrorAt(p,msg) -> ( printer p msg 
                          ; default
                          )
     
 let catch printer f arg = catch' Error printer f arg
                          
-let errorExn point msg = raise (ErrorExn(point,msg))
-let parseExn pos   msg = raise (ParseExn(pos,msg))
-let fatalExn msg       = raise (FatalExn(msg)) 
+let errorAt      loc msg = raise (ErrorAt(loc,msg))
+let errorAtPos   pos msg = raise (ErrorAt(Pos(pos),msg))
+let errorAtPoint pnt msg = raise (ErrorAt(Point(pnt),msg))
+let error            msg = raise (ErrorAt(NoPos,msg))
 
-let warning point msg =
-    ( prerr_string (Srcmap.Str.point point)
+let warningPrt pos msg = 
+    ( match pos with
+    | Point(p) ->  prerr_string (Srcmap.Str.point p)
+    | Pos(p)   ->  prerr_string (string_of_int p)
+    | NoPos    ->  ()
+    )
     ; prerr_string " Warning: "
-    ; List.iter prerr_string msg
+    ; prerr_string msg
     ; prerr_newline ()
-    )       
+    
 
-let error point msg =
-    ( prerr_string (Srcmap.Str.point point)
+let errorPrt pos msg = 
+    ( match pos with
+    | Point(p) ->  prerr_string (Srcmap.Str.point p)
+    | Pos(p)   ->  prerr_string (string_of_int p)
+    | NoPos    ->  ()
+    )
     ; prerr_string " Error: "
-    ; List.iter prerr_string msg
+    ; prerr_string msg
     ; prerr_newline ()
-    )       
-
 
 @
 

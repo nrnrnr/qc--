@@ -170,7 +170,7 @@ let atoc s      = Char.code (String.get s 0)
 
 let rec evalFetch set env = function
     | LValueAt(v,_) -> evalFetch set env v
-    | Mem (_,_,_)   -> fatalExn "memory access in const declaration"
+    | Mem (_,_,_)   -> error "memory access in const declaration"
     | Var(n)        -> evalConst set env n
 
 and evalPrimOp set env op args = 
@@ -179,7 +179,7 @@ and evalPrimOp set env op args =
     let xt       = List.map fst xs         in
     let xv       = List.map snd xs         in
     let sigma    = ( try Types.unify t (proc xt bool) Types.empty with 
-                   | Types.UnifyExn -> fatalExn "type mismatch"
+                   | Types.UnifyExn -> error "type mismatch"
                    ) in
     let rt       = ( match Types.subst sigma t with
                    | Types.Procedure(_,r) -> r
@@ -210,14 +210,14 @@ and evalExpr set env = function
          
 
 and evalConst set env id = 
-    if IDSet.mem id set then fatalExn "circular const definition" else
+    if IDSet.mem id set then error "circular const definition" else
     match lookup id env with
     | (_,(Constant(ExprConst(e)) as c)) -> 
         let (t,x,env') = evalExpr (IDSet.add id set) env e
         in (t,x, enter id (t,Constant(x)) env')
     | (t, Constant(x))                  -> (t,x,env)
     | x                                 -> 
-        fatalExn "access of non-constant id in const declaration"
+        error "access of non-constant id in const declaration"
 
 let eval env =
     let rec accConst id entry l = 
@@ -233,7 +233,7 @@ let eval env =
 
 let check file =
     let fd          = try open_in file 
-                      with Sys_error(msg) -> fatalExn msg               in
+                      with Sys_error(msg) -> error msg               in
     let finally ()  = close_in fd                                       in
     let lexbuf      = Lexing.from_channel fd                            in
     let map         = Srcmap.empty                                      in
@@ -248,11 +248,11 @@ let check file =
         with
             | Parsing.Parse_error -> 
               ( finally()
-              ; errorExn (map, Parsing.symbol_start()) ["parse error"]
+              ; errorAtPoint (map, Lexing.lexeme_start lexbuf) "parse error"
               )
-            | ParseExn(pos,msg) ->
+            | ErrorAt(Pos(pos),msg) ->
               ( finally()
-              ; errorExn (map,pos) [msg]
+              ; errorAtPoint (map,pos) msg
               )   
             | e ->  
               ( finally()
