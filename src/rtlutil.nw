@@ -78,6 +78,29 @@ end
 @    
 
 % ------------------------------------------------------------------ 
+\subsection{Aliasing}
+% ------------------------------------------------------------------ 
+
+If a store to one item could affect the value of another, those two
+items \emph{may alias}.
+
+Because of a flaw in the design of our register representation, it is
+difficult to know how many cells of its space a [[Register.t]]
+occupies.
+We ignore the problem and assume every register is just one cell.
+This assumption is blatantly wrong, but it should be OK in those few
+cases where we currently use may-alias information, i.e., to expand
+shuffles. 
+<<rtlutil.mli>>=
+module MayAlias : sig
+  (* MODULE MAY GIVE FALSE NEGATIVES FOR QUERIES INVOLVING REGISTER PAIRS *)
+  val regs : Register.t -> Register.t -> bool   
+  val locs : Rtl.loc -> Rtl.loc -> bool  (* useful to partially apply *)
+  val exp  : Rtl.loc -> Rtl.exp -> bool  (* useful to partially apply *)
+end
+@
+
+% ------------------------------------------------------------------ 
 \subsection{Substitution}
 % ------------------------------------------------------------------ 
 
@@ -718,3 +741,56 @@ let exp e =
         Pp.ppToString 66 (* line width *) pp
 @
 
+\subsection{Aliasing}
+First code is not used but is to show how it should be done.
+<<rtlutil.ml>>=
+module Down = Rtl.Convert
+module MayAlias = struct
+
+  let cells (s, i, w) = Impossible.unimp "cell counts for registers"
+  let regs_may_not_alias ((s, i, w) as r) ((s', i', w') as r') = 
+    s <> s' || i + cells r <= i' || i' + cells r' <= i
+
+  let regs (s, i, w) (s', i', w') = s = s && i = i'
+  let with_reg r = function
+    | RP.Reg r' -> regs r r'
+    | _ -> false
+
+  let with_vari vi = function
+    | RP.Var (_, vi', _) -> vi = vi'
+    | _ -> false
+
+  let with_mem = function  (* VERY APPROXIMATE *)
+    | RP.Mem (s', a', w', e', _) -> true
+    | _ -> false
+
+  let unslice f l =
+    let rec un = function
+      | RP.Slice (_, _, l) -> un l
+      | l -> l
+    in f (un l)
+
+  let rec locs' l = match l with
+    | RP.Reg r               -> unslice (with_reg  r)
+    | RP.Var (_, i, _)       -> unslice (with_vari i)
+    | RP.Mem (s, a, w, e, _) -> unslice (with_mem   )
+    | RP.Slice (_, _, l)     -> locs' l
+  and locs l =
+    let alias = locs' (Down.loc l) in
+    fun l' -> alias (Down.loc l')
+          
+  let has_loc f e =
+    let rec has es ess = match es with
+      | [] -> (match ess with [] -> false | es :: ess -> has es ess)
+      | RP.Const _ :: es -> has es ess
+      | RP.Fetch (l, w) :: es ->
+          f l || (match l with
+                 | RP.Mem (_, _, _, e, _) -> has (e :: es) ess
+                 | _ -> has es ess)
+      | RP.App (_, es') :: es -> has es (es' :: ess) in
+    has [e] []
+
+  let exp l =
+    let alias = has_loc (locs' (Down.loc l)) in
+    fun e -> alias (Down.exp e)
+end

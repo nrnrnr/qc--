@@ -8,6 +8,10 @@
 \title{Roadmap to a Working Quick C-{}- Compiler}
 \date{Early June, 2002}
 
+\newcommand\status[2]{\marginpar{\raggedright\small\textbf{#1: #2}\par}\ignorespaces}
+
+\newcommand\sjul{\status{July~'02}}
+
 \newcommand\PAL{{\small C-{}-}}
 \newcommand\AST{{\small AST}}
 \newcommand\CFG{{\small CFG}}
@@ -50,6 +54,7 @@ This is a major item to be covered by the ``control-flow graph working
 group.'' 
 In addition to the problems listed in that other document, the working
 group should also address the following problems.
+\sjul{Well under way}
 \begin{enumerate} 
 \item
 At least one operation in the current implementation of the {\cfg}
@@ -73,6 +78,7 @@ and a code expander (especially for short-circuit Booleans).
 \end{enumerate}
 \who{Christian, Glenn, John, Kevin, and Norman.}
 \item\b{B+}
+\sjul{Largely done}
 \emph{Identify suitable technology for writing machine-dependent
 components}.  
  Generating everything from a machine is a research
@@ -81,6 +87,7 @@ We must identify techniques that will produce solid code, which
 we expect to be primarily hand-written code.
 \who{Norman.}
 \item\b{B+}
+\sjul{Largely done}
 Build a \emph{back end for a new target}, developing detailed porting
 instructions on the way.
 This process will include solutions to the following problems:
@@ -97,10 +104,12 @@ invariant of these {\rtl}s should be clearly defined.
 conventional location, writing a PC to a conventional location, and
 possibly a private invariant shared with the code expander. ---NR}
 \item
+\sjul{Req'd by expander}
 How does the optimizer know if it is safe to negate the condition on a
 conditional branch without violating the machine invariant?
 And if it not safe, what can the optimizer do?
 \item
+\sjul{Open}
 Figure out how to \emph{reserve a stack slot in the code expander}.
 The {\small SPARC} cannot move a value from an integer register to a
 floating-point register. 
@@ -113,19 +122,23 @@ We might wish to allocate one per activation, in the stack slot of
 the current frame, because getting to a cell on the stack is faster
 and doesn't cost a register.
 \item
+\sjul{Done}
 \emph{Stack-frame layout} should be part of the target specification.
 Currently the overall stack layout is hardcoded into the \path|freeze|
 function in the \path|Ast3IR| module. 
 \end{enumerate}
   \who{Norman.}
 \item\b{B}
+\sjul{Open}
 Write \emph{variable placers} by hand.  \who{Kevin.}
 \item\b{B}
+\sjul{Open (preliminary in x86)}
 Develop either hand-written or machine-generated
 \emph{operator context charts} to guide selection of temporaries.
 For use both in variable placement and in code expansion.
 \who{Kevin.}
 \item\b{D}
+\sjul{Open}
 {\rtl} operators describe compile-time, link-time, and run-time
 operations. The list of \emph{operators available at compile time} is extremely
 limited.
@@ -145,23 +158,28 @@ results; these implementations must be removed.
 \end{itemize}
 \who{Kevin.}
 \item\b{A}
+\sjul{Open}
 Identify the \emph{critical compile-time operators} and make sure they
 are implemented correctly.
 These might include add and subtract, bit insert, bit extract, and
 shifts.
 \who{Christian.}
 \item\b C
+\sjul{Incomplete?}
 Partial \emph{map of variables and callee-saves registers to locations} at
 each call site.
 \who{John or Kevin.}
 \item\b C 
+\sjul{Partial}
 Implement \texttt{span}, with support for lookup at each call site.
 \who{John or Kevin.}
 \item \b B
+\sjul{Partial}
 Specify and implement \emph{calling conventions.}
 Christian is quite interested in this problem.
 \who{John or Christian.}
 \item \b A
+\sjul{No longer relevant?}
 Develop and successfully compile a small \emph{test suite} for SPARC,
 including some C~programs.
 Because of limitations of the compiler, it is likely that any
@@ -170,11 +188,13 @@ crafted for this purpose.
 It is OK if these programs don't do anything useful.
 \who{Christian.}
 \item \b{B+}
+\sjul{Incomplete}
 Implement \emph{small arithmetic}. 
 The compiler currently lacks a comprehensive plan how to deal with values of
 smaller than the size of a register. 
 \who{Kevin and Norman.}
 \item \b A
+\sjul{Open}
 Support a \emph{complete set of RTL operators}, probably with new
 representation.
 Minimum here is to make sure that we have all 60+ operators and that
@@ -182,6 +202,7 @@ everything typechecks.
 A new representation could be a bonus.
 \who{Kevin.}
 \item\b{A-}
+\sjul{Done}
 Identify, allocate, and initialize escaping \emph{continuations}.
 This entails repairing the following problems:
 \begin{enumerate} 
@@ -237,6 +258,7 @@ Emit initialization code obtained from the target
 \end{itemize}
 \who{Christian.}
 \item\b{B+}
+\sjul{Done}
 Implement \texttt{cut to} correctly.
 The implementation of \path|cut to| currently expects to put overflow
 parameters into the  \emph{incoming} area for the procedure containing
@@ -250,6 +272,7 @@ can easily be passed in registers.
 continuation parameter.)
 \who{Christian.}
 \item \b{B}
+\sjul{In progress}
 Solve the following problem, which NR does not understand: \emph{The
 control-flow graph 
 lacks proper edges to indicate the data flow in the presence of
@@ -258,6 +281,7 @@ The first step is to identify exactly what the problem is, which
 Christian will do.
 \who{Christian.}
 \item \b C
+\sjul{Unknown}
 Add a target-specific map for hardware registers, and ensure that the
 front end rejects named hardware registers that do not appear in the
 map.
@@ -268,10 +292,12 @@ N.B.~Christian recommends that exposing the target to the front end
 will solve this and some other problems.
 \who{Christian.}
 \item \b C
+\sjul{Unknown}
 Ensure that the front end rejects a named calling convention that is
 not known to the back end.
 \who{Christian.}
 \item \b A
+\sjul{Open}
 Targets provide code that spills and reloads registers. This code must
 respect the machine invariant, but currently does not. Machine specific
 spilling and reloading code must be defined. 
@@ -281,6 +307,7 @@ spilling and reloading code must be defined.
 the question how small values of 8 or 16 bit widths are handled. Are
 these values ever spilled?)
 \item \b {B-}
+\sjul{Done}
 Support \texttt{also cuts to k} on \texttt{cut to}. 
 Here's an example use:
 \begin{verbatim}
@@ -296,6 +323,7 @@ yield () {
 \end{verbatim}
 \who{Christian}
 \item \b{B-}
+\sjul{Unknown}
 The \emph{semantics of the assembler interface} needs to be defined
 clearly. The problem stems for an anticipated use for both textual
 assemblers and binary emitters. Especially the role of symbols is not
@@ -305,12 +333,14 @@ The first step is to \emph{review the assembly interface}, which
 should happen after the redesign of the flow graph.
 \who{Norman.}
 \item
+\sjul{Open}
 In the assembler interface, there is a problem with the functions used
 to emit initialized data---some ambiguity about how they are supposed
 to be used.
 Christian will identify the problem more precisely so it can be fixed.
 \who{Christian and Norman.}
 \item\b C
+\sjul{Open}
 The semantics of \texttt{fcmp} should be specified precisely.
 In particular, it is not known how the results map to two-bit values.
 If the answer is target-specific, then the \texttt{Target} module should be
@@ -319,15 +349,18 @@ This item has relatively low priority because the new floating-point
 comparisons are more convenient than \texttt{fcmp}.
 \who{?????}
 \item \b{B+}
+\sjul{Open}
 Alter the \texttt{lcc} back end to use the new floating-point
 comparisons.
 \who{????}
 \item
+\sjul{In progress}
 The function \path|proc| that controls the translation of a procedure
 in module \path|Ast3ir| must be broken up and cleaned up. 
 The proper time to do this is \emph{after} the flow-graph revision.
 \who{Christian}
 \item\b{A-}
+\sjul{Unknown}
 The treatment of the \texttt{*} operator in {\PAL} source code must be
 corrected.
 For purposes of type checking, 
@@ -345,6 +378,7 @@ In that case, it will be reasonable to invent a new RTL operator, a
 truncating multiply, perhaps to be called \texttt{mulu\_trunc}.
 \who{Christian.}
 \item \b A
+\sjul{In progress}
 The algorithm that linearizes the control-flow graph does not work
 properly. It fails to detect the difference between nodes that fall into
 a label and those that jump to a label. A probable fix to the problem is
@@ -357,6 +391,7 @@ the {\cfg} design: it is neccessary to create new nodes inside the
 give up the polymorphism of the {\cfg} which wasn't working anyway. --CL
 (Tue May  7 16:44:58 EDT 2002)}.
 \item \b C
+\sjul{Open}
 We need support for IEEE 754 floating-point literals.
 Mapping a literal to a bit vector is quite complicated and involved
 (see papers from PLDI'96), but there should be reliable C~code on the
@@ -365,6 +400,7 @@ into the compiler.
 David Gay or Will Clinger may know where to find such code.
 \who{Christian.}
 \item \b C
+\sjul{Open}
 We need a policy decision about whether to support floating-point
 operations at compile time.
 Someone will have to investigate to see if there is suitable ``soft
@@ -376,10 +412,12 @@ values to 64 bit integer values, but it is platform
 sensitive and maybe the wrong way.
 \who{Christian.}
 \item \b D
+\sjul{Open}
 Implement support for string literals (low priority).
 In order to support Unicode, we might need changes to the {\PAL}
 language definition.
 \item \b D
+\sjul{Open}
 Identify a principled way to reject programs that a particular back
 end cannot successfully compile.
 Reasons for rejection might include use of {\PAL} variables or
@@ -390,6 +428,7 @@ suggest, but it is a far-future item.
 We will have a much better idea how to handle this problem after we
 have built a few back ends.
 \item\b{B-}
+\sjul{Open}
 Ensure that \emph{global-variable declarations are consistent} across
 modules. 
 When multiple compilation units share their global variables one of them
@@ -402,8 +441,10 @@ Primarily what needs to be done is arrange suitable import/export and
 implement a command-line option that designates the ``main''
 compilation unit.
 \item\b D
+\sjul{Open}
 Implement \texttt{switch}.
 \item\b C
+\sjul{Unknown}
 Export substitution of late compile-time constants and constant folding
 as finalizing step of a procedure translation to Lua. Currently these
 steps are hard-coded into the \path|freeze| function in module
@@ -416,6 +457,7 @@ steps are hard-coded into the \path|freeze| function in module
 
 
 Expression evaluation needs to be unified. The correct way is to
+\sjul{Open}
 translate an expression into an {\rtl} expressions and then to evaluate
 it. Currently the constant evaluation phase of the \path|Elab| module
 evaluates constant expressions directly. See also the reasons for this
