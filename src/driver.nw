@@ -43,7 +43,6 @@ The compiler is controlled by a Lua interpreter that is build in the
 \module{main2} module. It takes several user-defined types to extend it.
 This module provides new Lua types like [[asm]] and [[ast]] for the
 interpreter, and a library that uses them. 
-
 <<driver.mli>>=
 val check     : 
   Srcmap.map * Ast.program -> 'proc Asm.assembler -> 'proc Fenv.Clean.env'
@@ -53,7 +52,7 @@ val print     : Pp.doc -> int -> out_channel -> unit
 val pretty    : 'a * Ast.toplevel list -> Pp.doc
 val scan      : string -> unit
 val version   : unit -> unit
-val compile : (Ast2ir.proc -> unit) -> 'a * Ast.program -> Ast2ir.tgt
+val compile : (Ast2ir.proc -> unit) -> bool -> 'a * Ast.program -> Ast2ir.tgt
                 -> Ast2ir.proc Fenv.Clean.env' -> Ast2ir.proc Asm.assembler
 val reinit    : unit -> unit
 @
@@ -167,9 +166,9 @@ let check (map,ast) (asm) =
                       Error.error "compilation aborted because of errors." in
     Fenv.clean env
 
-let compile (opt) (map,ast) (target) (env)  =
+let compile opt exportglobals (map,ast) target env  =
     let () = consistency_check env target in   
-    Ast2ir.translate target env opt ast 
+    Ast2ir.translate target env opt exportglobals ast 
 <<driver.ml>>=
 let pretty (map,ast) = Astpp.program ast
 let print doc width channel = Pp.ppToFile channel width doc

@@ -46,6 +46,7 @@ type proc = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t
 val translate :  tgt
                 -> proc Fenv.Clean.env'
                 -> optimizer: (proc -> unit)
+                -> defineglobals: bool
                 -> Ast.program 
                 -> proc Asm.assembler
 @
@@ -118,7 +119,7 @@ The first instantiation is visible here; the second appears in
 [[<<definition of [[proc]], which translates one procedure>>]].
 <<ast2ir.ml>>=
 <<definition of type [[blocklists]]>>
-let translate target env ~optimizer =
+let translate target env ~optimizer ~defineglobals =
   let pointersize = target.T.pointersize in
   let add = RU.add pointersize in
   let ccs = target.T.cc in
@@ -1189,30 +1190,34 @@ let globals (base:Rtl.exp) names =
 We have to deal somehow with the global-register area, i.e., make it consistent.
 The fingerprint [[digest]] for global register declarations is a
 16-character string of unprintable characters. We make it printable by 
-applying the {\ocaml} escaping rules. 
+calling [[idcode]]; using [[String.escaped]] produces identifiers that
+are too long for the linker.
 <<supporting functions for fooling with the global-register area>>=
-let import_global_register area () =
-  Impossible.unimp "cross-module linkage for global registers"
-
-and export_global_register_area () =
-  let base_sym = F.symbol env "Cmm_private_global_area" in
-  let base     = Rtl.link base_sym pointersize in 
-  let area    
-     ,digest   = globals base (F.globals env) in
-  let area     = area.AT.overflow in
-  let digest   = String.escaped digest in
-  let asm      = F.asm env in
-  let digest   = asm#export digest in
-  begin
-    asm#section (target.T.data_section);
-    asm#comment "memory for global registers";
-    asm#align (Block.alignment area);
-    asm#label base_sym;
-    asm#label digest;
-    asm#addloc (Block.size area)
-  end
-@ This stuff should probably be imported by digest, not by the conventional
-name [[base_sym]].
+let emit_global_register_area ~export =
+  let base_sym     = F.symbol env "Cmm.global_area" in
+  let base         = Rtl.link base_sym pointersize in 
+  let area, digest = globals base (F.globals env) in
+  let area         = area.AT.overflow in
+  let digest       = "Cmm." ^ Idcode.encode digest in
+  let asm          = F.asm env in
+  let digest       = if export then asm#export digest else asm#import digest in
+  if export then 
+    begin
+      asm#section (target.T.data_section);
+      asm#comment "memory for global registers";
+      asm#align (Block.alignment area);
+      asm#label digest;     (* ensures desired definition is present *)
+      asm#label base_sym;   (* ensures no multiple inconsistent definitions *)
+      asm#addloc (Block.size area)
+    end
+  else
+    let localref = asm#local "Cmm.ref_to_global_area" in
+    begin
+      asm#section (target.T.data_section);
+      asm#label localref;
+      asm#comment "reference to global-register signature";
+      asm#addr (Reloc.Simple.of_sum digest (Bits.zero pointersize))
+    end
 @
  
 % ------------------------------------------------------------------ 
@@ -1264,7 +1269,7 @@ declarations.
 let program prog =
   let asm = F.asm env in
   <<supporting functions for fooling with the global-register area>> in
-  export_global_register_area ();
+  emit_global_register_area defineglobals;
   List.iter (toplevel asm) prog;
   asm
 @

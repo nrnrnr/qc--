@@ -135,6 +135,7 @@ Options.output     = nil   -- -o
 Options.keep       = { }   -- extensions of derived files to keep (nil to keep all)
 Options.argc       = 0     -- number of argument files
 Options.argv       = {}    -- argv[1], .. , argv[argc]
+Options.globals    = nil   -- don't emit globals
 @ 
 Here we handle the semantics of the [[-keep]] options.
 <<Lua command-line driver>>=
@@ -281,6 +282,7 @@ function CMD.parse (args)
     elseif v == "-S"       then O.stop_at(".s"); O.stop['.qs'] = 1; O.keep['.qs'] = 1
     elseif v == "-v"       then O.verbose = O.verbose + 1
     elseif v == "-vv"      then O.verbose = O.verbose + 2
+    elseif v == "-globals" then O.globals = 1  -- emit globals for 1 file
     elseif strfind(v, "=") then local _ = dostring(v) or exit(2)
     elseif v == "-o" then 
         i,v    = i+1, args[i+1] or CMD.error("argument for option -o missing") 
@@ -524,7 +526,9 @@ We recognize extension [[.cmm]] as well as [[.c--]].
 function CMD.compilertab[".c--"](file) 
   local asm = CMD.outfilename(file, '.s')
   if Options.verbose > 0 then write('Translating ', file, ' to ', asm, '\n') end
-  if Options.verbose < 2 then backend.compile(backend, file, asm)          end
+  local emitglobals = Options.globals
+  if emitglobals == 1 then Options.globals = nil end
+  if Options.verbose < 2 then backend.compile(backend, emitglobals, file, asm) end
   return asm
 end
 @ 
@@ -564,7 +568,8 @@ CMD.interptab[".lua"] = CMD.compilertab[".lua"]
 function CMD.interptab[".c--"](file) 
   local asm = CMD.outfilename(file, '.qs', '.s')
   if Options.verbose > 0 then write('Translating ', file, ' to ', asm, '\n') end
-  if Options.verbose < 2 then backend.compile(backend, file, asm)          end
+  if emitglobals == 1 then Options.globals = nil end
+  if Options.verbose < 2 then backend.compile(backend, emitglobals, file, asm) end
   return asm
 end
 @ 

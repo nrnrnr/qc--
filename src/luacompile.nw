@@ -578,7 +578,7 @@ function Compile.run_optimizer(self,proc)
     B.run(self.action, proc)
 end    
 
-function Compile.file(backend, file, out)
+function Compile.file(backend, emitglobals, file, out)
     local fd  = (not out or out == "-") and Driver.stdout or open_out(out)
     local ast = Driver.parse(file)
     
@@ -588,7 +588,7 @@ function Compile.file(backend, file, out)
                 , action = Opt.standard(backend, asm, NewBackplane) 
                 , B = NewBackplane
                 }
-    Driver.compile(opt, ast, backend.target, env)
+    Driver.compile(opt, emitglobals, ast, backend.target, env)
     if backend.emit then backend.emit(asm) end
     if fd ~= Driver.stdout then close_out(fd) end -- close fd
 end    
