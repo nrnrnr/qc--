@@ -84,6 +84,9 @@ error-free (wrt.[[info]]) values.  Applying [[clean]] to an
 violation. 
 
 <<fenv.mli>>=
+module StrSet: Set.S with type elt = string
+module StrMap: Map.S with type key = string
+
 <<module type Env>>
 
 module Dirty : Env
@@ -298,18 +301,34 @@ val incrIndex       : env -> env
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{External Names}
+\subsubsection{Imports and Exports}
 % ------------------------------------------------------------------ 
 
-Names that are visible outside of a {\PAL} compilation unit are called
-\emph{external} names, other names are called internal.  A names
-becomes external when it is exported.  The [[export]] directive allows
-to export an internal name under a different external name.  The code
-generation phase of the compiler must be aware which external names
-are already in use such that it does not accidently re-uses a name. 
-This interface provides a function [[add_external]] that adds a name
-to a set of external names and a predicated that checks whether a name
-is external.
+The translation process assigns certain {\PAL} \emph{names} assembly-level
+\emph{symbols}. The relation between a name and its assembly symbol is
+not straight forward, as explained in module \module{mangle}. In order
+to build a map from {\PAL} names to symbols all imports and exports of
+a {\PAL} program must be registered. This is done with [[import]] and
+[[export]]. To provide meaningful error messages, both function receive
+the region of the statement at hand in the source code. 
+
+<<>>=
+val import: Srcmap.rgn -> string -> string -> env -> env (* import g as f *)
+val export: Srcmap.rgn -> string -> string -> env -> env (* export f as g *)
+@
+
+The assembly level symbols imported and exported from a compilation
+unit can be obtained, as well as a map from {\PAL} names to these
+symbols.  The union of the imported and exported sets equals the range
+of the map.
+
+<<>>=
+val imported: env -> StrSet.t
+val exported: env -> StrSet.t
+val nam2sym:  env -> string StrMap.t
+@
+
+
 
 
 % ------------------------------------------------------------------ 
@@ -330,11 +349,14 @@ module T            = Types
 
 Name spaces are implemented as polymorphic functional maps from
 [[string]] to some value.  The [[Map.Make]] functor must be provided
-with the structure of the key, i.e.~the [[string]] type.
+with the structure of the key, i.e.~the [[string]] type. The
+[[import]] and [[export]] functions build sets of symbol, so we need a
+set of strings, too.
 
 <<>>=
 module Comparable   = struct type t=string let compare=compare end
 module StrMap       = Map.Make(Comparable)
+module StrSet       = Set.Make(Comparable)
 @
 A handy error printing function: [[r]] is a [[Srcmap.reg]] source code
 position that is used to describe the place where an error is located. 
@@ -492,6 +514,18 @@ and  target         = { memsize:      int        partial info
                       }
 @
 
+Imports and exports are recorded (see module \module{mangle}) to build
+a map from {\PAL} names to assembly symbols.  The [[asm]] type holds
+two sets of assembly symbols:  [[imported]] and [[exported]], and a
+map from {\PAL} names to symbols.
+
+<<>>=
+and asm             = { imported:     StrSet.t
+                      ; exported:     StrSet.t
+                      ; nam2sym:      string StrMap.t
+                      }
+@
+
 An [[env]] is a record that holds maps for types and values. The
 target description is implemented as a record because the values bound
 are not uniform.
@@ -503,6 +537,7 @@ and   env           =
                       ; srcmap :      Srcmap.map
                       ; error  :      bool
                       ; target :      target
+                      ; asm    :      asm
                       ; rindex :      int       (* register index *)
                       }    
 @
@@ -527,6 +562,10 @@ let empty  map      = { tenv   = StrMap.empty
                                  ; pointer    = Arg.default 32
                                  ; float      = Arg.default "ieee754"
                                  ; charset    = Arg.default "latin1"
+                                 }
+                      ; asm    = { imported   = StrSet.empty
+                                 ; exported   = StrSet.empty
+                                 ; nam2sym    = StrMap.empty
                                  }
                       } 
 @
@@ -690,6 +729,49 @@ let findCharset     env = env.target.charset
 @   
 
 % ------------------------------------------------------------------ 
+\subsubsection{Imports and Exports}
+% ------------------------------------------------------------------ 
+
+The fat environment maintains the set of imported and exported
+assembly symbols and a map, that associates an imported or exported
+{\PAL} name with it symbol. No assembly symbol may be imported and
+exported at the same time. If such a case is detected, an error
+message is issued. 
+
+<<>>=
+let import r sym name env =
+    if StrSet.mem sym env.asm.exported 
+    then ( error r env.srcmap ("import of an exported name: "^name)
+         ; flagError env
+         )
+    else let asm = { exported = env.asm.exported
+                   ; imported = StrSet.add sym env.asm.imported
+                   ; nam2sym  = StrMap.add name sym env.asm.nam2sym
+                   }
+         in
+            { env with asm = asm }
+
+let export r name sym env =
+    if StrSet.mem sym env.asm.imported 
+    then ( error r env.srcmap ("export of an imported name: "^name)
+         ; flagError env
+         )
+    else let asm = { imported = env.asm.imported
+                   ; exported = StrSet.add sym env.asm.exported
+                   ; nam2sym  = StrMap.add name sym env.asm.nam2sym
+                   }
+         in
+            { env with asm = asm }
+@
+
+<<>>=
+let imported env = env.asm.imported
+let exported env = env.asm.exported
+let nam2sym  env = env.asm.nam2sym
+@
+
+
+% ------------------------------------------------------------------ 
 \subsubsection{Register Index}
 % ------------------------------------------------------------------ 
 
@@ -765,6 +847,13 @@ and clean_target = function
         }
     |   _ -> assert false 
 
+and clean_asm asm =
+    { Clean.imported = asm.Dirty.imported
+    ; Clean.exported = asm.Dirty.exported
+    ; Clean.nam2sym  = asm.Dirty.nam2sym
+    }
+     
+
 and clean env =
     { Clean.tenv   = clean_tenv env.Dirty.tenv
     ; Clean.venv   = clean_venv env.Dirty.venv
@@ -772,6 +861,7 @@ and clean env =
     ; Clean.error  = env.Dirty.error
     ; Clean.target = clean_target env.Dirty.target
     ; Clean.rindex = env.Dirty.rindex
+    ; Clean.asm    = clean_asm env.Dirty.asm
     }
 @
 
