@@ -1,0 +1,183 @@
+% The module name const is odd. I'm sticking to it because of the
+% original module, but would like to find something better. rtleqn? 
+%
+
+
+% ------------------------------------------------------------------ 
+\section{Equations over RTL-expressions}
+% ------------------------------------------------------------------ 
+
+This module allows to build an equation system by equating {\rtl}
+expressions.  The equation system determines the value of late
+compile-time constants that are part of the participating expressions.
+
+<<const2.mli>>=
+exception Can'tSolve
+
+type t              (* equation *)
+type solution =
+    { known:        (string * Rtl.exp) list
+    ; depedent:     (string * Rtl.exp) list
+    }
+
+val equate:     Rtl.exp -> Rtl.exp -> t                     (* e1   == e2   *)
+val equate':    x:int -> Rtl.exp -> y:int -> Rtl.exp -> t   (* x+e1 == y+e2 *) 
+
+val solve: width:int -> t list ->-> solution   (* Can'tSolve *)
+@
+
+The functions [[equate]] and [[equate']] create an equation of type
+[[t]]. For convenience, [[equate']] allows to add integers to both
+equations.  A list of equations is an equation system that can be
+solved. Solving treats late compile-time values as variables and tries
+to express them as {\rtl} expression that are variable-free. Variables
+that can be expressed this way, are said to be \emph{known}. Variables
+whose values can only be expressed in terms of other variables are said
+to be \emph{dependent}. If a solution has dependent variables, the
+equation system had more equations that variables.
+
+Limitations: Despite the interface and the expressiveness of {\rtl}
+expressions, this is not a general equation solver. How can I make
+precise what the equation solver does without going into the details of
+operation?
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The implementation relies on the linear equation solver module
+\module{eqn}. The main tasked solved here is to parse an {\rtl}
+expression into linear form such that it can be passed to the linear
+equation solver. The general idea is that complicated (and possibly
+non-linear) terms are treated as constant with respect to equation
+solving.
+
+<<const2.ml>>=
+module D  = Rtl.Convert  (* Down *)
+module U  = Rtl.Revert   (* UP *)
+module RP = Rtl.Private
+
+exception Can'tSolve
+type solution =
+    { known:        (string * Rtl.exp) list
+    ; depedent:     (string * Rtl.exp) list
+    }
+@
+
+For actually solving equations, we represent any expression as a linear
+sum of terms.  A term is a constant, a variable, or one. An equation is
+a sum whose value is known to be zero.
+
+<<const2.ml>>=
+type term =
+    | Const of Rtl.exp
+    | Var   of string
+    | Unit  
+
+type sum = (int * term) list
+type t   = sum                  (* equation, sum == 0 *)
+@
+
+Here are constructor functions for simple sums. We use them when we
+parse an {\rtl} expression into a sum.
+
+<<const2.ml>>=
+let sym x       = [(1, Var x)]
+let int i       = [(i, Unit)]
+let const k     = [(1, Const (U.exp k))]
+let add x y     = x @ y
+let sub x y     = x @ List.map (fun (i,y) -> (-i,y)) y
+@
+
+The real work is to parse an {\rtl} expression into a sum. This requires
+in particular to recognize certain {\rtl} operators. We traverse an
+{\rtl} expression and create a sum representation for it. Everything we
+don't know how to handle becomes a constant.
+
+<<const2.ml>>=
+let exp e = 
+    let rec exp = function
+    | RP.Const(RP.Bits(b))      -> int (Bits.U.to_int b)
+    | RP.Const(RP.Late(x,_))    -> sym x
+    | RP.Const(_) as x          -> const x
+    | RP.App(("add",_),[e1;e2]) -> add (exp e1) (exp e2)
+    | RP.App(("sub",_),[e1;e2]) -> sub (exp e1) (exp e2)
+    | x                         -> const x
+    in
+        exp (D.exp e)
+@
+
+An equation is a sum whose value is zero. The [[equate]] functions
+simply subtract both sides from each other to obtain a sum of value
+zero.
+
+<<const2.ml>>=
+let equate     e1    e2 = sub (exp e1) (exp e2)
+let eqaute' ~x e1 ~y e2 = sub (add (int x) (exp e1)) (add (int x) (exp e2))
+@
+
+The linear equation solver needs to know about terms. We provide the
+structure [[T]] for it and create an instance of the equation solver for
+us. The equation solver provides (should be changed):
+
+\begin{itemize}
+\item [[T.t]]: the type for a set of equations.
+\item [[T.empty]]: the empty set.
+\item [[T.make_zero]]: adds a sum that is known to be zero to an
+       equation set.
+\end{itemize}
+
+<<const2.ml>>=
+module T = struct
+    type t = term
+    let variable = function         (* identify variable *)
+        | Var(s)    -> Some s
+        | _         -> None
+    let compare = compare           (* order over t *)    
+end
+module Solver = Eqn.Make(T)         (* equation solver over terms *)
+@
+
+The result as it is returned by the quation solver associates a variable
+with a sum. Since we need to return {\rtl} expressions, we have to
+unparse a sum into an expression. 
+
+<<const2.ml>>=
+let rtl ~(width:int) (e:sum) = 
+    let add    = Rtl.opr "add"  [width] in
+    let mult   = Rtl.opr "mult" [width] in 
+    let bits i = Rtl.bits (Bits.U.of_int i width) width    in 
+    let late x = Rtl.late x width in
+    let summand = function
+        | (1,Var x)   -> late x 
+        | (i,Var x)   -> Rtl.app mult [bits i; late x] 
+        | (i,Unit)    -> bits i 
+        | (1,Const k) -> k
+        | (i,Const k) -> Rtl.app mult [bits i;k] in
+    let rec loop e = function
+        | []    -> e
+        | [s]   -> Rtl.app add [e;summand s]
+        | s::ss -> loop (Rtl.app add [e;summand s]) ss
+    in
+        match e with
+        | []    -> Rtl.bits (Bits.zero width) width
+        | s::ss -> loop (summand s) ss 
+@
+
+Here we solve the equation system. We have a list of sums that we feed
+into the linear equation solver. Once we obtain the result, we translate
+it back to {\rtl}s. 
+
+<const2.ml>>=
+let solve ~width sums =
+    try
+        let eqns   = List.fold_right Solver.make_zero sums Solver.empty in
+        let result =  Solver.solve eqns in
+        let to_rtl = function (v,sum) -> (v,rtl width sum) in
+                { known     = List.map to_rtl result.Solver.known
+                ; dependent = List.map to_rtl result.Solver.dependent
+                }
+    with
+        Solver.Can'tSolve -> raise Can'tSolve
+@
+
