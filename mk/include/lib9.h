@@ -98,8 +98,8 @@ enum
 typedef
 struct Qid
 {
-	ulong	path;
-	ulong	vers;
+	unsigned long	path;
+	unsigned long	vers;
 } Qid;
 
 typedef
@@ -109,10 +109,10 @@ struct Dir
 	char	uid[NAMELEN];
 	char	gid[NAMELEN];
 	Qid	qid;
-	ulong	mode;
+	unsigned long	mode;
 	int	atime;
 	int	mtime;
-	ulong	length;
+	unsigned long	length;
 	ushort	type;
 	dev_t	dev;
 } Dir;

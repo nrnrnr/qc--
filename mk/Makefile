@@ -30,8 +30,7 @@ all:
 install:    all
 	    install -s mk $(BINDIR)
 	    install mk.1  $(MAN1DIR)
-	    
-	    
+
 clean:
 	    rm -f *~ include/*~
 	    for i in lib/regexp lib/bio lib/9 src; do (cd $$i; make clean); done
@@ -71,5 +70,3 @@ $(FILE).tar.gz:	Makefile
 			-o -print                  \
 			| sed "s|./|$(FILE)/|"`
 		rm -f $(FILE)
-
-

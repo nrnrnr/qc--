@@ -14,7 +14,7 @@ statconv(Dir *dir, struct stat *s)
 {
 	struct passwd *p;
 	struct group *g;
-	ulong q;
+	unsigned long q;
 
 	p = getpwuid(s->st_uid);
 	if (p)

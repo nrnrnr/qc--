@@ -283,7 +283,7 @@ numbconv(va_list *arg, Fconv *fp)
 		break;
 
 	case FUNSIGN|FPOINTER:
-		v = (ulong)va_arg(*arg, void*);
+		v = (unsigned long)va_arg(*arg, void*);
 		break;
 
 	case FLONG:
@@ -291,7 +291,7 @@ numbconv(va_list *arg, Fconv *fp)
 		break;
 
 	case FUNSIGN|FLONG:
-		v = va_arg(*arg, ulong);
+		v = va_arg(*arg, unsigned long);
 		break;
 
 	default:
@@ -318,7 +318,7 @@ numbconv(va_list *arg, Fconv *fp)
 		if(fp->f3 & FVLONG)
                         LONGLONGSTMT(n = (uvlong)vl % b;)
 		else
-			n = (ulong)v % b;
+			n = (unsigned long)v % b;
 		n += '0';
 		if(n > '9') {
 			n += 'a' - ('9'+1);
@@ -331,7 +331,7 @@ numbconv(va_list *arg, Fconv *fp)
 		if(fp->f3 & FVLONG)
                         LONGLONGSTMT(vl = (uvlong)vl / b;)
 		else
-			v = (ulong)v / b;
+			v = (unsigned long)v / b;
 		if(fp->f2 != NONE && i >= IDIGIT-fp->f2)
 			continue;
 		if(fp->f3 & FVLONG) {
