@@ -21,6 +21,7 @@ TKRTL = $TKDIR/rtl
 SLEDLIBDIR = $TKDIR
 RTLSPECDIR = $TKRTL
 SLEDSPECDIR = /home/lair/nr/toolkit/www/specs
+LRTLHEAP=/usr/share/smlnj/bin/.heap/lrtl.x86-linux
 
 
 # ------------------------------------------------------------------ 
@@ -30,7 +31,7 @@ SLEDSPECDIR = /home/lair/nr/toolkit/www/specs
 HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
 INC  =          `echo *.nw       | sed 's/\.nw/.inc/g;'`
 
-all:V:          src cmo
+all:V:          src cmo lib
 all.opt:V:      
 update:V:       
 update.opt:V:   
@@ -64,6 +65,9 @@ install:V:      all.opt
 
 <../config/ocaml.mk
 <../config/noweb.mk
+
+MACHINEREGEX=sparc
+
 <../config/lrtl.mk
 
 # compiler flags used by the rules just included
@@ -75,19 +79,19 @@ OCAMLO_FLAGS =     -I $LIBDIR
 # gather ye specifications where ye may
 # ------------------------------------------------------------------ 
 
-$SLEDSPECDIR/%.spec: $SLEDSPECDIR/%.nw
+$SLEDSPECDIR/&.spec: $SLEDSPECDIR/&.nw
 	(cd `dirname $target`; mk `basename $target`)
 
-$SLEDSPECDIR/%-names.spec: $SLEDSPECDIR/%.nw
+$SLEDSPECDIR/&-names.spec: $SLEDSPECDIR/&.nw
 	(cd `dirname $target`; mk `basename $target`)
 
-$TKRTL/%.rtl: $TKRTL/%.nw
+$TKRTL/&.rtl: $TKRTL/&.nw
 	(cd `dirname $target`; mk `basename $target`)
 
-%.sled: $SLEDSPECDIR/%.spec $SLEDSPECDIR/%-names.spec
+&.sled: $SLEDSPECDIR/&.spec $SLEDSPECDIR/&-names.spec
 	cat $prereq > $target
 
-%.rtl: $TKRTL/%.rtl
+&.rtl: $TKRTL/&.rtl
 	cat $prereq > $target
 
 
@@ -104,6 +108,7 @@ sledlib.ml: $TKDIR/caml-lib.nw
 LOCAL =         sledlib.ml	\
 		sparc.ml	\
                 sparcmkasm.ml   \
+		sparcrec.ml	\
 
 LOCALI =        sledlib.mli	\
 		sparc.mli	\
@@ -124,42 +129,44 @@ src:V: $SCAN
 # building binaries
 # ------------------------------------------------------------------ 
 
-CMOLIBS =       str.cma  cllib.cma
-CMXLIBS =       str.cmxa cllib.cmxa
+LIBCMO =       gen.cma
+LIBCMX =       gen.cmxa
 
-ocamlerror:     ocamlscan.cmo ocamlerror.cmo 
-		$OCAMLC $OCAMLC_FLAGS -custom -o $target $CMOLIBS $prereq
+lib:V: $LIBCMO
+
+$LIBCMO:        $CMO
+		$OCAMLC $OCAMLC_FLAGS -a -o $target $prereq
                 
 
-ocamlerror.opt: ocamlscan.cmx ocamlerror.cmx 
-		$OCAMLO $OCAMLO_FLAGS         -o $target $CMXLIBS $prereq
+$LIBCMX:	$CMX
+		$OCAMLO $OCAMLO_FLAGS -a -o $target $prereq
 
 # ------------------------------------------------------------------ 
-# extra rules for cases not covered by noweb.mk
+# update hierarchy
 # ------------------------------------------------------------------ 
 
-ocamlscan.mll:  ocamlerror.nw
-                $NOTANGLE -R$target $prereq > $target
+$LIBDIR/$LIBCMO:    $LIBCMO dirs
+		    for i in $LIBCMO *.mli *.cmi 
+                    do
+		        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR 
+		    done
 
-ocamlerror.pod: ocamlerror.nw
-                $NOTANGLE -R$target $prereq > $target
+$LIBDIR/$LIBCMX:    $LIBCMX dirs
+		    for i in $LIBCMX $NAME.a *.mli *.cmi
+                    do
+		        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR
+		    done
 
-# ------------------------------------------------------------------ 
-# rules to export source code into a world without noweb
-# ------------------------------------------------------------------ 
+dirs:VQ:
+                    for i in $LIBDIR; do
+                        if [ ! -d $i ]; then
+                            echo "missing directory $i"
+                            echo "invoke mk from the toplevel the first time"
+                            echo "to create all directories"
+                            false
+                        fi
+                    done    
 
-untangle:V:     ocamlerror.pod ocamlerror.1
-                nountangle -ml -Rocamlerror.ml ocamlerror.nw > ocamlerror.ml
-                nountangle -ml -Rocamlscan.mll ocamlerror.nw > ocamlscan.mll
-                nountangle -ml -Rsrcmap.ml  ../cllib/srcmap.nw > srcmap.ml
-                nountangle -ml -Rsrcmap.mli ../cllib/srcmap.nw > srcmap.mli
-
-EXPORT =        build.sh srcmap.mli srcmap.ml ocamlscan.mll ocamlerror.ml\
-                ocamlerror.pod ocamlerror.1
-
-tar:V:          untangle
-                tar zcvf ocamlerror.tar.gz $EXPORT
-                                
 
 # ------------------------------------------------------------------ 
 # recalculate dependencies
@@ -168,7 +175,7 @@ tar:V:          untangle
 
 depend:V: $DEPEND
 $DEPEND:	$SCAN
-		$OCAMLDEP $SCAN > $DEPEND
+		$OCAMLDEP -I $LIBDIR $SCAN > $DEPEND
 
 # ------------------------------------------------------------------ 
 # include dependencies
