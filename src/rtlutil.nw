@@ -41,6 +41,7 @@ to [[exp]].
 module Width: sig
     val loc:    Rtl.loc -> int
     val exp:    Rtl.exp -> int
+    val exp':   Rtl.Private.exp -> int
 end 
 @ 
 % ------------------------------------------------------------------ 
@@ -311,17 +312,18 @@ its implementation. We have to look it up for expressions that have an
 application on the outermost level.
 
 <<Width>>=
-let exp e = match Rtl.Dn.exp e with
-    | RP.Const(RP.Bool _)     -> assert false
+let exp' = function
+    | RP.Const(RP.Bool _)     -> Impossible.impossible "asked width of Boolean"
     | RP.Const(RP.Bits b)     -> Bits.width b
     | RP.Const(RP.Link (_,w)) -> w
     | RP.Const(RP.Late (_,w)) -> w
     | RP.Fetch(_,w)           -> w
     | RP.App (op,_)           -> 
         ( match snd (Rtlop.Types.mono (Rtl.Up.opr op)) with
-        | Types.Bits(n) -> n
-        | Types.Bool    -> assert false 
+        | Types.Bits n -> n
+        | Types.Bool   -> Impossible.impossible "asked width of Boolean operator"
         ) 
+let exp e = exp' (Rtl.Dn.exp e)
 @
 
 % ------------------------------------------------------------------ 

@@ -327,11 +327,13 @@ room they need.
 type operator_class = Register | Stack of push * int
 and  push = LeftFirst | RightFirst
 @ 
-For a particular machine, we need to know the class of each operator
-and the depth of the stack.
+For a particular machine, we need to know the class of each operator,
+the depth of the stack, and the width of a value that can be pushed on
+the stack.
 <<generic expansion operations for stack machines>>=
 val opclass : operator -> operator_class
 val stack_depth : int
+val stack_width : int
 @
 We can push a value from memory or pop the stack into memory.
 <<generic expansion operations for stack machines>>=
@@ -374,6 +376,7 @@ end
 module Nostack (Address : sig type t val reg : temp -> t end) = struct
   let opclass _ = Register
   let stack_depth = 0
+  let stack_width = 0
   let push ~addr _              = Impossible.impossible "stack op on register machine"
   let store_pop ~addr _         = Impossible.impossible "stack op on register machine"
   let push_cvt _ _ ~addr _      = Impossible.impossible "stack op on register machine"
@@ -803,6 +806,8 @@ and is_compile_time_constant = function
 and to_stack' room e =
   if room < 1 then
     Impossible.impossible "machine stack overflow in code generation";
+  if Rtlutil.Width.exp' e <> Post.stack_width then
+    Unsupported.stack_width ~have:(Rtlutil.Width.exp' e) ~want:Post.stack_width;
   match e with
   | RP.Const k -> to_segment (Post.pushk k)
   | RP.Fetch (RP.Mem ('m', agg, w, addr, assn), w') ->
@@ -844,6 +849,10 @@ and to_stack' room e =
 let is_not_rounding_mode arg = match arg with
 | RP.Fetch (loc, 2) -> proc.Proc.target.Target.rounding_mode <> Up.loc loc
 | _ -> true in
+<<junk>>=
+let insist_rounding_mode arg =
+  if is_not_rounding_mode arg then
+    Unsupported.soft_rounding_mode()
 <<other generic expander functions>>=
 and save_stack room =
   let number_to_push = Post.stack_depth - room in
@@ -971,10 +980,11 @@ and assign left right w =
         | <<\emph{pattern [[->]] action} for low-bit store>>
         | _ ->
             if looks_like_stack_rhs right then
-              let is = to_stack room right in
               (match right with
               | <<\emph{pattern [[->]] action} for converting store-pop>>
-              | _ -> is @@ is' @@ to_segment (Post.store_pop a (upassn assn)))
+              | _ -> 
+                  let is = to_stack room right in
+                  is @@ is' @@ to_segment (Post.store_pop a (upassn assn)))
             else
               match right with
               | RP.Fetch (RP.Mem('m', agg', w', addr', assn'), _) ->
