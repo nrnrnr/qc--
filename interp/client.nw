@@ -11,7 +11,7 @@ Additionally, a sample client implementation may be found at the bottom of this 
 
 The Quick~{\PAL} Interpreter is not a standalone application.
 Rather, it works in conjunction with a client (a front-end runtime system).
-The client must tell the interpreter which files to load as assembly units, which pieces of {\PAL} code to bundle up as ``thread''s, which threads to execute, etc.
+The client must tell the interpreter which files to load as assembly units, which pieces of {\PAL} code to bundle up as ``threads'', which threads to execute, etc.
 A client is responsible for creating the C function named [[main]].
 This is where control flow begins for the application; this function should drive the interpreter as it sees fit.
 
@@ -33,14 +33,21 @@ If given values of 0, [[Cmm_open]] will choose a non-zero, default size.
 int Cmm_open (int valstack_size, int argspace_size);
 @ 
 
-To register C functions with the interpreter so that they may be called from {\PAL} code, the interpreter exports function [[register_c_func]].
+To register a C function with the interpreter so it may be called from {\PAL} code, the interpreter exports function [[register_c_func]].
 A signature ([[sig]]) of a C function is a string containing a comma-delimited list of the C types of the function's arguments, followed by a colon and the the function's return type.
-An explicit [[void]] should be used in the case of nullary functions.
-For example, the signature for a C function that takes two [[int]]s and returns a [[double]] would be [["int,int:double"]].
+An explicit [[void]] should be used in the case of nullary functions, and 
+[[pointer]] should be used in place of all C pointer types.
+For example, the signature for a C function that takes an [[int]] and a [[struct some_struct *]] and returns a [[double]] would be [["int,pointer:double"]].
+This registration mechanism does not presently allow the use of compound name
+types (i.e., non-[[typedef]]'d [[union]] or [[struct]] types).
 
 <<available exported C functions>>=
 void register_c_func(const char *name, void *f, const char *sig);
 @ 
+
+Note that the only C function that may be registered as a varargs function with
+the interpreter is [[printf]], and it must registered with the special [[sig]]
+of: [["printf"]].
 
 % ----------------------------------------------------------------------------
 \paragraph{Loading Source Code}
@@ -54,7 +61,11 @@ Note that code cannot be interpreted until it has been loaded into memory.
 int load_assembly_unit (char *s, assembly_unit_type source_type);
 @ 
 
-[[source_type]] may either take on the value [[SRC_STRING]], [[SRC_FILE]], or [[SRC_STDIN]] to indicate whether [[s]] is the name of a file, a Lua source string itself, or a reference to [[stdin]].
+[[source_type]] may either take on the value [[SRC_STRING]] to indicate that
+[[s]] is a string of Lua source code, the value [[SRC_FILE]] to indicate that
+[[s]] is the name of a Lua file to be read in as source code, or the value 
+[[SRC_STDIN]] to indicate that Lua source code should be read in from
+[[stdin]].
 
 % ----------------------------------------------------------------------------
 \paragraph{Examining Source Code}
@@ -67,12 +78,16 @@ Note that this function will only find the code for which you are looking if it 
 Cmm_Dataptr cmm_find_export (const char *arg);
 @ 
 
-For debugging purposes, we also allow clients to disassemble previously loaded code.
-[[disassemble_instructions]] prints out a list of the bytecode instructions it finds stored in memory at a given location.
-To use this function, first call [[cmm_find_export]] to find the [[Dataptr]] associated with an exported {\PAL} label.
+For debugging purposes, we also allow clients to disassemble previously loaded
+code.
+[[disassemble_instructions]] disassembles the bytecode instructions it finds 
+stored in memory at a given location and outputs the instructions in readable
+format to a given file descriptor.
+To use this function, first call [[cmm_find_export]] to find the [[Dataptr]] 
+associated with an exported {\PAL} label.
 
 <<available exported C functions>>=
-void disassemble_instructions (Cmm_Dataptr loc);
+void disassemble_instructions (FILE *fd, Cmm_Dataptr loc);
 @ 
 
 % ----------------------------------------------------------------------------
@@ -93,11 +108,19 @@ void Cmm_close (void);
 \emph{For now, look at the {\PAL} manual.}
 
 % ----------------------------------------------------------------------------
-\implementation {A Sample Interpreter Client}
+\implementation{A Sample Interpreter Client}
 % ----------------------------------------------------------------------------
 
-Below is a sample client implentation; it should be useful for demonstration as well as testing.
-Its implementation is split across files [[client.h]] and [[client.c]].
+Below, we implement a sample interpreter client.
+The client has two modes: command-line mode and interactive mode.
+If the client is run with no command-line arguments, it enters interactive
+mode and allows the user to load interpreter assembly units, disassemble
+loaded units in memory, and run exported procedures from loaded assembly units.
+Otherwise, the client attempts to load all files specified on the command
+line, run {\PAL} procedure [[main]], and return to the system.
+
+The client's implementation is split across files [[client.h]] and 
+[[client.c]].
 
 <<client.h>>=
 #ifndef _CLIENT_H
@@ -130,8 +153,6 @@ Its implementation is split across files [[client.h]] and [[client.c]].
 <<interpreter interaction functions>>
 <<utility functions>>
 <<application driver>>
-
-<<linker>>
 @
 
 % ----------------------------------------------------------------------------
@@ -195,12 +216,14 @@ void     TCB_free(Cmm_TCB *tcb);
 <<utility functions>>=
 Cmm_TCB *TCB_new(void) {
   Cmm_Dataptr  data;
-  Cmm_TCB     *tcb = (Cmm_TCB *) malloc(sizeof(Cmm_TCB));
+  Cmm_TCB     *tcb = (Cmm_TCB *) malloc(sizeof(*tcb));
   assert(tcb != NULL);
 
-  tcb->stack_space       = (Cmm_Dataptr) malloc(stack_size * sizeof(*data));
+  tcb->stack_space      = (Cmm_Dataptr) malloc(stack_size * sizeof(*data));
   mem_assert(tcb->stack_space);
   tcb->stack_space_size = stack_size;
+
+  tcb->limit_cookie     = NULL;
 
   return tcb;
 }
@@ -327,13 +350,6 @@ The table below lists and explains the arguments supported.\\
 [[-h]] & lists and explains arguments supported
 \\\hline
 
-[[-o ]] $<filename>$ & links files listed on the command line, placing results
-in $<filename>$
-\\\hline
-
-[[-P]] $<interpPath>$ & specifies path to the interpreter
-\\\hline
-
 [[-v]] & turns verbosity ON
 \\\hline
 
@@ -368,55 +384,57 @@ extern int   opterr;
     int   i;
     int   c            = -1;
     int   files_loaded =  0;
-    char *link         = NULL;
-
-    char *interp_path  = "/usr/bin/env qc--interp";
 
     /* process options */
     opterr = 0;
     do {
+      <<process next command line option>>
+   } while (c != -1);
+
+    for (i = optind; i < argc; i++) {
+      <<load next source file specified on command line>>
+    }
+
+    if (files_loaded) {
+      <<attempt to run procedure [[main]]>>
+    }
+  }
+@ 
+<<load next source file specified on command line>>=
+      if (strcmp(argv[i], "-") == 0) {
+        files_loaded = !load_assembly_unit(NULL, SRC_STDIN) || files_loaded;
+      } else {
+		/* assume we're given a filename */
+		files_loaded = !load_assembly_unit(argv[i],SRC_FILE) || files_loaded;
+      }
+@ 
+
+Once files are loaded, we look for procedure [[main]] and try to run it.
+
+<<attempt to run procedure [[main]]>>=
+      /* if we're here, then we've loaded in files; let's run them now */
+      loc = cmm_find_export("main");
+      if (loc == NULL) {
+        fprintf(stderr, "error: cannot find procedure \"main\"\n");
+      } else {
+        int *arg_int_p = NULL;
+        <<run code at address [[loc]] with possible arg [[arg_int_p]]>>
+      }
+@ 
+
+Processing command line options is not very interesting if done with the
+help of [[getopt]].
+
+<<process next command line option>>=
       c = getopt(argc, argv, "hvo:P:");
 
       switch (c) {
         case 'h':
-          printf("Usage: %s {[--help] | [-] | [<filename>]*}\n", argv[0]);
-          printf("Interprets a C-- program as converted into Lua code\n");
-          printf("Enters interactive mode unless command line arguments are "
-                 "given.\n\n");
-
-          printf("  -h                Display this help screen\n");
-          printf("  -o <filename>     Link specified files into <filename>\n");
-          printf("  -P <interp_path>  Specifies path to the interpreter\n");
-          printf("  -v                Turns verbosity ON\n");
-          printf("  -                 Read source file from stdin\n");
-          printf("  <filename>*       Read in source files named\n");
-
+          <<print usage help information>>
           exit(0);
 
         case 'v':
           verbosity = 1;
-          break;
-
-        case 'o':
-          if (optarg == NULL) {
-            fprintf(stderr,"error: must specify output file with -o option\n");
-            exit(1);
-          } else if (link != NULL) {
-            fprintf(stderr, "error: cannot use -o option twice\n");
-            exit(1);
-          }
-          link   = optarg;
-          optarg = NULL;
-          break;
-
-        case 'P':
-          if (optarg == NULL) {
-            fprintf(stderr, "error: must specify interpreter path with -P "
-                            "option\n");
-            exit(1);
-          }
-          interp_path = optarg;
-          optarg      = NULL;
           break;
 
         case '?':
@@ -430,42 +448,21 @@ extern int   opterr;
         default:
           break;
       }
-    } while (c != -1);
+@ 
 
-    for (i = optind; i < argc; i++) {
-      if (strcmp(argv[i], "-") == 0) {
-        if (link == NULL) {
-          files_loaded = !load_assembly_unit(NULL, SRC_STDIN) || files_loaded;
-        } else {
-          fprintf(stderr, "error: linking from stdin not supported\n");
-          exit(1);
-        }
-      } else {
-        if (link == NULL) {
-          /* assume we're given a filename */
-          files_loaded = !load_assembly_unit(argv[i],SRC_FILE) || files_loaded;
-        } else {
-          /* link the files */
-          assert(argv[i] != NULL);
-          add_linked_file(link, interp_path, argv[i]);
-        }
-      }
-    }
+If [[-h]] is given as a command line option, we print to [[stdout]] a summary
+of the arguments this client takes on the command line.
 
-    if (files_loaded) {
-      /* if we're here, then we've loaded in files; let's run them now */
-      loc = cmm_find_export("main");
-      if (loc == NULL) {
-        fprintf(stderr, "error: cannot find procedure \"main\"\n");
-      } else {
-        int *arg_int_p = NULL;
-        <<run code at address [[loc]] with possible arg [[arg_int_p]]>>
-      }
-    } else {
-      /* close off linking output */
-      add_linked_file(link, interp_path, NULL);
-    }
-  }
+<<print usage help information>>=
+          printf("Usage: %s {[-h] | [-] | [<filename>]*}\n", argv[0]);
+          printf("Interprets a C-- program as converted into Lua code\n");
+          printf("Enters interactive mode unless command line arguments are "
+                 "given.\n\n");
+
+          printf("  -h                Display this help screen\n");
+          printf("  -v                Turns verbosity ON\n");
+          printf("  -                 Read source file from stdin\n");
+          printf("  <filename>*       Read in source files named\n");
 @ 
 
 % ----------------------------------------------------------------------------
@@ -586,11 +583,12 @@ To find a label, we call on [[cmm_find_export]].
 % ----------------------------------------------------------------------------
 
 Disassembling the bytecode for a sequence of instructions should yield the instructions originally encoded.
-For now [[disassemble_instructions]] sends all output to [[stdout]].
+For now we have [[disassemble_instructions]] send all output to [[stdout]].
+
 <<disassemble code at label [[arg]] (address [[loc]])>>=
   /* disassemble instructions */
   printf("BEGIN LABEL \"%s\" (<address %x>)\n\n", arg, (unsigned) loc);
-  disassemble_instructions(loc);
+  disassemble_instructions(stdout, loc);
   printf("\n[END CODE]\n");
 @
 
@@ -620,62 +618,3 @@ Creating and running a {\PAL} thread with a continuation to execute the code at 
 <<run continuation in [[tcb]]>>=
   tcb->cont = Cmm_RunThread(tcb->cont);
 @
-
-% ----------------------------------------------------------------------------
-\subsection{Linking}
-% ----------------------------------------------------------------------------
-
-Linking multiple Lua files is not too difficult.  Perhaps it shouldn't take 
-place here in [[client.nw]], but here it is for now.
-
-<<function prototypes>>=
-void add_linked_file(char *out_file, char *interp_path, char *in_file);
-@ 
-
-<<linker>>=
-void add_linked_file(char *out_file, char *interp_path, char *in_file) {
-  static FILE *output_stream = NULL;
-  
-  FILE *input_stream;
-  char  c;
-
-  /* close off I/O */
-  if (in_file == NULL) {
-    if (output_stream == NULL) return;
-    fflush(output_stream);
-    fclose(output_stream);
-
-    { int rc = chmod(out_file, S_IXUSR | S_IRUSR | S_IWUSR |
-                               S_IXGRP | S_IRGRP |
-                               S_IXOTH | S_IROTH            );
-      if (rc != 0) {
-        fprintf(stderr, "error: output file error\n");
-        exit(1);
-      }
-    }
-    return;
-  }
-
-  /* initialize output FILE descriptor */
-  if (output_stream == NULL) {
-    output_stream = fopen(out_file, "w");
-
-    fprintf(output_stream, "#!%s", interp_path);
-    fprintf(output_stream, "\n");
-  }
-
-  /* open input file */
-  input_stream = fopen(in_file, "r");
-  for (;;) {
-    c = getc(input_stream);
-    if (c == EOF) break;
-    putc(c, output_stream);
-  }
-  fclose(input_stream);
-
-  fprintf(output_stream, "\n");
-  fprintf(output_stream, "CMM.new_assembly_unit()");
-  fprintf(output_stream, "\n");
-}
-@ 
-

@@ -68,6 +68,14 @@ For example, the signature for a C function that takes two [[int]]s and returns 
 void register_c_func(const char *name, void *f, const char *sig);
 @ 
 
+Note that C functions may \emph{not} be registered with the interpreter as
+varargs functions (they could be restricted to a fixed number of arguments
+and thus registered)--with the exception of [[printf]].
+Because of the extreme usefulness of [[printf]], we provide this one varargs
+C function, but it must be specially registered.
+To register [[printf]], a call must be made to [[register_c_func]] with a
+[[sig]] of simply [["printf"]].
+
 Internally, we use separate helper functions for each type of C function signature we are willing to call from a {\PAL} program.
 To register these callers, we use the [[register_c_sig]] helper function.
  
@@ -82,7 +90,7 @@ void init_c_sigs(void);
 @ 
 
 % ----------------------------------------------------------------------------
-\implementation {Calling C Functions from {\PAL}}
+\implementation{Calling C Functions from {\PAL}}
 % ----------------------------------------------------------------------------
 
 <<ccall.c>>=

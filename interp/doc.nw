@@ -104,29 +104,19 @@
 
 I could probably remove \texttt{locals\_end} and \texttt{stackdata\_end} as local variables in function \texttt{run\_interp}; but they \emph{must} remain stored away in an \texttt{activation} record at all non-tail calls.
 
-How should floating-pt computation with rounding best be done?
-
 FIX FIX have to change [[ROTL]] and [[ROTR]] so they deal with the case when $d > x$.
 
 [[label_new]] does NOT copy its string argument; do NOT free anything you pass off to [[label_new]]!
 
 Use CII: maybe sequences to store closure pointers, check out Hanson's [[malloc]] interface (that allows debugging), maybe rings for the dead set, look at dvars and [[array_t]].
 
-Only procedures, declarations, and other sections may be in toplevel ``section.''
-
 Make clear that what I mean by an unnamed section is actually just the toplevel part of the assembly unit (i.e., declarations and procedures not in a section).
-
-Don't we have to free [[RBlock]]s when we've finished copying them?
 
 Consider making better use of the [[lua_State *]] in the [[table]] structure.
 
 Use ``higher-order'' macros to declare, define and register operator implementations (instead of the current [[#undef]] business).
 
-Document that tables sent to Lua function [[CMM_call]] (as call-site annotations) are used internally by the encoder/interpreter and that changing them would be dangerous.
-
 Do we have to handle [[never returns]] annotations?
-
-Do we need to make sure that continuations are not defined outside of procedures (by testing if [[curr_proc]] is [[NULL]])?
 
 Quote from manual: \emph{All separately compiled modules must have} identical \emph{top-level variable declarations}.
 
@@ -225,7 +215,8 @@ more complicated depths of the interpreter.
 \def\subpageref#1{\origsubpageref{int-#1}}
 \def\sublabel#1{\origsublabel{int-#1}}
 \let\interface\section
-\let\implementation \endinput
+\def\implementation#1{\endinput}  % if we don't do this, we end up with 
+                                  % trailing garbage in interfaces only section
 
 \input{features.inc}
 \input{types.inc}

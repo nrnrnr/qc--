@@ -27,12 +27,16 @@ A unique identifier is used to uniquely identify an activation frame; in
 
 We represent $uid$'s as indicated above: with a thread id and a frame id.  
 For ease of thread identification, we choose to actually make the thread id a pointer to the structure representing the current thread.
-The pointer is of type [[void *]] because of mutually recursive definition dependencies among types [[uid]] and [[thread]].
+Because of mutually recursive definition dependencies among types [[uid]] and
+[[thread]], we create field [[thread.uid]] as a pointer to an incomplete
+[[struct]] type.
 
 <<type definitions>>=
+struct thread;
+
 typedef struct {
-  void         *thread;
-  unsigned int  frame;
+  struct thread *thread;
+  unsigned int   frame;
 } uid;
 @ 
 
@@ -53,7 +57,7 @@ int    islive_uid(uid u);
 @ 
 
 % ----------------------------------------------------------------------------
-\implementation {Unique Identifiers for Activations}
+\implementation{Unique Identifiers for Activations}
 % ----------------------------------------------------------------------------
 
 <<uid.c>>=
