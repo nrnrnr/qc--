@@ -52,6 +52,29 @@ module I    = Lua.MakeInterp                            (* our interpreter *)
 @
 
 % ------------------------------------------------------------------ 
+\subsection{Interactive Lua-Interpreter}
+% ------------------------------------------------------------------ 
+
+For extreme-debugging an interactive session with the compiler's Lua
+interpreter might be helpful.
+
+<<main2.ml>>=
+let run_interactive state infile =
+    let rec loop n pfx =
+        let line = input_line infile in
+        if String.length line > 0 && 
+            String.get line (String.length line - 1) = '\\' then
+            loop n (pfx ^ String.sub line 0 (String.length line - 1) ^ "\n")
+        else
+        begin
+            ignore (I.dostring state (pfx ^ line ^ "\n"));
+            flush stdout; flush stderr;
+            loop (n+1) ""
+        end
+    in  try loop 1 "" with End_of_file -> ()
+@
+
+% ------------------------------------------------------------------ 
 \subsection{Command Line Processing}
 % ------------------------------------------------------------------ 
 
@@ -107,6 +130,10 @@ let main () =
                     ; loop args
                     )
                 | ["-e"] -> E.error usage
+                | ["-i"::args] -> 
+                    ( export_argv state args
+                    ; run_interactive state stdin
+                    )
                 | args -> export_argv state args
             in
                 ( ignore(I.dofile state "qc--.lua")     (* startup *)
@@ -181,6 +208,8 @@ qc-- - the quick c-- compiler
 
 B<qc--> [B<-e> I<command>] [B<-e> I<command>] [I<arg> I<arg> ...] 
 
+B<qc--> [B<-e> I<command>] [B<-e> I<command>] B<-i> [I<arg> I<arg> ...] 
+
 =head1 DESCRIPTION
 
 B<qc--> compiles C-- code. The compiler is still under development and
@@ -197,7 +226,7 @@ control B<qc-->. The few existing command line switches therefore
 control the Lua interpreter, rather than the compiler directly.
 
 Upon start-up B<qc--> reads the file B<qc--.lua> in the current
-directory and then starts processing the command line:
+directory and then processes command line options from left to right:
 
 =over
 
@@ -206,11 +235,19 @@ directory and then starts processing the command line:
 The I<command> is passed to the Lua interpreter and evaluated. This
 option can be used multiple times.
 
+=item B<-i> 
+
+Makes all remaining arguments in B<Sys.argv> available to the Lua
+interpreter and starts an I<interactive> session with the interpreter.
+It reads from stdin. Note that any B<-e> option after the first B<-i>
+option is I<not> processed but considered a generic argument that is
+passed in B<Sys.argv>.
+
 =item I<arg> ...
 
-After all B<-e> options have been processed remaining arguments are
-passed literally to the Lua interpreter. They are available as
-B<Sys.argv> in the Lua interpreter. 
+The first argument that is not any of the above options starts the
+sequence of generic arguments. They are passed literally in B<Sys.argv>
+to the Lua interpreter.
 
 =back
 
@@ -333,10 +370,10 @@ http://www.cs.princeton.edu/zephyr/ASDL/
 
 =head1 AUTHORS
 
-Christian Lindig <lindig@eecs.harvard.edu>, 
-Norman Ramsey <nr@eecs.harvard.edu>,
-Daniel Damian <damian@eecs.harvard.edu>,
-John Dias <dias@eecs.harvard.edu>,
+Christian Lindig <lindig@eecs.harvard.edu> 
+Norman Ramsey <nr@eecs.harvard.edu>
+Daniel Damian <damian@eecs.harvard.edu>
+John Dias <dias@eecs.harvard.edu>
 Jonathan D. Eddy <eddy@fas.harvard.edu>
 @
           
