@@ -16,9 +16,13 @@
 % l2h substitution forall forall
 % l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
 
-% ------------------------------------------------------------------ 
+% Unlike most other noweb files in this project, this document contains
+% several modules. Each module is presented in a section. For easier
+% visual and mechanical navigation sections are marked as below.
+
+% ################################################################## 
 \section{Abstract CFG Interface}
-% ------------------------------------------------------------------ 
+% ################################################################## 
 
 The dynamic part of a procedure is represented by a control flow
 graph:  nodes represent statements, and edges possible flow of control
@@ -44,7 +48,6 @@ module type S = sig
     <<signature S>>
 end
 @
-
 
 % ------------------------------------------------------------------ 
 \subsection{Shared Types}
@@ -219,9 +222,9 @@ val branch  : Rtl.Private.expr -> node -> node -> unode
 @
 
 
-% ------------------------------------------------------------------ 
+% ################################################################## 
 \section{CFG Implementation}
-% ------------------------------------------------------------------ 
+% ################################################################## 
 
 This module implements the abstract CFG interface and provides the
 lowest level implementation for the {\qcc} compiler.  Despite what the
@@ -253,6 +256,8 @@ module Make (T: TARGET): sig
     val init:       cfg -> init
     val stmts:      cfg -> (string -> string) -> Ast.stmt list
     
+    (* we will add some transformations here *)
+
 end with
     type init = string * Fenv.Clean.proc
 @
@@ -315,7 +320,7 @@ and  kind       = Deferred
                 | Jump              of Rtl.Private.expr * node list
                 | Cutto             of Rtl.Private.expr * cuts
                 | Return            of int * int
-                (* one successor *)
+                (* one default successor *)
                 | Entry             of node
                 | Call              of Rtl.Private.expr * node * cuts
                 | Assign            of Rtl.Private.rtl * node
@@ -834,11 +839,11 @@ let stmts cfg mangle =
 % ------------------------------------------------------------------ 
 
 This module implements some extras, which are announced in the
-interface.  This is polymorphic map that allows to attach informations
-to nodes.  The [[stmts]] function translates a [[cfg]] to a list of
-statements such that it can be visualized via pretty printing the
-{\AST}.  And [[init]] provides access to the value stored in a [[cfg]]
-when it is created.
+interface.  This includes a polymorphic map that allows to attach
+informations to nodes.  The [[stmts]] function translates a [[cfg]] to
+a list of statements such that it can be visualized via pretty
+printing the {\AST}.  And [[init]] provides access to the value stored
+in a [[cfg]] when it is created.
  
 
 <<module Make>>=
@@ -848,10 +853,161 @@ let stmts         = Export.stmts
 let init {init=i} = i
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Transformations}
+% ------------------------------------------------------------------ 
 
-% ------------------------------------------------------------------ 
+This section presents some semantic preserving transformations on
+control-flow graphs. 
+
+<<module Make>>=
+module type TRANS = sig
+    <<signature TRANS body>>
+end
+@
+
+The [[expand]] function expands a single node to a target specific
+sequence of nodes.  This function can only applied to the following
+kind of nodes:  [[goto]], [[jump]], [[cutto]], [[call]], [[branch]],
+and [[assign]].  Applying it to any other kind of node results in a
+assertion violation. 
+
+<<signature TRANS body>>=
+val expand: node -> Target.t -> (Rtl.rtl -> Rtl.rtl list) -> unit
+@
+
+<<module Make>>=
+module Trans = struct
+    <<module Trans body>>
+end
+@
+
+The [[replace]] function walks over a list [[ll]] and replaces every
+element [[x]] by [[y]].  In addition, the returned list is also
+reversed (which does no harm in this context).
+
+<<module Trans body>>=
+let replace x y ll =
+    let repl ll l = if l=x then y::ll else l::ll
+    in
+        List.fold_left repl [] ll
+@
+
+The expansion of a single node into a sequence of nodes is implemented
+as follows:
+
+\begin{itemize}
+\item A function [[expand_rtl]] expands a single {\rtl} into a list
+      of {\rtl}s. The single {\rtl} is taken from the node being
+      expanded. In case this node contains a [[Rtl.expr]] value, it is
+      converted to an {\rtl} using one of the [[target#mk*]] methods.
+      
+\item The last {\rtl} in the list returned by [[expand_rtl]] is used to
+      update the node being expanded. More precisely, the [[kind]] field
+      is updated using a [[target#match*]] function to translate the {\rtl}
+      to an expression if necessary.
+
+\item The rest of the returned {\rtl}s are translated into
+      assignment nodes, preceding the expanded node. This is
+      implemented by [[rtls2assigns]]; the predecessors of the top
+      assignment are the former predecessors of the expanded node.
+
+\item The original predecessors of the expanded node still link to it. 
+      Their successor links, which are part of their [[kind]] are
+      updated such that they link to the top assignment node. 
+      Updating the [[kind]] is implemented by [[subtscucc]]. 
+     
+\end{itemize}
+
+[[substsucc]] replaces in a [[node.kind]] references to ([[node]])
+[[x]] by [[y]] in a [[kind]]. 
+
+<<>>=
+let substsucc node x y = 
+    let substcuts cuts x y =
+        { cuts    = replace x y cuts.cuts
+        ; unwinds = replace x y cuts.unwinds
+        ; returns = replace x y cuts.returns
+        ; aborts  = cuts.aborts
+        } 
+    in node.kind <- match node.kind with
+        | Entry (x)             -> Entry (y)
+        | Goto  (e,ll)          -> Goto (e, replace x y ll)
+        | Branch (e,t,f)        -> Branch ( e
+                                          , (if t=x then y else t)
+                                          , (if f=x then y else f)
+                                          )
+        | Assign (rtl,next)     -> Assign(rtl,y)
+        | Jump (e,ll)           -> Jump(e, replace x y ll)
+        | Label (l,next)        -> Label(l,y) 
+        | Call (expr,n,cuts)    -> 
+            Call(expr, (if n = x then y else n), substcuts cuts x y)
+        | Cutto (expr,cuts)     -> Cutto(expr,substcuts cuts x y)    
+        | Exit                  -> assert false (* impossible *)
+        | Return (x,y)          -> assert false (* impossible *)
+        | Deferred              -> assert false (* impossible *)
+@
+
+The [[rts2assigns]] function takes a list of [[rtls]] and creates a
+sequence of [[assign]] nodes from them. The sequence's predecessors
+are [[pred]], its single successor [[succ]]. All new nodes get
+properties [[props]] assigned. The function returns the topmost node
+of the sequence.
+
+<<>>=
+let rtls2assigns props pred rtls succ =
+    let rec loop succ = function
+        | []     -> succ
+        | r::rr  -> 
+            ( let node = newNode (cfg_of succ) (Assign(r,succ)) props in
+              let _    = succ.pred <- [node] in
+                loop node rr
+            )
+    in
+        let top = loop succ rtls in
+        let _   = top.pred <- pred in
+            top
+@
+             
+Function [[expand]] expands a [[node]] by extracting its [[rtl]] and
+passing it to [[expand_rtl]] which returns a list of {\rtl}s. These
+are turned into a sequence of assignment nodes, except the last on,
+which is used to update [[node]]. The sequence of assignment nodes
+becomes the predecessor of [[node]].
+   
+<<>>=
+let expand node target expand_rtl = 
+    let rtl = match node.kind with
+        | Assign (rtl,next)     -> rtl
+        | Goto  (expr,ll)       -> target#mkGoto   expr
+        | Branch (expr,t,f)     -> target#mkBranch expr
+        | Jump (expr,ll)        -> target#mkJump   expr
+        | Call (expr,n,cuts)    -> target#mkCall   expr
+        | Cutto (expr,cuts)     -> target#mkCutto  expr
+        | _                     -> assert false (* can't expand *) in
+    match List.rev (expand_rtl rtl) with
+        | [ ]   -> assert false
+        | r::rr -> 
+            let kind =
+                ( match node.kind with
+                | Assign (rtl,next)     -> Assign (r,next)
+                | Goto  (expr,ll)       -> Goto   (target#matchGoto r,ll)
+                | Branch (expr,t,f)     -> Branch (target#matchBranch r,t,f)
+                | Jump (expr,ll)        -> Jump   (target#matchJump r,ll)
+                | Call (expr,n,cuts)    -> Call   (target#matchCall r,n,cuts)
+                | Cutto (expr,cuts)     -> Cutto  (target#matchCutto r, cuts)
+                | _                     -> assert false (* can't expand *) 
+                ) in
+            let top = rtls2assigns node.props node.pred rr node in
+                List.iter (fun n -> substsucc n node top) top.pred 
+@        
+
+
+
+
+% ################################################################## 
 \section{Lowering Copy-In and Copy-Out Nodes}
-% ------------------------------------------------------------------ 
+% ################################################################## 
 
 The flow graph of a procedure, as part of the assembly program emitted
 by the \module{ast2ir} module, contains so-called copy-in and copy-out

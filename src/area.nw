@@ -1,40 +1,64 @@
-The idea is to have some sort of ``area'' to use to compute the layout
-of the stack frame.  It's not yet clear what the interface should be,
-and especially, whether the data type should be functional or
-imperative.
 
-Here are some ideas (in imperative style)
 <<area.mli>>=
-type area
+type size       = int
+type align      = int
+type width      = int
+type name       = string (* link time constant *)
+type direction  = Up | Down
 
-(* primitive constructors *)
+module Loc: sig
+    type t
+        
+    val fetch: t -> width -> Rtl.Private.expr
+    val store: Rtl.Private.expr -> width -> t -> Rtl.Private.effect
+end
 
-val empty    : unit -> area
+module Dfa: sig
+    type t
+    val sparc_cmm:  t   (* sample dfa *)
+    
+    (* allocate memory *)
+    val ty:         t -> name -> size * string option -> Loc.t * t
+    val block:      t -> name -> size * align         -> Loc.t * t
+    
+    val align:      align (* requirement for base *)
+    val size:       size  (* currently allocated *)
+end
 
-(* from elsewhere:
-      val overflow : Automaton.t -> area 
-*)
+module Area: sig 
+    type t
+    
+    val create: name -> Dfa.t -> direction -> t
+    val reset: t -> Dfa.t -> t
 
+    val ty:    t -> size * string option -> Loc.t * t
+    val block: t -> size * align         -> Loc.t * t
 
-(* mutators *)
+    val size:  size   (* of area *)
+    val align: align  (* of base *)
+end
 
-  (* add an item to the end of an area; return its address *)
-  val append      : area -> size -> alignment -> Rtl.exp
+module CC: sig
+    type t
 
-  (* bind together two areas in an address relationship, create combined area *)
-  val overlayHigh : area -> area -> area
-  val overlayLow  : area -> area -> area
-  val concat      : area -> area -> area
+    val sparc:      t   (* sample cc *)
+    val name:       t -> string (* name of this cc *)
+    
+    val sp:         t -> Rtl.Private.location
+    val sp_align:   t -> align
+    val sp_grows:   t -> direction
 
-  (* the following mutators bind an area to an address *)
-  val bindLow     : area -> Rtl.exp -> unit
-  val bindHigh    : area -> Rtl.exp -> unit
+    val call:       t -> Dfa.t
+    val cont:       t -> Dfa.t
+    val ret:        t -> Dfa.t
+end
 
-  (* promise no more changes to the area *)
-  val freeze : area -> unit
+module Target: sig
+    type t
 
-
-(* observers, good for frozen areas only *)
-
-val size      : area -> int
-val alignment : area -> int
+    val name:           t -> string (* name of target *)
+    val byteorder:      t -> Rtl.aggregation
+    val wordsize:       t -> size
+    val pointersize:    t -> 
+end
+@

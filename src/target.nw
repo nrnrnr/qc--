@@ -95,6 +95,7 @@ method memsize:        int                     (* in bits, 8 typical   *)
 method float:          string                  (* "ieee754" typical    *)
 method charset:        string                  (* "latin1"  typical    *)
 method cc:             cc StrMap.t             (* calling conv by name *)
+method cc':            string -> cc            (* Error.ErrorExn      *)
 method globals:        Automaton.t             (* global reg alloc     *)
 method registers:      Rtl.Private.location StrMap.t   (* registers by name    *)
 @
@@ -108,11 +109,35 @@ target is compatible to the claims in the source file, and raises the
 method validate: Fenv.Clean.env -> bool
 @
 
+The code-generation phase translates generic [[branch]] or [[call]]
+nodes of the control flow graph (module \module{cfg})) into platform
+specific {\rtl}s.  Each target platform provides methods for this
+translation and an inverse function that recognizes the generated
+{\rtl}.  If a recogonzier ([[match]]\dots]) fails, an assertion failure
+will be raised because this is manifests an internal compiler error.
+
+<<>>=
+method mkGoto:          Rtl.expr -> Rtl.rtl
+method matchGoto:       Rtl.rtl  -> Rtl.expr    
+
+method mkJump:          Rtl.expr -> Rtl.rtl
+method matchJump:       Rtl.rtl  -> Rtl.expr
+
+method mkCutto:         Rtl.expr -> Rtl.rtl
+method matchCutto:      Rtl.rtl  -> Rtl.expr
+
+method mkCall:          Rtl.expr -> Rtl.rtl
+method matchCall:       Rtl.rtl  -> Rtl.expr
+
+method mkBranch:        Rtl.expr -> Rtl.rtl
+method matchBranch:     Rtl.rtl  -> Rtl.expr
+@
+
 % ------------------------------------------------------------------ 
-\subsubection{Dummy Target}
+\subsubsection{Dummy Target}
 % ------------------------------------------------------------------ 
 
-The [[dummy]] target is a fictious target to be used during
+The [[dummy]] target is a fictitious target to be used during
 development.  Its main characteristic is the the lack of
 sophistication, hence the name.
 
@@ -205,7 +230,17 @@ method registers =
             loop StrMap.empty 7
 @
 
+The method [[cc]] is bad because it reveals the implementation how
+calling conventions are stored. The following implementation [[cc']]
+provides what a client really needs: a lookup function for calling
+conventions. For compatibility bth [[cc]] and [[cc']] are provided, but
+[[cc]] is deprecated. 
 
+<<>>=
+method cc' name = 
+    try StrMap.find name (self#cc)
+    with Not_found -> Error.error ("unknown calling convention: "^name)
+@    
 
 The [[validate]] predicate just checks entries that can be checked and
 emits error messages if informations do not match.
@@ -234,3 +269,32 @@ method validate env =
         then    error "charset"
         else true
 @
+
+% ------------------------------------------------------------------ 
+\subsubsection{Making and Matching RTLs}
+% ------------------------------------------------------------------ 
+
+A platform description provides methods to construct and deconstruct
+platform specific {\rtl}s for some nodes in a control flow graph
+(module \module{cfg}). Since I have yet have to look up what a real
+platform does I'm am clueless what a dummy should do. The following
+methods are almost useless.
+
+<<>>=
+method mkGoto expr    = assert false
+method matchGoto rtl  = assert false
+
+method mkJump expr    = assert false
+method matchJump rtl  = assert false
+
+method mkCutto expr   = assert false   
+method matchCutto rtl = assert false    
+
+method mkCall         = assert false        
+method matchCall      = assert false    
+
+method mkBranch       = assert false    
+method matchBranch    = assert false    
+@
+
+

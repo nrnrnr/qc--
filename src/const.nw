@@ -1,5 +1,21 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
+\input{macros.tex}
+
+% l2h substitution dots ...
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
 % ------------------------------------------------------------------ 
 \section{Compile-time constants}
 % ------------------------------------------------------------------ 
@@ -11,19 +27,14 @@ We want to borrow the notion of ``link-time constant'' but use it for
 compile-time constants.
 
 <<const.mli>>=
-(* module Const *)
+val register : string -> int -> Rtl.expr
+  (* Creates a named value of a given width. The name is registered in
+     the interface such that it can be refined by calls to [[make_equal]].
+   *) 
 
-val gensym : string -> string
-  (* gensym s  returns a string that
-       (a) is not the name of any C-- identifier
-       (b) is not the name of any existing compile-time constant
-       (c) probably contains s (or some mangling of s)
-   *)
-
-val value : string -> Rtl.expr
+val lookup : string -> Rtl.expr
   (* Returns the RTL expression denoting the value of the constant
-     with the given name.  May create a new binding for this name if
-     the name is new to the interface.  Does *not* always return the
+     with the given name.  Does *not* always return the
      same value; for example, if the name gets bound to a constant,
      that may change the result returned by value. *)
 
@@ -35,7 +46,7 @@ val make_equal : Rtl.expr -> Rtl.expr -> unit
      two expressions does not lead to a binding.
 
      Expressions in the following forms are guaranteed to work:
-         make_equal (value s) (Rtl.Bits b)
+         make_equal (value s) (Rtl.bits b w)
          make_equal (value s) (value s')
 
      Note that after a call to [[make_equal (value s) (value s')]], we
@@ -43,3 +54,38 @@ val make_equal : Rtl.expr -> Rtl.expr -> unit
      not purely applicative but depends on the global state that is
      mutated by [[make_equal]]).
    *)
+@
+   
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The implementation uses an imperative hash table to record bindings in
+the implementation. 
+
+<<const.ml>>=
+let bindings = Hashtbl.create 500
+
+let register id width = 
+    let expr = Rtl.const (Rtl.linkconst id width) in
+        ( Hashtbl.add bindings id expr
+        ; expr 
+        )
+         
+let lookup id = 
+    try Hashtbl.find bindings id
+    with Not_found -> assert false
+
+exception Cannot_solve of Rtl.expr * Rtl.expr
+@
+
+The [[make_equal]] function is exremely limited: it can only be used
+to replace a link-time constant with another value.
+
+<<>>=
+let make_equal x y =
+    match Rtl.conv_expr x with
+    | Rtl.Private.Const (Rtl.Private.Link(id,w)) -> Hashtbl.add bindings id y
+    | _                                          -> raise (Cannot_solve(x,y))
+@
+
