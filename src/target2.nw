@@ -45,6 +45,10 @@ by names.  Calling conventions are not only selected at run-time, we
 also intend to construct them at run-time.  For the time being,
 however, we will rely on a fixed set of calling conventions.  
 
+% ------------------------------------------------------------------ 
+\subsection{Calling Convention}
+% ------------------------------------------------------------------ 
+
 A calling convention includes specifications for automata that
 implement calling conventions.  In {\PAL} parameters are passed in
 three different contexts:  into procedures, into continuations, and
@@ -69,6 +73,10 @@ error to ask for an unknown calling convention.
 cc: string -> cc; (* raises Error.Exn if name is unknown *)
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Bits and Pieces}
+% ------------------------------------------------------------------ 
+
 Many of the following characteristics of a target are more or less
 obvious.  A {\PAL} source can name hardware registers for variables. 
 The [[register]] component provides the location for a given name.  We
@@ -84,9 +92,40 @@ float:          string            ; (* "ieee754" float representation    *)
 charset:        string            ; (* "latin1"  character encoding      *)
 globals:        Automaton.spec    ; (* Automaton to allocate global vars *)
 register:       string -> Rtl.loc ; (* rtl for named hardware register   *)
-                                    (*XXX Register.t instead *)          
-                                      
+                                    (*XXX Register.t instead? *)          
 @
+
+A target has many address spaces:  main memory, different register
+sets, temporaries.  A [[Rtl.loc]] value describes a location within
+such a space.  Each space is homogeneous in the sense that all its
+cells have the same width.  When cells within one space are aggregated
+a common aggregation scheme is used, described by a space-specific
+[[Rtl.aggregation]] value.  The cells within a space are addressed by
+an integer expression denoting their \emph{address}.  All address
+expressions for a space share a common width.  For example, memory
+might by addressed by 32-bit wide addresses, registers by 5-bit wide
+addresses. 
+                
+The [[space]] function returns a description of a given space.  It is
+a checked run-time error to ask for the description of an unknown
+space.
+
+<<components of t>>=
+space:          Rtl.space -> Rtl.spacedescr;
+@
+
+\begin{quote}\it
+    Target properties like [[pointersize]], or [[memsize]] are just
+    properties of the [[m]] [[space]]. I like the more general idea
+    of address spaces but I'm not sure whether we should get rid of the
+    more specialized properties or should keep them as abbreviations.
+    The hole problem stems from the fact that I only over time begin
+    to understand what describes a target. --CL
+\end{quote}
+
+% ------------------------------------------------------------------ 
+\subsection{RTLs for the Control-Flow Graph}
+% ------------------------------------------------------------------ 
 
 The nodes in the control-flow graph (module \module{cfg}) contain
 target-specific {\rtl}s.  For example, a [[jump]] node takes an {\rtl}
@@ -110,6 +149,10 @@ call:           Rtl.exp map ;
 branch:         (Rtl.exp * Rtl.exp) map;
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Temporaries, Register Allocation}
+% ------------------------------------------------------------------ 
+
 The register allocator (see \module{linscan}) needs target-specific
 informations about hardware registers and temporaries. In particular:
 
@@ -130,34 +173,19 @@ allocatable:    Register.t list;
       register allocation on this platform.
 \end{itemize}
 
-
-A target has many address spaces:  main memory, different register
-sets, temporaries.  A [[Rtl.loc]] value describes a location within
-such a space.  Each space is homogeneous in the sense that all its
-cells have the same width.  When cells within one space are aggregated
-a common aggregation scheme is used, described by a space-specific
-[[Rtl.aggregation]] value.  The cells within a space are addressed by
-an integer expression denoting their \emph{address}.  All address
-expressions for a space share a common width.  For example, memory
-might by addressed by 32-bit wide addresses, registers by 5-bit wide
-addresses. 
-                
-The [[space]] function returns a description of a given space.  It is
-a checked run-time error to ask for the description of an unknown
-space.
+In general temporaries come in different widths, for example 8, 16,
+and 32 bit.  These belong to different spaces and only the target
+knows how they are related.  Therefore only the target can provide a
+function that creates new temporaries.
 
 <<components of t>>=
-space:          Rtl.space -> Rtl.spacedescr
+mk_tmp:         Register.t -> Register.t        (* Invalid_argument *)
 @
 
-\begin{quote}\it
-    Target properties like [[pointersize]], or [[memsize]] are just
-    properties of the [[m]] [[space]]. I like the more general idea
-    of address spaces but I'm not sure whether we should get rid of the
-    more specialized properties or should keep them as abbreviations.
-    The hole problem stems from the fact that I only over time begin
-    to understand what describes a target. --CL
-\end{quote}
+The function [[mk_tmp r]] creates a new temporary for register [[r]].
+A target typically supports temporaries only for certain registers
+widths. If [[r]] is not supported this is a check run-time error and
+[[Invalid_argument]] will be raised.
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
@@ -187,24 +215,58 @@ module CharUtil = MapUtil(CharMap)
 <<type map>>
 <<type cc>>
 <<type t>>
-<<dummy>>
+
+module D = struct
+    <<module D>>
+end
+
+let dummy = D.t
 @
 
-<<dummy>>=
+% ------------------------------------------------------------------ 
+\subsection{Dummy Target}
+% ------------------------------------------------------------------ 
 
+<<module D>>=
 let m = { embed   = (fun _ -> assert false)
         ; project = (fun _ -> assert false)
         }
 
 let spaces = CharUtil.list2map
-    [('m',{ R.cellwidth   =Dummy.wordsize
-          ; R.byteorder   =Dummy.byteorder 
-          ; R.addrwidth   =Dummy.pointersize
+    [('m',{ R.cellwidth   = Dummy.wordsize
+          ; R.byteorder   = Dummy.byteorder 
+          ; R.addrwidth   = Dummy.pointersize
+          })
+          
+    ;('t',{ R.cellwidth   = 32
+          ; R.byteorder   = Rtl.Identity
+          ; R.addrwidth   = 16
+          })
+    
+    ;('u',{ R.cellwidth   = 16
+          ; R.byteorder   = Rtl.Identity
+          ; R.addrwidth   = 16
+          })
+    
+    ;('v',{ R.cellwidth   = 8
+          ; R.byteorder   = Rtl.Identity
+          ; R.addrwidth   = 16
           })
     ]      
-          
-let dummy: t = 
-    { byteorder       = Dummy.byteorder
+    
+
+let tmp_counter = ref 0     
+
+let new_tmp (sp,index,width) =
+    incr tmp_counter;
+    match width with
+    | 8  -> ('v',!tmp_counter,width)
+    | 16 -> ('u',!tmp_counter,width)
+    | 32 -> ('t',!tmp_counter,width)
+    | _  -> invalid_arg "unsupported register width in target2.nw"
+    
+let t = 
+    { byteorder       = Dummy.byteorder         
     ; wordsize        = Dummy.wordsize
     ; pointersize     = Dummy.pointersize
     ; memsize         = Dummy.memsize
@@ -221,7 +283,8 @@ let dummy: t =
     ; fits            = (fun sp (sp',index,width) -> sp = sp')
     ; is_tmp          = (fun sp -> sp = 't')
     ; allocatable     = [] (* need something more sensible *)
-    ; space           = fun sp -> CharUtil.lookup spaces sp
+    ; space           = CharUtil.lookup spaces 
+    ; mk_tmp          = new_tmp 
     }
 @
         
