@@ -125,7 +125,7 @@ behaviors, the following name scheme is used:
 type cfg        
 type t = cfg                    (* Cfg.t looks JustBetter *)
 type node
-type locs                       (* locations for liveness analysis *)
+type locs = Register.Set.t      (* locations for liveness analysis *)
 
 (* abstract type for data inside nodes *)
 type property
@@ -142,7 +142,8 @@ val lookup:     cfg -> string -> node  (* never fails -- see description *)
 (* cfg observation, fold order unspecified *)
 val entry:      cfg -> node 
 val exit:       cfg -> node 
-val fold:       cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
+val fold_fwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
+val fold_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
 
 (* cfg traversal in linear order, requires (enumerated cfg)  *)
 val first:      cfg -> node (* wrt numbering *)
@@ -161,18 +162,16 @@ val gm_cutto:   cfg -> Rtl.rtl -> conts     -> node
 val gm_call:    cfg -> Rtl.rtl -> conts -> succ:node -> node
 val gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
 val gm_dummy:   cfg -> node
-val gm_dataflow: cfg -> def:locs -> use:locs -> kill:locs -> succ:node -> node
-@
+val gm_dataflow: cfg -> defs:locs -> uses:locs -> kills:locs -> succ:node -> node
 
-% pulled out here
-% add linear sequence of assign nodes to cfg, ensures: not (enumerated cfg
-% val gm_copyin:  cfg -> formal list -> Alloc.Reg.t -> succ:node -> node * Alloc.Reg.t
-% val gm_copyout: cfg -> actual list -> Alloc.Reg.t -> succ:node -> node * Alloc.Reg.t
-%
-<<types and ops>>=
+(* obsolete and deprecated
+ * add linear sequence of assign nodes to cfg, ensures: not (enumerated cfg
+ * val gm_copyin:  cfg -> formal list -> Alloc.Reg.t -> succ:node -> node * Alloc.Reg.t
+ * val gm_copyout: cfg -> actual list -> Alloc.Reg.t -> succ:node -> node * Alloc.Reg.t
+ *)
 
 (* cfg mutators, ensures: not (enumerated cfg) *)
-val gm_redirect_all:            node -> olddst:node -> newdst:node -> unit
+val gm_redirect_all:            src:node -> olddst:node -> newdst:node -> unit
 val gm_insert_assign_before:    Rtl.rtl -> node -> unit (* any node   *)
 val gm_insert_assign_after:     Rtl.rtl -> node -> unit (* see descr! *)
 val gm_insert_assign_between:   Rtl.rtl -> src:node -> dst:node -> unit
@@ -185,13 +184,13 @@ val succ:       node -> node list
 val pred:       node -> node list
 val property:   node -> property
 val number:     node -> int             (* pre: enumerated cfg *)
-val defines:    node -> locs            (* locs defined by node *)
+val defs:       node -> locs            (* locs defined by node *)
 val uses:       node -> locs            (* locs used by node    *)
 val kills:      node -> locs            (* locs killed by node  *)
 
 (* node mutators *)
 val set_rtl:        node -> (Rtl.rtl -> Rtl.rtl) -> unit
-val set_property:   node -> property list -> unit 
+val set_property:   node -> property -> unit 
 @
 
 % ------------------------------------------------------------------ 
@@ -247,11 +246,21 @@ The {\cfg}'s unique exit node.
 % ------------------------------------------------------------------ 
 
 \begin{itemize}
-\item [[fold: cfg -> (node -> 'a -> 'a) -> 'a -> 'a]]:
+
+\item 
+\begin{verbatim}
+fold_fwd: cfg -> (node -> 'a -> 'a) -> 'a -> 'a
+fold_bwd: cfg -> (node -> 'a -> 'a) -> 'a -> 'a
+\end{verbatim}
+
 Traverses the graph in \emph{unspecified} order and passes each
 [[node]] and an intermediate result [['a]] to the function [[f]] that
 is supplied as the second argument.  It is an \emph{unchecked}
-run-time error if [[f]] calls a graph mutator.
+run-time error if [[f]] calls a graph mutator.  The forward-folding
+function [[fold_fwd]] traverses the graph such that the majority of
+edges are followd in control-flow direction, the backward-folding
+function [[fold_bwd]] such that most edges are followed in reverse
+control-flow direction.
 \end{itemize}
 
 All traversal functions below rely on and respect a numbering that
@@ -430,7 +439,7 @@ absent.
 
 \item 
 \begin{verbatim}
-defines:    node -> Rtl.loc list    
+defs:       node -> Rtl.loc list    
 uses:       node -> Rtl.loc list    
 kills:      node -> Rtl.loc list    
 \end{verbatim}

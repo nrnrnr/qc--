@@ -29,6 +29,7 @@ be passed at run-time (rather than by a module, which can not).
 
 <<target2.mli>>=
 <<type cc>>
+<<type map>>
 <<type t>>
 val dummy: t        (* our only target for now *)
 @
@@ -54,14 +55,14 @@ specifications exist.
 type cc =      
     { sp:       Rtl.loc           (* stack pointer                             *)
     ; return:   Rtl.rtl           (* return machine instr passed to Cfg.return *)
-    ; proc:     Alloc.Reg.spec    (* call a proc                        *)
-    ; cont:     Alloc.Reg.spec    (* call a continuation                *)
-    ; ret:      Alloc.Reg.spec    (* return values                      *)
+    ; proc:     Automaton.spec    (* pass parameter to a procedure      *)
+    ; cont:     Automaton.spec    (* pass parameter to a contunation    *)
+    ; ret:      Automaton.spec    (* return values                      *)
     }
 @
 
 To obtain a calling convention, pass its name to the [[cc]] component
-which will return ithe concention response.  It is a checked run-time
+which will return the convention response.  It is a checked run-time
 error to ask for an unknown calling convention.
 
 <<components of t>>=
@@ -81,33 +82,31 @@ pointersize:    int               ; (* bits *)
 memsize:        int               ; (* smallest addressable unit, typically 8 *)
 float:          string            ; (* "ieee754" float representation    *)
 charset:        string            ; (* "latin1"  character encoding      *)
-globals:        Alloc.Reg.spec    ; (* Automaton to allocate global vars *)
+globals:        Automaton.spec    ; (* Automaton to allocate global vars *)
 register:       string -> Rtl.loc ; (* rtl for named hardware register   *)
 @
 
 The nodes in the control-flow graph (module \module{cfg}) contain
 target-specific {\rtl}s.  For example, a [[jump]] node takes an {\rtl}
 and not an expression for the target.  The construction of these
-{\rtl}s is target specific and so we provide functions that allows to
-do it.
+{\rtl}s is target specific and so we provide [[embed]] functions that
+allows to do it.  For debugging of the {\cfg} we also like to
+re-construct the expressions from these {\rtl}s.  We provide matching
+[[project]] functions to obtain the original expressions \emph{if the
+supplied {\rtl}s} were constructed by the construction functions.  Any
+attempt to do otherwise results in an unchecked run-time error. 
 
-For debugging of the {\cfg} we also like to re-construct the
-expressions from these {\rtl}s.  We provide matching functions to
-obtain the original expressions \emph{if the supplied {\rtl}s} were
-constructed by the construction functions}.  Any attempt to do
-otherwise is considered an internal error.
+<<type map>>=
+type 'a map =   { embed:    'a -> Rtl.rtl
+                ; project:  Rtl.rtl -> 'a
+                }
 
 <<components of t>>=
-mkGoto:         Rtl.exp -> Rtl.rtl ;
-matchGoto:      Rtl.rtl -> Rtl.exp ;
-mkJump:         Rtl.exp -> Rtl.rtl ;
-matchJump:      Rtl.rtl -> Rtl.exp ;
-mkCutto:        Rtl.exp -> Rtl.rtl ;
-matchCutto:     Rtl.rtl -> Rtl.exp ;
-mkCall:         Rtl.exp -> Rtl.rtl ;
-matchCall:      Rtl.rtl -> Rtl.exp ;
-mkBranch:       Rtl.exp -> Rtl.rtl ;
-matchBranch:    Rtl.rtl -> Rtl.exp ;
+goto:           Rtl.exp map ;
+jump:           Rtl.exp map ;
+cutto:          Rtl.exp map ;
+call:           Rtl.exp map ;
+branch:         (Rtl.exp -> Rtl.loc) map;
 @
 
 % ------------------------------------------------------------------ 
@@ -119,7 +118,7 @@ to implement lookup tables for registers and calling conventions.
 
 <<target2.ml>>=
 module StrMap = Map.Make(struct type t=string let compare=compare end)
-
+<<type map>>
 <<type cc>>
 <<type t>>
 <<dummy>>
@@ -130,11 +129,14 @@ let lookup map key =
     try  StrMap.find key map 
     with Not_found -> Impossible.impossible ("Target.lookup "^key^" not found")
 
-
 let list2map assoc =
     let add map (key,value) = StrMap.add key value map in
     List.fold_left add StrMap.empty assoc  
 
+let m = { embed   = (fun _ -> assert false)
+        ; project = (fun _ -> assert false)
+        }
+    
 let dummy: t = 
     { byteorder       = Dummy.byteorder
     ; wordsize        = Dummy.wordsize
@@ -142,18 +144,13 @@ let dummy: t =
     ; memsize         = Dummy.memsize
     ; float           = Dummy.float
     ; charset         = Dummy.charset
-    ; globals         = Alloc.Reg.dummy
+    ; globals         = Automaton.dummy
     ; register        = lookup StrMap.empty (* no registers *)
-    ; mkGoto          = (fun _ -> Impossible.unimp "target.dummy")
-    ; matchGoto       = (fun _ -> Impossible.unimp "target.dummy")
-    ; mkJump          = (fun _ -> Impossible.unimp "target.dummy")
-    ; matchJump       = (fun _ -> Impossible.unimp "target.dummy")
-    ; mkCutto         = (fun _ -> Impossible.unimp "target.dummy")
-    ; matchCutto      = (fun _ -> Impossible.unimp "target.dummy")
-    ; mkCall          = (fun _ -> Impossible.unimp "target.dummy")
-    ; matchCall       = (fun _ -> Impossible.unimp "target.dummy")
-    ; mkBranch        = (fun _ -> Impossible.unimp "target.dummy")
-    ; matchBranch     = (fun _ -> Impossible.unimp "target.dummy")
+    ; goto            = m
+    ; jump            = m
+    ; cutto           = m
+    ; call            = m
+    ; branch          = m
     ; cc              = lookup StrMap.empty
     }
 @

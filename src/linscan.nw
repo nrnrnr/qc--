@@ -33,7 +33,7 @@ Liveness analysis provides the accurate lifetime of each registers.
 The register allocator tries to map temporary registers to hardware
 registers such that their lifetimes do not interfere.  If the number
 of available hardware registers is too small to map temporary
-registers the register allocator runs out registers.  The solution is
+registers, the register allocator runs out registers.  The solution is
 to store some temporaries in memory and re-load them to a hardware
 register only when they are needed; this is called \emph{spilling}.
 
@@ -72,7 +72,7 @@ module type Args = sig
         (* create an assignment rtl that transfers a value from src to dst *)
     val mkMem:      Register.t -> Rtl.loc
         (* create a new spill slot for a register. Incomplete - will 
-           use Automaton.t *)
+           use Area.builder that maintains stack slots *)
 end
 @
 
@@ -80,7 +80,12 @@ Module type [[S]] summarizes the functionality we implement and export
 for clients.  
 
 <<exported module types>>=
-module type G = Cfg3.S with type locs = Register.Set.t
+module type G = sig
+    include Cfg3.S
+
+    val get_live: node -> locs          (* access to live sets *)
+    val set_live: node -> locs -> unit
+end
 
 <<linscan.mli>>=
 <<exported module types>>
@@ -129,13 +134,9 @@ module Make (A: Args) (G: G) = struct
     type lifetimes  = LT.t RM.t  (* lt *)  (* map from register to its lifetimes *)
     type loc        = Register.t    
  
-
-    (* extract live set from a node *)
-    let live (node: G.node) = assert false 
-
     <<compute lifetimes>>
     
-    module A = A open A (* never do that *)
+    module A = A open A (* never do that, but NR did *)
     let lookup table x = RM.find x table       (* lookup lifetime *)
 
     <<find tmp>>
@@ -218,7 +219,7 @@ let lifetimes cfg lt =
     let domain map  = RM.fold (fun key _ list -> key::list) map [] in
     let scan node (oldset, state) =
         let point   = G.number node                                in
-        let set     = live node                                    in
+        let set     = G.get_live node                              in
         let opening = RS.diff set oldset                           in
         let closing = RS.diff oldset set                           in
         let state   = open_regs  point (RS.elements opening) state in
@@ -248,7 +249,7 @@ interface.  The heart of the implementation is the functor [[Make]]
 with code to
 
 \begin{enumerate}
-\item find a temporary in a node that need to be placed into a register,
+\item find a temporary in a node that needs to be placed into a register,
 \item find a hardware register to accommodate a temporary,
 \item find a register to spill (if we are stuck),
 \item allocate registers for an entire {\cfg}, using the building
@@ -308,7 +309,7 @@ entire {\cfg}. However, if no [[r]] can be found, we must spill:
 let replace tmp reg      = fun t -> if t = tmp then reg else t
 
 let replace_tmp node tmp lifetimes success spill =
-  let iter cfg f = G.fold cfg (fun node () -> G.set_rtl node f) () in
+  let iter cfg f = G.fold_fwd cfg (fun node () -> G.set_rtl node f) () in
   let lifetime   = lookup lifetimes in
   let cfg         = G.cfg node    in
   match find_reg lifetimes tmp with
@@ -413,7 +414,7 @@ registers and spill the one that ends last.
 Registers currently in use, or \emph{active}, are those whose
 lifetime's bounding box overlaps with the current node.  This is a
 superset of all nodes used by the current node.  The function
-[[longest_active]] computes the node, lifetime pair who is used
+[[longest_active]] computes the node/lifetime pair that is used
 longest in the program.  This is our spill candidate and we want to
 spill it from the current node up to the end of the procedure.
 

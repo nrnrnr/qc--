@@ -23,9 +23,12 @@
 % ------------------------------------------------------------------ 
 
 Liveness analysis determines for every node in a flow graph (see
-module \module{cfg3}) the set of variables that will be used in any of
-its succeeding nodes.  This set of variables is called the \emph{live
-set}.  Since nodes use and define variables, liveness is actually only
+module \module{cfg3}) the set of locations that will be used in that
+node or any of its successors.  More formally a location $x$ is live
+before a node $n$, if and only if $x$ is \emph{used} by $n$ or there
+exists a path to a node that uses $x$ without crossing a definition or
+kill of $x$.  A set of live variables is called the \emph{live set}. 
+Since nodes use, define, and kill variables, liveness is actually only
 defined \emph{between} adjacent notes.  Therefore, the set of live
 variables associated with each node in a control flow graph denotes
 the variables that are live \emph{before} the node at hand.
@@ -37,9 +40,16 @@ the variables that are live \emph{before} the node at hand.
 The [[liveness]] function annotates the nodes in a control-flow graph
 [[cfg]] with the set of live registers \emph{before} that node.
 
+<<CFG>>=
+module type CFG = sig
+    include Cfg3.S
+    val get_live: node -> locs          (* access to live sets *)
+    val set_live: node -> locs -> unit
+end
+
 <<live.mli>>=
-module Make(G: Cfg3.S with type locs = Register.Set.t
-           ) : sig
+<<CFG>>
+module Make(G: CFG): sig
     val liveness: G.t -> unit
 end
 @
@@ -49,29 +59,13 @@ end
 % ------------------------------------------------------------------ 
 
 
+
 <<live.ml>>=
-module Make (G: Cfg3.S with type locs = Register.Set.t) = struct
+<<CFG>>
+module Make (G: CFG) = struct 
     module R = Register.Set
     <<struct Make>>
 end
-@
-
-The set of live variables of a node are basically the union of live
-variables from its successors.  The [[union]] function unites a list
-of sets.
-
-<<struct Make>>=
-let (union: Register.Set.t list -> Register.Set.t) = 
-        List.fold_left R.union R.empty            
-@
-
-Nodes in the control-flow graph {\cfg} carry mutable properties which
-include a set of register live before that node.  The following
-functions allow to read and write this set.
-
-<<struct Make>>=
-let get_live (node:G.node)                      = assert false
-let set_live (node:G.node) (set:Register.Set.t) = assert false
 @
 
 The [[live]] function computes the set of registers live \emph{before}
@@ -83,17 +77,18 @@ details depend on the kind of [[node]].
 
 \begin{itemize}
 \item A variables live after the node are also live before it,
-\item minus the variables that are written by the rtl,
-\item plus the variables that are read by the rtl.
+\item minus the variables that are defined by the rtl,
+\item minus the variables that are killed by the rtl,
+\item plus the variables that are used by the rtl.
 \end{itemize}
 
-\begin{quote}\it
-    What is the difference of \emph{def} and \emph{kill} from the
-    liveness analysis point of view. It seems that both define a
-    location but in the case of a kill the value is unknown. However,
-    the value does not matter for liveness analysis which would make
-    them equivalent. --CL
-\end{quote}
+% \begin{quote}\it
+%     What is the difference of \emph{def} and \emph{kill} from the
+%     liveness analysis point of view. It seems that both define a
+%     location but in the case of a kill the value is unknown. However,
+%     the value does not matter for liveness analysis which would make
+%     them equivalent. --CL
+% \end{quote}
 
 $$\mathit{live} = 
     ( \mathit{after} 
@@ -101,36 +96,36 @@ $$\mathit{live} =
     ) \cup \mathit{used}
 $$
 
+<<struct Make>>=
+let rec live: G.node -> Register.Set.t = fun node -> 
+    let defs         = G.defs    node                      in
+    let uses         = G.uses    node                      in
+    let kills        = G.kills   node                      in
+    let live         = Register.Set.diff (after node) defs in
+    let live         = Register.Set.diff live kills        in 
+        Register.Set.union live uses
+@
+
 The [[after]] function computes the union of the live sets of a node's
 successors.
 
 <<struct Make>>=
-let rec after node = union (List.map live (G.succ node)) 
-@
-
-Nodes report the locations they use, define, and kill.
-
-<<struct Make>>=
-and live: G.node -> Register.Set.t = fun node -> 
-    let defs         = G.defines node                      in
-    let uses         = G.uses    node                      in
-    let kills        = G.kills   node                      in
-    let live         = Register.Set.diff (after node) defs in
-    let live         = Register.Set.diff live kills        in (*XXX*)
-        Register.Set.union live uses
+and after node = 
+    List.fold_left (fun set x -> R.union (G.get_live x) set) R.empty
+                   (G.succ node)
 @
 
 Computing the live sets of a control-flow graph (\cfg) is a fix-point
 problem:  you have to do it as long as doing so changes the result. 
 After computing a new live set for a node we compare it to the set
-currently stored in the node.  If both differ the mutable
-[[changed]] flag is set.  
+currently stored in the node.  If both differ the mutable [[changed]]
+flag is set. 
 
 <<struct Make>>=
 let process changed node =
     let l = live node in
-        if l <>  get_live node then
-            ( changed := true; set_live node l )
+        if l <>  G.get_live node then
+            ( changed := true; G.set_live node l )
         else
             ()
 @
@@ -138,13 +133,14 @@ let process changed node =
 The [[process]] function, which updates the live set of a node, is
 repeatedly applied to all nodes in [[cfg]].  This is done until
 [[process]] does not change any live set which means the fix point is
-reached.  We use [[G.fold]] to implement an iteration function
-[[iter]] over the nodes of a {\cfg}. 
+reached.  We use [[G.fold_bwd]] to implement an iteration function
+that iterates mostly backwards (reverse control-flow direction) over
+the {\cfg}.
 
 <<struct Make>>=
 let liveness cfg =
     let changed = ref false                                in
-    let iter cfg f = G.fold cfg (fun node () -> f node) () in
+    let iter cfg f = G.fold_bwd cfg (fun node () -> f node) () in
     let rec loop () = 
         ( changed := false
         ; iter cfg (process changed) 
