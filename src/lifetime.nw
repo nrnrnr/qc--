@@ -1,0 +1,315 @@
+
+\input{macros.tex}
+                        
+\ifx\asdl\undefined     \def\asdl{{\small ASDL}}   \fi
+\ifx\qcc\undefined      \def\qcc{{\small QC--}}    \fi
+\ifx\noweb\undefined    \def\noweb{{\small NOWEB}} \fi
+\ifx\ocaml\undefined    \def\ocaml{{\small OCAML}} \fi
+\ifx\rtl\undefined      \def\rtl{{\small RTL}}     \fi
+\ifx\ir\undefined       \def\ir{{\small IR}}       \fi
+\ifx\AST\undefined      \def\AST{{\small AST}}     \fi
+\ifx\cfg\undefined      \def\cfg{{\small cfg}}     \fi
+
+% ------------------------------------------------------------------ 
+\section{Variable Lifetimes}
+% ------------------------------------------------------------------ 
+
+Liveness analysis determines for every node in a control-flow graph
+the set of life registers.  Register allocation needs a global
+perspective on the liveness of variables in a procedure.  This module
+provides intervals over ordered points to model a region where a
+particular variable is live, and defines the lifetime of a variable to
+be a \emph{disjoint} set of intervals.
+
+The implementation is a functor [[Make]] that takes the a [[Point]]
+module as parameter and returns a module of type [[S]].  detailed
+below.
+
+<<lifetime.mli>>=
+<<module type POINT>>
+<<module type S>>
+module Make (Point: POINT): (S with type point = Point.t)
+@
+
+Module type [[S]] describes the result of the [[Make]] functor. Since
+we habe repreat it in the implementation we make it a named code chunk
+such that we can re-use it later.
+
+<<module type S>>=
+module type S = sig 
+    <<type S sig>>
+end
+@
+
+Points must be ordered and in addition provide a single point
+[[zero]].  This is used to define an empty interval.  This module type
+too is in a named code chunk that be be referred to in the
+implementation. 
+
+<<module type POINT>>=
+module type POINT = sig
+    type t
+    val compare: t -> t -> int
+    val zero: t
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Intervals}
+% ------------------------------------------------------------------ 
+
+An interval $[x,y)$ over ordered points represents a set of points $\{
+p \mid x \leq p < y \}$.  Non-empty intervals can precede or overlap
+each other; an empty interval never overlaps or precedes any other. 
+The implementation of [[mk]] $x$ $y$ returns an [[empty]] value in any
+of the following cases:
+
+\begin{enumerate}
+\item $x > y$
+\item $x \leq \mathit{zero}$
+\item $y \leq \mathit{zero}$
+\end{enumerate}
+
+<<type S sig>>= 
+type point
+
+module Interval: sig
+    type t
+    (* primitives *)
+    val empty: t
+    val mk: point -> point -> t  (* note conditions above *) 
+    (* observers *)
+    val overlaps: t -> t -> bool
+    val precedes: t -> t -> bool
+end
+@
+
+The following algebraic laws explain the interaction between the
+different functions. Unlike in the implementation, [[mk]] never
+creates an [[empty]] value.
+
+\begin{quote}\obeylines\obeyspaces\tt 
+precedes empty \_ = false
+precedes \_ empty = false
+overlaps empty \_ = false
+
+precedes (mk \_ y) (mk x \_) = y $\leq$ x
+
+overlaps x y  = overlaps x y
+overlaps (mk x y) (mk v w) = $\neg$ (precedes (mk x y) (mk v w) 
+                             $\vee$ precedes (mk v w) (mk x y))
+\end{quote}
+
+% ------------------------------------------------------------------ 
+\subsection{Lifetimes}
+% ------------------------------------------------------------------ 
+
+The lifetime of a variable in a procedure is not continuous, but has
+holes in it. Therefore, the lifetime of a variable is modeled as a set
+of non overlapping (i.e. disjoint) intervals. 
+
+A lieftime is either empty, or created from an interval. The boundig
+box [[bbox]] provides an approcimation of a lifetime by returning the
+smallest interval a lifetime fits in completely. Two lifetimes $x$
+and $y$ can be joined into a new one [[union x y]], if the following
+condition is met: 
+        
+$$[[overlaps (bbox x) y = false]]$$
+
+This guarantees that [[y]] contains a whole big enough to hold the
+entire lifetime of [[x]].  Trying to join overlapping lifetimes leads
+to an checked run-time error. 
+
+\begin{quote}\it
+    I believe that it is sufficient for two lifetimes not to overlap
+    in order to form a meaningful union. This would lead to a
+    symmetrical [[union]] operation. --CL
+\end{quote}
+
+<<type S sig>>=
+module Lifetime: sig
+    type t
+    (* primitives *)
+    val empty: t
+    val mk: Interval.t -> t     (* mk Interval.empty = empty *)
+    (* constructors *)
+    val union: t -> t -> t      (* see text for assertion *)
+    (* observers *)
+    val overlaps: Interval.t -> t -> bool
+    val bbox: t -> Interval.t
+end
+@
+
+The following rules apply; the algebra below assumes that [[mk]] does
+not create an empty lifetime (which is not true for the
+implementation).
+
+\begin{quote}\obeylines\obeyspaces\tt 
+union empty x     = x
+union x empty     = x
+mk (bbox empty)   = empty
+overlaps \_ empty = false
+overlaps i (union x y) = (overlaps i x) $\vee$ (overlaps i y)
+overlaps i (mk j) = Interval.overlaps i j
+bbox (union x y)  = smallest interval containing (bbox x) 
+                    and (bbox y)
+bbox (mk i)       = i
+bbox (empty)      = Interval.empty
+\end{quote}
+
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation of Intervals}
+% ------------------------------------------------------------------ 
+
+The implementation must repeat the module types from the interface. 
+For convenience, [[Order]] provides the common set of binary relation
+operators for points.  The real implementation happens in the body of
+[[Make]], and the bodies of [[Interval]] and [[Lifetime]] in
+particular.
+ 
+<<lifetime.ml>>=
+<<module type POINT>>
+<<module type S>>
+module Make (Point: POINT) = struct
+    type point = Point.t
+    module Order = struct
+        let eq x y  = (Point.compare x y) = 0
+        let lt x y  = (Point.compare x y) < 0 
+        let gt x y  = (Point.compare x y) > 0
+        let le x y  = lt x y || eq x y
+        let ge x y  = gt x y || eq x y
+    end
+    module Interval = struct
+        <<module Interval struct>>
+    end
+    module Lifetime = struct
+        <<module Lifetime struct>>
+    end 
+end
+@
+
+
+An non-empty interval is a pair of two points, where the first component is
+smaller than the second:  $(x,y)$ where $x \leq y$.  An empty interval
+is represented by the special interval $(0,0)$. The [[mk]] function
+establishes the invariant, that an interval is either $(0,0)$, or
+$(x,y)$ where $x \leq y$.
+
+<<module Interval struct>>=
+type t  = Point.t * Point.t
+type t' = t
+
+let empty     = (Point.zero,Point.zero)
+let isempty t = t = empty  
+    
+let mk x y = match x, y with
+    | x, y when Order.gt x y          -> empty
+    | x, y when Order.le x Point.zero -> empty
+    | x, y when Order.le y Point.zero -> empty
+    | _                               -> (x,y)
+@
+
+To order intervals, they are compared by their first component first
+and then by their second. 
+
+<<module Interval struct>>=
+let cmp (x1,y1) (x2,y2) = match Point.compare x1 y1, Point.compare x2 y2 with
+    | 0,x -> x
+    | x,_ -> x
+@
+
+Two intervals overlap, if an end point falls onto an end point of the
+other interval or into it.  Empty intervals never overlap.
+
+<<module Interval struct>>=
+let overlaps i1 i2 = match i1, i2 with
+    | i1     , i2  when isempty i1 || isempty i2 -> false
+    | (x1,y1), (x2,y2)  -> (Order.le x2 x1 && Order.lt x1 y2) ||
+                           (Order.le x2 y1 && Order.lt y1 y2)
+@
+
+An interval $(x_1,y_1)$ precedes another one $(x_2,y_2)$ if they don't
+overlap and $y_1 \leq x_2$ or $y_2 < x_1$ holds.  An empty interval
+precedes no other interval. 
+
+<<module Interval struct>>=
+let precedes i1 i2 = match i1, i2 with
+    | i1     , i2  when isempty i1 || isempty i2 -> false
+    | (x1,y1), (x2,y2)  -> (Order.le y1 x2 || Order.lt y2 x1)
+@
+
+To model a lifetime we need sets of intervals.  The standard set
+construction does the job. 
+
+<<module Interval struct>>=
+module Set = Set.Make (struct type t=t' let compare=cmp end)
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation of Lifetimes}
+% ------------------------------------------------------------------ 
+
+A [[Lifetime.t]] models the time a register (temporary or hardware) is
+live in a procedure.  Lifetimes are the \emph{disjoint} union of
+\emph{non-empty} [[Interval.t]] values.  Trying to join overlapping
+lifetimes leads to an checked run-time error. 
+
+<<module Lifetime struct>>=
+type t = Interval.Set.t
+
+let empty = Interval.Set.empty
+@
+
+The two functions [[mk]] and [[bbox]] connect intervals and
+lifetimes:  the only way to build a non-empty lifetime is to use
+[[mk]].  The bounding box of a lifetime is an interval that
+covers the entire lifetime.  Because a lifetime is a disjoint union of
+intervals, the extreme intervals can be used to obtain the bounds. If
+a lifetime is empty, its bounding box is empty, too. 
+
+<<module Lifetime struct>>=
+let mk intv = 
+    if Interval.isempty intv then
+        empty
+    else
+        Interval.Set.singleton intv
+@
+
+The [[bbox]] implementation exploits that we know the implementation
+of an interval.  Otherwise the [[Interval]] interface would need
+projection functions to observe that start and end of an interval.
+        
+<<module Lifetime struct>>=
+let bbox t = 
+    if t = Interval.Set.empty then
+        Interval.empty
+    else
+        let (x1,_ ) = Interval.Set.min_elt t in
+        let (_ ,y2) = Interval.Set.max_elt t in
+            (x1,y2)   
+@
+
+The union of two lifetimes is only meaningful when the two are
+disjoint and as a result all intervals in the union are disjoint as
+well.  The [[overlaps intv t]] predicate implements a stricter
+criterion:  the interval [[intv]] must not overlap with any of the
+intervals in [[t]]. We don't have to consider empty intervals as part
+of [[t]] because [[mk]] never lets them into a set.
+
+
+<<module Lifetime struct>>=
+let overlaps intv t = Interval.Set.exists (Interval.overlaps intv) t
+@
+
+If the disjointness of two lifetimes is guaranteed, their union is
+simply the union of the intervals constituting them.  Note, that union
+is not as symmetrical as its type looks:  the bounding box of the first
+argument must not overlap with the second.
+
+<<module Lifetime struct>>=
+let union t1 t2 = 
+    assert (not (overlaps (bbox t1) t2));
+    Interval.Set.union t1 t2
+@
