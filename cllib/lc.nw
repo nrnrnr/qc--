@@ -74,6 +74,7 @@ case it consumes as many characters as [[s]] is long.
 
 <<>>=
 val ( *** ) : 'a lexer -> 'a lexer -> 'a lexer
+val seq     : 'a lexer -> 'a lexer -> 'a lexer
 @ 
 [[x *** y]] is a lexer that first uses lexer [[x]] and then scans the
 remaining input using lexer [[y]].  It fails when any of [[x]] and
@@ -82,6 +83,7 @@ remaining input using lexer [[y]].  It fails when any of [[x]] and
 
 <<>>=
 val ( ||| ) : 'a lexer -> 'a lexer -> 'a lexer
+val alt     : 'a lexer -> 'a lexer -> 'a lexer
 @
 [[x ||| y]] scans the input using lexer [[x]]; if [[x]] fails it scans
 the input again using [[y]].  The lexer fails when [[y]] fails. 
@@ -189,26 +191,32 @@ type 'a lexer           = string -> int -> 'a list -> (int * 'a list)
    r=region list (all regions saved by the [save] lexer) *)
 
 let succeed str x r     = (0,r)
+<<>>=
 
 let fail msg            = error msg
 
+<<>>=
 let any                 = fun str x r -> 
                           if x < strlen str 
                           then (1,r)
                           else fail "unexpected eof"
 
+<<>>=
 let eof                 = fun str x r ->         
                           if x = strlen str
                           then (0,r)
                           else fail "eof expected"
 
+<<>>=
 let satisfy f           = fun str x r ->
                           if x < strlen str && f (get str x)
                           then (1,r)
                           else fail "predicate failed"
 
+<<>>=
 let chr c               = satisfy ((=) c)
  
+<<>>=
 let str s               = fun st x r ->    
                           let l = strlen s in
                           let rec loop i =
@@ -220,12 +228,16 @@ let str s               = fun st x r ->
                               in 
                                   loop 0
 
-let ( *** ) l1 l2       = fun str x r ->
+<<>>=
+let seq  l1 l2          = fun str x r ->
                           let (i1,r1) = l1 str  x     r    in
                           let (i2,r2) = l2 str (x+i1) r1   in
                               (i1+i2,r2)
+let ( *** ) = seq
 
-let ( ||| ) l1 l2       = fun str x r ->
+                              
+<<>>=
+let alt l1 l2           = fun str x r ->
                           try l1 str x r with
                               Error _ -> try l2 str x r with
                                   Error _ -> fail "(x ||| y) failed"
@@ -235,18 +247,24 @@ let ( ||| ) l1 l2       = fun str x r ->
                              definitions like "let word = many any"
                              which are caused by strict evaluation
                              *)
+let (|||) = alt
 
+<<>>=
 let rec many l          = fun str x r ->
                           (l *** many l ||| succeed) str x r 
 
+<<>>=
 let some l              = l *** many l
 
+<<>>=
 let opt l               = l ||| succeed
 
+<<>>=
 let save f l            = fun str x r ->
                           let (i,r') = l str x r   in
                               (i,f str x i :: r')
 
+<<>>=
 let saveStr l           = save String.sub l
                               
 (* auxilary functions *)
