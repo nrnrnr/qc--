@@ -25,7 +25,7 @@
 An action specified on the {\qcc} command line is usually too complex
 to be carried out by the \module{main} module that parses the command
 line.  Modules like \module{ast} or \module{elab} implement the
-functionality to do what the user asks for; however, in order to keep
+functionality the user asks for; however, in order to keep
 these modules as clean as possible they should be not concerned with
 opening a file and parsing it just to get the abstract syntax of a
 file.  This module mediates between the \module{main} module and the
@@ -189,51 +189,21 @@ The [[compile]] compiles a source file from {\PAL} to {\PAL}.  The
 generation is only performed when the check of the static semantics is
 passed. 
 
-This is experimental! After a procedure has been translated and all
-registers are allocated {\rtl}s we fix the stack frame. This allows to
-compute all symbolic compile-time values and substitute them. 
+After a procedure has been translated and all registers are allocated
+{\rtl}s we freeze the stack frame. This allows to compute all symbolic
+compile-time values and substitute them. 
 
-Substituting [[Rtl.exp]] value is a bit tricky because this is a
-recursive data type: expressions themselves contain expressions.
-
-
-<<fix stack frame>>=
-let fix_stack (p:Proc.t) = 
-    let stack = [ p.Proc.outgoing               (* our stack layout *)
-                ; p.Proc.stackd
-                ; Automaton.freeze p.Proc.priv
-                ; p.Proc.incoming
-                ] in
-    let stack,eqns = Area.concat stack p.Proc.eqns in
-    let solution = Const.solve eqns in
-    let ()       = assert (solution.Const.dependent = []) in
-    let map      = Str.assoc2map solution.Const.known     in
-    let rec subst (e:RP.exp) = match e with              
-        | RP.Const(RP.Link(x,_)) -> 
-            ( try Rtl.Convert.exp (Str.Map.find x map) with 
-            | Not_found -> e
-            )  
-        | RP.App(op,exprs) -> RP.App (op, List.map subst exprs)
-        | RP.Fetch(RP.Cell(sp,agg,w,e,ass),w')  ->
-            RP.Fetch(RP.Cell(sp,agg,w,subst e,ass),w')
-        | _ -> e in
-    let subst' e = Rtl.Revert.exp (subst (Rtl.Convert.exp e)) in
-    let ()       = Cfgutil.subst p.Proc.cfg (Rtlutil.Subst.exp subst') in
-        ()
 
 <<driver.ml>>=
 module Personality = struct
     module RP = Rtl.Private 
     let target                             = Target2.dummy
     type instr                             = Proc.t
-
-    <<fix stack frame>>
-    
     let ext (p:Proc.t) target init = 
         let () = L.liveness p.Proc.cfg  in       (* experimental *)
     (*  let () = Linscan.linscan p.Proc.cfg target p.Proc.priv in (* exp *)
      *)
-        let () = fix_stack p            in       (* experimental *)
+        let () = p.Proc.freeze p            in   (* experimental *)
         Cfg3.ast p.Proc.cfg p.Proc.name p.Proc.mangle target
 end    
 

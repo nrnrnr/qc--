@@ -100,6 +100,7 @@ module Make (Asm: <<ASM>>) =
 struct
     module G  = Cfg3 
     module IO = Copyinout.Make(G)
+    module RP = Rtl.Private
 
     <<Make expressions>>
     <<Make constant evaluation>>
@@ -802,6 +803,30 @@ let init_cont (cfg:G.cfg) (c:Cont.t) =
 
 
 <<Make procedure>>=
+let freeze (p:Proc.t) = 
+    let stack = [ p.Proc.outgoing               (* our stack layout *)
+                ; p.Proc.stackd
+                ; Automaton.freeze p.Proc.priv
+                ; p.Proc.incoming
+                ] in
+    let stack,eqns = Area.concat stack p.Proc.eqns in
+    let solution = Const.solve eqns in
+    let ()       = assert (solution.Const.dependent = []) in
+    let map      = Str.assoc2map solution.Const.known     in
+    let rec subst (e:RP.exp) = match e with              
+        | RP.Const(RP.Link(x,_)) -> 
+            ( try Rtl.Convert.exp (Str.Map.find x map) with 
+            | Not_found -> e
+            )  
+        | RP.App(op,exprs) -> RP.App (op, List.map subst exprs)
+        | RP.Fetch(RP.Cell(sp,agg,w,e,ass),w')  ->
+            RP.Fetch(RP.Cell(sp,agg,w,subst e,ass),w')
+        | _ -> e in
+    let subst' e = Rtl.Revert.exp (subst (Rtl.Convert.exp e)) in
+    let ()       = Cfgutil.subst p.Proc.cfg (Rtlutil.Subst.exp subst') in
+        p.Proc.frozen <- true
+
+
 let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) = 
     let p           = match F.findv name env with
                       | _,(F.Label(F.Proc p),_) -> p
@@ -869,6 +894,8 @@ let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) =
         ; Proc.stackd   = stackd     (* stack data *)
         ; Proc.priv     = priv       (* Automaton for spill loc, etc *)
         ; Proc.eqns     = eqns       (* constraints for compile-time consts *)
+        ; Proc.frozen   = false
+        ; Proc.freeze   = freeze
         } 
     in
         asm ++ Asm.instr i
