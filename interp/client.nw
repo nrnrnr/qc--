@@ -130,6 +130,8 @@ The client's implementation is split across files [[client.h]] and
 #include <lua.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <signal.h>
+#include <setjmp.h>
 #include "runtime.h"
 #include "types.h"
 
@@ -256,20 +258,21 @@ void TCB_free(Cmm_TCB *tcb) {
 
 In this client, we register a couple of C functions with the interpreter: 
 a simple 16-bit printing function (that takes a 16 bit [[unsigned int]], 
-prints it, and returns it) and its 32-bit sibling.
+prints it, and returns it) and its 32-bit sibling.  Their C and {\PAL} names
+are different to avoid redefining symbols during bootstrapping.
 
 <<function prototypes>>=
-u_int16 cmmprint16(u_int16 i);
-u_int32 cmmprint32(u_int32 i);
+u_int16 c_cmmprint16(u_int16 i);
+u_int32 c_cmmprint32(u_int32 i);
 @ 
 
 <<interpreter interaction functions>>=
-u_int16 cmmprint16(u_int16 i) {
+u_int16 c_cmmprint16(u_int16 i) {
   printf("[CMMPRINT] %u\n", i);
   return i;
 }
 
-u_int32 cmmprint32(u_int32 i) {
+u_int32 c_cmmprint32(u_int32 i) {
   printf("[CMMPRINT] %u\n", i);
   return i;
 }
@@ -278,8 +281,8 @@ u_int32 cmmprint32(u_int32 i) {
 To register the functions, the we call [[register_c_func]].
 
 <<register needed C functions with the interpreter>>=
-  register_c_func("cmmprint16", (void(*)(void)) cmmprint16, "u_int16:u_int16");
-  register_c_func("cmmprint32", (void(*)(void)) cmmprint32, "u_int32:u_int32");
+  register_c_func("cmmprint16", (void(*)(void))c_cmmprint16,"u_int16:u_int16");
+  register_c_func("cmmprint32", (void(*)(void))c_cmmprint32,"u_int32:u_int32");
 @ 
 
 We then proceed onward to a register a number of functions in the C standard 
@@ -292,12 +295,15 @@ See the [[ccall]] module for details about this.
 <<register needed C functions with the interpreter>>=
   register_c_func("putchar",(void(*)(void))putchar, "int:int" );
   register_c_func("printf" ,(void(*)(void))printf , "printf"  );
+  register_c_func("fprintf",(void(*)(void))fprintf, "fprintf" );
   register_c_func("exit"   ,(void(*)(void))exit   , "int:void");
   register_c_func("getchar",(void(*)(void))getchar, "void:int");
   register_c_func("malloc" ,(void(*)(void))malloc , "unsigned:pointer"       );
   register_c_func("strcpy" ,(void(*)(void))strcpy , "pointer,pointer:pointer");
   register_c_func("strlen" ,(void(*)(void))strlen , "pointer:unsigned"       );
   register_c_func("free"   ,(void(*)(void))free   , "pointer:void");
+  register_c_func("signal" ,(void(*)(void))signal , "int,pointer:pointer");
+  register_c_func("setjmp" ,(void(*)(void))setjmp , "jmp_buf:int");
 @ 
 
 % ----------------------------------------------------------------------------
@@ -494,6 +500,7 @@ We then tokenize the line read in and act appropriately.
 
 <<loop and act according to user commands>>=
   printf("Quick C-- Interpreter\n");
+  printf("'help' prints available commands.\n\n");
   for ( ;; ) {
     char *command, *arg;
 
@@ -523,9 +530,7 @@ Special commands [[verbosity]] and [[stacksize]] allow the user to slightly alte
 <<process [[command]]>>=
 
     if        (strcmp(command, "help") == 0) {
-      printf("legal commands: ");
-      printf("{ load {filename}*, disasm {label}*, run {label}*, verbosity, "
-             "stacksize, quit }\n");
+      <<print usage information>>
     } else if (strcmp(command, "load") == 0) {
       while ((arg = strtok(NULL, " ")) != NULL) {
         <<load file [[arg]] as an assembly unit>>
@@ -575,6 +580,22 @@ Special commands [[verbosity]] and [[stacksize]] allow the user to slightly alte
       printf("invalid command, please try again\n");
 @
 
+<<print usage information>>=
+  printf("Legal commands: \n\n");
+  printf("  help                  Command help\n");
+  printf("  load {filename}*      Load interpreter source files into memory\n");
+  printf("  disasm {label}*       Disassemble pre-loaded code found at given "
+                                 "labels\n");
+  printf("  run {label} [{arg}]   Run procedure found at label with optional\n"
+         "                        integer argument\n");
+  printf("  verbosity             Toggle noise level\n");
+  printf("  stacksize [{arg}]     Get or set current size of the stack\n");
+  printf("  inspect               Enter Lua-style inspection mode\n");
+  printf("  quit                  Quit the interpreter\n");
+  printf("\n");
+@ 
+
+
 % ----------------------------------------------------------------------------
 \paragraph{Loading an Assembly Unit}
 % ----------------------------------------------------------------------------
@@ -609,7 +630,7 @@ For now we have [[disassemble_instructions]] send all output to [[stdout]].
 
 <<disassemble code at label [[arg]] (address [[loc]])>>=
   /* disassemble instructions */
-  printf("BEGIN LABEL \"%s\" (<address %x>)\n\n", arg, (unsigned) loc);
+  printf("BEGIN LABEL \"%s\" (<address 0x%x>)\n\n", arg, (unsigned) loc);
   disassemble_instructions(stdout, loc);
   printf("\n[END CODE]\n");
 @
@@ -655,7 +676,10 @@ Inspection mode is experimental.
   {
     char *ic;
 
-    printf("[Entering inspection mode.  An EOF quits inspection mode.]\n");
+    printf("[Entering inspection mode Lua interpreter.  "
+           "An EOF quits inspection mode.]\n");
+	printf("Pertinent interpreter values are in tables CMM.inspect and "
+           "CMM.tables.\n");
 
     for (;;) {
       printf("Inspect> ");
