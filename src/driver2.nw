@@ -348,6 +348,7 @@ module Map = struct
     let doc       = DocV.makemap    V.userdata V.projection
     let frame     = FrameV.makemap  V.userdata V.projection
     let target    = TargetV.makemap V.userdata V.projection
+    let optimize  = V.pfunc (cfg **-> frame **-> V.runit)
 end
 
 let builtins =
@@ -360,7 +361,9 @@ let builtins =
   ; "scan"      , pf (V.string **-> V.runit)            Caml.scan
   ; "version"   , pf (V.string **-> V.runit)  (fun _ -> Caml.version ())
   ; "compile"   
-    , pf (Map.ast  **-> Map.target **-> Map.env **-> V.result Map.asm) 
-      (Caml.compile (fun _ _ -> ()))
+    , pf (Map.optimize  **-> Map.ast  
+                        **-> Map.target 
+                        **-> Map.env 
+                        **-> V.result Map.asm) Caml.compile 
   ] 
 @  
