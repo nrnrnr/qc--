@@ -1386,8 +1386,8 @@ void run_interp(thread *t) {
               
               #line 460 "interp.m"
                {
-                                                 value v = POP(values);
-                                                 /* fesetround(v.bits2); */
+                                                 /* value v = POP(values); */
+                                                 /* fesetround(v.bits2);   */
                                                  pc      = next;
                                                  }
                           /* ARGS OK */

@@ -9,7 +9,8 @@
 #   all         : builds qc--interp
 #   update      : builds qc--interp and copies binary to $BINDIR
 #   depend      : updates dependencies for proper compilation
-#   gc          : builds experimental garb. collecting interp. client gc_client
+#   gc          : builds experimental garb. collecting interp client gc_client
+#   exn         : builds experimental exn. dispatching interp client exn_client
 #   clean       : cleans object files (*.o)
 #   clobber     : cleans all binaries, object files, and source code that can
 #                 be regenerated from .NW files
@@ -48,12 +49,6 @@ all.opt:V:  all
 update:V:     $BINDIR/$NAME
 update.opt:V: update
 
-depend:V:   $SRCS $HDRS
-            cp mkfile mkfile.bak
-            sed '/^# DO NOT DELETE/q' mkfile.bak > mkfile
-            $CC $DEPEND $INCLUDES $SRCS | \
-                sed 's/gc\.o:/clients\/gc\.o:/' >> mkfile
-
 test:VQ:
             cd test
             mk $MKFLAGS test
@@ -66,9 +61,9 @@ clean.opt:V: clean
 clobber:V:  clean
 	        rm -f *.blg *.log *.dvi *.inc *.toc *.aux 
             rm -f clients/*.blg clients/*.inc
-	        rm -f $NWTEXFILES interfaces.nw clients/gc.tex
+	        rm -f $NWTEXFILES interfaces.nw clients/gc.tex clients/exn.tex
             rm -f prof.out core *~
-            rm -f $NAME clients/gc_client
+            rm -f $NAME clients/gc_client clients/exn_client
             rm -f *.m *.i decode.fetch bytecode.sled clients/*.i
             rm -f $INTERPHDRS $INTERPSRCS
             rm -f $CLIENTHDRS $CLIENTSRCS
@@ -151,8 +146,8 @@ CORESRCS   = $EXTSRCS $INTERPSRCS $GENSRCS
 COREHDRS   = $INTERPHDRS $GENHDRS
 COREOBJS   = ${CORESRCS:%.c=%.o}
 
-CLIENTHDRS = client.h clients/gc.h
-CLIENTSRCS = client.c clients/gc.c
+CLIENTHDRS = client.h clients/gc.h clients/exn.h
+CLIENTSRCS = client.c clients/gc.c clients/exn.c
 
 HDRS       = $COREHDRS $CLIENTHDRS
 SRCS       = $CORESRCS $CLIENTSRCS
@@ -170,14 +165,18 @@ $BINDIR/$NAME:  $NAME
 # binaries
 # ------------------------------------------------------------------
 
-gc:V:     clients/gc_client
 interp:V: $NAME
+gc:V:     clients/gc_client
+exn:V:    clients/exn_client
 
 $NAME:    $COREOBJS client.o
     $CC $CFLAGS $LIBS -o $target $COREOBJS client.o
 
-clients/gc_client: $COREOBJS clients/gc.o
+clients/gc_client:  $COREOBJS clients/gc.o
     $CC $CFLAGS $LIBS -o $target $COREOBJS clients/gc.o
+
+clients/exn_client: $COREOBJS clients/exn.o
+    $CC $CFLAGS $LIBS -o $target $COREOBJS clients/exn.o
 
 ###
 ###
@@ -194,18 +193,36 @@ lcc-interp:V:
     mk $MKFLAGS MODE=$MODE code
     mk $MKFLAGS MODE=$MODE CC=lcc CFLAGS='-g -A -A -b $INCLUDES' $NAME
     mk $MKFLAGS MODE=$MODE CC=lcc CFLAGS='-g -A -A -b $INCLUDES' clients/gc_client
+    mk $MKFLAGS MODE=$MODE CC=lcc CFLAGS='-g -A -A -b $INCLUDES' clients/exn_client
 
 sparc-interp:V:
     mk $MKFLAGS MODE=$MODE MACHINE=sparc NOTANGLEOPTS=$NOTANGLEOPTS \
-    TOOLS=/home/lair/olinsky/bin/sparc/tools $NAME \
-    LUAINCLUDES=-I/home/lair/olinsky/include \
-    LUALIBS='/home/lair/olinsky/lib/sparc/o/*.o' \
+       TOOLS=/home/lair/olinsky/bin/sparc/tools $NAME \
+       LUAINCLUDES=-I/home/lair/olinsky/include \
+       LUALIBS='/home/lair/olinsky/lib/sparc/o/*.o' \
     CC='$CC'
-    mk gc $MKFLAGS MODE=$MODE MACHINE=sparc NOTANGLEOPTS=$NOTANGLEOPTS \
-    TOOLS=/home/lair/olinsky/bin/sparc/tools $NAME \
-    LUAINCLUDES=-I/home/lair/olinsky/include \
-    LUALIBS='/home/lair/olinsky/lib/sparc/o/*.o' \
-    CC='$CC'
+    mk gc  $MKFLAGS MODE=$MODE MACHINE=sparc NOTANGLEOPTS=$NOTANGLEOPTS \
+           TOOLS=/home/lair/olinsky/bin/sparc/tools $NAME \
+           LUAINCLUDES=-I/home/lair/olinsky/include \
+           LUALIBS='/home/lair/olinsky/lib/sparc/o/*.o' \
+           CC='$CC'
+    mk exn $MKFLAGS MODE=$MODE MACHINE=sparc NOTANGLEOPTS=$NOTANGLEOPTS \
+           TOOLS=/home/lair/olinsky/bin/sparc/tools $NAME \
+           LUAINCLUDES=-I/home/lair/olinsky/include \
+           LUALIBS='/home/lair/olinsky/lib/sparc/o/*.o' \
+           CC='$CC'
+
+# ------------------------------------------------------------------
+# dependency recalculation
+# ------------------------------------------------------------------
+
+depend:V:   $SRCS $HDRS
+            cp mkfile mkfile.bak
+            sed '/^# DO NOT DELETE/q' mkfile.bak > mkfile
+            $CC $DEPEND $INCLUDES $SRCS | \
+                sed 's/gc\.o:/clients\/gc\.o:/'   |
+                sed 's/exn\.o:/clients\/exn\.o:/' >> mkfile
+
 
 # ------------------------------------------------------------------
 # documentation-related files
@@ -374,3 +391,6 @@ client.o: client.c client.h runtime.h label.h assemblyunit.h \
 clients/gc.o: clients/gc.c clients/gc.h runtime.h label.h assemblyunit.h \
  controlflow.h activation.h table.h types.h machine.h uid.h value.h \
  interp.h intervals.h thread.h ccall.h span.h
+clients/exn.o: clients/exn.c clients/exn.h runtime.h label.h assemblyunit.h \
+ controlflow.h activation.h table.h types.h machine.h uid.h value.h \
+ interp.h intervals.h thread.h ccall.h

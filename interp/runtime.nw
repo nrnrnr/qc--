@@ -394,10 +394,11 @@ Cmm_Cont *Cmm_GetUnwindCont(const Cmm_Activation *a, Cmm_Word index) {
     runtime_sys_err("cannot unwind below oldest activation on stack");
   }
 
+  /* this isn't necessary, is it? */
   a_caller = ((actptr) a->locals) - 1;
 
   {
-    annotations    *ann      = a_caller->kappa;
+    annotations    *ann = a->kappa;
     CMM_label      *lbl;
 
     lua_pushtable(L, ann->also_unwinds_to);
@@ -407,7 +408,8 @@ Cmm_Cont *Cmm_GetUnwindCont(const Cmm_Activation *a, Cmm_Word index) {
         (lbl = lua_touserdata(L, -1)) == NULL)
     {
       lua_pop(L, 2); /* pop bogus value, table */
-      runtime_sys_err("invalid unwind index given to Cmm_GetUnwindCont");
+      runtime_sys_err("invalid unwind index %d given to Cmm_GetUnwindCont",
+                      (int) index);
     }
 
     lua_pop(L, 2);
