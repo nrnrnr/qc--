@@ -433,6 +433,10 @@ module TypeSortBind = SortAndBind(Type)
 \subsubsection{Constants}
 % ------------------------------------------------------------------ 
 
+        EVENTUALLY, SUPPORT FOR CONSTANT EXPRESSIONS SHOULD MOVE INTO
+        THE [[Elabexp]] MODULE.
+
+
 A constant declaration must declare a value of type [[bits]]; although
 it is syntactically and type-wise possible to declare a boolean value
 this is not permitted. The optionally provided type must match the
@@ -656,13 +660,17 @@ let proc env p =
     stackmem = stackmem; stacklabels = stacklabels; code = unimp "code"; }) in
 @ 
 A continuation knows its address (in the form of an empty, unaligned
-block) and whether it escapes.
+block).
+It also maintains some mutable data, filled in by [[Elabexp]] and
+[[Elabstmt]], that tells if the continuation is used in an expression
+or an annotation.
 <<definitions of name-binding functions>>=
 let bind_continuation env (r, name) =
   let addrblock =
     Block.relative vfp ("continuation " ^ name) Block.at ~size:0 ~alignment:1 in
-  let den = F.Continuation {F.base = addrblock; F.escapes = false}, pointerty in
-  F.bindv name (r, E.Ok den) env in
+  let k = { F.base = addrblock; F.escapes = false;
+            F.cut_to = false; F.unwound_to = false; F.returned_to = false } in
+  F.bindv name (r, E.Ok (F.Continuation k, pointerty)) env in
 @ 
 \subsubsection{Easy stuff}
 
@@ -1002,51 +1010,6 @@ To evaluate constant expressions we use the code from [[Const.Eval]];
 the returned value has type [[(Types.ty * F.value) E.error]]
 <<check>>=
 let constExpr env e = Consts.evalExpr env e
-@    
-The [[lvalue]] function checks an lvalue and returns its type. 
-Depending on the [[context]], an [lvalue] must be a register.  In case
-an assignment to memory is allowed the size of the memory being
-assigned to must be a multiple of the memsize.  The address of the
-memory must be an data pointer.
-<<check>>=
-let rec lvalue context env = function
-    | A.NameOrMemAt(x,r)       -> E.catch (error r env) (lvalue context env) x
-    | A.Name(Some h,x) when context <> Call ->
-        E.error "no hint allowed in this context"
-    | A.Name(hint,name)      -> 
-        E.ematch (E.Raise.right (F.findv name env))
-        ( function
-        | _, (F.Variable _,t) -> t
-        | _                   -> E.error ("not a register: "^name)
-        )
-    | A.Mem(t,e,a,_) when context <> Assign -> 
-        E.error "no memory assignment allowed in this context"
-    | A.Mem(t,e,aligned,aliasing) -> 
-        let msg1   = "alignment not a power of 2"                in
-        let msg2   = "type must be a multiple of target memsize" in
-        let msg3   = "unknown target memsize"                    in
-        let msg4   = "expression is not a pointer"               in
-        let msg5   = "bool is not a value type"                  in
-        let align  = function
-            | Some a when not (is2power a) -> E.error msg1
-            | Some a                       -> ()
-            | None                         -> () 
-        in
-            ( align aligned (* check alignment constraint *)
-            ; E.ematchQuad ( Elabexp.elab_ty env t
-                           , tyExpr env e
-                           , F.findMemsize env
-                           , pointerTy env
-                           )
-            ( function
-            | _       , _           , None   ,_ -> E.error msg3
-            | T.Bool  , _           , _      ,_ -> E.error msg5
-            | T.Bits n, _           , Some m ,_
-              when n mod m <> 0                 -> E.error msg2
-            | t       , t'          , _      ,p
-              when t' = p                       -> t
-            | _                                 -> E.error msg4
-            ))
 @
 A target for a [[goto]] statement must be a local code pointer.
 <<check>>=
@@ -1057,41 +1020,6 @@ let checkGotoTarget env x = E.seq' env (snd (F.findv x env))
     | (F.Label(_)     ,_)    -> E.error (x^" is not a goto label")
     | otherwise              -> E.error (x^" is not a label")
     )
-@
-A call-target must be either a procedure, or an imported symbol with
-the native code pointer type.
-<<check>>=
-let checkCallTarget env x = 
-    E.seq' env (E.Raise.pair (pointerTy env,E.Raise.right (F.findv x env)))
-    ( function
-    | p,(_      ,(F.Label(F.Proc _),_)) ->  env
-    | p,(_      ,(F.Import _       ,t)) 
-      when t = p                         ->  env
-    | otherwise                          ->  E.error (x^" is not call target")
-    )
-@
-A flow annotation must be a (local) continuation.  The flow
-annotations [[returns to]] and [[unwinds to]] are meaningless when
-used to annotate a [[cuts to]] statement.  We are checking a [[cut
-to]] statement when [[isCutTo]] is true. 
-<<check>>=
-let rec checkFlow isCutTo env f =
-    let check env x = E.seq' env (snd (F.findv x env))
-        ( function
-        | (F.Continuation _,_) -> env
-        | _                    -> E.error (x^" is not a continuation")
-        )     
-    in match f with
-    | A.FlowAt(x,r)     -> E.catch' (F.flagError env)
-                                    (error r env) (checkFlow isCutTo env) x
-    | A.CutsTo(ns)      -> foldl check env ns 
-    | A.UnwindsTo(ns)   -> if isCutTo 
-                           then E.error "unwinds is meaningless for cut to" 
-                           else foldl check env ns 
-    | A.ReturnsTo(ns)   -> if isCutTo 
-                           then E.error "returns is meaningless for cut to"
-                           else foldl check env ns 
-    | A.Aborts          -> env
 @
 The [[isLabel env e]] function returns [[true]] if the expression [[e]]
 denotes a statically known label for [[goto]]. Analogously,
@@ -1110,87 +1038,6 @@ let rec isGotoLabel env = function
           )        
     | _                                         -> false
 
-let rec isNoFunction env = function
-    | A.ExprAt(x,_)                             -> isNoFunction env x
-    | A.Fetch(A.NameOrMemAt(x,_))               -> isNoFunction env (A.Fetch x)
-    | A.Fetch(A.Name(_,x))                      -> 
-          ( match F.findv x env with
-          | _       ,E.Error                    -> false (* could be proc *)
-          | scope   ,E.Ok(F.Import _,_)         -> false
-          | scope   ,E.Ok(F.Label(F.Proc _),_) -> false
-          | scope   ,E.Ok(F.Variable _,_)       -> false
-          | _                                   -> true
-          )        
-    | _                                         -> false
-@
-The expression of an [[if]] statement must be a boolean value. Errors
-in any of the two statement blocks are recorded in the environment.
-<<check>>=
-let rec ifStmt env (e,ss1,ss2) =
-    let msg = "if-condition must be of type bool" in           
-    let env = foldl body env ss1 in
-    let env = foldl body env ss2 in
-        E.seq' env (tyExpr env e)
-        ( function 
-        | t when t = T.Bool -> env 
-        | _                 -> E.error msg
-        )
-@
-A [[span]] statement has two expressions [[e1]] and [[e2]].  The first
-(token) must be a constant native word, the second a link time (data)
-pointer.  Of course, all statement inside the span must be checked as
-well. Currently we don't check the link-time property of [[e2]].
-<<check>>=
-and spanStmt env (e1,e2,ss) =
-    let msg1 = "span token must be a constant word" in
-    let msg2 = "span value must be a pointer"       in
-    let env  = foldl body env ss                    in
-        E.seq' env (Error.Raise.quad ( constExpr env e1
-                                     , tyExpr env e2
-                                     , pointerTy env
-                                     , wordTy env
-                                     ))
-        ( function
-        | (t1,v1), _ , p, w when t1 <> p -> E.error msg1
-        | _      , t2, p, w when t2 <> w -> E.error msg2
-        | _                              -> env
-        )
-@
-Two two sides of an assign statement must match: the number and types
-of lvalues and expressions are checked against each other.  For
-improved error messages [[List.combine]] is re-implemented. Details
-of the left hand side are handled by the [[lvalue]] function.
-
-The right hand side may contain optional guarding expressions of type
-[[bool]].
-<<check>>=
-and assignStmt env left_right =
-    let msg0 = "type mismatch of left and right side in assignment" in
-    let msg1 = "guard must have type bool" in
-    let rec combine = function (* like List.combine *)
-        | []   , []    -> []
-        | _    , []    -> E.error "too many locations on the left side"
-        | []   , _     -> E.error "too many expression on the right side"
-        | x::xx, y::yy -> (x,y)::combine (xx,yy) in
-    let pairs = combine left_right in
-    let check env = function
-        | (lhs,(None,exp)) -> E.seq' (F.flagError env) 
-           (E.Raise.pair (lvalue Assign env lhs, tyExpr env exp))
-           ( function 
-           | tl, tr when tl = tr -> env
-           | _                   -> E.error msg0
-           )
-        |  (lhs,(Some g,exp)) -> E.seq' (F.flagError env) 
-           (E.Raise.triple ( lvalue Assign env lhs
-                           , tyExpr env exp
-                           , tyExpr env g))
-               ( fun (tl, tr, gt) ->
-                      if tl =  tr && gt = T.Bool then env
-                 else if tl <> tr                then E.error msg0
-                 else                                 E.error msg1
-               )
-    in
-        foldl check env pairs
 @
 A [[goto]] statement must name all possible (local) targets [[ts]] for
 its code pointer expression [[e]].  Targets may be omitted if the
@@ -1212,30 +1059,6 @@ and gotoStmt env (e,ts) =
         then E.error msg2
         else env
 @
-A call need not name targets;
-the only requirement is that the expression by of the native pointer
-type.  
-The
-details of the assignment in a [[Call]] context are handled by
-[[lvalue]].  To make sure all errors are recorded in [[env]] the
-argument to [[E.seq']] includes [[left]] and [[at]] although only the
-type of [[exp]] is used.
-<<check>>=
-and callStmt env (left,cc,exp,args,ts,fs) =
-    let msg1 = "call expression is not a function"                in
-    let msg2 = "call expression is not a pointer"                 in
-    let left = E.Raise.list (List.map (lvalue Call env) left)     in
-    let env  = foldl (checkFlow false) env fs                     in
-    let env  = foldl  checkCallTarget  env ts                     in
-    let args = List.map snd args (* strip hints *)                in
-    let at   = E.Raise.list (List.map (tyExpr env) args)          in
-        if isNoFunction env exp then E.error msg1 else 
-        E.seq' (F.flagError env) 
-               (E.Raise.quad (tyExpr env exp,left,at,pointerTy env)) 
-               ( function 
-               | t,_,_,p when t = p    -> env
-               | otherwise             -> E.error msg2 
-               ) 
 @
 A call of a primitive is type checked: argument types must have the
 expected types. This is done by [[Rtlop.Translate.check]].
@@ -1247,19 +1070,6 @@ and primStmt env (left,cc,op,args,fs) =
     let t      = E.Raise.list (List.map (tyExpr env) args)          in 
     let right  = E.ematch t (fun t -> fst (Rtlop.Translate.operator op t)) in
         E.seq' (F.flagError env) (E.Raise.pair (left,right)) (fun _ -> env)
-@
-The formal parameters of a continuation statement must be local
-registers. 
-<<check>>=
-and contStmt env (n,ns) = 
-    let check env (hint,name) = E.seq' env (snd (F.findv name env))
-        ( function  
-        | (F.Variable _,_) when F.is_localv name env -> env
-        | (F.Variable _,_) -> E.error (name^" is not a local register")  
-        | _ -> E.error ("formal continuation parameter not a register: "^n)
-        )
-    in
-        foldl check env ns
 @
 A continuation expression must have a continuation type. 
 <<check>>=
@@ -1301,24 +1111,6 @@ and returnStmt env (cc,alt,args) =
                 | _ -> E.error "illegal <x/y> combination"
                 )
 @
-A [[jump]] has to lists it targets except when the jump target is
-statically known. The jump expression must be a (code) pointer.
-<<check>>=
-and jumpStmt env (cc,e,args,ts) =
-    (*MUST CHECK THAT CALLING CONVENTION IS THE SAME AS CONTAINING PROCEDURE*)
-    let args = List.map (tyExpr env) (List.map snd args) in
-    let env  = foldl checkCallTarget env ts              in
-    let env  = E.seq' env (E.Raise.pair (tyExpr env e,pointerTy env)) 
-               ( function 
-               | t,p when t = p -> env
-               | otherwise      -> E.error "jump target is not a pointer"
-               )
-    in
-        if isNoFunction env e then
-            E.error "jump target is not a function"
-        else 
-            E.seq' (F.flagError env) (E.Raise.list args) (fun x -> env)
-@
 The type of range-expressions in a [[switch]] statement must match the
 type [[t]] of the [[switch]] expression.  The parameter [[t]] is in
 the [[E.error]] domain and thus function from the [[E]] module are
@@ -1358,32 +1150,12 @@ and arm t env = function
             | _  -> env
             )
 @
-The type of the switch expression must be matched by the guarding
-ranges of the arms.  An empty switch-statement is an error because no
-arm can match the value of the switch-expression at run-time.
-<<check>>=
-and switchStmt env (r, expr, arms) =
-    let t   = tyExpr env expr in
-    let env = match r with
-        | Some r -> range t env r
-        | None   -> env in
-    let env = foldl (arm t) env arms in
-        E.seq' (F.flagError env) t
-        ( fun t -> 
-            if arms = [] 
-            then E.error "empty switch statement"
-            else env
-        )
-@
 The [[stmt]] function catches errors detected in individual statements
 and flags them in the environment. Nothing needs to be done for most
 declarations and labels since they were entered into [[env]] in
 previous steps.
 <<check>>=
 and stmt env = function
-    | A.StmtAt(x,r)     -> E.catch' (F.flagError env) (error r env) (stmt env) x
-    | A.IfStmt  x       -> ifStmt     env x
-    | A.SpanStmt x      -> spanStmt   env x
     | A.AssignStmt x    -> assignStmt env x
     | A.CallStmt x      -> callStmt   env x
     | A.PrimStmt x      -> primStmt   env x
@@ -1393,7 +1165,6 @@ and stmt env = function
     | A.JumpStmt x      -> jumpStmt   env x
     | A.ContStmt x      -> contStmt   env x
     | A.SwitchStmt x    -> switchStmt env x
-    | A.LabelStmt x     -> env        (* nothing to do *)
     | A.EmptyStmt       -> env        (* nothing to do *)  
     | A.CommentStmt _   -> env
 @

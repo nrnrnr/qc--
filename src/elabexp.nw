@@ -14,11 +14,19 @@
 The {\qcc} compiler type checks expressions and converts them to RTL
 expressions. 
 None of these functions ever raises an exception.
+To elaborate an lvalue, call [[elab_loc]] in a context in which no
+hint is permissible and [[elab_hinted_name]] in a context in which a
+name with an
+optional hint is expected.
+(There are no contexts in which a hint is permitted with a general lvalue.)
+ONE PROBLEM REMAINS: WE COULD ACCEPT A HINT ON A PRIMITIVE CALL.
 <<elabexp.mli>>=
 type nm_or_mem = Ast.name_or_mem
 val elab_ty : 'a Fenv.Dirty.env' -> Ast.ty   -> Types.ty                    Error.error
 val elab_exp: 'a Fenv.Dirty.env' -> Ast.expr -> (Rtl.exp * Types.ty)        Error.error
 val elab_loc: 'a Fenv.Dirty.env' -> nm_or_mem-> (Automaton.loc * Rtl.width) Error.error
+val elab_hinted_name: 
+  'a Fenv.Dirty.env' -> nm_or_mem -> (string * (Automaton.loc * Rtl.width)) Error.error
 
 @ The [[elab_*]] functions work with incomplete information,
 indicated by [[Error.Error]] values.  The policy is as follows:
@@ -58,16 +66,18 @@ let is2power x = x > 0 && x land (x - 1) = 0
 <<elabexp.ml>>=
 module M = Metrics
 <<utilities>>
-<<definition of [[lvalue_name_in_env]]>>
 let exprfuns env =
-  let metrics = F.metrics env in
-  let lvalue_name = lvalue_name_in_env env in
-  <<definition of [[rvalue_name]]>> in
-  let catch r f x = E.catch (E.errorRegionPrt (F.srcmap env, r)) f x in
+  let metrics     = F.metrics env in
+  let eprint r    = E.errorRegionPrt (F.srcmap env, r) in
+  let errorf fmt  = Printf.kprintf E.error fmt in
+  let catch r f x = E.catch (eprint r) f x in
+  <<definition of [[lvalue_name]]>>
+  <<definition of [[rvalue_name]]>>
   <<mutually recursive nest of [[typed_expr]] and [[lvalue]]>> in
-  catch Srcmap.null typed_expr, catch Srcmap.null lvalue
-let elab_exp env = fst (exprfuns env)
-let elab_loc env = snd (exprfuns env)
+  catch Srcmap.null typed_expr, catch Srcmap.null lvalue, catch Srcmap.null hinted_name
+let elab_exp         env = let f, _, _ = exprfuns env in f
+let elab_loc         env = let _, f, _ = exprfuns env in f
+let elab_hinted_name env = let _, _, f = exprfuns env in f
 @
 
 There are four interesting syntactic categories here:
@@ -121,8 +131,8 @@ context.
 The environment is explicit.
 \nwaddbox{lvalue_name_in_inv : F.env -> name -> AT.loc * Rtl.width}
 \deeperbox{16pt}
-<<definition of [[lvalue_name_in_env]]>>=
-let lvalue_name_in_env env x = 
+<<definition of [[lvalue_name]]>>=
+let lvalue_name x = 
   E.ematch (snd (F.findv x env))
   (fun (denot,t) ->
     let w = tywidth "assigned to" t  in
@@ -140,7 +150,7 @@ let lvalue_name_in_env env x =
         | F.Import   _ -> "imported symbol"
         | F.Continuation _ -> "continuation"
         | F.Variable _ -> "register" in
-        impossf "asked for lvalue of %s %s" what x)
+        errorf "may not assign to %s %s" what x) in
 @ 
 Any name can be meaningful in an rvalue context.
 The environment is implicit.
@@ -159,7 +169,7 @@ let rvalue_name x =
     | F.Continuation c            -> (c.F.escapes <- true; E.Ok (Block.base c.F.base))
     | F.Label(F.Stack addr) -> E.Ok addr  (* a fetch would be wrong *)
     | F.Variable _                -> emap atfetch (lvalue_name x) in
-    E.Raise.left (rval, t))
+    E.Raise.left (rval, t)) in
 @ 
 Help for fetching and storing automata locations.
 <<utilities>>=
@@ -168,26 +178,35 @@ let atstore (loc, w) exp = loc.AT.store exp w
 @ 
 \subsubsection{General lvalues}
 
+WE MUST CHECK TO SEE IF A HINT IS PERMITTED!
+
 Again, the environment is implicit.
 \nwaddbox{lvalue : Ast.lvalue -> AT.loc * Rtl.width}
 \deeperbox{14pt}
 <<mutually recursive nest of [[typed_expr]] and [[lvalue]]>>=
+let rec hinted_name lhs = match lhs with
+  | A.NameOrMemAt(lhs,r) -> catch r hinted_name lhs
+  | A.Name(hint,x)       -> E.Raise.right (Aux.Option.get "" hint, lvalue_name x)
+  | A.Mem _              -> E.error "only a name may appear to left of a call" in
 let rec lvalue lhs = match lhs with
-  | A.NameOrMemAt(lhs,_) -> lvalue lhs
-  | A.Name(hint,x)       -> lvalue_name x 
+  | A.NameOrMemAt(lhs,r) -> catch r lvalue lhs
+  | A.Name(Some _,x)     -> E.error "hint permissible only on parameter or result"
+  | A.Name(None,x)       -> lvalue_name x 
   | A.Mem(t,addr,aligned,aliasing) ->
-      let w    = astwidth "value in memory" env t in
-      let addr = typed_expr addr in
-      E.ematchTriple  (w, addr, assertion aligned)
-        (fun (w, (addre, addrt), assn) ->
-          if tywidth "address" addrt = metrics.M.pointersize then
-            AT.of_loc (Rtl.mem assn 'm' metrics.M.byteorder w addre), w
+      let w = astwidth "value in memory" env t in
+      E.ematch3 w (typed_expr addr) (assertion aligned)
+        (fun w (addre, addrt) assn ->
+          if tywidth "address" addrt <> metrics.M.pointersize then
+            E.error "address's type is not the machine's pointer size"
+          else if w mod metrics.M.memsize <> 0 then
+            E.error "reference's type is not a multiple of target memsize"
           else
-            E.error "address's type is not the machine's pointer size")
+            AT.of_loc (Rtl.mem assn 'm' metrics.M.byteorder w addre), w)
 and expr e = emap fst (typed_expr e) 
 and rvalue_name_or_mem nm = match nm with
-  | A.NameOrMemAt(v, _) -> rvalue_name_or_mem v
-  | A.Name(hint, x)     -> rvalue_name x
+  | A.NameOrMemAt(v, r) -> catch r rvalue_name_or_mem v
+  | A.Name(Some _, x)   -> E.error "hint permissible only on parameter or result"
+  | A.Name(None,   x)   -> rvalue_name x
   | A.Mem(_, _, _, _)   ->
       E.ematch (lvalue nm) (fun (loc, w) -> loc.AT.fetch w, Types.Bits w)
 @

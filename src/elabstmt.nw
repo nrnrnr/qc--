@@ -14,15 +14,16 @@
 <<exposed types>>=
 type exp = Rtl.exp
 type rtl = Rtl.rtl
-type loc = Rtl.loc
+type loc = Automaton.loc * Rtl.width
 type convention = string
 type hint = string
+type actual = hint * exp * Rtl.width
 type name = string
 type linktime = Bits.bits Reloc.Simple.relocatable
 type 'a hinted = hint * 'a
 type range = int * int   (* lo <= x < hi *)
 type procname = string
-type flow = { cuts : name list; unwinds : name list; areturns : name list;
+type 'a flow = { cuts : 'a list; unwinds : 'a list; areturns : 'a list;
               returns : bool; aborts : bool }
 type stmt =
   | If     of exp * stmt list * stmt list
@@ -31,12 +32,12 @@ type stmt =
   | Cont   of name * name hinted list
   | Span   of Bits.bits * linktime * stmt list
   | Assign of rtl
-  | Call   of loc hinted list * convention * exp * exp hinted list * procname list
-            * flow
+  | Call   of loc hinted list * convention * exp * actual list * procname list
+            * name flow
   | Goto   of exp * name list
-  | Jump   of convention * exp * exp hinted list * procname list
-  | Cut    of exp * exp hinted list * flow 
-  | Return of convention * int * int * exp hinted list
+  | Jump   of convention * exp * actual list * procname list
+  | Cut    of exp * actual list * name flow 
+  | Return of convention * int * int * actual list
 @
 <<elabstmt.mli>>=
 <<exposed types>>
@@ -63,10 +64,11 @@ indicated by [[Error.Error]] values.  The policy is as follows:
 
 <<elabstmt.ml>>=
 <<exposed types>>
+module A  = Ast
 module AT = Automaton
-module N = Nast
-module E = Error
-module F = Fenv.Dirty
+module E  = Error
+module F  = Fenv.Dirty
+module N  = Nast
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let unimp = Impossible.unimp
 let is2power x = x > 0 && x land (x - 1) = 0
@@ -88,6 +90,7 @@ let elab_stmts env =
   let loc = Elabexp.elab_loc env in
   let metrics = F.metrics env in
   let rec full_stmt r reachable s =
+    <<elaboration utilities>>
     <<definitions of elaboration functions>>
     let rec stmt s = match s with
     | N.StmtAt (s, r) -> E.catch (eprint r) (full_stmt r reachable) s
@@ -107,11 +110,17 @@ let elab_stmts env =
           c
     | N.Span (k, v, ss) -> span k v ss
     | N.Assign (lhs, rhs) -> assign lhs rhs
+    | N.Call (lhs, conv, p, args, tgts, flow) -> call r lhs conv p args tgts flow
+    | N.Jump (conv, p, args, tgts) -> jump r conv p args tgts
     | _ -> unimp "statements" in
     stmt s
-  and stmts r ss =
+  and stmts r ss = stmts' false r ss
+  and stmts' procbody r ss =
     let rec stmts reachable = function
-      | [] -> []
+      | [] -> if procbody && reachable then
+                [errorf r "control falls off end of procedure"]
+              else
+                []
       | N.Span (_, _, []) :: ss -> stmts reachable ss
       | s :: ss -> full_stmt r reachable s :: stmts (not (jumps s)) ss in
     Error.Raise.list (stmts true ss)
@@ -121,15 +130,12 @@ let elab_stmts env =
                      | N.Span (_, _, ss) -> jumps (Aux.last ss)
                      | _ -> false in
 (*
-  | N.Assign of 'a
-  | N.Call   of 'l list * convention * 'e   * 'e actual list * procname list * flow
   | N.Prim   of 'l list * convention * name * 'e actual list * flow
   | N.Goto   of 'e * label list
-  | N.Jump   of convention * 'e * 'e actual list * procname list
   | N.Cut    of 'e * 'e actual list * cflow 
   | N.Return of convention * ('e * 'e) option * 'e actual list
 *)
-  stmts Srcmap.null
+  stmts' true Srcmap.null
 <<definitions of elaboration functions>>=
 let cformal (hint, name) =
   E.seq (snd (F.findv name env)) (fun den ->
@@ -157,12 +163,12 @@ let span k v ss =
   let const k = E.seq (exp k) (fun (k, kt) ->
     let k = E.catch (eprint r) (ok Simplify.bits) k in
     match kt with
-    | Types.Bits n when n = metrics.Metrics.wordsize -> k
+    | Types.Bits n when n = metrics.M.wordsize -> k
     | _ -> errorf r "span token (key) must be a bit vector of native word size") in
   let linktime v = E.seq (exp v) (fun (v, vt) ->
     let v = E.catch (eprint r) (ok Simplify.link) v in
     match vt with
-    | Types.Bits n when n = metrics.Metrics.pointersize -> v
+    | Types.Bits n when n = metrics.M.pointersize -> v
     | _ -> errorf r "span value must be a bit vector of native pointer size") in
   E.ematch3 (const k) (linktime v) (stmts r ss) (fun k v ss ->
     Span (k, v, ss)) in
@@ -203,3 +209,114 @@ else
   errorf r
     "assignment has %d locations on the left but only %d expressions on the right"
     (List.length lhs) (List.length rhs)
+@ 
+A call need not name targets;
+the only requirement is that the expression by of the native pointer
+type.  
+The
+details of the assignment in a [[Call]] context are handled by
+[[lvalue]].  To make sure all errors are recorded in [[env]] the
+argument to [[E.seq']] includes [[left]] and [[at]] although only the
+type of [[exp]] is used.
+<<definitions of elaboration functions>>=
+let call r left conv p args targets flows =
+  let left = E.Raise.list (List.map (Elabexp.elab_hinted_name env) left) in
+  let args = E.Raise.list (List.map (actual r) args) in
+  let tgts = E.Raise.list (List.map (call_target r) targets) in
+  let flow = call_flow r flows in
+  reject_uncallable p;
+  E.ematch5 left args (exp p) tgts flow (fun left args (p,pt) tgts flow ->
+    match pt with
+    | Types.Bits n when n = metrics.M.pointersize ->
+        Call (left, conv, p, args, tgts, flow)
+    | _ -> E.error "procedure value must be a bit vector of native pointer size") in
+@
+The jump expression must be a (code) pointer.
+<<definitions of elaboration functions>>=
+let jump r conv p args targets =
+  let args = E.Raise.list (List.map (actual r) args) in
+  let tgts = E.Raise.list (List.map (call_target r) targets) in
+  reject_uncallable p;
+  E.ematch3 args (exp p) tgts (fun args (p,pt) tgts ->
+    match pt with
+    | Types.Bits n when n = metrics.M.pointersize -> Jump (conv, p, args, tgts)
+    | _ -> E.error "procedure value must be a bit vector of native pointer size") in
+@ 
+<<elaboration utilities>>=
+let actual r (hint, e) = E.seq (exp e) (fun (e, ty) ->
+  match ty with
+  | Types.Bits w -> E.Ok (hint, e, w)
+  | Types.Bool   -> errorf r "an actual parameter may not be a Boolean") in
+@ 
+As target of a call or jump,
+we reject out of hand (by raising [[E.ErrorExn]]) any name that is
+obviously not a procedure. 
+<<elaboration utilities>>=
+let rec reject_uncallable = function
+  | A.ExprAt(x,_) -> reject_uncallable x
+  | A.Fetch(A.NameOrMemAt(x,_)) -> reject_uncallable (A.Fetch x)
+  | A.Fetch(A.Name(_,x)) -> reject_uncallable_denotation x (snd (F.findv x env))
+  | _ -> ()
+and reject_uncallable_denotation name d =
+  let bad thing = E.error (Printf.sprintf "cannot call or jump to %s %s" thing name) in
+  match d with
+  | E.Ok (F.Constant _, _)        -> bad "constant"
+  | E.Ok (F.Label (F.Code  _), _) -> bad "code label"
+  | E.Ok (F.Label (F.Data  _), _) -> bad "data label"
+  | E.Ok (F.Label (F.Stack _), _) -> bad "stackdata label"
+  | E.Ok (F.Continuation _, _)    -> bad "continuation"
+  | E.Ok ((F.Label (F.Proc _) | F.Import (_, _) | F.Variable _), _) | E.Error -> () in
+@    
+\paragraph{Checking flow annotations}
+For the moment, we elaborate flow of names into flow of names, doing only checking.
+But at some point we might want to elaborate flow of names into flow
+of denotations.  This might require extending the denotations.
+We'll know when we revise [[Ast2ir]].
+<<elaboration utilities>>=
+let flow r default_aborts default_returns =
+  let as_cut_to  k = k.F.cut_to <- true in
+  let as_unwinds k = k.F.unwound_to <- true in
+  let as_returns k = k.F.returned_to <- true in
+  let rec ks r as_what prev' ns =
+    let continuation n = E.seq (snd (F.findv n env)) (function
+      | F.Continuation k, _ -> as_what k; E.Ok n
+      | _ -> errorf r "%s is not a continuation" n) in
+    match ns with
+    | [] -> prev'
+    | n :: ns -> ks r as_what (continuation n :: prev') ns in
+  let rec flow r c' u' r' aborts returns = function
+    | [] -> finish_flow c' u' r' aborts returns
+    | A.FlowAt(f,r)  :: fs -> flow r c' u' r' aborts returns (f :: fs)
+    | A.CutsTo    ns :: fs -> flow r (ks r as_cut_to c' ns) u' r' aborts returns fs
+    | A.UnwindsTo ns :: fs -> flow r c' (ks r as_unwinds u' ns) r' aborts returns fs
+    | A.ReturnsTo ns :: fs -> flow r c' u' (ks r as_returns r' ns) aborts returns fs
+    | A.Aborts       :: fs -> flow r c' u' r' true returns fs
+  (*| A.NeverAborts  :: fs -> flow r c' u' r' false returns fs *)
+    | A.NeverReturns :: fs -> flow r c' u' r' aborts false fs 
+  and finish_flow c' u' r' aborts returns =
+    let list ns = E.Raise.list (List.rev ns) in
+    E.ematch3 (list c') (list u') (list r') (fun c u r ->
+      { cuts = c; unwinds = u; areturns = r; aborts = aborts; returns = returns }) in
+  flow r [] [] [] default_aborts default_returns in
+@ 
+The rules for flow are slightly different for calls and cuts.
+<<elaboration utilities>>=
+let call_flow r fs = flow r false true fs in
+let cut_flow r fs =
+  let null = function [] -> true | _ :: _ -> false in
+  E.seq (flow r true false fs) (fun f ->
+    if not (null f.unwinds) then
+      errorf r "'also unwinds to' is meaningless on a 'cut to'"
+    else if not (null f.areturns) then
+      errorf r "'also returns to' is meaningless on a 'cut to'"
+    else
+      E.Ok f) in
+@ 
+A call target must be either a procedure or an imported symbol with
+the native pointer type.
+<<elaboration utilities>>=
+let call_target r x = E.seq (snd (F.findv x env)) (function
+  | (F.Label (F.Proc _) | F.Import _), t when t = Types.Bits metrics.M.pointersize ->
+      E.Ok x
+  | _ -> errorf r "target %s is not a procedure or imported pointer" x) in
+@ 
