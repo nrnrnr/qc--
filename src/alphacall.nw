@@ -124,8 +124,6 @@ Alpha.cc        = Alpha.cc        or {}
 Alpha.cc["C"]   = Alpha.cc["C"]   or {}
 Alpha.cc["cmm"] = Alpha.cc["cmm"] or {}
 
-function round_mult_64 (k) return Util.round_up_mult(64, k) end
-
 Alpha.growth    = "down"
 Alpha.byteorder = "little"
 Alpha.sp_align  = 16
@@ -150,8 +148,7 @@ COMPILATION UNIT HAS MULTIPLE CALL SITES THAT RETURN THE SAME HINT, WE
 SHOULD SEE A FAILURE HERE.
 <<Alpha calling convention automata in Lua>>=
 Alpha.cc["C"].results =
-  { A.widen(round_mult_64)
-  , A.widths { 64 }
+  { A.widen(64)
   , A.choice { "float" , A.useregs { f(0), f(1) }
              , A.is_any, A.useregs { r(0) }
              }
@@ -205,7 +202,7 @@ Alpha.cc["C"].call =
   , A.choice { "float",  { A.widths { 64 }
                          , A.regs_by_bits("bits", f(16) .. f(21))
                          }
-             , A.is_any, { A.widen(round_mult_64)
+             , A.is_any, { A.widen(64, "multiple")
                          , A.regs_by_bits("bits", r(16) .. r(21))
                          }
              }
@@ -222,7 +219,7 @@ Since this is strictly an internal calling convention, we can use
 whatever we like. We use all volatile registers.
 <<Alpha calling convention automata in Lua>>=
 Alpha.cc["C"].cutto =
- { A.widen(round_mult_64)
+ { A.widen(64, "multiple")
  , A.choice { "float",  A.useregs(Alpha.vol_fp)
             , A.is_any, A.useregs(Alpha.vol_int)
             }
@@ -327,15 +324,11 @@ let c ~return_to cut spec =
 And in Lua we need only register the defined conventions.
 <<Alpha calling convention automata in Lua>>=
 -- register the new calling conventions!
-Backend.alpha.target = A.register_cc(Backend.alpha.target, "C", Alpha.cc["C"])
-Backend.alpha.target = A.register_cc(Backend.alpha.target, "cmm0",
-                                     Alpha.cc["C"])
-Backend.alpha.target = A.register_cc(Backend.alpha.target, "cmm1",
-                                     Alpha.cc["C"])
-Backend.alpha.target = A.register_cc(Backend.alpha.target, "cmm2",
-                                     Alpha.cc["C"])
-Backend.alpha.target = A.register_cc(Backend.alpha.target, "cmm3",
-                                     Alpha.cc["cmm"])
+A.register_cc(Backend.alpha.target, "C"   , Alpha.cc["C"  ])
+A.register_cc(Backend.alpha.target, "cmm0", Alpha.cc["C"  ])
+A.register_cc(Backend.alpha.target, "cmm1", Alpha.cc["C"  ])
+A.register_cc(Backend.alpha.target, "cmm2", Alpha.cc["C"  ])
+A.register_cc(Backend.alpha.target, "cmm3", Alpha.cc["cmm"])
 @ 
 
 \paragraph{Test of new calling convention specification} Module
@@ -348,11 +341,8 @@ location of the return address on exit. It has to be in \$26. Using
 <<alphacall.ml>>=
 module CS = Callspec
 
-let template spec = (* conservative spec *)
+let template = (* conservative spec *)
         { CS.name           = "cmm"
-        ; CS.call           = (fun () -> spec.A.call)
-        ; CS.results        = (fun () -> spec.A.results)
-        ; CS.cutto          = (fun () -> spec.A.cutto)
         ; CS.stack_growth   = Memalloc.Down
         ; CS.overflow       = CS.overflow C.Caller C.Caller
         ; CS.sp             = r 30
@@ -369,8 +359,8 @@ We build a [[Call.t]] value from a specification and do the final fixup
 for the return address. 
 
 <<alphacall.ml>>=
-let cc return_to cut spec =
-    let t = CS.to_call cut (rtn return_to) spec in 
+let cc auto return_to cut spec =
+    let t = CS.to_call cut (rtn return_to) auto spec in 
         { t with C.ra_on_exit = (fun _ _ t -> ra) }
 @
 
@@ -379,23 +369,20 @@ specification. Here are calling conventions that we derive from our
 template.
 
 <<alphacall.ml>>=
-let cmm0 ~return_to cut spec = let template = template spec in
-    cc return_to cut 
+let cmm0 ~return_to cut ccspec = cc ccspec return_to cut
     { template with CS.name     = "cmm0"
                   ; CS.overflow = CS.overflow C.Caller C.Caller 
     }
-let cmm1 ~return_to cut spec = let template = template spec in 
-    cc return_to cut 
+let cmm1 ~return_to cut ccspec = cc ccspec return_to cut
+
     { template with CS.name     = "cmm1"
                   ; CS.overflow = CS.overflow C.Caller C.Callee 
     }
-let cmm2 ~return_to cut spec = let template = template spec in
-    cc return_to cut 
+let cmm2 ~return_to cut ccspec = cc ccspec return_to cut 
     { template with CS.name     = "cmm2"
                   ; CS.overflow = CS.overflow C.Callee C.Caller 
     }
-let cmm3 ~return_to cut spec = let template = template spec in
-    cc return_to cut 
+let cmm3 ~return_to cut ccspec = cc ccspec return_to cut 
     { template with CS.name     = "cmm3"
                   ; CS.overflow = CS.overflow C.Callee C.Callee 
     }

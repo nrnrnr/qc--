@@ -322,14 +322,27 @@ let register_cc t name tbl =
   Call.register_cc t name ~call:(getfield "call")
      ~results:(getfield "results") ~cutto:(getfield "cutto") in
 
-let widths_errmsg i = 
-  Printf.sprintf "width %d not supported in this calling convention" i in
-let useregs_errmsg i rs =
-  Printf.sprintf
-    "cannot satisfy allocation request of width %d with useregs stage" i in
+let widen args =
+  let rec f = function
+  | [ (V.Number _) as n ; V.String "multiple" ] ->
+     Aux.round_up_to ~multiple_of:(V.int.V.project n)
+  | [ (V.Number _) as n ; V.String "exact"    ] -> 
+     let n = V.int.V.project n in
+     fun x -> let y = Aux.round_up_to ~multiple_of:n x
+              in if   y <= n then y
+                 else Unsupported.automaton_widen ~have:x ~want:n
+  | [ (V.Number _) as n ; V.Nil ] -> f [n; V.String "exact"]
+  |	[ (V.Function _) as luafunc ; V.Nil ] ->
+     (V.func (V.int **->> V.int)).V.project luafunc
+  |	_ -> raise (V.Projection ((V.list V.value).V.embed args,
+                              "Automaton.widen stage args"))
+  in Automaton.widen (f args)
+in
 
 let regty = RL.map in
 let counterty = V.string in
+
+let zerostring = Printf.sprintf "%c" '\000' in
 
 C.register_module "Automaton"
   [ (* first the stage constructors ... *)
@@ -357,11 +370,12 @@ C.register_module "Automaton"
                     Automaton.regs_by_bits
   ; "unit"        , Map.ccstage.V.embed Automaton.unit
   ; "useregs"     , V.efunc (V.list regty **->> Map.ccstage)
-                    (fun rs -> Automaton.useregs rs ~errormsg:useregs_errmsg)
-  ; "widen"       , V.efunc ((V.func (V.int **->> V.int)) **->> Map.ccstage)
-                    Automaton.widen
+                    Automaton.useregs
+  ; "widen"       , V.efunc (V.value **-> V.value **->> Map.ccstage)
+                    (fun x y -> widen [ x ; y ])
   ; "widths"      , V.efunc (V.list V.int **->> Map.ccstage)
-                    (fun ws -> Automaton.widths ws ~errormsg:widths_errmsg)
+                    Automaton.widths
+  ; "zerostring"  , V.String zerostring
 
     (* the prewritten utils ... *)
   ; "is_any"      , V.efunc (V.string **-> V.int **->> V.bool)
@@ -369,7 +383,7 @@ C.register_module "Automaton"
 
     (* registration, although it shouldn't necessarily be in here *)
   ; "register_cc" , V.efunc (Map.new_target **-> V.string **-> 
-                             V.table **->> Map.new_target)
+                             V.table **->> V.unit)
                     register_cc
   ] g;
 <<register modules to [[g]] in alphabetical order>>=

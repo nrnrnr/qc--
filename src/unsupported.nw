@@ -15,6 +15,8 @@ val explain : int -> int list -> unit
 val widen_float : int -> 'a
 val stack_width : have:int -> want:int -> 'a
 val calling_convention : string -> 'a
+val automaton_widths : int -> 'a
+val automaton_widen  : have:int -> want:int -> 'a
 @ 
 <<unsupported.ml>>=
 exception Unsupported
@@ -26,12 +28,24 @@ let getn f =
   let n = state.n in
   state.explanations <- f :: state.explanations;
   n
+@ 
 
+In the [[fail]] function we unfortunately need to hard-code the name of the
+binary being run (qc--) because otherwise OCaml provides the {\em absolute}
+pathname of the binary, and users' error messages will thus not match
+up with recorded error messages in the test suite (their binaries are likely
+in different locations).
+At some point in the future, if deemed necessary, we could always provide
+a hack using an environment variable.  If the variable is set, we output
+its value as [[binname]], otherwise we actually use [[Sys.argv.(0)]].
+<<unsupported.ml>>=
 let fail msg code args =
+(*  let binname = Sys.argv.(0) in *)
+  let binname = "qc--" in
   let args = String.concat ", " (List.map string_of_int (code :: args)) in
   Printf.eprintf "%s\n" msg;
   Printf.eprintf "For a longer explanation run\n  %s -e 'Unsupported.explain(%s)'\n"
-        (Sys.argv.(0)) args;
+        binname args;
   raise Unsupported
 <<unsupported.ml>>=
 let explain n ns =
@@ -92,3 +106,23 @@ let calling_convention_n = getn (ex0 (fun _ ->
 let calling_convention name =
   fail (nosupport (s "the '%s' calling convention" name))
        calling_convention_n []
+
+<<unsupported.ml>>=
+let automaton_widths_n = getn (ex1 (fun x ->
+  [ s "Your code tried to pass a %d-bit value as a parameter or return" x
+  ; "value to/from a procedure although it was not supported by the calling"
+  ; "convention being used for the call/return/cut to."
+  ]))
+let automaton_widths w =
+  fail (s "The current calling convention could not support a %d-bit value" w)
+      automaton_widths_n [w]
+
+let automaton_widen_n = getn (ex2 (fun have want ->
+  [ s "Your code tried to pass a %d-bit value as a parameter or return" have
+  ; "value to/from a procedure although the calling convention only being"
+  ; s "used expected a value %d-bits wide or potentially narrower." want
+  ]))
+let automaton_widen ~have ~want =
+  fail (s "The current calling convention could not widen a %d-bit " have ^
+        s "value to %d-bits" want)
+      automaton_widen_n [ have ; want ]

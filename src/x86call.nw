@@ -106,7 +106,8 @@ X86.eax = r(0)  X86.ecx = r(1)  X86.edx = r(2)
 X86.ebx = r(3)  X86.esp = r(4)  X86.ebp = r(5)
 X86.esi = r(6)  X86.edi = r(7)
 
-X86.stack_top_proxy_reg = reg("\000", 0, 80)
+X86.stack_top_proxy_reg = reg(A.zerostring, 0, 80)
+-- X86.stack_top_proxy_reg = reg("\000", 0, 80)
 X86.all_regs = {X86.eax, X86.ecx, X86.edx, X86.ebx, X86.esi, X86.edi, X86.ebp}
 @ 
 
@@ -137,12 +138,6 @@ let badwidth what w = Impossible.impossible
 let imp _ = Impossible.impossible "grave miscalculation in automaton"
 @ 
 
-And in Lua we need a few helper functions:
-<<x86 calling convention automata in Lua>>=
-function round_mult_32 (k) return Util.round_up_mult(32, k) end
-function round_mult_80 (k) return Util.round_up_mult(80, k) end
-@ 
-
 \paragraph{Automata for passing values---C~convention}
 
 For results,
@@ -156,12 +151,10 @@ let stack_top_proxy_reg = ('\000', 0, 80)
 
 <<x86 calling convention automata in Lua>>=
 X86.cc["C"].results =
-  A.choice { "float" , { A.widen(round_mult_80)
-                       , A.widths { 80 }
+  A.choice { "float" , { A.widen(80)
                        , A.useregs { X86.stack_top_proxy_reg }
                        }
-           , A.is_any, { A.widen(round_mult_32)
-                       , A.widths { 32 }
+           , A.is_any, { A.widen(32)
                        , A.useregs { X86.eax }
                        }
            }
@@ -174,7 +167,7 @@ of words.  The ABI specifies padding, but we'll use [[widen]] because
 the machine is little-endian.
 <<x86 calling convention automata in Lua>>=
 X86.cc["C"].call =
-  { A.widen(round_mult_32)
+  { A.widen(32, "multiple")
   , A.overflow { memsize = 8, byteorder = X86.byteorder, growth = "up"
                , max_alignment = X86.sp_align
                }
@@ -184,8 +177,7 @@ When passing cut-to parameters, we use all the registers---there's no
 reason not to.
 <<x86 calling convention automata in Lua>>=
 X86.cc["C"].cutto =
-  { A.widen(round_mult_32)
-  , A.widths { 32 }
+  { A.widen(32)
   , A.useregs(X86.all_regs)
   , A.overflow { memsize = 8, byteorder = X86.byteorder, growth = "up"
                , max_alignment = X86.sp_align
@@ -215,7 +207,7 @@ X86.cc["C--"].results =
   } 
 
 X86.cc["C--"].call =
-  { A.widen(round_mult_32)
+  { A.widen(32, "multiple")
   , A.useregs { X86.eax }
   , A.overflow { memsize = 8, byteorder = X86.byteorder, growth = "up"
                , max_alignment = X86.sp_align
@@ -344,10 +336,10 @@ let conv ~jump name specs ~return_to cut =
 And in Lua:
 <<x86 calling convention automata in Lua>>=
 -- register the new calling conventions!
-Backend.x86.target=A.register_cc(Backend.x86.target,"C"     ,X86.cc["C"     ])
-Backend.x86.target=A.register_cc(Backend.x86.target,"C'"    ,X86.cc["C"     ])
-Backend.x86.target=A.register_cc(Backend.x86.target,"C--"   ,X86.cc["C--"   ])
-Backend.x86.target=A.register_cc(Backend.x86.target,"notail",X86.cc["notail"])
+A.register_cc(Backend.x86.target,"C"     ,X86.cc["C"     ])
+A.register_cc(Backend.x86.target,"C'"    ,X86.cc["C"     ])
+A.register_cc(Backend.x86.target,"C--"   ,X86.cc["C--"   ])
+A.register_cc(Backend.x86.target,"notail",X86.cc["notail"])
 @ 
 
 % ------------------------------------------------------------------ 
@@ -358,9 +350,6 @@ Backend.x86.target=A.register_cc(Backend.x86.target,"notail",X86.cc["notail"])
 module CS = Callspec
 let template = (* conservative spec *)
         { CS.name           = "callspec"    (* override this! *)
-        ; CS.call           = (fun () -> assert false)
-        ; CS.results        = (fun () -> assert false)   
-        ; CS.cutto          = (fun () -> assert false)
         ; CS.stack_growth   = Memalloc.Down
         ; CS.overflow       = CS.overflow C.Caller C.Caller
         ; CS.sp             = esp
@@ -375,8 +364,8 @@ let rtn return_to k n ~ra =
     if k = 0 && n = 0 then return_to ra
     else Impossible.impossible "alternate return using C calling convention" 
 
-let cc return_to cut spec =
-    let t    = CS.to_call cut (rtn return_to) spec                   in  
+let cc auto return_to cut spec =
+    let t    = CS.to_call cut (rtn return_to) auto spec            in  
     let jump = spec.CS.overflow.C.parameter_deallocator = C.Callee in 
         { t with (* fix what Callspec got wrong *)
             C.ra_on_exit = if jump 
@@ -384,12 +373,8 @@ let cc return_to cut spec =
                            else (fun _ _ _ -> ra)
         }
 
-let c' ccname ccspec ~return_to cut = cc return_to cut
-    { template with CS.name    = ccname 
-                  ; CS.call    = (fun () -> ccspec.A.call)
-                  ; CS.results = (fun () -> ccspec.A.results)
-                  ; CS.cutto   = (fun () -> ccspec.A.cutto)
-    }
+let c' ccname auto ~return_to cut = cc auto return_to cut
+    { template with CS.name = ccname }
 @
 
 And finally, our lookup function.

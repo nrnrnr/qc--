@@ -181,7 +181,7 @@ convention.
 The [[widths]] stage can restrict the convention to satisfy only
 requests naming a listed width.
 <<exported values>>=
-val widths : int list -> errormsg:(int -> string) -> stage
+val widths : int list -> stage
 @
 The [[widen f]] stage  alters a request for a
 width~[[w]] so it has a width [[f w]], which must be at least as large as~[[w]].
@@ -217,17 +217,20 @@ $n$~is chosen such that the number of bits in these registers is
 exactly the number of bits in the request.
 If there is no such~$n$, it barfs with an error message.
 <<exported values>>=
-val useregs : Register.t list -> errormsg:(int -> Register.t list -> string) -> stage
+val useregs : Register.t list -> stage
 @ The [[useregs]] stage is stateful; a register handed out in response
 to an earlier request cannot be used to satisfy a later request.
 @
 See the paper for these.
+<<exposed types>>=
+type counter = string
+@ 
 <<exported values>>=
-val bitcounter  : string  -> stage
-val regs_by_bits: string  -> Register.t list -> stage
+val bitcounter  : counter -> stage
+val regs_by_bits: counter -> Register.t list -> stage
 
-val argcounter  : string  -> stage
-val regs_by_args: string  -> Register.t list -> stage
+val argcounter  : counter -> stage
+val regs_by_args: counter -> Register.t list -> stage
 @ 
 And this is documented nowhere, not even in the paper.  It is used
 to post-process the results from a [[freeze]] request.  For example,
@@ -386,6 +389,7 @@ implementation.
 \nwaddbox{wrap        : (methods                   -> methods) -> stage}
 \nwaddbox{swrap       : (methods -> ~start:Rtl.exp -> ~ctrs:counters -> methods) -> stage}
 \nwaddbox{wrap_choice : (('a*(methods->methods)) list -> methods -> methods) -> ('a * stage) list -> stage}
+\deeperbox{40pt}
 <<automaton.ml>>=
 let wrap  f = S (fun (I next) -> 
                    I (fun ~start ~ctrs -> f (next ~start ~ctrs)))
@@ -452,11 +456,11 @@ let txstage f  = wrap (fun next ->
 let _ = (txstage : (allocator -> allocator) -> stage)
 @ 
 <<automaton.ml>>=
-let widths ws ~errormsg = txstage
+let widths ws = txstage
   (fun nalloc ~width ~alignment ~hint ->
     if   List.exists ((=) width) ws
     then nalloc width alignment hint
-    else imposs (errormsg width))
+    else Unsupported.automaton_widths width)
 @   
 Narrowing and widening.
 <<automaton.ml>>=
@@ -544,22 +548,18 @@ let counterwrap f label =
               (n, fun s -> if s = label then Some n else ctrs s)) in
            f ctr (next ~start ~ctrs)))
 
-let counterstage f = 
-  counterwrap
+let counterstage f = counterwrap
     (fun ctr next -> { allocate = f ctr next.allocate; freeze = next.freeze })
 
-let counter = fun of_width ctr nalloc ~width ~alignment ~hint ->
-                (ctr := !ctr + of_width width ; nalloc ~width ~alignment ~hint)
+let counter of_width ctr nalloc ~width ~alignment ~hint =
+  let loc = nalloc ~width ~alignment ~hint in
+  (ctr := !ctr + of_width width ; loc)
 
-let somecounter     of_width   = counterstage (counter of_width)
-let somecounter_ref of_width n = txstage      (counter of_width n)
-
-let bitcounter     = somecounter     (fun w -> w)
-let bitcounter_ref = somecounter_ref (fun w -> w)
-let argcounter     = somecounter     (fun w -> 1)
+let bitcounter = counterstage (counter (fun w -> w))
+let argcounter = counterstage (counter (fun w -> 1))
 @ 
 
-We'll probably need to add an argument to reg_placer when we implement
+We'll probably need to add an argument to [[reg_placer]] when we implement
 register aggregation because [[regs_by_bits]] and [[regs_by_args]] should
 handle it differently (see document with formal semantics of these functions).
 <<automaton.ml>>=
@@ -578,8 +578,7 @@ let reg_placer of_width dropflag n regs next =
 
   let state = { avail = regs; used = RS.empty } in
   let alloc ~width ~alignment ~hint =
-    let new_n = !n - of_width width in
-    if dropflag then state.avail <- drop new_n regs;
+    if dropflag then state.avail <- drop !n regs;
     try
       let (_, _, w) as r = getreg state in
       if      w = width then of_loc (R.reg r)
@@ -589,21 +588,18 @@ let reg_placer of_width dropflag n regs next =
   let freeze regs mems = next.freeze (RS.union state.used regs) mems in
   { freeze = freeze; allocate = alloc }
 
-let regs_by_bits_unwrapped  = reg_placer (fun w -> w) true
-let regs_by_bits label regs =
-  counterwrap (fun ctr -> regs_by_bits_unwrapped ctr regs) label
-let regs_by_bits_ref n regs = wrap (regs_by_bits_unwrapped n regs)
+let regs_by_bits          = reg_placer (fun w -> w) true
+let regs_by_bits label rs = counterwrap (fun ctr -> regs_by_bits ctr rs) label
 
-let useregs                 = reg_placer (fun _ -> 0) false
-let useregs regs ~errormsg  = wrap (useregs (ref 0) regs)
+let useregs               = reg_placer (fun _ -> 0) false
+let useregs regs          = wrap (useregs (ref 0) regs)
 
-let regs_by_args_unwrapped  = reg_placer (fun w -> 1) true
-let regs_by_args label regs =
-    counterwrap (fun ctr -> regs_by_args_unwrapped ctr regs) label
+let regs_by_args          = reg_placer (fun w -> 1) true
+let regs_by_args label rs = counterwrap (fun ctr -> regs_by_args ctr rs) label
 @ 
 
 The code below seems like a promising start to implementing split
-allocations but might be untested.  For now, it is \em{not} included
+allocations but might be untested.  For now, it is {\em not included}
 in [[automaton.ml]].
 <<experimental code to split locations (currently unused)>>=
 <<shift and mask functions>>
@@ -611,7 +607,7 @@ let splitloc bo locs = match locs with
 | [l, w] -> l
 | _ ->
     let rec little = function
-      | []  -> Impossible.impossible "split empty list of locations"
+      | []  -> imposs "split empty list of locations"
       | [l, w] -> l
       | (loc, w) :: rest ->
           let loc' = little rest in
@@ -628,7 +624,7 @@ let splitloc bo locs = match locs with
     match bo with
     | Rtl.LittleEndian -> little locs
     | Rtl.BigEndian    -> little (List.rev locs)
-    | Rtl.Identity     -> Impossible.impossible "split without order"
+    | Rtl.Identity     -> imposs "split without order"
 <<shift and mask functions>>=
 let const w k = R.bits (Bits.U.of_int k w) w
 let zx n w v = R.app (R.opr "zx" [n; w]) [v]

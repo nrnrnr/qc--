@@ -73,9 +73,6 @@ value.
 <<type t>>=
 type t =
     { name              : string            (* name this CC *)
-    ; call              : unit -> Automaton.stage
-    ; results           : unit -> Automaton.stage
-    ; cutto             : unit -> Automaton.stage
     ; stack_growth      : Memalloc.growth   (* up or down *)
     ; overflow          : Call.overflow     (* overflow handling *)
     ; sp                : Register.t        (* stack pointer register *)
@@ -94,6 +91,7 @@ return instructions.
 <<callspec.mli>>=
 val to_call: cutto:Mflow.cut_args Target.map -> 
              return:(int -> int -> ra:Rtl.exp -> Rtl.rtl) -> 
+             Automaton.cc_spec ->
              t -> Call.t   
 @
 
@@ -157,7 +155,7 @@ let std_sp_location wordsize =
     RU.add wordsize (vfp wordsize) (R.late "minus frame size" wordsize)
 
 let mk_automaton wordsize block_name automaton = fun () ->
-    Block.srelative (vfp wordsize) block_name A.at (automaton ())
+    Block.srelative (vfp wordsize) block_name A.at automaton
 @
 
 Small utilities to observe the return address location and its policy
@@ -174,10 +172,10 @@ parameters. Incoming overflow parameters always are held in a block
 allocated by the caller.
 
 <<callspec.ml>>=
-let prolog t = 
+let prolog t auto = 
     let autosp = (fun a -> young_end (wordsize t) t.stack_growth a.A.overflow) in
     C.incoming ~growth:t.stack_growth ~sp:(R.reg t.sp)
-        ~mkauto:(mk_automaton (wordsize t) "in call parms" t.call)
+        ~mkauto:(mk_automaton (wordsize t) "in call parms" auto.A.call)
                         
         (* ~autosp:(fun _ -> vfp (wordsize t)) *)
         ~autosp:autosp
@@ -198,9 +196,9 @@ could be allocated outside the parameter block and thus we could
 deallocate the parameter block completely. 
 
 <<callspec.ml>>=
-let epilog t =
+let epilog t auto =
     C.outgoing ~growth:t.stack_growth ~sp:(R.reg t.sp)
-        ~mkauto:(mk_automaton (wordsize t) "out ovfl results" t.results)
+        ~mkauto:(mk_automaton (wordsize t) "out ovfl results" auto.A.results)
         ~autosp:(fun r -> std_sp_location (wordsize t))
         ~postsp:(match t.overflow with
                 | {C.parameter_deallocator=C.Caller; C.result_allocator=C.Caller} ->
@@ -222,9 +220,9 @@ specified in Lua. Therefore, the move to the young end might be
 redundant but we cannot test for it here.
 
 <<callspec.ml>>=
-let call_actuals t =
+let call_actuals t auto =
     C.outgoing ~growth:t.stack_growth ~sp:(R.reg t.sp)
-        ~mkauto:(mk_automaton (wordsize t) "out call parms" t.call)
+        ~mkauto:(mk_automaton (wordsize t) "out call parms" auto.A.call)
         ~autosp:(fun r  -> std_sp_location (wordsize t))
         ~postsp:(fun a sp -> young_end (wordsize t) t.stack_growth a.A.overflow)
 @
@@ -235,10 +233,10 @@ might or might not be redundant. If it is not, this will deallocate any
 callee-allocated result block.
 
 <<callspec.ml>>=
-let call_results t =
+let call_results t auto =
     let autosp = (fun a   -> young_end (wordsize t) t.stack_growth a.A.overflow) in
     C.incoming ~growth:t.stack_growth ~sp:(R.reg t.sp)
-        ~mkauto:(mk_automaton (wordsize t) "in ovfl results" t.results)
+        ~mkauto:(mk_automaton (wordsize t) "in ovfl results" auto.A.results)
         ~autosp
         ~postsp:(fun _ _ -> std_sp_location (wordsize t)) 
         ~insp:(fun a _ _ -> autosp a)
@@ -248,17 +246,17 @@ Parameter passing for cuts is independent of parameter passing for
 procedures.
 
 <<callspec.ml>>=
-let also_cuts_to t =
+let also_cuts_to t auto =
     let autosp = (fun r   -> std_sp_location (wordsize t)) in
     C.incoming ~growth:t.stack_growth ~sp:(R.reg t.sp)
-        ~mkauto:(mk_automaton (wordsize t) "in cont parms" t.cutto)
+        ~mkauto:(mk_automaton (wordsize t) "in cont parms" auto.A.cutto)
         ~autosp
         ~postsp:(fun _ _ -> std_sp_location (wordsize t)) 
         ~insp:(fun a _ _ -> autosp a)
 
-let cut_actuals t base  =
+let cut_actuals t auto base =
     C.outgoing ~growth:t.stack_growth ~sp:(R.reg t.sp) 
-        ~mkauto:(fun ()  -> A.at base (t.cutto ()))
+        ~mkauto:(fun ()  -> A.at base auto.A.cutto)
         ~autosp:(fun r   -> R.fetch (R.reg t.sp) (wordsize t))
         ~postsp:(fun _ _ -> R.fetch (R.reg t.sp) (wordsize t))
 
@@ -290,12 +288,12 @@ let where_to_save_ra t = fun ra_on_entry temp -> match style t with
     | ReturnAddress.KeepInPlace  -> ra t
     | ReturnAddress.SaveToTemp s -> Talloc.Multiple.loc temp s (wordsize t) 
 
-let to_call ~cutto ~return t =
+let to_call ~cutto ~return auto t =
     { C.name           = t.name
     ; C.overflow_alloc = t.overflow
-    ; C.call_parms     = { C.in' = prolog t       ; C.out = call_actuals t }
-    ; C.cut_parms      = { C.in' = also_cuts_to t ; C.out = cut_actuals t  }
-    ; C.results        = { C.in' = call_results t ; C.out = epilog t       }
+    ; C.call_parms     = {C.in'=prolog       t auto; C.out=call_actuals t auto}
+    ; C.cut_parms      = {C.in'=also_cuts_to t auto; C.out=cut_actuals  t auto}
+    ; C.results        = {C.in'=call_results t auto; C.out=epilog       t auto}
     
     ; C.stack_growth     = t.stack_growth
     ; C.stable_sp_loc    = std_sp_location (wordsize t)

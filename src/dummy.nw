@@ -299,16 +299,6 @@ let std_sp_location = RU.add pointersize
                         vfp (R.late "minus frame size" pointersize)
 @
 
-\paragraph{Generic Automaton Support}
-
-<<calling convention>>=
-let badwidth msg width = 
-    Impossible.impossible 
-        (Printf.sprintf "Unsupported (rounded) width %d in Dummy: %s" width msg)
-
-let error _ = Impossible.impossible "fatal error in automaton for Dummy"
-@
-
 \paragraph{Automata for passing values}
 
 We pass everything in registers, until we run out of them and pass
@@ -319,11 +309,11 @@ registers.
 let simple =
     AN.choice
         [ AN.is_hint "float",  AN.widen (Aux.round_up_to ~multiple_of:32) 
-                            *> AN.widths  [32]    ~errormsg:(badwidth "simple")
-                            *> AN.useregs fregs   ~errormsg:error
+                            *> AN.widths  [32]
+                            *> AN.useregs fregs
         ; AN.is_any,         AN.widen (Aux.round_up_to ~multiple_of:32)
-                          *> AN.widths  [32]    ~errormsg:(badwidth "simple")
-                          *> AN.useregs  regs   ~errormsg:error
+                          *> AN.widths  [32]
+                          *> AN.useregs regs
         ] *> 
     AN.overflow ~memsize:A.memsize
                 ~byteorder:A.byte_order

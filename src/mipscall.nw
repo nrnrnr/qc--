@@ -124,7 +124,6 @@ Mips         = Mips         or {}
 Mips.cc      = Mips.cc      or {}
 Mips.cc["C"] = Mips.cc["C"] or {}
 
-function round_mult_32 (k) return Util.round_up_mult(32, k)    end
 function is_float64(h, w)  return (h == "float") and (w == 64) end
 
 Mips.growth    = "down"
@@ -177,7 +176,7 @@ A C~function returns an integer (up to 64 bits wide) in [[$2]] and
 
 <<MIPS calling convention automata in Lua>>=
 Mips.cc["C"].results =
-  { A.widen  (round_mult_32)
+  { A.widen  (32, "multiple")
   , A.widths { 32, 64 }
   , A.choice { "float" , A.useregs(f(0) .. f(3))
              , A.is_any, A.useregs(r(2) .. r(3))
@@ -208,7 +207,7 @@ let arguments () =
     let bits = "bits" in
     let arg  = "arg"  in
     A.widen (Aux.round_up_to ~multiple_of: 32) *>
-    A.widths [32;64] ~errormsg:(badwidth "MIPS argument") *>
+    A.widths [32;64] *>
     A.bitcounter bits *>
     A.argcounter arg  *>
     A.first_choice 
@@ -242,15 +241,15 @@ And in Lua:
 -- see the comments above in mipscall.nw for cc["C"].call
 -- note that there's some postprocessing magic going on in mipscall.nw too
 Mips.cc["C"].call =
-  { A.widen (round_mult_32)
+  { A.widen (32, "multiple")
   , A.widths { 32, 64 }
   , A.bitcounter("bits")
   , A.argcounter("arg")
   , A.first_choice { 
       "float" , { A.choice {
                     "float" , A.choice {
-                                64      , A.regs_by_args("arg", {d(12),d(14)}),
-                                A.is_any, A.regs_by_args("arg", {f(12),f(14)})
+                                64, A.regs_by_args("arg", {d(12),d(14)}),
+                                32, A.regs_by_args("arg", {f(12),f(14)})
                               },
                     A.is_any, A.unit
                   },
@@ -286,7 +285,7 @@ Since this is strictly internal calling convention, we can use whatever
 we like. We use all volatile registers.
 <<MIPS calling convention automata in Lua>>=
 Mips.cc["C"].cutto =
-  { A.widen (round_mult_32)
+  { A.widen (32, "multiple")
   , A.choice { "float" , A.useregs(Mips.vol_fp)
              , A.is_any, A.useregs(Mips.vol_int)
              }
@@ -376,17 +375,13 @@ let c ~return_to cut stage =
     ; C.ra_on_exit       = (fun _ _ t -> ra)
     ; C.sp_on_jump       = (fun _ _ -> Rtl.null)
     }
-
-let cconv ~return_to cut ccname stage = 
-  let f =
-    match ccname with
-    | _ -> c
-  in f ~return_to cut stage
 @
 And in Lua:
 <<MIPS calling convention automata in Lua>>=
--- register the new calling convention!
-Backend.mips.target = A.register_cc(Backend.mips.target, "C", Mips.cc["C"])
+-- register the new calling conventions!
+A.register_cc(Backend.mips.target, "C" , Mips.cc["C"])
+A.register_cc(Backend.mips.target, "C'", Mips.cc["C"])
+A.register_cc(Backend.mips.target, "C--", Mips.cc["C"])
 @ 
 
 \paragraph{Support for Debugging} 
@@ -424,9 +419,6 @@ let rtn return_to k n ~ra =
 <<callspec specification>>=
 let spec = 
         { CS.name           = "C'"
-        ; CS.call           = (fun () -> ccspec.A.call)
-        ; CS.results        = (fun () -> ccspec.A.results)
-        ; CS.cutto          = (fun () -> ccspec.A.cutto)
         ; CS.stack_growth   = Memalloc.Down
         ; CS.overflow       = CS.overflow C.Caller C.Caller
         ; CS.sp             = r 29
@@ -440,10 +432,21 @@ let spec =
 @
 
 <<mipscall.ml>>=
-let c' ~return_to cut ccspec =
+let c' ~return_to cut auto =
     <<callspec specification>> in
-    let t = CS.to_call cut (rtn return_to) spec in
+    let t = CS.to_call cut (rtn return_to) auto spec in
         { t with (* fix what callspec got wrong *)
             C.ra_on_exit = (fun _ _ t -> ra)
-        }    
+        }
 @
+
+
+And finally our lookup function.
+<<mipscall.ml>>=
+let cconv ~return_to cut ccname stage = 
+  let f =
+    match ccname with
+    | "C'" -> c'
+    | _    -> c
+  in f ~return_to cut stage
+@ 

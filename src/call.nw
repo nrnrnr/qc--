@@ -293,7 +293,7 @@ type tgt = ((Rtl.exp -> Automaton.t), t) Target.t
 val register_cc : 
     tgt -> string -> call:Automaton.stage ->
     results:Automaton.stage ->
-    cutto:Automaton.stage -> tgt
+    cutto:Automaton.stage -> unit
 
 (* val get_cc : ('a, 'cc) Target.t -> string -> 'cc *)
 val get_cc : ('a, 'cc) Target.t -> string -> 'cc
@@ -389,8 +389,7 @@ let add_cc specs name ~call ~results ~cutto =
 
 let register_cc t name ~call ~results ~cutto =
    let newspecs = add_cc t.Target.cc_specs name ~call ~results ~cutto
-   in
-     { t with Target.cc_specs = newspecs }
+   in t.Target.cc_specs <- newspecs ; ()
 
 let get_ccspec tgt name =
   try  List.assoc name tgt.Target.cc_specs
