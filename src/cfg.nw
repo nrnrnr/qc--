@@ -1431,11 +1431,11 @@ THE CURRENT SOLUTION IS NOT NECESSARILY PERMANENT:
 We make two passes:
 \begin{enumerate}
 \item
-  The first pass establishes the layout constraints for cbr, call, and imp
-  nodes. The constraints are established by ensuring that the layout successor
+  The first pass establishes the layout constraints.
+  The constraints are established by ensuring that the layout successor
   has only the given node as a predecessor. This property can be established
-  by adding an unconditional branch to the layout successor. Of course, a join
-  point must be inserted in between to maintain the golden invariant.
+  by adding an unconditional branch to the layout successor. Of course, for
+  fork points, a join point must be inserted to maintain the golden invariant.
 \item
   Fold over the nodes, visiting the successors in such a way as to meet layout
   constraints. Layout constraints are met by calling succs, which returns the
@@ -1453,7 +1453,10 @@ let fold_layout f zero cfg =
     | Imp i ->
       if List.length (preds i.imp_succ) > 1 then
         set_succ node ~succ:(join_leading_to (branch cfg i.imp_succ))
-    | _     -> () in
+    | Joi _ | Ins _ | Sta _ | Ass _ | Ret _ | Ent _ ->
+      if List.length (preds (succ node)) > 1 then
+        set_succ node ~succ:(branch cfg (succ node))
+    | Mbr _ | Bra _ | Cut _ | Jum _ | Exi _ | Ill _ | Boot-> () in
   let () = iter_nodes ins_branch cfg in
   let snoc node build = fun tail -> build (f node tail) in
   cps_postorder_dfs cfg snoc (fun x -> x) (fun build _ -> build zero)
