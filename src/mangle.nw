@@ -250,8 +250,7 @@ It is created from a [[symbol]] value, and an initial [[strmap]] from
 imported or exported {\PAL} names to their corresponding symbols.
 
 <<mangle.mli>>=
-module StrMap: Map.S with type key = string
-type strmap = string StrMap.t
+type strmap = string Str.Map.t
              
 val mk:         symbol -> strmap -> mangler     (* create a mangler *)
 @
@@ -266,12 +265,8 @@ things first:  here are the types and modules declared in the
 interface, which provide no surprises.
 
 <<mangle.ml>>=
-module Comparable   = struct type t = string let compare = compare end
-module StrSet       = Set.Make(Comparable)
-module StrMap       = Map.Make(Comparable)
-
-type strset         = StrSet.t
-type strmap         = string StrMap.t
+type strset         = Str.Set.t
+type strmap         = string Str.Map.t
 
 type mangler        = string -> string
 type symbol         = { preprocess:  string -> string
@@ -287,8 +282,8 @@ be calculated from the map:
 
 <<mangle.ml>>=
 let range map =
-    let add name sym set = StrSet.add sym set in
-        StrMap.fold add map StrSet.empty
+    let add name sym set = Str.Set.add sym set in
+        Str.Map.fold add map Str.Set.empty
 @
 
 A [[mangler]] must maintain some state: the set of used symbols, and the
@@ -309,13 +304,13 @@ the new symbol are recorded in the mutable state.
 <<mangle.ml>>=
 let mk symbol map =
     let state    = { used = List.fold_right 
-                                StrSet.add symbol.reserved (range map) 
+                                Str.Set.add symbol.reserved (range map) 
                    ; map  = map
                    } 
     in
     
     let rec avoid s  =
-            if   StrSet.mem s state.used 
+            if   Str.Set.mem s state.used 
             then avoid (symbol.avoid s)
             else s 
     in
@@ -326,13 +321,13 @@ let mk symbol map =
                      String.set s' i (symbol.replace (String.get s' i))
                    done in
         let s'   = avoid s' in
-            ( state.used <- StrSet.add s' state.used
-            ; state.map  <- StrMap.add s s' state.map
+            ( state.used <- Str.Set.add s' state.used
+            ; state.map  <- Str.Map.add s s' state.map
             ; s'
             )
     in         
     let mangle s = 
-        try  StrMap.find s state.map 
+        try  Str.Map.find s state.map 
         with Not_found -> newMangle s
     in
         mangle

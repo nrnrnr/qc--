@@ -1,0 +1,46 @@
+
+\input{macros.tex}
+
+% l2h substitution cfg CFG
+% l2h substitution dots ...
+% l2h substitution AST AST
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{String Utilities}
+% ------------------------------------------------------------------ 
+
+Sets and Maps over strings are commonly used in the compiler. Although
+is is possible to create these data structures with one line of source
+code this is not always the best way to do it, because different
+instances are type incompatible. This module provides sets and maps over
+strings for the admittedly few cases where these maps are passed between
+modules. Neither the interface nor the implementation offers any
+surprises.
+
+<<str.mli>>=
+module Set: Set.S with type elt = string
+module Map: Map.S with type key = string
+@
+
+% ------------------------------------------------------------------ 
+\section{Implementation}
+% ------------------------------------------------------------------ 
+
+<<str.ml>>=
+module Compare = struct type t = string let compare=compare end
+module Set = Set.Make(Compare)
+module Map = Map.Make(Compare)
+@
+

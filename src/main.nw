@@ -75,7 +75,6 @@ let cmd_version   = literal "-version"      --> fun _ -> Cmdline.Version
 let cmd_lex       = literal "-lex" **> any  --> fun s -> Cmdline.Lex(s) 
 let cmd_asdl      = literal "-asdl" **> any --> fun s -> Cmdline.Asdl(s) 
 let cmd_check     = literal "-check" **>any --> fun s -> Cmdline.Check(s) 
-let cmd_default   = any                     --> fun s -> Cmdline.Check(s)
 
 let cmd_target    =  (literal "-target" **> any)
                  ||| succeed "dummy"
@@ -117,7 +116,6 @@ let cmdline       = (  cmd_version
                    ||| cmd_pp
                    ||| cmd_check
                    ||| cmd_compile    
-                   ||| cmd_default 
                     ) **< Pc.eof
 @
 
@@ -250,8 +248,9 @@ compiler exits with an exit code different from 0.
 =item B<-c> B<-target> I<target> I<file>
 
 Check the static semantics of I<file>, compile it into internal data
-structures and back to C--. The C-- output is written to stdout. This is
-a development option; do not expect the output to be legal C--.
+structures and back to C--. The I<target> is ignored, the C-- output is
+written to stdout. This is a development option; do not expect the
+output to be legal C--.
 
 =back
 

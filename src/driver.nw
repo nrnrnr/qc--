@@ -168,8 +168,8 @@ let check file =
     let env      = Elab.Check.global env ast         in
     let env      = Elab.Env.setDefaults env          in
         match Fenv.Dirty.errorFlag env with
-            | true  -> 1
-            | false -> 0
+            | true  -> 1        (* error occurred *)
+            | false -> 0        (* ok *)        
 @
 
 % ------------------------------------------------------------------ 
@@ -217,10 +217,9 @@ passed.
 <<driver.ml>>=
 
 module Personality = struct
-    let target                  = Target2.dummy
-    type instr                  = Cfg3.t * string
-    let mangle                  = Mangle.mk cmangle Mangle.StrMap.empty
-    let ext (cfg,name)          = Cfg3.ast cfg name mangle 
+    let target                        = Target2.dummy
+    type instr                        = Cfg3.t * string
+    let ext (cfg,name) target mangle  = Cfg3.ast cfg name mangle target
 end    
 
     
@@ -260,22 +259,26 @@ let version () =
     ( This.name     stdout 
     ; output_string stdout " "
     ; This.version  stdout 
-    ; output_string stdout "\n(c) 2000,2001 President and Fellows of Harvard University" 
-    ; output_string stdout "\nhttp://www.cminusminus.org/\n"
+    ; output_string stdout 
+        "\n(c) 2000, 2001 President and Fellows of Harvard University\n" 
+    ; output_string stdout 
+        "See also http://www.cminusminus.org/\n"
     )
 @
 
 <<driver.ml>>=
 let usage this =
   let msg = 
-  [   "\t -help                      (this to stdout)"
-  ;   "\t -version                   (version to stdout)"
-  ;   "\t -lex file.c--              (scan file)"
-  ;   "\t -asdl file.c--             (parse file)"
-  ;   "\t -pp [-w width] file.c--    (parse and pretty print file for width)"
-  ;   "\t -check file.c--            (check static semantics of file)"
-  ;   "\t -c -target target file.c-- (compile file.c-- for target)"
-  ;   "\t file.c--                   (same as -check)"
+  [   "\t -help                       this to stdout"
+  ;   "\t -version                    version to stdout"
+  ;   "\t -lex file.c--               scan file"
+  ;   "\t -asdl file.c--              parse file"
+  ;   "\t -pp [-w width] file.c--     parse and pretty print file for width"
+  ;   "\t -check file.c--             check static semantics of file"
+  ;   "\t -c -target target file.c--  compile file.c-- for target"
+  ;   "\t                             the target is ignored at the moment"
+  ;   ""
+  ;   "See also the manual page qc--(1)"
   ] in
     Printf.printf "%s command line syntax\n" this ;
     List.iter print_endline msg

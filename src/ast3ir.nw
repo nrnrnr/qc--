@@ -50,12 +50,16 @@ a program and translates it into an abstract assembler program.  An
 assembler instruction is a control-flow graph and represents an entire
 procedure. 
 
+
+<<ASM>>=
+Asm2.S with type instruction = G.t * string
+       and  type init        = string -> string
+@
+
 <<ast3ir.mli>>=
 module Make 
         (G: Cfg3.S) 
-        (A: Asm2.S with type instruction = G.t * string
-                   and  type init        = unit)  : sig
-    
+        (A: <<ASM>>) : sig
     val translate: Fenv.Clean.env -> Target2.t -> Ast.program -> A.asm
 end
 @
@@ -74,8 +78,7 @@ module F        = Fenv.Clean
 <<auxilliaries>>
 <<ExprTypes>>
 module Make (G: Cfg3.S) 
-            (Asm: Asm2.S with type instruction = (G.t * string)
-                         and  type init        = unit) =
+            (Asm: <<ASM>>) = 
 struct
     module IO = Copyinout.Make(G)
 
@@ -1012,11 +1015,11 @@ are registered in the fat environment.  For details, see modules
 
 <<Make translate program>>=
 let exports env asm = 
-    Fenv.StrSet.fold (fun s asm -> asm ++ Asm.export (Asm.mksym s)) 
+    Str.Set.fold (fun s asm -> asm ++ Asm.export (Asm.mksym s)) 
     (F.exported env) asm
 
 let imports env asm =
-    Fenv.StrSet.fold (fun s asm -> asm ++ Asm.import (Asm.mksym s)) 
+    Str.Set.fold (fun s asm -> asm ++ Asm.import (Asm.mksym s)) 
     (F.imported env) asm
 @
 
@@ -1024,7 +1027,37 @@ The assembler maintains a current section. To guarantee that
 everything goes into a meaningful section, the first action is to
 start the [[text]] section.
 
-
+<<Make translate program>>=
+let cmm =
+    let reserved =
+        [ "aborts"; "align"; "aligned"; "also"; "as"; "big"; "byteorder";
+        "case"; "const"; "continuation"; "cut"; "cuts"; "else"; "equal";
+        "export"; "foreign"; "goto"; "if"; "import"; "invariant"; "jump";
+        "little"; "memsize"; "pragma"; "register"; "return"; "returns";
+        "section"; "semi"; "span"; "stackdata"; "switch"; "target"; "targets";
+        "to"; "typedef"; "unicode"; "unwinds"; "float"; "charset";
+        "pointersize"; "wordsize"]
+    in
+    let id = function
+        | 'a'..'z'
+        | '0'..'9'
+        | 'A'..'Z'
+        | '.' 
+        | '_' 
+        | '$' 
+        | '@'      -> true
+        | _        -> false in
+    let replace = function
+        | x when id x -> x
+        | _           -> '@' in    
+        { Mangle.preprocess = (fun x -> x)
+        ; Mangle.replace    = replace
+        ; Mangle.reserved   = reserved
+        ; Mangle.avoid      = (fun x -> x ^ "$")
+        }
+@
+    
+                      
 <<Make translate program>>=
 let program env target asm tt = 
     let asm = asm ++ Asm.section "text"           in
@@ -1036,6 +1069,8 @@ let translate env target prog =
     let base     = Rtl.link "global_base" target.Target.pointersize in (*XXX*)
     let env,area = globals env target base (F.globals env) in
                    (*XXX where does area go?*)
-    let asm      = Asm.init () in
+    let map      = F.nam2sym env in
+    let mangler  = Mangle.mk cmm map in
+    let asm      = Asm.init mangler in
         program env target asm prog  (* asm *)
 @    

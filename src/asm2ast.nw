@@ -44,14 +44,29 @@ The personality provides additionally an abstract representation of
 instructions. In this specific implementation a single instruction is
 used to implement an entire procedure. However, this implementation
 requires a function [[ext]] thant translates an instruction to the
-abstract syntax of a procedure.
+abstract syntax of a procedure. 
+
+Names that are passed to the assembler become {\PAL} names in the output
+and therefore must obey certain rules. We assume that the client side
+knows about these rules and passes only legal names. This means in
+practice that names passed into this interface are not touched here and
+should be mangled previously (see module \module{mangle}).
+
+The assembler is initialized with a value of type [[init]]. In the case
+of this assembler [[init]] is a mangler function that is passed to the
+function [[ext]] that translates an instruction. Knowing the rules for
+names from the mangler and together with the actual target, [[ext]] is in
+the position to create code that respects the current constrains.
+
+<<init type>>=
+(string -> string)
+@
 
 <<module type personality>>=
 module type PERSONALITY = sig
     val target: Target2.t
     type instr
-    val  ext: instr -> Target2.t -> Ast.proc
-    val mangle: Mangle.mangler
+    val  ext: instr -> Target2.t -> <<init type>> -> Ast.proc
 end
 @
 
@@ -64,7 +79,7 @@ module Make (P: PERSONALITY): sig
     val ast: asm -> Ast.program         (* extra *)
 end
     with type instruction = P.instr 
-    with type init        = unit
+    with type init        = <<init type>>
     with type offset      = unit
 @
 
@@ -158,10 +173,12 @@ An assembler program is represented by an [[asm]] value; it contains:
 \end{itemize}
 
 <<module make>>=
+type init = <<init type>>
 type asm =      { symbols:      symbol Symbol.t
                 ; section:      string
                 ; actions':     A.section list
                 ; toplevel':    (string * A.section list) list
+                ; init:         init
                 }
 @
 
@@ -169,12 +186,12 @@ The initially empty {\PAL} program puts everything into the ``this
 can't happen'' section.  This is admittedly ugly. 
 
 <<module make>>=
-type init = unit
-let init args =
+let init (args:init) =
     { symbols           = Symbol.empty
     ; section           = "this can't happen"
     ; actions'          = []
     ; toplevel'         = []
+    ; init              = args
     }
 @
 
@@ -187,13 +204,14 @@ an action.
 <<module make>>=
 type action     = NewSection    of string
                 | CurSection    of A.section
+                | Instruction   of instruction
                 | DefSym        of symbol
                 | Nop
 @
 
 The [[mksym]] function creates [[sym]] values.  Symbols ultimately
-create {\PAL} names and must be mangled for that.  This implementation
-mangles the names as part of symbols when the {\AST} is created.
+create {\PAL} names. We assume that the client only passes legal
+(i.e.~mangled) names and thus don't touch them.
 
 <<module make>>=
 let mksym s    = Sym s
@@ -220,6 +238,11 @@ let append asm = function
     
     | CurSection x ->
         { asm with actions' = x :: asm.actions' }
+    
+    | Instruction i ->  (* special case of current section *)
+        let proc = A.Procedure(P.ext i P.target asm.init) in
+        { asm with actions' = proc :: asm.actions' }
+
     | DefSym (n,c) -> 
         if Symbol.mem n asm.symbols
         then asm
@@ -296,15 +319,15 @@ let common (Sym n) size algn sect   = DefSym(n,Common(size,algn,sect))
 let lookup (Sym n) asm              = Symbol.find n asm.symbols
 @
 
-
-All labels must be mangled in order to obey the {\PAL} syntax.
+We assume that the client is aware of the naming restrictions for labels
+and thus just put them into the {\AST} \emph{without} mangling them.
 
 <<module make>>=
-let define_label (n,c)      = CurSection(A.Datum(A.Label(P.mangle n)))
+let define_label (n,c)      = CurSection(A.Datum(A.Label n))
 let define_const (n,c) b    = 
     let bits = A.Int(b,Some (bits (Bits.width b))) 
-    in CurSection(A.Decl(A.Const(None,P.mangle n,bits)))  
-let define_local (Sym n)    = CurSection(A.Datum(A.Label (P.mangle n)))
+    in CurSection(A.Decl(A.Const(None,n,bits)))  
+let define_local (Sym n)    = CurSection(A.Datum(A.Label n))
 @
 
 This implementation does not support relocatable addresses. 
@@ -319,7 +342,8 @@ let reladdr (n,c) () = (Sym n)
 @
 
 <<module make>>=
-let instr i = CurSection(A.Procedure(P.ext i P.target))
+let instr i = Instruction i
+
 @
 
 The [[zeroes n]] function emits [[bits8[n]{0,0,...,0}]], where
