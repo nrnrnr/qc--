@@ -260,11 +260,8 @@ inst:  Par(Store(meml, reg, w:int), Llr(regl, "add", i_r, 32))
 There is a special instruction for shift left by 16 and load immediate
 that is often used when loading 32-bit constants.
 <<rules>>=
-inst:  Llr(regl, "shl", reg, w:int)
-       {: "lis "  ^ regl ^ "," ^ reg  :} 
 inst:  Store(regl, Shl(const,b:const), w:int) --[{: guard (b=16) :}]
        {: "lis " ^ regl ^ "," ^ const :}
-
 @ 
 Special purpose registers have special instructions.
 <<rules>>=
@@ -317,57 +314,33 @@ inst:  Guarded(cmp,Goto(lconst))
 \paragraph{Arithmetic instructions}
 
 <<rules>>=
-inst:  Llr(regl, "add", reg, w:int)
-       {: "add "  ^ regl ^ "," ^ regl ^ "," ^ reg   :} 
 inst:  Store(regl, Add(x:reg,y:reg), w:int)
        {: "add "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Llr(regl, "add", const, w:int)
-       {: "addi " ^ regl ^ "," ^ regl ^ "," ^ const :} 
 inst:  Store(regl, Add(x:reg,y:const), w:int)
        {: "addi " ^ regl ^ "," ^ x    ^ "," ^ y     :}
-
-inst:  Llr(regl, "sub", reg, w:int)
-       {: "sub " ^ regl ^ "," ^ regl ^ "," ^ reg   :} 
 inst:  Store(regl, Sub(x:reg,y:reg), w:int)
        {: "sub " ^ regl ^ "," ^ x    ^ "," ^ y     :}
-
-inst:  Llr(regl, "mul_trunc", reg, w:int)
-       {: "mulhw " ^ regl ^ "," ^ regl ^ "," ^ reg   :} 
 inst:  Store(regl, Mul_trunc(x:reg,y:reg), w:int)
        {: "mulhw " ^ regl ^ "," ^ x    ^ "," ^ y     :}
-
 inst:  Store(regl, Neg(reg), w:int) {: "neg " ^ reg ^ "," ^ reg :}
 @ 
 \paragraph{Logical instructions}
 
 <<rules>>=
-inst:  Llr(regl, "and", reg, w:int)
-       {: "and "   ^ regl ^ "," ^ regl ^ "," ^ reg   :} 
 inst:  Store(regl, And(x:reg,y:reg), w:int)
        {: "and "   ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Llr(regl, "and", const, w:int)
-       {: "andi. " ^ regl ^ "," ^ regl ^ "," ^ const :} 
 inst:  Store(regl, And(x:reg,y:const), w:int)
        {: "andi. " ^ regl ^ "," ^ x    ^ "," ^ y     :}
-
-inst:  Llr(regl, "or", reg, w:int)
-       {: "or "  ^ regl ^ "," ^ regl ^ "," ^ reg   :} 
 inst:  Store(regl, Or(x:reg,y:reg), w:int)
        {: "or "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Llr(regl, "or", const, w:int)
-       {: "ori " ^ regl ^ "," ^ regl ^ "," ^ const :} 
 inst:  Store(regl, Or(x:reg,y:const), w:int)
        {: "ori " ^ regl ^ "," ^ x    ^ "," ^ y     :}
-
-inst:  Llr(regl, "xor", reg, w:int)
-       {: "xor "  ^ regl ^ "," ^ regl ^ "," ^ reg   :} 
 inst:  Store(regl, Xor(x:reg,y:reg), w:int)
        {: "xor "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Llr(regl, "xor", const, w:int)
-       {: "xori " ^ regl ^ "," ^ regl ^ "," ^ const :} 
 inst:  Store(regl, Xor(x:reg,y:const), w:int)
        {: "xori " ^ regl ^ "," ^ x    ^ "," ^ y     :}
-
+inst: Store(regl, Shl(x:reg, y:reg), w:int)
+       {: "slw " ^ regl ^ "," ^  x    ^ "," ^ y     :}
 @
 \paragraph{Recommended Simplified Mnemonics}
 Appendix F.9 of the architecture manual describes some of the most
@@ -428,8 +401,6 @@ any : Cmp(op:string, x:any, y:any)
                         {: cat [ "Cmp(";op;",";x;",";y;")" ] :}
 any : Par(l:any, r:any) {: "Par(" ^ l ^ "," ^ r ^ ")" :}
 any : Goto(any) {: "Goto(" ^ any ^ ")" :}
-any : Llr(dst:any, string, src:any, w:int) 
-  {: "Llr(" ^ dst ^","^string^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
 @
 
 
@@ -450,6 +421,7 @@ constructor for each operator.
 | RP.App(("and",  ws), [x; y]) -> conAnd  (exp x) (exp y)
 | RP.App(("or",   ws), [RP.Fetch(l,_) as x; RP.Fetch(l',_) as y]) ->
   if l = l' then conMr (exp x) else conOr  (exp x) (exp y)
+| RP.App(("or",   ws), [x; y]) -> conOr   (exp x) (exp y)
 | RP.App(("xor",  ws), [x; y]) -> conXor  (exp x) (exp y)
 | RP.App(("shl",  ws), [x; y]) -> conShl  (exp x) (exp y)
 | RP.App(("shra", ws), [x; y]) -> conShra (exp x) (exp y)
@@ -488,8 +460,7 @@ and loc l = match l with
   | RP.Reg(sp, i, w)          -> conReg sp i w 
   | RP.Mem(_, _, _, _, _)     -> error "non-mem, non-reg cell"
   | RP.Var(s, i, w)           -> error "var found"
-  | RP.Slice(w,i,l)           -> (*error "cannot handle slice"*)
-      conSlice w i (loc l)
+  | RP.Slice(w,i,l)           -> conSlice w i (loc l)
 @ 
 Things start to get a bit baroque here, as we recognize different
 special forms a single effect can take.
@@ -509,8 +480,6 @@ respectively.
 }
 <<code to follow the labeler>>=  
 and effect = function
-  | RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w) 
-    when l = l'                       -> conLlr (loc l) o (exp r) w
   | RP.Store(RP.Reg('c', i, w),r,_) 
     when (i = SS.indices.SS.pc)       -> conGoto (exp r)
   | RP.Store(l,e,w)                   -> conStore (loc l) (exp e) w
