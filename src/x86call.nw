@@ -44,25 +44,25 @@ the return register is [[eax]], and the volatile registers are
 
 <<x86call.ml>>=
 let ( **> ) f x = f x
+let ( *> ) f1 f2 x = f1 (f2 x)
 let badwidth what w = Impossible.impossible
     ("Unsupported (rounded) width " ^ string_of_int w ^ " in x86 " ^ what)
 
 let imp _ = Impossible.impossible "grave miscalculation in automaton"
+@ 
+Strictly more permissive than~C, as it permits returning one integer
+\emph{and} one floating result.
+<<x86call.ml>>=
 let results base = 
   A.mk **>
-  A.widen  (Aux.round_up_to ~multiple_of:32) **>
-  A.widths [32] ~errormsg:(badwidth "x86 return convention") **>
-  A.useregs [eax] ~errormsg:imp **>
-  A.no_overflow base 4 "multiple return values for x86 C"
-@ 
-There's a different rule for returning floating-point results.
-We don't yet have appropriate combinators.
-<<x86call.ml>>=
-let float_results base = 
-  A.mk **>
-  A.widen  (Aux.round_up_to ~multiple_of:80) **>
-  A.widths [80] ~errormsg:(badwidth "x86 floating return convention") **>
-  A.useregs [('f', 0, 80)] ~errormsg:imp **>
+  A.hint_choice
+     [ ((==) "float"),  A.widen  (Aux.round_up_to ~multiple_of:80) *>
+                        A.widths [80] ~errormsg:(badwidth "x86 floating return") *>
+                        A.useregs [('f', 0, 80)] ~errormsg:imp
+     ; (fun _ -> true), A.widen  (Aux.round_up_to ~multiple_of:32) *>
+                        A.widths [32] ~errormsg:(badwidth "x86 return convention") *>
+                        A.useregs [eax] ~errormsg:imp
+     ] **>
   A.no_overflow base 4 "multiple return values for x86 C"
 @ 
 Here are the volatile and nonvolatile registers.
@@ -132,12 +132,11 @@ let prolog  =
     ~postsp:(fun _ -> std_sp_location)
     ~relative_to:vfp
 @ 
-This code works only for integer results.
 <<x86call.ml>>=
 let call_results  =
   C.incoming ~growth ~sp ~spec:results
     ~autosp:(fun r -> Block.base r.A.overflow)
-    ~postsp:(fun _ -> vfp)  (* irrelevant *)
+    ~postsp:(fun _ -> std_sp_location)  (* irrelevant? *)
     ~relative_to:vfp
 let epilog  =
   C.outgoing ~growth ~sp ~spec:results
@@ -193,6 +192,7 @@ let c ~return_to cut =
   ; C.also_returns_to = call_results
 
   ; C.stack_growth    = Memalloc.Down
+  ; C.stable_sp_loc   = std_sp_location
   ; C.sp_align        = 4               (* alignment of stack pointer at call/cut *)
   ; C.ra              = ra              (* where return address is on entry *)
   ; C.nvregs          = nvregs          (* registers preserved across calls *)

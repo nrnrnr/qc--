@@ -54,6 +54,8 @@ val scan : string -> unit
 val version : unit -> unit
 val compile : (Proc.t -> unit) ->
                 'a * Ast.program -> Target2.t -> Fenv.Clean.env -> Asm3.assembler
+val new_compile : (Ast2ir.proc -> unit) ->
+                'a * Ast.program -> Ast2ir.tgt -> Fenv.Clean.env -> Asm3.assembler
 @
 
 
@@ -149,8 +151,10 @@ let sparcasm    (solaris:bool) (c:out_channel)  = Sparcasm.make solaris c
 The user specifies in the source code some target properties. They must
 be consistent with the actual target. We check this in
 [[consistency_check]].
+THIS CHECK SHOULD PROBABLY BE MOVED INTO ELAB, WHICH SHOULD ALSO CHECK FOR
+THINGS LIKE CORRECT CALLING CONVENTIONS AND HARDWARE REGISTERS.
 <<driver2.ml>>=
-let consistency_check env (t:Target2.t) =
+let consistency_check env (t:('a, 'b) Target2.t') =
     let int i = string_of_int i in
     let msg property source target = 
         let m = Printf.sprintf 
@@ -192,6 +196,10 @@ let check (map,ast) (asm) =
 let compile (opt) (map,ast) (target) (env)  =
     let () = consistency_check env target in   
     IR.translate env target opt ast 
+
+let new_compile (opt) (map,ast) (target) (env)  =
+    let () = consistency_check env target in   
+    Ast2ir.translate target env opt ast 
 
 let pretty (map,ast) =
     Astpp.program ast

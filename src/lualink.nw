@@ -29,25 +29,36 @@ module Reloc             = Sledlib.MkReloc
 module MSparcRtlEncoder  = Msparcenc.Mk(Reloc)
 module MSparcRtlExpander = Sparcexpander.Make (Reloc) (MSparcRtlEncoder)
 
+module T1 = Lua.Lib.Combine.T3
+                (DocType)                   (* T1.T1 *)
+                (AsmType)                   (* T1.T2 *)
+                (Luaiolib.T)                (* T1.T3 *)
+
 module T    = Lua.Lib.Combine.T10           (* types *)
-                (AsmType)                   (* T1 *)
+                (T1)
                 (AstType)                   (* T2 *)
                 (EnvType)                   (* T3 *)
                 (ProcType)                  (* T4 *)
                 (TargetType)                (* T5 *)
-                (DocType)                   (* T6 *)
-                (Luaiolib.T)                (* T7 *)
+                (NewProcType)               (* T6 *)
+                (NewTargetType)             (* T7 *)
                 (Backplane.T)               (* T8 *)
                 (Colorgraph.GCT)            (* T9 *)
                 (BlockType)                 (* T10 *)
 
-module AsmT        = T.T1
+
+module T1V = Lua.Lib.Lift (T1) (T.T1)
+
+module DocT        = T1V.T1
+module AsmT        = T1V.T2
+module LuaioT      = T1V.T3
+
 module AstT        = T.T2
 module EnvT        = T.T3
 module ProcT       = T.T4
 module TargetT     = T.T5
-module DocT        = T.T6
-module LuaioT      = T.T7
+module NewProcT    = T.T6
+module NewTargetT  = T.T7
 module BackplaneT  = T.T8
 module ColorgraphT = T.T9
 module BlockT      = T.T10
@@ -59,7 +70,7 @@ module L1 =
     (Luaiolib.Make (LuaioT))
     (IO (Luastrlib.M))
     (IO (Luamathlib.M))
-    (MakeLib (AsmT) (AstT) (EnvT) (ProcT) (TargetT) (DocT) (LuaioT) (BlockT))
+    (MakeLib (AsmT) (AstT) (EnvT) (ProcT) (TargetT) (NewProcT) (NewTargetT) (DocT) (LuaioT) (BlockT))
     (Backplane.Make  (BackplaneT) (ProcT))
     (Colorgraph.Make (BackplaneT) (ColorgraphT) (ProcT))
     (Targets.MakeLib (TargetT))
@@ -127,11 +138,23 @@ module ProcType = struct
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> ("<proc "^t.Proc.symbol#text^">") 
 end
+module NewProcType = struct
+    type 'a t       = Ast2ir.proc
+    let tname       = "new proc"
+    let eq _        = fun x y -> x = y
+    let to_string _ = fun t -> ("<new proc "^t.Proc.symbol#text^">") 
+end
 module TargetType = struct
     type 'a t       = Target2.t
     let tname       = "target"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<target " ^ t.Target2.name ^ ">" 
+end
+module NewTargetType = struct
+    type 'a t       = Ast2ir.tgt
+    let tname       = "new target"
+    let eq _        = fun x y -> x = y
+    let to_string _ = fun t -> "<new target " ^ t.Target2.name ^ ">" 
 end
 module DocType = struct
     type 'a t       = Pp.doc
@@ -155,6 +178,10 @@ module MakeLib
   (ProcV   : Lua.Lib.TYPEVIEW with type 'a t        = 'a ProcType.t
                               and  type 'a combined = 'a AsmV.combined)
   (TargetV : Lua.Lib.TYPEVIEW with type 'a t        = 'a TargetType.t 
+                              and  type 'a combined = 'a AsmV.combined)
+  (NewProcV   : Lua.Lib.TYPEVIEW with type 'a t     = 'a NewProcType.t
+                              and  type 'a combined = 'a AsmV.combined)
+  (NewTargetV : Lua.Lib.TYPEVIEW with type 'a t     = 'a NewTargetType.t 
                               and  type 'a combined = 'a AsmV.combined)
   (DocV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a DocType.t 
                               and  type 'a combined = 'a AsmV.combined)
@@ -186,9 +213,12 @@ module Map = struct
     let asm       = AsmV.makemap    V.userdata V.projection
     let env       = EnvV.makemap    V.userdata V.projection
     let proc      = ProcV.makemap   V.userdata V.projection
+    let new_proc  = NewProcV.makemap   V.userdata V.projection
     let doc       = DocV.makemap    V.userdata V.projection
     let target    = TargetV.makemap V.userdata V.projection
+    let new_target= NewTargetV.makemap V.userdata V.projection
     let optimize  = V.closure (proc **-> V.runit)
+    let new_optimize  = V.closure (new_proc **-> V.runit)
     let channel   = InOutV.makemap  V.userdata V.projection
     let inchan    = Luaiolib.in'    channel    V.projection
     let outchan   = Luaiolib.out    channel    V.projection
@@ -226,6 +256,9 @@ let init g =
     ; "compile"   , V.efunc (Map.optimize 
                             **-> Map.ast  **-> Map.target 
                             **-> Map.env  **-> V.result Map.asm) Driver2.compile
+    ; "new_compile"   , V.efunc (Map.new_optimize 
+                            **-> Map.ast  **-> Map.new_target 
+                            **-> Map.env  **-> V.result Map.asm) Driver2.new_compile
     ] g;
   C.register_module "Expander"
     [ "x86f" , V.efunc (V.value **-> Map.proc **-> V.result V.bool) X86.X.cfg
@@ -239,6 +272,7 @@ let init g =
     [ "dummy",      Map.target.V.embed Targets.dummy 
     ; "sparc",      Map.target.V.embed Targets.sparc
     ; "x86",        Map.target.V.embed X86.target
+    ; "new_x86",    Map.new_target.V.embed X86.new_target
     ; "interp",     Map.target.V.embed Interp.target
     ] g;
   C.register_module "Block" 

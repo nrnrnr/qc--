@@ -535,10 +535,8 @@ function CMD.interact ()
     end           
 end
 @
-
-Simple command line options are implemented in the [[CMD]] module
+Simple command-line options are implemented in the [[CMD]] module
 directly. 
-
 <<Lua Boot Script>>=
 CMD.help = [[
 qc-- [option | file] ...
@@ -562,7 +560,10 @@ var=value   Assign the variable var in qc--'s Lua interpreter the
 
 See also: qc--(1), qc--internals(1), http://www.cminusminus.org/.            
 ]]
-
+@ 
+SHOULDN'T THE ASSIGNMENT TO [[CMD.manpage]] BE GENERATED AUTOMATICALLY
+SO IT CAN TRACK CHANGES IN THE MAN PAGE?
+<<Lua Boot Script>>=
 CMD.manpage = [[
 NAME
        qc-- - The Quick C-- Compiler
@@ -772,7 +773,6 @@ We have to be careful when using tables as lists, as tables do not
 guarantee any order when traversed using [[next()]]. Therefore we rely
 on indices. All our tables are indexed by consecutive numbers $1 \dots
 n$.
-
 <<Lua Boot Script>>=
 function CMD.cmdline (args)
     local O = Options
@@ -857,12 +857,15 @@ function CMD.run ()
         local objs= {}
         objs.n = 0      -- save in OCaml implementation?
 
-        while i <= O.argc do
+        if not CMD.dispatch then -- wizards can set CMD.dispatch
             if O.interp or backend == Backend.interp then
-                obj = CMD.interp_dispatch(Options.argv[i],O.output)
+                CMD.dispatch = CMD.interp_dispatch
             else
-                obj = CMD.compile_dispatch(Options.argv[i],O.output)
+                CMD.dispatch = CMD.compile_dispatch
             end    
+        end
+        while i <= O.argc do
+            obj = CMD.dispatch(Options.argv[i],O.output)
             -- skip nil entries resulted from *.lua
             if obj then objs.n=objs.n+1; objs[objs.n] = obj end
             i = i+1
@@ -878,7 +881,6 @@ function CMD.run ()
     return 0
 end    
 @
-
 [[CMD.dispatch]] decides what needs to be done with an individual file,
 based on its file name suffix and returns the file name of the final
 result. This is simple in principle and complicated in practice because
@@ -891,7 +893,6 @@ The [[CMD.cmm2asm]] does what it names suggest: it takes the name of a
 parameter [[out]] is not [[nil]] it specifies the file name of the
 resulting file. Otherwise the [[cmm2asm]] is free to pick a name. This
 applies to the other functions $x$[[2]]$y$ analogously.
-
 <<Lua Boot Script>>=
 function CMD.compile_dispatch(file,out)
     if Util.checksuffix (file, ".c--") or Util.checksuffix(file, ".cmm") then 

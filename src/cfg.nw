@@ -919,15 +919,35 @@ let succ node = match node with
   | Ill _ -> undef "succ" "illegal"
   | Boot  -> undef "succ" "boot"
 
+let eq node node' = match node, node' with
+  | Joi r, Joi r' -> r == r'
+  | Ins r, Ins r' -> r == r'
+  | Bra r, Bra r' -> r == r'
+  | Cbr r, Cbr r' -> r == r'
+  | Mbr r, Mbr r' -> r == r'
+  | Jum r, Jum r' -> r == r'
+  | Cal r, Cal r' -> r == r'
+  | Ret r, Ret r' -> r == r'
+  | Cut r, Cut r' -> r == r'
+  | Ent r, Ent r' -> r == r'
+  | Exi r, Exi r' -> r == r'
+  | Ass r, Ass r' -> r == r'
+  | Ill r, Ill r' -> r == r'
+  | Imp r, Imp r' -> r == r'
+  | Boot,  Boot   -> true
+  | _,     _      -> false
+
+
 let get_cfg start_node =
-  let rec search n =
-    if n = start_node then imposs "cycle in cfg with no join node"
+  let rec search n badlist =
+    if List.exists ((==) n) badlist then
+      imposs "cycle in cfg with no join node"
     else match n with
         | Exi e -> e.exi_cfg
         | Joi j -> j.joi_cfg
         | Ill i -> i.ill_cfg
-        | x     -> search (succ x) in (* relies on golden invariant *)
-  search start_node
+        | n     -> search (succ_n n 0) (n::badlist) in (* relies on golden invariant *)
+  search start_node []
 @
 
 We avoid showing duplicates to the client.
@@ -1064,10 +1084,8 @@ let add_inedge_uses node regs = match node with
   | Ret r -> RS.union regs r.ret_uses
   | _     -> regs
 @ 
-
 The only graph mutation occurs via the set successors functions. 
 The rest of the CFG implementation also uses these mutators.
-
 <<set successors>>=
 let node_labeled cfg label =
   try SM.find label cfg.label_map
@@ -1082,11 +1100,9 @@ let node_labeled cfg label =
     let () = cfg.label_map <- SM.add label join cfg.label_map in
     join
 @
-
 The successor of a branch node must be a join point.
 [[join_leading_to]] inserts such a join point, if necessary.
 The proper successor (a join point) is then returned.
-
 <<set successors>>=
 let rec join_leading_to ~succ =
   if is_join succ then succ
@@ -1098,7 +1114,8 @@ let rec join_leading_to ~succ =
             let () = set_succ_n join 0 ~succ:succ in
             join
 @
-
+This black magic was on NR's whiteboard, but it still needs to be
+explained :-)
 <<set successors>>=
 and set_succ' single mult cbr node old_succ ~succ =
   if not (is_join succ) && not (is_ill succ) && not (is_ill (pred succ)) then
@@ -1112,7 +1129,6 @@ and set_succ' single mult cbr node old_succ ~succ =
       )
     end
 @
-
 <<update [[node]]'s $n$th successor field to point to [[succ]]>>=
 match node with
 | Joi j -> j.joi_succ <- single succ

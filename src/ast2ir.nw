@@ -65,15 +65,13 @@ the less-specific information before the more-specific information.
 The functor parameters and the parameter of type [[string->Call.t]]
 will all go away once the new flow graph ([[Cfg]]) takes over the compiler.
 <<ast2ir.mli>>=
-module Make (G : Cfg.S) (*(Call : Call.S with type node = Rtl.rtl G.node)*) : sig
-  type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target2.t'
-  type proc = (Automaton.t, Rtl.rtl G.cfg, Call.t, tgt) Proc.t'
-  val translate :  tgt
+type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target2.t'
+type proc = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t'
+val translate :  tgt
                 -> Fenv.Clean.env 
                 -> optimizer: (proc -> unit)
                 -> Ast.program 
                 -> Asm3.assembler
-end
 @
 
 % ------------------------------------------------------------------ 
@@ -108,40 +106,39 @@ once at top level and once instead each procedure.
 The first instantiation is visible here; the second appears in 
 [[<<definition of [[proc]], which translates one procedure>>]].
 <<ast2ir.ml>>=
-module Make (G : Cfg.S) (*(C : Call.S with type node = Rtl.rtl G.node)*) = struct
-  module C = Call
-  <<statement-related types>>
-  <<module [[K]], for continution info>>
-  <<types for gathering stack and continuation info>>
-  type 'a nvr = { reg : 'a; tmp : 'a; w : int }   (* for callee-saves info *)
+module G = Cfgx.M
+module C = Call
+<<statement-related types>>
+<<module [[K]], for continution info>>
+<<types for gathering stack and continuation info>>
+type 'a nvr = { reg : 'a; tmp : 'a; w : int }   (* for callee-saves info *)
 
-  type tgt = ((Rtl.exp -> Automaton.t), C.t) Target2.t'
-  type proc = (Automaton.t, Rtl.rtl G.cfg, C.t, tgt) Proc.t'
+type tgt = ((Rtl.exp -> Automaton.t), C.t) Target2.t'
+type proc = (Automaton.t, Rtl.rtl G.cfg, C.t, tgt) Proc.t'
 
-  let translate target env ~optimizer =
-    let pointersize = target.T.pointersize in
-    let add = RU.add pointersize in
-    let ccs = target.T.cc in
-    let to_cc cconv = ccs (Aux.Option.get default_cc cconv) in
-    <<definition of [[lvalue_name_in_env]]>> in
-    <<environment-independent support for formals, actuals, and results>> in
-    let exprfuns env contenv cont_rvalue =
-      <<definition of function [[exprtype]]>> in
-      let lvalue_name = lvalue_name_in_env env in
-      <<definition of [[rvalue_name]]>> in
-      <<mutually recursive nest of [[expr]] and [[lvalue]]>> in
-      expr, exprtype, lvalue  in
-    let expr, exprtype, lvalue = 
-      let impcont _ _ _ = impossible "continuation at top level" in
-      exprfuns env Strutil.Map.empty impcont in
-    <<definitions of [[compile_const]], [[eval_const]], and [[link_const]]>> in
-    <<definition of [[proc]], which translates one procedure>> in
-    <<definition of [[globals]]>> in
-    <<function [[datum]], for initialized and uninitialized data>> in
-    <<function [[toplevel]], for emitting toplevel items>> in
-    <<function [[program]], which translates an entire program>> in
-  program
-end
+let translate target env ~optimizer =
+  let pointersize = target.T.pointersize in
+  let add = RU.add pointersize in
+  let ccs = target.T.cc in
+  let to_cc cconv = ccs (Aux.Option.get default_cc cconv) in
+  <<definition of [[lvalue_name_in_env]]>> in
+  <<environment-independent support for formals, actuals, and results>> in
+  let exprfuns env contenv cont_rvalue =
+    <<definition of function [[exprtype]]>> in
+    let lvalue_name = lvalue_name_in_env env in
+    <<definition of [[rvalue_name]]>> in
+    <<mutually recursive nest of [[expr]] and [[lvalue]]>> in
+    expr, exprtype, lvalue  in
+  let expr, exprtype, lvalue = 
+    let impcont _ _ _ = impossible "continuation at top level" in
+    exprfuns env Strutil.Map.empty impcont in
+  <<definitions of [[compile_const]], [[eval_const]], and [[link_const]]>> in
+  <<definition of [[proc]], which translates one procedure>> in
+  <<definition of [[globals]]>> in
+  <<function [[datum]], for initialized and uninitialized data>> in
+  <<function [[toplevel]], for emitting toplevel items>> in
+  <<function [[program]], which translates an entire program>> in
+program
 @
 
 % ------------------------------------------------------------------
@@ -742,7 +739,7 @@ let insert_init_cont_nodes contmap init_node =
   let one_node cname k succ = 
     if k.K.escapes then
       let pc = exp_of_label k.K.cut_pc in
-      let sp = Block.base spblock in
+      let sp = proc_cc.C.stable_sp_loc in
       G.instruction g (Contn.init_code k.K.rep sp pc) succ
     else
       succ in
@@ -777,8 +774,8 @@ let proc containing_spans (cconv,procname,args,procbody) =
     let g = G.mk info Idgen.label in (* empty control-flow graph *)
 
     let vfp = target.T.vfp in (* virtual frame pointer *)
-    let spblock =
-      Block.relative vfp "sp" Block.at ~size:0 ~alignment:proc_cc.C.sp_align in
+    let spblock = 
+      Block.at ~base:proc_cc.C.stable_sp_loc ~size:0 ~alignment:proc_cc.C.sp_align in
 
     (* calculate amount of user stack data - rebinds env! *)
     <<definition of [[stackdata]]>> in
