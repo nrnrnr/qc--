@@ -108,15 +108,23 @@ let empty = Subst.empty
 let unifyExn msg = raise UnifyExn
 let substExn ()  = raise SubstExn
 
-@ The Unification has two non trivial cases:
+@ What is called a unification is technically a matching of a constant
+type with a variable type. Unification in contrast deals with two two
+variable term. There are two non trivial cases:
 
 \begin{itemize}
 \item A variable width unifies with a fixed width; this leads to an
-      instantiationof the variable. 
+      instantiation of the variable. 
 \item A width variable might have been instantiated; thus the
       instantiation must be looked up in the substitutions and checked
       against the fixed width.
 \end{itemize}
+
+The unification of procedure types does not unify the result types
+because there is no result type at the call site.  The unification
+typically results in a substitution for the result type in the type
+scheme.  When the substitution is then applied (using [[subst]]) to
+the type scheme a result type is available.
 
 <<>>=
 let rec unify ts t sigma = match ts, t with
