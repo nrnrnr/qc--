@@ -283,14 +283,33 @@ type sdoc =
     | SLine             of int    * sdoc    (* newline + spaces *)
 
 @ Printing a [[sdoc]] value to a string or file is straight forward. 
-The [[oc]] parameter for [[sdocToFile]] is an open file channel.
+The [[oc]] parameter for [[sdocToFile]] is an open file channel. For
+efficiency, the [[sdocToString]] function uses the imperative [[Buffer]]
+interface.
 
-<<pp.ml>>=
+<<pp.ml original>>=
 let rec sdocToString = function
     | SNil              -> ""
     | SText(s,d)        -> s ^ sdocToString d
     | SLine(i,d)        -> let prefix = String.make i ' ' 
                            in  nl ^ prefix ^ sdocToString d
+<<pp.ml>>=
+let sdocToString sdoc =
+    let buf = Buffer.create 256 in
+    let rec loop = function
+        | SNil              -> ()
+        | SText(s,d)        -> ( Buffer.add_string buf s
+                               ; loop d
+                               )
+        | SLine(i,d)        -> let prefix = String.make i ' ' in
+                               ( Buffer.add_char   buf '\n'
+                               ; Buffer.add_string buf prefix
+                               ; loop d
+                               )
+    in
+        ( loop sdoc
+        ; Buffer.contents buf
+        )
 
 let sdocToFile oc doc = 
     let pstr = output_string oc in
