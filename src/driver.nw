@@ -214,7 +214,19 @@ The [[compile]] compiles a source file from {\PAL} to {\PAL}.  The
 generation is only performed when the check of the static semantics is
 passed. 
     
-<<driver.ml unused>>=
+<<driver.ml>>=
+
+module Personality = struct
+    let target = Target2.dummy
+    type instr = Cfg3.t
+    let ext _  = (None, "foo", [], [])
+    let mangle = Mangle.mk cmangle Mangle.StrMap.empty
+end    
+
+    
+module Asm = Asm2ast.Make(Personality)
+module IR  = Ast3ir.Make (Cfg3) (Asm)
+
 let compile target file =
     let ast, map = ast_of file                       in
     let env      = Fenv.Dirty.empty map              in
@@ -224,9 +236,9 @@ let compile target file =
     let env      = Elab.Env.setDefaults env          in
         if Fenv.Dirty.errorFlag env = true then 1 else
         let env    = Fenv.clean env                  in
-        let target = Target.dummy                    in
+        let target = Target2.dummy                   in
         let width  = 72                              in
-        let _,asm  = Ast2IR.translate env target ast in
+        let asm    = IR.translate env target ast in
             ( Astpp.ppToFile stdout width (Asm.ast asm)
             ; 0
             )
@@ -255,8 +267,8 @@ let usage this =
   ;   "\t -asdl file.c--             (parse file)"
   ;   "\t -pp [-w width] file.c--    (parse and pretty print file for width)"
   ;   "\t -check file.c--            (check static semantics of file)"
-  ;   "\t -ir file.c--               (create abstract c-- )"
-  ;   "\t file.c--                   (same as -check file)"
+  ;   "\t -c -target target file.c-- (compile file.c-- for target)"
+  ;   "\t file.c--                   (same as -check)"
   ] in
     Printf.printf "%s command line syntax\n" this ;
     List.iter print_endline msg
@@ -280,7 +292,7 @@ let dispatch cmd =
         | Cmdline.Asdl(file)            -> asdl file      ; 0
         | Cmdline.PP(file,width)        -> pp file width  ; 0
         | Cmdline.Check(file)           -> check file
-    (*  | Cmdline.Compile(target,file)  -> compile target file *)
+        | Cmdline.Compile(target,file)  -> compile target file   
         )
     with
         | E.ErrorExn(msg)               -> E.errorPrt msg; 1

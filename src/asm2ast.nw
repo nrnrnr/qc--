@@ -48,7 +48,7 @@ abstract syntax of a procedure.
 
 <<module type personality>>=
 module type PERSONALITY = sig
-    val target: Target.t
+    val target: Target2.t
     type instr
     val  ext: instr -> Ast.proc
     val mangle: Mangle.mangler
@@ -86,6 +86,7 @@ module Make (P: PERSONALITY) = struct
 end
 
 <<module make>>=
+module T        = Target2
 module A        = Ast
 module Symbol   = Map.Make(struct type t=string let compare=compare end)
 @
@@ -104,14 +105,14 @@ necessary informations. The following functions helps to create types
 and values in {\AST} syntax.
 
 <<module make>>=
-let pointer     = A.BitsTy(P.target#pointersize)
+let pointer     = A.BitsTy(P.target.T.pointersize)
 let bits n      = A.BitsTy n
-let int n       = A.Int( Bits.of_int n P.target#wordsize
-                       , Some (bits P.target#wordsize)
+let int n       = A.Int( Bits.of_int n P.target.T.wordsize
+                       , Some (bits P.target.T.wordsize)
                        )
 let one         = int 1 (* wordsize *)
-let zero        = A.Int( Bits.of_int 0 P.target#memsize
-                       , Some (bits P.target#memsize)
+let zero        = A.Int( Bits.of_int 0 P.target.T.memsize
+                       , Some (bits P.target.T.memsize)
                        ) (* memsize *)
 @
 
@@ -277,7 +278,7 @@ uninitialized data.
 
 <<module make>>=
 let addloc n = 
-    let memsize = P.target#memsize in
+    let memsize = P.target.T.memsize in
     let ty      = bits memsize            in
     let size    = int n                   in
         CurSection(A.Datum(A.MemDecl(ty,A.FixSize(size),None)))
@@ -326,7 +327,7 @@ The [[zeroes n]] function emits [[bits8[n]{0,0,...,0]], where
 
 <<module make>>=
 let zeroes n = 
-    let memsize = P.target#memsize in
+    let memsize = P.target.T.memsize in
     let ty      = bits memsize            in
     let size    = int n                   in
     let rec z   = function
@@ -348,7 +349,7 @@ let addr (Sym a)   =
         CurSection(A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
 
 <<module make>>=
-let byteorder = match P.target#byteorder with
+let byteorder = match P.target.T.byteorder with
     | Rtl.BigEndian    -> Fenv.Clean.Big
     | Rtl.LittleEndian -> Fenv.Clean.Little
     | _                -> assert false
@@ -385,38 +386,18 @@ head of the program.
 
 <<module make>>=
 let personality =
-    [ A.Memsize P.target#memsize
-    ; ( match P.target#byteorder with
+    [ A.Memsize P.target.T.memsize
+    ; ( match P.target.T.byteorder with
       | Rtl.BigEndian    -> A.ByteorderBig
       | Rtl.LittleEndian -> A.ByteorderLittle
       | _                -> assert false
       )
-    ; A.PointerSize P.target#pointersize
-    ; A.WordSize    P.target#wordsize
-    ; A.Charset     P.target#charset
-    ; A.FloatRepr   P.target#float
+    ; A.PointerSize P.target.T.pointersize
+    ; A.WordSize    P.target.T.wordsize
+    ; A.Charset     P.target.T.charset
+    ; A.FloatRepr   P.target.T.float
     ]
 @
-
-The target's personality includes a map of known hardware registers. 
-Since programs a free to use these registers, we have to declare them. 
-We walk over the map, and create declarations based on the name and
-the width of the registers.  In order to avoid name clashes with user
-declared variables, we append a space to a register's name before we
-mangle it.  Of course, this convention must be respected when
-references to these registers are generated.  This applies especially
-to the translation of {\rtl}s to {\PAL} in module \module{rtl2ast}: 
-hardware registers names must be extended by a space and then mangled.
-
-
-<<module make>>=
-let decl name loc dd = 
-  let w = Rtlutil.locwidth loc in
-  let r = (A.Variant, None, A.BitsTy w, P.mangle (name^" "), Some name) 
-  in  r::dd
-
-let decls = Target.StrMap.fold decl P.target#registers []
-    
 
 <<module make>>=
 let ast asm = 
@@ -425,7 +406,7 @@ let ast asm =
     let sections = List.map (fun (name,sect) -> A.Section(name,sect)) 
                             toplevel                    in
     let target   = A.TopDecl(A.Target personality)      in
-        target :: A.TopDecl(A.Registers(decls)) :: sections
+        target :: sections
 @
 
 

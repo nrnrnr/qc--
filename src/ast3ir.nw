@@ -219,7 +219,7 @@ and expr env target exp =
         | A.Int(bits,t)     -> Rtl.bits bits (const word t)
         | A.Float(bits,t)   -> Rtl.bits bits (const word t)
         | A.Char(bits,t)    -> Rtl.bits bits (const word t)
-        | A.Fetch(v)        -> assert false
+        | A.Fetch(v)        -> fetch env target v
         | A.BinOp (l,op,r)  -> prim env target op [l;r]
         | A.UnOp  (op,e)    -> prim env target op [e]
         | A.PrimOp(op,args) -> prim env target op (List.map snd args)
@@ -741,6 +741,10 @@ and switchStmt    state x  = Impossible.unimp "switch"
 
 <<Make procedure>>=
 let proc env target (*props*) asm (cconv,name,args,bdy) = 
+    let p           = match F.findv name env with
+                      | _,(F.Label(F.Proc p),_) -> p
+                      | _                        -> assert false in
+    let env         = F.push env p.F.scope in  (* activate local scope *)
     let cfg         = G.mk ()   in 
     let priv        = Area.mk (Rtl.link "private" target.Target.pointersize) in
     let env, priv   = StackData.proc env target priv bdy in
@@ -774,7 +778,7 @@ let proc env target (*props*) asm (cconv,name,args,bdy) =
      * These will be attached to the instruction but the interface 
      * for Asm has to change first.
      *)
-        asm ++ Asm.instr cfg
+        asm ++ Asm.instr cfg    (*XXX*)
 @
         
    
