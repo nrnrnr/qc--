@@ -15,13 +15,10 @@ To run {\PAL} code through the interpreter, we must first convert it into
 the Lua-based format the interpreter expects.
 This module provides a translation from an RTL to a string representing its
 Lua-style counterpart.
-For debugging, the [[proc]] function is exported to Lua in
-\module{lualink}.
 
 <<rtltolua.mli>>=
 val rtl: out_channel -> Rtl.rtl -> unit
 val exp: Rtl.exp -> string
-val proc: Proc.t -> unit            (* to stdout, for debugging *)
 @ 
 
 % ------------------------------------------------------------------ 
@@ -166,17 +163,3 @@ let rtl fd = (rtl' fd) << Rtl.Convert.rtl
 let exp = expr
 @ 
 
-% ------------------------------------------------------------------ 
-\subsection{Emitting RTLs from Procedure}
-% ------------------------------------------------------------------ 
-
-For debugging, we provide a function that traverses a procedure's {\cfg}
-nodes and emits all {\rtl}s to stdout. The interface of this function is
-chosen such that it can be easily exported to Lua.
-
-<<ToLua>>=
-let proc proc =
-    let cfg         = proc.Proc.cfg in
-    let iter cfg f  = Cfgutil.fold_fwd cfg (fun n () -> f n) () in
-        iter cfg (fun node -> rtl stdout (Cfg4.instr node))
-@

@@ -186,6 +186,7 @@ debugging feature to visualize a {\cfg}.
 
 <<interface>>=
 val ast:    (Rtl.rtl -> Ast.stmt) -> cfg -> name:string -> Ast.proc
+val interp: cfg -> out_channel -> unit
 @
 
 % ------------------------------------------------------------------ 
@@ -214,6 +215,10 @@ type locs       = Register.Set.t    (* locations for liveness analysis *)
 type property   = Cfgprop.t         (* mutable data inside node *)
 
 module OO = struct
+    let fprintf = Printf.fprintf
+    let  printf = Printf.printf
+    let sprintf = Printf.sprintf
+
     <<OO>>  (* low level object-oriented implementation *)
 end
 
@@ -249,6 +254,7 @@ class type  cfg = object
     method ast:         (Rtl.rtl -> Ast.stmt) -> Ast.stmt list 
     method nodes:       node list        (* for debugging *)
     method anon:        string * Symbol.t (* anon name/symbol pair *)
+    method interp:      out_channel -> unit
 end
 @
 
@@ -286,6 +292,9 @@ and  node = object
 
     (* for debugging only *)
     method test:        unit            (* test integrity of this *)
+
+    (* emit code for Reuben's interpreter *)
+    method interp:      out_channel -> unit
 end
 @
 
@@ -572,6 +581,14 @@ method ast i2ast =
                               node#ast i2ast :: result in
             Array.fold_right f this#enumeration []
         )
+
+method interp fd =
+    let this = (this :> cfg) in
+        ( if not this#enumerated then this#enumerate else ()
+        ; Array.iter (fun node -> node#interp fd) this#enumeration 
+        )
+    
+
 @
 % ------------------------------------------------------------------ 
 \subsection{Virtual Node Implementation}
@@ -678,6 +695,9 @@ object (this)
                                 true 
                                 succ)
             )
+
+    method interp fd = () (* do nothing *) 
+
 end (* of vnode class *)
 @
 
@@ -763,7 +783,12 @@ object(this)
         let this = (this :> labl) in
             ( super#test
             ; assert (List.length this#pred <= 1 || _symbol <> None)
-            )
+            )  
+ 
+    method interp fd =
+        match _symbol with
+        | Some s -> fprintf fd "CMM.define_label('%s')\n" s#text
+        | None   -> assert false
 end
 @
 
@@ -796,6 +821,7 @@ object(this)
     method upd_succ map = 
         let map = upd (this :> node) map in
         _succ <- map _succ
+    method interp fd = () (* do nothing *)    
 end
 @
 
@@ -809,6 +835,7 @@ object(this)
     inherit  vnode cfg cfg#nop as super
 
     method linorder = (None, [])
+    method interp fd = () (* nothing *)
 end
 @
 
@@ -855,6 +882,8 @@ object (this)
             )
         
     method linorder   = (Some _succ,[])
+    method interp fd =
+        Rtltolua.rtl fd _instr
 end
 @
 
@@ -882,6 +911,8 @@ object (this)
 
     method node_info_string  = super#node_info_string ^ " return"    
     method linorder = (None, [_exit])
+    method interp fd =
+        fprintf fd "CMM.cmm_return(%d,%d)\n" _x _y
 end
 @
 
@@ -908,6 +939,12 @@ object (this)
         _targets <- List.map map _targets 
 
     method linorder = (None, _targets)
+    method interp fd =
+        let e = Interp.target.Target2.goto.Target2.project _instr in
+        ( Rtltolua.rtl fd _instr
+        ; fprintf fd "CMM.goto()\n"
+        )
+        
 end
 @
 
@@ -932,6 +969,12 @@ object (this)
     method upd_succ map =
         let map = upd (this :> node) map in
             _exit    <- map _exit
+            
+    method interp fd =
+        let e = Interp.target.Target2.jump.Target2.project _instr in
+        ( Rtltolua.rtl fd _instr
+        ; fprintf fd "CMM.cmm_tail_call()\n"
+        )
 end
 @
 
@@ -964,6 +1007,16 @@ object (this)
         ( Some _succ
         , uniq(List.concat[_cuts;_unwinds;_returns])
         )
+        
+    method interp fd =
+        let e       = Interp.target.Target2.call.Target2.project _instr in
+        ( Rtltolua.rtl fd _instr
+        ; fprintf fd "CMM.cmm_call({%s}, {%s}, {%s}, %s)\n"
+            (String.concat "," []) (* FIX *)
+            (String.concat "," []) (* FIX *)
+            (String.concat "," []) (* FIX *)
+            (if _aborts then "1" else "0")
+        )    
 end
 @
 
@@ -997,6 +1050,13 @@ object (this)
         ( None
         , uniq(List.concat[_cuts;_unwinds;_returns;[_exit]])
         )
+
+    method interp fd =
+        let e       = Interp.target.Target2.cutto.Target2.project _instr in
+        ( Rtltolua.rtl fd _instr
+        ; fprintf fd "CMM.cut()\n"
+        )
+        
 end
 @
 
@@ -1030,6 +1090,7 @@ object (this)
         ( Some _ifnot
         , [_ifso]
         )
+
 end
 @
 
@@ -1261,6 +1322,8 @@ let ast i2ast (cfg:cfg) ~(name:string) =
     , List.map (fun s -> Ast.StmtBody s) (cfg#ast i2ast)
     )
 
+
+let interp cfg fd = cfg#interp fd
 @
 
 
