@@ -258,10 +258,18 @@ width---while they are best avoided in source code anyway.
 rule token = parse
     eof                 { fun map -> map            }
   | nl                  { fun map -> nl lexbuf map ; token lexbuf map }
-  | [' ' '\t']*  '#'    { fun map -> line lexbuf map 0; token lexbuf map }
-  | [^ '\n']+           { fun map -> token lexbuf map }
-  | _                   { fun map -> assert false }
-@    
+  | nl ws* '#'          { fun map -> line lexbuf map 0; token lexbuf map }
+  | ws* '#'             { fun map -> 
+                          if Lexing.lexeme_start lexbuf = 0 then 
+                                ( line lexbuf map 0
+                                ; token lexbuf map
+                                )
+                          else
+                                error "illegal character" 
+                        }
+  | [^ '\n']+   { fun map -> token lexbuf map }
+  | _           { fun map -> assert false }
+@ 
  
 The [[line]] scanner scans a [[#line]] pragma and updates the source map
 accordingly. The scanner is not very accurate. It looks for a string in
