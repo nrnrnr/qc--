@@ -159,20 +159,16 @@ specification of a primitive and should never happen.
 The [[widthlist]] function takes the type of a primitive (a
 [[tyscheme]]) and a list of argument types and returns the sizes bound
 by the variables in the type scheme.
-
 <<appl>>=
 val split : string -> string * int option     (* RTL op name, return width *)
 @
-
 Some operators encode the size of their return values in their name:
 [[zx32]] is the zero-extension function that returns a 32 bit value.
 The [[split]] function returns the operator name (without the numbers)
 and the size of the return value, if it exists:
-
 <<appl>>=
 val instantiate: tyscheme -> widths:int list -> monotype
 @
-
 An operator inside an {\rtl} is monomorphic. It carries a \emph{width
 list} that allows to reconstruct the monomorphic type from its
 polymorphic type scheme. This process is called instantiation. It is a
@@ -293,32 +289,28 @@ let subst sigma = function
     | Bits(Half(x))     -> (try Bits((lookup x sigma)/2) with Not_found ->
                                 E.error "internal error (3) in application")
 @
-
 The [[appl]] function matches the argument types with the [[size t]]
 values at the argument positions of a [[tyscheme]].  The resulting
 substitution is applied to the result [[size t]] to get the result
 [[ty]].
-                           
 <<types.ml>>=
 let appl (args',r) args =
     let sigma  = S.empty                                     in
     let pairs  = try List.combine args' args with Invalid_argument _ ->
-                 E.error "wrong number of arguments in call" in
+                 E.error "wrong number of arguments passed to operator" in
     let sigma  = ( try List.fold_left match' sigma pairs with
                  | MatchExn -> E.error "type error in application"
                  )                                           in
         subst sigma r
 @
-
 The [[widthlist]] function takes the type of a primitive (a
 [[tyscheme]]) and a list of argument types and returns the sizes bound
 by the variables in the type scheme.
-
 <<types.ml>>=
 let widthlist (args',r) args =
     let sigma  = S.empty                                     in
     let pairs  = try List.combine args' args with Invalid_argument _ ->
-                 E.error "wrong number of arguments in call" in
+                 E.error "wrong number of arguments passed to operator" in
     let sigma  = ( try List.fold_left match' sigma pairs with
                  | MatchExn -> E.error "type error in application"
                  )                                           in
@@ -326,8 +318,6 @@ let widthlist (args',r) args =
                  (dump sigma)                                in
         List.map snd sorted
 @
-
-
 The implementation of [[spilt]] uses regular expressions to split off
 a trailing number.
 
