@@ -83,6 +83,7 @@ void init_c_sigs(void);
 
 #include <assert.h>
 #include <lua.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include "label.h"
 #include "lualink.h"
@@ -150,7 +151,7 @@ void register_c_func(const char *name, void *f, const char *sig) {
     if (!lua_isnil(L, -1)) {
        lua_pop(L, 3); /* pop nil, string copy, table */
        fprintf(stderr, "cannot register C function \"%s\"; "
-                       "a label of that name already exists", name);
+                       "a label of that name already exists\n", name);
        exit(1);
     }
     lua_pop(L, 1); /* pop nil */
@@ -176,7 +177,7 @@ void register_c_func(const char *name, void *f, const char *sig) {
       (caller = lua_touserdata(L, -1)) == NULL)
   {
     fprintf(stderr, "cannot register C function with unsupported type "
-                    "signature; was given type signature [%s]", sig);
+                    "signature; was given type signature [%s]\n", sig);
     exit(1);
   }
   lua_insert(L, -2); /* swap positions of caller pointer and sig table */
@@ -213,6 +214,7 @@ ITERATE_NULLARY_C_CALLERS(NULLARY_C_CALLER_REGISTRATION)
 ITERATE_UNARY_C_CALLERS(UNARY_C_CALLER_REGISTRATION)
 ITERATE_BINARY_C_CALLERS(BINARY_C_CALLER_REGISTRATION)
 ITERATE_FOURARY_C_CALLERS(FOURARY_C_CALLER_REGISTRATION)
+register_c_sig("printf", c_caller_printf);
 @
 
 We must also provide prototypes for the macro-generated functions that implement the registration of a C signature.
@@ -222,6 +224,7 @@ ITERATE_NULLARY_C_CALLERS(NULLARY_C_CALLER_PROTOTYPE)
 ITERATE_UNARY_C_CALLERS(UNARY_C_CALLER_PROTOTYPE)
 ITERATE_BINARY_C_CALLERS(BINARY_C_CALLER_PROTOTYPE)
 ITERATE_FOURARY_C_CALLERS(FOURARY_C_CALLER_PROTOTYPE)
+sptr c_caller_printf (sptr arguments, void *f);
 @ 
 
 % ----------------------------------------------------------------------------
@@ -256,6 +259,7 @@ F(pointer,  pointer, RETURNS_VAL ) \
 F(int,      void,    RETURNS_VOID) \
 F(char,     void,    RETURNS_VOID) \
 F(unsigned, void,    RETURNS_VOID) \
+F(pointer,  void,    RETURNS_VOID)
 
 #define ITERATE_BINARY_C_CALLERS(F) \
 F(int, int, int,     RETURNS_VAL ) \
@@ -353,4 +357,38 @@ ITERATE_NULLARY_C_CALLERS(NULLARY_C_CALLER)
 ITERATE_UNARY_C_CALLERS(UNARY_C_CALLER)
 ITERATE_BINARY_C_CALLERS(BINARY_C_CALLER)
 ITERATE_FOURARY_C_CALLERS(FOURARY_C_CALLER)
+
+sptr c_caller_printf (sptr arguments, void *f) {
+  char *fmt = (char *) arguments[0].ptr;
+  int   nextarg = 1;
+
+  for (;;) {
+    while (*fmt != '%' && *fmt != '\0') { putchar(*(fmt++)); }
+    if (*fmt == '\0') return arguments;
+
+    {
+      char   temp    = fmt[2];
+      value *the_arg = arguments + (nextarg++);
+
+      fmt[2] = '\0';
+      switch(fmt[1]) {
+      case '%':
+        putchar('%');
+        nextarg--;
+        break;
+      case 'f':
+        printf(fmt, *(VIEW(the_arg, float *)));
+        break;
+      case 'x': case 'X':
+      case 's':
+	    printf(fmt, *(VIEW(the_arg, void **)));
+        break;
+      default:
+        printf(fmt, *(VIEW(the_arg, unsigned *)));
+      }
+      fmt[2] = temp;
+      fmt += 2;
+    }
+  }
+}
 @ 

@@ -124,6 +124,7 @@ It is useful to iterate through all the {\PAL} functions exported to Lua, callin
 <<macro definitions>>=
 #define ITERATE_CMM_FUNCS(F) \
 F(comment) \
+F(breakpt) \
 \
 F(section) \
 F(end_section) \
@@ -752,12 +753,13 @@ int lua_CMM_emit_raddr(lua_State *L) {
   CMM_label  *lbl;
   RAddr       found_raddr, raddr_to_emit;
   const char *sym;
-  int         offset;
+  long int    offset;
 
-  lua_assert_isnumber(L, -1, "emit_raddr expects an offset value (number)");
+  lua_assert_isstring(L, -1, "emit_raddr expects an offset (hex string)");
   lua_assert_isstring(L, -2, "emit_raddr expects a symbol name (string)");
 
-  offset = (int) lua_tonumber(L, -1);
+  cmm_assert(sscanf(lua_tostring(L, -1), "%lx", &offset) == 1,
+			 "could not parse offset; hexadecimal string literal expected");
   lua_pop(L, 1);
 
   sym = Atom_string(lua_tostring(L, -1));
@@ -1139,6 +1141,7 @@ LUA_WRAP_NULLARY(goto_,         goto         )
 LUA_WRAP_NULLARY(cmm_tail_call, cmm_tail_call)
 LUA_WRAP_NULLARY(cut,           cut          )
 LUA_WRAP_NULLARY(end_proc,      end_procedure)
+LUA_WRAP_NULLARY(breakpt,       breakpt      )
 
 /* LUA_WRAP_UNARY_INDEX(encodingFunctionName, nameStemForLua) */
 LUA_WRAP_UNARY_INDEX(fetch_arg,     fetch_arg    )

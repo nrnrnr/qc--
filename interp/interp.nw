@@ -599,9 +599,9 @@ patterns
     GOTO          CBRANCHT       CBRANCHF       BRANCHTF
     CALL          CMM_TAIL_CALL  RETURN         CUT
     EMIT_RADDR    PUSH_SYMBOL    OP
-    PLACECODE
+    PLACECODE     BREAKPT
     HALT
-  ] is op = {0 to 32}
+  ] is op = {0 to 33}
 @ 
 
 To add an instruction to the bytecode, one must simply add an instruction name to the [[op]] table above and increase the upper bound of [[op]]'s value range.
@@ -616,6 +616,7 @@ patterns
   any32   is CALL           | DEFINE_PROC     | PUSH_SYMBOL
   memory  is FETCH | STORE  | GSTORE
   nullary is HALT  |  GOTO  | CMM_TAIL_CALL   | CUT           | END_PROC
+           | BREAKPT
 @ 
 
 The [[relocatable]] and [[placeholder]] keywords allow us to specify that some arguments to instructions will be relocatable addresses ([[RAddr]]s).
@@ -781,6 +782,8 @@ loads and stores.
 unsigned mem_aggregate(unsigned char *a, byte_order bo, unsigned num_bytes) {
   int      i;
   unsigned u = 0;
+
+  cmm_assert(a, "attempted to dereference or fetch at address NULL");
 
   switch (bo) {
     case LITTLE:
@@ -2010,6 +2013,10 @@ And its brother, [[END_PROC]].
 
                            cmm_err("procedure missing return/jump statement");
                            }
+
+    | BREAKPT()         => {
+	                       pc = next;
+	                       }
 @ 
 
 % ----------------------------------------------------------------------------

@@ -188,6 +188,7 @@ Cmm_Cont *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n,
   sprintf(bootstring, "CMM.imports({ '%s' })               \n"
                       "CMM.exports({ '_boot_proc_%u' })    \n"
                       "CMM.section('_boot_section_%u')     \n"
+                      "CMM.align(%d)                       \n"
                       "CMM.define_label('_boot_f_%u')      \n"
                       "CMM.skip(4)                         \n"
                       "CMM.define_label('_boot_x_%u')      \n"
@@ -212,8 +213,8 @@ Cmm_Cont *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n,
                       "CMM.cmm_return(0, 0)                \n"
                       "CMM.end_section()                   \n",
 
-                      CMM_label_raddr(((CMM_label *) f))->label->name,
-                      boot_id, boot_id, boot_id, boot_id, boot_id, boot_id,
+                      CMM_label_raddr(((CMM_label *) f))->label->name, boot_id,
+                      boot_id, DEF_ALIGN, boot_id, boot_id, boot_id, boot_id,
                       8*sizeof(void *), byteorder_string, DEF_ALIGN, boot_id, 
                       8*sizeof(void *), byteorder_string, DEF_ALIGN, boot_id, 
                       boot_id, 8*sizeof(void *), byteorder_string, DEF_ALIGN);
@@ -397,6 +398,8 @@ We have full access to the global variables, so these three functions for accesi
 
 <<global register functions>>=
 void *Cmm_FindGlobalVar(void *gp, int n) {
+  if (n >= Cmm_GlobalCount() || n < 0)
+    runtime_sys_err("globals subscript out of range in Cmm_FindGlobalVar");
   return (void *) (((value *) globals) + n);
 }
 unsigned Cmm_GlobalCount(void) {
@@ -417,14 +420,24 @@ void Cmm_RestoreGlobals_helper(unsigned gpu);
 <<global register functions>>= 
 void Cmm_SaveGlobals_helper(unsigned gpu) {
   void *gp = (void *) gpu;
-  cmm_assert(gp != NULL, "SaveGlobals given NULL pointer");
-  gp = memcpy(gp, globals, sizeof(value) * num_globals);
+
+  if (num_globals <= 0) return;
+
+  if (gp == NULL)
+    runtime_sys_err("SaveGlobals given NULL pointer");
+  else
+    gp = memcpy(gp, globals, sizeof(value) * num_globals);
 }
 
 void Cmm_RestoreGlobals_helper(unsigned gpu) {
   void *gp = (void *) gpu;
-  cmm_assert(gp != NULL, "RestoreGlobals given NULL pointer");
-  globals = memcpy(globals, gp, sizeof(value) * num_globals);
+
+  if (num_globals <= 0) return;
+
+  if (gp == NULL)
+    runtime_sys_err("RestoreGlobals given NULL pointer");
+  else
+    globals = memcpy(globals, gp, sizeof(value) * num_globals);
 }
 @ 
 

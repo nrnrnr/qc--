@@ -47,6 +47,7 @@ Its implementation is split across files [[gc.h]] and [[gc.c]].
 #define _GC_H
 
 #include "runtime.h"
+#include "types.h"
 
 <<constant definitions>>
 <<type definitions>>
@@ -161,21 +162,21 @@ unsigned int  fullsize(void *m);
 % ------------------------------------------------------------------ 
 
 In this client, we register a printing function with the interpreter: a simple 
-C function that takes an [[int]], prints it, and returns it.
+C function that takes a 32-bit [[int]], prints it, and returns it.
 
 <<function prototypes>>=
-int cmmprint(int i);
+u_int32 cmmprint32(u_int32 i);
 @ 
 
 <<interpreter interaction functions>>=
-int cmmprint(int i) {
+u_int32 cmmprint32(u_int32 i) {
   printf("[CMMPRINT] %u\n", i);
   return i;
 }
 @ 
 To register this function, the client simply calls [[register_c_func]].
 <<register needed C functions with the interpreter>>=
-  register_c_func("cmmprint", (void *) cmmprint, "int:int");
+  register_c_func("cmmprint32", (void *) cmmprint32, "u_int32:u_int32");
 @ 
 
 % ------------------------------------------------------------------ 
@@ -420,6 +421,7 @@ void gc_copy(void) {
       }
     }
   } while (Cmm_ChangeActivation(&a));
+  assert(Cmm_isOldestActivation(a));
 }
 @ 
 
@@ -691,7 +693,9 @@ more than one {\PAL} thread.
   tcb            = TCB_new();
 
   /* start at loc, passing off globals_backup to C-- procedure "main" */
-  tcb->cont      = Cmm_CreateThread(loc, globals_backup, tcb->stack_space, 
+  tcb->cont      = Cmm_CreateThread(loc, 
+                                    (void *) (&globals_backup), 
+                                    tcb->stack_space, 
 									tcb->stack_space_size, 
 									&(tcb->limit_cookie));
   curr_thread    = tcb->cont;
