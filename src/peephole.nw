@@ -25,13 +25,13 @@ that [[t1 == 12]].
 You can therefore do a forward substitution of [[12]]~for~[[t1]],
 yielding
 \begin{verbatim}
-  t1 := 0
+  t1 := 12
   t2 := sp + 12
 \end{verbatim}
 With luck, the assignment to~[[t1]] becomes dead, and a later
 dead-assignment elimination will eliminate it.
 Congratulations!  You have a peephole optimizer.
-
+@
 This module implements a forward dataflow pass that does the forward
 substitution.
 It's very pessimistic about available expressions, assuming that they
@@ -43,7 +43,6 @@ val subst_forward : 'a -> Ast2ir.proc -> bool
 
 \subsection{Implementation}
 
-This is a forward dataflow problem.
 <<peephole.ml>>=
 module G  = Cfgx.M
 module P  = Proc
@@ -56,64 +55,63 @@ module T  = Target
 
 module ToString = RU.ToString
 <<utilities>>
+
+module D  = Dataflow.Make (G)
 @ 
 <<peephole.ml>>=
-module D  = Dataflow.Make (G)
-
 let () = Debug.register "peephole" "peephole optimizer"
 let peephole = "peephole"  (* avoid allocating again and again... *)
-
+let debug = Debug.on peephole
+@ 
+This is a forward dataflow problem.
+We propagate dataflow facts and use these facts to mutate RTLs at
+nodes.
+Two key functions are wrapped for debugging:
+\begin{itemize}
+\item
+[[ok]] tests to see if an RTL is an instruction on the target
+\item
+[[replace]] produces the new version of an RTL
+\end{itemize}
+<<peephole.ml>>=
 let subst_forward _ proc =
-  let ok =
-    if Debug.on "peephole" then
-      (fun i -> if proc.P.target.T.is_instruction i then true
-                else (Printf.eprintf "### rejected substitution %s\n"
-                           (ToString.rtl i); false))
-    else
-      proc.P.target.T.is_instruction in
-  let changed = ref false in
-  let init = Avail.empty in
-  let split _ = Avail.empty in
-  let merge _ _ = false in
   let replace =
-    if Debug.on "peephole" then
+    if debug then
       (fun rtl old ->
         Printf.eprintf "Replacing old rtl %s\n     with new rtl %s\n"
           (ToString.rtl old) (ToString.rtl rtl);
         rtl) 
     else
       (fun rtl _ -> rtl) in
-  <<propagation>>
+  let ok =
+    if debug then
+      (fun i -> if proc.P.target.T.is_instruction i then true
+                else (Printf.eprintf "### rejected substitution %s\n"
+                           (ToString.rtl i); false))
+    else
+      proc.P.target.T.is_instruction in
+  let init      = Avail.empty in
+  let split _   = Avail.empty in
+  let merge _ _ = false in
+  let changed = ref false in  (* track changes for backplane *)
+  <<propagation of available expressions and replacement of RTLs>>
   let fwd = D.fwd_iteration { D.split_info = split; D.merge_split_info = merge
                             ; D.init_info = init; D.propagate = propagate } in
   (try ignore (fwd proc.P.cfg) with G.Tx.Exhausted -> ()); 
   !changed
 @ 
-According to Jack Davidson, we should try two substitutions, not just
-one, when peephole optimizing.
-<<propagation>>=
+In one pass, we simultaneously propagate dataflow information and
+mutate RTLs.
+The dataflow information is a set of available expressions, which is
+passed in as parameter [[avail]].
+The propagation is shown here; the real work is done by
+[[Avail.forward]].
+This code is very stupid; the moment it encounters any nontrivial
+control flow, it forgets all it knows and resumes with [[Avail.empty]].
+<<propagation of available expressions and replacement of RTLs>>=
 let propagate node avail =
-  <<substitution>>
-  let update rtl =
-    G.Tx.start_exn peephole;
-    G.update_instr (replace rtl) node;
-    changed := true;
-    G.Tx.finish () in
-  let () = 
-    match G.to_executable node with
-    | Some rtl ->
-        if Pervasives.(<>) (G.kind node) G.StackAdjust then
-          Debug.eprintf "peephole" "=> Considering %s\n" (ToString.rtl rtl);
-          let try_pair l l' resume =
-            let rtl' = subst2 l l' rtl in
-            if ok rtl' then update rtl' else resume () in
-          let try_one l resume =
-            let rtl' = subst1 l rtl in
-            if ok rtl' then update rtl' else resume () in
-          let cs = candidates (Dn.rtl rtl) in
-          search_pairs cs (wrap2 try_pair) (fun () -> search cs (wrap try_one)
-                          (fun () -> ()))
-    | None -> () in
+  <<utility functions that substitute expressions for locations>>
+  <<code that may mutate the RTL at [[node]]>>
   match G.kind node with
   | G.Instruction | G.Assertion ->
       (match G.to_instr node with
@@ -121,16 +119,96 @@ let propagate node avail =
       | Some rtl -> Avail.forward rtl avail)
   | _ -> Avail.empty  (* rank pessimism *) in
 @ 
-<<substitution>>=
+Here's the mutation code.
+The [[update]] function replaces an RTL, provided we haven't run out
+of transactions.
+<<code that may mutate the RTL at [[node]]>>=
+let update rtl =
+  G.Tx.start_exn peephole;
+  G.update_instr (replace rtl) node;
+  changed := true;
+  G.Tx.finish () in
+let () = 
+  match G.to_executable node with
+  | Some rtl ->
+      if Pervasives.(<>) (G.kind node) G.StackAdjust then
+        begin
+          if debug then
+            Printf.eprintf "=> Considering %s\n" (ToString.rtl rtl);
+          <<do our best to use [[update]] to replace [[node]]'s RTL>>
+        end
+  | None -> () in
+@ 
+How do we find a new RTL to pass to [[update]]?
+The basic idea is to substitute [[Fetch(e)]] for [[loc]] in the
+existing [[rtl]].
+According to Jack Davidson, when we are peephole optimizing 
+we should try two substitutions, not just
+one.
+This is a bit like using a three-instruction window for peephole
+optimization instead of just a two-instruction window.
+
+Instead of using single substitution twice, we define [[subst2]] to do
+two substitutions at once.
+This way we avoid allocating yet another copy of the RTL.
+<<utility functions that substitute expressions for locations>>=
+let slocs = RU.Subst.Fetch.rtl in
+let subst1 (loc, e) rtl =
+  Simplify.rtl (slocs ~guard:(RU.Eq.loc loc) ~fetch:(fun _ _ -> e) rtl) in
+let subst2 (loc,e) (loc',e') rtl =
+  Simplify.rtl (slocs ~guard:(fun l -> RU.Eq.loc l loc || RU.Eq.loc l loc')
+                      ~fetch:(fun l _ -> if RU.Eq.loc l loc then e else e') rtl) in
+@
+What substitutions will we try?
+We want locations that are fetched in the current RTL and that have
+known values in [[avail]].
+For the time being, we're only interested in register locations, but
+if we eventually get good may-alias information, we will want to check
+memory locations as well.
+
+Function [[candidates]] finds all [[(loc, e)]] pairs that might be
+suitable for substitutions.  
+<<utility functions that substitute expressions for locations>>=
 let candidates rtl =
   let add loc pairs = match loc with
-  | RP.Reg _ when not (List.mem_assoc loc pairs) ->
+  | RP.Reg _ when not (List.mem_assoc loc pairs) ->  (* don't make duplicates *)
       (match Avail.in_loc avail loc with
       | Some e -> (loc, e) :: pairs
       | None -> pairs)
   | _ -> pairs in
   RU.Fold.LocFetched.rtl add rtl [] in
-
+@ 
+Now we actually attempt the update.
+We use a backtracking search, which is implemented in
+continuation-passing style.
+The search repeatedly attempts first
+[[try_pair]] and then [[try_one]].
+Each [[try]] function uses one or two (location, expression) pairs
+(named [[le]] or [[le']]), substitutes in [[rtl]], and checks the
+result to see if it is OK, that is, if it is representable on the
+target machine.
+If so, we are done. 
+If not, we backtrack by tail-calling the [[resume]] continuation.
+<<do our best to use [[update]] to replace [[node]]'s RTL>>=
+let try_pair le le' resume =
+  let rtl' = subst2 le le' rtl in
+  if ok rtl' then update rtl' else resume () in
+let try_one le resume =
+  let rtl' = subst1 le rtl in
+  if ok rtl' then update rtl' else resume () in
+@
+To call these functions, we generate the list of all candidates, try
+all pairs, then try all single candidates.
+Functions [[wrap2]] and [[wrap]] add debugging information.
+<<do our best to use [[update]] to replace [[node]]'s RTL>>=
+let cs = candidates (Dn.rtl rtl) in
+search_pairs cs (wrap2 try_pair) (fun () -> search cs (wrap try_one) (fun () -> ()))
+@ 
+The search functions are the typical style with success and failure
+continuations.
+(Examples and explanations can be found in the undergraduate textbook
+by Ramsey and Kamin.)
+<<utility functions that substitute expressions for locations>>=
 let rec search list succ fail = match list with
 | [] -> fail()
 | x :: xs -> succ x (fun () -> search xs succ fail) in
@@ -139,21 +217,9 @@ let rec search_pairs list succ fail = match list with
 | [] -> fail ()
 | x :: xs -> search xs (fun x' resume -> succ x x' resume)
                        (fun () -> search_pairs xs succ fail) in
-
-let subst1 (loc, e) rtl =
-  Simplify.rtl (RU.Subst.Fetch.rtl ~guard:(RU.Eq.loc loc) ~fetch:(fun _ _ -> e) rtl) in
-
-let subst2 (loc,e) (loc',e') rtl =
-  Simplify.rtl (RU.Subst.Fetch.rtl ~guard:(fun l -> RU.Eq.loc l loc || RU.Eq.loc l loc')
-                                   ~fetch:(fun l _ -> if RU.Eq.loc l loc then e else e')
-                rtl) in
 @ 
-<<utilities>>=
-let is_copy rtl = match Dn.rtl rtl with
-| RP.Rtl [(RP.Const (RP.Bool true),
-           RP.Store(RP.Reg _, RP.Fetch(RP.Reg _, _), _))] -> true
-| _ -> false
-@ 
+These wrapper functions help diagnose failures of the search for
+substitutions. 
 <<utilities>>=
 let () =
   Debug.register "peephole-search"
@@ -174,34 +240,21 @@ let wrap2 =
       Printf.eprintf "Substituting for %s and %s\n" (ToString.loc (Up.loc (fst l))) 
         (ToString.loc (Up.loc (fst l')));
       succ l l' (fun () ->
-        (Printf.eprintf "Abandoning %s and %s\n" (ToString.loc (Up.loc (fst l))) (ToString.loc (Up.loc (fst l'))); resume())))
+        (Printf.eprintf "Abandoning %s and %s\n" (ToString.loc (Up.loc (fst l)))
+                                     (ToString.loc (Up.loc (fst l'))); resume())))
   else
     (fun succ -> succ)
 @ 
-Here's a nasty backtracking search for a substitutable location.
-<<old substitution>>=
-let subst_one rtl avail succ fail =
-  let is_some = function Some _ -> true | None -> false in
-  let substitute loc =
-    match Avail.in_loc avail loc with
-    | Some e -> RU.Subst.rhs_exp ~guard:(RU.Eq.loc loc) ~map:(fun _ _ -> e) rtl
-    | None -> Impossible.impossible "available location is not available?!" in
-  let substitutable exp =
-    RU.Find.Loc.exp (fun l -> is_some (Avail.in_loc avail l)) exp in
-  let rec find_loc succ fail = function
-    | [] -> fail ()
-    | (guard, RP.Kill loc) :: es ->
-        let resume () = find_loc succ fail es in
-        let succ = wrap succ in
-        ( match substitutable guard with Some l -> succ l resume | None -> resume ())
-    | (guard, RP.Store (loc, rhs, w)) :: es ->
-        let succ = wrap succ in
-        let r1 () =
-          let resume () = find_loc succ fail es in
-          match substitutable rhs with Some l -> succ l resume | None -> resume() in
-        match substitutable guard with Some l -> succ l r1 | None -> r1 () in
-  let RP.Rtl effs = Dn.rtl rtl in
-  find_loc (fun loc resume -> succ (substitute loc) resume) fail effs
-
-type void = Void of void
-let _ = (subst_one : Rtl.rtl -> Avail.t -> (Rtl.rtl -> (unit->void) -> void) -> (unit->void) -> void)
+It's very often possible to peephole-optimize a copy instruction, but
+it's not clear if it's a good idea.
+This predicate could easily be used to turn off people optimization of
+copy instructions
+(the idea being that the register allocator should take care of them).
+A~possible refinement would be to optimize only copy instructions
+between different register spaces.
+<<utilities>>=
+let is_copy rtl = match Dn.rtl rtl with
+| RP.Rtl [(RP.Const (RP.Bool true),
+           RP.Store(RP.Reg _, RP.Fetch(RP.Reg _, _), _))] -> true
+| _ -> false
+@ 
