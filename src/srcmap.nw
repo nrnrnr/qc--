@@ -257,7 +257,7 @@ to get the current file name and line number.
 <<srcmap.ml>>=
 
 let last map =
-    ( assert (map.top > 0)
+    ( assert (map.top > 0 && map.top <= Array.length map.points)
     ; snd map.points.(map.top-1)
     )
        
@@ -292,11 +292,14 @@ the array.
 let search x array length cmp =
     let rec loop left right =
         if left > right then
-            array.(right)
+            ( assert (0 <= right && right < Array.length array)
+            ; array.(right)
+            )
         else
             let pivot = (left + right)/2 in
             let res   = cmp x array.(pivot) in
-            
+            let _     = assert (0 <= pivot && pivot < Array.length array) in
+                
                 if res = 0 then 
                     array.(pivot)
                 else if res < 0 then

@@ -162,7 +162,7 @@ let asdl file =
         with
             | Parsing.Parse_error -> 
               ( finally()
-              ; errorExn (map, Parsing.symbol_start()) ["parse error"]
+              ; errorExn (map, Lexing.lexeme_start lexbuf) ["parse error"]
               )
             | ParseExn(pos,msg) ->
               ( finally()
@@ -183,14 +183,14 @@ let pp file width =
         try
             ( Srcmap.sync map 0 (file,1,1) 
             ; let ast = Parse.program scanner lexbuf in
-                 ( Astpp.ppToFile stdout width ast
-              (* ; Srcmap.dump map *)
+                 ( Astpp.ppToFile stdout width ast 
+                 (* Srcmap.dump map *) 
                  )
             ) 
         with
             | Parsing.Parse_error -> 
               ( finally()
-              ; errorExn (map, Parsing.symbol_start()) ["parse error"]
+              ; errorExn (map, Lexing.lexeme_start lexbuf) ["parse error"]
               )
             | ParseExn(pos,msg) ->
               ( finally()
