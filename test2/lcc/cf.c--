@@ -1,0 +1,98 @@
+target
+	byteorder little
+	memsize 8
+	wordsize 32
+	pointersize 32
+	float "ieee754";
+
+bits2 System.rounding_mode "IEEE 754 rounding mode";
+section "data" {
+export i@main as "main";
+}
+section "text" {
+foreign "C" i@main(bits32 i@argc, "address" bits32 i@argv, ) {
+  stackdata {
+  }
+  bits32 i@i.26;
+  bits32 i@nc.27;
+  bits32 i@c.28;
+  bits32 f@cutoff.29;
+  bits32 f@1.30;
+  bits32 i@2.31;
+  bits32 i@3.32;
+  bits32 i@4.33;
+  bits32 f@5.34;
+  if (%gt(i@argc, 1)) { goto L.2; }
+  f@cutoff.29 = bits32[f@4];
+  goto L.3;
+  L.2:
+  "float" f@1.30 = foreign "C" (i@atof)("address" bits32[%add(i@argv,4)]);
+  f@cutoff.29 = %fdiv(f@1.30,bits32[f@5], System.rounding_mode);
+  L.3:
+  i@i.26 = 0;
+  L.6:
+  i@2.31 = i@i.26;
+  i@i.26 = %add(i@2.31,1);
+  bits32[%add(%shl(i@2.31,2),i@f)] = bits32[f@4];
+  L.7:
+  if (%le(i@i.26, 127)) { goto L.6; }
+  i@nc.27 = 0;
+  goto L.11;
+  L.10:
+  i@3.32 = %add(%shl(i@c.28,2),i@f);
+  bits32[i@3.32] = %fadd(bits32[i@3.32],bits32[f@13], System.rounding_mode);
+  i@nc.27 = %add(i@nc.27,1);
+  L.11:
+  i@4.33 = foreign "C" (i@getchar)();
+  i@c.28 = i@4.33;
+  if (%ne(i@4.33, ~1)) { goto L.10; }
+  foreign "C" (i@printf)("address" i@14);
+  i@i.26 = 0;
+  L.15:
+  f@5.34 = bits32[%add(%shl(i@i.26,2),i@f)];
+  if (%feq(f@5.34, bits32[f@4])) { goto L.19; }
+  if (%flt(%fdiv(f@5.34,%i2f32(i@nc.27, System.rounding_mode), System.rounding_mode), f@cutoff.29)) { goto L.19; }
+  if (%gt(i@i.26, 32)) { goto L.21; }
+  foreign "C" (i@printf)("address" i@23, i@i.26);
+  goto L.22;
+  L.21:
+  foreign "C" (i@printf)("address" i@24, i@i.26);
+  L.22:
+  foreign "C" (i@printf)("address" i@25, "float" %f2f64(%fdiv(%fmul(bits32[f@5],bits32[%add(%shl(i@i.26,2),i@f)], System.rounding_mode),%i2f32(i@nc.27, System.rounding_mode), System.rounding_mode), System.rounding_mode));
+  L.19:
+  L.16:
+  i@i.26 = %add(i@i.26,1);
+  if (%le(i@i.26, 127)) { goto L.15; }
+  return (0);
+  L.1:
+return();
+}
+import bits32 "printf" as i@printf;
+import bits32 "getchar" as i@getchar;
+import bits32 "atof" as i@atof;
+}
+section "bss" {
+export i@f as "f";
+align 4;
+i@f:
+bits8[512];
+}
+section "data" {
+i@25:
+bits8[] "\x09%.1f\x0a\x00";
+i@24:
+bits8[] "%c\x00";
+i@23:
+bits8[] "%03o\x00";
+i@14:
+bits8[] "char\x09freq\x0a\x00";
+align 4;
+f@13:
+bits32[] {0x3f800000};
+align 4;
+f@5:
+bits32[] {0x42c80000};
+align 4;
+f@4:
+bits32[] {0x0};
+}

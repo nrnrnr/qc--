@@ -1,0 +1,129 @@
+target
+	byteorder little
+	memsize 8
+	wordsize 32
+	pointersize 32
+	float "ieee754";
+
+bits2 System.rounding_mode "IEEE 754 rounding mode";
+section "data" {
+export i@main as "main";
+}
+section "text" {
+foreign "C" i@main() {
+  stackdata {
+  }
+  bits32 i@i.10;
+  bits32 i@1.11;
+  bits32 i@2.12;
+  i@i.10 = 0;
+  L.2:
+  i@1.11 = %shl(i@i.10,2);
+  i@2.12 = 1;
+  bits32[%add(i@1.11,i@down)] = i@2.12;
+  bits32[%add(i@1.11,i@up)] = i@2.12;
+  L.3:
+  i@i.10 = %add(i@i.10,1);
+  if (%lt(i@i.10, 15)) { goto L.2; }
+  i@i.10 = 0;
+  L.6:
+  bits32[%add(%shl(i@i.10,2),i@rows)] = 1;
+  L.7:
+  i@i.10 = %add(i@i.10,1);
+  if (%lt(i@i.10, 8)) { goto L.6; }
+  foreign "C" (i@queens)(0);
+  return (0);
+  L.1:
+return();
+}
+export i@queens as "queens";
+foreign "C" i@queens(bits32 i@c, ) {
+  stackdata {
+  }
+  bits32 i@r.25;
+  bits32 i@1.26;
+  bits32 i@2.27;
+  bits32 i@3.28;
+  bits32 i@4.29;
+  bits32 i@5.30;
+  bits32 i@6.31;
+  bits32 i@7.32;
+  bits32 i@8.33;
+  bits32 i@9.34;
+  bits32 i@10.35;
+  bits32 i@11.36;
+  bits32 i@12.37;
+  i@r.25 = 0;
+  L.14:
+  i@2.27 = 2;
+  i@3.28 = 0;
+  if (%eq(bits32[%add(%shl(i@r.25,i@2.27),i@rows)], i@3.28)) { goto L.18; }
+  if (%eq(bits32[%add(%shl(%sub(i@r.25,i@c),i@2.27),(i@up+28))], i@3.28)) { goto L.18; }
+  if (%eq(bits32[%add(%shl(%add(i@r.25,i@c),i@2.27),i@down)], i@3.28)) { goto L.18; }
+  i@7.32 = 2;
+  i@8.33 = 0;
+  bits32[%add(%shl(%add(i@r.25,i@c),i@7.32),i@down)] = i@8.33;
+  bits32[%add(%shl(%sub(i@r.25,i@c),i@7.32),(i@up+28))] = i@8.33;
+  bits32[%add(%shl(i@r.25,i@7.32),i@rows)] = i@8.33;
+  bits32[%add(%shl(i@c,2),i@x)] = i@r.25;
+  if (%ne(i@c, 7)) { goto L.22; }
+  foreign "C" (i@print)();
+  goto L.23;
+  L.22:
+  foreign "C" (i@queens)(%add(i@c,1));
+  L.23:
+  i@11.36 = 2;
+  i@12.37 = 1;
+  bits32[%add(%shl(%add(i@r.25,i@c),i@11.36),i@down)] = i@12.37;
+  bits32[%add(%shl(%sub(i@r.25,i@c),i@11.36),(i@up+28))] = i@12.37;
+  bits32[%add(%shl(i@r.25,i@11.36),i@rows)] = i@12.37;
+  L.18:
+  L.15:
+  i@r.25 = %add(i@r.25,1);
+  if (%lt(i@r.25, 8)) { goto L.14; }
+  return (0);
+  L.13:
+return();
+}
+export i@print as "print";
+foreign "C" i@print() {
+  stackdata {
+  }
+  bits32 i@k.45;
+  i@k.45 = 0;
+  L.39:
+  foreign "C" (i@printf)("address" i@43, %add(bits32[%add(%shl(i@k.45,2),i@x)],49));
+  L.40:
+  i@k.45 = %add(i@k.45,1);
+  if (%lt(i@k.45, 8)) { goto L.39; }
+  foreign "C" (i@printf)("address" i@44);
+  return (0);
+  L.38:
+return();
+}
+import bits32 "printf" as i@printf;
+}
+section "bss" {
+export i@x as "x";
+align 4;
+i@x:
+bits8[32];
+export i@rows as "rows";
+align 4;
+i@rows:
+bits8[32];
+export i@down as "down";
+align 4;
+i@down:
+bits8[60];
+export i@up as "up";
+align 4;
+i@up:
+bits8[60];
+}
+section "data" {
+i@44:
+bits8[] "\x0a\x00";
+i@43:
+bits8[] "%c \x00";
+}

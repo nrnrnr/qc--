@@ -1,0 +1,367 @@
+target
+	byteorder little
+	memsize 8
+	wordsize 32
+	pointersize 32
+	float "ieee754";
+
+bits2 System.rounding_mode "IEEE 754 rounding mode";
+section "data" {
+export i@addpoint as "addpoint";
+}
+section "text" {
+foreign "C" i@addpoint("address" bits32 i@2, "address" bits32 i@p1, "address" bits32 i@p2, ) {
+  stackdata {
+  }
+  bits32 i@1.3;
+  bits32 i@2.4;
+  bits32 i@3.5;
+  bits32[i@p1] = %add(bits32[i@p1],bits32[i@p2]);
+  i@2.4 = 4;
+  i@3.5 = %add(i@p1,i@2.4);
+  bits32[i@3.5] = %add(bits32[i@3.5],bits32[%add(i@p2,i@2.4)]);
+  bits32 i@.blkcopy.6, i@.blkcopy.7;
+  i@.blkcopy.6 = bits32[i@p1];
+  i@.blkcopy.7 = bits32[i@p1+4];
+  bits32[i@2] = i@.blkcopy.6;
+  bits32[i@2+4] = i@.blkcopy.7;
+  L.1:
+return();
+}
+export i@canonrect as "canonrect";
+foreign "C" i@canonrect("address" bits32 i@9, "address" bits32 i@r, ) {
+  stackdata {
+  }
+  stackdata {
+    align 4;
+    i@temp.26: bits8[16];
+  }
+  bits32 i@10.27;
+  bits32 i@14.28;
+  bits32 i@1.29;
+  bits32 i@2.30;
+  bits32 i@18.31;
+  bits32 i@3.32;
+  bits32 i@23.33;
+  bits32 i@4.34;
+  if (%ge(bits32[i@r], bits32[%add(i@r,8)])) { goto L.11; }
+  i@10.27 = bits32[i@r];
+  goto L.12;
+  L.11:
+  i@10.27 = bits32[%add(i@r,8)];
+  L.12:
+  bits32[i@temp.26] = i@10.27;
+  if (%ge(bits32[%add(i@r,4)], bits32[%add(i@r,12)])) { goto L.15; }
+  i@14.28 = bits32[%add(i@r,4)];
+  goto L.16;
+  L.15:
+  i@14.28 = bits32[%add(i@r,12)];
+  L.16:
+  bits32[(i@temp.26+4)] = i@14.28;
+  if (%le(bits32[i@r], bits32[%add(i@r,8)])) { goto L.19; }
+  i@18.31 = bits32[i@r];
+  goto L.20;
+  L.19:
+  i@18.31 = bits32[%add(i@r,8)];
+  L.20:
+  bits32[(i@temp.26+8)] = i@18.31;
+  if (%le(bits32[%add(i@r,4)], bits32[%add(i@r,12)])) { goto L.24; }
+  i@23.33 = bits32[%add(i@r,4)];
+  goto L.25;
+  L.24:
+  i@23.33 = bits32[%add(i@r,12)];
+  L.25:
+  bits32[((i@temp.26+8)+4)] = i@23.33;
+  bits32 i@.blkcopy.35, i@.blkcopy.36;
+  i@.blkcopy.35 = bits32[i@temp.26];
+  i@.blkcopy.36 = bits32[i@temp.26+4];
+  bits32[i@9] = i@.blkcopy.35;
+  bits32[i@9+4] = i@.blkcopy.36;
+  i@.blkcopy.35 = bits32[i@temp.26+8];
+  i@.blkcopy.36 = bits32[i@temp.26+12];
+  bits32[i@9+8] = i@.blkcopy.35;
+  bits32[i@9+12] = i@.blkcopy.36;
+  L.8:
+return();
+}
+export i@makepoint as "makepoint";
+foreign "C" i@makepoint("address" bits32 i@38, bits32 i@x, bits32 i@y, ) {
+  stackdata {
+  }
+  stackdata {
+    align 4;
+    i@p.40: bits8[8];
+  }
+  bits32[i@p.40] = i@x;
+  bits32[(i@p.40+4)] = i@y;
+  bits32 i@.blkcopy.41, i@.blkcopy.42;
+  i@.blkcopy.41 = bits32[i@p.40];
+  i@.blkcopy.42 = bits32[i@p.40+4];
+  bits32[i@38] = i@.blkcopy.41;
+  bits32[i@38+4] = i@.blkcopy.42;
+  L.37:
+return();
+}
+export i@makerect as "makerect";
+foreign "C" i@makerect("address" bits32 i@44, "address" bits32 i@p1, "address" bits32 i@p2, ) {
+  stackdata {
+  }
+  stackdata {
+    align 4;
+    i@r.46: bits8[16];
+  }
+  stackdata {
+    align 4;
+    i@2.47: bits8[16];
+  }
+  bits32 i@.blkcopy.48, i@.blkcopy.49;
+  i@.blkcopy.48 = bits32[i@p1];
+  i@.blkcopy.49 = bits32[i@p1+4];
+  bits32[i@r.46] = i@.blkcopy.48;
+  bits32[i@r.46+4] = i@.blkcopy.49;
+  i@.blkcopy.48 = bits32[i@p2];
+  i@.blkcopy.49 = bits32[i@p2+4];
+  bits32[(i@r.46+8)] = i@.blkcopy.48;
+  bits32[(i@r.46+8)+4] = i@.blkcopy.49;
+  i@.blkcopy.48 = bits32[i@r.46];
+  i@.blkcopy.49 = bits32[i@r.46+4];
+  bits32[i@2.47] = i@.blkcopy.48;
+  bits32[i@2.47+4] = i@.blkcopy.49;
+  i@.blkcopy.48 = bits32[i@r.46+8];
+  i@.blkcopy.49 = bits32[i@r.46+12];
+  bits32[i@2.47+8] = i@.blkcopy.48;
+  bits32[i@2.47+12] = i@.blkcopy.49;
+  foreign "C" (i@canonrect)("address" i@44, "address" i@2.47);
+  L.43:
+return();
+}
+export i@ptinrect as "ptinrect";
+foreign "C" i@ptinrect("address" bits32 i@p, "address" bits32 i@r, ) {
+  stackdata {
+  }
+  bits32 i@51.54;
+  bits32 i@1.55;
+  bits32 i@2.56;
+  bits32 i@3.57;
+  bits32 i@4.58;
+  bits32 i@5.59;
+  i@2.56 = bits32[i@p];
+  if (%lt(i@2.56, bits32[i@r])) { goto L.52; }
+  if (%ge(i@2.56, bits32[%add(i@r,8)])) { goto L.52; }
+  i@4.58 = 4;
+  i@5.59 = bits32[%add(i@p,i@4.58)];
+  if (%lt(i@5.59, bits32[%add(i@r,i@4.58)])) { goto L.52; }
+  if (%ge(i@5.59, bits32[%add(i@r,12)])) { goto L.52; }
+  i@51.54 = 1;
+  goto L.53;
+  L.52:
+  i@51.54 = 0;
+  L.53:
+  return (i@51.54);
+  L.50:
+return();
+}
+}
+section "data" {
+export i@y as "y";
+i@y:
+bits8[] "ab\x00";
+export i@odd as "odd";
+}
+section "text" {
+foreign "C" i@odd("address" bits32 i@y, ) {
+  stackdata {
+  }
+  stackdata {
+    i@x.62: bits8[3];
+  }
+  bits32 i@.blkcopy.63, i@.blkcopy.64;
+  i@.blkcopy.63 = %sx32(bits8[i@y]);
+  bits8[i@x.62] = %lobits8(i@.blkcopy.63);
+  i@.blkcopy.63 = %sx32(bits8[i@y+1]);
+  i@.blkcopy.64 = %sx32(bits8[i@y+2]);
+  bits8[i@x.62+1] = %lobits8(i@.blkcopy.63);
+  bits8[i@x.62+2] = %lobits8(i@.blkcopy.64);
+  foreign "C" (i@printf)("address" i@61, "address" i@x.62);
+  return (0);
+  L.60:
+return();
+}
+}
+section "data" {
+align 4;
+i@66:
+bits32[] {0x0};
+bits32[] {0x0};
+align 4;
+i@67:
+bits32[] {0x140};
+bits32[] {0x140};
+align 4;
+i@68:
+bits32[] {0xffffffff};
+bits32[] {0xffffffff};
+bits32[] {0x1};
+bits32[] {0x1};
+bits32[] {0x14};
+bits32[] {0x12c};
+bits32[] {0x1f4};
+bits32[] {0x190};
+export i@main as "main";
+}
+section "text" {
+foreign "C" i@main() {
+  stackdata {
+  }
+  bits32 i@i.84;
+  stackdata {
+    align 4;
+    i@pts.85: bits8[32];
+  }
+  stackdata {
+    align 4;
+    i@screen.86: bits8[16];
+  }
+  stackdata {
+    align 4;
+    i@x.87: bits8[8];
+  }
+  stackdata {
+    align 4;
+    i@origin.88: bits8[8];
+  }
+  stackdata {
+    align 4;
+    i@maxpt.89: bits8[8];
+  }
+  stackdata {
+    align 4;
+    i@4.90: bits8[8];
+  }
+  stackdata {
+    align 4;
+    i@2.91: bits8[8];
+  }
+  stackdata {
+    align 4;
+    i@3.92: bits8[8];
+  }
+  stackdata {
+    align 4;
+    i@7.93: bits8[8];
+  }
+  stackdata {
+    align 4;
+    i@5.94: bits8[8];
+  }
+  stackdata {
+    align 4;
+    i@6.95: bits8[8];
+  }
+  bits32 i@8.96;
+  bits32 i@9.97;
+  bits32 i@11.98;
+  stackdata {
+    align 4;
+    i@12.99: bits8[8];
+  }
+  stackdata {
+    align 4;
+    i@13.100: bits8[16];
+  }
+  bits32 i@14.101;
+  stackdata {
+    i@15.102: bits8[3];
+  }
+  bits32 i@.blkcopy.103, i@.blkcopy.104;
+  i@.blkcopy.103 = bits32[i@66];
+  i@.blkcopy.104 = bits32[i@66+4];
+  bits32[i@origin.88] = i@.blkcopy.103;
+  bits32[i@origin.88+4] = i@.blkcopy.104;
+  i@.blkcopy.103 = bits32[i@67];
+  i@.blkcopy.104 = bits32[i@67+4];
+  bits32[i@maxpt.89] = i@.blkcopy.103;
+  bits32[i@maxpt.89+4] = i@.blkcopy.104;
+  i@.blkcopy.103 = bits32[i@68];
+  i@.blkcopy.104 = bits32[i@68+4];
+  bits32[i@pts.85] = i@.blkcopy.103;
+  bits32[i@pts.85+4] = i@.blkcopy.104;
+  i@.blkcopy.103 = bits32[i@68+8];
+  i@.blkcopy.104 = bits32[i@68+12];
+  bits32[i@pts.85+8] = i@.blkcopy.103;
+  bits32[i@pts.85+12] = i@.blkcopy.104;
+  i@.blkcopy.103 = bits32[i@68+16];
+  i@.blkcopy.104 = bits32[i@68+20];
+  bits32[i@pts.85+16] = i@.blkcopy.103;
+  bits32[i@pts.85+20] = i@.blkcopy.104;
+  i@.blkcopy.103 = bits32[i@68+24];
+  i@.blkcopy.104 = bits32[i@68+28];
+  bits32[i@pts.85+24] = i@.blkcopy.103;
+  bits32[i@pts.85+28] = i@.blkcopy.104;
+  i@8.96 = ~10;
+  foreign "C" (i@makepoint)("address" i@4.90, i@8.96, i@8.96);
+  i@.blkcopy.103 = bits32[i@maxpt.89];
+  i@.blkcopy.104 = bits32[i@maxpt.89+4];
+  bits32[i@3.92] = i@.blkcopy.103;
+  bits32[i@3.92+4] = i@.blkcopy.104;
+  foreign "C" (i@addpoint)("address" i@2.91, "address" i@3.92, "address" i@4.90);
+  i@9.97 = 10;
+  foreign "C" (i@makepoint)("address" i@7.93, i@9.97, i@9.97);
+  i@.blkcopy.103 = bits32[i@origin.88];
+  i@.blkcopy.104 = bits32[i@origin.88+4];
+  bits32[i@6.95] = i@.blkcopy.103;
+  bits32[i@6.95+4] = i@.blkcopy.104;
+  foreign "C" (i@addpoint)("address" i@5.94, "address" i@6.95, "address" i@7.93);
+  foreign "C" (i@makerect)("address" i@screen.86, "address" i@2.91, "address" i@5.94);
+  i@i.84 = 0;
+  goto L.72;
+  L.69:
+  i@11.98 = %shl(i@i.84,3);
+  foreign "C" (i@makepoint)("address" i@x.87, bits32[%add(i@11.98,i@pts.85)], bits32[%add(i@11.98,(i@pts.85+4))]);
+  foreign "C" (i@printf)("address" i@73, bits32[%add(%shl(i@i.84,3),i@pts.85)], bits32[(i@x.87+4)]);
+  i@.blkcopy.103 = bits32[i@x.87];
+  i@.blkcopy.104 = bits32[i@x.87+4];
+  bits32[i@12.99] = i@.blkcopy.103;
+  bits32[i@12.99+4] = i@.blkcopy.104;
+  i@.blkcopy.103 = bits32[i@screen.86];
+  i@.blkcopy.104 = bits32[i@screen.86+4];
+  bits32[i@13.100] = i@.blkcopy.103;
+  bits32[i@13.100+4] = i@.blkcopy.104;
+  i@.blkcopy.103 = bits32[i@screen.86+8];
+  i@.blkcopy.104 = bits32[i@screen.86+12];
+  bits32[i@13.100+8] = i@.blkcopy.103;
+  bits32[i@13.100+12] = i@.blkcopy.104;
+  i@14.101 = foreign "C" (i@ptinrect)("address" i@12.99, "address" i@13.100);
+  if (%ne(i@14.101, 0)) { goto L.76; }
+  foreign "C" (i@printf)("address" i@78);
+  L.76:
+  foreign "C" (i@printf)("address" i@79, bits32[i@screen.86], bits32[(i@screen.86+4)], bits32[(i@screen.86+8)], bits32[((i@screen.86+8)+4)]);
+  L.70:
+  i@i.84 = %add(i@i.84,1);
+  L.72:
+  if (%ltu(%lobits32(i@i.84), 4)) { goto L.69; }
+  i@.blkcopy.103 = %sx32(bits8[i@y]);
+  bits8[i@15.102] = %lobits8(i@.blkcopy.103);
+  i@.blkcopy.103 = %sx32(bits8[i@y+1]);
+  i@.blkcopy.104 = %sx32(bits8[i@y+2]);
+  bits8[i@15.102+1] = %lobits8(i@.blkcopy.103);
+  bits8[i@15.102+2] = %lobits8(i@.blkcopy.104);
+  foreign "C" (i@odd)("address" i@15.102);
+  foreign "C" (i@exit)(0);
+  return (0);
+  L.65:
+return();
+}
+import bits32 "exit" as i@exit;
+import bits32 "printf" as i@printf;
+}
+section "data" {
+i@79:
+bits8[] "within [%d,%d; %d,%d]\x0a\x00";
+i@78:
+bits8[] "not \x00";
+i@73:
+bits8[] "(%d,%d) is \x00";
+i@61:
+bits8[] "%s\x0a\x00";
+}

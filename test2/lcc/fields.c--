@@ -1,0 +1,129 @@
+target
+	byteorder little
+	memsize 8
+	wordsize 32
+	pointersize 32
+	float "ieee754";
+
+bits2 System.rounding_mode "IEEE 754 rounding mode";
+section "data" {
+}
+section "data" {
+export i@x as "x";
+align 4;
+i@x:
+bits32[] {0x1};
+bits8[] {0x2::bits8};
+bits8[3];
+bits8[] {0x3::bits8};
+bits8[] {0x40::bits8};
+bits8[2];
+bits8[] {0x50::bits8};
+bits8[] {0x6::bits8};
+bits8[2];
+export i@i as "i";
+align 4;
+i@i:
+bits32[] {0x10};
+export i@y as "y";
+align 4;
+i@y:
+bits8[] {0x23::bits8};
+bits8[3];
+bits8[] {0x9::bits8};
+bits8[] {0x0::bits8};
+bits8[] {0x0::bits8};
+bits8[] {0x0::bits8};
+export i@main as "main";
+}
+section "text" {
+foreign "C" i@main() {
+  stackdata {
+  }
+  bits32 i@1.21;
+  bits32 i@2.22;
+  bits32 i@3.23;
+  bits32 i@4.24;
+  bits32 i@5.25;
+  bits32 i@6.26;
+  bits32 i@7.27;
+  bits32 i@8.28;
+  i@1.21 = 20;
+  foreign "C" (i@printf)("address" i@4, bits32[i@x], %sx32(bits8[(i@x+4)]), %shra(%shl(bits32[(i@x+8)],i@1.21),i@1.21), %shra(%shl(bits32[(i@x+8)],16),28), %shra(%shl(bits32[(i@x+12)],25),29), %sx32(bits8[(i@x+13)]));
+  i@2.22 = bits32[i@y];
+  foreign "C" (i@printf)("address" i@10, %and(i@2.22,3), %and(%shrl(i@2.22,2),15), bits32[(i@y+4)]);
+  i@3.23 = (i@x+8);
+  i@4.24 = 28;
+  bits32[i@3.23] = %or(%and(%lobits32(bits32[i@3.23]),~61441),%and(%shl(%lobits32(%shra(%shl(bits32[i@i],i@4.24),i@4.24)),12),61440));
+  i@5.25 = (i@x+12);
+  bits32[i@5.25] = %and(%lobits32(bits32[i@5.25]),~113);
+  i@6.26 = 20;
+  foreign "C" (i@printf)("address" i@4, bits32[i@x], %sx32(bits8[(i@x+4)]), %shra(%shl(bits32[(i@x+8)],i@6.26),i@6.26), %shra(%shl(bits32[(i@x+8)],16),28), %shra(%shl(bits32[(i@x+12)],25),29), %sx32(bits8[(i@x+13)]));
+  i@7.27 = i@y;
+  bits32[i@7.27] = %or(%and(bits32[i@7.27],~4),2);
+  bits32[(i@y+4)] = %lobits32(bits32[i@i]);
+  i@8.28 = bits32[i@y];
+  foreign "C" (i@printf)("address" i@10, %and(i@8.28,3), %and(%shrl(i@8.28,2),15), bits32[(i@y+4)]);
+  foreign "C" (i@f2)("address" i@x);
+  return (0);
+  L.3:
+return();
+}
+export i@f1 as "f1";
+foreign "C" i@f1("address" bits32 i@p, ) {
+  stackdata {
+  }
+  bits32 i@1.34;
+  bits32 i@2.35;
+  bits32 i@3.36;
+  bits32 i@4.37;
+  bits32 i@5.38;
+  bits32 i@6.39;
+  bits32[i@p] = %and(bits32[i@p],~61);
+  i@3.36 = 3;
+  bits32[i@p] = %or(%and(bits32[i@p],~4),%and(%and(0,i@3.36),i@3.36));
+  if (%eq(%and(bits32[i@p],60), 0)) { goto L.30; }
+  foreign "C" (i@printf)("address" i@32);
+  L.30:
+  bits32[i@p] = %or(bits32[i@p],3);
+  bits32[i@p] = %or(bits32[i@p],60);
+  i@6.39 = bits32[i@p];
+  foreign "C" (i@printf)("address" i@33, %and(i@6.39,3), %and(%shrl(i@6.39,2),15));
+  return (0);
+  L.29:
+return();
+}
+export i@f2 as "f2";
+foreign "C" i@f2("address" bits32 i@p, ) {
+  stackdata {
+  }
+  bits32 i@41.44;
+  bits32 i@1.45;
+  bits32 i@2.46;
+  bits32 i@3.47;
+  if (%ne(bits32[i@i], 0)) { goto L.42; }
+  i@41.44 = 1;
+  goto L.43;
+  L.42:
+  i@41.44 = 0;
+  L.43:
+  i@2.46 = 3;
+  bits32[i@p] = %or(%and(bits32[i@p],~4),%and(%and(%lobits32(i@41.44),i@2.46),i@2.46));
+  foreign "C" (i@f1)("address" i@p);
+  bits32[i@p] = %or(%and(bits32[i@p],~61),%and(%shl(%and(%lobits32(0),15),2),60));
+  return (0);
+  L.40:
+return();
+}
+import bits32 "printf" as i@printf;
+}
+section "data" {
+i@33:
+bits8[] "p->a = 0x%x, p->b = 0x%x\x0a\x00";
+i@32:
+bits8[] "p->b != 0!\x0a\x00";
+i@10:
+bits8[] "y = %d %d %d\x0a\x00";
+i@4:
+bits8[] "x = %d %d %d %d %d %d\x0a\x00";
+}

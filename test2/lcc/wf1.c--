@@ -1,0 +1,235 @@
+target
+	byteorder little
+	memsize 8
+	wordsize 32
+	pointersize 32
+	float "ieee754";
+
+bits2 System.rounding_mode "IEEE 754 rounding mode";
+section "data" {
+export i@main as "main";
+}
+section "text" {
+foreign "C" i@main() {
+  stackdata {
+  }
+  stackdata {
+    i@word.5: bits8[20];
+  }
+  stackdata {
+    align 4;
+    i@root.6: bits32;
+  }
+  bits32 i@1.7;
+  bits32 i@2.8;
+  bits32[i@root.6] = 0;
+  bits32[i@next] = 0;
+  goto L.3;
+  L.2:
+  "address" i@1.7 = foreign "C" (i@lookup)("address" i@word.5, "address" i@root.6);
+  bits32[i@1.7] = %add(bits32[i@1.7],1);
+  L.3:
+  i@2.8 = foreign "C" (i@getword)("address" i@word.5);
+  if (%ne(i@2.8, 0)) { goto L.2; }
+  foreign "C" (i@tprint)("address" bits32[i@root.6]);
+  return (0);
+  L.1:
+return();
+}
+export i@err as "err";
+foreign "C" i@err("address" bits32 i@s, ) {
+  stackdata {
+  }
+  foreign "C" (i@printf)("address" i@10, "address" i@s);
+  foreign "C" (i@exit)(1);
+  return (0);
+  L.9:
+return();
+}
+export i@getword as "getword";
+foreign "C" i@getword("address" bits32 i@buf, ) {
+  stackdata {
+  }
+  bits32 i@c.22;
+  bits32 i@s.23;
+  bits32 i@1.24;
+  bits32 i@2.25;
+  bits32 i@3.26;
+  bits32 i@4.27;
+  bits32 i@5.28;
+  L.12:
+  L.13:
+  i@1.24 = foreign "C" (i@getchar)();
+  i@c.22 = i@1.24;
+  if (%eq(i@1.24, ~1)) { goto L.15; }
+  i@2.25 = foreign "C" (i@isletter)(i@c.22);
+  if (%eq(i@2.25, 0)) { goto L.12; }
+  L.15:
+  i@s.23 = i@buf;
+  goto L.19;
+  L.16:
+  i@3.26 = i@s.23;
+  i@s.23 = %add(i@3.26,1);
+  bits8[i@3.26] = %lobits8(i@c.22);
+  L.17:
+  i@4.27 = foreign "C" (i@getchar)();
+  i@c.22 = i@4.27;
+  L.19:
+  i@5.28 = foreign "C" (i@isletter)(i@c.22);
+  i@c.22 = i@5.28;
+  if (%ne(i@5.28, 0)) { goto L.16; }
+  bits8[i@s.23] = 0::bits8;
+  if (%leu(%lobits32(i@s.23), %lobits32(i@buf))) { goto L.20; }
+  return (1);
+  goto L.11;
+  L.20:
+  return (0);
+  L.11:
+return();
+}
+export i@isletter as "isletter";
+foreign "C" i@isletter(bits32 i@c, ) {
+  stackdata {
+  }
+  bits32 i@1.34;
+  bits32 i@2.35;
+  if (%lt(i@c, 65)) { goto L.30; }
+  if (%gt(i@c, 90)) { goto L.30; }
+  i@c = %add(i@c,32);
+  L.30:
+  if (%lt(i@c, 97)) { goto L.32; }
+  if (%gt(i@c, 122)) { goto L.32; }
+  return (i@c);
+  goto L.29;
+  L.32:
+  return (0);
+  L.29:
+return();
+}
+export i@lookup as "lookup";
+foreign "C" i@lookup("address" bits32 i@word, "address" bits32 i@p, ) {
+  stackdata {
+  }
+  stackdata {
+    align 4;
+    i@cond.54: bits32;
+  }
+  bits32 i@1.55;
+  bits32 i@2.56;
+  bits32 i@3.57;
+  bits32 i@4.58;
+  bits32 i@5.59;
+  bits32 i@6.60;
+  bits32 i@7.61;
+  bits32 i@9.62;
+  bits32 i@8.63;
+  bits32 i@10.64;
+  if (%eq(%lobits32(bits32[i@p]), 0)) { goto L.37; }
+  i@1.55 = foreign "C" (i@strcmp)("address" i@word, "address" bits32[%add(bits32[i@p],12)]);
+  bits32[i@cond.54] = i@1.55;
+  if (%ge(bits32[i@cond.54], 0)) { goto L.39; }
+  "address" i@2.56 = foreign "C" (i@lookup)("address" i@word, "address" %add(bits32[i@p],4));
+  return ("address" i@2.56);
+  goto L.36;
+  L.39:
+  if (%le(bits32[i@cond.54], 0)) { goto L.41; }
+  "address" i@3.57 = foreign "C" (i@lookup)("address" i@word, "address" %add(bits32[i@p],8));
+  return ("address" i@3.57);
+  goto L.36;
+  L.41:
+  return ("address" bits32[i@p]);
+  goto L.36;
+  L.37:
+  if (%lt(bits32[i@next], 2000)) { goto L.43; }
+  foreign "C" (i@err)("address" i@45);
+  L.43:
+  bits32[%add(%shl(bits32[i@next],4),i@words)] = 0;
+  i@4.58 = %shl(bits32[i@next],4);
+  i@5.59 = 0;
+  bits32[%add(i@4.58,(i@words+8))] = i@5.59;
+  bits32[%add(i@4.58,(i@words+4))] = i@5.59;
+  i@6.60 = foreign "C" (i@strlen)("address" i@word);
+  "address" i@7.61 = foreign "C" (i@malloc)(%add(i@6.60,1));
+  bits32[%add(%shl(bits32[i@next],4),(i@words+12))] = i@7.61;
+  if (%ne(%lobits32(bits32[%add(%shl(bits32[i@next],4),(i@words+12))]), 0)) { goto L.49; }
+  foreign "C" (i@err)("address" i@52);
+  L.49:
+  foreign "C" (i@strcpy)("address" bits32[%add(%shl(bits32[i@next],4),(i@words+12))], "address" i@word);
+  i@8.63 = i@next;
+  i@9.62 = bits32[i@8.63];
+  bits32[i@8.63] = %add(i@9.62,1);
+  i@10.64 = %add(%shl(i@9.62,4),i@words);
+  bits32[i@p] = i@10.64;
+  return ("address" i@10.64);
+  L.36:
+return();
+}
+export i@tprint as "tprint";
+foreign "C" i@tprint("address" bits32 i@tree, ) {
+  stackdata {
+  }
+  bits32 i@1.69;
+  if (%eq(%lobits32(i@tree), 0)) { goto L.66; }
+  foreign "C" (i@tprint)("address" bits32[%add(i@tree,4)]);
+  foreign "C" (i@printf)("address" i@68, bits32[i@tree], "address" bits32[%add(i@tree,12)]);
+  foreign "C" (i@tprint)("address" bits32[%add(i@tree,8)]);
+  L.66:
+  return (0);
+  L.65:
+return();
+}
+export i@strcmp as "strcmp";
+foreign "C" i@strcmp("address" bits32 i@s1, "address" bits32 i@s2, ) {
+  stackdata {
+  }
+  bits32 i@1.80;
+  goto L.72;
+  L.71:
+  i@1.80 = i@s1;
+  i@s1 = %add(i@1.80,1);
+  if (%ne(%sx32(bits8[i@1.80]), 0)) { goto L.74; }
+  return (0);
+  goto L.70;
+  L.74:
+  i@s2 = %add(i@s2,1);
+  L.72:
+  if (%eq(%sx32(bits8[i@s1]), %sx32(bits8[i@s2]))) { goto L.71; }
+  if (%ne(%sx32(bits8[i@s1]), 0)) { goto L.76; }
+  return (~1);
+  goto L.70;
+  L.76:
+  if (%ne(%sx32(bits8[i@s2]), 0)) { goto L.78; }
+  return (1);
+  goto L.70;
+  L.78:
+  return (%sub(%sx32(bits8[i@s1]),%sx32(bits8[i@s2])));
+  L.70:
+return();
+}
+import bits32 "strcpy" as i@strcpy;
+import bits32 "strlen" as i@strlen;
+import bits32 "malloc" as i@malloc;
+import bits32 "getchar" as i@getchar;
+import bits32 "exit" as i@exit;
+import bits32 "printf" as i@printf;
+}
+section "bss" {
+export i@next as "next";
+align 4;
+i@next:
+bits8[4];
+export i@words as "words";
+align 4;
+i@words:
+bits8[32000];
+}
+section "data" {
+i@68:
+bits8[] "%d\x09%s\x0a\x00";
+i@52:
+bits8[] "out of word storage\x00";
+i@45:
+bits8[] "out of node storage\x00";
+i@10:
+bits8[] "? %s\x0a\x00";
+}
