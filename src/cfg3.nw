@@ -180,6 +180,7 @@ val gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
 val gm_delete_assign:           node -> unit    (* req: node is assign node *)
 
 val print_node : node -> string
+val dump: cfg -> msg:string -> unit           (* dump msg, cfg to stderr *)
 
 (* cfg mutators, ensures: not (enumerated cfg) *)
 (* all assignment insertions return the new node *)
@@ -753,6 +754,13 @@ let gm_delete_assign (node:node) =
 
 let print_node (node:node) =
     (node#comment ^ "\n")
+
+let dump cfg msg =
+    let nodes = cfg#nodes in
+        ( prerr_endline msg
+        ; List.iter (fun n -> prerr_endline (n#comment)) nodes
+        ; flush stderr
+        )
 @    
 
 Many node observations simply invoke a node's method. 
@@ -822,6 +830,7 @@ class type cfg = object
     method get_id:      unit -> int     (* unique *)
     method test:        unit            (* test integrity of this *)
     method ast:         Target2.t -> Ast.body list 
+    method nodes:       node list       (* for debugging *)
 end
 @
 
@@ -1231,6 +1240,9 @@ object (this)
             | _      -> assert false                  in
         let f node result = node#ast target :: result in
             List.concat (Array.fold_right f enum [])
+
+    method nodes =
+        NodeSet.elements _nodes
             
 end
 @
@@ -1321,6 +1333,9 @@ object(this)
         invalid_arg "Cfg3: add_assign_after method for non-assignment node"
 
     method insert_assign_on_edges_from (rtl:Rtl.rtl) (before:node) =
+        let _           = () (* Printf.eprintf "this:%s before:%s\n" 
+                            ((this :> node)#comment)
+                            (before#comment); flush stderr *)in 
         let ()          = assert (NodeSet.mem before _pred) in
         let this        = (this :> node) in
         let assign      = new assign _cfg rtl this in
@@ -1334,9 +1349,9 @@ object(this)
         let this = (this :> node) in
         let live = (this#property).Property.liveout in 
             Printf.sprintf 
-                "node: %d num: %d live: %s rtl: %s pred: %s succ: %s\n"
-                _id
+                "num: %02d id: %d live: %s rtl: %s pred: %s succ: %s "
                 _num
+                _id
                 (Register.print_set live) 
                 (Rtldebug.rtl_to_string _rtl)
                 (String.concat "," 

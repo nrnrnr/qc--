@@ -10,20 +10,19 @@ The primary variation is in the interfaces.
 
 One policy question is whether the client of the allocator should name
 the temporary space directly or should name the hardware space into
-which the temporary will eventually be mapped.
-We have decided that clients must ask for a specific temporary space,
-not for a temporary mapping into some hardware space.
-Our reasoning is twofold: first, that asking for a hardware space does
-not specify a location set, and second, that the client is supposed to
-know all about the temporaries anyway.
+which the temporary will eventually be mapped.  We have decided that
+clients must ask for a specific temporary space, not for a temporary
+mapping into some hardware space.  Our reasoning is twofold: first, that
+asking for a hardware space does not specify a location set, and second,
+that the client is supposed to know all about the temporaries anyway.
 
-Type~[[Single.t]] represents an allocator for a single space.
-It is a mutable type; its state represents the temporaries that have
-already been allocated.  
-[[Single.for_space]] creates a fresh allocator.
-The space passed to [[Single.for_space]] must be a temporary space.
-Functions [[reg]] and [[loc]] provide different interfaces to the allocator.
-It may be useful to partially apply [[reg]] to [[t]].
+Type~[[Single.t]] represents an allocator for a single space.  It is a
+mutable type; its state represents the temporaries that have already
+been allocated.  [[Single.for_space]] creates a fresh allocator.  The
+space passed to [[Single.for_space]] must be a temporary space.
+Functions [[reg]] and [[loc]] provide different interfaces to the
+allocator.  It may be useful to partially apply [[reg]] to [[t]].
+
 <<talloc.mli>>=
 module Single : sig
   type t       (* an allocator for one space -- a mutable type *)
@@ -33,23 +32,21 @@ module Single : sig
   val loc : t -> width:int -> Rtl.loc
 end
 @ 
+
 Type~[[Multiple.t]] represents a group of allocators, one for each
-temporary space on a machine. 
-It is a mutable type; its state represents the temporaries that have
-already been allocated.  
-[[Single.for_spaces]] creates a fresh allocator for each temporary
-space on the list passed to it.
-Non-temporary spaces are ignored, so it is possible to pass a list of
-\emph{all} spaces.
-Functions [[reg]], [[loc]], and [[reg_like]] provide different
-interfaces to the allocator.
-It may be useful to partially apply [[reg]] and [[loc]] to~[[t]] and a space.
-More interfaces could be added.
-It is a checked run-time error to ask for a space that is not a
-temporary space on the original list.
+temporary space on a machine.  It is a mutable type; its state
+represents the temporaries that have already been allocated.
+[[Single.for_spaces]] creates a fresh allocator for each temporary space
+on the list passed to it.  Non-temporary spaces are ignored, so it is
+possible to pass a list of \emph{all} spaces.  Functions [[reg]],
+[[loc]], and [[reg_like]] provide different interfaces to the allocator.
+It may be useful to partially apply [[reg]] and [[loc]] to~[[t]] and a
+space.  More interfaces could be added.  It is a checked run-time error
+to ask for a space that is not a temporary space on the original list.
+
 <<talloc.mli>>=
 module Multiple : sig
-  type t       (* an allocator for one space -- a mutable type *)
+  type t       (* an allocator for multiple spaces -- a mutable type *)
 
   val for_spaces : Space.t list -> t            (* a fresh allocator *)
   val reg : t -> Rtl.space -> width:int -> Register.t

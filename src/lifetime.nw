@@ -107,6 +107,8 @@ module type S = sig
     val precedes      : t -> t -> bool
     val starts_before : t -> t -> bool
     val ends_after    : t -> t -> bool
+
+    val to_string     : t -> string (* debugging*)
     module Set : Set.S with type elt = t
       (* Set implements a total order on intervals that respects
       start_before but it *not* the same as the partial order defined
@@ -124,6 +126,7 @@ module type POINT = sig
     type t
     val compare: t -> t -> int
     val zero: t
+    val to_string: t -> string
 end
 @
 
@@ -181,7 +184,10 @@ type t' = t
 
 let empty     = (Point.zero,Point.zero)
 let isempty t = t = empty  
-    
+
+let to_string (x,y) = 
+    Printf.sprintf "(%s,%s]" (Point.to_string x) (Point.to_string y)
+
 let mk x y = match x, y with
     | x, y when Order.ge x y          -> empty
     | x, y when Order.le x Point.zero -> empty
@@ -205,8 +211,8 @@ other interval or into it.  Empty intervals never overlap.
 <<module Interval struct>>=
 let overlaps i1 i2 = match i1, i2 with
     | i1     , i2  when isempty i1 || isempty i2 -> false
-    | (x1,y1), (x2,y2)  -> (Order.le x2 x1 && Order.lt x1 y2) ||
-                           (Order.le x2 y1 && Order.lt y1 y2)
+    | (x1,y1), (x2,y2)  -> (Order.le x2 x1  && Order.lt  x1 y2) ||
+                           (Order.lt x2 y1  && Order.le  y1 y2)
 @
 
 An interval $(x_1,y_1)$ precedes another one $(x_2,y_2)$ if they don't
@@ -297,6 +303,7 @@ module type S = sig
     (* observers *)
     val overlaps: Interval.t -> t -> bool
     val bbox: t -> Interval.t
+    val to_string: t -> string
 end
 @
 
@@ -336,6 +343,9 @@ lifetimes leads to an checked run-time error.
 type t = Interval.Set.t  (* no element is an empty interval *)
 
 let empty = Interval.Set.empty
+let to_string t = 
+    let set= Interval.Set.elements t in
+        String.concat ":" (List.map Interval.to_string set)
 @
 
 The two functions [[mk]] and [[bbox]] connect intervals and
@@ -384,6 +394,13 @@ argument must not overlap with the second.
 
 <<module Lifetime struct>>=
 let union t1 t2 = 
-    assert (not (overlaps (bbox t1) t2));
+    ( if overlaps (bbox t1) t2 then 
+        ( Printf.eprintf 
+            "Liftetime.union: %s overlaps with %s" 
+            (Interval.to_string (bbox t1)) (to_string t2)
+        ; flush stderr
+        ; assert false
+        )
+    );
     Interval.Set.union t1 t2
 @

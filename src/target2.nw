@@ -65,11 +65,12 @@ specifications exist.
 
 <<type cc>>=
 type cc =      
-    { sp:       Rtl.loc         (* stack pointer                      *)
-    ; return:   Rtl.rtl         (* return machine instr passed to Cfg.return *)
-    ; proc:     Automaton.spec  (* pass parameter to a procedure      *)
-    ; cont:     Automaton.spec  (* pass parameter to a contunation    *)
-    ; ret:      Automaton.spec  (* return values                      *)
+    { sp:           Rtl.loc         (* stack pointer                      *)
+    ; return:       Rtl.rtl         (* machine instr passed to Cfg.return *)
+    ; proc:         Automaton.spec  (* pass parameter to a procedure      *)
+    ; cont:         Automaton.spec  (* pass parameter to a contunation    *)
+    ; ret:          Automaton.spec  (* return values                      *)
+    ; allocatable:  Register.t list (* regs for reg-allocation            *)
     }
 @
 
@@ -171,8 +172,6 @@ branch:         (Rtl.exp * Rtl.exp) map;
 The register allocator (see \module{linscan}) needs target-specific
 informations about hardware registers and temporaries. In particular:
 
-<<components of t>>=
-allocatable:    Register.t list;        (*ALERT! should be calling convention*)
 <<exported functions>>=
 val is_tmp : t -> Rtl.space -> bool  (* partially apply me *)
 val fits:    t -> Rtl.space -> Register.t -> bool
@@ -184,37 +183,34 @@ val fits:    t -> Rtl.space -> Register.t -> bool
 
 \item [[is_tmp t sp]] is true, if [[sp]] denotes a {\rtl} space that
       holds temporaries.  It should be partially applied for efficiency.
-
-\item [[allocatable]] is the list of registers that are available for 
-      register allocation on this platform.
-\emph{ALERT!   This is a function of calling convention, not target
-machine! ---NR}
 \end{itemize}
 @
+
 The [[assign]] function creates an [[Rtl.rtl]] that transfers a value
 from one register to another.  The source and destination must be
 assignment compatible, otherwise it is a checked run-time error which
 raises an [[Invalid_argument]] exception.  The first argument is a
 lookup-function that provides information about the spaces the source
-and destination registers live in.
+and destination registers live in. \emph{{\rtl} respects machine
+invariant? --CL}
 
 <<components of t>>=
-assign: (Rtl.space -> Space.t) 
-    -> src:Register.t -> dst:Register.t -> Rtl.rtl;
+assign: (Rtl.space -> Space.t) -> src:Register.t -> dst:Register.t -> Rtl.rtl;
 @
 
-When the register allocator (see ~module{linscan}) must spill, it has
-to create {\rtl}s that move values from registers to memory (spill)
-and vice versa (reloads).  Here are two functions to create such
-{\rtl}s:
+When the register allocator (see ~module{linscan}) must spill, it has to
+create {\rtl}s that move values from registers to memory (spill) and
+vice versa (reloads).  Here are two functions to create such {\rtl}s:
+
 <<components of t>>=
 spill:  (Rtl.space -> Space.t) -> Register.t -> Rtl.loc -> Rtl.rtl list;
 reload: (Rtl.space -> Space.t) -> Register.t -> Rtl.loc -> Rtl.rtl list;
-@ The RTLs should be returned in \emph{execution order}, i.e., the
-first element of the list is the first to be executed.
-\emph{ALERT! Perhaps we ought to revisit these interfaces, since the role of the
-first argument is baffling. ---NR}
-@
+@ 
+
+The RTLs should be returned in \emph{execution order}, i.e., the first
+element of the list is the first to be executed.  \emph{ALERT! Perhaps
+we ought to revisit these interfaces, since the role of the first
+argument is baffling. ---NR} 
 
 % ------------------------------------------------------------------ 
 \subsection{Resource Allocation on the Stack}
@@ -256,43 +252,12 @@ to implement lookup tables for registers and calling conventions.
 module R       = Rtl
 module S       = Space
 module RP      = Rtl.Private
-(**
-module F       = Fenv.Clean
-**)
 <<type map>>
 <<type cc>>
 <<type t>>
 
 @
 
-The [[check]] function compares expectations about a target recorded in
-an fat environment with an actual target.
-
-<<target2.ml>>=
-(***
-let check (t:t) (env:F.env) =
-    let itoa i = string_of_int i in
-    let msg property source target = 
-        Error.error ( "missmatch of "^property
-             ^ " in source (" ^source
-             ^ ") and target ("^target^")") in
-    match F.findEndianness env, t.byteorder with
-    | F.Big,   R.LittleEndian -> msg "byteorder" "little" "big"
-    | F.Little, R.BigEndian    -> msg "byteorder" "big"    "little"
-    | _ -> if F.findWordsize env <> t.wordsize then
-        msg "wordsize" (itoa (F.findWordsize env)) (itoa t.wordsize)
-    else if F.findMemsize env <> t.memsize then
-        msg "memsize" (itoa (F.findMemsize env)) (itoa t.memsize)
-    else if F.findPointersize env <> t.pointersize then
-        msg "pointer size" (itoa (F.findPointersize env)) (itoa t.pointersize)
-    else if F.findFloat env <> t.float then
-        msg "floating point standard" (F.findFloat env) t.float
-    else if F.findCharset env <> t.charset then
-        msg "charset" (F.findCharset env) t.charset
-    else
-        ()
-***)
-@
 <<target2.ml>>=
 let space t s = List.find (fun x -> x.Space.space = s) t.spaces
 @

@@ -41,7 +41,7 @@ module T    = Lua.Lib.Combine.T9                         (* types *)
 
 module IO   = Lua.Lib.Extend (T.T7)
 
-module L    = Lua.Lib.Combine.L9                        (* libraries *)
+module L    = Lua.Lib.Combine.L10                       (* libraries *)
                 (Luaiolib.Make (T.T7))
                 (IO (Luastrlib.M))
                 (IO (Luamathlib.M))
@@ -51,6 +51,7 @@ module L    = Lua.Lib.Combine.L9                        (* libraries *)
                 (Colorgraph.Make (T.T8) (T.T9) (T.T4))
                 (Targets.MakeLib (T.T5))
                 (Placevar.Make (T.T8) (T.T4))
+                (Linscan.Make (T.T4))
                 (IO (Luautil.MakeLib))
                 
 module I    = Lua.MakeInterp                            (* our interpreter *)
@@ -241,6 +242,7 @@ CGStages =
     , printCG        = mkS("printCG",       CG.printCG)
     , printCFGLive   = mkS("printCFGLive",  CG.printCFGLive)
     , pCFG           = mkS("pCFG",          CG.pCFG)
+    , linscan        = mkS("linscan",       Linscan.allocate)
     }
 
 function makeInitInfo (colors) 
@@ -322,6 +324,30 @@ function Default.runopt(cfg, frame)
 end
 
 ------------------------------------------------------------------ 
+-- Linear Scan register allocator - Experimental
+-- activate it: ./qc-- -e 'Default.optimizer=linscan' -c foo.c--
+------------------------------------------------------------------ 
+
+function linscan ()
+    return 
+        seq
+        { codeExpand
+        , single(CGStages.linscan)
+        }
+end 
+
+function expand ()
+    return 
+        seq
+        { codeExpand
+        }
+end    
+
+function none ()
+    return seq {}
+end    
+
+------------------------------------------------------------------ 
 -- Main
 -- High-level functions the user is most likely to use
 ------------------------------------------------------------------ 
@@ -379,6 +405,34 @@ function Main.pretty ()
     Driver.print(doc,Default.linewidth)
 end    
 Main.p = Main.pretty -- abbreviation
+
+-- dump
+-- dumps the entire name space of the Lua interpreter to see what is
+-- there
+
+function Main.dumptable (name,table)
+    local key,val = next(table,nil)
+    local s
+    while key do
+        s = format("%-40s%s\n", name .. key, type(val))
+        write(s)
+        if type(val) == "table" then 
+            Main.dumptable (name .. key .. ".", val) 
+        end
+        key,val = next(table,key)
+    end
+end
+
+function Main.dump ()
+    local key,val = nextvar(nil)
+    local s
+    while key do
+        s = format ("%-40s%s\n",key, type(val))
+        write (s)
+        if type(val) == "table" then Main.dumptable (key .. ".", val) end
+        key,val = nextvar(key)
+    end
+end    
 @
 
  

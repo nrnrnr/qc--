@@ -1,5 +1,6 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
-
+% :vim sw=4 et 
+        
 \input{../config/macros.tex}
 
 % l2h substitution cfg CFG
@@ -148,6 +149,15 @@ procedure's activation record.
 val linscan: Proc.t -> bool
 @
 
+We export the linear scan register allocator as a Lua function that fits
+into the framework of the Optimization Backplane. In particular, we
+export the allocator as the Lua function [[Linscan.allocate]]. 
+
+<<linscan.mli>>=
+module Make (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Proc.t): 
+    Lua.Lib.TYPEFUL with type 'a combined = 'a ProcT.combined
+@
+
 % ------------------------------------------------------------------ 
 \subsection{Construction of Register Lifetimes}
 % ------------------------------------------------------------------ 
@@ -175,6 +185,7 @@ module P = struct
     type t = int
     let compare = compare
     let zero = 0 
+    let to_string = string_of_int
 end
 
 module I        = Interval.Make(P)
@@ -184,13 +195,25 @@ module Pr       = Cfgprop
 module RM       = Register.Map
 module RS       = Register.Set
 module T        = Target2
+module S        = Space
+
+module NodeSet = Set.Make (struct 
+    type t = G.node
+    let compare = compare
+end)    
 
 type lifetimes  = LT.t RM.t  (* lt *)  (* map from register to its lifetimes *)
 type loc        = Register.t    
 
-<<compute lifetimes>>
+(* for debugging *)
+let dump lifetimes =
+    RM.iter (fun (sp,i,w) lt -> Printf.eprintf "(%c,%d,%d): %s\n"
+              sp i w (LT.to_string lt)) lifetimes
 
-let lookup table x = RM.find x table       (* lookup lifetime *)
+let lookup table (sp,i,_ as x) = 
+    try RM.find x table  with Not_found -> LT.empty
+
+<<compute lifetimes>>
 
 <<find tmp>>
 <<find reg>>
@@ -270,7 +293,7 @@ open intervals must be closed.
 <<compute lifetimes>>=
 let lifetimes proc =
     let cfg         = proc.Proc.cfg                                in
-    let registers   = proc.Proc.target.T.allocatable               in
+    let registers   = proc.Proc.cc.T.allocatable                   in
     let lt          = List.fold_left (fun map r -> RM.add r LT.empty map) 
                                      RM.empty registers            in
     let initial     = (RM.empty, lt)                               in
@@ -288,14 +311,10 @@ let lifetimes proc =
     let (set,(op,lt)) = G.scan_fwd cfg first last scan (RS.empty, initial) in
                       (* close all open intervals after the last node *)
     let     (_ ,lt) = close_regs (last+1) (domain op) (op,lt)      in
+    let _           = () (* dump lt *)   in
+
         lt
 @
-
-\begin{quote}\it
-    I have to verify that the above code calculates the correct
-    intervals with respect to the open interval semantics for lifetime
-    intervals. --CL
-\end{quote}
 
 
 % ------------------------------------------------------------------ 
@@ -322,21 +341,21 @@ temporaries.  The [[alloc]] function receives two continuations,
 can be found for a temporary.  Because spilling mutates the structure
 of a {\cfg}, register allocation starts over after spilling.
 
-\begin{quote}\it
-    The [[lifetimes]] function must be supplied with a map that
-    contains all hardware registers that are available for register
-    allocation, not the [[empty]] set. --CL
-\end{quote}
+The [[lifetimes]] function must be supplied with a map that contains all
+hardware registers that are available for register allocation, not the
+[[empty]] set. --CL
 
 <<linscan>>=
 let rec linscan proc =
-    let _ = LI.liveness proc.Proc.cfg     in
-    let _ = G.gm_enumerate proc.Proc.cfg  in
-    let rec next_node lifetimes node = match node with 
+    let _  = LI.liveness proc.Proc.cfg     in
+    let _  = G.gm_enumerate proc.Proc.cfg  in
+    let lt = lifetimes proc                in
+    let rec next_node lt node = match node with 
         | None      -> true (* lies!  risky... *)
-        | Some node -> alloc proc node lifetimes next_node spill
+        | Some node -> alloc proc node lt next_node spill
     in
-        next_node (lifetimes proc) (Some (G.first proc.Proc.cfg))
+        (* G.dump proc.Proc.cfg "foo"; true *)
+         next_node lt (Some (G.first proc.Proc.cfg)) 
 @
 <<alloc>>=
 let alloc proc node lifetimes next_node spill =
@@ -382,16 +401,20 @@ let replace_tmp proc node tmp lifetimes next_tmp spill =
   let cfg        = G.cfg node                                       in
   match find_reg proc lifetimes tmp with
   | Some r -> (* successfully found a hardware register r *)
-      let lifetimes = RM.add r (LT.union (lifetime r) (lifetime tmp))
+      let lifetimes = RM.add r (LT.union (lifetime tmp)(lifetime r))
                                lifetimes                            in
       let lookup    = Target2.space proc.Proc.target                in
       let lifetimes = RM.remove tmp lifetimes                       in
       let ()        = iter cfg (Rtlutil.Subst2.reg lookup (replace tmp r)) in
           next_tmp lifetimes
   | None -> (* out of register - must spill *)
-      let spillee, interval = find_spillee lifetimes tmp node       in
-      let mem               = spill_slot proc.Proc.priv spillee     in
-          spill proc spillee mem interval
+      let allocatable = proc.Proc.cc.T.allocatable              in 
+      let is_tmp      = T.is_tmp proc.Proc.target in
+      let spillable (sp,_,_ as loc) = 
+        List.mem loc allocatable in
+      let spillee, interval = find_spillee spillable lifetimes tmp node in 
+      let mem               = spill_slot proc.Proc.priv spillee     in 
+        spill proc spillee mem interval
 @
 
 % ------------------------------------------------------------------ 
@@ -422,8 +445,9 @@ explicitly.
 <<find tmp>>=
 let find_tmp proc node = 
     let uses space index width = function
-        | None when T.is_tmp proc.Proc.target space -> Some (space, index, width)
-        | x                                      -> x 
+        | None when T.is_tmp proc.Proc.target space -> 
+            Some (space, index, width)
+        | x -> x 
     in
         Rtlutil.ReadWrite.fold uses uses (G.rtl node) None    
 @       
@@ -456,10 +480,16 @@ register [[r]], that respects all of the following conditions, or
 
 <<find reg>>=
 let first_fit proc lifetimes t =
-    let fits' (sp,_,_ as t) r = 
-        T.fits proc.Proc.target sp r &&   (* ALERT! should partially apply *)
-        not (LT.overlaps (LT.bbox (lookup lifetimes t)) 
-                                (lookup lifetimes r))
+    let fits' (sp,i,_ as t) (sp',i',_ as r) = 
+        let x = T.fits proc.Proc.target sp r in
+        let y = not (LT.overlaps (LT.bbox (lookup lifetimes t)) 
+                    (lookup lifetimes r)) in
+        (*
+        let _ = Printf.eprintf "%c[%d] %s %c[%d]\n" 
+                    sp i 
+                    (if x&&y then "->" else "!->") 
+                    sp' i'; flush stderr in  *)
+            x && y            
     in
     let check r lt = function
         | None   when fits' t r -> Some r       
@@ -498,32 +528,49 @@ longest in the program.  This is our spill candidate and we want to
 spill it from the current node up to the end of the procedure.
 
 <<find spillee>>=
-let active point lifetimes =
+let active point lifetimes spillable =
     let here = I.mk point (point+1) in
     let find = fun loc lt active ->  
-        if LT.overlaps here lt then (loc,lt) :: active else active
+        let ol = LT.overlaps here lt in
+        let sp = spillable loc in
+        (* let _  = Printf.eprintf "%s %s %s %s (%s)\n"
+                 (I.to_string here)
+                 (if ol then "overlaps" else "not overlaps")
+                 (Register.print loc)
+                 (LT.to_string lt)
+                 (if sp then "spillable" else "not spillable") in *)
+        if  ol && sp then
+            (loc,lt) :: active 
+        else 
+            active
     in
         RM.fold find lifetimes []
 
-<<longest active type>>=
-G.node -> loc -> lifetimes -> loc * LT.t
 <<find spillee>>=
-let longest_active: <<longest active type>> = fun node tmp lifetimes ->
+let longest_active node tmp lifetimes spillable  =
     let here   = G.number node        in
-    let active = active here lifetimes  in
+    let active = active here lifetimes spillable in
     let max (loc1,lt1 as x) (loc2,lt2 as y) = 
-        if I.ends_after (LT.bbox lt1) (LT.bbox lt2) then x else y 
-    in
-        List.fold_left max (tmp,lookup lifetimes tmp) active
+        if I.ends_after (LT.bbox lt1) (LT.bbox lt2) then x else y in
+    let _      = assert (active <> []) in    
+    let r = List.fold_left max (List.hd active) (List.tl active) in
+    (*
+    let () = Printf.eprintf "active: %s longest: %s\n"
+             (String.concat " " 
+                (List.map (fun f -> Register.print (fst f)) active))
+             (Register.print (fst r)) in
+    *)    
+        r         
 
-<<find spillee type>>= 
-lifetimes -> loc -> G.node -> loc * I.t 
 <<find spillee>>=
-let find_spillee: <<find spillee type>> = fun lifetimes tmp node ->
+let find_spillee spillable lifetimes tmp node =
     let cfg      = G.cfg node                     in
     let last     = G.number (G.last cfg)       in
-    let loc,_    = longest_active node tmp lifetimes in
+    let loc,_    = longest_active node tmp lifetimes spillable in
     let interval = I.mk (G.number node) (last+1)  in
+    (* let ()       = Printf.eprintf "spilling: %s in %s\n" 
+                    (Register.print loc) (I.to_string interval) in
+     *)   
         loc, interval
 @
 
@@ -578,11 +625,16 @@ such that the [[spillee]] is held in memory [[mem]] most of the time.
 When the spillee is used, it is re-loaded into a temporary.
 
 <<spill>>=
+
 and spill proc spillee mem interval = 
+    (* let _     = Cfg3.dump proc.Proc.cfg "before spilling" in *)
     let first = I.left  interval in
     let last  = I.right interval in 
+    let nodes = G.scan_fwd proc.Proc.cfg first last
+                    (fun n set -> NodeSet.add n set) NodeSet.empty in
         ( G.scan_fwd proc.Proc.cfg first last 
-                (fun n () -> update proc interval spillee mem n) ()
+            (fun n () -> update proc interval nodes spillee mem n) ()
+          (* ; Cfg3.dump proc.Proc.cfg "after spilling" *)
         ; linscan proc (* start over *)
         )
 @
@@ -616,19 +668,27 @@ spill the [[spillee]] to [[mem]], outgoing edges reload [[mem]] to
 edges for [[node]]. 
 
 <<update>>=
-and upd_incoming target interval spillee mem node =
-    let pred  = extern interval (G.pred node) in
+and upd_incoming target extern spillee mem node =
     let spill = target.T.spill (T.space target) spillee mem in
-        List.iter (fun n -> insert_between spill n node) pred
+    let upd n = if extern n (* && RS.mem spillee 
+                                ((G.property n).Pr.liveout) *) then 
+                    insert_between spill node n 
+                else 
+                    () in
+        List.iter upd (G.pred node)
 
-and upd_outgoing target interval spillee mem node = 
-    let succ    = extern interval (G.succ node) in
+and upd_outgoing target extern spillee mem node = 
     let reload  = target.T.reload (T.space target) spillee mem          in
-        List.iter (fun n -> insert_between reload node n) succ
+    let liveout = RS.mem spillee ((G.property node).Pr.liveout) in
+    let upd n   = if extern n && liveout then
+                    insert_between reload n node 
+                  else () in
+        List.iter upd (G.succ node)
 
 and insert_between rtls node before =
-  ignore
-    (List.fold_right (fun rtl n -> G.gm_insert_assign_between rtl before n) rtls node)
+    ignore (List.fold_right 
+        (fun rtl n -> G.gm_insert_assign_between rtl before n) 
+        rtls node)
 @
 
 The heart of the spiller is [[update]] that is applied to every
@@ -647,13 +707,26 @@ to and read from [[mem]].
 \end{quote}
 
 <<update>>=
-and update proc interval spillee mem node = 
-    upd_incoming proc.Proc.target interval spillee mem node ;    
+and tmp_for spaces temps (sp,_,w) =
+    let is_tmp = function
+        | S.Temp {Space.stands_for = sp} -> true
+        | _                              -> false in
+    let space = try List.find (fun s -> is_tmp s.S.classification) spaces 
+                with Not_found -> assert false in
+    let sp'   = space.S.space in 
+        Talloc.Multiple.reg temps sp' w
+
+<<update>>=
+and update proc interval nodes spillee mem node = 
+    let extern n = not (NodeSet.mem n nodes) in
+    upd_incoming proc.Proc.target extern spillee mem node ;    
+    upd_outgoing proc.Proc.target extern spillee mem node;      
     let reads, writes = reads_writes (G.rtl node) spillee in
     let target = proc.Proc.target in
     let lookup = Target2.space target in
         if reads || writes then 
-            ( let tmp   = Talloc.Multiple.reg_like proc.Proc.temps spillee in
+            ( let tmp   = tmp_for proc.Proc.target.Target2.spaces 
+                                  proc.Proc.temps spillee in
               let subst = fun x -> if x = spillee then tmp else x in 
               ( if reads  then 
                     ignore (List.fold_right G.gm_insert_assign_before
@@ -664,7 +737,6 @@ and update proc interval spillee mem node =
               ; G.set_rtl node (Rtlutil.Subst2.reg lookup subst)
               )
             );
-    upd_outgoing target interval spillee mem node       
 @
 
 \begin{quote}\it
@@ -674,3 +746,36 @@ and update proc interval spillee mem node =
     register might the there because a calling convention demands it.
     --CL
 \end{quote}
+
+% ------------------------------------------------------------------ 
+\section{Backplane Interface}
+% ------------------------------------------------------------------ 
+
+We export the linear scan register allocator as a Lua function that fits
+into the framework of the Optimization Backplane.
+
+<<linscan.ml>>=
+module Make (ProcT: Lua.Lib.TYPEVIEW with type 'a t = Proc.t): 
+    Lua.Lib.TYPEFUL with type 'a combined = 'a ProcT.combined =
+struct
+    type 'a combined = 'a ProcT.combined
+    module M (C : Lua.Lib.CORE with type 'a V.userdata' = 'a combined) =
+    struct
+        <<export linear scan allocator>>
+        let init = C.register_module "Linscan" builtins
+    end (*M*)    
+end (*Make*)            
+
+<<export linear scan allocator>>=
+module V  = C.V
+
+let ( **-> ) = V.( **-> )
+let proc     = ProcT.makemap V.userdata V.projection
+let pf t     = (V.pfunc t).V.embed    (* pure Lua function *)
+let allocate = fun _ -> linscan
+
+let builtins =
+    [ "allocate" , pf (V.value **-> proc **-> V.result V.bool) allocate
+    ]
+@
+    
