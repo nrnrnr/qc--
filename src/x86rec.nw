@@ -72,12 +72,9 @@ let error_rtl rtl = error (RU.ToReadableString.rtl rtl)
 let native b = Nativeint.to_string (B.U.to_native b)
 let cat = String.concat ""
 @   
-The [[guard]] function turns a predicate into a cost where [[n]] is the
-cost for the [[true]] case.
+The [[guard]] function turns a predicate into a cost.
 <<head>>=
-let guard n = function
-    | true  -> n
-    | false -> C.inf_cost 
+let guard b = if b then 0 else C.inf_cost
 @ 
 <<head>>=
 let suffix w = match w with
@@ -90,9 +87,9 @@ let suffix w = match w with
 \subsection{Register names}
 % ------------------------------------------------------------------ 
 <<head>>=
-let r8_names  = [| "al"; "cl"; "dl"; "bl"; "ah"; "ch"; "dh"; "bh" |]
-let r16_names = [| "ax"; "cx"; "dx"; "bx"; "sp"; "bp"; "si"; "di" |]
-let r32_names = [| "eax"; "ecx"; "edx"; "ebx"; "esp"; "ebp"; "esi"; "edi" |]
+let r8_names  = [| "%al"; "%cl"; "%dl"; "%bl"; "%ah"; "%ch"; "%dh"; "%bh" |]
+let r16_names = [| "%ax"; "%cx"; "%dx"; "%bx"; "%sp"; "%bp"; "%si"; "%di" |]
+let r32_names = [| "%eax"; "%ecx"; "%edx"; "%ebx"; "%esp"; "%ebp"; "%esi"; "%edi" |]
 let reg_names w = match w with
 | 8  -> r8_names
 | 16 -> r16_names
@@ -127,14 +124,20 @@ The following table summarizes the nonterminals from the rule set. \\
                 & An effective address\\
 \end{tabularx}
 
+It's tempting to eliminate [[Fetch]], which would simplify rules, but
+which would mean including widths on at least some operators.
+
+
 First, link-time constants.
 <<rules>>=
 lconst: Link(symbol, width) {: symbol#text :}
-const:  Bits(b:bits)        {: native b :}
+const :  Bits(b:bits)        {: native b :}
+four  :  Bits(b:bits) [{: guard (Bits.U.to_int b = 4) :}] {: native b :}
 <<rules>>=
-reg:      Reg('r', n, w) {: regname w n :}
-eaddrl: reg  {: reg :}
-meml:   Mem(Fetch(reg, rw:w), w) {: "(" ^ reg ^ ")" :}  -- indir
+regl:      Reg('r', n, w) {: regname w n :}
+eaddrl: regl  {: regl :}
+reg: Fetch(regl, w) {: regl :}
+meml:   Mem(reg, w) {: "(" ^ reg ^ ")" :}  -- indir
 disp: App2("add", reg, const) {:  const ^ "(" ^ reg ^ ")" :}
 disp: App2("add", const, reg) {:  const ^ "(" ^ reg ^ ")" :}
 meml: Mem(disp, w) {: disp :}
@@ -152,26 +155,57 @@ immed : const  {: "$" ^ const :}
 immed : App2("add", lconst, const) {:  lconst ^ "+" ^ const :}
 immed : App2("add", const, lconst) {:  lconst ^ "+" ^ const :}
 @ 
-Move, load, and store instruction.
+Move, load, and store instructions.
+Because the machine can do eaddr/reg
+and reg/eaddr but not eaddr/eaddr, there are two varieties of each.
 <<rules>>=
 inst: Store(dst:eaddrl, src:immed, w) 
   {: cat ["mov"; suffix w; " "; src; ","; dst] :}
 
-inst: Store(dst:eaddrl, src:eaddr, w) 
+-- straight load/store/move
+inst: Store(dst:eaddrl, src:reg, w) 
   {: cat ["mov"; suffix w; " "; src; ","; dst] :}
 
-inst: Store(dst:eaddrl, App1("sx", Fetch(src:eaddrl, nw:w)), w)
+inst: Store(dst:regl, src:eaddr, w) 
+  {: cat ["mov"; suffix w; " "; src; ","; dst] :}
+
+-- sign extension
+inst: Store(dst:eaddrl, App1("sx", Fetch(src:regl, nw:w)), w)
   {: cat ["movs"; suffix nw; suffix w; " "; src; ","; dst] :}
 
-inst: Store(dst:eaddrl, App1("zx", Fetch(src:eaddrl, nw:w)), w)
+inst: Store(dst:regl, App1("sx", Fetch(src:eaddrl, nw:w)), w)
+  {: cat ["movs"; suffix nw; suffix w; " "; src; ","; dst] :}
+
+-- zero extension
+inst: Store(dst:eaddrl, App1("zx", Fetch(src:regl, nw:w)), w)
   {: cat ["movz"; suffix nw; suffix w; " "; src; ","; dst] :}
 
-inst: Store(dst:eaddrl, App1("lobits", src:mem), nw:w)
-  {: cat ["mov"; suffix nw; " "; src; ","; dst] :}
+inst: Store(dst:regl, App1("zx", Fetch(src:eaddrl, nw:w)), w)
+  {: cat ["movz"; suffix nw; suffix w; " "; src; ","; dst] :}
 
-inst: Store(dst:eaddrl, App1("lobits", Fetch(Reg('r', n, rw:w), w)), nw:w)
+-- moving low bits (relies on proper name of source)
+inst: Store(dst:eaddrl, App1("lobits", Fetch(Reg('r', n, rw:w), fw:w)), nw:w)
   {: cat ["mov"; suffix nw; " "; regname nw n; ","; dst] :}
 
+inst: Store(dst:regl, App1("lobits", src:mem), nw:w)
+  {: cat ["mov"; suffix nw; " "; src; ","; dst] :}
+@ 
+Arithmetic.
+<<rules>>=
+inst: Withflags(dst:eaddrl, "add", src:reg, w, "x86_aflags")
+  {: cat ["add"; suffix w; " "; src; ","; dst] :}
+
+inst: Withflags(dst:regl, "add", src:eaddr, w, "x86_aflags")
+  {: cat ["add"; suffix w; " "; src; ","; dst] :}
+
+@ 
+Return.
+<<rules>>=
+esp : Reg('r', n, w) [{: guard (n = 4 && w = 32):}] {: () :}
+pop: Store(esp, App2("add", Fetch(esp, w), four), sw:w) {: () :}
+pop: Llr(esp, "add", four, w) {: () :}
+stacktop: Mem(Fetch(esp, w), mw:w) [{:guard (mw = 32):}] {: () :}
+inst: Par(Goto(Fetch(stacktop, w)),pop) {: "ret" :}
 @ 
 Debugging rules.
 <<rules>>=
@@ -184,6 +218,8 @@ inst: Store(any, eaddr, w) [2] {: "<store " ^ eaddr ^ " into " ^ any ^ ">" :}
 
 inst: Store (dst:any, src:any, w) [5]
   {: "Store(" ^ dst ^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
+
+inst: any [10] {: "<" ^ any ^ ">" :}
 
 <<rules>>=
 inst: Nop() {: "nop" :}
@@ -205,6 +241,15 @@ any: Store (dst:any, src:any, w) {: "Store(" ^ dst ^ "," ^ src ^ "," ^ string_of
 
 any: Guarded(guard:any, any) {: "Guarded(" ^ guard ^ "," ^ any ^ ")" :}
 any: Par(l:any, r:any) {: "Par(" ^ l ^ "," ^ r ^ ")" :}
+any: Goto(any) {: "Goto(" ^ any ^ ")" :}
+any: Setflags(any) {: "Setflags(" ^ any ^ ")" :}
+any: Llr(dst:any, string, src:any, w) 
+  {: "Llr(" ^ dst ^","^string^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
+
+any: Withflags(dst:any, string, src:any, w, fo:string) 
+  {: "Withflags(" ^ dst ^","^string^ "," ^ src ^ "," ^ string_of_int w ^ 
+      ","^ fo ^ ")" :}
+
 
 
 
@@ -278,33 +323,55 @@ decompose applications and complex {\rtl}s here.
 
 <<tail>>=  
 let const = function
-    | RP.Bool(true)             -> conTrue  ()
-    | RP.Bool(false)            -> conFalse ()
-    | RP.Link(s,w)              -> conLink s w
-    | RP.Late(s,w)              -> conLate s w
-    | RP.Bits(b)                -> conBits(b)
+  | RP.Bool(true)             -> conTrue  ()
+  | RP.Bool(false)            -> conFalse ()
+  | RP.Link(s,w)              -> conLink s w
+  | RP.Late(s,w)              -> conLate s w
+  | RP.Bits(b)                -> conBits(b)
 
 let rec exp = function
-    | RP.Const(k)               -> const (k)
-    | RP.Fetch(l,w)             -> conFetch (loc l) w
-    | RP.App((o,_),[x])         -> conApp1 o (exp x)
-    | RP.App((o,_),[x;y])       -> conApp2 o (exp x) (exp y)
-    | RP.App((o,_),[x;y;z])     -> conApp3 o (exp x) (exp y) (exp z)
-    | RP.App(_,_)               -> error "too many arguments in application"
+  | RP.Const(k)               -> const (k)
+  | RP.Fetch(l,w)             -> conFetch (loc l) w
+  | RP.App((o,_),[x])         -> conApp1 o (exp x)
+  | RP.App((o,_),[x;y])       -> conApp2 o (exp x) (exp y)
+  | RP.App((o,_),[x;y;z])     -> conApp3 o (exp x) (exp y) (exp z)
+  | RP.App(_,_)               -> error "too many arguments in application"
 
 and loc = function
-    | RP.Cell('m', aff, w, e, ass) -> conMem (exp e) w
-    | RP.Cell(sp, aff, w, RP.Const(RP.Bits b), ass)
-                                -> conReg sp (Bits.U.to_int b) w
-    | RP.Cell(_, _, _, _, _)    -> error "non-mem, non-reg cell"
-    | RP.Var(s, i, w)           -> error "var found"
-    | RP.Slice(w,i,loc)         -> error "cannot handle slice"
+  | RP.Cell('m', aff, w, e, ass) -> conMem (exp e) w
+  | RP.Cell(sp, aff, w, RP.Const(RP.Bits b), ass)
+                              -> conReg sp (Bits.U.to_int b) w
+  | RP.Cell(_, _, _, _, _)    -> error "non-mem, non-reg cell"
+  | RP.Var(s, i, w)           -> error "var found"
+  | RP.Slice(w,i,loc)         -> error "cannot handle slice"
     
 and stmt = function
-    | RP.Store(l,e,w)           -> conStore (loc l) (exp e) w
-    | RP.Kill(loc)              -> error "cannot handle kill"
+  | RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w) when l = l' ->
+      conLlr (loc l) o (exp r) w
+  | RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits b), ass), r, w)
+    when (Bits.U.to_int b = 0) ->
+      conGoto (exp r)
+  | RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits b), ass), r, w)
+    when (Bits.S.to_int b = 1) ->
+      conSetflags (exp r)
+  | RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits b), ass), r, w) ->
+      error ("set $c["^string_of_int (Bits.U.to_int b)^"]")
+  | RP.Store(RP.Cell('c', _, _, index, ass), r, w) ->
+      error ("set $c["^RU.ToReadableString.exp (Up.exp index)^"]")
+  | RP.Store(l,e,w)           -> conStore (loc l) (exp e) w
+  | RP.Kill(loc)              -> error "cannot handle kill"
 @
-
+<<horrible pattern match for [[Withflags]]>>=
+| [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
+  ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>)
+  ] when l = l' && l = l'' && r = r' && o = o' && Bits.U.to_int flag_index = 1 ->
+      conWithflags (loc l) o (exp r) w fo
+<<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>=
+RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w) 
+<<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>=
+RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits flag_index), ass), 
+         RP.App((fo, _), [RP.App((o', _), [RP.Fetch(l'',_); r'])]), _)
+@ 
 We classify an {\rtl} here and pass it to the appropriate rule in the
 rule set. The encoding of special instructions is shared between the
 code expander and a target description. See module \module{targets}.
@@ -316,6 +383,7 @@ and rtl (RP.Rtl es) = geffects es
 and geffects = function
     | [] -> conNop ()
     | [g, s] -> guarded g s
+    <<horrible pattern match for [[Withflags]]>>
     | (g, s) :: t -> conPar (guarded g s) (geffects t)
 and guarded g s = match g with
 | RP.Const(RP.Bool b) -> if b then stmt s else conNop()
@@ -333,13 +401,13 @@ let to_string (r: R.rtl) =
         plan.inst.Camlburg.action ()
     with 
         | Camlburg.Uncovered -> 
-            cat [ " # not an instruction: " ; RU.ToReadableString.rtl r]
+            cat [ " not an instruction: " ; RU.ToReadableString.rtl r]
         | Error(msg) ->
             ( List.iter prerr_endline
                 [ msg
                 ; RU.ToString.rtl r
                 ]
-            ; " # error in recognizer: " ^ msg (*assert false*)
+            ; " error in recognizer: " ^ msg (*assert false*)
             )
 
 @                        
