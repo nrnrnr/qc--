@@ -334,15 +334,15 @@ let char            = bits 8
 
 let add  = function
     | [IntConst(x);IntConst(y)] -> IntConst(x+y)
-    | _                         -> assert false
+    | _                         -> error "illegal operands"
 
 let mult  = function
     | [IntConst(x);IntConst(y)] -> IntConst(x*y)
-    | _                         -> assert false
+    | _                         -> error "illegal operands"
 
 let eq    = function
     | [IntConst(x);IntConst(y)] -> BoolConst(x=y)
-    | _                         -> assert false
+    | _                         -> error "illegal operands"
 
 let constOps = Symbol.enterList
     [  "add"    , (add  , proc [bitsv 1; bitsv 1] (bitsv 1))
@@ -747,12 +747,22 @@ and returnStmt env cc alt args =
     | Some (e1,e2) ->
         let t1,x1 = strip (constExpr env e1)  in
         let t2,x2 = strip (constExpr env e2)  in
-            if t1 != word then
-                error "first argument in <x/y> not a number"
-            else if t2 != word then
-                error "second argument in <x/y> not a number"
+        let x =
+            ( match t1, x1 with
+            | word, IntConst(x) -> x
+            | otherwise         -> error "first argument in <x/y> not a number"
+            ) in
+        let y =
+            ( match t2, x2 with
+            | word, IntConst(y) -> y
+            | otherwise         -> error "second argument in <x/y> not a number"
+            ) in
+            if (x < 0 || y < 0 || x > y) then
+                error "illegal numbers in <x/y>"
             else
-                () 
+                ()  
+           
+            
 
 and assignStmt env pairs =
     let pair (lhs,expr) =  
