@@ -170,13 +170,16 @@ values, but we assume the [[Dummy]] machine does. As an oversimplified
 experiment, we declare the following operators to be floating point
 operators, taking and yielding floating point values.
 
+\emph{The [[fcmp]] operator yields a 2 bit value, not a floating-point
+value! It should be in its own category. --CL}
+
 <<utilities>>=
 module StringSet = Set.Make(struct type t = string let compare = compare end)
 
 let float_ops = 
     List.fold_right 
         StringSet.add 
-        ["fcmp"; "fadd"; "fsub"; "fdiv"; "fmul"; "fabs"; "fneg"; "fsqrt"]
+        ["fadd"; "fsub"; "fdiv"; "fmul"; "fabs"; "fneg"; "fsqrt"]
         StringSet.empty
 @
 
@@ -195,7 +198,6 @@ let bool_ops = (* boolean valued primitive with non-boolean args *)
 
 let is_float_op (op,_) = StringSet.mem op float_ops
 let is_bool_op  (op,_) = StringSet.mem op bool_ops
-let is_int_op   opr    = not (is_float_op opr || is_bool_op opr) 
 @
 
 To create a fetch from a location we have to know the size of the
@@ -289,6 +291,23 @@ ireg:       App(iop, iregs) [1]
                 exec (R.store t exp width)                >>= fun () ->
                 return t
             :}
+
+--
+-- hardware registers for floating point compare result
+--
+
+dreg:      App(fcmp, fregs) [1]
+            {:
+                fregs >>= fun us ->
+                let exp     = R.app fcmp (List.map fetch us) in
+                let const n width = R.bits (Bits.of_int n width) width in
+                let fpcond n = R.cell R.none 'd' R.Identity  2 (const n 2) in
+                let r        = fpcond 1 in
+                exec (R.store r exp 2) >>= fun () ->
+                return r
+            :}    
+
+dreg:      Fetch(dreg,width) {: dreg :} 
 @
 
 Floating-point expressions are analogously developed into floating-point
@@ -315,14 +334,15 @@ freg:       App(fop, fregs) [1]
                 let exp     = R.app fop fetches           in
                 let width   = W.exp exp                   in
                 ftmp width                                >>= fun t  ->
-                exec (R.store t (R.app fop fetches) width)>>= fun () ->
+                exec (R.store t exp width)>>= fun () ->
                 return t
             :}
 @            
 
 Lists of expressions are decomposed into list of registers holding their
 values. Lists are either for integer or floating-point values, but not
-both.
+both. We also have lists of hardware registers with floating point
+results. The latter is part of a hack.
 
 <<rules>>=
 iregs:      Nil() {: return [] :}
@@ -333,6 +353,10 @@ iregs:      Cons(ireg, iregs)
 fregs:      Nil() {: return [] :}
 fregs:      Cons(freg, fregs)
             {: freg  >>= fun u -> fregs >>= fun us -> return (u::us) :}
+
+dregs:      Nil() {: return [] :}
+dregs:      Cons(dreg, dregs)
+            {: dreg  >>= fun u -> dregs >>= fun us -> return (u::us) :}
 @
 
 We expect memory locations, temporaries, and hardware registers in the
@@ -374,6 +398,13 @@ freg:       Cell('u', agg, width, const, ass)
                 return (R.cell (U.assertion ass) 'u' agg width k) 
             :}
 
+dreg:       Cell('d', agg, width, const, ass)
+            {: 
+                const >>= fun k ->
+                return (R.cell (U.assertion ass) 'd' agg width k) 
+            :}
+
+
 creg:       Cell('c', agg, width, const, ass)
             {: 
                 const >>= fun k ->
@@ -395,17 +426,20 @@ associated with extreme costs and thus will be never selected.
 fop:        Op(opr) [{: if is_float_op opr  then 0 else C.inf_cost :}] 
             {: U.opr opr :}
 
-iop:        Op(opr) [{: if is_int_op opr    then 0 else C.inf_cost :}]
-            {: U.opr opr :}
-
 bop:        Op(opr) [{: if is_bool_op opr   then 0 else C.inf_cost :}]
             {: U.opr opr :}
-@
 
-To make sure we can cover every {\rtl} we can move integer registers
-into floating-point temporairies, and floating-point registers into
-integer temporaries. We do not like these conversions so we penalize
-them with high costs. 
+fcmp:       Op(opr) [{: match opr with ("fcmp",_) -> 0 | _ -> C.inf_cost :}]
+            {: U.opr opr :}
+
+iop:        Op(opr) [1] -- matches if, nothing above matches
+            {: U.opr opr :}
+@            
+
+To make sure we can cover every {\rtl}, we allow to move integer
+registers into floating-point temporairies, and floating-point registers
+into integer temporaries. We do not like these conversions so we
+penalize them with high costs. 
 
 <<rules>>=
 -- t := f
@@ -417,6 +451,7 @@ ireg:       freg [2]
                 exec (R.store t (R.fetch u w) w)    >>= fun () ->
                 return t
             :} 
+
 -- f := t            
 freg:       ireg [2]    
             {:  
@@ -427,7 +462,6 @@ freg:       ireg [2]
                 return u
             :} 
 @
-
 
 {\rtl} effects are covered by the [[stmt]] nonterminal. We allow
 only very simple assignments between registers of the same class and
@@ -473,6 +507,13 @@ stmt:       Store(creg, ireg, width)
                 return (R.store c (R.fetch r width) width)
             :}    
 
+-- d := d
+stmt:       Store(left:dreg, right:dreg, width)
+            {:
+                left  >>= fun l ->
+                right >>= fun r ->
+                return (R.store l (R.fetch r width) width)
+            :}    
 @
 
 Currently the frontend generates guarded expression only for
@@ -490,6 +531,12 @@ guard:      False() {: return (R.bool false) :}
 guard:      App(bop, iregs)
             {:  
                 iregs >>= fun rs ->
+                return (R.app bop (List.map fetch rs))
+            :}    
+
+guard:      App(bop, dregs)
+            {:  
+                dregs >>= fun rs ->
                 return (R.app bop (List.map fetch rs))
             :}    
 

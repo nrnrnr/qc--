@@ -93,10 +93,11 @@ module StrUtil  = MapUtil(StrMap)
 module CharUtil = MapUtil(CharMap) 
 @
 
-The [[assign]] function converts both registers to [[Rtl.loc]] values and
-then uses the [[Rtl]] framework to create an assignment. Returned
-{\rtl}s must respect the machine invariant. This is currently not the
-case!   
+The [[assign]] function converts both registers to [[Rtl.loc]] values
+and then uses the [[Rtl]] framework to create an assignment. Because
+register allocation (and therefore spilling) happens after code
+expansion, returned {\rtl}s must respect the machine invariant. This is
+currently not the case!   
 
 <<target-independent utilities>>=
 module Spill = struct
@@ -216,12 +217,12 @@ let spaces =
     ]     
 
 let const n width = Rtl.bits (Bits.of_int n width) width
+let fpcond n      = Rtl.cell Rtl.none 'd' Rtl.Identity  2 (const n 2)
 let reg n         = Rtl.cell Rtl.none 'r' Rtl.Identity 32 (const n 5)
 let pc            = Rtl.cell Rtl.none 'c' Rtl.Identity 32 (const 0 1)
 let mem addr      = Rtl.cell Rtl.none 'm' Rtl.LittleEndian 32 addr
 let assign loc e  = Rtl.store loc e (Rtlutil.Width.exp e)       
 
-let fpcond n      = Rtl.cell Rtl.none 'd' Rtl.Identity  2 (const n 2)
     
 let named_registers =
   [ "IEEE 754 rounding modes",     fpcond 0
