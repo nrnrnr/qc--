@@ -169,9 +169,7 @@ new temporary.
 
 <<utilities>>=
 let dtmp = function
-    | 2 -> fun(rtls, tmp as state) ->
-        let const n width = R.bits (Bits.U.of_int n width) width in
-        (R.cell R.none 'd' R.Identity  2 (const 1 2), state)
+    | 2 -> fun(rtls, tmp as state) -> (R.reg ('d', 1, 2), state)
     | w  -> Impossible.impossible 
                 (Printf.sprintf "unsupported width for d-space register: %d" w)
 
@@ -417,8 +415,7 @@ dreg:      App2("fcmp", x, f1:freg, f2:freg) [1]
                 f1 >>= fun f1 -> f2 >>= fun f2 ->
                 let o        = R.opr "fcmp" x in
                 let exp      = R.app o [fetch f1; fetch f2] in
-                let const n width = R.bits (Bits.U.of_int n width) width in
-                let fpcond n = R.cell R.none 'd' R.Identity  2 (const n 2) in
+                let fpcond n = R.reg ('d', n, 2) in
                 let r        = fpcond 1 in
                 exec (R.store r exp 2) >>= fun () ->
                 return r

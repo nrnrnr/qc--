@@ -551,17 +551,24 @@ space into a (named) type, which is neither wrong nor right.
 <<ToAST>>=
 and location' = function 
     | R.Mem (sp,agg,width,e,ass) ->
-        let a       =  match agg with
-                       | Rtl.Identity     -> 'I'
-                       | Rtl.BigEndian    -> 'B'
-                       | Rtl.LittleEndian -> 'L' in
-        let space   =  Printf.sprintf "$%c(%d%c)" sp width a in   
-        let aligned = if ass = 1 then None else Some ass in 
-        A.Mem(A.AliasTy space,expr' e,aligned)
+        (match !the_verbosity with
+        | High ->
+            let a       =  match agg with
+                           | Rtl.Identity     -> 'I'
+                           | Rtl.BigEndian    -> 'B'
+                           | Rtl.LittleEndian -> 'L' in
+            let space   =  Printf.sprintf "$%c(%d%c)" sp width a in   
+            let aligned = if ass = 1 then None else Some ass in 
+            A.Mem(A.AliasTy space,expr' e,aligned)
+        | Low ->
+            A.Mem(A.BitsTy width,expr' e, if ass = 1 then None else Some ass))
     | R.Reg(sp,i,w) -> 
-        let space   =  Printf.sprintf "$%c(%d)" sp w in   
-        let s       = string_of_int i in
+        (match !the_verbosity with
+        | High ->
+            let space   =  Printf.sprintf "$%c(%d)" sp w in   
+            let s       = string_of_int i in
             A.Mem(A.AliasTy space,A.Int(s,None), None)
+        | Low -> A.Name(None, Printf.sprintf "$%c%d" sp i))
     | R.Var (name,_,width)       -> A.Name(None,name)
     | R.Slice (w,i,loc)          -> location' loc (*XXX*)
     
@@ -612,7 +619,7 @@ module T = Types
 let const = function
     | R.Bool(true)   ->  "true"
     | R.Bool(false)  ->  "false"
-    | R.Bits b       ->  string_of_int (Bits.U.to_int b)
+    | R.Bits b       ->  string_of_int (Bits.S.to_int b)
                      
     | R.Link(sym,w)  -> sym#mangled_text
     | R.Late(name,w) -> "<" ^ name ^ ">"

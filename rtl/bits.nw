@@ -335,7 +335,7 @@ end
 <<bitwise operators>>=
 let add (b, w) (b', w') =
   assert (w = w');
-  (Int64.add b b', w)
+  (Int64.add (sx64 b w) (sx64 b' w), w)
 
 let lt (b, w) (b', w') =
   assert (w = w');
@@ -442,6 +442,7 @@ let fits_unsigned i w =
 
 let of_int i w =
     check w;
+    assert (i >= 0);
     let i' = I.of_int i in 
     let i' = if i' < I.zero 
              then I.sub i' (I.shift_left (I.of_int min_int) 1)  
@@ -451,6 +452,7 @@ let of_int i w =
 
 let of_native i w =
     check w;
+    assert (i >= Nativeint.zero);
     let i' = I.of_nativeint i in 
     let i' = if i' < I.zero 
              then I.sub i' (I.shift_left (I.of_nativeint Nativeint.min_int) 1) 
@@ -796,7 +798,6 @@ when converting between various types of values. Most of them assume
 that no exceptions are raised when converting. When no laws are
 applicable, the full residual call is generated.
 <<bits.ml ((residualizing))>>=
-
 let to_int ((tag,bitv),w) =
   match tag with
     INT -> bitv

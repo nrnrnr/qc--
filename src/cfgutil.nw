@@ -222,9 +222,11 @@ let new_cfg2ast instr g ~name =
       | G.Illegal -> A.CommentStmt "dangling pointer in flow graph" :: tail
       | _ -> A.CommentStmt("unknown kind of node") :: tail
   in
-  let graph = G.fold_nodes node [] g in
+  let oldv = Rtlutil.ToAST.verbosity Rtlutil.ToAST.Low in
+  let graph = G.fold_layout node [] g in
+  let _ = Rtlutil.ToAST.verbosity oldv in
     ( None
     , name
     , []
-    , List.map (fun s -> Ast.StmtBody s) graph
+    , List.map (fun s -> Ast.StmtBody s) (List.rev graph)
     )
