@@ -1,3 +1,6 @@
+# this is the machine on which the C-- runtime system will execute
+TARGET=x86-linux
+
 NOWEAVE=`echo ${NOWEAVE-noweave}`
 
 # should split into ASDLSOURCES and CAMLSOURCES
@@ -35,7 +38,7 @@ clean:V:
 	rm -f *.cmi *.cmo *.o 
 
 clobber:V: clean
-	rm -f *.g *.sml *.sig *.ord *.lex *.tab *.mli *.ml
+	rm -f *.g *.sml *.sig *.ord *.lex *.tab *.mli *.ml *.[ch] *.mly
 	rm -f *.tex *.html *.defs cm.gif *.a
 	rm -rf CM NW WWW
 	rm -f *.asdl
@@ -150,6 +153,9 @@ ir.asdl: cmmir.nw
 	ocamlc $CAMLOPTS -c $prereq
 %.cmo: %.ml
 	ocamlc $CAMLOPTS -c $prereq
+
+cmmrti.h: rti.nw
+	notangle -filter "nocond '$TARGET'" -R$target -L $prereq | cpif $target
 
 iRNode.cmi: rTL.mli
 iRNode.cmo: rTL.ml
