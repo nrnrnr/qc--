@@ -250,10 +250,15 @@ functions provides pretty printing for important non terminals in a
 program.  Each function returns a [[Pp.doc]] value that can be turned
 into a [[string]] with the help of the [[Pp]] module.
 
+The [[emit]] function is specialized and more efficient in certain
+cases. It is here to help John Dias emit large programs.
+
 <<astpp.mli>>=
 val decl       : bool -> Ast.decl  -> Pp.doc
 val stmt       : Ast.stmt          -> Pp.doc
 val program    : Ast.toplevel list -> Pp.doc
+
+val emit       : out_channel -> width:int -> Ast.toplevel list -> unit
 @
 
 
@@ -822,17 +827,6 @@ and decl is_global = function
     | A.Pragma        -> comment "pragma"
 
 <<astpp.ml>>=
-and section = function
-    | A.SectionAt(x,_)  -> section x
-    | A.Decl(d)         -> decl true d
-    | A.Datum( d)       -> datum d
-    | A.Procedure(p)    -> proc p
-    | A.SSpan( e1, e2, ss) ->  
-        P.agrp begin
-        ~~ P.agrp (P.text "span" ^/ expr e1 ^/ expr e2)
-        ^/ P.block section ss
-        end
-            
 and arm = function
     | A.ArmAt(x,_)          -> arm x
     | A.Case(ranges, stmts) ->
@@ -842,6 +836,19 @@ and arm = function
         ^^ P.text ":"
         ^/ P.block (body false) stmts
         end 
+
+and section  = function (* inside a section *)
+    | A.SectionAt(x,_)  -> section x
+    | A.Decl(d)         -> decl true d
+    | A.Datum( d)       -> datum d
+    | A.Procedure(p)    -> proc p
+    | A.SSpan( e1, e2, ss) ->  
+        P.agrp begin
+        ~~ P.agrp (P.text "span" ^/ expr e1 ^/ expr e2)
+        ^/ P.block section ss
+        end
+       
+       
 <<astpp.ml>>=
 let rec toplevel = function
     | A.ToplevelAt(x, _)  -> toplevel x
@@ -859,4 +866,17 @@ let program ds = P.vgrp begin
                   end
                                             
 let pp = program
+@
+
+The [[emit]] function is more imperative than [[pp]]. It pretty-print
+every top-level element seperately and is therefore much faster. I also
+believe, that this solves stack overflow problems when large programs
+are emitted. The [[Astasm]] module was changes accordingly to use
+[[emit]].
+
+<<astpp.ml>>=
+let emit fd ~width tl =
+    List.iter (fun t -> ( P.ppToFile fd width (toplevel t)
+                        ; output_string fd "\n\n"
+                        )) tl
 @

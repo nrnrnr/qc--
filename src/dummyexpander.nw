@@ -403,8 +403,8 @@ freg:       App3("fmul", x, r1:freg, r2:freg, c:dreg)
 dreg:      App2("fcmp", x, f1:freg, f2:freg) [1]
             {:
                 f1 >>= fun f1 -> f2 >>= fun f2 ->
-                let o  = R.opr "fcmp" x in
-                let exp     = R.app o (List.map fetch [f1;f2]) in
+                let o        = R.opr "fcmp" x in
+                let exp      = R.app o [fetch f1; fetch f2] in
                 let const n width = R.bits (Bits.U.of_int n width) width in
                 let fpcond n = R.cell R.none 'd' R.Identity  2 (const n 2) in
                 let r        = fpcond 1 in
@@ -416,7 +416,7 @@ dreg:      App2("fcmp", x, f1:freg, f2:freg) [1]
 
 A cell is either a register or a memory cell. A register has a constant
 address and needs no further re-writing. We just categorize it as
-interger, floating-point, or control register. Memory cells include
+integer, floating-point, or control register. Memory cells include
 address expressions which must be rewritten. This is enforced by the
 [[addr]] nonterminal, which stands for a register value. Hence, memory
 can only be addresses by registers in this model.
@@ -494,7 +494,7 @@ stmt:       Store(dcell, dreg, width)       {: store dcell dreg  width :}
 stmt:       Store(ccell, const,width)       {: store' ccell const width :}
 @
 
-Currently the frontend generates guarded expression only for
+Currently the front end generates guarded expression only for
 if-statements. The expression is already simplified such that it is
 either [[true]], [[false]], or an application with a boolean result that
 takes \emph{non-boolean} arguments. 
