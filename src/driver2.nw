@@ -19,7 +19,7 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
     type cfg        (* control-flow graph for a procedure *)
     type doc        (* printable document                 *)
     type target     (* target architecture                *)
-    type stack      (* container for stack slots          *)
+    type frame      (* container for stack slots          *)
 
     val dummy:      target                  (* our only target right now *)
     
@@ -31,7 +31,7 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
     val check:      ast -> env              (* check semantics of AST  *)
 
     val compile:    ast -> target -> env -> asm
-                    (* calls optimize: cfg -> stack -> unit *)
+                    (* calls optimize: cfg -> frame -> unit *)
                 
     val assemble:   asm -> doc
     val print:      doc -> width:int -> unit (* print doc to stdout *)
@@ -95,7 +95,7 @@ type env    = Fenv.Clean.env
 type doc    = Pp.doc
 type cfg    = Cfg3.cfg
 type target = Target2.t
-type stack  = Automaton.t
+type frame  = Automaton.t
 
 <<Caml>>=
 let dummy   = Target2.dummy
@@ -198,10 +198,54 @@ let print (doc:doc) (width:int) =
 % ------------------------------------------------------------------ 
 
 <<driver2.ml>>=
-module Lua = struct
-    <<Lua>>
+module Export = struct
+    <<Export>>
 end
 
-<<Lua>>=
+<<Export>>=
+module ASM' = struct
+    type 'a t       = Caml.asm
+    let tname       = "asm"
+    let eq _        = compare
+    let to_string _ = "<asm>" 
+end
+module AST' = struct
+    type 'a t       = Caml.ast
+    let tname       = "ast"
+    let eq _        = compare
+    let to_string _ = "<ast>" 
+end
+module ENV' = struct
+    type 'a t       = Caml.ast
+    let tname       = "env"
+    let eq _        = compare
+    let to_string _ = "<env>" 
+end
+module CFG' = struct
+    type 'a t       = Caml.cfg
+    let tname       = "cfg"
+    let eq _        = compare
+    let to_string _ = "<cfg>" 
+end
+module TARGET' = struct
+    type 'a t       = Caml.target
+    let tname       = "target"
+    let eq _        = compare
+    let to_string _ = "<target>" 
+end
+module DOC' = struct
+    type 'a t       = Caml.doc
+    let tname       = "doc"
+    let eq _        = compare
+    let to_string _ = "<doc>" 
+end
+module FRAME' = struct
+    type 'a t       = Caml.frame
+    let tname       = "frame"
+    let eq _        = compare
+    let to_string _ = "<frame>" 
+end
+    
+    
 @
 
