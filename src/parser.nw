@@ -743,13 +743,16 @@ position of the first character after the symbol.  These regions are
 attached to important nodes in the abstract syntax.  The function
 [[pn]] returns the region for symbol [[n]] on the right hand side,
 where the leftmost symbol has index 1.
-
 <<helper functions>>=
 let p  ()  = (Parsing.symbol_start (), Parsing.symbol_end())
 let pn n   = (Parsing.rhs_start n, Parsing.rhs_end n)
 let px ()  = (Parsing.symbol_start ())
 
-let dep deprecated msg =
+let rev    = List.rev
+<<helper functions>>=
+let dep msg =
+  let deprecated = ref false in
+  let _ = Reinit.at (fun () -> deprecated := false) in
   fun x ->
     if not (!deprecated) then
       begin
@@ -757,30 +760,17 @@ let dep deprecated msg =
         deprecated := true;
       end;
     x
-let rd = ref false
-let ned = ref false
-let _ = Reinit.at (fun () -> (rd := false; ned := false))
 
-let rdep = dep rd "Use of 'register' keyword is deprecated"
-let noeqdep = dep ned "Hardware register name without '=' is deprecated"
-
-let rev    = List.rev
-
+let rdep = dep "Use of 'register' keyword is deprecated"
+let noeqdep = dep "Hardware register name without '=' is deprecated"
+@ 
 <<helper functions>>=
-let mkRegs v (hint,ty,regs) =
-    let r (id,reg) = (v, hint, ty, id, reg) 
-    in
-        List.map r regs
-
-<<helper functions>>=
-let mkTypedefs ty names =
-    List.map (fun n -> A.Typedef(n,ty)) names
+let mkRegs v (hint,ty,regs) = List.map (fun (id,reg) -> (v, hint, ty, id, reg)) regs
+let mkTypedefs ty names = List.map (fun n -> A.Typedef(n,ty)) names
 @            
-
 The [[[str2int]] function takes the string representation of an integer
 and returns its value. We cannot use [[int_of_string]] directly because
 we take a string starting with [[0]] (zero) as an octal value.
-
 <<helper functions>>=
 let str2int str =
     let len    = String.length str in
@@ -791,7 +781,6 @@ let str2int str =
             Failure _ -> Error.error ("syntax error in constant: "^str)
             (* should not happen except for overflows *)    
 @         
-
 <<parse.mly>>=
 %token ABORTS ALIGN ALIGNED ALSO AS AMPERSAND BIG BYTEORDER CASE COLON CCOLON
 %token COMMA CONST CONTINUATION CUT CUTS DEFAULT DOTDOT ELSE EOF EQUAL
@@ -827,9 +816,7 @@ let str2int str =
 %token <string>         FLT
 %token <int>            CHAR
 @
-
 The precedence of tokens from lowest to highest precedence.
-
 <<parse.mly>>=
 /* lvalue conflict resolution */
 %right      ID
@@ -1196,5 +1183,3 @@ optstr      :   STR                            { Some $1 }
             |   /**/                           { None    }
 string16    :   UNICODE LPAREN STR RPAREN      { $3 }
 @
-
-

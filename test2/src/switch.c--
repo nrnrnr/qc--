@@ -1,0 +1,33 @@
+target byteorder little;
+
+import printf;
+export main;
+
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+  sw(1);
+  sw(2);
+  sw(3);
+  sw(4);
+  sw(99);
+  sw(-3);
+  foreign "C" return();
+}
+
+sw(bits32 n) {
+  switch (n) {
+    case 1:      { foreign "C" printf(first, n); }
+    case 2 .. 3: { foreign "C" printf(second, n); }
+    case 4:      { foreign "C" printf(third, n); }
+    case 0x80000000 .. 0xffffffff, 0, 5 .. 0xffffffff : 
+       { foreign "C" printf(def, n); }
+  }
+  return();
+}
+
+section "data" {
+  first: bits8[] "first branch: n = %d\n\0";
+  second: bits8[] "second branch: n = %d\n\0";
+  third: bits8[] "third branch: n = %d\n\0";
+  def: bits8[] "default branch: n = %d\n\0";
+}
+

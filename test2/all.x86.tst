@@ -30,6 +30,7 @@ Test.files = { "add.c--"
              , norun("ralloc-000.c--")
              , norun("rnd2.c--")
              , norun("sub.c--")
+	     , "switch.c--"
              , norun("x86-000.c--")
              , norun("x86-001.c--")
              }

@@ -165,8 +165,8 @@ let app o w args = match o with
     |  "borrow" 	-> default o w args
     |  "carry" 		-> default o w args
     |  "com" 		-> unop o w BO.com args
-    |  "conjoin" 	-> default o w args
-    |  "disjoin" 	-> default o w args
+    |  "conjoin" 	-> conjoin w args
+    |  "disjoin" 	-> disjoin w args
     |  "div" 		-> default o w args
     |  "divu" 		-> binop o w BO.divu args
     |  "eq" 		-> cmp_bits o w BO.eq args
@@ -211,7 +211,7 @@ let app o w args = match o with
     |  "mzero" 		-> default o w args
     |  "ne" 		-> cmp_bits o w BO.ne args
     |  "neg" 		-> unop  o w BO.neg args
-    |  "not" 		-> default o w args
+    |  "not" 		-> not' w args
     |  "or" 		-> binop o w BO.or' args
     |  "pinf" 		-> default o w args
     |  "popcnt" 	-> default o w args
@@ -355,6 +355,24 @@ let rec add ws args =
 let binop name w op = function
     | [RP.Const(RP.Bits x); RP.Const(RP.Bits y)] -> const (op x y)
     | args       -> default name w args
+
+let disjoin w = function
+    | [RP.Const(RP.Bool true); _] -> RP.Const(RP.Bool true)
+    | [_; RP.Const(RP.Bool true)] -> RP.Const(RP.Bool true)
+    | [RP.Const(RP.Bool false); p] -> p
+    | [p; RP.Const(RP.Bool false)] -> p
+    | args       -> default "disjoin" w args
+
+let conjoin w = function
+    | [RP.Const(RP.Bool false); _] -> RP.Const(RP.Bool false)
+    | [_; RP.Const(RP.Bool false)] -> RP.Const(RP.Bool false)
+    | [RP.Const(RP.Bool true); p] -> p
+    | [p; RP.Const(RP.Bool true)] -> p
+    | args       -> default "conjoin" w args
+
+let not' w = function
+    | [RP.Const(RP.Bool b)] -> RP.Const(RP.Bool (not b))
+    | args       -> default "not" w args
 
 let cmp_bits name w op = function
     | [RP.Const(RP.Bits x); RP.Const(RP.Bits y)] -> to_bool (op x y)

@@ -205,7 +205,7 @@ let switch rg e arms =
 A range has two constant expressions of the same width.
 <<elaboration utilities>>=
 let range = function
-  | A.Range (l, h) -> E.ematch2 (con l) (con l) (fun (l, lw) (h, hw) ->
+  | A.Range (l, h) -> E.ematch2 (con l) (con h) (fun (l, lw) (h, hw) ->
       if lw = hw then (l, h), lw
       else E.errorf "constants in range %s..%s have different types bits%d and bits%d"
           (Bits.to_string l) (Bits.to_string h) lw hw)
@@ -354,7 +354,7 @@ let cut conv k args flows =
   let args = E.Raise.list (List.map (actual r) args) in
   let flow = cut_flow r flows in
   E.ematch3 args (exp k) flow (fun args (k,kt) flow ->
-    insist_pointer "continuation value" kt;
+    insist_pointer "target of 'cut to'" kt;
     Cut (conv, k, args, flow)) in
 @ 
 @
@@ -456,7 +456,7 @@ the native pointer type.
 let call_target r x = E.seq (snd (F.findv x env)) (function
   | (FE.Label (FE.Proc _) | FE.Import _), t when ispointer t -> E.Ok x
   | d, _ -> errorf r "target %s is a %s (must be a procedure or imported pointer)"
-          (FE.denotation's_category d) x) in
+          x (FE.denotation's_category d)) in
 @
 A call of a primitive is type checked: argument types must have the
 expected types. This is done by [[Rtlop.Translate.check]].

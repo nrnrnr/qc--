@@ -457,7 +457,7 @@ and stmt  props s  succ =
   | S.If (e, so, not) ->
       G.cbranch g e ~ifso:(stmts props so succ) ~ifnot:(stmts props not succ)
   | S.Label n              -> let l = G.node_labeled g n in (G.set_succ l succ; l)
-  | S.Switch (range, e, arms) -> switchStmt range e arms props succ
+  | S.Switch (rg, e, arms) -> switchStmt rg e arms props succ
   | S.Cont (name, _, _)    -> contStmt2 name succ
   | S.Span (kv, bs)        -> stmts (kv :: props) bs succ
   | S.Assign rtl           -> G.instruction g rtl succ
@@ -477,25 +477,28 @@ and stmt  props s  succ =
 \paragraph{[[switch]] statements}
 
 QUESTION: are the [[disjoin]]s below suitably short-circuited?
-Is it premature to optimize for lo == hi below?
 
+We compile a switch statement into a simple sequence of if-then-else
+tests, so there's no use for the optional range.
+If we were to compile into jump tables, then the optional range might
+tell us how big the jump tables would have to be.
 <<supporting functions for translating statements>>=
 and switchStmt range e arms props stmt_succ =
-  (* what are we supposed to do with the optional range? *)
-  let w  = RU.Width.exp e in
-  let e_eq guard = Rtl.app (Rtl.opr "eq" [w]) [e; guard] in
-  let e_in_interval lo hi =
-     Rtl.app (Rtl.opr "conjoin" [])
-             [ Rtl.app (Rtl.opr "leu" [w]) [Rtl.bits lo w; e]
-             ; Rtl.app (Rtl.opr "geu" [w]) [Rtl.bits hi w; e]
-             ] in
+  let w = RU.Width.exp e in
+  let leu     = Rtl.opr "leu" [w] in
+  let conjoin = Rtl.opr "conjoin" [] in
+  let e_in_interval (lo, hi) =
+    if Bitops.eq lo hi then
+      Rtl.app (Rtl.opr "eq" [w]) [e; Rtl.bits lo w]
+    else
+      Rtl.app conjoin
+        [Rtl.app leu [Rtl.bits lo w; e]; Rtl.app leu [e; Rtl.bits hi w]] in
   let do_arm (ranges, body) succ =
     let condition =
-       List.fold_left (fun or_exp (lo, hi) ->
-                         let opnd1 = if Bitops.eq lo hi then e_eq e
-                                     else e_in_interval lo hi
-                         in Rtl.app (Rtl.opr "disjoin" []) [opnd1; or_exp])
-                       (Rtl.bool false) ranges in
+      Simplify.exp (
+        List.fold_left (fun cond range ->
+                          Rtl.app (Rtl.opr "disjoin" []) [e_in_interval range; cond])
+                       (Rtl.bool false) ranges) in
     G.cbranch g condition ~ifso:(stmts props body stmt_succ)
                           ~ifnot:(G.branch g ~target:succ)
   in List.fold_right do_arm arms stmt_succ

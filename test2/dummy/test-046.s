@@ -25,14 +25,12 @@ section "text"
         $t1 = $r30;
         initialize continuations:l5:
         proc body start:l4:
-        $c0 when %disjoin[](%eq[32](i, 1), %false()) = sym@join@l11;
+        $c0 when %eq[32](i, 1) = sym@join@l11;
         join:l12:
         $c0 = sym@join@l9;
         join:l9:
-        $c0
-            when
-            %disjoin[](%conjoin[](%leu[32](2, i), %geu[32](3, i)),
-            %false()) = sym@join@l7;
+        $c0 when %conjoin[](%leu[32](2, i), %leu[32](i, 3))
+            = sym@join@l7;
         join:l8:
         $c0 = sym@exit@l1;
         join:l7:

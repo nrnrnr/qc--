@@ -619,9 +619,6 @@ end
 The [[Compile.file]] function takes the file name for a {\PAL} source
 file, a backend, and the name of the (assembly) file to produce and
 compiles the file.
- 
-\emph{I do not understand how the optimizer is run here. Maybe some
-clarifying words by the designer are in order. -- CL} 
 
 There is some inconsistency how we deal with files. The [[Driver.parse]]
 function takes a file name, while an assembler expects a file
@@ -629,7 +626,23 @@ descriptor.
 <<Lua compiler configuration>>=
 Compile = Compile and error('Compile not empty') or {}
 
-
+function Compile.file(backend, emitglobals, file, out)
+    local fd  = (not out or out == "-") and Driver.stdout or open_out(out)
+    local ast = Driver.parse(file)
+    local asm = backend.asm(fd) 
+    local opt = { apply  = Compile.run_optimizer
+                , action = Opt.standard(backend, asm, NewBackplane) 
+                , B = NewBackplane
+                }
+    Driver.compile(backend.target, opt, emitglobals, ast, asm)
+    if backend.emit then backend.emit(asm) end
+    if fd ~= Driver.stdout then close_out(fd) end -- close fd
+end    
+@ 
+To run the optimizer, [[Compile.run_optimizer]] takes the table above
+and a procedure, then runs the given [[self.action]] in the
+optimization backplane.
+<<Lua compiler configuration>>=
 function Compile.run_optimizer(self,proc)
     local B = self.B or error("missing backplane")
     -- verbose('running Compile.run_optimizer with ', whichB(B), '\n')
@@ -642,8 +655,23 @@ function Compile.run_optimizer(self,proc)
 
     B.run(self.action, proc)
 end    
+@ 
+The old front end.
+<<Lua compiler configuration>>=
+Compile.Old = Compile.Old or { } 
 
-function Compile.file(backend, emitglobals, file, out)
+function Compile.Old.use()
+  local k, backend = next(Backend, nil)
+  while k do
+    if type(backend) == 'table' and backend.compile == Compile.file then
+      backend.compile = Compile.Old.file
+    end
+    k, backend = next(Backend, k)
+  end
+  Compile.file = Compile.Old.file
+end
+
+function Compile.Old.file(backend, emitglobals, file, out)
     local fd  = (not out or out == "-") and Driver.stdout or open_out(out)
     local ast = Driver.parse(file)
     
@@ -653,7 +681,7 @@ function Compile.file(backend, emitglobals, file, out)
                 , action = Opt.standard(backend, asm, NewBackplane) 
                 , B = NewBackplane
                 }
-    Driver.compile(opt, emitglobals, ast, backend.target, env)
+    Driver.old_compile(opt, emitglobals, ast, backend.target, env)
     if backend.emit then backend.emit(asm) end
     if fd ~= Driver.stdout then close_out(fd) end -- close fd
 end    
