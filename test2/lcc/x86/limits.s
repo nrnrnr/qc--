@@ -41,11 +41,11 @@ join_l47:
 	movl $65535,%eax
 	nop
 	leal i_3,%ecx
-	movl %ecx,64(%esp)
+	movl %ecx,16(%esp)
 	movl $-72,%ecx
 	leal 72(%esp), %edx
 	addl %ecx,%edx
-	movl 64(%esp),%ecx
+	movl 16(%esp),%ecx
 	movl %ecx,(%edx)
 	movl $-68,%ecx
 	leal 72(%esp), %edx
@@ -64,11 +64,11 @@ join_l44:
 	movl $-1,%eax
 	nop
 	leal i_4,%ecx
-	movl %ecx,60(%esp)
+	movl %ecx,20(%esp)
 	movl $-72,%ecx
 	leal 72(%esp), %edx
 	addl %ecx,%edx
-	movl 60(%esp),%ecx
+	movl 20(%esp),%ecx
 	movl %ecx,(%edx)
 	movl $-68,%ecx
 	leal 72(%esp), %edx
@@ -87,11 +87,11 @@ join_l41:
 	movl $-1,%eax
 	nop
 	leal i_5,%ecx
-	movl %ecx,56(%esp)
+	movl %ecx,24(%esp)
 	movl $-72,%ecx
 	leal 72(%esp), %edx
 	addl %ecx,%edx
-	movl 56(%esp),%ecx
+	movl 24(%esp),%ecx
 	movl %ecx,(%edx)
 	movl $-68,%ecx
 	leal 72(%esp), %edx
@@ -110,11 +110,11 @@ join_l38:
 	movl $127,%eax
 	nop
 	leal i_6,%ecx
-	movl %ecx,52(%esp)
+	movl %ecx,28(%esp)
 	movl $-72,%ecx
 	leal 72(%esp), %edx
 	addl %ecx,%edx
-	movl 52(%esp),%ecx
+	movl 28(%esp),%ecx
 	movl %ecx,(%edx)
 	movl $-68,%ecx
 	leal 72(%esp), %edx
@@ -133,11 +133,11 @@ join_l35:
 	movl $127,%eax
 	nop
 	leal i_7,%ecx
-	movl %ecx,48(%esp)
+	movl %ecx,32(%esp)
 	movl $-72,%ecx
 	leal 72(%esp), %edx
 	addl %ecx,%edx
-	movl 48(%esp),%ecx
+	movl 32(%esp),%ecx
 	movl %ecx,(%edx)
 	movl $-68,%ecx
 	leal 72(%esp), %edx
@@ -156,11 +156,11 @@ join_l32:
 	movl $32767,%eax
 	nop
 	leal i_8,%ecx
-	movl %ecx,44(%esp)
+	movl %ecx,36(%esp)
 	movl $-72,%ecx
 	leal 72(%esp), %edx
 	addl %ecx,%edx
-	movl 44(%esp),%ecx
+	movl 36(%esp),%ecx
 	movl %ecx,(%edx)
 	movl $-68,%ecx
 	leal 72(%esp), %edx
@@ -202,11 +202,11 @@ join_l26:
 	movl $2147483647,%eax
 	nop
 	leal i_10,%ecx
-	movl %ecx,36(%esp)
+	movl %ecx,44(%esp)
 	movl $-72,%ecx
 	leal 72(%esp), %edx
 	addl %ecx,%edx
-	movl 36(%esp),%ecx
+	movl 44(%esp),%ecx
 	movl %ecx,(%edx)
 	movl $-68,%ecx
 	leal 72(%esp), %edx
@@ -225,11 +225,11 @@ join_l23:
 	movl $-128,%eax
 	nop
 	leal i_11,%ecx
-	movl %ecx,32(%esp)
+	movl %ecx,48(%esp)
 	movl $-72,%ecx
 	leal 72(%esp), %edx
 	addl %ecx,%edx
-	movl 32(%esp),%ecx
+	movl 48(%esp),%ecx
 	movl %ecx,(%edx)
 	movl $-68,%ecx
 	leal 72(%esp), %edx
@@ -248,11 +248,11 @@ join_l20:
 	movl $-128,%eax
 	nop
 	leal i_12,%ecx
-	movl %ecx,28(%esp)
+	movl %ecx,52(%esp)
 	movl $-72,%ecx
 	leal 72(%esp), %edx
 	addl %ecx,%edx
-	movl 28(%esp),%ecx
+	movl 52(%esp),%ecx
 	movl %ecx,(%edx)
 	movl $-68,%ecx
 	leal 72(%esp), %edx
@@ -271,11 +271,11 @@ join_l17:
 	movl $-32768,%eax
 	nop
 	leal i_13,%ecx
-	movl %ecx,24(%esp)
+	movl %ecx,56(%esp)
 	movl $-72,%ecx
 	leal 72(%esp), %edx
 	addl %ecx,%edx
-	movl 24(%esp),%ecx
+	movl 56(%esp),%ecx
 	movl %ecx,(%edx)
 	movl $-68,%ecx
 	leal 72(%esp), %edx
@@ -294,11 +294,11 @@ join_l14:
 	movl $-2147483648,%eax
 	nop
 	leal i_14,%ecx
-	movl %ecx,20(%esp)
+	movl %ecx,60(%esp)
 	movl $-72,%ecx
 	leal 72(%esp), %edx
 	addl %ecx,%edx
-	movl 20(%esp),%ecx
+	movl 60(%esp),%ecx
 	movl %ecx,(%edx)
 	movl $-68,%ecx
 	leal 72(%esp), %edx
@@ -317,11 +317,11 @@ join_l11:
 	movl $-2147483648,%eax
 	nop
 	leal i_15,%ecx
-	movl %ecx,16(%esp)
+	movl %ecx,64(%esp)
 	movl $-72,%ecx
 	leal 72(%esp), %edx
 	addl %ecx,%edx
-	movl 16(%esp),%ecx
+	movl 64(%esp),%ecx
 	movl %ecx,(%edx)
 	movl $-68,%ecx
 	leal 72(%esp), %edx

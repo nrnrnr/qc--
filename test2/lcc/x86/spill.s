@@ -238,90 +238,90 @@ initialize_continuations_l67:
 	shll %cl, %edx
 	movl %edx,68(%esp)
 	movl 68(%esp),%ecx
-	movl %ecx,28(%esp)
+	movl %ecx,24(%esp)
 	leal a,%ecx
 	movl %ecx,76(%esp)
-	movl 28(%esp),%ecx
-	movl %ecx,36(%esp)
-	movl 36(%esp),%ecx
+	movl 24(%esp),%ecx
+	movl %ecx,32(%esp)
+	movl 32(%esp),%ecx
 	movl 76(%esp),%edx
 	addl %edx,%ecx
-	movl %ecx,36(%esp)
-	movl $-108,%ecx
 	movl %ecx,32(%esp)
+	movl $-108,%ecx
+	movl %ecx,28(%esp)
 	leal 108(%esp), %ecx
 	movl %ecx,72(%esp)
-	movl 32(%esp),%ecx
+	movl 28(%esp),%ecx
 	movl 72(%esp),%edx
 	addl %ecx,%edx
 	movl %edx,72(%esp)
-	movl 36(%esp),%ecx
+	movl 32(%esp),%ecx
 	fildq (%ecx)
 	movl 72(%esp),%ecx
 	fistpq (%ecx)
 	leal b,%ecx
 	movl %ecx,84(%esp)
-	movl 28(%esp),%ecx
-	movl %ecx,44(%esp)
-	movl 44(%esp),%ecx
+	movl 24(%esp),%ecx
+	movl %ecx,40(%esp)
+	movl 40(%esp),%ecx
 	movl 84(%esp),%edx
 	addl %edx,%ecx
-	movl %ecx,44(%esp)
-	movl $-100,%ecx
 	movl %ecx,40(%esp)
+	movl $-100,%ecx
+	movl %ecx,36(%esp)
 	leal 108(%esp), %ecx
 	movl %ecx,80(%esp)
-	movl 40(%esp),%ecx
+	movl 36(%esp),%ecx
 	movl 80(%esp),%edx
 	addl %ecx,%edx
 	movl %edx,80(%esp)
-	movl 44(%esp),%ecx
+	movl 40(%esp),%ecx
 	fildq (%ecx)
 	movl 80(%esp),%ecx
 	fistpq (%ecx)
 	leal f_33,%ecx
-	movl %ecx,52(%esp)
-	movl $-92,%ecx
 	movl %ecx,48(%esp)
+	movl $-92,%ecx
+	movl %ecx,44(%esp)
 	leal 108(%esp), %ecx
 	movl %ecx,88(%esp)
-	movl 48(%esp),%ecx
+	movl 44(%esp),%ecx
 	movl 88(%esp),%edx
 	addl %ecx,%edx
 	movl %edx,88(%esp)
-	movl 52(%esp),%ecx
+	movl 48(%esp),%ecx
 	fildq (%ecx)
 	movl 88(%esp),%ecx
 	fistpq (%ecx)
 	movl $-92,%ecx
 	movl %ecx,92(%esp)
 	leal 108(%esp), %ecx
-	movl %ecx,56(%esp)
-	movl 56(%esp),%ecx
+	movl %ecx,52(%esp)
+	movl 52(%esp),%ecx
 	movl 92(%esp),%edx
 	addl %edx,%ecx
-	movl %ecx,56(%esp)
-	movl 56(%esp),%ecx
+	movl %ecx,52(%esp)
+	movl 52(%esp),%ecx
 	fldl (%ecx)
 	movl $-100,%ecx
 	movl %ecx,96(%esp)
 	leal 108(%esp), %ecx
-	movl %ecx,60(%esp)
-	movl 60(%esp),%ecx
+	movl %ecx,56(%esp)
+	movl 56(%esp),%ecx
 	movl 96(%esp),%edx
 	addl %edx,%ecx
-	movl %ecx,60(%esp)
-	movl 60(%esp),%ecx
+	movl %ecx,56(%esp)
+	movl 56(%esp),%ecx
 	fldl (%ecx)
 	movl $-108,%ecx
 	movl %ecx,100(%esp)
 	leal 108(%esp), %ecx
-	movl %ecx,64(%esp)
-	movl 64(%esp),%ecx
+	movl %ecx,60(%esp)
+	movl 60(%esp),%ecx
 	movl 100(%esp),%edx
 	addl %edx,%ecx
-	movl %ecx,64(%esp)
-	movl 64(%esp),%ecx
+	movl %ecx,60(%esp)
+	movl 60(%esp),%ecx
 	fldl (%ecx)
 	faddp
 	fcompp
@@ -371,11 +371,11 @@ L.32:
 	nop
 	movl $0,%eax
 	leal 108(%esp), %ecx
-	movl %ecx,24(%esp)
+	movl %ecx,64(%esp)
 	movl $0,%ecx
 	leal 108(%esp), %edx
 	addl %ecx,%edx
-	movl 24(%esp),%ecx
+	movl 64(%esp),%ecx
 	movl (%ecx),%ecx
 	movl %ecx,(%edx)
 	leal 108(%esp), %esp

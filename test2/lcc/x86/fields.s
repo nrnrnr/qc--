@@ -126,6 +126,178 @@ join_l20:
 	movl (%eax),%eax
 	nop
 	leal i_10,%ecx
+	movl %ecx,52(%esp)
+	movl $-112,%ecx
+	leal 112(%esp), %edx
+	addl %ecx,%edx
+	movl 52(%esp),%ecx
+	movl %ecx,(%edx)
+	movl $3,%ecx
+	movl %eax,48(%esp)
+	movl 48(%esp),%edx
+	andl %ecx,%edx
+	movl %edx,48(%esp)
+	movl $-108,%ecx
+	leal 112(%esp), %edx
+	addl %ecx,%edx
+	movl 48(%esp),%ecx
+	movl %ecx,(%edx)
+	movl $15,%edx
+	movl $2,%ecx
+	shrl %cl, %eax
+	movl %eax,108(%esp)
+	movl 108(%esp),%eax
+	andl %edx,%eax
+	movl %eax,108(%esp)
+	movl $-104,%ecx
+	leal 112(%esp), %eax
+	addl %ecx,%eax
+	movl 108(%esp),%ecx
+	movl %ecx,(%eax)
+	movl $4,%ecx
+	leal y,%eax
+	addl %ecx,%eax
+	movl $-100,%ecx
+	leal 112(%esp), %edx
+	addl %ecx,%edx
+	movl (%eax),%eax
+	movl %eax,(%edx)
+	nop
+	call printf
+join_l17:
+	nop
+	nop
+	nop
+	movl $8,%ecx
+	leal x,%eax
+	addl %ecx,%eax
+	movl $28,%ecx
+	movl $61440,%edx
+	movl %edx,60(%esp)
+	movl $12,%edx
+	movl %edx,56(%esp)
+	leal i,%edx
+	movl (%edx),%edx
+	shll %cl, %edx
+	sarl %cl, %edx
+	movl 56(%esp),%ecx
+	shll %cl, %edx
+	movl %edx,64(%esp)
+	movl 64(%esp),%ecx
+	movl 60(%esp),%edx
+	andl %edx,%ecx
+	movl %ecx,64(%esp)
+	movl $-61441,%ecx
+	movl (%eax),%edx
+	andl %ecx,%edx
+	movl 64(%esp),%ecx
+	orl %ecx,%edx
+	movl %edx,(%eax)
+	movl $12,%ecx
+	leal x,%eax
+	addl %ecx,%eax
+	movl $-113,%ecx
+	movl (%eax),%edx
+	andl %ecx,%edx
+	movl %edx,(%eax)
+	movl $20,%ecx
+	nop
+	leal i_4,%eax
+	movl %eax,84(%esp)
+	movl $-112,%eax
+	leal 112(%esp), %edx
+	addl %eax,%edx
+	movl 84(%esp),%eax
+	movl %eax,(%edx)
+	leal x,%eax
+	movl %eax,80(%esp)
+	movl $-108,%eax
+	leal 112(%esp), %edx
+	addl %eax,%edx
+	movl 80(%esp),%eax
+	movl (%eax),%eax
+	movl %eax,(%edx)
+	movl $4,%eax
+	leal x,%edx
+	addl %eax,%edx
+	movsbl (%edx),%eax
+	movl %eax,76(%esp)
+	movl $-104,%eax
+	leal 112(%esp), %edx
+	addl %eax,%edx
+	movl 76(%esp),%eax
+	movl %eax,(%edx)
+	movl $8,%eax
+	leal x,%edx
+	addl %eax,%edx
+	movl (%edx),%eax
+	shll %cl, %eax
+	sarl %cl, %eax
+	movl $-100,%ecx
+	leal 112(%esp), %edx
+	addl %ecx,%edx
+	movl %eax,(%edx)
+	movl $28,%eax
+	movl %eax,72(%esp)
+	movl $16,%ecx
+	movl $8,%eax
+	leal x,%edx
+	addl %eax,%edx
+	movl (%edx),%eax
+	shll %cl, %eax
+	movl 72(%esp),%ecx
+	sarl %cl, %eax
+	movl $-96,%ecx
+	leal 112(%esp), %edx
+	addl %ecx,%edx
+	movl %eax,(%edx)
+	movl $29,%eax
+	movl %eax,68(%esp)
+	movl $25,%ecx
+	movl $12,%eax
+	leal x,%edx
+	addl %eax,%edx
+	movl (%edx),%eax
+	shll %cl, %eax
+	movl 68(%esp),%ecx
+	sarl %cl, %eax
+	movl $-92,%ecx
+	leal 112(%esp), %edx
+	addl %ecx,%edx
+	movl %eax,(%edx)
+	movl $13,%ecx
+	leal x,%eax
+	addl %ecx,%eax
+	movsbl (%eax),%eax
+	movl $-88,%ecx
+	leal 112(%esp), %edx
+	addl %ecx,%edx
+	movl %eax,(%edx)
+	nop
+	call printf
+join_l14:
+	nop
+	nop
+	nop
+	leal y,%eax
+	movl $2,%ecx
+	movl %ecx,88(%esp)
+	movl $-4,%ecx
+	movl (%eax),%edx
+	andl %ecx,%edx
+	movl 88(%esp),%ecx
+	orl %ecx,%edx
+	movl %edx,(%eax)
+	leal i,%eax
+	movl $4,%ecx
+	leal y,%edx
+	addl %ecx,%edx
+	movl (%eax),%eax
+	movl %eax,(%edx)
+	leal y,%eax
+	movl (%eax),%eax
+	nop
+	leal i_10,%ecx
 	movl %ecx,96(%esp)
 	movl $-112,%ecx
 	leal 112(%esp), %edx
@@ -153,178 +325,6 @@ join_l20:
 	leal 112(%esp), %eax
 	addl %ecx,%eax
 	movl 104(%esp),%ecx
-	movl %ecx,(%eax)
-	movl $4,%ecx
-	leal y,%eax
-	addl %ecx,%eax
-	movl $-100,%ecx
-	leal 112(%esp), %edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
-	nop
-	call printf
-join_l17:
-	nop
-	nop
-	nop
-	movl $8,%ecx
-	leal x,%eax
-	addl %ecx,%eax
-	movl $28,%ecx
-	movl $61440,%edx
-	movl %edx,64(%esp)
-	movl $12,%edx
-	movl %edx,60(%esp)
-	leal i,%edx
-	movl (%edx),%edx
-	shll %cl, %edx
-	sarl %cl, %edx
-	movl 60(%esp),%ecx
-	shll %cl, %edx
-	movl %edx,68(%esp)
-	movl 68(%esp),%ecx
-	movl 64(%esp),%edx
-	andl %edx,%ecx
-	movl %ecx,68(%esp)
-	movl $-61441,%ecx
-	movl (%eax),%edx
-	andl %ecx,%edx
-	movl 68(%esp),%ecx
-	orl %ecx,%edx
-	movl %edx,(%eax)
-	movl $12,%ecx
-	leal x,%eax
-	addl %ecx,%eax
-	movl $-113,%ecx
-	movl (%eax),%edx
-	andl %ecx,%edx
-	movl %edx,(%eax)
-	movl $20,%ecx
-	nop
-	leal i_4,%eax
-	movl %eax,88(%esp)
-	movl $-112,%eax
-	leal 112(%esp), %edx
-	addl %eax,%edx
-	movl 88(%esp),%eax
-	movl %eax,(%edx)
-	leal x,%eax
-	movl %eax,84(%esp)
-	movl $-108,%eax
-	leal 112(%esp), %edx
-	addl %eax,%edx
-	movl 84(%esp),%eax
-	movl (%eax),%eax
-	movl %eax,(%edx)
-	movl $4,%eax
-	leal x,%edx
-	addl %eax,%edx
-	movsbl (%edx),%eax
-	movl %eax,80(%esp)
-	movl $-104,%eax
-	leal 112(%esp), %edx
-	addl %eax,%edx
-	movl 80(%esp),%eax
-	movl %eax,(%edx)
-	movl $8,%eax
-	leal x,%edx
-	addl %eax,%edx
-	movl (%edx),%eax
-	shll %cl, %eax
-	sarl %cl, %eax
-	movl $-100,%ecx
-	leal 112(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	movl $28,%eax
-	movl %eax,76(%esp)
-	movl $16,%ecx
-	movl $8,%eax
-	leal x,%edx
-	addl %eax,%edx
-	movl (%edx),%eax
-	shll %cl, %eax
-	movl 76(%esp),%ecx
-	sarl %cl, %eax
-	movl $-96,%ecx
-	leal 112(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	movl $29,%eax
-	movl %eax,72(%esp)
-	movl $25,%ecx
-	movl $12,%eax
-	leal x,%edx
-	addl %eax,%edx
-	movl (%edx),%eax
-	shll %cl, %eax
-	movl 72(%esp),%ecx
-	sarl %cl, %eax
-	movl $-92,%ecx
-	leal 112(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	movl $13,%ecx
-	leal x,%eax
-	addl %ecx,%eax
-	movsbl (%eax),%eax
-	movl $-88,%ecx
-	leal 112(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	nop
-	call printf
-join_l14:
-	nop
-	nop
-	nop
-	leal y,%eax
-	movl $2,%ecx
-	movl %ecx,48(%esp)
-	movl $-4,%ecx
-	movl (%eax),%edx
-	andl %ecx,%edx
-	movl 48(%esp),%ecx
-	orl %ecx,%edx
-	movl %edx,(%eax)
-	leal i,%eax
-	movl $4,%ecx
-	leal y,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
-	leal y,%eax
-	movl (%eax),%eax
-	nop
-	leal i_10,%ecx
-	movl %ecx,56(%esp)
-	movl $-112,%ecx
-	leal 112(%esp), %edx
-	addl %ecx,%edx
-	movl 56(%esp),%ecx
-	movl %ecx,(%edx)
-	movl $3,%ecx
-	movl %eax,52(%esp)
-	movl 52(%esp),%edx
-	andl %ecx,%edx
-	movl %edx,52(%esp)
-	movl $-108,%ecx
-	leal 112(%esp), %edx
-	addl %ecx,%edx
-	movl 52(%esp),%ecx
-	movl %ecx,(%edx)
-	movl $15,%edx
-	movl $2,%ecx
-	shrl %cl, %eax
-	movl %eax,108(%esp)
-	movl 108(%esp),%eax
-	andl %edx,%eax
-	movl %eax,108(%esp)
-	movl $-104,%ecx
-	leal 112(%esp), %eax
-	addl %ecx,%eax
-	movl 108(%esp),%ecx
 	movl %ecx,(%eax)
 	movl $4,%ecx
 	leal y,%eax

@@ -431,14 +431,14 @@ initialize_continuations_l86:
 	movl 20(%esp),%eax
 	addl %ecx,%eax
 	movl %eax,20(%esp)
-	movl 16(%esp),%eax
-	movl %eax,24(%esp)
+	movl 16(%esp),%ebx
 	movl $2,%ecx
-	movl 24(%esp),%eax
+	movl %ebx,%eax
 	shll %cl, %eax
 	movl 12(%esp),%ecx
 	addl %ecx,%eax
-	movl (%eax),%ebx
+	movl (%eax),%eax
+	movl %eax,24(%esp)
 	jmp L.22
 L.22:
 	movl 20(%esp),%eax
@@ -448,14 +448,13 @@ L.22:
 join_l93:
 	movl $2,%ecx
 	nop
-	movl 24(%esp),%eax
-	shll %cl, %eax
-	movl 12(%esp),%edx
-	addl %edx,%eax
-	movl $-32,%edx
-	leal 32(%esp), %ebx
-	addl %edx,%ebx
-	movl %eax,(%ebx)
+	shll %cl, %ebx
+	movl 12(%esp),%eax
+	addl %eax,%ebx
+	movl $-32,%eax
+	leal 32(%esp), %edx
+	addl %eax,%edx
+	movl %ebx,(%edx)
 	movl 20(%esp),%eax
 	shll %cl, %eax
 	movl 12(%esp),%ecx
@@ -496,7 +495,8 @@ L.25:
 	movl 12(%esp),%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
-	cmpl %ebx,%eax
+	movl 24(%esp),%ecx
+	cmpl %ecx,%eax
 	jl join_l101
 join_l102:
 	movl $1,%ecx
@@ -511,7 +511,8 @@ L.28:
 	movl 12(%esp),%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
-	cmpl %ebx,%eax
+	movl 24(%esp),%ecx
+	cmpl %ecx,%eax
 	jg join_l99
 join_l100:
 	movl 20(%esp),%eax
@@ -533,14 +534,14 @@ join_l98:
 	addl %eax,%edx
 	movl 28(%esp),%eax
 	movl %eax,(%edx)
-	movl 20(%esp),%eax
-	shll %cl, %eax
-	movl 12(%esp),%ecx
-	addl %ecx,%eax
-	movl $-28,%ecx
-	leal 32(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
+	movl 20(%esp),%edx
+	shll %cl, %edx
+	movl 12(%esp),%eax
+	addl %eax,%edx
+	movl $-28,%eax
+	leal 32(%esp), %ecx
+	addl %eax,%ecx
+	movl %edx,(%ecx)
 	nop
 	call exchange
 join_l96:

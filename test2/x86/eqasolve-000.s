@@ -177,18 +177,18 @@ join_l63:
 	cmpl %ecx,%eax
 	jne join_l59
 join_l60:
-	movl $0,%ecx
+	movl $0,%edx
 	leal -8(%esp), %esp
 	leal _i_26,%eax
 	movl (%eax),%eax
-	movl $-216,%edx
+	movl $-216,%ecx
 	leal 216(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-212,%edx
+	addl %ecx,%ebx
+	movl %edx,(%ebx)
+	movl $-212,%ecx
 	leal 216(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
+	addl %ecx,%ebx
+	movl %edx,(%ebx)
 	nop
 	leal _xlload,%ecx
 	movl (%ecx),%ecx

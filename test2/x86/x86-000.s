@@ -12,29 +12,30 @@ p:
 	movl (%eax),%eax
 	movl %eax,28(%esp)
 initialize_continuations_l3:
-	movl $1,%eax
-	movl $2,%ecx
-	movl %ecx,20(%esp)
-	movl $3,%ecx
-	movl %ecx,4(%esp)
-	movl 4(%esp),%ecx
-	movl %ecx,(%esp)
-	movl 20(%esp),%ecx
-	movl %ecx,(%eax)
-	movl 20(%esp),%ecx
-	movl %ecx,(%esp)
-	movl 20(%esp),%ecx
-	movb %cl,(%eax)
-	movsbl (%eax),%ecx
-	movl %ecx,8(%esp)
-	movl 8(%esp),%ecx
-	movl %ecx,(%eax)
-	movl 20(%esp),%ecx
-	movzbl (%ecx),%ecx
-	movl %ecx,12(%esp)
-	movl 12(%esp),%ecx
+	movl $1,%ecx
+	movl $2,%eax
+	movl %eax,20(%esp)
+	movl $3,%eax
+	movl %eax,4(%esp)
+	movl 4(%esp),%eax
+	movl %eax,(%esp)
+	movl 20(%esp),%eax
+	movl %eax,(%ecx)
+	movl 20(%esp),%eax
+	movl %eax,(%esp)
+	movl 20(%esp),%eax
+	movb %al,(%ecx)
+	movsbl (%ecx),%eax
+	movl %eax,8(%esp)
+	movl 8(%esp),%eax
+	movl %eax,(%ecx)
+	movl 20(%esp),%eax
+	movzbl (%eax),%eax
+	movl %eax,12(%esp)
+	movl 12(%esp),%eax
 	movl 20(%esp),%edx
-	movl %ecx,(%edx)
+	movl %eax,(%edx)
+	movl %ecx,%eax
 	movl 20(%esp),%ecx
 	addl %ecx,%eax
 	movl (%esp),%ecx

@@ -86,13 +86,12 @@ main:
 	movl %ecx,(%eax)
 	movl %ebx,8(%esp)
 initialize_continuations_l3:
-	movl $0,%eax
-	movl %eax,12(%esp)
+	movl $0,%ebx
 	jmp L.8
 L.8:
 	leal y,%edx
 	movl $2,%ecx
-	movl 12(%esp),%eax
+	movl %ebx,%eax
 	shll %cl, %eax
 	addl %edx,%eax
 	movl (%eax),%eax
@@ -135,29 +134,30 @@ join_l8:
 join_l12:
 	jmp L.5
 L.5:
-	movl $0,%ebx
+	movl $0,%eax
+	movl %eax,12(%esp)
 	jmp L.12
 L.12:
 	movl $2,%ecx
-	leal y,%eax
-	movl 12(%esp),%edx
-	shll %cl, %edx
-	addl %eax,%edx
-	movl (%edx),%edx
+	leal y,%edx
 	movl %ebx,%eax
 	shll %cl, %eax
 	addl %edx,%eax
 	movl (%eax),%eax
+	movl 12(%esp),%edx
+	shll %cl, %edx
+	addl %eax,%edx
+	movl (%edx),%eax
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne join_l17
 join_l18:
 	nop
-	leal i_14,%edx
+	leal i_14,%eax
 	movl $-20,%ecx
-	leal 20(%esp), %eax
-	addl %ecx,%eax
-	movl %edx,(%eax)
+	leal 20(%esp), %edx
+	addl %ecx,%edx
+	movl %eax,(%edx)
 	nop
 	call printf
 join_l16:
@@ -165,27 +165,25 @@ join_l16:
 	nop
 	nop
 L.6:
-	movl $1,%ecx
-	movl 12(%esp),%eax
-	addl %ecx,%eax
-	movl %eax,12(%esp)
+	movl $1,%eax
+	addl %eax,%ebx
 	jmp L.8
 join_l17:
 	jmp L.9
 L.9:
 	movl $2,%ecx
 	nop
-	leal y,%eax
-	movl 12(%esp),%edx
-	shll %cl, %edx
-	addl %eax,%edx
-	movl (%edx),%edx
+	leal y,%edx
 	movl %ebx,%eax
 	shll %cl, %eax
-	movl %eax,16(%esp)
-	movl 16(%esp),%eax
 	addl %edx,%eax
-	movl %eax,16(%esp)
+	movl (%eax),%eax
+	movl 12(%esp),%edx
+	shll %cl, %edx
+	movl %edx,16(%esp)
+	movl 16(%esp),%ecx
+	addl %eax,%ecx
+	movl %ecx,16(%esp)
 	movl $-16,%ecx
 	leal 20(%esp), %eax
 	addl %ecx,%eax
@@ -204,8 +202,10 @@ join_l21:
 	nop
 	nop
 L.10:
-	movl $1,%eax
-	addl %eax,%ebx
+	movl $1,%ecx
+	movl 12(%esp),%eax
+	addl %ecx,%eax
+	movl %eax,12(%esp)
 	jmp L.12
 .section .data
 .align 4
