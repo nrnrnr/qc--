@@ -27,11 +27,13 @@ module RP   = Rtl.Private
 module Up   = Rtl.Up
 module Down = Rtl.Dn
 module PX   = Postexpander
+module T    = Target
 <<spaces>>
 module Post = struct
   <<ppc postexpander>>
 end
 module X = Expander.IntFloatAddr (Post)
+<<calling conventions>>
 <<target spec>>
 <<variable placer>>
 @
@@ -73,6 +75,8 @@ end
 @ 
 The power PC has 7 different control registers.
 <<spaces>>=
+let reg n  = R.reg ('r',n,32)
+let freg n = R.reg ('f',n,32)
 let creg n = R.reg ('c',n,32)
 let nia    = creg 0  (* new (next) instr address         *)
 let cia    = creg 1  (* current instr address (pc)       *)
@@ -190,7 +194,9 @@ let load ~dst ~addr assn =
 let store ~addr ~src assn =
   let w = twidth src in
   assert (w = wordsize);
-  [R.store (mem assn w addr) (tval src) w]
+  [R.par [ R.store (mem assn w addr) (tval src) w
+         ; tstore src addr
+         ] ]
 
 let xload op ~dst ~addr w assn =
   let ext = R.app (R.opr op [w; twidth dst]) [memval assn w addr]
@@ -217,24 +223,34 @@ let block_copy ~dst assn1 ~src assn2 width = ui "block_copy"
 
 let br ~tgt = [R.store pc_lhs (tval tgt) wordsize]
 let b ~tgt  = [R.store pc_lhs (Up.const tgt) wordsize]
-let bc tmp1 op tmp2 ~tgt = [ R.guard (R.app (Up.opr op) [R.bool true]) (List.hd (b tgt))
-                           ; R.store (R.reg tmp1)
-                               (R.app (Up.opr op) [ (R.fetch (R.reg tmp1) wordsize)
-                                                  ; (R.fetch (R.reg tmp2) wordsize)
-                                                  ] )
-                               wordsize
-                           ]
+let bc tmp1 op tmp2 ~tgt =
+  [ R.guard (R.app (Up.opr op) [R.bool true]) (List.hd (b tgt))
+  ; R.store (R.reg tmp1)
+      (R.app (Up.opr op) [ (R.fetch (R.reg tmp1) wordsize)
+                         ; (R.fetch (R.reg tmp2) wordsize)
+                         ] )
+      wordsize
+  ]
 
 
 let bnegate rtl = rtl
-let call  ~tgt ~others = 
-    [R.par (List.hd (b  tgt) :: List.map Up.effect others)]
-let callr ~tgt ~others = 
-    [R.par (List.hd (br tgt) :: List.map Up.effect others)]
+let call  ~tgt ~others = [R.par (List.hd (b  tgt) :: List.map Up.effect others)]
+let callr ~tgt ~others = [R.par (List.hd (br tgt) :: List.map Up.effect others)]
 
 let cut_to effects = [R.par (List.map Up.effect effects)]
 
-let don't_touch_me effects = false
+let don't_touch_me effects =
+  let exp = (fun e -> Rtlutil.ToReadableString.exp (Up.exp e))
+  and loc = (fun l -> Rtlutil.ToReadableString.loc (Up.loc l)) in
+  let pr = function
+      RP.Store (l,e,w) ->
+        Printf.eprintf "dtm store: %s = %s (%d bits)\n" (loc l) (exp e) w
+    | RP.Kill l ->
+        Printf.eprintf "stm kill: %s\n" (loc l)
+  in
+  Printf.eprintf("dont touch me effects\n");
+  List.iter pr effects; false
+
 let opclass op = PX.Register
 
 let stack_depth = 8
@@ -254,19 +270,110 @@ let bc_stack op ~tgt = ui "bc_stack"
 let is_stack_top_proxy loc = false
 @ 
 % ---------------------------------------------------------------------------
+\section{Calling Conventions}
+% ---------------------------------------------------------------------------
+<<calling conventions>>=
+module C  = Call
+module RS = Register.Set
+@ 
+Integer registers r0, and r2-r12 are volatile, r1 is the stack
+pointer, and r13-r31 are non-volatile. For floating point,
+registers f1-f13 are volatile, and f14-131 are not.
+<<calling conventions>>=
+let regset s w l = RS.of_list (List.map (fun r-> (s,r,w)) l)
+let sp_reg = ('r', 1, 32)
+let vregs  = regset 'r' 32 [0;2;3;4;5;6;7;8;9;10;11;12]
+let nvregs = regset 'r' 32 [13;14;15;16;17;18;19;20;21;
+                            22;23;24;25;26;27;28;29;30;31]
+let fvregs  = regset 'f' 64 [0;1;2;3;4;5;6;7;8;9;10;11;12;13]
+let fnvregs = regset 'f' 64 [14;15;16;17;18;19;20;21;22;
+                             23;24;25;26;27;28;29;30;31]
+let cvregs = regset 'c' 32 [5(*lr*); 6(*ctr*); 4(*xer*); 2(*cr*)]
+
+(* let volregs  = RS.union (RS.union vregs fvregs) cvregs *)
+(* let nvolregs = RS.union nvregs fnvregs *)
+let volregs  = RS.union vregs cvregs
+let nvolregs = nvregs
+@ 
+A function to build a [[Call.t]].
+<<calling conventions>>=
+let cconv name spec =
+  let ws    = Post.wordsize
+  and callt = Dummy.dummy32b'.T.cc_spec_to_auto name spec in
+  { callt with
+    C.replace_vfp      = Cfgx.Vfp.replace_with ~sp:(reg 1)
+  ; C.pre_nvregs = nvolregs
+  ; C.volregs    = volregs
+  ; C.return           = (fun k n ~ra -> R.store nia (R.fetch lr ws) ws)
+  ; C.ra_on_entry      = (fun b       -> R.fetch lr ws)
+(*  ; C.where_to_save_ra = (fun e t     -> Post.mem R.none ws sp_8) *)
+  ; C.ra_on_exit       = (fun l e t   -> lr)
+  }
+@ 
+The calling convention specs are written in Lua; they have no ML
+counterpart.
+<<PPC calling convention automata in Lua>>=
+A                = Automaton
+PPC              = PPC              or {}
+PPC.cc           = PPC.cc           or {}
+PPC.cc["C"     ] = PPC.cc["C"     ] or {}
+PPC.cc["C--"   ] = PPC.cc["C--"   ] or {}
+PPC.cc["notail"] = PPC.cc["notail"] or {}
+
+function PPC.r(i) return({ space = "r", index = i, width = 32 }) end
+function PPC.f(i) return({ space = "f", index = i, width = 64 }) end
+
+PPC.overflow = A.overflow { memsize       = 8
+                          , byteorder     = "big"
+                          , growth        = "down"
+                          , max_alignment = 4
+                          }
+
+PPC.cc["C"].call =
+  { A.widen(32, "multiple")
+  , A.widths { 32, 64 }
+  , A.bitcounter("bits")
+  , A.argcounter("arg")
+  , A.choice { "float",  A.regs_by_args("args", PPC.f(1) .. PPC.r(13))
+             , A.is_any, A.regs_by_bits("bits", PPC.r(3) .. PPC.r(10))
+             }
+  , PPC.overflow
+  }
+
+PPC.cc["C"].results =
+  A.choice
+    { "float" , { A.widen(64), A.useregs { PPC.f(1) }}
+    , A.is_any, { A.widen(32), A.useregs { PPC.r(3), PPC.r(4) }}
+    }
+
+PPC.cc["C"].cutto = { A.widen(32), PPC.overflow }
+
+PPC.cc["C--"].call    = PPC.cc["C"].call
+PPC.cc["C--"].results = { PPC.cc["C"].results, PPC.overflow }
+PPC.cc["C--"].cutto   = PPC.cc["C"].cutto
+
+PPC.cc["notail"] = PPC.cc["C--"]
+
+A.register_cc(Backend.ppc.target,"C"     ,PPC.cc["C"     ])
+A.register_cc(Backend.ppc.target,"C'"    ,PPC.cc["C"     ])
+A.register_cc(Backend.ppc.target,"C--"   ,PPC.cc["C--"   ])
+A.register_cc(Backend.ppc.target,"notail",PPC.cc["notail"])
+@ 
+% ---------------------------------------------------------------------------
 \section{Target Specification}
 % ---------------------------------------------------------------------------
 <<target spec>>=
-(* Target.t strucure for PPC *)
-module T = Target
 module F = Mflow.MakeStandard (
   struct
     let pc_lhs = Post.pc_lhs
     let pc_rhs = Post.pc_rhs
-    let ra_reg = R.reg ('c',5,32)
+    let ra_reg = creg 5
     let ra_offset = 4                 (* size of call instruction *)
   end)
-
+@ 
+We must provide an automaton for allocating globals, and functions for
+spilling and reloading registers.
+<<target spec>>=
 module A = Automaton
 let ( *> ) = A.( *> )
 let globals base = 
@@ -275,9 +382,14 @@ let globals base =
   A.at ~start:base (A.widen width *> A.align_to align *>
   A.overflow ~memsize:8 ~byteorder:Post.byte_order ~growth:Memalloc.Up ~max_alignment:4)
 
-let spill f r l = []
-let reload f r l = []
-
+let spill lookup (_,_,w as reg) loc =
+  [ Automaton.store loc (Rtl.fetch (Rtl.reg reg) w) w ]
+    
+let reload lookup (_,_,w as reg) loc =
+  [ Rtl.store (Rtl.reg reg) (Automaton.fetch loc w) w ]
+@ 
+The actual [[Target.t]] for the PPC backend.
+<<target spec>>=
 let target =
   { T.name = "ppc"
 
@@ -288,7 +400,7 @@ let target =
   ; T.vfp         = Space.Standard32.vfp
   ; T.alignment = 1
   ; T.memsize = 8
-  ; T.spaces = [ Spaces.m; Spaces.r; Spaces.t; Spaces.c ]
+  ; T.spaces = [ Spaces.m; Spaces.r; Spaces.t; Spaces.c; Spaces.f; Spaces.u ]
   ; T.distinct_addr_sp = false
 
   (* Does the Pentium really implement IEEE 754?  I think so *)
@@ -305,8 +417,8 @@ let target =
   ; T.call    = F.call
   ; T.branch  = F.branch
 
-  ; T.cc_specs         = Dummy.dummy32b'.T.cc_specs
-  ; T.cc_spec_to_auto  = Dummy.dummy32b'.T.cc_spec_to_auto
+  ; T.cc_specs         = []      (* added by lua code *)
+  ; T.cc_spec_to_auto  = cconv
 
   (* global or hardware registers *)
   ; T.globals  = globals
