@@ -128,9 +128,6 @@ provide some hard-coded automata here.
 
 <<signature build>>=
 val cc:         t           (* calling convention *)
-@
-
-<<unused>>=
 val globals:    t           (* global register placement *)
 @
 
@@ -226,25 +223,43 @@ let offset k        = Rtl.Const(Rtl.Bits(Bits.of_int k word,word))
 let add             = ("add",[word])                          
 let sum x y         = Rtl.App (add,[x;y])                       
 
-let reg0 = Rtl.Cell ( 'r'
-                    , Rtl.Identity
-                    , word
-                    , Rtl.Const(Rtl.Bits(Bits.of_int 0 5,5))
+let regsp = Rtl.Cell( 'm'
+                    , agg
+                    , pointer
+                    , Rtl.Const(Rtl.Link("sp ",pointer))
                     , -1
-                    ) 
+                    )
+
+let globs = Rtl.Cell( 'm'
+                    , agg
+                    , pointer
+                    , Rtl.Const(Rtl.Link("globals ",pointer))
+                    , -1
+                    )
                         
-let sp              = Rtl.Fetch(reg0,word)
-let stack_sp k w    = Rtl.Cell('m',agg,w,sum sp (offset k),-1)    
-let read_sp  k w    = Rtl.Fetch(stack_sp k w, w)                 
-let write_sp k w    = fun e -> Rtl.Store(stack_sp k w, e, w)    
+let sp loc          = Rtl.Fetch(loc,word)
+let stack loc k w   = Rtl.Cell('m',agg,w,sum (sp loc) (offset k),-1)    
+let read  loc k w   = Rtl.Fetch(stack loc k w, w)                 
+let write loc k w   = fun e -> Rtl.Store(stack loc k w, e, w)    
 @
 
-The following automaton places parameters relative to some link-time
-constant named ``sp ''.
+The following automaton places parameters relative to some register
+[[reg0]]. 
 
 <<>>=
-let cc = { offset = 0
-         ; read   = read_sp
-         ; write  = write_sp
-         }
+let cc = 
+    { offset = 0
+    ; read   = read  regsp
+    ; write  = write regsp
+    }
 @
+
+Here is an automaton that places global registers relative to some
+link-time constanat named ``globals ''.
+
+<<>>=
+let globals = 
+    { offset = 0
+    ; read   = read  globs
+    ; write  = write globs
+    }    

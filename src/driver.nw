@@ -171,15 +171,14 @@ let check file =
 
 <<>>=
 let dummy =     
-
-    let reg0 = Rtl.Cell ( 'r'
-                        , Rtl.Identity
-                        , 32
-                        , Rtl.Const(Rtl.Bits(Bits.of_int 0 5,5))
-                        , -1
-                        ) in
+    let sp = Rtl.Cell( 'm'
+                    , Rtl.BigEndian
+                    , 32
+                    , Rtl.Const(Rtl.Link("sp ",32))
+                    , -1
+                    ) in
     let conv = 
-        { Target.sp             = reg0
+        { Target.sp             = sp
         ; Target.proc_param     = Automaton.Build.cc 
         ; Target.proc_result    = Automaton.Build.cc 
         ; Target.cont_param     = Automaton.Build.cc
@@ -194,10 +193,16 @@ let dummy =
         ; Target.float          = "ieee754"
         ; Target.charset        = "latin1"
         ; Target.conv           = convmap
-        ; Target.globals        = Automaton.Build.cc (* bogus *)
+        ; Target.globals        = Automaton.Build.globals
         ; Target.regmap         = Target.StrMap.empty
         }
 @
+
+% ------------------------------------------------------------------ 
+\subsubsection{A {\PAL} to {\PAL} compiler}
+% ------------------------------------------------------------------ 
+
+
 
 % ------------------------------------------------------------------ 
 \subsection{Dispatch over command line options}
@@ -220,6 +225,6 @@ let dispatch cmd =
         | Cmdline.Compile(target,file)  -> E.error "not yet implemented"
         )
     with
-        | E.ErrorExn(msg)       -> E.errorPrt msg; 1
+        | E.ErrorExn(msg)               -> E.errorPrt msg; 1
 @
 

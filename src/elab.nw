@@ -1623,21 +1623,34 @@ of lvalues and expressions are checked against each other.  For
 improved error messages [[List.combine]] is re-implemented. Details
 of the left hand side are handled by the [[lvalue]] function.
 
+The right hand side may contain optional guarding expressions of type
+[[bool]].
+
 <<>>=
 and assignStmt env left_right =
-    let msg = "type mismatch of left and right side in assignment" in
+    let msg0 = "type mismatch of left and right side in assignment" in
+    let msg1 = "guard must have type bool" in
     let rec combine = function (* like List.combine *)
         | []   , []    -> []
         | _    , []    -> E.error "too many locations on the left side"
         | []   , _     -> E.error "too many expression on the right side"
         | x::xx, y::yy -> (x,y)::combine (xx,yy) in
     let pairs = combine left_right in
-    let check env (lhs,exp) =
-        E.seq' (F.flagError env) 
-               (E.Raise.pair (lvalue Assign env lhs, tyExpr env exp))
-               ( function 
-               | tl, tr when tl = tr -> env
-               | _                   -> E.error msg
+    let check env = function
+        | (lhs,(None,exp)) -> E.seq' (F.flagError env) 
+           (E.Raise.pair (lvalue Assign env lhs, tyExpr env exp))
+           ( function 
+           | tl, tr when tl = tr -> env
+           | _                   -> E.error msg0
+           )
+        |  (lhs,(Some g,exp)) -> E.seq' (F.flagError env) 
+           (E.Raise.triple ( lvalue Assign env lhs
+                           , tyExpr env exp
+                           , tyExpr env g))
+               ( fun (tl, tr, gt) ->
+                      if tl =  tr && gt = T.Bool then env
+                 else if tl <> tr                then E.error msg0
+                 else                                 E.error msg1
                )
     in
         foldl check env pairs
