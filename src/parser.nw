@@ -541,15 +541,11 @@ syntax used by \ocaml-Lex and using expressions defined above):
 [['#' ws+ nat '"'[^ '"']*'"' ws* '\n']]
 \end{center}
 
-The current line is linked to line number given in the directive and
-the file enclosed in quotes.
-
-Line directive may not appear inside \C~pragmas and comments.  More
-precisely they are only recognized in the [[token]] context.  As a
-side effect a syncronization point is entered into the source location
-map after the file name is found.  When the context becomes active the
-initial [[#]] has already been consumed. The context is left after the
-quoted file name is recognized. 
+The meaning of a line directive
+\texttt{\#}~\textit{line}~\texttt{"}file\texttt{"} is that the
+\textit{following} line is on line \textit{line} in file
+\textit{file}.  The implementation links the current line to
+$\textit{line}-1$ in \textit{file} by placing a sync point.
 
 This implementation does not check the syntax but just recognizes
 different tokens. It returns when it finds a string and relies on the
@@ -567,7 +563,7 @@ and line = parse
                           let _        = string lexbuf map buf in
                           let file     = Buffer.contents buf in
                           let pos      = Lexing.lexeme_start lexbuf in
-                          let location = file, l, 1 in
+                          let location = file, l-1, 1 in
                                 ( Srcmap.sync map pos location
                                 ; () (* return *)
                                 )
