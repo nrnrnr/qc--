@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 % l2h substitution C C--
 % l2h substitution PAL C--
 % l2h substitution asdl ASDL
@@ -39,7 +40,12 @@ val maxwidth    : width
 @
 
 The [[fits]] predicate is true, if and only if a given [[bits]] value
-fits into width. The width must mot be graeter than [[maxwidth]],
+fits into width.  N.B. this is a property of the \emph{width} of the
+argument, not of its \emph{value}.  In particular, a 32-bit
+representation of the integer~1 does not ``[[fits]]'' into 16~bits,
+even though the value can easily be represented in 16~bits.
+
+The width must mot be greater than [[maxwidth]],
 otherwise the [[Size]] exception is raised which indicates a problem
 with the limits of an implementation.
 
@@ -148,11 +154,11 @@ val of_stringf  : string -> width -> bits
 val of_stringc  : string -> width -> bits
 @
 
-A [[bits]] value can be also created from an integer ([[of_int]]).
-
+[[bits]] values can be created from integers.
 <<>>=
-val of_int      : int    -> width -> bits  (* Size *)
-val of_int64    : int64  -> width -> bits  (* Size *)
+val of_int       : int       -> width -> bits  (* Size *)
+val of_int64     : int64     -> width -> bits  (* Size *)
+val of_nativeint : nativeint -> width -> bits  (* Size *)
 @
 
 % ------------------------------------------------------------------ 
@@ -168,6 +174,7 @@ type radix      = Oct
                 | Hex
 
 val to_int      : bits -> int                       (* raises Overflow *)
+val to_nativeint : bits -> nativeint                (* raises Overflow *)
 val to_string   : radix option -> bits -> string    
 @
 
@@ -310,6 +317,8 @@ let of_int64 i width =
     ( check width i
     ; (width,i)
     )
+
+let of_nativeint i width = of_int64 (I.of_nativeint i) width
 @
     
 % ------------------------------------------------------------------ 
@@ -325,6 +334,16 @@ let to_int (width,uint64) =
         raise (Overflow)
     else
         I.to_int uint64
+@ 
+Similarly for native integers.  The test is bogus, but there's no easy
+way to find out if [[width]] is small enough to fit into the width of
+[[nativeint]], because we're not given the width of [[nativeint]].
+<<>>=
+let to_nativeint (width,uint64) =
+    if I.logand uint64 (I.of_nativeint Nativeint.max_int) = uint64 then
+        I.to_nativeint uint64
+    else
+        raise (Overflow)
 @
 This is buggy: the [[I.to_string]] function considers the [[bits]]
 value as a signed integer. We also ignore the radix for the moment.

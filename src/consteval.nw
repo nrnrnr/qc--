@@ -19,11 +19,12 @@ val compile : Rtl.expr -> Bits.bits   (* a compile-time constant *)
 val link    : Rtl.expr -> relexpr
 @ 
 <<consteval.ml>>=
+exception Not_constant of Rtl.expr
 type relexpr = Rtl.expr (* a flagrant cheat *)
 
 let compile e = match Rtl.Convert.expr e with
   | Rtl.Private.Const(Rtl.Private.Bits(bits,w)) -> bits
-  | _ -> assert false
+  | _ -> raise (Not_constant e)
     (* should really try to use Const.lookup to evaluate ``link-time''
       constants, but we don't yet *)
 

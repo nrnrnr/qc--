@@ -1,0 +1,62 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% ----------------------------------------------------------------
+\section{Operations on bit vectors}
+% ----------------------------------------------------------------
+
+This module encapsulates operations on bit vectors.
+Its primary use will be to support constant evaluation, but
+it is also used to evaluate `early' expressions during RTL creation.
+%
+<<bitops.mli>>=
+(*module Bitops*)
+type t = Bits.bits
+type width = Bits.width
+@ 
+Standard RTL operators
+<<bitops.mli>>=
+val eq : t -> t -> bool
+val ne : t -> t -> bool
+val lt : t -> t -> bool
+val le : t -> t -> bool
+val gt : t -> t -> bool
+val ge : t -> t -> bool
+
+val sx : t -> width -> t
+val zx : t -> width -> t
+@ 
+Testing for widths.
+<<bitops.mli>>=
+val fits_signed : t -> width -> bool
+  (* fits_signed v w == v can be narrowed to width w, then
+         sign-extended to its original width, without changing its value *)
+val fits_unsigned : t -> width -> bool
+  (* fits_signed v w == v can be narrowed to width w, then
+         zero-extended to its original width, without changing its value *)
+@
+
+
+
+% ----------------------------------------------------------------
+\subsection{Implementation}
+% ----------------------------------------------------------------
+
+<<bitops.ml>>=
+type t = Bits.bits
+type width = Bits.width
+let eq x y = x = y
+let ne x y = x <> y
+
+exception Unimplemented of string
+let unimp s = raise (Unimplemented s)
+
+let lt x y = unimp "lt"
+let le x y = unimp "le"
+let gt x y = unimp "gt"
+let ge x y = unimp "ge"
+
+let sx x w = unimp "sx"
+let zx x w = unimp "zx"
+
+let fits_signed x w = unimp "fits_signed"
+let fits_unsigned x w = unimp "fits_unsigned"
