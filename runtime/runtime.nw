@@ -123,7 +123,7 @@ Cmm_YoungestActivation(const Cmm_Cont* t) {
 
   //print_stack(t->sp);
 
-  a.vfp = t->sp - decode_woffset(entry->frame_size);
+  a.vfp = (Cmm_Word*)((int)t->sp - decode_offset(entry->frame_size));
   a.pc = t->pc;
   a.rtdata = (void*)entry;
   update_saved_regs(&a, 0);
@@ -152,8 +152,9 @@ Cmm_NextActivation(const Cmm_Activation *a) {
   //print_stack(fp);
 
   entry = (pc_map_entry*)a->rtdata;
-  caller = a->vfp + decode_woffset(entry->return_address);
+  caller = (Cmm_Word*)((int)a->vfp + decode_offset((unsigned)entry->return_address));
   entry = lookup_entry_linear((Cmm_Codeptr)*caller);
+          
   if (!entry) {
     fp = walk_foreign_frames(fp, a->regs);
     if (fp) {
@@ -164,8 +165,9 @@ Cmm_NextActivation(const Cmm_Activation *a) {
 
   if (entry) {
     old_entry = (pc_map_entry*)a->rtdata;
-    na.vfp = fp - decode_woffset(entry->frame_size)
-                + decode_woffset(old_entry->overflow_size);
+    na.vfp = (Cmm_Word*)((int)fp - decode_offset(entry->frame_size)
+                                 + decode_offset(old_entry->overflow_size));
+
     na.pc = (Cmm_Codeptr)*caller;
     na.rtdata = (void*)entry;
     update_saved_regs(&na, a);
@@ -260,7 +262,7 @@ update_saved_regs(Cmm_Activation* new, const Cmm_Activation* prev) {
   
   for (i = 0; i < r; i+=2) {
     if (regs[i] == regs[i+1]) continue;
-    new->regs[decode_reg(regs[i])] = new->vfp + decode_woffset(regs[i + 1]);
+    new->regs[decode_reg(regs[i])] = (Cmm_Word*)((int)new->vfp + decode_offset(regs[i + 1]));
   }
 }
 @ 
@@ -270,6 +272,8 @@ structure.
 <<public function implementations>>=
 unsigned
 Cmm_LocalVarCount(const Cmm_Activation *a) {
+  assert(a);
+  assert(a->rtdata);
   pc_map_entry* entry = (pc_map_entry*)a->rtdata;
   return decode_offset(entry->num_locals);
 }
@@ -290,10 +294,12 @@ Cmm_FindLocalVar(const Cmm_Activation *a, unsigned n) {
   }
   local = (locals(entry))[n];
   if (0 != (reg = decode_reg(local))) {
+    assert(a);
+    assert(a->regs);
     return a->regs[reg];
   }
   else if (!is_dead(local)) {
-    return a->vfp + decode_woffset(local);
+    return (void*)((int)a->vfp + decode_offset(local));
   }
   return 0;
 }
@@ -320,7 +326,7 @@ Cmm_FindStackData(const Cmm_Activation *a, unsigned n) {
     assert(0);
   }
 
-  return a->vfp + sdt[n+1];
+  return (void*)((int)a->vfp + decode_offset(sdt[n+1]));
 }
 @ 
 % ---------------------------------------------------------------------------
@@ -336,8 +342,8 @@ stitch things together.
 <<private functions>>=
 void print_stack(int* fp) {
   int a;
-  printf("stack %X\n", (unsigned)fp);
+  fprintf(stderr, "stack %X\n", (unsigned)fp);
   for (a = 35; a > -7; --a) {
-    printf("%d: %X: %x\n", a, (unsigned)fp+a, fp[a]);
+    fprintf(stderr, "%d: %X: %x\n", a, (unsigned)fp+a, fp[a]);
   }
 }
