@@ -203,7 +203,7 @@ An arm is guarded by a nonempty list of ranges, each of the same width.
 let arm (rgs, ss) =
   E.ematch2 (E.Raise.list (List.map range rgs)) (stmts r true ss) (fun rgs ss ->
     match rgs with
-    | [] -> impossf "parser produced case arm with empty range list"
+    | [] -> E.error "case arm has an empty range list"
     | (rg, w) :: rgs ->
         let strip w (rg, w') = if w = w' then rg else <<exn on range type mismatch>> in
         ((rg :: List.map (strip w) rgs), ss), w) in
@@ -255,8 +255,8 @@ let effect lhs (guard,rhs) =
   let guard = Aux.Option.map exp guard in
   E.seq2 (loc lhs) (exp rhs) (fun (loc, w) (e, ty) ->
     if ty <> Types.Bits w then
-      errorf r "location of type bits%d cannot hold value of type %s" w
-        (Types.to_string ty)
+      errorf (Elabexp.loc_region r lhs)
+        "location of type bits%d cannot hold value of type %s" w (Types.to_string ty)
     else
       let rtl = Rtl.store loc e w in
       match guard with
@@ -442,7 +442,8 @@ the native pointer type.
 <<elaboration utilities>>=
 let call_target r x = E.seq (snd (F.findv x env)) (function
   | (F.Label (F.Proc _) | F.Import _), t when ispointer t -> E.Ok x
-  | _ -> errorf r "target %s is not a procedure or imported pointer" x) in
+  | d, _ -> errorf r "target %s is a %s (must be a procedure or imported pointer)"
+          (F.denotation's_category d) x) in
 @
 A call of a primitive is type checked: argument types must have the
 expected types. This is done by [[Rtlop.Translate.check]].

@@ -34,7 +34,14 @@ val elab_con: 'a Fenv.Dirty.env' -> Ast.expr -> (Bits.bits * Rtl.width) Error.er
 val elab_link:'a Fenv.Dirty.env' -> Ast.expr -> (link      * Rtl.width) Error.error
 val elab_hinted_name: 
   'a Fenv.Dirty.env' -> nm_or_mem -> (string * (Rtl.loc * Rtl.width)) Error.error
-
+@ 
+For convenience in providing better locations in error messages,
+we provide a way to get region of a location or expression.
+The first parameter is the default result in case the location or
+expression does not carry a region.
+<<elabexp.mli>>=
+val loc_region : Ast.region -> nm_or_mem -> Ast.region
+val exp_region : Ast.region -> Ast.expr  -> Ast.region
 @ The [[elab_*]] functions work with incomplete information,
 indicated by [[Error.Error]] values.  The policy is as follows:
 \begin{itemize}
@@ -73,6 +80,9 @@ let is2power x = x > 0 && x land (x - 1) = 0
 <<elabexp.ml>>=
 module M = Metrics
 <<utilities>>
+let loc_region r l = match l with A.NameOrMemAt(_, r) -> r | _ -> r
+let exp_region r l = match l with A.ExprAt     (_, r) -> r | _ -> r
+
 let exprfuns env =
   let metrics     = F.metrics env in
   let eprint r    = E.errorRegionPrt (F.srcmap env, r) in
@@ -86,8 +96,7 @@ let exprfuns env =
     | Types.Bits w -> simp k, w
     | _ -> E.error "constant expression may not be a Boolean") in
   let caught r f x = catch (r x) f x in
-  let e = function A.ExprAt     (_, r) -> r | _ -> Srcmap.null in
-  let l = function A.NameOrMemAt(_, r) -> r | _ -> Srcmap.null in
+  let l, e = loc_region Srcmap.null, exp_region Srcmap.null in
   caught e typed_expr, caught l lvalue, caught l hinted_name,
   caught e (constant Simplify.bits), caught e (constant Simplify.link)
 
@@ -195,14 +204,13 @@ let rec lvalue lhs = match lhs with
   | A.Name(None,x)       -> lvalue_name x 
   | A.Mem(t,addr,aligned,aliasing) ->
       let w = astwidth "value in memory" env t in
-      E.ematch3 w (typed_expr addr) (assertion aligned)
-        (fun w (addre, addrt) assn ->
-          if tywidth "address" addrt <> metrics.M.pointersize then
-            E.error "address's type is not the machine's pointer size"
-          else if w mod metrics.M.memsize <> 0 then
-            E.error "reference's type is not a multiple of target memsize"
-          else
-            Rtl.mem assn 'm' metrics.M.byteorder w addre, w)
+      E.ematch2 w (typed_expr addr) (fun w (addre, addrt) ->
+        if tywidth "address" addrt <> metrics.M.pointersize then
+          E.error "address's type is not the machine's pointer size"
+        else if w mod metrics.M.memsize <> 0 then
+          E.error "reference's type is not a multiple of target memsize"
+        else
+          Rtl.mem (assertion aligned) 'm' metrics.M.byteorder w addre, w)
 and expr e = emap fst (typed_expr e) 
 and rvalue_name_or_mem nm = match nm with
   | A.NameOrMemAt(v, r) -> catch r rvalue_name_or_mem v
@@ -215,8 +223,7 @@ and rvalue_name_or_mem nm = match nm with
 let assertion = function
   | None -> Rtl.none
   | Some n when is2power n -> Rtl.aligned n 
-  | Some n -> E.error (Printf.sprintf "Alignment %d is not a power of 2" n) 
-let assertion x = E.catch E.errorPrt (fun x -> E.Ok (assertion x)) x
+  | Some n -> E.errorf "alignment %d is not a power of 2" n
 @ 
 % ------------------------------------------------------------------ 
 \subsubsection{The meaning of expressions}
