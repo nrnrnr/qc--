@@ -92,7 +92,8 @@ end
   module type T = sig
    module T : USERTYPE
    module Make (Interp : INTERP) 
-               (T' : TYPEVIEW with module U = T and module I = Interp)
+               (T' : TYPEVIEW with module U = T and module I = Interp and
+module I.V = Interp.V)
                : INIT with type state = Interp.V.state
   end
   module type S = sig
@@ -138,6 +139,9 @@ module Combine : sig
     module Hide (L : Client.TT with module T1 = Shared.T) : Client.T 
   end
 end
+module ConvertType (T : USERTYPE) : Lua.USERDATA
+module Convert (T : Client.T) : Lua.Lib.FULL
+module EmptyT : Client.T
 @ As is typical, it's less efficient to string together a bunch of
 pairs than it is to build larger tuples.
 Perhaps one day soon we will provide more alternatives---perhaps by
@@ -344,6 +348,7 @@ end
         end (* Make *)
       end (* Hide *)
   end (* Sharing_T *)
+@
          
 
 
@@ -412,5 +417,49 @@ end
       let init g = (L1'.init g; L2'.init g)
   end
 end
+@
 
+
+<<newlib.ml>>=
+module ConvertType (T : USERTYPE) : Lua.USERDATA with type 'a t = 'a T.t = struct
+    type 'a t = 'a T.t
+    let tname = T.tname
+    let eq = T.eq
+    let to_string = T.to_string
+    type 'a state = int
+    let state () = 3
+end
+
+module Convert (T : Client.T) : Lua.Lib.FULL = struct
+    module U = ConvertType(T.T)
+    module M (This : Lua.Lib.FULL_VIEW with type 'a t = 'a T.T.t and type 'a
+state = 'a U.state) = struct
+        module Typeview : TYPEVIEW with module I.V = This.Interp.V and type
+'a U.t = 'a T.T.t = struct
+            module I = This.Interp
+            module U = T.T
+            let map = This.map
+        end
+        module Init = T.Make (This.Interp) (Typeview)
+
+        let init = Init.init
+    end
+end
+
+module EmptyT : Client.T = struct
+    module T : USERTYPE = struct
+        type 'a t = unit
+        let tname = "EMPTY Client.T"
+        let eq _ x y = x = y
+        let to_string _ _ = "EMPTY Client.T"
+    end
+
+    module Make (Interp : INTERP)
+                (T' : TYPEVIEW with module U = T and module I = Interp)
+                : INIT with type state = Interp.V.state = struct
+        type state = Interp.V.state
+        let init _ = ()
+    end
+end
+@
 
