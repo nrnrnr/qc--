@@ -3,16 +3,16 @@
 \section{OCamlerror makes stack traces readable}
 % ------------------------------------------------------------------ 
 
-When an {\ocaml} byte code program fails an assertion it writes out a
-stack trace that includes source code positions. Each position is an
-integer byte-offset from the start of a source file. Visiting these
-positions in an editor is tedious because navigation in files best
-supported by line numbers. When the source file is the result of a
-preprocessing step the relation between the original source and the
-positions in the stack trace are even more complicated. The
+When an {\ocaml} byte code program fails with an assertion, it writes
+out a stack trace that includes source code positions.  Each position
+is an integer byte-offset from the start of a source file.  Visiting
+these positions in an editor is tedious because navigation in files
+is best supported by line numbers.  When the source file is the result
+of a preprocessing step the relation between the original source and
+the positions in the stack trace are even more complicated.  The
 [[ocamlerror]] program reads a stack trace from standard input,
-translates source code positions into file, line, and column positions,
-and writes an annotated stack trace to standard out. 
+translates source code positions into file, line, and column
+positions, and writes an annotated stack trace to standard out. 
 
 \begin{quote}\small
 \begin{verbatim}
@@ -46,17 +46,17 @@ Called from module Main2, character 4324 (main2.nw: 190, column 16)
 \end{quote}
 
 For the translation of the stack trace [[ocamlerror]] tries to find the
-source file of the module, scans it, and translates the character
-position into the file, line, column triple. While scanning the file
-[[ocamlerror]] honors the C style [[#line]] directives inserted by
-preprocessors and thus giving meaningful results for preprocessed source
-files. If [[ocamlerror]] cannot find the source file of a module, it
-emits the line from the stack trace as is. On the command line
-[[ocamlerror]] takes a list of directories that it searches for source
-files. If, for example, [[/usr/local/lib/ocaml]] had been added in the
-example above, [[ocamlerror]] would have found the source files for the
-modules from the standard library and translated positions within as
-well.
+source file of each mentioned module, scans it, and translates the character
+position pointing into the module into a file, line, column triple. 
+While scanning the file, [[ocamlerror]] honors the C style [[#line]]
+directives inserted by preprocessors and thus giving meaningful
+results for preprocessed source files.  If [[ocamlerror]] cannot find
+the source file of a module, it emits the line from the stack trace as
+is.  On the command line [[ocamlerror]] takes a list of directories
+that it searches for source files.  If, for example,
+[[/usr/local/lib/ocaml]] had been added in the example above,
+[[ocamlerror]] would have found the source files for the modules from
+the standard library and translated positions within as well.
 
 
 % ------------------------------------------------------------------ 
@@ -65,9 +65,9 @@ well.
 
 The implementation relies on the [[Srcmap]] module that provides a
 mapping between character offsets and file, line, column triples for a
-file. For each source file such a map is built while it is scanned and
-the map is stored in a cache. The map is then used to translate the
-character position from the stack track trace into the file, line,
+file. For each source file such a map is built while it is scanned, and
+stored in a cache. The map is then used to translate the
+character position from the stack trace into the file, line,
 column triple.
 
 <<ocamlerror.ml>>=
@@ -76,8 +76,8 @@ let error msg = raise (Error msg)
 @  
 
 We try to find a source file along a path of directories. The file is
-considered found when it exists and [[find]] will return its full path.
-Otherwise [[find]] returns [[None]].
+considered found when it exists and returnded by [[find]] with its full
+path.  Otherwise [[find]] returns [[None]].
 
 <<ocamlerror.ml>>=
 let find (path: string list) (file:string) =
@@ -135,7 +135,7 @@ let trace (line:string) =
 @
 
 A stack trace typically refers to the same file multiple times. To avoid
-searching and scanning the same file each time we cache the map for a
+searching and scanning the same file each time, we cache the map for
 each file we have read.
 
 <<ocamlerror.ml>>=
@@ -209,7 +209,7 @@ let _ = try main () with e ->
 \section{Scanning Source Files}
 % ------------------------------------------------------------------ 
 
-To translate a character position into a file into a meaningful triple
+To translate a character position in a file into a meaningful triple
 of filename, line number, and column we build a map for each file, that
 associates character offsets with these triples. The scanner recognizes
 any non-linearity in the source file, like preprocessor-directives and
@@ -248,11 +248,11 @@ let nl          = '\n'
 @
 
 The [[token]] function scans an entire file and returns its map. At
-every newline we call [[nl]] to put a synchronization point into the map.
-We consider lines starting with [[#]] [[#line]] directives and call the
-[[line]] sub-scanner. All other characters are just skipped. A Tab
-characters is treated like a space because there is no universal
-Tab width---they are best avoided in source code anyway. 
+every newline we call [[nl]] to put a synchronization point into the
+map.  We consider lines starting with [[#]] as [[#line]] directives and
+call the [[line]] sub-scanner. All other characters are just skipped. A
+tab characters is treated like a space because there is no universal tab
+width---while they are best avoided in source code anyway. 
 
 <<ocamlscan.mll>>=
 rule token = parse
