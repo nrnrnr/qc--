@@ -55,21 +55,18 @@ use in constructing hash tables.
 val compare : t -> t -> int
 val eq      : t -> t -> bool
 @ 
-If a conversion fails, it raises an exception. The [[Overflow]]
-exception indicates that the target range is too small for a given
-conversion; the [[Syntax]] exception indicates a syntax violation when a
-number of built from a string that violates the syntax. Roughly, the
+If a conversion fails because the target range is too small for a given
+conversion, it raises the [[Overflow]] exception.
+If a conversion fails because of bad string syntax, this is considered
+a bug in the compiler, which halts with an error message.
+The
 syntax for numbers follows the {\PAL} syntax. For the details of
 strings, see below.
 <<bits.mli ((evaluating))>>=
 exception Overflow
-exception Syntax of string
-
-<<bits.mli ((evaluating))>>=
 module S: sig  (* signed *) 
     <<interface S>>
 end
-
 module U: sig (* unsigned *)
     <<interface U>>
 end
@@ -85,7 +82,6 @@ with sign.
 Function [[to_hex_or_decimal_string]] converts to decimal if the
 argument is ``unsigned less then'' [[declimit]]; otherwise it converts
 to form [["0x%x"]].
-
 <<bits.mli ((evaluating))>>=
 val to_string         : bits -> string
 val to_decimal_string : bits -> string
@@ -141,10 +137,10 @@ integer of width $w$. If $w$ is too small for this encoding ($v <
 
 $$v = \sum_{i=0}^{w-2} 2^i \times b_i - 2^{w-1} \times b_{w-1}$$
 <<interface S>>=
-val of_int:     int         -> width -> t       (* Overflow *)
-val of_native:  nativeint   -> width -> t       (* Overflow *)
-val of_int64:   int64       -> width -> t       (* Overflow *)
-val of_string:  string      -> width -> t   (* Overflow, Syntax *)
+val of_int:     int         -> width -> t   (* raises Overflow *)
+val of_native:  nativeint   -> width -> t   (* raises Overflow *)
+val of_int64:   int64       -> width -> t   (* raises Overflow *)
+val of_string:  string      -> width -> t   (* raises Overflow *)
 @ For the format of the strings accepted by [[of_string]], see the section
 below.  I CANNOT FIND THE REFERENCE.  PLEASE TRY \ref OR \pageref!
 @
@@ -189,14 +185,12 @@ The derived number $v'$ is the unsigned interpretation of the signed
 number $v$. If $v' < 2^w$ holds, $v'$ is represented as a bit vector of
 length $w < k$, using an unsigned interpretation. Otherwise, the
 constructor function raises [[Overflow]]. 
-
 $$v' = \sum_{i=0}^{w-1} 2^i \times b_i$$
-
 <<interface U>>=
 val of_int:     int         -> width -> t       
 val of_native:  nativeint   -> width -> t       
 val of_int64:   int64       -> width -> t       
-val of_string:  string      -> width -> t            (* Overflow, Syntax *)
+val of_string:  string      -> width -> t   (* raises Overflow *)
 @
 
 % ------------------------------------------------------------------ 
@@ -240,12 +234,10 @@ val fits : width -> t -> bool    (* fits w b == (b = zxlo w b) *)
 
 A [[bits]] value can be created from a string representation. The string
 describes an integer, character, or floating-point literal.
-
 \begin{enumerate}
 \item The integer string representation can use a decimal, octal, or
       hexadecimal radix.  The characters to represent the respective
       radices in strings are shown below.  
-
         \begin{tabular}{ll}
         Radix        & characters \\
         \hline
@@ -253,9 +245,7 @@ describes an integer, character, or floating-point literal.
         decimal      & \ttfamily 0 1 2 3 4 5 6 7 8 9 \\
         hexadecimal  & \ttfamily 0 1 2 3 4 5 6 7 8 9 a b c d e f A B C D E F \\
         \end{tabular}
- 
       The radix of a string is determined by its first two characters:
-
       \begin{itemize}
       \item A string starting with [[0x]] or [[0X]] is considered a
             hexadecimal number.
@@ -263,14 +253,12 @@ describes an integer, character, or floating-point literal.
             numbers.
       \item All other strings are considered as strings with decimal numbers.
       \end{itemize}
-
-      A [[Syntax]] exception is raised when the string contains illegal
-      characters. 
+      If a string contains illegal
+      characters, it is considered an internal error in the compiler.
 
 \item A character is enclosed in single quotes like in [['a']]. The
       character representation honors the C escape sequences.
       Otherwise, each character stands for itself.
-      
        \begin{quote}
         \begin{tabular}{ll}
             Escape Sequence & Interpretation \\ 
@@ -318,7 +306,6 @@ describes an integer, character, or floating-point literal.
 
 The evaluating and residualizing instantiations provide the same
 interface to [[bits]].
-
 \begin{quote}\it
     The interface to this module has changed completely. Now I don't
     know what to do with the residualizing interface. -- CL
@@ -330,11 +317,8 @@ interface to [[bits]].
 
 <<bits.ml ((evaluating))>>=
 module I = Int64        (* signed   operations *)
-
 exception Overflow
-exception Syntax of string
-
-let syntax fmt = Printf.kprintf (fun s -> raise (Syntax s)) fmt
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 @ 
 Here, we want our polymorphism.
 <<bits.ml ((evaluating))>>=
@@ -353,9 +337,8 @@ type bits       = int64 * width
 type t          = bits 
 
 let width (_,w) = w
-let check w =
-  if w <= 0 || w > 64 then Impossible.impossible ("Bits.bits width " ^ string_of_int w)
-let zero w      = check w; (I.zero, w)
+let check w = if w <= 0 || w > 64 then impossf "unsupported bitwidth %d" w
+let zero w  = check w; (I.zero, w)
 
 
 let to_string (i,w) = Printf.sprintf "0x%Lx::bits%d" i w 
@@ -533,9 +516,9 @@ let of_int64 i w =
     if fits_signed i w then (i,w) else raise Overflow
 
 let of_string str w =
-    check w;
-    let i = string str w in
-        if fits_signed i w then (i,w) else raise Overflow
+  check w;
+  let i = string sint str w in
+  if fits_signed i w then (i,w) else raise Overflow
 
 let to_int (i,w) =
     if I.of_int min_int <= i && i <= I.of_int max_int then
@@ -606,8 +589,8 @@ let of_int64 i w =
 
 let of_string str w =
     check w;
-    let i = string str w in
-        if fits_unsigned i w then (i, w) else raise Overflow
+    let i = string uint str w in
+    if fits_unsigned i w then (i, w) else raise Overflow
 
 let to_int (i,w) = 
     let i = mask i w in
@@ -651,7 +634,7 @@ or an [[E]], everything else must be an integer.
 <<parse float>>
 <<parse char>>
 
-let string (s:string) (w:int) =
+let string int (s:string) (w:int) =
     assert (String.length s > 0);
     if s.[0] =<= '\'' then
         char s w 
@@ -670,7 +653,8 @@ This implementation cannot read very large decimal and octal number
 representations. They would have to set the sign bit which they don't.
 However, hexadecimal representations can use all 64 bits.
 <<parse int>>=
-let int str w =
+let sint str w =
+  check w;
   let len = String.length str in
   try  
     if len > 2 && str.[0] =<= '0' && (str.[1] =<= 'x' || str.[1] =<= 'X') then 
@@ -679,8 +663,15 @@ let int str w =
       I.of_string ("0o"^str)
     else
       I.of_string str
-  with Failure s ->
-    syntax "caml function '%s' failed on literal %s (syntax error or overflow)" s str
+  with Failure s -> raise Overflow  (* either that, or we let through bad syntax *)
+@ 
+<<parse int>>=
+let uint str w = 
+  check w;
+  try Uint64.of_string str
+  with
+  | Failure "overflow" -> raise Overflow
+  | Failure s -> Impossible.impossible "bad unsigned integer literal"
 @
 For a floating-point literal, we trust the Caml compiler to produce
 the right bit pattern.
@@ -692,9 +683,8 @@ let float str w =
     match w with
     | 32 -> Uint64.Cast.float32 x
     | 64 -> Int64.bits_of_float x
-    | _ -> Unsupported.floatlit w
-  with Failure s -> 
-    syntax "caml function '%s' failed on literal %s (syntax error or overflow)" s str
+    | _  -> Unsupported.floatlit w
+  with Failure s -> impossf "caml function '%s' failed on literal %s" s str
 @ 
 <<parse char>>=
 let char str w =
@@ -716,10 +706,9 @@ let char str w =
         | '?'  when len = 2 -> I.of_int 63
         | 'x'  when len = 2 -> I.of_string ("0"  ^ str)
         | '0' .. '7'        -> I.of_string ("0o" ^ str) 
-        | _                 -> syntax "syntax error: %s" str
+        | _                 -> impossf "bad character literal '%s'" str
         else                   I.of_int (Char.code str.[0])
-    with Failure s ->
-      syntax "caml function '%s' failed on literal %s (syntax error or overflow)" s str
+    with Failure s -> impossf "caml function '%s' failed on literal %s" s str
 @    
     
 % ================================================================== 

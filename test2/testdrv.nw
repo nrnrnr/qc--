@@ -14,8 +14,9 @@ see the README file.
 <<testdrv.lua>>=
 $debug 1
 Test = Test  or {}
-Test.errors     = 0      -- number of failures found
-Test.diffs      = 0      -- number of tests passed with different assembly languages
+Test.errors     = 0      -- number of test cases with failures
+Test.diffs      = 0      -- number of test cases passed with diffs
+Test.curstat    = nil    -- nil, 'diff', or 'error' depending on outcome
 Test.verbose    = nil    -- provide detailed failure info
 Test.skip_files = nil    -- skip input source files
 Test.on_error   = {}     -- error handlers
@@ -160,11 +161,12 @@ end
 @ 
 <<testdrv.lua>>=
 function Test.print_error_stats(n)
-  local es, ds = "s", "s"
-  if Test.errors == 1 then es = "" end
-  if Test.diffs  == 1 then ds = "" end
-  print(format("# %d error%s and %d diff%s detected out of %d tests.", 
-               Test.errors, es, Test.diffs, ds, n))
+  if Test.errors == 0 and Test.diffs == 0 then
+    print(format("# passed %d tests.", n))
+  else
+    print(format("# in %d tests, %d had errors and %d had diffs.", 
+                 n, Test.errors, Test.diffs))
+  end 
 end
 @ 
 % -------------------------------------------------------------------
@@ -204,9 +206,9 @@ All errors are reported by calling this function.
 function Test.error(file, expected, actual, ext)
   Test.clear_status_line()
   if ext == ".s" or ext == ".5" then
-    Test.diffs  = Test.diffs + 1
+    Test.curstat = Test.curstat or 'diff'
   else
-    Test.errors = Test.errors + 1
+    Test.curstat = 'error'
   end
   local basename = Caml.Filename.basename(expected)
   local ext = Caml.Filename.extension(expected)
@@ -218,6 +220,14 @@ function Test.error(file, expected, actual, ext)
     else
       print(format("FAILED %s\n", expected))
     end
+  end
+end
+<<remember [[Test.curstat]] in [[Test.errors]] and [[Test.diffs]]>>=
+if Test.curstat then
+  if Test.curstat == 'diff' then
+    Test.diffs = Test.diffs + 1
+  else
+    Test.errors = Test.errors + 1
   end
 end
 @ 
@@ -471,6 +481,7 @@ function Test.run_test_case(inputs)
   local to_remove = { }           -- to be removed after test case
   local all_compiles_ok = 'true'  -- all compilers went OK
   inputs.diffs = ""               -- extensions that are different
+  Test.curstat = nil
   <<compile each file in [[sources]]; set [[s_files]], [[status]], [[all_compiles_ok]]>>
   local runtime_sig = Test.sign_runtimes(inputs)
   status = status + Test.check_update_file(inputs, runtime_sig)
@@ -494,6 +505,7 @@ function Test.run_test_case(inputs)
 
   if status > 0 and Test.update then write('\n') end -- end to updates
   Test.remove(to_remove)
+  <<remember [[Test.curstat]] in [[Test.errors]] and [[Test.diffs]]>>
 
   <<if there are [[inputs.diffs]], print a summary line using [[status]]>>
 end

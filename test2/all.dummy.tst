@@ -7,6 +7,7 @@ Ld.rtend = ""  --- don't need the run-time system
 -- source files live in src directory
 Test.source  = "src"
 Test.files = { "add.c--"
+             , "badlit8.c--"
              , "bits-bug.c--"
              , "cut.c--"
              , "eqasolve-000.c--"

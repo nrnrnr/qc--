@@ -69,7 +69,8 @@ The [[of_string]] function parses a string into a [[int64]] value.
 Unlike the corresponding function from [[Int64]] it uses the highest
 result bit as well and thus considers the result as an unsigned
 integer. Also unlike [[Int64.of_string]], it considers a number to be
-in octal notation, when it starts with a [[0]].
+in octal notation, when it starts with a [[0]],
+and for a decimal number, it accepts a trailing [[u]] or [[U]].
 \begin{quote}
     \begin{tabular}{ll}
         Prefix         & encoding \\
@@ -81,6 +82,7 @@ in octal notation, when it starts with a [[0]].
         else           & decimal     \\
     \end{tabular}
 \end{quote}
+This function raises [[Failure]] with either [["overflow"]] or [["syntax"]].
 <<external functions>>=
 external of_string:  string -> int64                 = "uint64_of_string"
 @
@@ -248,16 +250,17 @@ static char* parse_base (char *p, int *base)
     if (*p == '0') {
         switch (p[1]) {
         case 'x': case 'X':
-            *base = 16; p += 2; break;
+            *base = 16; return p + 2;
         case 'o': case 'O':
-            *base = 8; p += 2; break;
+            *base =  8; return p + 2; 
         case 'b': case 'B':
-            *base = 2; p += 2; break;
+            *base =  2; return p + 2; 
         default:
-            *base = 8; break;
+            *base =  8; return p;
         }
+    } else {
+        return p;
     }
-    return p;
 }
 @
 Convert a string to an unsigned [[int64]] value.  In case of syntax
@@ -267,17 +270,19 @@ currently.
 value uint64_of_string(value s)          /* ML */
 {
     char * p;
-    uint64 res;
+    uint64 res, next;
     int base, d;
 
-    p    = parse_base (String_val(s), &base);
+    p = parse_base (String_val(s), &base);
     for (res = 0; /*nothing*/; p++) {
         d = parse_digit(p);
         if (d < 0 || d >= base) break;
         /* check for overflow? */
-        res = base * res + d;
+        next = base * res + d;
+        if (next < res) failwith("overflow");
+        res = next;
     }
-    if (*p != 0) failwith("int_of_string");
+    if (base == 10 && (*p == 'u' || *p == 'U')) p++;
+    if (*p != 0) failwith("syntax");
     return copy_int64(res);
 }
-@

@@ -28,7 +28,8 @@ Test.files = { "add.c--"
 	     , "hex.c--"
              , "jtab.c--"    -- computed goto with jump table
 	     , { source='ladd.c--', other='src/ops64.c' }
-	           , "live_rtd.c--"
+             , { source = 'lit8.c--', other='src/lit8main.c' }
+             , "live_rtd.c--"
              , "not.c--"
              , "ovrflow.c--"
              , "ralloc-000.c--"
