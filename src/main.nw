@@ -2,7 +2,9 @@
 % l2h substitution asdl ASDL
 % l2h substitution ocaml OCaml
 
-\section{Main}
+% ------------------------------------------------------------------ 
+\section{Main}\label{sect:main}
+% ------------------------------------------------------------------ 
 
 This module contains the [[main]] function that is executed when the
 \C~compiler starts.  Its main purposes are command line processing,
@@ -124,32 +126,8 @@ let usage this =
     Printf.printf "%s command line syntax\n" this ;
     List.iter print_endline msg
 @
-    
-<<>>=
-let lex file =
-    let fd          = try open_in file
-                      with Sys_error(msg) -> E.error msg   in
-    let finally ()  = close_in fd                          in
-    let lexbuf      = Lexing.from_channel fd               in
-    let map         = Srcmap.empty                         in
-    let scanner     = Scan.scan map                        in
-    let rec loop lb =
-        match scanner lb with
-            | Parse.EOF -> ()
-            | tok       ->
-                let (file,line,col) = Scan.location lb map in
-                let tok             = Scan.tok2str tok     in
-                    ( Printf.printf "%-16s %3d %2d %s\n" file line col tok
-                    ; loop lb
-                    )
-    in
-        ( Srcmap.sync map 0 (file,1,1)
-        ; loop lexbuf
-        ; finally ()
-        )
-@
         
-For testing the parser we let the {\small ASDL} code write the
+For testing the parser we let the [[asdl]] function write the
 abstract syntax to stdout.
 
 <<>>=
@@ -178,33 +156,6 @@ let asdl file =
               ( finally()
               ; raise e
               )
-
-<<>>=
-let pp file width =
-    let fd          = try open_in file
-                      with Sys_error(msg) -> E.error msg     in
-    let finally ()  = close_in fd                            in
-    let lexbuf      = Lexing.from_channel fd                 in
-    let map         = Srcmap.empty                           in
-    let scanner     = Scan.scan map                          in
-    let _           = Srcmap.sync map 0 (file,1,1)           in
-    let pp ()       = let ast = Parse.program scanner lexbuf in
-                         (E.Ok (Astpp.ppToFile stdout width ast))
-        in try pp () with
-            | Parsing.Parse_error ->
-              ( finally()
-              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) "parse error"
-              ; E.Error
-              )
-            | E.ErrorExn msg ->
-              ( finally()
-              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) msg
-              ; E.Error
-              )
-            | e  ->
-              ( finally()
-              ; raise e
-              )
 @
  
 The [[main]] function gets the command line arguments and tries to
@@ -229,9 +180,9 @@ let main () =
     let dispatch    = function
         | Cmdline.Help          -> usage this ; E.Ok ()
         | Cmdline.Version	-> version () ; E.Ok ()
-        | Cmdline.Lex(file)     -> lex file   ; E.Ok ()
+        | Cmdline.Lex(file)     -> Scan.lex file 
         | Cmdline.Asdl(file)    -> asdl file 
-        | Cmdline.Pp(file,width)-> pp file width
+        | Cmdline.Pp(file,width)-> Astpp.pp file width
         | Cmdline.Check(file)   -> Check.check file
     in
         match E.catch E.errorPrt dispatch cmd with

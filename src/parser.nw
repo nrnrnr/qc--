@@ -28,6 +28,7 @@ sync point for the following character into the source map.
 <<scan.mll>>=
 {
     module P = Parse    (* tokens are defined here *)
+    module E = Error
 
     let nl lexbuf map =
         let next = (Lexing.lexeme_start lexbuf) + 1     in
@@ -663,9 +664,9 @@ and line = parse
 
 In case of an parse error the problem may be actually caused by the
 scanner.  For debugging we define a function [[tok2str]] that turns a
-token (as defined in [[parse.mli]]) into a string.  This is used in
-the [[Main]] module to define a function that reports the stream of
-all tokens for a file together with their positions.
+token (as defined in [[parse.mli]]) into a string.  This is used below
+to define a function that reports the stream of all tokens for a file
+together with their positions.
 
 <<>>=
     let tok2str = function
@@ -753,9 +754,38 @@ all tokens for a file together with their positions.
     | P.FLT(f,Some bits)  -> "FLT(" ^ f  ^":"^ string_of_int bits ^ ")"    
     | P.CHAR(c,Some bits) -> "CHAR(" ^ c ^":"^ string_of_int bits ^ ")"    
     | P.BITSn(i)          -> "BITSn(" ^        string_of_int i    ^ ")"
-    
-}
+@
 
+The following function [[lex]] takes a file name, scans the
+corresponding file and writes all tokens to standard output. It
+implements the [[-lex]] command line flag and is called by the
+[[Main]] module. In case of success, the function returns
+[[Error.Ok()]] and [[Error.Error]] otherwise.
+
+<<>>=
+let lex file =
+    let fd          = try open_in file
+                      with Sys_error(msg) -> E.error msg    in
+    let finally ()  = close_in fd                           in
+    let lexbuf      = Lexing.from_channel fd                in
+    let map         = Srcmap.empty                          in
+    let scanner     = scan map                              in
+    let rec loop lb =
+        match scanner lb with
+            | Parse.EOF -> ()
+            | tok       ->
+                let (file,line,col) = location lb map       in
+                let tok             = tok2str tok           in
+                    ( Printf.printf "%-16s %3d %2d %s\n" file line col tok
+                    ; loop lb
+                    )
+    in
+        ( Srcmap.sync map 0 (file,1,1)
+        ; loop lexbuf
+        ; finally ()
+        ; Error.Ok()
+        )
+} (* end of epilog *)
 @
 
 

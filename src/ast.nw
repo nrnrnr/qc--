@@ -204,12 +204,17 @@ module.
 
 The interface provides a function [[ppToFile]] to print a program in
 abstract syntax to an open file.  The second parameter controls the
-line width the output is formatted for.
+line width the output is formatted for. The function [[pp]] takes a
+file name as argument and pretty prints the file to standard output.
+In case [[pp]] is successful it returns [[Error.Ok()]], and
+[[Error.Error]] otherwise.
 
 <<astpp.mli>>=
 val ppToFile   : out_channel -> int -> Ast.program -> unit
+val pp         : string -> int -> unit Error.error
+@ 
 
-@ For error reporting it is useful to obtain pretty printed fragments
+For error reporting it is useful to obtain pretty printed fragments
 of a program.  The following list of functions provides pretty
 printing for important non terminals in a program.  Each function
 returns a [[Pp.doc]] value that can be turned into a [[string]] with
@@ -232,6 +237,7 @@ representation is than written to an open file.
 <<astpp.ml>>=
 module A = Ast
 module P = Pp
+module E = Error
 
 let (^^)   = P.(^^)
 let (^/)   = P.(^/)
@@ -778,4 +784,37 @@ let program ds = P.vgrp begin
                   end
                                             
 let ppToFile fd width prog = Pp.ppToFile fd width (program prog)
+@
+
+The function [[pp]] scans, parses, and pretty prints a file to
+standard output.  The second argument controls the the line width the
+output is formatted for.  This function implements the [[-pp]] flag of
+the command line and is called from the [[Main]] module. 
+
+<<>>=
+let pp file width =
+    let fd          = try open_in file
+                      with Sys_error(msg) -> E.error msg     in
+    let finally ()  = close_in fd                            in
+    let lexbuf      = Lexing.from_channel fd                 in
+    let map         = Srcmap.empty                           in
+    let scanner     = Scan.scan map                          in
+    let _           = Srcmap.sync map 0 (file,1,1)           in
+    let pp ()       = let ast = Parse.program scanner lexbuf in
+                         (E.Ok (ppToFile stdout width ast))
+        in try pp () with
+            | Parsing.Parse_error ->
+              ( finally()
+              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) "parse error"
+              ; E.Error
+              )
+            | E.ErrorExn msg ->
+              ( finally()
+              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) msg
+              ; E.Error
+              )
+            | e  ->
+              ( finally()
+              ; raise e
+              )
 @
