@@ -24,11 +24,19 @@ scheme of multiple cells is associated with the [[space]], but not
 included in a [[t]] value.  They can, however, obtained from the
 [[Target.t]] description of the target the register belongs to.
 
+We also define a type [[Register.x]], which is a sum type that may be
+either a register or a slice of a register.
+This type is useful for performing accurate liveness analysis at the
+slice level.
+
 We cannot refer to types in module \module{rtl} because this would
 create a cyclic dependency,
 <<exported types>>=
 type width = int
-type t = char * int * width       (* Rtl.space, index, Rtl.width *)
+type reg = char * int * width (* Rtl.space, index, Rtl.width *)
+type t = reg
+type x = Reg   of t
+       | Slice of width * int * t
 @
 We provide an extended set type.
 <<exported types>>=
@@ -40,8 +48,19 @@ end
 @
 <<register.mli>>=
 <<exported types>>
-module Set: SETX  with type elt = t
-module Map: Map.S with type key = t
+module SetX: SETX  with type elt = x
+module MapX: Map.S with type key = x
+module Set:  SETX  with type elt = t
+module Map:  Map.S with type key = t
+@
+Sometimes it is useful to consider only registers; we can promote a type [[x]] to a
+type [[t]] by returning the register or the register from which we are taking a slice,
+as appropriate.
+We can also convert between different types of sets.
+<<register.mli>>=
+val promote_x     : x -> t
+val rset_to_rxset : Set.t  -> SetX.t
+val promote_rxset : SetX.t -> Set.t
 @
 Registers are exported to Lua as a new \emph{userdata} type.
 <<register.mli>>=
@@ -56,10 +75,24 @@ end
 <<exported types>>
 
 module Compare = struct
-    <<exported types>>
+    type t = reg 
+    let compare = compare
+end
+module CompareX = struct
+    type t = x
     let compare = compare
 end
 <<register.ml>>=
+module SetX = struct
+  module S = Set.Make(CompareX)
+  include S
+  let of_list l = List.fold_right add l empty
+  let to_string s =
+    let elt = function | Reg   (s, i, w) -> Printf.sprintf "%c%d" s i
+                       | Slice (w, i, (s, i' ,_)) ->
+											    Printf.sprintf "Slice(%d,%d,%c%d)" w i s i' in
+    String.concat ", " (List.map elt (elements s))
+end
 module Set = struct
   module S = Set.Make(Compare)
   include S
@@ -69,7 +102,15 @@ module Set = struct
     String.concat ", " (List.map elt (elements s))
 end
 <<register.ml>>=
-module Map = Map.Make(Compare)
+module MapX = Map.Make(CompareX)
+module Map  = Map.Make(Compare)
+@
+<<register.ml>>=
+let promote_x = function | Reg r | Slice (_, _, r) -> r
+let rset_to_rxset set = Set.fold (fun r rst -> SetX.add (Reg r) rst) set SetX.empty
+let promote_rxset set =
+  SetX.fold (fun r rst -> match r with | Reg r | Slice (_,_,r) -> Set.add r rst)
+            set Set.empty
 @
 The [[RT]] module creates an embedding/projection pair for registers.
 <<register.ml>>=
