@@ -121,11 +121,12 @@ let lex file =
     let rec loop lb = 
         match Scan.token lb with
             | Parse.EOF -> ()
-            | tok       -> let (file,line,col) = Scan.pos lb      in
-                           let tok             = Scan.tok2str tok in
-                           ( Printf.printf "%3d,%2d %s\n" line col tok 
-                           ; loop lb
-                           )
+            | tok       -> 
+                let (file,line,col) = Scan.location lb in
+                let tok             = Scan.tok2str tok in
+                    ( Printf.printf "%-16s %3d %2d %s\n" file line col tok 
+                    ; loop lb
+                    )
     in
         ( Scan.init file
         ; loop lexbuf
@@ -149,7 +150,7 @@ let parse file =
         with
             | Parsing.Parse_error | Error(_) ->
               ( finally()
-              ; let (file,line,col) = Scan.pos lexbuf in
+              ; let (file,line,col) = Scan.location lexbuf in
                     error (Printf.sprintf "%3d,%2d parse error" line col)
               )
             | e ->  ( finally()
@@ -168,7 +169,7 @@ let pp file width =
         with
             | Parsing.Parse_error | Error(_) ->
               ( finally()
-              ; let (file,line,col) = Scan.pos lexbuf in
+              ; let (file,line,col) = Scan.location lexbuf in
                     error (Printf.sprintf "%3d,%2d parse error" line col)
               )
             | e ->  ( finally()

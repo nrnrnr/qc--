@@ -81,9 +81,10 @@ type location       = string    (* file   *)
 
 type srcmap
 
-val create :        location -> srcmap
+val empty :         srcmap
 val sync :          srcmap -> position -> location -> unit
-val location :      position -> srcmap -> location
+val nl :            srcmap -> position -> unit
+val location :      srcmap -> position -> location
 val dump:           srcmap -> unit
 @
 
@@ -145,19 +146,12 @@ In \ocaml every array cell must be initialized upon creation. We use
 let size        =  2
 let undefined   =  (0, ("undefined", -1, -1))    
 
-@ To enforce that the first position is a sync point we ask for a
-location when creating a [[srcmap]] and sync it with position 0.
-
 <<srcmap.ml>>= 
-let create position =
-    let map = { points  = Array.create size undefined 
-              ; top     = 1
-              ; files   = Hashtbl.create 17
-              }    
-    in
-        ( map.points.(0) <- (0, position)
-        ; map
-        )
+let empty =
+    { points  = Array.create size undefined 
+    ; top     = 0
+    ; files   = Hashtbl.create 17
+    }    
 
 @ To prevent that the array fills up [[alloc]] makes sure there is at
 least space for the next sync point.  In case the array is filled it
@@ -191,10 +185,22 @@ let sync srcmap position (file,line,col) =
     in
     let location' = (file', line, col) in
     let top   = srcmap.top   in
-        ( assert ((fst srcmap.points.(top-1) < position) && (position > 0))
+        ( assert ((position = 0) || (fst srcmap.points.(top-1) < position))
         ; srcmap.points.(top) <- (position,location')
         ; srcmap.top <- srcmap.top + 1
         )
+        
+@ Entering a sync point for a new line is so common that it deserves a
+function. The sync point is actually at the position following the new
+line because we know that this will be at the beginning of the next
+line; [[position]] must point to this first character of the new line.
+The new line is in the same file as the last sync point.
+
+<<srcmap.ml>>=
+
+let nl srcmap position = 
+    let (_,(file, line, _)) = srcmap.points.(srcmap.top-1) in
+        sync srcmap position (file, line+1, 1)
         
 @ Function [[cmp]] compares a [[position]] with a [[(position,location)]]
 pair; the [[position]] is the one we like to find in the array.
@@ -204,8 +210,9 @@ let cmp x (y,_) = compare x y
 
 @ We want to find the element in the array with the position we are
 looking for, or, if it is not there, the element to the left of it.
-Since the array is not empty this always exists. Only the first
-[[length]] entries are searched in the array.
+We expect that the arry si not empty when it is used and secure this
+by an assertion.  Only the first [[length]] entries are searched in
+the array.
 
 <<srcmap.ml>>=
 
@@ -224,7 +231,9 @@ let search x array length cmp =
                 else
                     loop (pivot+1) right
     in
-        loop 0 (length-1)
+        ( assert (length > 0)
+        ; loop 0 (length-1)
+        )
 
 @ To calculate the location of a position we have to find the sync
 point to its left. We binary search this point in the map which gives
@@ -233,12 +242,12 @@ point: we simply have to add the missing columns to go there.
 
 <<srcmap.ml>>=
 
-let location position map =
+let location map position =
     let pos,(file,line,col) = search position map.points map.top cmp in
-    (file,line,col + pos - position)
+    (file,line,position - pos + col)
 
 
-@ To aid debugging we provide a function [[sump]] to write the
+@ To aid debugging we provide a function [[dump]] to write the
 contents of a [[srcmap]] to stdout.
 
 <<srcmap.ml>>=

@@ -20,61 +20,34 @@ The scanner for lexical anaylis is generated from a specificaton for
 @ The generated scanner keeps track of its current position in its
 input stream by counting the bytes it consumes.  In order to maintain
 the more useful information of the current line and column in the
-input we maintain some state [[position]] of type [[position]]:
+input we maintain some state in a source map which maps input stream
+positions to a file name, line number, column number triple.  The
+source map is held as a value inside the scanner which makes it
+non-reentrant. 
 
-\begin{itemize}
-\item [[file]]  is the name of the current input file.
-\item [[line]]  is the current line number in [[file]] we are in.
-\item [[start]] is the position of the first character in the current line
-                in the input stream.  
-\item [[tab]]   is an offset in order to keep track of the current
-                column in the presence of tab characters.
-\end{itemize}
-
-There is one value [[position]] held in the [[Scan]] module which
-makes it non-reentrant. It is initialized by [[init]] and
-automatically during the initialization of the module.
 
 <<scan.mll>>=
-    type position = { mutable file:      string
-                    ; mutable start:     int
-                    ; mutable line:      int
-                    ; mutable tab:       int
-                    }
 
-    let position = { file  = "undefined"
-                   ; start = 0
-                   ; line  = 1
-                   ; tab   = 0
-                   }
+    let map = Srcmap.empty 
+
+@ The first action of the scanner is to place a sync point into the
+source map.  This guarantees that every position in the input can be
+maped to a location.  The fist character is always in line 1 and
+column 1 in [[file]].
+
+<<scan.mll>>=
 
     let init file =
-        ( position.file  <- file
-        ; position.start <- 0
-        ; position.line  <- 1
-        ; position.tab   <- 0
-        )
+        Srcmap.sync map 0 (file, 1, 1)
 
-@ Whenever the scanner encounters a newline character it updates [[position]]
-by calling [[nl]]. The position of the first character of the next line
-(the first after the newline) is remembered in [[start]].
+@ Whenever the scanner encounters a newline character it places a new
+sync point for the following character into the source map.
 
 <<scan.mll>>= 
 
     let nl lexbuf =
-        ( position.start <- (Lexing.lexeme_start lexbuf) + 1 
-        ; position.tab   <- 0
-        ; position.line  <- position.line + 1
-        )
-
-@ The actual column the scanner is looking is basically the current
-position in the input stream minus everything before the actual line.
-Tab characters advance the cursor more characters than they are long.
-This is honored by adding the [[tab]] value to the value obtained so far.
-
-<<scan.mll>>=
-    let column lexbuf =
-        Lexing.lexeme_start lexbuf + position.tab - position.start 
+        let next = (Lexing.lexeme_start lexbuf) + 1     in
+            Srcmap.nl map next
 
 @ The tab character is one byte long, but moves the cursor additional
 $x$ positions to the right.  The number $x$ of virtual spaces depends
@@ -83,24 +56,22 @@ on the column $c$ of the tab:
             $$x = 7 - (c~\textrm{mod}~8)$$ 
 
 Whenever the scanner encounters a tab character it calls the [[tab]]
-function to update the [[position.tab]] accordingly.  The first column
-is by definition 1 and not zero; this is accounted by the [[pos]]
-function, which returns the actual position. 
+function to place a sync point into the source map. We currently
+ignore tabs by not placing a sync point.
 
 <<scan.mll>>=
-    let tab lexbuf =
-        let c  = column lexbuf      in
-        ( position.tab <- position.tab + 7 - (c mod 8)
-        )
+    let tab lexbuf = ()
         
-    let pos lexbuf =
-        ( position.file
-        , position.line
-        , 1 + column lexbuf  
-        )
+@ The current location can be obtained by passing the current position
+to [[Srcmap.location]]:
+
+<<scan.mll>>= 
+
+    let location lexbuf =
+        Srcmap.location map (Lexing.lexeme_start lexbuf)
      
     let lexerror lexbuf msg = 
-        let (file, line, col) = pos lexbuf      in
+        let (file, line, col) = location lexbuf      in
         let m = Printf.sprintf "File %s, line %d, column %d: %s"
                 file line col msg
         in 
@@ -563,31 +534,31 @@ all tokens for a file together with their positions.
 
     | LINE              -> "LINE"
 
-    | AMPERSAND(s)      -> "AMPERSAND (" ^ s ^ ")"
-    | BAR(s)            -> "BAR       (" ^ s ^ ")"
-    | CARET(s)          -> "CARET     (" ^ s ^ ")"
-    | EEQ(s)            -> "EEQ       (" ^ s ^ ")"
-    | GEQ(s)            -> "GEQ       (" ^ s ^ ")"
-    | GGREATER(s)       -> "GGREATER  (" ^ s ^ ")"
-    | GT(s)             -> "GT        (" ^ s ^ ")"
-    | LEQ(s)            -> "LEQ       (" ^ s ^ ")"
-    | LLESS(s)          -> "LLESS     (" ^ s ^ ")"
-    | LT(s)             -> "LT        (" ^ s ^ ")"
-    | MINUS(s)          -> "MINUS     (" ^ s ^ ")"
-    | NEQ(s)            -> "NEQ       (" ^ s ^ ")"
-    | PERCENT(s)        -> "PERCENT   (" ^ s ^ ")"
-    | PLUS(s)           -> "PLUS      (" ^ s ^ ")"
-    | SLASH(s)          -> "SLASH     (" ^ s ^ ")"
-    | STAR(s)           -> "STAR      (" ^ s ^ ")"
-    | TILDE(s)          -> "TILDE     (" ^ s ^ ")"
+    | AMPERSAND(s)      -> "AMPERSAND(" ^ s ^ ")"
+    | BAR(s)            -> "BAR(" ^       s ^ ")"
+    | CARET(s)          -> "CARET(" ^     s ^ ")"
+    | EEQ(s)            -> "EEQ(" ^       s ^ ")"
+    | GEQ(s)            -> "GEQ(" ^       s ^ ")"
+    | GGREATER(s)       -> "GGREATER(" ^  s ^ ")"
+    | GT(s)             -> "GT(" ^        s ^ ")"
+    | LEQ(s)            -> "LEQ(" ^       s ^ ")"
+    | LLESS(s)          -> "LLESS(" ^     s ^ ")"
+    | LT(s)             -> "LT(" ^        s ^ ")"
+    | MINUS(s)          -> "MINUS(" ^     s ^ ")"
+    | NEQ(s)            -> "NEQ(" ^       s ^ ")"
+    | PERCENT(s)        -> "PERCENT(" ^   s ^ ")"
+    | PLUS(s)           -> "PLUS(" ^      s ^ ")"
+    | SLASH(s)          -> "SLASH(" ^     s ^ ")"
+    | STAR(s)           -> "STAR(" ^      s ^ ")"
+    | TILDE(s)          -> "TILDE(" ^     s ^ ")"
     
-    | ID(s)             -> "ID      (" ^ s               ^ ")"
-    | STR(s)            -> "STR     (" ^ s               ^ ")"
-    | INT(i)            -> "INT     (" ^ string_of_int i ^ ")"
-    | FLT(f)            -> "FLT     (" ^ f               ^ ")"
-    | BITSn(i)          -> "BITSn   (" ^ string_of_int i ^ ")"
-    | FLOATn(i)         -> "FLOATSn (" ^ string_of_int i ^ ")"
-    | CHAR(c)           -> "CHAR    (" ^ c               ^ ")"
+    | ID(s)             -> "ID(" ^ s                     ^ ")"
+    | STR(s)            -> "STR(" ^ s                    ^ ")"
+    | INT(i)            -> "INT(" ^ string_of_int i      ^ ")"
+    | FLT(f)            -> "FLT(" ^ f                    ^ ")"
+    | BITSn(i)          -> "BITSn(" ^ string_of_int i    ^ ")"
+    | FLOATn(i)         -> "FLOATSn(" ^ string_of_int i  ^ ")"
+    | CHAR(c)           -> "CHAR(" ^ c                   ^ ")"
     
 }
 
