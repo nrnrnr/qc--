@@ -1158,16 +1158,12 @@ hardware register, the expander will assume the obligation of
 extending it if needed.
 <<helpers>>=
 let is_hardware_register proc loc =
-  let rec bare_hardware = function
-    | RP.Reg _ -> true
-    | RP.Slice (_, _, l) -> bare_hardware l
-    | _ -> false in
   match loc with
   | RP.Global (_, i, w) ->
       (match Dn.exp (proc.Proc.global_map.(i).Automaton.fetch w) with
-      | RP.Fetch (l, _) -> bare_hardware l
+      | RP.Fetch (l, _) -> RU.is_hardware l
       | _ -> false)
-  | _ -> bare_hardware loc
+  | _ -> RU.is_hardware loc
 @ 
 <<widen.ml>>=
 let needs_widening t r =

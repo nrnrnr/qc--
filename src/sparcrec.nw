@@ -95,23 +95,25 @@ one    : Bits(bits)   [{: guard (Bits.eq bits (Bits.S.of_int 1 32)) :}] {:():}
 \paragraph{Location Types}
 <<rules>>=
 rreg   : Fetch(rregl, w) {: rregl :}
-rregl  : Reg('r', n:int, w:int) {: idiomatic_reg_name n :}
+rregl  : Reg('r', n:int) {: idiomatic_reg_name n :}
 
 freg   : Fetch(fregl, w) {: fregl :}
-fregl  : Reg('f', n:int, w:int) {: sprintf "%%f%i" n :}
+fregl  : Reg('f', n:int) {: sprintf "%%f%i" n :}
 
-xreg   : Fetch(xregl, w) {: xregl :}
-xregl  : Reg('x', n:int, w:int)
-    {: (sprintf "%%f%i" ((n*2)+8), sprintf "%%f%i" ((n*2)+9)) :}
+dreg   : Fetch(dregl, w) {: dregl :}
+dregl  : RegPair('f', n:int) {: sprintf "%%f%i" n :}
+
+dregnum   : Fetch(dregnuml, w) {: dregnuml :}
+dregnuml  : RegPair('f', n:int) {: n :}
 
 -- this is stupid, but we don't know how to deal with
 -- changing register windows at this point, so this allows
 -- us to do an ugly hack.
-result_reg   : Fetch(Reg('i', n:int, w:int), w) {: sprintf "%%o%i" n :}
-result_regl  : Reg('i', n:int, w:int) {: sprintf "%%i%i" n :}
+result_reg   : Fetch(Reg('i', n:int), w) {: sprintf "%%o%i" n :}
+result_regl  : Reg('i', n:int) {: sprintf "%%i%i" n :}
 
-arg_reg   : Fetch(Reg('o', n:int, w:int), w) {: sprintf "%%i%i" n :}
-arg_regl  : Reg('o', n:int, w:int) {: sprintf "%%o%i" n :}
+arg_reg   : Fetch(Reg('o', n:int), w) {: sprintf "%%i%i" n :}
+arg_regl  : Reg('o', n:int) {: sprintf "%%o%i" n :}
 
 regl : rregl {: rregl :}
 regl : result_regl {: result_regl :}
@@ -132,13 +134,13 @@ target : lconst {: lconst :}
 
 \paragraph{Special Locations}
 <<rules>>=
-pcl:  Reg('c',  0, w:int) {: () :}
-npcl: Reg('c',  1, w:int) {: () :}
-ccl:  Reg('c',  2, w:int) {: () :}
-spl:  Reg('r', 14, w:int) {: () :}
-fpl:  Reg('r', 30, w:int) {: () :}
-ral:  Reg('r', 31, w:int) {: () :}
-cwpl: Reg('k',  0, w:int) {: () :}
+pcl:  Reg('c',  0) {: () :}
+npcl: Reg('c',  1) {: () :}
+ccl:  Reg('c',  2) {: () :}
+spl:  Reg('r', 14) {: () :}
+fpl:  Reg('r', 30) {: () :}
+ral:  Reg('r', 31) {: () :}
+cwpl: Reg('k',  0) {: () :}
 
 pc:  Fetch(pcl,  w) {: () :}
 cc:  Fetch(ccl,  w) {: () :}
@@ -152,22 +154,20 @@ cwp: Fetch(cwpl, w) {: () :}
 inst : Store(dst:fregl, Ftoi(src:freg), w)
   {: sprintf "fstoi %s, %s" src dst :}
 
--- not sure about this either: fdtoi will it try to
--- store into a register pair?
-inst : Store(dst:fregl, Ftoi(src:xreg), w)
-  {: sprintf "! dubious ftoi\n\tfdtoi %s, %s" (fst src) dst :}
+inst : Store(dst:fregl, Ftoi(src:dreg), w)
+  {: sprintf "fdtoi %s, %s" src dst :}
 
 inst : Store(dst:fregl, Itof(src:freg), w)
   {: sprintf "fitos %s, %s" src dst :}
-inst : Store(dst:xregl, Itof(src:freg), w)
-  {: sprintf "fitod %s, %s" src (fst dst) :}
+inst : Store(dst:dregl, Itof(src:freg), w)
+  {: sprintf "fitod %s, %s" src dst :}
 
 inst : Store(dst:fregl, Ftof(src:freg), w)
   {: sprintf "fmovs %s, %s" src dst :}
-inst : Store(dst:xregl, Ftof(src:freg), w)
-  {: sprintf "fstod %s, %s" src (fst dst) :}
-inst : Store(dst:fregl, Ftof(src:xreg), w)
-  {: sprintf "fdtos %s, %s" (fst src) dst :}
+inst : Store(dst:dregl, Ftof(src:freg), w)
+  {: sprintf "fstod %s, %s" src dst :}
+inst : Store(dst:fregl, Ftof(src:dreg), w)
+  {: sprintf "fdtos %s, %s" src dst :}
 
 -- load symbol
 inst : Store(dst:regl, src:lconst, w)
@@ -197,8 +197,8 @@ inst : Store(dst:regl, Sxhalf(src:mem), w)
 
 inst : Store(dst:fregl, src:mem, w)
   {: sprintf "ld %s, %s" src dst :}
-inst : Store(dst:xregl, src:mem, w)
-  {: sprintf "ldd %s, %s" src (fst dst) :}
+inst : Store(dst:dregl, src:mem, w)
+  {: sprintf "ldd %s, %s" src dst :}
 
 -- memory store
 inst : Store(dst:meml, src:reg, w)
@@ -211,8 +211,8 @@ inst : Store(dst:meml, Lohalf(src:reg), w)
 
 inst : Store(dst:meml, src:freg, w)
   {: sprintf "st %s, %s" src dst :}
-inst : Store(dst:meml, src:xreg, w)
-  {: sprintf "std %s, %s" (fst src) dst :}
+inst : Store(dst:meml, src:dreg, w)
+  {: sprintf "std %s, %s" src dst :}
 
 -- memory store to offset
 -- note that y must be a 13-bit constant...probably need a different
@@ -221,8 +221,8 @@ inst : Store(Mem(Add(x:reg, y:const),mw:w), src:reg, w)
   {: sprintf "st %s, [%s+%s]" src x y :}
 inst : Store(Mem(Add(x:reg, y:const),mw:w), src:freg, w)
   {: sprintf "st %s, [%s+%s]" src x y :}
-inst : Store(Mem(Add(x:reg, y:const),mw:w), src:xreg, w)
-  {: sprintf "std %s, [%s+%s]" (fst src) x y :}
+inst : Store(Mem(Add(x:reg, y:const),mw:w), src:dreg, w)
+  {: sprintf "std %s, [%s+%s]" src x y :}
 
 -- memory load from offset
 inst : Store(dst:regl, Fetch(Mem(Add(x:reg, y:const), mw:w), w), w)
@@ -230,8 +230,8 @@ inst : Store(dst:regl, Fetch(Mem(Add(x:reg, y:const), mw:w), w), w)
 inst : Store(dst:fregl, Fetch(Mem(Add(x:reg, y:const), mw:w), w), w)
   {: sprintf "ld [%s+%s], %s" x y dst :}
 
-inst : Store(dst:xregl, Fetch(Mem(Add(x:reg, y:const), mw:w), w), w)
-  {: sprintf "ldd [%s+%s], %s" x y (fst dst) :}
+inst : Store(dst:dregl, Fetch(Mem(Add(x:reg, y:const), mw:w), w), w)
+  {: sprintf "ldd [%s+%s], %s" x y dst :}
 @ 
 
 \paragraph{Arithmetic}
@@ -301,35 +301,39 @@ inst : Store(dst:regl, Shra(x:reg, y:reg_or_const), w)
 -- fdiv
 inst : Store(dst:fregl, Fdiv(x:freg, y:freg), w)
   {: sprintf "fdivs %s, %s, %s" x y dst :}
-inst : Store(dst:xregl, Fdiv(x:xreg, y:xreg), w)
-  {: sprintf "fdivd %s, %s, %s" (fst x) (fst y) (fst dst) :}
+inst : Store(dst:dregl, Fdiv(x:dreg, y:dreg), w)
+  {: sprintf "fdivd %s, %s, %s" x y dst :}
 
 -- fmul
 inst : Store(dst:fregl, Fmul(x:freg, y:freg), w)
   {: sprintf "fmuls %s, %s, %s" x y dst :}
-inst : Store(dst:xregl, Fmul(x:xreg, y:xreg), w)
-  {: sprintf "fmuld %s, %s, %s" (fst x) (fst y) (fst dst) :}
+inst : Store(dst:dregl, Fmul(x:dreg, y:dreg), w)
+  {: sprintf "fmuld %s, %s, %s" x y dst :}
 
 -- fadd
 inst : Store(dst:fregl, Fadd(x:freg, y:freg), w)
   {: sprintf "fadds %s, %s, %s" x y dst :}
-inst : Store(dst:xregl, Fadd(x:xreg, y:xreg), w)
-  {: sprintf "faddd %s, %s, %s" (fst x) (fst y) (fst dst) :}
+inst : Store(dst:dregl, Fadd(x:dreg, y:dreg), w)
+  {: sprintf "faddd %s, %s, %s" x y dst :}
 
 -- fsub
 inst : Store(dst:fregl, Fsub(x:freg, y:freg), w)
   {: sprintf "fsubs %s, %s, %s" x y dst :}
-inst : Store(dst:xregl, Fsub(x:xreg, y:xreg), w)
-  {: sprintf "fsubd %s, %s, %s" (fst x) (fst y) (fst dst) :}
+inst : Store(dst:dregl, Fsub(x:dreg, y:dreg), w)
+  {: sprintf "fsubd %s, %s, %s" x y dst :}
 
 -- fneg
 inst : Store(dst:fregl, Fneg(x:freg), w)
   {: sprintf "fnegs %s, %s" x dst :}
-
-     -- gcc thinks this is okay...
-inst : Store(dst:xregl, Fneg(x:xreg), w)
-  {: sprintf "fnegs %s, %s\n\tfmovs %s, %s" (fst x) (fst dst)
-                                            (snd x) (snd dst) :}
+@ 
+To negate a double-precision floating-point value, we negate the most
+significant word, which contains the sign bit.
+The least significant word is simply copied.
+Strictly speaking, this ought to be handled in the postexpander.
+That would be good, because then we could get rid of [[dregnuml]].
+<<rules>>=
+inst : Store(dst:dregnuml, Fneg(x:dregnum), w)
+  {: sprintf "fnegs %%f%d, %%f%d\n\tfmovs %%f%d, %%f%d" x dst (x+1) (dst+1) :}
 @ 
 
 \paragraph{Control Flow}
@@ -372,8 +376,8 @@ inst: Store(ccl, Sparcsubcc(x:reg, y:reg_or_const), w)
    {: sprintf "subcc %s, %s, %%g0" x y :}
 inst: Store(ccl, Sparcsubcc(x:freg, y:freg), w)
    {: sprintf "fcmps %s, %s\n\tnop" x y :}
-inst: Store(ccl, Sparcsubcc(x:xreg, y:xreg), w)
-   {: sprintf "fcmpd %s, %s\n\tnop" (fst x) (fst y) :}
+inst: Store(ccl, Sparcsubcc(x:dreg, y:dreg), w)
+   {: sprintf "fcmpd %s, %s\n\tnop" x y :}
 
 inst: Guarded(Sparceq(cc), Goto(target))
    {: sprintf "be %s\n\tnop" target :}
@@ -462,7 +466,7 @@ any : F2i(n:w, w, any) {: sprintf "F2i(%d, %d, %s)" n w any :}
 any : I2f(n:w, w, any) {: sprintf "I2f(%d, %d, %s)" n w any :}
 any : Lobits(any, w) {: "Lobits(" ^ any ^ ", " ^ string_of_int w ^ ")" :}
 any : Mem(any, w) {: "Mem(" ^any ^ ")" :}
-any : Reg  (char, n:int, w:int) {: sprintf "Reg(%s, %d)"   (Char.escaped char) n :}
+any : Reg  (char, n:int) {: sprintf "Reg(%s, %d)"   (Char.escaped char) n :}
 any : Store (dst:any, src:any, w)
  {: "Store(" ^ dst ^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
 any : Kill(any) {: "Kill(" ^ any ^ ")" :}
@@ -529,6 +533,7 @@ any : Goto(any) {: "Goto(" ^ any ^ ")" :}
 
 | RP.App(("i2f", [w;w']), [x; rm]) -> conItof (exp x)
 | RP.App(("f2i", [w;w']), [x; rm]) -> conFtoi (exp x)
+     (* MISSING ASSERTION: %f2i ALWAYS ROUNDS TO ZERO *)
 | RP.App(("f2f", [w;w']), [x; rm]) -> conFtof (exp x)
 
 | RP.App((("add"|"sub"|"mul"|"sx"|"zx"|"lobits"|"bitInsert"|
@@ -557,7 +562,9 @@ let rec exp = function
 <<code to follow the labeler>>=  
 and loc l = match l with
   | RP.Mem(('m', aff, _), w, e, ass) -> conMem (exp e) w
-  | RP.Reg((sp, _, _), i, w)         -> conReg sp i w 
+  | RP.Reg((sp, _, _), i, R.C 1)     -> conReg     sp i
+  | RP.Reg((sp, _, _), i, R.C 2)     -> conRegPair sp i
+  | RP.Reg _                  -> unimp "quad registers and other large beasts"
   | RP.Mem(_, _, _, _)        -> error "non-mem, non-reg cell"
   | RP.Var _ | RP.Global _    -> error "var found"
   | RP.Slice(w,i,l)           -> unimp "sparc: slice locations"

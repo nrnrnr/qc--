@@ -1578,23 +1578,11 @@ This fact is documented in the postexpander interface.
     if n <> n' then Impossible.impossible "ill-typed %zx(%lobits(...))";
     to_temp' room context (Dn.exp (Rewrite.zxlo n w (Up.exp x)))
 <<cases for sign extending or zero extending a narrow hardware register>>=
-| RP.App ((("sx"|"zx" as o), [n; w]), [RP.Fetch(r, _) as e]) when is_hardware r ->
-    let r = to_hardware r in
+| RP.App ((("sx"|"zx" as o), [n; w]), [RP.Fetch(r, _) as e]) when RU.is_hardware r ->
+    let r = RU.to_hardware r in
     let t = alloc icontext w in
     let fill = if o == "sx" then PX.HighS else PX.HighZ in
     t, Post.hwget ~dst:(fill,t) ~src:r 
-<<internal utilities for the generic expander>>=
-let rec is_hardware = function
-  | RP.Reg r -> true
-  | RP.Slice (w, lsb, r) -> is_hardware r
-  | _ -> false
-let rec to_hardware = function
-  | RP.Reg r -> Rg.Reg r
-  | RP.Slice (w, lsb, r) ->
-      (match to_hardware r with
-      | Rg.Reg r -> Rg.Slice (w, lsb, r)
-      | Rg.Slice (w', lsb', r) -> Rg.Slice(w', lsb+lsb', r))
-  | l -> impossf "to_hardware given non-harware location %s" (D.loc l)
 @ 
 To get a result of normal width, 
 we can see a weird value operator in two contexts: a weird result is

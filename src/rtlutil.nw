@@ -40,6 +40,13 @@ not readily available.
 val fetch : Rtl.loc -> Rtl.exp
 val store : Rtl.loc -> Rtl.exp -> Rtl.rtl
 @ 
+It's useful to check and see if a location is a hardware register.
+It is a checked run-time error to call [[to_hardware l]] unless
+[[is_hardware l]].
+<<rtlutil.mli>>=
+val is_hardware : Rtl.Private.loc -> bool
+val to_hardware : Rtl.Private.loc -> Register.x
+@ 
 % ------------------------------------------------------------------ 
 \subsection{Equality and comparison}
 % ------------------------------------------------------------------ 
@@ -343,7 +350,7 @@ module R   = Rtl
 module RP  = Rtl.Private
 module Up  = Rtl.Up
 module Dn  = Rtl.Dn
-module Re  = Register
+module Rg  = Register
 module RS  = Register.Set
 module RSX = Register.SetX
 
@@ -365,6 +372,7 @@ end
 let fetch l   = R.fetch l   (Width.loc l)
 let store l e = R.store l e (Width.loc l)
 
+<<rtlutil.ml>>=
 <<define common ReadWriteKill Higher Order Fns>>
 
 module ReadWrite = struct
@@ -398,14 +406,27 @@ end
 module Time = struct
     <<Time>>
 end    
-@
+@ 
+<<rtlutil.ml>>=
+let rec is_hardware = function
+  | RP.Reg r -> true
+  | RP.Slice (w, lsb, r) -> is_hardware r
+  | _ -> false
 
+let rec to_hardware = function
+  | RP.Reg r -> Rg.Reg r
+  | RP.Slice (w, lsb, r) ->
+      (match to_hardware r with
+      | Rg.Reg r -> Rg.Slice (w, lsb, r)
+      | Rg.Slice (w', lsb', r) -> Rg.Slice(w', lsb+lsb', r))
+  | l -> Printf.kprintf Impossible.impossible
+           "to_hardware given non-harware location %s" (ToString.location' l)
+@
 Register allocation may benefit from knowing whether an {\rtl} represents a
 move instruction. [[singleAssignment]] returns a destination and source
 register pair if the input {\rtl} consists of a single, unconditional
 assignment with any number of unconditional kills. If the {\rtl} has a
 different form, [[singleAssignment]] returns [[None]].
-
 <<rtlutil.ml>>=
 module RTLType = struct
     <<RTLType>>
@@ -468,9 +489,9 @@ let fold handle_reg handle_slice handle_mem ~read ~write ~kill r z =
      rtl z (Rtl.Dn.rtl r)
 
 let fold_regx ~read ~write ~kill r z =
-  fold (fun which z r -> which (Re.Reg r) z)
+  fold (fun which z r -> which (Rg.Reg r) z)
        (fun loc which z (w, i, l) -> match l with
-                        | RP.Reg r -> which (Re.Slice (w, i, r)) z
+                        | RP.Reg r -> which (Rg.Slice (w, i, r)) z
                         | _        -> loc which z l)
        (fun _ z _ -> z)
     ~read ~write ~kill r z
@@ -1285,8 +1306,8 @@ module Fold = struct
         | RP.Fetch (l, _) -> loc z l
         | RP.App (_, es') -> List.fold_left exp z es'
       and loc z = function
-        | RP.Reg   r                -> f (Re.Reg r) z
-        | RP.Slice (w, i, RP.Reg r) -> f (Re.Slice (w, i, r)) z
+        | RP.Reg   r                -> f (Rg.Reg r) z
+        | RP.Slice (w, i, RP.Reg r) -> f (Rg.Slice (w, i, r)) z
         | RP.Slice (_, _, l)        -> loc z l
         | _ -> z in
       loc z (Rtl.Dn.loc l)
