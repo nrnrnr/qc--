@@ -9,7 +9,7 @@ Cmm.global_area:
 .section .data
 .align 4
 Cmm_stack_growth:
-.long 0xffffffffffffffff
+.long 0xffffffff
 .section .data
 print_float:
 .byte 37
