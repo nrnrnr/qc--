@@ -25,16 +25,10 @@ val bits:   Rtl.exp -> Bits.bits    (* Error.ErrorExn, convenient function *)
 val bool:   Rtl.exp -> bool         (* Error.ErrorExn, convenient function *)
 @
 
-Futrue plans: this module exports the list of {\rtl} operators that can
-be evaluated at compile-time to Lua. Such an export is \emph{not} fully
-visible in the interface! The exported list allows to implement a
-command line option to inform the user. Since the user thinks in terms
-of {\PAL} operators, this still might not be the best solution. On the
-other hand, {\PAL} and {\rtl} operators are closely related and thus it
-might be possible to compute the {\PAL} operators from this list.
+We export the list of operators we can evaluate at compile time. 
 
 <<rtleval2.mli>>=
-module Lua : Lua.Lib.BARE   (* defines table Rtleval *)
+val compile_time_ops: string list
 @
 
 % ------------------------------------------------------------------ 
@@ -50,8 +44,8 @@ run-time.
 module RS = Reloc.Simple
 module R  = Rtl
 module RP = Rtl.Private
-module D  = Rtl.Dn (* Down *)
-module U  = Rtl.Up  (* Up   *)
+module D  = Rtl.Dn 
+module U  = Rtl.Up
 
 type reloc     = Bits.bits RS.relocatable
 let impossible = Impossible.impossible
@@ -81,18 +75,10 @@ let bits e = match Private.exp (D.exp e) with
 let bool e = match Private.exp (D.exp e) with
              | RP.Const(RP.Bool(b)) -> b
              | _                    -> Error.error "not a constant condition"
-@
 
-Interface to Lua. The sub-module below is linked into the Lua
-interpreter that is part of the compiler.
-
-<<rtleval2.ml>>=
-module Lua (C: Lua.Lib.CORE) = struct
-    module V = C.V
-    <<builtins>>
-    let init g = C.register_module "Rtleval" builtins g; Lua.Lib.StringList.empty
-end (*Lua*)       
-
+let compile_time_ops = 
+    [ "add"; "and"; "div"; "eq"; "mul"; "neg"; "ne"; "shl"; "shra";
+      "shrl"; " sub"; "sx"]
 @
 
 % ------------------------------------------------------------------ 
@@ -363,26 +349,4 @@ let xor w args  = default "xor" w args
 let zx w args   = default "zx" w args
 let bitExtract w args = default "bitExtract" w args
 @    
-
-% ------------------------------------------------------------------ 
-\subsection{Interface to Lua}
-% ------------------------------------------------------------------ 
-
-We export the list of {\rtl} operator names that we know how to evaluate
-at compile time.
-
-Should we export a list, or a function that returns a list? The latter
-would ensure that the list is conceptually read-only.
-
-<<builtins>>=
-let ( **-> ) = V.( **-> )
-
-let compile_time_ops = 
-    [ "add"; "and"; "div"; "eq"; "mul"; "neg"; "ne"; "shl"; "shra";
-      "shrl"; " sub"; "sx"]
-
-let builtins =
-    [ "compiletimeopr" , (V.list V.string).V.embed compile_time_ops
-    ]
-@
 
