@@ -4,7 +4,6 @@
 % ------------------------------------------------------------------ 
 
 <<rtldebug.mli>>=
-val rtl_to_string: Rtl.rtl -> string
 val typecheck:     Rtl.rtl -> unit      (* prints rtl to stdout, traps *)
 @
 
@@ -13,16 +12,9 @@ val typecheck:     Rtl.rtl -> unit      (* prints rtl to stdout, traps *)
 % ------------------------------------------------------------------ 
 
 <<rtldebug.ml>>=
-let rtl_to_string rtl =
-    let stmt = Rtl2ast.rtl  rtl in
-    let pp   = Astpp.stmt stmt              in
-        Pp.ppToString 80 pp
-@
-
-<<rtldebug.ml>>=
 module RP = Rtl.Private
 exception TypeCheck of string
-let fail rtl = raise (TypeCheck (rtl_to_string rtl))
+let fail rtl = raise (TypeCheck (Rtlutil.ToString.rtl rtl))
 
 let typecheck (r:Rtl.rtl) =
     let width n ty = match ty with

@@ -24,7 +24,9 @@
 
 This module provides functions to observe and transform {\rtl}s. 
 
+% ------------------------------------------------------------------ 
 \subsection{Width}
+% ------------------------------------------------------------------ 
 
 Locations and non-boolean expressions have a \emph{width} that can be
 observed.  It is a checked run-time error to pass a boolean expression
@@ -134,6 +136,41 @@ module RTLType: sig
 end
 @
 
+% ------------------------------------------------------------------ 
+\subsection{RTL AST Representation}
+% ------------------------------------------------------------------ 
+
+For debugging we like to make the intermediate code visible by
+translating it back to {\PAL} syntax.  Technically this means, that
+{\rtl}s are translated to the {\PAL} abstract syntax ({\AST}); for the
+{\AST} a pretty printer (in module \module{ast}) translates it back to
+{\small ASCII} codes. This module provides a translation from an {\rtl}
+to a {\PAL} statement.
+
+<<rtlutil.mli>>=
+module ToAST: sig
+    type verbosity =    Low | High             (* default is High   *)
+    val verbosity:      verbosity -> verbosity (* returns old value *)
+
+    val expr:           Rtl.exp  -> Ast.expr 
+    val rtl:            Rtl.rtl  -> Ast.stmt 
+end
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{RTL String Representation}
+% ------------------------------------------------------------------ 
+
+For debugging, we want to represent {\rtl}s as strings. The string
+representation is meant to be human-, but not necessarily
+machine-readable. 
+
+<<rtlutil.mli>>=
+module ToString: sig
+    val rtl: Rtl.rtl -> string
+end
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
@@ -156,6 +193,14 @@ end
 
 module Subst2 = struct
     <<Subst2>>
+end
+
+module ToAST = struct
+    <<ToAST>>
+end
+
+module ToString = struct
+    <<ToString>>
 end
 @
 
@@ -481,4 +526,116 @@ let singleAssignment rtl =
         match assign with
         | Some _ when allKills rst -> assign
         | _ -> None
+@
+% ------------------------------------------------------------------ 
+\subsection{Conversion to AST}
+% ------------------------------------------------------------------ 
+
+<<ToAST>>=
+module R = Rtl.Private
+module A = Ast
+module T = Types
+@
+
+<<ToAST>>=
+type verbosity = Low | High  (* default is High --- more accurate *)
+let the_verbosity = ref High
+let verbosity v =
+  let v' = !the_verbosity in
+  the_verbosity := v;
+  v'
+
+<<ToAST>>=
+let bits n             = A.BitsTy n
+
+let const = function
+    | R.Bool(_)      -> assert false    (* impossible *)
+    | R.Bits(b,w)    ->  A.Int((b,w)
+                              ,if !the_verbosity = High 
+                               then Some (bits w) 
+                               else None)
+                     
+    | R.Link(sym,w)  -> A.Fetch(A.Var(None, (sym#text)))
+    | R.Late(name,w) -> A.Fetch(A.Var(None, name)) (*XXX ok? *)
+@
+
+<<ToAST>>=
+let rec expr' = function
+    | R.Const c         -> const c
+    | R.Fetch(loc,_)    -> A.Fetch(location' loc)
+    | R.App((op,ww),ee) -> let actual e = (None, expr' e) in
+                           match ee with
+                           | [l; r] when op = "add" || op = "sub" ->
+                                  let op = if op = "add" then "+" else "-" in
+                                  A.BinOp(expr' l, op, expr' r)
+                           | _ -> A.PrimOp(op, List.map actual ee)
+@
+
+N.B. This code might possibly look up the location in a machine-dependent map
+in case it needs to the name of a hardware register variable.
+
+A translation of {\rtl} locations to {\PAL} is not semantic preserving
+because {\PAL} has no notion of spaces. The translation here turns a
+space into a (named) type, which is neither wrong nor right.
+
+<<ToAST>>=
+and location' = function 
+    | R.Cell (sp,agg,width,e,ass) ->
+     (* let space   =  Printf.sprintf "$%c" sp           in *)
+        let space   =  Printf.sprintf "$%c(%d)" sp width in   
+        let aligned = if ass = 1 then None else Some ass in 
+        A.Mem(A.AliasTy space,expr' e,aligned)
+    | R.Var (name,_,width)       -> A.Var(None,name)
+    | R.Slice _                  -> assert false 
+                                    (*should convert as special reg name*)
+
+let (@<<) f g  = fun x -> f (g x)
+let expr       = expr'     @<< Rtl.Convert.exp
+let location   = location' @<< Rtl.Convert.loc
+
+@
+
+A [[kill]] is translated into an assignment of [[%undef()]].
+
+<<ToAST>>=
+let rec effect guard = function
+    | R.Kill   loc       -> 
+        let width = Width.loc  (Rtl.Revert.loc loc)       in
+        let undef = R.App(("undef",[width]),[]) in
+            effect guard (R.Store(loc, undef, width))
+    | R.Store  (loc,e,w) ->
+            (location' loc,(guard, expr' e))
+
+let guard = function
+  | R.Const (R.Bool true) -> None
+  | g -> Some (expr' g)  
+
+let guarded (g, eff) = effect (guard g) eff
+
+let rtl' (R.Rtl gg) = 
+  match gg with
+  | [] -> A.EmptyStmt
+  | _ :: _ ->
+    let pairs    = List.map (guarded ) gg in
+    let lhs, rhs = List.split pairs             in
+        A.AssignStmt(lhs,rhs)
+let rtl = rtl' @<< Rtl.Convert.rtl
+@
+
+
+
+% ------------------------------------------------------------------ 
+\subsection{Conversion to String}
+% ------------------------------------------------------------------ 
+
+We convert a given {\rtl} into {\PAL} abstract syntax and then
+pretty-print it into a string. To avoid newlines in the string we pass
+[[max_int]] as the line-width to the pretty-printer. 
+
+
+<<ToString>>=
+let rtl r =
+    let stmt = ToAST.rtl r in
+    let pp   = Astpp.stmt stmt              in
+        Pp.ppToString max_int (* line width *) pp
 @

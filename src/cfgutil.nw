@@ -78,7 +78,7 @@ let subst cfg (f: Rtl.rtl -> Rtl.rtl) =
 <<cfgutil.ml>>=
 module Cfg = Cfg3
 let number_and_rtl node =
-  string_of_int (Cfg.number node) ^ ": " ^ Rtldebug.rtl_to_string (Cfg.rtl node)
+  string_of_int (Cfg.number node) ^ ": " ^ Rtlutil.ToString.rtl (Cfg.rtl node)
 
 let cfg2dot compress name cfg =
   let nodename node = Printf.sprintf "N\"%d\"" (Cfg.number node) in
@@ -92,14 +92,14 @@ let cfg2dot compress name cfg =
     let bwd = List.fold_left (add_edge edge_bwd) "" (Cfg.pred node) in
     fwd ^ bwd in
   let _ = Cfg.gm_enumerate cfg in
-  let oldv = Rtl2ast.verbosity Rtl2ast.Low in
+  let oldv = Rtlutil.ToAST.verbosity Rtlutil.ToAST.Low in
   let dotOpenGraph = "digraph " ^ name ^ " {\n" in
   let pagesize = "  size=\"8,10.5\"\n" in
   let compress = if compress then "  ratio=compress\n" else "" in
   let dotCloseGraph = "}\n" in
   let dotnodes = fold_bwd cfg (fun node rst -> dotnode node ^ "\n" ^ rst) "" in
   let dotedges = fold_bwd cfg (fun node rst -> edges_leaving node ^ rst) "" in
-  let _ = Rtl2ast.verbosity oldv in
+  let _ = Rtlutil.ToAST.verbosity oldv in
     dotOpenGraph ^ pagesize ^ compress ^ dotnodes ^ dotedges ^ dotCloseGraph
 @
 
