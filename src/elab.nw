@@ -234,11 +234,30 @@ requires to enter type declarations, constants, and other values.  The
 <<>>=
 module Env = struct
     <<module Env>>
+@
 
+The default [[target memsize]] is [[8]].  If the user has not
+specified a memsize we set it explicitly because the static semantic
+checks need it. 
+
+<<>>=
+    let setDefaults env =
+        let env = match F.findMemsize env with
+            | E.Ok(Some x) -> env
+            | E.Ok(None)   -> F.bindMemsize Srcmap.null 8 env
+            | E.Error      -> env   in
+        let env = match F.findEndianness env with
+            | E.Ok(Some x) -> env
+            | E.Ok(None)   -> E.error "target endianness specification missing"
+            | E.Error      -> E.error "target endianness specification inconsistent"
+        in
+            env
+<<>>=
     let global env program =
         let env = Typedefs.global              env program in
         let env = Consts.global                env program in
         let env = foldl (toplevel Srcmap.null) env program in
+        let env = setDefaults env                          in
             env
 
     let local env (_,_,ff,bb as proc) =
@@ -264,7 +283,6 @@ bindings.
 <<>>=
 let global env program =
     let env        = Env.global env program                 in
-    let env        = F.setDefaults env                      in
     let env        = Check.global  env program              in
         env
     
