@@ -1,22 +1,60 @@
+* Spilling hardware registers is not save: if [[spillee]] is a
+  hardware register, it is re-loaded into a new temporary that
+  substitutes the hardware register in nodes. However, the hardware
+  register might the there because a calling convention demands it.
+  --CL
 
-* A return statement has an optional pair of intergers (x,y) where 
-  x < y. If no pair is given, (y,y) is the default but y itself is
-  unknown. Thus, a default like (0,0) would be better.
+* The register allocator needs to know which hardware registers are available
+  for placement.  This might depend on the calling convention. 
+  However, the register allocator works on the level of a procedure
+  which might include calls using different calling conventions.
+
+* I'm not sure how Const should work. When are equations solved? --CL
+
+* We currently have the [[Const]] module to relate compile-time
+  constants.  However, it maintains a global set of equations despite
+  the fact that equations are procedure-local.  I'd like to discuss
+  the interface of [[Const]] first before providing an implementation
+  for Area.overlap.  --CL
+
+* think about the relationship between Rtl.link and the Const 
+
+* The implementation of Area needs the width of an Rtl.exp.
+  Implemented in Rtlutl, but was marked deprecated.
+
+* I don't know how to find the data-flow annotations/nodes for continuations.
+
+* The data-flow nodes in CFG3 do not work for return, jump, cutto
+  nodes because they don't have a successor to put a the data-flow
+  node before.  I still would like to add annotations directly into
+  call/return/jump/ cutto nodes. 
+
+* Since evaluation and type-checking of expressions are separated,
+  types in nested expressions are checked multiple times.  This
+  introduces a quadratic complexity.  The only way to avoid this, as
+  far as I can see, is a combined bottom-up evaluation and type
+  checking.  --CL
+    
+* Does the {\rtl} used for the return depend on $(x,y)$. I believe
+  so and this means the [[Target]] interface should be changed. --CL
+
+* Expcheck provides code to check the static semantics of an
+  expression and rtleval code to evaluate a constant.  However, elab
+  does not use this code for constants.  I do not remeber why except
+  that error messages are less precises when expcheck/rtleval are used.
+  --CL
+
+* Rtleval provides evaluation for constant RTL compile-time and
+  link-time expressions.  The implementation for link-time
+  expressions is missing. 
 
 * Value.Ops is making things a bit ugly when it comes to abstract RTL 
   operators.  Rethink it in light of the more abstract RTL interface.
   Some of the ugliness comes to light in the use of the Ast2ir.Expr.op function.
 
-* think about the relationship between Rtl.link and the Const 
 
-* look up IEE 754 floating-point codes and get rid of the worst unimps
+* look up IEEE 754 floating-point codes and get rid of the worst unimps
   in bitops.nw
-
-* Imports inside a procedure create a globally visible name. NR
-  recommended this in oder to make the mapping from C-- labels to
-  assembly names label simpler.  Now the mapping becomes scope
-  independent.
-
 
 * asdlGen:
 
@@ -40,4 +78,6 @@
   Fenv.Dirty) and ast2ir.nw needs a constant evaluation (against
   Fenv.Clean). The plan is, to use some IR technology for this which
   is not yet in place.
-   
+  
+  We now have rtleval to evaluate expressions and expcheck to check the
+  static semantics of expressions.  
