@@ -13,7 +13,7 @@ MANDIR =    ../man
 # high level targets
 # ------------------------------------------------------------------  
 
-all:V:          fp
+scripts:V:      fixpoint regr        
 
 fp:V:           fixpoint
                 for f in *.c--; do ./fixpoint $f; done
@@ -26,7 +26,6 @@ fp:V:           fixpoint
 NOWEAVE =       noweave
 NOTANGLE =      notangle
 CPIF =          cpif
-LATEX =         latex
 RERUN =         Rerun (LaTeX|to get cross-references right)
 
 LINE =          '# %L "%F"%N'
@@ -41,24 +40,13 @@ HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
 %.html:         %.nw
                 $NOWEAVE -delay -html -filter l2h $prereq > $target
 
-%.dvi:          %.tex
-                $LATEX "\\scrollmode \\input $stem.tex"
-                ltxcount=3
-                while egrep -s "$RERUN" $stem.log && [ $ltxcount -gt 0 ]
-                do
-                    $LATEX "\\scrollmode \\input $stem.tex"
-                    ltxcount=`expr $ltxcount - 1`
-                done
-
-%.ps:           %.dvi
-                dvips -Ppdf -o $target $prereq
-
-
 # ------------------------------------------------------------------  
 # sources generated from noweb sources
 # ------------------------------------------------------------------  
 
-fixpoint:       test.nw
+fixpoint        \
+regr:           test.nw
                 eval $MISCTANGLE
+                chmod +x $target
 
 html:V:         $HTML

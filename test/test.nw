@@ -20,12 +20,12 @@ is has parsed. This is an opportunity for a fixpoint test:
       one should not differ.
 \end{enumerate}
 
-Every legal \C~input can thus be used to easily test the parsing and
-pretty printing modules of the compiler.  Doing it for the actual
-implementation, however, requires a third parsing and printing step
-before the fixpoint is reached:  when [[qc--]] parses a pragma it
+Every \textit{legal} \C~input can thus be used to easily test the
+parsing and pretty printing modules of the compiler.  Doing it for the
+actual implementation, however, requires a third parsing and printing
+step before the fixpoint is reached:  when [[qc--]] parses a pragma it
 pretty prints a comment for it.  Since comments are skipped while
-scanning the next round this comment will no produce in any output. 
+scanning the next round this comment will not produce any output. 
 When this output again is parsed and printed it should be equal to the
 one just parsed. 
 
@@ -67,6 +67,183 @@ exit $rc
 
 @
  
+% ------------------------------------------------------------------ 
+\subsection{Regression Test}
+% ------------------------------------------------------------------ 
+
+While the fixpoint test is good to test the scanner and parser with
+leagal input it it much less suited for \C~files that contain errors. 
+Here is a litte script for regression testing that assists in this
+job:  it runs a command and compares the exit code, standard output,
+and standard error produced by the program with expected results.  
+
+The script can be used in a recording mode where the standard and
+error output of a command are recored in files for later comparison.
+Running the regression test is especially useful after changes to the
+compiler to make sure the old behaviour is still matched.
+
+<<regr>>=
+#! /bin/sh 
+##
+##
+## regr cmd [-r] [-v] [-in ifile] [-out ofile] [-err efile] [-x n] [-f file].. 
+##
+## see usage below or call without parameters for usage
+##
+
+## set defaults
+
+verbose=off
+this="regr"
+tmp="${TMP:-/tmp}/$this.$$"
+stdin="/dev/null"
+stdout="/dev/null"
+stderr="/dev/null"
+exitc="0"
+recording=off
+files=""
+
+## interrupt handler
+
+trap "rm -f $tmp.* ; exit 1" 1 2 3 15
+
+
+## parse command line arguments and show usage
+
+if [ $# -lt 1 ]; then
+    cat <<EOF
+    
+     $this cmd [-r] [-in ifile] [-out ofile] [-err efile] [-x n]  [-f file] .. 
+    
+     Regression test tool. Runs cmd and matches its behavior against specs
+     on the command line:
+
+     
+     -x n:        cmd is expected to exit with exitcode n (default 0)
+     -out ofile:  cmd's stdout should match ofile         (default /dev/null)
+     -err efile:  cmd's stderr should match efile         (default /dev/null)
+     -in  ifile:  cmd gets its stdin from ifile           (default /dev/null)
+    
+     -f   /some/file    
+                  cmd is expected to create /some/file. /some/file should 
+		  NOT be placed into the \$CWD. /some/file is compared against
+                  \$CWD/file. /some/file is deleted after comparison
+    
+     -r           recording mode: no comaparisons are done. Instead all
+                  output of cmd is directed to the files specified on the
+                  command line.
+                  In case of -f /some/file is moved to \$CWD/file
+    
+                  The recording mode helps to build all the files for
+                  later regression testing.  
+
+     -v           Verbose Flag.
+EOF
+exit 2
+fi
+
+cmd="$1"
+shift
+while : ; do
+    case "$1" in
+	"")
+	    break;;
+	-in)
+	    stdin="$2"; shift;;
+	-out)
+	    stdout="$2"; shift;;
+	-err)
+	    stderr="$2"; shift;;
+	-x)
+	    exitc="$2"; shift;;
+	-v)
+            verbode="on";;
+	-r)
+	    recording="on";;
+	-f)
+	    files="$files $2"; shift;;
+	*)
+	    echo "unknown option: $1" 2>&1;
+	    exit 2;;
+    esac
+    shift
+done
+
+
+#
+# run cmd
+#
+
+if [ "$verbose" = "on" ]; then
+    echo "testing command: '$cmd'"
+fi
+
+if [ "$recording" = "off" ]; then
+    $cmd < "$stdin" 2> "$tmp.stderr" > "$tmp.stdout"
+    returnc="$?"
+else
+    # recording mode - do not compare but create files 
+    # as specified on the cmd line
+
+    $cmd < "$stdin" 2> "$stderr" > "$stdout"
+    for f in $files; do
+	mv $f `basename $f`
+    done
+    exit 0
+fi
+
+#
+# check results (only if not in recording mode)
+#
+
+# return code for $this
+
+rc=0
+
+if ! [ "$returnc" = "$exitc" ]; then
+    echo "failed: '$cmd' exitcode $returnc does not match $exitc"
+    rc=1
+fi
+
+if ! cmp "$stdout" "$tmp.stdout" ; then
+    echo "failed: '$cmd' stdout does not match expectation"
+    diff -c "$stdout" "$tmp.stdout"
+    rc=1
+fi
+
+if ! cmp "$stderr" "$tmp.stderr" ; then
+    echo "failed: '$cmd' stderr does not match expectation"
+    diff -c "$stderr" "$tmp.stderr"
+    rc=1
+fi
+
+for f in $files; do
+    expect=`basename $f`
+    if ! cmp $f $expect; then 
+	echo "failed: $f does not match expectation $expect"
+	diff -c $f $expect
+	rm -f $f
+	rc=1
+	break
+    else
+	rm -f $f
+    fi
+done
+
+#
+# clean up
+#
+
+rm -f $tmp.*
+
+#
+# exit
+#
+
+exit $rc
+@
+
+
 
 
 
