@@ -19,7 +19,10 @@
 
 The meaning, or denotation, of names in a {\PAL} program are recorded
 in one environment.  Because only one environment is used for all
-different kinds of names it is called fat.  In particular the fat
+different kinds of names it is called fat.  The fat environment not
+only serves the classic symbol table purpose but also represents some
+global state of the compiler.  It is used to pass around informations
+between the different phases of the compiler.  In particular the fat
 environment holds informations about:
 
 \begin{itemize}
@@ -27,6 +30,7 @@ environment holds informations about:
 \item Types, as they are declared by the [[typedef]] directive.
 \item Target architecture, as declared by the [[target]] directive.
 \item Source code positions, as recored by a [[Srcmap.map]].
+\item An Index counter for registers.
 \end{itemize}
 
 The fat environment comes in two variants:  a \textit{dirty} and a
@@ -123,10 +127,10 @@ type kind           = Proc  of env partial
                     | Data
                     | Stack
 
-type denotation     = Constant of Value.value
-                    | Label    of kind
+type denotation     = Constant      of Value.value
+                    | Label         of kind
                     | Import
-                    | Register
+                    | Register      of int (* index for run-time API *)
                     | Continuation
 @
 
@@ -250,6 +254,35 @@ val findWordsize    : env -> int        partial info
 val findPointersize : env -> int        partial info
 val findFloat       : env -> string     partial info
 val findCharset     : env -> string     partial info
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Register Index}
+% ------------------------------------------------------------------ 
+
+{\PAL} uses integers to identify global and local registers during
+run-time at the run-time interface.  The fat environment maintains a
+counter to facilitate the assignment of an integer to a register.
+
+\begin{itemize}
+\item [[setIndex]] sets the index counter.
+\item [[getIndex]] returns the actual value of the index counter.
+\item [[incrIndex]] advances the index counter.
+\end{itemize}
+
+The index-related functions obey the following laws:
+
+\begin{quote}
+\begin{verbatim}
+getIndex (setIndex env n) = n
+getIndex (incrIndex env) = (getIndex env) + 1
+\end{verbatim}
+\end{quote}
+
+<<>>=
+val setIndex        : env -> int -> env
+val getIndex        : env -> int
+val incrIndex       : env -> env         
 @
 
 % ------------------------------------------------------------------ 
@@ -393,15 +426,15 @@ type endianness     = Big | Little
 @            
 
 <<>>=
-type kind           = Proc  of env Arg.partial
+type kind           = Proc          of env Arg.partial
                     | Code
                     | Data
                     | Stack
 
-and  denotation     = Constant of Value.value
-                    | Label    of kind
+and  denotation     = Constant      of Value.value
+                    | Label         of kind
                     | Import
-                    | Register
+                    | Register      of int    (* index for run-time API *)
                     | Continuation
 
 and  ventry         = (denotation * Types.ty) Arg.info
@@ -439,6 +472,7 @@ and   env           =
                       ; srcmap :      Srcmap.map
                       ; error  :      bool
                       ; target :      target
+                      ; index  :      int       (* register index *)
                       }    
 @
 
@@ -455,6 +489,7 @@ let empty  map      = { tenv   = StrMap.empty
                       ; venv   = StrMap.empty
                       ; srcmap = map
                       ; error  = false
+                      ; index  = 0
                       ; target = { memsize    = Arg.default 8
                                  ; endianness = Arg.default Little
                                  ; word       = Arg.default 32
@@ -624,6 +659,18 @@ let findCharset     env = env.target.charset
 @   
 
 % ------------------------------------------------------------------ 
+\subsubsection{Register Index}
+% ------------------------------------------------------------------ 
+
+No surprises here.
+
+<<>>=
+let setIndex   env n = { env with index = n}
+let getIndex   env   = env.index
+let incrIndex  env   = { env with index = env.index + 1}
+@
+
+% ------------------------------------------------------------------ 
 \subsubsection{Cleaning a fat environment}
 % ------------------------------------------------------------------ 
 
@@ -648,7 +695,7 @@ let rec clean_venv map  =
                 | Dirty.Label(Dirty.Data)         -> Clean.Label(Clean.Data)
                 | Dirty.Label(Dirty.Stack)        -> Clean.Label(Clean.Stack)
                 | Dirty.Import                    -> Clean.Import
-                | Dirty.Register                  -> Clean.Register
+                | Dirty.Register(n)               -> Clean.Register(n)
                 | Dirty.Continuation              -> Clean.Continuation
                 | _                               -> assert false
             in
@@ -690,6 +737,7 @@ and clean env =
     ; Clean.srcmap = env.Dirty.srcmap 
     ; Clean.error  = env.Dirty.error
     ; Clean.target = clean_target env.Dirty.target
+    ; Clean.index  = env.Dirty.index
     }
 @
 

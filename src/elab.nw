@@ -1108,8 +1108,9 @@ let imports r scope env t ii          = foldl (import r scope t) env ii
 let register r scope env = function
     | (_,t,name,Some x) when scope = F.Local ->
                         E.error "local registers can't be maped to hardware"
-    | (_,t,name,reg) -> bindv name (r,scope) (E.ematch (ty r env t) 
-                        (fun t -> F.Register,t)) env
+    | (_,t,name,reg) -> let i = F.getIndex env in
+                        bindv name (r,scope) (E.ematch (ty r env t)
+                        (fun t -> F.Register(i),t)) (F.incrIndex env)
 @
 
 The [[datum]] function binds global data-labels and local
@@ -1181,7 +1182,9 @@ bound in the environment and the [[goto]] labels in its body.
 <<>>=
 let formal r env (hint, inv, ty, name) =
     match evalTy env ty with
-    | E.Ok(t) -> F.bindv name ((r,F.Local),(E.Ok(F.Register,t))) env 
+    | E.Ok(t) -> let i = F.getIndex env in
+                     F.bindv name ((r,F.Local),(E.Ok(F.Register(i),t))) 
+                     (F.incrIndex env) 
     | E.Error -> F.bindv name ((r,F.Local), E.Error) env
 @
 
@@ -1328,8 +1331,8 @@ let rec lvalue context env = function
     | A.Var(hint,name)      -> 
         E.ematch (E.Raise.right (F.findv name env))
         ( function
-        | _, (F.Register,t) -> t
-        | _                 -> E.error ("not a register: "^name)
+        | _, (F.Register _,t) -> t
+        | _                   -> E.error ("not a register: "^name)
         )
     | A.Mem(t,e,a) when context <> Assign -> 
         E.error "no memory assignment allowed in this context"
@@ -1686,8 +1689,8 @@ registers.
 and contStmt env (n,ns) = 
     let check env name = E.seq' env (E.Raise.right (findv name env))
         ( function  
-        | F.Local , (F.Register,_) -> env
-        | F.Global, (F.Register,_) -> E.error (name^" is not a local register")  
+        | F.Local , (F.Register _,_) -> env
+        | F.Global, (F.Register _,_) -> E.error (name^" is not a local register")  
         | _ -> E.error ("formal continuation parameter not a register: "^n)
         )
     in
@@ -1863,8 +1866,7 @@ stage. Only the [[export]] declaration must be checked.
 
 <<>>=
 and decl env = function
-    | A.DeclAt(x,r)   -> E.catch' (F.flagError env) (error r env)
-                          (decl env) x
+    | A.DeclAt(x,r)   -> E.catch' (F.flagError env) (error r env) (decl env) x
     | A.Import      x -> env
     | A.Export      x -> export env x
     | A.Const       x -> env
@@ -1901,17 +1903,25 @@ The [[Env.local]] functions computes this environment which is used by
 the functions that check the body of a procedure. Errors recorded in
 the local environment must be copied to the global environment.
 
+A procedure numbers its local parameters and registers starting from
+0. We must save the actual value of [[F.getIndex]] and set it later
+such that the global counter for indexing registers is maintained
+across procedures.
+
 The local environment for the procedure is bound in the fat
 environment such that it can be re-used later.
 
 <<>>=
 and proc r env (_,name,_,bb as p) =
-    let env' = Env.local env p   in
-    let env' = foldl body env' bb in
-    let t    = E.ematch (pointerTy env) 
+    let i    = F.getIndex env  (* save old value *)      in
+    let env' = F.setIndex env 0                          in
+    let env' = Env.local env p                           in
+    let env' = foldl body env' bb                        in
+    let t    = E.ematch (pointerTy env)
                (fun p -> (F.Label(F.Proc(Some env')),p)) in
-    let env  = F.rebindProc name t env in
-        if   F.errorFlag env' 
+    let env  = F.rebindProc name t env                   in
+    let env  = F.setIndex env i (* set old value *)      in
+        if   F.errorFlag env'
         then F.flagError env
         else env
 @
