@@ -489,7 +489,56 @@ and a value.
 @
 
 <<>>=
-let evalExpr env expr = E.Error
+let rec evalFetch env = function
+    | A.LValueAt(x,r) -> E.catch (E.errorRegPrt r) (evalFetch env) x
+    | A.Mem (_,_,_)   -> E.error "memory access in const declaration"
+    | A.Var(id)       -> ( match F.findv' id env with
+                         | E.Error                -> E.Error
+                         | E.Ok(F.Constant(v),ty) -> E.Ok(ty, v)
+                         | _ -> E.error ("access of non-constant "^id)
+                         ) 
+@
+<<>>=
+let rec evalPrimOp' op env args =
+    let f, t   = Const.Symbol.lookup op Const.constOps in
+    let at,av  = List.split args                       in
+    let unused = Types.bool                            in
+    let sigma  = ( try Types.unify t (Types.proc at unused) Types.empty with
+                 | Types.UnifyExn -> E.error "type mismatch"
+                 )                                     in
+    let rt     = ( match Types.subst sigma t with
+                 | Types.Procedure(_,t) -> t
+                 | _                    -> assert false
+                 )                                     in
+        rt, f av
+<<>>=
+and evalPrimOp env op args =
+    E.emap (evalPrimOp' op env) (evalExprs env args)
+
+<<>>=
+and evalExprs env ee =
+    let rec loop env acc = function
+        | []    -> E.Ok(acc)
+        | e::ee -> ( match evalExpr env e with
+                   | E.Ok(t, v) -> loop env ((t,v)::acc) ee
+                   | E.Error    -> E.Error
+                   )
+    in
+        loop env [] ee
+
+<<>>=
+and evalExpr env = function
+| A.ExprAt(x,r) -> E.catch (E.errorRegPrt r) (evalExpr env) x
+| A.Int (str,(Some size as s))   -> E.Ok(T.bits size, Const.int2value str s)
+| A.Int (str,(None      as s))   -> E.Ok(T.word     , Const.int2value str s)
+| A.Float (str,(Some size as s)) -> E.Ok(T.bits size, Const.float2value str s)
+| A.Float (str,(None      as s)) -> E.Ok(T.word     , Const.float2value str s)
+| A.Char (str,(Some size as s))  -> E.Ok(T.bits size, Const.char2value str s)
+| A.Char (str,(None      as s))  -> E.Ok(T.word     , Const.char2value str s)
+| A.Fetch(v)                     -> evalFetch env v
+| A.BinOp(l,op,r)                -> evalPrimOp env op [l;r]
+| A.UnOp(op,expr)                -> evalPrimOp env op [expr]
+| A.PrimOp(op,args)              -> evalPrimOp env op (List.map snd args)
 
 <<>>=
 let doConstDecl scope env = function
@@ -570,22 +619,23 @@ create the abstract syntax and calls the different phases of checking.
 <<check file>>=
 let check file =
     let fd          = try open_in file 
-                      with Sys_error(msg) -> E.error msg      in
-    let finally ()  = close_in fd                             in
-    let lexbuf      = Lexing.from_channel fd                  in
-    let map         = Srcmap.empty                            in
-    let scanner     = Scan.scan map                           in
+                      with Sys_error(msg) -> E.error msg                 in
+    let finally ()  = close_in fd                                        in
+    let lexbuf      = Lexing.from_channel fd                             in
+    let map         = Srcmap.empty                                       in
+    let scanner     = Scan.scan map                                      in
         try
             ( Srcmap.sync map 0 (file,1,1)
-            ; let ast        = Parse.program scanner lexbuf   in
-              let env0       = F.empty                        in
-              let env1       = TypeEnv.doGlobalTypes env0 ast in
-              let env2       = ValueEnv.BindGlobals.program env1 ast      in 
+            ; let ast        = Parse.program scanner lexbuf              in
+              let env0       = F.empty                                   in
+              let env1       = TypeEnv.doGlobalTypes env0 ast            in
+              let env2       = ValueEnv.BindGlobals.program env1 ast     in
+              let env3       = ValueEnv.EvalConst.doGlobalConst env2 ast in
                  ( E.Ok ()
                  )
             )
         with
-            | Parsing.Parse_error -> 
+            | Parsing.Parse_error ->
               ( finally()
               ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) "parse error"
               ; E.Error
@@ -595,7 +645,7 @@ let check file =
               ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) msg
               ; E.Error
               )
-            | e ->  
+            | e ->
               ( finally()
               ; raise e
               )
