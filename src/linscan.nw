@@ -25,7 +25,7 @@
 
 The nodes of a control-flow graph (\cfg) initially contain temporary
 registers and hardware registers.  For translation to machine
-instructions the temporary registers must be replaced by hardware
+instructions, the temporary registers must be replaced by hardware
 registers.  The register allocation process re-writes a control flow
 graph such that nodes only use hardware registers.
 
@@ -46,8 +46,34 @@ registers as they are required by calling conventions.
 Linear-scan register allocation requires a linear representation of a
 procedure.  This is provided by numbering nodes in the control-flow
 graph {\cfg}.  Of course, any change to the structure of the {\cfg}
-destroys a numbering.  This happens typically when code for spilling
-is inserted into a {\cfg}.
+destroys a numbering.  This happens when code for spilling is inserted
+into a {\cfg}.
+
+The [[Arg]] module summarizes the functionality that we need from the
+environment.  Since it is just a type, we can put here whatever we
+want without having to provide an implementation.  Ultimately, we like
+to implement everything that is provided by [[Arg]] and get rid of it.
+
+<<exported module types>>=
+module type Args = sig
+    val fits : Rtl.space -> Register.t -> bool
+        (* fits s r = true, iff r can hold any value from space s *) 
+    val is_tmp : Rtl.space -> bool
+        (* true, iff space belongs to the temporary space *)
+end
+@
+
+Module type [[S]] summarizes the functionality we implement and export
+for clients.  
+
+<<exported module types>>=
+module type S = sig 
+    val linscan: Cfg3.t -> unit
+end 
+
+<<linscan.mli>>=
+<<exported module types>>
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Construction of Register Lifetimes}
@@ -66,11 +92,10 @@ graph and recognize the opening and closing of intervals where a
 particular variable is live.  Liveness intervals are then joined to
 form \emph{lifetime} values.
 
-Node in a {\cfg} are numbered with integers, calles \emph{points}
+Node in a {\cfg} are numbered with integers, called \emph{points}
 here.  Points mark the opening and closing of liveness intervals. 
 
 <<linscan.ml>>=
-
 module Point = struct
     type t = int
     let compare = compare
@@ -154,21 +179,21 @@ is processed, all still open intervals must be closed.
 
 <<compute lifetimes>>=
 let lifetimes cfg lt =
-    let initial    = (RM.empty, lt)                                           in
-    let domain map = RM.fold (fun key _ list -> key::list) map []             in
+    let initial    = (RM.empty, lt)                                       in
+    let domain map = RM.fold (fun key _ list -> key::list) map []         in
     let scan node (oldset, state) =
-        let point   = Cfg3.number node                                        in
-        let set     = Cfg3.live node                                          in
-        let opening = RS.diff set oldset                                      in
-        let closing = RS.diff oldset set                                      in
-        let state   = open_regs  point (RS.elements opening) state            in
-        let state   = close_regs point (RS.elements closing) state            in
-                      (set, state)                                            in
-    let first       = Cfg3.number (Cfg3.first cfg)                            in
-    let last        = Cfg3.number (Cfg3.last cfg)                             in
+        let point   = Cfg3.number node                                    in
+        let set     = Cfg3.live node                                      in
+        let opening = RS.diff set oldset                                  in
+        let closing = RS.diff oldset set                                  in
+        let state   = open_regs  point (RS.elements opening) state        in
+        let state   = close_regs point (RS.elements closing) state        in
+                      (set, state)                                        in
+    let first       = Cfg3.number (Cfg3.first cfg)                        in
+    let last        = Cfg3.number (Cfg3.last cfg)                         in
     let (set,(op,lt)) = Cfg3.scan_fwd cfg first last scan (RS.empty, initial) in
                       (* close all open intervals after the last node *)
-    let     (_ ,lt) = close_regs (last+1) (domain op) (op,lt)                 in
+    let     (_ ,lt) = close_regs (last+1) (domain op) (op,lt)             in
         lt
 @
 
@@ -180,214 +205,125 @@ let lifetimes cfg lt =
 
 
 % ------------------------------------------------------------------ 
-\subsection{Register Allocation Algorithm}
-% ------------------------------------------------------------------ 
-
-Register allocation works as follows:  at the start the majority of
-registers in a control-flow graph are temporary registers; a few nodes
-use hardware registers for calling conventions, but most hardware
-register available for register allocation are unused.  We try to
-place a temporary into a hardware register, if the lifetime of the
-temporary fits into a lifetime hole of the register.  If this
-succeeds, the temporary can be replaced by the hardware register in
-the control-flow graph.  At the same time, the the register's lifetime
-becomes more dense and it will be more difficult in the future to
-place a temporary into it.  When this case happens, we have to select
-either a temporary or a register and spill it.  As an optimization,
-the chosen register or temporary can be spilled only in parts of the
-procedure; this is called \emph{local spilling}.  Spilling requires to
-insert new nodes into the control-flow graph and invalidates all
-liveness information.  The overall effect is that a few long liveness
-intervals are replaced by a number of shorter liveness intervals for a
-number of new temporaries.  This makes it easier to place them into
-registers. The general algorithm and some open questions are outlined
-below. 
-
-\begin{quote}
-\let\mc\multicolumn
-\def\cfg{\mathit{cfg}}
-\def\lt{\mathit{lifetime}}
-\def\v#1{\mathit{#1}}   % variable
-\def\k#1{\textbf{#1}}   % keyword
-\begin{tabular}{rl}
-\mc{2}{l}{\sc Allocate $(\cfg)$} \\
-1  & \k{forall} hardware register $r$ \k{do} $\lt[r] \gets\emptyset$ \\
-2  & \k{loop} spill:\\
-3  & \quad $\v{lifeness}(\cfg)$\\
-   & \quad $\v{lifetime} \gets \v{lifetimes}(\cfg)$\\
-4  & \quad $\v{tmp},\v{reg} \gets \v{partition}(\v{domain}(\v{lifetime}))$\\
-   & \quad \it temporaries and hardware registers\\
-5  & \quad \k{loop} assign:\\
-6  & \quad\quad \k{if} $\v{tmp} = \emptyset$ \k{then} \k{return} $\cfg$ \\
-7  & \quad\quad $(t,r) \gets \v{select}(\v{tmp},\v{reg})$\\
-   & \quad\quad \it such that $\neg\v{overlaps}(\v{bbox}(\lt[t]),\lt[r])$\\
-8  & \quad\quad \k{if} no $(t,r)$ found \k{then}\\
-9  & \quad\quad\quad select $r \in\v{tmp} \cup \v{reg}$ \\
-10 & \quad\quad\quad select interval $i \subseteq \lt[r]$\\
-11 & \quad\quad\quad $\cfg \gets \v{spill}(\cfg,r)$\\
-12 & \quad\quad\quad \k{loop} spill\\
-13 & \quad\quad \k{else}\\
-14 & \quad\quad\quad $\lt[r] \gets \lt[t] \cup \lt[r]$\\
-15 & \quad\quad\quad remove $t$ from $\lt$\\
-16 & \quad\quad\quad $\v{substitute}(\cfg,t,r)$\\
-17 & \quad\quad\quad $\v{tmp} \gets \v{tmp} \setminus \{t\}$\\
-18 & \quad\quad\quad \k{loop} assign\\
-\end{tabular}
-\end{quote}
-
-
-
-\begin{enumerate}
-\item How to select a hardware register and a temporary for placement?
-      When there are multiple choices, which is a good one? The
-      following heuristics come to mind:
-      \begin{enumerate}
-      \item Try to place temporaries with short lifetimes first. The
-      underlying assumption is, that these might be loop variables and
-      therefore should stay in registers.
-      \item Alternatively, try to place the temporaries in the order
-      that they are used. This would emulate the strategy used by
-      Poletto \cite{poletto:99:toplas}.
-      \item Take the first register that has a hole big enough to
-      accommodate the current temporary. The rationale is, that the
-      first-fit strategy works well in memory management.
-      \item Take the register that has the smallest hole to accommodate
-      the current temporary. This best-fit strategy is used by 
-      Traub et al.~\cite{traub:98:pldi}.
-      \end{enumerate}
-
-      Are there additional matching rules? For example, is it possible
-      to place a [[bits8]] temporary into a [[bits32]] register?
-
-      What about two [[bits16]] hardware register, that also can be
-      used as one [[bits32]] register. We currently assume that all
-      hardware registers are disjoint.
-
-\item How to select a register or temporary for spilling? Dual to the
-      strategy to place short-lived temporaries first, long living
-      temporaries could be candidates for spilling.  This would also
-      minimize the chance that a temporary resulting from a previous
-      spill operation would be spilled again.
-      
-      If local spilling is used, in which interval?  We have no notion
-      of register pressure to find interesting intervals.
-
-      Do we need a gain function that tells how much can be gained
-      from spilling a temporary in order to decide which
-      temporary should be spilled?
-      
-\item How to guarantee termination? Should there be an upper bound for
-      spilled temporaries or is there a better way?
-\end{enumerate}
-
-
-% ------------------------------------------------------------------ 
 \subsection{Register Allocation Implementation}
 % ------------------------------------------------------------------ 
 
-<<linscan.mli>>=
-<<exported module types>>
-module Make (A : Args) : S
-@
-
-The [[Arg]] module summarizes the functionality that we need from the
-environment.  Since it is just a type, we can put here whatever we
-want without having to provide an implementation. Ultimately, we like
-to implement everything that is provided by [[Arg]] and get rid of it.
-
-
-<<exported module types>>=
-module type Args = sig
-    val fits : Rtl.space -> Register.t -> bool
-        (* fits s r = true, iff r can hold any value from space s *) 
-    val is_tmp : Rtl.space -> bool
-        (* true, iff space belongs to the temporary space *)
-end
-@
-
-Module type [[S]] summarizes the functionality we implement and export
-for clients.  
-
-<<exported module types>>=
-module type S = sig end (* dummy *)
-@
-
 The implementation must provided all the module types declared in the
-interface. Thanks to literate programming we can refer to the code
-chunk that was used in the interface. 
+interface.  The heart of the implementation is the functor [[Make]]
+with code to
+
+\begin{enumerate}
+\item find a temporary in a node that need to be placed into a register,
+\item find a hardware register to accommodate a temporary,
+\item find a register to spill (if we are stuck),
+\item and the linear-scan register allocator, making use of the above
+      building blocks.
+\end{enumerate}
 
 <<linscan.ml>>=
 <<exported module types>>
 module Make (A : Args) : S = struct
-    module A = A
-    open A
-    <<Make>>
+    module A = A open A (* never do that *)
+    let lookup table x = RM.find x table       (* lookup lifetime *)
+
+    <<find_tmp>>
+    <<find_reg>>
+    <<find_spillee>>
+    
+    <<replace>> 
+    <<alloc>> 
+    <<linscan>>
 end
 @
 
-<<Make>>=
-(* general purpose functions 
- * - iter walks over cfg, update RTLs in nodes using f
- *)
-let iter cfg f = Cfg3.fold cfg (fun node () -> Cfg3.set_rtl node f) () 
-@
-
-Linear scan register allocation works by traversing the nodes of a
-procedure in a linear way.  The [[alloc]] function is passed the
-actual node and is responsible for placing it's temporaries.  Every
-time a temporary is successfully placed into a register, it disappears
-from the entire control-flow graph.  Assuming that the [[alloc]]
-function allocates \emph{all} temporaries of a node, a temporary found
-by [[alloc]] can only be live in the rest of the graph, but not before
-the current node.  It is thus sensible to restrict the substitution of
-temporaries to the current node and its successors.
-
-\begin{enumerate}
-\item No node preceding the current node reads or writes temporaries.
-\item The current node (before allocation) writes temporaries, but
-      does not read them.  
-       
-      \emph{Is this true?  In the presence of loops registers can be live
-      that are not defined by code preceding them in the linear order. 
-      The current node could read such a note which could be a
-      temporary.}
-      
-\item Nodes past the current node read and write temporaries.
-\end{enumerate}
+The linear-scan register allocator [[linscan]] visits all nodes of a
+{\cfg} in a linear order and [[alloc]]'tes hardware register for their
+temporaries.  The [[alloc]] function receives two continuations,
+[[loop]] and [[spill]].  It calls the latter, if no hardware register
+can be found for a temporary.  Because spilling mutates the structure
+of a {\cfg}, register allocation starts over after spilling.
 
 <<linscan>>=
-let linscan cfg lifetimes =
-    let iter cfg f = Cfg3.fold cfg (fun node () -> f node) () in
-    let alloc      = <<allocator>>                            in
-        iter cfg alloc 
-@
-
-The allocator takes a node and replaces all temporaries by hardware
-registers. 
-
-<<allocator>>=
-fun node -> 
-    let spill        = fun cfg loc intv  -> assert false in (* continuation *)
-    let rec allocate = fun cfg lifetimes -> match find_tmp node with
-        | None     -> ()
-        | Some tmp -> replace_tmp cfg tmp lifetimes node allocate spill
+let rec linscan cfg =
+    let _          = Live.liveness cfg     in
+    let _          = Cfg3.gm_enumerate cfg in
+    let rec loop lifetimes = function (* over all nodes *)
+        | None      -> ()
+        | Some node -> alloc node lifetimes loop spill
     in
-        allocate cfg lifetimes
+        loop (lifetimes cfg RM.empty) (Some (Cfg3.first cfg)) 
+
+and spill cfg loc interval = (* spill here and start over .. *)
+    ( ignore (assert false) 
+    ; linscan cfg 
+    )
 @
 
-% ------------------------------------------------------------------ 
-% Building blocks for an allocator
-% ------------------------------------------------------------------ 
+The [[alloc]] function loops over all temporaries of a given node and
+tries to replace them using [[replace_tmp]].  The [[replace_tmp]]
+function again receives two continuation for the [[success]] and
+[[spill]] cases.
 
+<<alloc>>=
+let alloc node lifetimes success spill =
+    let rec loop lifetimes = match find_tmp node with
+        | None     -> success lifetimes (Cfg3.next node)
+        | Some tmp -> replace_tmp node tmp lifetimes loop spill      
+    in
+        loop lifetimes 
+@
 
-<<Make>>=
-let lookup table x       = RM.find x table       (* lookup lifetime *)
+The real work is done in [[replace_tmp]].  For a given temporary
+[[tmp]] a register [[r]] must by found by [[find_reg]].  If this
+succeeds, the lifetime of [[tmp]] is joined with the register's
+livetime, and all occurrences of [[tmp]] substituted by [[r]] in the
+entire {\cfg}. However, if no [[r]] can be found, we must spill:
+[[find_spillee] finds a candidate to spill and passes it to the
+[[spill]] continuation.
+
+<<replace>>=
 let replace tmp reg      = fun t -> if t = tmp then reg else t
+
+let replace_tmp node tmp lifetimes success spill =
+  let iter cfg f = Cfg3.fold cfg (fun node () -> Cfg3.set_rtl node f) () in
+  let lifetime   = lookup lifetimes in
+  let cfg         = Cfg3.cfg node    in
+  match find_reg lifetimes tmp with
+  | Some r -> (* successfully found a hardware register *)
+      let lifetimes = RM.add r (L.union (lifetime r) (lifetime r)) lifetimes in
+      let lifetimes = RM.remove tmp lifetimes                      in
+      let ()        = iter cfg (Rtlutil.Subst.reg (replace tmp r)) in
+          success lifetimes
+  | None ->
+      let spillee, interval = find_spillee lifetimes tmp node in 
+          spill cfg spillee interval
 @
+
+% ------------------------------------------------------------------ 
+\subsubsection{Finding a Temporary}
+% ------------------------------------------------------------------ 
+
+The linear scan allocator replaces all temporaries at a given node by
+hardware registers. The [[find_tmp]] function implements the policy to
+select a temporary to be placed.
 
 The [[find_tmp]] function returns a temporary used in [[node]] that
 should be replaced by a hardware register. [[None]] is returned, if no
 such register can be found.
+
+Our implementation is simple and returns the first temporary it
+finds. The [[read_write_lists]] functions returns all registers read
+or written by an {\rtl} and thus we have to look for temporaries
+explicitly.
+
+<<find_tmp>>=
+let find_tmp node = 
+    let uses space index width = function
+        | None when is_tmp space -> Some (space, index, width)
+        | x                      -> x 
+    in
+        Rtlutil.read_write_lists uses uses (Cfg3.rtl node) None    
+@       
 
 \begin{quote}\it
     An alternative design would be to return a sorted list of all
@@ -397,33 +333,25 @@ such register can be found.
     contain some temporaries no longer used by that node.  --CL
 \end{quote}
 
-Our implementation is simple and returns the first temporary it
-finds. The [[read_write_lists]] functions returns all registers read
-or written by an {\rtl} and thus we have to look for temporaries
-explicitly.
+% ------------------------------------------------------------------ 
+\subsubsection{Finding a Hardware-Register}
+% ------------------------------------------------------------------ 
 
-<<Make>>=
-let find_tmp node = 
-    let uses space index width = function
-        | None when is_tmp space -> Some (space, index, width)
-        | x                      -> x 
-    in
-        Rtlutil.read_write_lists uses uses (Cfg3.rtl node) None    
-@       
-
-The [[first_fit]] function searches the domain of [[lifetimes]] to
-find a (hardware) register that can hold temporary [[t]].  It returns
-the \emph{first} register [[r]], that respects all of the following
-conditions, or [[None]] otherwise.
+After a temporary was selected to be placed into a hardware register,
+an appropriate hardware register must be found.  The [[first_fit]]
+function searches the domain of [[lifetimes]] to find a (hardware)
+register that can hold temporary [[t]].  It returns the \emph{first}
+register [[r]], that respects all of the following conditions, or
+[[None]] otherwise.
 
 \begin{enumerate}
 \item The register [[r]] can hold the same values that [[t]] can hold. 
-      This is decided using the target-specifi [[fits]] function.
+      This is decided using the target-specific [[fits]] function.
 \item The bounding box of the lifetime of [[t]] does not overlap the 
       lifetimes of [[r]].      
 \end{enumerate}
 
-<<Make>>=
+<<find_reg>>=
 let first_fit lifetimes t =
     let fits' (sp,_,_ as t) r = 
         fits sp r &&
@@ -439,12 +367,17 @@ let first_fit lifetimes t =
 let find_reg = first_fit        (* first_fit is a possible find_reg impl *)
 @
 
-When no register can be found to hold register [[t]], we have to spill
-a register which can be either a hardware register, or a temporary. 
-The [[find_spillee]] function receives the [[lifetimes]] map, the
-register [[t]] that we could not find a register for, and the [[node]]
-under consideration in the linear scan.  The function returns a
-register to spill and a region, where to spill it.
+
+% ------------------------------------------------------------------ 
+\subsubsection{Finding a Spillee}
+% ------------------------------------------------------------------ 
+
+When no register can be found to hold register [[tmp]], we have to
+spill a register which can be either a hardware register, or a
+temporary.  The [[find_spillee]] function receives the [[lifetimes]]
+map, the register [[tmp]] that we could not find a register for, and
+the [[node]] under consideration in the linear scan.  The function
+returns a register to spill and a region, where to spill it.
 
 For finding a spillee, we use the policy described by
 \cite{poletto:99:toplas}:  consider the temporary that could not be
@@ -460,7 +393,7 @@ superset of all nodes used by the current node.  The function
 longest in the program.  This is our spill candidate and we want to
 spill it from the current node up to the end of the procedure.
 
-<<Make>>=
+<<find_spillee>>=
 let active point lifetimes =
     let here = I.mk point (point+1) in
     let find = fun loc lt active ->  
@@ -470,7 +403,7 @@ let active point lifetimes =
 
 <<longest_active type>>=
 Cfg3.node -> loc -> lifetimes -> loc * L.t
-<<Make>>=
+<<find_spillee>>=
 let longest_active: <<longest_active type>> = fun node tmp lifetimes ->
     let here   = Cfg3.number node        in
     let active = active here lifetimes  in
@@ -481,7 +414,7 @@ let longest_active: <<longest_active type>> = fun node tmp lifetimes ->
 
 <<find_spillee type>>= 
 lifetimes -> loc -> Cfg3.node -> loc * I.t 
-<<Make>>=
+<<find_spillee>>=
 let find_spillee: <<find_spillee type>> = fun lifetimes tmp node ->
     let cfg      = Cfg3.cfg node                     in
     let last     = Cfg3.number (Cfg3.last cfg)       in
@@ -490,28 +423,3 @@ let find_spillee: <<find_spillee type>> = fun lifetimes tmp node ->
         loc, interval
 @
 
-The [[replace_temporary]] function tries to replace temporary [[t]] in
-[[graph]] with a hardware register. On success, it calls continuation
-[[allocated]], on failure [[spill]]. The parameter [[node]] indicates
-what node is currently under consideration in the linear scan
-allocator. 
-
-<<Make>>=
-let replace_tmp (graph:Cfg3.t) (t:Register.t) lifetimes node allocated spill =
-  let lifetime = lookup lifetimes in
-  match find_reg lifetimes t with
-  | Some r -> (* successfully found a hardware register *)
-      let lifetimes = RM.add r (L.union (lifetime r) (lifetime r)) lifetimes in
-      let lifetimes = RM.remove t lifetimes                        in
-      let ()        = iter graph (Rtlutil.Subst.reg (replace t r)) in
-          allocated graph lifetimes
-  | None ->
-      let spillee, interval = find_spillee lifetimes t node in 
-          spill graph spillee interval
-@
-
-
-<<Make>>=
-(* linscan comes last because it depends on helper functions above *)
-<<linscan>>
-@
