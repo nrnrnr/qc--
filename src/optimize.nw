@@ -26,13 +26,13 @@ It is possible to build a flow graph such that a node cannot be reached
 by following successors from the entry node, but it can be reached by
 following predecessors from the exit node.
 <<optimize.mli>>=
-val trim_unreachable_code : 'i Cfgx.M.cfg -> unit
+val trim_unreachable_code : 'a -> Ast2ir.proc -> bool
 @
 It's also easy to collapse simple branch chains.
 We eliminate a branch to a join point if the branch is the only predecessor of the join
 point.
 <<optimize.mli>>=
-val collapse_branch_chains: 'i Cfgx.M.cfg -> unit
+val collapse_branch_chains: 'a -> Ast2ir.proc -> bool
 @
 
 % ------------------------------------------------------------------ 
@@ -53,7 +53,7 @@ We break any loops among these nodes by setting the successor of each join node 
 illegal node.
 Finally, we can delete any nodes that have no successors.
 <<optimize.ml>>=
-let trim_unreachable_code cfg =
+let trim_unreachable_code _ {Proc.cfg = cfg} =
   let module IS = Set.Make (struct type t = int let compare = compare end) in
   let nodes_from_entry =
     G.postorder_dfs (fun n set -> IS.add (G.num n) set) IS.empty cfg in
@@ -71,12 +71,13 @@ let trim_unreachable_code cfg =
       let succs = G.succs n in
       (G.delete cfg n;
        delete_nodes (hanging_nodes succs @ rst)) in
-  delete_nodes (hanging_nodes to_delete)
+  delete_nodes (hanging_nodes to_delete);
+  to_delete <> []
 @
 We find each join point with one predecessor, and if the predecessor is a branch to the
 join point, we eliminate the branch and the join point.
 <<optimize.ml>>=
-let collapse_branch_chains cfg =
+let collapse_branch_chains _ {Proc.cfg = cfg} =
   let brp node = G.kind node = G.Branch &&
                  let p = G.pred node in
                  G.kind p = G.Join in
@@ -95,5 +96,6 @@ let collapse_branch_chains cfg =
               (G.preds j);
     if List.for_all (fun n -> G.kind n = G.Illegal) (G.preds j)
     then (G.delete cfg j; G.delete cfg n) in
-  List.iter collapse to_collapse
+  List.iter collapse to_collapse;
+  to_collapse <> []
 @
