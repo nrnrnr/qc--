@@ -463,7 +463,7 @@ let doLocalTypes  env body    = doTypes false env (foldLocalTypeDecls body)
 % ------------------------------------------------------------------ 
 
 The top-level scope of a compilation unit includes the top-level
-itself and all sections.  Values declared on either level are visible
+itself and all sections.  Names declared on either level are visible
 in the entire compilation unit.  Before the static semantics of a
 program can be checked these global declarations must be bound in an
 environment.  Additionally constant declarations are type checked and
@@ -471,11 +471,12 @@ evaluated.  The values for them are also bound in the environment,
 too. 
 
 Except for constants all other values like labels, continuations, or
-registers, are completely known at the place where they are defined or
-declared.  Constants can refer to other constants and thus processing
-them takes some care.  Like type declarations, constants must be
-processed in a (topological) order such that less dependent
-declarations are processed first. 
+registers, are completely described by the place where they are found
+and can be immediately bound in the environment.  Constants, on the
+other hand, can refer to other constants and thus processing them
+takes some care.  Like type declarations, constants must be processed
+in a (topological) order such that less dependent declarations are
+processed first. 
 
 Conceptually all declarations and language constructs that create a
 named value could be treated as a declaration--most of them depending
@@ -486,6 +487,13 @@ into the environment.  Then we collect all constant declarations, sort
 and process them.  Because sorting fails in the presence of cyclic
 declarations and must be re-done, keeping the list to be sorted small
 is also advantageous.
+
+The outline of the [[ValueEnv]] module below gives a glimpse of the
+different steps:  module [[TV]] provides informations about the
+dependencies of constant declarations.  [[Bind]] enters names for
+values (except of constants) into the environment, [[Collect]]
+collects constant declarations, and [[Eval]] evaulates constant
+declarations and enters them into the environment. 
 
 <<building the value environment>>=
 module ValueEnv = struct
@@ -510,14 +518,13 @@ end
 
     
 % ------------------------------------------------------------------ 
-\subsubsection{Binding non-constant values}
+\subsubsection{Binding names for link- and run-time values}
 % ------------------------------------------------------------------ 
 
-Labels and procedures have fixed types that can be entered into the
-environment.  Register and Import declarations on the other hand carry
-user provided types with them.  In case these types are names they may
-be undefined; this leads to register and import declarations which are
-bound to [[Error]]. 
+Labels and names for procedures have fixed types.  Types of register
+and import declarations on the other hand can refer to named types
+which may be undefined. A declaration wich refers to an undefined type
+is bound to [[Error.Error]].
 
 <<bind global values>>=
 let proct scope    = (scope, E.Ok(F.Label(F.Proc),T.code))
@@ -647,45 +654,81 @@ let locals  env bb   = foldl (body F.Local) env bb
 \subsubsection{Collecting constant declarations}
 % ------------------------------------------------------------------ 
 
-Constant declarations are a bit special because every declaration's
-type and value can depend on other declarations. They thus must be
-topologically sorted before their types and values can be computed.
+Constant declarations are special because every declaration's type and
+value can depend on other declarations.  They thus must be
+topologically sorted before their types and values can be computed. 
 The following functions walk over the abstract syntax and collect
-constant declarations in a list. 
+constant declarations in a list.  As we walk we remember the last
+source code position annotation we came across and use it for the
+declaration we find. 
+
+Local constant declarations are only found in the [[body]] of
+procedures and [[span]] statements.  Global constant declarations are
+part of [[section]s and their [[span]]s.
 
 <<collecting const declarations>>=
 let rec body r dd = function
-    | A.BodyAt(x,r)     -> body (Some r) dd x
+    | A.BodyAt(x,r)     -> body r dd x
     | A.DeclBody(d)     -> decl r dd d
-    | _                 -> dd
+    | A.StmtBody(s)     -> stmt r dd s
+    | A.DataBody _      -> dd    
+<<>>=
 and decl r dd = function
-    | A.DeclAt(x,r)     -> decl (Some r) dd x
-    | A.Const(_) as d   -> (d,r)::dd
-    | _                 -> dd
+    | A.DeclAt(x,r)       -> decl r dd x
+    | A.Const(d)          -> (d,r)::dd
+    | A.Typedef   _       -> dd
+    | A.Import    _       -> dd
+    | A.Export    _       -> dd
+    | A.Registers _       -> dd
+    | A.Target    _       -> dd
+    | A.Pragma            -> dd
+@
+The function [[body]] is used only for collecting local declarations,
+[[stmt]] for both global and and local declarations, and the two
+remaining functions [[section]] and [[toplevel]] only for global
+declarations.
+
+<<>>=
 and stmt r dd = function
-    | A.StmtAt(x,r)     -> stmt (Some r) dd x
+    | A.StmtAt(x,r)     -> stmt r dd x
     | A.SpanStmt(_,_,bb)-> foldl (body r) dd bb
-    | _                 -> dd
+    | A.IfStmt _     -> dd
+    | A.SwitchStmt _ -> dd
+    | A.LabelStmt _  -> dd
+    | A.ContStmt _   -> dd
+    | A.AssignStmt _ -> dd
+    | A.CallStmt _   -> dd
+    | A.PrimStmt _   -> dd
+    | A.GotoStmt _   -> dd
+    | A.JumpStmt _   -> dd
+    | A.CutStmt _    -> dd
+    | A.ReturnStmt _ -> dd
+    | A.EmptyStmt    -> dd    
 
 <<>>=
 let rec section r dd = function
-    | A.SectionAt(x,r)         -> section (Some r) dd x 
+    | A.SectionAt(x,r)         -> section r dd x 
     | A.Decl(d)                -> decl r dd d 
     | A.SSpan( e1, e2, ss)     -> foldl (section r) dd ss
     | A.Datum( d)              -> dd
     | A.Procedure(p)           -> dd 
 <<>>=    
 let rec toplevel r dd = function
-    | A.ToplevelAt(x,r)   -> toplevel (Some r) dd x
+    | A.ToplevelAt(x,r)   -> toplevel r dd x
     | A.Section(_, ss)    -> foldl (section r) dd ss
     | A.TopDecl (d)       -> decl r dd d
     | _                   -> dd
+@
+
+The following two functions collect global (unit/section) and local
+(procedure) constant declarations and return them in a list. 
+    
 <<>>=
 let foldGlobalConstDecls program =
-    foldl (toplevel None) [] program
+    foldl (toplevel Srcmap.null) [] program
 <<>>=
 let foldLocalConstDecls b =
-    foldl (body None) [] b
+    foldl (body Srcmap.null) [] b
 @
 
 % ------------------------------------------------------------------ 
@@ -697,14 +740,12 @@ declaration defines a name (multiple in general) and refers to other
 names.  As said before we only sort constant declarations. 
 
 <<module TV>>=
-type decl = A.decl * A.region option
-
-let rec defines = function
-    | A.DeclAt(d,r)        , _   -> defines (d,Some r)
-    | A.Const(t,name,expr) , _   -> [name]
-    | _                    , _   -> []
+type decl = (A.ty option * string * A.expr) * A.region
 @
-
+A [[const]] declaration defines the name it declare. That was simple.
+<<>>=
+let rec defines ((t,name,expr),r) = [name]
+@
 A constant expression can refer to other constant and link-time
 constants.  To find the right topological order it is only important
 to find other constants.  Of course, these can not be syntactically
@@ -712,27 +753,42 @@ distinguished and so we will collect all free variables of an
 expression.  This leads to used names, that are not constants and that
 appear to be undefined from the perspective of the topological
 [[sort]] function.  But [[sort]] assumes that these undeclared names
-do not depend on any constant---which is correct.
+do not depend on any constant---which is correct. 
+
+The [[freeExprVars]] function returns all names referenced in an
+expression. A constant expression depends on all of them.
+
+We like to avoid costly append operations.  Since the order of our
+result does not matter we can easily code an efficient [[join]]
+functions:  that returns the elements of two lists in one list.
 
 <<>>=
+let rec join l = foldl (fun x y -> y :: x) l
+    
+<<>>=
 let rec freeExprVars = function
-    | A.ExprAt(x,r)     -> freeExprVars x
+    | A.ExprAt(x,_)     -> freeExprVars x
     | A.Fetch(lvalue)   -> freeLValueVars lvalue
-    | A.BinOp(e1,_,e2)  -> (freeExprVars e1) @ (freeExprVars e2)
+    | A.BinOp(e1,_,e2)  -> join (freeExprVars e1) (freeExprVars e2)
     | A.UnOp(_,e)       -> freeExprVars e
     | A.PrimOp(_,args)  -> 
         List.concat (List.map (fun (_,e) -> freeExprVars e) args)
-    | _                 -> []
+    | A.Int _           -> []
+    | A.Float _         -> []
+    | A.Char _          -> []
+
 <<>>=
 and freeLValueVars = function
     | A.LValueAt(x,r)   -> freeLValueVars x
     | A.Mem(_,e,_)      -> freeExprVars e
     | A.Var(_,name)     -> [name]
-       
-let rec uses = function
-    | A.DeclAt(d,r)        , _   -> uses (d,Some r)
-    | A.Const(t,name,expr) , _   -> freeExprVars expr
-    | _                    , _   -> []
+@
+A constant declaration uses all names in its defining expression.
+These should be names of other constant expression but we don't know
+this yet.
+         
+<<>>=  
+let rec uses ((t,n,e),r) = freeExprVars e
 @
 
 % ------------------------------------------------------------------ 
@@ -821,9 +877,15 @@ it is syntactically and type-wise possible to declare a boolean value
 this is not permitted. The optionally provided type must match the
 actual type of the defining expression.
 
+The [[doConstDecl]] evaluates the expression for a constant declaration
+and optionally its type. Only when both succeed and the resulting type
+match the given type, and is not [[bool]] the name is bound to the
+type and value in the environment.
+
 <<>>=
-let doConstDecl scope env = function
-    | A.Const(Some t', name, expr) -> 
+let doConstDecl scope env ((ty,name,expr),r) = 
+    match ty with 
+    | Some t' -> (* type given at decl *)
         ( match evalExpr env expr, evalTy env t' with 
         | E.Ok(t,v),E.Ok(t') when t =t' && t <> Types.bool -> 
             F.bindv name (scope,E.Ok(F.Constant(v),t)) env
@@ -837,7 +899,7 @@ let doConstDecl scope env = function
             )
         | _ -> F.bindvError name scope env
         )
-    | A.Const(None, name, expr) ->
+    | None -> (* no type part of decl *)
         ( match evalExpr env expr with
         | E.Ok(t,v) when t <> Types.bool ->
             F.bindv name (scope,E.Ok(F.Constant(v),t)) env
@@ -847,7 +909,7 @@ let doConstDecl scope env = function
             ) 
         | _  -> F.bindvError name scope env
         )
-    | _   -> assert false
+    
 
 <<>>=
 let doConstDecls scope env dd =
@@ -862,28 +924,30 @@ let bindError scope env decls =
     let names = List.concat (List.map TV.defines decls) in 
         foldl (fun env name -> F.bindvError name scope env) env names
 @
-<<>>=
-let reportCycle env decls = 
-    let report = function
-        | A.Const(t,n,_), Some r -> 
-            error r env ("const declaration for "^n^" is cyclic")
-        | A.Const(t,n,_), None   ->
-            E.errorPrt  ("const declaration for "^n^" is cyclic")
-        | _                     -> assert false
-    in
-        List.iter report decls      
+
+This functions reports an error for all names defined by declarations
+that were found to be cyclic.
 
 <<>>=
-let doConst is_global env dd =
-    let decls          = List.map fst                            in
-    let scope          = if is_global then F.Global else F.Local in
+let reportCycle env decls = 
+    let report ((t,n,e),r) =
+        error r env ("const declaration for "^n^" is cyclic")
+    in
+        List.iter report decls      
+@
+
+The [[doConst]] function sorts and processes constant declarations.
+Depending on its [[scope]] parameter the declared names get the
+respective scope in [[env]]; an enlarged [[env]] is returned.
+
+<<>>=
+let doConst scope env dd =
     let rec bindAll env dd =
         try
             let dd' = TSort.sort dd                              in
-            doConstDecls scope env (decls dd')
+            doConstDecls scope env dd'
         with TSort.Cycle(offending) ->
             let dd'   = exclude dd offending                     in
-            let scope = if is_global then F.Global else F.Local  in
             let env'  = bindError scope env offending            in
                 ( reportCycle env offending
                 ; bindAll env' dd'
@@ -898,9 +962,9 @@ during the check of the static semantics below.
 
 <<>>=
 let doGlobalConst env program = 
-        doConst true  env (Collect.foldGlobalConstDecls program)
+        doConst F.Global env (Collect.foldGlobalConstDecls program)
 let doLocalConst  env body    = 
-        doConst false env (Collect.foldLocalConstDecls body)
+        doConst F.Local env (Collect.foldLocalConstDecls body)
 @
 
 % ------------------------------------------------------------------ 
