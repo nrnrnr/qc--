@@ -1,0 +1,80 @@
+#! /usr/bin/perl -w
+#
+# $Id$
+#
+# Work in progress!
+#
+# This is the configure script for Quick C--. Run as ./confire
+# to configure the compilation process. The script assumes that 
+# mk(1) from qc--/mk is already installed.
+
+#
+# which (file, dir, dir, dir, ..), call as which(file, @dirs)
+# search for file in @dirs and return, full path, if found, and ""
+# otherwise.
+#
+
+sub which {
+    my $file = shift (@_);
+
+    while ($f = shift (@_)) {
+        my $x = "$f/$file";
+        if (-f $x) { 
+            return $x; 
+        }
+    }
+    return "";
+}
+
+#
+# important search paths
+#
+
+@path       = split(/:/,$ENV{PATH});
+@include    = ( "/usr/include"
+              , "/usr/local/include"
+              , "/usr/include/lua40"
+              , "/usr/local/include/lua40"
+              , "/usr/local/lua/include"
+              , "/usr/include/lua"
+              );
+@libs       = ( "/lib"
+              , "/usr/lib"
+              , "/usr/local/lib"
+              );
+
+#
+# check for various executables and versions
+#
+
+$ocamlc     = which("ocamlc",@path);
+$ocamlv     = (`$ocamlc -v` =~ /(\d\.\d\d)/) && $1;
+$notangle   = which ("notangle",@path); 
+$cc         = which ("gcc",@path) || which ("lcc",@path) || which ("cc",@path);
+$mk         = which("mk",@path); 
+$latex      = which("latex",@path); 
+$pod2html   = which ("pod2html",@path);
+$lua_h      = which ("lua.h", @include);
+$lualib_h   = which ("lualib.h", @include);
+$liblua     = which ("liblua.a", @libs) || which ("liblua40.a", @libs);
+$liblualib  = which ("liblualib.a", @libs) || which ("liblualib40.a", @libs);
+$luav       = $lua_h && `grep LUA_VERSION $lua_h` =~ /Lua (\d.\d)/ && $1;  
+
+
+print <<EOF;    
+    Results
+    
+    ocamlc:         $ocamlc
+    OCaml Version:  $ocamlv
+    notangle:       $notangle
+    cc:             $cc
+    mk:             $mk
+    latex:          $latex
+    pod2html:       $pod2html
+    lua.h:          $lua_h
+    lualib.h:       $lualib_h
+    liblua:         $liblua
+    liblualib:      $liblualib
+    Lua Version:    $luav
+EOF
+    
