@@ -1,4 +1,4 @@
-    % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 % vim: ts=8 et sw=4:
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
 % Quality    ::=    A|B|C|D|E
@@ -85,6 +85,9 @@ module Ops : sig
   val add       : bits -> bits -> bits
   val sub       : bits -> bits -> bits
   val shra      : bits -> bits -> bits
+  val shrl      : bits -> bits -> bits
+  val shl       : bits -> bits -> bits
+  val logor     : bits -> bits -> bits
   val mul_trunc : bits -> bits -> bits
   val neg       : bits -> bits
 
@@ -409,6 +412,17 @@ let shra (b,w) (b',w') =
     let n  = zx64 b w in
         (Int64.shift_right b (Int64.to_int b'), w)
 
+let shrl (b,w) (b',w') =
+    assert (w = w');
+    (Int64.shift_right_logical b (Int64.to_int b'), w)
+
+let shl (b,w) (b',w') =
+    assert (w = w');
+    (zx64 (Int64.shift_left b (Int64.to_int b')) w, w)
+
+let logor (b,w) (b',w') =
+    assert (w = w');
+    (zx64 (Int64.logor b b') w, w)
 @
 <<bits.ml ((evaluating))>>=
 <<string scanning>>
