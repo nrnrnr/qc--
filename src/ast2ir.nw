@@ -203,7 +203,7 @@ let lvalue_name_in_env env x =
       if F.is_localv x env then
         AT.of_loc (Rtl.var x i w), w
       else 
-        impossible "global variable without location"
+        impossible ("global variable "^x^" without location")
   | _ -> 
       let what = match denot with
       | F.Constant _ -> "constant"
@@ -1146,6 +1146,7 @@ THIS CODE NEEDS TO BE REVISED ACCORDING TO THE NEW MANUAL: FIRST TABLE
 LOOKUP, THEN IF NOT FOUND, ALLOCATION FROM AUTOMATON.
 <<definition of [[globals]]>>=
 let globals (base:Rtl.exp) names =
+    let () = Verbose.say 5 ("global registers: " :: names) in
     let t = target.T.globals base in
     let decls = Buffer.create 128 in (* initial size - grows as needed *)
     let rec assign env n =
