@@ -75,6 +75,7 @@ register    = (invariant, ty, name, reg?)
 section     = SectionAt(section, region)
             | SSpan (expr key, expr value, section*)
             | Datum (datum)
+            | SExport (ty?, name*)            
             | Procedure ( conv?
                         , name
                         , formal*
@@ -293,8 +294,7 @@ let block f xs =
 
 let commablock f xs =
     nest begin
-    ~~ break
-    ^^ list (text "," ^^ break) f xs
+    ~~ list (text "," ^^ break) f xs
     end
 
 @ To indent a group we provide [[angrp]] and [[fngrp]]; [[fngrp]] is a
@@ -660,7 +660,21 @@ let rec stmt = function
         ^^ (if ts <> [] then break ^^ targets ts else empty)
         ^^ semi
         end
-    | EmptyStmt                           -> text ";"
+    | EmptyStmt -> semi
+
+let export t ns =
+    agrp begin
+    ~~ agrp begin 
+       ~~ text "export" 
+       ^^ ( match t with 
+          | Some t -> break ^^ ty t
+          | None   -> empty
+          )
+       end
+       ^/ commablock id ns
+       ^^ semi
+    end
+
 
 let rec section = function
     | SectionAt(x,_) -> section x
@@ -671,6 +685,7 @@ let rec section = function
             end
     | Datum( d) ->  
             datum d
+    | SExport (t, ns) -> export t ns
     | Procedure(cc,n,fs, ds, ss)  ->  
             agrp begin 
             ~~ agrp begin
@@ -700,19 +715,7 @@ let rec topdecl = function
                ^^ semi
             end
 
-    | Export( t, ns) ->
-            agrp begin
-            ~~ agrp begin 
-               ~~ text "export" 
-               ^^ ( match t with 
-                  | Some t -> break ^^ ty t
-                  | None   -> empty
-                  )
-               end
-               ^/ commablock id ns
-               ^^ semi
-            end
-    
+    | Export( t, ns) -> export t ns
     | Const ( cs) ->
             agrp begin 
             ~~ text "const"

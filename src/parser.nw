@@ -757,26 +757,29 @@ line        :   LINE LBRACE STR INT RBRACE
                         Srcmap.sync map  pos ($3,$4,$5) 
                     }
             
-toplevelAt  :   toplevel                          { TopDeclAt($1,p())   }
-toplevel    :   IMPORT ty names  SEMI             { Import($2,rev $3)   }
-            |   EXPORT    names  SEMI             { Export(None   , rev $2)}
-            |   EXPORT ty names  SEMI             { Export(Some $2, rev $3)}
-            |   CONST LBRACE constants RBRACE     { Const(rev $3)       }
-            |   INVARIANT REGISTER registers SEMI 
-                    { Registers (mkRegs Invariant $3) }
+toplevelAt  :   toplevel                          { TopDeclAt($1,p())        }
+toplevel    :   IMPORT ty names  SEMI             { Import($2,rev $3)        }
+            |   EXPORT    names  SEMI             { Export (None   , rev $2) }
+            |   EXPORT ty names  SEMI             { Export (Some $2, rev $3) }
+            |   CONST LBRACE constants RBRACE     { Const(rev $3)            }
+            |   INVARIANT REGISTER registers SEMI
+                    { Registers (mkRegs Invariant $3)                        }
             |   /*-----*/ REGISTER registers SEMI
-                    { Registers (mkRegs Variant   $2) }
+                    { Registers (mkRegs Variant   $2)                        }
             
             |   SECTION STR LBRACE sections RBRACE { Section($2,rev $4) }
             |   pragma                            { $1                  }
 
+
 sections    :   sections sectionAt                { $2 :: $1 }
             |   /**/                              { []       }
 
-sectionAt   :   section                           { SectionAt($1,p()) }
-section     :   procedure                         { $1                }
-            |   datum                             { Datum($1)         }
-            |   span                              { $1                }
+sectionAt   :   section                           { SectionAt($1,p())         }
+section     :   procedure                         { $1                        }
+            |   datum                             { Datum($1)                 }
+            |   span                              { $1                        }
+            |   EXPORT    names  SEMI             { SExport (None   , rev $2) }
+            |   EXPORT ty names  SEMI             { SExport (Some $2, rev $3) }
 
 span        :   SPAN exprAt expr 
                 LBRACE sections RBRACE            { SSpan($2,$3,rev $5) }
@@ -884,8 +887,8 @@ tyAt        :   ty                                { TyAt($1,p()) }
 ty          :   BITSn                             { BitsTy($1)   }
             |   FLOATn                            { FloatTy($1)  }
 
-body        :   LBRACE decls stmts RBRACE    { $2, rev $3 }
-block       :   LBRACE       stmts RBRACE    {     rev $2 }
+body        :   LBRACE decls stmts RBRACE    { rev $2, rev $3 }
+block       :   LBRACE       stmts RBRACE    {         rev $2 }
 
 returnto    :   LT sexprAt SLASH sexprAt GT  { Some ($2,$4) }
             |   /**/                         { None         }
