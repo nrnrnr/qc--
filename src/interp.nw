@@ -89,6 +89,9 @@ module Spaces = struct
                 ; Space.classification = Space.Reg
                 }
                 
+    (* these are never used, but Ast2IR expects to find a temp space *)
+    let r = Space.Standard32.r 32 Rtl.Identity [32]
+    let t = Space.Standard32.t    Rtl.Identity [32]
 end
 @
 
@@ -384,7 +387,7 @@ let cc' = (* new style *)
 
     ; C.stack_growth    = growth
     ; C.stable_sp_loc   = std_sp_location
-    ; C.replace_vfp     = (fun _ -> ())
+    ; C.replace_vfp     = Cfgx.Vfp.replace_with ~sp
     ; C.sp_align        = 1             
     ; C.pre_nvregs      = Register.Set.empty
     ; C.volregs         = Register.Set.empty
@@ -444,7 +447,8 @@ let target' = (* new style *)
       ; T.charset      = "latin1" 
       ; T.globals      = globls
       ; T.is_rounding_mode = (fun loc -> loc = fp_mode)
-      ; T.spaces       = [ Spaces.m ; Spaces.c ;  Spaces.a ; Spaces.g ]
+      ; T.spaces       = [ Spaces.m ; Spaces.c ;  Spaces.a ; Spaces.g ;
+                           Spaces.r ; Spaces.t (* bogus *) ]
       ; T.data_section = "data"
       ; T.bnegate      = Flow.bnegate
       ; T.goto         = Flow.goto

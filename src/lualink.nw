@@ -126,7 +126,6 @@ so forth.
 <<Linking QC-- Types>>=
 module AstAsm    = Astasm.Make(Personality)
 module NewAstAsm = Astasm.Make(NewPersonality)
-module InterpAsm = Interpasm.Make(Interp)
 
 module AsmType = struct
     type 'a t       = 'a Asm3.assembler
@@ -217,6 +216,9 @@ struct
 end (*MakeLib*)
 @ 
 
+HOW ARE THE DIFFERENT ASSEMBLERS asm, vasm, new_asm SUPPOSED TO BE USED?
+SOME DOCUMENTATION WOULD BE WELCOME. --CL
+
 <<export goodies to Lua>>=
 module Map = struct
     let compose ~lo ~hi =
@@ -276,7 +278,15 @@ C.register_module "Asm"
   ; "x86"     , V.efunc (Map.outchan **-> V.result Map.asm) (X86asm.make Cfgutil.emit)
   ; "new_x86" , V.efunc (Map.outchan **-> V.result Map.new_asm) 
                             (X86asm.make Cfgutil.new_emit)
-  ; "interp"  , V.efunc (Map.outchan **-> V.result Map.asm) InterpAsm.asm
+  ; "interp32l" , V.efunc (Map.outchan **-> V.result Map.asm) 
+            (Interpasm.asm ~byteorder:Rtl.LittleEndian ~memsize:8 ~ptrsize:32)
+  ; "interp32b" , V.efunc (Map.outchan **-> V.result Map.asm) 
+            (Interpasm.asm ~byteorder:Rtl.BigEndian ~memsize:8 ~ptrsize:32)
+  ; "new_interp32l" , V.efunc (Map.outchan **-> V.result Map.new_asm) 
+            (Interpasm.asm' ~byteorder:Rtl.LittleEndian ~memsize:8 ~ptrsize:32)
+  ; "new_interp32b" , V.efunc (Map.outchan **-> V.result Map.new_asm) 
+            (Interpasm.asm' ~byteorder:Rtl.LittleEndian ~memsize:8 ~ptrsize:32)
+  
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Block" 

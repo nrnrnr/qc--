@@ -31,7 +31,7 @@ $debug 1
 -- Evrything starts from here
 --
 
-backend = Backend.dummy32b
+backend = nil   -- is set in CMD.run, if unset
 
 CMD.cmdline(Sys.argv)
 return CMD.run()
@@ -472,6 +472,7 @@ a backend are primitives, and thus cannot be simply constructed in Lua.
 <<Lua Boot Script>>=
 Backend = Backend and error('Backend not empty') or {}
 
+-- make a backend for the old backplane
 function Backend.make(b)
   return
     { target    = b.target    or error('target not specified')
@@ -486,6 +487,7 @@ function Backend.make(b)
     }   
 end
 
+-- make a backend for the new backplane
 function Backend.new_make(b)
   return
     { target    = b.target    or error('target not specified')
@@ -501,20 +503,22 @@ function Backend.new_make(b)
     }   
 end
 
-Backend.dummy32l        = Backend.make { target = Targets.dummy32l}
-Backend.dummy32b        = Backend.make { target = Targets.dummy32b}
+-- Dummy backends, for new and old backplane
+Backend.dummy32l        = Backend.make      { target = Targets.dummy32l}
+Backend.dummy32b        = Backend.make      { target = Targets.dummy32b}
 Backend.dummy           = Backend.dummy32b      -- alias
 
-Backend.new_dummy32l    = Backend.new_make { target = Targets.new_dummy32l }
-Backend.new_dummy32b    = Backend.new_make { target = Targets.new_dummy32b }
+Backend.new_dummy32l    = Backend.new_make  { target = Targets.new_dummy32l }
+Backend.new_dummy32b    = Backend.new_make  { target = Targets.new_dummy32b }
 Backend.new_dummy       = Backend.new_dummy32b  -- alias
 
-Backend.interp          = Backend.make { target = Targets.interp
-                                       , asm    = Asm.interp
-                                       }
-Backend.new_interp      = Backend.make { target = Targets.new_interp
-                                       , asm    = nil
-                                       }
+-- Interpreter backends, for new and old backplane
+Backend.interp          = Backend.make      { target = Targets.interp
+                                            , asm    = Asm.interp32l }
+Backend.new_interp      = Backend.new_make  { target = Targets.new_interp
+                                            , asm    = Asm.new_interp32l }
+Backend.debug_interp    = Backend.new_make  { target = Targets.new_interp
+                                            , asm    = Asm.new_cmm}
 
 Backend.x86 =     
   { target    = Targets.x86
@@ -769,7 +773,7 @@ function CMD.cmdline (args)
         elseif v == "-pp"           then O.pretty       = not nil
         elseif v == "-interp"       then 
             O.interp = not nil
-            backend  = Backend.interp
+            backend  = backend or Backend.interp
         elseif strfind(v, "=") then dostring (v) 
         elseif v == "-o" then 
             i,v    = i+1, args[i+1]
@@ -806,6 +810,12 @@ each case.
 function CMD.run ()
     local O = Options
     
+    if O.interp and not backend then
+        backend = Backend.interp
+    elseif not backend then
+        backend = Backend.dummy
+    end -- else backend was set in command line 
+    
     if      O.help                     then write(CMD.help)   ; return 0
     elseif  O.man                      then write(CMD.manpage); return 0
     elseif  O.version                  then CMD.version() ; return 0
@@ -832,7 +842,7 @@ function CMD.run ()
         objs.n = 0      -- safe in OCaml implementation?
 
         if not CMD.dispatch then -- wizards can set CMD.dispatch
-            if O.interp or backend == Backend.interp then
+            if O.interp then
                 CMD.dispatch = CMD.interp_dispatch
             else
                 CMD.dispatch = CMD.compile_dispatch
@@ -845,7 +855,7 @@ function CMD.run ()
             i = i+1
         end 
         if not O.to_asm and not O.to_obj and not O.pretty then
-            if O.interp or backend == Backend.interp then
+            if O.interp then
                 CMD.qs2exe(objs, O.output)
             else
                 CMD.obj2exe(objs, O.output)

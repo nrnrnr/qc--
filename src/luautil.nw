@@ -93,7 +93,13 @@ let dostring g str   = C.apply (lookup g "dostring") g  [str]
 let defaultdir       = "/usr/local/lib/qc--"    (*XXX fix XXX*)
 let luapath          = "QCMMLUAPATH"
 let defaultpath      = ":.:*"                   (*XXX fix XXX*)
+@
 
+The code for [[*]] has a problem with exceptions: a [[Not_found]]
+escaping from the [[dostring]] function will be misread as coming from
+the [[find]] and cause a new attempt to find [[file]].
+
+<<dofile>>=
 let dosearchfile g file value =
     let path = try Sys.getenv luapath with Not_found -> defaultpath in
     let rec search = function

@@ -5,40 +5,29 @@
 \section{Lua Assembler}
 % ------------------------------------------------------------------ 
 
-This is an assembler that emits Lua code in the format expected by the 
-{\qcc} interpreter. 
-It implements the [[Asm3.assembler]] interface for assemblers in the 
-{\qcc} compiler.
-
-Since {\PAL} has no natural \emph{native pointer size} like assemblers
-for real machines it receives a functor argument of type [[PERSONALITY]]
-that defines the size of pointers and words. 
-
-<<PERSONALITY>>=
-module type PERSONALITY = sig
-    val target: Target2.t
-end
-@
-
-The assembler constructor receives the output channel for the assembler. 
-
-<<S>>=
-module type S = sig
-    val asm: out_channel -> Proc.t Asm3.assembler
-end    
+This is an assembler that emits Lua code in the format expected by the
+{\qcc} interpreter.  It implements the [[Asm3.assembler]] interface for
+assemblers in the {\qcc} compiler.
 
 <<interpasm.mli>>=
-<<PERSONALITY>>
-<<S>>
-module Make(P: PERSONALITY): S 
+type tgt   = ((Rtl.exp -> Automaton.t), Call.t) Target2.t'
+type proc' = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t'
+
+
+
+val asm:    byteorder:Rtl.aggregation -> memsize:int -> ptrsize:int
+            -> out_channel -> Proc.t Asm3.assembler
+val asm':   byteorder:Rtl.aggregation -> memsize:int -> ptrsize:int
+            -> out_channel -> proc'  Asm3.assembler
 @
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
-The implementation provides no surprises. It emits Lua code to [[stdout]]
-and shuts down when the [[emit]] method is called.
+The details of procedure representation and how to emit a procedure are
+captured by a functor argument of signature [[PROC]]. I could not get it
+to work with polymorphism allone.
 
 <<interpasm.ml>>=
 module T        = Target2
@@ -48,18 +37,65 @@ module GU       = Cfgutil
 module RL       = Rtltolua
 module RP       = Rtl.Private
 
-<<PERSONALITY>>
-<<S>>
-module Make (P: PERSONALITY):S = struct
-    <<Make>>
+type tgt   = ((Rtl.exp -> Automaton.t), Call.t) Target2.t'
+type proc' = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t'
+
+module type PROC = sig
+    type proc
+    val emit: proc -> out_channel -> unit
 end
+
+module Make (P: PROC) = struct
+    type proc = P.proc
+    <<auxilliaries>>
+    <<name mangler spec>>
+    <<class asm>>
+
+    let asm = new asm 
+end
+
+module Old = struct
+    type proc = Proc.t
+    
+    let emit (proc:proc) fd =
+        let fprintf = Printf.fprintf in
+        ( fprintf fd "CMM.procedure ('%s',%d,%d) -- stack data size correct\n" 
+                      (proc.Proc.symbol#mangled_text)
+                      proc.Proc.vars
+                      (Block.size proc.Proc.stackd)
+        ; Cfg4.interp proc.Proc.cfg fd
+        ; fprintf fd "CMM.end_procedure()\n"
+        )
+end
+
+module New = struct
+    type proc = proc'
+
+    let emit (proc:proc) fd =
+        let fprintf = Printf.fprintf in
+        ( fprintf fd "CMM.procedure ('%s',%d,%d) -- stack data size correct\n" 
+                      (proc.Proc.symbol#mangled_text)
+                      proc.Proc.vars
+                      (Block.size proc.Proc.stackd)
+        ; Interpemit.proc proc fd
+        ; fprintf fd "CMM.end_procedure()\n"
+        )
+end
+
+
+module OldAsm = Make(Old)
+module NewAsm = Make(New)
+
+let asm  = OldAsm.asm
+let asm' = NewAsm.asm
+
 @
 
 % ------------------------------------------------------------------ 
 \subsubsection{Auxiliaries}
 % ------------------------------------------------------------------ 
 
-<<Make>>=
+<<auxilliaries>>=
 let quoted        s = "\"" ^ s ^ "\""
 let parenthesized s = "("  ^ s ^ ")"
 let braced        s = "{"  ^ s ^ "}"
@@ -87,7 +123,7 @@ naming conventions. The \module{mangle} module provides name
 mangling support. To highlight the destinction between names and symbols
 we prefix every symbol with [[sym]].
 
-<<Make>>=
+<<name mangler spec>>=
 let spec =
     let reserved = [] (* add any reserved words here *)
     in
@@ -130,14 +166,12 @@ The assembler maintains mutable state for:
 Most methods append a declaration to the current section---[[append]]
 provides a private method for this.
 
-The [[init]] argument for the constructor provides a chance to open a
-file or similar. We don't use it at the momement.
 
-<<Make>>=
-type init  = unit
-type i    = Proc.t
-
-class asm (fd:out_channel): [Proc.t] Asm.assembler = 
+<<class asm>>=
+class asm  ~(byteorder:Rtl.aggregation)
+           ~(memsize:int)
+           ~(ptrsize:int)
+           (fd:out_channel): [proc] Asm.assembler =
 object (this)
     val         _fd       = fd
 
@@ -196,29 +230,18 @@ object (this)
         if n <> 0 then this#append (luafunc "skip"  (string_of_int n))
 
     (* instructions *)
-    method cfg_instr (proc:Proc.t) =
-        let cfg     = proc.Proc.cfg               in
-        let symbol  = proc.Proc.symbol            in
-        let vars    = proc.Proc.vars              in (* number of locals *)
-        let stackd  = Block.size proc.Proc.stackd in (* stackdata size   *)
-        let fprintf = Printf.fprintf in
-        ( fprintf fd "CMM.procedure ('%s',%d,%d) -- stack data size correct\n" 
-                      symbol#mangled_text
-                      vars
-                      stackd
-        ; G.interp cfg _fd
-        ; fprintf fd "CMM.end_procedure()\n"
-        )
+    method cfg_instr (proc: proc) = P.emit proc _fd
+
     (* -- emit data -- *)
 
     (* zeroes emits n zeroes as initialized data *)
     method zeroes (n:int) =
         let rec  z   = function
             | 0 -> []
-			| n -> 0 :: z (n-1) in
+            | n -> 0 :: z (n-1) in
         if n > 0 then
-            this#append (initdata (P.target.T.memsize) 
-						          (List.map string_of_int (z n)))
+            this#append (initdata (memsize) 
+                                  (List.map string_of_int (z n)))
         else
             ()
     
@@ -229,12 +252,12 @@ object (this)
         
     method addr (a: reloc) = 
         match Reloc.Simple.normalize a with
-		| None,   bits -> 
-			this#append (initdata (Bits.width bits) [(hexbits bits)])
-		| Some s, bits ->
-			this#append (luafunc "emit_raddr" 
-						         ((quoted s#mangled_text) ^ "," ^ 
-								  (quoted (hexbits bits))))
+        | None,   bits -> 
+            this#append (initdata (Bits.width bits) [(hexbits bits)])
+        | Some s, bits ->
+            this#append (luafunc "emit_raddr" 
+                                 ((quoted s#mangled_text) ^ "," ^ 
+                                  (quoted (hexbits bits))))
 
     (* should we consider throwing the comments in as Lua comments? *)
     method comment s = ()
@@ -243,17 +266,17 @@ object (this)
         match Strutil.Set.elements _imported with
         | []    -> ""
         | names -> luafunc "imports" 
-			               (braced (String.concat "," 
+                           (braced (String.concat "," 
                                         (List.map quoted
-										    (Strutil.Set.elements _imported))))
+                                            (Strutil.Set.elements _imported))))
 
     method private exports =
         match Strutil.Set.elements _exported with
         | []    -> ""
         | names -> luafunc "exports" 
-			               (braced (String.concat "," 
+                           (braced (String.concat "," 
                                         (List.map quoted
-											(Strutil.Set.elements _exported))))
+                                            (Strutil.Set.elements _exported))))
     
     (* this is wrong!!! *)
     method private globals =
@@ -263,13 +286,13 @@ object (this)
     (* -- Advertise pointer sizes and such for this assembler -- *)
 
     method private personality =
-          luafunc "memsize"   (string_of_int P.target.T.memsize)
-        ^ luafunc "byteorder" ( match P.target.T.byteorder with
-		                        | Rtl.BigEndian    -> quoted "NATIVE"
-							    | Rtl.LittleEndian -> quoted "NATIVE"
-							    | _                -> assert false
+          luafunc "memsize"   (string_of_int memsize)
+        ^ luafunc "byteorder" ( match byteorder with
+                                | Rtl.BigEndian    -> quoted "NATIVE"
+                                | Rtl.LittleEndian -> quoted "NATIVE"
+                                | _                -> assert false
                               )
-        ^ luafunc "ptrsize"   (string_of_int P.target.T.pointersize)
+        ^ luafunc "ptrsize"   (string_of_int ptrsize)
     
     method emit = 
         let toplevel = this#imports ^ this#exports ^ this#personality
@@ -279,12 +302,4 @@ object (this)
         )
 
 end    
-@
-
-% ------------------------------------------------------------------ 
-\section{Assember Constructor Function}
-% ------------------------------------------------------------------ 
-
-<<Make>>=
-let asm fd = new asm fd
 @
