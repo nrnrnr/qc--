@@ -149,23 +149,6 @@ implementation.
         ; ("unwinds"        , P.UNWINDS)
 
         |]
-@
-
-Floating point, integer, and character literals can specify an
-optional number of bits to hold the value.  To support arbitray
-precision in the AST the actual value is stored as a string but the
-number of bits as an integer.  The following functions deconstruct
-strings of matched literals.
- 
-<<>>=
-let splitAtColon s =
-    let len   = String.length s                      in
-    let colon = String.rindex s ':'                  in
-    let left  = String.sub s 0 colon                 in
-    let right = String.sub s (colon+1) (len-colon-1) in 
-        try 
-            (left, Some (int_of_string right))
-        with Failure _ -> assert false
 
 } (* end of prolog *)
 @
@@ -192,7 +175,6 @@ let exp         = ['e''E'] sign? nat
 let float       = frac exp? 
                 | nat exp
 
-let size        = ':' nat
 let cxxcomment  = "//" [^ '\n']*
                 
 let id          = (alpha | misc) (alpha | misc | digit)*
@@ -306,10 +288,8 @@ the reserved word [[pragma]] the [[PRAGMA]] token is returned by
                   let s = substr 1 0 (get lexbuf)
                   in P.PRIMOP(s)
                 }
-  | float       { fun map -> P.FLT (get lexbuf, None) }
-  | nat         { fun map -> P.INT (get lexbuf, None) }
-  | float size  { fun map -> P.FLT (splitAtColon (get lexbuf))}
-  | nat   size  { fun map -> P.INT (splitAtColon (get lexbuf))}
+  | float       { fun map -> P.FLT (get lexbuf) }
+  | nat         { fun map -> P.INT (get lexbuf) }
   
   | "/*"        { fun map -> comment1 lexbuf map }
   | cxxcomment  { fun map -> token lexbuf map (* skip comment *) }
@@ -331,43 +311,18 @@ written.
 and character = parse
     printable      "'"          { fun map -> 
                                   let s = substr 1 (-1) (get lexbuf) in
-                                  P.CHAR  (s,None) 
-                                }
-  | printable      "'"  size    { fun map -> 
-                                  let lexem     = get lexbuf         in
-                                  let left,size = splitAtColon lexem in
-                                  P.CHAR (substr 0 (-1) left, size)
+                                  P.CHAR  (s)
                                 }
   
   | '\\' escape    "'"          { fun map -> 
                                   let s = substr 1 (-1) (get lexbuf) in
-                                  P.CHAR  (s,None)
+                                  P.CHAR  (s)
                                 }
 
-  | '\\' escape    "'" size     { fun map -> 
-                                  let lexem     = get lexbuf         in
-                                  let left,size = splitAtColon lexem in
-                                  P.CHAR (substr 1 (-1) left, size)
-                                }
-  | '\\' octal+   "'"           { fun map -> 
-                                  let s = substr 1 (-1) (get lexbuf) in
-                                  P.CHAR  (s,None) (* XXX *)
-                                }
-  | '\\' octal+   "'" size      { fun map -> 
-                                  let lexem     = get lexbuf         in
-                                  let left,size = splitAtColon lexem in
-                                  P.CHAR (substr 1 (-1) left, size)
-                                }
   
   | '\\' ['x' 'X'] hex+ "'"     { fun map -> 
                                   let s = substr 2 (-1) (get lexbuf) in
-                                  P.CHAR  (s,None) (* XXX *)
-                                }
-  | '\\' ['x' 'X'] hex+ "'" size    
-                                { fun map -> 
-                                  let lexem     = get lexbuf         in
-                                  let left,size = splitAtColon lexem in
-                                  P.CHAR (substr 2 (-1) left, size)
+                                  P.CHAR  (s)
                                 }
                                   
   | _                           { fun map ->
@@ -752,17 +707,14 @@ together with their positions.
     | P.TILDE(s)          -> "TILDE(" ^     s ^ ")"
     | P.UMINUS(s)         -> "UMINUS" ^     s ^ ")"
     
-    | P.ID(s)             -> "ID(" ^ s                     ^ ")"
-    | P.STR(s)            -> "STR(" ^ s                    ^ ")"
-    | P.INFIXOP(s)        -> "INFIXOP(" ^ s                ^ ")"
-    | P.PRIMOP(s)         -> "PRIMOP(" ^ s                 ^ ")"
-    | P.INT(i,None)       -> "INT(" ^ i                    ^ ")"
-    | P.FLT(f,None)       -> "FLT(" ^ f                    ^ ")"    
-    | P.CHAR(c,None)      -> "CHAR(" ^ c                   ^ ")"    
-    | P.INT(i,Some bits)  -> "INT(" ^ i  ^":"^ string_of_int bits ^ ")"
-    | P.FLT(f,Some bits)  -> "FLT(" ^ f  ^":"^ string_of_int bits ^ ")"    
-    | P.CHAR(c,Some bits) -> "CHAR(" ^ c ^":"^ string_of_int bits ^ ")"    
-    | P.BITSn(i)          -> "BITSn(" ^        string_of_int i    ^ ")"
+    | P.ID(s)             -> "ID(" ^        s           ^ ")"
+    | P.STR(s)            -> "STR(" ^       s           ^ ")"
+    | P.INFIXOP(s)        -> "INFIXOP(" ^   s           ^ ")"
+    | P.PRIMOP(s)         -> "PRIMOP(" ^    s           ^ ")"
+    | P.INT(i)            -> "INT(" ^       i           ^ ")"
+    | P.FLT(f)            -> "FLT(" ^       f           ^ ")"
+    | P.CHAR(c)           -> "CHAR(" ^      c           ^ ")"
+    | P.BITSn(i)          -> "BITSn(" ^ string_of_int i ^ ")"
 @
 
 The following function [[lex]] takes a file name, scans the
@@ -835,8 +787,8 @@ number of bits. The ``ascii to integer'' function [[atoi]] returns the
 value by applying [[int_of_string]]].
  
 <<>>=
-let atoi (x,_) = try int_of_string x
-                 with Failure _ -> assert false
+let atoi x = try int_of_string x
+             with Failure _ -> assert false
 @
 
 <<>>=
@@ -877,12 +829,12 @@ let mkTypedefs ty names =
 %token <string> INFIXOP
 %token <string> PRIMOP 
 
-%token <string>            ID
-%token <string>            STR
-%token <int>               BITSn
-%token <string*int option> INT
-%token <string*int option> FLT
-%token <string*int option> CHAR
+%token <string>         ID
+%token <string>         STR
+%token <int>            BITSn
+%token <string>         INT
+%token <string>         FLT
+%token <string>         CHAR
 @
 
 The precedence of tokens from lowest to highest precedence.
@@ -1150,19 +1102,19 @@ stmts       :   stmts stmtAt                   { $2 :: $1 }
             |   /**/                           { []       }
 
 <<>>=
-sexprAt     :   sexpr                          { A.ExprAt($1, p()) }
-sexpr       :   INT                            { A.Int   $1        }
-            |   INT CCOLON tyAt                { A.Int   $1        }
-            |   FLT                            { A.Float $1        }
-            |   FLT CCOLON tyAt                { A.Float $1        }
-            |   CHAR                           { A.Char  $1        }
-            |   CHAR CCOLON tyAt               { A.Char  $1        }
-            |   lvalueAt0                      { A.Fetch $1        }
-            |   PRIMOP actls                   { A.PrimOp($1,$2)   }
+sexprAt     :   sexpr                          { A.ExprAt($1, p())    }
+sexpr       :   INT                            { A.Int($1, None)      }
+            |   INT CCOLON tyAt                { A.Int($1, Some $3)   }
+            |   FLT                            { A.Float($1, None)    }
+            |   FLT CCOLON tyAt                { A.Float($1, Some $3) }
+            |   CHAR                           { A.Char($1, None)     }
+            |   CHAR CCOLON tyAt               { A.Char($1, Some $3)  }
+            |   lvalueAt0                      { A.Fetch $1           }
+            |   PRIMOP actls                   { A.PrimOp($1,$2)      }
 <<>>=
-exprAt      :   expr                           { A.ExprAt($1, p()) }
-expr:       |   sexpr                          { $1                }
-            |   LPAREN exprAt RPAREN           { $2                }
+exprAt      :   expr                           { A.ExprAt($1, p())    }
+expr:       |   sexpr                          { $1                   }
+            |   LPAREN exprAt RPAREN           { $2                   }
 
             |   exprAt PLUS       exprAt       { A.BinOp($1,$2,$3) }
             |   exprAt MINUS      exprAt       { A.BinOp($1,$2,$3) }

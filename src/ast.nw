@@ -174,9 +174,9 @@ stmt        = StmtAt        (stmt, region)
             | EmptyStmt  
 <<>>=
 expr        = ExprAt        (expr, region)
-            | Int           (string,size?)
-            | Float         (string,size?)
-            | Char          (string,size?)
+            | Int           (string,ty?)
+            | Float         (string,ty?)
+            | Char          (string,ty?)
             | Fetch         (lvalue)
             | BinOp         (expr, op, expr)
             | UnOp          (op, expr)
@@ -360,11 +360,11 @@ and actuals xs = P.agrp (P.text "(" ^^ P.commalist actual xs ^^ P.text ")")
 and expr = function
     | A.ExprAt(x,_)             -> expr x
     | A.Int( i, None)           -> intlit i
-    | A.Int( i, Some size)      -> intlit i ^^ P.text ":" ^^ int size
+    | A.Int( i, Some t)         -> intlit i ^^ P.text "::" ^^ ty t
     | A.Float( f, None)         -> float f
-    | A.Float( f, Some size)    -> float f ^^ P.text ":" ^^ int size
+    | A.Float( f, Some t)       -> float f ^^ P.text "::" ^^ ty t
     | A.Char( c, None)          -> char c 
-    | A.Char( c, Some size)     -> char c ^^ P.text ":" ^^ int size
+    | A.Char( c, Some t)        -> char c ^^ P.text "::" ^^ ty t
     | A.Fetch(v)                -> lvalue v
     | A.BinOp(l,op,r)           -> P.agrp begin
                                  ~~ P.text "(" ^^ expr l

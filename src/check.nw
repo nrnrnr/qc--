@@ -660,12 +660,24 @@ and evalExprs env ee =
 <<>>=
 and evalExpr env = function
 | A.ExprAt(x,r) -> E.catch (error r env) (evalExpr env) x
-| A.Int (str,(Some size as s))   -> E.Ok(T.bits size, Const.int2value str s)
-| A.Int (str,(None      as s))   -> E.Ok(T.word     , Const.int2value str s)
-| A.Float (str,(Some size as s)) -> E.Ok(T.bits size, Const.float2value str s)
-| A.Float (str,(None      as s)) -> E.Ok(T.word     , Const.float2value str s)
-| A.Char (str,(Some size as s))  -> E.Ok(T.bits size, Const.char2value str s)
-| A.Char (str,(None      as s))  -> E.Ok(T.word     , Const.char2value str s)
+| A.Int (str, Some t)           -> 
+    ( match evalTy env t with
+    | E.Error -> E.Error
+    | E.Ok(t) -> E.Ok(t, Const.int2value str)
+    )
+| A.Int (str, None   )           -> E.Ok(T.word     , Const.int2value str)
+| A.Float (str, Some t)         -> 
+    ( match evalTy env t with
+    | E.Error -> E.Error
+    | E.Ok(t) -> E.Ok(t, Const.float2value str)
+    )
+| A.Float (str, None)            -> E.Ok(T.word     , Const.float2value str)
+| A.Char (str, Some t)          -> 
+    ( match evalTy env t with
+    | E.Error -> E.Error
+    | E.Ok(t) -> E.Ok(t, Const.char2value str)
+    )
+| A.Char (str, None)             -> E.Ok(T.word     , Const.char2value str)
 | A.Fetch(v)                     -> evalFetch env v
 | A.BinOp(l,op,r)                -> evalPrimOp env op [l;r]
 | A.UnOp(op,expr)                -> evalPrimOp env op [expr]
@@ -835,12 +847,12 @@ and tyPrimOp env op args =
 <<>>=
 and tyExpr env = function
     | A.ExprAt(x,r) -> E.catch (error r env) (tyExpr env) x
-    | A.Int (str,(Some size as s))   -> E.Ok(T.bits size)
-    | A.Int (str,(None      as s))   -> E.Ok(T.word     )
-    | A.Float (str,(Some size as s)) -> E.Ok(T.bits size)
-    | A.Float (str,(None      as s)) -> E.Ok(T.word     )
-    | A.Char (str,(Some size as s))  -> E.Ok(T.bits size)
-    | A.Char (str,(None      as s))  -> E.Ok(T.word     )
+    | A.Int (str, Some t)            -> evalTy env t
+    | A.Int (str, None)              -> E.Ok(T.word     )
+    | A.Float (str, Some t)          -> evalTy env t
+    | A.Float (str, None)            -> E.Ok(T.word     )
+    | A.Char (str, Some t)           -> evalTy env t
+    | A.Char (str, None)             -> E.Ok(T.word     )
     | A.Fetch(v)                     -> tyFetch env v
     | A.BinOp(l,op,r)                -> tyPrimOp env op [l;r]
     | A.UnOp(op,expr)                -> tyPrimOp env op [expr]
