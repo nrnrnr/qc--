@@ -183,16 +183,17 @@ sub c_compare {
         my $val   = shift @_;
         my $v     = shift @_;
         my $unsig = "unsigned " . lookup("$width/int");
-        
+        my $const = $val . "UL";        
+
         if ($hint eq "float") {
             print CEE <<EOF;
-            if (*($unsig*)(&$v) != $val) {
+            if (*($unsig*)(&$v) != $const) {
               printf("failed ($val) - %s sig [%s]\\n", TESTFILE, SIG); return;
             }
 EOF
         } else {
             print CEE <<EOF;
-            if ($v != $val) {
+            if ($v != $const) {
               printf("failed ($val) - %s sig [%s]\\n", TESTFILE, SIG); return;
             }
 EOF
@@ -294,7 +295,7 @@ while (defined($sig=<STDIN>)) {
     my $cee = sprintf "%s-callee-%03d.c", $name, $i;
     $i++;
 
-    # emit C-- code, and additioanlly C code, if $emitc is true.
+    # emit C-- code, and additionally C code, if $emitc is true.
 
     chop($sig);
     if ($emitc eq 0) {
