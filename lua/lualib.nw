@@ -157,6 +157,14 @@ module Combine : sig
     TYPEFUL with type 'a combined = 'a L1.combined
   <<similar specifications for [[L1]] to [[L9]]>>
 end
+@ 
+Finally, this is a convenient place to export empty libraries and
+types, for those interpreters that won't use libraries or types.
+<<lualib.mli>>=
+module Empty : sig
+  module Type : COMBINED_TYPE
+  module Library : TYPEFUL
+end
 @
 \section{Implementation}
 
@@ -281,6 +289,16 @@ module Extend (T : TYPEVIEW) (L : BARE) : TYPEFUL with type 'a combined = 'a T.c
 @ 
 @ 
 <<lualib.ml>>=
+module Empty = struct
+  module Type = Combine.T1 (Unused.Type)
+  module Library = 
+    struct
+      type 'a combined = unit
+      module M (C : CORE with type 'a V.userdata' = 'a combined) = struct
+        let init g = ()
+      end (*M*)
+    end (*Empty.Library*)
+end
 @ 
 <<[[Combine]] contents>>=
   module L10 (L1 : TYPEFUL)

@@ -60,6 +60,7 @@ interface found in~C.
 Instead, we use higher-order functions to whip up functionality as needed.
 If a projection fails, it raises [[Projection]] giving the value it
 tried to project and a string indicating what it tried to project to.
+Library clients may use the function [[projection]] to achieve this effect.
 <<lua.mli>>=
   exception Projection of value * string
   val projection : value -> string -> 'a
@@ -188,7 +189,7 @@ userdata.
 For example, the I/O library must be able to project userdata to
 values of type [[in_channel]] and [[out_channel]], representing open
 files.
-
+@
 The approved technique occurs in three stages:
 \begin{enumerate}
 \item
@@ -204,7 +205,7 @@ Combine all the libraries into a single library using
 [[Lualib.Combine.T]]$m$, where $m$~is the number of libraries.
 \end{enumerate}
 The combined types and libraries can then be used to build an interpreter.
-
+@
 While this scheme is a bit more elaborate than a scheme in which types
 and libraries are bundled together, it makes it possible for each
 library to depend on any set of types---essential for complex interpreters.
@@ -296,7 +297,7 @@ the userdata type is the [[combined]] type of the view on which the
 typeful library depends.
 <<library support>>=
 module type TYPEFUL = sig
-  type 'a combined  (* the combined type of all the view on which lib depends *)
+  type 'a combined  (* the combined type of all the views on which lib depends *)
   module M : functor (C : CORE with type 'a V.userdata' = 'a combined) -> sig
     val init : C.V.state -> unit
   end
@@ -305,7 +306,7 @@ end
 For simplicity, we combine only typeful libraries.
 This means we occasionally need to extend a bare library to make it typeful.
 We put the type first, not the library, because the partial
-application is useful
+application is useful.
 <<library support>>=
 module Extend (T : TYPEVIEW) (L : BARE) : TYPEFUL with type 'a combined = 'a T.combined
 @ 
@@ -366,16 +367,18 @@ module type INTERP_CORE = sig
 end
 
 module MakeCore
-    (T : Lib3.COMBINED_TYPE)
-    (L : Lib3.TYPEFUL with type 'a combined = 'a T.t)
+    (T : Lib.COMBINED_TYPE)
+    (L : Lib.TYPEFUL with type 'a combined = 'a T.t)
     : INTERP_CORE with type 'a Value.userdata' = 'a T.t
 @ 
-
-Because building an interpreter requires a library, and because not
-every client will want to create a special library, we provide an
-empty library.
-<<old lua.mli>>=
-module EmptyLibrary : Lib.FULL
+Because building an interpreter requires a library and a type, and because not
+every client will want to create a special library, we provide empty
+libraries and types.
+<<lua.mli>>=
+module Empty : sig
+  module Type : Lib.COMBINED_TYPE
+  module Library : Lib.TYPEFUL
+end
 @ 
 We also provide three standard libraries:
 [[Luastrlib : Lib.BARE]],
@@ -431,6 +434,7 @@ types.
                (Luacolorgraph.Make(T.T2)(T.T3))
   module I = Lua.MakeInterp (Lua.Parser.MakeStandard) (Lua.MakeCore (T) (L))
   module Go = Lua.Run(I)
+\end{verbatim}
 @
 
 \section{Implementation}
@@ -454,9 +458,8 @@ end
 module Run (I : INTERP) = Luarun.Make (I)
 module MakeCore = Luainterp.Make3
 module MakeInterp = Luabaselib.Add
-(*
-module EmptyLibrary = Luainterp.NoLibrary
-*)
+
+module Empty = Lualib.Empty
 
 let scanner map buf = Luascanner.token buf map
 @ 
