@@ -102,7 +102,7 @@ type ('l, 'e, 'a) proc = {
     locals        : register marked list;
     pdecls        : 'e compile_time_defns;
     continuations : name marked list;
-    stackdata     : (void, void, void) datum list;
+    stackdata     : (void, void, void) datum marked list;
     code          : ('l, 'e, 'a) stmt list;
   }
 and ('l, 'e, 'a)  datum =
@@ -110,7 +110,7 @@ and ('l, 'e, 'a)  datum =
   | Align      of int
   | ReserveMem of ty * Ast.memsize * Ast.init option (*init always none on stackdata*)
   | Procedure  of ('l, 'e, 'a) proc
-  | SSpan      of 'e * 'e * ('l, 'e, 'a) datum list
+  | SSpan      of 'e * 'e * ('l, 'e, 'a) datum marked list
 and void = Void of void
 @ 
 And last, the normal form of a compilation unit.
@@ -127,7 +127,7 @@ type 'e t' = {
   }
 <<exposed types>>=
 type assign  = (Ast.name_or_mem list * Ast.guarded list)
-type section = name * (Ast.expr, Ast.name_or_mem, assign) datum list
+type section = name * (Ast.expr, Ast.name_or_mem, assign) datum marked list
 type t = {
     target   : Ast.arch marked list;
     imports  : (Ast.region * Ast.ty option * Ast.import list) list;
@@ -170,9 +170,9 @@ The name [[fdata]] is short for ``fold data.''
 <<nast.ml>>=
 let rec add_datum r d ds = match d with
   | A.DatumAt (d, r) -> add_datum r d ds
-  | A.Label l -> Datalabel l :: ds
-  | A.Align n -> Align n :: ds
-  | A.MemDecl (t, s, init) -> ReserveMem (t, s, init) :: ds
+  | A.Label l -> (r, Datalabel l) :: ds
+  | A.Align n -> (r, Align n) :: ds
+  | A.MemDecl (t, s, init) -> (r, ReserveMem (t, s, init)) :: ds
 
 let fdata r = List.fold_right (add_datum r) 
 @ 
@@ -315,7 +315,8 @@ let rec section r imps exports lbls ks consts types regs archs data s k = match 
 | A.SSpan(key, v, ss) ->
     sections r imps exports lbls ks consts types regs archs [] ss
       (fun imps exports lbls ks pconsts ptypes pregs archs sdata ->
-        k imps exports lbls ks pconsts ptypes pregs archs (SSpan(key,v,sdata)::data))
+        let data = (r, SSpan(key,v,sdata)) :: data in
+        k imps exports lbls ks pconsts ptypes pregs archs data)
 | A.Datum d ->
     k imps exports lbls ks consts types regs archs (add_datum r d data)
 | A.Procedure(cc,p,fs,bs) ->
@@ -325,7 +326,7 @@ let rec section r imps exports lbls ks consts types regs archs data s k = match 
       let p = { cc = convention cc; name = p; formals = List.map formal fs; code = ss;
                 continuations = pks;
                 locals = rflatten pregs; pdecls = cdecls; stackdata = pdata; } in
-      k imps exports lbls ks consts types regs archs (Procedure p :: data))
+      k imps exports lbls ks consts types regs archs ((r,Procedure p) :: data))
 and sections r = kmap_none section r
 @ 
 At top level, we accumulate sections, where a section is a named list of data.

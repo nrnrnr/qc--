@@ -116,9 +116,6 @@ type compunit = {
 <<nelab.mli>>=
 <<exposed types>>
 @ 
-<<nelab.ml>>=
-<<exposed types>>
-@ 
 % ------------------------------------------------------------------ 
 \section{Checking Static Semantics}
 % ------------------------------------------------------------------ 
@@ -212,6 +209,7 @@ environment.
 % ------------------------------------------------------------------ 
 
 <<nelab.ml>>=
+<<exposed types>>
 module A  = Ast
 module B  = Bits
 module E  = Error
@@ -224,6 +222,7 @@ module Up = Rtl.Up
 module T  = Types
 
 let unimp = Impossible.unimp
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 
 <<nelab.ml>>=
 <<auxiliaries>>
@@ -347,7 +346,7 @@ Project a [[Rtl.exp]] value to a [[Bits.bits]] value.
 <<auxiliaries>>=
 let to_bits e = match Dn.exp e with
     | RP.Const (RP.Bits b) -> b
-    | _                    -> assert false 
+    | _                    -> impossf "expression deemed constant wasn't Bits"
 @
 % ------------------------------------------------------------------ 
 \subsection{Sorting and binding type and constant declarations}
@@ -456,22 +455,22 @@ module Const = struct
     let uses    (_, (t,name,expr)) = freeExprVars expr []
   end
   let what = "constant"
-  type rhs = Rtl.exp * Types.ty
+  type rhs = Bits.bits * Types.ty
   let eval env (r, (ty, name, e)) =
     let errorf x =
       Printf.kprintf (fun s -> E.errorRegionPrt (F.srcmap env, r) s; E.Error) x in
-    E.seq (evalExpr env e) (fun (e, t) ->
+    E.seq (evalExpr env e) (fun (b, t) ->
       if t = Types.bool then errorf "constant has type bool but must have a bits type"
       else
         match ty with
-        | None -> E.Ok (e, t)
+        | None -> E.Ok (b, t)
         | Some ty ->
             E.seq (Type.evalTy env ty) (fun t' ->
-              if t = t' then E.Ok (e, t)
+              if t = t' then E.Ok (b, t)
               else errorf "constant %s declared with type %s has actual type %s"
                            name (Types.to_string t') (Types.to_string t)))
   let bind name (r, typed_exp) env = 
-    F.bindv name (r, E.ematch typed_exp (fun (e, t) -> F.Constant(to_bits e), t)) env
+    F.bindv name (r, E.ematch typed_exp (fun (b, t) -> F.Constant b, t)) env
 end
 module ConstSortBind = SortAndBind(Const)
 @ 
@@ -549,7 +548,7 @@ let literalExpr env v ty cvt  =
     E.ematch ty
     ( function 
     | T.Bool            -> E.error "a named constant value must have type bitsXX"
-    | T.Bits width as t -> (R.bits (cvt v width) width, t) 
+    | T.Bits width as t -> (cvt v width, t) 
     )
 @ 
 <<utility functions for constants>>=
@@ -558,10 +557,9 @@ let rec evalFetch env = function
     | A.Mem (_,_,_,_)    -> E.error "memory access in const declaration"
     | A.Name(hint,id)  -> 
             ( match snd (F.findv id env) with
-            | E.Error                -> E.Error
-            | E.Ok(F.Constant(bits),ty) -> 
-                E.Ok(R.bits bits (B.width bits), ty)
-            | _ -> E.error ("access of non-constant "^id)
+            | E.Error                  -> E.Error
+            | E.Ok(F.Constant bits,ty) -> E.Ok(bits, ty)
+            | _ -> E.error ("access of non-constant "^id^ " in constant expression")
             ) 
 @
 Applications to primitives operators must be type checked. Only if the
@@ -571,11 +569,12 @@ operator and get the result.  Both result and type are returned.
 and evalPrimOp env op args =
     E.ematch (E.Raise.list (List.map (evalExpr env) args))
     (fun args ->
-        let v,t    = List.split args                 in
-        let rt,opr = Rtlop.Translate.operator op t   in
-        let e      = Simplify.exp (Rtl.app opr v)    in
+        let v,t       = List.split args                 in
+        let rt,opr    = Rtlop.Translate.operator op t   in
+        let of_bits b = R.bits b (B.width b)            in
+        let e         = Simplify.exp (Rtl.app opr (List.map of_bits v))    in
             ( match Dn.exp e with
-            | RP.Const(RP.Bits _) -> e, rt
+            | RP.Const(RP.Bits b) -> b, rt
             | _     -> E.error ("not a compile-time operator: "^op)
             )
     )
@@ -616,6 +615,8 @@ let elab lvalue typed_expr srcmap asm ast =
       Printf.kprintf (fun s -> E.errorRegionPrt (srcmap, r) s; E.Error) in
     let pointerty = Types.Bits metrics.Metrics.pointersize in
     let wordty    = Types.Bits metrics.Metrics.wordsize in
+    let vfp       = Vfp.mk metrics.Metrics.wordsize in
+    let memsize   = metrics.Metrics.memsize in
     <<definitions of name-binding functions>>
     let env = F.empty srcmap metrics asm in
     let env = TypeSortBind. bind_sortable_definitions env ast.N.udecls.N.types in
@@ -684,6 +685,67 @@ let bind_section_labels env _ = unimp "section-label binding" in
 let check_exports env _ = unimp "export checking" in
 @ 
 ================================================================
+% ------------------------------------------------------------------ 
+\subsection{Translation of \texttt{stackdata} declarations, accumulating labels}
+% ------------------------------------------------------------------ 
+
+We process [[stackdata]] declarations to accumulate three results:
+\begin{quote}
+\begin{tabular}{ll}
+[[mem]]& Memory layout for stack data\\
+[[stacklabels']]& [[stackdata]] labels, reversed\\
+[[env]]& Environment with bindings for stack labels\\
+\end{tabular}
+\end{quote}
+@ 
+The traversal is straightforward and needs little documentation.
+<<definitions of name-binding functions>>=
+let stackdata env ds =
+  <<definitions of stack-data procedures>> in
+  stackdata (Memalloc.relative vfp "stackdata" Memalloc.Up) [] env in
+@ 
+<<definitions of stack-data procedures>>=
+let rec stackdata mem stacklabels' env ds = match ds with
+| [] -> Memalloc.freeze mem, List.rev stacklabels', env
+| d :: ds ->
+    stackdatum mem stacklabels' env d
+      (fun mem stacklabels' env -> stackdata mem stacklabels' env ds) 
+@ 
+Any error flags the environment and continues.
+<<definitions of stack-data procedures>>=
+and stackdatum mem stacklabels' env (r, d) k =
+  let errorf fmt = Printf.kprintf
+      (fun s -> error r env s; k mem stacklabels' (F.flagError env)) fmt in
+  match d with
+  | N.Datalabel l ->
+      let loc = Memalloc.current mem in
+      let env = F.bindv l (r, E.Ok (F.Label (F.Stack loc), pointerty)) env in
+      k mem (loc :: stacklabels') env
+  | N.Align n ->
+      k (Memalloc.align mem n) stacklabels' env
+  | N.ReserveMem(ty,size,Some _) -> errorf "initialization not permitted for stackdata"
+  | N.ReserveMem(ty,A.DynSize,_) -> errorf "illegal size for stackdata"
+  | N.ReserveMem(ty,size,None) ->
+      (match Type.evalTy env ty with
+      | E.Error -> k mem stacklabels' env
+      | E.Ok Types.Bool -> impossf "boolean type in abstract syntax"
+      | E.Ok (Types.Bits w) ->
+          let finish size =
+            if w mod memsize = 0 then
+              k (Memalloc.allocate mem (size * (w / memsize))) stacklabels' env
+            else
+              errorf "width %d of initialized data is not a multiple of memsize %d"
+                w memsize in
+          match size with 
+          | A.NoSize    -> finish 1 
+          | A.DynSize   -> impossf "dynamic memory size"
+          | A.FixSize e ->
+              match Const.evalExpr env e with
+              | E.Ok (bits, _) -> finish (Bits.U.to_int bits)
+              | E.Error        -> k mem stacklabels' (F.flagError env)
+      )
+  | N.Procedure _ -> impossf "nested procedures"
+  | N.SSpan (_, _, _) -> impossf "span in stackdata"
 @
 Global symbols are all those on the top level and section level.
 Additionally all labels for code inside procedures are also
