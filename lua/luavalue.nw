@@ -22,8 +22,8 @@ matching [[Luavalue.S]].
 We need a synonym because to re-export [[ep]] and [[ep]] would be
 consider a circular type defintion.
 <<signatures>>=
-type ('a, 'b) ep = { embed : 'a -> 'b; project : 'b -> 'a }
-type ('a, 'b) synonym_for_ep = ('a, 'b) ep = { embed : 'a -> 'b; project : 'b -> 'a }
+type ('a, 'b, 'state) ep = { embed : 'a -> 'b; project : 'state -> 'b -> 'a }
+type ('a, 'b, 'state) synonym_for_ep = ('a, 'b, 'state) ep = { embed : 'a -> 'b; project : 'state -> 'b -> 'a }
 @ 
 <<signatures>>=
 module type S = sig
@@ -80,8 +80,9 @@ WE MIGHT HAVE TO ADD FLEXIBILITY BY MAKING
 <<signatures>>=
   exception Projection of value * string
   val projection : value -> string -> 'a
-  type ('a, 'b) ep = ('a, 'b) synonym_for_ep = { embed : 'a -> 'b; project : 'b -> 'a }
-  type 'a map  = ('a, value) ep
+  type ('a, 'b, 'state) ep = ('a, 'b, 'state) synonym_for_ep = 
+     { embed : 'a -> 'b; project : 'state -> 'b -> 'a }
+  type 'a map  = ('a, value, state) ep
   type 'a mapf  (* used to build function maps that curry/uncurry *)
 @ 
 These functions enable us to convert the basic types.
@@ -137,9 +138,10 @@ arguments by using the embedding/projection pair produced by
   val result   : 'a map  -> 'a mapf
   val runit    : unit mapf                         (* for functions w/o results *)
   val values   : value list mapf                   (* functions returning value lists*)
-  val pfunc    : 'a mapf -> 'a map                 (* pure functions *)
-  val func     : 'a mapf -> (state -> 'a) map      (* impure functions *)
-  val closure  : 'a mapf -> (state -> 'a) map      (* function or table w/apply method *)
+  val func     : 'a mapf -> 'a map                 (* function *)
+  val closure  : 'a mapf -> 'a map                 (* function or tbl w/apply method *)
+  val pure     : 'a mapf -> 'a            -> value (* pure f = (closure f).embed *)
+  val impure   : 'a mapf -> (state -> 'a) -> value (* expose state to function *)
 end
 @ Here's an example: we embed the [[String.sub]] function, then apply
 it to some arguments.
@@ -175,7 +177,7 @@ module Make (U : USERDATA) : S with type 'a userdata'  = 'a U.t
 module Make (U : USERDATA) : S with type 'a userdata'  = 'a U.t 
 = struct
   <<value toplevel>>
-  <<tests>>
+  (*<tests>*)
 end
 @ 
 I have to repeat the datatype definition.
@@ -281,32 +283,40 @@ Now, for embedding and projection.  More repeats.
 <<value toplevel>>=
 exception Projection of value * string
 let projection v s = raise (Projection(v, s))
-type ('a,'b) ep = ('a, 'b) synonym_for_ep = { embed : 'a -> 'b; project : 'b -> 'a }
-type 'a map  = ('a, value) ep
-type 'a mapf = ('a, value list -> value list) ep
+type ('a,'b,'state) ep = ('a, 'b,'state) synonym_for_ep = 
+  { embed : 'a -> 'b; project : 'state -> 'b -> 'a }
+type 'a map  = ('a, value, state) ep
+type 'a mapf = 
+  { fembed   : 'a -> state -> value list -> value list
+  ; fproject : state -> (state -> value list -> value list) -> 'a
+  } 
 @
 Here are the embedding/projection pairs for the simple types.
 There are subtle mismatches between Caml types and Lua types, so I do
 my best to patch them.
 <<value toplevel>>=
 let userdata = { embed = (fun x -> Userdata x)
-               ; project = function Userdata x -> x
-                                  | v -> raise (Projection (v, U.tname))
+               ; project = fun _ v -> match v with 
+                                      | Userdata x -> x
+                                      | _ -> raise (Projection (v, U.tname))
                } 
 
 let string = { embed = (fun s -> String s)
-             ; project = function String s -> s 
-                                | Number x -> string_of_float x
-                                | v -> raise (Projection (v, "string"))
+             ; project = fun _ v -> match v with
+                                  | String s -> s 
+                                  | Number x -> string_of_float x
+                                  | v -> raise (Projection (v, "string"))
              } 
 
 let is_float_literal s = 
   Luafloat.length (Lexing.from_string s) = String.length s
 let pervasive_float = float
 let float = { embed = (fun x -> Number x)
-            ; project = function Number x -> x
-                               | String s when is_float_literal s -> float_of_string s
-                               | v -> raise (Projection (v, "float"))
+            ; project = fun _ v ->
+                        match v with
+                        | Number x -> x
+                        | String s when is_float_literal s -> float_of_string s
+                        | v -> raise (Projection (v, "float"))
             } 
 <<luafloat.mll>>=
 let digit       = ['0'-'9']
@@ -322,20 +332,23 @@ let to_int x =
   if pervasive_float n = x then n else raise (Projection (Number x, "int"))
 
 let int   = { embed = (fun n -> Number (pervasive_float n))
-            ; project = function Number x -> to_int x 
-                               | v -> raise (Projection (v, "int"))
+            ; project = fun _ v -> match v with
+                                   | Number x -> to_int x 
+                                   | v -> raise (Projection (v, "int"))
             } 
 
 let bool  = { embed = (fun b -> if b then String "t" else Nil)
-            ; project = function Nil -> false | _ -> true
+            ; project = fun _ v -> match v with Nil -> false | _ -> true
             } 
 let unit =  { embed = (fun () -> Nil)
-            ; project = function Nil -> () | v -> raise (Projection (v, "unit"))
+            ; project = (fun _ v -> match v with Nil -> () 
+                                    | v -> raise (Projection (v, "unit")))
             } 
 @ 
 <<value toplevel>>=
-let option t = { embed = (function None -> Nil | Some x -> t.embed x)
-               ; project = (function Nil -> None | v -> Some (t.project v))
+let option t = { embed = (fun v -> match v with None -> Nil | Some x -> t.embed x)
+               ; project = (fun g v -> match v with Nil -> None
+                                      | v -> Some (t.project g v))
                }
 @ 
 <<value toplevel>>=
@@ -349,24 +362,26 @@ let list' nil_ok (ty : 'a map) =
                    ; set_elems (next +. 1.0) es)
     in  (set_elems 1.0 l; Table t)
   in
-  let untable (t:table) =
+  let untable g (t:table) =
     let n = match Table.find t (String "n") with
     | Number x -> to_int x
     | v -> Luahash.population t  in
     let rec elems i =
       if i > n then []
-      else ty.project (Table.find t (Number (pervasive_float i))) :: elems (i + 1) in
+      else ty.project g (Table.find t (Number (pervasive_float i))) :: elems (i + 1) in
     elems 1
-  in { embed = table; project = (function Table t -> untable t
+  in { embed = table; project = (fun g v -> match v with
+                                        | Table t -> untable g t
                                         | Nil when nil_ok -> []
                                         | v -> raise (Projection (v, "list"))) }
 let list    ty = list' false ty
 let optlist ty = list' true  ty
 @
 <<value toplevel>>=
-let value = { embed = (fun x -> x); project = (fun x -> x) }
+let value = { embed = (fun x -> x); project = (fun _ x -> x) }
 let table = { embed = (fun x -> Table x)
-            ; project = (function Table t -> t | v -> raise (Projection (v, "table")))
+            ; project = fun g v -> match v with Table t -> t
+                                   | v -> raise (Projection (v, "table"))
             }
 @ 
 Here is a simple function from one argument to one result.
@@ -381,13 +396,21 @@ let state () =
  { globals = Table.create 50; fallbacks = Hashtbl.create 10; callstack = [];
    currentloc = None }
 let emptystate = state()
-
+@ 
+There's a horrible choice here.  Do we use the state where the
+function is embedded or where it is applied.
+Presumably where it is applied is right is really right, but would
+botch a pure function.
+Maybe we need [[val state : 'a map -> (state -> 'a) map]]?
+<<value toplevel>>=
 let (-->) arg result =
   { embed =   (fun f -> 
-               caml_func (fun _ args -> [result.embed (f (arg.project (trim1 args)))]))
-  ; project = function Function (_, f) -> 
-                          fun x -> result.project (trim1 (f emptystate [arg.embed x]))
-                     | v -> raise (Projection (v, "function"))
+               caml_func (fun g args -> [result.embed (f (arg.project g (trim1 args)))]))
+  ; project = fun g v ->
+              match v with
+              | Function (_, f) -> 
+                  fun x -> result.project g (trim1 (f emptystate [arg.embed x]))
+              | v -> raise (Projection (v, "function"))
   } 
 @ 
 What we have above would be enough, except that Caml likes functions
@@ -398,47 +421,47 @@ The functions are a bit subtle, but if you follow the types, you
 shouldn't be too baffled. 
 <<value toplevel>>=
 let ( **-> ) (firstarg : 'a map) (lastargs : 'b mapf) : ( ('a -> 'b) mapf ) =
-  let apply (f : 'a -> 'b) args = 
+  let apply (f : 'a -> 'b) g args = 
     let h, t = match args with [] -> Nil, [] | h :: t -> h, t in
-    let f = f (firstarg.project h) in
-    lastargs.embed f t
+    let f = f (firstarg.project g h) in
+    lastargs.fembed f g t
   in
-  let unapp f' =
-    fun (x : 'a) -> lastargs.project (function t -> f' (firstarg.embed x :: t)) in
-  { embed = apply; project = unapp }
+  let unapp g f' =
+    fun (x : 'a) -> lastargs.fproject g (fun g t -> f' g (firstarg.embed x :: t)) in
+  { fembed = apply; fproject = unapp }
 
 let result (r : 'a map) : ('a mapf) = 
-  { embed   = (fun f -> fun args -> [r.embed f])
-  ; project = (fun f -> r.project (trim1 (f [])))
+  { fembed   = (fun f -> fun g args -> [r.embed f])
+  ; fproject = (fun g f -> r.project g (trim1 (f g [])))
   } 
 
-let runit = { embed = (fun () args -> [])
-            ; project = (fun f -> match f [] with [] -> ()
-                                  | h::t -> raise (Projection (h, "unit result")))
+let runit = { fembed   = (fun () g args -> [])
+            ; fproject = (fun g f -> match f g [] with [] -> ()
+                                    | h::t -> raise (Projection (h, "unit result")))
             } 
 
 let values : value list mapf =
-  { embed = (fun l args -> l); project = (fun f -> assert false)
+  { fembed = (fun l g args -> l); fproject = (fun g f -> assert false)
   } 
 
-let pfunc (arrow : 'a mapf) : ('a map) =
-  { embed   = (fun (f : 'a) -> caml_func (fun s -> arrow.embed f))
-  ; project = (function Function (_, f) -> (arrow.project (f emptystate) : 'a)
-                      | v -> raise (Projection (v, "function")))
+let func (arrow : 'a mapf) : ('a map) =
+  { embed   = (fun (f : 'a) -> caml_func (arrow.fembed f))
+  ; project = (fun g v -> match v with
+                          | Function (_, f) -> (arrow.fproject g f : 'a)
+                          | v -> raise (Projection (v, "function")))
   } 
 
-let func (arrow : 'a mapf) : ((state -> 'a) map) =
-  { embed   = (fun (f : state -> 'a) -> caml_func (fun s -> arrow.embed (f s)))
-  ; project = (function Function (_, f) -> (fun s -> arrow.project (f s) : state -> 'a)
-                      | v -> raise (Projection (v, "function")))
+let impure arrow f = caml_func (fun g -> arrow.fembed (f g) g)
+
+let closure (arrow : 'a mapf) : ('a map) =
+  { embed   = (fun (f : 'a) -> caml_func (arrow.fembed f))
+  ; project = (fun g v -> match v with
+                          | Function (_, f) -> (arrow.fproject g f : 'a)
+                          | Table t as v -> (<<project table [[t]] into a function>>)
+                          | v -> raise (Projection (v, "function")))
   } 
 
-let closure (arrow : 'a mapf) : ((state -> 'a) map) =
-  { embed   = (fun (f : state -> 'a) -> caml_func (fun s -> arrow.embed (f s)))
-  ; project = (function Function (_, f) -> (fun s -> arrow.project (f s) : state -> 'a)
-                      | Table t as v -> (<<project table [[t]] into a function>>)
-                      | v -> raise (Projection (v, "function")))
-  } 
+let pure arrow = (closure arrow).embed
 @
 A table is a function if it has an apply method that is a function.
 <<project table [[t]] into a function>>=
@@ -446,8 +469,7 @@ let f = try Table.find t (String "apply")
         with Not_found -> raise (Projection (v, "function"))  in
 match f with
 | Function (_, f) ->
-    let f' s vs = f s (v :: vs) in
-    (fun s -> arrow.project (f' s) : state -> 'a)
+    let f' g vs = f g (v :: vs) in arrow.fproject g f'
 | v -> raise (Projection (v, "'apply' element of table as function"))
 @ 
 Lua tables are very nearly Caml hash tables, except they never have

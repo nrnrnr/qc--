@@ -262,8 +262,13 @@ compiler stage):
 
 
 Here's the code that implements the execution rules:
-
 <<runProgram>>=
+let the_verbosity = ref false
+let verbosity v =
+  let v' = !the_verbosity in
+  the_verbosity := v;
+  v'
+
 let rec runProgram arg proc = function
     | Seq actionList ->
         let seqHelp truth (action) =
@@ -281,7 +286,12 @@ let rec runProgram arg proc = function
         && runProgram arg proc (Fix action)
     | Ignore action ->
         let _ = runProgram arg proc action in false
-    | Single {fn = func; name = n} -> func arg proc
+    | Single {fn = func; name = name} -> 
+        begin
+          if !the_verbosity then
+            List.iter prerr_string ["Running stage "; name; "\n"];
+          func arg proc
+        end
     | Share (param, _, action) -> runProgram param proc action
 @
 
@@ -595,31 +605,25 @@ combined) =
 
 
 We provide embedding/projection pairs for each of the backplane types.
-
-LARGE UGLY BOGON!  THE ACTION MAP, IF IT IS PASSED A TABLE, SHOULD GO
-AHEAD AND ATTEMPT TO PROJECT THAT TABLE INTO A STAGE.  IF SUCCESSFUL,
-IT SHOULD THEN APPLY SINGLE TO THE RESULT.  THIS WAY, SINGLE NEVER
-SHOWS UP AT THE LUA LEVEL. ---NR
 <<Lua initialization>>=
 let {V.embed = embed; V.project = project} = T1.makemap V.userdata V.projection
 
 let ( **-> ) = V.( **-> )
 let proc    = T2.makemap V.userdata V.projection
-let stageFn = V.pfunc (V.value **-> proc **-> V.result V.bool)
+let stageFn = V.func (V.value **-> proc **-> V.result V.bool)
 
 <<stage map>>
 
-let projectAction v = match v with
-  | V.Userdata _ -> project v
-  | V.Table _    -> single (projectStage v)
-  | V.Function _ -> single (projectStage v)
+let projectAction g v = match v with
+  | V.Userdata _ -> project g v
+  | V.Table _    -> single (projectStage g v)
+  | V.Function _ -> single (projectStage g v)
   | _            -> raise (V.Projection (v, "action"))
 
 let action = { V.embed   = embed 
              ; V.project = projectAction 
              }
 @
-
 
 Finally, we make the list of builtins that will be visible in Lua.
 N.B. that the ``[[stage]]'' builtin is not necessary except as a way
@@ -631,15 +635,16 @@ let ( **-> ) = V.( **-> )
 let id x = x
 let init g =
   Interp.register_module "Backplane" 
-  [ "seq",       (V.pfunc ((V.list action)     **-> V.result action)).V.embed seq
-  ; "when_do",   (V.pfunc (action  **-> action **-> V.result action)).V.embed when_do
-  ; "unless_do", (V.pfunc (action  **-> action **-> V.result action)).V.embed unless_do
-  ; "fix",       (V.pfunc (action  **->             V.result action)).V.embed fix
-  ; "share",     (V.pfunc (V.value **-> V.string **-> action **->
+  [ "seq",       (V.func ((V.list action)     **-> V.result action)).V.embed seq
+  ; "when_do",   (V.func (action  **-> action **-> V.result action)).V.embed when_do
+  ; "unless_do", (V.func (action  **-> action **-> V.result action)).V.embed unless_do
+  ; "fix",       (V.func (action  **->             V.result action)).V.embed fix
+  ; "share",     (V.func (V.value **-> V.string **-> action **->
                                                     V.result action)).V.embed share
-  ; "ignore",    (V.pfunc (action  **->             V.result action)).V.embed ignore
-  ; "stage",     (V.pfunc (action  **->             V.result action)).V.embed id
-  ; "run",       (V.pfunc (action **-> proc **->    V.result V.bool)).V.embed run
+  ; "ignore",    (V.func (action  **->             V.result action)).V.embed ignore
+  ; "stage",     (V.func (action  **->             V.result action)).V.embed id
+  ; "run",       (V.func (action **-> proc **->    V.result V.bool)).V.embed run
+  ; "verbosity", (V.func (V.bool **->              V.result V.bool)).V.embed verbosity
   ] g
 ; Lua.Lib.StringList.empty
 @
@@ -663,10 +668,10 @@ let stage_name g v =
   | Some (V.Element (s, _         )) -> s ^ ".?"
 
 
-let projectStage stage' = match stage' with
+let projectStage g stage' = match stage' with
   | V.Function (_, f) ->
-    { name = stage_name (V.state()) stage'
-    ; fn   = stageFn.V.project stage'
+    { name = stage_name g stage'
+    ; fn   = stageFn.V.project g stage'
     ; paramExpected  = None
     ; stateCreated   = SS.empty
     ; stateDestroyed = SS.empty
@@ -674,12 +679,12 @@ let projectStage stage' = match stage' with
     }
   | V.Table stage ->
       let field f      = V.Table.find stage (embedString f) in
-      let string_set v = list2SSet ((V.optlist V.string).V.project v) in
+      let string_set v = list2SSet ((V.optlist V.string).V.project g v) in
       { name = (match field "name" with
                 | V.Nil -> stage_name (V.state()) stage'
-                | s     -> projectString s)
-      ; fn = stageFn.V.project (field "fn")
-      ; paramExpected  = (V.option V.string).V.project (field "paramExpected")
+                | s     -> projectString g s)
+      ; fn = stageFn.V.project g (field "fn")
+      ; paramExpected  = (V.option V.string).V.project g (field "paramExpected")
       ; stateCreated   = string_set (field "creates")
       ; stateDestroyed = string_set (field "destroys")
       ; stateUsed      = string_set (field "uses")
@@ -721,13 +726,13 @@ We set up wrappers to create the [[action]] types. These functions will
 be the primitives visible in Lua.
 
 <<stage map>>=
-let seq alst = Seq alst
-let when_do a1 a2 = When_Do(a1, a2)
-let unless_do a1 a2 = Unless_Do(a1, a2)
-let fix a = Fix a
+let seq       alst     = Seq alst
+let when_do   a1 a2    = When_Do(a1, a2)
+let unless_do a1 a2    = Unless_Do(a1, a2)
+let fix       a        = Fix a
 let share value name a = Share(value, name, a)
-let ignore a = Ignore a
-let single a = Single a
+let ignore a           = Ignore a
+let single a           = Single a
 @
 
 

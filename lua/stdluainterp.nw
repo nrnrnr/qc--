@@ -264,8 +264,8 @@ If anything goes wrong, it calls the ``arith'' fallback.
 let arith opname op =
   let opname = V.String opname in (* allocate early and share *)
   let f x y g = try
-    let x = V.float.V.project x in
-    let y = V.float.V.project y in
+    let x = V.float.V.project g x in
+    let y = V.float.V.project g y in
     V.float.V.embed (op x y)
   with V.Projection (_, _) -> fb1 "arith" g [x; y; opname]
   in f
@@ -273,7 +273,7 @@ let arith opname op =
 Negation is similar except that it takes but one argument.
 <<interp toplevel>>=
 let negate x g = try
-  let x = V.float.V.project x in
+  let x = V.float.V.project g x in
   V.float.V.embed (~-. x)
   with V.Projection (_, _) -> fb1 "arith" g [x; V.Nil; V.String "umn"]
 @ 
@@ -290,8 +290,8 @@ let order opname nop sop =
   let f x y g =
     match x, y with
     | V.Number x, V.Number y -> V.bool.V.embed (nop x y)
-    | _ -> try let x = V.string.V.project x in
-               let y = V.string.V.project y in
+    | _ -> try let x = V.string.V.project g x in
+               let y = V.string.V.project g y in
                V.bool.V.embed (sop x y)
            with V.Projection (_, _) -> fb1 "order" g [x; y; opname]
   in f
@@ -299,8 +299,8 @@ let order opname nop sop =
 Concatenation converts to string.
 <<interp toplevel>>=
 let concat x y g =
-  try let x = V.string.V.project x in
-      let y = V.string.V.project y in
+  try let x = V.string.V.project g x in
+      let y = V.string.V.project g y in
       V.string.V.embed (x ^ y)
   with V.Projection (_, _) -> fb1 "concat" g [x; y]
 @ 

@@ -306,9 +306,6 @@ Here we finally bind the exported values to names in the Lua
 interpreter. The [[compile]] function receives a lua value such that it
 can call Lua functions while it is active.
 <<export goodies to Lua>>=
-let pf      t = (V.pfunc   t).V.embed 
-let func    t = (V.func    t).V.embed 
-let closure t = (V.closure t).V.embed 
 
 module Map = struct
     let ast       = AstV.makemap    V.userdata V.projection
@@ -317,47 +314,40 @@ module Map = struct
     let proc      = ProcV.makemap   V.userdata V.projection
     let doc       = DocV.makemap    V.userdata V.projection
     let target    = TargetV.makemap V.userdata V.projection
-    let optimize  = V.func    (proc **-> V.runit)
-    let optimize' = V.closure (proc **-> V.runit)
+    let optimize  = V.closure (proc **-> V.runit)
     let channel   = InOutV.makemap  V.userdata V.projection
     let inchan    = Luaiolib.in'    channel    V.projection
     let outchan   = Luaiolib.out    channel    V.projection
-    let stage     = V.pfunc (V.value **-> proc **-> V.result V.bool)
+    let stage     = V.func (V.value **-> proc **-> V.result V.bool)
 end
 
 let init g = 
   C.register_module "Asm"
-    [ "cmm"  , pf (            Map.outchan **-> V.result Map.asm) Asm.asm     
-    ; "ast"  , pf (            Map.outchan **-> V.result Map.asm) Asm.asm (*alias*)
-    ; "dot"  , pf (            Map.outchan **-> V.result Map.asm) Dotasm.asm
-    ; "asdl" , pf (            Map.outchan **-> V.result Map.asm) Asdlasm.asm
-    ; "sparc", pf (V.bool **-> Map.outchan **-> V.result Map.asm) Msparcasm.asm
+    [ "cmm"  , V.pure (            Map.outchan **-> V.result Map.asm) Asm.asm     
+    ; "ast"  , V.pure (            Map.outchan **-> V.result Map.asm) Asm.asm (*alias*)
+    ; "dot"  , V.pure (            Map.outchan **-> V.result Map.asm) Dotasm.asm
+    ; "asdl" , V.pure (            Map.outchan **-> V.result Map.asm) Asdlasm.asm
+    ; "sparc", V.pure (V.bool **-> Map.outchan **-> V.result Map.asm) Msparcasm.asm
     ] g;
   C.register_module "Driver" 
-    [ "assemble"      , pf (Map.asm     **-> V.runit)            (fun asm -> asm#emit)
-    ; "proc_assembler", pf (Map.asm     **-> V.result Map.stage) 
+    [ "assemble"      , V.pure (Map.asm     **-> V.runit)        (fun asm -> asm#emit)
+    ; "proc_assembler", V.pure (Map.asm     **-> V.result Map.stage) 
                           (fun asm v p -> asm#cfg_instr p.Proc.cfg p.Proc.symbol; true)
-    ; "check"         , pf (Map.ast     **-> Map.asm 
+    ; "check"         , V.pure (Map.ast     **-> Map.asm 
                                         **-> V.result Map.env)   check
-    ; "emit_asdl"     , pf (Map.ast     **-> V.runit)            emit_asdl
-    ; "parse"         , pf (V.string    **-> V.result Map.ast)   parse
-    ; "print"         , pf (Map.doc     **-> V.int **-> V.runit) print
-    ; "pretty"        , pf (Map.ast     **-> V.result Map.doc)   pretty
-    ; "scan"          , pf (V.string    **-> V.runit)            scan
-    ; "version"       , pf (V.unit      **-> V.runit)            version
+    ; "emit_asdl"     , V.pure (Map.ast     **-> V.runit)            emit_asdl
+    ; "parse"         , V.pure (V.string    **-> V.result Map.ast)   parse
+    ; "print"         , V.pure (Map.doc     **-> V.int **-> V.runit) print
+    ; "pretty"        , V.pure (Map.ast     **-> V.result Map.doc)   pretty
+    ; "scan"          , V.pure (V.string    **-> V.runit)            scan
+    ; "version"       , V.pure (V.unit      **-> V.runit)            version
     ; "stdin"         , Map.inchan.V.embed                       stdin (* hack *)
     ; "stdout"        , Map.outchan.V.embed                      stdout(* hack *)
     ; "freeze"        , Map.stage.V.embed (fun v p -> Ast3ir.freeze p; true)
-    ; "compile"       , func (Map.optimize  **-> Map.ast  
-                                            **-> Map.target 
-                                            **-> Map.env 
-                                            **-> V.result Map.asm)
-                        (fun g opt -> compile (opt g))
-    ; "compilec"      , func (Map.optimize' **-> Map.ast  
-                                            **-> Map.target 
-                                            **-> Map.env 
-                                            **-> V.result Map.asm)
-                        (fun g opt -> compile (opt g))
+    ; "compile"       , V.pure (Map.optimize **-> Map.ast  
+                                             **-> Map.target 
+                                             **-> Map.env 
+                                             **-> V.result Map.asm) compile
     ] g;
   Lua.Lib.StringList.empty
 @  

@@ -280,7 +280,12 @@ let link_const    env target asm exp =
     | RP.Const(RP.Link(l,w)) -> Reloc.Simple.of_sum l (Bits.zero w)
     | RP.App(("add",_),[RP.Const(RP.Link(l,w)); RP.Const(RP.Bits(b))]) ->
         Reloc.Simple.of_sum l b
-    | _ -> assert false
+    | RP.App(("sub",_),[RP.Const(RP.Link(l,w)); RP.Const(RP.Link(l',w'))]) ->
+        Impossible.unimp "difference of link-time constants"
+    | e -> (prerr_string "Bad link-time constant ";
+            prerr_string (Rtlutil.ToString.exp (U.exp e));
+            prerr_string "\n";
+            assert false)
 @
 
 % ------------------------------------------------------------------ 

@@ -43,13 +43,12 @@ module MakeLib : Lua.Lib.BARE
 module MakeLib (C: Lua.Lib.CORE) = struct
     module V = C.V
     let ( **-> ) = V.( **-> )
-    let func t   = (V.func t).V.embed 
 
     <<dofile>>
     
     let builtins =
     [ "dosearchfile" , 
-      func (V.string **-> V.value **-> V.result (V.list V.value)) dosearchfile
+      V.impure (V.string **-> V.value **-> V.result (V.list V.value)) dosearchfile
     ]
     let init g =
       C.register_module "Util" builtins g;

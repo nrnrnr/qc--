@@ -29,12 +29,11 @@ combined = 'a BackplaneT.combined)
     
       let proc = ProcT.makemap V.userdata V.projection
       let ( **-> ) = V.( **-> )
-      let stageFn = (V.pfunc (V.value **-> proc **-> V.result V.bool)).V.embed
       <<builtins>>
 
       let init g =
         Interp.register_module "Placevar"
-          [ "fortran", stageFn fortran
+          [ "fortran", V.pure (V.value **-> proc **-> V.result V.bool) fortran
           ] g;
         Lua.Lib.StringList.empty (* FIX -- proper stage *)
     end

@@ -247,8 +247,7 @@ type colorGraph = { mutable adjSet : EdgeSet.t
 the set of valid colors.
 
 <<init cgInfo>>=
-    let makeInitInfo _ =
-		embed
+    let makeInitInfo () =
            { adjSet = EdgeSet.empty
            ; adjListMap = RM.empty
            ; degreeMap = RM.empty
@@ -278,7 +277,7 @@ the set of valid colors.
 		(cgInfo.colors <- colors;
 		 cgInfo.k      <- List.length colors)
     let setColors cgInfo {Proc.cc = colors} =
-		setColors (project cgInfo) colors.Target2.allocatable; false
+		setColors cgInfo colors.Target2.allocatable; false
 @
 
 We include two observers for the [[colorGraph]] type. [[possibleColors]]
@@ -384,7 +383,6 @@ let build cg {Proc.cfg = cfg; Proc.target = target} =
     <<addInterference>>
     let _ = fold_fwd cfg addInterference () in
         true
-let build cg = build (project cg)
 @
 
 We add an edge between the temps defined in an instruction and those that
@@ -442,7 +440,6 @@ let makeWorklist cg _ =
         let _ = List.iter addToLists cg.initial in
         let _ = cg.initial <- [] in
             true
-let makeWorklist cg = makeWorklist (project cg)
 @
 
 It is useful to have observers that take a [[temp]] as an argument and
@@ -483,7 +480,6 @@ let simplify cg {Proc.target = t} =
             let _ = RS.iter (decrementDegree cg t) (adjacent temp cg) in
                 true
         | _ -> false)
-let simplify cg = simplify (project cg)
 @
 
 For each of the [[temps]], [[enableMoves]] will allow previously uncoalescable
@@ -584,7 +580,6 @@ let coalesce cg {Proc.target = target} =
         in
             true
     | _ -> false)
-let coalesce cg = coalesce (project cg)
 @
 
 When moves are coalesced or constrained, the temps involved are placed on
@@ -677,7 +672,6 @@ let freeze cg _ =
              freezeMoves temp cg;
              true)
         | _ -> false)
-let freeze cg = freeze (project cg)
 @
 
 When a move is frozen, it must be removed from the [[activeMoves]] list.  Also,
@@ -722,7 +716,6 @@ let selectSpill cg _ =
             let _ = freezeMoves temp cg in
                 true
          | _ -> false)
-let selectSpill cg = selectSpill (project cg)
 @
 
 %-------------------------------------------------------------------
@@ -755,7 +748,6 @@ let assignColors cg {Proc.target = target} =
         | [] -> colorCoalescedTemps ()
         | _ -> () in
         true
-let assignColors cg = assignColors (project cg)
 @
 
 [[colorTemp]] is responsible for coloring a single temp. The possible colors
@@ -846,7 +838,6 @@ let applyColors cg {Proc.cfg = cfg; Proc.target = target} =
                       ; "\n"];
                G.upd_instr node (Rtlutil.Subst2.reg ~lookup ~map:subst)) ()
         ; true)
-let applyColors cg = applyColors (project cg)
 @
 
 %-------------------------------------------------------------------
@@ -884,14 +875,13 @@ let resetProgram cg proc =
     let _ = cg.worklistMoves <- [] in
     let _ = cg.activeMoves <- [] in
         true
-let resetProgram cg = resetProgram (project cg)
 @
 
 The simple predicate [[haveSpilledTemps]] may be used to determine whether
 the graph coloring algorithm has terminated.
 
 <<resetProgram>>=
-let haveSpilledTemps cg _ = not (empty (project cg).spilledTemps)
+let haveSpilledTemps cg _ = not (empty cg.spilledTemps)
 @
 
 [[updateProgram]] removes coalesced moves from the \cfg. It may be desirable
@@ -918,7 +908,6 @@ let removeCoalescedMoves cfg coalescedMoves =
 let updateProgram cg {Proc.cfg = cfg} =
     let _ = removeCoalescedMoves cfg cg.coalescedMoves in
         true
-let updateProgram cg = updateProgram (project cg)
 @
 
 A pair of convenience functions for adding lists of \cfg nodes:
@@ -1020,10 +1009,10 @@ module Cheats = struct
             with Not_found -> []
 
     (* OK, THIS HAS TO BE CHANGED... still assuming width 32 *)
-    let makeRegs regTable =
-        let reg space i = String.get (V.string.V.project space) 0, i, 32 in
+    let makeRegs g regTable =
+        let reg space i = String.get (V.string.V.project g space) 0, i, 32 in
         luaTableMapApp (fun space rlist ->
-                        List.map (reg space) ((V.list V.int).V.project rlist))
+                        List.map (reg space) ((V.list V.int).V.project g rlist))
                     regTable
 
     (* check whether two temps interfere - whether they have overlapping reg
@@ -1135,13 +1124,11 @@ module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.action)
                 with type 'a V.userdata' = 'a BackplaneT.combined) = struct
         module V = Interp.V
         let cgmap = GCT.makemap V.userdata V.projection
-        let embed = cgmap.V.embed
-        let project = cgmap.V.project
 
         <<graph coloring builtins>>
 
         let init g =
-          Interp.register_globals graph_coloring_globals    g;
+          (* PLEASE CHANGE 'CG' TO 'Colorgraph' *)
           Interp.register_module "CG" graph_coloring_module g;
           Lua.Lib.StringList.empty (* FIX -- replace with init code *)
     end
@@ -1176,41 +1163,34 @@ Embedding the functions in the Lua interpreter.
 <<graph coloring builtins>>=
 let proc = ProcT.makemap V.userdata V.projection
 let ( **-> ) = V.( **-> )
-let stageFnType = V.value **-> proc **-> V.result V.bool
-let stageFn = (V.pfunc stageFnType).V.embed
-let param2StageFn =
-        (V.pfunc (V.value **-> V.result (V.pfunc stageFnType))).V.embed
-let param2value =
-        (V.pfunc (V.value **-> V.result V.value)).V.embed
+let stageFn    = cgmap **-> proc **-> V.result V.bool
 
 let writedot compress _ proc =
-    prerr_string (Cfgutil.cfg2dot (V.bool.V.project compress)
-                                  "CFG" proc.Proc.cfg);
+    prerr_string (Cfgutil.cfg2dot compress "CFG" proc.Proc.cfg);
     flush stderr;
     true
 
 let graph_coloring_module =
-        [ "liveness",         stageFn liveness
-        ; "build",            stageFn build
-        ; "makeWorklist",     stageFn makeWorklist
-        ; "simplify",         stageFn simplify
-        ; "coalesce",         stageFn coalesce
-        ; "freeze",           stageFn freeze
-        ; "selectSpill",      stageFn selectSpill
-        ; "assignColors",     stageFn assignColors
-        ; "haveSpilledTemps", stageFn haveSpilledTemps
-        ; "resetProgram",     stageFn resetProgram
-        ; "updateProgram",    stageFn updateProgram
-        ; "applyColors",      stageFn applyColors
-        ; "printCG",          stageFn printCGInfo
-        ; "printCFGLive",     stageFn printCFGLive
-        ; "pCFG",             stageFn pCFG
-        ; "makeInitInfo",     param2value makeInitInfo
-        ; "setColors",        stageFn setColors
-        ; "writedot",         param2StageFn writedot
-        ]
+  [ "liveness",         V.pure stageFn liveness
+  ; "build",            V.pure stageFn build
+  ; "makeWorklist",     V.pure stageFn makeWorklist
+  ; "simplify",         V.pure stageFn simplify
+  ; "coalesce",         V.pure stageFn coalesce
+  ; "freeze",           V.pure stageFn freeze
+  ; "selectSpill",      V.pure stageFn selectSpill
+  ; "assignColors",     V.pure stageFn assignColors
+  ; "haveSpilledTemps", V.pure stageFn haveSpilledTemps
+  ; "resetProgram",     V.pure stageFn resetProgram
+  ; "updateProgram",    V.pure stageFn updateProgram
+  ; "applyColors",      V.pure stageFn applyColors
+  ; "printCG",          V.pure stageFn printCGInfo
+  ; "printCFGLive",     V.pure stageFn printCFGLive
+  ; "pCFG",             V.pure stageFn pCFG
+  ; "makeInitInfo",     V.pure (V.unit **-> V.result cgmap) makeInitInfo
+  ; "setColors",        V.pure stageFn setColors
+  ; "writedot",         V.pure (V.bool **-> V.result (V.func stageFn)) writedot
+  ]
 
-let graph_coloring_globals = []
 @
 This startup code sets up the right passes.
 <<Lua startup code for [[Colorgraph]] module>>=
@@ -1377,8 +1357,7 @@ let print_cgInfo cgInfo =
         List.iter printMovelist (moveLists cgInfo);
         printColorMap cgInfo.colorMap
 
-let printCGInfo param _ = match project param with cg ->
-    print_cgInfo cg; true
+let printCGInfo param _ = print_cgInfo param; false
 @
 
 <<print CGInfo>>=
