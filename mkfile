@@ -27,6 +27,7 @@ SUBDIRS =       $LIBSRC $SRC
 # test:         run test suite
 # precompile:   pre-compile some sources because they depend on special
 #               tools
+# export:       create *.tar.gz files for parts we publish
 
 all:V:          lib
                 for i in $SRC; 
@@ -57,11 +58,17 @@ lib.opt:V:
                 done
 
 precompile:V:
-                for i in src tools camlburg
+                for i in src 
                 do 
                     (echo "# entering $i" && cd $i && mk $MKFLAGS $target)
                 done
                     
+export:V:
+                for i in camlburg tools
+                do 
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS $target)
+                done
+
 
 html            \
 dvi:V:          dirs
