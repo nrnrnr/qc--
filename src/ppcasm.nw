@@ -1,0 +1,254 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 et sw=4 
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+% ------------------------------------------------------------------ 
+\section{PPC Assembler}
+% ------------------------------------------------------------------ 
+
+This is an assembler that emits ``AT\&T'' style assembly language for
+the PPC platform.
+It implements the
+[[Asm.assembler]] interface for assemblers in the {\qcc} compiler.
+@
+
+The assembler constructor receives the output channel for the assembler. 
+<<ppcasm.mli>>=
+val make : 
+  ('cfg -> (Rtl.rtl -> unit) -> (string -> unit) -> unit) ->
+  out_channel -> ('a, 'cfg, 'b, 'c) Proc.t Asm.assembler
+  (* pass Cfgutil.emit or Cfgutil.emit *)
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The implementation provides no surprises. It builds up an {\AST} and
+emits it to [[stdout]] when the [[emit]] method is called.
+
+<<ppcasm.ml>>=
+module SM = Strutil.Map
+<<utilities>>
+<<definitions>>
+let make emitter fd = new asm emitter fd
+@
+<<utilities>>=
+let fprintf = Printf.fprintf
+@
+
+
+% ------------------------------------------------------------------ 
+\subsubsection{Classes for symbols}
+% ------------------------------------------------------------------ 
+
+We include name mangling into [[Symbol.t]] class because all assembler
+symbols like labels will be derived from them. Since the mangler is
+stateful, we have to create it outside the individual instance of a
+symbol. For now, we pass it from the assembler to here.
+This mangler is very conservative, accepting only symbols built with
+alphanumerics, underscores, and dots.
+Most assemblers, including the Gnu assembler, will accept many more
+characters.  But this way we don't have to enumerate the reserved
+words (e.g., names of registers).
+<<definitions>>=
+<<definition of [[manglespec]] (for the name mangler)>>=
+let spec =
+    let reserved = [] in        (* list reserved words here so we can avoid them *)
+    let id = function
+        | 'a'..'z'
+        | '0'..'9'
+        | 'A'..'Z'
+        | '.'
+        | '_'      -> true
+        | _        -> false in
+    let replace = function
+        | x when id x -> x
+        | _           -> '_' 
+        in    
+            { Mangle.preprocess = (fun x -> x)  
+            ; Mangle.replace    = replace
+            ; Mangle.reserved   = reserved
+            ; Mangle.avoid      = (fun x -> x ^ "_")
+            }
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{The assembler class}
+% ------------------------------------------------------------------ 
+
+The assembler maintains mutable state for:
+\begin{itemize}
+\item the actual section the assembler is in,
+\item exported symbols,
+\item imported symbols,
+\item completed sections in reverse order,
+\item declarations in the current section in reverse order.
+\end{itemize}
+
+Most methods append a declaration to the current section---[[append]]
+provides a private method for this.
+<<definitions>>=
+<<definition of [[manglespec]] (for the name mangler)>>
+
+class ['a, 'b, 'c, 'd] asm emitter fd : [('a, 'b, 'c, 'd) Proc.t] Asm.assembler = 
+object (this)
+    val         _fd       = fd
+    val         _mangle  = (Mangle.mk spec)   
+    val mutable _syms    = SM.empty 
+    method private new_symbol name =
+      let s = Symbol.with_mangler _mangle name in
+      _syms <- SM.add name s _syms;
+      s
+
+    <<private assembly state>>
+    method private print l = List.iter (output_string _fd) l
+
+    <<assembly methods>>
+end
+@ 
+Importing emits nothing; identifiers that are otherwise undefined are
+automatically imported.
+Maintaining the symbol table suffices.
+<<assembly methods>>=
+method import s = this#new_symbol s
+@
+Exporting requires announcing as global.
+<<assembly methods>>=
+method export s =
+  let sym = this#new_symbol s in
+  Printf.fprintf _fd ".globl %s\n" sym#mangled_text;
+  sym
+@ 
+Locals also require no announcement.
+<<assembly methods>>=
+method local s = this#new_symbol s
+@ 
+\emph{Common seems to be missing from the Q\PAL\ version.}
+<<PPC assembly interface procedures>>=
+static AsmSymbol asm_common(name, size, align, section) 
+  char *name; int size; int align; char *section;
+{ 
+  AsmSymbol s;
+  assert(section == NULL);
+  if (solaris)
+    print(".common %s,%d,%d\n", name, size, align);
+  else
+    print(".common %s,%d\n", name, size);
+  s = asm_sym_insert(asmtab, name, ASM_COMMON);
+  s->u.common.size  = size;
+  s->u.common.align = align;
+  return s;
+}
+@ 
+The symbol bound to a label should be made local if it isn't already.
+The name of this method should probably change to [[define_label]].
+<<assembly methods>>=
+method label (s: Symbol.t) = fprintf _fd "%s:\n" s#mangled_text
+@ 
+Gcc does this:
+<<PPC assembly interface procedures>>=
+static void asm_function (name) char *name; { 
+  print(".type %s,@function", name);
+}
+@ 
+I have to keep track of the current section so I can implement
+[[current_section]]. 
+
+The [[.section]] directive for the Mac OS X assembler
+causes the assembler to begin assembling into the section given by
+{\it segname} and {\it sectname}. Since the [[section]] method in
+the [[Asm.assembler]] interface only gets one argument, I assumed
+every section is in the [[__TEXT]] segment.
+<<assembly methods>>=
+method section name =
+  _section <- name;
+  fprintf _fd ".section __TEXT,.%s\n" name
+method current = _section
+<<private assembly state>>=
+val mutable _section = "bogus section"
+@ 
+<<assembly methods>>=
+method org n = fprintf _fd ".org %d\n" n
+method align  n = 
+  if n <> 1 then fprintf _fd ".align %d\n" n
+method addloc n = 
+  if n <> 0 then fprintf _fd ".space %d\n"  n
+<<assembly methods>>=
+method zeroes (n:int) = fprintf _fd ".space %d, 0\n" n
+@ 
+I use a dreadful hack to increase the likelihood of duplicating {\tt
+lcc}'s 
+assembly-language output for [[.word]] and [[.half]].
+The PPC has no 8-byte emission unit, so I fake one, assuming big-endian order.
+<<assembly methods>>=
+method value (v:Bits.bits) = 
+  let altfmt v =
+    let i64 = Bits.U.to_int64 v in
+    if Uint64.lt i64 (Uint64.of_int 256) then
+      string_of_int (Int64.to_int i64)
+    else
+      hexbits v  in
+  match Bits.width v with
+  |  8 -> fprintf _fd ".byte %s\n"  (decbits v)
+  | 16 -> fprintf _fd ".short %s\n" (altfmt v)
+  | 32 -> fprintf _fd ".long %s\n"  (altfmt v)
+  | 64 ->
+      let i = Bits.U.to_int64 v in
+      output_string _fd (Int64.format ".long 0x%x\n" (Int64.shift_right_logical i 32));
+      output_string _fd (Int64.format ".long 0x%x\n" (Int64.logand i mask32))
+  | w -> Impossible.unimp ("emission width " ^ string_of_int w ^ " in ppc assembler")
+<<utilities>>=
+let mask32 = Int64.pred (Int64.shift_left Int64.one 32)
+let hexbits b = Int64.format "0x%x" (Bits.U.to_int64 b)
+let decbits b = Int64.format "%d"   (Bits.S.to_int64 b)
+@ 
+<<assembly methods>>=            
+method addr a =
+  match Reloc.Simple.normalize a with
+  | None, bits   -> this#value bits
+  | Some s, bits -> 
+      if Bits.Ops.eq bits (Bits.zero 32) then
+        fprintf _fd ".long %s\n" s#mangled_text
+      else
+        fprintf _fd ".long %s + %s\n" s#mangled_text (hexbits bits) 
+@ 
+<<assembly methods>>=
+method emit = ()
+@
+<<assembly methods>>=
+method comment s = fprintf _fd "; %s\n" s
+
+method const (s: Symbol.t) (b:Bits.bits) = 
+  fprintf _fd ".set %s, %s" s#mangled_text (hexbits b)
+@ 
+This almost certainly doesn't work---we must linearize the flow graph
+and know to emit labels.
+This code belongs elsewhere; assemblers shouldn't have to know more
+than simple instructions. 
+This means layering the abstraction with a common subtype for
+instruction-based assemblers.
+<<assembly methods>>=
+method private instruction rtl =
+  output_string _fd "\t";
+  output_string _fd (Ppcrec.M.to_asm rtl);
+  output_string _fd "\n"
+
+method cfg_instr proc  = 
+    (* We have to emit a label/whatever for the procedure's 
+       entry point. This is what symbol is for. Simply use this#label?  *)
+    let cfg    = proc.Proc.cfg
+    and symbol = proc.Proc.symbol in
+    let label l = this#label (try SM.find l _syms with Not_found -> this#local l) in
+    this#label symbol;
+    (emitter cfg (this#instruction) label : unit)
+
+<<unused utilities>>=
+module Asm = Ppcrec.M
+@
+
