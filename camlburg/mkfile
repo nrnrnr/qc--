@@ -1,7 +1,10 @@
-SRC=myList.ml pprint.ml syntax.ml code.ml spec.ml pc.ml token.ml lex.ml parse.ml norm.ml burg.ml main.ml 
+SRC=myList.ml pprint.ml syntax.ml code.ml spec.ml pc.ml token.ml srcmap.ml lex.ml parse.ml norm.ml burg.ml main.ml 
 BIN=`echo $SRC | sed 's/\.mli/.cmi/g;s/\.ml /.cmo /g;s/.ml$/.cmo/'`
 TEST=test.ml test2.ml
 
+LIBDIR=../lib
+
+<../config/ocaml.mk
 
 LINE =          '# %L "%F"%N'
 
@@ -14,16 +17,10 @@ LINE =          '# %L "%F"%N'
 %.mli: %.nw
 	notangle -L"$LINE" -R$target $prereq > $target
 
-%.mll: %.nw
-	notangle -R$target $prereq > $target
-
-%.cmi:          %.mli
-                ocamlc -c $stem.mli
-
-%.cmo:          %.ml
-                ocamlc -c $stem.ml
-
 all:V: mlburg
+
+lex.mll: lex.nw
+	notangle -R$target $prereq > $target
 
 main.ml: burg.nw
 	notangle -L"$LINE" -R$target $prereq > $target
@@ -59,30 +56,6 @@ gen.ml: sample.mlb mlburg
 
 token.ml: lex.nw
         notangle -L"$LINE" -R$target $prereq > $target
-
-## syntax.ml: syntax.nw
-##         notangle -L"$LINE" -R$target $prereq > $target
-## 
-## syntax.mli: syntax.nw
-##         notangle -L"$LINE" -R$target $prereq > $target
-## 
-## code.ml: code.nw
-##         notangle -L"$LINE" -R$target $prereq > $target
-## 
-## code.mli: code.nw
-##         notangle -L"$LINE" -R$target $prereq > $target
-## 
-## pprint.ml: pprint.nw
-##         notangle -L"$LINE" -R$target $prereq > $target
-## 
-## pprint.mli: pprint.nw
-##         notangle -L"$LINE" -R$target $prereq > $target
-## 
-## myList.ml: myList.nw
-##         notangle -L"$LINE" -R$target $prereq > $target
-## 
-## myList.mli: myList.nw
-##         notangle -L"$LINE" -R$target $prereq > $target
 
 <DEPEND
 

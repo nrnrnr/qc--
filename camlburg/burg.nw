@@ -154,7 +154,9 @@ let read filename =
   let buf = Lexing.from_channel (open_in filename) in
   let showme t = (printl ["Read token "; Token.to_string t]; print_newline(); t) in
   let showme t = t in
-  let rec read toks = match Lex.token buf with
+  let map = Srcmap.empty in
+  let _ = Srcmap.sync map 0 (filename, 1, 1) in
+  let rec read toks = match Lex.token buf map with
   | Token.Eof -> List.rev_append toks []
   | t -> read (showme t :: toks)                                   in
   let pspec = fst (Parse.spec (read [])) in
@@ -218,14 +220,15 @@ let write spec =
   let _ = Format.print_newline() in
   let _ = emit_nts_type spec.Spec.nonterminals in
   let _ = Format.print_newline() in
-  let print_head c = (Format.print_string c; Format.print_newline()) in
-  let _ = List.iter print_head spec.Spec.head in
+  let _ = Code.print_frags spec.Spec.head in
+  let _ = Format.print_newline() in
   let ls = Burg.labellers spec in
   let arity c = try List.length (StringMap.find c spec.Spec.signatures)
                 with Not_found -> error ["Unknown arity for constructor "; c]   in
   let codes = List.map (Burg.labeller_pair arity spec.Spec.nonterminals) ls in
   let body = [Syntax.Defn.Let ("burgrec", Code.to_syntax (Code.Record codes))] in
-  List.iter (Syntax.defn (fun _ -> assert false)) body
+  let nox _ = assert false in
+  List.iter (Syntax.defn nox) body
 
 let (>>) f g x = g (f x)
 

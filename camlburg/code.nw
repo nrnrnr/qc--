@@ -3,7 +3,7 @@
 Here we export code types.
 Values of these types represent expressions, programs, etc.
 <<exported types>>=
-type fragment = Line of string | Synch of string * int
+type fragment = Line of string | Synch of Srcmap.location
 type exp =
   | Record of (string * exp) list
   | Tuple  of exp list
@@ -25,6 +25,7 @@ and pat =
 <<exported types>>
 val pprint : exp -> unit
 val id     : string -> exp
+val print_frags : fragment list -> unit
 
 val plus : exp -> exp -> exp
 val let' : pat -> exp -> exp -> exp
@@ -48,10 +49,20 @@ let let' p e' e = Let ([p, e'], e)
 <<prettyprinting>>=
 module S = Syntax
 let error s = (prerr_endline s; exit 1)
-let synch_string file line = "# " ^ string_of_int line ^ " \"" ^ file ^ "\""
+let blanks = function
+  | 0 -> ""
+  | k -> let s = String.create k in (String.fill s 0 k ' '; s)
+let synch_string file line col =
+  "# " ^ string_of_int line ^ " \"" ^ file ^ "\"\n" ^ blanks (col-1)
 let raw_to_string l =
-  String.concat "\n"
-  (List.map (function Line n -> n | Synch (f, l) -> synch_string f l) l)
+  String.concat ""
+  (List.map (function Line n -> n ^ "\n" | Synch (f, l, c) -> synch_string f l c) l)
+
+let location_prefix (file, line, col) = "\n" ^ synch_string file line col
+
+let print_frags = List.iter
+  (function Line n -> (Format.print_string n; Format.print_newline ())
+          | Synch (f, l, c) -> (Format.print_string (synch_string f l c)))
 
 let rec to_syntax = function
   | Record l -> S.RECORD (List.map (fun (n, e) -> n, to_syntax e) l)
@@ -69,7 +80,7 @@ let rec to_syntax = function
   | Qualid l -> S.VAR (String.concat "." l)
   | Let (bs, e') -> S.LET (List.map (fun (p, e) -> pat_syntax p, to_syntax e) bs,
                            to_syntax e')
-  | Raw c -> S.VAR ("(" ^ raw_to_string c ^ ")")
+  | Raw (c) -> S.VAR ("(\n" ^ raw_to_string c ^ ")")
   | Int n -> S.INT n
   | String s -> S.STR s
 and pat_syntax = function

@@ -3,32 +3,46 @@
 {
 module T = Token
 let brace_depth = ref 0
+let k x = fun map -> x
+<<prolog>>
 }
 let alpha       = ['a'-'z' 'A'-'Z' '_']
 let delim       = ['(' ')' ',' ':' ';' '[' ']' '<' '>' '{' '}']
 let symbol      = ['.' '_' '$' '@' '%' '!' '#' '^' '&' '*' '+' '=' '~' '`' '|' 
                    '/' '?' '-']
 let digit       = ['0'-'9']
+let nl          = '\n'          
+let id          = alpha(digit|alpha)*
 
 rule token = parse
-    [' ' '\t']          { token lexbuf }     (* skip blanks *)
-  | ['\n' ]             { T.Eol }
-  | digit+              { T.Int(int_of_string(Lexing.lexeme lexbuf)) }
-  | alpha(digit|alpha)* { T.alnum  (Lexing.lexeme lexbuf) }
-  | symbol+             { T.symbol (Lexing.lexeme lexbuf) }
-  | delim               { T.delim  (Lexing.lexeme lexbuf) }
-  | "{:"                { brace_depth := 1; T.Code (String.concat "" (braces lexbuf)) }
-  | eof                 { T.Eof }
+    [' ' '\t']+          { token lexbuf }     (* skip blanks *)
+  | nl                  { fun map -> nl lexbuf map ; T.Eol }
+  | nl '#'              { fun map -> line lexbuf map 0; token lexbuf map }
+  | digit+              { k (T.Int(int_of_string(Lexing.lexeme lexbuf))) }
+  | id                  { k (T.alnum  (Lexing.lexeme lexbuf)) }
+  | symbol+             { k (T.symbol (Lexing.lexeme lexbuf)) }
+  | delim               { k (T.delim  (Lexing.lexeme lexbuf)) }
+  | "{:"                { fun map -> 
+                          let here = Srcmap.location map (Lexing.lexeme_start lexbuf)in
+                          brace_depth := 1;
+                          T.Code (here, String.concat "" (braces lexbuf map)) }
+  | eof                 { k T.Eof }
 and braces = parse
-  | [^ ':' '{' '}']+    { let t = Lexing.lexeme lexbuf in t :: braces lexbuf }
-  | "{:"                { incr brace_depth;
-                          let t = Lexing.lexeme lexbuf in t :: braces lexbuf }
-  | ":}"                { decr brace_depth;
+    nl                  { fun map -> nl lexbuf map; "\n" :: braces lexbuf map }
+  | [^ ':' '{' '}' '\n']+  { fun map -> 
+                          let t = Lexing.lexeme lexbuf in t :: braces lexbuf map }
+  | "{:"                { fun map -> incr brace_depth;
+                          let t = Lexing.lexeme lexbuf in t :: braces lexbuf map }
+  | ":}"                { fun map ->
+                          decr brace_depth;
                           if !brace_depth = 0 then []
-                          else let t = Lexing.lexeme lexbuf in t :: braces lexbuf }
-  | [':' '{' '}']       { let t = Lexing.lexeme lexbuf in t :: braces lexbuf }
+                          else let t = Lexing.lexeme lexbuf in t :: braces lexbuf map }
+  | [':' '{' '}']       { fun map -> 
+                          let t = Lexing.lexeme lexbuf in t :: braces lexbuf map }
+<<line numbers>>
 <<token.ml>>=
-type t = Eol | Eof | Int of int | Name of string | Reserved of string | Code of string
+type t = Eol | Eof | Int of int | Name of string | Reserved of string
+       | Code of Srcmap.location * string
 let alnum s = Name s
 let reserved = ["%"; "%%"]
 let symbol s = if List.exists ((=) s) reserved then Reserved s else Name s
@@ -39,5 +53,48 @@ let to_string = function
   | Int n -> string_of_int n
   | Name s -> s
   | Reserved s -> s
-  | Code s -> "<code fragment>"
+  | Code (loc, s) -> "<code fragment>"
 @ 
+<<prolog>>=
+let nl lexbuf map =
+    let next = (Lexing.lexeme_start lexbuf) + 1     in
+        Srcmap.nl map next
+@ 
+The current location can be obtained by passing the current position
+to [[Srcmap.loc]]:
+<<prolog>>=
+let location lexbuf map =
+    Srcmap.location map (Lexing.lexeme_start lexbuf)
+@
+<<line numbers>>=
+and line = parse 
+    eof                 { fun map l ->
+                          error lexbuf map "unterminated line directive" 
+                        }
+  | [' ' '\t']+         { line lexbuf }
+  | '"' [^ '"']+ '"'    { fun map l ->
+                          let string = Lexing.lexeme lexbuf in
+                          let file   = String.sub string 1 (String.length string-2) in
+                          let pos    = Lexing.lexeme_start lexbuf in
+                          let loc    = file, l-1, 1 in
+                                ( Srcmap.sync map pos loc
+                                ; () (* return *)
+                                )
+                        }
+  | digit+              { fun map l -> 
+                          
+                          (* inline'ing the l' expression caused an
+                          int_of_string failure with ocamlopt *)
+                          
+                          let l' = int_of_string (Lexing.lexeme lexbuf)
+                          in  line lexbuf map l'
+                        }
+  | id                  { line lexbuf }
+  | _                   { fun map l -> 
+                          error lexbuf map 
+                          "illegal character in line directive"
+                        }
+
+@ 
+<<prolog>>=
+let error _ _ s = (prerr_string (s^"\n"); assert false)

@@ -24,9 +24,9 @@ let newline = satisfy "newline" ((=) T.Eol)
 let int  = some "integer"   (function T.Int n  -> Some n | _ -> None)
 let xxx = Some "gi"
 
-let exp_of_code c = Code.Raw [Code.Line c]
-let some_code = function T.Code c -> Some c | _ -> None
-let raw_code = (some "{: ... :}" some_code : string producer)
+let exp_of_code frags = Code.Raw frags
+let some_code = function T.Code (l, c) -> Some [Code.Synch l; Code.Line c] | _ -> None
+let raw_code = some "{: ... :}" some_code
 let code = raw_code >> exp_of_code
 
 
@@ -49,18 +49,26 @@ let rec tree tokens = (
 
 let (-^-) x y = x -- y >> (fun (x, y) -> x ^ " " ^ y)
 
-let rec multi      p toks = (p -^- (multi p || empty >> const "")) toks
-let rec ssep comma p toks = (p -^- (!* comma -^- ssep "," p || empty >> const "")) toks
+
+
+let apply (f, l) = match l with
+| [] -> f
+| _  -> List.fold_left (fun f arg -> Code.Apply (f, arg)) f l
+let rec funapps    p = p -- repeat p >> apply
+let rec ssep comma p = p -- repeat (!* comma ->- p) >> cons
+let tuple = function [e] -> e | l -> Code.Tuple l
+let _ = (funapps : Code.exp producer -> Code.exp producer)
+let _ = (ssep : string -> 'a producer -> 'a list producer)
 
 let rec mlexp toks =
-  multi (  name 
-        || int >> string_of_int
-        || !* "(" -^- ssep "," mlexp -^- !* ")"
-        || !* "[" -^- ssep ";" mlexp -^- !* "]"
-        ) toks
+  let mlexp = (mlexp : Code.exp producer) in
+  funapps (  name                                  >> (fun x -> Code.id x)
+          || int                                   >> (fun n -> Code.Int n)
+          || !* "(" ->- ssep "," mlexp -<- !* ")"  >> (fun l -> tuple l)
+          || !* "[" ->- ssep ";" mlexp -<- !* "]"  >> (fun l -> Code.List l)
+          ) toks
 
-let cost = "[" *$-- (mlexp >> exp_of_code) *--$ "]"
-
+let cost = "[" *$-- mlexp *--$ "]"
 
 let zero = Code.Int 0
 
@@ -81,7 +89,7 @@ let ty = name
 type decls = { start : S.nonterm list
              ; types : (S.ty * S.nonterm list) list
              ; terms : string list
-             ; head  : string list
+             ; head  : Code.fragment list
              }
 let decl =
   let start nt ({ start=s; types=tys; terms=ts; head=h } as state) =
@@ -91,8 +99,8 @@ let decl =
     { start=s; types=(t, nts)::tys; terms=ts; head=h }  in
   let addterms terms { start=s; types=tys; terms=ts; head=h } =
     { start=s; types=tys; terms=terms@ts; head=h }  in
-  let addheader code { start=s; types=tys; terms=ts; head=h } =
-    { start=s; types=tys; terms=ts; head=h@[code] }  in
+  let addheader frags { start=s; types=tys; terms=ts; head=h } =
+    { start=s; types=tys; terms=ts; head=h@frags }  in
   
      key "start" nonterm                                  >> start
   || key "type"  ("<" *$-- ty *--$ ">" -- repeat nonterm) >> addty
