@@ -444,7 +444,7 @@ let first_fit lifetimes t =
 let find_reg = first_fit        (* first_fit is a possible find_reg impl *)
 @
 
-When no register can be found to hold regsiter [[t]], we have to spill
+When no register can be found to hold register [[t]], we have to spill
 a register which can be either a hardware register, or a temporary. 
 The [[find_spillee]] function receives the [[lifetimes]] map, the
 register [[t]] that we could not find a register for, and the [[node]]
@@ -461,31 +461,38 @@ registers and spill the one that ends last.
 Registers currently in use, or \emph{active}, are those whose
 lifetime's bounding box overlaps with the current node.  This is a
 superset of all nodes used by the current node.  The function
-[[longest]] computes a list of all registers active at the current
-node plus the temporay [[tmp]], and returns the register whose
-lifetime bounding box ends last. 
+[[longest_active]] computes the node, lifetime pair who is used
+longest in the program.  This is our spill candidate and we want to
+spill it from the current node up to the end of the procedure.
 
 <<Make>>=
-let active node tmp lifetimes =
-    let nodei = I.mk (Cfg3.number node) (Cfg3.number node + 1) in
-    let find loc lt (maxloc,maxi as m) = 
-        let loci = L.bbox lt in 
-            if (I.overlaps loci nodei) && (I.max maxi loci = loci) 
-            then (loc,loci) else m                             in            
-    let init = tmp, L.bbox (RM.find tmp lifetimes)             in
-    let (loc,_) = RM.fold find lifetimes init                  in
-        loc
-@        
+let active point lifetimes =
+    let here = I.mk point (point+1) in
+    let find = fun loc lt active ->  
+        if L.overlaps here lt then (loc,lt) :: active else active
+    in
+        RM.fold find lifetimes []
+
+<<longest_active type>>=
+Cfg3.node -> loc -> lifetimes -> loc * L.t
+<<Make>>=
+let longest_active: <<longest_active type>> = fun node tmp lifetimes ->
+    let here   = Cfg3.number node        in
+    let active = active here lifetimes  in
+    let max (loc1,lt1 as x) (loc2,lt2 as y) = 
+        if I.behind (L.bbox lt1) (L.bbox lt2) then x else y 
+    in
+        List.fold_left max (tmp,lookup lifetimes tmp) active
 
 <<find_spillee type>>= 
 lifetimes -> loc -> Cfg3.node -> loc * I.t 
 <<Make>>=
 let find_spillee: <<find_spillee type>> = fun lifetimes tmp node ->
-    let cfg      = Cfg3.cfg node                    in
-    let last     = Cfg3.number (Cfg3.last cfg)      in
-    let register = active node tmp lifetimes        in
-    let interval = I.mk (Cfg3.number node) (last+1) in
-        register, interval
+    let cfg      = Cfg3.cfg node                     in
+    let last     = Cfg3.number (Cfg3.last cfg)       in
+    let loc,_    = longest_active node tmp lifetimes in
+    let interval = I.mk (Cfg3.number node) (last+1)  in
+        loc, interval
 @
 
 The [[replace_temporary]] function tries to replace temporary [[t]] in
