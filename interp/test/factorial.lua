@@ -44,7 +44,7 @@ CMM.procedure("factorial-helper", 1, 0, {})
 
    CMM.fetch_local(0)
    CMM.fetch_arg(0)
-   CMM.apply_operator("mul_trunc", "bits16,bits16:bits16")
+   CMM.apply_operator("mul", "bits16,bits16:bits16")
    CMM.store_arg(0)
 
    CMM.fetch_local(0)

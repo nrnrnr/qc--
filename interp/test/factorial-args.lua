@@ -64,7 +64,7 @@ CMM.store_arg(1)
 CMM.fetch_local(0)
 
 CMM.fetch_local(1)
-CMM.apply_operator("mul_trunc","bits32,bits32:bits32")
+CMM.apply_operator("mul","bits32,bits32:bits32")
 CMM.store_arg(0)
 CMM.push_symbol("factorial_helper")
 CMM.cmm_tail_call()
