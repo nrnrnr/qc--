@@ -56,7 +56,7 @@ let rev    = List.rev
 @
 
 We collect declarations into a record, starting with the [[empty]]
-record below. Two terminals are predifined: [[int]] and
+record below. These terminals are predifined: [[int]], [[char]], and
 [[string]]---they correspond to the types of literals.
 
 <<prolog>>=
@@ -69,7 +69,7 @@ type decls =
 let empty =
     { terms     = List.fold_right 
                     S.StringSet.add 
-                    ["int"; "string"] 
+                    ["int"; "string"; "char"] 
                     S.StringSet.empty
     ; heads     = []
     ; tails     = []
@@ -89,6 +89,7 @@ superficial tokens here.
 %token<Srcmap.location * string>    CODE        
 %token<string>                      STRING
 %token<Srcmap.map>                  EOF
+%token<char>                        CHAR
 
 %token START
 %token TERM
@@ -198,6 +199,7 @@ restrictions.
 <<grammar>>=
 pat     : INT                       { fun ts -> S.Literal(S.Int($1)) }
         | STRING                    { fun ts -> S.Literal(S.String($1))}
+        | CHAR                      { fun ts -> S.Literal(S.Char($1))}
         | ID LPAREN pats RPAREN     { fun ts -> S.Con($1, rev ($3 ts))}
         | ID                        { fun ts -> 
                                       let t = if S.StringSet.mem $1 ts

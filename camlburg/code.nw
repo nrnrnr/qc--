@@ -45,6 +45,7 @@ and exp =
     | RecordWith    of (string * (string * exp) list)
     | Seq           of exp list
     | String        of string
+    | Char          of char
     | Tuple         of exp list
 
 (* patterns *)
@@ -77,6 +78,7 @@ val record:     (string * exp) list -> exp
 val recordwith: string -> (string * exp) list -> exp
 val seq:        exp list -> exp
 val string:     string -> exp
+val char:       char -> exp
 val tuple:      exp list -> exp
 val unit:       exp
 val id:         string -> exp
@@ -137,6 +139,7 @@ let record bindings         = Record bindings
 let recordwith r bindings   = RecordWith(r,bindings)
 let seq es                  = Seq(es)
 let string s                = String s
+let char c                  = Char c
 let tuple es                = Tuple es
 let unit                    = Tuple []
 
@@ -237,6 +240,7 @@ and exp = function
     | RecordWith(r,binds)       -> recordwith r binds 
     | Seq       (exps)          -> seq exps
     | String    (s)             -> P.text ("\"" ^ (String.escaped s) ^ "\"")
+    | Char      (c)             -> P.text ("'"^Char.escaped c^"'")
     | Tuple     (exps)          -> tuple exps
 
 and doc d = P.ppToFile stdout 77 d

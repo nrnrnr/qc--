@@ -6,10 +6,11 @@
 
 This is a scanner for a burg specification, written in the specification
 language for the Objective Caml scanner generator {\small OCamlLex}. It
-defines three scanners: [[token]], [[action]], and [[line]]. All
-scanners use a common set of named regular expression that define the
-syntax of identifiers and other tokens of the scanned language. The
-prolog of the scanner specification contain commonly used functions.
+defines several scanners: [[token]], [[action]], [[line]], [[string]],
+and [[char]]. All scanners use a common set of named regular expression
+that define the syntax of identifiers and other tokens of the scanned
+language. The prolog of the scanner specification contain commonly used
+functions.
 
 <<lex.mll>>=
 {   
@@ -25,6 +26,7 @@ prolog of the scanner specification contain commonly used functions.
 <<action>>
 <<line>>
 <<string>>
+<<char>>
 {
     <<epilog>>
 }    
@@ -148,6 +150,7 @@ rule token = parse
                               let s = string lexbuf map (Buffer.create 80) in 
                                 T.STRING(s)
                             }    
+  | '\''                    { fun map -> T.CHAR(char lexbuf map) }
   | '%'                     { return T.PERCENT }
   | "%%"                    { return T.PPERCENT }
   | '<'                     { return T.LT }
@@ -159,7 +162,7 @@ rule token = parse
   | ']'                     { return T.RBRACKET }
   
   | ','                     { return T.COMMA }
-  
+
   | _                       { fun map ->
                               error ( "illegal character `"
                                     ^ get lexbuf
@@ -268,6 +271,31 @@ and string = parse
 @
 
 % ------------------------------------------------------------------ 
+\subsection{Characters}
+% ------------------------------------------------------------------ 
+
+<<char>>=
+and char = parse
+    eof         { fun map -> error "end of file in character constant" }
+  | '\\' _ "'"  { fun map ->
+                  let c = getchar lexbuf 1 in
+                    match c with
+                    | 'n'   -> '\n'
+                    | 't'   -> '\t'
+                    | 'r'   -> '\r'
+                    | _     -> c
+                }
+  | [^'\\' '\''] "'"
+                { fun map -> getchar lexbuf 0 }
+                
+  | _           { fun map -> 
+                  error (Printf.sprintf 
+                            "illegal character constant: %c"
+                            (getchar lexbuf 0))
+                }            
+@
+
+% ------------------------------------------------------------------ 
 \subsection{Line directive}
 % ------------------------------------------------------------------ 
 
@@ -327,6 +355,7 @@ let to_string = function
     | T.CODE((f,l,c),s)     -> Printf.sprintf "action(%s)" s 
     | T.INT(d)              -> Printf.sprintf "int(%d)" d
     | T.STRING(s)           -> Printf.sprintf "\"%s\"" (String.escaped s)
+    | T.CHAR(c)             -> Printf.sprintf "'%s\'"  (Char.escaped c)
 
     | T.COLON     -> ":"
     | T.COMMA     -> ","  

@@ -38,6 +38,7 @@ exactly that literal in the subject tree.
 type literal =
     | Int       of int
     | String    of string
+    | Char      of char
 @
 
 Variables are typed: they either have a terminal (Objective Caml) type,
@@ -239,6 +240,7 @@ otherwise we report a type error.
 let argty = function
     | Literal(String _) -> Mono "string"
     | Literal(Int _)    -> Mono "int"
+    | Literal(Char _)   -> Mono "char"
     | Var(_, Term x)    -> Mono x
     | Var(_, NonTerm _) -> Poly
     | Con _             -> Poly
@@ -299,6 +301,7 @@ let lit x       = P.text x
 let literal = function
     | Int(i)    -> int i
     | String(s) -> lit s
+    | Char(c)   -> P.text ("'"^(Char.escaped c)^"'")
 
 let rec pattern = function
     | Literal(c)         -> literal c
