@@ -6,10 +6,10 @@ Here is the interface to this collection:
 
 <<function prototypes>>=
 interval_list *interval_list_new   (void);
-interval_list *interval_list_add   (interval_list *list, unsigned int lower,
-                                    unsigned int upper);
-interval_list *interval_list_remove(interval_list *list, unsigned int i);
-int            interval_list_member(interval_list *list, unsigned int i);
+interval_list *interval_list_add   (interval_list *list, unsigned long lower,
+                                    unsigned long upper);
+interval_list *interval_list_remove(interval_list *list, unsigned long i);
+long            interval_list_member(interval_list *list, unsigned long i);
 void           interval_list_free  (interval_list *list);
 void           interval_list_print (interval_list *list);
 void           interval_list_print_file (interval_list *list, FILE *out_file);
@@ -48,8 +48,8 @@ And now for the implementation:
 #define max(X,Y) ((X) > (Y) ? (X) : (Y))
 
 typedef struct interval_list_t {
-  unsigned int lower;
-  unsigned int upper;
+  unsigned long lower;
+  unsigned long upper;
 
   struct interval_list_t *next;
 } interval_list;
@@ -70,8 +70,8 @@ interval_list *interval_list_new(void) {
   return NULL;
 }
 
-interval_list *interval_list_add(interval_list *list, unsigned int lower, 
-                                 unsigned int upper)
+interval_list *interval_list_add(interval_list *list, unsigned long lower, 
+                                 unsigned long upper)
 {
   interval_list *temp,      *last;
   interval_list *free_temp, *free_last;
@@ -161,7 +161,7 @@ interval_list *interval_list_add(interval_list *list, unsigned int lower,
   }
 }
 
-interval_list *interval_list_remove(interval_list *list, unsigned int i) {
+interval_list *interval_list_remove(interval_list *list, unsigned long i) {
     interval_list *last, *temp;
     interval_list *new;
 
@@ -203,7 +203,7 @@ interval_list *interval_list_remove(interval_list *list, unsigned int i) {
     return list;
 }
 
-int interval_list_member(interval_list *list, unsigned int i) {
+long interval_list_member(interval_list *list, unsigned long i) {
     for ( ; list != NULL; list = list->next)
 	if (i >= list->lower && i <= list->upper)
 	    return 1;
