@@ -11,50 +11,25 @@ function CMD.compilertab[".tig"](file)
 end
 
 Test.trust_exe = 1
-Test.source  = "../../frontends/tiger/test"
-Test.results = "../../frontends/tiger/test/x86"
+Test.tigertop = Test.tigertop or "../../frontends/tiger"
+Test.source  = Test.tigertop .. "/test"
+Test.results = Test.tigertop .. "/test/x86"
+
+function Test.tigertest(filename, stdin)
+  return { source = filename, stdin = stdin,
+           other = Test.tigertop .. "/runtime.o " .. Test.tigertop .. "/stdlib.a" }
+end
 
 -- source files live in src directory
-Test.files = { { source = "arrays.tig"
-               , stdin = "/dev/null"
-               , other = "../../frontends/tiger/runtime.o ../../frontends/tiger/stdlib.a"
-               }
-             , { source = "colmajor.tig"
-               , other = "../../frontends/tiger/runtime.o ../../frontends/tiger/stdlib.a"
-               }
-             , { source = "forloop.tig"
-               , stdin = "/dev/null"
-               , other = "../../frontends/tiger/runtime.o ../../frontends/tiger/stdlib.a"
-               }
-             , { source = "funcall.tig"
-               , stdin = "/dev/null"
-               , other = "../../frontends/tiger/runtime.o ../../frontends/tiger/stdlib.a"
-               }
-             , { source = "hello.tig"
-               , stdin = "/dev/null"
-               , other = "../../frontends/tiger/runtime.o ../../frontends/tiger/stdlib.a"
-               }
-             , { source = "merge.tig"
-               , stdin = "/dev/null"
-               , other = "../../frontends/tiger/runtime.o ../../frontends/tiger/stdlib.a"
-               }
-             , { source = "qsort.tig"
-               , stdin = "/dev/null"
-               , other = "../../frontends/tiger/runtime.o ../../frontends/tiger/stdlib.a"
-               }
-             , { source = "queens.tig"
-               , stdin = "/dev/null"
-               , other = "../../frontends/tiger/runtime.o ../../frontends/tiger/stdlib.a"
-               }
-             , { source = "rc4.tig"
-               , other = "../../frontends/tiger/runtime.o ../../frontends/tiger/stdlib.a"
-               }
-             , { source = "sieve.tig"
-               , stdin = "/dev/null"
-               , other = "../../frontends/tiger/runtime.o ../../frontends/tiger/stdlib.a"
-               }
-             , { source = "wf.tig"
-               , stdin = "/dev/null"
-               , other = "../../frontends/tiger/runtime.o ../../frontends/tiger/stdlib.a"
-               }
-             }
+Test.files = { Test.tigertest("arrays.tig", "/dev/null"),
+               Test.tigertest("colmajor.tig"),
+               Test.tigertest("forloop.tig", "/dev/null"),
+               Test.tigertest("funcall.tig", "/dev/null"),
+               Test.tigertest("hello.tig", "/dev/null"),
+               Test.tigertest("merge.tig", "/dev/null"),
+               Test.tigertest("qsort.tig", "/dev/null"),
+               Test.tigertest("queens.tig", "/dev/null"),
+               Test.tigertest("rc4.tig"),
+               Test.tigertest("sieve.tig", "/dev/null"),
+               Test.tigertest("wf.tig", "/dev/null")
+	     }
