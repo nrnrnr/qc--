@@ -233,7 +233,7 @@ and variable env target hint x =
     let (_,(denot,t)) = F.findv x env in
     ( match denot with
     | F.Constant(bits)          -> Rtl.bits bits (width t)
-    | F.Label(F.Proc (s,_))     -> Rtl.link s (width t)
+    | F.Label(F.Proc (s,_,_))   -> Rtl.link s (width t)
     | F.Label(F.Code s)         -> Rtl.link s (width t)
     | F.Label(F.Data s)         -> Rtl.link s (width t)
     | F.Import(_,s)             -> Rtl.link s (width t)
@@ -1022,8 +1022,10 @@ let init_cont env (cfg:G.cfg) (target:Target.t) (cc:Target.cc)
 @
 <<Make procedure>>=
 let proc env target optimizer (cconv,name,args,bdy) = 
-    let symbol,scope = match F.findv name env with
-                      | _,(F.Label(F.Proc (sym,scope)),_) -> sym,scope
+    let ( symbol
+        , scope
+        , vars )    = match F.findv name env with
+                      | _,(F.Label(F.Proc (sym,scope,i)),_) -> sym,scope,i
                       | _                          -> assert false in
     let env         = F.push env scope  in  (* activate local scope *)
     let pointer     = target.Target.pointersize in
@@ -1098,6 +1100,7 @@ let proc env target optimizer (cconv,name,args,bdy) =
         ; Proc.priv     = priv       (* Automaton for spill loc, etc *)
         ; Proc.eqns     = []
         ; Proc.conts    = conts
+        ; Proc.vars     = vars       (* number of variables *)
         } in
     optimizer i (* runs optimizer, freezes, and assembles proc *)
 @

@@ -175,6 +175,9 @@ before entering or leaving a procedure the scope stack must be
 manipulated.
 
 \begin{itemize}
+\item  A [[scope]] caries a counter [[index]] for numbering registers.
+       The index of an [[emptyscope]] is [[0]].
+
 \item  The scope stack of an [[empty]] [[env]] is also empty. Thus, an
        [[emptyscope]] should be [[push]]'ed first.  An [[env]]
        includes a [[Srcmpa.map]] value, which is required to give
@@ -223,6 +226,9 @@ environment (at the outermost/bottom scope) during the first pass, that
 enters all globally bound values.  A later pass that enters only locally
 visible values must ignore them. 
 
+\emph{The stort below about continuations is wrong. JD would be the best
+to straighten it out because he implements continuations. -- CL}
+
 The denotation of a continuation $x$ includes a label $x'$. It is used
 during translation the translation of an expressions that refer to $x$:
 the reference is first represented as a \emph{symbolic constant}
@@ -248,13 +254,25 @@ becomes part of the value's denotation.
 and  reghint        = RReg  of string   (* hardware reg *)
                     | RHint of string   (* calling convention hint *)
                     | RNone             (* none of above *)
-                      
+@
+
+A register has an [[index]] that identifies it \emph{within its scope}.
+Consequently, global registers are numbered consecutively, and local
+registers are numbered consecutively.
+
+<<types>>=
 and  register =     { index:        int
                     ; rhint:        reghint
                     ; loc:          Automaton2.loc option
                     }
-                      
-and  kind           = Proc          of Symbol.t * scope partial 
+@
+
+The [[int]] value in the procedure denotation is the number of local
+variables, plus the number of parameters. We need this value for the
+interpreter.
+
+<<types>>=
+and  kind           = Proc          of Symbol.t * scope partial * int
                     | Code          of Symbol.t    
                     | Data          of Symbol.t
                     | Stack         of Rtl.exp option
@@ -393,9 +411,15 @@ val findCharset     : env -> string     partial info
 
 {\PAL} uses integers to identify global and local registers during
 run-time at the run-time interface.  The fat environment maintains a
-counter to facilitate the assignment of an integer to a register.
-The current index is returned by [[getIndex]], and the index is
-advanced by [[nextIndex]]:
+counter to facilitate the assignment of an integer to a register. The
+number of a register is local to its scope: global and local registers
+have independent numbering schemes.
+
+The current index in the current scope is returned by [[getIndex]], and
+the index is advanced by [[nextIndex]]:
+
+\emph{Should these functions work on [[scope]] values, rather than
+[[env]]?}
 
 <<signature Env>>=
 val getIndex: env -> int
@@ -766,7 +790,6 @@ type env           =  { scopes     :    scope list (* top = hd scopes *)
                       ; error      :    bool
                       ; target     :    target
                       ; extern     :    extern
-                      ; rindex     :    int   (* register index *)
                       ; globals    :    string  list  (* global   registers *)
                       ; stackdata  :    stackdata
                       }
@@ -809,6 +832,7 @@ A [[scope]] is record of two maps for values and types respectively:
 <<module Env>>=
 and scope           = { venv:   ventry Strutil.Map.t
                       ; tenv:   tentry Strutil.Map.t
+                      ; rindex: int   (* getIndex, nextIndex *)
                       }
 @
 
@@ -843,7 +867,6 @@ let empty  map asm =
     ; srcmap    = map
     ; asm       = asm
     ; error     = false
-    ; rindex    = 0
     ; globals   = []
     ; stackdata = { smaxalign  = 1
                   ; soffset    = 0
@@ -866,7 +889,11 @@ let empty  map asm =
 The implementation of the [[scope]] stack provides no surprises.
 
 <<module Env>>=
-let emptyscope          = { venv  = Strutil.Map.empty; tenv = Strutil.Map.empty }
+let emptyscope          = { venv   = Strutil.Map.empty
+                          ; tenv   = Strutil.Map.empty 
+                          ; rindex = 0
+                          }
+
 let srcmap {srcmap=m}   = m
 let asm    {asm=a}      = a 
 
@@ -1165,11 +1192,19 @@ let symbol env n =
 \subsection{Register Index}
 % ------------------------------------------------------------------ 
 
-No surprises here.
+No surprises here. The index is local to the current scope!
 
 <<module Env>>=
-let nextIndex  env   = { env with rindex = env.rindex + 1}
-let getIndex   env   = env.rindex
+let nextIndex  env   = match env.scopes with
+                       | top::t -> { env with scopes = 
+                                        {top with rindex = top.rindex + 1}::t
+                                   } 
+                       | _      -> assert false (* no scope *)
+
+let getIndex   env   = match env.scopes with
+                       | top::_ -> top.rindex
+                       | _      -> assert false (* no scope *)
+                       
 @
 
 % ------------------------------------------------------------------ 
@@ -1210,8 +1245,8 @@ let rec clean_venv map  =
         |  pos,E.Ok(denot,ty) ->
             let denot' = match denot with
                 | Dirty.Constant(v)           -> Clean.Constant(v)
-                | Dirty.Label(Dirty.Proc(s, p))-> 
-                    Clean.Label(Clean.Proc(s, clean_proc p))
+                | Dirty.Label(Dirty.Proc(s, p,i))-> 
+                    Clean.Label(Clean.Proc(s, clean_proc p,i))
                 | Dirty.Label(Dirty.Code s)   -> Clean.Label(Clean.Code s)
                 | Dirty.Label(Dirty.Data s)   -> Clean.Label(Clean.Data s)
                 | Dirty.Label(Dirty.Stack x)  -> Clean.Label(Clean.Stack x)
@@ -1259,9 +1294,10 @@ and clean_extern extern =
     }
 
 <<clean function>>=
-and clean_scope { Dirty.venv = v; Dirty.tenv = t } =
-    { Clean.tenv = clean_tenv t
-    ; Clean.venv = clean_venv v
+and clean_scope { Dirty.venv = v; Dirty.tenv = t; Dirty.rindex=i } =
+    { Clean.tenv   = clean_tenv t
+    ; Clean.venv   = clean_venv v
+    ; Clean.rindex = i
     }
     
 <<clean function>>=
@@ -1282,7 +1318,6 @@ and clean env =
     ; Clean.asm       = env.Dirty.asm
     ; Clean.error     = env.Dirty.error
     ; Clean.target    = clean_target env.Dirty.target
-    ; Clean.rindex    = env.Dirty.rindex
     ; Clean.stackdata = clean_stackdata env.Dirty.stackdata
     ; Clean.globals   = env.Dirty.globals
     ; Clean.extern    = clean_extern env.Dirty.extern

@@ -1309,7 +1309,7 @@ let formal r env (hint, inv, ty, name) =
 let proc r env (_,name,ff,bb as p) =
     let sym     = F.symbol env name in
     let ventry  = E.ematch (pointerTy env) 
-                           (fun p -> F.Label(F.Proc(sym,None)),p) in
+                           (fun p -> F.Label(F.Proc(sym,None,0)),p) in
     let env     = foldl (body r Global) env bb     in 
     let env     = F.bindv name (r,ventry) env    in
         env
@@ -2051,14 +2051,15 @@ and proc r env (_,name,_,bb as p) =
     let env   = F.push env F.emptyscope  (* open new scope *)   in 
     let env   = Env.local env p                                 in
     let env   = foldl body env bb (* traverse body *)           in
+    let index = F.getIndex env                                  in
     let scope = F.top env                                       in
     let env   = F.pop env                                       in
     let r,x   = try F.findv name env (* lookup this proc *)  
                 with Not_found -> assert false                  in
     let entry = E.ematch x
                ( function
-               | (F.Label(F.Proc(sym,None)),t) -> (* update denotation *)
-                    F.Label(F.Proc(sym,Some scope)),t
+               | (F.Label(F.Proc(sym,None,_)),t) -> (* update denotation *)
+                    F.Label(F.Proc(sym,Some scope,index)),t
                | _ -> assert false
                )                                            
     in
