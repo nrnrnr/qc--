@@ -62,7 +62,8 @@ record below. Two terminals are predifined: [[int]] and
 <<prolog>>=
 type decls = 
     { terms     : S.StringSet.t
-    ; heads     : Code.exp list     (* in reversed order *)
+    ; heads     : Code.exp list     (* in reverse order *)
+    ; tails     : Code.exp list     (* in reverse order *)
     }
 
 let empty =
@@ -71,6 +72,7 @@ let empty =
                     ["int"; "string"] 
                     S.StringSet.empty
     ; heads     = []
+    ; tails     = []
     }
 @
 
@@ -92,6 +94,7 @@ superficial tokens here.
 %token TERM
 %token TYPE
 %token HEAD
+%token TAIL
 
 %token PERCENT 
 %token PPERCENT
@@ -121,12 +124,14 @@ spec    : decls PPERCENT rules EOF  { let d   = $1 in
                                       in
                                         { S.terms  = d.terms
                                         ; S.heads  = rev d.heads
+                                        ; S.tails  = rev d.tails
                                         ; S.rules  = rev r
                                         ; S.srcmap = map
                                         }
                                      }   
         | decls EOF                 { { S.terms  = $1.terms
                                       ; S.heads  = rev $1.heads
+                                      ; S.tails  = rev $1.tails
                                       ; S.rules  = []
                                       ; S.srcmap = $2
                                       }
@@ -143,7 +148,10 @@ decl    : PERCENT TERM idlist       { fun d ->
                                     }  
 
         | PERCENT HEAD CODE         { fun d -> 
-                                    {d with heads = Code.Raw($3) :: d.heads}
+                                      {d with heads = Code.Raw($3) :: d.heads}
+                                    }
+        | PERCENT TAIL CODE         { fun d -> 
+                                      {d with tails = Code.Raw($3) :: d.tails}
                                     }
         ;
         
@@ -165,6 +173,14 @@ rule    : ID COLON toppat cost code { fun terms ->
                                         ; S.pattern  = $3 terms
                                         ; S.cost     = $4
                                         ; S.code     = $5
+                                        }
+                                    }
+                                    
+        | ID COLON toppat      code { fun terms ->
+                                        { S.nonterm  = $1
+                                        ; S.pattern  = $3 terms
+                                        ; S.cost     = Code.Int(0)
+                                        ; S.code     = $4
                                         }
                                     }    
 @
@@ -208,11 +224,16 @@ pats    : pats COMMA pat            { fun ts -> $3 ts :: $1 ts }
         | pat                       { fun ts -> [$1 ts] }
         | /**/                      { fun ts -> [] }
         ;
+@
 
+I encountered shift-reduce errors when I provided an empty alternative
+for the cost. Therefore the default case with no explicit cost expression
+is now part of the [[rule]] nontermimal.
 
+<<grammar>>=
 cost    : LBRACKET INT    RBRACKET  { Code.Int($2) }
-        | LBRACKET code   RBRACKET  { $2           }
-        | /**/                      { Code.Int(0)  }
+        | LBRACKET code   RBRACKET  { $2           }    /* remove */
+        | code                      { $1           }    
         ;
 
 code    : CODE                      { let (loc,src) = $1 in 

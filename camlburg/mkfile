@@ -33,11 +33,18 @@ HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
 DVI  =          `echo *.nw       | sed 's/\.nw/.dvi/g;'`
 PS   =          `echo *.nw       | sed 's/\.nw/.ps/g;'`
 
+# files that belong to the runtime system
+RTCMO =         camlburg.cmo camlburg.cmi camlburg.mli 
+RTCMX =         camlburg.cmx camlburg.cmi camlburg.mli camlburg.o
+
 all:V:          mlburg      runtime
 all.opt:V:      mlburg.opt  runtime.opt  
 
-update update.opt:QV:   
-                echo "nothing to be done"
+update:         $RTCMO
+                cp $RTCMO $LIBDIR
+                
+update.opt:QV:  $RTCMX
+                cp $RTCMX $LIBDIR
 
 dvi:V:          $DVI
 html:V:         $HTML
@@ -49,8 +56,8 @@ test:VQ:        sample.cmo iburg.cmo
 
 depend:V:       $DEPEND
 
-runtime:V:      camlburg.cmo camlburg.cmi camlburg.mli camlburg.ml
-runtime.opt:V:  camlburg.cmx camlburg.cmi camlburg.mli camlburg.ml camlburg.o
+runtime:V:      camlburg.ml $RTCMO
+runtime.opt:V:  camlburg.ml $RTCMX
 
 clean:V:    
                 rm -f *.cmo *.cmi *.cmx *.o *.sig 

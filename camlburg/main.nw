@@ -145,6 +145,7 @@ are nonterminals.
 
     decl    :   "%term" { ident }
             |   "%head" code
+            |   "%tail" code
 
     rule    :   nonterm ":" pattern [ cost ] code
 
@@ -173,9 +174,9 @@ can be followed by characters, numbers, and underscores. Comments start
 with two hyphens and go to the end of the line.  
 
 Certain identifier are keywords and cannot be used as variables or
-nonterminals: C<start>, C<term>, C<type>, C<head>. Two terminal types
-are predefined: C<int> and C<string>. They correspond to number and
-string literals.
+nonterminals: C<start>, C<term>, C<type>, C<head>, C<tail>. Two terminal
+types are predefined: C<int> and C<string>. They correspond to number
+and string literals.
 
 Here is an example for a specification:
 
@@ -206,11 +207,12 @@ Here is an example for a specification:
     number : str                   [1]    {: int_of_string str    :}
 
 Code associated with a C<%head> declaration is copied verbatim to the
-output. Its is used to declare type and values used by user code in the
-rules. A C<%term> declaration lists Objective Caml types used for
-variables in rules. In the example above, C<x:number> is a nonterminal
-variable, and C<x:string> is a terminal variable, because C<string> was
-declared as a terminal type.
+output I<before> the code generated for rules, code from a C<%tail>
+declaration goes I<after> code for rules. This code is used to declare
+type and values used by user code in the rules. A C<%term> declaration
+lists Objective Caml types used for variables in rules. In the example
+above, C<x:number> is a nonterminal variable, and C<x:string> is a
+terminal variable, because C<string> was declared as a terminal type.
 
 A rule defines a nonterminal (type) that is to the left of the colon,
 has a pattern, an optional non-negative cost, and a user-provided action. 
