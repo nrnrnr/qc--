@@ -74,7 +74,7 @@ section "text"
         ;
         $t1 = $r30;
         ;
-        initialize continuations:l10:
+        initialize continuations:l11:
         bits32[($r31+24)], bits32[($r31+28)] = sym@k@C8, $r31;
         n = 0;
         ;
@@ -134,7 +134,7 @@ section "text"
         ;
         $t1 = $r30;
         ;
-        initialize continuations:l23:
+        initialize continuations:l25:
         ;
         $r0 = k;
         ;
@@ -171,7 +171,7 @@ section "text"
         ;
         $t1 = $r30;
         ;
-        initialize continuations:l34:
+        initialize continuations:l37:
         ;
         $r0 = k;
         ;
@@ -208,7 +208,7 @@ section "text"
         ;
         $t1 = $r30;
         ;
-        initialize continuations:l45:
+        initialize continuations:l49:
         $r0 = 99;
         $r31, $c0 = bits32[(k+4)], bits32[k];
     }

@@ -28,7 +28,7 @@ section "text"
         ;
         $t1 = $r30;
         ;
-        initialize continuations:l3:
+        initialize continuations:l4:
         ;
         $r0 = bits32[(x+x)];
         ;

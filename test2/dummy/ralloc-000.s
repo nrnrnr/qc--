@@ -28,19 +28,19 @@ section "text"
         ;
         $t1 = $r30;
         ;
-        initialize continuations:l3:
+        initialize continuations:l4:
         ii = 1;
         ij = 2;
         ik = 0;
         il = 0;
-        $c0 when %ge[32](ij, 2) = sym@join@l5;
-        join:l11:
-        $c0 = sym@join@l6;
-        join:l5:
+        $c0 when %ge[32](ij, 2) = sym@join@l6;
+        join:l12:
+        $c0 = sym@join@l7;
+        join:l6:
         ik = 3;
         il = 4;
-        $c0 = sym@join@l6;
-        join:l6:
+        $c0 = sym@join@l7;
+        join:l7:
         iitotal = (((ii+ij)+ik)+il);
         ;
         $r0 = iitotal;

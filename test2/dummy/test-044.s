@@ -28,7 +28,7 @@ section "data"
         ;
         $t1 = $r30;
         ;
-        initialize continuations:l3:
+        initialize continuations:l4:
         loop:
         // dangling pointer in flow graph
     }

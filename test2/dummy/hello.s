@@ -65,7 +65,7 @@ section "text"
         ;
         $t1 = $r30;
         ;
-        initialize continuations:l3:
+        initialize continuations:l4:
         ;
         $r0 = sym@my_data;
         ;

@@ -78,15 +78,15 @@ section "text"
         ;
         $t1 = $r30;
         ;
-        initialize continuations:l3:
-        $c0 when %gt[32](iargc, 1) = sym@join@l8;
-        join:l9:
+        initialize continuations:l4:
+        $c0 when %gt[32](iargc, 1) = sym@join@l9;
+        join:l10:
         iptr = sym@hello;
-        $c0 = sym@join@l7;
-        join:l8:
+        $c0 = sym@join@l8;
+        join:l9:
         iptr = sym@bye;
-        $c0 = sym@join@l7;
-        join:l7:
+        $c0 = sym@join@l8;
+        join:l8:
         ;
         $r0 = iptr;
         ;

@@ -28,7 +28,7 @@ section "text"
         ;
         $t1 = $r30;
         ;
-        initialize continuations:l3:
+        initialize continuations:l4:
         i = j;
         i = bits32[j];
         bits32[i] = j;
@@ -59,18 +59,18 @@ section "text"
         bits32[i] = %and[32](j, bits32[k]);
         bits32[i] = %or[32](j, bits32[k]);
         bits32[i] = %xor[32](j, bits32[k]);
-        $c0 when %lt[32](j, k) = sym@join@l8;
-        join:l9:
-        $c0 when %le[32](j, k) = sym@join@l6;
-        join:l7:
-        $c0 when %leu[32](j, k) = sym@join@l5;
+        $c0 when %lt[32](j, k) = sym@join@l9;
+        join:l10:
+        $c0 when %le[32](j, k) = sym@join@l7;
+        join:l8:
+        $c0 when %leu[32](j, k) = sym@join@l6;
         L:
         // dangling pointer in flow graph
-        join:l5:
-        $c0 = sym@sym@L;
         join:l6:
         $c0 = sym@sym@L;
-        join:l8:
+        join:l7:
+        $c0 = sym@sym@L;
+        join:l9:
         $c0 = sym@sym@L;
         sym@L:
         // dangling pointer in flow graph

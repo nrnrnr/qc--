@@ -28,7 +28,7 @@ section "text"
         ;
         $t1 = $r30;
         ;
-        initialize continuations:l3:
+        initialize continuations:l4:
         i = 1;
         j = 2;
         k = 3;
