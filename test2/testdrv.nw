@@ -32,8 +32,12 @@ function Test.list_len(l)
   return i - 1
 end
 
-function Test.list_add(l, x)
-  l[Test.list_len(l)+1] = x
+function Test.list_add(l, ...)
+  local i = 1
+  while arg[i] do
+    l[Test.list_len(l)+1] = arg[i]
+    i = i + 1
+  end
 end
 @ 
 The status line is printed during a batch process. In the case of an
@@ -68,8 +72,20 @@ Lua tmpname places files all around the filesystem.
 <<testdrv.lua>>=
 function Test.temp_name(ext)
   local name = tmpname()
-  remove(name) -- tmpname creates file
+  Test.remove(name) -- tmpname creates file
   return(name .. ext)
+end
+@ 
+Function [[Test.remove]] removes a single file or a list.
+<<testdrv.lua>>=
+function Test.remove(...)
+  local i = 1
+  while arg[i] do
+    if type(arg[i]) == 'table' then Util.call(Test.remove, arg[i])
+    else remove(arg[i])
+    end
+    i = i + 1
+  end
 end
 @ 
 % -------------------------------------------------------------------
@@ -122,13 +138,15 @@ function Test.translate(file)
   CMD.translate_files(file, CMD.compilertab)
   return 1
 end
-function Test.compile_file(file, i)
+function Test.compile_file(file, i, txlimit)
   local s_file = Test.temp_name(".s")
   local so = s_file .. "1"
   local se = s_file .. "2"
 
-  Test.log("compiling %s -> %s", file, s_file)
+  Test.log("compiling %s -> %s%s", file, s_file,
+           txlimit and format(" with transaction limit %d", txlimit) or "")
 
+  Cfg.Tx.set_limit(txlimit or (2^30 - 1))
   Driver.reinit()
   Options.stop_at(".s")
   if (i or 1) == 1 then
@@ -151,7 +169,6 @@ function Test.compile_file(file, i)
     Test.clear_status_line()
     print(format("Used %d optimization transactions", Cfg.Tx.used()))
   end
-
 
   return s_file, so, se, compiles_ok
 end
@@ -272,6 +289,7 @@ end
 The [[check_update_file]] function compares two files. If the files
 differ, then either the expected file is updated, or an error message
 is generated.
+When files differ, their extensions are added to [[inputs.diffs]].
 <<testdrv.lua>>=
 function Test.check_update_file(inputs, file, i)
   local  ext = Caml.Filename.extension(file)
@@ -281,7 +299,7 @@ function Test.check_update_file(inputs, file, i)
   elseif ext == ".1"  then exp = inputs.stdout
   elseif ext == ".2"  then exp = inputs.stderr end
 
-  local equiv = Util.catch(Util.files_nonwhite_equivalent, exp, file)
+  local equiv = Util.files_nonwhite_equivalent(exp, file)
   if not equiv then
     if Test.update then
       print(format("%s \thas changed \t\t!! updating !!", exp))
@@ -320,22 +338,19 @@ function Test.run_test_case(inputs)
   local s_files = ""
   local to_remove = { }
   local all_compiles_ok = 'true'
+  inputs.diffs = ""
   while sources[i] do
     local file = sources[i]
     local s_file, so, se, compiles_ok = Test.compile_file(file, i)
     all_compiles_ok = all_compiles_ok and compiles_ok
-    if not s_file then return end -- not sure if this is right for multiple files
-
-    inputs.diffs = ""
+    assert(s_file)
 
     s_files = s_files .. " " .. s_file
     status = status + Test.check_update_file(inputs, s_file, i)
                     + Test.check_update_file(inputs, so, i)
                     + Test.check_update_file(inputs, se, i)
     i = i + 1
-    Test.list_add(to_remove, s_file)
-    Test.list_add(to_remove, so)
-    Test.list_add(to_remove, se)
+    Test.list_add(to_remove, s_file, so, se)
   end
 
   if inputs.runnable and (Test.update or status > 0) then
@@ -345,9 +360,7 @@ function Test.run_test_case(inputs)
         local pso, pse = Test.run_exe(exe_file, inputs.stdin)
         status = Test.check_update_file(inputs, pso)
                + Test.check_update_file(inputs, pse)
-        remove(pso)
-        remove(pse)
-        remove(exe_file)
+        Test.remove(pso, pse, exe_file)
       else
         status = 1  -- failed to build exe is an error
       end
@@ -356,8 +369,7 @@ function Test.run_test_case(inputs)
     end
   end
 
-  i = 1
-  while to_remove[i] do remove(to_remove[i]); i = i + 1 end
+  Test.remove(to_remove)
 
   if inputs.diffs ~= "" then
     local msg = format("{%s } differ", inputs.diffs)
@@ -373,6 +385,74 @@ function Test.run_test_case(inputs)
     end
   end
 end
+@ 
+\paragraph{VPOISO lives}
+
+To isolate an error in the optimizer, we automatically find the exact
+transaction that introduces the failure.
+<<testdrv.lua>>=
+function Test.iso_test_case(inputs)
+  if not inputs.runnable then
+    CMD.error('tried to isolate the bad optimization on a non-runnable test case')
+  end
+  local sources = inputs.source
+  local i = 1
+  local to_remove = { }
+  local all_compiles_ok = 'true'
+  local off_outputs, on_outputs = { }, { } -- unoptimized and optimized .s files
+  while sources[i] do
+    local file = sources[i]
+    local s_file,  so,  se,  compiles_ok  = Test.compile_file(file, i)     -- on
+    local s_file0, so0, se0, compiles_ok0 = Test.compile_file(file, i, 0)  -- off
+    all_compiles_ok = all_compiles_ok and compiles_ok and compiles_ok0
+    assert(s_file and s_file0)
+    off_outputs[i] = s_file0
+    on_outputs[i]  = s_file
+
+    i = i + 1
+    Test.list_add(to_remove, so, so0, se, se0)
+  end
+
+  if all_compiles_ok then
+    -- embarrassing to run assembler multiple times...
+    local off_exe = Test.build_exe(inputs, off_outputs)
+    local on_exe  = Test.build_exe(inputs, on_outputs)
+
+    if off_exe and on_exe then
+      local pso,  pse  = Test.run_exe(on_exe,  inputs.stdin)
+      local pso0, pse0 = Test.run_exe(off_exe, inputs.stdin)
+      <<insist [[ps[eo]]] and [[ps[eo]0]] enable isolation, otherwise error>>
+      <<set [[i]] such that optimizing exactly files $1..[[i]]$ fails>>
+      local n
+      <<set [[n]] such that optimizing [[n]] times succeeds, but not $[[n]]+1$>>
+      <<print [[n]] and write good and bad assembly files somewhere>>
+      Test.remove(pso, pse, pso0, pse0)
+    else
+      CMD.error('complaining bitterly -- cannot build executables for isolation')
+    end
+    Test.remove(on_exe, off_exe)
+  else
+    CMD.error('complaining bitterly -- cannot build assembly for isolation')
+  end
+
+  Test.remove(to_remove)
+end
+@ 
+With optimizations off, everything has to match.
+But with optimizations on, as long as either standard error or
+standard output are different, we can isolate.
+<<insist [[ps[eo]]] and [[ps[eo]0]] enable isolation, otherwise error>>=
+local eq = Util.files_nonwhite_equivalent 
+if eq(pso0, inputs.stdout) and eq(pse0, inputs.stderr) and
+   (not eq(pso, inputs.stdout) or not eq(pse, inputs.stderr)) then
+   -- everything is OK
+else
+  CMD.error("asked to isolate optimizer bug, but outputs won't work")
+end
+@ 
+<<set [[i]] such that optimizing exactly files $1..[[i]]$ fails>>=
+<<set [[n]] such that optimizing [[n]] times succeeds, but not $[[n]]+1$>>=
+<<print [[n]] and write good and bad assembly files somewhere>>=
 @ 
 These two function fill in defaults for any options not specified for
 a test case, before running the test case.
