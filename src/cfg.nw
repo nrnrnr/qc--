@@ -1106,10 +1106,11 @@ and set_succ' ~single ~mult ~cbr ~node ~old_succ ~succ =
     set_succ' ~single ~mult ~cbr ~node ~old_succ ~succ:(join_leading_to succ)
   else
     begin
-      ( <<modify the $n$th successor of [[node]] because [[node]] is no longer a predecessor>>
-      ; if not (is_ill succ)
-        then <<modify [[succ]] because [[node]] has become a predecessor>>
-      ; <<update [[node]]'s $n$th successor field to point to [[succ]]>>
+      ( (<<modify the $n$th successor of [[node]] because [[node]] is no longer a predecessor>>)
+      ; (if not (is_ill succ)
+         then <<modify [[succ]] because [[node]] has become a predecessor>>
+        )
+      ; (<<update [[node]]'s $n$th successor field to point to [[succ]]>>)
       )
     end
 @
@@ -1120,7 +1121,9 @@ match node with
 | Ass a -> a.ass_succ <- single succ
 | Jum j -> j.jum_succ <- single succ
 | Ret r -> r.ret_succ <- single succ
-| Ent e -> e.ent_succ <- single succ
+| Ent e -> ( e.ent_succ <- single succ
+           ; Printf.fprintf stderr "updating ent\n"
+           )
 | Mbr m -> ignore (mult m.mbr_succs (fun _ -> join_leading_to succ))
 | Cal c -> ignore (mult (ce_getnodes c.cal_contedges) (fun _ -> succ))
 | Cut c -> ignore (mult (ce_getnodes c.cut_contedges) (fun _ -> succ))
@@ -1304,12 +1307,14 @@ let copy info transform cfg =
                 ; label_map = SM.empty
                 ; mk_label  = cfg.mk_label
                 } in
-  let ill = illegal new_cfg in
-  let ()  = new_cfg.ill <- ill in
+  let ()  = new_cfg.ill <- illegal new_cfg in
   let convert node succ =
-    (* if not found, join must be a join point, not exit, b/c we visit the
-       exit first *)
     let lookup join = assert false in
+    (*
+      try SM.find (label join) new_cfg.label_map
+      with Not_found -> 
+      *)
+
     (*
       try  (SM.find (label join) new_cfg.label_map, map)
       with Not_found _ ->
