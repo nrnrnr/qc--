@@ -58,8 +58,9 @@ left of an existing synchronization point is synchronized.
 Building and using a source map involves only few operations:
 
 \begin{itemize}
-\item Create an initial source map.
+\item Create an initially empty source map.
 \item Enter synchronization points into the map.
+\item As a special case, enter a sync point for a new line.
 \item Return the location of a given position.
 \item For debugging, we also provide a [[dum]] function that 
       prints out the contents of a source map.
@@ -190,11 +191,12 @@ let sync srcmap position (file,line,col) =
         ; srcmap.top <- srcmap.top + 1
         )
         
-@ Entering a sync point for a new line is so common that it deserves a
-function. The sync point is actually at the position following the new
-line because we know that this will be at the beginning of the next
-line; [[position]] must point to this first character of the new line.
-The new line is in the same file as the last sync point.
+@ Entering a sync point for a new line is so common that it deserves
+its own function.  The sync point is actually at the position
+following the newline character because we know that this will be at the
+beginning of the next line; [[position]] must point to this first
+character of the new line.  The new line is in the same file as the
+last sync point.
 
 <<srcmap.ml>>=
 
@@ -210,7 +212,7 @@ let cmp x (y,_) = compare x y
 
 @ We want to find the element in the array with the position we are
 looking for, or, if it is not there, the element to the left of it.
-We expect that the arry si not empty when it is used and secure this
+We expect that the array is not empty when it is used and secure this
 by an assertion.  Only the first [[length]] entries are searched in
 the array.
 
