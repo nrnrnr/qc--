@@ -99,16 +99,7 @@ let wordsize   = 64
 @ 
 The postexpander may need to allocate temporaries.
 <<ia64 postexpander>>=
-let talloc = ref None
-let get_talloc () = match !talloc with
-  | Some s -> s
-  | None   -> Impossible.impossible 
-                    "Temp allocator not registered with postexpander"
-let remember_allocator ta = talloc := Some ta
-let remember_slot_allocator _ = ()
-
-(* don't eta reduce 'talloc' *)
-let talloc space = Talloc.Multiple.reg space (get_talloc ()) 
+let talloc = Postexpander.Alloc.temp
 @ 
 \paragraph{Utility Functions}
 <<ia64 postexpander>>=

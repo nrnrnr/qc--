@@ -257,21 +257,10 @@ end
 
 Taken from the Alpha
 <<SPARC postexpander>>=
-let talloc = ref None
-let remember_allocator ta = talloc := Some ta
-let get_talloc () =
-  match !talloc with
-  | Some s -> s
-  | None   -> imposs "Temp allocator not registered with postexpander"
-let talloc space = Talloc.Multiple.reg space (get_talloc ())
-let salloc = ref None
-let get_salloc () = match !salloc with
-  | Some s -> s
-  | None   -> Impossible.impossible "Slot allocator not registered with postexpander"
-let remember_slot_allocator sa = salloc := Some sa
-let salloc w = A.allocate (get_salloc()) w ""
-let sfetch aloc w = A.fetch aloc w
-let sstore aloc exp w = A.store aloc exp w
+let talloc = Postexpander.Alloc.temp
+let salloc = Postexpander.Alloc.slot
+let sfetch = A.fetch 
+let sstore = A.store
 @ 
 <<SPARC postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)

@@ -167,23 +167,10 @@ module Address = struct
   let reg r = R.fetch (R.reg r) (Register.width r)
 end
 @ 
-This temporary allocator is copied directly from the x86 backend.
+Two allocators.
 <<ppc postexpander>>=
-let talloc = ref None
-let get_talloc () = match !talloc with
-  | Some s -> s
-  | None   -> Impossible.impossible "Temp allocator not registered with postexpander"
-let remember_allocator ta = talloc := Some ta
-let talloc space = Talloc.Multiple.reg space (get_talloc ())
-
-let salloc = ref None
-let get_salloc () = match !salloc with
-  | Some s -> s
-  | None   -> Impossible.impossible "Slot allocator not registered with postexpander"
-let remember_slot_allocator sa = salloc := Some sa
-let salloc w = A.allocate (get_salloc()) w ""
-let sfetch aloc w = A.fetch aloc w
-let sstore aloc exp w = A.store aloc exp w
+let talloc = PX.Alloc.temp
+let salloc = PX.Alloc.slot
 @ 
 Contexts.
 <<ppc postexpander>>=

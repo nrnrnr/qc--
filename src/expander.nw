@@ -151,6 +151,8 @@ machine.
 These are the operations every target must implement.
 <<postexpander.mli>>=
 <<types for postexpanders>>
+<<exported utility functions for postexpanders>>
+<<exported utility functions for use by the generic expander>>
 <<signature of a postexpander>>
 <<postexpander.ml>>=
 <<types for postexpanders>>
@@ -186,7 +188,7 @@ instruction, with the following exceptions:
 \begin{itemize}
 \item
 If the target machine has delayed control-transfer instructions
-(branch/call/etc), we may use an RTL to represent an atomic
+(branch\slash call\slash etc), we may use an RTL to represent an atomic
 two-instruction package consisting of the control transfer and the
 instruction in the delay slot.
 We do this because at present, we have no other way to constrain
@@ -228,7 +230,22 @@ As in [[Cond]],
 the condition must be expandle using the [[expand_cond]] function
 in the postexpander interface below.
 The condition need not satisfy any other invariants.
+\item
+At need, we could add a 
+[[Nop]] to represent an empty sequence of instructions.
 \end{itemize}
+@
+A postexpander may need to allocate a temporary or a slot in the stack
+frame, or it may need to emit initialized data (e.g., for a
+floating-point load). 
+At present, only allocation of a temporary or a stack
+slot is supported.
+<<exported utility functions for postexpanders>>=
+module Alloc : sig
+  val temp : char -> width -> temp
+  val slot : width -> Automaton.loc
+end
+@ 
 <<signature of a postexpander>>=
 module type S = sig
   val byte_order : Rtl.aggregation (* used on all access to memory *)
@@ -239,19 +256,9 @@ module type S = sig
     val reg : temp -> t
   end
 
-  <<operations that enable the postexpander to allocate>>
   <<generic expansion operations for register machines>>
   <<generic expansion operations for stack machines>>
 end
-@ 
-A postexpander may need to allocate a temporary or a slot in the stack
-frame, or it may need to emit initialized data (e.g., for a
-floating-point load). It keeps these allocators in mutable state (once
-per procedure). At present, only allocation of a temporary or a stack
-slot is supported.
-<<operations that enable the postexpander to allocate>>=
-val remember_allocator : Talloc.Multiple.t -> unit
-val remember_slot_allocator : Automaton.t -> unit
 @ 
 \subsubsection{Postexpander operations for register machines}
 We provide basic load and store.
@@ -506,6 +513,52 @@ end
 
 \subsection{Implementation outline}
 
+The generic expander can temporarily install and uninstall allocators.
+<<exported utility functions for use by the generic expander>>=
+val remember_allocators : Talloc.Multiple.t -> Automaton.t -> unit
+val forget_allocators   : unit -> unit
+@ The following are checked run-time errors:
+\begin{itemize}
+\item
+ To call [[remember_allocators]] twice
+consecutively without an intervening call to [[forget_allocators]]
+\end{itemize}
+The following are \emph{unchecked} run-time errors:
+\begin{itemize} 
+\item
+To call any function in [[Postexpander.S]] before any call to
+[[remember_allocators]].
+\item
+To call any function in [[Postexpander.S]] if [[forget_allocators]]
+has been called more recently than
+[[remember_allocators]].
+\end{itemize}
+@
+<<postexpander.ml>>=
+module Alloc = struct
+  let badslot : width -> Automaton.loc =
+    fun _ -> Impossible.impossible "slot allocator misconfigured"
+  let badtemp : char -> width -> temp =
+    fun _ _ -> Impossible.impossible "temporary allocator misconfigured"
+  let valid = Reinit.ref false
+  let slotr = Reinit.ref badslot
+  let tempr = Reinit.ref badtemp
+  let slot w = !slotr w
+  let temp c w = !tempr c w
+end
+let remember_allocators t s =
+  if !Alloc.valid then
+    Impossible.impossible "too many allocators";
+  Alloc.valid := true;
+  Alloc.tempr := (fun c w -> Talloc.Multiple.reg c t w);
+  Alloc.slotr := (fun w -> Automaton.allocate s w "")
+let forget_allocators () = 
+  if not !Alloc.valid then
+    Impossible.impossible "too few allocators";
+  Alloc.valid := false;
+  Alloc.slotr := Alloc.badslot;
+  Alloc.tempr := Alloc.badtemp
+@
 The [[Proc.t]] gives the expander a supply of temporaries.
 <<expander.mli>>=
 module type S = sig
@@ -738,8 +791,7 @@ let expand ({Proc.cfg = cfg} as proc) =
   let alloc_direct (allocator, _) = allocator proc.Proc.temps in
   <<flow-graph functions>>
   <<definitions of [[to_temp]], [[rtl]] and all the other generic expander functions>>
-  (Post.remember_allocator proc.Proc.temps;
-   Post.remember_slot_allocator proc.Proc.priv;
+  (Postexpander.remember_allocators proc.Proc.temps proc.Proc.priv;
   (expand_cbranch,rtl))
 @ 
 To find the context for the operands of a comparison, I use the
@@ -1515,6 +1567,7 @@ let cfg _ ({Proc.cfg = cfg} as proc) =
         | _ -> modified := replace_node n (expand_rtl i) in
 
   G.iter_nodes expand_node proc.Proc.cfg;
+  Postexpander.forget_allocators();
   !modified
 @
 

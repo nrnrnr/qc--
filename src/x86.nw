@@ -103,13 +103,7 @@ type operator  = Rtl.Private.opr
 @
 The postexpander may need to allocate temporaries.
 <<x86 postexpander>>=
-let talloc = Reinit.ref None
-let get_talloc () = match !talloc with
-  | Some s -> s
-  | None   -> Impossible.impossible "Temp allocator not registered with postexpander"
-let remember_allocator ta = talloc := Some ta
-let talloc space = Talloc.Multiple.reg space (get_talloc ()) (* don't eta-reduce *)
-let remember_slot_allocator _ = ()
+let talloc = Postexpander.Alloc.temp
 @ 
 \paragraph{Contexts}
 Addresses go in the integer registers, so we use these contexts:

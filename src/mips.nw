@@ -171,13 +171,7 @@ type operator   = Rtl.Private.opr
 @
 The postexpander may need to allocate temporaries.
 <<MIPS postexpander>>=
-let talloc = ref None
-let remember_allocator ta = talloc := Some ta
-let get_talloc () = match !talloc with
-  | Some s -> s
-  | None   -> Impossible.impossible "Temp allocator not registered with postexpander"
-let talloc space = Talloc.Multiple.reg space (get_talloc ()) (* don't eta-reduce *)
-let remember_slot_allocator _ = ()
+let talloc = Postexpander.Alloc.temp
 @
 \paragraph{Contexts}
 There is no distinction between an integer and an address.
