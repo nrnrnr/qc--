@@ -22,27 +22,27 @@
 % ------------------------------------------------------------------ 
 
 For debugging we like to make the intermediate code visible by
-translating in back to {\PAL} syntax.  Technically this means, that
+translating it back to {\PAL} syntax.  Technically this means, that
 {\rtl}s are translated to the {\PAL} abstract syntax ({\AST}); for the
 {\AST} a pretty printer (in module \module{ast}) translates it back to
-{\small ASCII} codes. This module provides a translation from a {\rtl}
+{\small ASCII} codes. This module provides a translation from an {\rtl}
 to a {\PAL} statement.
 
 % ------------------------------------------------------------------ 
 \subsection{Interface}
 % ------------------------------------------------------------------ 
 
-The [[translate]] function takes a {\rtl} and produces a statement
+The [[translate]] function takes an {\rtl} and produces a statement
 list, describing the effect of the {\rtl}.  When a variable name is
-created from a name found in an {\rtl}, it is passed through the first
-argument to [[translate]].  This gives this mangling function a chance
-to re-write names such that they obey to the {\PAL} syntax.  See also
-module \module{mangle}.
+created from a name found in an {\rtl}, it is passed through a
+mangling function that is also passed to [[translate]].  This gives
+[[translate]] a chance to re-write names such that they obey to the
+{\PAL} syntax.  See also module \module{mangle}.
 
 <<rtl2ast.mli>>=
 val expr:      (string -> string) Rtl.expr  -> Ast.expr 
 val const:     (string -> string) Rtl.const -> Ast.expr 
-val translate: (string -> string) Rtl.rtl   -> Ast.stmt list
+val translate: (string -> string) Rtl.rtl   -> Ast.stmt 
 @
 
 % ------------------------------------------------------------------ 
@@ -63,29 +63,56 @@ let const mangle = function
     | R.Bool(_)      -> assert false
     | R.Bits(b,w)    -> A.Int(b, Some (bits w))
     | R.Link(name,w) -> A.Fetch(A.Var(None, mangle name))
+@
 
+<<>>=
+let locwidth = function
+    | R.Cell(_,_,w,_,_) -> w
+    | R.Var(_,_,w)      -> w
+@
+    
+Primitive operators in {\PAL} are monomorphic, whereas they are
+polymorphic in {\rtl}s.  The translatation to {\PAL} thus must
+specialize the operator if it is polymorphic.  Currently not
+implemented.
+
+<<>>=
 let rec expr mangle = function
     | R.Const c         -> const mangle c
     | R.Fetch(loc,_)    -> A.Fetch(location mangle loc)
     | R.App((op,ww),ee) -> let actual e = (None, expr mangle e)
-                        in 
-                            A.PrimOp(mangle op, List.map actual ee)
+                           in 
+                                A.PrimOp(op, List.map actual ee)
+@
 
+What to do with registers?
+
+<<>>=
 and location mangle = function 
     | R.Cell('m',agg,width,e,_)  -> A.Mem(bits width, expr mangle e, None)
     | R.Cell( _ ,agg,width,e,_)  -> assert false 
     | R.Var (name,_,width)       -> A.Var(None,mangle name)
-    
+@
 
-let effect mangle = function
-    | R.Kill   _         -> assert false
-    | R.Store  (loc,e,w) -> A.AssignStmt([location mangle loc],[expr mangle e])
+A [[kill]] is translated into an assignment of [[%undef()]].
+
+<<>>=
+let rec effect mangle guard = function
+    | R.Kill   loc       -> 
+        let width = locwidth loc                in
+        let undef = R.App(("undef",[width]),[]) in
+            effect mangle guard (R.Store(loc, undef, width))
+    | R.Store  (loc,e,w) -> 
+            (location mangle loc,(guard, expr mangle e))
 
 let guarded mangle = function
     | (e, eff) 
-       when e = truth    -> effect mangle eff
-    | (e, eff)           -> A.IfStmt(expr mangle e, [effect mangle eff], [])
+       when e = truth    -> effect mangle None                   eff
+    | (e, eff)           -> effect mangle (Some (expr mangle e)) eff
 
-let translate mangle (R.Rtl gg) = List.map (guarded mangle) gg
+let translate mangle (R.Rtl gg) = 
+    let pairs    = List.map (guarded mangle) gg in
+    let lhs, rhs = List.split pairs             in
+        A.AssignStmt(lhs,rhs)
 @
 
