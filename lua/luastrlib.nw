@@ -9,7 +9,7 @@
 <<luastrlib.mli>>=
 module M : Lua.Lib.BARECODE
 <<string builtins>>=
-let unimp g s =
+let unimp s =
   V.caml_func (fun _ -> I.error ("string library does not implement `" ^ s ^ "'"))
 
 <<support for [[format]]>>
@@ -20,7 +20,7 @@ let strindex = { V.embed = (fun n -> V.int.V.embed (n+1))
                ; V.is = V.int.V.is
                } 
 
-let string_builtins g =
+let string_builtins =
   let error s = I.error s in
   let invalid f x =
     try f x with Invalid_argument m -> error ("Invalid argument: " ^ m) in
@@ -61,8 +61,8 @@ let string_builtins g =
                     String.concat "" (list [] n))
   ; "ascii",   V.efunc (V.string **-> V.default 0 strindex **->> V.int)
                (fun s i -> Char.code (String.get s i))
-  ; "format",  ifunc (V.string **-> V.value *****->> V.string) (format g)
-  ; "gsub",    unimp g "gsub"
+  ; "format",  ifunc (V.string **-> V.value *****->> V.string) format
+  ; "gsub",    unimp "gsub"
   ] 
 @ 
 <<luastrlib.ml>>=
@@ -72,14 +72,14 @@ module M (I : Lua.Lib.CORE) = struct
   let ( **->> ) x y = x **-> V.result y
   let ( *****->> ) = V.dots_arrow
   <<string builtins>>
-  let init g = I.register_globals (string_builtins g) g; Lua.Lib.StringList.empty
+  let init g = I.register_globals string_builtins g; Lua.Lib.StringList.empty
 end
 @ 
 Code for [[format]] borrowed from standard [[Printf]] library.
 <<support for [[format]]>>=
 external format_int: string -> int -> string = "format_int"
 external format_float: string -> float -> string = "format_float"
-let bprintf_internal g buf format =
+let bprintf_internal buf format =
   let rec doprn i args =
     if i >= String.length format then
       begin
@@ -156,7 +156,7 @@ let bprintf_internal g buf format =
 
   in doprn 0
 
-let format g fmt args = bprintf_internal g (Buffer.create 16) fmt args
+let format fmt args = bprintf_internal (Buffer.create 16) fmt args
 @ 
 A recognizer takes as arguments a position and success and failure continuations.
 The implementation is based on standard parser combinators.

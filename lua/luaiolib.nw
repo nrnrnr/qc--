@@ -59,7 +59,7 @@ let readfrom =
       setinput (Unix.open_process_in (String.sub s 1 (String.length s - 1)))
     else
       setinput (open_in s) in
-  let from_other _ = C.fallback "error" g [V.String "bad args to readfrom"] in
+  let from_other _ = C.error "bad args to readfrom" in
   [ V.alt (V.string **->> infile)   from_string
   ; V.alt (V.unit   **->> infile)   (fun () -> (close_in io.currentin; setinput stdin))
   ; V.alt (infile   **->> infile)   setinput
@@ -81,27 +81,21 @@ let writeto' append =
   let to_nil () = (close_out io.currentout; setoutput stdout) in
   let to_other _ = 
     let funname = if append then "appendto" else "writeto" in
-    C.fallback "error" g [V.String ("bad args to " ^ funname)] in
+    C.error ("bad args to " ^ funname) in
   [ V.alt (V.string **->> outfile)   (fun s -> setoutput (open_out_string append s))
   ; V.alt (V.unit   **->> outfile)   to_nil
   ; V.alt (outfile  **->> outfile)   setoutput
   ; V.alt (V.value  **->  V.values)  to_other
   ]  in
     
-let unimp g s =
-  V.caml_func (fun _ ->
-    C.fallback "error" g [V.String ("string library does not implement `" ^ s ^ "'")]) in
-
-let read g = function
+let read = function
   | None -> [try V.String (input_line io.currentin) with End_of_file -> V.Nil]
-  | Some _ -> C.fallback "error" g
-              [V.String ("I/O library does not implement read patterns")]  in
+  | Some _ -> C.error ("I/O library does not implement read patterns")  in
 
 let getopt x d = match x with Some v -> v | None -> d  in
 
-let date g = function
-  | Some _ -> C.fallback "error" g
-              [V.String ("string library does not implement read patterns")]
+let date = function
+  | Some _ -> C.error ("I/O library does not implement read patterns")
   | None ->
       let t = Unix.localtime (Unix.time ()) in
       let s = string_of_int in
@@ -114,7 +108,7 @@ let tmpname () = Filename.temp_file "lua" "" in
 
 let write_strings file l = (List.iter (output_string file) l; flush file; 1) in
 
-let io_builtins g =
+let io_builtins =
   [ "readfrom",  errchoose readfrom
   ; "open_out",  V.efunc (V.string **->> outfile) (open_out_string false)
   ; "close_out", V.efunc (outfile  **->> V.unit)  close_out
@@ -125,13 +119,13 @@ let io_builtins g =
   ; "remove",    errfunc (V.string **->> V.string) (succeed Sys.remove)
   ; "rename",    errfunc (V.string **-> V.string **->> V.string) (succeed2 Sys.rename)
   ; "tmpname",   V.efunc (V.unit **->> V.string) tmpname
-  ; "read",      V.efunc (V.option V.string **-> V.values) (read g)
+  ; "read",      V.efunc (V.option V.string **-> V.values) read
   ; "write",     errchoose 
                  [ V.alt (V.string *****->> V.int)
                                                (fun l -> write_strings io.currentout l)
                  ; V.alt (outfile **-> V.string *****->> V.int) write_strings
                  ]                          
-  ; "date",      V.efunc (V.option V.string **-> V.values) (date g)
+  ; "date",      V.efunc (V.option V.string **-> V.values) date 
   ; "exit",      V.efunc (V.option V.int **-> V.runit) (fun n -> exit (getopt n 0))
   ; "getenv",    V.efunc (V.string **->> V.option V.string)
                  (fun s -> try Some (Sys.getenv s) with Not_found -> None)
@@ -187,7 +181,7 @@ module Make (T : Lua.Lib.TYPEVIEW with type 'a t = 'a t)
        let init g = 
          let io = {currentin = stdin; currentout = stdout} in
          <<i/o builtins>>
-         C.register_globals (io_builtins g) g;
+         C.register_globals io_builtins g;
          Lua.Lib.StringList.empty
      end (*M*)
   end (*Make*)
