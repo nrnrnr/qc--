@@ -161,15 +161,17 @@ type reg            = pos * pos
 type location       = string    (* file   *)
                     * int       (* line   *)
                     * int       (* column *)
+@
 
-@ A [[syncpoint]] associates a [[pos]] with a [[location]]. To
+A [[syncpoint]] associates a [[pos]] with a [[location]]. To
 lower memory requirements a bit this could be also defined as a
 quadruple. 
 
 <<srcmap.ml>>=
 type syncpoint      = pos * location
+@
 
-@ We have chosen to use an array to implement a source map.  Binary
+We have chosen to use an array to implement a source map.  Binary
 search can be used to implement the lookup operation and an array
 is compact in memory.  When an array fills up it is copied
 into a new one twice of the size of the old. 
@@ -196,14 +198,14 @@ type map =          { mutable points:       syncpoint array
                     }
 type point          = map * pos
 type region         = map * reg
+@
 
-@ The [[top]] component maintains the index of the first free position
+The [[top]] component maintains the index of the first free position
 in the [[points]] array.  In \ocaml~every array cell must be
 initialized upon creation.  We use [[undefined]] for this.  The
 initial size of the array is [[size]].
 
 <<srcmap.ml>>=
-
 let size        =  2    (* small to test alloc *)
 let undefined   =  (0, ("undefined", -1, -1))    
 
@@ -213,8 +215,9 @@ let empty =
     ; top     = 0
     ; files   = Hashtbl.create 17
     }    
+@
 
-@ To prevent that the array fills up [[alloc]] makes sure there is at
+To prevent that the array fills up [[alloc]] makes sure there is at
 least space for the next sync point.  In case the array is full it
 copies the existing array into a new one, twice as the size of the
 old. 
@@ -228,15 +231,15 @@ let alloc srcmap =
         else 
             let points' = Array.create length undefined in
                 srcmap.points <- Array.append srcmap.points points'
-            
-@ Synchronizing means simply to enter the position and the
+@            
+
+Synchronizing means simply to enter the position and the
 corresponding location into the array.  The file name in the location
 is replaced by an instance that comes from the hash table and is
 shared by many sync points.  We check also for the increasing order of
 positions.
 
 <<srcmap.ml>>=         
-
 let sync srcmap pos (file,line,col) =
     let _     = alloc srcmap in
     let file' = try  Hashtbl.find srcmap.files file
@@ -250,18 +253,19 @@ let sync srcmap pos (file,line,col) =
         ; srcmap.points.(top) <- (pos,location')
         ; srcmap.top <- srcmap.top + 1
         )
+@ 
 
-@ [[last]] returns the location of the last sync point. It is useful
+[[last]] returns the location of the last sync point. It is useful
 to get the current file name and line number.
 
 <<srcmap.ml>>=
-
 let last map =
     ( assert (map.top > 0 && map.top <= Array.length map.points)
     ; snd map.points.(map.top-1)
     )
-       
-@ Entering a sync point for a new line is so common that it deserves
+@ 
+
+Entering a sync point for a new line is so common that it deserves
 its own function.  The sync point is actually at the position
 following the newline character because we know that this will be at the
 beginning of the next line; thus [[position]] must point to this first
@@ -269,26 +273,25 @@ character of the new line.  The new line is in the same file as the
 last sync point.
 
 <<srcmap.ml>>=
-
 let nl map pos = 
     let (file, line, _) = last map in
         sync map pos (file, line+1, 1)
-
+@
         
-@ Function [[cmp]] compares a [[pos]] with a [[(pos,location)]]
+Function [[cmp]] compares a [[pos]] with a [[(pos,location)]]
 pair; the [[pos]] is the one we like to find in the array.
 
 <<srcmap.ml>>=
 let cmp x (y,_) = compare x y
+@
 
-@ We want to find the element in the array with the position we are
+We want to find the element in the array with the position we are
 looking for, or, if it is not there, the element to the left of it.
 We expect that the array is not empty when it is used and secure this
 by an assertion.  Only the first [[length]] entries are searched in
 the array.
 
 <<srcmap.ml>>=
-
 let search x array length cmp =
     let rec loop left right =
         if left > right then
@@ -310,24 +313,24 @@ let search x array length cmp =
         ( assert (length > 0)
         ; loop 0 (length-1)
         )
+@
 
-@ To calculate the location of a position we have to find the sync
+To calculate the location of a position we have to find the sync
 point to its left.  We do a binary search for this point in the map
 which gives us a location.  The actual location is possibly to the
 right of this point:  we simply have to add the missing columns to go
 there.
 
 <<srcmap.ml>>=
-
 let location map pos =
     let pos',(file,line,col) = search pos map.points map.top cmp in
     (file,line,pos - pos' + col)
+@
 
-@ To aid debugging we provide a function [[dump]] to write the
+To aid debugging we provide a function [[dump]] to write the
 contents of a [[srcmap]] to stdout.
 
 <<srcmap.ml>>=
-
 let dump map =
     let point (pos,(file,line,col)) = 
         Printf.printf "%5d: %-32s %4d %3d\n" pos file line col
@@ -335,14 +338,13 @@ let dump map =
         for i=0 to map.top-1 do
             point map.points.(i)
         done
+@
 
-@ For reporting locations to the user they must be available as
+For reporting locations to the user they must be available as
 strings. The [[Str]] module provides conversions.
 
 <<srcmap.ml>>=
-
 module Str = struct
-    
     let point  (map,pos) =
         let (file,line,column) = location map pos in
             Printf.sprintf "%s:%d.%d" file line column   
@@ -362,6 +364,4 @@ module Str = struct
                 "file %s, line %d, character %d - file %s, line %d, character %d"
                 file1 l1 col2 file2 l2 col2
 end
-
-
 @

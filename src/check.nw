@@ -71,7 +71,7 @@ let rec evalTy env = function
 
 <<building the type environment>>
 <<building the value environment>>
-
+<<checking the static semantics>>
 <<check file>>
 @
 
@@ -475,9 +475,9 @@ let foldLocalConstDecls b =
 \subsection{Evaluating constant declarations}
 % ------------------------------------------------------------------ 
 
-Constant declarations must be sorted topoligically before they can be
+Constant declarations must be sorted topologically before they can be
 processed. Processing includes checking their types and evaluating
-their values. Bot type and value are bound in the environment.
+their values. Both type and value are bound in the environment.
 
 Processing a constant declaration means to
 
@@ -588,7 +588,7 @@ let reportCycle env decls =
         | A.Const(t,n,_), Some r -> 
             error r env ("const declaration for "^n^" is cyclic")
         | A.Const(t,n,_), None   ->
-            E.errorPrt      ("const declaration for "^n^" is cyclic")
+            E.errorPrt  ("const declaration for "^n^" is cyclic")
         | _                     -> assert false
     in
         List.iter report decls      
@@ -617,6 +617,155 @@ let doLocalConst  env body    =
         doConst false env (CollectConst.foldLocalConstDecls body)
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Checking the static semantics}
+% ------------------------------------------------------------------ 
+
+
+<<checking the static semantics>>=
+module Semantics = struct
+    <<check>>
+end
+@
+
+Alignments must be a power of two. This predicates is true, iff its argument
+is a positive power of two.
+
+<<check>>=
+let rec is2power = function
+    | 1 -> true
+    | x -> x > 0 && (x mod 2) = 0 && is2power (x/2)
+@
+
+Expressions are type checked.  In [[ValueEnv.EvalCOnst]] constant
+definitions were already type checked and there is some code for this. 
+But the evaluation of constants interleaced type checking and
+evaluations It is easier and cleaner to implement the type checking
+functions again.
+
+<<>>=
+let rec tyFetch env = function
+    | A.LValueAt(x,r) -> E.catch (error r env) (tyFetch env) x
+    | A.Var(id)       -> ( match F.findv' id env with
+                         | E.Error                -> E.Error
+                         | E.Ok(denotation,ty)    -> E.Ok(ty)
+                         ) 
+    | A.Mem (t,e,a)   -> 
+        let te    = tyExpr env e in
+        let t'    = evalTy env t in
+        let align = match a with
+                    | None   -> 1
+                    | Some a when is2power a -> a
+                    | Some a -> E.error "alignment not a power of 2"
+        in
+            ( match te, t' with
+            | E.Error, _         -> E.Error
+            | _      , E.Error   -> E.Error
+            | E.Ok(t), E.Ok(t') when t' = Types.data -> E.Ok(t)
+            | _     -> E.error "memory reference by non-data pointer"
+            )
+
+<<>>=
+and tyAppl' opTy argTys =
+    let unused = Types.bool                            in
+    let sigma  = ( try Types.unify opTy (Types.proc argTys unused) Types.empty with
+                 | Types.UnifyExn -> E.error "type error in application"
+                 )                                     in
+        ( match Types.subst sigma opTy with
+        | Types.Procedure(_,t) -> t
+        | _                    -> assert false
+        )
+        
+and tyAppl opTy argTys = E.emap (tyAppl' opTy) argTys
+@
+
+For now we are using the types of the primitive constant operators.
+All primitive runtime operators will go into their own module
+[[Primitives]]. So we have to fix the [[lookup]] later.
+
+<<>>=
+and tyPrimOp env op args =
+    let at = List.map (tyExpr env) args                  in
+    let ot = snd (Const.Symbol.lookup op Const.constOps) in
+        tyAppl ot (E.Raise.list at)
+
+<<>>=
+and tyExpr env = function
+    | A.ExprAt(x,r) -> E.catch (error r env) (tyExpr env) x
+    | A.Int (str,(Some size as s))   -> E.Ok(T.bits size)
+    | A.Int (str,(None      as s))   -> E.Ok(T.word     )
+    | A.Float (str,(Some size as s)) -> E.Ok(T.bits size)
+    | A.Float (str,(None      as s)) -> E.Ok(T.word     )
+    | A.Char (str,(Some size as s))  -> E.Ok(T.bits size)
+    | A.Char (str,(None      as s))  -> E.Ok(T.word     )
+    | A.Fetch(v)                     -> tyFetch env v
+    | A.BinOp(l,op,r)                -> tyPrimOp env op [l;r]
+    | A.UnOp(op,expr)                -> tyPrimOp env op [expr]
+    | A.PrimOp(op,args)              -> tyPrimOp env op (List.map snd args)
+@
+
+Checking the static semantics really starts here.  We traverse the
+abstract syntax and check all the constrains.  The overall result is
+either [[E.Ok()]] or [[E.Error]].  The reduce the correctness of a
+complex object to a single result we emply the [[Error.Implode]]
+module heavily.
+
+<<>>=
+let rec init env = function
+    | A.InitAt(x,_)   -> init env x
+    | A.InitExprs(es) -> E.Raise.list (List.map (tyExpr env) es)
+    | A.InitStr(s)    -> E.Ok ([Types.char])
+    | A.InitUStr(s)   -> E.Ok ([Types.uchar])
+
+let memsize env = function
+    | A.NoSize    -> E.Ok(Some 1)
+    | A.DynSize   -> E.Ok(None)
+    | A.FixSize e -> 
+        let f' = function
+            | Types.Bits(x), size 
+              when Const.val2i size > 0 -> Some (Const.val2i size)
+            | otherwise                 -> E.error "invalid size"   in
+        let f x = E.emap f' x                                       in
+            f (ValueEnv.EvalConst.evalExpr env e)
+<<>>=
+let memdecl env ty size = function 
+    | None     -> E.Implode.pair (memsize env size, evalTy env ty)
+    | Some (i) -> 
+        ( match init env i, evalTy env ty with
+        | E.Error,_          -> E.Error
+        | _, E.Error         -> E.Error
+        | E.Ok tys, E.Ok ty' ->
+            let n           = List.length tys in
+            let consistent  = foldl (fun res t -> res && ty' = t) true tys in
+
+            if not consistent then
+                E.error 
+                    "initial values have types different than declared type" 
+            else ( match memsize env size with
+                 | E.Ok(Some m) when n > m -> E.error "too many initial values"
+                 | E.Ok(Some m) when n < m -> E.error "too few  initial values"
+                 | E.Ok(Some m)            -> E.Ok ()
+                 | E.Ok(None)              -> E.Ok ()
+                 | E.Error                 -> E.Error
+                 )
+        )
+<<>>=
+let rec datum env = function
+    | A.DatumAt(x,r)   -> E.catch (error r env) (datum env) x
+    | A.Label(n)       -> E.Ok ()
+    | A.Align(a)       -> if is2power a then E.Ok () else 
+                          E.error ("illegal alignment: " ^ string_of_int a)
+    | A.MemDecl(t,m,i) -> memdecl env t m i
+
+<<>>=
+let rec stackdatum env = function
+    | A.DatumAt(x,r)      -> E.catch  (error r env) (stackdatum env) x
+    | A.Label(n)          -> E.Ok() (* should be in env *)
+    | A.Align(a)          -> if is2power a then E.Ok() else 
+                             E.error ("illegal alignment: " ^ string_of_int a)
+    | A.MemDecl(t,m,None) -> memdecl env t m None 
+    | A.MemDecl(t,m,_   ) -> E.error "no initial values allowed for stackdata"
+@
 % ------------------------------------------------------------------ 
 \subsection{Checking a whole file}
 % ------------------------------------------------------------------ 
