@@ -89,14 +89,21 @@ and primOp env op args =
         E.ematch argtys (fun tys -> fst (Rtlop.Translate.operator op tys))
             
 and expr env exp =
-    let optty default = function
-        | None    -> default
-        | Some t  -> astty env t       
+    let optty default cvt x ty =
+        let w   = match ty with
+                  | None    -> default
+                  | Some ty -> astty env ty  in
+        let msg = "literal value does not match type" in
+        E.sequence w (fun t -> match t with
+                               | (Types.Bits w as t) ->
+                                 (try let _ = cvt x w in Error.Ok t
+                                  with Bits.Overflow ->   Error.error msg)
+                               | Types.Bool          ->   Error.error msg)
     in match exp with
         | A.ExprAt(x,r)     -> expr env x
-        | A.Int   (_,ty)    -> optty env.wordsize ty
-        | A.Float (_,ty)    -> optty env.wordsize ty
-        | A.Char  (_,ty)    -> optty (E.Ok(Types.bits 8)) ty
+        | A.Int   (x,ty)    -> optty env.wordsize         Bits.U.of_string x ty
+        | A.Float (x,ty)    -> optty env.wordsize         Bits.U.of_string x ty
+        | A.Char  (x,ty)    -> optty (E.Ok(Types.bits 8)) Bits.U.of_int    x ty
         | A.Fetch (v)       -> astFetch env v
         | A.BinOp (l,op,r)  -> primOp env op [l;r]
         | A.UnOp  (op,e)    -> primOp env op [e]
