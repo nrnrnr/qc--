@@ -16,7 +16,7 @@ state.tex: state.inc
     echo "\input{state.inc}" > $target
 
 clean:V: clean-tex
-	rm -f design.tex state.tex *~
+	rm -f design.tex state.tex bytecode.tex *~
 
 clean-tex:V:
 	rm -f *.blg *.log *.dvi *.inc *.toc *.aux
@@ -30,6 +30,9 @@ decode.fetch:D: bytecode.nw
 decode.m:D: bytecode.nw
 	$NOTANGLE -L -R$target $prereq > $target
 
+interp.h:D: bytecode.nw
+        $NOTANGLE -L -R$target $prereq > $target
+
 encode.c encode.h: bytecode.sled
 	tools -lc-cons-names -encoder encode $prereq
 
@@ -37,3 +40,5 @@ encode.c encode.h: bytecode.sled
 	tools -lc-cons-names -decoder $target -matcher $stem.m \
 		bytecode.sled decode.fetch
 
+interp.o: decode.c interp.h
+        gcc -c -o interp.o decode.c
