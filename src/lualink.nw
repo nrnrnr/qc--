@@ -39,7 +39,7 @@ module T    = Lua.Lib.Combine.T10           (* types *)
                 (Luaiolib.T)                (* T7 *)
                 (Backplane.T)               (* T8 *)
                 (Colorgraph.GCT)            (* T9 *)
-                (Block.T)                   (* T9 *)
+                (BlockType)                 (* T10 *)
 
 module AsmT        = T.T1
 module AstT        = T.T2
@@ -59,7 +59,7 @@ module L1 =
     (Luaiolib.Make (LuaioT))
     (IO (Luastrlib.M))
     (IO (Luamathlib.M))
-    (MakeLib (AsmT) (AstT) (EnvT) (ProcT) (TargetT) (DocT) (LuaioT))
+    (MakeLib (AsmT) (AstT) (EnvT) (ProcT) (TargetT) (DocT) (LuaioT) (BlockT))
     (Backplane.Make  (BackplaneT) (ProcT))
     (Colorgraph.Make (BackplaneT) (ColorgraphT) (ProcT))
     (Targets.MakeLib (TargetT))
@@ -72,13 +72,12 @@ module XXX = MSparcRtlExpander.Lua
 
 
 module L2 = 
-  Lua.Lib.Combine.L6                    (* up to 9 more libs *)
+  Lua.Lib.Combine.L5                    (* up to 9 more libs *)
     (L1)
     (Dummyexpander.Make          (ProcT))
     (Placevar2.Make (BackplaneT) (ProcT))
     (MSparcRtlExpander.Lua       (ProcT))
     (IO (Rtleval2.Lua)) 
-    (Block.MakeLib(BlockT))
 
 module I = 
   Lua.MakeInterp                            (* our interpreter *)
@@ -134,6 +133,12 @@ module DocType = struct
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<doc>" 
 end
+module BlockType = struct
+    type 'a t       = Block.t
+    let tname       = "block"
+    let eq _        = fun x y -> x = y
+    let to_string   = fun _ t -> "<block>"
+end
 
 module MakeLib
   (AsmV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AsmType.t)
@@ -148,6 +153,8 @@ module MakeLib
   (DocV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a DocType.t 
                               and  type 'a combined = 'a AsmV.combined)
   (InOutV  : Lua.Lib.TYPEVIEW with type 'a t        = 'a Luaiolib.T.t    
+                              and  type 'a combined = 'a AsmV.combined)
+  (BlockV  : Lua.Lib.TYPEVIEW with type 'a t        = 'a BlockType.t    
                               and  type 'a combined = 'a AsmV.combined)
     
     : Lua.Lib.TYPEFUL with type 'a combined = 'a AsmV.combined =
@@ -180,6 +187,7 @@ module Map = struct
     let inchan    = Luaiolib.in'    channel    V.projection
     let outchan   = Luaiolib.out    channel    V.projection
     let stage     = V.func (V.value **-> proc **-> V.result V.bool)
+    let block     = BlockV.makemap  V.userdata V.projection
 end
 
 let init g = 
@@ -207,7 +215,9 @@ let init g =
     ; "version"   , V.efunc (V.unit  **-> V.runit)            Driver2.version
     ; "stdin"     , Map.inchan.V.embed                        stdin (* hack *)
     ; "stdout"    , Map.outchan.V.embed                       stdout(* hack *)
+   (* replaced by Stack.freeze
     ; "freeze"    , Map.stage.V.embed (fun v p -> Ast3ir.freeze p; true)
+    *)
     ; "compile"   , V.efunc (Map.optimize **-> Map.ast  
                                           **-> Map.target 
                                           **-> Map.env 
@@ -226,6 +236,27 @@ let init g =
     ; "sparc",  Map.target.V.embed Targets.sparc
     ; "x86",    Map.target.V.embed X86.target
     ] g;
+  C.register_module "Block" 
+    [ "size",       V.efunc (Map.block **-> V.result V.int)  Block.Lua.size
+    ; "alignment",  V.efunc (Map.block **-> V.result V.int)  Block.Lua.alignment
+    ; "adjust",     V.efunc (Map.block **-> V.result Map.block) Block.Lua.adjust
+    ; "cat",        V.efunc (V.list Map.block **-> V.result Map.block) 
+                        (Block.Lua.cat (C.error g))
+    ; "overlap",    V.efunc (V.list Map.block **-> V.result Map.block) 
+                        (Block.Lua.cat (C.error g))
+    ] g;
+  (* someone who groks the Lua map mechanism could rewrite the embedding
+     below of Stack.blocks: Proc.t -> (string * Block.t) list. I don't know
+     how to map string * Block.t into a table easily -- CL *)
+  C.register_module "Stack"
+    [ "freeze",     V.efunc (Map.proc **-> Map.block **-> V.result V.unit) 
+                        Stack.freeze
+    ; "blocks",     V.efunc (Map.proc **-> V.result V.table)
+                    (let embed (str,blk) = (str, Map.block.V.embed blk)
+                     in fun p -> 
+                        V.Table.of_list (List.map embed (Stack.blocks p)))
+    ] g;                    
+  
   Lua.Lib.StringList.of_list [ <<lua initialization>> ]
 @  
 <<lua initialization>>=

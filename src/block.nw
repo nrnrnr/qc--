@@ -93,23 +93,34 @@ be observed and composed, but there is no way to create primitive
 blocks. The main reason for these limitations that blocks rely on other
 data types that have no Lua representation.
 
-From the Lua point of view, blocks provide the following signature:
+From the Lua point of view, blocks provide the following (C-style)
+signature: :
 
 <<lua block signature>>=
-Block.size(block): int
-Block.alignment(block): int
-Block.adjust(block): block
-Block.cat(block list): block
-Block.overlap("high"|"low", block list): block
+block   Block.mk(block addr, int size, int alignment, string offset)
+int     Block.size(block block)
+int     Block.alignment(block)
+block   Block.adjust(block)
+block   Block.cat(block table)
+block   Block.overlap("high"|"low", block table)
 @
 
-We export a module and a functor that are linked into the Lua
-interpreter in module \module{lualink}.
+The [[Block.mk]] function does not take an address directly, but another
+block whose address $a$ is used to form a new address $a+k$, where $k$
+is a late compile-time constant. The last string argument is optional
+and is used to build a unique compile-time constant. The other two
+arguments are identical to that of the {\ocaml} function [[mk]] and
+provide size and alignment.
 
 <<block.mli>>=
-module T: Lua.Lib.USERTYPE
-module MakeLib  (V : Lua.Lib.TYPEVIEW with type 'a t = 'a T.t)
-    : Lua.Lib.TYPEFUL with type 'a combined = 'a V.combined 
+module Lua: sig
+    val size:       t -> int
+    val alignment:  t -> int
+    val adjust:     t -> t
+    val cat:        (string -> t) -> t list -> t
+    val overlap:    (string -> t) -> string -> t list -> t
+    val mk:         t -> int (*size*) -> int -> string option -> t
+end
 @
 
 % ------------------------------------------------------------------ 
@@ -225,66 +236,55 @@ let overlap_list p ts = List.fold_left (overlap p) (List.hd ts) (List.tl ts)
 \subsection{Export to Lua}
 % ------------------------------------------------------------------ 
 
-A block is represented as a [[userdata]] type in Lua. We could use the
-[[Rtlutil.ToString]] module to provide a better [[to_string]] function.
+We export the block abstraction to Lua. The actual export is handled in
+module \module{lualink}. Here we just provide the {\ocaml} functions
+that implement the new Lua primitives and the representation [[T]] for
+blocks in Lua..
 
 <<block.ml>>=
-module T = struct
-    type block      = t         (* just to access outer type t *)
-    type 'a t       = block
-    let tname       = "block"
-    let eq _        = fun x y -> x = y
-    let to_string   = fun _ t -> "<block>"
+module Lua = struct
+    let size      = size
+    let alignment = alignment
+    let adjust    = adjust
+    
+    <<Block primitives for Lua>>
 end
 @
 
-The [[MakeLib]] functor is exported such that the Lua interpreter can be
-linked together. The details how this exactly works are beyond me. 
+Some primitives are not simply the {\oacml} functions but need
+additionally check arguments to prevent the interpreter fail. For error
+reporting functions receive a function [[error]] that expects a string.
 
-<<block.ml>>=
-module MakeLib (BlockV: Lua.Lib.TYPEVIEW with type 'a t = 'a T.t) =
-struct
-    type 'a combined = 'a BlockV.combined
-    module M (C: Lua.Lib.CORE with type 'a V.userdata' = 'a combined) =
-    struct
-        module V = C.V
-        let ( **-> ) = V.( **-> )
-        <<export functions to Lua>>
-    end (*M*)
-end (*MakeLib*)
-@
-
-An interpreter should never fails with internal errors. Therefore we
-have to wrap the [[cat]] and [[overlap]] function to check for possible
-problems be fore we call them.
-
-<<export functions to Lua>>=
-let cat' g = function
-    | [] -> C.error g "Block.cat: empty argument list"
+<<Block primitives for Lua>>=
+let cat error = function
+    | [] -> error "Block.cat: empty argument list"
     | bs -> cat_list bs
 
-let overlap' g placement blocks = match (placement, blocks) with
-    | _     , [] -> C.error g "Block.overlap: empty block list"
+let overlap error placement blocks = match (placement, blocks) with
+    | _     , [] -> error "Block.overlap: empty block list"
     | "high", bs -> overlap_list High bs
     | "low" , bs -> overlap_list Low  bs
-    | _          -> C.error g "Block.overlap: 'high' or 'low' expected"
+    | _          -> error "Block.overlap: 'high' or 'low' expected"
 @    
 
-The [[init]] function is called during the initialization phase of the
-interpreter. It creates a new table [[Block]] and registers all
-functions in there. 
+The Lua version for [[mk']] is significantly different from the {\ocaml}
+version of [[mk]]. The address $a'$ for the new block is derived from
+the address $a$ of an existing block. We form a new address $a'=a+k$
+where $k$ is a late compile-time constant. The client can optionally
+provide a name for the constant that is fed into [[Idgen]] to make it
+unique.
 
-<<export functions to Lua>>=
-let init g =
-    let block = BlockV.makemap V.userdata V.projection in
-    C.register_module "Block"
-        [ "size"       , V.efunc (block        **-> V.result V.int) size
-        ; "alignment"  , V.efunc (block        **-> V.result V.int) alignment
-        ; "adjust"     , V.efunc (block        **-> V.result block) adjust
-        ; "cat"        , V.efunc (V.list block **-> V.result block) (cat' g)
-        ; "overlap"    , V.efunc (V.string **-> V.list block 
-                                           **-> V.result block) (overlap' g)
-        ] g;
-    Lua.Lib.StringList.empty    
-        
+<<Block primitives for Lua>>=
+let offset base name ptrwidth =
+    let k = Rtl.late (Idgen.offset name) ptrwidth in
+        Rtl.app (Rtl.opr "add" [ptrwidth]) [base;k] 
+
+let mk block size alignment name =
+    let name  = Aux.Option.get "Block.mk" name in (* name for late *)
+    let width = Rtlutil.Width.exp (base block) in (* width of addr *)  
+    let late  = Rtl.late name width in
+    let addr  = offset (base block) name width in
+        mk addr size alignment
 @
+
+

@@ -1,0 +1,91 @@
+% vim: ts=8 sw=4 et:
+
+% ------------------------------------------------------------------ 
+\section{Stack Layout in Lua}
+% ------------------------------------------------------------------ 
+
+This module implements Lua primitives that allow to define the frame
+layout for a procedure in Lua. [[Blocks]] provides a list of named
+blocks that must be assembled by the layout function into one block.
+[[Freeze]] takes this block and realizes the layout by performing final
+substitutions in the procedure's code. For the names available, just see
+the list in the implementation of [[blocks]] below.
+
+The functions exported here are bound to Lua functions in module
+\module{lualink}.
+
+<<stack.mli>>=
+val blocks: Proc.t -> (string * Block.t) list
+val freeze: Proc.t -> Block.t -> unit
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<stack.ml>>=
+module Target = Target2
+module RP     = Rtl.Private
+module AT     = Automaton2
+@
+
+[[blocks]] builds a list table of (named) blocks taken from the actual
+procedure.  This table will be passed to the Lua function that actually
+assembles the blocks into one that becomes the stack frame. 
+
+Some blocks blocks are special: the block named [[sp]] is empty, but is
+still useful because its address is the stack pointer. It can be
+therefore used by the frame-assembling Lua function to define where the
+stack pointer points into the frame. We probably have to add another
+such block for the frame pointer [[fp]].
+
+<<stack.ml>>=
+let blocks (p:Proc.t) =
+    let cc       = p.Proc.cc                        in
+    let ptr      = p.Proc.target.Target.pointersize in
+        [ "sp"              , Block.mk(Rtl.fetch cc.Target.sp ptr) 0 1 
+        ; "incoming"        , p.Proc.incoming
+        ; "stackdata"       , p.Proc.stackd            
+        ; "continuations"   , p.Proc.conts
+        ; "spills"          , AT.freeze p.Proc.priv 
+        ; "outgoing"        , p.Proc.outgoing
+        ]
+        
+
+let freeze (p:Proc.t) (stack:Block.t) = 
+    let pointer  = p.Proc.target.Target2.pointersize in            
+    let eqns     = p.Proc.eqns @ (Block.constraints stack) in
+    let solution = 
+        try Const2.solve pointer eqns 
+        with Const2.Can'tSolve -> Impossible.impossible 
+                ("can't solve equations in "^ p.Proc.symbol#text)    
+    in            
+    let ()       = assert (solution.Const2.dependent = []) in
+    let ()       = assert (solution.Const2.known <>    []) in
+    let map      = Strutil.assoc2map solution.Const2.known     in
+    (*
+     * let ()       = List.iter 
+     *               (fun (key,_) -> Printf.printf "%s\n" key) 
+     *                solution.Const2.known in 
+     *)
+    (* The guard protects the subst function. If the guard is true
+     * the subst function is applied to an expression *)
+    let guard    = function
+        | RP.Const(RP.Late(_)) -> true
+        | _                    -> false in
+    
+    (* This is the guareded substitution - we replace certain RP.Late
+       values *)
+    let rec subst (e:RP.exp) = match e with              
+        | RP.Const(RP.Late(x,_)) -> 
+            ( try Rtl.Convert.exp (Strutil.Map.find x map) with 
+            | Not_found -> 
+                if false then e else Impossible.impossible ("cannot find: "^x)
+            )  
+        | x -> x in
+    let () = Cfgutil.subst p.Proc.cfg (Rtlutil.Subst2.exp ~guard ~map:subst)
+    and () = Cfgutil.subst p.Proc.cfg Rtleval2.rtl (* const folding *)
+    in
+        ()
+@
+

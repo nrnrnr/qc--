@@ -301,6 +301,24 @@ state, we can't easily discover the name of a function.
 Accordingly, we patch things here.
 <<qc--.lua>>= 
 ------------------------------------------------------------------ 
+-- Stack
+------------------------------------------------------------------ 
+
+function Stack.layout(dummy,proc)
+    blocks = Stack.blocks(proc)
+    block  = Block.cat 
+                { blocks.incoming
+                , blocks.stackdata
+                , blocks.continuations
+                , blocks.spills
+                , blocks.outgoing
+                , blocks.sp
+                }
+    Stack.freeze(proc,block)
+    return 1    -- Backplane protocol
+end
+
+------------------------------------------------------------------ 
 -- Stage patching
 ------------------------------------------------------------------ 
 
@@ -314,7 +332,8 @@ end
 Util.make_stage(Placevar, 'fortran', "fortran variable placer")
 Util.make_stage(Expander, 'dummy',   'dummy expander')
 Util.make_stage(Expander, 'sparc',   'sparc expander')
-Util.make_stage(Driver,   'freeze',  'freeze stack frame')
+-- Util.make_stage(Driver,'freeze',  'freeze stack frame')
+
 @ 
 Some additional thought needs to be given to how [[Default]]
 should work.
@@ -431,7 +450,7 @@ end
 @
 A backend is represented by a table that contains the following
 fields:\\
-\begin{tabularx}{\linewidth}{@{}lX@{}
+\begin{tabularx}{\linewidth}{@{}lX@{}}
 [[target]]&  
   The target.  What's here and why it has to be here is a bit fuzzy,
   but I think at minimum it is used to check to see that the {\PAL}
@@ -471,7 +490,7 @@ Backend.debug =     --- debugging back end
   , expand    = Expander.toy
   , liveness  = Stages.null
   , ralloc    = Ralloc.color
-  , freeze    = Driver.freeze
+  , freeze    = Stack.layout
   , asm       = Asm.cmm
   , emit      = Driver.assemble
   }   
@@ -483,7 +502,7 @@ Backend.old =     --- compatible with old back end
   , expand    = Expander.dummy
   , liveness  = Stages.null
   , ralloc    = Ralloc.color
-  , freeze    = Driver.freeze
+  , freeze    = Stack.layout
   , asm       = Asm.cmm
   , emit      = Driver.assemble
   }   
@@ -495,7 +514,7 @@ Backend.x86 =     --- compatible with old back end
   , expand    = Expander.x86
   , liveness  = Stages.null
   , ralloc    = Ralloc.color
-  , freeze    = Driver.freeze
+  , freeze    = Stack.layout
   , asm       = Asm.cmm
   , emit      = Driver.assemble
   }   
