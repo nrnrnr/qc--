@@ -1,5 +1,19 @@
 target byteorder little;
-export notzero;
+export main; import printf;
 section "data" {
-  notzero: bits8[] "\x0a";
+  notzero: bits8[] "\x0a\0";
+}
+
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+  bits32 n;
+  import strlen;
+  n = foreign "C" strlen("address" notzero);
+
+  foreign "C" printf("address" answer, n, %zx32(bits8[notzero]));
+  foreign "C" return(0);
+}
+
+section "data" {
+  answer: bits8[]
+   "length is %d (wants 1) and first character is the final newline.%c\0";
 }

@@ -27,12 +27,12 @@ Test.files = { "add.c--"
              , norun("float-001.c--")
 	     , 'f2.c--'
              , "hello.c--"
-	     , norun("hex.c--")
+	     , "hex.c--"
 	     , { source='ladd.c--', other='src/ops64.c' }
              , "not.c--"
              , "ovrflow.c--"
              , norun("ralloc-000.c--")
-             , norun("rnd2.c--")
+             , "rnd2.c--"
              , "sub.c--"
 	     , "switch.c--"
 	     , "tail.c--"

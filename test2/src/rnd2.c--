@@ -4,6 +4,21 @@ bits2 rm = "IEEE 754 rounding mode";
 
 section "text" {
   p() {
-    return;
+    return ("float" %i2f32(3, rm));
   }
 }
+
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+  bits32 x;
+  "float" x = p();
+
+  foreign "C" printf("address" answer, "float" %f2f64(x, rm));
+  foreign "C" return(0);
+}
+
+section "data" {
+  answer: bits8[]
+   "Integer 3 converts to floating-point %4.2lf\n\0";
+}
+
+import printf; export main;
