@@ -522,6 +522,10 @@ combined) =
 
 We provide embedding/projection pairs for each of the backplane types.
 
+LARGE UGLY BOGON!  THE ACTION MAP, IF IT IS PASSED A TABLE, SHOULD GO
+AHEAD AND ATTEMPT TO PROJECT THAT TABLE INTO A STAGE.  IF SUCCESSFUL,
+IT SHOULD THEN APPLY SINGLE TO THE RESULT.  THIS WAY, SINGLE NEVER
+SHOWS UP AT THE LUA LEVEL. ---NR
 <<backplane builtins>>=
 let {V.embed = embed; V.project = project} = T1.makemap V.userdata V.projection
 let action = { V.embed = (fun a -> embed (Action a))
@@ -546,21 +550,21 @@ Finally, we make the list of builtins that will be visible in Lua.
 
 <<backplane builtins>>=
 <<run>>
-
 let ( **-> ) = V.( **-> )
 
 let backplane_builtins =
-    [ "run", (V.pfunc (action **-> proc **-> inputs **-> V.result V.bool)).V.embed run
+  [ "seq",       (V.pfunc ((V.list action)     **-> V.result action)).V.embed seq
+  ; "when_do",   (V.pfunc (action  **-> action **-> V.result action)).V.embed when_do
+  ; "unless_do", (V.pfunc (action  **-> action **-> V.result action)).V.embed unless_do
+  ; "fix",       (V.pfunc (action  **->             V.result action)).V.embed fix
+  ; "share",     (V.pfunc (V.value **-> V.string **-> action **->
+                                                    V.result action)).V.embed share
+  ; "ignore",    (V.pfunc (action  **->             V.result action)).V.embed ignore
+  ; "single",    (V.pfunc (stage   **->             V.result action)).V.embed single
+  ; "run",       (V.pfunc (action **-> proc **-> inputs **-> 
+                                                    V.result V.bool)).V.embed run
 
-    ; "seq", (V.pfunc ((V.list action) **-> V.result action)).V.embed seq
-    ; "when_do", (V.pfunc (action **-> action **-> V.result action)).V.embed when_do
-    ; "unless_do", (V.pfunc (action **-> action **-> V.result action)).V.embed unless_do
-    ; "fix", (V.pfunc (action **-> V.result action)).V.embed fix
-    ; "share", (V.pfunc (V.value **-> V.string **-> action **->
-                                                 V.result action)).V.embed share
-    ; "ignore", (V.pfunc (action **-> V.result action)).V.embed ignore
-    ; "single", (V.pfunc (stage **-> V.result action)).V.embed single
-    ]
+  ]
 @
 
 
