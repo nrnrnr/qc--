@@ -68,8 +68,14 @@ exception IDontKnowYet
 @ [[width]] returns the width of a location
 <<rtlFuns.ml>>=
 
-let widthPrivate = Rtlutil.locwidth'
-let width = Rtlutil.locwidth
+exception NoWay
+
+let widthPrivate loc =
+  match loc with
+    RP.Cell(space, aggregation, width, exp, assertion) -> width
+  | _ -> raise NoWay
+
+let width x = widthPrivate (Rtl.Convert.loc x)
     
 @ To note the implementation of [[foldLocsUsed]]. When we meet a
 location, we apply the folded function to it and we also descend into
