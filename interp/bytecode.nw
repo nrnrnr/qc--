@@ -1,10 +1,12 @@
 % -*- mode: Noweb; noweb-code-mode: c-mode -*-
 
-\section{Bytecode for a Quick~{\PAL} Interpreter}
+\section{Implementing a Quick~{\PAL} Interpreter}
 
-This file contains some SLED definitions and simple functions that
-define a bytecode representation of the instructions used in the
-Quick~{\PAL} interpreter.
+This file contains a sketch of the (representation and) implementation of a Quick~{\PAL} interpreter in C, using the New Jersey Machine-Code toolkit.
+
+\subsection{Bytecode Representation}
+
+SLED definition of the bytecode:
 
 <<bytecode.sled>>=
 fields of bcode     (8) op 0:7
@@ -12,49 +14,7 @@ fields of byte      (8) bits8  0:7
 fields of short    (16) bits16 0:15
 fields of long     (32) bits32 0:31
 fields of longlong (64) bits64 0:63
-@ 
-Here's the general idea:
-most bytecodes will carry an integer index that will be used to look
-up a function in a table.
-That function will modify memory as needed and possibly return new
-state elements.
-As an example, consider an operator.
-It needs access only to the value stack, and it can't overflow.
-Perhaps this stack is represented by an array and a stack pointer.
-Then we would have
-\begin{verbatim}
-   typedef unsigned (*operator_fun)(Array_T valstack, unsigned sp);
-\end{verbatim}
-An operator bytecode would then carry an index into an array of [[operator_fun*]].
-@
-Here are some sketches about implementation:
-\begin{itemize}
-\item
-A literal or a symbol can be handled by a single `push' bytecode.
-\item
-We will want ``short'' and ``long'' versions of many bytecodes (using
-8- and 16-bit arguments).
-\end{itemize}
-@
-Here are type definitions for procedures we might need.
-<<type definitions>>=
-typedef value *stack;
-typedef value *sptr;
 
-typedef sptr (*operator_fun)(stack values, sptr sp);
-  /* FETCH, STORE, OPERATOR */
-
-typedef sprt (*push_fun)    (stack values, sptr sp, stpr limit);
-  /* LITERAL, PUSH_SYMBOL */
-
-typedef sptr (*var_fun)     (stack values, sptr sp, value *vars);
-  /* GUARDED_STORE */
-
-typedef unsigned (*arg_fun)     (stack values, sptr sp, sptr slimit,
-                                 stack args,   sptr ap, sptr alimit);
-  /* PUSH_ARG, POP_ARG */
-@ 
-<<bytecode.sled>>=
 patterns
   [ OP8 OP16 PUSH VAR8 VAR16 VARPUSH8 VARPUSH16 PUSH_ARG POP_ARG 
     STORE_LOCAL8  STORE_GLOBAL8  FETCH_LOCAL8  FETCH_GLOBAL8
@@ -103,42 +63,300 @@ constructors
     when { }  is fetch_global8 (bits16)
     otherwise is fetch_global16(bits16)
 @ 
-<<decode.m>>=
-<<type definitions>>
 
-extern operator_fun *operator_funs;
-extern var_fun *var_funs;
+Here is the general idea:
+most bytecodes will carry an integer index that will be used to look
+up a function in a table.
+That function will modify memory as needed and possibly return new
+state elements.
+As an example, consider an operator.
+It needs access only to the value stack, and it can't overflow.
+Perhaps this stack is represented by an array and a stack pointer.
+Then we would have
+\begin{verbatim}
+   typedef sptr (*operator_fun)(sptr sp);
+\end{verbatim}
+An operator bytecode would then carry an index into an array of [[operator_fun*]].
+@
+Here are some sketches about implementation:
+\begin{itemize}
+\item
+A literal or a symbol can be handled by a single `push' bytecode.
+\item
+We will want ``short'' and ``long'' versions of many bytecodes (using
+8- and 16-bit arguments).
+\end{itemize}
+@
 
-void run_interp(void) {
-    bytecode *pc;
-    stack values;
-    sptr vsp;
-    sprt vlimit;
-    stack args;
-    sptr asp;
-    sprt alimit;
-    value *locals;
-    value *globals;
+\subsection{C Code}
 
-      for (;;) {
-        match pc to
-        | op8 (n) => vsp = operator_funs[n](values, vsp);
-        | op16(n) => vsp = operator_funs[n](values, vsp);
-        | var8 (n) => vsp = var_funs[n](values, vsp, vlimit);
-        | var16(n) => vsp = var_funs[n](values, vsp, alimit);
-        | store_local(n) => locals[n] = POP(values, vsp);
-        | fetch_local(n) => PUSH(values, vsp, vlimit, locals[n]);
-        | store_global(n) => globals[n] = POP(values, vsp);
-        | fetch_global(n) => PUSH(values, vsp, vlimit, globals[n]);
-        | HALT => return;
-        endmatch
-      }
-}
+Moving onward to C code, we will begin with some type definitions required:
 
+<<type definitions>>=
+typedef unsigned char bytecode;
+
+typedef union {
+  unsigned char  bits1;
+  unsigned char  bits8;
+  unsigned short bits16;
+  unsigned long  bits32;
+  double         bits64;
+} value;
+
+typedef value *stack;    /* value stack */
+typedef value *sptr;     /* stack pointer */
+
+typedef unsigned char data;
+
+typedef data *datastack;
+typedef data *dataptr;
+
+typedef sptr (*operator_fun)(sptr values); /* FETCH, STORE, OPERATOR         */
+typedef sptr (*push_fun)    (sptr values); /* LITERAL, PUSH_SYMBOL           */
+typedef sptr (*var_fun)     (sptr values, value *vars);    /* GLOBAL, LOCAL  */
+typedef void (*arg_fun)     (sptr *values, sptr *arguments); /* PUSH/POP_ARG */
+
+typedef struct {
+  const char   *opname;  /* operator name */
+  unsigned     min_args;
+  operator_fun f;
+} operator;
+
+typedef struct {
+  unsigned int thread;
+  unsigned int frame;
+} uid;
+
+typedef struct {
+  bytecode *pc;
+
+  /* take care of rho */
+  /* stack localbase; */
+  sptr *localsp;
+  /* sptr *locallimit; */
+ 
+  /* take care of sp */
+  /* datastack stackdatabase; */
+  dataptr stackdatasp;
+  /* dataptr stackdatalimit; */
+
+  /* missing field: annotations */
+
+  uid u;
+} activation;
+
+typedef activation *actstack;
+typedef activation *actptr;
 
 @ 
+
+Next, some initialization code for the interpreter to build its table of operators and perform other necessary tasks:
+
+<<initialization>>=
+static operator operators[] = {
+  { "mul_trunc32", 2, mul_trunc },
+  /* ... */
+  /* remaining operators initialized here */
+  /* ... */
+  { NULL,          0, NULL      }
+};
+
+uid new_uid (void) {
+  static unsigned int i = 0;
+  uid u = { 0, i++ };
+
+  return u;
+}
+
+/* ...
+ * some helper functions go here
+ * ...
+ */
+
+void check_value_types (void) {
+  value v;
+  assert(sizeof(v.bits8 ) == 1);
+  assert(sizeof(v.bits16) == 2);
+  assert(sizeof(v.bits32) == 4);
+  assert(sizeof(v.bits64) == 8);
+  assert(sizeof(void *)   == sizeof(v.bits32));
+}
+
+void init(void) {
+  check_value_types();
+  /* register_operators(operators); */
+}
+@ 
+
+Now, a sample operator implementation for a ``signed multiple and truncate'' operator:
+
+<<operator definitions>>=
+sptr mul_trunc (sptr values) {
+  long m = *(long *) values;
+  long n = *(long *) (values - 1);
+  *(long *) values = n * m;
+  return values - 1;
+}
+
+/* ...
+ * the remaining operator definitions will go here
+ * ...
+ */
+
+@ 
+
+Finally, we get to the main part of the interpreter.  We start by initializing the internal state of the interpreter:
+
+<<initialize interpreter internals>>=
+  /* pc is passed in!               */
+  sptr     values;           /* V   */
+  sptr     locals;           /* rho */
+  dataptr  stackdata;        /* sp  */
+  value    *globals;         /* g   */
+  /* sigma is left implicit!        */
+  sptr     arguments;        /* A   */
+  uid      u;                /* u   */
+  actptr   callstack;        /* s   */
+
+  valuesbase      = (sptr) malloc(sizeof(value) * DEF_VALUESSTACK_SIZE);
+  assert(valuesbase != NULL);
+  valueslimit     = valuesbase + DEF_VALUESSTACK_SIZE;
+  values          = valuesbase;
+
+  localsbase      = (sptr) malloc(sizeof(value) * DEF_LOCALSSTACK_SIZE);
+  assert(localsbase != NULL);
+  localslimit     = localsbase + DEF_LOCALSSTACK_SIZE;
+  locals          = localsbase;
+
+  stackdatabase   = (dataptr) malloc(sizeof(data) * DEF_STACKDATASTACK_SIZE);
+  assert(stackdatabase != NULL);
+  stackdatalimit  = stackdatabase + DEF_STACKDATASTACK_SIZE;
+  stackdata       = stackdatabase;
+
+  globals         = (value *) malloc(sizeof(value) * num_globals);
+  assert(globals != NULL);
+
+  argumentsbase   = (sptr) malloc(sizeof(value) * DEF_ARGUMENTSSTACK_SIZE);
+  assert(argumentsbase != NULL);
+  argumentslimit  = argumentsbase + DEF_ARGUMENTSSTACK_SIZE;
+  arguments       = argumentsbase;
+
+  u = new_uid();
+
+  callstackbase   = (actptr) malloc(sizeof(activation) * DEF_CALLSTACK_SIZE);
+  assert(callstackbase != NULL);
+  callstacklimit  = callstackbase + DEF_CALLSTACK_SIZE;
+  callstack       = callstackbase;
+@ 
+
+And now for the main loop:
+
+<<main interpreter loop>>=
+void run_interp(bytecode *pc, int num_globals) {
+  <<initialize interpreter internals>>
+
+  for (;;) {
+    match pc to
+    | operator(n)     => values = (*operators[n].f)(values);
+    /*  | var(n)          => vsp = var_funs[n](values, vsp, vlimit); */
+    | store_local(n)  => locals[n] = POP(values);
+    | fetch_local(n)  => PUSH(locals[n], values);
+    | store_global(n) => globals[n] = POP(values);
+    | fetch_global(n) => PUSH(globals[n], values);
+    | HALT            => return;
+    endmatch
+  }
+}
+@ 
+
+And now we can put it all together:
+
+<<decode.m>>=
+<<preprocessor directives>>
+
+<<global variable definitions>>
+
+<<operator definitions>>
+<<initialization>>
+
+<<main interpreter loop>>
+@ 
+
+\section{Missing Details}
+
+The missing \texttt{\#include} and \texttt{\#define} directives:
+
+<<preprocessor directives>>=
+#include <assert.h>
+#include <stdlib.h>
+#include "interp.h"
+
+#define DEF_VALUESSTACK_SIZE    65536
+#define DEF_ARGUMENTSSTACK_SIZE 65536
+#define DEF_LOCALSSTACK_SIZE    65536
+#define DEF_STACKDATASTACK_SIZE 65536
+#define DEF_CALLSTACK_SIZE      65536
+
+/* NEED TO IMPLEMENT UNDER/OVERFLOW checking, even if only w/assertions for now
+ *
+ * ALSO NOTE: don't use PUSH or POP more than once in the same statement!
+ */
+
+/* PUSH(V, S) pushes value V onto value stack S and returns V
+
+   (note S should initially point to the top stack element, and PUSH should set
+    it to point to the value just pushed)
+ */
+#define PUSH(V, S) ((++S)[0] = (V))
+
+/* POP(S) pops the top value off value stack S and returns the value
+
+   (note S should initially point to the top stack element, and POP should set
+    it to point to what had been the next-to-top element)
+ */
+#define POP(S)     ((S--)[0])
+@
+
+The missing definitions of global variables:
+
+<<global variable definitions>>=
+static stack     valuesbase;
+static sptr      valueslimit;
+
+static stack     argumentsbase;
+static sptr      argumentslimit;
+
+static stack     localsbase;
+static sptr      localslimit;
+
+static datastack stackdatabase;
+static dataptr   stackdatalimit;
+
+static actstack  callstackbase;
+static actptr    callstacklimit;
+
+@ 
+
+Function prototypes for code implemented here:
+
+<<interp.h>>=
+<<type definitions>>
+
+void run_interp(bytecode *pc, int num_globals);
+
+/* Initialization Helper Functions: */
+uid  new_uid(void);
+void check_value_types(void);
+void init(void);
+
+/* Operator Implementations: */
+sptr mul_trunc(sptr values);
+@ 
+
+And some more information for decoding bytecodes:
+
 <<decode.fetch>>=
 address type is "unsigned char *"
 fetch 8  using "*%a"
 fetch 16 using "%a[0] + (%a[1] << 8)"
-
+@
