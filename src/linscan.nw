@@ -48,21 +48,21 @@ registers as they are required by calling conventions.
 \subsection{Overview}
 % ------------------------------------------------------------------ 
 
-Linear-scan register allocation works assumes a procedure is a linear
+Linear-scan register allocation assumes, a procedure is a linear
 sequence of control-flow nodes, which represent instructions.  Such an
 order can be easily obtained by enumerating the nodes in {\cfg}---of
 course, many possible enumerations exist.  Liveness analysis determines
-which registers, temporaries and hardware registers, are live on any
+which registers, temporaries and hardware registers are live on any
 control-flow edge.  Each node is marked with the registers that are live
 on its outgoing edges.  These registers are said to be \emph{live after}
-that node.  Linear Register-allocation needs a more global perspective
+that node.  Linear-scan register allocation needs a broader perspective
 on liveness and computes a global map that associates with every
 register the set of nodes at which the register is \emph{live after}.
 This situation is shown in Figure \ref{fig:linscan:overview}:  from the
 linearized flow graph in (1) a map in (2) is computed that shows at
 which regions the temporaries $t_0$, $t_1$ and the hardware register
-$r_0$ are live.  Typically most data lives in temporaries and only very
-few hardware registers are used, typically for parameter passing.  
+$r_0$ are live.  Typically, most data lives in temporaries and a
+few hardware registers are for parameter passing.  
 
 \begin{figure}[bh]
 \centerline{\includegraphics[width=\hsize]{../figures/linscan-1}}
@@ -72,26 +72,37 @@ temporaries to hardware registers.}
 
 The aim of the register-allocator is to place every temporary into a
 hardware register.  The allocator in this module implements basically
-policy the policy described by Poletto \cite{poletto:99:toplas}:  it
+the policy described by Poletto \cite{poletto:99:toplas}:  it
 scans the procedure in linear order and tries to place temporaries
 that are live at the node at hand.  In Figure
 \ref{fig:linscan:overview} the first live temporary is $t_0$.  The
 policy described by Poletto mandates that the \emph{bounding box},
-highlighted as a dotted rectangle, fits into the chose hardware
+highlighted as a dotted rectangle, fits into the chosen hardware
 register.  This is the case in situation (3) for $r_0$ and thus $t_0$
 is placed there.  Now every instruction in the {\cfg} that uses $t_0$
 is re-written to use $r_0$ instead. 
 
 Continuing scanning, the register allocator finds $t_1$.  However, the
 bounding box of its lifetime collides with the lifetime of $r_0$ and
-thus $r_0$ can not hold $t_1$.  Assuming that no other hardware
-register is available, the register allocator decides to spill
-temporary $t_1$.  This breaks $t_1$ into smaller intervals \emph{and}
-creates new temporaries $t_2$ and $t_3$ for each usage of $t_1$, as
-shown in Figure \ref{fig:linscan:overview} (5).  After a new round of
-liveness analysis and and scanning $t_1$, $t_2$, and $t_3$ can be
-assigned to $r_0$ and register allocation is complete. 
+thus $r_0$ cannot hold $t_1$.  Assuming that no other hardware register
+is available, the register allocator decides to spill temporary $t_1$.
+This breaks $t_1$ into smaller intervals \emph{and} creates new
+temporaries $t_2$ and $t_3$ for each usage of $t_1$, as shown in Figure
+\ref{fig:linscan:overview} (5).  After a new round of liveness analysis
+and scanning, temporaries $t_1$, $t_2$, and $t_3$ can be assigned to
+$r_0$---register allocation is now complete. 
  
+\begin{quote}\it
+    We have changed the policy: only hardware registers are spilled, not
+    temporaries. Because spilling a temporary does not guarantee, that
+    we can find a hardware register for it after it was spilled and thus
+    we might get stuck. When a hardware register $r$ is spilled, reloads
+    use $r$ again, because the use of $r$ could have been demanded by a
+    calling convention. We cannot reload into a different register or a
+    temporary that might get assigned to a different register. The
+    picture in Figure \ref{fig:linscan:spilling} is incorrect, as is the
+    explanation in the text.
+\end{quote}
 
 \begin{figure}[htb]
 \centerline{\includegraphics[width=\hsize]{../figures/linscan-2}}
@@ -100,8 +111,8 @@ assigned to $r_0$ and register allocation is complete.
 
 Spilling deserves a closer look because it requires that new nodes are
 added to a control-flow graph.  Figure \ref{fig:linscan:spilling}
-shows a situation where a register $x$ is spilled in sequence of
-nodes, called the spill region.  Outside the region $x$ is left
+shows a situation where a register $x$ is spilled in a sequence of
+nodes, called a spill region.  Outside the region $x$ is left
 untouched, inside the region the value of $x$ is held in a memory
 location, typically on the run-time stack.  Therefore on every edge
 that enters or leaves the region \emph{and} on which $x$ is live nodes
@@ -112,15 +123,10 @@ spill region.
 For every use of the spilled register inside the spill-region $x$ must
 be re-loaded from memory and re-written, if it is live after the use. 
 The corresponding nodes are the two grey nodes inside the spill
-region.  However, $x$ is not re-loaded into $x$ but into a new
-temporary ($z$) for every use inside the spill region.  This creates a
-short-lived temporaries which can hopefully easyly assigned to
-hardware registers.
+region.  
+
 
 \begin{quote}\it
-The register allocator is quite simple and room for improvements
-includes:
-
 \begin{itemize}
 \item Re-writing the nodes of a {\cfg} to reflect assignments can be
       delayed until spilling or register allocation is completed. 
