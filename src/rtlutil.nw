@@ -1053,7 +1053,14 @@ let exp e =
 @
 
 \subsection{Aliasing}
-First code is not used but is to show how it should be done.
+Recall that registers may overlap due to aggregation, even if they do not have
+the same index.
+Hence, the following code is wrong (and should never be reintroduced to the compiler):
+\begin{code}
+let regs' ((s,_,_), i, w) ((s',_,_), i', w') = s =<= s' && i = i'  (* WRONG!!! *)
+\end{code}
+
+The following code is a little more careful:
 <<rtlutil.ml>>=
 module Down = Rtl.Dn
 module MayAlias = struct
@@ -1062,21 +1069,15 @@ module MayAlias = struct
 
   let () = Debug.register "may-alias" "check register may-alias function"
 
-  let regs' ((s,_,_), i, w) ((s',_,_), i', w') = s =<= s' && i = i'  (* WRONG!!! *)
-
-  let debug = Debug.on "may-alias"
-
   let regs =
-    if Debug.on "old-alias" then
-      regs'
-    else if debug then
+    if Debug.on "may-alias" then
       let regs ((s,_,_), i, R.C c as r) ((s',_,_), i', R.C c' as r') =
-        let bad  = regs' r r' in
-        let good = regs  r r' in
+        let good = regs r r' in
         let what p = if p then "may" else "may not" in
-        if not (good =:= bad) then
-          Printf.eprintf "Comparing $%c[%d:%d] and $%c[%d:%d]: old algorithm says %s alias; new says %s alias\n" s i c s' i' c' (what bad) (what good);
-        good in
+        ( Printf.eprintf "Comparing $%c[%d:%d] and $%c[%d:%d]: %s alias\n"
+                        s i c s' i' c' (what good)
+        ; good
+        ) in
       regs
     else
       regs
