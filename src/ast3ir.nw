@@ -119,8 +119,18 @@ let rec astty env = function
 (* val astwidth : F.env -> A.ty -> int *)
 let astwidth env = width @<< (astty env) 
 
+
 let foldl = List.fold_left
 let foldr = List.fold_right
+
+
+(* Useful for adding a list of RTL's to the cfg.
+   Usage: add_to_cfg cfg (f: G.node -> 'a -> 'a) (rtls: Rtl.rtl list) (succ:G.node, 'a) *)
+let add_to_cfg cfg f =
+    List.fold_right
+        (fun rtl (succ,rst) ->
+             let node = Cfg4.gm_assign cfg rtl succ in
+             (node, f node rst))
 @
 
 We often know that the address of a block has the form $b+k$, where $b$
@@ -196,21 +206,13 @@ let rec fetch env target = function
             Rtl.fetch cell width     
 @
 
-A continuation has two labels: one for its code ([[x]]), and one that is
-used as its value ([[label]]). The label is later re-written to a
-pointer expression that denotes a pair of values in the activation
-record. The label is part of the continuation's denotation.
-
-\begin{quote}\it
-    The translation of continuations in \path|Ast3ir| is bogus. A
-    continuation \emph{value} is a pointer into the stack where two values
-    are stored: a pointer to the code of the continuation, and a stack
-    pointer. The current representation of a continuation value is a
-    link-time constant, which is wrong. A continuation \emph{value} is a
-    late compile-time expression: a sum of the stack pointer value and some
-    late compile-time constant. The stack pointer in turn, depends on the
-    currently active calling convention. -- CL (Wed May 15 16:58:46 EDT 2002)
-\end{quote}
+The translation of continuations in \path|Ast3ir| is bogus.
+A continuation \emph{value} is a pointer into the stack where two values
+are stored: a pointer to the code of the continuation, and a stack
+pointer.
+A continuation \emph{value} is a late compile-time expression: a sum of
+the stack pointer value and some late compile-time constant. The stack
+pointer in turn, depends on the currently active calling convention.
 
 For example, we expect the following C--:
 \begin{alltt}
@@ -218,7 +220,7 @@ p () {
     continuation k():
 }
 \end{alltt}
-to be translated into the following:
+to cause the following initialization at the start of the enclosing procedure:
 \begin{alltt}
 sym@p()
 {
@@ -523,7 +525,8 @@ type state =
     ; inbase:       Rtl.exp          (* addr of INCOMING ares          *)
     ; outgoing:     Block.t list     (* areas to be overlayed in OUTGOING *)   
     ; incoming:     Block.t list     (* ditto for INCOMING *)
-    ; conts:        Contn.t Strutil.Map.t   (* local continuations *)    
+    ; conts:        Contn.t Strutil.Map.t (* local *)    
+    ; esc_conts:    Strutil.Set.t    (* escaping conts *)
     }
 @
     
@@ -795,8 +798,10 @@ and jumpStmt state (cconv,e,args,labels) =
         if args = [] then (* no copyout nodes *)
             { state with node = jmp }
         else
-            let node,area,defs = IO.copyout state.cfg args cc.Target.proc 
-                                       state.inbase jmp in
+            let rtls,area = IO.copyout args cc.Target.proc state.inbase in
+            let node, defs =
+                add_to_cfg state.cfg (fun n rst -> Register.Set.union rst (G.defs n))
+                           rtls (state.node, Register.Set.empty) in
             let result = 
                 { state with node     = node
                 ;            incoming = area :: state.incoming
@@ -852,11 +857,16 @@ and callStmt state (lhs,cconv, e, args, targets (*unused*), conts) =
     let conts   = continuations conts state.cfg                  in
     let rtl     = state.target.Target.call.Target.embed exp      in
     (* linking nodes from back to front: copyin<-call<-copyout *) 
-    let copyi,areai,uses = IO.copyin state.cfg (List.map lvalue lhs) 
-                      cc.Target.ret (offset state.inbase ptrsize) state.node  in
+    let rtls,areai = IO.copyin (List.map lvalue lhs) cc.Target.ret
+                            (offset state.inbase ptrsize) in
+    let copyi,uses =
+        add_to_cfg state.cfg (fun n rst -> Register.Set.union rst (G.uses n))
+                   rtls (state.node, Register.Set.empty) in
     let call        = G.gm_call  state.cfg rtl conts copyi in
-    let copyo,areao,defs = IO.copyout state.cfg args cc.Target.proc 
-                        (offset state.outbase ptrsize) call in
+    let rtls,areao = IO.copyout args cc.Target.proc (offset state.outbase ptrsize) in
+    let copyo,defs =
+        add_to_cfg state.cfg (fun n rst -> Register.Set.union rst (G.defs n))
+                   rtls (call, Register.Set.empty) in
     let result = { state with
                      node     = copyo
                  ;   outgoing = areao :: state.outgoing
@@ -890,9 +900,12 @@ and returnStmt state (cconv, kont, args) =
                   (actual state.env state.target) args       in
     let ret     = G.gm_return state.cfg rtl (x, y)   in
     let ptr     = state.target.Target.pointersize in
-    let copy, area, defs =
-                  IO.copyout state.cfg args cc.Target.ret 
-                    (offset state.inbase ptr) ret in
+    let rtls, area =
+              IO.copyout args cc.Target.ret (offset state.inbase ptr) in
+    let copy, defs =
+        add_to_cfg state.cfg (fun n rst -> Register.Set.union rst (G.defs n))
+                   rtls (ret, Register.Set.empty) in
+                    
     let result  = {state with node = copy; incoming = area :: state.incoming}in
 		  (* fix data-flow *)
     let ()      = G.gm_insert_dataflow_between
@@ -903,9 +916,7 @@ and returnStmt state (cconv, kont, args) =
 @
 
 Each continuation receives its parameters in its own area.
-For the moment we assume that all continuations escape
-and collect them in [[state.conts]]. Therefore we simply add the
-[[label]] of this continuation to the list.
+Only continuations that escape are given space on the stack.
 
 <<Make statements>>=
 and contStmt state (label,args)  = 
@@ -918,21 +929,31 @@ and contStmt state (label,args)  =
         match F.findv label state.env with
         | (_,(F.Continuation (n,_),_)) -> n
         | _                          -> Idgen.cont label in
-    let variable  = Rtl.late contID ptr in
-    let add       = Rtl.opr "add" [ptr] in
-    let offset    = Rtl.app add [sp; variable] in
-    let newBase   = Rtl.late (Idgen.block "contParams") ptr   in
-    let copy,area,uses = IO.copyin state.cfg args 
-                  cc.Target.cont newBase state.node in
-    let cont      = Contn.with_overflow state.target offset area in
+
+    let succ,state =
+        if Strutil.Set.mem label state.esc_conts
+        then begin
+            let variable  = Rtl.late contID ptr in
+            let add       = Rtl.opr "add" [ptr] in
+            let offset    = Rtl.app add [sp; variable] in
+            let newBase   = Rtl.late (Idgen.block ("contParams"^label)) ptr   in
+            let rtls,area = IO.copyin args cc.Target.cont newBase in
+            let copy,_ =
+                add_to_cfg state.cfg (fun n rst -> Register.Set.union rst (G.uses n))
+                           rtls (state.node, Register.Set.empty) in
+            let cont      = Contn.with_overflow state.target offset area in
+            let state     = { state with conts = Strutil.Map.add label cont state.conts} in
+            copy,state
+        end else begin
+            state.node,state
+        end in
+
 
     let symbol  = match F.findv label state.env with
                   | _,(F.Continuation(_,s),_) -> s
-                  | _ -> assert false                            in
-    let copy    = G.gm_label state.cfg label symbol copy         in
-    let result  = { state with node     = copy
-                  ;            conts    = Strutil.Map.add label cont state.conts
-                  } in
+                  | _ -> (Printf.fprintf stderr "notfound: %s\n" label;assert false)                            in
+    let succ    = G.gm_label state.cfg label symbol succ         in
+    let result  = { state with node = succ } in
         result
 @
 
@@ -959,15 +980,13 @@ and cutStmt state (e, args, conts) =
     let size      = ptr / state.target.Target.memsize                  in
     let oflow     = Rtl.app (Rtl.opr "add" [ptr])
                             [exp; Rtl.bits (Bits.S.of_int (2 * size) ptr) ptr] in
-    let copy,area,uses = IO.copyout state.cfg args cc.Target.cont oflow cut    in
+    let rtls,area = IO.copyout args cc.Target.cont oflow in
 
     (* solve the equations *)
     let solution =
         try Const2.solve ptr (Block.constraints area)
         with Const2.Can'tSolve -> Impossible.impossible 
                 ("can't solve equations in "^ state.proc)              in            
-    let ()       = assert (solution.Const2.dependent = [])             in
-    let ()       = assert (solution.Const2.known <>    [])             in
 
     (* substitute for the compile-time constants *)
     let map      = Strutil.assoc2map solution.Const2.known             in
@@ -980,12 +999,18 @@ and cutStmt state (e, args, conts) =
             | Not_found -> e   (* we don't know all the constants yet *)
             )  
         | x -> x in
-    let () = G.upd_instr copy (Rtlutil.Subst2.exp ~guard ~map:subst) in
-    let () = G.upd_instr copy Rtleval2.rtl in
+
+    let copy,defs =
+        add_to_cfg state.cfg
+            (fun node rst ->
+                 let () = G.upd_instr node (Rtlutil.Subst2.exp ~guard ~map:subst) in
+                 let () = G.upd_instr node Rtleval2.rtl in
+                 Register.Set.union rst (G.defs node))
+            rtls (cut, Register.Set.empty) in
 
     let result    =    { state with node     = copy } in
     let ()      = G.gm_insert_dataflow_between
-		  ~defs:Register.Set.empty ~uses ~kills:Register.Set.empty
+		  ~defs:Register.Set.empty ~uses:defs ~kills:Register.Set.empty
 		  ~src:cut ~dst:(G.exit(state.cfg)) in
         result
 
@@ -1008,8 +1033,7 @@ initialized when the procedure is entered. The following function
 inserts this code into the procedure.
 
 <<Make procedure>>=
-let init_cont env (cfg:G.cfg) (target:Target.t) (cc:Target.cc) 
-                                                        label (c:Contn.t) = 
+let init_cont env (cfg:G.cfg) (target:Target.t) (cc:Target.cc) label (c:Contn.t) = 
     let ptr  = target.Target.pointersize in
     let sp   = cc.Target.sp in
     let sym  = match F.findv label env with
@@ -1040,7 +1064,7 @@ let proc env target optimizer (cconv,name,args,bdy) =
     let privb       = sp_offset (Rtl.late "private"   pointer) in
     (* calculate amount of user stack data - updates env! *)
     let stackd      = Memalloc.mk stack in
-    let ( env, stackd, conts) = StackData.proc env target stackd cc bdy in
+    let ( env, stackd, conts, esc_conts) = StackData.proc env target stackd cc bdy in
     (* priv provides spill slots etc *)    
     let priv        = AT.mk cc.Target.stack_slots privb in
     (* build CFG for body *)                    
@@ -1061,14 +1085,17 @@ let proc env target optimizer (cconv,name,args,bdy) =
         ; inbase    = inb
         ; outbase   = outb
         ; conts     = conts
+        ; esc_conts = esc_conts
         } in  
     (* translate body of procedure *)
     let state = foldr body bdy state in
     (* add nodes for incoming parameters *)
     let atmi  = AT.mk cc.Target.proc  (offset state.outbase pointer) in
     let args  = List.map (procformal state.env) args in
-    let copy,area,uses = IO.copyin state.cfg args 
-                    cc.Target.proc state.inbase state.node    in
+    let rtls,area = IO.copyin args cc.Target.proc state.inbase in
+    let copy,_ =
+        add_to_cfg state.cfg (fun n rst -> Register.Set.union rst (G.uses n))
+                   rtls (state.node, Register.Set.empty) in
     let state = 
         { state with    
           node     = copy
@@ -1084,8 +1111,9 @@ let proc env target optimizer (cconv,name,args,bdy) =
     let conts    =
         match Strutil.Map.fold (fun _ c rst -> c :: rst) state.conts [] with
         | [] -> Block.mk (Rtl.late "bogus" pointer) 0 1 (*XXX*)
-        | conts -> List.fold_left (fun b c -> Block.cathl c.Contn.block b) 
-                        (List.hd conts).Contn.block (List.tl conts) in 
+        | conts ->
+            List.fold_left (fun b c -> Block.cathl c.Contn.block b) 
+                    (List.hd conts).Contn.block (List.tl conts) in 
     (* order cfg *)
     let ()    = G.gm_enumerate cfg in
     let i =    
@@ -1129,6 +1157,7 @@ module StackData = struct
         ; target: Target.t
         ; cc:     Target.cc     (* current calling convention *)  
         ; conts:  Contn.t Strutil.Map.t
+        ; esc_conts:    Strutil.Set.t    (* escaping conts *)
         }
 
     let rec stackdatum state = function
@@ -1159,12 +1188,21 @@ module StackData = struct
         | _ -> assert false (* illegal memory initializer *)
 
     let rec stmt state = function 
-        | A.StmtAt(x,r)        -> stmt state x
-        | A.SpanStmt    x      -> spanStmt      state x
-        | A.IfStmt      x      -> ifStmt        state x
-        | A.SwitchStmt  x      -> switchStmt    state x
-        | A.ContStmt(n,args)   -> state
-        | _                    -> state
+        | A.StmtAt(x,r)        -> stmt       state x
+        | A.IfStmt      x      -> ifStmt     state x
+        | A.SwitchStmt  _      -> Impossible.unimp "switch"
+        | A.LabelStmt   x      -> state
+        | A.ContStmt    x      -> state
+        | A.SpanStmt    _      -> Impossible.unimp "span"
+        | A.AssignStmt  x      -> assignStmt state x
+        | A.CallStmt    x      -> callStmt   state x
+        | A.PrimStmt    _      -> Impossible.unimp "primitive"
+        | A.GotoStmt    x      -> gotoStmt   state x
+        | A.JumpStmt    x      -> jumpStmt   state x
+        | A.CutStmt     x      -> cutStmt    state x
+        | A.ReturnStmt  x      -> returnStmt state x
+        | A.EmptyStmt          -> state
+        | A.CommentStmt _      -> state
 
     and body state = function 
         | A.BodyAt(x, _)        -> body state x
@@ -1173,23 +1211,69 @@ module StackData = struct
         | A.DataBody(data)      -> foldl stackdatum state data
 
     and ifStmt state (e,ifso,ifnot) =
-        let left  = foldl body state  ifso  in
-        let right = foldl body left   ifnot in
-            state
-
-    and spanStmt      state x  = Impossible.unimp "span"
-    and switchStmt    state x  = Impossible.unimp "switch"
+        let test  = expr state e in
+        let left  = foldl body test  ifso  in
+        let right = foldl body left  ifnot in
+            right
+    and assignStmt  state (lhs,rhs) =
+        let left  = foldl lvalue  state lhs in
+        let right = foldl guarded left  rhs in
+        right
+    and callStmt    state (lhs,cconv, e, args, targets (*unused*), conts) =
+        let left = foldl lvalue state lhs in
+        let estate = expr left e in
+        let actual = foldl actual estate args in
+        actual
+    and gotoStmt    state (e,labels) = expr state e
+    and jumpStmt    state (cconv,e,args,labels) =
+        let estate = expr state e in
+        let actual = foldl actual estate args in
+        actual
+    and cutStmt     state (e, args, conts) =
+        let estate = expr state e in
+        let actual = foldl actual estate args in
+        actual
+    and returnStmt  state (cconv, altcont, args) =
+        let altstate = match altcont with
+            | Some (e1,e2) -> expr (expr state e2) e1
+            | None -> state in
+        let actual = foldl actual altstate args in
+        actual
+    and expr state e = match e with
+      | A.ExprAt (e,_) -> expr state e
+      | A.Fetch (lv) -> lvalue state lv
+      | A.BinOp (e1,_,e2) -> expr (expr state e1) e2
+      | A.UnOp (_,e) -> expr state e
+      | A.PrimOp (_,actuals) -> foldl actual state actuals
+      | _ -> state
+    and actual state (_,e) = expr state e
+    and lvalue state l = match l with
+      | A.LValueAt (lv,_) -> lvalue state lv
+      | A.Mem (_,e,_)      -> expr   state e
+      | A.Var (_,name)     ->
+            ( match F.findv name state.env with
+              | (_,(F.Continuation _,_)) ->
+                  {state with esc_conts = Strutil.Set.add name state.esc_conts}
+              | _ -> state
+            )
+    and guarded state (e1,e2) =
+        let e1state = match e1 with
+                      | None -> state
+                      | Some e -> expr state e in
+        let e2state = expr e1state e2 in
+        e2state
 
     let proc env target priv cc bb =
         let state = 
             { env    = env
             ; target = target
             ; mem    = priv
-            ; conts  = Strutil.Map.empty
             ; cc     = cc
+            ; conts  = Strutil.Map.empty
+            ; esc_conts = Strutil.Set.empty
             } in
         let state = foldl body state bb in 
-                (state.env, Memalloc.freeze state.mem, state.conts)
+                (state.env, Memalloc.freeze state.mem, state.conts, state.esc_conts)
 
 end (* of module StackData *)
 @

@@ -92,26 +92,21 @@ type formal =   { width:    Rtl.width
 @ 
 <<Make sig>>=
 <<type formal>>
-val copyin: G.cfg -> formal list -> Automaton2.spec 
-                -> addr:Rtl.exp -> succ:G.node 
-                -> G.node * Block.t * Register.Set.t (* uses *)
-@ The [[copyin]] function creates a linear sequence of assign-nodes for
-the {\cfg} and returns a triple: the top-node of the sequence, the
-area used for incoming overflow parameters and (calling-convention)
-locations used by the sequence.  The [[Block.t]] value is used to
-reserve memory in the incoming area, the usages for data-flow
-annotations in the control-flow graph.  The function receives the
-following parameters:
+val copyin: formal list -> Automaton2.spec -> addr:Rtl.exp -> Rtl.rtl list * Block.t
+@
+
+The [[copyin]] function creates a linear sequence of assign instructions for
+the {\cfg} and returns a pair: the list of {\rtl}s and the
+area used for incoming overflow parameters.
+The [[Block.t]] value is used to reserve memory in the incoming area.
+The function receives the following parameters:
 \begin{itemize}
-\item The {\cfg} the node-sequence becomes part of.
 \item The list of formal parameters of the (receiving) procedure at hand.
 \item An [[A.spec]] value, describing the calling convention
       to use.
 \item The base-address for the area that holds overflowing incoming
       parameters. This is a run-time expression in the incoming area
       of the procedure.
-\item The node [[succ]] that succeeds the sequence of assign-nodes. The
-      last node of the sequence becomes the predecessor of [[succ]].
 \end{itemize}
 
 An [[A.t]] value derived from an [[A.spec]] value
@@ -143,7 +138,7 @@ The values must be transferred to locations determined by the calling
 convention, before the call itself can be executed.  The translation
 of the call therefore inserts a virtual copy-out node before a
 call-node that takes care of all the details.  A copy-out node is
-really a sequence of assign-node that implements the transfer and is
+really a sequence of assign {\rtl}s that implements the transfer and is
 implemented by the [[copyout]] function. It receives expression that
 denote the values to pass but otherwise is similar to [[copyin]]:
 
@@ -152,30 +147,30 @@ type actual     = Rtl.exp               (* value to pass      *)
                 * Rtl.width             (* its width          *)
                 * string option         (* calling conv. hint *)
 @
+
 The documentation of this function is primarily above, with the
 documentation for [[copyin]].
 <<Make sig>>=
 <<type actual>>
-val copyout: G.cfg -> actual list -> Automaton2.spec 
-                 -> addr:Rtl.exp -> succ:G.node 
-                 -> G.node * Block.t * Register.Set.t (* defs *)
-@ The head node of the sequence is returned together with the area for
-overflowing parameter and the locations defined by the sequence. 
+val copyout: actual list -> Automaton2.spec -> addr:Rtl.exp -> Rtl.rtl list * Block.t
+@
+
+The sequence is returned together with the area for overflowing parameter.
 The parameters are
 \begin{itemize}
-\item The {\cfg}
 \item The list of actual parameters, i.e.~expressions
 \item The automaton for the calling convention
 \item The base address for the overflow area
-\item The node succeeding the sequence
 \end{itemize}
 @
+
 Like the virtual copy-in is used to receive parameters returned by a
 callee, copy-out not only passes values to procedures (or
 continuations) but also returns values.  Note that in the case of
 continuations and tail-calls \emph{outgoing} overflow parameters are
-passed in the \emph{incoming} area of an activations.  Refer to
+passed in the \emph{incoming} area of an activation.  Refer to
 section \module{stack} for an overview.
+
 @
 The nodes of a {\cfg} are subject to liveness analysis to find the
 lifespan of variables (c.f.~\module{life}).  The liveness analysis
@@ -237,39 +232,34 @@ module Make (G: Cfg4.S) = struct
 end
 @
 
-The [[copyin]] function creates an assign-node for every formal
-parameter in the [[assign]] function and chains them together.  The
-top of this chain is returned together with the area required to hold
-incoming overflow parameters.
+The [[copyin]] function creates an assign {\rtl} for every formal
+parameter in the [[assign]] function and returns them.
+It also returns the area required to hold incoming overflow parameters.
 
 <<copyin>>=
-let copyin cfg formals spec ~addr ~succ =
+let copyin formals spec ~addr =
     let a       = A.mk spec addr in  (* a is mutable *)
-    let assign (succ,uses) formal = 
+    let assign rtls formal = 
         let w   = formal.width in
         let src = A.allocate a formal.width formal.hint in
         let exp = A.fetch src w in
         let rtl = match formal.repr with
                   | Local (name,index)-> Rtl.store (Rtl.var name index w) exp w 
                   | Global loc        -> A.store loc exp w in
-        let node = G.gm_assign cfg rtl succ in
-        let uses = Register.Set.union uses (G.uses node) in
-            (node,uses) in
-    let top,uses = List.fold_left assign (succ, Register.Set.empty) formals in
+            rtl::rtls in
+    let rtls = List.fold_left assign [] formals in
     let area     = A.freeze a in
-        (top, area, uses)
+        (rtls, area)
 @             
 
 <<copyout>>=
-let copyout cfg actuals spec ~addr ~succ = 
+let copyout actuals spec ~addr =
     let a       = A.mk spec addr in (* a is mutable *)
-    let assign (succ,defs) (exp,width,hint) =
+    let assign rtls (exp,width,hint) =
         let dst  = A.allocate a width hint in
         let rtl  = A.store dst exp width in
-        let node = G.gm_assign cfg rtl succ in
-        let defs = Register.Set.union defs (G.defs node) in
-            (node,defs) in
-    let top,defs = List.fold_left assign (succ, Register.Set.empty) actuals in
+			rtl::rtls in
+    let rtls = List.fold_left assign [] actuals in
     let area    = A.freeze a in
-        (top, area, defs)
+        (rtls, area)
 @
