@@ -108,8 +108,13 @@ let xer    = creg 4  (* XER register                     *)
 let lr     = creg 5  (* link register                    *)
 let ctr    = creg 6  (* counter register                 *)
 
-(* what follows is a lie *)
-let rmode = R.reg (('?', Rtl.Identity, Cell.of_size 2), 99, R.C 1)
+(* what follows is true but doesn't work *)
+let rmode = R.slice 2 ~lsb:30 fpscr
+
+(* what follows works *)
+let dspace   = ('d', Rtl.Identity, Cell.of_size 2)  (* rounding modes *)
+let rmode    = Rtl.reg (dspace, 0, R.C 1)
+let rresults = Rtl.reg (dspace, 1, R.C 1)
 @ 
 Setting bits in the control registers is handled by this utility
 function. The [[flag_map]] function shold convert the flag parameter
@@ -717,7 +722,7 @@ let target =
   ; T.rounding_mode = rmode
   ; T.named_locs   = Strutil.assoc2map 
                      ["IEEE 754 rounding mode", rmode
-                     ;"IEEE 754 rounding results", rmode
+                     ;"IEEE 754 rounding results", rresults
                      ]
   
   (* bogosity *)
@@ -735,10 +740,10 @@ let impossible          = Impossible.impossible
 let placevars = 
   let is_float w hint _ = w <= 32 && hint =$= "float" in
   let warn ~width:w ~alignment:a ~hint:h =
-    if w > 32 then unimp (Printf.sprintf "%d-bit values not supported"  w) in
+    if w > 64 then unimp (Printf.sprintf "%d-bit values not supported"  w) in
   let mk_stage ~temps =
     A.choice
-      [ is_float,               A.widen (Aux.round_up_to ~multiple_of: 32); 
+      [ is_float,               A.widen (Aux.round_up_to ~multiple_of: 64); 
         (fun w h _ -> w <= 32), A.widen (fun _ -> 32) *> temps 't';
         A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
       ] in

@@ -720,6 +720,7 @@ function Opt.standard(backend, asm, B)
     , Opt.verb(Optimize.simplify_exps) or Stages.null
     , Opt.verb(backend.preopt)     or Stages.null
     , Opt.verb(backend.pic)        or Stages.null
+    , print_cfg
     , Opt.verb(backend.expand)     or Stages.null
     , Opt.verb(backend.improve)    or Stages.null
     , Opt.verb(backend.liveness)   or Stages.null
@@ -965,7 +966,9 @@ Backend.alpha =
 Backend.ppc =
   { target     = Targets.ppc
   , placevars  = Placevar.context(Placevar.ppc, "ppc")
-  , floatwiden = Stages.assert('proper widths')
+  , floatwiden = Backplane.seq
+                   { Widen.ppc_floats,
+                     Stages.assert('proper widths') }
   , preopt     = Optimize.remove_nops
   , pic        = Backplane.seq { Pic.ppc, Stages.assert('proper pic') }
   , expand     = Expander.ppc
