@@ -593,9 +593,22 @@ function Sparc.layout["C"](dummy,proc) --- really for a C convention only
     -- loads, so...
     -- also we have to make sure, somehow, that the size of the stack that
     -- we allocate is a multiple of 8 (I think).
+
+    -- old sp = fp
+    -- automatic blah blah blah
+    -- temporaries and saved floats
+    -- sp + (23 * 4) : outgoing parameters past the sixth, if any
+    -- sp + (17 * 4) : 6 words for callee
+    -- sp + (16 * 4) : hidden parameter (where callee stores aggregate return)
+    -- sp            : 16 words for OS to save register window
+    --
+
+-- used to be 26 * 4, but needs to be 23 so that outgoing parameters
+-- are in the right place.  Add extra space in calling convention
+
     local linkage =
-      { caller = Block.relative(blocks.vfp, "caller's linkage area", 26*4, 16)
-      , callee = Block.relative(blocks.sp , "our linkage area"     , 26*4, 16)
+      { caller = Block.relative(blocks.vfp, "caller's linkage area", 23*4, 16)
+      , callee = Block.relative(blocks.sp , "our linkage area"     , 23*4, 16)
       }
     local old_end = Block.cat(32, { blocks.oldblocks.caller
                                   , linkage.caller

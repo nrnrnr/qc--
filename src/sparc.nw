@@ -90,12 +90,14 @@ windows.  Nyarggg.  We pretend that it's actually split between 32 and
 <<SPARC spaces>>=
   let t = SS.t    id [32]
 
-  let j = S.checked { S.space          = ('j', Rtl.BigEndian, Cell.of_size 64)
+  let j = S.checked { S.space          = ('j', Rtl.Identity, (* Rtl.BigEndian, *)
+                                           Cell.of_size 64)
                     ; S.doc            = "64-bit integer temporaries"
                     ; S.cellwidth      = 64
                     ; S.indexwidth     = 32
                     ; S.indexlimit     = None
-                    ; S.aggregation    = Rtl.BigEndian
+                    (* ; S.aggregation    = Rtl.BigEndian *)
+                    ; S.aggregation    = Rtl.Identity
                     ; S.widths         = [64]
                     ; S.classification =
                         S.Temp { S.stands_for = s.S.space
@@ -105,12 +107,15 @@ windows.  Nyarggg.  We pretend that it's actually split between 32 and
                     }
 @ [[u]] is the temporary space for the [[f]] space.
 <<SPARC spaces>>=
-  let u = S.checked { S.space          = ('u', Rtl.BigEndian, Cell.of_size 32)
+  let u = S.checked { S.space          = ('u', 
+                                          Rtl.Identity, (* Rtl.BigEndian, *)
+                                          Cell.of_size 32)
                     ; S.doc            = "floating-point temporaries"
                     ; S.cellwidth      = 32
                     ; S.indexwidth     = 32
                     ; S.indexlimit     = None
-                    ; S.aggregation    = Rtl.BigEndian
+                    (* ; S.aggregation    = Rtl.BigEndian *)
+                    ; S.aggregation    = Rtl.Identity
                     ; S.widths         = [32]
                     ; S.classification =
                         S.Temp { S.stands_for = f.S.space
@@ -119,12 +124,13 @@ windows.  Nyarggg.  We pretend that it's actually split between 32 and
                                }
                     }
 
-  let q = S.checked { S.space          = ('q', Rtl.BigEndian, Cell.of_size 64)
+  let q = S.checked { S.space          = ('q', Rtl.Identity, Cell.of_size 64)
                     ; S.doc            = "64-bit floating-point temporaries"
                     ; S.cellwidth      = 64
                     ; S.indexwidth     = 32
                     ; S.indexlimit     = None
-                    ; S.aggregation    = Rtl.BigEndian
+                    (* ; S.aggregation    = Rtl.BigEndian *)
+                    ; S.aggregation    = Rtl.Identity
                     ; S.widths         = [64]
                     ; S.classification =
                         S.Temp { S.stands_for = x.S.space
@@ -258,7 +264,14 @@ let get_talloc () =
   | Some s -> s
   | None   -> imposs "Temp allocator not registered with postexpander"
 let talloc space = Talloc.Multiple.reg space (get_talloc ())
-let remember_slot_allocator _ = ()
+let salloc = ref None
+let get_salloc () = match !salloc with
+  | Some s -> s
+  | None   -> Impossible.impossible "Slot allocator not registered with postexpander"
+let remember_slot_allocator sa = salloc := Some sa
+let salloc w = A.allocate (get_salloc()) w ""
+let sfetch aloc w = A.fetch aloc w
+let sstore aloc exp w = A.store aloc exp w
 @ 
 <<SPARC postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
@@ -332,16 +345,26 @@ let move ~dst ~src =
   match src, dst with
   | (('u', _, _), _, R.C 1), (('t', _, _), _, R.C 1)
   | (('t', _, _), _, R.C 1), (('u', _, _), _, R.C 1) ->
+      let slot = salloc w in
+      [ R.store (R.reg dst) (sfetch slot w) w;
+        sstore slot (rfetch src) w ]
+(*
       let offset = R.bits (Bits.S.of_int (23*4) 32) 32 in
       let addr   = R.app (R.opr "add" [32]) [rfetch sp; offset] in
       [ R.store (R.reg dst)   (R.fetch (mem w addr) w) w
       ; R.store (mem w addr) (rfetch src) w ]
+*)
   | (('j', _, _), _, R.C 1), (('q', _, _), _, R.C 1)
   | (('q', _, _), _, R.C 1), (('j', _, _), _, R.C 1) ->
+      let slot = salloc w in
+      [ R.store (R.reg dst) (sfetch slot w) w;
+        sstore slot (rfetch src) w ]
+(*
       let offset = R.bits (Bits.S.of_int (24*4) 32) 32 in
       let addr   = R.app (R.opr "add" [32]) [rfetch sp; offset] in
       [ R.store (R.reg dst)   (R.fetch (mem w addr) w) w
       ; R.store (mem w addr) (rfetch src) w ]
+*)
   | _, _ -> if Register.eq src dst then []
             else [R.store (R.reg dst) (rfetch src) w]  
 @ 
@@ -351,13 +374,20 @@ let li  ~dst const =
   match dst, const with
   | (('u', _, _), _, R.C 1), _ -> (* we are forced to go through memory *)
       let t = talloc 't' 32 in
+      let slot = salloc 32 in
+      [ R.store (R.reg dst) (sfetch slot 32) 32;
+        sstore slot (rfetch t) 32;
+        R.store (R.reg t) (Up.const const) 32 ]
+(*
       let offset = R.bits (Bits.S.of_int (23*4) 32) 32 in
       let addr   = R.app (R.opr "add" [32]) [rfetch sp; offset] in
       [ R.store (R.reg dst)    (R.fetch (mem 32 addr) 32) 32
       ; R.store (mem 32 addr) (rfetch t) 32
       ; R.store (R.reg t)      (Up.const const) 32
       ]
+*)
   | (('q', _, _), _, R.C 1), RP.Bits b -> (* we are forced to go through memory *)
+      Printf.eprintf "Bad idea!!!!\n";
       let t1 = talloc 't' 32 in
       let t2 = talloc 't' 32 in
       let offset1 = R.bits (Bits.S.of_int (24*4) 32) 32 in
@@ -423,6 +453,19 @@ let unop ~dst op x =
 let binop ~dst op x y =
   let dstw = reg_width dst in
   match op with
+(* I think this is never used...
+  | ("f2i", ws) ->
+      begin match dst, x with
+      | ('r', _, _), ('f', _, _) ->
+          assert (dstw = 32);
+          let ftmp = talloc 'u' dstw in
+          let slot = salloc dstw in
+          [R.store (R.reg dst) (sfetch slot) dstw;
+           R.store (sstore slot) (rfetch ftmp); 
+           R.store (R.reg ftmp) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw]
+      | _ -> [R.store (R.reg dst) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw]
+      end
+*)
   | ("modu", ws) ->
     [ R.store (R.reg dst) (R.app (R.opr "sub"  ws) [rfetch x; rfetch dst]) dstw
     ; R.store (R.reg dst) (R.app (R.opr "mul"  ws) [rfetch y; rfetch dst]) dstw
@@ -573,7 +616,7 @@ let globals base =
                 else Aux.round_up_to ~multiple_of:wordsize w in
   let align = function _ -> 8 in
   A.at mspace ~start:base (A.widen width *> A.align_to align *>
-  A.overflow ~growth:Memalloc.Up ~max_alignment:8)
+  A.overflow ~growth:Memalloc.Up ~max_alignment:16)
 @ 
 
 <<sparc.ml>>=
@@ -595,7 +638,7 @@ let target =
     ; T.byteorder           = byteorder
     ; T.wordsize            = wordsize
     ; T.pointersize         = wordsize
-    ; T.alignment           = 4             (* not sure *)
+    ; T.alignment           = 8             (* sparc 9 *)
     ; T.memsize             = 8
     ; T.spaces              = spaces
     ; T.reg_ix_map          = T.mk_reg_ix_map spaces

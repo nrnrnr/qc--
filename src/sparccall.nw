@@ -64,7 +64,8 @@ let saved_nvr temps =
       (match sp with 'r' -> t | 's' -> j | 'f' -> u | 'x' -> q | _ -> bad()) w
 @ 
 
-Stack pointer is doubleword-aligned.
+Stack pointer is doubleword-aligned (which we actually force to be
+quad word aligned in case we are really on a sparc 9)
 <<SPARC calling convention automata in Lua>>=
 Sparc.sp_align  = 16
 Sparc.wordsize  = 32
@@ -79,7 +80,8 @@ function o(i) return (reg("o", i, Sparc.wordsize)) end
 function i(i) return (reg("i", i, Sparc.wordsize)) end
 function s(i) return (reg("s", i, Sparc.wordsize * 2)) end
 
-Sparc.vol_fp  = (f(0) .. f(7)) .. (x(0) .. x(7))
+Sparc.vol_fp  = {f(0), f(1), f(2), f(3), f(4), f(5), f(6), f(7),
+                 x(0), x(1), x(2), x(3), x(4), x(5), x(6), x(7)}
 @ 
 
 \paragraph{Conventions governing the stack}
@@ -107,18 +109,22 @@ Sparc.cc["C"].results =
 
 Sparc.cc["C"].call =
   { A.widen(32, "multiple")
-  , A.bitcounter("bits")
-  , A.choice { "float",  A.regs_by_bits("bits", o(0)..o(5))
-             , A.is_any, A.regs_by_bits("bits", o(0)..o(5))
-             }
+  , A.useregs {o(0), o(1), o(2), o(3), o(4), o(5)}
   , A.overflow { growth = "up", max_alignment = Sparc.sp_align }
   }	
 @ 
+Wrong ..
+Sparc.cc["C"].call =
+  { A.widen(32, "multiple")
+  , A.bitcounter("bits")
+  , A.regs_by_bits("bits", o(0) .. o(5))
+  , A.overflow { growth = "up", max_alignment = Sparc.sp_align }
+  }	
 
 <<SPARC calling convention automata in Lua>>=
 Sparc.cc["C"].cutto =
   { A.widen(32)
-  , A.useregs(o(0) .. o(5))
+  , A.useregs {o(0), o(1), o(2), o(3), o(4), o(5)}
   , A.overflow { growth = "up", max_alignment = Sparc.sp_align }
   }
 @ 
@@ -250,11 +256,20 @@ else
 @
 
 <<sparccall.ml>>=
+(*
+let prefixbytes result =
+  let b = Block.relative (Vfp.mk 32) "prefix block" Block.at ~size:3 ~alignment:8
+  in { result with A.overflow = Block.cathl b result.A.overflow }
+
+let postprocess cconv =
+    { cconv with A.call = A.postprocess cconv.A.call prefixbytes }
+*)
+
 let rtn return_to k n ~ra =
     if k = 0 && n = 0 then return_to ra
     else Impossible.impossible "alternate return using C calling convention" 
 
-let c ~return_to cut auto = to_call cut (rtn return_to) auto
+let c ~return_to cut auto = to_call cut (rtn return_to) auto (* postprocess auto *)
 @ 
 
 Here's our CC lookup function.

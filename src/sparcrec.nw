@@ -157,21 +157,14 @@ cwp: Fetch(cwpl, w) {: () :}
 
 \paragraph{Data movement}
 <<rules>>=
--- Seems like the wrong thing to do....
--- should probably be calling fstoi before the move?
-inst : Store(dst:regl, Ftoi(src:freg), w)
-  {: sprintf "! %s := ftoi(%s)\n\tst %s, [%%sp+%i]\n\tld [%%sp+%i], %s" dst src src (23*4) (23*4) dst :}
-
 inst : Store(dst:fregl, Ftoi(src:freg), w)
   {: sprintf "fstoi %s, %s" src dst :}
 
 -- not sure about this either: fdtoi will it try to
 -- store into a register pair?
 inst : Store(dst:fregl, Ftoi(src:xreg), w)
-  {: sprintf "! dubios ftoi\n\tfdtoi %s, %s" (fst src) dst :}
+  {: sprintf "! dubious ftoi\n\tfdtoi %s, %s" (fst src) dst :}
 
-inst : Store(dst:fregl, Itof(src:reg), w)
-  {: sprintf "st %s, [%%sp+%i]\n\tld [%%sp+%i], %s" src (23*4) (23*4) dst :}
 inst : Store(dst:fregl, Itof(src:freg), w)
   {: sprintf "fitos %s, %s" src dst :}
 inst : Store(dst:xregl, Itof(src:freg), w)
@@ -205,15 +198,16 @@ inst : Store(dst:sregl, Sparcmkj(x:reg, y:reg), w)
 -- register move
 inst : Store(dst:regl, src:reg, w)
   {: sprintf "mov %s, %s" src dst :}
+
 -- here we start cheating...
-inst : Store(dst:fregl, src:reg, w)
-  {: sprintf "! cheating move\n\tst %s, [%%sp+%i]\n\tld [%%sp+%i], %s" src (23*4) (23*4) dst :}
-inst : Store(dst:regl, src:freg, w)
-  {: sprintf "! cheating move\n\tst %s, [%%sp+%i]\n\tld [%%sp+%i], %s" src (23*4) (23*4) dst :}
-inst : Store(dst:sregl, src:xreg, w)
-  {: let (dst, _) = dst in
-     let (src, _) = src in
-     sprintf "! cheating move\n\tstd %s, [%%sp+%i]\n\tldd [%%sp+%i], %s" src (24*4) (24*4) dst :}
+-- inst : Store(dst:fregl, src:reg, w)
+--   {: sprintf "! cheating move\n\tst %s, [%%sp+%i]\n\tld [%%sp+%i], %s" src (23*4) (23*4) dst :}
+-- inst : Store(dst:regl, src:freg, w)
+--   {: sprintf "! cheating move\n\tst %s, [%%sp+%i]\n\tld [%%sp+%i], %s" src (23*4) (23*4) dst :}
+-- inst : Store(dst:sregl, src:xreg, w)
+--  {: let (dst, _) = dst in
+--     let (src, _) = src in
+--     sprintf "! cheating move\n\tstd %s, [%%sp+%i]\n\tldd [%%sp+%i], %s" src (24*4) (24*4) dst :}
 inst : Store(dst:regl, Loword(src:sreg), w)
   {: let (_, src) = src in
      sprintf "mov %s, %s" src dst :}

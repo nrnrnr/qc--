@@ -461,10 +461,9 @@ though you only pass the index [[n']] in instead of an entire
 solution.
 <<applying rules>>=
 let rec subsume_index soln n' =
-  if is_tau soln then (soln.n < n' && soln.m <= soln.n) || soln.n = n'
-  else if fill soln =*= H then
-    subsume_index {soln with fill = S; n = soln.w - soln.n} n'
-  else imposs "subsume_index: not tau and not H"
+  match fill soln with
+  | S | G | Z -> (soln.n < n' && soln.m <= soln.n) || soln.n = n'
+  | H         -> subsume_index {soln with fill = S; n = soln.w - soln.n} n'
 @ Again, the high-bits type is dealt with by pretending it has been
 converted back to sign-bits type and comparing as usual.
 
@@ -511,7 +510,8 @@ the combined rule case.
 \]
 <<applying rules>>=
 let fill_rule m soln =
-  if fill soln =*= G then
+  match fill soln with
+  | G ->
     let w = width soln in
     let lo_exists = not_null (find_exts_from m w "lobits") in
     if lo_exists then
@@ -529,7 +529,7 @@ let fill_rule m soln =
       let solns    = zx_solns @ sx_solns in
       List.filter (fun s -> s.n <= s.w) solns (* this is necessary *)
     else []
-  else []
+  | _ -> []
 @ 
 
 \[\widentheta{{\ensuremath{\sigma}}}
@@ -557,7 +557,8 @@ let widen_sigma m soln =
 \]
 <<applying rules>>=
 let widen_garbage m soln =
-  if fill soln =*= G then
+  match fill soln with
+  | G ->
     let w         = width soln in
     let zx_widths = find_exts_from m w "zx" in
     let sx_widths = find_exts_from m w "sx" in
@@ -571,7 +572,7 @@ let widen_garbage m soln =
       | _ -> imposs (ext^" operator should have some type bits#n->bits#w")
     in
     List.map (create Z "zx") zx_widths @ List.map (create S "sx") sx_widths
-  else []
+  | _ -> []
 @ 
 
 \[\inferrule [Narrow \sidecond{n\leq w\leq w'}]
@@ -607,9 +608,9 @@ let narrow_rule m soln =
 \]
 <<applying rules>>=
 let to_high_rule m soln =
-  if fill soln =*= G &&
-    List.exists (function [w] -> w = soln.w | _ -> false) (machine_widths m "shl")
-  then
+  match fill soln with
+  | G when
+      List.exists (function [w] -> w = soln.w | _ -> false) (machine_widths m "shl") ->  
     let w = soln.w in
     let n = soln.n in
     [{ soln with
@@ -618,7 +619,7 @@ let to_high_rule m soln =
        cost = soln.cost + 1;
        n    = w - n;
        fill = H }]
-  else []
+  | _ -> []
 @ 
 
 \[
@@ -629,9 +630,9 @@ let to_high_rule m soln =
 \]
 <<applying rules>>=
 let from_high_s_rule m soln =
-  if fill soln =*= H &&
-    List.exists (function [w] -> w = soln.w | _ -> false) (machine_widths m "shra")
-  then
+  match fill soln with
+  | H when
+      List.exists (function [w] -> w = soln.w | _ -> false) (machine_widths m "shra") ->
     let w = soln.w in
     let n = soln.n in
     [{ soln with
@@ -640,7 +641,7 @@ let from_high_s_rule m soln =
        cost = soln.cost + 1;
        n    = w - n;
        fill = S }]
-    else []
+  | _ -> []
 @ 
 
 \[
@@ -651,9 +652,9 @@ let from_high_s_rule m soln =
 \]
 <<applying rules>>=
 let from_high_z_rule m soln =
-  if fill soln =*= H &&
-    List.exists (function [w] -> w = soln.w | _ -> false) (machine_widths m "shrl")
-  then 
+  match fill soln with
+  | H when
+      List.exists (function [w] -> w = soln.w | _ -> false) (machine_widths m "shrl") ->
     let w = soln.w in
     let n = soln.n in
     [{ soln with
@@ -662,7 +663,7 @@ let from_high_z_rule m soln =
        cost = soln.cost + 1;
        n    = w - n;
        fill = Z }]
-  else []    
+  | _ -> []    
 @ 
 
 All the width-changing and subtyping rules are applied by the function
@@ -713,7 +714,7 @@ let mksolutions_lit_bits litwidths tau e = match e with
   let n = Bits.width b in
   let litwidths = List.filter (fun w' -> n <= w') litwidths in
   (match tau with
-  | (S | Z) ->
+  | S | Z ->
       let f w' =
         let ext = if tau =*= S then Bits.Ops.sx else Bits.Ops.zx in
         {e = e; m = n; cost = 0; e' = RP.Const(RP.Bits (ext w' b)); fill = tau; n = n; w = w'} in
@@ -746,10 +747,9 @@ let lookup_gamma name w =
 
 let mksolutions_var name e w =
   let (fill, n) = lookup_gamma name w in
-  if fill =*= H then
-    [{e = e; m = n; cost = 0; e' = e; fill = H; n = w - n; w = w}]
-  else 
-    [{e = e; m = n; cost = 0; e' = e; fill = fill; n = n; w = w}]
+  match fill with
+  | H -> [{e = e; m = n; cost = 0; e' = e; fill = H;    n = w - n; w = w}]
+  | _ -> [{e = e; m = n; cost = 0; e' = e; fill = fill; n = n;     w = w}]
 @ 
 
 \[\inferrule [Binop \sidecond{\n1\leq\w1,\n2\leq\w2,n\leq w}]
