@@ -19,45 +19,60 @@ type parameter.
 <<context.mli>>=
 type 'c op = string * 'c list * 'c        (* op, arguments, result *)
 @ 
-On most machines operators can be described by five contexts: integer,
-floating point, rounding mode, address, and boolean. The [[standard]]
-function returns an association for all {\rtl} operators, that states
-standard operator contexts.
+Because postexpanders need not deal with Boolean operators, on most
+machines operators can be described by three contexts: integer, 
+floating point, and, rounding mode.
+The [[nonbool]]
+function returns a list giving standard argument and
+result contexts for each non-Boolean {\rtl} operator.
+The [[full]] function includes Boolean operators.
+The [[except]] function helps write exceptions; it is a union with
+priority to the right-hand element.
 <<context.mli>>=
-val standard: int:'c -> fp:'c -> rm:'c -> addr:'c -> bool:'c -> 'c op list
+val nonbool  : int:'c -> fp:'c -> rm:'c -> 'c op list
+val full     : int:'c -> fp:'c -> rm:'c -> bool:'c -> 'c op list
+val except   : 'c op list -> 'c op list -> 'c op list
+@  Many machines will be able to define a context by taking the
+[[nonbool]] context plus a few exceptions, e.g.,
+[[except (nonbool i f r) [exn_list]]].
 @
-
+Everything above is quite general, but the specific context that the
+expander wants is this:
+<<context.mli>>=
+type t = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
+@
+We can build a context from a single temporary space or from a list of
+temporary spaces.
+The context allocates from the space(s), accepts any temporary from
+the space(s), and accepts any hardware register that is acceptable to
+(any of) the space(s).
+<<context.mli>>=
+val of_space  : Space.t      -> t
+val of_spaces : Space.t list -> t
+@ 
+Finally, we can create the functions that the expander needs.
+<<context.mli>>=
+val functions : t op list -> (Rtl.Private.opr -> t list) * (Rtl.Private.opr -> t)
 @
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 <<context.ml>>=
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
+
 type 'c op = string * 'c list * 'c        (* op, arguments, result *)
-let standard ~int ~fp ~rm ~addr ~bool =
+let nonbool ~int ~fp ~rm =
     [ "add"           , [int; int], int
     ; "addc"          , [int; int; int], int
-    ; "add_overflows" , [int; int], bool
     ; "and"           , [int; int], int
-    ; "bit"           , [bool], int
     ; "bitExtract"    , [int; int], int
     ; "bitInsert"     , [int; int; int], int
     ; "bitTransfer"   , [int; int; int; int; int], int
-    ; "bool"          , [int], bool
     ; "borrow"        , [int; int; int], int
     ; "carry"         , [int; int; int], int
     ; "com"           , [int], int
-    ; "conjoin"       , [bool; bool], bool
-    ; "disjoin"       , [bool; bool], bool
     ; "div"           , [int; int], int
-    ; "div_overflows" , [int; int], bool
     ; "divu"          , [int; int], int
-    ; "eq"            , [int; int], bool
-    ; "feq"           , [fp; fp], bool
-    ; "fge"           , [fp; fp], bool
-    ; "fgt"           , [fp; fp], bool
-    ; "fle"           , [fp; fp], bool
-    ; "flt"           , [fp; fp], bool
-    ; "fne"           , [fp; fp], bool
     ; "f2f"           , [fp; rm], fp
     ; "f2f_implicit_round"     , [fp], fp
     ; "f2i"           , [fp; rm], fp  (* conversion done in float unit?? *)
@@ -73,35 +88,22 @@ let standard ~int ~fp ~rm ~addr ~bool =
     ; "fneg"          , [fp], fp
     ; "fsqrt"         , [fp; rm], fp
     ; "fsub"          , [fp; fp; rm], fp
-    ; "ge"            , [int; int], bool
-    ; "geu"           , [int; int], bool
-    ; "gt"            , [int; int], bool
-    ; "gtu"           , [int; int], bool
     ; "i2f"           , [fp; rm], fp  (* conversion done in float unit? *)
-    ; "le"            , [int; int], bool
-    ; "leu"           , [int; int], bool
     ; "lobits"        , [int], int
-    ; "lt"            , [int; int], bool
-    ; "ltu"           , [int; int], bool
     ; "minf"          , [], fp
     ; "mod"           , [int; int], int
     ; "modu"          , [int; int], int
     ; "mul"           , [int; int], int
     ; "mulux"         , [int; int], int
     ; "mulx"          , [int; int], int
-    ; "mul_overflows" , [int; int], bool
-    ; "mulu_overflows", [int; int], bool
     ; "mzero"         , [], fp
     ; "NaN"           , [fp], fp           (* ??? *)
-    ; "ne"            , [int; int], bool
     ; "neg"           , [int], int
-    ; "not"           , [bool], bool
     ; "or"            , [int; int], int
     ; "pinf"          , [], fp
     ; "popcnt"        , [int], int
     ; "pzero"         , [], fp
     ; "quot"          , [int; int], int
-    ; "quot_overflows", [int; int], bool
     ; "rem"           , [int; int], int
     ; "round_down"    , [], rm
     ; "round_nearest" , [], rm
@@ -114,10 +116,79 @@ let standard ~int ~fp ~rm ~addr ~bool =
     ; "shrl"          , [int; int], int
     ; "sub"           , [int; int], int
     ; "subb"          , [int; int; int], int
-    ; "sub_overflows" , [int; int], bool
     ; "sx"            , [int], int
     ; "unordered"     , [], fp
     ; "xor"           , [int; int], int
     ; "zx"            , [int], int
     ]
+
+let boolops ~int ~fp ~bool =
+    [ "add_overflows" , [int; int], bool
+    ; "bit"           , [bool], int
+    ; "bool"          , [int], bool
+    ; "conjoin"       , [bool; bool], bool
+    ; "disjoin"       , [bool; bool], bool
+    ; "div_overflows" , [int; int], bool
+    ; "eq"            , [int; int], bool
+    ; "feq"           , [fp; fp], bool
+    ; "fge"           , [fp; fp], bool
+    ; "fgt"           , [fp; fp], bool
+    ; "fle"           , [fp; fp], bool
+    ; "flt"           , [fp; fp], bool
+    ; "fne"           , [fp; fp], bool
+    ; "ge"            , [int; int], bool
+    ; "geu"           , [int; int], bool
+    ; "gt"            , [int; int], bool
+    ; "gtu"           , [int; int], bool
+    ; "le"            , [int; int], bool
+    ; "leu"           , [int; int], bool
+    ; "lt"            , [int; int], bool
+    ; "ltu"           , [int; int], bool
+    ; "mul_overflows" , [int; int], bool
+    ; "mulu_overflows", [int; int], bool
+    ; "ne"            , [int; int], bool
+    ; "not"           , [bool], bool
+    ; "quot_overflows", [int; int], bool
+    ; "sub_overflows" , [int; int], bool
+    ]
+
+let except base exns =
+  let keep (o, _, _) = not (List.exists (fun (o', _, _) -> o =$= o') exns) in
+  exns @ List.filter keep base
+
+let full ~int ~fp ~rm ~bool = nonbool ~int ~fp ~rm @ boolops ~int ~fp ~bool
 @    
+<<context.ml>>=
+type t = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
+let spacename (s, _, _) = s
+let of_space s =
+  match s.Space.classification with
+  | Space.Temp { Space.stands_for = ok } ->
+      let name = spacename s.Space.space in
+      let alloc = Talloc.Multiple.reg name in
+      let ok ((s', _, _) as r) = spacename s' =<= name || ok r in
+      alloc, ok
+  | _ -> impossf "context from non-temporary space"
+
+let rec of_spaces l = match l with
+| [] -> impossf "context from empty list of spaces"
+| [s] -> of_space s
+| s :: ss ->
+    let a,  o  = of_space  s  in
+    let a', o' = of_spaces ss in
+    let alloc m =
+      let a  = a  m in
+      let a' = a' m in
+      fun w -> if w = s.Space.cellwidth then a w else a' w in
+    alloc, (fun r -> o r || o' r)
+@ 
+<<context.ml>>=
+module SM = Strutil.Map
+let functions ops =
+  let resmap = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty ops in
+  let argmap = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty ops in
+  let arg_contexts   (n, _) =
+    try SM.find n argmap with Not_found -> impossf "no arg context for %s" n in
+  let result_context (n, _) =
+    try SM.find n resmap with Not_found -> impossf "no result context for %s" n in
+  arg_contexts, result_context
