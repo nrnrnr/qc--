@@ -150,7 +150,8 @@ and rewrite e = match e with
   | RP.Const _      -> e
   | RP.Fetch (l, e) -> RP.Fetch(loc l, e)
   | RP.App (op, args) when Rtlop.Types.has_floating_result (Up.opr op) ->
-      Verbose.say 4 ["Warning -- rewriting (not converting) floating-point result"];
+      Debug.eprintf "widen"
+        "Warning -- rewriting (not converting) floating-point result";
       let w = Rtlutil.Width.exp' e in
       convert w w e
   | RP.App (("f2i", [fw; iw]), [x; rm]) ->
@@ -200,13 +201,17 @@ let rtl r =
     | _ -> false in
   if Rtlutil.Exists.Opr.rtl needs_conversion r then
     let rtl = Rtlutil.ToReadableString.rtl in
-    let _ = Verbose.eprintf 6 "Widening %s...\r" (rtl r) in
+    let _ = if Debug.on "widen-pre" then Printf.eprintf "Widening %s...\r" (rtl r) in
     let r' =
       let RP.Rtl es = Down.rtl r in Up.rtl (RP.Rtl (List.map guarded es)) in
-    Verbose.eprintf 5 "Widened %s into\n  %s\n" (rtl r) (rtl r');
+    if Debug.on "widen" then Printf.eprintf "Widened %s into\n  %s\n" (rtl r) (rtl r');
     r'
   else
     r in
+<<widen.ml>>=
+let () =
+  Debug.register "widen"      "show results of widener";
+  Debug.register "widen-pre"  "show RTL before widening"
 @ 
 <<widen.ml>>=
 let store_const goodwidth rtl = match Down.rtl rtl with

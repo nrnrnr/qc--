@@ -205,9 +205,11 @@ let set_live g =
         if n < 1000 then loop (n+1) 
         else Impossible.impossible "liveness didn't converge in 1000 iterations"
       else
-        Verbose.say 2 ["set_live converged in "; string_of_int n; " iterations\n"]
+        Debug.eprintf "live" "set_live converged in %d iterations\n" n
     ) in
   loop 1
+<<live.ml>>=
+let () = Debug.register "live" "liveness analysis"
 @
 To update the cache we call [[new_live_out]] and note whether anything
 has changed.
@@ -271,7 +273,7 @@ let set_live' =
         if once g then
           go (n+1)
         else
-          Verbose.say 2 ["set_live' converged in "; string_of_int n; " iterations\n"]
+          Debug.eprintf "live" "set_live' converged in %d iterations\n" n
       else
         Impossible.impossible "liveness didn't converge in 1000 iterations";
     in go 0

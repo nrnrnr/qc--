@@ -991,8 +991,7 @@ module MayAlias = struct
         | None,   None   -> true
         | Some (sym, n), Some(sym', n') ->
 (*
-Verbose.say 4 [Printf.sprintf "--> comparing stack slots %s+%d and %s+%d\n"
-sym n sym' n'];
+Printf.eprintf "--> comparing stack slots %s+%d and %s+%d\n" sym n sym' n';
 *)
                 sym = sym' && not (n + w * memsize <= n' || n' + w' + memsize <= n))
     | _ -> false
@@ -1029,11 +1028,10 @@ sym n sym' n'];
     fun e ->
       let answer = may_alias e in
       let module S = ToReadableString in
-(*
-      Verbose.say 4 ["*** Expression "; S.exp (Rtl.Up.exp e);
-                     (if answer then " may " else " may not ");
-                     "alias with location "; S.loc (Rtl.Up.loc l); "\n"];
-*)
+      let debug () = 
+        Printf.eprintf "*** Expression %s %s alias with location %s\n"
+          (S.exp (Rtl.Up.exp e)) (if answer then " may " else " may not ")
+          (S.loc (Rtl.Up.loc l)) in
       answer
 
   let exp l =

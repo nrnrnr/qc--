@@ -38,20 +38,7 @@ module RP = Rtl.Private
 <<fetch and store globals>>=
 let store_global exp (s, i, w) = proc.P.global_map.(i).A.store (R.Up.exp exp) w in
 let fetch_global     (s, i, w) = proc.P.global_map.(i).A.fetch                w in
-@ 
-Old diagnostics?
-<<walk RTL>>=
-let print_var (s, i, w) = 
-    Verbose.say 18 ["VAR: "
-                   ; s 
-                   ; " " 
-                   ; string_of_int i 
-                   ; " " 
-                   ; string_of_int w 
-                   ; "\n" 
-                   ] in
 @    
-
 We use a higer-order function to allow different variable placers to replace a variable
 and take advantage of the rtl-walk.
 <<replace var>>=
@@ -297,13 +284,14 @@ let () = G.iter_nodes updateNode g in
 @ 
 <<verbosely dump [[tMap]]>>=
 let () =
-  if Verbose.verbosity > 5 then
+  if Debug.on "placevar" then
     let loc = function
       | None -> "<??none??>"
       | Some l -> RU.ToReadableString.exp (l.A.fetch 99) in
-    Verbose.say 6 ["Varmap: Var i -> Loc\n"];
-    Array.iteri
-      (fun i l -> Verbose.say 6 [Printf.sprintf "  %d -> %s\n" i (loc l)]) tMap in
+    Printf.eprintf "Varmap: Var i -> Loc\n";
+    Array.iteri (fun i l -> Printf.eprintf "  %d -> %s\n" i (loc l)) tMap in
+<<placevar.ml>>=
+let () = Debug.register "placevar" "variable placer"
 @
 <<freeze [[autmtn]] and make sure its overflow block is empty>>=
 let aresult = A.freeze autmtn in

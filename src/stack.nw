@@ -66,8 +66,8 @@ let freeze' apply_to_proc p (stack:Block.t) =
     let ()   = assert (null solution.Rtleqn.dependent)   in
     let ()   = assert (not (null solution.Rtleqn.known)) in
     let map  = Strutil.assoc2map solution.Rtleqn.known     in
-    if Verbose.verbosity >= 4 then
-      Verbose.say 4 ("Solutions:\n" ::
+    if Debug.on "stack" then
+      Printf.eprintf "Solutions:%s\n" (String.concat ""
                        (List.map (fun (s, e) -> Printf.sprintf "  %20s = %s\n" s
                                                 (Rtlutil.ToReadableString.exp e))
                           solution.Rtleqn.known));
@@ -88,6 +88,8 @@ let freeze' apply_to_proc p (stack:Block.t) =
             )  
         | x -> x in
     apply_to_proc guard subst p
+
+let () = Debug.register "stack" "show solutions to stack-layout equations"
 
 let freeze =
   let module G = Cfgx.M in

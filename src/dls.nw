@@ -1150,7 +1150,7 @@ assigned to.
 <<add spans for variable locations>>=
 let rewrite_spans (lbl, ss as rst) =
   let node = G.node_labeled cfg lbl in
-  Verbose.eprintf verb "adding dls span for node labeled %s, node %d\n" lbl (G.num node);
+  Debug.eprintf "dls" "adding dls span for node labeled %s, node %d\n" lbl (G.num node);
   if lbl <> proc.Proc.symbol#original_text then
     let vm = try IM.find (G.num node) state.varInMaps
              with Not_found -> (Cfgutil.print_cfg cfg; assert false) in
@@ -1166,6 +1166,8 @@ let rewrite_spans (lbl, ss as rst) =
     (lbl, List.map rewrite_span ss)
   else rst in
 proc.Proc.spans <- List.map rewrite_spans proc.Proc.spans;
+<<dls.ml>>=
+let () = Debug.register "dls" "(downstairs) linear-scan register allocator"
 @
 %-------------------------------------------------------------------
 \subsection{Utilities}
@@ -1300,7 +1302,6 @@ module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M'.acti
 @
 More code for exposing the register allocator to Lua.
 <<dls.ml>>=
-let verb = 12
 module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M'.action)
             (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Oast2ir.proc
                                   and type 'a combined = 'a BackplaneT.combined)

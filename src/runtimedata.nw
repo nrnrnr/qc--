@@ -101,7 +101,6 @@ val emit_as_asm : Oast2ir.proc Asm.assembler -> 'v -> Oast2ir.proc-> bool
 % ------------------------------------------------------------------ 
 A number of shorthands are used throughout the implementation.
 <<runtimedata.ml>>=
-let verb   = 20
 let imposs = Impossible.impossible
 let unimp  = Impossible.unimp
 
@@ -121,7 +120,6 @@ module Dn = Rtl.Dn
 module Up = Rtl.Up
 module P  = Proc
 module T  = Target
-module V  = Verbose
 @
 We represent a dead value as the constant rtl expression [[false]].
 <<runtimedata.ml>>=
@@ -233,8 +231,13 @@ The rest of the indices are straightforward.
 let cont_ix nregs nvars cn  = -(nvars + 2*nregs + 9 + cn)
 @
 <<runtimedata.ml>>=
-let pspan conv (b,e) =
-  V.eprintf verb "span: (%d,%s)\n" (conv b) (RU.ToReadableString.exp e)
+let () = Debug.register "spans" "debug span associations"
+let pspan =
+  if Debug.on "spans" then
+    (fun conv (b, e) ->
+      Printf.eprintf "span: (%d,%s)\n" (conv b) (RU.ToReadableString.exp e))
+  else
+    (fun _ _ -> ())
 let print_span        = pspan Bits.S.to_int
 let print_pseudo_span = pspan (fun x -> x)
 @

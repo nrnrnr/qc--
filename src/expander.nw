@@ -547,7 +547,11 @@ The expander writes debugging information as it goes;
 to activate it, try \texttt{VERBOSITY=5~qc--}.
 <<expander.ml>>=
 module D = struct (* debugging *)
-    let strings = Verbose.say 5 
+    let strings =
+      if Debug.on "expander" then
+        (fun ss -> Printf.eprintf "%s" (String.concat "" ss))
+      else
+        (fun ss -> ()) 
     let int n = string_of_int n
     let exp e = Rtlutil.ToReadableString.exp (Up.exp e) 
     let rtl r = Rtlutil.ToReadableString.rtl r 

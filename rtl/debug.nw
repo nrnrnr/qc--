@@ -30,10 +30,14 @@ let on s = List.mem s debugging
 
 let refs = ref ([] : (string * string) list)
 let register ~word ~meaning =
+  let rec insert word meaning = function
+    | [] -> [(word, meaning)]
+    | ((w, m) as p) :: ps when word < w -> (word, meaning) :: p :: ps
+    | p :: ps -> p :: insert word meaning ps in
   if List.mem_assoc word (!refs) then
     Impossible.impossible ("Debug.register: multiple registrations of " ^ word)
   else
-    refs := (word, meaning) :: !refs
+    refs := insert word meaning (!refs)
 
 let rec ign x = Obj.magic ign
 let eprintf s = if on s then Printf.eprintf else ign
