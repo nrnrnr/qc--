@@ -60,6 +60,16 @@ module type Args = sig
         (* fits s r = true, iff r can hold any value from space s *) 
     val is_tmp : Rtl.space -> bool
         (* true, iff space belongs to the temporary space *)
+    
+    (* 
+     * for spilling
+     *)
+     
+    val mkTmp:      Rtl.loc -> Register.t
+        (* create a new tmp for a value currently held by loc *)
+    val assign_loc: dst:Rtl.loc    -> src:Register.t -> Rtl.rtl 
+    val assign_reg: dst:Register.t -> src:Rtl.loc    -> Rtl.rtl 
+        (* create an assignment rtl that transfers a value from src to dst *)
 end
 @
 
@@ -102,6 +112,7 @@ module Point = struct
     let zero = 0 
 end
 
+module G        = Cfg3
 module P        = Point
 module I        = Interval.Make(Point)
 module L        = Lifetime.Make(I)
@@ -182,16 +193,16 @@ let lifetimes cfg lt =
     let initial    = (RM.empty, lt)                                       in
     let domain map = RM.fold (fun key _ list -> key::list) map []         in
     let scan node (oldset, state) =
-        let point   = Cfg3.number node                                    in
-        let set     = Cfg3.live node                                      in
+        let point   = G.number node                                    in
+        let set     = G.live node                                      in
         let opening = RS.diff set oldset                                  in
         let closing = RS.diff oldset set                                  in
         let state   = open_regs  point (RS.elements opening) state        in
         let state   = close_regs point (RS.elements closing) state        in
                       (set, state)                                        in
-    let first       = Cfg3.number (Cfg3.first cfg)                        in
-    let last        = Cfg3.number (Cfg3.last cfg)                         in
-    let (set,(op,lt)) = Cfg3.scan_fwd cfg first last scan (RS.empty, initial) in
+    let first       = G.number (G.first cfg)                        in
+    let last        = G.number (G.last cfg)                         in
+    let (set,(op,lt)) = G.scan_fwd cfg first last scan (RS.empty, initial) in
                       (* close all open intervals after the last node *)
     let     (_ ,lt) = close_regs (last+1) (domain op) (op,lt)             in
         lt
@@ -224,6 +235,7 @@ with code to
 <<exported module types>>
 module Make (A : Args) : S = struct
     module A = A open A (* never do that *)
+
     let lookup table x = RM.find x table       (* lookup lifetime *)
 
     <<find tmp>>
@@ -233,6 +245,7 @@ module Make (A : Args) : S = struct
     <<replace>> 
     <<alloc>> 
     <<linscan>>
+    <<spiller>>
 end
 @
 
@@ -246,12 +259,12 @@ of a {\cfg}, register allocation starts over after spilling.
 <<linscan>>=
 let rec linscan cfg =
     let _          = Live.liveness cfg     in
-    let _          = Cfg3.gm_enumerate cfg in
+    let _          = G.gm_enumerate cfg in
     let rec loop lifetimes = function (* over all nodes *)
         | None      -> ()
         | Some node -> alloc node lifetimes loop spill
     in
-        loop (lifetimes cfg RM.empty) (Some (Cfg3.first cfg)) 
+        loop (lifetimes cfg RM.empty) (Some (G.first cfg)) 
 
 and spill cfg loc interval = (* spill here and start over .. *)
     ( ignore (assert false) 
@@ -267,7 +280,7 @@ function again receives two continuation for the [[success]] and
 <<alloc>>=
 let alloc node lifetimes success spill =
     let rec loop lifetimes = match find_tmp node with
-        | None     -> success lifetimes (Cfg3.next node)
+        | None     -> success lifetimes (G.next node)
         | Some tmp -> replace_tmp node tmp lifetimes loop spill      
     in
         loop lifetimes 
@@ -285,9 +298,9 @@ entire {\cfg}. However, if no [[r]] can be found, we must spill:
 let replace tmp reg      = fun t -> if t = tmp then reg else t
 
 let replace_tmp node tmp lifetimes success spill =
-  let iter cfg f = Cfg3.fold cfg (fun node () -> Cfg3.set_rtl node f) () in
+  let iter cfg f = G.fold cfg (fun node () -> G.set_rtl node f) () in
   let lifetime   = lookup lifetimes in
-  let cfg         = Cfg3.cfg node    in
+  let cfg         = G.cfg node    in
   match find_reg lifetimes tmp with
   | Some r -> (* successfully found a hardware register *)
       let lifetimes = RM.add r (L.union (lifetime r) (lifetime r)) lifetimes in
@@ -322,7 +335,7 @@ let find_tmp node =
         | None when is_tmp space -> Some (space, index, width)
         | x                      -> x 
     in
-        Rtlutil.read_write_lists uses uses (Cfg3.rtl node) None    
+        Rtlutil.read_write_lists uses uses (G.rtl node) None    
 @       
 
 \begin{quote}\it
@@ -402,10 +415,10 @@ let active point lifetimes =
         RM.fold find lifetimes []
 
 <<longest active type>>=
-Cfg3.node -> loc -> lifetimes -> loc * L.t
+G.node -> loc -> lifetimes -> loc * L.t
 <<find spillee>>=
 let longest_active: <<longest active type>> = fun node tmp lifetimes ->
-    let here   = Cfg3.number node        in
+    let here   = G.number node        in
     let active = active here lifetimes  in
     let max (loc1,lt1 as x) (loc2,lt2 as y) = 
         if I.behind (L.bbox lt1) (L.bbox lt2) then x else y 
@@ -413,13 +426,123 @@ let longest_active: <<longest active type>> = fun node tmp lifetimes ->
         List.fold_left max (tmp,lookup lifetimes tmp) active
 
 <<find spillee type>>= 
-lifetimes -> loc -> Cfg3.node -> loc * I.t 
+lifetimes -> loc -> G.node -> loc * I.t 
 <<find spillee>>=
 let find_spillee: <<find spillee type>> = fun lifetimes tmp node ->
-    let cfg      = Cfg3.cfg node                     in
-    let last     = Cfg3.number (Cfg3.last cfg)       in
+    let cfg      = G.cfg node                     in
+    let last     = G.number (G.last cfg)       in
     let loc,_    = longest_active node tmp lifetimes in
-    let interval = I.mk (Cfg3.number node) (last+1)  in
+    let interval = I.mk (G.number node) (last+1)  in
         loc, interval
 @
 
+% ------------------------------------------------------------------ 
+\subsubsection{Spilling (Under Construction)}
+% ------------------------------------------------------------------ 
+
+This is intended to be a very simple specification of spilling, which
+may be replaced by a more elaborate version.
+
+We assume that we have a control-flow graph and that we want to spill
+a register or temporary in a given region of the flow graph.  We write
+[[member region n]] to indicate that a node~[[n]] lies in the region
+of interest.  We contemplate an implementation in which the nodes of
+the control-flow graph are placed in linear order, and in which
+regions are intervals, but these assumptions are not necessary to this
+specification.
+
+We assume that we can find control-flow successors and predecessors
+with functions [[succ]] and [[pred]].
+
+The new graph for [[spill r region m g]] is computed as follows:
+
+\begin{quote}
+\begin{tabbing}
+xx\=xx\=xx\=xx\=xx\=xx\=xx\=xx\=\kill
+for each node [[n]] in [[g]] such that [[member region n]] do\\
+\> choose a fresh temporary [[t]]\\
+\> for each node [[p]] in [[pred n]] such that %\\ \> 
+[[not (member region p)]] and [[r]] is live before [[n]] do\\
+\>\> insert [[m := r]] on the edge from [[p]] to [[n]]\\
+\> if [[n]] reads [[r]], insert [[t := m]] before [[n]]\\
+\> if [[n]] writes [[r]], insert [[m := t]] after [[n]]\\
+\> substitute [[t]] for [[r]] in [[n]]\\
+\> for each node [[s]] in [[succ n]] such that % \\ \> 
+[[not (member region p)]] and [[r]] is live before [[s]] do\\
+\>\> insert [[r := m]] on the edge from [[n]] to [[s]]\\
+\end{tabbing}
+\end{quote}
+
+It would be highly desirable to be able to separate the liveness tests
+here, so for example we could always insert [[r := m]] or [[m := r]]
+on edges that cross region boundaries, and then remove the unnecessary
+instructions with a post-pass.
+Some building blocks.
+
+% ------------------------------------------------------------------ 
+\subsubsection{Spilling Implementation}
+% ------------------------------------------------------------------ 
+
+The [[reads_writes]] function checks whether a location [[loc]] is
+read or written by an {\rtl}.  It returns a pair $(r,w)$ of [[bool]]
+values.  The first component $r$ is true, iff [[loc]] is read by
+[[rtl]], the second $w$, iff [[loc]] is written by [[rtl]], and false
+otherwise.
+
+<<spiller>>=
+let reads_writes rtl loc =
+    let f sp index width (r,w) = 
+        let eq = (sp,index,width) = loc in (r || eq, w || eq) 
+    in
+        Rtlutil.read_write_lists f f rtl (false,false)
+@
+
+The [[extern]] function returns all nodes from a list of nodes that do
+not belong to an [[interval]]. Edges from such nodes to nodes inside
+the interval must be augmented with assignments; this is done by 
+
+<<spiller>>=
+let extern interval = 
+    List.filter (fun n -> not (I.member (G.number n) interval)) 
+@
+
+Edges entering and leaving the spilling interval must be modified to
+include assignment nodes:  outside the interval the [[spillee]] holds
+a value, inside the interval [[mem]].  Incoming edges therefore must
+write the [[spillee]] to [[mem]], outgoing edges [[mem]] to
+[[spillee]].  The following two functions [[upd_*]] functions update
+edges for [[node]]. 
+
+<<spiller>>=
+let upd_incoming interval spillee mem node =
+    let pred  = extern interval (G.pred node) in
+    let write = A.assign_loc mem spillee          in
+        List.iter (fun n -> G.gm_insert_assign_between write n node) pred
+
+let upd_outgoing interval spillee mem node = 
+    let succ  = extern interval (G.succ node) in
+    let read  = A.assign_reg spillee mem          in
+        List.iter (fun n -> G.gm_insert_assign_between read node n) succ
+
+    
+let update interval spillee mem node = 
+    let _ = upd_incoming interval spillee mem node       in
+    let _ = upd_outgoing interval spillee mem node       in
+    let reads, writes = reads_writes (G.rtl node) spillee in
+        if (reads || writes) then 
+            ( let tmp  = A.mkTmp mem in
+              ( if reads  then 
+                    (G.gm_insert_assign_before  node (A.assign_reg tmp mem))
+              ; if writes then 
+                    (G.gm_insert_assign_after   node (A.assign_loc mem tmp))
+              ; G.set_rtl node (fun rtl -> rtl (*XXX*))
+              )
+            )
+        else
+            () (* done *)
+         
+let spiller cfg spillee mem interval =
+    let first = I.left interval      in
+    let last  = I.right interval - 1 in
+        G.scan_fwd cfg first last (fun n () -> update interval spillee mem n) ()
+@
