@@ -145,7 +145,7 @@ sub main {
     print OUT<<"EOF";
     foreign "C" main("unsigned" bits$w iargc, "address" bits$w iargv) {
         foreign "$conv" callee$a ; 
-        return(0);  // indicate success here, too
+        foreign "C" return(0);  // indicate success here, too
     }
 EOF
 }
@@ -164,7 +164,11 @@ sub compare {
         
         my $value = "${val}::bits$width";
         print OUT <<EOF;
-        if $v != $value {foreign "C" printf("address" failed); return();} 
+        if $v != $value 
+        {
+            foreign "C" printf("address" failed); 
+            foreign "$conv" return();
+        } 
 EOF
     }        
 }
@@ -198,7 +202,7 @@ EOF
     compare(@_);
     print OUT <<"EOF";
         foreign "C" printf("address" success);
-        return ();
+        foreign "$conv" return ();
     }
 EOF
 }
@@ -239,9 +243,10 @@ foreach $t (@ARGV) {
 #
 
 %ctype = 
-    ( "$w/int"          => "int"
-    , "$w/unsigned"     => "unsigned int" 
-    , "$w/float"        => "float"
+    ( "32/int"          => "int"
+    , "32/unsigned"     => "unsigned int" 
+    , "32/float"        => "float"
+    , "64/int"          => "long int"
     , "8/int"           => "char"
     );    
 

@@ -20,6 +20,7 @@ CC  =               cc
 ASM =               `ls -1 *.c-- | sed s'/\.c--/.s/'`
 
 all:V:              alpha-call x86-c-call
+asm:V:              $ASM
                     
 
 #
@@ -43,8 +44,12 @@ x86-c-call.sigs:    $QCC
 #
 
 alpha-call:V:       alpha-call.sigs
-                    $GEN -name=$target      -width=64 < $prereq 
-                    $GEN -name=$target-x -c -width=64 < $prereq
+                    #$GEN -name=$target      -width=64 < $prereq 
+                    #$GEN -name=$target-x -c -width=64 < $prereq
+                    $GEN  -name=$target-cmm0 -conv="cmm0" -width=64 < $prereq 
+                    $GEN  -name=$target-cmm1 -conv="cmm1" -width=64 < $prereq 
+                    $GEN  -name=$target-cmm2 -conv="cmm2" -width=64 < $prereq 
+                    $GEN  -name=$target-cmm3 -conv="cmm3" -width=64 < $prereq 
 
 x86-c-call:V:       x86-c-call.sigs             
                     $GEN -name=$target      -width=32 < $prereq
@@ -61,6 +66,10 @@ x86%.s:             x86%.c--
 alpha%.s:           alpha%.c--                    
                     $QCC backend=Backend.alpha -S $prereq
 
+alpha%.dbg:        alpha%.c--
+                    $QCC backend=Backend.alpha  \
+                         backend.asm=Asm.cmm -S -o $target $prereq
+
 #
 # Run tests. This will only work on the right platform.
 #
@@ -74,10 +83,29 @@ x86-test:V:         $ASM
                         cc $f $g && ./a.out
                     done    
 
+#
+# Our Alphas don't have mk(1) installed. Therefore I keep the action
+# in a sh(1) script which I can run manually.
+#
+
 alpha-test:V:       $ASM
-                    for f in alpha*.s; do
-                        cc $f && ./a.out
+                    sh alpha.sh
+
+
+alpha.sh:V:
+                    echo '
+                    set -x
+                    for f in alpha-call-cmm*-main-*.s; do
+                        cc $f 2> /dev/null
+                        ./a.out
                     done    
+                    
+                    for f in alpha-call-x-main-*.s; do
+                        g=`echo $f | sed -e 's/main/callee/' -e 's/\.s/.c/'`
+                        cc $f $g 2> /dev/null
+                        ./a.out
+                    done   
+                    ' > $target
 
 #
 # clean
@@ -85,10 +113,12 @@ alpha-test:V:       $ASM
 
 clean:V:
                     rm -f *.c--
+                    rm -f *.o
                     rm -f *.c
                     rm -f *.s
                     rm -f *.sigs
                     rm -f a.out
+                    rm -f alpha.sh
 
 clobber:V:          clean
 
