@@ -22,12 +22,10 @@ easily.
 
 The abstract syntax is specified in [[ast.asdl]]; the resulting
 modules are [[Ast]] and [[AstUtil]].
-
 <<ast.asdl>>=
 module ast {
     <<ast declaration>>
 }
-
 <<ast declaration>>=
 name        = (string)
 conv        = (string)  -- names for calling conventions
@@ -38,14 +36,12 @@ size        = (int)     -- power of 2 (bits8, float16, ..)
 align       = (int)     -- power of 2
 aligned     = (int)     -- power of 2
 op          = (string)
-
 @ Every important node is wrapped by a node that includes a source
 code position [[region]].  This is the character span in the input
 character stream that covers the node.  The first character in the
 stream has index 0.  The first number in a [[region]] denotes the
 first character covered by the node, the second number the first
 character \textit{after} the node.
-
 <<ast declaration>>=
 region      = (int,int) -- (* Srcmap.reg *)
 
@@ -60,15 +56,12 @@ topdecl     = TopDeclAt     (topdecl, region)
             | TopProcedure  (proc)
             -- pragmas
             | Pragma                          -- just for testing
-
 @ Extensions to the language are syntactically covered by [[pragma]]s. 
 Extensions that are recognized by this implementation cover them in
 the abstract syntax.  For testing purposes currently a meaningless
 [[Pragma]] constructor is returned by the parser for recognized
 pragmas. 
-
 <<ast declaration>>=
-
 const       = (name, expr)
 
 register    = (invariant, ty, name, reg?)
@@ -92,7 +85,6 @@ datum       = DatumAt (datum, region)
 @ Escape sequence in the concrete syntax of strings and character
 literals are removed during the translation to the abstract syntax. 
 So [[InitStr]] and [[InitUStr]] do not contain escaped characters.
-
 <<ast declaration>>=
 init        = InitAt (init, region)
             | InitExprs (expr*)
@@ -102,12 +94,9 @@ init        = InitAt (init, region)
 ty          = TyAt (ty, region)
             | BitsTy  (size)
             | FloatTy (size)
-
 @ To encode the [[invariant]] keyword a boolean value would suffice.
 But this type is not provided by \asdl.
-
 <<ast declaration>>=
-
 invariant   = Invariant
             | Variant
 
@@ -130,14 +119,12 @@ lvalue      = LValueAt (lvalue, region)
 
 assign      = (lvalue,expr)
 altcont     = (expr, expr)
-
-@ The abstract syntax does not make a difference between an empty list
-of statements and an absent optional list of statements. An [[if]]
+@ 
+The abstract syntax does not distinguish an empty list
+of statements from an absent optional list of statements. An [[if]]
 statement without an [[else]] block looks on this level like an [[if]]
 with an empty [[else]] block.
-
 <<ast declaration>>=
-
 stmt        = StmtAt (stmt, region)
             | IfStmt     (expr, stmt*, stmt*)
             | LabelStmt  (name)
