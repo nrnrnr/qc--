@@ -143,16 +143,19 @@ lua-$INTERP.cmxa:	$LIBCMX	$LIBCMI
 # copy library and interfaces to $LIBDIR. Note that lua-std.a is
 # implicitly built when lua-std.cmxa is built.
 
-$LIBDIR/lua.cma: lua-std.cma $LIBMLI $LIBCMI dirs
-		for f in lua-std.cma $LIBMLI $LIBCMI
+$LIBDIR/lua.cma:Q: lua-std.cma $LIBMLI $LIBCMI dirs
+		cmp -s lua-std.cma $target || cp -v lua-std.cma $target
+		for f in $LIBMLI $LIBCMI
 		do
-		    cmp -s $f $LIBDIR/$f || cp $f $LIBDIR
+		    cmp -s $f $LIBDIR/$f || cp -v $f $LIBDIR
 		done
 
-$LIBDIR/lua.cmxa: lua-std.cmxa $LIBMLI $LIBCMI dirs
-		for f in lua-std.cmxa lua-std.a $LIBMLI $LIBCMI
+$LIBDIR/lua.cmxa:Q: lua-std.cmxa $LIBMLI $LIBCMI dirs
+		cmp -s lua-std.cmxa $target || cp -v lua-std.cma $target
+		cmp -s lua-std.a    $LIBDIR/lua.a || cp -v lua-std.a $LIBDIR/lua.a
+		for f in $LIBMLI $LIBCMI
 		do
-		    cmp -s $f $LIBDIR/$f || cp $f $LIBDIR
+		    cmp -s $f $LIBDIR/$f || cp -v $f $LIBDIR
 		done
 
 # ------------------------------------------------------------------ 
