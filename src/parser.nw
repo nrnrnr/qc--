@@ -81,7 +81,7 @@ on the column $c$ of the tab:
 Whenever the scanner encounters a tab character it calls the [[tab]]
 function to update the [[position.tab]] accordingly.  The first column
 is by definition 1 and not zero; this is accounted by the [[pos]]
-function, whcih returns the actual position. 
+function, which returns the actual position. 
 
 <<scan.mll>>=
     let tab lexbuf =
@@ -116,9 +116,10 @@ quite intuitive when called as [[get lexbuf]].
 substring extraction function (inspired by Python's [[slice]]) that
 makes this easy.  The parameters [[start]] and [[stop]] denote which
 part of [[str]] should be extracted; negative numbers can be used to
-reference that starting point from the end of the string.  It is best
-to think about the indices as pointing between the characters; some
-examples makes this clear:
+reference the starting point from the end of the string rather than
+the beginning.  It is best to think about the [[start]] and [[stop]]
+indices as pointing between the characters; some examples makes this
+clear:
 
 <<substr example>>=
           h  e  l  l  o  _  w  o  r  l  d
@@ -151,7 +152,7 @@ examples makes this clear:
 
 @ All keywords are stored in a hash table that maps them to tokens;
 [[keyword s]] tries to lookup [[s]] in the table of keywords and
-retrns the matching token or raises [[Not_found]]. 
+returns the matching token or raises [[Not_found]]. 
 
 <<scan.mll>>=
     let keywords    = Hashtbl.create 127
@@ -487,23 +488,23 @@ and pragma3 = parse
 
     | LINE              -> "LINE"
 
-    | AMPERSAND(s)      -> "AMPERSAND(" ^ s ^ ")"
-    | BAR(s)            -> "BAR(" ^ s ^ ")"
-    | CARET(s)          -> "CARET(" ^ s ^ ")"
-    | EEQ(s)            -> "EEQ(" ^ s ^ ")"
-    | GEQ(s)            -> "GEQ(" ^ s ^ ")"
-    | GGREATER(s)       -> "GGREATER(" ^ s ^ ")"
-    | GT(s)             -> "GT(" ^ s ^ ")"
-    | LEQ(s)            -> "LEQ(" ^ s ^ ")"
-    | LLESS(s)          -> "LLESS(" ^ s ^ ")"
-    | LT(s)             -> "LT(" ^ s ^ ")"
-    | MINUS(s)          -> "MINUS(" ^ s ^ ")"
-    | NEQ(s)            -> "NEQ(" ^ s ^ ")"
-    | PERCENT(s)        -> "PERCENT(" ^ s ^ ")"
-    | PLUS(s)           -> "PLUS(" ^ s ^ ")"
-    | SLASH(s)          -> "SLASH(" ^ s ^ ")"
-    | STAR(s)           -> "STAR(" ^ s ^ ")"
-    | TILDE(s)          -> "TILDE(" ^ s ^ ")"
+    | AMPERSAND(s)      -> "AMPERSAND (" ^ s ^ ")"
+    | BAR(s)            -> "BAR       (" ^ s ^ ")"
+    | CARET(s)          -> "CARET     (" ^ s ^ ")"
+    | EEQ(s)            -> "EEQ       (" ^ s ^ ")"
+    | GEQ(s)            -> "GEQ       (" ^ s ^ ")"
+    | GGREATER(s)       -> "GGREATER  (" ^ s ^ ")"
+    | GT(s)             -> "GT        (" ^ s ^ ")"
+    | LEQ(s)            -> "LEQ       (" ^ s ^ ")"
+    | LLESS(s)          -> "LLESS     (" ^ s ^ ")"
+    | LT(s)             -> "LT        (" ^ s ^ ")"
+    | MINUS(s)          -> "MINUS     (" ^ s ^ ")"
+    | NEQ(s)            -> "NEQ       (" ^ s ^ ")"
+    | PERCENT(s)        -> "PERCENT   (" ^ s ^ ")"
+    | PLUS(s)           -> "PLUS      (" ^ s ^ ")"
+    | SLASH(s)          -> "SLASH     (" ^ s ^ ")"
+    | STAR(s)           -> "STAR      (" ^ s ^ ")"
+    | TILDE(s)          -> "TILDE     (" ^ s ^ ")"
     
     | ID(s)             -> "ID(" ^ s ^ ")"
     | STR(s)            -> "STR(" ^ s ^ ")"
@@ -670,7 +671,7 @@ span        :   SPAN expr expr
                 LBRACE section RBRACE             { SSpan(p(),$2,$3,rev $5) }
 
 constants   :   constants ID EQUAL expr SEMI      { (p(),$2,$4)::$1 }
-            |   /**/                              { []          }
+            |   /**/                              { []              }
 
 decls       :   decls decl                        { $1 @ $2  }
             |   /**/                              { []       }
@@ -704,8 +705,8 @@ data        :   data  datum                           { $2 :: $1 }
 
 
 init        :   LBRACE   exprs RBRACE             { InitExprs($2) }
-            |   string                            { InitStr($1) }
-            |   string16                          { InitUStr($1) }
+            |   string                            { InitStr($1)   }
+            |   string16                          { InitUStr($1)  }
 
 size        :   LBRACKET expr  RBRACKET           { FixSize $2 }
             |   LBRACKET       RBRACKET           { DynSize    }
@@ -723,9 +724,9 @@ procedure   :   conv ID frmls body      { let (dec,stmt) = $4 in
 
 
 frmls       :   LPAREN  formals RPAREN            { rev $2 }
-            |   LPAREN          RPAREN            { [] }
+            |   LPAREN          RPAREN            { []     }
 actls       :   LPAREN  actuals RPAREN            { rev $2 }
-            |   LPAREN          RPAREN            { [] }
+            |   LPAREN          RPAREN            { []     }
 
 formals     :   formals COMMA formal              { $3 :: $1 }
             |   formal                            { [$1]     }
@@ -757,10 +758,10 @@ lvalue      :   ID                                { Var(p(),$1)             }
             |   ty LBRACKET expr         RBRACKET { Mem(p(),$1,$3,None)     }
 
 lvalues     :   lvalues COMMA lvalue              { $3 :: $1 }
-            |   lvalue                            { [$1] }
+            |   lvalue                            { [$1]     }
 
 
-ty          :   BITSn                             { BitsTy(p(),$1) }
+ty          :   BITSn                             { BitsTy(p(),$1)  }
             |   FLOATn                            { FloatTy(p(),$1) }
 
             /*
