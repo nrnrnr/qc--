@@ -13,7 +13,7 @@
 # paths
 # ------------------------------------------------------------------ 
 
-NAME =      mlburg
+NAME =      ocamlburg
 
 TOP    =    ..
 INTERP =    evaluating
@@ -37,24 +37,24 @@ PS   =          `echo *.nw       | sed 's/\.nw/.ps/g;'`
 RTCMO =         camlburg.cmo camlburg.cmi camlburg.mli 
 RTCMX =         camlburg.cmx camlburg.cmi camlburg.mli camlburg.o
 
-all:V:          mlburg      runtime     man
-all.opt:V:      mlburg.opt  runtime.opt man 
+all:V:          ocamlburg      runtime     man
+all.opt:V:      ocamlburg.opt  runtime.opt man 
 
 update:V:       $RTCMO all 
                 cp $RTCMO       $LIBDIR
-                cp mlburg       $BINDIR
-                cp mlburg.1     $MANDIR/man1
+                cp ocamlburg       $BINDIR
+                cp ocamlburg.1     $MANDIR/man1
                 
 update.opt:QV:  $RTCMX all.opt 
                 cp $RTCMX       $LIBDIR
-                cp mlburg.opt   $BINDIR
-                cp mlburg.1     $MANDIR/man1
+                cp ocamlburg.opt   $BINDIR
+                cp ocamlburg.1     $MANDIR/man1
     
 dvi:V:          $DVI
 html:V:         $HTML
 ps:V:           $PS
 
-man:V:          mlburg.1 
+man:V:          ocamlburg.1 
 
 test:VQ:        sample.cmo iburg.cmo
 
@@ -74,7 +74,7 @@ clean:V:
                 rm -f *.pod
                 
 clobber:V:      clean
-                rm -f mlburg mlburg.opt mlburg.1
+                rm -f ocamlburg ocamlburg.opt ocamlburg.1
                 rm -f nofake*
                 rm -f pp.*
                 rm -f srcmap.*
@@ -82,9 +82,9 @@ clobber:V:      clean
                 rm -f *.tar*
 #
 
-install:V:      mlburg.opt mlburg.1
-                install -s mlburg.opt $prefix/bin/mlburg
-                install    mlburg.1   $prefix/man/man1                
+install:V:      ocamlburg.opt ocamlburg.1
+                install -s ocamlburg.opt $prefix/bin/ocamlburg
+                install    ocamlburg.1   $prefix/man/man1                
 
 # ------------------------------------------------------------------ 
 # rules and tools for OCaml
@@ -133,10 +133,10 @@ CMX =           `echo $ML       | sed 's/\.ml/.cmx/g'`
 # building binaries
 # ------------------------------------------------------------------ 
 
-mlburg:         $LIBDIR/cllib.cma  $CMO 
+ocamlburg:      $LIBDIR/cllib.cma  $CMO 
                 $OCAMLC $OCAMLC_FLAGS -o $target $prereq
                 
-mlburg.opt:     $LIBDIR/cllib.cmxa $CMX
+ocamlburg.opt:  $LIBDIR/cllib.cmxa $CMX
                 $OCAMLO $OCAMLO_FLAGS -o $target $prereq
 
 # ------------------------------------------------------------------ 
@@ -160,7 +160,7 @@ parse.ml        \
 parse.output:   parse.mly
                 $OCAMLYACC -v parse.mly
 
-mlburg.pod:     main.nw
+ocamlburg.pod:  main.nw
                 $NOTANGLE -R$target $prereq > $target
 
 # ------------------------------------------------------------------ 
@@ -173,11 +173,11 @@ sample.mlb:     sample.nw
 sampleclient.ml: sample.nw
                 $NOTANGLE -L"$LINE" -R$target $prereq > $target
 
-sample.ml:      sample.mlb mlburg runtime
-                ./mlburg sample.mlb > $target
+sample.ml:      sample.mlb ocamlburg runtime
+                ./ocamlburg sample.mlb > $target
 
-iburg.ml:       iburg.mlb mlburg runtime
-                ./mlburg iburg.mlb > $target
+iburg.ml:       iburg.mlb ocamlburg runtime
+                ./ocamlburg iburg.mlb > $target
 
 # ------------------------------------------------------------------ 
 # export distribution to outside world
@@ -205,7 +205,7 @@ nofake-man.html:    nofake
 
 EXPORT =        README DEPEND Makefile                      \
                 iburg.mlb                                   \
-                mlburg.1 mlburg-man.html                    \
+                ocamlburg.1 ocamlburg-man.html              \
                 nofake nofake.1 nofake-man.html nofake.html \
                 burg.nw burg.html                           \
                 camlburg.nw camlburg.html                   \
@@ -220,7 +220,7 @@ EXPORT =        README DEPEND Makefile                      \
                 spec.nw spec.html                           \
                 srcmap.nw srcmap.html                       \
 
-tidy:V:         $HTML nofake-man.html mlburg-man.html
+tidy:V:         $HTML nofake-man.html ocamlburg-man.html
                 tidy -f /dev/null -im $prereq || exit 0
 
 FILE =          "ocamlburg-1.0"

@@ -19,8 +19,8 @@ NOFAKE =	perl -- nofake
 # high level targets
 # ------------------------------------------------------------------ 
 
-all:		mlburg	    runtime	examples
-all.opt:	mlburg.opt  runtime.opt examples.opt
+all:		ocamlburg      runtime	   examples
+all.opt:	ocamlburg.opt  runtime.opt examples.opt
 
 # ------------------------------------------------------------------ 
 # rules
@@ -100,10 +100,10 @@ CMX =		$(addsuffix .cmx,$(basename $(ML)))
 # binaries
 # ------------------------------------------------------------------ 
 
-mlburg:		$(CMO)
+ocamlburg:	$(CMO)
 		$(OCAMLC) $(OCAMLC_FALGS) -o $@ $(CMO)
 
-mlburg.opt:	$(CMX)
+ocamlburg.opt:	$(CMX)
 		$(OCAMLO) $(OCAMLO_FLAGS) -o $@ $(CMX)
 
 # ------------------------------------------------------------------ 
@@ -116,11 +116,11 @@ sample.mlb:	sample.nw
 sampleclient.ml:    sample.nw
 		$(NOFAKE) -L'# %L "%F"%N' -R$@ $< > $@
 		
-iburg.ml:	iburg.mlb mlburg runtime
-		./mlburg iburg.mlb > $@
+iburg.ml:	iburg.mlb ocamlburg runtime
+		./ocamlburg iburg.mlb > $@
 
-sample.ml:	sample.mlb mlburg runtime
-		./mlburg sample.mlb > $@
+sample.ml:	sample.mlb ocamlburg runtime
+		./ocamlburg sample.mlb > $@
 
 runtime:	camlburg.ml camlburg.cmo camlburg.cmi camlburg.mli
 runtime.opt:	camlburg.ml camlburg.cmx camlburg.cmi camlburg.mli camlburg.o
