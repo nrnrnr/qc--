@@ -34,9 +34,9 @@ main:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	nop
+	leal 4(%esp), %ecx
 	leal 4(%esp), %eax
-	movl (%eax),%ecx
-	leal 4(%esp), %eax
+	movl (%ecx),%ecx
 	movl %ecx,(%eax)
 initialize_continuations_l3:
 	nop
@@ -54,10 +54,10 @@ join_l7:
 	nop
 	nop
 	leal 4(%esp), %eax
-	movl (%eax),%eax
 	movl $0,%ecx
 	leal 4(%esp), %edx
 	addl %ecx,%edx
+	movl (%eax),%eax
 	movl %eax,(%edx)
 	leal 4(%esp), %esp
 	ret
