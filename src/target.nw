@@ -293,15 +293,19 @@ It can be used for several purposes:
 \item
  Emit code for helping to test implementations of operators.
 \end{itemize}
-The capability record says what operators can be used and what widths
-of literals and memory references are supported.
+The capability record says what source code a back end promises to handle.
 <<components of [[t]]>>=
 capabilities: capabilities;
 <<auxiliary types used to define type [[t]]>>=
 type capabilities = {
-    ops      : Rtl.opr   list;
-    literals : Rtl.width list;
-    memory   : Rtl.width list;
+    ops         : Rtl.opr   list;  (* operators that can be used *)
+    literals    : Rtl.width list;  (* literals that can be used *)
+    memory      : Rtl.width list;  (* memory refs that can be used *)
+    block_copy  : bool;            (* OK to copy large variables, large refs? *)
+    itemps      : Rtl.width list;  (* what integer temporaries can be computed with *)
+    ftemps      : Rtl.width list;  (* what floating temporaries can be computed with *)
+    iwiden      : bool;            (* use int ops and literals at narrow widths? *)
+    fwiden      : bool;            (* use float ops literals at narrow widths? *)
   }
 @ 
 An incapable back end has no capabilities whatever.
@@ -329,7 +333,8 @@ module RU = Rtlutil
 <<auxiliary types used to define type [[t]]>>
 <<type t>>
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
-let incapable = { ops = []; literals = []; memory = []; }
+let incapable = { ops = []; literals = []; memory = []; itemps = []; ftemps = [];
+                  block_copy = false; iwiden = false; fwiden = false; }
 @
 <<target.ml>>=
 let space t s = 
