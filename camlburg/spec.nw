@@ -159,6 +159,10 @@ module StringSet = Set.Make(struct type t = string let compare = compare end)
 module StringMap = Map.Make(struct type t = string let compare = compare end)
 <<exported type definitions>>
 
+module PrettyPrint = struct
+    <<PrettyPrint>>
+end
+
 (* helper functions *)
 let error msg = raise (Error msg)
 
@@ -167,9 +171,6 @@ let error msg = raise (Error msg)
 <<free variables>>
 <<type check>>
 
-module PrettyPrint = struct
-    <<PrettyPrint>>
-end
 @
 
 
@@ -244,6 +245,13 @@ let argty = function
     | Var(_, Term x)    -> Mono x
     | Var(_, NonTerm _) -> Poly
     | Con _             -> Poly
+
+let type2str args =
+    let ty2str = function
+        | Mono x -> x
+        | Poly   -> "_" 
+    in
+        Printf.sprintf "(%s)" (String.concat "," (List.map ty2str args))
 @
 
 [[Add]] computes the type of a constructor based on its arguments and
@@ -255,11 +263,15 @@ an inconsistency.
 let add types con args =
     let contype = List.map argty args in
     try
-        if contype = StringMap.find con types then
+        let contype' = StringMap.find con types in
+        if contype = contype' then
             types
         else
-            error (Printf.sprintf "constructor `%s' is used inconsistently" 
-                   con)
+            error (Printf.sprintf 
+                "constructor `%s' found with arguments %s, but expected %s" 
+                   con
+                   (type2str contype)
+                   (type2str contype'))
     with Not_found -> (* first time we see con *)
         StringMap.add con contype types
             
