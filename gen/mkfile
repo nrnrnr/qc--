@@ -1,0 +1,178 @@
+# ------------------------------------------------------------------ 
+# $Id$
+# ------------------------------------------------------------------ 
+
+# ------------------------------------------------------------------ 
+# paths
+# ------------------------------------------------------------------ 
+
+TOP    =    ..
+INTERP =    evaluating
+DEPEND =    DEPEND
+
+LIBDIR =    ../lib
+BINDIR =    ../bin
+MANDIR =    ../man
+
+prefix =    /usr/local
+
+TKDIR = /home/lair/nr/zephyr/cvs/toolkit
+TKRTL = $TKDIR/rtl
+SLEDLIBDIR = $TKDIR
+RTLSPECDIR = $TKRTL
+SLEDSPECDIR = /home/lair/nr/toolkit/www/specs
+
+
+# ------------------------------------------------------------------ 
+# (high level) virtual targets
+# ------------------------------------------------------------------ 
+
+HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
+INC  =          `echo *.nw       | sed 's/\.nw/.inc/g;'`
+
+all:V:          src cmo
+all.opt:V:      
+update:V:       
+update.opt:V:   
+
+dvi:V:          $INC
+html:V:         $HTML
+
+test:VQ:
+                echo "nothing to be done"
+
+depend:V:       $DEPEND
+
+clean:V:    
+                rm -f *.cmo *.cmi *.cmx *.o
+                rm -f *.output
+                
+clobber:V:      clean
+                rm -rf *.ml *.mll *.mli DEPEND 
+                rm -rf ocamlerror ocamlerror.opt
+                rm -rf ocamlerror.pod ocamlerror.1
+                rm -rf *.aux *.log *.dvi *.tex *.inc *.toc
+
+install:V:      all.opt
+                install -s ocamlerror.opt $prefix/bin/ocamlerror
+                install    ocamlerror.1   $prefix/man/man1  
+
+
+# ------------------------------------------------------------------ 
+# rules and tools for OCaml
+# ------------------------------------------------------------------ 
+
+<../config/ocaml.mk
+<../config/noweb.mk
+<../config/lrtl.mk
+
+# compiler flags used by the rules just included
+
+OCAMLC_FLAGS =  -g -I $LIBDIR
+OCAMLO_FLAGS =     -I $LIBDIR
+
+# ------------------------------------------------------------------ 
+# gather ye specifications where ye may
+# ------------------------------------------------------------------ 
+
+$SLEDSPECDIR/%.spec: $SLEDSPECDIR/%.nw
+	(cd `dirname $target`; mk `basename $target`)
+
+$SLEDSPECDIR/%-names.spec: $SLEDSPECDIR/%.nw
+	(cd `dirname $target`; mk `basename $target`)
+
+$TKRTL/%.rtl: $TKRTL/%.nw
+	(cd `dirname $target`; mk `basename $target`)
+
+%.sled: $SLEDSPECDIR/%.spec $SLEDSPECDIR/%-names.spec
+	cat $prereq > $target
+
+%.rtl: $TKRTL/%.rtl
+	cat $prereq > $target
+
+
+# ------------------------------------------------------------------ 
+# important file sets
+# ------------------------------------------------------------------ 
+
+sledlib.mli: $TKDIR/caml-lib.nw
+	notangle -L"$LINE" -R$target $prereq > $target
+
+sledlib.ml: $TKDIR/caml-lib.nw
+	notangle -L"$LINE" -R$target $prereq > $target
+
+LOCAL =         sledlib.ml	\
+		sparc.ml	\
+                sparcmkasm.ml   \
+
+LOCALI =        sledlib.mli	\
+		sparc.mli	\
+                sparcmkasm.mli   \
+
+QCMM  =		sparcrec.ml	\
+
+CMO =           `echo $LOCAL       | sed 's/\.ml/.cmo/g'`
+cmo:V: $CMO
+CMX =           `echo $LOCAL       | sed 's/\.ml/.cmx/g'`
+OBJ =           `echo $LOCAL       | sed 's/\.ml/.o/g'`
+
+SCAN =          $LOCAL $LOCALI
+
+src:V: $SCAN
+
+# ------------------------------------------------------------------ 
+# building binaries
+# ------------------------------------------------------------------ 
+
+CMOLIBS =       str.cma  cllib.cma
+CMXLIBS =       str.cmxa cllib.cmxa
+
+ocamlerror:     ocamlscan.cmo ocamlerror.cmo 
+		$OCAMLC $OCAMLC_FLAGS -custom -o $target $CMOLIBS $prereq
+                
+
+ocamlerror.opt: ocamlscan.cmx ocamlerror.cmx 
+		$OCAMLO $OCAMLO_FLAGS         -o $target $CMXLIBS $prereq
+
+# ------------------------------------------------------------------ 
+# extra rules for cases not covered by noweb.mk
+# ------------------------------------------------------------------ 
+
+ocamlscan.mll:  ocamlerror.nw
+                $NOTANGLE -R$target $prereq > $target
+
+ocamlerror.pod: ocamlerror.nw
+                $NOTANGLE -R$target $prereq > $target
+
+# ------------------------------------------------------------------ 
+# rules to export source code into a world without noweb
+# ------------------------------------------------------------------ 
+
+untangle:V:     ocamlerror.pod ocamlerror.1
+                nountangle -ml -Rocamlerror.ml ocamlerror.nw > ocamlerror.ml
+                nountangle -ml -Rocamlscan.mll ocamlerror.nw > ocamlscan.mll
+                nountangle -ml -Rsrcmap.ml  ../cllib/srcmap.nw > srcmap.ml
+                nountangle -ml -Rsrcmap.mli ../cllib/srcmap.nw > srcmap.mli
+
+EXPORT =        build.sh srcmap.mli srcmap.ml ocamlscan.mll ocamlerror.ml\
+                ocamlerror.pod ocamlerror.1
+
+tar:V:          untangle
+                tar zcvf ocamlerror.tar.gz $EXPORT
+                                
+
+# ------------------------------------------------------------------ 
+# recalculate dependencies
+# make sure that generators are run first
+# ------------------------------------------------------------------ 
+
+depend:V: $DEPEND
+$DEPEND:	$SCAN
+		$OCAMLDEP $SCAN > $DEPEND
+
+# ------------------------------------------------------------------ 
+# include dependencies
+# ------------------------------------------------------------------ 
+
+<$DEPEND
+
