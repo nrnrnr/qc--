@@ -131,6 +131,17 @@ are removed at the end of the script.
 
 \texttt{Install an interrupt handler that also removes temporary files.}
 
+<<testqc>>=
+
+sub mysys {
+    my $rc;
+    my $signo;
+    
+    $rc    = system(@_);
+    $signo = $rc & 127; 
+    $signo && die "killed by signal $signo\n";
+    return ($rc >> 8);  
+}
 
 <<testqc>>=
 sub syntax {
@@ -139,9 +150,9 @@ sub syntax {
     my $t2   = "$tmp.2";
     my $t3   = "$tmp.3";
     
-    system("$qc -pp $file -o $t1 2> /dev/null > /dev/null"); 
-    system("$qc -pp $t1   -o $t2 2> /dev/null > /dev/null");
-    system("$qc -pp $t2   -o $t3 2> /dev/null > /dev/null");
+    mysys("$qc -pp $file -o $t1 2> /dev/null > /dev/null"); 
+    mysys("$qc -pp $t1   -o $t2 2> /dev/null > /dev/null"); 
+    mysys("$qc -pp $t2   -o $t3 2> /dev/null > /dev/null");
     return (same ($t2,$t3));
 }
 @
@@ -157,9 +168,9 @@ sub same {
     if (!-f $old || !-f $new) { return 1;} # not equal 
 
     if ($verbose) {
-        $rc = system ("diff -c $old $new");
+        $rc = mysys ("diff -c $old $new");
     } else {
-        $rc = system ("cmp -s $old $new");
+        $rc = mysys ("cmp -s $old $new");
     }    
     my $equal = ($rc eq 0 ? 1 : 0);
     $reason = $equal ? $reason : "$old and $new different";
@@ -187,7 +198,7 @@ sub expect {
         $reason = "file $stdin or $stdout missing\n";
         return 0;   # failed
     }
-    $rc = system ("$cmd < $stdin 2> $t2 > $t1");
+    $rc = mysys ("$cmd < $stdin 2> $t2 > $t1");
     $rc >>= 8;
     
     # if something goes wrong, we expect the outputs not to match, so we
@@ -277,8 +288,10 @@ sub success {
     cleantmp();
 }
 
+$SIG{__DIE__} = sub { cleantmp() };
+
 sub cleantmp {
-    system ("rm -f $tmp*") && die "$!";
+    mysys ("rm -f $tmp*") && die "$!";
 }
 @
 
