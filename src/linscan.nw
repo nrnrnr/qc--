@@ -226,9 +226,9 @@ module Make (A : Args) : S = struct
     module A = A open A (* never do that *)
     let lookup table x = RM.find x table       (* lookup lifetime *)
 
-    <<find_tmp>>
-    <<find_reg>>
-    <<find_spillee>>
+    <<find tmp>>
+    <<find reg>>
+    <<find spillee>>
     
     <<replace>> 
     <<alloc>> 
@@ -316,7 +316,7 @@ finds. The [[read_write_lists]] functions returns all registers read
 or written by an {\rtl} and thus we have to look for temporaries
 explicitly.
 
-<<find_tmp>>=
+<<find tmp>>=
 let find_tmp node = 
     let uses space index width = function
         | None when is_tmp space -> Some (space, index, width)
@@ -351,7 +351,7 @@ register [[r]], that respects all of the following conditions, or
       lifetimes of [[r]].      
 \end{enumerate}
 
-<<find_reg>>=
+<<find reg>>=
 let first_fit lifetimes t =
     let fits' (sp,_,_ as t) r = 
         fits sp r &&
@@ -393,7 +393,7 @@ superset of all nodes used by the current node.  The function
 longest in the program.  This is our spill candidate and we want to
 spill it from the current node up to the end of the procedure.
 
-<<find_spillee>>=
+<<find spillee>>=
 let active point lifetimes =
     let here = I.mk point (point+1) in
     let find = fun loc lt active ->  
@@ -401,10 +401,10 @@ let active point lifetimes =
     in
         RM.fold find lifetimes []
 
-<<longest_active type>>=
+<<longest active type>>=
 Cfg3.node -> loc -> lifetimes -> loc * L.t
-<<find_spillee>>=
-let longest_active: <<longest_active type>> = fun node tmp lifetimes ->
+<<find spillee>>=
+let longest_active: <<longest active type>> = fun node tmp lifetimes ->
     let here   = Cfg3.number node        in
     let active = active here lifetimes  in
     let max (loc1,lt1 as x) (loc2,lt2 as y) = 
@@ -412,10 +412,10 @@ let longest_active: <<longest_active type>> = fun node tmp lifetimes ->
     in
         List.fold_left max (tmp,lookup lifetimes tmp) active
 
-<<find_spillee type>>= 
+<<find spillee type>>= 
 lifetimes -> loc -> Cfg3.node -> loc * I.t 
-<<find_spillee>>=
-let find_spillee: <<find_spillee type>> = fun lifetimes tmp node ->
+<<find spillee>>=
+let find_spillee: <<find spillee type>> = fun lifetimes tmp node ->
     let cfg      = Cfg3.cfg node                     in
     let last     = Cfg3.number (Cfg3.last cfg)       in
     let loc,_    = longest_active node tmp lifetimes in
