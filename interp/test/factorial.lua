@@ -1,53 +1,56 @@
-CMM_exports({ "main" })
+print("[factorial.lua] Procedure [main] should print out 7 and then 7! = 5040")
+print("Tests: recursive procedure calls & default returns, some operators") 
 
-CMM_procedure("main", 0, 0)
+CMM.exports({ "main" })
 
-   CMM_push_literal("7")
-   CMM_push_arg()
+CMM.procedure("main", 0, 0)
 
-   CMM_c_call("cmmprint")
+   CMM.push_literal("7")
+   CMM.push_arg()
 
-   CMM_push_symbol("factorial")
-   CMM_cmm_call({}, {}, {}, 0)
+   CMM.c_call("cmmprint")
 
-   CMM_c_call("cmmprint")
+   CMM.push_symbol("factorial")
+   CMM.cmm_call({}, {}, {}, 0)
 
-   CMM_return(1, 1)
+   CMM.c_call("cmmprint")
 
-CMM_procedure("factorial", 0, 0)
+   CMM.cmm_return(0, 0)
 
-   CMM_pop_arg()
-   CMM_push_literal("1")
-   CMM_push_arg()
-   CMM_push_arg()
+CMM.procedure("factorial", 0, 0)
 
-   CMM_push_symbol("factorial-helper")
-   CMM_cmm_call({}, {}, {}, 0)
+   CMM.pop_arg()
+   CMM.push_literal("1")
+   CMM.push_arg()
+   CMM.push_arg()
 
-   CMM_return(1, 1)
+   CMM.push_symbol("factorial-helper")
+   CMM.cmm_call({}, {}, {}, 0)
+
+   CMM.cmm_return(0, 0)
 
 --running count, n
-CMM_procedure("factorial-helper", 1, 0)
+CMM.procedure("factorial-helper", 1, 0)
 
-   CMM_pop_arg()
-   CMM_store_local(0)
-   CMM_fetch_local(0)
-   CMM_push_literal("1")
-   CMM_apply_operator("leu", "bits16,bits16:bits1")
-   CMM_cbrancht("done")
+   CMM.pop_arg()
+   CMM.store_local(0)
+   CMM.fetch_local(0)
+   CMM.push_literal("1")
+   CMM.apply_operator("leu", "bits16,bits16:bits1")
+   CMM.cbrancht("done")
 
-   CMM_fetch_local(0)
-   CMM_pop_arg()
-   CMM_apply_operator("mulu", "bits16,bits16:bits16")
-   CMM_push_arg()
+   CMM.fetch_local(0)
+   CMM.pop_arg()
+   CMM.apply_operator("mulu", "bits16,bits16:bits16")
+   CMM.push_arg()
 
-   CMM_fetch_local(0)
-   CMM_push_literal("1")
-   CMM_apply_operator("sub", "bits16,bits16:bits16")
-   CMM_push_arg()
+   CMM.fetch_local(0)
+   CMM.push_literal("1")
+   CMM.apply_operator("sub", "bits16,bits16:bits16")
+   CMM.push_arg()
 
-   CMM_push_symbol("factorial-helper")
-   CMM_cmm_call({}, {}, {}, 0)
+   CMM.push_symbol("factorial-helper")
+   CMM.cmm_call({}, {}, {}, 0)
 
-   CMM_define_label("done")
-      CMM_return(1, 1)
+   CMM.define_label("done")
+      CMM.cmm_return(0, 0)

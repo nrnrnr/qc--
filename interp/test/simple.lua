@@ -1,34 +1,48 @@
 -- begin assembly code
 
-CMM_section("code")
-  CMM_procedure("main", 0, 0)
-    CMM_define_label("label2")
-      CMM_push_arg()
-      CMM_pop_arg()
-      CMM_push_literal("1201230123")
-      CMM_fetch_local(3)
-      CMM_store_local(5)
-      CMM_fetch_global(11)
-      CMM_store_global(12)
-      CMM_return(1, 2)
-      CMM_goto()
-      CMM_cbrancht("label2")
-      CMM_cbranchf("label3")
-      CMM_cut()
-    CMM_define_label("label3")
-      CMM_branchtf("label2", "label3");
-      CMM_cmm_tail_call()
-      CMM_c_call("printf", "char")
-      CMM_push_symbol("label2")
-      CMM_fetch(32, "LITTLE", 0)
-      CMM_store(32, "LITTLE", 0)
-      CMM_gstore(32, "LITTLE", 0)
-      CMM_gstore_local(5)
-      CMM_gstore_global(12)
-      CMM_cmm_call( {"label2"}, {}, {"label3"}, 1 )
-CMM_end_section()
+CMM.exports({ "main", "random", "third" })
 
-CMM_procedure("main2", 0, 0)
-  CMM_pop_arg()
+CMM.section("code")
+   CMM.procedure("main", 2, 0)
+      CMM.define_label("label1")
+        CMM.push_literal("5")
+        CMM.push_literal("3")
+        CMM.push_symbol("label1")
+
+        CMM.push_arg()
+        CMM.pop_arg()
+
+        CMM.store_local(0)
+        CMM.store_local(1)
+
+        CMM.fetch_local(0)
+        CMM.fetch_local(1)
+
+        CMM.push_literal("1")
+        CMM.cbrancht("otherlabel")
+
+     CMM.define_label("backhere")
+        CMM.push_literal("1")
+
+     CMM.branchtf("theend", "infloop")
+CMM.end_section()
+
+CMM.section("code2")
+   CMM.procedure("random", 0, 0)
+      CMM.define_label("otherlabel")
+        CMM.push_literal("63082")
+
+        CMM.push_literal("0")
+        CMM.cbranchf("backhere")
+        CMM.push_literal("666")
+
+      CMM.define_label("theend")
+
+CMM.end_section()
+
+CMM.procedure("third", 0, 0)
+  CMM.define_label("infloop")
+    CMM.push_symbol("infloop")
+    CMM.goto()
 
 -- end of code
