@@ -57,8 +57,9 @@ module Standard32 : sig
   val locations : c:t -> Rtl.loc locations
         (* apply to c space to get standard locations *)
   val indices : int locations (* standard indices in c space *)
+  val vfp : Rtl.exp  (* the virtual frame pointer, $V[0] *)
 end
-@
+@ 
 
 A [[Rtl.space]] denotes a memory space, the details of a particular
 space are covered by a space descriptor [[t]]:  
@@ -318,13 +319,10 @@ module Standard32 = struct
     { space = space; cellwidth = cw; aggregation = bo; indexwidth = iw } ->
     if space <> 'c' then
       Impossible.impossible ("Standard locations from space " ^ Char.escaped space);
-    let rindex n = Rtl.bits (Bits.U.of_int n iw) iw in
-    let cell n = Rtl.cell Rtl.none space bo cw (rindex n) in
-    { pc = cell 0; npc = cell 1; cc = cell 2 }
+    let reg n = Rtl.reg (space, n, cw) in
+    { pc = reg 0; npc = reg 1; cc = reg 2 }
   let indices = { pc = 0; npc = 1; cc = 2 }
+  let vfp = Rtl.fetch (Rtl.reg ('V', 0, 32)) 32
 end
-@ 
-<<space.ml>>=
-
 @
 

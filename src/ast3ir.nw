@@ -916,10 +916,8 @@ and returnStmt state (cconv, kont, args) =
 	result
 	
 @
-
 Each continuation receives its parameters in its own area.
 Only continuations that escape are given space on the stack.
-
 <<Make statements>>=
 and contStmt state (label,args)  = 
     let ptr     = state.target.Target.pointersize in
@@ -1106,12 +1104,8 @@ let proc env target optimizer (cconv,name,args,bdy) =
     let incoming = Block.overlap_list Block.Low  state.incoming in
     let outgoing = Block.overlap_list Block.High state.outgoing in
     
-    let conts    =
-        match Strutil.Map.fold (fun _ c rst -> c :: rst) state.conts [] with
-        | [] -> Block.mk (Rtl.late "bogus" pointer) 0 1 (*XXX*)
-        | conts ->
-            List.fold_left (fun b c -> Block.cathl c.Contn.block b) 
-                    (List.hd conts).Contn.block (List.tl conts) in 
+    let conts = Block.cathl_list pointer
+                (Strutil.Map.fold (fun _ c rst -> Contn.rep c :: rst) state.conts [])in
     (* order cfg *)
     let ()    = G.gm_enumerate cfg in
     let i =    

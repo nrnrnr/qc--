@@ -109,6 +109,10 @@ successors.
 A \emph{dataflow node} has a unique predecessor and successor, but it
 contains no RTL or label and it generates no code.
 It contains definitions, uses, and kills.
+POSSIBLE ALTERNATE DESIGN: DATAFLOW NODES ARE PERMANENTLY ATTACHED TO
+CALL, JUMP, OR RETURN NODES.  THEY APPEAR TO BE SEPARATE NODES FOR
+ANALYSIS PURPOSES, BUT OTHERWISE THEY ARE FIRMLY ATTACHED TO THEIR
+MASTER NODES.  THIS WAY NO CLIENT CAN CAUSE A PHONY INSERTION.
 \item
 The entry node has a successor but no predecessor
 \item
@@ -234,6 +238,7 @@ counter.
 \item
 A \emph{jump} node is a lot like a branch except its successor is the
 exit node, which is considered a join point \emph{ex officio}. 
+BUT WAIT! A JUMP NODE CAN ALSO HAVE A DATAFLOW NODE AS ITS SUCCESSOR?!
 \item
 A \emph{conditional branch} has two
 successors, which are labeled true and false.
@@ -326,6 +331,8 @@ module type S = sig
 
   type 'i cfg
   type 'i node
+  type regs = Register.Set.t (* sets of regs for dataflow nodes *)
+  type 'i contedge = { kills:regs; defs:regs; node:'i node }
   type kind = (* all the kinds of nodes *)
     | Join | Instruction | Branch | Cbranch | Mbranch
     | Jump | Call | Return | CutTo
@@ -528,21 +535,24 @@ Otherwise, it's up to the client to supply the instruction that does
 the transfer.
 <<graph and node constructors>>=
 val branch       : 'i cfg -> target:'i node -> 'i node
-val jump         : 'i cfg -> 'i -> targets:string list -> 'i node
+val jump         : 'i cfg -> 'i -> uses:regs -> targets:string list -> 'i node
 val cbranch      : 'i cfg -> Rtl.exp -> ifso:'i node -> ifnot:'i node -> 'i node
 val mbranch      : 'i cfg -> 'i -> targets:'i node list -> 'i node
-val call         : 'i cfg -> 'i -> altrets:'i node list -> ret:'i node ->
-                     unwinds_to:'i node list -> cuts_to:'i node list ->
-                     aborts:bool -> 'i node
-val cut_to       : 'i cfg -> 'i -> cuts_to:'i node list -> aborts:bool -> 'i node
-val return       : 'i cfg -> 'i -> cont:int -> alts:int -> 'i node
+val call         : 'i cfg -> 'i -> altrets:'i contedge list -> succ:'i node ->
+                     unwinds_to:'i contedge list -> cuts_to:'i contedge list ->
+                     aborts:bool -> uses:regs -> defs:regs -> kills:regs -> 'i node
+val cut_to       : 'i cfg -> 'i -> cuts_to:'i contedge list -> aborts:bool ->
+                     uses:regs -> 'i node
+val return       : 'i cfg -> 'i -> uses:regs -> 'i node
   (* NEEDS DOCO SAYING IT CAN FLOW THROUGH DATAFLOW TO THE EXIT NODE *)
+@ N.B. So that a [[call]] can be composed in sequence just like an
+[[instruction]], the ordinary return from a call is called [[succ]].
 @
 The wierd nodes.
 <<graph and node constructors>>=
 val impossible   : 'i cfg -> succ:'i node -> 'i node
-type regs        = Register.Set.t
 val dataflow     : defs:regs -> uses:regs -> kills:regs -> succ:'i node -> 'i node
+val illegal      : 'i cfg -> 'i node  (* a node that must never be reached *)
 @
 \section{Implementation}
 <<cfg.ml>>=

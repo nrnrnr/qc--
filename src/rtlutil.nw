@@ -163,6 +163,7 @@ end
 module ToReadableString: sig
     val rtl: Rtl.rtl -> string
     val exp: Rtl.exp -> string
+    val loc: Rtl.loc -> string
 end
 @
 
@@ -470,9 +471,9 @@ and location' = function
     | R.Slice (w,i,loc)          -> location' loc (*XXX*)
     
 
-let (@<<) f g  = fun x -> f (g x)
-let expr       = expr'     @<< Rtl.Convert.exp
-let location   = location' @<< Rtl.Convert.loc
+let (<<) f g  = fun x -> f (g x)
+let expr       = expr'     << Rtl.Convert.exp
+let location   = location' << Rtl.Convert.loc
 
 @
 
@@ -500,7 +501,7 @@ let rtl' (R.Rtl gg) =
     let pairs    = List.map (guarded ) gg in
     let lhs, rhs = List.split pairs             in
         A.AssignStmt(lhs,rhs)
-let rtl = rtl' @<< Rtl.Convert.rtl
+let rtl = rtl' << Rtl.Convert.rtl
 @
 % ------------------------------------------------------------------ 
 \subsection{Conversion to Readable String}
@@ -551,9 +552,9 @@ and location' = function
     | R.Slice (w,i,loc)          ->
         location' loc ^ "@[" ^ string_of_int i ^ ".." ^ string_of_int (i+w-1) ^ "]"
     
-let (@<<) f g  = fun x -> f (g x)
-let expr       = expr'     @<< Rtl.Convert.exp
-let location   = location' @<< Rtl.Convert.loc
+let (<<) f g  = fun x -> f (g x)
+let expr       = expr'     << Rtl.Convert.exp
+let loc = location' << Rtl.Convert.loc
 @
 
 A [[kill]] is translated into an assignment of [[%undef()]].
@@ -572,7 +573,7 @@ let rtl' (R.Rtl gg) =
   match gg with
   | [] -> "skip"
   | _ :: _ -> join " | " (List.map guarded gg)
-let rtl = rtl' @<< Rtl.Convert.rtl
+let rtl = rtl' << Rtl.Convert.rtl
 let exp = expr
 @
 

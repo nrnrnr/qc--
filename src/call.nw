@@ -140,7 +140,7 @@ module type S = sig
     { locs     : Automaton2.loc list  (* where passed values reside *)
     ; overflow : Block.t              (* includes all locs for values passed in mem *)
     ; sploc    : Rtl.exp              (* where sp is required when values are passed *)
-    ; defs_or_uses : Register.Set.t   (* set of locations defined (used) by partner *)
+    ; regs     : Register.Set.t       (* set of locations defined (used) by partner *)
     ; pre_sp   : Rtl.rtl              (* conditional SP adjustment pre-shuffle *)
     ; shuffle  : 'a list -> Rtl.rtl   (* support for creating shuffle *)
     ; post_sp  : Rtl.rtl              (* unconditional SP adjustment post-shuffle *)
@@ -156,9 +156,13 @@ module type S = sig
     ; call_results    : incoming   (* normal return cont *)
     ; cut_to_actuals  : outgoing
     ; also_cuts_to    : incoming
+    ; return_actuals  : outgoing
     ; also_returns_to : incoming
 
     ; sp : Rtl.loc                      (* stack pointer *)
+    ; nvregs : Register.Set.t           (* registers preserved across calls *)
+    ; volregs: Register.Set.t           (* registers not preserved across calls *)
+    ; saved_nvr : Talloc.Multiple.t -> Register.t -> Rtl.loc (* where to save a NVR *)
     ; return : int -> int -> Rtl.rtl    (* alternate return *)
     ; alt_return_table : node list -> node
     ; stack_layout : unit

@@ -677,3 +677,111 @@ let cfg _ proc =
   List.iter exp nodes;
   !modified
 @
+
+\subsection{Compilation of Boolean expressions into control flow.}
+
+THIS CODE SHOULD BE MOVED TO THE GENERIC CODE EXPANDER.
+
+An if-statement is governed by a boolean expression that has no side
+effects. A simple translation is to use this expression as a guard for a
+conditional branch to implement the if-statement. The guard finally
+becomes a guard in the {\rtl} that implements the conditional branch.
+The problem is, that the guarding expression can be quite complex and
+must be simplified before a machine instruction can be found that
+implements it. We translate a boolean expression $e$ into a sequence of
+nodes. If $e$ evaluates to true, the control flow reaches the end of the
+sequence, otherwise it branches to a provided label. 
+
+
+\begingroup % keeps definitions local
+\def\C#1{{\cal C}[\![#1]\!]}
+\let\i\textit
+
+The translation is summarized by the following function $\C{\cdot}~f$
+that takes a boolean expression $e$ and a continuation $f$ to branch if
+the expression evaluates to false. The result is a sequence of nodes,
+that branches to $f$ if $e$ is false, and falls through otherwise.
+
+\begin{center}
+\begin{eqnarray*}
+    \C{\i{true}}~f              & \to & \i{nop}\\
+    \C{\i{false}}~f             & \to & \i{goto}~f\\
+    \C{x \vee y}~f              & \to & \C x~l; l: \C y~f\\
+    \C{x \wedge y}~f            & \to & \C x~f; \C y~f\\
+    \C{\lnot x}~f               & \to & \C x~l; \i{goto}~f; l:\\
+    \C{\oplus(e_1, \dots, e_n)} & \to & 
+        \i{if}(\lnot \oplus(e_1, \dots, e_n)\{\i{goto}~f\}
+\end{eqnarray*}
+\end{center}
+
+The last line covers the case of an application with a boolean result
+but non-boolean arguments. Currently only the logical operators $\lnot$,
+$\vee$, and $\wedge$ \emph{take} boolean arguments.
+
+The implementation first translates the governing expression into an
+{\rtl} and then tranlate it into the sequence of nodes.
+
+\begin{quote}\it
+    I think the code below shows a design weakness: we have decided to
+    have explicit label nodes in the {\cfg}. In order to jump or branch
+    to a node one needs the symbol associated with the label. This,
+    however, cannot be observed. This means, labels can only be used
+    where they are constructed. In the implementation of the {\cfg}
+    labels could be made a sub-class of nodes. However, since we shield
+    the object-oriented nature of nodes behind standard types, this is
+    not easily possible. Nodes must be more abstract or labels must
+    become special.  --CL
+\end{quote}
+
+\endgroup
+
+<<old Make statements>>=
+and guard state succ fail e = 
+    let rec guard' succ fail = function
+
+    | RP.Const(RP.Bool(true))         -> succ
+    | RP.Const(RP.Bool(false))        -> fail
+    | RP.Const(_)                     -> assert false
+    | RP.Fetch(_)                     -> assert false
+    <<special cases that match floating-point comparisons>>
+    | RP.App(("conjoin",_), [x;y])    -> 
+        let ll    = Idgen.label state.proc    in
+        let ls    = F.symbol env ll     in
+        let fail  = G.gm_label state.cfg ll ls fail in
+            let tail = guard' succ fail y in
+            let head = guard' tail fail x in
+                head
+    | RP.App(("not",_), [x])          -> guard' fail succ x
+    | RP.App(("disjoin",_), [x;y])    ->
+        let ll    = Idgen.label state.proc    in
+        let ls    = F.symbol env ll     in
+        let succ  = G.gm_label state.cfg ll ls succ in
+        let y     = guard' succ fail y    in
+        let lexp  = Rtl.link ls state.target.T.pointersize in
+        let lrtl  = state.target.T.goto.T.embed lexp in
+        let succ  = G.gm_goto state.cfg lrtl [G.lookup state.cfg ll] in
+                guard' succ y x              
+    | RP.App(opr, args) as e -> 
+        let sl    = Idgen.label state.proc    in
+        let ss    = F.symbol env sl     in
+        let succ  = G.gm_label state.cfg sl ss succ in
+        
+        let fl    = Idgen.label state.proc    in
+        let fs    = F.symbol env fl     in
+        let fail  = G.gm_label state.cfg fl fs fail in
+        
+        let oexp  = Rtl.link fs state.target.T.pointersize in
+        let ortl  = state.target.T.goto.T.embed oexp in
+        let fail  = G.gm_goto state.cfg ortl [G.lookup state.cfg fl] in
+        
+        let e     = R.Revert.exp e in
+        let link  = Rtl.link ss state.target.T.pointersize in
+        let rtl   = state.target.T.branch.T.embed (e,link)  in
+            G.gm_branch state.cfg rtl succ fail 
+    in
+        { state with node = guard' succ fail e }
+        
+@
+<<special cases that match floating-point comparisons>>=
+(* the evil empire *)
+@

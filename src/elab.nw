@@ -1605,7 +1605,6 @@ let checkGotoTarget env x = E.seq' env (snd (F.findv x env))
 
 A call-target must be either a procedure, or an imported symbol with
 the native code pointer type.
-    
 <<check>>=
 let checkCallTarget env x = 
     E.seq' env (E.Raise.pair (pointerTy env,E.Raise.right (F.findv x env)))
@@ -1872,9 +1871,9 @@ and returnStmt env (cc,alt,args) =
 
 A [[jump]] has to lists it targets except when the jump target is
 statically known. The jump expression must be a (code) pointer.
-
 <<check>>=
 and jumpStmt env (cc,e,args,ts) =
+    (*MUST CHECK THAT CALLING CONVENTION IS THE SAME AS CONTAINING PROCEDURE*)
     let args = List.map (tyExpr env) (List.map snd args) in
     let env  = foldl checkCallTarget env ts              in
     let env  = E.seq' env (E.Raise.pair (tyExpr env e,pointerTy env)) 

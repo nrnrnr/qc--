@@ -289,32 +289,6 @@ fi
 
 rc=0
 
-if ! [ "$returnc" = "$exitc" ]; then
-    echov "failed: '$cmd' exit code $returnc does not match $exitc"
-    failmsg="unexpected return code"
-    rc=1
-fi
-
-if [ ! -r "$stderr" ]; then
-    echo "Error in test suite: cannot compare '$stderr' with stderr" 1>&2
-    exit 1
-elif ! cmp "$stderr" "$tmp.stderr" > /dev/null ; then
-    echov "failed: '$cmd' stderr does not match expectation"
-    failmsg="stderr does not match"
-    if [ "$verbosity" = on ]; then diff "$stderr" "$tmp.stderr"; fi
-    rc=1
-fi
-
-if [ ! -r "$stdout" ]; then
-    echo "Error in test suite: cannot compare '$stdout' with stdout" 1>&2
-    exit 1
-elif ! cmp "$stdout" "$tmp.stdout" > /dev/null ; then
-    echov "failed: '$cmd' stdout does not match expectation"
-    failmsg="stdout does not match"
-    if [ "$verbosity" = on ]; then diff "$stdout" "$tmp.stdout"; fi
-    rc=1
-fi
-
 for f in $files; do
     expect=`basename $f`
     if [ ! -r "$expect" -o ! -r "$f" ]; then
@@ -331,6 +305,32 @@ for f in $files; do
         rm -f $f
     fi
 done
+
+if [ ! -r "$stdout" ]; then
+    echo "Error in test suite: cannot compare '$stdout' with stdout" 1>&2
+    exit 1
+elif ! cmp "$stdout" "$tmp.stdout" > /dev/null ; then
+    echov "failed: '$cmd' stdout does not match expectation"
+    failmsg="stdout does not match"
+    if [ "$verbosity" = on ]; then diff "$stdout" "$tmp.stdout"; fi
+    rc=1
+fi
+
+if [ ! -r "$stderr" ]; then
+    echo "Error in test suite: cannot compare '$stderr' with stderr" 1>&2
+    exit 1
+elif ! cmp "$stderr" "$tmp.stderr" > /dev/null ; then
+    echov "failed: '$cmd' stderr does not match expectation"
+    failmsg="stderr does not match"
+    if [ "$verbosity" = on ]; then diff "$stderr" "$tmp.stderr"; fi
+    rc=1
+fi
+
+if ! [ "$returnc" = "$exitc" ]; then
+    echov "failed: '$cmd' exit code $returnc does not match $exitc"
+    failmsg="unexpected return code"
+    rc=1
+fi
 
 #
 # clean up

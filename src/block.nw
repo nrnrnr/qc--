@@ -55,6 +55,7 @@ compile-time constants. A separate substitution step must replace the
 late compile-time constants in {\rtl} expressions that emerged from the
 block operations.
 
+THIS PARAGRAPH NEEDS FIXING!
 \emph{Attention:} the semantis of [[cat]] might counter your intuition.
 The result of [[cat x y]] is one block into which [[x]] and [[y]] are
 embedded side by side. Block [[y]] occupies a lower addresses, and [[x]]
@@ -89,7 +90,7 @@ this module in terms of the above primitives; it is a checked run-time
 error when the argument lists are empty.
 
 <<block.mli>>=
-val cathl_list:       t list -> t
+val cathl_list:     Rtl.width -> t list -> t
 val overlap_list:   placement -> t list -> t
 @
 
@@ -121,13 +122,12 @@ is a late compile-time constant. The last string argument is optional
 and is used to build a unique compile-time constant. The other two
 arguments are identical to that of the {\ocaml} function [[mk]] and
 provide size and alignment.
-
 <<block.mli>>=
 module Lua: sig
     val size:       t -> int
     val alignment:  t -> int
     val adjust:     t -> t
-    val cat:        (string -> t) -> t list -> t
+    val cat:        int -> t list -> t
     val overlap:    (string -> t) -> string -> t list -> t
     val mk:         t -> int (*size*) -> int -> string option -> t
 end
@@ -237,7 +237,9 @@ let overlap place x y =
 Not essential, but convenient functions.
 
 <<block.ml>>=
-let cathl_list     ts = List.fold_left cathl       (List.hd ts) (List.tl ts)
+let cathl_list w = function
+  | [] -> mk ~base:(Rtl.late (Idgen.offset "empty block") w) ~size:0 ~alignment:1
+  | b :: bs -> List.fold_left cathl b bs
 let overlap_list p ts = List.fold_left (overlap p) (List.hd ts) (List.tl ts)
 @
 
@@ -260,14 +262,11 @@ module Lua = struct
 end
 @
 
-Some primitives are not simply the {\oacml} functions but need
+Some primitives are not simply the {\ocaml} functions but need
 additionally check arguments to prevent the interpreter fail. For error
 reporting functions receive a function [[error]] that expects a string.
-
 <<Block primitives for Lua>>=
-let cat error = function
-    | [] -> error "Block.cat: empty argument list"
-    | bs -> cathl_list bs
+let cat = cathl_list
 
 let overlap error placement blocks = match (placement, blocks) with
     | _     , [] -> error "Block.overlap: empty block list"

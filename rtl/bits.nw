@@ -274,7 +274,6 @@ module I = Int64        (* signed   operations *)
 
 exception Overflow
 exception Syntax of string
-exception UnsupportedWidth
 
 let syntax msg  = raise (Syntax msg)
 let overflow () = raise Overflow
@@ -291,7 +290,8 @@ type bits       = int64 * width
 type t          = bits 
 
 let width (_,w) = w
-let check w     = if w <= 0 || w > 64 then raise UnsupportedWidth else ()  
+let check w =
+  if w <= 0 || w > 64 then Impossible.impossible ("Bits.bits width " ^ string_of_int w)
 let zero w      = check w; (I.zero, w)
 @
 

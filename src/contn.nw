@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 % ------------------------------------------------------------------ 
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
@@ -24,18 +25,30 @@ To deal with the different aspects of a continuation, this module
 provides an abstraction.
 
 <<contn.mli>>=
-type t =
+type t
+(****
+    (* WHY IS THIS REPRESENTATION EXPOSED? *)
     { block:      Block.t     (* memory block for pair *)
     ; sp:         Rtl.loc     (* location inside block for sp *)
     ; pc:         Rtl.loc     (* location in block for code ptr *)
     ; overflow:   Rtl.exp     (* base in block of overflow area *)
     }
+***)
 
 (* observers *)
 val value:   t -> Rtl.exp            (* the value (pointer to pair) *)
 val ov_base: t -> Rtl.exp
 val init_code:    t -> sp:Rtl.loc -> pc:Rtl.exp -> Rtl.rtl list    
 val with_overflow: Target2.t -> Rtl.exp -> Block.t -> t
+  (* EXPLANATION OF ARGUMENTS CONSIDERED HELPFUL *)
+  (* IN PARTICULAR, I'D LIKE TO SEE THE FOLLOWING:
+      type t (* no exposure *)
+      val with_overflow_at : Target2.t -> sp:Rtl.loc -> Block.t -> address:Rtl.exp -> t
+      val rep           : t -> Block.t  (* entire cont in memory *)
+      val init_code     : t -> Rtl.rtl
+      val cut_to_code   : t -> Rtl.rtl
+   *)
+val rep : t -> Block.t        
 @
 
 
@@ -62,6 +75,8 @@ type t =
     ; pc:         Rtl.loc     (* location in block for code ptr *)
     ; overflow:   Rtl.exp     (* base in block of overflow area *)
     }
+
+let rep t = t.block
 
 let value t = Block.base t.block        (* pointer to block *)
 
