@@ -98,18 +98,18 @@ let default_memory             = ('m' : Rtl.space)
 
 Top-level procedures go into text [[text]] assembler section.
 
-<<>>=
+<<auxiliaries>>=
 let toplevel_section           = "text"  
 @
 
-<<>>=
+<<auxiliaries>>=
 let dummy_expression    = Rtl.bits (Bits.zero 32) 32
 @
 
 [[bits]] extracts a [[width]] from a type, i.e.~the number of bits.
 This must be never applied to a [[bool]] value.
 
-<<>>=
+<<auxiliaries>>=
 let bits = function
     | T.Bits n -> n
     | _        -> assert false
@@ -118,21 +118,21 @@ let bits = function
 [[un_const]] should take a compile-time constant expression and
 produce a small itneger.  [[un_const]] is surely the wrong name.
 
-<<>>=
+<<auxiliaries>>=
 let un_const e = 333 (* bogus *)
-@ 
+@
 
 Function composition is not provided by the {\ocaml} standard library. 
-We provide it here:  [[f << g]] is a function that applies [[f]] to
+We provide it here:  [[f @<< g]] is a function that applies [[f]] to
 the result of [[g]].  Think of data flowing from right to left.
 
-<<>>=
-let (<<) f g   = fun x -> f (g x)
+<<auxiliaries>>=
+let (@<<) f g   = fun x -> f (g x)
 @
 
 Fold is an old friend of us. We like to abbreviate its name.
 
-<<>>=
+<<auxiliaries>>=
 let foldl = List.fold_left
 let foldr = List.fold_right
 @
@@ -142,7 +142,7 @@ structure. Currently the \module{elab} module dos not check that a
 given calling convention is known. Until this is fixed we will raise
 an exception.
 
-<<>>=
+<<auxiliaries>>=
 let find_cc cc target =
     try Target.StrMap.find cc target#cc
     with Not_found -> raise (E.ErrorExn ("unknown calling convention "^cc))
@@ -179,7 +179,7 @@ let rec ty env = function
 The [[idTy]] function returns the number of bits denoted by a name
 [[n]] which is looked up in the fat environment.
 
-<<>>=                           
+<<module Make>>=
 let idTy n env = match F.findv n env with attr, (denot,ty) -> bits ty
 @
                              
@@ -187,7 +187,7 @@ let idTy n env = match F.findv n env with attr, (denot,ty) -> bits ty
 [[formal]] builds the [[Agraph.formal]] record for a variable that is
 a formal parameter. 
 
-<<>>=
+<<module Make>>=
 let formal env n =
     ( match snd (F.findv n env) with 
     | (F.Register {F.index=i; F.rhint=h},ty) when F.is_localv n env  -> 
@@ -209,7 +209,7 @@ let formal env n =
 The following function translates an [[Ast.actual]] parameter into a
 [[Fgraph.actual]].
 
-<<>>=
+<<module Make>>=
 let rec actual env (target: Target.t) globals (hint, e) = 
     let width = bits (Expr.tyExpr env target e) in
     let e     = expr env target globals e       in
@@ -229,7 +229,7 @@ more complicated.  If the variable is a local register, it becomes a
 [[Rtl.var]] value, if it is global, it can be looked up in
 [[globals]].
 
-<<>>=
+<<module Make>>=
 and variable (env: F.env) (target: Target.t) globals = function
     | A.LValueAt(x,_) -> variable env target globals x
     | A.Var(hint,x)   ->
@@ -269,7 +269,7 @@ and variable (env: F.env) (target: Target.t) globals = function
                                    Rtl.fetch cell width
                                     
             
-<<>>=
+<<module Make>>=
 and primOp env (target: Target.t) globals op args =
     let (o, ws) = Expr.op env target op args 
     in
@@ -331,7 +331,7 @@ computing the value to be stores.  The expression is already an
 \emph{(There seems to be some duplication between [[assign]] and
 [[variable]], but I haven't checked carefully. ---NR}
 
-<<>>=
+<<module Make>>=
 let rec assign env target globals lhs (e: Rtl.expr) = match lhs with
     | A.LValueAt(x,_)  -> assign env target globals x e
     | A.Var(hint,x)    ->
@@ -374,7 +374,7 @@ arguments that we need for all statements:  [[env]] is the clean
 environment, which doesn't change.  [[s]] is the statement being
 translated.  We return a new flow-graph node. 
 
-<<>>=
+<<module Make>>=
 let rec body env target globals props graph after bb =
     let decorate n       = G.bind props n           in
     let rec stmt s after = match s with
@@ -423,7 +423,7 @@ invent one.
     let cout a       = decorate (GM.copyo actuals AG.ProcResults cc a)     in
     let ret  a       = decorate (GM.return graph
                                  (un_const cont) (un_const count))           in
-        (cout << ret) after
+        (cout @<< ret) after
 
 <<cases for translating statements>>=
 | A.LabelStmt(n)       -> decorate (GM.label n after)
@@ -464,7 +464,7 @@ node.
                      then decorate (GM.copyi (List.map lvalue lhs)
                                        AG.ProcResults cc after)
                      else after                                   in
-        (cout << call << cin) after
+        (cout @<< call @<< cin) after
 @
 
 A continuation is represented by a labeled node.  This node is a
@@ -478,7 +478,7 @@ A continuation is represented by a labeled node.  This node is a
                     then decorate (GM.copyi args AG.ContParameters cc after)
                     else after                        in
     let lbl after = decorate (GM.label n after)       in
-        (lbl << cin) after
+        (lbl @<< cin) after
 
 <<cases for translating statements>>=
 | A.EmptyStmt     -> after
@@ -499,7 +499,7 @@ sequence of statements.
                         decorate (GM.copyo    args AG.ProcParameters cc after)
                      else after                               in
     let jump after = decorate (GM.jump graph (expr env target globals e) ts) in
-        (cout << jump) after 
+        (cout @<< jump) after 
 @
 
 The translation of a [[goto]] statement is straight forward; the
@@ -539,7 +539,7 @@ link-time constant.
                           (expr env target globals e) 
                           (flows fs)
                         )                                         in
-        (cout << cut) after        
+        (cout @<< cut) after        
 @
 
 The following statements are just skipped for the moment.    
@@ -553,8 +553,8 @@ The following statements are just skipped for the moment.
 let range env ir = function
     | A.Point(e)        -> true
     | A.Range(e1,e2)    -> true
-@ 
-<<>>=
+@
+<<unused>>=
 and arm env ir = function
     | A.ArmAt(x,_)          -> arm env ir x
     | A.Case(ranges, stmts) -> true
@@ -592,13 +592,13 @@ and proc env (target: Target.t) globals props (asm: Asm.asm) (cc,n,fs,bb) =
                         AG.ProcParameters cc a)                        in
     let bdy   a    = body env target globals props graph a  bb         in
     let exit       = decorate (GM.exit graph)                          in
-    let node       = (entry << copy << bdy) exit                       in
+    let node       = (entry @<< copy @<< bdy) exit                       in
          asm ++ Asm.instr (GM.cfg_of node)
 @
 
 Local declarations are ignored for the moment. 
  
-<<>>=    
+<<module Make>>=
 and ldecl env after = after
 @
    
@@ -620,7 +620,7 @@ In order to reserve memory for data we have to know how many objects
 an sequence of initializing expressions defined. This number is
 returned by [[init_size]].
 
-<<>>=
+<<module Make>>=
 let rec init_size = function
     | None   -> 1
     | Some i -> let rec loop = function 
@@ -636,7 +636,7 @@ Data can be declared initialized or un-initialized. The amount of
 memory used by a declaration is the size of the base-type times the
 number of values of this type. 
 
-<<>>=
+<<module Make>>=
 let memdecl env target asm t size ini = 
     let sizeof = ty env t / target#memsize (* no. of memsized objs *) in
     let n      = ( match size with
@@ -693,7 +693,7 @@ let rec sspan env target globals props asm (e1,e2,ss) =
     in
         foldl (section env target globals props) asm ss 
 
-<<>>=
+<<module Make>>=
 and section env target globals props (asm: Asm.asm) = function
     | A.SectionAt(x,_)     -> section env target globals props asm x
     | A.Decl(d)            -> asm
@@ -727,7 +727,7 @@ of the assembly program.  The sets of imported and exported symbols
 are registered in the fat environment.  For details, see modules
 \module{mangle}, and \module{elab}. 
 
-<<>>=
+<<module Make>>=
 let exports env asm = 
     Fenv.StrSet.fold (fun s asm -> asm ++ Asm.export (Asm.mksym s)) 
     (F.exported env) asm
@@ -752,7 +752,7 @@ Hardware registers are known as [[Rtl.locations]], which differ from
 an [[Automaton.location]]. The function [[reg2loc]] constructs an
 [[Automaton.location]] for a hardware register.
 
-<<>>=
+<<module Make>>=
 let reg2loc loc =
   let width = Rtlutil.locwidth loc in
     ( (fun e -> Rtl.store loc e width)  (* store e to loc         *)
@@ -789,7 +789,7 @@ start the [[text]] section.
 
 
 
-<<>>=
+<<module Make>>=
 let program env target globals asm tt = 
     let asm = asm ++ Asm.section "text"           in
     let asm = exports env asm                     in
@@ -800,7 +800,7 @@ let program env target globals asm tt =
 The initializing argument to [[Asm.init]] is probably target dependent
 and should be provided by [[target]]. 
 
-<<>>=
+<<module Make>>=
 type program = Automaton.location StrMap.t * Asm.asm
 
 let translate env target prog =
@@ -856,7 +856,7 @@ For now we are using the types of the primitive constant operators.
 All primitive runtime operators will go into their own module
 [[Primitives]].  So we have to fix the [[lookup]] later.
 
-<<>>=
+<<module Expr>>=
 and tyPrimOp env target op args =
     let at = List.map (tyExpr env target) args          in
     let ot = snd (Value.Ops.lookup op Value.ops) in
@@ -867,7 +867,7 @@ and op env target o args =
     let ot = snd (Value.Ops.lookup o Value.ops) in
         o,Types.widthlist ot at
 
-<<>>=
+<<module Expr>>=
 and tyExpr env (target: Target.t) = function
     | A.ExprAt(x,r)            -> tyExpr env target x
     | A.Int   (str, Some t)    -> evalTy env t

@@ -147,12 +147,12 @@ It is an \emph{unchecked run-time error} to compose in parallel two or
 more RTLs that assign to the same location; such a parallel
 composition is not meaningful.
 
-<<>>=
+<<types and functions exported at top level>>=
 val guard     : expr -> rtl -> rtl
 val par       : rtl list -> rtl
 @
 
-<<>>=
+<<types and functions exported at top level>>=
 @
 
 The purpose of the private interface is to exploit the implementation
@@ -325,8 +325,8 @@ type location  = Private.location
 type rtl       = Private.rtl        
 type op        = Private.op         
 type assertion = Private.assertion  
-@ 
-<<>>=
+@
+<<definitions of types and functions exported at top level>>=
 let aligned k = k
 let none = aligned 1
 @
@@ -334,7 +334,7 @@ let none = aligned 1
 Below are simple, nonetheless frequently used functions values on
 {\rtl}s.
 
-<<>>=
+<<definitions of types and functions exported at top level>>=
 let par rtls   = Rtl (List.concat (List.map (fun (Rtl x) -> x) rtls))
 let slice width lsb loc = Slice (width, lsb, loc) 
 @
@@ -343,7 +343,7 @@ The [[guard]] function combines every guard in the {\rtl} with the
 given expression using Boolean conjunction.  We use a fairly
 unsophisticated notion of conjunction; it doesn't even reassociate.
 %
-<<>>=
+<<definitions of types and functions exported at top level>>=
 let conjunction = ("conjoin", [])   (* logical and *)
 let conjoin g g' = match g with
 | Const(Bool true)  -> g'
@@ -352,15 +352,15 @@ let conjoin g g' = match g with
        | Const(Bool true)  -> g
        | Const(Bool false) -> g'
        | _ -> App(conjunction, [g; g'])
-@ 
-<<>>= 
+@
+<<definitions of types and functions exported at top level>>=
 let guard expr (Rtl geffects) =
     let conjunct (guard,effect) = (conjoin expr guard, effect) in
     Rtl (List.map conjunct geffects)  
 @
 
 
-<<>>=
+<<definitions of types and functions exported at top level>>=
 let true'  = Const (Bool true)
 let false' = Const (Bool false)
 let bool p = if p then true' else false'

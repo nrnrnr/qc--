@@ -106,7 +106,7 @@ intended for.  The [[validate]] method returns [[true]] if the actual
 target is compatible to the claims in the source file, and raises the
 [[Error.ErrorExn]] exception otherwise.
 
-<<>>=
+<<class type t body>>=
 method validate: Fenv.Clean.env -> bool
 @
 
@@ -117,7 +117,7 @@ translation and an inverse function that recognizes the generated
 {\rtl}.  If a recogonzier ([[match]]\dots]) fails, an assertion failure
 will be raised because this manifests an internal compiler error.
 
-<<>>=
+<<class type t body>>=
 method mkGoto:          Rtl.expr -> Rtl.rtl
 method matchGoto:       Rtl.rtl  -> Rtl.expr    
 
@@ -170,10 +170,10 @@ module StrMap = Map.Make(struct type t=string let compare=compare end)
 First some auxiliary functions.  The [[reg]] function creates a 32bit
 register, addressed by 4 bit number [[n]].
 
-<<>>=
+<<target.ml>>=
 let reg n = 
     Rtl.cell Rtl.none
-	     'r' 
+             'r' 
              Rtl.BigEndian 
              32
              (Rtl.bits (Bits.of_int n 4) 4)
@@ -182,7 +182,7 @@ let reg n =
 The class for the dummy's calling convention. A single instance is
 created below.
 
-<<>>=
+<<target.ml>>=
 class dummycc: cc = object 
     method sp          = reg 8
     method proc_param  = Automaton.Build.cc   
@@ -190,7 +190,7 @@ class dummycc: cc = object
     method cont_param  = Automaton.Build.cc 
 end
 
-<<>>=
+<<target.ml>>=
 class dummytarget: t = object (self)
     <<dummy object body>>
 end
@@ -200,7 +200,7 @@ We only need one instance of the [[dummytarget]] class. Since only the
 instance is exported and not the class definition it is impossible for
 clients to create more instances. 
 
-<<>>=
+<<target.ml>>=
 let dummy = new dummytarget
 @
 
@@ -220,7 +220,7 @@ method globals         = Automaton.Build.globals
 The [[dummy]] target has a set of 8 universal [[registers]] which we
 construct below. The registers are addressed by 4-bit numbers $0--7$. 
 
-<<>>=
+<<dummy object body>>=
 method registers = 
     let name n = Printf.sprintf "r%d" n in
     let rec loop map = function
@@ -236,7 +236,7 @@ provides what a client really needs: a lookup function for calling
 conventions. For compatibility bth [[cc]] and [[cc']] are provided, but
 [[cc]] is deprecated. 
 
-<<>>=
+<<dummy object body>>=
 method cc' name = 
     try StrMap.find name (self#cc)
     with Not_found -> Error.error ("unknown calling convention: "^name)
@@ -245,7 +245,7 @@ method cc' name =
 The [[validate]] predicate just checks entries that can be checked and
 emits error messages if informations do not match.
 
-<<>>=
+<<dummy object body>>=
 method validate env = 
     let error x = 
         ( E.errorPrt ("The target declartion for "^x^" is not compatible with the actual target") 
@@ -280,7 +280,7 @@ platform specific {\rtl}s for some nodes in a control flow graph
 platform does I'm am clueless what a dummy should do. The following
 methods are almost useless.
 
-<<>>=
+<<dummy object body>>=
 method mkGoto expr    = assert false
 method matchGoto rtl  = assert false
 

@@ -61,7 +61,7 @@ parameter, but also to some degree on its purpose.  A type from the
 perspective of calling conventions is thus a tuple of a {\PAL} type
 and a hint. 
 
-<<basic types>>= 
+<<basic types>>=
 type ty = Types.ty * string option
 @
 
@@ -73,7 +73,7 @@ at a [[return]] and when [[cut]]'ing to a continuation.  A
 effect of storing a value to a location, and an expression that
 fetches a value from that location.
 
-<<>>=
+<<basic types>>=
 type location = (Rtl.expr -> Rtl.rtl)          (* write value *)
               * Rtl.expr                       (* read  parameter *)
 @
@@ -81,7 +81,7 @@ type location = (Rtl.expr -> Rtl.rtl)          (* write value *)
 Of course, there is the automaton itself.  An automaton maintains an
 internal state that changes when the automaton is run. 
 
-<<>>=
+<<basic types>>=
 type t
 @
 
@@ -113,7 +113,7 @@ automaton and thus can be obtained from it.  In contrast, the
 [[location]] for a parameter is determined by the \emph{transition}
 between two states and thus it is returned by the [[next]] function.
 
-<<>>=
+<<signature run>>=
 type overflow   = { size:   int   (* overflow area in memsize units *)
                   ; align:  int   (* alignment in memsize units     *)
                   }
@@ -209,7 +209,7 @@ type overflow =     { size:  int
                     ; align: int
                     }
 
-<<>>=
+<<module run>>=
 let overflow dfa = { size  = dfa.offset
                    ; align = 1
                    }
@@ -245,7 +245,7 @@ let write loc k w   = fun e -> Rtl.store (stack loc k w) e w
 The following automaton places parameters relative to some link time
 constant ``sp ''.
 
-<<>>=
+<<module build>>=
 let cc = 
     { offset = 0
     ; read   = read  regsp
@@ -256,7 +256,7 @@ let cc =
 Here is an automaton that places global registers relative to some
 link-time constanat named ``globals ''.
 
-<<>>=
+<<module build>>=
 let globals = 
     { offset = 0
     ; read   = read  globs

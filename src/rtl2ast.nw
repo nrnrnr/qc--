@@ -56,7 +56,7 @@ module A = Ast
 module T = Types
 @
 
-<<>>=
+<<rtl2ast.ml>>=
 let bits n             = A.BitsTy n
 
 let const mangle = function
@@ -65,7 +65,7 @@ let const mangle = function
     | R.Link(name,w) -> A.Fetch(A.Var(None, mangle name))
 @
 
-<<>>=
+<<rtl2ast.ml>>=
 @
     
 Primitive operators in {\PAL} are monomorphic, whereas they are
@@ -73,7 +73,7 @@ polymorphic in {\rtl}s.  The translatation to {\PAL} thus must
 specialize an operator if it is polymorphic.  Currently not
 implemented.
 
-<<>>=
+<<rtl2ast.ml>>=
 let rec expr' mangle = function
     | R.Const c         -> const mangle c
     | R.Fetch(loc,_)    -> A.Fetch(location' mangle loc)
@@ -84,7 +84,7 @@ let rec expr' mangle = function
 
 N.B. This code might possibly look up the location in a machine-dependent map
 in case it needs to mangle as the name of a hardware register variable.
-<<>>=
+<<rtl2ast.ml>>=
 and location' mangle = function 
     | R.Cell('m',agg,width,e,_)  -> A.Mem(bits width, expr' mangle e, None)
     | R.Cell('r',agg,width,R.Const(R.Bits(n,3)),_) ->  
@@ -94,15 +94,15 @@ and location' mangle = function
     | R.Var (name,_,width)       -> A.Var(None,mangle name)
     | R.Slice _                  -> assert false (*should convert as special reg name*)
 
-let (<<) f g   = fun x -> f (g x)
-let expr m = expr' m << Rtl.Convert.expr
-let location m = location' m << Rtl.Convert.location
+let (@<<) f g   = fun x -> f (g x)
+let expr m = expr' m @<< Rtl.Convert.expr
+let location m = location' m @<< Rtl.Convert.location
 
 @
 
 A [[kill]] is translated into an assignment of [[%undef()]].
 
-<<>>=
+<<rtl2ast.ml>>=
 let rec effect mangle guard = function
     | R.Kill   loc       -> 
         let width = Rtlutil.locwidth' loc                in
@@ -121,6 +121,6 @@ let rtl' mangle (R.Rtl gg) =
     let pairs    = List.map (guarded mangle) gg in
     let lhs, rhs = List.split pairs             in
         A.AssignStmt(lhs,rhs)
-let rtl mangle = rtl' mangle << Rtl.Convert.rtl
+let rtl mangle = rtl' mangle @<< Rtl.Convert.rtl
 @
 

@@ -63,13 +63,13 @@ ignore tabs by not placing a sync point in the [[map]].  Sync points
 are explained in section \ref{srcmap} about source code position
 tracking.
 
-<<>>=
+<<prolog>>=
 let tab lexbuf map = ()
         
 @ The current location can be obtained by passing the current position
 to [[Srcmap.location]]:
 
-<<>>= 
+<<prolog>>=
 let location lexbuf map =
     Srcmap.location map (Lexing.lexeme_start lexbuf)
      
@@ -78,7 +78,7 @@ let error lexbuf map msg = Error.error msg
 @ We define some helpers; [[get]] returns the matched string and is
 quite intuitive when called as [[get lexbuf]].
 
-<<>>=
+<<prolog>>=
 let get         = Lexing.lexeme
 let getchar     = Lexing.lexeme_char
 let strlen      = String.length
@@ -108,7 +108,7 @@ clear:
 \end{verbatim}
 \end{quote}
 
-<<>>=
+<<prolog>>=
 let substr start stop str = 
     let start = if start <  0 then String.length str + start else start in
     let stop  = if stop  <= 0 then String.length str + stop  else stop  in
@@ -122,7 +122,7 @@ directly encoded into the automaton of the scanner because this is
 notorious for overflowing the tables of the automaton's
 implementation.
 
-<<>>=
+<<prolog>>=
 let keywords    = Hashtbl.create 127
 let keyword s   = Hashtbl.find keywords s
 
@@ -180,7 +180,7 @@ explained in the definition of the abstract syntax \module{ast}. Below
 are conversion functions that take strings as arguments and returns a
 [[Bits.bits]] value using the maximum width [[Bits.maxwidth]].
 
-<<>>=
+<<prolog>>=
 let str2bits f str =
     try f str Bits.maxwidth with
     | Bits.Size     -> E.error "literal too large for this implementation"
@@ -281,8 +281,8 @@ rule token = parse
   | "*"         { fun map -> P.STAR(get lexbuf)      }
   | "/"         { fun map -> P.SLASH(get lexbuf)     }
   | "%"         { fun map -> P.PERCENT(get lexbuf)   }
-  | ">>"        { fun map -> P.GGREATER(get lexbuf)  }
-  | "<<"        { fun map -> P.LLESS(get lexbuf)     }
+  | "@>>"        { fun map -> P.GGREATER(get lexbuf)  }
+  | "@<<"        { fun map -> P.LLESS(get lexbuf)     }
   | "&"         { fun map -> P.AMPERSAND(get lexbuf) }
   | "|"         { fun map -> P.BAR(get lexbuf)       }
   | "^"         { fun map -> P.CARET(get lexbuf)     }
@@ -335,7 +335,7 @@ the reserved word [[pragma]] the [[PRAGMA]] token is returned by
 The interpretation functions for escaped characters are not yet
 written. Currently the string representation is returned.
 
-<<>>=
+<<scan.mll>>=
 and character = parse
     printable      "'"          { fun map -> 
                                   let s = substr 0 (-1) (get lexbuf) in
@@ -518,7 +518,7 @@ and pragma2 = parse
   | _                   { fun map id -> 
                           error lexbuf map "pragma body expected" 
                         }
-@ 
+@
 
 It is an error when the opening bracket is not found. Once it is
 found the body of the pragma is skipped over in context [[pragma3]]. A
@@ -535,7 +535,7 @@ for the details but must consider only the following cases:
 \end{itemize}
 
 
-<<>>=
+<<scan.mll>>=
 and pragma3 = parse
     eof                         { fun map level ->
                                   error lexbuf map "unterminated pragma" 
@@ -606,7 +606,7 @@ This implementation does not check the syntax but just recognizes
 different tokens. It returns when it finds a string and relies on the
 fact that the line number must come first.
 
-<<>>=
+<<scan.mll>>=
 and line = parse 
     eof                 { fun map l ->
                           error lexbuf map "unterminated line directive" 
@@ -643,7 +643,7 @@ and line = parse
 
 
 
-<<>>=                                
+<<scan.mll>>=
 
 {   (* start of epilog *)
     <<scanner entry point>>
@@ -659,7 +659,7 @@ token (as defined in [[parse.mli]]) into a string.  This is used below
 to define a function that reports the stream of all tokens for a file
 together with their positions.
 
-<<>>=
+<<scan.mll>>=
     let tok2str = function
 
     | P.ABORTS            -> "ABORTS"
@@ -786,12 +786,12 @@ let px ()  = (Parsing.symbol_start ())
 
 let rev    = List.rev
 
-<<>>=
+<<helper functions>>=
 let mkRegs v (hint,ty,regs) =
     let r (id,reg) = (v, hint, ty, id, reg) 
     in
         List.map r regs
-<<>>=
+<<helper functions>>=
 let mkTypedefs ty names =
     List.map (fun n -> A.Typedef(n,ty)) names
 @            
@@ -799,13 +799,13 @@ let mkTypedefs ty names =
 The [[[bits2int]] function takes a [[bits]] value and returns its integer
 value; additionally it takes care of possible overflows.
 
-<<>>=
+<<helper functions>>=
 let bits2int b = 
     try
         Bits.to_int b
     with
         Bits.Overflow -> E.error "Constant exceeds implementation limits"
-@ 
+@
 
 <<parse.mly>>=
 %token ABORTS ALIGN ALIGNED ALSO AS AMPERSAND BIG BYTEORDER CASE COLON CCOLON
@@ -820,7 +820,7 @@ let bits2int b =
 
 %token PRAGMA
 
-<<>>=
+<<parse.mly>>=
 /* infix and prefix operators */
 
 %token <string> EEQ NEQ LT LEQ GT GEQ
@@ -844,7 +844,7 @@ let bits2int b =
 
 The precedence of tokens from lowest to highest precedence.
 
-<<>>=
+<<parse.mly>>=
 /* lvalue conflict resolution */
 %right      ID
 %right      LBRACKET
@@ -868,12 +868,12 @@ program     :   toplevels                      { rev $1}
 
 toplevels   :   toplevels toplevelAt           { $2::$1 }
             |   /**/                           { []     }
-<<>>=
+<<parse.mly>>=
 toplevelAt  :   toplevel                       { A.ToplevelAt($1,p())       }
 toplevel    :   SECTION STR LBRACE sections RBRACE  { A.Section($2, rev $4) }
             |   procedure                      { A.TopProcedure($1)         }
             |   declAt                         { A.TopDecl($1)              }
-<<>>=
+<<parse.mly>>=
 sections    :   sections sectionAt             { $2 :: $1 }
             |   /**/                           { []       }
 
@@ -883,7 +883,7 @@ section     :   procedure                      { A.Procedure($1)     }
             |   span                           { A.SSpan($1)         }
             |   declAt                         { A.Decl($1)          }
 
-<<>>=
+<<parse.mly>>=
 declAt      :   decl                           { A.DeclAt($1,p()) }   
 decl        :   INVARIANT REGISTER registers SEMI
                     { A.Registers(mkRegs A.Invariant $3) }
@@ -901,7 +901,7 @@ decl        :   INVARIANT REGISTER registers SEMI
             |   CONST  ty ID EQUAL exprAt SEMI { A.Const(Some $2,$3,$5)    }
             |   TYPEDEF ty names SEMI          { A.Typedef($2,rev $3)      }
             |   TARGET properties SEMI         { A.Target(rev $2)          }
-<<>>=
+<<parse.mly>>=
 property    :   MEMSIZE INT                    { A.Memsize(bits2int $2)      }
             |   BYTEORDER BIG                  { A.ByteorderBig                 }
             |   BYTEORDER LITTLE               { A.ByteorderLittle              }
@@ -910,13 +910,13 @@ property    :   MEMSIZE INT                    { A.Memsize(bits2int $2)      }
             |   PTRSIZE INT                    { A.PointerSize (bits2int $2) }
             |   WRDSIZE INT                    { A.WordSize (bits2int $2)    }
 
-<<>>=
+<<parse.mly>>=
 properties  :   properties property            { $2 :: $1 }
             |   /**/                           { []       }
-<<>>=
+<<parse.mly>>=
 span        :   SPAN exprAt expr
                 LBRACE sections RBRACE         { $2, $3, rev $5 }
-<<>>=
+<<parse.mly>>=
 datumAt     :   datum                          { A.DatumAt($1,p()) }
 datum       :   ID COLON                       { A.Label $1 }
             |   ALIGN INT SEMI                 { A.Align (bits2int $2) }
@@ -924,12 +924,12 @@ datum       :   ID COLON                       { A.Label $1 }
             |   tyAt size        SEMI          { A.MemDecl($1,$2,None)}
             |   tyAt      initAt SEMI          { A.MemDecl($1,A.NoSize,Some $2)}
             |   tyAt             SEMI          { A.MemDecl($1,A.NoSize,None)}
-<<>>=
+<<parse.mly>>=
 initAt      :   init                           { A.InitAt($1,p()) }
 init        :   LBRACE   exprs RBRACE          { A.InitExprs($2)  }
             |   STR                            { A.InitStr($1)    }
             |   string16                       { A.InitUStr($1)   }
-<<>>=
+<<parse.mly>>=
 registers   :   STR    tyAt regs               { Some $1, $2, rev $3 }
             |   STR    tyAt regs COMMA         { Some $1, $2, rev $3 }
             |          tyAt regs COMMA         { None   , $1, rev $2 }
@@ -940,7 +940,7 @@ regs        :   regs COMMA ID STR              { ($3, Some $4)::$1 }
             |   ID STR                         { [($1,Some $2)]    }
             |   ID                             { [($1,None   )]    }
 
-<<>>=
+<<parse.mly>>=
 size        :   LBRACKET exprAt RBRACKET       { A.FixSize($2) }
             |   LBRACKET       RBRACKET        { A.DynSize     }
 
@@ -990,7 +990,7 @@ cformals_   :   cformals_ COMMA cformal        { $3 :: $1 }
 actual      :   STR exprAt                     { Some $1, $2 }
             |       exprAt                     { None   , $1 }
 
-<<>>=
+<<parse.mly>>=
 stackdecl   :   STACKDATA LBRACE data RBRACE   { rev $3 }
 
 data        :   data  datumAt                  { $2 :: $1 }
@@ -1021,12 +1021,12 @@ reduce/reduce conflicts caused by the use of [[lvalueAt]] in
 [[lvalueAt]] into [[lvalueAt0]] and [[lvalueAt]]:  [[lvalueAt0]] does
 not include [[STR ID]] which is not needed for [[sexpr]].
 
-<<>>=
+<<parse.mly>>=
 lvalueAt    :   lvalue                         { A.LValueAt($1,p()) } 
 lvalue      :   lvalue0                        { $1 } 
             |   STR ID                         { A.Var(Some $1,$2) } 
             
-<<>>=
+<<parse.mly>>=
 lvalueAt0   :   lvalue0                                { A.LValueAt($1,p()) }
 lvalue0     :   ID                                     { A.Var(None, $1)    }
             |   sty   LBRACKET exprAt aligned RBRACKET { A.Mem($1,$3,$4)    }
@@ -1050,7 +1050,7 @@ block       :   LBRACE stmts RBRACE            { rev $2 }
 
 returnto    :   LT sexprAt SLASH sexprAt GT    { Some($2,$4) }
             |   /**/                           { None        }
-<<>>=
+<<parse.mly>>=
 stmtAt      :   stmt                           { A.StmtAt($1,p())     }
 stmt        :   SEMI                           { A.EmptyStmt          }
             |   ID COLON                       { A.LabelStmt $1       }
@@ -1099,7 +1099,7 @@ stmt        :   SEMI                           { A.EmptyStmt          }
             |   SWITCH srange expr LBRACE arms RBRACE  
                         {A.SwitchStmt($2,$3, rev $5)}
 
-<<>>=
+<<parse.mly>>=
 srange      :   LBRACKET range RBRACKET        {Some $2}
             |   /**/                           {None}
 
@@ -1122,7 +1122,7 @@ arm         :   CASE ranges COLON block        { A.Case($2,$4)   }
 stmts       :   stmts stmtAt                   { $2 :: $1 }
             |   /**/                           { []       }
 
-<<>>=
+<<parse.mly>>=
 sexprAt     :   sexpr                          { A.ExprAt($1, p())    }
 sexpr       :   INT                            { A.Int($1, None)      }
             |   INT CCOLON tyAt                { A.Int($1, Some $3)   }
@@ -1132,7 +1132,7 @@ sexpr       :   INT                            { A.Int($1, None)      }
             |   CHAR CCOLON tyAt               { A.Char($1, Some $3)  }
             |   lvalueAt0                      { A.Fetch $1           }
             |   PRIMOP actls                   { A.PrimOp($1,$2)      }
-<<>>=
+<<parse.mly>>=
 exprAt      :   expr                           { A.ExprAt($1, p())    }
 expr:       |   sexpr                          { $1                   }
             |   LPAREN exprAt RPAREN           { $2                   }
@@ -1162,7 +1162,7 @@ expr:       |   sexpr                          { $1                   }
 exprs       :   exprs_ optcomma                { rev $1   }
 exprs_      :   exprs_ COMMA exprAt            { $3 :: $1 }
             |   exprAt                         { [$1]     }
-<<>>=
+<<parse.mly>>=
 imports     :   imports_ optcomma              { rev $1           }
 imports_    :   imports_ COMMA STR AS ID       { (Some $3,$5)::$1 }
             |   imports_ COMMA        ID       { (None   ,$3)::$1 } 

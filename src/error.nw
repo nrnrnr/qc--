@@ -47,10 +47,10 @@ val error :         string -> 'a (* ErrorExn *)
 For the many holes in our implementation we reserve another exception:
 [[NotImplemented]]. 
 
-<<>>=
+<<error.mli>>=
 exception NotImplemented    of string
 val not_implemented:        string -> 'a (* NotImplemented *)
-@ 
+@
 % ------------------------------------------------------------------ 
 \subsubsection{Error functions}\label{sect:error-fun}
 % ------------------------------------------------------------------ 
@@ -129,7 +129,7 @@ module Lower :
                                             * 'c error 
                                             * 'd error
   end
-@ 
+@
 The functions of the [[Implode]] module destroy informations by
 reducing complex [['a error]] values to [[unit error]]. They come in
 handy when are there are only good and bad results. Whenever an
@@ -141,7 +141,7 @@ The [[list]] function is similar to [[Raise.list]] as is raises the
 does not stop when it encounters the first [[Error]] but traverses the
 whole list.  The motivation is to give detect possible bad values in
 the list such that the [[ErrorExn]] can be raised for them. 
-<<>>=
+<<error.mli>>=
 module Implode :
   sig
     val singleton : 'a error                                  -> unit error
@@ -165,7 +165,7 @@ Catching the exception is done with [[catch]] in the special case, and
 [[catch']] in the general case.  [[catch']] permits to specify the
 value that is returned when an exception is caught whereas [[catch]]
 always uses [[Error]] for this.
-<<>>=
+<<error.mli>>=
 val catch   :       (string -> unit) 
                     -> ('a -> 'b error) -> 'a -> 'b error
 val catch'  : 'b -> (string -> unit) 
@@ -182,7 +182,7 @@ The [[warningPrt]] and [[errorPrt]] functions can be passed to
 cases specialized functions for error reporting will be used to include
 some source code locations.
 
-<<>>=
+<<error.mli>>=
 val warningPrt : string -> unit
 val errorPrt   : string -> unit
 @
@@ -193,7 +193,7 @@ argument.  Typically the location is supplied to the function like in
 [[catch]].  This works because the error locations are attached where
 exceptions are caught and not where they are raised.
 
-<<>>=
+<<error.mli>>=
 val errorPointPrt  : Srcmap.point -> string -> unit
 val errorRegionPrt : Srcmap.region -> string -> unit
 val errorPosPrt    : Srcmap.pos -> string -> unit
@@ -221,7 +221,7 @@ a complex value to the top-level. A complex value is bad when one
 of its components is bad and good otherwise. The raising combinators
 deal with the most important data types: options, lists, and tuples.
 
-<<error.ml>>=    
+<<error.ml>>=
 module Raise = struct
     <<raise module>>
 end
@@ -231,7 +231,7 @@ let option = function
     | Some Error        -> Error
     | Some (Ok x)       -> Ok (Some x)
     | None              -> Ok (None)
-<<>>=
+<<raise module>>=
 let list xs =
     let rec loop acc = function
         | []            -> Ok (List.rev acc)
@@ -240,27 +240,27 @@ let list xs =
     in      
         loop [] xs
 
-<<>>=
+<<raise module>>=
 let pair = function
     | (Ok x, Ok y)          -> Ok (x,y)
     | _                     -> Error
         
-<<>>=
+<<raise module>>=
 let left = function
     | (Ok x, y)             -> Ok (x,y)
     | _                     -> Error
 
-<<>>=
+<<raise module>>=
 let right = function
     | (x, Ok y)             -> Ok (x,y)
     | _                     -> Error
 
-<<>>=
+<<raise module>>=
 let triple = function
     | (Ok x, Ok y, Ok z)    -> Ok (x,y,z)
     | _                     -> Error 
 
-<<>>=
+<<raise module>>=
 let quad = function
     | (Ok a,Ok b,Ok c,Ok d) -> Ok (a,b,c,d)
     | _                     -> Error
@@ -284,15 +284,15 @@ end
 let pair = function
     | Ok (x,y)              -> Ok x , Ok y
     | Error                 -> Error, Error 
-<<>>=
+<<lower module>>=
 let triple = function
     | Ok (x,y,z)            -> Ok x , Ok y , Ok z
     | Error                 -> Error, Error, Error
-<<>>=
+<<lower module>>=
 let quad = function
     | Ok (a,b,c,d)          -> Ok a , Ok b , Ok c , Ok d
     | Error                 -> Error, Error, Error, Error
-@ 
+@
 
 % ------------------------------------------------------------------ 
 \subsubsection{Reduction functions}
@@ -313,28 +313,28 @@ let singleton = function
     | Ok _ -> Ok ()
     | _    -> Error
 
-<<>>=
+<<implode module>>=
 let pair = function
     | Ok _, Ok _ -> Ok ()
     | _          -> Error
 
-<<>>=
+<<implode module>>=
 let triple = function
     | Ok _, Ok _, Ok _ -> Ok ()
     | _                -> Error
 
-<<>>=
+<<implode module>>=
 let quad = function
     | Ok _, Ok _, Ok _, Ok _ -> Ok ()
     | _                      -> Error
 
-<<>>=
+<<implode module>>=
 let rec list = function
     | []            -> Ok ()
     | (Ok _)::xs    -> list xs
     | _             -> Error 
 
-<<>>=
+<<implode module>>=
 let map f l =
     let ok = Ok () in
     let rec loop res = function
@@ -360,18 +360,18 @@ let combine = function
     | Ok x      -> x
     | Error     -> Error
 
-<<>>=
+<<error.ml>>=
 let ematch x f = match x with
     | Ok x      -> Ok (f x)
     | Error     -> Error
 
-<<>>=
+<<error.ml>>=
 let ematchPair    x2 = ematch (Raise.pair x2)
 let ematchTriple  x3 = ematch (Raise.triple x3)
 let ematchQuad    x4 = ematch (Raise.quad x4)
 
 
-<<>>=
+<<error.ml>>=
 let sequence x f = match x with 
     | Ok x      -> f x
     | Error     -> Error
@@ -397,7 +397,7 @@ let catch' default printer f arg =
     | ErrorExn(msg) -> ( printer msg 
                        ; default
                        )
-<<>>=    
+<<error.ml>>=
 let catch printer f arg = catch' Error printer f arg
 let error msg           = raise (ErrorExn msg)
 let not_implemented msg = raise (NotImplemented msg)
@@ -407,34 +407,34 @@ The following functions print error and warning messages. They differ
 in the argument describing a source code position the error is
 attributed to.
 
-<<>>=
+<<error.ml>>=
 let warningPrt msg = 
     ( prerr_string "Warning: "
     ; prerr_string msg
     ; prerr_newline ()
     ) 
-<<>>=
+<<error.ml>>=
 let errorPrt msg = 
     ( prerr_string "Error: "
     ; prerr_string msg
     ; prerr_newline ()
     )
-<<>>=
+<<error.ml>>=
 let errorPointPrt  p msg = 
     ( Printf.eprintf "%s " (Srcmap.Str.point p)
     ; errorPrt msg
     )
-<<>>=    
+<<error.ml>>=
 let errorRegionPrt r msg =
     ( Printf.eprintf "%s " (Srcmap.Str.region r)
     ; errorPrt msg
     )
-<<>>=    
+<<error.ml>>=
 let errorPosPrt    p msg =
     ( Printf.eprintf "Character %d " p
     ; errorPrt msg
     )
-<<>>=
+<<error.ml>>=
 let errorRegPrt (l,r) msg = 
     ( Printf.eprintf "Character %d-%d " l r
     ; errorPrt msg

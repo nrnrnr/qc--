@@ -95,7 +95,7 @@ module StrMap: Map.S with type key = string
 
 <<module type Env>>
 
-<<>>=
+<<fenv.mli>>=
 module Dirty : Env
     with type 'a info    = 'a Error.error
     with type 'a partial = 'a option
@@ -185,7 +185,7 @@ provided:  [[foldv f s z]] applies f to all [[ventry]] values found in
 scope [[s]] together with a result value of type [['a]] passed along;
 [[z]] is the initial value for the result.
 
-<<>>=
+<<signature Env>>=
 val foldv:      (string -> ventry -> 'a -> 'a) -> scope -> 'a -> 'a
 @  
 
@@ -309,7 +309,7 @@ is bound in the top scope, \emph{and} the top scope is not the bottom
 scope at the same time.  It is an assertion failure to supply an
 unknown value.
 
-<<>>=
+<<signature Env>>=
 val is_localv       : string -> env -> bool     (* *)
 @
 
@@ -329,7 +329,7 @@ to the following law:
     [[errorFlag empty = false]]
 \end{tabular}
 
-<<>>=
+<<signature Env>>=
 val flagError       : env -> env
 val errorFlag       : env -> bool
 @
@@ -381,7 +381,7 @@ counter to facilitate the assignment of an integer to a register.
 The current index is returned by [[getIndex]], and the index is
 advanced by [[nextIndex]]:
 
-<<>>=
+<<signature Env>>=
 val getIndex: env -> int
 val nextIndex: env -> env
 @
@@ -408,7 +408,7 @@ decided to maintain the [[offset]] counter inside the fat environment
 because the [[offset]] must be maintained over many functions and
 becomes a non-local property.
 
-<<>>=
+<<signature Env>>=
 val resetOffset     : string -> env -> env
 val incrOffset      : int -> env -> env
 val alignOffset     : int -> env -> env
@@ -449,7 +449,7 @@ the source code.
 
 \emph{Describe interaction with bindv}
 
-<<>>=
+<<signature Env>>=
 val import: Srcmap.rgn -> string -> string -> env -> env (* import g as f *)
 val export: Srcmap.rgn -> string -> string -> env -> env (* export f as g *)
 @
@@ -459,7 +459,7 @@ unit can be obtained, as well as a map from {\PAL} names to these
 symbols.  The union of the imported and exported sets equals the range
 of the map.
 
-<<>>=
+<<signature Env>>=
 val imported: env -> StrSet.t
 val exported: env -> StrSet.t
 val nam2sym:  env -> string StrMap.t
@@ -506,7 +506,7 @@ with the structure of the key, i.e.~the [[string]] type.  The
 [[import]] and [[export]] functions build sets of symbol, so we need a
 set of strings, too.
 
-<<>>=
+<<fenv.ml>>=
 module Comparable   = struct type t=string let compare=compare end
 module StrMap       = Map.Make(Comparable)
 module StrSet       = Set.Make(Comparable)
@@ -517,7 +517,7 @@ The [[Arg]] modules captures the diverse aspects of [[Clean]] and
 [[Dirty]]. Different [[Arg]] implementations are passed to functor [[Env]]
 to create [[Clean]] and [[Dirty]].
 
-<<>>=
+<<fenv.ml>>=
 module type Arg = sig
     type 'a partial
     type 'a info
@@ -528,7 +528,7 @@ module type Arg = sig
     val update  : 'a partial info -> 'a -> (unit -> unit) -> 'a partial info
     val default : 'a   -> 'a partial info
 end
-@ 
+@
 
 \begin{itemize}
     \item First of all, are information more vaguely represented in
@@ -559,11 +559,11 @@ which are instances of [[Env]], which basically is \emph{the}
 implementation of this module.  The arguments to [[Env]] are
 implementations of [[Arg]].
 
-<<>>=
+<<fenv.ml>>=
 <<module type Env>>
 module Env (Arg: Arg) = struct <<module Env>> end
 
-<<>>=
+<<fenv.ml>>=
 module Dirty = Env (struct
     type 'a partial = 'a option
     type 'a info    = 'a Error.error
@@ -587,7 +587,7 @@ module Dirty = Env (struct
     let default x = Error.Ok(None)
 end)
 
-<<>>=
+<<fenv.ml>>=
 module Clean = Env (struct
     type 'a partial             = 'a 
     type 'a info                = 'a
@@ -604,7 +604,7 @@ end)
 The function [[clean]] translates a dirty environment into a clean
 environment. 
 
-<<>>=
+<<fenv.ml>>=
 <<clean function>>
 @
 
@@ -626,7 +626,7 @@ Our interfaces includes definitions for types that capture the
 denotation of values and types. Of course, these types must be defined
 in the implementation as well.
 
-<<>>=
+<<module Env>>=
 <<types>>
 and env            =  { scopes     :    scope list (* top = hd scopes *)
                       ; srcmap     :    Srcmap.map
@@ -648,7 +648,7 @@ and stackdata =       { soffset    :    int    (* current offset *)
 The [[target]] type captures target specific informations, like the
 byteorder, or sizes words and pointers.
 
-<<>>=
+<<module Env>>=
 and  target         = { memsize:      int        partial info
                       ; endianness:   endianness partial info
                       ; word:         int        partial info
@@ -663,7 +663,7 @@ a map from {\PAL} names to assembly symbols.  The [[asm]] type holds
 two sets of assembly symbols:  [[imported]] and [[exported]], and a
 map from {\PAL} names to symbols.
 
-<<>>=
+<<module Env>>=
 and asm             = { imported:     StrSet.t
                       ; exported:     StrSet.t
                       ; nam2sym:      string StrMap.t
@@ -672,7 +672,7 @@ and asm             = { imported:     StrSet.t
 
 A [[scope]] is record of two maps for values and types respectively:
 
-<<>>=
+<<module Env>>=
 and scope           = { venv:   ventry StrMap.t
                       ; tenv:   tentry StrMap.t
                       }
@@ -703,7 +703,7 @@ environment is [[Dirty]]; the defaults for a [[Clean]] environment
 should never be used because a clean environment is obtained by
 cleaning a dirty one. 
 
-<<>>=
+<<module Env>>=
 let empty  map =  
     { scopes    = []
     ; srcmap    = map
@@ -730,7 +730,7 @@ let empty  map =
 
 The implementation of the [[scope]] stack provides no surprises.
 
-<<>>=
+<<module Env>>=
 let emptyscope          = { venv  = StrMap.empty; tenv = StrMap.empty }
 let srcmap {srcmap=m}   = m
 
@@ -745,7 +745,7 @@ let pop env = match env.scopes with
 let push env scope = { env with scopes = scope :: env.scopes } 
 @
 
-<<>>=
+<<module Env>>=
 let foldv f {venv=v} z = StrMap.fold f v z
 @
 
@@ -761,7 +761,7 @@ is issued, the error flag is set, and the existing binding is re-bound
 to a bad value.  Register values that use a hardware register are
 additionally recorded in the [[regdecls]] component.
 
-<<>>=
+<<module Env>>=
 let bindv name (rgn,x as ventry) env = 
     let scope = ( match env.scopes with
                 | []    -> assert false
@@ -787,7 +787,7 @@ let bindv name (rgn,x as ventry) env =
             | _ -> env
             ) 
 
-<<>>=
+<<module Env>>=
 let bindt name (rgn,x as tentry) env = 
     let scope = ( match env.scopes with
                 | []    -> assert false
@@ -814,7 +814,7 @@ The [[find]] functions start searching in the top of the stack and
 move to the bottom. The first binding found is returned, and
 [[Error.ErrorExn]] raised otherwise.
 
-<<>>=
+<<module Env>>=
 let findv name env =
     let rec loop = function
         | []    -> E.error ("unknown value: "^name)
@@ -823,7 +823,7 @@ let findv name env =
                    )
     in
         loop env.scopes
-<<>>=
+<<module Env>>=
 let findt name env =
     let rec loop = function
         | []    -> E.error ("unknown type: "^name)
@@ -837,7 +837,7 @@ let findt name env =
 The [[rebindv]] function replaces the most local binding for a name. If
 the name is not bound in the environment, it is returned unaltered. 
 
-<<>>=
+<<module Env>>=
 let rebindv name x env =
     let rec loop = function
         | []    -> []
@@ -850,7 +850,7 @@ let rebindv name x env =
 
 An assertion fails, if the scope stack is empty.
 
-<<>>=
+<<module Env>>=
 let is_localv name env = 
     ( match env.scopes with
     | []    -> assert false
@@ -869,7 +869,7 @@ error found in the static semantics of a program.  The function
 [[flagError env]] sets the flag in the returned environment,
 [[errorFlag]] returns the flag's value in [[env]].
 
-<<>>=
+<<module Env>>=
 let flagError env = if env.error then env else { env with error = true }
 let errorFlag env = env.error
 @
@@ -896,7 +896,7 @@ was un-set the new value is returned. Otherwise the new value must
 match the existing one, or an inconsistency was found. In the latter
 case [[Error]] is returned.
 
-<<>>=
+<<module Env>>=
 let update_int r map old i errmsg =
     if   i > 0 
     then Arg.update old i errmsg
@@ -904,14 +904,14 @@ let update_int r map old i errmsg =
          ; Arg.bad ()
          ) 
 
-<<>>=
+<<module Env>>=
 let bindMemsize r n env =
     let f ()     = error r env.srcmap "inconsistent memsize specification" in
     let memsize' = update_int r env.srcmap env.target.memsize n f          in
     let target'  = { env.target with memsize = memsize' }                  in
         { env with  target = target' }
 
-<<>>=
+<<module Env>>=
 let bindWordsize r n env =
     let f ()     = error r env.srcmap "inconsistent word size specification" in
     let word'    = update_int r env.srcmap env.target.word n f               in
@@ -924,28 +924,28 @@ let bindPointersize r n env =
     let target'  = { env.target with pointer = pointer' }                    in
         { env with  target = target' }
 
-<<>>=
+<<module Env>>=
 let bindEndianness r e env =
     let f ()     = error r env.srcmap "inconsistent byteorder specification" in
     let e'       = Arg.update env.target.endianness e f                      in
     let target'  = { env.target with endianness = e' }                       in
         { env with target = target' }
         
-<<>>=
+<<module Env>>=
 let bindFloat r fp env =
     let f ()     = error r env.srcmap "inconsistent floating point specification" in
     let fp'      = Arg.update env.target.float fp f               in
     let target'  = { env.target with float = fp' }                in
         { env with target = target' }
 
-<<>>=
+<<module Env>>=
 let bindCharset r cs env =
     let f ()     = error r env.srcmap "inconsistent charset specification" in
     let cs'      = Arg.update env.target.charset cs f                      in
     let target'  = { env.target with charset = cs' }                       in
         { env with target = target' }
 
-<<>>=
+<<module Env>>=
 let findMemsize     env = env.target.memsize
 let findEndianness  env = env.target.endianness
 let findPointersize env = env.target.pointer 
@@ -966,7 +966,7 @@ exported at the same time. If such a case is detected, an error
 message is issued. Details about the connection between {\PAL} names
 and assembly symbols can be found in \module{mangle}.
 
-<<>>=
+<<module Env>>=
 let import r sym name env =
     if StrSet.mem sym env.asm.exported 
     then ( error r env.srcmap ("import of an exported name: "^name)
@@ -992,7 +992,7 @@ let export r name sym env =
             { env with asm = asm }
 @
 
-<<>>=
+<<module Env>>=
 let imported env = env.asm.imported
 let exported env = env.asm.exported
 let nam2sym  env = env.asm.nam2sym
@@ -1005,7 +1005,7 @@ let nam2sym  env = env.asm.nam2sym
 
 No surprises here.
 
-<<>>=
+<<module Env>>=
 let nextIndex  env   = { env with rindex = env.rindex + 1}
 let getIndex   env   = env.rindex
 @
@@ -1017,7 +1017,7 @@ let getIndex   env   = env.rindex
 The implementation of the [[offset]] functions for stack data are
 straight forward:
 
-<<>>=
+<<module Env>>=
 let resetOffset n env     = let sd = { smaxalign = 1
                                      ; soffset   = 0
                                      ; sname     = n
@@ -1036,7 +1036,7 @@ let offsetName env        = env.stackdata.sname
 The [[alignOffset]] function aligns the [[soffset]] counter and also
 remembers the maximal alignment constraint.
 
-<<>>=
+<<module Env>>=
 let alignOffset n env = 
     let m = max n env.stackdata.smaxalign in
     let o = if   env.stackdata.soffset mod n = 0 
@@ -1059,7 +1059,7 @@ The list of register declarations that use hardware registers is build
 in reverse order by [[bindv]].  So we have to reverse it when we
 return it.
 
-<<>>=
+<<module Env>>=
 let regdecls env = List.rev env.regdecls
 @
 
@@ -1106,14 +1106,14 @@ let rec clean_venv map  =
         |  _  -> assert false
     in
         StrMap.fold copy map StrMap.empty      
-<<>>=
+<<clean function>>=
 and clean_tenv map =
     let copy key data map = match data with
         | p, E.Ok(t) -> StrMap.add key (p,t) map
         | _          -> assert false
     in
         StrMap.fold copy map StrMap.empty
-<<>>=
+<<clean function>>=
 and clean_target = function
     |   { Dirty.memsize    = E.Ok(Some n)
         ; Dirty.endianness = E.Ok(Some e)
@@ -1134,20 +1134,20 @@ and clean_target = function
         }
     |   _ -> assert false 
 
-<<>>=
+<<clean function>>=
 and clean_asm asm =
     { Clean.imported = asm.Dirty.imported
     ; Clean.exported = asm.Dirty.exported
     ; Clean.nam2sym  = asm.Dirty.nam2sym
     }
 
-<<>>=
+<<clean function>>=
 and clean_scope { Dirty.venv = v; Dirty.tenv = t } =
     { Clean.tenv = clean_tenv t
     ; Clean.venv = clean_venv v
     }
     
-<<>>=
+<<clean function>>=
 and clean_proc x = match x with
     |   { Dirty.scope     = Some s
         ; Dirty.sdata     = Some n 
@@ -1170,7 +1170,7 @@ and clean_stackdata sd =
     ; Clean.smaxalign = sd.Dirty.smaxalign
     } 
 
-<<>>=     
+<<clean function>>=
 and clean env =
     { Clean.scopes    = List.map clean_scope env.Dirty.scopes
     ; Clean.srcmap    = env.Dirty.srcmap 

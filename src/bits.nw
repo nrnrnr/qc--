@@ -34,7 +34,7 @@ The width of a [[bits]] value is determined when it is created. The
 is not supported by the implementation [[Size]] is raised. The
 [[maxwidth]] is the maximal width supported by an implementation.
 
-<<>>=
+<<bits.mli>>=
 val width       : bits -> width
 val maxwidth    : width
 @
@@ -49,7 +49,7 @@ The width must mot be greater than [[maxwidth]],
 otherwise the [[Size]] exception is raised which indicates a problem
 with the limits of an implementation.
 
-<<>>=
+<<bits.mli>>=
 val fits        : bits -> width -> bool
 @
 
@@ -58,7 +58,7 @@ value. This is a dangerous operation since the new size may violate
 the assumption that the current value fits into that size. Thus,
 [[Overflow]] is raised, when this assumption is violated by the new size.
 
-<<>>=
+<<bits.mli>>=
 val setSize     : bits -> width -> bits
 @
 
@@ -144,18 +144,18 @@ string representation.  [[Size]] is raised when the requested
 raised when the specified [[width]] is too small to hold the value
 given by the string representation.
 
-<<>>=
+<<bits.mli>>=
 exception Overflow
 exception Size
 
-<<>>=
+<<bits.mli>>=
 val of_stringi  : string -> width -> bits (* Size, Overflow, Error *)
 val of_stringf  : string -> width -> bits
 val of_stringc  : string -> width -> bits
 @
 
 [[bits]] values can be created from integers.
-<<>>=
+<<bits.mli>>=
 val of_int       : int       -> width -> bits  (* Size *)
 val of_int64     : int64     -> width -> bits  (* Size *)
 val of_nativeint : nativeint -> width -> bits  (* Size *)
@@ -168,7 +168,7 @@ val of_nativeint : nativeint -> width -> bits  (* Size *)
 A [[bits]] value can be converted to an integer or string.  If the
 [[bits]] do not fit into an [[int]], [[Overflow]] is raised. 
 
-<<>>=
+<<bits.mli>>=
 type radix      = Oct
                 | Dec
                 | Hex
@@ -182,7 +182,7 @@ val to_string   : radix option -> bits -> string
 \subsubsection{Operations on [[bits]]}
 % ------------------------------------------------------------------ 
 
-<<>>=
+<<bits.mli>>=
 val zero        : width -> bits
 @
 
@@ -213,12 +213,12 @@ exception Size
 
 Values of type [[bits]] are represented as pairs of width and value.
 
-<<>>=
+<<bits.ml>>=
 type width      = int
 type bits       = width * int64
 @
 
-<<>>=
+<<bits.ml>>=
 let maxwidth    = 64
 let width (w,_) = w
 @
@@ -228,7 +228,7 @@ with is inside the implementation's limits and an actual value fits
 into that many bits.  The [[check]] function raises [[Size]] or
 [[Overflow]] in case the mentioned rules are violated.
 
-<<>>=
+<<bits.ml>>=
 let fits (width',bits) width =
     if (width <= 0) || (width > 64) 
     then raise Size
@@ -236,7 +236,7 @@ let fits (width',bits) width =
 @
 
  
-<<>>=
+<<bits.ml>>=
 let check width uint64 =
     if not (fits (maxwidth,uint64) width)
     then raise Overflow
@@ -246,7 +246,7 @@ let check width uint64 =
 [[setSize]] sets the size of a [[bits]] value and raises [[Overflow]]
 in case the size is too small.
 
-<<>>=
+<<bits.ml>>=
 let setSize (w,b as bits) width =
     if not (fits bits width)
     then raise Overflow
@@ -257,7 +257,7 @@ let setSize (w,b as bits) width =
 \subsubsection{Creation of \texttt{bits} values}
 % ------------------------------------------------------------------ 
 
-<<>>=
+<<bits.ml>>=
 let of_stringi str width =
     let len    = String.length str in
     let uint64 = ( match str.[0] with
@@ -271,14 +271,14 @@ let of_stringi str width =
         with
             Failure _ -> E.error ("syntax error in constant: "^str)
          
-<<>>=        
+<<bits.ml>>=
 let of_stringf str width =
     if   width <> 64 
     then raise Size
     else try (width,U.of_float (float_of_string str)) with
          | Failure _ -> E.error ("syntax error in constant: "^str)
 
-<<>>=
+<<bits.ml>>=
 let of_stringc str width =
     let len = String.length str in
     let c   = 
@@ -306,13 +306,13 @@ let of_stringc str width =
             ; (width, c)
             ) 
     
-<<>>=
+<<bits.ml>>=
 let of_int i width =
     let uint64 = U.of_int i in
         ( check width uint64
         ; (width,uint64)
         )
-<<>>=
+<<bits.ml>>=
 let of_int64 i width =
     ( check width i
     ; (width,i)
@@ -328,17 +328,17 @@ let of_nativeint i width = of_int64 (I.of_nativeint i) width
 The [[to_int]] function checks that the [[bits]] value can be
 represented as a positive integer and raises [[Overflow]] otherwise. 
 
-<<>>=
+<<bits.ml>>=
 let to_int (width,uint64) =
     if uint64 > I.of_int(max_int) then
         raise (Overflow)
     else
         I.to_int uint64
-@ 
+@
 Similarly for native integers.  The test is bogus, but there's no easy
 way to find out if [[width]] is small enough to fit into the width of
 [[nativeint]], because we're not given the width of [[nativeint]].
-<<>>=
+<<bits.ml>>=
 let to_nativeint (width,uint64) =
     if I.logand uint64 (I.of_nativeint Nativeint.max_int) = uint64 then
         I.to_nativeint uint64
@@ -348,7 +348,7 @@ let to_nativeint (width,uint64) =
 This is buggy: the [[I.to_string]] function considers the [[bits]]
 value as a signed integer. We also ignore the radix for the moment.
 
-<<>>=
+<<bits.ml>>=
 type radix      = Oct
                 | Dec
                 | Hex
@@ -360,7 +360,7 @@ let to_string radix (width,uint64) = I.to_string uint64 (* wrong *)
 \subsubsection{Operations on [[bits]]}
 % ------------------------------------------------------------------ 
 
-<<>>=
+<<bits.ml>>=
 let zero w =
     let z = U.of_int 0 in
     ( check w z

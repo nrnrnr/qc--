@@ -40,7 +40,7 @@ type ty         = int  t
 @
 A [[tyscheme]] describes a polymorphic function that takes a list of
 arguments and returns a single value as result.
-<<>>=
+<<types>>=
 type tyscheme   = (size t) list * (size t)
 @
 The [[tyscheme]] for the [[add]] primitve would be encoded as follows:
@@ -66,7 +66,7 @@ scheme fails.  This indicates an error in the type specification of a
 primitive and should never happen.  In case it does, an assertion will
 be violated.
 
-<<>>=
+<<types>>=
 exception MatchExn
 
 <<appl>>=
@@ -79,7 +79,7 @@ Some operators encode the size of their return values in their name:
 The [[retsize]] function returns this number from an operator name (if
 present) as an [[int option]] value.
 
-<<>>=
+<<appl>>=
 val retsize : string -> int option
 @
 
@@ -142,7 +142,7 @@ The [[match]] function matches a [[tyscheme]] with a [[ty]] and
 returns a substitution.  In case of a mismatch, [[matchExn]] is
 raised.
 
-<<>>=
+<<types.ml>>=
 let match' sigma = function 
     | Bool           , Bool                          -> sigma
     | Bits(Const(x)) , Bits(y) when x = y            -> sigma
@@ -157,7 +157,7 @@ and returns a [[ty]].  In the context of C-- this must always
 succeed, because primitive operators are predefined and only their
 type schemes are used for matching and substitution.
 
-<<>>=    
+<<types.ml>>=
 let subst sigma = function
     | Bool              -> Bool
     | Bits(Const(x))    -> Bits(x)
@@ -170,7 +170,7 @@ values at the argument positions of a [[tyscheme]].  The resulting
 substitution is applied to the result [[size t]] to get the result
 [[ty]].
                            
-<<>>=
+<<types.ml>>=
 let appl (args',r) args =
     let sigma  = S.empty                                     in
     let pairs  = try List.combine args' args with Invalid_argument _ ->
@@ -185,7 +185,7 @@ The [[widthlist]] function takes the type of a primitive (a
 [[tyscheme]]) and a list of argument types and returns the sizes bound
 by the variables in the type scheme.
 
-<<>>=
+<<types.ml>>=
 let widthlist (args',r) args =
     let sigma  = S.empty                                     in
     let pairs  = try List.combine args' args with Invalid_argument _ ->
@@ -205,7 +205,7 @@ alpha]] scanner, the second by the [[many num]] scanner whose result
 is also saved. A successful scan must consume the whole string and
 return the (possibly empty) string of the matched numbers.
 
-<<>>=
+<<types.ml>>=
 let retsize op =
     let ( *** ) = Lc.seq                                                in
     let num     = Lc.satisfy (fun c -> '0'  <= c && c <= '9')           in
@@ -222,7 +222,7 @@ let retsize op =
 
 The implementation of the abbreviations is trivial:
 
-<<>>=
+<<types.ml>>=
 let bitsc x         = Bits(Const(x))
 let bitsv x         = Bits(Var(x))
 let bits  x         = Bits(x)

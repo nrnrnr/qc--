@@ -40,10 +40,10 @@ implementation over these aspects, which we call the
 compromise between a fixed personality, and a run-time configured
 personality.
 
-The personality provides additionally an asbtract representation of
+The personality provides additionally an abstract representation of
 instructions. In this specific implementation a single instruction is
 used to implement an entire procedure. However, this implementation
-requires a function [[ext]] thant translates an instruction to
+requires a function [[ext]] thant translates an instruction to the
 abstract syntax of a procedure.
 
 <<module type personality>>=
@@ -93,7 +93,7 @@ module Symbol   = Map.Make(struct type t=string let compare=compare end)
 The [[Unsupported]] exception is raised when using features provided
 by the interface, but not by this implementation.
  
-<<>>=
+<<module make>>=
 exception Unsupported of string
 let unsupported msg = raise (Unsupported msg)
 @
@@ -103,7 +103,7 @@ architecture. The personality module [[P]] provides us with the
 necessary informations. The following functions helps to create types
 and values in {\AST} syntax.
 
-<<>>=
+<<module make>>=
 let pointer     = A.BitsTy(P.target#pointersize)
 let bits n      = A.BitsTy n
 let int n       = A.Int( Bits.of_int n P.target#wordsize
@@ -118,7 +118,7 @@ let zero        = A.Int( Bits.of_int 0 P.target#memsize
 The following types for section names, sizes and alignments are
 dictated by the assembly interface.
 
-<<>>=
+<<module make>>=
 type section    = string
 type size       = int
 type align      = int
@@ -127,7 +127,7 @@ type align      = int
 A [[sym]] value is created from the [[mksym]] function.  A [[symbol]]
 represents a label that was registered in the assemblers symbol table.
 
-<<>>=
+<<module make>>=
 type symclass   = Import        
                 | Export
                 | Local
@@ -156,7 +156,7 @@ An assembler program is represented by an [[asm]] value; it contains:
       clients.
 \end{itemize}
 
-<<>>=
+<<module make>>=
 type asm =      { symbols:      symbol Symbol.t
                 ; section:      string
                 ; actions':     A.section list
@@ -167,7 +167,7 @@ type asm =      { symbols:      symbol Symbol.t
 The initially empty {\PAL} program puts everything into the ``this
 can't happen'' section.  This is admittedly ugly. 
 
-<<>>=
+<<module make>>=
 type init = unit
 let init args =
     { symbols           = Symbol.empty
@@ -183,7 +183,7 @@ actions must be categorized.  The effect of the [[append]] function
 that adds an action to an assembly program depends on the category of
 an action.
 
-<<>>=
+<<module make>>=
 type action     = NewSection    of string
                 | CurSection    of A.section
                 | DefSym        of symbol
@@ -194,7 +194,7 @@ The [[mksym]] function creates [[sym]] values.  Symbols ultimately
 create {\PAL} names and must be mangled for that.  This implementation
 mangles the names as part of symbols when the {\AST} is created.
 
-<<>>=
+<<module make>>=
 let mksym s    = Sym s
 @
 
@@ -205,7 +205,7 @@ is reversed, before the now closed section is added \emph{in front} of
 the list of sections.  This means, that each section is in the right
 order, but the order of sections is still reversed.
 
-<<>>=
+<<module make>>=
 let append asm = function
     | NewSection s -> 
         { asm with 
@@ -243,31 +243,31 @@ in some cases.
 names of sections are \emph{not} mangled before they are used in the
 {\AST}.
 
-<<>>=
+<<module make>>=
 let section s   = NewSection s
 let current asm = asm.section
 @
 
 For completeness, a \emph{no-operation} is provided.
 
-<<>>=
+<<module make>>=
 let nop = Nop
 @
 
 Our assembler does not announce procedures.  Since instructions are
 {\PAL} procedures, we rely on them to do The Right Thing.
 
-<<>>=
+<<module make>>=
 type proc_info = unit
 let proc () = Nop
 @
 
 {\PAL} provides no concept of a directly accessible location counter
-and thus it can't be set.  Since all code we are generating here are
+and thus it can't be set.  Since all code we are generating here is
 outside of procedures the [[align]] action must denote an alignment
 for data and can not denote an align statement.
 
-<<>>=
+<<module make>>=
 let org    n = unsupported "no location counter in this implementation"
 let align  n = CurSection(A.Datum(A.Align n))
 @
@@ -275,7 +275,7 @@ let align  n = CurSection(A.Datum(A.Align n))
 We represent [[addloc]] that advances the location counter by emitting
 uninitialized data.
 
-<<>>=
+<<module make>>=
 let addloc n = 
     let memsize = P.target#memsize in
     let ty      = bits memsize            in
@@ -285,9 +285,9 @@ let addloc n =
     
 
 The actions related to symbols define new symbols, which are also entered
-to the symbol table. The [[lookup]] function helps to find them.
+into the symbol table. The [[lookup]] function helps to find them.
 
-<<>>=
+<<module make>>=
 let import (Sym n)                  = DefSym(n,Import)
 let export (Sym n)                  = DefSym(n,Export)
 let local  (Sym n)                  = DefSym(n,Local)
@@ -298,7 +298,7 @@ let lookup (Sym n) asm              = Symbol.find n asm.symbols
 
 All labels must be mangled in order to obey the {\PAL} syntax.
 
-<<>>=
+<<module make>>=
 let define_label (n,c)      = CurSection(A.Datum(A.Label(P.mangle n)))
 let define_const (n,c) b    = 
     let bits = A.Int(b,Some (bits (Bits.width b))) 
@@ -308,7 +308,7 @@ let define_local (Sym n)    = CurSection(A.Datum(A.Label (P.mangle n)))
 
 This implementation does not support relocatable addresses. 
 
-<<>>=
+<<module make>>=
 type reladdr = sym
 type offset  = unit
 
@@ -317,14 +317,14 @@ let diff s s        = unsupported "relocatable addresses unsupported"
 let reladdr (n,c) () = (Sym n) 
 @
 
-<<>>=
+<<module make>>=
 let instr i = CurSection(A.Procedure(P.ext i))
 @
 
 The [[zeroes n]] function emits [[bits8[n]{0,0,...,0]], where
 [[bits8]] is the type for [[memsize]].
 
-<<>>=
+<<module make>>=
 let zeroes n = 
     let memsize = P.target#memsize in
     let ty      = bits memsize            in
@@ -336,29 +336,29 @@ let zeroes n =
         if n = 0 
         then Nop
         else CurSection(A.Datum(A.MemDecl(ty,A.FixSize(size),init n)))
-<<>>=        
+<<module make>>=
 let value  v = 
     let ty   = bits (Bits.width v)              in
     let init = A.InitExprs([A.Int(v, Some ty)]) in
         CurSection(A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
-<<>>=
+<<module make>>=
 let addr (Sym a)   =
     let ty   = pointer in
     let init = A.InitExprs([A.Fetch(A.Var(None,a))]) in
         CurSection(A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
 
-<<>>=
+<<module make>>=
 let byteorder = match P.target#byteorder with
     | Rtl.BigEndian    -> Fenv.Clean.Big
     | Rtl.LittleEndian -> Fenv.Clean.Little
     | _                -> assert false
 @
 
-We can't emmitit comments (at the moment), because the {\AST} provides
+We can't emmit comments (at the moment), because the {\AST} provides
 only a comment \emph{statement}.  Statements are part of procedures
 which this code does not deal with.
 
-<<>>=
+<<module make>>=
 let comment n = Nop
 @
 
@@ -383,7 +383,7 @@ head of the program.
       registers attached to them.
 \end{itemize}
 
-<<>>=
+<<module make>>=
 let personality =
     [ A.Memsize P.target#memsize
     ; ( match P.target#byteorder with
@@ -409,7 +409,7 @@ to the translation of {\rtl}s to {\PAL} in module \module{rtl2ast}:
 hardware registers names must be extended by a space and then mangled.
 
 
-<<>>=
+<<module make>>=
 let decl name loc dd = 
   let w = Rtlutil.locwidth loc in
   let r = (A.Variant, None, A.BitsTy w, P.mangle (name^" "), Some name) 
@@ -418,7 +418,7 @@ let decl name loc dd =
 let decls = Target.StrMap.fold decl P.target#registers []
     
 
-<<>>=
+<<module make>>=
 let ast asm = 
     let section  = (asm.section, List.rev asm.actions') in
     let toplevel = List.rev (section :: asm.toplevel')  in

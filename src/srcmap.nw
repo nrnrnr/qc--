@@ -78,14 +78,14 @@ are represented by [[pos]].  A continuous region in the input
 stream consists of the first character in the span and the first one
 following it.
 
-<<srcmap.mli>>= 
+<<srcmap.mli>>=
 type pos            = int
 type rgn            = pos * pos
 @
 The [[null]] region is sometimes used a special value when no real
 region information is available and.
 
-<<>>=
+<<srcmap.mli>>=
 val null            : rgn
 @
 
@@ -96,7 +96,7 @@ danger of confusing lines and columns because they share the same
 type.  Records avoid this but have other drawbacks:  labels must be
 unique which leads to long names and ugly pattern matching.
 
-<<>>=
+<<srcmap.mli>>=
 type location       = string    (* file   *)
                     * int       (* line   *)
                     * int       (* column *)
@@ -105,7 +105,7 @@ A source map is a mutable data structure with an undisclosed
 representation.  A source map should never be empty but should
 contain a synchronization point for [[pos]] 0.
 
-<<>>=
+<<srcmap.mli>>=
 type map
 val empty :         map
 @
@@ -117,34 +117,34 @@ same file as the previous sync point and advances one line.  The
 line.  Another common case are tab characters which we currently
 ignore.
 
-<<>>=
+<<srcmap.mli>>=
 val sync :          map -> pos -> location -> unit
 val nl :            map -> pos -> unit
 @
 [[last]] returns the location of the last sync point. It is useful
 to get the current file name and line number.
 
-<<>>=
+<<srcmap.mli>>=
 val last :          map -> location
 @
 The corresponding location for a position can be obtained with
 [[location]].  For debugging a source map can be dumped to stdout
 using [[dump]]. 
 
-<<>>=
+<<srcmap.mli>>=
 val location :      map -> pos -> location
 val dump:           map -> unit
 @
 To make positions meaningful they can be bundled with a source map
 that keeps track of their origins. 
 
-<<>>= 
+<<srcmap.mli>>=
 type point          = map * pos
 type region         = map * rgn
 @
 The [[Str]] module provides string representations for points and regions.
 
-<<>>=
+<<srcmap.mli>>=
 module Str:
 sig
     val point       : point  -> string
@@ -167,7 +167,7 @@ type rgn            = pos * pos
 type location       = string    (* file   *)
                     * int       (* line   *)
                     * int       (* column *)
-<<>>=
+<<srcmap.ml>>=
 let null = (0,0)
 @
 
@@ -217,7 +217,7 @@ initial size of the array is [[size]].
 let size        =  2    (* small to test alloc *)
 let undefined   =  (0, ("undefined", -1, -1))    
 
-<<srcmap.ml>>= 
+<<srcmap.ml>>=
 let empty =
     { points  = Array.create size undefined 
     ; top     = 0
@@ -247,7 +247,7 @@ is replaced by an instance that comes from the hash table and is
 shared by many sync points.  We check also for the increasing order of
 positions.
 
-<<srcmap.ml>>=         
+<<srcmap.ml>>=
 let sync srcmap pos (file,line,col) =
     let _     = alloc srcmap in
     let file' = try  Hashtbl.find srcmap.files file
@@ -261,7 +261,7 @@ let sync srcmap pos (file,line,col) =
         ; srcmap.points.(top) <- (pos,location')
         ; srcmap.top <- srcmap.top + 1
         )
-@ 
+@
 
 [[last]] returns the location of the last sync point. It is useful
 to get the current file name and line number.
@@ -271,7 +271,7 @@ let last map =
     ( assert (map.top > 0 && map.top <= Array.length map.points)
     ; snd map.points.(map.top-1)
     )
-@ 
+@
 
 Entering a sync point for a new line is so common that it deserves
 its own function.  The sync point is actually at the position

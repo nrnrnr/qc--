@@ -43,7 +43,7 @@ external to_float:   int64 -> float                  = "uint64_i2f"
 The function [[of_int]] copies an [[int]] bitwise into an [[int64]]
 value; unlike [[Int64.of_int]] no sign-extension is performed.
 
-<<>>=
+<<external functions>>=
 external of_int:     int   -> int64                  = "uint64_i2i"
 @
 
@@ -51,7 +51,7 @@ The following arithmetical operations consider their arguments and
 return values as unsigned integers. Otherwise they implement the
 behavior of the corresponding functions in the [[Int64]] module.
 
-<<>>=
+<<external functions>>=
 external cmp:        int64 -> int64 -> int           = "uint64_compare"
 external add:        int64 -> int64 -> int64         = "uint64_add"
 external sub:        int64 -> int64 -> int64         = "uint64_sub"
@@ -78,7 +78,7 @@ in octal notation, when it starts with a [[0]].
     \end{tabular}
 \end{quote}
 
-<<>>=
+<<external functions>>=
 external of_string:  string -> int64                 = "uint64_of_string"
 @
 
@@ -94,7 +94,7 @@ val ge:              int64 -> int64 -> bool     (* greater equal *)
 
 Shift operations for unsigned [[int64]] values.
 
-<<>>=
+<<internal functions>>=
 val shl:             int -> int64 -> int64      (* shift left  *)
 val shr:             int -> int64 -> int64      (* shift right *)
 @
@@ -115,7 +115,7 @@ module I = Int64
 Comparison functions are implemented with the help of the [[cmp]]
 primitive. 
 
-<<>>=
+<<uint64.ml>>=
 let eq  x y =    (cmp x y) = 0
 let lt  x y =    (cmp x y) < 0
 let gt  x y =    (cmp x y) > 0
@@ -127,7 +127,7 @@ The shift-operations can be taken from the [[Int64]] module because
 they are the same for signed and unsigned values.  This applies to
 many other operations as well.
 
-<<>>=
+<<uint64.ml>>=
 let shl n x =    I.shift_left x n
 let shr n x =    I.shift_right_logical x n  
 @
@@ -146,7 +146,7 @@ let shr n x =    I.shift_right_logical x n
 Unsigned omparison of [[int64]] values; this implements the
 (mathematical) sign function of the difference of the two values. 
 
-<<>>=
+<<uint64p.c>>=
 value uint64_compare(value v1, value v2)
 {
     uint64 i1 = Int64_val(v1);
@@ -157,7 +157,7 @@ value uint64_compare(value v1, value v2)
 
 Bitwise conversion of a [[float]] to a [[int64]].
 
-<<>>=
+<<uint64p.c>>=
 value uint64_f2i(value f)
 {
     union { double d; int64 i; } buffer;
@@ -167,7 +167,7 @@ value uint64_f2i(value f)
 @
 
 Bitwise conversion of a [[int64]] value to to [[float]].
-<<>>=
+<<uint64p.c>>=
 value uint64_i2f(value i)
 {
     union { double d; int64 i; } buffer;
@@ -180,7 +180,7 @@ The following function is a quick hack and not portable to 64 bit
 architectures.  It converts an [[int]] value bitwise into an [[int64]]
 value. 
 
-<<>>=
+<<uint64p.c>>=
 value uint64_i2i(value i)
 {
     union { int32 i[2]; int64 j; } buffer;
@@ -194,19 +194,19 @@ value uint64_i2i(value i)
 
 Implementation of unsigned arithmetic operators.
 
-<<>>=
+<<uint64p.c>>=
 value uint64_add(value v1, value v2)  /* ML */
 { return copy_int64((uint64)Int64_val(v1) + (uint64)Int64_val(v2)); }
 
-<<>>=
+<<uint64p.c>>=
 value uint64_sub(value v1, value v2)  /* ML */
 { return copy_int64((uint64)Int64_val(v1) - (uint64)Int64_val(v2)); }
 
-<<>>=
+<<uint64p.c>>=
 value uint64_mul(value v1, value v2)  /* ML */
 { return copy_int64((uint64)Int64_val(v1) * (uint64)Int64_val(v2)); }
 
-<<>>=
+<<uint64p.c>>=
 value uint64_div(value v1, value v2)  /* ML */
 {
     int64 divisor = Int64_val(v2);
@@ -214,7 +214,7 @@ value uint64_div(value v1, value v2)  /* ML */
     return copy_int64((uint64)Int64_val(v1) / (uint64)divisor);
 }
 
-<<>>=
+<<uint64p.c>>=
 value uint64_mod(value v1, value v2)  /* ML */
 {
     int64 divisor = Int64_val(v2);
@@ -228,7 +228,7 @@ declared [[static]] there such that we can't access it.
 [[parse_digit]] returns the value of a digit in its string
 representation. 
 
-<<>>=
+<<uint64p.c>>=
 static int parse_digit(char * p)
 {
     int c = *p;
@@ -247,7 +247,7 @@ A string number contains its radix implicitly. This function sets the
 [[base]] accordingly and returns an advanced [[p]] such that a header
 like [[0x]] is skipped. 
 
-<<>>=
+<<uint64p.c>>=
 static char* parse_base (char *p, int *base)
 {
     *base = 10;
@@ -271,7 +271,7 @@ Convert a string to an unsigned [[int64]] value.  In case of syntax
 errors [[Failure]] is raised.  No overflow checks are performed
 currently.
 
-<<>>=
+<<uint64p.c>>=
 value uint64_of_string(value s)          /* ML */
 {
     char * p;

@@ -226,7 +226,7 @@ The characteristics of symbols of an assembler are captured by a
 [[symbol]] value.  In implements a number of tactics to create symbols
 from names:
 
-<<>>=
+<<mangle.mli>>=
 type symbol = { preprocess:  string -> string
               ; replace:     char -> char
               ; reserved:    string list
@@ -249,7 +249,7 @@ The previous sections present the rich inner life of a [[mangler]].
 It is created from a [[symbol]] value, and an initial [[strmap]] from
 imported or exported {\PAL} names to their corresponding symbols.
 
-<<>>=
+<<mangle.mli>>=
 module StrMap: Map.S with type key = string
 
 type strmap = string StrMap.t
@@ -287,7 +287,7 @@ A [[mangler]] is made from a [[symbol]] value and an initial map.  The
 initial set $M$ used in the abstract description of the algorithm can
 be calculated from the map:
 
-<<>>=
+<<mangle.ml>>=
 let range map =
     let add name sym set = StrSet.add sym set in
         StrMap.fold add map StrSet.empty
@@ -296,7 +296,7 @@ let range map =
 A [[mangler]] must maintain some state: the set of used symbols, and the
 map of names to symbols.                       
 
-<<>>=
+<<mangle.ml>>=
 type state          = { mutable used: strset
                       ; mutable map:  strmap 
                       }
@@ -308,7 +308,7 @@ make sure they are never used for a name. If a name can not be found
 in [[state.map]] it must be mangled and the new mapping together with
 the new symbol are recorded in the mutable state.
 
-<<>>=
+<<mangle.ml>>=
 let make symbol map =
     let state    = { used = List.fold_right 
                                 StrSet.add symbol.reserved (range map) 
@@ -342,7 +342,7 @@ let make symbol map =
 
 Here is a simple [[symbol]] for testing a mangler.
         
-<<>>=       
+<<mangle.ml>>=
 let simple =
     let reserved =
         [ "aborts"; "align"; "aligned"; "also"; "as"; "big"; "byteorder";

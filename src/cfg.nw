@@ -76,9 +76,9 @@ transformed or visualized.  Since a label $l$ and its successor $x$
 are two different nodes, $x$ can be reached directly in the graph and
 not only by paths via $l$---this is completely legal. 
 
-Continuations can be used to model exception handling. Nodes that can
-transfer control to a continuation are annotated with a [[cuts]] value
-that lists the different possible nodes/continuations.
+{\PAL} Continuations can be used to model exception handling.  Nodes
+that can transfer control to a continuation are annotated with a
+[[cuts]] value that lists the different possible nodes/continuations.
 
 <<shared types>>=
 type label      = string
@@ -94,17 +94,16 @@ with [[copy]] nodes, a [[context]] value identifies the exact purpose
 of a copy.  This information is necessary to find the right calling
 convention to implement the copying. 
                            
-<<>>=
+<<shared types>>=
 type context    = ProcParameters
                 | ProcResults
                 | ContParameters
 @
 
-
 A formal parameter is a variable, an actual parameter an expression. 
 Both can have optional hints, and have a [[width]], i.e.~a type. 
 
-<<>>=
+<<shared types>>=
 type formal =   { name:      string 
                 ; width:     Rtl.width       (* bits *)
                 ; hint:      string option   (* C-- hint *)
@@ -148,7 +147,7 @@ use [[bind]] to add properties.
       generated code. A comment must not contain a newline character. 
 \end{itemize}
 
-<<>>=
+<<signature S>>=
 module Props : sig 
     type t          (* properties *)
 
@@ -165,7 +164,7 @@ that must be unique within a [[cfg]].  As noted above, a [[label]] can
 be used before it is attached to a node and thus allows to express
 sharing of nodes. 
 
-<<>>=
+<<signature S>>=
 (* label *)
 val label:      label -> node -> unode
 @
@@ -186,7 +185,7 @@ its return.  The first [[int]] value is the number of the continuation
 to be used at its point of return, the other the total number of
 continuation at its point of return.
 
-<<>>=
+<<signature S>>=
 (* 0 successor nodes *)
 val exit:       cfg -> unode
 val goto:       cfg -> Rtl.expr -> label list -> unode
@@ -197,13 +196,13 @@ val return:     cfg -> int -> int             -> unode
 
 The following nodes are lying on a control flow path and thus have a
 single successor.  For calls the normal point of return is given as a
-[[node]], all exceptional points of return by name by a [[cuts]]
+[[node]], all exceptional points of return are named in a [[cuts]]
 value. 
 
 Copy-in and copy-out nodes carry informations about formal and actual
 parameters, the calling convention to be used, and their [[context]]. 
 
-<<>>=
+<<signature S>>=
 (* 1 successor node *)
 val entry:      node -> unode                   (* unique entry node *)
 val assign:     Rtl.rtl -> node -> unode
@@ -213,11 +212,11 @@ val call:       Rtl.expr -> node -> cuts -> unode
 @
 
 A [[branch]] node has two successors: the first is taken when its
-expression evaluates to true, and the other otherwise. Since a control flow
+expression evaluates to true, and the second otherwise. Since a control flow
 graph is built from the bottom up, both successors are known when the
 branching point is reached.
 
-<<>>=
+<<signature S>>=
 (* 2 successor nodes *)
 val branch  : Rtl.expr -> node -> node -> unode
 @
@@ -231,7 +230,7 @@ This module implements the abstract CFG interface and provides the
 lowest level implementation for the {\qcc} compiler.  Despite what the
 interface says, this implementation does not provide [[copyi/o]]
 nodes.  We expect them to be implemented as a sequence of [[assign]]
-nodes by a higher level implementation.
+nodes by a lower level implementation.
 
 % ------------------------------------------------------------------ 
 \subsection{Interface}
@@ -239,7 +238,7 @@ nodes by a higher level implementation.
 
 This module implements the abstract CFG interface plus some extras.
 The latter include a way to translate a control flow graph back into
-abstract {\PAL} syntax to make is visible via pretty-printing. This
+abstract {\PAL} syntax to make it visible via pretty-printing. This
 translation requires some knowledge about the sizes of pointers and
 the like and is provided as a functor argument of type [[TARGET]] to
 functor [[Make]].
@@ -313,7 +312,7 @@ into the [[by_label]] table of the [[cfg]] and given the [[Deferred]]
 kind.  When the corresponding node is defined, all missing
 informations will be added.
 
-<<>>=
+<<module Make>>=
 and  kind       = Deferred
                 (* end of a path *) 
                 | Exit
@@ -334,7 +333,7 @@ Continuations, that a [[call] or [[cutto]] node may reach, are
 represented as nodes and no longer as labels as they are in the
 interface.
 
-<<>>=
+<<module Make>>=
 and cuts =      { cuts:             node list
                 ; unwinds:          node list
                 ; returns:          node list
@@ -346,7 +345,7 @@ Nodes can be ordered based on their unique [[id]]. We provide a
 [[Compare]] module to be used with functors that create (ordered) maps
 and sets of nodes.
                
-<<>>=
+<<module Make>>=
 module Compare = struct
     type t = node
     let compare x y = compare x.id y.id
@@ -379,7 +378,7 @@ functions defined here.  All nodes are constructed by [[newNode]];
 this function assigns a fresh [[id]] to the new node and initializes
 the list of predecessors to the empty list.
 
-<<>>=
+<<module Make>>=
 let newNode cfg kind props =
     let _ = cfg.nid <- cfg.nid + 1 in
         { cfg   = cfg
@@ -395,7 +394,7 @@ node is not yet defined, a new [[Deferred]] node is created.  When
 later a node of that name is defined, the [[kind]] field is updated;
 see the [[labelStmt]] function for the details of this.
 
-<<>>=        
+<<module Make>>=
 let lookup cfg label =
     try  Hashtbl.find cfg.by_label label
     with Not_found ->
@@ -407,7 +406,7 @@ let lookup cfg label =
 The [[cuts]] bundle in the interface references by name.  The
 implementation references nodes directly and thus must look them up.
 
-<<>>=
+<<module Make>>=
 let lookup_cuts cfg c =
     { cuts    = List.map (lookup cfg) c.Acfg.cuts
     ; unwinds = List.map (lookup cfg) c.Acfg.unwinds
@@ -420,7 +419,7 @@ Finally, here are the exported functions that create the graph.  An
 empty [[cfg]] has neither entry, nor exit node and just stores the
 [[init]] value.
 
-<<>>=
+<<module Make>>=
 let create init = 
     { init      = init
     ; entry     = None
@@ -433,7 +432,7 @@ let create init =
 Each node contains its graph; the [[cfg_of]] functions returns a node's
 [[cfg]]. 
     
-<<>>=    
+<<module Make>>=
 let cfg_of { cfg=g } = g
 @
 
@@ -441,7 +440,7 @@ Below are all the functions that create nodes in the control flow
 graph. Each function must update the list of predecessors of nodes it
 refers to.
 
-<<>>=
+<<module Make>>=
 let exit cfg props = 
     let node = newNode cfg Exit props  in
     let _    = cfg.exit <- Some node   in       (* record exit in cfg *)
@@ -451,7 +450,7 @@ let exit cfg props =
 An [[entry]] node is also registered in the [[graph]] and has a
 successor, which is back-linked to the node at hand. 
 
-<<>>=
+<<module Make>>=
 let entry next props  = 
     let cfg   = cfg_of next                    in
     let node  = newNode cfg (Entry next) props in
@@ -463,7 +462,7 @@ let entry next props  =
 A [[goto]] node links to all its successors. Successors are given by
 name and thus must be looked up first.
 
-<<>>=
+<<module Make>>=
 let goto g expr labels props = 
     let succ = List.map (lookup g) labels                     in
     let n    = newNode g (Goto(expr,succ)) props              in
@@ -474,7 +473,7 @@ let goto g expr labels props =
 A [[branch]] has two successors, which are both back-linked via their
 [[pred]] components.
 
-<<>>=
+<<module Make>>=
 let branch expr t f props =
     let node  = newNode (cfg_of t) (Branch (expr, t, f)) props   in
     let _     = t.pred <- node::t.pred                           in
@@ -484,7 +483,7 @@ let branch expr t f props =
 
 An assignment is simple; is has a successor that must be linked in.
 
-<<>>=
+<<module Make>>=
 let assign rtl next props = 
     let node = newNode (cfg_of next) (Assign (rtl, next)) props in
     let _    = next.pred <- node::next.pred                       in
@@ -494,21 +493,21 @@ let assign rtl next props =
 No [[copy]] nodes are available, as explained above in the interface
 section. 
 
-<<>>=
+<<module Make>>=
 let copyi  formals context cc next p = assert false
 let copyo  actuals context cc next p = assert false
 @
 
 A [[return]] node has no successors.
 
-<<>>=
+<<module Make>>=
 let return g x y props = newNode g (Return (x,y)) props
 @
 
 A [[call]] takes an expression and a continuation bundle. The normal point
 of return is the successor of the [[call]] node.
 
-<<>>= 
+<<module Make>>=
 let call expr next cuts props =
     let g    = cfg_of next      in
     let cuts = lookup_cuts g cuts in
@@ -521,7 +520,7 @@ let call expr next cuts props =
 A [[cutto]] and a [[jump]] node have no included successors.  All
 successors are referenced by name and thus must be looked up.
 
-<<>>=
+<<module Make>>=
 let cutto g expr cuts props =
     let cuts = lookup_cuts g cuts                                   in
     let node = newNode g (Cutto(expr,cuts)) props                   in
@@ -544,7 +543,7 @@ simply update the [[Deferred]] kind of that node to [[Label]] and are
 done. If the label was never used before, we directly create a
 [[Label]] node and put it into the [[by_label]] map of the [[cfg]].
 
-<<>>=
+<<module Make>>=
 let label l node props =
     let g    = cfg_of node in
         try let n = Hashtbl.find g.by_label l in
@@ -583,7 +582,7 @@ remember the visited nodes.  Module [[NSet]] provides a set of nodes;
 the identity of nodes is based on their (integer) [[id]]s. 
  
 
-<<>>=
+<<module Make>>=
 module Export = struct
     module NSet = Set.Make(Compare)
     module A    = Ast
@@ -614,7 +613,7 @@ A [[cuts]] value bundles a number of nodes. These are identified by
 names in the {\AST} and as such, names must be generated for them.
 [[flows]] creates an [[Ast.cuts]] value from a [[cuts]] value.
 
-<<>>=
+<<module Export>>=
 let flows mangle cuts = 
         [ A.CutsTo     (List.map (label_of mangle) cuts.cuts)
         ; A.UnwindsTo  (List.map (label_of mangle) cuts.unwinds)
@@ -643,7 +642,7 @@ usually \emph{not} processed last.  The [[exit]] node is therefore
 translated to a generic [[return]] statement.  \emph{Is [[0/0]] legal
 {\PAL}?}
              
-<<>>=
+<<module Export>>=
 let rec exitStmt visited mangle todo = 
     A.CommentStmt "exit" :: returnStmt visited mangle todo (0,0) 
 @
@@ -651,7 +650,7 @@ let rec exitStmt visited mangle todo =
 Given the introduction above, the translation of most nodes is
 straight forward.
 
-<<>>=
+<<module Export>>=
 and entryStmt visited mangle todo next = 
     A.CommentStmt "entry" :: nextstmt visited mangle (next :: todo)
 
@@ -669,7 +668,7 @@ This code relied on the fact that the left node is labeled. Since the
 left node is not necessarily shared, it otherwise won't be labeled in
 the output and thus the goto 
    
-<<>>=
+<<module Export>>=
 and branchStmt visited mangle (todo: node list) (expr,(left: node),(right: node)) = 
     let _      = assert ( match left.kind with
                         | Label _ -> true
@@ -726,7 +725,7 @@ and cutStmt visited mangle todo (expr,cuts) =
 The [[dispatch]] function handles all the different kind of nodes and
 calls the respective function from above. No magic involved.
 
-<<>>=
+<<module Export>>=
 and dispatch visited mangle todo = function        
     | Exit                  -> exitStmt    visited mangle todo 
     | Entry (x)             -> entryStmt   visited mangle todo x
@@ -750,7 +749,7 @@ before, the corresponding label was already generated.  The [[goto]]
 function creates the [[goto]] Statement.
 
 
-<<>>=
+<<module Export>>=
 and label mangle node =
     A.LabelStmt(label_of mangle node)         
 
@@ -802,7 +801,7 @@ handled by the [[stmt]] function.
 \item Please see the comments above about [[branch]] nodes.
 \end{itemize} 
         
-<<>>=
+<<module Export>>=
 and stmt terminal visited mangle = function
     | []    -> []
     | n::nn ->  
@@ -828,7 +827,7 @@ and termstmt visited mangle todo = stmt true  visited mangle todo
 The [[stmts]] function translates a [[cfg]] into a list of statements
 by pushing the [[entry]] node on the [[todo]] stack. 
 
-<<>>=
+<<module Export>>=
 let stmts cfg mangle = 
     match cfg.entry with
         | None      -> []
@@ -868,7 +867,7 @@ end
 @
 
 The [[expand]] function expands a single node to a target specific
-sequence of nodes.  This function can only applied to the following
+sequence of nodes.  This function can be only applied to the following
 kind of nodes:  [[goto]], [[jump]], [[cutto]], [[call]], [[branch]],
 and [[assign]].  Applying it to any other kind of node results in a
 assertion violation. 
@@ -923,7 +922,7 @@ as follows:
 [[substsucc]] replaces in a [[node.kind]] references to ([[node]])
 [[x]] by [[y]] in a [[kind]]. 
 
-<<>>=
+<<module Trans body>>=
 let substsucc node x y = 
     let substcuts cuts x y =
         { cuts    = replace x y cuts.cuts
@@ -955,7 +954,7 @@ are [[pred]], its single successor [[succ]]. All new nodes get
 properties [[props]] assigned. The function returns the topmost node
 of the sequence.
 
-<<>>=
+<<module Trans body>>=
 let rtls2assigns props pred rtls succ =
     let rec loop succ = function
         | []     -> succ
@@ -976,7 +975,7 @@ are turned into a sequence of assignment nodes, except the last on,
 which is used to update [[node]]. The sequence of assignment nodes
 becomes the predecessor of [[node]].
    
-<<>>=
+<<module Trans body>>=
 let expand node target expand_rtl = 
     let rtl = match node.kind with
         | Assign (rtl,next)     -> rtl

@@ -82,7 +82,7 @@ let append asm a    = { asm with actions = a :: asm.actions }
 
 The [[nop]] action does nothing. 
 
-<<>>=
+<<functional>>=
 val nop:            action
 @
 
@@ -113,7 +113,7 @@ val current : asm -> section
 Some assemblers also like procdures to be announced. The [[proc]] 
 actions does this and receives some abstract [[proc_info]] value.
 
-<<>>=
+<<module type s>>=
 type proc_info
 val proc    : proc_info -> action
 @
@@ -124,7 +124,7 @@ the next largest multiple of [[n]], in case the current value of the
 location pointer is not a multiple of [[n]].  [[addloc n]] increments
 the value of the location pointer by [[n]].
 
-<<>>=
+<<module type s>>=
 val org     : int -> action
 val align   : int -> action
 val addloc  : int -> action
@@ -182,7 +182,7 @@ binds a constant to a symbol.  No values must be bound to imported
 symbols and exactly one value must be bound to every other declared
 symbol.
 
-<<>>=
+<<module type s>>=
 val lookup          : sym -> asm -> symbol
 val define_label    : symbol -> action
 val define_const    : symbol -> Bits.bits -> action
@@ -191,7 +191,7 @@ val define_const    : symbol -> Bits.bits -> action
 To make the handling of local symbols easier, [[define_local]] is
 provided: 
 
-<<>>=
+<<module type s>>=
 val define_local    : sym -> action
 @
 
@@ -207,7 +207,7 @@ address which is taken from a [[symbol]] $s$: $r= s+o$ where $o$ is
 the [[offset]] from the symbol $s$. An offset can be specified
 directly, or taken from the difference of two symbols.
 
-<<>>=
+<<module type s>>=
 type reladdr
 type offset
 
@@ -225,7 +225,7 @@ course, in order to be general the representation of an
 [[instruction]] is hidden and left to an implementation.  The [[inst]]
 action emits an instruction.
 
-<<>>=
+<<module type s>>=
 type instruction
 val instr           : instruction -> action
 @
@@ -236,7 +236,7 @@ values of the target [[memsize]], [[addr]] emits a relative address,
 and [[value]] emits a value.  The assembler takes care of the
 [[byteorder]]. 
 
-<<>>=
+<<module type s>>=
 val zeroes          : int -> action
 val value           : Bits.bits -> action
 val addr            : reladdr -> action
@@ -249,14 +249,14 @@ val addr            : reladdr -> action
 A target specific assembler takes the target's byteorder into account.
 The [[byteorder]] value tells it.
 
-<<>>=
+<<module type s>>=
 val byteorder       : Fenv.Clean.endianness
 @
 
 To emit a comment, use the [[comment]] action. A comment should
 contain only printable characters and especially no newline character.
 
-<<>>=
+<<module type s>>=
 val comment         : string -> action 
 @
 
@@ -270,7 +270,7 @@ assembly symbols.  The connection between {\PAL} names and symbols
 depends on the set of symbols imported and exported from an assembly
 program, as explained in \module{mangle}.
 
-<<>>=
+<<module type s>>=
 val mksym: string -> sym
 @
 

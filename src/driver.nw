@@ -62,7 +62,7 @@ name [[file]] together with a [[Srcmap.map]] for that file.  It raises
 [[Error.ErrorExn]] in case of problems. 
 
 
-<<>>=
+<<driver.ml>>=
 let ast_of file = 
     let fd          = try open_in file
                       with Sys_error(msg) -> E.error msg    in
@@ -100,7 +100,7 @@ functions it works at the lexical level.  We thus can't use the
 [[ast_of]] function from above.  The funtion reads a file token by
 token and prints it together with its position to [[stdout]].
 
-<<>>=
+<<driver.ml>>=
 let lex file =
     let fd          = try open_in file
                       with Sys_error(msg) -> E.error msg    in
@@ -132,7 +132,7 @@ let lex file =
 The [[asdl]] command exports the abstract syntax
 of a a file in {\asdl} format to [[stdout]].
 
-<<>>=
+<<driver.ml>>=
 let asdl file =
     let ast,map = ast_of file in
         AstUtil.sexp_wr_program ast stdout
@@ -146,7 +146,7 @@ let asdl file =
 The [[pp]] command parses a file and pretty-prints it for a line
 [[width]] to [[stdout]].
 
-<<>>=
+<<driver.ml>>=
 let pp file width =
     let ast,map = ast_of file in
         Astpp.ppToFile stdout width ast
@@ -159,7 +159,7 @@ let pp file width =
 
 The [[check]] command parses a file and checks its static semantics. 
 
-<<>>=
+<<driver.ml>>=
 let check file = 
     let ast, map = ast_of file                       in
     let env      = Fenv.Dirty.empty map              in
@@ -179,7 +179,7 @@ let check file =
 The following [[Mangle.symbol]] value is used to construct a
 [[Mangle.mangler]] function that respects the syntax of {\PAL}.
 
-<<>>=       
+<<driver.ml>>=
 let cmangle =
     let reserved =
         [ "aborts"; "align"; "aligned"; "also"; "as"; "big"; "byteorder";
@@ -232,7 +232,7 @@ between the various module types in the following code is subtle:
 
 \end{itemize}
 
-<<>>=
+<<driver.ml>>=
 module DummyTarget = struct
     let t = Target.dummy
 end
@@ -246,7 +246,7 @@ byteorder and many other aspects of the target architecture.  It also
 defines what is an instruction in our assembler.  An instruction is en
 entire procedure and is represented by an asbtract flow graph. 
 
-<<>>=
+<<driver.ml>>=
 module Personality = struct
     module F = Fenv.Clean
     module A = Ast
@@ -273,7 +273,7 @@ statements use local variables that need to be declared. Declarations
 are (re-) constructed by scanning the [[scope]] of the procedure for
 register declarations. 
 
-<<>>=
+<<module Personality>>=
 let rdecl mangle name ventry dd = match ventry with
     | (_, (F.Register _ , Types.Bits n)) -> 
         let r = (A.Variant, None, A.BitsTy n ,mangle name, None)
@@ -325,7 +325,7 @@ The [[compile]] compiles a source file from {\PAL} to {\PAL}.  The
 generation is only performed when the check of the static semantics is
 passed. 
     
-<<>>=
+<<driver.ml>>=
 let compile target file =
     let ast, map = ast_of file                       in
     let env      = Fenv.Dirty.empty map              in
@@ -351,12 +351,12 @@ The (exported) dispatch function just invokes the appropriate function
 that implements a command. The cases [[Help]] and [[Version]] are
 expexted to be handled by the \module{main} module. 
             
-<<>>=
+<<driver.ml>>=
 let dispatch cmd = 
     try 
         ( match cmd with 
         | Cmdline.Help                  -> assert false
-        | Cmdline.Version	        -> assert false
+        | Cmdline.Version               -> assert false
         | Cmdline.Lex(file)             -> lex  file      ; 0
         | Cmdline.Asdl(file)            -> asdl file      ; 0
         | Cmdline.PP(file,width)        -> pp file width  ; 0
