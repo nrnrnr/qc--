@@ -19,7 +19,7 @@ states in its automaton and the corresponding edges should be finite.
 The module traverses this state graph and emits it for analysis.
 
 Function [[print]] takes a function [[mk]], that creates an automaton in
-its initial state a list of widths, and list of hints. It prints all
+its initial state, a list of widths, and list of hints. It prints all
 edges of the automaton to [[stdout]] in the Dot language.  The widths
 and hints are used to construct requests: in every state of the
 automaton, every combination of a width and a hint are explored to reach
@@ -33,7 +33,7 @@ val print:  mk:(unit -> Automaton.t)
 
 I now realize that the [[graph]] type defined in the implementation is
 basically an isomorphism of the automaton defined in
-\module{automaton.nw}. Given the graph, the underlying automaton can be
+\module{automaton}. Given the graph, the underlying automaton can be
 simulated.  After this realization I changed the type definition of
 [[graph]] to make simulation easy. This should help to apply Bailey's
 algorithm to find interesting paths.
@@ -57,7 +57,7 @@ state, we have to freeze it. But to follow a new edge we need an
 unfrozen automaton, thus we have to re-construct the automaton's state
 such that we can make the transition. To do that, we maintain a
 \emph{path} of types that allows to reconstruct the state automaton,
-starting from the initial state of an automaton. This in turn requires,
+starting from the initial state of an automaton. This in turn requires
 to create an automaton in its initial state when needed.
 
 
@@ -347,6 +347,13 @@ let rec explore graph (visited:ES.t) (path:path) (paths:path list list) node =
             (paths,visited)
             (List.map (fun ty -> (node,ty)) labels)
 @
+
+I have tested this code by looking at the number of paths generated for
+a graph: for every node with $i$ incoming and $o$ outgoing edges,
+$i\times o$ paths are generated. The start node has only $n$ outgoing
+edges, for each of which one paths is generated. Overall, $n+i\times o$
+paths must be generated. For the single test case with 13 nodes and 54
+paths, the result was correct. 
 
 The main function extracts the parameter lists, flattens and reverses
 them.
