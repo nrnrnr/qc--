@@ -1,0 +1,132 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% ---------------------------------------------------------------- %
+\section{Allocator for temporaries}
+% ---------------------------------------------------------------- %
+
+Multiple parts of the compiler may need to allocate temporaries.
+Here we provide simple allocators for temporaries.
+The primary variation is in the interfaces.
+
+One policy question is whether the client of the allocator should name
+the temporary space directly or should name the hardware space into
+which the temporary will eventually be mapped.
+We have decided that clients must ask for a specific temporary space,
+not for a temporary mapping into some hardware space.
+Our reasoning is twofold: first, that asking for a hardware space does
+not specify a location set, and second, that the client is supposed to
+know all about the temporaries anyway.
+
+Type~[[Single.t]] represents an allocator for a single space.
+It is a mutable type; its state represents the temporaries that have
+already been allocated.  
+[[Single.for_space]] creates a fresh allocator.
+The space passed to [[Single.for_space]] must be a temporary space.
+Functions [[reg]] and [[loc]] provide different interfaces to the allocator.
+It may be useful to partially apply [[reg]] to [[t]].
+<<talloc.mli>>=
+module Single : sig
+  type t       (* an allocator for one space -- a mutable type *)
+
+  val for_space : Space.t -> t            (* a fresh allocator *)
+  val reg : t -> width:int -> Register.t
+  val loc : t -> width:int -> Rtl.loc
+end
+@ 
+Type~[[Multiple.t]] represents a group of allocators, one for each
+temporary space on a machine. 
+It is a mutable type; its state represents the temporaries that have
+already been allocated.  
+[[Single.for_spaces]] creates a fresh allocator for each temporary
+space on the list passed to it.
+Non-temporary spaces are ignored, so it is possible to pass a list of
+\emph{all} spaces.
+Functions [[reg]], [[loc]], and [[reg_like]] provide different
+interfaces to the allocator.
+It may be useful to partially apply [[reg]] and [[loc]] to~[[t]] and a space.
+More interfaces could be added.
+It is a checked run-time error to ask for a space that is not a
+temporary space on the original list.
+<<talloc.mli>>=
+module Multiple : sig
+  type t       (* an allocator for one space -- a mutable type *)
+
+  val for_spaces : Space.t list -> t            (* a fresh allocator *)
+  val reg : t -> Rtl.space -> width:int -> Register.t
+  val loc : t -> Rtl.space -> width:int -> Rtl.loc
+  val reg_like : t -> Register.t -> Register.t
+end
+@ 
+
+% ---------------------------------------------------------------- %
+\subsection{Implementation}
+% ---------------------------------------------------------------- %
+
+<<talloc.ml>>=
+module S = Space
+<<auxiliaries>>
+module Single = struct
+  type t = (width:int -> Register.t) * (width:int -> Rtl.loc)
+        
+  let for_space space =
+    let next = ref 22000 in
+    let divide = divideby space.S.cellwidth in (* premature optimization *)
+    (fun width ->
+      <<use [[width]] to make [[k]] be the next index, updating [[next]]>>
+      (space.S.space, k, width)),
+    (fun width ->
+      <<use [[width]] to make [[k]] be the next index, updating [[next]]>>
+      let k = Bits.of_int k space.S.indexwidth in
+      let index = (Rtl.bits k space.S.indexwidth) in
+      Rtl.cell Rtl.none space.S.space space.S.aggregation width index)
+
+  let reg (reg, _) = reg
+  let loc (_, loc) = loc
+end
+@ 
+<<use [[width]] to make [[k]] be the next index, updating [[next]]>>=
+let n = divide width in
+(* could check to see if width is supported ... *)
+let k = !next in
+let _ = next := k + n in
+@ 
+<<talloc.ml>>=
+module Multiple = struct
+  let fail c =
+    prerr_string ("Space '" ^ Char.escaped c ^ "' is not a temporary space\n");
+    flush stderr;
+    assert false
+
+  let is_temp s = match s.S.classification with
+  | S.Temp _ -> true
+  | _ -> false
+
+  type t = Rtl.space -> Single.t
+
+  let for_spaces spaces =
+    List.fold_right
+      (fun s rest ->
+         if is_temp s then
+           let a = Single.for_space s in
+           fun c -> if c = s.S.space then a else rest c
+         else
+           rest)
+      spaces fail
+
+  let reg t c = Single.reg (t c)
+  let loc t c = Single.loc (t c)
+
+  let reg_like t (space, _, width) = Single.reg (t space) width
+end
+@ 
+This bit of cleverness may get the compiler to optimize division using
+right shifts.  If not, we could write the right shifts ourselves.
+I have absolutely no business pulling stunts like this!
+<<auxiliaries>>=
+let divideby = function
+  | 32 -> fun n -> n / 32
+  | 8  -> fun n -> n / 8
+  | 64 -> fun n -> n / 64
+  | m  -> fun n -> n / m
+@ 
+  
