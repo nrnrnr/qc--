@@ -37,6 +37,7 @@ val emit    :   cfg -> (Rtl.rtl -> 'a -> 'a)
                     -> 'a
                     -> 'a
 val new_cfg2dot:    compress:bool -> name:string -> Rtl.rtl Cfgx.M.t -> string
+val new_cfg2ast: ('i -> Ast.stmt) -> 'i Cfgx.M.t -> name:string -> Ast.proc
 @
 
 \begin{itemize}
@@ -160,7 +161,27 @@ let new_cfg2dot ~compress ~name g =
   let _ = Rtlutil.ToAST.verbosity oldv in
   String.concat "" (openg :: pagesize :: compress :: body)
 @
-
-        
-
-
+<<cfgutil.ml>>=
+let new_cfg2ast instr g ~name =
+  let module G = Cfgx.M in
+  let module A = Ast in
+  let node n tail = match G.to_instr n with
+  | Some i ->
+      let is = instr i :: tail in
+      if G.kind n = G.Assertion then
+        A.CommentStmt "the following node is merely asserted" :: is
+      else
+        is 
+  | None ->
+      match G.kind n with
+      | G.Join -> List.fold_right (fun l t -> A.LabelStmt l :: t) (G.labels n) tail
+      | G.Entry | G.Exit | G.Impossible -> tail
+      | G.Illegal -> A.CommentStmt "dangling pointer in flow graph" :: tail
+      | _ -> A.CommentStmt("unknown kind of node") :: tail
+  in
+  let graph = G.fold_nodes node [] g in
+    ( None
+    , name
+    , []
+    , List.map (fun s -> Ast.StmtBody s) graph
+    )

@@ -104,7 +104,16 @@ module I =
 
 <<Linking QC-- Types>>=
 module Personality = struct
+    type proc = Proc.t
     let target = Targets.dummy
+    let cfg2ast proc =
+      Cfg4.ast Rtlutil.ToAST.rtl proc.Proc.cfg proc.Proc.symbol#text
+end
+module NewPersonality = struct
+    type proc = Ast2ir.proc
+    let target = Targets.dummy
+    let cfg2ast proc =
+      Cfgutil.new_cfg2ast Rtlutil.ToAST.rtl proc.Proc.cfg proc.Proc.symbol#text
 end
 @
 
@@ -113,7 +122,8 @@ have to supply a target description that defines the sizes of words and
 so forth.
 
 <<Linking QC-- Types>>=
-module Asm       = Astasm.Make(Personality)
+module AstAsm    = Astasm.Make(Personality)
+module NewAstAsm = Astasm.Make(NewPersonality)
 module InterpAsm = Interpasm.Make(Interp)
 
 (* IT IS BOGUS TO HAVE TWO ASSEMBLY TYPES HERE.
@@ -244,8 +254,9 @@ end
 
 let init g = 
   C.register_module "Asm"
-    [ "cmm"     , V.efunc (Map.outchan **-> V.result Map.asm) Asm.asm     
-    ; "ast"     , V.efunc (Map.outchan **-> V.result Map.asm) Asm.asm
+    [ "cmm"     , V.efunc (Map.outchan **-> V.result Map.asm) AstAsm.asm     
+    ; "new_cmm" , V.efunc (Map.outchan **-> V.result Map.new_asm) NewAstAsm.asm     
+    ; "ast"     , V.efunc (Map.outchan **-> V.result Map.asm) AstAsm.asm
     ; "dot"     , V.efunc (Map.outchan **-> V.result Map.asm) Dotasm.asm
     ; "new_dot" , V.efunc (Map.outchan **-> V.result Map.new_asm) Dotasm.new_asm
     ; "asdl"    , V.efunc (Map.outchan **-> V.result Map.asm) Asdlasm.asm 

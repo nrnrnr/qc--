@@ -17,10 +17,14 @@ This is an assembler that emits {\PAL}. It implements the
 Since {\PAL} has no natural \emph{native pointer size} like assemblers
 for real machines it receices a functor argument of type [[PERSONALITY]]
 that defines the size of pointers and words. 
-
+THIS SEEMS BOGUS, AS NOW IT IS POSSIBLE TO CONVERT TO AST ONLY IF THE
+INPUT PROGRAM MATCHES THE COMPILED-IN TARGET.  THE TARGET SHOULD BE A
+DYNAMIC PARAMETER.
 <<PERSONALITY>>=
 module type PERSONALITY = sig
     val target: Target2.t
+    type proc
+    val cfg2ast : proc -> Ast.proc
 end
 @
 
@@ -28,13 +32,14 @@ The assembler constructor receices the output channel for the assembler.
 
 <<S>>=
 module type S = sig
-    val asm: out_channel -> Proc.t Asm3.assembler
+    type proc
+    val asm: out_channel -> proc Asm3.assembler
 end    
 
 <<astasm.mli>>=
 <<PERSONALITY>>
 <<S>>
-module Make(P: PERSONALITY): S 
+module Make(P: PERSONALITY): S with type proc = P.proc
 @
 
 % ------------------------------------------------------------------ 
@@ -48,11 +53,11 @@ emits it to [[stdout]] when the [[emit]] method is called.
 module T        = Target2
 module A        = Ast
 module Asm      = Asm3
-module G        = Cfg4
 
 <<PERSONALITY>>
 <<S>>
-module Make (P: PERSONALITY):S = struct
+module Make (P: PERSONALITY): S with type proc = P.proc = struct
+    type proc = P.proc
     <<Make>>
 end
 @
@@ -171,9 +176,8 @@ file or similar. We don't use it at the momement.
 
 <<Make>>=
 type init  = unit
-type i    = Proc.t
 
-class asm (fd:out_channel): [Proc.t] Asm.assembler = 
+class asm (fd:out_channel): [proc] Asm.assembler = 
 object (this)
     val         _fd       = fd
     val mutable _section  = "this can't happen"
@@ -239,11 +243,8 @@ object (this)
             this#append (A.Datum(A.MemDecl(ty,A.FixSize(size),None)))
 
     (* instructions *)
-    method cfg_instr (proc:Proc.t) =
-        let cfg    = proc.Proc.cfg 
-        and symbol = proc.Proc.symbol in
-        let ast = G.ast Rtlutil.ToAST.rtl cfg ~name:symbol#text in
-            this#append (A.Procedure(ast))
+    method cfg_instr (proc:proc) = 
+            this#append (A.Procedure(P.cfg2ast proc))
 
     
 

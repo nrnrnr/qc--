@@ -21,7 +21,6 @@ message is typically printed to [[stderr]] before the exception is
 raised.
 
 \begin{itemize}
-\item [[dummy]]: represents our only target architecture.
 \item [[version]]: print a version information to [[stdout]]. This is
       intentionally not a string such it is harder to abuse.
 \item [[scan]]: scans a file and prints all tokens together with their
@@ -64,18 +63,8 @@ val new_compile : (Ast2ir.proc -> unit) ->
 % ------------------------------------------------------------------ 
 
 <<driver2.ml>>=
-module Personality = struct
-    let target = Targets.dummy
-end
-
 module E   = Error
 module F   = Fenv.Clean
-module L   = Olive.Make(Cfg4)
-module Asm = Astasm.Make(Personality)
-module IR  = Ast3ir
-
-
-let dummy   = Targets.dummy
 
 let version () =
     ( This.name     stdout 
@@ -195,7 +184,7 @@ let check (map,ast) (asm) =
 <<driver2.ml>>=
 let compile (opt) (map,ast) (target) (env)  =
     let () = consistency_check env target in   
-    IR.translate env target opt ast 
+    Ast3ir.translate env target opt ast 
 
 let new_compile (opt) (map,ast) (target) (env)  =
     let () = consistency_check env target in   
