@@ -174,7 +174,7 @@ let generate spec ~fd:chan =
         if rules <> [] then     
              ( List.iter exp spec.S.heads
              ; nl 2
-             ; tydecl (CodeGen.tydecl nts) 
+             ; tydecl (CodeGen.tydecl nts spec.S.types) 
              ; nl 2
              ; top (CodeGen.infdef nts)
              ; nl 2
@@ -550,20 +550,26 @@ field; [[typevars]] generates a list of parameter names from the list of
 fields.
 
 <<CodeGen>>=
-let typevars nts =
-    let rec loop i = function
-        | []      -> []
-        | nt::nts -> ("t" ^ string_of_int i) :: loop (i+1) nts
+let nonterm_types nts types =
+    let rec loop i (tyvars, pairs as result) = function
+        | []      -> result
+        | nt::nts -> 
+            if Spec.StringMap.mem nt types then
+                let t = Spec.StringMap.find nt types in
+                    loop i     (tyvars, (nt,(C.tyraw t))::pairs) nts
+            else
+                let t = "t" ^ string_of_int i in
+                    loop (i+1) (t::tyvars, (nt, C.tyvar t)::pairs) nts
     in
-        loop 0 nts
+        loop 0 ([],[]) nts
 
-let tydecl nts =
-    let tvs  = typevars nts           in
+
+let tydecl nts types =
+    let tyvars, pairs = nonterm_types nts types in
     let nt t = C.ty [t] "Camlburg.nt" in 
-    { C.params = tvs
+    { C.params = tyvars 
     ; C.name   = "nonterm"
-    ; C.rep    = Some (C.typrod (List.map2 
-                            (fun x t -> (false, x, nt (C.tyvar t))) nts tvs))
+    ; C.rep    = Some (C.typrod (List.map (fun (x,t)->(false, x, nt t)) pairs))
     }
 @
 

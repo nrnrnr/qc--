@@ -191,6 +191,7 @@ below.
     decl    :   "%term" { ident }
             |   "%head" code
             |   "%tail" code
+            |   "%type" code
 
     rule    :   ident ":" pattern [ cost ] code
 
@@ -236,7 +237,9 @@ Here is an example for a specification:
 
     %head {: (* generated from sample.mlb, do not edit *) }
     %term int string        -- terminal type must be declared
-
+    %type number {: int :}  -- type for nonterminal is optional
+    %type str    {: string :}
+    
     %%
 
     number : ADD(x:number,  y:number)     [2]    {: x + y :}
@@ -262,11 +265,18 @@ Here is an example for a specification:
 Code associated with a C<%head> declaration is copied verbatim to the
 output I<before> the code generated for rules, code from a C<%tail>
 declaration goes I<after> code for rules. This code is used to declare
-type and values used by user-provided code in rules. A C<%term>
-declaration lists Objective Caml types used for terminal variables in
-rules. In the example above, C<x:number> is a nonterminal variable, and
-C<x:string> is a terminal variable, because C<string> was declared as a
-terminal type.
+type and values used by user-provided code in rules. 
+
+A C<%term> declaration lists Objective Caml types used for terminal
+variables in rules. In the example above, C<x:number> is a nonterminal
+variable, and C<x:string> is a terminal variable, because C<string> was
+declared as a terminal type.
+
+A C<%type> declaration declares the Objective Caml type of a
+nonterminal. For instance, example above declares C<nonterm> to produce
+an C<int> value, and C<str> to produce a C<string>. Because the declared
+type may be complex, it is delimited by the same braces that are used
+for code. Type declarations for nonterminals are optional.
 
 =head2 RULES
 

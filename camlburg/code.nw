@@ -16,6 +16,7 @@ type loc = string * int * int
 
 type ty =           (* very incomplete *)
     | TyVar         of string                       (* 'a  *)
+    | TyRaw         of string                       (* user-supplied string *)
     | Ty            of ty list * string             (* ('a,int) foo *)
 
 type tyrep =        (* incomplete *)
@@ -63,6 +64,7 @@ functions come to our rescue.
 <<values>>=
 val tyvar:      string -> ty
 val ty:         ty list -> string -> ty
+val tyraw:      string -> ty                (* user-supplied code *)
 val typrod:     (bool * string * ty) list -> tyrep
 
 val def:        (string * exp) list -> toplevel
@@ -126,7 +128,7 @@ end
 let tyvar name              = TyVar  name
 let ty vs name              = Ty(vs,name)
 let typrod binds            = TyProd binds 
-
+let tyraw str               = TyRaw str
 let def bindings            = Def bindings
 
 let apply f x               = Apply(f,x)
@@ -185,6 +187,7 @@ let rec tybinding (mtbl, x, e) =
 
 and ty = function
     | TyVar x   -> tyvar x
+    | TyRaw x   -> P.text (Printf.sprintf "(%s)" x)
     | Ty([],x)  -> P.text x
     | Ty(vs,x)  -> 
         P.agrp begin

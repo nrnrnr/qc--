@@ -64,6 +64,7 @@ type decls =
     { terms     : S.StringSet.t
     ; heads     : Code.exp list     (* in reverse order *)
     ; tails     : Code.exp list     (* in reverse order *)
+    ; types     : string S.StringMap.t
     }
 
 let empty =
@@ -73,6 +74,7 @@ let empty =
                     S.StringSet.empty
     ; heads     = []
     ; tails     = []
+    ; types     = S.StringMap.empty
     }
 @
 
@@ -128,13 +130,15 @@ spec    : decls PPERCENT rules EOF  { let d   = $1 in
                                         ; S.tails  = rev d.tails
                                         ; S.rules  = rev r
                                         ; S.srcmap = map
+                                        ; S.types  = d.types
                                         }
-                                     }   
+                                    }   
         | decls EOF                 { { S.terms  = $1.terms
                                       ; S.heads  = rev $1.heads
                                       ; S.tails  = rev $1.tails
                                       ; S.rules  = []
                                       ; S.srcmap = $2
+                                      ; S.types  = $1.types
                                       }
                                     }  
         
@@ -154,6 +158,18 @@ decl    : PERCENT TERM idlist       { fun d ->
         | PERCENT TAIL CODE         { fun d -> 
                                       {d with tails = Code.Raw($3) :: d.tails}
                                     }
+        | PERCENT TYPE ID CODE      { fun d -> 
+                                        let code = snd $4 in
+                                        { d with types = 
+                                            Spec.StringMap.add $3 code d.types }
+                                    }
+       /* This rule permits to write simple types without {: .. :}. Do
+        * we want this ?
+        | PERCENT TYPE ID ID        { fun d -> 
+                                        { d with types = 
+                                            Spec.StringMap.add $3 $4 d.types }
+                                    }
+        */                            
         ;
         
 idlist  : idlist ID                 { $2 :: $1 }
