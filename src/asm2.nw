@@ -31,6 +31,16 @@ interface to conform to the module type [[S]] provided here.
 module type S = sig
     <<module type s>>
 end
+
+module type ASM = sig
+    type instruction 
+    type proc_info
+end
+
+module Make (A: ASM): S 
+    with type instruction = A.instruction
+    with type proc_info   = A.proc_info
+    
 @
 
 % ------------------------------------------------------------------ 
@@ -97,6 +107,14 @@ val section : section -> action
 val current : asm -> section
 @
 
+Some assemblers also like procdures to be announced. The [[proc]] 
+actions does this and receives some abstract [[proc_info]] value.
+
+<<>>=
+type proc_info
+val proc    : proc_info -> action
+@
+
 The location counter of the current section can be manipulated: 
 [[org]] sets it to a value, [[align n]] aligns the location pointer to
 the next largest multiple of [[n]], in case the current value of the
@@ -109,8 +127,10 @@ val align   : int -> action
 val addloc  : int -> action
 @
 
+
+
 % ------------------------------------------------------------------ 
-\subsection{Symbols and Adresses}
+\subsection{Symbols and Addresses}
 % ------------------------------------------------------------------ 
 
 A [[symbol]] is an assembly-level name that binds a value.  This can
