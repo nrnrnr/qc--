@@ -1168,7 +1168,7 @@ let formal r env (hint, inv, ty, name) =
 
 <<>>=
 let proc r env (_,name,ff,bb as p) =
-    let x    = { F.env = None; F.stackdata = None } in
+    let x    = { F.env = None; F.stackdata = None; F.salign = None } in
     let t    = E.ematch (pointerTy env) (fun p -> F.Label(F.Proc(x)),p) in
     let env  = foldl (body r F.Global) env bb     in 
     let env  = F.bindv name ((r,F.Global),t) env    in
@@ -1931,8 +1931,10 @@ and proc r env (_,name,_,bb as p) =
     let env' = F.resetOffset env' (* stackdata offset *)   in
     let env' = Env.local env p                             in
     let env' = foldl body env' bb                          in
-    let sd   = F.offset env (* amount of stackdata *)      in
-    let p    = { F.env = Some env'; F.stackdata = Some sd} in
+    let p    = { F.env       = Some env'
+               ; F.stackdata = Some (F.offset env)
+               ; F.salign    = Some (F.maxOffsetAlign env)
+               }                                           in
     let t    = E.ematch (pointerTy env)
                (fun t -> (F.Label(F.Proc(p)),t))           in
     let env  = F.rebindv name t env                        in

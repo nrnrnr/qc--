@@ -142,6 +142,7 @@ type register       = { index:      int           (* for run-time API *)
 
 type proc           = { env:        env partial
                       ; stackdata:  int partial
+                      ; salign:     int partial (* max align constraint *)
                       }
 
 type kind           = Proc          of proc
@@ -331,15 +332,18 @@ becomes a non-local property.
 val resetOffset     : env -> env
 val incrOffset      : int -> env -> env
 val alignOffset     : int -> env -> env
+val maxOffsetAlign  : env -> int
 val offset          : env -> int
 @
 
 Each procedure sets the offset to zero by calling [[resetOffset]].  A
 data declaration increments the offset by its size using
-[[incrOffset]].  The [[alignOffset n]] fuction advanves the [[offset]]
+[[incrOffset]].  The [[alignOffset n]] fuction advances the [[offset]]
 to the next multiple of [[n]] unless [[offset]] is already a multiple
-of [[n]].  For labels and the total amount of [[stackdata]] [[offset]]
-reports the current value of the offset counter.
+of [[n]].  The maximal alignment constraint is also remembered and
+returned by [[maxOffsetAlign]].  For labels and the total amount of
+[[stackdata]] [[offset]] reports the current value of the offset
+counter.
 
 % ------------------------------------------------------------------ 
 \subsubsection{Imports and Exports}
@@ -547,7 +551,8 @@ obtained.
 
 <<>>=
 type proc           = { env:        env partial
-                      ; stackdata:  int partial
+                      ; stackdata:  int partial (* offset into stackdata *)
+                      ; salign:     int partial (* max align constraint *)
                       }
                       
 and  kind           = Proc          of proc
@@ -607,15 +612,16 @@ are not uniform.
 
 <<>>=
 and   env           = 
-                      { tenv   :      tenv
-                      ; venv   :      venv
-                      ; srcmap :      Srcmap.map
-                      ; error  :      bool
-                      ; target :      target
-                      ; asm    :      asm
-                      ; rindex :      int       (* register index *)
-                      ; offset :      int       (* stack data offset *)
-                      ; hwregs :      hwregs    (* hardware registers *)
+                      { tenv    :      tenv
+                      ; venv    :      venv
+                      ; srcmap  :      Srcmap.map
+                      ; error   :      bool
+                      ; target  :      target
+                      ; asm     :      asm
+                      ; rindex  :      int       (* register index *)
+                      ; offset  :      int       (* stack data offset *)
+                      ; maxalign:      int       (* offset align constraint*)
+                      ; hwregs  :      hwregs    (* hardware registers *)
                       }
                       
 @
@@ -635,6 +641,7 @@ let empty  map      = { tenv   = StrMap.empty
                       ; error  = false
                       ; rindex = 0
                       ; offset = 0 
+                      ; maxalign = 1
                       ; hwregs = []
                       ; target = { memsize    = Arg.default 8
                                  ; endianness = Arg.default Little
@@ -876,13 +883,26 @@ The implementation of the [[offset]] functions for stack data are
 straight forward:
 
 <<>>=
-let resetOffset env   = { env with offset = 0 }
-let incrOffset n env  = { env with offset = env.offset + n }
-let offset env        = env.offset
-let alignOffset n env = if   env.offset mod n= 0
-                        then env
-                        else let q = env.offset / n in 
-                             { env with offset = (q+1) * n }
+let resetOffset env     = { env with offset = 0 }
+let incrOffset n env    = { env with offset = env.offset + n }
+let offset env          = env.offset
+let maxOffsetAlign env  = env.maxalign
+@
+
+The [[alignOffset]] function aligns the [[offset]] counter and also
+remembers the maximal alignment constraint.
+
+<<>>=
+let alignOffset n env = 
+    let m = max n env.maxalign in
+    let o = if   env.offset mod n = 0 
+            then env.offset 
+            else let q = env.offset / n in (q+1) * n
+    in
+        { env with
+            offset   = o
+        ;   maxalign = m
+        }
 @
 
 % ------------------------------------------------------------------ 
@@ -974,9 +994,11 @@ and clean_asm asm =
 and clean_proc = function
     |   { Dirty.env       = Some env
         ; Dirty.stackdata = Some n 
+        ; Dirty.salign    = Some m 
         } ->
         { Clean.env       = clean env
         ; Clean.stackdata = n
+        ; Clean.salign    = m
         }
     |   _ -> assert false 
 
@@ -992,6 +1014,7 @@ and clean env =
     ; Clean.target = clean_target env.Dirty.target
     ; Clean.rindex = env.Dirty.rindex
     ; Clean.offset = env.Dirty.offset
+    ; Clean.maxalign = env.Dirty.maxalign
     ; Clean.hwregs = clean_hwregs env.Dirty.hwregs
     ; Clean.asm    = clean_asm env.Dirty.asm
     }
