@@ -1031,14 +1031,9 @@ in the environment. This helps to decide whether a symbol is local or
 global when it is accessed from inside a procedure.
 
 <<>>=
-let import r scope t env x = 
-    match x with
-    | Some foreign, name -> 
-        bindv name (r,scope) (E.ematch (ty r env t) 
-        (fun t -> F.Import,t)) env
-    | None        , name -> 
-        bindv name (r,scope) (E.ematch (ty r env t) 
-        (fun t -> F.Import,t)) env
+let import r scope t env (foreign,name) = 
+    bindv name (r,scope) 
+        (E.ematch (ty r env t) (fun t -> F.Import foreign,t)) env
          
     
 <<>>=
@@ -1450,7 +1445,7 @@ let checkCallTarget env x =
     E.seq' env (E.Raise.pair (pointerTy env,E.Raise.right (F.findv x env)))
     ( function
     | p,(_      ,(F.Label(F.Proc(_)),_)) ->  env
-    | p,(_      ,(F.Import       ,t)) 
+    | p,(_      ,(F.Import _     ,t)) 
       when t = p                         ->  env
     | otherwise                          ->  E.error (x^" is not call target")
     )
@@ -1494,7 +1489,7 @@ let rec isLabel env = function
           ( match F.findv x env with
           | _       ,E.Error            -> false
           | scope   ,E.Ok(F.Label(_),_) -> true
-          | scope   ,E.Ok(F.Import,_)   -> true
+          | scope   ,E.Ok(F.Import _,_) -> true
           | _                           -> false
           )        
     | _                                 -> false

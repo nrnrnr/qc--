@@ -255,7 +255,8 @@ and variable env = function
             | F.Label(F.Code)  -> Rtl.Const(Rtl.Link(x, bits t))
             | F.Label(F.Data)  -> Rtl.Const(Rtl.Link(x, bits t))
             | F.Label(F.Stack) -> assert false (* don't know how *)
-            | F.Import         -> Rtl.Const(Rtl.Link(x, bits t))
+            | F.Import(None)   -> Rtl.Const(Rtl.Link(x, bits t))
+            | F.Import(Some n) -> Rtl.Const(Rtl.Link(n, bits t))
             | F.Register(r)    -> let width = bits t in 
                                   let v = Rtl.Var
                                       ( x
@@ -574,12 +575,25 @@ and proc env props (asm: asm) (cc,n,fs,bb) =
         ^^ ic.asm
         )
 @   
-    
-<<module Make>>=
+
+<<>>=    
+and decl env x (asm: asm) = asm
+@
+
+<<unused>>=
 and decl env x (asm: asm) = match x with
     | A.DeclAt(x,_)    -> decl env x asm
-    | A.Import( t, ns) -> assert false
-    | A.Export( t, ns) -> assert false
+    | A.Import( t, ns) -> 
+        let import = function
+            | (None        , name )   -> Asm.Import name 
+            | (Some foreign, _    )   -> Asm.Import foreign
+        in
+            foldr (fun n asm -> import n ^^ asm) ns asm 
+    | A.Export( t, ns) -> 
+        let export = function 
+            | (name, Some foreign)    -> Asm.Export foreign
+            | (name, None        )    -> Asm.Export name
+        in foldr (fun n asm -> export n ^^ asm) ns asm 
     | A.Const (t,n,e)  -> asm (* skip *)
     | A.Registers( rs) -> asm (* skip *)
     | A.Typedef (t,nn) -> asm (* skip *)
