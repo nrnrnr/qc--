@@ -202,20 +202,20 @@ let app o w args = match o with
     |  "lobits" 	-> lobits w args
     |  "lt" 		-> cmp_bits o w BO.lt args
     |  "ltu" 		-> cmp_bits o w BO.ltu args
-    |  "minf" 		-> default o w args
+    |  "minf" 		-> minf w args
     |  "mod" 		-> default o w args
     |  "modu" 		-> default o w args
     |  "mul"     	-> binop o w BO.mul args
     |  "mulux" 		-> default o w args
     |  "mulx" 		-> default o w args
-    |  "mzero" 		-> default o w args
+    |  "mzero" 		-> mzero w args
     |  "ne" 		-> cmp_bits o w BO.ne args
     |  "neg" 		-> unop  o w BO.neg args
     |  "not" 		-> not' w args
     |  "or" 		-> binop o w BO.or' args
-    |  "pinf" 		-> default o w args
+    |  "pinf" 		-> pinf w args
     |  "popcnt" 	-> default o w args
-    |  "pzero" 		-> default o w args
+    |  "pzero" 		-> pzero w args
     |  "quot" 		-> default o w args
     |  "rem" 		-> default o w args
     |  "rotl" 		-> default o w args
@@ -450,3 +450,21 @@ let bit w args = assert (w = []); match args with
 | [RP.Const (RP.Bool b)] -> RP.Const (RP.Bits (if b then one1 else zero1))
 | _ -> default "bit" w args
 @
+<<RTL operator implementations>>=
+let pzero w args = assert (args = []); match w with
+| [(32|64) as w] -> const (Bits.zero w)
+| _ -> default "pzero" w args
+
+let mzero w args = assert (args = []); match w with
+| [(32|64) as w] -> const (BO.shl (Bits.U.of_int 1 w) (Bits.U.of_int (w-1) w))
+| _ -> default "mzero" w args
+
+let pinf w args = assert (args = []); match w with
+| [32] -> const (BO.shl (Bits.U.of_int 0xff  32) (Bits.U.of_int 23 32))
+| [64] -> const (BO.shl (Bits.U.of_int 0x7ff 64) (Bits.U.of_int 52 64))
+| _ -> default "pinf" w args
+
+let minf w args = assert (args = []); match w with
+| [32|64] -> or' w [pinf w args; mzero w args]
+| _ -> default "minf" w args
+

@@ -28,6 +28,7 @@ Test.files = { "add.c--"
 	     , { source="fargres.c--", other='src/double.c' }
              , norun("float-000.c--")
              , norun("float-001.c--")
+             , 'float-002.c--'
 	     , 'f2.c--'
              , "hello.c--"
 	     , "hex.c--"

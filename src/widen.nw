@@ -129,6 +129,9 @@ let rec convert ~(from:int) ~(to':int) e =
       convert ~from:f ~to' x
   | RP.App (("i2f", [f; t]), [x; rm]) ->
       make_cvt "i2f" f to' (rewrite x) rm
+  | RP.App ((("pinf"|"minf"|"pzero"|"mzero") as op, [w]), []) -> 
+      assert (w=from);
+      f2f from to' (RP.App((op, [w]), []))
   | RP.App ((("fabs"|"fneg") as op, [w]), [x]) -> 
       assert (w=from);
       RP.App((op, [to']), [cvt x])

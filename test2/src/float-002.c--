@@ -1,0 +1,29 @@
+target byteorder little;
+
+bits2 rm = "IEEE 754 rounding mode";
+
+import printf;
+export main;
+
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+  foreign "C" printf(pinf64, "float" %pinf64);
+  foreign "C" printf(pinf32, "float" %f2f64(%pinf32, rm));
+  foreign "C" printf(minf64, "float" %minf64);
+  foreign "C" printf(minf32, "float" %f2f64(%minf32, rm));
+  foreign "C" printf(pzero64, "float" %pzero64);
+  foreign "C" printf(pzero32, "float" %f2f64(%pzero32, rm));
+  foreign "C" printf(mzero64, "float" %mzero64);
+  foreign "C" printf(mzero32, "float" %f2f64(%mzero32, rm));
+  foreign "C" return(0);
+}
+
+section "data" {
+  pinf64: bits8[] "64-bit pinf == %f\n\0";
+  pinf32: bits8[] "32-bit pinf == %f\n\0";
+  minf64: bits8[] "64-bit minf == %f\n\0";
+  minf32: bits8[] "32-bit minf == %f\n\0";
+  pzero64: bits8[] "64-bit pzero == %f\n\0";
+  pzero32: bits8[] "32-bit pzero == %f\n\0";
+  mzero64: bits8[] "64-bit mzero == %f\n\0";
+  mzero32: bits8[] "32-bit mzero == %f\n\0";
+}
