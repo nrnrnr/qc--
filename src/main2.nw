@@ -502,11 +502,19 @@ Opt = Opt or {}
 -- The functions below define the different optimizer we 
 -- can use for a function.  
 
+function Opt.freeze(v, proc) -- can't do this (a Lua fun cannot be a stage)
+    write('about to call Driver.freeze\n')
+    local answer = Driver.freeze(v, proc)
+    write('returned from Driver.freeze\n')
+    return answer
+end
+
 function Opt.dummy(proc)
     local action = B.seq
         { B.single(Expand.stages.placeVars)
         , B.single(Expand.stages.dummy)
         , Default.allocator
+        , B.single(B.mk("freeze", Driver.freeze))
         }
     B.run(action, proc, {})
 end
@@ -517,6 +525,7 @@ function Opt.sparc(proc)
         { B.single(Expand.stages.placeVars)
         , B.single(Expand.stages.sparc)
         , Default.allocator
+        , B.single(B.mk("freeze", Driver.freeze))
         }
     B.run(action, proc, {})
 end
@@ -525,6 +534,7 @@ function Opt.sparc_dbg (proc)
     local action = B.seq
         { B.single(Expand.stages.placeVars)
         -- , B.single(Expand.stages.sparc)
+        , B.single(B.mk("freeze", Driver.freeze))
         }
     B.run(action, proc, {})
 end
@@ -575,6 +585,7 @@ function Targets.Toy.opt.apply(self, proc)
         { self.placer
         , self.expander
         , self.ralloc
+        , B.single(B.mk("freeze", Driver.freeze))
         }
     B.run(action, proc, {})
 end
@@ -680,7 +691,7 @@ Backend.debug =     --- debugging back end
   , expand    = Expander.toy
   , liveness  = Stages.null
   , ralloc    = CG.color
-  , freeze    = Stages.null
+  , freeze    = Driver.freeze
   , asm       = Stages.cmmasm
   }   
 

@@ -50,6 +50,7 @@ val translate: Fenv.Clean.env
             -> optimizer: (Proc.t -> unit)
             -> Ast.program 
             -> Asm3.assembler
+val freeze : Proc.t -> unit
 @
 
 % ------------------------------------------------------------------ 
@@ -940,7 +941,6 @@ let init_cont env (cfg:G.cfg) (target:Target.t) (cc:Target.cc)
         ignore (List.fold_left G.gm_insert_assign_after (G.entry cfg) rtls)
     
 @
-
 In the [[freeze]] function we fix the stack layout. The results in an
 equation system whose solution determines the values of symbolic
 compile-time constants. A substitution replaces all these symbolic
@@ -949,9 +949,6 @@ all {\rtl}s in a {\cfg} are simplified, using constant folding.
 
 We are hardcoding the stack layout here for all targets. This seems a
 bad idea.
-
-The
-
 <<Make procedure>>=
 let freeze (p:Proc.t) = 
     let stack = [ p.Proc.outgoing               (* our stack layout *)
@@ -1071,7 +1068,6 @@ let proc env target optimizer asm (cconv,name,args,bdy) =
         ; Proc.conts    = conts
         } in
     let () = optimizer i in
-    let () = (**) freeze i (**)   in
         asm#cfg_instr i.Proc.cfg i.Proc.symbol
         
 @

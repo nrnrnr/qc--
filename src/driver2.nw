@@ -15,42 +15,6 @@ This module presents the compiler as a compositional collection of
 abstract values and functions. These functions and values are exported
 as primitives to a Lua interpreter, giving the user a way to customize
 the compiler.
-
-The [[Caml]] module offers access to the different phases and values in
-the compiler. 
-
-<<driver2.mli>>=
-module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
-    type asm        (* assembler                          *)
-    type ast        (* abstract syntax                    *)
-    type env        (* environment/symbol table           *)
-    type doc        (* printable document                 *)
-    type target     (* target architecture                *)
-    type proc       (* procedure representation in back-end, includes
-                       cfg, calling convention *)
-    type optimize  = proc -> unit
-
-    val dummy:      target                  (* our only target right now *)
-    
-    val cmmasm:     out_channel -> asm      (* C-- emitting assembler *)
-    val dotasm:     out_channel -> asm      (* DOT emitting assembler *)
-    val asdlasm:    out_channel -> asm      (* ASDL emitting assembler *)
-    val sparcasm:   (* solaris *) bool -> out_channel -> asm  (* SPARC *)
-
-    val version:    unit -> unit            (* print version to stdout   *)
-    val scan:       string -> unit     (* for debugging the scanner *)
-    val parse:      string -> ast      (* parse file                *)
-    val pretty:     ast -> doc              (* pretty print *)
-
-    val emit_asdl:  ast -> unit             (* emit AST in ASDL format *)
-    val check:      ast -> asm -> env       (* check semantics of AST  *)
-
-    val compile:    optimize -> ast -> target -> env -> asm
-                    (* calls optimize *)
-                
-    val assemble:   asm -> unit
-    val print:      doc -> int -> unit (* print doc to stdout *)
-end
 @
 
 In case of an error, all functions raise [[Error.ErrorExn]]. An error
@@ -113,13 +77,9 @@ end
 \subsection{Caml Implementation}
 % ------------------------------------------------------------------ 
 
-<<driver2.ml>>=
-module Caml = struct
-    <<Caml>>
-end
 @
 
-<<Caml>>=
+<<Export>>=
 module Personality = struct
     let target = Targets.dummy
 end
@@ -131,19 +91,10 @@ module IR  = Ast3ir
 module F   = Fenv.Clean
 
 <<Caml>>=
-type asm        = Asm3.assembler
-type ast        = Srcmap.map * Ast.program
-type env        = Fenv.Clean.env
-type doc        = Pp.doc
-type proc       = Proc.t
-type target     = Target2.t
-type optimize   = proc -> unit 
-
-<<Caml>>=
 
 let dummy   = Targets.dummy
 
-<<Caml>>=
+<<Export>>=
 let version () =
     ( This.name     stdout 
     ; output_string stdout " "
@@ -154,7 +105,7 @@ let version () =
         "See also http://www.cminusminus.org/\n"
     )
 
-<<Caml>>=
+<<Export>>=
 let scan file =
     let fd          = try open_in file
                       with Sys_error(msg) -> E.error msg    in
@@ -178,7 +129,7 @@ let scan file =
         ; finally ()
         )
 
-<<Caml>>=
+<<Export>>=
 let parse (file:string) = 
     let fd          = try open_in file
                       with Sys_error(msg) -> E.error msg    in
@@ -206,19 +157,13 @@ let parse (file:string) =
               ; raise e
               )
 
-<<Caml>>=
-let emit_asdl (map,ast:ast) =
+<<Export>>=
+let emit_asdl (map,ast) =
         AstUtil.sexp_wr_program ast stdout
 @
 
 Assemblers are objects. We therefore need function to create them, Here
 are our current assemblers.
-
-<<Caml>>=
-let cmmasm      (c:out_channel)                 = Asm.asm      c 
-let dotasm      (c:out_channel)                 = Dotasm.asm   c
-let asdlasm     (c:out_channel)                 = Asdlasm.asm  c
-let sparcasm    (solaris:bool) (c:out_channel)  = Msparcasm.asm solaris c
 
 <<Caml old>>=
 let sparcasm    (solaris:bool) (c:out_channel)  = Sparcasm.make solaris c
@@ -227,8 +172,7 @@ let sparcasm    (solaris:bool) (c:out_channel)  = Sparcasm.make solaris c
 The user specifies in the source code some target properties. They must
 be consistent with the actual target. We check this in
 [[consistency_check]].
-
-<<Caml>>=
+<<Export>>=
 let consistency_check env (t:Target2.t) =
     let int i = string_of_int i in
     let msg property source target = 
@@ -255,8 +199,8 @@ let consistency_check env (t:Target2.t) =
 @
 
 
-<<Caml>>=
-let check (map,ast:ast) (asm:asm) =
+<<Export>>=
+let check (map,ast) (asm) =
     let env      = Fenv.Dirty.empty map asm          in
     let env      = Fenv.Dirty.push env (Fenv.Dirty.emptyscope) in
     let env      = Elab.Env.global   env ast         in
@@ -267,19 +211,16 @@ let check (map,ast:ast) (asm:asm) =
     in
         Fenv.clean env
 
-<<Caml>>=
-let compile (opt:optimize) (map,ast:ast) (target:target) (env:env)  =
-    let ()     = consistency_check env target in   
-        IR.translate env target opt ast 
+<<Export>>=
+let compile (opt) (map,ast) (target) (env)  =
+    let () = consistency_check env target in   
+    IR.translate env target opt ast 
 
-let pretty (map,ast:ast) =
+let pretty (map,ast) =
     Astpp.program ast
 
-<<Caml>>=
-let assemble (asm:asm) = asm#emit
-
-<<Caml>>=
-let print (doc:doc) (width:int) =
+<<Export>>=
+let print (doc) (width) =
     Pp.ppToFile stdout width doc
 @
 
@@ -294,37 +235,37 @@ end
 
 <<Export>>=
 module AsmT = struct
-    type 'a t       = Caml.asm
+    type 'a t       = Asm3.assembler
     let tname       = "asm"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<asm>" 
 end
 module AstT = struct
-    type 'a t       = Caml.ast
+    type 'a t       = Srcmap.map * Ast.program
     let tname       = "ast"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<ast>" 
   end
 module EnvT = struct
-    type 'a t       = Caml.env
+    type 'a t       = Fenv.Clean.env
     let tname       = "env"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<env>" 
 end
 module ProcT = struct
-    type 'a t       = Caml.proc
+    type 'a t       = Proc.t
     let tname       = "proc"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> ("<proc "^t.Proc.symbol#text^">") 
 end
 module TargetT = struct
-    type 'a t       = Caml.target
+    type 'a t       = Target2.t
     let tname       = "target"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<target " ^ t.Target2.name ^ ">" 
 end
 module DocT = struct
-    type 'a t       = Caml.doc
+    type 'a t       = Pp.doc
     let tname       = "doc"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<doc>" 
@@ -367,7 +308,7 @@ All exported functions go into the Lua namespace [[Driver]].
 @ 
 
 
-Here we finally bind the [[Caml]] values to names in the Lua
+Here we finally bind the exported values to names in the Lua
 interpreter. The [[compile]] function receives a lua value such that it
 can call Lua functions while it is active.
 
@@ -388,35 +329,37 @@ module Map = struct
     let channel   = InOutV.makemap  V.userdata V.projection
     let inchan    = Luaiolib.in'    channel    V.projection
     let outchan   = Luaiolib.out    channel    V.projection
+    let stage     = V.pfunc (V.value **-> proc **-> V.result V.bool)
 end
 
 let builtins =
-  [ "assemble"  , pf (Map.asm     **-> V.runit)            Caml.assemble
+  [ "assemble"  , pf (Map.asm     **-> V.runit)            (fun asm -> asm#emit)
   ; "check"     , pf (Map.ast     **-> Map.asm 
-                                  **-> V.result Map.env)   Caml.check
-  ; "emit_asdl" , pf (Map.ast     **-> V.runit)            Caml.emit_asdl
-  ; "parse"     , pf (V.string    **-> V.result Map.ast)   Caml.parse
-  ; "print"     , pf (Map.doc     **-> V.int **-> V.runit) Caml.print
-  ; "pretty"    , pf (Map.ast     **-> V.result Map.doc)   Caml.pretty
-  ; "scan"      , pf (V.string    **-> V.runit)            Caml.scan
-  ; "version"   , pf (V.unit      **-> V.runit)            Caml.version
-  ; "cmmasm"    , pf (Map.outchan **-> V.result Map.asm)   Caml.cmmasm     
-  ; "astasm"    , pf (Map.outchan **-> V.result Map.asm)   Caml.cmmasm (*alias*)
-  ; "dotasm"    , pf (Map.outchan **-> V.result Map.asm)   Caml.dotasm
-  ; "asdlasm"   , pf (Map.outchan **-> V.result Map.asm)   Caml.asdlasm
+                                  **-> V.result Map.env)   check
+  ; "emit_asdl" , pf (Map.ast     **-> V.runit)            emit_asdl
+  ; "parse"     , pf (V.string    **-> V.result Map.ast)   parse
+  ; "print"     , pf (Map.doc     **-> V.int **-> V.runit) print
+  ; "pretty"    , pf (Map.ast     **-> V.result Map.doc)   pretty
+  ; "scan"      , pf (V.string    **-> V.runit)            scan
+  ; "version"   , pf (V.unit      **-> V.runit)            version
+  ; "cmmasm"    , pf (Map.outchan **-> V.result Map.asm)   Asm.asm     
+  ; "astasm"    , pf (Map.outchan **-> V.result Map.asm)   Asm.asm (*alias*)
+  ; "dotasm"    , pf (Map.outchan **-> V.result Map.asm)   Dotasm.asm
+  ; "asdlasm"   , pf (Map.outchan **-> V.result Map.asm)   Asdlasm.asm
   ; "sparcasm"  , pf (V.bool **-> Map.outchan 
-                             **-> V.result Map.asm)        Caml.sparcasm
+                             **-> V.result Map.asm)        Msparcasm.asm
   ; "stdin"     , Map.inchan.V.embed                       stdin (* hack *)
   ; "stdout"    , Map.outchan.V.embed                      stdout(* hack *)
+  ; "freeze"    , Map.stage.V.embed (fun v p -> Ast3ir.freeze p; true)
   ; "compile"   , func (Map.optimize  **-> Map.ast  
                                       **-> Map.target 
                                       **-> Map.env 
                                       **-> V.result Map.asm)
-                  (fun g opt -> Caml.compile (opt g))
+                  (fun g opt -> compile (opt g))
   ; "compilec"  , func (Map.optimize' **-> Map.ast  
                                       **-> Map.target 
                                       **-> Map.env 
                                       **-> V.result Map.asm)
-                  (fun g opt -> Caml.compile (opt g))
+                  (fun g opt -> compile (opt g))
   ] 
 @  
