@@ -82,7 +82,16 @@ module T = Types
 module E = Error
 module A = Ast
 module F = Fatenv
+@
 
+The non-terminal symbol [[lvalue]] is used in different contexts that
+we would like to distinguish.
+
+<<>>=
+type context = Assign     (* x,y = y,x  *)
+             | Call       (* x,y = f()  *)
+             | PrimCall   (* x,y = %f() *)
+<<>>=
 let foldl = List.fold_left (* f:('a -> 'b -> 'a) -> init:'a -> 'b list -> 'a *)
 @
 
@@ -419,9 +428,10 @@ let import scope t env = function
     | None        , name -> F.bindv name (importt scope (ty env t)) env
 <<>>=
 let target env = function
-    | A.Memsize(i)        -> F.bindMemsize i env
-    | A.ByteorderBig      -> F.bindEndianness F.Big env
-    | A.ByteorderLittle   -> F.bindEndianness F.Little env 
+    | A.Memsize(i) when i > 0   -> F.bindMemsize i env
+    | A.Memsize(i)              -> E.error "memsize must be positive"
+    | A.ByteorderBig            -> F.bindEndianness F.Big env
+    | A.ByteorderLittle         -> F.bindEndianness F.Little env 
     
 <<>>=
 let imports  scope env t ii         = foldl (import scope t) env ii
@@ -585,7 +595,7 @@ let rec freeExprVars = function
 and freeLValueVars = function
     | A.LValueAt(x,r)   -> freeLValueVars x
     | A.Mem(_,e,_)      -> freeExprVars e
-    | A.Var(name)       -> [name]
+    | A.Var(_,name)     -> [name]
        
 let rec uses = function
     | A.DeclAt(d,r)        , _   -> uses (d,Some r)
@@ -620,7 +630,7 @@ and a value.
 let rec evalFetch env = function
     | A.LValueAt(x,r) -> E.catch (error r env) (evalFetch env) x
     | A.Mem (_,_,_)   -> E.error "memory access in const declaration"
-    | A.Var(id)       -> ( match F.findv' id env with
+    | A.Var(hint,id)  -> ( match F.findv' id env with
                          | E.Error                -> E.Error
                          | E.Ok(F.Constant(v),ty) -> E.Ok(ty, v)
                          | _ -> E.error ("access of non-constant "^id)
@@ -630,14 +640,7 @@ let rec evalFetch env = function
 let rec evalPrimOp' op env args =
     let f, t   = Const.Symbol.lookup op Const.constOps in
     let at,av  = List.split args                       in
-    let unused = Types.bool                            in
-    let sigma  = ( try Types.unify t (Types.proc at unused) Types.empty with
-                 | Types.UnifyExn -> E.error "type mismatch"
-                 )                                     in
-    let rt     = ( match Types.subst sigma t with
-                 | Types.Procedure(_,t) -> t
-                 | _                    -> assert false
-                 )                                     in
+    let rt     = Types.appl t at                       in
         rt, f av
 <<>>=
 and evalPrimOp env op args =
@@ -797,7 +800,7 @@ functions again.
 <<type check expression>>=
 let rec tyFetch env = function
     | A.LValueAt(x,r) -> E.catch (error r env) (tyFetch env) x
-    | A.Var(id)       -> ( match F.findv' id env with
+    | A.Var(hint,id)  -> ( match F.findv' id env with
                          | E.Error                -> E.Error
                          | E.Ok(denotation,ty)    -> E.Ok(ty)
                          ) 
@@ -815,19 +818,8 @@ let rec tyFetch env = function
             | E.Ok(te), E.Ok(t') when te = Types.data -> E.Ok(t')
             | _      -> E.error "memory reference by non-data pointer"
             )
-
-<<>>=
-and tyAppl' opTy argTys =
-    let unused = Types.bool                            in
-    let sigma  = ( try Types.unify opTy (Types.proc argTys unused) Types.empty with
-                 | Types.UnifyExn -> E.error "type error in application"
-                 )                                     in
-        ( match Types.subst sigma opTy with
-        | Types.Procedure(_,t) -> t
-        | _                    -> assert false
-        )
-        
-and tyAppl opTy argTys = E.emap (tyAppl' opTy) argTys
+<<>>=        
+and tyAppl opTy argTys = E.emap (Types.appl opTy) argTys
 @
 
 For now we are using the types of the primitive constant operators. 
@@ -936,7 +928,7 @@ let rec stackdatum env = function
     | A.MemDecl(t,m,None) -> memdecl env t m None 
     | A.MemDecl(t,m,_   ) -> E.error "no initial values allowed for stackdata"
 <<>>=
-let checkJumpTarget env x =
+let checkGotoTarget env x =
     match F.findv x env with
     | _       ,E.Error                 ->  E.Error
     | F.Local ,E.Ok(F.Label(F.Code),_) ->  E.Ok ()
@@ -944,7 +936,16 @@ let checkJumpTarget env x =
     | _       ,E.Ok(F.Label(_)     ,_) ->  E.error (x^" not a goto  label")
     | otherwise                        ->  E.error (x^" is not a label")
 <<>>=
-let targets env ts = E.Implode.map (checkJumpTarget env) ts 
+let checkCallTarget env x =
+    match F.findv x env with
+    | _       ,E.Error                 ->  E.Error
+    | _       ,E.Ok(F.Label(F.Proc),_) ->  E.Ok ()
+    | _       ,E.Ok(F.Import       ,t) 
+        when t = Types.code            ->  E.Ok ()
+    | otherwise                        ->  E.error (x^" is not call target")
+<<>>=
+let gotoTargets env ts = E.Implode.map (checkGotoTarget env) ts 
+let callTargets env ts = E.Implode.map (checkCallTarget env) ts 
 
 <<>>=
 let checkFlowTarget env x =
@@ -974,16 +975,18 @@ let flows isCutTo env fs = E.Implode.map (flow isCutTo env) fs
 @
 
 The [[isLabel env e]] function returns [[true]] if the expression
-[[e]] is a label, i.e. when it is statically known.
+[[e]] denotes a statically known address. This means it must be a
+label or an imported symbol.
 
 <<>>=
 let rec isLabel env = function
     | A.ExprAt(x,_)                     -> isLabel env x
     | A.Fetch(A.LValueAt(x,_))          -> isLabel env (A.Fetch x)
-    | A.Fetch(A.Var(x))                 -> 
+    | A.Fetch(A.Var(_,x))               -> 
           ( match F.findv x env with
           | _       ,E.Error            -> false
           | scope   ,E.Ok(F.Label(_),_) -> true
+          | scope   ,E.Ok(F.Import,_)   -> true
           | _                           -> false
           )        
     | _                                 -> false
@@ -996,28 +999,42 @@ registers, but not memory. References to memory in that case are thus
 an error.
 
 <<>>=
-let rec lvalue is_call env lv =
+let lvalue context env lv =
+    let memsize = match F.findMemsize env with
+        | Some n -> n
+        | None   -> assert false (* user defined or default *) in
     let align = function
         | Some a when not (is2power a)  -> E.error "alignment not a power of 2"
         | Some _ (* properly aligned *) -> E.Ok()
-        | None                          -> E.Ok()
-    in match lv with 
-    | A.LValueAt (lv, r)   -> E.catch (error r env) (lvalue is_call env) lv
-    | A.Var(name)          -> 
+        | None                          -> E.Ok()              in
+    let multiMemsize = function
+        | Types.Bits(m) -> (m mod memsize) = 0
+        | _             -> assert false
+    in 
+    let rec f = function 
+    | A.LValueAt (lv, r)   -> E.catch (error r env) f lv
+    | A.Var(Some hint, name) 
+           when context <> Call -> E.error "no hint allowed in this context"
+    | A.Var(hint,name)          -> 
         ( match F.findv name env with
         | _, E.Ok(F.Register,t) -> E.Ok(t)
         | _, E.Ok(_)            -> E.error ("not a register: "^name)
         | _, E.Error            -> E.Error
         )
-    | A.Mem(t, e, a) when is_call -> E.error ("not a register") 
+    | A.Mem(t, e, a) when context <> Assign  -> E.error ("not a register") 
     | A.Mem(t, e, a)       -> 
         ( match tyExpr env e, evalTy env t, align a with
+        | E.Ok(te), E.Ok(t), E.Ok() when not (multiMemsize t) ->
+            E.error "type must be a mutiple of target memsize (typically bits8,16,24..)"
         | E.Ok(te), E.Ok(t), E.Ok() when te = T.data    ->
             E.Ok(t)         
         | E.Ok(te), E.Ok(t), E.Ok() when te <> T.data   -> 
             E.error "expression is not a data pointer"
         | _                                             -> E.Error
         )
+    in
+        f lv
+
 <<>>=
 let rec ifStmt env e ss1 ss2 =
     match tyExpr env e with
@@ -1044,7 +1061,7 @@ expression is a label.
                          
 <<>>=
 and gotoStmt env e ts = 
-    let t' = targets env ts in
+    let t' = gotoTargets env ts in
     let e' = match tyExpr env e with
         | E.Error                 -> E.Error
         | E.Ok(t) when t = T.code -> E.Ok()
@@ -1068,7 +1085,7 @@ and cutStmt env e args fs =
 
 <<>>=    
 and jumpStmt env cc e args ts =
-    let t    = targets env ts in
+    let t    = callTargets env ts in
     let args = List.map (tyExpr env) (List.map snd args) in
     let et   = match tyExpr env e with
                 | E.Ok(t) when t = T.code  -> E.Ok ()
@@ -1118,7 +1135,7 @@ and assignStmt env (lvalues,exprs) =
                 E.error "length of lhs/rhs in assignment differs"
     in
     let pair (lhs,expr) =  
-        match lvalue false env lhs, tyExpr env expr with
+        match lvalue Assign env lhs, tyExpr env expr with
         | E.Ok (t), E.Ok(te) when t = te -> E.Ok()
         | E.Error , _                    -> E.Error
         | _       , E.Error              -> E.Error
@@ -1128,8 +1145,8 @@ and assignStmt env (lvalues,exprs) =
 
 <<>>=
 and callStmt env (l,cc,e,args,ts,fs) =
-    let lt      = E.Implode.map (lvalue true env) l in
-    let ts'     = targets env ts                    in
+    let lt      = E.Implode.map (lvalue Call env) l in
+    let ts'     = callTargets env ts                    in
     let fs'     = flows false env fs                in
     let args'   = List.map snd args                 in
     let argsTy  = E.Implode.map (tyExpr env) args'  in
@@ -1142,7 +1159,7 @@ and callStmt env (l,cc,e,args,ts,fs) =
              
 <<>>=
 and primStmt env (l,cc,op,args,fs) =
-    let l      = E.Implode.map (lvalue true env) l           in
+    let l      = E.Implode.map (lvalue PrimCall env) l           in
     let fs     = flows false env fs                          in
     let opTy   = snd (Const.Symbol.lookup op Const.constOps) in
     let args'  = List.map snd args                           in

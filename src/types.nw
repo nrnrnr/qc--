@@ -70,6 +70,15 @@ val subst  : subst -> tyscheme -> ty
 val empty  : subst
 @
 
+The [[appl]] function simplifies the type checking of application by
+combining the building blocks from above for this purpose: The first
+argument is a procedure type scheme, the second the types of the
+arguments and the result the type of the result.
+
+<<>>=
+val appl   : tyscheme -> ty list -> ty
+@
+
 For debugging types and type schema can be pretty printed into
 [[Pp.doc]] values. These can be printed into a string or a file.
 
@@ -128,8 +137,9 @@ val codesize : int
 The implementation uses an environment to model substitutions. 
 
 <<types.ml>>=
-<<types>>
+module E = Error
 
+<<types>>
 module Subst = Env.Make(struct type t=key let compare=compare end)
 open Subst
 
@@ -166,19 +176,29 @@ let rec unify ts t sigma = match ts, t with
     | Bits(Var(x))   , Bits(y)                       -> enter x y sigma
     | Procedure(xs,x), Procedure(ys,y)  -> unify' (xs) (ys) sigma 
     | _              , _                             -> unifyExn "sorry"
-
+<<>>=
 and unify' xs ys sigma = match xs, ys with
     | []            , []        -> sigma
     | []            , ys        -> unifyExn "arity mismatch"
     | xs            , []        -> unifyExn "arity mismatch"
     | x::xs         , y::ys     -> unify' xs ys (unify x y sigma)
-
+<<>>=
 let rec subst sigma = function
     | Bool              -> Bool
     | Bits(Const(x))    -> Bits(x)
     | Procedure(xs,x)   -> Procedure (List.map (subst sigma) xs, subst sigma x)
     | Bits(Var(x))      -> try Bits(lookup x sigma)
                            with Not_found -> substExn ()
+<<>>=
+let appl op args =
+    let unused = Bool          in
+    let sigma  = ( try unify op (Procedure(args,unused)) empty with
+                 | UnifyExn -> E.error "type error in application"
+                 )              in
+        ( match subst sigma op with
+        | Procedure(_,t) -> t
+        | _              -> assert false
+        )
 @
 
 The pretty printer for types ueses the pretty printer module [[Pp]]. 

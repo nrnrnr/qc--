@@ -140,7 +140,7 @@ flow        = FlowAt        (flow, region)
             | Aborts    
 
 lvalue      = LValueAt      (lvalue, region)
-            | Var           (name)
+            | Var           (hint?,name)
             | Mem           (ty, expr, aligned?)
 <<>>=
 altcont     = (expr, expr)
@@ -338,7 +338,8 @@ let rec ty = function
 <<>>=        
 let rec lvalue = function
     | A.LValueAt(x,_)   -> lvalue x
-    | A.Var(x)          -> id x
+    | A.Var(None,x)     -> id x
+    | A.Var(Some h,x)   -> str h ^/ id x
     | A.Mem(t,e,a)      -> 
         ~~ ty t 
         ^^ P.text "["
