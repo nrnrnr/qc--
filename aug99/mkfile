@@ -5,7 +5,7 @@ ASDLGEN=camlGen
 NOWEAVE=`echo ${NOWEAVE-noweave}`
 
 ASDLSRC=asm cmmir ast rtl
-OCAMLSRC=sourcemap util atomize
+OCAMLSRC=sourcemap util atomize ralloc
 
 
 ASDLSRCDOTDEFS=`echo $ASDLSRC | sed 's/ /.defs /g;s/$/.defs/'`
@@ -142,9 +142,12 @@ index.tex: index.nw
 
 UTILS=option.mli option.ml 
 UTILSOBJ=`echo $UTILS | sed 's/\.mli/.cmi/g;s/\.ml/.cmo/g'`
+DERIVEDCAMLOBJ=asm.cmi asm.cmo iRNode.cmi iRNode.cmo aST.cmi aST.cmo iR.cmi iR.cmo 
+DERIVEDCAMLSRC=`echo $DERIVEDCAMLOBJ | sed 's/[.]cmi/.mli/g;s/[.]cmo/.ml/g'`
 
-caml:V: $OCAMLSRCDOTCMI $OCAMLSRCDOTCMO $UTILSOBJ \
-	asm.cmi asm.cmo iRNode.cmi iRNode.cmo aST.cmi aST.cmo iR.cmi iR.cmo 
+ALLCAMLSRC="$OCAMLSRCDOTMLI $OCAMLSRCDOTML $UTILS $DERIVEDCAMLSRC"
+
+caml:V: $OCAMLSRCDOTCMI $OCAMLSRCDOTCMO $UTILSOBJ $DERIVEDCAMLOBJ
 
 CAMLOPTS="-I /home/cellar/nr/zephyr/asdlGen-19990816/src/ocaml"
 
@@ -206,4 +209,36 @@ rti:V: cmmrti.h
 	(echo '#include "cmmrti.h"'; echo 'int garbage = 77;') > rti-test.c
 	gcc -ansi -pedantic -Wall -c rti-test.c
 
+
+
+DEPENDMARK="#### dependencies follow --- write nothing after this line"
+
+depend:V: $ALLCAMLSRC
+	ocamldep $prereq > /dev/null || exit 1
+	rm -f mkfile.new
+	(sed "/^$DEPENDMARK/,"'$d' mkfile; echo $DEPENDMARK; ocamldep $prereq) > mkfile.new
+	if [ -r mkfile.new ]; then overwrite mkfile cat mkfile.new; fi; : ignore
+	rm -f mkfile.new
 	
+#### dependencies follow --- write nothing after this line
+atomize.cmi: iRNode.cmi rTL.cmi 
+sourcemap.cmo: option.cmi sourcemap.cmi 
+sourcemap.cmx: option.cmx sourcemap.cmi 
+util.cmo: util.cmi 
+util.cmx: util.cmi 
+atomize.cmo: iRNode.cmi rTL.cmi atomize.cmi 
+atomize.cmx: iRNode.cmx rTL.cmx atomize.cmi 
+ralloc.cmo: iRNode.cmi rTL.cmi regset.cmi ralloc.cmi 
+ralloc.cmx: iRNode.cmx rTL.cmx regset.cmi ralloc.cmi 
+option.cmo: option.cmi 
+option.cmx: option.cmi 
+asm.cmo: asm.cmi 
+asm.cmx: asm.cmi 
+iRNode.cmi: rTL.cmi 
+iRNode.cmo: rTL.cmi iRNode.cmi 
+iRNode.cmx: rTL.cmx iRNode.cmi 
+aST.cmo: aST.cmi 
+aST.cmx: aST.cmi 
+iR.cmi: aST.cmi iRNode.cmi 
+iR.cmo: aST.cmi iRNode.cmi iR.cmi 
+iR.cmx: aST.cmx iRNode.cmx iR.cmi 
