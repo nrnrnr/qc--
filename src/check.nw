@@ -941,17 +941,42 @@ let checkFlowTarget env x =
     | F.Local, E.Ok(F.Continuation,_) -> E.Ok()
     | _      , E.Ok(F.Continuation,_) -> assert false
     | _                               -> E.error (x^" is not a continuation")
+@
+The flow annotations [[returns to]] and [[unwinds to]] is meaningless when
+used to annotate a [[cuts to]] statement. We are checking a [[cut to]] 
+statement when [[isCutTo]] is true.
 
 <<>>=
-let rec flow env = function
-    | A.FlowAt(x,r)     -> E.catch (error r env) (flow env) x
+let rec flow isCutTo env = function
+    | A.FlowAt(x,r)     -> E.catch (error r env) (flow isCutTo env) x
     | A.CutsTo(ns)      -> E.Implode.map (checkFlowTarget env) ns 
-    | A.UnwindsTo(ns)   -> E.Implode.map (checkFlowTarget env) ns 
-    | A.ReturnsTo(ns)   -> E.Implode.map (checkFlowTarget env) ns 
+    | A.UnwindsTo(ns)   -> 
+        if isCutTo then E.error "unwinds is meaningless for cut to" 
+        else E.Implode.map (checkFlowTarget env) ns 
+    | A.ReturnsTo(ns)   -> 
+        if isCutTo then E.error "returns is meaningless for cut to"
+        else E.Implode.map (checkFlowTarget env) ns 
     | A.Aborts          -> E.Ok ()
 
-let flows env fs = E.Implode.map (flow env) fs
+let flows isCutTo env fs = E.Implode.map (flow isCutTo env) fs
 @
+
+The [[isLabel env e]] function returns [[true]] if the expression
+[[e]] is a label, i.e. when it is statically known.
+
+<<>>=
+let rec isLabel env = function
+    | A.ExprAt(x,_)                     -> isLabel env x
+    | A.Fetch(A.LValueAt(x,_))          -> isLabel env (A.Fetch x)
+    | A.Fetch(A.Var(x))                 -> 
+          ( match F.findv x env with
+          | _       ,E.Error            -> false
+          | scope   ,E.Ok(F.Label(_),_) -> true
+          | _                           -> false
+          )        
+    | _                                 -> false
+@
+
 An \textit{lvalue} must be a memory location or a register. We check
 the types of both sides of an assignment and therefore return the type
 of the \textit{lvalue}. The results of a call can be only assigned to
@@ -1012,26 +1037,15 @@ and gotoStmt env e ts =
         | E.Error                 -> E.Error
         | E.Ok(t) when t = T.code -> E.Ok()
         | _                       -> 
-            E.error "goto-expression does not evaluate to a code pointer" in
-    let rec isLocalLabel = function
-        | A.ExprAt(x,_)            -> isLocalLabel x
-        | A.Fetch(A.LValueAt(x,_)) -> isLocalLabel (A.Fetch x)
-        | A.Fetch(A.Var(x))        -> 
-              ( match F.findv x env with
-              | _       ,E.Error                 ->  false
-              | F.Local ,E.Ok(F.Label(F.Code),_) ->  true
-              | _                                ->  false
-              )        
-        | _                        -> false
-    in
-        if ts = [] && not (isLocalLabel e) then
-            E.error "target list is empty"
-        else
-            E.Implode.pair (e',t')
+            E.error "goto-expression does not evaluate to a code pointer" 
+    in 
+        match ts, isLabel env e with
+        | [], false   -> E.error "must specify a target list"
+        | _           -> E.Implode.pair (e',t')
 
 <<>>=
 and cutStmt env e args fs =
-    let f    = flows env fs in
+    let f    = flows true env fs in
     let args = List.map (tyExpr env) (List.map snd args) in
     let nt   = match tyExpr env e with
                 | E.Ok(t) when t = Types.cont -> E.Ok ()
@@ -1104,10 +1118,12 @@ and assignStmt env (lvalues,exprs) =
 and callStmt env (l,cc,e,args,ts,fs) =
     let lt      = E.Implode.map (lvalue true env) l in
     let ts'     = targets env ts                    in
-    let fs'     = flows env fs                      in
+    let fs'     = flows false env fs                in
     let args'   = List.map snd args                 in
     let argsTy  = E.Implode.map (tyExpr env) args'  in
-        match tyExpr env e with
+        if ts = [] && not (isLabel env e) then
+            E.error "a target annotation for this call is missing"
+        else match tyExpr env e with
         | E.Error                 -> E.Error
         | E.Ok(t) when t = T.code -> E.Implode.quad (lt,ts',fs',argsTy)
         | otherwise               -> E.error "call-expression is not a pointer"
@@ -1115,7 +1131,7 @@ and callStmt env (l,cc,e,args,ts,fs) =
 <<>>=
 and primStmt env (l,cc,op,args,fs) =
     let l      = E.Implode.map (lvalue true env) l           in
-    let fs     = flows env fs                                in
+    let fs     = flows false env fs                          in
     let opTy   = snd (Const.Symbol.lookup op Const.constOps) in
     let args'  = List.map snd args                           in
     let argsTy = List.map (tyExpr env) args'                 in
