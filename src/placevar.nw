@@ -51,7 +51,11 @@ let placeVars _ {Proc.cfg = cfg; Proc.target = target; Proc.temps = temps} =
 			tMap' in
 	let _ = Cfgutil.fold_fwd cfg updateNode TM.empty in
 true
-
+@ Presumably the return value of placeVars indicates whether anything
+was changed (as per the optimization backplane).  Shouldn't always
+need to return true - only if something changed, not after the first time.
+@
+<<builtins>>=
 let proc = ProcT.makemap V.userdata V.projection
 let ( **-> ) = V.( **-> )
 let stageFn = (V.pfunc (V.value **-> proc **-> V.result V.bool)).V.embed
@@ -59,6 +63,7 @@ let stageFn = (V.pfunc (V.value **-> proc **-> V.result V.bool)).V.embed
 let placevar_module = [ "placeVars", stageFn placeVars
                       ; "expander",  stageFn Expander.cfg
                       ]
+
 @
 We use the Fortran convention for placing variables: anything named
 with I~through~N is an INteger, and anything else is floating point.
