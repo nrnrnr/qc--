@@ -298,11 +298,12 @@ of it with programs external to the compiler.  The intermediate
 representation for procedures ({\ir}) is essentially a control-flow
 graph whose nodes contain register transfer lists ({\rtl}s). 
 
-% ------------------------------------------------------------------ 
-\subsection{Flow graph \module{fgraph}}
-% ------------------------------------------------------------------ 
-
-This intermediate representation for procedures is currently unused. 
+% % ------------------------------------------------------------------ 
+% \subsection{Flow graph \module{fgraph}}
+% % ------------------------------------------------------------------ 
+% 
+% This intermediate representation for procedures is currently unused. 
+%
 
 % ------------------------------------------------------------------ 
 \subsection{Abstract flow graph \module{agraph}}
@@ -376,4 +377,47 @@ The code generation phase of the compiler must know many details of
 the target architecture, like calling conventions, registers sets, or
 register sizes. This \module{target} module provides a data type
 [[info]] that holds informations about a target platform.
+
+% ------------------------------------------------------------------ 
+\subsection{Debugging: Translation of {\rtl} to {\AST} \module{rtl2ast}}
+% ------------------------------------------------------------------ 
+
+For debugging we like to make the intermediate code visible by
+translating it back to {\PAL} syntax.  Technically this means, that
+{\rtl}s are translated to the {\PAL} abstract syntax ({\AST}); for the
+{\AST} a pretty printer (in module \module{ast}) translates it back to
+{\small ASCII} codes. This module provides a translation from an {\rtl}
+to a {\PAL} statement.
+
+% ------------------------------------------------------------------ 
+\subsection{Debugging: Assembler Interface to {\AST} \module{asm2ast}}
+% ------------------------------------------------------------------ 
+
+The \module{asm2} describes an abstract interface to assemblers. This
+module provides an implementation of that interface by representing
+actions of the assembler in {\PAL} abstract syntax. 
+
+% ------------------------------------------------------------------ 
+\subsection{Debugging: Flow-Graph Implementation \module{agraph2ast}}
+% ------------------------------------------------------------------ 
+
+This implementation of the abstract flow graph interface (module
+\module{agraph}) clusters assignment nodes into basic blocks:  a graph
+is a list of basic blocks, where each block is a list of {\rtl}s.  Of
+course, many details provided by the \module{agraph} interface are
+ignored by this implementation.
+
+The big picture is as follows:  the \module{ast2ir} module translates
+{\PAL} to abstract assembly code.  For debugging, the assembler from
+the \module{asm2ast} module is used.  Procedures in this assembler are
+flow graphs.  More specifically, the \module{agraph2ast} module is
+used to provide a flow-graph representation.  Thus, procedures are
+lists of {\rtl} lists.  Since the assembler can be translated to
+{\AST}, as well as {\rtl}s, which make up the procedures (or
+instructions) in the assembler, all assembler code can be represented
+as {\AST} and thus we have a {\AST} to {\AST} translation to play
+with.
+
+
+
 

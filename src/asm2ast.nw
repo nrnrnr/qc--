@@ -29,111 +29,41 @@ actions of the assembler in {\PAL}.
 % ------------------------------------------------------------------ 
 
 The interface is a sub-type of [[Asm2.S]]: it provides everything
-outlined there, plus some extras: 
+outlined there.
 
-<<module type s>>=
-module type S = sig
-    <<asm interface>>
-    <<extras>>
-end
-
-<<asm2ast.mli>>=
-<<module type s>>
-@
-
-An assembler reflects the many of the characteristics of the
-underlying target architecture.  Since {\PAL} is quite flexible with
-respect to pointer sizes, byteorder and such, we like to functorize
-our implementation over these aspects, which we call the
+An assembler reflects many of the characteristics of the underlying
+target architecture.  Since {\PAL} is quite flexible with respect to
+pointer sizes, byteorder and such, we like to functorize our
+implementation over these aspects, which we call the
 \emph{personality} of the assembler.  A functor seems to be a good
 compromise between a fixed personality, and a run-time configured
 personality.
 
-The personality additionally determines the form of instructions for
-the assembler.  The implementation of this assembler treats an
-instruction like a procedure.  The precise representation of an
-instruction is hidden.  The implementation uses only the function
-[[proc_of_instr]] that translates an instruction into abstract syntax.
+The personality provides additionally an asbtract representation of
+instructions. In this specific implementation a single instruction is
+used to implement an entire procedure. However, this implementation
+requires a function [[ext]] thant translates an instruction to
+abstract syntax of a procedure.
 
 <<module type personality>>=
 module type PERSONALITY = sig
     val target: Target.info
-    type instruction
-    val  proc_of_instr: instruction -> Ast.proc
+    type instr
+    val  ext: instr -> Ast.proc
 end
 @
 
 <<asm2ast.mli>>=
 <<module type personality>>
 
-module Make (P: PERSONALITY): S with 
-    type instruction = P.instruction
-@
+module Make (P: PERSONALITY): sig 
+    include Asm2.S
 
-The main extra functionality is provided by the [[ast]] function,
-which returns an abstract {\PAL} program for an [[asm]] value. Such a
-function is necessary, because it is impossible to represent an
-[[asm]] value directly as an [[Ast.program]].
-
-<<extras>>=
-val ast:    asm -> Ast.program
-@
-
-Not every concept provided by the abstract assembler interface is
-provided by {\PAL}.  Trying to use unsupported features will result in
-the [[Unsupported]] exception.
-
-<<extras>>=
-exception Unsupported of string
-@
-
-The interface to the assembler ([[Asm2.S]]) is described in the module
-\module{asm2}, so we don't repeat it here.
-
-<<asm interface>>=
-type asm
-type action
-type section = string
-type proc_info
-type symbol
-type sym
-type size = int
-type align = int
-type reladdr
-type offset = unit
-type instruction 
-
-val append : asm -> action -> asm
-val init : string list -> asm
-val section : section -> action
-val current : asm -> section
-val proc : proc_info -> action
-val org : int -> action
-val align : int -> action
-val addloc : int -> action
-
-val import : sym -> action
-val export : sym -> action
-val local : sym -> action
-val common : sym -> size -> align -> section -> action
-val lookup : sym -> asm -> symbol           (* Not_found *)
-val define_label : symbol -> action
-val define_const : symbol -> Bits.bits -> action
-val define_local : sym -> action
-
-val offset : int -> offset                  (* Unsupported *)
-val diff : symbol -> symbol -> offset       (* Unsupported *)
-val reladdr : symbol -> offset -> reladdr   (* ignores offset *)  
-
-val instr : instruction -> action
-
-val zeroes : int -> action
-val value : Bits.bits -> action
-val addr : reladdr -> action
-val byteorder : Fenv.Clean.endianness
-val comment : string -> action
-
-val mangle : string -> sym
+    val ast: asm -> Ast.program         (* extra *)
+end
+    with type instruction = P.instr
+    with type init        = unit
+    with type offset      = unit
 @
 
 % ------------------------------------------------------------------ 
@@ -145,11 +75,10 @@ It is a bit ironic, that the abstract interface to assemblers (module
 {\PAL}, the portable assembler. 
 
 <<asm2ast.ml>>=
-<<module type s>>
 <<module type personality>>
 
 module Make (P: PERSONALITY) = struct
-    type instruction = P.instruction
+    type instruction = P.instr
 
     <<module make>>
 end
@@ -237,6 +166,7 @@ The initially empty {\PAL} program puts everything into the ``this
 can't happen'' section.  This is admittedly ugly. 
 
 <<>>=
+type init = unit
 let init args =
     { symbols           = Symbol.empty
     ; section           = "this can't happen"
@@ -301,18 +231,6 @@ let append asm = function
                  }
     | Nop          -> asm
 @
-
-The [[ast]] function provides the abstract {\PAL} syntax of the
-``assembly'' program.  It closes the current section and reverse the
-list of sections of [[asm.toplevel']] before returning them.
-
-<<>>=
-let ast asm = 
-    let section  = (asm.section, List.rev asm.actions') in
-    let toplevel = List.rev (section :: asm.toplevel')  in
-        List.map (fun (name,sect) -> A.Section(name,sect)) toplevel
-@
-
 
 The semantics of the following functions is mostly determined by the
 assembly interface.  However, this translation to {\PAL} is imperfect
@@ -393,7 +311,7 @@ let reladdr (n,c) () = (Sym n)
 @
 
 <<>>=
-let instr i = CurSection(A.Procedure(P.proc_of_instr i))
+let instr i = CurSection(A.Procedure(P.ext i))
 @
 
 The [[zeroes n]] function emits [[bits8[n]{0,0,...,0]], where
@@ -437,4 +355,19 @@ which this code does not deal with.
 let comment n = Nop
 @
 
-        
+% ------------------------------------------------------------------ 
+\subsection{Extras}
+% ------------------------------------------------------------------         
+
+The [[ast]] function provides the abstract {\PAL} syntax of the
+``assembly'' program.  It closes the current section and reverse the
+list of sections of [[asm.toplevel']] before returning them.
+
+<<>>=
+let ast asm = 
+    let section  = (asm.section, List.rev asm.actions') in
+    let toplevel = List.rev (section :: asm.toplevel')  in
+        List.map (fun (name,sect) -> A.Section(name,sect)) toplevel
+@
+
+

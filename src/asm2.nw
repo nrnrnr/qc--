@@ -38,13 +38,17 @@ end
 % ------------------------------------------------------------------ 
 
 An assembly program is represented by an abstract type [[asm]].  It is
-built by a sequence of [[actions]], which are appended to an initially
+built by a sequence of [[action]]s, which are appended to an initially
 empty assembly program.  The general assumption is, that a assembly
-program is constructed in its natural order, from top to bottom.
+program is constructed in its natural order, from top to bottom. It
+may happen that an implementation does not implement this interface
+completely. To signal unimplemented functionality, an implementation
+should use the [[Unsupported]] exception.
 
 <<module type s>>=
 type asm        
 type action
+exception Unsupported of string
 
 val append: asm -> action -> asm
 @
@@ -80,11 +84,12 @@ The [[nop]] action does nothing.
 val nop:            action
 @
 
-A program is created by an [[init]] function that receives a string
-list as arguments for initialization.
+A program is created by an [[init]] function that receives an abstract
+[[info]] value.
 
 <<module type s>>=
-val init:           string list -> asm
+type init
+val init:           init -> asm
 @
 
 % ------------------------------------------------------------------ 
@@ -266,3 +271,4 @@ program, as explained in \module{mangle}.
 <<>>=
 val mangle: string -> sym
 @
+

@@ -31,7 +31,8 @@ semantics have been found correct it is translated into abstract
 <<ast2ir.mli>>=
 module Make 
     (G      : Agraph.S with type Make.ginit  = string   ) 
-    (Asm    : Asm2.S   with type instruction = G.graph) :
+    (Asm    : Asm2.S   with type instruction = G.graph
+                       with type init = unit) :
 sig
     module StrMap: Map.S with type key = string
     type program = Automaton.location StrMap.t * Asm.asm
@@ -69,7 +70,8 @@ end
 
 module Make
   (G         : Agraph.S with type Make.ginit = string)
-  (Asm       : Asm2.S   with type instruction  = G.graph) =
+  (Asm       : Asm2.S   with type instruction  = G.graph
+                        with type init = unit) =
 struct
     module GM     = G.Make
     module AG     = Agraph
@@ -788,7 +790,7 @@ type program = Automaton.location StrMap.t * Asm.asm
 
 let translate env target prog =
     let regs   = globals target (F.regdecls env) in
-    let asm    = Asm.init [] in
+    let asm    = Asm.init () in
         ( regs                         (* global register map *)
         , program env target regs asm prog  (* asm                 *)
         )

@@ -234,19 +234,22 @@ let cmangle =
         }
 
 module Personality = struct
+    module G = Agraph2ast.Graph
+    
     let target          = dummy
-    type instruction    = Agraph2ast.graph
+    type instr          = G.graph
+    
     let map             = Mangle.StrMap.empty
     let mangle          = Mangle.make cmangle map
-    let proc_of_instr i = 
-        let name  = mangle (Agraph2ast.name  i) in
-        let stmts = Agraph2ast.stmts i mangle   in
+    let ext i           = 
+        let name  = mangle (G.name  i) in
+        let stmts = G.stmts i mangle   in
             (None, name, [], List.map (fun s -> Ast.StmtBody s) stmts) 
 end
 
 module Asm = Asm2ast.Make(Personality)
 
-module Ast2IR = Ast2ir.Make (Agraph2ast) (Asm)
+module Ast2IR = Ast2ir.Make (Agraph2ast.Graph) (Asm)
 @
 
     

@@ -38,46 +38,17 @@ provided. Most useful is the function [[ast]], which translates a
 [[graph]] into {\PAL} abstract syntax.
 
 <<agraph2ast.mli>>=
-<<agraph interface>>
-<<extras>>
-@
+module type S = Agraph.S
+    with type Make.ginit = string
 
-<<agraph interface>>=
-type graph
-type node
-type unode
-type cont
-module Props : sig
-    type properties
-    val empty : properties
-    val add_span : Bits.bits -> Rtl.const -> properties -> properties
-    val add_comment : string -> properties -> properties
-end
-val bind : Props.properties -> unode -> node
-module Make : sig
-    type ginit = string
-    val graph : ginit -> graph
-    val graph_of : node -> graph
-    val exit : graph -> unode
-    val entry : node -> unode
-    val goto : graph -> Rtl.expr -> Agraph.label list -> unode
-    val branch : Rtl.expr -> node -> node -> unode
-    val assign : Rtl.rtl -> node -> unode
-    val copy_in : Agraph.formal list -> Agraph.context -> Target.conv -> node -> unode
-    val copy_out : Agraph.actual list -> Agraph.context -> Target.conv -> node -> unode
-    val return : graph -> int -> int -> unode
-    val make_cont : node -> Agraph.cuts -> cont
-    val call : Rtl.expr -> cont -> unode
-    val jump : graph -> Rtl.expr -> Agraph.label list -> unode
-    val label : Agraph.label -> node -> unode
-end
-@
+module Graph: sig
+    include S
 
-<<extras>>=
-type block = string * Rtl.rtl list
-val blocks: graph -> block list
-val stmts : graph -> Mangle.mangler -> Ast.stmt list
-val name  : graph -> string
+    type block = string * Rtl.rtl list
+    val blocks: graph -> block list
+    val stmts : graph -> Mangle.mangler -> Ast.stmt list
+    val name  : graph -> string
+end
 @
 
 % ------------------------------------------------------------------ 
@@ -90,12 +61,20 @@ the modules [[Props]] and [[Make]] are mandatory.
 
 <<agraph2ast.ml>>=
 module A        = Ast
-module Props = struct
-    <<module Props>>
-end
-<<types>>
-module Make = struct
-    <<module Make>>
+
+module type S = Agraph.S
+    with type Make.ginit = string
+
+module Graph = struct
+    module Props = struct
+        <<module Props>>
+    end
+    <<types>>
+    <<bind function>>
+    module Make = struct
+        <<module Make>>
+    end
+    <<extras implementation>>
 end
 @
 
@@ -106,7 +85,7 @@ reference to the graph it belongs to.
 <<types>>=
 type block =   string * Rtl.rtl list    (* label and RTLs *)
 type graph =   { name:              string
-               ; mutable bbs:      block list
+               ; mutable bbs:       block list
                }
 
 type node  =   { graph:             graph 
@@ -150,7 +129,7 @@ The binding of properties to nodes is built into the construction
 functions. The [[bind]] function required by the interface is a simple
 application.
 
-<<agraph2ast.ml>>=
+<<bind function>>=
 let bind props unode = unode props
 @
     
@@ -270,13 +249,13 @@ let label n node p =
 
 A block's name is returned by [[name]]:
 
-<<agraph2ast.ml>>=
+<<extras implementation>>=
 let name {name=n} = n 
 @
 
 The list of basic blocks is returned by [[blocks]]:
 
-<<agraph2ast.ml>>=
+<<extras implementation>>=
 let blocks {bbs = bb} = bb
 @
 
