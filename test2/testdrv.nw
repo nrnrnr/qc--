@@ -25,6 +25,10 @@ Test.tst_file   = nil    -- name of config file
 Test.gen_args   = ""     -- additional arguments for generator
 Test.qc         = getenv("QC") or Sys.cmd or "../bin/qc--"
 @ 
+We should use the test version of the run-time system:
+<<testdrv.lua>>=
+Ld.rtend = "../runtime/libqc--.a ../runtime/pcmap.ld"
+@ 
 \subsection{Utility functions}
 
 \paragraph{Lists}
@@ -270,7 +274,10 @@ function Test.build_exe(inputs, s_files)
     local i = 2
     while s_files[i] do snames = snames .. ' ' .. s_files [i]; i = i + 1; end
   end
-  local cmd   = format("cc -o %s %s %s", exe_file, snames, other)
+  local oldobjs = Ld.objects
+  Ld.objects = snames .. ' ' .. other
+  local cmd = Ld.cmd(exe_file)
+  Ld.objects = oldobjs
 
   Test.log(cmd)
   if execute(cmd) ~= 0 then

@@ -1,6 +1,8 @@
 backend = Backend.x86
 backend.ralloc = backend.ralloc or Ralloc.color
 
+Ld.rtend = ""  --- don't need the run-time system
+
 Test.trust_exe = 1
 Test.source    = "lcc"
 Test.results   = Test.results or "lcc/x86"

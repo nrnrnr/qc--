@@ -6,6 +6,7 @@ Test.results = Test.results or "x86"
 
 function norun(file) return { source = file, runnable="false" } end
 
+Ld.rtend = ""  --- don't need the run-time system
 -- source files live in src directory
 Test.source  = "src"
 Test.files = { "add.c--"
