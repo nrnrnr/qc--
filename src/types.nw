@@ -1,0 +1,127 @@
+% l2h substitution C C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+
+% ------------------------------------------------------------------  
+\section{Types}\label{sec:types}
+% ------------------------------------------------------------------  
+
+The static semantics of \C~require some type checks:  types of
+arguments to primitive functions must meet the types of their formal
+parameters, if-statements are governed by an expression of type
+[[bool]].  This module lays out the type language for this purpose.
+
+The basic types in \C~are [[bool]] and [[bits]]$n$, where $n$ is a
+power of two.  Every value in \C~is monomorphic except for primitive
+operators like [[add]], which can be polymorphic in the size of their
+operators: 
+
+$$[[add]]: \forall~#n.[[bits]]#n \times [[bits]]#n \to [[bits]]#n$$
+ 
+A polymorphic values is described by a \textit{type scheme} that may
+contains bound variables for the size part of a [[bits]] type. Types,
+on the other hand, contain no variables at all. The structure of type
+schema and types are covered by a parameterized type [[t]]. Depending
+on the parameter types [[ty]] and type schema [[tyscheme]] can be
+created from [[t]].
+
+<<types>>=
+type key        = string
+
+type 'a t       = Bool
+                | Bits of 'a 
+
+type size       = Const of int
+                | Var   of key
+
+type ty         = int  t
+type tyscheme   = size t
+
+exception UnifyExn
+exception SubstExn
+
+@ The formal parameters to a primitive operation are describe by a
+type scheme, the types of the actual parameters.  The [[unify]]
+function checks that those two fit together.  During unification the
+variables part of the type scheme are instantiated.  The instantiation
+are recorded in a substitution [[subst]] that maps variable names from
+a type scheme to sizes (of type [[int]]).  When [[unify]] fails it
+raises the [[UnifyExn]] exception.
+
+<<unify>>=
+type subst
+
+val unify  : tyscheme      -> ty       -> subst -> subst
+val unify' : tyscheme list -> ty list  -> subst -> subst
+@
+
+A type scheme [[tyscheme]] can be turned into a type [[ty]] by
+replacing all variable sizes with fixed ones. This happens when a
+substitution is applied to a type scheme. Of course, it is an error
+when the type scheme contains variables not in the domain of the
+substitution. In that case the [[SubstExn]] is raised.
+
+<<subst>>=
+val subst  : subst -> tyscheme -> ty
+@
+
+% ------------------------------------------------------------------  
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+<<types.mli>>=
+<<types>>
+<<unify>>
+<<subst>>
+
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The implementation uses an environment to model substitutions. 
+
+<<types.ml>>=
+<<types>>
+
+module Subst = Env.Make(struct type t=key let compare=compare end)
+open Subst
+
+type subst = int env
+
+let unifyExn msg = raise UnifyExn
+let substExn ()  = raise SubstExn
+
+@ The Unification has two non trivial cases:
+
+\begin{itemize}
+\item A variable width unifies with a fixed width; this leads to an
+      instantiationof the variable. 
+\item A width variable might have been instantiated; thus the
+      instantiation must be looked up in the substitutions and checked
+      against the fixed width.
+\end{itemize}
+
+<<>>=
+let rec unify ts t sigma = match ts, t with
+    | Bool          , Bool                          -> sigma
+    | Bits(Const(x)), Bits(y) when x = y            -> sigma
+    | Bits(Var(x))  , Bits(y) when (domain x sigma) && 
+                              (lookup x sigma) = y  -> sigma
+    | Bits(Var(x))  , Bits(y)                       -> enter x y sigma
+    | _             , _                             -> unifyExn "sorry"
+
+and unify' xs ys sigma = match xs, ys with
+    | []            , []        -> sigma
+    | []            , ys        -> unifyExn "arity mismatch"
+    | xs            , []        -> unifyExn "arity mismatch"
+    | x::xs         , y::ys     -> unify' xs ys (unify x y sigma)
+
+let subst sigma = function
+    | Bool              -> Bool
+    | Bits(Const(x))    -> Bits(x)
+    | Bits(Var(x))      -> try Bits(lookup x sigma)
+                           with Not_found -> substExn ()
+@
+                           
