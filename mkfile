@@ -19,14 +19,19 @@ VERSION =       `date +%Y%m%d`
 
 SUBDIRS =       cllib asdl gen lua rtl camlburg tools doc src interp
 
-# A note on profiling.  Profiling is controlled in subdirectories by a
-# PROFILE variable in each mkfile.  Profiling is turned on by default,
-# but it is not clear whether this is a sensible default.  It might
-# even be sensible for different directories to have different
-# defaults.  Since we use profiling only for native-code binaries,
-# maybe it just doesn't matter.
-
-
+# ------------------------------------------------------------------ 
+# profiling
+# ------------------------------------------------------------------ 
+#
+# Profiling requires a "mk clobber" in advance.
+#
+# for ocamlprof(1): mk P=count
+# for gprof(1):     mk P=prof all.opt
+# test coverage:    mk coverage         (this uses ocamlprof)
+#
+# Maybe we should introduce virtual targets for these and call mk(1)
+# recursively? --CL
+#
 # ------------------------------------------------------------------ 
 # high level targets
 # ------------------------------------------------------------------ 
@@ -40,6 +45,7 @@ SUBDIRS =       cllib asdl gen lua rtl camlburg tools doc src interp
 #
 # test:         run test suite
 # install:      simple-minded install to $prefix, need to call 'all' first
+# coverage:     show how much code is covered by the test suite
 
 
 
