@@ -15,6 +15,9 @@ along target platform, in particular:
     \begin{tabular}{ll}
         [[src/file.c--]]        & test case                 \\
         [[src/file.0]]          & stdin for compiled test    \\
+        [[src/file.sh]]         & shell script tp execute executable, \\
+                                & if present; [[$SELF]] contains name\\
+                                & of executable\\  
         [[x86/linux/file.1]]    & expected stdout for test case\\
         [[x86/linux/file.2]]    & expected stderr for test case\\
         [[x86/linux/file.s]]    & expected assembler output\\
@@ -243,9 +246,10 @@ sub run {
 
     my $tstdir      = "$base/$target";
     my $srcdir      = "$base/src";
- 
+    
     my $filec       = "$srcdir/$file.c--";      
     my $file0       = "$srcdir/$file.0";    # stdin for binary
+    my $filesh      = "$srcdir/$file.sh";   # to run executable
     my $files       = "$tstdir/$file.s";    # asm file
     my $file1       = "$tstdir/$file.1";    # expected stdout for binary
     my $file2       = "$tstdir/$file.2";    # expected stderr for binary
@@ -268,8 +272,14 @@ sub run {
     $cmd = "$qc backend=Backend.$target -o $tx $ts";
     expect ($cmd, "/dev/null", "/dev/null", "/dev/null") || return 0; #failed
 
+
     # run $tx file, compare for expected output
-    expect ($tx, $file0, $file1, $file2) || return 0; #failed
+    if (-f $filesh) {
+        $ENV{SELF} = $tx;
+        expect ("sh $filesh", $file0, $file1, $file2) || return 0;
+    } else {
+        expect ($tx, $file0, $file1, $file2) || return 0; #failed
+    }    
 
     return 1; # success
 }
