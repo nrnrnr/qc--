@@ -1,0 +1,30 @@
+#!/bin/ksh
+
+ARCH=`basename *.ctab .ctab` 
+PERL=`which perl`
+
+if [  ! -f $PERL ] ; then
+    echo "Cannot find location of perl"
+    exit 1
+fi
+
+cat << SHAR_EOF > test.settings
+TARGET	$ARCH
+REF	cc
+CC	gcc
+SHAR_EOF
+
+cat << SHAR_EOF > tgen
+#!/bin/sh
+
+ICONX="iconx.$ARCH"
+export ICONX
+exec tgen.$ARCH \$@
+SHAR_EOF
+
+
+sed "s#PERL_LOCATION#$PERL#g" < call-test.in > call-test
+chmod a+x call-test
+chmod a+x tgen
+/bin/rm -f call-test.in
+

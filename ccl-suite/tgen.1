@@ -1,0 +1,91 @@
+.TH tgen 1 "29 April 1996"
+.SH NAME
+tgen \- generate test cases from a convention table specification
+.SH SYNOPSIS
+.RI "tgen [" options "] " file
+.SH DESCRIPTION
+.I tgen
+is an Icon program that generates test cases from a CCL (Calling
+Convention Language) convention table. 
+.I tgen
+will generate either ANSI C, or traditional C files, as well as tests
+of variadic functions
+.RI ( varargs (5))
+files. The program takes 
+.I file,
+a convention table, that specifies the mapping
+function for a procedure's arguments. The table, which represents a
+finite-state machine, is used to generate a covering set of C
+signatures. For each member of this set, an appropriate C test case is
+generated. 
+.I tgen
+is usually used with the 
+.I call-test
+front-end, although it can be used to enumerate, or count the number
+of tests that will be generated. 
+.SH OPTIONS
+.IP \-a 8
+Generate ANSI Tests. This flag changes the number of test cases are
+generated because more types are available in ANSI C. No matter what
+the setting, a preprocessor parameterized file is generated that will
+work for either language. Default is non-ANSI C.
+.IP \-c
+Display counts of tests. Usually, this flag is used in conjunction
+with the -E flag.
+.IP \-d
+Generate debugging information.
+.IP "\-f name"
+Generate specific test. 
+.I name
+is of the form 
+.RI tst. t0 . t2 . t3 ... 
+where
+.RI t n
+is member of [b,w,l,f,d,s[0-m]] which stand for byte, word, longword,
+float, double and struct (size), respectively.
+.IP \-p
+Compute placement for a signature. This flag disables the 
+.I -t
+flag.
+.IP "\-s name"
+Start enumeration 
+.RI ( -E )
+or generation 
+.RI ( -t )
+starting with test named
+name. Names follow same convention as 
+.IR -f .
+.IP \-t
+Generate test cases. This is the default.
+.IP \-v
+Generate varargs tests as well. By default, only standard tests are
+generated. 
+.IP \-w
+Don't wait between generation of each test. By default,
+.I tgen
+waits for a return to indicate that the last test has been used. This
+throttles the test generator when it is used with 
+.I call-test.
+Otherwise, 
+.I tgen
+will fill the working directory with files. This is troublesome for
+most operating systems.
+.IP \-Ealg
+Enumerate using
+.I alg
+algorithm. Choices are: paths, pairs and acyclic in increasing number
+of test cases. Paths generates the minimum number of tests. Pairs
+generates many more tests, with additional confidence that the tests
+provide sufficient coverage. For most RISC machines, acyclic generates
+more tests than could realistically be compiled (here more for
+completeness than anything else). Default is pairs. For further
+information on these algorithms, see:
+.br 
+Mark W. Bailey and Jack W. Davidson, Target-Sensitive Construction of
+Diagnostic Programs for Procedure Calling Conventions Generators. To
+appear in 
+.I SIGPLAN'96: Conference on Programming Language Design and
+.I Implementation (PLDI). 
+Philadelpha, PA. May 1996.
+.SH SEE ALSO
+call-test(1)
