@@ -107,6 +107,7 @@ end
 @ 
 <<MIPS postexpander>>=
 let byte_order  = byteorder
+let exchange_alignment = 4
 let wordsize    = wordsize
 
 type temp       = Register.t
@@ -350,8 +351,8 @@ let globals base =
 This variable placer is a simplified version of the x86 placer.
 <<mips.ml>>=
 let placevars = 
-  let is_float    w hint _ = w <= 32 && hint =$= "float" in
-  let warn ~width:w ~alignment:a ~hint:h =
+  let is_float    w kind _ = w <= 32 && kind =$= "float" in
+  let warn ~width:w ~alignment:a ~kind:k =
     if w > 32 then
       unimp (Printf.sprintf "%d-bit values (because no block copies)" w) in
   let mk_stage ~temps =

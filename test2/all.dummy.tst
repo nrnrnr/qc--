@@ -63,6 +63,7 @@ Test.files = { "badlit8.c--"
              , "test-047.c--"
              , "test-048.c--"
              , "test-049.c--"
+             , "test-051.c--"
              }
 
 local i = 1

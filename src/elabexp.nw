@@ -23,21 +23,23 @@ The {\qcc} compiler type checks expressions and converts them to RTL
 expressions. 
 None of these functions ever raises an exception.
 To elaborate an lvalue, call [[elab_loc]] in a context in which no
-hint is permissible and [[elab_hinted_name]] in a context in which a
+kind is permissible and [[elab_kinded_name]] in a context in which a
 name with an
-optional hint is expected.
-(There are no contexts in which a hint is permitted with a general lvalue.)
-ONE PROBLEM REMAINS: WE COULD ACCEPT A HINT ON A PRIMITIVE CALL.
+optional kind is expected.
+(There are no contexts in which a kind is permitted with a general lvalue.)
+ONE PROBLEM REMAINS: WE COULD ACCEPT A KIND ON A PRIMITIVE CALL.
 <<elabexp.mli>>=
 type nm_or_mem = Ast.name_or_mem
 type link = Bits.bits Reloc.Simple.relocatable
-val elab_ty : 'a Fenv.Dirty.env' -> Ast.ty   -> Rtl.width                Error.error
+val aligned : Metrics.t -> Rtl.width -> Ast.aligned option -> Ast.aligned
+                                                                     (* raises Error *)
+val elab_ty : 'a Fenv.Dirty.env' -> Ast.ty   -> Rtl.width               Error.error
 val elab_loc: 'a Fenv.Dirty.env' -> nm_or_mem-> (Rtl.loc   * Rtl.width) Error.error
 val elab_exp: 'a Fenv.Dirty.env' -> Ast.expr -> (Rtl.exp   * Types.ty)  Error.error
 val elab_con: 'a Fenv.Dirty.env' -> Ast.expr -> (Bits.bits * Rtl.width) Error.error
 val elab_link:'a Fenv.Dirty.env' -> Ast.expr -> (link      * Rtl.width) Error.error
-val elab_hinted_name: 
-  'a Fenv.Dirty.env' -> nm_or_mem -> (string * (Rtl.loc * Rtl.width)) Error.error
+val elab_kinded_name: 
+  'a Fenv.Dirty.env' -> nm_or_mem -> (string * (Rtl.loc * Rtl.width) * int) Error.error
 @ 
 For convenience in providing better locations in error messages,
 we provide a way to get region of a location or expression.
@@ -88,6 +90,14 @@ module M = Metrics
 let loc_region r l = match l with A.NameOrMemAt(_, r) -> r | _ -> r
 let exp_region r l = match l with A.ExprAt     (_, r) -> r | _ -> r
 
+let aligned metrics =
+  let wordsize = metrics.M.wordsize in
+  let wordmult = Cell.divides (Cell.of_size wordsize) in
+  let aligned w = function
+    | Some a -> alignment a
+    | None   -> if wordmult w then w / wordsize else 1 in
+  aligned
+
 let exprfuns env =
   let metrics     = F.metrics env in
   let mcell       = Cell.of_size metrics.M.memsize in
@@ -95,6 +105,7 @@ let exprfuns env =
   let eprint r    = E.errorRegionPrt (F.srcmap env, r) in
   let errorf fmt  = Printf.kprintf E.error fmt in
   let catch r f x = E.catch (eprint r) f x in
+  let aligned     = aligned metrics in
   <<definition of [[lvalue_name]]>>
   <<definition of [[rvalue_name]]>>
   <<mutually recursive nest of [[typed_expr]] and [[lvalue]]>> in
@@ -104,12 +115,12 @@ let exprfuns env =
     | _ -> E.error "constant expression may not be a Boolean") in
   let caught r f x = catch (r x) f x in
   let l, e = loc_region Srcmap.null, exp_region Srcmap.null in
-  caught e typed_expr, caught l lvalue, caught l hinted_name,
+  caught e typed_expr, caught l lvalue, caught l kinded_name,
   caught e (constant Simplify.bits), caught e (constant Simplify.link)
 
 let elab_exp         env = let f, _, _, _, _ = exprfuns env in f
 let elab_loc         env = let _, f, _, _, _ = exprfuns env in f
-let elab_hinted_name env = let _, _, f, _, _ = exprfuns env in f
+let elab_kinded_name env = let _, _, f, _, _ = exprfuns env in f
 let elab_con         env = let _, _, _, f, _ = exprfuns env in f
 let elab_link        env = let _, _, _, _, f = exprfuns env in f
 @
@@ -196,20 +207,20 @@ let rvalue_name x =
 @ 
 \subsubsection{General lvalues}
 
-WE MUST CHECK TO SEE IF A HINT IS PERMITTED!
+WE MUST CHECK TO SEE IF A KIND IS PERMITTED!
 
 Again, the environment is implicit.
 \nwaddbox{lvalue : Ast.lvalue -> Rtl.loc * Rtl.width}
 \deeperbox{14pt}
 <<mutually recursive nest of [[typed_expr]] and [[lvalue]]>>=
-let rec hinted_name lhs = match lhs with
-  | A.NameOrMemAt(lhs,r) -> catch r hinted_name lhs
-  | A.Name(hint,x)       -> E.Raise.right (Aux.Option.get "" hint, lvalue_name x)
+let rec kinded_name lhs = match lhs with
+  | A.NameOrMemAt(lhs,r) -> catch r kinded_name lhs
+  | A.Name(kind,x,a)     -> E.ematch (lvalue_name x) (fun (loc, w) ->
+                               (Aux.Option.get "" kind, (loc, w), aligned w a))
   | A.Mem _              -> E.error "only a name may appear to left of a call" in
 let rec lvalue lhs = match lhs with
-  | A.NameOrMemAt(lhs,r) -> catch r lvalue lhs
-  | A.Name(Some _,x)     -> E.error "hint permissible only on parameter or result"
-  | A.Name(None,x)       -> lvalue_name x 
+  | A.NameOrMemAt(lhs,r)    -> catch r lvalue lhs
+  | A.Name(k,x,a) -> no_kind_or_alignment k a lvalue_name x
   | A.Mem(t,addr,aligned,aliasing) ->
       let w = astwidth "value in memory" env t in
       E.ematch2 w (typed_expr addr) (fun w (addre, addrt) ->
@@ -222,16 +233,23 @@ let rec lvalue lhs = match lhs with
 and expr e = emap fst (typed_expr e) 
 and rvalue_name_or_mem nm = match nm with
   | A.NameOrMemAt(v, r) -> catch r rvalue_name_or_mem v
-  | A.Name(Some _, x)   -> E.error "hint permissible only on parameter or result"
-  | A.Name(None,   x)   -> rvalue_name x
+  | A.Name(k, x, a)     -> no_kind_or_alignment k a rvalue_name x
   | A.Mem(_, _, _, _)   ->
       E.ematch (lvalue nm) (fun (loc, w) -> Rtl.fetch loc w, Types.Bits w)
+<<utilities>>=
+let no_kind_or_alignment k a f x = match k, a with
+  | None, None     -> f x
+  | Some _, None   -> E.error "kind permissible only on parameter or result"
+  | None, Some _   -> E.error "alignment permissible only on parameter or result"
+  | Some _ ,Some _ -> 
+      E.error "kind and alignment permissible only on parameter or result"
 @
 <<utilities>>=
+let alignment n =
+  if is2power n then n else E.errorf "alignment %d is not a power of 2" n
 let assertion = function
   | None -> Rtl.none
-  | Some n when is2power n -> Rtl.aligned n 
-  | Some n -> E.errorf "alignment %d is not a power of 2" n
+  | Some n -> Rtl.aligned (alignment n)
 @ 
 % ------------------------------------------------------------------ 
 \subsubsection{The meaning of expressions}
@@ -252,12 +270,21 @@ and typed_expr exp =
   let literal cvt v width = Rtl.bits (cvt v width) width, Types.Bits width in
   let literal cvt v = emap (literal cvt v) in
   let signed, unsigned, float =
-    let cvt what cvt v width =
+    let does_not_overflow f v w =
+      try (ignore (f v w); true) with Bits.Overflow -> false in
+    let cvt signed what cvt v width =
       try cvt v width
-      with Bits.Overflow -> E.errorf "%s overflow in literal %s" what v in
-    cvt "signed-integer"   Bits.S.of_string,
-    cvt "unsigned-integer" Bits.U.of_string,
-    cvt "floating-point"   Bits.U.of_string in  (* surprising but true *)
+      with Bits.Overflow ->
+        if signed && not (v.[0] =<= '-') && does_not_overflow Bits.U.of_string v width
+        then
+          E.errorf "literal %s does not fit in %d signed bits, but it will\n\
+                    fit in %d unsigned bits---perhaps you want '%sU'?"
+            v width width v
+        else
+          E.errorf "%s overflow in literal %s" what v in
+    cvt true  "signed-integer"   Bits.S.of_string,
+    cvt false "unsigned-integer" Bits.U.of_string,
+    cvt false "floating-point"   Bits.U.of_string in  (* surprising but true *)
   let const default_width = function
     | Some ty -> astwidth "literal constant" env ty
     | None    -> E.Ok default_width in
@@ -270,7 +297,8 @@ and typed_expr exp =
   | A.Fetch(v)        -> rvalue_name_or_mem v
   | A.BinOp (l,op,r)  -> apply Rtlop.Translate.binary op [l;r]
   | A.UnOp  (op,e)    -> apply Rtlop.Translate.unary  op [e]
-  | A.PrimOp(op,args) -> apply Rtlop.Translate.prefix op (List.map snd args)
+  | A.PrimOp(op,args) -> let args = List.map (fun (k, x, a) -> x) args in
+                         apply Rtlop.Translate.prefix op args
 @ Perhaps suprisingly, [[Bits.U.of_string]] copes with all 
          literal formats.
 @

@@ -8,8 +8,9 @@
 
 This is more my idea of an elaborated representation.
 <<exposed types>>=
-type name = string
-type hint = string
+type name    = string
+type kind    = string
+type aligned = int
 @ 
 Procedures and sections in nice normal form.
 It's depressing that formals and locals don't have the same type.
@@ -22,7 +23,7 @@ type 'a proc =
     cc      : string;    (* calling convention *)
     name    : name;
     spans   : (Bits.bits * linktime) list;  (* enclose whole procedure *)
-    formals : (index * hint * Ast.variance * Rtl.width * name) list;
+    formals : (index * kind * Ast.variance * Rtl.width * name * aligned) list;
     locals  : Fenv.variable list;
     continuations : (name * Fenv.continuation) list;
     stackmem      : Block.t;
@@ -352,7 +353,7 @@ let rec freeExprVars e tail = match e with
 | A.Fetch(lvalue)   -> freeLValueVars lvalue tail
 | A.BinOp(e1,_,e2)  -> freeExprVars e1 (freeExprVars e2 tail)
 | A.UnOp(_,e)       -> freeExprVars e tail
-| A.PrimOp(_,args)  -> foldl (fun t (_,e) -> freeExprVars e t) tail args
+| A.PrimOp(_,args)  -> foldl (fun t (_,e,_) -> freeExprVars e t) tail args
 | A.Sint _ 
 | A.Uint _           
 | A.Float _         
@@ -362,7 +363,7 @@ let rec freeExprVars e tail = match e with
 and freeLValueVars l tail = match l with
 | A.NameOrMemAt(x,r) -> freeLValueVars x tail
 | A.Mem(_,e,_, _)    -> freeExprVars e tail
-| A.Name(_,name)     -> if List.mem name tail then tail else name :: tail
+| A.Name(_,name,_)   -> if List.mem name tail then tail else name :: tail
 @
 
 % ------------------------------------------------------------------ 
@@ -379,14 +380,16 @@ imports and exports have two effects
 type scope = Local | Global
 let program ~swap validate srcmap asm ast =
   E.seq (Metrics.of_ast ~swap srcmap ast.N.target) (fun metrics ->
-    let flag       = function E.Error -> F.flagError | E.Ok _ -> (fun env -> env) in
-    let eprint r s = E.errorRegionPrt (srcmap, r) s in
-    let errorf r   = Printf.kprintf (fun s -> eprint r s; E.Error) in
-    let findve r n = E.catch (eprint r) (fun env -> snd (F.findv n env)) in
-    let pointerty  = Types.Bits metrics.Metrics.pointersize in
-    let wordty     = Types.Bits metrics.Metrics.wordsize in
-    let vfp        = Vfp.mk metrics.Metrics.wordsize in
-    let memsize    = metrics.Metrics.memsize in
+    let flag        = function E.Error -> F.flagError | E.Ok _ -> (fun env -> env) in
+    let eprint r s  = E.errorRegionPrt (srcmap, r) s in
+    let errorf r    = Printf.kprintf (fun s -> eprint r s; E.Error) in
+    let findve r n  = E.catch (eprint r) (fun env -> snd (F.findv n env)) in
+    let pointerty   = Types.Bits metrics.Metrics.pointersize in
+    let wordty      = Types.Bits metrics.Metrics.wordsize in
+    let vfp         = Vfp.mk metrics.Metrics.wordsize in
+    let memsize     = metrics.Metrics.memsize in
+    let aligned     = Elabexp.aligned metrics in
+    let aligned r w = E.catch (eprint r) (fun a -> E.Ok (aligned w a)) in
     <<definitions of name-binding functions>>
     <<definitions of elaboration functions>>
     (* phase one: create environment and bind all names *)
@@ -494,8 +497,8 @@ let global_base_sym = F.symbol env "Cmm.global_area" in
 let global_sigbuf   = Buffer.create 128 in
 let global_loc env = 
   let global_automaton = target.T.globals (Rtl.link global_base_sym pointersize) in
-  fun hint ty name ->
-    let hinted h =
+  fun kind ty name ->
+    let kinded h =
       let w = tywidth ty in
       Printf.bprintf global_sigbuf "[%s %d]" name w
       AT.allocate t w h in
@@ -505,8 +508,8 @@ let global_loc env =
         E.Ok (AT.of_loc (Strutil.Map.find t target.T.named_locs))
       with Not_found ->
         errorf "unknown hardware register %S" r in
-    function FE.Rnone   -> hinted ""
-           | FE.RHint h -> hinted h
+    function FE.Rnone   -> kinded ""
+           | FE.RKind h -> kinded h
            | FE.RReg r  -> hardware r in
 with Error.ErrorExn msg -> impossible msg
     in
@@ -523,17 +526,17 @@ let registers_from scope n rs env =
           | _ -> impossf "nonregister" in
         List.map unreg rs) in
       env, regs
-  | (rgn, (v, hint, t, name, hwreg)) :: rs ->
+  | (rgn, (v, kind, t, name, hwreg)) :: rs ->
       let entry = E.seq (Elabexp.elab_ty env t) (fun w ->
         let loc   = (match scope with Global -> R.global | Local -> R.var) name n w in
-        let reg h = { FE.index = n; FE.rhint = h; FE.loc = loc; FE.variance = v } in
+        let reg h = { FE.index = n; FE.rkind = h; FE.loc = loc; FE.variance = v } in
         let den h = E.Ok (FE.Variable (reg h)) in
-        let den = match hint, hwreg with
-        | Some _, Some _ -> errorf rgn "can't have hint and hardware register"
+        let den = match kind, hwreg with
+        | Some _, Some _ -> errorf rgn "can't have kind and hardware register"
         | Some h, None ->
-            (match scope with Global -> den (FE.RHint h)
+            (match scope with Global -> den (FE.RKind h)
             | Local -> errorf rgn
-                  "hints permissible only on formal parameters or global variables") 
+                  "kinds permissible only on formal parameters or global variables") 
         | None,   None   -> den FE.RNone
         | None,   Some r ->
             (match scope with
@@ -547,14 +550,18 @@ let registers_from scope n rs env =
 let formals_from n rs env =
   let rec formals prev' n rs env = match rs with
   | [] -> env, n, List.rev prev'
-  | (r, (hint, inv, ty, name)) :: rs ->
+  | (r, (kind, inv, ty, name, a)) :: rs ->
+      let error () = formals prev' n rs (F.bindv name (r, E.Error) env) in
       match Elabexp.elab_ty env ty with
+      | E.Error -> error()
       | E.Ok w ->
-          let i = { FE.index = n; FE.variance = inv;
-                    FE.loc = Rtl.var name n w; FE.rhint = FE.RHint hint; } in
-          let env = F.bindv name (r, E.Ok (FE.Variable i, Types.Bits w)) env in
-          formals ((n, hint, inv, w, name)::prev') (n+1) rs env
-      | E.Error -> formals prev' n rs (F.bindv name (r, E.Error) env) in
+          match aligned r w a with
+          | E.Error -> error()
+          | E.Ok a ->
+              let i = { FE.index = n; FE.variance = inv;
+                        FE.loc = Rtl.var name n w; FE.rkind = FE.RKind kind; } in
+              let env = F.bindv name (r, E.Ok (FE.Variable i, Types.Bits w)) env in
+              formals ((n, kind, inv, w, name, a)::prev') (n+1) rs env in
   formals [] n rs env in
 @ 
 <<definitions of name-binding functions>>=

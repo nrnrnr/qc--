@@ -16,7 +16,7 @@ a variable into a temporary; if the opportunity is not used (i.e. the stage
 passes the buck to its successor), the variable goes into the private block on
 the stack.
 <<placevar.mli>>=
-val mk_automaton : warn:(width:int -> alignment:int -> hint:string -> unit) ->
+val mk_automaton : warn:(width:int -> alignment:int -> kind:string -> unit) ->
                    vfp:Rtl.exp ->
                    memspace:Rtl.space ->
                    (temps:(char -> Automaton.stage) -> Automaton.stage) ->
@@ -218,7 +218,7 @@ let rec count_rtl r = match Rtl.Dn.rtl r with
 For each variable, we choose the context with the most votes.
 The default context is "int".
 <<choose a context for each variable>>=
-let default_hint = "int" in
+let default_kind = "int" in
 let ctxt_map =
   let elect i =
     let cnts = var_counts.(i) in
@@ -231,43 +231,45 @@ let ctxt_map =
 @
 To replace a variable, we use the automaton to allocate a new fetch of the variable,
 and we extract the location.
-The automaton relies on a hint to return an appropriate location.
-If the variable is a formal argument with a hint, we use that hint and issue a warning
-if it is different from the elected hint.
-The function [[choose_hint]] is responsible for detecting and handling formal
+The automaton relies on a kind to return an appropriate location.
+If the variable is a formal argument with a kind, we use that kind and issue a warning
+if it is different from the elected kind.
+The function [[choose_kind]] is responsible for detecting and handling formal
 arguments.
-We do not issue a warning if the elected hint is the default, with zero votes.
+We do not issue a warning if the elected kind is the default, with zero votes.
+
+WE DON'T INFER ANY ALIGNMENT.  SHOULD WE WORRY?
 <<context replace var>>=
 let formal_arr = Array.make proc.Proc.vars None in
 let () = List.iter (fun (i,v) -> formal_arr.(i) <- Some v) formals in
-let choose_hint i elected_hint = 
+let choose_ty i elected_kind = 
   let space_name = function "signed" | "unsigned" | "" -> "int"
                           | n                          -> n     in
   match formal_arr.(i) with
-  | Some (Some ("address" as h), _, _, n) when elected_hint =$= "int" ->
+  | Some (Some ("address" as h), _, _, n, a) when elected_kind =$= "int" ->
     if tgt.Target.distinct_addr_sp then
       Impossible.unimp "Var placer does not distinguish addr and int spaces"
-    else h
-  | Some (Some h, _, _, n) when Pervasives.(<>) (space_name h) elected_hint ->
+    else h, a
+  | Some (Some h, _, _, n, a) when Pervasives.(<>) (space_name h) elected_kind ->
     let votes = var_counts.(i) in
     begin
-      (if not (elected_hint =$= default_hint) || votes.intc <>. 0.0 then
+      (if not (elected_kind =$= default_kind) || votes.intc <>. 0.0 then
         let error_str =
           ( Printf.sprintf 
-              "Hint \"%s\" on formal parameter %s differs from inferred hint \"%s\":\n"
-              h n elected_hint
+              "Kind \"%s\" on formal parameter %s differs from inferred kind \"%s\":\n"
+              h n elected_kind
           ^ Printf.sprintf "  {int: %f, float: %f, addr: %f}"
                            votes.intc votes.floatc votes.addrc) in
         Error.warningPrt error_str);
-      h
+      h, a
     end
-  | _ -> elected_hint in
+  | _ -> elected_kind, None in
   
 let get_placer i w =
   match tMap.(i) with
   | Some a -> a
-  | None   -> let hint = choose_hint i ctxt_map.(i) in
-              let alloc = A.allocate autmtn w hint in
+  | None   -> let kind, aligned = choose_ty i ctxt_map.(i) in
+              let alloc = A.allocate autmtn w kind (Aux.Option.get 1 aligned) in
               (changed := true;
                tMap.(i) <- Some alloc;
                alloc) in
@@ -304,7 +306,7 @@ let ( *> ) = A.( *> )
 
 let from_temps proc space = (* stage to allocate a temporary location *)
   let allocator = Talloc.Multiple.loc proc.Proc.temps space in
-  let alloc ~width:w ~alignment:a ~hint:h = A.of_loc (allocator w) in
+  let alloc ~width:w ~alignment:a ~kind:h = A.of_loc (allocator w) in
   A.wrap (fun methods -> {A.allocate = alloc; A.freeze = methods.A.freeze})
 
 let debug lbl w h a ctr =
@@ -312,8 +314,8 @@ let debug lbl w h a ctr =
 
 let mk_automaton ~warn ~vfp ~memspace mk_stage proc =
   let warn methods =
-    let alloc ~width:w ~alignment:a ~hint:h =
-      warn ~width:w ~alignment:a ~hint:h;
+    let alloc ~width:w ~alignment:a ~kind:h =
+      warn ~width:w ~alignment:a ~kind:h;
       methods.A.allocate w a h in
     {A.allocate = alloc; A.freeze = methods.A.freeze} in
   Block.srelative vfp "variables placed in memory" (A.at memspace)

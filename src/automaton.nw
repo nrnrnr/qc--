@@ -17,7 +17,7 @@
 % ------------------------------------------------------------------ 
 
 \emph{The predicates for [[choice]] and [[first_choice]] take [[width]]
-and [[hint]] in different orders. Maybe we should define an extra type
+and [[kind]] in different orders. Maybe we should define an extra type
 alias. --CL}
 
 This module supports Bailey-Davidson automata for allocating locations
@@ -65,16 +65,16 @@ The interface exports abstract types, concrete types, and values.
 <<registration types>>
 <<exported values>>
 @ 
-\subsection{Standard hints}
+\subsection{Standard kinds}
 
-We might use these hints:\\
+We might use these kinds:\\
 \begin{tabular}{>{\ttfamily}ll}
 signed& Signed integer\\
 unsigned& Unsigned integer\\
 address&  Address\\
 float&    Floating-point value\\
 \end{tabular}\\
-A missing or empty hint is assumed to be [[unsigned]].
+A missing or empty kind is assumed to be [[unsigned]].
 @
 \subsection{Observer-Mutator interface}
 An [[Automaton.t]] encapsulates mutable state.  
@@ -96,10 +96,9 @@ type result =
   }
 @ 
 We allocate a location by identifying a value's type, which in {\PAL}
-is a width and a hint.
+is a width and a kind.
 <<exported values>>=
-val allocate : t -> width:int -> hint:string -> loc
-val allocate_with_alignment : t -> width:int -> hint:string -> align:int -> loc
+val allocate : t -> width:int -> kind:string -> align:int -> loc
 val freeze   : t -> result
 @
 In some conventions, a value must be split between two registers or
@@ -108,7 +107,7 @@ Accordingly, we need a special type of location: an object with fetch
 and store methods.
 <<exposed types>>=
 type width = int
-type hint  = string
+type kind  = string
 type loc = Rtlutil.aloc =
     { fetch  : width -> Rtl.exp
     ; store  : Rtl.exp -> width -> Rtl.rtl
@@ -135,7 +134,7 @@ out, which information it passes to the right.
 At the very end is the overflow block.
 <<exposed types>>=
 type methods =
-    { allocate : width: int -> alignment: int -> hint: string -> loc
+    { allocate : width: int -> alignment: int -> kind: string -> loc
     ; freeze   : Register.Set.t -> Rtl.loc list -> result
     } 
 @ To get an instance of an automaton, we need to provide a memory
@@ -185,7 +184,7 @@ val widths : int list -> stage
 @
 The [[widen f]] stage  alters a request for a
 width~[[w]] so it has a width [[f w]], which must be at least as large as~[[w]].
-The widening operation depends on the hint.
+The widening operation depends on the kind.
 For a little-endian machine passing values in memory, widening an
 unsigned integer or address is
 equivalent to adding padding.
@@ -267,7 +266,7 @@ val choice : (choice_predicate * stage) list -> stage
 @ To help create predicates we provide several convenience functions.
 <<exported values>>=
 val counter_is : counter -> (int -> bool) -> choice_predicate
-val is_hint    : hint                     -> choice_predicate
+val is_kind    : kind                     -> choice_predicate
 val is_width   : int                      -> choice_predicate
 val is_any     :                             choice_predicate
 @ 
@@ -374,7 +373,7 @@ let ( *> ) (S f1) (S f2) = S (fun rhs -> f1 (f2 rhs))
 let pipeline_end = I (
   fun ~start ~space ~ctrs -> 
     let block = Block.at ~base:start ~size:0 ~alignment:1 in
-    { allocate = (fun ~width ~alignment ~hint -> impossf
+    { allocate = (fun ~width ~alignment ~kind -> impossf
                   "fell off end of pipeline -- multiple return values from C?")
     ; freeze   =
       (fun regs mems -> 
@@ -387,16 +386,13 @@ let at space ~start (S s) =
   let I f = s pipeline_end in
     f ~start ~space ~ctrs:(fun _ -> None)
 
-let of_methods t              = t
-let allocate   t ~width ~hint = t.allocate width 1 hint
-let allocate_with_alignment   t ~width ~hint ~align = t.allocate width align hint
-let freeze     t              = t.freeze Register.Set.empty []
+let of_methods t                     = t
+let allocate   t ~width ~kind ~align = t.allocate width align kind
+let freeze     t                     = t.freeze Register.Set.empty []
 
-let fetch      loc            = loc.fetch
-let store      loc            = loc.store
-let of_loc     loc            = { fetch  = R.fetch loc
-                                ; store  = R.store loc
-                                }
+let fetch  loc = loc.fetch
+let store  loc = loc.store
+let of_loc loc = { fetch  = R.fetch loc; store  = R.store loc }
 @ 
 \subsection{Wrapping etc.}
 
@@ -440,7 +436,7 @@ let overflow ~growth ~max_alignment =
 To allocate, we align and increment the memory block.
 The address of the new location depends on the direction of stack growth.
 <<functions [[allocate]] and [[freeze]] for the overflow block>>=
-let allocate ~width ~alignment ~hint =
+let allocate ~width ~alignment ~kind =
   if not (Cell.divides memsize width) then
    impossf "width %d not multiple of memsize %d" width (Cell.size memsize);
   if max_alignment mod alignment <> 0 then
@@ -472,15 +468,15 @@ let freeze regs mems =
 \paragraph{Higher-order functions for request transformers}
 
 <<automaton.ml>>=
-type allocator = width: int -> alignment: int -> hint: string -> loc
+type allocator = width: int -> alignment: int -> kind: string -> loc
 let txstage f  = wrap (fun next -> 
                         { allocate = f next.allocate; freeze = next.freeze })
 let _ = (txstage : (allocator -> allocator) -> stage)
 @ 
 <<automaton.ml>>=
 let widths ws = txstage
-  (fun nalloc ~width ~alignment ~hint ->
-    if   List.exists ((=) width) ws then nalloc width alignment hint
+  (fun nalloc ~width ~alignment ~kind ->
+    if   List.exists ((=) width) ws then nalloc width alignment kind
                                     else Unsupported.automaton_widths width)
 @   
 Narrowing and widening.
@@ -499,13 +495,13 @@ let narrower =
 let narrowf = narrower "float"
 
 let widen f = txstage 
-  (fun nalloc ~width:n ~alignment ~hint ->
+  (fun nalloc ~width:n ~alignment ~kind ->
     let w   = f n in
-    let loc = nalloc w alignment hint in
-    if w = n then loc else narrower hint ~n ~w loc)
+    let loc = nalloc w alignment kind in
+    if w = n then loc else narrower kind ~n ~w loc)
 
 let align_to f =
-  txstage (fun nalloc ~width:w ~alignment ~hint -> nalloc w (f w) hint)
+  txstage (fun nalloc ~width:w ~alignment ~kind -> nalloc w (f w) kind)
 @
 
 \paragraph{Choice and First Choice Stages}
@@ -521,10 +517,10 @@ let choice choices next ~ctrs =
       let follows_choice = { allocate = next.allocate
                            ; freeze   = alternative.freeze } in
       let choice = stage follows_choice in
-      let alloc ~width ~alignment ~hint =
-        let alloc = if p width hint ctrs then choice.allocate 
+      let alloc ~width ~alignment ~kind =
+        let alloc = if p width kind ctrs then choice.allocate 
                                          else alternative.allocate in
-        alloc width alignment hint in
+        alloc width alignment kind in
       { allocate = alloc; freeze = choice.freeze } in
     List.fold_right add choices
       { allocate = (fun ~width -> impossf "fell off end of choice stage")
@@ -534,15 +530,15 @@ let choice = wrap_choice choice
 let first_choice choices next ~ctrs =
   let choices = List.map (fun (p, c) -> (p, c next)) choices in
   let myself = ref next in (* temporary *)
-  let allocate ~width ~alignment ~hint = 
-    (!myself).allocate width alignment hint in
+  let allocate ~width ~alignment ~kind = 
+    (!myself).allocate width alignment kind in
   let freeze regs mems = (!myself).freeze regs mems in
-  let first_allocate ~width ~alignment ~hint =
+  let first_allocate ~width ~alignment ~kind =
     let choice =
-      try snd (List.find (fun (p, _) -> p width hint ctrs) choices)
+      try snd (List.find (fun (p, _) -> p width kind ctrs) choices)
       with Not_found -> impossf "missing choice" in
     myself := choice;
-    allocate width alignment hint in
+    allocate width alignment kind in
   let () = try
     myself := { allocate = first_allocate
               ; freeze   = (snd (List.hd choices)).freeze }
@@ -551,7 +547,7 @@ let first_choice choices next ~ctrs =
 let first_choice = wrap_choice first_choice
 
 let counter_is c f _ _ env = match env c with Some i -> f (!i) | None -> false
-let is_hint    h'  w h _   = h =$= h'
+let is_kind    h'  w h _   = h =$= h'
 let is_width   w'  w h _   = w = w'
 let is_any         w h _   = true
 @ 
@@ -568,8 +564,8 @@ let wrap_counter f label =
            f space ctr (next ~start ~space ~ctrs)))
 
 let counter of_width =
-  let f ctr nalloc ~width ~alignment ~hint =
-    let loc = nalloc ~width ~alignment ~hint in
+  let f ctr nalloc ~width ~alignment ~kind =
+    let loc = nalloc ~width ~alignment ~kind in
     (ctr := !ctr + of_width width ; loc)
   in (fun ctr next -> { allocate = f ctr next.allocate; freeze = next.freeze })
 @ 
@@ -594,13 +590,13 @@ let reg_placer of_width agg n regs reserve next =
   | r :: rest -> drop (i - of_width (Register.width r)) rest
   | []        -> [] in
 
-  let rec alloc ~width ~alignment ~hint =
+  let rec alloc ~width ~alignment ~kind =
     try
       let ((_, _, ms), _, c) as r = getreg (drop !n regs) in
       let w = Cell.to_width ms c in
       if w = width then
          let allocated = of_loc (R.reg r) in
-         ( if reserve then ignore (next.allocate width alignment hint)
+         ( if reserve then ignore (next.allocate width alignment kind)
          ; allocated )
       else if w < width then match agg with
              | Some endianness ->
@@ -608,11 +604,11 @@ let reg_placer of_width agg n regs reserve next =
                 let _   = n := !n + w in
                 let ell = combine_loc endianness
                              (of_loc (R.reg r)) w
-                             (alloc ~width:w' ~alignment ~hint) w'
+                             (alloc ~width:w' ~alignment ~kind) w'
                 in ( n := !n - w ; ell )
              | None -> Unsupported.automaton_widen ~have:width ~want:w
       else unimp "auto-widening for register requests"
-    with Failure _ -> next.allocate width alignment hint in
+    with Failure _ -> next.allocate width alignment kind in
   let freeze regs mems = next.freeze (RS.union state.used regs) mems in
   { freeze = freeze; allocate = alloc }
 
@@ -635,10 +631,10 @@ let regs_by_args label rs reserve =
 let pad = 
   let padcounter space ctr next =
     let (_, _, memsize) = space in
-    let f nalloc ~width ~alignment ~hint =
+    let f nalloc ~width ~alignment ~kind =
       let al = Cell.to_width memsize (R.C alignment) in
       ctr := Aux.round_up_to ~multiple_of:al !ctr;
-      nalloc ~width ~alignment ~hint
+      nalloc ~width ~alignment ~kind
     in { next with allocate = f next.allocate }
   in wrap_counter padcounter
 @ 
@@ -693,9 +689,9 @@ let unit = wrap (fun next -> next)
 \paragraph{Debugging}
 <<automaton.ml>>=
 let debug f _ ctr next =
-  let allocate ~width ~alignment ~hint =
-    f width hint alignment (!ctr);
-    next.allocate ~width ~alignment ~hint in
+  let allocate ~width ~alignment ~kind =
+    f width kind alignment (!ctr);
+    next.allocate ~width ~alignment ~kind in
   { allocate = allocate; freeze = next.freeze }
 
 let debug counter f = wrap_counter (debug f) counter

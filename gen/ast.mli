@@ -27,10 +27,10 @@
   
   and name_or_mem =
         NameOrMemAt of (name_or_mem * region)
-      | Name of (hint option * name)
+      | Name of (hint option * name * aligned option)
       | Mem of (ty * expr * aligned option * in_alias list)
   
-  and actual = (hint option * expr)
+  and actual = (hint option * expr * aligned option)
   and expr =
         ExprAt of (expr * region)
       | Sint of (StdPrims.std_string * ty option)
@@ -69,7 +69,7 @@
       | Pragma
       | Target of (arch list)
   
-  and bare_formal = (hint option * variance * ty * name)
+  and bare_formal = (hint option * variance * ty * name * aligned option)
   and formal = (region * bare_formal)
   and memsize =
         NoSize
@@ -88,7 +88,7 @@
       | Align of (align)
       | MemDecl of (ty * memsize * init option)
   
-  and cformal = (region * hint option * name)
+  and cformal = (region * hint option * name * aligned option)
   and flow =
         FlowAt of (flow * region)
       | CutsTo of (name list)

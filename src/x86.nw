@@ -86,6 +86,7 @@ We ought to find a good way to tie this information into the target
 metrics, so as to avoid duplication and potential inconsistency.
 <<x86 postexpander>>=
 let byte_order = Spaces.bo
+let exchange_alignment = 4  (* not required, but faster *)
 let mcell  = Cell.of_size 8
 let mspace = ('m', byte_order, mcell)
 let mcount = Cell.to_count mcell
@@ -506,7 +507,7 @@ as requested.
 <<x86 postexpander>>=
 let hwget ~dst:(fill,dt) ~src =
   if Register.eqx src Rg.fpround then
-    let slot = PX.Alloc.slot 16 in
+    let slot = PX.Alloc.slot 16 2 in
     rtl (slot.A.store (tempval Rg.fpuctl) 16)    <:>  (* fnstcw *)
     tempstore dt (RO.zx 16 32 (slot.A.fetch 16)) <:>  (* movzwl *)
     match fill with
@@ -522,7 +523,7 @@ status word.
 <<x86 postexpander>>=
 let hwset ~dst ~src =
   if Register.eqx dst Rg.fpround then
-    let slot      = PX.Alloc.slot 16 in
+    let slot      = PX.Alloc.slot 16 2 in
     let t         = PX.Alloc.temp 't' 32 in
     let t2, ldsrc = weird_tmp (PX.Alloc.temp 't' 32) src in
     rtl (slot.A.store (tempval Rg.fpuctl) 16)      <:> (* fnstcw *)
@@ -1038,6 +1039,7 @@ let target =
                        ; "com",     [32]
                        ; "div",     [32]
                        ; "divu",    [32]
+                       ; "false", []
                        ; "mod",     [32]
                        ; "modu",    [32]
                        ; "mul",     [32]
@@ -1055,6 +1057,7 @@ let target =
                        ; "shrl",    [32]
                        ; "sub",     [32]
                        ; "subb",    [32]
+                       ; "true", []
                        ; "xor",     [32]
                        ; "eq",      [32]
                        ; "ge",      [32]
@@ -1113,7 +1116,6 @@ let target =
                        ; "round_zero", []  (* from simplifier *)
                        ; "round_nearest", []  (* from simplifier *)
                        ; "NaN",   [23; 32]  (* from simplifier *)
-                       (* ; "NaN",   [52; 64]  from simplifier *)
                        ;  "add_overflows",  [32]
                        ;  "div_overflows",  [32]
                        ;  "mul_overflows",  [32]
@@ -1125,7 +1127,10 @@ let target =
                        ; "disjoin", []
                        ; "conjoin", []
                        ; "bit",     []
-                   ]; T.literals = [32;64]}
+                   ]; T.litops = List.map Up.opr [
+                        "NaN",   [52; 64]  (* from simplifier *)
+                      ];
+                        T.literals = [32;64]}
 
   (* global or hardware registers *)
   ; T.globals  = globals
@@ -1145,7 +1150,7 @@ The machine accepts only three widths of floating-point variables: 32,
 64, and 80~bits.
 Any 80-bit value is seen as a float (this might be wrong in the case
 of an 80-bit structure variable, so the decision should be revisited).
-A~32-bit or 64-bit value would have to be suitably hinted to be seen
+A~32-bit or 64-bit value would have to be suitably kinded to be seen
 as a float.
 Because floating-point registers are organized as a stack, we can't
 use the registers effectively for variables, so floats go in memory.
@@ -1158,19 +1163,19 @@ SOMEHOW.
 <<x86.ml>>=
 let warning s = Printf.eprintf "backend warning: %s\n" s
 let placevars = 
-  let is_float      w hint _ = w = 80 || (hint=$="float" && (w = 32 || w = 64)) in
-  let strange_float w hint   = w = 80 && Pervasives.(<>) hint "float" in
-  let strange_int   w hint   = hint =$= "float" && not (is_float w hint ()) in
-  let warn ~width:w ~alignment:a ~hint:h =
-      if strange_float w h then
-        warning "80-bit variable not hinted float but will go as float anyway"
-      else if strange_int w h then
+  let is_float      w kind _ = w = 80 || (kind=$="float" && (w = 32 || w = 64)) in
+  let strange_float w kind   = w = 80 && Pervasives.(<>) kind "float" in
+  let strange_int   w kind   = kind =$= "float" && not (is_float w kind ()) in
+  let warn ~width:w ~alignment:a ~kind:k =
+      if strange_float w k then
+        warning "80-bit variable not kinded float but will go as float anyway"
+      else if strange_int w k then
         warning
-          (Printf.sprintf "%d-bit variable hinted float but will go as integer" w) in
+          (Printf.sprintf "%d-bit variable kinded float but will go as integer" w) in
   let mk_stage ~temps =
     A.choice
       [ is_float,               A.widen (Aux.round_up_to ~multiple_of: 32); 
-        (fun w h _ -> w <= 32), A.widen (fun _ -> 32) *> temps 't';
+        (fun w k a -> w <= 32), A.widen (fun _ -> 32) *> temps 't';
         A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
       ] in
   Placevar.mk_automaton ~warn ~vfp:target.T.vfp ~memspace:P.mspace mk_stage

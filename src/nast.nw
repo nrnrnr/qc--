@@ -20,13 +20,14 @@ type loc = Ast.name_or_mem
 type 'a marked = Ast.region * 'a
 
 type name = string
-type hint = string
+type kind = string
 type convention = string
+type aligned    = int
 @
 Statements.  
 <<exposed types>>=
-type cformal  = Ast.region * hint * name
-type actual   = hint * exp
+type cformal  = Ast.region * kind * name * aligned option
+type actual   = kind * exp * aligned option
 type flow     = Ast.flow list
 type alias    = Ast.mem  list
 type range    = Ast.range
@@ -67,7 +68,7 @@ type proc = {
     region        : Ast.region;
     cc            : convention;
     name          : name;
-    formals       : (hint * Ast.variance * ty * name) marked list;
+    formals       : (kind * Ast.variance * ty * name * aligned option) marked list;
     locals        : Ast.register marked list;
     pdecls        : compile_time_defns;
     continuations : (name * convention * cformal list) marked list;
@@ -118,10 +119,10 @@ let rflatten xs =
 
 
 
-let cformal (r, hint, name) = (r, Aux.Option.get "" hint, name)
-let formal (r, (hint, variance, ty, name)) =
-  (r, (Aux.Option.get "" hint, variance, ty, name))
-let actual (hint, name) = (Aux.Option.get "" hint, name)
+let cformal (r, kind, name, aligned) = (r, Aux.Option.get "" kind, name, aligned)
+let formal (r, (kind, variance, ty, name, aligned)) =
+  (r, (Aux.Option.get "" kind, variance, ty, name, aligned))
+let actual (kind, name, aligned) = (Aux.Option.get "" kind, name, aligned)
 let convention = Aux.Option.get "C--"
 @ 
 Conversion of [[datum]].

@@ -220,7 +220,7 @@ capture the structure of values in {\PAL}.
 \begin{itemize}
 \item A constant denotes its value directly.
 \item A register can be either bound to a hardware register, or it can
-      be annotated with a hint. Hints are used to determine calling
+      be annotated with a kind. Kinds are used to determine calling
       conventions (see module \module{callconv}). Each register has an
       index that identifies it for the run-time API.
 \item Labels come in different flavors:  labels in [[goto]] or inside
@@ -258,9 +258,9 @@ Some values finally become assembler symbols. When such a value enters
 the fat environment we reserve an assembler symbol for it. The symbol
 becomes part of the value's denotation.
 <<exposed types shared by clean and dirty environments>>=
-type reghint        = RReg  of string   (* hardware reg *)
-                    | RHint of string   (* calling convention hint *)
-                    | RNone             (* none of above *)
+type regkind       = RReg  of string   (* hardware reg *)
+                   | RKind of string   (* calling convention kind *)
+                   | RNone             (* none of above *)
 @
 {\PAL} A register has an [[index]] that identifies it \emph{within its
 scope}.  Consequently, global registers are numbered consecutively, and
@@ -268,45 +268,47 @@ local registers are numbered consecutively. To avoid confusion with
 hardware registers in the compiler backend, we name {\PAL} registers
 variables.
 <<exposed types shared by clean and dirty environments>>=
-type variable =     { index:        int
-                    ; rhint:        reghint
-                    ; loc:          Rtl.loc
-                    ; variance:     Ast.variance
-                    }
+type variable =    { index:        int
+                   ; rkind:        regkind
+                   ; loc:          Rtl.loc
+                   ; variance:     Ast.variance
+                   }
 @
 The [[int]] value in the procedure denotation is the number of local
 variables, plus the number of parameters. We need this value for the
 interpreter.
 <<exposed types shared by clean and dirty environments>>=
-type kind           = Proc          of Symbol.t
-                    | Code          of Symbol.t    
-                    | Data          of Symbol.t
-                    | Stack         of Rtl.exp  (* address of slot *)
+type symclass      = Proc          of Symbol.t
+                   | Code          of Symbol.t    
+                   | Data          of Symbol.t
+                   | Stack         of Rtl.exp  (* address of slot *)
 
-type denotation     = Constant      of Bits.bits
-                    | Label         of kind
-                    | Import        of string * Symbol.t
-                          (* external name, assembly symbol *)
-                    | Variable      of variable
-                    | Continuation  of continuation
-and continuation =  { base       : Block.t;   (* always empty; used only for address *)
-                      convention : string;
-                      formals    : (string * variable) list; (* hinted formals *)
-                      mutable escapes     : bool;  (* used as rvalue *)
-                      mutable cut_to      : bool;  (* mentioned in annotation *)
-                      mutable unwound_to  : bool;  (* mentioned in annotation *)
-                      mutable returned_to : convention list;
-                         (* list every convention cc such that there exists
-                            a call site with convention cc and that call site
-                            `also returns to' the continuation *)
-                    } (* might need a convention here *)
-and convention = string
+type denotation    = Constant      of Bits.bits
+                   | Label         of symclass
+                   | Import        of string * Symbol.t
+                                             (* external name, assembly symbol *)
+                   | Variable      of variable
+                   | Continuation  of continuation
+and continuation = { base       : Block.t;   (* always empty; used only for address *)
+                     convention : string;
+                     formals    : (string * variable * aligned) list;
+                                                  (* kinded, aligned formals *)
+                     mutable escapes     : bool;  (* used as rvalue *)
+                     mutable cut_to      : bool;  (* mentioned in annotation *)
+                     mutable unwound_to  : bool;  (* mentioned in annotation *)
+                     mutable returned_to : convention list;
+                        (* list every convention cc such that there exists
+                           a call site with convention cc and that call site
+                           `also returns to' the continuation *)
+                   } (* might need a convention here *)
+and convention   = string
+and aligned      = int
 @
 The complete entry [[ventry]] for a value includes not only its
 denotation, but also its type [[Types.ty]], and its source code
 position as a [[Srcmap.rgn]] value.
 <<types exposed in signature [[Env]]>>=
-and  ventry         = Srcmap.rgn * (denotation * Types.ty) info
+and  ventry        = Srcmap.rgn * (denotation * Types.ty) info
 @ 
 For error messages, we provide a way of saying what kind of thing a
 symbol denotes.

@@ -184,7 +184,8 @@
               Ast.NameOrMemAt(name_or_mem1, region1)
             | "ast_Name" -> let hint_opt1 = (SexpPkl.rd_option sexp_rd_hint s_) in
               let name1 = (sexp_rd_name s_) in
-              Ast.Name(hint_opt1, name1)
+              let aligned_opt1 = (SexpPkl.rd_option sexp_rd_aligned s_) in
+              Ast.Name(hint_opt1, name1, aligned_opt1)
             | "ast_Mem" -> let ty1 = (sexp_rd_ty s_) in
               let expr1 = (sexp_rd_expr s_) in
               let aligned_opt1 = (SexpPkl.rd_option sexp_rd_aligned s_) in
@@ -204,7 +205,8 @@
         (SexpPkl.rd_sym "ast_actual" s_);
         let tmp_ = let hint_opt1 = (SexpPkl.rd_option sexp_rd_hint s_) in
           let expr1 = (sexp_rd_expr s_) in
-          (hint_opt1, expr1) in
+          let aligned_opt1 = (SexpPkl.rd_option sexp_rd_aligned s_) in
+          (hint_opt1, expr1, aligned_opt1) in
         begin
           (SexpPkl.rd_rp s_);
           tmp_
@@ -378,7 +380,8 @@
           let variance1 = (sexp_rd_variance s_) in
           let ty1 = (sexp_rd_ty s_) in
           let name1 = (sexp_rd_name s_) in
-          (hint_opt1, variance1, ty1, name1) in
+          let aligned_opt1 = (SexpPkl.rd_option sexp_rd_aligned s_) in
+          (hint_opt1, variance1, ty1, name1, aligned_opt1) in
         begin
           (SexpPkl.rd_rp s_);
           tmp_
@@ -468,7 +471,8 @@
         let tmp_ = let region1 = (sexp_rd_region s_) in
           let hint_opt1 = (SexpPkl.rd_option sexp_rd_hint s_) in
           let name1 = (sexp_rd_name s_) in
-          (region1, hint_opt1, name1) in
+          let aligned_opt1 = (SexpPkl.rd_option sexp_rd_aligned s_) in
+          (region1, hint_opt1, name1, aligned_opt1) in
         begin
           (SexpPkl.rd_rp s_);
           tmp_
@@ -1011,11 +1015,12 @@
             (sexp_wr_region region1 s_);
             (SexpPkl.wr_rp s_)
           end
-        | (Ast.Name(hint_opt1, name1)) -> begin
+        | (Ast.Name(hint_opt1, name1, aligned_opt1)) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_Name" s_);
             (SexpPkl.wr_option sexp_wr_hint hint_opt1 s_);
             (sexp_wr_name name1 s_);
+            (SexpPkl.wr_option sexp_wr_aligned aligned_opt1 s_);
             (SexpPkl.wr_rp s_)
           end
         | (Ast.Mem(ty1, expr1, aligned_opt1, in_alias_list1)) -> begin
@@ -1031,11 +1036,12 @@
   
   and sexp_wr_actual x_ s_ = 
       (match (x_) with 
-          ((hint_opt1, expr1) : Ast.actual) -> begin
+          ((hint_opt1, expr1, aligned_opt1) : Ast.actual) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_actual" s_);
             (SexpPkl.wr_option sexp_wr_hint hint_opt1 s_);
             (sexp_wr_expr expr1 s_);
+            (SexpPkl.wr_option sexp_wr_aligned aligned_opt1 s_);
             (SexpPkl.wr_rp s_)
           end)
       (* end match *)
@@ -1269,13 +1275,18 @@
   
   and sexp_wr_bare_formal x_ s_ = 
       (match (x_) with 
-          ((hint_opt1, variance1, ty1, name1) : Ast.bare_formal) -> begin
+          ((hint_opt1,
+            variance1,
+            ty1,
+            name1,
+            aligned_opt1) : Ast.bare_formal) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_bare_formal" s_);
             (SexpPkl.wr_option sexp_wr_hint hint_opt1 s_);
             (sexp_wr_variance variance1 s_);
             (sexp_wr_ty ty1 s_);
             (sexp_wr_name name1 s_);
+            (SexpPkl.wr_option sexp_wr_aligned aligned_opt1 s_);
             (SexpPkl.wr_rp s_)
           end)
       (* end match *)
@@ -1373,12 +1384,16 @@
   
   and sexp_wr_cformal x_ s_ = 
       (match (x_) with 
-          ((region1, hint_opt1, name1) : Ast.cformal) -> begin
+          ((region1,
+            hint_opt1,
+            name1,
+            aligned_opt1) : Ast.cformal) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_cformal" s_);
             (sexp_wr_region region1 s_);
             (SexpPkl.wr_option sexp_wr_hint hint_opt1 s_);
             (sexp_wr_name name1 s_);
+            (SexpPkl.wr_option sexp_wr_aligned aligned_opt1 s_);
             (SexpPkl.wr_rp s_)
           end)
       (* end match *)

@@ -78,6 +78,8 @@ module SP = Spans
 module T  = Target
 module Up = Rtl.Up
 module W  = Rtlutil.Width
+
+type aligned = int
 @ 
 Utility functions and so on.
 <<ast2ir.ml>>=
@@ -139,24 +141,25 @@ let translate target env ~optimizer ~defineglobals =
 \subsection{The translation of actual parameters, formal parameters, and results}
 % ------------------------------------------------------------------ 
 
-For actuals, formals, or results, we need a sequence of hint/width pairs
+For actuals, formals, or results, we need a sequence of
+kind/width/alignment triples
 to feed to the calling convention.
 For a formal or result, we need the corresponding location, and for each
 actual, the corresponding value.
 We do the dirty work with a higher-order function.
-Argument [[hint_parm]] splits the abstract syntax into a hint and
-a ``parameter''.
+Argument [[kind_parm_aligned]] splits the abstract syntax into a kind, 
+a ``parameter'', and an alignment.
 Argument [[cvt]] takes a ``parameter'' and produces a converted
 parameter (location or expression), plus the width of the parameter.
 The later parameter [[conv]] is a calling convention, which we apply
 here for convenience.
 THIS OLD FUNCTION MAY BE SLATED FOR REPLACEMENT!!!
 <<environment-independent support for formals, actuals, and results>>=
-let convert_parms hint_parm cvt =
-  let add x (hws, parms) =
-    let hint, parm = hint_parm x in
+let convert_parms kind_parm_aligned cvt =
+  let add x (wkas, parms) =
+    let kind, parm, a = kind_parm_aligned x in
     let parm, w = cvt parm in
-    (hint, w) :: hws, parm :: parms in
+    (w, kind, a) :: wkas, parm :: parms in
   fun conv l ->
     let hws, parms = List.fold_right add l ([], []) in
     conv hws parms 
@@ -223,8 +226,8 @@ module K = struct
     ;         escapes     : bool        (* properties of how it is used *)
     ;         cut_to      : bool
     ;         unwound_to  : bool
-    ;         formals     : (string * FE.variable) list
-                            (* args (hint, variable index) to the continuation *)
+    ;         formals     : (string * FE.variable * aligned) list
+                            (* args (kind, variable index) to the continuation *)
     ;         cut_in      : (Block.t -> Rtl.rtl) C.answer
                                                 (* move vals at cut (uses rep) *)
     ;         return_in   : (Block.t -> Rtl.rtl) C.answer
@@ -434,7 +437,7 @@ A LIVENESS EDGE OUT OF THE CALL NODE?
 <<functions that translate statements, including [[stmts]]>>=
 and generate_unwind_to_entry k = 
   let bogus_space = ('z', Rtl.Identity, Cell.of_size 1) in
-  let use_var (h,v) succ =
+  let use_var (h,v,a) succ =
     let w = RU.Width.loc v.FE.loc in
     G.assertion g (RU.store (R.mem R.none bogus_space (R.C w)
                                    (R.bits (Bits.S.of_int 0 w) w))
@@ -549,7 +552,7 @@ and call lhs cconv e args targets(*unused*) conts alias succ =
   let in'   = results cc.C.results.C.in' lhs     in
   let calli = target.T.call.T.embed e            in
   let unwind_conts =
-    let f_to_cont (h,v) = (h,v.FE.index) in
+    let f_to_cont (h,v,a) = (h,v.FE.index,a) in
     let unwind_k kname =
       let k = continuation kname in
       let args = List.map f_to_cont k.K.formals in
@@ -733,12 +736,12 @@ chunk~\subpageref{ast2ir.K.t}).
 The [[stackdata]] function includes the first pass of translation of
 continuations. 
 <<definition of [[proc]], which translates one procedure>>=
-let formals  = convert_parms (fun ((_, h, _, w, _) as parm) -> h, parm)
-                             (fun (i, _, _, w, n) -> AT.of_loc (R.var n i w), w) in
+let formals  = convert_parms (fun ((_, k, _, w, _, a) as parm) -> k, parm, a)
+                             (fun (i, _, _, w, n, _) -> AT.of_loc (R.var n i w), w) in
 let cformals = convert_parms (fun p -> p)
                              (fun v -> AT.of_loc v.FE.loc, RU.Width.loc v.FE.loc) in
-let actuals  = convert_parms (fun ((h, _, _) as parm) -> h, parm)
-                             (fun (_, e, w) -> e, w) in
+let actuals  = convert_parms (fun ((k, _, _, a) as parm) -> k, parm, a)
+                             (fun (_, e, w, _) -> e, w) in
 let results  = convert_parms (fun p -> p) (fun (l, w) -> AT.of_loc l, w) in
 @ 
 @ 
@@ -872,8 +875,9 @@ Then function [[optimize]], which is passed in, runs the rest of the
 compiler. 
 The main thing here is dealing with all the blocks.
 <<definition of [[proc]], which translates one procedure>>=
-  let formals = List.map (fun (i, h, v, w, n) -> i, (Some h, v, Ast.BitsTy w, n))
-                proc.N.formals in
+  let formals =
+    List.map (fun (i, h, v, w, n, a) -> i, (Some h, v, Ast.BitsTy w, n, Some a))
+    proc.N.formals in
   let i =    
     { Proc.symbol      = proc.N.sym
     ; Proc.cc          = proc_cc
@@ -958,13 +962,13 @@ declarations.
 let globals (base:Rtl.exp) vars =
     let t           = target.T.globals base in
     let decls       = Buffer.create 128 in (* initial size - grows as needed *)
-    let rec assign bindings (name, var) = match var.FE.rhint with
-    | FE.RNone | FE.RHint _ -> 
+    let rec assign bindings (name, var) = match var.FE.rkind with
+    | FE.RNone | FE.RKind _ -> 
         (* global register w/o hardware annotation *)
         let w     = RU.Width.loc var.FE.loc in
         let sig'  = Printf.sprintf "[%s %d]" name w in
         let ()    = Buffer.add_string decls sig' in
-        let loc   = AT.allocate t w "" in
+        let loc   = AT.allocate t w "" 1 in
         (var.FE.index, loc) :: bindings   (* could do even better here *)
     | FE.RReg hw ->
         (* global register with h/w annotation *)

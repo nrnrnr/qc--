@@ -21,12 +21,14 @@ All the truth about what the representation means lives off in the
 [[Runtimedata]] module.
 <<spans.mli>>=
 type t
-type label = string
-type link  = Bits.bits Reloc.Simple.relocatable
+type label   = string
+type link    = Bits.bits Reloc.Simple.relocatable
+type aligned = int
 val to_spans : inalloc:Rtl.loc -> outalloc:Rtl.loc -> ra:Rtl.loc ->
                users:((Bits.bits * link) list) ->
                csregs:((Register.t * Rtl.loc option) list) ->
-               conts:((label * Rtl.loc * (string * int) list) list) ->
+               conts:((label * Rtl.loc * (string * int * aligned) list) list) ->
+                          (* (ra, sp, parms : (hint, var number, alignment) list) *)
                sds:(Rtl.loc list)                          ->
                vars:(Rtl.loc option array)                 ->
                t
@@ -35,16 +37,16 @@ val expose : t -> rep
 @ 
 That was the fig leaf.  Now we expose it.
 <<regrettably exposed [[rep]] type>>=
-type rep   = { mutable inalloc  : Rtl.loc
-             ; mutable outalloc : Rtl.loc
-             ; mutable ra       : Rtl.loc
-             ; mutable users    : (Bits.bits * link) list
-             ; mutable csregs   : (Register.t * Rtl.loc option) list
-             ; mutable conts    : (label * Rtl.loc * (string * int) list) list
-                                  (* (ra, sp, (hint, var number) list) *)
-             ; mutable sds      : Rtl.loc list
-             ; mutable vars     : Rtl.loc option array
-             }
+type rep =
+  { mutable inalloc  : Rtl.loc
+  ; mutable outalloc : Rtl.loc
+  ; mutable ra       : Rtl.loc
+  ; mutable users    : (Bits.bits * link) list
+  ; mutable csregs   : (Register.t * Rtl.loc option) list
+  ; mutable conts    : (label * Rtl.loc * (string * int * aligned) list) list
+  ; mutable sds      : Rtl.loc list
+  ; mutable vars     : Rtl.loc option array
+  }
 @
 To walk the stack, we need to keep the stack pointer, previous stack pointer,
 and return address live.
@@ -56,6 +58,7 @@ val fold_live_locs : (Register.x -> 'a -> 'a) -> t -> 'a -> 'a
 <<spans.ml>>=
 type label = string
 type link  = Bits.bits Reloc.Simple.relocatable
+type aligned = int
 <<regrettably exposed [[rep]] type>>
 type t = rep
 let to_spans ~inalloc ~outalloc ~ra ~users ~csregs ~conts ~sds ~vars =

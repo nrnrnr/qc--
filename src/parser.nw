@@ -917,10 +917,9 @@ span        :   SPAN sexprAt exprAt
 datumAt     :   datum                          { A.DatumAt($1,p()) }
 datum       :   ID COLON                       { A.Label $1 }
             |   ALIGN uint SEMI                { A.Align $2 }
-            |   tyAt size initAt SEMI          { A.MemDecl($1,$2,Some $3)}
-            |   tyAt size        SEMI          { A.MemDecl($1,$2,None)}
-            |   tyAt      initAt SEMI          { A.MemDecl($1,A.NoSize,Some $2)}
-            |   tyAt             SEMI          { A.MemDecl($1,A.NoSize,None)}
+            |   tyAt size opt_initAt SEMI      { A.MemDecl($1,$2,$3)}
+
+opt_initAt : initAt { Some $1 } | { None }
 <<parse.mly>>=
 initAt      :   init                           { A.InitAt($1,p()) }
 init        :   LBRACE   exprs RBRACE          { A.InitExprs($2)  }
@@ -928,10 +927,8 @@ init        :   LBRACE   exprs RBRACE          { A.InitExprs($2)  }
             |   STR                            { A.InitStr($1)    }
             |   string16                       { A.InitUStr($1)   }
 <<parse.mly>>=
-registers   :   STR    tyAt regs               { Some $1, $2, rev $3 }
-            |   STR    tyAt regs COMMA         { Some $1, $2, rev $3 }
-            |          tyAt regs COMMA         { None   , $1, rev $2 }
-            |          tyAt regs               { None   , $1, rev $2 }
+registers   :   STR    tyAt regs opt_comma     { Some $1, $2, rev $3 }
+            |          tyAt regs opt_comma     { None   , $1, rev $2 }
 
 regs        :   regs COMMA ID optEq STR        { ($3, Some $5)::$1 }
             |   regs COMMA ID                  { ($3, None   )::$1 }
@@ -944,6 +941,7 @@ optEq       :   { noeqdep () }
 <<parse.mly>>=
 size        :   LBRACKET exprAt RBRACKET       { A.FixSize($2) }
             |   LBRACKET       RBRACKET        { A.DynSize     }
+            |                                  { A.NoSize      }
 
 procedure   :   conv ID frmls body             {  $1, $2, $3, $4, p() }
             |        ID frmls body             {None, $1, $2, $3, p() }
@@ -963,35 +961,30 @@ frmls       :   LPAREN  formals RPAREN         { $2 }
 actls       :   LPAREN  actuals RPAREN         { $2 }
             |   LPAREN          RPAREN         { [] }
 
-formals     :   formals_ optcomma              { rev $1   }
+formals     :   formals_ opt_comma             { rev $1   }
 formals_    :   formals_ COMMA formal          { $3 :: $1 }
             |   formal                         { [$1]     }
 
-actuals     :   actuals_ optcomma              { rev $1   }
+actuals     :   actuals_ opt_comma             { rev $1   }
 actuals_    :   actuals_ COMMA actual          { $3 :: $1 }
             |   actual                         { [$1]     }
 
 formal      :   bare_formal                    { p(), $1 }
-bare_formal :   STR INVARIANT REGISTER tyAt ID { Some $1, A.Invariant, $4, $5}
-            |   STR INVARIANT          tyAt ID { Some $1, A.Invariant, $3, $4}
-            |   STR           REGISTER tyAt ID { Some $1, A.Variant  , $3, $4}
-            |   STR                    tyAt ID { Some $1, A.Variant  , $2, $3}
-            |       INVARIANT REGISTER tyAt ID { None   , A.Invariant, $3, $4}
-            |       INVARIANT          tyAt ID { None   , A.Invariant, $2, $3}
-            |                 REGISTER tyAt ID { None   , A.Variant  , $2, $3}
-            |                          tyAt ID { None   , A.Variant  , $1, $2}
+bare_formal :   opt_kind opt_invariant opt_register tyAt ID opt_aligned
+                { $1, $2, $4, $5, $6 }
 
-cformal     :   STR ID                         { p(), Some $1, $2 }
-            |       ID                         { p(), None   , $1 }
+opt_kind : STR { Some $1 } | { None }
+opt_invariant : INVARIANT { A.Invariant } | { A.Variant }
+opt_register  : REGISTER { () } | { () }
 
-cformals    :   cformals_ optcomma             { rev $1   }
-            |   /**/      optcomma             { []       }
+cformal     :   opt_kind ID opt_aligned        { p(), $1, $2, $3 }
+
+cformals    :   cformals_ opt_comma            { rev $1   }
+            |   /**/      opt_comma            { []       }
 cformals_   :   cformals_ COMMA cformal        { $3 :: $1 }
             |   cformal                        { [$1]     }
 
-actual      :   STR exprAt                     { Some $1, $2 }
-            |       exprAt                     { None   , $1 }
-
+actual      :   opt_kind exprAt opt_aligned    { $1, $2, $3 }
 <<parse.mly>>=
 stackdecl   :   STACKDATA LBRACE data RBRACE   { rev $3 }
 
@@ -1016,8 +1009,8 @@ targets     :   TARGETS names                  { $2 }
             |   /**/                           { [] }
 
 aliasAt     :   alias                          { A.AliasAt($1,p()) }
-alias       :   READS  optnames                { A.Reads ($2)       }
-            |   WRITES optnames                { A.Writes($2)       }
+alias       :   READS  opt_names               { A.Reads ($2)       }
+            |   WRITES opt_names               { A.Writes($2)       }
 
 procanns    :   procanns flowAt                { A.Flow  $2 :: $1 }
             |   procanns aliasAt               { A.Alias $2 :: $1 }
@@ -1038,13 +1031,14 @@ reduce/reduce conflicts caused by the use of [[nameOrMemAt]] in
 <<parse.mly>>=
 nameOrMemAt :   nameOrMem                      { A.NameOrMemAt($1,p()) } 
 nameOrMem   :   nameOrMem0                     { $1 } 
-            |   STR ID                         { A.Name(Some $1,$2) } 
+            |   ID aligned                     { A.Name(None, $1, Some $2) }
+            |   STR ID opt_aligned             { A.Name(Some $1,$2,$3) } 
             
 <<helper functions>>=
 let ast_mem ty exp (align, alias) = A.Mem(ty, exp, align, alias)
 <<parse.mly>>=
 nameOrMemAt0:   nameOrMem0                    { A.NameOrMemAt($1,p()) }
-nameOrMem0  :   ID                            { A.Name(None, $1)    }
+nameOrMem0  :   ID                            { A.Name(None, $1, None)}
             |   mem_type LBRACKET exprAt mem_properties RBRACKET { ast_mem $1 $3 $4 }
 
 mem_type : sty { $1 }
@@ -1060,7 +1054,7 @@ ids         : ID { [$1] }
             | ID COMMA ids { $1 :: $3 }
 
 
-nameOrMems  :   nameOrMems_ optcomma           { rev $1   }
+nameOrMems  :   nameOrMems_ opt_comma          { rev $1   }
 nameOrMems_ :   nameOrMems_ COMMA nameOrMemAt  { $3 :: $1 }
             |   nameOrMemAt                    { [$1]     }
 
@@ -1142,19 +1136,16 @@ armAt       :   arm                            { A.ArmAt($1,p()) }
 arm         :   CASE ranges COLON body         { A.Case($2,$4)   } 
 
 <<parse.mly>>=
-sexprAt     :   sexpr                          { A.ExprAt($1, p())    }
-sexpr       :   SINT                           { A.Sint($1, None)      }
-            |   SINT CCOLON tyAt               { A.Sint($1, Some $3)   }
-            |   UINT                           { A.Uint($1, None)      }
-            |   UINT CCOLON tyAt               { A.Uint($1, Some $3)   }
-            |   FLT                            { A.Float($1, None)    }
-            |   FLT CCOLON tyAt                { A.Float($1, Some $3) }
-            |   CHAR                           { A.Char($1, None)     }
-            |   CHAR CCOLON tyAt               { A.Char($1, Some $3)  }
-            |   nameOrMemAt0                   { A.Fetch $1           }
+sexprAt     :   sexpr                          { A.ExprAt($1, p()) }
+sexpr       :   SINT opt_colon_ty              { A.Sint ($1, $2)   }
+            |   UINT opt_colon_ty              { A.Uint ($1, $2)   }
+            |   FLT  opt_colon_ty              { A.Float($1, $2)   }
+            |   CHAR opt_colon_ty              { A.Char ($1, $2)   }
+            |   nameOrMemAt0                   { A.Fetch $1        }
            /*   allow to write nullary OPs like constants */
-            |   PRIMOP                         { A.PrimOp($1,[]) }
-            |   LPAREN exprAt RPAREN           { $2                   }
+            |   PRIMOP                         { A.PrimOp($1,[])   }
+            |   LPAREN exprAt RPAREN           { $2                }
+opt_colon_ty : CCOLON tyAt { Some $2 } | { None }
 <<parse.mly>>=
 exprAt      :   expr                           { A.ExprAt($1, p())    }
 expr:       |   sexpr                          { $1                   }
@@ -1176,11 +1167,12 @@ expr:       |   sexpr                          { $1                   }
             |   exprAt LEQ        exprAt       { A.BinOp($1,$2,$3) }
             |   exprAt GEQ        exprAt       { A.BinOp($1,$2,$3) }
             |   exprAt GT         exprAt       { A.BinOp($1,$2,$3) }
-            |   exprAt INFIXOP    exprAt       { A.PrimOp($2,[None,$1;None,$3]) }
+            |   exprAt INFIXOP    exprAt       { A.PrimOp($2,[None,$1,None;
+                                                              None,$3,None]) }
             |   TILDE exprAt %prec TILDE       { A.UnOp($1,$2)     }
             |   MINUS exprAt %prec UMINUS      { uminus $2         }
 
-exprs       :   exprs_ optcomma                { rev $1   }
+exprs       :   exprs_ opt_comma               { rev $1   }
 exprs_      :   exprs_ COMMA exprAt            { $3 :: $1 }
             |   exprAt                         { [$1]     }
 <<helper functions>>=
@@ -1191,26 +1183,26 @@ let uminus e =
     | _ -> A.UnOp("-", e) in
   strip e
 <<parse.mly>>=
-imports     :   imports_ optcomma              { rev $1           }
+imports     :   imports_ opt_comma             { rev $1           }
 imports_    :   imports_ COMMA STR AS ID       { (Some $3,$5)::$1 }
             |   imports_ COMMA        ID       { (None   ,$3)::$1 } 
             |   STR AS ID                      { [Some $1,$3]     }
             |   ID                             { [None   ,$1]     }
 
-exports     :   exports_ optcomma              { rev $1           }
+exports     :   exports_ opt_comma             { rev $1           }
 exports_    :   exports_ COMMA ID AS STR       { ($3,Some $5)::$1 }
             |   exports_ COMMA ID              { ($3,None)::$1    }
             |   ID AS STR                      { [$1,Some $3]     }
             |   ID                             { [$1,None]        }
 
-names       :   names_ optcomma                { rev $1 }
+names       :   names_ opt_comma               { rev $1 }
 names_      :   names_ COMMA ID                { $3:: $1}
             |   ID                             { [$1] }
 
-optnames    :   names { $1 }
+opt_names   :   names { $1 }
             |   /**/  { [] }
 
-optcomma    :   COMMA                          {}
+opt_comma   :   COMMA                          {}
             |   /**/                           {}
 
 string16    :   UNICODE LPAREN STR RPAREN      { $3 }

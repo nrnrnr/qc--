@@ -22,11 +22,12 @@ type loc = Rtl.loc * Rtl.width
 type rtl = Rtl.rtl
 
 type name = string
-type hint = string
+type kind = string
 type convention = string
+type aligned    = int
 <<exposed types>>=
-type actual = hint * exp * Rtl.width
-type 'a hinted = hint * 'a
+type actual = kind * exp * Rtl.width * aligned
+type 'a kinded = kind * 'a * aligned
 type 'a flow  = { cuts : 'a list; unwinds : 'a list; areturns : 'a list;
                   returns : bool; aborts : bool }
 type 'a cflow = { ccuts : 'a list; caborts : bool }
@@ -40,10 +41,10 @@ type stmt =
   | If     of exp * stmt list * stmt list
   | Switch of range option * exp * (range list * stmt list) list
   | Label  of label
-  | Cont   of name * convention * Fenv.variable hinted list
+  | Cont   of name * convention * Fenv.variable kinded list
   | Span   of (Bits.bits * linktime) * stmt list
   | Assign of rtl
-  | Call   of loc hinted list * convention * exp * actual list * procname list
+  | Call   of loc kinded list * convention * exp * actual list * procname list
             * name flow * name list option alias
   | Goto   of exp * label list
   | Jump   of convention * exp * actual list * procname list
@@ -57,7 +58,7 @@ val elab_stmts :
   Nast.stmt list -> stmt list Error.error
 val elab_cformals : 
   Ast.region -> 'a Fenv.Dirty.env' -> Nast.cformal list ->
-    Fenv.variable hinted list Error.error
+    Fenv.variable kinded list Error.error
 @ The [[elab_*]] functions work with incomplete information,
 indicated by [[Error.Error]] values.  The policy is as follows:
 \begin{itemize}
@@ -97,9 +98,11 @@ restrictions: if a statement is reachable by ordinary control flow, it
 Similarly, it had better not be the end of the procedure body.
 <<elabstmt.ml>>=
 let elab_functions validate srcmap r env =
-  let eprint r   = E.errorRegionPrt (F.srcmap env, r) in
-  let errorf r   = Printf.kprintf (fun s -> eprint r s; E.Error) in
-  let findve r n = E.catch (eprint r) (fun env -> snd (F.findv n env)) in
+  let eprint r    = E.errorRegionPrt (F.srcmap env, r) in
+  let errorf r    = Printf.kprintf (fun s -> eprint r s; E.Error) in
+  let findve r n  = E.catch (eprint r) (fun env -> snd (F.findv n env)) in
+  let aligned     = Elabexp.aligned (F.metrics env) in
+  let aligned r w = E.catch (eprint r) (fun a -> E.Ok (aligned w a)) in
   let exp = Elabexp.elab_exp env in
   let con = Elabexp.elab_con env in
   let loc = Elabexp.elab_loc env in
@@ -174,7 +177,7 @@ We sometimes do extra checking if an expression is just a name.
 let rec exp_as_name = function
   | A.ExprAt(x,_) -> exp_as_name x
   | A.Fetch(A.NameOrMemAt(x,_)) -> exp_as_name (A.Fetch x)
-  | A.Fetch(A.Name(_,x)) -> Some x
+  | A.Fetch(A.Name(_,x,_)) -> Some x
   | _ -> None in
 @ 
 Lots of things have to be the native pointer type.
@@ -195,10 +198,12 @@ let vrtl r rtl =
 @ 
 A formal parameter to a continuation must be a local register variable.
 <<elaboration of continuation formals>>=
-let cformal (rgn, hint, name) =
+let cformal (rgn, kind, name, a) =
   E.seq (findve rgn name env) (fun den ->
     match den with
-    | FE.Variable v, _ when F.is_localv name env -> E.Ok (hint, v)
+    | FE.Variable v, Types.Bool -> impossf "Boolean variable"
+    | FE.Variable v, Types.Bits w when F.is_localv name env ->
+        E.ematch (aligned rgn w a) (fun a -> (kind, v, a))
     | FE.Variable _, _ ->
         errorf r "continuation parameter '%s' may not be a global variable" name
     | d, _ ->
@@ -353,7 +358,7 @@ argument to [[E.seq']] includes [[left]] and [[at]] although only the
 type of [[exp]] is used.
 <<definitions of elaboration functions>>=
 let call left conv p args targets flows alias =
-  let left  = E.Raise.list (List.map (Elabexp.elab_hinted_name env) left) in
+  let left  = E.Raise.list (List.map (Elabexp.elab_kinded_name env) left) in
   let args  = E.Raise.list (List.map (actual r) args) in
   let tgts  = E.Raise.list (List.map (call_target r) targets) in
   let flow  = call_flow r conv flows in
@@ -420,9 +425,9 @@ else if i > n then
 else
   impossf "bad <i/n> with i = %d and n = %d, but no better error message" i n
 <<elaboration utilities>>=
-let actual r (hint, e) = E.seq (exp e) (fun (e, ty) ->
+let actual r (kind, e, a) = E.seq (exp e) (fun (e, ty) ->
   match ty with
-  | Types.Bits w -> E.Ok (hint, e, w)
+  | Types.Bits w -> E.ematch (aligned r w a) (fun a -> (kind, e, w, a))
   | Types.Bool   -> errorf r "an actual parameter may not be a Boolean") in
 @ 
 As target of a call or jump,
@@ -512,24 +517,29 @@ A call of a primitive is type checked: argument types must have the
 expected types. This is done by [[Rtlop.Translate.check]].
 <<definitions of elaboration functions>>=
 let prim lhs conv op args flows =
-  let lhs  = E.Raise.list (List.map (Elabexp.elab_hinted_name env) lhs) in
-  let args = E.Raise.list (List.map (fun (h, e) -> E.Raise.right (h, exp e)) args) in
+  let strip_decorations = function
+    | "", arg, None   -> arg
+    | "", arg, Some _ ->
+        E.error "call to primitive operator may not use explicit alignment"
+    | s, arg,  None   ->
+        E.error "call to primitive operator must use empty kind"
+    | s, arg,  Some _ ->
+        E.error "call to primitive operator must use empty kind and default alignment"
+  in
+  let lhs  = E.Raise.list (List.map (Elabexp.elab_kinded_name env) lhs) in
+  let args = E.Raise.list (List.map (fun arg -> exp (strip_decorations arg)) args) in
   let flow = prim_flow r flows in
   E.ematch3 lhs args flow (fun lhs args flow ->
-    let nonempty_hint (h, _) = Pervasives.(<>) h "" in
-    if List.exists nonempty_hint lhs || List.exists nonempty_hint args then
-      E.error "calls to primitive operators may use only empty hints"
-    else
-      match lhs with
-      | [_, (result, w)] ->
-          let argtys  = List.map (fun (_, (_, t)) -> t) args in
-          let argexps = List.map (fun (_, (e, _)) -> e) args in
-          let t, opr  = Rtlop.Translate.prefix op argtys in
-          if Pervasives.(<>) t (Types.Bits w) then
-            <<raise error exn on primop type mismatch>>
-          else
-            Assign (Rtl.store result (Rtl.app opr argexps) w)
-      | _ -> E.error "primitive operator produces exactly one result") in
+    match lhs with
+    | [_, (result, w), aligned] ->
+        let argtys  = List.map snd args in
+        let argexps = List.map fst args in
+        let t, opr  = Rtlop.Translate.prefix op argtys in
+        if Pervasives.(<>) t (Types.Bits w) then
+          <<raise error exn on primop type mismatch>>
+        else
+          Assign (Rtl.store result (Rtl.app opr argexps) w)
+    | _ -> E.error "primitive operator produces exactly one result") in
 <<raise error exn on primop type mismatch>>=
 Printf.kprintf E.error
   "left-hand side has type bits%d, but primitive operator produces results of type %s"

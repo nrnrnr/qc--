@@ -756,9 +756,9 @@ let rec const = function
         | Low  -> None in
         (try A.Sint (string_of_int (Bits.S.to_int b), w)
         with Bits.Overflow -> A.Uint (Bits.to_string b, w))
-    | R.Link(sym,_,w) -> A.Fetch(A.Name(None, sym#mangled_text))
-    | R.Diff(c1,c2)   -> A.PrimOp("-", [(None,const c1); (None,const c2)])
-    | R.Late(name,w)  -> A.Fetch(A.Name(None, name)) (*XXX ok? *)
+    | R.Link(sym,_,w) -> A.Fetch(A.Name(None, sym#mangled_text,None))
+    | R.Diff(c1,c2)   -> A.PrimOp("-", [(None,const c1,None); (None,const c2,None)])
+    | R.Late(name,w)  -> A.Fetch(A.Name(None, name, None)) (*XXX ok? *)
 @
 <<ToAST>>=
 let opr op w =
@@ -767,7 +767,7 @@ let opr op w =
 let rec expr' = function
     | R.Const c         -> const c
     | R.Fetch(loc,_)    -> rvalue loc
-    | R.App((op,ww),ee) -> let actual e = (None, expr' e) in
+    | R.App((op,ww),ee) -> let actual e = (None, expr' e, None) in
                            match ee with
                            | [l; r] when op =$= "add" || op =$= "sub" ->
                                   let op = if op =$= "add" then "+" else "-" in
@@ -787,13 +787,15 @@ and rvalue = function
   | R.Slice (w, i, loc) ->
       let e = rvalue loc in
       let e = if i = 0 then e
-              else A.PrimOp("shrl", [None, e;
-                                     None, A.Sint (string_of_int i, None)]) in
-      let e = A.PrimOp("lobits" ^ string_of_int w, [None, e]) in
+              else A.PrimOp("shrl", [None, e, None;
+                                     None, A.Sint (string_of_int i, None), None]) in
+      let e = A.PrimOp("lobits" ^ string_of_int w, [None, e, None]) in
       e
   | loc -> A.Fetch(location' loc) 
 
-and location' = function 
+and location' =
+  let name n = A.Name (None, n, None) in
+  function
     | R.Mem ((sp,agg,ms),c,e,ass) ->
         let width = Cell.to_width ms c in
         (match !the_verbosity with
@@ -815,11 +817,11 @@ and location' = function
             let space   =  sprintf "$%c(%d)" sp (Cell.to_width ms c) in   
             let s       = string_of_int i in
             A.Mem(A.TypeSynonym space,A.Sint(s,None), None, [])
-        | Low -> A.Name(None, sprintf "$%c%d" sp i))
-    | R.Var    (name,_,width)   -> A.Name(None,name)
-    | R.Global (name,_,width)    -> A.Name(None,name)
-    | R.Slice (w,i,loc)          ->
-        A.Name(None, sprintf "Slice(%d, %d, %s)" w i (ToString.location' loc))
+        | Low -> name (sprintf "$%c%d" sp i))
+    | R.Var    (n,_,width)   -> name n
+    | R.Global (n,_,width)   -> name n
+    | R.Slice (w,i,loc)      ->
+        name (sprintf "Slice(%d, %d, %s)" w i (ToString.location' loc))
 
 let (<<) f g  = fun x -> f (g x)
 let expr       = expr'     << Rtl.Dn.exp

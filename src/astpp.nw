@@ -154,18 +154,19 @@ let rec ty = function
 
 
 <<astpp.ml>>=
+let aligned = function
+  | Some i -> P.text " aligned" ^/ int i 
+  | None   -> P.empty
+
 let rec lvalue = function
-    | A.NameOrMemAt(x,_)   -> lvalue x
-    | A.Name(None,x)     -> id x
-    | A.Name(Some h,x)   -> str h ^/ id x
-    | A.Mem(t,e,aligned,aliasing) -> 
+    | A.NameOrMemAt(x,_)  -> lvalue x
+    | A.Name(None,x,a) -> P.agrp (id x ^^ aligned a)
+    | A.Name(Some h,x,a) -> P.agrp (str h ^/ id x ^^ aligned a)
+    | A.Mem(t,e,a,aliasing) -> 
         ~~ ty t 
         ^^ P.text "["
         ^^ expr e 
-        ^^ begin match aligned with 
-                | Some i -> P.break ^^ P.text "aligned" ^/ int i 
-                | None   -> P.empty
-           end 
+        ^^ aligned a
         ^^ begin match aliasing with 
      	         | [] -> P.empty 
                  | n :: ns ->
@@ -183,8 +184,8 @@ and glvalue = function
     | x, Some e -> P.agrp(lvalue x  ^/ P.text "when" ^/ expr e)
                         
 and actual = function
-    | ( Some hint, e) -> P.agrp (str hint ^/ expr e)
-    | ( None     , e) -> expr e
+    | ( Some hint, e, a) -> P.agrp (str hint ^/ expr e ^^ aligned a)
+    | ( None     , e, a) -> P.agrp (expr e ^^ aligned a)
 
 and actuals xs = P.agrp (P.text "(" ^^ P.commalist actual xs ^^ P.text ")")
 
@@ -246,21 +247,23 @@ let rec datum = function
     | A.MemDecl(t,m,None)   -> P.agrp (ty t ^^ memsize m ^^ semi) 
 
 <<astpp.ml>>=
-let formal (_, (h, v, t, n)) =
+let formal (_, (h, v, t, n, a)) =
     P.agrp begin
     ~~ (match h with Some hint -> str hint ^^ P.break | None -> P.empty)
     ^^ (if v =*= A.Invariant then P.text "invariant" ^^ P.break else P.empty)
     ^^ ty t
     ^/ id n
+    ^^ aligned a
     end
 
 let formals xs = P.agrp (P.text "(" ^^ P.commalist formal xs ^^ P.text ")")
 
 <<astpp.ml>>=
-let cformal (_, h, n) =
+let cformal (_, h, n, a) =
     P.agrp begin
     ~~ (match h with Some hint -> str hint ^^ P.break | None -> P.empty)
     ^^ id n
+    ^^ aligned a
     end
 
 let cformals xs = P.agrp (P.text "(" ^^ P.commalist cformal xs ^^ P.text ")")

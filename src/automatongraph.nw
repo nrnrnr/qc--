@@ -10,8 +10,9 @@
 
 The Quick {\PAL} compiler represents a calling convention as an
 automaton [[Automaton.t]]. When a client supplies a \emph{type} to an
-automaton it advances to a new state. A type is a pair of an integer and
-a string, representing a width in bits and a so-called hint. The state
+automaton it advances to a new state. A type is a triple:
+a width, a kind, and an alignment.
+The state
 of an automaton comprises a set of register locations and the alignment
 of a memory block. We are interested in a graph representation of the
 reachable states: states form the nodes, and transitions the edges of
@@ -19,11 +20,13 @@ the graph. For any realistic calling convention the set of reachable
 states in its automaton and the corresponding edges should be finite.
 The module traverses the state graph and emits it for analysis.
 
-Function [[print]] takes a function [[mk]], that creates an automaton in
-its initial state, a list of widths, and list of hints. It prints all
-edges of the automaton to [[stdout]] in the Dot language.  The widths
-and hints are used to construct requests: in every state of the
-automaton, every combination of a width and a hint are explored to reach
+Function [[print]] takes a function [[mk]] and a list of types.
+The [[mk]] argument creates an automaton in
+its initial state.
+Function [[print]] prints all
+edges of the automaton to [[stdout]] in the Dot language.  The types
+ are used to construct requests: in every state of the
+automaton, every type is explored to reach
 a new state.
 
 Function [[paths]] works like [[print]] but emits all ``interesting''
@@ -33,16 +36,10 @@ outgoing edge at a node.
 
 Function [[summary]] prints the number of nodes, edges, and paths.
 <<automatongraph.mli>>=
-val print: mk:(unit -> Automaton.t) 
-                     -> (int * string) list (* width * hint *)
-                     -> unit
-
-val paths: mk:(unit -> Automaton.t) 
-                     -> (int * string) list (* width * hint *)
-                     -> unit
-val summary : what:string -> mk:(unit -> Automaton.t) 
-                     -> (int * string) list (* width * hint *)
-                     -> unit
+type ty = int * string * int (* width * kind * alignment *)
+val print: mk:(unit -> Automaton.t) -> ty list -> unit
+val paths: mk:(unit -> Automaton.t) -> ty list -> unit
+val summary : what:string -> mk:(unit -> Automaton.t) -> ty list -> unit
 @
 I now realize that the [[graph]] type defined in the implementation is
 basically an isomorphism of the automaton defined in \module{automaton}.
@@ -58,7 +55,7 @@ automatongraph.ml.
 
 The basic idea is simple: we start from the initial state of an
 automaton and explore all outgoing edges. An edge is labeled with a
-type, which is a pair of a width and a hint. As long as we find new
+type, which is a triple of width, kind, and alignment. As long as we find new
 edges we continue depth first. The graph should be finite because a
 typical calling convention has only a limited set of registers and a
 limited set of stack alignments. Once the graph is explored, we can
@@ -79,8 +76,8 @@ module A    = Automaton
 let sprintf = Printf.sprintf
 let printf  = Printf.printf
 @
-
-A type is a pair of a width and a hint. Types label edges in the graph.
+A type is a width, kind, and alignment.
+Types label edges in the graph.
 A path is a list of types that indirectly describes the state of an
 automaton: starting from the initial state, the types are forming a
 path. When they are fed into the automaton, the automaton advances its
@@ -88,7 +85,7 @@ state accordingly. (The same state may be represented by different
 paths.)
 
 <<automatongraph.ml>>=
-type ty =       int * string                    (* width, hint     *)
+type ty = int * string * int (* width * kind * alignment *)
 type path =     ty list                         (* leads to a node *)
 @
 A [[node]] is the observable state of an automaton. It comprises the set
@@ -163,7 +160,7 @@ represent all our types as strings. Feel free to improve this.
 <<automatongraph.ml>>=
 module ToString = struct
     let register ((sp,_,_),i,_) = sprintf "$%c%i" sp i
-    let ty (width,hint)   = sprintf "%d/%s" width hint
+    let ty (width,kind,a) = sprintf "%s::%d@%d" kind width a
     let align n           = sprintf "%i:" n
     let node s            = let regs = Register.Set.elements s.regs in
                             String.concat "" 
@@ -180,10 +177,8 @@ module ToString = struct
             String.concat "\n" edges
 end
 @
-
 Below is a rather ugly emitter for the AT\&T graph layouter Dot. This is
 now the standard output format.
-
 <<automatongraph.ml>>=
 module ToDot = struct
     let size = function
@@ -192,7 +187,7 @@ module ToDot = struct
         | n  -> sprintf ":%d" n
         
     let register ((sp,_,ms),i,c) = sprintf "$%c%i%s" sp i (size (Cell.to_width ms c))
-    let ty (width,hint)   = sprintf "%d/%s" width hint
+    let ty (width,kind,a) = sprintf "%s::%d@%d" kind width a
     let node s            = let regs = Register.Set.elements s.regs in
                             sprintf "\"%i:%s\"" 
                                         s.align 
@@ -218,35 +213,22 @@ module ToDot = struct
         )
 end
 @
-
-[[combine]] forms the product of two lists. We use it to compute all
-possible edge labels from a list of widths and hints.
-
-<<automatongraph.ml>>=
-let combine xs ys =
-    let pair x y = (x,y) in
-        List.concat (List.map (fun w -> List.map (pair w) ys) xs)
-@
-
 [[goto]] takes a function [[mk]] that creates an automaton in its initial
 state, and a [[path]] (of types). It feeds [[path]] through the automaton,
 and returns the reached state as a [[node]].
-
 <<automatongraph.ml>>=
 let goto mk path =
     let t    = mk ()                        in
-    let ()   = List.iter (fun (w,h) -> ignore (A.allocate t w h)) path in
+    let ()   = List.iter (fun (w,h,a) -> ignore (A.allocate t w h a)) path in
     let res  = A.freeze t in
         { regs  = res.A.regs_used     
         ; align = res.A.align_state
         }
 @
-
 Given an abstract location, we would like to know the registers it
 contains. To find out, we use a trick: we store a (possibly ill-sized)
 constant into the location and receive an {\rtl} for this operation.
 This we can analyse and should find the registers we are looking for.
-
 <<automatongraph.ml>>=
 let registers loc =
     let c   = Rtl.bits (Bits.zero 32) 32 in
@@ -254,7 +236,6 @@ let registers loc =
     let (read, written) = Rtlutil.ReadWrite.sets rtl in
         written
 @    
-
 The heart of the algorithm are two mutually recursive functions, [[dfs]]
 and [[follow]]. The depth-first search function [[dfs]] explores a
 [[graph]] in all direction, starting from [[node]]. [[Follow]]
@@ -275,20 +256,17 @@ recursively depth first.
 
 Allocating a location for [[ty]] has led us from [[node]] to [[node']].
 We like to check that the location for [[ty]] wasn't used before:
-
 \begin{itemize}
-
-\item If [[ty]] is passed in a register, [[node'.regs]] must include it;
+\item 
+If [[ty]] is passed in a register, [[node'.regs]] must include it;
 more specifically, [[node.regs]] must be a subset of [[node'.regs]].
-
-\item If [[ty]] is passed in memory, the alignment of [[node']] should
+\item 
+If [[ty]] is passed in memory, the alignment of [[node']] should
 differ from [[node]]. However, this is not 100\% sure. There may exist
 parameters that are so large that they cause to alignment to wrap in
 which case we cannot observe a difference. This corresponds to a seld
 loop in the automaton. 
-
 \end{itemize}
-
 <<automatongraph.ml>>=
 let rec follow (mk:unit->Automaton.t) (dirs: ty list) graph path node ty =
     let path  = path @ [ty]  in
@@ -299,27 +277,23 @@ let rec follow (mk:unit->Automaton.t) (dirs: ty list) graph path node ty =
     else
         (* assert (Register.Set.subset node.regs node'.regs) *)
         dfs mk dirs (add edge node' graph) path node'
-       
 
 and dfs mk dirs graph path node =   (* call this *)
     List.fold_left 
         (fun graph ty -> follow mk dirs graph path node ty) graph dirs
 @
-
-Finally, here is the function we export. The list [[dirs]] of all
-potential edge labels is the product of all widths and hints. Function
+Finally, here is the function we export. 
+Function
 [[mk]] creates an automaton in its initials state. The initial graph
 contains the node corresponding to the initial state and is otherwise
 empty.
-  
 <<automatongraph.ml>>=
 let print ~mk dirs =
     let dump g  = print_endline (ToString.graph g) in
     let init    = {regs=Register.Set.empty; align=0}   in
     let g       = graph init            in
     let g       = dfs mk dirs g [] init in
-        ( ToDot.graph g
-        )
+    ToDot.graph g
 @
 
 % ------------------------------------------------------------------ 

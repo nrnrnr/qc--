@@ -116,6 +116,7 @@ let return e =
 module Post = struct
   let byte_order = byteorder
   let wordsize   = wordsize
+  let exchange_alignment = 4
   module Address = struct
     type t    = R.exp
     let reg r = R.fetch (R.reg r) (Register.width r) 
@@ -198,9 +199,8 @@ let rec load ~dst ~addr assn =
         let rec f acc n = if n = -1 then acc else f (ld1 (fit * n) <:> acc) (n - 1) in
         PX.Expand.block (f (rtl (R.store (R.reg dst) (rfetch d) 32)) (nloads - 1))
     | (('u', _, cell), _, R.C 1) when Cell.to_width cell (R.C 1) = 32 ->
-        (* MUST go through memory *)
-        (* NOTE THE STACK SLOT SHOULD BE WORD ALIGNED! *)
-        let slot = salloc w in
+        (* MUST go through memory -- stack slot is word aligned *)
+        let slot = salloc w 4 in
         let d    = talloc 't' 32 in
         load ~dst:d ~addr assn <:>
         rtl (A.store slot (rfetch d) w) <:>
@@ -277,9 +277,8 @@ let move ~dst ~src =
   let w = rwidth src in
   assert (w = rwidth dst);
   if (if is_int src then is_float dst else is_float src && is_int dst) then
-    (* move through stack *)
-    (* WHAT ABOUT ALIGNMENT FOR THE STACK SLOT---SHOULD BE DOUBLEWORD ALIGNED! *)
-    let slot = salloc w in
+    (* move through stack -- doubleword aligned *)
+    let slot = salloc w 8 in
     rtl (A.store slot (rfetch src) w) <:> rtl (R.store (R.reg dst) (A.fetch slot w) w)
   else if Register.eq src dst then
     PX.Nop
@@ -298,9 +297,8 @@ let extract ~dst ~lsb ~src =
     else
       impossf "bad lsb in sparc extract" in
   if is_int dst && is_float src then
-    (* move through stack *)
-    (* WHAT ABOUT ALIGNMENT FOR THE STACK SLOT---SHOULD BE DOUBLEWORD ALIGNED! *)
-    let slot = salloc n in
+    (* move through stack -- doubleword aligned *)
+    let slot = salloc n 8 in
     rtl (A.store slot srcval n) <:> rtl (R.store (R.reg dst) (A.fetch slot n) n)
   else if is_float dst && is_float src then
     rtl (R.store (R.reg dst) srcval n)
@@ -318,7 +316,7 @@ let li  ~dst const =
   match dst, const with
   | (('u', _, _), _, R.C 1), _ -> (* we are forced to go through memory *)
       let t = talloc 't' 32 in
-      let slot = salloc 32 in
+      let slot = salloc 32 4 in
       rstore (R.reg t)   (Up.const const)  32 <:>
       astore slot        (rfetch t)        32 <:>
       rstore (R.reg dst) (A.fetch slot 32) 32
@@ -574,7 +572,7 @@ let target =
     ; T.capabilities        = {T.memory = [32; 64]; T.block_copy = true;
                                T.itemps = [32]; T.ftemps = [32; 64];
                                T.iwiden = false; T.fwiden = false;
-                               T.literals = [32; 64];
+                               T.literals = [32; 64]; T.litops = [];
                                T.operators = List.map Up.opr [
                                    "sx",      [ 1; 32]
                                  ; "zx",      [ 1; 32]
@@ -688,13 +686,13 @@ let target =
 @ 
 \subsection{Variable Placement}
 
-If we get a 64-bit variable that is not hinted float, we could put it
+If we get a 64-bit variable that is not kinded float, we could put it
 in a floating-point temporary, but we're not that aggressive.
 <<sparc.ml>>=
 let warning s = Printf.eprintf "backend warning: %s\n" s
 let placevars = 
-  let is_float w hint _ = hint =$= "float" in
-  let warn ~width ~alignment ~hint = () in
+  let is_float w kind _ = kind =$= "float" in
+  let warn ~width ~alignment ~kind = () in
   let mk_stage ~temps =
     A.choice
       [ is_float,                 A.widen (Aux.round_up_to ~multiple_of: 32)

@@ -164,6 +164,7 @@ let clr_xer_flag fl = function
 % ---------------------------------------------------------------------------
 <<ppc postexpander>>=
 let byte_order = R.BigEndian
+let exchange_alignment = 4
 let wordsize = 32
 let memsize  = 8
 let pc_lhs = nia
@@ -830,6 +831,7 @@ let target =
 
   ; T.is_instruction = Ppcrec.M.is_instruction
   ; T.capabilities   = { T.operators = List.map Up.opr Post.machine_env;
+                         T.litops = [];
                          T.literals = [32;64]; T.memory = [8;32];
                          T.block_copy = false; T.itemps = [32]; T.ftemps = [];
                          T.iwiden = true; T.fwiden = false; }
@@ -854,13 +856,13 @@ let unimp               = Impossible.unimp
 let impossible          = Impossible.impossible
 
 let placevars = 
-  let is_float w hint _ = w <= 32 && hint =$= "float" in
-  let warn ~width:w ~alignment:a ~hint:h =
+  let is_float w kind _ = w <= 32 && kind =$= "float" in
+  let warn ~width:w ~alignment:a ~kind:k =
     if w > 64 then unimp (Printf.sprintf "%d-bit values not supported"  w) in
   let mk_stage ~temps =
     A.choice
       [ is_float,               A.widen (Aux.round_up_to ~multiple_of: 64); 
-        (fun w h _ -> w <= 32), A.widen (fun _ -> 32) *> temps 't';
+        (fun w _ _ -> w <= 32), A.widen (fun _ -> 32) *> temps 't';
         A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
       ] in
   Placevar.mk_automaton ~warn ~vfp ~memspace:mspace mk_stage

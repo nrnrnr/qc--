@@ -105,11 +105,9 @@ module Personality = struct
       Cfgutil.cfg2ast Rtlutil.ToAST.rtl proc.Proc.cfg proc.Proc.symbol#mangled_text
 end
 @
-
 The assemblers for the {\AST} and the interpreter are polymorphic. We
 have to supply a target description that defines the sizes of words and
 so forth.
-
 <<Linking QC-- Types>>=
 module AstAsm = Astasm.Make(Personality)
 
@@ -290,6 +288,7 @@ module Map = struct
       let e f x = f.V.embed x in
       table [ "literals",   e (V.list V.int) cap.T.literals;
               "operators",  e (V.list opr)   (sort cap.T.operators);
+              "litops",     e (V.list opr)   (sort cap.T.litops);
               "memory",     e (V.list V.int) cap.T.memory;
               "block_copy", e V.bool         cap.T.block_copy;
               "iwiden",     e V.bool         cap.T.iwiden;
@@ -386,7 +385,7 @@ less depth.
 <<embedding/projection pairs for calling conventions>>=
 let choicep =
   (V.int    <@ A.is_width) <|>
-  (V.string <@ A.is_hint ) <|>
+  (V.string <@ A.is_kind ) <|>
   (V.func (V.int **-> V.string **-> Map.counterenv **->> V.bool)) in
 
 let all_preds l w h ce = List.for_all (fun p -> p w h ce) l in
@@ -556,14 +555,19 @@ let dump f =
   let mktuplelist t = 
     let field f = V.Table.find t (V.String f) in
     let ty      = V.string.V.project (field "type") in
+    let al      = (V.default 1 V.int).V.project (field "aligned") in
     let widths  = (V.list V.int).V.project (field "widths") in
-    List.map (fun w -> (w, ty)) widths in
+    List.map (fun w -> (w, ty, al)) widths in
   let luafun target ccname types = f target ccname 
                                     (List.flatten (List.map mktuplelist types))
   in
   V.efunc (Map.target **-> V.string **-> (V.list V.table) **->> V.unit)
     luafun
 in
+
+let run_cc_wrap f tgt cc tys =
+  let unaligned (w, k) = (w, k, 1) in
+  f (fun s -> s.Automaton.call) tgt cc (List.map unaligned tys) in
 
 C.register_module "Debug"
   [ "explain",      V.efunc (V.unit **->> V.unit) Debug.explain
@@ -579,11 +583,11 @@ C.register_module "Debug"
   ; "path_2_in_overflow", V.efunc (Map.target **-> V.string **->> V.unit)
                           Call.path_2_in_overflow
   ; "run_cc_on_args", V.efunc (Map.target **-> V.string **->
-                               listpair V.string V.int **->> V.unit)
-                      (Call.run_cc_on_sig_and_print (fun s -> s.Automaton.call))
+                               listpair V.int V.string **->> V.unit)
+                      (run_cc_wrap Call.run_cc_on_sig_and_print)
   ; "run_cc_return", V.efunc (Map.target **-> V.string **->
-                               listpair V.string V.int **->> V.list (V.list V.string))
-                      (Call.run_cc_on_sig_and_return (fun s -> s.Automaton.call))
+                               listpair V.int V.string **->> V.list (V.list V.string))
+                      (run_cc_wrap Call.run_cc_on_sig_and_return)
   ; "printcfg", backplane_stage (fun _ proc -> Cfgutil.print_cfg proc.Proc.cfg; true)
   ] g;
 @

@@ -425,7 +425,7 @@ slot is supported.
 <<exported utility functions for postexpanders>>=
 module Alloc : sig
   val temp : char -> width -> temp
-  val slot : width -> Automaton.loc
+  val slot : width:width -> aligned:int -> Automaton.loc
 end
 @ 
 The postexpander might also like to create a loop or conditional and
@@ -504,6 +504,7 @@ target's byte order.
 <<signature of a postexpander>>=
 module type S = sig
   val byte_order : Rtl.aggregation (* used to check access to memory *)
+  val exchange_alignment : int     (* alignment for an exchange slot *)
   <<generic expansion operations for register machines>>
   <<generic expansion operations for stack machines>>
 end
@@ -1017,14 +1018,14 @@ type uid = int
 @ 
 <<postexpander.ml>>=
 module Alloc = struct
-  let badslot : width -> Automaton.loc =
+  let badslot : width -> int -> Automaton.loc =
     fun _ -> Impossible.impossible "slot allocator misconfigured"
   let badtemp : char -> width -> temp =
     fun _ _ -> Impossible.impossible "temporary allocator misconfigured"
   let valid = Reinit.ref false
   let theslot = Reinit.ref badslot
   let thetemp = Reinit.ref badtemp
-  let slot w = !theslot w
+  let slot ~width ~aligned = !theslot width aligned
   let temp c w = !thetemp c w
 end
 let remember_allocators t s =
@@ -1032,7 +1033,7 @@ let remember_allocators t s =
     Impossible.impossible "too many allocators";
   Alloc.valid := true;
   Alloc.thetemp := (fun c w -> Talloc.Multiple.reg c t w);
-  Alloc.theslot := (fun w -> Automaton.allocate s w "")
+  Alloc.theslot := (fun w a -> Automaton.allocate s w "" a)
 let forget_allocators () = 
   if not !Alloc.valid then
     Impossible.impossible "too few allocators";
@@ -2260,7 +2261,7 @@ let exchange_slot =
   function w ->
     try List.assoc w (!slots)
     with Not_found ->
-      let slot = A.allocate proc.Proc.priv w "" in
+      let slot = Postexpander.Alloc.slot w Post.exchange_alignment in
       slots := (w, slot) :: !slots;
       slot in
 @   

@@ -22,7 +22,7 @@ Here's what needs to be done at various sorts of places in the code.
 \emph{Outgoing parameters at a call site}
 \begin{enumerate}
 \item
-Run convention feeding widths/hints and get locations plus block.
+Run convention feeding widths/kinds/alignments and get locations plus block.
 (Stack layout must fit block into frame in the right place.)
 \item
 Provide binding of where stack pointer must be just before the call
@@ -54,7 +54,7 @@ In the example above, this means $\sp \gets L$.
 \emph{Normal return from a call site.}
 \begin{enumerate}
 \item
-Run convention feeding widths/hints and get locations plus block.
+Run convention feeding widths/kinds/alignments and get locations plus block.
 (Stack layout must fit block into frame in the right place.)
 \item
 Provide binding of where stack pointer will be left just after return.
@@ -106,7 +106,7 @@ PC/SP pair that represents the continuation.
 On this entry point:
 \begin{enumerate}
 \item
-Run convention feeding widths/hints and get locations plus block.
+Run convention feeding widths/kinds/alignments and get locations plus block.
 (Stack layout must fit block into frame in the right place.)
 \item
 Provide binding of where stack pointer must be just before the call
@@ -129,9 +129,10 @@ MORE TO COME.
 <<exported type definitions>>
 @ 
 <<exported type definitions>>=
-type hint  = string
-type width = int
-type types = (hint * width) list
+type kind    = string
+type width   = int
+type aligned = int
+type types = (width * kind * aligned) list
 
 type 'insp answer =
   { 
@@ -302,15 +303,15 @@ val get_cc : ('a, 'cc) Target.t -> string -> 'cc
 
 We provide a general mechanism for analyzing calling convention automata.
 <<call.mli>>=
-val dump_proc    : tgt -> string -> (int * string) list -> unit
-val dump_return  : tgt -> string -> (int * string) list -> unit
-val dump_cutto   : tgt -> string -> (int * string) list -> unit
-val paths_proc   : tgt -> string -> (int * string) list -> unit
-val paths_return : tgt -> string -> (int * string) list -> unit
-val paths_cutto  : tgt -> string -> (int * string) list -> unit
-val summary_proc   : tgt -> string -> (int * string) list -> unit
-val summary_return : tgt -> string -> (int * string) list -> unit
-val summary_cutto  : tgt -> string -> (int * string) list -> unit
+val dump_proc      : tgt -> string -> types -> unit
+val dump_return    : tgt -> string -> types -> unit
+val dump_cutto     : tgt -> string -> types -> unit
+val paths_proc     : tgt -> string -> types -> unit
+val paths_return   : tgt -> string -> types -> unit
+val paths_cutto    : tgt -> string -> types -> unit
+val summary_proc   : tgt -> string -> types -> unit
+val summary_return : tgt -> string -> types -> unit
+val summary_cutto  : tgt -> string -> types -> unit
 
 val path_2_in_overflow : tgt -> string -> unit
 @ 
@@ -322,11 +323,9 @@ a value may occupy more than one location.
 The second prints this information in suitable diagnostic form.
 <<call.mli>>=
 val run_cc_on_sig_and_return :
-    (Automaton.cc_spec -> Automaton.stage) -> tgt -> string ->
-    (string * int) list -> string list list
+  (Automaton.cc_spec -> Automaton.stage) -> tgt -> string -> types -> string list list
 val run_cc_on_sig_and_print :
-    (Automaton.cc_spec -> Automaton.stage) -> tgt -> string ->
-    (string * int) list -> unit
+  (Automaton.cc_spec -> Automaton.stage) -> tgt -> string -> types -> unit
 @ 
 
 \subsection{Implementation}
@@ -357,8 +356,8 @@ let ne sp target = R.app (R.opr "ne" [RU.Width.loc sp]) [RU.fetch sp; target]
 
 let outgoing ~growth ~sp ~mkauto ~autosp ~postsp types actuals =
     let a = mkauto () in
-    let crank effects' (h, w) actual =
-      let l = A.allocate a w h in
+    let crank effects' (w, k, aligned) actual =
+      let l = A.allocate a ~width:w ~kind:k ~align:aligned in
       A.store l actual w :: effects' in
     let shuffle = R.par (List.rev (List.fold_left2 crank [] types actuals)) in
     let a = A.freeze a in
@@ -376,8 +375,8 @@ let outgoing ~growth ~sp ~mkauto ~autosp ~postsp types actuals =
 
 let incoming ~growth ~sp ~mkauto ~autosp ~postsp ~insp types formals =
     let a = mkauto() in
-    let crank effects' (h, w) formal =
-      let l = A.allocate a w h in
+    let crank effects' (w, k, aligned) formal =
+      let l = A.allocate a ~width:w ~kind:k ~align:aligned in
       A.store formal (A.fetch l w) w :: effects' in
     let shuffle = R.par (List.rev (List.fold_left2 crank [] types formals)) in
     let a = A.freeze a in
@@ -420,8 +419,8 @@ let get_cc tgt name =
 let dump what autofun target ccname =
   let wordsize  = target.Target.wordsize  in
   let automaton = autofun (get_ccspec target ccname) in
-   what ~mk:(fun () -> 
-             A.at ~start:(R.bits (Bits.zero wordsize) wordsize) 
+  what ~mk:(fun () -> 
+            A.at ~start:(R.bits (Bits.zero wordsize) wordsize) 
                   target.Target.memspace  automaton)
         
 let dump_proc    = dump Automatongraph.print (fun s -> s.A.call)
@@ -445,7 +444,7 @@ let findpath_1_in_overflow autofun target ccname =
     let an  = A.at ~start:(R.bits (Bits.zero wordsize) wordsize) 
                    target.Target.memspace automaton in
     let tys = (wordsize, "unsigned") :: tys in
-    let _   = List.map (fun (w,h) -> A.allocate an ~width:w ~hint:h) tys in
+    let _   = List.map (fun (w,h) -> A.allocate an ~width:w ~kind:h) tys in
     let res = A.freeze an in
     if res.A.mems_used == [] then find_overflow_1 tys else tys in
   find_overflow_1 []
@@ -469,19 +468,19 @@ let locs aloc w =
   List.fold_right (fun (_,  e) locs -> add_locs (getloc e) locs) gs []
 
 let run_cc_on_sig_and_return autofun target ccname tys =
-  let loc2strs l (h, w) = List.map Rtlutil.ToString.loc (locs l w) in
-  let wordsize  = target.Target.wordsize  in
-  let auto      = autofun (get_ccspec target ccname) in
-  let an        = A.at ~start:(Rtl.late "ovflw" wordsize) target.Target.memspace auto in
-  let allocs    = List.map (fun (h,w) -> A.allocate an ~width:w ~hint:h) tys in
+  let loc2strs l (w, k, a) = List.map Rtlutil.ToString.loc (locs l w) in
+  let wordsize = target.Target.wordsize  in
+  let auto   = autofun (get_ccspec target ccname) in
+  let an     = A.at ~start:(Rtl.late "ovflw" wordsize) target.Target.memspace auto in
+  let allocs = List.map (fun (w,k,a) -> A.allocate an ~width:w ~kind:k ~align:a) tys in
   List.map2 loc2strs allocs tys
 
 let run_cc_on_sig_and_print autofun target ccname tys =
   let locs = run_cc_on_sig_and_return autofun target ccname tys in
-  let print (h, w) ls = Printf.printf "%s/%d => { %s }\n" h w (String.concat "," ls) in
+  let print (w, k, a) ls =
+    Printf.printf "\"%s\":%d@%d => { %s }\n" k w a (String.concat "," ls) in
   List.iter2 print tys locs
 @ 
-
 \subsection{Potential new constructors for \texttt{Call.t}}
 
 The idea is to have an easier way for a client to build a value of
@@ -490,7 +489,6 @@ The hope is we need change nothing above this line.
 
 THIS STUFF IS PARTIALLY MIGRATED TO \module{Callspec}.
 CLONED AND MODIFIED BROKEN WINDOWS!  HOW EMBARRASSING\ldots
-
 @
 <<call.ml>>=
 <<specification for a calling convention>>

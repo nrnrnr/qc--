@@ -97,6 +97,7 @@ end
 @ 
 <<ia64 postexpander>>=
 let byte_order = Rtl.LittleEndian
+let exchange_alignment = 8
 let wordsize   = 64
 @ 
 The postexpander may need to allocate temporaries.
@@ -396,7 +397,7 @@ let target =
   ; T.is_instruction  = Ia64rec.is_instruction
   ; T.capabilities = {T.memory = [64]; T.block_copy = false;
                       T.itemps = [64]; T.ftemps = [64];
-                      T.iwiden = true; T.fwiden = false;
+                      T.iwiden = true; T.fwiden = false; T.litops=[];
                       T.operators=List.map Up.opr [
                          "sx",      [ 1; 64]
                        ; "zx",      [ 1; 64]
@@ -453,15 +454,15 @@ to classify them.
 <<ia64.ml>>=
 let warning s = Printf.eprintf "backend warning: %s\n" s
 let placevars = 
-  let is_float      w hint _ = w = 82 || (hint =$= "float" && (w = 32 || w = 64)) in
-  let strange_float w hint   = w = 82 && not (hint =$= "float") in
-  let strange_int   w hint   = hint =$= "float" && not (is_float w hint ()) in
-  let warn ~width:w ~alignment:a ~hint:h =
-      if strange_float w h then
-        warning "82-bit variable not hinted float but will go as float anyway"
-      else if strange_int w h then
+  let is_float      w kind _ = w = 82 || (kind =$= "float" && (w = 32 || w = 64)) in
+  let strange_float w kind   = w = 82 && not (kind =$= "float") in
+  let strange_int   w kind   = kind =$= "float" && not (is_float w kind ()) in
+  let warn ~width:w ~alignment:a ~kind:k =
+      if strange_float w k then
+        warning "82-bit variable not kinded float but will go as float anyway"
+      else if strange_int w k then
         warning
-          (Printf.sprintf "%d-bit variable hinted float but will go as integer" w) in
+          (Printf.sprintf "%d-bit variable kinded float but will go as integer" w) in
   let mk_stage ~temps =
     A.choice
       [ is_float,               A.widen (Aux.round_up_to ~multiple_of:64) *> temps 'u';
