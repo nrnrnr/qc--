@@ -200,6 +200,7 @@ Test.on_error[".1"]  = Test.on_error[".s"]
 Test.on_error[".2"]  = Test.on_error[".s"]
 Test.on_error[".s1"] = Test.on_error[".s"]
 Test.on_error[".s2"] = Test.on_error[".s"]
+Test.on_error[".5"]  = Test.on_error[".s"]
 @ 
 This function handles dispatching to the correct error handler.
 All errors are reported by calling this function.
@@ -312,7 +313,11 @@ of timestamps, userids, and similar rot.
 for i
 do
   case $i in
-    *.a) (ar t $i; ar p $i) | md5sum | sed "s@-@$i@" ;;
+    *.a) 
+       for j in `ar t $i`; do
+         ar p $i $j | md5sum | sed "s@-@$i($j)@"
+       done
+       ;;
     *)   md5sum $i
   esac
 done
