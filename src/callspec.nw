@@ -289,6 +289,7 @@ let where_to_save_ra t = fun ra_on_entry temp -> match style t with
     | ReturnAddress.SaveToTemp s -> Talloc.Multiple.loc temp s (wordsize t) 
 
 let to_call ~cutto ~return auto t =
+    <<it's impossible for the stack pointer to be a useful register too>>;
     { C.name           = t.name
     ; C.overflow_alloc = t.overflow
     ; C.call_parms     = {C.in'=prolog       t auto; C.out=call_actuals t auto}
@@ -309,6 +310,13 @@ let to_call ~cutto ~return auto t =
     ; C.cutto            = cutto
     ; C.return           = return
     }
+<<it's impossible for the stack pointer to be a useful register too>>=
+if Register.Set.mem t.sp t.all_regs then
+  Impossible.impossible
+    (Printf.sprintf "In convention \"%s\", stack pointer is also an ordinary register"
+       t.name)
+else
+  ()
 @
 
 
