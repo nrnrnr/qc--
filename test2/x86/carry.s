@@ -74,7 +74,7 @@ lladd:
 	lahf
 	shrl $8, %eax
 	shll $31, %eax
-	sarl $31, %eax
+	shrl $31, %eax
 	btl $0,%eax
 	movl 36(%esp),%eax
 	movl 44(%esp),%ecx
@@ -173,7 +173,7 @@ llsub:
 	lahf
 	shrl $8, %eax
 	shll $31, %eax
-	sarl $31, %eax
+	shrl $31, %eax
 	btl $0,%eax
 	movl 36(%esp),%eax
 	movl 44(%esp),%ecx
