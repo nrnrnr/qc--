@@ -14,11 +14,7 @@ issue?
 ----------------------------------------
 
 The autodefs.caml Noweb filter depends on the path of local perl
-instalation. It does not work on my system.
-
-----------------------------------------
-
-"mk clean" in /cllib does not clean html files.
+instalation. It does not work on some systems.
 
 ----------------------------------------
 
@@ -44,14 +40,38 @@ mk:    ...  : exit status=1
 
 ----------------------------------------
 
-Some of the code in "bits" and "bitops" shows up twice in the
-residualizing and in the evaluating instantiations. It is advisable
-that we share as much as possible of the common code. This is
-especially true for the interface declarations, but it may also hold
-for the rest of the code.
+At the moment, the implementation can handle only one
+machine-instruction set at one time. The desirabilities of:
 
-----------------------------------------
+  1) having a program that can be specialized with respect to multiple
+     instruction sets.
 
-mk clean in "cllib" does not clean all .cmi/.cmo files?
+  2) Not knowing in advance how many isnstruction sets we might have.
+
+  3) one residualizing instantiation for a particular instruction set
+     should not be burdeoned by other instructions sets
+
+are somehow irreconciable. The reason is as follows:
+
+ - 2 and 3 impose that the type of residual expressions is parametric
+   on the syntactic representation of machine instructions.
+
+   This in turn, imposes the fact that the core TDPE implementation is
+   parametric on the syntactic representation of machine
+   instructions. However, this is a problem. To implement shift and
+   reset, we need to have the expression type fully instantiated (the
+   answer type of continuations).
+
+   Even then, the residualizing definitions of the base types
+   (std_nativeint) and such need to be fully instantiated (not
+   polymorphic).
+
+   Some solution may be devised, but it involves extensive use of
+   functors and such. Not feasible, and the overhead would be too
+   high.
+
+
+
+
 
 

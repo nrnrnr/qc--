@@ -41,14 +41,13 @@ val read_write_locsInstr : 'a read_write_type
 @ \section{Implementation}
 <<generic.ml>>=
 <<type definitions>>
-module E = MachineEncode
-module R = MachineRecognize
+module M = Machine
 
 let mkMachineSubst f =
   fun i1 -> fun i2 -> 
     OpOps.bind
-      R.recognizeInstruction
-      (f (E.encode i1) (E.encode i2))
+      M.recognizeInstruction
+      (f (M.encode i1) (M.encode i2))
 
 let frwdSubstInst =
   mkMachineSubst RtlSubst.frwdSubst
@@ -64,14 +63,14 @@ let frwdInstMerge =
       RtlMerge.frwdMerge i1 i2 (fun _ -> false))
 
 let identity instruction = instruction
-let identInstr i1 = R.recognizeInstruction (E.encode i1)
+let identInstr i1 = M.recognizeInstruction (M.encode i1)
 
 
 let read_write_setsInstr read write instruction zero =
-  Rtlutil.read_write_lists read write (E.encode instruction) zero
+  Rtlutil.read_write_lists read write (M.encode instruction) zero
 
 let read_write_locsInstr read write instruction zero =
   ReadWrite.read_write_sets
-    read write (E.encode instruction) zero
+    read write (M.encode instruction) zero
 
 @ 

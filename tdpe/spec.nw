@@ -61,7 +61,6 @@ module type TEST =
 
 module T = Tdpe
 module M = Machine
-module Mn = MachineNbe
 module Ms = MachineSyntax
 module S = Syntax
 module G = Generic
@@ -108,7 +107,7 @@ module Id : TEST_INSTANCE =
     type tau = M.instruction -> M.instruction
     let term = RtlFuns.identity
     let termName = "identity"
-    let combinator = T.arrow(Mn.instruction,Mn.instruction)
+    let combinator = T.arrow(M.instruction,M.instruction)
   end
 @ The [[IdTranslation]] instance produces the residualizing version of
 the composition of the RTL-encoder and RTL-recognizer. Ideally, it
@@ -120,7 +119,7 @@ module IdTranslation : TEST_INSTANCE =
     type tau = M.instruction -> M.instruction option
     let term = G.identInstr
     let termName = "identInstr"
-    let combinator = T.arrow(Mn.instruction,T.option(Mn.instruction))
+    let combinator = T.arrow(M.instruction,T.option(M.instruction))
   end
 
 @ \subsubsection{Forward substitution instances}
@@ -138,8 +137,8 @@ module MkFS(B : FS_INSTANCE) : TEST_INSTANCE =
     open B
      type tau = G.subst_type
     let combinator =
-      T.arrow(Mn.instruction,
-              T.arrow(Mn.instruction,T.option(Mn.instruction)))
+      T.arrow(M.instruction,
+              T.arrow(M.instruction,T.option(M.instruction)))
     let term = B.term
     let termName = B.termName
   end
@@ -196,7 +195,7 @@ module MkRW_cd(B : RW_INSTANCE) : TEST_INSTANCE =
       T.arrowStub
         ("read",treg,
          T.arrowStub("write",treg,
-                     T.arrowStub("instruction",Mn.instruction,
+                     T.arrowStub("instruction",M.instruction,
                                  T.arrowStub("zero",T.a',T.a'))))
     let term = B.term
     let termName = B.termName
@@ -224,7 +223,7 @@ module MkRW(B : RW_INSTANCE) : TEST_INSTANCE =
                                           T.arrowStub("zero",T.a',T.a'))))
     let term =
       (fun read -> fun write -> fun instr -> fun zero -> 
-        B.term read write (Tdpe.nbe' Mn.instruction instr) zero)
+        B.term read write (Tdpe.nbe' M.instruction instr) zero)
     let termName = B.termName
   end
 
