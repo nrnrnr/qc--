@@ -139,34 +139,13 @@ compile-time functions over [[Bits.bits]] are defined.
 
 <<Make>>=
 module CompileTime = struct
-    let zero = function (* damn lies *)
-        | [x;y] -> Bits.zero (Bits.width x)
-        | _     -> E.error "wrong number of arguments"
-
-    let ops =
-        let ops = 
-            [  "add"    , zero  
-            ;  "+"      , zero  
-            ;  "sub"    , zero  
-            ;  "-"      , zero  
-            ;  "mult"   , zero  
-            ;  "shl"    , zero  
-            ;  "shra"   , zero  
-            ;  "shrl"   , zero  
-            ;  "<<"     , zero  
-            ;  ">>"     , zero  
-            ;  "*"      , zero  
-            ]
-        in
-            List.fold_left (fun map (key,f) -> Str.Map.add key f map)
-                           Str.Map.empty 
-                           ops
-
     let apply (op,wl) exps =
-        let f    = try Str.Map.find op ops 
+        let args = List.map (fun e -> Rtlop.Impl.Bits e) exps in
+        let f    = try Rtlop.Impl.lookup op
                    with Not_found -> E.error ("unknown operator "^op)
-        in
-            f exps
+        in match f args with
+            | Rtlop.Impl.Bits b -> b
+            | _                 -> assert false
 end
 @
 
