@@ -831,6 +831,14 @@ The precedence of tokens from lowest to highest precedence.
 %right      ID
 %right      LBRACKET
 
+/* conflict resolution for %foo() and %foo. We ensure the '(' has
+   higher precedence and gets shifted. Take the following two
+   declarations out and you get a shift/reduce conflict which defaults
+   to shifting. This is correct, but we also like to get rid of the
+   warning. */
+%nonassoc   PRIMOP
+%nonassoc   LPAREN
+
 %nonassoc   INFIXOP
 %nonassoc   EEQ NEQ LT LEQ GT GEQ
 %left       BAR                      
@@ -1112,9 +1120,8 @@ sexpr       :   INT                            { A.Int($1, None)      }
             |   CHAR CCOLON tyAt               { A.Char($1, Some $3)  }
             |   nameOrMemAt0                   { A.Fetch $1           }
             |   PRIMOP actls                   { A.PrimOp($1,$2)      }
-           /*   would allow to write nullary OPs like constants
+           /*   allow to write nullary OPs like constants */
             |   PRIMOP                         { A.PrimOp($1,[]) }
-            */
 <<parse.mly>>=
 exprAt      :   expr                           { A.ExprAt($1, p())    }
 expr:       |   sexpr                          { $1                   }
