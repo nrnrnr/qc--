@@ -33,6 +33,7 @@ Test.files = { "add.c--"
              , "not.c--"
              , "ovrflow.c--"
              , "ralloc-000.c--"
+             , 'ratail.c--'
 	     , { source='r64.c--', other='src/r64main.c' }
              , "rnd2.c--"
              , "round.c--"

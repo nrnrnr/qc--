@@ -1,0 +1,25 @@
+foreign "C"
+g(bits32 a, bits32 b) {
+  jump gt(a, b, b+10); 
+}
+
+gt(bits32 a, bits32 b, bits32 c) {
+  foreign "C" return (a + b + c);
+}
+
+foreign "C" main (bits32 argc, "address" bits32 argv) {
+  bits32 n;
+  n = foreign "C" g(10, 20);
+  n = foreign "C" printf("address" fmt, n); import printf;
+  foreign "C" return (0);
+}
+
+section "data" {
+  fmt: bits8 [] "sixty should be %d\n\0";
+}
+
+export main;
+
+
+target byteorder little;
+
