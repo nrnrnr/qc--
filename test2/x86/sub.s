@@ -14,10 +14,7 @@ f:
 initialize_continuations_l3:
 	nop
 	negl %eax
-	movl $99,%ecx
-	movl %ecx,4(%esp)
-	movl 4(%esp),%ecx
-	negl %ecx
+	movl $-99,%ecx
 	movl %ecx,4(%esp)
 	movl $4,%ecx
 	movl %ecx,(%esp)
