@@ -127,12 +127,14 @@ let backward_anal (fact, comp) graph =
     let old_block_in = P.get fact.prop u in
     if fact.changed ~old:old_block_in ~new':block_in then
       begin
-        let show_block b = match GR.first (GR.unzip b) with
+        let show_block (f, t) = match f with
         | GR.Entry -> "<entry>"
         | GR.Label ((_, l), _, _) -> l in
         Debug.eprintf "dataflow" "Dataflow fact changed at block %s\n" (show_block b);
         P.set fact.prop u block_in;
-        changed := true
+        match (fst b) with
+        | GR.Entry -> () (* does not count as a change for fixed-point purposes *)
+        | GR.Label _ -> changed := true
       end in
   (* get blocks, initialize, and iterate to fixed point *)
   let blocks = List.rev (G.postorder_dfs graph) in
@@ -190,12 +192,14 @@ and general_backward fact comp graph =
     let old_block_in = P.get fact.prop u in
     if fact.changed ~old:old_block_in ~new':block_in then
       begin
-        let show_block b = match GR.first (GR.unzip b) with
+        let show_block b = match fst b with
         | GR.Entry -> "<entry>"
         | GR.Label ((_, l), _, _) -> l in
         Debug.eprintf "dataflow" "Dataflow fact changed at block %s\n" (show_block b);
         P.set fact.prop u block_in;
-        changed := true
+        match (fst b) with
+        | GR.Entry -> () (* does not count as a change for fixed-point purposes *)
+        | GR.Label _ -> changed := true
       end in
   let blocks = List.rev (G.postorder_dfs graph) in
   let init () = List.iter (fun b -> P.set fact.prop (GR.id b) fact.init_info) blocks in
