@@ -162,6 +162,15 @@ function Testgen.emit(t)
   w('  bits%d[] {\n', metrics.pointersize)
   Testgen.section = 'pending'
 
+  local block_stride = 200
+
+  if cap.block_copy then
+    local stride = block_stride
+    w('    %s, cmmtest_copy%d, ctest_copy%d, cprint_copy%d, %d,\n',
+      Testgen.emitstring(format("copy%d", stride)), stride, stride, stride, stride)
+    Testgen.emitdata('  import ctest_copy%d, cprint_copy%d;\n', stride, stride)
+  end
+
   local defined = { }
   local i = 1
   local ops = cap.operators
@@ -180,6 +189,18 @@ function Testgen.emit(t)
 
   Testgen.drain_pending('data')
   w('}\n')
+
+  if cap.block_copy then
+    local stride = block_stride
+    local opname = 'copy' .. stride
+    local ptr = metrics.pointersize
+    w('foreign "C" cmmtest_%s("address" bits%d pr, "address" bits%d px, ' ..
+      '"address" bits%d py, "address" bits%d pz) {\n',
+      opname, ptr, ptr, ptr, ptr)
+    w('  bits%d[pr] = bits%d[px];\n', stride, stride)
+    w('  foreign "C" return (%d);\n', Testgen.cellcount(t, stride))
+    w('}\n\n')
+  end
 
   i = 1
   while ops[i] do
