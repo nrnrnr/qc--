@@ -97,7 +97,10 @@ source code. The endianness is part of the [[target]] declaration.
 <<>>=
 type endianness = Big | Little
 
-@ An [[env]] holds a source map that was obtained during the parsing
+
+@
+
+An [[env]] holds a source map that was obtained during the parsing
 of a source code. It must be provided when the [[env]] is created such
 that is available to all code that report error in the static semantics.
 
@@ -152,8 +155,8 @@ return [[None]].
 <<>>=
 val bindMemsize     : int        -> env -> env
 val bindEndianness  : endianness -> env -> env 
-val findMemsize     : env -> int option
-val findEndianness  : env -> endianness option   
+val findMemsize     : env -> int option Error.error
+val findEndianness  : env -> endianness option Error.error  
 @
 
 The function [[errorfree]] checks whether a fat environment [[env]]
@@ -187,21 +190,21 @@ module StrMap       = Map.Make(Comparable)
 
 type tenv           = (attr * tentry) StrMap.t
 type venv           = (attr * ventry) StrMap.t
-type arch           = { memsize:      int option
-                      ; endianness:   endianness option
+type target         = { memsize:      int option E.error
+                      ; endianness:   endianness option E.error
                       }
 <<>>=
 type env            = { tenv   :      tenv
                       ; venv   :      venv
-                      ; arch   :      arch
+                      ; target :      target
                       ; srcmap :      Srcmap.map
                       }    
 
-let create map      = { tenv = StrMap.empty
-                      ; venv = StrMap.empty
-                      ; arch = { memsize    = None
-                               ; endianness = None
-                               }
+let create map      = { tenv   = StrMap.empty
+                      ; venv   = StrMap.empty
+                      ; target = { memsize    = E.Ok(None)
+                                 ; endianness = E.Ok(None)
+                                 }
                       ; srcmap = map
                       }
 @
@@ -309,43 +312,71 @@ an program is intended for. The information can be distributed over
 the program and can declare the same fact several times.  However, the
 informations about the target architecture must be consistent. 
 
-The implementation maintains a record of type [[arch]] for the target
+The implementation maintains a record of type [[target]] for the target
 informations where each information is captured by an [[option]] type. 
 Once an information has been supplied the [[bind]] functions enforce
-that only the same fact can be entered again.  They raise an
-[[E.Error]] in case this is attempted because this would violate the
-consistency constraint.
- 
+that only the same fact can be entered again.  When an inconsistent
+update is attemped the target information is bound to [[Error]] and an
+error message is issued.
+
+The [[update]] function computes the value inside the target record
+based on an existing value and a new one. In case the target record
+was unset the new value is returned. Otherwise the new value must
+match the existing one, or an inconsistency was found. In the latter
+case [[Error]] is returned.
+
+<<>>=
+let update r env name old new' =
+    let seq f x = E.sequence x f in
+        seq old
+        ( function
+        | Some x as old when x = new' -> E.Ok(old) (* consistent   *)
+        | Some x               -> 
+            ( error r env ("inconsistent target specification for "^name)
+            ; E.Error                              (* inconsitent *)
+            )
+        | None                        -> E.Ok(Some new') (* set *)
+        ) 
+    
+
 <<>>=
 let bindMemsize n env =
-    match env.arch.memsize with
-    | Some n' when n' <> n -> E.error "Inconsistent memsize specification"
-    | Some n' -> env
-    | None -> { env with arch = { env.arch with memsize = Some n} }
-@
+    let r        = Srcmap.null (* for the moment *)            in
+    let memsize' = update r env "memsize" env.target.memsize n in
+    let target'  = { env.target with memsize = memsize' }      in
+        { env with  target = target' }
 
 <<>>=
 let bindEndianness e env =
-    match env.arch.endianness with
-    | Some e' when e' <> e -> E.error "Inconsistent endianness specification"
-    | Some e' -> env
-    | None -> { env with arch = { env.arch with endianness = Some e} }
-@
+    let r        = Srcmap.null (* for the moment *)                  in 
+    let e'       = update r env "endianness" env.target.endianness e in
+    let target'  = { env.target with endianness = e' }               in
+        { env with target = target' }
+        
 
 <<>>=
-let findMemsize    env = env.arch.memsize
-let findEndianness env = env.arch.endianness
+let findMemsize    env = env.target.memsize
+let findEndianness env = env.target.endianness
 @   
     
 % ------------------------------------------------------------------ 
 \subsubsection{Test for \texttt{Error}-bindings}
 % ------------------------------------------------------------------ 
 
+This function looks for [[Error]] bindings in the fat environment. It
+returns [[Error]] in case an [[Error]] binding is found, and [[Ok()]]
+otherwise. 
+
 <<>>=
 let errorfree env =
     let combine key (attr,x) y = E.Implode.pair (x,y)    in
     let free map = StrMap.fold combine map (E.Ok())      in
-        E.Implode.pair (free env.tenv, free env.venv)
+        E.Implode.list 
+        [ free env.tenv
+        ; free env.venv
+        ; E.Implode.singleton env.target.memsize
+        ; E.Implode.singleton env.target.endianness
+        ]
 @
 
 % ------------------------------------------------------------------ 
@@ -359,6 +390,7 @@ checks need it.
 <<>>=
 let setDefaults env =
     match findMemsize env with
-    | Some x -> env
-    | None   -> bindMemsize 8 env
+    | E.Ok(Some x) -> env
+    | E.Ok(None)   -> bindMemsize 8 env
+    | E.Error      -> env
 @

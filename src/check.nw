@@ -1231,15 +1231,14 @@ call-context case are an error.
 
 <<>>=
 let lvalue context env lv =
-    let memsize = match F.findMemsize env with
-        | Some n -> n
-        | None   -> assert false (* user defined or default *) in
+    let msg = 
+        "type must be a mutiple of target memsize (typically bits8,16,24..)"in
     let align = function
         | Some a when not (is2power a)  -> E.error "alignment not a power of 2"
         | Some _ (* properly aligned *) -> E.Ok()
         | None                          -> E.Ok()              in
-    let multiMemsize = function
-        | Types.Bits(m) -> (m mod memsize) = 0
+    let multiMemsize m = function
+        | Types.Bits(n) -> (n mod m) = 0
         | _             -> assert false
     in 
     let rec f = function 
@@ -1252,12 +1251,13 @@ let lvalue context env lv =
         | _, _              -> E.error ("not a register: "^name)
         )
     | A.Mem(t, e, a) when context <> Assign  -> E.error ("not a register") 
-    | A.Mem(t, e, a) -> E.matchTriple (tyExpr env e, evalTy env t, align a) 
+    | A.Mem(t, e, a) -> E.matchQuad 
+        (tyExpr env e, evalTy env t, align a, F.findMemsize env) 
         ( function  
-        | te, t, () when not (multiMemsize t) ->
-            E.error "type must be a mutiple of target memsize (typically bits8,16,24..)"
-        | te, t, () when te = T.data          -> t         
-        | te, t, () -> E.error "expression is not a data pointer"
+        | te, t, (), Some m when not (multiMemsize m t) -> E.error msg
+        | te, t, (), None   -> E.error "target memsize unknown"
+        | te, t, (), m      when te = T.data -> t         
+        | te, t, (), m      -> E.error "expression is not a data pointer"
         )
     in
         f lv
