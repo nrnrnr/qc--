@@ -77,11 +77,11 @@ k_U10:
 k_C9:
 	jmp .Ljoin_l19
 .Ljoin_l19:
-	movl $1,%edi
-	leal 16(%esp), %esi
-	movl $-16,%ebp
-	addl %ebp,%esi
-	movl %edi,(%esi)
+	movl $1,%eax
+	leal 16(%esp), %ecx
+	movl $-16,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call exit
 .Lpostcall_l15:
 .section .pcmap_data
@@ -185,11 +185,11 @@ k_U34:
 	call printf
 .Ljoin_l40:
 	movl $0,%eax
-	leal 8(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl 4(%esp),%ecx
-	movl %ecx,(%edx)
+	leal 8(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 4(%esp),%edx
+	movl %edx,(%ecx)
 	leal 8(%esp), %esp
 	ret
 .section .pcmap_data

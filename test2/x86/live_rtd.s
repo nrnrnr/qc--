@@ -17,11 +17,11 @@ main:
 	movl (%eax),%eax
 .Linitialize_continuations_l4:
 .Lproc_body_start_l3:
-	movl $0,%edi
-	leal 8(%esp), %esi
-	movl $-8,%ebp
-	addl %ebp,%esi
-	movl %edi,(%esi)
+	movl $0,%ecx
+	leal 8(%esp), %edx
+	movl $-8,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	movl %eax,4(%esp)
 	call exit
 .Lpostcall_l7:

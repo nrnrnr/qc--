@@ -12,59 +12,57 @@ Cmm_stack_growth:
 .long 0xffffffff
 .section .text
 main:
-	leal -24(%esp), %esp
-	leal 24(%esp), %eax
+	leal -20(%esp), %esp
+	leal 20(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
-	leal 24(%esp), %eax
+	leal 20(%esp), %eax
 	movl $8,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
-	leal 24(%esp), %eax
+	leal 20(%esp), %eax
 	movl $12,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
-	leal 24(%esp), %eax
+	leal 20(%esp), %eax
 	movl (%eax),%eax
 .Linitialize_continuations_l4:
 .Lproc_body_start_l3:
 	movl $1084227584,%ecx
-	leal 24(%esp), %edx
-	movl %edi,16(%esp)
-	movl $-24,%edi
-	addl %edi,%edx
+	leal 20(%esp), %edx
+	movl %eax,16(%esp)
+	movl $-20,%eax
+	addl %eax,%edx
 	movl %ecx,(%edx)
-	movl %eax,20(%esp)
 	call doubleme
 .Ljoin_l11:
-	leal 24(%esp), %edi
-	movl $-12,%eax
-	addl %eax,%edi
-	fstps (%edi)
-	leal str,%edi
-	leal 24(%esp), %eax
-	movl $-24,%ecx
+	leal 20(%esp), %eax
+	movl $-8,%ecx
 	addl %ecx,%eax
-	movl %edi,(%eax)
-	leal 24(%esp), %edi
-	movl $-12,%eax
-	addl %eax,%edi
-	flds (%edi)
-	leal 24(%esp), %edi
-	movl $-20,%eax
-	addl %eax,%edi
-	fstpl (%edi)
+	fstps (%eax)
+	leal str,%eax
+	leal 20(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
+	leal 20(%esp), %eax
+	movl $-8,%ecx
+	addl %ecx,%eax
+	flds (%eax)
+	leal 20(%esp), %eax
+	movl $-16,%ecx
+	addl %ecx,%eax
+	fstpl (%eax)
 	call printf
 .Ljoin_l8:
 	movl $0,%eax
-	leal 24(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl 20(%esp),%ecx
-	movl %ecx,(%edx)
-	movl 16(%esp),%edi
-	leal 24(%esp), %esp
+	leal 20(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 16(%esp),%edx
+	movl %edx,(%ecx)
+	leal 20(%esp), %esp
 	ret
 .section .pcmap_data
 .Lstackdata_l18:
@@ -75,20 +73,18 @@ main:
 .section .pcmap_data
 .Lframe_l19:
 .long 0x80000004
-.long 0xffffffe8
+.long 0xffffffec
 .long 0xfffffffc
 .long .Lstackdata_l18
-.long 1
+.long 0
 .long 5
 .long 0
 .long 1
-.long 11
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xfffffff8
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0xfffffff4
 .long 0
 .section .pcmap
 .long .Ljoin_l8
@@ -96,20 +92,18 @@ main:
 .section .pcmap_data
 .Lframe_l20:
 .long 0x80000004
-.long 0xffffffe8
+.long 0xffffffec
 .long 0xfffffffc
 .long .Lstackdata_l18
-.long 1
+.long 0
 .long 5
 .long 0
 .long 1
-.long 11
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xfffffff8
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0xfffffff4
 .long 0
 .section .text
 .section .data

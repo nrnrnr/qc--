@@ -57,22 +57,22 @@ run_thread:
 	addl %eax,%edx
 	movl (%edx),%eax
 	movl (%ecx),%ecx
-	movl %edi,28(%esp)
-	movl %esi,24(%esp)
-	movl %ebp,20(%esp)
-	movl %ebx,16(%esp)
+	movl %edi,16(%esp)
+	movl %esi,20(%esp)
+	movl %ebp,24(%esp)
+	movl %ebx,28(%esp)
 	movl %eax, %esp; jmp *%ecx
 cutback_C11:
 	movl %edx,%eax
-	leal 40(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl 12(%esp),%ecx
-	movl %ecx,(%edx)
-	movl 16(%esp),%ebx
-	movl 20(%esp),%ebp
-	movl 24(%esp),%esi
-	movl 28(%esp),%edi
+	leal 40(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 12(%esp),%edx
+	movl %edx,(%ecx)
+	movl 28(%esp),%ebx
+	movl 24(%esp),%ebp
+	movl 20(%esp),%esi
+	movl 16(%esp),%edi
 	leal 40(%esp), %esp
 	ret
 .section .pcmap_data
@@ -92,13 +92,13 @@ cutback_C11:
 .long 0
 .long 1
 .long 7
-.long 0xffffffe8
-.long 9
-.long 0xffffffec
-.long 10
-.long 0xfffffff0
-.long 11
 .long 0xfffffff4
+.long 9
+.long 0xfffffff0
+.long 10
+.long 0xffffffec
+.long 11
+.long 0xffffffe8
 .long 0
 .long 0
 .long 0
@@ -110,27 +110,27 @@ cmm_threadfun:
 	movl (%ecx),%ecx
 .Linitialize_continuations_l26:
 .Lproc_body_start_l25:
-	movl (%eax),%edi
-	movl $4,%esi
-	addl %esi,%eax
-	movl (%eax),%esi
-	leal 8(%esp), %ebp
-	movl $-8,%ebx
-	addl %ebx,%ebp
-	movl %esi,(%ebp)
+	movl (%eax),%edx
+	movl $4,%ebx
+	addl %ebx,%eax
+	movl (%eax),%eax
+	leal 8(%esp), %ebx
+	movl $-8,%ebp
+	addl %ebp,%ebx
+	movl %eax,(%ebx)
 	movl %ecx,4(%esp)
-	call *%edi
+	call *%edx
 .Ljoin_l29:
 	movl %eax,%edx
-	leal comeback,%edi
-	movl (%edi),%edi
-	movl $4,%esi
-	addl %esi,%edi
-	movl (%edi),%edi
-	leal comeback,%esi
-	movl (%esi),%esi
-	movl (%esi),%esi
-	movl %edi, %esp; jmp *%esi
+	leal comeback,%eax
+	movl (%eax),%eax
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl (%eax),%eax
+	leal comeback,%ecx
+	movl (%ecx),%ecx
+	movl (%ecx),%ecx
+	movl %eax, %esp; jmp *%ecx
 .section .pcmap_data
 .Lstackdata_l36:
 .long 0
@@ -164,12 +164,12 @@ cmm_threadfun:
 .long threadlabel
 .section .text
 fact:
-	leal -20(%esp), %esp
-	leal 20(%esp), %ecx
-	movl $4,%edx
-	addl %edx,%ecx
-	movl (%ecx),%eax
-	leal 20(%esp), %ecx
+	leal -16(%esp), %esp
+	leal 16(%esp), %eax
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl (%eax),%eax
+	leal 16(%esp), %ecx
 	movl (%ecx),%ecx
 .Linitialize_continuations_l40:
 .Lproc_body_start_l39:
@@ -178,74 +178,69 @@ fact:
 	je .Ljoin_l49
 .Ljoin_l50:
 	movl $1,%edx
-	movl %edi,4(%esp)
-	movl %eax,%edi
-	subl %edx,%edi
-	leal 20(%esp), %edx
-	movl %edi,8(%esp)
-	movl $-20,%edi
-	addl %edi,%edx
-	movl 8(%esp),%edi
-	movl %edi,(%edx)
-	movl %ecx,16(%esp)
-	movl %eax,12(%esp)
+	movl %eax,4(%esp)
+	subl %edx,%eax
+	leal 16(%esp), %edx
+	movl %eax,8(%esp)
+	movl $-16,%eax
+	addl %eax,%edx
+	movl 8(%esp),%eax
+	movl %eax,(%edx)
+	movl %ecx,12(%esp)
 	call fact
 .Ljoin_l44:
+	movl 4(%esp),%ecx
+	imull %eax,%ecx
+	movl %ecx,%eax
+	leal 16(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
 	movl 12(%esp),%edx
-	imull %eax,%edx
-	movl %edx,%eax
-	leal 20(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl 16(%esp),%ecx
-	movl %ecx,(%edx)
-	movl 4(%esp),%edi
-	leal 20(%esp), %esp
+	movl %edx,(%ecx)
+	leal 16(%esp), %esp
 	ret
 .Ljoin_l49:
-	movl %ecx,16(%esp)
+	movl %ecx,12(%esp)
 	call cmm_stacktrace
 .Ljoin_l48:
 	movl $1,%eax
-	leal 20(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl 16(%esp),%ecx
-	movl %ecx,(%edx)
-	leal 20(%esp), %esp
+	leal 16(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 12(%esp),%edx
+	movl %edx,(%ecx)
+	leal 16(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l56:
+.Lstackdata_l57:
 .long 0
 .section .pcmap
 .long .Ljoin_l44
-.long .Lframe_l57
+.long .Lframe_l58
 .section .pcmap_data
-.Lframe_l57:
+.Lframe_l58:
 .long 0x80000004
-.long 0xffffffec
-.long 0xfffffffc
-.long .Lstackdata_l56
-.long 1
-.long 2
-.long 2
-.long 1
-.long 11
 .long 0xfffffff0
-.long 0xfffffff8
+.long 0xfffffffc
+.long .Lstackdata_l57
+.long 0
+.long 2
+.long 2
+.long 1
+.long 0xfffffff4
 .long 0
 .long 0
 .long 0
 .long fact_lbl
 .section .pcmap
 .long .Ljoin_l48
-.long .Lframe_l58
+.long .Lframe_l59
 .section .pcmap_data
-.Lframe_l58:
+.Lframe_l59:
 .long 0x80000004
-.long 0xffffffec
+.long 0xfffffff0
 .long 0xfffffffc
-.long .Lstackdata_l56
+.long .Lstackdata_l57
 .long 0
 .long 2
 .long 2
@@ -260,8 +255,8 @@ cmm_stacktrace:
 	leal -32(%esp), %esp
 	leal 32(%esp), %eax
 	movl (%eax),%eax
-.Linitialize_continuations_l66:
-	leal k_C63,%ecx
+.Linitialize_continuations_l67:
+	leal k_C64,%ecx
 	leal 32(%esp), %edx
 	movl %eax,4(%esp)
 	movl $-8,%eax
@@ -274,7 +269,7 @@ cmm_stacktrace:
 	movl $-4,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-.Lproc_body_start_l65:
+.Lproc_body_start_l66:
 	leal 32(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax
@@ -282,83 +277,83 @@ cmm_stacktrace:
 	movl $-32,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	movl %edi,20(%esp)
-	movl %esi,16(%esp)
-	movl %ebp,12(%esp)
-	movl %ebx,8(%esp)
+	movl %edi,8(%esp)
+	movl %esi,12(%esp)
+	movl %ebp,16(%esp)
+	movl %ebx,20(%esp)
 	call stacktrace
-.Ljoin_l71:
-	leal 32(%esp), %edx
+.Ljoin_l72:
+	leal 32(%esp), %eax
 	movl $0,%ecx
-	addl %ecx,%edx
+	addl %ecx,%eax
 	movl 4(%esp),%ecx
-	movl %ecx,(%edx)
-	movl 8(%esp),%ebx
-	movl 12(%esp),%ebp
-	movl 16(%esp),%esi
-	movl 20(%esp),%edi
+	movl %ecx,(%eax)
+	movl 20(%esp),%ebx
+	movl 16(%esp),%ebp
+	movl 12(%esp),%esi
+	movl 8(%esp),%edi
 	leal 32(%esp), %esp
 	ret
-k_C63:
-	leal 32(%esp), %edx
+k_C64:
+	leal 32(%esp), %eax
 	movl $0,%ecx
-	addl %ecx,%edx
+	addl %ecx,%eax
 	movl 4(%esp),%ecx
-	movl %ecx,(%edx)
-	movl 8(%esp),%ebx
-	movl 12(%esp),%ebp
-	movl 16(%esp),%esi
-	movl 20(%esp),%edi
+	movl %ecx,(%eax)
+	movl 20(%esp),%ebx
+	movl 16(%esp),%ebp
+	movl 12(%esp),%esi
+	movl 8(%esp),%edi
 	leal 32(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l77:
+.Lstackdata_l78:
 .long 0
 .section .pcmap
-.long .Ljoin_l71
-.long .Lframe_l78
-.section .pcmap_data
-.Lframe_l78:
-.long 0x80000004
-.long 0xffffffe0
-.long 0xffffffe4
-.long .Lstackdata_l77
-.long 4
-.long 0
-.long 2
-.long 1
-.long 7
-.long 0xffffffe8
-.long 9
-.long 0xffffffec
-.long 10
-.long 0xfffffff0
-.long 11
-.long 0xfffffff4
-.long 0
-.long 0
-.long stacktrace_lbl
-.section .pcmap
-.long k_C63
+.long .Ljoin_l72
 .long .Lframe_l79
 .section .pcmap_data
 .Lframe_l79:
 .long 0x80000004
 .long 0xffffffe0
 .long 0xffffffe4
-.long .Lstackdata_l77
+.long .Lstackdata_l78
 .long 4
 .long 0
 .long 2
 .long 1
 .long 7
-.long 0xffffffe8
-.long 9
-.long 0xffffffec
-.long 10
-.long 0xfffffff0
-.long 11
 .long 0xfffffff4
+.long 9
+.long 0xfffffff0
+.long 10
+.long 0xffffffec
+.long 11
+.long 0xffffffe8
+.long 0
+.long 0
+.long stacktrace_lbl
+.section .pcmap
+.long k_C64
+.long .Lframe_l80
+.section .pcmap_data
+.Lframe_l80:
+.long 0x80000004
+.long 0xffffffe0
+.long 0xffffffe4
+.long .Lstackdata_l78
+.long 4
+.long 0
+.long 2
+.long 1
+.long 7
+.long 0xfffffff4
+.long 9
+.long 0xfffffff0
+.long 10
+.long 0xffffffec
+.long 11
+.long 0xffffffe8
 .long 0
 .long 0
 .long stacktrace_lbl

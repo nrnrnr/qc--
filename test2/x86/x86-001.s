@@ -15,203 +15,208 @@ playground:
 .skip 48, 0
 .section .text
 p:
-	leal -80(%esp), %esp
-	leal 80(%esp), %edx
-	movl (%edx),%edx
+	leal -76(%esp), %esp
+	leal 76(%esp), %eax
+	movl (%eax),%eax
 .Linitialize_continuations_l5:
 .Lproc_body_start_l4:
 	movl $1,%ecx
-	movl $2,%eax
-	movl $3,%ecx
-	movl %edx,(%esp)
-	movl %eax,%edx
-	leal playground,%edx
-	addl %eax,%edx
-	movl (%edx),%edx
-	movl %edx,4(%esp)
-	leal playground,%edx
+	movl $2,%ecx
+	movl $3,%edx
+	movl %eax,(%esp)
+	movl %ecx,%eax
+	leal playground,%eax
+	addl %ecx,%eax
+	movl (%eax),%eax
+	movl %eax,4(%esp)
+	leal playground,%eax
 	movl %ecx,8(%esp)
 	movl 4(%esp),%ecx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	leal playground,%edx
-	addl %eax,%edx
-	movl %edx,12(%esp)
-	leal playground,%edx
-	addl %ecx,%edx
+	addl %ecx,%eax
+	movl 8(%esp),%ecx
+	movl %ecx,(%eax)
+	leal playground,%eax
+	addl %ecx,%eax
+	movl %eax,12(%esp)
+	leal playground,%eax
+	movl 4(%esp),%ecx
+	addl %ecx,%eax
 	movl 12(%esp),%ecx
 	movl (%ecx),%ecx
-	movl %ecx,(%edx)
-	leal playground,%edx
-	addl %eax,%edx
-	movsbl (%edx),%edx
-	leal playground,%edx
-	addl %eax,%edx
-	movswl (%edx),%edx
-	leal playground,%edx
-	addl %eax,%edx
-	movzbl (%edx),%edx
-	leal playground,%edx
-	addl %eax,%edx
-	movzwl (%edx),%edx
-	leal playground,%ecx
-	addl %edx,%ecx
-	movl %eax,16(%esp)
-	movw %ax,(%ecx)
-	leal playground,%ecx
-	addl %edx,%ecx
-	movl 16(%esp),%eax
-	movb %al,(%ecx)
-	movl 16(%esp),%edx
-	movl %edx,%ecx
-	movl 8(%esp),%eax
-	addl %eax,%ecx
-	movl %edx,%ecx
-	subl %eax,%ecx
-	movl %edx,%ecx
-	andl %eax,%ecx
-	movl %edx,%ecx
-	orl %eax,%ecx
-	movl %edx,%ecx
-	xorl %eax,%ecx
-	leal playground,%ecx
-	addl %edx,%ecx
-	movl (%ecx),%ecx
-	addl %eax,%ecx
-	leal playground,%ecx
-	addl %edx,%ecx
-	movl (%ecx),%ecx
-	subl %eax,%ecx
-	leal playground,%ecx
-	addl %edx,%ecx
-	movl (%ecx),%ecx
-	andl %eax,%ecx
-	leal playground,%ecx
-	addl %edx,%ecx
-	movl (%ecx),%ecx
-	orl %eax,%ecx
-	leal playground,%ecx
-	addl %edx,%ecx
-	movl (%ecx),%ecx
-	xorl %eax,%ecx
-	leal playground,%ecx
-	addl %eax,%ecx
-	movl (%ecx),%ecx
-	movl %ecx,20(%esp)
-	movl %edx,%ecx
-	movl 20(%esp),%edx
-	addl %edx,%ecx
-	leal playground,%edx
-	addl %eax,%edx
-	movl (%edx),%edx
-	movl %edx,24(%esp)
-	movl 16(%esp),%ecx
-	movl %ecx,%edx
-	movl 24(%esp),%ecx
-	subl %ecx,%edx
-	leal playground,%edx
-	addl %eax,%edx
-	movl (%edx),%edx
-	movl %edx,28(%esp)
-	movl 16(%esp),%ecx
-	movl %ecx,%edx
-	movl 28(%esp),%ecx
-	andl %ecx,%edx
-	leal playground,%edx
-	addl %eax,%edx
-	movl (%edx),%edx
-	movl %edx,32(%esp)
-	movl 16(%esp),%ecx
-	movl %ecx,%edx
-	movl 32(%esp),%ecx
-	orl %ecx,%edx
-	leal playground,%edx
-	addl %eax,%edx
-	movl (%edx),%edx
-	movl %edx,36(%esp)
-	movl 16(%esp),%ecx
-	movl %ecx,%edx
-	movl 36(%esp),%ecx
-	xorl %ecx,%edx
-	leal playground,%ecx
-	addl %eax,%ecx
-	movl (%ecx),%ecx
-	movl %edx,4(%esp)
-	movl %ecx,40(%esp)
-	movl 16(%esp),%edx
-	movl %edx,%ecx
-	movl 40(%esp),%edx
-	addl %edx,%ecx
-	leal playground,%edx
-	movl %ecx,44(%esp)
+	movl %ecx,(%eax)
+	leal playground,%eax
+	movl 8(%esp),%ecx
+	addl %ecx,%eax
+	movsbl (%eax),%eax
+	leal playground,%eax
+	addl %ecx,%eax
+	movswl (%eax),%eax
+	leal playground,%eax
+	addl %ecx,%eax
+	movzbl (%eax),%eax
+	leal playground,%eax
+	addl %ecx,%eax
+	movzwl (%eax),%eax
+	movl %eax,4(%esp)
+	leal playground,%eax
 	movl 4(%esp),%ecx
-	addl %ecx,%edx
+	addl %ecx,%eax
+	movl %eax,16(%esp)
+	movl 8(%esp),%ecx
+	movl %ecx,%eax
+	movl 16(%esp),%ecx
+	movw %ax,(%ecx)
+	leal playground,%eax
+	movl 4(%esp),%ecx
+	addl %ecx,%eax
+	movl %eax,20(%esp)
+	movl 8(%esp),%ecx
+	movl %ecx,%eax
+	movl 20(%esp),%ecx
+	movb %al,(%ecx)
+	movl 8(%esp),%eax
+	movl %eax,%ecx
+	addl %edx,%ecx
+	movl %eax,%ecx
+	subl %edx,%ecx
+	movl %eax,%ecx
+	andl %edx,%ecx
+	movl %eax,%ecx
+	orl %edx,%ecx
+	movl %eax,%ecx
+	xorl %edx,%ecx
+	leal playground,%ecx
+	addl %eax,%ecx
+	movl (%ecx),%ecx
+	addl %edx,%ecx
+	leal playground,%ecx
+	addl %eax,%ecx
+	movl (%ecx),%ecx
+	subl %edx,%ecx
+	leal playground,%ecx
+	addl %eax,%ecx
+	movl (%ecx),%ecx
+	andl %edx,%ecx
+	leal playground,%ecx
+	addl %eax,%ecx
+	movl (%ecx),%ecx
+	orl %edx,%ecx
+	leal playground,%ecx
+	addl %eax,%ecx
+	movl (%ecx),%ecx
+	xorl %edx,%ecx
+	leal playground,%ecx
+	addl %edx,%ecx
+	movl (%ecx),%ecx
+	addl %ecx,%eax
+	leal playground,%eax
+	addl %edx,%eax
+	movl (%eax),%eax
+	movl %eax,24(%esp)
+	movl 8(%esp),%ecx
+	movl %ecx,%eax
+	movl 24(%esp),%ecx
+	subl %ecx,%eax
+	leal playground,%eax
+	addl %edx,%eax
+	movl (%eax),%eax
+	movl %eax,28(%esp)
+	movl 8(%esp),%ecx
+	movl %ecx,%eax
+	movl 28(%esp),%ecx
+	andl %ecx,%eax
+	leal playground,%eax
+	addl %edx,%eax
+	movl (%eax),%eax
+	movl %eax,32(%esp)
+	movl 8(%esp),%ecx
+	movl %ecx,%eax
+	movl 32(%esp),%ecx
+	orl %ecx,%eax
+	leal playground,%eax
+	addl %edx,%eax
+	movl (%eax),%eax
+	movl %eax,36(%esp)
+	movl 8(%esp),%ecx
+	movl %ecx,%eax
+	movl 36(%esp),%ecx
+	xorl %ecx,%eax
+	leal playground,%ecx
+	addl %edx,%ecx
+	movl (%ecx),%ecx
+	movl %eax,4(%esp)
+	movl 8(%esp),%eax
+	addl %ecx,%eax
+	leal playground,%ecx
+	movl %eax,40(%esp)
+	movl 4(%esp),%eax
+	addl %eax,%ecx
+	movl 40(%esp),%eax
+	movl %eax,(%ecx)
+	leal playground,%eax
+	addl %edx,%eax
+	movl (%eax),%eax
+	movl %eax,44(%esp)
+	movl 8(%esp),%ecx
+	movl %ecx,%eax
 	movl 44(%esp),%ecx
-	movl %ecx,(%edx)
-	leal playground,%edx
-	addl %eax,%edx
-	movl (%edx),%edx
-	movl %edx,48(%esp)
-	movl 16(%esp),%ecx
-	movl %ecx,%edx
-	movl 48(%esp),%ecx
-	subl %ecx,%edx
+	subl %ecx,%eax
 	leal playground,%ecx
-	movl %edx,52(%esp)
-	movl 4(%esp),%edx
-	addl %edx,%ecx
-	movl 52(%esp),%edx
-	movl %edx,(%ecx)
-	leal playground,%edx
-	addl %eax,%edx
-	movl (%edx),%edx
-	movl %edx,56(%esp)
-	movl 16(%esp),%ecx
-	movl %ecx,%edx
-	movl 56(%esp),%ecx
-	andl %ecx,%edx
+	movl %eax,48(%esp)
+	movl 4(%esp),%eax
+	addl %eax,%ecx
+	movl 48(%esp),%eax
+	movl %eax,(%ecx)
+	leal playground,%eax
+	addl %edx,%eax
+	movl (%eax),%eax
+	movl %eax,52(%esp)
+	movl 8(%esp),%ecx
+	movl %ecx,%eax
+	movl 52(%esp),%ecx
+	andl %ecx,%eax
 	leal playground,%ecx
-	movl %edx,60(%esp)
-	movl 4(%esp),%edx
-	addl %edx,%ecx
-	movl 60(%esp),%edx
-	movl %edx,(%ecx)
-	leal playground,%edx
-	addl %eax,%edx
-	movl (%edx),%edx
-	movl %edx,64(%esp)
-	movl 16(%esp),%ecx
-	movl %ecx,%edx
-	movl 64(%esp),%ecx
-	orl %ecx,%edx
+	movl %eax,56(%esp)
+	movl 4(%esp),%eax
+	addl %eax,%ecx
+	movl 56(%esp),%eax
+	movl %eax,(%ecx)
+	leal playground,%eax
+	addl %edx,%eax
+	movl (%eax),%eax
+	movl %eax,60(%esp)
+	movl 8(%esp),%ecx
+	movl %ecx,%eax
+	movl 60(%esp),%ecx
+	orl %ecx,%eax
 	leal playground,%ecx
-	movl %edx,68(%esp)
-	movl 4(%esp),%edx
-	addl %edx,%ecx
-	movl 68(%esp),%edx
-	movl %edx,(%ecx)
-	leal playground,%edx
-	addl %eax,%edx
-	movl (%edx),%edx
-	movl %edx,72(%esp)
-	movl 16(%esp),%ecx
-	movl %ecx,%edx
-	movl 72(%esp),%ecx
-	xorl %ecx,%edx
+	movl %eax,64(%esp)
+	movl 4(%esp),%eax
+	addl %eax,%ecx
+	movl 64(%esp),%eax
+	movl %eax,(%ecx)
+	leal playground,%eax
+	addl %edx,%eax
+	movl (%eax),%eax
+	movl %eax,68(%esp)
+	movl 8(%esp),%ecx
+	movl %ecx,%eax
+	movl 68(%esp),%ecx
+	xorl %ecx,%eax
 	leal playground,%ecx
-	movl %edx,76(%esp)
-	movl 4(%esp),%edx
-	addl %edx,%ecx
-	movl 76(%esp),%edx
-	movl %edx,(%ecx)
-	movl 16(%esp),%edx
-	cmpl %eax,%edx
+	movl %eax,72(%esp)
+	movl 4(%esp),%eax
+	addl %eax,%ecx
+	movl 72(%esp),%eax
+	movl %eax,(%ecx)
+	movl 8(%esp),%eax
+	cmpl %edx,%eax
 	jb .Ljoin_l10
 .Ljoin_l11:
-	cmpl %eax,%edx
+	cmpl %edx,%eax
 	jbe .Ljoin_l8
 .Ljoin_l9:
-	cmpl %eax,%edx
+	cmpl %edx,%eax
 	jbe .Ljoin_l7
 .Ljoin_l18:
 	jmp L
@@ -223,12 +228,12 @@ p:
 	jmp L
 L:
 	movl $99,%eax
-	leal 80(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl (%esp),%ecx
-	movl %ecx,(%edx)
-	leal 80(%esp), %esp
+	leal 76(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl (%esp),%edx
+	movl %edx,(%ecx)
+	leal 76(%esp), %esp
 	ret
 .section .text
 .section .text
@@ -251,23 +256,23 @@ main:
 .Ljoin_l29:
 	leal fmt,%ecx
 	leal 16(%esp), %edx
-	movl %edi,12(%esp)
-	movl $-16,%edi
-	addl %edi,%edx
+	movl %eax,12(%esp)
+	movl $-16,%eax
+	addl %eax,%edx
 	movl %ecx,(%edx)
-	leal 16(%esp), %edi
+	leal 16(%esp), %eax
 	movl $-12,%ecx
-	addl %ecx,%edi
-	movl %eax,(%edi)
+	addl %ecx,%eax
+	movl 12(%esp),%ecx
+	movl %ecx,(%eax)
 	call printf
 .Ljoin_l26:
 	movl $0,%eax
-	leal 16(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl 8(%esp),%ecx
-	movl %ecx,(%edx)
-	movl 12(%esp),%edi
+	leal 16(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 8(%esp),%edx
+	movl %edx,(%ecx)
 	leal 16(%esp), %esp
 	ret
 .section .pcmap_data
@@ -299,12 +304,10 @@ main:
 .long 0xfffffff0
 .long 0xfffffff8
 .long .Lstackdata_l35
-.long 1
+.long 0
 .long 3
 .long 0
 .long 1
-.long 11
-.long 0xfffffffc
 .long 0
 .long 0
 .long 0

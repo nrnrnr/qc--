@@ -13,22 +13,23 @@ Cmm_stack_growth:
 .section .text
 main:
 	leal -4(%esp), %esp
-	leal 4(%esp), %edx
+	leal 4(%esp), %eax
 	movl $4,%ecx
-	addl %ecx,%edx
-	movl (%edx),%edx
-	leal 4(%esp), %edx
+	addl %ecx,%eax
+	movl (%eax),%eax
+	leal 4(%esp), %eax
 	movl $8,%ecx
-	addl %ecx,%edx
-	movl (%edx),%edx
-	leal 4(%esp), %edx
-	movl (%edx),%edx
+	addl %ecx,%eax
+	movl (%eax),%eax
+	leal 4(%esp), %eax
+	movl (%eax),%eax
 .Linitialize_continuations_l4:
 .Lproc_body_start_l3:
 .Ljoin_l8:
-	movl $0,%eax
+	movl $0,%ecx
+	movl %eax,(%esp)
+	movl %ecx,%eax
 	leal 4(%esp), %ecx
-	movl %edx,(%esp)
 	movl $0,%edx
 	addl %edx,%ecx
 	movl (%esp),%edx

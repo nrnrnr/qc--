@@ -13,80 +13,80 @@ Cmm_stack_growth:
 .section .text
 g:
 	leal -32(%esp), %esp
-	leal 32(%esp), %edx
+	leal 32(%esp), %eax
 	movl $4,%ecx
-	addl %ecx,%edx
-	movl (%edx),%eax
-	leal 32(%esp), %edx
-	movl $8,%ecx
-	addl %ecx,%edx
-	movl (%edx),%edx
+	addl %ecx,%eax
+	movl (%eax),%eax
 	leal 32(%esp), %ecx
+	movl $8,%edx
+	addl %edx,%ecx
 	movl (%ecx),%ecx
+	leal 32(%esp), %edx
+	movl (%edx),%edx
 .Linitialize_continuations_l6:
 .Lproc_body_start_l5:
-	movl %edx,(%esp)
-	leal 32(%esp), %edx
-	movl %edx,4(%esp)
-	movl $-4,%edx
-	movl %edx,8(%esp)
-	movl 4(%esp),%edx
-	movl %ecx,12(%esp)
-	movl 8(%esp),%ecx
-	addl %ecx,%edx
-	movl (%esp),%ecx
-	movl %ecx,(%edx)
-	movl $10,%edx
+	movl %ecx,(%esp)
+	leal 32(%esp), %ecx
+	movl %ecx,4(%esp)
+	movl $-4,%ecx
+	movl %ecx,8(%esp)
+	movl 4(%esp),%ecx
+	movl %edx,12(%esp)
+	movl 8(%esp),%edx
 	addl %edx,%ecx
-	leal 32(%esp), %edx
-	movl %edx,16(%esp)
-	movl $0,%edx
-	movl %edx,20(%esp)
-	movl 16(%esp),%edx
-	movl %ecx,24(%esp)
-	movl 20(%esp),%ecx
+	movl (%esp),%edx
+	movl %edx,(%ecx)
+	movl $10,%ecx
 	addl %ecx,%edx
-	movl 24(%esp),%ecx
-	movl %ecx,(%edx)
-	leal 32(%esp), %edx
-	movl $-8,%ecx
-	addl %ecx,%edx
-	movl 12(%esp),%ecx
-	movl %ecx,(%edx)
+	leal 32(%esp), %ecx
+	movl %ecx,16(%esp)
+	movl $0,%ecx
+	movl %ecx,20(%esp)
+	movl 16(%esp),%ecx
+	movl %edx,24(%esp)
+	movl 20(%esp),%edx
+	addl %edx,%ecx
+	movl 24(%esp),%edx
+	movl %edx,(%ecx)
+	leal 32(%esp), %ecx
+	movl $-8,%edx
+	addl %edx,%ecx
+	movl 12(%esp),%edx
+	movl %edx,(%ecx)
 	leal 24(%esp), %esp
 	jmp gt
 .section .text
 .section .text
 gt:
 	leal -20(%esp), %esp
-	leal 20(%esp), %edx
-	movl $4,%ecx
-	addl %ecx,%edx
-	movl (%edx),%edx
 	leal 20(%esp), %ecx
-	movl %edx,(%esp)
-	movl $8,%edx
+	movl $4,%edx
 	addl %edx,%ecx
-	movl (%ecx),%edx
-	leal 20(%esp), %ecx
 	movl (%ecx),%ecx
+	leal 20(%esp), %edx
+	movl %eax,(%esp)
+	movl $8,%eax
+	addl %eax,%edx
+	movl (%edx),%eax
+	leal 20(%esp), %edx
+	movl (%edx),%edx
 .Linitialize_continuations_l17:
 .Lproc_body_start_l16:
-	movl %edx,4(%esp)
-	movl (%esp),%edx
-	addl %edx,%eax
-	movl 4(%esp),%edx
-	addl %edx,%eax
-	leal 20(%esp), %edx
-	movl %edx,8(%esp)
-	movl $8,%edx
-	movl %edx,12(%esp)
-	movl 8(%esp),%edx
-	movl %ecx,16(%esp)
-	movl 12(%esp),%ecx
-	addl %ecx,%edx
-	movl 16(%esp),%ecx
-	movl %ecx,(%edx)
+	movl %eax,4(%esp)
+	movl (%esp),%eax
+	addl %ecx,%eax
+	movl 4(%esp),%ecx
+	addl %ecx,%eax
+	leal 20(%esp), %ecx
+	movl %ecx,8(%esp)
+	movl $8,%ecx
+	movl %ecx,12(%esp)
+	movl 8(%esp),%ecx
+	movl %edx,16(%esp)
+	movl 12(%esp),%edx
+	addl %edx,%ecx
+	movl 16(%esp),%edx
+	movl %edx,(%ecx)
 	leal 28(%esp), %esp
 	ret
 .section .text
@@ -107,36 +107,36 @@ main:
 .Lproc_body_start_l27:
 	movl $10,%ecx
 	leal 16(%esp), %edx
-	movl %edi,8(%esp)
-	movl $-16,%edi
-	addl %edi,%edx
+	movl %eax,8(%esp)
+	movl $-16,%eax
+	addl %eax,%edx
 	movl %ecx,(%edx)
-	movl $20,%edi
+	movl $20,%eax
 	leal 16(%esp), %ecx
 	movl $-12,%edx
 	addl %edx,%ecx
-	movl %edi,(%ecx)
-	movl %eax,12(%esp)
+	movl %eax,(%ecx)
 	call g
 .Ljoin_l35:
-	leal fmt,%edi
-	leal 16(%esp), %ecx
-	movl $-16,%edx
-	addl %edx,%ecx
-	movl %edi,(%ecx)
-	leal 16(%esp), %edi
+	leal fmt,%ecx
+	leal 16(%esp), %edx
+	movl %eax,12(%esp)
+	movl $-16,%eax
+	addl %eax,%edx
+	movl %ecx,(%edx)
+	leal 16(%esp), %eax
 	movl $-12,%ecx
-	addl %ecx,%edi
-	movl %eax,(%edi)
+	addl %ecx,%eax
+	movl 12(%esp),%ecx
+	movl %ecx,(%eax)
 	call printf
 .Ljoin_l32:
 	movl $0,%eax
-	leal 16(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl 12(%esp),%ecx
-	movl %ecx,(%edx)
-	movl 8(%esp),%edi
+	leal 16(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 8(%esp),%edx
+	movl %edx,(%ecx)
 	leal 16(%esp), %esp
 	ret
 .section .pcmap_data
@@ -149,14 +149,12 @@ main:
 .Lframe_l43:
 .long 0x80000004
 .long 0xfffffff0
-.long 0xfffffffc
+.long 0xfffffff8
 .long .Lstackdata_l42
-.long 1
+.long 0
 .long 3
 .long 0
 .long 1
-.long 11
-.long 0xfffffff8
 .long 0
 .long 0
 .long 0
@@ -168,14 +166,12 @@ main:
 .Lframe_l44:
 .long 0x80000004
 .long 0xfffffff0
-.long 0xfffffffc
+.long 0xfffffff8
 .long .Lstackdata_l42
-.long 1
+.long 0
 .long 3
 .long 0
 .long 1
-.long 11
-.long 0xfffffff8
 .long 0
 .long 0
 .long 0

@@ -60,20 +60,20 @@ main:
 	jmp .Ljoin_l9
 .Ljoin_l9:
 	leal 12(%esp), %edx
-	movl %edi,4(%esp)
-	movl $-12,%edi
-	addl %edi,%edx
+	movl %eax,4(%esp)
+	movl $-12,%eax
+	addl %eax,%edx
+	movl 4(%esp),%eax
 	movl %eax,(%edx)
 	movl %ecx,8(%esp)
 	call printf
 .Ljoin_l8:
 	movl $0,%eax
-	leal 12(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl 8(%esp),%ecx
-	movl %ecx,(%edx)
-	movl 4(%esp),%edi
+	leal 12(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 8(%esp),%edx
+	movl %edx,(%ecx)
 	leal 12(%esp), %esp
 	ret
 .section .pcmap_data
@@ -88,12 +88,10 @@ main:
 .long 0xfffffff4
 .long 0xfffffffc
 .long .Lstackdata_l18
-.long 1
+.long 0
 .long 3
 .long 0
 .long 1
-.long 11
-.long 0xfffffff8
 .long 0
 .long 0
 .long 0

@@ -55,22 +55,22 @@ run_thread:
 	addl %eax,%edx
 	movl (%edx),%eax
 	movl (%ecx),%ecx
-	movl %edi,28(%esp)
-	movl %esi,24(%esp)
-	movl %ebp,20(%esp)
-	movl %ebx,16(%esp)
+	movl %edi,16(%esp)
+	movl %esi,20(%esp)
+	movl %ebp,24(%esp)
+	movl %ebx,28(%esp)
 	movl %eax, %esp; jmp *%ecx
 cutback_C8:
 	movl %edx,%eax
-	leal 40(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl 12(%esp),%ecx
-	movl %ecx,(%edx)
-	movl 16(%esp),%ebx
-	movl 20(%esp),%ebp
-	movl 24(%esp),%esi
-	movl 28(%esp),%edi
+	leal 40(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 12(%esp),%edx
+	movl %edx,(%ecx)
+	movl 28(%esp),%ebx
+	movl 24(%esp),%ebp
+	movl 20(%esp),%esi
+	movl 16(%esp),%edi
 	leal 40(%esp), %esp
 	ret
 .section .pcmap_data
@@ -90,13 +90,13 @@ cutback_C8:
 .long 0
 .long 1
 .long 7
-.long 0xffffffe8
-.long 9
-.long 0xffffffec
-.long 10
-.long 0xfffffff0
-.long 11
 .long 0xfffffff4
+.long 9
+.long 0xfffffff0
+.long 10
+.long 0xffffffec
+.long 11
+.long 0xffffffe8
 .long 0
 .long 0
 .long 0
@@ -108,28 +108,28 @@ cmm_threadfun:
 	movl (%ecx),%ecx
 .Linitialize_continuations_l23:
 .Lproc_body_start_l22:
-	leal 12(%esp), %edi
-	movl $-12,%esi
-	addl %esi,%edi
-	movl %eax,(%edi)
-	movl $10,%edi
-	leal 12(%esp), %esi
-	movl $-8,%ebp
-	addl %ebp,%esi
-	movl %edi,(%esi)
+	leal 12(%esp), %edx
+	movl $-12,%ebx
+	addl %ebx,%edx
+	movl %eax,(%edx)
+	movl $10,%eax
+	leal 12(%esp), %edx
+	movl $-8,%ebx
+	addl %ebx,%edx
+	movl %eax,(%edx)
 	movl %ecx,8(%esp)
 	call fib
 .Ljoin_l26:
 	movl %eax,%edx
-	leal comeback,%edi
-	movl (%edi),%edi
-	movl $4,%esi
-	addl %esi,%edi
-	movl (%edi),%edi
-	leal comeback,%esi
-	movl (%esi),%esi
-	movl (%esi),%esi
-	movl %edi, %esp; jmp *%esi
+	leal comeback,%eax
+	movl (%eax),%eax
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl (%eax),%eax
+	leal comeback,%ecx
+	movl (%ecx),%ecx
+	movl (%ecx),%ecx
+	movl %eax, %esp; jmp *%ecx
 .section .pcmap_data
 .Lstackdata_l33:
 .long 0

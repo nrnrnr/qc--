@@ -17,25 +17,25 @@ unwind_test:
 	movl (%ecx),%ecx
 .Linitialize_continuations_l12:
 .Lproc_body_start_l11:
-	movl %ecx,4(%esp)
-	movl %eax,(%esp)
+	movl %ecx,(%esp)
+	movl %eax,4(%esp)
 	call g
 .Ljoin_l17:
 	movl $0,%eax
-	leal 8(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl 4(%esp),%ecx
-	movl %ecx,(%edx)
+	leal 8(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl (%esp),%edx
+	movl %edx,(%ecx)
 	leal 8(%esp), %esp
 	ret
 k1_U10:
-	movl (%esp),%eax
-	leal 8(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl 4(%esp),%ecx
-	movl %ecx,(%edx)
+	movl 4(%esp),%eax
+	leal 8(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl (%esp),%edx
+	movl %edx,(%ecx)
 	leal 8(%esp), %esp
 	ret
 .section .pcmap_data
@@ -48,13 +48,13 @@ k1_U10:
 .Lframe_l24:
 .long 0x80000004
 .long 0xfffffff8
-.long 0xfffffffc
+.long 0xfffffff8
 .long .Lstackdata_l23
 .long 0
 .long 1
 .long 0
 .long 7
-.long 0xfffffff8
+.long 0xfffffffc
 .long 1
 .long 2
 .long 1
@@ -90,23 +90,23 @@ g:
 	movl $-32,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	movl %edi,20(%esp)
-	movl %esi,16(%esp)
-	movl %ebp,12(%esp)
-	movl %ebx,8(%esp)
+	movl %edi,8(%esp)
+	movl %esi,12(%esp)
+	movl %ebp,16(%esp)
+	movl %ebx,20(%esp)
 	call do_unwind
 .Lpostcall_l36:
 k_C29:
 	movl $1,%eax
-	leal 32(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl 4(%esp),%ecx
-	movl %ecx,(%edx)
-	movl 8(%esp),%ebx
-	movl 12(%esp),%ebp
-	movl 16(%esp),%esi
-	movl 20(%esp),%edi
+	leal 32(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 4(%esp),%edx
+	movl %edx,(%ecx)
+	movl 20(%esp),%ebx
+	movl 16(%esp),%ebp
+	movl 12(%esp),%esi
+	movl 8(%esp),%edi
 	leal 32(%esp), %esp
 	ret
 .section .pcmap_data
@@ -126,13 +126,13 @@ k_C29:
 .long 0
 .long 1
 .long 7
-.long 0xffffffe8
-.long 9
-.long 0xffffffec
-.long 10
-.long 0xfffffff0
-.long 11
 .long 0xfffffff4
+.long 9
+.long 0xfffffff0
+.long 10
+.long 0xffffffec
+.long 11
+.long 0xffffffe8
 .long 0
 .section .pcmap
 .long k_C29
@@ -148,12 +148,12 @@ k_C29:
 .long 0
 .long 1
 .long 7
-.long 0xffffffe8
-.long 9
-.long 0xffffffec
-.long 10
-.long 0xfffffff0
-.long 11
 .long 0xfffffff4
+.long 9
+.long 0xfffffff0
+.long 10
+.long 0xffffffec
+.long 11
+.long 0xffffffe8
 .long 0
 .section .text

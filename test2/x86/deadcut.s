@@ -38,7 +38,8 @@ main:
 	addl %edx,%ecx
 	movl %eax,(%ecx)
 .Lproc_body_start_l9:
-	movl $97,%edx
+	movl $97,%eax
+	movl %eax,%edx
 	leal 32(%esp), %eax
 	movl $-4,%ecx
 	addl %ecx,%eax
@@ -48,23 +49,23 @@ main:
 	movl $-8,%eax
 	addl %eax,%ecx
 	movl (%ecx),%eax
-	movl %edi,20(%esp)
-	movl %esi,16(%esp)
-	movl %ebp,12(%esp)
-	movl %ebx,8(%esp)
+	movl %edi,8(%esp)
+	movl %esi,12(%esp)
+	movl %ebp,16(%esp)
+	movl %ebx,20(%esp)
 	movl 4(%esp),%ecx
 	movl %ecx, %esp; jmp *%eax
 k_C7:
 	movl $0,%eax
-	leal 32(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl (%esp),%ecx
-	movl %ecx,(%edx)
-	movl 8(%esp),%ebx
-	movl 12(%esp),%ebp
-	movl 16(%esp),%esi
-	movl 20(%esp),%edi
+	leal 32(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl (%esp),%edx
+	movl %edx,(%ecx)
+	movl 20(%esp),%ebx
+	movl 16(%esp),%ebp
+	movl 12(%esp),%esi
+	movl 8(%esp),%edi
 	leal 32(%esp), %esp
 	ret
 .section .pcmap_data
@@ -84,13 +85,13 @@ k_C7:
 .long 0
 .long 1
 .long 7
-.long 0xffffffe8
-.long 9
-.long 0xffffffec
-.long 10
-.long 0xfffffff0
-.long 11
 .long 0xfffffff4
+.long 9
+.long 0xfffffff0
+.long 10
+.long 0xffffffec
+.long 11
+.long 0xffffffe8
 .long 0
 .long 0
 .long 0

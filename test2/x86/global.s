@@ -14,16 +14,16 @@ Cmm_stack_growth:
 .long 0xffffffff
 .section .text
 main:
-	leal -16(%esp), %esp
-	leal 16(%esp), %eax
+	leal -12(%esp), %esp
+	leal 12(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
-	leal 16(%esp), %eax
+	leal 12(%esp), %eax
 	movl $8,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
-	leal 16(%esp), %eax
+	leal 12(%esp), %eax
 	movl (%eax),%eax
 .Linitialize_continuations_l4:
 .Lproc_body_start_l3:
@@ -31,50 +31,48 @@ main:
 	leal Cmm.global_area,%edx
 	movl %ecx,(%edx)
 	leal nvalue,%ecx
-	leal 16(%esp), %edx
-	movl %edi,8(%esp)
-	movl $-16,%edi
-	addl %edi,%edx
+	leal 12(%esp), %edx
+	movl %eax,8(%esp)
+	movl $-12,%eax
+	addl %eax,%edx
 	movl %ecx,(%edx)
-	leal Cmm.global_area,%edi
-	leal 16(%esp), %ecx
-	movl $-12,%edx
+	leal Cmm.global_area,%eax
+	leal 12(%esp), %ecx
+	movl $-8,%edx
 	addl %edx,%ecx
-	movl (%edi),%edi
-	movl %edi,(%ecx)
-	movl %eax,12(%esp)
+	movl (%eax),%eax
+	movl %eax,(%ecx)
 	call printf
 .Ljoin_l17:
-	leal callincn,%edi
-	leal 16(%esp), %eax
-	movl $-16,%ecx
-	addl %ecx,%eax
-	movl %edi,(%eax)
+	leal callincn,%eax
+	leal 12(%esp), %ecx
+	movl $-12,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 .Ljoin_l14:
 	call incn
 .Ljoin_l11:
-	leal nvalue,%edi
-	leal 16(%esp), %eax
-	movl $-16,%ecx
-	addl %ecx,%eax
-	movl %edi,(%eax)
-	leal Cmm.global_area,%edi
-	leal 16(%esp), %eax
-	movl $-12,%ecx
-	addl %ecx,%eax
-	movl (%edi),%edi
-	movl %edi,(%eax)
+	leal nvalue,%eax
+	leal 12(%esp), %ecx
+	movl $-12,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
+	leal Cmm.global_area,%eax
+	leal 12(%esp), %ecx
+	movl $-8,%edx
+	addl %edx,%ecx
+	movl (%eax),%eax
+	movl %eax,(%ecx)
 	call printf
 .Ljoin_l8:
 	movl $0,%eax
-	leal 16(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl 12(%esp),%ecx
-	movl %ecx,(%edx)
-	movl 8(%esp),%edi
-	leal 16(%esp), %esp
+	leal 12(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 8(%esp),%edx
+	movl %edx,(%ecx)
+	leal 12(%esp), %esp
 	ret
 .section .pcmap_data
 .Lstackdata_l23:
@@ -85,15 +83,13 @@ main:
 .section .pcmap_data
 .Lframe_l24:
 .long 0x80000004
-.long 0xfffffff0
+.long 0xfffffff4
 .long 0xfffffffc
 .long .Lstackdata_l23
-.long 1
+.long 0
 .long 2
 .long 0
 .long 1
-.long 11
-.long 0xfffffff8
 .long 0
 .long 0
 .long 0
@@ -103,15 +99,13 @@ main:
 .section .pcmap_data
 .Lframe_l25:
 .long 0x80000004
-.long 0xfffffff0
+.long 0xfffffff4
 .long 0xfffffffc
 .long .Lstackdata_l23
-.long 1
+.long 0
 .long 2
 .long 0
 .long 1
-.long 11
-.long 0xfffffff8
 .long 0
 .long 0
 .long 0
@@ -121,15 +115,13 @@ main:
 .section .pcmap_data
 .Lframe_l26:
 .long 0x80000004
-.long 0xfffffff0
+.long 0xfffffff4
 .long 0xfffffffc
 .long .Lstackdata_l23
-.long 1
+.long 0
 .long 2
 .long 0
 .long 1
-.long 11
-.long 0xfffffff8
 .long 0
 .long 0
 .long 0
@@ -139,15 +131,13 @@ main:
 .section .pcmap_data
 .Lframe_l27:
 .long 0x80000004
-.long 0xfffffff0
+.long 0xfffffff4
 .long 0xfffffffc
 .long .Lstackdata_l23
-.long 1
+.long 0
 .long 2
 .long 0
 .long 1
-.long 11
-.long 0xfffffff8
 .long 0
 .long 0
 .long 0

@@ -13,25 +13,25 @@ Cmm_stack_growth:
 .section .text
 p:
 	leal -8(%esp), %esp
-	leal 8(%esp), %edx
-	movl (%edx),%edx
+	leal 8(%esp), %eax
+	movl (%eax),%eax
 .Linitialize_continuations_l5:
 .Lproc_body_start_l4:
 	movl $3,%ecx
-	leal 8(%esp), %eax
-	movl %edx,4(%esp)
-	movl $-8,%edx
-	addl %edx,%eax
-	movl %ecx,(%eax)
 	leal 8(%esp), %edx
-	movl $-8,%ecx
-	addl %ecx,%edx
-	fildl (%edx)
-	leal 8(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl 4(%esp),%ecx
+	movl %eax,4(%esp)
+	movl $-8,%eax
+	addl %eax,%edx
 	movl %ecx,(%edx)
+	leal 8(%esp), %eax
+	movl $-8,%ecx
+	addl %ecx,%eax
+	fildl (%eax)
+	leal 8(%esp), %eax
+	movl $0,%ecx
+	addl %ecx,%eax
+	movl 4(%esp),%ecx
+	movl %ecx,(%eax)
 	leal 8(%esp), %esp
 	ret
 .section .text
@@ -73,11 +73,11 @@ main:
 	call printf
 .Ljoin_l20:
 	movl $0,%eax
-	leal 20(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl 16(%esp),%ecx
-	movl %ecx,(%edx)
+	leal 20(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 16(%esp),%edx
+	movl %edx,(%ecx)
 	leal 20(%esp), %esp
 	ret
 .section .pcmap_data

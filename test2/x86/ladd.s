@@ -12,106 +12,110 @@ Cmm_stack_growth:
 .long 0xffffffff
 .section .text
 main:
-	leal -60(%esp), %esp
-	leal 60(%esp), %eax
+	leal -68(%esp), %esp
+	leal 68(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
-	leal 60(%esp), %eax
+	leal 68(%esp), %eax
 	movl $8,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
-	leal 60(%esp), %eax
+	leal 68(%esp), %eax
 	movl (%eax),%eax
 .Linitialize_continuations_l4:
 .Lproc_body_start_l3:
 	movl $-2147483648,%ecx
-	leal 60(%esp), %edx
-	movl %edi,52(%esp)
-	movl $-32,%edi
-	addl %edi,%edx
+	leal 68(%esp), %edx
+	movl %eax,52(%esp)
+	movl $-40,%eax
+	addl %eax,%edx
 	movl %ecx,(%edx)
-	movl $0,%edi
-	leal 60(%esp), %ecx
+	movl $0,%eax
+	leal 68(%esp), %ecx
+	movl $-36,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
+	movl $-2147483648,%eax
+	leal 68(%esp), %ecx
+	movl $-32,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
+	movl $0,%eax
+	leal 68(%esp), %ecx
 	movl $-28,%edx
 	addl %edx,%ecx
-	movl %edi,(%ecx)
-	movl $-2147483648,%edi
-	leal 60(%esp), %ecx
-	movl $-24,%edx
-	addl %edx,%ecx
-	movl %edi,(%ecx)
-	movl $0,%edi
-	leal 60(%esp), %ecx
-	movl $-20,%edx
-	addl %edx,%ecx
-	movl %edi,(%ecx)
-	leal 60(%esp), %edi
-	movl $-32,%ecx
-	addl %ecx,%edi
-	leal 60(%esp), %ecx
-	movl $-60,%edx
-	addl %edx,%ecx
-	fildq (%edi)
-	fistpq (%ecx)
-	leal 60(%esp), %edi
-	movl $-24,%ecx
-	addl %ecx,%edi
-	leal 60(%esp), %ecx
-	movl $-52,%edx
-	addl %edx,%ecx
-	fildq (%edi)
-	fistpq (%ecx)
-	movl %eax,56(%esp)
-	call ladd
-.Ljoin_l11:
-	leal 60(%esp), %edi
-	movl $-16,%ecx
-	addl %ecx,%edi
-	movl %eax,(%edi)
-	leal 60(%esp), %edi
-	movl $-12,%eax
-	addl %eax,%edi
-	movl %edx,(%edi)
-	leal format,%edi
-	leal 60(%esp), %eax
-	movl $-60,%ecx
-	addl %ecx,%eax
-	movl %edi,(%eax)
-	leal 60(%esp), %edi
-	movl $-32,%eax
-	addl %eax,%edi
-	leal 60(%esp), %eax
-	movl $-56,%ecx
-	addl %ecx,%eax
-	fildq (%edi)
-	fistpq (%eax)
-	leal 60(%esp), %edi
-	movl $-24,%eax
-	addl %eax,%edi
-	leal 60(%esp), %eax
-	movl $-48,%ecx
-	addl %ecx,%eax
-	fildq (%edi)
-	fistpq (%eax)
-	leal 60(%esp), %edi
-	movl $-16,%eax
-	addl %eax,%edi
-	leal 60(%esp), %eax
+	movl %eax,(%ecx)
+	leal 68(%esp), %eax
 	movl $-40,%ecx
 	addl %ecx,%eax
-	fildq (%edi)
-	fistpq (%eax)
+	leal 68(%esp), %ecx
+	movl $-68,%edx
+	addl %edx,%ecx
+	fildq (%eax)
+	fistpq (%ecx)
+	leal 68(%esp), %eax
+	movl $-32,%ecx
+	addl %ecx,%eax
+	leal 68(%esp), %ecx
+	movl $-60,%edx
+	addl %edx,%ecx
+	fildq (%eax)
+	fistpq (%ecx)
+	call ladd
+.Ljoin_l11:
+	leal 68(%esp), %ecx
+	movl %ecx,56(%esp)
+	movl $-24,%ecx
+	movl %ecx,60(%esp)
+	movl 56(%esp),%ecx
+	movl %ebx,64(%esp)
+	movl 60(%esp),%ebx
+	addl %ebx,%ecx
+	movl %eax,(%ecx)
+	leal 68(%esp), %eax
+	movl $-20,%ecx
+	addl %ecx,%eax
+	movl %edx,(%eax)
+	leal format,%eax
+	leal 68(%esp), %ecx
+	movl $-68,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
+	leal 68(%esp), %eax
+	movl $-40,%ecx
+	addl %ecx,%eax
+	leal 68(%esp), %ecx
+	movl $-64,%edx
+	addl %edx,%ecx
+	fildq (%eax)
+	fistpq (%ecx)
+	leal 68(%esp), %eax
+	movl $-32,%ecx
+	addl %ecx,%eax
+	leal 68(%esp), %ecx
+	movl $-56,%edx
+	addl %edx,%ecx
+	fildq (%eax)
+	fistpq (%ecx)
+	leal 68(%esp), %eax
+	movl $-24,%ecx
+	addl %ecx,%eax
+	leal 68(%esp), %ecx
+	movl $-48,%edx
+	addl %edx,%ecx
+	fildq (%eax)
+	fistpq (%ecx)
 	call printf
 .Ljoin_l8:
 	movl $0,%eax
-	leal 60(%esp), %edx
-	movl $0,%ecx
-	addl %ecx,%edx
-	movl 56(%esp),%ecx
-	movl %ecx,(%edx)
-	movl 52(%esp),%edi
-	leal 60(%esp), %esp
+	leal 68(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 52(%esp),%edx
+	movl %edx,(%ecx)
+	movl 64(%esp),%ebx
+	leal 68(%esp), %esp
 	ret
 .section .pcmap_data
 .Lstackdata_l18:
@@ -122,20 +126,18 @@ main:
 .section .pcmap_data
 .Lframe_l19:
 .long 0x80000004
-.long 0xffffffc4
-.long 0xfffffffc
+.long 0xffffffbc
+.long 0xfffffff0
 .long .Lstackdata_l18
-.long 1
+.long 0
 .long 5
 .long 0
 .long 1
-.long 11
-.long 0xfffffff8
 .long 0
 .long 0
+.long 0xffffffd8
 .long 0xffffffe0
 .long 0xffffffe8
-.long 0xfffffff0
 .long 0
 .section .pcmap
 .long .Ljoin_l8
@@ -143,20 +145,20 @@ main:
 .section .pcmap_data
 .Lframe_l20:
 .long 0x80000004
-.long 0xffffffc4
-.long 0xfffffffc
+.long 0xffffffbc
+.long 0xfffffff0
 .long .Lstackdata_l18
 .long 1
 .long 5
 .long 0
 .long 1
-.long 11
-.long 0xfffffff8
+.long 7
+.long 0xfffffffc
 .long 0
 .long 0
+.long 0xffffffd8
 .long 0xffffffe0
 .long 0xffffffe8
-.long 0xfffffff0
 .long 0
 .section .text
 .section .data

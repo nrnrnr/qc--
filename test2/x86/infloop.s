@@ -13,31 +13,31 @@ Cmm_stack_growth:
 .section .text
 f3:
 	leal -64(%esp), %esp
-	leal 64(%esp), %edx
-	movl (%edx),%edx
+	leal 64(%esp), %eax
+	movl (%eax),%eax
 .Linitialize_continuations_l4:
 .Lproc_body_start_l3:
 	jmp f3_label
 f3_label:
-	movl $18,%edi
-	leal 64(%esp), %esi
-	movl $-64,%ebp
-	addl %ebp,%esi
-	movl %edi,(%esi)
-	movl $0,%edi
-	leal 64(%esp), %esi
-	movl $-60,%ebp
-	addl %ebp,%esi
-	movl %edi,(%esi)
-	leal 64(%esp), %edi
-	movl $-64,%esi
-	addl %esi,%edi
-	leal 64(%esp), %esi
-	movl $-64,%ebp
-	addl %ebp,%esi
-	movl $32,%ebp
-	addl %ebp,%esi
-	fildq (%edi)
-	fistpq (%esi)
+	movl $18,%eax
+	leal 64(%esp), %ecx
+	movl $-64,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
+	movl $0,%eax
+	leal 64(%esp), %ecx
+	movl $-60,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
+	leal 64(%esp), %eax
+	movl $-64,%ecx
+	addl %ecx,%eax
+	leal 64(%esp), %ecx
+	movl $-64,%edx
+	addl %edx,%ecx
+	movl $32,%edx
+	addl %edx,%ecx
+	fildq (%eax)
+	fistpq (%ecx)
 	jmp f3_label
 .section .text
