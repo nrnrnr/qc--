@@ -135,6 +135,12 @@ let errorfallback s g = fun args -> fallback "error" g [V.String s]
 let arithfallback g   = function
   | [V.Number x; V.Number y; V.String s] when s = "pow" -> [V.Number (x ** y)]
   | args -> errorfallback "unexpected type at conversion to number" g args
+let funcfallback g  = function 
+    | f::args   -> 
+        let args' = String.concat ", " (List.map V.to_string args) in 
+        let call  = Printf.sprintf "%s(%s)" (V.to_string f) args' in
+        fallback "error" g [V.String ("call expr is "^call)]
+    | args      -> fallback "error" g [V.String "call expr not a function"]
       
 let fbs g =
   [ "arith",     arithfallback g
@@ -144,7 +150,7 @@ let fbs g =
   ; "getglobal", (fun args -> [V.Nil])
   ; "gettable",  errorfallback "indexed expression not a table" g
   ; "settable",  errorfallback "indexed expression not a table" g
-  ; "function",  errorfallback "call expression not a function" g
+  ; "function",  funcfallback g
   ; "error",     default_error_fallback g
   ] 
 @ 
