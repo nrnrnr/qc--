@@ -89,8 +89,8 @@ let expand ((mem_like : RP.loc -> bool), (temp_for : char -> int -> R.loc)) =
         t, (R.store t (up (RP.App (op, List.map fetch temps))) w @:: concat is)
   <<other expander functions>>
   and rtl r = match Rtl.Convert.rtl r with
-  | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (left, right, w))] ->
-      assign left right w
+  | RP.Rtl [(g, RP.Store (left, right, w))] ->
+      assign g left right w
   | _ -> unit r (* no expansion takes place *)
   in fun r -> rtl r []
 @ It would be good to do something with multiple assignments and with
@@ -98,10 +98,10 @@ guards, but for now I keep things very simple.
 @
 The remaining functions are simple.
 <<other expander functions>>=
-and assign left right w =
+and assign g left right w =
   let r, is  = to_temp right in
   let l, is' = loc left in
-  R.store l (R.fetch r w) w @:: is @@ is'
+  R.guard (up g) (R.store l (R.fetch r w) w) @:: is @@ is'
 
 and loc l =
   if mem_like l then
