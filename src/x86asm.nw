@@ -192,12 +192,12 @@ method value (v:Bits.bits) =
       hexbits v  in
   match Bits.width v with
   |  8 -> fprintf _fd ".byte %s\n"  (decbits v)
-  | 16 -> fprintf _fd ".hword %s\n" (altfmt v)
-  | 32 -> fprintf _fd ".word %s\n"  (altfmt v)
+  | 16 -> fprintf _fd ".word %s\n" (altfmt v)
+  | 32 -> fprintf _fd ".long %s\n"  (altfmt v)
   | 64 ->
       let i = Bits.U.to_int64 v in
-      output_string _fd (Int64.format ".word 0x%x\n" (Int64.shift_right_logical i 32));
-      output_string _fd (Int64.format ".word 0x%x\n" (Int64.logand i mask32))
+      output_string _fd (Int64.format ".long 0x%x\n" (Int64.shift_right_logical i 32));
+      output_string _fd (Int64.format ".long 0x%x\n" (Int64.logand i mask32))
   | w -> Impossible.unimp ("emission width " ^ string_of_int w ^ " in x86 assembler")
 <<utilities>>=
 let mask32 = Int64.pred (Int64.shift_left Int64.one 32)
