@@ -13,7 +13,12 @@ module RP = Rtl.Private
 
 module Down = Rtl.Dn
 module Up   = Rtl.Up
-
+@ 
+We're given [[goodwidths]], and our goal is to change all
+floating-point operations in an RTL to be using one of the widths in
+[[goodwidths]].
+(In practice we choose [[bestwidth w]], which is the smallest width in
+[[goodwidths]] that is at least as large as~[[w]].)
 <<widen.ml>>=
 let float ~rm goodwidths =
   let rm = Down.exp rm in
@@ -23,9 +28,17 @@ let float ~rm goodwidths =
     with Not_found -> Unsupported.widen_float w in
   <<widening>>
   rtl
+@ 
+I'm a little shaky what is the postcondition regarding float-to-float
+conversions.
+For example, suppose the source program tries to narrow a
+floating-point value to single precision.
+We owe it to ourselve to arrange to store and reload it at that
+precision, but I'm sure that doesn't happen.
+There may be other errors lurking as well.
 
-let foo = 33
-
+Anyway [[f2f']] implements a float-to-float conversion, which may or
+may not combine with a conversion underneath it.
 <<widening>>=
 let f2f' combine srcw dstw e =
   if srcw = dstw then
@@ -39,6 +52,11 @@ let f2f' combine srcw dstw e =
         RP.App(("f2f", [srcw; dstw]), [e; rm]) in
 let f2f = f2f' true in
 let force_f2f = f2f' false in
+@ 
+Function [[convert]] takes an expression that is known to produce a
+floating-point value, and it changes the width of the expression,
+while rewriting all subexpressions.
+<<widening>>=
 let rec convert ~(from:int) ~(to':int) e =
   let cvt = convert ~from ~to' in
   match e with
@@ -59,6 +77,10 @@ let rec convert ~(from:int) ~(to':int) e =
 	assert (w=from);
 	RP.App((op, [to']), [cvt x; rm])
   | RP.App (_, _) -> Impossible.impossible "float widener widening non-float value"
+@ 
+Function [[rewrite]] rewrites all subexpressions to ensure the postcondition.
+Its major job is to call [[convert]] when it spots a floating-point subexpression.
+<<widening>>=
 and rewrite e = match e with
   | RP.Const _      -> e
   | RP.Fetch (l, e) -> RP.Fetch(loc l, e)
@@ -73,10 +95,17 @@ and rewrite e = match e with
       RP.App ((opname, [w']), [convert ~from:w ~to':w' x; convert ~from:w ~to':w' y])
   | RP.App(op, args) ->
       RP.App (op, List.map rewrite args)
+@ 
+Function [[loc]] rewrites all subexpressions that appear in a location
+(i.e., in an addressing expression).
+<<widening>>=
 and loc l = match l with
 | RP.Mem(sp, agg, w, addr, assn)    -> RP.Mem(sp, agg, w, rewrite addr, assn)
 | RP.Slice(w, lsb, l)               -> RP.Slice(w, lsb, loc l)
 | RP.Reg(_, _, _) | RP.Var(_, _, _) -> l in
+@ 
+Assignment requires that we know whether the right-hand side is a
+floating-point expression.  If so, [[convert]], otherwise [[rewrite]].
 <<widening>>=
 let is_floating_exp = function
   | RP.App(op, args) -> Rtlop.Types.has_floating_result (Up.opr op)
@@ -91,6 +120,10 @@ let guarded (g, eff) =
         RP.Store(loc l, rewrite r, w)
   | RP.Kill l -> RP.Kill (loc l) in
   (rewrite g, eff) in
+@ 
+In the common case where we have no operators that need conversion, we
+avoid rewriting the RTL, thereby reducing the load on the major heap.
+<<widening>>=
 let rtl r = 
   let needs_conversion op =
     Rtlop.Types.has_floating_result op ||
