@@ -1,0 +1,71 @@
+\newcommand\dash{\texttt{-}}
+\newcommand\state[9]{\langle #1, #2, #3, #4, #5, #6, #7, #8, #9 \rangle}
+\newcommand\act[5]{\langle #1, #2, #3, #4, #5 \rangle}
+
+\newcommand\pc{{\mathit{PC}}}   % program counter
+\newcommand\ls{{\mathit{ls}}}   % location stack
+\newcommand\uid{{\mathit{uid}}} % unique identifier
+\newcommand\spt{{\mathit{sp}}}  % stack pointer
+\newcommand\emptystack{{\mathit{nil}}}
+
+\newcommand\newpc{\widehat{\pc}}
+
+% default state and activation record
+\newcommand\dstate{\state \pc V \rho \spt g \sigma A u s}
+\newcommand\dact{\act \pc \rho \spt \kappa u}
+
+% continuation bundle
+\newcommand\bundle{\langle \kappa_{c}, \kappa_{u}, \kappa_{r}, abort \rangle}
+
+% for building inference rules
+\newcommand{\xfrac}[3][c]{{\displaystyle\genfrac{}{}{0pt}{}{%
+  \strut\ifx r#1\hfill\fi#2\ifx l#1\hfill\fi}{#3}}%
+  \kern-\nulldelimiterspace}
+\def\twoline#1#2{\xfrac{#1}{#2}}
+\def\threeline#1#2#3{\xfrac{\xfrac{#1}{#2}}{#3}}
+\def\fourline#1#2#3#4{\xfrac{\xfrac{\xfrac{#1}{#2}}{#3}}{#4}}
+\def\fiveline#1#2#3#4#5{\xfrac{\xfrac{\xfrac{\xfrac{#1}{#2}}{#3}}{#4}}{#5}}
+\def\sixline#1#2#3#4#5#6{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{#1}{#2}}{#3}}{#4}}{#5}}{#6}}
+\def\sevenline#1#2#3#4#5#6#7{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{#1}{#2}}{#3}}{#4}}{#5}}{#6}}{#7}}
+\def\eightline#1#2#3#4#5#6#7#8{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{#1}{#2}}{#3}}{#4}}{#5}}{#6}}{#7}}{#8}}
+\def\nineline#1#2#3#4#5#6#7#8#9{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{\xfrac{#1}{#2}}{#3}}{#4}}{#5}}{#6}}{#7}}{#8}}{#9}}
+\newcommand\twoquad  [2]{{#1}\qquad{#2}}
+\newcommand\threequad[1]{{#1}\qquad\twoquad}
+\newcommand\fourquad [1]{{#1}\qquad\threequad}
+\newcommand\fivequad [1]{{#1}\qquad\fourquad}
+\newcommand\sixquad  [1]{{#1}\qquad\fivequad}
+
+\newcommand\cons{\mathbin{::}}
+
+\def\andalso{\qquad}
+\def\YIELDS{\Downarrow}
+\def\yields{\rightarrow}
+
+% evaluation judgment \step{s1}{s2}
+\newcommand\step[2]{#1 \yields #2}
+
+%%% newmacros
+
+\makeatletter
+\def\doops[#1]#2#3#4{%
+  \global\@namedef{ops-#1}{\showops{#2}{#3}{#4}}\@nameuse{ops-#1}}
+\newcommand\ops{\@ifnextchar[{\doops}{\dblops}}
+\newcommand\dblops[1]{\doops[#1]{#1}}
+\newcommand\useops[1]{%
+   \@ifundefined{ops-#1}%
+     {\@latex@error{No rule `#1' defined in operational
+     semantics}\@opshelp}
+     {\@nameuse{ops-#1}}}
+\gdef\@opshelp{I never saw a rule by that name.\@ehc}
+
+\makeatother
+\newcommand\rulename{\textsc}
+
+\newcommand\showrule[2]{%
+    \renewcommand{\theequation}{\mbox{{\rulename{#1}}}}%
+                         % dubious \llap hoped to make rules centered...
+    \begin{equation}
+    #2
+    \end{equation}
+}
+\newcommand\showops[3]{\showrule{#1}{\frac{#2}{#3}}}
