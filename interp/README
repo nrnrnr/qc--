@@ -2,7 +2,26 @@
 QC-- Interpreter
 ---------------------------------------------------------------------
 
-Known Issues ::
+Known Issues/Thoughts/Worries ::
+
+ [translation from compiler]
+
+    * Stackdata translation unimplemented!
+    * "Cut to" is not properly translated
+      (assertions fail, labels are not found, translation is wrong, etc.)!
+    * Continuations are not properly translated
+      (see above; also, continuations must be specially defined with
+       define_continuation assembly instruction--define_label is not good
+       enough for interpreter as of now)!
+
+    * Rounding modes are currently being translated...
+    * Interpreter is not told correct number of global registers.
+
+    * Multiple returns have not been tested 
+      (contingent upon continuations; see above)
+
+    * Multiple variable assignment has not been tested.
+    * Translation of guarded-RTLs is not tested.
 
  [client]
 
@@ -22,6 +41,11 @@ Known Issues ::
 
  [interpreter]
 
+    * It is unclear how stackdata access is to be handled in the interpreter;
+      this is strongly dependent on how the compiler will be able to inform
+      the interpreter of stackdata labels, sizes and of how references to
+      stackdata labels will be successfully translated to interpreter Lua
+      code
     * Mutual dependencies among separate assembly units is not allowed for now.
     * When calls are made from a C-- procedure to a C-- procedure, the caller's
       activation record indicates that it is suspended at (has a PC of) the
@@ -38,15 +62,7 @@ Known Issues ::
             'cont'.  At runtime, an activation of 'p' calls itself, and
             then that activation calls itself--leaving 3 live activations.
             When this youngest activation of 'p' cuts to 'cont', which
-            activation record is cut to?
+            activation record is cut to?  Which activation record would the
+            interpreter as it is now cut to?
     * LIMITCHECK instruction unimplemented.
 
- [translation from compiler]
-
-    * Stackdata translation unimplemented.
-    * "Cut to" is not properly translated.
-    * Continuations are not properly translated.
-    * Rounding modes are not properly translated.
-    * Interpreter is not told correct number of global registers.
-
-    * Translation of guarded-RTLs is not tested.

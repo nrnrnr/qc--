@@ -605,7 +605,7 @@ patterns
     GOTO          CBRANCHT       CBRANCHF       BRANCHTF
     CALL          CMM_TAIL_CALL  RETURN         CUT
     EMIT_RADDR    PUSH_SYMBOL    OP
-    SAVE_ROUND    RESTORE_ROUND
+    FETCH_ROUND   STORE_ROUND
     PLACECODE     BREAKPT
     HALT
   ] is op = {0 to 35}
@@ -623,7 +623,7 @@ patterns
   any32   is CALL           | DEFINE_PROC     | PUSH_SYMBOL
   memory  is FETCH | STORE  | GSTORE
   nullary is HALT  |  GOTO  | CMM_TAIL_CALL   | CUT           | END_PROC
-           | SAVE_ROUND     | RESTORE_ROUND
+           | FETCH_ROUND    | STORE_ROUND
            | BREAKPT
 @ 
 
@@ -1506,18 +1506,18 @@ Operator implementation functions return a new [[sptr]] so we set [[values]] to 
                            pc = next;
 @
 
-Saving and restoring rounding modes involves the simple saving and restoring
-of a shared global variable.
+``Fetching'' a rounding mode pushes the current hardware floating-point 
+rounding mode atop the value stack.
+``Storing'' a rounding mode involves popping a 2-bit value off the value stack
+and setting it to be the current hardware floating-point rounding mode.
 
-<<global variable definitions>>=
-int saved_rounding_mode;
-int saved_rounding_mode_exists = 0;
-@ 
 <<matching statement>>=
-    | SAVE_ROUND()      => saved_rounding_mode_exists = 1;
-                           saved_rounding_mode = fegetround();
-    | RESTORE_ROUND()   => if (saved_rounding_mode_exists) {
-                             fesetround(saved_rounding_mode);
+    | FETCH_ROUND()     => PUSH(to_CMM_value(fegetround(), 2), values);
+                           pc = next;
+    | STORE_ROUND()     => {
+                           value v = POP(values);
+                           fesetround(v.bits2);
+                           pc      = next;
                            }
 @ 
 
@@ -2320,9 +2320,7 @@ Make clear that what I mean by an unnamed section is actually just the toplevel 
 
 Don't we have to free [[RBlock]]s when we've finished copying them?
 
-We have to release all lua references when done?
-
-Consider making use of the [[lua_State *]] in the [[table]] structure.
+Consider making better use of the [[lua_State *]] in the [[table]] structure.
 
 Use ``higher-order'' macros to declare, define and register operator implementations (instead of the current [[#undef]] business).
 
@@ -2334,7 +2332,6 @@ Do we need to make sure that continuations are not defined outside of procedures
 
 Quote from manual: \emph{All separately compiled modules must have} identical \emph{top-level variable declarations}.
 
-\section{To Do Immediately}
 Consider changing operator representation/implementation so that OP bytecode does not need to carry around a 32-bit value (right now it carries around an (operator *)).
 
 Use dynamic arrays!  Stop with this assertion failure business.

@@ -724,7 +724,7 @@ void disassemble_instructions(CMM_label *loc) {
               next = (((MATCH_p) + 1));
               
               #line 214 "disasm.m"
-                    asmprintf(asmprintfd, "%x: %s", pc, "SAVE ROUNDING MODE ");
+                    asmprintf(asmprintfd, "%x: %s", pc, "FETCH ROUNDING MODE ");
                     asmprintf(asmprintfd, "\n");
               
               
@@ -739,7 +739,7 @@ void disassemble_instructions(CMM_label *loc) {
               
               #line 217 "disasm.m"
                
-                    asmprintf(asmprintfd, "%x: %s", pc, "RESTORE_ROUNDING MODE ");
+                    asmprintf(asmprintfd, "%x: %s", pc, "STORE_ROUNDING MODE ");
                     asmprintf(asmprintfd, "\n");
               
               
