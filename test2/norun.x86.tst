@@ -13,6 +13,7 @@ Test.files = { "eqasolve-000.c--"
 	     , "err-001.c--"
              , "err-000.c--"
              , "err-002.c--"
+             , "infloop.c--"
              }
 
 function norun(file) return { source = file, runnable="false" } end
