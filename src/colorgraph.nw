@@ -822,11 +822,13 @@ let applyColors cg {Proc.cfg = cfg; Proc.target = target} =
     let subst = function
       | temp when is_tmp temp target ->
             (try RM.find temp cg.colorMap
-                     with Not_found -> print_cgInfo cg;
+                     with Not_found -> 
                                        cfgSay [ "\n"
+									          ; "Error - uncolored temp: "
                                               ; (Register.print temp)
-                                              ; "\n"
-                                              ];
+                                              ; "\nCGInfo:\n"
+											  ];
+                                       print_cgInfo cg;
                                        raise (UncoloredTemp temp))
       | t -> t
     in
@@ -1226,6 +1228,7 @@ let regLists cgInfo =
                ; ("coalescedTemps", cgInfo.coalescedTemps)
                ; ("coloredTemps", cgInfo.coloredTemps)
                ; ("SelectStack", cgInfo.selectStack)
+			   ; ("Colors", cgInfo.colors)
                ]
 let moveLists cgInfo =
                 [ ("coalescedMoves", cgInfo.coalescedMoves)
@@ -1288,6 +1291,7 @@ let print_cgInfo cgInfo =
     in
         printAdjListMap cgInfo.adjListMap;
         List.iter printReglist (regLists cgInfo);
+		cgSay ["    K: "; string_of_int cgInfo.k; "\n"];
         List.iter printMovelist (moveLists cgInfo);
         printColorMap cgInfo.colorMap
 
