@@ -139,9 +139,9 @@ compile-time functions over [[Bits.bits]] are defined.
 
 <<Make>>=
 module CompileTime = struct
-    let apply (op,wl) exps =
+    let apply (op,_ as opr) exps =
         let args = List.map (fun e -> Rtlop.Impl.Bits e) exps in
-        let f    = try Rtlop.Impl.lookup op
+        let f    = try Rtlop.Impl.lookup (Rtl.Revert.opr opr)
                    with Not_found -> E.error ("unknown operator "^op)
         in match f args with
             | Rtlop.Impl.Bits b -> b

@@ -34,7 +34,6 @@ record [[env]] for the [[check]] function.
 type env = 
     { tlookup:  string -> Types.ty       Error.error    (* type aliases *)
     ; vlookup:  string -> Types.ty       Error.error    (* types of values *)
-    ; olookup:  string -> Types.tyscheme Error.error    (* type of operators *) 
     ; wordsize:           Types.ty       Error.error
     ; pointersize:        Types.ty       Error.error
     }   
@@ -101,8 +100,7 @@ operators.
 <<expcheck.ml>>=
 and primOp env op args =
     let argtys = (E.Raise.list @<< List.map (expr env)) args in
-    let opty   = env.olookup op in
-        E.ematchPair (opty,argtys) (fun (op,args) -> Types.appl op args)
+        E.ematch argtys (fun tys -> fst (Rtlop.Translate.operator op tys))
             
 and expr env exp =
     let optty default = function

@@ -161,7 +161,6 @@ have a clean environment.
         let word      = Error.Ok(Types.bits target.Target.wordsize)    in
         let pointer   = Error.Ok(Types.bits target.Target.pointersize) in
         let tlookup   = fun x -> Error.Ok(snd (F.findt x env))         in
-(*XXX*) let olookup   = fun x -> E.Ok(Rtlop.Types.poly x)              in 
         let vlookup   = fun x -> Error.Ok( match (F.findv x env) with
                                          | (_,(_,t)) -> t 
                                          ) in
@@ -169,7 +168,6 @@ have a clean environment.
                 ; Expcheck.pointersize = pointer
                 ; Expcheck.tlookup     = tlookup
                 ; Expcheck.vlookup     = vlookup
-                ; Expcheck.olookup     = olookup
                 } 
         in try ( match Expcheck.check e exp with
                | Error.Ok(t) -> t
@@ -250,9 +248,8 @@ and variable env target hint x =
 <<Make expressions>>=
 and prim env target op args =
     let argtys  = List.map (exprtype env target) args in
-    let opty    = Rtlop.Types.poly op in      (*XXX*)
-    let widths  = Types.widthlist opty argtys               in
-        Rtl.app (Rtl.opr op widths) (List.map (expr env target) args)
+    let _,opr   = Rtlop.Translate.operator op argtys   in
+        Rtl.app opr (List.map (expr env target) args)
 
 and expr env target exp = 
     let word = target.Target.wordsize in

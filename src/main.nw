@@ -141,8 +141,11 @@ let main () =
         try 
              Driver.dispatch cmd; exit 0                (* success *)
          with
-            E.ErrorExn(msg) -> E.errorPrt msg ; exit 1  (* failure *)
-            
+            E.ErrorExn(msg) -> 
+                ( E.errorPrt msg
+                ; E.errorPrt "Exit with exit code 1" 
+                ; exit 1  (* failure *)
+                )
 @                
 
 In \ocaml~no [[main]] function like in C exists but simply all values
@@ -161,6 +164,7 @@ should use instead the following:
 let _ = try main () with e -> 
         ( Printf.eprintf "%s\n" (Printexc.to_string e)
         ; Printf.eprintf "Please report this problem to bugs@cminusminus.org\n"
+        ; Printf.eprintf "Exit with exit code 2\n"
         ; exit 2
         )
 @

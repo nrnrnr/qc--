@@ -69,6 +69,10 @@ variable in the result position that does not also show up in an
 argument position. This indicates a checked run-time error in the type
 specification of a primitive and should never happen.  
 
+The [[widthlist]] function takes the type of a primitive (a
+[[tyscheme]]) and a list of argument types and returns the sizes bound
+by the variables in the type scheme.
+
 <<types>>=
 exception MatchExn
 
@@ -79,11 +83,11 @@ val widthlist : tyscheme -> ty list -> int list (* raises matchExn *)
 
 Some operators encode the size of their return values in their name: 
 [[zx32]] is the zero-extension function that returns a 32 bit value. 
-The [[retsize]] function returns this number from an operator name (if
-present) as an [[int option]] value.
+The [[split]] function returns the operator name (without the numbers)
+and the size of the return value, if it exists:
 
 <<appl>>=
-val retsize : string -> int option
+val split : string -> string * int option     (* RTL op name, return width *)
 @
 
 An operator inside an {\rtl} is monomorphic. It carries a \emph{width
@@ -143,15 +147,13 @@ functions.
 
 <<types.ml>>=
 module S = Map.Make(struct type t=key let compare=compare end)
-
-let lookup key env = 
-    try S.find key env with Not_found -> Error.error ("unknown operator")
-let dump env = let f key data res = (key,data)::res in S.fold f env []
+let lookup key env = S.find key env 
+let dump env       = let f key data res = (key,data)::res in S.fold f env []
 @
 
 What is called a unification is technically a matching of a constant
-type with a variable type.  Unification in contrast deals with two two
-variable term.  There are two non trivial cases:
+type with a variable type.  Unification in contrast deals with two
+variable terms.  These are the two non trivial cases:
 
 \begin{itemize}
 \item A variable width matches with a fixed width; this leads to an
@@ -222,22 +224,24 @@ let widthlist (args',r) args =
 @
 
 
-The implementation of [[retsize]] uses the lexical combinator module
+The implementation of [[spilt]] uses the lexical combinator module
 [[Lc]]:  the first part of an operator is scanned using the [[some
 alpha]] scanner, the second by the [[many num]] scanner whose result
 is also saved. A successful scan must consume the whole string and
 return the (possibly empty) string of the matched numbers.
 
 <<types.ml>>=
-let retsize op =
-    let ( *** ) = Lc.seq                                                in
-    let num     = Lc.satisfy (fun c -> '0'  <= c && c <= '9')           in
-    let alpha   = Lc.satisfy (fun c -> ('a' <= c && c <= 'z')
-                                   ||  ('A' <= c && c <= 'Z'))          in
-    let op'     = Lc.some alpha *** Lc.saveStr (Lc.many num) *** Lc.eof in
+let split op =
+    let ( *** ) = Lc.seq                              in
+    let isnum c = '0' <= c && c <= '9'                in
+    let num     = Lc.satisfy isnum                    in
+    let alpha   = Lc.satisfy (fun c -> not (isnum c)) in
+    let op'     =     Lc.saveStr (Lc.some alpha)
+                  *** Lc.saveStr (Lc.many num)
+                  *** Lc.eof                          in
         try match Lc.scan op op' with
-            | l, [""]      -> None
-            | l, [n]       -> Some (int_of_string n)
+            | l, ["";op]   -> op, None
+            | l, [n ;op]   -> op, Some (int_of_string n)
             | _            -> assert false
         with Lc.Error msg  -> assert false
 @

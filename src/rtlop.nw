@@ -1,41 +1,76 @@
 
 % ------------------------------------------------------------------ 
-\section{Primitive RTL operators}
+\section{Translation of {\PAL} operators to RTL operators}
 % ------------------------------------------------------------------ 
 
-This module provides  types and implementations for {\rtl} operators.
-The semantics of an {\rtl} operator is independent of its
-implementation. Therefore run-time and compile-time implementations of
-an operator share the same type. 
+This module provides translation of {\PAL} operators to {\rtl}
+operators, types, and implementations for {\rtl} operators.  The
+semantics of an {\rtl} operator is independent of its implementation.
+Therefore run-time and compile-time implementations of an operator share
+the same type. 
 
-[[Poly]] returns the polymorphic type of an operator. It is a checked
-run-time error to look up an unknown operator. [[Mono]] takes an
-[[Rtl.opr]] operator and reconstructs its monomorphic type (using the
-width list inside the operator).
+{\rtl} operators are closely related to {\PAL} primitive operators. The
+[[Translate]] module provides [[operator]] to typecheck the application
+of a {\PAL} primitive operator and to translate the operator to an
+{\rtl} operator. It returns the type of the result, and the {\rtl}
+operator. The client has tp supply the name of the {\PAL} operator and
+the types of the arguments. In case of an error (unknown operator, type
+check fails), [[Error.ErrorExn]] is raised.
 
 <<rtlop.mli>>=
-module Types: sig
-    val poly: string  -> Types.tyscheme      (* Not_found *)
-    val mono: Rtl.opr -> Types.monotype      (* Not_found *)
+module Translate : sig
+    val operator:  op:string -> Types.ty list -> Types.ty * Rtl.opr  
+    (* ErrorExn *)
 end
 @
 
-Module [[CT]] provides compile-time implementations of {\rtl} operators. 
+% ------------------------------------------------------------------ 
+\subsection{Compile-Time implementations of RTL operators}
+% ------------------------------------------------------------------ 
+
+Module [[Impl]] provides compile-time implementations of {\rtl}
+operators. 
 
 <<rtlop.mli>>=
 module Impl : sig
     type value  = Bits of Bits.bits
                 | Bool of bool
 
-    val lookup: string -> (value list -> value)
+    val lookup: Rtl.opr -> (value list -> value)        (* Not_found *)
 end
 @
+
+
+% ------------------------------------------------------------------ 
+\subsection{Types of RTL operators}
+% ------------------------------------------------------------------ 
+
+Note: the [[Types]] module is not intended for the casual user. There
+should be no reason why you need to know about the types of a {\rtl}
+operator. 
+
+% [[Poly]] returns the polymorphic type of an {\rtl} operator. It is a
+% checked run-time error to look up an unknown operator. 
+
+[[Mono]] takes an [[Rtl.opr]] operator and reconstructs its monomorphic
+type (using the width list inside the operator). If the operator is
+unknown, [[Not_found]] is raised.
+
+<<rtlop.mli>>=
+module Types: sig
+    val mono: Rtl.opr -> Types.monotype      (* Not_found *)
+    (* val poly: string  -> Types.tyscheme      (* Not_found *) *)
+end
+@
+
+
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
 <<rtlop.ml>>=
+module T = Types        (* save external Types module here *)
 
 module Types = struct
     <<Types>>
@@ -44,6 +79,10 @@ end
 module Impl  = struct
     <<CT>>
 end    
+
+module Translate = struct
+    <<Translate>>
+end
 @
 
 
@@ -51,28 +90,22 @@ end
 \subsection{RTL-Op Types}
 % ------------------------------------------------------------------ 
 
+
 <<Types>>=
 module T = Types
 
 let ops = Str.assoc2map
     [  "add"    , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
-    ;  "+"      , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
     ;  "sub"    , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
-    ;  "-"      , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "div"    , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "neg"    , (T.proc [T.bitsv 1]            (T.bitsv 1))
     ;  "mult"   , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
     ;  "shl"    , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
     ;  "shra"   , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
     ;  "shrl"   , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
-    ;  "<<"     , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
-    ;  ">>"     , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
-    ;  "*"      , (T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
     ;  "eq"     , (T.proc [T.bitsv 1; T.bitsv 1] T.bool)
-    ;  "=="     , (T.proc [T.bitsv 1; T.bitsv 1] T.bool)
-    ;  "<="     , (T.proc [T.bitsv 1; T.bitsv 1] T.bool)
-    ;  ">="     , (T.proc [T.bitsv 1; T.bitsv 1] T.bool)
-    ;  ">"      , (T.proc [T.bitsv 1; T.bitsv 1] T.bool)
-    ;  "<"      , (T.proc [T.bitsv 1; T.bitsv 1] T.bool)
-    ;  "!="     , (T.proc [T.bitsv 1; T.bitsv 1] T.bool)
+    (* the argument for the return size is alwys the last argument! *)
+    ;  "zx"     , (T.proc [T.bitsv 1] (T.bitsv 2))
     ] 
 
 let poly op = Str.Map.find op ops 
@@ -99,32 +132,91 @@ let zero = function
     | [Bits(x);Bits(y)] -> Bits(B.zero (B.width x))
     | _                 -> assert false
 
+let neg = function
+    | [Bits(x)]     -> Bits(B.zero (B.width x))
+    | _             -> assert false
+
 let true' = function
     | [Bits(_);Bits(_)] -> Bool(true)
     | _                 -> assert false
 
 let ops = Str.assoc2map
     [  "add"    , (zero  )
-    ;  "+"      , (zero  )
     ;  "sub"    , (zero  )
-    ;  "-"      , (zero  )
+    ;  "div"    , (zero  )
+    ;  "neg"    , (neg   )
     ;  "mult"   , (zero  )
     ;  "shl"    , (zero  )
     ;  "shra"   , (zero  )
     ;  "shrl"   , (zero  )
-    ;  "<<"     , (zero  )
-    ;  ">>"     , (zero  )
-    ;  "*"      , (zero  )
     ;  "eq"     , (true' )
-    ;  "=="     , (true' )
-    ;  "<="     , (true' )
-    ;  ">="     , (true' )
-    ;  ">"      , (true' )
-    ;  "<"      , (true' )
-    ;  "!="     , (true' )
+    ;  "zx"     , (zero  )
     ]
 
-let lookup op = try Str.Map.find op ops with Not_found -> assert false
+let lookup opr = 
+    let (op,_) = Rtl.Convert.opr opr in
+    try Str.Map.find op ops with Not_found -> assert false
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Translation from {\PAL} primitive operators}
+% ------------------------------------------------------------------ 
+
+
+{\PAL} primitive operators and {\rtl} primitive operators are closely
+connected. To typecheck the application of a {\PAL} operator we use the
+type of the corresponding {\RTL} operator.  For example, the {\PAL}
+operator [[add]] is translated to the {\rtl} operator [[add]], that has
+the exact same signature. The exceptions are {\PAL} operators like
+[[zx32]] that encodes the size of its return value in the name. {\rtl}
+operators are more polymorphic than {\PAL} operators and thus and there
+are no separate operators [[zx1]], \dots, [[zx32]], \dots, but a single
+polymorphic operator [[zx]]:
+
+$$[[zx]]: \forall~\alpha,\beta.[[bits]]\alpha \to [[bits]]\beta$$
+
+An application [[zx32 (1::bits10)]] is translated into the {\rtl}
+operator [[(zx,[10,32])]], where [[10]] is bound by $\alpha$, and [[32]]
+by $\beta$ in the above type scheme. Hence, the size of the result,
+which is inferred from the name, is always the \emph{last}
+value in the \emph{width list} of an {\rtl} operator.
+
+<<Translate>>=
+let alias = Str.assoc2map 
+    [  "+"      , "add"
+    ;  "-"      , "sub"
+    ;  "*"      , "mult"
+    ;  "/"      , "div"
+    ;  "<<"     , "shl"
+    ;  ">>"     , "shrl"
+    ;  "=="     , "eq"
+    ;  "<="     , "leq"
+    ;  ">="     , "geq"
+    ;  ">"      , "gt"
+    ;  "<"      , "lt"
+    ;  "!="     , "ne"
+    ;  "~"      , "neg"
+    ] 
+
+let unalias op = try Str.Map.find op alias with Not_found -> op    
+@
+
+{\PAL} uses infix symbols as aliases for alphanumeric operator names. If
+we find the current operator in the [[alias]] map we replace it with the
+official name. If we don't find it, we assume it is an official name
+already.
+
+<<Translate>>=
+let operator op argtys =
+    try 
+        let op, argtys = match T.split (unalias op) with
+            | op, None   -> op, argtys
+            | op, Some n -> op, argtys @ [T.bits n]        in
+        let return    = T.appl (Types.poly op) argtys      in
+        let widthlist = T.widthlist (Types.poly op) argtys in
+        return, Rtl.opr op widthlist 
+    with
+    | Not_found  -> Error.error ("unknown operator "^op)
+    | T.MatchExn -> Error.error "type error in application"
+@        
 

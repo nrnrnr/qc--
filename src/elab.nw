@@ -957,24 +957,18 @@ let rec evalFetch env = function
             ) 
 @
 
-Applications to primitives operators must be type checked.  The types
-of the arguments [[at]] and the typescheme [[t]] of the operator as
-found in [[Const.Symbol]] are passed to [[Types.appl]] which returns
-the type of the result, if the type check passes.  Otherwise it raises
-an [[Error.ErrorExn]].  Only if the type check passes we apply the
-values to the implementation [[f]] of the operator and get the result. 
-Both result and type are returned.
+Applications to primitives operators must be type checked. Only if the
+type check passes we apply the values to the implementation [[f]] of the
+operator and get the result.  Both result and type are returned.
 
 <<module Eval>>=
 and evalPrimOp env op args =
     E.ematch (E.Raise.list (List.map (evalExpr env) args))
     (fun args ->
-        let  t      = Rtlop.Types.poly op   in
-        let  f      = Rtlop.Impl.lookup op  in
-        let at, av  = List.split args in
-        let rt      = Types.appl t at in
-            rt, f av
-    )
+        let t,v    = List.split args                 in
+        let rt,opr = Rtlop.Translate.operator op t      in
+        let  f     = Rtlop.Impl.lookup opr           in
+            rt, f v)
 
 <<module Eval>>=
 and evalExprs env ee = E.Raise.list (List.map (evalExpr env) ee)
@@ -1356,13 +1350,11 @@ let tyExpr env exp =
                     ) in
     let tlookup   = fun x -> snd (F.findt x env)                  in
     let vlookup   = fun x -> E.ematch (snd (F.findv x env)) (snd) in 
-    let olookup   = fun x -> E.Ok(Rtlop.Types.poly x) in
                     
     let e = { Expcheck.wordsize    = word
             ; Expcheck.pointersize = pointer
             ; Expcheck.tlookup     = tlookup
             ; Expcheck.vlookup     = vlookup
-            ; Expcheck.olookup     = olookup
             } 
     in Expcheck.check e exp 
 
@@ -1761,19 +1753,16 @@ and callStmt env (left,cc,exp,args,ts,fs) =
 @
 
 A call of a primitive is type checked: argument types must have the
-expected types. This is done by [[Types.appl]]. The type for the
-primitive is currently taken from [[Const.constOps]] but this will
-change. 
-             
+expected types. This is done by [[Rtlop.Translate.check]].
+
 <<check>>=
 and primStmt env (left,cc,op,args,fs) =
     let left   = E.Raise.list (List.map (lvalue PrimCall env) left) in
     let env    = foldl (checkFlow false) env fs                     in
-    let opTy   = Rtlop.Types.poly op                                in
     let args   = List.map snd args                                  in
-    let at     = List.map (tyExpr env) args                         in
-    let rTy    = tyAppl opTy (E.Raise.list at)                      in
-        E.seq' (F.flagError env) (E.Raise.pair (left,rTy)) (fun _ -> env)
+    let t      = E.Raise.list (List.map (tyExpr env) args)          in 
+    let right  = E.ematch t (fun t -> fst (Rtlop.Translate.operator op t)) in
+        E.seq' (F.flagError env) (E.Raise.pair (left,right)) (fun _ -> env)
 @
 
 The formal parameters of a continuation statement must be local
