@@ -94,8 +94,12 @@ let do_lexbuf ~sourcename:filename g buf =
   | I.Error s -> (prerr_endline "Lua interpreter halted with error"; [])
   | I.Value.Projection (v, w) -> (prerr_endline ("error projecting to " ^ w); [])
 
+
 let dostring g s = 
-  I.with_stack (V.srcloc ("dostring('" ^ s ^ "')") 0) g
+  let abbreviate s =
+    if String.length s < 200 then s
+    else String.sub s 0 60 ^ "..." in
+  I.with_stack (V.srcloc ("dostring('" ^ abbreviate s ^ "')") 0) g
     (do_lexbuf ~sourcename:"<string>" g) (Lexing.from_string s)
 
 let dofile g infile =
