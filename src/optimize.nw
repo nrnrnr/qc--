@@ -57,8 +57,8 @@ module G = Cfgx.M
 module RP = Rtl.Private
 module Down = Rtl.Dn
 module Up = Rtl.Up
+module SS = Strutil.Set
 @
-
 We traverse the flow graph and simplify rtl's.
 <<optimize.ml>>=
 let simplify_exps _ {Proc.cfg = cfg} =
@@ -68,7 +68,6 @@ let simplify_exps _ {Proc.cfg = cfg} =
     | Some i -> G.update_instr Simplify.rtl n; true in
   G.fold_nodes simplify_node false cfg
 @
-
 A forward dfs followed by a backwards dfs will find nodes reachable from the entry
 (following successors) and nodes reachable from the exit (following predecessors).
 Since we want to catch loops, we can't just look for nodes that have no successors.
@@ -77,11 +76,20 @@ reach from the exit node.
 We break any loops among these nodes by setting the successor of each join node to the
 illegal node.
 Finally, we can delete any nodes that have no successors.
+
+When we delete a node, we also need to remove any spans that are associated
+with the node.
+Because spans are associated with labels, we also collect the labels that are
+accessible from the entry node.
+Then we remove the unreachable spans.
 <<optimize.ml>>=
-let trim_unreachable_code _ {Proc.cfg = cfg} =
+let trim_unreachable_code _ ({Proc.cfg = cfg} as proc) =
   let module IS = Set.Make (struct type t = int let compare = compare end) in
-  let nodes_from_entry =
-    G.postorder_dfs (fun n set -> IS.add (G.num n) set) IS.empty cfg in
+  let (nodes_from_entry, labels_from_entry) =
+    let add_labels n lset = 
+      if G.is_join n then List.fold_right SS.add (G.labels n) lset else lset in
+    G.postorder_dfs (fun n (nset, lset) -> (IS.add (G.num n) nset, add_labels n lset))
+                    (IS.empty, SS.empty) cfg in
   let nodes_from_exit  = G.reverse_podfs (fun n rst -> n :: rst) [] cfg in
   let to_delete = List.filter (fun n -> not (IS.mem (G.num n) nodes_from_entry))
                               nodes_from_exit in
@@ -91,12 +99,16 @@ let trim_unreachable_code _ {Proc.cfg = cfg} =
     List.filter (fun n -> G.kind n <> G.Entry &&
                           List.for_all (fun p -> G.kind p = G.Illegal) (G.preds n)) in
   let rec delete_nodes = function
-    | []       -> ()
+    | [] -> ()
     | n :: rst -> 
-      let succs = G.succs n in
+      let succs  = G.succs n in
       (G.delete cfg n;
        delete_nodes (hanging_nodes succs @ rst)) in
+  let proc_name = proc.Proc.symbol#original_text in
   delete_nodes (hanging_nodes to_delete);
+  proc.Proc.spans <-
+      List.filter (fun (l,_) -> l = proc_name || SS.mem l labels_from_entry)
+                  proc.Proc.spans;
   to_delete <> []
 @
 We find each join point with one predecessor, and if the predecessor is a branch to the
