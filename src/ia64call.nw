@@ -1,0 +1,106 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{IA64 calling conventions}
+
+<<ia64call.mli>>=
+val cconv :
+  return_to:(Rtl.exp -> Rtl.rtl) ->
+  Mflow.cut_args Target.map ->
+  string -> Automaton.cc_spec ->
+  Call.t
+@ 
+
+\section{Implementation of IA64 calling conventions}
+
+<<ia64call.ml>>=
+module R = Rtl
+@ 
+<<IA64 calling convention automata in Lua>>=
+A                 = Automaton
+IA64              = IA64              or {}
+IA64.cc           = IA64.cc           or {}
+IA64.cc["C"     ] = IA64.cc["C"     ] or {}
+@ 
+
+\paragraph{IA64 registers and their conventional uses}
+<<ia64call.ml>>=
+let r i = ('r', i, 64)
+let volregs = RS.of_list (List.map r ([2; 3; 8; 9; 10; 11] @ 
+									  (Aux.from 14 ~upto:31)))
+let nvregs  = RS.of_list (List.map r [0; 1; 4; 5; 6; 7; 12; 13])
+let allregs = RS.elements (RS.union volregs nvregs)
+
+let saved_nvr temps = 
+  let t = Talloc.Multiple.loc temps 't' in
+  fun (_, _, w) -> t w
+@ 
+
+<<IA64 calling convention automata in Lua>>=
+IA64.growth    = "down"
+IA64.byteorder = "little"
+IA64.sp_align  = 16
+IA64.wordsize  = 64
+
+function reg(sp, i, w) return({ space = sp, index = i, width = w }) end
+function r(i) return (reg("r", i, IA64.wordsize)) end
+function f(i) return (reg("f", i, IA64.wordsize)) end
+@ 
+
+\paragraph{Conventions governing the stack}
+<<ia64call.ml>>=
+let sp       = R.reg (r 12)
+let spval    = R.fetch sp 64
+let sp_align = 16
+let growth   = Memalloc.Down
+let bo       = R.LittleEndian
+@ 
+
+\paragraph{Automata for passing values---C~convention}
+
+<<IA64 calling convention automata in Lua>>=
+function fpreturn(h, w)
+  return (h == "float" and w <= 82)
+end
+
+IA64.cc["C"].results =
+  A.choice { fpreturn, { A.widths { 32, 64, 82 }
+                       , A.useregs { f(8) }
+                       }
+           , A.is_any, { A.widen(64, "multiple") 
+                       , A.widths { 64, 128 }
+                       , A.useregs { r(8), r(9) }
+                       } 
+           } 
+@ 
+
+<<IA64 calling convention automata in Lua>>=
+IA64.cc["C"].call = 
+  { A.widen(64, "multiple")
+  , A.bitcounter("bits")
+  , A.choice { "float", { A.bitcounter("floatbits")
+                        , A.choice { A.is_counter("bits", lt512),
+                                          A.regs_by_bits("floatbits",
+                                                         f(8) .. f(15))
+                                   , A.is_any, A.unit
+                                   } 
+                        } 
+             , A.is_any, A.regs_by_bits("bits", r(32) .. r(39))
+             } 
+  , A.overflow { memsize = 8, byteorder = IA64.byteorder, growth = "up"
+               , max_alignment = IA64.sp_align
+               } 
+  }	
+@ 
+
+<<IA64 calling convention automata in Lua>>=
+IA64.cc["C"].cutto =
+  { A.widen(64)
+  , A.useregs(r(32) .. r(39))
+  , A.overflow { memsize = 8, byteorder = IA64.byteorder, growth = "up"
+               , max_alignment = IA64.sp_align
+               }
+  }
+@ 
+
+\subsection{Implementation using [[Callspec]]}
+
