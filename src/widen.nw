@@ -10,6 +10,18 @@ val float : rm:Rtl.exp -> int list -> Rtl.rtl -> Rtl.rtl
 
 val store_const : int -> Rtl.rtl -> Rtl.rtl
   (* l := k   =>   l := lobits(k') *)
+
+val width_cost : Rtl.rtl -> (int * int * int)
+  (* count extension and truncation operations (#sign, #zero, #lobits) *)
+  (* we don't count these operations applied to locations or constants *)
+
+val dpwiden : Rtl.rtl -> Rtl.rtl
+  (* do integer widening using dynamic programming *)
+
+val badwiden : Rtl.rtl -> Rtl.rtl
+  (* do integer widening using dynamic programming *)
+
+val time : ('a -> 'b) -> 'a -> 'b
 @ 
 <<widen.ml>>=
 module R = Rtl
@@ -181,4 +193,682 @@ let store_const goodwidth rtl = match Down.rtl rtl with
       let lobits = RP.App(("lobits", [goodwidth; w]), [widek]) in
       Up.rtl (RP.Rtl [(g, RP.Store(l, lobits, w))])
   | _ -> rtl
+@ 
 
+<<widen.ml>>=
+let width_cost r =
+  let rec count_loc c = function
+    | RP.Mem(_,_,_,e,_) -> do_count c e
+    | RP.Slice(_,_,l) -> count_loc c l
+  and do_count ((sx, zx, lo) as c) = function
+    | RP.Const _ -> c
+    | RP.Fetch(l, w) -> c
+    | RP.App ((("sx"|"zx"), _), [(RP.Const _ | RP.Fetch _)]) -> c
+    | RP.App (("sx", _), [arg]) -> do_count (sx+1, zx, lo) arg
+    | RP.App (("zx", _), [arg]) -> do_count (sx, zx+1, lo) arg
+    | RP.App (("lobits", _), [RP.Const(RP.Bits _)]) -> c
+    | RP.App (("lobits", _), [arg]) -> do_count (sx, zx, lo+1) arg
+    | RP.App ((opname, _), args) -> List.fold_left do_count c args
+  in
+  let do_count_guard counts (g, eff) =
+    let counts' = 
+      match eff with
+      | RP.Store(l, r, w) -> do_count counts r
+      | RP.Kill l         -> counts
+    in
+    do_count counts' g
+  in
+  let rtl = Rtlutil.ToReadableString.rtl in
+  let _ = Printf.printf "Counting %s\n" (rtl r) in
+  let (sx, zx, lo) =
+    let RP.Rtl es = Down.rtl r in
+    List.fold_left do_count_guard (0, 0, 0) es
+  in
+  Printf.printf "Counted %i sx, %i zx, %i lo\n" sx zx lo;
+  (sx, zx, lo)
+@ 
+
+\subsection{DP Integer Widening}
+
+<<widen.ml>>=
+<<types>>
+<<solution utilities>>
+<<helpers>>
+<<environments>>
+<<find reachable solutions>>
+<<combine solutions>>
+<<bottom-up transform>>
+<<dynamic programming>>
+@ 
+
+<<types>>=
+type fill = G | Z | S
+(* type width = int *)
+type index = int
+type width = int
+type solution = {e : RP.exp; cost : int; e' : RP.exp; fill : fill; n : index; w : width}
+type machine_env = (string * (width list)) list
+type fill_env    = (string * fill * index) list
+@ 
+
+<<find reachable solutions>>=
+<<relations>>
+<<solution set utilities>>
+<<applying rules>>
+let rec find_reachable known frontier =
+  let frontier' = solutions_unique (List.concat (List.map apply_rules frontier)) in
+  let known     = solutions_union frontier known in
+  let frontier  = List.find_all (fun soln -> relevant_given soln known) frontier'
+  in
+  if frontier <> [] then find_reachable known frontier else known
+@ 
+
+The key to finding the reachable solutions is being able to compare them.
+<<relations>>=
+let comparable a b =
+  ast a = ast b && width a = width b && fill a = fill b
+@ 
+
+Should definitly explain this more.  Perhaps bears some formalization.
+<<relations>>=
+(* determines if solution a is redundant given solution b *)
+let redundant_given1 a b =
+  if comparable a b then
+    if      index a > index b && cost a < cost b then false
+    else if index a < index b && cost a > cost b then false
+    else if index a >= index b then cost a >= cost b
+    else (* index a <  index b *)   false
+  else false
+@ 
+
+<<relations>>=
+let relevant_given soln known = not (List.exists (redundant_given1 soln) known)
+@ 
+
+<<solution set utilities>>=
+let solutions_union xs ys =
+  let xs' = List.find_all (fun soln -> relevant_given soln ys) xs in
+  xs' @ ys
+@ 
+
+<<solution set utilities>>=
+let solutions_unique =
+  let rec make_unique result = function
+    | []           -> result
+    | soln :: rest -> 
+        if relevant_given soln rest && relevant_given soln result then
+          make_unique (soln :: result) rest
+        else make_unique result rest
+  in make_unique []
+@ 
+
+<<applying rules>>=
+let subsume_fill_rule soln =
+  if fill soln = S || fill soln = Z then
+    [subst_fill soln G]
+  else []
+@ 
+
+<<applying rules>>=
+let natural_rule soln =
+  let create fill' = {soln with fill = fill'; n = soln.w} in    
+  if width soln = index soln && fill soln = G then
+    [create S; create Z]
+  else if fill soln = S || fill soln = Z then
+    [create S; create Z]
+  else []
+@ 
+
+<<applying rules>>=
+let fill_rule soln =
+  let n = index soln in
+  let w = width soln in
+  let sx_exists = find_exts_to w "sx" <> [] in
+  let zx_exists = find_exts_to w "zx" <> [] in
+  let lo_exists = find_exts_from w "lobits" <> [] in
+  let create fill' ext =
+    { soln with
+      cost = soln.cost + 2;
+      e'   = RP.App((ext, [n;w]), [RP.App(("lobits", [w;n]), [soln.e'])]);
+      fill = fill' }
+  in
+  if fill soln = G && lo_exists then
+    let sx_solns = if sx_exists then [create S "sx"] else [] in
+    let zx_solns = if zx_exists then [create Z "zx"] else [] in
+    let solns    = sx_solns @ zx_solns in
+    List.find_all (fun s -> s.n <= s.w) solns (* is this necessary *)
+  else []
+@ 
+
+<<applying rules>>=
+let widen_sigma soln =
+  if is_sigma soln then
+    let ext        = ext_of_fill soln.fill in
+    let w          = width soln in
+    let ext_widths = find_exts_from w ext in
+    let create ws =
+      let (_, w') = monomorphic ext ws in
+      { soln with
+        e' = RP.App((ext, ws), [soln.e']);
+        cost = soln.cost + 1;
+        w = w' }
+    in
+    List.map create ext_widths
+  else []
+@ 
+
+<<applying rules>>=
+let widen_garbage soln =
+  if fill soln = G then
+    let w          = width soln in
+    let sx_widths = find_exts_from w "sx" in
+    let zx_widths = find_exts_from w "zx" in
+    let create fill' ext ws =
+      let (_, w') = monomorphic ext ws in
+      { soln with
+        e' = RP.App((ext, ws), [soln.e']);
+        cost = soln.cost + 1;
+        w = w' }
+    in
+    List.map (create S "sx") sx_widths @ List.map (create Z "zx") zx_widths
+  else []
+@ 
+
+<<applying rules>>=
+let narrow_rule soln =
+  let w'           = width soln in
+  let trunc_widths = find_exts_from w' "lobits" in
+  let create ws =
+    let (_, w) = monomorphic "lobits" ws in
+    { soln with
+      e' = RP.App(("lobits", ws), [soln.e']);
+      cost = soln.cost + 1;
+      w = w }
+  in
+  List.find_all (fun s -> s.n <= s.w) (List.map create trunc_widths)
+@ 
+
+<<applying rules>>=
+let apply_rules soln =
+  let all_general_rules = [subsume_fill_rule; natural_rule; fill_rule;
+                           widen_sigma; widen_garbage; narrow_rule]
+  in
+  let relevant_rules = 
+    match ast soln with
+    | RP.Const (RP.Bool _) -> []
+    | RP.Const (RP.Bits _) -> [subsume_fill_rule; natural_rule; narrow_rule]
+(*     | Var(s,w) -> ext_var_rule :: all_general_rules *)
+    | _        -> all_general_rules
+  in List.concat (List.map (apply_with soln) relevant_rules)
+@ 
+
+<<combine solutions>>=
+let mksolutions_lit_bool ((RP.Const (RP.Bool b)) as e) =
+  [{e = e; cost = 0; e' = e; fill = Z; n = 1; w = 1}]
+
+let mksolutions_lit_bits tau ((RP.Const (RP.Bits b)) as e) =
+  let n = Bits.width b (* minbits i *) in
+  let litwidths = List.filter (fun w' -> n <= w') (List.assoc "literal" m) in
+  let f w' =
+    let ext = if tau = S then Bits.Ops.sx else Bits.Ops.zx in
+    {e = e; cost = 0; e' = RP.Const(RP.Bits (ext w' b)); fill = tau; n = n; w = w'} in
+  List.map f litwidths
+@ 
+
+Assume that each use of a variable is garbage type with index same as width.
+<<combine solutions>>=
+let mksolutions_var e w =
+  [{e = e; cost = 0; e' = e; fill = G; n = w; w = w}]
+@ 
+
+<<combine solutions>>=
+let mksolutions_op args_solns opname ws args =
+  let (args_indices, result_index) = monomorphic opname ws in
+  let args_solns = map2_find_all (fun n s -> s.n <= n) args_indices args_solns in
+
+  let m_widths = machine_widths m opname in
+  let m_widths = List.map (fork (monomorphic opname) id) m_widths in
+
+  let solns_combinations = cross_list_all args_solns in
+
+  let has_widths solns widths =
+    List.for_all2 (fun s w -> s.w = w) solns (fst (fst widths)) in
+  let solns_and_widths = cross_pair_filter has_widths solns_combinations m_widths in
+
+  let taus = try List.assoc opname op_fill_types with _ -> [] in
+  let has_taus (solns, _) (taus, _) =
+    List.for_all2 (fun s t -> s.fill = t) solns taus in
+  let solns_widths_and_taus = cross_pair_filter has_taus solns_and_widths taus in
+  
+  let mkopsoln ((solns, ((_,w'), ws')), (_,t)) =
+    { e    = RP.App((opname, ws), args);
+      cost = List.fold_left (+) 0 (List.map cost solns);
+      e'   = RP.App((opname, ws'), List.map ast' solns);
+      fill = t;
+      n    = result_index;
+      w    = w' }
+  in
+  List.map mkopsoln solns_widths_and_taus
+@ 
+
+This implements the Drop-Ext rule.
+<<combine solutions>>=
+let mksolutions_ext ext ws [arg_solns] =
+  (* find all solutions that have the appropriate sigma *)
+  let sigma = fill_of_ext ext in
+  let arg_solns = List.find_all (fun s -> s.fill = sigma) arg_solns in
+
+  (* find all solutions with index equal to the input width of the extension *)
+  let ([n], n') = monomorphic ext ws in
+  let arg_solns = List.find_all (fun s -> s.n <= n && s.w >= n) arg_solns in
+  (* remember to use n as the index of the result *)
+
+  let create arg_soln = { arg_soln with e = RP.App((ext,ws),[arg_soln.e]); n = n } in
+  List.map create arg_solns
+@ 
+
+<<combine solutions>>=
+let mksolutions_trunc ws [arg_solns] =
+  let e arg = RP.App(("lobits", ws), [arg]) in
+  let ([n'], n) = monomorphic "lobits" ws in
+  let drop_lo_copy arg_soln = { arg_soln with e = e arg_soln.e } in
+  let drop_lo_ignore arg_soln = 
+    { arg_soln with e = e arg_soln.e; fill = G; n = n}
+  in
+  let arg_solns = List.find_all (fun s -> index s = n') arg_solns in
+  List.map drop_lo_copy arg_solns @ List.map drop_lo_ignore arg_solns
+@ 
+
+<<combine solutions>>=
+let ast_combine solns = function
+  | RP.Const(RP.Bool b) as e -> mksolutions_lit_bool e
+  | RP.Const(RP.Bits b) as e -> (mksolutions_lit_bits S e) @ (mksolutions_lit_bits Z e)
+  | (RP.Const(RP.Link(_,w)|RP.Late(_,w)) | RP.Fetch(_,w)) as e -> mksolutions_var e w
+  | RP.App((("sx"|"zx" as ext),   ws), [arg]) -> mksolutions_ext ext ws solns
+  | RP.App(("lobits",             ws), [arg]) -> mksolutions_trunc ws solns
+  | RP.App((opname,               ws), args) -> mksolutions_op solns opname ws args
+@ 
+
+<<bottom-up transform>>=
+let rec bottom_up f = function
+  | RP.App(_,es) as e -> f (List.map (bottom_up f) es) e
+  | e                 -> f [] e
+@ 
+
+<<dynamic programming>>=
+let all_solutions =
+  let solve_node known e =
+    (find_reachable []) (solutions_unique (ast_combine known e)) in
+  bottom_up solve_node
+@ 
+
+<<solution utilities>>=
+let cost  s = s.cost
+let index s = s.n
+let width s = s.w
+let ast   s = s.e
+let ast'  s = s.e'
+let fill  s = s.fill
+
+let is_sigma s = fill s = S || fill s = Z
+@ 
+<<solution utilities>>=
+let subst_fill s tau = {s with fill = tau}
+let minbits i = 31  (* CHANGE THIS! *)
+@ 
+
+<<solution utilities>>=
+let apply_with x f = f x
+let map2_find_all prop xss ys = List.map2 (fun x -> List.find_all (prop x)) xss ys
+let fork f g x = (f x, g x)
+let id x = x
+let compose f g x = f (g x)
+@ 
+
+<<solution utilities>>=
+let rec cross_list xs ys =
+  match xs, ys with
+  | [],      _  -> []
+  | _,       [] -> []
+  | x::rest, ys -> List.map (fun y -> [x;y]) ys @ cross_list rest ys
+
+let rec cross_pair xs ys =
+  match xs, ys with
+  | [], _ -> []
+  | _, [] -> []
+  | x::rest, ys ->
+      List.map (fun y -> (x, y)) ys @ cross_pair rest ys
+@ 
+
+<<solution utilities>>=
+let rec cross_pair_filter p xs ys =
+  match xs, ys with
+  | [], _ -> []
+  | _, [] -> []
+  | x::rest, ys ->
+      List.map (fun y -> (x, y)) (List.filter (p x) ys) @ cross_pair_filter p rest ys
+@ 
+
+<<solution utilities>>=
+let cross_list_all xss =
+  let nest_each = List.map (fun x -> [x]) in
+  let rec combinations current = function
+    | [] -> current
+    | xs :: rest -> 
+        let current' = List.map List.concat (cross_list current (nest_each xs)) in
+        combinations current' rest
+  in
+  match xss with
+  | [] | [_] -> []
+  | xs :: rest -> combinations (nest_each xs) rest
+@ 
+
+<<solution utilities>>=
+let rec minimum_cost = function
+  | [] -> failwith "can't take minimum of empty list"
+  | [x] -> x
+  | x :: rest -> let m = minimum_cost rest in if cost x < cost m then x else m
+
+let rec maximum_cost = function
+  | [] -> failwith "can't take maximum of empty list"
+  | [x] -> x
+  | x :: rest -> let m = minimum_cost rest in if cost x > cost m then x else m
+
+let minimum = function
+  | [] -> failwith "empty list"
+  | x :: rest -> List.fold_left min x rest
+@ 
+
+<<helpers>>=
+let monomorphic opname ws =
+  match opname, ws with
+  | ("eq"|"ge"|"geu"|"gt"|"gtu"|"le"|"leu"|"lt"|"ltu"|"ne"), [n;1] -> [n;n], 1
+  | ("eq"|"ge"|"geu"|"gt"|"gtu"|"le"|"leu"|"lt"|"ltu"|"ne"), [n] -> [n;n], 1
+  | "not", _ -> [1], 1
+  | ("com"|"neg"|"popcnt"), [n] -> [n], n
+  | ("mul_trunc"|"quot"|"rem"|"mod"|"modu"|"add"|"and"|"or"|"shl"|"shra"|"shrl"|"sub"|"xor"|"div"|"divu"), [n] -> [n;n], n
+  | ("mul"|"mulu"), [n;m] -> [n;n], m
+  | ("sx"|"zx"|"lobits"), [n;w] -> [n], w
+  | _ ->
+      Printf.printf "!!! %s at " opname;
+      ignore (List.map (Printf.printf "%i, ") ws);
+      Printf.printf "!!!\n";
+      raise Not_found
+
+let ext_of_fill = function
+  | S -> "sx"
+  | Z -> "zx"
+  | _ -> raise Not_found
+
+let fill_of_ext = function
+  | "sx" -> S
+  | "zx" -> Z
+  | ext  -> raise Not_found
+@ 
+
+<<environments>>=
+let op_fill_types =
+  [ "add", [[G;G],G]
+  ; "sub", [[G;G],G]
+  ; "div", [[S;S],S]
+  ; "divu", [[Z;Z],Z]
+  ; "mul", [[S;S],S]
+  ; "mul_trunc", [[Z;Z],Z]
+  ; "shra", [[S;Z],S]
+  ; "shrl", [[Z;Z],Z]
+  ; "shl",  [[G;Z],G]
+  ; "xor", [[G;G],G
+           ;[S;S],S
+           ;[Z;Z],Z]
+  ; "or", [[S;S],S;
+           [Z;Z],Z;
+           [G;G],G]
+  ; "neg", [[G],G]
+  ; "mulu", [[Z;Z],Z]
+  ; "mod", [[S;S],S]
+  ; "modu", [[Z;Z],Z]
+  ; "com", [[S],S;
+            [G],G]
+  ; "and", [[S;S],S;
+            [Z;G],Z;
+            [G;Z],Z;
+            [G;G],G]
+  ; "rem", [[S;S],S]
+
+  ; "eq",     [[S;S],Z;
+               [Z;Z],Z]
+  ; "ge",     [[S;S],S]
+  ; "geu",    [[S;S],Z;
+               [Z;Z],Z]
+  ; "gt",     [[S;S],Z]
+  ; "gtu",    [[S;S],Z;
+               [Z;Z],Z]
+  ; "le",     [[S;S],Z]
+  ; "leu",    [[S;S],Z;
+               [Z;Z],Z]
+  ; "lt",     [[S;S],Z]
+  ; "ltu",    [[S;S],Z;
+               [Z;Z],Z]
+  ; "ne",     [[S;S],Z;
+               [Z;Z],Z]
+  ; "not",    [[Z],Z]
+  ]
+
+let m : machine_env =
+  [ "sx",     [32;64]
+  ; "sx",     [16;64]
+  ; "sx",     [ 8;64]
+  ; "sx",     [ 1;64]
+  ; "zx",     [32;64]
+  ; "zx",     [16;64]
+  ; "zx",     [ 8;64]
+  ; "zx",     [ 1;64]
+  ; "lobits", [64;32]
+  ; "lobits", [64;16]
+  ; "lobits", [64;8]
+  ; "lobits", [64;1]
+  ; "sxlo",   [64;64]
+  ; "zxlo",   [64;64]
+  ; "add",    [64]
+  ; "and",    [64]
+  ; "com",    [64]
+  ; "div",    [64]
+  ; "divu",   [64]
+  ; "mod",    [64]
+  ; "modu",   [64]
+  ; "mul",    [64;64]
+  ; "mulu",   [64;64]
+  ; "mul_trunc", [64]
+  ; "neg",    [64]
+  ; "or",     [64]
+  ; "quot",   [64]
+  ; "rem",    [64]
+  ; "shl",    [64]
+  ; "shra",   [64]
+  ; "shrl",   [64]
+  ; "sub",    [64]
+  ; "xor",    [64]
+  ; "literal",[64]
+
+  ; "eq",     [64;1]
+  ; "ge",     [64;1]
+  ; "geu",    [64;1]
+  ; "gt",     [64;1]
+  ; "gtu",    [64;1]
+  ; "le",     [64;1]
+  ; "leu",    [64;1]
+  ; "lt",     [64;1]
+  ; "ltu",    [64;1]
+  ; "ne",     [64;1]
+  ; "not",    [1]
+  ]
+
+let machine_has menv opname ws = List.mem (opname,ws) menv
+
+let machine_widths menv opname =
+  let all = List.find_all (fun (opname',_) -> opname = opname') menv in
+    List.map (fun (opname,ws) -> ws) all
+
+let find_exts_from w extname =
+  let ext_widths = machine_widths m extname in
+  List.find_all (fun [w1;_] -> w1 = w) ext_widths
+
+let find_exts_to w extname =
+  let ext_widths = machine_widths m extname in
+  List.find_all (fun [_;w2] -> w2 = w) ext_widths
+@ 
+
+<<widen.ml>>=
+let dpwiden r =
+  let find_best_soln r tau w =
+    let solns  = all_solutions r in
+    let solns  = List.find_all (fun s -> width s = w && fill s = tau) solns in
+    (minimum_cost solns).e'
+  in
+  let rec widen_loc = function
+    | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,w,find_best_soln e Z 64,a)
+    | RP.Slice(w,i,l)      -> RP.Slice(w,i, widen_loc l)
+    | l                    -> l
+  in
+  let widen_guard (g, eff) =
+    let effsoln = 
+      match eff with
+      | RP.Store(l, r, w) -> RP.Store(widen_loc l, find_best_soln r S w, w)
+      | RP.Kill l         -> RP.Kill (widen_loc l)
+    in
+    let gsoln = find_best_soln g Z 1 in
+    (gsoln, effsoln)
+  in
+  let rtl = Rtlutil.ToReadableString.rtl in
+  let () = Printf.printf "Widening %s\n" (rtl r) in
+  let r' =
+    let RP.Rtl es = Down.rtl r in
+    Up.rtl (RP.Rtl (List.map widen_guard es))
+  in
+  let () = Printf.printf "Widened to %s\n" (rtl r') in
+  r'
+@ 
+
+<<widen.ml>>=
+let time f x =
+  let start_time = Sys.time() in
+  let result = f x in
+  let finish_time = Sys.time() in
+  print_string
+    ("CPU time (user): "^(string_of_float(finish_time -. start_time)));
+  print_newline();
+  result
+@ 
+
+<<widen.ml>>=
+let badwiden r =
+  let best_fill1 tau fills =
+    try List.find (fun ([t1],t) -> t1 = G && t = tau) fills
+    with Not_found ->
+      try List.find (fun ([t1],t) -> t = tau) fills
+      with Not_found ->
+        List.hd fills
+  in
+  let best_fill2 tau fills =
+    try List.find (fun ([t1;t2], t) -> t1 = G && t2 = G && t = tau) fills
+    with Not_found ->
+      try List.find (fun ([t1;t2], t) -> t1 = G && t = tau) fills
+      with Not_found -> 
+        try List.find (fun ([t1;t2], t) -> t2 = G && t = tau) fills
+        with Not_found ->
+          try List.find (fun ([t1;t2], t) -> t = tau) fills
+          with Not_found -> 
+            List.hd fills
+  in
+  let maybe_do_ext e tau w w' = 
+    if w < w' then
+      let extname = try ext_of_fill tau with Not_found -> "zx" in
+      let wss     = find_exts_to w' extname in
+      let ws      = List.find ((=) [w;w']) wss in
+      RP.App((extname, ws), [e])
+    else e
+  in
+  let rec find_best_soln r tau index w' =
+    match r with
+      (* constants *)
+    | RP.Const(RP.Bool b) as e -> e
+    | RP.Const(RP.Bits b) ->
+        let ext = if tau = S then Bits.Ops.sx else Bits.Ops.zx in
+        RP.Const(RP.Bits (ext w' b))
+      
+      (* variables *)
+    | ((RP.Const(RP.Link(_,w)|RP.Late(_,w))) | RP.Fetch(_,w)) as e ->
+        maybe_do_ext e tau w w'
+      
+      (* width changing *)
+    | RP.App((("sx"|"zx" as ext), [n;w2]), [RP.App(("lobits", [w1;n']), [arg])]) ->
+        let [w; _] = List.hd (find_exts_to w' (ext^"lo")) in
+        let argsoln = find_best_soln arg G n w in
+        if (tau = G || ext_of_fill tau = ext) && index >= n then 
+          RP.App((ext, [n;w']), [RP.App(("lobits", [w;n]), [argsoln])])
+        else 
+          maybe_do_ext argsoln tau w w'
+    | RP.App((("sx"|"zx" as ext), [n;w]), [arg]) ->
+        let argsoln = find_best_soln arg tau n 64 in
+        argsoln
+    | RP.App(("lobits", [w;n]), [arg]) -> 
+        let argsoln = find_best_soln arg tau n 64 in
+        argsoln
+
+      (* operators *)
+    | RP.App((opname, ws), [arg1; arg2]) ->
+        let fills = List.assoc opname op_fill_types in
+        let ([n1;n2], n) = monomorphic opname ws in
+        let ([t1;t2], t) = best_fill2 tau fills in
+        let (_,ws') =
+          List.find (fun (nm, ws') -> nm = opname && snd (monomorphic nm ws') = w') m in
+        let ([w1;w2], w') = monomorphic opname ws' in
+        let arg1soln = find_best_soln arg1 t1 n1 w1 in
+        let arg2soln = find_best_soln arg2 t2 n2 w2 in
+        let r' = RP.App((opname, ws'), [arg1soln; arg2soln]) in
+        if t = tau then r'
+        else RP.App((ext_of_fill tau, [n;w']),
+                    [RP.App(("lobits", [w';n]), [r'])])
+    | RP.App((opname, ws), [arg]) ->
+        let fills = List.assoc opname op_fill_types in
+        let ([n1], n) = monomorphic opname ws in
+        let ([t1], t) = best_fill1 tau fills in
+        let (_,ws') =
+          List.find (fun (nm, ws') -> nm = opname && snd (monomorphic nm ws') = w') m in
+        let ([w1], w') = monomorphic opname ws' in
+        let argsoln = find_best_soln arg t1 n1 w1 in
+        let r' = RP.App((opname, ws'), [argsoln]) in
+        if t = tau then r'
+        else RP.App((ext_of_fill tau, [n;w']),
+                    [RP.App(("lobits", [w';n]), [r'])])
+  in
+  let rec widen_loc = function
+    | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,64,find_best_soln e Z w 64,a)
+    | RP.Slice(w,i,l)      -> RP.Slice(w,i, widen_loc l)
+    | l                    -> l
+  in
+  let widen_guard (g, eff) =
+    let effsoln =
+      match eff with
+      | RP.Store(l, r, w) -> 
+          let r' = 
+            if w < 64 then
+              RP.App(("lobits", [64;w]), [find_best_soln r S w 64])
+            else
+              find_best_soln r S w 64
+          in
+          RP.Store(widen_loc l, r', w)
+      | RP.Kill l         -> RP.Kill (widen_loc l)
+    in
+    let gsoln = find_best_soln g Z 1 1 in
+    (gsoln, effsoln)
+  in
+  let rtl = Rtlutil.ToReadableString.rtl in
+  let () = Printf.printf "Widening %s\n" (rtl r) in
+  let r' =
+    let RP.Rtl es = Down.rtl r in
+    Up.rtl (RP.Rtl (List.map widen_guard es))
+  in
+  let () = Printf.printf "Widened to %s\n" (rtl r') in
+  r'
+@ 

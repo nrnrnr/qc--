@@ -716,6 +716,49 @@ Backend.debug_interp    = Backend.make  { target = Targets.interp
                                         , asm    = Asm.cmm
                                         , freeze = Interp.layout
                                         }
+
+--
+-- Kevin's x86 backend for testing widening
+--
+
+Backend.widentest =
+  { target    = Targets.x86
+  , placevars = Placevar.context(Placevar.x86, "x86")
+  , widen     = NewBackplane.seq
+                   { Widen.x86_floats, Widen.store_const(32),
+                     Widen.dpwiden,
+                     Widen.width_cost,
+                     Stages.assert('proper widths') }
+  , preopt    = Optimize.remove_nops
+  , expand    = Expander.x86
+  , liveness  = Liveness.liveness
+  , ralloc    = Ralloc.color
+  , freeze    = X86.layout
+  , rmvfp     = Stages.replace_vfp
+  , asm       = Asm.x86
+  , emit      = Driver.assemble
+  , compile   = Compile.file
+  }
+
+Backend.widentest2 =
+  { target    = Targets.x86
+  , placevars = Placevar.context(Placevar.x86, "x86")
+  , widen     = NewBackplane.seq
+                   { Widen.x86_floats, Widen.store_const(32),
+                     Widen.badwiden,
+                     Widen.width_cost,
+                     Stages.assert('proper widths') }
+  , preopt    = Optimize.remove_nops
+  , expand    = Expander.x86
+  , liveness  = Liveness.liveness
+  , ralloc    = Ralloc.color
+  , freeze    = X86.layout
+  , rmvfp     = Stages.replace_vfp
+  , asm       = Asm.x86
+  , emit      = Driver.assemble
+  , compile   = Compile.file
+  }
+
 --
 -- x86 backends
 --
