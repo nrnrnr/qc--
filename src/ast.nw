@@ -2,12 +2,8 @@
 % $Id$
 %
 
-
-
-
-
 % ------------------------------------------------------------------  
-\section{Abstract Syntax Definition}
+\section{Abstract Syntax Definition}\label{sec:ast}
 % ------------------------------------------------------------------  
 
 \ifhtml\tableofcontents\fi
@@ -176,7 +172,7 @@ unparse the abstract syntax back to concrete syntax and thus we keep
 them. 
 
 % ------------------------------------------------------------------  
-\section{Pretty Printer}
+\section{Pretty Printer}\label{sec:astpp}
 % ------------------------------------------------------------------  
 
 For debugging and regression testing we provide a module that pretty
@@ -319,6 +315,8 @@ let int n       = text (string_of_int n)
 let float f     = text f
 let semi        = text ";"
 
+let comment x   = text "/* " ^^ text x ^^ text " */"
+
 @ The escape functions provided by \ocaml~do not exactly match the
 escape rules of \C. We must replace them with our own.
 
@@ -453,7 +451,7 @@ let altcont (e1,e2) =
             agrp begin 
                 ~~ text "<" 
                 ^^ expr e1 
-                ^^ text "," 
+                ^^ text "/" 
                 ^/ expr e2
                 ^^ text ">"
             end
@@ -706,7 +704,7 @@ let rec topdecl = function
                 ^/ block register rs
             end
     | Pragma ->
-            text "<pragma>"
+            comment "<pragma>"
 
 let program(ds) = vgrp begin
                         ~~ list (break ^^ break) topdecl ds
