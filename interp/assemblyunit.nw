@@ -43,7 +43,6 @@ typedef struct {
   RBlock     def_section;
   table      section_table;
   table      label_table;
-  table      span_table;
 } assembly_unit;
 @
 
@@ -63,8 +62,11 @@ To abstract away from the details of memory management, this interface
 provides a function to create a new [[assembly_unit]] and a function that frees
 all existing [[assembly_unit]]s in memory.
 
+<<internal function prototypes>>=
+static assembly_unit *assembly_unit_new(void);
+@ 
+
 <<function prototypes>>=
-assembly_unit *assembly_unit_new(void);
 void           assembly_unit_free_all(void);
 @ 
 
@@ -110,10 +112,11 @@ extern procedure *curr_proc;
 #include "lualink.h"
 #include "encoding.h"
 #include "interp.h"
-#include "span.h"
 
 <<internal static variable definitions>>
 <<global variable definitions>>
+
+<<internal function prototypes>>
 <<function definitions>>
 @
 
@@ -129,7 +132,7 @@ static Arena_T assembly_unit_arena = NULL;
 @ 
 
 <<function definitions>>=
-assembly_unit *assembly_unit_new(void) {
+static assembly_unit *assembly_unit_new(void) {
   assembly_unit *au;
 
   if (assembly_unit_arena == NULL) {
@@ -174,9 +177,8 @@ assembly_unit *new_assembly_unit(lua_State *L) {
   au->def_section     = NULL;
   au->section_table   = fresh_table();
   au->label_table     = fresh_table();
-  au->span_table      = fresh_table();
 
-  au->section_table.L = au->label_table.L = au->span_table.L = L;
+  au->section_table.L = au->label_table.L = L;
 
   /* store assembly_unit in table */
   lua_pushtable(L, assembly_units_table);
@@ -188,7 +190,6 @@ assembly_unit *new_assembly_unit(lua_State *L) {
   /* reset global variables */
   unit             = au;
   curr_proc        = NULL;
-  curr_span_within = NULL;
 
   /* create and enter default section */
   assert(lua_gettop(L) == 0);

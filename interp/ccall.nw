@@ -56,6 +56,7 @@ We export a function [[register_c_func]] that may be used by a client's runtime 
 A signature ([[sig]]) of a C function is a string containing a comma-delimited list of the C types of the function's arguments, followed by a colon and the the function's return type.
 An explicit [[void]] should be used in the case of nullary functions, and [[pointer]] should be used in place of any pointers.
 For example, the signature for a C function that takes two [[int]]s and returns a [[double]] would be [["int,int:double"]].
+
 <<function prototypes>>=
 void register_c_func(const char *name, void *f, const char *sig);
 @ 
@@ -63,8 +64,8 @@ void register_c_func(const char *name, void *f, const char *sig);
 Internally, we use separate helper functions for each type of C function signature we are willing to call from a {\PAL} program.
 To register these callers, we use the [[register_c_sig]] helper function.
  
-<<function prototypes>>=
-void register_c_sig(const char *sig, c_caller caller);
+<<internal function prototypes>>=
+static void register_c_sig(const char *sig, c_caller caller);
 @
 
 To internally register all known C signatures, we provide [[init_c_sigs]].
@@ -91,6 +92,8 @@ void init_c_sigs(void);
 <<macro-generated function prototypes>>
 
 <<global variable definitions>>
+
+<<internal function prototypes>>
 <<function definitions>>
 @
 
@@ -184,7 +187,7 @@ void register_c_func(const char *name, void *f, const char *sig) {
 Internally, we use the [[register_c_sig]] function to register C function signatures (add a pointer to the signature's caller implementation to the Lua signature table).
 
 <<function definitions>>=
-void register_c_sig(const char *sig, c_caller caller) {
+static void register_c_sig(const char *sig, c_caller caller) {
   lua_State *L = c_sig_table.L;
 
   lua_pushtable(L, c_sig_table);

@@ -157,20 +157,20 @@ clean-obj:V:
 # source code targets
 #
 bytecode.sled:D: interp.nw
-	$NOTANGLE -L -R$target $prereq > $target
+	$NOTANGLE -L -R$target $prereq | $CPIF $target
 
 decode.fetch:D: interp.nw
     if [ -n "$BYTEORDER" ]; then
-      $NOTANGLE -L -R$target.$BYTEORDER $prereq > $target;
+      $NOTANGLE -L -R$target.$BYTEORDER | $CPIF $target;
     else
-      $NOTANGLE -L -R$target.LITTLE $prereq > $target;
+      $NOTANGLE -L -R$target.LITTLE $prereq | $CPIF $target;
     fi
 
 machine.h:D: interp.nw
     if [ -n "$BYTEORDER" ]; then
-      $NOTANGLE -L -R$target.$BYTEORDER $prereq > $target;
+      $NOTANGLE -L -R$target.$BYTEORDER $prereq | $CPIF $target
     else
-      $NOTANGLE -L -R$target.LITTLE $prereq > $target;
+      $NOTANGLE -L -R$target.LITTLE $prereq | $CPIF $target
     fi
 
 encode.c encode.h: bytecode.sled
@@ -181,13 +181,13 @@ encode.c encode.h: bytecode.sled
 		bytecode.sled decode.fetch
 
 '(([^/]*/)*)(.*)\.h$':RD:       '\1\3.nw'
-	$NOTANGLE -L -R$stem3.h $prereq > $target
+	$NOTANGLE -L -R$stem3.h $prereq | $CPIF $target
 
 '(([^/]*/)*)(.*)\.c$':RD:       '\1\3.nw'
-	$NOTANGLE -L -R$stem3.c $prereq > $target
+	$NOTANGLE -L -R$stem3.c $prereq | $CPIF $target
 
 %.m:D: %.nw
-    $NOTANGLE -R$target $prereq > $target
+    $NOTANGLE -R$target $prereq | $CPIF $target
 
 #
 # intermediate code targets
@@ -223,7 +223,7 @@ interp: $COREOBJS client.o
     $CC $CFLAGS $LIBS -L$LIBDIR -o $target $COREOBJS client.o \
                                    $LIBDIR/liblua.a $LIBDIR/liblualib.a
 
-clients/gc_client: $OBJS clients/gc.o
+clients/gc_client: $COREOBJS clients/gc.o
     $CC $CFLAGS $LIBS -L$LIBDIR -o $target $COREOBJS clients/gc.o \
                                    $LIBDIR/liblua.a $LIBDIR/liblualib.a
 
@@ -232,60 +232,59 @@ clients/gc_client: $OBJS clients/gc.o
 #
 # DO NOT DELETE THIS LINE -- mk depend depends on it
 arena.o: arena.c include/cii/assert.h include/cii/except.h \
- include/cii/arena.h
+  include/cii/arena.h
 assert.o: assert.c
 atom.o: atom.c
 except.o: except.c
 mclib.o: mclib.c
 mem.o: mem.c
-assemblyunit.o: assemblyunit.c assemblyunit.h controlflow.h \
- activation.h table.h types.h machine.h uid.h value.h lualink.h \
- encoding.h interp.h intervals.h label.h thread.h span.h
+assemblyunit.o: assemblyunit.c assemblyunit.h controlflow.h activation.h \
+  table.h types.h machine.h uid.h value.h lualink.h encoding.h interp.h \
+  intervals.h label.h thread.h
 ccall.o: ccall.c ccall.h table.h value.h types.h machine.h label.h \
- assemblyunit.h controlflow.h activation.h uid.h lualink.h interp.h \
- intervals.h thread.h
-controlflow.o: controlflow.c controlflow.h activation.h table.h \
- types.h machine.h uid.h value.h interp.h assemblyunit.h intervals.h \
- label.h thread.h
-disasm-dec.o: disasm-dec.c disasm.h label.h assemblyunit.h \
- controlflow.h activation.h table.h types.h machine.h uid.h value.h \
- operator.h
+  assemblyunit.h controlflow.h activation.h uid.h lualink.h interp.h \
+  intervals.h thread.h
+controlflow.o: controlflow.c controlflow.h activation.h table.h types.h \
+  machine.h uid.h value.h interp.h assemblyunit.h intervals.h label.h \
+  thread.h
+disasm-dec.o: disasm-dec.c disasm.h label.h assemblyunit.h controlflow.h \
+  activation.h table.h types.h machine.h uid.h value.h operator.h
 encode.o: encode.c encode.h
 encoding.o: encoding.c encoding.h table.h assemblyunit.h controlflow.h \
- activation.h types.h machine.h uid.h value.h encode.h label.h \
- lualink.h operator.h interp.h intervals.h thread.h
+  activation.h types.h machine.h uid.h value.h encode.h label.h lualink.h \
+  operator.h interp.h intervals.h thread.h span.h
 interp-dec.o: interp-dec.c interp.h activation.h table.h types.h \
- machine.h uid.h value.h assemblyunit.h controlflow.h intervals.h \
- label.h thread.h lualink.h encode.h ccall.h operator.h encoding.h \
- span.h stack.h
+  machine.h uid.h value.h assemblyunit.h controlflow.h intervals.h \
+  label.h thread.h lualink.h encode.h ccall.h operator.h encoding.h \
+  span.h stack.h
 intervals.o: intervals.c intervals.h
 label.o: label.c label.h assemblyunit.h controlflow.h activation.h \
- table.h types.h machine.h uid.h value.h lualink.h interp.h \
- intervals.h thread.h
+  table.h types.h machine.h uid.h value.h lualink.h interp.h intervals.h \
+  thread.h
 lualink.o: lualink.c lualink.h table.h interp.h activation.h types.h \
- machine.h uid.h value.h assemblyunit.h controlflow.h intervals.h \
- label.h thread.h encoding.h
+  machine.h uid.h value.h assemblyunit.h controlflow.h intervals.h \
+  label.h thread.h encoding.h
 operator.o: operator.c operator.h table.h value.h types.h machine.h \
- stack.h lualink.h interp.h activation.h uid.h assemblyunit.h \
- controlflow.h intervals.h label.h thread.h
+  stack.h lualink.h interp.h activation.h uid.h assemblyunit.h \
+  controlflow.h intervals.h label.h thread.h
 runtime.o: runtime.c runtime.h label.h assemblyunit.h controlflow.h \
- activation.h table.h types.h machine.h uid.h value.h interp.h \
- intervals.h thread.h lualink.h ccall.h
+  activation.h table.h types.h machine.h uid.h value.h interp.h \
+  intervals.h thread.h lualink.h ccall.h
 span.o: span.c span.h table.h label.h assemblyunit.h controlflow.h \
- activation.h types.h machine.h uid.h value.h
-stack.o: stack.c stack.h value.h types.h machine.h interp.h \
- activation.h table.h uid.h assemblyunit.h controlflow.h intervals.h \
- label.h thread.h
+  activation.h types.h machine.h uid.h value.h interp.h intervals.h \
+  thread.h lualink.h
+stack.o: stack.c stack.h value.h types.h machine.h interp.h activation.h \
+  table.h uid.h assemblyunit.h controlflow.h intervals.h label.h thread.h
 table.o: table.c table.h
 thread.o: thread.c thread.h intervals.h label.h assemblyunit.h \
- controlflow.h activation.h table.h types.h machine.h uid.h value.h \
- interp.h
+  controlflow.h activation.h table.h types.h machine.h uid.h value.h \
+  interp.h
 uid.o: uid.c uid.h intervals.h thread.h label.h assemblyunit.h \
- controlflow.h activation.h table.h types.h machine.h value.h
+  controlflow.h activation.h table.h types.h machine.h value.h
 value.o: value.c value.h types.h machine.h
 client.o: client.c client.h runtime.h label.h assemblyunit.h \
- controlflow.h activation.h table.h types.h machine.h uid.h value.h \
- interp.h intervals.h thread.h disasm.h ccall.h
+  controlflow.h activation.h table.h types.h machine.h uid.h value.h \
+  interp.h intervals.h thread.h disasm.h ccall.h
 clients/gc.o: clients/gc.c clients/gc.h runtime.h label.h assemblyunit.h \
- controlflow.h activation.h table.h types.h machine.h uid.h value.h \
- interp.h intervals.h thread.h ccall.h
+  controlflow.h activation.h table.h types.h machine.h uid.h value.h \
+  interp.h intervals.h thread.h ccall.h

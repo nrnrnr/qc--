@@ -481,8 +481,8 @@ int cmm_interp_open(int valstack_size, int argspace_size);
 [[cmm_interp_open]] starts up Lua and prepares for future encoding and interpreting, returning a non-zero [[int]] only if an error occurred.
 We make use of helper function [[check_value_types]] (from [[value.nw]]) to perform some assertions about the basic C types used in the interpreter's implementation; and we use [[init_interp]] to perform basic interpreter initialization (including operator registration, etc.).
 
-<<function prototypes>>=
-void   init_interp(lua_State *L, int valstack_size, int argspace_size);
+<<internal function prototypes>>=
+static void init_interp(lua_State *L, int valstack_size, int argspace_size);
 @ 
 
 For the sake of this interpreter's implementation and execution, we also make sure that defined [[MEMSIZE]]s and [[PTRSIZE]]s will work with the current architecture.
@@ -566,10 +566,10 @@ patterns
     GSTORE_LOCAL8 GSTORE_LOCAL16 GSTORE_GLOBAL8 GSTORE_GLOBAL16
     GOTO          CBRANCHT       CBRANCHF       BRANCHTF
     CALL          CMM_TAIL_CALL  RETURN         CUT
-    BEGIN_SPAN    END_SPAN       EMIT_RADDR
-    PLACECODE     PUSH_SYMBOL    OP
+    EMIT_RADDR    PUSH_SYMBOL    OP
+    PLACECODE
     HALT
-  ] is op = {0 to 34}
+  ] is op = {0 to 32}
 @ 
 
 To add an instruction to the bytecode, one must simply add an instruction name to the [[op]] table above and increase the upper bound of [[op]]'s value range.
@@ -581,7 +581,7 @@ patterns
            | GSTORE_LOCAL8  | GSTORE_GLOBAL8  | FETCH_ARG     | STORE_ARG
   any16   is STORE_LOCAL16  | STORE_GLOBAL16  | FETCH_LOCAL16 | FETCH_GLOBAL16
            | GSTORE_LOCAL16 | GSTORE_GLOBAL16
-  any32   is PUSH  | CALL   | DEFINE_PROC     | END_SPAN      | PUSH_SYMBOL
+  any32   is PUSH  | CALL   | DEFINE_PROC     | PUSH_SYMBOL
   memory  is FETCH | STORE  | GSTORE
   nullary is HALT  |  GOTO  | CMM_TAIL_CALL   | CUT           | END_PROC
 @ 
@@ -606,7 +606,6 @@ constructors
   any32          bits32               is any32;      bits32
   memory         bits8  bits8b bits8c is memory;     bits8;      bits8b; bits8c
   EMIT_RADDR     addr                 is bits32=addr
-  BEGIN_SPAN     bits32 addr          is BEGIN_SPAN; bits32;     bits32=addr
   APPLY_OPERATOR bits32               is OP;         bits32
   CBRANCHT       addr                 is CBRANCHT;   bits32=addr
   CBRANCHF       addr                 is CBRANCHF;   bits32=addr
@@ -652,12 +651,14 @@ With some preprocessor exploitation, we are able to reuse the same operator defi
 \emph{NOTE: great care must be taken to make sure that the implementation operator definitions stay above the definition of [[init_interp]]; we redefine the same macros to do different things within [[init_interp]].}
 
 <<utility functions>>=
-void init_interp(lua_State *L, int valstack_size, int argspace_size) {
+static void init_interp(lua_State *L, int valstack_size, int argspace_size) {
 
   /* initialize the contents of global tables */
   assembly_units_table   = fresh_table();
   exports_table          = fresh_table();
   operator_table         = fresh_table();
+  span_table             = fresh_table();
+
   c_func_table           = fresh_table();
   c_sig_table            = fresh_table();
 
@@ -665,6 +666,8 @@ void init_interp(lua_State *L, int valstack_size, int argspace_size) {
   assembly_units_table.L = L;
   exports_table.L        = L;
   operator_table.L       = L;
+  span_table.L           = L;
+
   c_func_table.L         = L;
   c_sig_table.L          = L;
  
@@ -1106,7 +1109,7 @@ Finally, we get to the main part of the interpreter.  We start by initializing t
   /* sigma is left implicit!          */
   /* A     is kept global             */
   /* u     is kept in thread t        */
-  /* s     is kept in t->stackdata_X  */
+  /* s     is kept in t->stack_X      */
 
   actptr      act;
   bytecodeptr pc;
@@ -1245,6 +1248,7 @@ Either way, we must decrement the [[values]] pointer by 2 to simulate the poppin
                            values -= 2;
                            pc = next;
 @ 
+
 Memory space fetches, stores, and guarded stores are more complex.
 They theoretically involve correctly aggregating / breaking up data into small pieces, arranged by the specified byte-order.
 For now, we only support the natural byte-order of the machine on which the interpreter is running (i.e., little-endian byte-order on x86 machines).
@@ -1798,41 +1802,6 @@ And its brother, [[END_PROC]].
                            }
 @ 
 
-Next, we deal with spans.
-
-For [[BEGIN_SPAN]], we associate the given token with the given value in the span table.
-Each token gets its own Lua table within the span table.
-The value is stored in the last entry in the token's table.
-
-<<matching statement>>=
-    | BEGIN_SPAN(tok,v) => {
-                           /* assume that we're in a procedure */
-                           assert(curr_proc != NULL);
-
-                           /* update current span information */
-						   /*
-                           span_table_push(curr_proc->span_table, tok, v);
-						   */
-
-                           pc = next;
-                           }
-@ 
-
-For [[END_SPAN]] we simply remove the last entry from the token's table (within the span table).
-
-<<matching statement>>=
-    | END_SPAN(tok)     => {
-                           /* assume that we're in a procedure */
-                           assert(curr_proc != NULL);
-
-                           /* update current span information */
-/*
-                           span_table_pop(curr_proc->span_table, tok);
-*/
-                           pc = next;
-                           }
-@
-
 % ----------------------------------------------------------------------------
 \subsection{Application Initialization}
 % ----------------------------------------------------------------------------
@@ -1938,8 +1907,9 @@ Putting it all together, we have [[interp.m]], the C file with NJ Machine-Code T
 
 <<global variable definitions>>
 
-<<utility functions>>
+<<internal function prototypes>>
 
+<<utility functions>>
 <<bytecode generation>>
 <<bytecode interpreting>>
 
@@ -2166,8 +2136,6 @@ Document that tables sent to Lua function [[CMM_call]] (as call-site annotations
 Do we have to handle [[never returns]] annotations?
 
 Do we need to make sure that continuations are not defined outside of procedures (by testing if [[curr_proc]] is [[NULL]])?
-
-Look at pools / regions.
 
 Convert C loop to Lua.
 

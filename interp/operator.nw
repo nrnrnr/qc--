@@ -42,8 +42,11 @@ To abstract away from the details of memory management, this interface
 provides a function to create a new [[operator]] and a function that frees
 all existing [[operator]]s in memory.
 
+<<internal function prototypes>>=
+static operator *operator_new(void);
+@ 
+
 <<function prototypes>>=
-operator *operator_new(void);
 void      operator_free_all(void);
 @ 
 
@@ -105,9 +108,9 @@ Additionally, a few other macros help with simplifying the macro calls to constr
 Helping to register C function implementations of {\PAL} operators is helper [[register_operator]].
 This helper takes the string description of the operator (as it would be called from {\PAL}), a pointer to the implementing C function, and the number of arguments the operator takes.
 
-<<function prototypes>>=
-void register_operator(const char *name, operator_fun f, unsigned num_args,
-                       const char *sig);
+<<internal function prototypes>>=
+static void register_operator(const char *name,  operator_fun f, 
+                              unsigned num_args, const char *sig);
 @
 
 To batch register all default-supported operator instantiations, we provide
@@ -139,6 +142,8 @@ void init_operators(void);
 
 <<internal static variable definitions>>
 <<global variable definitions>>
+
+<<internal function prototypes>>
 <<function definitions>>
 @
 
@@ -172,7 +177,7 @@ static Arena_T operator_arena = NULL;
 @ 
 
 <<function definitions>>=
-operator *operator_new(void) {
+static operator *operator_new(void) {
   operator *op;
 
   if (operator_arena == NULL) {
@@ -342,9 +347,10 @@ The main method of registering operators is through the use of helper function [
 This function takes the name of an operator, a pointer to its implementation, and the number of arguments it takes, and creates an [[operator]] structure to represent it.
 This [[operator]] is then stored away in the global (Lua) table [[operator_table]].
 Note that [[register_operator]] will soundlessly re-register an operator if the same operator name and signature are sent to it more than once.
+
 <<function definitions>>=
-void register_operator(const char *name, operator_fun f, unsigned num_args, 
-                       const char *sig)
+static void register_operator(const char *name,  operator_fun f, 
+                              unsigned num_args, const char *sig)
 {
   table     op_family = fresh_table();
   lua_State *L        = operator_table.L;

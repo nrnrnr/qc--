@@ -72,6 +72,7 @@ int lua_CMM_end_section(lua_State *L);
 #include "lualink.h"
 #include "operator.h"
 #include "interp.h"
+#include "span.h"
 
 <<bytecode generation>>
 @
@@ -399,37 +400,38 @@ int lua_CMM_define_label(lua_State *L) {
 }
 @
 
-Spans are somewhat simpler to implement than the other structure elements.
+The encoding of spans is mostly farmed out to helper functions in [[span.nw]].
 [[lua_CMM_begin_span]] expects two arguments on the Lua stack: a token (a string) and a value (a string label).
 [[lua_CMM_end_span]] expects one argument atop the Lua stack: a token (a string).
 Both functions return 0 to indicate to Lua that they return no values.
 
 <<bytecode generation>>=
 int lua_CMM_begin_span(lua_State *L) {
-  CMM_label *lbl;
+  const char *value;
+  unsigned    tok;
 
   lua_assert_isstring(L, -1, "begin_span requires a value as its 2nd arg.");
-  lua_assert_isstring(L, -2, "begin_span requires a token as its 1st arg.");
+  lua_assert_isnumber(L, -2, "begin_span requires a token as its 1st arg.");
 
-  lbl = get_label(L, lua_tostring(L, -1));
+  value = lua_tostring(L, -1);
+  tok   = (unsigned) lua_tonumber(L, -2);
+  
+  lua_pop(L, 2); /* pop token, value */
 
-  /* BOOKKEEPING CODE GOES HERE !!! */
-
-  /* emit instruction */
-  begin_span((unsigned) lua_tonumber(L, -1), CMM_label_raddr(lbl));
-
-  lua_pop(L, 1); /* pop token */
+  /* enter span */
+  span_table_begin(span_table, tok, value);
   return 0;
 }
 int lua_CMM_end_span(lua_State *L) {
-  lua_assert_isstring(L, -1, "end_span requires a token as its only argument");
+  unsigned tok;
 
-  /* SPAN BOOKKEEPING CODE GOES HERE !!! */
+  lua_assert_isnumber(L, -1, "end_span requires a token as its only argument");
 
-  /* emit instruction */
-  end_span((unsigned) lua_tonumber(L, -1));
-
+  tok = (unsigned) lua_tonumber(L, -1);
   lua_pop(L, 1); /* pop token */
+
+  /* enter span */
+  span_table_end(span_table, tok);
   return 0;
 }
 @ 
