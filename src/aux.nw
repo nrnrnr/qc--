@@ -25,6 +25,8 @@ val round_up_to : multiple_of:int -> int -> int
 val foldri : (int -> 'a -> 'b -> 'b) -> 'a list -> 'b -> 'b
   (* fold list elements right to left, passing index for List.nth *)
 
+val map_partial : ('a -> 'b option) -> 'a list -> 'b list
+
 val last : 'a list -> 'a (* raises Invalid_argument on empty list *)
 
 val from: int -> upto:int -> int list
@@ -110,3 +112,13 @@ let rec last = function
   | [] -> raise (Invalid_argument "empty list")
   | [x] -> x
   | x :: xs -> last xs
+
+<<aux.ml>>=
+let rec map_partial f = function
+  | [] -> []
+  | x :: xs ->
+      match f x with
+      | Some y -> y :: map_partial f xs
+      | None -> map_partial f xs
+
+      

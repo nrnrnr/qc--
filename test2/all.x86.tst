@@ -37,6 +37,7 @@ Test.files = { "add.c--"
 	     , "tail.c--"
              , { source = {'tail2.c--', 'call3.c--'} }
              , { source = {'tailnot.c--', 'call3.c--'} }
+	     , 'test-050.c--'
              , norun("x86-000.c--")
              , norun("x86-001.c--")
              }

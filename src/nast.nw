@@ -32,6 +32,7 @@ type actual   = hint * exp
 Flow annotations on calls and cut to.
 <<exposed types>>=
 type flow  = Ast.flow list
+type alias = Ast.mem  list
 @
 Statements.  
 <<exposed types>>=
@@ -43,7 +44,7 @@ type stmt =
   | Cont   of name * convention * cformal list
   | Span   of exp * exp * stmt list
   | Assign of Ast.name_or_mem list * Ast.guarded list
-  | Call   of loc list * convention * exp  * actual list * procname list * flow
+  | Call   of loc list * convention * exp  * actual list * procname list * flow * alias
   | Prim   of loc list * convention * name * actual list * flow
   | Goto   of exp * label list
   | Jump   of convention * exp * actual list * procname list
@@ -242,7 +243,11 @@ let rec stmt r s k =
   | A.AssignStmt (ls, rs) ->
       atomic (Assign (ls, rs))
   | A.CallStmt (ls, cc, p, a's, tgts, flows) ->
-      atomic (Call (ls, convention cc, p, List.map actual a's, tgts, flows))
+      let add a (flows, mems) = match a with
+      | A.Flow f -> (f :: flows, mems)
+      | A.Alias m -> (flows, m :: mems) in
+      let flows, mems = List.fold_right add flows ([], []) in
+      atomic (Call (ls, convention cc, p, List.map actual a's, tgts, flows, mems))
   | A.PrimStmt (ls, cc, p, a's, flows) ->
       atomic (Prim (ls, convention cc, p, List.map actual a's, flows))
   | A.GotoStmt (e, tgts) ->

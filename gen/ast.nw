@@ -154,6 +154,13 @@ flow        = FlowAt        (flow, region)
             | NeverReturns
             | Aborts    
 
+mem         = AliasAt       (mem, region)
+            | Reads         (name*)
+            | Writes        (name*)
+
+procann     = Flow (flow) 
+            | Alias (mem)
+
 name_or_mem = NameOrMemAt   (name_or_mem, region)
             | Name          (hint?,name)
             | Mem           (ty, expr, aligned?, in_alias*)
@@ -194,7 +201,7 @@ stmt        = StmtAt        (stmt, region)
             | ContStmt      (name, cformal*)
             | SpanStmt      (expr key, expr value, body*)
             | AssignStmt    (name_or_mem*, guarded*)
-            | CallStmt      (name_or_mem*, conv?, expr, actual*, target*, flow*)
+            | CallStmt      (name_or_mem*, conv?, expr, actual*, target*, procann*)
             | PrimStmt      (name_or_mem*, conv?, name, actual*, flow*)
             | GotoStmt      (expr, target*)
             | JumpStmt      (conv?, expr, actual*, target*)

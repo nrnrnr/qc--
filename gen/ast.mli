@@ -96,6 +96,15 @@
       | NeverReturns
       | Aborts
   
+  and mem =
+        AliasAt of (mem * region)
+      | Reads of (name list)
+      | Writes of (name list)
+  
+  and procann =
+        Flow of (flow)
+      | Alias of (mem)
+  
   and altcont = (expr * expr)
   and range =
         Point of (expr)
@@ -119,7 +128,7 @@
           expr *
           actual list *
           target list *
-          flow list)
+          procann list)
       | PrimStmt of (name_or_mem list *
           conv option *
           name *

@@ -38,6 +38,8 @@
   val sexp_rd_datum : SexpPkl.instream -> Ast.datum
   val sexp_rd_cformal : SexpPkl.instream -> Ast.cformal
   val sexp_rd_flow : SexpPkl.instream -> Ast.flow
+  val sexp_rd_mem : SexpPkl.instream -> Ast.mem
+  val sexp_rd_procann : SexpPkl.instream -> Ast.procann
   val sexp_rd_altcont : SexpPkl.instream -> Ast.altcont
   val sexp_rd_range : SexpPkl.instream -> Ast.range
   val sexp_rd_guarded : SexpPkl.instream -> Ast.guarded
@@ -54,6 +56,7 @@
   val sexp_rd_range_option : SexpPkl.instream -> Ast.range option
   val sexp_rd_altcont_option : SexpPkl.instream -> Ast.altcont option
   val sexp_rd_name_or_mem_list : SexpPkl.instream -> Ast.name_or_mem list
+  val sexp_rd_procann_list : SexpPkl.instream -> Ast.procann list
   val sexp_rd_flow_list : SexpPkl.instream -> Ast.flow list
   val sexp_rd_cformal_list : SexpPkl.instream -> Ast.cformal list
   val sexp_rd_actual_list : SexpPkl.instream -> Ast.actual list
@@ -106,6 +109,8 @@
   val sexp_wr_datum : Ast.datum -> SexpPkl.outstream -> unit
   val sexp_wr_cformal : Ast.cformal -> SexpPkl.outstream -> unit
   val sexp_wr_flow : Ast.flow -> SexpPkl.outstream -> unit
+  val sexp_wr_mem : Ast.mem -> SexpPkl.outstream -> unit
+  val sexp_wr_procann : Ast.procann -> SexpPkl.outstream -> unit
   val sexp_wr_altcont : Ast.altcont -> SexpPkl.outstream -> unit
   val sexp_wr_range : Ast.range -> SexpPkl.outstream -> unit
   val sexp_wr_guarded : Ast.guarded -> SexpPkl.outstream -> unit
@@ -126,6 +131,7 @@
   val sexp_wr_name_or_mem_list : Ast.name_or_mem list ->
       SexpPkl.outstream ->
       unit
+  val sexp_wr_procann_list : Ast.procann list -> SexpPkl.outstream -> unit
   val sexp_wr_flow_list : Ast.flow list -> SexpPkl.outstream -> unit
   val sexp_wr_cformal_list : Ast.cformal list -> SexpPkl.outstream -> unit
   val sexp_wr_actual_list : Ast.actual list -> SexpPkl.outstream -> unit

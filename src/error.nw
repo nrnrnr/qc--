@@ -71,15 +71,17 @@ Combinators to deal with functions that do not naturally expect
 values of type [[error]].
 
 <<error.mli>>=
-val combine     : 'a error error -> 'a error
-val ematch      : 'a error -> ('a -> 'b) -> 'b error
-val ematch2     : 'a error -> 'b error -> ('a -> 'b -> 'c) -> 'c error
-val ematch3     : 'a error -> 'b error -> 'c error ->
-                  ('a -> 'b -> 'c -> 'd) -> 'd error
-val ematch4     : 'a error -> 'b error -> 'c error -> 'd error -> 
-                  ('a -> 'b -> 'c -> 'd -> 'e) -> 'e error
-val ematch5     : 'a error -> 'b error -> 'c error -> 'd error -> 'e error ->
-                  ('a -> 'b -> 'c -> 'd -> 'e -> 'f) -> 'f error
+val combine : 'a error error -> 'a error
+val ematch  : 'a error -> ('a -> 'b) -> 'b error
+val ematch2 : 'a error -> 'b error -> ('a -> 'b -> 'c) -> 'c error
+val ematch3 : 'a error -> 'b error -> 'c error ->
+              ('a -> 'b -> 'c -> 'd) -> 'd error
+val ematch4 : 'a error -> 'b error -> 'c error -> 'd error -> 
+              ('a -> 'b -> 'c -> 'd -> 'e) -> 'e error
+val ematch5 : 'a error -> 'b error -> 'c error -> 'd error -> 'e error ->
+              ('a -> 'b -> 'c -> 'd -> 'e -> 'f) -> 'f error
+val ematch6 : 'a error -> 'b error -> 'c error -> 'd error -> 'e error -> 'f error ->
+              ('a -> 'b -> 'c -> 'd -> 'e -> 'f -> 'g) -> 'g error
 val ematchPair  : 'a error * 'b error -> ('a * 'b -> 'c) -> 'c error
 val ematchTriple: 'a error * 'b error * 'c error -> 
                    ('a * 'b * 'c -> 'd) -> 'd error
@@ -374,6 +376,8 @@ let ematch2 x y f =
 let ematch3 x y z f     = match x with Ok x -> ematch2 y z     (f x) | Error -> Error
 let ematch4 x y z w f   = match x with Ok x -> ematch3 y z w   (f x) | Error -> Error
 let ematch5 x y z w v f = match x with Ok x -> ematch4 y z w v (f x) | Error -> Error
+let ematch6 x y z w v u f =
+  match x with Ok x -> ematch5 y z w v u (f x) | Error -> Error
 let ematchPair    x2 = ematch (Raise.pair x2)
 let ematchTriple  x3 = ematch (Raise.triple x3)
 let ematchQuad    x4 = ematch (Raise.quad x4)

@@ -495,6 +495,43 @@
         end
       end
   
+  and sexp_rd_mem s_ = 
+      begin
+        (SexpPkl.rd_lp s_);
+        let tmp_ = let t = (SexpPkl.get_sym s_) in
+          (match (t) with 
+              "ast_AliasAt" -> let mem1 = (sexp_rd_mem s_) in
+              let region1 = (sexp_rd_region s_) in
+              Ast.AliasAt(mem1, region1)
+            | "ast_Reads" -> let name_list1 = (SexpPkl.rd_list sexp_rd_name s_) in
+              Ast.Reads(name_list1)
+            | "ast_Writes" -> let name_list1 = (SexpPkl.rd_list sexp_rd_name s_) in
+              Ast.Writes(name_list1)
+            | _ -> (SexpPkl.die ()))
+          (* end match *) in
+        begin
+          (SexpPkl.rd_rp s_);
+          tmp_
+        end
+      end
+  
+  and sexp_rd_procann s_ = 
+      begin
+        (SexpPkl.rd_lp s_);
+        let tmp_ = let t = (SexpPkl.get_sym s_) in
+          (match (t) with 
+              "ast_Flow" -> let flow1 = (sexp_rd_flow s_) in
+              Ast.Flow(flow1)
+            | "ast_Alias" -> let mem1 = (sexp_rd_mem s_) in
+              Ast.Alias(mem1)
+            | _ -> (SexpPkl.die ()))
+          (* end match *) in
+        begin
+          (SexpPkl.rd_rp s_);
+          tmp_
+        end
+      end
+  
   and sexp_rd_altcont s_ = 
       begin
         (SexpPkl.rd_lp s_);
@@ -591,8 +628,8 @@
               let expr1 = (sexp_rd_expr s_) in
               let actual_list1 = (SexpPkl.rd_list sexp_rd_actual s_) in
               let target_list1 = (SexpPkl.rd_list sexp_rd_target s_) in
-              let flow_list1 = (SexpPkl.rd_list sexp_rd_flow s_) in
-              Ast.CallStmt(name_or_mem_list1, conv_opt1, expr1, actual_list1, target_list1, flow_list1)
+              let procann_list1 = (SexpPkl.rd_list sexp_rd_procann s_) in
+              Ast.CallStmt(name_or_mem_list1, conv_opt1, expr1, actual_list1, target_list1, procann_list1)
             | "ast_PrimStmt" -> let name_or_mem_list1 = (SexpPkl.rd_list sexp_rd_name_or_mem s_) in
               let conv_opt1 = (SexpPkl.rd_option sexp_rd_conv s_) in
               let name1 = (sexp_rd_name s_) in
@@ -744,6 +781,9 @@
   
   and sexp_rd_name_or_mem_list s_ = 
       (SexpPkl.rd_list sexp_rd_name_or_mem s_)
+  
+  and sexp_rd_procann_list s_ = 
+      (SexpPkl.rd_list sexp_rd_procann s_)
   
   and sexp_rd_flow_list s_ = 
       (SexpPkl.rd_list sexp_rd_flow s_)
@@ -1370,6 +1410,45 @@
           end)
       (* end match *)
   
+  and sexp_wr_mem x_ s_ = 
+      (match (x_) with 
+          (Ast.AliasAt(mem1, region1)) -> begin
+            (SexpPkl.wr_lp s_);
+            (SexpPkl.wr_sym "ast_AliasAt" s_);
+            (sexp_wr_mem mem1 s_);
+            (sexp_wr_region region1 s_);
+            (SexpPkl.wr_rp s_)
+          end
+        | (Ast.Reads(name_list1)) -> begin
+            (SexpPkl.wr_lp s_);
+            (SexpPkl.wr_sym "ast_Reads" s_);
+            (SexpPkl.wr_list sexp_wr_name name_list1 s_);
+            (SexpPkl.wr_rp s_)
+          end
+        | (Ast.Writes(name_list1)) -> begin
+            (SexpPkl.wr_lp s_);
+            (SexpPkl.wr_sym "ast_Writes" s_);
+            (SexpPkl.wr_list sexp_wr_name name_list1 s_);
+            (SexpPkl.wr_rp s_)
+          end)
+      (* end match *)
+  
+  and sexp_wr_procann x_ s_ = 
+      (match (x_) with 
+          (Ast.Flow(flow1)) -> begin
+            (SexpPkl.wr_lp s_);
+            (SexpPkl.wr_sym "ast_Flow" s_);
+            (sexp_wr_flow flow1 s_);
+            (SexpPkl.wr_rp s_)
+          end
+        | (Ast.Alias(mem1)) -> begin
+            (SexpPkl.wr_lp s_);
+            (SexpPkl.wr_sym "ast_Alias" s_);
+            (sexp_wr_mem mem1 s_);
+            (SexpPkl.wr_rp s_)
+          end)
+      (* end match *)
+  
   and sexp_wr_altcont x_ s_ = 
       (match (x_) with 
           ((expr1, expr2) : Ast.altcont) -> begin
@@ -1485,7 +1564,7 @@
             expr1,
             actual_list1,
             target_list1,
-            flow_list1)) -> begin
+            procann_list1)) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_CallStmt" s_);
             (SexpPkl.wr_list sexp_wr_name_or_mem name_or_mem_list1 s_);
@@ -1493,7 +1572,7 @@
             (sexp_wr_expr expr1 s_);
             (SexpPkl.wr_list sexp_wr_actual actual_list1 s_);
             (SexpPkl.wr_list sexp_wr_target target_list1 s_);
-            (SexpPkl.wr_list sexp_wr_flow flow_list1 s_);
+            (SexpPkl.wr_list sexp_wr_procann procann_list1 s_);
             (SexpPkl.wr_rp s_)
           end
         | (Ast.PrimStmt(name_or_mem_list1,
@@ -1699,6 +1778,9 @@
   
   and sexp_wr_name_or_mem_list x_ s_ = 
       (SexpPkl.wr_list sexp_wr_name_or_mem x_ s_)
+  
+  and sexp_wr_procann_list x_ s_ = 
+      (SexpPkl.wr_list sexp_wr_procann x_ s_)
   
   and sexp_wr_flow_list x_ s_ = 
       (SexpPkl.wr_list sexp_wr_flow x_ s_)

@@ -305,9 +305,24 @@ let rec flow f =
     | A.Aborts                          -> P.text "also aborts"
     | _                                 -> P.empty
 
+let rec alias f =
+  let ann s ns = P.agrp (P.text s ^/ nest (P.commalist id ns)) in
+  match f with
+  | A.AliasAt(x,_)     -> alias x
+  | A.Reads  ns -> ann "reads"  ns
+  | A.Writes ns -> ann "writes" ns
+
+let pann = function
+  | A.Alias a -> alias a
+  | A.Flow f  -> flow f
+
 let flows = function
     | []    -> P.empty
     | xs    -> nest (P.agrp (P.list P.break flow xs))
+
+let panns = function
+    | []    -> P.empty
+    | xs    -> nest (P.agrp (P.list P.break pann xs))
 
 let conv = function
     | Some cc       -> P.agrp (P.text "foreign" ^/ str cc)
@@ -437,7 +452,7 @@ before it is printed.
               end
            end
         ^^ (if ts <> [] then P.break ^^ targets ts else P.empty)
-        ^^ (if fs <> [] then P.break ^^ flows fs else P.empty)
+        ^^ (if fs <> [] then P.break ^^ panns fs else P.empty)
         ^^ semi
         end
 <<astpp.ml>>=

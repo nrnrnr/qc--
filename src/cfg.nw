@@ -639,7 +639,8 @@ val cbranch      : 'i cfg -> Rtl.exp -> ifso:'i node -> ifnot:'i node -> 'i node
 val mbranch      : 'i cfg -> 'i -> targets:'i node list -> 'i node
 val call         : 'i cfg -> 'i -> altrets:'i contedge list -> succ:'i node ->
                      unwinds_to:'i contedge list -> cuts_to:'i contedge list ->
-                     aborts:bool -> uses:regs -> defs:regs -> kills:regs -> 'i node
+                     aborts:bool -> uses:regs -> defs:regs -> kills:regs ->
+                     reads:string list option -> writes:string list option -> 'i node
 val cut_to       : 'i cfg -> 'i -> cuts_to:'i contedge list -> aborts:bool ->
                      uses:regs -> 'i node
 val return       : 'i cfg -> 'i -> uses:regs -> 'i node
@@ -820,6 +821,8 @@ type ('i, 'n, 'e) cal = {         cal_num        : int
                         ;         cal_altrets    : int
                         ;         cal_unwinds_to : int
                         ;         cal_cuts_to    : int
+                        ;         cal_reads      : string list option
+                        ;         cal_writes     : string list option
                         }
 type ('i, 'n, 'e) cut = {         cut_num        : int
                         ; mutable cut_i          : 'i
@@ -1693,7 +1696,7 @@ let copy info transform cfg =
       mk_call (transform c.cal_i) ~pred:new_cfg.ill
               ~contedges:ce_lst ~lsucc:new_cfg.ill ~uses:c.cal_uses
               ~altrets:c.cal_altrets ~unwinds_to:c.cal_unwinds_to
-              ~cuts_to:c.cal_cuts_to
+              ~cuts_to:c.cal_cuts_to ~reads:c.cal_reads ~writes:c.cal_writes
     | Cut c ->
       let cuts_to = Array.to_list (convert_contedges c.cut_contedges) in
       cut_to new_cfg (transform c.cut_i) ~cuts_to ~aborts:false ~uses:c.cut_uses
@@ -1719,7 +1722,8 @@ We have to bootstrap node construction because of the way [[set_succ]] works.
 <<node constructors with interesting control flow edges>>=
 let join_leading_to_ce ce = {ce with node = join_leading_to ce.node}
 
-let mk_call i ~pred ~contedges ~lsucc ~uses ~altrets ~unwinds_to ~cuts_to =
+let mk_call i ~pred ~contedges ~lsucc ~uses ~altrets ~unwinds_to ~cuts_to
+    ~reads ~writes =
     Cal { cal_num        = new_num ()
         ; cal_i          = i
         ; cal_pred       = pred
@@ -1730,9 +1734,11 @@ let mk_call i ~pred ~contedges ~lsucc ~uses ~altrets ~unwinds_to ~cuts_to =
         ; cal_altrets    = altrets
         ; cal_unwinds_to = unwinds_to
         ; cal_cuts_to    = cuts_to
+        ; cal_reads      = reads  
+        ; cal_writes     = writes 
         }
 
-let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts ~uses ~defs ~kills =
+let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts ~uses ~defs ~kills ~reads ~writes =
   let () = if List.length altrets > 0
            then Impossible.unimp "alternate returns not yet supported" in
   let altrets     = List.map join_leading_to_ce altrets in
@@ -1745,7 +1751,7 @@ let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts ~uses ~defs ~kills =
   let illedge     = fun {kills=k; defs=d; node=n} -> {kills=k; defs=d; node=cfg.ill} in
   let contedges   = Array.of_list (List.map illedge edgelist) in
   let cal =
-    mk_call i ~pred:cfg.ill ~contedges ~lsucc:cfg.ill ~uses
+    mk_call i ~pred:cfg.ill ~contedges ~lsucc:cfg.ill ~uses ~reads ~writes
             ~altrets:(List.length altrets) ~unwinds_to:(List.length unwinds_to)
             ~cuts_to:(List.length cuts_to) in
   let ()  = Aux.foldri (fun i n () -> set_succ_n cal i ~succ:n.node)

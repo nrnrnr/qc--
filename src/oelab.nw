@@ -1805,9 +1805,11 @@ argument to [[E.seq']] includes [[left]] and [[at]] although only the
 type of [[exp]] is used.
 
 <<check>>=
-and callStmt env (left,cc,exp,args,ts,fs) =
+and callStmt env (left,cc,exp,args,ts,fas) =
     let msg1 = "call expression is not a function"                in
     let msg2 = "call expression is not a pointer"                 in
+    let flow = function A.Flow f -> Some f | A.Alias _ -> None    in
+    let fs   = Aux.map_partial flow fas                           in
     let left = E.Raise.list (List.map (lvalue Call env) left)     in
     let env  = foldl (checkFlow false) env fs                     in
     let env  = foldl  checkCallTarget  env ts                     in

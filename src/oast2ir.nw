@@ -726,12 +726,13 @@ let () = if cc.C.overflow_alloc.C.parameter_deallocator <> C.Callee then
 @
 \paragraph{Calls}
 <<supporting functions for translating statements>>=
-and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ = 
+and callStmt (lhs,cconv, e, args, targets (*unused*), fas) succ = 
   let cc    = to_cc cconv                        in
   let out   = actuals cc.C.call_parms.C.out args in
   let in'   = results cc.C.results.C.in' lhs     in
   let calli = target.T.call.T.embed (expr e)     in
-  let conts = continuations cc conts false       in
+  let flow  = function A.Flow f -> Some f | A.Alias _ -> None    in
+  let conts = continuations cc (Aux.map_partial flow fas) false       in
   let () =
     add youngblocks cc.C.overflow_alloc.C.parameter_deallocator out.C.overflow in
                                         (* outgoing overflow parms *)
@@ -750,7 +751,8 @@ and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ =
     G.stack_adjust g out.C.post_sp                                       **>
     G.call g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
                    ~altrets:conts.returns ~unwinds_to:conts.unwinds
-                   ~cuts_to:conts.cuts ~aborts:conts.aborts ~succ             in
+                   ~cuts_to:conts.cuts ~aborts:conts.aborts ~reads:None ~writes:None
+                   ~succ             in
   let call_succ  =
     G.assertion    g (in'.C.insp out.C.overflow)              **>
     G.stack_adjust g in'.C.pre_sp            **>  (* DOUBTS ABOUT THIS *)

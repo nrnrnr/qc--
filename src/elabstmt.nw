@@ -27,6 +27,7 @@ type range = Bits.bits * Bits.bits   (* lo `leu` x `leu` hi, as in manual *)
 type procname = string
 type 'a flow = { cuts : 'a list; unwinds : 'a list; areturns : 'a list;
               returns : bool; aborts : bool }
+type 'a alias = { reads : 'a; writes : 'a }
 type 'a cflow = {
     ccuts : 'a list;
     caborts : bool;
@@ -40,7 +41,7 @@ type stmt =
   | Span   of Runtimedata.span * stmt list
   | Assign of rtl
   | Call   of loc hinted list * convention * exp * actual list * procname list
-            * name flow
+            * name flow * name list option alias
   | Goto   of exp * name list
   | Jump   of convention * exp * actual list * procname list
   | Cut    of convention * exp * actual list * name cflow 
@@ -122,7 +123,7 @@ let elab_functions r env =
     | N.Span (k, v, ss)   -> span k v (stmts r reachable ss)
     | N.Assign (lhs, rhs) -> assign lhs rhs
     | N.Goto (tgt, tgts)  -> goto tgt tgts
-    | N.Call (lhs, conv, p, args, tgts, flow) -> call lhs conv p args tgts flow
+    | N.Call (lhs, conv, p, args, tgts, f, a) -> call lhs conv p args tgts f a
     | N.Jump (conv, p, args, tgts)            -> jump conv p args tgts
     | N.Cut  (conv, k, args, flow)            -> cut conv k args flow
     | N.Prim (lhs, conv, p, args, flow)       -> prim lhs conv p args flow
@@ -137,7 +138,7 @@ let elab_functions r env =
           s' :: stmts (not (jumps s)) ss in
     Error.Raise.list (stmts reachable ss)
   and jumps = function N.Goto _ | N.Jump _ | N.Cut _ | N.Return _  -> true
-                     | N.Call (_, _, _, _, _, fl) -> List.exists never_returns fl
+                     | N.Call (_, _, _, _, _, fl, _) -> List.exists never_returns fl
                      | N.StmtAt (s, _) -> jumps s
                      | N.Span (_, _, ss) -> jumpsss ss
                      | N.If (_, t, f) -> jumpsss t && jumpsss f
@@ -336,15 +337,16 @@ details of the assignment in a [[Call]] context are handled by
 argument to [[E.seq']] includes [[left]] and [[at]] although only the
 type of [[exp]] is used.
 <<definitions of elaboration functions>>=
-let call left conv p args targets flows =
-  let left = E.Raise.list (List.map (Elabexp.elab_hinted_name env) left) in
-  let args = E.Raise.list (List.map (actual r) args) in
-  let tgts = E.Raise.list (List.map (call_target r) targets) in
-  let flow = call_flow r flows in
+let call left conv p args targets flows alias =
+  let left  = E.Raise.list (List.map (Elabexp.elab_hinted_name env) left) in
+  let args  = E.Raise.list (List.map (actual r) args) in
+  let tgts  = E.Raise.list (List.map (call_target r) targets) in
+  let flow  = call_flow r flows in
+  let alias = elab_alias r alias in
   reject_uncallable p;
-  E.ematch5 left args (exp p) tgts flow (fun left args (p,pt) tgts flow ->
+  E.ematch6 left args (exp p) tgts flow alias (fun left args (p,pt) tgts flow alias ->
     insist_pointer "procedure value" pt;
-    Call (left, conv, p, args, tgts, flow)) in
+    Call (left, conv, p, args, tgts, flow, alias)) in
 @
 The jump expression must be a (code) pointer.
 <<definitions of elaboration functions>>=
@@ -411,6 +413,20 @@ let reject_uncallable e = match exp_as_name e with
   | E.Ok ((FE.Label (FE.Proc _) | FE.Import (_, _) | FE.Variable _), _) | E.Error -> ()
   | E.Ok (d, _) -> 
       E.errorf "cannot call or jump to %s %s" (FE.denotation's_category d) x in
+@ 
+\paragraph{Checking aliasing annotations}
+Alias is at most one read and at most one write.
+<<elaboration utilities>>=
+let elab_alias r alias =
+  let none = function None -> true | Some _ -> false in
+  let rec elab r reads writes = function
+    | [] -> E.Ok { reads = reads; writes = writes }
+    | A.AliasAt(a,r) :: a's -> E.catch (eprint r) (elab r reads writes) (a :: a's)
+    | A.Reads  ns :: a's when none reads  -> elab r (Some ns) writes a's
+    | A.Writes ns :: a's when none writes -> elab r reads (Some ns) a's
+    | A.Reads  _ :: _ -> errorf r "multiple 'reads' annotations on one call"
+    | A.Writes _ :: _ -> errorf r "multiple 'writes' annotations on one call" in
+  E.catch (eprint r) (elab r None None) alias in
 @    
 \paragraph{Checking flow annotations}
 For the moment, we elaborate flow of names into flow of names, doing only checking.

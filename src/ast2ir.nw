@@ -443,7 +443,7 @@ and stmt' props s  succ =
   | S.Cont (name, _, _)    -> "Cont"
   | S.Span (kv, bs)        -> "Span"
   | S.Assign rtl           -> "Assign"
-  | S.Call (lhs, cc, e, args, targets, conts) -> "Call"
+  | S.Call (lhs, cc, e, args, targets, conts, alias) -> "Call"
   | S.Goto (e, labels) -> "Goto"
   | S.Jump (cc, e, args, targets) -> "Jump"
   | S.Cut (cc, k, args, conts)    -> "Cut"
@@ -461,7 +461,8 @@ and stmt  props s  succ =
   | S.Cont (name, _, _)    -> contStmt2 name succ
   | S.Span (kv, bs)        -> stmts (kv :: props) bs succ
   | S.Assign rtl           -> G.instruction g rtl succ
-  | S.Call (lhs, cc, e, args, targets, conts) -> call lhs cc e args targets conts succ
+  | S.Call (lhs, cc, e, args, targets, conts, alias) ->
+      call lhs cc e args targets conts alias succ
   | S.Goto (e, labels) ->
       (match Dn.exp e with
       | RP.Const (RP.Link (sym, _, w)) ->
@@ -535,7 +536,7 @@ let () = if cc.C.overflow_alloc.C.parameter_deallocator <> C.Callee then
 @
 \paragraph{Calls}
 <<supporting functions for translating statements>>=
-and call lhs cconv e args targets(*unused*) conts succ = 
+and call lhs cconv e args targets(*unused*) conts alias succ = 
   let cc    = to_cc cconv                        in
   let out   = actuals cc.C.call_parms.C.out args in
   let in'   = results cc.C.results.C.in' lhs     in
@@ -559,7 +560,8 @@ and call lhs cconv e args targets(*unused*) conts succ =
     G.stack_adjust g out.C.post_sp                                       **>
     G.call g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
                    ~altrets:conts.S.areturns ~unwinds_to:conts.S.unwinds
-                   ~cuts_to:conts.S.cuts ~aborts:conts.S.aborts ~succ    in
+                   ~cuts_to:conts.S.cuts ~aborts:conts.S.aborts
+                   ~reads:alias.S.reads ~writes:alias.S.writes ~succ    in
   let call_succ  =
     G.assertion    g (in'.C.insp out.C.overflow)              **>
     G.stack_adjust g in'.C.pre_sp            **>  (* DOUBTS ABOUT THIS *)
