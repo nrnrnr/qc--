@@ -183,8 +183,14 @@ ${B}camlburg.o:V:
 ocamlburg.pod:D:  main.nw
 	$NOTANGLE -R$target $prereq > $target
 
-ocamlburgfix.1:D: ocamlburgfix
-	$POD2MAN ocamlburgfix > $target
+ocamlburgfix.1:DQ: ocamlburgfix
+	echo "Trying to use pod2man to build $target"
+	if [ -x "`which $POD2MAN`" ]; then
+	  $POD2MAN $prereq > $target
+	else
+	  echo "No pod2man; no manual." > $target
+	fi
+
 
 ocamlburgfix-man.html:D: ocamlburgfix
 	$POD2HTML ocamlburgfix > $target
@@ -222,8 +228,13 @@ nofake:         nofake.nw
 	$NOTANGLE -R$target $prereq > $target
 	chmod +x $target
 
-nofake.1:       nofake
-	$POD2MAN nofake > $target
+nofake.1:Q:       nofake
+	echo "Trying to use pod2man to build $target"
+	if [ -x "`which $POD2MAN`" ]; then
+	  $POD2MAN $prereq > $target
+	else
+	  echo "No pod2man; no manual." > $target
+	fi
 
 nofake-man.html:    nofake
 	$POD2HTML nofake > $target

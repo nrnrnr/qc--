@@ -149,8 +149,13 @@ ocamlscan.mll:  ocamlerror.nw
 ocamlerror.pod: ocamlerror.nw
 	$NOTANGLE -R$target $prereq > $target
 
-nofake.1:       nofake                
-	$POD2MAN nofake > $target
+nofake.1:Q:       nofake                
+	echo "Trying to use pod2man to build $target"
+	if [ -x "`which $POD2MAN`" ]; then
+	  $POD2MAN $prereq > $target
+	else
+	  echo "No pod2man; no manual." > $target
+	fi
 
 nofake-man.html:    nofake
 	$POD2HTML nofake > $target

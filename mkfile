@@ -276,7 +276,6 @@ FILES:D:          clobber
 timestamps:V:   
 	(cd interp; mk -t -a disasm-dec.c interp-dec.c encode.[ch])
 	touch */*.1
-	touch doc/release.ps
 
 tar:V:          $DIR.tar.gz
 

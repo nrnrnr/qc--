@@ -19,24 +19,35 @@ PS =            cfg.ps better.ps working.ps newtarget.ps modules.ps \
 
 all:V:          man ps-$config_has_latex
 ps-true:V: $PS
-ps-false:V:
+
+ps-false:VQ:
+	# do nothing
 
 man:V:          qc--.1 qc--internals.1 qc--interp.1 qc--.man
 
-update:V:       man release.ps
+update:V:       man release-$config_has_latex
 	cp qc--.1           $TOP/man/man1
 	cp qc--.1           $TOP/man/man1/qc--.opt.1
 	cp qc--internals.1  $TOP/man/man1
 	cp qc--interp.1     $TOP/man/man1
 
+release-true:V: release.ps
+release-false:VQ:
+	# do nothing
+
 update.opt:V:   update
 
-install:V: man release.ps
+install:V: man install-release-$config_has_latex
 	install -m 644 -D qc--.1          $install_man1/qc--.1
 	install -m 644 -D qc--.1          $install_man1/qc--.opt.1
 	install -m 644 -D qc--internals.1 $install_man1/qc--internals.1
 	install -m 644 -D qc--interp.1    $install_man1/qc--interp.1
+
+install-release-true:V: release.ps
 	install -m 644 -D release.ps      $install_doc/release.ps
+
+install-release-false:VQ:
+	# do nothing
 
 install.opt:V: install
 
