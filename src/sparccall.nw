@@ -1,0 +1,235 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{SPARC calling conventions}
+
+<<sparccall.mli>>=
+val cconv :
+  return_to:(Rtl.exp -> Rtl.rtl) ->
+  Mflow.cut_args Target.map ->
+  string -> Automaton.cc_spec ->
+  Call.t
+@ 
+
+\section{Implementation of SPARC calling conventions}
+
+<<sparccall.ml>>=
+module R  = Rtl
+module RU = Rtlutil
+module RS = Register.Set
+module A  = Automaton
+module C  = Call
+let sprintf = Printf.sprintf
+@ 
+<<SPARC calling convention automata in Lua>>=
+A                  = Automaton
+Sparc              = Sparc              or {}
+Sparc.cc           = Sparc.cc           or {}
+Sparc.cc["C"     ] = Sparc.cc["C"     ] or {}
+@ 
+
+\paragraph{SPARC registers and their conventional uses}
+<<sparccall.ml>>=
+let r i = ('r', i, 32)
+let vol_regs    = RS.of_list (List.map r ([1; 2; 3; 4]@(Aux.from 16 ~upto:23)))
+let nv_regs     = RS.of_list (List.map r [])
+let all_regs    = List.fold_left (fun acc e -> RS.union acc e) RS.empty
+                    [ vol_regs; nv_regs ]
+
+let saved_nvr temps = 
+  let t sp = Talloc.Multiple.loc temps sp in
+  function
+   | (_  , _, w) -> (t 't') w
+@ 
+
+Stack pointer is doubleword-aligned.
+<<SPARC calling convention automata in Lua>>=
+Sparc.sp_align  = 16
+Sparc.wordsize  = 32
+
+function reg(sp, i, w) return({ space = sp, index = i, width = w }) end
+function r(i) return (reg("r", i, Sparc.wordsize)) end
+function o(i) return (reg("o", i, Sparc.wordsize)) end
+function i(i) return (reg("i", i, Sparc.wordsize)) end
+function g(i) return (reg("g", i, Sparc.wordsize)) end
+@ 
+
+\paragraph{Conventions governing the stack}
+<<sparccall.ml>>=
+let ra       = R.reg (r 31)
+let spr      = r 14
+let sp       = R.reg spr
+let spval    = R.fetch sp 32
+let sp_align = 16
+let growth   = Memalloc.Down
+let bo       = R.BigEndian
+@ 
+
+\paragraph{Automata for passing values---C~convention}
+
+<<SPARC calling convention automata in Lua>>=
+Sparc.cc["C"].results =
+  A.choice { A.is_any, { A.widen(32, "multiple") 
+                       , A.widths {32}
+                       , A.useregs { i(0), i(1), i(2), i(3), i(4), i(5) }
+                       } 
+           } 
+
+Sparc.cc["C"].call =
+  { A.widen(32, "multiple")
+  , A.bitcounter("bits")
+  , A.choice { A.is_any, A.regs_by_bits("bits", o(0)..o(5))
+             }
+  , A.overflow { growth = "up", max_alignment = Sparc.sp_align }
+  }	
+@ 
+
+<<SPARC calling convention automata in Lua>>=
+Sparc.cc["C"].cutto =
+  { A.widen(32)
+  , A.useregs(o(0) .. o(5))
+  , A.overflow { growth = "up", max_alignment = Sparc.sp_align }
+  }
+@ 
+
+Finally we register the calling conventions.
+<<SPARC calling convention automata in Lua>>=
+A.register_cc(Backend.sparc.target, "C", Sparc.cc["C"])
+@ 
+
+\subsection{Implementation based on [[Callspec]]}
+
+<<sparccall.ml>>=
+let wordsize  = 32
+let memsize   = 8
+let byteorder = bo
+let vfp       = Vfp.mk wordsize
+let std_sp_location = RU.add wordsize vfp (R.late "minus frame size" wordsize)
+let mk_automaton block_name automaton () =
+  Block.srelative vfp block_name (A.at ~memsize ~byteorder) automaton
+
+let old_end   block = RU.addk wordsize (Block.base block) (Block.size block)
+let young_end block = Block.base block
+@ 
+
+<<sparccall.ml>>=
+let tail_overflow = 
+    { C.parameter_deallocator = C.Callee
+    ; C.result_allocator      = C.Caller
+    }
+
+let c_overflow =
+    { C.parameter_deallocator = C.Caller
+    ; C.result_allocator      = C.Caller
+    } 
+@ 
+
+<<sparccall.ml>>=
+let prolog auto = 
+  let autosp a = young_end a.A.overflow in
+  C.incoming ~growth:growth ~sp:sp
+    ~mkauto:(mk_automaton "in call parms" auto.A.call)
+    ~autosp:autosp
+    ~postsp:(fun _ _ -> std_sp_location) 
+    ~insp:(fun a _ _ -> autosp a)
+@ 
+
+<<sparccall.ml>>=
+let epilog auto =
+    C.outgoing ~growth:growth ~sp:sp
+        ~mkauto:(mk_automaton "out ovfl results" auto.A.results)
+        ~autosp:(fun r -> std_sp_location)
+        ~postsp:(fun _ _ -> vfp)
+@ 
+
+<<sparccall.ml>>=
+let call_actuals auto =
+    C.outgoing ~growth:growth ~sp:sp
+        ~mkauto:(mk_automaton "out call parms" auto.A.call)
+        ~autosp:(fun r  -> std_sp_location)
+        ~postsp:(fun a sp -> std_sp_location)
+@ 
+
+<<sparccall.ml>>=
+let call_results auto =
+    let autosp = (fun a -> std_sp_location) in
+    C.incoming ~growth:growth ~sp:sp
+        ~mkauto:(mk_automaton "in ovfl results" auto.A.results)
+        ~autosp:autosp
+        ~postsp:(fun _ _ -> std_sp_location) 
+        ~insp:(fun a _ _ -> std_sp_location)
+@ 
+
+
+These might be wrong.  No tests yet.
+<<sparccall.ml>>=
+let also_cuts_to auto =
+    let autosp = (fun r   -> std_sp_location) in
+    C.incoming ~growth:growth ~sp:sp
+        ~mkauto:(mk_automaton "in cont parms" auto.A.cutto)
+        ~autosp:autosp
+        ~postsp:(fun _ _ -> std_sp_location) 
+        ~insp:(fun a _ _ -> autosp a)
+
+let cut_actuals auto base =
+    C.outgoing ~growth:growth ~sp:sp
+        ~mkauto:(fun ()  -> (A.at ~memsize:memsize) 
+                             ~byteorder:byteorder ~start:base auto.A.cutto)
+        ~autosp:(fun r   -> R.fetch sp wordsize)
+        ~postsp:(fun _ _ -> R.fetch sp wordsize)
+@ 
+
+<<sparccall.ml>>=
+let ra_on_entry block = R.fetch ra wordsize
+let where_to_save_ra ra_on_entry temp = ra
+@ 
+
+<<sparccall.ml>>=
+let to_call ~cutto ~return auto =
+    <<it's impossible for the stack pointer to be a useful register too>>;
+    { C.name           = "C"
+    ; C.overflow_alloc = c_overflow
+    ; C.call_parms     = {C.in'=prolog       auto; C.out=call_actuals auto}
+    ; C.cut_parms      = {C.in'=also_cuts_to auto; C.out=cut_actuals  auto}
+    ; C.results        = {C.in'=call_results auto; C.out=epilog       auto}
+    
+    ; C.stack_growth     = growth
+    ; C.stable_sp_loc    = std_sp_location
+    ; C.replace_vfp      = Cfgx.Vfp.replace_with ~sp:sp
+    ; C.sp_align         = sp_align
+    ; C.ra_on_entry      = ra_on_entry
+    ; C.where_to_save_ra = where_to_save_ra
+    ; C.ra_on_exit       = (fun _ _ t -> ra)
+    ; C.sp_on_unwind     = (fun e -> RU.store sp e)
+    ; C.sp_on_jump       = (fun _ _ -> Rtl.null)
+    ; C.pre_nvregs       = nv_regs
+    ; C.volregs          = Register.Set.diff all_regs nv_regs
+    ; C.saved_nvr        = saved_nvr
+    ; C.cutto            = cutto
+    ; C.return           = return
+    }
+@ 
+<<it's impossible for the stack pointer to be a useful register too>>=
+if Register.Set.mem spr all_regs then
+  Impossible.impossible
+    (Printf.sprintf "In convention \"%s\", stack pointer is also an ordinary register"
+       "C")
+else
+  ()
+@
+
+<<sparccall.ml>>=
+let rtn return_to k n ~ra =
+    if k = 0 && n = 0 then return_to ra
+    else Impossible.impossible "alternate return using C calling convention" 
+
+let c ~return_to cut auto = to_call cut (rtn return_to) auto
+@ 
+
+Here's our CC lookup function.
+<<sparccall.ml>>=
+let cconv ~return_to cut ccname stage =
+  let f =
+    match ccname with
+	| "C" | _ -> c
+  in f ~return_to cut stage
+@ 

@@ -1,0 +1,445 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Back end for the SPARC}
+
+Required as part of the interface: postexpander, target, and variable
+placer.  May add other pieces as required by the recognizer (the main
+client of this module).
+
+<<sparc.mli>>=
+module X : Expander.S
+val target: Ast2ir.tgt
+val placevars : Ast2ir.proc -> Automaton.t
+@ 
+
+% ------------------------------------------------------------------
+\subsection{Storage spaces}
+% ------------------------------------------------------------------
+
+<<sparc.ml>>=
+module SS = Space.Standard32
+module R  = Rtl
+module Up = R.Up
+module Dn = R.Dn
+module RP = R.Private
+module SM = Strutil.Map
+module A  = Automaton
+module T  = Target
+@ 
+
+<<sparc.ml>>=
+let byteorder = R.BigEndian
+let wordsize  = 32
+@ 
+
+<<sparc.ml>>=
+module Spaces = struct
+  let id = R.Identity
+  <<SPARC spaces>>
+end
+@ [[m]] is a big-endian memory space with byte, halfword, word, and
+doubleword accesses.
+<<SPARC spaces>>=
+  let m = SS.m byteorder [8; 16; 32] (* not sure what these mean *)
+@ [[r]] is the general purpose integer register file with 32-bit
+registers.  Some of these may be managed specially by register
+windows.
+<<SPARC spaces>>=
+  let r = SS.r 32 id [32]
+@ [[f]] is the general purpose floating-point register file with 32
+32-bit registers.  Unlike the [[r]] space, these are all globals.
+<<SPARC spaces>>=
+  let f = SS.f 32 id [32]
+@ [[t]] is the temporary space for the [[r]] space.
+<<SPARC spaces>>=
+  let t = SS.t    id [32]
+@ [[u]] is the temporary space for the [[f]] space.
+<<SPARC spaces>>=
+  let u = SS.u    id [32]
+@ [[c]] is the space for condition codes and the program counter.
+<<SPARC spaces>>=
+  let c = SS.c  6 id [32]  (* pc, npc, cc, ???, fp_mode, fp_fcmp *)
+@ [[k]] is the space for register windows.  The first cell represents
+the CWP (current window pointer), which is just a counter that we
+increment and decrement when saving and restoring windows.  The rest
+of the space will eventually be used to represent saved window
+registers.
+<<SPARC spaces>>=
+  let k = { Space.space          = 'k'
+          ; Space.doc            = "register windows"
+          ; Space.cellwidth      = 32
+          ; Space.indexwidth     = 32     (* what is indexwidth? *)
+          ; Space.indexlimit     = Some 1
+          ; Space.aggregation    = Rtl.Identity
+          ; Space.widths         = [32]
+          ; Space.classification = Space.Fixed
+          }
+@ 
+
+% ------------------------------------------------------------------
+\subsection{Registers}
+% ------------------------------------------------------------------
+
+<<sparc.ml>>=
+let locations = SS.locations Spaces.c
+let pc        = locations.SS.pc
+let cc        = locations.SS.cc
+let npc       = locations.SS.npc
+(* Do we use this?
+   let fp_mode = locations.SS.fp_mode
+   let fp_fcmp = locations.SS.fcmp
+*)
+let vfp     = Vfp.mk wordsize
+
+let r n  = ('r', n, wordsize)
+
+let zero = r 0  (* always zero, r[0] is sames as global[0] *)
+let ra   = r 31 (* return address set by CALL instruction, same as %o7 *)
+
+let fp   = r 30 (* conventionally the same as %fp or %i6 *)
+let sp   = r 14 (* conventionally the same as %sp or %o6 *)
+
+let cwp  = ('k', 0, 32)
+
+(* This looks totally wrong to me, what the heck is going on with
+   rounding modes? *)
+let rm_reg = ('d', 0, 2)
+@ 
+
+% ------------------------------------------------------------------
+\subsection{Utilities}
+% ------------------------------------------------------------------
+
+<<sparc.ml>>=
+let imposs     = Impossible.impossible
+let unimp      = Impossible.unimp
+let mem w addr = R.mem R.none 'm' byteorder w  addr
+let reg_width  (_, _, w) = w
+
+let rreg t = R.reg t
+let rfetch (_,_,w as t) = R.fetch (rreg t) w
+@ 
+
+% ------------------------------------------------------------------
+\subsection{Control-flow}
+% ------------------------------------------------------------------
+
+<<sparc.ml>>=
+module F = Mflow.MakeStandard
+    (struct
+      let pc_lhs    = npc
+      let pc_rhs    = pc
+      let ra_reg    = R.reg ra
+      let ra_offset = 4
+    end)
+@ 
+
+<<sparc.ml>>=
+let return e =
+  let one = R.bits (Bits.S.of_int 1 32) 32 in
+  R.par [R.store npc e wordsize;
+         R.store (rreg cwp) (R.app (R.opr "add" [32]) [rfetch cwp; one]) wordsize]
+@ 
+
+% ------------------------------------------------------------------
+\subsection{Postexpander}
+% ------------------------------------------------------------------
+
+<<sparc.ml>>=
+module Post = struct
+  let byte_order = byteorder
+  let wordsize   = wordsize
+  module Address = struct
+    type t               = R.exp
+    let reg (_,_,w as r) = R.fetch (R.reg r) w 
+  end
+  type temp      = Register.t
+  type rtl       = R.rtl
+  type width     = R.width
+  type assertion = R.assertion
+  type operator  = RP.opr
+  <<SPARC postexpander>>
+  include Postexpander.Nostack(Address)
+end
+@ 
+
+Taken from the Alpha
+<<SPARC postexpander>>=
+let talloc = ref None
+let remember_allocator ta = talloc := Some ta
+let get_talloc () =
+  match !talloc with
+  | Some s -> s
+  | None   -> imposs "Temp allocator not registered with postexpander"
+let talloc space = Talloc.Multiple.reg space (get_talloc ())
+let remember_slot_allocator _ = ()
+@ 
+<<SPARC postexpander>>=
+type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
+let icontext = Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't'
+let fcontext = Talloc.Multiple.reg 'u', fun (c, _, _) -> c = 'f' || c = 'u'
+let acontext = icontext
+(* FIX ME! rcontext is nonsense *)
+let rcontext = (fun x y -> unimp "Unsupported soft rounding mode")
+               ,fun r -> r = ('d', 0, 2)
+let itempwidth = 32
+@ Will this work with loads from an offset?  Does the instruction
+exist on the SPARC?
+<<SPARC postexpander>>=
+let load ~dst ~addr assn =
+  let w = reg_width dst in
+  assert (w = wordsize); 
+  [R.store (rreg dst) (R.fetch (mem w addr) w) w]
+@ 
+<<SPARC postexpander>>=
+let store ~addr ~src assn =
+  let w = reg_width src in
+  assert (w = wordsize);
+  [R.store (mem w addr) (rfetch src) w]
+@ 
+<<SPARC postexpander>>=
+let extend  op n e = R.app (R.opr op       [n; wordsize]) [e]
+let lobits     n e = R.app (R.opr "lobits" [wordsize; n]) [e]
+let xload op ~dst ~addr n assn =
+  let w = reg_width dst in
+  assert (w = wordsize); 
+  [R.store (rreg dst)
+             (extend op n (R.fetch (R.mem assn 'm' byteorder n addr) n)) w]
+
+let sxload = xload "sx"
+let zxload = xload "zx"
+
+let lostore ~addr ~src n assn =
+  assert (reg_width src = wordsize);
+  [R.store (R.mem assn 'm' byteorder n addr)
+             (lobits n (rfetch src)) n]
+@ Block copies are only implemented in powers of 2 up to 64-bits.
+<<SPARC postexpander>>=
+let block_copy ~dst dassn ~src sassn w =
+  let t = talloc 't' 32 in
+  match w with
+  | 8  | 16 -> lostore dst t w dassn @ zxload t src w sassn
+  | 32      -> store dst t dassn @ load t src sassn
+
+    (* using 64 bit registers only available on SPARC-V9 *)
+  | 64      -> [R.store (mem w dst) (rfetch t) w;
+                R.store (rreg t) (R.fetch (mem w src) w) w]
+
+  | _  -> unimp "general block copies on SPARC"
+@ 
+
+<<SPARC postexpander>>=
+let move ~dst ~src =
+  let w = reg_width src in
+  assert (w = reg_width dst);
+  if src = dst then [] else [R.store (rreg dst) (rfetch src) w]  
+@ 
+
+<<SPARC postexpander>>=
+let li  ~dst const = [R.store (rreg dst) (Up.const const) (reg_width dst)]
+let lix ~dst e     = [R.store (rreg dst) e                (reg_width dst)]
+@ 
+
+What do argmap and resmap actually do??
+<<SPARC postexpander>>=
+let bcontext = (fun x y -> imposs "allocate from bcontext"), fun _ -> false
+let operators = Context.standard icontext fcontext rcontext acontext bcontext
+
+let resmap = List.fold_left (fun m (n,a,r) -> SM.add n r m) SM.empty operators
+let argmap = List.fold_left (fun m (n,a,r) -> SM.add n a m) SM.empty operators
+@ 
+
+<<SPARC postexpander>>=
+let arg_contexts   (n, _) =
+  try SM.find n argmap with Not_found ->
+    Printf.eprintf "arg_context %s failed\n" n;
+    assert false
+let result_context (n, _) =
+  try SM.find n resmap with Not_found ->
+    Printf.eprintf "result_context %s failed\n" n;
+    assert false
+let constant_context w = icontext
+@ 
+
+<<SPARC postexpander>>=
+let unop ~dst op x =
+  [R.store (rreg dst)
+             (R.app (Up.opr op) [rfetch x]) (reg_width dst)]
+
+let binop ~dst op x y =
+  let dstw = reg_width dst in
+  [R.store (rreg dst) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw]
+(*
+  match op with
+  | ("rem", ws) ->
+      let t = talloc 't' 32 in
+      let t' = talloc 't' 32 in
+      [ R.store (rreg dst) (R.app (R.opr "sub" ws)  [rfetch x; rfetch t']) dstw
+      ; R.store (rreg t') (R.app (R.opr "mul" ws)  [rfetch y; rfetch t]) dstw
+      ; R.store (rreg t) (R.app (R.opr "quot" ws) [rfetch x; rfetch y])   dstw
+      ]
+  | _ ->
+      [R.store (rreg dst) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw]
+*)
+
+let rtlop ~dst op args =
+  [R.store (rreg dst)
+             (R.app (Up.opr op) (List.map rfetch args)) (reg_width dst)]
+@ 
+
+<<SPARC postexpander>>=
+let pc_lhs = npc        (* PC as assigned by branch *)
+let pc_rhs = pc         (* PC as captured by call   *)
+@ 
+
+<<SPARC postexpander>>=
+let br ~tgt = [R.store pc_lhs (rfetch tgt)   wordsize]  (* branch reg *)
+let b  ~tgt = [R.store pc_lhs (Up.const tgt) wordsize]  (* branch     *)
+@ 
+
+Needs to be filled in
+<<SPARC postexpander>>=
+let bc x (opr, ws as op) y ~tgt =
+  assert (ws = [wordsize]);
+  [ R.guard (R.app (R.opr opr ws) [rfetch x; rfetch y])
+            (R.store pc_lhs (Up.const tgt) 32) ]
+@ 
+
+<<SPARC postexpander>>=
+let bnegate r = 
+    let zero   = R.bits (Bits.zero 32) 32 in    
+    let negate = function
+        | "ne" -> "eq"
+        | "eq" -> "ne"
+        | _    -> imposs "ill-formed SPARC conditional branch" in
+    match Dn.rtl r with
+    | RP.Rtl [ RP.App( (("eq"|"ne" as op),[32])
+                     , [RP.Fetch(RP.Reg(x),32); RP.Const(RP.Bits(b))]
+                     ) 
+             , RP.Store (pc, tgt, 32)
+             ] when pc = Dn.loc pc_lhs && b = Bits.zero 32 ->
+                 R.guard (R.app (R.opr (negate op) [32]) [rfetch x; zero]) 
+                (R.store pc_lhs (Up.exp tgt) wordsize)
+    | _ -> imposs "ill-formed SPARC conditional branch"
+@ 
+
+<<SPARC postexpander>>=
+let effects = List.map Up.effect
+let call  ~tgt ~others =
+  [R.par (R.store pc_lhs (Up.const tgt) wordsize
+          :: effects others)]
+let callr ~tgt ~others =
+  [R.par (R.store pc_lhs (rfetch tgt) wordsize
+          :: effects others)]
+@ 
+
+<<SPARC postexpander>>=
+let cut_to effs = [R.par (effects effs)]
+@ 
+
+<<SPARC postexpander>>=
+let don't_touch_me =
+  let stores_to_cwp = function
+    | RP.Store (RP.Reg maybe_cwp, _, _) when maybe_cwp = cwp -> true
+    | _                                                      -> false
+  in
+  List.exists stores_to_cwp
+@ 
+
+% ------------------------------------------------------------------ 
+\subsection{Expander}
+% ------------------------------------------------------------------ 
+
+<<sparc.ml>>=
+module X = Expander.IntFloatAddr(Post)
+@ 
+
+% ------------------------------------------------------------------
+\subsection{Target}
+% ------------------------------------------------------------------
+
+<<sparc.ml>>=
+let spill  p t l = [A.store l (rfetch t) (reg_width t)]
+let reload p t l = 
+    let w = reg_width t in [R.store (rreg t) (Automaton.fetch l w) w]
+@ 
+
+<<sparc.ml>>=
+let ( *> ) = A.( *> )
+let globals base = 
+  let width w = if      w <= 8  then 8  
+                else if w <= 16 then 16 
+                else Aux.round_up_to wordsize w in
+  let align = function _ -> 8 in
+  A.at ~start:base ~memsize:8 ~byteorder (A.widen width *> A.align_to align *>
+  A.overflow ~growth:Memalloc.Up ~max_alignment:8)
+@ 
+
+<<sparc.ml>>=
+let target =
+    let spaces = [ Spaces.m
+                 ; Spaces.r
+                 ; Spaces.f
+                 ; Spaces.t
+                 ; Spaces.u
+                 ; Spaces.c
+                 ] in
+    { T.name                = "sparc"
+    ; T.byteorder           = byteorder
+    ; T.wordsize            = wordsize
+    ; T.pointersize         = wordsize
+    ; T.alignment           = 4             (* not sure *)
+    ; T.memsize             = 8
+    ; T.spaces              = spaces
+    ; T.reg_ix_map          = T.mk_reg_ix_map spaces
+    ; T.distinct_addr_sp    = false
+    ; T.float               = Float.ieee754
+    ; T.spill               = spill
+    ; T.reload              = reload
+
+    ; T.vfp                 = vfp
+(* Is F really where we want to be looking?  *)
+    ; T.bnegate             = F.bnegate cc
+    ; T.goto                = F.goto
+    ; T.jump                = F.jump
+    ; T.call                = F.call
+    ; T.return              = F.return
+    ; T.branch              = F.branch
+    
+    ; T.cc_specs            = A.init_cc
+    ; T.cc_spec_to_auto     = Sparccall.cconv ~return_to:return
+                                   (F.cutto (Rtl.reg sp))
+
+    ; T.is_instruction      = Sparcrec.is_instruction
+    ; T.machine_env         = {T.ops=[]; T.literal=[]}
+    ; T.globals             = globals
+    ; T.rounding_mode       = Rtl.reg rm_reg
+    ; T.named_locs          = Strutil.Map.empty
+    ; T.data_section        = "data"
+    ; T.charset             = "latin1" (* REMOVE THIS FROM TARGET.T *)
+    }    
+@ 
+
+\subsection{Variable Placement}
+The machine accepts no floating point values.
+<<sparc.ml>>=
+let warning s = Printf.eprintf "backend warning: %s\n" s
+let placevars = 
+  let is_float      w hint _ = w = 82 || (hint = "float" && (w = 32)) in
+  let strange_float w hint   = w = 82 && hint <> "float" in
+  let strange_int   w hint   = hint = "float" && not (is_float w hint ()) in
+  let warn ~width:w ~alignment:a ~hint:h =
+      if strange_float w h then
+        warning "82-bit variable not hinted float but will go as float anyway"
+      else if strange_int w h then
+        warning
+          (Printf.sprintf "%d-bit variable hinted float but will go as integer" w) in
+  let mk_stage ~temps =
+    A.choice
+      [ (fun w h _ -> w <= 32), A.widen (fun _ -> 32) *> temps 't';
+        A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
+      ] in
+  Placevar.mk_automaton
+     ~warn ~vfp:target.T.vfp ~memsize:target.T.memsize
+     ~byteorder:Post.byte_order mk_stage
+@ 

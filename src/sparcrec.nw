@@ -1,0 +1,454 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{SPARC Recognizer}
+
+<<sparcrec.mli>>=
+val to_asm : Rtl.rtl -> string
+val is_instruction : Rtl.rtl -> bool
+@ 
+
+A few abbreviations.
+<<modules>>=
+module RU = Rtlutil
+module RP = Rtl.Private
+module SS = Space.Standard32
+module Down = Rtl.Dn
+module Up   = Rtl.Up
+@ 
+<<sparcrec.mlb>>=
+%head {: <<modules>> 
+         <<code to precede the labeler>>
+      :}
+%tail {: <<code to follow the labeler>>
+      :}
+
+%term <<names of types of terminals>>
+
+%%
+<<rules>>
+@ 
+
+\subsection{Utilities}
+<<code to precede the labeler>>=
+let cat = String.concat ""
+let infinity = Camlburg.inf_cost
+let guard b = if b then 0 else infinity
+
+let const32 b =
+  assert (Bits.width b = 32);
+  Nativeint.to_string (Bits.U.to_native b)
+
+exception Error of string
+let sprintf   = Printf.sprintf
+let error msg = raise (Error msg)
+
+let spl = RP.Reg('r', 14, 32)
+let sp  = RP.Fetch(spl, 32)
+let ral = RP.Reg('r', 31, 32)
+let ra  = RP.Fetch(ral, 32)
+
+let idiomatic_reg_name n =
+  if n = 14 then "%sp"
+  else if n = 30 then "%fp"
+  else if n >= 0 && n < 8 then sprintf "%%g%i" n
+  else if n < 16 then sprintf "%%o%i" (n - 8)
+  else if n < 24 then sprintf "%%l%i" (n - 16)
+  else if n < 32 then sprintf "%%i%i" (n - 24)
+  else Impossible.impossible (sprintf "Register %%r%i doesn't exist" n)
+
+let positive b = Bits.Ops.gt b (Bits.zero 32)
+
+let negative b = Bits.Ops.lt b (Bits.zero 32)
+
+let in_proc = ref false
+@ 
+
+\subsection{Recognizer terminals, nonterminals, and constructors}
+
+<<names of types of terminals>>=
+n w bits symbol
+@ 
+
+\subsection{Recognizer Rules}
+
+\paragraph{Constants}
+<<rules>>=
+lconst : Link(symbol, w) {: symbol#mangled_text :}
+const  : Bits(b:bits) [{: guard (Bits.width b = 32) :}]  {: const32 b :}
+pos    : Bits(b:bits) [{: guard (Bits.width b = 32 && positive b) :}]  {: const32 b :}
+neg    : Bits(b:bits) [{: guard (Bits.width b = 32 && negative b) :}]  {: const32 b :}
+four   : Bits(bits)   [{: guard (bits = Bits.S.of_int 4 32) :}] {:():}
+one    : Bits(bits)   [{: guard (bits = Bits.S.of_int 1 32) :}] {:():}
+@ 
+
+\paragraph{Location Types}
+<<rules>>=
+rreg   : Fetch(rregl, w) {: rregl :}
+rregl  : Reg('r', n:int, w:int) {: idiomatic_reg_name n :}
+
+-- this is stupid, but we don't know how to deal with
+-- changing register windows at this point, so this allows
+-- us to do an ugly hack.
+result_reg   : Fetch(Reg('i', n:int, w:int), w) {: sprintf "%%o%i" n :}
+result_regl  : Reg('i', n:int, w:int) {: sprintf "%%i%i" n :}
+
+arg_reg   : Fetch(Reg('o', n:int, w:int), w) {: sprintf "%%i%i" n :}
+arg_regl  : Reg('o', n:int, w:int) {: sprintf "%%o%i" n :}
+
+regl : rregl {: rregl :}
+regl : result_regl {: result_regl :}
+regl : arg_regl {: arg_regl :}
+
+reg : rreg {: rreg :}
+reg : result_reg {: result_reg :}
+reg : arg_reg {: arg_reg :}
+
+mem   : Fetch(meml, w) {: meml :}
+meml  : Mem(reg, w)    {: "[" ^ reg ^ "]" :} -- indirect
+
+reg_or_const : reg   {: reg :}
+reg_or_const : const {: const :}
+
+target : lconst {: lconst :}
+@ 
+
+\paragraph{Special Locations}
+<<rules>>=
+pcl:  Reg('c',  0, w:int) {: () :}
+npcl: Reg('c',  1, w:int) {: () :}
+ccl:  Reg('c',  2, w:int) {: () :}
+spl:  Reg('r', 14, w:int) {: () :}
+fpl:  Reg('r', 30, w:int) {: () :}
+ral:  Reg('r', 15, w:int) {: () :}
+cwpl: Reg('k',  0, w:int) {: () :}
+
+pc:  Fetch(pcl,  w) {: () :}
+sp:  Fetch(spl,  w) {: () :}
+ra:  Fetch(ral,  w) {: () :}
+cwp: Fetch(cwpl, w) {: () :}
+@ 
+
+\paragraph{Data movement}
+<<rules>>=
+-- load symbol
+inst : Store(dst:regl, src:lconst, w)
+  {: sprintf "set %s, %s" src dst :}
+
+-- load immediate
+inst : Store(dst:regl, src:const, w)
+  {: sprintf "set %s, %s" src dst :}
+
+-- register move
+inst : Store(dst:regl, src:reg, w)
+  {: sprintf "mov %s, %s" src dst :}
+
+-- memory load
+inst : Store(dst:regl, src:mem, w)
+  {: if w = 64 then sprintf "ldx %s, %s" src dst
+     else sprintf "ld %s, %s" src dst :}
+inst : Store(dst:regl, Zxbyte(src:mem), w)
+  {: sprintf "ldub %s, %s" src dst :}
+inst : Store(dst:regl, Zxhalf(src:mem), w)
+  {: sprintf "lduh %s, %s" src dst :}
+inst : Store(dst:regl, Sxbyte(src:mem), w)
+  {: sprintf "ldsb %s, %s" src dst :}
+inst : Store(dst:regl, Sxhalf(src:mem), w)
+  {: sprintf "ldsh %s, %s" src dst :}
+
+-- memory store
+inst : Store(dst:meml, src:reg, w)
+  {: if w = 64 then sprintf "stx %s, %s" src dst
+     else sprintf "st %s, %s" src dst :}
+inst : Store(dst:meml, Lobyte(src:reg), w)
+  {: sprintf "stb %s, %s" src dst :}
+inst : Store(dst:meml, Lohalf(src:reg), w)
+  {: sprintf "sth %s, %s" src dst :}
+
+-- memory store to offset
+-- note that y must be a 13-bit constant...probably need a different
+-- rule that can split 32-bit constants.
+inst : Store(Mem(Add(x:reg, y:const),mw:w), src:reg, w)
+  {: if w = 64 then sprintf "stx %s, [%s+%s]" src x y
+     else sprintf "st %s, [%s+%s]" src x y :}
+
+-- memory load from offset
+inst : Store(dst:regl, Fetch(Mem(Add(x:reg, y:const), mw:w), w), w)
+  {: if w = 64 then sprintf "ldx [%s+%s], %s" x y dst
+     else sprintf "ld [%s+%s], %s" x y dst :}
+@ 
+
+\paragraph{Arithmetic}
+<<rules>>=
+-- add
+inst : Store(dst:regl, Add(x:reg_or_const, y:reg), w)
+  {: sprintf "add %s, %s, %s" y x dst :}
+inst : Store(dst:regl, Add(x:reg, y:reg_or_const), w)
+  {: sprintf "add %s, %s, %s" x y dst :}
+
+-- sub
+inst : Store(dst:regl, Sub(x:reg_or_const, y:reg), w)
+  {: sprintf "sub %s, %s, %s" y x dst :}
+inst : Store(dst:regl, Sub(x:reg, y:reg_or_const), w)
+  {: sprintf "sub %s, %s, %s" x y dst :}
+
+-- mul (only 32->32->32)
+inst : Store(dst:regl, Mul(x:reg_or_const, y:reg), w)
+  {: sprintf "smul %s, %s, %s" y x dst :}
+inst : Store(dst:regl, Mul(x:reg, y:reg_or_const), w)
+  {: sprintf "smul %s, %s, %s" x y dst :}
+
+-- quot
+inst : Store(dst:regl, Quot(x:reg_or_const, y:reg), w)
+  {: sprintf "sdiv %s, %s, %s" y x dst :}
+inst : Store(dst:regl, Quot(x:reg, y:reg_or_const), w)
+  {: sprintf "sdiv %s, %s, %s" x y dst :}
+
+-- neg
+inst : Store(dst:regl, Neg(x:reg_or_const), w)
+  {: sprintf "neg %s, %s" x dst :}
+
+-- and
+inst : Store(dst:regl, And(x:reg, y:reg_or_const), w)
+  {: sprintf "and %s, %s, %s" x y dst :}
+inst : Store(dst:regl, And(x:reg_or_const, y:reg), w)
+  {: sprintf "and %s, %s, %s" y x dst :}
+
+-- or
+inst : Store(dst:regl, Or(x:reg, y:reg_or_const), w)
+  {: sprintf "or %s, %s, %s" x y dst :}
+inst : Store(dst:regl, Or(x:reg_or_const, y:reg), w)
+  {: sprintf "or %s, %s, %s" y x dst :}
+
+-- xor
+inst : Store(dst:regl, Xor(x:reg, y:reg_or_const), w)
+  {: sprintf "xor %s, %s, %s" x y dst :}
+inst : Store(dst:regl, Xor(x:reg_or_const, y:reg), w)
+  {: sprintf "xor %s, %s, %s" y x dst :}
+
+-- com
+inst : Store(dst:regl, Com(x:reg_or_const), w)
+  {: sprintf "not %s, %s" x dst :}
+
+-- shl
+inst : Store(dst:regl, Shl(x:reg, y:reg_or_const), w)
+  {: sprintf "sll %s, %s, %s" x y dst :}
+
+-- shrl
+inst : Store(dst:regl, Shrl(x:reg, y:reg_or_const), w)
+  {: sprintf "srl %s, %s, %s" x y dst :}
+
+-- shra
+inst : Store(dst:regl, Shra(x:reg, y:reg_or_const), w)
+  {: sprintf "sra %s, %s, %s" x y dst :}
+
+-- popcnt: strange, but the SPARC-V9 seems to have population count.
+-- This probably won't work with older SPARCs though.
+inst : Store(dst:regl, Popcnt(x:reg), w)
+  {: sprintf "popc %s, %s" x dst :}
+@ 
+
+\paragraph{Control Flow}
+<<rules>>=
+-- call
+next: Store(regl, Add(pc, four), w) {: regl :}
+inst: Par(Goto(target), next)
+  {: sprintf "call %s, 0\n\tnop" target :}
+
+-- decrement register window and allocate space on the stack
+inst : Save(x:sp, y:neg)
+  {: if not !in_proc then (in_proc := true; sprintf "save %%sp, %s, %%sp" y)
+     else sprintf "! Evil recognizer deleted add %%sp, %s, %%sp" y :}
+
+inst : Save(x:neg, y:sp)
+  {: if not !in_proc then (in_proc := true; sprintf "save %%sp, %s, %%sp" x)
+     else sprintf "! Evil recognizer deleted add %%sp, %s, %%sp" x :}
+
+inst : Save(x:sp, y:pos)
+  {: sprintf "! Evil recognizer deleted add %%sp, %s, %%sp" y :}
+
+inst : Save(x:pos, y:sp)
+  {: sprintf "! Evil recognizer deleted add %%sp, %s, %%sp" x :}
+
+-- increment register window and deallocate space on the stack
+restore: Store(cwpl, Add(cwp, one), w) {: () :}
+inst : Par(Return(), restore)
+    {: (in_proc := false; "ret\n\trestore") :}
+
+-- branches
+inst: Goto(target) {: sprintf "ba %s\n\tnop" target :}
+
+-- indirect branches
+inst: Goto(reg)    {: sprintf "jmp %s\n\tnop" reg :}
+
+-- conditional branches
+inst: Guarded(Eq(x:reg, y:reg_or_const), Goto(target))
+   {: sprintf "cmp %s, %s\n\tbe %s\n\tnop" x y target :}
+
+inst: Guarded(Ne(x:reg, y:reg_or_const), Goto(target))
+   {: sprintf "cmp %s, %s\n\tbne %s\n\tnop" x y target :}
+
+inst: Guarded(Ge(x:reg, y:reg_or_const), Goto(target))
+   {: sprintf "cmp %s, %s\n\tbge %s\n\tnop" x y target :}
+inst: Guarded(Geu(x:reg, y:reg_or_const), Goto(target))
+   {: sprintf "cmp %s, %s\n\tbgeu %s\n\tnop" x y target :}
+inst: Guarded(Gt(x:reg, y:reg_or_const), Goto(target))
+   {: sprintf "cmp %s, %s\n\tbg %s\n\tnop" x y target :}
+inst: Guarded(Gtu(x:reg, y:reg_or_const), Goto(target))
+   {: sprintf "cmp %s, %s\n\tbgu %s\n\tnop" x y target :}
+
+inst: Guarded(Le(x:reg, y:reg_or_const), Goto(target))
+   {: sprintf "cmp %s, %s\n\tble %s\n\tnop" x y target :}
+inst: Guarded(Leu(x:reg, y:reg_or_const), Goto(target))
+   {: sprintf "cmp %s, %s\n\tbleu %s\n\tnop" x y target :}
+inst: Guarded(Lt(x:reg, y:reg_or_const), Goto(target))
+   {: sprintf "cmp %s, %s\n\tbl %s\n\tnop" x y target :}
+inst: Guarded(Ltu(x:reg, y:reg_or_const), Goto(target))
+   {: sprintf "cmp %s, %s\n\tblu %s\n\tnop" x y target :}
+@ 
+
+\paragraph{Other Instructions}
+Why is this here?
+<<rules>>=
+inst : Nop() {: "! Why do you think there should be a nop? " :}
+@ 
+
+\subsection{Interfacing {\rtl}s with the Expander}
+
+<<special cases for particular operators>>=
+| RP.App(("eq",    [w]), [x; y]) -> conEq     (exp x) (exp y)
+| RP.App(("ne",    [w]), [x; y]) -> conNe     (exp x) (exp y)
+| RP.App(("ge",    [w]), [x; y]) -> conGe     (exp x) (exp y)
+| RP.App(("geu",   [w]), [x; y]) -> conGeu    (exp x) (exp y)
+| RP.App(("gt",    [w]), [x; y]) -> conGt     (exp x) (exp y)
+| RP.App(("gtu",   [w]), [x; y]) -> conGtu    (exp x) (exp y)
+| RP.App(("le",    [w]), [x; y]) -> conLe     (exp x) (exp y)
+| RP.App(("leu",   [w]), [x; y]) -> conLeu    (exp x) (exp y)
+| RP.App(("lt",    [w]), [x; y]) -> conLt     (exp x) (exp y)
+| RP.App(("ltu",   [w]), [x; y]) -> conLtu    (exp x) (exp y)
+
+| RP.App(("sub",   [w]), [x; y])  -> conSub    (exp x) (exp y)
+| RP.App(("add",   [w]), [x; y])  -> conAdd    (exp x) (exp y)
+| RP.App(("mul",   [32]), [x; y]) -> conMul    (exp x) (exp y)
+| RP.App(("neg",   [w]), [x])     -> conNeg    (exp x)
+| RP.App(("quot",  [w]), [x; y])  -> conQuot   (exp x) (exp y)
+(* maybe can be implemented with mulx instruction for SPARC 9
+| RP.App(("mulx",  [32;64]), [x; y]) -> conMulx (exp x) (exp y)
+*)
+
+| RP.App(("and",   [w]), [x; y]) -> conAnd    (exp x) (exp y)
+| RP.App(("or",    [w]), [x; y]) -> conOr     (exp x) (exp y)
+| RP.App(("xor",   [w]), [x; y]) -> conXor    (exp x) (exp y)
+| RP.App(("com",   [w]), [x])    -> conCom    (exp x)
+
+| RP.App(("shl",   [w]), [x; y]) -> conShl    (exp x) (exp y)
+| RP.App(("shrl",  [w]), [x; y]) -> conShrl   (exp x) (exp y)
+| RP.App(("shra",  [w]), [x; y]) -> conShra   (exp x) (exp y)
+
+| RP.App(("popcnt",[w]), [x   ]) -> conPopcnt (exp x)
+
+| RP.App(("lobits",[32;8]),  [x]) -> conLobyte (exp x)
+| RP.App(("lobits",[32;16]), [x]) -> conLohalf (exp x)
+| RP.App(("zx", [8; 32]),     [x]) -> conZxbyte (exp x)
+| RP.App(("zx", [16;32]),     [x]) -> conZxhalf (exp x)
+| RP.App(("sx", [8; 32]),     [x]) -> conSxbyte (exp x)
+| RP.App(("sx", [16;32]),     [x]) -> conSxhalf (exp x)
+
+| RP.App((("add"|"sub"|"mul"|"sx"|"zx"|"lobits"|"bitInsert"|
+           "bitExtract"|"fabs"|"fneg"|"fdiv"|"fmul"|"fsub"|"fadd"|"f2f"|"f2i"|
+           "i2f"|"and"|"or"|"xor"|"com") as op, ws), xs)->
+    Impossible.impossible
+      (Printf.sprintf
+         "operator %%%s specialized to %d widths & applied to %d arguments"
+         op (List.length ws) (List.length xs))
+@
+And now we convert between RTLs and Burg constructors.
+<<code to follow the labeler>>=  
+let unimp = Impossible.unimp
+let const = function
+  | RP.Late(s,w)              -> unimp "sparc: late constants"
+  | RP.Bool(b)                -> unimp "sparc: bool"
+  | RP.Link(s,_,w)            -> conLink s w
+  | RP.Diff _                 -> error "PIC not supported"
+  | RP.Bits(b)                -> conBits(b)
+<<code to follow the labeler>>=  
+let rec exp = function
+  | RP.Const(k)               -> const (k)
+  | RP.Fetch(l,w)             -> conFetch (loc l) w
+  <<special cases for particular operators>>
+  | RP.App((o,_),_)           -> error ("unknown operator " ^ o)
+<<code to follow the labeler>>=  
+and loc l = match l with
+  | RP.Mem('m', aff, w, e, ass) -> conMem (exp e) w
+  | RP.Reg(sp, i, w)          -> conReg sp i w 
+  | RP.Mem(_, _, _, _, _)     -> error "non-mem, non-reg cell"
+  | RP.Var _ | RP.Global _    -> error "var found"
+  | RP.Slice(w,i,l)           -> unimp "sparc: slice locations"
+@ 
+We recognize some special forms of single effects.  When is npc used
+and when is pc used?
+
+How to handle returns:
+
+ ret  is really jmpl %i7+8, %g0
+ retl is really jmpl %o7+8, %g0
+ 
+this is a bit of a problem for our code because the machinery has no
+idea that the return address is being placed in different registers
+maybe we should tell it that %i7 is the return address, which is a
+non-volatile register, so that it won't try to save and resore the
+value on the stack, which is pointless.  Should be okay as long as %o7
+is mentioned as volatile and isn't available to pass a parameter on a
+call.  For now, we will just be using the ``ret'' instruction because
+we don't do the so-called ``leaf optimization''.
+<<code to follow the labeler>>=  
+and effect = function
+  | RP.Store(RP.Reg('c', i, w), r, _)
+    when (i = 1 (* i = npc *)) ->
+       if r = ra then conReturn () else conGoto (exp r)
+  | RP.Store(RP.Reg('c',i, _), r, w)  -> error ("set $c["^string_of_int i^"]")
+  | RP.Store(maybe_spl, RP.App(("add",_), [x;y]), _)
+    when (maybe_spl = spl && (x = sp || y = sp)) -> conSave (exp x) (exp y)
+  | RP.Store(l,e,w)                   -> conStore (loc l) (exp e) w
+  | RP.Kill(l)                        -> unimp "sparc: kill effect"
+@
+We attempt to recognize register pairs.
+<<code to follow the labeler>>=  
+and regpair = function
+  | _ -> Impossible.impossible "Argument is not a register pair"
+@
+<<code to follow the labeler>>=
+and rtl (RP.Rtl es) = geffects es
+and geffects = function
+    | []          -> conNop ()
+    | [g, s]      -> guarded g s
+    | (g, s) :: t -> conPar (guarded g s) (geffects t)
+and guarded g eff = match g with
+  | RP.Const(RP.Bool b) -> if b then effect eff else conNop()
+  | _ -> conGuarded (exp g) (effect eff)
+@ 
+
+\subsection{The exported recognizer}
+
+We try not to immediately halt if something goes wrong but instead drop error messages into the assembly language.
+
+<<code to follow the labeler>>=
+let errmsg r msg =
+  List.iter prerr_string
+    [ "recognizer error: "; msg; " on "; RU.ToString.rtl r; "\n" ]
+
+let to_asm r =
+  try
+    let plan = rtl (Down.rtl r) in
+    plan.inst.Camlburg.action ()
+  with 
+  | Camlburg.Uncovered -> cat [" not an instruction: " ; RU.ToString.rtl r]
+  | Error msg -> (errmsg r msg; " error in recognizer: " ^ msg)
+
+let is_instruction r =
+  try
+    let plan = rtl (Down.rtl r) in
+    plan.inst.Camlburg.cost < 100  (* should be true, but shade this... *)
+  with 
+  | Camlburg.Uncovered -> false
+  | Error msg -> (errmsg r msg; false)
+@ 
