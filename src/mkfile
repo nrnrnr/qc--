@@ -96,7 +96,7 @@ clean:V:
             rm -f *.lua 
     
 clobber:V:  clean
-            rm -f $NAME $NAME.opt newer
+            rm -f $NAME $NAME.opt 
 
 
 # ------------------------------------------------------------------
@@ -364,13 +364,6 @@ scan.mli:       parser.nw
                 $NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 #
-# LaTeX documentation for non OCaml code
-#
-
-newer.inc:      newer.nw
-                $NOWEAVE -delay -autodefs c -index $prereq > $target
-
-#
 # include the yacc grammar in the manual for reference
 #
 
@@ -434,22 +427,19 @@ this.ml:        this.in qc--.lua
 # make sure that generators are ran first
 # ------------------------------------------------------------------
 
-$DEPEND:D:    $SCAN
-            $OCAMLDEP -I $LIBDIR $prereq > $DEPEND
+$DEPEND:D:      $SCAN mkfile
+                $OCAMLDEP -I $LIBDIR $prereq > $DEPEND
             
 
 # make sure DEPEND is up to date
-depend-check:VQ: newer
+depend-check:VQ: $BINDIR/newer
     # check for $DEPEND
-    if ./newer $DEPEND mkfile; then true;
+    if $BINDIR/newer $DEPEND mkfile; then true;
     else
       echo "$DEPEND is out of date;" 1>&2
       echo "you must run 'mk depend' before continuing" 1>&2
       exit 1
     fi
-
-newer: newer.c
-    $CC -o $target $prereq
 
 
 <$DEPEND
