@@ -438,18 +438,28 @@ specific automaton to obtain locations for each of them.  A location
 is added to a register's denoation in the environment.  The updated
 environment plus the area of memory that hold global registers.
 
+When different compilation units are linked together they all must
+declare exactly the same global registers. We compute a cryptographic
+hash value for all global register declarations as a finger print. The
+finger print is a string of 16 characters which are not guaranteed to be
+printable.
+
 <<Make global registers>>=
 let globals env target (base:Rtl.exp) names =
     let t = Automaton.mk target.Target.globals base in
-    let hint = function
-        | F.RReg x -> Some x
-        | _        -> None
-    in 
+    let decls = Buffer.create 128 in (* initial size - grows as needed *)
     let rec assign env n =
         try 
             ( match F.findv n env with
             | (rgn,(F.Register(reg),ty)) ->
-                let loc   = Automaton.ty t (width ty) (hint reg.F.rhint) in
+                let h,h'  = match reg.F.rhint with
+                            | F.RReg x -> Some x, x     (* h/w register *)
+                            | _        -> None  , "" in
+                let w     = width ty in
+                (* sig is string representation of this declaration *)
+                let sign  = Printf.sprintf "[%d <%s>]" w h' in
+                let ()    = Buffer.add_string decls sign    in
+                let loc   = Automaton.ty t w h in
                 let entry = ( rgn
                             , (F.Register({reg with F.loc = Some loc}),ty)
                             ) in F.rebindv n entry env
@@ -458,7 +468,7 @@ let globals env target (base:Rtl.exp) names =
         with Error.ErrorExn msg -> Impossible.impossible msg
     in
     let env = List.fold_left assign env names in
-        env, Automaton.freeze t    
+        env, Automaton.freeze t, Digest.string (Buffer.contents decls)    
 @
 
 
@@ -1058,12 +1068,31 @@ let program env target mangle asm tt =
     let asm = exports env asm                     in
     let asm = imports env asm                     in
         foldl (toplevel env target mangle) asm tt
+@
 
+The finger print [[disgest]] for global register declarations is a 16
+character long string of unprintable characters. We make it printable by
+applying the {\ocaml} escaping rules and [[mangle]]. Note: this symbol
+should be exported but currently it is not.
+
+
+<<Make translate program>>=
 let translate env target prog =
-    let base     = Rtl.link "global_base" target.Target.pointersize in (*XXX*)
-    let env,area = globals env target base (F.globals env) in
+    let base_sym = "global base" in
+    let base     = Rtl.link base_sym target.Target.pointersize in (*XXX*)
+    let env
+       ,area
+       ,digest   = globals env target base (F.globals env) in
                    (*XXX where does area go?*)
     let mangle   = Asm.mangle (F.nam2sym env) in 
+    let digest   = mangle (String.escaped digest) in
     let asm      = Asm.init () in
+    let asm      = asm ++ Asm.section (target.Target.data_section)
+                       ++ Asm.comment "memory for global registers"
+                       ++ Asm.align area.Area.align
+                       ++ Asm.addloc area.Area.size
+                       ++ Asm.define_local (Asm.mksym base_sym) (*XXX ok? *)
+                       ++ Asm.define_local (Asm.mksym digest) (*XXX*)
+    in   
         program env target mangle asm prog  (* asm *)
 @    
