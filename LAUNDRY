@@ -1,10 +1,46 @@
+* CFG creation: who is responsible to insert jumps and labels into the 
+  CFG such that it can be brought into linear form? This means that
+  every node with more than one predecessor must be labeled. Currently
+  the AST3IR module takes care of this but it could also be deligated to
+  the CFG module.
+
+* How are RTLs translated back to C--? C-- syntax has no way to express
+  different spaces as they are present in RTLs. 
+
+    $r[2]       -> bits32[2]            no indication of space 
+                                        confusing
+                -> typedef $r bits32    space becomes type
+                   $r[2]                width of '2' can be wrong
+                -> bits32[$r+2]         space becomes base address
+                                        width of '2' can be wrong    
+
+* The implementation of cutto currently lacks all details to find the
+  activation for the continuation and thus the \emph{incoming} area in
+  that activations. This is where the [[cut to]] statement puts the
+  \emph{outgoing} overflow parameters. Some abstraction for a
+  continuation's runt-time representation, similar to [[Automaton.loc]]
+  might be appropriate. --CL
+
+* Register.spill/reload needs a review. The RTLs produced may not
+  respect the machine invariant. Should these functions be moved into 
+  Target.t? Another way would be to pass a code-expander into these
+  functions. 
+
+* Should Target.t be an object? 
+
+* Error reporting for checked run-time errors is very fractured: I
+  like to use assert false because if it is raised it includes a
+  source code position.  Some functions use Impossible.impossible
+  which raises an exception.  Tracking the cause of such a location
+  requires the debugger and backward execution.  Another possibility
+  would be to raise the standard exception Invalid_argument. The
+  problem of tracking its cause remains the same. 
+
 * I believe stack slots for registers (spilling, callee saved
   registers, etc) should be managed by an automaton that itself
   allocates memory from an Area. The private area of the stack
   therefore is a concatenation of (at least) two Area.t: user stack
   data and slots used by compiler and run-time system.
-
-* Area provides overlapping of areas but we need concatenation, too.
 
 * Automaton.freeze and Area.freeze should adjust the size of the area 
   under construction such that is a multiple of the base alignment.
@@ -39,11 +75,6 @@
   Implemented in Rtlutl, but was marked deprecated.
 
 * I don't know how to find the data-flow annotations/nodes for continuations.
-
-* The data-flow nodes in CFG3 do not work for return, jump, cutto
-  nodes because they don't have a successor to put a the data-flow
-  node before.  I still would like to add annotations directly into
-  call/return/jump/ cutto nodes. 
 
 * Since evaluation and type-checking of expressions are separated,
   types in nested expressions are checked multiple times.  This
@@ -97,3 +128,14 @@
   
   We now have rtleval to evaluate expressions and expcheck to check the
   static semantics of expressions.  
+
+* Added a 'space' property to Target. This seems to be a very general
+  description and therefore I like it. But it needs approval from NR.
+  Should the Target.space type go to Rtl? Done.
+
+* Area provides overlapping of areas but we need concatenation, too. Done.
+
+* The data-flow nodes in CFG3 do not work for return, jump, cutto
+  nodes because they don't have a successor to put a the data-flow
+  node before.  I still would like to add annotations directly into
+  call/return/jump/ cutto nodes. Solved: we have links to the exit node.
