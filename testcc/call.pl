@@ -182,9 +182,15 @@ sub c_compare {
         my $val   = shift @_;
         my $v     = shift @_;
         
-        print CEE <<EOF;
-        if (*(unsigned*)(&$v) != $val) {printf("failed ($val)\\n"); return;} 
+        if ($hint eq "float") {
+            print CEE <<EOF;
+            if (*(unsigned*)(&$v) != $val) {printf("failed ($val)\\n"); return;}
 EOF
+        } else {
+            print CEE <<EOF;
+            if ($v != $val) {printf("failed ($val)\\n"); return;}
+EOF
+        }
     }
 }
 
