@@ -1,0 +1,84 @@
+#!/bin/sh
+#
+
+if uname -p >/dev/null 2>/dev/null; then
+  PROC=`uname -p`
+else
+  PROC=unknown
+fi
+
+if [ "x$PROC" != xunknown ]; then
+  : do nothing
+elif [ -x /bin/arch ]; then 
+  PROC=`/bin/arch`
+elif uname >/dev/null 2>/dev/null; then
+  case `uname` in
+    AIX) echo rs6000-aix ;;
+    FreeBSD)
+      OS=bsd
+      if uname -m >/dev/null 2>/dev/null; then
+        PROC=`uname -m`
+      else
+        PROC=unknown
+      fi
+      echo $PROC-$OS ;;
+    Linux)
+      OS=linux;
+      if uname -m >/dev/null 2>/dev/null; then
+        case `uname -m` in
+          i586|i486|i386) PROC=x86 ;;
+          *) PROC=`uname -m` ;;
+        esac
+      else
+        PROC=unknown
+      fi 
+      echo $PROC-$OS ;;
+    *) echo unknown ;;
+  esac
+  exit 0
+fi
+
+case $PROC in
+  sun4) PROC=sparc ;;
+  i386|i486|i586|i686) PROC=x86 ;;
+esac
+
+case $PROC in
+  sparc) case `uname -r` in
+           4.*)      OS=sunos ;;
+           [5-9].*)  OS=solaris ;;
+           *)        echo "unknown-OS" 1>&2; exit 1 ;;
+         esac ;;
+  mips) case `uname -s` in
+          IRIX) 
+	    case `uname -r` in
+              5.*) OS=irix5 ;;
+              *)        echo "unknown-OS" 1>&2; exit 1 ;;
+            esac ;;
+           *)        echo "unknown-OS" 1>&2; exit 1 ;;
+         esac ;;
+  x86)   case `uname` in
+            FreeBSD) OS=bsd ;;
+            Linux) OS=linux ;;
+            *) OS=unknown ;;
+         esac ;;
+  alpha) case `uname` in
+           OSF1) OS=osf1 ;;
+           Linux|linux) OS=linux ;;
+           *) OS=unknown ;;
+         esac ;;
+  *) echo "unknown-OS" 1>&2; exit 1 ;;
+esac
+echo $PROC-$OS
+
+
+exit 0
+
+for i in /usr/local/bin/bintype /bin/arch /usr/ucb/arch /usr/local/bin/cputype
+do
+  if [ -x $i ]; then export CPU=`$i` ; break; fi
+done
+
+if [ "$CPU" = "i586" ]; then
+  CPU=i486
+fi
