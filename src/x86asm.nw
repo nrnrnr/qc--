@@ -51,16 +51,20 @@ We include name mangling into [[Symbol.t]] class because all assembler
 symbols like labels will be derived from them. Since the mangler is
 stateful, we have to create it outside the individual instance of a
 symbol. For now, we pass it from the assembler to here.
-
+This mangler is very conservative, accepting only symbols built with
+alphanumerics, underscores, and dots.
+Most assemblers, including the Gnu assembler, will accept many more
+characters.  But this way we don't have to enumerate the reserved
+words (e.g., names of registers).
 <<definitions>>=
 <<definition of [[manglespec]] (for the name mangler)>>=
 let spec =
-    let reserved = [] in        (* list reserved words here so we can
-                                   avoid them *)
+    let reserved = [] in        (* list reserved words here so we can avoid them *)
     let id = function
         | 'a'..'z'
         | '0'..'9'
         | 'A'..'Z'
+        | '.'
         | '_'      -> true
         | _        -> false in
     let replace = function
@@ -74,13 +78,11 @@ let spec =
             }
 @
 
-
 % ------------------------------------------------------------------ 
 \subsubsection{The assembler class}
 % ------------------------------------------------------------------ 
 
 The assembler maintains mutable state for:
-
 \begin{itemize}
 \item the actual section the assembler is in,
 \item exported symbols,
