@@ -313,7 +313,7 @@ We translate constants to {\rtl} expressions which we then evaluate.
 <<Make constant evaluation>>=
 let compile_const env target exp     = Rtleval2.bits (expr env target exp)
 let eval_const    env target asm exp = Rtleval2.exp  (expr env target exp)  
-let link_const    env target asm exp = 
+let link_const    env target exp = 
     match D.exp (Rtleval2.exp  (expr env target exp)) with
     | RP.Const(RP.Bits(b))   -> Reloc.Simple.of_const b
     | RP.Const(RP.Link(l,w)) -> Reloc.Simple.of_sum l (Bits.zero w)
@@ -530,6 +530,7 @@ type state =
     ; conts:        Contn.t Strutil.Map.t (* local *)    
     ; esc_conts:    Strutil.Set.t    (* escaping conts *)
     }
+    
 @
     
 \begin{itemize}
@@ -560,31 +561,31 @@ activation record will be unsolvable.
 
 
 <<Make statements>>=
-let rec stmt s state = match s with
-    | A.StmtAt(x,r)        -> stmt x state 
-    | A.SpanStmt    x      -> spanStmt      state x
-    | A.IfStmt      x      -> ifStmt        state x
-    | A.SwitchStmt  x      -> switchStmt    state x
-    | A.LabelStmt   x      -> labelStmt     state x
-    | A.ContStmt    x      -> contStmt      state x
-    | A.AssignStmt  x      -> assignStmt    state x
-    | A.CallStmt    x      -> callStmt      state x
-    | A.PrimStmt    x      -> primStmt      state x
-    | A.GotoStmt    x      -> gotoStmt      state x
-    | A.JumpStmt    x      -> jumpStmt      state x
-    | A.CutStmt     x      -> cutStmt       state x
-    | A.ReturnStmt  x      -> returnStmt    state x 
+let rec stmt spans s state = match s with
+    | A.StmtAt(x,r)        -> stmt spans x state 
+    | A.SpanStmt    x      -> spanStmt      spans state x
+    | A.IfStmt      x      -> ifStmt        spans state x
+    | A.SwitchStmt  x      -> switchStmt    spans state x
+    | A.LabelStmt   x      -> labelStmt     spans state x
+    | A.ContStmt    x      -> contStmt      spans state x
+    | A.AssignStmt  x      -> assignStmt    spans state x
+    | A.CallStmt    x      -> callStmt      spans state x
+    | A.PrimStmt    x      -> primStmt      spans state x
+    | A.GotoStmt    x      -> gotoStmt      spans state x
+    | A.JumpStmt    x      -> jumpStmt      spans state x
+    | A.CutStmt     x      -> cutStmt       spans state x
+    | A.ReturnStmt  x      -> returnStmt    spans state x 
     | A.EmptyStmt          -> state     
     | A.CommentStmt _      -> state    
 
-and body b state = match b with
-    | A.BodyAt(x, _)        -> body x state
+and body spans b state = match b with
+    | A.BodyAt(x, _)        -> body spans x state
     | A.DeclBody(d)         -> state (* nothing to be done *)
-    | A.StmtBody(s)         -> stmt s state 
+    | A.StmtBody(s)         -> stmt spans s state 
     | A.DataBody(dd)        -> state (* already done *)
     
 
-and labelStmt state x =
+and labelStmt spans state x =
     let s = match F.findv x state.env with
         | _, (F.Label(F.Code(s)),_) -> s
         | _ -> assert false
@@ -714,7 +715,7 @@ taken otherwise and ends with a [[goto]] around the other branch.
 \end{enumerate}
 
 <<Make statements old>>=
-and ifStmt' state (e,ifso,ifnot) =
+and ifStmt' spans state (e,ifso,ifnot) =
     let l_ifso = Idgen.label state.proc in (* label for ifso/left *)
     let l_join = Idgen.label state.proc in (* label for join *)
     let s_ifso = F.symbol state.env l_ifso in   (* register symbol *)
@@ -735,22 +736,22 @@ and ifStmt' state (e,ifso,ifnot) =
         }
 
 <<Make statements>>=
-and ifStmt state (e,ifso,ifnot) =
+and ifStmt spans state (e,ifso,ifnot) =
     let l_join = Idgen.label state.proc in (* label for join *)
     let s_join = F.symbol state.env l_join in   (* register symbol *)
     let n_join = G.gm_label state.cfg l_join s_join state.node in
-    let ifso   = foldr body ifso { state with node = n_join } in
+    let ifso   = foldr (body spans) ifso { state with node = n_join } in
     
     let l2exp  = Rtl.link s_join state.target.Target.pointersize in
     let l2rtl  = state.target.Target.goto.Target.embed l2exp in
     let l2goto = G.gm_goto state.cfg l2rtl [G.lookup state.cfg l_join] in
-    let ifnot  = foldr body ifnot {ifso with node = l2goto} in
+    let ifnot  = foldr (body spans) ifnot {ifso with node = l2goto} in
     
     let e      = R.Convert.exp (expr state.env state.target e) in
         guard ifnot ifso.node ifnot.node e 
         
 
-and assignStmt state (lhs,rhs) =
+and assignStmt spans state (lhs,rhs) =
     let effect lhs (guard,rhs) =
         let exp = expr   state.env state.target rhs     in
         let rtl = assign state.env state.target lhs exp in 
@@ -768,7 +769,7 @@ If the {\AST} does not mention any labels, we know that the expression
 must be a label.
              
 <<Make statements>>=
-and gotoStmt state (e,labels) =
+and gotoStmt spans state (e,labels) =
     let rec label_of = function
         | A.ExprAt(x,_)             -> label_of x
         | A.Fetch(A.LValueAt(x,_))  -> label_of (A.Fetch x)
@@ -791,7 +792,7 @@ mechanism is used.
 \end{quote}
 
 <<Make statements>>=
-and jumpStmt state (cconv,e,args,labels) = 
+and jumpStmt spans state (cconv,e,args,labels) = 
     let exp     = expr state.env state.target e    in
     let cc      = state.target.Target.cc (Aux.Option.get default_cc cconv) in
     let args    = List.map (actual state.env state.target) args in
@@ -846,7 +847,7 @@ statement. A data-flow node expresses inter-procedural data-flow.}
 \end{quote}
 
 <<Make statements>>=
-and callStmt state (lhs,cconv, e, args, targets (*unused*), conts) = 
+and callStmt spans state (lhs,cconv, e, args, targets (*unused*), conts) = 
     let rec lvalue = function
         | A.LValueAt(x,_) -> lvalue x
         | A.Var x         -> formal state.env x 
@@ -864,7 +865,7 @@ and callStmt state (lhs,cconv, e, args, targets (*unused*), conts) =
     let copyi,uses =
         add_to_cfg state.cfg (fun n rst -> Register.Set.union rst (G.uses n))
                    rtls (state.node, Register.Set.empty) in
-    let call        = G.gm_call  state.cfg rtl conts copyi in
+    let call        = G.gm_call  state.cfg rtl conts spans copyi in
     let rtls,areao = IO.copyout args cc.Target.proc (offset state.outbase ptrsize) in
     let copyo,defs =
         add_to_cfg state.cfg (fun n rst -> Register.Set.union rst (G.defs n))
@@ -891,7 +892,7 @@ and refer to the big picture in \module{stack}.
 \end{quote}
 
 <<Make statements>>=
-and returnStmt state (cconv, kont, args) = 
+and returnStmt spans state (cconv, kont, args) = 
     let const e = Bits.S.to_int (compile_const state.env state.target e)     in
     let cc      = state.target.Target.cc (Aux.Option.get default_cc cconv) in
     let (x,y)   = match kont with
@@ -919,7 +920,7 @@ and returnStmt state (cconv, kont, args) =
 Each continuation receives its parameters in its own area.
 Only continuations that escape are given space on the stack.
 <<Make statements>>=
-and contStmt state (label,args)  = 
+and contStmt spans state (label,args)  = 
     let ptr     = state.target.Target.pointersize in
     let cc      = state.target.Target.cc default_cc      in
     let sp      = Rtl.fetch cc.Target.sp  ptr in
@@ -964,7 +965,7 @@ to replace the late compile-time constants in the rtl's returned from
 [[copyout]].
 
 <<Make statements>>=
-and cutStmt state (e, args, conts) = 
+and cutStmt spans state (e, args, conts) = 
     let cc        = state.target.Target.cc default_cc                  in
     let ptr       = state.target.Target.pointersize                    in
     let mem       = state.target.Target.memsize                        in
@@ -1012,10 +1013,20 @@ and cutStmt state (e, args, conts) =
 		  ~defs:Register.Set.empty ~uses:defs ~kills:Register.Set.empty
 		  ~src:cut ~dst:(G.exit(state.cfg)) in
         result
+@
 
-and primStmt      state x  = Impossible.unimp "primitive"
-and spanStmt      state x  = Impossible.unimp "span"
-and switchStmt    state x  = Impossible.unimp "switch"
+The span statement just evaluates the two span arguments and adds them
+to the list of active spans.
+
+<<Make statements>>=
+and spanStmt spans state (e1,e2,b) =
+    let key   = compile_const state.env state.target  e1 in
+    let value = link_const    state.env state.target  e2 in
+    let spans = (key,value) :: spans                     in
+        foldr (body spans) b state
+
+and primStmt    spans state x  = Impossible.unimp "primitive"
+and switchStmt  spans state x  = Impossible.unimp "switch"
 @
 
 % ------------------------------------------------------------------ 
@@ -1043,7 +1054,7 @@ let init_cont env (cfg:G.cfg) (target:Target.t) (cc:Target.cc) label (c:Contn.t)
     
 @
 <<Make procedure>>=
-let proc env target optimizer (cconv,name,args,bdy) = 
+let proc spans env target optimizer (cconv,name,args,bdy) = 
     let ( symbol
         , scope
         , vars )    = match F.findv name env with
@@ -1086,7 +1097,7 @@ let proc env target optimizer (cconv,name,args,bdy) =
         ; esc_conts = esc_conts
         } in  
     (* translate body of procedure *)
-    let state = foldr body bdy state in
+    let state = foldr (body spans) bdy state in
     (* add nodes for incoming parameters *)
     let atmi  = AT.mk cc.Target.proc  (offset state.outbase pointer) in
     let args  = List.map (procformal state.env) args in
@@ -1147,12 +1158,12 @@ report only those continuations that appear in expressions.
 module StackData = struct 
 
     type state = 
-        { env:    F.env
-        ; mem:    Memalloc.t
-        ; target: Target.t
-        ; cc:     Target.cc     (* current calling convention *)  
-        ; conts:  Contn.t Strutil.Map.t
-        ; esc_conts:    Strutil.Set.t    (* escaping conts *)
+        { env:              F.env
+        ; mem:              Memalloc.t
+        ; target:           Target.t
+        ; cc:               Target.cc     (* current calling convention *)  
+        ; conts:            Contn.t Strutil.Map.t
+        ; esc_conts:        Strutil.Set.t    (* escaping conts *)
         }
 
     let rec stackdatum state = function
@@ -1285,7 +1296,7 @@ end (* of module StackData *)
 
 <<Make memory declarations>>=
 let initialized_data env target asm expr = 
-        asm#addr (link_const env target asm expr)
+        asm#addr (link_const env target expr)
 
 let rec init env target asm = function
     | A.InitAt(x,_)   -> init env target asm x
@@ -1365,24 +1376,24 @@ global registers are determined by an automaton, see module
 \module{callconv}. 
 
 A [[span]] on the section level must be pushed to the statement level: 
-when we come across a [[span]] we modify the properties [[props]]
+when we come across a [[span]] we modify the properties [[spans]]
 accordingly.  The next time we come across a procedure, the properties
 including the span will be used.
 
 <<Make toplevel>>=
-let rec sspan env target optimizer asm (e1,e2,ss) =    
+let rec sspan spans env target optimizer asm (e1,e2,ss) =    
     let key   = compile_const env target      e1 in
-    let value = link_const    env target  asm e2 in
-    (* construct props value, pass it to section. not implemented *)
-        List.iter (section env target optimizer asm) ss 
+    let value = link_const    env target  e2 in
+    let spans = (key,value) :: spans             in
+        List.iter (section spans env target optimizer asm) ss 
 
 <<Make toplevel>>=
-and section env target optimizer asm = function
-    | A.SectionAt(x,_)     -> section env target optimizer asm x
+and section spans env target optimizer asm = function
+    | A.SectionAt(x,_)     -> section spans env target optimizer asm x
     | A.Decl(d)            -> ()
-    | A.Datum( d)          -> datum   env target asm d
-    | A.Procedure(p)       -> proc    env target optimizer p
-    | A.SSpan ss           -> sspan   env target optimizer asm ss
+    | A.Datum( d)          -> datum         env target asm d
+    | A.Procedure(p)       -> proc    spans env target optimizer p
+    | A.SSpan ss           -> sspan   spans env target optimizer asm ss
 @            
 
 What to do with top-level procedures? They should go into some section
@@ -1394,10 +1405,10 @@ let rec toplevel env target optimizer asm = function
     | A.ToplevelAt(x, _)  -> toplevel env target optimizer asm x
     | A.Section(name, ss) -> 
         let () = asm#section (name)in  
-            List.iter (section env target (*props*) optimizer asm) ss
+            List.iter (section [] env target (*props*) optimizer asm) ss
     | A.TopDecl(d)        -> ()
     | A.TopProcedure(p)   -> let () = asm#section default_section  in 
-                             proc env target optimizer p
+                             proc [] env target optimizer p
 @
 
 
