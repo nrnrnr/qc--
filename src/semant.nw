@@ -233,14 +233,16 @@ are replaced by the correct types and values.
 let constant env (name,expr) = 
     enter_ok name (dummy,Constant(ExprConst(expr))) env
     
+let procedure env (cc,n,fs, ds, ss) = 
+    let env' = enter_ok n (pointer,Memory) env in 
+        stmts env' ss 
+            
 let rec section env = function
     | SectionAt(x,r)         -> catch' env (errorRegPrt r) (section env) x
     | SSpan( e1, e2, ss)     -> foldl section env ss
     | Datum( d)              -> datum env d
     | SExport (t, ns)        -> env
-    | Procedure(cc,n,fs, ds, ss) -> 
-        let env' = enter_ok n (pointer,Memory) env in 
-            stmts env' ss 
+    | Procedure(p)           -> procedure env p
 
 let rec topdecl env = function
     | TopDeclAt(x,r)  -> catch' env (errorRegPrt r) (topdecl env) x
@@ -250,7 +252,7 @@ let rec topdecl env = function
     | Const ( cs)     -> foldl constant env cs
     | Section( n, ss) -> foldl section env ss
     | Registers( rs)  -> foldl register env rs
-    | TopProcedure(p) -> env
+    | TopProcedure(p) -> procedure env p
     | Pragma          -> env
 
 let program ds srcmap = 
