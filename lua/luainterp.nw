@@ -43,37 +43,21 @@ module type INTERP = sig
 end
 @ 
 <<signatures>>=
-(*
-module type FALLBACK = sig
-  module V : Value.S
-  val fallback : string -> V.state -> V.value list -> V.value list
-end
-
-module type LAYER = sig
-  module U : Value.USERDATA
-  module M (FB : FALLBACK) : sig
-    val init : U.t FB.V.map -> (FB.V.state -> U.state) -> FB.V.state -> unit
-  end
-end
-
-module type MIXIN = functor (L : LAYER) -> LAYER
-*)
-
 module type TOWER = sig
   (* top of the tower *)
   module V : Value.S
   val fallback : string -> V.state -> V.value list -> V.value list
 
   (* access to one tier *)
-  type t
-  val map : t V.map
-  type state 
-  val project_state : V.state -> state
+  type 'a t   (* is this parameter really needed? *)
+  val map : V.value t V.map
+  type 'a state 
+  val project_state : V.state -> V.value state
 end
 
 module type TIER = sig
   module U : Value.USERDATA
-  module M (T : TOWER with type t = U.t with type state = U.state) : sig
+  module M (T : TOWER with type 'a t = 'a U.t with type 'a state = 'a U.state) : sig
     val init : T.V.state -> unit
   end
 end
@@ -83,12 +67,12 @@ module type MIXIN = functor (L : TIER) -> TIER
 <<lua.ml>>=
 module Bottom : TIER = struct
   module U = struct
-    type t = unit
+    type 'a t = unit
     let tname = "<nothing>"
-    type state = unit
+    type 'a state = unit
     let state () = ()
-    let to_string () = "<nothing>"
-    let eq () () = true
+    let to_string _ () = "<nothing>"
+    let eq _ () () = true
   end
   module M (FB : TOWER) = struct let init _ = () end
 end
@@ -134,9 +118,9 @@ let add_fallbacks g =
 module Top = struct
   module V = Value
   let fallback = fallback
-  type t = V.userdata
+  type 'a t = 'a V.userdata'
   let map = V.userdata
-  type state = V.userstate
+  type 'a state = 'a V.userstate'
   let project_state g = g.V.userstate
 end
 

@@ -5,40 +5,39 @@
 <<io.mli>>=
 module Builtins : Lua.MIXIN
 @ 
-@ 
 <<io.ml>>=
 module Builtins (L : Lua.TIER) : Lua.TIER = struct
   module U = struct
-    type t = In of in_channel | Out of out_channel | Other of L.U.t
+    type 'a t = In of in_channel | Out of out_channel | Other of 'a L.U.t
     let tname = "I/O channel or " ^ L.U.tname
-    let eq x y = match x, y with
+    let eq veq x y = match x, y with
     | In x,    In y    -> x = y
     | Out x,   Out y   -> x = y
-    | Other x, Other y -> L.U.eq x y
+    | Other x, Other y -> L.U.eq veq x y
     | _, _ -> false
-    let to_string = function
+    let to_string vs = function
       | In _ -> "<input>"
       | Out _ -> "<output>"
-      | Other x -> L.U.to_string x
-    type state = { mutable currentin  : in_channel
-                 ; mutable currentout : out_channel
-                 ; other : L.U.state
-                 } 
+      | Other x -> L.U.to_string vs x
+    type 'a state = { mutable currentin  : in_channel
+                    ; mutable currentout : out_channel
+                    ; other : 'a L.U.state
+                    } 
     let state () = { currentin = stdin; currentout = stdout; other = L.U.state () }
   end
-  module M (FB : Lua.TOWER with type t = U.t with type state = U.state) = struct
+  module M (FB : Lua.TOWER with type 'a t = 'a U.t with type 'a state = 'a U.state) = struct
     module V = FB.V
     let ( **-> ) = V.( **-> )
     module FB' = struct
       module V = V
       let fallback = FB.fallback
-      type t = L.U.t
+      type 'a t = 'a L.U.t
       let map = { V.embed   = (fun x -> FB.map.V.embed (U.Other x))
                 ; V.project = (fun v -> match FB.map.V.project v with
                                         | U.Other x -> x
                                         | _ -> raise (V.Projection (v, U.tname)))
                 }
-      type state = L.U.state
+      type 'a state = 'a L.U.state
       let project_state s = (FB.project_state s).U.other
     end
     module L' = L.M (FB')

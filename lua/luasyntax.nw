@@ -1,22 +1,22 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 @ 
 \subsection{Parser}
-<<parse.mli>>=
+<<parser.mli>>=
 module type S = sig
   type chunk
   val chunks : (Lexing.lexbuf  -> token) -> Lexing.lexbuf -> chunk list
 end
 module type MAKER = functor (Ast : Ast.S) -> S with type chunk = Ast.chunk
-module Make : MAKER
+module MakeStandard : MAKER
 @ 
-<<parse.mly>>=
+<<parser.mly>>=
 %{
 module type S = sig
   type chunk
   val chunks : (Lexing.lexbuf  -> token) -> Lexing.lexbuf -> chunk list
 end
 module type MAKER = functor (Ast : Ast.S) -> S with type chunk = Ast.chunk
-  module Make (Ast : Ast.S) = struct
+  module MakeStandard (Ast : Ast.S) = struct
     module A = Ast
     type chunk = Ast.chunk
 %}
@@ -133,7 +133,7 @@ glob_arm_and_body
          {codeIf($3,$7);$$=$3+3;} /* patch jumps; return label for other patch */
        ;                      
 */
-<<parse.mly>>=
+<<parser.mly>>=
 block    :  statlist ret { $1 @ $2 } ;
 
 ret	: /* empty */          { [] }
@@ -266,7 +266,7 @@ end
 \item The scanner compiles, but is untested otherwise.
 \item Pragma lines, starting with a [[$]] are skipped.
 \item The entry point of the scanner is [[token]]:
-      $$[[val token : Lexing.lexbuf -> Srcmap.map -> Parse.token]]$$
+      $$[[val token : Lexing.lexbuf -> Srcmap.map -> Parser.token]]$$
 
       The second argument is a source map, that allows to reconstruct 
       filename, line, and column from a character offset. The first
@@ -278,7 +278,7 @@ end
 
 <<scan.mll>>=
 {
-    module P = Parse     (* tokens are defined here *)
+    module P = Parser     (* tokens are defined here *)
     
     exception Scan of string
     

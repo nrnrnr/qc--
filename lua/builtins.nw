@@ -4,17 +4,17 @@ module String : Lua.MIXIN
 module Math   : Lua.MIXIN
 
 
-module Add (MakeParser : Parse.MAKER) (I : Lua.INTERP) : sig
+module Add (MakeParser : Parser.MAKER) (I : Lua.INTERP) : sig
   val do_lexbuf : sourcename:string -> I.state -> Lexing.lexbuf -> I.value list
   val dostring  : I.state -> string -> I.value list
   val dofile    : I.state -> string -> I.value list
   val state : unit -> I.state
   module Value  : Value.S 
-  module Parser : Parse.S with type chunk = I.Ast.chunk
+  module Parser : Parser.S with type chunk = I.Ast.chunk
   module Interp : Lua.INTERP
 end with module Value = I.Value with module Interp = I
 <<builtins.ml>>=
-module Add (MakeParser : Parse.MAKER) (I : Lua.INTERP) = struct
+module Add (MakeParser : Parser.MAKER) (I : Lua.INTERP) = struct
   module Parser = MakeParser (I.Ast)
   module Value = I.Value
   module Interp = I
@@ -178,7 +178,7 @@ let math_builtins =
 <<builtins.ml>>=
 module String (L : Lua.TIER) = struct
   module U = L.U
-  module M (FB : Lua.TOWER with type t = U.t and type state = U.state) = struct
+  module M (FB : Lua.TOWER with type 'a t = 'a U.t and type 'a state = 'a U.state) = struct
     module I = struct let fallback = FB.fallback end
     module V = FB.V
     let ( **-> ) = V.( **-> )
@@ -193,7 +193,7 @@ end
 
 module Math (L : Lua.TIER) = struct
   module U = L.U
-  module M (FB : Lua.TOWER with type t = U.t and type state = U.state) = struct
+  module M (FB : Lua.TOWER with type 'a t = 'a U.t and type 'a state = 'a U.state) = struct
     module I = struct let fallback = FB.fallback end
     module V = FB.V
     let ( **-> ) = V.( **-> )

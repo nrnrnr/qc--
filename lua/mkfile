@@ -7,7 +7,7 @@ LIBDIR =        ../lib
 OCAMLC_FLAGS=-I $LIBDIR -g
 OCAMLO_FLAGS=-I $LIBDIR
 
-OBJ=thashtbl.cmo floatscan.cmo value.cmo ast.cmo parse.cmo scan.cmo lua.cmo builtins.cmo io.cmo main.cmo
+OBJ=thashtbl.cmo floatscan.cmo value.cmo ast.cmo parser.cmo scan.cmo lua.cmo builtins.cmo io.cmo main.cmo
 OPT=`echo $OBJ | sed 's/\.cmo/.cmx/g'`
 
 all:V: oclua
@@ -18,7 +18,7 @@ oclua: $OBJ
 oclua.opt: $OPT
 	ocamlopt $OCAMLO_FLAGS -o $target unix.cmxa cllib.cmxa $prereq 
 
-bin:V: lua.cmi lua.cmo parse.cmo parse.cmi scan.cmi scan.cmo main.cmo builtins.cmi builtins.cmo 
+bin:V: lua.cmi lua.cmo parser.cmo parser.cmi scan.cmi scan.cmo main.cmo builtins.cmi builtins.cmo 
 src:V: lua.ml lua.mli
 
 TEST=03 04 05 06 07 08 10 12 02
@@ -28,7 +28,7 @@ test:V: oclua.opt
 
 parsex.mly: syntax.nw
 	[ -r $target ] && chmod +w $target
-	notangle -Rparse.mly $prereq | 
+	notangle -Rparser.mly $prereq | 
 	sed "s/','/COMMA/g;s/'{'/LBRA/g;s/'}'/RBRA/g;s/'<'/LT/g;s/'>'/GT/g;s/':'/COLON/g;s/';'/SEMI/g;s/'^'/HAT/g;s/'\*'/STAR/g;s@'/'@SLASH@g;s/'('/LPAR/g;s/')'/RPAR/g;s/'='/GETS/g;s/'+'/PLUS/;s/'-'/MINUS/g;s/'\.'/DOT/g;s/'\['/LSQ/g;s/'\]'/RSQ/g" > $target
 	chmod -w $target
 
@@ -38,10 +38,10 @@ scan.mll: syntax.nw
 floatscan.mll: value.nw
 	notangle -R$target $prereq > $target
 
-parse.ml: parsex.ml
+parser.ml: parsex.ml
 	cp $prereq $target
 
-parse.mli: parsex.mli syntax.nw
+parser.mli: parsex.mli syntax.nw
 	(sed '/^val /,$d' parsex.mli; notangle -L"$LINE" -R$target syntax.nw) > $target
 
 depend:V: DEPEND
