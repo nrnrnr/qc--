@@ -200,6 +200,12 @@ html:V:         $HTML
 # sources generated from noweb sources
 # ------------------------------------------------------------------  
 
+ast2cfg.ml      \
+fpcfg.mli       \
+fpcfg.ml:       fpcfg.nw
+                eval $OCAMLTANGLE
+
+
 dfa.ml:         dfa.nw
                 eval $OCAMLTANGLE
 
@@ -254,10 +260,14 @@ ast2ir.mli      \
 ast2ir.ml:      ast2ir.nw
                 eval $OCAMLTANGLE
 
-rtl.smlview     \
-rtl.view        \
-rtl.asdl:       rtl.nw
-                eval $MISCTANGLE
+rtl.mli         \
+rtl.ml:         rtl.nw
+                eval $OCAMLTANGLE
+
+# rtl.smlview   \
+# rtl.view      \
+# rtl.asdl:     rtl.nw
+#               eval $MISCTANGLE
 
 bits.mli        \
 bits.ml:        bits.nw
@@ -356,14 +366,9 @@ uint64p.o:      uint64p.c
 # views for some of the definined types. So first all asdl files are
 # concatenated and then all views.
 
-ASDL =          ast.asdl        \
-                rtl.asdl        \
-                                
-VIEWS =         ast.view        \
-                rtl.view        \
-
-SMLVIEWS =      rtl.smlview     \
-
+ASDL =          ast.asdl   
+VIEWS =         ast.view  
+SMLVIEWS =      
 
 ocaml.asdl:     $ASDL $VIEWS
                 cat $ASDL           >  $target
@@ -380,23 +385,13 @@ sml.asdl:       $ASDL $SMLVIEWS
 ast.ml          \
 ast.mli         \
 astUtil.ml      \
-astUtil.mli     \
-                \
-rtl.ml          \
-rtl.mli         \
-rtlUtil.ml      \
-rtlUtil.mli:    ocaml.asdl
+astUtil.mli:    ocaml.asdl
                 asdlGen --ocaml --pickler=sexp $prereq
 
 ast.sml         \
 ast.sig         \
 astUtil.sml     \
-astUtil.sig     \
-                \
-rtl.sml         \
-rtl.sig         \
-rtlUtil.sml     \
-rtlUtil.sig     : sml.asdl                
+astUtil.sig:    sml.asdl                
                 asdlGen --sml --pickler=sexp $prereq
 
 # ------------------------------------------------------------------ 
