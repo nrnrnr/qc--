@@ -192,6 +192,10 @@ Having strings everywhere is a bit of a cheat---more abstraction might
 be useful (especially if we ever care to handle a file with a space or
 metacharacter in
 its name).
+
+The fields [[rtstar]], [[rtend]], and [[libs]] are currently not used,
+at least not in this file. Eliminate them? -- CL
+
 <<Lua command-line driver>>=
 Ld = Ld and error ('Ld not empty') or {}
 Ld.path     = "cc"          -- binary
@@ -425,10 +429,14 @@ end
 Translating a single file dispatches on its canonical extension in [[CMD.txtab]].
 <<Lua command-line driver>>=
 function CMD.translate(file, txtab)
+  -- write("CMD.translate: "..file.."\n")
   txtab = txtab or CMD.txtab
   if txtab[CMD.canonical_extension(file)] then
     return txtab[CMD.canonical_extension(file)](file)
-  else
+  elseif txtab['unrecognized extension'] then
+    -- write('treating as unrecognzied file: '..file..'\n')
+    txtab['unrecognized extension'](file)
+  else  
     CMD.error('qc-- does not recognize extension of file ' .. file)
   end
 end
@@ -554,9 +562,15 @@ An object file is salted away in [[Ld.objects]].
 I'm slightly embarrassed to use strings here.
 <<Lua command-line driver>>=
 function CMD.compilertab[".o"](file) 
+  -- write("treating as object file: "..file.."\n")
   Ld.objects = Ld.objects .. " " .. file
 end
 @ 
+Unknown extensions are treated like object files: they are passed to the
+linker.
+<<Lua command-line driver>>=
+CMD.compilertab["unrecognized extension"]=CMD.compilertab[".o"]
+@
 The compiler barfs if given interpreter's assembly code.
 <<Lua command-line driver>>=
 function CMD.compilertab[".qs"](file)
@@ -590,6 +604,11 @@ function CMD.interptab[".qs"](file)
   tinsert(CMD.qslist, file)
 end
 @ 
+Unknown extensions are treated like assembly code: they are passed to the
+linker.
+<<Lua command-line driver>>=
+CMD.interptab["unrecognized extension"]=CMD.interptab[".qs"]
+@
 The interpreter barfs if given native assembly code.
 <<Lua command-line driver>>=
 function CMD.interptab[".s"](file)
