@@ -88,7 +88,6 @@ let lookup x env =
     | ErrorExn _ -> error ("unkown identifier: "^x)
     )
 
-
 @
 
 
@@ -643,6 +642,17 @@ let conv env = function
     | Some cc       -> () 
     | None          -> ()
 
+
+let rec collectCont env = function
+    | StmtAt(x,_)             -> collectCont env x
+    | ContStmt(n,ns)          -> shadow_ok n (pointer,Continuation) env
+    | SpanStmt(e1,e2,ss)      -> foldl collectCont env ss
+    | IfStmt ( e, ss1, ss2)   -> 
+        let env'  = foldl collectCont env  ss1 in
+        let env'' = foldl collectCont env' ss2 in
+            env''
+    | otherwise                           -> env
+
 let rec stmt env = function
     | StmtAt(x,_)                         -> stmt env x
     | IfStmt ( e, ss1, ss2)               -> ()
@@ -716,6 +726,7 @@ let rec topdecl env = function
 let program env ds srcmap =
     ignore (List.map (topdecl env) ds) ; Ok ()  
 @
+
 
 % ------------------------------------------------------------------  
 \subsection{Checking a File}
