@@ -719,10 +719,10 @@ Lframe_l87:
 .long 0x8000000c
 .long 0xffffffec
 .long Lstackdata_l86
-.long 0x80000008
-.long 0x80000014
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 20
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -751,7 +751,7 @@ Lframe_l87:
 .long 0
 .long 0xffffffe8
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long xor_50_gc_data
 .section .pcmap
@@ -763,10 +763,10 @@ Lframe_l88:
 .long 0x8000000c
 .long 0xffffffec
 .long Lstackdata_l86
-.long 0x80000008
-.long 0x80000014
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 20
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -795,7 +795,7 @@ Lframe_l88:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long xor_50_gc_data
 .section .pcmap
@@ -807,10 +807,10 @@ Lframe_l89:
 .long 0x8000000c
 .long 0xffffffec
 .long Lstackdata_l86
-.long 0x80000008
-.long 0x80000014
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 20
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -839,7 +839,7 @@ Lframe_l89:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long xor_50_gc_data
 .section .pcmap
@@ -851,10 +851,10 @@ Lframe_l90:
 .long 0x8000000c
 .long 0xffffffec
 .long Lstackdata_l86
-.long 0x80000008
-.long 0x80000014
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 20
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -883,7 +883,7 @@ Lframe_l90:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long xor_50_gc_data
 .section .pcmap
@@ -895,10 +895,10 @@ Lframe_l91:
 .long 0x8000000c
 .long 0xffffffec
 .long Lstackdata_l86
-.long 0x80000008
-.long 0x80000014
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 20
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -927,7 +927,7 @@ Lframe_l91:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long xor_50_gc_data
 .section .pcmap
@@ -939,10 +939,10 @@ Lframe_l92:
 .long 0x8000000c
 .long 0xffffffec
 .long Lstackdata_l86
-.long 0x80000008
-.long 0x80000014
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 20
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -971,7 +971,7 @@ Lframe_l92:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long xor_50_gc_data
 .section .pcmap
@@ -983,10 +983,10 @@ Lframe_l93:
 .long 0x8000000c
 .long 0xffffffec
 .long Lstackdata_l86
-.long 0x80000008
-.long 0x80000014
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 20
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -1015,7 +1015,7 @@ Lframe_l93:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long xor_50_gc_data
 .section .pcmap
@@ -1027,10 +1027,10 @@ Lframe_l94:
 .long 0x8000000c
 .long 0xffffffec
 .long Lstackdata_l86
-.long 0x80000008
-.long 0x80000014
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 20
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -1059,7 +1059,7 @@ Lframe_l94:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long xor_50_gc_data
 .section .text
@@ -1274,10 +1274,10 @@ Lframe_l116:
 .long 0x80000004
 .long 0xffffffd8
 .long Lstackdata_l115
-.long 0x80000008
-.long 0x80000008
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 8
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -1294,7 +1294,7 @@ Lframe_l116:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long init_sbox_51_gc_data
 .section .pcmap
@@ -1306,10 +1306,10 @@ Lframe_l117:
 .long 0x80000004
 .long 0xffffffd8
 .long Lstackdata_l115
-.long 0x80000008
-.long 0x80000008
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 8
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -1326,7 +1326,7 @@ Lframe_l117:
 .long 0x4000000b
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long init_sbox_51_gc_data
 .section .pcmap
@@ -1338,10 +1338,10 @@ Lframe_l118:
 .long 0x80000004
 .long 0xffffffd8
 .long Lstackdata_l115
-.long 0x80000008
-.long 0x80000008
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 8
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -1358,7 +1358,7 @@ Lframe_l118:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long init_sbox_51_gc_data
 .section .text
@@ -1665,10 +1665,10 @@ Lframe_l141:
 .long 0x8000000c
 .long 0xffffffec
 .long Lstackdata_l140
-.long 0x80000008
-.long 0x8000000c
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 12
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -1689,7 +1689,7 @@ Lframe_l141:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long swap_93_gc_data
 .section .pcmap
@@ -1701,10 +1701,10 @@ Lframe_l142:
 .long 0x8000000c
 .long 0xffffffec
 .long Lstackdata_l140
-.long 0x80000008
-.long 0x8000000c
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 12
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -1725,7 +1725,7 @@ Lframe_l142:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long swap_93_gc_data
 .section .pcmap
@@ -1737,10 +1737,10 @@ Lframe_l143:
 .long 0x8000000c
 .long 0xffffffec
 .long Lstackdata_l140
-.long 0x80000008
-.long 0x8000000c
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 12
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -1761,7 +1761,7 @@ Lframe_l143:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long swap_93_gc_data
 .section .pcmap
@@ -1773,10 +1773,10 @@ Lframe_l144:
 .long 0x8000000c
 .long 0xffffffec
 .long Lstackdata_l140
-.long 0x80000008
-.long 0x8000000c
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 12
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -1797,7 +1797,7 @@ Lframe_l144:
 .long 0
 .long 0x4000000b
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long swap_93_gc_data
 .section .text
@@ -2263,10 +2263,10 @@ Lframe_l181:
 .long 0x80000008
 .long 0xffffffd0
 .long Lstackdata_l180
-.long 0x80000008
-.long 0x80000012
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 18
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -2293,7 +2293,7 @@ Lframe_l181:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long encrypt_94_gc_data
 .section .pcmap
@@ -2305,10 +2305,10 @@ Lframe_l182:
 .long 0x80000008
 .long 0xffffffd0
 .long Lstackdata_l180
-.long 0x80000008
-.long 0x80000012
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 18
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -2335,7 +2335,7 @@ Lframe_l182:
 .long 0
 .long 0
 .long 0x4000000a
-.long 0x80000000
+.long 0
 .long 0
 .long encrypt_94_gc_data
 .section .pcmap
@@ -2347,10 +2347,10 @@ Lframe_l183:
 .long 0x80000008
 .long 0xffffffd0
 .long Lstackdata_l180
-.long 0x80000008
-.long 0x80000012
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 18
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -2377,7 +2377,7 @@ Lframe_l183:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long encrypt_94_gc_data
 .section .pcmap
@@ -2389,10 +2389,10 @@ Lframe_l184:
 .long 0x80000008
 .long 0xffffffd0
 .long Lstackdata_l180
-.long 0x80000008
-.long 0x80000012
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 18
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -2419,7 +2419,7 @@ Lframe_l184:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long encrypt_94_gc_data
 .section .pcmap
@@ -2431,10 +2431,10 @@ Lframe_l185:
 .long 0x80000008
 .long 0xffffffd0
 .long Lstackdata_l180
-.long 0x80000008
-.long 0x80000012
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 18
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -2461,7 +2461,7 @@ Lframe_l185:
 .long 0xffffffe4
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long encrypt_94_gc_data
 .section .pcmap
@@ -2473,10 +2473,10 @@ Lframe_l186:
 .long 0x80000008
 .long 0xffffffd0
 .long Lstackdata_l180
-.long 0x80000008
-.long 0x80000012
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 18
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -2503,7 +2503,7 @@ Lframe_l186:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long encrypt_94_gc_data
 .section .pcmap
@@ -2515,10 +2515,10 @@ Lframe_l187:
 .long 0x80000008
 .long 0xffffffd0
 .long Lstackdata_l180
-.long 0x80000008
-.long 0x80000012
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 18
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -2545,7 +2545,7 @@ Lframe_l187:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long encrypt_94_gc_data
 .section .pcmap
@@ -2557,10 +2557,10 @@ Lframe_l188:
 .long 0x80000008
 .long 0xffffffd0
 .long Lstackdata_l180
-.long 0x80000008
-.long 0x80000012
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 18
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -2587,7 +2587,7 @@ Lframe_l188:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long encrypt_94_gc_data
 .section .pcmap
@@ -2599,10 +2599,10 @@ Lframe_l189:
 .long 0x80000008
 .long 0xffffffd0
 .long Lstackdata_l180
-.long 0x80000008
-.long 0x80000012
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 18
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -2629,7 +2629,7 @@ Lframe_l189:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long encrypt_94_gc_data
 .section .text
@@ -2832,10 +2832,10 @@ Lframe_l222:
 .long 0x80000004
 .long 0xffffffd8
 .long Lstackdata_l221
-.long 0x80000008
-.long 0x8000000c
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 12
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -2856,7 +2856,7 @@ Lframe_l222:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long cypher_52_gc_data
 .section .pcmap
@@ -2868,10 +2868,10 @@ Lframe_l223:
 .long 0x80000004
 .long 0xffffffd8
 .long Lstackdata_l221
-.long 0x80000008
-.long 0x8000000c
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 12
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -2892,7 +2892,7 @@ Lframe_l223:
 .long 0
 .long 0
 .long 0x4000000b
-.long 0x80000000
+.long 0
 .long 0
 .long cypher_52_gc_data
 .section .pcmap
@@ -2904,10 +2904,10 @@ Lframe_l224:
 .long 0x80000004
 .long 0xffffffd8
 .long Lstackdata_l221
-.long 0x80000008
-.long 0x8000000c
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 12
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -2928,7 +2928,7 @@ Lframe_l224:
 .long 0xffffffdc
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long cypher_52_gc_data
 .section .pcmap
@@ -2940,10 +2940,10 @@ Lframe_l225:
 .long 0x80000004
 .long 0xffffffd8
 .long Lstackdata_l221
-.long 0x80000008
-.long 0x8000000c
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 12
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -2964,7 +2964,7 @@ Lframe_l225:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long cypher_52_gc_data
 .section .pcmap
@@ -2976,10 +2976,10 @@ Lframe_l226:
 .long 0x80000004
 .long 0xffffffd8
 .long Lstackdata_l221
-.long 0x80000008
-.long 0x8000000c
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 12
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -3000,7 +3000,7 @@ Lframe_l226:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long cypher_52_gc_data
 .section .pcmap
@@ -3012,10 +3012,10 @@ Lframe_l227:
 .long 0x80000004
 .long 0xffffffd8
 .long Lstackdata_l221
-.long 0x80000008
-.long 0x8000000c
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 12
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -3036,7 +3036,7 @@ Lframe_l227:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long cypher_52_gc_data
 .section .pcmap
@@ -3048,10 +3048,10 @@ Lframe_l228:
 .long 0x80000004
 .long 0xffffffd8
 .long Lstackdata_l221
-.long 0x80000008
-.long 0x8000000c
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 12
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -3072,7 +3072,7 @@ Lframe_l228:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long cypher_52_gc_data
 .section .text
@@ -3080,10 +3080,10 @@ Lframe_l228:
 cypher_52_gc_data:
 .long 5
 .long 1
-.long 1
-.long 1
 .long 0
 .long 0
+.long 1
+.long 1
 .long 12
 .long 1
 .long 1
@@ -3099,117 +3099,112 @@ cypher_52_gc_data:
 .long 0
 .section .text
 tiger_main:
-	leal -36(%esp), %esp
-	leal 36(%esp), %ecx
+	leal -32(%esp), %esp
+	leal 32(%esp), %ecx
 	movl (%ecx),%ecx
 Linitialize_continuations_l231:
 Lproc_body_start_l230:
-	leal 36(%esp), %edx
+	leal 32(%esp), %edx
 	movl %edi,4(%esp)
 	movl $-8,%edi
 	addl %edi,%edx
 	movl %eax,(%edx)
 	leal Cmm.global_area,%edi
 	movl (%edi),%edi
-	movl $1032,%edx
-	addl %edx,%edi
-	leal space_end,%edx
-	movl (%edx),%edx
-	cmpl %edx,%edi
+	movl $1032,%eax
+	addl %eax,%edi
+	leal space_end,%eax
+	movl (%eax),%eax
+	cmpl %eax,%edi
 	jg Ljoin_l247
 Ljoin_l248:
-	jmp Lalc_46
+	jmp Lalc_gc_45
 Ljoin_l247:
 	jmp Lalc_gc_45
 Lalc_gc_45:
+	movl %ecx,8(%esp)
 	call tig_call_gc
 Ljoin_l246:
-	jmp Lalc_46
 Lalc_46:
 	movl $1032,%edi
-	leal Cmm.global_area,%edx
-	movl (%edx),%edx
-	movl %edi,(%edx)
+	leal Cmm.global_area,%ecx
+	movl (%ecx),%ecx
+	movl %edi,(%ecx)
 	leal Cmm.global_area,%edi
 	movl (%edi),%edi
-	movl $4,%edx
-	addl %edx,%edi
+	movl $4,%ecx
+	addl %ecx,%edi
+	leal Cmm.global_area,%ecx
+	movl (%ecx),%ecx
+	movl $1032,%edx
+	addl %edx,%ecx
 	leal Cmm.global_area,%edx
-	movl (%edx),%edx
-	movl $1032,%eax
-	addl %eax,%edx
-	leal Cmm.global_area,%eax
-	movl %edx,(%eax)
-	movl $256,%edx
-	movl %edx,(%edi)
-	movl $1,%edx
+	movl %ecx,(%edx)
+	movl $256,%ecx
+	movl %ecx,(%edi)
+	movl $1,%ecx
 	jmp Linit_start_42
 Linit_start_42:
-	movl $0,%eax
-	movl %edi,8(%esp)
-	movl $4,%edi
+	movl $0,%edx
+	movl $4,%eax
 	movl %edi,12(%esp)
-	movl %edx,%edi
-	movl %esi,16(%esp)
-	movl 12(%esp),%esi
-	imull %esi,%edi
-	movl %edi,20(%esp)
-	movl 8(%esp),%esi
-	movl %esi,%edi
-	movl 20(%esp),%esi
+	movl %ecx,%edi
+	imull %eax,%edi
+	movl %edi,16(%esp)
+	movl 12(%esp),%eax
+	movl %eax,%edi
+	movl %esi,20(%esp)
+	movl 16(%esp),%esi
 	addl %esi,%edi
-	movl %eax,(%edi)
+	movl %edx,(%edi)
 	movl $1,%edi
-	addl %edi,%edx
+	addl %edi,%ecx
 	movl $257,%edi
-	cmpl %edi,%edx
+	cmpl %edi,%ecx
 	jle Ljoin_l242
 Ljoin_l243:
 	jmp Linit_end_43
 Linit_end_43:
-	leal 36(%esp), %edi
+	leal 32(%esp), %edi
 	movl $-8,%esi
 	addl %esi,%edi
 	movl $4,%esi
 	addl %esi,%edi
-	movl 8(%esp),%esi
-	movl %esi,(%edi)
-	leal 36(%esp), %eax
+	movl %eax,(%edi)
+	leal 32(%esp), %eax
 	movl $-8,%edi
 	addl %edi,%eax
-	movl %ecx,24(%esp)
 	call init_sbox_51
 Ljoin_l241:
 	leal Cmm.global_area,%edi
 	movl (%edi),%edi
-	leal 36(%esp), %eax
+	leal 32(%esp), %eax
 	movl $-8,%esi
 	addl %esi,%eax
 	call cypher_52
 Ljoin_l238:
-	leal 36(%esp), %esi
-	movl $-36,%ecx
+	leal 32(%esp), %esi
+	movl $-32,%ecx
 	addl %ecx,%esi
 	movl %eax,(%esi)
 	call tig_print
 Ljoin_l235:
 	leal Cmm.global_area,%edx
 	movl %edi,(%edx)
-	movl $0,%eax
-	leal 36(%esp), %edx
+	leal 32(%esp), %edx
 	movl $0,%ecx
 	addl %ecx,%edx
-	movl 24(%esp),%ecx
+	movl 8(%esp),%ecx
 	movl %ecx,(%edx)
-	movl 16(%esp),%esi
+	movl 20(%esp),%esi
 	movl 4(%esp),%edi
-	leal 36(%esp), %esp
+	leal 32(%esp), %esp
 	ret
 Ljoin_l242:
 	jmp Ljoin_l252
 Ljoin_l252:
-	movl 16(%esp),%esi
-	movl 8(%esp),%edi
+	movl %eax,%edi
+	movl 20(%esp),%esi
 	jmp Linit_start_42
 .section .pcmap_data
 Lstackdata_l254:
@@ -3220,14 +3215,14 @@ Lstackdata_l254:
 .long Lframe_l255
 .section .pcmap_data
 Lframe_l255:
-.long 0xffffffdc
+.long 0xffffffe0
 .long 0x80000004
-.long 0x40000005
+.long 0xffffffe8
 .long Lstackdata_l254
-.long 0x80000008
-.long 0x80000008
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 8
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -3235,7 +3230,7 @@ Lframe_l255:
 .long 0x4000000a
 .long 0x4000000a
 .long 0x4000000b
-.long 0xffffffe0
+.long 0xffffffe4
 .long 0
 .long 0
 .long 0
@@ -3244,7 +3239,7 @@ Lframe_l255:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
@@ -3252,22 +3247,22 @@ Lframe_l255:
 .long Lframe_l256
 .section .pcmap_data
 Lframe_l256:
-.long 0xffffffdc
+.long 0xffffffe0
 .long 0x80000004
-.long 0xfffffff4
+.long 0xffffffe8
 .long Lstackdata_l254
-.long 0x80000008
-.long 0x80000008
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 8
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
 .long 0x40000009
 .long 0x4000000a
-.long 0xffffffec
+.long 0xfffffff4
 .long 0x4000000b
-.long 0xffffffe0
+.long 0xffffffe4
 .long 0
 .long 0
 .long 0
@@ -3276,7 +3271,7 @@ Lframe_l256:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
@@ -3284,22 +3279,22 @@ Lframe_l256:
 .long Lframe_l257
 .section .pcmap_data
 Lframe_l257:
-.long 0xffffffdc
+.long 0xffffffe0
 .long 0x80000004
-.long 0xfffffff4
+.long 0xffffffe8
 .long Lstackdata_l254
-.long 0x80000008
-.long 0x80000008
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 8
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
 .long 0x40000009
 .long 0x4000000a
-.long 0xffffffec
+.long 0xfffffff4
 .long 0x4000000b
-.long 0xffffffe0
+.long 0xffffffe4
 .long 0
 .long 0
 .long 0
@@ -3308,7 +3303,7 @@ Lframe_l257:
 .long 0
 .long 0
 .long 0x4000000b
-.long 0x80000000
+.long 0
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
@@ -3316,22 +3311,22 @@ Lframe_l257:
 .long Lframe_l258
 .section .pcmap_data
 Lframe_l258:
-.long 0xffffffdc
+.long 0xffffffe0
 .long 0x80000004
-.long 0xfffffff4
+.long 0xffffffe8
 .long Lstackdata_l254
-.long 0x80000008
-.long 0x80000008
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 8
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
 .long 0x40000009
 .long 0x4000000a
-.long 0xffffffec
+.long 0xfffffff4
 .long 0x4000000b
-.long 0xffffffe0
+.long 0xffffffe4
 .long 0
 .long 0
 .long 0
@@ -3340,7 +3335,7 @@ Lframe_l258:
 .long 0
 .long 0
 .long 0x4000000b
-.long 0x80000000
+.long 0
 .long 0
 .long tiger_main_gc_data
 .section .text

@@ -518,7 +518,6 @@ Ltry_end_67:
 Ljoin_l50:
 	leal Cmm.global_area,%edx
 	movl %edi,(%edx)
-	movl $0,%eax
 	leal 56(%esp), %edx
 	movl $0,%ecx
 	addl %ecx,%edx

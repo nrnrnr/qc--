@@ -497,7 +497,6 @@ Ljoin_l59:
 Ljoin_l56:
 	leal Cmm.global_area,%edx
 	movl %edi,(%edx)
-	movl $0,%eax
 	leal 24(%esp), %edx
 	movl $0,%ecx
 	addl %ecx,%edx

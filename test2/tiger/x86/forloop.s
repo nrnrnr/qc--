@@ -67,7 +67,6 @@ Ljoin_l8:
 	leal Cmm.global_area,%edx
 	movl 8(%esp),%ecx
 	movl %ecx,(%edx)
-	movl $0,%eax
 	leal 28(%esp), %edx
 	movl $0,%ecx
 	addl %ecx,%edx
