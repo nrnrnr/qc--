@@ -14,7 +14,7 @@
 #include <ctype.h>
 #include <setjmp.h>
 
-#include "float_features.h"
+#include "float-features.h"
 #include "lualink.h"
 #include "encode.h"
 #include "ccall.h"

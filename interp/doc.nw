@@ -2,7 +2,7 @@
 \usepackage{noweb}
 \title{The Quick {\PAL} Interpreter}
 \author{Reuben Olinsky}
-\usepackage{tabularx,array} 
+\usepackage{tabularx,array,nchicago} 
 \usepackage{hyperref}
 \usepackage{path}
 \usepackage{amsmath}
@@ -13,6 +13,8 @@
 \usepackage{alltt}
 \begin{document} 
 
+\newcommand\nointro{1}
+
 \pagenumbering{roman}
 \maketitle
 \cleardoublepage
@@ -22,6 +24,8 @@
 
 
 \newcommand\myinput[1]{\cleardoublepage\input{#1}}
+
+\part{Overall thoughts and documentation}
 
 \chapter{Known Issues/Thoughts/Worries}
 
@@ -95,19 +99,51 @@
     \item  BUG : span token must be a positive integer (0 does not work!)
 \end{itemize}
 
-\chapter{All the interfaces}
-\input{interfaces.inc}
 
-\let\origsection\section
-\let\origsubsection\subsection
-\let\origsubsubsection\subsubsection
-\let\subsubsection\subsection
-\let\subsection\section
-\let\section\chapter
+\chapter{User's guide}
+\input{manual.inc}
+
+\chapter{Client's view}
+\let\interface\section
+\let\implementation \section
+\input{client.inc}
+
+\chapter{All the interfaces}
+
+\begingroup
+\let\origsubpageref\subpageref
+\let\origsublabel\sublabel
+\def\subpageref#1{\origsubpageref{int-#1}}
+\def\sublabel#1{\origsublabel{int-#1}}
+\let\interface\section
+\let\implementation \endinput
+
+\input{features.inc}
+\input{types.inc}
+\input{value.inc}
+\input{stack.inc}
+\input{lualink.inc}
+\input{table.inc}
+\input{intervals.inc}
+\input{uid.inc}
+\input{activation.inc}
+\input{controlflow.inc}
+\input{label.inc}
+\input{thread.inc}
+\input{assemblyunit.inc}
+\input{encoding.inc}
+\input{operator.inc}
+\input{ccall.inc}
+\input{span.inc}
+\input{disasm.inc}
+\input{runtime.inc}
+
+}}}}}}}}}}}}}\endgroup  % something wrong with unbalanced }
 
 \part{Modules with interfaces}
-\input{manual.inc}
-\input{client.inc}
+
+\let\interface\chapter
+\let\implementation \section
 \input{features.inc}
 \input{types.inc}
 \input{value.inc}
@@ -131,5 +167,8 @@
 
 \part{Unused stuff}
 \input{opgen.inc}
+
+%\bibliographystyle{nchicago}
+%\bibliography{../doc/qc--}
 
 \end{document}
