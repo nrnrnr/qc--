@@ -106,13 +106,20 @@ val freeze   : t -> result
 In some conventions, a value must be split between two registers or
 between registers and memory.
 Accordingly, we need a special type of location.
+For those cases where we know that a value is not split, we can observe
+the location directly; it is a checked runtime error to observee a split
+location.
 <<exposed types>>=
 type width = int
 type hint  = string
-type loc = { fetch : width -> Rtl.exp; store : Rtl.exp -> width -> Rtl.rtl }
+type loc = { fetch  : width -> Rtl.exp
+           ; store  : Rtl.exp -> width -> Rtl.rtl
+           ; simple : unit -> Rtl.loc
+           }
 <<exported values>>=
 val fetch  : loc ->            width -> Rtl.exp
 val store  : loc -> Rtl.exp -> width -> Rtl.rtl
+val simple : loc                     -> Rtl.loc
 @ 
 Most locations are easy.
 <<exported values>>=
@@ -388,7 +395,11 @@ let freeze     t              = t.freeze Register.Set.empty []
 
 let fetch      loc            = loc.fetch
 let store      loc            = loc.store
-let of_loc     loc            = { fetch = R.fetch loc; store = R.store loc }
+let simple     loc            = loc.simple ()
+let of_loc     loc            = { fetch  = R.fetch loc
+                                ; store  = R.store loc
+                                ; simple = fun () -> loc
+                                }
 @ 
 \subsection{Wrapping etc.}
 
@@ -483,8 +494,9 @@ let narrower =
   let narrow nopname wopname ~w ~n loc =
      let widen  = R.opr wopname [n; w] in 
      let narrow = R.opr nopname [w; n] in 
-       { fetch = (fun n   -> R.app narrow [loc.fetch w])
-       ; store = (fun e n -> loc.store (R.app widen [e]) w)
+       { fetch  = (fun n   -> R.app narrow [loc.fetch w])
+       ; store  = (fun e n -> loc.store (R.app widen [e]) w)
+       ; simple = loc.simple
        } in
   function
   | "signed" -> narrow "lobits" "sx"
@@ -622,14 +634,15 @@ let splitloc bo locs = match locs with
       | (loc, w) :: rest ->
           let loc' = little rest in
           let w'   = List.fold_left (fun n (_, w) -> n + w) 0 rest in
-          { fetch = (fun ww ->
-                       assert (ww = w + w');
-                       orb ww (zx w ww (fetch loc w))
-                              (shl ww (zx w' ww (fetch loc' w')) w))
-          ; store = (fun v ww ->
-                       assert (ww = w + w');
-                       R.par [ store loc  (lobits ww  w v) w 
-                             ; store loc' (lobits ww w' (shrl ww v w)) w'])
+          { fetch  = (fun ww ->
+                        assert (ww = w + w');
+                        orb ww (zx w ww (fetch loc w))
+                               (shl ww (zx w' ww (fetch loc' w')) w))
+          ; store  = (fun v ww ->
+                        assert (ww = w + w');
+                        R.par [ store loc  (lobits ww  w v) w 
+                              ; store loc' (lobits ww w' (shrl ww v w)) w'])
+          ; simple = (fun () -> Impossible.impossible "tried to observe split location")
           } in
     match bo with
     | Rtl.LittleEndian -> little locs
