@@ -45,4 +45,5 @@ CMM.procedure("main", 2, 0)  -- BEGIN PROCEDURE main with 2 local variable
    -- end quasi-gracefully
    CMM.define_label("end")
   
+      CMM.push_arg()
       CMM.cmm_return(0, 0)

@@ -19,6 +19,7 @@ CMM.procedure("main", 0, 0)
       CMM.push_literal("0")
       CMM.push_arg()
       CMM.c_call("cmmprint")
+
       CMM.cmm_return(0, 0)
 
 CMM.procedure("subroutine", 1, 0)
