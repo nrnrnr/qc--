@@ -113,6 +113,19 @@ hint = (string)
 @ 
 Variables stand for locations.  On entry, they must have been created
 with the [[RTL.VAR]] constructor.
+We expect that the code generator will eliminate them at the first
+possible moment, but the exact strategy for doing so will depend on
+the design of the code generator:
+\begin{itemize}
+\item
+A code generator based on VPO would put them all in stack locations.
+\item
+A code generator based on an Appel-George coalescing allocator would
+put them all in temporaries.
+\item
+A code generator based on Fraser's \texttt{lcc} code generator would
+put some in hardware registers and the rest on the stack.
+\end{itemize}
 <<ASDL definitions for nodes of abstract \PAL>>=
 variable = (RTL.location) -- must be VAR constructor on entry
 @
@@ -155,5 +168,6 @@ module IR (imports IRNode imports AST) {
   label_pair = (AST.const_name, IRNode.nodeid)
   seg = (AST.segment_name, item*)
   item = Datum (AST.datum)
-       | Proc  (AST.const_name procedure)
+       | Proc  (IRNode.proc procedure)
 }
+@ 
