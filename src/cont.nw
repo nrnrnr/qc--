@@ -25,12 +25,12 @@ This module provides an abstraction from the $(\sp,l)$ representation of
 continuations.
 
 <<cont.mli>>=
-type t                                  (* a continuation *)
+type t                                      (* a continuation *)
 
-val allocate:   Automaton.t             (* stack space *)
-                -> sp:Rtl.loc           (* location of stack pointer *)
-                -> label:Symbol.symbol    (* label of continuation *)
-                -> reference:string     (* reference to cont *)
+val allocate:   Automaton2.t                (* stack space *)
+                -> sp:Rtl.loc               (* location of stack pointer *)
+                -> label:Symbol.t           (* label of continuation *)
+                -> reference:string         (* reference to cont *)
                 -> t
                 
 val register:   t -> Const.t -> Const.t (* register t for substitution *)
@@ -78,6 +78,8 @@ generate assignments at the entry of a procedure.
 % ------------------------------------------------------------------ 
 
 <<cont.ml>>=
+module A = Automaton2
+
 type t =
     { cont_sp:          Rtl.loc         (* location of sp in pair *)
     ; cont_pc:          Rtl.loc         (* location of pc in pair *)
@@ -103,13 +105,13 @@ type t =
 \end{itemize}
 
 <<cont.ml>>=
-let allocate (a:Automaton.t)(sp:Rtl.loc)(label:Symbol.t)(reference:string) =
+let allocate (a:A.t) ~(sp:Rtl.loc) ~(label:Symbol.t) ~(reference:string) =
     let width = Rtlutil.Width.loc sp in         (* pointer width *)
         { label     = label
         ; reference = reference
         ; sp        = sp
-        ; cont_sp   = Automaton.to_loc (Automaton.ty a width None)
-        ; cont_pc   = Automaton.to_loc (Automaton.ty a width None)
+        ; cont_sp   = A.to_loc (A.allocate a width None)
+        ; cont_pc   = A.to_loc (A.allocate a width None)
         }
 
 let reference t = Rtl.late t.reference (Rtlutil.Width.loc t.sp)
