@@ -506,7 +506,7 @@ errors, we run the program.
 <<run>>=
 exception MismatchedParameters of string
 
-let run main proc input =
+let run main proc =
 (*
     let _ = backSay ["Running stateCheck()\n"] in
 *)
@@ -618,12 +618,6 @@ let projectAction v = match v with
 let action = { V.embed   = embed 
              ; V.project = projectAction 
              }
-let inputs = { V.embed = (fun s -> (V.list V.string).V.embed (SS.elements s))
-             ; V.project = (fun v ->
-                               try List.fold_left (fun a b -> SS.add b a)
-                                      SS.empty ((V.list V.string).V.project v)
-                               with _ -> raise (V.Projection (v, "inputs")))
-             }
 @
 
 
@@ -645,8 +639,7 @@ let init g =
                                                     V.result action)).V.embed share
   ; "ignore",    (V.pfunc (action  **->             V.result action)).V.embed ignore
   ; "stage",     (V.pfunc (action  **->             V.result action)).V.embed id
-  ; "run",       (V.pfunc (action **-> proc **-> inputs **-> 
-                                                    V.result V.bool)).V.embed run
+  ; "run",       (V.pfunc (action **-> proc **->    V.result V.bool)).V.embed run
   ] g
 ; Lua.Lib.StringList.empty
 @
