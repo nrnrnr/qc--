@@ -77,6 +77,11 @@ struct sd {
   location entries[1];  /* variable length */
 };
 
+struct reg {
+  unsigned index;               /* machine-specific index */
+  location saved;               /* where saved (or dead) */
+};
+
 struct conts {
   unsigned num_entries;
   int entries[1]; /* variable length (offset of contblock) */
@@ -92,11 +97,11 @@ struct contblock {
   } vars[1]; /* variable length */
 };
 
-#define registers(e)      ((e)->data)
-#define locals(e)        (((e)->data) + (e)->num_registers)
-#define continuations(e) (struct conts *) (((e)->data) + (e)->num_registers \
+#define registers(e)     ((struct reg*)((e)->data))
+#define locals(e)        (((e)->data) + 2 * (e)->num_registers)
+#define continuations(e) (struct conts *) (((e)->data) + 2 * (e)->num_registers \
                                                  + (e)->num_locals)
-#define spans(e)         (((Cmm_Word*)(e)->data) + (e)->num_registers \
+#define spans(e)         (((Cmm_Word*)(e)->data) + 2 * (e)->num_registers \
                                                  + (e)->num_locals  \
                                                  + (e)->cont_block_size)
 
@@ -324,21 +329,10 @@ if (sdt->num_entries == 0) {
 {
   int r = entry->num_registers;
   int i;
-  location* regs = registers(entry);
-  if (r > 0) {
-    printf("%s    unchanged registers:", indent);
-    for (i = 0; i < r; i+=2) {
-      if (regs[i].l == regs[i+1].l)
-        printf(" %d", i/2);
-    }
-    printf("\n");
-  }
-  for (i = 0; i < r; i+=2) {
-    if (regs[i].l == regs[i+1].l) continue;
-    printf("%s      reg %2d: caller = ", indent, i/2);
-    printloc(regs[i]);
-    printf(", callee = ");
-    printloc(regs[i+1]);
+  struct reg* regs = registers(entry);
+  for (i = 0; i < r; i++) {
+    printf("%s      pair %2d: caller register %d at ", indent, i, regs[i].index);
+    printloc(regs[i].saved);
     printf("\n");
   }
 }

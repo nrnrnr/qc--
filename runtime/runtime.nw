@@ -90,7 +90,7 @@ some other method that preempts the {\PAL} thread at an arbitrary
 point.
 (At some future time, it may be worthwhile for the run-time system to
 be able to capture a Unix signal context and synthesize a suitable
-{\PAL} continuation.
+{\PAL} continuation.)
 
 Walking the stack always begins at a continuation. A {\PAL}
 continuation contains the program counter and stack pointer at the
@@ -98,56 +98,110 @@ point of return to the continuation. From this an initial virtual
 frame pointer (vfp) can be derived. The process of walking the stack
 involves computing the vfp of each caller, and tracking the locations
 of all saved registers along the way.
-
-In order to compute the virtual frame pointer for an activation, the
-runtime system needs to know the frame size at each call site and
-continuation in the {\PAL} program. In addition, the runtime system
-needs to know the locations of caller and callee saved registers.
-Happily, for {\PAL} functions, all of this information is emitted by
-the {\PAL} compiler as part of the runtime data. Unhappily, none of
-this information is available for non-{\PAL} compilers, and compiler
-specific techniques must be used to skip over unknown areas of the
-stack.
-
-This file contains all of the general stack walking code including all
-of the code for handling {\PAL} functions. Compiler specific code is
-contained in separate files -- one for each compiler supported. The
-compiler specific files must export the function
-[[walk_foreign_frames]], which takes as arguments the current frame
-pointer, and a list of register values for the current frame. This
-function should return a new frame pointer, or [[NULL]] on failure.
-<<external functions>>=
-extern Cmm_Word*
-walk_foreign_frames(Cmm_Word* fp, Cmm_Word* const* regs);
 @
-The runtime system can begin walking a call stack at a {\PAL}
+In order to compute the virtual frame pointer for an activation, the
+runtime system needs to know how it relates to the stack pointer at
+each call site and 
+continuation in the {\PAL} program. 
+In addition, the run-time system
+needs to know the locations of caller- and callee-saved registers.
+Happily, for {\PAL} functions, all of this information is emitted by
+the {\PAL} compiler as part of the run-time data. 
+For  non-{\PAL} functions, including C~functions, we must rely on the
+target-specific ABI to skip over unknown areas of the
+stack.\footnote
+{If the ABI does not specify the locations in which registers
+are saved, we make pessimistic assumptions.}
+@
+\subsubsection{Stack-walking data structures and internal interfaces}
+
+We dispatch between generic {\PAL} code and target-specific code using
+function pointers.
+At present, there is only one function pointer, which implements
+[[ChangeActivation]]. 
+At a future point, to make things more efficient, we may add an
+implementation of [[IsOldestActivation]].
+<<definitions of private data structures>>=
+struct cmm_activation_methods {
+  int (*change)(Cmm_Activation *a);
+};
+@ 
+The activation contains a pointer to the method suite, a virtual frame
+pointer, and a pointer to the run-time sytem's data.
+It also contains a pointer to each machine register; if the value of a
+register is not known, the corresponding pointer is [[NULL]].
+
+For an activation built from a continuation, the [[pc]] is the program
+counter of that continuation.
+For an activation suspended at a call site, it is the normal return address.
+<<exposed private data structures>>=
+<<definition of [[struct cmm_cont]]>>
+struct cmm_activation {
+  struct cmm_activation_methods *methods;
+  char *vfp;        /* declared char* so that arithmetic works on addresses */
+  struct cmm_pc_map_entry *rtdata;  
+  Cmm_Word* regs[NUM_REGS];
+  <<other fields of an activation>>
+};
+@ In addition to the fields above, an activation also holds a program
+counter (used only for debugging), plus space for specialized run-time
+system functions.
+The space is stored in a union~[[u]]; 
+the [[unwind]] field is used by [[MakeUnwindContinuation]], and the
+[[cwalk]] field contains a counter that may be useful to some
+target-specific stack walkers.
+<<other fields of an activation>>=
+Cmm_Codeptr pc;   /* used only for debugging */
+union {  /* following fields are temporary space to avoid allocation */
+  struct {
+    Cmm_Word* sp;
+    Cmm_Cont   k;
+  } unwind;
+  struct {
+    unsigned tries;
+  } cwalk;
+} u;
+@
+The target-specific stack-walking code must export these two functions:
+<<external functions>>=
+extern int Cmm_c_change_activation(Cmm_Activation *a);
+extern void Cmm_init_c_frame(Cmm_Activation *a, char *young_in_overflow);
+@ The function [[Cmm_c_change_activation]] implements
+[[ChangeActivation]] for an activation suspended at a call site in a
+C~function.
+The function [[Cmm_init_c_frame]]
+is used to initialize a frame for such an activation.
+For such a frame, the [[regs]] field is as accurate as we can make it,
+and the [[pc]] field is initialized to the return address.
+The [[methods]] and [[rtdata]] fields are initialized appropriately.
+The pointer [[young_in_overflow]] points to the young end of the
+callee's incoming overflow parameters.
+@
+The implementations of  [[Cmm_c_change_activation]] and
+[[Cmm_init_c_frame]] live in target-specific files---one for each
+compiler-machine combination that we support. 
+The rest of the stack-walking code lives here, in this file.
+@
+Here are the methods that are used by the stack walker.
+A~pointer to the {\PAL} method suite is exported to target-specific code.
+<<definitions of method suites>>=
+static struct cmm_activation_methods cmm_methods = { normal_change           };
+static struct cmm_activation_methods c_methods   = { Cmm_c_change_activation }; 
+struct cmm_activation_methods *Cmm_cmm_frame_methods = &cmm_methods;
+@ 
+\subsubsection{Initializing and walking a stack}
+
+The run-time system can begin walking a call stack only at a {\PAL}
 continuation. The youngest activation is constructed by looking up the
-runtime data associated with the given continuation. It is important
-to note that none of the runtime functions may allocate memory.
-Because of this, the initial activation record is returned by value
+run-time data associated with the given continuation. 
+None of the run-time functions may allocate memory.
+Because of this, the initial activation record is returned by value,
 which forces the caller to allocate space for it.
 
 SOMETHING MUST BE DONE TO ENSURE CORRECTNESS FOR A CONTINUATION THAT
 REPRESENTS A NEWLY CREATED STACK.  
 THE CHOICES WOULD BE TO TREAT THAT PC SPECIALLY HERE OR TO SYNTHESIZE
 RUNTIMEDATA STRUCTURES FOR IT.
-<<definitions of private data structures>>=
-struct cmm_activation_methods {
-  int (*change)(Cmm_Activation *a);
-};
-
-<<definitions of method suites>>=
-static struct cmm_activation_methods cmm_methods = {
-  normal_change
-};
-struct cmm_activation_methods *Cmm_cmm_frame_methods = &cmm_methods;
-
-extern int Cmm_c_change_activation(Cmm_Activation *a);
-extern void Cmm_init_c_frame(Cmm_Activation *a, char *young_in_overflow);
-static struct cmm_activation_methods c_methods = {
-  Cmm_c_change_activation
-};
-
 <<implementations of public functions>>=
 Cmm_Activation
 Cmm_YoungestActivation(const Cmm_Cont* t) {
@@ -214,23 +268,63 @@ static int normal_change(Cmm_Activation *a) {
   return 1;
 }
 @ 
+\subsubsection{Tracking register contents}
+
+As new activations are created during a walk of the stack, the
+locations of saved registers are recorded within the activations. The
+locations of all saved registers for an activation can be computed
+using information in the pc map table along with the previous
+activation.
+<<declarations of private functions>>=
+void update_saved_regs(Cmm_Activation* new, const Cmm_Activation* prev);
+<<private functions>>=
+void
+update_saved_regs(Cmm_Activation* new, const Cmm_Activation* prev) {
+  int i;
+  int r = prev->rtdata->num_registers;
+  struct reg* regs = registers(prev->rtdata);
+
+  for (i = 0; i < NUM_REGS; i++) 
+    new->regs[i] = prev->regs[i];
+  
+  for (i = 0; i < r; i++)
+    new->regs[regs[i].index] = (Cmm_Word*)(prev->vfp + Cmm_as_offset(regs[i].saved));
+}
+@ This code will fail loudly if a register is ever saved in another
+register (instead of on the stack).
+@
+\subsubsection{Exported stack-walking functions}
+
+The efficient path is [[ChangeActivation]].
+As long as we don't have a very mixed stack, branch-prediction
+hardware should do well with the indirect call.
 <<implementations of public functions>>=
 int Cmm_ChangeActivation(Cmm_Activation *a) {
   return a->methods->change(a);
 }
+@ 
+[[NextActivation]] is not too bad, as most of the copying is
+necessary. 
+<<implementations of public functions>>=
 Cmm_Activation Cmm_NextActivation(const Cmm_Activation *a) {
   Cmm_Activation na = *a;
   int rc = na.methods->change(&na);
   assert(rc);
   return na;
 }
+@ 
+[[isOldestActivation]] is wildly inefficient---in the common case, we
+copy the activation, mutate it, and then throw all that work away.
+<<implementations of public functions>>=
 int Cmm_isOldestActivation(const Cmm_Activation *a) {
   Cmm_Activation na = *a;
   return (!na.methods->change(&na));
 }
 @ 
-We import the assembly code that restores the registers and cuts to the unwind entry
-point.
+\subsection{Unwinding to a continuation}
+
+We import the assembly code that restores the registers and cuts to
+the unwind entry point.
 <<implementations of public functions>>=
 extern void (*__cmm_unwindcont)();
 Cmm_Cont* Cmm_MakeUnwindCont(Cmm_Activation *a, Cmm_Word index, ...) {
@@ -258,11 +352,9 @@ Cmm_Cont* Cmm_MakeUnwindCont(Cmm_Activation *a, Cmm_Word index, ...) {
 
   /* We initialize unknown registers to a bogus (but clearly live) address:
      that of the activation. Otherwise, they would dereference 0. */
-  for(i = 0; i < NUM_REGS; i++) {
-    if(a->regs[i] == NULL) {
+  for(i = 0; i < NUM_REGS; i++)
+    if (a->regs[i] == NULL)
       a->regs[i] = (Cmm_Word *)a;
-    }
-  }
 
   /* Users are not allowed to reuse space in the activation, so we can set the PC
      and ESP to the continuation's entry point and stack pointer. */
@@ -347,31 +439,6 @@ information about saved registers at the time of the call. If a
 register has been saved on the stack, then the offset from the frame
 pointer is given. Otherwise, a zero indicates that the register has
 not been saved by this activation.
-
-As new activations are created during a walk of the stack, the
-locations of saved registers are recorded within the activations. The
-locations of all saved registers for an activation can be computed
-using information in the pc map table along with the previous
-activation.
-<<declarations of private functions>>=
-void update_saved_regs(Cmm_Activation* new, const Cmm_Activation* prev);
-<<private functions>>=
-void
-update_saved_regs(Cmm_Activation* new, const Cmm_Activation* prev) {
-  int i;
-  int r = prev->rtdata->num_registers;
-  location* regs = registers(prev->rtdata);
-
-  for (i = 0; i < NUM_REGS; i++) {
-      new->regs[i] = prev->regs[i];
-  }
-  
-  for (i = 0; i < r; i+=2) {
-    if (regs[i].l == regs[i+1].l) continue;
-    new->regs[Cmm_as_register(regs[i])] =
-      (Cmm_Word*)(prev->vfp + Cmm_as_offset(regs[i + 1]));
-  }
-}
 @ 
 Clients of the runtime system must report when a local variable is written.
 <<implementations of public functions>>=
@@ -469,33 +536,6 @@ stitch things together.
 <<definitions of method suites>>
 <<private functions>>
 <<implementations of public functions>>
-@ 
-<<exposed private data structures>>=
-struct cmm_cont {
-  Cmm_Codeptr pc;
-  Cmm_Word*   sp;
-};
-@ 
-For an activation built from a continuation, the [[pc]] is the program
-counter of that continuation.
-For an activation suspended at a call site, it is the normal return address.
-<<exposed private data structures>>=
-struct cmm_activation {
-  struct cmm_activation_methods *methods;
-  char *vfp;        /* declared char* so that arithmetic works on addresses */
-  Cmm_Codeptr pc;   /* used only for debugging */
-  struct cmm_pc_map_entry *rtdata;  
-  Cmm_Word* regs[NUM_REGS];
-  union {  /* following fields are temporary space to avoid allocation */
-    struct {
-      Cmm_Word* sp;
-      Cmm_Cont   k;
-    } unwind;
-    struct {
-      unsigned tries;
-    } cwalk;
-  } u;
-};
 @ 
 \subsection{{\PAL} runtime}
 
@@ -618,3 +658,9 @@ void Cmm_show_activation(const Cmm_Activation *a) {
   }
 }
 @
+@
+<<definition of [[struct cmm_cont]]>>=
+struct cmm_cont {
+  Cmm_Codeptr pc;
+  Cmm_Word*   sp;
+};

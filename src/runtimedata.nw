@@ -311,7 +311,7 @@ emit_loc spans.S.inalloc;
 emit_loc spans.S.outalloc;
 emit_loc spans.S.ra;
 asm#addr (Reloc.Simple.of_sum Rtl.datasym sd_label zero);
-emit_int (List.length spans.S.csregs * 2);
+emit_int (List.length (List.filter nonredundant spans.S.csregs));
 emit_int (Array.length spans.S.vars);
 @
 The source spans are laid out by index.
@@ -412,7 +412,14 @@ let emit_maybe_loc l = match l with
   | Some l -> emit_loc l
   | None   -> emit_dead_loc () in
 
-let emit_csreg (reg, l) = (emit_loc (R.reg reg); emit_maybe_loc l) in
+let nonredundant (reg, l) = match l with
+| Some r -> not (RU.Eq.loc (Dn.loc r) (RP.Reg reg))
+| None   -> true in
+
+let emit_csreg (reg, l) =
+  if nonredundant (reg, l) then
+    (emit_int (reg_ix reg); emit_maybe_loc l) in
+
 let emit_user_span reloc = match reloc with
   | None   -> emit_dead_loc ()
   | Some reloc -> asm#addr reloc in
