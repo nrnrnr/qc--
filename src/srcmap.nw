@@ -83,7 +83,7 @@ type pos            = int
 type rgn            = pos * pos
 @
 The [[null]] region is sometimes used a special value when no real
-region information is available and.
+region information is available.
 
 <<srcmap.mli>>=
 val null            : rgn
@@ -102,13 +102,15 @@ type location       = string    (* file   *)
                     * int       (* column *)
 @
 A source map is a mutable data structure with an undisclosed
-representation.  A source map should never be empty but should
-contain a synchronization point for [[pos]] 0.
+representation.  A source map should never be empty but should contain
+a synchronization point for [[pos]] 0.  The [[mk]] function returns an
+empty source map for a file.
 
 <<srcmap.mli>>=
 type map
-val empty :         map
+val mk:             unit -> map (* empty map *)
 @
+
 A synchronization is announced with [[sync]].  It synchronizes a
 position [[pos]] with a [[location]].  A common case is the
 synchronization for a new line trough [[nl]].  A new line stays in the
@@ -218,7 +220,7 @@ let size        =  2    (* small to test alloc *)
 let undefined   =  (0, ("undefined", -1, -1))    
 
 <<srcmap.ml>>=
-let empty =
+let mk () =
     { points  = Array.create size undefined 
     ; top     = 0
     ; files   = Hashtbl.create 17
@@ -227,7 +229,7 @@ let empty =
 
 To prevent that the array fills up [[alloc]] makes sure there is at
 least space for the next sync point.  In case the array is full it
-copies the existing array into a new one, twice as the size of the
+copies the existing array into a new one, twice of the size of the
 old. 
 
 <<srcmap.ml>>=
