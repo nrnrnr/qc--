@@ -122,7 +122,10 @@ GENERATED =     this.ml     \
                 astUtil.ml  \
                 astUtil.mli \
 
-src:V: $ML $MLI
+MLY =	parse.mly
+MLL =	scan.mll
+
+src:V: $ML $MLI $MLY $MLL
 
 CMO =           `echo $ML       | sed 's/\.ml/.cmo/g'`
 CMX =           `echo $ML       | sed 's/\.ml/.cmx/g'`
@@ -222,6 +225,9 @@ html:V:         $HTML
 '^'(.*)'\.mli?$':R:		'\1'.nw
 	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 # caml compiler is so fast that I see no need for cpif above
+
+%.c: 	%.nw
+	$NOTANGLE -L -R$target $prereq > $target
 
 %.view: %.nw
 	$NOTANGLE -R$target $prereq > $target
@@ -353,7 +359,7 @@ OBJ =           uint64p.o
 CMOLIBS =       cllib.cma  asdl.cma
 CMXLIBS =       cllib.cmxa asdl.cmxa
 
-$NAME:          $CMO $OBJ
+$NAME:          depend-check $CMO $OBJ
                 $OCAMLC $OCAMLC_FLAGS -custom -o $target $CMOLIBS $OBJ $CMO 
                 
 $NAME.opt:      $CMX $OBJ
@@ -397,11 +403,23 @@ this.ml:        this.in mkfile
 depend:V:	src
 		$OCAMLDEP *.mli *.ml > DEPEND
 
+# make sure DEPEND is up to date
+depend-check:VQ: newer
+	# check for DEPEND
+	if ./newer DEPEND mkfile; then true;
+	else
+	  echo "DEPEND is out of date; you must run 'mk depend' before continuing" 1>&2
+	  exit 1
+	fi
+	
+newer: newer.c
+	cc -o $target $prereq
+
 #
 # create tags for vi(1)
 #
 
-tags:V:
+tags:V:		src
                 mltags *.ml *.mli *.mly
 
 ################################################################
@@ -417,13 +435,16 @@ clean:V:
 	        rm -f *.cmo *.cmx *.o
 	        rm -f *.asdl *.view *.smlview
 	        rm -f *.cmi
-	        rm -f $NAME $NAME.opt
 	        rm -f *.ml *.mli *.c *.mly *.mll this.in
 	        rm -f *.sig *.sml
 	        rm -f *.dvi *.log *.aux *.bbl *.blb *.blg
 	        rm -f parse.output
 	        rm -f *.html *.1 *.ps *.pod
 	        rm -f *~
+
+clobber:V:	clean
+	        rm -f $NAME $NAME.opt newer
+
 
 
 ################################################################
