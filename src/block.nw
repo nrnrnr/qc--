@@ -211,7 +211,6 @@ alignments.
 \emph{Attention:} as discussed above, there is a possibility for
 confusion here which block goes into low memory and which into high
 memory. Block [[x]] sits on top of [[y]].
-
 <<block.ml>>=
 let cathl x y =
     let size' = align (size y) (alignment x) in
@@ -222,11 +221,9 @@ let cathl x y =
                           :: (constraints y) @ (constraints x) 
         }
 @
-
 When overlapping blocks, the resulting block must be large enough for
 the bigger of the two. The constraints express that either the lower
 ends align, or the higher ends.
-
 <<block.ml>>=
 let overlap place x y = 
     let x = adjust x        
@@ -248,9 +245,7 @@ let overlap place x y =
                           :: (constraints x) @ (constraints y)
         }           
 @        
-
 Not essential, but convenient functions.
-
 <<block.ml>>=
 let offset base name ptrwidth =
   RU.add ptrwidth base (Rtl.late (Idgen.offset name) ptrwidth)
@@ -273,7 +268,6 @@ We export the block abstraction to Lua. The actual export is handled in
 module \module{lualink}. Here we just provide the {\ocaml} functions
 that implement the new Lua primitives and the representation [[T]] for
 blocks in Lua..
-
 <<block.ml>>=
 module Lua = struct
     let size      = size
@@ -304,9 +298,7 @@ let relative block name size alignment =
 let base block = Rtlutil.ToReadableString.exp (base block)
 let constraints block = List.map Rtleqn.to_string (constraints block)
 @
-
 Norman suggested to have overlap and concatenation functions in Lua that
 take any number of parameters which can be either blocks or lists
 (tables) of blocks. This amounts to functions that take a list of Lua
 values.
-
