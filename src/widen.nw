@@ -199,7 +199,8 @@ let store_const goodwidth rtl = match Down.rtl rtl with
 let width_cost r =
   let rec count_loc c = function
     | RP.Mem(_,_,_,e,_) -> do_count c e
-    | RP.Slice(_,_,l) -> count_loc c l
+    | RP.Slice(_,_,l)   -> count_loc c l
+    | _                 -> failwith "count_loc can only handle mem and slice"
   and do_count ((sx, zx, lo) as c) = function
     | RP.Const _ -> c
     | RP.Fetch(l, w) -> c
@@ -403,16 +404,19 @@ let apply_rules soln =
 @ 
 
 <<combine solutions>>=
-let mksolutions_lit_bool ((RP.Const (RP.Bool b)) as e) =
-  [{e = e; cost = 0; e' = e; fill = Z; n = 1; w = 1}]
+let mksolutions_lit_bool e = match e with 
+| (RP.Const (RP.Bool b)) -> [{e = e; cost = 0; e' = e; fill = Z; n = 1; w = 1}]
+| _ -> failwith "mksolutions_lit_bool requires a bool const"
 
-let mksolutions_lit_bits tau ((RP.Const (RP.Bits b)) as e) =
+let mksolutions_lit_bits tau e = match e with
+| (RP.Const (RP.Bits b)) ->
   let n = Bits.width b (* minbits i *) in
   let litwidths = List.filter (fun w' -> n <= w') (List.assoc "literal" m) in
   let f w' =
     let ext = if tau = S then Bits.Ops.sx else Bits.Ops.zx in
     {e = e; cost = 0; e' = RP.Const(RP.Bits (ext w' b)); fill = tau; n = n; w = w'} in
   List.map f litwidths
+| _ -> failwith "mksolutions_lit_bits requires a bitvector const"
 @ 
 
 Assume that each use of a variable is garbage type with index same as width.
@@ -453,13 +457,16 @@ let mksolutions_op args_solns opname ws args =
 
 This implements the Drop-Ext rule.
 <<combine solutions>>=
-let mksolutions_ext ext ws [arg_solns] =
+let mksolutions_ext ext ws arg_solnss =
+  let arg_solns = List.hd arg_solnss in
+
   (* find all solutions that have the appropriate sigma *)
   let sigma = fill_of_ext ext in
   let arg_solns = List.find_all (fun s -> s.fill = sigma) arg_solns in
 
   (* find all solutions with index equal to the input width of the extension *)
-  let ([n], n') = monomorphic ext ws in
+  let (ns, n') = monomorphic ext ws in
+  let n = List.hd ns in
   let arg_solns = List.find_all (fun s -> s.n <= n && s.w >= n) arg_solns in
   (* remember to use n as the index of the result *)
 
@@ -468,9 +475,11 @@ let mksolutions_ext ext ws [arg_solns] =
 @ 
 
 <<combine solutions>>=
-let mksolutions_trunc ws [arg_solns] =
+let mksolutions_trunc ws arg_solnss =
+  let arg_solns = List.hd arg_solnss in
   let e arg = RP.App(("lobits", ws), [arg]) in
-  let ([n'], n) = monomorphic "lobits" ws in
+  let (ns', n) = monomorphic "lobits" ws in
+  let n' = List.hd ns' in
   let drop_lo_copy arg_soln = { arg_soln with e = e arg_soln.e } in
   let drop_lo_ignore arg_soln = 
     { arg_soln with e = e arg_soln.e; fill = G; n = n}
@@ -487,6 +496,7 @@ let ast_combine solns = function
   | RP.App((("sx"|"zx" as ext),   ws), [arg]) -> mksolutions_ext ext ws solns
   | RP.App(("lobits",             ws), [arg]) -> mksolutions_trunc ws solns
   | RP.App((opname,               ws), args) -> mksolutions_op solns opname ws args
+  | _  -> failwith "ast_combine couldn't handle the rtl"
 @ 
 
 <<bottom-up transform>>=
@@ -753,11 +763,13 @@ let machine_widths menv opname =
 
 let find_exts_from w extname =
   let ext_widths = machine_widths m extname in
-  List.find_all (fun [w1;_] -> w1 = w) ext_widths
+  List.find_all (function [w1;_] -> w1 = w
+                        | _ -> failwith "ill formed machine env") ext_widths
 
 let find_exts_to w extname =
   let ext_widths = machine_widths m extname in
-  List.find_all (fun [_;w2] -> w2 = w) ext_widths
+  List.find_all (function [_;w2] -> w2 = w
+                        | _ -> failwith "ill formed machine env") ext_widths
 @ 
 
 <<widen.ml>>=
@@ -806,21 +818,29 @@ let time f x =
 
 <<widen.ml>>=
 let badwiden r =
+  let extract1 f x = match x with
+  | ([t1'], t') -> f t1' t'
+  | _ -> failwith "expected singleton"
+  in
+  let extract2 f x = match x with
+  | ([t1';t2'], t') -> f t1' t2' t'
+  | _ -> failwith "expected singleton"
+  in
   let best_fill1 tau fills =
-    try List.find (fun ([t1],t) -> t1 = G && t = tau) fills
+    try List.find (extract1 (fun t1 t -> t1 = G && t = tau)) fills
     with Not_found ->
-      try List.find (fun ([t1],t) -> t = tau) fills
+      try List.find (extract1 (fun t1 t -> t = tau)) fills
       with Not_found ->
         List.hd fills
   in
   let best_fill2 tau fills =
-    try List.find (fun ([t1;t2], t) -> t1 = G && t2 = G && t = tau) fills
+    try List.find (extract2 (fun t1 t2 t -> t1 = G && t2 = G && t = tau)) fills
     with Not_found ->
-      try List.find (fun ([t1;t2], t) -> t1 = G && t = tau) fills
+      try List.find (extract2 (fun t1 t2 t -> t1 = G && t = tau)) fills
       with Not_found -> 
-        try List.find (fun ([t1;t2], t) -> t2 = G && t = tau) fills
+        try List.find (extract2 (fun t1 t2 t -> t2 = G && t = tau)) fills
         with Not_found ->
-          try List.find (fun ([t1;t2], t) -> t = tau) fills
+          try List.find (extract2 (fun t1 t2 t -> t = tau)) fills
           with Not_found -> 
             List.hd fills
   in
@@ -846,7 +866,7 @@ let badwiden r =
       
       (* width changing *)
     | RP.App((("sx"|"zx" as ext), [n;w2]), [RP.App(("lobits", [w1;n']), [arg])]) ->
-        let [w; _] = List.hd (find_exts_to w' (ext^"lo")) in
+        let w = (List.hd (List.hd (find_exts_to w' (ext^"lo")))) in
         let argsoln = find_best_soln arg G n w in
         if (tau = G || ext_of_fill tau = ext) && index >= n then 
           RP.App((ext, [n;w']), [RP.App(("lobits", [w;n]), [argsoln])])
@@ -862,11 +882,11 @@ let badwiden r =
       (* operators *)
     | RP.App((opname, ws), [arg1; arg2]) ->
         let fills = List.assoc opname op_fill_types in
-        let ([n1;n2], n) = monomorphic opname ws in
-        let ([t1;t2], t) = best_fill2 tau fills in
+        let (n1, n2, n) = extract2 (fun x y z -> (x,y,z)) (monomorphic opname ws) in
+        let (t1, t2, t) = extract2 (fun x y z -> (x,y,z)) (best_fill2 tau fills) in
         let (_,ws') =
           List.find (fun (nm, ws') -> nm = opname && snd (monomorphic nm ws') = w') m in
-        let ([w1;w2], w') = monomorphic opname ws' in
+        let (w1, w2, w') = extract2 (fun x y z -> (x,y,z)) (monomorphic opname ws') in
         let arg1soln = find_best_soln arg1 t1 n1 w1 in
         let arg2soln = find_best_soln arg2 t2 n2 w2 in
         let r' = RP.App((opname, ws'), [arg1soln; arg2soln]) in
@@ -875,16 +895,17 @@ let badwiden r =
                     [RP.App(("lobits", [w';n]), [r'])])
     | RP.App((opname, ws), [arg]) ->
         let fills = List.assoc opname op_fill_types in
-        let ([n1], n) = monomorphic opname ws in
-        let ([t1], t) = best_fill1 tau fills in
+        let (n1, n) = extract1 (fun x y -> (x,y)) (monomorphic opname ws) in
+        let (t1, t) = extract1 (fun x y -> (x,y)) (best_fill1 tau fills) in
         let (_,ws') =
           List.find (fun (nm, ws') -> nm = opname && snd (monomorphic nm ws') = w') m in
-        let ([w1], w') = monomorphic opname ws' in
+        let (w1, w') = extract1 (fun x y -> (x,y)) (monomorphic opname ws') in
         let argsoln = find_best_soln arg t1 n1 w1 in
         let r' = RP.App((opname, ws'), [argsoln]) in
         if t = tau then r'
         else RP.App((ext_of_fill tau, [n;w']),
                     [RP.App(("lobits", [w';n]), [r'])])
+    | _ -> failwith "find_best_soln couldn't match"
   in
   let rec widen_loc = function
     | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,64,find_best_soln e Z w 64,a)
