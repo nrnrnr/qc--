@@ -241,14 +241,15 @@ and returns boolean value.
 Stack = Stack or error('Stack primitives missing')
 
 function Stack.layout(dummy,proc)
+   -- works only with *old* back end
     local blocks = Stack.blocks(proc)
     local layout = 
-                { blocks.incoming               -- <-- high addresses
+                { blocks.oldblocks[1]               -- <-- high addresses
                 , blocks.stackdata
                 , blocks.continuations
                 , Block.relative(blocks.sp, 'six words', 24, 16)   -- size/alignment=24/16
                 , blocks.spills
-                , blocks.outgoing
+                , blocks.youngblocks[1]
                 , blocks.sp                     -- <-- low addresses 
                 }
     local block = Block.cat(999, layout)
@@ -274,50 +275,78 @@ function Debug.showblocks(blocks, keys)
     i = i + 1
   end
 end
-
-function Stack.new_layout(dummy,proc) --- really for a C convention only
-    local blocks = Stack.new_blocks(proc)
-    local layout = 
-                { blocks.incoming               -- <-- high addresses
-                , blocks.vfp
-                , blocks.stackdata
-                , blocks.continuations
-                , blocks.spills
-                , blocks.outgoing
-                , blocks.sp                     -- <-- low addresses 
-                }
-    if Debug.stack then
-      Debug.showblocks (blocks, {'incoming', 'vfp', 'stackdata', 'continuations',
-                                 'spills', 'outgoing', 'sp'})
-    end
-    local block = Block.cat(999, layout)
-    Stack.new_freeze(proc,block)
-    return 1
-end    
 @ 
 This code should probably move to the x86 module.
 <<Lua Boot Script>>=
 X86 = X86 or {}
 X86.layout = { creates='no late consts' }
 
-function X86.layout.fn(dummy,proc) --- really for a C convention only
+function X86.layout.fn(dummy,proc) --- dispatch on cc name
+  return X86.layout[Stack.ccname(proc)](dummy, proc)
+end
+
+function X86.layout["C"](dummy,proc) --- really for a C convention only
     local blocks = Stack.new_blocks(proc)
     blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)
+
+    blocks.oldblocks   = Block.overlap(32, "low", blocks.oldblocks)
+    blocks.youngblocks = Block.overlap(32, "low", blocks.youngblocks)
     local layout = 
-                { blocks.incoming               -- <-- high addresses
+                { blocks.oldblocks               -- <-- high addresses
                 , blocks.ra
                 , blocks.vfp
                 , blocks.stackdata
                 , blocks.continuations
                 , blocks.spills
-                , blocks.outgoing
+                , blocks.youngblocks
                 , blocks.sp                     -- <-- low addresses 
                 }
     if Debug.stack then
-      Debug.showblocks (blocks, {'incoming', 'ra', 'vfp', 'stackdata', 'continuations',
-                                 'spills', 'outgoing', 'sp'})
+      write('======= using stack layout for C/notail =======\n')
+      write('****** cc name = ', Stack.ccname(proc), '\n')
+      Debug.showblocks (blocks, {'oldblocks', 'ra', 'vfp', 'stackdata',
+                                 'continuations', 'spills', 'youngblocks', 'sp'})
     end
-    local block = Block.cat(999, layout)
+    local block = Block.cat(32, layout)
+    Stack.new_freeze(proc,block)
+    return 1
+end    
+
+X86.layout["notail"] = X86.layout["C"]
+
+function X86.layout["C--"](dummy,proc)
+    local blocks = Stack.new_blocks(proc)
+
+    if Debug.stack then
+      write('======= using stack layout for C-- with tail calls =======\n')
+      local i = 1
+      local keys = { }
+      while blocks.oldblocks[i] do keys[i] = i; i = i + 1 end
+      write('old blocks:\n')
+      Debug.showblocks(blocks.oldblocks, keys)
+      write('\n')
+    end
+
+    blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)
+    -- first old block is always the incoming parms
+    blocks.oldblocks[1] = Block.cat(32, {blocks.oldblocks[1], blocks.ra, blocks.vfp})
+    blocks.oldblocks   = Block.overlap(32, "high", blocks.oldblocks)
+    blocks.youngblocks = Block.overlap(32, "high", blocks.youngblocks)
+    local layout = 
+                { blocks.oldblocks               -- <-- high addresses
+                --- , blocks.ra  -- joined to incoming block
+                --- , blocks.vfp
+                , blocks.stackdata
+                , blocks.continuations
+                , blocks.spills
+                , blocks.sp                     -- <-- low addresses 
+                , blocks.youngblocks
+                }
+    if Debug.stack then
+      Debug.showblocks (blocks, {'oldblocks', 'ra', 'vfp', 'stackdata',
+                                 'continuations', 'spills', 'sp', 'youngblocks'})
+    end
+    local block = Block.cat(32, layout)
     Stack.new_freeze(proc,block)
     return 1
 end    

@@ -352,10 +352,13 @@ C.register_module "Simplify"
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Stack"
   [ "freeze",     V.efunc (Map.proc **-> Map.block **-> V.runit) Stack.freeze
-  ; "blocks",     V.efunc (Map.proc **-> V.result (V.record Map.block))  Stack.blocks
+  ; "blocks",     V.efunc (Map.proc **-> V.result (V.record V.value))
+                          (Stack.blocks Map.block.V.embed (V.list V.value).V.embed)
   ; "new_freeze", V.efunc (Map.new_proc **-> Map.block **-> V.runit) Stack.new_freeze
-  ; "new_blocks", V.efunc (Map.new_proc **-> V.result (V.record Map.block))
-                  Stack.new_blocks
+  ; "new_blocks", V.efunc (Map.new_proc **-> V.result (V.record V.value))
+                          (Stack.new_blocks Map.block.V.embed (V.list V.value).V.embed)
+  ; "ccname",     V.efunc (Map.new_proc **-> V.result (V.string))
+                          (fun p -> p.Proc.cc.Call.name)
   ] g;                    
 @ 
 PERHAPS THIS CODE SHOULD REPLACE THE SOMEWHAT HEAVYWEIGHT [[Asm.dot]]???

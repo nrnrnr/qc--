@@ -154,7 +154,9 @@ type cut_pair = (incoming, (Rtl.exp -> outgoing)) pair'
 
 type t = (* part of a calling convention *)
   (* we get 3 dual pairs *)
-  { call_parms    : pair
+  { name          : string   (* canonical name of this cc *)
+  ; jump_ok       : bool     (* does it support tail calls? *)
+  ; call_parms    : pair
   ; results       : pair
   ; cut_parms     : cut_pair
        (* exp is continuation val; used to address overflow block *)
@@ -166,7 +168,7 @@ type t = (* part of a calling convention *)
   ; stack_growth  : Memalloc.growth
   ; sp_align      : int             (* alignment of stack pointer at call/cut *)
   ; ra            : Rtl.loc                      (* where return address is on entry *)
-  ; nvregs        : Register.Set.t           (* registers preserved across calls *)
+  ; pre_nvregs    : Register.Set.t           (* registers preserved across calls *)
   ; volregs       : Register.Set.t           (* registers not preserved across calls *)
   ; saved_nvr     : Talloc.Multiple.t -> Register.t -> Rtl.loc (* where to save NVR *)
   ; saved_ra      : Talloc.Multiple.t -> Rtl.loc (* where to save the return address *)
@@ -176,21 +178,24 @@ type t = (* part of a calling convention *)
   ; replace_vfp   : Rtl.rtl Cfgx.M.cfg -> unit
   ; cutto         : Mflow.cut_args Target2.map    (* newpc * newsp map*)
   } 
-@ 
+@ N.B. the [[pre_nvregs]] are all possible nonvolatile registers.
+The actual nonvolatile registers are those [[pre_nvregs]] that are not
+used for parameters.
+@
 We have the beginnings of an implementation that computes incoming and
 outgoing stuff.  The [[relative_to]] parameter is pure hell and not obvious
 to the amateur.  The [[postsp]] parameter is a bit tricky too.
 <<call.mli>>=
-val outgoing : what:string ->
-     growth:Memalloc.growth -> sp:Rtl.loc -> spec:valpass ->
+val outgoing :
+     growth:Memalloc.growth -> sp:Rtl.loc -> mkauto:valpass ->
      autosp:(Automaton.result -> Rtl.exp) ->
-     postsp:(Rtl.exp -> Rtl.exp) -> relative_to:Rtl.exp -> outgoing
-val incoming : what:string ->
-     growth:Memalloc.growth -> sp:Rtl.loc -> spec:valpass ->
+     postsp:(Rtl.exp -> Rtl.exp) -> outgoing
+val incoming : 
+     growth:Memalloc.growth -> sp:Rtl.loc -> mkauto:valpass ->
      autosp:(Automaton.result -> Rtl.exp) ->
-     postsp:(Rtl.exp -> Rtl.exp) -> relative_to:Rtl.exp -> incoming
+     postsp:(Rtl.exp -> Rtl.exp) -> incoming
 <<exported type definitions>>=
-type valpass = Rtl.exp -> Automaton.implementation
+type valpass = unit -> Automaton.implementation
 @ 
 \subsection{Implementation}
 
@@ -213,9 +218,10 @@ let too_small growth sp target =
   | Memalloc.Down -> RU.fetch sp >* target
   | Memalloc.Up   -> RU.fetch sp <* target
 
-let outgoing ~what ~growth ~sp ~spec ~autosp ~postsp ~relative_to types actuals =
-    let a = Block.relative relative_to (what ^ " out ovfl")
-            (fun ~base -> A.mk (spec base)) in
+let ne sp target = R.app (R.opr "ne" [RU.Width.loc sp]) [RU.fetch sp; target]
+
+let outgoing ~growth ~sp ~mkauto ~autosp ~postsp types actuals =
+    let a = A.mk (mkauto ()) in
     let crank effects' (h, w) actual =
       let l = A.allocate a w h in
       A.store l actual w :: effects' in
@@ -229,13 +235,12 @@ let outgoing ~what ~growth ~sp ~spec ~autosp ~postsp ~relative_to types actuals 
     ; insp     = RU.store sp autosp
     ; regs     = a.A.regs_used
     ; shuffle  = shuffle
-    ; post_sp  = setsp
+    ; post_sp  = R.guard (ne sp postsp)               setsp
     ; pre_sp   = R.guard (too_small growth sp postsp) setsp
     }
 
-let incoming ~what ~growth ~sp ~spec ~autosp ~postsp ~relative_to types formals =
-    let a = Block.relative relative_to (what ^ " in ovfl")
-            (fun ~base -> A.mk (spec base)) in
+let incoming ~growth ~sp ~mkauto ~autosp ~postsp types formals =
+    let a = A.mk (mkauto()) in
     let crank effects' (h, w) formal =
       let l = A.allocate a w h in
       A.store formal (A.fetch l w) w :: effects' in
@@ -249,7 +254,7 @@ let incoming ~what ~growth ~sp ~spec ~autosp ~postsp ~relative_to types formals 
     ; insp     = RU.store sp autosp
     ; regs     = a.A.regs_used
     ; shuffle  = shuffle
-    ; post_sp  = setsp
+    ; post_sp  = R.guard (ne sp postsp)               setsp
     ; pre_sp   = R.guard (too_small growth sp postsp) setsp
     }
 @ 

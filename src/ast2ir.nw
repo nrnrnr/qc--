@@ -37,8 +37,6 @@
 WORK STILL TO BE DONE:
 \begin{itemize}
 \item
-REPLACE STACK POINTER WITH VIRTUAL FRAME POINTER.
-\item
 RECORD SET OF THINGS DEFINED AT THE ``UNWOUND TO'' ENTRY POINT OF A CONTINUATION.
 THERE IS A PROBLEM HERE, BECAUSE WE HAVE NO WAY TO RECORD
 A DEFINITION OF A VARIABLE, BUT THIS IS WHAT THE UNWIND OPERATION
@@ -375,21 +373,21 @@ each continuation, depending on how the continuation is used.
 <<Make continuation bundles>>=
 let continuations cc ast default_aborts =
   let volregs = cc.C.volregs in                 (* volatile registers *)
-  let allregs = RS.union volregs cc.C.nvregs in (* all registers *)
+  let allregs = RS.union volregs cc.C.pre_nvregs in (* all registers *)
   let entry n = G.node_labeled g n in
   let (--)    = RS.diff in
   let as_cut_to k =
     k.K.cut_to <- true;
     let defs = k.K.cut_in.C.regs in
-    { G.defs = defs;   G.kills = allregs -- defs; G.node = entry k.K.cut_pc    } in
+    { G.defs = defs;     G.kills = allregs -- defs; G.node = entry k.K.cut_pc    } in
   let as_unwinds k =
     k.K.unwound_to <- true;
-    { G.defs = noregs; G.kills = volregs;         G.node = entry k.K.unwind_pc } in
+    { G.defs = RS.empty; G.kills = volregs;         G.node = entry k.K.unwind_pc } in
     (* defs are variables and so can't be a register set.  NEED ANOTHER MECHANISM *)
   let as_returns k =
     k.K.returned_to <- true;
     let defs = k.K.return_in.C.regs in
-    { G.defs = defs;   G.kills = volregs -- defs; G.node=entry k.K.return_pc   } in
+    { G.defs = defs;     G.kills = volregs -- defs; G.node=entry k.K.return_pc   } in
   let contmap f = List.map (f << continuation) in
   let rec add f cs = match f with (* avoid list reversal! *)
     | A.FlowAt(f,_)  -> add f cs
@@ -572,6 +570,7 @@ interprocedural optimization and call-graph analysis.
 <<supporting functions for translating statements>>=
 let rec jumpStmt (cconv,e,args,targets (*unused*)) = 
     let cc    = to_cc cconv in
+    <<insist that [[cc] matches [[proc_cc]] and supports jumps>>
     let out   = actuals cc.C.call_parms.C.out args in
     let jumpi = target.T.jump.T.embed (expr e) in
     let ()    = add_oldblock out.C.overflow    in  (* jump overflow = old *)
@@ -579,10 +578,14 @@ let rec jumpStmt (cconv,e,args,targets (*unused*)) =
     G.instruction  g out.C.shuffle                                 **>
     G.instruction  g restore_nvrs                                  **>
     G.instruction  g (R.store proc_cc.C.ra saved_ra pointersize)   **>
-    G.instruction  g out.C.post_sp                                 **>
-    G.jump         g jumpi ~targets ~uses:(RS.union out.C.regs cc.C.nvregs)
-<<auxiliaries>>=
-let noregs = Register.Set.empty
+    G.stack_adjust g out.C.post_sp                                 **>
+    G.jump         g jumpi ~targets ~uses:(RS.union out.C.regs nvregs)
+<<insist that [[cc] matches [[proc_cc]] and supports jumps>>=
+let ()    = if cc.C.name <> proc_cc.C.name then
+              Impossible.impossible "calling conv mismatch in jump" in
+let ()    = if not cc.C.jump_ok then
+              Impossible.impossible
+                ("calling conv " ^ cc.C.name ^ " does not support jump") in
 @
 
 
@@ -617,14 +620,14 @@ and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ =
   let () = add_youngblock in'.C.overflow          in  (* incoming overflow results *)
   G.stack_adjust g out.C.pre_sp                **>
   G.instruction  g out.C.shuffle               **>
-  G.instruction  g out.C.post_sp               **>
+  G.stack_adjust g out.C.post_sp               **>
   G.call         g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
                          ~altrets:conts.returns ~unwinds_to:conts.unwinds
                          ~cuts_to:conts.cuts ~aborts:conts.aborts ~spans:props  **>
   G.assertion    g in'.C.insp              **>
   G.stack_adjust g in'.C.pre_sp            **>  (* DOUBTS ABOUT THIS *)
   G.instruction  g in'.C.shuffle           **>
-  G.instruction  g in'.C.post_sp           **>
+  G.stack_adjust g in'.C.post_sp           **>
   succ
 <<auxiliaries>>=
 let ( **> ) f x = f ~succ:x
@@ -644,6 +647,10 @@ and returnStmt (cconv, kont, args) =
 let () =
   let regstring (s, i, _) = Printf.sprintf "%c%d" s i in
   let used = List.map regstring (RS.elements out.C.regs) in
+(* THIS CODE WILL NOT WORK --- WE NEED TO RESTORE THE RA, THEN RETURN USING THE 
+   RESTORED RA.  PERHAPS THE PEEPHOLE OPTIMIZER CAN COMBINE AND PERHAPS NOT.
+   THE RESTORATION OF THE RA MIGHT BE COMBINED WITH RESULTS AND RESTORE NVRS IN 
+   ONE GRAND SHUFFLE? *)
   Verbose.say 2 ["return statement uses regs: "; String.concat ", " used; "\n"] in
     let reti =
       match kont with
@@ -656,10 +663,13 @@ let () =
     let () = add_oldblock out.C.overflow in  (* outgoing jump overflow = incoming *)
     G.stack_adjust g out.C.pre_sp            **>
     G.instruction  g out.C.shuffle           **>
-      (* SHOULD JUMP TO SHARED EPILOG HERE -- RESTORE REGS AND SP *)
+      (* SHUFFLE ISN'T SAFE HERE, AS IT MIGHT DESTROY SAVED NVRS OR RA *)
+      (* FOR SOME CONV, MIGHT JUMP TO SHARED EPILOG HERE -- RESTORE REGS AND SP *)
+      (* PROBABLY NEED TO RESTORE RA HERE *)
     G.instruction  g restore_nvrs            **>
-    G.instruction  g out.C.post_sp           **>
-    G.return       g reti ~uses:(RS.union out.C.regs cc.C.nvregs)
+      (* IF COMBINED, NOT CLEAR WHAT HAPPENS IF SHUFFLE MUST SPILL *)
+    G.stack_adjust g out.C.post_sp           **>
+    G.return       g reti ~uses:(RS.union out.C.regs nvregs)
 @ 
 A [[cut to]] instruction passes arguments according to a calling convention.
 Each continuation has its own overflow area. The [[copyout]] routine returns
@@ -713,9 +723,10 @@ and finish_compiling_continuation k =
 and generate_cut_to_entry k =
   let in' = k.K.cut_in in
   G.set_succ (G.node_labeled g k.K.cut_pc) (
+  G.assertion    g in'.C.insp     **>
   G.stack_adjust g in'.C.pre_sp   **>
   G.instruction  g in'.C.shuffle  **>
-  G.instruction  g in'.C.post_sp  **>
+  G.stack_adjust g in'.C.post_sp  **>
   k.K.succ)
 
 and generate_return_to_entry k = 
@@ -725,7 +736,7 @@ and generate_return_to_entry k =
   G.set_succ (G.node_labeled g k.K.return_pc) (
   G.stack_adjust g in'.C.pre_sp    **>
   G.instruction  g in'.C.shuffle   **>
-  G.instruction  g in'.C.post_sp   **>
+  G.stack_adjust g in'.C.post_sp   **>
   k.K.succ)
 
 and generate_unwind_to_entry k = 
@@ -828,10 +839,32 @@ let proc containing_spans (cconv,procname,args,procbody) =
 
     (* compute temps, save_nvrs, restore_nvrs *)
     let temps = Talloc.Multiple.for_spaces target.T.spaces in
+@ 
+We place a restriction on calling conventions supported by C--: a
+parameter register is never nonvolatile.  
+Therefore, for any particular procedure, we get the nonvolatile
+registers for \emph{that} procedure by subtracting off those registers
+used as parameters.
+This choicse constrains the set of calling conventions we can express,
+but it makes it easy to express, e.g., the ``lightweight'' calling
+convention, in which every register not a parameter is nonvolatile.
+N.B. for a return or a jump, it is up to the specification of the
+calling convention to avoid a conflict between result registers and
+nonvolatile registers.
+<<definition of [[proc]], which translates one procedure>>=
+
+    (* translate body of procedure *)
+
+
+    (* build CFG for body *)                    
+    <<using [[env]] and [[expr]], build funs for formals, actuals, and results>> in    
+
+    let in' = formals proc_cc.C.call_parms.C.in' args  in
+    let nvregs = RS.diff proc_cc.C.pre_nvregs in'.C.regs in
     let nvr_info =
       let info ((_, _, w) as r) =
         { reg = R.reg r; tmp = proc_cc.C.saved_nvr temps r; w = w } in
-      RS.fold (fun r i -> info r :: i) proc_cc.C.nvregs [] in
+      RS.fold (fun r i -> info r :: i) nvregs [] in
     let save_nvrs =
       R.par (List.map (fun i -> R.store i.tmp (R.fetch i.reg i.w) i.w) nvr_info) in
     let restore_nvrs =
@@ -842,33 +875,24 @@ let proc containing_spans (cconv,procname,args,procbody) =
       R.store loc (R.fetch proc_cc.C.ra w) w, R.fetch loc w in
 
     <<Make continuation bundles>> in
-    <<using [[env]] and [[expr]], build funs for formals, actuals, and results>> in    
     <<functions that translate statements, including [[bodies]]>> in
     <<definition of [[insert_init_cont_nodes]]>> in
 
 
-    (* translate body of procedure *)
-
-    (* build CFG for body *)                    
-    let in' = formals proc_cc.C.call_parms.C.in' args  in
-      (* CALLING CONV PROBABLY NEEDS MORE INFO TO GET PROPER POST STACK POINTER *)
     let initcont = G.node_labeled g (Idgen.label "initialize continuations") in
     let labeln node ~succ = (G.set_succ node succ; node) in
     let () = add_oldblock in'.C.overflow in
     let () = G.set_succ (G.entry g) (
       G.stack_adjust g in'.C.pre_sp    **>
       G.instruction  g in'.C.shuffle   **>
-      G.instruction  g in'.C.post_sp   **>
+      G.stack_adjust g in'.C.post_sp   **>
       G.instruction  g save_ra         **>
       G.instruction  g save_nvrs       **>
       labeln initcont                  **>
       bodies containing_spans procbody (G.exit g)) in
 
     let () = insert_init_cont_nodes contenv initcont in
-      (* THESE PLACEMENTS ARE WRONG.  THEY DEPEND ON THE DIRECTION OF STACK GROWTH *)
-    let incoming = Block.overlap_list pointersize Block.Low  (!oldblocks)  in
-    let outgoing = Block.overlap_list pointersize Block.Low (!youngblocks) in
-    
+  
     let contblocks =
       let addblock name k blocks =
         finish_compiling_continuation k;
@@ -877,20 +901,20 @@ let proc containing_spans (cconv,procname,args,procbody) =
     let priv =
       Block.relative vfp "private" (aligned_mem ~align:proc_cc.C.sp_align) target in
     let i =    
-        { Proc.symbol   = symbol
-        ; Proc.cc       = proc_cc
-        ; Proc.target   = target
-        ; Proc.temps    = temps
-        ; Proc.cfg      = g
-        ; Proc.incoming = incoming   (* incoming   block *)   
-        ; Proc.outgoing = outgoing   (* outgoing   block *)   
-        ; Proc.stackd   = stackd     (* stack data block *)
-        ; Proc.priv     = priv
-        ; Proc.sp       = spblock
-        ; Proc.eqns     = List.concat (!constraints)
-        ; Proc.conts    = contblocks
-        ; Proc.vars     = vars       (* number of variables *)
-        ; Proc.varMap   = Proc.VarMap.empty
+        { Proc.symbol      = symbol
+        ; Proc.cc          = proc_cc
+        ; Proc.target      = target
+        ; Proc.temps       = temps
+        ; Proc.cfg         = g
+        ; Proc.oldblocks   = List.rev (!oldblocks) (* parms must be first *)
+        ; Proc.youngblocks = !youngblocks          (* order doesn't matter *)
+        ; Proc.stackd      = stackd     (* stack data block *)
+        ; Proc.priv        = priv
+        ; Proc.sp          = spblock
+        ; Proc.eqns        = List.concat (!constraints)
+        ; Proc.conts       = contblocks
+        ; Proc.vars        = vars       (* number of variables *)
+        ; Proc.varMap      = Proc.VarMap.empty
         } in
     optimizer i (* runs optimizer, freezes, and assembles proc *)
 <<auxiliaries>>=

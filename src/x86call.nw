@@ -10,6 +10,8 @@ val c : return_to:(Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target2.map -> Call.t
   (* C calling convention *)
 val cmm : return_to:(Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target2.map -> Call.t
   (* C-- calling convention *)
+val notail: return_to:(Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target2.map -> Call.t
+  (* C-- calling convention without tail calls *)
 @ 
 \section{Implementation of X86 calling conventions}
 We use these abbreviations:
@@ -113,15 +115,15 @@ an integer result is widened to 32~bits.
 <<x86call.ml>>=
 let results iregs base = 
   A.hint_choice
-     [ ((==) "float"),  A.widen  (Aux.round_up_to ~multiple_of:80) *>
+     [ ((=) "float"),   A.widen  (Aux.round_up_to ~multiple_of:80) *>
                         A.widths [80] ~errormsg:(badwidth "x86 floating return") *>
                         A.useregs [('f', 0, 80)] ~errormsg:imp
      ; (fun _ -> true), A.widen  (Aux.round_up_to ~multiple_of:32) *>
                         A.widths [32] ~errormsg:(badwidth "x86 return convention") *>
                         A.useregs iregs ~errormsg:imp
-     ] **>
-  A.no_overflow base 4 "multiple return values for x86 C"
-let c_results = results [eax]
+     ]
+let c_results ~base =
+  results [eax] base **> A.no_overflow base 4 "multiple return values for x86 C"
 @
 When passing procedure parameters, we put
 earlier arguments in lower addresses, so even though the
@@ -130,7 +132,7 @@ An argument's size is increased, if necessary, to make it a multiple
 of words.  The ABI specifies padding, but we'll use [[widen]] because
 the machine is little-endian.
 <<x86call.ml>>=
-let c_arguments base = 
+let c_arguments ~base = 
   A.widen  (Aux.round_up_to ~multiple_of:32) **>
   A.overflow ~memsize:8 ~byteorder:bo ~start:base
              ~growth:Memalloc.Up ~max_alignment:sp_align
@@ -138,7 +140,7 @@ let c_arguments base =
 When passing cut-to parameters, we use all the registers---there's no
 reason not to.
 <<x86call.ml>>=
-let cut_args base = 
+let cut_args ~base = 
   A.widen  (Aux.round_up_to ~multiple_of:32) **>
   A.widths [32] ~errormsg:(badwidth "x86 cut-to convention") **>
   A.useregs allregs ~errormsg:imp **>
@@ -152,8 +154,12 @@ candidates for defaulting.
 @
 \paragraph{Automata for passing values---{\PAL}~convention}
 <<x86call.ml>>=
-let cmm_results = results (RS.elements volregs)
-let cmm_arguments base = 
+let cmm_results ~base =
+  results (RS.elements volregs) base **>
+  A.overflow ~memsize:8 ~byteorder:bo ~start:base
+             ~growth:Memalloc.Down ~max_alignment:sp_align
+
+let cmm_arguments ~base = 
   A.widen  (Aux.round_up_to ~multiple_of:32) **>
   A.useregs (RS.elements volregs) ~errormsg:imp **>
   A.overflow ~memsize:8 ~byteorder:bo ~start:base
@@ -175,63 +181,70 @@ let addk = RU.addk 32
 let add  = RU.add  32
 let std_sp_location = add vfp (R.late "minus frame size" 32)
 @ 
+TROUBLESOME STUFF: [[~autosp]] SEEMS TO BE USED ONLY TO SET
+[[Call.insp]], WHICH ONE THINKS WOULD BE USEFUL ONLY FOR INCOMING GOO.
+IT'S UNCLEAR WHETHER THE [[~postsp]] WOULD BE USED ONLY FOR OUTGOING
+OR FOR BOTH.
+
 N.B. the call instruction moves the stack pointer.
 <<functions to transform automata>>=
 let call_actuals  =
-  C.outgoing ~what:"call" ~growth ~sp ~spec:specs.call
+  C.outgoing ~growth ~sp
+    ~mkauto:(fun () -> Block.relative vfp "out call parms" specs.call)
     ~autosp:(fun r -> Block.base r.A.overflow)
-    ~postsp:(fun _ -> std_sp_location)
-    ~relative_to:vfp in
+    ~postsp:(fun sp -> sp) in  (* was ~postsp:(fun _ -> std_sp_location) *)
 let prolog  =
-  C.incoming ~what:"prolog" ~growth ~sp ~spec:specs.call
-    ~autosp:(fun r -> addk (Block.base r.A.overflow) (-4))
-    ~postsp:(fun _ -> std_sp_location)
-    ~relative_to:vfp in
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> specs.call (addk vfp 4))
+    ~autosp:(fun _ -> vfp)
+    ~postsp:(fun _ -> std_sp_location) in
+   (* alternate: ~mkauto:Block.relative vfp "in call parms" specs.call *)
+   (*   ~autosp:(fun r -> addk (Block.base r.A.overflow) (-4)) *)
 @ 
 <<functions to transform automata>>=
 let call_results  =
-  C.incoming ~what:"results" ~growth ~sp ~spec:specs.results
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> Block.relative vfp "in ovfl results" specs.results)
     ~autosp:(fun r -> Block.base r.A.overflow)
-    ~postsp:(fun _ -> std_sp_location)  (* irrelevant? *)
-    ~relative_to:vfp in
+    ~postsp:(fun _ -> std_sp_location) in  (* irrelevant? *)
 let epilog  =
-  C.outgoing ~what:"epilog" ~growth ~sp ~spec:specs.results
+  C.outgoing ~growth ~sp
+    ~mkauto:(fun () -> Block.relative vfp "out ovfl results" specs.results)
     ~autosp:(fun r -> Block.base r.A.overflow)
-    ~postsp:(fun _ -> vfp)  (* irrelevant *)
-    ~relative_to:vfp in
+    ~postsp:(fun _ -> vfp)  (* irrelevant *) in
 @ 
-If we use [[Call.outgoing]] by itself, we have a problem, because
-[[Call.outgoing]] assumes that the overflow block is relative, when in
-fact it needs to be exact for a [[cut to]].
-We have a horrid patch here.
+We need an assertion here!
 <<functions to transform automata>>=
 let also_cuts_to =
-  C.incoming ~what:"continuation" ~growth ~sp ~spec:specs.cutto
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> Block.relative vfp "in cont parms" specs.cutto)
     ~autosp:(fun r -> std_sp_location)
-    ~postsp:(fun _ -> std_sp_location)
-    ~relative_to:vfp in
+    ~postsp:(fun _ -> std_sp_location) in
 
 let cut_actuals base  =
  let out =
-   C.outgoing ~what:"cut to" ~growth ~sp ~spec:specs.cutto
+   C.outgoing ~growth ~sp ~mkauto:(fun () -> specs.cutto base)
      ~autosp:(fun r -> spval)
-     ~postsp:(fun _ -> spval)
-     ~relative_to:base in
+     ~postsp:(fun _ -> spval) in
+(*
  let out types actuals = 
    let answer = out types actuals in
    let c = Const2.equate base (Block.base answer.C.overflow) in
    {answer with C.overflow = Block.with_constraint answer.C.overflow c} in
+*)
  out in
 @ 
 \paragraph{Putting together the whole convention}
 <<x86call.ml>>=
 type ('a, 'b, 'c) specs = { call : 'a; results : 'b; cutto : 'c }
-let conv specs ~return_to cut =
+let conv name jump specs ~return_to cut =
   <<functions to transform automata>>
   let return k n ~ra =
     if k = 0 & n = 0 then return_to ra
     else Impossible.impossible "alternate return using C calling convention" in
-  { C.call_parms = { C.in' = prolog;       C.out = call_actuals}
+  { C.name       = name
+  ; C.jump_ok    = jump
+  ; C.call_parms = { C.in' = prolog;       C.out = call_actuals}
   ; C.cut_parms  = { C.in' = also_cuts_to; C.out = cut_actuals}
   ; C.results    = { C.in' = call_results; C.out = epilog}
 
@@ -240,7 +253,7 @@ let conv specs ~return_to cut =
   ; C.replace_vfp     = Cfgx.Vfp.replace_with ~sp
   ; C.sp_align        = 4               (* alignment of stack pointer at call/cut *)
   ; C.ra              = ra              (* where return address is on entry *)
-  ; C.nvregs          = nvregs          (* registers preserved across calls *)
+  ; C.pre_nvregs      = nvregs          (* registers preserved across calls *)
   ; C.volregs         = volregs         (* registers not preserved across calls *)
   ; C.saved_nvr       = saved_nvr
   ; C.cutto           = cut
@@ -248,5 +261,7 @@ let conv specs ~return_to cut =
   ; C.return          = return
   } 
 
-let c   = conv { call = c_arguments;   results=c_results;   cutto=cut_args }
-let cmm = conv { call = cmm_arguments; results=cmm_results; cutto=cut_args }
+let c   = conv "C"   false { call = c_arguments;   results=c_results;   cutto=cut_args}
+let cmm = conv "C--" true  { call = cmm_arguments; results=cmm_results; cutto=cut_args}
+let notail= conv "notail" false
+              { call = cmm_arguments; results=cmm_results; cutto=cut_args}

@@ -130,7 +130,7 @@ dot:V:		graph.dot
 print-dot:V:	graph.ps
 	        lpr $prereq
 
-%.ps: %.dot:D:
+%.ps:D: %.dot
 	        dot -Tps $prereq > $target
 
 DEPENDFILES =   cllib/DEPEND.evaluating \
@@ -223,7 +223,7 @@ DIR =           $NAME$VERSION
 
 # find(1)'s job is it to exclude unwanted files and directories.
 
-FILES:          clobber
+FILES:D:          clobber
                 find .  \( -path "*/CVS/*"         \
                         -o -path "*/.*"            \
                         -o -path "./lib/*"         \

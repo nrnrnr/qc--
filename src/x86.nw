@@ -591,11 +591,17 @@ let target =
   ; T.charset = "latin1" (* THIS IS NONSENSE!! NOT A PROPERTY OF THE MACHINE?? *)
   } 
 @ 
+This is an ugly wart.  The only reason we need to distinguish [[cmm]]
+from [[notail]] is to tell whether a tail call is permitted, but this
+information is actually encapsulated in the stack-frame layout,
+\emph{not} in the [[Call.t]].
 <<x86.ml>>=
 let c_convention =
-  X86call.c   (fun ra -> pop_with (fun ra -> store pc ra)) (F.cutto PX.esp)
+  X86call.c      (fun ra -> pop_with (fun ra -> store pc ra)) (F.cutto PX.esp)
 let cmm_convention =
-  X86call.cmm (fun ra -> pop_with (fun ra -> store pc ra)) (F.cutto PX.esp)
+  X86call.cmm    (fun ra -> pop_with (fun ra -> store pc ra)) (F.cutto PX.esp)
+let notail_convention =
+  X86call.notail (fun ra -> pop_with (fun ra -> store pc ra)) (F.cutto PX.esp)
 
 module A = Automaton
 let ( **> ) f x = f x
@@ -636,6 +642,7 @@ let new_target =
 
   ; T.cc = (function "C" | "c" -> c_convention
             | "C--" | "c--"    -> cmm_convention
+            | "notail"         -> notail_convention
             | cc -> Impossible.impossible ("unsupported calling convention "^cc))
   ; T.globals  = globals
   ; T.is_rounding_mode = (fun loc -> loc = fpcond 0) (* see globals value *)

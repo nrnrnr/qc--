@@ -16,10 +16,10 @@ The functions exported here are bound to Lua functions in module
 \module{lualink}.
 
 <<stack.mli>>=
-val blocks: Proc.t -> (string * Block.t) list
+val blocks: (Block.t -> 'a) -> ('a list -> 'a) -> Proc.t -> (string * 'a) list
 val freeze: Proc.t -> Block.t -> unit
 
-val new_blocks: Ast2ir.proc -> (string * Block.t) list
+val new_blocks: (Block.t -> 'a) -> ('a list -> 'a) -> Ast2ir.proc -> (string * 'a) list
 val new_freeze: Ast2ir.proc -> Block.t -> unit
 @
 
@@ -43,20 +43,20 @@ pointer and the virtual frame pointer respectively. It can be
 therefore used by the frame-assembling Lua function to define where the
 stack pointer points into the frame. 
 <<stack.ml>>=
-let blocks' frozen_block p =
+let blocks' frozen_block block list p =
     let cc  = p.Proc.cc                        in
     let vfp = p.Proc.target.Target.vfp         in
-        [ "sp"              , p.Proc.sp
-        ; "vfp"             , Block.at vfp 0 (Block.alignment p.Proc.sp)
-        ; "incoming"        , p.Proc.incoming
-        ; "stackdata"       , p.Proc.stackd            
-        ; "continuations"   , p.Proc.conts
-        ; "spills"          , frozen_block p.Proc.priv 
-        ; "outgoing"        , p.Proc.outgoing
+        [ "sp"              , block p.Proc.sp
+        ; "vfp"             , block (Block.at vfp 0 (Block.alignment p.Proc.sp))
+        ; "oldblocks"       , list (List.map block p.Proc.oldblocks)
+        ; "stackdata"       , block p.Proc.stackd            
+        ; "continuations"   , block p.Proc.conts
+        ; "spills"          , block (frozen_block p.Proc.priv)
+        ; "youngblocks"     , list (List.map block p.Proc.youngblocks)
         ]
 
-let new_blocks = blocks' (fun a -> (Automaton.freeze a).Automaton.overflow)
-let blocks     = blocks' Automaton2.freeze
+let new_blocks x = blocks' (fun a -> (Automaton.freeze a).Automaton.overflow) x
+let blocks     x = blocks' Automaton2.freeze x
         
 
 let freeze' apply_to_cfg p (stack:Block.t) = 
