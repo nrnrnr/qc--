@@ -545,8 +545,9 @@ Perhaps ultimately we will use an analog of the embedding/projection
 pairs specified in the [[Target]] module.
 <<graph and node constructors>>=
 type       label_supply        = string -> string
-type 'i instruction_info = { goto   : (label, 'i) Ep.map
-                           ; branch : (Rtl.exp * label, 'i) Ep.map
+type 'i instruction_info = { goto    : (label, 'i) Ep.map
+                           ; branch  : (Rtl.exp * label, 'i) Ep.map
+                           ; bnegate : 'i -> 'i
                            }
 val mk   : 'i instruction_info -> label_supply -> 'i cfg
 @ 
@@ -615,8 +616,10 @@ module Make (X:X) : S with module X = X = struct
   type regs = Register.Set.t (* sets of regs for dataflow *)
   type label = string
   type label_supply = string -> label
-  type 'i instruction_info = { goto   : (label, 'i) Ep.map
-                             ; branch : (Rtl.exp * label, 'i) Ep.map}
+  type 'i instruction_info = { goto    : (label, 'i) Ep.map
+                             ; branch  : (Rtl.exp * label, 'i) Ep.map
+                             ; bnegate : 'i -> 'i
+                             }
 
   type kind = (* all the kinds of nodes *)
     | Join | Instruction | Branch | Cbranch | Mbranch
@@ -1056,10 +1059,6 @@ let cps_postorder_dfs g cons nil cont =
     next children acc visited in
   vnode (entry g) cont nil emptyset
 
-let rev_postorder_dfs g cons nil =
-  let snoc node build = fun tail -> build (cons node tail) in
-    cps_postorder_dfs g snoc (fun x -> x) (fun build _ -> build nil)
-
 let postorder_dfs g cons nil =
   cps_postorder_dfs g cons nil (fun x _ -> x)
 
@@ -1273,6 +1272,7 @@ let invert_cbr node = match node with
     let new_true = c.cbr_false in
     ( set_fsucc node ~succ:c.cbr_true
     ; set_tsucc node ~succ:new_true
+    ; c.cbr_i <- (get_cfg node).inst_info.bnegate c.cbr_i
     )
   | _     -> undef "invert_cbr" "non-cond-branch"
 
@@ -1302,7 +1302,20 @@ let update_instr upd node = match node with
   | Ill _ -> ()
   | Boot  -> imposs "update_instr undefined on boot nodes"
 
-let fold_layout f zero cfg = rev_postorder_dfs cfg f zero
+let fold_layout f zero cfg =
+  let ins_branch node = match node with
+    | Cbr c ->
+      if List.length (preds c.cbr_false) > 1 then
+        set_fsucc node ~succ:(branch cfg c.cbr_false)
+    | Cal c ->
+      if List.length (preds (succ node)) > 1 then
+        set_succ_n node 0 ~succ:(branch cfg (succ node))
+    | Imp i ->
+      if List.length (preds i.imp_succ) > 1 then
+        set_succ node ~succ:(branch cfg i.imp_succ)
+    | _     -> () in
+  let () = iter_nodes ins_branch cfg in
+  postorder_dfs cfg f zero
 @
 
 

@@ -42,6 +42,9 @@ follows:\\
 Note that [[cut to]] is not yet correctly implemented in this
 interface.
 
+The condition in a conditional branch can be negated by calling [[bnegate]]
+on the branch instruction.
+
 Also note that there is no place for [[return]] in this interface.
 On many machines, [[return]] is simply an indirect jump, for which
 [[goto]] can be used.
@@ -65,12 +68,13 @@ type cut_args = { new_sp : Rtl.exp; new_pc : Rtl.exp }
 
 module type S = sig (* see types Target2.t and Target2.map for doco *)
   type 'a map = ('a, Rtl.rtl) Ep.map
-  val goto  : Rtl.exp map
-  val jump  : Rtl.exp map
-  val cutto : sp:Rtl.loc -> cut_args map  (* assumes sp and pc same width *)
+  val bnegate : Rtl.loc -> Rtl.rtl -> Rtl.rtl
+  val goto    : Rtl.exp map
+  val jump    : Rtl.exp map
+  val cutto   : sp:Rtl.loc -> cut_args map  (* assumes sp and pc same width *)
     (* N.B. sp is a dynamic argument because it could differ among call conventions *)
-  val call  : Rtl.exp map
-  val branch : (Rtl.exp * Rtl.exp) map  (* probably should also be record *)
+  val call    : Rtl.exp map
+  val branch  : (Rtl.exp * Rtl.exp) map  (* probably should also be record *)
 end
 <<mflow.mli>>=
 module MakeStandard (Pc : PC) : S
@@ -87,10 +91,50 @@ module MakeStandard (P : PC) = struct
 end
 @ 
 <<standard machine-level control flow>>=
+module Up   = Rtl.Up
+module Down = Rtl.Dn
+
 let w = RU.Width.loc P.pc_lhs
 let downrtl = R.Dn.rtl
 let uploc   = R.Up.loc
 let upexp   = R.Up.exp
+@
+In order to negate the branch condition in [[bnegate]], [[cmpneg]] takes a
+comparison and flips the operator when possible. If the operator is "not",
+then the operator is discarded; if the operator has no negation, then "not" is
+applied.
+<<standard machine-level control flow>>=
+let cmpneg w ~cop ~fetch =
+  let flip_op flip = RP.App ((flip, [w]), fetch) in
+  match cop with
+  | "eq"   -> flip_op "ne"
+  | "ne"   -> flip_op "eq"
+  | "lt"   -> flip_op "ge"
+  | "le"   -> flip_op "gt"
+  | "gt"   -> flip_op "le"
+  | "ge"   -> flip_op "lt"
+  | "ltu"  -> flip_op "geu"
+  | "leu"  -> flip_op "gtu"
+  | "gtu"  -> flip_op "leu"
+  | "geu"  -> flip_op "ltu"
+  | "feq"  -> flip_op "fne"
+  | "fne"  -> flip_op "feq"
+  | "flt"  -> flip_op "fge"
+  | "fle"  -> flip_op "fgt"
+  | "fgt"  -> flip_op "fle"
+  | "fge"  -> flip_op "flt"
+  | "not"  -> (match fetch with
+               | [r] -> r
+               | _ -> Impossible.impossible "negation of multiple arguments")
+  | _      -> RP.App (("not", [w]), fetch)
+let bnegate bool_flags r = match Down.rtl r with
+  | RP.Rtl [RP.App((cop, [w1]), [RP.Fetch (flags, w2)]), RP.Store (pc, tgt, w3)]
+    when pc = Down.loc P.pc_lhs && flags = Down.loc bool_flags
+      && w1 = w && w2 = w && w3 = w ->
+      Up.rtl (RP.Rtl [cmpneg w ~cop ~fetch:[RP.Fetch (flags, w)],
+                               RP.Store (pc, tgt, w)])
+  | _ -> Impossible.impossible "ill-formed conditional branch"
+
 let goto = { Ep.embed   = (fun e -> R.store P.pc_lhs e w)
            ; Ep.project = (fun r -> match downrtl r with
                                    | RP.Rtl [(_, RP.Store(_, e, _))] -> upexp e

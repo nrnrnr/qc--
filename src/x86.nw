@@ -92,6 +92,7 @@ module RP   = Rtl.Private
 module Up   = Rtl.Up
 module Down = Rtl.Dn
 
+let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
 module Post = struct
   <<x86 postexpander>>
 end
@@ -480,7 +481,7 @@ With the postexpander in place, we can build a target.
 We begin with more utility functions
 <<x86.ml>>=
 module PX = Post
-let pc        = PX.pc
+let pc        = pc
 let espval    = PX.tempval ('r', 4, 32)
 let add       = Rtlutil.add 32
 let sub x y   = R.app (R.opr "sub" [32]) [x; y]
@@ -562,11 +563,12 @@ let target =
   ; T.reload = reload
 
   (* control flow is solid, except [[cutto]] is a lie *)
-  ; T.goto = F.goto
-  ; T.jump = F.jump
-  ; T.call = { T.embed = (fun e -> R.par [F.goto.T.embed e; push (fetch pc)])
-             ; T.project = F.call.T.project (* should be OK *)
-             } 
+  ; T.bnegate = F.bnegate eflags
+  ; T.goto    = F.goto
+  ; T.jump    = F.jump
+  ; T.call    = { T.embed = (fun e -> R.par [F.goto.T.embed e; push (fetch pc)])
+                ; T.project = F.call.T.project (* should be OK *)
+                } 
   ; T.branch = F.branch
 
   (* the calling convention is a cruel joke *)
@@ -622,12 +624,13 @@ let new_target =
   ; T.reload = reload
 
   (* control flow is solid, except [[cutto]] is a lie *)
-  ; T.goto = F.goto
-  ; T.jump = F.jump
-  ; T.call = { T.embed = (fun e -> R.par [F.goto.T.embed e; push (fetch pc)])
-             ; T.project = F.call.T.project (* should be OK *)
-             } 
-  ; T.branch = F.branch
+  ; T.bnegate = F.bnegate eflags
+  ; T.goto    = F.goto
+  ; T.jump    = F.jump
+  ; T.call    = { T.embed = (fun e -> R.par [F.goto.T.embed e; push (fetch pc)])
+                ; T.project = F.call.T.project (* should be OK *)
+                } 
+  ; T.branch  = F.branch
 
   ; T.cc = (function "C" | "C--" | "c" | "c--" -> c_convention
             | cc -> Impossible.impossible ("unsupported calling convention "^cc))
