@@ -1621,46 +1621,19 @@ object (this)
     method kills  = _kills
 
     method comment = "dataflow"    
+
+    method ast mangle target =
+        let labels       = super#ast mangle target           in
+        let guard,label  = target.T.branch.T.project _rtl     in
+        let s            = A.CommentStmt("dataflow node")    in
+            labels@[stmt s]
+
+
     method linorder =
         ( Some _succ
         , []
         )
 end
 @
-
-%
-% ATTIC
-% 
-
-% transfer parameters from location determined by calling conventions to
-% registers, and vice versa.  These sequences of assignments are created
-% by functions \emph{copy-in} and \emph{copy-out} that take their
-% successor as argument return the topmost node of the sequence they
-% create.  Calling conventions are implemented by automata that are
-% passed to the functions and returned in an advanced state.  The
-% [[copyi]] function implements receiving parameters, the [[copyo]]
-% function passing actual parameters. 
-% 
-% Formal parameters are implicitly declared local registers when used
-% for procedures.  A continuation's formal parameter must be an already
-% declared local \emph{or global} register.  Since local registers are
-% basically represented as names, but global registers as abstract
-% locations of type [[Automaton2.loc]], the [[formal]] type must
-% accommodate both.
-% 
-% ((type formal))=
-% type repr       = Local  of  string           (* name            *)
-%                 | Global of  Alloc.Reg.loc    (* abstr. location *)     
-%                 
-% type formal =   { width:    Rtl.width
-%                 ; hint:     string option
-%                 ; repr:     repr              (* representation *)
-%                 }
-%                  
-% ((type actual))=
-% type actual     = Rtl.exp 
-%                 * Rtl.width 
-%                 * string option               (* hint *)
-% @
 
 % vim:tw=72:ts=4:et:

@@ -17,6 +17,27 @@
 % l2h substitution forall forall
 % l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
 
+% Table of Contents
+% egrep '^\\(sub)*section' ast3ir.nw 
+%
+% \section{Translation to Intermediate Representation}
+% \subsection{Implementation}
+% \subsection{Auxilliaries}
+% \subsection{Expression Types}
+% \subsection{Expression Translation}
+% \subsection{Constant Evaluation}
+% \subsection{Auxilliaries for Make}
+% \subsection{Continuation Bundles}
+% \subsection{Assignment}
+% \subsection{Formal and Actual Parameters}
+% \subsection{Global Registers}
+% \subsection{Statements}
+% \subsection{Procedure Translation}
+% \subsection{Global Memory declarations}
+% \subsection{Stack Data Declarations}
+% \subsection{Toplevel}
+% \subsubsection{Program}
+
 
 
 
@@ -786,13 +807,19 @@ let proc env target (*props*) asm (cconv,name,args,bdy) =
 \subsection{Global Memory declarations}
 % ------------------------------------------------------------------ 
 
+\begin{note}\it
+    The [[Asm]] interface for emitting link-time expressions is
+    incompatible with the [[Rtl]]s that represent link-time expressions.
+    --CL
+\end{note}
+
 <<Make memory declarations>>=
-let initialized_data asm expr = (*XXX*)
+let initialized_data target asm expr = 
     Impossible.unimp "initialized data in global memory declaration"
 
 let rec init env target asm = function
     | A.InitAt(x,_)   -> init env target asm x
-    | A.InitExprs(es) -> foldl initialized_data asm es
+    | A.InitExprs(es) -> foldl (initialized_data target) asm es
     | A.InitUStr(_)      (*XXX*)
     | A.InitStr(_)    -> (*XXX*)
         Impossible.unimp "initialized data in global memory declaration"
