@@ -1,18 +1,31 @@
 # this is the machine on which the C-- runtime system will execute
 TARGET=x86-linux
+ASDLGEN=camlGen
 
 NOWEAVE=`echo ${NOWEAVE-noweave}`
 
 # should split into ASDLSOURCES and CAMLSOURCES
 
-SOURCES=asm cmmir ast
-# SOURCES=`cmsrcs *.cm | sed 's/\.nw$//'`
-SOURCESDOTDEFS=`echo $SOURCES | sed 's/ /.defs /g;s/$/.defs/'`
-SOURCESDOTTEX=`echo   $SOURCES | sed 's/ /.tex /g;s/$/.tex/'`
-SOURCESDOTASDL=`echo   $SOURCES | sed 's/ /.asdl /g;s/$/.asdl/'`
-SOURCESDOTHTML=`echo   $SOURCES | sed 's/ /.html /g;s/$/.html/'`
-SOURCESDOTNW=`echo   $SOURCES | sed 's/ /.nw /g;s/$/.nw/'`
-SOURCESREGEXP=`echo $SOURCES | sed 's/ /|/g'`
+ASDLSRC=asm cmmir ast
+ASDLSRCDOTDEFS=`echo $ASDLSRC | sed 's/ /.defs /g;s/$/.defs/'`
+ASDLSRCDOTTEX=`echo   $ASDLSRC | sed 's/ /.tex /g;s/$/.tex/'`
+ASDLSRCDOTASDL=`echo   $ASDLSRC | sed 's/ /.asdl /g;s/$/.asdl/'`
+ASDLSRCDOTHTML=`echo   $ASDLSRC | sed 's/ /.html /g;s/$/.html/'`
+ASDLSRCDOTNW=`echo   $ASDLSRC | sed 's/ /.nw /g;s/$/.nw/'`
+ASDLSRCREGEXP=`echo $ASDLSRC | sed 's/ /|/g'`
+
+OCAMLSRC=sourcemap
+OCAMLSRCDOTDEFS=`echo $OCAMLSRC | sed 's/ /.defs /g;s/$/.defs/'`
+OCAMLSRCDOTTEX=`echo  $OCAMLSRC | sed 's/ /.tex /g;s/$/.tex/'`
+OCAMLSRCDOTML=`echo   $OCAMLSRC | sed 's/ /.ml /g;s/$/.ml/'`
+OCAMLSRCDOTMLI=`echo  $OCAMLSRC | sed 's/ /.mli /g;s/$/.mli/'`
+OCAMLSRCDOTCMO=`echo   $OCAMLSRC | sed 's/ /.cmo /g;s/$/.cmo/'`
+OCAMLSRCDOTCMI=`echo   $OCAMLSRC | sed 's/ /.cmi /g;s/$/.cmi/'`
+OCAMLSRCDOTHTML=`echo $OCAMLSRC | sed 's/ /.html /g;s/$/.html/'`
+OCAMLSRCDOTNW=`echo   $OCAMLSRC | sed 's/ /.nw /g;s/$/.nw/'`
+OCAMLSRCREGEXP=`echo  $OCAMLSRC | sed 's/ /|/g'`
+
+
 
 NWLIB1=/usr/public/pkg/noweb/lib
 NWLIB2=/usr/local/lib/noweb
@@ -24,7 +37,8 @@ NWLIB4=/usr/local/noweb/lib
 HTMLDIR=WWW/
 TEXDIR=TEX/
 
-SOURCESDOTHTML=`echo $SOURCES | sed "s@^@$HTMLDIR@;s@ @.html $HTMLDIR@g;s/\$/.html/"`
+ASDLSRCDOTHTML=`echo $ASDLSRC | sed "s@^@$HTMLDIR@;s@ @.html $HTMLDIR@g;s/\$/.html/"`
+OCAMLSRCDOTHTML=`echo $OCAMLSRC | sed "s@^@$HTMLDIR@;s@ @.html $HTMLDIR@g;s/\$/.html/"`
 
 %.g: %.nw
 	notangle -L -R$target $prereq | cpif $target
@@ -43,14 +57,14 @@ clobber:V: clean
 	rm -rf CM NW WWW
 	rm -f *.asdl
 
-html:V: $SOURCESDOTHTML
+html:V: $ASDLSRCDOTHTML $OCAMLSRCDOTHTML 
 
 ################################################################
 #
 #	counting lines of code
 
 counts:V: count
-count:V: $SOURCESDOTNW
+count:V: $ASDLSRCDOTNW
 	PATH="$NWLIB1:$NWLIB2:$NWLIB3:$NWLIB4:$PATH"
 	export PATH
 	markup $prereq | elide 'refman:*' '\*' | nocount -f
@@ -70,10 +84,15 @@ $HTMLDIR%.gif: %.dot
 WWW:
 	mkdir $target 2>/dev/null
 
-$HTMLDIR%.html: %.nw `echo $HTMLDIR | sed 's@/$@@'`
+^$HTMLDIR($ASDLSRCREGEXP)'\.'html:R: '\1'.nw `echo $HTMLDIR | sed 's@/$@@'`
 	echo '\section*{Contents}
 	\tableofcontents' |
 	$NOWEAVE -filter 'elide refman:*' -filter l2h -autodefs asdl -html -index - $prereq | htmltoc > $target
+
+^$HTMLDIR($OCAMLSRCREGEXP)'\.'html:R: '\1'.nw `echo $HTMLDIR | sed 's@/$@@'`
+	echo '\section*{Contents}
+	\tableofcontents' |
+	$NOWEAVE -filter 'elide refman:*' -filter l2h -html -index - $prereq | htmltoc > $target
 
 ${HTMLDIR}index.html: index.nw
 	$NOWEAVE -filter l2h -html $prereq | htmltoc | htmlgif > $target
@@ -81,19 +100,19 @@ ${HTMLDIR}index.html: index.nw
 
 ################ defined identifiers (not used here)
 
-^($SOURCESREGEXP)'\.'defs:R: '\1'.nw 
+^($ASDLSRCREGEXP)'\.'defs:R: '\1'.nw 
 	nodefs -auto asdl $prereq > $target
 
-all.defs: $SOURCESDOTDEFS 
+all.defs: $ASDLSRCDOTDEFS 
 	sort -u $prereq | cpif $target
 
 ################ literate source 
 
-^($SOURCESREGEXP)'\.'tex:R: '\1'.nw
+^($ASDLSRCREGEXP)'\.'tex:R: '\1'.nw
 	$NOWEAVE -autodefs asdl -index -n $stem1.nw >$target
 
 
-DOCINPUTS="doc.tex $SOURCESDOTTEX"
+DOCINPUTS="doc.tex $ASDLSRCDOTTEX"
 
 docin:V: $DOCINPUTS
 
@@ -103,7 +122,7 @@ doc.tex: doc.nw
 	$NOWEAVE -delay doc.nw >$target
 
 doc_check:V: doc.tex
-	for i in $SOURCESDOTTEX; do 
+	for i in $ASDLSRCDOTTEX; do 
 	  j=`basename $i .tex`
 	  fgrep -s "\include{$j}" doc.tex || echo "$i not in doc" 1>&2
         done
@@ -116,25 +135,31 @@ doc_check:V: doc.tex
 #
 #  Targets for interfaces
 
-caml:V: asm.cmi asm.cmo iRNode.cmi iRNode.cmo aST.cmi aST.cmo \
-	iR.cmi iR.cmo
+caml:V: $OCAMLSRCDOTCMI $OCAMLSRCDOTCMO asm.cmi asm.cmo iRNode.cmi iRNode.cmo \
+	aST.cmi aST.cmo iR.cmi iR.cmo 
 
 CAMLOPTS="-I /home/cellar/nr/zephyr/asdlGen-19990816/src/ocaml"
 
+option.mli: util.nw
+	notangle -R$target -L'# %L "%F"%N' $prereq > $target
+option.ml: util.nw
+	notangle -R$target -L'# %L "%F"%N' $prereq > $target
+
+
 asm.mli asm.ml asmUtil.mli asmUtil.ml: asm.asdl
-	camlGen --ocaml --pickler=sexp $prereq
+	$ASDLGEN --ocaml --pickler=sexp $prereq
 
 rTL.mli rTL.ml: rtl.asdl
-	camlGen --ocaml --pickler=sexp $prereq
+	$ASDLGEN --ocaml --pickler=sexp $prereq
 
 iRNode.mli iRNode.ml: rtl.asdl irnode.asdl
-	camlGen --ocaml --pickler=sexp $prereq
+	$ASDLGEN --ocaml --pickler=sexp $prereq
 
 iR.mli iR.ml: ir.asdl irnode.asdl rtl.asdl ast.asdl
-	camlGen --ocaml --pickler=sexp $prereq
+	$ASDLGEN --ocaml --pickler=sexp $prereq
 
 aST.mli aST.ml aSTUtil.mli aSTUtil.ml: ast.asdl
-	camlGen --ocaml --pickler=sexp $prereq
+	$ASDLGEN --ocaml --pickler=sexp $prereq
 
 %.asdl: %.nw
 	notangle -R$target -L' --#line %-1L "%F"%N'  $prereq > $target
@@ -150,12 +175,26 @@ ir.asdl: cmmir.nw
 	notangle -Rinterface -L'# %L "%F"%N' $prereq > $target
 
 %.cmi: %.mli
-	ocamlc $CAMLOPTS -c $prereq
+	ocamlc $CAMLOPTS -c $stem.mli
 %.cmo: %.ml
-	ocamlc $CAMLOPTS -c $prereq
+	ocamlc $CAMLOPTS -c $stem.ml
+
+iRNode.cmi: rTL.cmi
+iRNode.cmo: rTL.cmi
+iR.cmi: iRNode.cmi
+iR.cmo: iRNode.cmi
+sourcemap.cmo: option.cmi 
+
+
+################################################################
+#
+#	run-time interface
 
 cmmrti.h: rti.nw
 	notangle -filter "nocond '$TARGET'" -R$target -L $prereq | cpif $target
 
-iRNode.cmi: rTL.mli
-iRNode.cmo: rTL.ml
+rti:V: cmmrti.h
+	(echo '#include "cmmrti.h"'; echo 'int garbage = 77;') > rti-test.c
+	gcc -ansi -pedantic -Wall -c rti-test.c
+
+	
