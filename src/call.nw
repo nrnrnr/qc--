@@ -136,18 +136,19 @@ module type S = sig
 
   type node (* CFG node for alternate return table *)
 
-  type 'a answer = 
+  type answer =
     { locs     : Automaton2.loc list  (* where passed values reside *)
     ; overflow : Block.t              (* includes all locs for values passed in mem *)
     ; sploc    : Rtl.exp              (* where sp is required when values are passed *)
     ; regs     : Register.Set.t       (* set of locations defined (used) by partner *)
     ; pre_sp   : Rtl.rtl              (* conditional SP adjustment pre-shuffle *)
-    ; shuffle  : 'a list -> Rtl.rtl   (* support for creating shuffle *)
+    ; shuffle  : Rtl.rtl              (* shuffle parms where they go *)
     ; post_sp  : Rtl.rtl              (* unconditional SP adjustment post-shuffle *)
     }
 
-  type outgoing = parms -> Rtl.exp        answer
-  type incoming = parms -> Automaton2.loc answer
+  type 'a answer' = 'a list -> answer
+  type outgoing = parms -> Rtl.exp        answer'
+  type incoming = parms -> Automaton2.loc answer'
 
   type t = (* part of a calling convention *)
     { prolog          : incoming   (* arg = procedure formals *)

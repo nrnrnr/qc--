@@ -409,7 +409,7 @@ let convert_parms hint_parm cvt =
     (hint, w) :: hws, parm :: parms in
   fun conv l ->
     let hws, parms = List.fold_right add l ([], []) in
-    conv hws, parms in
+    conv hws parms in
 @ 
 We instantiate this code four ways.
 For an actual parameter, the [[cvt]] parameter is the function [[ew]],
@@ -553,12 +553,12 @@ N.B.~We don't use the [[targets]] list, which is there for future
 interprocedural optimization and call-graph analysis.
 <<supporting functions for translating statements>>=
 let rec jumpStmt (cconv,e,args,targets (*unused*)) = 
-    let cc           = ccs (Aux.Option.get default_cc cconv) in
-    let out, actuals = actuals cc.C.call_actuals args in
-    let jumpi        = target.T.jump.T.embed (expr e) in
-    let ()           = add_oldblock out.C.overflow    in  (* jump overflow = old *)
+    let cc     = ccs (Aux.Option.get default_cc cconv) in
+    let out   = actuals cc.C.call_actuals args in
+    let jumpi = target.T.jump.T.embed (expr e) in
+    let ()    = add_oldblock out.C.overflow    in  (* jump overflow = old *)
     G.instruction g out.C.pre_sp                                  **>
-    G.instruction g (out.C.shuffle actuals)                       **>
+    G.instruction g out.C.shuffle                                 **>
     G.instruction g restore_nvrs                                  **>
     G.instruction g (R.store proc_cc.C.ra saved_ra pointersize)   **>
     G.instruction g out.C.post_sp                                 **>
@@ -590,22 +590,22 @@ let noregs = Register.Set.empty
 
 <<supporting functions for translating statements>>=
 and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ = 
-  let cc           = ccs (Aux.Option.get default_cc cconv) in
-  let out, actuals = actuals cc.C.call_actuals args        in
-  let in', results = results cc.C.call_results lhs         in
+  let cc    = ccs (Aux.Option.get default_cc cconv) in
+  let out   = actuals cc.C.call_actuals args        in
+  let in'   = results cc.C.call_results lhs         in
   let calli = target.T.call.T.embed (expr e)               in
   let conts = continuations cc conts                       in
   let () = add_youngblock out.C.overflow in  (* outgoing overflow parms *)
   let () = add_youngblock in'.C.overflow in  (* incoming overflow results *)
   G.instruction g out.C.pre_sp            **>
-  G.instruction g (out.C.shuffle actuals) **>
+  G.instruction g out.C.shuffle           **>
   G.instruction g out.C.post_sp           **>
   G.call        g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
                         ~altrets:conts.returns ~unwinds_to:conts.unwinds
                         ~cuts_to:conts.cuts ~aborts:conts.aborts ~spans:props  **>
-  G.assertion   g (R.store cc.C.sp in'.C.sploc pointersize)           **>
+  G.assertion   g (R.store cc.C.sp in'.C.sploc pointersize)                    **>
   G.instruction g in'.C.pre_sp            **>  (* DOUBTS ABOUT THIS *)
-  G.instruction g (in'.C.shuffle results) **>
+  G.instruction g in'.C.shuffle           **>
   G.instruction g in'.C.post_sp           **>
   succ
 <<auxiliaries>>=
@@ -619,7 +619,7 @@ and refer to the big picture in \module{stack}.
 and returnStmt (cconv, kont, args) = 
 (* SHOULD RETURN BEAR A CALLING CONVENTION, OR DOES IT GET THE CONVENTION OF THE BODY? *)
     let cc = ccs (Aux.Option.get default_cc cconv)    in
-    let out, actuals = actuals cc.C.return_actuals args in
+    let out = actuals cc.C.return_actuals args in
     let reti =
       match kont with
       | None       ->
@@ -630,7 +630,7 @@ and returnStmt (cconv, kont, args) =
           (* WHY IS THIS Bits.S AND NOT Bits.U ??? *)
     let () = add_oldblock out.C.overflow in  (* outgoing jump overflow = incoming *)
     G.instruction g out.C.pre_sp            **>
-    G.instruction g (out.C.shuffle actuals) **>
+    G.instruction g out.C.shuffle           **>
       (* SHOULD JUMP TO SHARED EPILOG HERE -- RESTORE REGS AND SP *)
     G.instruction g restore_nvrs            **>
     G.instruction g out.C.post_sp           **>
@@ -655,12 +655,12 @@ NEED A SYSTEMATIC APPROACH TO ARGS/RESULTS, AS WELL AS TO DATAFLOW NODES.
 and cutStmt (e, args, conts) = 
   (* PERHAPS IT SHOULD BE POSSIBLE TO SET THE CALLING CONVENTION FOR CUT TO
      AND FOR CONTINUATION? *)
-  let cc = ccs default_cc in
-  let out, actuals = actuals cc.C.cut_to_actuals args in
+  let cc    = ccs default_cc in
+  let out   = actuals cc.C.cut_to_actuals args in
   let cuti  = Contn.cutto target cc.C.cutto.Target2.embed ~contn:(expr e) in
   let ()    = add_constraints (Block.constraints out.C.overflow) in
   let conts = continuations cc conts in
-  G.instruction g (out.C.shuffle actuals) **>
+  G.instruction g out.C.shuffle **>
   G.cut_to      g cuti ~cuts_to:conts.cuts ~aborts: conts.aborts ~uses:out.C.regs
 @
 \subsubsection{Continuations and their entry points}
@@ -685,21 +685,21 @@ and finish_compiling_continuation k =
   end
 
 and generate_cut_to_entry k =
-  let in', formals = k.K.cut_in, k.K.formals in
+  let in' = k.K.cut_in in
   G.set_succ (G.node_labeled g k.K.cut_pc) (
-  G.instruction g in'.C.pre_sp              **>
-  G.instruction g (in'.C.shuffle formals)   **>
-  G.instruction g in'.C.post_sp             **>
+  G.instruction g in'.C.pre_sp   **>
+  G.instruction g in'.C.shuffle  **>
+  G.instruction g in'.C.post_sp  **>
   k.K.succ)
 
 and generate_return_to_entry k = 
   let cc = ccs default_cc in
-  let in', formals = k.K.return_in, k.K.formals in
+  let in' = k.K.return_in in
   let () = add_youngblock in'.C.overflow in
   G.set_succ (G.node_labeled g k.K.return_pc) (
-  G.instruction g in'.C.pre_sp              **>
-  G.instruction g (in'.C.shuffle formals)   **>
-  G.instruction g in'.C.post_sp             **>
+  G.instruction g in'.C.pre_sp    **>
+  G.instruction g in'.C.shuffle   **>
+  G.instruction g in'.C.post_sp   **>
   k.K.succ)
 
 and generate_unwind_to_entry k = 
@@ -806,17 +806,17 @@ let proc containing_spans (cconv,procname,args,procbody) =
     (* translate body of procedure *)
 
     (* build CFG for body *)                    
-    let in', formals = formals proc_cc.C.prolog args  in
+    let in' = formals proc_cc.C.prolog args  in
       (* CALLING CONV PROBABLY NEEDS MORE INFO TO GET PROPER POST STACK POINTER *)
     let initcont = G.node_labeled g (Idgen.label "initialize continuations") in
     let labeln node ~succ = (G.set_succ node succ; node) in
     let () = G.set_succ (G.entry g) (
-      G.instruction g in'.C.pre_sp            **>
-      G.instruction g (in'.C.shuffle formals) **>
-      G.instruction g in'.C.post_sp           **>
-      G.instruction g save_ra                 **>
-      G.instruction g save_nvrs               **>
-      labeln initcont                         **>
+      G.instruction g in'.C.pre_sp    **>
+      G.instruction g in'.C.shuffle   **>
+      G.instruction g in'.C.post_sp   **>
+      G.instruction g save_ra         **>
+      G.instruction g save_nvrs       **>
+      labeln initcont                 **>
       bodies containing_spans procbody (G.exit g)) in
 
     let () = insert_init_cont_nodes contenv initcont in
@@ -889,19 +889,17 @@ module K = struct
     ; mutable cut_to      : bool
     ; mutable returned_to : bool
     ; mutable unwound_to  : bool
-(*    ;         formals     : A.cformal list  (* parameters with hints *) *)
     ;         unwind_pc   : label       (* labels may or may not be used *)
     ;         cut_pc      : label
     ;         return_pc   : label
     ;         rep         : Contn.t     (* representation as C-- value (incl block) *)
-    ;         cut_in      : Automaton2.loc C.answer  (* move vals at cut (uses rep) *)
-    ;         return_in   : Automaton2.loc C.answer  (* move vals at also returns *)
-    ;         formals     : Automaton2.loc list   (* where parms go at cut/return *)
-    ; mutable succ        : 'i G.node             (* filled in at translation time *)
+    ;         cut_in      : C.answer    (* move vals at cut (uses rep) *)
+    ;         return_in   : C.answer    (* move vals at also returns *)
+    ; mutable succ        : 'i G.node   (* filled in at translation time *)
     }
 
 
-  let mk name args rep formals g ~cut_in ~return_in  =
+  let mk name args rep g ~cut_in ~return_in  =
     { escapes     = false
     ; cut_to      = false
     ; returned_to = false
@@ -913,7 +911,6 @@ module K = struct
     ; rep         = rep
     ; cut_in      = cut_in
     ; return_in   = return_in
-    ; formals     = formals
     ; succ        = G.illegal g
     }
 end
@@ -982,11 +979,11 @@ and stmt state = function
     | A.SwitchStmt  x      -> Impossible.unimp "switch"
     | A.ContStmt(n,args)   ->
         let cc = ccs default_cc in
-        let cut_in,    formals = cformals' state.env cc.C.also_cuts_to    args in
-        let return_in, _       = cformals' state.env cc.C.also_returns_to args in
+        let cut_in    = cformals' state.env cc.C.also_cuts_to    args in
+        let return_in = cformals' state.env cc.C.also_returns_to args in
         let base = exp_of_label (n^"base for bogosity") in
         let rep  = Contn.with_overflow target base cut_in.C.overflow in
-        let k    = K.mk n args rep formals g ~cut_in ~return_in in
+        let k    = K.mk n args rep g ~cut_in ~return_in in
         { state with conts = Strutil.Map.add n k state.conts }
     | _                    -> state
 
