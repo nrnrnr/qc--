@@ -236,8 +236,29 @@ let cmangle =
         }
 @
 
-An assembler if functorized over a personality that determines target
-characteristics and provides a name mangler. 
+An assembler if functorized over a personality that determines its
+target characteristics and provides a name mangler. The interaction
+between the various module types in the following code is subtle:
+
+\begin{itemize}
+\item [[Graph0]] implements [[Agraph.S]], the abstract flow graph
+      interface, plus some extra functions [[name]] and [[stmts]] to
+      obtain informations from a constructed flow graph.
+
+\item [[Graph1]] implements [[Agraph.S]] by using another [[Agraph.S]]
+      implementation.  Essentially, all data structures of [[Graph1]]
+      are the ones provided by [[Graph0]].  The difference between
+      [[Graph0]] and [[Graph1]] are dynamic:  a graph built by
+      [[Graph1]] does not include [[CopyIn/Out]] nodes.
+
+\item The interface of [[Graph1]] reveals, that [[Graph0]] and
+      [[Graph1]] share the same data structures.  This makes it
+      possible to call [[Graph0.stmts]] with a graph built by
+      [[Graph1]], to access the extra functionality ([[stmts]],
+      [[name]]) provided by [[Graph0]].
+
+\end{itemize}
+
 
 <<>>=
 module Graph0   = Agraph2ast.Graph
@@ -245,20 +266,25 @@ module Graph1   = Lowercopy.Make(Graph0)
 
 module Personality = struct
     let target          = dummy
-    type instr          = Graph0.graph
+    type instr          = Graph1.graph (* = Graph0.graph *)
     
     let map             = Mangle.StrMap.empty
     let mangle          = Mangle.make cmangle map
     let ext i           = 
-        let name  = mangle (Graph0.name  i) in
+        let name  = mangle (Graph0.name  i) in 
         let stmts = Graph0.stmts i mangle   in
             (None, name, [], List.map (fun s -> Ast.StmtBody s) stmts) 
 end
 
 module Asm      = Asm2ast.Make(Personality)
-module Ast2IR   = Ast2ir.Make (Graph0) (Asm)
+module Ast2IR   = Ast2ir.Make (Graph1) (Asm)
 @
 
+
+The [[compile]] compiles a source file from {\PAL} to {\PAL}.  The
+[[target]] provided from the command line is currently ignored.  Code
+generation is only performed when the check of the static semantics is
+passed. 
     
 <<>>=
 let compile target file =
