@@ -4,23 +4,24 @@
 \section{Useful Lua functions}
 % ------------------------------------------------------------------ 
 
-This module introduces Lua function in the Lua table [[Util]]. 
+This module adds Lua function into the Lua table [[Util]]. 
 
 \begin{itemize}
 \item [[Util.dosearchfile(string,table)]]
 
 The [[dosearchfile]] function obtains a search path from the environment
-variable [[QC--LUAPATH]] and searches for the named file. If the file
+variable [[QC--LUAPATH]] and searches if for a named file. If the file
 name is absolut, it is immediately passed to [[dofile]]. Otherwise it is
-searched in the directories from the search path, from left to right.
-Entries in the search path are separated by colons.
+searched in the directories from the search path from left to right.
 
-Two path names in the search path are special: [[*]] and the empty path.
-The star stands for a table passed to [[dosearchfile]] and the empty
-path for a system specific directory. If the table is searched the name
-is used as a key.  A matching entry is passed to [[dostring]] and thus
-exceuted as a Lua program. If no file can be found the file name is
-passed to [[dofile]] to allow it to recover.
+Directory entries in the search path are separated by colons.  Two
+directory names in the search path are special: [[*]] and the empty
+path.  The star [[*]] stands for the [[table]] passed to
+[[dosearchfile]] and the empty path for a system specific directory. If
+the table is searched the file name is used as a key.  A matching entry
+is passed to [[dostring]] and thus exceuted as a Lua program. If no file
+can be found the error fallback is called.  
+
 \end{itemize}
 
 <<luautil.mli>>=
@@ -47,9 +48,9 @@ module MakeLib (C: Lua.Lib.CORE) = struct
 end
 @
 
-A search path is easier to handle in \ocaml~ when it is represented as a
+A search path is easier to handle in \ocaml~when it is represented as a
 list of strings. The [[split]] function splits a colon-separated string
-into list of strings.
+into a list. Put this into [[Strutil]]?
 
 <<dofile>>=
 let split path =
@@ -67,22 +68,9 @@ let split path =
         loop 0 
 @
 
-The [[dosearchfile]] function obtains a search path from the environment
-variable [[QC--LUAPATH]] and searches for the named file. If the file
-name is absolut, it is immediately passed to [[dofile]]. Otherwise it is
-searched in the directories from the search path, from left to right.
-Entries in the search path are separated by colons.
-
-Two path names in the search path are special: [[*]] and the empty path.
-The star stands for a table passed to [[dofile]] and the empty path for
-a system specific directory. If the table is searched the name is used
-as a key.  A matching entry is passed to [[dostring]] and thus exceuted
-as a Lua program. If no file can be found the file name is passed to
-[[dofile]] to allow it to recover.
-
-The conversion of values between Lua and Caml is a bit ugly. Maybe some
-expert can clean this up. Another problem was to call [[dofile]] and
-[[dostring]]. Is there a better way then [[eval]]?
+The conversion of values between Lua and \ocaml~is a bit ugly. Maybe
+some expert can clean this up. Another problem was to call [[dofile]]
+and [[dostring]]. Is there a better way then [[apply]]?
 
 <<dofile>>=
 let error g msg      = C.fallback "error" g [V.String msg]
@@ -97,7 +85,6 @@ let defaultpath      = ":.:*"                   (*XXX fix XXX*)
 
 let dosearchfile g file value =
     let path = try Sys.getenv luapath with Not_found -> defaultpath in
-    let dirs = split path in
     let rec search = function
         | [] -> 
             error g ("dosearchfile: can't find `"^file^"' in path `"^path^"'")
@@ -111,15 +98,14 @@ let dosearchfile g file value =
               | _  -> 
                 error g "dosearchfile: expected nil or table as second argument"
             )  
-        | dir :: rem -> (*XXX fix system path XXX*)
+        | dir :: rem -> 
             let d    = if dir = "" then defaultdir else dir in
-            let path = Filename.concat dir file in
-                if Sys.file_exists path then
+                if Sys.file_exists (Filename.concat dir file) then
                     dofile g (V.String path)
                 else search rem
     in
         if Filename.is_relative file then
-            search dirs
+            search (split path)
         else
             dofile g (V.String file)
 @    
