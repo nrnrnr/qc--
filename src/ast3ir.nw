@@ -88,63 +88,24 @@ let foldr = List.fold_right
 \subsection{Expression Types}
 % ------------------------------------------------------------------ 
 
-<<ExprTypes body>>=
-
-let expr' env target exp =
-    let word      = Error.Ok(Types.bits target.Target.wordsize)    in
-    let pointer   = Error.Ok(Types.bits target.Target.pointersize) in
-    let tlookup   = fun x -> Error.Ok(snd (F.findt x env))         in
-    let vlookup   = fun x -> Error.Ok( match (F.findv x env) with
-                                     | (_,(_,t)) -> t 
-                                     ) in
-    let e = { Expcheck.wordsize    = word
-            ; Expcheck.pointersize = pointer
-            ; Expcheck.tlookup     = tlookup
-            ; Expcheck.vlookup     = vlookup
-            } 
-    in Expcheck.check e exp
-        
-    
-let rec astFetch env target = function
-    | A.LValueAt(x,r)   -> astFetch env target x
-    | A.Var(hint,id)    -> (match F.findv id env with (attr,(_,t)) -> t)
-    | A.Mem(ty,e,align) -> 
-        let et = expr env target e      in
-        let t  = astty env ty           in
-        let a  = Aux.Option.get 1 align in
-            t
-@
-
-The types for primitive operators are looked up in the [[Value]]
-model.  This is a hack; we need a model for run-time primitive
-operators. 
-
-<<ExprTypes body>>=
-and primOp env target op args =
-    let argtys = List.map (expr env target) args     in
-    let opty   = snd (Value.lookup op Value.ops) in (*XXX*)
-        Types.appl opty argtys 
-            
-and expr env target exp =
-    let word          = T.bits target.Target.wordsize in
-    let optty default = function
-        | None    -> default
-        | Some t  -> astty env t       
-    in match exp with
-        | A.ExprAt(x,r)     -> expr env target x
-        | A.Int   (_,ty)    -> optty word ty
-        | A.Float (_,ty)    -> optty word ty
-        | A.Char  (_,ty)    -> optty word ty
-        | A.Fetch (v)       -> astFetch env target v
-        | A.BinOp (l,op,r)  -> primOp env target op [l;r]
-        | A.UnOp  (op,e)    -> primOp env target op [e]
-        | A.PrimOp(op,args) -> primOp env target op (List.map snd args)
-
-
 <<ExprTypes>>=
-module ExprTypes = struct
-    <<ExprTypes body>>
-end
+    let exprtype env target exp =
+        let word      = Error.Ok(Types.bits target.Target.wordsize)    in
+        let pointer   = Error.Ok(Types.bits target.Target.pointersize) in
+        let tlookup   = fun x -> Error.Ok(snd (F.findt x env))         in
+        let vlookup   = fun x -> Error.Ok( match (F.findv x env) with
+                                         | (_,(_,t)) -> t 
+                                         ) in
+        let e = { Expcheck.wordsize    = word
+                ; Expcheck.pointersize = pointer
+                ; Expcheck.tlookup     = tlookup
+                ; Expcheck.vlookup     = vlookup
+                } 
+        in try ( match Expcheck.check e exp with
+               | Error.Ok(t) -> t
+               | Error.Error -> assert false
+               )
+           with Error.ErrorExn msg -> assert false
 @
 
 % ------------------------------------------------------------------ 
@@ -164,13 +125,6 @@ let idwidth id env = match F.findv id env with (attr,(_,t)) -> width t
 Expressions denotes values, represented by compile-time, link-time, or
 run-time values.  The translation of a variable depends on its
 denotation. 
-
-\begin{quote}\it
-    \begin{enumerate}
-        \item Translation of primitive operators needs fix.
-        \item Translation of variables denoting stack labels missing.
-    \end{enumerate} --CL
-\end{quote}
 
 Lookup for operations is a hack; we need a module for primitive
 operators.
@@ -214,9 +168,19 @@ and variable env target hint x =
         else (* global register without location *)
             Impossible.impossible "Ast3ir.Make.variable"
     )
+@
+
+\begin{quote}\it
+    Since evaluation and type-checking are separated, types in nested
+    expressions are checked multiple times. This introduces a
+    quadratic complexity. The only way to avoid this, as far as I can
+    see, is a combined bottom-up evaluation and type checking. --CL
+\end{quote}
     
+    
+<<Make expressions>>=
 and prim env target op args =
-    let argtys  = List.map (ExprTypes.expr env target) args in
+    let argtys  = List.map (exprtype env target) args in
     let opty    = snd (Value.lookup op Value.ops)      in (*XXX*)
     let widths  = Types.widthlist opty argtys               in
         Rtl.app (Rtl.opr op widths) (List.map (expr env target) args)
@@ -243,14 +207,20 @@ and expr env target exp =
 
 <<Make constant evaluation>>=
 let compile_const env target exp =
-    try 
-        Rtleval.compile Rtleval.empty (expr env target exp)
+    try ( match Rtleval.compile Rtleval.empty (expr env target exp) with
+        | Error.Ok(b) -> b
+        | Error.Error -> assert false
+        )
     with 
-        Rtleval.Not_constant -> 
-                Impossible.unimp "compile time expression not constant"
+        Error.ErrorExn m -> assert false
         
 let link_const env target exp =
-    Rtleval.link Rtleval.empty (expr env target exp)
+    try ( match Rtleval.link Rtleval.empty (expr env target exp) with
+        | Error.Ok(x) -> x
+        | Error.Error -> assert false
+        )
+    with 
+        Error.ErrorExn m -> assert false
 @
 
 
@@ -318,7 +288,7 @@ let rec assign env target lhs exp = match lhs with
 
 <<Make formals and actuals>>=
 let actual env target (hint, e) =
-    let w   = width (ExprTypes.expr env target e) in
+    let w   = width (exprtype env target e) in
     let exp = expr env target e           in
         (exp, w, hint) 
 @

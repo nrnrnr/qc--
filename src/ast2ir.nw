@@ -290,6 +290,31 @@ and expr env (target: Target.t) globals = function
 @    
 
 % ------------------------------------------------------------------ 
+\subsection{Compile-time and Link-time Constants}
+% ------------------------------------------------------------------ 
+
+<<module Make>>=
+let compile_const env target globals e =
+    let rtl = expr env target globals e in
+    try ( match Rtleval.compile Rtleval.empty rtl with
+        | E.Ok(b) -> b
+        | _       -> assert false
+        )
+    with Error.ErrorExn m -> assert false
+
+let compile_link env target globals e =
+    let rtl = expr env target globals e in
+    try ( match Rtleval.link Rtleval.empty rtl with
+        | E.Ok(e) -> e
+        | _       -> assert false
+        )
+    with Error.ErrorExn m -> assert false
+    
+@
+
+
+
+% ------------------------------------------------------------------ 
 \subsubsection{Flow Annotations}
 % ------------------------------------------------------------------     
 
@@ -515,8 +540,8 @@ link-time constant.
 \emph{Something is very wrong here, but NR is not sure what\ldots}
 <<cases for translating statements>>=
 | A.SpanStmt(e1,e2,bb) ->
-    let key   = Rtleval.compile Rtleval.empty (ignore e1; assert false) in
-    let value = Rtleval.link    Rtleval.empty (ignore e2; assert false) in
+    let key   = compile_const env target globals e1 in
+    let value = compile_link  env target globals e2 in
         body env target globals 
             (G.Props.add_span key value props) graph after bb
 @
@@ -687,8 +712,8 @@ including the span will be used.
 
 <<module Make>>=
 let rec sspan env target globals props asm (e1,e2,ss) =    
-    let key   = Rtleval.compile Rtleval.empty (e1; assert false) in
-    let value = Rtleval.link    Rtleval.empty (e2; assert false) in
+    let key   = compile_const env target globals e1 in
+    let value = compile_link  env target globals e1 in
     let props = G.Props.add_span key value props 
     in
         foldl (section env target globals props) asm ss 

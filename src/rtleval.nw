@@ -28,7 +28,11 @@ variables is provided by a [[lookup]] function that is passed into the
 evaluator.  A lookup on a variable must return a {\rtl}
 \emph{constant} expression.  Only a minimal number of checks is
 performed because it is assumed that expression have been type-checked
-before.  In particular, any of the following conditions lead to
+before.  Errors are reported in conformance with the policy outlined
+in the \module{error} module.  In short, computing with bad values
+lead to a bad value, detection of a new error leads to an exception.
+
+In particular, any of the following conditions lead to
 checked run-time error:
 
 \begin{itemize}
@@ -38,12 +42,6 @@ checked run-time error:
 \item Use of an undefined variable.
 \item Circular variable definitions.
 \end{itemize}
-
-Errors are reported by raising the [[Not_constant]] exception.
- 
-<<types and exceptions>>=
-exception Not_constant
-@
 
 The functions [[compile]] and [[link]] evaluate compile-time and
 link-time expressions respectively.  The variants [[compile]] and
@@ -61,10 +59,10 @@ type relexp
 
 <<rtleval.mli>>=
 <<types and exceptions>>  
-val empty   : Rtl.exp lookup (* empty lookup table *)
-val compile : Rtl.exp lookup -> Rtl.exp -> Bits.bits (* Not_constant *)
-val compile': Rtl.exp lookup -> Rtl.exp -> Rtl.exp   (* Not_constant *)
-val link    : Rtl.exp lookup -> Rtl.exp -> relexp    (* Not_constant *)
+val empty    : Rtl.exp lookup (* empty lookup table *)
+val compile  : Rtl.exp lookup -> Rtl.exp -> Bits.bits Error.error
+val compile' : Rtl.exp lookup -> Rtl.exp -> Rtl.exp   Error.error
+val link     : Rtl.exp lookup -> Rtl.exp -> relexp    Error.error
 @
 
 % ------------------------------------------------------------------ 
@@ -136,8 +134,9 @@ let ops =
                 ops
 
 let rec app lookup (op,wl) exps =
-    let f    = try E.Ok(StrMap.find op ops) with Not_found -> E.Error in
-    let args = Error.Raise.list (List.map (exp lookup) exps)          in    
+    let f    = try E.Ok(StrMap.find op ops) 
+               with Not_found -> E.error ("unknown operator "^op)  in
+    let args = Error.Raise.list (List.map (exp lookup) exps)       in    
         Error.seqPair (f,args) (fun (f,args) -> f args)
 @
 
@@ -148,10 +147,11 @@ must be evaluated.  In order to detect circular bindings a new
 <<CompileTime>>=
 and fetch lookup = function
     | RP.Var(x,index,w)   -> 
-        let lookup' x' = if x = x' then E.Error else lookup x' in
-        E.sequence (lookup x) (fun x -> exp lookup' (Rtl.Convert.exp x))
-    | RP.Cell _           -> E.Error
-    | RP.Slice _          -> E.Error
+        let lookup' x' = if x = x' then E.error ("circular defintion of "^x) 
+                         else lookup x' in
+            E.sequence (lookup x) (fun x -> exp lookup' (Rtl.Convert.exp x))
+    | RP.Cell _           -> E.error "memory or register access"
+    | RP.Slice _          -> E.error "slices not supported"
 
 and exp lookup = function
     | RP.Const c          -> E.Ok(c)
@@ -161,15 +161,15 @@ and exp lookup = function
 let eval' lookup e =
     match exp lookup (R.Convert.exp e) with
     | E.Error 
-    | E.Ok(RP.Link _) -> raise Not_constant
-    | E.Ok(x)         -> Rtl.Revert.exp (RP.Const x)    
+    | E.Ok(RP.Link _) -> E.error "not a compile-time value"
+    | E.Ok(x)         -> E.Ok(Rtl.Revert.exp (RP.Const x))    
 
 let eval  lookup e =
     match exp lookup (R.Convert.exp e) with
-    | E.Error 
-    | E.Ok(RP.Link _) 
-    | E.Ok(RP.Bool _)      -> raise Not_constant
-    | E.Ok(RP.Bits b)      -> b
+    | E.Error as x         -> x          
+    | E.Ok(RP.Link _)      -> E.error "not a compile-time value"
+    | E.Ok(RP.Bool _)      -> E.error "boolean value, expected bits value"
+    | E.Ok(RP.Bits b)      -> E.Ok(b)
 @
 
  
@@ -178,5 +178,5 @@ let eval  lookup e =
 % ------------------------------------------------------------------ 
 
 <<LinkTime>>=
-let eval lookup exp = exp (* damn lie *)
+let eval lookup exp = Error.Ok(exp) (* damn lie *)
 @
