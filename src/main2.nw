@@ -240,6 +240,10 @@ let _ = try main () with e ->
 When the compiler starts, it looks for the Lua script  [[qc--.lua]] in
 the actual directory.
 
+THIS SCRIPT SHOULD BE BROKEN UP INTO PIECES, AND MANY OF THE PIECES
+SHOULD BE FARMED OUT TO OTHER MODULES.  FOR EXAMPLE, THE
+REGISTER-ALLOCATION PIECES SHOULD WIND UP IN colograph.lua.
+
 <<qc--.lua>>= 
 $debug 1
 -- 
@@ -306,6 +310,11 @@ end
 
 B = Backplane
 
+-- THIS FUNCTION SHOULD BE RENAMED B.stage AND SHOULD BY DEFAULT TAKE A SINGLE
+-- FUNCTION AS ITS ARGUMENT.  IT SHOULD THEN LOOK IN THE LUA STATE TO FIND
+-- A SENSIBLE NAME FOR THAT FUNCTION.  IF NEEDED, AN EXPLICIT NAME CAN BE AN 
+-- OPTIONAL SECOND PARAMETER.
+
 function B.mk (n, f) 
     return { name = n, fn = f }
 end
@@ -336,10 +345,13 @@ CG.stages =
     }
 
 CG.makeGraph = B.seq 
-    { B.single(CG.stages.liveness)
+    { B.single(CG.stages.liveness) -- BETTER:  B.stage(CG.liveness) --- NR
     , B.single(CG.stages.build)
     }
     
+---  Try  `B.single(CG.stages.xxx)' becomes `B.stage(CG.xxx)'
+
+
 CG.orderVars = B.seq 
     { B.single(CG.stages.makeWorklist)
     , B.fix(B.unless_do(B.single(CG.stages.simplify),
@@ -383,7 +395,7 @@ CG.color =
 -- Linear-Scan Register Allocator
 ------------------------------------------------------------------ 
 
-Linsan = Linscan or {}
+Linscan = Linscan or {}
 Linscan.scan = B.single(B.mk("linscan", Linscan.allocate))    
 
 ------------------------------------------------------------------ 
@@ -393,10 +405,10 @@ Linscan.scan = B.single(B.mk("linscan", Linscan.allocate))
 Expand = Expand or {}
 
 Expand.stages = 
-    { placeVars = B.mk("placeVars", PV.placeVars)
-    , generic   = B.mk("expander" , PV.expander)
-    , dummy     = B.mk("expander" , Dummyexpand.expand)
-    , sparc     = B.mk("expander" , Sparcexpand.expand)
+    { placeVars = B.mk("placeVars",           PV.placeVars)
+    , generic   = B.mk("PV.expander" ,        PV.expander)
+    , dummy     = B.mk("Dummyexpand.expand" , Dummyexpand.expand)
+    , sparc     = B.mk("Sparcexpand.expand" , Sparcexpand.expand)
     }
 
 ------------------------------------------------------------------ 
