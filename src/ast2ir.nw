@@ -155,22 +155,64 @@ let rec actual env (hint, e) =
 
 An assignment is an effect that is captured by an {\rtl}.  The lvalue
 of an assignment becomes a {\rtl} [[location]].  We currently ignore
-alignments and hints.
+alignments and hints. The only names on the left hand side of an
+assignment are registers; all syntactically possible names (like
+labels, continuations) must have been rejected by the static semantics
+check.
 
 <<>>=
 and lvalue env = function
-    | A.LValueAt(x,_)   -> lvalue env x
-    | A.Var(hint,x)     -> let (attr,(_,t)) = F.findv x env in Rtl.Var(x,bits t)
-    | A.Mem(t,e,a)      -> let width = ty env t      in
-                             Rtl.Cell
-                             ( default_memory
-                             , byteorder env 
-                             , width
-                             , expr env e
-                             , default_assertion
-                             )
+    | A.LValueAt(x,_)          -> lvalue env x
+    | A.Var(hint,x)            -> 
+        let (attr,(denot,t)) = F.findv x env in 
+            ( match denot with
+            | F.Register(_)    -> let width = bits t in 
+                                  Rtl.Var(x, width)
+            | _                -> assert false (* impossible *)
+            )
+    | A.Mem(t,e,a)             -> let width = ty env t      in
+                                  Rtl.Cell
+                                      ( default_memory
+                                      , byteorder env 
+                                      , width
+                                      , expr env e
+                                      , default_assertion
+                                      )
 @
 
+Not all variables as part of a {\PAL} expression are equal:  we have
+to look at a variable's denotation to check wheter they are constant
+values or locations from wich a value must be fetched. 
+
+<<>>=
+and variable env = function
+    | A.LValueAt(x,_) -> variable env x
+    | A.Var(hint,x)   ->
+        let (attr,(denot,t)) = F.findv x env in 
+            ( match denot with
+            | F.Constant(b)    -> Rtl.Const(Rtl.Bits(b, bits t))
+            | F.Label(F.Proc _)-> Rtl.Const(Rtl.Link(x, bits t))
+            | F.Label(F.Code)  -> Rtl.Const(Rtl.Link(x, bits t))
+            | F.Label(F.Data)  -> Rtl.Const(Rtl.Link(x, bits t))
+            | F.Label(F.Stack) -> let width = bits t in 
+                                  Rtl.Fetch(Rtl.Var(x, width), width)
+            | F.Import         -> Rtl.Const(Rtl.Link(x, bits t))
+            | F.Register(_)    -> let width = bits t in 
+                                  Rtl.Fetch(Rtl.Var(x, width),width)
+            | F.Continuation   -> let width = bits t in
+                                  Rtl.Fetch(Rtl.Var(x, width),width)
+            )
+    | A.Mem (t,e,a)            -> let width = ty env t      in
+                                  let cell = Rtl.Cell
+                                      ( default_memory
+                                      , byteorder env 
+                                      , width
+                                      , expr env e
+                                      , default_assertion
+                                      ) in 
+                                   Rtl.Fetch(cell,width)
+                                    
+            
 <<>>=
 and primOp env op args =
     let o = Expr.op env op args 
@@ -184,9 +226,8 @@ and expr env = function
     | A.Float( f, None)     -> Rtl.Const(Rtl.Bits(f,wordBits env))
     | A.Float( f, Some t)   -> Rtl.Const(Rtl.Bits(f,ty env t))
     | A.Char( c, None)      -> Rtl.Const(Rtl.Bits(c,wordBits env))
-    | A.Char( c, Some t)    -> Rtl.Const(Rtl.Bits(c, ty env t))
-    | A.Fetch(v)            -> let width = bits (Expr.tyFetch env v) in 
-                               Rtl.Fetch(lvalue env v,width)
+    | A.Char( c, Some t)    -> Rtl.Const(Rtl.Bits(c,ty env t))
+    | A.Fetch(v)            -> variable env v
     | A.BinOp(l,op,r)       -> primOp env op [l;r]
     | A.UnOp(op,e)          -> primOp env op [e]
     | A.PrimOp(op,xs)       -> primOp env op (List.map snd xs) (* ignore hints*)

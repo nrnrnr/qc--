@@ -927,11 +927,12 @@ and a value.
 let rec evalFetch env = function
     | A.LValueAt(x,r) -> E.catch (error r env) (evalFetch env) x
     | A.Mem (_,_,_)   -> E.error "memory access in const declaration"
-    | A.Var(hint,id)  -> ( match snd (F.findv id env) with
-                         | E.Error                -> E.Error
-                         | E.Ok(F.Constant(v),ty) -> E.Ok(ty, v)
-                         | _ -> E.error ("access of non-constant "^id)
-                         ) 
+    | A.Var(hint,id)  -> 
+        ( match snd (F.findv id env) with
+        | E.Error                -> E.Error
+        | E.Ok(F.Constant(bits),ty) -> E.Ok(ty, Value.Bits bits)
+        | _ -> E.error ("access of non-constant "^id)
+        ) 
 @
 
 Applications to primitives operators must be type checked.  The types
@@ -1019,7 +1020,7 @@ let doConstDecl scope env ((ty,name,expr),r) =
     let reg          = F.srcmap env, r                              in
     let entry = E.seq (evalExpr env expr) 
         ( function
-        | (t,v) when t <> Types.bool -> E.Ok(F.Constant(v),t)
+        | (t,Value.Bits bits) when t <> Types.bool -> E.Ok(F.Constant(bits),t)
         | (t,v) -> 
             ( E.errorRegionPrt reg "constant has type bool but must have type bits"
             ; E.Error
