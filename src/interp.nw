@@ -21,6 +21,7 @@ let arch        = "interp"
 let byte_order  = Rtl.LittleEndian       (* byte order *)
 let wordsize    = 32
 let pointersize = wordsize
+let memsize     = 8
 @
 
 The interpreter at the moment knows only the memory space [[m]].  We use
@@ -242,8 +243,9 @@ let seq (reg: int -> Register.t) next =
     }
 let seq reg = AN.wrap (seq reg)
 
-let params      = seq arg_reg               (* for parameters  *)
-let globls base = AN.at base (seq glb_reg)  (* for global regs *)
+let params      = seq arg_reg                       
+let globls base = AN.at ~start:base ~memsize ~byteorder:byte_order
+                    (seq glb_reg)
 
 let ccspecs     = { AN.call = params; AN.results = params; AN.cutto = params }
 @
@@ -258,16 +260,17 @@ interpreter does not work like a CPU.
 I have to admit, that I don't know what I am doing here.
 
 <<transformations>>=
+let autoAt = AN.at ~memsize ~byteorder:byte_order in
 let call_actuals  =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out call parms" AN.at params) 
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" autoAt params) 
     ~autosp:(fun r  -> Block.base r.AN.overflow)
     ~postsp:(fun _ sp -> sp) in  
 
 let prolog  =
   let autosp = (fun _ -> vfp) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in call parms" AN.at params)
+    ~mkauto:(fun () -> Block.srelative vfp "in call parms" autoAt params)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
     ~insp:(fun a _ _ -> autosp a) in
@@ -275,27 +278,27 @@ let prolog  =
 let call_results  =
   let autosp = (fun r -> Block.base r.AN.overflow) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" AN.at params)
+    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" autoAt params)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
     ~insp:(fun a _ _ -> autosp a) in
 
 let epilog  =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" AN.at params)
+    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" autoAt params)
     ~autosp:(fun r -> Block.base r.AN.overflow)
     ~postsp:(fun _ _ -> vfp) in
 
 let also_cuts_to =
   let autosp = (fun r -> std_sp_location) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" AN.at params)
+    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" autoAt params)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
     ~insp:(fun a _ _ -> autosp a) in
 
 let cut_actuals base  =
-   C.outgoing ~growth ~sp ~mkauto:(fun () -> AN.at base params)
+   C.outgoing ~growth ~sp ~mkauto:(fun () -> autoAt base params)
      ~autosp:(fun r -> spval)
      ~postsp:(fun _ _ -> spval) in
 
@@ -350,7 +353,7 @@ let target' = (* new style *)
       ; T.pointersize       = wordsize
       ; T.vfp               = Vfp.mk wordsize
       ; T.alignment         = 1
-      ; T.memsize           = 8
+      ; T.memsize           = memsize
       ; T.float             = "ieee754"
       ; T.charset           = "latin1" 
       ; T.globals           = globls

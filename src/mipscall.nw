@@ -224,7 +224,7 @@ let arguments () =
             A.regs_by_bits bits [r 4; r 5; r 6; r 7]  false
         ]  
     ] *>
-    A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up 
+    A.overflow ~byteorder ~growth:Memalloc.Up 
                ~max_alignment:sp_align
 @ 
 And in Lua:
@@ -253,7 +253,7 @@ Mips.cc["C"].call =
                   A.is_any  , A.regs_by_bits("bits", r(4) .. r(7))
                 }
     }
-  , A.overflow { memsize = 8, byteorder = Mips.byteorder, growth = "up"
+  , A.overflow { byteorder = Mips.byteorder, growth = "up"
                , max_alignment = Mips.sp_align
                }
   }
@@ -281,7 +281,7 @@ Mips.cc["C"].cutto =
   , A.choice { "float" , A.useregs(Mips.vol_fp)
              , A.is_any, A.useregs(Mips.vol_int)
              }
-  , A.overflow { memsize = 8, byteorder = Mips.byteorder, growth = Mips.growth
+  , A.overflow { byteorder = Mips.byteorder, growth = Mips.growth
                , max_alignment = Mips.sp_align }
   }
 @
@@ -297,30 +297,31 @@ an overflow block is always at the extreme end of a frame, which is not
 the case here.
 
 <<transformations>>=
+let autoAt = A.at ~memsize:8 ~byteorder in
 let prolog =
   let autosp = (fun _  -> vfp) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at stage.A.call)
+    ~mkauto:(fun () -> Block.srelative vfp "in call parms" autoAt stage.A.call)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
     ~insp:(fun a _ _ -> autosp a) in
 
 let epilog =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at stage.A.results)
+    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" autoAt stage.A.results)
     ~autosp:(fun r  -> std_sp_location)
     ~postsp:(fun _ _ -> vfp) in
 
 let call_actuals =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at stage.A.call)
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" autoAt stage.A.call)
     ~autosp:(fun r    -> std_sp_location)
     ~postsp:(fun a sp -> std_sp_location) in
 
 let call_results =
   let autosp = (fun r   -> std_sp_location) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun ()  -> Block.srelative vfp "in ovfl results" A.at stage.A.results)
+    ~mkauto:(fun ()  -> Block.srelative vfp "in ovfl results" autoAt stage.A.results)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
     ~insp:(fun a _ _ -> autosp a) in
@@ -328,13 +329,13 @@ let call_results =
 let also_cuts_to =
   let autosp = (fun r -> std_sp_location) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at stage.A.cutto)
+    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" autoAt stage.A.cutto)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
     ~insp:(fun a _ _ -> autosp a) in
 
 let cut_actuals base =
-   C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base stage.A.cutto)
+   C.outgoing ~growth ~sp ~mkauto:(fun () -> autoAt base stage.A.cutto)
      ~autosp:(fun r -> spval)
      ~postsp:(fun _ _ -> spval) in
 
@@ -394,6 +395,8 @@ let spec =
         ; CS.overflow       = CS.overflow C.Caller C.Caller
         ; CS.sp             = r 29
         ; CS.sp_align       = sp_align
+        ; CS.memsize        = 8
+        ; CS.byteorder      = byteorder
         ; CS.all_regs       = RS.of_list (List.concat [nvl_int; nvl_fp;
                                                        vol_int; vol_fp])
         ; CS.nv_regs        = RS.of_list (nvl_int @ nvl_fp)

@@ -93,7 +93,7 @@ let placevars =
       [ (fun _ h w -> w <= 32),   A.widen (fun _ -> 32) *> temps 't';
         A.is_any,                 A.widen (Aux.round_up_to ~multiple_of: 8);
       ] in
-  Placevar.mk_automaton ~warn ~vfp mk_stage
+  Placevar.mk_automaton ~warn ~vfp ~memsize:8 ~byteorder mk_stage
 @ 
 % ------------------------------------------------------------------ 
 \subsection{Control-flow {\rtl}s}
@@ -415,9 +415,8 @@ let globals base =
                 else if w <= 16 then 16 
                 else Aux.round_up_to 32 w in
   let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
-  A.at ~start:base (A.widen width *> A.align_to align *>
-  A.overflow ~memsize:8 
-             ~byteorder:byteorder 
+  A.at ~start:base ~memsize:8 ~byteorder (A.widen width *> A.align_to align *>
+  A.overflow ~byteorder:byteorder 
              ~growth:Memalloc.Up 
              ~max_alignment:4)
 @

@@ -17,6 +17,8 @@ the stack.
 <<placevar.mli>>=
 val mk_automaton : warn:(width:int -> alignment:int -> hint:string -> unit) ->
                    vfp:Rtl.exp ->
+                   memsize:int ->
+                   byteorder:Rtl.aggregation ->
                    (temps:(Rtl.space -> Automaton.stage) -> Automaton.stage) ->
                    (Ast2ir.proc -> Automaton.t)
 val context   : (Ast2ir.proc -> Automaton.t) -> 'e -> Ast2ir.proc -> bool
@@ -366,13 +368,13 @@ let from_temps proc space = (* stage to allocate a temporary location *)
   let alloc ~width:w ~alignment:a ~hint:h = A.of_loc (allocator w) in
   A.wrap (fun methods -> {A.allocate = alloc; A.freeze = methods.A.freeze})
 
-let mk_automaton ~warn ~vfp mk_stage proc =
+let mk_automaton ~warn ~vfp ~memsize ~byteorder mk_stage proc =
   let warn methods =
     let alloc ~width:w ~alignment:a ~hint:h =
       warn ~width:w ~alignment:a ~hint:h;
       methods.A.allocate w a h in
     {A.allocate = alloc; A.freeze = methods.A.freeze} in
-  Block.srelative vfp "variables placed in memory" A.at
+  Block.srelative vfp "variables placed in memory" (A.at ~memsize ~byteorder)
   ( A.wrap warn *> mk_stage ~temps:(from_temps proc) *> A.as_stage proc.Proc.priv )
 @
 After we have placed the variables, we record their locations in the spans.

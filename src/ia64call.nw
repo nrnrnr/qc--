@@ -92,7 +92,7 @@ Ia64.cc["C"].call =
                         } 
              , A.is_any, A.regs_by_bits("bits", r(33) .. r(40))
              } 
-  , A.overflow { memsize = 8, byteorder = Ia64.byteorder, growth = "up"
+  , A.overflow { byteorder = Ia64.byteorder, growth = "up"
                , max_alignment = Ia64.sp_align
                } 
   }	
@@ -110,7 +110,7 @@ Ia64.cc["C"].call =
   , A.choice { "float" , A.regs_by_bits("bits", f(8)  .. f(15))
              , A.is_any, A.regs_by_bits("bits", r(33) .. r(40))
              } 
-  , A.overflow { memsize = 8, byteorder = Ia64.byteorder, growth = "up"
+  , A.overflow { byteorder = Ia64.byteorder, growth = "up"
                , max_alignment = Ia64.sp_align
                } 
   }
@@ -136,7 +136,7 @@ let postprocess cconv =
 Ia64.cc["C"].cutto =
   { A.widen(64)
   , A.useregs(r(33) .. r(40))
-  , A.overflow { memsize = 8, byteorder = Ia64.byteorder, growth = "up"
+  , A.overflow { byteorder = Ia64.byteorder, growth = "up"
                , max_alignment = Ia64.sp_align
                }
   }
@@ -153,6 +153,8 @@ A.register_cc(Backend.ia64.target, "C", Ia64.cc["C"])
   { CS.name         = "C"
   ; CS.stack_growth = Memalloc.Down
   ; CS.overflow     = CS.overflow C.Caller C.Caller
+  ; CS.memsize      = 8
+  ; CS.byteorder    = bo
   ; CS.sp           = r 12
   ; CS.sp_align     = sp_align
   ; CS.all_regs     = all_regs

@@ -113,7 +113,8 @@ end
 @ 
 <<x86 postexpander>>=
 let byte_order = Rtl.LittleEndian
-let wordsize = 32
+let wordsize   = 32
+let memsize    = 8
 @ 
 These copies are a nuisance.
 <<x86 postexpander>>=
@@ -817,8 +818,9 @@ let ( *> ) = A.( *> )
 let globals base = 
   let width w = if w <= 8 then 8 else if w <= 16 then 16 else Aux.round_up_to 32 w in
   let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
-  A.at ~start:base (A.widen width *> A.align_to align *>
-  A.overflow ~memsize:8 ~byteorder:PX.byte_order ~growth:Memalloc.Up ~max_alignment:4)
+  A.at ~start:base ~memsize:PX.memsize ~byteorder:PX.byte_order
+    (A.widen width *> A.align_to align *>
+     A.overflow ~byteorder:PX.byte_order ~growth:Memalloc.Up ~max_alignment:4)
 
 let target =
   let spaces = [Spaces.m; Spaces.r; Spaces.t; Spaces.u; Spaces.c] in
@@ -830,7 +832,7 @@ let target =
   ; T.pointersize = PX.wordsize
   ; T.vfp         = SS.vfp
   ; T.alignment = 1
-  ; T.memsize = 8
+  ; T.memsize = PX.memsize
   ; T.spaces = spaces
   ; T.reg_ix_map          = T.mk_reg_ix_map spaces
   ; T.distinct_addr_sp = false
@@ -905,7 +907,8 @@ let placevars =
         (fun _ h w -> w <= 32), A.widen (fun _ -> 32) *> temps 't';
         A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
       ] in
-  Placevar.mk_automaton ~warn ~vfp:target.T.vfp mk_stage
+  Placevar.mk_automaton ~warn ~vfp:target.T.vfp ~memsize:PX.memsize 
+     ~byteorder:PX.byte_order mk_stage
 @ 
 \section{Tentative example Lua code}
 

@@ -12,8 +12,6 @@
 %%Grades: A Central Later
 
 
-
-
 % ------------------------------------------------------------------ 
 \section{Automaton-Based Slot Allocation}
 % ------------------------------------------------------------------ 
@@ -148,7 +146,8 @@ address for the overflow block.
 BASE ADDRESS ELSEWHERE.  THIS DIFFERENCE MAY CAUSE PROBLEMS FOR THINGS
 THAT GROW DOWN.) 
 <<exported values>>=
-val at         : start:Rtl.exp -> stage -> t
+val at         : memsize:int -> byteorder:Rtl.aggregation -> start:Rtl.exp ->
+                 stage -> t
 val of_methods : methods -> t
 @ 
 The idea is that we build an implementation by a composition of
@@ -173,9 +172,8 @@ To make an overflow block, you need a bunch of information about the
 machine and a bunch of information about the convention.
 <<exported values>>=
 val overflow :
-  memsize:int -> byteorder:Rtl.aggregation ->               (* machine    *)
-  growth:Memalloc.growth -> max_alignment:int ->            (* convention *)
-  stage
+  byteorder:Rtl.aggregation -> growth:Memalloc.growth ->    (* machine    *)
+  max_alignment:int -> stage                                (* convention *)
 @ 
 It is possible to have {no} overflow block.
 In this case, it's up to clients to gather that only finitely many
@@ -245,7 +243,7 @@ val regs_by_bits: counter -> Register.t list -> bool -> stage
 val argcounter  : counter -> stage
 val regs_by_args: counter -> Register.t list -> bool -> stage
 
-val pad         : memsize:int -> counter -> stage
+val pad         : counter -> stage
 @ 
 And this is documented nowhere, not even in the paper.  It is used
 to post-process the results from a [[freeze]] request.  For example,
@@ -354,7 +352,9 @@ type counter    = string
 type counterenv = string -> int ref option
 type choice_predicate = counterenv -> string -> int -> bool
 
-type implementation = I of (start:Rtl.exp -> ctrs:counterenv -> methods)
+type implementation =
+  I of (start:Rtl.exp -> memsize:int -> byteorder:Rtl.aggregation ->
+        ctrs:counterenv -> methods)
 type stage = S of (implementation -> implementation)
 @ 
 
@@ -380,7 +380,7 @@ The big idea here is hooking up the end of the pipeline:
 let ( *> ) (S f1) (S f2) = S (fun rhs -> f1 (f2 rhs))
 
 let pipeline_end = I (
-  fun ~start ~ctrs -> 
+  fun ~start ~memsize ~byteorder ~ctrs -> 
     let block = Block.at ~base:start ~size:0 ~alignment:1 in
     { allocate = (fun ~width ~alignment ~hint -> imposs
                   "fell off end of pipeline -- multiple return values from C?")
@@ -393,9 +393,9 @@ All the work of the implementation is in the closures.
 <<automaton.ml>>=
 let empty_counterenv = (fun _ -> None)
 
-let at ~start (S s) =
+let at ~memsize ~byteorder ~start (S s) =
   let I f = s pipeline_end in
-    f ~start ~ctrs:empty_counterenv
+    f ~start ~memsize ~byteorder ~ctrs:empty_counterenv
 
 let of_methods t              = t
 let allocate   t ~width ~hint = t.allocate width 1 hint
@@ -417,36 +417,40 @@ implementation.
 
 FIX: THESE TYPES BELOW ARE NOT CORRECT ANYMORE!!!
 \nwaddbox{wrap         : (methods                   -> methods) -> stage}
-\nwaddbox{swrap        : (methods -> ~start:Rtl.exp -> ~ctrs:counterenv -> methods) -> stage}
+\nwaddbox{swrap        : (methods -> ~start:Rtl.exp -> ~memsize:int -> ~ctrs:counterenv -> methods) -> stage}
 \nwaddbox{wrap_choice  : (('a*(methods->methods)) list -> methods -> methods) -> ('a * stage) list -> stage}
 \nwaddbox{wrap_counter : ((methods -> methods) -> counter -> stage}
 \deeperbox{40pt}
 <<automaton.ml>>=
-let wrap  f = S (fun (I next) -> 
-                   I (fun ~start ~ctrs -> f (next ~start ~ctrs)))
-let swrap f = S (fun (I next) -> 
-                   I (fun ~start ~ctrs -> f (next ~start ~ctrs) ~start ~ctrs))
+let wrap  f = S (fun (I next) -> I (fun ~start ~memsize ~byteorder ~ctrs ->
+                                    f (next ~start ~memsize ~byteorder ~ctrs)))
+let swrap f =
+  S (fun (I next) -> I (fun ~start ~memsize ~byteorder ~ctrs ->
+                           f (next ~start ~memsize ~byteorder ~ctrs) ~start 
+                                         ~memsize ~byteorder ~ctrs))
 let wrap_choice f choices = S (fun (I next) ->
   let apply (I f) = f in
-  let downchoice c ~start ~ctrs =
-      fun meths -> apply (c (I (fun ~start ~ctrs -> meths))) ~start ~ctrs in
-  I (fun ~start ~ctrs ->
-      let choices = List.map (fun (p,(S c)) -> (p, downchoice c ~start ~ctrs))
-                             choices in
-      f choices (next ~start ~ctrs) ~ctrs))
+  let downchoice c ~start ~memsize ~byteorder ~ctrs =
+   fun meths -> apply (c (I (fun ~start ~memsize ~byteorder ~ctrs -> meths)))
+                  ~start ~memsize ~byteorder ~ctrs in
+  I (fun ~start ~memsize ~byteorder ~ctrs ->
+   let choices = List.map (fun (p,(S c)) ->
+                            (p, downchoice c ~start ~memsize ~byteorder ~ctrs))
+                 choices
+   in f choices (next ~start ~memsize ~byteorder ~ctrs) ~ctrs))
 @
 The overflow block is slightly interesting.
 <<automaton.ml>>=
 type state = { mutable mem       : M.t; mutable frozen : bool
              ; mutable mems_list : R.loc list  }
-let overflow ~memsize ~byteorder ~growth ~max_alignment next =
-  fun ~start ~ctrs ->
+let overflow ~byteorder ~growth ~max_alignment next =
+  fun ~start ~memsize ~byteorder ~ctrs ->
     let mem = M.at start growth in
     let state = { mem = mem; frozen = false; mems_list = [] } in
     <<functions [[allocate]] and [[freeze]] for the overflow block>>
     { allocate = allocate; freeze = freeze }
-let overflow ~memsize ~byteorder ~growth ~max_alignment = 
-  swrap (overflow ~memsize ~byteorder ~growth ~max_alignment) 
+let overflow ~byteorder ~growth ~max_alignment = 
+  swrap (overflow ~byteorder ~growth ~max_alignment) 
 @ 
 To allocate, we align and increment the memory block.
 The address of the new location depends on the direction of stack growth.
@@ -573,13 +577,13 @@ let is_any         _   h w = true
 <<automaton.ml>>=
 let wrap_counter f label =
   S (fun (I next) ->
-       I (fun ~start ~ctrs ->
+       I (fun ~start ~memsize ~byteorder ~ctrs ->
            let (ctr, ctrs) = (match ctrs label with
            | Some n -> (n, ctrs)
            | None   ->
               let n = ref 0 in
               (n, fun s -> if s = label then Some n else ctrs s)) in
-           f ctr (next ~start ~ctrs)))
+           f ~memsize ctr (next ~start ~memsize ~byteorder ~ctrs)))
 
 let counter of_width =
   let f ctr nalloc ~width ~alignment ~hint =
@@ -632,17 +636,17 @@ let regs_by_bits = reg_placer (fun w -> w) true
 let useregs regs = wrap (fun next -> let c = ref 0 in
                            (bitcounter c) ((regs_by_bits c regs false) next))
 
-let bitcounter   = wrap_counter bitcounter
+let bitcounter   = wrap_counter (fun ~memsize -> bitcounter)
 let regs_by_bits label rs reserve =
-    wrap_counter (fun ctr -> regs_by_bits ctr rs reserve) label
+    wrap_counter (fun ~memsize ctr -> regs_by_bits ctr rs reserve) label
 
-let argcounter   = wrap_counter (counter (fun w -> 1))
+let argcounter   = wrap_counter (fun ~memsize -> counter (fun w -> 1))
 let regs_by_args = reg_placer (fun w -> 1) false
 let regs_by_args label rs reserve = 
-    wrap_counter (fun ctr -> regs_by_args ctr rs reserve) label
+    wrap_counter (fun ~memsize ctr -> regs_by_args ctr rs reserve) label
 
-let pad ~memsize = 
-  let padcounter ctr next =
+let pad = 
+  let padcounter ~memsize ctr next =
     let f nalloc ~width ~alignment ~hint =
       let al = alignment * memsize in
       ( if !ctr mod al != 0 
@@ -712,7 +716,7 @@ To us an automaton as a stage, we pass on an allocation request but
 ignore a freeze request.
 <<automaton.ml>>=
 let as_stage inner next = 
-  fun ~start ~ctrs ->
+  fun ~start ~memsize ~byteorder ~ctrs ->
     let freeze regs mems =
       { regs_used = regs; mems_used = mems;
         overflow = Block.at start 0 0; align_state = 0 } in
@@ -729,8 +733,8 @@ let unit = wrap (fun next -> next)
 <<automaton.ml>>=
 let postprocess (S stage) f = S (fun imp ->
   let I i = stage imp in
-  I (fun ~start ~ctrs ->
-      let m = i start ctrs in
+  I (fun ~start ~memsize ~byteorder ~ctrs ->
+      let m = i start memsize byteorder ctrs in
       { allocate = m.allocate
       ; freeze = (fun rs ms -> f (m.freeze rs ms))
       } ))

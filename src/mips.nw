@@ -427,11 +427,11 @@ let globals base =
                 else if w <= 16 then 16 
                 else Aux.round_up_to 32 w in
   let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
-  A.at ~start:base (A.widen width *> A.align_to align *>
-  A.overflow ~memsize:8 
-             ~byteorder:byteorder 
-             ~growth:Memalloc.Up 
-             ~max_alignment:4)
+  A.at ~start:base ~memsize:8 ~byteorder 
+    (A.widen width *> A.align_to align *>
+     A.overflow ~byteorder:byteorder 
+                ~growth:Memalloc.Up 
+                ~max_alignment:4)
 @
 This variable placer is a simplified version of the x86 placer.
 <<mips.ml>>=
@@ -449,7 +449,7 @@ let placevars proc =
       methods.A.allocate w a h
     in
     {A.allocate = alloc; A.freeze = methods.A.freeze} in
-  Block.srelative vfp "variables placed in memory" A.at
+  Block.srelative vfp "variables placed in memory" (A.at ~memsize:8 ~byteorder)
   (
     A.wrap warn *>
     A.choice

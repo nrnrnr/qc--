@@ -272,8 +272,10 @@ let globals base =
   let width w = if   w <= 8 then 8 else if w <= 16 then 16 else if w <= 32 then 32
                 else Aux.round_up_to 64 w in
   let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
-  A.at ~start:base (A.widen width *> A.align_to align *>
-  A.overflow ~memsize:8 ~byteorder:Post.byte_order ~growth:Memalloc.Up ~max_alignment:16)
+  A.at ~start:base ~memsize:8 ~byteorder:Post.byte_order 
+   (A.widen width *> A.align_to align *>
+    A.overflow ~byteorder:Post.byte_order ~growth:Memalloc.Up
+    ~max_alignment:16)
 @ 
 We write a helper function to take care of expanding out load/stores through
 offsets.
@@ -384,5 +386,7 @@ let placevars =
         (fun _ h w -> w <= 64), A.widen (fun _ -> 64) *> temps 't';
         A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
       ] in
-  Placevar.mk_automaton ~warn ~vfp:target.T.vfp mk_stage
+  Placevar.mk_automaton
+     ~warn ~vfp:target.T.vfp ~memsize:target.T.memsize
+     ~byteorder:Post.byte_order mk_stage
 @ 

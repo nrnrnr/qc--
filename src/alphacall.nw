@@ -160,7 +160,7 @@ conventions.
 <<Alpha calling convention automata in Lua>>=
 Alpha.cc["cmm"].results =
   { A.widths { 64 }
-  , A.overflow { memsize = 8, byteorder = Alpha.byteorder, growth = "up"
+  , A.overflow { byteorder = Alpha.byteorder, growth = "up"
                , max_alignment = Alpha.sp_align
                }
   }
@@ -205,7 +205,7 @@ Alpha.cc["C"].call =
                          }
              , A.is_any, A.regs_by_bits("bits", r(16) .. r(21))
              }
-  , A.overflow { memsize = 8, byteorder = Alpha.byteorder, growth = "up"
+  , A.overflow { byteorder = Alpha.byteorder, growth = "up"
                , max_alignment = Alpha.sp_align }
   }
 
@@ -222,7 +222,7 @@ Alpha.cc["C"].cutto =
  , A.choice { "float",  A.useregs(Alpha.vol_fp)
             , A.is_any, A.useregs(Alpha.vol_int)
             }
- , A.overflow { memsize = 8, byteorder = Alpha.byteorder, growth = Alpha.growth
+ , A.overflow { byteorder = Alpha.byteorder, growth = Alpha.growth
               , max_alignment = Alpha.sp_align }
  }
 
@@ -246,30 +246,31 @@ the prolog of a procedure and set back before the procedure returns. I
 hope the code below reflects this.
 
 <<transformations>>=
+let autoAt = A.at ~memsize:8 ~byteorder in
 let prolog =
   let autosp = (fun _ -> vfp) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at spec.A.call)
+    ~mkauto:(fun () -> Block.srelative vfp "in call parms" autoAt spec.A.call)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
       ~insp:(fun a _ _ -> autosp a) in
 
 let epilog =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at spec.A.results)
+    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" autoAt spec.A.results)
     ~autosp:(fun r -> std_sp_location)
     ~postsp:(fun _ _ -> vfp) in
 
 let call_actuals =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at spec.A.call)
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" autoAt spec.A.call)
     ~autosp:(fun r  -> std_sp_location)
     ~postsp:(fun _ sp -> sp) in  
 
 let call_results =
   let autosp = (fun r -> std_sp_location) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at spec.A.results)
+    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" autoAt spec.A.results)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
     ~insp:(fun a _ _ -> autosp a) in
@@ -278,13 +279,13 @@ let call_results =
 let also_cuts_to =
   let autosp = (fun r -> std_sp_location) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at spec.A.cutto)
+    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" autoAt spec.A.cutto)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
       ~insp:(fun a _ _ -> autosp a) in
 
 let cut_actuals base  =
-   C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base spec.A.cutto)
+   C.outgoing ~growth ~sp ~mkauto:(fun () -> autoAt base spec.A.cutto)
      ~autosp:(fun r -> spval)
      ~postsp:(fun _ _ -> spval) in
 
@@ -344,6 +345,8 @@ let template = (* conservative spec *)
         { CS.name           = "cmm"
         ; CS.stack_growth   = Memalloc.Down
         ; CS.overflow       = CS.overflow C.Caller C.Caller
+        ; CS.memsize        = 8
+        ; CS.byteorder      = byteorder
         ; CS.sp             = r 30
         ; CS.sp_align       = sp_align
         ; CS.all_regs       = RS.of_list (List.concat [nvl_int; nvl_fp;
