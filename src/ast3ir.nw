@@ -57,13 +57,11 @@ treating a control-flow graph as an instruction.
 
 
 <<ast3ir.mli>>=
-module Make(A: Asm3.ASM with type i = Proc.t): sig
-    val translate: Fenv.Clean.env 
-                -> Target2.t 
-                -> (optimizer: Proc.t -> unit)
-                -> Ast.program 
-                -> Asm3.assembler
-end
+val translate: Fenv.Clean.env 
+            -> Target2.t 
+            -> (optimizer: Proc.t -> unit)
+            -> Ast.program 
+            -> Asm3.assembler
 @
 
 % ------------------------------------------------------------------ 
@@ -80,26 +78,23 @@ module F        = Fenv.Clean
 <<auxilliaries>>
 <<ExprTypes>>
 
-module Make(Asm: Asm3.ASM with type i = Proc.t) = 
-struct
-    module G  = Cfg3 
-    module IO = Copyinout.Make(G)
-    module RP = Rtl.Private
+module G  = Cfg3 
+module IO = Copyinout.Make(G)
+module RP = Rtl.Private
 
-    <<Make expressions>>
-    <<Make constant evaluation>>
-    <<Make auxilliaries>>
-    <<Make continuation bundles>>
-    <<Make assignment>>    
-    <<Make global registers>>    
-    <<Make formals and actuals>>    
-    <<Make statements>>
-    <<Make stack data declarations>>
-    <<Make procedure>>
-    <<Make memory declarations>>
-    <<Make toplevel>>
-    <<Make translate program>>
-end
+<<Make expressions>>
+<<Make constant evaluation>>
+<<Make auxilliaries>>
+<<Make continuation bundles>>
+<<Make assignment>>    
+<<Make global registers>>    
+<<Make formals and actuals>>    
+<<Make statements>>
+<<Make stack data declarations>>
+<<Make procedure>>
+<<Make memory declarations>>
+<<Make toplevel>>
+<<Make translate program>>
 @
 
 % ------------------------------------------------------------------
@@ -265,11 +260,12 @@ and expr env target exp =
 We translate constants to {\rtl} expressions which we then evaluate.
 
 <<Make constant evaluation>>=
-module Eval = Rtleval.Make(Asm.RelAddr)
-
-let compile_const env target exp     = Eval.compile (expr env target exp)
-let link_const    env target asm exp = Eval.link (expr env target exp)  (*XXX*)
-let eval_const    env target asm exp = Eval.eval (expr env target exp)  (*XXX*)
+let compile_const env target exp     = 
+    Rtleval.compile (expr env target exp)
+let link_const    env target asm exp = 
+    Rtleval.link (fun b -> asm#reladdr b) (expr env target exp)  
+let eval_const    env target asm exp = 
+    Rtleval.eval (fun b -> asm#reladdr b) (expr env target exp)  
 @
 
 % ------------------------------------------------------------------ 
@@ -827,7 +823,14 @@ let freeze (p:Proc.t) =
     in
         ()
 
+<<Make procedure>>=
+class instr (p:Proc.t) (t:Target2.t): Asm3.instruction = object
+    method ast  = Cfg3.ast p.Proc.cfg p.Proc.symbol#text t
+    method text = assert false
+end    
 
+
+<<Make procedure>>=
 let proc env target optimizer asm (cconv,name,args,bdy) = 
     let symbol,scope = match F.findv name env with
                       | _,(F.Label(F.Proc (sym,scope)),_) -> sym,scope
@@ -903,7 +906,7 @@ let proc env target optimizer asm (cconv,name,args,bdy) =
         } in
     let () = optimizer i in
     let () = freeze i    in
-        asm#instr (new Asm.instr i)  (* *)
+        asm#instr (new instr i target)  (* *)
 @
         
 % ------------------------------------------------------------------ 
@@ -1006,8 +1009,8 @@ end (* of module StackData *)
 <<Make memory declarations>>=
 let initialized_data env target asm expr = 
         match eval_const env target asm expr with
-        | Eval.LinkTime e    -> asm#addr e
-        | Eval.CompileTime b -> asm#value b
+        | Rtleval.LinkTime e    -> asm#addr e
+        | Rtleval.CompileTime b -> asm#value b
 
 let rec init env target asm = function
     | A.InitAt(x,_)   -> init env target asm x

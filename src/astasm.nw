@@ -5,8 +5,8 @@
 \section{{\PAL} Assembler}
 % ------------------------------------------------------------------ 
 
-This is an assembler that emits {\PAL}. It matches the [[Asm3.ASM]]
-interface for assemblers in the {\qcc} compiler.
+This is an assembler that emits {\PAL}. It implements the
+[[Asm3.assembler]] interface for assemblers in the {\qcc} compiler.
 
 Since {\PAL} has no natural \emph{native pointer size} like assemblers
 for real machines it receices a functor argument of type [[PERSONALITY]]
@@ -17,10 +17,15 @@ module type PERSONALITY = sig
     val target: Target2.t
 end
 
+<<S>>=
+module type S = sig
+    val asm: unit -> Asm3.assembler
+end    
+
 <<astasm.mli>>=
 <<PERSONALITY>>
-module Make(P: PERSONALITY): Asm3.ASM with type i    = Proc.t
-                                      with type init = unit 
+<<S>>
+module Make(P: PERSONALITY): S 
 @
 
 % ------------------------------------------------------------------ 
@@ -36,9 +41,8 @@ module A        = Ast
 module Asm      = Asm3
 
 <<PERSONALITY>>
-module Make (P: PERSONALITY):Asm.ASM with type i    = Proc.t 
-                                     with type init = unit = 
-struct
+<<S>>
+module Make (P: PERSONALITY):S = struct
     <<Make>>
 end
 @
@@ -113,39 +117,33 @@ interface it is good enough to let these additional methods fail because
 we never expect them to be called.
 
 <<Make>>=
-(* symbols *)
-class symbol (n:string) : Asm.symbol = object
-    method text = n
-end
-
-<<Make>>=
-(* instructions *)
-class instr (p:Proc.t): Asm.instruction = object
-    method ast  = Cfg3.ast p.Proc.cfg p.Proc.symbol#text P.target
-    method text = unsupported "instruction.text"
-end    
-@
-
-<<Make>>=
 (* relocatable addresses *)
-module RelAddr:Asm.RELADDR = struct
-    class sym (s:Asm.symbol) = object
-        method ast = A.Fetch (A.Var(None,s#text))
-    end
-    
-    class const (k:Bits.bits) = object
-        method ast = A.Int(k, Some(A.BitsTy(Bits.width k)))
-    end
+class addr (ast: A.expr): Asm.reladdr = object
+    val _ast     = ast
 
-    class add (x:Asm.reladdr) (y:Asm.reladdr) = object
-        method ast = A.PrimOp ("add", [(None,x#ast);(None,y#ast)])
-    end
+    method ast   = _ast
+    method add x = new addr (A.PrimOp ("add", [(None,_ast);(None,x#ast)]))
+    method sub x = new addr (A.PrimOp ("sub", [(None,_ast);(None,x#ast)])) 
+end
 
-    class sub (x:Asm.reladdr) (y:Asm.reladdr) = object
-        method ast = A.PrimOp ("sub", [(None,x#ast);(None,y#ast)])
-    end
+class sym (s:Asm.symbol): Asm.reladdr = 
+object(this)
+    inherit addr (A.Fetch (A.Var(None,s#text)))
+end
+
+class const (k:Bits.bits): Asm.reladdr = 
+object(this)
+    inherit addr (A.Int(k, Some(A.BitsTy(Bits.width k))))
+end
+
+<<Make>>=
+class symbol (n:string) : Asm.symbol = 
+object(this)
+    method text    = n
+    method reladdr = new sym (this :> Asm.symbol)
 end
 @
+
 
 % ------------------------------------------------------------------ 
 \subsubsection{The assembler class}
@@ -183,6 +181,9 @@ object (this)
 
     method private append (a:A.section) =
         _actions <- a::_actions
+
+    (* etc *)
+    method reladdr (k:Bits.bits) = new const k
     
     (* declare symbols *)
     method import s =
@@ -314,4 +315,12 @@ object (this)
         let doc = Astpp.program ast in
             Pp.ppToFile stdout 72 doc
 end    
+@
+
+% ------------------------------------------------------------------ 
+\section{Assember Constructor Function}
+% ------------------------------------------------------------------ 
+
+<<Make>>=
+let asm () = new asm ()
 @

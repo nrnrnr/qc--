@@ -26,49 +26,31 @@ An {\rtl} expression can denote a compile-time, link-time, or run-time
 expression. This module offers functions [[compile]] and [[link]] to
 evaluate compile-time and link-time constants respectively. A
 compile-time constant is evaluated to a [[Bits.bits]] value, a link-time
-constant to an [[EXP.t]] value. 
+constant to an [[Asm3.reladdr]] value. 
 
 \begin{quote}\it
     Should translation of run-time expression be integrated here, too?
     This would allow to do contant-folding. --CL
 \end{quote}
 
-The module type [[RELADDR]] provides a target and back-end dependent way of
-constructing link-time expressions. All link-time expressions must be of
-the native pointer type, otherwise it is an unchecked run-time error.
-denote a boolean value. This is no restriction because there are no
-compile-time boolean values in the {\PAL} language. Of course, no
-compile-time constant expression must access memory or registers.
-References to {\rtl} variables are currently also unsupported.
-
-Checked compile-time errors are reported as [[Error.ErrorExn]]
-exceptions.
-
-<<module type S>>=
-module type S = sig
-    type symbol = Asm3.symbol 
-    type value  =
-        | CompileTime of Bits.bits       (* compile-time *)
-        | LinkTime    of Asm3.reladdr    (* link-time    *)
-        
-    (* raise Error.ErrorExn in case of error *)
-    val link:     Rtl.exp -> Asm3.reladdr 
-    val eval:     Rtl.exp -> value   
-    val compile:  Rtl.exp -> Bits.bits                            
-end    
+<<rtleval.mli>>=
+type symbol = Asm3.symbol 
+type value  =
+    | CompileTime of Bits.bits       (* compile-time *)
+    | LinkTime    of Asm3.reladdr    (* link-time    *)
+    
+(* raise Error.ErrorExn in case of error *)
+val link:     (Bits.bits -> Asm3.reladdr) -> Rtl.exp -> Asm3.reladdr 
+val eval:     (Bits.bits -> Asm3.reladdr) -> Rtl.exp -> value   
+val compile:  Rtl.exp -> Bits.bits                            
 @
 
 The evaluation of link-time expressions depends on the representation of
-link-time values. It is provided as a functor argument. Some clients
-like to evaluate compile-time {\rtl} expression but lack an [[EXP]]
-module to supply the functor. For them we provide a dummy [[EXP]]
-implementation [[Dummy]].
-
-<<rtleval.mli>>=
-<<module type S>>
-module Dummy: Asm3.RELADDR
-module Make (Exp: Asm3.RELADDR): S 
-@
+link-time values. To construct link-time values from constants we have
+to provide a back-end dependent function. An alterative design provided
+the provided these functions in a functor argument. To avoid
+functorization of large parts of the compiler the design has become more
+dynamic.
 
 
 % ------------------------------------------------------------------ 
@@ -83,35 +65,17 @@ done with two tags [[CT]] and [[LT]] respectively, that are attached to
 values and list of values.
 
 <<rtleval.ml>>=
-<<module type S>>
-
 module E  = Error
 module R  = Rtl
 module RP = Rtl.Private
 
-module Dummy: Asm3.RELADDR = struct
-    class const (bits:Bits.bits):Asm3.reladdr = 
-        object method ast = assert false 
-    end
-    class sym (symbol:Asm3.symbol):Asm3.reladdr = object 
-        method ast = assert false 
-    end
-    class add (x:Asm3.reladdr) (y:Asm3.reladdr):Asm3.reladdr = object 
-        method ast = assert false 
-    end    
-    class sub (x:Asm3.reladdr) (y:Asm3.reladdr):Asm3.reladdr = object 
-        method ast = assert false 
-    end
-end    
 
-module Make (R: Asm3.RELADDR) = struct
-    type symbol = Asm3.symbol 
-    type value  =
-        | CompileTime of Bits.bits       (* compile-time *)
-        | LinkTime    of Asm3.reladdr    (* link-time    *)
-        
-    <<Make>>
-end
+type symbol = Asm3.symbol 
+type value  =
+    | CompileTime of Bits.bits       (* compile-time *)
+    | LinkTime    of Asm3.reladdr    (* link-time    *)
+    
+<<Make>>
 @
 
 Compile-time and link-time expressions include different operators.
@@ -121,11 +85,11 @@ in two sub-modules, [[LinkTime]] and [[CompileTime]].
 <<Make>>=
 module LinkTime = struct
     let add = function
-        | [x;y] -> new R.add x y
+        | [x;y] -> x#add y
         | _     -> E.error "wrong number of arguments to link-time add"
 
     let sub = function
-        | [x;y] -> new R.sub x y
+        | [x;y] -> x#sub y
         | _     -> E.error "wrong number of arguments to link-time sub"
 
     let rec apply (op,wl) exps =
@@ -161,14 +125,14 @@ type ('a, 'b) choice    = CT of 'a      (* compile-time *)
                         | LT of 'b      (* link-time    *)
 @
 
-Every compile-time value can be transformed into a linke-time value
+Every compile-time value can be transformed into a link-time value
 using [[link_time]]. This is done, when the evaluation detects that a
 value is not a compile-time value.
 
 <<Make>>=
-let link_time v = match v with
+let link_time (k:Bits.bits ->Asm3.reladdr) = function
     | LT x -> x
-    | CT x -> new R.const x     
+    | CT x -> k x     
 @
 
 A function application can either apply a compile-time or a link-time
@@ -178,22 +142,22 @@ a list of compile-time values, if all values are compile-time values, or
 a list of link-time values, if at least on value is a link-time value.
 
 <<Make>>=
-let lift values = (* (Bits.bits list, Exp.t list) choice *)
+let lift (k:Bits.bits ->Asm3.reladdr) values = 
     let rec choose = function
         | (cts, [])                     -> CT (List.rev cts)
         | (cts, (CT x)  :: xs)          -> choose (x::cts, xs)
         | (cts, ((LT _) :: _ as xs))    -> 
-            LT (List.map (fun v -> new R.const v) (List.rev cts) 
-              @ List.map link_time xs)
+            LT (List.map (fun v -> k v) (List.rev cts) 
+              @ List.map (link_time k) xs)
     in
-        choose ([], values)
+        choose ([], values) (*(Bits.bits list, Exp.t list) choice*)
 
 let rec const = function
     | RP.Bool _      -> E.error "boolean in compile- or link-time expression"
     | RP.Late (x,w)  -> 
         E.error "late compile-time value in link-time expression"
     | RP.Bits b      -> CT(b)
-    | RP.Link (l,w)  -> LT(new R.sym l)
+    | RP.Link (l,w)  -> LT(l#reladdr)
 @    
 
 The [[exp]] function evaluates an expression. The point is the
@@ -202,23 +166,25 @@ whether the result will be a link- or compile-time value and also which
 [[apply]] function to call.
  
 <<Make>>= 
-and exp = function
+and exp (k:Bits.bits->Asm3.reladdr) = function
     | RP.Const c           -> const c 
     | RP.Fetch (loc,width) -> E.error "register/memory access in constant"
     | RP.App(op,exps)      -> 
-        match lift (List.map exp exps) with
+        match lift k (List.map (exp k) exps) with
         | CT args       -> CT (CompileTime.apply op args)
         | LT args       -> LT (LinkTime.apply    op args)
 
-let link e = match exp (Rtl.Convert.exp e) with
+let link k e = match exp k (Rtl.Convert.exp e) with
     | LT x      -> x
-    | CT x      -> new R.const x
+    | CT x      -> k x
 
-let compile e = match exp (Rtl.Convert.exp e) with
+let compile e = 
+    let k = fun x -> E.error "not a compile-time expression" in
+    match exp k (Rtl.Convert.exp e) with
     | CT x      -> x
     | LT _      -> E.error "not a compile-time constant expression"
 
-let eval e =  match exp (Rtl.Convert.exp e) with
+let eval k e =  match exp k (Rtl.Convert.exp e) with
     | CT x      -> CompileTime x
     | LT x      -> LinkTime x
 @

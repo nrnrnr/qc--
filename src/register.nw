@@ -72,7 +72,6 @@ val print_set: Set.t -> string
 module R    = Rtl
 module S    = Space
 module RP   = Rtl.Private
-module Eval = Rtleval.Make(Rtleval.Dummy) 
 
 <<type t>>
 
@@ -93,7 +92,7 @@ let to_loc lookup (sp,index,width) =
 let of_loc loc = match Rtl.Convert.loc loc with
     | RP.Cell(sp,_,width,exp,_) -> 
         let exp   = Rtl.Revert.exp exp in
-        let index = ( try Bits.to_int (Eval.compile exp) with
+        let index = ( try Bits.to_int (Rtleval.compile exp) with
                     | Error.ErrorExn _ 
                     | Bits.Overflow   -> invalid_arg "Register.of_loc" 
                     )

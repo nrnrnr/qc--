@@ -7,8 +7,7 @@ This module implements an assembler that emits every procedure as a
 graph in \textsc{dot} format.
 
 <<dotasm.mli>>=
-module Make: Asm3.ASM with type i    = Proc.t
-                      with type init = unit
+val asm: unit -> Asm3.assembler
 @                      
 
 % ------------------------------------------------------------------ 
@@ -19,17 +18,13 @@ Most assembler directives do nothing. We are only interested in the
 control-flow-graphs that are part of an instruction. 
 
 <<dotasm.ml>>=
-module Make = struct
-    module Asm = Asm3
+module Asm = Asm3
 
-    type init   = unit
-    type i      = Proc.t
+exception Unsupported of string
+let unsupported msg = raise (Unsupported msg)
 
-    exception Unsupported of string
-    let unsupported msg = raise (Unsupported msg)
-
-    <<Make>>
-end    
+<<Make>>
+let asm () = new asm ()
 @
 
 
@@ -39,35 +34,15 @@ end
 
 
 <<Make>>=
-class symbol (n:string) : Asm.symbol = object
-    method text = n
+class addr: Asm.reladdr = object
+    method ast   = unsupported "Dotasm.addr#ast"
+    method add x = new addr
+    method sub x = new addr
 end
 
-<<Make>>=
-class instr (p:i): Asm.instruction = object
-    method ast  = unsupported "instruction.ast"
-    method text =
-        Cfgutil.cfg2dot ~compress:true p.Proc.symbol#text p.Proc.cfg
-end    
-@
-
-<<Make>>=
-module RelAddr:Asm.RELADDR = struct
-    class sym (s:Asm.symbol): Asm.reladdr = object
-        method ast = unsupported "reladdr.ast"
-    end
-    
-    class const (k:Bits.bits): Asm.reladdr = object
-        method ast = unsupported "reladdr.ast"
-    end
-
-    class add (x:Asm.reladdr) (y:Asm.reladdr): Asm.reladdr = object
-        method ast = unsupported "reladdr.ast"
-    end
-
-    class sub (x:Asm.reladdr) (y:Asm.reladdr): Asm.reladdr = object
-        method ast = unsupported "reladdr.ast"
-    end
+class symbol (n:string) : Asm.symbol = object
+    method text    = n
+    method reladdr = new addr
 end
 @
 
@@ -79,6 +54,9 @@ end
 class asm () : Asm.assembler =
 object (this)
     val mutable _section = "this can't happen"
+
+    (* etc *)
+    method reladdr (k:Bits.bits) = new addr
 
     (* declarations *)
     method import s = new symbol s
