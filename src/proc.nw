@@ -27,6 +27,7 @@ type ('automaton, 'cfg, 'cc, 'tgt) t =
     ; cc:                 'cc                (* calling convention                   *)
     ; target:             'tgt               (* target of this procedure             *)
     ; temps:              Talloc.Multiple.t  (* allocator for temporaries            *)
+    ; mk_symbol:          string -> Symbol.t (* allocator for symbols            *)
     ; cfg:                'cfg               (* control-flow graph                   *)
     ; oldblocks_caller:   Block.t list    (* stack - incoming parms, outgoing results *)
     ; oldblocks_callee:   Block.t list    (* stack - incoming parms, outgoing results *)
@@ -43,24 +44,37 @@ type ('automaton, 'cfg, 'cc, 'tgt) t =
 @
 
 \begin{itemize}
-\item [[name]]:     the name of the procedure represented by this.
-\item [[cc]]:       calling convention for this procedure.
-\item [[target]]:   the target we are compiling for.    
-\item [[cfg]]:      the control-flow graph of the procedure.
-\item [[incoming]]: stack area for incoming parameters.
-\item [[outgoing]]: stack area for outgoing parameters.
-\item [[stackd]]:   User stack data, from the [[stack data]] construct.
-\item [[priv]]:     Automaton that provides register-like \emph{memory}
-                    locations for spill slots, continuations, etc. The 
-                    memory will be allocated on the stack.
-\item [[eqns]]:     Constraints for symbolic compile-time constants.
-                    They are introduced by [[Area.t]] values that are
-                    concatenated and overlayed to form a procedure's
-                    stack frame.
-\item [[vars]]:     Parameters and local variables in a procdure are
-                    numbered starting from zero for the runtime system. 
-                    [[vars]] is the number of parameters plus the number
-                    of local variables.
+\item [[symbol]]:               the name of the procedure represented by this.
+\item [[cc]]:                  calling convention for this procedure.
+\item [[target]]:              the target we are compiling for.    
+\item [[temps]]:               an allocator for temporaries
+\item [[mk_symbol]]:           an allocator for symbols
+\item [[cfg]]:                 the control-flow graph of the procedure.
+\item [[oldblocks_caller]]:    stack area for incoming parameters, allocated by the
+                               caller.
+\item [[oldblocks_callee]]:    stack area for incoming parameters, allocated by the
+                               callee.
+\item [[youngblocks_caller]]:  stack area for outgoing parameters, deallocated by the
+                               caller.
+\item [[youngblocks_callee]]:  stack area for outgoing parameters, deallocated by the
+                               callee.
+\item [[incoming]]:            stack area for incoming parameters.
+\item [[outgoing]]:            stack area for outgoing parameters.
+\item [[stackd]]:              User stack data, from the [[stack data]] construct.
+\item [[conts]]:               Area on the stack where continuations are stored.
+\item [[sp]]:                  The block where the sp is stored during the procedure
+             									 body.
+\item [[priv]]:                Automaton that provides register-like \emph{memory}
+                               locations for spill slots, continuations, etc. The 
+                               memory will be allocated on the stack.
+\item [[eqns]]:                Constraints for symbolic compile-time constants.
+                               They are introduced by [[Area.t]] values that are
+                               concatenated and overlayed to form a procedure's
+                               stack frame.
+\item [[vars]]:                Parameters and local variables in a procdure are
+                               numbered starting from zero for the runtime system. 
+                               [[vars]] is the number of parameters plus the number
+                               of local variables.
 \end{itemize}
 
 <<proc.mli>>=
