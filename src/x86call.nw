@@ -204,13 +204,41 @@ X86.cc["C--"].call =
   , A.useregs { X86.eax }
   , A.overflow { growth = "up", max_alignment = X86.sp_align }
   }
-
 -- all the calling conventions share the same cutto automaton specs.
 X86.cc["C--"].cutto = X86.cc["C"].cutto
+@
 
--- the notail automata is identical to the C-- one
-X86.cc["notail"] = X86.cc["C--"]
-@ 
+\paragraph{Automato for calling a garbage collection---\texttt{gc}~convention}
+We want to make the call for the caller as cheap as possible because a
+garbage collection will dominate all efforts by the callee. This means:
+we are not using any register such that the caller is free to use them
+as temporaries.
+
+<<x86 calling convention automata in Lua>>=
+X86.cc["gc"].results = 
+  { A.choice { "float" , { A.widen(80)
+                         , A.useregs { X86.stack_top_proxy_reg }
+                         }
+             , A.is_any, { A.widen(32, 'multiple')
+                         , A.useregs { X86.eax }
+                         }
+             }
+  , A.overflow { growth = "down", max_alignment = X86.sp_align }
+  } 
+
+X86.cc["gc"].call =
+  { A.widen(32, "multiple")
+  , A.overflow { growth = "up", max_alignment = X86.sp_align }
+  }
+
+X86.cc["gc"].cutto =
+  { A.widen(32)
+  , A.overflow { growth = "up", max_alignment = X86.sp_align }
+  }
+
+X86.layout["gc"] = X86.layout["C"]
+@
+
 \paragraph{Managing the stack pointer and return address}
 On entry, the stack pointer points to the return address.
 This needs some aliasing info?
@@ -335,14 +363,21 @@ let conv ~calleesaves ~jump ~altret name specs ~return_to cut =
   } 
 @
 
-And in Lua:
+And in Lua: register the new calling conventions. From the perspective
+of automata, some calling conventions are identical. Despite this, they
+may differ because of the additional OCaml code that defines the calling
+convention.
+
 <<x86 calling convention automata in Lua>>=
--- register the new calling conventions!
 X86.cc["paranoid C"]        = X86.cc["C"]
 X86.layout["paranoid C"]    = X86.layout["C"]
 
-X86.cc["gc"]                = X86.cc["C"]
-X86.layout["gc"]            = X86.layout["C"]
+-- uncomment the next two lines to make "gc" a synonym for "C--"
+-- X86.cc["gc"]                = X86.cc["C--"]
+-- X86.layout["gc"]            = X86.layout["C"]
+
+-- layout for "notail" is defined in luacompile.nw (uses the "C" layout)
+X86.cc["notail"]            = X86.cc["C--"]
 
 A.register_cc(Backend.x86.target,"C"     ,    X86.cc["C"     ])
 A.register_cc(Backend.x86.target,"paranoid C",X86.cc["paranoid C"])
@@ -352,11 +387,29 @@ A.register_cc(Backend.x86.target,"notail",    X86.cc["notail"])
 A.register_cc(Backend.x86.target,"gc",        X86.cc["gc"])
 @ 
 
+And finally, our lookup function.
+<<x86call.ml>>=
+let cconv ~return_to cut ccname stage =
+  let f =
+    match ccname with
+    | "C--"         -> conv ~jump:true  ~altret:true ~calleesaves:true
+    | "lightweight" -> conv ~jump:true  ~altret:true ~calleesaves:true
+    | "notail"      -> conv ~jump:false ~altret:true ~calleesaves:true
+    | "paranoid C"  -> conv ~jump:false ~altret:false ~calleesaves:false
+    | "C"           -> conv ~jump:false ~altret:false ~calleesaves:true
+    | "gc"          -> conv ~jump:false ~altret:false ~calleesaves:true
+    | _ -> Unsupported.calling_convention ccname
+  in f ccname stage ~return_to cut
+@
 % ------------------------------------------------------------------ 
-\subsection{Implementation using [[Callspec]]}
+\subsection{Remove? Implementation using [[Callspec]]}
 % ------------------------------------------------------------------ 
 
-<<x86call.ml>>=
+Nobody seems to use the one convention [[C']] that is defined using this
+code. Therefore I suggest to remove it. As a first step, this code is no
+longer compiled.
+
+<<move before [[cconv]] to use again>>=
 module CS = Callspec
 let template = (* conservative spec *)
         { CS.name           = "callspec"    (* override this! *)
@@ -386,18 +439,3 @@ let c' ccname auto ~return_to cut = cc auto return_to cut
     { template with CS.name = ccname }
 @
 
-And finally, our lookup function.
-<<x86call.ml>>=
-let cconv ~return_to cut ccname stage =
-  let f =
-    match ccname with
-    | "C--"         -> conv ~jump:true  ~altret:true ~calleesaves:true
-    | "lightweight" -> conv ~jump:true  ~altret:true ~calleesaves:true
-    | "notail"      -> conv ~jump:false ~altret:true ~calleesaves:true
-    | "C'"          -> c'
-    | "paranoid C"  -> conv ~jump:false ~altret:false ~calleesaves:false
-    |  "C"          -> conv ~jump:false ~altret:false ~calleesaves:true
-    | "gc"          -> conv ~jump:false ~altret:false ~calleesaves:true
-    | _ -> Unsupported.calling_convention ccname
-  in f ccname stage ~return_to cut
-@
