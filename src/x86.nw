@@ -491,6 +491,9 @@ Parts of the target record are reasonable.
 Parts are lies.
 Parts are baffling---why is character set characterized by the target?
 <<x86.ml>>=
+let downrtl = R.Convert.rtl
+let uploc   = R.Revert.loc
+let upexp   = R.Revert.exp
 let target =
   { T.name = "x86"
 
@@ -527,6 +530,18 @@ let target =
            ; T.ret  = Targets.dummy_automaton PX.byte_order
            ; T.allocatable = List.map (fun n -> ('r', n, 32)) [0; 1; 2; 3]
            ; T.stack_slots = Targets.dummy_automaton PX.byte_order
+           ; T.cutto =
+                 { T.embed   =
+                   (fun (newpc, newsp) ->
+                     let assign loc e =
+                       Rtl.store loc e (Rtlutil.Width.exp e) in
+                       Rtl.par [assign PX.esp newsp; assign pc newpc])
+                 ; T.project = (fun r -> match downrtl r with
+                                  | RP.Rtl [ (_, RP.Store(_, nsp, _))
+                                           ; (_, RP.Store(_ , npc, _))] ->
+                                    (upexp nsp, upexp npc)
+                                  | _ -> Impossible.impossible "projected non-cutto")
+                 }
            })
 
   (* bogosity *)

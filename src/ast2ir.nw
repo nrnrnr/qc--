@@ -746,8 +746,17 @@ let proc containing_spans (cconv,procname,args,procbody) =
     let exp_to_label e = match Dn.exp e with
     | RP.Const(RP.Link (l, _)) -> l # text
     | _ -> impossible "bad label projection" in
+    let guarded_exp_of_label (g,l) =
+     (g, (R.link ((F.asm env)#local l) pointersize)) in
+    let guarded_exp_to_label (e1,e2) = match (e1, Dn.exp e2) with
+    | (g, RP.Const(RP.Link (l, _))) -> (g, l # text)
+    | _                           -> impossible "bad label projection" in
     let info = { G.goto = { T.embed = target.T.goto.T.embed << exp_of_label
                           ; T.project = exp_to_label << target.T.goto.T.project }
+               ; G.branch = { T.embed = target.T.branch.T.embed
+                                 << guarded_exp_of_label
+                            ; T.project = guarded_exp_to_label
+                                 << target.T.branch.T.project }
                } in
     let g = G.mk info Idgen.label in (* empty control-flow graph *)
 

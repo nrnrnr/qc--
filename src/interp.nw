@@ -267,6 +267,9 @@ The [[target]] value is the essential information for the rest of the
 compiler.
 
 <<interp.ml>>=
+let downrtl = R.Convert.rtl
+let uploc   = R.Revert.loc
+let upexp   = R.Revert.exp
 let target =
     { T.name = arch
       ; T.cc = (fun _ -> 
@@ -276,6 +279,18 @@ let target =
                ; T.cont   = new arguments
                ; T.ret    = new arguments
                ; T.allocatable = []
+               ; T.cutto  = 
+                 { T.embed   =
+                   (fun (newpc, newsp) ->
+                     let assign loc e =
+                       Rtl.store loc e (Rtlutil.Width.exp e) in
+                       Rtl.par [assign Flow.sp newsp; assign Flow.pc newpc])
+                 ; T.project = (fun r -> match downrtl r with
+                                  | RP.Rtl [ (_, RP.Store(_, nsp, _))
+                                           ; (_, RP.Store(_ , npc, _))] ->
+                                    (upexp nsp, upexp npc)
+                                  | _ -> Impossible.impossible "projected non-cutto")
+                 }
                ; T.stack_slots  = new globals (* bogus *)
                }) 
       ; T.byteorder    = byte_order

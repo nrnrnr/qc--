@@ -395,6 +395,9 @@ The [[cc]] value describes a calling convention. It is just a toy and
 probably is not good for anything.
 
 <<DummyTarget>>=
+let downrtl = R.Convert.rtl
+let uploc   = R.Revert.loc
+let upexp   = R.Revert.exp
 let cc =
     { T.sp              = reg 31
     ; T.return          = assign pc (R.fetch (mem (R.fetch (reg 31) 32)) 32)
@@ -402,6 +405,18 @@ let cc =
     ; T.cont            = new simple' Rtl.BigEndian
     ; T.ret             = new simple' Rtl.BigEndian
     ; T.stack_slots     = new simple' Rtl.BigEndian
+    ; T.cutto           =
+                 { T.embed   =
+                   (fun (newpc, newsp) ->
+                     let assign loc e =
+                       Rtl.store loc e (Rtlutil.Width.exp e) in
+                       Rtl.par [assign (reg 31) newsp; assign pc newpc])
+                 ; T.project = (fun r -> match downrtl r with
+                                  | RP.Rtl [ (_, RP.Store(_, nsp, _))
+                                           ; (_, RP.Store(_ , npc, _))] ->
+                                    (upexp nsp, upexp npc)
+                                  | _ -> Impossible.impossible "projected non-cutto")
+                 }
     ; T.allocatable     = List.concat 
     (*
           [ List.map (fun n -> ('r',n,32)) [0;1]
@@ -658,6 +673,23 @@ let cc =
     ; T.cont            = new simple' Rtl.BigEndian
     ; T.ret             = new simple' Rtl.BigEndian
     ; T.stack_slots     = new simple' Rtl.BigEndian
+    ; T.cutto           =
+                 { T.embed   =
+                     (fun _ -> Impossible.unimp "sparc cutto embedding")
+                 ; T.project = 
+                     (fun _ -> Impossible.unimp "sparc cutto projection")
+                 }
+                 (* i don't know how to get the pc?
+                   (fun (newpc, newsp) ->
+                     let assign loc e =
+                       Rtl.store loc e (Rtlutil.Width.exp e) in
+                       Rtl.par [assign sp newsp; assign pc newpc])
+                            (fun r -> match downrtl r with
+                                  | RP.Rtl [ (_, RP.Store(_, nsp, _))
+                                           ; (_, RP.Store(_ , npc, _))] ->
+                                    (upexp nsp, upexp npc)
+                                  | _ -> Impossible.impossible "projected non-cutto")
+                 *)
     ; T.allocatable     = List.concat 
                             [ List.map (fun n -> ('r',n,32)) [1;2;3;4;5;6;7;8;9;10;11;12;13;14;15
                                                              ;16;17;18;19;20;21;22;23;24;25;26;27
