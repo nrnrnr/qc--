@@ -15,7 +15,7 @@ VERSION =       `date +%Y%m%d`
 # SUBDIRS are made from left to right - order matters
 # ------------------------------------------------------------------ 
 
-SUBDIRS =       cllib asdl src 
+SUBDIRS =       cllib lua asdl src 
 
 # ------------------------------------------------------------------ 
 # high level targets
