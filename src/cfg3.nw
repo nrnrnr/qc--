@@ -166,7 +166,6 @@ val gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
 val gm_redirect_all:            src:node -> olddst:node -> newdst:node -> unit
 val gm_insert_assign_before:    Rtl.rtl list -> node -> unit (* any node   *)
 val gm_insert_assign_after:     Rtl.rtl list -> node -> unit (* see descr! *)
-val gm_insert_assign_between:   Rtl.rtl list -> src:node -> dst:node -> unit
 val gm_insert_dataflow_between: defs:locs -> uses:locs -> kills:locs ->
                                 src:node -> dst:node -> unit
 val gm_enumerate:               cfg -> unit (* post: enumerated cfg *)
@@ -387,25 +386,25 @@ Note, that if several outgoing edges of a node point to the same
 successor, they \emph{all} get updated to the new node.  Hence,
 [[gm_redirect_all]] is not fully general.
 
-\item [[gm_insert_assign_before:    Rtl.rtl list -> node -> unit]]:
-Inserts [[assign]] nodes $a$ before a node $n$, using the
-supplied {\rtl}s.  It is a checked run-time error if the node $n$
-was not created by the [[gm_assign]] function.  The successors of
-$n$ become successors of $a$ and $a$ becomes the only successor of
-$n$.
-                 
-\item [[gm_insert_assign_after: Rtl.rtl list -> node -> unit]]:
-Like [[insert_assign_before]], except that the assign nodes are placed
-after the node which must be an [[assign]] node.  This guarantees that
-it has only one outgoing edge and therefore this operation is well
-defined. 
+\item [[gm_insert_assign_after:    Rtl.rtl list -> node -> unit]]:
+Inserts [[assign]] nodes $a$ after a node $n$, using the
+supplied {\rtl}s.  It is a checked run-time error if the node $n$ was
+not created by the [[gm_assign]] function. This guarantees that it has
+only one outgoing edge and therefore this operation is well defined.
+The (single) successor of $n$ becomes the successor of $a$ and $a$
+becomes the only successor of $n$. 
 
-\item [[gm_insert_assign_between: Rtl.rtl list -> src:node -> dst:node -> unit]]:
-Inserts assign nodes on every edge leading from [[src]] to [[dst]]. 
-The predecessor/successor relationship of all nodes is updated to
-reflect the insertion of the assign nodes on all affected edges.  It
-is a checked run-time error, if no edge between [[src]] and [[dst]]
-exists.
+\item [[gm_insert_assign_before: Rtl.rtl list -> node -> unit]]:
+Like [[insert_assign_after]], except that the assign nodes are placed
+before the node which can be any node.  
+
+
+% \item [[gm_insert_assign_between: Rtl.rtl list -> src:node -> dst:node -> unit]]:
+% Inserts assign nodes on every edge leading from [[src]] to [[dst]]. 
+% The predecessor/successor relationship of all nodes is updated to
+% reflect the insertion of the assign nodes on all affected edges.  It
+% is a checked run-time error, if no edge between [[src]] and [[dst]]
+% exists.
 
 \item
 \begin{verbatim}
@@ -413,7 +412,7 @@ gm_insert_dataflow_between: defs:locs -> uses:locs -> kills:locs ->
                             src:node -> dst:node -> unit
 \end{verbatim}
 Inserts a node between [[src]] and [[dst]] that announces locations
-being defined, used, and killed.  This node is used to provide
+being defined, used, and killed.  This node informs
 data-flow analysis about inter-procedural data-flow that can not be
 deduced from the other nodes.  It is a checked run-time error, if no
 edge between [[src]] and [[dst]] exists.
@@ -569,19 +568,48 @@ let gm_call   = new X.call
 let gm_branch = new X.branch
 @
 
+<<cfg3.ml>>=
+let gm_redirect_all ~src ~olddst ~newdst =
+    src#upd_succ (fun n -> if n = olddst then newdst else n)
 
+let gm_insert_assign_before (rtls:Rtl.rtl list) (node:node) =
+    let node = List.fold_right 
+                    (fun rtl n -> n#insert_assign_before rtl) rtls node 
+    in ()               
+
+let gm_insert_assign_after (rtls:Rtl.rtl list) (node:node) =
+    let node = List.fold_left
+                    (fun n rtl -> n#insert_assign_after rtl) node rtls
+    in ()
+
+let gm_insert_dataflow_between ~defs ~uses ~kills ~src ~dst =
+    let cfg  = src#cfg          in
+    let exit = cfg#exit         in
+    let node = new X.dataflow cfg exit defs uses kills in
+        ( src#upd_succ (fun n -> if n = dst then node else n)
+        ; node#upd_succ (fun n -> dst)
+        )
+    
+    
 <<cfg3.ml>>=
 let cfg         (node:node) = node#cfg
 let rtl         (node:node) = node#rtl
 let succ        (node:node) = node#succ
 let pred        (node:node) = node#pred
-let property    (node:node) = assert false
+let property    (node:node) = node#property
 let number      (node:node) = node#number
 let defs        (node:node) = node#defs
 let uses        (node:node) = node#uses
 let kills       (node:node) = node#kills
 @
 
+<<cfg3.ml>>=
+let set_rtl     (node:node) (map:Rtl.rtl -> Rtl.rtl) =
+    node#set_rtl (map node#rtl)
+
+let set_property (node:node) (p:property) = node#set_property p
+@
+    
 
 % ------------------------------------------------------------------ 
 \subsection{Object-Oriented Implementation}
@@ -647,15 +675,21 @@ and node = object
     method number:      int             (* number of this; req:cfg enumerated *)
     method succ:        node list       (* cf successors of this *)
     method pred:        node list       (* cf predecessors of this *)
+    method property:    property        (* property of this *)
 
+    method add_label:   string -> unit  (* add alabel to this node *)
     method link_pred:   node -> unit    (* add    in-edge from to pred node *)
     method unlink_pred: node -> unit    (* remove in-edge from to pred node *) 
     method upd_succ:    (node -> node) -> unit (* redirect succs of this *)
     method set_rtl:     Rtl.rtl -> unit (* set rtl to new value *)
+    method set_property: property -> unit (* set property *)
 
     method defs:        locs            (* defined by this *)
     method uses:        locs            (* used by this    *)
     method kills:       locs            (* killed by this  *)
+    
+    method insert_assign_before: Rtl.rtl -> node (* returns new node *)
+    method insert_assign_after : Rtl.rtl -> node (* returns new node *)  
 end
 @
 
@@ -678,7 +712,7 @@ end
       single node but can't reverse the effect.
 \end{itemize}      
 
-The implementation of labels requires a third class type [[proxy]]
+The implementation of labels requires a third type [[proxy]]
 which is a sub-class type of [[node]]. A [[proxy]] node holds a label
 for a node that is not yet defined. Its distinct feature is, that an
 edge to a successor can be added later after the proxy was created.
@@ -779,7 +813,7 @@ object (this)
         with Not_found ->
             try (Hashtbl.find _dummies label :> node)
             with Not_found ->
-            let (d:proxy) = new dummy (this :> cfg) in
+            let (d:proxy) = new dummy (this :> cfg) label in
                 ( Hashtbl.add _dummies label d 
                 ; this#add (d :> node)
                 ; (d :> node)
@@ -791,8 +825,10 @@ object (this)
             let d = Hashtbl.find _dummies label in
                 d#set_succ node
         with Not_found ->
-            Hashtbl.add _labels label node
-            
+            ( Hashtbl.add _labels label node
+            ; node#add_label label  
+            )
+
     method add node =
         ( _enumerated <- false
         ; _nodes <- NodeSet.add node _nodes
@@ -807,17 +843,27 @@ object (this)
         ; _id
         )
 end
+@
 
-(* ------------------------------------------------------------------ *) 
+To insert a new [[assign]] node before [[this]] we first create an
+assign node that has the [[exit]] node as its successor for now. Then we
+redirect all incoming edges to the new assign node and finally its
+outgoing edge towards [[this]] node.
+
+Adding an assignment node after [[this]] only works if [[this]] is
+itself an assignment node with a single successor. Therefore the method
+provided here fails but is overridden in the [[assign]] class.
 
 <<module X>>=
 and virtual vnode cfg rtl =
 object(this)
-    val mutable _pred = NodeSet.empty
-    val mutable _rtl  = (rtl: Rtl.rtl)
-    val         _cfg  = cfg
-    val mutable _id   = (cfg#get_id ())
-    val mutable _num  = -1 
+    val mutable _pred   = NodeSet.empty
+    val mutable _rtl    = (rtl: Rtl.rtl)
+    val         _cfg    = cfg
+    val mutable _id     = (cfg#get_id ())
+    val mutable _num    = -1 
+    val mutable _prop   = ()
+    val mutable _labels = ([]: string list)
     
     initializer
         _cfg#add (this :> node)
@@ -829,9 +875,15 @@ object(this)
     method id       = _id
     method number   = _num
     
+    method add_label (x:string) = 
+        _labels <- x::_labels
+        
     method upd_succ map =               (* make virtual? *)
         ()
     
+    (* every node with more than one predecessor should be 
+       labeled - do we want to check for this? *)
+
     method link_pred node =
         _pred <- NodeSet.add node _pred
         
@@ -852,7 +904,26 @@ object(this)
 
     method kills =
         Register.Set.empty
-end 
+
+    method set_property (p:property) = 
+        _prop <- p 
+
+    method property =
+        _prop
+
+    method insert_assign_before (rtl:Rtl.rtl) =
+        let this        = (this :> node) in
+        let assign      = new assign _cfg rtl (_cfg#exit) in 
+        let redirect n  = if n = this then assign else n in
+            ( NodeSet.iter  (fun n -> n#upd_succ redirect) _pred
+            ; assign#upd_succ (fun n -> this)
+            ; assign (* the new node *)
+            )
+
+    method insert_assign_after (rtl:Rtl.rtl) = 
+        invalid_arg "Cfg3: add_assign_after method for non-assignment node"
+
+end (* of vnode class *)
 
 (* ------------------------------------------------------------------ *) 
 
@@ -877,14 +948,19 @@ end
 (* ------------------------------------------------------------------ *) 
 
 <<module X>>=
-and dummy cfg: proxy =
+and dummy cfg label: proxy =
 object(this)
     inherit vnode cfg Rtl.null
 
-    val mutable _succ = (None: node option) 
+    val mutable _succ   = (None: node option) 
+
+    initializer
+        (this :> node) # add_label label
 
     method set_succ node =
-        _succ <- Some node
+        ( _succ <- Some node
+        ; node#link_pred (this :> node)
+        )
     
     method succ =
         match _succ with
@@ -923,11 +999,13 @@ and exit cfg: node =
 object(this)
     inherit vnode cfg Rtl.null
 end
+@
 
-(* ------------------------------------------------------------------ *) 
+The [[assign]] object provides an [[add_assign_after]] method that
+allows to insert a new [[assign]] node before the successor. 
 
 <<module X>>=
-class assign cfg rtl succ : node =
+and assign cfg rtl succ : node =
 object (this)
     inherit vnode cfg rtl
 
@@ -941,6 +1019,15 @@ object (this)
     method upd_succ map = 
         let map = upd (this :> node) map in
         _succ <- map _succ
+
+    method insert_assign_after (rtl:Rtl.rtl) =
+        let this   = (this :> node) in
+        let assign = new assign _cfg rtl (_succ) in
+            ( _succ#unlink_pred this
+            ; _succ <- assign
+            ; _succ#link_pred this
+            ; assign
+            )
 end
 
 (* ------------------------------------------------------------------ *) 
@@ -1079,6 +1166,33 @@ object (this)
         )
 end
 
+
+(* ------------------------------------------------------------------ *)
+
+<<module X>>=
+class dataflow cfg (succ:node) (defs:locs) (uses:locs) (kills:locs) : node =
+object (this)
+    inherit vnode cfg (Rtl.null)
+
+    val mutable _succ = succ
+    val _defs  = defs
+    val _uses  = uses
+    val _kills = kills
+
+    initializer
+        _succ # link_pred (this:>node)
+
+    method succ =
+        [_succ]
+
+    method upd_succ map =
+        let map = upd (this :> node) map in
+        _succ <- map _succ
+
+    method defs   = _defs
+    method uses   = _uses
+    method kills  = _kills
+end
 @
 
 % vim:tw=72:ts=4:et:
