@@ -1,9 +1,9 @@
 .globl main
-.globl Cmm_globalsig_aQOYZWMPACZAJaMABGMOZeCCPY
+.globl Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY
 .data
 /* memory for global registers */
-Cmm_globalsig_aQOYZWMPACZAJaMABGMOZeCCPY:
-Cmm_global_area:
+Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
+Cmm.global_area:
 .data
 nocut:
 .byte 110
@@ -38,9 +38,9 @@ main:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	nop
+	leal 36(%esp), %ecx
 	leal 36(%esp), %eax
-	movl (%eax),%ecx
-	leal 36(%esp), %eax
+	movl (%ecx),%ecx
 	movl %ecx,(%eax)
 	movl %ebx,20(%esp)
 	movl %ebp,16(%esp)
@@ -90,12 +90,12 @@ join_l18:
 	nop
 	nop
 	nop
-	leal 36(%esp), %eax
-	movl (%eax),%edx
+	leal 36(%esp), %edx
 	movl $0,%ecx
 	leal 36(%esp), %eax
 	addl %ecx,%eax
-	movl %edx,(%eax)
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	movl 16(%esp),%ebp
 	movl 20(%esp),%ebx
 	movl 12(%esp),%esi
@@ -127,12 +127,12 @@ join_l14:
 	nop
 	nop
 	nop
-	leal 36(%esp), %eax
-	movl (%eax),%edx
+	leal 36(%esp), %edx
 	movl $0,%ecx
 	leal 36(%esp), %eax
 	addl %ecx,%eax
-	movl %edx,(%eax)
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	movl 16(%esp),%ebp
 	movl 20(%esp),%ebx
 	movl 12(%esp),%esi
@@ -146,7 +146,7 @@ f:
 	leal 8(%esp), %ecx
 	movl (%ecx),%ecx
 	movl %ecx,4(%esp)
-initialize_continuations_l27:
+initialize_continuations_l28:
 	nop
 	movl $-8,%ecx
 	leal 8(%esp), %edx
@@ -154,7 +154,7 @@ initialize_continuations_l27:
 	movl %eax,(%edx)
 	nop
 	call g
-join_l34:
+join_l35:
 	nop
 	nop
 	nop
@@ -166,7 +166,7 @@ join_l34:
 	movl %eax,(%edx)
 	nop
 	call printf
-join_l31:
+join_l32:
 	nop
 	nop
 	nop
@@ -188,14 +188,14 @@ g:
 	movl (%eax),%eax
 	nop
 	leal 4(%esp), %ecx
-	movl (%ecx),%edx
-	leal 4(%esp), %ecx
-	movl %edx,(%ecx)
-initialize_continuations_l41:
+	leal 4(%esp), %edx
+	movl (%ecx),%ecx
+	movl %ecx,(%edx)
+initialize_continuations_l43:
 	nop
 	nop
 	call h
-join_l48:
+join_l50:
 	nop
 	nop
 	nop
@@ -207,17 +207,17 @@ join_l48:
 	movl %eax,(%edx)
 	nop
 	call printf
-join_l45:
+join_l47:
 	nop
 	nop
 	nop
 	nop
 	nop
 	leal 4(%esp), %eax
-	movl (%eax),%eax
 	movl $0,%ecx
 	leal 4(%esp), %edx
 	addl %ecx,%edx
+	movl (%eax),%eax
 	movl %eax,(%edx)
 	leal 4(%esp), %esp
 	ret
@@ -228,7 +228,7 @@ h:
 	nop
 	movl %esp,%eax
 	movl (%eax),%eax
-initialize_continuations_l55:
+initialize_continuations_l58:
 	movl $99,%eax
 	movl $4,%ebx
 	movl %ecx,%edx
