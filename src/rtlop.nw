@@ -44,6 +44,14 @@ module Types: sig
   val mono: Rtl.opr -> Types.monotype      (* Not_found *)
   val has_floating_result : Rtl.opr -> bool
 end
+@ 
+\subsection{Enumerating operators}
+
+For testing purposes, we enumerate the operators, so we can generate
+code for testing, identify operators that are not implemented, and so
+on. 
+<<rtlop.mli>>=
+val opnames : string list  (* names of all source-language operators *)
 @
 
 \subsection{Useful functions}
@@ -64,6 +72,7 @@ module T = Types        (* save external Types module here *)
 module Types = struct
     <<Types>>
 end
+let opnames = Types.opnames
 
 module Translate = struct
     <<Translate>>
@@ -186,6 +195,11 @@ let optable =
 
 let optypes  = Strutil.assoc2map (List.map (fun (o, _, t) -> (o, t)) optable)
 let opfloats = Strutil.assoc2map (List.map (fun (o, f, _) -> (o, f)) optable)
+
+let opnames =
+  let visible = function "bitExtract" | "bitInsert" | "bitTransfer" -> false
+              | _ -> true in
+  List.filter visible (List.map (fun (o, _, _) -> o) optable)
 
 let findopname name t =
   try Strutil.Map.find name t

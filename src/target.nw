@@ -21,32 +21,22 @@ be passed at run-time (rather than by a module, which can not).
 <<target.mli>>=
 <<type map>>
 <<type cc>>
+<<auxiliary types used to define type [[t]]>>
 <<type t>>
 
 <<exported functions>>
 val space : ('au, 'cc) t -> Rtl.space -> Space.t
-@ 
-
-The [[space]] function returns information about a particular space.
+@ The [[space]] function returns information about a particular space.
 It is a checked run-time error to ask about a space not on the list
 for the target.
-
-<<type t>>=
-type machine_env = {
-    ops : (string * Types.ty list) list;
-    literal : int list
-  }
 @ 
-
 <<type t>>=
 type ('automaton, 'cc) t = { <<components of [[t]]>> }
 @
-
 Every target has a descriptive name.
 <<components of [[t]]>>=
 name: string;
 @
-
 A target is described by many small informations like pointer sizes
 and one bigger chunk that describe calling conventions.  A single
 platform can implement many calling conventions, which are identified
@@ -235,7 +225,6 @@ operators.
 If a target provides names hardware registers, a user can request them
 for a global {\PAL} register. A target advertises a map of known
 hardware registers. 
-
 <<components of [[t]]>>=
 named_locs:    Rtl.loc Strutil.Map.t;
 @
@@ -289,13 +278,38 @@ For optimization, we need to know what an instruction is.
 <<components of [[t]]>>=
 is_instruction: Rtl.rtl -> bool;
 @ 
-
 % ------------------------------------------------------------------
-\subsection{Machine environment}
+\subsection{Code-generation capabilities}
 % ------------------------------------------------------------------
-
+@
+The [[capabilities]] record explains the code-generation capabilities
+of the back end.
+It can be used for several purposes:
+\begin{itemize}
+\item
+ Tell Kevin's widener which operators can be widened and how far
+\item
+ Emit an informal explanation of what code a front end should generate
+\item
+ Emit code for helping to test implementations of operators.
+\end{itemize}
+The capability record says what operators can be used and what widths
+of literals and memory references are supported.
 <<components of [[t]]>>=
-machine_env: machine_env
+capabilities: capabilities;
+<<auxiliary types used to define type [[t]]>>=
+type capabilities = {
+    ops      : Rtl.opr   list;
+    literals : Rtl.width list;
+    memory   : Rtl.width list;
+  }
+@ 
+An incapable back end has no capabilities whatever.
+IT WOULD BE GOOD TO HAVE A ``STANDARD'' BACK END THAT TAKES A NATURAL
+WIDTH (OR PERHAPS INT AND FLOATING WIDTHS?) AND RETURNS A CAPABILITY
+RECORD. 
+<<target.mli>>=
+val incapable : capabilities  (* the completely useless back end *)
 @ 
 
 % ------------------------------------------------------------------ 
@@ -312,11 +326,11 @@ module RP = Rtl.Private
 module RU = Rtlutil
 <<type map>>
 <<type cc>>
+<<auxiliary types used to define type [[t]]>>
 <<type t>>
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
-
+let incapable = { ops = []; literals = []; memory = []; }
 @
-
 <<target.ml>>=
 let space t s = 
   try List.find (fun x -> RU.Eq.space x.Space.space s) t.spaces

@@ -208,16 +208,18 @@ module RT (C : Lua.Lib.CORE) = struct
 
     let projectRegister reg = match reg with
       | V.Table reg ->
-          let field f = V.Table.find reg (V.String f) in
-          let s    = String.get (V.string.V.project (field "space")) 0 in
-          let cell = Cell.of_size (V.int.V.project (field "cellsize")) in
-          let i    = V.int.V.project (field "index") in
-          let a    = agg.V.project (field "agg") in
-          let c    = match field "count" with
-          | V.Nil -> let w = V.int.V.project (field "width") in
-                     Cell.to_count cell w
-          | cf    -> C (V.int.V.project cf) in
-          ((s,a,cell),i,c)
+          (try
+            let field f = V.Table.find reg (V.String f) in
+            let s    = String.get (V.string.V.project (field "space")) 0 in
+            let cell = Cell.of_size (V.int.V.project (field "cellsize")) in
+            let i    = V.int.V.project (field "index") in
+            let a    = agg.V.project (field "agg") in
+            let c    = match field "count" with
+            | V.Nil -> let w = V.int.V.project (field "width") in
+                       Cell.to_count cell w
+            | cf    -> C (V.int.V.project cf) in
+            ((s,a,cell),i,c)
+          with V.Projection _ -> raise (V.Projection (V.Table reg, "register")))
       | _ -> raise (V.Projection (reg, "register"))
 
     let map = {

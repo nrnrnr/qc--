@@ -1193,14 +1193,9 @@ just to match what some C-- frontends seem to want to do...not that it matters.
 <<widen.ml>>=
 let dpwiden t r =
   let targetwidth = t.Target.wordsize in
-  let ptrwidth = t.Target.pointersize in
-  let ops = t.Target.machine_env.Target.ops in
-  let remove_bits = function
-    | Types.Bits n -> n
-    | Types.Bool   -> 1
-  in
-  let ops = List.map (fun (s, bs) -> (s, List.map remove_bits bs)) ops in
-  let litwidths = t.Target.machine_env.Target.literal in
+  let ptrwidth    = t.Target.pointersize in
+  let ops         = List.map Dn.opr t.Target.capabilities.Target.ops in
+  let litwidths   = t.Target.capabilities.Target.literals in
   let m = {ops=ops; literals=litwidths; pointer=ptrwidth; word=targetwidth} in
   let find_best_soln r tau w =
     let solns  = all_solutions m r in

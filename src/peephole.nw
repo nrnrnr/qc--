@@ -59,8 +59,8 @@ module ToString = RU.ToString
 module D  = Dataflow.Make (G)
 @ 
 <<peephole.ml>>=
-let () = Debug.register "peephole" "peephole optimizer"
 let peephole = "peephole"  (* avoid allocating again and again... *)
+let () = Debug.register peephole "peephole optimizer"
 let debug = Debug.on peephole
 @ 
 This is a forward dataflow problem.
@@ -124,7 +124,7 @@ The [[update]] function replaces an RTL, provided we haven't run out
 of transactions.
 <<code that may mutate the RTL at [[node]]>>=
 let update rtl =
-  G.Tx.start_exn peephole;
+  G.Tx.start_exn peephole;  (* the allocation we most want to avoid *)
   G.update_instr (replace rtl) node;
   changed := true;
   G.Tx.finish () in

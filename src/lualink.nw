@@ -250,6 +250,26 @@ module Map = struct
 
     let doc           = DocV.makemap       V.userdata V.projection
     let target        = TargetV.makemap V.userdata V.projection
+    let capabilities   =
+      let module T = Target in
+      let table l = V.Table (V.Table.of_list l) in
+      let ty = { V.embed = (function Types.Bits n -> V.int.V.embed n
+                                   | Types.Bool -> V.string.V.embed "bool");
+                 V.project = (fun v -> Types.Bits (V.int.V.project v)); (* lies *)
+                 V.is = (fun _ -> true); (* more lies *)
+               } in
+      let noproj _ = Impossible.unimp "project back-end capabilities" in
+      let eop o =
+        let (s, ws) = Rtl.Dn.opr o in
+        table ["name",   V.string.V.embed s;
+               "widths", (V.list V.int).V.embed ws;] in
+      let op = { V.embed = eop; V.project = noproj; V.is = (fun _ -> true); } in
+      let embed cap =
+        table [ "literals", (V.list V.int).V.embed cap.T.literals;
+                "ops",      (V.list op)   .V.embed cap.T.ops;
+                "memory",   (V.list V.int).V.embed cap.T.memory;
+              ] in
+      { V.embed = embed; V.project = noproj; V.is = (fun _ -> true); }
     let optimize proc = V.closure (proc **->> V.unit)
     let channel       = InOutV.makemap     V.userdata V.projection
     let inchan        = Luaiolib.in'       channel    V.projection
@@ -572,6 +592,7 @@ C.register_module "Rtlop"
   [ "Emit", (V.record V.value).V.embed
       [ "creators", V.efunc (V.unit **->> V.unit) Rtlop.Emit.creators;
       ];
+    "opnames", (V.list V.string).V.embed Rtlop.opnames;
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Runtime"
@@ -607,6 +628,11 @@ C.register_module "Stages"
   ; "replace_vfp", backplane_stage
       (fun _ proc -> proc.Proc.cc.Call.replace_vfp proc.Proc.cfg; true)
   ]  g;
+<<register modules to [[g]] in alphabetical order>>=
+C.register_module "Target"
+  [ "capabilities", V.efunc (Map.target **->> Map.capabilities)
+                                 (fun (t:Ast2ir.tgt) -> t.Target.capabilities);
+  ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Targets"
   [ "dummy32l", Map.target.V.embed Dummy.dummy32l'

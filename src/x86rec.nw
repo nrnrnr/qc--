@@ -484,6 +484,12 @@ inst : Withaflags(dst:regl, "shra", reg_cl, w, "x86_shraflags")
 inst : Withaflags(dst:regl, "shrl", reg_cl, w, "x86_shrlflags")
   {: sprintf "shr%s %%cl, %s" (suffix w) dst :}
 
+inst : Withaflags(dst:regl, "rotl", reg_cl, w, "x86_rotlflags")
+  {: sprintf "rol%s %%cl, %s" (suffix w) dst :}
+
+inst : Withaflags(dst:regl, "rotr", reg_cl, w, "x86_rotrflags")
+  {: sprintf "ror%s %%cl, %s" (suffix w) dst :}
+
 inst : Llr(dst:regl, "shl", immed, w)
   {: sprintf "shl%s %s, %s" (suffix w) immed dst :}
 
@@ -798,7 +804,7 @@ constructor for each operator.
 | RP.App(("bitExtract", [w; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
 | RP.App((("gt"|"lt"|"ge"|"le"|"eq"|"ne"), [w]) as op, [l; r]) ->
     conCmp op (exp l) (exp r)
-| RP.App((("shra"|"shrl"|"shl") as op, [w]), [x; y]) -> conShift op (exp x) (exp y)
+| RP.App((("shra"|"shrl"|"shl"|"rotl"|"rotr") as op, [w]), [x; y]) -> conShift op (exp x) (exp y)
 | RP.App((("quot"|"rem"|"div"|"mod"|"divu"|"modu"|"mulx"|"mulux") as op, [w]), [x; y])->
     conNonLlrOp op
 | RP.App((("neg") as op, [w]), [x]) -> conNonLlrOp op

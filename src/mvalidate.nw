@@ -25,13 +25,9 @@ let () = Debug.register "mvalidate" "debug machine-environment validator"
 let rtl t r =
   let impossf fmt = Printf.kprintf Impossible.impossible fmt in
   let imposs = Impossible.impossible in
-  let remove_bits = function
-    | Types.Bits n -> n
-    | Types.Bool   -> 1 in
-  let m  = t.Target.machine_env.Target.ops in
-  let m  = List.map (fun (s, bs) -> (s, List.map remove_bits bs)) m in
+  let m  = List.map Rtl.Dn.opr t.Target.capabilities.Target.ops in
   let w  = t.Target.wordsize in
-  let ns = t.Target.machine_env.Target.literal in
+  let ns = t.Target.capabilities.Target.literals in
   Debug.eprintf "mvalidate" "ns is %d length\n" (List.length ns);
   let spaces = Vfp.mk_space w :: t.Target.spaces in
   let name   = t.Target.name in
@@ -76,6 +72,9 @@ let rtl t r =
     | RP.App((opname, ws), es) ->
         let str_of_opty (opname, ws) =
           let (argw, resw) = Rtlop.Types.mono (Rtl.opr opname ws) in
+          let remove_bits = function
+            | Types.Bits n -> n
+            | Types.Bool   -> 1 in
           let argw = List.map remove_bits argw in
           let resw = remove_bits resw in
           String.concat "->" (List.map string_of_int (argw @ [resw]))

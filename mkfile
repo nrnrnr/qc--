@@ -94,7 +94,10 @@ interp:V:       dirs
 doc:V:          dirs 
 	./mkdirs doc
 test:V:         all
-	cd test2 && mk $MKFLAGS all
+	cd test2 && NPROC=1 mk $MKFLAGS all
+
+test.opt:V:         all.opt
+	cd test2 && NPROC=1 mk QC=../bin/qc--.opt $MKFLAGS all
 
 coverage: test2/ocamlprof.dump	
 	rm -f $target
