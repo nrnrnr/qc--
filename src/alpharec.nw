@@ -200,8 +200,11 @@ inst:       Store(meml, freg, w:int)
             {: sprintf "sts %s, %s" freg meml :}
 @
 
-Moves between registers. We cannot move between data and fp registers
-directly.
+Moves between registers. I cannot find the instructions to move between
+integer and floating-point registers in the \textit{Assembly Language
+Programmer's Guide}, but they are describes in the \textit{Alpha
+Architecture Handbook}, Sections 4.10.18 and 4.10.19 (according to Glenn
+Holloway).  To make them work, we have to emit [[.arch ev6]];
 
 <<rules>>=
 inst:       Store(regl, reg, 64)
@@ -209,6 +212,13 @@ inst:       Store(regl, reg, 64)
 
 inst:       Store(fregl, freg, 64)
             {: sprintf "fmov %s, %s" freg  fregl :}
+
+inst:       Store(fregl, reg, 64)
+            {: sprintf "itoft %s, %s" reg  fregl :}
+
+inst:       Store(regl, freg, 64)
+            {: sprintf "ftoit %s, %s" freg  regl :}
+
 @
 
 \paragraph{Control Flow}
