@@ -137,7 +137,7 @@ val freeze: node list -> cfg (* raises Error if node list empty *)
 @
 
 Nodes that can be reached from a given node at run-time are called the
-nodes \emph{succesors}.  During construction of a node, two methods
+nodes \emph{successors}.  During construction of a node, two methods
 exist to specify its successors:  [[label]] nodes are referred to by
 their name.  For some nodes, like the [[assign]] node, the successor
 is the node following it in the node list that is constructed.  For
@@ -187,14 +187,18 @@ node.  Note, that nodes reported by the analysis functions have type
 [[node']] that is different from the type [[node]] that was used by
 the construction functions.
 
-Finding the successors of a node requires to resolve labels. In case
-an undefined label is found in this process, an assertion failure is
-raised. 
+The dual operation is finding the predecessors of a node.
+
+Finding the successors or predecessors of a node requires to resolve
+labels. 
+It is a checked run-time error to call [[succ]] or [[pred]] on a graph
+that contains unresolved labels.
 
 <<abstract types and values>>=
 type node'
 val entry: cfg -> node' 
-val succ:  cfg -> node' -> node' list (* assertion: no undefined labels *)
+val succ:  cfg -> node' -> node' list (* precondition: no undefined labels *)
+val pred:  cfg -> node' -> node' list (* precondition: no undefined labels *)
 @
 
 The [[kind]] function reports a node's flavor and most of the data
@@ -568,6 +572,8 @@ let succ cfg = function
         | Label _          -> [next]
         | Exit             -> []
         )                           
+
+let pred _ _ = assert false (* should be fixed *)
 @
 
 To implement [[foldl]] we can't use [[List.foldl]] because a [[node']]
