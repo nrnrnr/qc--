@@ -134,6 +134,11 @@ The [[idTy]] function returns the number of bits denoted by a name
 let idTy n env = match F.findv n env with attr, (denot,ty) -> bits ty
 @
 
+<<>>=
+let scope = function
+    | F.Global -> Rtl.Global
+    | F.Local  -> Rtl.Local
+@
                              
 The following function translates an [[Ast.actual]] parameter into a
 [[Fgraph.actual]].
@@ -164,10 +169,16 @@ check.
 and lvalue env = function
     | A.LValueAt(x,_)          -> lvalue env x
     | A.Var(hint,x)            -> 
-        let (attr,(denot,t)) = F.findv x env in 
+        let ((_,s),(denot,t)) = F.findv x env in 
             ( match denot with
-            | F.Register(_)    -> let width = bits t in 
-                                  Rtl.Var(x, width)
+            | F.Register(r)    -> let width = bits t in 
+                                  Rtl.Var
+                                      ( x
+                                      , scope s
+                                      , r.F.index
+                                      , r.F.hwreg  
+                                      , width
+                                      )
             | _                -> assert false (* impossible *)
             )
     | A.Mem(t,e,a)             -> let width = ty env t      in
@@ -188,19 +199,24 @@ values or locations from wich a value must be fetched.
 and variable env = function
     | A.LValueAt(x,_) -> variable env x
     | A.Var(hint,x)   ->
-        let (attr,(denot,t)) = F.findv x env in 
+        let ((_,s),(denot,t)) = F.findv x env in 
             ( match denot with
             | F.Constant(b)    -> Rtl.Const(Rtl.Bits(b, bits t))
             | F.Label(F.Proc _)-> Rtl.Const(Rtl.Link(x, bits t))
             | F.Label(F.Code)  -> Rtl.Const(Rtl.Link(x, bits t))
             | F.Label(F.Data)  -> Rtl.Const(Rtl.Link(x, bits t))
-            | F.Label(F.Stack) -> let width = bits t in 
-                                  Rtl.Fetch(Rtl.Var(x, width), width)
+            | F.Label(F.Stack) -> assert false (* don't know how *)
             | F.Import         -> Rtl.Const(Rtl.Link(x, bits t))
-            | F.Register(_)    -> let width = bits t in 
-                                  Rtl.Fetch(Rtl.Var(x, width),width)
-            | F.Continuation   -> let width = bits t in
-                                  Rtl.Fetch(Rtl.Var(x, width),width)
+            | F.Register(r)    -> let width = bits t in 
+                                  let v = Rtl.Var
+                                      ( x
+                                      , scope s
+                                      , r.F.index
+                                      , r.F.hwreg
+                                      , width
+                                      ) 
+                                  in Rtl.Fetch(v,width)
+            | F.Continuation   -> assert false (* don't know how *)
             )
     | A.Mem (t,e,a)            -> let width = ty env t      in
                                   let cell = Rtl.Cell

@@ -130,6 +130,10 @@ tells us the details.
 \end{itemize}
       
 <<>>=
+type register       = { index:      int           (* for run-time API *)
+                      ; hwreg:      string option (* hardware register *)
+                      }
+
 type kind           = Proc          of env partial
                     | Code
                     | Data
@@ -138,7 +142,7 @@ type kind           = Proc          of env partial
 type denotation     = Constant      of Bits.bits
                     | Label         of kind
                     | Import
-                    | Register      of int (* index for run-time API *)
+                    | Register      of register
                     | Continuation
 @
 
@@ -434,6 +438,10 @@ type endianness     = Big | Little
 @            
 
 <<>>=
+type register       = { index:      int           (* for run-time API *)
+                      ; hwreg:      string option (* hardware register *)
+                      }
+                      
 type kind           = Proc          of env Arg.partial
                     | Code
                     | Data
@@ -442,7 +450,7 @@ type kind           = Proc          of env Arg.partial
 and  denotation     = Constant      of Bits.bits
                     | Label         of kind
                     | Import
-                    | Register      of int    (* index for run-time API *)
+                    | Register      of register
                     | Continuation
 
 and  ventry         = (denotation * Types.ty) Arg.info
@@ -480,7 +488,7 @@ and   env           =
                       ; srcmap :      Srcmap.map
                       ; error  :      bool
                       ; target :      target
-                      ; index  :      int       (* register index *)
+                      ; rindex :      int       (* register index *)
                       }    
 @
 
@@ -497,7 +505,7 @@ let empty  map      = { tenv   = StrMap.empty
                       ; venv   = StrMap.empty
                       ; srcmap = map
                       ; error  = false
-                      ; index  = 0
+                      ; rindex = 0
                       ; target = { memsize    = Arg.default 8
                                  ; endianness = Arg.default Little
                                  ; word       = Arg.default 32
@@ -673,9 +681,9 @@ let findCharset     env = env.target.charset
 No surprises here.
 
 <<>>=
-let setIndex   env n = { env with index = n}
-let getIndex   env   = env.index
-let incrIndex  env   = { env with index = env.index + 1}
+let setIndex   env n = { env with rindex = n}
+let getIndex   env   = env.rindex
+let incrIndex  env   = { env with rindex = env.rindex + 1}
 @
 
 % ------------------------------------------------------------------ 
@@ -703,7 +711,10 @@ let rec clean_venv map  =
                 | Dirty.Label(Dirty.Data)         -> Clean.Label(Clean.Data)
                 | Dirty.Label(Dirty.Stack)        -> Clean.Label(Clean.Stack)
                 | Dirty.Import                    -> Clean.Import
-                | Dirty.Register(n)               -> Clean.Register(n)
+                | Dirty.Register(n)     -> Clean.Register(
+                                         { Clean.index  = n.Dirty.index
+                                         ; Clean.hwreg  = n.Dirty.hwreg
+                                         })
                 | Dirty.Continuation              -> Clean.Continuation
                 | _                               -> assert false
             in
@@ -745,7 +756,7 @@ and clean env =
     ; Clean.srcmap = env.Dirty.srcmap 
     ; Clean.error  = env.Dirty.error
     ; Clean.target = clean_target env.Dirty.target
-    ; Clean.index  = env.Dirty.index
+    ; Clean.rindex = env.Dirty.rindex
     }
 @
 

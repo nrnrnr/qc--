@@ -1109,9 +1109,12 @@ let imports r scope env t ii          = foldl (import r scope t) env ii
 let register r scope env = function
     | (_,t,name,Some x) when scope = F.Local ->
                         E.error "local registers can't be maped to hardware"
-    | (_,t,name,reg) -> let i = F.getIndex env in
-                        bindv name (r,scope) (E.ematch (ty r env t)
-                        (fun t -> F.Register(i),t)) (F.incrIndex env)
+    | (_,t,name,reg) -> let i = { F.index = F.getIndex env
+                                ; F.hwreg = reg
+                                }
+                        in
+                            bindv name (r,scope) (E.ematch (ty r env t)
+                            (fun t -> F.Register(i),t)) (F.incrIndex env)
 @
 
 The [[datum]] function binds global data-labels and local
@@ -1183,9 +1186,12 @@ bound in the environment and the [[goto]] labels in its body.
 <<>>=
 let formal r env (hint, inv, ty, name) =
     match evalTy env ty with
-    | E.Ok(t) -> let i = F.getIndex env in
-                     F.bindv name ((r,F.Local),(E.Ok(F.Register(i),t))) 
-                     (F.incrIndex env) 
+    | E.Ok(t) -> let i = { F.index = F.getIndex env (* run-time API *)
+                         ; F.hwreg = None           (* h/w register *)
+                         }
+                     in
+                         F.bindv name ((r,F.Local),(E.Ok(F.Register(i),t))) 
+                         (F.incrIndex env) 
     | E.Error -> F.bindv name ((r,F.Local), E.Error) env
 @
 
