@@ -200,6 +200,15 @@ Norman Ramsey, Literate programming simplified, IEEE Software
 # Generated from nofake.nw. Do not edit! Edit nofake.nw instead and
 # run nofake on it: 
 #   ./nofake -Rnofake > nofake.pl && cp nofake.pl nofake
+#
+# The manual page is at the end of this file in Perl's 
+# POD format. You can format it using pod2man(1):
+#
+#   pod2man nofake > nofake.1
+#   nroff -man nofake.1 | more
+#
+# This software is in the public domain; for details, see the manual
+# page.
 
 sub version {
     print @<<'EOF';
@@ -247,12 +256,13 @@ $chunk='*';                         #default chunk to extract
 If we compile source code that was extracted from a noweb file, we want
 the error messages point to the noweb file and not the file extracted
 from it. Therefore we emit [[#line]] directives that connect the
-extracted file back with the noweb file and that many compiler
-understand. 
+extracted file back with the noweb file. They are understood by many
+compilers such that they can emit error messages pointing to the noweb
+file.
 
-The [[line_directive]] returns the string used as a line directive. The
-formatting is taken from [[lineformat]] that is controlled by the [[-L]]
-command line option.
+The [[line_directive]] returns the string to be used as a line
+directive. The formatting is taken from [[lineformat]] that is
+controlled by the [[-L]] command line option.
 
 <<line directive>>=
 sub line_directive {
@@ -266,7 +276,7 @@ sub line_directive {
 @
 
 The [[read_line]] function reads a file line-by-line and recognizes
-chunk-definitions. Each chunk is put under its name into the global
+chunk definitions. Each chunk is put under its name into the global
 [[chunks]] hash table. The [[sync]] flag controls whether line
 directives are emitted.
 
@@ -286,7 +296,7 @@ sub read_file {
     my $chunk='';   # name of actual chunk, '' iff outside of chunk
     my $line;
     for(my $i=1;$line=<INFILE>;$i++) {
-        if($line =~ /^@<<([^<>]+)@>>=\s*$/){
+        if($line =~ /^@<<([^<>]+)@>>=\s*$/o){
             $chunk=$1;
             if(!exists $chunks{$chunk}){
                 $chunks{$chunk}='';
@@ -295,8 +305,8 @@ sub read_file {
                 $chunks{$chunk}.=line_directive($fname,$i+1);
             }
         } elsif($chunk ne '') { 
-            #inside <<foo>= ... @ chunk
-            if($line=~/^(@|@<<[^<>]+@>>=\s*)/){ 
+            #inside @<<foo@>>= ... @ chunk
+            if($line=~/^(@|@<<[^<>]+@>>=\s*)/o){ 
                 # reached end of chunk
                 $chunk='';
             }else{
@@ -322,6 +332,10 @@ line from the referenced chunk is prefixed with the prefix, all
 following lines with as many whitespace as the prefix is long. The
 postfix is appended to the last line of the chunk.
 
+I have noted that the indentation produced by {\nofake} is different
+from {\noweb}. Currently I don't understand how {\noweb} mainatins
+indentation when extracting multi-line chunks.
+
 <<extract>>=
 %cache=();
 %being_extracted=();
@@ -345,7 +359,7 @@ sub extract {
     $cache{$chunk}='';
     # obtain chunk and process it recursively
     foreach my $line (split /\n/, $chunks{$chunk}){
-        if($line =~/^(.*[^\@]*)@<<([^<>@]+)@>>(.*)$/){
+        if($line =~/^(.*[^\@]*)@<<([^<>@]+)@>>(.*)$/o){
             my $prefix=$1;
             my $postfix=$3;
             my $next=$2;
@@ -362,7 +376,7 @@ sub extract {
             $cache{$chunk} .= "$postfix\n";
             
         }else{
-            $line =~ s/\@(@<<|@>>)/$1/g;
+            $line =~ s/\@(@<<|@>>)/$1/og;
             $cache{$chunk}.="$line\n";
         }
     }
@@ -371,7 +385,7 @@ sub extract {
 }
 @
 
-We parse the command line and start to work: reading the noweb file and
+We parse the command line and start working: reading the noweb file and
 then extracting the chunk in the [[chunk]] variable.
 
 <<process command line and extract chunk>>=
@@ -395,15 +409,6 @@ while ($_ = shift(@ARGV)) {
     elsif(/^(\-.*)$/)           { usage($1); exit(1);}
     else{$fname=$_}
 }
-
-
-# foreach (@ARGV) {
-#    if(/^\-L(.*)/){ $sync=1; if ($1 ne '') {$lineformat=$1;}}
-#    elsif(/^\-R(.+)/){$chunk=$1}
-#    elsif(/^\-(v|-version)$/){version();exit(0);}
-#    elsif(/^\(-.*)/){usage($1); exit(1);}
-#    else{$fname=$_}
-# }
 
 read_file($fname,$sync);
 print extract($chunk);
