@@ -52,11 +52,11 @@ region      = (int,int) -- (* Srcmap.reg *)
 program     = (topdecl*)
 
 topdecl     = TopDeclAt (topdecl, region)
-            | Import  (ty, name*)
-            | Export  (name*)
-            | Const   (const*)
-            | Section (name, section*)
-            | Global  (register*)
+            | Import    (ty, name*)
+            | Export    (ty?,name*)
+            | Const     (const*)
+            | Section   (name, section*)
+            | Registers (register*)
             -- pragmas
             | Pragma                          -- just for testing
 
@@ -116,7 +116,7 @@ formal      = (hint?, invariant, ty, name)
 actual      = (hint?, expr)
 
 decl        = DeclAt (decl, region)
-            | Register  (invariant, ty, name)
+            | LRegisters  (register*)
             | Stackdata (datum*)
            
 flow        = FlowAt (flow, region)
@@ -293,8 +293,8 @@ let block f xs =
 
 let commablock f xs =
     nest begin
-        ~~ break
-        ^^ list (text "," ^^ break) f xs
+    ~~ break
+    ^^ list (text "," ^^ break) f xs
     end
 
 @ To indent a group we provide [[angrp]] and [[fngrp]]; [[fngrp]] is a
@@ -307,18 +307,18 @@ to make new room -- as many as possible breaks are printed as spaces.
 
 let angrp x =
     agrp begin 
-       ~~ nest begin
-          ~~ x
-          end
-       (* *)
+    ~~ nest begin
+       ~~ x
+       end
+    (* *)
     end
 
 let fngrp x =
     fgrp begin 
-       ~~ nest begin
-          ~~ x
-          end
-       (* *)
+    ~~ nest begin
+       ~~ x
+       end
+    (* *)
     end
 
 @ Most of the names used below refer directly to the grammar or
@@ -387,26 +387,26 @@ and expr = function
     | Char( c, Some size)     -> char c ^^ text ":" ^^ int size
     | Fetch(v)                -> lvalue v
     | BinOp(l,op,r)           -> agrp begin
-                                     ~~ text "(" ^^ expr l
-                                     ^^ nest begin
-                                        ~~ text op
-                                        ^^ breakWith ""
-                                        ^^ expr r
-                                        end
-                                     ^^ text ")"
-                                   end
+                                 ~~ text "(" ^^ expr l
+                                 ^^ nest begin
+                                    ~~ text op
+                                    ^^ breakWith ""
+                                    ^^ expr r
+                                    end
+                                 ^^ text ")"
+                                 end
 
     | UnOp(op,e)              -> agrp (str op ^^ expr e)
     | PrimOp(n,xs)            -> agrp (text "%" ^^ id n ^^ actuals xs)
 
 let constant (name,e) =       agrp begin 
-                                ~~ id name 
-                                ^/ text "="
-                                ^/ nest begin
-                                    ~~ expr e
-                                    ^^ semi
-                                   end
-                                end
+                              ~~ id name 
+                              ^/ text "="
+                              ^/ nest begin
+                                 ~~ expr e
+                                 ^^ semi
+                                 end
+                              end
 
 let memsize = function
     | NoSize        -> empty
@@ -417,21 +417,21 @@ let rec init = function
     | InitAt(x,_) -> init x
     | InitExprs(es) -> 
             fgrp begin
-                ~~ text "{"
-                ^/ nest begin
-                    ~~ commalist expr es
-                end
-                ^/ text "}"
+            ~~ text "{"
+            ^/ nest begin
+               ~~ commalist expr es
+               end
+            ^/ text "}"
             end
     | InitStr(s) -> str s
     | InitUStr(s) -> 
             agrp begin
-                ~~ text "unicode"
-                ^/ text "("
-                ^/ nest begin
-                   ~~ str s
-                   end
-                ^/ text ")"
+            ~~ text "unicode"
+            ^/ text "("
+            ^/ nest begin
+               ~~ str s
+               end
+            ^/ text ")"
             end
 
 let rec datum = function
@@ -443,45 +443,45 @@ let rec datum = function
 
 let formal ( h, v, t, n) =
         agrp begin
-            ~~ (match h with Some hint -> str hint ^^ break | None -> empty)
-            ^^ (if v = Invariant then text "invariant" ^^ break else empty)
-            ^^ ty t
-            ^/ id n
+        ~~ (match h with Some hint -> str hint ^^ break | None -> empty)
+        ^^ (if v = Invariant then text "invariant" ^^ break else empty)
+        ^^ ty t
+        ^/ id n
         end
 
 let formals xs = agrp (text "(" ^^ commalist formal xs ^^ text ")")
 
+                 
+let register ( v , t, n, reg) = 
+    agrp begin 
+    ~~ (if v = Invariant then text "invariant" ^^ break else empty)
+    ^^ ty t
+    ^/ id n
+    ^^ (match reg with Some r -> break ^^ str r | None -> empty)
+    ^^ semi
+    end 
+
 let rec decl = function
     | DeclAt(x,_)   -> decl x
-    | Register( Invariant, t, n) ->   
-            agrp begin
-                ~~ text "invariant"
-                ^/ ty t
-                ^/ id n
-                ^^ semi
+    | LRegisters(rs) ->
+            vgrp begin
+            ~~ list break register rs
             end
 
-    | Register( Variant  , t, n) ->   
-            agrp begin 
-                ~~ ty t
-                ^/ id n
-                ^^ semi
-            end
-    
     | Stackdata( dd) ->                
             agrp begin
-                ~~ text "stackdata"
-                ^/ block datum dd
+            ~~ text "stackdata"
+            ^/ block datum dd
             end
 
 
 let altcont (e1,e2) =   
             agrp begin 
-                ~~ text "<" 
-                ^^ expr e1 
-                ^^ text "/" 
-                ^/ expr e2
-                ^^ text ">"
+            ~~ text "<" 
+            ^^ expr e1 
+            ^^ text "/" 
+            ^/ expr e2
+            ^^ text ">"
             end
 
 let targets = function
@@ -514,153 +514,151 @@ let rec stmt = function
     | StmtAt(x,_)   -> stmt x
     | IfStmt ( e, ss1, ss2)    -> 
         agrp begin
-            ~~ agrp (text "if" ^/ expr e)
-            ^/ block stmt ss1
-            ^^ begin match ss2 with
-               | []     -> empty
-               | ss     -> break ^^ text "else" ^/ block stmt ss
-               end
+        ~~ agrp (text "if" ^/ expr e)
+        ^/ block stmt ss1
+        ^^ begin match ss2 with
+           | []     -> empty
+           | ss     -> break ^^ text "else" ^/ block stmt ss
+           end
         end
     | LabelStmt(n)            -> 
         agrp begin
-            ~~ id n ^^ text ":"
+        ~~ id n ^^ text ":"
         end
         
     | ContStmt(n,ns)          ->
         agrp begin
-            ~~ text "continuation"
-            ^^ angrp begin
-               ~~ break
-               ^^ id n
-               ^^ fngrp (break ^^ text "(" ^^ commalist id ns ^^ text ")")
-               ^^ text ":"
-               end
-            (* *)
+        ~~ text "continuation"
+        ^^ angrp begin
+           ~~ break
+           ^^ id n
+           ^^ fngrp (break ^^ text "(" ^^ commalist id ns ^^ text ")")
+           ^^ text ":"
+           end
         end
 
     | SpanStmt(e1,e2,ss)      -> 
         agrp begin
-            ~~ agrp (text "span" ^/ expr e1 ^/ expr e2)
-            ^/ block stmt ss
+        ~~ agrp (text "span" ^/ expr e1 ^/ expr e2)
+        ^/ block stmt ss
         end
     
     | AssignStmt(xs)          -> 
         let lhs,rhs = unzip xs in
-        agrp begin
-            fngrp begin 
-            ~~ commalist lvalue lhs 
-            ^/ text "="
+            agrp begin
+            ~~ fngrp begin 
+               ~~ commalist lvalue lhs 
+               ^/ text "="
+               end
+            ^^ fngrp begin
+               ~~ break
+               ^^ commalist expr rhs
+               ^^ semi
+               end
             end
-            ^^
-            fngrp begin
-            ~~ break
-            ^^ commalist expr rhs
-            ^^ semi
-            end
-        end
     
     | CallStmt( lhs, cc, e, args, ts, fs) -> 
         angrp begin
-            ~~ ( if lhs <> [] 
-                 then fngrp begin 
-                      ~~ commalist lvalue lhs 
-                      ^/ text "="
-                      ^^ break
-                     end
-                 else empty
-               )
-            ^^ ( match cc with 
-               | Some c -> agrp (text "foreign" ^/ str c ^^ break)
-               | None   -> empty
-               ) 
-            ^^ angrp begin 
-               ~~ expr e
-               ^^ fngrp begin 
-                  ~~ break 
-                  ^^ text "(" 
-                  ^^ commalist actual args 
-                  ^^ text ")"
-                  end
-               end
-            ^^ (if ts <> [] then break ^^ targets ts else empty)
-            ^^ (if fs <> [] then break ^^ flows fs else empty)
-            ^^ semi
+        ~~ ( if lhs <> [] 
+             then fngrp begin 
+                  ~~ commalist lvalue lhs 
+                  ^/ text "="
+                  ^^ break
+                 end
+             else empty
+           )
+        ^^ ( match cc with 
+           | Some c -> agrp (text "foreign" ^/ str c ^^ break)
+           | None   -> empty
+           ) 
+        ^^ angrp begin 
+           ~~ expr e
+           ^^ fngrp begin 
+              ~~ break 
+              ^^ text "(" 
+              ^^ commalist actual args 
+              ^^ text ")"
+              end
+           end
+        ^^ (if ts <> [] then break ^^ targets ts else empty)
+        ^^ (if fs <> [] then break ^^ flows fs else empty)
+        ^^ semi
         end
         
     | PrimStmt( lhs, cc, n, args, fs)     -> 
         angrp begin
-            ~~ ( if lhs <> [] 
-                 then fngrp begin 
-                      ~~ commalist lvalue lhs 
-                      ^/ text "="
-                      ^^ break
-                     end
-                 else empty
-               )
-            ^^ ( match cc with 
-               | Some c -> agrp (text "foreign" ^/ str c ^^ break)
-               | None   -> empty
-               ) 
-            ^^ angrp begin 
-               ~~ text "%%" 
-               ^^ id n
-               ^^ fngrp begin 
+        ~~ ( if lhs <> [] 
+             then fngrp begin 
+                  ~~ commalist lvalue lhs 
+                  ^/ text "="
+                  ^^ break
+                 end
+             else empty
+           )
+        ^^ ( match cc with 
+           | Some c -> agrp (text "foreign" ^/ str c ^^ break)
+           | None   -> empty
+           ) 
+        ^^ angrp begin 
+           ~~ text "%%" 
+           ^^ id n
+           ^^ fngrp begin 
+              ~~ break 
+              ^^ text "(" 
+              ^^ commalist actual args 
+              ^^ text ")"
+              end
+           end
+        ^^ (if fs <> [] then break ^^ flows fs else empty)
+        ^^ semi
+        end
+    | GotoStmt(e,ts)                      -> 
+        agrp begin
+        ~~ text "goto"
+        ^/ expr e
+        ^^ (if ts <> [] then break ^^ targets ts else empty)
+        ^^ semi
+        end
+    | CutStmt(n, args, fs)                -> 
+        angrp begin
+        ~~ text "cut to"
+        ^/ id n
+        ^^ fngrp (break ^^ text "(" ^^ commalist actual args ^^ text ")")
+        ^^ (if fs <> [] then break ^^ flows fs else empty)
+        ^^ semi
+        end
+    | ReturnStmt(cc, alt, args)           -> 
+        angrp begin
+        ~~ ( match cc with 
+           | Some c -> text "foreign" ^/ str c ^^ break
+           | None   -> empty
+           )
+        ^^ text "return"
+        ^^ ( match alt with
+           | Some a -> break ^^ altcont a ^^ break
+           | None   -> empty
+           )
+        ^^ fngrp (break ^^ text "(" ^^ commalist actual args ^^ text ")") 
+        ^^ semi 
+        end
+    | JumpStmt(cc,e,args,ts)              -> 
+        angrp begin
+        ~~ ( match cc with 
+           | Some c -> agrp (text "foreign" ^/ str c) ^^ break
+           | None   -> empty
+           )
+        ^^ angrp (text "jump" ^/ expr e)
+        ^^ ( if args <> [] 
+             then fngrp begin 
                   ~~ break 
                   ^^ text "(" 
                   ^^ commalist actual args 
                   ^^ text ")"
                   end
-               end
-            ^^ (if fs <> [] then break ^^ flows fs else empty)
-            ^^ semi
-        end
-    | GotoStmt(e,ts)                      -> 
-        agrp begin
-            ~~ text "goto"
-            ^/ expr e
-            ^^ (if ts <> [] then break ^^ targets ts else empty)
-            ^^ semi
-        end
-    | CutStmt(n, args, fs)                -> 
-        angrp begin
-            ~~ text "cut to"
-            ^/ id n
-            ^^ fngrp (break ^^ text "(" ^^ commalist actual args ^^ text ")")
-            ^^ (if fs <> [] then break ^^ flows fs else empty)
-            ^^ semi
-        end
-    | ReturnStmt(cc, alt, args)           -> 
-        angrp begin
-            ~~ ( match cc with 
-               | Some c -> text "foreign" ^/ str c ^^ break
-               | None   -> empty
-               )
-            ^^ text "return"
-            ^^ ( match alt with
-               | Some a -> break ^^ altcont a ^^ break
-               | None   -> empty
-               )
-            ^^ fngrp (break ^^ text "(" ^^ commalist actual args ^^ text ")") 
-            ^^ semi 
-        end
-    | JumpStmt(cc,e,args,ts)              -> 
-        angrp begin
-            ~~ ( match cc with 
-               | Some c -> agrp (text "foreign" ^/ str c) ^^ break
-               | None   -> empty
-               )
-            ^^ angrp (text "jump" ^/ expr e)
-            ^^ ( if args <> [] 
-                 then fngrp begin 
-                            ~~ break 
-                            ^^ text "(" 
-                            ^^ commalist actual args 
-                            ^^ text ")"
-                            end
-                 else empty
-               )
-            ^^ (if ts <> [] then break ^^ targets ts else empty)
-            ^^ semi
+             else empty
+           )
+        ^^ (if ts <> [] then break ^^ targets ts else empty)
+        ^^ semi
         end
     | EmptyStmt                           -> text ";"
 
@@ -668,77 +666,76 @@ let rec section = function
     | SectionAt(x,_) -> section x
     | SSpan( e1, e2, ss) ->  
             agrp begin
-                agrp (text "span" ^/ expr e1 ^/ expr e2)
-                ^/ block section ss
+            ~~ agrp (text "span" ^/ expr e1 ^/ expr e2)
+            ^/ block section ss
             end
     | Datum( d) ->  
             datum d
     | Procedure(cc,n,fs, ds, ss)  ->  
             agrp begin 
-                agrp begin
-                    begin match cc with 
-                    | Some c -> text "foreign" ^/ str c ^^ break
-                    | None   -> empty
-                    end
-                    ^^ id n
-                    ^^ formals fs
-                end
-                ^/ text "{"
-                ^^ nest begin
-                   ~~ break
-                   ^^ list break decl ds
-                   ^^ break ^^ break
-                   ^^ list break stmt ss
-                   end 
-                ^/ text "}" 
+            ~~ agrp begin
+               ~~ begin match cc with 
+                  | Some c -> text "foreign" ^/ str c ^^ break
+                  | None   -> empty
+                  end
+               ^^ id n
+               ^^ formals fs
+               end
+            ^/ text "{"
+            ^^ nest begin
+               ~~ break
+               ^^ list break decl ds
+               ^^ break ^^ break
+               ^^ list break stmt ss
+               end 
+            ^/ text "}" 
             end
-                 
-let register ( v , t, n, reg) = 
-    agrp begin 
-        ~~ (if v = Invariant then text "invariant" ^^ break else empty)
-        ^^ ty t
-        ^/ id n
-        ^^ (match reg with Some r -> break ^^ str r | None -> empty)
-        ^^ semi
-    end 
 
 let rec topdecl = function
     | TopDeclAt(x,_) -> topdecl x
     | Import( t, ns) -> 
-            agrp begin 
-                agrp (text "import" ^/ ty t)
-                ^/ commablock id ns
-                ^^ semi
+            agrp begin
+            ~~ agrp (text "import" ^/ ty t)
+               ^/ commablock id ns
+               ^^ semi
             end
-    | Export( ns) ->
-            agrp begin 
-                ~~ text "export"
-                ^/ commablock id ns
-                ^^ semi
-            end 
+
+    | Export( t, ns) ->
+            agrp begin
+            ~~ agrp begin 
+               ~~ text "export" 
+               ^^ ( match t with 
+                  | Some t -> break ^^ ty t
+                  | None   -> empty
+                  )
+               end
+               ^/ commablock id ns
+               ^^ semi
+            end
+    
     | Const ( cs) ->
             agrp begin 
-                ~~ text "const"
-                ^/ block constant cs
+            ~~ text "const"
+            ^/ block constant cs
             end
     | Section( n, ss) ->
             agrp begin 
-                agrp (text "section" ^/ str n)
-                ^/ block section ss
+            ~~ agrp (text "section" ^/ str n)
+            ^/ block section ss
             end
                    
-    | Global( rs) ->
-            agrp begin 
-                ~~ text "global"
-                ^/ block register rs
+    | Registers( rs) ->
+            vgrp begin
+            ~~ list break register rs
             end
+            
     | Pragma ->
             comment "<pragma>"
 
 let program(ds) = vgrp begin
-                        ~~ list (break ^^ break) topdecl ds
-                        ^^ break
-                    end
+                  ~~ list (break ^^ break) topdecl ds
+                  ^^ break
+                  end
             
                                             
 let ppToFile fd width prog = Pp.ppToFile fd width (program prog)

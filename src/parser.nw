@@ -128,13 +128,13 @@ returns the matching token or raises [[Not_found]].
         ; ("equal"          , EQUAL)
         ; ("export"         , EXPORT)
         ; ("foreign"        , FOREIGN)
-        ; ("global"         , GLOBAL)
         ; ("goto"           , GOTO)
         ; ("if"             , IF)
         ; ("import"         , IMPORT)
         ; ("invariant"      , INVARIANT)
         ; ("jump"           , JUMP)
         ; ("pragma"         , PRAGMA)
+        ; ("register"       , REGISTER)
         ; ("return"         , RETURN)
         ; ("returns"        , RETURNS)
         ; ("section"        , SECTION)
@@ -525,7 +525,6 @@ all tokens for a file together with their positions.
     | EQUAL             -> "EQUAL"
     | EXPORT            -> "EXPORT"
     | FOREIGN           -> "FOREIGN"
-    | GLOBAL            -> "GLOBAL"
     | GOTO              -> "GOTO"
     | IF                -> "IF"
     | IMPORT            -> "IMPORT"
@@ -538,6 +537,7 @@ all tokens for a file together with their positions.
     | PRAGMA            -> "PRAGMA"
     | RBRACE            -> "RBRACE"
     | RBRACKET          -> "RBRACKET"
+    | REGISTER          -> "REGISTER"
     | RETURN            -> "RETURN"
     | RETURNS           -> "RETURNS"
     | RPAREN            -> "RPAREN"
@@ -604,9 +604,10 @@ open List
 
 let error pos msg = Error.parseExn pos msg
 
-let localReg region = function
-    | (var,ty,id,None) -> DeclAt(Register(var,ty,id),region)
-    | (var,ty,id,_)    -> error (fst region) "no hint allowed for local variable"
+let mkRegs v (ty,regs) =
+    let r (id,hint) = (v, ty, id, hint) 
+    in
+        map r regs
 
 @ Multiple assignments are defined as a list of pairs in the abstract syntax
 but two lists in the concrete syntax. The [[assign]] function implements
@@ -657,7 +658,6 @@ let px () = (Parsing.symbol_start ())
 %token EQUAL
 %token EXPORT
 %token FOREIGN
-%token GLOBAL
 %token GOTO
 %token IF
 %token IMPORT
@@ -669,6 +669,7 @@ let px () = (Parsing.symbol_start ())
 %token PPERCENT
 %token RBRACE
 %token RBRACKET
+%token REGISTER
 %token RETURN
 %token RETURNS
 %token RPAREN
@@ -758,9 +759,14 @@ line        :   LINE LBRACE STR INT RBRACE
             
 toplevelAt  :   toplevel                          { TopDeclAt($1,p())   }
 toplevel    :   IMPORT ty names  SEMI             { Import($2,rev $3)   }
-            |   EXPORT    names  SEMI             { Export(rev $2)      }
+            |   EXPORT    names  SEMI             { Export(None   , rev $2)}
+            |   EXPORT ty names  SEMI             { Export(Some $2, rev $3)}
             |   CONST LBRACE constants RBRACE     { Const(rev $3)       }
-            |   GLOBAL LBRACE registers RBRACE    { Global($3)          }
+            |   INVARIANT REGISTER registers SEMI 
+                    { Registers (mkRegs Invariant $3) }
+            |   /*-----*/ REGISTER registers SEMI
+                    { Registers (mkRegs Variant   $2) }
+            
             |   SECTION STR LBRACE sections RBRACE { Section($2,rev $4) }
             |   pragma                            { $1                  }
 
@@ -778,24 +784,29 @@ span        :   SPAN exprAt expr
 constants   :   constants ID EQUAL exprAt SEMI    { ($2,$4)::$1 }
             |   /**/                              { []          }
 
-decls       :   decls declAt                      { $1 @ $2  }
-            |   /**/                              { []       }
+decls       :   decls declAt                      { $2 :: $1  }
+            |   /**/                              { []        }
 
-declAt      :   register                     { map (localReg (p())) $1         }
-            |   STACKDATA LBRACE data RBRACE { [DeclAt(Stackdata(rev $3),p())] }
+declAt      :   decl                              
+                    { DeclAt($1,p())                   }
+decl        :   INVARIANT REGISTER registers SEMI
+                    { LRegisters (mkRegs Invariant $3) }
+            |   INVARIANT /*----*/ registers SEMI
+                    { LRegisters (mkRegs Invariant $2) }
+            |   /*-----*/ REGISTER registers SEMI
+                    { LRegisters (mkRegs Variant   $2) }
+            |   /*-----*/ /*----*/ registers SEMI
+                    { LRegisters (mkRegs Variant   $1) }
+            |   STACKDATA LBRACE data RBRACE
+                    { Stackdata(rev $3)                }
 
-register    :   INVARIANT tyAt regs SEMI 
-                { map (fun (id,hint) -> (Invariant,$2,id,hint)) (rev $3) }
-            |   /*******/ tyAt regs SEMI       
-                { map (fun (id,hint) -> (Variant  ,$1,id,hint)) (rev $2) } 
+
+registers   :   tyAt regs                   { $1, rev $2 }
 
 regs        :   regs COMMA ID STR           { ($3,Some $4)::$1              }
             |   regs COMMA ID               { ($3,None   )::$1              }
             |   ID STR                      { [($1,Some $2)]                }
             |   ID                          { [($1,None   )]                }
-
-registers   :   registers register          { $1 @ $2                       }
-            |   /**/                        { []                            }
 
 datumAt     :   datum                       { DatumAt($1, p())              }
 datum       :   ID COLON                    { Label($1)                     }
