@@ -6,20 +6,20 @@ Cmm.ref_to_global_area:
 .section .text
 call3:
 	leal -20(%esp), %esp
-	movl $4,%edx
-	leal 20(%esp), %ecx
-	addl %edx,%ecx
-	movl (%ecx),%edx
-	movl $8,%ecx
-	movl %eax,(%esp)
-	leal 20(%esp), %eax
-	addl %ecx,%eax
-	movl (%eax),%ecx
-	movl $12,%eax
-	movl %edx,4(%esp)
 	leal 20(%esp), %edx
+	movl $4,%ecx
+	addl %ecx,%edx
+	movl (%edx),%ecx
+	leal 20(%esp), %edx
+	movl %eax,(%esp)
+	movl $8,%eax
 	addl %eax,%edx
 	movl (%edx),%eax
+	leal 20(%esp), %edx
+	movl %ecx,4(%esp)
+	movl $12,%ecx
+	addl %ecx,%edx
+	movl (%edx),%ecx
 	leal 20(%esp), %edx
 	movl (%edx),%edx
 Linitialize_continuations_l4:
@@ -27,22 +27,22 @@ Lproc_body_start_l3:
 	movl %eax,8(%esp)
 	movl 4(%esp),%eax
 	movl %ecx,12(%esp)
-	movl $8,%ecx
+	leal 20(%esp), %ecx
 	movl %edx,16(%esp)
-	leal 20(%esp), %edx
-	addl %ecx,%edx
-	movl 12(%esp),%ecx
-	movl %ecx,(%edx)
-	movl $12,%ecx
-	leal 20(%esp), %edx
-	addl %ecx,%edx
-	movl 8(%esp),%ecx
-	movl %ecx,(%edx)
-	movl $4,%ecx
-	leal 20(%esp), %edx
-	addl %ecx,%edx
-	movl 16(%esp),%ecx
-	movl %ecx,(%edx)
+	movl $8,%edx
+	addl %edx,%ecx
+	movl 8(%esp),%edx
+	movl %edx,(%ecx)
+	leal 20(%esp), %ecx
+	movl $12,%edx
+	addl %edx,%ecx
+	movl 12(%esp),%edx
+	movl %edx,(%ecx)
+	leal 20(%esp), %ecx
+	movl $4,%edx
+	addl %edx,%ecx
+	movl 16(%esp),%edx
+	movl %edx,(%ecx)
 	leal 24(%esp), %esp
 	movl -24(%esp),%ecx
 	jmp *%ecx

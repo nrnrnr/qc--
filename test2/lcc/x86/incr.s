@@ -17,167 +17,176 @@ Linitialize_continuations_l8:
 Lproc_body_start_l7:
 	movl $0,%eax
 	leal 4(%esp), %edx
-	movl $0,%ecx
+	leal 4(%esp), %ecx
 	movl %ebx,(%esp)
-	leal 4(%esp), %ebx
-	addl %ecx,%ebx
-	movl (%edx),%ecx
-	movl %ecx,(%ebx)
+	movl $0,%ebx
+	addl %ebx,%ecx
+	movl (%edx),%ebx
+	movl %ebx,(%ecx)
 	movl (%esp),%ebx
 	leal 4(%esp), %esp
 	ret
 .section .text
 memchar:
-	leal -16(%esp), %esp
+	leal -28(%esp), %esp
 Linitialize_continuations_l21:
 Lproc_body_start_l20:
-	movl $-4,%edx
-	leal 16(%esp), %ecx
-	addl %edx,%ecx
-	movl (%ecx),%edx
-	movl $1,%ecx
-	movl %edx,%eax
-	addl %ecx,%eax
+	leal 28(%esp), %edx
+	movl $-4,%ecx
+	addl %ecx,%edx
+	movl (%edx),%ecx
+	movl $1,%edx
+	movl %ecx,%eax
+	addl %edx,%eax
 	movl %ebx,(%esp)
-	movl $-4,%ebx
+	leal 28(%esp), %ebx
 	movl %ebp,4(%esp)
-	leal 16(%esp), %ebp
-	addl %ebx,%ebp
-	movl %eax,(%ebp)
-	movl $-8,%eax
-	leal 16(%esp), %ebp
-	addl %eax,%ebp
-	movzbl (%edx),%eax
-	movb %al,(%ebp)
-	movl $-4,%eax
-	leal 16(%esp), %ebp
-	addl %eax,%ebp
-	movl (%ebp),%eax
-	addl %ecx,%eax
-	movl $-4,%ecx
-	leal 16(%esp), %ebp
-	addl %ecx,%ebp
-	movl %eax,(%ebp)
-	movl $-8,%ebp
-	leal 16(%esp), %ecx
-	addl %ebp,%ecx
-	movzbl (%eax),%eax
-	movb %al,(%ecx)
-	movl $-4,%eax
-	leal 16(%esp), %ecx
-	addl %eax,%ecx
-	movl (%ecx),%eax
-	movl $-1,%ecx
-	movl %eax,%ebp
-	addl %ecx,%ebp
-	movl $-4,%edx
-	leal 16(%esp), %ebx
-	addl %edx,%ebx
-	movl %ebp,(%ebx)
-	movl $-8,%ebx
-	leal 16(%esp), %ebp
-	addl %ebx,%ebp
-	movzbl (%eax),%eax
-	movb %al,(%ebp)
-	movl $-4,%eax
-	leal 16(%esp), %ebp
-	addl %eax,%ebp
-	movl (%ebp),%eax
-	addl %ecx,%eax
-	movl $-4,%ecx
-	leal 16(%esp), %ebp
-	addl %ecx,%ebp
-	movl %eax,(%ebp)
-	movl $-8,%ebp
-	leal 16(%esp), %ecx
-	addl %ebp,%ecx
-	movzbl (%eax),%eax
-	movb %al,(%ecx)
-	movl $0,%eax
-	leal 16(%esp), %ecx
-	movl $0,%ebp
-	leal 16(%esp), %ebx
+	movl $-4,%ebp
 	addl %ebp,%ebx
-	movl (%ecx),%ebp
-	movl %ebp,(%ebx)
+	movl %eax,(%ebx)
+	leal 28(%esp), %eax
+	movl $-8,%ebx
+	addl %ebx,%eax
+	movzbl (%ecx),%ebx
+	movl %eax,8(%esp)
+	movl %ebx,%eax
+	movl 8(%esp),%ebx
+	movb %al,(%ebx)
+	leal 28(%esp), %eax
+	movl $-4,%ebx
+	addl %ebx,%eax
+	movl (%eax),%ebx
+	addl %edx,%ebx
+	leal 28(%esp), %edx
+	movl $-4,%eax
+	addl %eax,%edx
+	movl %ebx,(%edx)
+	leal 28(%esp), %edx
+	movl $-8,%eax
+	addl %eax,%edx
+	movzbl (%ebx),%eax
+	movb %al,(%edx)
+	leal 28(%esp), %eax
+	movl $-4,%edx
+	addl %edx,%eax
+	movl (%eax),%edx
+	movl $-1,%eax
+	movl %edx,%ebx
+	addl %eax,%ebx
+	leal 28(%esp), %ecx
+	movl $-4,%ebp
+	addl %ebp,%ecx
+	movl %ebx,(%ecx)
+	leal 28(%esp), %ecx
+	movl $-8,%ebx
+	addl %ebx,%ecx
+	movzbl (%edx),%ebx
+	movl %eax,12(%esp)
+	movl %ebx,%eax
+	movb %al,(%ecx)
+	leal 28(%esp), %eax
+	movl $-4,%ecx
+	addl %ecx,%eax
+	movl (%eax),%ecx
+	movl 12(%esp),%eax
+	addl %eax,%ecx
+	leal 28(%esp), %eax
+	movl $-4,%ebx
+	addl %ebx,%eax
+	movl %ecx,(%eax)
+	leal 28(%esp), %eax
+	movl $-8,%ebx
+	addl %ebx,%eax
+	movzbl (%ecx),%ebx
+	movl %eax,16(%esp)
+	movl %ebx,%eax
+	movl 16(%esp),%ebx
+	movb %al,(%ebx)
+	movl $0,%eax
+	leal 28(%esp), %ebx
+	leal 28(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl (%ebx),%edx
+	movl %edx,(%ecx)
 	movl (%esp),%ebx
 	movl 4(%esp),%ebp
-	leal 16(%esp), %esp
+	leal 28(%esp), %esp
 	ret
 .section .text
 memint:
 	leal -16(%esp), %esp
 Linitialize_continuations_l34:
 Lproc_body_start_l33:
-	movl $-4,%edx
-	leal 16(%esp), %ecx
-	addl %edx,%ecx
-	movl (%ecx),%edx
-	movl $4,%ecx
-	movl %edx,%eax
-	addl %ecx,%eax
-	movl %ebx,(%esp)
-	movl $-4,%ebx
-	movl %ebp,4(%esp)
-	leal 16(%esp), %ebp
-	addl %ebx,%ebp
-	movl %eax,(%ebp)
-	movl $-8,%eax
-	leal 16(%esp), %ebp
-	addl %eax,%ebp
-	movl (%edx),%eax
-	movl %eax,(%ebp)
-	movl $-4,%eax
-	leal 16(%esp), %ebp
-	addl %eax,%ebp
-	movl (%ebp),%eax
-	addl %ecx,%eax
+	leal 16(%esp), %edx
 	movl $-4,%ecx
-	leal 16(%esp), %ebp
-	addl %ecx,%ebp
-	movl %eax,(%ebp)
-	movl $-8,%ebp
-	leal 16(%esp), %ecx
-	addl %ebp,%ecx
-	movl (%eax),%ebp
-	movl %ebp,(%ecx)
-	movl $-4,%ecx
-	leal 16(%esp), %ebp
-	addl %ecx,%ebp
-	movl (%ebp),%ecx
-	movl $-4,%ebp
+	addl %ecx,%edx
+	movl (%edx),%ecx
+	movl $4,%edx
 	movl %ecx,%eax
-	addl %ebp,%eax
-	movl $-4,%edx
+	addl %edx,%eax
+	movl %ebx,(%esp)
 	leal 16(%esp), %ebx
-	addl %edx,%ebx
-	movl %eax,(%ebx)
-	movl $-8,%eax
-	leal 16(%esp), %ebx
-	addl %eax,%ebx
-	movl (%ecx),%eax
-	movl %eax,(%ebx)
-	movl $-4,%eax
-	leal 16(%esp), %ebx
-	addl %eax,%ebx
-	movl (%ebx),%eax
-	addl %ebp,%eax
+	movl %ebp,4(%esp)
 	movl $-4,%ebp
-	leal 16(%esp), %ebx
 	addl %ebp,%ebx
 	movl %eax,(%ebx)
+	leal 16(%esp), %eax
 	movl $-8,%ebx
-	leal 16(%esp), %ebp
-	addl %ebx,%ebp
+	addl %ebx,%eax
+	movl (%ecx),%ebx
+	movl %ebx,(%eax)
+	leal 16(%esp), %eax
+	movl $-4,%ebx
+	addl %ebx,%eax
 	movl (%eax),%ebx
-	movl %ebx,(%ebp)
-	movl $0,%eax
-	leal 16(%esp), %ebx
-	movl $0,%ebp
+	addl %edx,%ebx
+	leal 16(%esp), %edx
+	movl $-4,%eax
+	addl %eax,%edx
+	movl %ebx,(%edx)
+	leal 16(%esp), %edx
+	movl $-8,%eax
+	addl %eax,%edx
+	movl (%ebx),%eax
+	movl %eax,(%edx)
+	leal 16(%esp), %eax
+	movl $-4,%edx
+	addl %edx,%eax
+	movl (%eax),%edx
+	movl $-4,%eax
+	movl %edx,%ebx
+	addl %eax,%ebx
 	leal 16(%esp), %ecx
+	movl $-4,%ebp
 	addl %ebp,%ecx
-	movl (%ebx),%ebp
-	movl %ebp,(%ecx)
+	movl %ebx,(%ecx)
+	leal 16(%esp), %ecx
+	movl $-8,%ebx
+	addl %ebx,%ecx
+	movl (%edx),%ebx
+	movl %ebx,(%ecx)
+	leal 16(%esp), %ecx
+	movl $-4,%ebx
+	addl %ebx,%ecx
+	movl (%ecx),%ebx
+	addl %eax,%ebx
+	leal 16(%esp), %eax
+	movl $-4,%ecx
+	addl %ecx,%eax
+	movl %ebx,(%eax)
+	leal 16(%esp), %eax
+	movl $-8,%ecx
+	addl %ecx,%eax
+	movl (%ebx),%ecx
+	movl %ecx,(%eax)
+	movl $0,%eax
+	leal 16(%esp), %ecx
+	leal 16(%esp), %ebx
+	movl $0,%edx
+	addl %edx,%ebx
+	movl (%ecx),%edx
+	movl %edx,(%ebx)
 	movl (%esp),%ebx
 	movl 4(%esp),%ebp
 	leal 16(%esp), %esp
@@ -203,12 +212,12 @@ Lproc_body_start_l46:
 	movsbl (%eax),%edx
 	movl $0,%eax
 	leal 4(%esp), %edx
-	movl $0,%ecx
+	leal 4(%esp), %ecx
 	movl %ebx,(%esp)
-	leal 4(%esp), %ebx
-	addl %ecx,%ebx
-	movl (%edx),%ecx
-	movl %ecx,(%ebx)
+	movl $0,%ebx
+	addl %ebx,%ecx
+	movl (%edx),%ebx
+	movl %ebx,(%ecx)
 	movl (%esp),%ebx
 	leal 4(%esp), %esp
 	ret
@@ -233,12 +242,12 @@ Lproc_body_start_l59:
 	movl (%eax),%edx
 	movl $0,%eax
 	leal 4(%esp), %edx
-	movl $0,%ecx
+	leal 4(%esp), %ecx
 	movl %ebx,(%esp)
-	leal 4(%esp), %ebx
-	addl %ecx,%ebx
-	movl (%edx),%ecx
-	movl %ecx,(%ebx)
+	movl $0,%ebx
+	addl %ebx,%ecx
+	movl (%edx),%ebx
+	movl %ebx,(%ecx)
 	movl (%esp),%ebx
 	leal 4(%esp), %esp
 	ret

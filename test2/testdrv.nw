@@ -1,4 +1,4 @@
-% -*- mode: Noweb; noweb-code-mode: fundamental-mode -*-
+% -*- mode: Noweb; noweb-code-mode: lua-mode -*-
 % ------------------------------------------------------------------ 
 \section{Lua Test Driver}
 % ------------------------------------------------------------------ 
@@ -326,7 +326,7 @@ function Test.check_update_file(inputs, file, i)
   local equiv = Util.files_nonwhite_equivalent(exp, file)
   if not equiv then
     if Test.update then
-      print(format("%s \thas changed \t\t!! updating !!", exp))
+      write(format("[new %s] ", exp))
       if not Test.copy_file(file, exp) then
         print(format(" !! error moving file %s to %s !!", file,  exp))
       end
@@ -338,9 +338,35 @@ function Test.check_update_file(inputs, file, i)
     return 1
   else
     if Test.update then
-      print(format("%s \thas not changed", exp))
+      if Test.verbose then
+        write(format("(%s unchanged) ", exp))
+      end
     else
       Test.log("%s matches output", exp)
+    end
+  end
+  return 0
+end
+@ 
+<<testdrv.lua>>=
+function Test.check_exit_code(inputs, rc)
+  local expected = inputs.rc or 0
+  if expected ~= rc then
+    if Test.update then
+      print(format("exit code for %s must be set to %s by hand", inputs.name, rc))
+    else
+      Test.log("expected exit code %s, but got %s", expected, rc)
+      Test.error(inputs.source, inputs.name .. ".rc", rc, ".rc")
+      inputs.diffs = inputs.diffs .. " " .. ".rc"
+    end
+    return 1
+  else
+    if Test.update then
+      if Test.verbose then
+        print(format("exit code \thas not changed"))
+      end
+    else
+      Test.log("exit code matches output")
     end
   end
   return 0
@@ -374,7 +400,7 @@ function Test.run_test_case(inputs)
         local pso, pse, rc = Test.run_exe(exe_file, inputs.stdin, inputs.argv)
         status = Test.check_update_file(inputs, pso)
                + Test.check_update_file(inputs, pse)
-               ---   + rc
+               + Test.check_exit_code  (inputs, rc)
         Test.remove(pso, pse, exe_file)
       else
         status = 1  -- failed to build exe is an error
@@ -384,6 +410,7 @@ function Test.run_test_case(inputs)
     end
   end
 
+  if status > 0 and Test.update then write('\n') end -- end to updates
   Test.remove(to_remove)
 
   <<if there are [[inputs.diffs]], print a summary line using [[status]]>>
@@ -399,7 +426,8 @@ while sources[i] do
   assert(s_file)
 
   s_files = s_files .. " " .. s_file
-  status = status + Test.check_update_file(inputs, s_file, i)
+  local s_status = Test.check_update_file(inputs, s_file, i)
+  status = status + (Test.different_asm_ok and 0 or s_status)
                   + Test.check_update_file(inputs, so, i)
                   + Test.check_update_file(inputs, se, i)
   i = i + 1
@@ -414,7 +442,7 @@ if inputs.diffs ~= "" then
     print(format("%s %s %s.record", Test.cmd_string(), 
                  Test.tst_file, inputs.name))
   else
-    local stat = (status == 0) and "PASSED" or "FAILED"
+    local stat = (status == 0) and "passed" or "FAILED"
     print(format("%s %s %s.test \t# %s {%s } differ", Test.cmd_string(1),
 	         Test.tst_file, inputs.name, stat, inputs.diffs))
   end

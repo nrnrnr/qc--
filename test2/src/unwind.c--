@@ -1,12 +1,25 @@
 // does not do anything, but should not cause assertion failure
 
   target byteorder little wordsize 32 ;
-  import bits32 g;
 
-  f() {
+  export unwind_test;
+
+  foreign "C" unwind_test() {
     g() also unwinds to k1 also aborts;
-    return;
+    foreign "C" return (0);
 
-    continuation k1():
-      return;
+    continuation k1(n):
+      bits32 n;
+      foreign "C" return (n);
   }
+
+g() {
+  foreign "C" do_unwind(k) never returns also aborts also cuts to k;
+  import do_unwind;
+
+  continuation k(): return (1);
+}
+
+
+
+  

@@ -12,48 +12,48 @@ notzero:
 .section .text
 main:
 	leal -16(%esp), %esp
-	movl $4,%eax
+	leal 16(%esp), %eax
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl (%eax),%ecx
 	leal 16(%esp), %ecx
-	addl %eax,%ecx
-	movl (%ecx),%eax
 	movl $8,%eax
-	leal 16(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
 	leal notzero,%eax
-	movl $-16,%ecx
-	leal 16(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
+	leal 16(%esp), %ecx
+	movl $-16,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call strlen
 Ljoin_l11:
 	leal answer,%ecx
-	movl $-16,%edx
+	leal 16(%esp), %edx
 	movl %ebx,12(%esp)
-	leal 16(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-12,%ecx
-	leal 16(%esp), %ebx
-	addl %ecx,%ebx
-	movl %eax,(%ebx)
-	leal notzero,%eax
-	movzbl (%eax),%ebx
-	movl $-8,%eax
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 16(%esp), %ecx
-	addl %eax,%ecx
-	movl %ebx,(%ecx)
+	movl $-12,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
+	leal notzero,%eax
+	movzbl (%eax),%ecx
+	leal 16(%esp), %eax
+	movl $-8,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
 	call printf
 Ljoin_l8:
 	movl $0,%eax
 	leal 16(%esp), %ecx
-	movl $0,%edx
-	leal 16(%esp), %ebx
-	addl %edx,%ebx
-	movl (%ecx),%edx
-	movl %edx,(%ebx)
+	leal 16(%esp), %edx
+	movl $0,%ebx
+	addl %ebx,%edx
+	movl (%ecx),%ebx
+	movl %ebx,(%edx)
 	movl 12(%esp),%ebx
 	leal 16(%esp), %esp
 	ret

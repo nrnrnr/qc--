@@ -1,3 +1,4 @@
+.globl unwind_test
 .globl Cmm.global_area
 .globl Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY
 .section .data
@@ -5,57 +6,160 @@
 Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
 .section .text
-f:
-	leal -4(%esp), %esp
-	leal 4(%esp), %eax
-	movl (%eax),%ecx
-Linitialize_continuations_l10:
-Lproc_body_start_l9:
-	movl %ecx,(%esp)
+unwind_test:
+	leal -12(%esp), %esp
+Linitialize_continuations_l12:
+Lproc_body_start_l11:
+	movl %eax,(%esp)
 	call g
-Ljoin_l15:
+Ljoin_l17:
 	movl $0,%eax
-	leal 4(%esp), %ecx
-	addl %eax,%ecx
-	movl (%esp),%eax
-	movl %eax,(%ecx)
-	leal 4(%esp), %esp
+	leal 12(%esp), %edx
+	leal 12(%esp), %ecx
+	movl %edi,8(%esp)
+	movl $0,%edi
+	addl %edi,%ecx
+	movl (%edx),%edi
+	movl %edi,(%ecx)
+	movl 8(%esp),%edi
+	leal 12(%esp), %esp
 	ret
-k1_U8:
-	movl $0,%eax
-	leal 4(%esp), %ecx
-	addl %eax,%ecx
+k1_U10:
 	movl (%esp),%eax
-	movl %eax,(%ecx)
-	leal 4(%esp), %esp
+	leal 12(%esp), %ecx
+	leal 12(%esp), %edx
+	movl %ebx,4(%esp)
+	movl $0,%ebx
+	addl %ebx,%edx
+	movl (%ecx),%ebx
+	movl %ebx,(%edx)
+	movl 4(%esp),%ebx
+	leal 12(%esp), %esp
 	ret
 .section .pcmap_data
-Lstackdata_l20:
+Lstackdata_l23:
 .long 0
 .section .pcmap
-.long Ljoin_l15
-.long Lframe_l21
+.long Ljoin_l17
+.long Lframe_l24
 .section .pcmap_data
-Lframe_l21:
-.long 0xfffffffc
+Lframe_l24:
+.long 0xfffffff4
 .long 0x80000004
-.long 0xfffffffc
-.long Lstackdata_l20
+.long 0x80000000
+.long Lstackdata_l23
+.long 0x80000008
+.long 0x80000001
+.long 0x80000000
+.long 0x80000007
+.long 0x40000007
+.long 0x40000007
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
+.long 0x4000000b
+.long 0xfffffff4
+.long 0x80000001
+.long 0x80000002
+.long 0x80000000
+.long 0x80000003
+.long 0
+.long k1_U10
+.long 0xfffffff4
+.section .text
+.section .text
+g:
+	leal -32(%esp), %esp
+	leal 32(%esp), %eax
+	movl (%eax),%ecx
+Linitialize_continuations_l32:
+	leal k_C29,%eax
+	leal 32(%esp), %edx
+	movl %ecx,4(%esp)
+	movl $-8,%ecx
+	addl %ecx,%edx
+	movl %eax,(%edx)
+	leal 32(%esp), %eax
+	movl $-32,%edx
+	addl %edx,%eax
+	leal 32(%esp), %edx
+	movl $-4,%ecx
+	addl %ecx,%edx
+	movl %eax,(%edx)
+Lproc_body_start_l31:
+	leal 32(%esp), %eax
+	movl $-8,%edx
+	addl %edx,%eax
+	leal 32(%esp), %edx
+	movl $-32,%ecx
+	addl %ecx,%edx
+	movl %eax,(%edx)
+	movl %edi,20(%esp)
+	movl %esi,16(%esp)
+	movl %ebp,12(%esp)
+	movl %ebx,8(%esp)
+	call do_unwind
+Lpostcall_l36:
+k_C29:
+	movl $1,%eax
+	leal 32(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 4(%esp),%edx
+	movl %edx,(%ecx)
+	movl 8(%esp),%ebx
+	movl 12(%esp),%ebp
+	movl 16(%esp),%esi
+	movl 20(%esp),%edi
+	leal 32(%esp), %esp
+	ret
+.section .pcmap_data
+Lstackdata_l41:
+.long 0
+.section .pcmap
+.long Lpostcall_l36
+.long Lframe_l42
+.section .pcmap_data
+Lframe_l42:
+.long 0xffffffe0
+.long 0x80000004
+.long 0xffffffe4
+.long Lstackdata_l41
 .long 0x80000008
 .long 0x80000000
 .long 0x80000000
-.long 0x80000005
-.long 0x40000007
-.long 0x40000007
-.long 0x40000009
-.long 0x40000009
-.long 0x4000000a
-.long 0x4000000a
-.long 0x4000000b
-.long 0x4000000b
 .long 0x80000001
-.long 0x80000002
-.long 0
-.long k1_U8
-.long 0xfffffffc
+.long 0x40000007
+.long 0xffffffe8
+.long 0x40000009
+.long 0xffffffec
+.long 0x4000000a
+.long 0xfffffff0
+.long 0x4000000b
+.long 0xfffffff4
+.long 0x80000000
+.section .pcmap
+.long k_C29
+.long Lframe_l43
+.section .pcmap_data
+Lframe_l43:
+.long 0xffffffe0
+.long 0x80000004
+.long 0xffffffe4
+.long Lstackdata_l41
+.long 0x80000008
+.long 0x80000000
+.long 0x80000000
+.long 0x80000001
+.long 0x40000007
+.long 0xffffffe8
+.long 0x40000009
+.long 0xffffffec
+.long 0x4000000a
+.long 0xfffffff0
+.long 0x4000000b
+.long 0xfffffff4
+.long 0x80000000
 .section .text

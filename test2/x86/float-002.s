@@ -8,1176 +8,1176 @@ Cmm.global_area:
 .section .text
 main:
 	leal -52(%esp), %esp
-	movl $4,%eax
+	leal 52(%esp), %eax
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl (%eax),%ecx
 	leal 52(%esp), %ecx
-	addl %eax,%ecx
-	movl (%ecx),%eax
 	movl $8,%eax
-	leal 52(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
 	movl $2139095040,%eax
-	movl $-24,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	movl $-24,%eax
-	leal 52(%esp), %edx
-	addl %eax,%edx
-	flds (%edx)
-	movl $-52,%edx
+	leal 52(%esp), %ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	leal 52(%esp), %eax
-	addl %edx,%eax
+	movl $-24,%ecx
+	addl %ecx,%eax
+	flds (%eax)
+	leal 52(%esp), %eax
+	movl $-52,%ecx
+	addl %ecx,%eax
 	fstpl (%eax)
 	call isnan
 Ljoin_l149:
 	movl $2139095040,%ecx
-	movl $-24,%edx
+	leal 52(%esp), %edx
 	movl %ebx,40(%esp)
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-52,%ebx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,44(%esp)
 	call isinf
 Ljoin_l146:
 	movl $2139095040,%ecx
-	movl $-24,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-52,%ebx
+	leal 52(%esp), %edx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,48(%esp)
 	call finite
 Ljoin_l143:
 	leal fmt,%ecx
-	movl $-52,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	leal op1,%ecx
-	movl $-48,%ebx
 	leal 52(%esp), %edx
+	movl $-52,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
+	leal op1,%ecx
+	leal 52(%esp), %edx
+	movl $-48,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
 	movl $2139095040,%ecx
-	movl $-24,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-44,%ebx
+	leal 52(%esp), %edx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-44,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
-	movl $-36,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl 44(%esp),%ecx
-	movl %ecx,(%ebx)
-	movl $-32,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl 48(%esp),%ecx
-	movl %ecx,(%ebx)
-	movl $-28,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl %eax,(%ebx)
+	leal 52(%esp), %ecx
+	movl $-36,%edx
+	addl %edx,%ecx
+	movl 44(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-32,%edx
+	addl %edx,%ecx
+	movl 48(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-28,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 Ljoin_l140:
 	movl $-8388608,%eax
-	movl $-24,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	movl $-24,%eax
-	leal 52(%esp), %edx
-	addl %eax,%edx
-	flds (%edx)
-	movl $-52,%edx
+	leal 52(%esp), %ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	leal 52(%esp), %eax
-	addl %edx,%eax
+	movl $-24,%ecx
+	addl %ecx,%eax
+	flds (%eax)
+	leal 52(%esp), %eax
+	movl $-52,%ecx
+	addl %ecx,%eax
 	fstpl (%eax)
 	call isnan
 Ljoin_l137:
 	movl $-8388608,%ecx
-	movl $-24,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-52,%ebx
+	leal 52(%esp), %edx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,44(%esp)
 	call isinf
 Ljoin_l134:
 	movl $-8388608,%ecx
-	movl $-24,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-52,%ebx
+	leal 52(%esp), %edx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,48(%esp)
 	call finite
 Ljoin_l131:
 	leal fmt,%ecx
-	movl $-52,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	leal op2,%ecx
-	movl $-48,%ebx
 	leal 52(%esp), %edx
+	movl $-52,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
+	leal op2,%ecx
+	leal 52(%esp), %edx
+	movl $-48,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
 	movl $-8388608,%ecx
-	movl $-24,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-44,%ebx
+	leal 52(%esp), %edx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-44,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
-	movl $-36,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl 44(%esp),%ecx
-	movl %ecx,(%ebx)
-	movl $-32,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl 48(%esp),%ecx
-	movl %ecx,(%ebx)
-	movl $-28,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl %eax,(%ebx)
+	leal 52(%esp), %ecx
+	movl $-36,%edx
+	addl %edx,%ecx
+	movl 44(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-32,%edx
+	addl %edx,%ecx
+	movl 48(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-28,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 Ljoin_l128:
 	movl $0,%eax
-	movl $-24,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	movl $-24,%eax
-	leal 52(%esp), %edx
-	addl %eax,%edx
-	flds (%edx)
-	movl $-52,%edx
+	leal 52(%esp), %ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	leal 52(%esp), %eax
-	addl %edx,%eax
+	movl $-24,%ecx
+	addl %ecx,%eax
+	flds (%eax)
+	leal 52(%esp), %eax
+	movl $-52,%ecx
+	addl %ecx,%eax
 	fstpl (%eax)
 	call isnan
 Ljoin_l125:
 	movl $0,%ecx
-	movl $-24,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-52,%ebx
+	leal 52(%esp), %edx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,44(%esp)
 	call isinf
 Ljoin_l122:
 	movl $0,%ecx
-	movl $-24,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-52,%ebx
+	leal 52(%esp), %edx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,48(%esp)
 	call finite
 Ljoin_l119:
 	leal fmt,%ecx
-	movl $-52,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	leal op3,%ecx
-	movl $-48,%ebx
 	leal 52(%esp), %edx
+	movl $-52,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
+	leal op3,%ecx
+	leal 52(%esp), %edx
+	movl $-48,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
 	movl $0,%ecx
-	movl $-24,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-44,%ebx
+	leal 52(%esp), %edx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-44,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
-	movl $-36,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl 44(%esp),%ecx
-	movl %ecx,(%ebx)
-	movl $-32,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl 48(%esp),%ecx
-	movl %ecx,(%ebx)
-	movl $-28,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl %eax,(%ebx)
+	leal 52(%esp), %ecx
+	movl $-36,%edx
+	addl %edx,%ecx
+	movl 44(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-32,%edx
+	addl %edx,%ecx
+	movl 48(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-28,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 Ljoin_l116:
 	movl $-2147483648,%eax
-	movl $-24,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	movl $-24,%eax
-	leal 52(%esp), %edx
-	addl %eax,%edx
-	flds (%edx)
-	movl $-52,%edx
+	leal 52(%esp), %ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	leal 52(%esp), %eax
-	addl %edx,%eax
+	movl $-24,%ecx
+	addl %ecx,%eax
+	flds (%eax)
+	leal 52(%esp), %eax
+	movl $-52,%ecx
+	addl %ecx,%eax
 	fstpl (%eax)
 	call isnan
 Ljoin_l113:
 	movl $-2147483648,%ecx
-	movl $-24,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-52,%ebx
+	leal 52(%esp), %edx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,44(%esp)
 	call isinf
 Ljoin_l110:
 	movl $-2147483648,%ecx
-	movl $-24,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-52,%ebx
+	leal 52(%esp), %edx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,48(%esp)
 	call finite
 Ljoin_l107:
 	leal fmt,%ecx
-	movl $-52,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	leal op4,%ecx
-	movl $-48,%ebx
 	leal 52(%esp), %edx
+	movl $-52,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
+	leal op4,%ecx
+	leal 52(%esp), %edx
+	movl $-48,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
 	movl $-2147483648,%ecx
-	movl $-24,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-44,%ebx
+	leal 52(%esp), %edx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-44,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
-	movl $-36,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl 44(%esp),%ecx
-	movl %ecx,(%ebx)
-	movl $-32,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl 48(%esp),%ecx
-	movl %ecx,(%ebx)
-	movl $-28,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl %eax,(%ebx)
+	leal 52(%esp), %ecx
+	movl $-36,%edx
+	addl %edx,%ecx
+	movl 44(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-32,%edx
+	addl %edx,%ecx
+	movl 48(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-28,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 Ljoin_l104:
 	movl $2139095073,%eax
-	movl $-24,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	movl $-24,%eax
-	leal 52(%esp), %edx
-	addl %eax,%edx
-	flds (%edx)
-	movl $-52,%edx
+	leal 52(%esp), %ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	leal 52(%esp), %eax
-	addl %edx,%eax
+	movl $-24,%ecx
+	addl %ecx,%eax
+	flds (%eax)
+	leal 52(%esp), %eax
+	movl $-52,%ecx
+	addl %ecx,%eax
 	fstpl (%eax)
 	call isnan
 Ljoin_l101:
 	movl $2139095073,%ecx
-	movl $-24,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-52,%ebx
+	leal 52(%esp), %edx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,44(%esp)
 	call isinf
 Ljoin_l98:
 	movl $2139095073,%ecx
-	movl $-24,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-52,%ebx
+	leal 52(%esp), %edx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,48(%esp)
 	call finite
 Ljoin_l95:
 	leal fmt,%ecx
-	movl $-52,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	leal op5,%ecx
-	movl $-48,%ebx
 	leal 52(%esp), %edx
+	movl $-52,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
+	leal op5,%ecx
+	leal 52(%esp), %edx
+	movl $-48,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
 	movl $2139095073,%ecx
-	movl $-24,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-44,%ebx
+	leal 52(%esp), %edx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-44,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
-	movl $-36,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl 44(%esp),%ecx
-	movl %ecx,(%ebx)
-	movl $-32,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl 48(%esp),%ecx
-	movl %ecx,(%ebx)
-	movl $-28,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl %eax,(%ebx)
+	leal 52(%esp), %ecx
+	movl $-36,%edx
+	addl %edx,%ecx
+	movl 44(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-32,%edx
+	addl %edx,%ecx
+	movl 48(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-28,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 Ljoin_l92:
 	movl $2139095117,%eax
-	movl $-24,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	movl $-24,%eax
-	leal 52(%esp), %edx
-	addl %eax,%edx
-	flds (%edx)
-	movl $-52,%edx
+	leal 52(%esp), %ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	leal 52(%esp), %eax
-	addl %edx,%eax
+	movl $-24,%ecx
+	addl %ecx,%eax
+	flds (%eax)
+	leal 52(%esp), %eax
+	movl $-52,%ecx
+	addl %ecx,%eax
 	fstpl (%eax)
 	call isnan
 Ljoin_l89:
 	movl $2139095117,%ecx
-	movl $-24,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-52,%ebx
+	leal 52(%esp), %edx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,44(%esp)
 	call isinf
 Ljoin_l86:
 	movl $2139095117,%ecx
-	movl $-24,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-52,%ebx
+	leal 52(%esp), %edx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,48(%esp)
 	call finite
 Ljoin_l83:
 	leal fmt,%ecx
-	movl $-52,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	leal op6,%ecx
-	movl $-48,%ebx
 	leal 52(%esp), %edx
+	movl $-52,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
+	leal op6,%ecx
+	leal 52(%esp), %edx
+	movl $-48,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
 	movl $2139095117,%ecx
-	movl $-24,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-24,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	flds (%ebx)
-	movl $-44,%ebx
+	leal 52(%esp), %edx
+	movl $-24,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
-	addl %ebx,%ecx
+	movl $-24,%edx
+	addl %edx,%ecx
+	flds (%ecx)
+	leal 52(%esp), %ecx
+	movl $-44,%edx
+	addl %edx,%ecx
 	fstpl (%ecx)
-	movl $-36,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl 44(%esp),%ecx
-	movl %ecx,(%ebx)
-	movl $-32,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl 48(%esp),%ecx
-	movl %ecx,(%ebx)
-	movl $-28,%ecx
-	leal 52(%esp), %ebx
-	addl %ecx,%ebx
-	movl %eax,(%ebx)
+	leal 52(%esp), %ecx
+	movl $-36,%edx
+	addl %edx,%ecx
+	movl 44(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-32,%edx
+	addl %edx,%ecx
+	movl 48(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-28,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 Ljoin_l80:
 	movl $0,%eax
-	movl $-20,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	movl $2146435072,%eax
-	movl $-16,%edx
 	leal 52(%esp), %ecx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	movl $-20,%eax
+	movl $2146435072,%eax
 	leal 52(%esp), %ecx
-	addl %eax,%ecx
-	fldl (%ecx)
-	movl $-52,%ecx
+	movl $-16,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	leal 52(%esp), %eax
+	movl $-20,%ecx
+	addl %ecx,%eax
+	fldl (%eax)
+	leal 52(%esp), %eax
+	movl $-52,%ecx
 	addl %ecx,%eax
 	fstpl (%eax)
 	call isnan
 Ljoin_l77:
 	movl $0,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $2146435072,%ecx
-	movl $-16,%ebx
 	leal 52(%esp), %edx
+	movl $-20,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
+	movl $2146435072,%ecx
 	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-52,%edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,44(%esp)
 	call isinf
 Ljoin_l74:
 	movl $0,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $2146435072,%ecx
-	movl $-16,%ebx
 	leal 52(%esp), %edx
+	movl $-20,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
+	movl $2146435072,%ecx
 	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-52,%edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,48(%esp)
 	call finite
 Ljoin_l71:
 	leal fmt,%ecx
-	movl $-52,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	leal op7,%ecx
-	movl $-48,%ebx
 	leal 52(%esp), %edx
+	movl $-52,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
+	leal op7,%ecx
+	leal 52(%esp), %edx
+	movl $-48,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
 	movl $0,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $2146435072,%ecx
-	movl $-16,%ebx
 	leal 52(%esp), %edx
+	movl $-20,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
+	movl $2146435072,%ecx
 	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-44,%edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-44,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
-	movl $-36,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl 44(%esp),%ecx
-	movl %ecx,(%edx)
-	movl $-32,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl 48(%esp),%ecx
-	movl %ecx,(%edx)
-	movl $-28,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
+	leal 52(%esp), %ecx
+	movl $-36,%edx
+	addl %edx,%ecx
+	movl 44(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-32,%edx
+	addl %edx,%ecx
+	movl 48(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-28,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 Ljoin_l68:
 	movl $0,%eax
-	movl $-20,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	movl $-1048576,%eax
-	movl $-16,%edx
 	leal 52(%esp), %ecx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	movl $-20,%eax
+	movl $-1048576,%eax
 	leal 52(%esp), %ecx
-	addl %eax,%ecx
-	fldl (%ecx)
-	movl $-52,%ecx
+	movl $-16,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	leal 52(%esp), %eax
+	movl $-20,%ecx
+	addl %ecx,%eax
+	fldl (%eax)
+	leal 52(%esp), %eax
+	movl $-52,%ecx
 	addl %ecx,%eax
 	fstpl (%eax)
 	call isnan
 Ljoin_l65:
 	movl $0,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-1048576,%ecx
-	movl $-16,%ebx
 	leal 52(%esp), %edx
+	movl $-20,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
+	movl $-1048576,%ecx
 	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-52,%edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,44(%esp)
 	call isinf
 Ljoin_l62:
 	movl $0,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-1048576,%ecx
-	movl $-16,%ebx
 	leal 52(%esp), %edx
+	movl $-20,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
+	movl $-1048576,%ecx
 	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-52,%edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,48(%esp)
 	call finite
 Ljoin_l59:
 	leal fmt,%ecx
-	movl $-52,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	leal op8,%ecx
-	movl $-48,%ebx
 	leal 52(%esp), %edx
+	movl $-52,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
+	leal op8,%ecx
+	leal 52(%esp), %edx
+	movl $-48,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
 	movl $0,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-1048576,%ecx
-	movl $-16,%ebx
 	leal 52(%esp), %edx
+	movl $-20,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
+	movl $-1048576,%ecx
 	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-44,%edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-44,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
-	movl $-36,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl 44(%esp),%ecx
-	movl %ecx,(%edx)
-	movl $-32,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl 48(%esp),%ecx
-	movl %ecx,(%edx)
-	movl $-28,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
+	leal 52(%esp), %ecx
+	movl $-36,%edx
+	addl %edx,%ecx
+	movl 44(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-32,%edx
+	addl %edx,%ecx
+	movl 48(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-28,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 Ljoin_l56:
 	movl $0,%eax
-	movl $-20,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	movl $0,%eax
-	movl $-16,%edx
 	leal 52(%esp), %ecx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	movl $-20,%eax
+	movl $0,%eax
 	leal 52(%esp), %ecx
-	addl %eax,%ecx
-	fldl (%ecx)
-	movl $-52,%ecx
+	movl $-16,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	leal 52(%esp), %eax
+	movl $-20,%ecx
+	addl %ecx,%eax
+	fldl (%eax)
+	leal 52(%esp), %eax
+	movl $-52,%ecx
 	addl %ecx,%eax
 	fstpl (%eax)
 	call isnan
 Ljoin_l53:
 	movl $0,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $0,%ecx
-	movl $-16,%ebx
 	leal 52(%esp), %edx
+	movl $-20,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
+	movl $0,%ecx
 	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-52,%edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,44(%esp)
 	call isinf
 Ljoin_l50:
 	movl $0,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $0,%ecx
-	movl $-16,%ebx
 	leal 52(%esp), %edx
+	movl $-20,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
+	movl $0,%ecx
 	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-52,%edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,48(%esp)
 	call finite
 Ljoin_l47:
 	leal fmt,%ecx
-	movl $-52,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
+	leal 52(%esp), %edx
+	movl $-52,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal op9,%ecx
+	leal 52(%esp), %edx
 	movl $-48,%ebx
-	leal 52(%esp), %edx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
 	movl $0,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
+	leal 52(%esp), %edx
+	movl $-20,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	movl $0,%ecx
+	leal 52(%esp), %edx
 	movl $-16,%ebx
-	leal 52(%esp), %edx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-44,%edx
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-44,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
-	movl $-36,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl 44(%esp),%ecx
-	movl %ecx,(%edx)
-	movl $-32,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl 48(%esp),%ecx
-	movl %ecx,(%edx)
-	movl $-28,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
+	leal 52(%esp), %ecx
+	movl $-36,%edx
+	addl %edx,%ecx
+	movl 44(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-32,%edx
+	addl %edx,%ecx
+	movl 48(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-28,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 Ljoin_l44:
 	movl $0,%eax
-	movl $-20,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	movl $-2147483648,%eax
-	movl $-16,%edx
 	leal 52(%esp), %ecx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	movl $-20,%eax
+	movl $-2147483648,%eax
 	leal 52(%esp), %ecx
-	addl %eax,%ecx
-	fldl (%ecx)
-	movl $-52,%ecx
+	movl $-16,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	leal 52(%esp), %eax
+	movl $-20,%ecx
+	addl %ecx,%eax
+	fldl (%eax)
+	leal 52(%esp), %eax
+	movl $-52,%ecx
 	addl %ecx,%eax
 	fstpl (%eax)
 	call isnan
 Ljoin_l41:
 	movl $0,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-2147483648,%ecx
-	movl $-16,%ebx
 	leal 52(%esp), %edx
+	movl $-20,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
+	movl $-2147483648,%ecx
 	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-52,%edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,44(%esp)
 	call isinf
 Ljoin_l38:
 	movl $0,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-2147483648,%ecx
-	movl $-16,%ebx
 	leal 52(%esp), %edx
+	movl $-20,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
+	movl $-2147483648,%ecx
 	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-52,%edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,48(%esp)
 	call finite
 Ljoin_l35:
 	leal fmt,%ecx
-	movl $-52,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	leal op10,%ecx
-	movl $-48,%ebx
 	leal 52(%esp), %edx
+	movl $-52,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
+	leal op10,%ecx
+	leal 52(%esp), %edx
+	movl $-48,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
 	movl $0,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $-2147483648,%ecx
-	movl $-16,%ebx
 	leal 52(%esp), %edx
+	movl $-20,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
+	movl $-2147483648,%ecx
 	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-44,%edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-44,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
-	movl $-36,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl 44(%esp),%ecx
-	movl %ecx,(%edx)
-	movl $-32,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl 48(%esp),%ecx
-	movl %ecx,(%edx)
-	movl $-28,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
+	leal 52(%esp), %ecx
+	movl $-36,%edx
+	addl %edx,%ecx
+	movl 44(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-32,%edx
+	addl %edx,%ecx
+	movl 48(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-28,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 Ljoin_l32:
 	movl $33,%eax
-	movl $-20,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	movl $2146435072,%eax
-	movl $-16,%edx
 	leal 52(%esp), %ecx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	movl $-20,%eax
+	movl $2146435072,%eax
 	leal 52(%esp), %ecx
-	addl %eax,%ecx
-	fldl (%ecx)
-	movl $-52,%ecx
+	movl $-16,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	leal 52(%esp), %eax
+	movl $-20,%ecx
+	addl %ecx,%eax
+	fldl (%eax)
+	leal 52(%esp), %eax
+	movl $-52,%ecx
 	addl %ecx,%eax
 	fstpl (%eax)
 	call isnan
 Ljoin_l29:
 	movl $33,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $2146435072,%ecx
-	movl $-16,%ebx
 	leal 52(%esp), %edx
+	movl $-20,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
+	movl $2146435072,%ecx
 	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-52,%edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,44(%esp)
 	call isinf
 Ljoin_l26:
 	movl $33,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $2146435072,%ecx
-	movl $-16,%ebx
 	leal 52(%esp), %edx
+	movl $-20,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
+	movl $2146435072,%ecx
 	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-52,%edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,48(%esp)
 	call finite
 Ljoin_l23:
 	leal fmt,%ecx
-	movl $-52,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	leal op11,%ecx
-	movl $-48,%ebx
 	leal 52(%esp), %edx
+	movl $-52,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
+	leal op11,%ecx
+	leal 52(%esp), %edx
+	movl $-48,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
 	movl $33,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $2146435072,%ecx
-	movl $-16,%ebx
 	leal 52(%esp), %edx
+	movl $-20,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
+	movl $2146435072,%ecx
 	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-44,%edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-44,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
-	movl $-36,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl 44(%esp),%ecx
-	movl %ecx,(%edx)
-	movl $-32,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl 48(%esp),%ecx
-	movl %ecx,(%edx)
-	movl $-28,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
+	leal 52(%esp), %ecx
+	movl $-36,%edx
+	addl %edx,%ecx
+	movl 44(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-32,%edx
+	addl %edx,%ecx
+	movl 48(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-28,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 Ljoin_l20:
 	movl $77,%eax
-	movl $-20,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	movl $2146435072,%eax
-	movl $-16,%edx
 	leal 52(%esp), %ecx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	movl $-20,%eax
+	movl $2146435072,%eax
 	leal 52(%esp), %ecx
-	addl %eax,%ecx
-	fldl (%ecx)
-	movl $-52,%ecx
+	movl $-16,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	leal 52(%esp), %eax
+	movl $-20,%ecx
+	addl %ecx,%eax
+	fldl (%eax)
+	leal 52(%esp), %eax
+	movl $-52,%ecx
 	addl %ecx,%eax
 	fstpl (%eax)
 	call isnan
 Ljoin_l17:
 	movl $77,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $2146435072,%ecx
-	movl $-16,%ebx
 	leal 52(%esp), %edx
+	movl $-20,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
+	movl $2146435072,%ecx
 	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-52,%edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,44(%esp)
 	call isinf
 Ljoin_l14:
 	movl $77,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $2146435072,%ecx
-	movl $-16,%ebx
 	leal 52(%esp), %edx
+	movl $-20,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
+	movl $2146435072,%ecx
 	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-52,%edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-52,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
 	movl %eax,48(%esp)
 	call finite
 Ljoin_l11:
 	leal fmt,%ecx
-	movl $-52,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	leal op12,%ecx
-	movl $-48,%ebx
 	leal 52(%esp), %edx
+	movl $-52,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
+	leal op12,%ecx
+	leal 52(%esp), %edx
+	movl $-48,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
 	movl $77,%ecx
-	movl $-20,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl %ecx,(%ebx)
-	movl $2146435072,%ecx
-	movl $-16,%ebx
 	leal 52(%esp), %edx
+	movl $-20,%ebx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	movl $-20,%ecx
+	movl $2146435072,%ecx
 	leal 52(%esp), %edx
-	addl %ecx,%edx
-	fldl (%edx)
-	movl $-44,%edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %ecx,(%edx)
 	leal 52(%esp), %ecx
+	movl $-20,%edx
+	addl %edx,%ecx
+	fldl (%ecx)
+	leal 52(%esp), %ecx
+	movl $-44,%edx
 	addl %edx,%ecx
 	fstpl (%ecx)
-	movl $-36,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl 44(%esp),%ecx
-	movl %ecx,(%edx)
-	movl $-32,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl 48(%esp),%ecx
-	movl %ecx,(%edx)
-	movl $-28,%ecx
-	leal 52(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
+	leal 52(%esp), %ecx
+	movl $-36,%edx
+	addl %edx,%ecx
+	movl 44(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-32,%edx
+	addl %edx,%ecx
+	movl 48(%esp),%edx
+	movl %edx,(%ecx)
+	leal 52(%esp), %ecx
+	movl $-28,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 Ljoin_l8:
 	movl $0,%eax
 	leal 52(%esp), %ecx
-	movl $0,%edx
-	leal 52(%esp), %ebx
-	addl %edx,%ebx
-	movl (%ecx),%edx
-	movl %edx,(%ebx)
+	leal 52(%esp), %edx
+	movl $0,%ebx
+	addl %ebx,%edx
+	movl (%ecx),%ebx
+	movl %ebx,(%edx)
 	movl 40(%esp),%ebx
 	leal 52(%esp), %esp
 	ret

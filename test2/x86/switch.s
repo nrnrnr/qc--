@@ -7,12 +7,12 @@ Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
 .section .text
 main:
-	movl $4,%ecx
+	movl %esp,%ecx
+	movl $4,%edx
+	addl %edx,%ecx
+	movl (%ecx),%edx
 	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%edx),%ecx
 	movl $8,%ecx
-	movl %esp,%edx
 	addl %ecx,%edx
 	movl (%edx),%ecx
 Linitialize_continuations_l5:
@@ -36,11 +36,11 @@ Ljoin_l12:
 	call sw
 Ljoin_l9:
 	movl %esp,%eax
-	movl $0,%ecx
-	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%ecx
-	movl %ecx,(%edx)
+	movl %esp,%ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl (%eax),%edx
+	movl %edx,(%ecx)
 	ret
 .section .pcmap_data
 Lstackdata_l30:
@@ -255,15 +255,15 @@ Ljoin_l46:
 Ljoin_l45:
 	leal def,%edx
 	movl %ebx,8(%esp)
-	movl $-20,%ebx
+	leal 20(%esp), %ebx
 	movl %ebp,12(%esp)
-	leal 20(%esp), %ebp
-	addl %ebx,%ebp
-	movl %edx,(%ebp)
-	movl $-16,%edx
-	leal 20(%esp), %ebp
-	addl %edx,%ebp
-	movl %eax,(%ebp)
+	movl $-20,%ebp
+	addl %ebp,%ebx
+	movl %edx,(%ebx)
+	leal 20(%esp), %edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %eax,(%edx)
 	movl %ecx,16(%esp)
 	call printf
 Ljoin_l44:
@@ -273,16 +273,16 @@ Ljoin_l44:
 	jmp Ljoin_l41
 Ljoin_l51:
 	leal third,%edx
-	movl %ebp,12(%esp)
-	movl $-20,%ebp
 	movl %ebx,8(%esp)
 	leal 20(%esp), %ebx
+	movl %ebp,12(%esp)
+	movl $-20,%ebp
 	addl %ebp,%ebx
 	movl %edx,(%ebx)
-	movl $-16,%edx
-	leal 20(%esp), %ebx
-	addl %edx,%ebx
-	movl %eax,(%ebx)
+	leal 20(%esp), %edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %eax,(%edx)
 	movl %ecx,16(%esp)
 	call printf
 Ljoin_l50:
@@ -293,15 +293,15 @@ Ljoin_l50:
 Ljoin_l57:
 	leal second,%edx
 	movl %ebx,8(%esp)
-	movl $-20,%ebx
+	leal 20(%esp), %ebx
 	movl %ebp,12(%esp)
-	leal 20(%esp), %ebp
-	addl %ebx,%ebp
-	movl %edx,(%ebp)
-	movl $-16,%edx
-	leal 20(%esp), %ebp
-	addl %edx,%ebp
-	movl %eax,(%ebp)
+	movl $-20,%ebp
+	addl %ebp,%ebx
+	movl %edx,(%ebx)
+	leal 20(%esp), %edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %eax,(%edx)
 	movl %ecx,16(%esp)
 	call printf
 Ljoin_l56:
@@ -311,16 +311,16 @@ Ljoin_l56:
 	jmp Ljoin_l41
 Ljoin_l63:
 	leal first,%edx
-	movl %ebp,12(%esp)
-	movl $-20,%ebp
 	movl %ebx,8(%esp)
 	leal 20(%esp), %ebx
+	movl %ebp,12(%esp)
+	movl $-20,%ebp
 	addl %ebp,%ebx
 	movl %edx,(%ebx)
-	movl $-16,%edx
-	leal 20(%esp), %ebx
-	addl %edx,%ebx
-	movl %eax,(%ebx)
+	leal 20(%esp), %edx
+	movl $-16,%ebx
+	addl %ebx,%edx
+	movl %eax,(%edx)
 	movl %ecx,16(%esp)
 	call printf
 Ljoin_l62:
@@ -329,10 +329,10 @@ Ljoin_l62:
 	movl 16(%esp),%ecx
 	jmp Ljoin_l41
 Ljoin_l41:
-	movl $0,%eax
-	leal 20(%esp), %edx
-	addl %eax,%edx
-	movl %ecx,(%edx)
+	leal 20(%esp), %eax
+	movl $0,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
 	leal 20(%esp), %esp
 	ret
 .section .pcmap_data

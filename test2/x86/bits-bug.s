@@ -30,29 +30,29 @@ failed:
 .section .text
 main:
 	leal -4(%esp), %esp
-	movl $4,%eax
+	leal 4(%esp), %eax
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl (%eax),%ecx
 	leal 4(%esp), %ecx
-	addl %eax,%ecx
-	movl (%ecx),%eax
 	movl $8,%eax
-	leal 4(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
 Linitialize_continuations_l5:
 Lproc_body_start_l4:
 	movl $-1420500317,%eax
-	movl $-4,%ecx
-	leal 4(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
+	leal 4(%esp), %ecx
+	movl $-4,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call callee
 Ljoin_l9:
 	leal 4(%esp), %eax
-	movl $0,%ecx
-	leal 4(%esp), %edx
-	addl %ecx,%edx
-	movl (%eax),%ecx
-	movl %ecx,(%edx)
+	leal 4(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl (%eax),%edx
+	movl %edx,(%ecx)
 	leal 4(%esp), %esp
 	ret
 .section .pcmap_data
@@ -86,45 +86,45 @@ Lframe_l17:
 .section .text
 callee:
 	leal -4(%esp), %esp
-	movl $4,%eax
-	leal 4(%esp), %ecx
-	addl %eax,%ecx
-	movl (%ecx),%eax
+	leal 4(%esp), %eax
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl (%eax),%ecx
 Linitialize_continuations_l20:
 Lproc_body_start_l19:
-	movl $-1420500317,%ecx
-	cmpl %ecx,%eax
+	movl $-1420500317,%eax
+	cmpl %eax,%ecx
 	jne Ljoin_l29
 Ljoin_l30:
 	leal success,%eax
-	movl $-4,%ecx
-	leal 4(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
+	leal 4(%esp), %ecx
+	movl $-4,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 Ljoin_l24:
 	leal 4(%esp), %eax
-	movl $0,%ecx
-	leal 4(%esp), %edx
-	addl %ecx,%edx
-	movl (%eax),%ecx
-	movl %ecx,(%edx)
+	leal 4(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl (%eax),%edx
+	movl %edx,(%ecx)
 	leal 4(%esp), %esp
 	ret
 Ljoin_l29:
 	leal failed,%eax
-	movl $-4,%ecx
-	leal 4(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
+	leal 4(%esp), %ecx
+	movl $-4,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 Ljoin_l28:
 	leal 4(%esp), %eax
-	movl $0,%ecx
-	leal 4(%esp), %edx
-	addl %ecx,%edx
-	movl (%eax),%ecx
-	movl %ecx,(%edx)
+	leal 4(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl (%eax),%edx
+	movl %edx,(%ecx)
 	leal 4(%esp), %esp
 	ret
 .section .pcmap_data

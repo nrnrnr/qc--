@@ -8,54 +8,54 @@ Cmm.global_area:
 .section .text
 main:
 	leal -20(%esp), %esp
-	movl $4,%eax
+	leal 20(%esp), %eax
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl (%eax),%ecx
 	leal 20(%esp), %ecx
-	addl %eax,%ecx
-	movl (%ecx),%eax
 	movl $8,%eax
-	leal 20(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
-	movl $12,%eax
-	leal 20(%esp), %ecx
-	addl %eax,%ecx
-	movl (%ecx),%eax
+	leal 20(%esp), %eax
+	movl $12,%ecx
+	addl %ecx,%eax
+	movl (%eax),%ecx
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
-	movl $1084227584,%eax
-	movl $-20,%ecx
-	leal 20(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
+	movl $1084227584,%ecx
+	leal 20(%esp), %eax
+	movl $-20,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
 	call doubleme
 Ljoin_l11:
-	movl $-8,%eax
-	leal 20(%esp), %ecx
-	addl %eax,%ecx
-	fstps (%ecx)
-	leal str,%ecx
-	movl $-20,%eax
-	leal 20(%esp), %edx
-	addl %eax,%edx
-	movl %ecx,(%edx)
+	leal 20(%esp), %eax
 	movl $-8,%ecx
-	leal 20(%esp), %edx
-	addl %ecx,%edx
-	flds (%edx)
-	movl $-16,%edx
+	addl %ecx,%eax
+	fstps (%eax)
+	leal str,%eax
 	leal 20(%esp), %ecx
+	movl $-20,%edx
 	addl %edx,%ecx
-	fstpl (%ecx)
+	movl %eax,(%ecx)
+	leal 20(%esp), %eax
+	movl $-8,%ecx
+	addl %ecx,%eax
+	flds (%eax)
+	leal 20(%esp), %eax
+	movl $-16,%ecx
+	addl %ecx,%eax
+	fstpl (%eax)
 	call printf
 Ljoin_l8:
 	movl $0,%eax
 	leal 20(%esp), %ecx
-	movl $0,%edx
+	leal 20(%esp), %edx
 	movl %ebx,16(%esp)
-	leal 20(%esp), %ebx
-	addl %edx,%ebx
-	movl (%ecx),%edx
-	movl %edx,(%ebx)
+	movl $0,%ebx
+	addl %ebx,%edx
+	movl (%ecx),%ebx
+	movl %ebx,(%edx)
 	movl 16(%esp),%ebx
 	leal 20(%esp), %esp
 	ret

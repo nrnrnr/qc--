@@ -10,12 +10,12 @@ Cmm.global_area:
 .section .text
 main:
 	leal -12(%esp), %esp
-	movl $4,%eax
+	leal 12(%esp), %eax
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl (%eax),%ecx
 	leal 12(%esp), %ecx
-	addl %eax,%ecx
-	movl (%ecx),%eax
 	movl $8,%eax
-	leal 12(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
 Linitialize_continuations_l4:
@@ -24,35 +24,35 @@ Lproc_body_start_l3:
 	leal Cmm.global_area,%ecx
 	movl %eax,(%ecx)
 	leal nvalue,%eax
-	movl $-12,%ecx
-	leal 12(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	leal Cmm.global_area,%eax
-	movl $-8,%edx
 	leal 12(%esp), %ecx
+	movl $-12,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
+	leal Cmm.global_area,%eax
+	leal 12(%esp), %ecx
+	movl $-8,%edx
 	addl %edx,%ecx
 	movl (%eax),%edx
 	movl %edx,(%ecx)
 	call printf
 Ljoin_l17:
 	leal callincn,%eax
-	movl $-12,%ecx
-	leal 12(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
+	leal 12(%esp), %ecx
+	movl $-12,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 Ljoin_l14:
 	call incn
 Ljoin_l11:
 	leal nvalue,%eax
-	movl $-12,%ecx
-	leal 12(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	leal Cmm.global_area,%eax
-	movl $-8,%edx
 	leal 12(%esp), %ecx
+	movl $-12,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
+	leal Cmm.global_area,%eax
+	leal 12(%esp), %ecx
+	movl $-8,%edx
 	addl %edx,%ecx
 	movl (%eax),%edx
 	movl %edx,(%ecx)
@@ -60,12 +60,12 @@ Ljoin_l11:
 Ljoin_l8:
 	movl $0,%eax
 	leal 12(%esp), %ecx
-	movl $0,%edx
+	leal 12(%esp), %edx
 	movl %ebx,8(%esp)
-	leal 12(%esp), %ebx
-	addl %edx,%ebx
-	movl (%ecx),%edx
-	movl %edx,(%ebx)
+	movl $0,%ebx
+	addl %ebx,%edx
+	movl (%ecx),%ebx
+	movl %ebx,(%edx)
 	movl 8(%esp),%ebx
 	leal 12(%esp), %esp
 	ret

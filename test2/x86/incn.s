@@ -9,15 +9,15 @@ incn:
 	movl (%edx),%ecx
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
+	leal Cmm.global_area,%edx
+	movl (%edx),%eax
 	movl $1,%edx
-	leal Cmm.global_area,%eax
-	movl (%eax),%eax
 	addl %edx,%eax
 	leal Cmm.global_area,%edx
 	movl %eax,(%edx)
-	movl $0,%eax
-	movl %esp,%edx
-	addl %eax,%edx
-	movl %ecx,(%edx)
+	movl %esp,%eax
+	movl $0,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
 	ret
 .section .text

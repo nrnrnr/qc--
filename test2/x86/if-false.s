@@ -7,22 +7,22 @@ Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
 .section .text
 main:
-	movl $4,%edx
+	movl %esp,%edx
+	movl $4,%ecx
+	addl %ecx,%edx
+	movl (%edx),%ecx
 	movl %esp,%ecx
-	addl %edx,%ecx
-	movl (%ecx),%edx
 	movl $8,%edx
-	movl %esp,%ecx
 	addl %edx,%ecx
 	movl (%ecx),%edx
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
 Ljoin_l8:
 	movl %esp,%edx
-	movl $0,%ecx
-	movl %esp,%eax
-	addl %ecx,%eax
-	movl (%edx),%ecx
-	movl %ecx,(%eax)
+	movl %esp,%ecx
+	movl $0,%eax
+	addl %eax,%ecx
+	movl (%edx),%eax
+	movl %eax,(%ecx)
 	ret
 .section .text

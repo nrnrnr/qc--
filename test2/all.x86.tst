@@ -4,8 +4,6 @@ backend.ralloc = backend.ralloc or Ralloc.color
 -- compare results with files in x86
 Test.results = Test.results or "x86"
 
-function norun(file) return { source = file, runnable="false" } end
-
 Ld.rtend = ""  --- don't need the run-time system
 -- source files live in src directory
 Test.source  = "src"
@@ -23,15 +21,13 @@ Test.files = { "add.c--"
 	     , "emptyifbody.c--"
 	     , "if-false.c--"
 	     , "if-false2.c--"
-             , norun("eqasolve-000.c--")
+             , "err-000.c--"
              , "exp-000.c--"
-             , norun("exp-001.c--")
-             , norun("exp-002.c--")
-             , norun("exp-003.c--")
+             , "exp-001.c--"
              , "fadd.c--"
 	     , { source="fargres.c--", other='src/double.c' }
              , "float-000.c--"
-             , norun("float-001.c--")
+             , "float-001.c--"
              , 'float-002.c--'
              , 'float-003.c--'
 	     , 'f2.c--'
@@ -41,7 +37,7 @@ Test.files = { "add.c--"
 	     , { source='ladd.c--', other='src/ops64.c' }
              , "not.c--"
              , "ovrflow.c--"
-             , norun("ralloc-000.c--")
+             , "ralloc-000.c--"
 	     , { source='r64.c--', other='src/r64main.c' }
              , "rnd2.c--"
 	     , { source="spdemo.c--", argv="4" }
@@ -57,7 +53,6 @@ Test.files = { "add.c--"
              , { source = {'tail2.c--', 'call3.c--'} }
              , { source = {'tailnot.c--', 'call3.c--'} }
 	     , 'test-050.c--'
-	     , norun('unwind.c--')
-             , norun("x86-000.c--")
-             , norun("x86-001.c--")
+             , "x86-000.c--"
+             , "x86-001.c--"
              }

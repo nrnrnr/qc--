@@ -17,12 +17,12 @@ Lproc_body_start_l4:
 	movl $-99,%ecx
 	movl %edx,(%esp)
 	movl %ecx,%edx
-	movl $0,%ecx
+	leal 8(%esp), %ecx
 	movl %ebx,4(%esp)
-	leal 8(%esp), %ebx
-	addl %ecx,%ebx
-	movl (%esp),%ecx
-	movl %ecx,(%ebx)
+	movl $0,%ebx
+	addl %ebx,%ecx
+	movl (%esp),%ebx
+	movl %ebx,(%ecx)
 	movl 4(%esp),%ebx
 	leal 8(%esp), %esp
 	ret
@@ -30,12 +30,12 @@ Lproc_body_start_l4:
 .section .text
 main:
 	leal -20(%esp), %esp
-	movl $4,%ecx
+	leal 20(%esp), %ecx
+	movl $4,%edx
+	addl %edx,%ecx
+	movl (%ecx),%edx
 	leal 20(%esp), %edx
-	addl %ecx,%edx
-	movl (%edx),%ecx
 	movl $8,%ecx
-	leal 20(%esp), %edx
 	addl %ecx,%edx
 	movl (%edx),%ecx
 Linitialize_continuations_l16:
@@ -45,28 +45,28 @@ Lproc_body_start_l15:
 Ljoin_l23:
 	leal fmt,%ecx
 	movl %ebx,12(%esp)
-	movl $-20,%ebx
+	leal 20(%esp), %ebx
 	movl %ebp,16(%esp)
-	leal 20(%esp), %ebp
-	addl %ebx,%ebp
-	movl %ecx,(%ebp)
-	movl $-16,%ecx
-	leal 20(%esp), %ebp
-	addl %ecx,%ebp
-	movl %eax,(%ebp)
-	movl $-12,%eax
-	leal 20(%esp), %ebp
-	addl %eax,%ebp
-	movl %edx,(%ebp)
+	movl $-20,%ebp
+	addl %ebp,%ebx
+	movl %ecx,(%ebx)
+	leal 20(%esp), %ecx
+	movl $-16,%ebx
+	addl %ebx,%ecx
+	movl %eax,(%ecx)
+	leal 20(%esp), %eax
+	movl $-12,%ecx
+	addl %ecx,%eax
+	movl %edx,(%eax)
 	call printf
 Ljoin_l20:
 	movl $0,%eax
 	leal 20(%esp), %ecx
-	movl $0,%edx
-	leal 20(%esp), %ebp
-	addl %edx,%ebp
-	movl (%ecx),%edx
-	movl %edx,(%ebp)
+	leal 20(%esp), %edx
+	movl $0,%ebx
+	addl %ebx,%edx
+	movl (%ecx),%ebx
+	movl %ebx,(%edx)
 	movl 12(%esp),%ebx
 	movl 16(%esp),%ebp
 	leal 20(%esp), %esp

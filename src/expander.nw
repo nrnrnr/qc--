@@ -1418,27 +1418,23 @@ match Post.opclass op with
     t, assign_slot room slot e w <:> is
 | PX.Register ->
     let w = width e in
-let tref = ref None in
-let t() = match !tref with
-| None -> (let t = alloc_direct (Post.result_context op) w in tref := Some t; t)
-| Some t -> t in
-(*    let t = alloc_direct (Post.result_context op) w in *)
+    let t = alloc_direct (Post.result_context op) w in 
     let temp e c = to_temp room (contextmap c) e in
     let warg e c = to_warg room (contextmap c) e in
     let is = match O.capply temp warg op args (Post.arg_contexts op) with
-    | O.Binop ((x, b1), (y, b2))          -> b2 <:> b1 <:>        Post.binop (t()) op x y
-    | O.Unop  ((x, b1))                   -> b1 <:>               Post.unop  (t()) op x
-    | O.Binrm ((x, b1), (y, b2), (r, b3)) -> b3 <:> b2 <:> b1 <:> Post.binrm (t()) op x y r
-    | O.Unrm  ((x, b1), (r, b2))          -> b1 <:> b2 <:>        Post.unrm  (t()) op x r
-    | O.Fpcvt ((x, b1), (r, b2))          -> b1 <:> b2 <:>        Post.unrm  (t()) op x r
+    | O.Binop ((x, b1), (y, b2))          -> b1 <:> b2 <:>        Post.binop t op x y
+    | O.Unop  ((x, b1))                   -> b1 <:>               Post.unop  t op x
+    | O.Binrm ((x, b1), (y, b2), (r, b3)) -> b1 <:> b2 <:> b3 <:> Post.binrm t op x y r
+    | O.Unrm  ((x, b1), (r, b2))          -> b1 <:> b2 <:>        Post.unrm  t op x r
+    | O.Fpcvt ((x, b1), (r, b2))          -> b1 <:> b2 <:>        Post.unrm  t op x r
     | O.Dblop ((x, b1), (y, b2))          ->
         Impossible.unimp "double-width multiply into single temporary"
-    | O.Wrdop ((x, b1), (y, b2), (z, b3)) -> b1 <:> b2 <:> b3 <:> Post.wrdop (t()) op x y z
+    | O.Wrdop ((x, b1), (y, b2), (z, b3)) -> b1 <:> b2 <:> b3 <:> Post.wrdop t op x y z
     | O.Wrdrop((x, b1), (y, b2), (z, b3)) ->
         impossf "single-bit result direct into temporary"
     | O.Cmp _ | O.Width | O.Bool | O.Nullary ->
         impossf "operator %%%s reached postexpander" (fst op) in
-    temp_in_context (t()) context is 
+    temp_in_context t context is 
 @
 <<cases for converting a compile-time constant to a temporary>>=
 | RP.Const k ->

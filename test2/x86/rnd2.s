@@ -13,65 +13,65 @@ p:
 Linitialize_continuations_l5:
 Lproc_body_start_l4:
 	movl $3,%edx
-	movl $-8,%eax
+	leal 8(%esp), %eax
 	movl %ecx,4(%esp)
-	leal 8(%esp), %ecx
-	addl %eax,%ecx
-	movl %edx,(%ecx)
 	movl $-8,%ecx
-	leal 8(%esp), %edx
-	addl %ecx,%edx
-	fildl (%edx)
+	addl %ecx,%eax
+	movl %edx,(%eax)
+	leal 8(%esp), %eax
+	movl $-8,%edx
+	addl %edx,%eax
+	fildl (%eax)
+	leal 8(%esp), %eax
 	movl $0,%edx
-	leal 8(%esp), %ecx
-	addl %edx,%ecx
+	addl %edx,%eax
 	movl 4(%esp),%edx
-	movl %edx,(%ecx)
+	movl %edx,(%eax)
 	leal 8(%esp), %esp
 	ret
 .section .text
 .section .text
 main:
 	leal -20(%esp), %esp
-	movl $4,%eax
+	leal 20(%esp), %eax
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl (%eax),%ecx
 	leal 20(%esp), %ecx
-	addl %eax,%ecx
-	movl (%ecx),%eax
 	movl $8,%eax
-	leal 20(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
 Linitialize_continuations_l16:
 Lproc_body_start_l15:
 	call p
 Ljoin_l23:
-	movl $-8,%eax
-	leal 20(%esp), %ecx
-	addl %eax,%ecx
-	fstps (%ecx)
-	leal answer,%ecx
-	movl $-20,%eax
-	leal 20(%esp), %edx
-	addl %eax,%edx
-	movl %ecx,(%edx)
+	leal 20(%esp), %eax
 	movl $-8,%ecx
-	leal 20(%esp), %edx
-	addl %ecx,%edx
-	flds (%edx)
-	movl $-16,%edx
+	addl %ecx,%eax
+	fstps (%eax)
+	leal answer,%eax
 	leal 20(%esp), %ecx
+	movl $-20,%edx
 	addl %edx,%ecx
-	fstpl (%ecx)
+	movl %eax,(%ecx)
+	leal 20(%esp), %eax
+	movl $-8,%ecx
+	addl %ecx,%eax
+	flds (%eax)
+	leal 20(%esp), %eax
+	movl $-16,%ecx
+	addl %ecx,%eax
+	fstpl (%eax)
 	call printf
 Ljoin_l20:
 	movl $0,%eax
 	leal 20(%esp), %ecx
-	movl $0,%edx
+	leal 20(%esp), %edx
 	movl %ebx,16(%esp)
-	leal 20(%esp), %ebx
-	addl %edx,%ebx
-	movl (%ecx),%edx
-	movl %edx,(%ebx)
+	movl $0,%ebx
+	addl %ebx,%edx
+	movl (%ecx),%ebx
+	movl %ebx,(%edx)
 	movl 16(%esp),%ebx
 	leal 20(%esp), %esp
 	ret

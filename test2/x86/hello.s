@@ -26,29 +26,29 @@ my_data:
 .section .text
 main:
 	leal -4(%esp), %esp
-	movl $4,%eax
+	leal 4(%esp), %eax
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl (%eax),%ecx
 	leal 4(%esp), %ecx
-	addl %eax,%ecx
-	movl (%ecx),%eax
 	movl $8,%eax
-	leal 4(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
 	leal my_data,%eax
-	movl $-4,%ecx
-	leal 4(%esp), %edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
+	leal 4(%esp), %ecx
+	movl $-4,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 Ljoin_l8:
 	leal 4(%esp), %eax
-	movl $0,%ecx
-	leal 4(%esp), %edx
-	addl %ecx,%edx
-	movl (%eax),%ecx
-	movl %ecx,(%edx)
+	leal 4(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl (%eax),%edx
+	movl %edx,(%ecx)
 	leal 4(%esp), %esp
 	ret
 .section .pcmap_data
