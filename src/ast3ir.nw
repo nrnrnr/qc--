@@ -300,9 +300,9 @@ asbtract type at the {\cfg} level.  The continuations function
 translates from the former to the latter.
 
 <<Make continuation bundles>>=
-type conts =    { cuts    : G.rtlnode list
-                ; unwinds : G.rtlnode list
-                ; returns : G.rtlnode list
+type conts =    { cuts    : G.node list
+                ; unwinds : G.node list
+                ; returns : G.node list
                 ; aborts  : bool
                 }
 
@@ -476,8 +476,8 @@ type state =
     { proc:         string           (* proc under translation (const) *)
     ; env:          F.env            (* fat environment        (const) *)
     ; target:       Target.t         (* current target         (const) *)
-    ; cfg:          G.rtlcfg         (* CFG under construction (const) *)
-    ; node:         G.rtlnode        (* node following current unit    *)   
+    ; cfg:          G.cfg            (* CFG under construction (const) *)
+    ; node:         G.node           (* node following current unit    *)   
     ; outbase:      Rtl.exp          (* addr of OUTGOING area          *)   
     ; inbase:       Rtl.exp          (* addr of INCOMING ares          *)
     ; outgoing:     Area.t list      (* areas to be overlayed in OUTGOING *)   
@@ -927,7 +927,7 @@ let create_cont (a:Automaton.t) (sp:Rtl.loc) (env:F.env) (label:string) =
         | _                            -> assert false in
     Cont.allocate a sp sym reference
         
-let init_cont (cfg:G.rtlcfg) (c:Cont.t) =
+let init_cont (cfg:G.cfg) (c:Cont.t) =
   ignore (List.fold_left G.gm_insert_assign_after (G.entry cfg) (Cont.init c))
 @
 
@@ -982,7 +982,7 @@ let proc env target optimizer asm (cconv,name,args,bdy) =
     let pointer     = target.Target.pointersize in
     let cc          = target.Target.cc (Aux.Option.get default_cc cconv) in
     let sp          = Rtl.fetch (cc.Target.sp) pointer in (* stack pointer *)
-    let cfg         = G.mk (Rtl.par [])   in      (* empty control-flow graph *)
+    let cfg         = G.mk target (Rtl.par []) in (* empty control-flow graph *)
     (* symbolic compile-time constants to be used for stack areas *)
     let eqns        = Const.empty pointer          in (* eqns over pointers *)
     let sp_offset k = Rtl.app (Rtl.opr "add" [pointer]) [sp;k] in
