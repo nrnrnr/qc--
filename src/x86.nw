@@ -511,7 +511,7 @@ let cmpneg = function
 module PX = Postexpander
 let opclass (op, _) =
   match op with
-  | "f2f" | "f2i" | "fabs" | "fneg" | "fsqrt" ->
+  | "i2f" | "f2f" | "f2f_implicit_round" | "f2i" | "fabs" | "fneg" | "fsqrt" ->
       PX.Stack(PX.LeftFirst, 1)
   | "fadd" | "fcmp" | "fdiv" | "fmul" | "fmulx" | "fsub"    
   | "feq" | "fge" | "fgt" | "fne"     
@@ -541,6 +541,12 @@ let st_push e = (* effect of pushing e *)
 
 let stack_depth = 8
 let stack_width = 80
+let stack_top_proxy_reg = ('\000', 0, 80)
+let _ = assert (stack_top_proxy_reg = X86call.stack_top_proxy_reg)
+let stack_top_proxy = R.reg stack_top_proxy_reg
+let is_stack_top_proxy = function
+  | RP.Reg r -> r = stack_top_proxy_reg
+  | _ -> false
 <<x86 postexpander>>=
 let push ~addr assn = 
 (*
