@@ -81,10 +81,9 @@ module Point = struct
     let zero = 0
 end
 
-module X = Lifetime.Make(Point)
 module P = Point
-module I = X.Interval
-module L = X.Lifetime
+module I = Interval.Make(Point)
+module L = Lifetime.Make(I)
 
 <<compute lifetimes>>
 @
@@ -143,22 +142,19 @@ let open_regs  point regs state = List.fold_left (open_intv point)  state regs
 let close_regs point regs state = List.fold_left (close_intv point) state regs
 @
 
-After the last node of the control-flow graph is processed, all still
-open intervals must be closed.
-
-<<compute lifetimes XXX>>=
-let close_all point 
-@
-
 The [[lifetimes]] function computes a map that associates a register
 with its lifetime.  The the lifetimes are inferred from the live sets
-that are part of the control-flow graph. The initial map [[lt]] is
-supplied by the client.
+that are part of the control-flow graph.  The initial map [[lt]] is
+supplied by the client.  After the last node of the control-flow graph
+is processed, all still open intervals must be closed.
 
-<<compute lifetimes XXXX>>=
+<<compute lifetimes>>=
 let lifetimes cfg lt =
     let initial = (Register.Map.empty, lt) in
     let point   = 1 in
+    let domain map = 
+        let f k v list = k::list in
+        Register.Map.fold f map [] in
     let scan node (oldset, point, state) =
         let set     = Cfg2.live node in 
         let opening = Register.Set.diff set oldset in
@@ -168,7 +164,7 @@ let lifetimes cfg lt =
                       (set, point+1, state)
     in (* close all open intervals after the last node *)
     let (os,pt,(op,lt)) = Cfg2.foldl cfg scan (Register.Set.empty, point, initial) in
-    let (os,pt,(op,lt)) = close_regs pt (Register.Set.elements op) (op,lt) in
+    let        (_ ,lt)  = close_regs pt (domain op) (op,lt) in 
         lt
                  
 @
