@@ -425,11 +425,11 @@ available as Lua primitives such that the user can write a Lua script to
 control B<qc-->. The few existing command line switches therefore
 control the Lua interpreter, rather than the compiler directly.
 
-Upon start-up B<qc--> reads the file B<qc--.lua> in the current
-directory and then processes command line options in the following
-order: first all generic I<arg> arguments are passed in B<Sys.argv> to
-the Lua interpreter, then B<-e> arguments are evaluated from left to
-right. If the interactive option B<-i> is present, it is honored last.  
+Upon start-up B<qc--> searched for the file F<qc--.lua>, executes it and
+then processes command line options in the following order: first all
+generic I<arg> arguments are passed in B<Sys.argv> to the Lua
+interpreter, then B<-e> arguments are evaluated from left to right. If
+the interactive option B<-i> is present, it is honored last.  
 
 =over
 
@@ -446,6 +446,12 @@ as generic I<arg> arguments that are passed to the Lua interpreter.
 Therefore B<-i -e> I<arg> does not evaluate I<arg> but passes B<-e> and
 I<arg> in B<Sys.argv>.
 
+=item B<->I<x>
+
+The option is equivalent to B<-e 'Main.>I<x>B<()'> and thus executes the
+function B<Main.>I<x>. This allows to implement traditional command line
+options easily.
+
 =item I<arg> ...
 
 The first argument that is not any of the above options starts the
@@ -453,7 +459,6 @@ sequence of generic arguments. They are passed literally in B<Sys.argv>
 to the Lua interpreter.
 
 =back
-
 
 =head1 EXAMPLES
 
@@ -463,11 +468,29 @@ to the Lua interpreter.
 
 Compile I<file.c--> for the B<Default.target>.
 
+=item B<qc--> B<-c> I<file.c-->
+
+Same as before, using an abbreviation.
+
 =item B<qc--> B<-e> B<'Main.check()'> I<file.c-->
 
 Check the static semantic of I<file.c-->.
 
 =back
+
+
+=head1 LUA STARTUP
+
+To find the Lua startup file F<qc--.lua>, B<qc--> takes the following
+steps: It reads the contents of the environment variable B<QC--LUAPATH>
+as a search path. If the environment variable is undefined, the default
+is "B<:.:*>". A search path contains a list of colon separated
+directories. Two directory names are special: the empty directory refers
+to an implementation dependent system-wide directory, like
+B</usr/local/lib/qc-->. The star B<*> refers to a directory that is part
+of the B<qc--> executable. With the default search path B<qc-->
+therefore looks first in the system-wide directory for F<qc--.lua>, then
+in the current directory, and then takes the built-in F<qc--.lua>. 
 
 =head1 LUA DEFAULTS
 
@@ -478,7 +501,7 @@ Defaults are stored in the Lua table B<Default>. In particular:
 
 =item B<target>: I<target>
 
-Target architecuture of type B<target>.
+Target architecture of type B<target>.
 
 =item B<linewidth>: I<number>
 
@@ -487,6 +510,9 @@ Linewidth for output.
 =item B<optimizer>: I<optimizer>
 
 Code optimizer.
+
+=item B<asm>(I<io>): I<asm>. Function that creates the default
+assembler. The assembler writes its output to I<io>.
 
 =back
 
@@ -498,7 +524,7 @@ compiler data structures:
 
 =over
 
-=item I<asm> Assembly code.
+=item I<asm> Assembler.
 
 =item I<ast> C-- abstract syntax.
 
@@ -511,6 +537,8 @@ compiler data structures:
 =item I<target> Target architecture.
 
 =item I<optimize> Code optimizer.
+
+=item I<io> File handle for input or output.
 =back
 
 =head1 LUA TARGETS
@@ -528,7 +556,7 @@ the above types:
 
 =over
 
-=item B<Driver.version>(I<string>). Prints version information and
+=item B<Driver.version>(I<nil>). Prints version information and
 copyright to stdout.
 
 
@@ -545,18 +573,31 @@ cross-compiler format to exchange an abstract syntax.
 =item B<Driver.check>(I<ast>). Takes an abstract syntax I<ast> and checks
 its static semantics. Returns a symbol table I<env> upon success.
 
+=item B<Driver.pretty>(I<ast>). Returns a printable I<doc> value of an
+I<ast>. 
+
 =item B<Driver.compile>(I<optimize>, I<ast>, I<target>, I<env>).
 Compiles an I<ast> for a I<target>, using symbol table I<env>. Returns
 an assembly program I<asm>. The function B<compile> passes every C--
 procedure to B<optimize>.
 
-=item B<Driver.assemble>(I<asm>). Assembles an I<asm> value to a
-printable I<doc> format.
+=item B<Driver.assemble>(I<asm>). Emits an assembler program.
 
 =item B<Driver.print>(I<doc>, I<number>). Formats I<doc> for a line width
 of I<number> characters and prints it to stdout.
 
+=item B<Driver.cmmasm>(I<io>). Creates an assembler that emits C-- code.
+
+=item B<Driver.dotasm>(I<io>). Creates an assembler that emits output
+for L<dot>.
+
+
 =back
+
+=head1 ENVIRONMENT
+
+B<QC--LUAPATH>: search path for Lua scripts loaded by B<qc-->; default
+B<:.*>. 
 
 =head1 EXIT CODE
 
@@ -566,9 +607,12 @@ exit code 1.  Any internal compiler error leads to exit code 2.
 
 =head1 SEE ALSO
 
+L<dot>.
+
 http://www.cminusminus.org/, 
 http://www.lua.org/,
 http://www.cs.princeton.edu/zephyr/ASDL/
+http://www.research.att.com/sw/tools/graphviz/
 
 =head1 AUTHORS
 
