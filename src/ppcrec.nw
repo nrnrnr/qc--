@@ -95,7 +95,7 @@ let suffix w = match w with
 | 8  -> "b"
 | 16 -> "h"
 | 32 -> "w"
-| _ -> Impossible.impossible "width in x86 not 8/16/32"
+| _ -> Impossible.impossible "width in PPC not 8/16/32"
 @ 
 % ------------------------------------------------------------------ 
 \subsection{Register names}
@@ -205,9 +205,9 @@ Load register from memory. A load of a value smaller than 32 bits
 implies a zero or sign extension.
 
 <<rules>>=
-inst:  Store(regl, mem, 32) {: int_load "l%s%s%s %s,%s" mem regl :}
+inst:  Store(regl, mem, 32) {: int_load "l%s%s%s %s,0(%s)" mem regl :}
 inst:  Par(Store(regl1:regl, mem, 32), Llr(regl2:regl, "add", i_r, 32))
-       {: int_loadu "l%s%su%s %s,%s" mem regl1 regl2 i_r :}
+       {: int_loadu "l%s%su%s %s,0(%s)" mem regl1 regl2 i_r :}
 @
 
 Store register to memory. No extension here; the 8, 16, or 32 bits are
@@ -215,13 +215,25 @@ simply written to memory.
   
 <<rules>>=
 inst:  Store(meml, reg, w:int)
-       {: int_store  "st%s%s %s,%s"  (suffix w) meml reg :}
+       {: int_store  "st%s%s %s,0(%s)"  (suffix w) meml reg :}
 inst:  Par(Store(meml, reg, w:int), Llr(regl, "add", i_r, 32))
-       {: int_storeu "st%su%s %s,%s" (suffix w) meml reg regl i_r :}
+       {: int_storeu "st%su%s %s,0(%s)" (suffix w) meml reg regl i_r :}
+@ 
+There is a special instruction for shift left by 16 and load immediate
+that is often used when loading 32-bit constants.
+<<rules>>=
+inst:  Store(regl, Shl(const,b:const), w:int) --[{: guard (b=16) :}]
+       {: "lis " ^ regl ^ "," ^ const :}
+@ 
+Special purpose registers have special instructions.
+<<rules>>=
+inst:  Store(regl, lr, w:int) {: "mflr " ^ regl :}
+inst:  Store(lrl, reg, w:int) {: "mtlr " ^ reg  :}
 @ 
 \paragraph{Control Flow}
 <<rules>>=
-inst:  Goto(lconst) {: "b " ^ lconst :}
+inst:  Goto(lconst)        {: "b " ^ lconst :}
+inst:  Goto(Fetch(lrl,32)) {: "blr"         :}
 @
 
 The [[next]] pattern covers the expression $PC + 4$ which denotes the
@@ -235,7 +247,9 @@ inst:  Par(Goto(lconst), Store(lrl,next,32)) {: "bl " ^ lconst :}
 
 <<rules>>=
 inst:  Llr(regl, "add", const, w:int) [{:guard (w=32):}]
-       {: "addi " ^ regl ^ "," ^ regl ^"," ^ const :} 
+       {: "addi " ^ regl ^ "," ^ regl ^"," ^ const :}
+inst:  Llr(regl, "or",  const, w:int) [{:guard (w=32):}]
+       {: "ori "  ^ regl ^ "," ^ regl ^"," ^ const :}
 @
 \paragraph{Other instructions}
 <<rules>>=
@@ -258,6 +272,7 @@ any : Fetch (any, w:int) {: "Fetch(" ^ any ^ "," ^ string_of_int w ^ ")" :}
 
 any : Add(x:any, y:any) {: "Add(" ^ x ^ ", " ^ y ^ ")" :}
 any : Sub(x:any, y:any) {: "Sub(" ^ x ^ ", " ^ y ^ ")" :}
+any : Shl(x:any, y:any) {: "Shl(" ^ x ^ ", " ^ y ^ ")" :}
 any : Sx(any) {: "Sx(" ^ any ^ ")" :}
 any : Zx(any) {: "Zx(" ^ any ^ ")" :}
 any : Lobits(any, w) {: "Lobits(" ^ any ^ ", " ^ string_of_int w ^ ")" :}
@@ -292,8 +307,9 @@ The most interesting code is probably the code that maps the
 general representation of application into one that uses a unique
 constructor for each operator.
 <<special cases for particular operators>>=
-| RP.App(("add", [w]), [x; y])            -> conAdd (exp x) (exp y)
-| RP.App(("sub", [w]), [x; y])            -> conSub (exp x) (exp y)
+| RP.App(("add", ws), [x; y])            -> conAdd (exp x) (exp y)
+| RP.App(("sub", ws), [x; y])            -> conSub (exp x) (exp y)
+| RP.App(("shl", ws), [x; y])            -> conShl (exp x) (exp y)
 | RP.App(("bitExtract", [w; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
 | RP.App((op, ws), [x; y]) 
     when Strutil.Set.mem op cmp           -> conCmp op (exp x) (exp y)

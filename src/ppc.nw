@@ -229,11 +229,29 @@ let sxload  = xload "sx"
 let zxload  = xload "zx"
 let lostore = xstore "lobits"
 @ 
-Values are copied into registers with [[tstore]].
+Immediate values and registers are copied into registers with
+[[tstore]].
 <<ppc postexpander>>=
-let move ~dst ~src  = [tstore dst (tval src)]
-let li   ~dst const = [tstore dst (Up.const const)]
-let lix  ~dst exp   = [tstore dst exp]
+let move ~dst ~src = [tstore dst (tval src)]
+let lix  ~dst  exp = [tstore dst exp]
+@ 
+Load immediate is a bit tricky because the PPC only allows 16-bit
+constants to be loaded directly.
+<<ppc postexpander>>=
+let li ~dst const =
+  let con w i = R.bits (Bits.S.of_int i w) w in
+  let split b = let i = Bits.S.to_int b in
+                ( con 32 (i lsr 16)       (* high bits *)
+                , con 16 (i land 0xffff)  (* low  bits *)
+                )
+  in
+  match const with
+    RP.Bits b -> let (h,l) = split b in
+                 let l = R.app (R.opr "zx" [16;32]) [l] in
+                 [ tstore dst (R.app (R.opr "or"  [32;32]) [tval dst;l])
+                 ; tstore dst (R.app (R.opr "shl" [32;32]) [h;con 32 16])
+                 ]
+  | _         -> [ tstore dst (Up.const const) ]
 @ 
 Operators...
 <<ppc postexpander>>=
@@ -291,19 +309,12 @@ let callr ~tgt ~others = [R.par (List.hd (br tgt) :: List.map Up.effect others)]
 
 let cut_to effects = [R.par (List.map Up.effect effects)]
 @ 
-For debugging purposes, all effects that can be preserved are printed.
+We want to prevent the expander from messing with the rtl [[pc := lr]]
+which is a return from procedure call.
 <<ppc postexpander>>=
-let don't_touch_me effects =
-  let exp = (fun e -> Rtlutil.ToReadableString.exp (Up.exp e))
-  and loc = (fun l -> Rtlutil.ToReadableString.loc (Up.loc l)) in
-  let pr = function
-      RP.Store (l,e,w) ->
-        Printf.eprintf "dtm store: %s = %s (%d bits)\n" (loc l) (exp e) w
-    | RP.Kill l ->
-        Printf.eprintf "stm kill: %s\n" (loc l)
-  in
-  Printf.eprintf("dont touch me effects\n");
-  List.iter pr effects; false
+let don't_touch_me = function
+    [ RP.Store(pc_lhs, RP.Fetch(lr, _), _) ] -> true
+  | _ -> false
 @ 
 Stack operations...
 <<ppc postexpander>>=
@@ -341,7 +352,7 @@ let sp     = R.reg sp_reg
 let vfp    = Vfp.mk 32
 
 let regset s w l = RS.of_list (List.map (fun r-> (s,r,w)) l)
-let vregs  = regset 'r' 32 [0;2;3;4;5;6;7;8;9;10;11;12]
+let vregs  = regset 'r' 32 [2;3;4;5;6;7;8;9;10;11;12]
 let nvregs = regset 'r' 32 [13;14;15;16;17;18;19;20;21;
                             22;23;24;25;26;27;28;29;30;31]
 let fvregs  = regset 'f' 64 [0;1;2;3;4;5;6;7;8;9;10;11;12;13]
