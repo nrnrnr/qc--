@@ -41,10 +41,7 @@ int Cmm_c_change_activation(Cmm_Activation *a) {
   pc_map_entry *entry;
   int i;
 
-  if (a->vfp == 0) {
-    fprintf(stderr, "C walk ended with a->vfp = 0\n");
-    return 0;
-  }
+  assert(a->vfp != 0);   /* protect against an unexpected error */
   <<possibly shout about our departure, showing arguments>>
   callerebp = *(Cmm_Word *)a->vfp;
   <<possibly announce caller's ebp>>
@@ -59,6 +56,8 @@ int Cmm_c_change_activation(Cmm_Activation *a) {
   a->pc = ra;  /* for debugging only */
   entry = Cmm_lookup_entry(ra);
   if (entry) {
+    if (Cmm_is_thread_start_frame(entry, ra))
+      return 0;  /* such a frame must not be seen */
     a->rtdata = entry;
     /* deallocation point = vfp + 8
        deallocation point = callervfp + entry->outalloc
