@@ -68,9 +68,9 @@ let printf  = Printf.printf
 @
 
 A type is a pair of a width and a hint. Types label the edges of the
-graph. A path is a list of types and indirectly describes the state of
-an automaton: starting from the initial state the types from the path
-are fed into the automaton, which advances its state accordingly.
+graph. A path is a list of types that indirectly describes the state of
+an automaton: starting from the initial state, the types forming the
+path are fed into the automaton, which advances its state accordingly.
 
 <<automatongraph.ml>>=
 type ty =       int * string                    (* width, hint     *)
@@ -129,7 +129,7 @@ already in the set of node when we call [[add]], we thus only have to
 add the destination node.
 
 <<automatongraph.ml>>=
-let mem edge graph          = T.mem edge graph.edges
+let mem edge graph = T.mem edge graph.edges
 let add (n,t as edge) node graph =
     assert (NS.mem n graph.nodes);
     { graph with edges = T.add edge node graph.edges
@@ -181,7 +181,9 @@ module ToDot = struct
     
     let graph g = 
         ( printf "digraph \"calling convention\" {\n"
-        ; printf "size=\"6,9\"\n"
+        ; printf "// nodes=%d \n" (NS.cardinal g.nodes)
+        ; printf "size=\"9,6\"\n"
+        ; printf "ratio=fill\n"
         ; let print_edge (src,label) dst () = edge src label dst  in
             T.fold print_edge g.edges () 
         ; printf "}\n"
@@ -212,7 +214,7 @@ let goto mk path =
         }
 @
 
-The heart of the algorithm are the two mutually recursive functions
+The heart of the algorithm are two mutually recursive functions,
 [[dfs]] and [[follow]]. The depth-search function [[dfs]] explores a
 [[graph]] in all direction, starting from one [[node]]. [[Follow]]
 specifically explores a [[node]] by following a potentially new edge

@@ -190,7 +190,7 @@ let arguments () =
           A.sharedregs exc [f 16; f 17; f 18; f 19; f 20; f 21] ~errormsg:fatal
       ; (fun h w -> h <> "float" && w = 64),
           A.widen (Aux.round_up_to ~multiple_of:64)        *>
-          A.sharedregs exc [r 16; r 17; r 18; r 19; r 20; r 21] ~errormsg:fatal 
+          A.sharedregs exc [r 16; r 17; r 18; r 19; r 20; r 21] ~errormsg:fatal
       ] **>
   A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
 @
@@ -294,11 +294,12 @@ nature of [[Call.t]] make this difficult rigth now.
 <<alphacall.ml>>=
 let dump automaton widths hints = 
     Automatongraph.print 
-        ~mk:(fun () -> A.at (Rtl.bits (Bits.zero wordsize) wordsize) automaton)
+        ~mk:(fun () -> A.at (Rtl.bits (Bits.zero wordsize) wordsize) 
+                            (automaton ()))
         ~widths ~hints
         
-let dump_proc     = dump (arguments ())
-let dump_return   = dump results
-let dump_cutto    = dump cut_args
+let dump_proc     = dump  arguments
+let dump_return   = dump (fun () -> results)
+let dump_cutto    = dump (fun () -> cut_args)
 @
 
