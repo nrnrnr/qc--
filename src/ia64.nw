@@ -15,20 +15,22 @@ module Spaces : sig
   val v : Space.t
 end
 
-module Post : Postexpander.S
-module X    : Expander.S
-val target : Ast2ir.tgt
+module Post   : Postexpander.S
+module X      : Expander.S
 
+val target    : Ast2ir.tgt
 val placevars : Ast2ir.proc -> Automaton.t
 @ 
 
-
+% ---------------------------------------------------------------------------
 \subsection{Name and Storage Spaces}
+% ---------------------------------------------------------------------------
+
 <<ia64.ml>>=
 module SS = Space.Standard64
 module R  = Rtl
 
-let arch = "ia64"
+let arch  = "ia64"  (* architecture name *)
 @ 
 
 <<ia64.ml>>=
@@ -62,14 +64,18 @@ module Spaces = struct
 end
 
 let locations = SS.locations Spaces.c
-let pc = locations.SS.pc  (* instruction pointer / program counter *)
-let cc = locations.SS.cc
-let sp = R.reg ('r', 12, 64)
-let ra = R.reg ('a',  0, 64)
+
+let pc    = locations.SS.pc  (* instruction pointer / program counter *)
+let cc    = locations.SS.cc
+let sp    = R.reg ('r', 12, 64)
+let ra    = R.reg ('a',  0, 64)
 let raloc = R.fetch ra 64
 @ 
 
+% ---------------------------------------------------------------------------
 \subsection{Postexpander}
+% ---------------------------------------------------------------------------
+
 <<ia64.ml>>=
 module RP   = Rtl.Private
 module Up   = Rtl.Up
@@ -86,6 +92,10 @@ let wordsize   = 64
 The postexpander may need to allocate temporaries.
 <<ia64 postexpander>>=
 let talloc = ref None
+let get_talloc () = match !talloc with
+  | Some s -> s
+  | None   -> Impossible.impossible 
+                    "Temp allocator not registered with postexpander"
 let remember_allocator ta = talloc := Some ta
 @ 
 \paragraph{Utility Functions}
@@ -111,14 +121,18 @@ let rcontext = (fun x y -> Impossible.unimp "Unsupported soft rounding mode")
                ,fun r -> r = ('d', 0, 2)
 @ 
 \paragraph{Addressing modes}
-The only addressing mode is the obvious one (and we have no stack).
+The only addressing mode is the obvious one.
 <<ia64 postexpander>>=
 module Address = struct
   type t = Rtl.exp
   let reg (space, n, w) = R.fetch (R.reg (space, n, w)) w
 end
+@ 
+There is no x86-like stack in the IA64.
+<<ia64 postexpander>>=
 include Postexpander.Nostack(Address)
 @ 
+
 \subsubsection{Data Movement}
 We treat the Itanium strictly as a 64-bit machine, so we assume the width of
 everything is~64.
@@ -198,9 +212,7 @@ let pc_rhs = pc
 
 (* note that instructions need to be specified in reverse order! *)
 let br ~tgt = 
-  let alloc = match !talloc with
-    | Some ta -> ta 
-    | None -> Impossible.impossible "can't find allocator for branch" in
+  let alloc = get_talloc () in
   let tempr = Talloc.Multiple.loc alloc 'v' 64 in
   [ R.store pc_lhs (R.fetch tempr 64) 64
   ; R.store tempr (tempval tgt) 64 ]
@@ -234,6 +246,12 @@ let don't_touch_me es = false
 @ 
 
 \subsection{Building the Target}
+
+We provide the IA64 postexpander as a parameter to the generic code expander.
+<<ia64.ml>>=
+module X = Expander.IntFloatAddr (Post)
+@ 
+
 Standard control flow.
 <<ia64.ml>>=
 module T = Target
@@ -242,7 +260,7 @@ module F = Mflow.MakeStandard (
      let pc_lhs = Post.pc_lhs
      let pc_rhs = Post.pc_rhs
      let ra_reg    = ra
-     let ra_offset = 8
+     let ra_offset = 8  (* size of instruction -- THIS IS A GUESS! *)
   end)
 @ 
 
@@ -257,12 +275,44 @@ let globals base =
   A.at ~start:base (A.widen width *> A.align_to align *>
   A.overflow ~memsize:8 ~byteorder:Post.byte_order ~growth:Memalloc.Up ~max_alignment:16)
 @ 
+We write a helper function to take care of expanding out load/stores through
+offsets.
+<<ia64.ml>>=
+let ldst_expand rtl =
+  let extract_reg_w op = function 
+	| [_; RP.Fetch((RP.Reg _) as r,w)] -> (r,w)
+	| [RP.Fetch((RP.Reg _) as r,w); _] -> (r,w)
+	| _ -> let (opname,_) = op in
+      Impossible.impossible ("could not find base register for ld/st") in
+  match Down.rtl rtl with
+  (* load from offset *)
+  |	RP.Rtl [g,RP.Store(dst,RP.Fetch(RP.Mem(s,agg,mw,
+										   (RP.App(op,exps) as e),assn),w'),w)
+           ] -> let (reg, regw) = extract_reg_w op exps in
+                List.map (fun x -> Up.rtl (RP.Rtl [g, x]))
+                    [ RP.Store(reg, e, regw)
+                    ; RP.Store(dst, RP.Fetch(RP.Mem(s,agg,mw,
+													RP.Fetch(reg,regw),assn),
+											 w'), w) ]
+
+  (* store from offset *)
+  |	RP.Rtl [g,RP.Store(RP.Mem(s,agg,mw,(RP.App(op,exps) as e),assn), src, w)
+           ] -> let (reg, regw) = extract_reg_w op exps in
+                let alloc = Post.get_talloc () in
+                let tempr = Down.loc (Talloc.Multiple.loc alloc 't' 64) in
+                List.map (fun x -> Up.rtl (RP.Rtl [g, x]))
+                    [ RP.Store(tempr, e, regw)
+                    ; RP.Store(RP.Mem(s, agg, mw, RP.Fetch(tempr, regw), assn),
+							   src, w) ]
+
+  (* default case *)
+  |	_ -> [rtl]
+@ 
 
 Spilling and reloading.
 <<ia64.ml>>=
-module X = Expander.IntFloatAddr (Post)
 (* expansion here once caused infinite loop *)
-let spill_expand p r = [r]
+let spill_expand p r = (* [r] *) (* ldst_expand r *) [r]
 let spill  p t l =
   spill_expand p (Automaton.store l (Post.tempval t) (Post.tempwidth t))
 let reload p t l =
@@ -301,7 +351,7 @@ let target =
   ; T.globals     = globals
 
   (* there is bogosity below *)
-  ; T.rounding_mode = R.slice 0 ~lsb:0 pc
+  ; T.rounding_mode = R.reg ('?', 99, 64)
   ; T.named_locs    = Strutil.assoc2map []
   ; T.data_section  = "data"
   ; T.charset       = "latin1"

@@ -476,6 +476,44 @@ end
 @
 
 % ------------------------------------------------------------------ 
+\paragraph{Stack Layout for the Ia64}
+% ------------------------------------------------------------------ 
+
+<<Lua compiler configuration>>=
+Ia64 = Ia64 or {}
+Ia64.layout = { creates='no late consts' }
+
+function Ia64.layout.fn(dummy,proc) --- dispatch on cc name
+  return Ia64.layout[Stack.ccname(proc)](dummy, proc)
+end
+
+function Ia64.layout["C"](dummy,proc) --- really for a C convention only
+    local blocks = Stack.blocks(proc)
+    blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)
+
+    blocks.oldblocks.callee   = Block.overlap(64, "high", blocks.oldblocks.callee)
+    blocks.oldblocks.caller   = Block.overlap(64, "low", blocks.oldblocks.caller)
+    blocks.youngblocks.callee = Block.overlap(64, "high", blocks.youngblocks.callee)
+    blocks.youngblocks.caller = Block.overlap(64, "low", blocks.youngblocks.caller)
+    local layout = 
+                { blocks.oldblocks.caller       -- <-- high addresses
+                , blocks.oldblocks.callee
+                , blocks.ra
+                , blocks.vfp
+                , blocks.stackdata
+                , blocks.continuations
+                , blocks.spills
+                , blocks.youngblocks.caller
+                , blocks.sp                     -- <-- low addresses 
+                , blocks.youngblocks.callee
+                }
+    local block = Block.cat(64, layout)
+    Stack.freeze(proc,block)
+    return 1
+end    
+@
+
+% ------------------------------------------------------------------ 
 \paragraph{Stack Layout for the Interpreter}
 % ------------------------------------------------------------------ 
 
@@ -745,6 +783,24 @@ Backend.ppc =
   , emit      = Driver.assemble
   , compile   = Compile.file
   }   
+
+--
+-- Ia64 Backend (64 bit, little-endian)
+--
+Backend.ia64 =
+  { target = Targets.ia64
+  , placevars = Placevar.context(Placevar.ia64, "ia64")
+  , widen     = Stages.assert('proper widths')
+  , preopt    = Optimize.remove_nops
+  , expand    = Expander.ia64
+  , liveness  = Liveness.liveness
+  , ralloc    = Ralloc.color
+  , freeze    = Ia64.layout
+  , rmvfp     = Stages.replace_vfp
+  , asm       = Asm.ia64
+  , emit      = Driver.assemble
+  , compile   = Compile.file
+  }
 @
 
 % ------------------------------------------------------------------ 
@@ -763,6 +819,7 @@ even though they all come together in [[qc--.lua]].
 <<Alpha calling convention automata in Lua>>
 <<MIPS calling convention automata in Lua>>
 <<PPC calling convention automata in Lua>>
+<<IA64 calling convention automata in Lua>>
 @ 
 <<calling convention utilities>>=
 Util = Util or {}

@@ -165,6 +165,10 @@ ML =            topsort.ml       \
 		x86.ml           \
                 x86rec.ml        \
 		x86asm.ml        \
+                ia64call.ml      \
+		ia64.ml          \
+                ia64rec.ml       \
+		ia64asm.ml       \
 		arm.ml		 \
 		ppc.ml		 \
 		ppcrec.ml	 \
@@ -238,6 +242,10 @@ MLI =           alpha.mli         \
                 expander.mli      \
                 expcheck.mli      \
                 fenv.mli          \
+                ia64.mli          \
+                ia64asm.mli       \
+                ia64call.mli      \
+                ia64rec.mli       \
                 idgen.mli         \
                 idcode.mli        \
                 interp.mli        \
@@ -306,7 +314,7 @@ SCAN = $ML $MLI ${B}rtldebug.mli ${B}rtldebug.ml
 
 # The following files contribute Noweb chunks to the main Lua file qc--.lua
 
-CALL_LUA = alphacall.nw mipscall.nw x86call.nw ppc.nw
+CALL_LUA = alphacall.nw ia64call.nw mipscall.nw x86call.nw ppc.nw
 
 # ------------------------------------------------------------------
 # rules and tools 
@@ -440,6 +448,12 @@ ${B}ppcrec.mlb:D:   ppcrec.nw
 
 ${B}ppcrec.ml:D:    ${B}ppcrec.mlb $MLBURG
 	$MLBURG ${B}ppcrec.mlb  | $MLBURGFIX $target 
+
+${B}ia64rec.mlb:D:  ia64rec.nw
+	$NOTANGLE -L"$LINE" -Ria64rec.mlb $prereq > $target
+
+${B}ia64rec.ml:D:    ${B}ia64rec.mlb $MLBURG
+	$MLBURG ${B}ia64rec.mlb  | $MLBURGFIX $target 
 
 ${B}mipsrec.mlb:D:  mipsrec.nw
 	$NOTANGLE -L"$LINE" -Rmipsrec.mlb $prereq > $target
