@@ -520,7 +520,6 @@ interprocedural optimization and call-graph analysis.
 <<supporting functions for translating statements>>=
 and jump cconv e args targets(*unused*) = 
     let cc      = to_cc cconv in
-    <<insist that [[cc]] matches [[proc_cc]] and supports jumps>>
     let out     = actuals cc.C.call_parms.C.out args in
     let ra_out  = cc.C.ra_on_exit saved_ra out.C.overflow temps in
     let jumpi   = target.T.jump.T.embed e in
@@ -533,11 +532,6 @@ and jump cconv e args targets(*unused*) =
     G.instruction  g (RU.store ra_out (RU.fetch saved_ra))         **>
     G.stack_adjust g jump_sp                                       **>
     G.jump         g jumpi ~targets ~uses:(RS.union out.C.regs nvregs)
-<<insist that [[cc]] matches [[proc_cc]] and supports jumps>>=
-let () = if cc.C.name <> proc_cc.C.name then
-           impossible "calling conv mismatch in jump" in
-let () = if cc.C.overflow_alloc.C.parameter_deallocator <> C.Callee then
-         impossible ("calling conv " ^ cc.C.name ^ " does not support jump") in
 @
 \paragraph{Calls}
 <<supporting functions for translating statements>>=

@@ -320,10 +320,11 @@ let conv ~jump ~altret name specs ~return_to cut =
   ; C.where_to_save_ra = if jump then (fun _ t -> Talloc.Multiple.loc t 't' 32)
                          else         (fun _ _ -> ra)
   ; C.ra_on_exit       = if jump then (fun _ b _ -> amem (addk (Block.base b) (-4)))
-                         else         (fun _ _ _ -> ra)
+                         else         (fun _ b _ -> amem (addk (Block.base b) (-4)))
   ; C.sp_on_jump       =
-             if jump then (fun b _ -> RU.store sp (addk (Block.base b) (-4)))
-                         else (fun _ _ -> Impossible.impossible "tail calls not supported by cc")
+      if jump then (fun b _ -> RU.store sp (addk (Block.base b) (-4)))
+      else (fun _ _ -> Impossible.impossible
+                        ("tail calls not supported by " ^ name ^ " calling convention"))
   ; C.pre_nvregs       = nvregs          (* registers preserved across calls *)
   ; C.volregs          = volregs         (* registers not preserved across calls *)
   ; C.saved_nvr        = saved_nvr

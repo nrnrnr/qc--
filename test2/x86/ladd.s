@@ -97,6 +97,12 @@ Ljoin_l11:
 	call printf
 Ljoin_l8:
 	movl $0,%eax
+	leal 56(%esp), %ecx
+	movl $0,%edx
+	leal 56(%esp), %ebx
+	addl %edx,%ebx
+	movl (%ecx),%edx
+	movl %edx,(%ebx)
 	movl 52(%esp),%ebx
 	leal 56(%esp), %esp
 	ret

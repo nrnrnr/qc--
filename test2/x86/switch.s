@@ -35,6 +35,12 @@ Ljoin_l12:
 	movl $-3,%eax
 	call sw
 Ljoin_l9:
+	movl %esp,%eax
+	movl $0,%ecx
+	movl %esp,%edx
+	addl %ecx,%edx
+	movl (%eax),%ecx
+	movl %ecx,(%edx)
 	ret
 .section .pcmap_data
 Lstackdata_l30:

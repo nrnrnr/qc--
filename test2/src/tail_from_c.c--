@@ -1,0 +1,54 @@
+target byteorder little;
+
+import bits32 printf;
+import bits32 atoi;
+export main;
+
+section "data" {
+  sp_str: bits8 [] "sum: %d\nproduct: %d\n\000";
+  total_str: bits8[] "Total: %d\n\000";
+  stack_address: bits8 [] "stackdata: %x\n\000";
+}
+
+/* Tail recursion */
+sp2( bits32 i_n ) {
+  jump sp2_help( i_n, 1, 1 );
+}
+
+
+sp2_help( bits32 i_n, bits32 i_s, bits32 i_p ) {
+  stackdata { align 4; onstack : bits32[1]; }
+
+	bits32 i1, i2, i3, i4, i5, i6, i7, i8;
+	i1 = 1;
+	i2 = 2;
+	i3 = 3;
+	i4 = 4;
+	i5 = 5;
+	i6 = 6;
+	i7 = 7;
+	foreign "C" printf("address" stack_address, onstack);
+	i8 = i1 + i2 + i3 + i4 + i5 + i6 + i7;
+  if i_n==1 {
+      return( i_s, i_p );
+  } else {
+      jump sp2_help( i_n-1, i_s+i_n, i_p*i_n );
+  }
+}
+
+tail_from_c( bits32 i_n, bits32 a1, bits32 a2, bits32 a3, bits32 a4, bits32 a5,
+bits32 a6,) {
+	bits32 i_s, i_p;
+  bits32 total;
+
+  i_s, i_p = sp2(i_n);
+  total = a1+a2+a3+a4+a5+a6;
+	foreign "C" printf("address" sp_str, i_s, i_p);
+	foreign "C" printf("address" total_str, total);
+	foreign "C" return(0);
+}
+
+foreign "C" main("unsigned" bits32 iargc, "address" bits32 iargv)
+{
+  jump tail_from_c(7,1,2,3,4,5,6);
+}

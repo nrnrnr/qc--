@@ -44,6 +44,7 @@ Test.files = { "add.c--"
              , "sub.c--"
 	     , "switch.c--"
 	     , "tail.c--"
+             , "tail_from_c.c--"
              , { source = {'tail2.c--', 'call3.c--'} }
              , { source = {'tailnot.c--', 'call3.c--'} }
 	     , 'test-050.c--'

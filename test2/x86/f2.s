@@ -64,6 +64,12 @@ Lproc_body_start_l3:
 	call printf
 Ljoin_l8:
 	movl $0,%eax
+	leal 28(%esp), %ecx
+	movl $0,%edx
+	leal 28(%esp), %ebx
+	addl %edx,%ebx
+	movl (%ecx),%edx
+	movl %edx,(%ebx)
 	movl 20(%esp),%ebx
 	leal 28(%esp), %esp
 	ret

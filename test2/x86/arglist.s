@@ -747,6 +747,12 @@ Ljoin_l96:
 	call g
 Ljoin_l93:
 	movl $0,%eax
+	leal 4(%esp), %ecx
+	movl $0,%edx
+	leal 4(%esp), %ebx
+	addl %edx,%ebx
+	movl (%ecx),%edx
+	movl %edx,(%ebx)
 	movl (%esp),%ebx
 	leal 4(%esp), %esp
 	ret

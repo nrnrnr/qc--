@@ -7,12 +7,13 @@ Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
 .section .text
 main:
+	leal -4(%esp), %esp
 	movl $4,%ecx
-	movl %esp,%edx
+	leal 4(%esp), %edx
 	addl %ecx,%edx
 	movl (%edx),%ecx
 	movl $8,%ecx
-	movl %esp,%edx
+	leal 4(%esp), %edx
 	addl %ecx,%edx
 	movl (%edx),%ecx
 Linitialize_continuations_l5:
@@ -24,6 +25,15 @@ Ljoin_l12:
 	call tryout
 Ljoin_l9:
 	movl $0,%eax
+	leal 4(%esp), %ecx
+	movl $0,%edx
+	movl %ebx,(%esp)
+	leal 4(%esp), %ebx
+	addl %edx,%ebx
+	movl (%ecx),%edx
+	movl %edx,(%ebx)
+	movl (%esp),%ebx
+	leal 4(%esp), %esp
 	ret
 .section .pcmap_data
 Lstackdata_l18:
@@ -33,7 +43,7 @@ Lstackdata_l18:
 .long Lframe_l19
 .section .pcmap_data
 Lframe_l19:
-.long 0x80000000
+.long 0xfffffffc
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l18
@@ -56,7 +66,7 @@ Lframe_l19:
 .long Lframe_l20
 .section .pcmap_data
 Lframe_l20:
-.long 0x80000000
+.long 0xfffffffc
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l18

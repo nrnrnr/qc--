@@ -64,6 +64,12 @@ Ljoin_l23:
 	call printf
 Ljoin_l20:
 	movl $0,%eax
+	leal 20(%esp), %ecx
+	movl $0,%edx
+	leal 20(%esp), %ebp
+	addl %edx,%ebp
+	movl (%ecx),%edx
+	movl %edx,(%ebp)
 	movl 16(%esp),%ebp
 	movl 12(%esp),%ebx
 	leal 20(%esp), %esp
