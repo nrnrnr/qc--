@@ -24,12 +24,13 @@ For example, the signature for a C function that takes two [[int]]s and returns 
 void register_c_func(const char *name, void *f, const char *sig);
 @ 
 \paragraph{Loading Source Code}
-To load a source file (in Lua style) into memory, [[load_assembly_unit]] should be called with the name of the source file.
+To load a source file (in Lua style) into memory, [[load_assembly_unit]] should be called with the name of the source file (or source string).
 Note that code cannot be interpreted until it has been loaded into memory.
 [[load_assembly_unit]] returns 0 if and only if [[filename]] was successfully loaded.
 <<available exported C functions>>=
-int load_assembly_unit (char *filename);
+int load_assembly_unit (char *s, assembly_unit_type ty);
 @ 
+[[ty]] may either take on the value [[SRC_STRING]] or [[SRC_FILE]] to indicate whether [[s]] is the name of a file or a Lua source string itself.
 \paragraph{Examining Source Code}
 To find the {\PAL} code associated with a certain {\PAL} label (be it a procedure, continuation, or simple code), call on [[cmm_find_export]] with the label in string form.
 Note that this function will only find the code for which you are looking if it has been previously loaded into memory using [[load_assembly_unit]], and if the code's assembly unit specified the label as an export (using the [[CMM.exports]] Lua function).
@@ -205,7 +206,7 @@ Note that if any source files are read in using command line arguments, the inte
         break;
       } else {
         /* assume we're given a filename */
-        files_loaded = (!load_assembly_unit(argv[i])) || files_loaded;
+        files_loaded = !load_assembly_unit(argv[i], SRC_FILE) || files_loaded;
       }
     }
 
@@ -286,7 +287,7 @@ Special commands [[verbosity]] and [[stacksize]] allow the user to slightly alte
 \paragraph{Loading an Assembly Unit}
 To load a given assembly file, we call on [[load_assembly_unit]].
 <<load file [[arg]] as an assembly unit>>=
-  load_assembly_unit(arg);
+  load_assembly_unit(arg, SRC_FILE);
 @
 \paragraph{Finding Labels and Procedures}
 To find a label, we call on [[cmm_find_export]].

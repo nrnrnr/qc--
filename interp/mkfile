@@ -4,16 +4,16 @@ INCLUDEDIR=include/
 
 CC=gcc
 CFLAGS=-g
+LIBS=-lm
 
 TOOLS=$BINDIR/tools
-DEPEND=$CC -MM -I$INCLUDEDIR
+DEPEND=$CC -MM -I$INCLUDEDIR -I.
 
-HDRS=encode.h interp.h machine.h intervals.h runtime.h client.h
+HDRS=encode.h interp.h machine.h intervals.h runtime.h client.h clients/gc.h
 SRCS=assert.c atom.c bcdis-dec.c encode.c except.c interp-dec.c intervals.c \
-     mclib.c mem.c runtime.c client.c
+     mclib.c mem.c runtime.c client.c clients/gc.c
 OBJS=assert.o atom.o bcdis-dec.o encode.o except.o interp-dec.o intervals.o \
-     mclib.o mem.o runtime.o client.o
-STDBASIS=stdbasis.lua
+     mclib.o mem.o runtime.o
 
 TOP=..
 INTERP=evaluating
@@ -21,6 +21,8 @@ INTERP=evaluating
 <../config/noweb.mk
 
 all:V: interp
+
+gc:V:  clients/gc_client
 
 doc:V: design.ps state.ps
 
@@ -36,26 +38,23 @@ interp.tex: interp.nw
 depend:V: $SRCS $HDRS
     cp mkfile mkfile.bak
     sed '/^# DO NOT DELETE/q' mkfile.bak > mkfile
-    $DEPEND $SRCS >> mkfile
+    $DEPEND $SRCS | sed 's/gc\.o:/clients\/gc\.o:/' >> mkfile
 
 clean:V: clean-tex clean-code clean-obj
-	rm -f design.tex state.tex bytecode.tex interp.tex intervals.tex opgen.tex client.tex runtime.tex interp *~
+	rm -f design.tex state.tex bytecode.tex interp.tex intervals.tex opgen.tex client.tex clients/gc.tex runtime.tex interp clients/gc_client *~
 
 clean-tex:V:
-	rm -f *.blg *.log *.dvi *.inc *.toc *.aux 
+	rm -f *.blg *.log *.dvi *.inc *.toc *.aux clients/*.blg clients/*.inc
 
 clean-code:V:
-    rm -f *.m *.h *.i *-dec.c intervals.c encode.c decode.fetch bytecode.sled
+    rm -f *.m *.h clients/*.h *.i *-dec.c intervals.c encode.c runtime.c client.c decode.fetch bytecode.sled clients/gc.c clients/*.i
 
 clean-obj:V:
-    rm -f *.o
+    rm -f *.o clients/*.o
 
 #
 # source code targets
 #
-stdbasis.lua: runtime.nw
-    $NOTANGLE -R$target $prereq > $target
-
 intervals.c: intervals.nw
     $NOTANGLE -L -R$target $prereq > $target
 
@@ -71,12 +70,15 @@ machine.h:D: interp.nw
 encode.c encode.h: bytecode.sled
     $TOOLS -lc-cons-names -encoder encode $prereq
 
+runtime.c: runtime.nw
+    $NOTANGLE -R$target $prereq > $target
+
 %-dec.c:D: %.m bytecode.sled decode.fetch
     $TOOLS -lc-cons-names -decoder $target -matcher $stem.m \
 		bytecode.sled decode.fetch
 
-%.h:D: %.nw
-    $NOTANGLE -L -R$target $prereq > $target
+'(([^/]*/)*)(.*)\.h$':RD:       '\1\3.nw'
+	$NOTANGLE -L -R$stem3.h $prereq > $target
 
 %.m:D: interp.nw
     $NOTANGLE -R$target $prereq > $target
@@ -84,14 +86,14 @@ encode.c encode.h: bytecode.sled
 #
 # intermediate code targets
 #
-%.i: %.c
-    $CC -P -E -I$INCLUDEDIR $stem.c > $stem.i
+'(([^/]*/)*)(.*)\.i$':RD:       '\1\3.c'
+    $CC -P -E -I$INCLUDEDIR -I. $prereq > $target
 
 #
 # object code targets
 #
 %.o: %.c
-    $CC $CFLAGS -c -I$INCLUDEDIR -o $target $stem.c
+    $CC $CFLAGS -c -I$INCLUDEDIR -I. -o $target $stem.c
 
 #
 # operator generator targets (not currently used)
@@ -111,8 +113,11 @@ optest:V: opgen
 #
 # compiled targets
 #
-interp: $OBJS $STDBASIS
-    $CC -g -lm -L$LIBDIR -o $target $OBJS $LIBDIR/liblua.a $LIBDIR/liblualib.a
+interp: $OBJS client.o
+    $CC -g $LIBS -L$LIBDIR -o $target $OBJS client.o $LIBDIR/liblua.a $LIBDIR/liblualib.a
+
+clients/gc_client: $OBJS clients/gc.o
+    $CC -g $LIBS -L$LIBDIR -o $target $OBJS clients/gc.o $LIBDIR/liblua.a $LIBDIR/liblualib.a
 
 #
 # dependencies 
@@ -132,3 +137,5 @@ runtime.o: runtime.c runtime.h interp.h intervals.h include/mclib.h \
  encode.h machine.h
 client.o: client.c client.h interp.h intervals.h include/mclib.h \
  encode.h machine.h runtime.h
+clients/gc.o: clients/gc.c clients/gc.h runtime.h interp.h intervals.h \
+ include/mclib.h encode.h machine.h
