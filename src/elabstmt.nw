@@ -137,12 +137,16 @@ let elab_functions r env =
           s' :: stmts (not (jumps s)) ss in
     Error.Raise.list (stmts reachable ss)
   and jumps = function N.Goto _ | N.Jump _ | N.Cut _ | N.Return _  -> true
-                     | N.Call (_, _, _, _, _, fl) -> List.mem Ast.NeverReturns fl
+                     | N.Call (_, _, _, _, _, fl) -> List.exists never_returns fl
                      | N.StmtAt (s, _) -> jumps s
                      | N.Span (_, _, ss) -> jumpsss ss
                      | N.If (_, t, f) -> jumpsss t && jumpsss f
                      | N.Switch (_, _, arms) -> List.for_all jumpsarm arms
                      | _ -> false
+  and never_returns = function
+    | Ast.FlowAt (f, _) -> never_returns f
+    | Ast.NeverReturns -> true
+    | _ -> false
   and jumpsss = function
     | [] -> false
     | [s] -> jumps s

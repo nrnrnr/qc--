@@ -116,6 +116,7 @@ let _ = Array.iter (fun (str,tok) -> Hashtbl.add keywords str tok)
     ; ("jump"           , P.JUMP)
     ; ("little"         , P.LITTLE)
     ; ("memsize"        , P.MEMSIZE)
+    ; ("never"          , P.NEVER)
     ; ("pragma"         , P.PRAGMA)
     ; ("register"       , P.REGISTER)
     ; ("return"         , P.RETURN)
@@ -654,6 +655,7 @@ together with their positions.
     | P.LBRACE            -> "LBRACE"
     | P.LBRACKET          -> "LBRACKET"
     | P.LPAREN            -> "LPAREN"
+    | P.NEVER             -> "NEVER"
     | P.PPERCENT          -> "PPERCENT"
     | P.PRAGMA            -> "PRAGMA"
     | P.RBRACE            -> "RBRACE"
@@ -785,7 +787,7 @@ let str2int str =
 %token ABORTS ALIGN ALIGNED ALSO AS AMPERSAND BIG BYTEORDER CASE COLON CCOLON
 %token COMMA CONST CONTINUATION CUT CUTS DEFAULT DOTDOT ELSE EOF EQUAL
 %token EXPORT FOREIGN GOTO IF IMPORT IN INFIXOP INVARIANT JUMP LBRACE
-%token LBRACKET LITTLE LPAREN MEMSIZE PPERCENT RBRACE RBRACKET REGISTER
+%token LBRACKET LITTLE LPAREN MEMSIZE NEVER PPERCENT RBRACE RBRACKET REGISTER
 %token RETURN RETURNS RPAREN SECTION SEMI SPAN STACKDATA SWITCH TARGET
 %token TARGETS TO TYPEDEF UNICODE UNWINDS
 %token WRDSIZE PTRSIZE FLOATREPR CHARSET
@@ -995,6 +997,7 @@ flow        :   ALSO CUTS     TO names         { A.CutsTo($4)     }
             |   ALSO UNWINDS  TO names         { A.UnwindsTo($4)  }
             |   ALSO RETURNS  TO names         { A.ReturnsTo($4)  }
             |   ALSO ABORTS                    { A.Aborts         }
+            |   NEVER RETURNS                  { A.NeverReturns   }
 
 flows       :   flows flowAt                   { $2 :: $1 }
             |   /**/                           { []       }

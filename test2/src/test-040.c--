@@ -3,6 +3,10 @@
 //
 
 target byteorder little;
+import player, players, makeMove, getMove, Exn_illegalMove, Exn_NoMoreTiles;
+
+bits32 next, movesTried;
+const EXN = 1;
 
 section "text" 
 {
@@ -17,25 +21,19 @@ section "text"
                 also returns to c1
                 also returns to c2;
             t = bits32[players];
-            next = (next + 1) % t;
+            next = (next + 1) `modu` t;
         }
-
-        continuation c1 ():
-            goto h1;
-
-        continuation c2 ():
-            goto h2;
 
         finish:
         movesTried = movesTried -1 ;
         return ;
                 
-        h1:
+        continuation c1 ():
         t = bits32[bits32[player+12]];
         t(s);
         goto finish;
 
-        h2:
+        continuation c2 ():
         t = bits32[bits32[player+12]];
         t(lit1);
         goto finish;
