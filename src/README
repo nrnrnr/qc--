@@ -3,14 +3,9 @@ DEVELOPER'S FAQ
 
 + What needs to be done to add new files to the compiler?
   
-  The standard case is new module foo.nw that provides foo.mli and
-  foo.ml.  If you just want to play with the new module but you don't
-  want it to link into the binary you just have to update the
-  dependencies and once this is done you can compile your module:
-   
-    mk foo.ml foo.mli           extract sources manually for first time
-    mk depend
-    mk foo.cmo
+  See the comments in mkfile. You have to make sure your sources are extracted
+  from their Noweb file and scanned for dependencies. Basically you have
+  to add them to the ML and MLI variables in the mkfile.      
 
   Once the dependencies are recorded, just "mk foo.cmi" or "mk
   foo.cmo" should extract the source code from foo.nw and compile it,
@@ -33,11 +28,11 @@ DEVELOPER'S FAQ
   means, high level modules go towards the end of the list.  Every
   time you modify the mkfile you have to do a "mk depend".
     
-  A non-standard case contains more modules in one noweb-file, say foo.nw
-  provides foo.ml, foo.mli and bar.ml. In this case you have to add a
-  rule for bar.ml in mkfile that extracts it from foo.nw. The standard
-  rules still deal with foo.ml and foo.mli. Look at cmdline.ml as an
-  example for such a rule.
+  A non-standard case contains multiple modules in one noweb-file, say
+  foo.nw provides foo.ml, foo.mli and bar.ml.  In this case you have
+  to add a rule for bar.ml in mkfile that extracts it from foo.nw. 
+  The standard rules still deal with foo.ml and foo.mli.  Look at
+  cmdline.ml as an example for such a rule.
 
 + The compiler complains about inconsistencies of compiled interfaces. 
   What can I do?
@@ -48,11 +43,11 @@ DEVELOPER'S FAQ
   what do we need to do short of running mk in the parent directory?
 
   The sub-directories in qc--/ in general depend on each other. In
-  particular does src/ (this direcory) depend on ../cllib/ and
-  ../asdl/. If these are up to date, running mk in this directory
-  builds the compiler as byte-code executable. During development
+  particular does src/ (this direcory) depend on ../cllib/, ../lua/
+  and ../asdl/.  If these are up to date, running mk in this directory
+  builds the compiler as byte-code executable.  During development
   there is little need to step outside of this directory to build the
-  compiler. See the top of mkfile for more targets.
+  compiler.  See the top of mkfile for more targets.
   
 + How do I create documentation for my module foo.nw?
 
@@ -62,16 +57,3 @@ DEVELOPER'S FAQ
         mk foo.dvi              create DVI file 
         mk foo.html             create HTML file
         mk foo.ps               create PostScript file
-        
-+ After a "cvs update" conflicting changes corrupted my DEPEND file.
-  What can I do?
-
-  This happens frequently during development because local changes
-  require a "mk depend". It's a good idea to remove the DEPEND* file
-  before an update and rebuild them if necessary after that:
-        
-        rm DEPEND*
-        cvs update
-        mk depend               for modules under development 
-
-
