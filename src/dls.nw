@@ -418,7 +418,6 @@ let alloc_block prefs (blockmap, predmap) bid pred_ids =
               choose_varMaps prefs None inmap ~defs:RS.empty ~uses:RS.empty
                              ~live_in ~live_out ~live_out_w_spans in
             let () = setVarIn bid varIn in
-Printf.eprintf "setting varin on %s\n" (blockname block);
             varOut
         | [] -> impossf "DLS: no more live_out sets" in
 
@@ -432,7 +431,6 @@ Printf.eprintf "setting varin on %s\n" (blockname block);
     let live_out = R.promote_rxset lo in
     match tail with
     | GR.Tail (m, t) ->
-VM.print "middle" inmap;
         let live_out_w_spans = live_out in
         let rtl = GR.mid_instr m in
         let defs = defsm m in
@@ -659,7 +657,6 @@ varmaps because we may have to set a spill location for the temp.
                   (VM.add_reg t reg map, spills)
       | None   -> (VM.add_reg t reg map, spills) in
     let reloads = if is_use then load' t reg :: reloads else reloads in
-    if is_use then (Printf.eprintf "load %s -> %s\n" (printReg t) (printReg reg));
     if live_past_use && (RS.mem reg live_out || RS.mem reg defs) then
       let spill_loc = get_spill_loc t in
       (VM.add_mem t spill_loc map, store' t reg :: spills, reloads, regs_used)
@@ -677,7 +674,7 @@ other).
   let get_avail_reg ((map, spills, reloads, regs_used) as s) t reg fail =
     if free_reg map regs_used (RS.mem t live_out_w_spans) reg then
       let reloads =
-        if is_use then (Printf.eprintf "load\n"; (load' t reg :: reloads)) else reloads in
+        if is_use then (load' t reg :: reloads) else reloads in
       (VM.add_reg t reg map, spills, reloads, RS.add reg regs_used)
     else fail s t in
 
@@ -800,8 +797,10 @@ We also update each variable map that is changed.
 let shuffle_around blockmap predmap pred_id succ_id =
   let pred = UM.find pred_id blockmap in
   let succ = UM.find succ_id blockmap in
+  (*
   VM.print (Printf.sprintf "\npred %s:" (blockname pred)) pred_vm;
   VM.print (Printf.sprintf "\nsucc %s:" (blockname succ)) succ_vm;
+  *)
 
   let regs temp succ_reg (ts, loads as rst) =
     match (VM.var_locs' pred_vm temp).VM.reg with

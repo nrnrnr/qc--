@@ -373,7 +373,6 @@ val add_live_spansf : Rep.first -> regs -> regs
 <<zipcfg.ml>>=
 module R = Rtl
 module RSX = Register.SetX
-module T = Target
 module U  = Unique
 module UM = Unique.Map
 module US = Unique.Set
@@ -748,7 +747,9 @@ let postorder_dfs g =
       vchildren block (get_children block) cont acc (US.add u visited)
   and get_children block =
     let uids = succs (last (unzip block)) in
-    List.map (Blocks.find blocks) uids
+    (*List.map (Blocks.find blocks) uids*)
+    List.fold_right (fun bid rst -> try Blocks.find blocks bid :: rst
+                                    with Not_found -> rst) uids []
   and vchildren block children cont acc visited = 
     let rec next children acc visited = match children with
       | [] -> cont (block :: acc) visited

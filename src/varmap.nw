@@ -25,7 +25,7 @@ We have some simple types for temps and locations, and location sets.
 type reg  = Register.t
 type rset = Register.Set.t
 type temp = Register.t
-type loc_pair = { reg : Register.t option; mem : Automaton.loc option }
+type loc_pair = { reg : Register.t option; mem : Rtlutil.aloc option }
 @
 The variable map supports standard map operations, as well as some unique operations
 that help with register allocation.
@@ -36,17 +36,17 @@ temp from a map.
 type t
 val empty            : t
 val add_reg          : temp -> Register.t    -> t -> t
-val add_mem          : temp -> Automaton.loc -> t -> t
-val spill            : temp -> Automaton.loc -> t -> t
+val add_mem          : temp -> Rtlutil.aloc -> t -> t
+val spill            : temp -> Rtlutil.aloc -> t -> t
 val remove_reg       : temp -> Register.t    -> t -> t
-val remove_mem       : temp -> Automaton.loc -> t -> t
+val remove_mem       : temp -> Rtlutil.aloc -> t -> t
 @
 We can also fold over a map, fold over each location a temp is in (the range), observe
 the locations where a temp is stored, observe the temp stored in a register, or print a
 map.
 <<varmap.mli>>=
 val fold             : (temp -> Register.t    -> 'a -> 'a) ->
-                       (temp -> Automaton.loc -> 'a -> 'a) -> t -> 'a -> 'a
+                       (temp -> Rtlutil.aloc -> 'a -> 'a) -> t -> 'a -> 'a
 val filter           : (temp -> bool) -> t -> t
 val var_locs'        : t -> temp -> loc_pair
 val reg_contents     : t -> reg  -> temp option
@@ -86,7 +86,7 @@ Our representation keeps a map from temps to locations and register locations to
 type reg  = Register.t
 type rset = Register.Set.t
 type temp = Register.t
-type loc_pair = { reg : Register.t option; mem : Automaton.loc option }
+type loc_pair = { reg : Register.t option; mem : Rtlutil.aloc option }
 module RM = Register.Map
 module RS = Register.Set
 type t = loc_pair RM.t * temp RM.t
