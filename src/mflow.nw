@@ -3,25 +3,53 @@
 
 \section{Machine-level control flow}
 
-This module is intended to record the ``standard'' implementations of
+The [[Target]] module provides for substantial generality in the
+implementation of control flow:
+a target can use any appropriate RTL to represent a control-flow
+instruction.
+But on most targets, the full generality of the abstraction is not
+needed.
+A~typical target works with a program counter, which it manipulates in
+typical ways.
+This module is intended to help reduce the burden of retargeting by providing
+the ``standard'' implementations of
 control flow at the machine level.
 Basically if we know the program counter plus a few facts about return
 address, we know enough to go on with.
 (To get [[cutto]] right, we will have to add knowledge of the stack
 pointer.)
 
-Noted:
-\begin{verbatim}
- > I have added a default RTL for return to Mflow. I thought this to be
- > reasonable since a call is also defined. 
+We assume that a machine has a program counter and registers.
+Furthermore, we use two different locations to refer to the program
+counter: one in an lvalue context and another in an rvalue context.
+These are called [[pc_lhs]] and [[pc_rhs]] in the source; here we call
+them \emph{nPC} (new PC or next PC) and \emph{PC}.
+The distinction is useful to support machines with delayed branches,
+such as the SPARC, MIPS, and HP PA-RISC.
 
-I may remove it.  Call is typically defined by the architecture, but
-return is done by convention.  On many machines, return is simply a
-branch indirect.
+We also assume that the call instruction captures the return address
+in a register, which we call \emph{RA}.
+The ``standard'' implementations of control flow are then as
+follows:\\
+\begin{tabularx}{\linewidth}{@{\hskip 1.5em}lX}
+\texttt{goto} $L$& $\mathit{nPC} \mathbin{:=} L$\\
+\texttt{jump} $L$& $\mathit{nPC} \mathbin{:=} L$\\
+\texttt{call} $L$& $\mathit{nPC} \mathbin{:=} L \mathrel{|}
+                    \mathit{RA} \mathbin{:=} \mathit{PC}+k $\\
+\texttt{branch} $p$ $L$&
+   $p \rightarrow \mathit{nPC} \mathbin{:=} L$\\
+\end{tabularx}
+Note that [[cut to]] is not yet correctly implemented in this
+interface.
 
-Where is it used?
-\end{verbatim}
-
+Also note that there is no place for [[return]] in this interface.
+On many machines, [[return]] is simply an indirect jump, for which
+[[goto]] can be used.
+On other machines, there seems to be no standard way of, e.g.,
+tagging a return for branch prediction or manipulating the stack
+pointer during a return.
+Targets for such machines will have to define [[return]] on an
+individual basis.
 
 <<mflow.mli>>=
 <<signatures>>
@@ -39,10 +67,9 @@ module type S = sig (* see types Target2.t and Target2.map for doco *)
   val cutto : Rtl.exp Target2.map
   val call  : Rtl.exp Target2.map
   val branch : (Rtl.exp * Rtl.exp) Target2.map
-  val return: unit    Target2.map
 end
 <<mflow.mli>>=
-module Make (Pc : PC) : S
+module MakeStandard (Pc : PC) : S
 @ 
 <<mflow.ml>>=
 <<signatures>>
@@ -51,11 +78,11 @@ module R  = Rtl
 module RP = Rtl.Private
 module T  = Target2
 
-module Make (P : PC) = struct
-  <<machine-level control flow>>
+module MakeStandard (P : PC) = struct
+  <<standard machine-level control flow>>
 end
 @ 
-<<machine-level control flow>>=
+<<standard machine-level control flow>>=
 let w = RU.Width.loc P.pc_lhs
 let downrtl = R.Convert.rtl
 let upexp   = R.Revert.exp

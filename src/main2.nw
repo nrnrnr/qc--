@@ -295,10 +295,6 @@ and [[Ralloc.linscan]].
 Ralloc = Ralloc or { }
 Ralloc.color = ColorGraph.color
 @ 
-The Caml code exports mostly functions, but we want stages.
-Because the embedding/projection pairs have no access to interpreter
-state, we can't easily discover the name of a function.
-Accordingly, we patch things here.
 <<qc--.lua>>= 
 ------------------------------------------------------------------ 
 -- Stack
@@ -307,7 +303,7 @@ Accordingly, we patch things here.
 -- we just have this. 
 
 function Stack.layout(dummy,proc)
-    blocks = Stack.blocks(proc)
+    local blocks = Stack.blocks(proc)
     local layout = 
                 { blocks.incoming               -- <-- high addresses
                 , blocks.stackdata
@@ -340,7 +336,12 @@ function Stack.layout(dummy,proc)
 
     return 1    -- Backplane protocol
 end
-
+@ 
+The Caml code exports mostly functions, but we want stages.
+The stage-projection function does have access to interpreter
+state, so we could simply discover and use the name of a function.
+But we are using these other names, so we patch things here.
+<<qc--.lua>>= 
 ------------------------------------------------------------------ 
 -- Stage patching
 ------------------------------------------------------------------ 
