@@ -73,6 +73,14 @@ exception MatchExn
 val appl   : tyscheme -> ty list -> ty (* raises matchExn *)
 @
 
+Some operators encode the size of their return values in their name: 
+[[zx32]] is the zero-extension function that returns a 32 bit value. 
+The [[retsize]] function returns this number from an operator name (if
+present) as an [[int option]] value.
+
+<<>>=
+val retsize : string -> int option
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Useful abbreviations}
@@ -181,6 +189,44 @@ let appl (args',r) args =
                  )                                           in
         subst sigma r
 @
+
+The [[widthlist]] function takes the type of a primitive (a
+[[tyscheme]]) and a list of argument types and returns the sizes bound
+by the variables in the type scheme.
+
+<<>>=
+let widthlist (args',r) args =
+    let sigma  = S.empty                                     in
+    let pairs  = try List.combine args' args with Invalid_argument _ ->
+                 E.error "wrong number of arguments in call" in
+    let sigma  = ( try List.fold_left match' sigma pairs with
+                 | MatchExn -> E.error "type error in application"
+                 )                                           in
+       List.sort (fun (key1,val1) (key2,val2) -> compare key1 key2) 
+                 (S.dump sigma) 
+@
+
+
+The implementation of [[retsize]] uses the lexical combinator module
+[[Lc]]:  the first part of an operator is scanned using the [[some
+alpha]] scanner, the second by the [[many num]] scanner whose result
+is also saved. A successful scan must consume the whole string and
+return the (possibly empty) string of the matched numbers.
+
+<<>>=
+let retsize op =
+    let ( *** ) = Lc.seq                                                in
+    let num     = Lc.satisfy (fun c -> '0'  <= c && c <= '9')           in
+    let alpha   = Lc.satisfy (fun c -> ('a' <= c && c <= 'z')
+                                   ||  ('A' <= c && c <= 'Z'))          in
+    let op'     = Lc.some alpha *** Lc.saveStr (Lc.many num) *** Lc.eof in
+        try match Lc.scan op op' with
+            | l, [""]      -> None
+            | l, [n]       -> Some (int_of_string n)
+            | _            -> assert false
+        with Lc.Error msg  -> assert false
+@
+
 
 The implementation of the abbreviations is trivial:
 

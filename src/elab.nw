@@ -816,26 +816,6 @@ and evalExpr env = function
     | A.PrimOp (op,args)  -> evalPrimOp env op (List.map snd args)
 @
 
-
-<<unused>>=
-and evalExpr env = function
-    | A.ExprAt(x,r)          -> E.catch (error r env) (evalExpr env) x
-    | A.Int   (str, Some t)  -> E.ematch (evalTy env t) 
-                                (fun t -> t, Const.int2value str)
-    | A.Int   (str, None)    -> E.Ok(T.word     , Const.int2value str)
-    | A.Float (str, Some t)  -> E.ematch (evalTy env t)
-                                (fun t -> t, Const.float2value str)
-    | A.Float (str, None)    -> E.Ok(T.word     , Const.float2value str)
-    | A.Char  (str, Some t)  -> E.ematch (evalTy env t)
-                                (fun t -> t, Const.char2value str)
-    | A.Char (str, None)     -> E.Ok(T.word     , Const.char2value str)
-    
-    | A.Fetch(v)             -> evalFetch env v
-    | A.BinOp(l,op,r)        -> evalPrimOp env op [l;r]
-    | A.UnOp(op,expr)        -> evalPrimOp env op [expr]
-    | A.PrimOp(op,args)      -> evalPrimOp env op (List.map snd args)
-@
-
 Names defined by declarations found in cycles are bound to [[E.Error]]
 in the (fat) environment. Additionally, an error is marked in the
 environment. 
@@ -919,7 +899,7 @@ let doConst scope env dd =
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Binding names for values like procedures and registers
+\subsection{Binding names for values like procedures and registers}
 % ------------------------------------------------------------------ 
 
 Labels and names for procedures have fixed types.  Types of register
@@ -1739,10 +1719,15 @@ The [[Env.local]] functions computes this environment which is used by
 the functions that check the body of a procedure. Errors recorded in
 the local environment must be copied to the global environment.
 
+The local environment for the procedure is bound in the fat
+environment such that it can be re-used later.
+
 <<>>=
-and proc r env (_,_,_,bb as p) =
+and proc r env (_,name,_,bb as p) =
     let env' = Env.local env p   in
     let env' = foldl body env' bb in
+    let t    = E.Ok(F.Label(F.Proc(Some env')),T.code) in
+    let env  = F.rebindv name t env in
         if   F.errorFlag env' 
         then F.flagError env
         else env

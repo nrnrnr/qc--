@@ -90,8 +90,10 @@ the declaration of that binding was erroneous.  For this reason the
 constructor.
 
 <<>>=
-type ventry     = (denotation * ty) Error.error
-type tentry     = ty                Error.error
+type ventry'    = (denotation * ty)
+type tentry'    = ty                
+type ventry     = ventry' Error.error
+type tentry     = tentry' Error.error
 
 type attr       = Srcmap.reg * scope
 @ 
@@ -101,8 +103,6 @@ source code. The endianness is part of the [[target]] declaration.
 
 <<>>=
 type endianness = Big | Little
-
-
 @
 
 An [[env]] holds a source map that was obtained during the parsing
@@ -125,6 +125,7 @@ the environment. The [[bind*]] functions never fail.
 
 <<>>=
 val bindv           : string -> attr  -> ventry  -> env -> env
+val rebindv         : string ->          ventry  -> env -> env
 val bindt           : string -> attr  -> tentry  -> env -> env
 @
 
@@ -140,10 +141,6 @@ val findv'          : string -> env -> ventry
 val findt'          : string -> env -> tentry
 @
 
-<<>>=
-(* will go away *)
-val rebindv  : string ->          ventry  -> env -> env
-@
 
 % ------------------------------------------------------------------ 
 \subsubsection{Other informations}
@@ -188,7 +185,7 @@ val errorFlag: env -> bool
 @
 
 For some opetional declarations in {\PAL} defaults exist. The
-[[setDefaults]] function enter the defaults into the environment in
+[[setDefaults]] function enter the defaults into the environment if
 the user has not provided a declaration.
 
 <<>>=
@@ -248,12 +245,14 @@ Each binding consists of a general attribute (see above) and an entry
 part.
 
 <<>>=
-and  ventry     = (denotation * ty) Error.error
-and  tentry     = ty                Error.error
+and  ventry'    = (denotation * ty)
+and  tentry'    = ty                
+and  ventry     = ventry' Error.error
+and  tentry     = tentry' Error.error
 
 <<>>=
-and  tenv           = (attr * tentry) StrMap.t
-and  venv           = (attr * ventry) StrMap.t
+and  tenv       = (attr * tentry) StrMap.t
+and  venv       = (attr * ventry) StrMap.t
 @
 
 The [[target]] type captures informations about the target machine
