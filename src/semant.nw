@@ -643,32 +643,105 @@ let conv env = function
     | None          -> ()
 
 
-let rec collectCont env = function
-    | StmtAt(x,_)             -> collectCont env x
-    | ContStmt(n,ns)          -> shadow_ok n (pointer,Continuation) env
-    | SpanStmt(e1,e2,ss)      -> foldl collectCont env ss
-    | IfStmt ( e, ss1, ss2)   -> 
-        let env'  = foldl collectCont env  ss1 in
-        let env'' = foldl collectCont env' ss2 in
-            env''
-    | otherwise                           -> env
+let rec collectCont env ss = 
+    let rec loop env = function
+        | StmtAt(x,_)             -> loop env x
+        | ContStmt(n,ns)          -> shadow_ok n (pointer,Continuation) env
+        | SpanStmt(e1,e2,ss)      -> collectCont env ss
+        | IfStmt ( e, ss1, ss2)   -> 
+            let env'  = collectCont env  ss1 in
+            let env'' = collectCont env' ss2 in
+                env''
+        | otherwise                           -> env
+    in 
+        foldl loop env ss
 
-let rec stmt env = function
+let rec ifStmt env e ss1 ss2 =
+    let ty = tyExpr env e in
+        if ty != bool then
+            error "if-expression must be of type bool"
+        else
+            ( stmts env ss1
+            ; stmts env ss2
+            )
+    
+and spanStmt env e1 e2 ss =
+    let t1, x1 = strip (constExpr env e1) in
+    let t2, x2 = strip (constExpr env e2) in
+         ( stmts env ss
+         ; if (t1 != word) then
+                error "span key must be a natural word"
+           else if (t2 != word) then
+                error "span value must be a natural word"
+         ) 
+
+and gotoStmt env e ts = 
+    ( targets env ts
+    ; let et = tyExpr env e in
+        if et != pointer then
+            error "goto-expression does not evaluate to a pointer" 
+        else
+            ()
+    )
+
+and cutStmt env n args fs =
+    ( flows env fs
+    ; let _ = List.map (tyExpr env) (List.map snd args) in
+      match strip (lookup n env) with
+      | _, Continuation     -> ()
+      | otherwise           -> error ("not a continuation: "^n)
+    ) 
+    
+and jumpStmt env cc e args ts =
+    ( targets env ts
+    ; let _  = List.map (tyExpr env) (List.map snd args) in
+      match tyExpr env e with
+      | t when t = pointer   -> ()
+      | otherwise            -> error "jump target is not a pointer"
+    )
+
+and contStmt env n ns = 
+    let check n = 
+        let f = function
+            | _, Register -> ()
+            | otherwise   -> 
+                error ("formal continuation parameter not a register: "^n)
+        in
+            f (strip (lookup n env))
+    in
+        List.iter check ns
+    
+and returnStmt env cc alt args =
+    let args' = List.map snd args in
+    let tys   = List.map (tyExpr env) args' in
+    match alt with
+    | None         -> ()
+    | Some (e1,e2) ->
+        let t1,x1 = strip (constExpr env e1)  in
+        let t2,x2 = strip (constExpr env e2)  in
+            if t1 != word then
+                error "first argument in <x/y> not a number"
+            else if t2 != word then
+                error "second argument in <x/y> not a number"
+            else
+                () 
+
+and stmt env = function
     | StmtAt(x,_)                         -> stmt env x
-    | IfStmt ( e, ss1, ss2)               -> ()
-    | LabelStmt(n)                        -> ()
-    | ContStmt(n,ns)                      -> ()
-    | SpanStmt(e1,e2,ss)                  -> ()
+    | IfStmt ( e, ss1, ss2)               -> ifStmt env e ss1 ss2
+    | SpanStmt(e1,e2,ss)                  -> spanStmt env e1 e2 ss
     | AssignStmt(xs)                      -> ()
     | CallStmt( lhs, cc, e, args, ts, fs) -> ()
     | PrimStmt( lhs, cc, n, args, fs)     -> ()
-    | GotoStmt(e,ts)                      -> ()
-    | CutStmt(n, args, fs)                -> ()
-    | ReturnStmt(cc, alt, args)           -> ()
-    | JumpStmt(cc,e,args,ts)              -> ()
+    | GotoStmt(e,ts)                      -> gotoStmt env e ts
+    | CutStmt(n, args, fs)                -> cutStmt env n args fs
+    | ReturnStmt(cc, alt, args)           -> returnStmt env cc alt args
+    | JumpStmt(cc,e,args,ts)              -> jumpStmt env cc e args ts
+    | ContStmt(n,ns)                      -> contStmt env n ns
+    | LabelStmt(n)                        -> ()
     | EmptyStmt                           -> ()
 
-let stmts env ss = List.iter (stmt env) ss
+and stmts env ss = List.iter (stmt env) ss
 
 let formal env (hint, inv, t, name) =
     shadow_ok name (ty t, Register) env
@@ -689,10 +762,13 @@ let rec decl env = function
 let decls env ds =
     foldl decl env ds
 
-let procedure env cc fs ds ss =
-    let env'  = formals env fs in
-    let env'' = decls env ds   in
-        stmts env'' ss  
+
+let procedure env cc fs ds ss = 
+    let env1  = formals env fs in
+    let env2  = collectCont env1 ss in
+    let env3  = decls env2 ds   in
+        stmts env3 ss  
+
      
 let export_ env t n (t',kind) =
     ( match t, t', kind with
