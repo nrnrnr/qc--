@@ -202,8 +202,12 @@ module SM = Strutil.Map
 let resmap = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators
 let argmap = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
 
-let arg_contexts   (n, _) = SM.find n argmap
-let result_context (n, _) = SM.find n resmap
+let arg_contexts   (n, _) = try SM.find n argmap 
+                            with Not_found -> Impossible.impossible 
+                                    ("cannot find arg context for "^n)
+let result_context (n, _) = try SM.find n resmap
+                            with Not_found -> Impossible.impossible
+                                    ("cannot find result context for "^n)
 @ 
 \subsubsection{Operator implementations (with flags)}
 Operator hell (or heaven).

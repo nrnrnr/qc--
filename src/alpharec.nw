@@ -111,8 +111,9 @@ bits n x w
 @
 
 <<rules>>=
-const:      Bits(bits)          {: int64 bits :}
-symbol:     Link(x, w:int)      {: x#mangled_text :}
+const:      Bits(bits)          {: int64 bits           :}
+zero:       Bits(bits)          [{: guard (bits = Bits.zero 64) :}] {: () :}
+symbol:     Link(x, w:int)      {: x#mangled_text       :}
 @
 
 \paragraph{Registers}
@@ -202,7 +203,7 @@ inst:       Goto(symbol)
             {: sprintf "br %s" symbol :}
 
 inst:       Goto(reg)
-            {: sprintf "br (%s)" reg  :}
+            {: sprintf "jmp (%s)" reg  :}
 
 inst:       Par(Goto(addr),Store(ral,pc,64))     -- s/addr/symbol/g ? 
             {: cat ["jsr"; " "; addr] :} 
@@ -214,13 +215,24 @@ because the [[op]] terminal symbol would be unaccessible. Only top-level
 terminals are in scope for the semantic action.
 
 <<rules>>=
-cmp:        Cmp(op:string,reg)                          {: (op, reg) :}
-inst:       Guarded(cmp,Goto(addr)) 
-            {: match cmp with (op,reg) ->
+inst:       Guarded(cmp_zero,Goto(addr)) 
+            {: match cmp_zero with (op,reg) ->
                 sprintf "b%s %s, %s" op reg addr
             :}   
 @
-            
+
+\paragraph{Comparison}
+
+<<rules>>=
+cmp:        Cmp(op:string,x:reg,y:reg)                      {: (op, x, y) :}
+cmp_zero:   Cmp(op:string,reg,zero)                         {: (op, reg)  :}
+
+inst:       Store(dst:regl,Bit(cmp),64)
+            {: match cmp with (op, x, y) -> 
+                sprintf "cmp%s %s, %s" op x y 
+            :}
+@
+
 \paragraph{Arithmetic}
 
 <<rules>>=
@@ -272,8 +284,9 @@ any : Kill(any)         {: cat [ "Kill(";any;")" ] :}
 
 any : Guarded(guard:any, any) 
                         {: cat [ "Guarded(";guard;",";any;")" ] :}
-any : Cmp(op:string, x:any)     
-                        {: cat [ "Cmp(";op;",";x;")"] :}
+any : Cmp(op:string, x:any, y:any)     
+                        {: cat [ "Cmp(";op;",";x;",";y;")"] :}
+any : Bit(any)          {: cat [ "Bit(";any;")"] :}
 any : Par(l:any, r:any) {: cat [ "Par(";l;",";r;")" ] :}
 any : Goto(any)         {: cat [ "Goto(";any;")" ] :}
 @
@@ -297,6 +310,7 @@ let const = function
     | RP.Late(s,w)              -> error (sprintf "late constant %s found" s)
 
 <<tail>>=
+<<helpers for [[exp]] and [[loc]]>>
 let rec exp = function
     | RP.Const(k)               -> const k
     | RP.Fetch(l,w)             -> conFetch (loc l) w
@@ -340,11 +354,17 @@ let rtl (RP.Rtl es) = geffects es
   when i = SS.indices.SS.pc   -> conGoto (exp r)
 @
 
+<<helpers for [[exp]] and [[loc]]>>=
+let cmp = 
+    Strutil.from_list ["eq";"ge";"geu";"gt";"gtu";"le";"leu";"lt";"ltu";"ne"] 
+@
+    
 <<special cases for [[App]]>>=
 | RP.App(("add", [w]), [x; y])            -> conAdd (exp x) (exp y)
 | RP.App(("sub", [w]), [x; y])            -> conSub (exp x) (exp y)
-| RP.App((("eq"|"ne" as op), [w]), [x; RP.Fetch(RP.Reg('r',31,64),64)]) 
-                                          -> conCmp op (exp x)
+| RP.App((op, [w]), [x; y])  
+    when Strutil.Set.mem op cmp           -> conCmp op (exp x) (exp y)
+| RP.App(("bit", [64]), [x])              -> conBit (exp x)  
 @
 
 <<special cases for [[guarded]]>>=

@@ -293,22 +293,23 @@ assigne the result to a new temporary, but cannot allocate one. We thus
 mutate the argument.
 
 <<Alpha postexpander>>=
+let bit = R.opr "bit" [wordsize] 
 let com x =
     let o = R.opr "com" [wordsize] in
-        R.store (tloc x) (R.app o [tval x]) wordsize
+        R.store (tloc x)  (R.app o [tval x]) wordsize
 @
 
-[[relation]] implements a binary relation, where the result is stored in
-[[x]]. 
+[[relation]] implements a binary relation, where the result is
+stored in [[x]] \emph{as a value}. 
 
 <<Alpha postexpander>>=
 let relation op x y = 
-    let o = R.opr op [wordsize] in 
-        R.store (tloc x) (R.app o [tval x;tval y]) wordsize 
+    let o   = R.opr op    [wordsize] in
+        R.store (tloc x) (R.app bit [R.app o [tval x;tval y]]) wordsize 
 @
 
 [[cmp]] implements the {\rtl} comparision operators where the result is
-stored in the first argument.
+stored in the first argument. 
 
 <<Alpha postexpander>>=
 let cmp op x y = match op with
@@ -331,20 +332,20 @@ let cmp op x y = match op with
     | "funordered"    -> unimp "floating-point comparison"
     | _               -> impossible 
                         "bad comparison in expanded Alpha conditional branch"
-
-let cbranch op x tgt =
-    R.guard (R.app (R.opr op [wordsize]) [tval x; tval zero])
-            (R.store pc_lhs (Up.const tgt) wordsize)
 @
 
 A conditional branch is a sequence of relational operators, followed by
-a [[cbranch]] on the result. The guard inside [[cbranch]] compares
-for not equal.
+a [[cbranch]] on the result. The guard inside [[cbranch]] compares for
+not equal.
 
 <<Alpha postexpander>>=
+let cbranch op x tgt =
+    R.guard (R.app (R.opr op [wordsize]) [tval x; R.bits (Bits.zero 64) 64])
+            (R.store pc_lhs (Up.const tgt) wordsize)
+
 let bc x (opr, ws as op) y ~tgt =
     assert (ws = [wordsize]);
-    cmp opr x y @ [cbranch "ne" x tgt]
+    (cbranch "ne" x tgt) :: (cmp opr x y)  
 @
 
 [[bnegate]] inverts the condition in a conditional branch. Since we only
@@ -353,19 +354,20 @@ done in the relational operators preceding the branch.
 
 <<Alpha postexpander>>=
 let bnegate r = 
+    let zero   = R.bits (Bits.zero 64) 64 in    
     let negate = function
-        | "eq" -> "ne"
         | "ne" -> "eq"
-        | _    -> impossible "ill-formed Alpha conditional branch"
-    in match Dn.rtl r with
+        | "eq" -> "ne"
+        | _    -> impossible "ill-formed Alpha conditional branch" in
+    match Dn.rtl r with
     | RP.Rtl [ RP.App( (("eq"|"ne" as op),[64])
-                     , [RP.Fetch(RP.Reg(x),64);RP.Fetch (RP.Reg(y),64)]
+                     , [RP.Fetch(RP.Reg(x),64);RP.Const(RP.Bits(b))]
                      ) 
              , RP.Store (pc, tgt, 64)
-             ] when pc = Dn.loc pc_lhs ->
-                 R.guard (R.app (R.opr (negate op) [64]) [tval x; tval y]) 
+             ] when pc = Dn.loc pc_lhs && b = Bits.zero 64 ->
+                 R.guard (R.app (R.opr (negate op) [64]) [tval x; zero]) 
                 (R.store pc_lhs (Up.exp tgt) wordsize)
-    | _ -> Impossible.impossible "ill-formed MIPS conditional branch"
+    | _ -> Impossible.impossible "ill-formed Alpha conditional branch"
 @
 
 \paragraph{Calls} In an indirect call the target is held in a register,
