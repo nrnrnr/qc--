@@ -1,0 +1,498 @@
+################################################################
+# $Id$ 
+################################################################
+#
+# Before you can do anything useful in this directory ../lib
+# must contain the right set of libraries. So call 'mk' one time
+# on the top level (..) first and then work locally in this directory.
+#
+# all               - creat new byte code binary
+#
+# depend            - rebuild dependencies
+#
+# update            - create native code binary and
+#                     update external directories 
+#                     (../bin ../man ../lib)
+#
+# ocamli            - OCaml interpreter with C modules compiled in
+#
+# html dvi ps       - create documentation
+#
+# clean             - remove everything but real sources
+#
+#
+# foo.html          - make foo.html from foo.nw
+# foo.dvi           - make foo.dvi  from foo.nw
+#
+
+CC = gcc
+
+# N.B. in building this mkfile, when we have a choice between making
+# the mkfile clean and making mk's output readable, we make mk's output
+# readable.
+
+
+NAME =      spec
+VERSION =   `date +%Y%m%d`
+
+TOP = ..
+
+################################################################
+# The target machine
+################################################################
+
+MACHINE = 101
+
+################################################################
+# The interpretation of base types
+################################################################
+
+INTERPRETATION = residualInt
+
+INSTDIR = ../src/
+
+INTINSTANCE = res      # for the residualizing interpretation
+
+################################################################
+# QC-- src
+################################################################
+
+QCmmSRC = ../src
+
+################################################################
+# paths
+################################################################
+
+LIBDIR =    ../lib
+BINDIR =    ../bin
+MANDIR =    ../man
+
+################################################################
+# my libraries paths
+################################################################
+
+TDPELIBDIR = 	tdpeLib
+MYLIBDIR = 	myLib
+MACHINEDIR = 	$MACHINE
+INTDIR = 	$INTERPRETATION
+
+################################################################
+# The includes
+################################################################
+
+OCAMLTDPEINC = -I $MYLIBDIR -I $TDPELIBDIR
+
+OCAMLINCLUDES = $OCAMLTDPEINC \
+                -I $INTDIR -I $MACHINEDIR -I $QCmmSRC -I $INSTDIR
+
+################################################################
+# (high level) virtual targets
+################################################################
+
+all:V:          $NAME
+
+################################################################
+# rules and tools for OCaml
+################################################################
+
+<../config/ocaml.mk
+
+# compiler flags used by the rules just included
+# we compile byte code for profiling
+
+# OCAMLC =        ocamlcp -p f    
+OCAMLC_FLAGS =  $OCAMLINCLUDES -g
+OCAMLO_FLAGS =  $OCAMLINCLUDES
+
+################################################################
+# important file sets
+################################################################
+
+# The order of files defines the link order.  So if you have troubles
+# with undefined symbols during linking re-order this list
+# accordingly.  No module must use any of its successors.
+
+# here I should hack something better
+
+MYLIBML   =     $MYLIBDIR/cell.ml \
+		$MYLIBDIR/myList.ml \
+		$MYLIBDIR/opOps.ml
+
+SYNTAXLIBML =   $TDPELIBDIR/pprint.ml \
+		$TDPELIBDIR/syntax.ml \
+
+TDPELIBML =     $TDPELIBDIR/callcc.ml \
+		$TDPELIBDIR/ctrlPlus.ml \
+		$TDPELIBDIR/tools.ml \
+		$TDPELIBDIR/tdpe.ml \
+
+INSTML    =     ${INSTDIR}base.ml \
+		${INSTDIR}bits.ml \
+		${INSTDIR}bitops.ml \
+
+INTML     =     $INSTML \
+		$INTDIR/sledlib.ml \
+		$INTDIR/nativeint.ml \
+
+
+MACHINEML =     $MACHINEDIR/constructors.ml \
+		$MACHINEDIR/machine.ml \
+		$MACHINEDIR/machineSyntax.ml \
+
+
+ENCRECML =      $MACHINEDIR/machineNbe.ml \
+		$MACHINEDIR/machineInstance.ml \
+		$MACHINEDIR/machineRep.ml \
+		$MACHINEDIR/machineEncode.ml \
+		$MACHINEDIR/machineRecognize.ml \
+
+QCmmPRELIMML =  $QCmmSRC/srcmap.ml \
+		$QCmmSRC/error.ml \
+		$QCmmSRC/uint64.ml \
+
+# remember this! there should be $QCmmSRC/
+
+QCmmML =        $QCmmSRC/rtl.ml \
+		$QCmmSRC/rtlutil.ml \
+
+CODEML =        rtlFuns.ml \
+		rtlSubst.ml \
+		rtlSubst2.ml \
+		rtlMerge.ml \
+		readwrite.ml \
+		generic.ml \
+		$NAME.ml     \
+
+
+ML =            $MYLIBML \
+		$SYNTAXLIBML \
+		$TDPELIBML \
+		$MACHINEML \
+		$QCmmPRELIMML \
+		$INTML \
+		$QCmmML \
+		$INTML \
+		$ENCRECML \
+		$CODEML \
+
+MLI=`echo $ML | sed 's/\.ml/.mli/g'`
+
+# these are useful for determening dependencies
+
+MYLIBMLI=`echo $MYLIBML | sed 's/\.ml/.mli/g'`
+TDPELIBMLI=`echo $TDPELIBML | sed 's/\.ml/.mli/g'`
+SYNTAXLIBMLI=`echo $TDPELIBML | sed 's/\.ml/.mli/g'`
+INTMLI=`echo $INTML | sed 's/\.ml/.mli/g'`
+INSTMLI=`echo $INSTML | sed 's/\.ml/.mli/g'`
+MACHINEMLI=`echo $MACHINEML | sed 's/\.ml/.mli/g'`
+ENCRECMLI=`echo $ENCRECML | sed 's/\.ml/.mli/g'`
+QCmmPRELIMMLI=`echo $QCmmPRELIMML | sed 's/\.ml/.mli/g'`
+CODEMLI=`echo $CODEML | sed 's/\.ml/.mli/g'`
+
+# only the QC-- sources needed
+# for the corrent project
+
+QCmmMLI=`echo $QCmmML | sed 's/\.ml/.mli/g'`
+
+
+
+# list all *.ml *.mli souces generated by some tool below
+# we need to generated them before we can generated the list
+# of dependencies (see target depend)
+# N.B. $GENERATED includes names from both $ML and $MLI
+
+GENERATED = 
+
+src:V: $ML $MLI
+
+CMO =           `echo $ML       | sed 's/\.ml/.cmo/g'`
+CMX =           `echo $ML       | sed 's/\.ml/.cmx/g'`
+
+################################################################
+# Noweb stuff - once this is stable the generic part should go to
+# ../config/noweb.mk
+################################################################
+
+NOWEAVE =       noweave   -filter emptydefn
+NOTANGLE =      notangle  -filter emptydefn
+CPIF =          cpif
+LATEX =         latex
+RERUN =         Rerun (LaTeX|to get cross-references right)
+
+LINE =          '# %L "%F"%N'
+
+HTML =          `echo *.nw                             | sed 's/\.nw/.html/g'`
+INC  =          `echo *.nw  ../cllib/*.nw ../test/*.nw | sed 's/\.nw/.inc/g'`
+
+################################################################
+
+# generate a self-contained LaTeX document from a LaTeX file that
+# is supposed to be read by \input from a master LaTeX file. This rule
+# allows to specify extra packages like tabularx to be included. 
+# The here-document ended by EOF relies on a single TAB character at
+# the beginning of a line - so don't substitute spaces for it .
+
+%.tex:	%.inc
+	cp $stem.inc $stem.tex
+	ed -s $stem.tex <<EOF 
+	1
+	i
+	\documentclass{article}
+	\usepackage{noweb}
+	\usepackage{tabularx}
+	\usepackage{hyperref}
+	\pagestyle{noweb}
+	\noweboptions{}
+	\begin{document}
+	\nwfilename{$stem.nw}
+	\tableofcontents
+	\nwbegindocs{}
+	.
+	\$
+	a
+	\end{document}
+	.
+	w
+	q
+	EOF 
+
+
+uint64.inc:     uint64.nw
+                $NOWEAVE -delay -autodefs c -index $prereq > $target
+
+################################################################
+
+$NAME.dvi:      $INC
+
+dvi:V:          $NAME.dvi
+ps:V:           $NAME.ps
+html:V:         $HTML
+
+################################################################ 
+# sources generated from noweb sources
+################################################################ 
+
+################################################################
+# rules for base types interpretations
+################################################################
+
+#<../config/common.mk
+
+INTERP =    residualizing
+<../config/noweb.mk
+
+################ general cases
+
+# The following rule covers the common case. Noweb file containing
+# more source files, or files named different than the noweb source must
+# be covered by additional rules. 
+
+# I like not having to recompile complex code, much faster to cpif
+# in my case
+
+# NOTE: You might want to put a ./ if using different dirs
+
+#'(([^/]*/)*)(.*)\.ml$':R:        '\1\3'.nw
+#	$NOTANGLE -L"$LINE" -R$stem3.ml $prereq | cpif $target
+
+#'(([^/]*/)*)(.*)\.mli$':R:        '\1\3'.nw
+#	$NOTANGLE -L"$LINE" -R$stem3.mli $prereq | cpif $target
+
+#'(([^/]*/)*)(.*)\.c$':R:       '\1\3.nw'
+#	$NOTANGLE -L"$LINE" -R$stem3.c $prereq | cpif $target
+
+#%.c: 	%.nw
+#	$NOTANGLE -L -R$target $prereq > $target
+
+
+################ special cases, primarily for multiple sources in one .nw
+#
+# these rules clutter up the mkfile, but they make the output from mk,
+# and especially from mk- n, more readable, so they are worth it.
+
+
+
+uint64p.c:      $QCmmSRC/uint64.nw
+	$NOTANGLE -L -R$target $prereq > $target
+
+
+# could reduce duplication by using fancier regexp above, but it's not worth it
+lowercopy.mli: cfg.nw
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
+lowercopy.ml: cfg.nw
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
+
+
+
+################################################################
+# C code
+################################################################
+
+
+################################################################
+# binaries
+################################################################
+OCAMLSOURCES = /usr/local/src/ocaml-3.00/
+CFLAGS=-I$OCAMLSOURCES/byterun -O
+
+%.o:            %.c
+                $CC $CFLAGS -c $stem.c -o $target
+
+uint64p.o:      uint64p.c
+                $OCAMLC $OCAMLC_FLAGS -c $prereq
+
+
+OBJ =           $TDPELIBDIR/callcc.o uint64p.o
+#CMOLIBS =       cllib.cma  asdl.cma
+#CMXLIBS =       cllib.cmxa asdl.cmxa
+
+$NAME:          depend-check $CMO $OBJ
+   $OCAMLC $OCAMLC_FLAGS -custom -o $target $CMOLIBS $OBJ $CMO 
+
+$NAME.opt:      $CMX $OBJ
+                $OCAMLO $OCAMLO_FLAGS -o $target $CMXLIBS $OBJ $CMX
+
+# an OCaml interpreter with all our C code compiled in
+
+ocamli:         $OBJ uint64.cmo
+                $OCAMLTOP -custom -o $target uint64.cmo $OBJ 
+
+################################################################
+# update hierarchy
+################################################################
+
+$BINDIR/$NAME:          $NAME.opt
+                        cp $prereq $target
+
+$BINDIR/$NAME.prof:     $NAME
+                        cp $prereq $target
+
+$MANDIR/man1/$NAME.1:   $NAME.1
+                        cp $prereq $target
+
+$MANDIR/man1/${NAME}grammar.1:   ${NAME}grammar.1
+                        cp $prereq $target
+################################################################
+# include version and name information
+################################################################
+
+this.ml:        this.in mkfile
+		sed 	-e "s/@this@/$NAME-$VERSION/"\
+			-e "s/@arch@/$ARCH/"\
+		this.in > $target
+
+################################################################
+# recalculate dependencies
+# make sure that generators are ran first
+################################################################
+
+NEWER = newer
+NEWERSRC = $QCmmSRC/newer.c
+
+# I should find a better hack here
+
+depend:V:	dependTdpe dependAll
+#		$OCAMLDEP $OCAMLINCLUDES *.mli *.ml \
+#		$MYLIBML $MYLIBMLI \
+#		$INTMLI $INTML \
+#		$TDPELIBMLI $TDPELIBML \
+#		$MACHINEMLI $MACHINEML \
+#		$QCmmML $QCmmMLI \
+#		$QCmmPRELIMML $QCmmPRELIMMLI \
+#		> DEPEND
+
+#dependQCmm:V:   src
+#		$OCAMLDEP $OCAMLTDPEINC -I $QCmmSRC\
+#		>> DEPEND
+
+dependTdpe:V:	src
+		$OCAMLDEP $OCAMLTDPEINC \
+		$MYLIBML $MYLIBMLI \
+		$SYNTAXLIBML $SYNTAXLIBMLI \
+		> DEPEND
+
+dependAll:V:	src
+		$OCAMLDEP $OCAMLINCLUDES \
+		$INTMLI $INTML \
+		$QCmmPRELIMML $QCmmPRELIMMLI \
+		$TDPELIBMLI $TDPELIBML \
+		$MACHINEMLI $MACHINEML \
+		$ENCRECMLI $ENCRECML \
+		$MACHINEMLI $MACHINEML \
+		$ENCRECMLI $ENCRECML \
+		$QCmmML $QCmmMLI \
+		$CODEMLI $CODEML \
+		>> DEPEND
+
+# make sure DEPEND is up to date
+depend-check:VQ: $NEWER
+	if $NEWER DEPEND mkfile; then true;
+	else
+	  echo "DEPEND is out of date; you must run 'mk depend' before continuing" 1>&2
+	  exit 1
+	fi
+
+$NEWER: $NEWERSRC
+	gcc -o $target $prereq
+
+#
+# create tags for vi(1)
+#
+
+tags:V:		src
+                mltags *.ml *.mli *.mly
+
+################################################################
+# (high level) virtual targets
+################################################################
+
+update:V:       $BINDIR/$NAME                 \
+                $BINDIR/$NAME.prof            \
+                $MANDIR/man1/$NAME.1          \
+                $MANDIR/man1/${NAME}grammar.1 \
+
+
+clean:V:        
+	        rm -f *.cmo *.cmx *.o
+	        rm -f *.asdl *.view *.smlview
+	        rm -f *.cmi
+	        rm -f *.ml *.mli *.c *.mly *.mll this.in
+	        rm -f *.sig *.sml
+	        rm -f *.dvi *.log *.aux *.bbl *.blb *.blg
+	        rm -f parse.output
+	        rm -f *.html *.1 *.ps *.pod
+	        rm -f *~
+	        rm -f $TDPELIBDIR/*.cmo $TDPELIBDIR/*.cmx $TDPELIBDIR/*.o
+	        rm -f $TDPELIBDIR/*.cmi
+	        rm -f $TDPELIBML $TDPELIBMLI
+	        rm -f $SYNTAXLIBML $SYNTAXLIBMLI
+	        rm -f $TDPELIBDIR/*.dvi $TDPELIBDIR/*.log $TDPELIBDIR/*.aux
+		rm -f $TDPELIBDIR/*.bbl $TDPELIBDIR/*.blb $TDPELIBDIR/*.blg
+	        rm -f $TDPELIBDIR/*.html $TDPELIBDIR/*.1 $TDPELIBDIR/*.ps $TDPELIBDIR/*.pod
+	        rm -f $TDPELIBDIR/*~
+	        rm -f $MACHINEDIR/*.cmo $MACHINEDIR/*.cmx $MACHINEDIR/*.o
+	        rm -f $MACHINEDIR/*.cmi
+	        rm -f $MACHINEDIR/*.dvi $MACHINEDIR/*.log $MACHINEDIR/*.aux
+		rm -f $MACHINEDIR/*.bbl $MACHINEDIR/*.blb $MACHINEDIR/*.blg
+	        rm -f $MACHINEDIR/*.html $MACHINEDIR/*.1 $MACHINEDIR/*.ps $MACHINEDIR/*.pod
+	        rm -f $MACHINEDIR/*~
+		rm -f $INTDIR/*.cmo $INTDIR/*.cmx $INTDIR/*.o
+		rm -f $INTDIR/*.ml $INTDIR/*.mli $INTDIR/*.c
+	        rm -f $INTDIR/*.cmi
+	        rm -f $INTDIR/*.dvi $INTDIR/*.log $INTDIR/*.aux
+		rm -f $INTDIR/*.bbl $INTDIR/*.blb $INTDIR/*.blg
+	        rm -f $INTDIR/*.html $INTDIR/*.1 $INTDIR/*.ps $INTDIR/*.pod
+	        rm -f $INTDIR/*~
+		rm -f $QCmmSRC/*.cmi $QCmmSRC/*.cmo
+		rm -f $INSTML $INSTMLI $INTDIR/*.c
+
+clobber:V:	clean
+	        rm -f $NAME $NAME.opt newer
+
+
+
+################################################################
+# include dependencies
+################################################################
+
+<DEPEND

@@ -1,0 +1,139 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+% l2h macro exfile 1 <a href="#$1"><tt>#1</tt></a>
+
+\input{macros.tex}
+\section{Introduction}
+
+In this module, we specialize the RTL-optimization functions. (Usually, I
+uncomment only the element of interest)
+
+\section{Interface}
+<<spec.mli>>=
+
+@ \section{Specialization directives}
+
+<<spec.ml>>=
+
+module T = Tdpe
+module S = Machine
+module Sn = MachineNbe
+
+module G = Generic
+    
+let _ =
+  let instropt = T.option(Sn.instruction) in
+  (*let r = T.nbe (T.arrow(T.arrow(T.a',T.arrow(T.a',T.a')),
+                       T.arrow(T.a',T.arrow(Sn.instruction,T.a')))) foldLocUsedInst in*)
+  (*let r1 = T.nbe (T.arrow(Sn.instruction,T.arrow(Sn.instruction,instropt))) frwSubstInst in
+  let r2 = T.nbe (T.arrow(Sn.instruction,T.arrow(Sn.instruction,instropt))) frwSubstInstMrg in
+  let r3 = T.nbe (T.arrow(Sn.instruction,T.arrow(Sn.instruction,instropt))) frwSubstInstMrgX in
+  let r4 = T.nbe (T.arrow(Sn.instruction,Sn.instruction)) RtlFuns.identity in
+  let r5 = T.nbe (T.arrow(Sn.instruction,instropt)) identInstr in*)
+  (*print_string "++++++++++++++++++++++++++++++++++++++\n";
+  print_string "The specialization of foldLocsUsed is:\n";
+  print_newline();
+  Syntax.pprint r;*)
+  (*print_newline();
+  print_string "++++++++++++++++++++++++++++++++++++++\n";
+  print_string "The specialization of frwSubstInst is:\n";
+  print_newline();
+  Syntax.pprint r1;
+  print_newline();*)
+  (*print_newline();
+  print_string "++++++++++++++++++++++++++++++++++++++\n";
+  print_string "The specialization of frwSubstInstMrg is:\n";
+  print_newline();
+  Syntax.pprint r2;
+  print_string "++++++++++++++++++++++++++++++++++++++\n";
+  print_string "The specialization of frwSubstInstMrgX is:\n";
+  print_newline();
+  Syntax.pprint r3;
+  print_string "++++++++++++++++++++++++++++++++++++++\n";
+  print_string "The specialization of physical identity is:\n";
+  print_newline();
+  Syntax.pprint r4;
+  print_string "++++++++++++++++++++++++++++++++++++++\n";
+  print_string "The specialization of identity by translation is:\n";
+  print_newline();
+  Syntax.pprint r5*)
+
+  (*print_newline();
+  let r6 = T.nbe (T.arrow(Sn.instruction,T.arrow(Sn.instruction,instropt))) G.frwSubstInstX in
+  print_string "++++++++++++++++++++++++++++++++++++++\n";
+  print_string "The specialization of frwSubstInstX is:\n";
+  print_newline();
+  MachineSyntax.pprint r6;
+  Format.print_flush();*)
+
+  (*print_newline();
+  let tinst = Sn.instruction in
+  let r7 = T.nbe (T.arrow(tinst,T.arrow(tinst,T.option(tinst)))) G.frwSubstInstX2 in
+  print_newline();
+  print_string "++++++++++++++++++++++++++++++++++++++\n";
+  print_string "The specialization of frwSubstInstX2 is:\n";
+  print_newline();
+  MachineSyntax.pprint r7;
+  Format.print_flush();
+  print_newline();*)
+
+  (*print_newline();
+  let tinst = T.a' in
+  let r8 = T.nbe (T.arrow(tinst,T.arrow(tinst,T.option(tinst)))) G.frwSubstInstX2E in
+  print_newline();
+  print_string "++++++++++++++++++++++++++++++++++++++\n";
+  print_string "The specialization of frwSubstInstX2E is:\n";
+  print_newline();
+  MachineSyntax.pprint r8;
+  Format.print_flush();
+  print_newline();*)
+
+  (*print_newline();
+  let tinst = Sn.instruction in
+  let treg = T.arrowN(T.char,T.arrowN(T.a',T.arrowN(T.int,T.arrowStub("z",T.a',T.a')))) in
+  (*let r9 = T.nbe (T.arrowStub("read",treg,
+			      T.arrowStub("write",treg,
+					  T.arrowStub("instruction",tinst,
+						      T.arrowStub("zero",T.a',T.a')))))
+      G.read_write_setsInstr in*)
+  let r9 = T.nbe (T.arrowStub("read",treg,
+			      T.arrowStub("write",treg,
+					  T.arrowStub("instruction",T.a',
+						      T.arrowStub("zero",T.a',T.a')))))
+      (fun read -> fun write -> fun instr -> fun zero -> 
+	G.read_write_setsInstr read write (Tdpe.nbe' tinst instr) zero)
+  in
+  print_newline();
+  print_string "open Sparcrep\n";
+  print_string "let v = \n";
+  print_newline();
+  MachineSyntax.pprint r9;
+  Format.print_flush();
+  print_newline();*)
+
+  print_newline();
+  let tinst = Sn.instruction in
+  let treg = T.arrowN(T.char,T.arrowN(T.a',T.arrowN(T.int,T.arrowStub("z",T.a',T.a')))) in
+  (*let r9 = T.nbe (T.arrowStub("read",treg,
+			      T.arrowStub("write",treg,
+					  T.arrowStub("instruction",tinst,
+						      T.arrowStub("zero",T.a',T.a')))))
+      G.read_write_setsInstr in*)
+  let triple = Tdpe.triple(Tdpe.char,Tdpe.a',Tdpe.int) in
+  let tlocset = Tdpe.pair(triple,triple) in 
+  let tp = Tdpe.pair(T.a',T.a') in 
+  let r9 = T.nbe (T.arrowStub("read",treg,
+			      T.arrowStub("write",treg,
+					  (T.arrowStub("instruction",T.a',
+						       T.arrowStub("info",T.a',
+								   T.a'))))))
+      (fun read -> fun write -> fun instr -> fun zero -> 
+	G.read_write_locsInstr read write (Tdpe.nbe' tinst instr) zero)
+  in
+  print_newline();
+  print_string "open Sparcrep\n";
+  print_string "let v = \n";
+  print_newline();
+  MachineSyntax.pprint r9;
+  Format.print_flush();
+  print_newline();

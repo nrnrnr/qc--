@@ -1,0 +1,111 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>(<a href="#$1.dvi">.dvi</a>)
+% l2h macro exfile 1 <a href="#$1"><tt>#1</tt></a>
+% l2h macro image 1 <img alt="Dependency graph" src="#1.gif" ALIGN=right></img>
+
+\input{macros.tex}
+
+\section{More utilities functions for lists}
+
+[[mapM f b i e]] maps a function to a list, sequentially. If the
+sequence contains more than one element, at the beginning of the
+sequence, inserts [[b()]]. Between elements, inserts [[i()]]. At the end
+of the sequence appends [[e()]].
+
+[[mapM' f b i e]] is the same as above, only that it does call the
+margin functions for a unique element too.
+
+<<myList.mli>>=
+val mapM :
+    ('a -> 'b) ->
+      (unit -> 'b) ->
+        (unit -> 'b) ->
+          (unit -> 'b) ->
+            'a list -> 'b list
+
+val mapM' :
+    ('a -> 'b) ->
+      (unit -> 'b) ->
+        (unit -> 'b) ->
+          (unit -> 'b) ->
+            'a list -> 'b list
+
+val mapM'' :
+    ('a -> 'b) ->
+      (unit -> 'b) ->
+        (unit -> 'b) ->
+          (unit -> 'b) ->
+            'a list -> 'b list
+
+<<myList.ml>>=
+
+let mapM f b m e ls =
+  match ls with
+    [] ->  []
+  | [x] -> [f x]
+  | ls ->
+      let rec walk =
+        (function
+            [] -> [e ()]
+          | [x] ->
+              let v1 = f x in
+              let v2 = e () in
+              [v1;v2]
+          | (x::xs) ->
+              let v1 = f x in 
+              let v2 = m () in
+              let vs = walk xs in
+              let ls1 = v2::vs in
+              let lsn = v1::ls1 in
+              lsn)
+      in
+      let v = b() in
+      let vs = walk ls in
+      v::vs
+
+let mapM' f b m e ls =
+  match ls with
+    [] ->  []
+  | ls ->
+      let rec walk =
+        (function
+            [] -> [e ()]
+          | [x] ->
+              let v1 = f x in
+              let v2 = e () in
+              [v1;v2]
+          | (x::xs) ->
+              let v1 = f x in 
+              let v2 = m () in
+              let vs = walk xs in
+              let ls1 = v2::vs in
+              let lsn = v1::ls1 in
+              lsn)
+      in
+      let v = b() in
+      let vs = walk ls in
+      v::vs
+
+let mapM'' f b m e ls =
+  match ls with
+    [] ->  [b();e()]
+  | ls ->
+      let rec walk =
+        (function
+            [] -> [e ()]
+          | [x] ->
+              let v1 = f x in
+              let v2 = e () in
+              [v1;v2]
+          | (x::xs) ->
+              let v1 = f x in 
+              let v2 = m () in
+              let vs = walk xs in
+              let ls1 = v2::vs in
+              let lsn = v1::ls1 in
+              lsn)
+      in
+      let v = b() in
+      let vs = walk ls in
+      v::vs
+

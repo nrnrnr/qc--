@@ -1,0 +1,242 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+% l2h macro exfile 1 <a href="#$1"><tt>#1</tt></a>
+
+\input{macros.tex}
+
+\section{Type directed partial evaluation}
+
+This module implements TDPE for the [[ocaml]] language.
+
+The module is dependent on a \module{MachineSyntax} module which defines
+the complete syntax of the residual language. Because of the control
+operators.
+
+\section{Type declarations}
+
+The type of reify/reflect pairs
+<<type declarations>>=
+
+type tExp = MachineSyntax.exp
+type 'a rr = RR of ('a -> tExp) * (tExp -> 'a)
+
+
+@ \subsection{Interface}
+\label{sec:tdpe_interface}
+
+<<tdpe.mli>>=
+    <<type declarations>>
+
+@ We need to make public the conrol operators as well
+<<tdpe.mli>>=
+  module Ctrl : CtrlPlus.CONTROL with type ans = tExp
+
+@ We define the combinators for the standard type constructors.  [[a']]
+is a the RR pair for a dynamic base type. The [[arrow]] pair is
+associated with the arrow type constructor. The [[boo]] is associated
+with the boolean type. [[pair]] is the RR pair for the pair type
+constructor. [[option]] is the RR pair for the [[option]] type
+constructor.
+
+<<tdpe.mli>>=
+val a' : tExp rr
+val int : int rr
+val char : char rr
+val arrow : 'a rr * 'b rr -> ('a -> 'b) rr
+val arrowN : 'a rr * 'b rr -> ('a -> 'b) rr
+val arrowStub : string * 'a rr * 'b rr -> ('a -> 'b) rr
+val arrowStubN : string * 'a rr * 'b rr -> ('a -> 'b) rr
+
+val arrowPair : ('a rr * 'b rr) * 'c rr -> (('a * 'b) -> 'c) rr
+val arrowPairStub : (string * string) * ('a rr * 'b rr) * 'c rr -> (('a * 'b) -> 'c) rr
+
+val boo : bool rr 
+val unit : unit rr 
+val booNone : bool rr 
+val pair : 'a rr * 'b rr -> ('a * 'b) rr
+val triple : 'a rr * 'b rr * 'c rr -> ('a * 'b * 'c) rr
+val option : 'a rr -> 'a option rr
+
+@ The  [[nbe]] and [[nbe']] functions are the reify/reflect pair.
+
+<<tdpe.mli>>=
+val nbe : 'a rr -> 'a -> tExp
+val nbe' : 'a rr -> tExp -> 'a
+
+@ \subsection{Implementation}
+\label{sec:tdpe_implementation}
+
+<<tdpe.ml>>=
+  <<type declarations>>
+
+@ Typical implementation of Tdpe
+
+<<tdpe.ml>>=
+module Ctrl = CtrlPlus.Control(struct type ans = tExp end)
+
+module S = Syntax
+
+exception NoWay
+    
+let a' = RR ((fun e -> e) ,(fun e -> e))
+let std_int = a'
+let std_word = a'
+let std_bits = a'
+let std_string = a'
+let std_bool = a'
+let unit = RR ((fun () -> S.UNIT),(fun e -> ()))
+let int = RR ((fun i -> S.INT i),(fun e -> raise NoWay))
+let char = RR ((fun c -> S.CHR c),(fun e -> raise NoWay))
+let boo = RR
+    ((fun v -> if v then S.BOOL true else S.BOOL false),
+     (fun e -> Ctrl.shift
+         (fun k -> S.COND (e,
+                         Ctrl.reset (fun () -> k true),
+                         Ctrl.reset (fun () -> k false)))))
+
+let booNone = RR
+    ((fun v -> if v then S.BOOL true else S.BOOL false),
+     (fun e -> Ctrl.shift
+         (fun k ->
+           let e1 = Ctrl.reset (fun () -> k true) in
+           let e2 = Ctrl.reset (fun () -> k false) in
+           match (e1,e2) with
+             (S.X_None,S.X_None) -> S.X_None
+           | _ -> S.COND (e,e1,e2))))
+
+
+let arrow (RR (reify1, reflect1), RR (reify2, reflect2))
+    = RR ((fun f ->
+      let x = Tools.gensym "x" in
+      S.LAM (S.ID x, Ctrl.reset
+               (fun () -> reify2 (f (reflect1 (S.VAR x)))))),
+          (fun e ->
+            fun v ->
+              let r = Tools.gensym "r" in
+              Ctrl.shift(fun k ->
+                S.LET (S.ID r,
+                     S.APP (e, reify1 v),
+                     Ctrl.reset
+                       (fun () -> k (reflect2 (S.VAR r)))))))
+
+let arrowStub (stub, RR (reify1, reflect1), RR (reify2, reflect2))
+    = RR ((fun f ->
+      let x = Tools.gensym stub in
+      S.LAM (S.ID x, Ctrl.reset
+               (fun () -> reify2 (f (reflect1 (S.VAR x)))))),
+          (fun e ->
+            fun v ->
+              let r = Tools.gensym stub in
+              Ctrl.shift(fun k ->
+                S.LET (S.ID r,
+                     S.APP (e, reify1 v),
+                     Ctrl.reset
+                       (fun () -> k (reflect2 (S.VAR r)))))))
+
+    
+(*let arrowSeq (RR (reify1, reflect1), RR (reify2, reflect2))
+    = RR ((fun f ->
+      let x = Tools.gensym "x" in
+      S.LAM (S.ID x, Ctrl.reset
+               (fun () -> reify2 (f (reflect1 (S.VAR x)))))),
+          (fun e ->
+            fun v ->
+              let r = Tools.gensym "r" in
+              Ctrl.shift(fun k ->
+                S.LET (S.ID r,
+                     S.APP (e, reify1 v),
+                     Ctrl.reset
+                       (fun () -> k (reflect2 (S.VAR r)))))))*)
+
+let arrowN (RR (reify1, reflect1), RR (reify2, reflect2))
+    = RR ((fun f ->
+      let x = Tools.gensym "x" in
+      S.LAM (S.ID x, reify2 (f (reflect1 (S.VAR x))))),
+          (fun e -> fun v -> reflect2(S.APP (e, reify1 v))))
+
+let arrowStubN (stub, RR (reify1, reflect1), RR (reify2, reflect2))
+    = RR ((fun f ->
+      let x = Tools.gensym stub in
+      S.LAM (S.ID x, reify2 (f (reflect1 (S.VAR x))))),
+          (fun e -> fun v -> reflect2(S.APP (e, reify1 v))))
+
+let arrowPair ((RR (reify1, reflect1), RR (reify2, reflect2)),RR (reify3, reflect3))
+    = RR ((fun f ->
+      let x1 = Tools.gensym "x" in
+      let x2 = Tools.gensym "x" in
+      S.LAM (S.TUPLE [S.ID x1;S.ID x2],
+	     Ctrl.reset
+               (fun () -> reify3 (f (reflect1 (S.VAR x1),
+				     reflect2 (S.VAR x2))
+				 )))),
+          (fun e ->
+            fun (v1,v2) ->
+              let r1 = Tools.gensym "r" in
+              let r2 = Tools.gensym "r" in
+              Ctrl.shift(fun k ->
+                S.LET (S.TUPLE [S.ID r1;S.ID r2],
+                       S.APP (e, S.PAIR(reify1 v1,reify2 v2)),
+                       Ctrl.reset
+			 (fun () -> k (reflect3 (S.PAIR(S.VAR r1,S.VAR r2)))
+			 )))))
+
+let arrowPairStub ((stub1,stub2),
+		   (RR (reify1, reflect1), RR (reify2, reflect2)),
+		   RR (reify3, reflect3))
+    = RR ((fun f ->
+      let x1 = Tools.gensym stub1 in
+      let x2 = Tools.gensym stub2 in
+      S.LAM (S.TUPLE [S.ID x1;S.ID x2],
+	     Ctrl.reset
+               (fun () -> reify3 (f (reflect1 (S.VAR x1),
+				     reflect2 (S.VAR x2))
+				 )))),
+          (fun e ->
+            fun (v1,v2) ->
+              let r1 = Tools.gensym stub1 in
+              let r2 = Tools.gensym stub2 in
+              Ctrl.shift(fun k ->
+                S.LET (S.TUPLE [S.ID r1;S.ID r2],
+                       S.APP (e, S.PAIR(reify1 v1,reify2 v2)),
+                       Ctrl.reset
+			 (fun () -> k (reflect3 (S.PAIR(S.VAR r1,S.VAR r2)))
+			 )))))
+
+    
+let pair (RR (reify1, reflect1), RR (reify2, reflect2))
+    = RR ((fun (v1, v2) -> S.PAIR (reify1 v1,
+                                 reify2 v2)),
+          (fun e -> (reflect1 (S.FST e),
+                     reflect2 (S.SND e))))
+
+let triple (RR (reify1, reflect1), RR (reify2, reflect2), RR (reify3, reflect3))
+    = RR ((fun (v1, v2, v3) -> S.TRIPLE (reify1 v1,
+                                     reify2 v2,
+				     reify3 v3)),
+          (fun e -> (reflect1 (S.FST3 e),
+                     reflect2 (S.SND3 e),
+                     reflect3 (S.TRD3 e))))
+
+let option (RR(reifySome,reflectSome))
+    = RR (
+  (fun r -> 
+    match r with
+      Some x -> S.X_Some (reifySome x)
+    | None -> S.X_None),
+  (fun e ->
+    let id1 = Tools.gensym "x" in
+    Ctrl.shift (fun k ->
+      S.CASEoption(e,
+                  (id1,
+                   Ctrl.reset
+                     (fun () -> k (Some (reflectSome (S.VAR id1))))),
+                  Ctrl.reset
+                    (fun () -> k None)))))
+
+let nbe (RR (reify, reflect)) v
+    = (Tools.resetGen(); reify v)
+let nbe' (RR (reify, reflect)) e
+    = reflect e
+
+@
+

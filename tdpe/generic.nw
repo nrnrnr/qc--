@@ -1,0 +1,84 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+% l2h macro exfile 1 <a href="#$1"><tt>#1</tt></a>
+
+\input{macros.tex}
+
+\title{Machine-dependent optimiziation functions}
+
+In this module we are defining the machine-dependent optimization
+functions, as simple composition of the RTL-based optimizers with the
+encoding and decoding functions.
+
+Note: we are using the [[bind]] function and a [[star]] function from
+the module \module{myList}. They should be placed somewhere else.
+
+\section{Interface}
+
+<<generic.mli>>=
+
+val frwSubstInstX : Machine.instruction -> Machine.instruction -> Machine.instruction option
+val frwSubstInstX2 : Machine.instruction -> Machine.instruction -> Machine.instruction option
+(*val frwSubstInstX2E : Machine.instruction -> Machine.instruction -> Machine.instruction option*)
+val frwInstMerge : Machine.instruction -> Machine.instruction -> Machine.instruction option
+val identInstr : Machine.instruction -> Machine.instruction option
+
+val read_write_setsInstr :
+    'a Rtlutil.regfun -> 'a Rtlutil.regfun -> Machine.instruction -> 'a -> 'a
+
+val read_write_locsInstr :
+    'a Rtlutil.regfun -> 'a Rtlutil.regfun -> Machine.instruction -> 'a -> 'a
+	(*Machine.instruction -> Readwrite.locInfo -> Readwrite.locInfo*)
+
+
+<<generic.ml>>=
+module E = MachineEncode
+module R = MachineRecognize
+
+let frwSubstInstX i1 i2 =
+  R.recognizeInstruction (RtlSubst.forwSubstitutionX
+                            (E.encode i1)
+                            (E.encode i2))
+
+let frwSubstInstX2 i1 i2 =
+  OpOps.bind R.recognizeInstruction
+    (RtlSubst2.forwSubstitutionX
+       (E.encode i1)
+       (E.encode i2))
+
+(*let frwSubstInstX2E i1 i2 =
+  MyList.bind R.recognizeInstructionE
+    (RtlSubst2.forwSubstitutionX
+       (E.encodeE i1)
+       (E.encodeE i2))*)
+
+(*let bSyntInst x = Syntax.XTRA (MachineSyntax.INST x)*)
+
+let frwSubstInstX2E i1 i2 =
+  (*let i1 = bSyntInst i1 in
+  let i2 = bSyntInst i2 in*)
+(*  OpOps.star bSyntInst*)
+    (OpOps.bind
+       R.recognizeInstruction
+       (RtlSubst2.forwSubstitutionX
+          (E.encode (Tdpe.nbe' (MachineNbe.instruction_None) i1))
+          (E.encode (Tdpe.nbe' (MachineNbe.instruction_None) i2))))
+
+let frwInstMerge i1 i2 =
+  OpOps.bind
+    R.recognizeInstruction (RtlMerge.forwMerge
+                              (E.encode i1)
+                              (E.encode i2)
+			      (fun _ -> false))
+
+let identInstr i1 =
+  R.recognizeInstruction (RtlFuns.identity
+                            (E.encode i1))
+
+
+let read_write_setsInstr read write instruction zero =
+  Rtlutil.read_write_lists read write (E.encode instruction) zero
+
+let read_write_locsInstr read write instruction zero =
+  Readwrite.read_write_sets
+    read write (E.encode instruction) zero

@@ -1,0 +1,263 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+% l2h macro exfile 1 <a href="#$1"><tt>#1</tt></a>
+
+\input{macros.tex}
+
+\section{A forward substitution function on RTLs}
+
+<<rtlSubst2.mli>>=
+
+val forwSubstitutionX : Rtl.rtl -> Rtl.rtl -> Rtl.rtl option
+
+@ \section{Implementation}
+
+<<rtlSubst2.ml>>=
+
+module R = Rtl.Private
+(*let (=) x y = Base.eq x y*)
+let (<) x y = Base.lessthan x y
+let (+) x y = Base.add x y
+let cond = Base.cond
+(*let not = Base.not*)
+
+module S = Base
+
+exception DiffNonsense
+exception IDontKnowYet
+
+@ [[forwSubstitutionX rtl1 rtl2]] sibstitutes assignments in [[rtl1]]
+into [[rtl2]]. Returns [[Some rtl2']] if some substitution is performed,
+[[None]] otherwise. As a general rule, [[Before]] is attached to
+expressions/locations evaluated in [[sigma]], [[After]] to those
+evaluated in [[sigma']].
+<<rtlSubst2.ml>>=
+
+let forwSubstitutionX  rtl1 rtl2 =
+  let (R.Rtl rtl1) = Rtl.Convert.rtl rtl1 in
+  let (R.Rtl rtl2) = Rtl.Convert.rtl rtl2 in
+
+@ [[constEq]] establishes if two constants evaluate to the same
+value. Returns [[true]] if the two constants are sure to be
+equal. Returns [[false]] if there is not enough information to establish
+that two constants are equal.
+<<rtlSubst2.ml>>=
+  let constEq c1 c2 =
+    match (c1,c2) with
+      (R.Bool b1,R.Bool b2) -> if b1 then b2 else not(b2)
+    | (R.Bits b1, R.Bits b2) -> Bitops.eq' b1 b2
+    | (R.Link (s1,w1),R.Link (s2,w2)) -> (s1=s2) && (w1=w2)
+    | _ -> false in
+@ [[constWithinDiff]] establishes if two intervals intersect. Each
+interval is defined by a constant and a length.  Returns [[false]] if
+certainly intersection does not exist, and returns [[true]] if [[false]]
+can not be established.
+<<rtlSubst2.ml>>=
+  let constWithinDiff c1 w1 c2 w2 =
+    match (c1,c2) with
+      (R.Bool b1,R.Bool b2) -> raise DiffNonsense
+(*    | (R.Int b1,R.Int b2) -> (b1<b2+w2) && (b2<b1+w1) *)
+    | (R.Bits b1,R.Bits b2) -> true
+    | (R.Link (s1,w1),R.Link (s2,w2)) -> true (* something I do not know of yet *)
+    | _ -> raise IDontKnowYet in
+
+@ [[sameValue]] establishes if two expressions [[eBefore]] and
+[[eAfter]] evlauate to the same value. First expression is evaluated in
+[[sigma]], second extression is evaluated in [[sigma']]. The function
+returns [[true]] if we are certain about equality, otherwise returns
+[[false]].
+
+\begin{itemize}
+\item if the first expression is a constant:
+  \begin{itemize}
+  \item Two constant expressions are equal if the two constants are equal
+  \item If the second expression is a [[fetch]]: We can ensure that
+    [[fetch l]] in [[rtl2]] may evaluate to a constant only if [[l]] has
+    been assigned to in the first RTL. But then, another substitution
+    should replace the fetch with the constant, and then we
+    fall back to the previous case.
+  \item If the second expression is a computation, then we can only establish
+    its results after evalution. We do not do that for now.
+
+    I can for instance force the evaluation in place, but in most of the
+    cases this will end up in a residual code in the program.... We may
+    also attempt to use of the fact that some location in the
+    subexpressions has been assigned to a constant in the first RTL. But
+    again, another substitution should have taken care of
+    that. Although, here maybe is a place where once can make use of
+    those comutative theories...
+  \end{itemize}
+  
+\item If the first expression is a location, then:
+  \begin{itemize}
+  \item I can not assume it is a constant.
+  \item If the second expression is also a fetch, we may try to do
+    something. To know for sure that the two locations yield the same
+    value,they must have the same width. Then, we can only tell for sure
+    that they are the same in two possibilities:
+    \begin{itemize}
+    \item They are the same location which is not altered by the first
+      assignment.
+    \item They are different locations, and the second one is assigned in
+      the first rtl to the first one. In this case, we hope that a later
+      substitution might transform this case into the first case.
+    \end{itemize}
+  \item And if the second expression is a computation, we approximate:
+    there is not much chance that we can establish anything.
+  \end{itemize}
+\item And if the first expression is a computation, I can say nothing if its
+  results (I assume that all possible evaluation has been done before)
+\end{itemize}
+
+<<rtlSubst2.ml>>=
+
+  let rec sameValue expBefore expAfter = 
+    match expBefore with
+      R.Const c1 ->
+        (match expAfter with
+          R.Const c2 -> constEq c1 c2
+        | R.Fetch(locAfter,widthAfter) -> false
+        | R.App(op,oplist) -> false)
+    | R.Fetch(locBefore,widthBefore) ->
+        (match expAfter with
+          R.Const c2 -> false
+        | R.Fetch(locAfter,widthAfter) ->
+            (widthBefore=widthAfter) &&
+            (sameLoc locBefore locAfter) &&
+            (unTouched locAfter widthAfter)
+        | R.App(op,oplist) -> false)
+    | R.App(op,oplist) -> false
+
+
+@ [[expMayWithinDiff]] checks whether two expressions evaluate to two
+values which, togehter with two given widths, may define wto overlapping
+intervals. The [[Const]] [[Const]] case is obvious, all the other cases
+take a conservative approach of returning [[true]].
+
+To note that in the case when the second expression is an fetch, might
+be able to disinguish the locations that have been assigned, but I am
+not getting that far now
+
+<<rtlSubst2.ml>>=
+  and expMayWithinDiff (expBefore,widthBefore) (expAfter,widthAfter) =
+  match expBefore with
+    R.Const cBefore ->
+      (match expAfter with
+        R.Const cAfter ->
+          constWithinDiff cBefore widthBefore cAfter widthAfter
+      | R.Fetch(loc,width) -> true
+      | R.App(op,exs) -> true)
+  | R.Fetch(loc,width) -> true
+  | R.App(op,exs) -> true
+
+@ [[sameLoc]] determines if two locations evaluate to the same memory
+point. That can happen only if the two locations are in the same space,
+of the same width, and indexed by expresions which evaluate to the same
+value.
+<<rtlSubst2.ml>>=
+  and sameLoc locBefore locAfter =
+  match (locBefore,locAfter) with
+    (R.Cell(space1,agg1,width1,expBefore,assrt1),
+     R.Cell(space2,agg2,width2,expAfter,assrt2)) ->
+       (space1=space2) &&
+       (width1 = width2) &&
+       (sameValue expBefore expAfter)
+  | _ -> false
+
+@ [[mayOverlap]] tests wether two locations may overlap. It
+returns [[false]] only if certain, [[true]] is a conservative approach.
+<<rtlSubst2.ml>>=
+  and mayOverlap (locBefore,widthBefore) (locAfter,widthAfter) =
+  match (locBefore,locAfter) with
+    (R.Cell(space1,agg1,width1,expBefore,assrt1),
+     R.Cell(space2,agg2,width2,expAfter,assrt2)) ->
+       (space1=space2) &&
+       (expMayWithinDiff (expBefore,widthBefore) (expAfter,widthAfter))
+  | (_,_) -> false
+
+
+@ [[unTouched]] determines if a location in the second RTL is tinted by
+an assignment in the first RTL. It is just a calling [[mayOverlap]] for
+with each location assigned in the first RTL.
+<<rtlSubst2.ml>>=
+  and unTouched locAfter widthAfter =
+    let checkF (e,eff) =
+      match eff with
+        R.Store(l,e,w) -> mayOverlap (l,w) (locAfter,widthAfter)
+      | R.Kill l -> mayOverlap (l,RtlFuns.widthPrivate l) (locAfter,widthAfter) in
+    let rec checkEff ls =
+      match ls with
+        [] -> true
+      | (eff::effs) ->
+          if checkF eff then false
+          else checkEff effs in
+    checkEff rtl1 in
+
+@ The function [[keptValue]] and [[keptLoc]] determine if an
+expression/location in the first rtl evaluates to the same expression if
+evaluated in the second rtl.
+
+<<rtlSubst2.ml>>=
+  let rec keptValue exp =
+    match exp with
+      R.Const c -> true
+    | R.Fetch (loc,width) -> (keptLoc loc width) && (unTouched loc width)
+    | R.App(op, explist) -> List.for_all keptValue explist
+
+  and keptLoc loc width =
+    match loc with
+      R.Cell(space,agg,width,exp,assrt) -> keptValue exp
+    | _ -> false in 
+
+@ [[matchEffect]] scans an effect for an assignment to a given
+location. Here we are again ignoring the guards
+<<rtlSubst2.ml>>=
+
+  let matchEffect locAfter widthAfter (g,eff) =
+    match eff with
+      R.Store(locBefore,expBefore,widthBefore)
+      when
+        (widthBefore = widthAfter) &&
+        (sameLoc locBefore locAfter) &&
+        (keptValue expBefore) ->
+          Some expBefore
+    | _ -> None in 
+  
+  let matchAnEffect loc width effs =
+    OpOps.findFirst (matchEffect loc width) effs  in
+
+@ [[substExp]] recursively scans an expression for a fetch with a
+previously assigned location.
+
+<<rtlSubst2.ml>>=
+  let rec substExp exp =
+    match exp with
+      R.Const c -> None
+    | R.Fetch (loc,width) ->
+        matchAnEffect loc width rtl1
+    | R.App(op, explist) ->
+        (match OpOps.selectiveReplace substExp explist with
+          Some exlist -> Some (R.App(op,exlist))
+        | None -> None) in
+  
+
+@ [[substEffects]] performs the substitution for an individual
+effect. It performs substitutions inside the index expression of a
+assignment and does not affect [Kill] effects.
+
+Note: for the moment we ignore guards.
+
+<<rtlSubst2.ml>>=
+  let substEffects (g,eff) =
+    match eff with
+      R.Store(l,e,w) ->
+        (match substExp e with
+          Some exp -> Some (g,R.Store(l,exp,w))
+        | None -> None)
+    | R.Kill l -> None in
+
+  OpOps.star
+    (fun r -> Rtl.Revert.rtl(R.Rtl r))
+    (OpOps.selectiveReplace substEffects rtl2)
+
+@ The end

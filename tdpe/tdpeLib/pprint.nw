@@ -1,0 +1,41 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+% l2h macro exfile 1 <a href="#$1"><tt>#1</tt></a>
+
+\input{macros.tex}
+
+\section{Pretty-printing primitives}
+
+This module provides some pretty-printing primitives
+
+<<pprint.mli>>=
+
+val ps : string -> unit
+val pc : char -> unit
+val psp : unit -> unit
+val pi  : int -> unit
+val pi64  : int64 -> unit
+val pni  : nativeint -> unit
+val pbk : unit -> unit
+val nl : unit -> unit
+  
+val print_open : int -> string -> unit
+val print_close : string -> unit
+
+val print_flush : unit ->  unit
+
+@ \section{Implementation}
+
+<<pprint.ml>>=
+
+let ps  = Format.print_string
+let pc  = Format.print_char
+let psp = Format.print_space
+let pi  = Format.print_int
+let pi64 i64 = Format.print_string (Int64.to_string i64)
+let pni ni = Format.print_string (Nativeint.to_string ni)
+let pbk = Format.print_cut
+let nl  = Format.print_cut
+let print_open i x = (Format.open_hovbox i; ps x)
+let print_close x  = (ps x; Format.close_box())
+let print_flush () = Format.print_flush()

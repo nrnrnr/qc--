@@ -1,0 +1,173 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+% l2h macro exfile 1 <a href="#$1"><tt>#1</tt></a>
+
+\input{macros.tex}
+
+\section{A forward substitution function on RTLs}
+
+This module implements a function which does the following: given two
+[[rtl]]s, [[rtl1]] and [[rtl2]] and a function [[isDead:Rtl.location ->
+bool]], returns the paralel composition of [[rtl1]] and [[rtl2']], where
+[[rtl2']] is the [[rtl2]] where assignments to dead locations have been
+removed.
+
+<<rtlMerge.mli>>=
+
+val forwMerge : Rtl.rtl -> Rtl.rtl -> (Rtl.loc -> bool) -> Rtl.rtl option
+
+@ \section{Implementation}
+
+<<rtlMerge.ml>>=
+
+module R = Rtl.Private
+(*let (=) x y = Base.eq x y
+let (<) x y = Base.lessthan x y
+let (+) x y = Base.add x y*)
+let cond = Base.cond
+let not = Base.not
+
+module S = Base
+
+exception DiffNonsense
+exception IDontKnowYet
+
+(*module LS = Set.MakeSet(
+  struct
+    type t = R.location
+    let eq x y = false
+  end)*)
+
+
+    
+@ [[width]] returns the width of a location
+<<rtlMerge.ml>>=
+let width l =
+  match l with
+    R.Cell(space,agg,width,exp,assrt) -> width
+  | R.Var(_,_,width) -> width
+  | _ -> raise IDontKnowYet
+
+@ [[forwSubstitutionX rtl1 rtl2]] sibstitutes assignments in [[rtl1]]
+into [[rtl2]]. Returns [[Some rtl2']] if some substitution is performed,
+[[None]] otherwise. As a general rule, [[Before]] is attached to
+expressions/locations evaluated in [[sigma]], [[After]] to those
+evaluated in [[sigma']].
+<<rtlMerge.ml>>=
+
+let forwMerge rtlP1 rtlP2 isDead =
+  let (R.Rtl rtl1) = Rtl.Convert.rtl rtlP1 in
+  let (R.Rtl rtl2) = Rtl.Convert.rtl rtlP2 in
+
+@ [[constWithinDiff]] establishes if two intervals intersect. Each
+interval is defined by a constant and a length.  Returns [[false]] if
+certainly intersection does not exist, and returns [[true]] if [[false]]
+can not be established.
+<<rtlMerge.ml>>=
+  let constWithinDiff c1 w1 c2 w2 =
+    match (c1,c2) with
+      (R.Bool b1,R.Bool b2) -> raise DiffNonsense
+    | (R.Bits(b1,w1),R.Bits(b2,w2)) -> raise IDontKnowYet
+    | (R.Link (s1,w1),R.Link (s2,w2)) -> true (* something I do not know of yet *)
+    | _ -> raise IDontKnowYet in
+
+
+@ [[expMayWithinDiff]] checks whether two expressions evaluate to two
+values which, togehter with two given widths, may define wto overlapping
+intervals. The [[Const]] [[Const]] case is obvious, all the other cases
+take a conservative approach of returning [[true]].
+
+To note that in the case when the second expression is an fetch, might
+be able to disinguish the locations that have been assigned, but I am
+not getting that far now
+
+<<rtlMerge.ml>>=
+ let expMayWithinDiff (expBefore,widthBefore) (expAfter,widthAfter) =
+  match expBefore with
+    R.Const cBefore ->
+      (match expAfter with
+        R.Const cAfter ->
+          constWithinDiff cBefore widthBefore cAfter widthAfter
+      | R.Fetch(loc,width) -> true
+      | R.App(op,exs) -> true)
+  | R.Fetch(loc,width) -> true
+  | R.App(op,exs) -> true in
+
+@ [[mayOverlap]] tests wether two locations may overlap. It
+returns [[false]] only if certain, [[true]] is a conservative approach.
+<<rtlMerge.ml>>=
+  let mayOverlap (locBefore,widthBefore) (locAfter,widthAfter) =
+  match (locBefore,locAfter) with
+    (R.Cell(space1,agg1,width1,expBefore,assrt1),
+     R.Cell(space2,agg2,width2,expAfter,assrt2)) ->
+       (space1=space2) &&
+       (expMayWithinDiff (expBefore,widthBefore) (expAfter,widthAfter))
+  | (_,_) -> false in
+
+@ [[substEffects]] performs the substitution for an individual
+effect. It performs substitutions inside the index expression of a
+assignment and does not affect [Kill] effects.
+
+Note: for the moment we ignore guards.
+
+<<rtlMerge.ml>>=
+
+  let removeDeadEffs eff rtl =
+    match eff with
+      (_,R.Store(l,_,_)) ->   (* should I take care of widths? *)
+        if isDead (Rtl.Revert.loc l) then rtl
+        else eff::rtl
+    | (_,R.Kill _) -> eff::rtl in
+
+  let effsCkech eff rtl =
+    match eff with
+      (g,R.Store(l,_,_)) ->   (* should I take care of widths? *)
+        if isDead (Rtl.Revert.loc l) then rtl
+        else eff::rtl
+    | (_,R.Kill _) -> eff::rtl in
+
+@ Computing the merged rtl.
+
+We compute the locations used by [[rtl1]] and [[rtl2']]. We then, in
+order, ensure that
+\begin{itemize}
+\item No location used by [[rtl1]] at any level is modified by an effect
+in [[rtl']]
+\item All the locations used by [[rtl2']] (including the ones that are
+  assigned) evaluate to the same locations as after the effects of
+  [[rtl1]]. This is implied if all locations in [[rtl2']] do not overlap
+  with the locations assigned by [[rtl1]].
+\end{itemize}
+
+<<rtlMerge.ml>>=
+  let locTopUsedRtl1 = RtlFuns.foldTopLocsUsedW (fun l ls -> l::ls) rtlP1 [] in
+  let locUsedRtl1 = RtlFuns.foldTopLocsUsedW (fun l ls -> l::ls) rtlP1 [] in
+  let liveRtl2 = List.fold_right removeDeadEffs rtl2 [] in
+  let liveRtlP2 = Rtl.Revert.rtl (R.Rtl liveRtl2) in
+  let locUsedLiveRtl2 = RtlFuns.foldAllLocsUsedW (fun l ls -> l::ls) liveRtlP2 [] in
+  
+  let locAssgRtl1 = RtlFuns.foldLocsDefinedW (fun l ls -> l::ls) rtlP1 [] in
+  let locAssgLiveRtl2 = RtlFuns.foldLocsDefinedW (fun l ls -> l::ls) liveRtlP2 [] in
+
+  let ok = if List.exists
+      (fun (locBefore,w1) -> 
+	let locBefore = Rtl.Convert.loc locBefore in
+	List.exists
+          (fun (locAfter,w2) ->
+	    let locAfter = Rtl.Convert.loc locAfter in
+	    mayOverlap (locBefore,w1) (locAfter,w2)) locUsedRtl1) locAssgLiveRtl2
+  then false
+  else
+    List.exists
+      (fun (locBefore,w1) ->
+	let locBefore = Rtl.Convert.loc locBefore in
+	List.exists
+          (fun (locAfter,w2) ->
+	    let locAfter = Rtl.Convert.loc locAfter in
+	    mayOverlap (locBefore,w1) (locAfter,w2)) locAssgRtl1) locUsedLiveRtl2
+
+  in
+  if ok then Some (Rtl.Revert.rtl (R.Rtl (rtl1@liveRtl2)))
+  else None
+
+@ The end

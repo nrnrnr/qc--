@@ -1,0 +1,129 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+@
+\chapter{Caml runtime library}
+Note that the signatures used in Caml emission must match these
+signatures.
+Indeed, one could argue for moving that code here!
+@
+Here is a possible emitter at which the ML bindings could be targeted.
+I don't yet have the emission code working, so I can't yet comment
+about how this fits in, but a code emitter might be parameterized by
+something like this.
+<<sledlib.mli>>=
+<<exported exceptions and module types>>
+<<exported modules and values>>
+@ 
+We include [[fail_unless]] because its monomorphic type makes it
+possible to create a residualizing implementation for use in the a
+specializer based on type-directed partial evaluation.
+<<exported exceptions and module types>>=
+exception Failure of string list (* raised on failure to encode *)
+<<exported modules and values>>=
+val fail : string list -> 'a     (* raises Failure *)
+val fail_unless : Base.std_bool -> string list -> unit     (* raises Failure *)
+@ 
+<<exported exceptions and module types>>=
+module type EMITTER = sig
+  type token_stream
+  val emit32 : nativeint * token_stream -> token_stream
+  val emit16 : int       * token_stream -> token_stream
+  val emit : value:nativeint -> width:int -> token_stream -> token_stream
+end
+@
+In ML, we can talk about very general relocatable addresses.
+The intent is that there exist a [[force]] procedure with type
+\mbox{[['a relocatable -> 'a option]]}.
+I don't put such a procedure in the signature, because this signature
+must be implemented by the user of the toolkit, and I want not to
+insist on a version that uses mutable state.
+
+Eventually there must be a connection between ``late'' relocatable
+addresses and the link-time constants of Quick {\PAL}.
+<<exported exceptions and module types>>=
+module type RELOCATABLE = sig
+  type 'a relocatable   (* a bit vector of type 'a
+                           whose value may not be known until link time *)
+
+  val early : 'a -> 'a relocatable      (* a value we know now *)
+  val late  : string -> offset:'a -> 'a relocatable
+                                        (* label + offset *)
+
+  (* not clear what the rest of the interface should be.  Here are three candidates:
+
+     C style  
+       val known : 'a relocatable -> bool
+       val force : 'a relocatable -> 'a
+
+     CPS?
+       val test  : 'a relocatable -> known:('a -> 'b) -> unknown:(unit -> 'b) -> b
+
+     vanilla ML
+       val force : 'a relocatable -> 'a option
+  *)
+end
+<<exported modules and values>>=
+module TrivialReloc : RELOCATABLE with type 'a relocatable = 'a
+@
+Span-dependent instructions may have a range of sizes.
+If we know the location of an instruction and the values of
+relocatable addresses on which it may depend, we can find its exact size.
+<<exported exceptions and module types>>=
+module type INSTRUCTION_SIZE = sig
+  type instruction
+  type address       (* location of instruction, value of relocatable operands
+                        --- an integer type *)
+  module Reloc : RELOCATABLE
+  type range = { min : int; max : int }
+  val sizeRange : inst : instruction -> range
+  val size      : inst   : instruction ->
+		  cur_pc : nativeint option ->
+		  force  : (address Reloc.relocatable -> address option) ->
+		  int
+end
+@ 
+The ML encoder might not throw off closures.
+Instead, it's likely to be called only when all locations are known.
+In any case, that's one possible assumption.
+This signature will undoubtedly change.
+<<exported exceptions and module types>>=
+module type ENCODER = sig
+  type instruction 
+  type address
+  module Reloc : RELOCATABLE
+  module Emitter : EMITTER
+
+  val encodeAt :
+    instruction -> address -> (address Reloc.relocatable -> address) 
+    -> Emitter.token_stream
+        -> Emitter.token_stream
+end
+@ 
+The main thing that's needed here is the exception, which is raised
+when an instruction can't be encoded.
+[[cons]] and [[nil']] exist to support the creation of lists of
+strings, but in practice they should be rewritten to use the standard
+ML notation for lists.
+<<sledlib.ml>>=
+
+module Sy = Syntax
+
+<<exported exceptions and module types>>
+(*let fail l = raise (Failure l)*)
+let fail l =
+  Tdpe.nbe' (Tdpe.arrow(Tdpe.a',Tdpe.unit))
+    (Sy.VAR "Sledlib.fail") (Sy.LIST (List.map (fun s -> Sy.STR s) l));
+  raise (Failure l)
+
+(*let fail_unless condition l = if condition then () else fail l*)
+
+let fail_unless condition l =
+  Tdpe.nbe' (Tdpe.arrowN(Tdpe.a',Tdpe.arrow(Tdpe.a',Tdpe.unit)))
+    (Sy.VAR "Sledlib.fail_unless") condition (Sy.LIST (List.map (fun s -> Sy.STR s) l))
+
+module TrivialReloc = struct
+  type 'a relocatable = 'a
+  let early x = x
+  let late label offset = fail ["Trivial relocatable addresses don't support labels"]
+end
+@ 
+

@@ -1,0 +1,205 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+% l2h macro exfile 1 <a href="#$1"><tt>#1</tt></a>
+
+\input{macros.tex}
+
+\title{A datatype of syntax of residual terms}
+
+The type of residual expressions is parametric, so that we can represent
+more types later.
+<<syntax.mli>>=
+  <<syntax datatype>>
+val pprint : ('a -> unit) -> 'a bExp -> unit
+@ [[filterNones]] is a hack which merges the braches returning [[None]]
+in a case statement. Should be really useful to get shorter residual code.
+<<syntax.mli>>=
+val filterNones : 'a bExp -> (string * id list * 'a bExp) list -> 'a bExp
+  
+@ The residual syntax relfects the basic types and type constructors in
+Ocaml.
+<<syntax datatype>>=
+type id = string
+type pat = ID of id | TUPLE of pat list
+type 'a bExp =
+    VAR of id
+  | LAM of pat * 'a bExp
+  | APP of 'a bExp * 'a bExp
+  | BOOL of bool
+  | INT of int
+  | INT64 of int64
+  | NINT of nativeint
+  | STR of string
+  | CHR of char
+  | LIST of 'a bExp list
+  | CONS of 'a bExp * 'a bExp
+  | NIL
+  | UNIT
+  | COND of  'a bExp *  'a bExp * 'a bExp
+  | LET of pat * 'a bExp * 'a bExp
+  | PAIR of 'a bExp * 'a bExp
+  | TRIPLE of 'a bExp * 'a bExp * 'a bExp
+  | SEQ of 'a bExp * 'a bExp
+  | FST of 'a bExp
+  | SND of  'a bExp
+  | FST3 of 'a bExp
+  | SND3 of  'a bExp
+  | TRD3 of  'a bExp
+  | X_Some of  'a bExp
+  | X_None
+  | CASEoption of 'a bExp * (id * 'a bExp) * 'a bExp
+  | CASEGEN of 'a bExp * (string * id list * 'a bExp) list * 'a bExp option
+  | XTRA of 'a
+
+@ \section{Implementatipon} The pretty-printing function takes an
+argument a function pretty-printing of additional types.
+
+<<syntax.ml>>=
+<<syntax datatype>>
+open Pprint
+
+let pprint pxtra t =
+
+  let rec pp_fun t =
+    match t with
+      LAM _  -> (print_open 1 "("; pp_top t; print_close ")")
+    | FST _  -> (print_open 1 "("; pp_top t; print_close ")")
+    | SND _  -> (print_open 1 "("; pp_top t; print_close ")")
+    | _        -> pp_top t 
+  
+  and pp_arg t =
+    match t with
+      APP _ -> (print_open 1 "("; pp_top t; print_close ")")
+    | LAM _ -> (print_open 1 "("; pp_top t; print_close ")")
+    | FST _ -> (print_open 1 "("; pp_top t; print_close ")")
+    | SND _ -> (print_open 1 "("; pp_top t; print_close ")")
+    | _        -> pp_top t
+
+  and pp_fst t =
+    match t with
+      LAM _ -> (print_open 1 "("; pp_top t; print_close ")")
+    | LET _ -> (print_open 1 "("; pp_top t; print_close ")")
+    | _       -> pp_top t
+
+  and pp_pat pat =
+    match pat with
+      ID x -> ps x
+    | TUPLE pats -> 
+	let _ =
+	  MyList.mapM
+	    pp_pat
+            (fun () -> ps "(")
+            (fun () -> ps ",")
+            (fun () -> ps ")") pats
+	in ()
+
+  and pp_top t =
+    match t with 
+      VAR x          -> (ps x)
+    | INT i          -> if i < 0 then (ps "("; pi i; ps ")") else pi i
+    | INT64 i64      -> (ps "("; pi64 i64; ps ")")
+    | NINT ni        -> (ps "("; pni ni; ps ")")
+    | STR s           -> ps "\""; ps s; ps "\"";
+    | CHR s           -> ps "'"; pc s; ps "'";
+    | BOOL true       -> ps "true"
+    | BOOL false      -> ps "false"
+    | UNIT           -> ps "()"
+    | LIST exs       ->
+        let _ = MyList.mapM''
+            pp_top
+            (fun () -> print_open 0 "[")
+            (fun () -> ps ";";pbk())
+            (fun () -> print_close "]") exs in ()
+    | CONS (e1,e2)       ->
+        print_open 1 "(";
+	pp_top e1;
+	ps "::";
+	pbk();
+	pp_top e2;
+	print_close ")"
+    | NIL -> ps "[]";
+    | APP(APP(VAR "+",t1),t2) -> (pp_fun t1; psp();ps "+";psp();pp_arg t2)
+    | APP(APP(VAR "=",t1),t2) -> (pp_fun t1; psp();ps "=";psp();pp_arg t2)
+    | APP(APP(VAR "<",t1),t2) -> (pp_fun t1; psp();ps "<";psp();pp_arg t2)
+    | APP(APP(VAR "&&",t1),t2) -> (pp_fun t1; psp();ps "&&";psp();pp_arg t2)
+    | APP(t1, t2)    -> (pp_fun t1; psp(); pp_arg t2)
+    | COND(e1,e2,e3) ->
+        (print_open 0 "if "; pp_top e1;
+         psp();
+         ps "then ";
+         pp_top e2;
+         psp();
+         ps "else ";
+         pp_top e3;
+         Format.close_box();
+        )
+    | LAM(pat, t)      -> 
+        (print_open 2 "fun ";
+	 pp_pat pat;
+	 ps " ->"; psp(); pp_top t; 
+         Format.close_box())
+    | PAIR(t1, t2)   -> 
+        (print_open 1 "("; pp_top t1; ps ","; psp(); pp_top t2;
+         print_close ")") 
+    | TRIPLE(t1, t2, t3)   -> 
+        (print_open 1 "("; pp_top t1; ps ","; psp(); pp_top t2;
+	 ps ","; psp(); pp_top t3;
+         print_close ")") 
+    | FST e     -> (ps "Tools.fst"; psp(); pp_arg e)
+    | SND e     -> (ps "Tools.snd"; psp(); pp_arg e)
+    | FST3 e     -> (ps "Tools.fst3"; psp(); pp_arg e)
+    | SND3 e     -> (ps "Tools.snd3"; psp(); pp_arg e)
+    | TRD3 e     -> (ps "Tools.trd3"; psp(); pp_arg e)
+    | LET(pat,e1, e) ->
+        (print_open 0 "let "; pp_pat pat; ps " = ";
+         Format.open_hovbox 0;
+         pp_top e1;
+         Format.close_box();
+         ps " in"; psp();
+         pp_top e; 
+         Format.close_box())
+    | X_Some e -> ps "(Some ";pp_top e;ps ")"
+    | X_None -> ps "None"
+    | CASEoption  (e,(x1,s1),s2) ->
+        print_open 2 "(match ";pp_top e; ps " with";psp();
+        print_open 2 "  Some "; ps x1; ps " -> "; pp_top s1; psp (); print_close "";
+        print_open 2 "| None -> "; pp_top s2; print_close ")";print_close ""
+    | CASEGEN  (e,ls,wild) ->
+        print_open 2 "(match ";pp_top e; ps " with";psp();
+        List.iter
+          (fun (tag,ids,e) ->
+            (print_open 2 " | ";
+             ps tag;
+             let _ = MyList.mapM' ps
+                 (fun () -> ps "(")
+                 (fun () -> ps ",")
+                 (fun () -> ps ")") ids in 
+             ps " ->"; psp();pp_top e; psp (); print_close "";nl()))
+          ls;
+        (*print_close "";*)
+        (match wild with
+          Some e -> print_open 2 "| _ ->"; psp();pp_top e;print_close ""
+        | None -> ());
+        print_close ")"
+    | SEQ(e1,e2) -> pp_top e1;ps ";";pbk();pp_top e2
+    | XTRA x -> pxtra x
+
+  in
+  Format.set_max_boxes(32000);
+  Format.set_ellipsis_text("PPELLIPSIS");
+  pp_top t
+
+let filterNones e ls =
+  let rec walk ls =
+    match ls with
+      [] -> (false,[])
+    | branch::ls ->
+        let (succ,branches) = walk ls in 
+        (match branch with
+          (_,_,X_None) -> (true,branches)
+        | _ -> (succ,branch::branches)) in
+  match walk ls with
+    (true,[]) -> X_None
+  | (true,ls) -> CASEGEN(e,ls,Some(X_None))
+  | (_,ls) -> CASEGEN(e,ls,None)
+@

@@ -1,0 +1,77 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+% l2h macro exfile 1 <a href="#$1"><tt>#1</tt></a>
+
+\input{macros.tex}
+
+\title{Set-based read and write functions}
+
+<<readwrite.mli ((evaluating))>>=
+type index
+type 'a set
+<<commmon types>>
+<<common values>>
+
+<<readwrite.mli ((residualizing))>>=
+type set = MachineSyntax.exp
+<<common types>>
+<<common values>>
+
+<<common types>>=
+type index = Base.std_int
+type loc = Rtl.space * index * Rtl.width
+type locInfo = loc * loc
+
+<<common values>>=
+val read_write_sets : 'a Rtlutil.regfun -> 'a Rtlutil.regfun -> Rtl.rtl -> 'a -> 'a
+    
+@ \section{Implementation}
+
+<<readwrite.ml ((evaluating))>>=
+
+type set = 'a list
+<<common types>>
+
+let empty = []
+<<common code>>
+
+<<readwrite.ml ((residualizing))>>=
+
+type set = MachineSyntax.exp
+<<common types>>
+
+module Sy = Syntax
+
+let empty = []
+<<common code>>
+
+@ The common code
+
+I have to mention that here, in the residualizing interpretation, the
+equality on indexes is structural equality on  expressions: it may be a
+conservative approximation, but deffinitelly not
+meaning-preserving... Introducing the usual equality would mean
+something else...
+
+<<common code>>=
+let insert space index width list =
+  let rec walk ls =
+    match ls with
+      [] -> [(space,index,width)]
+    | (space',index',width')::ls' ->
+	if space = space' && index=index' && width=width'
+	then ls
+	else (space',index',width')::(walk ls')
+  in walk list
+
+let insert_left space index width (set1,set2) =
+  (insert space index width set1,set2)
+let insert_right space index width (set1,set2) =
+  (set1,insert space index width set2)
+
+let read_write_sets read write rtl z =
+  let rws = Rtlutil.read_write_lists insert_left insert_right in
+  let (readlist, writelist) = rws rtl (empty, empty) in
+  let read ls (s,i,w) = read s i w ls in
+  let write ls (s,i,w) = write s i w ls in
+  List.fold_left read (List.fold_left write z writelist) readlist

@@ -1,0 +1,281 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+% l2h macro exfile 1 <a href="#$1"><tt>#1</tt></a>
+
+\input{macros.tex}
+
+\section{Functions working on RTLs}
+
+This module defines functions that manipulate RTLs.
+
+\subsection{Interface}
+
+The following functions are defined:
+\begin{itemize}
+\item [[foldLocsUsed]] walks a function over all the locations used by
+  the right-hand side of an RTL. 
+
+\item [[foldTopLocsUsed]] walks a function over the top-level(!) locations
+  used by the right-hand side of an RTL.
+  
+\item [[foldLocsDefined]] walks a function over the locations
+  defined/altered by an RTL (left-hand sides).
+
+\item [[foldLocsAssg]] walks a function over the locations
+  defined by an RTL (left-hand sides without ``kill'' effects).
+
+\item [[foldAllLocsUsed]] walks a function over all the locations
+  in an RTL
+
+\end{itemize}
+with a [[W]] postfix, the function pairs the location with its indicated
+width (!).
+
+
+<<rtlFuns.mli>>=
+
+val width : Rtl.loc -> Rtl.width
+val widthPrivate : Rtl.Private.loc -> Rtl.width
+
+val foldLocsUsed : (Rtl.loc -> 'b -> 'b) -> Rtl.rtl -> 'b -> 'b
+val foldLocsUsedW : ((Rtl.loc * Rtl.width) -> 'b -> 'b) -> Rtl.rtl -> 'b -> 'b
+
+val foldTopLocsUsed : (Rtl.loc -> 'b -> 'b) -> Rtl.rtl -> 'b -> 'b
+val foldTopLocsUsedW : ((Rtl.loc * Rtl.width) -> 'b -> 'b) -> Rtl.rtl -> 'b -> 'b
+    
+val foldLocsDefined : (Rtl.loc -> 'b -> 'b) -> Rtl.rtl -> 'b -> 'b
+val foldLocsDefinedW : ((Rtl.loc * Rtl.width) -> 'b -> 'b) -> Rtl.rtl -> 'b -> 'b
+
+val foldLocsAssg : (Rtl.loc -> 'b -> 'b) -> Rtl.rtl -> 'b -> 'b
+val foldLocsAssgW : ((Rtl.loc * Rtl.width) -> 'b -> 'b) -> Rtl.rtl -> 'b -> 'b
+
+val foldAllLocsUsed : (Rtl.loc -> 'b -> 'b) -> Rtl.rtl -> 'b -> 'b
+val foldAllLocsUsedW : ((Rtl.loc * Rtl.width) -> 'b -> 'b) -> Rtl.rtl -> 'b -> 'b
+
+    
+val identity : 'a -> 'a
+
+@ \subsection{Implementation}
+
+<<rtlFuns.ml>>=
+
+let (=) x y = Base.eq x y
+module R = Rtl
+module RP = Rtl.Private
+
+exception IDontKnowYet
+    
+@ [[width]] returns the width of a location
+<<rtlFuns.ml>>=
+
+let widthPrivate = Rtlutil.locwidth'
+let width = Rtlutil.locwidth
+    
+@ To note the implementation of [[foldLocsUsed]]. When we meet a
+location, we apply the folded function to it and we also descend into
+the expression defining the location, if applicable.
+
+An alternative function is implemented which also passes the width of
+the location.
+    
+<<rtlFuns.ml>>=
+let rec foldLocation f location zero =
+  match location with
+    RP.Cell (space,_,_,exp,_) -> foldExp f exp zero
+  | _ -> zero
+and foldExp f exp zero =
+  match exp with
+    RP.Const _ -> zero |
+    RP.Fetch (location,_) -> foldLocation f location (f (Rtl.Revert.loc location) zero) |
+    RP.App(op,exlist) ->
+      List.fold_left (fun zero ex -> foldExp f ex zero) zero exlist
+
+let foldEff f eff zero =
+  match eff with
+    RP.Store(location,e,_) -> foldExp f e zero |
+    RP.Kill l -> zero
+
+let foldGuarded f (ex,eff) zero =
+  foldExp f ex (foldEff f eff zero)
+
+let foldLocsUsed f rtl zero =
+  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  List.fold_left (fun zero g -> foldGuarded f g zero) zero gl
+
+let rec foldLocationW f location zero =
+  match location with
+    RP.Cell (space,_,_,exp,_) -> foldExpW f exp zero
+  | _ -> zero
+and foldExpW f exp zero =
+  match exp with
+    RP.Const _ -> zero |
+    RP.Fetch (location,width) ->
+      foldLocationW f location
+	(f ((Rtl.Revert.loc location),width) zero) |
+    RP.App(op,exlist) ->
+      List.fold_left (fun zero ex -> foldExpW f ex zero) zero exlist
+        
+let foldEffW f eff zero =
+  match eff with
+    RP.Store(location,e,_) -> foldExpW f e zero |
+    RP.Kill l -> zero
+
+let foldGuardedW f (ex,eff) zero =
+  foldExpW f ex (foldEffW f eff zero)
+    
+let foldLocsUsedW f rtl zero =
+  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  List.fold_left (fun zero g -> foldGuardedW f g zero) zero gl
+
+@ [[foldTopLocsUsed]] applies a function [[f]] to the locations used by
+an RTL. The function [[f]] is not applied to the locations refered in
+the indexing expression of a ``top location''.
+
+<<rtlFuns.ml>>=
+let rec foldTopExp f exp zero =
+  match exp with
+    RP.Const _ -> zero |
+    RP.Fetch (location,_) -> f (Rtl.Revert.loc location) zero |
+    RP.App(op,exlist) ->
+      List.fold_left (fun zero ex -> foldTopExp f ex zero) zero exlist
+
+let foldTopEff f eff zero =
+  match eff with
+    RP.Store(location,e,_) -> foldTopExp f e zero |
+    RP.Kill l -> zero
+
+let foldTopGuarded f (ex,eff) zero =
+  foldTopExp f ex (foldTopEff f eff zero)
+
+let foldTopLocsUsed f rtl zero =
+  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  List.fold_left (fun zero g -> foldTopGuarded f g zero) zero gl
+
+let rec foldTopExpW f exp zero =
+  match exp with
+    RP.Const _ -> zero |
+    RP.Fetch (location,width) -> f ((Rtl.Revert.loc location),width) zero |
+    RP.App(op,exlist) ->
+      List.fold_left (fun zero ex -> foldTopExpW f ex zero) zero exlist
+        
+let foldTopEffW f eff zero =
+  match eff with
+    RP.Store(location,e,_) -> foldTopExpW f e zero |
+    RP.Kill l -> zero
+
+let foldTopGuardedW f (ex,eff) zero =
+  foldTopExpW f ex (foldTopEffW f eff zero)
+    
+let foldTopLocsUsedW f rtl zero =
+  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  List.fold_left (fun zero g -> foldTopGuardedW f g zero) zero gl
+
+@ Now, the implementation of [[foldLocsDefined]]. The locations
+considered to be defined includes the ones that are killed as well.
+
+<<rtlFuns.ml>>=
+
+let foldEffDef f eff zero =
+  match eff with
+    RP.Store(location,e,_) -> f (Rtl.Revert.loc location) zero
+  | RP.Kill location -> f (Rtl.Revert.loc location) zero
+
+let foldGuardedDef f (ex,eff) zero =
+  foldEffDef f eff zero
+
+let foldLocsDefined f rtl zero =
+  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  List.fold_left (fun zero g -> foldGuardedDef f g zero) zero gl
+
+let foldEffDefW f eff zero =
+  match eff with
+    RP.Store(location,e,width) -> f ((Rtl.Revert.loc location),width) zero
+  | RP.Kill location -> f ((Rtl.Revert.loc location), widthPrivate location) zero
+
+let foldGuardedDefW f (ex,eff) zero =
+  foldEffDefW f eff zero
+
+let foldLocsDefinedW f rtl zero =
+  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  List.fold_left (fun zero g -> foldGuardedDefW f g zero) zero gl
+
+@ [[foldLocsAssg]] applies a function to the locations assigned by an
+[[rtl]].
+<<rtlFuns.ml>>=
+let foldEffAssg f eff zero =
+  match eff with
+    RP.Store(location,e,_) -> f (Rtl.Revert.loc location) zero
+  | RP.Kill _ -> zero
+
+let foldGuardedAssg f (ex,eff) zero =
+  foldEffAssg f eff zero
+
+let foldLocsAssg f rtl zero =
+  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  List.fold_left (fun zero g -> foldGuardedAssg f g zero) zero gl
+
+let foldEffAssgW f eff zero =
+  match eff with
+    RP.Store(location,e,width) -> f ((Rtl.Revert.loc location),width) zero
+  | RP.Kill _ -> zero
+
+let foldGuardedAssgW f (ex,eff) zero =
+  foldEffAssgW f eff zero
+
+let foldLocsAssgW f rtl zero =
+  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  List.fold_left (fun zero g -> foldGuardedAssgW f g zero) zero gl
+
+@ All locations
+
+<<rtlFuns.ml>>=
+let rec foldAllLocation f location zero =
+  match location with
+    RP.Cell (space,_,_,exp,_) -> foldAllExp f exp zero
+  | _ -> zero
+and foldAllExp f exp zero =
+  match exp with
+    RP.Const _ -> zero |
+    RP.Fetch (location,_) -> foldAllLocation f location (f (Rtl.Revert.loc location) zero) |
+    RP.App(op,exlist) ->
+      List.fold_left (fun zero ex -> foldAllExp f ex zero) zero exlist
+
+let foldAllEff f eff zero =
+  match eff with
+    RP.Store(location,e,_) -> foldAllExp f e (f (Rtl.Revert.loc location) zero) |
+    RP.Kill l -> foldAllLocation f l (f (Rtl.Revert.loc l) zero)
+
+let foldAllGuarded f (ex,eff) zero =
+  foldAllExp f ex (foldAllEff f eff zero)
+
+let foldAllLocsUsed f rtl zero =
+  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  List.fold_left (fun zero g -> foldAllGuarded f g zero) zero gl
+
+let rec foldAllLocationW f location zero =
+  match location with
+    RP.Cell (space,_,_,exp,_) -> foldAllExpW f exp zero
+  | _ -> zero
+and foldAllExpW f exp zero =
+  match exp with
+    RP.Const _ -> zero
+  | RP.Fetch (location,width) ->
+      foldAllLocationW f location
+	(f ((Rtl.Revert.loc location),width) zero)
+  | RP.App(op,exlist) ->
+      List.fold_left (fun zero ex -> foldAllExpW f ex zero) zero exlist
+        
+let foldAllEffW f eff zero =
+  match eff with
+    RP.Store(location,e,_) -> foldAllExpW f e zero
+  | RP.Kill l -> zero
+
+let foldAllGuardedW f (ex,eff) zero =
+  foldAllExpW f ex (foldAllEffW f eff zero)
+    
+let foldAllLocsUsedW f rtl zero =
+  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  List.fold_left (fun zero g -> foldAllGuardedW f g zero) zero gl
+
+    
+let identity x = x

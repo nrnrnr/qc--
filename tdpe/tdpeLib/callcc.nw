@@ -1,0 +1,102 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>(<a href="#$1.dvi">.dvi</a>)
+% l2h macro exfile 1 <a href="#$1"><tt>#1</tt></a>
+% l2h macro image 1 <img alt="Dependency graph" src="#1.gif" ALIGN=right></img>
+
+\input{../macros.tex}
+
+The C file that does everything
+
+<<callcc.c>>=
+#include <alloc.h>
+#include <memory.h>
+#include <mlvalues.h>
+#include <stacks.h>
+
+value duplicate_stack(unit)
+     value unit;
+{
+  mlsize_t nentries, size, i, delta;
+  value block;
+  value * p, * q;
+
+  nentries = stack_high - extern_sp;
+  size = nentries + 1;
+  if (size < Max_young_wosize) {
+    block = alloc(size, 0);
+    bcopy(extern_sp, &Field(block, 0), nentries * sizeof(value));
+  } else {
+    block = alloc_shr(size, 0);
+    for (i = 0; i < nentries; i++)
+      initialize(&Field(block, i), extern_sp[i]);
+  }
+  Field(block, nentries) = Val_long(trapsp - extern_sp);
+  p = trapsp;
+  while (p < stack_high) {
+    q = Trap_link(p);
+    Field(block, p - extern_sp + 1) = Val_long(q - extern_sp);
+    p = q;
+  }
+  return block;
+}
+
+value reinstall_stack(block_res)
+     value block_res;
+{
+  value block = Field(block_res, 0);
+  value res = Field(block_res, 1);
+  mlsize_t nentries, size;
+  value * p;
+
+  size = Wosize_val(block);
+  nentries = size - 1;
+  Assert (nentries <= stack_high - stack_low);
+  extern_sp = stack_high - nentries;
+  bcopy(&Field(block, 0), extern_sp, nentries * sizeof(value));
+  trapsp = extern_sp + Long_val(Field(block, nentries));
+  for (p = trapsp; p < stack_high; p = Trap_link(p)) {
+    Trap_link(p) = extern_sp + Long_val((value) Trap_link(p));
+  }
+  return res;
+}
+
+@ The Ocaml libraries
+
+<<callcc.mli>>=
+type 'a cont
+
+val callcc: ('a cont -> 'a) -> 'a
+val throw: 'a cont -> 'a -> 'b
+@ The implementation
+<<callcc.ml>>=
+
+(*type 'a cont
+
+external duplicate_stack : unit -> 'a cont = "duplicate_stack"
+external reinstall_stack : 'a cont * 'a -> 'b = "reinstall_stack"
+
+let callcc next = next (duplicate_stack())
+
+let throw_aux cont_arg = reinstall_stack cont_arg
+
+let throw cont arg = throw_aux (cont, arg)*)
+
+type 'a cont
+
+external duplicate_stack : unit -> 'a cont = "duplicate_stack"
+external reinstall_stack : 'a cont * 'a -> 'b = "reinstall_stack"
+
+let callcc_aux next = next (duplicate_stack())
+
+let callcc next =
+  let res = callcc_aux next in res
+  (* Defeat tail-call optimization. We need to make sure that a return frame
+     is pushed on the stack, containing in particular the extra_args count
+     for the invocation of callcc (which may be applied to more than
+     one argument). *)
+
+let throw_aux cont_arg = reinstall_stack cont_arg
+
+let throw cont arg = throw_aux (cont, arg)
+
+
