@@ -1,0 +1,122 @@
+
+\input{macros.tex}
+
+% l2h substitution cfg CFG
+% l2h substitution dots ...
+% l2h substitution AST AST
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Memory Blocks}
+% ------------------------------------------------------------------ 
+
+{\PAL} allows to allocate continuous memory blocks inside a
+procedure's activation (called \texttt{stack data}).  The allocation
+is not specified as one big chunk but piecewise, where for each piece
+its size and alignment requirement are known.  This module provides an
+abstraction for the allocation of these piecewise allocated blocks of
+memory. 
+
+During the allocation process the continuous memory block is
+represented by an abstract type [[builder]].  A still can be enlarged
+by allocating more memory, or by strengthening alignment requirements. 
+When allocation is completed, the [[builder]] is \emph{frozen} and
+responds with a type [[t]] that represents the memory block's size,
+base-address, and the base-address alignment.
+
+<<shared types>>=
+type t = 
+    { address : Rtl.exp (* address of memory block *) (*XXX Rtl.loc? *)
+    ; align   : int     (* at run time, must have address mod align = 0 *)
+    ; size    : int
+    }
+
+<<area.mli>>=
+<<shared types>>
+type builder
+
+val mk          : address:Rtl.exp -> builder
+val align       : builder -> int -> builder
+val alloc       : builder -> int -> builder
+val location    : builder -> Rtl.exp         (* Rtl.loc ?? *)
+val freeze      : builder -> t
+@
+
+\begin{itemize}
+\item An initial (empty) block is created by prividing a
+      $\mathit{base}$ address to [[mk]].  The alignment of the new
+      block is 1\footnote{the unit for alignment is the target
+      specific \emph{memsize}, usually one byte}.  
+      
+\item At any given time
+      the [[location]] function returns $\mathit{base} +
+      \mathit{size}$, where \textit{size} is the size that could be
+      observed if the [[builder]] were frozen at that moment.
+
+\item A call to [[allocate]] increases the size of the
+      memory block [[builder]] by the supplied number of \emph{memsize} objects. 
+
+\item A call to [[allign n t]] also increases the size of the block
+      such that after the call $\mathit{base}+\mathit{size}$ is
+      $t$-aligned.
+
+\item After allocation is complete a block can be frozen to obtain its
+      definitve size and alignment.  It is a checked run-time error to
+      allocate or align a frozen [[builder]], or to ask for its
+      current [[location]].
+\end{itemize}
+
+
+It's possible that several areas, with disjoint lifetimes, can be
+overlapped in a single location in memory.  The result is a new area
+[[t]] with more constraints in general.  The [[placement]] value
+determines whether the overlapping areas share a common low or high
+end. 
+
+<<shared types>>=
+type placement = EqualHighEnds | EqualLowEnds
+
+<<area.mli>>=
+val overlap : placement -> t list -> t  
+  (* Overlap several areas into a larger area, forcing constraints on
+     compile-time constants.  May make calls to Const.make_equal, but
+     otherwise has no side effects.  It is a checked run-time error to
+     overlap areas at the high end unless the size of every area is a
+     multiple of its alignment.  N.B. may raise Const.Cannot_solve. *)
+@
+
+% ------------------------------------------------------------------ 
+\section{Implementation}
+% ------------------------------------------------------------------ 
+
+A real implementation is postponed.
+
+<<area.ml>>=
+<<shared types>>
+type builder = Rtl.exp
+let mk ~address  = address
+let align    b n = b
+let alloc    b n = b
+let location b   = b 
+let freeze   b   = { address = b
+                   ; align   = 1
+                   ; size    = 0
+                   }
+let overlap placement = function
+    | []     -> assert false
+    | a::aa  -> a
+@
+                   
+
+
