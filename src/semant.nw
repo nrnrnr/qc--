@@ -59,6 +59,30 @@ module IDSet    = Set.Make(ID)
 module Symbol   = Env.Make(ID)
 @
 
+In \C~symbols are never re-declared.  Thus a symbol should never be
+entered into the symbol table when the same symbol is already part of
+it.  The [[enter]] function checks for this.  However, during the
+evaluation of constants an existing entry for a constant must be
+replaced with the one that holds the actual type and value of a
+constant.  The [[replace]] function allows to use the original
+semantics of [[Symbol.enter]]. 
+
+<<>>=
+let enter key v env =
+    if Symbol.domain key env then
+        error ("identifier already declared: " ^ key)
+    else
+        Symbol.enter key v env        
+
+let enter_ok key v env = enter key (Ok v) env
+
+let replace key v env =
+    Symbol.enter key v env
+
+let lookup = Symbol.lookup
+@
+
+
 The type of labels in code and data depends on the natural word size
 of an architecture. Currently there is no way to specify them so we
 make an assumpion about it. This has to be fixed later.
@@ -81,65 +105,49 @@ symbol table.  We provide [[ppEnv]] to pretty-print a symbol table to
 a [[Pp.doc]] value.  The document simply associates each entry in the
 table with its [[kind]] and [[Types.ty]]. 
 
-<<print>>=
+<<print module>>=
 module Print = struct 
-
-    let (~~) x = x 
-
-    let ppValue = function
-        | CharConst(c)  -> text "char("  ^^ text (Char.escaped c)  ^^ text ")"
-        | IntConst(i)   -> text "int("   ^^ text (string_of_int i) ^^ text ")"
-        | FloatConst(f) -> text "float(" ^^ text (string_of_float f) ^^ text ")"
-        | BoolConst(b)  -> text "bool("  ^^ text (if b then "t" else "f") ^^ text ")"
-        | ExprConst(e)  -> text "<expr>"
-
-    let ppKind = function
-        | Register    -> text "register"
-        | Memory      -> text "memory"
-        | Constant(v) -> text "constant:" ^/ ppValue v
-
-
-    let ppEntry (key,(ty,kind)) =
-        agrp begin
-        ~~ text key ^^ text ":"
-        ^^ nest 4 begin
-           ~~ break
-           ^^ Types.ppTy ty
-           ^/ text "/"
-           ^/ ppKind kind
-           end
-        end
-     
-    let ppEnv env =
-        let entries = Symbol.dump env in
-        vgrp begin
-        ~~ list break ppEntry entries
-        ^^ break
-        end      
+    <<print>>
 end
+
+<<print>>=
+let (~~) x = x 
+
+let ppValue = function
+    | CharConst(c)  -> text "char("  ^^ text (Char.escaped c)  ^^ text ")"
+    | IntConst(i)   -> text "int("   ^^ text (string_of_int i) ^^ text ")"
+    | FloatConst(f) -> text "float(" ^^ text (string_of_float f) ^^ text ")"
+    | BoolConst(b)  -> text "bool("  ^^ text (if b then "t" else "f") ^^ text ")"
+    | ExprConst(e)  -> text "<expr>"
+
+let ppKind = function
+    | Register    -> text "register"
+    | Memory      -> text "memory"
+    | Constant(v) -> text "constant:" ^/ ppValue v
+
+
+let ppEntry (key,v) = 
+    agrp begin
+    ~~ text key ^^ text ":"
+    ^^ ( match v with
+       | Ok (ty,kind) -> 
+            nest 4 begin
+            ~~ break
+            ^^ Types.ppTy ty
+            ^/ text "/"
+            ^/ ppKind kind
+            end
+       | Error -> text "<error>"
+       )
+    end
+ 
+let ppEnv env =
+    let entries = Symbol.dump env in
+    vgrp begin
+    ~~ list break ppEntry entries
+    ^^ break
+    end      
 @
-
-In \C~symbols are never re-declared.  Thus a symbol should never be
-entered into the symbol table when the same symbol is already part of
-it.  The [[enter]] function checks for this.  However, during the
-evaluation of constants an existing entry for a constant must be
-replaced with the one that holds the actual type and value of a
-constant.  The [[replace]] function allows to use the original
-semantics of [[Symbol.enter]]. 
-
-<<>>=
-let enter key v env =
-    if Symbol.domain key env then
-        error ("identifier already declared: " ^ key)
-    else
-        Symbol.enter key v env        
-
-let replace key v env =
-    Symbol.enter key v env
-
-let lookup = Symbol.lookup
-@
-
 
 
 % ------------------------------------------------------------------  
@@ -189,19 +197,19 @@ let rec ty = function
 
 let rec datum env = function
     | DatumAt(x,r)        -> catch' env (errorRegPrt r) (datum env) x
-    | Label(n)            -> enter n (pointer,Memory) env
+    | Label(n)            -> enter_ok n (pointer,Memory) env
     | _                   -> env
     
 let formal env ( h, v, t, n) = env
 let formals env xs = env
 
-let register env ( v , t, n, reg) = enter n (ty t, Register) env
+let register env ( v , t, n, reg) = enter_ok n (ty t, Register) env
 
 let rec stmt env = function
     | StmtAt(x,r)             -> catch' env (errorRegPrt r) (stmt env) x
     | IfStmt ( e, ss1, ss2)   -> let env' = stmts env ss1 in
                                     stmts env' ss2 
-    | LabelStmt(n)            -> enter n (pointer,Memory) env
+    | LabelStmt(n)            -> enter_ok n (pointer,Memory) env
     | SpanStmt(e1,e2,ss)      -> stmts env ss
     | _                       -> env
     
@@ -214,7 +222,7 @@ are replaced by the correct types and values.
 
 <<>>=
 let constant env (name,expr) = 
-    enter name (dummy,Constant(ExprConst(expr))) env
+    enter_ok name (dummy,Constant(ExprConst(expr))) env
     
 let rec section env = function
     | SectionAt(x,r)         -> catch' env (errorRegPrt r) (section env) x
@@ -222,13 +230,13 @@ let rec section env = function
     | Datum( d)              -> datum env d
     | SExport (t, ns)        -> env
     | Procedure(cc,n,fs, ds, ss) -> 
-        let env' = enter n (pointer,Memory) env in 
+        let env' = enter_ok n (pointer,Memory) env in 
             stmts env' ss 
 
 let rec topdecl env = function
     | TopDeclAt(x,r)  -> catch' env (errorRegPrt r) (topdecl env) x
     | Import( t, ns)  -> let entry = (ty t, Memory) in
-                         foldl (fun env n -> enter n entry env) env ns 
+                         foldl (fun env n -> enter_ok n entry env) env ns 
     | Export( t, ns)  -> env
     | Const ( cs)     -> foldl constant env cs
     | Section( n, ss) -> foldl section env ss
@@ -347,11 +355,16 @@ replaced by the correct type and value.
 let eval env =
     let rec accConst id entry l = 
         ( match entry with
-        | _, Constant(ExprConst(_))   -> id::l
-        | _                           -> l
+        | Ok (_, Constant(_)) -> id::l
+        | _                   -> l
         ) in
     let keys = Symbol.fold accConst env [] in
-    let eval env id = trd3 (evalConst IDSet.empty env id) in
+    let eval env id = 
+        ( match evalConstID IDSet.empty env id with
+        | Ok(_,_,env') -> env'
+        | Error        -> replace id Error env
+        ) 
+     in
         foldl eval env keys    
 @ 
 
@@ -377,7 +390,7 @@ let foldl           = List.fold_left
 let rec evalFetch set env = function
     | LValueAt(v,_) -> evalFetch set env v
     | Mem (_,_,_)   -> error "memory access in const declaration"
-    | Var(n)        -> evalConst set env n
+    | Var(id)       -> evalConstID set env id
 @
 
 Only the application of primitive operators requires serious type
@@ -390,11 +403,11 @@ values are applied to the implementation [[f]] of the primitive and
 the result is returned together with its type [[rt]].
 
 <<>>=
-and evalPrimOp set env op args = 
-    let env', xs = evalExprs set env args  in
+
+and evalPrimOp' set op (env',args) =
     let f, t     = lookup op primOps       in 
-    let xt       = List.map fst xs         in
-    let xv       = List.map snd xs         in
+    let xt       = List.map fst args       in
+    let xv       = List.map snd args       in
     let unused   = bool                    in
     let sigma    = ( try Types.unify t (proc xt unused) Types.empty with 
                    | Types.UnifyExn -> error "type mismatch"
@@ -405,39 +418,48 @@ and evalPrimOp set env op args =
                    ) in
         rt, f xv, env'
 
+and evalPrimOp set env op args = 
+    emap (evalPrimOp' set op) (evalExprs set env args)
+
 and evalExprs set env es = 
     let rec loop set env acc = function
-        | []    -> env, List.rev acc
-        | e::es -> let t,x,env' = evalExpr set env e in
-                   loop set env' ((t,x)::acc) es
+        | []    -> Ok(env, List.rev acc)
+        | e::es -> ( match evalExpr set env e with
+                   | Ok (t, x, env') -> loop set env' ((t,x)::acc) es
+                   | Error           -> Error
+                   )
     in
         loop set env [] es
 
 and evalExpr set env = function 
-    | ExprAt(e,r)         -> evalExpr set env e 
-    | Int(i, None)        -> word     , IntConst(atoi i), env 
-    | Int(i, Some size)   -> bits size, IntConst(atoi i), env
-    | Float(f, None)      -> word     , FloatConst(atof f), env
-    | Float(f, Some size) -> bits size, FloatConst(atof f), env
-    | Char(c, None)       -> char     , IntConst(atoc c), env
-    | Char(c, Some size)  -> bits size, IntConst(atoc c), env
+    | ExprAt(e,r)         -> catch (errorRegPrt r) (evalExpr set env) e
+    | Int(i, None)        -> Ok(word     , IntConst(atoi i), env) 
+    | Int(i, Some size)   -> Ok(bits size, IntConst(atoi i), env)
+    | Float(f, None)      -> Ok(word     , FloatConst(atof f), env)
+    | Float(f, Some size) -> Ok(bits size, FloatConst(atof f), env)
+    | Char(c, None)       -> Ok(char     , IntConst(atoc c), env)
+    | Char(c, Some size)  -> Ok(bits size, IntConst(atoc c), env)
     | Fetch(v)            -> evalFetch set env v
     | BinOp(l,op,r)       -> evalPrimOp set env op [l;r]
     | PrimOp(op,es)       -> evalPrimOp set env op (List.map snd es)
     | UnOp(op,e)          -> evalPrimOp set env op [e]
          
-
-and evalConst set env id = 
+and evalConst set env id ty = function
+    | ExprConst(e)  -> 
+        ( match evalExpr (IDSet.add id set) env e with
+        | Error          -> Error
+        | Ok(t, x, env') -> Ok (t , x, replace id (Ok(t,Constant(x))) env)
+        )
+    | x             -> Ok (ty, x , env)
+        
+and evalConstID set env id = 
     if IDSet.mem id set then 
-        error "circular definition" 
+        error ("constant defintion "^id^" is circular" )
     else match lookup id env with
-        | (_,(Constant(ExprConst(e)) as c)) ->
-            let (t,x,env') = evalExpr (IDSet.add id set) env e in 
-                (t,x, replace id (t,Constant(x)) env')
-    
-        | (t, Constant(x))                  -> (t,x,env)
-        | x -> error (Printf.sprintf "reference to non-constant %s" id) 
-
+        | Error              -> Error
+        | Ok(t, Constant(x)) -> evalConst set env id t x
+        | _                  -> error ("not a constant: "^id)
+        
 @
 
 % ------------------------------------------------------------------  
@@ -498,8 +520,8 @@ open Pp
 open Error
 
 <<symtab>>
-<<print>>
 
+<<print module>>
 <<phase1 module>>
 <<phase2 module>>
 
