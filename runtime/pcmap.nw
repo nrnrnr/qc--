@@ -61,25 +61,25 @@ typedef struct {
 
 typedef struct cmm_pc_map_entry pc_map_entry;
 struct cmm_pc_map_entry {
-  location   frame_size;       // always an offset 
-  location   overflow_size;    // always an offset 
-  location   return_addressp;  // always an offset
+  location   frame_size;       /* always an offset */
+  location   overflow_size;    /* always an offset */
+  location   return_addressp;  /* always an offset */
   struct sd *stackdata_table;
   Cmm_Word   num_registers;
   Cmm_Word   num_locals;
   Cmm_Word   num_spans;
   Cmm_Word   cont_block_size;
-  location   data[1]; // registers, locals, continuations, spans.
+  location   data[1]; /* registers, locals, continuations, spans */
 };
 
 struct sd {
   unsigned num_entries;
-  location entries[1];  // variable length
+  location entries[1];  /* variable length */
 };
 
 struct conts {
   unsigned num_entries;
-  int entries[1]; // variable length (offset of contblock)
+  int entries[1]; /* variable length (offset of contblock) */
 };
 
 struct contblock {
@@ -89,7 +89,7 @@ struct contblock {
   struct contarg {
     Cmm_Word localnum;
     Cmm_Word ctype;
-  } vars[1]; // variable length
+  } vars[1]; /* variable length */
 };
 
 #define registers(e)      ((e)->data)
@@ -101,7 +101,7 @@ struct contblock {
                                                  + (e)->cont_block_size)
 
 pc_map_entry* Cmm_lookup_entry(const Cmm_Codeptr caller);
-void Cmm_show_map(); // for debugging 
+void Cmm_show_map(); /* for debugging */
 @
 <<exported type, procedure, and macro declarations>>=
 enum ctypes { CHAR = 0, DOUBLE = 1, FLOAT = 2, INT = 3, LONGDOUBLE = 4, LONGINT = 5
@@ -114,11 +114,12 @@ enum ctypes { CHAR = 0, DOUBLE = 1, FLOAT = 2, INT = 3, LONGDOUBLE = 4, LONGINT 
 The runtime system expects the symbols [[Cmm_pc_map]] and
 [[Cmm_pc_map_limit]] to be emitted by the linker.
 <<pcmap.c>>=
-#include "qc--runtime.h"
-#include "pcmap.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <string.h>
+#include "qc--runtime.h"
+#include "pcmap.h"
 
 extern pc_map_index Cmm_pc_map[];
 extern pc_map_index Cmm_pc_map_limit[];
@@ -135,10 +136,8 @@ followed immediately by a continuation, for example.
 static int is_sorted(void) {
   pc_map_index *p;
   for (p = Cmm_pc_map+1; p < Cmm_pc_map_limit; p++)
-    if (p[-1].ra > p[0].ra) {  
-      fprintf(stderr, "C-- Surprise! PCMAP array is unsorted!\n");
-      for (p = Cmm_pc_map; p < Cmm_pc_map_limit; p++)
-        fprintf(stderr, "  ra = %8p\n", p->ra);
+    if ((unsigned)p[-1].ra > (unsigned)p[0].ra) {  
+      <<conditionally spray information about the [[pc_map]] array>>
       return 0;
     }
   return 1;
@@ -151,7 +150,7 @@ static int compare(const void *x, const void *y) {
 
 static pc_map_entry *binlookup(const Cmm_Codeptr caller) {
   pc_map_index *p;
-  p = bsearch(caller, Cmm_pc_map, pc_map_size, sizeof(Cmm_pc_map[0]), compare);
+  p = bsearch((void*)caller, Cmm_pc_map, pc_map_size, sizeof(Cmm_pc_map[0]), compare);
   if (p)
     return p->entry;
   else
@@ -178,6 +177,19 @@ Cmm_lookup_entry(const Cmm_Codeptr caller)
   return lookup(caller);
 }
 @ 
+<<conditionally spray information about the [[pc_map]] array>>=
+{ char *debug = getenv("QCDEBUG");
+  if (debug && strstr(debug, "pcmap")) {
+    fprintf(stderr, "C-- Surprise! PCMAP array is unsorted!\n");
+    for (p = Cmm_pc_map; p < Cmm_pc_map_limit; p++) {
+      fprintf(stderr, "  ra = %8p", (void*)p->ra);
+      if (p > Cmm_pc_map && (unsigned)p[-1].ra > (unsigned)p[0].ra)
+        fprintf(stderr, " *");
+      fprintf(stderr, "\n");
+    }
+  }
+}
+@ 
 The compiler encodes the type in the top two bits. Registers are given
 the encoding [[01]], dead variables are given [[00]], and offsets are
 prefixed with 1. See [[emit_data]] in [[src/runtimedata.nw]] for more
@@ -197,11 +209,11 @@ loctype Cmm_loctype(location l) {
 }
 
 unsigned Cmm_as_register(location l) {
-  assert(Cmm_loctype(l) == REGISTER);
   int local = l.l;
   int mask   = GOODBITS / 2;
   int slice  = (local & ((1 @<< GOODBITS) - 1)) >> mask;
   int offset =  local & ((1 @<< mask    ) - 1);
+  assert(Cmm_loctype(l) == REGISTER);
 
   if (slice) {
     fprintf(stderr, "register slices not supported.\n");
@@ -248,7 +260,7 @@ void Cmm_show_map(void) {
            "  frame_size = %d (coded %X), overflow = %d (coded %X)\n"
            "  num_regs = %d, num_locals = %d, num_spans = %d,"
            " size of cont block = %d\n",
-           idx - Cmm_pc_map, idx->entry, idx->ra, 
+           idx - Cmm_pc_map, (void*)idx->entry, (void*)idx->ra, 
            Cmm_as_offset(idx->entry->frame_size),
            idx->entry->frame_size.l,
            Cmm_as_offset(idx->entry->overflow_size),
@@ -356,7 +368,7 @@ static void show_cont(struct conts *conts, int contnum) {
     printf("%s%s local%d", i > 0 ? ", " : "", typestring(block->vars[i].ctype),
            block->vars[i].localnum);
   }
-  printf(") = <pc=%p, sp=", block->pc);
+  printf(") = <pc=%p, sp=", (void*)block->pc);
   printloc(block->sp);
   printf(">\n");
 }
