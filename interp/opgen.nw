@@ -1,0 +1,148 @@
+% -*- mode: Noweb; noweb-code-mode: icon-mode -*-
+
+% inc: \usepackage{grammar} 
+
+
+\section{An operator generator for a {\PAL} interpreter}
+
+The idea is to take a little language for generating operator
+implementations.
+A specification should fit on one line:
+\begin{production}{opspec}
+\sequence{\nt{name} \lit: \nt{type}} \nt{operator-name} \lit{--} \nt{exp} \lit: \nt{type}
+\end{production}
+\productionglue
+\begin{production}{type}
+\alternate*{\lit i\nt{width} | \lit u\nt{width} |\lit f\nt{width}}
+\end{production}
+The specification shows how many operands the operator expects and
+their types.
+The \nt{exp} computes the result.
+The \nt{operator-name} should be a fully specialized name; the tool
+does not know enough about the types of operators to specialize them
+automatically.
+
+<<opgen.icn>>=
+global operators, arrayname
+procedure main(args)
+  operators := []
+  arrayname := "operators"
+  arrayname := (args[1] ? tab(many(&letters ++ &digits ++ '_'))) || "_operators"
+  if *args > 0 then
+    every gencode(open(!args))
+  else
+    gencode(&input)
+  finish()
+end
+@ 
+<<opgen.icn>>=
+procedure gencode(f)
+  local operands, operator, exp, restype
+  while line := read(f) do 
+    line ? {
+      if (optwhite(), pos(0)) then
+        &null
+      else {
+        operands := []
+        while put(operands, anoperand())
+        operator := aname() | expected("name")
+        ="--" | expected("\"--\"")
+        (exp := tab(upto(':')), =":", optwhite(), restype := atype(),
+         optwhite(), pos(0)) | expected("exp : type")
+        emit(operands, operator, exp, restype)
+      }
+    }
+  return
+end
+@ 
+<<opgen.icn>>=
+record operand(name, ctype, btype)
+record rator(name, count)
+
+procedure emit(operands, operator, exp, restype)
+  put(operators, rator(operator, *operands))
+  write("static sptr op_", operator, " (sptr values) {")
+  every o := !operands do
+    write("  ", o.ctype, " ", o.name, ";")
+  if *operands > 0 then 
+    write("  UNDERFLOW_CHECK(values, ", *operands, ");")
+  else
+    write("  OVERFLOW_CHECK(values, 1);")
+  every i := 1 to *operands do
+    write("  ", operands[i].name, " = ", stackview(fmt2(*operands-i-1), operands[i]),
+          ";")
+  write("  ", stackview(1-*operands, restype), " = (", exp, ");")
+  write("  return values", adjustby(1-*operands), ";")
+  write("}")
+  write()
+end
+
+procedure adjustby(k)
+  return if k = 0 then ""
+         else if k > 0 then "+" || k
+         else k
+end
+        
+procedure stackview(i, res)
+  return "VIEW(STACK_ELT(values, " ||  i || ")." || res.btype || ", " || res.ctype || ")"
+end
+@ 
+<<opgen.icn>>=
+procedure finish()
+  write()
+  write("extern struct operator ", arrayname, "[] = {")
+  every o := !operators do
+    write("  { \"", o.name, "\", op_", o.name, ", ", o.count, " },")
+  write("  { NULL, (operator *) 0, 0 }")
+  write("};")
+end
+<<opgen.icn>>=
+procedure actype(t, w)
+  return case t of {
+    "i" : "int"  || w || "_t"
+    "u" : "uint" || w || "_t"
+    "f" : "float" || w
+    default : stop ("this can't happen")
+  }
+end
+
+procedure abtype(t, w)
+  return "bits" || w
+end
+<<opgen.icn>>=
+procedure anoperand()
+  (n := aname(), =":", t := atype()) | fail
+  t.name := n
+  return t
+end
+
+procedure atype()
+  suspend (optwhite(), any('ifu'), t := move(1), w := tab(many(&digits)),
+   (white() | pos(0)) \ 1, operand(&null, actype(t, w), abtype(c, w))) |
+  (optwhite(), ="bool", (white() | pos(0)) \ 1,
+   operand(&null, "bool_t", "bool"))
+end
+
+procedure aname()
+  suspend (optwhite(), any(&letters), n := tab(many(&letters ++ &digits ++ '_')),
+           optwhite(), n)
+end
+
+procedure white()
+  suspend tab(many(' \t'))
+end
+
+procedure optwhite()
+  suspend white() | ""
+end
+@ 
+<<opgen.icn>>=
+procedure expected(token)
+  stop("Fatal error: expected ", token, " at\n  ",
+       &subject[1:&pos], "<>", &subject[&pos:0])
+end
+
+procedure fmt2(s)
+  return if *string(s) < 2 then right(s, 2) else s
+end
+

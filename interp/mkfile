@@ -7,7 +7,7 @@ all:V: doc coders
 
 doc:V: design.ps state.ps
 
-coders:V: encode.h encode.c decode.c
+coders:V: encode.h encode.c decode-dec.c
 
 design.tex: design.inc
 	echo "\input{design.inc}" > $target
@@ -48,18 +48,31 @@ encode.o: encode.c encode.h
 mclib.o: 
         gcc -g -c -I/home/lair/olinsky/include/ -o mclib.o mclib.c
 
-%.c:D: %.m bytecode.sled decode.fetch
+%-dec.c:D: %.m bytecode.sled decode.fetch
 	tools -lc-cons-names -decoder $target -matcher $stem.m \
 		bytecode.sled decode.fetch
+
+opgen:	opgen.icn
+	icont -o $target $prereq
+
+%.icn:D: %.nw
+	$NOTANGLE -L'#line %-1L "%F"%N' -R$target $prereq > $target
+
+optest:V: opgen
+	echo "v1:f32 v2:f32 feq32 -- v1 == v2 : bool" | ./opgen
+
+%-ops.c:D: %.ops opgen
+	./opgen $stem.ops > $target
 
 intervals.o: intervals.c intervals.h
         gcc -g -c -o intervals.o intervals.c
 
-decode.i: decode.c interp.h
-        rm -f decode.i ; gcc -I/home/lair/olinsky/include/ -E -P decode.c > decode.i
+decode-dec.i:D: decode-dec.c interp.h
+        rm -f $target ; gcc -I/home/lair/olinsky/include/ -E -P decode-dec.c > $target
 
-interp.o: decode.i intervals.h encode.h
-        gcc -g -c -o interp.o decode.i
+interp.o: decode-dec.i intervals.h encode.h
+        gcc -g -c -o interp.o decode-dec.i
 
 interp: interp.o intervals.o encode.o mclib.o
         gcc -lm -L/home/lair/olinsky/lib/ -o interp interp.o intervals.o encode.o mclib.o /home/lair/olinsky/lib/liblua.a /home/lair/olinsky/lib/liblualib.a /home/lair/olinsky/lib/libtolua.a
+
