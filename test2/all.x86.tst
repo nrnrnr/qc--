@@ -20,8 +20,10 @@ Test.files = { "add.c--"
              , norun("exp-002.c--")
              , norun("exp-003.c--")
              , "fadd.c--"
+	     , { source="fargres.c--", other='src/double.c' }
              , norun("float-000.c--")
              , norun("float-001.c--")
+	     , 'f2.c--'
              , "hello.c--"
 	     , norun("hex.c--")
 	     , { source='ladd.c--', other='src/ops64.c' }

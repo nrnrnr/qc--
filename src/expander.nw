@@ -1188,6 +1188,10 @@ and assign_room room left right w =
 RP.App (("lobits", [w; n]), [rhs]) ->
   let r, is = to_temp room icontext rhs in
   is @@ is' @@ to_segment (Post.lostore a r n (upassn assn))
+| RP.Const (RP.Bits b) when w < Post.itempwidth ->
+  let rhs = RP.Const (RP.Bits (Bits.Ops.zx Post.itempwidth b)) in
+  let r, is = to_temp room icontext rhs in
+  is @@ is' @@ to_segment (Post.lostore a r w (upassn assn))
 <<\emph{pattern [[->]] action} for converting store-pop>>=
 RP.App ((("sx" | "zx"), [wsrc; wdst]) as op, [rhs]) ->
   (* what goes wrong if wsrc is not the width of the stack? *)

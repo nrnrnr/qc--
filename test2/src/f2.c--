@@ -1,0 +1,30 @@
+target
+        byteorder little
+        memsize 8
+        wordsize 32
+        pointersize 32
+        float "ieee754";
+
+        bits2 System.rounding_mode = "IEEE 754 rounding mode";
+
+export main;
+import printf;
+
+foreign "C" main(bits32 argc, bits32 argv, bits32 envp) {
+  bits8 x;
+  bits32 fl;
+
+  x = %zx8(%bit(%disjoin(%bool(%lobits1(1::bits8)), %bool(%lobits1(0::bits8)))));
+
+  fl = %f2i32(0xc0600000::bits32, System.rounding_mode);
+
+  foreign "C" printf("address" fmt, %zx32(x), fl);
+
+ foreign "C" return(0);
+}
+
+section "data" {
+  fmt: bits8[] "Disjunction is %d and conversion is %d\n\0";
+}
+
+

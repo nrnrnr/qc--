@@ -1,0 +1,28 @@
+target
+        byteorder little
+        memsize 8
+        wordsize 32
+        pointersize 32
+        float "ieee754";
+
+        bits2 System.rounding_mode = "IEEE 754 rounding mode";
+
+import doubleme, printf;
+export main;
+
+foreign "C" main(bits32 argc, bits32 argv, bits32 envp) {
+ bits32 a;
+ bits32 b;
+
+ a = 0x40a00000::bits32;
+ "float" b = foreign "C" doubleme("float" a); // OK to use 32 bits; have prototype
+
+ foreign "C" printf("address" str, "float" %f2f64(b, System.rounding_mode));
+     // not OK to use 32 bits, no prototype for float argument
+ foreign "C" return(0);
+}
+
+section "data" {
+  str: bits8[] "The value returned was %f (should be 10.0)\n\0";
+}
+

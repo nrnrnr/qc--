@@ -160,8 +160,8 @@ let app o w args = match o with
     |  "NaN" 		-> default o w args
     |  "add" 		-> add w args
     |  "and" 		-> binop o w BO.and' args
-    |  "bit" 		-> default o w args
-    |  "bool" 		-> default o w args
+    |  "bit" 		-> bit  w args
+    |  "bool" 		-> bool w args
     |  "borrow" 	-> default o w args
     |  "carry" 		-> default o w args
     |  "com" 		-> unop o w BO.com args
@@ -340,7 +340,7 @@ let round_down    w args = RP.Const(RP.Bits(Bits.U.of_int 3 2))
 let round_up      w args = RP.Const(RP.Bits(Bits.U.of_int 2 2))
 let round_nearest w args = RP.Const(RP.Bits(Bits.U.of_int 1 2))
 let round_zero    w args = RP.Const(RP.Bits(Bits.U.of_int 0 2))
-
+<<RTL operator implementations>>=
 let rec add ws args = 
     let w = match ws with [w] -> w | _ -> Impossible.impossible "ill-typed add" in
     match args with
@@ -352,10 +352,27 @@ let rec add ws args =
     | [x; RP.Const (RP.Bits y)] when Bits.Ops.eq (Bits.U.of_int 0 w) y -> x
     | args  ->  default "add" ws args
 
+let sub ws args =
+  let rec remove_one y xs = match xs with
+  | [] -> Impossible.impossible "did not find removable expression"
+  | x :: xs when y = x -> xs
+  | x :: xs -> x :: remove_one y xs in
+  let w = match ws with [w] -> w | _ -> Impossible.impossible "ill-typed sub" in
+  match args with
+  | [RP.Const(RP.Bits x); RP.Const(RP.Bits y)] -> const (Bits.Ops.sub x y)
+  | [RP.App(("add",ws'),args); e] when List.mem e args ->
+    (match remove_one e args with
+    | _::_::_ as rst -> add ws' rst
+    | [a]            -> a
+    | []             -> RP.Const(RP.Bits(Bits.zero w))
+    )
+  | [x; y] when x = y -> RP.Const(RP.Bits(Bits.zero w))
+  | args      -> default "sub" ws args
+<<RTL operator implementations>>=
 let binop name w op = function
     | [RP.Const(RP.Bits x); RP.Const(RP.Bits y)] -> const (op x y)
     | args       -> default name w args
-
+<<RTL operator implementations>>=
 let disjoin w = function
     | [RP.Const(RP.Bool true); _] -> RP.Const(RP.Bool true)
     | [_; RP.Const(RP.Bool true)] -> RP.Const(RP.Bool true)
@@ -369,33 +386,20 @@ let conjoin w = function
     | [RP.Const(RP.Bool true); p] -> p
     | [p; RP.Const(RP.Bool true)] -> p
     | args       -> default "conjoin" w args
-
+<<RTL operator implementations>>=
 let not' w = function
     | [RP.Const(RP.Bool b)] -> RP.Const(RP.Bool (not b))
     | args       -> default "not" w args
-
+<<RTL operator implementations>>=
 let cmp_bits name w op = function
     | [RP.Const(RP.Bits x); RP.Const(RP.Bits y)] -> to_bool (op x y)
     | args       -> default name w args
-
+<<RTL operator implementations>>=
 let unop name w op = function
     | [RP.Const(RP.Bits x)] -> const (op x)
     | args       -> default name w args
-
-let sub ws args =
-    let w = match ws with [w] -> w | _ -> Impossible.impossible "ill-typed add" in
-    match args with
-    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
-                -> const (Bits.Ops.sub x y)
-    | [RP.App(("add",ws'),args); e] when List.mem e args ->
-      (match List.filter ((<>) e) args  with
-      | _::_::_ as rst -> RP.App(("add",ws'),rst)
-      | [a]            -> a
-      | []             -> RP.Const(RP.Bits(Bits.zero w))
-      )
-    | [x; y] when x = y -> D.exp (R.bits (Bits.U.of_int 0 w) w)
-    | args      -> default "sub" ws args
-    
+<<RTL operator implementations>>=
+<<RTL operator implementations>>=    
 let or' ws args = 
     let w = match ws with [w] -> w | _ -> Impossible.impossible "ill-typed or" in
     match args with
@@ -413,20 +417,32 @@ let and' ws args =
     | [x; RP.Const (RP.Bits y) as zero] when Bits.Ops.eq (Bits.U.of_int 0 w) y -> zero
     | [RP.Const (RP.Bits x) as zero; y] when Bits.Ops.eq (Bits.U.of_int 0 w) x -> zero
     | args  ->  default "and" ws args
+<<RTL operator implementations>>=
+let rec zx w args   = match w, args with
+| [n;w],[RP.Const (RP.Bits x)] -> const (Bits.Ops.zx w x)
+| [n;w],[RP.App (("zx", [n';w']), [x])] -> assert (w' = n); zx [n';w] [x]
+| [n;w], [x] when n = w -> x
+| _         -> default "zx" w args
 
-
-
-let sx w args   = match (w,args) with
+let rec sx w args   = match (w,args) with
 | [i;j],[RP.Const(RP.Bits x)] -> const (Bits.Ops.sx j x)
+| [n;w],[RP.App (("sx", [n';w']), [x])] -> assert (w' = n); sx [n';w] [x]
+| [n;w],[RP.App (("zx", [n';w']), [x])] when w' > n' -> assert (w' = n); zx [n';w] [x]
 | [i;j], [x] when i = j -> x
 | _         -> default "sx" w args
 
-let zx w args   = match (w,args) with
-| [i;j],[RP.Const(RP.Bits(x))] -> const (Bits.Ops.zx j x)
-| [i;j], [x] when i = j -> x
-| _         -> default "zx" w args
-
 let lobits w args   = match (w,args) with
-    | [i;j], [x] when i = j -> x
-    | _         -> default "lobits" w args
+| [i;j],[RP.Const(RP.Bits x)] -> const (Bits.Ops.lobits j x)
+| [i;j], [x] when i = j -> x
+| _         -> default "lobits" w args
+<<RTL operator implementations>>=
+let zero1 = Bits.U.of_int 0 1
+let one1  = Bits.U.of_int 1 1
+let bool w args = assert (w = []); match args with
+| [RP.Const (RP.Bits x)] -> RP.Const (RP.Bool (Bits.Ops.ne x zero1))
+| _ -> default "bool" w args
+
+let bit w args = assert (w = []); match args with
+| [RP.Const (RP.Bool b)] -> RP.Const (RP.Bits (if b then one1 else zero1))
+| _ -> default "bit" w args
 @

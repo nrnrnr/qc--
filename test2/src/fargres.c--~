@@ -1,0 +1,30 @@
+target
+        byteorder little
+        memsize 8
+        wordsize 32
+        pointersize 32
+        float "ieee754";
+
+        bits2 System.rounding_mode = "IEEE 754 rounding mode";
+
+import buggy, printf;
+export main;
+
+foreign "C" main(bits32 argc, bits32 argv, bits32 envp) {
+ bits32 a;
+ bits32 b;
+
+ a = 0x40a00000::bits32;
+ "float" b = foreign "C" buggy("float" a);
+
+ foreign "C" printf("address" str, "float" %f2f64(b, System.rounding_mode));
+ //foreign "C" printf("addr" str, a); 
+
+ foreign "C" return(0);
+}
+
+
+section "data" {
+str: bits8[] "The value returned was %f (should be 10.0)\n\0";
+}
+

@@ -23,10 +23,6 @@ val mk_automaton : warn:(width:int -> alignment:int -> hint:string -> unit) ->
                    (temps:(Rtl.space -> Automaton.stage) -> Automaton.stage) ->
                    (Oast2ir.proc -> Automaton.t)
 val context   : (Oast2ir.proc -> Automaton.t) -> 'e -> Oast2ir.proc -> bool
-@ 
-The [[fortran]] variable placer is deprecated.
-<<placevar.mli>>=
-val fortran'  : 'a -> Oast2ir.proc -> bool
 @
 Boilerplate for linking to Lua.
 <<placevar.ml>>=
@@ -38,65 +34,7 @@ module RU = Rtlutil
 module RP = Rtl.Private
 
 <<replace var>>
-@
-\subsection{Fortran-style variable placer}
-The key datastructure is [[tMap]], which maps the index of a variable
-to the temporary cell that the variable will occupy.
-Function [[replace_var]] at once builds up the map and replaces each
-variable with its temporary location.
-<<placevar.ml>>=
-let fortran' _ ({Proc.cfg = g; Proc.temps = temps; Proc.var_map = tMap} as proc) =
-  let module G = Cfgx.M in
-  let changed = ref false in
-  <<fortran replace var>>
-  <<fetch and store globals>>
-  let updateNode node =
-    match G.to_instr node with
-    | None     -> ()
-    | Some rtl ->
-        let rtl' = replace_var store_var fetch_var store_global fetch_global rtl in
-        G.update_instr (fun _ -> rtl') node  in
-  let () = G.iter_nodes updateNode g in
-  <<add variable placements to spans>>
-  !changed
-@
-We use the Fortran convention for placing variables: anything named
-with I~through~N is an INteger, and anything else is floating point.
-Anything other than 32~bits is shoved into a 32-bit temporary.
-This makes no sense to me, and I don't see how it can possibly do
-anything useful.
-<<fortran replace var>>=
-(* NOTE: using space 't' is hopeful, but ultimately bogus. *)
-let new_tmp name w =
-  let first = try Char.lowercase (name.[0])
-              with Invalid_argument _ -> Impossible.impossible "empty name" in
-    match name, w with
-    |   n, _  when String.length n = 0 -> Impossible.impossible "empty name"
-    |   n, 32 when 'i' <= first && first <= 'n'
-               -> Talloc.Multiple.loc temps 't' w
-    |   n, 32  -> Printf.eprintf "name:%s\n" name;Talloc.Multiple.loc temps 'u' w 
-    |   n, 64 when 'i' <= first && first <= 'n'
-               -> Talloc.Multiple.loc temps 't' 64
-    |   n, 64  -> Talloc.Multiple.loc temps 'u' 64
-    |   n, 16  -> Talloc.Multiple.loc temps 't' 32
-    |   n, 8   -> Talloc.Multiple.loc temps 't' 32
-  (*
-    |   n, 8   -> Talloc.Multiple.loc temps 'v' w
-  *)
-    |  _       -> Impossible.impossible 
-                    (Printf.sprintf "asked for temporay %s (%d wide)" name w) in
-let get_placer s i w =
-  match tMap.(i) with
-  | Some a -> a
-  | None   -> let tmp = new_tmp s w in
-              let alloc = { A.fetch  = (fun   w -> R.fetch tmp w)
-                          ; A.store  = (fun e w -> R.store tmp e w)
-                          } in
-              (changed := true;
-               tMap.(i) <- Some alloc;
-               alloc) in
-let store_var exp (s, i, w) = (get_placer s i w).A.store (R.Up.exp exp) w in
-let fetch_var     (s, i, w) = (get_placer s i w).A.fetch                w in
+@ 
 <<fetch and store globals>>=
 let store_global exp (s, i, w) = proc.P.global_map.(i).A.store (R.Up.exp exp) w in
 let fetch_global     (s, i, w) = proc.P.global_map.(i).A.fetch                w in
@@ -186,7 +124,7 @@ let context autmtn _ ({ Proc.cfg = g; Proc.target = tgt; Proc.formals = formals
   let autmtn  = autmtn proc in
   <<initialize context count structures>>
   <<get operator contexts>>
-  <<estimate exec\_counts for graph nodes>>
+  <<estimate [[exec_counts]] for graph nodes>>
   <<count uses in each context>>
   <<choose a context for each variable>>
   <<replace variables with temps>>
@@ -228,7 +166,7 @@ let ctxt_parms  op = try Some (fst (SM.find op ops)) with Not_found -> None in
 let ctxt_result op = try Some (snd (SM.find op ops)) with Not_found -> None in
 @
 For now, we don't estimate execution counts; we assume each node is executed once.
-<<estimate exec\_counts for graph nodes>>=
+<<estimate [[exec_counts]] for graph nodes>>=
 let exec_counts      = G.fold_nodes (fun n map -> NM.add n 1.0 map) NM.empty g  in
 let get_exec_count n = try NM.find n exec_counts
                        with Not_found -> Impossible.impossible "node not counted" in 
@@ -379,6 +317,9 @@ let from_temps proc space = (* stage to allocate a temporary location *)
   let allocator = Talloc.Multiple.loc proc.Proc.temps space in
   let alloc ~width:w ~alignment:a ~hint:h = A.of_loc (allocator w) in
   A.wrap (fun methods -> {A.allocate = alloc; A.freeze = methods.A.freeze})
+
+let debug lbl w h a ctr =
+  Printf.eprintf "Placevar %s w=%d h=%s a=%d ctr=%d\n" lbl w h a ctr
 
 let mk_automaton ~warn ~vfp ~memsize ~byteorder mk_stage proc =
   let warn methods =
