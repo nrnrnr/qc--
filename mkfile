@@ -21,7 +21,11 @@ SUBDIRS =       cllib asdl src
 # high level targets
 # ------------------------------------------------------------------ 
 
-update all:V:   dirs
+all:V:          update html 
+
+update          \
+html            \
+dvi:V:          dirs
                 for i in $SUBDIRS; do (cd $i && mk $target); done
 
 clean:V:
