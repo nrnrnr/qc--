@@ -159,6 +159,8 @@ val first:      cfg -> node (* wrt numbering *)
 val last:       cfg -> node (* wrt numbering *)
 val scan_fwd:   cfg -> first:int -> limit:int -> (node -> 'a -> 'a) -> 'a -> 'a 
 val scan_bwd:   cfg -> first:int -> limit:int -> (node -> 'a -> 'a) -> 'a -> 'a
+val fold_fwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a 
+val fold_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a
 val next:       node -> node option
 val prev:       node -> node option
 
@@ -269,7 +271,10 @@ All traversal functions below rely on and respect a numbering that
 must be established by [[gm_enumerate]] before these functions can be
 used.  Using any of the traversal functions without an established
 order is a checked run-time error.  Any use of a graph mutator
-function invalidates an existing numbering.
+function invalidates an existing numbering. Exception: it is safe to
+mutate the {\cfg} using [[scan]] and [[fold]] because these functions
+take a snapshot of the order and then ignore any changes to the graph
+structure.
 
 \begin{itemize}
 \item [[first: cfg -> node]]:
@@ -280,18 +285,25 @@ The last node with respect to numbering.
 
 \item 
 [[scan_fwd: cfg -> first:int -> limit:int -> (node -> 'a -> 'a) -> 'a -> 'a]]: 
+
 Applies a function [[f]] to the range of nodes from [[first]] to
-[[limit]] (excluded) and passes an intermediate result.  The nodes
-are visited in increasing order with respect to the numbering.  It is
-an \emph{unchecked} run-time error if [[f]] calls a graph mutator; in
-order for [[f]] being applied to nodes [[first]]] $<$ [[limit]] must
-hold, otherwise the intermediate result [['a]] is returned.
+[[limit]] (excluded) and passes an intermediate result.  The nodes are
+visited in increasing order with respect to the numbering.  It is
+\emph{safe} for [[f]] to call a graph mutator; in order for [[f]] being
+applied to nodes, [[first]] $<$ [[limit]] must hold, otherwise the
+intermediate result [['a]] is returned.
 
 \item 
 [[scan_bwd: cfg -> first:int -> limit:int -> (node -> 'a -> 'a) -> 'a -> 'a]]:
 Dual function to [[scan_fwd]] in the sense that nodes are visited in
-decreasing order, starting with the node before [[limit]].  Note,
-that [[first]] $<$ [[limit]] still must hold.
+decreasing order, starting with the node before [[limit]].  Note, that
+[[first]] $<$ [[limit]] still must hold. 
+
+\item [[fold_fwd: cfg -> (node -> 'a -> 'a) -> 'a -> 'a]]: 
+Like [[scan_fwd]] but traverses the entire graph.
+
+\item [[fold_fwd: cfg -> (node -> 'a -> 'a) -> 'a -> 'a]]: 
+Like [[scan_bwd]] but traverses the entire graph.
 
 \item [[next: node -> node option]]:
 The node following the argument [[node]] with respect to an
@@ -641,6 +653,19 @@ let scan_bwd (cfg:cfg) ~(first:int) ~(limit:int) f zero =
     in
         loop (limit-1) zero
 @
+
+<<implementation>>=
+let fold_fwd (cfg:cfg) f zero =
+    assert (cfg#enumerated);
+    let limit = Array.length (cfg#enumeration) + 1 in
+        scan_fwd cfg 1 limit f zero
+
+let fold_bwd (cfg:cfg) f zero =
+    assert (cfg#enumerated);
+    let limit = Array.length (cfg#enumeration) + 1 in
+        scan_bwd cfg 1 limit f zero
+@
+
 
 The node numbered [[n]] is at the array position [[n-1]]. Consequently
 is the next node at [[n]] and the previous one at position [[n-2]]. 
