@@ -68,6 +68,11 @@ type reloc     = Bits.bits RS.relocatable
 let error msg  = raise (Error msg)
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 
+module ToString = struct
+  let exp  e = RU.ToString.exp (Up.exp e)
+  let exp' e = RU.ToUnreadableString.exp (Up.exp e)
+end
+
 module Safe = struct
     <<RTL operator implementations>>
     <<traverse RTL>>
@@ -283,10 +288,7 @@ let rec app o w args = match Safe.app o w args with
         | Some(r1,k1), Some(r2,k2) when Register.eq r1 r2 -> 
             let r      = app op w [k1;k2] in
             let dbg () = Printf.eprintf "Simplify2.Unsafe.app: %s `%s` %s = %s\n"
-                        (Rtlutil.ToString.exp (Rtl.Up.exp k1))
-                        op
-                        (Rtlutil.ToString.exp (Rtl.Up.exp k2))
-                        (Rtlutil.ToString.exp (Rtl.Up.exp r)) in
+                        (ToString.exp k1) op (ToString.exp k2) (ToString.exp r) in
             r
                
         | _  -> x
@@ -445,6 +447,19 @@ let rec lobits ws args   = match (ws,args) with
 <<cases for rewriting aggregates in big-endian or little-endian registers>>
 | [i;j], [x] when i = j -> x
 | _         -> default "lobits" ws args
+
+let () = Debug.register "simp-lobits" "simplification of %lobits expressions"
+
+let lobits =
+  if Debug.on "simp-lobits" then
+    (fun ws args ->
+      let e = RP.App (("lobits", ws), args) in
+      let answer = lobits ws args in
+      Printf.eprintf "simplified %s -> %s\n" (ToString.exp e) (ToString.exp answer);
+      answer)
+  else
+    lobits
+
 <<cases for rewriting aggregates in big-endian or little-endian memory>>=
 | [w;n],[<<little-endian memory fetch>>] when Cell.divides mcell n ->
     RP.Fetch (RP.Mem (mspace, Cell.to_count mcell n, addr, assn), n)

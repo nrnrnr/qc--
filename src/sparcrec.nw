@@ -449,6 +449,8 @@ any : Fdiv(x:any, y:any) {: sprintf "Fdiv(%s, %s)" x y :}
 any : Fneg(any) {: sprintf "Fneg(%s)" any :}
 any : Fabs(any) {: sprintf "Fabs(%s)" any :}
 
+any : Loword(any) {: sprintf "Loword(%s)" any :}
+
 any : BitInsert(x:any, y:any, z:any) {: sprintf "BitInsert(%s, %s, %s)" x y z :}
 any : BitExtract(lsb:any, y:any, n:w) {: sprintf "BitExtract(%s, %s, %d)" lsb y n :}
 any : Slice(n:w, lsb:n, y:any) {: sprintf "Slice(%d, %d, %s)" n lsb y :}
@@ -494,6 +496,7 @@ any : Goto(any) {: "Goto(" ^ any ^ ")" :}
 
 | RP.App(("lobits",[32;8]),  [x]) -> conLobyte (exp x)
 | RP.App(("lobits",[32;16]), [x]) -> conLohalf (exp x)
+| RP.App(("lobits",[64;32]), [x]) -> conLoword (exp x)
 | RP.App(("zx", [8; 32]),    [x]) -> conZxbyte (exp x)
 | RP.App(("zx", [16;32]),    [x]) -> conZxhalf (exp x)
 | RP.App(("sx", [8; 32]),    [x]) -> conSxbyte (exp x)
@@ -615,7 +618,7 @@ let errmsg r msg =
 
 let to_asm r =
   try
-    let plan = rtl (Down.rtl r) in
+    let plan = rtl (Down.rtl (Simplify.rtl r)) in
     plan.inst.Camlburg.action ()
   with 
   | Camlburg.Uncovered -> cat [" not an instruction: " ; RU.ToString.rtl r]
@@ -623,7 +626,7 @@ let to_asm r =
 
 let is_instruction r =
   try
-    let plan = rtl (Down.rtl r) in
+    let plan = rtl (Down.rtl (Simplify.rtl r)) in
     plan.inst.Camlburg.cost < 100  (* should be true, but shade this... *)
   with 
   | Camlburg.Uncovered -> false

@@ -227,7 +227,7 @@ clobber:V:      dirs clean
 
 # make sure appropriate empty directories exist
 dirs:VQ:
-	for i in bin lib man man/man1 lua/std; do
+	for i in bin include lib man man/man1 lua/std; do
 	  [ -d $i ] || mkdir $i
 	done
 

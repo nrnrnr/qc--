@@ -1,5 +1,7 @@
 %cg. -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
+% inc: \usepackage{alltt}
+
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
 % Quality    ::=    A|B|C|D|E
 % Importance ::=    Central|Subsystem|Peripheral
@@ -476,13 +478,27 @@ let separate_set tempset =
 @
 Find the registers that hold temps from the temporary space [[s]].
 <<type declarations>>=
+let () = Debug.register "dls-regs" "mapping of registers to temporaries"
+
+let fits =
+  if Debug.on "dls-regs" then
+    (fun t ((sn, _, _) as s) r ->
+       let answer = Target.fits t s r in
+       Printf.eprintf "register %s %s space '%c'\n" (RU.ToString.reg r)
+         (if answer then "fits" else "does not fit") sn;
+       answer)
+  else
+    Target.fits
+
+type 'a answer = A of 'a
+
 let get_regs_for_space tgt regmap s =
-  let fits = Target.fits in
-  List.concat (SM.fold (fun _ regs rst ->
-                          match regs with
-                          | r::_ -> if fits tgt s r then regs :: rst else rst
-                          | _    -> rst)
-                       regmap [])
+  let fits = fits tgt s in
+  let getone r (A good) = if fits r then (A (r :: good)) else A good in
+  let getlist key regs good = List.fold_right getone regs good in
+  let A result = SM.fold getlist regmap (A []) in
+  result
+
 let flatten_regmap regmap =
   List.concat (SM.fold (fun _ regs rst -> regs::rst) regmap [])
 
@@ -558,19 +574,10 @@ let rpo_dfs (state, prefs) =
 <<dls algorithm>>=
 let dls () ({Proc.cfg = cfg; Proc.cc = cc; Proc.target = tgt} as proc) =
   ignore (Optimize.trim_unreachable_code () proc);
-  if Debug.on "dls" then
-    begin
-      Cfgutil.print_cfg cfg;
-      G.iter_nodes
-        (fun n ->
-          let set = Register.SetX.to_string in
-          Printf.eprintf
-            "%4d live_out = { %s }\n" (G.num n) (set (Cfgx.Live.live_out n));
-          Printf.eprintf
-            "%4d live_in  = { %s }\n" (G.num n) (set (Cfgx.Live.live_in n)))
-        cfg
-    end;
-  let alloc_regset = cc.Call.volregs ++ cc.Call.pre_nvregs      in
+  if Debug.on "dls" then <<print [[cfg]] plus live-in and live-out sets>>;
+  let alloc_regset = cc.Call.volregs ++ cc.Call.pre_nvregs in
+  if Debug.on "dls-regs" then
+    Printf.eprintf "alloc_regset = { %s }" (Register.Set.to_string alloc_regset);
   <<define spill functions>>
   <<define [[buffer_if_succ_is_join]] to insert a nop after instr leading to join>>
   <<definition of shuffle>>
@@ -859,7 +866,8 @@ varmaps because we may have to set a spill location for the temp.
       let (state,map) = spill_reg true_fun (state, map) r in
       (state, VM.add_reg t r map, a, c, rst, not_lo)
     | ([],     _,      _,     _)                                    ->
-        impossf "No register available for temp %s" (printReg t) in
+        impossf "At node %d, no register available for temp %s"
+          (G.num node) (printReg t) in
 @
 Note that by calling [[get_avail_reg]], I am disallowing copies in which the used
 temp lives past this node.
@@ -1272,7 +1280,9 @@ Most of the functions are not even specific to this particular algorithm.
 <<register utilities>>=
 let setFromList l = List.fold_left (fun set r -> RS.add r set) RS.empty l
 let part = List.partition
-let printReg ((s,_,_), i, w) = Printf.sprintf "%c%d" s i
+let printReg ((s,_,_), i, R.C n) =
+  if n = 1 then Printf.sprintf "%c%d" s i
+  else Printf.sprintf "%c%d:%d" s i n
 let true_fun _ = true
 let diff  lst set = List.filter (fun r -> not (RS.mem r set)) lst
 let inter lst set = List.filter (fun r -> RS.mem r set) lst
@@ -1365,6 +1375,19 @@ let time f x =
   print_newline();
   result
 @
+<<print [[cfg]] plus live-in and live-out sets>>=
+begin
+  Cfgutil.print_cfg cfg;
+  G.iter_nodes
+    (fun n ->
+      let set = Register.SetX.to_string in
+      Printf.eprintf
+        "%4d live_out = { %s }\n" (G.num n) (set (Cfgx.Live.live_out n));
+      Printf.eprintf
+        "%4d live_in  = { %s }\n" (G.num n) (set (Cfgx.Live.live_in n)))
+    cfg
+end
+@ 
 
 %-------------------------------------------------------------------
 \subsection{Exporting to Lua}

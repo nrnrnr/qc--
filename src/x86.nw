@@ -241,6 +241,12 @@ This code hasn't yet been checked for compatility with floating point.
 let move_rtl dst src = rtl (R.store (temploc dst) (tempval src) (tempwidth src))
 let move ~dst ~src   = if Register.eq dst src then PX.Nop else move_rtl dst src
 @ 
+Because there's only one size of temporary in this back end, we don't
+need [[extract]] or [[aggregate]].
+<<x86 postexpander>>=
+let extract ~dst ~lsb ~src = impossf "extract on x86"
+let aggregate ~dst ~src = impossf "aggregate on x86"
+@ 
 Load immediate is also a simple move.
 <<x86 postexpander>>=
 let li  ~dst const = rtl (R.store (temploc dst) (Up.const const) (tempwidth dst))
@@ -407,7 +413,10 @@ let dblop ~dsthi ~dstlo op x y =
 let weird_tmp tmp z = match z with
 | PX.WTemp (Register.Reg t) -> t, PX.Nop
 | PX.WTemp (Register.Slice (w, 0, t)) -> t, PX.Nop
-| PX.WTemp (Register.Slice (w, lsb, t)) -> Impossible.unimp "weird value in slice"
+| PX.WTemp (Register.Slice (w, lsb, t)) -> 
+    tmp,
+    move tmp t <:>
+    rtl (R.store (temploc tmp) (RO.shrl 32 (tempval tmp) (RO.unsigned 32 lsb)) 32)
 | PX.WBits b -> tmp, rtl (R.store (temploc tmp) (R.bits (Bits.Ops.zx 32 b) 32) 32)
 
 let set_carry ~tmp z =
@@ -477,7 +486,6 @@ let hwset ~dst ~src =
 let hwget ~dst:(fill,dt) ~src =
   if Register.eqx src rounding_mode_reg then
     let slot      = PX.Alloc.slot 16 in
-    let clear_others = with_lflags dt and32 (tempval dt) rmask_set 32 in
     let shift op n =
       rtl (R.store (temploc dt) (op 32 (tempval dt) (RO.unsigned 32 n)) 32) in
     rtl (slot.A.store (R.fetch Rg.fpuctl 16) 16) <:>                   (* fnstcw *)
@@ -486,9 +494,9 @@ let hwget ~dst:(fill,dt) ~src =
     | PX.HighAny ->
         shift RO.shrl 10
     | PX.HighZ ->
-        clear_others <:> shift RO.shrl 10
+        shift RO.shl 20 <:> shift RO.shrl 30
     | PX.HighS ->
-        clear_others <:> shift RO.shl 20 <:> shift RO.shra 30
+        shift RO.shl 20 <:> shift RO.shra 30
   else
     impossf "getting unexposed hardware register"
 @ 

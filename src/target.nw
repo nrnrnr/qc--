@@ -236,7 +236,6 @@ named_locs:    Rtl.loc Strutil.Map.t;
 The register allocator (see \module{colorgraph.nw}) needs
 target-specific informations about hardware registers and temporaries.
 In particular:
-
 <<exported functions>>=
 val is_tmp : ('au, 'cc) t -> Rtl.space -> bool  (* partially apply me *)
 val fits:    ('au, 'cc) t -> Rtl.space -> Register.t -> bool
@@ -413,8 +412,7 @@ let mk_reg_ix_map spaces =
 <<target.ml>>=
 let space_fits tmp =
   match tmp.Space.classification with
-  | Space.Temp {Space.stands_for=hw; Space.index_ok=locset} ->
-      fun (hw', idx, width) -> RU.Eq.space hw hw' && locset idx
+  | Space.Temp {Space.stands_for=ok} -> ok
   | _ ->
       let (sp, _, _) = tmp.Space.space in
       impossf "space_fits called on non-temp of space '%c'" sp
@@ -422,7 +420,7 @@ let space_fits tmp =
 let fits t space =
   try
     space_fits (List.find (fun s -> RU.Eq.space s.Space.space space) t.spaces)
-  with Not_found -> assert false
+  with Not_found -> impossf "space not found in Target.fits"
 @ 
 \subsection{Lua support for exposing target capabilities}
 

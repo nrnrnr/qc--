@@ -351,6 +351,7 @@ let id     x = x
 let falsef x = false
 
 let unimpf fmt = Printf.kprintf Impossible.unimp fmt
+let sprintf = Printf.sprintf
 
 type aloc = 
     { fetch  : Rtl.width -> Rtl.exp
@@ -762,7 +763,7 @@ let rec const = function
 
 <<ToAST>>=
 let opr op w =
-    Printf.sprintf "%s[%s]" op (String.concat "," (List.map string_of_int w))
+    sprintf "%s[%s]" op (String.concat "," (List.map string_of_int w))
 
 let rec expr' = function
     | R.Const c         -> const c
@@ -802,7 +803,7 @@ and location' = function
                            | Rtl.Identity     -> 'I'
                            | Rtl.BigEndian    -> 'B'
                            | Rtl.LittleEndian -> 'L' in
-            let space   =  Printf.sprintf "$%c(%d%c)" sp width a in
+            let space   =  sprintf "$%c(%d%c)" sp width a in
             let aligned = if ass = 1 then None else Some ass in 
             A.Mem(A.TypeSynonym space,expr' e,aligned,
                   if sp =<= 'm' then [] else ["'" ^ Char.escaped sp ^ "'"])
@@ -812,14 +813,14 @@ and location' = function
     | R.Reg((sp,_,ms),i,c) -> 
         (match !the_verbosity with
         | High ->
-            let space   =  Printf.sprintf "$%c(%d)" sp (Cell.to_width ms c) in   
+            let space   =  sprintf "$%c(%d)" sp (Cell.to_width ms c) in   
             let s       = string_of_int i in
             A.Mem(A.TypeSynonym space,A.Int(s,None), None, [])
-        | Low -> A.Name(None, Printf.sprintf "$%c%d" sp i))
+        | Low -> A.Name(None, sprintf "$%c%d" sp i))
     | R.Var    (name,_,width)   -> A.Name(None,name)
     | R.Global (name,_,width)    -> A.Name(None,name)
     | R.Slice (w,i,loc)          ->
-        A.Name(None, Printf.sprintf "Slice(%d, %d, %s)" w i (ToString.location' loc))
+        A.Name(None, sprintf "Slice(%d, %d, %s)" w i (ToString.location' loc))
 
 let (<<) f g  = fun x -> f (g x)
 let expr       = expr'     << Rtl.Dn.exp
@@ -895,17 +896,28 @@ and brexpr' e = match e with (* bracketed expression *)
 @
 
 <<ToString>>=
+and agg = function
+  | Rtl.BigEndian    -> "B"
+  | Rtl.LittleEndian -> "L"
+  | Rtl.Identity     -> "I"
 and location' = function 
-    | R.Mem ((sp,_,ms),c,e,ass) ->
+    | R.Mem ((sp,a,ms),c,e,ass) ->
         let space = if sp =<= 'm' then "bits" ^ string_of_int (Cell.to_width ms c)
                     else "$" ^ Char.escaped sp in
-        space ^ "[" ^ expr' e ^ "]"
+        sprintf "%s%s[%s]" space (agg a) (expr' e)
     | R.Reg r -> reg r
     | R.Var    (name,_,width)       -> name
     | R.Global (name,_,width)       -> name
     | R.Slice (w,i,loc)          ->
+
         location' loc ^ "@[" ^ string_of_int i ^ ".." ^ string_of_int (i+w-1) ^ "]"
-and reg ((sp,_,_),i,w) = Printf.sprintf "$%s[%d]" (Char.escaped sp) i
+
+and reg ((sp,a,_),i,R.C n) =
+  if n = 1 then
+    sprintf "$%s[%d]" (Char.escaped sp) i
+  else
+    sprintf "$%s[%d:%d%s]" (Char.escaped sp) i n (agg a)
+
     
 let (<<) f g  = fun x -> f (g x)
 let expr       = expr'     << Rtl.Dn.exp
@@ -963,10 +975,7 @@ let link e = match Dn.exp e with
 We convert a given {\rtl} into {\PAL} abstract syntax and then
 pretty-print it into a string. To avoid newlines in the string we pass
 [[max_int]] as the line-width to the pretty-printer. 
-
-
 <<ToUnreadableString>>=
-
 module P  = Pp
 module R  = Rtl
 module RP = Rtl.Private 
@@ -977,7 +986,7 @@ let (^/)   = P.(^/)
 let indent x = P.nest 4 (P.break ^^ x)
 let int i    = P.text (string_of_int i)
 let str s    = P.text s
-let char c   = P.text (Printf.sprintf "'%c'" c)
+let char c   = P.text (sprintf "'%c'" c)
 
 let tuple docs = 
     P.agrp (P.text "(" ^^ P.list (P.text "," ^^ P.break) id docs ^^ P.text ")")
@@ -989,7 +998,7 @@ let aggregation' = function
     | R.LittleEndian    -> P.text "LE"
     | R.Identity        -> P.text "ID"
 
-let agg= function
+let agg = function
     | R.BigEndian       -> "big"
     | R.LittleEndian    -> "little"
     | R.Identity        -> "none"
@@ -1015,8 +1024,8 @@ let rec exp = function
 and loc = function
     | RP.Mem((sp, agg, ms), c, e, ass) -> 
         apply "Mem" [char sp; aggregation' agg; int (Cell.to_width ms c); exp e]
-    | RP.Reg((sp,agg,ms),i,c) ->
-        apply "Reg" [char sp; int i; int (Cell.to_width ms c)]
+    | RP.Reg((sp,agg,ms),i,R.C c) ->
+        apply "Reg" [char sp; int i; str (sprintf "C %d" c)]
     | RP.Var(name, index, w) ->
         apply "Var" [str name; int index; int w]
     | RP.Global(name, index, w) ->

@@ -5675,10 +5675,8 @@ Ljoin_l353:
 Ljoin_l352:
 	jmp Lalc_gc_46
 Lalc_gc_46:
-	movl %edx,12(%esp)
 	call tig_call_gc
 Ljoin_l351:
-	movl 12(%esp),%edx
 	jmp Lalc_47
 Lalc_47:
 	movl $12,%eax
@@ -5691,50 +5689,50 @@ Lalc_47:
 	addl %eax,%ecx
 	leal Cmm.global_area,%eax
 	movl (%eax),%eax
-	movl %edx,12(%esp)
-	movl $12,%edx
-	addl %edx,%eax
-	leal Cmm.global_area,%edx
-	movl %eax,(%edx)
+	movl %ebp,12(%esp)
+	movl $12,%ebp
+	addl %ebp,%eax
+	leal Cmm.global_area,%ebp
+	movl %eax,(%ebp)
 	movl $0,%eax
 	movl %eax,(%ecx)
 	leal Lgbl_43,%eax
-	movl $4,%edx
-	movl %ebp,16(%esp)
-	movl %ecx,%ebp
-	addl %edx,%ebp
-	movl %eax,(%ebp)
+	movl $4,%ebp
+	movl %esi,16(%esp)
+	movl %ecx,%esi
+	addl %ebp,%esi
+	movl %eax,(%esi)
 	movl $4,%eax
-	movl %ebx,%ebp
-	imull %eax,%ebp
-	movl 12(%esp),%eax
-	movl %eax,%edx
-	addl %ebp,%edx
-	movl %ecx,(%edx)
-	movl $1,%ecx
-	addl %ecx,%ebx
-	leal 32(%esp), %ecx
-	movl $-12,%edx
-	addl %edx,%ecx
-	movl $4,%edx
-	addl %edx,%ecx
-	movl (%ecx),%edx
-	movl $1,%ecx
-	addl %ecx,%edx
-	cmpl %edx,%ebx
+	movl %ebx,%esi
+	imull %eax,%esi
+	movl %edx,%eax
+	addl %esi,%eax
+	movl %ecx,(%eax)
+	movl $1,%eax
+	addl %eax,%ebx
+	leal 32(%esp), %eax
+	movl $-12,%ecx
+	addl %ecx,%eax
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl (%eax),%ecx
+	movl $1,%eax
+	addl %eax,%ecx
+	cmpl %ecx,%ebx
 	jle Ljoin_l347
 Ljoin_l348:
 	jmp Linit_end_52
 Linit_end_52:
-	leal 32(%esp), %edx
-	movl $-12,%ecx
-	addl %ecx,%edx
-	movl $8,%ecx
-	addl %ecx,%edx
-	movl %eax,(%edx)
-	leal 32(%esp), %eax
+	leal 32(%esp), %ecx
+	movl $-12,%eax
+	addl %eax,%ecx
+	movl $8,%eax
+	addl %eax,%ecx
+	movl %edx,(%ecx)
+	leal 32(%esp), %ecx
 	movl $-12,%edx
-	addl %edx,%eax
+	addl %edx,%ecx
+	movl %ecx,%eax
 	call initlist_56
 Ljoin_l346:
 	leal -4(%esp), %esp
@@ -5743,8 +5741,8 @@ Ljoin_l346:
 	addl %ecx,%eax
 	movl $1,%ecx
 	leal 36(%esp), %edx
-	movl $-36,%ebp
-	addl %ebp,%edx
+	movl $-36,%esi
+	addl %esi,%edx
 	movl %ecx,(%edx)
 	call sort_58
 Ljoin_l343:
@@ -5754,8 +5752,8 @@ Ljoin_l343:
 	addl %ecx,%eax
 	leal Lgbl_207,%ecx
 	leal 36(%esp), %edx
-	movl $-36,%ebp
-	addl %ebp,%edx
+	movl $-36,%esi
+	addl %esi,%edx
 	movl %ecx,(%edx)
 	call print_list_57
 Ljoin_l340:
@@ -5765,8 +5763,8 @@ Ljoin_l340:
 	addl %ecx,%eax
 	movl $0,%ecx
 	leal 36(%esp), %edx
-	movl $-36,%ebp
-	addl %ebp,%edx
+	movl $-36,%esi
+	addl %esi,%edx
 	movl %ecx,(%edx)
 	call sort_58
 Ljoin_l337:
@@ -5776,25 +5774,27 @@ Ljoin_l337:
 	addl %ecx,%eax
 	leal Lgbl_208,%ecx
 	leal 36(%esp), %edx
-	movl $-36,%ebp
-	addl %ebp,%edx
+	movl $-36,%esi
+	addl %esi,%edx
 	movl %ecx,(%edx)
 	call print_list_57
 Ljoin_l334:
+	movl $0,%eax
 	leal 32(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx
 	movl 4(%esp),%edx
 	movl %edx,(%ecx)
 	movl 8(%esp),%ebx
-	movl 16(%esp),%ebp
+	movl 12(%esp),%ebp
+	movl 16(%esp),%esi
 	leal 32(%esp), %esp
 	ret
 Ljoin_l347:
 	jmp Ljoin_l362
 Ljoin_l362:
-	movl %eax,%edx
-	movl 16(%esp),%ebp
+	movl 16(%esp),%esi
+	movl 12(%esp),%ebp
 	jmp Linit_start_51
 .section .pcmap_data
 Lstackdata_l364:
@@ -5855,7 +5855,7 @@ Lframe_l366:
 .long 0
 .long 0
 .long 0x40000007
-.long 0xffffffec
+.long 0x40000006
 .long 0
 .long 0
 .long 0
@@ -5878,9 +5878,9 @@ Lframe_l367:
 .long 0x40000007
 .long 0xffffffe8
 .long 0x40000009
+.long 0xffffffec
+.long 0x4000000a
 .long 0xfffffff0
-.long 0x4000000a
-.long 0x4000000a
 .long 0x4000000b
 .long 0x4000000b
 .long 0
@@ -5909,9 +5909,9 @@ Lframe_l368:
 .long 0x40000007
 .long 0xffffffe8
 .long 0x40000009
+.long 0xffffffec
+.long 0x4000000a
 .long 0xfffffff0
-.long 0x4000000a
-.long 0x4000000a
 .long 0x4000000b
 .long 0x4000000b
 .long 0
@@ -5940,9 +5940,9 @@ Lframe_l369:
 .long 0x40000007
 .long 0xffffffe8
 .long 0x40000009
+.long 0xffffffec
+.long 0x4000000a
 .long 0xfffffff0
-.long 0x4000000a
-.long 0x4000000a
 .long 0x4000000b
 .long 0x4000000b
 .long 0
@@ -5971,9 +5971,9 @@ Lframe_l370:
 .long 0x40000007
 .long 0xffffffe8
 .long 0x40000009
+.long 0xffffffec
+.long 0x4000000a
 .long 0xfffffff0
-.long 0x4000000a
-.long 0x4000000a
 .long 0x4000000b
 .long 0x4000000b
 .long 0
@@ -6002,9 +6002,9 @@ Lframe_l371:
 .long 0x40000007
 .long 0xffffffe8
 .long 0x40000009
+.long 0xffffffec
+.long 0x4000000a
 .long 0xfffffff0
-.long 0x4000000a
-.long 0x4000000a
 .long 0x4000000b
 .long 0x4000000b
 .long 0

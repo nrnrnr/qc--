@@ -18,6 +18,7 @@ QC   =          $TOP/bin/qc--$P
 
 all:V:    test
 test:V:   all.dummy.tst $config_arch.test $config_arch.optest
+optest:V: $config_arch.optest
 test.opt:VQ:
 	NPROC=1 mk $MKFLAGS QC=../bin/qc--.opt test
 
@@ -61,7 +62,8 @@ testdrv.inc:D: testdrv.nw
 opgen.lua:D:  opgen.nw
 	$NOTANGLE -L'$file "%F"%N$line %L%N' -R$target $prereq > $target
 
-copgen.lua:D:  copgen.nw ../interp/operator.nw
+copgen.lua:DQ:  copgen.nw ../interp/operator.nw
+	echo "# building operator test bed (C version)"
 	($NOTANGLE -L'$file "%F"%N$line %L%N' -R$target copgen.nw
 	 ($NOTANGLE -R'macro definitions for converting C to Lua' copgen.nw
 	  $NOTANGLE -R'macro synonyms' ../interp/operator.nw
@@ -70,7 +72,7 @@ copgen.lua:D:  copgen.nw ../interp/operator.nw
 	) > $target
 
 
-copgen32.c:D: opgen.lua copgen.lua 
+copgen32.c:DQ: opgen.lua copgen.lua 
 	($NOTANGLE -R'type definitions for rounding mode' ../interp/operator.nw
 	 ../bin/qc-- opgen.lua copgen.lua
 	) > $target
@@ -78,14 +80,15 @@ copgen32.c:D: opgen.lua copgen.lua
 x86-linux.optest: optest-x86-linux
 	./$prereq -v -nan -nan 500000
 
-optest-${config_arch}: optest.o copgen${config_wordsize}.o cmmopgen-${config_arch}.o
+optest-${config_arch}:Q: optest.o copgen${config_wordsize}.o cmmopgen-${config_arch}.o
 	cc -o $target $prereq -lm
 
-cmmopgen-${config_arch}.c--:D: opgen.lua $QC
+cmmopgen-${config_arch}.c--:DQ: opgen.lua $QC
+	echo "# building operator test bed (C-- version)"
 	$QC opgen.lua -e 'Testgen.emit()' > $target
 
-cmmopgen-&.o: cmmopgen-&.c-- $QC
+cmmopgen-&.o:Q: cmmopgen-&.c-- $QC
 	$QC -c -globals cmmopgen-$stem.c--
 
-optest.c:D: optest.nw
+optest.c:DQ: optest.nw
 	$NOTANGLE -L -R"$target" $prereq > $target

@@ -797,40 +797,40 @@ step_38_gc_data:
 .section .text
 tiger_main:
 	leal -32(%esp), %esp
-	leal 32(%esp), %ecx
-	movl (%ecx),%edx
+	leal 32(%esp), %edx
+	movl (%edx),%ecx
 Linitialize_continuations_l75:
 Lproc_body_start_l74:
-	leal 32(%esp), %ecx
+	leal 32(%esp), %edx
 	movl %eax,(%esp)
 	movl $-16,%eax
-	addl %eax,%ecx
-	movl (%esp),%eax
-	movl %eax,(%ecx)
-	movl $1000,%eax
-	leal 32(%esp), %ecx
-	movl %edx,4(%esp)
-	movl $-16,%edx
-	addl %edx,%ecx
-	movl $4,%edx
-	addl %edx,%ecx
-	movl %eax,(%ecx)
-	leal Cmm.global_area,%eax
-	movl (%eax),%ecx
-	leal 32(%esp), %eax
-	movl $-16,%edx
-	addl %edx,%eax
-	movl $4,%edx
-	addl %edx,%eax
-	movl (%eax),%edx
-	movl $2,%eax
 	addl %eax,%edx
+	movl (%esp),%eax
+	movl %eax,(%edx)
+	movl $1000,%eax
+	leal 32(%esp), %edx
+	movl %ecx,4(%esp)
+	movl $-16,%ecx
+	addl %ecx,%edx
+	movl $4,%ecx
+	addl %ecx,%edx
+	movl %eax,(%edx)
+	leal Cmm.global_area,%eax
+	movl (%eax),%edx
+	leal 32(%esp), %eax
+	movl $-16,%ecx
+	addl %ecx,%eax
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl (%eax),%ecx
+	movl $2,%eax
+	addl %eax,%ecx
 	movl $4,%eax
-	imull %eax,%edx
-	addl %edx,%ecx
-	leal space_end,%edx
-	movl (%edx),%eax
-	cmpl %eax,%ecx
+	imull %eax,%ecx
+	addl %ecx,%edx
+	leal space_end,%ecx
+	movl (%ecx),%eax
+	cmpl %eax,%edx
 	jg Ljoin_l87
 Ljoin_l88:
 	jmp Lalc_34
@@ -842,18 +842,18 @@ Ljoin_l86:
 	jmp Lalc_34
 Lalc_34:
 	leal 32(%esp), %eax
-	movl $-16,%ecx
-	addl %ecx,%eax
-	movl $4,%ecx
-	addl %ecx,%eax
-	movl (%eax),%ecx
-	movl $2,%eax
-	addl %eax,%ecx
-	movl $4,%eax
-	imull %eax,%ecx
-	leal Cmm.global_area,%eax
+	movl $-16,%edx
+	addl %edx,%eax
+	movl $4,%edx
+	addl %edx,%eax
 	movl (%eax),%edx
-	movl %ecx,(%edx)
+	movl $2,%eax
+	addl %eax,%edx
+	movl $4,%eax
+	imull %eax,%edx
+	leal Cmm.global_area,%eax
+	movl (%eax),%ecx
+	movl %edx,(%ecx)
 	leal Cmm.global_area,%ecx
 	movl (%ecx),%edx
 	movl $4,%ecx

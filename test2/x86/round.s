@@ -98,8 +98,8 @@ Lproc_body_start_l4:
 	addl %edx,%eax
 	fnstcw 36(%esp)
 	movzwl 36(%esp),%edx
-	andl $3072,%edx
-	shrl $10, %edx
+	shll $20, %edx
+	shrl $30, %edx
 	fnstcw 34(%esp)
 	movl %ecx,64(%esp)
 	movzwl 34(%esp),%ecx
@@ -155,8 +155,8 @@ Ljoin_l18:
 	addl %ecx,%eax
 	fnstcw 42(%esp)
 	movzwl 42(%esp),%ecx
-	andl $3072,%ecx
-	shrl $10, %ecx
+	shll $20, %ecx
+	shrl $30, %ecx
 	fnstcw 40(%esp)
 	movzwl 40(%esp),%edx
 	andl $-3073,%edx
@@ -210,8 +210,8 @@ Ljoin_l15:
 	addl %ecx,%eax
 	fnstcw 48(%esp)
 	movzwl 48(%esp),%ecx
-	andl $3072,%ecx
-	shrl $10, %ecx
+	shll $20, %ecx
+	shrl $30, %ecx
 	fnstcw 46(%esp)
 	movzwl 46(%esp),%edx
 	andl $-3073,%edx
@@ -265,8 +265,8 @@ Ljoin_l12:
 	addl %ecx,%eax
 	fnstcw 54(%esp)
 	movzwl 54(%esp),%ecx
-	andl $3072,%ecx
-	shrl $10, %ecx
+	shll $20, %ecx
+	shrl $30, %ecx
 	fnstcw 52(%esp)
 	movzwl 52(%esp),%edx
 	andl $-3073,%edx

@@ -159,9 +159,11 @@ module SetX = struct
   include S
   let of_list l = List.fold_right add l empty
   let to_string s =
-    let elt = function Reg   ((s,_,_), i, w) -> Printf.sprintf "%c%d" s i
-                     | Slice (w, i, ((s,_,_), i', _)) ->
-                         Printf.sprintf "%c%d@[%d..%d]" s i' i (i + w - 1) in
+    let elt = function
+      | Reg ((s,_,_), i, C 1) -> Printf.sprintf "%c%d" s i
+      | Reg ((s,_,_), i, C n) -> Printf.sprintf "%c%d:%d" s i n
+      | Slice (w, i, ((s,_,_), i', _)) ->
+          Printf.sprintf "%c%d@[%d..%d]" s i' i (i + w - 1) in
     String.concat ", " (List.map elt (elements s))
 end
 module Set = struct
@@ -169,7 +171,11 @@ module Set = struct
   include S
   let of_list l = List.fold_right add l empty
   let to_string s =
-    let elt ((s,_,_), i, w) = Printf.sprintf "%c%d" s i in
+    let elt ((s,_,_), i, C n) =
+      if n = 1 then
+        Printf.sprintf "%c%d" s i
+      else
+        Printf.sprintf "%c%d:%d" s i n in
     String.concat ", " (List.map elt (elements s))
 end
 <<register.ml>>=

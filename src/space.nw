@@ -124,7 +124,7 @@ locations.
 All temporary locations are removed before code generation is
 complete. 
 (This is the job of the register allocator.)
-
+@
 The classification of a space depends on the binding time of the
 expressions used to index cells in that space.
 \begin{itemize}
@@ -165,12 +165,13 @@ expressions used to index cells in that space.
    with a real hardware location.
 \end{itemize}
 <<type location set>>=
-type predicate    = int -> bool
 type location_set =
-    { stands_for : Rtl.space  (* space we form a subset of *)
-    ; index_ok   : predicate  (* predicate to check the qualifying condition *)
+    { stands_for : Register.t -> bool  (* what registers we stand for *)
     ; set_doc    : string     (* informal description *)    
     }
+@ We make it easy to build a simple predicate.
+<<space.mli>>=
+val stands_for : char -> Register.aggregation -> Register.width -> (Register.t -> bool)
 @    
 
 
@@ -208,6 +209,9 @@ let checked s =
       end;
     s
   end
+let stands_for s agg w =
+  (fun ((s', agg', c), _, Register.C ct) ->
+    s' =<= s && agg =*= agg' && ct = 1 && Cell.size c = w)
 @
 
 A set of standard spaces can now be constructed from a simple functor
@@ -248,8 +252,7 @@ module Standard(A:sig val width: int end) = struct
     ; aggregation   = agg
     ; widths        = ws
     ; classification = Temp  
-        { stands_for = ('r', agg, Cell.of_size A.width)
-        ; index_ok   = (fun _ -> true) (* lies *)
+        { stands_for = stands_for 'r' agg A.width
         ; set_doc    = "general-purpose temporaries"
         } 
     } 
@@ -274,8 +277,7 @@ module Standard(A:sig val width: int end) = struct
     ; aggregation   = agg
     ; widths        = ws
     ; classification = Temp 
-        { stands_for = ('f', agg, Cell.of_size A.width)
-        ; index_ok   = (fun _ -> true) (* lies *)
+        { stands_for = stands_for 'f' agg A.width
         ; set_doc    = "floating-point temporaries"
         } 
     } 
@@ -300,8 +302,7 @@ module Standard(A:sig val width: int end) = struct
     ; aggregation   = agg
     ; widths        = ws
     ; classification = Temp 
-        { stands_for = ('a', agg, Cell.of_size A.width)
-        ; index_ok   = (fun _ -> true) (* lies *)
+        { stands_for = stands_for 'a' agg A.width
         ; set_doc    = "address temporaries"
         } 
     } 
@@ -325,8 +326,7 @@ module Standard(A:sig val width: int end) = struct
     ; aggregation   = agg
     ; widths        = ws
     ; classification = Temp 
-        { stands_for = ('p', agg, Cell.of_size 1)
-        ; index_ok   = (fun _ -> true) (* lies *)
+        { stands_for = stands_for 'p' agg 1
         ; set_doc    = "predicate temporaries"
         } 
     } 

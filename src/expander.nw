@@ -557,6 +557,21 @@ access to the floating-point rounding mode.
 val hwset : dst:Register.x -> src:warg       -> block
 val hwget : dst:wtemp      -> src:Register.x -> block
 @ 
+Finally, we have to handle moves between temporaries of different
+sizes.
+For example, it might be necessary to move a value from a 64-bit
+floating-point register into two 32-bit integer registers (or vice
+versa).
+To move from a large temporary to a smaller one, we move one piece at
+a time using [[extract]].
+To fill a larger temporary using a list of smaller ones is more
+complicated.
+We pass the pieces of the large value, \emph{least significant piece
+  first}, to [[aggregate]].
+<<generic expansion operations for register machines>>=
+val extract   : dst:temp -> lsb:int -> src:temp -> block
+val aggregate : dst:temp -> src:temp list       -> block (* little-endian *)
+@ 
 Load immediate can take any constant except a Boolean.
 <<generic expansion operations for register machines>>=
 val li  : dst:temp -> Rtl.Private.const -> block
@@ -655,16 +670,13 @@ and  warg  = WBits of Bits.bits
 <<exported utility functions for postexpanders>>=
 val warg_val : warg -> exp
 @ 
-Usage notes:
+Usage note:
 \begin{quote}
 \slshape
-The interface contains multiple functions to make life easy for those
-writing postexpanders by hand.
-If the target machine is sufficiently regular, the postexpander may
-certainly use an implementation such as
-\begin{verbatim}
-let binop ~dst op x y = rtlop ~dst op [x; y]
-\end{verbatim}
+The interface contains multiple functions because different operators
+take arguments of different types.
+The types are discussed in detail in the documentation for the
+[[Opshape]] module.
 
 It is almost certainly true that not every operator is implemented on
 every machine.
@@ -1461,6 +1473,7 @@ let rec to_temp' room context e =
   <<cases for sign extending or zero extending a temporary>>
   <<cases for sign-extending and zero-extending loads>>
   <<cases for sign extending or zero extending a narrow hardware register>>
+  <<cases for extracting from a wide temporary>>
   <<cases for narrow weird value operators>>
   <<cases for converting a Boolean to a value>>
   | RP.App ((_, [stackw; tempw]) as cvt, _) as e
@@ -1528,6 +1541,18 @@ match Post.opclass op with
     temp_in_context r context PX.Nop
 | RP.Fetch _ ->
     impossf "memory-like access to non-memory space"
+@ 
+<<cases for extracting from a wide temporary>>=
+| RP.App (("lobits", [w;n]), [RP.App (("shrl", [w']), [e; RP.Const (RP.Bits b)])]) ->
+    let shamt = Bits.U.to_int b in
+    assert (w = w' && shamt < w);
+    let t = alloc context n in
+    let src, is = to_temp room (guess_context e) e in
+    t, is <:> Post.extract ~dst:t ~lsb:shamt ~src
+| RP.App (("lobits", [w;n]), [e]) ->
+    let t = alloc context n in
+    let src, is = to_temp room (guess_context e) e in
+    t, is <:> Post.extract ~dst:t ~lsb:0 ~src
 @
 Sign-extending and zero-extending loads are done into integer registers only.
 This fact is documented in the postexpander interface.

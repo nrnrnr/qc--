@@ -70,10 +70,8 @@ Ljoin_l56:
 Ljoin_l55:
 	jmp Lalc_gc_27
 Lalc_gc_27:
-	movl %edx,16(%esp)
 	call tig_call_gc
 Ljoin_l54:
-	movl 16(%esp),%edx
 	jmp Lalc_28
 Lalc_28:
 	movl $48,%eax
@@ -396,9 +394,10 @@ Lloop_end_52:
 	movl %ecx,64(%esp)
 	call tig_print
 Ljoin_l8:
-	leal Cmm.global_area,%ecx
-	movl 64(%esp),%edx
-	movl %edx,(%ecx)
+	leal Cmm.global_area,%eax
+	movl 64(%esp),%ecx
+	movl %ecx,(%eax)
+	movl $0,%eax
 	leal 88(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -521,7 +520,7 @@ Lstackdata_l63:
 Lframe_l64:
 .long 0xffffffa8
 .long 0x80000004
-.long 0xffffffb8
+.long 0x40000006
 .long Lstackdata_l63
 .long 0x80000008
 .long 0x80000020

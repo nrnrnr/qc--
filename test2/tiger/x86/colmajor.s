@@ -1538,7 +1538,6 @@ Ljoin_l122:
 	jmp LifFalse_146
 LifFalse_146:
 	movl $0,%ecx
-	movl %ecx,%eax
 	jmp LifEnd_147
 Ljoin_l121:
 	jmp LifTrue_145
@@ -1556,6 +1555,7 @@ Ljoin_l120:
 	movl %ebp,(%ecx)
 	jmp LifEnd_147
 LifEnd_147:
+	movl $0,%eax
 	leal 120(%esp), %ecx
 	movl $0,%ebp
 	addl %ebp,%ecx

@@ -15,6 +15,7 @@ module PX = Postexpander
 module S  = Space
 module SS = S.Standard32
 module R  = Rtl
+module RO = Rewrite.Ops
 module RU = Rtlutil
 module Up = R.Up
 module Dn = R.Dn
@@ -64,16 +65,6 @@ windows.  Nyarggg.  We pretend that it's actually split between 32 and
                     ; S.classification = S.Reg
                     }
 
-  let x = S.checked { S.space           = ('x', Rtl.Identity, Cell.of_size 64)
-                    ; S.doc            = "64-bit floating-point registers"
-                    ; S.cellwidth      = 64
-                    ; S.indexwidth     = 32
-                    ; S.indexlimit     = Some 8
-                    ; S.aggregation    = Rtl.Identity
-                    ; S.widths         = [64]
-                    ; S.classification = S.Reg
-                    }
-
 (*
  let f = SS.f 32 id [32]
 *)
@@ -83,18 +74,17 @@ windows.  Nyarggg.  We pretend that it's actually split between 32 and
 @ [[u]] is the temporary space for the [[f]] space.
 <<SPARC spaces>>=
   let u = S.checked { S.space          = ('u', 
-                                          Rtl.Identity, (* Rtl.BigEndian, *)
+                                          Rtl.BigEndian,
                                           Cell.of_size 32)
                     ; S.doc            = "floating-point temporaries"
                     ; S.cellwidth      = 32
                     ; S.indexwidth     = 32
                     ; S.indexlimit     = None
-                    (* ; S.aggregation    = Rtl.BigEndian *)
-                    ; S.aggregation    = Rtl.Identity
+                    ; S.aggregation    = Rtl.BigEndian
                     ; S.widths         = [32]
                     ; S.classification =
-                        S.Temp { S.stands_for = f.S.space
-                               ; S.index_ok   = (fun _ -> true) (* lies *)
+                        S.Temp { S.stands_for = S.stands_for 'f' Rtl.BigEndian 32
+                                   (* lies about index? *)
                                ; S.set_doc    = "floating-point temporaries"
                                }
                     }
@@ -104,12 +94,11 @@ windows.  Nyarggg.  We pretend that it's actually split between 32 and
                     ; S.cellwidth      = 64
                     ; S.indexwidth     = 32
                     ; S.indexlimit     = None
-                    (* ; S.aggregation    = Rtl.BigEndian *)
                     ; S.aggregation    = Rtl.Identity
                     ; S.widths         = [64]
                     ; S.classification =
-                        S.Temp { S.stands_for = x.S.space
-                               ; S.index_ok   = (fun _ -> true) (* lies *)
+                        S.Temp { S.stands_for =
+                                   (fun ((c, _, _), _, R.C n) -> c =<= 'f' && n = 2)
                                ; S.set_doc    = "64-bit floating-point temporaries"
                                }
                     }
@@ -153,9 +142,8 @@ let vfp     = Vfp.mk wordsize
 let mcell = Cell.of_size 8
 let mspace = ('m', Rtl.BigEndian, mcell)
 let rspace = ('r', Rtl.BigEndian, Cell.of_size 32)
-let fspace = ('f', Rtl.Identity, Cell.of_size 32)
-let xspace = ('x', Rtl.Identity, Cell.of_size 64)
-let dspace = ('d', Rtl.Identity, Cell.of_size 2)  (* rounding modes *)
+let fspace = ('f', Rtl.BigEndian, Cell.of_size 32)
+let dspace = ('d', Rtl.Identity, Cell.of_size 2)  (* rounding mode *)
 
 let r n  = (rspace, n, R.C 1)
 
@@ -167,7 +155,9 @@ let sp   = r 14 (* conventionally the same as %sp or %o6 *)
 
 let cwp  = (('k', Rtl.Identity, Cell.of_size 32), 0, R.C 1)
 
-let rounding_modesl   = Rtl.reg (dspace, 0, R.C 1)
+let rounding_mode_reg = (dspace, 0, R.C 1)
+let rounding_model   = Rtl.reg rounding_mode_reg
+let rounding_mode    = R.fetch rounding_model 2
 let rounding_resultsl = Rtl.reg (dspace, 1, R.C 1)
 @ 
 % ------------------------------------------------------------------
@@ -238,7 +228,7 @@ let fcontext =
   (fun t w ->
     if w = 32 then Talloc.Multiple.reg 'u' t 32
     else Talloc.Multiple.reg 'q' t 64), 
-  fun ((c,_,_), _, _) -> c =<= 'f' || c =<= 'u' || c =<= 'x' || c =<= 'q'
+  fun ((c,_,_), _, _) -> c =<= 'f' || c =<= 'u' || c =<= 'q'
 let acontext = icontext
 let rcontext = (fun x y -> unimpf "Unsupported soft rounding mode")
                ,fun ((sp,_,_), i, _) -> sp =<= 'd' && i = 0
@@ -308,6 +298,28 @@ let move ~dst ~src =
     rtl (R.store (R.reg dst) (rfetch src) w)
 @ 
 <<SPARC postexpander>>=
+let extract ~dst ~lsb ~src =
+  let w = reg_width src in
+  let n = reg_width dst in
+  let srcval =
+    if lsb = 0 then
+      RO.lobits w n (rfetch src)
+    else if lsb = 32 then
+      RO.lobits w n (RO.shrl w (rfetch src) (RO.unsigned w lsb))
+    else
+      impossf "bad lsb in sparc extract" in
+  if is_int dst && is_float src then
+    (* move through stack *)
+    let slot = salloc n in
+    rtl (A.store slot srcval n) <:> rtl (R.store (R.reg dst) (A.fetch slot n) n)
+  else if is_float dst && is_float src then
+    rtl (R.store (R.reg dst) srcval n)
+  else
+    impossf "unexpected extract in sparc postexpander"
+
+let aggregate ~dst ~src = Impossible.unimp "aggregate"
+@ 
+<<SPARC postexpander>>=
 let hwset ~dst ~src = Impossible.unimp "setting hardware register"
 let hwget ~dst ~src = Impossible.unimp "getting hardware register"
 @ 
@@ -368,42 +380,43 @@ let unop ~dst op x =
   | ("zx", _) | ("sx", _) | ("lobits", _) ->
       impossf "%%%s%d reached sparc postexpander" (fst op) (List.nth (snd op) 1)
   | _ -> rstore (R.reg dst) (R.app (Up.opr op) [rfetch x]) (reg_width dst)
-
+<<SPARC postexpander>>=
 let binop ~dst op x y =
   let dstw = reg_width dst in
   match op with
-  | "f2i", ws ->
-      begin match dst, x with
-      | (('u', _, _), _, _), (('u', _, _), _, _) ->
-          rstore (R.reg dst) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw
-      | (('u', _, _), _, _), (('q', _, _), _, _) ->
-          rstore (R.reg dst) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw
-      | ((dstr, _, _), _, _), ((xr, _, _), _, _) -> impossf "'%c' := %%f2i('%c'..): f2i only available single precision or float-to-float space\n" dstr xr
-(*
-      | (('t', _, _), _, _), (('u', _, _), _, _) ->
-          let ftmp = talloc 'u' dstw in
-          let slot = salloc dstw in
-          rstore (R.reg ftmp) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw <:>
-          astore slot (rfetch ftmp) dstw <:>
-          rstore (R.reg dst) (A.fetch slot dstw) dstw
-*)
-      end
-  | "modu", ws ->
-      rstore (R.reg dst) (R.app (R.opr "divu" ws) [rfetch x; rfetch y])   dstw <:>
-      rstore (R.reg dst) (R.app (R.opr "mul"  ws) [rfetch y; rfetch dst]) dstw <:>
-      rstore (R.reg dst) (R.app (R.opr "sub"  ws) [rfetch x; rfetch dst]) dstw
-  | "rem", ws ->
-      rstore (R.reg dst) (R.app (R.opr "quot" ws) [rfetch x; rfetch y])   dstw <:>
-      rstore (R.reg dst) (R.app (R.opr "mul"  ws) [rfetch y; rfetch dst]) dstw <:>
-      rstore (R.reg dst) (R.app (R.opr "sub"  ws) [rfetch x; rfetch dst]) dstw
+  | "modu", [w] ->
+      PX.Expand.block (rstore (R.reg dst) (Rewrite.modu w (rfetch x) (rfetch y)) dstw)
+  | "rem", [w] ->
+      PX.Expand.block (rstore (R.reg dst) (Rewrite.rem w (rfetch x) (rfetch y)) dstw)
   | _ ->
       rstore (R.reg dst) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw
-
+<<SPARC postexpander>>=
 let dblop ~dsthi ~dstlo op x y = Unsupported.mulx_and_mulux()
 let wrdop  ~dst op x y z = Unsupported.singlebit ~op:(fst op)
 let wrdrop ~dst op x y z = Unsupported.singlebit ~op:(fst op)
-let unrm  ~dst op x rm   = Impossible.unimp "floating point with rounding mode"
-let binrm ~dst op x y rm = Impossible.unimp "floating point with rounding mode"
+<<SPARC postexpander>>=
+let with_rm rm b =
+  PX.with_hw ~hard:(Register.Reg rounding_mode_reg) ~soft:rm ~temp:(talloc 't' 32) b
+
+let f2i op dst x w = match dst, x with
+| (('u', _, _), _, _), (('u', _, _), _, _) ->
+    rstore (R.reg dst) (R.app op [rfetch x; rounding_mode]) w
+| (('u', _, _), _, _), (('q', _, _), _, _) ->
+    rstore (R.reg dst) (R.app op [rfetch x; rounding_mode]) w
+| ((dstr, _, _), _, _), ((xr, _, _), _, _) ->
+    impossf "'%c' := %%f2i('%c'..): f2i only available single precision\
+             or float-to-float space\n" dstr xr
+
+let unrm ~dst op x rm   =
+  let w = Register.width dst in
+  match op with
+  | "f2i", _ -> with_rm rm  (f2i (Up.opr op) dst x w)
+  | _ ->
+      with_rm rm (rstore (R.reg dst) (R.app (Up.opr op) [rfetch x; rounding_mode]) w)
+let binrm ~dst op x y rm =
+  let w = Register.width dst in
+  with_rm rm
+    (rstore (R.reg dst) (R.app (Up.opr op) [rfetch x; rfetch y; rounding_mode]) w)
 @ 
 <<SPARC postexpander>>=
 let pc_lhs = npc        (* PC as assigned by branch *)
@@ -489,7 +502,6 @@ let target =
     let spaces = [ Spaces.m
                  ; Spaces.r
                  ; Spaces.f
-                 ; Spaces.x
                  ; Spaces.t
                  ; Spaces.u
                  ; Spaces.q
@@ -525,9 +537,9 @@ let target =
     ; T.is_instruction      = Sparcrec.is_instruction
     ; T.capabilities        = T.incapable
     ; T.globals             = globals
-    ; T.rounding_mode       = rounding_modesl (* Rtl.reg rm_reg *)
+    ; T.rounding_mode       = rounding_model (* Rtl.reg rm_reg *)
     ; T.named_locs   = Strutil.assoc2map 
-                       ["IEEE 754 rounding mode",    rounding_modesl
+                       ["IEEE 754 rounding mode",    rounding_model
                        ;"IEEE 754 rounding results", rounding_resultsl
                        ]
     ; T.data_section        = "data"

@@ -517,9 +517,10 @@ Ltry_end_67:
 	movl %ecx,56(%esp)
 	call tig_print
 Ljoin_l50:
-	leal Cmm.global_area,%ecx
-	movl 56(%esp),%edx
-	movl %edx,(%ecx)
+	leal Cmm.global_area,%eax
+	movl 56(%esp),%ecx
+	movl %ecx,(%eax)
+	movl $0,%eax
 	leal 64(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx

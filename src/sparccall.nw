@@ -32,13 +32,12 @@ Sparc.cc["C"     ] = Sparc.cc["C"     ] or {}
 Cheats, cheats, and more cheats...
 <<sparccall.ml>>=
 let rspace = ('r', Rtl.Identity, Cell.of_size 32)
-let fspace = ('f', Rtl.Identity, Cell.of_size 32)
-let xspace = ('x', Rtl.Identity, Cell.of_size 64)
+let fspace = ('f', Rtl.BigEndian, Cell.of_size 32)
 let dspace = ('d', Rtl.Identity, Cell.of_size 2)  (* rounding modes *)
 
 let r i = (rspace, i, R.C 1)
 let f i = (fspace, i, R.C 1)
-let x i = (xspace, i, R.C 1)
+let x i = (fspace, 8+2*i, R.C 2)
 
 let vol_regs    = RS.of_list (List.map r ([1;2;3;4] @ Aux.from 16 ~upto:23))
 let nv_regs     = RS.of_list (List.map r [])
@@ -65,12 +64,12 @@ quad word aligned in case we are really on a sparc 9)
 Sparc.sp_align  = 16
 Sparc.wordsize  = 32
 
-function reg(sp, i, w)
-  return Register.create { space = sp, index = i, cellsize = w }
+function reg(sp, i, w, agg)
+  return Register.create { space = sp, index = i, cellsize = w, agg = agg }
 end
 function r(i) return (reg("r", i, Sparc.wordsize)) end
-function f(i) return (reg("f", i, Sparc.wordsize)) end
-function x(i) return (reg("x", i, Sparc.wordsize * 2)) end
+function f(i) return (reg("f", i, Sparc.wordsize, 'big')) end
+function x(i) return (reg("f", 8+2*i, Sparc.wordsize * 2, 'big')) end
 function o(i) return (reg("o", i, Sparc.wordsize)) end
 function i(i) return (reg("i", i, Sparc.wordsize)) end
 
@@ -129,7 +128,6 @@ let mk_automaton block_name automaton () =
 let old_end   block = RU.addk wordsize (Block.base block) (Block.size block)
 let young_end block = Block.base block
 @ 
-
 <<sparccall.ml>>=
 let tail_overflow = 
     { C.parameter_deallocator = C.Callee
@@ -141,7 +139,6 @@ let c_overflow =
     ; C.result_allocator      = C.Caller
     } 
 @ 
-
 <<sparccall.ml>>=
 let prolog auto = 
   let autosp a = young_end a.A.overflow in
@@ -151,7 +148,6 @@ let prolog auto =
     ~postsp:(fun _ _ -> std_sp_location) 
     ~insp:(fun a _ _ -> autosp a)
 @ 
-
 <<sparccall.ml>>=
 let epilog auto =
     C.outgoing ~growth:growth ~sp:sp
@@ -159,7 +155,6 @@ let epilog auto =
         ~autosp:(fun r -> std_sp_location)
         ~postsp:(fun _ _ -> vfp)
 @ 
-
 <<sparccall.ml>>=
 let call_actuals auto =
     C.outgoing ~growth:growth ~sp:sp
@@ -167,7 +162,6 @@ let call_actuals auto =
         ~autosp:(fun r  -> std_sp_location)
         ~postsp:(fun a sp -> std_sp_location)
 @ 
-
 <<sparccall.ml>>=
 let call_results auto =
     let autosp = (fun a -> std_sp_location) in
@@ -177,8 +171,6 @@ let call_results auto =
         ~postsp:(fun _ _ -> std_sp_location) 
         ~insp:(fun a _ _ -> std_sp_location)
 @ 
-
-
 These might be wrong.  No tests yet.
 <<sparccall.ml>>=
 let also_cuts_to auto =
@@ -195,12 +187,10 @@ let cut_actuals auto base =
         ~autosp:(fun r   -> R.fetch sp wordsize)
         ~postsp:(fun _ _ -> R.fetch sp wordsize)
 @ 
-
 <<sparccall.ml>>=
 let ra_on_entry block = R.fetch ra wordsize
 let where_to_save_ra ra_on_entry temp = ra
 @ 
-
 <<sparccall.ml>>=
 let to_call ~cutto ~return auto =
     <<it's impossible for the stack pointer to be a useful register too>>;
@@ -234,7 +224,6 @@ if Register.Set.mem spr all_regs then
 else
   ()
 @
-
 <<sparccall.ml>>=
 (*
 let prefixbytes result =
@@ -251,7 +240,6 @@ let rtn return_to k n ~ra =
 
 let c ~return_to cut auto = to_call cut (rtn return_to) auto (* postprocess auto *)
 @ 
-
 Here's our CC lookup function.
 <<sparccall.ml>>=
 let cconv ~return_to cut ccname stage =
