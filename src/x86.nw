@@ -73,6 +73,7 @@ module RU   = Rtlutil
 module Up   = Rtl.Up
 module Down = Rtl.Dn
 module Rg   = X86regs
+module RO   = Rewrite.Ops
 
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 
@@ -159,6 +160,10 @@ let upint8  n = Up.const (RP.Bits(Bits.U.of_int n 8))
 
 let ah_val = R.fetch Rg.ah 8
 let carrybit = R.app (R.opr "x86_carrybit" []) [RU.fetch eflags]
+
+let sahf = rtl (R.store eflags (R.app (R.opr "x86_ah2flags" []) [ah_val]) 16)
+let lahf =
+  rtl (R.store Rg.ah (R.app (R.opr "x86_flags2ah" []) [R.fetch eflags 16]) 8)
 @ 
 Here are some invented operators that hide the real truth about what
 happens to the flags.
@@ -403,7 +408,9 @@ let wrdrop  ~dst:(fill, dt) op x y z =
   let t = talloc 't' 32 in
   wrdop ~dst:t ((if is_add then "addc" else "subb"), [32]) x y z <:>
   rtl (R.store (temploc dt) (R.bits (Bits.zero 32) 32) 32) <:>
-  rcl dt 1 <:>
+  lahf <:> 
+  rtl (R.store eax (RO.shrl 32 (RU.fetch eax) (R.bits (Bits.U.of_int 8 32) 32)) 32) <:>
+  rtl (R.store (temploc dt) (R.fetch eax 32) 32) <:>
   match fill with
   | PX.HighAny | PX.HighZ -> PX.Nop
   | PX.HighS ->
@@ -721,7 +728,6 @@ let bc_stack op ~ifso ~ifnot = match op with
         PX.Test (setcc <:> fstsw <:> clear_extra <:> xor_with_eq_pat,
                  bc_x86 (fpcmpopr opname) ifso ifnot)
     | _ ->
-        let sahf = rtl (R.store eflags (R.app (R.opr "x86_ah2flags" []) [ah_val]) 16)in
         PX.Test (setcc <:> fstsw <:> sahf, bc_x86 (fpcmpopr opname) ifso ifnot))
 | _ -> impossf "strange operator in x86 bc_stack"
 @ 

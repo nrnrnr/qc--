@@ -58,6 +58,7 @@ end
 %type eaddr {: string :}
 %type eaddri {: string :}
 %type eaddrl {: string :}
+%type eaddr_shr_k {: string * int :}
 %type eax {: unit :}
 %type ecx {: unit :}
 %type edx {: unit :}
@@ -104,6 +105,7 @@ end
 %type regl8 {: string :}
 %type regpair {: string :}
 %type regpairl {: string :}
+%type shamt {: int :}
 %type stacknext {: unit :}
 %type stacktop {: unit :}
 %type target {: string :}
@@ -156,6 +158,9 @@ let native' w b =
   Nativeint.to_string (Bits.U.to_native b)
 let native = native' 32
 let cat = String.concat ""
+let is_shamt b =
+  let w = Bits.width b in
+  w >= 5 && Bits.Ops.lt (Bits.zero w) b && Bits.Ops.lt b (Bits.U.of_int 32 w)
 @   
 The [[guard]] function turns a predicate into a cost.
 <<code to precede the labeler>>=
@@ -275,6 +280,7 @@ lconst : Link(symbol, w) {: symbol#mangled_text :}
 pic    : Diff(c1:lconst,c2:lconst) {: c1 ^ " - " ^ c2 :}
 const  : Bits(b:bits)  [{: guard (Bits.width b = 32) :}]  {: native b :}
 const8 : Bits(b:bits)  [{: guard (Bits.width b = 8) :}]  {: native' 8 b :}
+shamt  : Bits(b:bits)  [{: guard (is_shamt b) :}] {: Bits.U.to_int b :}
 four   : Bits(b:bits)
     [{: guard (Bits.width b > 3 && Bits.Ops.eq (Bits.U.of_int 4 (Bits.width b)) b) :}] {: () :}
 minusfour : Bits(b:bits)
@@ -514,6 +520,9 @@ inst : Withlflags8H(dst:regabcdl, logical:string, src:immed8, "x86_logicflags")
 <<rules>>=
 eflags : Reg('c', n) [{: guard (n = SS.indices.SS.cc):}] {: () :}
 eaddrbit0 : Lobits(eaddr, w) [{: guard (w=1) :}] {: eaddr :}
+eaddrbitk : Lobits(eaddr_shr_k, w) [{: guard (w=1) :}] {: eaddr_shr_k :}
+eaddr_shr_k : Shift("shra", eaddr, shamt)    {: eaddr, shamt :}
+eaddr_shr_k : Shift("shrl", eaddr, shamt)    {: eaddr, shamt :}
 inst : Llr(eflags, "x86_setcarry", eaddrbit0, w)
   {: sprintf "bt%s $0,%s" (suffix 32) eaddrbit0 :}
 
@@ -638,6 +647,7 @@ ahval : Fetch(ah, w) [{: guard (w=8) :}] {: ah :}
 inst : Store(eax, BitInsert(zero, Fetch(eax, w), fpustatus), sw:w) {: "fstsw %ax" :}
 inst : Store(ax,  fpustatus, w) [{: guard (w = 16) :}] {: cat ["fstsw "; ax] :}
 inst : Setflags(Ah2flags(ahval)) {: "sahf" :}
+inst : Store(ah,  Flags2ah(Fetch(eflags, fw:w)), w) {: "lahf" :}
 @ 
 \paragraph{Other instructions}
 <<rules>>=
@@ -684,6 +694,7 @@ any : BitInsert(x:any, y:any, z:any) {: sprintf "BitInsert(%s, %s, %s)" x y z :}
 any : BitExtract(lsb:any, y:any, n:w) {: sprintf "BitExtract(%s, %s, %d)" lsb y n :}
 any : Slice(n:w, lsb:n, y:any) {: sprintf "Slice(%d, %d, %s)" n lsb y :}
 any : Ah2flags(any) {: sprintf "Ah2flags(%s)" any :}
+any : Flags2ah(any) {: sprintf "Flags2ah(%s)" any :}
 
 any : Sx(any) {: "Sx(" ^ any ^ ")" :}
 any : Zx(any) {: "Zx(" ^ any ^ ")" :}
@@ -697,6 +708,7 @@ any : X86ccop(string, cc:any) {: "X86ccop(" ^ string ^ ", " ^ cc ^ ")" :}
 any : X86op(string) {: "X86op(" ^ string ^ ")" :}
 
 any : NonLlrOp(string) {: "NonLlrOp(" ^ string ^ ")" :}
+any : Shift(string, x:any, y:any) {: sprintf "Shift(%s, %s, %s)" string x y :}
 
 any : Mem(any, c) {: "Mem(" ^any ^ "," ^ string_of_int c ^ ")" :}
 any : Reg  (char, n) {: sprintf "Reg(%s, %d)"   (Char.escaped char) n :}
@@ -772,13 +784,14 @@ constructor for each operator.
 | RP.App(("x86_subflags", [w]), [x; y]) -> conX86_subflags (exp x) (exp y)
 | RP.App(("x86_addflags", [w]), [x; y]) -> conX86_addflags (exp x) (exp y)
 | RP.App(("x86_ah2flags", []), [x]) -> conAh2flags (exp x)
+| RP.App(("x86_flags2ah", []), [x]) -> conFlags2ah (exp x)
 | RP.App(("x86_repmovs",   [w]), [x;y;z]) -> conRepmovs (exp x) (exp y) (exp z)
 | RP.App(("bitInsert", [w; n]), [lsb; dst; src]) ->
     conBitInsert (exp lsb) (exp dst) (exp src)
 | RP.App(("bitExtract", [w; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
 | RP.App((("gt"|"lt"|"ge"|"le"|"eq"|"ne"), [w]) as op, [l; r]) ->
     conCmp op (exp l) (exp r)
-| RP.App((("shra"|"shrl"|"shl") as op, [w]), [x; y]) -> conNonLlrOp op
+| RP.App((("shra"|"shrl"|"shl") as op, [w]), [x; y]) -> conShift op (exp x) (exp y)
 | RP.App((("quot"|"rem"|"div"|"mod"|"divu"|"modu") as op, [w; n]), [x; y]) -> 
     conNonLlrOp op
 | RP.App((("neg") as op, [w]), [x]) -> conNonLlrOp op
