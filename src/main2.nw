@@ -293,17 +293,20 @@ function graphColoring (colors)
             })
 end
 
-function fullRun (colors) 
-    return seq({codeExpand, graphColoring(colors)}) end
-prCFG = seq({codeExpand, live})
+-- colors used for GC allocator
 
 colors = {r={31,11,12,13}, f={11,12,13}}
 
-Optimizer = Optimizer or {}
-  -- `run' should be delayed
-function Optimizer.default () return fullRun(colors) end
-Optimizer.prCFG      = prCFG
-Optimizer.codeExpand = codeExpand
+-- optimizer, using graph coloring allocator
+
+function graphColoringAllocator (proc) 
+    local action = seq
+        { codeExpand
+        , graphColoring(colors)
+        } 
+    run(action, proc, {})     
+end
+
 
 ------------------------------------------------------------------ 
 -- Defaults
@@ -311,29 +314,24 @@ Optimizer.codeExpand = codeExpand
 
 Default = Default or {}
 Default.target          = Targets.dummy          -- target
-Default.optimizer       = Optimizer.default
+Default.optimizer       = graphColoringAllocator --
 Default.linewidth       = 72                     -- output line width
 Default.asm             = Driver.cmmasm          -- function io -> asm
-
-function Default.runopt(cfg, frame)
-  local opt = Default.optimizer
-  if type(opt) == "function" then
-    opt = opt()
-  end
-  run(opt, cfg, {})
-end
 
 ------------------------------------------------------------------ 
 -- Linear Scan register allocator - Experimental
 -- activate it: ./qc-- -e 'Default.optimizer=linscan' -c foo.c--
 ------------------------------------------------------------------ 
 
-function linscan ()
-    return 
+-- optimizer, using linear scan register allocation
+
+function linscan (proc)
+    local action = 
         seq
         { codeExpand
         , single(CGStages.linscan)
         }
+    run(action, proc, {})    
 end 
 
 function expand ()
@@ -341,10 +339,6 @@ function expand ()
         seq
         { codeExpand
         }
-end    
-
-function none ()
-    return seq {}
 end    
 
 ------------------------------------------------------------------ 
@@ -377,7 +371,7 @@ function Main.compile ()
     local ast = Driver.parse(f)
     local asm = Default.asm(Driver.stdout)    
     local env = Driver.check(ast,asm)
-    local asm = Driver.compile(Default.runopt, ast, Default.target, env)
+    local asm = Driver.compile(Default.optimizer, ast, Default.target, env)
     Driver.assemble(asm)
 end    
 Main.c = Main.compile -- abbreviation
