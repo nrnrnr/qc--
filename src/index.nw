@@ -2,10 +2,20 @@
 %
 %
 
-% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
-% l2h macro inmodule 2 <a href="#$1.html">#2</a>
+\input{macros.tex}
 
-\input 
+% l2h substitution rtl RTL
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h substitution ir IR
+% l2h substitution AST AST
+ 
 
 % ------------------------------------------------------------------ 
 \section{Roadmap to the source code}
@@ -196,6 +206,115 @@ integer, or a floating point number.
       module [[uint64p.c]].
 
 \end{itemize}
+
+
+% ------------------------------------------------------------------ 
+\subsection{Fat Environment \module{fenv}}
+% ------------------------------------------------------------------ 
+
+The denotation (meaning) of identifiers in a {\PAL} program is
+recorded in so-called fat environment of type [[Fenv.env]]. The fat
+environment in particular contains informations about:
+
+\begin{itemize}
+\item Denotation of values (registers, labels, continuations,
+      constants, imports), including their types. The denotation of a
+      constant includes its value.
+
+\item Meaning of name declared by [[typedef]].
+
+\item Informations about the target architecture, including byte order
+      and the size of words and pointers.
+\end{itemize}
+
+A fat environment comes in two flavors:  dirty and clean.  In a dirty
+environment some informations can be marked as erroneous or absent.  A
+dirty environment is built up by the \module{elab} module.  After the
+static semantics of a program have been checked a dirty environment is
+transformed into a clean environment.  In a clean environment
+informations are never absent or marked as erroneous.
+
+% ------------------------------------------------------------------ 
+\subsection{Check of the static semantics \module{elab}}
+% ------------------------------------------------------------------ 
+
+After a {\PAL} program has been successfully parsed its static
+semantics are checked.  This means, the program is checked against the
+constraints laid out in the {\PAL} reference manual. Due to the
+nature of {\PAL} this must be done is a multi-step approach:
+
+\begin{enumerate}
+\item A first pass collects type declarations, sorts them
+      topologically (c.f.~module \module{topsort}), and enters them
+      into the fat environment.
+
+\item A second pass collects constant declarations, sorts them
+      topologically, evaluates them and enter them into the fat
+      environment. 
+
+\item A third pass anters all other values (like procedures and
+      registers) into the fat environment.
+
+\item The fourth and last pass uses the fat environment to check the
+      static semantics.  Found errors are propagated using the
+      \module{error} module such that as many as possible errors are
+      detected without reporting errors resulting from previous
+      errors. 
+
+\end{enumerate}
+
+% ------------------------------------------------------------------ 
+\subsection{Auxiliary modules \module{aux}, \module{env}, \module{topsort}}
+% ------------------------------------------------------------------ 
+
+Some module just provide services for others without laying directly
+on the compilation path:
+
+\begin{itemize}
+\item \module{aux} provides general purpose functionality that is not
+      already provided by the {\ocaml} standard libraries.
+\item \module{env} provides applicative maps.
+\item \module{topsort} provides an topological sorting function.
+      Type and constant declarations depend on each other and must be
+      topologically sorted before they can be processed. 
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{{\PAL} intermediate representation \module{ir}}
+% ------------------------------------------------------------------ 
+
+The first real compilation step translates the abstract syntax of a
+{\PAL} program into the so-called intermediate representation.  This
+representation is specified in {\asdl} in order to facilitate exchange
+of it with programs external to the compiler.  The intermediate
+representation ({\ir}) is esentially a control-flow graph whose nodes
+contain register transfer lists ({\rtl}s). The module \module{ir} is
+contains two {\asdl} modules:
+
+\begin{enumerate}
+\item Module \texttt{Rtl} defines register transfer lists.
+\item Module \texttt{Fgraph} defines control flow graphs.
+\end{enumerate}
+
+% ------------------------------------------------------------------ 
+\subsection{Abstract flow graph \module{agraph}}
+% ------------------------------------------------------------------ 
+
+The {\ir} is not built directly but through an abstract interface.
+Using the interface to build the {\ir} is just one way of using it.
+The same interface can probably be used to create very different
+representations of a {\PAL} program as well.
+
+% ------------------------------------------------------------------ 
+\subsection{Creation of an {\ir} \module{ast2ir}}
+% ------------------------------------------------------------------ 
+
+The translation from the abstract syntax ({\AST}) to the intermediate
+representation ({\ir}) is done by the \module{ast2ir} module. It
+traverses the {\AST} and call functions from the abstract flow graph
+interface module \module{agraph}. The translation process also uses
+the informations recorded in a clean fat environment (\module{fenv}).
+
 
 
 
