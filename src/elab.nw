@@ -1718,7 +1718,10 @@ and gotoStmt env (e,ts) =
         else env
 @
 
-A call must name targets, unless its expression is a label or import. 
+
+We had:  \emph{A call must name targets, unless its expression is a
+label or import.} Droped this requirement.
+
 In any case the expression must have a native code pointer type.  The
 details of the assignment in a [[Call]] context are handled by
 [[lvalue]].  To make sure all errors are recorded in [[env]] the
@@ -1734,14 +1737,13 @@ and callStmt env (left,cc,exp,args,ts,fs) =
     let env  = foldl  checkCallTarget  env ts                     in
     let args = List.map snd args (* strip hints *)                in
     let at   = E.Raise.list (List.map (tyExpr env) args)          in
-        if ts = [] && not (isLabel env exp) 
-        then E.error msg1
-        else E.seq' (F.flagError env) 
-                  (E.Raise.quad (tyExpr env exp,left,at,pointerTy env)) 
-                  ( function 
-                  | t,_,_,p when t = p    -> env
-                  | otherwise             -> E.error msg2 
-                  ) 
+        (* if ts = [] && not (isLabel env exp) then E.error msg1 else *)
+        E.seq' (F.flagError env) 
+               (E.Raise.quad (tyExpr env exp,left,at,pointerTy env)) 
+               ( function 
+               | t,_,_,p when t = p    -> env
+               | otherwise             -> E.error msg2 
+               ) 
 @
 
 A call of a primitive is type checked: argument types must have the
