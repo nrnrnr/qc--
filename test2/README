@@ -163,6 +163,40 @@ program with the parameter 200 and compare the results to the files
 with basename ops200.
 
 
+Comparing code-size results
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For any test file, you can get the test driver to count the number of
+lines of assembly code emitted.  (This option turns off the emission
+of the run-time system's initialized data.)  This is useful primarily
+for comparing different versions of the compiler.  For example, the
+following run shows that the simple peephole optimizer trims the code
+size by about a third on the lcc test suite:
+
+  % ../bin/qc--.opt testdrv.lua lcc.x86.tst lcc.count    
+  Assembly-code counts for 15 files written to lcc.count                          
+  % ./qcp testdrv.lua lcc.x86.tst lcc-opt.count          
+  Assembly-code counts for 15 files written to lcc-opt.count                      
+  % lua40 compare.lua lcc.count lcc-opt.count 
+                              lcc lcc-opt
+  lcc/fields.c--              535    368   68%
+  lcc/switch.c--             1564   1241   79%
+  lcc/incr.c--                239    108   45%
+  lcc/wf1.c--                 816    549   67%
+  lcc/sort.c--                595    414   69%
+  lcc/init.c--                475    385   81%
+  lcc/spill.c--               384    263   68%
+  lcc/array.c--               507    409   80%
+  lcc/8q.c--                  350    285   81%
+  lcc/limits.c--              537    406   75%
+  lcc/cvt.c--                1653    833   50%
+  lcc/front.c--               497    336   67%
+  lcc/struct.c--             1163    633   54%
+  lcc/cf.c--                  324    233   71%
+  TOTALS                     9639   6463   67%
+
+
+
 Frequently asked questions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 

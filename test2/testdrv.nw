@@ -83,7 +83,7 @@ Lua tmpname places files all around the filesystem.
 function Test.temp_name(ext)
   local name = tmpname()
   Test.remove(name) -- tmpname creates file
-  return(name .. ext)
+  return(name .. (ext or ""))
 end
 @ 
 Function [[Test.remove]] removes a single file or a list.
@@ -96,6 +96,24 @@ function Test.remove(...)
     end
     i = i + 1
   end
+end
+@ 
+<<testdrv.lua>>=
+function Test.capture_stdout(cmd)
+  local name = Test.temp_name()
+  execute(cmd .. " > " .. name)
+  local in = _INPUT
+  readfrom(name)
+  local contents, s = ""
+  repeat
+    s = read()
+    if s then
+      contents = contents .. s .. "\n"
+    end
+  until not s
+  readfrom()
+  readfrom(in)
+  return contents
 end
 @ 
 % -------------------------------------------------------------------
@@ -740,6 +758,52 @@ function CMD.compilertab[".gen"](file)
   execute(cmd)
   Test.translate(cmm_file)
   remove(cmm_file)
+end
+@ 
+\paragraph{Counting lines of code}
+The idea here is to record a table that shows how many lines of
+assembly language are generated.
+<<testdrv.lua>>=
+if CMD.compilertab[".count"] then
+  error("CMD.compilertab[.count] already defined")
+end
+function CMD.compilertab[".count"](file)
+  backend = backend or Backend.x86
+  backend.emit_data = nil
+  Test.did_something = 1
+  local base = Caml.Filename.chop_extension(file)
+  local output = open_out(file)
+  write(output, format("counts(%q, {\n", base))
+  local i = 1
+  local len = Test.list_len(Test.files)
+  while Test.files[i] do
+    Test.status_line(i, len);
+    Test.write_asm_sizes(output, Test.complete_test_table(Test.files[i]))
+    i = i + 1
+  end
+  write(output, "})\n")
+  close_out(output)
+  Test.clear_status_line()
+  write(format('Assembly-code counts for %d files written to %s\n', len, file))
+end
+@ 
+<<testdrv.lua>>=
+function Test.write_asm_sizes(output, inputs)
+  local sources = inputs.source
+  local i = 1
+  local to_remove = { }
+  while sources[i] do
+    local file = sources[i]
+    local s_file, so, se, compiles_ok = Test.compile_file(file, i)
+    if compiles_ok then
+      local count = Test.capture_stdout('wc -l < ' .. s_file)
+      local first, last = strfind(count, '%S*')
+      count = tonumber(strsub(count, first, last))
+      write(output, format('  [%q] = %d,\n', file, count))
+    end
+    i = i + 1
+    Test.list_add(to_remove, s_file, so, se)
+  end
 end
 @ 
 Overrides for standard compiler actions.
