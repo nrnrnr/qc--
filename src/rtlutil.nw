@@ -182,14 +182,49 @@ and subst' map (RP.Rtl rtl) = RP.Rtl (List.map (subst_guarded map) rtl)
 let loc map rtl = Rtl.Revert.rtl (subst' map (Rtl.Convert.rtl rtl))
 @    
 
-The [[reg]] function substitutes registers in {\rtl}s and could be
-implemented in terms of [[subst]] because a register is a special case
-of a location.  However, the details of this embedding are not clear: 
-are the width and the endianness of a register?  It seems they are
-target dependent.
+The [[reg]] function substitutes registers in {\rtl}s and is
+implemented in terms of the location substitution [[loc] above:  the
+[[aux]] function has type
+
+$$[[(Register.t -> Register.t) -> (Rtl.loc -> Rtl.loc )]]$$ 
+
+and returns the function needed for [[loc]].  A register is the
+special case of a [[Rtl.Cell]] location where the expression for the
+address is a compile-time constant that fits into an [[integer]].  If
+the [[aux]] function can identify such a location, it takes the
+register part out of it, passes to the register-transforming function
+[[f]] and inserts the resulting register back into a location.  In
+short, the context provided by the location for the register is
+maintained.
 
 <<module Subst struct>>=
-let reg f rtl = assert false 
+let aux f = fun loc -> 
+    ( match Rtl.Convert.loc loc with
+    | Rtl.Private.Cell 
+        ( sp
+        , agg
+        , width
+        , Rtl.Private.Const(Rtl.Private.Bits bits)
+        , ass) ->
+        ( try
+            let register            = (sp, Bits.to_int bits, width)  in
+            let index_width         = Bits.width bits                in
+            let (sp',index',width') = f register                     in
+            let loc' = Rtl.Private.Cell
+                ( sp'
+                , agg
+                , width'
+                , Rtl.Private.Const
+                    (Rtl.Private.Bits (Bits.of_int index' index_width))
+                , ass) 
+            in 
+                Rtl.Revert.loc loc'
+          with Bits.Overflow -> loc
+        )
+    | otherwise            -> loc
+    )
+
+let reg f rtl = loc (aux f) rtl
 @
     
 The predicate [[uses locs rtl]] is true, if and only if [[rtl]]
