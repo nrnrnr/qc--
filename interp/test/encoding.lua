@@ -6,6 +6,7 @@
 -- begin assembly code
 
 CMM.exports({ "main", "main2" })
+CMM.imports({ "cmmprint" })
 
 CMM.section("code")
   CMM.procedure("main", 0, 0)
@@ -32,7 +33,7 @@ CMM.section("code")
       CMM.gstore(32, "LITTLE", 0)
       CMM.gstore_local(5)
       CMM.gstore_global(12)
-      CMM.cmm_call( {"label2"}, {}, {"label3"}, 1 )
+      CMM.call( {"label2"}, {}, {"label3"}, 1 )
 CMM.end_section()
 
 CMM.procedure("main2", 0, 0)

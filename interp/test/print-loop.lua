@@ -1,6 +1,7 @@
 --- ./regr "../interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
 
 CMM.exports({ "main" })
+CMM.imports({ "cmmprint" })
 
 CMM.procedure("main", 2, 0)  -- BEGIN PROCEDURE main with 2 local variable
 
@@ -24,7 +25,7 @@ CMM.procedure("main", 2, 0)  -- BEGIN PROCEDURE main with 2 local variable
 
       -- pop off top 2 values (locals[0] copy and value copy), perform
       -- less than or equal to comparison, push result on stack
-      CMM.apply_operator("geu", "bits16,bits16:bits1")
+      CMM.apply_operator("geu", "bits16,bits16:bool")
 
       -- if (locals[0] >= current value) branch to "end"
       CMM.cbrancht("end")

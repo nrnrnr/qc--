@@ -176,14 +176,12 @@ Pops a boolean off the value stack; if the boolean is false, the program counter
 [[CMM.branchtf]]            &$(string$ [[labelT]]$, $ [[labelF]]$)$ &
 Pops a boolean off the value stack; the program counter is set to the address of label [[labelT]] if the boolean is true, and to the address of label [[labelF]] if the boolean is false.
 \\\hline
-[[CMM.cmm_call]]            &$(stringTable$ $\kappa_{[[cuts]]}, stringTable$ $\kappa_{[[unwinds]]}, stringTable$ $\kappa_{[[returns]]}, number$ [[aborts]]$)$ &
-Pops an address off the value stack and makes a call to the {\PAL} procedure located at the address, with the given call-site annotations.
+[[CMM.call]]            &$(stringTable$ $\kappa_{[[cuts]]}, stringTable$ $\kappa_{[[unwinds]]}, stringTable$ $\kappa_{[[returns]]}, number$ [[aborts]]$)$ &
+Pops an address off the value stack and makes a call to the procedure located at the address, with the given call-site annotations.
+Annotations are ignored if procedure is a foreign C procedure; C procedures must have previously been registered with the interpreter using exported function [[register_c_func]].
 \\\hline
 [[CMM.cmm_tail_call]]       &$()$                                   &
 Pops an address off the value stack and makes a tail call to the {\PAL} procedure located at the address.
-\\\hline
-[[CMM.c_call]]              &$(string$ [[name]]$)$ &
-Calls C function [[name]], which has been previously registered with the interpreter using exported function [[register_c_func]].
 \\\hline
 [[CMM.cmm_return]]          &$(number$ [[index]]$, number$ [[count]]$)$ &
 Returns to alternate return [[index]] of the the current activation's caller, which has [[count]] return sites.
@@ -927,7 +925,7 @@ typedef struct {
 To distinguish assembly unit source strings from assembly unit source files, we create the [[typedef]]'d [[enum]] type [[assembly_unit_type]].
 <<abstract types for storing internal state>>=
 typedef enum {
-  SRC_STRING, SRC_FILE
+  SRC_STRING, SRC_FILE, SRC_STDIN
 } assembly_unit_type;
 @ 
 To create a new [[assembly_unit]], we provide the function [[new_assembly_unit]] to create and initialize a fresh [[struct]].
@@ -949,6 +947,7 @@ typedef struct {
     RAddr         raddr;
     procedure    *proc ;
     continuation *cont ;
+    unsigned int  cfunc_id;
   } lbl;
   assembly_unit *unit;
 } CMM_label;
@@ -1100,21 +1099,21 @@ patterns
     STORE_LOCAL16 STORE_GLOBAL16 FETCH_LOCAL16  FETCH_GLOBAL16
     GSTORE_LOCAL8 GSTORE_LOCAL16 GSTORE_GLOBAL8 GSTORE_GLOBAL16
     GOTO          CBRANCHT       CBRANCHF       BRANCHTF
-    CMM_CALL      CMM_TAIL_CALL  C_CALL         RETURN
-    CUT           BEGIN_SPAN     END_SPAN       EMIT_RADDR
+    CALL          CMM_TAIL_CALL  RETURN         CUT
+    BEGIN_SPAN    END_SPAN       EMIT_RADDR
     PLACECODE
     HALT
-  ] is op = {0 to 33}
+  ] is op = {0 to 32}
 @ 
 To add an instruction to the bytecode, one must simply add an instruction name to the [[op]] table above and increase the upper bound of [[op]]'s value range.
 We next define another set of patterns to ease constructor generation of similarly structure instructions.
 <<bytecode.sled>>=
 patterns 
   any8    is STORE_LOCAL8   | STORE_GLOBAL8   | FETCH_LOCAL8  | FETCH_GLOBAL8
-           | GSTORE_LOCAL8  | GSTORE_GLOBAL8  | C_CALL
+           | GSTORE_LOCAL8  | GSTORE_GLOBAL8
   any16   is STORE_LOCAL16  | STORE_GLOBAL16  | FETCH_LOCAL16 | FETCH_GLOBAL16
            | GSTORE_LOCAL16 | GSTORE_GLOBAL16
-  any32   is PUSH  | CMM_CALL | DEFINE_PROC | END_SPAN
+  any32   is PUSH  | CALL     | DEFINE_PROC | END_SPAN
   memory  is FETCH | STORE    | GSTORE
   nullary is HALT  | PUSH_ARG | POP_ARG  |  GOTO  |  CUT  |  CMM_TAIL_CALL
 @ 
@@ -1426,37 +1425,65 @@ T_UNARYOP (bool,    v1                , v1,     bool   , bits1 )
 /* borrow      */
 /* carry       */
 T_UNARYOP (com,     ~v1               , v1,     u_int16, bits16)
+T_UNARYOP (com,     ~v1               , v1,     u_int32, bits32)
 T_BINARYOP(conjoin, (v1 != 0 ? v2 : 0), v1, v2, bool   , bits1 )
 T_BINARYOP(disjoin, (v1 != 0 ? 1 : v2), v1, v2, bool   , bits1 )
 /* div  */
 BINARYOP  (divu,v1 / v2,  v1,v2, u_int16, u_int8, u_int8,bits16, bits8,  bits8)
-BINARYOP  (eq,  v1 == v2, v1,v2, u_int16, u_int16,bool , bits16, bits16, bits1)
-BINARYOP  (ge,  v1 >= v2, v1,v2, s_int16, s_int16,bool , bits16, bits16, bits1)
-BINARYOP  (geu, v1 >= v2, v1,v2, u_int16, u_int16,bool , bits16, bits16, bits1)
-BINARYOP  (gt,  v1 >  v2, v1,v2, s_int16, s_int16,bool , bits16, bits16, bits1)
-BINARYOP  (gtu, v1 >  v2, v1,v2, u_int16, u_int16,bool , bits16, bits16, bits1)
-BINARYOP  (le,  v1 <= v2, v1,v2, s_int16, s_int16,bool , bits16, bits16, bits1)
-BINARYOP  (leu, v1 <= v2, v1,v2, u_int16, u_int16,bool , bits16, bits16, bits1)
+BINARYOP  (divu,v1 / v2,  v1,v2, u_int32, u_int16,u_int16,bits32,bits16,bits16)
+BINARYOP  (eq,  v1 == v2, v1,v2, u_int16, u_int16,bool , bits16, bits16, bool )
+BINARYOP  (eq,  v1 == v2, v1,v2, u_int32, u_int32,bool , bits32, bits32, bool )
+BINARYOP  (ge,  v1 >= v2, v1,v2, s_int16, s_int16,bool , bits16, bits16, bool )
+BINARYOP  (ge,  v1 >= v2, v1,v2, s_int32, s_int32,bool , bits32, bits32, bool )
+BINARYOP  (geu, v1 >= v2, v1,v2, u_int16, u_int16,bool , bits16, bits16, bool )
+BINARYOP  (geu, v1 >= v2, v1,v2, u_int32, u_int32,bool , bits32, bits32, bool )
+BINARYOP  (gt,  v1 >  v2, v1,v2, s_int16, s_int16,bool , bits16, bits16, bool )
+BINARYOP  (gt,  v1 >  v2, v1,v2, s_int32, s_int32,bool , bits32, bits32, bool )
+BINARYOP  (gtu, v1 >  v2, v1,v2, u_int16, u_int16,bool , bits16, bits16, bool )
+BINARYOP  (gtu, v1 >  v2, v1,v2, u_int32, u_int32,bool , bits32, bits32, bool )
+BINARYOP  (le,  v1 <= v2, v1,v2, s_int16, s_int16,bool , bits16, bits16, bool )
+BINARYOP  (le,  v1 <= v2, v1,v2, s_int32, s_int32,bool , bits32, bits32, bool )
+BINARYOP  (leu, v1 <= v2, v1,v2, u_int16, u_int16,bool , bits16, bits16, bool )
+BINARYOP  (leu, v1 <= v2, v1,v2, u_int32, u_int32,bool , bits32, bits32, bool )
 /* mod  */
-BINARYOP  (modu, v1 % v2, v1,v2, u_int16, u_int8, u_int8, bits16, bits8, bits8)
-T_BINARYOP(mul,     v1 * v2           , v1, v2, s_int16, bits16)
-T_BINARYOP(mulu,    v1 * v2           , v1, v2, u_int16, bits16)
-BINARYOP  (ne,   v1 !=v2, v1,v2, u_int16, u_int16,bool,   bits16, bits16,bits1)
+BINARYOP  (modu, v1 % v2, v1,v2, u_int16, u_int8, u_int8, bits16,bits8, bits8 )
+BINARYOP  (modu, v1 % v2, v1,v2, u_int32, u_int16,u_int16,bits32,bits16,bits16)
+BINARYOP  (mul,  v1 * v2, v1, v2,s_int8 , s_int8 ,s_int16,bits8 ,bits8 ,bits16)
+BINARYOP  (mul,  v1 * v2, v1, v2,s_int16, s_int16,s_int32,bits16,bits16,bits32)
+T_BINARYOP(mul_trunc, v1 * v2, v1, v2, u_int16, bits16)
+T_BINARYOP(mul_trunc, v1 * v2, v1, v2, u_int32, bits32)
+BINARYOP  (mulu, v1 * v2, v1,v2, u_int16, u_int16,u_int32,bits16,bits16,bits32)
+BINARYOP  (mulu, v1 * v2, v1,v2, u_int8 , u_int8 ,u_int16,bits8 ,bits8 ,bits16)
+BINARYOP  (ne,   v1 !=v2, v1,v2, u_int16, u_int16,bool,   bits16,bits16,bool )
+BINARYOP  (ne,   v1 !=v2, v1,v2, u_int32, u_int32,bool,   bits32,bits32,bool )
 T_UNARYOP (neg,     -v1               , v1    , s_int16, bits16)
+T_UNARYOP (neg,     -v1               , v1    , s_int32, bits32)
 T_UNARYOP (not,     !v1               , v1    , bool   , bits1 )
 T_BINARYOP(or ,     v1 | v2           , v1, v2, u_int16, bits16)
+T_BINARYOP(or ,     v1 | v2           , v1, v2, u_int32, bits32)
 POPCNT    (u_int16, bits16)
-BINARYOP  (quot, v1 / v2, v1,v2, u_int16, u_int8, u_int8, bits16, bits8, bits8)
-BINARYOP  (rem,  v1 % v2, v1,v2, u_int16, u_int8, u_int8, bits16, bits8, bits8)
+POPCNT    (u_int32, bits32)
+BINARYOP  (quot, v1 / v2, v1,v2, u_int16,u_int8, u_int8, bits16,bits8, bits8 )
+BINARYOP  (quot, v1 / v2, v1,v2, u_int32,u_int16,u_int16,bits32,bits16,bits16)
+BINARYOP  (rem,  v1 % v2, v1,v2, u_int16,u_int8, u_int8, bits16,bits8, bits8 )
+BINARYOP  (rem,  v1 % v2, v1,v2, u_int32,u_int16,u_int16,bits32,bits16,bits16)
 ROTL      (u_int16, bits16)
+ROTL      (u_int32, bits32)
 ROTR      (u_int16, bits16)
+ROTR      (u_int32, bits32)
 T_BINARYOP(shl ,    v1 << v2          , v1, v2, u_int16, bits16)
+T_BINARYOP(shl ,    v1 << v2          , v1, v2, u_int32, bits32)
 /* shra   */
 T_BINARYOP(shrl,    v1 >> v2          , v1, v2, u_int16, bits16)
+T_BINARYOP(shrl,    v1 >> v2          , v1, v2, u_int32, bits32)
 T_BINARYOP(sub ,    v1 - v2           , v1, v2, s_int16, bits16)
+T_BINARYOP(sub ,    v1 - v2           , v1, v2, s_int32, bits32)
 UNARYOP   (sx  ,    (s_int16) v1      , v1, s_int8, s_int16, bits8, bits16)
+UNARYOP   (sx  ,    (s_int32) v1      , v1, s_int16,s_int32, bits16,bits32)
 T_BINARYOP(xor ,    v1 ^ v2           , v1, v2, s_int16, bits16)
+T_BINARYOP(xor ,    v1 ^ v2           , v1, v2, s_int32, bits32)
 UNARYOP   (zx  ,    (u_int16) v1      , v1, u_int8, u_int16, bits8, bits16)
+UNARYOP   (zx  ,    (u_int32) v1      , v1, u_int16,u_int32, bits16,bits32)
 /* INTEGER operators end here. */
 @ 
 \paragraph{Operator Registration}
@@ -1504,9 +1531,9 @@ void register_operator(const char *name, operator_fun f, unsigned num_args,
 @ 
 \subsubsection{C Function Calls}
 \paragraph{Registration Helpers}
-We provide the exported function [[register_c_func]] to allow clients to register C funtions with the interpreter for use in programs (with [[CMM_c_call]]s).
+We provide the exported function [[register_c_func]] to allow clients to register C funtions with the interpreter for use in programs (with [[call]]s).
 Each time [[register_c_func]] is called, we make two entries in the global table [[c_func_table]].
-We associate the function's name (as a string) with a number, and we associate the number with a table that contains the function's signature and pointer.
+We associate the function's name (as a string) with a number in the global exports table, and we associate the number with a table that contains the function's signature and pointer in the C function table.
 <<C function call helpers>>=
 void register_c_func(const char *name, void *f, const char *sig) {
   static unsigned int id = 1;
@@ -1514,6 +1541,31 @@ void register_c_func(const char *name, void *f, const char *sig) {
   void      *caller;
   lua_State *L = c_sig_table.L;
   assert(c_sig_table.L == c_func_table.L);
+
+  lua_pushtable(L, c_func_table);
+
+  /* create a new table for the C function */
+  lua_newtable(L);
+
+  lua_pushstring(L, C_FUNC_CALLER);
+  <<push caller pointer atop Lua stack>>
+  lua_settable(L, -3);
+
+  lua_pushstring(L, C_FUNC_POINTER);
+  lua_pushusertag(L, f, lua_c_func_tag);
+  lua_settable(L, -3);
+
+  /* associate C function's table with id in c_func_table */
+  lua_rawseti(L, -2, id);
+
+  /* associate id with name of function in c_func_table */
+  /*
+  lua_pushstring(L, name);
+  lua_pushnumber(L, (double) id);
+  lua_settable(L, -3);
+  */
+ 
+  lua_pop(L, 1);
 
   /* also get a CMM_label placeholder for this C function */
   {
@@ -1529,31 +1581,17 @@ void register_c_func(const char *name, void *f, const char *sig) {
                "a label of that name already exists", name);
     }
     lua_pop(L, 1); /* pop nil */
-    lbl     = (CMM_label *) malloc(sizeof(CMM_label));
+
+    lbl               = (CMM_label *) malloc(sizeof(CMM_label));
     mem_assert(lbl);
-    lbl->ty = CMM_CFUNCTION;
+    lbl->ty           = CMM_CFUNCTION;
+    lbl->lbl.cfunc_id = id;
+
     lua_pushusertag(L, (void *) lbl, lua_CMM_label_tag);
     lua_settable(L, -3);
     lua_pop(L, 1); /* pop table */
   }
 
-  lua_pushtable(L, c_func_table);
-
-  lua_newtable(L);
-  lua_pushstring(L, C_FUNC_CALLER);
-  <<push caller pointer atop Lua stack>>
-  lua_settable(L, -3);
-    lua_pushstring(L, C_FUNC_POINTER);
-  lua_pushusertag(L, f, lua_c_func_tag);
-  lua_settable(L, -3);
-
-  lua_rawseti(L, -2, id);
-
-  lua_pushstring(L, name);
-  lua_pushnumber(L, (double) id);
-  lua_settable(L, -3);
- 
-  lua_pop(L, 1);
   id++;
 }
 @
@@ -2141,9 +2179,8 @@ F(goto) \
 F(cbrancht) \
 F(cbranchf) \
 F(branchtf) \
-F(cmm_call) \
+F(call) \
 F(cmm_tail_call) \
-F(c_call) \
 F(cmm_return) \
 F(cut)
 @
@@ -2533,10 +2570,8 @@ int lua_CMM_imports(lua_State *L) {
 
     lua_pop(L, 1); /* pop CMM_label */
 
-    lbl->unit = imported_label->unit;
-
-    /* FIX do some error-checking in case of different types (PROC, LABEL) */
-    CMM_label_raddr(lbl) = CMM_label_raddr(imported_label);
+    /* copy label contents */
+    *lbl = *imported_label;
   }
 
   lua_pop(L, 2); /* pop 2 tables */
@@ -3015,9 +3050,9 @@ int lua_CMM_branchtf(lua_State *L) {
   return 0;
 }
 @ 
-[[lua_CMM_cmm_call]] looks for three tables and a number (to be interpreted as a boolean) atop the Lua stack, constructs an [[annotations]] structure from the three tables and number, calls the [[cmm_call]] encoding function with a pointer to the [[annotations]] structure, pops the four arguments off the Lua stack, and returns 0 to tell Lua it returns no Lua values.
+[[lua_CMM_call]] looks for three tables and a number (to be interpreted as a boolean) atop the Lua stack, constructs an [[annotations]] structure from the three tables and number, calls the [[cmm_call]] encoding function with a pointer to the [[annotations]] structure, pops the four arguments off the Lua stack, and returns 0 to tell Lua it returns no Lua values.
 <<bytecode generation>>=
-int lua_CMM_cmm_call(lua_State *L) {
+int lua_CMM_call(lua_State *L) {
   int         n, t, i;
   annotations *ann;
 
@@ -3040,7 +3075,7 @@ int lua_CMM_cmm_call(lua_State *L) {
   <<[[ann]] $\leftarrow$ new, initialized [[annotations]] structure>>
 
   /* emit instruction */
-  cmm_call((unsigned) ann);  
+  call((unsigned) ann);  
 
   return 0;
 }
@@ -3085,29 +3120,6 @@ Converting the labels stored in the argument tables into [[CMM_label]]s is as si
     lua_rawseti(L, -2, i);
   }
   lua_pop(L, 2); /* pop new table, pop argument table */
-@
-[[lua_CMM_c_call]] checks for a string (function name) argument.
-It then seeks the global table [[c_func_table]], calls the [[c_call]] encoding function with the C function's index in the table, and returns 0 signifying that it returns no values to Lua.
-<<bytecode generation>>=
-int lua_CMM_c_call (lua_State *L) {
-  unsigned n;
-
-  lua_assert_isstring(L, -1, "c_call requires a function name (as a string)");
-
-  lua_pushtable(L, c_func_table);
-  lua_insert(L, -2);    /* swap positions of table and string */
- 
-  lua_gettable(L, -2);
-  lua_assert_isnumber(L, -1, "cannot call an unregistered C function");
-  n = (unsigned) lua_tonumber(L, -1);
-
-  lua_pop(L, 2);        /* pop number and table */
-  
-  /* emit instruction */
-  c_call(n);          
-
-  return 0; 
-}
 @
 [[lua_CMM_cmm_return]] checks for two numbers atop the Lua stack, calls the [[return_]] encoding function with the [[unsigned]] casts of these two numbers, pops the numbers from the Lua stack, and returns 0 signifying that it returns no values to Lua.
 <<bytecode generation>>=
@@ -3258,7 +3270,7 @@ int load_assembly_unit(char *s, assembly_unit_type ty) {
     if (ty == SRC_FILE) {
       fprintf(stderr, "error: unrecoverable error; cannot finish loading "
                       "file [%s]\n", s);
-    } else if (ty == SRC_STRING) {
+    } else {
       fprintf(stderr, "error: unrecoverable error; cannot finish loading "
                       "assembly unit\n");
     }
@@ -3266,9 +3278,12 @@ int load_assembly_unit(char *s, assembly_unit_type ty) {
   } else {
     if (ty == SRC_FILE) {
       <<run Lua source file [[s]]>>
-    } else {
-      assert(ty == SRC_STRING);
+    } else if (ty == SRC_STRING) {
       <<run Lua source string [[s]]>>
+    } else {
+      assert(ty == SRC_STDIN);
+      assert(s  == NULL);
+      <<run Lua source code on [[stdin]]>>
     }
     <<perform bytecode relocation>>
   }
@@ -3286,6 +3301,10 @@ To run a Lua source file, we simply call the Lua API function [[lua_dofile]] and
 To run a Lua source string, we call Lua API function [[lua_dostring]] and relegate error handling to [[lua_error_handle]].
 <<run Lua source string [[s]]>>=
   lua_error_handle(lua_dostring(L, s), s);
+@ 
+To run Lua source code on [[stdin]], we call [[lua_dofile]] with a [[NULL]] argument.
+<<run Lua source code on [[stdin]]>>=
+  lua_error_handle(lua_dofile(L, NULL), "<stdin>");
 @ 
 \paragraph{Relocating Relocatable Blocks}
 Once we have finished emitting all bytecode into [[RBlock]]s, we are ready to assign permanent addresses to the [[RBlock]]s.
@@ -3537,29 +3556,37 @@ Although these instructions were encoded using [[RAddr]]s for arguments, the Too
 <<matching statement>>=
     | BRANCHTF(a, b)    => pc = (bytecodeptr) (VIEW(POP(values),bool) ? a : b);
 @ 
-To implement a {\PAL} procedure call, we must store information about the present activation in the current thread's activation stack and perform some pointer bookkeeping.
-We pop a pointer to a C [[procedure]] structure off the value stack, and dereference it to find needed information about the callee (so we can properly allocate new memory from the [[locals]] and [[stackdata]] stacks.
-\useops{CMMCall}
+We implement both {\PAL} and foreign C procedure calls with one matching case.
 <<matching statement>>=
-    | CMM_CALL(a)       => {
-                           annotations *ann = (annotations *) a;
+    | CALL(a)           => {
                            CMM_label   *lbl;
-                           procedure   *proc;
-                           actptr       saved;
-
-                           assert(ann != NULL);
 
                            lbl  = VIEW(POP(values), CMM_label *);
                            ASSERT_EMPTY(values);
-                           if (lbl->ty != CMM_PROCEDURE) {
+                           if (lbl->ty == CMM_CFUNCTION) {
+                             <<perform C call>>
+                           } else if (lbl->ty != CMM_PROCEDURE) {
                              cmm_err("target label not a procedure");
+                           } else {
+                             <<perform {\PAL} call>>
                            }
-                           proc = lbl->lbl.proc;
-                           assert(proc != NULL);
+                           }
+@ 
+First, to implement a {\PAL} procedure call, we must store information about the present activation in the current thread's activation stack and perform some pointer bookkeeping.
+We pop a pointer to a C [[procedure]] structure off the value stack, and dereference it to find needed information about the callee (so we can properly allocate new memory from the [[locals]] and [[stackdata]] stacks.
+\useops{CMMCall}
+<<perform {\PAL} call>>=
+                           {
+                             actptr       saved;
+                             annotations *ann  = (annotations *) a;
+                             procedure   *proc = lbl->lbl.proc;
 
-                           <<save current activation info in a stack record>>
+                             assert(ann  != NULL);
+                             assert(proc != NULL);
 
-                           <<allocate and update memory for new activation>>
+                             <<save current activation info in a stack record>>
+
+                             <<allocate and update memory for new activation>>
                            }
 @
 To save the caller's activation record, we simply use the next free [[activation]] location in the [[callstack]] array and copy over the necessary pointers and information.
@@ -3597,59 +3624,15 @@ When the matching statement is executed once more during the next cycle of the [
 
                            u             = new_uid(t);
 @
-Tail calls are easier to implement than regular procedure calls because we need not save the activation record of the calling activation.
-In fact, we must effectively kill off the calling activation (we call [[dies_uid]] to signal the death of the activation).
-Once more, we pop a [[procedure]] struct pointer off the value stack for information about the callee.
-\useops{CMMTailCall}
-<<matching statement>>=
-    | CMM_TAIL_CALL     => {
-                           CMM_label *lbl;
-                           procedure *proc;
-
-                           lbl  = VIEW(POP(values), CMM_label *);
-                           ASSERT_EMPTY(values);
-
-                           if (lbl->ty != CMM_PROCEDURE) {
-                             cmm_err("target label not a procedure");
-                           }
-                           proc = lbl->lbl.proc;
-                           assert(proc != NULL);
-
-                           assert(location_known(proc->raddr));
-                           pc   = (bytecodeptr) location(proc->raddr);
-
-                           <<reuse dead local memory for new activation>>
-
-                           /* deal with uid : */
-                           dies_uid(u);
-                           u = new_uid(t);
-                           }
-@ 
-Because the old activation dies, we can simply reuse the memory chunk it used on the [[locals]] and [[stackdata]] stacks.
-We do need to make sure, though, that there is enough room on these stacks for the new activation in the case that the new activation needs more local stack memory than the dying one.
-<<reuse dead local memory for new activation>>=
-                           /* for now, make sure there's enough room on locals
-                              and stackdata stacks
-                            */
-                           assert(locals_end    <= t->locals_limit);
-                           assert(stackdata_end <= t->stackdata_limit);
-
-                           /* locals ptr stays because we throw out old rho */
-                           /* stackdata ptr stays for same reason */
-
-                           t->locals_free = locals_end = locals + 
-                                                         proc->num_locals;
-                           t->stackdata_free = stackdata_end = stackdata + 
-                                                         proc->stackdata_size;
-@ 
 C calls can be tricky to perform because we need to specially call any registered C function by casting a stored function pointer to the correct C type and dereferencing it.
 Unfortunately we cannot support an infinite number of C function types.
 \useops{CCall}
-<<matching statement>>=
-    | C_CALL(i)         => {
-                           c_caller   call_helper;
-                           void       *f;
-                           lua_State  *L = c_func_table.L;
+<<perform C call>>=
+                           {
+                           c_caller      call_helper;
+                           void         *f;
+                           lua_State    *L = c_func_table.L;
+                           unsigned int  i = lbl->lbl.cfunc_id;
 
                            <<[[call_helper]] $\leftarrow$ pointer to C caller>>
                            <<[[f]] $\leftarrow$ pointer to C function>>
@@ -3693,6 +3676,51 @@ We make a call to [[call_helper]], which takes care of arranging the argument st
 We simply pass the argument stack in and get it back out again (with the pointer to the top of the stack possibly altered).
 <<use [[call_helper]] to call [[f]]>>=
                            call_helper(arguments, f);
+@ 
+{\PAL} tail calls are easier to implement than regular {\PAL} procedure calls because we need not save the activation record of the calling activation.
+In fact, we must effectively kill off the calling activation (we call [[dies_uid]] to signal the death of the activation).
+Once more, we pop a [[procedure]] struct pointer off the value stack for information about the callee.
+\useops{CMMTailCall}
+<<matching statement>>=
+    | CMM_TAIL_CALL     => {
+                           CMM_label *lbl;
+                           procedure *proc;
+
+                           lbl  = VIEW(POP(values), CMM_label *);
+                           ASSERT_EMPTY(values);
+
+                           if (lbl->ty != CMM_PROCEDURE) {
+                             cmm_err("target label not a procedure");
+                           }
+                           proc = lbl->lbl.proc;
+                           assert(proc != NULL);
+
+                           assert(location_known(proc->raddr));
+                           pc   = (bytecodeptr) location(proc->raddr);
+
+                           <<reuse dead local memory for new activation>>
+
+                           /* deal with uid : */
+                           dies_uid(u);
+                           u = new_uid(t);
+                           }
+@ 
+Because the old activation dies, we can simply reuse the memory chunk it used on the [[locals]] and [[stackdata]] stacks.
+We do need to make sure, though, that there is enough room on these stacks for the new activation in the case that the new activation needs more local stack memory than the dying one.
+<<reuse dead local memory for new activation>>=
+                           /* for now, make sure there's enough room on locals
+                              and stackdata stacks
+                            */
+                           assert(locals_end    <= t->locals_limit);
+                           assert(stackdata_end <= t->stackdata_limit);
+
+                           /* locals ptr stays because we throw out old rho */
+                           /* stackdata ptr stays for same reason */
+
+                           t->locals_free = locals_end = locals + 
+                                                         proc->num_locals;
+                           t->stackdata_free = stackdata_end = stackdata + 
+                                                         proc->stackdata_size;
 @ 
 We implement both return rules with one matching case.
 \useops{ReturnDefault}
@@ -4332,10 +4360,10 @@ void disassemble_instructions(CMM_label *loc) {
       asmprintf(asmprintfd, "%s", " ");
       disprintreloc(b);
       asmprintf(asmprintfd, "\n");
-  | CMM_CALL(a) =>
+  | CALL(a) =>
       {
       annotations *ann = (annotations *) a;
-      asmprintf(asmprintfd, "%x: %s", pc, "CMM_CALL ");
+      asmprintf(asmprintfd, "%x: %s", pc, "CALL ");
       asmprintf(asmprintfd, " { also cuts to = ");
       print_table(ann->also_cuts_to);
       asmprintf(asmprintfd, ", also unwinds to = ");
@@ -4352,13 +4380,6 @@ void disassemble_instructions(CMM_label *loc) {
   | CMM_TAIL_CALL() => 
       asmprintf(asmprintfd, "%x: %s", pc, "CMM_TAIL_CALL");
       asmprintf(asmprintfd, "\n");
-  | C_CALL(bits8) =>
-      {
-      asmprintf(asmprintfd, "%x: %s", pc, "C_CALL ");
-      asmprintf(asmprintfd, "<C function #");
-      print_unsigned_bits8(bits8);
-      asmprintf(asmprintfd, ">\n");
-      }
   | RETURN(a, b) => 
       asmprintf(asmprintfd, "%x: %s", pc, "RETURN ");
       print_unsigned_bits8(a);
@@ -4450,7 +4471,7 @@ Use ``higher-order'' macros to declare, define and register operator implementat
 When we push values, how do we store them?  As what kind of [[bits]]$k$ value?
 I think [[lua_CMM_push_literal]] needs some help in this respect.
 
-Document that tables sent to Lua function [[CMM_cmm_call]] (as call-site annotations) are used internally by the encoder/interpreter and that changing them would be dangerous.
+Document that tables sent to Lua function [[CMM_call]] (as call-site annotations) are used internally by the encoder/interpreter and that changing them would be dangerous.
 
 Do we have to handle [[never returns]] annotations?
 

@@ -4,6 +4,7 @@
 --- ./regr "../interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
 
 CMM.exports({ "main" })
+CMM.imports({ "cmmprint" })
 
 CMM.procedure("main", 0, 0)
 
@@ -11,7 +12,7 @@ CMM.procedure("main", 0, 0)
    CMM.push_arg()
 
    CMM.push_symbol("print")
-   CMM.cmm_call({}, {}, { "alt-return" }, 0)
+   CMM.call({}, {}, { "alt-return" }, 0)
 
 -- the normal return site ends the program
    CMM.cmm_return(1, 1)

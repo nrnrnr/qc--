@@ -4,13 +4,14 @@
 --- ./regr "../interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
 
 CMM.exports({ "main" })
+CMM.imports({ "cmmprint" })
 
 CMM.procedure("main", 0, 0)
 
    CMM.push_literal("0")
    CMM.push_arg()
    CMM.push_symbol("subroutine")
-   CMM.cmm_call({ "cont" }, {}, {}, 1)
+   CMM.call({ "cont" }, {}, {}, 1)
 
    CMM.cmm_return(0, 0) -- this should not execute
 
@@ -31,7 +32,7 @@ CMM.procedure("subroutine", 1, 0)
 
    CMM.fetch_local(0)
    CMM.push_literal("10")
-   CMM.apply_operator("geu", "bits16,bits16:bits1")
+   CMM.apply_operator("geu", "bits16,bits16:bool")
    CMM.cbrancht("cutback")
 
    CMM.fetch_local(0)
@@ -40,7 +41,7 @@ CMM.procedure("subroutine", 1, 0)
    CMM.push_arg()
 
    CMM.push_symbol("subroutine")
-   CMM.cmm_call({ "cont" }, {}, {}, 1)
+   CMM.call({ "cont" }, {}, {}, 1)
 
 -- this should not execute
    CMM.fetch_local(0)

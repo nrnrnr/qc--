@@ -1,6 +1,7 @@
 --- ./regr "../interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
 
 CMM.exports({ "main", "datalabel" })
+CMM.imports({ "cmmprint" })
 
 CMM.section("data")
    CMM.define_label("datalabel")

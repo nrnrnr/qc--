@@ -4,6 +4,7 @@
 --- ./regr "../interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
 
 CMM.exports({ "main" })
+CMM.imports({ "cmmprint" })
 
 CMM.procedure("main", 0, 0)
 
@@ -13,7 +14,7 @@ CMM.procedure("main", 0, 0)
    CMM.c_call("cmmprint")
 
    CMM.push_symbol("factorial")
-   CMM.cmm_call({}, {}, {}, 0)
+   CMM.call({}, {}, {}, 0)
 
    CMM.c_call("cmmprint")
 
@@ -27,7 +28,7 @@ CMM.procedure("factorial", 0, 0)
    CMM.push_arg()
 
    CMM.push_symbol("factorial-helper")
-   CMM.cmm_call({}, {}, {}, 0)
+   CMM.call({}, {}, {}, 0)
 
    CMM.cmm_return(0, 0)
 
@@ -38,12 +39,12 @@ CMM.procedure("factorial-helper", 1, 0)
    CMM.store_local(0)
    CMM.fetch_local(0)
    CMM.push_literal("1")
-   CMM.apply_operator("leu", "bits16,bits16:bits1")
+   CMM.apply_operator("leu", "bits16,bits16:bool")
    CMM.cbrancht("done")
 
    CMM.fetch_local(0)
    CMM.pop_arg()
-   CMM.apply_operator("mulu", "bits16,bits16:bits16")
+   CMM.apply_operator("mul_trunc", "bits16,bits16:bits16")
    CMM.push_arg()
 
    CMM.fetch_local(0)

@@ -156,7 +156,7 @@ Cmm_Cont *Cmm_RunThread (Cmm_Cont *k) {
 
 \paragraph{Exporting to {\PAL}}
 
-We write helper [[Cmm_CreateThread_helper]] simply to wrap up a call to [[Cmm_CreateThread]].
+We write [[Cmm_CreateThread_helper]] simply to wrap up a call to [[Cmm_CreateThread]].
 For now this involves only some simple type casting (pointer arguments are passed as [[void *]]s).
 
 <<thread functions>>=
@@ -167,14 +167,6 @@ void *Cmm_CreateThread_helper(void *f, void *s, unsigned n,
                                    (Cmm_Dataptr *) limit_cookie);
 }
 @ 
-
-We need only write a {\PAL} wrapper procedure that calls the helper.
-
-<<export of CreateThread to {\PAL}>>=
-CMM.procedure('CreateThread', 0, 0) -- expects 5 args: f, s, n, limit_cookie
-   CMM.c_call('Cmm_CreateThread')
-   CMM.cmm_return(0,0)
-@
 
 \subsection{Walking the Stack}
 
@@ -338,24 +330,6 @@ void Cmm_RestoreGlobals_helper(unsigned gpu) {
 }
 @ 
 
-\paragraph{Exporting to {\PAL}}
-
-Given C helpers [[Cmm_SaveGlobals_helper]] and [[Cmm_RestoreGlobals_helper]], exporting [[SaveGlobals]] and [[RestoreGlobals]] to {\PAL} is as easy as wrapping up a few C calls in {\PAL} procedures (which we add to the standard basis).
-
-\emph{Note that these C helpers are exported to {\PAL} as [[Cmm_SaveGlobals]] and [[Cmm_RestoreGlobals]].}
-
-<<export of SaveGlobals to {\PAL}>>=
-CMM.procedure('SaveGlobals', 0, 0)   -- expects bits32 gp on stack
-   CMM.c_call('Cmm_SaveGlobals')
-   CMM.cmm_return(0,0)
-@
-
-<<export of RestoreGlobals to {\PAL}>>=
-CMM.procedure('RestoreGlobals', 0, 0) -- expects bits32 gp on stack
-   CMM.c_call('Cmm_RestoreGlobals')
-   CMM.cmm_return(0,0)
-@
-
 \subsection{Controlling the Interpreter}
 
 So we can better control how the runtime system fits in with the interpreter, we wrap the interpreter's [[cmm_interp_open]] and [[cmm_interp_close]] functions.
@@ -366,11 +340,11 @@ int Cmm_open(int valstack_size, int argstack_size) {
   int rc = cmm_interp_open(valstack_size, argstack_size);
 
   /* register any necessary C functions with C-- */
-  register_c_func("Cmm_SaveGlobals",    (void *) Cmm_SaveGlobals_helper,
+  register_c_func("SaveGlobals",    (void *) Cmm_SaveGlobals_helper,
                   "unsigned:void");
-  register_c_func("Cmm_RestoreGlobals", (void *) Cmm_RestoreGlobals_helper, 
+  register_c_func("RestoreGlobals", (void *) Cmm_RestoreGlobals_helper, 
                   "unsigned:void");
-  register_c_func("Cmm_CreateThread",   (void *) Cmm_CreateThread_helper,
+  register_c_func("CreateThread",   (void *) Cmm_CreateThread_helper,
                   "pointer,pointer,unsigned,pointer:pointer");
 
   if (rc != 0) { return rc; }
@@ -387,13 +361,10 @@ directory.  If all fails, we signal an error.
 
 <<load in the standard basis and store error code in [[rc]]>>=
   {
-    const char *standard_basis = 
-      "CMM.exports({ 'SaveGlobals', 'RestoreGlobals', 'CreateThread' }) \n"
-      "CMM.section('stdbasis')                                          \n"
-      "<<export of SaveGlobals to {\PAL}>>                              \n"
-      "<<export of RestoreGlobals to {\PAL}>>                           \n"
-      "<<export of CreateThread to {\PAL}>>                             \n"
-      "CMM.end_section()                                                \n";
+    char *standard_basis = "function CMM.c_call(s)   \n"
+                           "CMM.push_symbol(s)       \n"
+                           "CMM.call({}, {}, {}, 0)  \n"
+                           "end                      \n";
 
     rc = load_assembly_unit(standard_basis, SRC_STRING);
   }

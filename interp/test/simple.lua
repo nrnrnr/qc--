@@ -3,6 +3,7 @@
 -- begin assembly code
 
 CMM.exports({ "main", "random", "third" })
+CMM.imports({ "cmmprint" })
 
 CMM.section("code")
    CMM.procedure("main", 2, 0)
