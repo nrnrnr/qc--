@@ -171,9 +171,9 @@ function Debug.prettyprint(file,out)
     local linewidth = 72
     local ast       = Driver.parse(file)
     local doc       = Driver.pretty(ast)
-    fd              = out and writeto(out) or Driver.stdout
+    fd              = (not out or out == "-") and Driver.stdout or writeto(out)
     Driver.print(doc,linewidth,fd)
-    if out then writeto() end
+    if fd ~= Driver.stdout then writeto() end
 end  
 @
 
@@ -444,7 +444,7 @@ function Compile.run_optimizer(self,proc)
 end    
 
 function Compile.file(backend, file, out)
-    local fd  = out and writeto(out) or Driver.stdout
+    local fd  = (not out or out == "-") and Driver.stdout or writeto(out)
     local ast = Driver.parse(file) 
     local asm = backend.asm(fd)
     local env = Driver.check(ast,asm) -- asm is stored in env
@@ -453,7 +453,7 @@ function Compile.file(backend, file, out)
                 }
     Driver.compile(opt, ast, backend.target, env)
     if backend.emit then backend.emit(asm) end
-    writeto() -- close fd
+    if fd ~= Driver.stdout then writeto() end -- close fd
 end    
 @
 
