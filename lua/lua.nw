@@ -321,13 +321,15 @@ Finally, to make a full-blown interpreter, you need to supply a
 parser.
 We then add the basic library.
 <<lua.mli>>=
-module MakeInterp (MakeParser : Parser.MAKER) (I : INTERP_CORE) : sig
+module type INTERP = sig
   include INTERP_CORE
   module Parser : Luaparser.S with type chunk = Ast.chunk
   val do_lexbuf : sourcename:string -> state -> Lexing.lexbuf -> value list
   val dostring  : state -> string -> value list
   val dofile    : state -> string -> value list
-end with module Value = I.Value
+end
+module MakeInterp (MakeParser : Parser.MAKER) (I : INTERP_CORE)
+    : INTERP with module Value = I.Value
 @ 
 Here is an example of how to build an interpreter that uses the three
 standard libraries:
@@ -349,6 +351,13 @@ module Parser = Luaparser
 module type AST = Luaast.S
 
 module type INTERP_CORE = Luainterp.S
+module type INTERP = sig
+  include INTERP_CORE
+  module Parser : Luaparser.S with type chunk = Ast.chunk
+  val do_lexbuf : sourcename:string -> state -> Lexing.lexbuf -> value list
+  val dostring  : state -> string -> value list
+  val dofile    : state -> string -> value list
+end
 module MakeCore = Luainterp.Make3
 module MakeInterp = Luabaselib.Add
 (*

@@ -1,0 +1,49 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Standalone Lua interpreters}
+
+Runs the given interpreter at startup, using [[Sys.argv]] to decide
+what to do.
+<<luarun.mli>>=
+module Make (I : Lua.INTERP) : sig end
+<<luarun.ml>>=
+module Make (I : Lua.INTERP) = struct
+  module V = I.Value
+  let state = I.state()
+  let dumpstate = ref false
+  let showresults =
+    let rec loop n = function
+      | h :: t -> print_string "Result "; print_int n; print_string " = ";
+                  print_endline (V.to_string h); loop (n+1) t
+      | [] -> ()
+    in loop 1
+  let run infile = ignore (I.dofile state infile)
+  let run_interactive infile =
+    let rec loop n pfx =
+      let line = input_line infile in
+      if String.length line > 0 && String.get line (String.length line - 1) = '\\' then
+        loop n (pfx ^ String.sub line 0 (String.length line - 1) ^ "\n")
+      else
+        begin
+          ignore (I.dostring state (pfx ^ line ^ "\n"));
+          flush stdout; flush stderr;
+          loop (n+1) ""
+        end
+    in  try loop 1 "" with End_of_file -> ()
+  let rec args = function
+    | "-dump" :: a's -> (dumpstate := true; args a's)
+    | "-new"  :: a's -> args a's
+    | [] -> run_interactive stdin
+    | files -> List.iter run files
+  
+  let _ = args (List.tl (Array.to_list (Sys.argv)))
+  
+  let _ = if !dumpstate then
+    begin
+      print_endline "final state: ";
+      Luahash.iter (fun k v -> print_string "  ";
+        print_string (V.to_string k); print_string " |-> ";
+        print_endline (V.to_string v)) state.V.globals
+    end
+end
+
