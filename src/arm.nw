@@ -1,0 +1,466 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% ------------------------------------------------------------------ 
+\section{Back end for the ARM}
+% ------------------------------------------------------------------ 
+
+This module defines a 32 bit little-endian {\arm} architecture.
+<<arm.mli>>=
+module Post : Postexpander.S
+module X    : Expander.S
+
+val target: Ast2ir.tgt
+val placevars : Ast2ir.proc -> Automaton.t
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Abbreviations and utility functions}
+% ------------------------------------------------------------------ 
+
+<<arm.ml>>=
+module SS   = Space.Standard32
+module S    = Space
+module A    = Automaton
+let ( *> )  = A.( *> ) 
+module R    = Rtl
+module RP   = Rtl.Private
+module Up   = Rtl.Up
+module Dn   = Rtl.Dn
+module SM   = Strutil.Map
+module T    = Target
+
+let unimp               = Impossible.unimp
+let impossible          = Impossible.impossible
+<<utilities that depend on [[byteorder]] or [[wordsize]]>>=
+let fetch_word l        = R.fetch l   wordsize
+let store_word l e      = R.store l e wordsize
+let mem w addr          = R.mem R.none 'm' byteorder w  addr
+let reg_width (_,_,w)   = w
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Name and storage spaces}
+% ------------------------------------------------------------------ 
+
+A {\arm} architecture can be either little or big endian. For now, we
+assume little endianness but expect to functorize the implementation
+later.
+<<arm.ml>>=
+let arch        = "arm"                    (* architecture *)
+let byteorder   = Rtl.LittleEndian 
+let wordsize    = 32
+<<utilities that depend on [[byteorder]] or [[wordsize]]>>
+@
+We use the standard storage spaces, including the spaces for PC and
+condition codes.
+There is no float-point hardware.
+<<arm.ml>>=
+module Spaces = struct
+    let id = Rtl.Identity
+    let m  = SS.m byteorder [8; 16; 32]
+    let r  = SS.r 16 id [32]
+    let t  = SS.t    id [32]    
+    let c  = SS.c  3 id [32]    (* pc, _, cc *)
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Registers}
+% ------------------------------------------------------------------ 
+
+<<arm.ml>>=
+let locations   = SS.locations Spaces.c
+let pc          = locations.SS.pc
+let cc          = locations.SS.cc
+let vfp         = Vfp.mk wordsize
+
+let reg n       = ('r',n,32)
+let sp          = reg 13        (* stack pointer    *)
+let ra          = reg 14        (* return address   *)
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Variable Placer}
+% ------------------------------------------------------------------ 
+
+This variable placer puts small variables in registers and others in memory.
+<<arm.ml>>=
+let placevars = 
+  let warn ~width:w ~alignment:a ~hint:h =
+    if w > 32 then unimp (Printf.sprintf "%d-bit values not supported" w) in
+  let mk_stage ~temps =
+    A.choice
+      [ (fun h w -> w <= 32),   A.widen (fun _ -> 32) *> temps 't';
+        A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
+      ] in
+  Placevar.mk_automaton ~warn ~vfp mk_stage
+@ 
+% ------------------------------------------------------------------ 
+\subsection{Control-flow {\rtl}s}
+% ------------------------------------------------------------------ 
+
+We generate standard control-flow {\rtl}s. The \module{ast2ir.nw} module
+inserts these into the {\cfg} it builds. 
+<<arm.ml>>=
+module F = Mflow.MakeStandard
+    (struct
+        let pc_lhs    = pc
+        let pc_rhs    = pc
+        let ra_reg    = R.reg ra
+        let ra_offset = 4               (* size of call instruction *)
+     end)   
+@
+Module [[F]] does not provide a return instruction. A return is simply a
+jump.
+<<arm.ml>>=
+let return = R.store pc (fetch_word (R.reg ra))
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Postexpander}
+% ------------------------------------------------------------------ 
+
+<<arm.ml>>=
+module Post = struct
+    <<ARM postexpander>>
+end
+
+<<ARM postexpander>>=
+let byte_order  = byteorder
+let wordsize    = wordsize
+
+type temp       = Register.t
+type rtl        = Rtl.rtl
+type width      = Rtl.width
+type assertion  = Rtl.assertion
+type operator   = Rtl.Private.opr
+@
+The postexpander may need to allocate temporaries.
+<<ARM postexpander>>=
+let talloc = ref None
+let remember_allocator ta = talloc := Some ta
+let get_talloc () = match !talloc with
+  | Some s -> s
+  | None   -> Impossible.impossible "Temp allocator not registered with postexpander"
+let talloc space = Talloc.Multiple.reg space (get_talloc ()) (* don't eta-reduce *)
+@
+\paragraph{Contexts}
+There is no distinction between an integer and an address.
+@
+<<ARM postexpander>>=
+type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
+let icontext = Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't'
+let acontext = icontext
+@
+\paragraph{Addressing modes}
+<<ARM postexpander>>=
+module Address = struct
+    type t               = Rtl.exp
+    let reg (_,_,w as r) = R.fetch (R.reg r) w 
+end
+include Postexpander.Nostack(Address)
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Load and Store}
+% ------------------------------------------------------------------ 
+
+All temporaries are 32~bit wide.
+<<ARM postexpander>>=
+let tloc t              = Rtl.reg t
+let tval (_,_,w as t)   = R.fetch (tloc t) w
+let twidth              = reg_width
+
+let load ~dst ~addr assn =
+    let w = twidth dst in
+        assert (w = wordsize);
+        [R.store (tloc dst) (R.fetch (mem w addr) w) w]
+
+let store ~addr ~src assn =
+    let w = twidth src in
+        assert (w = wordsize);
+        [R.store (mem w addr) (tval src) w]
+
+let block_copy ~dst dassn ~src sassn w =
+  match w with
+  | 32 -> let t = talloc 't' w in store dst t dassn @ load t src sassn
+  | _  -> Impossible.unimp "general block copies on Arm"
+@
+The {\arm} provides sign- and zero-extending load operations for
+loading values smaller than [[wordsize]]. We only support operations on
+[[wordsize]].
+<<ARM postexpander>>=
+let extend  op n e = R.app (R.opr op       [n; wordsize]) [e]
+let lobits     n e = R.app (R.opr "lobits" [wordsize; n]) [e]
+
+let xload op ~dst ~addr n assn =
+    let w = twidth dst in
+        assert (w = wordsize); 
+        [R.store (tloc dst)
+                 (extend op n (R.fetch (R.mem assn 'm' byteorder n addr) n)) 
+                 w]
+
+let sxload = xload "sx"
+let zxload = xload "zx"
+
+let lostore ~addr ~src n assn =
+    assert (reg_width src = wordsize);
+    [R.store (R.mem assn 'm' byteorder n addr) (lobits n (tval src)) n]
+@
+The general move operation only works between temporaries of the same
+width. Load immediate loads a constant into a temorary.
+<<ARM postexpander>>=
+let move ~dst ~src =
+    assert (reg_width src = reg_width dst);
+    if src = dst then [] else [R.store (tloc dst) (tval src) (twidth src)]
+@
+Immediate load, and extended immediate load. An extended load-immediate
+can take sums and differences of compile-time constants (including late
+compile-time constants). 
+<<ARM postexpander>>=
+let li  ~dst const = [R.store (tloc dst) (Up.const const) (twidth dst)]
+let lix ~dst e     = [R.store (tloc dst) e                (twidth dst)]  
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Operator contexts}
+% ------------------------------------------------------------------ 
+
+We have no boolean context because boolean operations are rewritten into
+control flow.
+Similarly, we have no floating-point context, and hence no rounding-mode context.
+<<ARM postexpander>>=
+let fcontext = (fun x y -> unimp "no floating point on ARM"), fun _ -> false
+let rcontext = (fun x y -> unimp "no rounding mode on ARM"),  fun _ -> false
+let bcontext = (fun x y -> impossible "allocate from bcontext"), fun _ -> false
+let operators = Context.standard icontext fcontext rcontext acontext bcontext
+
+let resmap = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators
+let argmap = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
+@
+We have two maps: from operator to argument context, and from operator
+to result context.
+<<ARM postexpander>>=
+let arg_contexts   (n, _) = try SM.find n argmap with Not_found -> assert false
+let result_context (n, _) = try SM.find n resmap with Not_found -> assert false
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Binary and unary operators}
+% ------------------------------------------------------------------ 
+
+This stuff is wrong because condition codes are not set.
+At present, we keep only conditions for subtraction, which we need to
+implement a conditional branch.
+<<ARM postexpander>>=
+let subflags x y w = R.store cc (R.app (R.opr "arm_subcc" [w]) [x; y]) 32
+
+let unop ~dst op x =
+  [R.store (tloc dst) (R.app (Up.opr op) [tval x]) (twidth dst)]
+
+let binop ~dst op x y =
+  [R.store (tloc dst) (R.app (Up.opr op) [tval x; tval y]) (twidth dst)]
+
+let rtlop ~dst op args =
+  [R.store (tloc dst) (R.app (Up.opr op) (List.map tval args)) (twidth dst)]
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Control Flow}
+% ------------------------------------------------------------------ 
+
+On the {\arm}, the PC can be read and written.
+<<ARM postexpander>>=
+let pc_lhs = pc         (* PC as assigned by branch *)
+let pc_rhs = pc         (* PC as captured by call   *)
+@
+
+\paragraph{Unconditional Branches}
+<<ARM postexpander>>=
+let br ~tgt = [R.store pc_lhs (tval tgt)     wordsize]  (* branch reg *)
+let b  ~tgt = [R.store pc_lhs (Up.const tgt) wordsize]  (* branch     *)
+@
+
+\paragraph{Conditional Branches}
+
+We have to set condition codes and make a conditional branch.
+A conditional branch is represented by a guarded assignment to the PC.
+We turn each condition into an ARM-specific test of the condition
+code, where the ARM operators use the ARM assembly-language mnemonics.
+<<ARM postexpander>>=
+let cmp x y = [subflags (tval x) (tval y) 32] 
+
+let rec bc x (opr, ws as op) y ~tgt =
+  let branch cond = R.guard (R.app (R.opr cond [32]) [R.fetch cc 32])
+                            (R.store pc_lhs (Up.const tgt) 32) in
+  assert (ws = [wordsize]);
+  match opr with
+  | "eq" | "ne" | "lt" | "le" | "gt" | "ge" | "leu" | "gtu" ->
+      branch (arm_cond opr) :: cmp x y
+  | "ltu" -> bc y ("gtu", ws) x ~tgt
+  | "geu" -> bc y ("leu", ws) x ~tgt
+  | _ -> Impossible.impossible
+          "non-comparison in ARM conditional branch (or overflow not implemented)"
+and arm_cond = function
+  | "eq"  -> "arm_eq"
+  | "ne"  -> "arm_ne"
+  | "lt"  -> "arm_lt"
+  | "le"  -> "arm_le"
+  | "gt"  -> "arm_gt"
+  | "ge"  -> "arm_ge"
+  | "leu" -> "arm_ls"
+  | "gtu" -> "arm_hi"
+  | "add_overflows"
+  | "div_overflows"
+  | "mul_overflows"
+  | "mulu_overflows"
+  | "sub_overflows" -> Impossible.unimp "ARM overflow tests"
+  | "ltu" | "geu" -> Impossible.impossible "ARM comparison not reversed"
+  | _ -> Impossible.impossible "non-comparison in ARM conditional branch"
+@
+[[bnegate]] inverts the condition in a conditional branch.
+<<ARM postexpander>>=
+let rec bnegate r = match Dn.rtl r with
+| RP.Rtl [RP.App((cop, [32]), [RP.Fetch (bcodes, 32)]), RP.Store (pc, tgt, 32)]
+  when pc = Dn.loc pc_lhs && bcodes = Dn.loc cc ->
+    Up.rtl (RP.Rtl [RP.App((negate cop, [32]), [RP.Fetch (bcodes, 32)]),
+                   RP.Store (pc, tgt, 32)])
+| _ -> Impossible.impossible "ill-formed ARM conditional branch"
+and negate = function
+  | "ne"     -> "eq"
+  | "eq"     -> "ne"
+  | "ge"     -> "lt"
+  | "gt"     -> "le"
+  | "le"     -> "gt"
+  | "lt"     -> "ge"
+  | "geu"    -> "ltu"
+  | "gtu"    -> "leu"
+  | "leu"    -> "gtu"
+  | "ltu"    -> "geu"
+  | "arm_eq" -> "arm_ne"
+  | "arm_ne" -> "arm_eq"
+  | "arm_lt" -> "arm_ge"
+  | "arm_le" -> "arm_gt"
+  | "arm_gt" -> "arm_le"
+  | "arm_ge" -> "arm_lt"
+  | "arm_ls" -> "arm_hi"
+  | "arm_hi" -> "arm_ls"
+  | "arm_vs" -> "arm_vc"
+  | "arm_vc" -> "arm_vs"
+  | "feq"           -> unimp "floating-point comparison"
+  | "fne"           -> unimp "floating-point comparison"
+  | "flt"           -> unimp "floating-point comparison"
+  | "fle"           -> unimp "floating-point comparison"
+  | "fgt"           -> unimp "floating-point comparison"
+  | "fge"           -> unimp "floating-point comparison"
+  | "fordered"      -> unimp "floating-point comparison"
+  | "funordered"    -> unimp "floating-point comparison"
+  | _               -> impossible 
+                        "bad comparison in expanded ARM conditional branch"
+@ 
+
+\paragraph{Calls} 
+In an indirect call the target is held in a register. 
+<<ARM postexpander>>=
+let effects = List.map Up.effect
+let call  ~tgt ~others = 
+  [R.par (R.store pc_lhs (Up.const tgt) wordsize :: effects others)]
+let callr ~tgt ~others = 
+  [R.par (R.store pc_lhs (tval tgt) wordsize :: effects others)]
+@
+
+\paragraph{Cut-To}
+<<ARM postexpander>>=
+let cut_to effs = [R.par (effects effs)]
+@
+
+\paragraph{No sacred instructions}
+<<ARM postexpander>>=
+let don't_touch_me es = false
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Expander}
+% ------------------------------------------------------------------ 
+
+<<arm.ml>>=
+module X = Expander.IntFloatAddr(Post)
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Spill and reload}
+% ------------------------------------------------------------------ 
+
+The register allocator needs to spill and reload values; we have to
+provide the instructions.
+<<arm.ml>>=
+let spill  p t l = [A.store l (Post.tval t) (Post.twidth t)]
+let reload p t l = 
+    let w = Post.twidth t in [R.store (Post.tloc t) (Automaton.fetch l w) w]
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Global Variables}
+% ------------------------------------------------------------------ 
+
+When a Global {\PAL} variable names no hardware register to live in, the
+variable is passed through to following automaton to obtain its
+location.
+
+THIS AUTOMATON SEEMS QUITE UNIVERSAL FOR 32 BIT ARCHITECTURES. MOVE IT
+TO Automaton.Standard32?
+<<arm.ml>>=
+let globals base = 
+  let width w = if      w <= 8  then 8  
+                else if w <= 16 then 16 
+                else Aux.round_up_to 32 w in
+  let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
+  A.at ~start:base (A.widen width *> A.align_to align *>
+  A.overflow ~memsize:8 
+             ~byteorder:byteorder 
+             ~growth:Memalloc.Up 
+             ~max_alignment:4)
+@
+% ------------------------------------------------------------------ 
+\subsection{The target record}
+% ------------------------------------------------------------------ 
+
+<<arm.ml>>=
+let target : Ast2ir.tgt =
+    { T.name                = "arm"
+    ; T.byteorder           = byteorder
+    ; T.wordsize            = wordsize
+    ; T.pointersize         = wordsize
+    ; T.alignment           = 4  (* strange rotations occur on unaligned loads *)
+    ; T.memsize             = 8
+    ; T.spaces              = [ Spaces.m
+                              ; Spaces.r
+                              ; Spaces.t
+                              ; Spaces.c
+                              ]
+    ; T.distinct_addr_sp    = false
+    ; T.float               = "none"
+    ; T.spill               = spill
+    ; T.reload              = reload
+
+    ; T.vfp                 = vfp
+    ; T.bnegate             = F.bnegate cc
+    ; T.goto                = F.goto
+    ; T.jump                = F.jump
+    ; T.call                = F.call
+    ; T.branch              = F.branch
+    
+    ; T.cc_specs            = A.init_cc
+    ; T.cc_spec_to_auto     = (fun _ _ -> assert false)
+(*
+                              Armcall.cconv 
+                                ~return_to:(fun ra -> (R.store pc ra wordsize))
+                                (F.cutto (Rtl.reg sp))
+*)                    
+    ; T.globals             = globals
+    ; T.rounding_mode       = R.reg ('?', 99, 32)
+    ; T.named_locs          = Strutil.assoc2map []
+    ; T.data_section        = "data"
+    ; T.charset             = "latin1" (* REMOVE THIS FROM TARGET.T *)
+    }    
+
