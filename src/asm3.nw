@@ -1,0 +1,169 @@
+
+% ------------------------------------------------------------------ 
+\section{Abstract Assembler Interface}
+% ------------------------------------------------------------------ 
+
+The code generators use this interface to access text-based and binary
+assemblers. Assembler aspects like symbols and relocatable addresses
+escape the assembler and become part of symbol tables and expressions.
+To avoid that all aspects of the compiler must be functorized over the
+different assemblers we have chosen to use a very polymorphic interface
+that uses Objective Caml's object system.
+
+<<asm3.mli>>=
+<<interface>>
+<<asm3.ml>>=
+<<interface>>
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Important Class Types}
+% ------------------------------------------------------------------ 
+
+An assembler provides four important types that are implemented as
+objects: instructions, relocatable addresses, symbols, and the assembler
+itself. The first three offer methods to represent themselves for
+different kind of assemblers. We expect these interfaces to grow as we
+add more assemblers.  In principle an object created by one assembler
+can be used by any other. However, we do not expect this and allow an
+object to fail on certain methods that are incompatible with its
+intended use.  
+
+
+<<interface>>=
+class type instruction = object
+    method ast:     Ast.proc
+end
+
+class type reladdr = object
+    method ast:     Ast.expr    
+end
+
+class type symbol = object
+    method text:    string
+end
+
+class type assembler = object
+    <<assembler methods>>
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Interface of an Assembler Implementation}
+% ------------------------------------------------------------------
+
+An assembler implementation must include a sub-module that matches
+[[RELADDR]]. It provides constructors for relocatable addresses. Such an
+address is either a symbol, a constant, a sum, or a difference of
+relocatable addresses. Of course, an assembler must implement the
+[[assembler]] class type. Unsupported features should raise the
+[[Unsupported]] exception.
+
+<<interface>>=
+module type RELADDR = sig
+    class const : Bits.bits -> reladdr
+    class sym : symbol -> reladdr
+    class add : reladdr -> reladdr -> reladdr
+    class sub : reladdr -> reladdr -> reladdr
+end
+
+module type ASM = sig
+    exception Unsupported of string
+    type init
+    
+    module RelAddr: RELADDR
+    class asm: init -> assembler
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Assembler Methods}
+% ------------------------------------------------------------------ 
+
+The assembler interface has an imperative flavor: a client emits a
+program by invoking a sequence of methods that mutate an [[assembler]]
+object. Most methods result in some side effects, like emitting code to
+a file, that cannot be observed directly.
+
+<<assembler methods>>=
+(* declarations *)
+method import : string -> symbol        (* any name is legal *)
+method export : string -> symbol        (* any name is legal *)
+method local  : string -> symbol        (* any name is legal *)
+
+(* definitions *)
+method label  : symbol -> unit
+method const  : symbol -> Bits.bits -> unit
+
+(* section, location counter *)
+method section : string -> unit
+method current: string                  (* req: section called *)
+
+method org     : int -> unit            (* set location counter       *)
+method align   : int -> unit            (* align location counter     *)
+method addloc  : int -> unit            (* increment location counter *)
+
+(* emit instructions *)
+method instr  : instruction -> unit
+
+(* emit data *)
+method zeroes : int -> unit
+method value  : Bits.bits -> unit
+method addr   : reladdr -> unit
+
+(* comment *)
+method comment: string -> unit 
+
+(* emit *)
+method emit: unit                       (* finalize *)
+@
+
+The most important abstraction is the symbol: a symbol \emph{must be
+declared before it can be used}. Later a value is bound to the value.
+The assembler must accept any name to declare a symbol for and hide the
+idiosyncrasies of a possibly underlying real assembler.
+
+Symbols are most commonly used for labels.  The scope of a symbol
+depends on its definition:
+
+\begin{enumerate}
+\item [[local]]:  the value of the symbol is defined exactly once
+      inside the compilation unit (program) at hand and not visible
+      outside of it.
+
+\item [[import]]: the value of the symbol is defined once in another
+      compilation unit but made visible in the compilation unit at hand
+      by an import declaration. No symbol exported from the module at
+      hand can be imported.
+
+\item [[export]]: a [[local]] symbol is additionally exported such that
+      other compilation units can import it. No imported symbol can be
+      exported.
+\end{enumerate}      
+
+An assembler maintains named \emph{sections} and for each section a
+\emph{location counter}.  The [[section]] method announces the start
+of a new section, the [[current]] method returns the currently active
+section. It is an unchecked run-time error to call [[current]] before
+[[section]].  
+
+The [[label]] method binds the current value of the location counter to
+a symbol. In a textual assembler this typically done by emitting a
+label. The [[const]] method binds a symbol to an explicitly given value.
+
+The location counter of the current section can be manipulated: [[align
+n]] aligns to the next multiple of [[n]], [[addloc n]] increments it,
+and [[org n]] sets it to [[n]]. In all cases [[n]] must be positive.
+
+The main task of an assembler is to emit data and instructions. This
+is done by [[instr]], [[zeroes]] et al. The instruction or datum goes
+into the current section.
+
+Comments are emitted using [[comment]]. It is an unchecked run-time
+error if the string argument contains a newline. 
+
+After all instructions and data has been passed to an [[assembler]]
+object the [[emit]] method must be called. It finishes any remaining
+business. It is an unchecked run-time error to invoke any [[assembler]]
+method subsequently.
+

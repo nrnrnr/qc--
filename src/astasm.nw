@@ -1,0 +1,272 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=4 et
+
+% TODO: name mangling to ensures symbols are transoformed to C-- syntax
+% and to avoid name clashes with reserved words.
+
+% ------------------------------------------------------------------ 
+\section{{\PAL} Assembler}
+% ------------------------------------------------------------------ 
+
+This is an assembler that emits {\PAL}. It matches the [[Asm3.ASM]]
+interface for assemblers in the {\qcc} compiler.
+
+Since {\PAL} has no natural \emph{native pointer size} like assemblers
+for real machines it receices a functor argument of type [[PERSONALITY]]
+that defines the size of pointers and words. 
+
+<<PERSONALITY>>=
+module type PERSONALITY = sig
+    val target: Target2.t
+end
+
+<<astasm.mli>>=
+<<PERSONALITY>>
+module Make(P: PERSONALITY): Asm3.ASM
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The implementation provides no surprises. It builds up an {\AST} and
+emits it to [[stdout]] when the [[emit]] method is called.
+
+<<astasm.ml>>=
+module T        = Target2
+module A        = Ast
+module Asm      = Asm3
+
+<<PERSONALITY>>
+module Make (P: PERSONALITY):Asm.ASM  = struct
+    <<Make>>
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Auxilliaries}
+% ------------------------------------------------------------------ 
+
+<<Make>>=
+let pointer     = A.BitsTy(P.target.T.pointersize)
+let bits n      = A.BitsTy n
+let int n       = A.Int( Bits.of_int n P.target.T.wordsize
+                       , Some (bits P.target.T.wordsize)
+                       )
+let one         = int 1 (* wordsize *)
+let zero        = A.Int( Bits.of_int 0 P.target.T.memsize
+                       , Some (bits P.target.T.memsize)
+                       ) (* memsize *)
+
+exception Unsupported of string
+let unsupported msg = raise (Unsupported msg)
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Classes for symbols, instructions, and addresses}
+% ------------------------------------------------------------------ 
+
+As more assemblers are added to the compiler the interfaces of the
+following three classes will have to grow. To match them the shared
+interface it is good enough to let these additional methods fail because
+we never expect them to be called.
+
+<<Make>>=
+(* symbols *)
+class symbol (n:string) : Asm.symbol = object
+    method text = n
+end
+
+<<Make>>=
+(* instructions *)
+class instr (p:Proc.t): Asm.instruction = object
+    method ast = Cfg3.ast p.Proc.cfg p.Proc.name p.Proc.mangle P.target
+end    
+@
+
+<<Make>>=
+(* relocatable addresses *)
+module RelAddr:Asm.RELADDR = struct
+    class sym (s:Asm.symbol) = object
+        method ast = A.Fetch (A.Var(None,s#text))
+    end
+    
+    class const (k:Bits.bits) = object
+        method ast = A.Int(k, Some(A.BitsTy(Bits.width k)))
+    end
+
+    class add (x:Asm.reladdr) (y:Asm.reladdr) = object
+        method ast = A.PrimOp ("add", [(None,x#ast);(None,y#ast)])
+    end
+
+    class sub (x:Asm.reladdr) (y:Asm.reladdr) = object
+        method ast = A.PrimOp ("sub", [(None,x#ast);(None,y#ast)])
+    end
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{The assembler class}
+% ------------------------------------------------------------------ 
+
+The assembler maintains mutable state for:
+
+\begin{itemize}
+\item the actual section the assembler is in,
+\item exported symbols,
+\item imported symbols,
+\item completed sections in reverse order,
+\item declarations in the current section in reverse order.
+\end{itemize}
+
+Most methods append a declaration to the current section---[[append]]
+provides a private method for this.
+
+The [[init]] argument for the constructor provides a chance to open a
+file or similar. We don't use it at the momement.
+
+<<Make>>=
+type init = unit
+
+class asm () : Asm.assembler = 
+object (this)
+    val mutable _section  = "this can't happen"
+    val mutable _exported = Strutil.Set.empty
+    val mutable _imported = Strutil.Set.empty
+    val mutable _toplevel = ([]: (string * A.section list) list) (* rev'ed *)
+    val mutable _actions  = ([]: A.section list) (* reversed *)                
+
+
+    method private append (a:A.section) =
+        _actions <- a::_actions
+    
+    (* declare symbols *)
+    method import s =
+        ( _imported <- Strutil.Set.add s _imported
+        ; new symbol s
+        )
+        
+    method export s =
+        ( _exported <- Strutil.Set.add s _exported
+        ; new symbol s
+        )
+        
+    method local  s = 
+        new symbol s
+
+    (* sections *)
+
+    (* section closes the current section and adds it to toplevel. It is
+       dropped in case it is empty. *)
+    method section s = 
+        if _actions <> [] then
+            _toplevel <- (_section, List.rev _actions) :: _toplevel
+        else
+            ()
+    
+    method current = 
+        _section
+            
+    (* define symbols *)        
+    method label (s: Asm.symbol) = 
+        this#append (A.Datum(A.Label s#text))
+    
+    method const (s: Asm.symbol) (b:Bits.bits) =
+        let bits = A.Int(b,Some (bits (Bits.width b))) in
+        this#append (A.Decl(A.Const(None,s#text,bits)))
+
+    (* set location counter *)
+    method org n =
+        unsupported "no location counter in this implementation"
+
+    method align n =
+        this#append (A.Datum(A.Align n))
+
+    method  addloc n = 
+        let memsize = P.target.T.memsize in
+        let ty      = bits memsize            in
+        let size    = int n                   in
+            this#append (A.Datum(A.MemDecl(ty,A.FixSize(size),None)))
+
+    (* instructions *)
+    method instr (i:Asm.instruction) = 
+        this#append (A.Procedure(i#ast))
+
+    (* emit data *)
+    method zeroes (n:int) =
+        let ty      = bits P.target.T.memsize in
+        let size    = int n                   in
+        let rec z   = function
+            | 0 -> []
+            | n -> zero :: z (n-1)            in
+        let init n  = Some(A.InitExprs(z n))  in
+            if n > 0 then
+                this#append (A.Datum(A.MemDecl(ty,A.FixSize(size),init n)))
+            else
+                ()
+    
+    method value (v:Bits.bits) = 
+        let ty   = bits (Bits.width v)              in
+        let init = A.InitExprs([A.Int(v, Some ty)]) in
+            this#append (A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
+            
+    method addr (a:Asm.reladdr) = 
+        let ty   = pointer          in      (* e is of native pointer type *)
+        let init = A.InitExprs([a#ast]) in
+            this#append (A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
+
+    (* the AST has comments only at the statement level. However, we are 
+    outside procedures here and thus cannot issue a comment. Should this
+    method call unsupported()? *)
+
+    method comment s = ()
+
+    method private imports =
+        match Strutil.Set.elements _imported with
+        | []    -> None
+        | names -> Some (A.Import( pointer
+                                 , List.map (fun n -> None, n) names
+                                 ))
+
+    method private exports =
+        match Strutil.Set.elements _exported with
+        | []    -> None
+        | names -> Some (A.Export( Some pointer
+                                 , List.map (fun n -> n, None) names
+                                 )) 
+    
+    (* Advertise pointer sizes and such for this assembler *)
+
+    method private personality =
+        [ A.Memsize P.target.T.memsize
+        ; ( match P.target.T.byteorder with
+          | Rtl.BigEndian    -> A.ByteorderBig
+          | Rtl.LittleEndian -> A.ByteorderLittle
+          | _                -> assert false
+          )
+        ; A.PointerSize P.target.T.pointersize
+        ; A.WordSize    P.target.T.wordsize
+        ; A.Charset     P.target.T.charset
+        ; A.FloatRepr   P.target.T.float
+        ]
+    
+    (* emit takes the declarations in toplevel and completes them to a
+       C-- program. Imports and exports are announced according to the
+       names registered in _imported, _exported *)
+
+    method emit = 
+        let target   = A.TopDecl(A.Target this#personality)  in 
+        let section  = (_section, List.rev _actions)    in
+        let toplevel = List.rev (section :: _toplevel) in
+        let sections = List.map (fun (name,sect) -> A.Section(name,sect))
+                                toplevel                in
+        let ast      = match this#imports, this#exports with
+            | None  , None   -> target :: sections
+            | Some i, None   -> target :: A.TopDecl(i) :: sections
+            | None  , Some e -> target :: A.TopDecl(e) :: sections
+            | Some i, Some e -> target :: A.TopDecl(i) :: A.TopDecl(e) 
+                             :: sections in
+        let doc = Astpp.program ast in
+            Pp.ppToFile stdout 72 doc
+end    
+@
