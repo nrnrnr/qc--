@@ -1,0 +1,207 @@
+
+% ------------------------------------------------------------------ 
+\section{Driver}
+% ------------------------------------------------------------------ 
+
+This module presents the compiler as a compositional collection of
+abstract values and functions. These functions and values are exported
+as primitives to a Lua interpreter, giving the user a way to customize
+the compiler.
+
+The [[Caml]] module offers access to the different phases and values in
+the compiler. 
+
+<<driver2.mli>>=
+module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
+    type asm        (* assembly code                      *)
+    type ast        (* abstract syntax                    *)
+    type env        (* environment/symbol table           *)
+    type cfg        (* control-flow graph for a procedure *)
+    type doc        (* printable document                 *)
+    type target     (* target architecture                *)
+    type stack      (* container for stack slots          *)
+
+    val dummy:      target                  (* our only target right now *)
+    
+    val version:    unit -> unit            (* print version to stdout   *)
+    val scan:       file:string -> unit     (* for debugging the scanner *)
+    val parse:      file:string -> ast      (* parse file                *)
+
+    val emit_asdl:  ast -> unit             (* emit AST in ASDL format *)
+    val check:      ast -> env              (* check semantics of AST  *)
+
+    val compile:    ast -> target -> env -> asm
+                    (* calls optimize: cfg -> stack -> unit *)
+                
+    val assemble:   asm -> doc
+    val print:      doc -> width:int -> unit (* print doc to stdout *)
+end
+@
+
+In case of an error, all functions raise [[Error.ErrorExn]]. An error
+message is typically printed to [[stderr]] before the exception is
+raised.
+
+\begin{itemize}
+\item [[dummy]]: represents our only target architecture.
+\item [[version]]: print a version information to [[stdout]]. This is
+      intentionally not a string such it is harder to abuse.
+\item [[scan]]: scans a file and prints all tokens together with their
+      source code position. Only useful to debug the scanner.
+\item [[parse]]: returns the abstract syntax of a {\PAL} file.
+\item [[emit_asdl]]: writes the {\AST} in {\small ASDL} syntax to
+      [[stdout]].
+\item [[check]]: checks the static semantics of a file and returns 
+      an environment [[env]] value upon success. 
+\item [[compile]]: compiles an {\AST} to assembly code. The function
+      calls the Lua function [[optimize]] for every function and passed
+      the functions control-flow graph [[cfg]] and its [[stack]] to it.
+\item [[assemble]]: truns a assembly program into the printable [[doc]]
+      format.
+\item [[print]]: prints a [[doc]] value to [[stdout]], formatting the
+      output for a line width of [[width]] characters.       
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Caml Implementation}
+% ------------------------------------------------------------------ 
+
+<<driver2.ml>>=
+module Caml = struct
+    <<Caml>>
+end
+@
+
+<<Caml>>=
+module Personality = struct
+    type instr = Proc.t
+    
+    let target = Target2.dummy
+
+    let ext (p:Proc.t) target init = 
+        (* call lua function *)
+        let () = p.Proc.freeze p in
+            Cfg3.ast p.Proc.cfg p.Proc.name p.Proc.mangle target
+end
+module E   = Error
+module L   = Live.Make(Cfg3)
+module Asm = Asm2ast.Make(Personality)
+module IR  = Ast3ir.Make(Asm)
+
+<<Caml>>=
+type asm    = Asm.asm 
+type ast    = Srcmap.map * Ast.program
+type env    = Fenv.Clean.env
+type doc    = Pp.doc
+type cfg    = Cfg3.cfg
+type target = Target2.t
+type stack  = Automaton.t
+
+<<Caml>>=
+let dummy   = Target2.dummy
+
+<<Caml>>=
+let version () =
+    ( This.name     stdout 
+    ; output_string stdout " "
+    ; This.version  stdout 
+    ; output_string stdout 
+        "\n(c) 2000, 2001 President and Fellows of Harvard University\n" 
+    ; output_string stdout 
+        "See also http://www.cminusminus.org/\n"
+    )
+
+<<Caml>>=
+let scan file =
+    let fd          = try open_in file
+                      with Sys_error(msg) -> E.error msg    in
+    let finally ()  = close_in fd                           in
+    let lexbuf      = Lexing.from_channel fd                in
+    let map         = Srcmap.mk ()                          in
+    let scanner     = Scan.scan map                         in
+    let location lb = Srcmap.location map (Lexing.lexeme_start lb) in
+    let rec loop lb =
+        match scanner lb with
+            | Parse.EOF -> ()
+            | tok       ->
+                let (file,line,col) = location lb           in
+                let tok             = Scan.tok2str tok      in
+                    ( Printf.printf "%-16s %3d %2d %s\n" file line col tok
+                    ; loop lb
+                    )
+    in
+        ( Srcmap.sync map 0 (file,1,1)
+        ; loop lexbuf
+        ; finally ()
+        )
+
+<<Caml>>=
+let parse (file:string) = 
+    let fd          = try open_in file
+                      with Sys_error(msg) -> E.error msg    in
+    let finally ()  = close_in fd                           in
+    let lexbuf      = Lexing.from_channel fd                in
+    let map         = Srcmap.mk ()                          in
+    let scanner     = Scan.scan map                         in
+        try
+            ( Srcmap.sync map 0 (file,1,1)
+            ; (map, Parse.program scanner lexbuf) 
+            )
+        with
+            | Parsing.Parse_error ->
+              ( finally()
+              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) "parse error"
+              ; E.error "parse error - compilation aborted"
+              )
+            | E.ErrorExn msg ->
+              ( finally()
+              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) msg
+              ; E.error "parse error - compilation aborted"
+              )
+            | e ->
+              ( finally()
+              ; raise e
+              )
+
+<<Caml>>=
+let emit_asdl (map,ast:ast) =
+        AstUtil.sexp_wr_program ast stdout
+
+<<Caml>>=
+let check (map,ast:ast) =
+    let env      = Fenv.Dirty.empty map              in
+    let env      = Fenv.Dirty.push env (Fenv.Dirty.emptyscope) in
+    let env      = Elab.Env.global   env ast         in
+    let env      = Elab.Check.global env ast         in
+    let env      = Elab.Env.setDefaults env          in
+    let ()       = if Fenv.Dirty.errorFlag env then 
+                      Error.error "compilation aborted because of errors." 
+    in
+        Fenv.clean env
+
+<<Caml>>=
+let compile (map,ast:ast) (target:target) (env:env) =
+    let ()     = Target2.check target env        in   
+        IR.translate env target ast 
+
+<<Caml>>=
+let assemble (asm:asm) = 
+    Astpp.program (Asm.ast asm)
+
+<<Caml>>=
+let print (doc:doc) (width:int) =
+    Pp.ppToFile stdout width doc
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Export to Lua}
+% ------------------------------------------------------------------ 
+
+<<driver2.ml>>=
+module Lua = struct
+    <<Lua>>
+end
+
+<<Lua>>=
+@
+
