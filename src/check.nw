@@ -26,8 +26,23 @@ following steps:
 \end{enumerate}
 
 % ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+Currently the interface only allows to check the static semantics of a
+named file. When the chek succeeds [[Error.Ok()]] is returned.
+
+<<check.mli>>=
+val check : string -> unit Error.error
+@ 
+
+% ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
+
+The key to understand the implementation is the fat environment
+[[Fatenv]]; it defines a symbol table that holds the type, value, and
+target environment.
 
 <<check.ml>>=
 module T = Types
@@ -35,8 +50,7 @@ module E = Error
 module A = Ast
 module F = Fatenv
 
-(* f:('a -> 'b -> 'a) -> init:'a -> 'b list -> 'a *)
-let foldl = List.fold_left
+let foldl = List.fold_left (* f:('a -> 'b -> 'a) -> init:'a -> 'b list -> 'a *)
 @
 
 The remove offending declarations from a list we use [[exclude]]: 
@@ -51,8 +65,8 @@ let exclude xx yy =
 @
 
 For error reports we need a source code map to resolve character
-positions into meaningful file, line, column triples. The source map
-can be obtained from the fat environment. Here is a suitable error
+positions into meaningful file, line, column triples.  The source map
+can be obtained from the fat environment.  Here is a suitable error
 reporting function for [[E.catch]]:
 
 <<>>=
@@ -79,9 +93,15 @@ let rec evalTy env = function
 \subsection{Building the type environment}
 % ------------------------------------------------------------------ 
 
-The [[TSort.sort]] function knows very few things about (type)
-declarations: it can ask for the names a declaration [[defines]], and
-the declared names it [[uses]]. For error reporting declarations are
+Before the values of a scope are entered into the environment all type
+declarations are processed. Type declarations can refer to each other
+and thus they must be processed in a topological order: declarations
+must depend only on declarations that have been already processed.
+
+Topological sort is implemented by the [[TSort]] module.  The
+[[TSort.sort]] function knows very few things about (type)
+declarations:  it can ask for the names a declaration [[defines]], and
+the declared names it [[uses]].  For error reporting declarations are
 enriched with optional source code positions.
 
 <<module TT>>=
@@ -99,10 +119,10 @@ let rec uses = function
     | _                             , _   -> []
 @
 
-To build the global type environment global type declarations must be
-collected. Type declarations ([[typedef]]) on the top-level and the
-section-level are global; [[foldGlobalTypeDecls]] collects them from
-the abstract syntax.
+To build the type environment type declarations must be collected. 
+Type declarations ([[typedef]]) on the top-level and the section-level
+are global; [[foldGlobalTypeDecls]] collects them from the abstract
+syntax.
 
 <<building the type environment>>=
 module TypeEnv = struct
@@ -118,16 +138,23 @@ end
 % ------------------------------------------------------------------ 
 \subsection{Collecting Type Declarations}
 % ------------------------------------------------------------------ 
+
+The type declarations of a scope are first collected, then sorted, and
+finally processed.  The functions collecting them walk over the
+abstract syntax and return declarations in a list.  The top-level and
+its sections declare global types, the body of procedures local types. 
         
 <<build type env>>=
 let rec body r dd = function
     | A.BodyAt(x,r)     -> body (Some r) dd x
     | A.DeclBody(d)     -> decl r dd d
     | _                 -> dd
+<<>>=
 and decl r dd = function
     | A.DeclAt(x,r)     -> decl (Some r) dd x
     | A.Typedef(_) as d -> (d,r)::dd
     | _                 -> dd
+<<>>=
 and stmt r dd = function
     | A.StmtAt(x,r)     -> stmt (Some r) dd x
     | A.SpanStmt(_,_,bb)-> foldl (body r) dd bb
@@ -158,15 +185,16 @@ let foldLocalTypeDecls b =
 \subsubsection{Processing type declarations}
 % ------------------------------------------------------------------ 
 
-After the global type declarations have been collected they are sorted
+After type declarations have been collected they are sorted
 topologically to get the right order to process them.  Sorting can
 fail when declarations happen to be circular; this is reported by an
 exceptions.  In that case offending declarations are taken out and the
-sorting is repeated. We end up with a fat environment in that binds
-all global names for types.
+sorting is repeated.  We end up with a fat environment that binds all
+names for types of the actual scope.
 
 Names defined by declarations found in cycles are bound to [[E.Error]]
 in the (fat) environment.
+
 <<>>=
 let bindError scope env decls = 
     let names = List.concat (List.map TT.defines decls) in 
@@ -205,22 +233,22 @@ let reportCycle env decls =
 
 <<>>=
 let doTypes is_global env dd =
-    let decls          = List.map fst                   in 
+    let decls          = List.map fst                 in
     let rec bindAll dd =
         try
-            let dd' = TSort.sort dd                     in
+            let dd'   = TSort.sort dd                 in
             doTypeDecls env (decls dd')
         with TSort.Cycle(offending) ->
-            let dd'   = exclude dd offending             in
-            let scope = if is_global then F.Global 
-                        else F.Local                     in
+            let dd'   = exclude dd offending          in
+            let scope = if is_global then F.Global
+                        else F.Local                  in
             let env'  = bindError scope env offending in
                 ( reportCycle env' offending
                 ; bindAll dd'
                 )
-                                                        in
+                                                      in
         bindAll dd
-
+<<>>=
 let doGlobalTypes env program = doTypes true  env (foldGlobalTypeDecls program)
 let doLocalTypes  env body    = doTypes false env (foldLocalTypeDecls body)
 @
@@ -229,13 +257,16 @@ let doLocalTypes  env body    = doTypes false env (foldLocalTypeDecls body)
 \subsection{Building the value environment}
 % ------------------------------------------------------------------ 
 
+
+
 The top-level scope of a compilation unit includes the top-level
 itself and all sections.  Values declared on either level are visible
 in the entire compilation unit.  Before the static semantics of a
 program can be checked these global declarations must be bound in an
 environment.  Additionally constant declarations are type checked and
 evaluated.  The values for them are also bound in the environment,
-too.
+too. 
+
 
 Except for constants all other values like labels, continuations, or
 registers, are completely known at the place where they are defined or
@@ -251,8 +282,8 @@ declarations are treated separately because only they require a
 topological sort.  We thus traverse the abstract syntax and bind all
 non-constant values into the environment.  Then we collect all
 constant declarations, sort and process them.  Because sorting fails
-in the presence of cyclic declarations and must be re-done keeping the
-list to be sorted small is advantageous.
+in the presence of cyclic declarations and must be re-done, keeping
+the list to be sorted small is also advantageous.
 
 <<building the value environment>>=
 module ValueEnv = struct
@@ -294,10 +325,10 @@ let rec defines = function
 
 A constant expression can refer to other constant and link-time
 constants.  To find the right topological order it is only important
-to find other constants.  Of course, these can be syntactically no be
+to find other constants.  Of course, these can not be syntactically
 distinguished and so we will collect all free variables of an
 expression.  This leads to used names, that are not constants and that
-appear to be defined from the perspective of the topological [[sort]]
+appear to be unddefined from the perspective of the topological [[sort]]
 function.  But [[sort]] assumes that these undeclared names do not
 depend on any constant---which is correct.
 
@@ -326,11 +357,11 @@ let rec uses = function
 \subsubsection{Binding Value Symbols}
 % ------------------------------------------------------------------ 
 
-Global labels and procedures have fixed types that can be entered into
-the environment. Register and Import declarations on the other hand
-carry user provided types with them. In case these types are names
-they may be undefined; this leads to register and import declarations which
-are bound to [[Error]]. 
+Labels and procedures have fixed types that can be entered into the
+environment.  Register and Import declarations on the other hand carry
+user provided types with them.  In case these types are names they may
+be undefined; this leads to register and import declarations which are
+bound to [[Error]]. 
 
 <<bind global values>>=
 let proct scope    = (scope, E.Ok(F.Label(F.Proc),T.code))
@@ -353,12 +384,18 @@ let rec ty env = function
     | A.AliasTy(n)      -> F.findt' n env
 @
 
-The following functions traverse the abstract syntax and enter all
-names of global scope into the environment -- except for constants. 
-In particular, these are:  all import, register, and procedure
-declarations on the top-level and section-level.  Additionally all
-label for code and data anywhere in the compilation unit because they
-have global scope.
+The following functions traverse the abstract syntax of the global or
+local scope and enter all names into the environment -- except for
+constants.  The parameter [[scope]] indicates whether local or global
+symbols are bound and defines also the scope that is used when names
+are bound in the fat environment. 
+
+Global symbols are all those on the top-level and section level.
+Additionally all labels for code inside procedures are also
+bound because they have global scope. When local symbols (inside a
+procedure) are bound labels are bound a second time with a local scope
+in the environment. This helps to decide whether a symbol is local or
+global when it is accessed from inside a procedure.
 
     
 <<>>=
@@ -382,6 +419,10 @@ let rec datum scope env = function
                                   F.bindv n (datat scope) env 
                                else env
     | _                     -> env
+@
+
+Continuations are local to procedures and thus they are only bound
+when in [[F.Local]] mode.
 
 <<>>=
 let rec stmt scope env = function 
@@ -407,7 +448,12 @@ and decl scope env = function
     | A.Registers(rr)  -> foldl (register scope) env rr 
     | A.Target(aa)     -> if scope=F.Global then foldl target env aa else env
     | _                -> env
+@
 
+A \textit{body} is always local to procedure and therefore its
+declarations are only processed when local values are bound. 
+
+<<>>=
 and body scope env = function
     | A.BodyAt(x, r) -> E.catch' env (error r env) (body scope env) x
     | A.DeclBody(d)  -> if scope=F.Local then decl scope env d else env 
@@ -444,6 +490,8 @@ let locals  env bb   = foldl (body F.Local) env bb
 Constant declarations are a bit special because every declaration's
 type and value can depend on other declarations. They thus must be
 topologically sorted before their types and values can be computed.
+The following functions walk over the abstract syntax and collect
+constant delclarations in a list. 
 
 <<collecting const declarations>>=
 let rec body r dd = function
@@ -485,13 +533,13 @@ let foldLocalConstDecls b =
 % ------------------------------------------------------------------ 
 
 Constant declarations must be sorted topologically before they can be
-processed. Processing includes checking their types and evaluating
-their values. Both type and value are bound in the environment.
+processed.  Processing includes checking their types and evaluating
+their values.  Both type and value are bound in the environment.
 
 Processing a constant declaration means to
 
 \begin{enumerate}
-\item infer its type and compare it an optionally supplied type that
+\item infer its type and compare it to an optionally supplied type that
       is part of it declaration,
 \item evaluate it to its value,
 \item bind the value and the type in the environment.
