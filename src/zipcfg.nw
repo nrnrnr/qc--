@@ -319,9 +319,15 @@ style.  The [[noflow]] continuation is used in the common case when an
 edge bears no dataflow information; the [[flow]] continuation is used
 in the general case.  Clients must guarantee that
 [[noflow n = flow {node=n; defs=empty; kills=empty}]].
-In the common case, [[union_over_edges]] simply applies [[noflow]] to
-its unique successor.
-
+<<zipcfg.mli>>=
+val union_over_outedges :
+  Rep.last -> noflow:(uid -> regs) -> flow:(contedge -> regs) -> regs
+@ Function [[union_over_outedges]] is good for backward problems; the
+corresponding function for forward problems is [[iter_outedges]].
+<<zipcfg.mli>>=
+val iter_outedges :
+  Rep.last -> noflow:(uid -> unit) -> flow:(contedge -> unit) -> unit
+@
 Calling [[add_inedge_uses n l]] returns the union of~[[l]] with any
 uses on the inedge to~[[n]].
 It is defined on \emph{all} nodes, because there are no uses on the
@@ -331,8 +337,6 @@ Calling [[add_live_spans n l]] returns the union of~[[l]] with any
 registers kept live in spans.
 Spans keep register live if they may be needed to walk the stack.
 <<zipcfg.mli>>=
-val union_over_outedges :
-  Rep.last -> noflow:(uid -> regs) -> flow:(contedge -> regs) -> regs
 val add_inedge_uses : Rep.last   -> regs -> regs
 val add_live_spansl : Rep.last  -> regs -> regs
 val add_live_spansf : Rep.first -> regs -> regs
@@ -818,6 +822,19 @@ let union_over_outedges node ~noflow ~flow =
   | Return _
   | Exit _
   | Forbidden _ -> RSX.empty
+  
+let iter_outedges node ~noflow ~flow =
+  let noflow (u, l) = noflow u in
+  match node with
+  | Call c -> List.iter flow c.cal_contedges
+  | Cut (_, es, _) -> List.iter flow es
+  | Cbranch (c, t, f) -> (noflow t; noflow f)
+  | Mbranch (_, ls) -> List.iter noflow ls
+  | Branch (_, l) -> noflow l
+  | Jump _
+  | Return _
+  | Exit _
+  | Forbidden _ -> ()
   
 let add_inedge_uses node regs =
   let reg_add  = RSX.fold RSX.add in

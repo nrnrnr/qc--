@@ -75,6 +75,9 @@ val forward_anal : 'a analysis -> Zipcfg.graph -> unit
 The Boolean result tells if the graph changed.
 <<declarations of exported values>>=
 val forward_rewrite : 'a pass -> Zipcfg.graph -> Zipcfg.graph * bool
+@ If the graph is already solved, we can take a short cut.
+<<declarations of exported values>>=
+val forward_rewrite_solved : 'a pass -> Zipcfg.graph -> Zipcfg.graph * bool
 @ 
 \paragraph{Composition operators}
 Here we will make new passes from old ones.
@@ -252,6 +255,9 @@ and forward_rewrite (fact : 'a fact) comp graph entry_fact changed =
                 unimpf "rewriting last node in forward dataflow" in
       rewrite_next_block () in
   rewrite_blocks [] (G.postorder_dfs graph) changed
+
+let forward_rewrite_solved (fact, comp) g =
+  forward_rewrite fact comp g fact.init_info false
 
 let forward_rewrite (fact, comp) g =
   snd (solve_and_rewrite fact comp g fact.init_info false)

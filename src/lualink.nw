@@ -637,9 +637,8 @@ C.register_module "Optimize"
   ; "remove_nops"           , Map.stage.V.embed Optimize.remove_nops
   ; "validate"              , Map.stage.V.embed Optimize.validate
   ; "trim_unreachable_code" , Map.stage.V.embed Optimize.trim_unreachable_code
-(*
   ; "peephole"              , Map.stage.V.embed Peephole.subst_forward
-*)
+  ; "peepholes"             , Map.stage.V.embed Peephole.sequential
   ; "deadfn"                , dataflow_stage (Dataflowp.backward_rewrite live_dead)
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
@@ -690,17 +689,17 @@ C.register_module "Stack"
   ] g;                    
 @ 
 PERHAPS THIS CODE SHOULD REPLACE THE SOMEWHAT HEAVYWEIGHT [[Asm.dot]]???
-<<old register modules to [[g]] in alphabetical order>>=
+<<register modules to [[g]] in alphabetical order>>=
 C.register_module "Stages"
   [ "writedot", Map.stage.V.embed
-      (fun _ proc -> 
+      (fun _ (g,proc) -> 
         prerr_string
           (Cfgutil.cfg2dot ~compress:true ~live:true
-             ~name:proc.Proc.symbol#mangled_text proc.Proc.cfg);
+             ~name:proc.Proc.symbol#mangled_text g);
         flush stderr;
-        true)
+        (g, proc), false)
   ; "replace_vfp", Map.stage.V.embed
-      (fun _ proc -> proc.Proc.cc.Call.replace_vfp proc.Proc.cfg; true)
+      (fun v (g,proc) -> Backplane.of_dataflow proc.Proc.cc.Call.replace_vfp v (g,proc))
   ]  g;
 <<register modules to [[g]] in alphabetical order>>=
 let metrics t =
@@ -733,10 +732,9 @@ C.register_module "Targets"
   ; "interp",   Map.target.V.embed Interp.target'
 *)
   ] g;
-<<old register modules to [[g]] in alphabetical order>>=
+<<register modules to [[g]] in alphabetical order>>=
 C.register_module "Typecheck" 
- [ "proc",       V.efunc (V.value **-> Map.proc **->> V.int)
-                         (fun _ proc -> Typecheck.proc proc; 1)
+ [ "proc",      Map.stage.V.embed (fun _ proc -> Typecheck.proc proc; proc, false)
  ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Unsupported" 

@@ -1,0 +1,56 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+@
+\section{Dataflow pass for available expressions}
+
+For dependency reasions, this module has to be split from the
+[[Avail]] module.
+<<availpass.mli>>=
+val analysis : Avail.t Dataflowf.analysis
+@ 
+
+\subsection{Implementation}
+
+
+<<availpass.ml>>=
+module D  = Dataflowf
+module G  = Zipcfg
+module GR = Zipcfg.Rep
+module P  = Property
+let matcher = { P.embed = (fun a -> P.Avail a);
+                P.project = (function P.Avail a -> Some a | _ -> None);
+                P.is = (function P.Avail a -> true | _ -> false);
+              }
+
+let prop = Unique.Prop.prop matcher
+
+let fact = {
+  D.fact_name = "available expressions";
+  D.init_info = Avail.unknown;
+  D.add_info = Avail.join;
+  D.changed = Avail.smaller;
+  D.prop = prop;
+}
+
+let last_outs in' l set =
+  let out = Avail.forward (GR.last_instr l) in' in
+  let set_edge e =
+    let out = Avail.invalidate e.G.defs  out in
+    let out = Avail.invalidate e.G.kills out in
+    let out = Avail.unknown (* paranoia *) in
+    set (fst e.G.node) out in
+  G.iter_outedges l ~noflow:(fun u -> set u out) ~flow:set_edge 
+
+let comp = {
+  D.name = "avail";
+  D.middle_out = (fun a m -> Avail.forward (GR.mid_instr m) a);
+  D.last_outs = last_outs;
+}
+
+let analysis = fact, comp

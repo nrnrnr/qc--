@@ -154,6 +154,10 @@ type outputs = SS.t
 <<exported module types>>
 module Make (Arg : ARG) : S with type proc = Arg.proc
 module M : S with type proc = Ast2ir.proc
+val of_dataflow : 
+  (Zipcfg.graph -> Zipcfg.graph * bool) ->
+    'a -> (Zipcfg.graph * 'c) -> (Zipcfg.graph * 'c) * bool
+@ 
 <<exported module types>>=
 module type ARG = sig
   type proc
@@ -897,3 +901,7 @@ let explain () =
 <<registration of standard semantic properties>>
 @ 
 
+<<backplane.ml>>=
+let of_dataflow graph_rewrite _ (g, proc) =
+  let g, changed = graph_rewrite g in
+  (g, proc), changed
