@@ -1,0 +1,73 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+An automaton encapsulates the ability to assign locations.
+Every automaton has a private collection of locations (e.g.,
+registers) that it may use at will, plus an ``overflow area.''
+The overflow area is located in memory, and it must be contiguous.
+
+Automata are imperative; the type [[Automaton.t]] encapsulates mutable
+state.
+This state is primarily the private internal state of the automaton, but there
+is one part of state that is public.
+When an automaton is ``frozen,'' it is no longer possible to get new
+locations from it, but in exchange, one can get the size and alignment
+requirement (and also the address) of its overflow area.
+
+Although an \emph{automaton} is imperative, the \emph{specification}
+of the automaton is not.
+To create an automaton, one needs a specification, plus the address to
+be used to point to the overflow area.
+\emph{Addresses always point to the lowest addressed byte, as in the
+value returned from [[malloc]].}
+This address may contain unbound compile-time constants (see \module{const}).
+
+<<new.mli>>=
+<<type abbreviations>>
+
+(* module Automaton *)
+
+type spec  (* specification of an automaton (immutable) *)
+
+type t   (* an automaton (mutable) *)
+type loc (* a location provided by an automaton *)
+
+val mk : spec -> Rtl.expr -> t
+  (* supply an address of the overflow area, and get back an
+     automaton in its initial state *)
+
+  (* get a location and change the automaton's internal state *)
+val ty    : t -> size * string option -> loc    
+val block : t -> size * align         -> loc    
+
+
+type area = { address : Rtl.expr    (* address of memory block *)
+            ; align   : align       (* at run time, must have address mod align = 0 *)
+            ; size    : int
+            } 
+
+  (* stop getting locations and found out about the overflow area *)
+val freeze : t -> area
+@ 
+Here's what we do with locations:
+<<new.mli>>=
+val fetch : loc -> width -> Rtl.expr
+val store : loc -> Rtl.expr -> width -> Rtl.rtl
+@ 
+It's possible that several overflow areas, with disjoint lifetimes,
+can be overlapped in a single location in memory.
+<<new.mli>>=
+type placement = EqualHighEnds | EqualLowEnds
+val overlap : placement -> area list -> area
+  (* Overlap several areas into a larger area, forcing constraints on
+     compile-time constants.  May make calls to Const.make_equal, but
+     otherwise has no side effects.  It is a checked run-time error to
+     overlap areas at the high end unless the size of every area is a
+     multiple of its alignment.  N.B. may raise Const.Cannot_solve. *)
+
+@ 
+Maybe this chunk should be inlined?
+<<type abbreviations>>=
+type align = int
+type width = int
+type size  = int
+@ 
