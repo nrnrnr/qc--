@@ -237,11 +237,14 @@ let compile target file =
         if Fenv.Dirty.errorFlag env = true then 1 else
         let env    = Fenv.clean env                  in
         let target = Target2.dummy                   in
-        let width  = 72                              in
-        let asm    = IR.translate env target ast in
-            ( Astpp.ppToFile stdout width (Asm.ast asm)
-            ; 0
-            )
+        match Target2.check target env with
+        | Some msg -> Error.errorPrt msg; 1 (* error *)
+        | None     -> (* ok *)
+            let width  = 72                              in
+            let asm    = IR.translate env target ast in
+                ( Astpp.ppToFile stdout width (Asm.ast asm)
+                ; 0
+                )
 @
 
 % ------------------------------------------------------------------ 

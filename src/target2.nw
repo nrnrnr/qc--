@@ -209,6 +209,21 @@ reload: (Rtl.space -> Rtl.spacedescr) -> Register.t -> Rtl.loc ->Rtl.rtl list;
 @
 
 % ------------------------------------------------------------------ 
+\subsection{Compatibility with Source Code}
+% ------------------------------------------------------------------ 
+
+A {\PAL} source code advertises some target properties that of course
+must match the actual target. The expected properties are recorded in
+the fat environment (\module{fenv}). The [[check]] function compares an
+actual target with the expectations in an environment and returns
+[[None]] if expectations match, and [[Some msg]] if there are
+discrepancies.
+
+<<target2.mli>>=
+val check: t -> Fenv.Clean.env -> string option (*XXX better interface?  *)
+@
+
+% ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
@@ -220,6 +235,7 @@ module R       = Rtl
 module RP      = Rtl.Private
 module StrMap  = Map.Make(struct type t=string let compare=compare end)
 module CharMap = Map.Make(struct type t=char   let compare=compare end)
+module F       = Fenv.Clean
 
 module MapUtil (M: Map.S) = struct
     let lookup map key =
@@ -238,12 +254,40 @@ module CharUtil = MapUtil(CharMap)
 <<type cc>>
 <<type t>>
 
-module D = struct
+module D = struct       (* D holds dummy target *)
     <<module D>>
 end
 
 let dummy = D.t
 @
+
+The [[check]] function compares expectations about a target recorded in
+an fat environment with an actual target.
+
+<<target2.ml>>=
+let check (t:t) (env:F.env) =
+    let itoa i = string_of_int i in
+    let msg property source target = 
+        Some ( "missmatch of "^property
+             ^ " in source (" ^source
+             ^ ") and target ("^target^")") in
+    match F.findEndianness env, t.byteorder with
+    | F.Big,   R.LittleEndian -> msg "byteorder" "little" "big"
+    | F.Little, R.BigEndian    -> msg "byteorder" "big"    "little"
+    | _ -> if F.findWordsize env <> t.wordsize then
+        msg "wordsize" (itoa (F.findWordsize env)) (itoa t.wordsize)
+    else if F.findMemsize env <> t.memsize then
+        msg "memsize" (itoa (F.findMemsize env)) (itoa t.memsize)
+    else if F.findPointersize env <> t.pointersize then
+        msg "pointer size" (itoa (F.findPointersize env)) (itoa t.pointersize)
+    else if F.findFloat env <> t.float then
+        msg "floating point standard" (F.findFloat env) t.float
+    else if F.findCharset env <> t.charset then
+        msg "charset" (F.findCharset env) t.charset
+    else
+        None
+@
+    
 
 % ------------------------------------------------------------------ 
 \subsection{Dummy Target}

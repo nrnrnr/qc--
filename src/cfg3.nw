@@ -679,10 +679,12 @@ let gm_insert_assign_after (rtls:Rtl.rtl list) (node:node) =
 let gm_insert_dataflow_between ~defs ~uses ~kills ~src ~dst =
     let cfg  = src#cfg          in
     let exit = cfg#exit         in
+    (*** debugging 
     let _    =
         ( Printf.printf "src: %d %s\n" src#id src#comment
         ; Printf.printf "dst: %d %s\n" dst#id dst#comment
         ) in
+     ***)    
     let node = new X.dataflow cfg exit defs uses kills in
         ( src#upd_succ (fun n -> if n = dst then node else n)
         ; node#upd_succ (fun n -> dst)
@@ -1234,13 +1236,13 @@ object(this)
     
     (* comment about node kind *)
     method comment =
-        "node"
+        Printf.sprintf "node %d" _id
 
     method ast (mangle:string->string) (target:Target2.t) = 
         let this    = (this :> node) in
         let label l = stmt (A.LabelStmt (mangle l)) in
         let labels  = List.map label _labels in
-        let msg     = (string_of_int _id) ^ " " ^ (this#comment) in
+        let msg     = this#comment in
         let id      = stmt (A.CommentStmt msg) in 
              id::labels
 
@@ -1332,7 +1334,7 @@ object(this)
         , []
         )
 
-    method comment = "proxy"    
+    method comment = super#comment ^ " proxy"    
 end
 
 (* ------------------------------------------------------------------ *) 
@@ -1349,7 +1351,7 @@ object(this)
 
     method linorder = (Some _succ, [])
     
-    method comment = "entry"    
+    method comment = super#comment ^ " entry"    
     method succ = [_succ]
     method upd_succ map = 
         let map = upd (this :> node) map in
@@ -1363,7 +1365,9 @@ and exit cfg: node =
 object(this)
     inherit vnode cfg Rtl.null as super
 
-    method comment = "exit - should be unreachable from entry!"    
+    method comment = 
+        super#comment ^ " exit - should be unreachable from entry!"    
+    
     method linorder = (None, [])
 end
 @
@@ -1402,7 +1406,7 @@ object (this)
         let s      = R2A.rtl mangle _rtl in
             labels@[stmt s]
 
-    method comment = "assign"    
+    method comment = super#comment ^ " assign"    
     method linorder = (Some _succ,[])
 end
 
@@ -1426,7 +1430,7 @@ object (this)
         let map = upd (this :> node) map in
         _exit <- map _exit
 
-    method comment = "return"    
+    method comment = super#comment ^ " return"    
 
     method ast mangle target =
         let labels = super#ast mangle target    in
@@ -1455,7 +1459,7 @@ object (this)
         let map = upd (this :> node) map in
         _targets <- List.map map _targets 
 
-    method comment = "goto"    
+    method comment = super#comment ^ "goto"    
     
     method ast mangle target =
         let labels = super#ast mangle target      in
@@ -1493,7 +1497,7 @@ object (this)
         let s      = A.JumpStmt (None,exp, [],[]) in
             labels@[stmt s]
     
-    method comment = "jump"    
+    method comment = super#comment ^ " jump"    
     method upd_succ map =
         let map = upd (this :> node) map in
             _exit    <- map _exit
@@ -1522,7 +1526,7 @@ object (this)
         ; _succ     <- map _succ
         ) 
     
-    method comment = "call"    
+    method comment = super#comment ^ " call"    
 
     method ast mangle target =
         let labels = super#ast mangle target      in
@@ -1560,7 +1564,7 @@ object (this)
         ; _exit     <- map _exit
         ) 
     
-    method comment = "cutto"    
+    method comment = super#comment ^ " cutto"    
 
     method ast mangle target =
         let labels = super#ast mangle target      in
@@ -1613,7 +1617,7 @@ object (this)
         ( Some _ifnot
         , [_ifso]
         )
-    method comment = "branch"    
+    method comment = super#comment ^ " branch"    
 end
 
 
@@ -1643,7 +1647,7 @@ object (this)
     method uses   = _uses
     method kills  = _kills
 
-    method comment = "dataflow"    
+    method comment = super#comment ^ " dataflow"    
 
     method ast mangle target =
         let labels       = super#ast mangle target           in
