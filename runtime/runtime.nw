@@ -33,7 +33,7 @@ typedef struct cmm_cont {
 
 typedef struct cmm_activation {
   struct cmm_activation_methods *methods;
-  Cmm_Word*   vfp;
+  char *vfpx;    /* make arithmetic work on addresses */
   Cmm_Codeptr pc;
   struct cmm_pc_map_entry *rtdatax;
   Cmm_Word*   regs[NUM_REGS];
@@ -42,8 +42,12 @@ typedef struct cmm_activation {
       Cmm_Word* sp;
       Cmm_Cont   k;
     } unwind;
+    struct {
+      unsigned tries;
+    } cwalk;
   } u;
 } Cmm_Activation;
+extern void Cmm_show_activation(const Cmm_Activation *a); /* for debugging */
 @ 
 Functions for walking the stack.
 <<public functions>>=
@@ -130,7 +134,24 @@ SOMETHING MUST BE DONE TO ENSURE CORRECTNESS FOR A CONTINUATION THAT
 REPRESENTS A NEWLY CREATED STACK.  
 THE CHOICES WOULD BE TO TREAT THAT PC SPECIALLY HERE OR TO SYNTHESIZE
 RUNTIMEDATA STRUCTURES FOR IT.
-<<public function implementations>>=
+<<definitions of private data structures>>=
+struct cmm_activation_methods {
+  int (*change)(Cmm_Activation *a);
+};
+
+<<definitions of method suites>>=
+static struct cmm_activation_methods cmm_methods = {
+  normal_change
+};
+struct cmm_activation_methods *Cmm_cmm_frame_methods = &cmm_methods;
+
+extern int Cmm_c_change_activation(Cmm_Activation *a);
+extern void Cmm_init_c_frame(Cmm_Activation *a, char *young_in_overflow);
+static struct cmm_activation_methods c_methods = {
+  Cmm_c_change_activation
+};
+
+<<implementations of public functions>>=
 Cmm_Activation
 Cmm_YoungestActivation(const Cmm_Cont* t) {
   int i;
@@ -138,9 +159,9 @@ Cmm_YoungestActivation(const Cmm_Cont* t) {
   pc_map_entry* entry = Cmm_lookup_entry(t->pc);
   assert(entry);
 
-  a.methods = NULL;
-  a.vfp    = (Cmm_Word*)((int)t->sp - Cmm_as_offset(entry->frame_size));
-  a.pc     = t->pc;
+  a.methods = &cmm_methods;
+  a.vfpx     = (char *)t->sp - Cmm_as_offset(entry->frame_size);
+  a.pc      = t->pc;
   a.rtdatax = entry;
   for(i = 0; i < NUM_REGS; i++) {
     a.regs[i] = NULL;
@@ -156,9 +177,44 @@ map, then we can try to skip past the unknown frame using
 [[walk_foreign_frames]]. If a new activation is found, a new
 activation record is populated and returned. Otherwise [[na.fp]] is
 set to zero to indicate failure.
-<<public function implementations>>=
+<<declarations of private functions>>=
+static int normal_change(Cmm_Activation *a);
+<<private functions>>=
+static int normal_change(Cmm_Activation *a) {
+  char *vfp;
+  Cmm_Word* raptr;
+  pc_map_entry* calleedata, *callerdata;
+
+  assert(a && a->vfpx);
+  vfp = a->vfpx;
+  update_saved_regs(a, a);
+#if 0
+  fprintf(stderr, "leaving C-- activation; caller's EBP == 0x%08x\n",
+          a->regs[9] ? (unsigned)*a->regs[9] : 0xdeadbeef);
+#endif
+
+  calleedata = a->rtdatax;
+  raptr      = (Cmm_Word*)(a->vfpx + Cmm_as_offset(calleedata->return_addressp));
+  callerdata = Cmm_lookup_entry((Cmm_Codeptr)*raptr);
+          
+
+  a->pc = (Cmm_Codeptr)*raptr;
+  a->rtdatax = callerdata;
+  if (callerdata) {
+    /* NEXT LINE WANTS SOME DOCO */
+    a->vfpx = (vfp - Cmm_as_offset(callerdata->frame_size)
+                  + Cmm_as_offset(calleedata->overflow_size));
+  } else {
+    a->methods = &c_methods;
+    a->rtdatax = Cmm_empty_pcmap_entry;
+    Cmm_init_c_frame(a, vfp + Cmm_as_offset(calleedata->overflow_size));
+  }
+  return 1;
+}
+
+<<implementations of public functions>>=
 Cmm_Activation
-Cmm_NextActivation(const Cmm_Activation *a) {
+old_Cmm_NextActivation(const Cmm_Activation *a) {
   Cmm_Word* fp;
   Cmm_Word* caller;
   Cmm_Activation na;
@@ -167,12 +223,12 @@ Cmm_NextActivation(const Cmm_Activation *a) {
   int foreign = 0;
   int i;
 
-  assert(a && a->vfp);
-  fp = a->vfp;
+  assert(a && a->vfpx);
+  fp = (Cmm_Word*)a->vfpx;
   update_saved_regs(&na, a);
 
   entry = a->rtdatax;
-  caller = (Cmm_Word*)((int)a->vfp + Cmm_as_offset(entry->return_addressp));
+  caller = (Cmm_Word*)((int)a->vfpx + Cmm_as_offset(entry->return_addressp));
   entry = Cmm_lookup_entry((Cmm_Codeptr)*caller);
           
   if (!entry) {
@@ -186,7 +242,7 @@ Cmm_NextActivation(const Cmm_Activation *a) {
 
   if (entry) {
     old_entry = a->rtdatax;
-    na.vfp = (Cmm_Word*)((int)fp - Cmm_as_offset(entry->frame_size)
+    na.vfpx = (char*)((int)fp - Cmm_as_offset(entry->frame_size)
                                  + Cmm_as_offset(old_entry->overflow_size));
 
     na.pc = (Cmm_Codeptr)*caller;
@@ -199,7 +255,7 @@ Cmm_NextActivation(const Cmm_Activation *a) {
       }
     }
   } else {
-    na.vfp = 0; /* indicates failure */
+    na.vfpx = 0; /* indicates failure */
   }
   return na;
 }
@@ -210,28 +266,42 @@ may differ for different environments. Currently, this function
 returns 0, and the end of the stack is detected by a failure of
 [[Cmm_NextActivation]].
 THIS LOOKS JUST A LITTLE BOGUS, GUYS...
-<<public function implementations>>=
+<<implementations of public functions>>=
 int
-Cmm_isOldestActivation(const Cmm_Activation *a) {
+old_Cmm_isOldestActivation(const Cmm_Activation *a) {
   return (a->pc == Cmm_start_thread_helper) ||
          0;
 }
 @ 
 The [[Cmm_ChangeActivation]] is provided for convenience.
-<<public function implementations>>=
+<<implementations of public functions>>=
 int
-Cmm_ChangeActivation(Cmm_Activation *a) {
+old_Cmm_ChangeActivation(Cmm_Activation *a) {
   if (Cmm_isOldestActivation(a)) {
     return 0;
   } else {
     *a = Cmm_NextActivation(a);
-    return (a->vfp != 0);
+    return (a->vfpx != 0);
   }
+}
+<<implementations of public functions>>=
+int Cmm_ChangeActivation(Cmm_Activation *a) {
+  return a->methods->change(a);
+}
+Cmm_Activation Cmm_NextActivation(const Cmm_Activation *a) {
+  Cmm_Activation na = *a;
+  int rc = na.methods->change(&na);
+  assert(rc);
+  return na;
+}
+int Cmm_isOldestActivation(const Cmm_Activation *a) {
+  Cmm_Activation na = *a;
+  return (!na.methods->change(&na));
 }
 @ 
 We import the assembly code that restores the registers and cuts to the unwind entry
 point.
-<<public function implementations>>=
+<<implementations of public functions>>=
 extern void (*__cmm_unwindcont)();
 Cmm_Cont* Cmm_MakeUnwindCont(Cmm_Activation *a, Cmm_Word index, ...) {
   int i;
@@ -268,7 +338,7 @@ Cmm_Cont* Cmm_MakeUnwindCont(Cmm_Activation *a, Cmm_Word index, ...) {
      and ESP to the continuation's entry point and stack pointer. */
 
   a->regs[PC]  = (Cmm_Word *) block->pc;
-  a->u.unwind.sp = (Cmm_Word *) ((int) a->vfp + Cmm_as_offset(block->sp));
+  a->u.unwind.sp = (Cmm_Word *) (a->vfpx + Cmm_as_offset(block->sp));
   a->regs[ESP] = (Cmm_Word *)&a->u.unwind.sp;
 
   a->u.unwind.k.pc = (Cmm_Codeptr) &__cmm_unwindcont;
@@ -313,7 +383,7 @@ than or equal to zero. A table of descriptors is stored in the pc map
 entry immediately following the locals data. Using the activation
 record, the table of descriptors is looked up, and the appropriate
 entry returned.
-<<public function implementations>>=
+<<implementations of public functions>>=
 Cmm_Dataptr
 Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token) {
   int num_spans;
@@ -353,6 +423,8 @@ locations of saved registers are recorded within the activations. The
 locations of all saved registers for an activation can be computed
 using information in the pc map table along with the previous
 activation.
+<<declarations of private functions>>=
+void update_saved_regs(Cmm_Activation* new, const Cmm_Activation* prev);
 <<private functions>>=
 void
 update_saved_regs(Cmm_Activation* new, const Cmm_Activation* prev) {
@@ -367,12 +439,12 @@ update_saved_regs(Cmm_Activation* new, const Cmm_Activation* prev) {
   for (i = 0; i < r; i+=2) {
     if (regs[i].l == regs[i+1].l) continue;
     new->regs[Cmm_as_register(regs[i])] =
-      (Cmm_Word*)((int)prev->vfp + Cmm_as_offset(regs[i + 1]));
+      (Cmm_Word*)(prev->vfpx + Cmm_as_offset(regs[i + 1]));
   }
 }
 @ 
 Clients of the runtime system must report when a local variable is written.
-<<public function implementations>>=
+<<implementations of public functions>>=
 void Cmm_LocalVarWritten(const Cmm_Activation *a, unsigned n) {
   return;
 }
@@ -380,7 +452,7 @@ void Cmm_LocalVarWritten(const Cmm_Activation *a, unsigned n) {
 Clients of the runtime system can ask for the number of locals for a
 given activation. This information is stored in the activation
 structure.
-<<public function implementations>>=
+<<implementations of public functions>>=
 unsigned
 Cmm_LocalVarCount(const Cmm_Activation *a) {
   assert(a && a->rtdatax);
@@ -392,7 +464,7 @@ local by first looking it up in the array of locals for this
 activation. If the local is in a register, a pointer into the saved
 register is returned. Otherwise, a pointer into the stack where the
 register is saved is returned.
-<<public function implementations>>=
+<<implementations of public functions>>=
 void*
 Cmm_FindLocalVar(const Cmm_Activation *a, unsigned n) {
   int reg;
@@ -420,7 +492,7 @@ Cmm_FindLocalVar(const Cmm_Activation *a, unsigned n) {
     case DEAD:
       return NULL;
     case OFFSET:
-      return (void*)((int)a->vfp + Cmm_as_offset(local));
+      return a->vfpx + Cmm_as_offset(local);
     default:
       assert(0);
       return 0;
@@ -429,7 +501,7 @@ Cmm_FindLocalVar(const Cmm_Activation *a, unsigned n) {
 @ 
 In the current implementation it is not possible to find the location
 of a dead var.
-<<public function implementations>>=
+<<implementations of public functions>>=
 void*
 Cmm_FindDeadLocalVar(const Cmm_Activation *a, unsigned n) {
   return Cmm_FindLocalVar(a, n);
@@ -437,7 +509,7 @@ Cmm_FindDeadLocalVar(const Cmm_Activation *a, unsigned n) {
 @
 Stack data is stored in a table per procedure. Each PC map entry links
 to the correct stack data table.
-<<public function implementations>>=
+<<implementations of public functions>>=
 void*
 Cmm_FindStackLabel(const Cmm_Activation *a, unsigned n) {
   pc_map_entry* entry = a->rtdatax;
@@ -449,7 +521,7 @@ Cmm_FindStackLabel(const Cmm_Activation *a, unsigned n) {
     assert(0);
   }
 
-  return (void*)((int)a->vfp + Cmm_as_offset(sdt->entries[n]));
+  return a->vfpx + Cmm_as_offset(sdt->entries[n]);
 }
 @ 
 % ---------------------------------------------------------------------------
@@ -462,8 +534,11 @@ stitch things together.
 #include "pcmap.h"
 <<machine-dependent macro definitions for the implementation>>
 <<external functions>>
+<<definitions of private data structures>>
+<<declarations of private functions>>
+<<definitions of method suites>>
 <<private functions>>
-<<public function implementations>>
+<<implementations of public functions>>
 <<private functions>>=
 void print_stack(int* fp) {
   int a;
@@ -558,3 +633,43 @@ section "data" {
 The following should be generated by a special call to Quick~{\PAL}.
 <<runtime.c>>=
 int Cmm_stack_growth = -1;
+@ 
+<<runtime.c>>=
+void Cmm_show_activation(const Cmm_Activation *a) {
+  printf("activation @ %p = {\n", (void*)a);
+  printf("  methods = ");
+  if (a->methods == Cmm_cmm_frame_methods)
+    printf("C-- methods,\n");
+  else if (a->methods == &c_methods) 
+    printf("C methods,\n");
+  else
+    printf("unknown methods at %p,\n", (void*)a->methods);
+  printf("  vfp = %p, pc = %p,\n", a->vfpx, (void *)a->pc);
+  <<print registers in activation [[a]]>>
+  printf("  entry = {\n");
+  Cmm_show_map_entry(a->rtdatax, -1, a->pc);
+  printf("  }\n}\n");
+}
+<<print registers in activation [[a]]>>=
+{ int any, i;
+  char *pfx;
+  any = 0;
+  for (i = 0; i < NUM_REGS; i++)
+    if (a->regs[i]) {
+      any = 1;
+      break;
+    }
+  if (any) {
+    printf("  regs = { ");
+    pfx = "";
+    for (i = 0; i < NUM_REGS; i++)
+      if (a->regs[i]) {
+        printf("%sREG %d @ %p", pfx, i, (void*)a->regs[i]);
+        pfx = ", ";
+      }
+    printf(" },\n");
+  } else {
+    printf("  regs = (no registers recoverable),\n");
+  }
+}
+@

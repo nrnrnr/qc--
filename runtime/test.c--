@@ -4,16 +4,16 @@ import bits32 printf;
 import bits32 rt_stack_trace;
 import bits32 rt_check;
 import bits32 c_b;
-import bits32 show_map;
+import bits32 Cmm_show_map;
 export main;
 export f,g,h;
 
 section "data" {
    s_lbl: bits8[] "stack_trace: sd=13,14,15  x=7, y=4\000";
    f_lbl: bits8[] "f sd=1,2,3 x=5\000";
-   g_lbl: bits8[] "g\000";
+   g_lbl: bits8[] "g sd='added dead face'\000";
    h_lbl: bits8[] "h sd=23,24,25\000";
-   m_lbl: bits8[] "main\000";
+   m_lbl: bits8[] "main sd='effaced bad facade', n=DEAD\000";
 
    fmt: bits8[] "%s : %X\n\000";
    msg: bits8[] "calling runtime system...\n\000";
@@ -36,8 +36,8 @@ stack_trace() {
   bits32[data2] = 14;
   bits32[data3] = 15;
   foreign "paranoid C" printf(msg);
-  foreign "C" rt_check(j) also cuts to j;
-  foreign "C" rt_stack_trace(j) also cuts to j;
+  foreign "paranoid C" rt_check(j) also cuts to j;
+  foreign "paranoid C" rt_stack_trace(j) also cuts to j;
   x = x + y;
   return();
 
@@ -59,7 +59,10 @@ h() {
 span 1 g_lbl {
 foreign "C"
 g() {
- stackdata { align 32; data: bits32; }
+ stackdata { align 32; data: bits32[3]; }
+ bits32[data]   = 0xadded;
+ bits32[data+4] = 0xdead;
+ bits32[data+8] = 0xface;
  foreign "paranoid C" c_b();       foreign "C"  return();
 }}
 
@@ -72,14 +75,18 @@ f() {
  bits32[data+4] = 2;
  bits32[data+8] = 3;
  foreign "C" g();
- return();
+ return(x);
 }}
 
 span 1 m_lbl {
 foreign "C" main() {
   stackdata { align 32; data: bits32[3]; }
-  /* show_map(); */
-  f();
-  foreign "C" return();
+  bits32[data] = 0xeffaced;
+  bits32[data+4] = 0xbad;
+  bits32[data+8] = 0xfacade;
+  // foreign "C" Cmm_show_map();
+  n = f();
+  bits32 n;
+  foreign "C" return(n - 5);
 }}
 }
