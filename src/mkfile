@@ -118,7 +118,7 @@ GENERATED =     this.ml scan.ml parse.ml parse.mli
 
 CMO =           `echo $ML       | sed 's/\.ml/.cmo/g'`
 CMX =           `echo $ML       | sed 's/\.ml/.cmx/g'`
-OBJ =           `echo $ML       | sed 's/\.ml/.o/g;'`
+OBJ =           `echo $ML       | sed 's/\.ml/.o/g'`
 CMI =           `echo $ML $MLI  | sed 's/\.mli*/.cmi/g'`
 
 # ------------------------------------------------------------------ 
@@ -183,6 +183,11 @@ html:V:         $HTML
 # ------------------------------------------------------------------  
 # sources generated from noweb sources
 # ------------------------------------------------------------------  
+
+float64.mli:    float64.nw
+                eval $OCAMLTANGLE
+float64.c:      float64.nw
+                eval $MISCTANGLE
 
 value.ml:       value.nw
                 eval $OCAMLTANGLE
@@ -256,7 +261,13 @@ ast.inc:        ast.nw
 srcmap.mli      \
 srcmap.ml:      srcmap.nw
                 eval $OCAMLTANGLE
+                
+# ------------------------------------------------------------------ 
+# C code
+# ------------------------------------------------------------------ 
 
+float64.o:      float64.c
+                $OCAMLC $OCAMLC_FLAGS -c $prereq
 
 # ------------------------------------------------------------------ 
 # asdl

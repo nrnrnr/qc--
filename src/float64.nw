@@ -1,0 +1,46 @@
+
+% ------------------------------------------------------------------ 
+\section{Float64}
+% ------------------------------------------------------------------ 
+
+This module provides a conversion between OCaml [[float]] values and
+[[int64]] values. The internal representation of both values uses 64
+bits. The conversion does not touch the internal representation but
+simply changes the interpretattion of an existing value.
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+<<float64.mli>>=
+external int64:     float -> int64 = "unpack_float64"
+external float:     int64 -> float = "pack_float64"
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The implementation in C uses a [[union]] to change the interpretation
+of a 64bit value. This code relies on the fact that a [[double]] value
+has 64 bits which may be not the case on every machine.
+
+<<float64.c>>=
+#include <caml/mlvalues.h>
+#include <caml/alloc.h>
+
+value unpack_float64(value f)
+{
+    union { double d; int64 i; } buffer;
+    buffer.d = Double_val(f);
+    return copy_int64(buffer.i);
+}
+
+value pack_float64(value i)
+{
+    union { double d; int64 i; } buffer;
+    buffer.i = Int64_val(i);
+    return copy_double(buffer.d);
+}
+@
+

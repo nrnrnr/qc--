@@ -1120,7 +1120,7 @@ and arm t env = function
         let ss' = stmts env ss in 
         let rr' =
             ( match E.Raise.list (List.map (range env) rr) with
-            | E.Ok([])     -> t
+            | E.Ok([])     -> E.error "must specify range for this arm"
             | E.Ok(t::tt)  -> if    List.for_all ((=) t) tt then E.Ok(t)
                               else E.error "type inconsistencies in ranges"
             | E.Error      -> E.Error
@@ -1134,7 +1134,7 @@ and arm t env = function
 and switchStmt env (r, expr, arms) =
     let et = tyExpr env expr in
     let at = ( match E.Raise.list (List.map (arm et env) arms) with
-             | E.Ok([])    -> et 
+             | E.Ok([])    -> E.error "empty switch body"
              | E.Ok(t::tt) -> if   List.for_all ((=) t) tt then E.Ok(t)
                               else E.error "type inconsistencies across arms" 
              | E.Error     -> E.Error
