@@ -77,41 +77,57 @@ type node    =  { regs:     Register.t list     (* ordered *)
                 }
 @
 
-An [[edge]] connects two nodes and is labeled with a type.
+An [[edge]] is the node where an edge originates and a label that
+identifies the edge.  The destination of the edge is uniquely defined in
+the [[graph]], but is not part of the [[edge]] type.
 
 <<automatongraph.ml>>=
-type edge =     { src:      node
-                ; label:    ty
-                ; dst:      node
-                }
+type edge =     node * ty
 @
 
-A graph is a set of nodes and edges. Since edges are pairs of nodes, it
-would be enough to have just a set of edges. 
+The [[graph]] type records the node an edge reaches in a map [[edges]].
+The map models the transition function $\mathit{node} \times
+\mathit{type} \to \mathit{node}$. An [[edge]] is therefore only
+meaningful in the context of a [[graph]] which provides the map. In
+addition, the [[graph]] maintains a set of all nodes, and a [[start]]
+node, corresponding to the start state of the automaton.
 
 <<automatongraph.ml>>=
-module ES = Set.Make(struct type t=edge let compare=compare end)                
-module NS = Set.Make(struct type t=node let compare=compare end)
+module NS = Set.Make (struct type t=node let compare=compare end)
+module T  = Map.Make (struct type t=edge let compare=compare end)
 
-type graph =    { nodes:    NS.t
-                ; edges:    ES.t
+type graph =    { nodes:    NS.t            (* all the nodes *)
+                ; start:    node            (* start node    *)
+                ; edges:    node T.t        (* transition: node*ty => node *)
                 }
+
+let graph node = { nodes = NS.add node NS.empty
+                 ; start = node
+                 ; edges = T.empty
+                 }
 @
+
+Several other definitons of [[graph]] would have been possible. This
+definition is close to the underlying automaton such that it is
+easy to follow edges in the same way the automaton changes its state.
 
 We have a membership predicate for edges and a function to [[add]]
-edges. The invariant is, that we only add edges whose source node is
-already part of the graph.
+edges. We maintain the following invariant: the origin of an edge is
+already in the set of node when we call [[add]], we thus only have to
+add the destination node.
 
 <<automatongraph.ml>>=
-let mem edge graph = ES.mem  edge graph.edges
-let add edge graph =
-    assert (NS.mem edge.src graph.nodes);
-    { graph with edges = ES.add edge graph.edges
-               ; nodes = NS.add edge.dst graph.nodes } 
+let mem edge graph          = T.mem edge graph.edges
+let add (n,t as edge) node graph =
+    assert (NS.mem n graph.nodes);
+    { graph with edges = T.add edge node graph.edges
+               ; nodes = NS.add node graph.nodes }
 @
 
 For debugging, the [[ToString]] module provides us with function to
-represent all our types as strings. Feel free to improve this.
+represent all our types as strings. Feel free to improve this. Another
+idea would be a [[ToDOT]] module, that implements output for
+\textit{dot}(1).
 
 <<automatongraph.ml>>=
 module ToString = struct
@@ -120,12 +136,14 @@ module ToString = struct
     let align n           = sprintf "%i:" n
     let node s            = String.concat "" 
                                 ((align s.align)::List.map register s.regs)
-    let edge e            = sprintf "%s--%s-->%s"
-                                (node  e.src)
-                                (ty    e.label)
-                                (node  e.dst)
-    let graph g           = String.concat "\n" 
-                                (List.map edge (ES.elements g.edges))
+    let edge src label dst= sprintf "%s --%s--> %s"
+                                (node  src)
+                                (ty    label)
+                                (node  dst)
+    let graph g = 
+        let add_edge (src,label) dst strs = edge src label dst :: strs in
+        let edges = T.fold add_edge g.edges [] in
+            String.concat "\n" edges
 end
 @
 
@@ -138,7 +156,7 @@ let combine xs ys =
         List.concat (List.map (fun w -> List.map (pair w) ys) xs)
 @
 
-[[goto]] takes function [[mk]] that creates an automaton in its inital
+[[goto]] takes function [[mk]] that creates an automaton in its initial
 state and a [[path]] of types. It feeds [[path]] through the automaton,
 observes its final state, and returns it as a [[node]].
 
@@ -152,7 +170,7 @@ let goto mk path =
         }
 @
 
-The heart of the algorithm are the two mutually recursice functions
+The heart of the algorithm are the two mutually recursive functions
 [[dfs]] and [[follow]]. The depth-search function [[dfs]] explores a
 [[graph]] in all direction, starting from one [[node]]. [[Follow]]
 specifically explores a [[node]] by following a potentially new edge
@@ -172,13 +190,13 @@ depth first.
 
 <<automatongraph.ml>>=
 let rec follow (mk:unit->Automaton.t) (dirs: ty list) graph path node ty =
-    let path  = path @ [ty] in
+    let path  = path @ [ty]  in
     let node' = goto mk path in
-    let edge  = { src = node; label=ty; dst=node' } in
+    let edge  = (node,ty)    in
     if mem edge graph then
         graph
     else
-        dfs mk dirs (add edge graph) path node'
+        dfs mk dirs (add edge node' graph) path node'
 
 and dfs mk dirs graph path node =   (* call this *)
     List.fold_left 
@@ -194,11 +212,11 @@ empty.
   
 <<automatongraph.ml>>=
 let print ~mk ~widths ~hints = 
-    let dump g  = ES.iter (fun e -> print_endline (ToString.edge e)) g.edges in
+    let dump g  = print_endline (ToString.graph g) in
     let dirs    = combine widths hints in
     let init    = {regs=[]; align=0}   in
-    let graph   = { nodes = NS.add init NS.empty; edges = ES.empty } in
-    let graph   = dfs mk dirs graph [] {regs=[]; align=0} in
-        dump graph
+    let g       = graph init           in
+    let g       = dfs mk dirs g [] {regs=[]; align=0} in
+        dump g
 @
 
