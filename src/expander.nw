@@ -1108,157 +1108,97 @@ let inst n =
   match G.to_instr n with
   | Some i -> i
   | None   -> impossf "Expanded node must have instruction"
-@
-SOMEWHERE WE NEED A HIGH-LEVEL EXPLANATION OF WHAT THE FLOW-GRAPH HAS
-TO DO WITH EXPANSION. ---NR
-
-The code expander returns a (possibly empty) segment of a cfg with an
-entry node and an exit node. 
-We represent such a segment with a pair $(entry\_node, exit\_node)$.
-The empty segment is represented by a pair containing two copies of
-the illegal node---and \emph{only} the empty segment may contain an
-illegal node.
-<<old flow-graph manipulation utilities>>=
-let emptyseg = let ill = G.illegal cfg in (ill,ill) in
-@
-<<expander.ml>>=
-let is_empty (xi,xf) = G.kind xi =*= G.Illegal && G.kind xf =*= G.Illegal
-@ To concatenate segments, we must recognize (and ignore) the empty segment.
-<<old flow-graph manipulation utilities>>=
-let (@@) ((xi,xf) as x) ((yi,yf) as y) =
-  if      is_empty x then y
-  else if is_empty y then x
-  else begin G.set_succ xf ~succ:yi; (xi, yf) end in
 @ 
 We provide three kinds of composition: blocks with blocks, blocks
 with branches, and blocks with conditional branches.
-<<flow-graph manipulation utilities>>=
+<<block-manipulation utilities>>=
 let (<:>) = PX.(<:>) in
 let (<::>) is (is', branch) = (is <:> is', branch) in
 let rec (<:::>) is cbranch = match cbranch with
 | PX.Exit b -> PX.Exit b
 | PX.Test (b, c) -> PX.Test (is <:> b, c)
 | PX.Shared (u, c) -> PX.Shared (u, is <:::> c) in
-@
-We provide several constructors for segments:
-\begin{itemize}
-\item [[nunit]] creates a segment that contains one instruction.
-\item [[to_segment]]  creates a segment from a list of instructions in
-reverse-execution order
-\item [[seg_concat]] concatenates a list of segments.
-\end{itemize}
-<<old flow-graph manipulation utilities>>=
-let nunit      i = let n = G.instruction cfg i ~succ:(G.illegal cfg) in (n,n) in
-let to_segment l = List.fold_left (fun seg i -> nunit i @@ seg) emptyseg l in
-let seg_concat l = List.fold_right (@@) l emptyseg in
 @ 
-<<flow-graph manipulation utilities>>=
+<<block-manipulation utilities>>=
 let block_concat l = List.fold_right (<:>) l PX.Nop in
 @
-We also need to be able to take a single-entry, single-exit segment of control flow and
-insert it in place of an existing non-join node.
-In the function [[replace_node]], [[xi]] is the single-entry and [[xf]] is the single
-exit in a control-flow segment.
-<<expander.ml>>=
-let replace_node n ((xi,xf) as x) =
-  if is_empty x then
-       (G.update_instr (fun _ -> R.par []) n; false)
-  else if G.eq xi xf then
-       (G.update_instr (fun _ -> inst xf) n; false)
-  else
-       let last_new = G.pred xf in
-         begin
-           G.splice_before ~entry:xi ~exit:last_new n;
-           G.update_instr (fun _ -> inst xf) n;
-           true
-         end
-@
-For debugging purposes, it's sometimes easier to look at a segment as a flat list;
-obviously, the list loses the structure of the segment.
-<<expander.ml>>=
-let seg_to_list (xi,xf)  =
-  let rec to_list' n =
-    if G.kind n =*= G.Illegal then []
-    else let rst = if G.eq n xf then [] else
-                   List.concat (List.map to_list' (G.succs n))
-         in  match G.to_instr n with
-             | Some i -> i :: rst
-             | None   -> rst
-  in to_list' xi
-@
+\subsubsection{Printing code for debugging}
 Some debugging code is most helpful.
 The expander writes debugging information as it goes;
-to activate it, try \texttt{VERBOSITY=5~qc--}.
+to activate it, try \texttt{QCDEBUG=expander~qc--}.
 <<expander.ml>>=
 module D = struct (* debugging *)
   let () = Debug.register "expander" "code expander"
+  let eprintf = Printf.eprintf 
+  let sprintf = Printf.sprintf 
   let strings =
     if Debug.on "expander" then
-      (fun ss -> Printf.eprintf "%s" (String.concat "" ss))
+      (fun ss -> eprintf "%s" (String.concat "" ss))
     else
       (fun ss -> ()) 
   let int n = string_of_int n
   let rtl r = Rtlutil.ToString.rtl r
-  let eprintf = Printf.eprintf 
-  let sprintf = Printf.sprintf 
-  let exp = Rtlutil.ToString.exp 
-  let rec cbi c = match c with
-  | e, PX.Exit true, PX.Exit false -> exp e
-  | e, PX.Exit false, PX.Exit true -> sprintf "!(%s)" (exp e)
-  | e, PX.Exit true, p -> sprintf "(%s || %s)" (exp e) (cbranch p)
-  | e, p, PX.Exit false -> sprintf "(%s && %s)" (exp e) (cbranch p)
-  | e, p, q -> sprintf "(%s ? %s : %s)" (exp e) (cbranch p) (cbranch q)
-  and cbranch c = match c with
-  | PX.Exit p -> if p then "true" else "false"
-  | PX.Shared (_, c) -> sprintf "[%s]" (cbranch c)
-  | PX.Test (PX.Nop, c) -> cbi c
-  | PX.Test (b, c) -> sprintf "{%s; %s}" (compact_block b) (cbi c)
-  and compact_block b =
-    let rec pr = function
-      | PX.Rtl r        -> sprintf "%s" (rtl r)
-      | PX.Seq (b, b')  -> sprintf "%s; %s" (pr b) (pr b')
-      | PX.If (c, t, f) -> sprintf "if (%s) { %s; } else { %s; }"
-            (cbranch c) (pr t) (pr f)
-      | PX.While (c, b) -> sprintf "while (%s) { %s; }" (cbranch c) (pr b)
-      | PX.Nop ->  "skip" in
-    pr b
-
-  let rec pr_block ind b =
-    let exp = Rtlutil.ToString.exp in
-    let rec pr = function
-      | PX.Rtl r          -> eprintf "%s%s;\n" ind (rtl r)
-      | PX.Seq (b, b')    -> pr b; pr b'
-      | PX.If (PX.Exit p, t, f) -> pr (if p then t else f)
-            (* true to semantics, but maybe not informative enough *)
-      | PX.If (PX.Shared (_, c), t, f) -> pr (PX.If(c, t, f))
-      | PX.If (PX.Test (PX.Nop, c), t, f) -> 
-          let ind' = ind ^ "  " in
-          eprintf "%sif (%s) {\n" ind (cbi c);
-          pr_block ind' t;
-          eprintf "%s} else {\n" ind;
-          pr_block ind' f;
-          eprintf "%s}\n" ind
-      | PX.If (PX.Test (b, cbi), t, f) ->
-          assert (Pervasives.(<>) b PX.Nop);
-          pr (PX.Seq (b, PX.If (PX.Test(PX.Nop, cbi), t, f)))
-      | PX.While (c, b) ->  (* not implemented really *)
-          let ind' = ind ^ "  " in
-          eprintf "%swhile (%s) {\n" ind (cbranch c);
-          pr_block ind' b;
-          eprintf "%s}\n" ind
-      | PX.Nop -> eprintf "%s<nop>\n" ind in
-    pr b
-  let pr_block = if Debug.on "expander" then pr_block "  " else fun _ -> ()
-  let cbranch =
-    if Debug.on "expander" then
-      cbranch
-    else
-      fun _ -> "<not showing cbranch>"
-  let pr_rtls rs = List.iter (fun r -> strings ["  "; rtl r; "\n"]) (List.rev rs)
   let temp ((s, _, ms), n, c) =
-    "$" ^ Char.escaped s ^ "[" ^ int n ^ "] : " ^ int (Cell.to_width ms c) ^ " loc" 
+    sprintf "$%s[%d] : %d loc" (Char.escaped s) n (Cell.to_width ms c)
+  let exp = Rtlutil.ToString.exp 
+  let pr_rtls rs = List.iter (fun r -> strings ["  "; rtl r; "\n"]) (List.rev rs)
+  <<more printing functions for the internal [[D]] module>>
+  (* renaming *)
+  let cbranch  = if Debug.on "expander" then cbranch       else fun _ -> "<cbranch>"
+  let pr_block = if Debug.on "expander" then pr_block "  " else fun _ -> ()
   let exp e = Rtlutil.ToString.exp (Up.exp e)
 end
+@ 
+Printing conditional branches:
+<<more printing functions for the internal [[D]] module>>=
+let rec cbi c = match c with
+| e, PX.Exit true,  PX.Exit false -> exp e
+| e, PX.Exit false, PX.Exit true  -> sprintf "!(%s)" (exp e)
+| e, PX.Exit true,  p -> sprintf "(%s || %s)" (exp e) (cbranch p)
+| e, p, PX.Exit false -> sprintf "(%s && %s)" (exp e) (cbranch p)
+| e, p, q -> sprintf "(%s ? %s : %s)" (exp e) (cbranch p) (cbranch q)
+and cbranch c = match c with
+| PX.Exit p           -> if p then "true" else "false"
+| PX.Shared (_, c)    -> sprintf "[%s]" (cbranch c)
+| PX.Test (PX.Nop, c) -> cbi c
+| PX.Test (b, c)      -> sprintf "{%s; %s}" (compact_block b) (cbi c)
+and compact_block b =
+  let rec pr = function
+    | PX.Rtl r        -> sprintf "%s" (rtl r)
+    | PX.Seq (b, b')  -> sprintf "%s; %s" (pr b) (pr b')
+    | PX.If (c, t, f) -> sprintf "if (%s) { %s; } else { %s; }"
+                           (cbranch c) (pr t) (pr f)
+    | PX.While (c, b) -> sprintf "while (%s) { %s; }" (cbranch c) (pr b)
+    | PX.Nop          -> "skip" in
+  pr b
+@ 
+Printing blocks:
+<<more printing functions for the internal [[D]] module>>=
+let rec pr_block ind b =
+  let exp = Rtlutil.ToString.exp in
+  let rec pr = function
+    | PX.Rtl r          -> eprintf "%s%s;\n" ind (rtl r)
+    | PX.Seq (b, b')    -> pr b; pr b'
+    | PX.If (PX.Exit p, t, f) -> pr (if p then t else f)
+          (* true to semantics, but maybe not informative enough *)
+    | PX.If (PX.Shared (_, c), t, f) -> pr (PX.If(c, t, f))
+    | PX.If (PX.Test (PX.Nop, c), t, f) -> 
+        let ind' = ind ^ "  " in
+        eprintf "%sif (%s) {\n" ind (cbi c);
+        pr_block ind' t;
+        eprintf "%s} else {\n" ind;
+        pr_block ind' f;
+        eprintf "%s}\n" ind
+    | PX.If (PX.Test (b, cbi), t, f) ->
+        assert (Pervasives.(<>) b PX.Nop);
+        pr (PX.Seq (b, PX.If (PX.Test(PX.Nop, cbi), t, f)))
+    | PX.While (c, b) ->  (* not implemented really *)
+        let ind' = ind ^ "  " in
+        eprintf "%swhile (%s) {\n" ind (cbranch c);
+        pr_block ind' b;
+        eprintf "%s}\n" ind
+    | PX.Nop -> eprintf "%s<nop>\n" ind in
+  pr b
 @ 
 This little hack
 enables statement-count profiling to work even when the expander loops infinitely.
@@ -1343,9 +1283,9 @@ let ok    (allocate, check) reg = check reg
 Function [[temp_in_context]] takes an existing temporary and a
 context, and returns a (possibly new) temporary that is OK for the
 context (along with instructions that make it so). 
-The temporary is \emph{preceded} by the [[instructions]].
-<<flow-graph functions>>=
-let temp_in_context ((space, n, _) as t) context instructions =
+The temporary is \emph{preceded} by [[instructions]].
+<<definition of [[temp_in_context]]>>=
+let temp_in_context t context instructions =
   if ok context t then
     t, instructions
   else
@@ -1360,7 +1300,7 @@ context that's not known at compile-compile time.
 <<generic expander>>=
 let expand ({Proc.cfg = cfg} as proc) =
   <<stack-slot allocation>>
-  <<flow-graph manipulation utilities>>
+  <<block-manipulation utilities>>
   <<functions for dealing with trivial guards>>
   let contextmap (allocator, checker) = (allocator proc.Proc.temps, checker) in
   let icontext = contextmap Post.icontext in
@@ -1369,10 +1309,8 @@ let expand ({Proc.cfg = cfg} as proc) =
   <<rounding-mode checking>>
   <<context guessing>>
   let alloc_direct (allocator, _) = allocator proc.Proc.temps in
-  <<flow-graph functions>>
+  <<definition of [[temp_in_context]]>> 
   <<definitions of [[to_temp]], [[rtl]] and all the other generic expander functions>>
-  let _ = Postexpander.remember_allocators proc.Proc.temps proc.Proc.priv in
-  let _ = Postexpander.remember_expanders block branch' expand_cbranch in
   (block, branch', expand_cbranch)
 let number = 999
 @ 
@@ -2184,14 +2122,20 @@ and old_loc l =
   | _ -> Up.loc l, PX.Nop in
 @
 \subsection{The flow-graph expander}
+
+To expand the flow graph, we expand each node.
+Expanding a node means converting its RTL to a block, a conditional
+branch, or a branch; expanding the result; then
+converting back to flow-graph nodes using  [[<<block-conversion functions>>]].
+
+Before and after expansion we must tie and untie the knot that
+establishes the mutual recursion between the generic expander and the
+machine-specific postexpander.
 <<generic flow-graph expander>>=
 let cfg _ ({Proc.cfg = cfg} as proc) =
-  if proc.Proc.target.Target.memsize <> 8 then
-    Impossible.unimp "may-alias detection for memsize <> 8";
   let modified = ref false in
   <<block-conversion functions>>
   let expand_block, expand_branch, expand_cbranch = expand proc in
-  let expand_rtl i = expand_block (PX.Rtl i) in
   let expand_node n =
     match G.to_instr n with
     | None -> ()
@@ -2204,7 +2148,7 @@ let cfg _ ({Proc.cfg = cfg} as proc) =
         | G.Assertion | G.StackAdjust | G.Join | G.Exit -> ()
         | G.Instruction ->
             pred_set_succ ill;
-            pred_set_succ (block_replace (expand_rtl i) n)
+            pred_set_succ (block_replace (expand_block (PX.Rtl i)) n)
         | G.Cbranch ->
           let bi   = (Up.exp (branch_condition i), PX.Exit true, PX.Exit false) in
           let b    = expand_cbranch (PX.Test (PX.Nop, bi)) in
@@ -2218,6 +2162,8 @@ let cfg _ ({Proc.cfg = cfg} as proc) =
             G.update_instr (fun _ -> i) n;
             pred_set_succ (block_before b n) in
 
+  Postexpander.remember_allocators proc.Proc.temps proc.Proc.priv;
+  Postexpander.remember_expanders expand_block expand_branch expand_cbranch;
   G.iter_nodes expand_node proc.Proc.cfg;
   Postexpander.forget_allocators();
   Postexpander.forget_expanders();
