@@ -202,7 +202,12 @@ module Subst: sig
     val exp_of_exp: guard:(Rtl.Private.exp -> bool)
                     -> map:(Rtl.Private.exp -> Rtl.Private.exp) 
                     -> Rtl.exp -> Rtl.exp
-    val loc_of_exp: map:(Register.t -> Rtl.loc) -> Rtl.exp -> Rtl.exp
+    val exp_of_loc: guard:(Rtl.Private.exp -> bool)
+                    -> map:(Rtl.Private.exp -> Rtl.Private.exp) 
+                    -> Rtl.loc -> Rtl.loc
+    val loc_of_loc: guard:(Rtl.Private.loc -> bool)
+                    -> map:(Rtl.Private.loc -> Rtl.Private.loc) 
+                    -> Rtl.loc -> Rtl.loc
     
     val reg:        map:(Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
     
@@ -306,6 +311,9 @@ module Dn  = Rtl.Dn
 module Re  = Register
 module RS  = Register.Set
 module RSX = Register.SetX
+
+let id     x = x
+let falsef x = false
 
 module Width = struct
     <<Width>>
@@ -532,18 +540,18 @@ let loc'     guard map rtl = loc_gen' guard map rtl ~def:true  ~use:true
 let loc_def' guard map rtl = loc_gen' guard map rtl ~def:true  ~use:false
 let loc_use' guard map rtl = loc_gen' guard map rtl ~def:false ~use:true
 
-let subst_exp_loc guard map =
-    let rec subst_exp e = if guard e then map e else match e with
+let subst_exp_loc ~eguard ~emap ~lguard ~lmap =
+    let rec subst_exp e = if eguard e then emap e else match e with
         | RP.Fetch (l, width)      -> RP.Fetch(subst_loc l, width)
         | RP.App(opr, exprs)       -> RP.App(opr, List.map subst_exp exprs)
         | x                        -> x
-    and subst_loc = function
+    and subst_loc l = if lguard l then lmap l else match l with
         | RP.Mem (sp,agg,w,e,ass)  -> RP.Mem(sp, agg, w, subst_exp e, ass)
         | RP.Slice (w,i,l)         -> RP.Slice(w,i,subst_loc l)
         | x                        -> x                                    in
     (subst_exp, subst_loc)
-let exp' guard map rtl =
-    let (exp, loc) = subst_exp_loc guard map                        in
+let exp' eguard emap rtl =
+    let (exp, loc) = subst_exp_loc ~eguard ~emap ~lguard:falsef ~lmap:id in
     let effect = function
         | RP.Store (l,e,width)     -> RP.Store(loc l, exp e, width)
         | RP.Kill  (l)             -> RP.Kill (loc l)               in
@@ -570,19 +578,14 @@ let reg_use' map rtl = reg_gen' map rtl loc_use'
 
 let exp        ~guard  ~map rtl = DownUp.rtl (exp' guard  map) rtl
 let exp_of_exp ~guard  ~map exp =
-  let (subst_exp,_) = subst_exp_loc guard map in
+  let (subst_exp,_) = subst_exp_loc ~eguard:guard ~emap:map ~lguard:falsef ~lmap:id in
   DownUp.exp subst_exp exp
-let loc_of_exp         ~map exp =
-  let rec subst_exp e = match e with
-      | RP.Fetch (l, width)      -> RP.Fetch(subst_loc l, width)
-      | RP.App(opr, exprs)       -> RP.App(opr, List.map subst_exp exprs)
-      | x                        -> x
-  and subst_loc = function
-      | RP.Mem (sp,agg,w,e,ass)  -> RP.Mem(sp, agg, w, subst_exp e, ass)
-      | RP.Slice (w,i,l)         -> RP.Slice(w,i,subst_loc l)
-      | RP.Reg (s,i,w as r)      -> Dn.loc (map r)
-      | x                        -> x                                    in
-  DownUp.exp subst_exp exp
+let exp_of_loc ~guard  ~map loc =
+  let (_,subst_loc) = subst_exp_loc ~eguard:guard ~emap:map ~lguard:falsef ~lmap:id in
+  DownUp.loc subst_loc loc
+let loc_of_loc ~guard  ~map loc =
+  let (_,subst_loc) = subst_exp_loc ~eguard:falsef ~emap:id ~lguard:guard ~lmap:map in
+  DownUp.loc subst_loc loc
   
 let loc        ~guard  ~map rtl = DownUp.rtl (loc' guard  map) rtl 
 let reg                ~map rtl = DownUp.rtl (reg'        map) rtl 
@@ -904,7 +907,6 @@ let str s    = P.text s
 let char c   = P.text (Printf.sprintf "'%c'" c)
 
 let tuple docs = 
-    let id x = x in
     P.agrp (P.text "(" ^^ P.list (P.text "," ^^ P.break) id docs ^^ P.text ")")
     
 let apply c args = P.agrp(str c ^^ indent(tuple args))

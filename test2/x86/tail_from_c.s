@@ -83,9 +83,6 @@ Lproc_body_start_l6:
 	movl %ecx,(%edx)
 	leal 4(%esp), %esp
 	jmp sp2_help
-.section .pcmap_data
-Lstackdata_l16:
-.long 0
 .section .text
 .section .text
 sp2_help:
@@ -474,7 +471,4 @@ Lproc_body_start_l56:
 	movl %edx,(%ecx)
 	leal 4(%esp), %esp
 	jmp tail_from_c
-.section .pcmap_data
-Lstackdata_l65:
-.long 0
 .section .text

@@ -32,8 +32,9 @@ module R = Rtl.Private
 let sprintf          = Printf.sprintf
 let quoted s         = "\"" ^ s ^ "\""
 
-let open_span printer (token, exp) = 
-   let dnexp  = Rtl.Dn.exp exp in
+let open_span printer (token, reloc) = 
+   let (_,bits) = Reloc.Simple.normalize reloc in
+   let dnexp  = Rtl.Dn.exp (Rtl.bits bits Interp.target'.T.pointersize) in
    let imposs = (fun () -> Impossible.impossible "open_span:invalid span val.")
    in
    let const  = function
@@ -98,8 +99,7 @@ let node proc printer n = match C.kind n with
 
         let spans   = 
           let label = C.label (C.succ_n n nreturns) in
-          try List.filter (fun (i,_) -> Bits.S.to_int i >= 0)
-                          (List.assoc label proc.Proc.spans)
+          try Runtimedata.user_spans (List.assoc label proc.Proc.spans)
           with Not_found -> [] in
 					
         let succs   = C.succs n     in

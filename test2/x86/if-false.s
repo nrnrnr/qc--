@@ -25,7 +25,4 @@ Ljoin_l8:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l16:
-.long 0
 .section .text

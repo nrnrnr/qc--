@@ -37,7 +37,4 @@ Lproc_body_start_l3:
 	movl 8(%esp),%ebx
 	leal 12(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l12:
-.long 0
 .section .text

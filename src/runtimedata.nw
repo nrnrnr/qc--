@@ -52,48 +52,36 @@ We expose two types of functions:
 \end{itemize}
 The first conversion function takes a user's key and value and produces a span.
 <<runtimedata.mli>>=
-type span = Bits.bits * Rtl.exp  (* should be abstract *)
-val user_span : Bits.bits -> Bits.bits Reloc.Simple.relocatable -> span
+type spans
+exception DeadValue
+val to_spans : sp:Rtl.loc -> prev_sp:Rtl.loc -> ra:Rtl.loc ->
+               users:((Bits.bits  * Bits.bits Reloc.Simple.relocatable) list) ->
+               csregs:((Register.t * Rtl.loc option) list) ->
+               conts:(Rtl.loc list)                        ->
+               sds:(Rtl.loc list)                          ->
+               vars:(Rtl.loc option array)                 ->
+               spans
+val upd_spans : (Rtl.loc -> Rtl.loc) -> spans -> unit
+                (* may raise DeadValue *)
 @ 
-The conversion functions for frame size and overflow-block size use
-the number of variables and the virtual frame pointer in addition to
-the expression representing the size.
-These functions cannot ask for a record of type [[Oast2ir.proc]] because
-they may be used before such a record exists. 
-<<runtimedata.mli>>=
-val frame_size_to_span    : vfp:Rtl.exp -> Rtl.exp -> span
-val overflow_size_to_span : vfp:Rtl.exp -> Rtl.exp -> span
-@
-Occasionally, it is useful to represent a value as being dead at a stopping point.
-For example, if a variable is not live, we represent it with the [[dead_value]].
-<<runtimedata.mli>>=
-val dead_value            : Rtl.exp
-@
-To facilitate unwinding the stack, we must be able to look up unwind continuations.
-UNFORTUNATELY, WE DO NOT YET HAVE A USEFUL IMPLEMENTATION.
-Note: Even if no continuations may be unwound to, this function must be called in order
-to create the span for the number of continuations.
-<<runtimedata.mli>>=
-val conts_to_spans : wordsize:int -> span list
-@
-The locations of stackdata labels must be exposed through the run-time system.
-<<runtimedata.mli>>=
-val stackdata_to_spans : wordsize:int -> vfp:Rtl.exp -> Rtl.exp list -> span list
-@
 We can convert the return address, callee-save registers, and variable assignments
 (from variable placement) to spans.
 <<runtimedata.mli>>=
-val ra_to_span        : wordsize:int -> Rtl.loc -> span
-val csregs_to_spans   : wordsize:int -> Register.Set.t ->
-                        (Register.t * Rtl.loc) list -> span list
-val var_asst_to_spans : Oast2ir.proc -> (int * Automaton.loc) list -> span list
+type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target.t
 @
 After we have placed all the data in spans, we emit
 the data as assembly by calling [[emit_as_asm]].
 The function should be partially applied to an assembler, then added
 to the optimization pipeline.
 <<runtimedata.mli>>=
-val emit_as_asm : Oast2ir.proc Asm.assembler -> 'v -> Oast2ir.proc-> bool
+val emit_as_asm : tgt -> 'a Asm.assembler -> procsym:Symbol.t ->
+                  (string * spans) list-> bool
+@
+It appears that the interpreter needs to know about user-defined spans and
+stackdata.
+<<runtimedata.mli>>=
+val user_spans : spans -> (Bits.bits * Bits.bits Reloc.Simple.relocatable) list
+val stackdata  : spans -> Rtl.loc list
 @
 
 % ------------------------------------------------------------------ 
@@ -101,29 +89,48 @@ val emit_as_asm : Oast2ir.proc Asm.assembler -> 'v -> Oast2ir.proc-> bool
 % ------------------------------------------------------------------ 
 A number of shorthands are used throughout the implementation.
 <<runtimedata.ml>>=
+type tgt   = ((Rtl.exp -> Automaton.t), Call.t) Target.t
 let imposs = Impossible.impossible
 let unimp  = Impossible.unimp
 
-type span  = Bits.bits * Rtl.exp
+type spans = { mutable sp            : Rtl.loc
+             ; mutable prev_sp       : Rtl.loc
+             ; mutable ra            : Rtl.loc
+             ; mutable users         :
+                    (Bits.bits * Bits.bits Reloc.Simple.relocatable) list
+             ; mutable csregs        : (Register.t * Rtl.loc option) list
+             ; mutable conts         : Rtl.loc list
+             ; mutable sds           : Rtl.loc list
+             ; mutable vars          : Rtl.loc option array
+             }
+exception DeadValue
+let to_spans ~sp ~prev_sp ~ra ~users ~csregs ~conts ~sds ~vars =
+  { sp = sp;       prev_sp = prev_sp; ra = ra; users = users; csregs = csregs;
+    conts = conts; sds = sds;         vars = vars }
 
-module A  = Automaton
+(* Don't touch the user-defined spans -- not necessary *)
+let upd_spans subst spans =
+  let maybe_upd l = match l with
+    | Some l -> (try Some (subst l) with DeadValue -> None)
+    | None   -> None in
+  spans.sp      <- subst spans.sp;
+  spans.prev_sp <- subst spans.prev_sp;
+  spans.ra      <- subst spans.ra;
+  spans.csregs  <- List.map (fun (r,l) -> (r, maybe_upd l)) spans.csregs;
+  spans.conts   <- List.map subst spans.conts;
+  spans.sds     <- List.map subst spans.sds;
+  Array.iteri (fun i l -> spans.vars.(i) <- maybe_upd l) spans.vars
+
 module B  = Bits
-module C  = Call
 module RM = Register.Map
 module RS = Register.Set
 module R  = Rtl
 module RP = Rtl.Private
 module RU = Rtlutil
-module S  = Space
 module W  = Rtlutil.Width
 module Dn = Rtl.Dn
 module Up = Rtl.Up
-module P  = Proc
 module T  = Target
-@
-We represent a dead value as the constant rtl expression [[false]].
-<<runtimedata.ml>>=
-let dead_value = R.bool false
 @
 
 % ------------------------------------------------------------------ 
@@ -193,60 +200,6 @@ the procedure.
 We associate the stackdata with the procedure's label; the stackdata items are
 0-indexed, in the order they appear in the procedure.
 
-For most of the indices, the mapping is trivial; only the registers require
-some work. We omit the identity function on source span indices.
-
-The local variables, frame size, overflow size, and return-address location are simple:
-<<runtimedata.ml>>=
-let var_ix           nregs i = -(2*nregs + 9 + i)
-let frame_size_ix            = -1
-let overflow_size_ix         = -2
-let ra_ix                    = -3
-@
-We also need an index for the label of the stackdata table, as well as the number
-entries.
-<<runtimedata.ml>>=
-let sd_table_ix   = -4
-let num_reg_ix    = -5
-let num_locals_ix = -6
-let num_spans_ix  = -7
-let num_conts_ix  = -8
-@
-The callee-save registers are indexed in sorted order, where the order is defined
-over the (space, index, width) type of a register.
-Registers are sorted first by space (increasing alphanumeric order), then by index
-(also increasing alphanumeric order).
-IT MAY JUST BE WORTH USING THE ORDERING DEFINED OVER ALL HARDWARE REGISTERS IN THE
-[[target.t]] RECORD.
-<<runtimedata.ml>>=
-let mk_csreg_ix_map nvregs = snd (Register.reg_int_map nvregs)
-@
-Using a map from registers to indices, we can easily look up the index for a
-callee-save register.
-<<runtimedata.ml>>=
-let csreg_ix r regmap = -(9 + 2*(RM.find r regmap))
-@
-The rest of the indices are straightforward.
-<<runtimedata.ml>>=
-let cont_ix nregs nvars cn  = -(nvars + 2*nregs + 9 + cn)
-@
-<<runtimedata.ml>>=
-let () = Debug.register "spans" "debug span associations"
-let pspan =
-  if Debug.on "spans" then
-    (fun conv (b, e) ->
-      Printf.eprintf "span: (%d,%s)\n" (conv b) (RU.ToString.exp e))
-  else
-    (fun _ _ -> ())
-let print_span        = pspan Bits.S.to_int
-let print_pseudo_span = pspan (fun x -> x)
-@
-Before emitting spans, we should always be sure to sort them in the proper order.
-<<runtimedata.ml>>=
-let sort_spans     ss = List.sort (fun (i1,_) (i2,_) -> compare i1 i2) ss
-let sort_neg_spans ss = List.sort (fun (i1,_) (i2,_) -> compare i2 i1) ss
-@
-
 % ------------------------------------------------------------------ 
 \subsubsection{Mapping data to expressions and emitting emitting spans as assembly}
 % ------------------------------------------------------------------ 
@@ -257,46 +210,37 @@ The stackdata spans ([[sd_spans]]) are emitted in a separate table.
 Then, for each stopping point, we emit the associated spans by calling
 [[emit_site_spans]].
 <<runtimedata.ml>>=
-let emit_as_asm asm _ proc =
-  let wordsize   = proc.P.target.T.wordsize in
+let emit_as_asm target asm ~procsym label_spans =
+  let wordsize   = target.T.wordsize in
   let to_bits  i = Bits.S.of_int i wordsize  in 
   let zero       = Bits.zero wordsize in
   let one        = to_bits 1 in
   <<define functions for emitting data>>
-  <<define [[partition_site_spans]] [[emit_sd_spans]] and [[emit_site_spans]]>>
-  let sd_spans, site_spans = partition_site_spans proc.P.spans in
+  <<define [[emit_sd_spans]] and [[emit_site_spans]]>>
   let prev_section = asm#current in
-  emit_sd_spans sd_spans;
-  List.iter emit_site_spans site_spans;
+  emit_sd_spans ();
+  List.iter emit_site_spans label_spans;
   asm#section prev_section;
   true
 @
-Stackdata spans have been paired with the label for the current procedure.
-We separate out these spans from the spans that are valid only at particular stopping
-points within the procedure.
-For each set of site spans, we add a span pointing to the table of stackdata spans.
-<<define [[partition_site_spans]] [[emit_sd_spans]] and [[emit_site_spans]]>>=
-let sd_label = asm#local (Idgen.label "stackdata") in
-let partition_site_spans spans =
-  let sd_spans, site_spans =
-    List.partition (fun (site,_) -> site = proc.P.symbol#original_text) spans in
-  let sd_span = to_bits sd_table_ix, Rtl.datasym sd_label proc.P.target.T.pointersize in
-  let site_spans = List.map (fun (l,ss) -> (l, sd_span::ss)) site_spans in
-  sd_spans, site_spans in
-@
 \paragraph{Emitting Stackdata Spans}
+Stackdata spans have been attached to all the span collections.
+They should all be identical, so we just pick one.
+<<define [[emit_sd_spans]] and [[emit_site_spans]]>>=
+let sd_label = asm#local (Idgen.label "stackdata") in
+@
 A stackdata map for $n$ stackdata labels is of size $n + 1$ words.
 The first word gives the number of stackdata labels.
 The next $n$ words give the stackdata labels in order.
-<<define [[partition_site_spans]] [[emit_sd_spans]] and [[emit_site_spans]]>>=
-let emit_sd_spans sd_spans =
-  match sd_spans with
-  | [(_,spans)] ->
-    asm#section "pcmap_data";
-    asm#label   sd_label;
-    asm#value   (Bits.U.of_int (List.length spans) proc.P.target.T.wordsize);
-    List.iter   (fun (_,e) -> emit_val_loc e) (sort_spans spans)
-  | _ -> imposs "More than one set of stackdata spans found for a procedure" in
+<<define [[emit_sd_spans]] and [[emit_site_spans]]>>=
+let emit_sd_spans () =
+  match label_spans with
+  | (_, spans)::_ ->
+      asm#section "pcmap_data";
+      asm#label   sd_label;
+      asm#value   (Bits.U.of_int (List.length spans.sds) target.T.wordsize);
+      List.iter   emit_loc spans.sds
+ | [] -> () in
 @
 \paragraph{Emitting Stopping-Point Spans}
 For each stopping point labelled [[stop_l]], we must emit the information stored in
@@ -309,7 +253,7 @@ This map is placed in the [[pcmap]] section of the assembly code.
 
 The second area is the collection of run-time data for each stopping point.
 This data is placed in the [[pcmap_data]] section of the assembly code.
-<<define [[partition_site_spans]] [[emit_sd_spans]] and [[emit_site_spans]]>>=
+<<define [[emit_sd_spans]] and [[emit_site_spans]]>>=
 let emit_site_spans (stop_l, spans) =
   let frame_label = asm#local (Idgen.label "frame") in
   <<emit proc to run-time data map>>
@@ -347,7 +291,7 @@ frame_data_lbl:
 +--------------------+
 | stackdata_table    |
 +--------------------+
-| num registers      |
+| num registers * 2  |
 +--------------------+
 | num locals         |
 +--------------------+
@@ -364,28 +308,38 @@ frame_data_lbl:
 | spans              |
 +--------------------+
 \end{verbatim}
-The compiler keeps track of all this information through the use of spans, which are
-(index, Rtl.exp) pairs.
-Because the frontend can only use whole numbers to index spans, we can easily
-distinguish between user-defined spans and compiler-defined spans.
 
-We fill in any gaps in the user-defined spans with 0's.
+We emit each of these blocks in order, beginning with the \PAL\ internal spans.
 <<emit frame data>>=
 asm#section "pcmap_data";
 asm#label frame_label;
-let source_spans, cmm_spans = 
-  let spans       = List.map (fun (n,e) -> (Bits.S.to_int n,e)) spans in
-  let ss, cs      = List.partition (fun (n,_) -> n >= 0) spans in
-  let max_span_ix = List.fold_left (fun best (i,_) -> max i best) (-1) ss in
-  let ss =
-    let span_arr = Array.init (max_span_ix + 1) (fun i -> (i,dead_value)) in
-    List.iter (fun (i,span) -> span_arr.(i) <- (i,span)) ss;
-    Array.to_list span_arr in
-  let num_span = (num_spans_ix,
-                  R.bits (to_bits (max_span_ix+1)) proc.P.target.T.wordsize) in
-  sort_spans ss, sort_neg_spans (num_span :: cs) in
-List.iter (fun (_,v) -> emit_val_loc v) cmm_spans;
-List.iter (fun (_,v) -> emit_val_loc v) source_spans;
+emit_loc spans.sp;
+emit_loc spans.prev_sp;
+emit_loc spans.ra;
+asm#addr (Reloc.Simple.of_sum Rtl.datasym sd_label zero);
+emit_int (List.length spans.csregs * 2);
+emit_int (Array.length spans.vars);
+@
+The source spans are laid out by index.
+Because the indices may be sparse, we fill in any gaps with zeroes.
+<<emit frame data>>=
+let users       = List.map (fun (n,e) -> (Bits.S.to_int n,e)) spans.users in
+let max_span_ix = List.fold_left (fun best (i,_) -> max i best) (-1) users in
+@
+And now, we fill in the rest of the data.
+<<emit frame data>>=
+emit_int (max_span_ix + 1);
+emit_int (List.length spans.conts);
+List.iter emit_csreg spans.csregs;
+Array.iter emit_maybe_loc   spans.vars;
+List.iter emit_loc   spans.conts;
+@
+The source spans are laid out by index.
+Because the indices may be sparse, we fill in any gaps with zeroes.
+<<emit frame data>>=
+let span_arr = Array.init (max_span_ix + 1) (fun _ -> None) in
+List.iter (fun (i,span) -> span_arr.(i) <- Some span) users;
+Array.iter emit_user_span span_arr;
 @
 We cover each section of the frame data in detail.
 In addition to emitting spans as assembly data, we provide functions
@@ -399,12 +353,6 @@ We provide conversion functions to store a value in a span,
 and we provide the functions to emit the expressions in these spans as 
 assembly.
 
-We provide conversion functions from an offset from the vfp to an integral size.
-<<runtimedata.ml>>=
-let offset_to_span ix vfp exp =
-  let w = W.exp exp in
-  Bits.S.of_int ix w, R.app (R.opr "sub" [w]) [exp; vfp]
-@
 We define functions for emitting two possible types of data in a single word:
 link-time constants and value locations.
 A link-time constant can be emitted directly.
@@ -430,20 +378,21 @@ The remaining bits store the magnitude of the offset from the virtual frame poin
 \end{enumerate}
 
 First, we define a slew of helpers to emit the different types of values.
-<<define helpers to emit different values>>=
+<<define functions for emitting data>>=
 <<define [[simplify_exp]] to simplify rtl expressions>>
-let reg_ix proc r =
-  try RM.find r (snd proc.P.target.T.reg_ix_map)
+let reg_ix r =
+  try RM.find r (snd target.T.reg_ix_map)
   with Not_found -> imposs "Register not found in map" in
-let emit_dead_var      ()    = asm#value zero in
+let emit_dead_loc      ()    = asm#value zero in
 let emit_link_const mk sym   = asm#addr (Reloc.Simple.of_sum mk sym zero) in
-let emit_offset bits =
+let offset_w = wordsize - 1 in
+let emit_offset bits = (* possibly an offset *)
   let value    = Bits.S.to_int bits in
-  let offset_w = wordsize - 1 in
   (try ignore (Bits.S.of_int value offset_w)
    with Bits.Overflow -> imposs "Offset from vfp is too large for run-time encoding");
   asm#value (B.Ops.or' (B.Ops.shl  one (to_bits offset_w))
-                         (B.Ops.shrl (B.Ops.shl (to_bits value) one) one)) in
+                       (B.Ops.shrl (B.Ops.shl (to_bits value) one) one)) in
+let emit_int i = emit_offset (Bits.S.of_int i offset_w) in
 let emit_reg ix offset =
   let offset_w = wordsize - 2 in
   let w'       = offset_w / 2 in
@@ -456,130 +405,73 @@ let emit_reg ix offset =
 Then, we check the type of value (as encoded in the [[Rtl.exp]] type) and emit the
 value in the proper format.
 <<define functions for emitting data>>=
-let emit_val_loc e =
+let emit_loc l =
   let mklink kind s w = Up.exp (RP.Const (RP.Link(s, kind, w))) in
-  <<define helpers to emit different values>>
-  match Dn.exp (simplify_exp e) with
-  | RP.Const (RP.Bool false)               -> emit_dead_var ()
-  | RP.Const (RP.Link (sym,kind,_))        -> emit_link_const (mklink kind) sym
-  | RP.Const (RP.Bits bs)                  -> emit_offset   bs
-  | RP.Fetch (RP.Reg r, _)                 -> emit_reg  (reg_ix proc r) 0
-  | RP.Fetch (RP.Slice (_,i, RP.Reg r), _) -> emit_reg  (reg_ix proc r) i
-  | _ -> imposs (Printf.sprintf "unexpected exp for span data: %s"
-                                (RU.ToString.exp e))  in
+  match Dn.loc (simplify_loc l) with
+  | RP.Mem (_,_,_, RP.Const (RP.Link (sym,kind,_)),_)  ->
+     emit_link_const (mklink kind) sym
+  | RP.Mem (_,_,_, RP.Const (RP.Bits bs),_)            -> emit_offset   bs
+  | RP.Reg r                                           -> emit_reg  (reg_ix r) 0
+  | RP.Slice (_, i, RP.Reg r)                          -> emit_reg  (reg_ix r) i
+  | _ -> imposs (Printf.sprintf "unexpected location for span data: %s"
+                                (RU.ToString.loc l))  in
+let emit_maybe_loc l = match l with
+  | Some l -> emit_loc l
+  | None   -> emit_dead_loc () in
+
+let emit_csreg (reg, l) = (emit_loc (R.reg reg); emit_maybe_loc l) in
+let emit_user_span reloc = match reloc with
+  | Some reloc ->
+      let s, b = Reloc.Simple.expnormalize reloc in
+      let w    = Bits.width b in
+      let addr = match s with
+                 | None           -> Rtl.bits b w
+                 | Some (sym, mk) -> Rtlutil.add w (mk sym w) (Rtl.bits b w) in
+      emit_loc (R.mem (R.aligned target.T.alignment) 'm'
+                      target.T.byteorder target.T.pointersize addr)
+  | None   -> emit_dead_loc () in
 @
 We provide a function to simplify an expression first by flattening slices such that
 they consist of a single offset from a location (if applicable), then by calling
-[[Simplify.exp]] on the expression.
+[[Simplify.exp]] on any expressions.
 <<define [[simplify_exp]] to simplify rtl expressions>>=
-let simplify_exp exp =
-  let vfp     = proc.P.target.T.vfp in
+let simplify_loc loc =
+  let vfp     = target.T.vfp in
   let check w = if w mod wordsize <> 0 || w < 0 then
                    unimp (Printf.sprintf "unsupported size or alignment %d" w) in
+  let is_vfp_offset e =
+    let rec exp e = if Up.exp e = vfp then true else match e with
+      | RP.Fetch (l,_)  -> loc l
+      | RP.App (_,exps) -> List.fold_left (fun v e -> v || exp e) false exps
+      | RP.Const _      -> false
+    and loc = function
+      | RP.Mem   (_,_,_,e,_) -> exp e
+      | RP.Slice (_,_,l)     -> loc l
+      | _                    -> false in
+    exp e in
   let rec flatten offset l = match l with
-    | RP.Mem (_,_,_,e,_) ->
+    | RP.Mem (s,agg,w,e,ass) when is_vfp_offset e ->
        let w = Rtlutil.Width.exp (Up.exp e) in
        check offset; check w;
        (*V.eprintf verb "Adding an offset %d of width %d\n" offset w;*)
-       Rtlutil.add w (R.app (R.opr "sub" [w]) [Up.exp e; vfp])
-                            (R.bits (Bits.S.of_int offset w) w)
+       let e' = Rtlutil.add w (R.app (R.opr "sub" [w]) [Up.exp e; vfp])
+                              (R.bits (Bits.S.of_int offset w) w) in
+       R.mem (Up.assertion ass) s agg w (Simplify.exp e')
+    | RP.Mem (s,agg,w,e,ass) -> (* not a VFP offset *)
+       R.mem (Up.assertion ass) s agg w (Simplify.exp (Up.exp e))
     | RP.Reg (_,_,w) ->
        check w; check offset;
        let l_up = Up.loc l in
        if offset <> 0 then
-         R.fetch (R.slice w offset l_up) w
-       else R.fetch l_up w
-    | RP.Slice (_,i,l)   -> flatten (offset + i) l
-    | RP.Var _ | RP.Global _ -> imposs "var after variable placement" in
-  match Dn.exp exp with
-  | RP.Fetch (loc,_) -> Simplify.exp (flatten 0 loc)
-  | _                -> Simplify.exp exp in
+         R.slice w offset l_up
+       else l_up
+    | RP.Slice (_,i,l)       -> flatten (offset + i) l
+    | RP.Var _ | RP.Global _ -> Up.loc l in
+  flatten 0 (Dn.loc loc) in
 @
-
-% ------------------------------------------------------------------ 
-\subsubsection{Frame size and overflow size}
-% ------------------------------------------------------------------ 
-We encode the frame size and overflow size as offsets from the virtual frame pointer.
+It appears that the interpreter needs to know about user-defined spans and
+stackdata.
 <<runtimedata.ml>>=
-let frame_size_to_span    ~vfp = offset_to_span frame_size_ix    vfp
-let overflow_size_to_span ~vfp = offset_to_span overflow_size_ix vfp
+let user_spans spans = spans.users
+let stackdata  spans = spans.sds
 @
-
-% ------------------------------------------------------------------ 
-\subsubsection{Return Address and Stackdata Table Label}
-% ------------------------------------------------------------------ 
-The return address is some location.
-<<runtimedata.ml>>=
-let ra_to_span ~wordsize loc =
-  let to_bits i = Bits.S.of_int i wordsize in
-  (to_bits ra_ix, RU.fetch loc)
-@
-
-% ------------------------------------------------------------------ 
-\subsubsection{Locations of stored registers}
-% ------------------------------------------------------------------ 
-Callee-save registers are stored as pairs of consecutive spans.
-The first span indicates the callee-save register.
-The second span indicates where it has been stored.
-<<runtimedata.ml>>=
-let csregs_to_spans ~wordsize nvregs csregs =
-  let to_bits i     = Bits.S.of_int i wordsize         in 
-  let csreg_map     = mk_csreg_ix_map (RS.elements nvregs) in
-  let num_span      =
-    (to_bits num_reg_ix, R.bits (to_bits (2 * List.length csregs)) wordsize) in
-  let to_span rst (r,loc) =
-    let ix = csreg_ix r csreg_map in
-    (to_bits (ix-1), RU.fetch loc) ::
-    (to_bits (ix), RU.fetch (R.reg r)) ::
-    rst in
-  num_span :: List.fold_left to_span [] csregs
-@
-
-% ------------------------------------------------------------------ 
-\subsubsection{Location of stored locals}
-% ------------------------------------------------------------------ 
-Locals are stored as fetches from simple locations.
-<<runtimedata.ml>>=
-let var_asst_to_spans proc vars =
-  let wordsize  = proc.P.target.T.wordsize in
-  let to_bits i = Bits.S.of_int i wordsize in 
-  let num_span  =
-    (to_bits num_locals_ix, R.bits (to_bits (List.length vars)) wordsize) in
-  let to_span (var_num, loc) =
-    (to_bits (var_ix proc.P.nvregs var_num),
-     R.fetch (Automatonutil.aloc loc wordsize) wordsize) in
-  num_span :: List.map to_span vars
-@
-
-% ------------------------------------------------------------------ 
-\subsubsection{Location of stackdata}
-% ------------------------------------------------------------------ 
-Stackdata locations are offsets from the virtual frame pointer.
-<<runtimedata.ml>>=
-let stackdata_to_spans ~wordsize ~vfp sd_exps =
-  snd (List.fold_left (fun (i,rst) e -> (i+1, offset_to_span i vfp e :: rst))
-                      (0,[]) sd_exps)
-@
-
-% ------------------------------------------------------------------ 
-\subsubsection{Location of continuations}
-% ------------------------------------------------------------------ 
-DUMMY IMPLEMENTATION
-<<runtimedata.ml>>=
-let conts_to_spans ~wordsize =
-  let to_bits i     = Bits.S.of_int i wordsize         in 
-  let num_span      =
-    (to_bits num_conts_ix, R.bits (to_bits 0) wordsize) in
-  [num_span]
-@
-\subsubsection{Link-time constants into spans}
-This ought to be the identity---indeed, the conversion ought to go
-\emph{from} general expression \emph{to} span.
-But until Jo\~ao has a chance to work his magic, it's a dreadful hack.
-<<runtimedata.ml>>=
-let user_span k v =
-  let s, b = Reloc.Simple.expnormalize v in
-  let w    = Bits.width b in
-  match s with
-  | None           -> k, Rtl.bits b w
-  | Some (sym, mk) -> k, Rtlutil.add w (mk sym w) (Rtl.bits b w)

@@ -165,9 +165,6 @@ L.3:
 	movl (%esp),%ebx
 	leal 4(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l69:
-.long 0
 .section .text
 s:
 	movl $4,%edx
@@ -184,9 +181,6 @@ L.12:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l81:
-.long 0
 .section .text
 .section .data
 .align 4
@@ -208,9 +202,6 @@ Lproc_body_start_l83:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l93:
-.long 0
 .section .text
 f:
 Linitialize_continuations_l96:
@@ -222,9 +213,6 @@ Lproc_body_start_l95:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l105:
-.long 0
 .section .text
 f1:
 Linitialize_continuations_l108:
@@ -236,9 +224,6 @@ Lproc_body_start_l107:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l117:
-.long 0
 .section .text
 f2:
 	movl $4,%edx
@@ -258,9 +243,6 @@ Lproc_body_start_l119:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l129:
-.long 0
 .section .text
 g:
 	movl $4,%edx
@@ -276,9 +258,6 @@ Lproc_body_start_l131:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l141:
-.long 0
 .section .text
 h:
 	movl $4,%edx
@@ -294,9 +273,6 @@ Lproc_body_start_l143:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l153:
-.long 0
 .section .text
 h1:
 	movl $4,%edx
@@ -316,9 +292,6 @@ Lproc_body_start_l155:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l165:
-.long 0
 .section .text
 h2:
 Linitialize_continuations_l168:
@@ -330,9 +303,6 @@ Lproc_body_start_l167:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l177:
-.long 0
 .section .text
 .section .data
 .align 4
@@ -349,9 +319,6 @@ Lproc_body_start_l179:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l189:
-.long 0
 .section .text
 .section .data
 .align 4
@@ -368,9 +335,6 @@ Lproc_body_start_l191:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l201:
-.long 0
 .section .text
 i_goo:
 Linitialize_continuations_l204:
@@ -382,9 +346,6 @@ Lproc_body_start_l203:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l213:
-.long 0
 .section .text
 sss:
 Linitialize_continuations_l216:
@@ -396,9 +357,6 @@ Lproc_body_start_l215:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l225:
-.long 0
 .section .text
 .section .bss
 .align 4
@@ -419,9 +377,6 @@ Lproc_body_start_l227:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l237:
-.long 0
 .section .text
 setstatic:
 Linitialize_continuations_l240:
@@ -433,9 +388,6 @@ Lproc_body_start_l239:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l249:
-.long 0
 .section .text
 gx1:
 	leal -16(%esp), %esp
@@ -457,10 +409,6 @@ Lproc_body_start_l251:
 	movl %ecx,(%edx)
 	leal 16(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l261:
-.long 1
-.long 0xfffffff8
 .section .text
 ff1:
 	leal -8(%esp), %esp
@@ -486,9 +434,6 @@ Lproc_body_start_l263:
 	movl %ecx,(%edx)
 	leal 8(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l273:
-.long 0
 .section .text
 gg1:
 	movl $4,%edx
@@ -508,9 +453,6 @@ Lproc_body_start_l275:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l285:
-.long 0
 .section .text
 hh1:
 	movl $4,%edx
@@ -526,9 +468,6 @@ Lproc_body_start_l287:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l297:
-.long 0
 .section .text
 cmp:
 	movl $4,%edx
@@ -548,9 +487,6 @@ Lproc_body_start_l299:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l309:
-.long 0
 .section .text
 sort:
 Linitialize_continuations_l312:
@@ -562,9 +498,6 @@ Lproc_body_start_l311:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l321:
-.long 0
 .section .text
 onearg:
 Linitialize_continuations_l324:
@@ -576,9 +509,6 @@ Lproc_body_start_l323:
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
 	ret
-.section .pcmap_data
-Lstackdata_l333:
-.long 0
 .section .text
 .section .bss
 .align 4

@@ -326,15 +326,10 @@ let fold_arri f a z =
     if i < l then do_fold (i+1) (f i (Array.get a i) z)
     else z in
   do_fold 0 z in
-let var_spans =
-  let vars =
-    fold_arri (fun i loc rst -> match loc with None   -> rst
-                                             | Some l -> (i,l) :: rst) tMap [] in
-  RT.var_asst_to_spans proc vars in
-let newspans =
-  List.map (fun (l,spans as p) -> if l = proc.Proc.symbol#original_text
-                                  then p
-                                  else (l, var_spans@spans))
-           proc.Proc.spans in
-proc.Proc.spans <- newspans;
+let upd_var e = match R.Dn.loc e with
+  | RP.Var (_,i,_) -> (match tMap.(i) with
+                       | None   -> raise RT.DeadValue
+                       | Some l -> (Automatonutil.aloc l tgt.Target.wordsize))
+  | _              -> e in
+List.iter (fun (_,ss) -> RT.upd_spans upd_var ss) proc.Proc.spans;
 @

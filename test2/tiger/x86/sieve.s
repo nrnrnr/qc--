@@ -93,10 +93,6 @@ Lproc_body_start_l15:
 	movl 16(%esp),%ebx
 	leal 52(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l25:
-.long 1
-.long 0xfffffff4
 .section .text
 .section .data
 mod_32_gc_data:

@@ -185,7 +185,7 @@ Lframe_l33:
 .long 0x80000000
 .long Lstackdata_l32
 .long 0x80000008
-.long 0x80000005
+.long 0x80000009
 .long 0x80000000
 .long 0x80000000
 .long 0x40000007
@@ -196,6 +196,10 @@ Lframe_l33:
 .long 0xffffffbc
 .long 0x4000000b
 .long 0x4000000b
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0
 .long 0
 .long 0
@@ -211,7 +215,7 @@ Lframe_l34:
 .long 0x80000000
 .long Lstackdata_l32
 .long 0x80000008
-.long 0x80000005
+.long 0x80000009
 .long 0x80000000
 .long 0x80000000
 .long 0x40000007
@@ -222,6 +226,10 @@ Lframe_l34:
 .long 0xffffffbc
 .long 0x4000000b
 .long 0xffffffc8
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0
 .long 0
 .long 0

@@ -65,9 +65,6 @@ L.1:
 	movl %ecx,(%edx)
 	leal 12(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l19:
-.long 0
 .section .text
 canonrect:
 	leal -32(%esp), %esp
@@ -244,10 +241,6 @@ L.8:
 	movl 4(%esp),%ebx
 	leal 32(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l39:
-.long 1
-.long 0xfffffff0
 .section .text
 makepoint:
 	leal -24(%esp), %esp
@@ -306,10 +299,6 @@ L.37:
 	movl 12(%esp),%ebx
 	leal 24(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l51:
-.long 1
-.long 0xfffffff8
 .section .text
 makerect:
 	leal -60(%esp), %esp
@@ -533,9 +522,6 @@ L.53:
 	movl 4(%esp),%ebx
 	leal 8(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l88:
-.long 0
 .section .text
 .section .data
 y:

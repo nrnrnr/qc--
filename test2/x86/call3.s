@@ -46,7 +46,4 @@ Lproc_body_start_l3:
 	leal 24(%esp), %esp
 	movl -24(%esp),%ecx
 	jmp *%ecx
-.section .pcmap_data
-Lstackdata_l13:
-.long 0
 .section .text

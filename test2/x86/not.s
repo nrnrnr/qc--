@@ -38,9 +38,6 @@ Ljoin_l9:
 	movl %edx,(%ecx)
 	leal 8(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l16:
-.long 0
 .section .text
 .section .text
 main:

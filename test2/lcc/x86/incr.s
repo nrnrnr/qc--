@@ -26,9 +26,6 @@ Lproc_body_start_l7:
 	movl (%esp),%ebx
 	leal 4(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l18:
-.long 0
 .section .text
 memchar:
 	leal -16(%esp), %esp
@@ -107,11 +104,6 @@ Lproc_body_start_l20:
 	movl (%esp),%ebx
 	leal 16(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l31:
-.long 2
-.long 0xfffffff8
-.long 0xfffffffc
 .section .text
 memint:
 	leal -16(%esp), %esp
@@ -190,11 +182,6 @@ Lproc_body_start_l33:
 	movl (%esp),%ebx
 	leal 16(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l44:
-.long 2
-.long 0xfffffff8
-.long 0xfffffffc
 .section .text
 regchar:
 	leal -4(%esp), %esp
@@ -225,9 +212,6 @@ Lproc_body_start_l46:
 	movl (%esp),%ebx
 	leal 4(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l57:
-.long 0
 .section .text
 regint:
 	leal -4(%esp), %esp
@@ -258,7 +242,4 @@ Lproc_body_start_l59:
 	movl (%esp),%ebx
 	leal 4(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l70:
-.long 0
 .section .text

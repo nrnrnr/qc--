@@ -1012,33 +1012,25 @@ them in the spans.
 <<rewrite temporaries in spans>>=
 let rewrite_spans (lbl, ss as rst) =
   let node = G.node_labeled cfg lbl in
-  Verbose.eprintf verb "adding colorgraph span for node labeled %s, node %d\n"
-    lbl (G.num node);
-  if lbl <> proc.Proc.symbol#original_text then
-    let get_spilled_loc tmp =
-      let (mem, spilltemps) =
-        try  RM.find tmp cg.spillMap
- 	with Not_found -> imposs "Temp not allocated by graph coloring allocator?" in
-      let rec try_temps tmps = match tmps with
-        | t::ts -> (try Rtl.reg (RM.find t cg.colorMap) with Not_found -> try_temps ts)
-        | []    -> let (_, _, w) = tmp in Automatonutil.aloc mem w in
-      try_temps spilltemps in
-    let temp_loc tmp =
-      try  Rtl.reg (RM.find tmp cg.colorMap)
-      with Not_found -> get_spilled_loc tmp in
-    let rewrite_span (i, e) =
-      let map r = if is_tmp target r then temp_loc r
-                    (*match temp_loc r with
-		       | Reg r::_ -> Rtl.reg r
-		       | Mem l::_ -> Automatonutil.aloc l (width r)
-                       | [] -> raise Not_found
-		     *)
-                  else Rtl.reg r in
-      (i, try Rtlutil.Subst.loc_of_exp ~map e
-          with Not_found -> RTD.dead_value) in
-    (lbl, List.map rewrite_span ss)
-  else rst in
-proc.Proc.spans <- List.map rewrite_spans proc.Proc.spans;
+  (Verbose.eprintf verb "adding colorgraph span for node labeled %s, node %d\n"
+     lbl (G.num node);
+   let get_spilled_loc tmp =
+     let (mem, spilltemps) =
+       try  RM.find tmp cg.spillMap
+ 	     with Not_found -> raise RTD.DeadValue in
+     let rec try_temps tmps = match tmps with
+       | t::ts -> (try RP.Reg (RM.find t cg.colorMap) with Not_found -> try_temps ts)
+       | []    -> let (_, _, w) = tmp in Dn.loc (Automatonutil.aloc mem w) in
+     try_temps spilltemps in
+   let map l = match l with
+     | RP.Reg tmp -> (try  RP.Reg (RM.find tmp cg.colorMap)
+                      with Not_found -> get_spilled_loc tmp)
+     | _          -> imposs "GC reg allocator emitting RT data: guard failed\n" in
+   let rewrite_span l =
+     let guard = function RP.Reg r -> is_tmp target r | _ -> false in
+     Rtlutil.Subst.loc_of_loc ~guard ~map l in
+   Runtimedata.upd_spans rewrite_span ss) in
+List.iter rewrite_spans proc.Proc.spans;
 @
 
 %-------------------------------------------------------------------
@@ -1242,6 +1234,8 @@ let listMapAdd value key listMap =
 <<colorgraph.ml>>=
 module RTD = Runtimedata
 module R   = Register
+module RP  = Rtl.Private
+module Dn  = Rtl.Dn
 module RM  = R.Map
 module RS  = R.Set
 module RSX = R.SetX

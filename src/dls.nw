@@ -57,6 +57,7 @@ later.
 module A  = Automaton
 module R  = Register
 module RP = Rtl.Private
+module Dn = Rtl.Dn
 module RU = Rtlutil
 module RTD = Runtimedata
 module G = Cfgx.M
@@ -1147,22 +1148,23 @@ assigned to.
 <<add spans for variable locations>>=
 let rewrite_spans (lbl, ss as rst) =
   let node = G.node_labeled cfg lbl in
-  Debug.eprintf "dls" "adding dls span for node labeled %s, node %d\n" lbl (G.num node);
-  if lbl <> proc.Proc.symbol#original_text then
-    let vm = try IM.find (G.num node) state.varInMaps
-             with Not_found -> (Cfgutil.print_cfg cfg; assert false) in
-    let rewrite_span (i, e) =
-      let map r = if is_tmp tgt r then
-                    match VM.var_locs vm r with
-                    | Reg r :: _ -> Rtl.reg r
-                    | Mem l :: _ -> let (_, _, w) = r in Automatonutil.aloc l w
-                    | [] -> raise Not_found
-                  else Rtl.reg r in
-      (i, try Rtlutil.Subst.loc_of_exp ~map e
-          with Not_found -> RTD.dead_value) in
-    (lbl, List.map rewrite_span ss)
-  else rst in
-proc.Proc.spans <- List.map rewrite_spans proc.Proc.spans;
+  (Debug.eprintf "dls" "adding dls span for node labeled %s, node %d\n"
+                       lbl (G.num node);
+   let vm = try IM.find (G.num node) state.varInMaps
+            with Not_found -> (Cfgutil.print_cfg cfg; assert false) in
+   let rewrite_span l =
+     let guard = function RP.Reg r -> is_tmp tgt r | _ -> false in
+     let map l = match l with
+       | RP.Reg r ->
+           (try match VM.var_locs vm r with
+                | Reg r :: _ -> RP.Reg r
+                | Mem l :: _ -> let (_, _, w) = r in Dn.loc (Automatonutil.aloc l w)
+                | [] -> raise RTD.DeadValue
+            with Not_found -> raise RTD.DeadValue)
+       | _          -> imposs "DLS reg allocator emitting RT data: guard failed\n" in
+     Rtlutil.Subst.loc_of_loc ~guard ~map l in
+   Runtimedata.upd_spans rewrite_span ss) in
+List.iter rewrite_spans proc.Proc.spans;
 <<dls.ml>>=
 let () = Debug.register "dls" "(downstairs) linear-scan register allocator"
 @
@@ -1170,6 +1172,7 @@ let () = Debug.register "dls" "(downstairs) linear-scan register allocator"
 \subsection{Utilities}
 %-------------------------------------------------------------------
 <<printers>>=
+let imposs = Impossible.impossible
 let indent = "  "
 let printTemps iter msg collection =
   Printf.eprintf "%s" msg;

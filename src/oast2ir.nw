@@ -532,11 +532,13 @@ let insert_init_cont_nodes contmap init_node =
     if k.K.escapes then
       let pc              = exp_of_code_label k.K.cut_pc    in
       let sp              = proc_cc.C.stable_sp_loc    in
+(*RUNTIME DATA support?
       let frame_size_span = RT.frame_size_to_span vfp proc_cc.C.stable_sp_loc in
       let cont_size_span  = RT.conts_to_spans target.T.wordsize in
       let ()    =
         add_spans (k.K.cut_pc, ra_span :: overflow_size_span :: frame_size_span ::
                                List.concat [cont_size_span; csregs_spans; k.K.spans]) in
+*)
       let pc_sp = { Mflow.new_pc = pc; Mflow.new_sp = sp } in
       G.instruction g (Contn.init_code k.K.rep pc_sp) succ
     else
@@ -739,12 +741,14 @@ and callStmt (lhs,cconv, e, args, targets (*unused*), fas) succ =
   let () = add youngblocks cc.C.overflow_alloc.C.result_allocator in'.C.overflow in
                                         (* incoming overflow results *)
 
+(*RUNTIME DATA support?
   let frame_size_span =
     let base = Block.base out.C.overflow in
     if cc.C.overflow_alloc.C.parameter_deallocator = C.Caller then
       RT.frame_size_to_span vfp base
     else RT.frame_size_to_span vfp (Rtlutil.addk (W.exp base) base
                                                  (Block.size out.C.overflow)) in
+*)
   let up_to_call ~succ =
     G.stack_adjust g out.C.pre_sp                                        **>
     G.instruction  g out.C.shuffle                                       **>
@@ -760,9 +764,11 @@ and callStmt (lhs,cconv, e, args, targets (*unused*), fas) succ =
     G.stack_adjust g in'.C.post_sp           **>
     succ in
   let call_succ' = G.join_leading_to call_succ in
+(*RUNTIME DATA support?
   let cont_spans = RT.conts_to_spans target.T.wordsize in (* BOGUS FOR NOW.... *)
   add_spans (G.label call_succ', ra_span :: overflow_size_span :: frame_size_span ::
                                  List.concat [cont_spans; csregs_spans; props]);
+*)
   up_to_call **> call_succ'
 @
 \paragraph{Returns}
@@ -925,8 +931,10 @@ the spans with the label for the current procedure.
     let env   = F.push env scope in
     let proc_label = proc_sym#original_text in
     let sd = stackdata target (F.push env scope) sdmem procbody in
+(*RUNTIME DATA support?
     add_spans (proc_label, RT.stackdata_to_spans ~wordsize:target.T.wordsize ~vfp
                                                  (List.rev (!sd_labels)));
+*)
     env, sd in
 @ 
 We provide a lookup of continuation by name.
@@ -1007,18 +1015,22 @@ type 'a nvr = { reg : 'a; tmp : 'a }   (* for callee-saves info *)
 For each procedure, we create a span that represents the incoming stack
 space that must be deallocated by the procedure.
 <<definition of [[proc]], which translates one procedure>>=
+(*RUNTIME DATA support?
   let overflow_size_span =
     let base = Block.base proc_in'.C.overflow in
     if proc_cc.C.overflow_alloc.C.parameter_deallocator = C.Callee then
       RT.overflow_size_to_span vfp
           (Rtlutil.addk (W.exp base) base (Block.size proc_in'.C.overflow))
     else RT.overflow_size_to_span vfp base in
+*)
 @ 
 Similarly, spans for the return address and callee-saves registers may be repeated
 throughout a procedure.
 <<definition of [[proc]], which translates one procedure>>=
+(*RUNTIME DATA support?
   let ra_span = RT.ra_to_span ~wordsize:target.T.wordsize saved_ra in
   let csregs_spans = RT.csregs_to_spans ~wordsize:target.T.wordsize nvregs nvr_temps in
+*)
 @ 
 \paragraph{Supporting procedures}
 We now have enough information in scope to drop in the definitions of

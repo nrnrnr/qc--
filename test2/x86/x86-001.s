@@ -133,7 +133,4 @@ L:
 	movl 16(%esp),%ebx
 	leal 20(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l18:
-.long 0
 .section .text

@@ -37,9 +37,6 @@ Lproc_body_start_l8:
 	movl (%esp),%ebx
 	leal 4(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l19:
-.long 0
 .section .text
 f:
 	leal -8(%esp), %esp
@@ -418,9 +415,6 @@ L.32:
 	movl 24(%esp),%ebx
 	leal 36(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l98:
-.long 0
 .section .text
 f5:
 	leal -36(%esp), %esp
@@ -501,9 +495,6 @@ Lproc_body_start_l100:
 	movl 16(%esp),%edi
 	leal 36(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l111:
-.long 0
 .section .text
 .section .bss
 .align 4

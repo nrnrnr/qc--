@@ -43,9 +43,10 @@ typedef struct cmm_cont Cmm_Cont;  /* continuation; private representation */
 Functions for walking the stack.
 <<public functions>>=
 Cmm_Activation Cmm_YoungestActivation (const Cmm_Cont *t);
-Cmm_Activation Cmm_NextActivation     (const Cmm_Activation *a);
 int            Cmm_isOldestActivation (const Cmm_Activation *a);
+Cmm_Activation Cmm_NextActivation     (const Cmm_Activation *a);
 int            Cmm_ChangeActivation   (Cmm_Activation *a);
+Cmm_Cont*      Cmm_MakeUnwindCont     (const Cmm_Activation *a, Cmm_Word index, ...);
 <<public functions>>=
 Cmm_Dataptr Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token);
 @ 
@@ -197,6 +198,18 @@ Cmm_ChangeActivation(Cmm_Activation *a) {
   }
 }
 @ 
+<<public function implementations>>=
+Cmm_Cont* Cmm_MakeUnwindCont(const Cmm_Activation *a, Cmm_Word index, ...) {
+  int num_conts;
+
+  pc_map_entry* entry = (pc_map_entry*)a->rtdata;
+  assert(entry);
+
+  num_conts = decode_offset(entry->num_continuations);
+  printf("Cmm_MakeUnwindCont() found %d continuations\n", num_conts);
+  return NULL;
+}
+@
 % ---------------------------------------------------------------------------
 \section{Span Data}
 % ---------------------------------------------------------------------------
@@ -321,7 +334,7 @@ Cmm_FindStackLabel(const Cmm_Activation *a, unsigned n) {
   assert(sdt);
 
   if (n >= sdt[0]) {
-    fprintf(stderr, "stack data index out of range");
+    fprintf(stderr, "Stack data index %d out of range [0..%d)\n", n, sdt[0]);
     assert(0);
   }
 

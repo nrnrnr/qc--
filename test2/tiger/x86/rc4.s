@@ -121,10 +121,6 @@ LifEnd_52:
 	movl 16(%esp),%ebx
 	leal 56(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l38:
-.long 1
-.long 0xfffffff0
 .section .text
 .section .data
 add_mod_256_45_gc_data:
@@ -479,10 +475,6 @@ LifEnd_78:
 	movl 12(%esp),%ebx
 	leal 44(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l85:
-.long 1
-.long 0xfffffff8
 .section .text
 .section .data
 compute_bit_54_gc_data:

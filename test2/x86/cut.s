@@ -378,7 +378,4 @@ Lproc_body_start_l71:
 	movl (%esi),%edi
 	movl (%eax),%esi
 	movl %edi, %esp; jmp *%esi
-.section .pcmap_data
-Lstackdata_l80:
-.long 0
 .section .text

@@ -40,7 +40,7 @@ type 'a proc =
     sym : Symbol.t;  (* assembly-language symbol for this procedure *)
     cc  : name;      (* calling convention *)
     name : name;
-    spans : Runtimedata.span list;  (* enclose whole procedure *)
+    spans : (Bits.bits * linktime) list;  (* enclose whole procedure *)
     formals : (index * hint * Ast.variance * Rtl.width * name) list;
     locals  : Fenv.variable list;
     continuations : (name * Fenv.continuation) list;
@@ -762,7 +762,7 @@ let rec data spans ds rest = match ds with
             else if vw <> metrics.Metrics.pointersize then
               errorf r "span value must be a bit vector of native pointer size"
             else
-              E.Ok (Runtimedata.user_span k v)) in
+              E.Ok ((k, v))) in
         data (span::spans) ds' ((spans, ds) :: rest)
 @ It's unfortunate that spans are elaborated both here and in
 \module{elabstmt}, but to reuse the error messages would be more

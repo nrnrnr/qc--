@@ -20,7 +20,4 @@ Lproc_body_start_l3:
 	addl %eax,%edx
 	movl %ecx,(%edx)
 	ret
-.section .pcmap_data
-Lstackdata_l12:
-.long 0
 .section .text

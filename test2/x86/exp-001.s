@@ -24,7 +24,4 @@ Lproc_body_start_l3:
 	movl %ecx,(%edx)
 	leal 4(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l12:
-.long 0
 .section .text

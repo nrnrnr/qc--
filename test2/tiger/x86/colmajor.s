@@ -121,10 +121,6 @@ Lproc_body_start_l19:
 	movl 16(%esp),%ebx
 	leal 52(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l29:
-.long 1
-.long 0xfffffff4
 .section .text
 .section .data
 mod_46_gc_data:
@@ -594,10 +590,6 @@ LifEnd_65:
 	movl 8(%esp),%ebx
 	leal 40(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l85:
-.long 1
-.long 0xfffffff8
 .section .text
 .section .data
 cmnext_48_gc_data:

@@ -38,7 +38,7 @@ type stmt =
   | Label  of name
   | Switch of range option * exp * (range list * stmt list) list
   | Cont   of name * convention * Fenv.variable hinted list
-  | Span   of Runtimedata.span * stmt list
+  | Span   of (Bits.bits * linktime) * stmt list
   | Assign of rtl
   | Call   of loc hinted list * convention * exp * actual list * procname list
             * name flow * name list option alias
@@ -260,7 +260,7 @@ let span k v ss =
     if kw <> metrics.M.wordsize then
       E.error "span token (key) must be a bit vector of native word size";
     insist_pointer "span value" (Types.Bits vw);
-    Span (Runtimedata.user_span k v, ss)) in
+    Span ((k, v), ss)) in
 @
 Two two sides of an assign statement must match: the number and types
 of lvalues and expressions are checked against each other.  For

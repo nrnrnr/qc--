@@ -42,7 +42,4 @@ Ljoin_l7:
 	movl 4(%esp),%ebx
 	leal 12(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l15:
-.long 0
 .section .text

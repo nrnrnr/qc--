@@ -499,9 +499,11 @@ C.register_module "Driver"
   ; "version"   , V.efunc (V.unit  **->> V.unit)  Driver.version
   ; "stdin"     , Map.inchan.V.embed              stdin (* hack *)
   ; "stdout"    , Map.outchan.V.embed             stdout(* hack *)
+(*
   ; "old_compile", V.efunc (Map.optimize Map.proc **-> V.bool **->
                            Map.ast **-> Map.new_target **-> Map.env **->> Map.asm) 
                           Driver.ocompile
+*)
   ; "compile"  , V.efunc (Map.new_target **-> Map.optimize Map.proc **-> V.bool **->
                            Map.ast **-> Map.asm **->> V.unit) 
                           Driver.compile
@@ -570,7 +572,9 @@ C.register_module "Placevar"
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Runtime"
-  [ "emit_data", V.efunc (Map.asm **->> (Map.stage Map.proc)) Runtimedata.emit_as_asm
+  [ "emit_data", V.efunc (Map.asm **->> (Map.stage Map.proc))
+       (fun asm _ proc -> Runtimedata.emit_as_asm proc.Proc.target asm
+                                                proc.Proc.symbol proc.Proc.spans)
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Simplify"

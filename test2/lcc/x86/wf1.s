@@ -538,9 +538,6 @@ L.32:
 	movl (%esp),%ebx
 	leal 8(%esp), %esp
 	ret
-.section .pcmap_data
-Lstackdata_l113:
-.long 0
 .section .text
 lookup:
 	leal -40(%esp), %esp
@@ -1170,7 +1167,7 @@ Lframe_l194:
 .long 0x80000000
 .long Lstackdata_l193
 .long 0x80000008
-.long 0x80000001
+.long 0x80000002
 .long 0x80000000
 .long 0x80000000
 .long 0x40000007
@@ -1182,6 +1179,7 @@ Lframe_l194:
 .long 0x4000000b
 .long 0x4000000b
 .long 0xfffffff4
+.long 0
 .section .pcmap
 .long Ljoin_l181
 .long Lframe_l195
@@ -1192,7 +1190,7 @@ Lframe_l195:
 .long 0x80000000
 .long Lstackdata_l193
 .long 0x80000008
-.long 0x80000001
+.long 0x80000002
 .long 0x80000000
 .long 0x80000000
 .long 0x40000007
@@ -1204,6 +1202,7 @@ Lframe_l195:
 .long 0x4000000b
 .long 0x4000000b
 .long 0xfffffff4
+.long 0
 .section .pcmap
 .long Ljoin_l178
 .long Lframe_l196
@@ -1214,7 +1213,7 @@ Lframe_l196:
 .long 0x80000000
 .long Lstackdata_l193
 .long 0x80000008
-.long 0x80000001
+.long 0x80000002
 .long 0x80000000
 .long 0x80000000
 .long 0x40000007
@@ -1225,6 +1224,7 @@ Lframe_l196:
 .long 0x4000000a
 .long 0x4000000b
 .long 0x4000000b
+.long 0
 .long 0
 .section .text
 strcmp:
@@ -1336,9 +1336,6 @@ L.74:
 	movl %edx,%ecx
 	movl (%esp),%edx
 	jmp L.72
-.section .pcmap_data
-Lstackdata_l220:
-.long 0
 .section .text
 .section .bss
 .align 4

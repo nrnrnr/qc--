@@ -95,9 +95,10 @@ let freeze =
   let module G = Cfgx.M in
   let apply_to_proc guard subst ({Proc.cfg = g; Proc.spans = spans} as p) =
     let subst_rtl        = Rtlutil.Subst.exp ~guard ~map:subst                 in
-    let subst_span (b,e) = (b, Rtlutil.Subst.exp_of_exp ~guard ~map:subst e)   in
+    let subst_span ss =
+      Runtimedata.upd_spans (Rtlutil.Subst.exp_of_loc ~guard ~map:subst) ss in
     G.iter_nodes (G.update_instr (fun i -> Simplify.rtl (subst_rtl i))) g;
-    p.Proc.spans <- List.map (fun (l, ss) -> (l, List.map subst_span ss)) spans in
+    List.iter (fun (_, ss) -> subst_span ss) spans in
   freeze' apply_to_proc
   (* unsafe simplifier is not needed until vfp is replaced *)
 @
