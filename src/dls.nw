@@ -334,23 +334,41 @@ let do_shuffle effs =
   let () = List.iter (fun r -> Printf.eprintf "%s\n" (Rtlutil.ToReadableString.rtl r)) effs in
 	let () = flush stderr in
 	
-  let strip_guard rtl = match Rtl.Dn.rtl rtl with
+  let just_effect rtl = match Rtl.Dn.rtl rtl with
+    | RP.Rtl [(_,eff)] -> eff
+    | _ -> Impossible.impossible "DLS bug: non-simple rtl in register shuffle" in
+	let just_effects = List.map just_effect in
+  let strip_store rtl = match Rtl.Dn.rtl rtl with
     | RP.Rtl [(_,RP.Store (l, r, w))] -> (l, r, w)
     | _ -> Impossible.impossible "DLS bug: non-simple rtl in register shuffle" in
+	let strip_stores = List.map strip_store in
   let rec shuffle =
-    let assign l r w = to_hughes [RP.Store (l, r, w)] in
+    let assign l r w = RP.Store (l, r, w) in
     function
-    | [(l, r, w)] -> assign l r w
-    | [] -> empty
+    | []          -> []
     | ((l, (r:RP.exp), w) :: rest) as effs ->
         <<definition of [[try_first_effect]]>>
         try_first_effect effs
-          (fun (l, r, w) rest -> shuffle rest @@ assign l r w)
-  in List.rev (List.map Rtl.Up.effect (shuffle (List.map strip_guard effs) [])) in
+          (fun (l, r, w) rest -> assign l r w :: shuffle rest)
+          (fun () ->
+					  (* NOT IDEAL -- SHOULD TRY TO MOVE THROUGH A REG FIRST.... *)
+						match l, r with
+						| RP.Reg lreg, RP.Fetch (RP.Reg rreg,_) ->
+                let m = Automaton.allocate proc.Proc.priv w "" in
+                (just_effects (target.Target.spill  (Target.space target) rreg m) @
+                 shuffle rest @
+                 just_effects (target.Target.reload (Target.space target) lreg m))
+								 (*
+            let t = Talloc.Multiple.reg proc.Proc.temps 't' 32 in
+            (assign (RP.Reg t) r w ::
+             [assign l (RP.Fetch (RP.Reg t, w)) w])
+						*)
+						| _ -> Impossible.impossible "Shuffle with non-reg as lhs or rhs")
+  in List.map Rtl.Up.effect (shuffle (strip_stores effs)) in
 <<definition of [[try_first_effect]]>>=
-let try_first_effect effects succ =
+let try_first_effect effects succ fail =
   let rec maybe bad = function
-    | [] -> Impossible.impossible "DLS bug: Circular register moves"
+    | [] -> fail () (* Circular register moves *)
     | (l, r, w) :: rest ->
         let alias (_, r, _) = RU.MayAlias.exp' l r in
         if not (List.exists alias bad || List.exists alias rest) then
@@ -476,23 +494,6 @@ let uses node =
     | Some i -> let uses, defs, kills = irwk i in uses in
   G.add_inedge_uses node uses
 @
-
-To avoid quadratric list append, I use John Hughes's
-continuation-passing list representation.
-<<utilities>>=
-let empty       = fun l -> l
-let unit x      = fun l -> x :: l
-let (@::) x f   = fun l -> x :: f l
-let (@@) f1 f2  = fun l -> f1 (f2 l)
-let to_hughes l = fun l' -> l @ l'
-let rec concat = function
-  | [] -> empty
-  | [x] -> x  (* premature optimization is the root of all evil *)
-  | [x; y] -> x @@ y  (* premature optimization is the root of all evil *)
-  | [x; y; z] -> x @@ y @@ z (* premature optimization is the root of all evil *)
-  | h::t -> h @@ concat t
-@ 
-
 <<utilities>>=
 let null = function [] -> true | _ -> false
 
