@@ -194,7 +194,45 @@ function Mips.layout.fn(dummy, proc)
     return 1
 end
 @
- 
+% ------------------------------------------------------------------ 
+\paragraph{Stack Layout for the Alpha}
+% ------------------------------------------------------------------ 
+
+<<Lua compiler configuration>>=
+Alpha        = {} or Alpha
+Alpha.layout = { creates='no late consts' } -- what is this for? -CL
+
+function Alpha.layout.fn(dummy, proc)
+    local blocks       = Stack.blocks(proc)
+    blocks.oldblocks   = Block.overlap(64,"low" , blocks.oldblocks)  
+    blocks.youngblocks = Block.overlap(64,"high", blocks.youngblocks)
+    local layout =
+        { blocks.oldblocks
+        , blocks.vfp
+        , blocks.spills
+        , blocks.continuations
+        , blocks.stackdata
+        , blocks.youngblocks
+        , blocks.sp
+        }
+    if Debug.stack then
+        write('****** cc name = ', Stack.ccname(proc), '\n')
+        Debug.showblocks (blocks, { 'oldblocks'
+                                  , 'stackdata'
+                                  , 'vfp'
+                                  , 'continuations'
+                                  , 'spills'
+                                  , 'youngblocks'
+                                  , 'sp'
+                                  })
+    end
+    local block = Block.cat(64, layout)
+    block = Block.adjust(block) -- size is multiple of 16 byte
+    Stack.freeze(proc, block)
+    return 1
+end
+@
+  
 % ------------------------------------------------------------------ 
 \paragraph{Stack Layout for the $x$86} 
 % ------------------------------------------------------------------ 
@@ -495,6 +533,26 @@ Backend.mips =
   , emit      = Driver.assemble
   , compile   = Compile.file
   }   
+
+--
+-- Alpha (64 bit, little endian)
+--
+
+Backend.alpha =     
+  { target    = Targets.alpha
+  , widen     = Stages.assert('proper widths')
+  , placevars = Placevar.fortran
+  , expand    = Expander.alpha
+  , liveness  = Liveness.liveness
+  , ralloc    = Ralloc.color
+  , freeze    = Alpha.layout
+  , rmvfp     = Stages.replace_vfp
+  , asm       = Asm.alpha
+  , emit      = Driver.assemble
+  , compile   = Compile.file
+  }   
 @
+
+
 
 

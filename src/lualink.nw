@@ -235,6 +235,8 @@ C.register_module "Asm"
                             (X86asm.make Cfgutil.emit)
   ; "mips", V.efunc (Map.outchan **-> V.result Map.asm) 
                             (Mipsasm.make Cfgutil.emit)
+  ; "alpha", V.efunc (Map.outchan **-> V.result Map.asm) 
+                            (Alphaasm.make Cfgutil.emit)
   ; "interp32l" , V.efunc (Map.outchan **-> V.result Map.asm) 
             (Interpasm.asm' ~byteorder:Rtl.LittleEndian ~memsize:8 ~ptrsize:32)
   ; "interp32b" , V.efunc (Map.outchan **-> V.result Map.asm) 
@@ -317,7 +319,16 @@ C.register_module "Debug"
                              (V.list V.string) **-> (* hints  *)
                              V.result V.unit) Mipscall.dump_cutto
         ])
+     ;"Alpha" , V.Table (V.Table.of_list 
+        [ "proc",   V.efunc ((V.list V.int)    **-> (* widths *)
+                             (V.list V.string) **-> (* hints  *)
+                             V.result V.unit) Alphacall.dump_proc
+        ; "cutto",  V.efunc ((V.list V.int)    **-> (* widths *)
+                             (V.list V.string) **-> (* hints  *)
+                             V.result V.unit) Alphacall.dump_cutto
+        ])
     
+ 
     ;"X86" , V.Table (V.Table.of_list 
         [ "c_proc",   V.efunc ((V.list V.int)    **-> (* widths *)
                                (V.list V.string) **-> (* hints  *)
@@ -332,6 +343,7 @@ C.register_module "Debug"
 C.register_module "Expander"
   [ "x86f" , V.efunc (V.value **-> Map.proc **-> V.result V.bool) X86.X.cfg
   ; "mips" , V.efunc (V.value **-> Map.proc **-> V.result V.bool) Mips.X.cfg
+  ; "alpha", V.efunc (V.value **-> Map.proc **-> V.result V.bool) Alpha.X.cfg
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Liveness"
@@ -376,6 +388,7 @@ C.register_module "Targets"
   ; "dummy32b", Map.new_target.V.embed Dummy.dummy32b'
   ; "x86",      Map.new_target.V.embed X86.target
   ; "mips",     Map.new_target.V.embed Mips.target
+  ; "alpha",    Map.new_target.V.embed Alpha.target
   ; "interp",   Map.new_target.V.embed Interp.target'
   ] g;
 <<register modules to [[g]] in alphabetical order>>=

@@ -52,7 +52,7 @@ preceding arguments.
 automata that are part of the calling convention to [[stdout]]. The two
 arguments are the width and hints to try in every state of an automaton.
 
-<<mispcall.mli>>=
+<<mipscall.mli>>=
 val dump_proc:      int list -> string list -> unit
 val dump_return:    int list -> string list -> unit
 val dump_cutto:     int list -> string list -> unit
@@ -95,16 +95,14 @@ let f n     = ('f',n,32)
 let d n     = ('f',n,64)
 let vfp     = Vfp.mk 32
 
-let rec from first ~upto = 
-    if first > upto then [] else first :: from (first+1) ~upto
 @
 Calling conventions treat floating point registers specially; therefore
 we have separate lists for them.
 <<mipscall.ml>>=
-let vol_int  = List.map r (from 2  ~upto:15 @ [24;25;31])
-let nvl_int  = List.map r (from 16 ~upto:23 @ [30])
-let vol_fp   = List.map f (from 0  ~upto:18)
-let nvl_fp   = List.map f (from 20 ~upto:30)
+let vol_int  = List.map r (Aux.from 2  ~upto:15 @ [24;25;31])
+let nvl_int  = List.map r (Aux.from 16 ~upto:23 @ [30])
+let vol_fp   = List.map f (Aux.from 0  ~upto:18)
+let nvl_fp   = List.map f (Aux.from 20 ~upto:30)
 @
 Non-volatile registers are saved somewhere in the frame. Currently, we
 cannnot provide dedicated locations.

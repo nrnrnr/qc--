@@ -164,6 +164,10 @@ ML =            topsort.ml       \
                 mipsasm.ml       \
                 mipscall.ml      \
                 mips.ml          \
+                alphacall.ml     \
+                alpharec.ml      \
+                alpha.ml         \
+                alphaasm.ml      \
                 proc.ml          \
                 interpemit.ml    \
                 asm.ml           \
@@ -187,7 +191,11 @@ ML =            topsort.ml       \
 
 # interfaces in alphabetical order
 
-MLI =           asm.mli           \
+MLI =           alpha.mli         \
+                alphaasm.mli      \
+                alphacall.mli     \
+                alpharec.mli      \
+                asm.mli           \
                 asdlasm.mli       \
                 astasm.mli        \
                 ast2ir.mli        \
@@ -399,10 +407,16 @@ mipsrec.mlb:D:  mipsrec.nw
 mipsrec.ml:D:   mipsrec.mlb $MLBURG
                 $MLBURG mipsrec.mlb | $MLBURGFIX $target
 
+alpharec.mlb:D: alpharec.nw
+                $NOTANGLE -L"$LINE" -R$target $prereq > $target
+
+alpharec.ml:D:  alpharec.mlb $MLBURG
+                $MLBURG alpharec.mlb | $MLBURGFIX $target
+
 # ------------------------------------------------------------------
 # include version and name information
 # ------------------------------------------------------------------
-# The ../doc/qc--.man dependency is cross directory; best avoided.
+# The ../doc/qc--.man dependency is across directories; best avoided.
 
 this.ml:D:      this.in qc--.lua ../doc/qc--.man
                 sed     -e "s/@this@/$NAME-$VERSION/"   \

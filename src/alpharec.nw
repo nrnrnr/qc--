@@ -1,0 +1,396 @@
+% vim: ts=8 sw=4 et:
+
+% ------------------------------------------------------------------ 
+\section{Alpha Recognizer}
+% ------------------------------------------------------------------ 
+
+This module provides a recognizer for Alpha {\rtl}s. The recognizer
+has two interfaces. The first is a predicate that is true, if an {\rtl}
+is a {\mips} instruction. The second returns an assembly-language string
+representation of the instruction.
+
+<<alpharec.mli>>=
+val is_instruction: Rtl.rtl -> bool
+val to_string:      Rtl.rtl -> string
+@
+
+It is a checked run-time error to pass an {\rtl} to [[to_string]] that
+is not an Alpha instruction.
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The recognizer is generated from a {\burg} specification. The [[head]]
+part precedes code generated from [[rules]], the [[tail]] part follows
+it.
+
+<<alpharec.mlb>>=
+%head {: <<head>> :}
+%tail {: <<tail>> :}
+%term <<terminal types>>
+%%
+<<rules>>
+@
+
+The usual abbreviations for modules go into the [[head]] clause.
+
+<<head>>=
+module RP = Rtl.Private
+module RU = Rtlutil
+module Up = Rtl.Up
+module Dn = Rtl.Dn
+module SS = Space.Standard64
+@
+
+We report a fatal error with [[error]]. We do not expect to recover from
+such an error; it is something that should not happen and is caused by
+an internal inconsistency.
+
+<<head>>=
+exception Error of string
+let error msg = raise (Error msg)   
+let sprintf   = Printf.sprintf (* useful for formatting msg *)
+@
+
+The [[guard]] function turns a predicate into a cost function that can
+be used in a dynmaic cost expression.
+
+<<head>>=
+let guard p = if p then 0 else Camlburg.inf_cost
+@
+
+Some utilities for building strings.
+
+<<head>>=
+let int64 b =
+    assert (Bits.width b = 64);
+    Int64.to_string (Bits.U.to_int64 b)
+
+let int32 b =
+    assert (Bits.width b = 32);
+    Nativeint.to_string (Bits.U.to_native b)
+
+let cat = String.concat ""
+
+let reg n   = "$"  ^ string_of_int n
+let freg n  = "$f" ^ string_of_int n
+
+let suffix = function
+    | 8  -> "b"      
+    | 16 -> "w"
+    | 32 -> "l"
+    | 64 -> "q"
+    | w  -> error (sprintf "not an Alpha width: %d" w)
+
+let width w = string_of_int w
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Recognizer Rules}
+% ------------------------------------------------------------------ 
+
+Note that the {\mips} assembler provides pseudo instructions that
+translate into multiple machine instructions. If we would emit binary
+instructions we would have to implement these pseudo instructions here.
+
+\iffalse
+\begin{quote}
+\begin{tabularx}{\linewidth}{@{}>{\ttfamily}lX@{}}
+    \emph{Nonterminal} & \emph{Meaning} \\ 
+    \hline
+    too lazy to keep this up to date\\
+\end{tabularx}
+\end{quote}
+\fi
+
+We use [[x]] as an universal terminal type whenever we need one. 
+
+<<terminal types>>=
+bits n x w
+@
+
+<<rules>>=
+const:      Bits(bits)          {: int64 bits :}
+symbol:     Link(x, w:int)      {: x#mangled_text :}
+@
+
+\paragraph{Registers}
+
+<<rules>>=
+regl:       Reg('r', n:int, w:int)  {: reg  n :}
+regl:       Reg('f', n:int, w:int)  {: freg n :}
+
+pcl:        Reg('c',  0, w:int) {: () :}
+spl:        Reg('r', 30, w:int) {: () :}
+ral:        Reg('r', 26, w:int) {: () :}
+
+reg:        Fetch(regl,w:int)   {: regl   :}
+pc:         Fetch(pcl,64)       {: () :}
+sp:         Fetch(spl,64)       {: () :}
+ra:         Fetch(ral,64)       {: () :}
+
+
+@
+
+\paragraph{Addresses}
+
+<<rules>>=
+meml:       Mem(addr,w:int)     {: addr :}
+mem:        Fetch(meml,w:int)   {: meml :}
+
+addr:       reg                 {: sprintf "(%s)" reg       :}
+addr:       imm                 {: imm                      :}
+addr:       Add(imm,reg)        {: sprintf "%s(%s)" imm reg :}
+addr:       Add(reg,imm)        {: sprintf "%s(%s)" imm reg :}
+addr:       symbol              {: symbol                   :}
+@
+
+\paragraph{Constant Expressions}
+
+<<rules>>=
+imm:        const               {: const  :} 
+imm:        symbol              {: symbol :}
+imm:        Add(symbol,imm)     {: sprintf "%s+%s" symbol imm :}
+imm:        Add(imm,symbol)     {: sprintf "%s+%s" symbol imm :}
+@
+
+\paragraph{Data Movement}
+
+Load register from memory. A load of a value smaller than 64 bits
+implies a zero or sign extension.  
+
+<<rules>>=
+inst:       Store(regl,imm,64)
+            {: sprintf "lda %s, %s" regl imm :} 
+            
+            
+inst:       Store(regl,const,64)
+            {: sprintf "ldiq %s, %s" regl const :}
+
+
+inst:       Store(regl,mem,64)
+            {: sprintf "ldq %s, %s" regl mem :}
+
+inst:       Store(regl, Sx(Fetch(mem,x:int)), w:int)
+            {: sprintf "ld%s %s, %s" (suffix w) regl mem :}
+            
+inst:       Store(regl, Zx(Fetch(mem,x:int)), w:int) 
+            {: sprintf "ld%su %s, %s" (suffix w) regl mem :}
+            
+@
+
+Store register to memory. No extension here; the 8, 32, or 64 bits are
+simply written to memory.
+
+<<rules>>=
+inst:       Store(meml, reg, w:int)
+            {: sprintf "st%s %s, %s" (suffix w) reg meml :}
+@
+
+Moves between registers.
+
+<<rules>>=
+inst:       Store(regl, reg, 64)
+            {: sprintf "mov %s, %s" reg  regl :}
+@
+
+\paragraph{Control Flow}
+
+<<rules>>=
+inst:       Goto(symbol)
+            {: sprintf "br %s" symbol :}
+
+inst:       Goto(reg)
+            {: sprintf "br (%s)" reg  :}
+
+inst:       Par(Goto(addr),Store(ral,pc,64))     -- s/addr/symbol/g ? 
+            {: cat ["jsr"; " "; addr] :} 
+@
+
+Here are conditional branches. The {\rtl} operator names fit the {\mips}
+assembly branch op-codes. We cannot inline the [[Cmp]] constructor
+because the [[op]] terminal symbol would be unaccessible. Only top-level
+terminals are in scope for the semantic action.
+
+<<rules>>=
+cmp:        Cmp(op:string,reg)                          {: (op, reg) :}
+inst:       Guarded(cmp,Goto(addr)) 
+            {: match cmp with (op,reg) ->
+                sprintf "b%s %s, %s" op reg addr
+            :}   
+@
+            
+\paragraph{Arithmetic}
+
+<<rules>>=
+inst:       Store(dst:regl, Add(x:reg,y:reg), 64)
+            {: sprintf "addq %s, %s, %s" x y dst :}
+     
+inst:       Store(dst:regl, Add(x:reg,y:imm), 64)
+            {: sprintf "addq %s, %s, %s" x y dst :}
+@
+
+\paragraph{Other Instructions}
+
+<<rules>>=
+inst:       Nop() {: "nop" :}
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Debugging Support}
+% ------------------------------------------------------------------ 
+
+Uncomment the next rule to get a printout of the tree burg tries to
+match.
+
+<<rules>>=
+inst: any [100]         {: cat ["<";any;">"] :}
+
+any : True  ()          {: cat [ "True"  ] :}
+any : False ()          {: cat [ "False" ] :}
+any : Link(x, w:int)    {: cat [ "Link(";x#mangled_text;",";width w;")" ] :}
+any : Late(string,w:int){: cat [ "Late(";string;",";width w;")" ] :}
+any : Bits(bits)        {: cat [ "Bits(b)" ] :}
+
+any : Fetch (any, w:int){: cat [ "Fetch(";any;",";width w;")" ] :}
+
+any : Add(x:any, y:any) {: cat [ "Add(";x;", ";y;")" ] :}
+any : Sub(x:any, y:any) {: cat [ "Sub(";x;", ";y;")" ] :}
+any : Sx(any)           {: cat [ "Sx(";any;")" ] :}
+any : Zx(any)           {: cat [ "Zx(";any;")" ] :}
+any : Lobits(any)       {: cat [ "Lobits(";any;")" ] :}
+
+any : Mem(any, w:int)   {: cat [ "Mem(";any;",";width w;")" ] :}
+any : Reg(char, n:int, w:int) 
+                        {: cat [ "Reg('";Char.escaped char;"',"
+                               ;width n;","; width w;")" ] :}
+
+any : Store (dst:any, src:any, w:int)
+                        {: cat [ "Store(";dst;",";src;",";width w;")" ] :}
+any : Kill(any)         {: cat [ "Kill(";any;")" ] :}
+
+any : Guarded(guard:any, any) 
+                        {: cat [ "Guarded(";guard;",";any;")" ] :}
+any : Cmp(op:string, x:any)     
+                        {: cat [ "Cmp(";op;",";x;")"] :}
+any : Par(l:any, r:any) {: cat [ "Par(";l;",";r;")" ] :}
+any : Goto(any)         {: cat [ "Goto(";any;")" ] :}
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Interfacing {\rtl}s with the Expander}
+% ------------------------------------------------------------------ 
+
+The principle interface is easy: {\rtl} constructors are mapped to
+constructor functions of the same name. Because some transformations are
+difficult to express in {\burg}, several operators and effects are
+matched as special cases in {\ocaml}.
+
+
+<<tail>>=
+let const = function
+    | RP.Bool _                 -> error "boolean found"
+    | RP.Link(s,w)              -> conLink s w
+    | RP.Bits(b)                -> conBits b
+    | RP.Late(s,w)              -> error (sprintf "late constant %s found" s)
+
+<<tail>>=
+let rec exp = function
+    | RP.Const(k)               -> const k
+    | RP.Fetch(l,w)             -> conFetch (loc l) w
+    <<special cases for [[App]]>>
+    | RP.App((o,_),_)           -> error (sprintf "unknown operator %s" o)
+
+and loc = function
+    | RP.Reg(sp,i,w)            -> conReg sp i w
+    | RP.Mem('m',a,w,e,ass)     -> conMem (exp e) w
+    | RP.Mem(sp,_,_,_,_)        -> error (sprintf "mem-space space %c" sp)
+    | RP.Var(s,i,w)             -> error (sprintf "var %s found" s)
+    | RP.Slice _                -> error "cannot handle slice"
+@
+
+<<tail>>= 
+let effect = function
+    <<special cases for [[Store]]>>
+    | RP.Store(l,e,w)           -> conStore (loc l) (exp e) w
+    | RP.Kill(l)                -> error "cannot handle kill"
+
+<<tail>>=
+let guarded g stmt = match g with
+    | RP.Const(RP.Bool b)       -> if b then effect stmt else conNop ()
+    <<special cases for [[guarded]]>>
+    | _                         -> conGuarded (exp g) (effect stmt)
+
+let rec geffects = function
+    | []                        -> conNop ()
+    | [g, s]                    -> guarded g s
+    | (g, s) :: t               -> conPar (guarded g s) (geffects t) 
+
+let rtl (RP.Rtl es) = geffects es
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Special cases}
+% ------------------------------------------------------------------ 
+
+<<special cases for [[Store]]>>=
+| RP.Store(RP.Reg('c',i,w),r,_)
+  when i = SS.indices.SS.pc   -> conGoto (exp r)
+@
+
+<<special cases for [[App]]>>=
+| RP.App(("add", [w]), [x; y])            -> conAdd (exp x) (exp y)
+| RP.App(("sub", [w]), [x; y])            -> conSub (exp x) (exp y)
+| RP.App((("eq"|"ne" as op), [w]), [x; RP.Fetch(RP.Reg('r',31,64),64)]) 
+                                          -> conCmp op (exp x)
+@
+
+<<special cases for [[guarded]]>>=
+@
+
+    
+% ------------------------------------------------------------------ 
+\subsection{The exported recognizers}
+% ------------------------------------------------------------------ 
+
+If an error occurs, we emit the error message to [[stderr]] and include
+it in the output. This will lead to errors with the assembler but makes
+debugging easier because we do not abort after the first problem. Revise
+this once the expander is more mature.
+
+<<tail>>=
+let rtl_to_string = RU.ToReadableString.rtl
+
+let dump msg rtl =
+    List.iter prerr_string
+    [ "error in recognizer: "
+    ; msg
+    ; " on "
+    ; rtl_to_string rtl
+    ; "\n"
+    ]
+
+let to_string r =
+    try 
+        let plan = rtl (Dn.rtl r) in
+        plan.inst.Camlburg.action ()
+    with
+        | Camlburg.Uncovered -> cat ["not an instruction: "
+                                    ; rtl_to_string r
+                                    ]
+        | Error msg          -> ( dump msg r 
+                                ; sprintf "error: %s" (rtl_to_string r)
+                                )
+
+let is_instruction r =
+    try 
+        let plan = rtl (Dn.rtl r) in
+        plan.inst.Camlburg.cost < 100
+    with
+        | Camlburg.Uncovered -> false
+        | Error msg          -> ( dump msg r 
+                                ; false
+                                )
+@        

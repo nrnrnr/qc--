@@ -1,231 +1,302 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
-\section{ALPHA calling conventions}
+% ------------------------------------------------------------------ 
+\section{Alpha calling conventions}
+% ------------------------------------------------------------------ 
 
-My goal here is to avoid knowing anything about instructions.
-The parameters represent the machine instructions to implement
-[[return]] and [[cut to]].
+\emph{Spreading the {\mips} backend across several files increases the
+chance of inconsistencies. Each file defines the byteorder and certain
+registers. Is this a real problem? It definitely makes it harder to define
+a little and a big-endian {\mips} backend. --CL}
+
+This module implements calling conventions for the Alpha. The
+parameters represent the machine instructions to implement [[return]]
+and [[cut to]].
+
 <<alphacall.mli>>=
-val c : return_to:(Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
-  (* C calling convention *)
-val cmm : return_to:(Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
-  (* C-- calling convention *)
-@ 
-\section{Implementation of ALPHA calling conventions}
-We use these abbreviations:
+val c: return_to: (Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
+@
+
+The implementation is based on \textit{True64 {\small UNIX} Assembly
+Language Programmer's Guide}, Version 5.1, published by Compaq Computer,
+Houston.
+
+\paragraph{Debugging} For debugging we provide functions that dump 
+automata that are part of the calling convention to [[stdout]]. The two
+arguments are the width and hints to try in every state of an automaton.
+
+<<alphacall.mli>>=
+val dump_proc:      int list -> string list -> unit
+val dump_return:    int list -> string list -> unit
+val dump_cutto:     int list -> string list -> unit
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation of Alpha calling conventions}
+% ------------------------------------------------------------------ 
+
 <<alphacall.ml>>=
 module A  = Automaton
+module AE = Automaton.Exclude
 module C  = Call
 module R  = Rtl
 module RP = Rtl.Private
 module RS = Register.Set
 module RU = Rtlutil
 module T  = Target
-@ 
-\paragraph{General information}
-Information on the C~calling convention is from the Tru64 Unix Calling
-Standard for Alpha Systems dated August 2000
-(Compaq part number AA-RH9MB-TE).
 
-@ 
-\paragraph{ALPHA registers and their conventional uses}
-Calling conventions refer to registers frequently, so it is
-appropriate to be able to refer to them by name.
-Lua code would do something similar.
+let impossible = Impossible.impossible
+let unimp      = Impossible.unimp
+let sprintf    = Printf.sprintf
+let wordsize   = 64
+@
+
+\paragraph{Registers}
+
+A non-volatile register can be used in a procedure if its initial value
+is restored upon exit. Such a register is also called callee-saved. A
+volatile register can be used without saving and restoring. Registers
+that are neither volatile nor non-volatile are unavailable for register
+allocation.
+
+The return address [[ra]] is volatile.  It can be used for register
+allocation, but the call instruction always writes it (and it is live on
+entry).
+
 <<alphacall.ml>>=
-let regs = Array.init 32 (fun i -> ('r', i, 64))
-let vfp = Vfp.mk 64
-@ 
-Here are the volatile and nonvolatile registers.
-N.B. In position-independent code, [[ebx]] is reserved to point to the
-global offset table.
-Flags are also volatile, except that the direction flag must be set to
-``forward'' (that is, zero) on entry and exit.
+let r n     = ('r',n,wordsize)
+let f n     = ('f',n,wordsize)
+let d n     = ('f',n,wordsize)
+let vfp     = Vfp.mk wordsize
+@
+
+Calling conventions treat floating point registers specially; therefore
+we have separate lists for them.
+
+Are special registers like [[ra]] and [[sp]] volatile, or not?
+Currently, [[ra]] is volatiole, and [[sp]] is not. 
+
 <<alphacall.ml>>=
-let volregs = RS.of_list [eax; ecx; edx]
-let nvregs  = RS.of_list [ebx; esi; edi; ebp]
-let allregs = RS.elements (RS.union volregs nvregs)
-@  N.B. We omit all floating-point registers.
-These are all volatile and available for allocation, although
-[[%st(0)]] can used to return a floating-point result.
-The ABI says that all these registers ``must be empty'' at entry and
-exit (except that [[%st(0)]] need not be empty if it holds a result).
-Understanding ``empty'' requires understanding $x$86 floating-point.
-@ 
-For now, we save a nonvolatile register anywhere.
-Later, we may want mechanisms for saving them in conventional locations.
+let vol_int  = List.map r ((Aux.from 2 ~upto:8)@(Aux.from 16 ~upto:27))
+let nvl_int  = List.map r (Aux.from 9  ~upto:14 @ [30])
+let vol_fp   = List.map f ([1;2] @ (Aux.from 10  ~upto:30))
+let nvl_fp   = List.map f (Aux.from 2 ~upto:30)
+@
+Non-volatile registers are saved somewhere in the frame. Currently, we
+cannnot provide dedicated locations as they are demanded in \S 6.3.3.5.
+
 <<alphacall.ml>>=
 let saved_nvr temps =
-  let t = Talloc.Multiple.loc temps 't' in
-  fun (_, _, w) -> t w
+    let t = Talloc.Multiple.loc temps 't' in
+    let u = Talloc.Multiple.loc temps 'u' in
+        function
+        | ('r',_,w) -> t w
+        | ('f',_,w) -> u w
+        | (s  ,i,_) -> impossible (sprintf "cannot save $%c%d" s i)
 @
-\paragraph{Conventions governing the stack}
-Page 3-10.  The stack is word-aligned.
-The stack pointer points at the last item on the stack, \emph{not} at
-an empty slot.
-<<alphacall.ml>>=
-let sp       = R.reg esp
-let spval    = R.fetch sp 32
-let sp_align = 4
-let growth   = Memalloc.Down
-let bo       = R.LittleEndian
-@
-\paragraph{Generic automaton support}
-The two infix operators both represent the basic composition operator,
-which must instantiated at two types:
-stage followed by stage is stage,
-and 
-stage followed by implementation is implementation.
-<<alphacall.ml>>=
-let ( **> ) f x = f x
-let ( *> ) f1 f2 x = f1 (f2 x)
-@ 
-We provide error parameters to automata.
-<<alphacall.ml>>=
-let badwidth what w = Impossible.impossible
-    ("Unsupported (rounded) width " ^ string_of_int w ^ " in alpha " ^ what)
-let imp _ = Impossible.impossible "grave miscalculation in automaton"
-@ 
-\paragraph{Automata for passing values---C~convention}
 
-Integer results come in register~0.
+\paragraph{Conventions}
+
+The size of the Alpha frame must be a multiple of 16. This cannot be
+specified here.
+
 <<alphacall.ml>>=
-let results iregs base = 
-  A.hint_choice
-     [ ((=) "float"),   A.widen  (Aux.round_up_to ~multiple_of:64) *>
-                        A.widths [64] ~errormsg:(badwidth "alpha floating return") *>
-                        A.useregs [('f', 0, 64)] ~errormsg:imp
-     ; (fun _ -> true), A.widen  (Aux.round_up_to ~multiple_of:64) *>
-                        A.widths [64] ~errormsg:(badwidth "alpha return convention") *>
-                        A.useregs iregs ~errormsg:imp
-     ] **>
-  A.no_overflow base 8 "multiple return values for alpha C"
-let c_results = results [regs.(0)]
+let ra        = R.reg (r 26)            (* return address *)
+let sp        = R.reg (r 30)            (* stack pointer  *)
+let spval     = R.fetch sp wordsize
+let growth    = Memalloc.Down           (* stack grows down *)
+let byteorder = R.LittleEndian         
+let sp_align  = 16                      (* SP always 16-byte aligned *)
+
+let std_sp_location = 
+    RU.add wordsize vfp (R.late "minus frame size" wordsize)
+
+let ( **> ) f x   = f x
+let (  *> ) f g x = f (g x)
+
+let badwidth (msg:string) (w:int) = 
+    impossible (sprintf "unsupported (rounded) width %d in Alpha: %s" w msg)
+
+let fatal _ = 
+    impossible "fatal error in Alpha automaton"
 @
-When passing procedure parameters, we put
-earlier arguments in lower addresses, so even though the
-stack grows down, the overflow block grows up.
-An argument's size is increased, if necessary, to make it a multiple
-of words.  The ABI specifies padding, but we'll use [[widen]] because
-the machine is little-endian.
+
+\paragraph{C~return results}
+
+A C~function returns an integer (up to 64 bits wide) in [[$0]], a
+floating-point result (up to two 64-bit values) in [[$f0]] and [[$f1]].
+
 <<alphacall.ml>>=
-let c_arguments base = 
-  A.widen  (Aux.round_up_to ~multiple_of:32) **>
-  A.overflow ~memsize:8 ~byteorder:bo ~start:base
-             ~growth:Memalloc.Up ~max_alignment:sp_align
-@ 
-When passing cut-to parameters, we use all the registers---there's no
-reason not to.
-<<alphacall.ml>>=
-let cut_args base = 
-  A.widen  (Aux.round_up_to ~multiple_of:32) **>
-  A.widths [32] ~errormsg:(badwidth "alpha cut-to convention") **>
-  A.useregs allregs ~errormsg:imp **>
-  A.overflow ~memsize:8 ~byteorder:bo ~start:base
-             ~growth:Memalloc.Up ~max_alignment:sp_align
-@ 
-It's worth studying these automata to see what's likely to remain
-unchanged across conventions:
-memsize, byte order, stack alignment, and growth direction are good
-candidates for defaulting.
+let results =
+    A.hint_choice
+        [ ((=) "float"),  
+            A.widen (Aux.round_up_to ~multiple_of: 64)              *>
+            A.widths [64] ~errormsg:(badwidth "Alpha FP return")  *>
+            A.useregs [f 0; f 1] ~errormsg:fatal
+        ; (fun _ ->true), 
+            A.widen (Aux.round_up_to ~multiple_of: 64)              *>
+            A.widths [64] ~errormsg:(badwidth "Alpha return")     *>  
+            A.useregs [r 0] ~errormsg:fatal
+        ] **>
+    A.no_overflow 4 "multiple return values for Alpha C"    
 @
-\paragraph{Automata for passing values---{\PAL}~convention}
+
+\paragraph{C~procedure parameters}
+
+Table 6-3 summarizes the calling convention: the location of an argument
+is determined by its position and type:
+
+\begin{quote}
+\begin{tabular}{lll}
+Position & Integer  & Floating-Point \\
+\hrule
+1        & [[$16]]  & [[f16]] \\
+2        & [[$17]]  & [[f17]] \\
+3        & [[$18]]  & [[f18]] \\
+4        & [[$19]]  & [[f19]] \\
+5        & [[$20]]  & [[f20]] \\
+6        & [[$21]]  & [[f21]] \\
+7        & stack    & stack   \\
+\dots    & \dots    & \dots   \\
+\end{tabular}
+\end{quote}
+
+We encode this by exclusion rules between corresponding integer and
+floating-point registers.
+
 <<alphacall.ml>>=
-let cmm_results = results (RS.elements volregs)
-let cmm_arguments base = 
-  A.widen  (Aux.round_up_to ~multiple_of:32) **>
-  A.useregs (RS.elements volregs) ~errormsg:imp **>
-  A.overflow ~memsize:8 ~byteorder:bo ~start:base
-             ~growth:Memalloc.Up ~max_alignment:sp_align
+let spaces =
+  let module SS = Space.Standard64 in
+  let r = SS.r 32 byteorder [64] in
+  let f = SS.f 32 byteorder [64] in
+  function
+  | 'r' -> r
+  | 'f' -> f
+  | _   -> Impossible.impossible "register space in parameter passing"
+
+let arguments () =
+  (* N.B. exc is mutable and must be made fresh each time *)
+  let exc = A.Exclude.of_pairs spaces [ [r 16] , [f 16]
+                                      ; [r 17] , [f 17]
+                                      ; [r 18] , [f 18]
+                                      ; [r 19] , [f 19]
+                                      ; [r 20] , [f 20]
+                                      ; [r 21] , [f 21]
+                                      ] in
+  A.choice   
+      [ (fun h w -> h = "float" && w = 64),
+          A.sharedregs exc [f 16; f 17; f 18; f 19; f 20; f 21] ~errormsg:fatal
+      ; (fun h w -> h <> "float" && w = 64),
+          A.widen (Aux.round_up_to ~multiple_of:64)        *>
+          A.sharedregs exc [r 16; r 17; r 18; r 19; r 20; r 21] ~errormsg:fatal 
+      ] **>
+  A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
 @
-\paragraph{Managing the stack pointer and return address}
-On entry, the stack pointer points to the return address.
-This needs some aliasing info?
+        
+\paragraph{C~cut-to parameters}
+
+Since this is strictly internal calling convention, we can use whatever
+we like. We use all volatile registers.
 <<alphacall.ml>>=
-let ra = R.mem R.none 'm' bo 32 vfp
-@ 
-The ``normal'' location for the stack pointer is at the bottom of the
-frame. 
-This line of code should be the \emph{only} place in the compiler
-where the constant [["minus frame size"]] is mentioned.
-Clients should use the base of the appropriate block in the calling convention.
-<<alphacall.ml>>=
-let addk = RU.addk 32
-let add  = RU.add  32
-let std_sp_location = add vfp (R.late "minus frame size" 32)
-@ 
-N.B. the call instruction moves the stack pointer.
-<<functions to transform automata>>=
+let cut_args = 
+    A.hint_choice
+        [ ((=) "float"),
+            A.widen (Aux.round_up_to ~multiple_of:64)        *>
+            A.useregs vol_fp  ~errormsg:fatal 
+        ; (fun _ -> true),
+            A.widen (Aux.round_up_to ~multiple_of:64)        *>
+            A.useregs vol_int ~errormsg:fatal 
+        ] **>
+    A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Putting it together} 
+% ------------------------------------------------------------------ 
+
+The Alpha demands (\S 6.3.3.2) that a precedure loads the global pointer
+value ($\$27$) into $\$gp$, if the procedure uses large constants. We
+have to assume that this is always the case. How do we implement this
+requirement?
+
+<<transformations>>=
 let call_actuals  =
-  C.outgoing ~what:"call" ~growth ~sp ~spec:specs.call
-    ~autosp:(fun r -> Block.base r.A.overflow)
-    ~postsp:(fun _ -> std_sp_location)
-    ~relative_to:vfp in
+  C.outgoing ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at (arguments ()))
+    ~autosp:(fun r  -> Block.base r.A.overflow)
+    ~postsp:(fun sp -> sp) in  
+
 let prolog  =
-  C.incoming ~what:"prolog" ~growth ~sp ~spec:specs.call
-    ~autosp:(fun r -> addk (Block.base r.A.overflow) (-4))
-    ~postsp:(fun _ -> std_sp_location)
-    ~relative_to:vfp in
-@ 
-<<functions to transform automata>>=
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at (arguments ()))
+    ~autosp:(fun _ -> vfp)
+    ~postsp:(fun _ -> std_sp_location) in
+
 let call_results  =
-  C.incoming ~what:"results" ~growth ~sp ~spec:specs.results
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at results)
     ~autosp:(fun r -> Block.base r.A.overflow)
-    ~postsp:(fun _ -> std_sp_location)  (* irrelevant? *)
-    ~relative_to:vfp in
+    ~postsp:(fun _ -> std_sp_location) in
+
 let epilog  =
-  C.outgoing ~what:"epilog" ~growth ~sp ~spec:specs.results
+  C.outgoing ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at results)
     ~autosp:(fun r -> Block.base r.A.overflow)
-    ~postsp:(fun _ -> vfp)  (* irrelevant *)
-    ~relative_to:vfp in
-@ 
-If we use [[Call.outgoing]] by itself, we have a problem, because
-[[Call.outgoing]] assumes that the overflow block is relative, when in
-fact it needs to be exact for a [[cut to]].
-We have a horrid patch here.
-<<functions to transform automata>>=
+    ~postsp:(fun _ -> vfp) in
+
 let also_cuts_to =
-  C.incoming ~what:"continuation" ~growth ~sp ~spec:specs.cutto
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at cut_args)
     ~autosp:(fun r -> std_sp_location)
-    ~postsp:(fun _ -> std_sp_location)
-    ~relative_to:vfp in
+    ~postsp:(fun _ -> std_sp_location) in
 
 let cut_actuals base  =
- let out =
-   C.outgoing ~what:"cut to" ~growth ~sp ~spec:specs.cutto
+   C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base cut_args)
      ~autosp:(fun r -> spval)
-     ~postsp:(fun _ -> spval)
-     ~relative_to:base in
- let out types actuals = 
-   let answer = out types actuals in
-   let c = Rtleqn.equate base (Block.base answer.C.overflow) in
-   {answer with C.overflow = Block.with_constraint answer.C.overflow c} in
- out in
-@ 
-\paragraph{Putting together the whole convention}
+     ~postsp:(fun _ -> spval) in
+
+
 <<alphacall.ml>>=
-type ('a, 'b, 'c) specs = { call : 'a; results : 'b; cutto : 'c }
-let conv specs ~return_to cut =
-  <<functions to transform automata>>
-  let return k n ~ra =
-    if k = 0 & n = 0 then return_to ra
-    else Impossible.impossible "alternate return using C calling convention" in
-  { C.call_parms = { C.in' = prolog;       C.out = call_actuals}
-  ; C.cut_parms  = { C.in' = also_cuts_to; C.out = cut_actuals}
-  ; C.results    = { C.in' = call_results; C.out = epilog}
+let c ~return_to cut = 
+    <<transformations>>
+    let return k n ~ra =
+        if k = 0 & n = 0 then return_to ra
+        else impossible "alternate return using C calling convention" in
+    { C.name            = "C"
+    ; C.jump_ok         = false
+    ; C.call_parms      = { C.in' = prolog;       C.out = call_actuals}
+    ; C.cut_parms       = { C.in' = also_cuts_to; C.out = cut_actuals}
+    ; C.results         = { C.in' = call_results; C.out = epilog}
 
-  ; C.stack_growth    = Memalloc.Down
-  ; C.stable_sp_loc   = std_sp_location
-  ; C.replace_vfp     = Cfgx.Vfp.replace_with ~sp
-  ; C.sp_align        = 4               (* alignment of stack pointer at call/cut *)
-  ; C.ra              = ra              (* where return address is on entry *)
-  ; C.nvregs          = nvregs          (* registers preserved across calls *)
-  ; C.volregs         = volregs         (* registers not preserved across calls *)
-  ; C.saved_nvr       = saved_nvr
-  ; C.cutto           = cut
-  ; C.saved_ra        = (fun _ -> ra)
-  ; C.return          = return
-  } 
+    ; C.stack_growth    = growth
+    ; C.stable_sp_loc   = std_sp_location
+    ; C.replace_vfp     = Cfgx.Vfp.replace_with ~sp
+    ; C.sp_align        = sp_align
+    ; C.pre_nvregs      = RS.union (RS.of_list nvl_int) (RS.of_list nvl_fp)
+    ; C.volregs         = RS.union (RS.of_list vol_int) (RS.of_list vol_fp)
+    ; C.saved_nvr       = saved_nvr
+    ; C.cutto           = cut
+    ; C.return          = return
+    ; C.ra_on_entry      = (fun _   -> R.fetch ra wordsize)
+    ; C.where_to_save_ra = (fun _ t -> Talloc.Multiple.loc t 't' wordsize)
+    ; C.ra_on_exit       = (fun t b -> t)
+    }
+@
 
-let c   = conv { call = c_arguments;   results=c_results;   cutto=cut_args }
-let cmm = conv { call = cmm_arguments; results=cmm_results; cutto=cut_args }
+\paragraph{Support for Debugging} 
+
+This code should ultimately moved close to the \module{call.nw} module
+such that it is available for all calling conventions. The polymorphic
+nature of [[Call.t]] make this difficult rigth now.
+
+<<alphacall.ml>>=
+let dump automaton widths hints = 
+    Automatongraph.print 
+        ~mk:(fun () -> A.at (Rtl.bits (Bits.zero wordsize) wordsize) automaton)
+        ~widths ~hints
+        
+let dump_proc     = dump (arguments ())
+let dump_return   = dump results
+let dump_cutto    = dump cut_args
+@
+

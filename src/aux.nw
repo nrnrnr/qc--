@@ -9,22 +9,6 @@
 % Example (at beginning of line): %%Grades: B Central Soon
 
 
-% l2h substitution cfg CFG
-% l2h substitution dots ...
-% l2h substitution AST AST
-% l2h substitution ast AST
-% l2h substitution rtl RTL
-% l2h substitution ir IR
-% l2h substitution noweb NOWEB
-% l2h substitution qcc QC--
-% l2h substitution C C--
-% l2h substitution PAL C--
-% l2h substitution pal C--
-% l2h substitution asdl ASDL
-% l2h substitution ocaml OCaml
-% l2h substitution forall forall
-% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
-
 % ------------------------------------------------------------------ 
 \section{Auxiliaries}
 % ------------------------------------------------------------------ 
@@ -41,187 +25,34 @@ val round_up_to : multiple_of:int -> int -> int
 val foldri : (int -> 'a -> 'b -> 'b) -> 'a list -> 'b -> 'b
   (* fold list elements right to left, passing index for List.nth *)
 
-module Option : sig 
-    <<interface option>>
-end
+val from: int -> upto:int -> int list
+  (* from x ~upto:y is the list of integers x, .., y *)
 
-module Bij : sig
-    <<interface bij>>
+module Option : sig 
+    val get: 'a -> 'a option -> 'a
 end
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
 
 <<aux.ml>>=
 module Option = struct
-    <<implementation option>>
+    let get x = function
+        | Some y -> y
+        | None   -> x
 end
 
-module Bij = struct
-    <<implementation bij>>
-end
-@
- 
-% ------------------------------------------------------------------ 
-\subsection{Interface [[Option]]}
-% ------------------------------------------------------------------ 
-
-[[Option.get]] provides a default in case an optional value contains
-[[None]]: [[get y (Some y) = y]] and [[get x None = x]].
-
-<<interface option>>=
-val get: 'a -> 'a option -> 'a
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Implementation [[Option]]}
-% ------------------------------------------------------------------ 
-
-<<implementation option>>=
-let get x = function
-    | Some y -> y
-    | None   -> x
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Interface Bijection [[Bij]]}
-% ------------------------------------------------------------------  
-
-A bijection is a maping from one set to another where each member of
-the first set is mapped to exactly one member of the other and vice
-versa. This module models a bijection as a set of pairs $(x,y)$ where
-both $x$ and $y$ identify the pair. 
-
-The [[Bij]] module is essentially a functor that receives two modules
-[[X]] and [[Y]], each providing an order for the $x$ and the $y$
-component of the pairs modeling the bijection.
- 
-<<interface bij>>=
-module type OrderedType = sig
-    type t
-    val compare: t -> t -> int
-end   
- 
-module type S = sig
-    <<module type S>>
-end
-
-module Make (X: OrderedType) (Y: OrderedType): (S with type x = X.t 
-                                                  with type y = Y.t) 
-@
-
-Type [[x]] is the type of the first pair-component, type [[y]] the type of
-the second component, and [[t]] is the type of a bijection.
-
-<<module type S>>=
-    type x
-    type y
-    type t
-@
-
-The signatures of the access functions provide little surprises:
-
-\begin{itemize}
-\item [[empty]] is an empty projection.
-\item [[add x y t]] adds a new pair $(x,y)$ to a bijection. In case the
-      values [[x]] and [[y]] would not identify $(x,y)$ when added to [[t],
-      the [[Bijection]] is raised. This happens in particular when 
-      any of [[x]] or [[y]] are already used in [[t]].
-\item The [[lookup]] function look up a pair in a bijection: given one
-      component of the pair, the other one is returned. In case the
-      given component is not part of [[t]], [[Not_found]] is raised.
-
-\item The [[del]] functions remove a pair from a bijection given a
-      component to identify it. If there is no such pair,
-      [[Not_found]] is raised.
-\end{itemize}
-    
-<<module type S>>=
-exception Bijection
-
-<<module type S>>=
-val empty       : t
-val add         : x -> y -> t -> t      (* Bijection *)
-val lookupx     : x -> t -> y           (* Not_found *)
-val lookupy     : y -> t -> x           (* Not_found *)
-val delx        : x -> t -> t           (* Not_found *)
-val dely        : y -> t -> t           (* Not_found *)
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Implementation Bijection [[Bij]]}
-% ------------------------------------------------------------------  
-
-<<implementation bij>>=
-module type OrderedType = sig
-    type t
-    val compare: t -> t -> int
-end   
-
-module type S = sig
-    <<module type S>>
-end
-
-<<implementation bij>>=
-module Make (X: OrderedType) (Y: OrderedType) = struct
-    <<module Make>>
-end
-@
-
-A bijection is modeled as two maps of type [[xmap]] and [[ymap]]. An
-[[xmap]] maps an [[x]] value to a [[y]] value, a [[ymap]] maps a [[y]]
-to an [[x]].
-
-<<module Make>>=
-type x = X.t
-type y = Y.t
-
-module XMap = Map.Make(X)
-module YMap = Map.Make(Y)
-
-type xmap = y XMap.t
-type ymap = x YMap.t
-type t    = { x: xmap
-            ; y: ymap
-            }
-
-exception Bijection
-
-let empty       = { x = XMap.empty; y = YMap.empty }
-@
-
-Before a new pair can be added we have to check whether ether [[x]] or
-[[y]] are already in use.  In that case the new addition must be
-rejected because it would no longer be uniquely identifiable.
-
-<<module Make>>=
-let add x y t   = if XMap.mem x t.x || YMap.mem y t.y
-                  then raise Bijection
-                  else
-                        { x = XMap.add x y t.x
-                        ; y = YMap.add y x t.y
-                        }
-@
-The implementation of the remaining functions is more or less obvious
-and simple.
-
-<<module Make>>=
-let lookupx x t = XMap.find x t.x
-let lookupy y t = YMap.find y t.y
-let delx    x t = let y = lookupx x t in
-                  { x = XMap.remove x t.x
-                  ; y = YMap.remove y t.y
-                  }
-let dely    y t = let x = lookupy y t in
-                  { x = XMap.remove x t.x
-                  ; y = YMap.remove y t.y
-                  }
-@
-@
 <<aux.ml>>=
 let round_up_to ~multiple_of:n k = n * ((k+(n-1)) / n)
+
+<<aux.ml>>=
 let foldri f l z =
   let rec next n = function
     | [] -> z
     | x :: xs -> f n x (next (n+1) xs) in
   next 0 l
 
-    
+let rec from first ~upto = 
+    if first > upto then [] else first :: from (first+1) ~upto

@@ -1,12 +1,16 @@
 
 
 % ------------------------------------------------------------------ 
-\section{Back end for the MIPS}
+\section{Back end for the Alpha}
 % ------------------------------------------------------------------ 
 
-This module defines a 32 bit little-endian {\mips} architecture.
+The Alpha is a 64 bit little-endian architecture. For informations about
+he architecture, we consulted the \textit{True64 {\small UNIX} Assembly
+Language Programmer's Guide}, Version 5.1, published by Compaq Computer,
+Houston.
 
-<<mips.mli>>=
+
+<<alpha.mli>>=
 module Post : Postexpander.S
 module X    : Expander.S
 
@@ -17,23 +21,17 @@ val target: Ast2ir.tgt
 \subsection{Name and storage spaces}
 % ------------------------------------------------------------------ 
 
-A {\mips} architecture can be either little or big endian. For now, we
-assume little endianness but expect to functorize the implementation
-later.
-
-<<mips.ml>>=
-let arch        = "mips"                    (* architecture *)
+<<alpha.ml>>=
+let arch        = "alpha"                    (* architecture *)
 let byteorder   = Rtl.LittleEndian 
-let wordsize    = 32
+let wordsize    = 64
 @
 
 We use the standard storage spaces, including the spaces for PC and
-condition codes. For now I'll treat floating point as 32 bit; maybe we
-need an additional spaces for 64-bit floating point values and
-temporaries.
+condition codes. 
 
-<<mips.ml>>=
-module SS   = Space.Standard32
+<<alpha.ml>>=
+module SS   = Space.Standard64
 module A    = Automaton
 module R    = Rtl
 module RP   = Rtl.Private
@@ -44,12 +42,12 @@ module T    = Target
 
 module Spaces = struct
     let id = Rtl.Identity
-    let m  = SS.m byteorder [8; 16; 32]
-    let r  = SS.r 32 id [32]
-    let f  = SS.f 32 id [32]    (* what about 64-bit FP? *)
-    let t  = SS.t    id [32]    
-    let u  = SS.u    id [32]
-    let c  = SS.c  6 id [32]    (* pc, npc, cc, _, fp_mode, fp_fcmp *)
+    let m  = SS.m byteorder [8; 16; 32; 64] (* byte, word, longword, quadword *)
+    let r  = SS.r 32 id [64]
+    let f  = SS.f 32 id [64]    
+    let t  = SS.t    id [64]    
+    let u  = SS.u    id [64]
+    let c  = SS.c  6 id [64]    (* pc, npc, cc, _, fp_mode, fp_fcmp *)
 end
 @
 
@@ -57,7 +55,7 @@ end
 \subsection{Registers}
 % ------------------------------------------------------------------ 
 
-<<mips.ml>>=
+<<alpha.ml>>=
 let locations   = SS.locations Spaces.c
 let pc          = locations.SS.pc
 let cc          = locations.SS.cc
@@ -66,17 +64,17 @@ let fp_mode     = locations.SS.fp_mode
 let fp_fcmp     = locations.SS.fp_fcmp
 let vfp         = Vfp.mk wordsize
 
-let reg n       = ('r',n,32)
-let sp          = reg 29        (* stack pointer    *)
-let ra          = reg 31        (* return address   *)
-let r0          = reg 0         (* register 0       *)
+let reg n       = ('r',n,wordsize)
+let sp          = reg 30        (* stack pointer    *)
+let ra          = reg 26        (* return address   *)
+let zero        = reg 31        (* always zero      *)
 @
 
 % ------------------------------------------------------------------ 
 \subsection{Utilities}
 % ------------------------------------------------------------------  
 
-<<mips.ml>>=
+<<alpha.ml>>=
 let unimp               = Impossible.unimp
 let impossible          = Impossible.impossible
 
@@ -92,7 +90,7 @@ let reg_width (_,_,w)   = w
 We generate standard control-flow {\rtl}s. The \module{ast2ir.nw} module
 inserts these into the {\cfg} it builds. 
 
-<<mips.ml>>=
+<<alpha.ml>>=
 module F = Mflow.MakeStandard
     (struct
         let pc_lhs    = pc
@@ -105,7 +103,7 @@ module F = Mflow.MakeStandard
 Module [[F]] does not provide a return instruction. A return is simply a
 jump.
 
-<<mips.ml>>=
+<<alpha.ml>>=
 let return = R.store pc (fetch_word (R.reg ra))
 @
 
@@ -114,12 +112,12 @@ let return = R.store pc (fetch_word (R.reg ra))
 \subsection{Postexpander}
 % ------------------------------------------------------------------ 
 
-<<mips.ml>>=
+<<alpha.ml>>=
 module Post = struct
-    <<MIPS postexpander>>
+    <<Alpha postexpander>>
 end
 
-<<MIPS postexpander>>=
+<<Alpha postexpander>>=
 let byte_order  = byteorder
 let wordsize    = wordsize
 
@@ -133,14 +131,14 @@ type operator   = Rtl.Private.opr
 \paragraph{Contexts}
 There is no distinction between an integer and an address.
 @
-<<MIPS postexpander>>=
+<<Alpha postexpander>>=
 type context = Rtl.space * (Register.t -> bool)
 let icontext = 't', fun (c, _, _) -> c = 'r' || c = 't'
 let fcontext = 'u', fun (c, _, _) -> c = 'f' || c = 'u'
 let acontext = icontext
 @
 \paragraph{Addressing modes}
-<<MIPS postexpander>>=
+<<Alpha postexpander>>=
 module Address = struct
     type t               = Rtl.exp
     let reg (_,_,w as r) = R.fetch (R.reg r) w 
@@ -151,32 +149,32 @@ end
 \subsubsection{Load and Store}
 % ------------------------------------------------------------------ 
 
-At the moment all temporaries are 32 bit wide but in the future we will
-also have 64-bit floating point values. Therefore we want to avoid
-hard coding [[wordsize]] into loads and stores.
+For now we assume every temporary is 64 bits wide. However, the alpha
+can handle 32 bit floating point values in its 64 bit floating point
+registers. I belive that one would always spill the 64 bit register.
 
-<<MIPS postexpander>>=
+<<Alpha postexpander>>=
 let tloc t              = Rtl.reg t
 let tval (_,_,w as t)   = R.fetch (tloc t) w
 let twidth              = reg_width
 
 let load ~dst ~addr assn =
     let w = twidth dst in
-        assert (w = wordsize); (* remove when we have 64-bit spaces *)
+        assert (w = wordsize); 
         [R.store (tloc dst) (R.fetch (mem w addr) w) w]
     
 
 let store ~addr ~src assn =
     let w = twidth src in
-        assert (w = wordsize); (* remove when we have 64-bit spaces *)
+        assert (w = wordsize); 
         [R.store (mem w addr) (tval src) w]
 @
 
-The {\mips} provides sign- and zero-extending load operations for
-loading values smaller than [[wordsize]]. We only support operations on
-[[wordsize]].
+The Alpha provides sign- and zero-extending load operations for
+loading values smaller than [[wordsize]]. Values are always extended to
+64 bits.
 
-<<MIPS postexpander>>=
+<<Alpha postexpander>>=
 let extend  op n e = R.app (R.opr op       [n; wordsize]) [e]
 let lobits     n e = R.app (R.opr "lobits" [wordsize; n]) [e]
 
@@ -198,7 +196,7 @@ let lostore ~addr ~src n assn =
 The general move operation only works between temporaries of the same
 width. Load immediate loads a constant into a temorary.
 
-<<MIPS postexpander>>=
+<<Alpha postexpander>>=
 let move ~dst ~src =
     assert (reg_width src = reg_width dst);
     if src = dst then [] else [R.store (tloc dst) (tval src) (twidth src)]
@@ -208,7 +206,7 @@ Immediate load, and extended immediate load. An extended load-immediate
 can take sums and differences of compile-time constants (including late
 compile-time constants). 
 
-<<MIPS postexpander>>=
+<<Alpha postexpander>>=
 let li  ~dst const = [R.store (tloc dst) (Up.const const) (twidth dst)]
 let lix ~dst e     = [R.store (tloc dst) e                (twidth dst)]  
 @
@@ -221,7 +219,7 @@ let lix ~dst e     = [R.store (tloc dst) e                (twidth dst)]
 We have no boolean context because boolean operations are rewritten into
 control flow.
 
-<<MIPS postexpander>>=
+<<Alpha postexpander>>=
 let bcontext = ' ', fun _ -> false  (* should never be used *)
 let operators = Context.standard icontext fcontext acontext bcontext
 
@@ -232,7 +230,7 @@ let argmap = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
 We have two maps: from operator to argument context, and from operator
 to result context.
 
-<<MIPS postexpander>>=
+<<Alpha postexpander>>=
 let arg_contexts   (n, _) = try SM.find n argmap with Not_found -> assert false
 let result_context (n, _) = try SM.find n resmap with Not_found -> assert false
 @
@@ -241,7 +239,11 @@ let result_context (n, _) = try SM.find n resmap with Not_found -> assert false
 \subsubsection{Binary and unary operators}
 % ------------------------------------------------------------------ 
 
-<<MIPS postexpander>>=
+None of the operators below expect or return boolean values. This
+implies, that comparison operators are not expanded here before they are
+used as guards for branches.
+
+<<Alpha postexpander>>=
 let unop ~dst op x =
     [R.store (tloc dst) (R.app (Up.opr op) [tval x]) (twidth dst)]
 
@@ -256,81 +258,121 @@ let rtlop ~dst op args =
 \subsubsection{Control Flow}
 % ------------------------------------------------------------------ 
 
-On the {\mips}, the PC can be read and written.
+On the Alpha, we can read and write the program counter.
 
-<<MIPS postexpander>>=
+<<Alpha postexpander>>=
 let pc_lhs = pc         (* PC as assigned by branch *)
 let pc_rhs = pc         (* PC as captured by call   *)
 @
 
 \paragraph{Unconditional Branches}
-<<MIPS postexpander>>=
+<<Alpha postexpander>>=
 let br ~tgt = [R.store pc_lhs (tval tgt)     wordsize]  (* branch reg *)
 let b  ~tgt = [R.store pc_lhs (Up.const tgt) wordsize]  (* branch     *)
 @
 
 \paragraph{Conditional Branches}
 
-The {\mips} assembler implements conditional branches directly, that is,
-without setting a condition code that a later branch uses.
+On the Alpha, a conditional branch is not a primitive instruction.
+Instead, a sequence of instructions implements a comparision, whose
+result is written to a register. The branch instruction reads the
+register, interprets it as a boolean, and branches accordingly.
 
-The [[negate]] function implements the nagation for of a binary
-operator.
+For the results of the comparison instructions we would like to allocate
+new temporaries. However, the Postexpander interface does not allow for
+it. We therefore store the result of $x \oplus y$ and $\lnot x$
+in $x$.
 
-<<MIPS postexpander>>=
-let negate = function
-  | "ne"            -> "eq"
-  | "eq"            -> "ne"
-  | "ge"            -> "lt"
-  | "gt"            -> "le"
-  | "le"            -> "gt"
-  | "lt"            -> "ge"
-  | "geu"           -> "ltu"
-  | "gtu"           -> "leu"
-  | "leu"           -> "gtu"
-  | "ltu"           -> "geu"
-  | "feq"           -> unimp "floating-point comparison"
-  | "fne"           -> unimp "floating-point comparison"
-  | "flt"           -> unimp "floating-point comparison"
-  | "fle"           -> unimp "floating-point comparison"
-  | "fgt"           -> unimp "floating-point comparison"
-  | "fge"           -> unimp "floating-point comparison"
-  | "fordered"      -> unimp "floating-point comparison"
-  | "funordered"    -> unimp "floating-point comparison"
-  | _               -> impossible 
-                        "bad comparison in expanded MIPS conditional branch"
-@ 
+Not all comparion operators are provided as primitives on the Alpha. We
+thus have to implement them as an instruction sequence. The rusult is in
+all cases stored in [[x]].
 
-A conditional branch is presented by a guarded assignment to the PC.
 
-<<MIPS postexpander>>=
-let bc x (opr, ws as op) y ~tgt =
-    assert (ws = [wordsize]);
-    [ R.guard (R.app (Up.opr op) [tval x; tval y]) 
-              (R.store pc_lhs (Up.const tgt) wordsize)  (* effect *)
-    ]
+[[com]] complements a temporay bitwise. As above, we could like to
+assigne the result to a new temporary, but cannot allocate one. We thus
+mutate the argument.
+
+<<Alpha postexpander>>=
+let com x =
+    let o = R.opr "com" [wordsize] in
+        R.store (tloc x) (R.app o [tval x]) wordsize
 @
 
-[[bnegate]] inverts the condition in a conditional branch.
+[[relation]] implements a binary relation, where the result is stored in
+[[x]]. 
 
-<<MIPS postexpander>>=
-let bnegate r = match Dn.rtl r with
-    | RP.Rtl [ RP.App( (op,[32])
-                     , [RP.Fetch(RP.Reg(x),32);RP.Fetch (RP.Reg(y),32)]
+<<Alpha postexpander>>=
+let relation op x y = 
+    let o = R.opr op [wordsize] in 
+        R.store (tloc x) (R.app o [tval x;tval y]) wordsize 
+@
+
+[[cmp]] implements the {\rtl} comparision operators where the result is
+stored in the first argument.
+
+<<Alpha postexpander>>=
+let cmp op x y = match op with
+    | "eq"          -> [relation "eq"  x y;]
+    | "ne"          -> [relation "eq"  x y; com x]
+    | "lt"          -> [relation "lt"  x y]
+    | "gt"          -> [relation "le"  x y; com x]
+    | "ge"          -> [relation "lt"  x y; com x]
+    | "ltu"         -> [relation "ltu" x y]
+    | "leu"         -> [relation "leu" x y]
+    | "gtu"         -> [relation "leu" x y; com x]
+    | "geu"         -> [relation "ltu" x y; com x]
+    | "feq"           -> unimp "floating-point comparison"
+    | "fne"           -> unimp "floating-point comparison"
+    | "flt"           -> unimp "floating-point comparison"
+    | "fle"           -> unimp "floating-point comparison"
+    | "fgt"           -> unimp "floating-point comparison"
+    | "fge"           -> unimp "floating-point comparison"
+    | "fordered"      -> unimp "floating-point comparison"
+    | "funordered"    -> unimp "floating-point comparison"
+    | _               -> impossible 
+                        "bad comparison in expanded Alpha conditional branch"
+
+let cbranch op x tgt =
+    R.guard (R.app (R.opr op [wordsize]) [tval x; tval zero])
+            (R.store pc_lhs (Up.const tgt) wordsize)
+@
+
+A conditional branch is a sequence of relational operators, followed by
+a [[cbranch]] on the result. The guard inside [[cbranch]] compares
+for not equal.
+
+<<Alpha postexpander>>=
+let bc x (opr, ws as op) y ~tgt =
+    assert (ws = [wordsize]);
+    cmp opr x y @ [cbranch "ne" x tgt]
+@
+
+[[bnegate]] inverts the condition in a conditional branch. Since we only
+compare for equality or inequality, this is easy. All the real work is
+done in the relational operators preceding the branch.
+
+<<Alpha postexpander>>=
+let bnegate r = 
+    let negate = function
+        | "eq" -> "ne"
+        | "ne" -> "eq"
+        | _    -> impossible "ill-formed Alpha conditional branch"
+    in match Dn.rtl r with
+    | RP.Rtl [ RP.App( (("eq"|"ne" as op),[64])
+                     , [RP.Fetch(RP.Reg(x),64);RP.Fetch (RP.Reg(y),64)]
                      ) 
-             , RP.Store (pc, tgt, 32)
+             , RP.Store (pc, tgt, 64)
              ] when pc = Dn.loc pc_lhs ->
-        R.guard (R.app (R.opr (negate op) [32]) [tval x; tval y]) 
+                 R.guard (R.app (R.opr (negate op) [64]) [tval x; tval y]) 
                 (R.store pc_lhs (Up.exp tgt) wordsize)
     | _ -> Impossible.impossible "ill-formed MIPS conditional branch"
 @
 
-\paragraph{Calls} Direct and indirect calls. In an indirect call the
-target is held in a register. I don't understand the [[others]]
-parameter. 
+\paragraph{Calls} In an indirect call the target is held in a register,
+otherwise it is an immediate constant.
 
 
-<<MIPS postexpander>>=
+<<Alpha postexpander>>=
 let effects = List.map Up.effect
 let call  ~tgt ~others = 
     [R.par (R.store pc_lhs (Up.const tgt) wordsize :: effects others)]
@@ -340,13 +382,13 @@ let callr ~tgt ~others =
 
 \paragraph{Cut-To}
 
-<<MIPS postexpander>>=
+<<Alpha postexpander>>=
 let cut_to effs = [R.par (effects effs)]
 @
 
 \paragraph{No sacred instructions}
 
-<<MIPS postexpander>>=
+<<Alpha postexpander>>=
 let don't_touch_me es = false
 @
 
@@ -354,7 +396,7 @@ let don't_touch_me es = false
 \subsection{Expander}
 % ------------------------------------------------------------------ 
 
-<<mips.ml>>=
+<<alpha.ml>>=
 module X = Expander.IntFloatAddr(Post)
 @
 
@@ -366,7 +408,7 @@ module X = Expander.IntFloatAddr(Post)
 The register allocator needs to spill and reload values; we have to
 provide the instructions.
 
-<<mips.ml>>=
+<<alpha.ml>>=
 let spill  p t l = [A.store l (Post.tval t) (Post.twidth t)]
 let reload p t l = 
     let w = Post.twidth t in [R.store (Post.tloc t) (Automaton.fetch l w) w]
@@ -380,37 +422,41 @@ When a Global {\PAL} variable names no hardware register to live in, the
 variable is passed through to following automaton to obtain its
 location.
 
-THIS AUTOMATON SEEMS QUITE UNIVERSAL FOR 32 BIT ARCHITECTURES. MOVE IT
-TO Automaton.Standard32?
+THIS AUTOMATON SEEMS QUITE UNIVERSAL FOR 64 BIT ARCHITECTURES. MOVE IT
+TO Automaton.Standard64?
 
-<<mips.ml>>=
+I am not sure what the best alignments are. Maybe every slot should be
+8-byte aligned.
+
+<<alpha.ml>>=
 let ( **> ) f x = f x
 let globals base = 
   let width w = if      w <= 8  then 8  
                 else if w <= 16 then 16 
-                else Aux.round_up_to 32 w in
-  let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
+                else if w <= 32 then 32
+                else Aux.round_up_to wordsize w in
+  let align = function _ -> 8 in
   A.at ~start:base **> A.widen width **> A.align_to align **>
   A.overflow ~memsize:8 
              ~byteorder:byteorder 
              ~growth:Memalloc.Up 
-             ~max_alignment:4
+             ~max_alignment:8
 @
 
 % ------------------------------------------------------------------ 
 \subsection{The target record}
 % ------------------------------------------------------------------ 
 
-<<mips.ml>>=
-let c_convention = Mipscall.c (fun ra -> (R.store pc ra wordsize)) 
-                              (F.cutto (Rtl.reg sp))
+<<alpha.ml>>=
+let c_convention = Alphacall.c (fun ra -> (R.store pc ra wordsize)) 
+                               (F.cutto (Rtl.reg sp)) 
 
 let target =
-    { T.name                = "mips"
+    { T.name                = "alpha"
     ; T.byteorder           = byteorder
     ; T.wordsize            = wordsize
     ; T.pointersize         = wordsize
-    ; T.alignment           = 4             (* not sure *)
+    ; T.alignment           = 8             (* not sure *)
     ; T.memsize             = 8
     ; T.spaces              = [ Spaces.m
                               ; Spaces.r
@@ -433,9 +479,7 @@ let target =
     ; T.cc                  = (fun _ -> c_convention)
     ; T.globals             = globals
     ; T.is_rounding_mode    = (fun loc -> false)
-    ; T.named_locs          = Strutil.assoc2map
-                              ["v0", Rtl.reg (reg 2) (* for SPIM *)
-                              ]
+    ; T.named_locs          = Strutil.Map.empty
     ; T.data_section        = "data"
     ; T.charset             = "latin1" (* REMOVE THIS FROM TARGET.T *)
     }    
