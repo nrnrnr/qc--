@@ -4,9 +4,10 @@ ASDLGEN=camlGen
 
 NOWEAVE=`echo ${NOWEAVE-noweave}`
 
-# should split into ASDLSOURCES and CAMLSOURCES
+ASDLSRC=asm cmmir ast rtl
+OCAMLSRC=sourcemap util atomize
 
-ASDLSRC=asm cmmir ast
+
 ASDLSRCDOTDEFS=`echo $ASDLSRC | sed 's/ /.defs /g;s/$/.defs/'`
 ASDLSRCDOTTEX=`echo   $ASDLSRC | sed 's/ /.tex /g;s/$/.tex/'`
 ASDLSRCDOTASDL=`echo   $ASDLSRC | sed 's/ /.asdl /g;s/$/.asdl/'`
@@ -14,7 +15,6 @@ ASDLSRCDOTHTML=`echo   $ASDLSRC | sed 's/ /.html /g;s/$/.html/'`
 ASDLSRCDOTNW=`echo   $ASDLSRC | sed 's/ /.nw /g;s/$/.nw/'`
 ASDLSRCREGEXP=`echo $ASDLSRC | sed 's/ /|/g'`
 
-OCAMLSRC=sourcemap
 OCAMLSRCDOTDEFS=`echo $OCAMLSRC | sed 's/ /.defs /g;s/$/.defs/'`
 OCAMLSRCDOTTEX=`echo  $OCAMLSRC | sed 's/ /.tex /g;s/$/.tex/'`
 OCAMLSRCDOTML=`echo   $OCAMLSRC | sed 's/ /.ml /g;s/$/.ml/'`
@@ -84,12 +84,14 @@ $HTMLDIR%.gif: %.dot
 WWW:
 	mkdir $target 2>/dev/null
 
-^$HTMLDIR($ASDLSRCREGEXP)'\.'html:R: '\1'.nw `echo $HTMLDIR | sed 's@/$@@'`
+^$HTMLDIR($ASDLSRCREGEXP)'\.'html:R: '\1'.nw
+	sh -c "[ -d $HTMLDIR ] || mkdir $HTMLDIR; exit 0"
 	echo '\section*{Contents}
 	\tableofcontents' |
 	$NOWEAVE -filter 'elide refman:*' -filter l2h -autodefs asdl -html -index - $prereq | htmltoc > $target
 
-^$HTMLDIR($OCAMLSRCREGEXP)'\.'html:R: '\1'.nw `echo $HTMLDIR | sed 's@/$@@'`
+^$HTMLDIR($OCAMLSRCREGEXP)'\.'html:R: '\1'.nw
+	sh -c "[ -d $HTMLDIR ] || mkdir $HTMLDIR; exit 0"
 	echo '\section*{Contents}
 	\tableofcontents' |
 	$NOWEAVE -filter 'elide refman:*' -filter l2h -html -index - $prereq | htmltoc > $target
@@ -130,21 +132,26 @@ doc_check:V: doc.tex
 %.nwi: %.tex
 	noindex $prereq
 
+index.tex: index.nw
+	$NOWEAVE $prereq > $target
+
 
 ###################
 #
 #  Targets for interfaces
 
-caml:V: $OCAMLSRCDOTCMI $OCAMLSRCDOTCMO asm.cmi asm.cmo iRNode.cmi iRNode.cmo \
-	aST.cmi aST.cmo iR.cmi iR.cmo 
+UTILS=option.mli option.ml 
+UTILSOBJ=`echo $UTILS | sed 's/\.mli/.cmi/g;s/\.ml/.cmo/g'`
+
+caml:V: $OCAMLSRCDOTCMI $OCAMLSRCDOTCMO $UTILSOBJ \
+	asm.cmi asm.cmo iRNode.cmi iRNode.cmo aST.cmi aST.cmo iR.cmi iR.cmo 
 
 CAMLOPTS="-I /home/cellar/nr/zephyr/asdlGen-19990816/src/ocaml"
 
-option.mli: util.nw
-	notangle -R$target -L'# %L "%F"%N' $prereq > $target
-option.ml: util.nw
-	notangle -R$target -L'# %L "%F"%N' $prereq > $target
-
+$UTILS: util.nw
+	for i in $target; do
+	  notangle -R$i -L'# %L "%F"%N' $prereq > $i || exit 1
+	done
 
 asm.mli asm.ml asmUtil.mli asmUtil.ml: asm.asdl
 	$ASDLGEN --ocaml --pickler=sexp $prereq
@@ -183,8 +190,9 @@ iRNode.cmi: rTL.cmi
 iRNode.cmo: rTL.cmi
 iR.cmi: iRNode.cmi
 iR.cmo: iRNode.cmi
-sourcemap.cmo: option.cmi 
-
+sourcemap.cmo: option.cmi sourcemap.cmi
+ralloc.cmo: regset.cmi
+atomize.cmo: atomize.cmi rTL.cmi iRNode.cmi
 
 ################################################################
 #
