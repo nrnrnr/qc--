@@ -230,6 +230,7 @@ function mkS (nm, f)
 CGStages = 
     { liveness       = mkS("liveness",      CG.liveness)
     , build          = mkS("build",         CG.build)
+    , setColors      = mkS("setColors",     CG.setColors)
     , makeWorklist   = mkS("makeWorklist",  CG.makeWorklist)
     , simplify       = mkS("simplify",      CG.simplify)
     , coalesce       = mkS("coalesce",      CG.coalesce)
@@ -268,10 +269,11 @@ prLive  = ignore(single(CGStages.printCFGLive))
 plive   = seq({single(CGStages.liveness), single(CGStages.printCFGLive)})
 live    = single(CGStages.liveness)
 
-function graphColoring (colors)
+function graphColoring ()
   return
-     share(makeInitInfo(colors), "cgInfo",
-        seq {fix (seq 
+     share(makeInitInfo(), "cgInfo",
+        seq { single(CGStages.setColors)
+            , fix (seq 
                    {ignore(seq
                       { single(CGStages.liveness)
                       , single(CGStages.build)
