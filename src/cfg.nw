@@ -684,6 +684,7 @@ val illegal      : 'i cfg -> 'i node  (* a node that must never be reached *)
 module Make (X:X) : S with module X = X = struct
   module R   = Register
   module RS  = R.Set
+  module IS  = Set.Make (struct type t = int let compare = compare end)
   module RSX = R.SetX
   module SM  = Strutil.Map
   module X   = X
@@ -907,24 +908,7 @@ type 'i node =
 The observers are straightforward.
 <<graph and node observers implementation>>=
 let kind = kind_util
-
-let num node = match node with
-  | Joi j -> j.joi_num
-  | Ins i -> i.ins_num
-  | Sta s -> s.sta_num
-  | Bra b -> b.bra_num
-  | Cbr c -> c.cbr_num
-  | Mbr m -> m.mbr_num
-  | Jum j -> j.jum_num
-  | Cal c -> c.cal_num
-  | Ret r -> r.ret_num
-  | Cut c -> c.cut_num
-  | Ent e -> e.ent_num
-  | Exi e -> e.exi_num
-  | Ass a -> a.ass_num
-  | Ill i -> i.ill_num
-  | Imp i -> i.imp_num
-  | Boot  -> undef "num" "boot"
+let num = num_util
 
 let is_join node = match node with
   | Joi _ | Exi _ -> true
@@ -1084,8 +1068,12 @@ Duplicates are useful in the case when a multiway branch has multiple
 branches to the same successor.
 Without duplicates in the internal representation, it would be unpleasant to
 update the succ/pred list when changing a branch.
+
+Internally, we provide the [[all_incoming]] function for cases where we need to see all
+incoming edges, not just the predecessors.
+Similarly with [[all_outgoing]] for successor edges.
 <<graph and node observers implementation>>=
-let preds node = match node with
+let all_incoming node = match node with
   | Ins i -> [i.ins_pred]
   | Sta i -> [i.sta_pred]
   | Ass a -> [a.ass_pred]
@@ -1097,13 +1085,15 @@ let preds node = match node with
   | Jum j -> [j.jum_pred]
   | Ret r -> [r.ret_pred]
   | Imp i -> [i.imp_pred]
-  | Joi j -> uniq j.joi_preds
-  | Exi e -> uniq e.exi_preds
+  | Joi j -> j.joi_preds
+  | Exi e -> e.exi_preds
   | Ent _ -> []
   | Ill _ -> []
   | Boot  -> undef "preds" "boot"
 
-let succs node = match node with
+let preds node = uniq (all_incoming node)
+
+let all_outgoing node = match node with
   | Joi j -> [j.joi_succ]
   | Ins i -> [i.ins_succ]
   | Sta i -> [i.sta_succ]
@@ -1112,14 +1102,15 @@ let succs node = match node with
   | Jum j -> [j.jum_succ]
   | Ret r -> [r.ret_succ]
   | Ent e -> [e.ent_succ]
-  | Cbr c -> uniq [c.cbr_false; c.cbr_true]
-  | Imp i -> uniq [i.imp_succ; i.imp_exit_succ]
-  | Mbr m -> uniq (Array.to_list m.mbr_succs)
-  | Cal c -> uniq (Array.to_list (ce_getnodes c.cal_contedges))
-  | Cut c -> uniq (Array.to_list (ce_getnodes c.cut_contedges))
+  | Cbr c -> [c.cbr_false; c.cbr_true]
+  | Imp i -> [i.imp_succ; i.imp_exit_succ]
+  | Mbr m -> (Array.to_list m.mbr_succs)
+  | Cal c -> (Array.to_list (ce_getnodes c.cal_contedges))
+  | Cut c -> (Array.to_list (ce_getnodes c.cut_contedges))
   | Exi _ -> []
   | Ill _ -> []
   | Boot  -> undef "succs" "boot"
+let succs node = uniq (all_outgoing node)
 @
 It may be useful to find the number of alternate returns, unwinds, or
 [[cuts_to]] edges at a call node.
@@ -1297,7 +1288,7 @@ let add_inedge_uses node regs = match node with
   | Ret r -> regs ++ R.rset_to_rxset r.ret_uses
   | _     -> regs
 @ 
-Although only internally visible, teh [[remove_pred]] function is vital.
+Although only internally visible, the [[remove_pred]] function is vital.
 For join and exit nodes, we remove [[node]] from the predecessor list.
 For other nodes, we set the predecessor to the illegal node.
 <<remove node predecessors>>=
@@ -1589,9 +1580,8 @@ let splice_after ~entry ~exit node =
   (set_succ node ~succ:entry ; set_succ exit ~succ)
 
 let delete cfg node =
-  let preds = preds node in
-  ( if   List.for_all (fun p -> kind p = Illegal)             preds 
-    then List.iter    (fun s -> remove_pred node ~old_succ:s) (succs node)
+  ( if   List.for_all (fun p -> kind p = Illegal)             (all_incoming node) 
+    then List.iter    (fun s -> remove_pred node ~old_succ:s) (all_outgoing node)
   ; if kind node = Join
     then cfg.label_map <- List.fold_right SM.remove (labels node) cfg.label_map
   )
@@ -1941,8 +1931,8 @@ let undef f n = imposs (Printf.sprintf "%s: undefined on %s nodes" f n)
 let undef_with_node node_num f n =
   imposs (Printf.sprintf "%s: undefined on %s node %d" f n node_num)
 @
-Some of the utilities need to check the kind of a node (before the observers have
-been defined).
+Some of the utilities need to check the kind or number of a node
+(before the observers have been defined).
 <<graph utilities>>=
 let kind_util = function
   | Joi _ -> Join
@@ -1962,6 +1952,25 @@ let kind_util = function
   | Imp _ -> Impossible
   | Boot  -> undef "kind" "boot"
 
+let num_util node = match node with
+  | Joi j -> j.joi_num
+  | Ins i -> i.ins_num
+  | Sta s -> s.sta_num
+  | Bra b -> b.bra_num
+  | Cbr c -> c.cbr_num
+  | Mbr m -> m.mbr_num
+  | Jum j -> j.jum_num
+  | Cal c -> c.cal_num
+  | Ret r -> r.ret_num
+  | Cut c -> c.cut_num
+  | Ent e -> e.ent_num
+  | Exi e -> e.exi_num
+  | Ass a -> a.ass_num
+  | Ill i -> i.ill_num
+  | Imp i -> i.imp_num
+  | Boot  -> undef "num" "boot"
+@ The string for the type of a node improves debugging messages.
+<<graph utilities>>=
 let name = function
   | Joi _ -> "Join"
   | Ins _ -> "Instruction"
@@ -2039,12 +2048,16 @@ let print_node node =
                          (succs node) []
        ])
 @
+If we believe that the lists passed to [[uniq]] will never be long, we may actually
+do better with simple [[List.exists]] comparisons.
 <<graph utilities>>=
 let log m = ()
-let uniq lst =
-  List.fold_left (fun rst n1 -> if List.exists (eq n1) rst
-                                then rst else n1::rst)
-                 [] lst
+let uniq lst = match lst with
+  | [] | [_] -> lst (* premature optimization? *)
+  | _ -> fst (List.fold_left (fun (ns,set as rst) n1 ->
+                                let i = num_util n1 in
+                                if IS.mem i set then rst else (n1::ns, IS.add i set))
+                             ([],IS.empty) lst)
 
 let is_ill node = match node with
   | Ill _ -> true
@@ -2087,7 +2100,6 @@ let heads cfg =
 
 We have some simple operations for handling sets of nodes.
 <<join node set operations>>=
-module IS                 = Set.Make (struct type t = int let compare = compare end)
 let emptyset              = IS.empty
 let add    n set          = IS.add (num n) set
 let member n set          = IS.mem (num n) set
