@@ -80,9 +80,10 @@ end
 module P        = Point
 module I        = Interval.Make(Point)
 module L        = Lifetime.Make(I)
-module M        = Register.Map
+module RM       = Register.Map
+module RS       = Register.Set
 
-type lifetimes  = L.t M.t  (* lt *)  (* map from register to its lifetimes *)
+type lifetimes  = L.t RM.t  (* lt *)  (* map from register to its lifetimes *)
 type loc        = Register.t    
  
 <<compute lifetimes>>
@@ -123,8 +124,8 @@ register from [[op]] and adding a new interval to its lifetime in
 [[lt]]. 
 
 <<compute lifetimes>>=
-(* type op    = P.t M.t  (* map from register to opening point *)
- * type lt    = L.t M.t  (* map from register to lifetime      *)
+(* type op    = P.t RM.t  (* map from register to opening point *)
+ * type lt    = L.t RM.t  (* map from register to lifetime      *)
  * type state = op * lt   
  *)
  
@@ -158,19 +159,20 @@ is processed, all still open intervals must be closed.
 
 <<compute lifetimes>>=
 let lifetimes cfg lt =
-    let _          = assert (Cfg3.enumerated cfg)  in
-    let initial    = (Register.Map.empty, lt)      in
-    let domain map = Register.Map.fold (fun key _ list -> key::list) map [] in
+    let initial    = (RM.empty, lt)      in
+    let domain map = RM.fold (fun key _ list -> key::list) map [] in
     let scan node (oldset, state) =
         let point   = Cfg3.number node             in
         let set     = Cfg3.live node               in 
-        let opening = Register.Set.diff set oldset in
-        let closing = Register.Set.diff oldset set in
-        let state   = open_regs  point (Register.Set.elements opening) state in
-        let state   = close_regs point (Register.Set.elements closing) state in
+        let opening = RS.diff set oldset in
+        let closing = RS.diff oldset set in
+        let state   = open_regs  point (RS.elements opening) state in
+        let state   = close_regs point (RS.elements closing) state in
                       (set, state)
     in (* close all open intervals after the last node *)
-    let (set,(op,lt)) = Cfg3.scan_fwd cfg scan (Register.Set.empty, initial) in
+    let first       = Cfg3.number (Cfg3.first cfg)      in
+    let last        = Cfg3.number (Cfg3.last cfg)       in
+    let (set,(op,lt)) = Cfg3.scan_fwd cfg first last scan (RS.empty, initial) in
     let last          = Cfg3.number (Cfg3.last cfg)             in
     let      (_ ,lt)  = close_regs (last+1)    (* half open interval! *) 
                                    (domain op) (op,lt) in 
@@ -380,7 +382,7 @@ fun node -> assert false
 
 
 <<Make>>=
-let lookup table x       = M.find x table       (* lookup lifetime *)
+let lookup table x       = RM.find x table       (* lookup lifetime *)
 let replace_temp tmp reg = fun t -> if t = tmp then reg else t
 @
 
@@ -396,12 +398,17 @@ such register can be found.
     contain some temporaries no longer used by that node.  --CL
 \end{quote}
 
-Our implementation is simple and just returns the first temporary it
+Our implementation is simple and returns the first temporary it
 finds. 
 
 <<Make>>=
-let find_tmp node = assert false
-@   
+let find_tmp node = 
+    let uses space index width = function
+        | None -> Some (space, index, width)
+        | x    -> x 
+    in
+        Rtlutil.read_write_lists uses uses (Cfg3.rtl node) None    
+@       
 
 The [[first_fit]] function searches the domain of [[lifetimes]] to
 find a (hardware) register that can hold temporary [[t]].  It returns
@@ -426,7 +433,7 @@ let first_fit lifetimes t =
         | None   when fits' t r -> Some r       
         | x (* otherwise *)     -> x      
     in
-        M.fold check lifetimes None
+        RM.fold check lifetimes None
 
 let find_reg = first_fit        (* first_fit is a possible find_reg impl *)
 @
@@ -453,8 +460,8 @@ let replace_temporary graph t lifetimes allocated spill =
   let lifetime = lookup lifetimes in
   match find_reg lifetimes t with
   | Some r -> (* successfully found a hardware register *)
-      let lifetimes = M.add r (L.union (lifetime r) (lifetime r)) lifetimes in
-      let lifetimes = M.remove t lifetimes                             in
+      let lifetimes = RM.add r (L.union (lifetime r) (lifetime r)) lifetimes in
+      let lifetimes = RM.remove t lifetimes                             in
       let ()        = iter graph (Rtlutil.Subst.reg (replace_temp t r)) in
           allocated graph lifetimes
   | None ->
