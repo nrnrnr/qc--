@@ -2,9 +2,10 @@
 #
 # $Id$
 #
-# This script emits C-- source code to stdout that tests parameter
+# This script emits C-- and C source that tests parameter
 # passing.  The parameter list passed from a caller to a callee is
-# constructed from a signaure, which is a line of <width>/<hint> types:
+# constructed from a signaure, which is a line of <width>/<hint> types
+# read from stdin.
 #
 #   32/float 32/int 32/float
 #   32/float 32/int 32/int
@@ -13,33 +14,41 @@
 #   32/float
 #   32/int
 #
-# The script reads signature lines from stdin and emits one file for
+# The script reads signature lines from stdin and emits one or two files for
 # each of them. The base name of the file is "testcc" but can be
 # overridden with the -name option. Other options:
 #
-# cmm-internal.pl [-width=<int>] [-little|-big] [-conv=<name>] # [-name=<name>]
-#
 # -width=<int>  # pointer and wordsize, default 32
-# -little       # emit little endian code
+# -little       # emit little endian code, this is the default
 # -big          # emit big endian code
 # -conv=<name>  # use calling convention <name> (untested)
-# -name=<name>  # base name of for output files/
+# -name=<name>  # base name for output files, default "testcc"
+# -c            # generate a C file for the callee
 #
+#
+# Whitout the -c flag, a single C-- source file is created for each
+# signature. It contains a main() function and a callee(). The callee
+# checks that the parameters passed from main() are indeed the ones that
+# are expected. With the -c flag, the callee is implemented in C and
+# emitted as an extra C source file. This tests parameter passing from
+# C-- to C.
 # 
 # Perl's data structures are quite weak: hashes and lists cannot be
 # nested inside a list without losing their identity. Therefore I
-# believe this script is not a good basis for future extensions to check
-# calls between C-- and C code. 
+# believe this script is not a good basis for future extensions.
+#
 
 $w          = 32;               # word and pointer size
 $bo         = "little";         # endianness
 $conv       = "C";              # calling convention between caller/callee
 $name       = "testcc";         # base name for files
+$emitc      = 0;                # don't emit C code by default
 
 #
 # A parameter list is represented by one list, like this
 #
-# ("int", 32, 0x12345678, "i0", "float", 32, 0xfaceface, "i2", ...     
+# ("int"  , 32, 0x12345678, "i0", 
+#  "float", 32, 0xfaceface, "i2", ...     
 #
 # Conceptually it is a list of 4-tuples, but Perl does not offer good
 # support for lists inside lists, so we have a flat representation.
@@ -49,6 +58,15 @@ $name       = "testcc";         # base name for files
 # 3 - value passed to formal parameter
 # 4 - name of formal parameter
 #
+
+sub lookup {
+    my $key = shift(@_);
+    if (exists $ctype{$key}) {
+        return $ctype{$key};
+    } else {
+        die "what is the C type for $key?";
+    }
+}
 
 #
 # rand_bits n 
@@ -84,6 +102,25 @@ sub formals {
 }
 
 #
+# return formal parameter list in C syntax.
+#
+
+sub c_formals {
+    my $r = "";
+    my $i = 0 ;
+    while (@_) {
+        my $hint  = shift @_;
+        my $width = shift @_;
+        my $val   = shift @_;
+        my $v     = shift @_;
+        $r = $r . sprintf "%s i%d", lookup("$width/$hint"), $i++;
+        if (@_) { $r = $r . "," }
+    }    
+    return "($r)";     
+}
+
+
+#
 # actuals returns an actual parameter list to be used by the caller.
 #
 sub actuals {
@@ -108,7 +145,6 @@ sub main {
     print OUT<<"EOF";
     foreign "C" main("unsigned" bits$w iargc, "address" bits$w iargv) {
         foreign "$conv" callee$a ; 
-        foreign "C" printf("address" success);
         return(0);  // indicate success here, too
     }
 EOF
@@ -134,6 +170,24 @@ EOF
 }
 
 #
+# Emit comparison in C syntax.
+#
+
+sub c_compare {
+    while (@_) {
+        my $hint  = shift @_;
+        my $width = shift @_;
+        my $val   = shift @_;
+        my $v     = shift @_;
+        
+        print CEE <<EOF;
+        if ($v != $val) {printf("failed ($val)\\n"); return;} 
+EOF
+    }
+}
+
+
+#
 # callee emits the procedure "callee"
 #
 sub callee {
@@ -143,17 +197,31 @@ sub callee {
 EOF
     compare(@_);
     print OUT <<"EOF";
+        foreign "C" printf("address" success);
         return ();
     }
 EOF
 }
 
+sub c_callee {
+    my $fml = c_formals(@_);
+    print CEE <<"EOF";
+    void callee$fml {
+EOF
+    c_compare(@_);
+    print CEE <<"EOF";
+        printf("success\\n");
+        return;
+    }
+EOF
+}
+
+
+
 #
-# We handle command line arguments here and emit the C-- code to stdout.
+# We handle command line arguments here 
 #
 #
-# The QC-- compiler has trouble with full 32-bit literal value.
-# As a hack, the 4 most significant bits in a value are not used. 
 
 foreach $t (@ARGV) {
        if ($t =~ /^-width=([0-9]+)$/)       { $w  = $1       }
@@ -161,15 +229,21 @@ foreach $t (@ARGV) {
     elsif ($t =~ /^-little$/)               { $bo = "little" }
     elsif ($t =~ /^-conv=([a-zA-Z0-9]+)$/)  { $conv = $1     }
     elsif ($t =~ /^-name=(.*)$/)            { $name = $1     }             
-    elsif ($t =~ /^-/) {
-        print STDERR "unknown option o: $t";
-        exit(1);
-    }        
-    else {
-        print STDERR "unknown argument: $t";
-        exit(1);
-    }
+    elsif ($t =~ /^-c$/)                    { $emitc = 1     }
+    elsif ($t =~ /^-/)          { die "unknown option o: $t" }        
+    else                        { die "unknown argument: $t" }
 }
+
+#
+# map from C-- types to C types
+#
+
+%ctype = 
+    ( "$w/int"          => "int"
+    , "$w/unsigned"     => "unsigned int" 
+    , "$w/float"        => "float"
+    , "8/int"           => "char"
+    );    
 
 #
 # Loop over all signatures read from stdin ..
@@ -177,8 +251,6 @@ foreach $t (@ARGV) {
 
 $i = 0;
 while (defined($sig=<STDIN>)) {
-    $f = sprintf "%s-%02d.c--", $name, $i++;
-    open (OUT, ">$f") || die "cannot open $f: $!";
     
     # loop over all types in one signature and build arg list
     my @args = ();
@@ -186,6 +258,8 @@ while (defined($sig=<STDIN>)) {
     my $n    = 0;
     foreach $t (@ts) {
         if ($t =~ /([0-9]+)\/([a-z]+)/) {
+            # The QC-- compiler has trouble with full 32-bit literal value.
+            # As a hack, the 4 most significant bits in a value are not used. 
             my $hint  = $2;
             my $width = $1;
             my $msb   = 4;  ## don't use this many most significant bits
@@ -196,9 +270,17 @@ while (defined($sig=<STDIN>)) {
             die "unknown type $t in signature $sig";
        }     
     }
-    # use arg list to emit C-- code to $f.
+    # use arg list to emit C-- 
+    my $cmm = sprintf "%s-main-%02d.c--", $name, $i;
+    my $cee = sprintf "%s-callee-%02d.c",   $name, $i;
+    $i++;
 
-    print OUT <<EOF;
+    # emit C-- code, and additioanlly C code, if $emitc is true.
+
+    if ($emitc eq 0) {
+        # just C-- code
+        open (OUT, ">$cmm") || die "cannot open $cmm: $!";
+        print OUT <<EOF;
         target byteorder $bo wordsize $w pointersize $w;
         import bits$w printf;
         export main;
@@ -210,10 +292,30 @@ while (defined($sig=<STDIN>)) {
             failed:  bits8[] "failed\\n\\0";
         }
 EOF
-    main(@args);
-    callee(@args);
+        main(@args);
+        callee(@args);
+        close (OUT) || die "cannot close $cmm: $!";
+    } else {
+        # C and C-- code
+        open (OUT, ">$cmm") || die "cannot open $cmm: $!";
+        open (CEE, ">$cee") || die "cannot open $cee: $!";
 
-    close (OUT) || die "cannot close $f: $!";
+        print OUT <<EOF;
+        target byteorder $bo wordsize $w pointersize $w;
+        import bits$w printf;
+        import bits$w callee; // import from C file
+        export main;
+EOF
+
+        print CEE<<EOF;
+        #include <stdio.h>
+EOF
+        
+        main(@args);
+        c_callee(@args);
+        close (CEE) || die "cannot close $cee: $!";
+        close (OUT) || die "cannot close $cmm: $!";
+    }
 }
 
 exit 0;

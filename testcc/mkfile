@@ -8,6 +8,8 @@
 
 TOP =               ..
 QCC =               $TOP/bin/qc--
+GEN =               ./call.pl
+CC  =               cc
 
 #
 # The cmm-internal script generated an unkown number of files. Therfore
@@ -41,10 +43,12 @@ x86-c-call.sigs:    $QCC
 #
 
 alpha-call:V:       alpha-call.sigs
-                    ./cmm-internal.pl -name=$target -width=64 < $prereq 
+                    $GEN -name=$target      -width=64 < $prereq 
+                    $GEN -name=$target-x -c -width=64 < $prereq
 
 x86-c-call:V:       x86-c-call.sigs             
-                    ./cmm-internal.pl -name=$target -width=32 < $prereq
+                    $GEN -name=$target      -width=32 < $prereq
+                    $GEN -name=$target-x -c -width=32 < $prereq
 
 #
 # Compile *.c-- files to *.s code. Compilation depends on the desired
@@ -62,9 +66,13 @@ alpha%.s:           alpha%.c--
 #
 
 x86-test:V:         $ASM
-                    for f in x86*.s; do
+                    for f in x86-c-call-main-*.s; do
                         cc $f && ./a.out
                     done
+                    for f in x86-c-call-x-main-*.s; do
+                        g=`echo $f | sed -e 's/main/callee/' -e 's/\.s/.c/'`
+                        cc $f $g && ./a.out
+                    done    
 
 alpha-test:V:       $ASM
                     for f in alpha*.s; do
@@ -77,6 +85,7 @@ alpha-test:V:       $ASM
 
 clean:V:
                     rm -f *.c--
+                    rm -f *.c
                     rm -f *.s
                     rm -f *.sigs
                     rm -f a.out
