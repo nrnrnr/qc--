@@ -93,12 +93,15 @@ and expr env exp =
         let w   = match ty with
                   | None    -> default
                   | Some ty -> astty env ty  in
+        let omsg w =
+	  Printf.sprintf "literal bit vector overflows when packed into %d bits" w in
+        let bmsg = "literal bit vector appears when bool expected" in
         let msg = "literal value does not match type" in
         E.sequence w (fun t -> match t with
                                | (Types.Bits w as t) ->
                                  (try let _ = cvt x w in Error.Ok t
-                                  with Bits.Overflow ->   Error.error msg)
-                               | Types.Bool          ->   Error.error msg)
+                                  with Bits.Overflow ->   Error.error (omsg w))
+                               | Types.Bool          ->   Error.error bmsg)
     in match exp with
         | A.ExprAt(x,r)     -> expr env x
         | A.Int   (x,ty)    -> optty env.wordsize         Bits.U.of_string x ty
