@@ -476,15 +476,15 @@ let emit_offset bits =
   let offset_w = wordsize - 1 in
   (try ignore (Bits.S.of_int value offset_w)
    with Bits.Overflow -> imposs "Offset from vfp is too large for run-time encoding");
-  asm#value (B.Ops.logor (B.Ops.shl  one (to_bits offset_w))
+  asm#value (B.Ops.or' (B.Ops.shl  one (to_bits offset_w))
                          (B.Ops.shrl (B.Ops.shl (to_bits value) one) one)) in
 let emit_reg ix offset =
   let offset_w = wordsize - 2 in
   let w'       = offset_w / 2 in
   (try ignore (Bits.S.of_int ix w'); ignore(Bits.S.of_int offset w')
    with Bits.Overflow -> imposs "Reg ix or offset is too large for run-time encoding");
-  asm#value (B.Ops.logor (B.Ops.shl one (to_bits offset_w))
-                         (B.Ops.logor (B.Ops.shl (to_bits offset) (to_bits w'))
+  asm#value (B.Ops.or' (B.Ops.shl one (to_bits offset_w))
+                         (B.Ops.or' (B.Ops.shl (to_bits offset) (to_bits w'))
                                       (to_bits ix))) in
 @  
 Then, we check the type of value (as encoded in the [[Rtl.exp]] type) and emit the
