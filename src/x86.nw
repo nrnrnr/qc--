@@ -244,20 +244,18 @@ The Pentium provides sign-extending loads and stores.
 It's a bit bogus to use EAX to do the [[lostore]], but we have no easy
 way of asking for a temporary that supports low-store instructions.
 <<x86 postexpander>>=
-let extend opname n e = R.app (R.opr opname   [n; 32]) [e]
-let lobits        n e = R.app (R.opr "lobits" [32; n]) [e]
 let sxload ~dst ~addr n assn =
   if tempwidth dst <> 32 then Impossible.unimp "widening of temporaries";
   rtl (R.store (temploc dst)
-             (extend "sx" n (R.fetch (R.mem assn mspace (mcount n) addr) n)) 32)
+             (RO.sx n 32 (R.fetch (R.mem assn mspace (mcount n) addr) n)) 32)
 let zxload ~dst ~addr n assn =
   assert (tempwidth dst = 32);
   rtl (R.store (temploc dst)
-             (extend "zx" n (R.fetch (R.mem assn mspace (mcount n) addr) n)) 32)
+             (RO.zx n 32 (R.fetch (R.mem assn mspace (mcount n) addr) n)) 32)
 let lostore ~addr ~src n assn =
   assert (tempwidth src = 32);
   rtl (R.store eax (tempval src) 32) <:>
-  rtl (R.store (R.mem assn mspace (mcount n) addr) (lobits n (R.fetch eax n)) n)
+  rtl (R.store (R.mem assn mspace (mcount n) addr) (RO.lobits 32 n (R.fetch eax n)) n)
 @ 
 Register-register moves involve only integer registers, so life is
 easy and good.
@@ -322,7 +320,6 @@ We insist on using most operators at their natural 32-bit width, and
 this function is the forcing function that makes it so.
 <<x86 postexpander>>=
 let at32 = function
-  | "lobits", [32; 32] -> "lobits"
   | opr, [32] -> opr
   | opr, [n]  -> Impossible.unimp ("%" ^ opr ^ string_of_int n ^ "(...)")
   | opr, ws   -> impossf "operator %%%s specialized to %d widths" opr (List.length ws)
@@ -341,8 +338,17 @@ Division is slightly painful.
 The dividend must go the EDX:EAX register pair, the value of which is
 written as [[regpair]].
 To set EDX appropriately we use [[sethi]].
-The instruction itself is [[div]], and it may be wrapped or rewritten
-in various ways.
+The instruction itself is [[div]];
+the effect of this instruction is that quotient and remainder go into
+EAX and EDX. 
+We then follow up with [[finish]], which takes some combination of EAX
+and EDX and
+does the right thing.
+
+Since the destination register is hard-wired, there's no need to make
+division an LLR instruction.
+Instead, division is part of the general [[binop]], with operands in
+[[x]]~and~[[y]] and result in [[dst]].
 <<cases in [[binop]] to handle integer division>>=
 | "mod" ->
     let modexp = Rewrite.(mod) 32 (tempval x) (tempval y) in
@@ -390,8 +396,7 @@ The list above should exhaust the x86 binary operators.
 <<more cases for [[llr]]>>=
 | op  -> impossf "non-binary operator %%%s in x86 binop" op
 @ 
-NOTE THERE IS NO REAL REASON THAT DIVISION SHOULD BE HANDLED AS LLR
-SINCE WE USE SPECIAL REGISTERS ANYWAY!  
+And here we combine the LLR operators with integer division.
 <<x86 postexpander>>=
 let binop ~dst op x y = match at32 op with
 <<cases in [[binop]] to handle integer division>>
@@ -404,7 +409,6 @@ be synthesized using a rewrite rule.
 let inplace op op32 x = match op32 with
 | "neg"    -> rtl (R.par [R.store (temploc x) (R.app (Up.opr op) [tempval x]) 32;
                           negflags (tempval x) 32])
-| "lobits" -> PX.Nop  (* lobits32 is identity *)
 | "com"    -> rtl (R.store (temploc x) (R.app (Up.opr op) [tempval x]) (tempwidth x))
 | op       -> impossf "non-unary operator %%%s in x86 unop" op
 
@@ -419,6 +423,10 @@ let unrm  ~dst op x   = impossf "operator %%%s in register" (fst op)
 let binrm ~dst op x y = impossf "operator %%%s in register" (fst op)
 @ 
 \paragraph{Extended multiply}
+
+An x86 extended-multiply instruction takes arguments in EAX and~[[y]]
+and returns the double-width result in the EDX:EAX pair.
+Flags are set.
 <<x86 postexpander>>=
 let extended_multiply op y =
   let opfun, flagfun = match op with
@@ -430,6 +438,8 @@ let extended_multiply op y =
               R.store eax (Rewrite.slice 64 32 ~lsb:0  product) 32;
               flagfun (tempval Rg.eax) (tempval y) 32])
 @               
+Given [[extended_multiply]], we need only move arguments and results
+to the right places.
 <<x86 postexpander>>=
 let dblop ~dsthi ~dstlo op x y =
   move Rg.eax x <:>
@@ -441,6 +451,7 @@ let dblop ~dsthi ~dstlo op x y =
 
 Function [[weird_tmp]] returns a register that holds a weird value,
 plus the instructions needed to get the value into the register.
+COULD THIS FUNCTION BE A CANDIDATE FOR A GENERAL POSTEXPANDER UTILITY?
 <<x86 postexpander>>=
 let weird_tmp tmp z = match z with
 | PX.WTemp (Register.Reg t) -> t, PX.Nop
@@ -456,7 +467,8 @@ function to insert a new carry bit.
 For performance, the simplifier has to know that
 [[x86_carrybit (x86_setcarry (eflags, c)) = c]].
 Unfortunately, that code lurks in the simplifier.
-It would be good to find a way to distribute such rules.
+It would be good to find a way to put the rewrite rule here in this
+module and to register it with the simplifier.
 <<x86 postexpander>>=
 let set_carry ~tmp z =
   let t, is = weird_tmp tmp z in
@@ -465,7 +477,10 @@ let set_carry ~tmp z =
   rtl (R.store eflags (R.app (R.opr "x86_setcarry" []) [RU.fetch eflags; bit0]) 32)
 @ 
 Add with carry and subtract with borrow use essentially the same code.
-We're missing a chance to optimize when we know the carry in is a literal~0.
+By using the general [[set_carry]], 
+we're missing a chance to optimize when we know the carry in is a
+literal~0.
+But the peephole optimizer takes care of it.
 <<x86 postexpander>>=
 let wrdop ~dst op x y z =
   let dv, yv = tempval dst, tempval y in
@@ -506,28 +521,16 @@ Then connect the dots.
 (Unlike the GNU code, we do \emph{not} set the rounding mode in the
 MMX unit.)
 @ 
+We begin with some useful constants and operators.
 <<x86 postexpander>>=
 let rmask_clear = R.bits (Bits.Ops.com (Bits.U.of_int 0xc00 32)) 32  (* 0xfffff3ff *)
 let rmask_set   = R.bits (Bits.U.of_int 0xc00 32)  32
 let and32 = R.opr "and" [32]
 let or32  = R.opr "or"  [32]
-let ten = RO.unsigned 32 10 
-<<x86 postexpander>>=
-let hwset ~dst ~src =
-  if Register.eqx dst rounding_mode_reg then
-    let slot      = PX.Alloc.slot 16 in
-    let t         = PX.Alloc.temp 't' 32 in
-    let t2, ldsrc = weird_tmp (PX.Alloc.temp 't' 32) src in
-    rtl (slot.A.store (R.fetch Rg.fpuctl 16) 16) <:>                  (* fnstcw *)
-    rtl (R.store (temploc t) (RO.zx 16 32 (slot.A.fetch 16)) 32) <:>  (* movzwl *)
-    with_lflags t and32 (tempval t) rmask_clear 32 <:>      (* mask out round bits *)
-    ldsrc <:>
-    rtl (R.store (temploc t2) (RO.shl 32 (tempval t2) ten) 32) <:>
-    with_lflags t or32 (tempval t) (tempval t2) 32 <:>
-    rtl (slot.A.store (RO.lobits 32 16 (tempval t)) 16) <:>      
-    rtl (R.store Rg.fpuctl (slot.A.fetch 16) 16)                   (* fldcw *)
-  else
-    impossf "setting unexposed hardware register"
+@ 
+Get the status word by moving it onto the stack, then loading it.
+Then shift the rounding mode into least significant position, filling
+as requested.
 <<x86 postexpander>>=
 let hwget ~dst:(fill,dt) ~src =
   if Register.eqx src rounding_mode_reg then
@@ -540,6 +543,26 @@ let hwget ~dst:(fill,dt) ~src =
     | PX.HighS   -> shift dt RO.shl 20 <:> shift dt RO.shra 30
   else
     impossf "getting unexposed hardware register"
+@ 
+To set the rounding mode, we get the status word, mask out bits, shift the
+rounding mode into position, or into the status word, then set the
+status word.
+<<x86 postexpander>>=
+let hwset ~dst ~src =
+  if Register.eqx dst rounding_mode_reg then
+    let slot      = PX.Alloc.slot 16 in
+    let t         = PX.Alloc.temp 't' 32 in
+    let t2, ldsrc = weird_tmp (PX.Alloc.temp 't' 32) src in
+    rtl (slot.A.store (R.fetch Rg.fpuctl 16) 16) <:>                  (* fnstcw *)
+    rtl (R.store (temploc t) (RO.zx 16 32 (slot.A.fetch 16)) 32) <:>  (* movzwl *)
+    with_lflags t and32 (tempval t) rmask_clear 32 <:>      (* mask out round bits *)
+    ldsrc <:>
+    shift t2 RO.shl 10 <:>
+    with_lflags t or32 (tempval t) (tempval t2) 32 <:>
+    rtl (slot.A.store (RO.lobits 32 16 (tempval t)) 16) <:>      
+    rtl (R.store Rg.fpuctl (slot.A.fetch 16) 16)                   (* fldcw *)
+  else
+    impossf "setting unexposed hardware register"
 @ 
 \subsubsection{Control flow}
 There's just one PC on the Pentium.
@@ -562,7 +585,9 @@ let call  ~tgt ~others =
 let callr ~tgt ~others =
   PX.Nop, R.par (R.store pc_lhs (tempval tgt)  32 :: effects others)
 @ 
-The [[cut to]] is our own little conspiracy.
+The [[cut to]] is our own little conspiracy:
+it encapsulates two instructions, and the recognizer emits them as an
+atomic pair. 
 <<x86 postexpander>>=
 let cut_to effs = PX.Nop, R.par (effects effs)
 @ 
@@ -578,7 +603,7 @@ let don't_touch_me =
       pc' =/ lowpc && sp =$ Rg.esp && sp2 =$ Rg.esp && Bits.S.to_int b = 4
   | _ -> false
 @
-To implement the comparisons, we define new operators that are private
+To implement comparisons, we define new operators that are private
 to the $x$86 architecture. 
 \begin{itemize}
 \item [[x86_subflags]] returns what goes into the flags after a
@@ -666,10 +691,10 @@ let cmpneg = function
 @ 
 The third important function returns the ``flag set'' function for an
 operator. This is normally just [[cmp]], but in the case of overflow,
-we need to emit arithmetic instructions to set the flags. Division is
-a bit more complex since a division overflow causes a fault. However,
-there is only one possibility for division overflow ($MIN_INT / -1$)
-to check for.
+we need to emit arithmetic instructions to set the flags. 
+
+Division can't be done this way since a division overflow causes a
+fault, so it is rewritten in the [[bc]] function above.
 <<important functions on $x$86 operators>>=
 let cmpfun =
   let set_flags op x y = binop (talloc 't' 32) (op, [32]) x y
@@ -745,22 +770,12 @@ let is_stack_top_proxy = function
   | RP.Reg r -> Register.eq r stack_top_proxy_reg
   | _ -> false
 @ 
-Rounding.
 <<x86 postexpander>>=
-let with_rm rm block =
-  PX.with_hw ~hard:rounding_mode_reg ~soft:rm ~temp:(talloc 't' 32) block
-<<x86 postexpander>>=
-let push ~addr assn = 
-(*
-  let memval = R.fetch (R.mem assn mspace 80 addr) 80 in
-  [st_push memval] (* bound to break *)
-*)
-impossf "push 80-bit float without conversion"
+let push ~addr assn = impossf "push 80-bit float without conversion"
 
 let store_pop ~addr assn = 
   let store regval = R.store (R.mem assn mspace (mcount 80) addr) regval 80 in
   rtl (st_pop_with store) (* bound to break *)
-(*Impossible.impossible "store 80-bit float without conversion"*)
 
 let push_cvt op w ~addr assn =
   assert (Cell.divides mcell w);
@@ -768,15 +783,11 @@ let push_cvt op w ~addr assn =
   let regval = R.app (Up.opr op) [memval; rounding_mode] in
   rtl (st_push regval)
 
-let push_cvt_rm op rm w ~addr assn = with_rm rm (push_cvt op w ~addr assn)
-
 let store_pop_cvt op w ~addr assn =
   assert (Cell.divides mcell w);
   let memval regval = R.app (Up.opr op) [regval; rounding_mode] in
   let store regval = R.store (R.mem assn mspace (mcount w) addr) (memval regval) w in
   rtl (st_pop_with store)
-let store_pop_cvt_rm op rm w ~addr assn =
-  with_rm rm (store_pop_cvt op w ~addr assn)
 <<x86 postexpander>>=
 let pushk _ = impossf "load 80-bit floating-point constant"
 let pushk_cvt _ _ _ = Impossible.unimp "load floating-point constant"
@@ -798,6 +809,16 @@ let stack_op op = match opclass op with
       rtl ( R.store (freg_at next_st) result 80)
     else
       rtl (R.par [ R.store (freg_at next_st) result 80; R.store st next_st 3])
+@ 
+All the instructions above use the hardware rounding mode.
+Here are the explicit versions:
+<<x86 postexpander>>=
+let with_rm rm block =
+  PX.with_hw ~hard:rounding_mode_reg ~soft:rm ~temp:(talloc 't' 32) block
+
+let push_cvt_rm op rm w ~addr assn = with_rm rm (push_cvt op w ~addr assn)
+let store_pop_cvt_rm op rm w ~addr assn =
+  with_rm rm (store_pop_cvt op w ~addr assn)
 let stack_op_rm op rm = with_rm rm (stack_op op)
 @ 
 The machine from hell:

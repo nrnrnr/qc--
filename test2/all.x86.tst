@@ -42,6 +42,7 @@ Test.files = { "add.c--"
 	     , { source='r64.c--', other='src/r64main.c' }
              , "rnd2.c--"
              , "round.c--"
+             , "round2.c--"
 	     , { source="spdemo.c--", argv="4" }
              , "sub.c--"
 	     , "switch.c--"
