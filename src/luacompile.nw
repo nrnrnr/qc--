@@ -582,6 +582,8 @@ function Opt.standard(backend, asm, B)
     , Opt.verb(backend.pic)        or Stages.null
     ----  , print_cfg -- diagnostics for Paul
     , Opt.verb(backend.expand)     or Stages.null
+           --- Optimize.validate could be appropriate here, provided the recognizer
+           --- can deal with temporaries...
 -- REMOVE
     , B.stage {name="nobadrtl", fn=Debug.nobadrtl}
     , Opt.verb(backend.improve)    or Stages.null
@@ -760,9 +762,12 @@ Backend.x86 =
                      Stages.assert('proper widths') }
   , preopt    = Optimize.remove_nops
 --  , pic       = Backplane.seq { Pic.x86, Stages.assert('proper pic') }
+--  , validate  = Backplane.seq { Typecheck.proc }
   , expand    = Expander.x86
   , liveness  = Liveness.liveness
-  , improve   = Backplane.seq { Optimize.validate } -- Typecheck.proc
+  , improve   = Backplane.seq { Optimize.validate }
+        -- would like to run Typecheck.proc here, but it does not
+        -- yet know about machine-dependent operators
   , ralloc    = Ralloc.dls
   , freeze    = X86.layout
   , rmvfp     = Backplane.seq
