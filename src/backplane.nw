@@ -28,9 +28,9 @@ control flow is verified in a static checking phase.
 module SS : Set.S with type elt = string
 type inputs = SS.t
 type outputs = SS.t
-type cfg = Cfg3.cfg
+type proc = Proc.t
 
-type 'a camlFunction = 'a -> cfg -> bool
+type 'a camlFunction = 'a -> proc -> bool
 <<stage type>>
 <<action type>>
 <<backplane types>>
@@ -39,7 +39,7 @@ val list2SSet : string list -> SS.t
 
 module T : Lua.Lib.USERTYPE with type 'a t = 'a t'
 module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a t')
-            (T2 : Lua.Lib.TYPEVIEW with type 'a t = Cfg3.cfg with type 'a combined
+            (T2 : Lua.Lib.TYPEVIEW with type 'a t = Proc.t with type 'a combined
 = 'a T1.combined)
     : Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined
 @
@@ -164,25 +164,25 @@ compiler stage):
 Here's the code that implements the execution rules:
 
 <<runProgram>>=
-let rec runProgram arg cfg = function
+let rec runProgram arg proc = function
     | Seq actionList ->
         let seqHelp truth (action) =
-            let result = runProgram arg cfg action in
+            let result = runProgram arg proc action in
                 truth || result in
         List.fold_left seqHelp false actionList
     | When_Do (whenExp, doExp) ->
-        let result = runProgram arg cfg whenExp in
-            if result then runProgram arg cfg doExp else result
+        let result = runProgram arg proc whenExp in
+            if result then runProgram arg proc doExp else result
     | Unless_Do (unlessExp, doExp) ->
-        let result = runProgram arg cfg unlessExp in
-            if result then result else runProgram arg cfg doExp
+        let result = runProgram arg proc unlessExp in
+            if result then result else runProgram arg proc doExp
     | Fix action ->
-        let result = runProgram arg cfg action in
-            if result then runProgram arg cfg (Fix action) else result
+        let result = runProgram arg proc action in
+            if result then runProgram arg proc (Fix action) else result
     | Ignore action ->
-        let _ = runProgram arg cfg action in false
-    | Single {fn = func} -> func arg cfg
-    | Share (param, _, action) -> runProgram param cfg action
+        let _ = runProgram arg proc action in false
+    | Single {fn = func} -> func arg proc
+    | Share (param, _, action) -> runProgram param proc action
 @
 
 
@@ -373,14 +373,14 @@ errors, we run the program.
 <<run>>=
 exception MismatchedParameters of string
 
-let run main cfg input =
+let run main proc input =
     let _ = prerr_string "Running stateCheck()\n"; flush stderr in
     let (liveIn, errors) = stateCheck main
     in
         if ES.is_empty errors
         then
             (prerr_string "No Errors. Running runProgram()\n"; flush stderr;
-             runProgram V.Nil cfg main)
+             runProgram V.Nil proc main)
         else
             (prerr_string "Errors in control flow.\n"; flush stderr; false)
 
@@ -411,8 +411,8 @@ let list2SSet lst = List.fold_right SS.add lst SS.empty
 type inputs = SS.t
 type outputs = SS.t
 
-type cfg = Cfg3.cfg
-type 'a camlFunction = 'a -> cfg -> bool
+type proc = Proc.t
+type 'a camlFunction = 'a -> proc -> bool
 
 <<stage type>>
 <<action type>>
@@ -440,7 +440,7 @@ module T : Lua.Lib.USERTYPE with type 'a t = 'a t' = struct
 end
 
 module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a t')
-            (T2 : Lua.Lib.TYPEVIEW with type 'a t = Cfg3.cfg with type 'a combined
+            (T2 : Lua.Lib.TYPEVIEW with type 'a t = Proc.t with type 'a combined
 = 'a T1.combined)
     : Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined =
   struct
@@ -471,9 +471,9 @@ let action = { V.embed = (fun a -> embed (Action a))
                                      | Action a -> a
                                      | _ -> raise (V.Projection (v, "action")))
              }
-let cfg = T2.makemap V.userdata V.projection
+let proc = T2.makemap V.userdata V.projection
 let ( **-> ) = V.( **-> )
-let stageFn = V.pfunc (V.value **-> cfg **-> V.result V.bool)
+let stageFn = V.pfunc (V.value **-> proc **-> V.result V.bool)
 let inputs = { V.embed = (fun s -> (V.list V.string).V.embed (SS.elements s))
              ; V.project = (fun v ->
                                try List.fold_left (fun a b -> SS.add b a)
@@ -492,7 +492,7 @@ Finally, we make the list of builtins that will be visible in Lua.
 let ( **-> ) = V.( **-> )
 
 let backplane_builtins =
-    [ "run", (V.pfunc (action **-> cfg **-> inputs **-> V.result V.bool)).V.embed run
+    [ "run", (V.pfunc (action **-> proc **-> inputs **-> V.result V.bool)).V.embed run
 
     ; "seq", (V.pfunc ((V.list action) **-> V.result action)).V.embed seq
     ; "when_do", (V.pfunc (action **-> action **-> V.result action)).V.embed when_do
