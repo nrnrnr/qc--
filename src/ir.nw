@@ -1,10 +1,6 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
-% l2h substitution C C--
-% l2h substitution PAL C--
-% l2h substitution asdl ASDL
-% l2h substitution ocaml OCaml
-% l2h substitution forall forall
-% l2h substitution rtl RTL
+
+\input{macros.tex}
 
 % ------------------------------------------------------------------ 
 \section{Abstract \PAL}
@@ -13,7 +9,7 @@
 After a {\PAL} program has been parsed and its static semantics have
 been checked it is transformed into a more abstract representation. 
 It is based on a data-flow graph which embeds register transfer lists
-in its nodes.  Register transfer lists (\rtl{}s)provide a machine and
+in its nodes.  Register transfer lists (\rtl{}s) provide a machine and
 target independent way to capture the meaning of statements and
 machine-level operations.  The representation of {\rtl}s and the flow
 graph is defined in {\asdl} to allow for the interchange of these
@@ -184,7 +180,7 @@ procedures.
 
 <<>>=
 node        = Branch    (rtl.expr, label, label)
-            | Exit      (int)
+            | Exit      
             | Assign    (rtl.rtl, node)
             | Goto      (rtl.expr, targets)
             | Jump      (rtl.expr, targets)
@@ -266,7 +262,19 @@ let of_bool       = function true -> 1 | false -> 0
 %%
 @
 
-Here's the implementation of the internal representation of the graph.
+% ------------------------------------------------------------------ 
+\subsection{Internal graph representation}
+% ------------------------------------------------------------------ 
+
+The flow graph is internally represented as a mapping from labels to
+nodes.  This representation is never used directly when a flow graph
+is built but only through an interface like [[Agraph]] (module
+\module{agraph)) that provides an abstract view.  The chosen
+representation at this level purely functional but may change in the
+future.  The view implementation maps the internal representation to
+the external representation which uses lists of [[(label,node)]]
+pairs, and vice versa.
+
 <<>>=
 module fgraph <= implementation_epilogue
 %%

@@ -1,6 +1,6 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
-% agraph = abstract graph
+% agraph == abstract graph
 
 \input{macros.tex}
 
@@ -34,10 +34,15 @@ instead, we add a new type:  [[unode]], for ``unmarked node.'' We then
 use [[bind]] to add properties.
 
 <<>>=
+module Props : sig (* property stuff *)
+    <<signature Props>>
+end
+@ 
+
+<<>>=
 type node
 type unode (* a node without any properties *)
-type properties
-val bind : properties -> unode -> node
+val bind : Props.properties -> unode -> node
 @ 
 
 Types [[unode]] and [[node]] might have exactly the same
@@ -47,22 +52,25 @@ properties are bound to each node.  At the moment, the only
 interesting properties are span bindings.
 
 <<>>=
-module Prop : sig (* property stuff *)
-  val empty : properties
-  type link_time_constant = Rtl.expr
-  val add_span : Bits.bits -> link_time_constant -> properties -> properties
-end
-@ 
-
-<<>>=
 type label = string (* a label in the C-- source language *)
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Properties}
+% ------------------------------------------------------------------ 
+
+<<signature Props>>=
+type properties
+
+val empty : properties
+val add_span : Bits.bits -> Rtl.const -> properties -> properties
 @
 
 % ------------------------------------------------------------------ 
 \subsubsection{Conctruction functions}
 % ------------------------------------------------------------------ 
 
-<<>>=
+<<signature S>>=
 module Make : sig
   <<constructor functions>>
 end
@@ -122,3 +130,134 @@ type cont = { normal  : node
 val call : Rtl.expr -> cont -> unode
 val jump : graph -> Rtl.expr -> label list -> unode
 @ 
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The abstract graph provides a view on the the flow graph defined in
+module{ir}.  While the graph representation there is applicative we
+take updatable view on a graph here.
+
+<<agraph.ml>>=
+module G = Fgraph.M
+module F = Fgraph
+module type S = sig
+    <<signature S>>
+end
+@
+
+A [[graph]] is an updatable data structure. 
+
+<<>>=
+type graph = Fgraph.graph ref
+@
+
+There are two kinds of nodes:  [[node]s with properties, and unmarked
+[[unode]]s without.  The representation of [[node]] and [[unode]] is
+the same; the distinction in the type system still allows to express
+some useful properties. 
+
+<<>>=
+module Props = struct
+    <<module Props>>
+end
+
+type node  = { graph: graph
+             ; props: Props.properties
+             ; node : Fgraph.node
+             } 
+type unode = node 
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Constructor functions}
+% ------------------------------------------------------------------ 
+
+The constructor functions for a graph are grouped together in a
+sub-module [[Make]]:
+
+<<>>=
+module Make = struct
+    <<module Make>>
+end
+@
+
+A initially empty graph is created by [[graph]]. 
+
+<<module Make>>=
+type cont = { normal  : node
+            ; cuts    : string list
+            ; unwinds : string list
+            ; returns : string list
+            ; aborts  : bool
+            } 
+@
+<<>>=
+let graph () = ref G.empty
+@
+
+<<>>=
+let exit graph = 
+    { graph = graph
+    ; props = Props.empty
+    ; node  = F.Exit
+    }
+@
+
+<<>>=
+let goto graph expr labels =
+    { graph = graph
+    ; props = Props.empty
+    ; node  = F.Goto(expr, List.map (fun n -> F.Name n) labels)
+    }
+@
+
+<<>>=
+let unode () =
+    { graph  = graph ()
+    ; props  = Props.empty
+    ; node   = F.Exit
+    }
+
+let branch   expr n1 n2                 = unode ()
+let assign   rtl node                   = unode ()
+let copy_in  formals context cc node    = unode ()
+let copy_out actuals context cc node    = unode ()
+let return   graph cont count           = unode ()
+let call     rtl cont                   = unode ()
+let jump     graph expr labels          = unode ()
+@
+    
+     
+
+% ------------------------------------------------------------------ 
+\subsubsection{Properties}
+% ------------------------------------------------------------------ 
+
+A node may have propertiesr; properties are independent of each other
+and may be absent.
+
+\begin{itemize}
+\item The [[span]] property consists of the span's key (or token) 
+      and its value, which is a link-time constant.
+\end{itemize}
+
+<<module Props>>=
+type properties = { span: (Bits.bits * Rtl.const) option }
+@
+              
+The [[empty]] property simply provides no [[span]] information.
+
+<<>>=  
+let empty     = { span = None }
+@
+
+To add a span, the span information is updated. Should we signal when
+there is already a span information?
+
+<<>>=
+let add_span key value p = { p with span = Some(key,value) } 
+@
+
+
