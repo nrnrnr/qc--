@@ -141,7 +141,7 @@ Do not use C<@> in chunk names.
 =item * 
 
 B<nofake> does not accept the B<-filter> I<command> option that
-B<notangle> use to filter chunks before they are emitted.
+B<notangle> uses to filter chunks before they are emitted.
 
 =item *
 
@@ -296,7 +296,7 @@ sub read_file {
             }
         } elsif($chunk ne '') { 
             #inside <<foo>= ... @ chunk
-            if($line=~/^@/){ 
+            if($line=~/^(@|@<<[^<>]+@>>=\s*)/){ 
                 # reached end of chunk
                 $chunk='';
             }else{
@@ -328,7 +328,7 @@ postfix is appended to the last line of the chunk.
 sub extract { 
     my ($chunk)=@_;
     
-    if(exists $being_extracted{$chunk}){
+    if(exists $being_extracted{$chunk} && $being_extracted{$chunk} > 0){
         print STDERR 
             "Code chunk @<<$chunk@>> is used in its own definition.\n";
         exit(1);
@@ -341,7 +341,7 @@ sub extract {
             "Code chunk @<<$chunk@>> is requested, but doesn't exist.\n";
         exit(1);
     }
-    $being_extracted{$chunk}=1;
+    $being_extracted{$chunk}++;
     $cache{$chunk}='';
     # obtain chunk and process it recursively
     foreach my $line (split /\n/, $chunks{$chunk}){
@@ -357,7 +357,7 @@ sub extract {
             # $i denotes line counter for lines from $next
             $cache{$chunk} .= $prefix;
             $cache{$chunk} .= 
-                join("\n", map {$i++; ($i > 1 ? $prefix : " " x $indent) . $_} 
+                join("\n", map {$i++; ($i > 1 ? " " x $indent : "") . $_} 
                                 split(/\n/,extract($next)));
             $cache{$chunk} .= "$postfix\n";
             
@@ -366,6 +366,7 @@ sub extract {
             $cache{$chunk}.="$line\n";
         }
     }
+    $being_extracted{$chunk}--;
     return $cache{$chunk};
 }
 @
