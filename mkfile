@@ -16,7 +16,7 @@ VERSION =       `date +%Y%m%d`
 # ------------------------------------------------------------------ 
 
 SRC     =       src
-LIBSRC  =       cllib lua asdl
+LIBSRC  =       cllib lua asdl rtl
 SUBDIRS =       $LIBSRC $SRC
 
 # ------------------------------------------------------------------ 
