@@ -55,12 +55,16 @@ end
 \subsubsection{Auxiliaries}
 % ------------------------------------------------------------------ 
 
-Some auxiliary bindings.
+Some auxiliary bindings.  The \module{ir} module defines a [[char]]
+view for [[Rtl.space]].  However, the [[char]] type is only used in
+{\asdl} \emph{data types that use} the [[space]] type, but
+[[Rtl.space]] itself is still [[int]].  So we can not use this type to
+annotate the [[default_memory]] definition. 
 
 <<auxiliaries>>=
-let default_convention  = "C--"  (* gospel truth *)
-let default_assertion   = -1     (* unused *)
-let default_memory      = 'm'    (* Rtl.space *)
+let default_convention         = "C--"  (* gospel truth *)
+let default_assertion          = -1     (* unused *)
+let default_memory             = 'm'    (* Rtl.space *)
 @
 
 <<>>=
@@ -101,6 +105,14 @@ let wordBits env        = F.findWordsize env
 let wordTy env          = T.bits (wordBits env)
 let pointerBits env     = F.findPointersize env
 let pointerTy env       = T.bits (pointerBits env)
+@
+
+Function composition is not provided by the {\ocaml} standard library. 
+We provide it here:  [[f << g]] is a function that applies [[f]] to
+the result of [[g]].  Think of data flowing from right to left.
+
+<<>>=
+let (<<) f g   = fun x -> f (g x)
 @
 
 % ------------------------------------------------------------------ 
@@ -326,8 +338,10 @@ let rec body env props graph after bb =
 <<cases for translating statements>>=
 | A.AssignStmt(lhs,rhs) ->
     let effects = 
-      List.map2 (fun lhs rhs -> R.assign (lvalue env lhs) (expr env rhs)) lhs rhs
-    in props (GM.assign (R.par effects) after)
+        List.map2 (fun lhs rhs -> 
+                   R.assign (lvalue env lhs) (expr env rhs)) lhs rhs
+    in 
+        props (GM.assign (R.par effects) after)
 
 <<cases for translating statements>>=
 | A.IfStmt ( e, ss1, ss2) ->
@@ -359,41 +373,42 @@ nodes in the flow graph:
 \item the passed in [[after]] node.
 \end{enumerate}
 
-Since the flow graph is build up backwards the [[CopyIn]] node comes first.
+The left hand side of a call is a list of variables that is translated
+to a [[Fgraph.formal list]] value that is passed to the [[CopyIn]]
+node. 
 
 <<cases for translating statements>>=
 | A.CallStmt(lhs, cc, e, args, ts, fs) ->
     let rec lvalue = function
-        | A.LValueAt(x,_) -> lvalue x
-        | A.Var(hint,n)   -> (n,idTy n env ,hint)
-        | A.Mem _         -> assert false in     
-    let cc    = Aux.Option.get default_convention cc in
-    let copyi = if lhs <> []
-                then props (GM.copy_in (List.map lvalue lhs)
+                     | A.LValueAt(x,_) -> lvalue x
+                     | A.Var(hint,n)   -> (n,idTy n env ,hint)
+                     | A.Mem _         -> assert false         in
+    let cc         = Aux.Option.get default_convention cc      in
+    let cout after = if args <> []
+                     then props (GM.copy_out (List.map (actual env) args)
+                                    Fgraph.ProcParameters cc after)
+                     else after                                in
+    let cont after = flows (GM.empty_cont after) fs            in
+    let call after = props (GM.call (expr env e) (cont after)) in
+    let cin  after = if lhs <> []
+                     then props (GM.copy_in (List.map lvalue lhs)
                                        Fgraph.ProcResults cc after)
-                else after                           in
-    let cont  = flows (GM.empty_cont copyi) fs       in
-    let call  = props (GM.call (expr env e) cont)    in
-    let copyo = if args <> []
-                then props (GM.copy_out (List.map (actual env) args)
-                                        Fgraph.ProcParameters cc call)
-                else call                            
-    in
-        copyo
-@        
+                     else after                                in
+        (cout << call << cin) after
+@
 
 A continuation is represented by a labeled node.  This node is a
-[[CopyIn]] node in case the continuation receives parameters. 
+[[CopyIn]] node in case the continuation receives arguments.
         
 <<cases for translating statements>>=
 | A.ContStmt(n,ns) -> 
-    let cc    = default_convention                                  in
-    let args  = List.map (fun (hint,n) -> (n, idTy n env, hint)) ns in
-    let copy  = if ns <> []
-                then props (GM.copy_in args Fgraph.ContParameters cc after)
-                else after                           
-    in
-        props (GM.label n copy)
+    let cc        = default_convention                                  in
+    let args      = List.map (fun (hint,n) -> (n, idTy n env, hint)) ns in
+    let cin after = if ns <> []
+                    then props (GM.copy_in args Fgraph.ContParameters cc after)
+                    else after                                          in
+    let lbl after = props (GM.label n after)                            in
+        (lbl << cin) after
 
 <<cases for translating statements>>=
 | A.EmptyStmt -> after
@@ -407,16 +422,17 @@ sequence of statements.
 
 <<cases for translating statements>>=
 | A.JumpStmt(cc,e,args,ts) ->
-    let cc    = Aux.Option.get default_convention cc  in
-    let args  = List.map (actual env) args            in
-    let jump  = props (GM.jump graph (expr env e) ts) in
-        if   args <> []
-        then props (GM.copy_out args Fgraph.ProcParameters cc jump)
-        else jump
+    let cc         = Aux.Option.get default_convention cc  in
+    let args       = List.map (actual env) args            in
+    let cout after = if args <> [] then 
+                        props (GM.copy_out args Fgraph.ProcParameters cc after)
+                     else after                            in
+    let jump after = props (GM.jump graph (expr env e) ts) in
+        (cout << jump) after
 @
 
 The translation of a [[goto]] statement is straight forward; the
-[[after]] node is unused.
+[[after]] node is unused because it can't be reached.
 
 <<cases for translating statements>>=
 | A.GotoStmt(e,ts) -> props (GM.goto graph (expr env e) ts)
@@ -425,10 +441,10 @@ The translation of a [[goto]] statement is straight forward; the
 The following statements are just skipped for the moment.    
 
 <<cases for translating statements>>=
-| A.PrimStmt(lhs, cc, n, args, fs)     -> after
-| A.SpanStmt(e1,e2,ss)                 -> after
-| A.CutStmt(e, args, fs)               -> after
-| A.SwitchStmt (r,e,arms)              -> after
+| A.PrimStmt(lhs, cc, n, args, fs)     -> assert false
+| A.SpanStmt(e1,e2,ss)                 -> assert false
+| A.CutStmt(e, args, fs)               -> assert false
+| A.SwitchStmt (r,e,arms)              -> assert false
 @
 
 <<unused>>=
