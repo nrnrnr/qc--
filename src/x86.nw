@@ -178,6 +178,7 @@ let esp = temploc ('r', 4, 32)
 let espreg = ('r', 4, 32)
 
 let upint32 n = Up.const (RP.Bits(Bits.U.of_int n 32))
+let upint8  n = Up.const (RP.Bits(Bits.U.of_int n 8))
 
 let insert16 dst src =
   R.app (R.opr "bitInsert" [32; 16]) [upint32 0; dst; src]
@@ -185,6 +186,13 @@ let store16 loc v =
   R.store loc (insert16 (R.fetch loc 32) v) 32
 let bitExtract lsb src w =
   R.app (R.opr "bitExtract" [32; w]) [upint32 lsb; src]
+
+let insert_h dst src =
+  R.app (R.opr "bitInsert" [32; 8]) [upint32 8; dst; src]
+let store_h loc v =
+  R.store loc (insert_h (R.fetch loc 32) v) 32
+
+let ah_val = bitExtract 8 (R.fetch eax 32) 8
 @ 
 Here are some invented operators that hide the real truth about what
 happens to the flags.
@@ -443,13 +451,13 @@ and so one, would jump.
 let cmp x y =
   R.store eflags (R.app (R.opr "x86_subflags" [32]) [tempval x; tempval y]) 32
 
-let bc_x86 opr tgt =
-  R.guard (R.app (R.opr (cmpopr opr) [32]) [R.fetch eflags 32]) 
+let bc_x86 x86opname tgt =
+  R.guard (R.app (R.opr x86opname [32]) [R.fetch eflags 32]) 
     (R.store pc_lhs (Up.const tgt) 32)
 
 let bc x (opr, ws) y ~tgt =
   assert (ws = [32]);
-  [ bc_x86 opr tgt; cmp x y ]
+  [ bc_x86 (cmpopr opr) tgt; cmp x y ]
 
 let bnegate r = match Down.rtl r with
 | RP.Rtl [RP.App((cop, [32]), [RP.Fetch (flags, 32)]), RP.Store (pc, tgt, 32)]
@@ -472,14 +480,6 @@ let cmpopr = function
   | "leu" -> "x86_be"
   | "gtu" -> "x86_a"
   | "geu" -> "x86_ae"
-  | "feq"  -> "x86_e"
-  | "fne"  -> "x86_ne"
-  | "flt"  -> "x86_b"
-  | "fle"  -> "x86_be"
-  | "fgt"  -> "x86_a"
-  | "fge"  -> "x86_ae"
-  | "fordered"   -> Impossible.unimp "floating-point ordered comparison"
-  | "funordered" -> Impossible.unimp "floating-point unordered comparison"
   | _ -> Impossible.impossible "non-comparison in x86 conditional branch"
 @ 
 The second important function negates an Intel operator.
@@ -495,6 +495,12 @@ let cmpneg = function
   | "x86_a" -> "x86_be"
   | "x86_be" -> "x86_a"
   | "x86_b" -> "x86_ae"
+  | "x86_np" -> "x86_p"
+  | "x86_p"  -> "x86_np"
+  | "x86_nc" -> "x86_c"
+  | "x86_c"  -> "x86_nc"
+  | "x86_nz" -> "x86_z"
+  | "x86_z"  -> "x86_nz"
   | _ -> Impossible.impossible "bad comparison in expanded x86 conditional branch"
 @ 
 \subsection{Stack operations}
@@ -505,9 +511,10 @@ let opclass (op, _) =
   | "f2f" | "f2i" | "fabs" | "fneg" | "fsqrt" ->
       PX.Stack(PX.LeftFirst, 1)
   | "fadd" | "fcmp" | "fdiv" | "fmul" | "fmulx" | "fsub"    
-  | "feq" | "fge" | "fgt" | "fle" | "flt" | "fne"     
+  | "feq" | "fge" | "fgt" | "fne"     
   | "fordered" | "funordered" ->
-      PX.Stack(PX.LeftFirst, 2)
+      PX.Stack(PX.RightFirst, 2)
+  | "fle" | "flt"  -> PX.Stack(PX.LeftFirst, 2)  (* computed by swapping *)
   | _ ->
       PX.Register
 <<x86 postexpander>>=
@@ -584,11 +591,11 @@ The \texttt{sahf} instruction moves AH~into the flags:
 \begin{quote}
 \begin{tabular}{|llll|cccc|}
 \hline
-Flag& AH bit& FPU bit&FPU code&$\not\parallel$&$>$&$<$&$=$\\
+Flag& AH bit& FPU bit&FPU code&$\parallel$&$>$&$<$&$=$\\
 \hline
-SF&7&15& B (FPU busy)\\
+SF&7&15& B (FPU busy)&&&&\\
 ZF&6&14& C3& 1&0&0&1\\
-AF&4&12& middle bit of TOP\\
+AF&4&12& middle bit of TOP&&&&\\
 PF&2&10& C2& 1& 0&0&0\\
 CF&0&8& C0& 1&0&1&0\\
 \hline
@@ -598,27 +605,51 @@ Apparently it suffices to test ZF and CF.
 \item
 Therefore
 \begin{quote}
-\def\f#1{\mathord\mbox{\uppercase{#1F}}}
-\begin{tabular}{ll}
-Comparison& Test\\
-Float $\not\parallel$& $\f 
-
+\def\f#1{\mathord{\mbox{\uppercase{#1F}}}}
+\begin{tabular}{lll}
+\emph{Comparison}& \emph{Test}& \emph{Instruction}\\
+Float $\parallel$& $\f p = 1$& JP\\
+Float $\not\parallel$&$\f p = 0$& JNP\\
+Float $<$& ugly & swap and compute $>$\\
+Float $\le$& ugly & swap and compute $\ge$\\
+Float $>$& $\f c = 0 \land \f z = 0$& JA \\
+Float $\ge$& $\f c = 0$& JNC \\
+Float $=$&$\f p = 0 \land \f z = 1$& ANDB AH,0x44; XORB AH, 0x40; JZ\\
+Float $\ne$&$\lnot(\f p = 0 \land \f z = 1)$& ANDB AH,0x44; XORB AH, 0x40; JNZ\\
+\end{tabular}
+\end{quote}
 \end{itemize}
-
 <<x86 postexpander>>=
+let fpcmpopr = function
+  | "feq"  -> "x86_z"  (* AH is    zero when xor'ed with the flag pattern for feq *)
+  | "fne"  -> "x86_nz" (* AH is nonzero when xor'ed with the flag pattern for feq *)
+  | "flt" | "fgt" -> "x86_a"   (* flt is swapped fgt *)
+  | "fle" | "fge" -> "x86_nc"  (* fle is swapped fge *)
+  | "fordered"    -> "x86_np"
+  | "funordered"  -> "x86_p"
+  | _ -> Impossible.impossible "floating-point comparison operator"
+
 let bc_stack op ~tgt = match op with
-| ("flt"|"fgt"|"fle"|"fge"|"feq"|"fne") as opname, [w] ->
+| ("fordered"|"funordered"|"flt"|"fgt"|"fle"|"fge"|"feq"|"fne") as opname, [w] ->
     let positions = Aux.from 0 1 in
     let argvals = List.map (fun n -> ffetch (stregplus n)) positions in
-    let result = R.app (R.opr "fcmp" [w]) argvals in
+    let result = R.app (R.opr "x86_fcmp" [w]) argvals in
     let next_st = stadd 2 in
     let setcc = R.par [R.store fpcc result 2; R.store st next_st 3] in
     let fstsw = store16 eax (R.fetch fpustatus 16) in
-    let sahf  = R.store eflags (R.app (R.opr "x86_ah2flags" [])
-                                  [bitExtract 8 (R.fetch eax 32) 8]) 16 in
-    [bc_x86 opname tgt; sahf; fstsw; setcc]
-| ("fordered"|"funordered") as opname, [w] ->
-    Impossible.unimp "x86 ordered/unordered floating comparison"
+    (match opname with
+    | "feq" | "fne" ->
+        let andb = R.opr "and" [8] in
+        let xorb = R.opr "xor" [8] in
+        let logic f l r = R.par [f l r; logicflags r 8] in
+        let clear_extra     = logic store_h eax (R.app andb [ah_val; upint8 0x45]) in
+        let xor_with_eq_pat = logic store_h eax (R.app xorb [ah_val; upint8 0x40]) in
+        (* at this point, ZF = 0 iff the flags showed floating eq *)
+        [bc_x86 (fpcmpopr opname) tgt; xor_with_eq_pat; clear_extra; fstsw; setcc]
+    | _ ->
+        let sahf  = R.store eflags (R.app (R.opr "x86_ah2flags" [])
+                                      [bitExtract 8 (R.fetch eax 32) 8]) 16 in
+        [bc_x86 (fpcmpopr opname) tgt; sahf; fstsw; setcc])
 | _ ->
     Impossible.impossible "strange operator in x86 bc_stack"
 @ 

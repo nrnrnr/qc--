@@ -79,9 +79,10 @@ $-4$ get converted to 32~bits with its sign bit clear.
 let weirdb = Bits.S.of_int (-4) 32
 let weird = Nativeint.to_string (Bits.S.to_native weirdb)
  (* let _ = List.iter prerr_string ["Weird integer is "; weird; "\n"] *)
-let native b = 
-  assert (Bits.width b = 32);
+let native' w b = 
+  assert (Bits.width b = w);
   Nativeint.to_string (Bits.U.to_native b)
+let native = native' 32
 let cat = String.concat ""
 @   
 The [[guard]] function turns a predicate into a cost.
@@ -120,6 +121,7 @@ let reg_names w = match w with
 | 32 -> r32_names
 | _  -> Impossible.impossible "x86 register width not 8/16/32"
 let regname w = Array.get (reg_names w)
+let hregname r = sprintf "%%%ch" r.[2]  (* pass %eax, get back %ah *)
 @ 
 \subsection{Other machine info}
 <<code to precede the labeler>>=
@@ -198,6 +200,7 @@ pointer.
 <<rules>>=
 lconst : Link(symbol, w) {: symbol#mangled_text :}
 const  : Bits(b:bits)  [{: guard (Bits.width b = 32) :}]  {: native b :}
+const8 : Bits(b:bits)  [{: guard (Bits.width b = 8) :}]  {: native' 8 b :}
 four   : Bits(b:bits)
     [{: guard (Bits.Ops.eq (Bits.U.of_int 4 (Bits.width b)) b) :}] {: () :}
 minusfour : Bits(b:bits)
@@ -210,6 +213,7 @@ accessible using the standard addressing modes.
 We've omitted the indexed modes, which use two registers.
 <<rules>>=
 regl : Reg('r', n, w) {: regname w n :}
+regabcdl : Reg('r', n, w) [{: guard (n < 4) :}] {: regname w n :}
 regl8: Reg('r', n, w) {: regname 8 n :}
 regl_ecx: Reg('r', n, rw:w) [{: guard (n=1) :}] {: () :}
 regpairl : RegPair(reg1:regl,reg2:regl) {: reg2 :}
@@ -228,7 +232,9 @@ To get a value for any of these, we fetch.
 We can also use a link-time constant as an effective address.
 <<rules>>=
 reg     : Fetch(regl    , w) {: regl     :}
+regabcd : Fetch(regabcdl, w) {: regabcdl :}
 reg8    : Lobits(Fetch(regl8, w), nw:w) [{: guard (nw=8) :}] {: regl8     :}
+reg8H   : BitExtract(eight, regabcd, w) [{: guard (w=8) :}] {: hregname regabcd :}
 reg_cl  : Lobits(Fetch(regl_ecx, w), nw:w) [{: guard (nw=8) :}] {: () :}
 regpair : Fetch(regpairl, w) {: regpairl :}
 mem     : Fetch(meml    , w) {: meml     :}
@@ -242,7 +248,8 @@ syntax for an immediate address depends on the context in which it
 appears. 
 <<rules>>=
 -- immed : lconst {: lconst :}
-immed : const  {: "$" ^ const :}
+immed  : const   {: "$" ^ const :}
+immed8 : const8  {: "$" ^ const8 :}
 -- immed : Add(lconst, const) {:  lconst ^ "+" ^ const :}
 -- immed : Add(const, lconst) {:  lconst ^ "+" ^ const :}
 @ 
@@ -352,6 +359,14 @@ inst : Withlflags(dst:eaddrl, logical:string, src:reg, w, "x86_logicflags")
 inst : Withlflags(dst:regl, logical:string, src:eaddr, w, "x86_logicflags")
   [{: match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]
   {: cat [logical; suffix w; " "; src; ","; dst] :}
+
+inst : Withlflags8H(dst:regabcdl, logical:string, src:reg8H, "x86_logicflags")
+  [{: match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]
+  {: sprintf "%s%s %s,%s" logical (suffix 8)  src (hregname dst) :}
+
+inst : Withlflags8H(dst:regabcdl, logical:string, src:immed8, "x86_logicflags")
+  [{: match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]
+  {: sprintf "%s%s %s,%s" logical (suffix 8) src (hregname dst) :}
 @ 
 \paragraph{Control flow}
 The simple jumps are easy.
@@ -430,9 +445,9 @@ inst : Par(Store(dst:meml, F2i(s:w, d:w, fpstacktop), w2:w), fppop)
 inst : Par(Store(fpstack1l, Fadd(fpstacktop, fpstack1), w), fppop)
   {: "faddp" :}
 inst : Par(Store(fpstack1l, Fsub(fpstacktop, fpstack1), w), fppop)
-  {: "fsubrp" :}
+  {: "fsubp" :}
 inst : Par(Store(fpstack1l, Fdiv(fpstacktop, fpstack1), w), fppop)
-  {: "fdivrp" :}
+  {: "fdivp" :}
 inst : Par(Store(fpstack1l, Fmul(fpstacktop, fpstack1), w), fppop)
   {: "fmulp" :}
 <<rules>>=
@@ -464,7 +479,6 @@ ahval : BitExtract(eight, Fetch(eax, fw:w), w) [{: guard (w = 8) :}] {: () :}
 
 inst : Store(eax, BitInsert(zero, Fetch(eax, w), fpustatus), sw:w) {: "fstsw %ax" :}
 inst : Setflags(Ah2flags(ahval)) {: "sahf" :}
-
 @ 
 \paragraph{Other instructions}
 <<rules>>=
@@ -484,6 +498,12 @@ any : Late(string, w) {: "Late(" ^ string ^ "," ^ string_of_int w ^")" :}
 any : Bits(bits)     {: sprintf "Bits(%s)" (Bits.to_string bits) :}
 
 any : Fetch (any, w) {: "Fetch(" ^ any ^ "," ^ string_of_int w ^ ")" :}
+
+any : And(x:any, y:any) {: "And(" ^ x ^ ", " ^ y ^ ")" :}
+any : Or(x:any, y:any)  {: "Or("  ^ x ^ ", " ^ y ^ ")" :}
+any : Xor(x:any, y:any) {: "Xor(" ^ x ^ ", " ^ y ^ ")" :}
+any : Com(x:any) {: "Com(" ^ x ^ ")" :}
+
 
 any : Add(x:any, y:any) {: "Add(" ^ x ^ ", " ^ y ^ ")" :}
 any : Mul_trunc(x:any, y:any) {: "Mul_trunc(" ^ x ^ ", " ^ y ^ ")" :}
@@ -532,6 +552,9 @@ any : Withlflags(dst:any, string, src:any, w, fo:string)
   {: "Withlflags(" ^ dst ^","^string^ "," ^ src ^ "," ^ string_of_int w ^ 
       ","^ fo ^ ")" :}
 
+any : Withlflags8H(dst:any, string, src:any, fo:string) 
+  {: "Withlflags8H(" ^ dst ^","^string^ "," ^ src ^ "," ^ fo ^ ")" :}
+
 any : Jcc(string, any) {: "Jcc(" ^ string ^ "," ^ any ^ ")" :}
 @
 
@@ -546,6 +569,10 @@ The most interesting code is probably the code that maps the
 general representation of application into one that uses a unique
 constructor for each operator.
 <<special cases for particular operators>>=
+| RP.App(("and", [w]), [x; y]) -> conAnd (exp x) (exp y)
+| RP.App(("or",  [w]), [x; y]) -> conOr (exp x) (exp y)
+| RP.App(("xor", [w]), [x; y]) -> conXor (exp x) (exp y)
+| RP.App(("com", [w]), [x]) -> conCom (exp x)
 | RP.App(("add", [w]), [x; y]) -> conAdd (exp x) (exp y)
 | RP.App(("sub", [w]), [x; y]) -> conSub (exp x) (exp y)
 (*| RP.App(("neg", [w]), [x])    -> conNeg (exp x)*)
@@ -561,7 +588,7 @@ constructor for each operator.
 | RP.App(("fdiv", [w]), [x; y; rm]) -> conFdiv (exp x) (exp y) (* need to assert rm *)
 | RP.App(("fneg", [w]), [x]) -> conFneg (exp x)
 | RP.App(("fabs", [w]), [x]) -> conFabs (exp x)
-| RP.App(("fcmp", [w]), [x; y]) -> conFcmp (exp x) (exp y)
+| RP.App(("x86_fcmp", [w]), [x; y]) -> conFcmp (exp x) (exp y)
 | RP.App(("lobits", [w;n]), [x])   -> conLobits (exp x) n
 | RP.App(("x86_subflags", [w]), [x; y]) -> conX86_subflags (exp x) (exp y)
 | RP.App(("x86_ah2flags", []), [x]) -> conAh2flags (exp x)
@@ -570,7 +597,7 @@ constructor for each operator.
 | RP.App(("bitExtract", [w; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
 | RP.App((("add"|"sub"|"mul_trunc"|"sx"|"zx"|"lobits"|"x86_subflags"|"bitInsert"|
            "bitExtract"|"fabs"|"fneg"|"fdiv"|"fmul"|"fsub"|"fadd"|"f2f"|"f2i"|
-           "i2f") as op, ws), xs)->
+           "i2f"|"and"|"or"|"xor"|"com") as op, ws), xs)->
     Impossible.impossible
       (Printf.sprintf
          "operator %%%s specialized to %d widths & applied to %d arguments"
@@ -632,6 +659,8 @@ and geffects = function
     | [g, s] -> guarded g s
     <<horrible pattern match for [[Withflags]]>>
     | (g, s) :: t -> conPar (guarded g s) (geffects t)
+and is8 b =
+  Bits.width b > 3 & Bits.Ops.eq b (Bits.U.of_int 8 (Bits.width b))
 @ 
 Dealing with a guard is straightforward.
 Either it's trivial, it's a conditional branch, or we pass it off to
@@ -669,6 +698,32 @@ Oh, the joy of the flags\ldots
   ] when l = l' && l = l'' && r = r' && o = o'
     && flag_index = SS.indices.SS.cc ->
       conWithlflags (loc l) o (exp r) w fo
+| [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]] at H register>>)
+  ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] [[flag_left']]>>)
+  ] when is8 eightbits && is8 eightbits' && l = l' && l = l''
+      && flag_left = flag_left' && flag_index = SS.indices.SS.cc ->
+      conWithlflags8H (loc l) o (exp r) fo
+
+| [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]] at H register>>)
+  ; _
+  ] when is8 eightbits && is8 eightbits' && l = l' && l = l'' ->
+      conWithlflags8H (loc l) o (exp r) "x86_mumbojumbo"
+(*
+  $r[0] := %%bitInsert(8, $r[0], %%and(%%bitExtract(8, $r[0]), 69)) 
+| $c[2] := %%x86_logicflags(%%and(%%bitExtract(8, $r[0]), 69))
+*)
+
+<<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]] at H register>>=
+RP.Store(l, RP.App(("bitInsert", [32; 8]),
+                   [RP.Const (RP.Bits eightbits);
+                    RP.Fetch(l', _);
+                    RP.App((o, _),
+                           [RP.App(("bitExtract", [32; 8]),
+                                   [RP.Const (RP.Bits eightbits'); RP.Fetch(l'',_)]);
+                            r]) as flag_left]),
+         w)
+<<pattern for flags := [[fo]] [[flag_left']]>>=
+RP.Store(RP.Reg('c', flag_index, _), RP.App((fo, _), [flag_left']), _)
 <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>=
 RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w) 
 <<pattern for flags := [[fo]] ([[l'']], [[r']])>>=
