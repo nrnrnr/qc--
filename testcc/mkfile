@@ -56,15 +56,13 @@ asm:V:
 
 
 alpha-call.sigs:    $QCC 
-                    $QCC -e 'Debug.Alpha.proc_paths({64},{"int","float"})' > $target
+	$QCC -e 'Debug.Alpha.proc_paths({64},{"int","float"}) exit(0)' > $target
 
 x86-call.sigs:      $QCC
-                    t=$target
-                    $QCC -e 'Debug.X86.c_proc_paths({32},{"int"})' > $t
+	$QCC -e 'Debug.X86.c_proc_paths({32},{"int"}) exit(0)' > $target
 
 mips-call.sigs:     $QCC
-                    t=$target
-                    $QCC -e 'Debug.Mips.proc_paths({32},{"float","int"})' > $t
+	$QCC -e 'Debug.Mips.proc_paths({32},{"float","int"}) exit(0)' > $target
 
 #
 # Generate *.c-- files from one signature file. The test case generator
@@ -97,17 +95,17 @@ mips-call:V:        mips-call.sigs
 # 
 
 x86%.s:             x86%.c--
-                    $QCC backend=Backend.x86   -S $prereq
+                    $QCC -globals backend=Backend.x86 -stop .s $prereq
 
 alpha%.s:           alpha%.c--                    
-                    $QCC backend=Backend.alpha -S $prereq
+                    $QCC -globals backend=Backend.alpha -stop .s $prereq
 
 mips%.s:            mips%.c--
-                    $QCC backend=Backend.mips  -S $prereq
+                    $QCC -globals backend=Backend.mips -stop .s $prereq
 
 alpha%.dbg:        alpha%.c--
-                    $QCC backend=Backend.alpha  \
-                         backend.asm=Asm.cmm -S -o $target $prereq
+                    $QCC -globals backend=Backend.alpha  \
+                         backend.asm=Asm.cmm -stop .s -o $target $prereq
 
 #
 # Run tests. This will only work on the right platform.
