@@ -25,50 +25,44 @@ anything with cost~100 (I~hope).
 
 WARNING: THIS RECOGNIZER DOES NOT (YET) RECOGNIZE KILLS.
 
+The level of indirection is an artifact from the old days.
+We keep it because in the future, the recognizer might want to take a
+module parameter.
+N.B.~A~recognizer takes two forms: one to say if we have an
+instruction, and one to convert to an assembly-language string.
 <<x86rec.mli>>=
 module M : sig
-  val to_asm      : Rtl.rtl -> string
   val is_instruction : Rtl.rtl -> bool
+  val to_asm         : Rtl.rtl -> string
 end
+@ 
 <<x86rec.mlb>>=
-%head {: <<modules>> :}
-%head {: 
-    module M (*
-        (I:     X86i.S with type t      = Sledlib.String.t) *)
-         =
-    struct    
-:}
+%head {: <<modules>> 
+         module M = struct
+           <<code to precede the labeler>>
+      :}
+%tail {:   <<code to follow the labeler>>
+         end (* of M *) 
+      :}
 
-%head {: <<head>> :}
-%tail {: <<tail>> :}
-%tail {: end (* of Make *) :}
-
-%term <<terminal types>>
+%term <<names of types of terminals>>
 %%
 <<rules>>
 @
-
-
+A few abbreviations.
 <<modules>>=
-module B  = Bits 
-module C  = Camlburg
-module Down  = Rtl.Convert      (* Convert Down  to private repr. *)
-module G  = Cfg4             (* for expanding all RTLs in a CFG *)
-module GU = Cfgutil
-module R  = Rtl
 module RP = Rtl.Private
 module RU = Rtlutil
-module N  = Nativeint
-module S  = Space
 module SS = Space.Standard32
-module T  = Target2
-module Up  = Rtl.Revert       (* Convert Up    to abstract repr. *)
-module W  = Rtlutil.Width 
+module Down  = Rtl.Convert      (* Convert Down  to private repr. *)
+module Up    = Rtl.Revert       (* Convert Up    to abstract repr. *)
 @
-<<head>>=
+If something goes wrong during recognition, we raise this exception.
+It's different from merely ``unrecognized;'' it means something
+happened that shouldn't have.
+<<code to precede the labeler>>=
 exception Error of string
-let error msg     = raise (Error msg)
-let error_rtl rtl = error (RU.ToReadableString.rtl rtl) 
+let error msg = raise (Error msg)
 @
 
 
@@ -77,21 +71,24 @@ let error_rtl rtl = error (RU.ToReadableString.rtl rtl)
 \subsection{Utilities}
 % ------------------------------------------------------------------ 
 
-<<head>>=
-let weirdb = B.S.of_int (-4) 32
-let weird = Nativeint.to_string (B.S.to_native weirdb)
+We've had some mystery problems; in particular, we've seen the integer
+$-4$ get converted to 32~bits with its sign bit clear.
+<<code to precede the labeler>>=
+let weirdb = Bits.S.of_int (-4) 32
+let weird = Nativeint.to_string (Bits.S.to_native weirdb)
  (* let _ = List.iter prerr_string ["Weird integer is "; weird; "\n"] *)
 let native b = 
-  assert (B.width b = 32);
-  Nativeint.to_string (B.U.to_native b)
+  assert (Bits.width b = 32);
+  Nativeint.to_string (Bits.U.to_native b)
 let cat = String.concat ""
 @   
 The [[guard]] function turns a predicate into a cost.
-<<head>>=
-let infinity = C.inf_cost
-let guard b = if b then 0 else C.inf_cost
+<<code to precede the labeler>>=
+let infinity = Camlburg.inf_cost
+let guard b = if b then 0 else infinity
 @ 
-<<head>>=
+The $x$86 uses a suffix to denote width.
+<<code to precede the labeler>>=
 let suffix w = match w with
 | 8  -> "b"
 | 16 -> "w"
@@ -101,7 +98,7 @@ let suffix w = match w with
 % ------------------------------------------------------------------ 
 \subsection{Register names}
 % ------------------------------------------------------------------ 
-<<head>>=
+<<code to precede the labeler>>=
 let r8_names  = [| "%al"; "%cl"; "%dl"; "%bl"; "%ah"; "%ch"; "%dh"; "%bh" |]
 let r16_names = [| "%ax"; "%cx"; "%dx"; "%bx"; "%sp"; "%bp"; "%si"; "%di" |]
 let r32_names = [| "%eax"; "%ecx"; "%edx"; "%ebx"; "%esp"; "%ebp"; "%esi"; "%edi" |]
@@ -116,189 +113,252 @@ let regname w = Array.get (reg_names w)
 
 
 % ------------------------------------------------------------------ 
+\subsection{Recognizer terminals, nonterminals, and constructors}
+% ------------------------------------------------------------------ 
+
+In a {\burg} pattern, a name denotes either a polymorphic nonterminal
+symbol or a monomorphic terminal symbol. 
+We distinguish terminals from nonterminals by name, so we have to
+announce the names of the nonterminals.
+<<names of types of terminals>>=
+n w bits symbol
+@ Terminals [[n]] and [[w]] are an index and width; both are integers.
+Terminal [[bits]] is a constant of types [[Bits.bits]]; terminal
+[[symbol]] is a string.
+@
+The recognizer uses these nonterminals:
+\begin{quote}
+\begin{tabularx}{\linewidth}{@{}>{\ttfamily}lX@{}}
+    \emph{Nonterminal} & \emph{Meaning} \\ 
+regl& A location corresponding to a register\\
+reg& A value corresponding to a register\\
+meml& A location in memory\\
+mem& A value in memory\\
+eaddrl& An effective address in an lvalue context (a location to be
+assigned to)\\
+eaddr& An effective address in an rvalue context (a value)\\
+lconst& A link-time constant\\
+const& A compile-time constant\\
+immed& An ``immediate'' constant expression as supported in the
+assembly language\\
+disp& An expression of the form $r+k$ or $k+r$ (displacement address)\\
+inst& An instruction\\
+any& Any tree (used for debugging)\\
+\end{tabularx}
+\end{quote}
+@
+The recognizer uses constructors that correspond to RTL
+operations, including [[Fetch]], [[Store]], [[Guarded]], and [[Par]].
+It also uses a separate, eponymous constructor for each RTL operator.
+Finally, it uses these special constructors:
+\begin{quote}
+\begin{tabularx}{\linewidth}{@{}>{\ttfamily}lX@{}}
+    \emph{Nonterminal} & \emph{Meaning} \\ 
+Withaflags& An operation that sets flags using the arithmetic flag
+convention (with two operands)\\
+Withlflags& An operation that sets flags using the logical flag
+convention (with one result)\\
+Setflags& Assign the flags\\
+Llr& An effect of the form $L \mathrel{:=} L \oplus R$\\
+Jcc& A jump conditional on the condition codes (flags)\\
+Nop& A no-op\\
+\end{tabularx}
+\end{quote}
+It's tempting to eliminate [[Fetch]], which would simplify rules, but
+which would mean including widths on at least some operators.
+@
+
+% ------------------------------------------------------------------ 
 \subsection{Recognizer Rules}
 % ------------------------------------------------------------------ 
 
-In a {\burg} pattern variables hold either polymorphic nonterminal
-values, or monomorphic terminal ({\ocaml}) values. Terminal types must
-be declared:
-<<terminal types>>=
-n w space
-k width opr exps agg ass index bool bits link late x symbol
+\paragraph{Constants}
+First, constants of various sorts.
+The constant~4 plays a key role because it is used to adjust the stack
+pointer. 
+<<rules>>=
+lconst : Link(symbol, w) {: symbol#text :}
+const  : Bits(b:bits)    {: native b :}
+four   : Bits(b:bits) [{: guard (Bits.U.to_int b = 4) :}] {: native b :}
+@ 
+\paragraph{Locations and effective addresses}
+Here are the basic locations.
+We can't refer to just any location in memory, but only to one that is
+accessible using the standard addressing modes.
+We've omitted the indexed modes, which use two registers.
+<<rules>>=
+regl : Reg('r', n, w) {: regname w n :}
+meml : Mem(reg,  w)   {: "(" ^ reg ^ ")" :}  -- indir
+meml : Mem(disp, w)   {: disp :}
+meml : Mem(lconst, w) {: lconst :}
+disp : Add(reg, const) {:  const ^ "(" ^ reg ^ ")" :}
+disp : Add(const, reg) {:  const ^ "(" ^ reg ^ ")" :}
+@ 
+An effective address is either a register or a memory location.
+<<rules>>=
+eaddrl : regl {: regl :}
+eaddrl : meml {: meml :}
 @
-
-The following table summarizes the nonterminals from the rule set. \\
-\begin{tabularx}{\linewidth}{@{\hskip1.5em}llX@{}}
-    Nonterminal & Type & Meaning \\ 
-    \hline
-    [[const]]       & [[nativeint]]
-                & a compile-time constant\\
-    [[mem]]     & [[string?]]
-                & a reference to memory\\
-    [[eaddr]]   & [[string]]
-                & An effective address\\
-\end{tabularx}
-
-It's tempting to eliminate [[Fetch]], which would simplify rules, but
-which would mean including widths on at least some operators.
-
-
-First, link-time constants.
+To get a value for any of these, we fetch.
+We can also use a link-time constant as an effective address.
 <<rules>>=
-lconst: Link(symbol, width) {: symbol#text :}
-const :  Bits(b:bits)        {: native b :}
-four  :  Bits(b:bits) [{: guard (Bits.U.to_int b = 4) :}] {: native b :}
-<<rules>>=
-regl:      Reg('r', n, w) {: regname w n :}
-eaddrl: regl  {: regl :}
-reg: Fetch(regl, w) {: regl :}
-meml:   Mem(reg, w) {: "(" ^ reg ^ ")" :}  -- indir
-disp: Add(reg, const) {:  const ^ "(" ^ reg ^ ")" :}
-disp: Add(const, reg) {:  const ^ "(" ^ reg ^ ")" :}
-meml: Mem(disp, w) {: disp :}
-meml: Mem(lconst, w) {: lconst :}
-eaddrl: meml {: meml :}
-eaddr: Fetch(eaddrl, w) {: eaddrl :}
-eaddr: lconst {: lconst :} -- absolute
-mem: Fetch(meml, w) {: meml :}
+reg   : Fetch(regl,   w) {: regl   :}
+mem   : Fetch(meml,   w) {: meml   :}
+eaddr : Fetch(eaddrl, w) {: eaddrl :}
+eaddr : lconst {: lconst :} -- absolute addressing mode
 -- indexed modes to come
 @ 
 I'm not at all sure about the rules for immediate constants, but here
-goes.
+goes a guess.  One problem is that I think the assembly-language
+syntax for an immediate address depends on the context in which it
+appears. 
 <<rules>>=
 immed : lconst {: lconst :}
 immed : const  {: "$" ^ const :}
 immed : Add(lconst, const) {:  lconst ^ "+" ^ const :}
 immed : Add(const, lconst) {:  lconst ^ "+" ^ const :}
 @ 
+\paragraph{Data movement}
 Move, load, and store instructions.
 Because the machine can do eaddr/reg
 and reg/eaddr but not eaddr/eaddr, there are two varieties of each.
 <<rules>>=
-inst: Store(dst:eaddrl, src:immed, w) 
+inst : Store(dst:eaddrl, src:immed, w) 
   {: cat ["mov"; suffix w; " "; src; ","; dst] :}
 
 -- straight load/store/move
-inst: Store(dst:eaddrl, src:reg, w) 
+inst : Store(dst:eaddrl, src:reg, w) 
   {: cat ["mov"; suffix w; " "; src; ","; dst] :}
 
-inst: Store(dst:regl, src:eaddr, w) 
+inst : Store(dst:regl, src:eaddr, w) 
   {: cat ["mov"; suffix w; " "; src; ","; dst] :}
 
 -- sign extension
-inst: Store(dst:eaddrl, Sx(Fetch(src:regl, nw:w)), w)
+inst : Store(dst:eaddrl, Sx(Fetch(src:regl, nw:w)), w)
   {: cat ["movs"; suffix nw; suffix w; " "; src; ","; dst] :}
 
-inst: Store(dst:regl, Sx(Fetch(src:eaddrl, nw:w)), w)
+inst : Store(dst:regl, Sx(Fetch(src:eaddrl, nw:w)), w)
   {: cat ["movs"; suffix nw; suffix w; " "; src; ","; dst] :}
 
 -- zero extension
-inst: Store(dst:eaddrl, Zx(Fetch(src:regl, nw:w)), w)
+inst : Store(dst:eaddrl, Zx(Fetch(src:regl, nw:w)), w)
   {: cat ["movz"; suffix nw; suffix w; " "; src; ","; dst] :}
 
-inst: Store(dst:regl, Zx(Fetch(src:eaddrl, nw:w)), w)
+inst : Store(dst:regl, Zx(Fetch(src:eaddrl, nw:w)), w)
   {: cat ["movz"; suffix nw; suffix w; " "; src; ","; dst] :}
 
 -- moving low bits (relies on proper name of source)
-inst: Store(dst:eaddrl, Lobits(Fetch(Reg('r', n, rw:w), fw:w)), nw:w)
+inst : Store(dst:eaddrl, Lobits(Fetch(Reg('r', n, rw:w), fw:w)), nw:w)
   {: cat ["mov"; suffix nw; " "; regname nw n; ","; dst] :}
 
-inst: Store(dst:regl, Lobits(src:mem), nw:w)
+inst : Store(dst:regl, Lobits(src:mem), nw:w)
   {: cat ["mov"; suffix nw; " "; src; ","; dst] :}
 @ 
-Arithmetic.
+\paragraph{Simple arithmetic}
+These are the well-behaved instructions, which don't require hairy
+special registers.
 <<rules>>=
-inst: Withaflags(dst:eaddrl, "add", src:reg, w, "x86_addflags")
+inst : Withaflags(dst:eaddrl, "add", src:reg, w, "x86_addflags")
   {: cat ["add"; suffix w; " "; src; ","; dst] :}
 
-inst: Withaflags(dst:regl, "add", src:eaddr, w, "x86_addflags")
+inst : Withaflags(dst:regl, "add", src:eaddr, w, "x86_addflags")
   {: cat ["add"; suffix w; " "; src; ","; dst] :}
 
-inst: Withaflags(dst:eaddrl, "sub", src:reg, w, "x86_subflags")
+inst : Withaflags(dst:eaddrl, "sub", src:reg, w, "x86_subflags")
   {: cat ["sub"; suffix w; " "; src; ","; dst] :}
 
-inst: Withaflags(dst:regl, "sub", src:eaddr, w, "x86_subflags")
+inst : Withaflags(dst:regl, "sub", src:eaddr, w, "x86_subflags")
   {: cat ["sub"; suffix w; " "; src; ","; dst] :}
 
-inst: Setflags(X86_subflags(l:eaddr, r:reg))
+inst : Setflags(X86_subflags(l:eaddr, r:reg))
   {: cat ["cmp"; suffix 32; " "; l; ","; r] :} -- POSSIBLE BUG IN WIDTH
-inst: Setflags(X86_subflags(l:reg, r:eaddr))
+inst : Setflags(X86_subflags(l:reg, r:eaddr))
   {: cat ["cmp"; suffix 32; " "; l; ","; r] :} -- POSSIBLE BUG IN WIDTH
 
-inst: Withlflags(dst:eaddrl, logical:string, src:reg, w, "x86_logicflags")
+inst : Withlflags(dst:eaddrl, logical:string, src:reg, w, "x86_logicflags")
   [{: match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]
   {: cat [logical; suffix w; " "; src; ","; dst] :}
 
-inst: Withlflags(dst:regl, logical:string, src:eaddr, w, "x86_logicflags")
+inst : Withlflags(dst:regl, logical:string, src:eaddr, w, "x86_logicflags")
   [{: match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]
   {: cat [logical; suffix w; " "; src; ","; dst] :}
-
-
-
-
 @ 
-Return.
+\paragraph{Control flow}
+The simple jumps are easy.
 <<rules>>=
-esp : Reg('r', n, w) [{: guard (n = 4 && w = 32):}] {: () :}
+inst : Goto(eaddr)            {: "jmp " ^ eaddr :}
+inst : Jcc(cc:string, lconst) {: "j" ^ cc ^ " " ^ lconst :}
+@ 
+Call and return require manipulating the stack pointer [[esp]] and
+program counter [[eip]].
+<<rules>>=
+esp : Reg('r', n, w) [{: guard (n = 4 && w = 32):}]                {: () :}
 eip : Reg('c', n, w) [{: guard (n = SS.indices.SS.pc && w = 32):}] {: () :}
-pop: Store(esp, Add(Fetch(esp, w), four), sw:w) {: () :}
-pop:  Llr(esp, "add", four, w) {: () :}
-push: Llr(esp, "sub", four, w) {: () :}
-stacktop: Mem(Fetch(esp, w), mw:w) [{:guard (mw = 32):}] {: () :}
-stacknext: Mem(Sub(Fetch(esp, w), four), mw:w) [{:guard (mw = 32):}] {: () :}
-inst: Par(Goto(Fetch(stacktop, w)),pop) {: "ret" :}
-inst: Par(Goto(eaddr),Par(Store(stacknext, Fetch(eip, x:w), y:w), push))
-        {: "call " ^ eaddr :}
-inst: Goto(eaddr)            {: "jmp " ^ eaddr :}
-inst: Jcc(cc:string, lconst) {: "j" ^ cc ^ " " ^ lconst :}
-
-<<rules>>=
-inst: Nop() {: "nop" :}
 @ 
-Debugging rules.
+There are two ways to recognize a pop, depending on whether the ML
+code sees it as an $L \mathrel{:=} L \oplus R$ instruction.
+<<rules>>=
+pop  : Store(esp, Add(Fetch(esp, w), four), sw:w) {: () :}
+pop  :  Llr(esp, "add", four, w) {: () :}
+push : Llr(esp, "sub", four, w) {: () :}
+stacktop  : Mem(Fetch(esp, w), mw:w)            [{:guard (mw = 32):}] {: () :}
+stacknext : Mem(Sub(Fetch(esp, w), four), mw:w) [{:guard (mw = 32):}] {: () :}
+inst : Par(Goto(Fetch(stacktop, w)),pop) 
+        {: "ret" :}
+inst : Par(Goto(eaddr),Par(Store(stacknext, Fetch(eip, x:w), y:w), push))
+        {: "call " ^ eaddr :}
+@ 
+\paragraph{Other instructions}
+<<rules>>=
+inst : Nop() {: "nop" :}
+@ 
+\paragraph{Support for debugging}
+If an RTL should fail to match, one can uncomment the following rule
+and get a printout of exactly how that RTL is represented using \burg\
+constructors. 
 <<rules>>=
 -- inst: any [100] {: "<" ^ any ^ ">" :}
 
-any: True  () {: "True"  :}
-any: False () {: "False" :}
-any: Link(symbol, width) {: "Link(" ^ symbol#text ^ "," ^ string_of_int width ^ ")" :}
-any: Late(string, width) {: "Late(" ^ string ^ "," ^ string_of_int width ^")" :}
-any: Bits(bits) {: "Bits(b)" :}
-any: Fetch (any, w) {: "Fetch(" ^ any ^ "," ^ string_of_int w ^ ")" :}
+any : True  () {: "True"  :}
+any : False () {: "False" :}
+any : Link(symbol, w) {: "Link(" ^ symbol#text ^ "," ^ string_of_int w ^ ")" :}
+any : Late(string, w) {: "Late(" ^ string ^ "," ^ string_of_int w ^")" :}
+any : Bits(bits)     {: "Bits(b)" :}
 
-any: Add(x:any, y:any) {: "Add(" ^ x ^ ", " ^ y ^ ")" :}
-any: Sx(any) {: "Sx(" ^ any ^ ")" :}
-any: Zx(any) {: "Zx(" ^ any ^ ")" :}
-any: Lobits(any) {: "Lobits(" ^ any ^ ")" :}
-any: X86_subflags(l:any, r:any) {: "X86_subflags(" ^ l ^ ", " ^ r ^ ")" :}
+any : Fetch (any, w) {: "Fetch(" ^ any ^ "," ^ string_of_int w ^ ")" :}
 
+any : Add(x:any, y:any) {: "Add(" ^ x ^ ", " ^ y ^ ")" :}
+any : Sx(any) {: "Sx(" ^ any ^ ")" :}
+any : Zx(any) {: "Zx(" ^ any ^ ")" :}
+any : Lobits(any) {: "Lobits(" ^ any ^ ")" :}
+any : X86_subflags(l:any, r:any) {: "X86_subflags(" ^ l ^ ", " ^ r ^ ")" :}
 
-any: Mem(any, w) {: "Mem(" ^any ^ "," ^ string_of_int w ^ ")" :}
-any: Reg(char, n, w)
+any : Mem(any, w) {: "Mem(" ^any ^ "," ^ string_of_int w ^ ")" :}
+any : Reg(char, n, w)
   {: "Reg('" ^ Char.escaped char ^ "'," ^ string_of_int n ^ "," ^
                string_of_int w ^ ")"
    :}
 
-any: Store (dst:any, src:any, w)
+any : Store (dst:any, src:any, w)
  {: "Store(" ^ dst ^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
-any: Kill(any) {: "Kill(" ^ any ^ ")" :}
+any : Kill(any) {: "Kill(" ^ any ^ ")" :}
 
-any: Guarded(guard:any, any) {: "Guarded(" ^ guard ^ "," ^ any ^ ")" :}
-any: Par(l:any, r:any) {: "Par(" ^ l ^ "," ^ r ^ ")" :}
-any: Goto(any) {: "Goto(" ^ any ^ ")" :}
-any: Setflags(any) {: "Setflags(" ^ any ^ ")" :}
-any: Llr(dst:any, string, src:any, w) 
+any : Guarded(guard:any, any) {: "Guarded(" ^ guard ^ "," ^ any ^ ")" :}
+any : Par(l:any, r:any) {: "Par(" ^ l ^ "," ^ r ^ ")" :}
+any : Goto(any) {: "Goto(" ^ any ^ ")" :}
+any : Setflags(any) {: "Setflags(" ^ any ^ ")" :}
+any : Llr(dst:any, string, src:any, w) 
   {: "Llr(" ^ dst ^","^string^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
 
-any: Withaflags(dst:any, string, src:any, w, fo:string) 
+any : Withaflags(dst:any, string, src:any, w, fo:string) 
   {: "Withaflags(" ^ dst ^","^string^ "," ^ src ^ "," ^ string_of_int w ^ 
       ","^ fo ^ ")" :}
 
-any: Withlflags(dst:any, string, src:any, w, fo:string) 
+any : Withlflags(dst:any, string, src:any, w, fo:string) 
   {: "Withlflags(" ^ dst ^","^string^ "," ^ src ^ "," ^ string_of_int w ^ 
       ","^ fo ^ ")" :}
 
-any: Jcc(string, any) {: "Jcc(" ^ string ^ "," ^ any ^ ")" :}
+any : Jcc(string, any) {: "Jcc(" ^ string ^ "," ^ any ^ ")" :}
 @
 
 
@@ -306,8 +366,11 @@ any: Jcc(string, any) {: "Jcc(" ^ string ^ "," ^ any ^ ")" :}
 \subsection{Interfacing {\rtl}s with the Expander}
 % ------------------------------------------------------------------ 
 
-Because it is much easier in {\ocaml} than in {\burg}, we
-decompose applications and complex {\rtl}s here.
+The code in this section walks an RTL and calls suitable \burg\
+constructors. 
+The most interesting code is probably the code that maps the
+general representation of application into one that uses a unique
+constructor for each operator.
 <<special cases for particular operators>>=
 | RP.App(("add", [w]), [x; y]) -> conAdd (exp x) (exp y)
 | RP.App(("sub", [w]), [x; y]) -> conSub (exp x) (exp y)
@@ -317,21 +380,22 @@ decompose applications and complex {\rtl}s here.
 | RP.App(("x86_subflags", [w]), [x; y]) -> conX86_subflags (exp x) (exp y)
 | RP.App((("add"|"sub"|"sx"|"zx"|"lobits"|"x86_subflags") as op, _), _) ->
     Impossible.impossible ("ill-formed " ^ op)
-
-<<tail>>=  
+@ 
+Here is the rest of the mapping.  
+<<code to follow the labeler>>=  
 let const = function
   | RP.Bool(true)             -> conTrue  ()
   | RP.Bool(false)            -> conFalse ()
   | RP.Link(s,w)              -> conLink s w
   | RP.Late(s,w)              -> conLate s w
   | RP.Bits(b)                -> conBits(b)
-
+<<code to follow the labeler>>=  
 let rec exp = function
   | RP.Const(k)               -> const (k)
   | RP.Fetch(l,w)             -> conFetch (loc l) w
   <<special cases for particular operators>>
   | RP.App((o,_),_)           -> error ("unknown operator " ^ o)
-
+<<code to follow the labeler>>=  
 and loc = function
   | RP.Cell('m', aff, w, e, ass) -> conMem (exp e) w
   | RP.Cell(sp, aff, w, RP.Const(RP.Bits b), ass)
@@ -339,8 +403,11 @@ and loc = function
   | RP.Cell(_, _, _, _, _)    -> error "non-mem, non-reg cell"
   | RP.Var(s, i, w)           -> error "var found"
   | RP.Slice(w,i,loc)         -> error "cannot handle slice"
-    
-and stmt = function
+@ 
+Things start to get a bit baroque here, as we recognize different
+special forms a single effect can take.
+<<code to follow the labeler>>=  
+and effect = function
   | RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w) when l = l' ->
       conLlr (loc l) o (exp r) w
   | RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits b), ass), r, w)
@@ -356,6 +423,34 @@ and stmt = function
   | RP.Store(l,e,w)           -> conStore (loc l) (exp e) w
   | RP.Kill(l)                -> conKill (loc l)
 @
+The truly ghastly stuff is the stuff that recognizes multiple
+effects that set flags.
+<<code to follow the labeler>>=  
+and rtl (RP.Rtl es) = geffects es
+and geffects = function
+    | [] -> conNop ()
+    | [g, s] -> guarded g s
+    <<horrible pattern match for [[Withflags]]>>
+    | (g, s) :: t -> conPar (guarded g s) (geffects t)
+@ 
+Dealing with a guard is straightforward.
+Either it's trivial, it's a conditional branch, or we pass it off to
+the recognizer (which currently falls on the floor).
+<<code to follow the labeler>>=  
+and guarded g eff = match g with
+| RP.Const(RP.Bool b) -> if b then effect eff else conNop()
+| RP.App((compare, [32]), [RP.Fetch(RP.Cell('c', _, _, RP.Const(RP.Bits n), _), _)])
+    when Bits.U.to_int n = SS.indices.SS.cc && begins_x86_ compare ->
+      (match eff with
+      | RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits b), _), r, w)
+        when (Bits.U.to_int b = SS.indices.SS.pc) ->
+          conJcc (String.sub compare 4 (String.length compare - 4)) (exp r)
+      | _ -> error "guard on x86 non-branch")
+| _ -> conGuarded (exp g) (effect eff)
+and begins_x86_ s =
+  String.length s >= 4 && s.[0] = 'x' && s.[1] = '8' && s.[2] = '6' && s.[3] = '_'
+@
+Oh, the joy of the flags\ldots
 <<horrible pattern match for [[Withflags]]>>=
 | [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
   ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l'']], [[r']])>>)
@@ -374,64 +469,31 @@ RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits flag_index), ass),
 <<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>=
 RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits flag_index), ass), 
          RP.App((fo, _), [RP.App ((o', _), [RP.Fetch(l'',_); r'])]), _)
-@ 
-We classify an {\rtl} here and pass it to the appropriate rule in the
-rule set. The encoding of special instructions is shared between the
-code expander and a target description. See module \module{targets}.
-The ``special'' instructions are identified by a false guard and capital
-letters in a cell.
-
-<<tail>>=  
-and rtl (RP.Rtl es) = geffects es
-and geffects = function
-    | [] -> conNop ()
-    | [g, s] -> guarded g s
-    <<horrible pattern match for [[Withflags]]>>
-    | (g, s) :: t -> conPar (guarded g s) (geffects t)
-and guarded g s = match g with
-| RP.Const(RP.Bool b) -> if b then stmt s else conNop()
-| RP.App((compare, [32]), [RP.Fetch(RP.Cell('c', _, _, RP.Const(RP.Bits n), _), _)])
-    when Bits.U.to_int n = SS.indices.SS.cc && begins_x86_ compare ->
-      (match s with
-      | RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits b), _), r, w)
-        when (Bits.U.to_int b = SS.indices.SS.pc) ->
-          conJcc (String.sub compare 4 (String.length compare - 4)) (exp r)
-      | _ -> error "guard on x86 non-branch")
-| _ -> conGuarded (exp g) (stmt s)
-and begins_x86_ s =
-  String.length s >= 4 && s.[0] = 'x' && s.[1] = '8' && s.[2] = '6' && s.[3] = '_'
 @
+\subsection{The exported recognizers}
 
-The [[rtl]] function returns (the best) plan to rewrite a given {\rtl}.
-When this plan is executed, it returns a monadic value that includes the
-desired expanded instructionss.
+The only tricky bits here are what we do when something goes wrong.
+In a production compiler, we should always halt the compiler.
+But here, it is more informative to drop an error message into the
+assembly language and to allow the assembler to barf downstream.
+<<code to follow the labeler>>=
+let errmsg r msg =
+  List.iter prerr_string
+    [ "recognizer error: "; msg; " on "; RU.ToReadableString.rtl r; "\n" ]
 
-<<tail>>=
-let to_asm (r: R.rtl) = 
-    try
-        let plan = rtl (Down.rtl r) in
-        plan.inst.Camlburg.action ()
-    with 
-        | Camlburg.Uncovered -> 
-            cat [ " not an instruction: " ; RU.ToReadableString.rtl r]
-        | Error(msg) ->
-            ( List.iter prerr_endline
-                [ msg
-                ; RU.ToString.rtl r
-                ]
-            ; " error in recognizer: " ^ msg (*assert false*)
-            )
+let to_asm r =
+  try
+    let plan = rtl (Down.rtl r) in
+    plan.inst.Camlburg.action ()
+  with 
+  | Camlburg.Uncovered -> cat [" not an instruction: " ; RU.ToReadableString.rtl r]
+  | Error msg -> (errmsg r msg; " error in recognizer: " ^ msg)
 
 let is_instruction r =
-    try
-        let plan = rtl (Down.rtl r) in
-        plan.inst.Camlburg.cost < 100  (* should be true, but shade this... *)
-    with 
-        | Camlburg.Uncovered -> false
-        | Error(msg) ->
-            ( List.iter prerr_string
-                [ "recognizer error: "; msg; " on "; RU.ToReadableString.rtl r; "\n"
-                ]
-            ; false
-            )
+  try
+    let plan = rtl (Down.rtl r) in
+    plan.inst.Camlburg.cost < 100  (* should be true, but shade this... *)
+  with 
+  | Camlburg.Uncovered -> false
+  | Error msg -> (errmsg r msg; false)
 @                        
