@@ -64,13 +64,13 @@ over.
 let first cfg = G.number (G.first cfg)     (* smallest number *)
 let limit cfg = G.number (G.last  cfg) + 1 (* highest number + 1 *)
 
-let fold_fwd cfg f zero =
+let fold_fwd cfg f unit =
   G.gm_enumerate cfg;
-  G.scan_fwd cfg (first cfg) (limit cfg) f zero
+  G.scan_fwd cfg (first cfg) (limit cfg) f unit
 
-let fold_bwd cfg f zero =
+let fold_bwd cfg f unit =
   G.gm_enumerate cfg;
-  G.scan_bwd cfg (first cfg) (limit cfg) f zero
+  G.scan_bwd cfg (first cfg) (limit cfg) f unit
 
 let subst cfg (f: Rtl.rtl -> Rtl.rtl) = 
     fold_fwd cfg (fun node () -> G.set_rtl node f) () 
@@ -81,7 +81,7 @@ let number_and_rtl node =
   string_of_int (Cfg.number node) ^ ": " ^ Rtldebug.rtl_to_string (Cfg.rtl node)
 
 let cfg2dot compress name cfg =
-  let nodename node = "N" ^ string_of_int (Cfg.number node) in
+  let nodename node = Printf.sprintf "N\"%d\"" (Cfg.number node) in
   let dotnode  node = nodename node ^ " [label=\"" ^ number_and_rtl node ^ "\"]" in
   let edge_fwd from to' = nodename from ^ " -> " ^ nodename to'  ^ "\n" in
   let edge_bwd from to' = nodename to'  ^ " -> " ^ nodename from ^

@@ -225,46 +225,51 @@ function mkS (nm, f)
 -- Here, liveness and the other second args to "mkS" are the Caml functions
 -- that have been embedded into Lua.
 
-CGStages = { liveness = mkS("liveness", CG.liveness)
-           , build = mkS("build", CG.build)
-           , makeWorklist = mkS("makeWorklist", CG.makeWorklist)
-           , simplify = mkS("simplify", CG.simplify)
-           , coalesce = mkS("coalesce", CG.coalesce)
-           , freeze = mkS("freeze", CG.freeze)
-           , selectSpill = mkS("selectSpill", CG.selectSpill)
-           , assignColors = mkS("assignColors", CG.assignColors)
-           , haveSpilledTemps = mkS("haveSpilledTemps", CG.haveSpilledTemps)
-           , resetProgram = mkS("resetProgram", CG.resetProgram)
-           , updateProgram = mkS("updateProgram", CG.updateProgram)
-           , applyColors = mkS("applyColors", CG.applyColors)
-		   , printCG = mkS("printCG", CG.printCG)
-		   , printCFGLive = mkS("printCFGLive", CG.printCFGLive)
-           , pCFG = mkS("pCFG", CG.pCFG)
-           }
+CGStages = 
+    { liveness       = mkS("liveness",      CG.liveness)
+    , build          = mkS("build",         CG.build)
+    , makeWorklist   = mkS("makeWorklist",  CG.makeWorklist)
+    , simplify       = mkS("simplify",      CG.simplify)
+    , coalesce       = mkS("coalesce",      CG.coalesce)
+    , freeze         = mkS("freeze",        CG.freeze)
+    , selectSpill    = mkS("selectSpill",   CG.selectSpill)
+    , assignColors   = mkS("assignColors",  CG.assignColors)
+    , haveSpilledTemps = mkS("haveSpilledTemps", CG.haveSpilledTemps)
+    , resetProgram   = mkS("resetProgram",  CG.resetProgram)
+    , updateProgram  = mkS("updateProgram", CG.updateProgram)
+    , applyColors    = mkS("applyColors",   CG.applyColors)
+    , printCG        = mkS("printCG",       CG.printCG)
+    , printCFGLive   = mkS("printCFGLive",  CG.printCFGLive)
+    , pCFG           = mkS("pCFG",          CG.pCFG)
+    }
 
-function makeInitInfo (colors) return CG.makeInitInfo(colors) end
+function makeInitInfo (colors) 
+    return CG.makeInitInfo(colors) 
+end
 
-CodeExpandStages = { placeVars = mkS("placeVars", PV.placeVars)
-                   , expander  = mkS("expander", PV.expander)
-                   }
+CodeExpandStages = 
+    { placeVars = mkS("placeVars", PV.placeVars)
+    , expander  = mkS("expander" , PV.expander)
+    }
 
-codeExpand = seq({ single(CodeExpandStages.placeVars)
-                 , single(CodeExpandStages.expander)
-                 })
+codeExpand = 
+    seq({ single(CodeExpandStages.placeVars)
+        , single(CodeExpandStages.expander)
+        })
 
 placeVars = single(CodeExpandStages.placeVars)
 
-pcg = ignore(single(CGStages.printCG))
-pcfg = ignore(single(CGStages.pCFG))
-prLive = ignore(single(CGStages.printCFGLive))
-plive = seq({single(CGStages.liveness), single(CGStages.printCFGLive)})
-live = single(CGStages.liveness)
+pcg     = ignore(single(CGStages.printCG))
+pcfg    = ignore(single(CGStages.pCFG))
+prLive  = ignore(single(CGStages.printCFGLive))
+plive   = seq({single(CGStages.liveness), single(CGStages.printCFGLive)})
+live    = single(CGStages.liveness)
 
 function graphColoring (colors)
   return
      share(makeInitInfo(colors), "cgInfo",
-        seq {fix(
-               seq {ignore(seq
+        seq {fix (seq 
+                   {ignore(seq
                       { single(CGStages.liveness)
                       , single(CGStages.build)
                       , single(CGStages.makeWorklist)
@@ -273,20 +278,18 @@ function graphColoring (colors)
                                     unless_do(single(CGStages.coalesce),
                                        unless_do(single(CGStages.freeze),
                                           single(CGStages.selectSpill)))))
-,pcg
-                      , single(CGStages.assignColors)} )
-                   , when_do(single(CGStages.haveSpilledTemps),
-seq {
-pcg,
-                             single(CGStages.resetProgram)
-, pcg
-})
+                      , pcg
+                      , single(CGStages.assignColors)
+                      })
+                   , when_do( single(CGStages.haveSpilledTemps)
+                            , seq {pcg, single(CGStages.resetProgram), pcg }
+                            )
                    } )
-          , seq { single(CGStages.updateProgram)
-				, single(CGStages.applyColors)
-				}
-          } )
-    end
+            , seq { single(CGStages.updateProgram)
+                  , single(CGStages.applyColors)
+                  }
+            })
+end
 
 function fullRun (colors) 
     return seq({codeExpand, graphColoring(colors)}) end
@@ -297,7 +300,7 @@ colors = {r={31,11,12,13}, f={11,12,13}}
 Optimizer = Optimizer or {}
   -- `run' should be delayed
 function Optimizer.default () return fullRun(colors) end
-Optimizer.prCFG = prCFG
+Optimizer.prCFG      = prCFG
 Optimizer.codeExpand = codeExpand
 
 ------------------------------------------------------------------ 

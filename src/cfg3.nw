@@ -1370,15 +1370,7 @@ object(this)
             
              
             (** this code was used to debug some problem 
-            ; if not ((List.length pred <= 1) || (_symbols <> [])) then
-                ( Printf.printf "node %d\n" _id
-                ; List.iter (fun n -> Printf.printf "pred %d (%s)" 
-                                n#id n#comment) pred
-                ; Printf.printf "\n"
-                ; List.iter (fun n -> Printf.printf "succ %d (%s)" 
-                                n#id n#comment) succ
-                ; Printf.printf "\n"
-                )
+            ; print_endline this#comment
             **)    
             )
     
@@ -1459,7 +1451,10 @@ object(this)
             | None   -> assert false (* undefined label! *)
             | Some s -> [stmt (A.LabelStmt (s#text))]
     
-    method comment = super#comment    
+    method comment = 
+        match _symbol with
+            | None   -> super#comment ^ "label without symbol"
+            | Some s -> super#comment ^ "label for " ^ s#text 
 
     method test =
         let this = (this :> labl) in
