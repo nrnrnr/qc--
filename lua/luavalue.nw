@@ -99,6 +99,11 @@ We won't see it.
 <<signatures>>=
   val option : 'a map -> 'a option map
 @ 
+To project with a default value, we provide [[default ]]$v$[[ t]],
+which behaves just as~[[t]] except it projects [[Nil]] to~$v$.
+<<signatures>>=
+  val default : 'a -> 'a map -> 'a map
+@ 
 To embed a list of values, we produce a table with a binding of the
 length to the name [[n]] and bindings of the values to the numbers $1..n$.
 To project a Lua table down to a list, we first look to see if the table 
@@ -109,7 +114,8 @@ This way, users are free to include [[n]] or not as they choose.
 <<signatures>>=
   val list    : 'a map -> 'a list map   (* does not project nil *)
   val optlist : 'a map -> 'a list map   (* projects nil to empty list *)
-@ 
+@ N.B. [[optlist t = default [] list t]].
+@
 If for some reason a Caml function operates on Lua values, we need an
 identity pair.  We also enable functions that expect tables.
 <<signatures>>=
@@ -150,7 +156,7 @@ end
 it to some arguments.
 <<tests>>=
 let sub = (func (string **-> int **-> int **-> result string)).embed String.sub
-let apply = function Function (_, f) -> fun args -> trim1 (f args)
+let apply = function Function (_, f) -> fun args -> take1 (f args)
                    | v -> raise (Projection (v, "function"))
 let check = string.project (apply sub [string.embed "hello"; int.embed 0; int.embed 2])
 let _ = assert (check = "he")
@@ -342,6 +348,10 @@ let unit =  { embed = (fun () -> Nil)
 let option t = { embed = (function None -> Nil | Some x -> t.embed x)
                ; project = (function Nil -> None | v -> Some (t.project v))
                }
+let default d t = 
+  { embed = t.embed
+  ; project = (function Nil -> d | v -> t.project v)
+  }
 @ 
 <<value toplevel>>=
 let list' nil_ok (ty : 'a map) = 
@@ -357,7 +367,7 @@ let list' nil_ok (ty : 'a map) =
   let untable (t:table) =
     let n = match Table.find t (String "n") with
     | Number x -> to_int x
-    | v -> Luahash.population t  in
+    | _ -> Luahash.population t  in
     let rec elems i =
       if i > n then []
       else ty.project (Table.find t (Number (pervasive_float i))) :: elems (i + 1) in
@@ -367,6 +377,7 @@ let list' nil_ok (ty : 'a map) =
                                         | v -> raise (Projection (v, "list"))) }
 let list    ty = list' false ty
 let optlist ty = list' true  ty
+
 @
 <<value toplevel>>=
 let value = { embed = (fun x -> x); project = (fun x -> x) }
@@ -392,7 +403,7 @@ let record ty =
 Here is a simple function from one argument to one result.
 We implement the usual Lua game of ``adjusting'' the argument list.
 <<value toplevel>>=
-let trim1 = function  (* trim list of arguments to a single argument *)
+let take1 = function  (* take one value from a list of arguments *)
   | [] -> Nil
   | h::t -> h
 
@@ -404,9 +415,9 @@ let emptystate = state()
 
 let (-->) arg result =
   { embed =   (fun f -> 
-               caml_func (fun args -> [result.embed (f (arg.project (trim1 args)))]))
+               caml_func (fun args -> [result.embed (f (arg.project (take1 args)))]))
   ; project = function Function (_, f) -> 
-                          fun x -> result.project (trim1 (f [arg.embed x]))
+                          fun x -> result.project (take1 (f [arg.embed x]))
                      | v -> raise (Projection (v, "function"))
   } 
 @ 
@@ -427,9 +438,10 @@ let ( **-> ) (firstarg : 'a map) (lastargs : 'b mapf) : ( ('a -> 'b) mapf ) =
     fun (x : 'a) -> lastargs.project (function t -> f' (firstarg.embed x :: t)) in
   { embed = apply; project = unapp }
 
+
 let result (r : 'a map) : ('a mapf) = 
-  { embed   = (fun f -> fun args -> [r.embed f])
-  ; project = (fun f -> r.project (trim1 (f [])))
+  { embed   = (fun (v:'a) -> fun args -> [r.embed v])
+  ; project = (fun f_lua -> r.project (take1 (f_lua [])))
   } 
 
 let runit = { embed = (fun () args -> [])
@@ -455,6 +467,7 @@ let closure (arrow : 'a mapf) : ('a map) =
   } 
 
 let efunc t f = (closure t).embed f
+let lf = efunc (list value **-> result (list value)) List.rev
 @
 A table is a function if it has an apply method that is a function.
 <<project table [[t]] into a function>>=

@@ -89,6 +89,11 @@ We won't see it.
 <<lua.mli>>=
   val option : 'a map -> 'a option map
 @ 
+To project with a default value, we provide [[default ]]$v$[[ t]],
+which behaves just as~[[t]] except it projects [[Nil]] to~$v$.
+<<lua.mli>>=
+  val default : 'a -> 'a map -> 'a map
+@ 
 To embed a list of values, we produce a table with a binding of the
 length to the name [[n]] and bindings of the values to the numbers $1..n$.
 To project a Lua table down to a list, we first look to see if the table 
@@ -119,7 +124,7 @@ associative.
 That's OK, as it probably shouldn't be used for curried functions.
 
 For curried functions that should take lists of arguments in Lua,
-we use [[**->]], [[pfunc]], [[func]], and [[result]].
+we use [[**->]], [[func]], and [[result]].
 The idea is this: if we have a Caml function type
 [[t -> u -> v -> w]], we can turn this into a Lua function of three
 arguments by using the embedding/projection pair produced by
@@ -140,17 +145,11 @@ end
 Here's an example: we embed the [[String.sub]] function, then apply
 it to some arguments.
 <<tests>>=
-let sub = (pfunc (string **-> int **-> int **-> result string)).embed String.sub
+let sub = efunc (string **-> int **-> int **-> result string) String.sub
 let apply = function Function (_, f) -> fun args -> trim1 (f emptystate args)
                    | v -> raise (Projection (v, "function"))
 let check = string.project (apply sub [string.embed "hello"; int.embed 0; int.embed 2])
 let _ = assert (check = "he")
-@ 
-If a function is impure (needs access to the Lua state) we use
-[[func]].
-<<tests>>=
-let setglobal {globals=g; fallbacks=f} n v = Table.bind g (String n) v
-let sg = ((func (string **-> value **-> runit)).embed setglobal : value)
 @ 
 \subsection{User-defined types and state}
 

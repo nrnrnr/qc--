@@ -12,11 +12,12 @@ module M : Lua.Lib.BARE
 let unimp g s =
   V.caml_func (fun _ -> I.error g ("string library does not implement `" ^ s ^ "'"))
 
-let getopt x y = match x with None -> y | Some x -> x
-
-
 <<support for [[format]]>>
 type 'a parser = int -> (int -> (unit -> 'a) -> 'a) -> (unit -> 'a) -> 'a
+
+let strindex = { V.embed = (fun n -> V.int.V.embed (n+1))
+               ; V.project = (fun v -> V.int.V.project v - 1)
+               } 
 
 let string_builtins g =
   let error s = I.error g s in
@@ -24,7 +25,6 @@ let string_builtins g =
     try f x with Invalid_argument m -> error ("Invalid argument: " ^ m) in
   <<support for matching>> 
   let strfind s pat init plain =
-    let init = match init with Some n -> n-1 | None -> 0 in
     let int    i = V.int.V.embed    i in
     let string s = V.string.V.embed s in
     match plain with
@@ -33,16 +33,16 @@ let string_builtins g =
         find pat s init
           (fun caps i j _ -> int (i+1) :: int j :: List.map string caps)
           (fun () -> [V.Nil]) in
-  [ "strfind", V.efunc (V.string **-> V.string **-> V.option V.int **->
+  [ "strfind", V.efunc (V.string **-> V.string **-> V.default 0 strindex **->
                         V.option V.int **-> V.values) strfind
   ; "strlen",  V.efunc (V.string **-> V.result V.int) String.length
   ; "strsub",
-    (V.efunc (V.string **-> V.int **-> V.option V.int **-> V.result V.string))
+    (V.efunc (V.string **-> strindex **-> V.option strindex **-> V.result V.string))
     (fun s start last ->
-      let start = start - 1 in (* caml strings are 0-indexed *)
-      let last = match last with None -> String.length s
-                               | Some n -> min n (String.length s) in
-      let len = last - start in
+      let maxlast = String.length s - 1 in
+      let last = match last with None -> maxlast
+                               | Some n -> min n maxlast in
+      let len = last - start + 1 in
       invalid (String.sub s start) len)
   ; "strlower", V.efunc (V.string **-> V.result V.string) String.lowercase
   ; "strupper", V.efunc (V.string **-> V.result V.string) String.uppercase
@@ -54,8 +54,8 @@ let string_builtins g =
                   else
                     let rec list l = function 0 -> l | n -> list (s::l) (n-1) in
                     String.concat "" (list [] n))
-  ; "ascii",   V.efunc (V.string **-> V.option V.int **-> V.result V.int)
-               (fun s i -> Char.code (String.get s (getopt i 1 - 1)))
+  ; "ascii",   V.efunc (V.string **-> V.default 0 strindex **-> V.result V.int)
+               (fun s i -> Char.code (String.get s i))
   ; "format",  V.caml_func (invalid (format g))
   ; "gsub",    unimp g "gsub"
   ] 
