@@ -1,0 +1,303 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+%
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+\section{Normalized Abstract-Syntax Tree}
+
+This is an AST, except we sort and organize everything.
+<<exposed types>>=
+type name = string
+type hint = string
+type convention = string
+type procname   = string
+type label      = string
+
+type range = Ast.range
+type ty = Ast.ty
+@ 
+Initialized and uninitialized data have the same type.
+<<wishful thinking>>=
+type size = int
+type bits = Bits.bits
+type exp  = Rtl.exp
+type loc  = Rtl.loc (* optimism *)
+type rtl  = Rtl.rtl
+type ty' = Ty of int  (* bits$n$ *)
+type init =
+  | ExpData    of exp list
+  | StringData of string
+@ 
+Here we have register variables (which double as formal parameters),
+continuation parameters, actual parameters.
+<<wishful thinking>>=
+type runtime_access = Invisible | Invariant | Variant
+
+type xregister = runtime_access * hint * ty * name (* ? *)
+<<exposed types>>=
+type register = A.register
+type cformal  = hint * name
+type 'e actual   = hint * 'e
+@ 
+Flow annotations on calls and cut to.
+<<wishful thinking>>=
+type iflow = {
+    cuts_to : name list;
+    unwinds_to : name list;
+    returns_to : name list;
+    aborts : bool;
+    returns : bool;
+  }
+type cflow = {
+    ccuts_to : name list;
+    caborts : bool;
+  }
+<<exposed types>>=
+type flow = Ast.flow list
+type cflow = flow
+@
+Statements.  Types [['l]], [['e]], and [['a]] are locations,
+expressions, and assignments, which we expect to be [[Ast]] types
+first and [[Rtl]] types later.
+<<exposed types>>=
+type ('l, 'e, 'a) stmt =
+  | StmtAt     of ('l, 'e, 'a) stmt * Ast.region
+  | If         of 'e * ('l, 'e, 'a) stmt list * ('l, 'e, 'a) stmt list
+  | Switch     of range option * 'e * (range list * ('l, 'e, 'a) stmt list) list
+  | Label      of name
+  | Cont       of name * cformal list
+  | Span       of 'e * 'e * ('l, 'e, 'a) stmt list
+  | Assign     of 'a
+  | Call       of 'l list * convention * 'e   * 'e actual list * procname list * flow
+  | Prim       of 'l list * convention * name * 'e actual list * flow
+  | Goto       of 'e * label list
+  | Jump       of convention * 'e * 'e actual list * procname list
+  | Cut        of 'e * 'e actual list * cflow 
+  | Return     of convention * ('e * 'e) option * 'e actual list
+@ 
+Procedures and sections in nice normal form.
+<<exposed types>>=
+type typedefn  = ty * string list
+type 'e constdefn = ty option * string * 'e
+type 'a marked = Ast.region * 'a
+type 'e compile_time_decls = {
+    types : typedefn marked list;
+    constants : 'e constdefn marked list;
+  }
+
+type ('l, 'e, 'a) proc = {
+    cc : convention;
+    name : name;
+    formals : (hint * A.invariant * ty * name) list;
+    locals : register list;
+    pdecls : 'e compile_time_decls;
+    stackdata : (unit, unit, unit) datum list;
+    code : ('l, 'e, 'a) stmt list;
+  }
+and ('l, 'e, 'a)  datum =
+  | Datalabel of name
+  | Align of int
+  | ReserveMem of ty * Ast.memsize * Ast.init option (*init always none on stackdata*)
+  | Procedure of ('l, 'e, 'a) proc
+  | SSpan of 'e * 'e * ('l, 'e, 'a) datum list
+@ 
+And last, the target and compilation unit.
+<<wishful thinking>>=
+type section = unit
+type extref = { internal : name; external' : name }
+type 'e t' = {
+    target  : Metrics.t;
+    imports : extref marked list;
+    exports : extref marked list;
+    globals : register list;
+    udecls  : 'e compile_time_decls;
+    sections : section list;
+  }
+
+<<exposed types>>=
+type assign = (Ast.name_or_mem list * Ast.guarded list)
+type section = name * (Ast.expr, Ast.name_or_mem, assign) datum list
+type t = {
+    target  : Ast.arch list;
+    imports : (Ast.region * Ast.ty * Ast.import list) list;
+    exports : (Ast.region * Ast.export list) list;
+    globals : register list;
+    udecls  : Ast.expr compile_time_decls;
+    sections : section list
+  }
+@ 
+<<nast.mli>>=
+<<exposed types>>
+@ 
+<<nast.ml>>=
+module A = Ast
+<<exposed types>>
+
+let default_proc_section = "text"
+
+let id ss = ss
+let null = function [] -> true | _ :: _ -> false
+
+let cformal (hint, name) = (Aux.Option.get "" hint, name)
+let formal (hint, variance, ty, name) = (Aux.Option.get "" hint, variance, ty, name)
+let actual (hint, name) = (Aux.Option.get "" hint, name)
+let convention = Aux.Option.get "C--"
+
+let rec add_datum r d ds = match d with
+  | Ast.DatumAt (d, r) -> add_datum r d ds
+  | Ast.Label l -> Datalabel l :: ds
+  | Ast.Align n -> Align n :: ds
+  | Ast.MemDecl (t, s, init) -> ReserveMem (t, s, init) :: ds
+
+let fdata r = List.fold_right (add_datum r) 
+@ 
+The idea here is CPS.
+We have a boatload of accumulating parameters, and eventually we get a
+program. 
+Most of the accumulating parameters accumulate declarations.
+<<nast.ml>>=
+let rec decl r imports exports consts types regs archs data d k = match d with
+  | A.DeclAt(x,r)     -> decl r imports exports consts types regs archs data x k
+  | A.Typedef(d)      -> k imports exports consts ((r,d) :: types) regs archs data
+  | A.Import (t,ii)   -> k ((r,t,ii)::imports) exports consts types regs archs data
+  | A.Export (t,ee)   -> k imports ((r,ee) :: exports) consts types regs archs data
+  | A.Const d         -> k imports exports ((r, d) :: consts) types regs archs data
+  | A.Registers rs    -> k imports exports consts types (rs :: regs) archs data
+  | A.Target    t     -> k imports exports consts types regs (t :: archs) data
+  | A.Pragma          -> k imports exports consts types regs archs data
+@ 
+This is a generic lifting function.
+Function [[kmap f]] turns function [[f]] from a function on~[['a]] to
+a function on \mbox{[['a list]]}.
+The function has to supply a value to its continuation;
+if it doesn't, use [[kmap_none]].
+<<nast.ml>>=
+let rec kmap f cons r imports exports consts types regs archs data xs k = match xs with
+| []      -> k [] imports exports consts types regs archs data
+| x :: xs ->
+    kmap f cons r imports exports consts types regs archs data xs
+    (fun xs imports exports consts types regs archs data ->
+      f r imports exports consts types regs archs data x
+        (fun x imports exports consts types regs archs data  ->
+          k (cons x xs) imports exports consts types regs archs data))
+let kmap_none f r imports exports consts types regs archs data xs k =  
+  let xk f r imports exports consts types regs archs data x k = 
+    f r imports exports consts types regs archs data x (k []) in
+  kmap (xk f) (fun _ _ -> [])
+    r imports exports consts types regs archs data xs (fun _ -> k)
+@ 
+And now, processing a body item, which is liftable.
+<<nast.ml>>=
+let rec body r imports exports consts types regs archs data b k = match b with
+| A.BodyAt(b,r) -> body r imports exports consts types regs archs data b k
+| A.DeclBody d  -> decl r imports exports consts types regs archs data d (k id)
+| A.StmtBody s  -> (<<match [[stmt]] [[s]] at [[r]] and continue with [[k]]>>)
+| A.DataBody ds -> k id imports exports consts types regs archs (fdata r ds data)
+and bodies r = kmap body (fun add ss -> add ss) r
+@ 
+Statements, which may or may not supply an actual statement.
+Function [[cons]] is for the case where we do supply a statement;
+[[id]]~is used where there is no statement.
+Function [[atomic]] helps with the common case in which a statement
+has no substatements, and therefore no declarations.
+<<match [[stmt]] [[s]] at [[r]] and continue with [[k]]>>=
+let rec stmt r s k = 
+  let cons s ss = StmtAt (s, r) :: ss in
+  let atomic s = k (cons s) imports exports consts types regs archs data in
+  match s with
+  | A.StmtAt(s,r) -> stmt r s k
+  | A.IfStmt (c,b1,b2)   ->
+      bodies r imports exports consts types regs archs data b2
+      (fun ss1 imports exports consts types regs archs data ->
+        bodies r imports exports consts types regs archs data b1 
+          (fun ss2 imports exports consts types regs archs data ->
+            k (cons (If (c, ss1, ss2))) imports exports consts types regs archs data))
+  | A.SwitchStmt (range,e,aa) ->
+      arms r imports exports consts types regs archs data aa
+        (fun aa imports exports consts types regs archs data ->
+          k (cons (Switch (range,e,aa))) imports exports consts types regs archs data)
+  | A.LabelStmt l ->
+      atomic (Label l)
+  | A.ContStmt (n, formals) ->
+      atomic (Cont (n, List.map cformal formals))
+  | A.SpanStmt(key,v,bs)   -> 
+      bodies r imports exports consts types regs archs data bs
+      (fun ss imports exports consts types regs archs data ->
+        k (cons (Span (key,v,ss))) imports exports consts types regs archs data)
+  | A.AssignStmt (ls, rs) ->
+      atomic (Assign (ls, rs))
+  | A.CallStmt (ls, cc, p, a's, tgts, flows) ->
+      atomic (Call (ls, convention cc, p, List.map actual a's, tgts, flows))
+  | A.PrimStmt (ls, cc, p, a's, flows) ->
+      atomic (Prim (ls, convention cc, p, List.map actual a's, flows))
+  | A.GotoStmt (e, tgts) ->
+      atomic (Goto (e, tgts))
+  | A.JumpStmt (cc, p, a's, tgts) ->
+      atomic (Jump (convention cc, p, List.map actual a's, tgts))
+  | A.CutStmt (e, a's, flows) ->
+      atomic (Cut (e, List.map actual a's, flows))
+  | A.ReturnStmt (cc, alt, a's) ->
+      atomic (Return (convention cc, alt, List.map actual a's))
+  | A.EmptyStmt
+  | A.CommentStmt _   ->
+      k id imports exports consts types regs archs data in
+stmt r s k
+<<nast.ml>>=
+and arm r imports exports consts types regs archs data a k = match a with
+| A.ArmAt (a,r) -> arm r imports exports consts types regs archs data a k
+| A.Case (ranges,bs) -> 
+    bodies r imports exports consts types regs archs data bs
+      (fun stmts imports exports consts types regs archs data ->
+        k (ranges, stmts) imports exports consts types regs archs data) 
+and arms r = kmap arm (fun x y -> x::y) r
+@
+A section simply accumulates data.
+<<nast.ml>>=
+let rec section r imports exports consts types regs archs data s k = match s with
+| A.SectionAt (s,r) ->
+    section r imports exports consts types regs archs data s k
+| A.Decl d ->
+    decl    r imports exports consts types regs archs data d k
+| A.SSpan(key, v, ss) ->
+    sections r imports exports consts types regs archs [] ss
+      (fun imports exports pconsts ptypes pregs archs sdata ->
+        k imports exports pconsts ptypes pregs archs (SSpan (key, v, sdata) :: data))
+| A.Datum d ->
+    k imports exports consts types regs archs (add_datum r d data)
+| A.Procedure(cc,p,fs,bs) ->
+    bodies r imports exports [] [] [] archs [] bs
+    (fun ss imports exports pconsts ptypes pregs archs pdata ->
+      let cdecls = { constants = pconsts; types = ptypes } in
+      let p = { cc = convention cc; name = p; formals = List.map formal fs; code = ss;
+                locals = List.flatten pregs; pdecls = cdecls; stackdata = pdata; } in
+      k imports exports consts types regs archs (Procedure p :: data))
+and sections r = kmap_none section r
+@ 
+<<nast.ml>>=
+let rec toplevel r imports exports consts types regs archs data t k = 
+  let cons s ss = (s, r) :: ss in
+  match t with
+  | A.ToplevelAt(t,r) -> toplevel r imports exports consts types regs archs data t k
+  | A.Section(name, ss) ->
+      sections r imports exports consts types regs archs [] ss
+        (fun imports exports consts types regs archs sdata ->
+          k (cons (name, sdata)) imports exports consts types regs archs data)
+  | A.TopDecl d ->
+      decl r imports exports consts types regs archs data d (k id)
+  | A.TopProcedure p ->
+      let t = A.Section(default_proc_section, [A.Procedure p]) in
+      toplevel r imports exports consts types regs archs data t k
+
+let program ts =
+  kmap toplevel (fun add t -> add t) Srcmap.null [] [] [] [] [] [] [] ts
+    (fun ss imports exports consts types regs archs sdata ->
+      let _ = if not (null sdata) then Impossible.impossible "some toplevel data" in
+      { target = List.flatten archs; imports = imports; exports = exports;
+        globals = List.flatten regs; sections = sdata;
+        udecls = { types = types; constants = consts };
+      })
+  
