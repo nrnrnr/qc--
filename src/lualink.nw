@@ -744,11 +744,11 @@ C.register_module "Unsupported"
 let floats ws _ (g, proc) =
   let rml = proc.Proc.target.Target.rounding_mode in
   let rm  = Rtlutil.fetch rml in
-  let g   = G.rtl_map (Widen.float ~rm ws) g in
+  let g   = G.map_rtls (Widen.float ~rm ws) g in
   (g, proc), true in
 
 let const n _ (g, proc) =
-  let g = G.rtl_map (Widen.store_const n) g in
+  let g = G.map_rtls (Widen.store_const n) g in
   (g, proc), true in
 
 let op_count _ (g, proc) =
@@ -792,14 +792,14 @@ let dpwiden _ (g, proc) =
   let premature_optimization g =
     let exists_rtl f g = Impossible.unimp "exists_rtl" in
     if exists_rtl (Widen.needs_widening proc.Proc.target) g then
-      (G.rtl_map (upd (Widen.dpwiden (g, proc))) g, proc), true
+      (G.map_rtls (upd (Widen.dpwiden (g, proc))) g, proc), true
     else
       (g, proc), false in
-  (G.rtl_map (upd (Widen.dpwiden (g, proc))) g, proc), true in
+  (G.map_rtls (upd (Widen.dpwiden (g, proc))) g, proc), true in
 
 let widenlocs _ (g, proc) =
   let upd g r = if Widen.needs_widening proc.Proc.target r then g r else r in
-  (G.rtl_map (upd (Widen.widenlocs proc.Proc.target)) g, proc), true in
+  (G.map_rtls (upd (Widen.widenlocs proc.Proc.target)) g, proc), true in
 
 C.register_module "Widen" 
  [ "x86_floats",          Map.stage.V.embed (floats [80])

@@ -300,12 +300,16 @@ val iter_nodes :
 val iter_rtls : (Rtl.rtl -> unit) -> graph -> unit
 @ 
 <<zipcfg.mli>>=
-val rtl_map  : (Rtl.rtl -> Rtl.rtl) -> graph    -> graph
-val rtl_mapl : (Rtl.rtl -> Rtl.rtl) -> Rep.last -> Rep.last
+val map_rtls : (Rtl.rtl -> Rtl.rtl) -> graph    -> graph
+val map_nodes :
+  (Rep.first -> Rep.first) -> (Rep.middle -> Rep.middle) -> (Rep.last -> Rep.last) ->
+  graph -> graph
 @ 
 <<zipcfg.mli>>=
 val new_rtlm : Rtl.rtl -> Rep.middle -> Rep.middle
 val new_rtll : Rtl.rtl -> Rep.last   -> Rep.last
+val map_rtlm : (Rtl.rtl -> Rtl.rtl) -> Rep.middle -> Rep.middle
+val map_rtll : (Rtl.rtl -> Rtl.rtl) -> Rep.last   -> Rep.last
 @ 
 \paragraph{Observing data flow}
 As noted above a node can contribute defs, uses, and kills to each
@@ -784,7 +788,7 @@ let new_rtlm rtl m = match m with
 | Assertion r    -> Assertion rtl
 | Stack_adjust r -> Stack_adjust rtl
 <<zipcfg.ml>>=
-let rtl_mapl map l = match l with
+let map_rtll map l = match l with
 | Exit    _ -> l
 | Branch  (r, l) -> Branch (map r, l)
 | Cbranch (r, t, f) -> Cbranch (map r, t, f)
@@ -795,14 +799,26 @@ let rtl_mapl map l = match l with
 | Jump    (r, uses, tgts) -> Jump (map r, uses, tgts)
 | Forbidden r -> Forbidden (map r)
 
-let rtl_map map g =
+let map_rtlm map m = match m with
+| Instruction r  -> Instruction (map r)
+| Assertion r    -> Assertion (map r)
+| Stack_adjust r -> Stack_adjust (map r)
+
+let map_rtls map g =
   let block (f, t) =
     let rec tail t = match t with
-    | Tail (Instruction r, t) -> Tail (Instruction (map r), tail t)
-    | Tail (Assertion r, t) -> Tail (Assertion (map r), tail t)
-    | Tail (Stack_adjust r, t) -> Tail (Stack_adjust (map r), tail t)
-    | Last l -> Last (rtl_mapl map l) in
+    | Tail (m, t) -> Tail (map_rtlm map m, tail t)
+    | Last l -> Last (map_rtll map l) in
     (f, tail t) in
+  UM.map block g
+
+<<zipcfg.ml>>=
+let map_nodes first middle last g =
+  let block (f, t) =
+    let rec tail t = match t with
+    | Tail (m, t) -> Tail (middle m, tail t)
+    | Last l -> Last (last l) in
+    (first f, tail t) in
   UM.map block g
 @ 
 <<zipcfg.ml>>=
