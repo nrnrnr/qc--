@@ -99,10 +99,6 @@ During the first pass the types of constants are unknown. In order to
 keep things simple we do not introduce an [[option]] type but simply
 abuse the [[bool]] type.
 
-<<>>=
-let pointer     = Types.Bits(32) 
-let dummy       = Types.Bool
-@
 
 % ------------------------------------------------------------------ 
 \subsection{Printing the Symbol Table}
@@ -165,14 +161,14 @@ let ppEnv env =
 
 In the first phase global symbols are entered into an initially empty
 symbol table.  Except for constants all global symbols are either
-given their declared type or [[pointer]] in case they denote a label
-or procedure. The functions that implement the first phase take a
-symbol table [[env]] as one of their arguments and return an enlarged
-symbol table that contains the global symbols. In case of an error the
-symbol table at the place where the error is caught is returned as a
-result. This throws away all additions to the symbol table from a
-deeper nesting. Currently only multiple definitions of symbols can
-cause errors in the first phase.
+given their declared type or [[pointer]] in case they denote a
+procedure and [[data]] in case of a data label.  The functions that
+implement the first phase take a symbol table [[env]] as one of their
+arguments and return an enlarged symbol table that contains the global
+symbols.  In case of an error the symbol table at the place where the
+error is caught is returned as a result.  This throws away all
+additions to the symbol table from a deeper nesting.  Currently only
+multiple definitions of symbols can cause errors in the first phase.
 
 
 \begin{table}
@@ -181,7 +177,7 @@ cause errors in the first phase.
         Object      & Kind          & Type \\ \hline
         Procedure   & [[Memory]]    & [[pointer]]  \\
         Code Label  & [[Memory]]    & [[pointer]]  \\
-        Data Label  & [[Memory]]    & [[pointer]]  \\
+        Data Label  & [[Memory]]    & [[data]]     \\
         Register    & [[Register]]  & as declared  \\
         Import      & [[Memory]]    & as declared  \\
         Constant    & [[Constant]]  & [[dummy]]    \\
@@ -190,6 +186,20 @@ cause errors in the first phase.
     \label{tab:phase1}
     \end{center}
 \end{table}
+
+<<type aliases>>=
+let bitsc x         = Types.Bits(Types.Const(x))
+let bitsv x         = Types.Bits(Types.Var(x))
+let bits  x         = Types.Bits(x)
+let bool            = Types.Bool
+let proc args res   = Types.Procedure(args,res)
+let word            = bits 32   (* for now *)
+let pointer         = bits 32
+let data            = bits 16
+let char            = bits 8
+let uchar           = bits 16
+let dummy           = bool
+@
 
 <<phase1 module>>=
 module Phase1 = struct
@@ -206,7 +216,7 @@ let rec ty = function
 
 let rec datum env = function
     | DatumAt(x,r)        -> catch' env (errorRegPrt r) (datum env) x
-    | Label(n)            -> enter_ok n (pointer,Memory) env
+    | Label(n)            -> enter_ok n (data,Memory) env
     | _                   -> env
     
 let formal env ( h, v, t, n) = env
@@ -324,13 +334,6 @@ module Prim = struct
 end
     
 <<primitives>>=
-let bitsc x         = Types.Bits(Types.Const(x))
-let bitsv x         = Types.Bits(Types.Var(x))
-let bits  x         = Types.Bits(x)
-let bool            = Types.Bool
-let proc args res   = Types.Procedure(args,res)
-let word            = bits 32   (* for now *)
-let char            = bits 8
 
 let add  = function
     | [IntConst(x);IntConst(y)] -> IntConst(x+y)
@@ -543,7 +546,7 @@ let rec tyFetch env = function
                     | Some a when is2power a -> a 
                     | Some a -> error "alignment not a power of 2"  
         in match tye with
-           | t when t = pointer -> t
+           | t when t = data -> t
            | otherwise          -> error "expression is not of pointer type"
 
 and tyPrimOp env op args =
@@ -653,7 +656,7 @@ let rec lvalue env = function
     | LValueAt (lv, r)   -> lvalue env lv
     | Var(name)          -> lookup name env
     | Mem(t, e, a)      -> 
-        if tyExpr env e != pointer then 
+        if tyExpr env e != data then 
             error "expression is not a pointer type"
         else 
         ( match a with
@@ -674,7 +677,7 @@ let rec lhs env = function
 let rec collectCont env ss = 
     let rec loop env = function
         | StmtAt(x,_)             -> loop env x
-        | ContStmt(n,ns)          -> shadow_ok n (pointer,Continuation) env
+        | ContStmt(n,ns)          -> shadow_ok n (data,Continuation) env
         | SpanStmt(e1,e2,ss)      -> collectCont env ss
         | IfStmt ( e, ss1, ss2)   -> 
             let env'  = collectCont env  ss1 in
@@ -939,6 +942,7 @@ open Ast
 open Pp
 open Error
 
+<<type aliases>>
 <<symtab>>
 
 <<print module>>
