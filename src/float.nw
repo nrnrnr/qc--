@@ -1,0 +1,39 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+\section{Support for floating-point numbers}
+
+Different targets may have different support for floating-point
+computation.
+We encapsulate this support as [[Float.t]].
+A~[[Float.t]] represents a specification of the semantics of all
+floating-point operations, as well as translation from literals to bit
+vectors. 
+
+At present, a [[Float.t]] has a name, which can be compared with a
+[[target]] declaration in a {\PAL} program.
+And function [[of_string t]] can convert a floating-point literal to a
+bit vector.
+<<float.mli>>=
+type t
+
+val name      : t -> string
+val of_string : t -> string -> Rtl.width -> Bits.bits
+
+val ieee754 : t    (* standard IEEE 754 semantics *)
+val none    : t    (* for machines without floating-point support *)
+@ 
+The implementation does not exist.
+<<float.ml>>=
+type t = string
+let name n = n
+let of_string _ _ _ = Impossible.unimp "Float.t"
+let ieee754 = "ieee754"
+let none = "none"
+@ 
