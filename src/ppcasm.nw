@@ -202,7 +202,12 @@ val mutable _section = "bogus section"
 <<assembly methods>>=
 method org n = fprintf _fd ".org %d\n" n
 method align  n = 
-  if n <> 1 then fprintf _fd ".align %d\n" n
+  let rec lg = function
+    | 0 -> 0
+    | 1 -> 0
+    | n -> 1 + (lg (n/2))
+ in
+  if n <> 1 then fprintf _fd ".align %d\n" (lg n)
 method addloc n = 
   if n <> 0 then fprintf _fd ".space %d\n"  n
 <<assembly methods>>=
