@@ -1,0 +1,129 @@
+#!/bin/sh
+
+# to get a fresh interpreter, you must run
+# `mk INTERP=xxx update.opt' in the lua directory
+
+PATH=$PATH:../bin
+
+version=fixed_hash
+version=chose_good_sizes
+version=dropped_allocation
+
+function fail {
+  echo "$1 fails on $2" 1>&2
+  exit 1
+}
+
+function badout {
+  echo "$1 produces bad output on $2" 1>&2
+  exit 1
+}
+
+function findsize {
+  case $1 in
+    ackermann) if [ $2 -ge 100 ]; then echo 6; elif [ $2 -gt 10 ]; then echo 4
+               else echo $2
+               fi ;;
+    fibo)      if [ $2 -ge 100 ]; then echo 20; 
+               else echo $2
+               fi ;;
+    *)         echo $2 ;;
+  esac
+}
+
+# hello is a pointless benchmark
+# moments is not usable; requires sort() plus file of numbers
+# regexmatch is not usable; regexp not implemented yet
+# strcat uses a custom string buffer
+# wc requires regexp support
+# wordfreq requires regexp support
+
+FILES="ackermann ary ary2 ary3 fibo hash heapsort lists 
+	methcall nestedloop objinst random reversefile 
+	strcat2 sumcol matrix hash2 sieve spellcheck"
+
+# really cool idea: compute size as function of number of seconds desired!
+# sizes here aim at about 10 seconds
+function goodsize {
+  case $1 in
+    ackermann) echo 6 ;;  # could be 7 if times improve (29sec)
+    matrix) echo 3 ;;
+    ary)  echo 20000 ;;  # notable nonlinearity from 20000 to 40000
+    ary2) echo 20000 ;;  # notable nonlinearity from 20000 to 40000
+    ary3) echo 70    ;;  # expected to be quadratic
+    fibo) echo 27    ;;
+    hash) echo 10000 ;;  # more gets into nonlinear region
+    heapsort) echo 3000 ;; # newcurve pts 200 0.09 1000 1.04 2000 4.0 3000 9.26 4000 16.73
+    lists) echo 1000 ;;
+       # newgraph newline pts 4000 1.68 6000 3.10 8000 4.79 10000 6.78
+    methcall) echo 9000 ;;   # is quadratic for oclbench, linear for lbench
+    nestedloop) echo 6 ;;    # exponential; hard to push to 7
+    objinst)  echo 15000 ;;  # quadratic
+    random)   echo 40000 ;;  # quadratic
+    reversefile) echo 0  ;;  # not used
+    strcat2) echo 9000 ;;    # quadratic, as expected
+    sumcol) echo 0       ;;  # not used
+    matrix) echo 3       ;;  # linear
+    hash2)  echo 6       ;;  # linear
+    sieve)  echo 2       ;;
+    spellcheck) echo 0   ;;  # not used
+    *) findsize $1 $2 $3 ;;
+  esac
+}
+
+function smallsize {
+  case $1 in
+    ackermann) echo 6 ;;  # could be 7 if times improve (29sec)
+    matrix) echo 3 ;;
+    ary) echo 2000 ;;
+  esac
+}
+
+size=${SIZE-2}
+size2=${SIZE2-100}
+
+INTERP=-std
+PROFILE=-p
+
+while [ $# -gt 0 ]; do
+  case $1 in
+    -std|-old|-stdu) INTERP=$1 ; shift ;;
+    -p) PROFILE=-p ; shift ;;
+    -nop) PROFILE= ; shift ;;
+    *) break ;;
+  esac
+done
+
+if [ $# -gt 0 ]; then 
+  FILES="$*"
+fi
+
+for base in $FILES
+do
+  base="`echo $base | sed 's/\.lua$//'`"
+  i="$base.lua"
+  echo $i 1>&2
+  truesize=`goodsize $base $size $size2`
+  for interp in oclbench${INTERP}${PROFILE}.opt  # oclbenchna # lbench oclbench # oclbenchu
+  do
+    if [ -r $i.Input ]; then
+      input=$i.Input
+    else
+      input=/dev/null
+    fi
+    /usr/bin/time -f "at size $truesize, $interp took %e seconds" \
+    /usr/bin/time \
+       -f "version=$version base=$base size=$truesize size2=$size INTERP=$INTERP PROFILE=$PROFILE sec=%e memmax=%M memavg=%K" \
+       -o $i.stats -a \
+      <$input $interp $i $truesize $size2 > $i.out$INTERP$PROFILE || fail $interp $i
+  done
+  case $base in
+     random) tolerance=1.0 ;;
+     heapsort) tolerance=0.5 ;;
+     *)      tolerance=0.01 ;;
+  esac
+  for test in lbench oclbenchna
+  do
+    spiff -r$tolerance $i.out.lbench $i.out.$test > /dev/null || badout $test $i
+  done
+done
