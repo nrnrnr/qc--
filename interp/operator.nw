@@ -91,7 +91,9 @@ NULLARYOP & \emph{unquoted string literal} [[NAME]] & function name stem \\
 \hline
 \end{tabularx}
 
-These macros are joined by cousins: [[IUNARYOP]] is an imperative form of [[UNARYOP]] that has a [[STMS]] argument instead of its [[EXP]] argument; and [[T_BINARYOP]], [[T_UNARYOP]], and [[T_IUNARYOP]] are versions of the above macros that assume all arguments and the return value share the same C type and {\PAL} type (there are no [[TX]], [[TY]], [[BX]], or [[BY]] arguments to these macros).
+These macros are joined by cousins.
+[[IBINARYOP]] is an imperative form of [[BINARYOP]] that has a [[STMS]] argument instead of its [[EXP]] argument.
+[[T_BINARYOP]], [[T_UNARYOP]], and [[T_IBINARYOP]] are versions of the above macros that assume all arguments and the return value share the same C type and {\PAL} type (there are no [[TX]], [[TY]], [[BX]], or [[BY]] arguments to these macros).
 Below is a sample use of these macros, showing how the operators [[leu]] (the unsigned $\le$ operator) and [[com]] (the bitwise negation operator) are defined:
 
 <<sample macro calls>>=
@@ -259,6 +261,7 @@ T_UNARYOP(fneg, -(v1),     v1, float, float32)
 % ----------------------------------------------------------------------------
 
 As with the floating-point operations, we write one macro call per integer operation specified in the {\PAL} documentation.
+
 <<integer operator definitions>>=
 /* INTEGER operators begin here. */
 T_BINARYOP(add,     v1 + v2           , v1, v2, s_int16, bits16)
@@ -269,6 +272,8 @@ T_UNARYOP (bit,     v1                , v1,     bool   , bits1 )
 /* bitExtract  */
 /* bitInsert   */
 /* bitTransfer */
+T_UNARYOP (lobits,  v1                , v1,     u_int32, bits32)
+UNARYOP   (lobits,  v1 & 0xff         , v1,     u_int32, u_int8, bits32, bits8)
 T_UNARYOP (bool,    v1                , v1,     bool   , bits1 )
 /* borrow      */
 /* carry       */
@@ -276,8 +281,11 @@ T_UNARYOP (com,     ~v1               , v1,     u_int16, bits16)
 T_UNARYOP (com,     ~v1               , v1,     u_int32, bits32)
 T_BINARYOP(conjoin, (v1 != 0 ? v2 : 0), v1, v2, bool   , bits1 )
 T_BINARYOP(disjoin, (v1 != 0 ? 1 : v2), v1, v2, bool   , bits1 )
-/* div  */
-BINARYOP  (divu,v1 / v2,  v1,v2, u_int16, u_int8, u_int8,bits16, bits8,  bits8)
+IBINARYOP (div, { div_t temp = div(v1, v2);
+                  ans = (temp.quot < 0 ? temp.quot - (temp.rem > 0)
+                                       : temp.quot + (temp.rem > 0));
+                },    v1,v2,ans, u_int32, u_int16,u_int32,bits32,bits16,bits32)
+BINARYOP  (divu,v1 / v2,  v1,v2, u_int16, u_int8, u_int8 ,bits16,bits8, bits8 )
 BINARYOP  (divu,v1 / v2,  v1,v2, u_int32, u_int16,u_int16,bits32,bits16,bits16)
 BINARYOP  (eq,  v1 == v2, v1,v2, u_int16, u_int16,bool , bits16, bits16, bool )
 BINARYOP  (eq,  v1 == v2, v1,v2, u_int32, u_int32,bool , bits32, bits32, bool )
@@ -297,7 +305,10 @@ BINARYOP  (lt,  v1 <  v2, v1,v2, s_int16, s_int16,bool , bits16, bits16, bool )
 BINARYOP  (lt,  v1 <  v2, v1,v2, s_int32, s_int32,bool , bits32, bits32, bool )
 BINARYOP  (ltu, v1 <  v2, v1,v2, u_int16, u_int16,bool , bits16, bits16, bool )
 BINARYOP  (ltu, v1 <  v2, v1,v2, u_int32, u_int32,bool , bits32, bits32, bool )
-/* mod  */
+IBINARYOP (mod, { div_t temp = div(v1, v2);
+                  ans = (temp.quot < 0 ? temp.rem + v2
+                                       : temp.rem);
+                },    v1,v2,ans, u_int32, u_int16,u_int16,bits32,bits16,bits16)
 BINARYOP  (modu, v1 % v2, v1,v2, u_int16, u_int8, u_int8, bits16,bits8, bits8 )
 BINARYOP  (modu, v1 % v2, v1,v2, u_int32, u_int16,u_int16,bits32,bits16,bits16)
 BINARYOP  (modu, v1 % v2, v1,v2, u_int32, u_int32,u_int32,bits32,bits32,bits32)
@@ -316,17 +327,32 @@ T_BINARYOP(or ,     v1 | v2           , v1, v2, u_int16, bits16)
 T_BINARYOP(or ,     v1 | v2           , v1, v2, u_int32, bits32)
 POPCNT    (u_int16, bits16)
 POPCNT    (u_int32, bits32)
-BINARYOP  (quot, v1 / v2, v1,v2, u_int16,u_int8, u_int8, bits16,bits8, bits8 )
-BINARYOP  (quot, v1 / v2, v1,v2, u_int32,u_int16,u_int16,bits32,bits16,bits16)
+
+/*
+BINARYOP  (quot, v1 / v2, v1,v2, u_int16,u_int8, u_int16,bits16,bits8, bits16)
+BINARYOP  (quot, v1 / v2, v1,v2, u_int32,u_int16,u_int32,bits32,bits16,bits32)
 BINARYOP  (rem,  v1 % v2, v1,v2, u_int16,u_int8, u_int8, bits16,bits8, bits8 )
 BINARYOP  (rem,  v1 % v2, v1,v2, u_int32,u_int16,u_int16,bits32,bits16,bits16)
+*/
+
 ROTL      (u_int16, bits16)
 ROTL      (u_int32, bits32)
 ROTR      (u_int16, bits16)
 ROTR      (u_int32, bits32)
+@ 
+
+According to the C language definition, right-shifting a signed value [[v1]] 
+by [[v2]] number of bits ([[v1 >> v2]]) is non-portable; the result value is
+up to the language implementor.
+As such, we perform logical right-shifts by viewing our arguments as unsigned
+integer in all situations, and arithmetic right-shifts with a few steps of
+arithmetic.
+
+<<integer operator definitions>>=
 T_BINARYOP(shl ,    v1 << v2          , v1, v2, u_int16, bits16)
 T_BINARYOP(shl ,    v1 << v2          , v1, v2, u_int32, bits32)
-/* shra   */
+T_BINARYOP(shra,    v1 / (1 << v2)    , v1, v2, u_int16, bits16)
+T_BINARYOP(shra,    v1 / (1 << v2)    , v1, v2, u_int32, bits32)
 T_BINARYOP(shrl,    v1 >> v2          , v1, v2, u_int16, bits16)
 T_BINARYOP(shrl,    v1 >> v2          , v1, v2, u_int32, bits32)
 T_BINARYOP(sub ,    v1 - v2           , v1, v2, s_int16, bits16)
@@ -339,10 +365,6 @@ T_BINARYOP(xor ,    v1 ^ v2           , v1, v2, s_int32, bits32)
 UNARYOP   (zx  ,    (u_int16) v1      , v1, u_int8 , u_int16, bits8 , bits16)
 UNARYOP   (zx  ,    (u_int32) v1      , v1, u_int16, u_int32, bits16, bits32)
 UNARYOP   (zx  ,    (u_int32) v1      , v1, u_int8 , u_int32, bits8 , bits32)
-
-/* THIS IS A HACK; REMOVE ME!!! -ro */
-T_UNARYOP(lobits, v, v, u_int32, bits32)
-
 /* INTEGER operators end here. */
 @ 
 
@@ -407,7 +429,7 @@ And now for the hackery that lets us define and register operators with the same
 <<operator macro redefinition>>=
 #undef BINARYOP
 #undef UNARYOP
-#undef IUNARYOP
+#undef IBINARYOP
 #undef NULLARYOP
 #undef POPCNT
 
@@ -417,8 +439,8 @@ register_operator(#NAME, op_##NAME##_##BX##_##BY##_##B, 2, #BX "," #BY ":" #B);
 #define UNARYOP(NAME, EXP, X, TX, T, BX, B) \
 register_operator(#NAME, op_##NAME##_##BX##_##B, 1, #BX ":" #B);
 
-#define IUNARYOP(NAME, STMS, X, TX, T, BX, B) \
-register_operator(#NAME, op_##NAME##_##BX##_##B, 1, #BX ":" #B);
+#define IBINARYOP(NAME, STMS, X, Y, RES, TX, TY, T, BX, BY, B) \
+register_operator(#NAME, op_##NAME##_##BX##_##BY##_##B, 2, #BX "," #BY ":" #B);
 
 #define NULLARYOP(NAME, STMS, X, T, B) \
 register_operator(#NAME, op_##NAME##_##B,  0, ":" #B);
@@ -459,7 +481,7 @@ sptr op_##NAME##_##BX##_##B (sptr values) {  \
   return values;                             \
 }
 @ 
-[[NULLARYOP]] and [[IUNARYOP]] are similar, but perform the result computation imperatively (allowing for arbitrary code execution of [[STMS]]).
+[[NULLARYOP]] and [[IBINARYOP]] are similar, but perform the result computation imperatively (allowing for arbitrary code execution of [[STMS]]).
 <<macro definitions>>=
 #define NULLARYOP(NAME, STMS, X, T, B) \
 \
@@ -471,19 +493,22 @@ sptr op_##NAME##_##B (sptr values) {       \
   return values + 1;                       \
 }
 
-/* IUNARYOP is an imperative form of UNARYOP; destroys value at values */
-#define IUNARYOP(NAME, STMS, X, TX, T, BX, B)  \
+/* IBINARYOP is an imperative form of BINARYOP; destroys value at values */
+#define IBINARYOP(NAME, STMS, X, Y, RES, TX, TY, T, BX, BY, B)  \
 \
-sptr op_##NAME##_##BX##_##B (sptr values) {  \
+sptr op_##NAME##_##BX##_##BY##_##B (sptr values) { \
   TX X;                                      \
-  UNDERFLOW_CHECK(values, 1);                \
-  X = VIEW(STACK_ELT(values, 0).BX, TX);     \
+  TY Y;                                      \
+  T  RES;                                    \
+  UNDERFLOW_CHECK(values, 2);                \
+  Y = VIEW(STACK_ELT(values,  0).BY, TY);    \
+  X = VIEW(STACK_ELT(values, -1).BX, TX);    \
   STMS;                                      \
-  VIEW(STACK_ELT(values, 0).B, T) = X;       \
+  VIEW(STACK_ELT(values, 0).B, T) = RES;     \
   return values;                             \
 }
 @ 
-[[T_BINARYOP]], [[T_UNARYOP]], and [[T_IUNARYOP]] are wrapper macros for their cousins; they require fewer type information arguments because they assume that all operator arguments share the same type with the operator return value.
+[[T_BINARYOP]], [[T_UNARYOP]], and [[T_IBINARYOP]] are wrapper macros for their cousins; they require fewer type information arguments because they assume that all operator arguments share the same type with the operator return value.
 <<macro definitions>>=
 #define T_BINARYOP(NAME, EXP, X, Y, T, B)    \
 BINARYOP(NAME, EXP, X, Y, T, T, T, B, B, B)
@@ -491,8 +516,8 @@ BINARYOP(NAME, EXP, X, Y, T, T, T, B, B, B)
 #define T_UNARYOP(NAME, EXP, X, T, B)        \
 UNARYOP(NAME, EXP, X, T, T, B, B)
 
-#define T_IUNARYOP(NAME, STMS, X, T, B)  \
-IUNARYOP(NAME, STMS, X, T, T, B, B)
+#define T_IBINARYOP(NAME, STMS, X, Y, RES, T, B)  \
+IBINARYOP(NAME, STMS, X, Y, RES, T, T, T, B, B, B)
 @ 
 Finally, we write a few extra macros for operators whose return value computations require type-specific information.
 By writing these as macros, we make it much easier to instantiate these operators at different types.

@@ -34,8 +34,13 @@ This document contains the interface and implementation of {\PAL} assembly unit 
 
 To represent an assembly unit in the interpreter, we create the type [[assembly_unit]] to keep track of all information that is common to code in an assembly unit yet not global to the interpreter.
 
+Note that we keep all [[assembly_unit]]s in an implicit chain (using the
+field [[next]]).  We have no way of finding the beginning of the chain, but
+the linking allows us to load in multiple assembly units at once and then
+properly relocate the [[RBlock]]s associated with each one just loaded.
+
 <<type definitions>>=
-typedef struct {
+typedef struct au {
   unsigned   int id;
 
   byte_order byte_order;
@@ -45,6 +50,8 @@ typedef struct {
   RBlock     def_section;
   table      section_table;
   table      label_table;
+
+  struct au *next;
 } assembly_unit;
 @
 
@@ -81,10 +88,9 @@ Note that [[assembly_unit_new]] returns a pointer to an \emph{uninitialized}
 % ----------------------------------------------------------------------------
 
 To create a new [[assembly_unit]], we provide the function [[enter_new_assembly_unit]] to create and initialize a fresh [[struct]].
-This function, for now, returns nothing because its clients do not need to actually access the [[assembly_unit]] record it constructs.
 
 <<function prototypes>>=
-void enter_new_assembly_unit(lua_State *L);
+assembly_unit *enter_new_assembly_unit(lua_State *L);
 @ 
 
 % ----------------------------------------------------------------------------
@@ -167,7 +173,7 @@ void assembly_unit_free_all(void) {
 To create and initialize an [[assembly_unit]] struct, we must make sure to create empty table references and default target-architecture values.
 We use the constants [[#define]]d in [[machine.h]] to initialize the architecture information.
 <<function definitions>>=
-void enter_new_assembly_unit(lua_State *L) {
+assembly_unit *enter_new_assembly_unit(lua_State *L) {
   static unsigned next_au_id = 1;
 
   assembly_unit *au = assembly_unit_new();
@@ -183,6 +189,7 @@ void enter_new_assembly_unit(lua_State *L) {
   au->label_table     = fresh_table();
 
   au->section_table.L = au->label_table.L = L;
+  au->next            = NULL;
 
   /* store assembly_unit in table */
   lua_pushtable(L, assembly_units_table);
@@ -192,12 +199,17 @@ void enter_new_assembly_unit(lua_State *L) {
   lua_pop(L, 1); /* pop the assembly_units_table */
 
   /* reset global variables */
+  if (unit != NULL) {
+    unit->next       = au;
+  }
   unit             = au;
   curr_proc        = NULL;
 
   /* create and enter default section */
   assert(lua_gettop(L) == 0);
   lua_CMM_section(L);
+
+  return au;
 }
 @
 

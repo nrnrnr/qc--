@@ -1144,10 +1144,13 @@ int load_assembly_unit(char *s, assembly_unit_type source_type) {
   lua_State     *L  = assembly_units_table.L;
   RClosure      *cl;
 
-  /* enter a new assembly unit */
-  enter_new_assembly_unit(L);
+  /* enter new assembly unit */
+  assembly_unit *au = enter_new_assembly_unit(L);
 
   if (setjmp(errorjmp)) {
+    /* don't try to apply closures that were created during the bad load */
+    closures_free = closures_base;
+
     if (source_type == SRC_FILE) {
       fprintf(stderr, "error: unrecoverable error; cannot finish loading "
                       "file [%s]\n", s);
@@ -1157,6 +1160,8 @@ int load_assembly_unit(char *s, assembly_unit_type source_type) {
     }
     return 1;
   } else {
+    assembly_unit *temp;
+
     if (source_type == SRC_FILE) {
       <<run Lua source file [[s]]>>
     } else if (source_type == SRC_STRING) {
@@ -1205,14 +1210,20 @@ Once we have finished emitting all bytecode into [[RBlock]]s, we are ready to as
 Here, we run a snippet of Lua code that iterates through all values stored in the Lua section table ([[section_table]])--which should be a table of all [[RBlock]]s created during bytecode generation--and calls the Lua function [[relocate_block]] on each value.
 This Lua function is actually a C function registered with Lua: [[lua_relocate_block]].
 
-<<perform bytecode relocation>>=
-  /* relocate all named sections */
-  lua_error_handle(lua_table_foreach(L, unit->section_table, "relocate_block"),
-                   "<internal code>");
+Note that we loop through all assembly units starting at [[au]].
+This is done because we may have read in multiple assembly units (see
+function [[lua_CMM_new_assembly_unit]] in [[encoding.nw]]).
 
-  /* relocate special block */
-  lua_pushusertag(L, (void *) unit->def_section, lua_RBlock_tag);
-  lua_relocate_block(L);
+<<perform bytecode relocation>>=
+  for (temp = au; temp != NULL; temp = temp->next) {
+    /* relocate all named sections */
+    lua_error_handle(lua_table_foreach(L,temp->section_table,"relocate_block"),
+                     "<internal code>");
+
+    /* relocate special block */
+    lua_pushusertag(L, (void *) temp->def_section, lua_RBlock_tag);
+    lua_relocate_block(L);
+  }
 @ 
 
 Now, each of the [[RBlock]]s we created to store bytecode have been assigned addresses although their contents have yet to be copied to their final memory locations.
@@ -1231,14 +1242,16 @@ We must then make sure to apply all closures stored away in the C [[closures]] a
 Finally, we must make sure to actually copy the contents of the relocated [[RBlock]]s into their permanent memory locations using a helper C function ([[lua_copy_block_contents]]) registered with Lua.
 
 <<perform bytecode relocation>>=
-  /* copy blocks */
-  lua_error_handle(lua_table_foreach(L, unit->section_table, 
-                                     "copy_block_contents"), 
-                   "<internal code>");
+  for (temp = au; temp != NULL; temp = temp->next) {
+    /* copy blocks */
+    lua_error_handle(lua_table_foreach(L, temp->section_table, 
+                                       "copy_block_contents"), 
+                     "<internal code>");
   
-  /* copy special block */
-  lua_pushusertag(L, (void *) unit->def_section, lua_RBlock_tag);
-  lua_copy_block_contents(L);
+    /* copy special block */
+    lua_pushusertag(L, (void *) temp->def_section, lua_RBlock_tag);
+    lua_copy_block_contents(L);
+  }
 @
 
 % ----------------------------------------------------------------------------

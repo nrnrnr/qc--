@@ -126,6 +126,8 @@ It is useful to iterate through all the {\PAL} functions exported to Lua, callin
 F(comment) \
 F(breakpt) \
 \
+F(new_assembly_unit) \
+\
 F(section) \
 F(end_section) \
 F(define_label) \
@@ -190,7 +192,26 @@ lua_CMM_register(lua_interp, #X, (lua_CFunction) lua_CMM_##X);
 
 Now, we must export the encoding functions the Toolkit provides us to Lua.
 
+\subsubsection{Demarcating Assembly Units}
+
+We provide an exported Lua function to mark the beginning of a new assembly
+unit.
+This allows us to concatenate multiple Lua assembly units and store them in
+one file that may be loaded all at once.
+
+Note that this function need not be called from Lua for the first assembly
+unit in a file; we default to creating a new assembly unit when we load in
+a new file anyway.
+
+<<bytecode generation>>=
+int lua_CMM_new_assembly_unit(lua_State *L) {
+  enter_new_assembly_unit(L);
+  return 0;
+}
+@ 
+
 \subsubsection{Structure Related Encoding}
+
 Each {\PAL} section is given its own relocatable block, with all code from the toplevel unnamed section being placed in a special relocatable block.  
 In [[lua_CMM_section]], we maintain a Lua table that maps section labels to their respective blocks.  
 Remember also that sections with the same label are effectively concatenated and placed together in memory.

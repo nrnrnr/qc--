@@ -85,6 +85,7 @@ void init_c_sigs(void);
 #include <lua.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "label.h"
 #include "lualink.h"
 #include "interp.h"
@@ -250,21 +251,23 @@ F(void, RETURNS_VOID) \
 F(int,  RETURNS_VAL )
 
 #define ITERATE_UNARY_C_CALLERS(F) \
-F(u_int16,  u_int16, RETURNS_VAL ) \
-F(u_int32,  u_int32, RETURNS_VAL ) \
-F(int,      int,     RETURNS_VAL ) \
-F(unsigned, pointer, RETURNS_VAL ) \
-F(pointer,  pointer, RETURNS_VAL ) \
+F(u_int16,  u_int16,  RETURNS_VAL ) \
+F(u_int32,  u_int32,  RETURNS_VAL ) \
+F(int,      int,      RETURNS_VAL ) \
+F(unsigned, pointer,  RETURNS_VAL ) \
+F(pointer,  unsigned, RETURNS_VAL ) \
+F(pointer,  pointer,  RETURNS_VAL ) \
 \
-F(int,      void,    RETURNS_VOID) \
-F(char,     void,    RETURNS_VOID) \
-F(unsigned, void,    RETURNS_VOID) \
-F(pointer,  void,    RETURNS_VOID)
+F(int,      void,     RETURNS_VOID) \
+F(char,     void,     RETURNS_VOID) \
+F(unsigned, void,     RETURNS_VOID) \
+F(pointer,  void,     RETURNS_VOID)
 
 #define ITERATE_BINARY_C_CALLERS(F) \
-F(int, int, int,     RETURNS_VAL ) \
+F(int,     int,     int,     RETURNS_VAL ) \
+F(pointer, pointer, pointer, RETURNS_VAL ) \
 \
-F(int, int, void,    RETURNS_VOID)
+F(int,     int,     void,    RETURNS_VOID)
 
 typedef void *pointer;
 
@@ -357,7 +360,11 @@ ITERATE_NULLARY_C_CALLERS(NULLARY_C_CALLER)
 ITERATE_UNARY_C_CALLERS(UNARY_C_CALLER)
 ITERATE_BINARY_C_CALLERS(BINARY_C_CALLER)
 ITERATE_FOURARY_C_CALLERS(FOURARY_C_CALLER)
+@ 
 
+Our ``[[printf]]'' caller is a hack to allow a varargs printing function.
+
+<<function definitions>>=
 sptr c_caller_printf (sptr arguments, void *f) {
   char *fmt = (char *) arguments[0].ptr;
   int   nextarg = 1;
@@ -367,11 +374,15 @@ sptr c_caller_printf (sptr arguments, void *f) {
     if (*fmt == '\0') return arguments;
 
     {
-      char   temp    = fmt[2];
+      char   temp;
+      int    offset;
       value *the_arg = arguments + (nextarg++);
 
-      fmt[2] = '\0';
-      switch(fmt[1]) {
+      offset = (int) strcspn(fmt + 1, "diouxXeEfFgGaAcsCSpn%") + 2;
+      temp   = fmt[offset];
+
+      fmt[offset] = '\0';
+      switch(fmt[offset - 1]) {
       case '%':
         putchar('%');
         nextarg--;
@@ -386,8 +397,8 @@ sptr c_caller_printf (sptr arguments, void *f) {
       default:
         printf(fmt, *(VIEW(the_arg, unsigned *)));
       }
-      fmt[2] = temp;
-      fmt += 2;
+      fmt[offset]  = temp;
+      fmt         += offset;
     }
   }
 }
