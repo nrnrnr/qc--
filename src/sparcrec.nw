@@ -31,7 +31,6 @@ module Up   = Rtl.Up
 
 \subsection{Utilities}
 <<code to precede the labeler>>=
-let cat = String.concat ""
 let infinity = Camlburg.inf_cost
 let guard b = if b then 0 else infinity
 
@@ -48,6 +47,7 @@ let const64 b =
 
 exception Error of string
 let sprintf   = Printf.sprintf
+let s         = Printf.sprintf
 let error msg = raise (Error msg)
 
 let rspace = ('r', R.BigEndian, Cell.of_size 32)
@@ -124,7 +124,7 @@ reg : result_reg {: result_reg :}
 reg : arg_reg {: arg_reg :}
 
 mem   : Fetch(meml, w) {: meml :}
-meml  : Mem(reg, w)    {: "[" ^ reg ^ "]" :} -- indirect
+meml  : Mem(reg, w)    {: s "[%s]" reg :} -- indirect
 
 reg_or_const : reg   {: reg :}
 reg_or_const : const {: const :}
@@ -426,25 +426,25 @@ inst : Nop() {: "! Why do you think there should be a nop? " :}
 
 \paragraph{Diagnostic rules}
 <<rules>>=
-inst: any [1000] {: "<" ^ any ^ ">" :}
+inst: any [1000] {: s "<%s>" any :}
 
 any : True  () {: "True"  :}
 any : False () {: "False" :}
-any : Link(symbol, w) {: "Link(" ^ symbol#mangled_text ^ "," ^ string_of_int w ^ ")" :}
-any : Late(string, w) {: "Late(" ^ string ^ "," ^ string_of_int w ^")" :}
-any : Diff(c1:any,c2:any) {: "Diff(" ^ c1 ^ "," ^ c2 ^ ")" :}
+any : Link(symbol, w) {: s "Link(%s,%d)" (symbol#mangled_text) w :}
+any : Late(string, w) {: s "Late(%s,%d)" string w :}
+any : Diff(c1:any,c2:any) {: s "Diff(%s,%s)" c1 c2 :}
 any : Bits(bits)     {: sprintf "Bits(%s)" (Bits.to_string bits) :}
 
-any : Fetch (any, w) {: "Fetch(" ^ any ^ "," ^ string_of_int w ^ ")" :}
+any : Fetch (any, w) {: s "Fetch(%s,%d)" any w :}
 
-any : And(x:any, y:any) {: "And(" ^ x ^ ", " ^ y ^ ")" :}
-any : Or(x:any, y:any)  {: "Or("  ^ x ^ ", " ^ y ^ ")" :}
-any : Xor(x:any, y:any) {: "Xor(" ^ x ^ ", " ^ y ^ ")" :}
-any : Com(x:any) {: "Com(" ^ x ^ ")" :}
+any : And(x:any, y:any) {: s "And(%s, %s)" x y :}
+any : Or(x:any, y:any)  {: s "Or(%s, %s)" x y :}
+any : Xor(x:any, y:any) {: s "Xor(%s, %s)" x y :}
+any : Com(x:any) {: s "Com(%s)" x :}
 
 
-any : Add(x:any, y:any) {: "Add(" ^ x ^ ", " ^ y ^ ")" :}
-any : Mul(x:any, y:any) {: "Mul(" ^ x ^ ", " ^ y ^ ")" :}
+any : Add(x:any, y:any) {: s "Add(%s, %s)" x y :}
+any : Mul(x:any, y:any) {: s "Mul(%s, %s)" x y :}
 any : Fadd(x:any, y:any) {: sprintf "Fadd(%s, %s)" x y :}
 any : Fsub(x:any, y:any) {: sprintf "Fsub(%s, %s)" x y :}
 any : Fmul(x:any, y:any) {: sprintf "Fmul(%s, %s)" x y :}
@@ -459,21 +459,21 @@ any : BitInsert(x:any, y:any, z:any) {: sprintf "BitInsert(%s, %s, %s)" x y z :}
 any : BitExtract(lsb:any, y:any, n:w) {: sprintf "BitExtract(%s, %s, %d)" lsb y n :}
 any : Slice(n:w, lsb:n, y:any) {: sprintf "Slice(%d, %d, %s)" n lsb y :}
 
-any : Sx(any) {: "Sx(" ^ any ^ ")" :}
-any : Zx(any) {: "Zx(" ^ any ^ ")" :}
+any : Sx(any) {: s "Sx(%s)" any :}
+any : Zx(any) {: s "Zx(%s)" any :}
 any : F2f(n:w, w, any) {: sprintf "F2f(%d, %d, %s)" n w any :}
 any : F2i(n:w, w, any) {: sprintf "F2i(%d, %d, %s)" n w any :}
 any : I2f(n:w, w, any) {: sprintf "I2f(%d, %d, %s)" n w any :}
-any : Lobits(any, w) {: "Lobits(" ^ any ^ ", " ^ string_of_int w ^ ")" :}
-any : Mem(any, w) {: "Mem(" ^any ^ ")" :}
+any : Lobits(any, w) {: s "Lobits(%s, %d)" any w :}
+any : Mem(any, w) {: s "Mem(%s)" any :}
 any : Reg  (char, n:int) {: sprintf "Reg(%s, %d)"   (Char.escaped char) n :}
 any : Store (dst:any, src:any, w)
- {: "Store(" ^ dst ^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
-any : Kill(any) {: "Kill(" ^ any ^ ")" :}
+ {: s "Store(%s,%s,%d)" dst src w :}
+any : Kill(any) {: s "Kill(%s)" any :}
 
-any : Guarded(guard:any, any) {: "Guarded(" ^ guard ^ "," ^ any ^ ")" :}
-any : Par(l:any, r:any) {: "Par(" ^ l ^ "," ^ r ^ ")" :}
-any : Goto(any) {: "Goto(" ^ any ^ ")" :}
+any : Guarded(guard:any, any) {: s "Guarded(%s,%s)" guard any :}
+any : Par(l:any, r:any) {: s "Par(%s,%s)" l r :}
+any : Goto(any) {: s "Goto(%s)" any :}
 @ 
 
 \subsection{Interfacing {\rtl}s with the Expander}
@@ -590,7 +590,7 @@ and effect = function
   | RP.Store(RP.Reg(('c',_,_), i, c), r, _)
     when (i = 1 (* i = npc *)) -> conGoto (exp r)
 (*
-  | RP.Store(RP.Reg('c',i, _), r, w)  -> error ("set $c["^string_of_int i^"]")
+  | RP.Store(RP.Reg('c',i, _), r, w)  -> error (sprintf "set $c[%d]" i)
 *)
   | RP.Store(maybe_spl, RP.App(("add",_), [x;y]), _)
     when (RU.Eq.loc maybe_spl spl && (RU.Eq.exp x sp || RU.Eq.exp y sp)) ->
@@ -628,7 +628,7 @@ let to_asm r =
     let plan = rtl (Down.rtl (Simplify.rtl r)) in
     plan.inst.Camlburg.action ()
   with 
-  | Camlburg.Uncovered -> cat [" not an instruction: " ; RU.ToString.rtl r]
+  | Camlburg.Uncovered -> " not an instruction: " ^ RU.ToString.rtl r
   | Error msg -> (errmsg r msg; " error in recognizer: " ^ msg)
 
 let is_instruction r =
