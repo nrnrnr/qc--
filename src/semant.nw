@@ -546,9 +546,10 @@ module Implode = struct
         let ok = Ok () in
         let rec loop res = function
             | []    -> res
-            | x::xs -> ( match res with
-                       | Error -> ignore (f x); loop Error xs 
-                       | Ok _  -> loop ok xs
+            | x::xs -> ( match res, f x with
+                       | Error, _     -> loop Error xs 
+                       |    _ , Error -> loop Error xs
+                       | _            -> loop ok    xs
                        )
         in
             loop ok l 
@@ -572,7 +573,7 @@ let rec ty = function
     | FloatTy(n)      -> Types.Bits(n)
 
 let rec tyFetch env = function
-    | LValueAt(v,_) -> tyFetch env v
+    | LValueAt(v,r) -> catch (errorRegPrt r) (tyFetch env) v
     | Var(id)       -> ( match lookup id env with
                        | Error       -> Error 
                        | Ok(ty,kind) -> Ok(ty)
@@ -673,10 +674,13 @@ let rec datum env = function
 
 let rec stackdatum env = function
     | DatumAt(x,r)      -> catch' env (errorRegPrt r) (stackdatum env) x
-    | Label(n)          -> env
+    | Label(n)          -> shadow_ok n (data,Memory) env
     | Align(a)          -> if is2power a then env
                            else error ("illegal alignment: " ^ string_of_int a)
-    | MemDecl(t,m,None) -> let _ = memsize env m in env
+    | MemDecl(t,m,None) -> ( match memsize env m with
+                           | Ok _  -> env
+                           | Error -> env
+                           )
     | MemDecl(t,m,_   ) -> error "no initial values allowed for stackdata"
 
 let checkJumpTarget env x =
@@ -950,11 +954,7 @@ let check file =
             ; let ast  = Parse.program scanner lexbuf in
               let env  = Phase1.program ast map in
               let env' = Phase2.eval env        in
-                  ( match Phase3.program env' ast map with
-                  | Error -> Error
-                  | _     -> Ok ()
-                  )
-                    
+                  Phase3.program env' ast map 
             ) 
         with
             | Parsing.Parse_error -> 
