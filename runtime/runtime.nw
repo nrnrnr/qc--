@@ -74,7 +74,6 @@ First, the machine-dependent register information.
 #define NUM_REGS 12
 <<machine-dependent macro definitions for the implementation ((x86-linux))>>=
 #define ESP 8 // r[4]
-#define EBP 9 // r[5]
 #define PC  0 // c[0]
 @ 
 
@@ -131,7 +130,7 @@ Cmm_Activation
 Cmm_YoungestActivation(const Cmm_Cont* t) {
   int i;
   Cmm_Activation a;
-  pc_map_entry* entry = lookup_entry_linear(t->pc);
+  pc_map_entry* entry = Cmm_lookup_entry(t->pc);
   assert(entry);
 
   //print_stack(t->sp);
@@ -171,14 +170,14 @@ Cmm_NextActivation(const Cmm_Activation *a) {
 
   entry = (pc_map_entry*)a->rtdata;
   caller = (Cmm_Word*)((int)a->vfp + decode_offset((unsigned)entry->return_address));
-  entry = lookup_entry_linear((Cmm_Codeptr)*caller);
+  entry = Cmm_lookup_entry((Cmm_Codeptr)*caller);
           
   if (!entry) {
     foreign = 1;
     fp = walk_foreign_frames(fp, na.regs);
     if (fp) {
       caller = (Cmm_Word*)(fp);
-      entry = lookup_entry_linear((Cmm_Codeptr)*caller);
+      entry = Cmm_lookup_entry((Cmm_Codeptr)*caller);
     }
   }
 
