@@ -53,17 +53,20 @@ assembler is functorized over the data type of instructions. This module
 puts a whole procedure body into a single instruction by basically
 treating a control-flow graph as an instruction. 
 
+
 <<ASM>>=
 Asm2.S with type instruction = Proc.t
-       and  type init        = unit
+       and  type init        = Lua.Parser.token (*will change*)
 @
 
 
 <<ast3ir.mli>>=
 module Make (A: <<ASM>>) : sig
-    val translate: Fenv.Clean.env -> Target2.t 
-                                  -> Ast.program 
-                                  -> A.asm
+    val translate: Fenv.Clean.env 
+                -> Target2.t 
+                -> lua:Lua.Parser.token  (* dummy - will change *)
+                -> Ast.program 
+                -> A.asm
 end
 @
 
@@ -96,6 +99,7 @@ module F        = Fenv.Clean
 
 <<auxilliaries>>
 <<ExprTypes>>
+
 module Make (Asm: <<ASM>>) = 
 struct
     module G  = Cfg3 
@@ -1157,7 +1161,7 @@ should be exported but currently it is not.
 \end{quote}
 
 <<Make translate program>>=
-let translate env target prog =
+let translate env target (lua:Lua.Parser.token) prog =
     let mangle   = Asm.mangle (F.nam2sym env) in 
     let base_sym = mangle "global base" in
     let base     = Rtl.link base_sym target.Target.pointersize in (*XXX*)
@@ -1165,7 +1169,7 @@ let translate env target prog =
        ,area
        ,digest   = globals env target base (F.globals env) in
     let digest   = mangle (String.escaped digest) in
-    let asm      = Asm.init () in
+    let asm      = Asm.init lua in
     let asm      = asm ++ Asm.section (target.Target.data_section)
                        ++ Asm.comment "memory for global registers"
                        ++ Asm.align area.Area.align

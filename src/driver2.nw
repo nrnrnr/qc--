@@ -20,6 +20,7 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
     type doc        (* printable document                 *)
     type target     (* target architecture                *)
     type frame      (* container for stack slots          *)
+    type lua        (* lua interpreter *)    
 
     val dummy:      target                  (* our only target right now *)
     
@@ -30,7 +31,7 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
     val emit_asdl:  ast -> unit             (* emit AST in ASDL format *)
     val check:      ast -> env              (* check semantics of AST  *)
 
-    val compile:    ast -> target -> env -> asm
+    val compile:    ast -> target -> env -> lua -> asm
                     (* calls optimize: cfg -> frame -> unit *)
                 
     val assemble:   asm -> doc
@@ -78,8 +79,8 @@ module Personality = struct
     
     let target = Target2.dummy
 
-    let ext (p:Proc.t) target init = 
-        (* call lua function *)
+    let ext (p:Proc.t) target (lua:Lua.Parser.token (*dummy*)) = 
+        (* call lua function using value lua*)
         let () = p.Proc.freeze p in
             Cfg3.ast p.Proc.cfg p.Proc.name p.Proc.mangle target
 end
@@ -96,6 +97,7 @@ type doc    = Pp.doc
 type cfg    = Cfg3.cfg
 type target = Target2.t
 type frame  = Automaton.t
+type lua    = Lua.Parser.token (* dummy *)
 
 <<Caml>>=
 let dummy   = Target2.dummy
@@ -180,9 +182,9 @@ let check (map,ast:ast) =
         Fenv.clean env
 
 <<Caml>>=
-let compile (map,ast:ast) (target:target) (env:env) =
+let compile (map,ast:ast) (target:target) (env:env) (lua:lua) =
     let ()     = Target2.check target env        in   
-        IR.translate env target ast 
+        IR.translate env target lua ast 
 
 <<Caml>>=
 let assemble (asm:asm) = 
