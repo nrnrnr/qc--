@@ -148,13 +148,16 @@ let talloc = Postexpander.Alloc.temp
 @
 \paragraph{Contexts}
 There is no distinction between an integer and an address.
-@
 <<ARM postexpander>>=
-type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-let icontext : context =
-  Talloc.Multiple.reg 't', fun ((c,_,_), _, _) -> c =<= 'r' || c =<= 't'
+let icontext = Context.of_space Spaces.t
 let acontext = icontext
 let itempwidth = 32
+let fcontext = (fun x y -> unimp "no floating point on ARM"), fun _ -> false
+let rcontext = (fun x y -> unimp "no rounding mode on ARM"),  fun _ -> false
+let constant_context w = icontext
+
+let operators = Context.nonbool icontext fcontext rcontext
+let arg_contexts, result_context = Context.functions operators
 @
 \paragraph{Addressing modes}
 <<ARM postexpander>>=
@@ -232,30 +235,6 @@ compile-time constants).
 <<ARM postexpander>>=
 let li  ~dst const = rtl (R.store (tloc dst) (Up.const const) (twidth dst))
 let lix ~dst e     = rtl (R.store (tloc dst) e                (twidth dst))  
-@
-
-% ------------------------------------------------------------------ 
-\subsubsection{Operator contexts}
-% ------------------------------------------------------------------ 
-
-We have no boolean context because boolean operations are rewritten into
-control flow.
-Similarly, we have no floating-point context, and hence no rounding-mode context.
-<<ARM postexpander>>=
-let fcontext = (fun x y -> unimp "no floating point on ARM"), fun _ -> false
-let rcontext = (fun x y -> unimp "no rounding mode on ARM"),  fun _ -> false
-let bcontext = (fun x y -> impossible "allocate from bcontext"), fun _ -> false
-let operators = Context.nonbool icontext fcontext rcontext
-
-let resmap = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators
-let argmap = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
-@
-We have two maps: from operator to argument context, and from operator
-to result context.
-<<ARM postexpander>>=
-let arg_contexts   (n, _) = try SM.find n argmap with Not_found -> assert false
-let result_context (n, _) = try SM.find n resmap with Not_found -> assert false
-let constant_context w = icontext
 @
 
 % ------------------------------------------------------------------ 

@@ -217,10 +217,9 @@ let talloc = Postexpander.Alloc.temp
 let salloc = Postexpander.Alloc.slot
 @ 
 There is some nasty cheating going on regarding the [['o']] registers.
+For this reason, it is not useful to use [[Context.of_space]] and friends.
 (And what about [['l']], [['i']], \ldots?)
 <<SPARC postexpander>>=
-type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-
 let icontext =
   Talloc.Multiple.reg 't',
   fun ((c,_,_), _, _) -> c =<= 'r' || c =<= 't' || c =<= 'o'
@@ -234,6 +233,10 @@ let acontext = icontext
 let rcontext = (fun x y -> unimpf "Unsupported soft rounding mode")
                ,fun ((sp,_,_), i, _) -> sp =<= 'd' && i = 0
 let itempwidth = 32
+
+let operators = Context.nonbool icontext fcontext rcontext
+let arg_contexts, result_context = Context.functions operators
+let constant_context w = icontext
 @ 
 <<SPARC postexpander>>=
 let load ~dst ~addr assn =
@@ -359,21 +362,6 @@ let li  ~dst const =
         (Register.width r) s
 let lix ~dst e = rtl (R.store (R.reg dst) e (reg_width dst))
   (* IS THIS REALLY RIGHT? *)
-@ 
-What do argmap and resmap actually do??
-<<SPARC postexpander>>=
-let bcontext = (fun x y -> imposs "allocate from bcontext"), fun _ -> false
-let operators = Context.nonbool icontext fcontext rcontext
-
-let resmap = List.fold_left (fun m (n,a,r) -> SM.add n r m) SM.empty operators
-let argmap = List.fold_left (fun m (n,a,r) -> SM.add n a m) SM.empty operators
-@ 
-<<SPARC postexpander>>=
-let arg_contexts   (n, _) =
-  try SM.find n argmap with Not_found -> impossf "arg_context %s failed\n" n
-let result_context (n, _) =
-  try SM.find n resmap with Not_found -> impossf "result_context %s failed\n" n
-let constant_context w = icontext
 @ 
 <<SPARC postexpander>>=
 let unop ~dst op x =

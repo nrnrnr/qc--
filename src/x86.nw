@@ -140,11 +140,13 @@ registers as well, even if it would be in a floating-point register on
 an ordinary machine.
 Hence there is only one context: the integer context.
 <<x86 postexpander>>=
-let icontext = Talloc.Multiple.reg 't', fun ((c, _, _), _, _) -> c =<= 'r' || c =<= 't'
+let icontext = C.of_space Spaces.t
+let itempwidth = 32
 let fcontext = icontext  (* required by interface *)
 let acontext = icontext
 let rcontext = icontext
-let itempwidth = 32
+let constant_context w = icontext
+let arg_contexts, result_context = C.functions (C.nonbool icontext fcontext rcontext)
 @ IT WOULD BE GOOD TO RESTRUCTURE THE CONTEXTS AND THE
 [[Talloc.Multiple]] INTERFACE SO THAT REQUESTING A BAD WIDTH COULD
 MAKE A SUITABLE CALL INTO [[Unsupported]].  
@@ -272,12 +274,6 @@ Load immediate is also a simple move.
 <<x86 postexpander>>=
 let li  ~dst const = tempstore dst (Up.const const)
 let lix ~dst e     = tempstore dst e
-@ 
-\subsubsection{Operator contexts}
-Here are contexts for all the operators.
-<<x86 postexpander>>=
-let arg_contexts, result_context = C.functions (C.nonbool icontext fcontext rcontext)
-let constant_context w = icontext
 @ 
 \subsubsection{Operator implementations (with flags)}
 Operator hell (or heaven).

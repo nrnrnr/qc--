@@ -173,14 +173,16 @@ let talloc = Postexpander.Alloc.temp
 @
 \paragraph{Contexts}
 There is no distinction between an integer and an address.
-@
 <<MIPS postexpander>>=
-type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-let icontext = Talloc.Multiple.reg 't', fun ((c,_,_), _, _) -> c =<= 'r' || c =<= 't'
-let fcontext = Talloc.Multiple.reg 'u', fun ((c,_,_), _, _) -> c =<= 'f' || c =<= 'u'
+let icontext = Context.of_space Spaces.t
+let fcontext = Context.of_space Spaces.u
 let acontext = icontext
 let rcontext = (fun x y -> unimp "unsupported soft rounding mode"), Register.eq rm_reg
+
+let operators = Context.nonbool icontext fcontext rcontext
+let arg_contexts, result_context = Context.functions operators
 let itempwidth = 32
+let constant_context w = if w = wordsize then icontext else fcontext
 @
 \paragraph{Addressing modes}
 <<MIPS postexpander>>=
@@ -259,26 +261,6 @@ compile-time constants).
 <<MIPS postexpander>>=
 let li  ~dst const = rtl (R.store (tloc dst) (Up.const const) (twidth dst))
 let lix ~dst e     = rtl (R.store (tloc dst) e                (twidth dst))  
-@
-% ------------------------------------------------------------------ 
-\subsubsection{Operator contexts}
-% ------------------------------------------------------------------ 
-
-We have no boolean context because boolean operations are rewritten into
-control flow.
-<<MIPS postexpander>>=
-let bcontext = (fun x y -> impossible "allocate from bcontext"), fun _ -> false
-let operators = Context.nonbool icontext fcontext rcontext
-
-let resmap = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators
-let argmap = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
-@
-We have two maps: from operator to argument context, and from operator
-to result context.
-<<MIPS postexpander>>=
-let arg_contexts   (n, _) = try SM.find n argmap with Not_found -> assert false
-let result_context (n, _) = try SM.find n resmap with Not_found -> assert false
-let constant_context w = if w = wordsize then icontext else fcontext
 @
 % ------------------------------------------------------------------ 
 \subsubsection{Binary and unary operators}

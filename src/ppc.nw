@@ -22,6 +22,7 @@ val target : Ast2ir.tgt
 val placevars : Ast2ir.proc -> Automaton.t
 @ 
 <<ppc.ml>>=
+module A  = Automaton
 module B  = Bits
 module BO = Bits.Ops
 module R  = Rtl
@@ -32,7 +33,6 @@ module RO = Rewrite.Ops
 module RU = Rtlutil
 module PX = Postexpander
 module T  = Target
-module A  = Automaton
 
 let rtl r = PX.Rtl r
 let (<:>) = PX.(<:>)
@@ -182,33 +182,20 @@ let salloc = PX.Alloc.slot
 @ 
 Contexts.
 <<ppc postexpander>>=
-type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-let icontext = Talloc.Multiple.reg 't', fun ((c,_,_), _, _) -> c =<= 'r' || c =<= 't'
-let fcontext = Talloc.Multiple.reg 'u', fun ((c,_,_), _, _) -> c =<= 'f' || c =<= 'u'
+module C  = Context
+let itempwidth = 32
+let icontext = C.of_space Spaces.t
+let fcontext = C.of_space Spaces.u
 let acontext = icontext
 let rcontext = (fun x y -> Impossible.unimp "Unsupported soft rounding mode")
                ,(function (('d',_,_), 0, R.C 1) -> true | _ -> false)
-let bcontext = (fun x y -> Impossible.impossible "allocate from bcontext")
-               ,fun _ -> false
-let itempwidth = 32
 
-module SM = Strutil.Map
-let operators = Context.nonbool icontext fcontext rcontext
-let operators = List.filter (fun (n,_,_) -> compares n "i2f" <> 0) operators
-let operators = ("i2f", [icontext;rcontext], fcontext) :: operators
-
-(* Hmm, yeah, this is "wrong". *)
-let operators = List.filter (fun (n,_,_) -> compares n "f2f" <> 0) operators
-let operators = ("f2f", [icontext;rcontext], fcontext) :: operators
-
-let resmap    = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators
-let argmap    = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
-let arg_contexts   (n, _) = try SM.find n argmap 
-                            with Not_found -> Impossible.impossible 
-                                    ("cannot find arg context for "^n)
-let result_context (n, _) = try SM.find n resmap
-                            with Not_found -> Impossible.impossible
-                                    ("cannot find result context for "^n)
+let exns = 
+   ["i2f", [icontext;rcontext], fcontext;   (* legitimate exception *)
+    "f2f", [icontext;rcontext], fcontext;   (* "wrong" exception *)
+   ]
+let operators = C.except (C.nonbool icontext fcontext rcontext) exns
+let arg_contexts, result_context = C.functions operators
 let constant_context w = if w > wordsize then fcontext else icontext
 @ 
 A few utility functions for building common RTLs.

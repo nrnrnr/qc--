@@ -117,10 +117,8 @@ let ui = Impossible.unimp
 \paragraph{Contexts}
 Addresses go in the integer registers, so we use these contexts:
 <<ia64 postexpander>>=
-type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-let icontext = Talloc.Multiple.reg 't', fun ((c, _, _), _, _) -> c =<= 'r' || c =<= 't'
-let fcontext = Talloc.Multiple.reg 'u', fun ((c, _, _), _, _) -> c =<= 'f' || c =<= 'u'
-let bcontext = Talloc.Multiple.reg 'w', fun ((c, _, _), _, _) -> c =<= 'p' || c =<= 'w'
+let icontext = Context.of_space Spaces.t
+let fcontext = Context.of_space Spaces.u
 let acontext = icontext
 let itempwidth = 64
 
@@ -198,16 +196,8 @@ let aggregate ~dst ~src = Impossible.unimp "aggregate"
 
 \subsubsection{Operator Contexts}
 <<ia64 postexpander>>=
-module SM = Strutil.Map
 let operators = Context.nonbool icontext fcontext rcontext
-let resmap    = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators
-let argmap    = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
-let arg_contexts   (n, _) = try SM.find n argmap 
-                            with Not_found -> Impossible.impossible 
-                                    ("cannot find arg context for "^n)
-let result_context (n, _) = try SM.find n resmap
-                            with Not_found -> Impossible.impossible
-                                    ("cannot find result context for "^n)
+let arg_contexts, result_context = Context.functions operators
 let constant_context w = icontext
 
 let dblop ~dsthi ~dstlo op x y = Unsupported.mulx_and_mulux()
