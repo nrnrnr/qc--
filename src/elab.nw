@@ -779,7 +779,7 @@ Both result and type are returned.
 and evalPrimOp env op args =
     E.ematch (E.Raise.list (List.map (evalExpr env) args))
     (fun args ->
-        let f , t   = Const.Symbol.lookup op Const.constOps in
+        let f , t   = Value.Ops.lookup op Value.ops in
         let at, av  = List.split args in
         let rt      = Types.appl t at in
             rt, f av
@@ -794,14 +794,14 @@ and literalExpr env str2bits str ty =
     ( function 
     | T.Bool       -> E.error "a value must have type bitsXX"
     | T.Bits width -> 
-        ( try E.Ok(T.bits width, str2bits str width) with
+        ( try T.bits width, Value.Bits (str2bits str width) with
         | Bits.Size     -> E.error "unsupported bits size" 
         | Bits.Overflow -> E.error "value does not fit into type"
         )
     )
     
-<<unused>>=
-and evalExpr' env = function
+<<>>=
+and evalExpr env = function
     | A.ExprAt(x,r)       -> E.catch (error r env) (evalExpr env) x
     | A.Int  (str, Some t)-> literalExpr env Bits.of_stringi str (evalTy env t)
     | A.Int  (str, None)  -> literalExpr env Bits.of_stringi str (E.Ok T.word)
@@ -817,7 +817,7 @@ and evalExpr' env = function
 @
 
 
-<<module Eval>>=
+<<unused>>=
 and evalExpr env = function
     | A.ExprAt(x,r)          -> E.catch (error r env) (evalExpr env) x
     | A.Int   (str, Some t)  -> E.ematch (evalTy env t) 
@@ -840,7 +840,7 @@ Names defined by declarations found in cycles are bound to [[E.Error]]
 in the (fat) environment. Additionally, an error is marked in the
 environment. 
 
-<<>>=
+<<module Eval>>=
 let bindError scope env decls = 
     let bind env ((_,name,_),r) = F.bindv name (r,scope) E.Error env
     in
@@ -1130,7 +1130,7 @@ All primitive runtime operators will go into their own module
 <<>>=
 and tyPrimOp env op args =
     let at = List.map (tyExpr env) args                  in
-    let ot = snd (Const.Symbol.lookup op Const.constOps) in
+    let ot = snd (Value.Ops.lookup op Value.ops) in
         tyAppl ot (E.Raise.list at)
 
 <<>>=
@@ -1218,10 +1218,14 @@ let memsize env = function
     | A.DynSize       -> E.Ok(None)
     | A.NoSize        -> E.Ok(Some 1)
     | A.FixSize(e)    -> E.ematch (Consts.Eval.evalExpr env e)
-        ( function
-        | Types.Bits(_), size
-          when Const.val2i size > 0 -> Some (Const.val2i size)
-        | _                         -> E.error "invalid memory size"
+        ( function 
+        | Types.Bits(_), Value.Bits(bits) ->
+            let size = try Bits.to_int bits with
+                       Bits.Overflow -> E.error "size too big"
+            in 
+                if size > 0 then Some (size)
+                else E.error "invalid memory size"
+        | _ ->       E.error "invalid memory size"
         )
 @    
 
@@ -1510,7 +1514,7 @@ change.
 and primStmt env (left,cc,op,args,fs) =
     let left   = E.Raise.list (List.map (lvalue PrimCall env) left) in
     let env    = foldl (checkFlow false) env fs                     in
-    let opTy   = snd (Const.Symbol.lookup op Const.constOps)        in
+    let opTy   = snd (Value.Ops.lookup op Value.ops)                in
     let args   = List.map snd args                                  in
     let at     = List.map (tyExpr env) args                         in
     let rTy    = tyAppl opTy (E.Raise.list at)                      in
@@ -1564,14 +1568,16 @@ and returnStmt env (cc,alt,args) =
             let e1' = constExpr env e1 in
             let e2' = constExpr env e2 in
                 E.seq' (F.flagError env) (E.Raise.pair (e1',e2'))
-                ( function (tx, x),(ty, y) -> if
+                ( function 
+                | (tx, Value.Bits(x)),(ty, Value.Bits(y)) -> if
                    (  tx = T.word 
                    && ty = T.word 
-                   && Const.val2i x >= 0 
-                   && Const.val2i y >= 0 
-                   && Const.val2i x <= Const.val2i y
+                   && Bits.to_int x >= 0 
+                   && Bits.to_int y >= 0 
+                   && Bits.to_int x <= Bits.to_int y
                    ) then env 
                      else E.error "illegal <x/y> combination"
+                | _ -> E.error "iilegal <x/y> combination"
                 )
 @
 

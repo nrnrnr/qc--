@@ -20,14 +20,47 @@ This module provides a representation and operations on them.
 <<value.mli>>=
 type value  = Bits of Bits.bits
             | Bool of bool
+
+module Ops  : Env.S with type key = string
+val ops     : ((value list -> value) * Types.tyscheme) Ops.env
 @
+
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
 <<value.ml>>=
+module T = Types
+module B = Bits
+
 type value  = Bits of Bits.bits
             | Bool of bool
+
+module Ops  = Env.Make(struct type t=string let compare=compare end)
+
+let zero = function
+    | [Bits(x);Bits(y)] -> Bits(B.zero (B.width x))
+    | _                 -> assert false
+
+let true' = function
+    | [Bool(_);Bool(_)] -> Bool(true)
+    | _                 -> assert false
+
+let ops = Ops.enterList
+    [  "add"    , (zero  , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "+"      , (zero  , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "sub"    , (zero  , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "-"      , (zero  , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "mult"   , (zero  , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "*"      , (zero  , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "eq"     , (true' , T.proc [T.bitsv 1; T.bitsv 1] T.bool)
+    ;  "=="     , (true' , T.proc [T.bitsv 1; T.bitsv 1] T.bool)
+    ;  "<="     , (true' , T.proc [T.bitsv 1; T.bitsv 1] T.bool)
+    ;  ">="     , (true' , T.proc [T.bitsv 1; T.bitsv 1] T.bool)
+    ;  ">"      , (true' , T.proc [T.bitsv 1; T.bitsv 1] T.bool)
+    ;  "<"      , (true' , T.proc [T.bitsv 1; T.bitsv 1] T.bool)
+    ;  "!="     , (true' , T.proc [T.bitsv 1; T.bitsv 1] T.bool)
+    ] Ops.empty
 @
 

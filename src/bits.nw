@@ -26,6 +26,7 @@ Currently 64 bits and less are supported.
 <<bits.mli>>=
 type bits
 type width      = int
+@
 
 The width of a [[bits]] value is determined when it is created. The
 [[width]] function provides access to it. In case the requested size
@@ -153,6 +154,15 @@ val to_string   : radix option -> bits -> string
 @
 
 % ------------------------------------------------------------------ 
+\subsubsection{Operations on [[bits]]}
+% ------------------------------------------------------------------ 
+
+<<>>=
+val zero        : width -> bits
+@
+
+
+% ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
@@ -181,6 +191,10 @@ Values of type [[bits]] are represented as pairs of width and value.
 <<>>=
 type width      = int
 type bits       = width * int64
+@
+
+<<>>=
+let width (w,_) = w
 @
 
 Operations on [[bits]] frequently must [[check]] that the requested
@@ -252,13 +266,13 @@ let of_stringc str width =
             ) 
     
 <<>>=
-let of_int width i =
+let of_int i width =
     let uint64 = U.of_int i in
         ( check width uint64
         ; (width,uint64)
         )
 <<>>=
-let of_int64 width i =
+let of_int64 i width =
     ( check width i
     ; (width,i)
     )
@@ -281,7 +295,11 @@ let to_int (width,uint64) =
 This is buggy: the [[I.to_string]] function considers the [[bits]]
 value as a signed integer. We also ignore the radix for the moment.
 
-<<>>=        
+<<>>=
+type radix      = Oct
+                | Dec
+                | Hex
+
 let to_string radix (width,uint64) = I.to_string uint64 (* wrong *)
 @
 
@@ -289,4 +307,11 @@ let to_string radix (width,uint64) = I.to_string uint64 (* wrong *)
 \subsubsection{Operations on [[bits]]}
 % ------------------------------------------------------------------ 
 
+<<>>=
+let zero w =
+    let z = U.of_int 0 in
+    ( check w z
+    ; (w,z) 
+    )
+@
 
