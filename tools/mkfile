@@ -58,7 +58,7 @@ install.opt:V: install all
 dvi:V:          $INC
 html:V:         $HTML
 
-man:V:          ocamlerror.1 nofake.1 grades.1
+man:V:
 
 test:V:         nofake nofake.nw
 	./nofake -Rnofake nofake.nw | diff - nofake 
@@ -78,8 +78,8 @@ clobber:V: dep-clobber clean
 	rm -f *.ml *.mli
 	rm -f *.mly *.mll
 	rm -f *.aux *.log *.dvi *.tex *.inc *.toc
-	rm -f *.pod *.1
-	rm -f *.html pod2html*
+	rm -f *.1
+	rm -f *.html
 	rm -f *.h *.c
 	rm -f ocamlerror ocamlerror.opt
 	rm -f nofake 
@@ -135,9 +135,6 @@ grades:         grades.nw
 	$NOTANGLE -Rgrades grades.nw > $target
 	chmod +x $target
 
-grades.pod:     grades.nw
-	$NOTANGLE -Rgrades.pod grades.nw > $target
-
 
 # ------------------------------------------------------------------ 
 # extra rules for cases not covered by noweb.mk
@@ -145,20 +142,6 @@ grades.pod:     grades.nw
 
 ocamlscan.mll:  ocamlerror.nw
 	$NOTANGLE -R$target $prereq > $target
-
-ocamlerror.pod: ocamlerror.nw
-	$NOTANGLE -R$target $prereq > $target
-
-nofake.1:Q:       nofake                
-	echo "Trying to use pod2man to build $target"
-	if [ -x "`which $POD2MAN`" ]; then
-	  $POD2MAN $prereq > $target
-	else
-	  echo "No pod2man; no manual." > $target
-	fi
-
-nofake-man.html:    nofake
-	$POD2HTML nofake > $target
 
 newer.inc:      newer.nw
 	$NOWEAVE -delay -autodefs c -index $prereq > $target

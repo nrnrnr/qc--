@@ -93,13 +93,12 @@ clean:V: clean.opt
 clobber:V: dep-clobber clean
 	rm -f ocamlburg ocamlburg.opt ocamlburg.tar.gz
 	rm -f nofake
-	rm -f *.pod *.1
+	rm -f *.1
 	rm -f *.ps *.pdf
 	rm -f $B*.ml $B*.ml[ily] $B*.output
 	rm -f *.aux *.log *.dvi *.tex *.inc *.toc *.html
 	rm -f pp.*
 	rm -f srcmap.*
-	rm -f pod2htm*
 
 # ------------------------------------------------------------------ 
 # rules and tools for OCaml
@@ -180,21 +179,6 @@ ${B}parse.ml: ${B}parse.mly
 ${B}camlburg.o:V:
 	echo "tried to make $target"
 
-ocamlburg.pod:D:  main.nw
-	$NOTANGLE -R$target $prereq > $target
-
-ocamlburgfix.1:DQ: ocamlburgfix
-	echo "Trying to use pod2man to build $target"
-	if [ -x "`which $POD2MAN`" ]; then
-	  $POD2MAN $prereq > $target
-	else
-	  echo "No pod2man; no manual." > $target
-	fi
-
-
-ocamlburgfix-man.html:D: ocamlburgfix
-	$POD2HTML ocamlburgfix > $target
-
 # ------------------------------------------------------------------ 
 # Examples
 # ------------------------------------------------------------------ 
@@ -227,18 +211,6 @@ srcmap.nw:      ../cllib/srcmap.nw
 nofake:         nofake.nw
 	$NOTANGLE -R$target $prereq > $target
 	chmod +x $target
-
-nofake.1:Q:       nofake
-	echo "Trying to use pod2man to build $target"
-	if [ -x "`which $POD2MAN`" ]; then
-	  $POD2MAN $prereq > $target
-	else
-	  echo "No pod2man; no manual." > $target
-	fi
-
-nofake-man.html:    nofake
-	$POD2HTML nofake > $target
-
 
 EXPORT =        README $DEPEND Makefile                           \
                 iburg.mlb                                         \
