@@ -423,7 +423,7 @@ let pointerTy env = E.seq (F.findPointersize env)
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Processing \texttt{target} declarations}
+\subsection{Processing \texttt{target},\texttt{im}-, and \textt{export} declarations}
 % ------------------------------------------------------------------ 
 
 <<module Targets>>=
@@ -458,12 +458,22 @@ and stmt r env = function
     | A.CutStmt _       -> env
     | A.ReturnStmt _    -> env
     | A.EmptyStmt       -> env
+
+<<>>=
+and import r env (s,name) =
+    let sym = Aux.Option.get name s
+    in F.import r sym name env
+
+and export r env (name,s) =
+    let sym = Aux.Option.get name s
+    in F.export r name sym env
+    
 <<>>=
 and decl r env = function
     | A.DeclAt(x,r)     -> decl r env x
     | A.Typedef(d)      -> env
-    | A.Import    _     -> env
-    | A.Export    _     -> env
+    | A.Import (_,ii)   -> foldl (import r) env ii
+    | A.Export (_,ee)   -> foldl (export r) env ee
     | A.Const     _     -> env
     | A.Registers _     -> env
     | A.Target    t     -> foldl (target r) env t
