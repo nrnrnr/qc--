@@ -21,6 +21,10 @@ The data type provided here is in-complete and there will change. The
 main purpose of this module is to provide a centralized defintion and
 documentation for it.
 
+THERE'S A BIT OF A PROBLEM HERE: ALL SORTS OF DATA LEAK INTO
+[[Proc.t]] WHEN IN A JUST WORLD THOSE DATA WOULD BE THE PRIVATE
+PROPERTIES OF THEIR INDIVIDUAL PASSES.  FOR EXAMPLE, [[global_map]]
+SHOULD BE THE PRIVATE PROPERTY OF THE VARIABLE PLACER.
 <<type t>>=
 type overflow = (Block.t list, Block.t list) Call.split_blocks
 type ('automaton, 'cfg, 'cc, 'tgt) t = 
@@ -40,8 +44,9 @@ type ('automaton, 'cfg, 'cc, 'tgt) t =
     ; eqns:           Rtleqn.t list      (* eqns for compile time consts *)
     ; vars:           int                (* number of local vars + parameters *)
     ; nvregs:         int                (* number of non-volatile registers *)
-    ; varMap:         Automaton.loc option array
+    ; var_map:        Automaton.loc option array
                                          (* where variables are stored *)
+    ; global_map:     Automaton.loc array (* where global variables are stored *)
     ; mutable spans:  (string * (Bits.bits * Rtl.exp) list) list
                                          (* runtime data *)
     }
@@ -80,7 +85,9 @@ incoming overflow results, some deallocated by the
                                [[vars]] is the number of parameters plus the number
                                of local variables.
 \item [[nvregs]]:              The number of non-volatile registers in this procedure.
-\item [[varMap]]:              A map from variables to the temps they are placed in.
+\item [[var_map]]:              A map from variables to the temps they are placed in.
+\item [[global_map]]:          A map from the index of a global
+                                variable to the machine location it is placed in.
 \item [[spans]]:               At each call site and continuation, we keep track of
                                information for the runtime system, including
                                relative location of stackdata, spans, etc.

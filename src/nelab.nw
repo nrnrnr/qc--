@@ -76,7 +76,7 @@ type 'a compunit = {
     imports : name list;
     exports : name list;
 *)
-    globals : Fenv.variable list;
+    globals : (name * Fenv.variable) list;
 (*
     constants : (name * bits) list;     (* maybe unnecessary *)
 *)
@@ -475,7 +475,7 @@ let proc env spans p =
     | _ -> impossf "procedure %s is not a procedure?!" p.N.name in
     Procedure
       { env = env; cc = p.N.cc; name = p.N.name; sym = sym; formals = formals;
-        locals = locals; continuations = conts; spans = spans;
+        locals = List.map snd locals; continuations = conts; spans = spans;
         stackmem = stackmem; stacklabels = stacklabels; code = code; }) in
 @ 
 A continuation knows its address (in the form of an empty, unaligned
@@ -560,7 +560,9 @@ let registers_from scope n rs env =
   let rec regs_from prev' n rs env = match rs with
   | [] ->
       let regs = E.ematch (E.Raise.list (List.rev prev')) (fun rs ->
-        List.map (function FE.Variable r, _ -> r | _ -> impossf "non-register") rs) in
+        let unreg = function (n,(FE.Variable r,_)) -> (n,r)
+          | _ -> impossf "nonregister" in
+        List.map unreg rs) in
       env, regs
   | (rgn, (v, hint, t, name, hwreg)) :: rs ->
       let entry = E.seq (Elabexp.elab_ty env t) (fun ty ->
@@ -578,7 +580,8 @@ let registers_from scope n rs env =
             else
               den (FE.RReg r) in
         E.Raise.left (den, ty)) in
-      regs_from (entry::prev') (n+1) rs (F.bindv name (rgn, entry) env) in
+      let named = E.Raise.right (name, entry) in
+      regs_from (named::prev') (n+1) rs (F.bindv name (rgn, entry) env) in
   regs_from [] n rs env in
 <<definitions of name-binding functions>>=
 let formals_from n rs env =

@@ -77,8 +77,6 @@ module S  = Elabstmt
 module T  = Target
 module Up = Rtl.Up
 module W  = Rtlutil.Width
-
-let unimp = Impossible.unimp
 @ 
 Utility functions and so on.
 <<ast2ir.ml>>=
@@ -598,7 +596,7 @@ The procedure calling convention and virtual frame pointer are everywhere.
 The temporaries are not everywhere, but it's convenient to have them
 here anyway.
 <<definition of [[proc]], which translates one procedure>>=
-let proc proc =
+let proc global_map proc =
   let proc_cc  = to_cc proc.N.cc in
   let vfp      = target.T.vfp in (* virtual frame pointer *)
   let temps    = Talloc.Multiple.for_spaces target.T.spaces in
@@ -826,7 +824,8 @@ The main thing here is dealing with all the blocks.
     ; Proc.conts          = contblocks
     ; Proc.vars           = nvars              (* number of variables *)
     ; Proc.nvregs         = RS.cardinal nvregs (* number of non-volatile regs *)
-    ; Proc.varMap         = Array.make nvars None
+    ; Proc.var_map        = Array.make nvars None
+    ; Proc.global_map     = global_map
     ; Proc.spans          = !spans
     } in
 @ 
@@ -856,13 +855,13 @@ A [[datum]] can appear globally inside a section or a section-level
 This code translates global data into assembly actions;
 the [[stackdata]] function handles stack data.
 <<function [[datum]], for initialized and uninitialized data>>=
-let rec datum asm = 
+let rec datum global_map asm = 
   function
     | N.Datalabel l -> asm#label l  
     | N.Align n     -> asm#align n
     | N.InitializedData es -> List.iter (fun (k, t) -> asm#addr k) es
     | N.UninitializedData n -> asm#zeroes n
-    | N.Procedure p -> proc p
+    | N.Procedure p -> proc global_map p
 @
 
 
@@ -892,13 +891,11 @@ DONE; PLEASE REVIEW --CL
 let globals (base:Rtl.exp) vars =
     let t           = target.T.globals base in
     let decls       = Buffer.create 128 in (* initial size - grows as needed *)
-    let to_loc (a:AT.loc) = (unimp "convert AT.loc to Rtl.loc" : Rtl.loc) in
-    let varname loc = unimp "find name of Rtl global variable" in
-    let rec assign bindings var = match var.FE.rhint with
+    let rec assign bindings (name, var) = match var.FE.rhint with
     | FE.RNone | FE.RHint _ -> 
         (* global register w/o hardware annotation *)
         let w     = RU.Width.loc var.FE.loc in
-        let sig'  = Printf.sprintf "[%s %d]" (varname var.FE.loc) w in
+        let sig'  = Printf.sprintf "[%s %d]" name w in
         let ()    = Buffer.add_string decls sig' in
         let loc   = AT.allocate t w "" in
         (var.FE.index, loc) :: bindings   (* could do even better here *)
@@ -906,12 +903,16 @@ let globals (base:Rtl.exp) vars =
         (* global register with h/w annotation *)
         (try
           let loc   = AT.of_loc (Strutil.Map.find hw target.T.named_locs) in
-          let sig'  = Printf.sprintf "[%s %s]" (varname var.FE.loc) hw in            
+          let sig'  = Printf.sprintf "[%s %s]" name hw in            
           let ()    = Buffer.add_string decls sig' in
           (var.FE.index, loc) :: bindings
         with Not_found -> impossible ("unknown h/w register: "^hw)) in
     let bindings = List.fold_left assign [] vars in
-    bindings, AT.freeze t, Digest.string (Buffer.contents decls)    
+    let gmap =
+      let var n = try List.assoc n bindings
+                  with Not_found -> impossf "no global register %d" n in
+      Array.init (List.length vars) var in
+    gmap, AT.freeze t, Digest.string (Buffer.contents decls)    
 @
 We have to deal somehow with the global-register area, i.e., make it consistent.
 The fingerprint [[digest]] for global register declarations is a
@@ -922,29 +923,31 @@ are too long for the linker.
 let emit_global_register_area ~export =
   let base_sym     = F.symbol env "Cmm.global_area" in
   let base         = Rtl.datasym base_sym pointersize in 
-  let bindings, area, digest = globals base prog.N.globals in
+  let gmap, area, digest = globals base prog.N.globals in
   let area         = area.AT.overflow in
   let digest       = "Cmm.globalsig." ^ Idcode.encode digest in
   let asm          = F.asm env in
   let digest       = if export then asm#export digest else asm#import digest in
-  (* must move to placevars and use bindings as a replacement map *)
-  if export then 
-    begin
-      asm#section (target.T.data_section);
-      asm#comment "memory for global registers";
-      asm#align (Block.alignment area);
-      asm#label digest;     (* ensures desired definition is present *)
-      asm#label base_sym;   (* ensures no multiple inconsistent definitions *)
-      asm#addloc (Block.size area)
-    end
-  else
-    let localref = asm#local "Cmm.ref_to_global_area" in
-    begin
-      asm#section (target.T.data_section);
-      asm#label localref;
-      asm#comment "reference to global-register signature";
-      asm#addr (Reloc.Simple.of_sum digest (Bits.zero pointersize))
-    end
+  (* must move to placevars and use gmap as a replacement map *)
+  let _ = 
+    if export then 
+      begin
+        asm#section (target.T.data_section);
+        asm#comment "memory for global registers";
+        asm#align (Block.alignment area);
+        asm#label digest;     (* ensures desired definition is present *)
+        asm#label base_sym;   (* ensures no multiple inconsistent definitions *)
+        asm#addloc (Block.size area)
+      end
+    else
+      let localref = asm#local "Cmm.ref_to_global_area" in
+      begin
+        asm#section (target.T.data_section);
+        asm#label localref;
+        asm#comment "reference to global-register signature";
+        asm#addr (Reloc.Simple.of_sum digest (Bits.zero pointersize))
+      end in
+  gmap
 @
  
 % ------------------------------------------------------------------ 
@@ -970,9 +973,9 @@ declarations.
 let program prog =
   let asm = F.asm env in
   <<supporting functions for fooling with the global-register area>> in
-  emit_global_register_area defineglobals;
+  let global_map = emit_global_register_area defineglobals in
   let section asm (name, data) =
-    asm#section name; List.iter (datum asm) data in
+    asm#section name; List.iter (datum global_map asm) data in
   List.iter (section asm) prog.N.sections;
   asm
 @
