@@ -1,0 +1,123 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*- %
+\section{RTL to Lua}
+
+This file provides functions that convert an RTL to Lua code, readable by 
+the {\PAL} interpreter.
+
+% ------------------------------------------------------------------ 
+\subsection{RTL Lua Representation}
+% ------------------------------------------------------------------ 
+
+To run {\PAL} code through the interpreter, we must first convert it into
+the Lua-based format the interpreter expects.
+This module provides a translation from an RTL to a string representing its
+Lua-style counterpart.
+
+<<rtltolua.mli>>=
+module ToLua: sig
+    val rtl: Rtl.rtl -> out_channel -> unit
+    val exp: Rtl.exp -> string
+end
+@ 
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<rtltolua.ml>>=
+module ToLua = struct
+    <<ToLua>>
+end
+@ 
+
+% ------------------------------------------------------------------ 
+\subsubsection{Conversion to Lua}
+% ------------------------------------------------------------------ 
+
+<<ToLua>>=
+module R    = Rtl.Private
+let fprintf = Printf.fprintf
+@ 
+
+<<ToLua>>=
+let quoted        q = "\"" ^ q ^ "\""
+let parenthesized p = "("  ^ p ^ ")"
+let luafunc       f args = "CMM." ^ f ^ parenthesized args
+
+let const = function
+    | R.Bool(true)    -> quoted "1"
+    | R.Bool(false)   -> quoted "0"
+    | R.Bits b        -> quoted (string_of_int (Bits.U.to_int b))
+
+    | R.Link(sym, w)  -> quoted sym#text
+    | R.Late(name, w) -> quoted name
+@ 
+
+<<ToLua>>=
+(* but what about the operator's return type? *)
+let opr op w = luafunc "apply_operator" 
+                       (String.concat "," (List.map string_of_int w))
+
+let byteorder = function
+  |	Rtl.BigEndian    -> "big"
+  |	Rtl.LittleEndian -> "little"
+  |	Rtl.Identity     -> ""
+
+(* what is identity? *)
+
+let alignment = string_of_int
+
+let rec expr' = function
+    | R.Const c           -> const c
+    | R.Fetch(loc, _)     -> 
+		let (prefix, func_suffix, args) = location' loc in
+		prefix ^ luafunc ("fetch" ^ func_suffix) args
+    | R.App((op, ww), ee) -> (String.concat "\n" (List.map expr' ee)) ^ 
+		                     opr op ww
+@ 
+
+<<ToLua>>=
+and location' = function
+    | R.Cell (sp, agg, width, e, ass) ->
+		(match sp with
+        | 'm' -> (expr' e,
+				  "",
+				  string_of_int width ^ "," ^ byteorder agg ^ "," ^ 
+				     alignment ass)
+		| 'g' -> ("",
+				  "_global",
+				  expr' e)
+        | s   -> ("", "", ""))
+    | R.Var   (name, index, width)     -> ("", "_local", string_of_int index)
+    | R.Slice (w, i, loc)              -> location' loc
+
+(* the last case of Cell is not being properly handled *)
+(* NOTE: R.Slice is not yet being properly handled     *)
+
+let (<<) f g = fun x -> f (g x)
+let expr     = expr'     << Rtl.Convert.exp
+let location = location' << Rtl.Convert.loc
+@ 
+
+<<ToLua>>=
+let effect eff func_prefix =
+    match eff with
+    | R.Kill loc            -> ""
+    | R.Store (loc, exp, w) -> 
+		let (prefix, func_suffix, args) = location' loc in
+		prefix ^ expr' exp ^ 
+		(luafunc (func_prefix ^ "store" ^ func_suffix) args)
+
+let guard = function
+  | R.Const (R.Bool true) -> ""
+  | g                     -> "g"
+
+let print_guarded fd (g, eff) = fprintf fd "%s" (effect eff (guard g))
+
+let rtl' (R.Rtl gg) fd = 
+  match gg with
+  | []     -> fprintf fd "-- skip"
+  | _ :: _ -> List.iter (print_guarded fd) gg
+let rtl = rtl' << Rtl.Convert.rtl
+let exp = expr
+@ 
