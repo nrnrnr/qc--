@@ -106,13 +106,8 @@ module F = Mflow.MakeStandard
      end)   
 @
 
-A return must pass the return address in register \$26. See the
-discussion below in section \ref{alpha:call}. It would be better if we
-could either specify a sequence or, or had the postexpander re-write the
-{\rtl}.
-
 <<alpha.ml>>=
-let return e = R.par [R.store pc e wordsize; R.store (R.reg ra) e wordsize]
+let return e = R.store pc e wordsize
 @
 
 % ------------------------------------------------------------------ 
@@ -402,7 +397,8 @@ The call and return instructions in general do not use the conventional
 registers. Here we expand them such that they do. We also add the
 [[ldgp]] instruction after a [[jsr]]. The [[ldgp]] instruction at the
 beginning of a procedure is added by the assembler module
-\module{alphaasm}.
+\module{alphaasm}. The calling convention ensures that the return
+address is in register \$26 and thus the protocal is followed.
 
 The semantics of [[ldgp]] are captured by the target-specfic operator
 [[alpha_gp]]; it takes as an argument the current PC and returns the
