@@ -679,6 +679,22 @@ let combine_loc bo (l1,w1) l2 =
   | Rtl.LittleEndian -> aux (fun x1 _  -> x1) (fun _  x2 -> x2)
   | Rtl.BigEndian    -> aux (fun _  x2 -> x2) (fun x1 _  -> x1)
 @ 
+<<definition of [[combine_loc]]>>=
+let combine' msb msw lsb lsw =
+  { fetch  = (fun ww -> assert (ww = msw + lsw);
+                        orb ww (zx lsw ww (fetch lsb lsw))
+                               (shl ww (zx msw ww (fetch msb msw)) lsw))
+  ; store  = (fun exp ww -> assert (ww = msw + lsw);
+                            R.par [ store lsb (lobits ww lsw exp              ) lsw
+                                  ; store msb (lobits ww msw (shrl ww exp lsw)) msw ])
+  ; simple = (fun () -> imposs "cannot observe a split Automaton.location")
+  }
+
+let combine_loc' = function
+  | Rtl.Identity     -> imposs "split without byte-ordering"
+  | Rtl.LittleEndian -> (fun b1 w1 b2 w2 -> combine' b2 w2 b1 w1)
+  | Rtl.BigEndian    -> combine'
+@ 
 
 <<shift and mask functions>>=
 let const w k = R.bits (Bits.U.of_int k w) w
