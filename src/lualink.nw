@@ -199,8 +199,8 @@ struct
       let ( --> )  = V.( --> )
       let ( **->> ) x y = x **-> V.result y 
       let ( *****->> ) = V.dots_arrow
-      let ( ||| ) = V.( ||| )
-      let ( >>= ) = V.( >>= )
+      let ( <|> ) = V.( ||| )
+      let ( <@ ) = V.( >>= )
       <<export goodies to Lua>>
     end (*M*)
 end (*MakeLib*)
@@ -311,13 +311,13 @@ let growth    = stringtab "memory growth"
 
 <<embedding/projection pairs for calling conventions>>=
 let choice_pred =
-  (V.string >>= A.is_hint)  |||
-  (V.int    >>= A.is_width) |||
-  (V.unit   >>= (fun () -> A.is_any)) |||
+  (V.string <@ A.is_hint)  <|>
+  (V.int    <@ A.is_width) <|>
+  (V.unit   <@ (fun () -> A.is_any)) <|>
   V.func (V.string **-> V.int **->> V.bool) in
 
 let stage stages =
-  (V.list stages >>= (fun l -> List.fold_right A.( *> ) l A.unit)) |||
+  (V.list stages <@ (fun l -> List.fold_right A.( *> ) l A.unit)) <|>
   Map.ccstage in
 let stage = stage (stage (stage (stage (stage (stage Map.ccstage))))) in
 @

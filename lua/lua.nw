@@ -155,25 +155,26 @@ arguments.
   val choose : alt list -> value        (* dispatch on type/number of args *)
 @ 
 It's also possible to combine multiple types for a single argument.
-The idea is just like parsing combinators.
-We can use the choice operator [[|||]] to combine two maps.
-To project, map [[t ||| t']] projects using [[t]] if~[[t]] claims to
+The idea is just like parsing combinators, and we use notation from
+Jeroen Fokker's paper \emph{Functional Parsers}.
+We can use the choice operator [[<|>]] to combine two maps.
+To project, map [[t <|> t']] projects using [[t]] if~[[t]] claims to
 recognize the argument.  
 If [[t]]~does not recognize the argument, the map projects
 using~[[t']].
-To embed, map [[t ||| t']] always embeds using [[t']].
+To embed, map [[t <|> t']] always embeds using [[t']].
 
 We can use the continuation operator [[>>=]] to apply a function to a
 value after projection.
-To project, the map [[t >>= f]] applies~[[f]] to the result of
+To project, the map [[t <@ f]] applies~[[f]] to the result of
 projecting with~[[t]].
-Because function~[[f]] cannot be inverted, the map [[t >>= f]] is not
+Because function~[[f]] cannot be inverted, the map [[t <@ f]] is not
 capable of embedding.
-It is therefore useful primarily on the left-hand side of the [[|||]]
+It is therefore useful primarily on the left-hand side of the [[<|>]]
 operator. 
 <<lua.mli>>=
-  val ( ||| ) : 'a map -> 'a map -> 'a map 
-  val ( >>= ) : 'a map -> ('a -> 'b) -> 'b map   (* apply continuation after project *)
+  val ( <|> ) : 'a map -> 'a map -> 'a map 
+  val ( <@  ) : 'a map -> ('a -> 'b) -> 'b map   (* apply continuation after project *)
 end
 @ 
 Here's an example: we embed the [[String.sub]] function, then apply
