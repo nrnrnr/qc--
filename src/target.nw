@@ -22,16 +22,49 @@
 
 The {\qcc} compiler aims to be a cross-compiler which means the same
 compiler can compile {\PAL} programs for different target platforms. 
-To inform especially the code generating phases of the compiler about
-a platform's idiosyncrasies, they are bundeled together into a type
-[[info]], that is provided by this module.
+Consequently, the current target must be described by an {\ocaml}
+value rather than a module, since the latter can not be passed at
+run-time of the compiler. 
+
+Informations about the target do not only include the sizes of
+pointers and the byte order, but also functions that create and
+recognize {\rtl}s.  Although functions and simple values can be
+combined in a tuple or record value, an object seems to be an even
+better fit.  In addition, classes allow to exploit similarities
+between targets by inheritance.
 
 % ------------------------------------------------------------------ 
 \subsection{Interface}
 % ------------------------------------------------------------------ 
 
-The interface merely provides a type [[info]] that bundles a platform's
-properties. These are:
+A target platform includes informations about the target's hardware
+architecture and conventions shared by other software running on the
+platform.  An important aspect of the latter are the calling
+conventions between code.
+
+<<target.mli>>=
+module StrMap:  Map.S with type key = string
+<<class type cc>>
+<<class type t>>
+<<dummy target>>
+@
+
+In {\PAL} values are passed in three different contexts:  into a
+procedures, returned by a procedure, into a continuation.  A calling
+convention provides an automaton that models the convention for the
+particular context and the stack pointer used by the convention.
+
+<<class type cc>>=
+class type cc = object
+    method sp:             Rtl.location    (* stack pointer *)
+    method proc_param:     Automaton.t         
+    method proc_result:    Automaton.t
+    method cont_param:     Automaton.t  
+end
+@
+
+A target is described by a lot of simple values denoting sizes of
+pointers and such:
 
 \begin{itemize}
 \item The byteoreder, or endianness.
@@ -39,7 +72,7 @@ properties. These are:
 \item The smallest number of bits in an adresseable memory unit. This
       is typically a byte, i.e.~8 bits.
 \item Norms that define the interpretation of characters and floating point
-      numbers.
+      numbers. \emph{This is more platform, than architecture specific.}
 \item A map [[conv]] of calling conventions.
 \item An automaton that determines the allocation of hardware registers
       for global registers.  
@@ -47,106 +80,157 @@ properties. These are:
       hardware register.
 \end{itemize}
 
-<<target.mli>>=
-module StrMap : Map.S with type key = string
-
-<<type conv>>
-<<type info>>
+<<class type t>>=
+class type t = object
+    <<class type t body>>
+end
 @
 
-\begin{quote}
-\emph{Candidates for [[info]]: the target assembler, the list of
-strings to initialize the target assembler}
-\end{quote}
-
-<<type info>>=
-type info =     { name          : string (* name of this target *)
-                ; byteorder     : Rtl.aggregation
-                ; wordsize      : int
-                ; pointersize   : int
-                ; memsize       : int           
-                ; float         : string (* like "ieee754" *) 
-                ; charset       : string (* like "latin1" - belongs here? *) 
-                ; conv          : conv StrMap.t
-                ; globals       : Automaton.t (* global reg allocation *)
-                ; regmap        : Rtl.location StrMap.t
-                }
+<<class type t body>>=
+method name:           string                  (* like sparc or i386   *)
+method byteorder:      Rtl.aggregation         (* big/small endian     *)
+method wordsize:       int                     (* in bits              *)
+method pointersize:    int                     (* in bits              *)
+method memsize:        int                     (* in bits, 8 typical   *)
+method float:          string                  (* "ieee754" typical    *)
+method charset:        string                  (* "latin1"  typical    *)
+method cc:             cc StrMap.t             (* calling conv by name *)
+method globals:        Automaton.t             (* global reg alloc     *)
+method registers:      Rtl.location StrMap.t   (* registers by name    *)
 @
 
-A single target can support mutiple calling conventions. A
-convention [[conv]] includes:
+A {\PAL} source code contains some informations about the target it is
+intended for.  The [[validate]] method returns [[true]] if the actual
+target is compatible to the claims in the source file, and raises the
+[[Error.ErrorExn]] exception otherwise.
 
-\begin{itemize}
-\item A location [[sp]] for the stack pointer.
-\item Automata that determine register for parameters passed to a
-      procedure ([[proc_param]]), returned by a procedure
-      ([[proc_result]]), or passed to a continuation ([[cont_param]]).
-\end{itemize}      
-
-<<type conv>>=
-type conv =     { sp            : Rtl.location (* stack pointer *)
-                ; proc_param    : Automaton.t
-                ; proc_result   : Automaton.t
-                ; cont_param    : Automaton.t
-                }
+<<>>=
+method validate: Fenv.Clean.env -> bool
 @
 
+% ------------------------------------------------------------------ 
+\subsubection{Dummy Target}
+% ------------------------------------------------------------------ 
 
-Some target platform properties are stated in a {\PAL} program. The
-[[validate]] function checks that the claims made there are compatible
-with a given platform:
+The [[dummy]] target is a fictious target to be used during
+development.  Its main characteristic is the the lack of
+sophistication, hence the name.
 
-<<target.mli>>=
-val validate: Fenv.Clean.env -> info -> bool
+<<dummy target>>=
+val dummy: t
 @
-
-In case the informations found in the fat environment are
-incompatible, an error message is issued as a side effect and
-[[false]] is returned.  On the other hand, ff the source code and the
-target are found to be compatible, the result is [[true]].
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
+The implementation first has to provide types declared in the
+interface.  In addition, modules used by the implementation are
+declared.
+
 <<target.ml>>=
-module F      = Fenv.Clean
 module E      = Error
+module F      = Fenv.Clean
 module StrMap = Map.Make(struct type t=string let compare=compare end)
+
+<<class type cc>>
+<<class type t>>
 @
 
-An implementatio first has to provide to type already declared in the
-interface: 
+% ------------------------------------------------------------------ 
+\subsubsection{The dummy target}
+% ------------------------------------------------------------------ 
+
+First some auxiliary functions.  The [[reg]] function creates a 32bit
+register, addressed by 4 bit number [[n]].
 
 <<>>=
-<<type conv>>
-<<type info>>
+let reg n = 
+    Rtl.Cell( 'r' 
+            , Rtl.BigEndian 
+            , 32
+            , Rtl.Const(Rtl.Bits(Bits.of_int n 4,4))
+            , -1
+            ) 
 @
 
-The [[valid]] predicate just checks entries that can be checked and
+The class for the dummy's calling convention. A single instance is
+created below.
+
+<<>>=
+class dummycc: cc = object 
+    method sp          = reg 8
+    method proc_param  = Automaton.Build.cc   
+    method proc_result = Automaton.Build.cc 
+    method cont_param  = Automaton.Build.cc 
+end
+
+<<>>=
+class dummytarget: t = object (self)
+    <<dummy object body>>
+end
+@
+
+We only need one instance of the [[dummytarget]] class. Since only the
+instance is exported and not the class definition it is impossible for
+clients to create more instances. 
+
+<<>>=
+let dummy = new dummytarget
+@
+
+
+<<dummy object body>>=
+method name            = "dummy"
+method byteorder       = Rtl.BigEndian 
+method wordsize        = 32
+method pointersize     = 32
+method memsize         = 8
+method float           = "ieee754"
+method charset         = "latin1"
+method cc              = StrMap.add "C--" (new dummycc) StrMap.empty
+method globals         = Automaton.Build.globals
+@
+
+The [[dummy]] target has a set of 8 universal [[registers]] which we
+construct below. The registers are addressed by 4-bit numbers $0--7$. 
+
+<<>>=
+method registers = 
+    let name n = Printf.sprintf "r%d" n in
+    let rec loop map = function
+            | -1  -> map
+            | n   -> loop (StrMap.add (name n) (reg n) map) (n-1)
+        in
+            loop StrMap.empty 7
+@
+
+
+
+The [[validate]] predicate just checks entries that can be checked and
 emits error messages if informations do not match.
 
 <<>>=
-let validate env info = 
+method validate env = 
     let error x = 
         ( E.errorPrt ("The target declartion for "^x^" is not compatible with the actual target") 
         ; false
         ) in
-        if      ( match (F.findEndianness env), info.byteorder with
+        if      ( match (F.findEndianness env), self#byteorder with
                 | F.Big   , Rtl.BigEndian    -> false
                 | F.Little, Rtl.LittleEndian -> false 
                 | _                          -> true
                 )
         then    error "endianness"
-        else if F.findMemsize env <> info.memsize
+        else if F.findMemsize env <> self#memsize
         then    error "memsize"
-        else if F.findWordsize env <> info.wordsize
+        else if F.findWordsize env <> self#wordsize
         then    error "wordsize"
-        else if F.findPointersize env <> info.pointersize
+        else if F.findPointersize env <> self#pointersize
         then    error "pointersize"
-        else if F.findFloat env <> info.float
+        else if F.findFloat env <> self#float
         then    error "float"
-        else if F.findCharset env <> info.charset
+        else if F.findCharset env <> self#charset
         then    error "charset"
         else true
 @

@@ -36,7 +36,7 @@ module Make
 sig
     module StrMap: Map.S with type key = string
     type program = Automaton.location StrMap.t * Asm.asm
-    val translate: Fenv.Clean.env -> Target.info -> Ast.program -> program  
+    val translate: Fenv.Clean.env -> Target.t -> Ast.program -> program  
 end
 @
 
@@ -145,7 +145,7 @@ an exception.
 
 <<>>=
 let find_cc cc target =
-    try Target.StrMap.find cc target.Target.conv
+    try Target.StrMap.find cc target#cc
     with Not_found -> raise (E.ErrorExn ("unknown calling convention "^cc))
 @
 
@@ -211,7 +211,7 @@ The following function translates an [[Ast.actual]] parameter into a
 [[Fgraph.actual]].
 
 <<>>=
-let rec actual env (target: Target.info) globals (hint, e) = 
+let rec actual env (target: Target.t) globals (hint, e) = 
     let width = bits (Expr.tyExpr env target e) in
     let e     = expr env target globals e       in
         (e, width, hint)
@@ -231,7 +231,7 @@ more complicated.  If the variable is a local register, it becomes a
 [[globals]].
 
 <<>>=
-and variable (env: F.env) (target: Target.info) globals = function
+and variable (env: F.env) (target: Target.t) globals = function
     | A.LValueAt(x,_) -> variable env target globals x
     | A.Var(hint,x)   ->
         let (_,(denot,t)) = F.findv x env in 
@@ -266,7 +266,7 @@ and variable (env: F.env) (target: Target.info) globals = function
     | A.Mem (t,e,a)            -> let width = ty env t      in
                                   let cell = Rtl.Cell
                                       ( default_memory
-                                      , target.Target.byteorder
+                                      , target#byteorder
                                       , width
                                       , expr env target globals e
                                       , default_assertion
@@ -275,18 +275,18 @@ and variable (env: F.env) (target: Target.info) globals = function
                                     
             
 <<>>=
-and primOp env (target: Target.info) globals op args =
+and primOp env (target: Target.t) globals op args =
     let o = Expr.op env target op args 
     in
         Rtl.App(o, List.map (expr env target globals) args)
 
-and expr env (target: Target.info) globals = function 
+and expr env (target: Target.t) globals = function 
     | A.ExprAt(x,_)         -> expr env target globals x
-    | A.Int( i, None)       -> Rtl.Const(Rtl.Bits(i,target.Target.wordsize))
+    | A.Int( i, None)       -> Rtl.Const(Rtl.Bits(i,target#wordsize))
     | A.Int( i, Some t)     -> Rtl.Const(Rtl.Bits(i,ty env t))
-    | A.Float( f, None)     -> Rtl.Const(Rtl.Bits(f,target.Target.wordsize))
+    | A.Float( f, None)     -> Rtl.Const(Rtl.Bits(f,target#wordsize))
     | A.Float( f, Some t)   -> Rtl.Const(Rtl.Bits(f,ty env t))
-    | A.Char( c, None)      -> Rtl.Const(Rtl.Bits(c,target.Target.wordsize))
+    | A.Char( c, None)      -> Rtl.Const(Rtl.Bits(c,target#wordsize))
     | A.Char( c, Some t)    -> Rtl.Const(Rtl.Bits(c,ty env t))
     | A.Fetch(v)            -> variable env target globals v
     | A.BinOp(l,op,r)       -> primOp env target globals op [l;r]
@@ -361,7 +361,7 @@ let rec assign env target globals lhs (e: Rtl.expr) = match lhs with
         let width = ty env t in
         let loc   = Rtl.Cell
               ( default_memory
-              , target.Target.byteorder
+              , target#byteorder
               , width
               , expr env target globals addr
               , default_assertion
@@ -593,7 +593,7 @@ environment belonging to a procedure.  The local environment [[env]]
 for a procedure is found in its entry in the fat environment.
 
 <<module Make>>=
-and proc env (target: Target.info) globals props (asm: Asm.asm) (cc,n,fs,bb) =  
+and proc env (target: Target.t) globals props (asm: Asm.asm) (cc,n,fs,bb) =  
     let decorate n = G.bind props n                                    in
     let p          = match F.findv n env with
                      | _,(F.Label(F.Proc p),_) -> p 
@@ -654,7 +654,7 @@ number of values of this type.
 
 <<>>=
 let memdecl env target asm t size ini = 
-    let sizeof = ty env t / target.Target.memsize (* no. of memsized objs *) in
+    let sizeof = ty env t / target#memsize (* no. of memsized objs *) in
     let n      = ( match size with
                  | A.DynSize    -> init_size ini
                  | A.NoSize     -> 1
@@ -797,11 +797,11 @@ let globals target decls =
                 loop map dfa rr
         
         | (name, F.RReg  h, ty) :: rr -> (* hardware register! *)
-            let reg = try Target.StrMap.find h target.Target.regmap
+            let reg = try Target.StrMap.find h target#registers
                       with Not_found -> unknown name in
             let map = StrMap.add name (reg2loc reg) map in
                 loop map dfa rr in
-    let dfa = target.Target.globals in
+    let dfa = target#globals in
     let map = StrMap.empty in
         loop map dfa decls
 @
@@ -868,7 +868,7 @@ let rec evalTy env = function
     | A.BitsTy(size) -> Types.Bits size
     | A.AliasTy(n)   -> snd (F.findt n env)
 
-let rec tyFetch env (target: Target.info) = function
+let rec tyFetch env (target: Target.t) = function
     | A.LValueAt(x,r) -> tyFetch env target x
     | A.Var(hint,id)  -> (match F.findv id env with (attr,(_,t)) -> t)
     | A.Mem (t,e,a)   -> 
@@ -894,14 +894,14 @@ and op env target o args =
         o,Types.widthlist ot at
 
 <<>>=
-and tyExpr env (target: Target.info) = function
+and tyExpr env (target: Target.t) = function
     | A.ExprAt(x,r)            -> tyExpr env target x
     | A.Int   (str, Some t)    -> evalTy env t
-    | A.Int   (str, None)      -> T.bits target.Target.wordsize
+    | A.Int   (str, None)      -> T.bits target#wordsize
     | A.Float (str, Some t)    -> evalTy env t
-    | A.Float (str, None)      -> T.bits target.Target.wordsize
+    | A.Float (str, None)      -> T.bits target#wordsize
     | A.Char  (str, Some t)    -> evalTy env t
-    | A.Char  (str, None)      -> T.bits target.Target.wordsize
+    | A.Char  (str, None)      -> T.bits target#wordsize
     | A.Fetch (v)              -> tyFetch env target v
     | A.BinOp (l,op,r)         -> tyPrimOp env target op [l;r]
     | A.UnOp  (op,expr)        -> tyPrimOp env target op [expr]

@@ -203,8 +203,8 @@ parameters, the calling convention to be used, and their [[context]].
 (* 1 successor node *)
 val entry:      node -> unode                   (* unique entry node *)
 val assign:     Rtl.rtl -> node -> unode
-val copyi:      formal list -> context -> Target.conv -> node -> unode
-val copyo:      actual list -> context -> Target.conv -> node -> unode
+val copyi:      formal list -> context -> Target.cc -> node -> unode
+val copyo:      actual list -> context -> Target.cc -> node -> unode
 val call:       Rtl.expr -> node -> cuts -> unode 
 @
 
@@ -242,7 +242,7 @@ functor [[Make]].
 
 <<cfg.mli>>=
 module type TARGET = sig
-    val t: Target.info
+    val t: Target.t
 end
 
 module Make (T: TARGET): sig
@@ -267,7 +267,7 @@ includes the [[cfg]] it belongs to.
 
 <<cfg.ml>>=
 module type TARGET = sig
-    val t: Target.info
+    val t: Target.t
 end
 
 module Make (T: TARGET) = struct
@@ -675,7 +675,7 @@ and branchStmt visited mangle (todo: node list) (expr,(left: node),(right: node)
         s :: nextstmt visited mangle (right :: left :: todo)
 
 and assignStmt visited mangle todo (rtl,next) =
-    let ast = Rtl2ast.translate mangle rtl 
+    let ast = Rtl2ast.rtl mangle rtl 
     in 
         ast :: nextstmt visited mangle (next :: todo)
 
@@ -694,8 +694,8 @@ and labelStmt visited mangle todo (label,next) =
         l :: nextstmt visited mangle (next :: todo)
 
 and returnStmt visited mangle todo (x,y) =
-    let e1  = A.Int(Bits.of_int x T.t.Target.wordsize,None) in
-    let e2  = A.Int(Bits.of_int y T.t.Target.wordsize,None) in
+    let e1  = A.Int(Bits.of_int x T.t#wordsize,None) in
+    let e2  = A.Int(Bits.of_int y T.t#wordsize,None) in
     let ret = A.ReturnStmt(None, Some (e1,e2), [])               in
         ret :: termstmt visited mangle todo
 
@@ -951,9 +951,9 @@ variable from the list of formal parameters.
 <<copyio>>=
 let copyi formals context conv after props =
     let dfa = ( match context with
-              | Acfg.ProcParameters -> conv.T.proc_param
-              | Acfg.ProcResults    -> conv.T.proc_result
-              | Acfg.ContParameters -> conv.T.proc_param
+              | Acfg.ProcParameters -> conv#proc_param
+              | Acfg.ProcResults    -> conv#proc_result
+              | Acfg.ContParameters -> conv#proc_param
               ) in
     let rec loop dfa = function  
         | []         -> after
@@ -990,9 +990,9 @@ value to the right location.
 <<copyio>>=
 let copyo actuals context conv after props = 
     let dfa = ( match context with
-              | Acfg.ProcParameters -> conv.T.proc_param
-              | Acfg.ProcResults    -> conv.T.proc_result
-              | Acfg.ContParameters -> conv.T.proc_param
+              | Acfg.ProcParameters -> conv#proc_param
+              | Acfg.ProcResults    -> conv#proc_result
+              | Acfg.ContParameters -> conv#proc_param
               ) in
     let rec loop dfa = function  
         | []                     -> after

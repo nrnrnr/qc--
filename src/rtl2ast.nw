@@ -35,14 +35,14 @@ to a {\PAL} statement.
 The [[translate]] function takes an {\rtl} and produces a statement
 list, describing the effect of the {\rtl}.  When a variable name is
 created from a name found in an {\rtl}, it is passed through a
-mangling function that is also passed to [[translate]].  This gives
-[[translate]] a chance to re-write names such that they obey to the
-{\PAL} syntax.  See also module \module{mangle}.
+mangling function that is also passed to [[rtl]].  This gives [[rtl]]
+a chance to re-write names such that they obey to the {\PAL} syntax. 
+See also module \module{mangle}.
 
 <<rtl2ast.mli>>=
 val expr:      (string -> string) -> Rtl.expr  -> Ast.expr 
 val const:     (string -> string) -> Rtl.const -> Ast.expr 
-val translate: (string -> string) -> Rtl.rtl   -> Ast.stmt 
+val rtl:       (string -> string) -> Rtl.rtl   -> Ast.stmt 
 @
 
 % ------------------------------------------------------------------ 
@@ -114,7 +114,7 @@ let guarded mangle = function
        when e = truth    -> effect mangle None                   eff
     | (e, eff)           -> effect mangle (Some (expr mangle e)) eff
 
-let translate mangle (R.Rtl gg) = 
+let rtl mangle (R.Rtl gg) = 
     let pairs    = List.map (guarded mangle) gg in
     let lhs, rhs = List.split pairs             in
         A.AssignStmt(lhs,rhs)

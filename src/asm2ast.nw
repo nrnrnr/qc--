@@ -47,7 +47,7 @@ abstract syntax of a procedure.
 
 <<module type personality>>=
 module type PERSONALITY = sig
-    val target: Target.info
+    val target: Target.t
     type instr
     val  ext: instr -> Ast.proc
     val mangle: Mangle.mangler
@@ -103,14 +103,14 @@ necessary informations. The following functions helps to create types
 and values in {\AST} syntax.
 
 <<>>=
-let pointer     = A.BitsTy(P.target.Target.pointersize)
+let pointer     = A.BitsTy(P.target#pointersize)
 let bits n      = A.BitsTy n
-let int n       = A.Int( Bits.of_int n P.target.Target.wordsize
-                       , Some (bits P.target.Target.wordsize)
+let int n       = A.Int( Bits.of_int n P.target#wordsize
+                       , Some (bits P.target#wordsize)
                        )
 let one         = int 1 (* wordsize *)
-let zero        = A.Int( Bits.of_int 0 P.target.Target.memsize
-                       , Some (bits P.target.Target.memsize)
+let zero        = A.Int( Bits.of_int 0 P.target#memsize
+                       , Some (bits P.target#memsize)
                        ) (* memsize *)
 @
 
@@ -276,7 +276,7 @@ uninitialized data.
 
 <<>>=
 let addloc n = 
-    let memsize = P.target.Target.memsize in
+    let memsize = P.target#memsize in
     let ty      = bits memsize            in
     let size    = int n                   in
         CurSection(A.Datum(A.MemDecl(ty,A.FixSize(size),None)))
@@ -325,7 +325,7 @@ The [[zeroes n]] function emits [[bits8[n]{0,0,...,0]], where
 
 <<>>=
 let zeroes n = 
-    let memsize = P.target.Target.memsize in
+    let memsize = P.target#memsize in
     let ty      = bits memsize            in
     let size    = int n                   in
     let rec z   = function
@@ -347,7 +347,7 @@ let addr (Sym a)   =
         CurSection(A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
 
 <<>>=
-let byteorder = match P.target.Target.byteorder with
+let byteorder = match P.target#byteorder with
     | Rtl.BigEndian    -> Fenv.Clean.Big
     | Rtl.LittleEndian -> Fenv.Clean.Little
     | _                -> assert false
@@ -384,16 +384,16 @@ head of the program.
 
 <<>>=
 let personality =
-    [ A.Memsize P.target.Target.memsize
-    ; ( match P.target.Target.byteorder with
+    [ A.Memsize P.target#memsize
+    ; ( match P.target#byteorder with
       | Rtl.BigEndian    -> A.ByteorderBig
       | Rtl.LittleEndian -> A.ByteorderLittle
       | _                -> assert false
       )
-    ; A.PointerSize P.target.Target.pointersize
-    ; A.WordSize    P.target.Target.wordsize
-    ; A.Charset     P.target.Target.charset
-    ; A.FloatRepr   P.target.Target.float
+    ; A.PointerSize P.target#pointersize
+    ; A.WordSize    P.target#wordsize
+    ; A.Charset     P.target#charset
+    ; A.FloatRepr   P.target#float
     ]
 @
 
@@ -415,7 +415,7 @@ let decl name loc dd = match loc with
         in  r::dd
     | _ -> assert false
 
-let decls = Target.StrMap.fold decl P.target.Target.regmap []
+let decls = Target.StrMap.fold decl P.target#registers []
     
 
 <<>>=
