@@ -1,6 +1,25 @@
+% -*- mode: Noweb; noweb-code-mode: sml-mode -*-
+
+\section{Utility modules}
+
+\subsection{\texttt{Option}}
 <<option.mli>>=
 val get : 'a option -> 'a -> 'a
 <<option.ml>>=
 let get opt default = match opt with None -> default | Some x -> x
 @ 
+\subsection{\texttt{Listutil}}
+<<listutil.mli>>=
+val forall : ('a -> bool) -> 'a list -> bool
+val exists : ('a -> bool) -> 'a list -> bool
+val foldl  : ('a -> 'b -> 'b) -> 'b -> 'a list -> 'b
+val foldr  : ('a -> 'b -> 'b) -> 'b -> 'a list -> 'b
+<<listutil.ml>>=
+let rec forall p = function [] -> true  | h :: t -> p h && forall p t
+let rec exists p = function [] -> false | h :: t -> p h || exists p t
+let rec foldl f base = function [] -> base | h :: t -> foldl f (f h base) t
+let rec foldr f base = function [] -> base | h :: t -> f h (foldr f base t)
+@ 
+<<interface>>=
+<<implementation>>=
 
