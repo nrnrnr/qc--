@@ -70,34 +70,6 @@ NOWEBBREAKCODE=no
 	EOF
 	) > $target
 
-old-%.tex-old:Q: %.inc
-	cp $stem.inc $stem.tex
-	> /dev/null ed -s $stem.tex <<EOF 
-	1
-	i
-	\documentclass{article}
-	\usepackage{noweb}
-	\usepackage{tabularx}
-	\usepackage{hyperref}
-	\usepackage[dvips]{graphicx}
-	\pagestyle{noweb}
-	`if [ $NOWEBBREAKCODE = yes ]; then echo '\noweboptions{breakcode}'; fi`
-	\begin{document}
-	\nwfilename{$stem.nw}
-	\tableofcontents
-	\nwbegindocs{}
-	.
-	. r $TOP/config/macros.tex
-	\$
-	a
-	\bibliographystyle{alpha}
-	\bibliography{qc--}
-	\end{document}
-	.
-	w
-	q
-	EOF 
-
 %.inc:          %.nw
                 $NOWEAVE -delay -filter $OCAMLDEFS -index $prereq > $target
 
