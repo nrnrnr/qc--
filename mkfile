@@ -30,12 +30,13 @@ SUBDIRS =       $LIBSRC $SRC
 # ------------------------------------------------------------------ 
 # all:          build the compiler
 # lib:          build just the lib/ directory, but not the compiler
-# depend:       update dependencies (recursive)
-# clean:        remove non-source files (recursive)
+#
+# clean:        remove non-source files (recursive) but leave all
+#               binaries in bin/
+# clobber:      remove all non-source file
+#
 # test:         run test suite
-# precompile:   pre-compile some sources because they depend on special
-#               tools
-# export:       create *.tar.gz files for parts we publish
+
 
 all:V:          lib dirs
                 for i in $SRC; 
@@ -75,19 +76,39 @@ dvi:V:          dirs
                     (echo "# entering $i" && cd $i && mk $MKFLAGS $target)
                 done
 
+test:V:         all
+                cd test && mk $MKFLAGS $target
+
 clean:V:        dirs
                 for i in $SUBDIRS; do (cd $i && mk $MKFLAGS $target); done
-                find bin lib man                        \
+                find lib \
                         \( -name 'CVS'                  \
                         -o -name '.cvsignore'           \
-                        \) -prune -o -type f -exec rm '{}' \;
+                        \) -prune                       \
+                        -o -type f -exec rm '{}' \;
 
-clobber:V:      dirs
-                find bin lib man -name 'CVS' -prune -o -type f -exec rm '{}' \;
+clean.opt:V:    dirs
+                # for i in $SUBDIRS; do (cd $i && mk $MKFLAGS $target); done
+                find lib \
+                        \( -name 'CVS'                  \
+                        -o -name '.cvsignore'           \
+                        \) -prune                       \
+                        -o                              \
+                        \( -name '*.cmx'                \
+                        -o -name '*.o'                  \
+                        -o -name '*.a'                  \
+                        -o -name '*.cmxa'               \
+                        \) -exec rm '{}' \;             
+
+clobber:V:      dirs clean
                 for i in $SUBDIRS; 
                 do 
                     (echo "# entering $i" && cd $i && mk $MKFLAGS $target)
                 done
+                find bin lib man                        \
+                        \( -name 'CVS'                  \
+                        -o -name '.cvsignore'           \
+                        \) -prune -o -type f -exec rm '{}' \;
                 
                 
 test:V:         all

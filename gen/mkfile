@@ -55,25 +55,26 @@ html dvi test:VQ:
 
 depend:V:       $DEPEND
 
-# What is the policy here? Does clean remove *.ml* files that we generate
-# using special tools or not? These files are derived, but they are also
-# in the repository. I vote for not removing them because a casual user
-# would be unable to derive them again.
+# I decided that 'clobber' does not remove files that are in the
+# repository but also can be derived using special tools that are
+# unavailable to most developers. --CL
+#
+# Sparcreg is expensive to derive and thus is not removed by clean.
 
-clean:V:    
-                # sparcrec.* is precious, so we keep it
-                # rm -rf *.cmo *.cmx *.cmi *.o
-                rm -f `find . -not -name 'sparcrec*' -name '*.cm*'` 
+clean.opt:V:
+                rm -f `find . -not -name 'sparcrec*' -name '*.cmx'` 
                 rm -f `find . -not -name 'sparcrec*' -name '*.o'` 
-                rm -f *.output
-                rm -rf *.aux *.log *.dvi *.tex *.inc *.toc
-                rm -f gen.cma gen.cmxa gen.a
-                rm -f $DEPEND
+                rm -f *.cmxa *.a
+
+clean:V:        clean.opt
+                rm -f `find . -not -name 'sparcrec*' -name '*.cm[io]'` 
+                rm -f *.cma
                 
 clobber:V:      clean
-                rm -f gen.cma gen.cmxa gen.a
-                # rm -f ast.ml* astUtil.ml*
-                # rm -f rtlasdl.ml* rtlasdlUtil.ml*
+                rm -f sparcrec*.cm[xio] sparcrec*.o
+                rm -f *.output
+                rm -f $DEPEND
+                rm -f *.aux *.log *.dvi *.tex *.inc *.toc
 
 # ------------------------------------------------------------------ 
 # rules and tools for OCaml
