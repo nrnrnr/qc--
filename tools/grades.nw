@@ -1,0 +1,199 @@
+%%Grades: C Peripheral Later
+
+% ------------------------------------------------------------------ 
+\section{Assessing Modules}
+% ------------------------------------------------------------------ 
+
+We're thinking of introducing a grading system that will help us
+identify problem areas in the compiler.   The grades will also help us
+set priorities for work.
+
+Modules are graded (typically by their authors, at least initially)
+along three axes: quality, importance, and urgency.
+
+
+\paragraph{Quality}
+
+\begin{description}
+\item[\tt A]  Excellent code and documentation.  Should be used as an example
+for others.  We expect to have very few `A' modules.
+
+\item[\tt B]  Good work, could be improved, but acceptable indefinitely as is.
+ We hope most of our modules will be `B' modules.
+
+\item[\tt C]  Needs improvement.  Can function correctly or close to correctly,
+ but should be refactored.
+
+\item[\tt D]  Barely adequate.  Ugly code, missing or bad documentation.
+
+\item[\tt E]  Broken.  Major functionality is broken or missing.
+\end{description}
+
+\paragraph{Importance} It's not obvious to me how to gauge importance, but one possibility
+is to look at the number of client modules that would be affect by a
+change.
+
+\begin{description} 
+\item[\tt Central]  A major data structure or interface
+that affects a large part of the compiler.  E.g., AST, flow graph, etc.
+
+\item[\tt Subsystem] Module affects a number of other modules in its
+subsystem, but not outside.
+
+\item[\tt Peripheral] Few other modules are affected.
+\end{description}
+
+\paragraph{Urgency}
+
+\begin{description} 
+\item[\tt Immediate]    Needs attention right away,
+because a problem is preventing forward progress.
+
+\item[\tt Soon] Should be attended to soon.
+
+\item[\tt Later] Should be dealt with, but at a lower priority.
+\end{description}
+
+% ------------------------------------------------------------------ 
+\subsection{Annotation Syntax}
+% ------------------------------------------------------------------ 
+
+A source file can carry its grade annotation. We use the following
+convention: 
+
+\begin{quote}
+\begin{verbatim}
+    %%Grades: D Subsystem Soon
+\end{verbatim}
+\end{quote}
+
+A grade annotation is a line starting with \texttt{\%\%Grades:} and
+followed by white space delimited grades for the three axes of grading.
+
+% ------------------------------------------------------------------ 
+\subsection{Tool Support}
+% ------------------------------------------------------------------ 
+
+We provide  a small skript [[grades]] that searches for a grade
+annotation in a source file and emits it together with the name of the
+source file. More precisely, it emits the name of the file and the three
+grades separated by a tab character to standard output. This format is
+intended for interoperability with Unix text tools like \texttt{cut}.
+
+<<grades>>=
+#! /usr/bin/perl -w
+
+sub usage {
+    print <<'EOF';
+    $Id$
+    
+    grades [file ..] 
+EOF
+}
+
+sub grade {
+    my $line = shift @_;
+    my $q="[A-E]";
+    my $i="Central|Subsystem|Peripheral";
+    my $u="Immediate|Soon|Later";
+    
+    if ($line =~ /^%%Grades:\s*($q)\s+($i)\s+($u)\s*$/i) {
+        my $file=$ARGV;
+        my $quality=$1;
+        my $importance=$2;
+        my $urgency=$3;
+
+        $quality    =~ tr [A-Z] [a-z];
+        $importance =~ tr [A-Z] [a-z];
+        $urgency    =~ tr [A-Z] [a-z];
+        
+        printf "%s\t%s\t%s\t%s\n", $file, $quality, $importance, $urgency;
+        return;
+    }
+
+    if ($line =~ /^%%Grades?:/) {
+        printf STDERR "Warning: $ARGV, syntax error: $line\n";
+        return;
+    }
+}
+
+while (defined($line=<>)) {
+    chop($line);
+    grade($line);       
+}
+
+exit(0);
+__END__
+<<manual page>>=
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Manual Page}
+% ------------------------------------------------------------------ 
+
+Perl manual pages are written in Perl's Plain Old Document ({\small
+POD}) format. They can be included into a script and extracted from
+there: [[pod2man grades > grades.1]]; various other format can be
+generated as well, including {\small HTML}.  This makes sure they do not
+get lost when the script is passed around. For the syntax, see the
+\texttt{perlpod} manual.
+
+<<grades.pod>>=
+=head1 NAME
+
+grades - extract quality grades from files
+
+=head1 SYNOPSIS 
+
+B<grades> [I<file> ...]
+
+=head1 DESCRIPTION
+
+B<Grades> extracts grade annotations from I<files> and prints them to
+stdout. The output format is a single line per file with four entires,
+separated by tabs: file name, quality, importance, urgency. For a
+description of the grading system, see below.
+
+=head1 OPTIONS
+
+No options.
+
+=head1 GRADE SYNTAX
+
+A grade annotation is a single line of the form C<%%Grades:> I<quality>
+I<importance> I<urgency>, like this:
+
+    %%Grades: B Central Later
+
+The annotation must be a line of its own and start with C<%%Grade:>.
+Grades have three axes: quality, importance, and urgency. The three axes
+have the following respective domains:
+
+=over 4
+
+=item Quality:
+    
+    A B C D E F
+
+=item Importance
+
+    Central Subsystem Peripheral
+
+=item Urgency
+
+    Immediate Soon Later
+
+=back    
+    
+=head1 BUGS
+
+Do we need options for more output formats?
+
+=head1 AUTHOR
+
+Christian Lindig <lindig@eecs.harvard.edu>
+
+=head1 VERSION
+
+$Id$
+

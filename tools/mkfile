@@ -25,25 +25,29 @@ prefix =    /usr/local
 HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
 INC  =          `echo *.nw       | sed 's/\.nw/.inc/g;'`
 
-all:V:          ocamlerror      nofake man
-all.opt:V:      ocamlerror.opt  nofake man
+all:V:          ocamlerror      nofake grades man 
+all.opt:V:      ocamlerror.opt  nofake grades man
 
 update:V:       all 
                 cp ocamlerror     $BINDIR
                 cp ocamlerror.1   $MANDIR/man1
                 cp nofake         $BINDIR
                 cp nofake.1       $BINDIR
+                cp grades         $BINDIR
+                cp grades.1       $MANDIR/man1  
                 
 update.opt:V:   all.opt
                 cp ocamlerror.opt $BINDIR
                 cp ocamlerror.1   $MANDIR/man1
                 cp nofake         $BINDIR
                 cp nofake.1       $BINDIR
+                cp grades         $BINDIR
+                cp grades.1       $MANDIR/man1  
 
 dvi:V:          $INC
 html:V:         $HTML
 
-man:V:          ocamlerror.1 nofake.1
+man:V:          ocamlerror.1 nofake.1 grades.1
 
 test:V:         nofake nofake.nw
                 ./nofake -Rnofake nofake.nw | diff - nofake 
@@ -64,6 +68,7 @@ clobber:V:      clean
                 rm -f ocamlerror ocamlerror.opt
                 rm -f ocamlerror.pod ocamlerror.1
                 rm -f nofake nofake.1
+                rm -f grades grades.1
 
 install:V:      all.opt
                 install -s ocamlerror.opt $prefix/bin/ocamlerror
@@ -117,6 +122,14 @@ ocamlerror.opt: ocamlscan.cmx ocamlerror.cmx
 nofake:         nofake.nw
                 notangle -R$target $prereq > $target
                 chmod +x $target
+
+grades:         grades.nw
+                $NOTANGLE -Rgrades grades.nw > $target
+                chmod +x $target
+
+grades.pod:     grades.nw
+                $NOTANGLE -Rgrades.pod grades.nw > $target
+
 
 # ------------------------------------------------------------------ 
 # extra rules for cases not covered by noweb.mk
