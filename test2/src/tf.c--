@@ -1,0 +1,17 @@
+target byteorder little;
+
+section "data" {
+  truth : bits8[] "truth\0";
+  falsehood : bits8[] "falsehood\0";
+  fmt: bits8[] "%%true gives %s and %%false gives %s\n\0";
+}
+
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+  bits32 t, f;
+  if (%true)  { t = truth; } else { t = falsehood; }
+  if (%false) { f = truth; } else { f = falsehood; }
+  foreign "C" printf("address" fmt, "address" t, "address" f);
+  foreign "C" return(0);
+}
+
+import printf; export main;

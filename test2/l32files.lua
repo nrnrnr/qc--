@@ -55,6 +55,7 @@ Test.files = { "add.c--"
              , { source = {'tail2.c--', 'call3.c--'} }
              , { source = {'tailnot.c--', 'call3.c--'} }
 	     , 'test-050.c--'
+             , 'tf.c--'
              , 'wtizzy.c--'
              , "x86-000.c--"
              , "x86-001.c--"
