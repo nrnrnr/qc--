@@ -50,28 +50,29 @@ graph  = (node*) 		-- A list of all and only the Label nodes
 label = (string?, int)		-- The Ints are unique per compilation unit
 				-- Ditto the names if present
 @
-Flow-graph nodes are taken from Table 2 of 
-the paper ``Exceptions Need Not Be Exceptional.''
+Flow-graph nodes are inspired by Table 2 of 
+the paper ``Exceptions Need Not Be Exceptional,'' but there are
+considerable differences.
+In particular, these nodes work only in extended basic blocks.
 <<ASDL definitions for nodes of abstract \PAL>>=
 node = Entry (continuation*, node next)
-     | Exit
-     | Label (label, node)
+     | Exit  (int cont_num, int abnormal_cont_count)
      | CopyIn  (formal*, copy_context, string convention, node next)
      | CopyOut (actual*, copy_context, string convention, node next)
      | CalleeSaves (variable*, node next)
      | Assign (RTL.rtl, node next)
-     | Branch (RTL.exp, label true, label false)	-- exp is condition
-     | Goto (RTL.exp, label* targets)           	-- exp is address of target
+     | Branch (RTL.exp, node true, node false)	-- exp is condition
+     | Goto (RTL.exp, label* targets)          	-- exp is address of target
      | Call (RTL.exp, contbund)
      | Jump (RTL.exp)
      | CutTo (RTL.exp)
      | Yield (RTL.exp, contbund)
 attributes (atts enclosing_spans)	-- used for spans
-atts = (keyvalue*)
-keyvalue = UserSpan(int token, RTL.exp value)	-- value is link-time constant
+atts = (att*)
+att  = UserSpan(int token, RTL.exp value)	-- value is link-time constant
 						-- token is non-negative
-	 | LiveVars(variable*)
-         | LastUses(RTL.location*) -- the deads list
+     | Other(private)        
+private = Private    -- private attributes not exchanged between passes
 @ On entry to a code generator,
 the RTL expressions should use no space other than the [[m]]~space (memory); 
 other spaces, including hardware registers, are reserved for the
@@ -179,3 +180,26 @@ module IR (imports IRNode imports AST) {
        | Proc  (IRNode.proc procedure)
 }
 @ 
+\section{Private data for the {\PAL} code generator}
+
+Clients shouldn't look here, and should not include this code in their
+ASDL.
+<<irnode.asdl ((codegen))>>=
+view OCaml {
+ module IRNode <= interface_prologue 
+%%
+type private_att = LiveVars of RTL.location list
+                 | NoCodegen                       (* suppress goto successor *)
+                 | LastUses of RTL.location list   (* the deads list *)
+%%
+ module IRNode <= implementation_prologue 
+%%
+type private_att = LiveVars of RTL.location list
+                 | NoCodegen                       (* suppress goto successor *)
+                 | LastUses of RTL.location list   (* the deads list *)
+%%
+  IRNode.private <= { natural_type : private_att
+                      unwrapper : fun _ -> assert false
+                      wrapper   : fun _ -> Private
+                    }
+}
