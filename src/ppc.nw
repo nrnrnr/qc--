@@ -26,13 +26,22 @@ module R    = Rtl
 module RP   = Rtl.Private
 module Up   = Rtl.Up
 module Down = Rtl.Dn
+module RU   = Rtlutil
 module PX   = Postexpander
 module T    = Target
+module A    = Automaton
 <<spaces>>
 module Post = struct
   <<ppc postexpander>>
 end
 module X = Expander.IntFloatAddr (Post)
+module F = Mflow.MakeStandard (
+  struct
+    let pc_lhs = Post.pc_lhs
+    let pc_rhs = Post.pc_rhs
+    let ra_reg = creg 5
+    let ra_offset = 4
+  end)
 <<calling conventions>>
 <<target spec>>
 <<variable placer>>
@@ -327,8 +336,11 @@ Integer registers r0, and r2-r12 are volatile, r1 is the stack
 pointer, and r13-r31 are non-volatile. For floating point,
 registers f1-f13 are volatile, and f14-131 are not.
 <<calling conventions>>=
-let regset s w l = RS.of_list (List.map (fun r-> (s,r,w)) l)
 let sp_reg = ('r', 1, 32)
+let sp     = R.reg sp_reg
+let vfp    = Vfp.mk 32
+
+let regset s w l = RS.of_list (List.map (fun r-> (s,r,w)) l)
 let vregs  = regset 'r' 32 [0;2;3;4;5;6;7;8;9;10;11;12]
 let nvregs = regset 'r' 32 [13;14;15;16;17;18;19;20;21;
                             22;23;24;25;26;27;28;29;30;31]
@@ -345,18 +357,75 @@ let nvolregs = nvregs
 A function to build a [[Call.t]]. This function is still cheating a
 bit by using the dummy module. I have changed that fields that both
 need to be different, and that I understand.
+<<transformations>>=
+let call_actuals  =
+  C.outgoing ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at specs.A.call)
+    ~autosp:(fun r  -> Block.base r.A.overflow)
+    ~postsp:(fun _ sp -> sp)
+and prolog  =
+  let autosp = (fun _ -> vfp) in
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at specs.A.call)
+    ~autosp
+    ~postsp:(fun _ _ -> std_sp_location)
+    ~insp:(fun a _ _ -> autosp a)
+and call_results  =
+  let autosp = (fun r -> Block.base r.A.overflow) in
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at specs.A.results)
+    ~autosp
+    ~postsp:(fun _ _ -> std_sp_location) (* irrelevant? *)
+    ~insp:(fun a _ _ -> autosp a)
+and epilog  =
+  C.outgoing ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at specs.A.results)
+    ~autosp:(fun r -> Block.base r.A.overflow)
+    ~postsp:(fun _ _ -> vfp)  (* irrelevant *)
+and also_cuts_to =
+  let autosp = (fun r -> std_sp_location) in
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at specs.A.cutto)
+    ~autosp
+    ~postsp:(fun _ _ -> std_sp_location)
+    ~insp:(fun a _ _ -> autosp a)
+and cut_actuals base  =
+   C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base specs.A.cutto)
+     ~autosp:(fun r -> spval)
+     ~postsp:(fun _ _ -> spval)
+and saved_nvr temps =
+  let t = Talloc.Multiple.loc temps 't' in
+  fun (_, _, w) -> t w
+@ 
 <<calling conventions>>=
-let cconv name spec =
-  let ws    = Post.wordsize
-  and callt = Dummy.dummy32b'.T.cc_spec_to_auto name spec in
-  { callt with
-    C.replace_vfp      = Cfgx.Vfp.replace_with ~sp:(reg 1)
-  ; C.pre_nvregs = nvolregs
-  ; C.volregs    = volregs
+let cconv name specs =
+  let ws              = Post.wordsize
+  and growth          = Memalloc.Down
+  and spval           = R.fetch sp 32
+  and std_sp_location = RU.add 32 vfp (R.late "minus frame size" 32)
+  in <<transformations>> in
+  { C.name             = name
+  ; C.overflow_alloc   = { C.parameter_deallocator = C.Caller
+                         ; C.result_allocator      = C.Caller
+                         }
+  ; C.call_parms       = { C.in' = prolog;       C.out = call_actuals}
+  ; C.cut_parms        = { C.in' = also_cuts_to; C.out = cut_actuals}
+  ; C.results          = { C.in' = call_results; C.out = epilog}
+ 
+  ; C.stack_growth     = growth
+  ; C.stable_sp_loc    = std_sp_location
+  ; C.replace_vfp      = Cfgx.Vfp.replace_with ~sp
+  ; C.sp_align         = 4
+  ; C.pre_nvregs       = nvolregs
+  ; C.volregs          = volregs
+  ; C.saved_nvr        = saved_nvr
+  ; C.cutto            = F.cutto sp
   ; C.return           = (fun k n ~ra -> R.store nia (R.fetch lr ws) ws)
-  ; C.ra_on_entry      = (fun b       -> R.fetch lr ws)
+  ; C.ra_on_entry      = (fun b     -> R.fetch lr ws)
 (*  ; C.where_to_save_ra = (fun e t     -> Post.mem R.none ws sp_8) *)
-  ; C.ra_on_exit       = (fun l e t   -> lr)
+  ; C.where_to_save_ra = (fun _ t   -> Talloc.Multiple.loc t 't' ws)
+  ; C.ra_on_exit       = (fun l e t -> lr)
+  ; C.sp_on_jump       = (fun _ _   -> Rtl.null)
   }
 @ 
 The calling convention specs are written in Lua; they have no ML
@@ -422,18 +491,10 @@ A.register_cc(Backend.ppc.target,"notail",PPC.cc["C--"])
 \section{Target Specification}
 % ---------------------------------------------------------------------------
 <<target spec>>=
-module F = Mflow.MakeStandard (
-  struct
-    let pc_lhs = Post.pc_lhs
-    let pc_rhs = Post.pc_rhs
-    let ra_reg = creg 5
-    let ra_offset = 4                 (* size of call instruction *)
-  end)
 @ 
 We must provide an automaton for allocating globals, and functions for
 spilling and reloading registers.
 <<target spec>>=
-module A = Automaton
 let ( *> ) = A.( *> )
 let globals base = 
   let width w = if w <= 8 then 8 else if w <= 16 then 16 else Aux.round_up_to 32 w in
@@ -498,8 +559,6 @@ let target =
 <<variable placer>>=
 let unimp               = Impossible.unimp
 let impossible          = Impossible.impossible
-
-let vfp = Vfp.mk 23
 
 let from_temps proc space = (* stage to allocate a temporary location *)
   let allocator = Talloc.Multiple.loc proc.Proc.temps space in
