@@ -1,4 +1,4 @@
-.globl nest /* comment to trigger re-run */
+.globl nest
 .globl Cmm.global_area
 .globl Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY
 .section .data
@@ -94,7 +94,7 @@ Lframe_l22:
 .long 0xfffffff4
 .long 0
 .long 0
-.long outer
+.long inner
 .section .pcmap
 .long k_C7
 .long Lframe_l23
@@ -118,7 +118,7 @@ Lframe_l23:
 .long 0xfffffff4
 .long 0
 .long 0
-.long outer
+.long inner
 .section .text
 .section .data
 outer:

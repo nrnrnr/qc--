@@ -315,25 +315,31 @@ emit_int (List.length (List.filter nonredundant spans.S.csregs));
 emit_int (Array.length spans.S.vars);
 @
 The source spans are laid out by index.
+We start with index~0 and go up to [[max_span_\index]].
 Because the indices may be sparse, we fill in any gaps with zeroes.
+Inner spans, which take priority, are placed first by the front end,
+so we use a stable sort to order the indices.
 <<emit frame data>>=
-let users       = List.map (fun (n,e) -> (Bits.S.to_int n,e)) spans.S.users in
-let max_span_ix = List.fold_left (fun best (i,_) -> max i best) (-1) users in
+let users =
+  let unsorted = List.map (fun (n,e) -> (Bits.S.to_int n,e)) spans.S.users in
+  let compare ((n : int), _) ((n' : int), _) = compare n n' in
+  List.stable_sort compare unsorted in
+let max_span_ix = match users with [] -> -1 | _ :: _ -> fst (Aux.last users) in
+let rec emit_spans_from n spans =
+  if n <= max_span_ix then
+    match spans with
+    | (n', e) :: tail when n > n' -> emit_spans_from n tail (* skip duplicate span *)
+    | (n', e) :: tail when n = n' -> asm#addr e; emit_spans_from (n+1) tail
+    | _                           -> emit_int 0; emit_spans_from (n+1) spans in
 @
 And now, we fill in the rest of the data.
 <<emit frame data>>=
 emit_int (max_span_ix + 1);
 emit_int (size_cont_block spans.S.conts);
 List.iter emit_csreg spans.S.csregs;
-Array.iter emit_maybe_loc   spans.S.vars;
+Array.iter emit_maybe_loc spans.S.vars;
 emit_conts spans.S.conts;
-@
-The source spans are laid out by index.
-Because the indices may be sparse, we fill in any gaps with zeroes.
-<<emit frame data>>=
-let span_arr = Array.init (max_span_ix + 1) (fun _ -> None) in
-List.iter (fun (i,span) -> span_arr.(i) <- Some span) users;
-Array.iter emit_user_span span_arr;
+emit_spans_from 0 users;
 @
 We cover each section of the frame data in detail.
 In addition to emitting spans as assembly data, we provide functions
@@ -419,10 +425,6 @@ let nonredundant (reg, l) = match l with
 let emit_csreg (reg, l) =
   if nonredundant (reg, l) then
     (emit_int (reg_ix reg); emit_maybe_loc l) in
-
-let emit_user_span reloc = match reloc with
-  | None   -> emit_dead_loc ()
-  | Some reloc -> asm#addr reloc in
 @
 To check that the continuation index is within bounds, we first emit the number
 of unwind continuations.
