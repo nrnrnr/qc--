@@ -12,9 +12,7 @@ MANDIR =    ../man
 # ------------------------------------------------------------------  
 
 test:VQ:        ../bin/qc-- fp regr
-                for f in *.c--; do
-                    grep '^///' $f | sed 's+^///++' | sh || true
-                done
+                for f in *.c--; do mk "`basename $f .c--`.test"; done
 
 
 # ------------------------------------------------------------------ 
@@ -28,7 +26,10 @@ test:VQ:        ../bin/qc-- fp regr
                 ../bin/qc-- -check $prereq 2> $target || true
 
 %.test:V:       %.c--         
-                grep '^///' $prereq | sed 's!^///!!' | sh || true
+		SELF=$stem.c--
+		BASE=$stem
+		export SELF BASE
+                sed -n 's!^///!!p' $SELF | sh -x || true
 
 %.xdiff:V:      %.out %.2
                 mgdiff -quit $stem.2 $stem.out
