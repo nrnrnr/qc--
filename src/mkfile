@@ -166,20 +166,6 @@ CMO =           `echo $ML       | sed 's/\.ml/.cmo/g'`
 CMX =           `echo $ML       | sed 's/\.ml/.cmx/g'`
 OBJ =           `echo $ML       | sed 's/\.ml/.o/g'`
 
-################################################################
-#
-# Files we generate documentation from
-
-HTML =          `echo *.nw                             | sed 's/\.nw/.html/g'`
-INC  =          `echo *.nw  ../cllib/*.nw ../test/*.nw | sed 's/\.nw/.inc/g'`
-
-################################################################
-
-$NAME.dvi:      $INC
-
-dvi:V:          $NAME.dvi
-ps:V:           $NAME.ps
-html:V:         $HTML
 
 
 ################ special cases, primarily for multiple sources in one .nw
@@ -260,6 +246,29 @@ ${NAME}grammar.pod:      main.nw parse.output
 	echo '/##grammar##/d
 	.r !grep "^  *[0-9]" parse.output
 	wq' | ed ${NAME}grammar.pod
+
+################################################################
+# LaTeX documentation
+################################################################
+# Files we generate documentation from
+
+HTML =          `echo *.nw                             | sed 's/\.nw/.html/g'`
+INC  =          `echo *.nw  ../cllib/*.nw ../test/*.nw | sed 's/\.nw/.inc/g'`
+
+################################################################
+
+$NAME.dvi:      $INC
+
+dvi:V:          $NAME.dvi
+ps:V:           $NAME.ps
+html:V:         $HTML 
+
+# modules.tex can be used in qc--.tex where documentation for
+# individual modules is included
+
+modules.tex:V: $INC
+    echo $INC | sed 's!\([a-z0-9./]*inc\)!\\input{\1}!g' | fmt -w 10 > $target
+        
                  
 ################################################################
 # C code
