@@ -101,9 +101,15 @@ type t = {
     sections : section list
   }
 @ 
+
+The [[swa[]] function swaps the byteorder specification of an AST. If
+the AST does not contain such a specification, as indentical AST is
+returned.
+
 <<nast.mli>>=
 <<exposed types>>
 val program : Ast.toplevel list -> t
+val swap:     Ast.toplevel list -> Ast.toplevel list
 @ 
 \section{Implementation}
 
@@ -330,3 +336,24 @@ let program ts =
         code_labels = lbls; globals = rflatten regs; sections = List.map fst ss;
         udecls = { types = types; constants = consts };
       })
+@
+\paragraph{Byteorder swap} We swap the byteorder specified in an AST. If
+no byteorder is specified, an identical AST is returned.
+
+<<nast.ml>>=
+let swap ast = 
+    let arch = function
+        | A.ByteorderBig    -> A.ByteorderLittle
+        | A.ByteorderLittle -> A.ByteorderBig
+        | x                 -> x in    
+    let rec decl = function
+        | A.DeclAt(d,r)     -> A.DeclAt(decl d,r)
+        | A.Target(aa)      -> A.Target(List.map arch aa)
+        | x                 -> x in    
+    let rec toplevel = function
+        | A.ToplevelAt(t,r) -> A.ToplevelAt(toplevel t,r)
+        | A.TopDecl(d)      -> A.TopDecl(decl d)
+        | x                 -> x
+    in 
+        List.map toplevel ast
+@
