@@ -1,0 +1,110 @@
+# ------------------------------------------------------------------ 
+# $Id$ 
+# ------------------------------------------------------------------ 
+
+NAME =      cllib
+
+# ------------------------------------------------------------------ 
+# paths
+# ------------------------------------------------------------------ 
+
+TOP    =    ..
+INTERP =    evaluating
+DEPEND =    DEPEND
+
+LIBDIR =    ../lib
+BINDIR =    ../bin
+MANDIR =    ../man
+
+# ------------------------------------------------------------------ 
+# (high level) virtual targets
+# ------------------------------------------------------------------ 
+
+HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
+INC  =          `echo *.nw       | sed 's/\.nw/.inc/g;'`
+
+all:V:          ocamlerror
+all.opt:V:      ocamlerror.opt
+update:V:       
+update.opt:V:   
+
+dvi:V:          $INC
+html:V:         $HTML
+
+test:VQ:
+                echo "nothing to be done"
+
+depend:V:       $DEPEND
+
+clean:V:    
+                rm -f *.cmo *.cmi *.cmx *.o
+                rm -f *.output
+                
+clobber:V:      clean
+                rm -rf *.ml *.mll DEPEND 
+                rm -rf ocamlerror ocamlerror.opt
+
+
+# ------------------------------------------------------------------ 
+# rules and tools for OCaml
+# ------------------------------------------------------------------ 
+
+<../config/ocaml.mk
+<../config/noweb.mk
+
+# compiler flags used by the rules just included
+
+OCAMLC_FLAGS =  -g -I $LIBDIR
+OCAMLO_FLAGS =  -g -I $LIBDIR
+
+# ------------------------------------------------------------------ 
+# important file sets
+# ------------------------------------------------------------------ 
+
+ML  =           ocamlscan.ml    \
+                ocamlerror.ml   \
+
+MLI =           
+
+
+SCAN =          $ML $MLI
+
+CMO =           `echo $ML       | sed 's/\.ml/.cmo/g'`
+CMX =           `echo $ML       | sed 's/\.ml/.cmx/g'`
+OBJ =           `echo $ML       | sed 's/\.ml/.o/g'`
+
+# ------------------------------------------------------------------ 
+# building binaries
+# ------------------------------------------------------------------ 
+
+CMOLIBS =       str.cma  cllib.cma
+CMXLIBS =       str.cmxa cllib.cmxa
+
+ocamlerror:     ocamlscan.cmo ocamlerror.cmo 
+		$OCAMLC $OCAMLC_FLAGS -custom -o $target $CMOLIBS $prereq
+                
+
+ocamlerror.opt: ocamlscan.cmx ocamlerror.cmx 
+		$OCAMLO $OCAMLO_FLAGS -custom -o $target $CMXLIBS $prereq
+
+# ------------------------------------------------------------------ 
+# extra rules for cases not covered by noweb.mk
+# ------------------------------------------------------------------ 
+
+ocamlscan.mll:  ocamlerror.nw
+                $NOTANGLE -R$target $prereq > $target
+
+# ------------------------------------------------------------------ 
+# recalculate dependencies
+# make sure that generators are run first
+# ------------------------------------------------------------------ 
+
+$DEPEND: 	$SCAN
+		$OCAMLDEP $SCAN > $DEPEND
+
+# ------------------------------------------------------------------ 
+# include dependencies
+# ------------------------------------------------------------------ 
+
+<$DEPEND
+

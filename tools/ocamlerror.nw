@@ -1,0 +1,228 @@
+
+% ------------------------------------------------------------------ 
+\section{Character Offset in OCaml-Source Files}
+% ------------------------------------------------------------------ 
+
+An assertion failure in an {\ocaml} program reports source code
+locations as a character offset in a source file. Looking up that
+position with an editor is quite tedious when the source file is
+preprocessed in any way. We provide a tool that honors the [[#line]]
+pragmas in an {\ocaml} source file and translates a character offset
+into a triple of file-name, line, and column. Given that, it is easy to
+jump to the failed assertion in an editor.
+
+
+<<ocamlerror.ml>>=
+exception Error of string
+let error msg = raise (Error msg)
+  
+let find path file =
+    let rec loop = function
+        | [] -> None
+        | dir::dirs ->
+            let f = Filename.concat dir file in    
+            if Sys.file_exists f then
+                Some f 
+            else    
+                loop dirs
+    in            
+        loop path
+                
+        
+let map_of file =
+    let fd          = try open_in file with Sys_error(msg) -> error msg in
+    let finally ()  = close_in fd                           in
+    let lexbuf      = Lexing.from_channel fd                in
+    let map         = Srcmap.mk ()                          in
+    let location lb = Srcmap.location map (Lexing.lexeme_start lb) in
+        ( Srcmap.sync map 0 (file,1,1)
+        ; let map = Ocamlscan.token lexbuf map in (finally () ; map)
+        )
+        
+let rx1 = Str.regexp "Called from module \(.*\\), character \([0-9]+\).*"  
+let rx2 = Str.regexp "Re-raised at module \(.*\\), character \([0-9]+\).*" 
+let rx3 = Str.regexp ".*Assert_failure(\"\(.*\)\", \([0-9]+\),.*"            
+
+type trace = 
+           | Module of string
+           | File   of string
+           
+let trace line =
+    let matched n l = Str.matched_group n l in  
+    if Str.string_match rx1 line 0 then
+        line, Some (Module(matched 1 line), int_of_string (matched 2 line))
+    else if Str.string_match rx2 line 0 then
+        line, Some (Module(matched 1 line), int_of_string (matched 2 line))
+    else if Str.string_match rx3 line 0 then
+        line, Some (File(matched 1 line), int_of_string (matched 2 line))
+    else    
+        line, None 
+
+module Cache = Map.Make(struct type t=trace let compare=compare end)
+        
+let input path =
+    let filename m = String.uncapitalize m ^ ".ml" in
+    let filepath = function
+        | Module x -> find path (filename x)
+        | File   x -> find path x in        
+    let location trace file line column =
+        Printf.printf "%s (%s: %d, column %d)\n" trace file line column in
+    try 
+        let rec loop cache line = 
+            ( match trace line with
+            | line, None        -> print_endline line; loop cache (read_line ())
+            | line, Some(m,pos) -> 
+                try
+                    let map         = Cache.find m cache      in
+                    let (file, l,c) = Srcmap.location map pos in 
+                        ( location line file l c
+                        ; loop cache (read_line ())
+                        )
+                with Not_found ->  (* not in cache *)
+                    ( match filepath m with
+                    | None   -> print_endline line; loop cache (read_line())
+                    | Some p -> (* found src file, scan and cache it *)
+                        let map         = map_of p in
+                        let cache       = Cache.add m map cache in
+                        let (file, l,c) = Srcmap.location map pos in 
+                        ( location line file l c
+                        ; loop cache (read_line ())
+                        )
+                    )    
+             )        
+        in loop Cache.empty (read_line ())    
+    with        
+        End_of_file -> ()
+           
+
+        
+let main () =
+    let argv     = Array.to_list Sys.argv in
+    let this     = Filename.basename (List.hd argv) in
+    let args     = List.tl argv in
+        input ("."::args); exit 0
+        
+let _ = try main () with e -> 
+        ( Printf.eprintf "%s\n" (Printexc.to_string e)
+        ; Printf.eprintf "Exit with exit code 2\n"
+        ; exit 2
+        )
+
+let _ = main ()
+@
+        
+% ------------------------------------------------------------------ 
+\section{Scanner}
+% ------------------------------------------------------------------ 
+
+<<ocamlscan.mll>>=
+{
+    exception Error of string
+    let error msg = raise (Error msg)
+
+    (* called for *every* newline *)
+    let nl lexbuf map =
+        let next = (Lexing.lexeme_start lexbuf) + 1     in
+            Srcmap.nl map next
+        
+    let location lexbuf map =
+        Srcmap.location map (Lexing.lexeme_start lexbuf)
+             let pos_start   = Lexing.lexeme_start
+
+    let pos_end     = Lexing.lexeme_end
+
+    let get         = Lexing.lexeme
+    let getchar     = Lexing.lexeme_char
+    let strlen      = String.length
+
+}
+
+let digit       = ['0'-'9']
+let nat         = digit+
+let alpha       = ['a'-'z' 'A'-'Z']
+let misc        = ['.' '_' '$' '@']
+let id          = (alpha | misc) (alpha | misc | digit)*
+let ws          = [' ' '\012' '\r' '\t']  (* SP FF CR TAB *)
+let nl          = '\n'          
+
+
+rule token = parse
+    eof                 { fun map -> map            }
+  | nl                  { fun map -> nl lexbuf map ; token lexbuf map }
+  | nl '#'              { fun map -> line lexbuf map 0; token lexbuf map }
+  | '#'                 { fun map -> 
+                          if Lexing.lexeme_start lexbuf = 0 then 
+                                ( line lexbuf map 0
+                                ; token lexbuf map
+                                )
+                          else
+                                error "illegal character" 
+                        }
+  | [^ '\n']+   { fun map -> token lexbuf map }
+  | _           { fun map -> assert false }
+@    
+ 
+The [[line]] scanner scans a [[#line]] pragma and updates the source map
+accordingly. The scanner is not very accurate. It looks for a string in
+double quotes and takes it as the file name in the pragma, and a number
+that it takes it as a line number. 
+
+<<ocamlscan.mll>>=
+and line = parse 
+    eof                 { fun map l ->
+                          error "unterminated line directive" 
+                        }
+  | ws+                 { fun map l -> line lexbuf map l }
+  | '"'                 { fun map l ->
+                          let buf      = Buffer.create 80 in
+                          let _        = string lexbuf map buf in
+                          let file     = Buffer.contents buf in
+                          let pos      = Lexing.lexeme_start lexbuf in
+                          let location = file, l-1, 1 in
+                                ( Srcmap.sync map pos location
+                                ; () (* return *)
+                                )
+                        }
+  | nat                 { fun map l -> 
+                          
+                          (* inline'ing the l' expression caused an
+                          int_of_string failure with ocamlopt *)
+                  
+                          let l' = int_of_string (get lexbuf)
+                          in  line lexbuf map l'
+                        }
+  | id                  { fun map l ->
+                          line lexbuf map l
+                        }
+  | _                   { fun map l -> 
+                          error "illegal character in line directive"
+                        }
+@
+
+The [[string]] scanner scans a string in double quotes and returns it.
+No escape mechanism is implemented.
+
+<<ocamlscan.mll>>=
+and string = parse
+    eof                 { fun map buf -> 
+                          error "unterminated string" 
+                        }
+  | "\""                { fun map buf -> Buffer.contents buf 
+                          (* we are done *)
+                        }
+
+  | [^ '\000'-'\031'
+       '\128'-'\159'
+       '"' ]+           { fun map buf ->
+                          let s    = get lexbuf              in
+                          ( Buffer.add_string buf s
+                          ; string lexbuf map buf
+                          )
+                        }
+ | _                   { fun map buf ->
+                          error "illegal character in string"
+                        }
+
+{ (* epilog *) }                        
+@
+
