@@ -128,9 +128,12 @@ pc_map_entry* Cmm_thread_start_up_pcmap_entry;
 pc_map_entry* Cmm_thread_start_dn_pcmap_entry;
 @ 
 We provide some functions for debugging.
+If not [[NULL]], the ``span shower'' is called for each user span.
 <<exported type, procedure, and macro declarations>>=
-void Cmm_show_map(); /* for debugging */
-void Cmm_show_map_entry(pc_map_entry *entry, int index, Cmm_Codeptr ra);
+typedef void (*Cmm_span_shower)(unsigned key, void *value, void *closure);
+void Cmm_show_map(Cmm_span_shower, void *); /* for debugging */
+void Cmm_show_map_entry(pc_map_entry *entry, int index, Cmm_Codeptr ra,
+                        Cmm_span_shower show_span, void *closure);
 @ 
 \subsection{Implementation}
 <<pcmap.c>>=
@@ -333,15 +336,17 @@ static void printloc(location loc) {
 <<pcmap.c>>=
 <<private show functions>>
 
-void Cmm_show_map(void) {
+void Cmm_show_map(Cmm_span_shower show_span, void *closure) {
   pc_map_index *idx;
   printf("pc_map_size %d\n", pc_map_size);
   for (idx = Cmm_pc_map; idx < Cmm_pc_map_limit; idx++) {
-    Cmm_show_map_entry(idx->entry, idx - Cmm_pc_map, idx->ra);
+    Cmm_show_map_entry(idx->entry, idx - Cmm_pc_map, idx->ra, show_span, closure);
   }
 }
 <<pcmap.c>>=
-void Cmm_show_map_entry(pc_map_entry *entry, int index, Cmm_Codeptr ra) {
+void Cmm_show_map_entry(pc_map_entry *entry, int index, Cmm_Codeptr ra,
+                        Cmm_span_shower show_span, void *closure)
+{
   struct sd *sdt;
   char *indent = index < 0 ? "    " : "";
   if (index >= 0) 
@@ -369,6 +374,7 @@ void Cmm_show_map_entry(pc_map_entry *entry, int index, Cmm_Codeptr ra) {
   <<show registers>>
   <<show continuations>>
   <<show stack-data table [[sdt]]>>
+  <<show spans>>
 }
 @ 
 <<show stack-data table [[sdt]]>>=
@@ -423,6 +429,13 @@ if (sdt->num_entries == 0) {
     for (i = 0; i < conts->num_entries; i++)
       show_cont(conts, i, indent);
   }
+}
+@ 
+<<show spans>>=
+{ unsigned i;
+  Cmm_Word *descs = spans(entry);
+  for (i = 0; i < entry->num_spans; i++)
+    show_span(i, (void *)descs[i], closure);
 }
 @ 
 <<private show functions>>=

@@ -83,3 +83,9 @@ void rt_check(Cmm_Cont* t) {
   } while (Cmm_ChangeActivation(&a));
 }
 
+void show_span(unsigned key, void *value, void *closure) {
+  if (key == 1)
+    printf("    span label == \"%s\"\n", (char *)value);
+  else if (value)
+    printf("    unexpected span %d == %p\n", key, value);
+}

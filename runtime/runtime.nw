@@ -666,6 +666,11 @@ section "data" {
 }
 @ 
 <<implementations of public functions>>=
+static void show_span(unsigned key, void *value, void *closure) {
+  if (value)
+    printf("    span %d == %p\n", key, value);
+}
+
 void Cmm_show_activation(const Cmm_Activation *a) {
   printf("activation @ %p = {\n", (void*)a);
   printf("  methods = ");
@@ -678,7 +683,7 @@ void Cmm_show_activation(const Cmm_Activation *a) {
   printf("  vfp = %p, pc = %p,\n", a->vfp, (void *)a->pc);
   <<print registers in activation [[a]]>>
   printf("  entry = {\n");
-  Cmm_show_map_entry(a->rtdata, -1, a->pc);
+  Cmm_show_map_entry(a->rtdata, -1, a->pc, show_span, NULL);
   printf("  }\n}\n");
 }
 <<print registers in activation [[a]]>>=
