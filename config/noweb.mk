@@ -84,12 +84,12 @@ NOWEBBREAKCODE=no
 	) > $target
 
 %.inc:D:          %.nw
-                $NOWEAVE -delay -filter $OCAMLDEFS -index $prereq > $target
+	$NOWEAVE -delay -filter $OCAMLDEFS -index $prereq > $target
 
 # next is for interface only
 %.int:D:          %.nw
-                $NOWEAVE -delay -filter $OCAMLDEFS -index $prereq > $target
+	$NOWEAVE -delay -filter $OCAMLDEFS -index $prereq > $target
 
 %.html:D: %.nw
-        cat $TOP/config/macros.tex $prereq |\
-        $NOWEAVE -delay -filter $OCAMLDEFS -index -html -filter l2h - > $target
+	cat $TOP/config/macros.tex $prereq |
+	$NOWEAVE -delay -filter $OCAMLDEFS -index -html -filter l2h - > $target

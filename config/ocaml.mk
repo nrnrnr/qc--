@@ -26,22 +26,21 @@ OCAMLLEX =      ocamllex
 # ------------------------------------------------------------------ 
 
 %.cmi:          %.mli
-                $OCAMLC $OCAMLC_FLAGS -c $stem.mli
+	$OCAMLC $OCAMLC_FLAGS -c $stem.mli
 
 %.cmo:          %.ml
-                $OCAMLC $OCAMLC_FLAGS -c $stem.ml
+	$OCAMLC $OCAMLC_FLAGS -c $stem.ml
 
 %.o %.cmx:      %.ml
-                $OCAMLO $OCAMLO_FLAGS -c $stem.ml
+	$OCAMLO $OCAMLO_FLAGS -c $stem.ml
 
 %.ml:           %.mll
-                $OCAMLLEX $stem.mll
+	$OCAMLLEX $stem.mll
 
 %.mli           \
 %.ml            \
 %.output:       %.mly
-                $OCAMLYACC -v $stem.mly
+	$OCAMLYACC -v $stem.mly
 
 %.sig:          %.ml
-                $OCAMLC $OCAMLC_FLAGS -c -i $stem.ml > $target
-
+	$OCAMLC $OCAMLC_FLAGS -c -i $stem.ml > $target
