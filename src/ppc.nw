@@ -8,6 +8,14 @@ Backend for PPC
 \section{Module Structure}
 % ---------------------------------------------------------------------------
 <<ppc.mli>>=
+module Spaces : sig
+  val m : Space.t
+  val r : Space.t
+  val t : Space.t
+  val c : Space.t
+  val f : Space.t
+  val u : Space.t
+end
 module Post : Postexpander.S
 module X    : Expander.S
 val target : Ast2ir.tgt
@@ -19,23 +27,73 @@ module RP   = Rtl.Private
 module Up   = Rtl.Up
 module Down = Rtl.Dn
 module PX   = Postexpander
-
-module Spaces = struct
-  module S = Space.Standard32
-  let bo = Rtl.BigEndian
-  let id = Rtl.Identity
-  let m = S.m    bo [8;16;32]
-  let r = S.r 32 id [32]
-  let t = S.t    id [32]
-  let c = S.c 3  id [32]
-end
-
+<<spaces>>
 module Post = struct
   <<ppc postexpander>>
 end
 module X = Expander.IntFloatAddr (Post)
 <<target spec>>
 <<variable placer>>
+@
+% ---------------------------------------------------------------------------
+\section{Spaces}
+% ---------------------------------------------------------------------------
+The PPC has 32 integer registers and 32 floating point registers.
+<<spaces>>=
+module Spaces = struct
+  module S = Space
+  module SS = Space.Standard32
+  let bo = Rtl.BigEndian
+  let id = Rtl.Identity
+  let m = SS.m    bo [8;16;32]
+  let r = SS.r 32 id [32]
+  let t = SS.t    id [32]
+  let c = SS.c 7  id [32]
+
+  let flt = { S.space = 'u'
+            ; S.doc = "floating point registers"
+            ; S.cellwidth = 64
+            ; S.indexwidth = 5
+            ; S.indexlimit = Some 32
+            ; S.aggregation = id
+            ; S.widths = [64]
+            ; S.classification = S.Reg
+            }
+ let f = S.checked flt
+ let u = S.checked { flt with
+                     S.indexwidth = 31
+                   ; S.indexlimit = None
+                   ; S.classification =
+                      S.Temp { S.stands_for = 'f'
+                             ; S.index_ok = (fun _ -> true)
+                             ; S.set_doc = "floating point temporaries"
+                             }
+                   }
+end
+@ 
+The power PC has 7 different control registers.
+<<spaces>>=
+let creg n = R.reg ('c',n,32)
+let cia    = creg 0  (* current instr address (pc)       *)
+let nia    = creg 1  (* new (next) instr address         *)
+let cr     = creg 2  (* condition register               *)
+let fpcr   = creg 3  (* flt point condition register     *)
+let xer    = creg 4  (* XER register                     *)
+let lr     = creg 5  (* link register                    *)
+let ctr    = creg 6  (* counter register                 *)
+@ 
+The condition registers are divided into several identical fields.
+<<spaces>>=
+let crf    n = R.slice 4 (n*4) cr
+let crfval n = R.fetch (crf n) 4
+let crLT  = crf 0
+and crGT  = crf 1
+and crEQ  = crf 2
+and crSO  = crf 3
+and crFX  = crf 4
+and crFEX = crf 5
+and crVX  = crf 6
+and crOX  = crf 7
 @ 
 % ---------------------------------------------------------------------------
 \section{Post Expander}
@@ -43,10 +101,8 @@ module X = Expander.IntFloatAddr (Post)
 <<ppc postexpander>>=
 let byte_order = R.BigEndian
 let wordsize = 32
-
-let pc = R.reg ('c', 0, 32)
-let pc_lhs = pc
-let pc_rhs = pc
+let pc_lhs = nia
+let pc_rhs = cia
 
 module Address = struct
   type t = Rtl.exp
@@ -135,8 +191,13 @@ let bc tmp1 op tmp2 ~tgt = [ R.guard (R.app (Up.opr op) [R.bool true]) (List.hd 
 
 
 let bnegate rtl = rtl
-let callr ~tgt ~others = br tgt
-let call ~tgt ~others = b tgt
+let callr ~tgt ~others = (R.par [ R.store lr (R.fetch pc_rhs wordsize) wordsize
+                                ; List.hd (br tgt)
+                                ]) ::  List.map Up.effect others
+let call ~tgt ~others  = (R.par [ R.store lr (R.fetch pc_rhs wordsize) wordsize
+                                ; List.hd (b tgt)
+                                ]) ::  List.map Up.effect others
+
 let cut_to effects = [R.par (List.map Up.effect effects)]
 
 let don't_touch_me effects = false
