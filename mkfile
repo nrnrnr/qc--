@@ -31,9 +31,7 @@ SUBDIRS =       $LIBSRC $SRC
 all:V:          lib
                 for i in $SRC; 
                 do 
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS update.opt)
-                done
-                    
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS update)
                 done
 
 all.opt:V:      lib.opt 
