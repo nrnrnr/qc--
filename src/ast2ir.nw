@@ -62,7 +62,8 @@ end
 
 module Make
   (G   : Agraph.S)      
-  (Asm : Asm2.S with type instruction = G.node) = 
+  (Asm : Asm2.S with type instruction = G.node) 
+  (CC  : Callconv.S) =
 struct
     module GM = G.Make
     <<module Make>> 
@@ -155,7 +156,8 @@ a flow graph.  The flow graph will in later steps replaced by real
 machine instructions.
 
 <<module Make>>=
-let (++) = Asm.append   (* infix, left associative *)
+let (++)    = Asm.append   (* infix, left associative *)
+let mangle  = Asm.mangle   (* name mangler C-- -> ASM *)
 @
 
 The [[ty]] function returns the number of bits denoted by a type in
@@ -292,40 +294,6 @@ and expr env = function
     | A.UnOp(op,e)          -> primOp env op [e]
     | A.PrimOp(op,xs)       -> primOp env op (List.map snd xs) (* ignore hints*)
 @    
-   
-% ------------------------------------------------------------------ 
-\subsubsection{Memory declarations}
-% ------------------------------------------------------------------ 
-
-
-<<>>=
-let memsize env asm = function
-    | A.NoSize        -> true
-    | A.DynSize       -> true
-    | A.FixSize(e)    -> true
-
-<<module Make>>=
-let initialized_data asm expr = assert false
-
-let rec init env asm = function
-    | A.InitAt(x,_)   -> init env asm x
-    | A.InitExprs(es) -> foldl initialized_data asm es
-    | A.InitStr(s)    -> assert false
-    | A.InitUStr(s)   -> assert false
-@
-
-<<module Make>>=
-let rec datum env asm = function
-    | A.DatumAt(x,_)        -> datum env asm x
-    | A.Label(n)            -> assert false
-    | A.Align(a)            -> asm ++ Asm.align a 
-    | A.MemDecl(t,m,Some i) -> assert false
-    | A.MemDecl(t,m,None)   -> assert false
-
-
-<<unused>>=
-let register env ir (v , t, n, reg)  = true
-@
 
 % ------------------------------------------------------------------ 
 \subsubsection{Flow Annotations}
@@ -365,7 +333,7 @@ let rec body env props graph after bb =
         | A.BodyAt(x, _)    -> body x after
         | A.DeclBody(d)     -> ldecl d after
         | A.StmtBody(s)     -> stmt s after
-        | A.DataBody(dd)    -> assert false  (* to do *)
+        | A.DataBody(dd)    -> after (* can be ignored *)
     in
         List.fold_right body bb after
 @
@@ -553,6 +521,70 @@ Local declarations are ignored for the moment.
 <<>>=    
 and ldecl env after = after
 @
+   
+% ------------------------------------------------------------------ 
+\subsubsection{Global Memory declarations}
+% ------------------------------------------------------------------ 
+
+<<module Make>>=
+let initialized_data asm expr = assert false
+
+let rec init env asm = function
+    | A.InitAt(x,_)   -> init env asm x
+    | A.InitExprs(es) -> foldl initialized_data asm es
+    | A.InitStr(s)    -> assert false
+    | A.InitUStr(s)   -> assert false
+@
+
+<<>>=
+let rec init_size = function
+    | None   -> 1
+    | Some i -> let rec loop = function 
+                    | A.InitAt(x,_)   -> loop x
+                    | A.InitExprs(es) -> List.length es
+                    | A.InitStr(s)    -> assert false
+                    | A.InitUStr(s)   -> assert false
+                in 
+                    loop i 
+@
+
+
+<<>>=
+let memdecl env asm t size ini = 
+    let sizeof = ty env t / (F.findMemsize env) (* no. of memsized objs *) in
+    let n      = ( match size with
+                 | A.DynSize    -> init_size ini
+                 | A.NoSize     -> 1
+                 | A.FixSize(e) -> un_const e (* bogus *)
+                 ) in
+        ( match ini with
+        | None    -> asm ++ Asm.zeroes (n * sizeof)
+        | Some ii -> init env asm ii
+        )
+@
+
+Data can be declared globally inside a section or a section-level
+[[span]] and locally, inside a procedure as [[stackdata]].  The former
+is directly translated into assembly action that reserve memory inside
+a section, the latter becomes just an amount of memory that is
+allocated inside a procedure's activation record.  Since the amount of
+stack allocated data and the offsets associated with labels inside of
+it are already entered into the fat environment (by
+[[Elab.Check.stackdatum]]), stack data declaration can be ignored. 
+Global data declarations, on the other hand, must be translated to
+assembly actions.
+ 
+<<module Make>>=
+let rec datum env asm = function
+    | A.DatumAt(x,_)        -> datum env asm x
+    | A.Label(n)            -> asm ++ Asm.define_local (mangle n)
+    | A.Align(a)            -> asm ++ Asm.align a 
+    | A.MemDecl(t,m,init)   -> memdecl env asm t m init
+@
+    
+% ------------------------------------------------------------------ 
+\subsubsection{Toplevel}
+% ------------------------------------------------------------------ 
 
 All global declarations have been processed at this stage and thus can
 be ignored.  The only exception are (global) register declarations. 
@@ -577,15 +609,10 @@ and gdecl env (asm: Asm.asm) = function
 let rec section env props (asm: Asm.asm) = function
     | A.SectionAt(x,_)     -> section env props asm x
     | A.Decl(d)            -> gdecl env asm d 
-    | A.Datum( d)          -> assert false  (* todo *)
+    | A.Datum( d)          -> datum env asm d
     | A.Procedure(p)       -> proc env props asm p
     | A.SSpan( e1, e2, ss) -> assert false
 @            
-    
-    
-% ------------------------------------------------------------------ 
-\subsubsection{Toplevel}
-% ------------------------------------------------------------------ 
 
 What to do with top-level procedures? They should go into some section
 because otherwise they will end up in whatever section is currently

@@ -166,6 +166,14 @@ type ventry         = (denotation * Types.ty) info
 type tentry         = Types.ty                info
 @
 
+Global registers can be mapped to hardware registers. The sequence of
+their declarations matters and thus the fat environment provides their
+asbtract sequence:
+
+<<>>=
+type hwregs         = (string * register * Types.ty) list
+@
+ 
 % ------------------------------------------------------------------ 
 \subsubsection{Type and Value Bindings}
 % ------------------------------------------------------------------ 
@@ -361,8 +369,17 @@ val exported: env -> StrSet.t
 val nam2sym:  env -> string StrMap.t
 @
 
+% ------------------------------------------------------------------ 
+\subsubsection{Hardware Registers}
+% ------------------------------------------------------------------
 
+A {\PAL} program can declare global registers to use a specific target
+hardware register.  The abstract \emph{sequence} of these declarations
+is returned by [[hwreg_decls]]:
 
+<<>>=
+val hwreg_decls: env -> hwregs
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
@@ -421,6 +438,12 @@ The [[Arg]] modules captures the aspects not common to [[Clean]] and
     nothing is known about a target yet and thus all fields are
     considered as good, but unknown.
 
+    \item The [[asgood]] function provides a way to access [[info]]
+    information.  If the information is absent, [[None]] is returned. 
+    In a [[Clean.env]] environment [[asgood]] alsways returns a
+    [[Some]] value.
+@
+
 \end{itemize} 
 
 <<>>=
@@ -429,6 +452,7 @@ module type Arg = sig
     type 'a info
     
     val good    : 'a   -> 'a info
+    val asgood  : 'a info -> 'a option
     val bad     : unit -> 'a info
     val update  : 'a partial info -> 'a -> (unit -> unit) -> 'a partial info
     val default : 'a   -> 'a partial info
@@ -453,7 +477,9 @@ module Dirty = Env (struct
     
     let good    x   = Error.Ok(x)
     let bad     x   = Error.Error
-
+    let asgood = function
+        | Error.Ok(x) -> Some x
+        | Error.Error -> None
     
     let update old new' error =
         E.sequence old
@@ -474,6 +500,7 @@ module Clean = Env (struct
     type 'a info                = 'a
 
     let good x                  = x
+    let asgood x                = Some x
     let bad  x                  = assert false
     let update old new' f       = new'
     let default x               = x
@@ -511,7 +538,14 @@ type endianness     = Big | Little
 type register       = { index:      int           (* for run-time API *)
                       ; hwreg:      string option (* hardware register *)
                       }
+@
 
+A global register can be declared to use a specific hardware register. 
+All hardware registers used by a program are remembered in the fat
+environment such that a set of all used hardware registers can be
+obtained.
+
+<<>>=
 type proc           = { env:        env partial
                       ; stackdata:  int partial
                       }
@@ -529,7 +563,11 @@ and  denotation     = Constant      of Bits.bits
 
 and  ventry         = (denotation * Types.ty) Arg.info
 and  tentry         = Types.ty                Arg.info
+
+<<>>=
+and  hwregs         = (string * register * Types.ty) list
 @
+
 
 Bindings for value and types are stored in a string-map [[StrMap]]. 
 Each entry consists of attributes [[attr]] for the source code
@@ -577,6 +615,7 @@ and   env           =
                       ; asm    :      asm
                       ; rindex :      int       (* register index *)
                       ; offset :      int       (* stack data offset *)
+                      ; hwregs :      hwregs    (* hardware registers *)
                       }
                       
 @
@@ -596,6 +635,7 @@ let empty  map      = { tenv   = StrMap.empty
                       ; error  = false
                       ; rindex = 0
                       ; offset = 0 
+                      ; hwregs = []
                       ; target = { memsize    = Arg.default 8
                                  ; endianness = Arg.default Little
                                  ; word       = Arg.default 32
@@ -636,8 +676,12 @@ let bindv name ((reg,scope as attr),x) env =
             ; error reg' env.srcmap ("previously declared here")
             ; add name (attr',Arg.bad ()) (flagError env)
             )
-        else
-            add name (attr,x) env
+        else match Arg.asgood x with 
+        | Some (Register({hwreg=Some hw} as reg),t) ->
+               { env with venv   = StrMap.add name (attr,x) env.venv
+               ;          hwregs = (name,reg,t) :: env.hwregs  
+               }          
+        | _ -> { env with venv = StrMap.add name (attr,x) env.venv }
     with
         Not_found -> add name (attr,x) env
 
@@ -842,6 +886,18 @@ let alignOffset n env = if   env.offset mod n= 0
 @
 
 % ------------------------------------------------------------------ 
+\subsubsection{Hardware Registers}
+% ------------------------------------------------------------------ 
+
+The list of register declarations that use hardware registers is build
+in reverse order by [[bindv]].  So we have to reverse it when we
+return it.
+
+<<>>=
+let hwreg_decls env = List.rev env.hwregs
+@
+
+% ------------------------------------------------------------------ 
 \subsubsection{Cleaning a fat environment}
 % ------------------------------------------------------------------ 
 
@@ -856,6 +912,11 @@ let clean_scope = function
     | Dirty.Local  -> Clean.Local
     | Dirty.Global -> Clean.Global
 
+let clean_reg r =
+    { Clean.index = r.Dirty.index
+    ; Clean.hwreg = r.Dirty.hwreg
+    }
+
 let rec clean_venv map  =
     let copy key data map = match data with
         |  (pos,scope),E.Ok(denot,ty) ->
@@ -866,10 +927,7 @@ let rec clean_venv map  =
                 | Dirty.Label(Dirty.Data)         -> Clean.Label(Clean.Data)
                 | Dirty.Label(Dirty.Stack(Some n))-> Clean.Label(Clean.Stack n)
                 | Dirty.Import(n)                 -> Clean.Import(n)
-                | Dirty.Register(n)     -> Clean.Register(
-                                         { Clean.index  = n.Dirty.index
-                                         ; Clean.hwreg  = n.Dirty.hwreg
-                                         })
+                | Dirty.Register(n)               -> Clean.Register(clean_reg n)
                 | Dirty.Continuation              -> Clean.Continuation
                 | _                               -> assert false
             in
@@ -922,6 +980,9 @@ and clean_proc = function
         }
     |   _ -> assert false 
 
+and clean_hwregs regs =
+    List.map (fun (name, reg, ty) -> (name, clean_reg reg, ty)) regs
+
 <<>>=     
 and clean env =
     { Clean.tenv   = clean_tenv env.Dirty.tenv
@@ -931,6 +992,7 @@ and clean env =
     ; Clean.target = clean_target env.Dirty.target
     ; Clean.rindex = env.Dirty.rindex
     ; Clean.offset = env.Dirty.offset
+    ; Clean.hwregs = clean_hwregs env.Dirty.hwregs
     ; Clean.asm    = clean_asm env.Dirty.asm
     }
 @
