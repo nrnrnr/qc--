@@ -96,13 +96,14 @@ Initialized data, as well as data in the form of [[SSpan]] and
 [[Procedure]], are found only at top level.
 <<exposed types>>=
 type ('l, 'e, 'a) proc = {
-    cc        : convention;
-    name      : name;
-    formals   : (hint * A.invariant * ty * name) list;
-    locals    : register list;
-    pdecls    : 'e compile_time_defns;
-    stackdata : (void, void, void) datum list;
-    code      : ('l, 'e, 'a) stmt list;
+    cc            : convention;
+    name          : name;
+    formals       : (hint * A.invariant * ty * name) list;
+    locals        : register list;
+    pdecls        : 'e compile_time_defns;
+    continuations : name marked list;
+    stackdata     : (void, void, void) datum list;
+    code          : ('l, 'e, 'a) stmt list;
   }
 and ('l, 'e, 'a)  datum =
   | Datalabel  of name
@@ -172,17 +173,30 @@ let fdata r = List.fold_right (add_datum r)
 The main idea in this module is CPS.
 We have a boatload of accumulating parameters, and eventually we get a
 program. 
-Most of the accumulating parameters accumulate declarations.
+The parameters are:
+\begin{quote}
+\begin{tabular}{ll}
+[[imps]]& Imports\\
+[[exports]]& Exports\\
+[[lbls]]& Code labels\\
+[[ks]]& Continuations\\
+[[consts]]& Constant definitions\\
+[[types]]& Type definitions\\
+[[archs]]& Target-specific declarations\\
+[[data]]& Initialized data or stack data\\
+\end{tabular}
+\end{quote}
+Most of these accumulating parameters accumulate declarations.
 <<nast.ml>>=
-let rec decl r imports exports lbls consts types regs archs data d k = match d with
-  | A.DeclAt(x,r)   -> decl r imports exports lbls consts types regs archs data x k
-  | A.Typedef d     -> k imports exports lbls consts ((r,d) :: types) regs archs data
-  | A.Import (t,ii) -> k ((r,t,ii)::imports) exports lbls consts types regs archs data
-  | A.Export (t,ee) -> k imports ((r,ee) :: exports) lbls consts types regs archs data
-  | A.Const d       -> k imports exports lbls ((r,d) :: consts)  types regs archs data
-  | A.Registers rs  -> k imports exports lbls consts types (rs :: regs) archs data
-  | A.Target    t   -> k imports exports lbls consts types regs ((r, t) :: archs) data
-  | A.Pragma        -> k imports exports lbls consts types regs archs data
+let rec decl r imps exports lbls ks consts types regs archs data d k = match d with
+  | A.DeclAt(x,r)   -> decl r imps exports lbls ks consts types regs archs data x k
+  | A.Typedef d     -> k imps exports lbls ks consts ((r,d) :: types) regs archs data
+  | A.Import (t,ii) -> k ((r,t,ii)::imps) exports lbls ks consts types regs archs data
+  | A.Export (t,ee) -> k imps ((r,ee) :: exports) lbls ks consts types regs archs data
+  | A.Const d       -> k imps exports lbls ks ((r,d) :: consts)  types regs archs data
+  | A.Registers rs  -> k imps exports lbls ks consts types (rs :: regs) archs data
+  | A.Target    t   -> k imps exports lbls ks consts types regs ((r, t) :: archs) data
+  | A.Pragma        -> k imps exports lbls ks consts types regs archs data
 @ 
 This is a generic lifting function.
 Function [[kmap f]] turns function [[f]] from a function on~[['a]] to
@@ -190,32 +204,32 @@ a function on \mbox{[['a list]]}.
 The function has to supply a value to its continuation;
 if it doesn't, use [[kmap_none]].
 <<nast.ml>>=
-let rec kmap f cons r imports exports lbls consts types regs archs data xs k =
+let rec kmap f cons r imps exports lbls ks consts types regs archs data xs k =
   match xs with
-  | []      -> k [] imports exports lbls consts types regs archs data
+  | []      -> k [] imps exports lbls ks consts types regs archs data
   | x :: xs ->
-      kmap f cons r imports exports lbls consts types regs archs data xs
-      (fun xs imports exports lbls consts types regs archs data ->
-        f r imports exports lbls consts types regs archs data x
-          (fun x imports exports lbls consts types regs archs data  ->
-            k (cons x xs) imports exports lbls consts types regs archs data))
+      kmap f cons r imps exports lbls ks consts types regs archs data xs
+      (fun xs imps exports lbls ks consts types regs archs data ->
+        f r imps exports lbls ks consts types regs archs data x
+          (fun x imps exports lbls ks consts types regs archs data  ->
+            k (cons x xs) imps exports lbls ks consts types regs archs data))
 
-let kmap_none f r imports exports lbls consts types regs archs data xs k =  
-  let xk f r imports exports lbls consts types regs archs data x k = 
-    f r imports exports lbls consts types regs archs data x (k []) in
+let kmap_none f r imps exports lbls ks consts types regs archs data xs k =  
+  let xk f r imps exports lbls ks consts types regs archs data x k = 
+    f r imps exports lbls ks consts types regs archs data x (k []) in
   kmap (xk f) (fun _ _ -> [])
-    r imports exports lbls consts types regs archs data xs (fun _ -> k)
+    r imps exports lbls ks consts types regs archs data xs (fun _ -> k)
 @ 
 And now, processing a body item, which is liftable with [[kmap]].
 The continuation~[[k]] expects an optional statement, which is represented
 as a value of type [[stmt list -> stmt list]].
 If there can be no statement, [[k]]'s first argument is~[[id]].
 <<nast.ml>>=
-let rec body r imports exports lbls consts types regs archs data b k = match b with
-| A.BodyAt(b,r) -> body r imports exports lbls consts types regs archs data b k
-| A.DeclBody d  -> decl r imports exports lbls consts types regs archs data d (k id)
+let rec body r imps exports lbls ks consts types regs archs data b k = match b with
+| A.BodyAt(b,r) -> body r imps exports lbls ks consts types regs archs data b k
+| A.DeclBody d  -> decl r imps exports lbls ks consts types regs archs data d (k id)
 | A.StmtBody s  -> (<<match [[stmt]] [[s]] at [[r]] and continue with [[k]]>>)
-| A.DataBody ds -> k id imports exports lbls consts types regs archs (fdata r ds data)
+| A.DataBody ds -> k id imps exports lbls ks consts types regs archs (fdata r ds data)
 and bodies r = kmap body (fun add ss -> add ss) r
 @ 
 Here are statements.
@@ -230,28 +244,29 @@ understand [[If]], you understand it all.
 <<match [[stmt]] [[s]] at [[r]] and continue with [[k]]>>=
 let rec stmt r s k = 
   let cons s ss = StmtAt (s, r) :: ss in
-  let atomic s = k (cons s) imports exports lbls consts types regs archs data in
+  let atomic s = k (cons s) imps exports lbls ks consts types regs archs data in
   match s with
   | A.StmtAt(s,r) -> stmt r s k
   | A.IfStmt (c,b1,b2)   ->
-      bodies r imports exports lbls consts types regs archs data b2
-      (fun ss1 imports exports lbls consts types regs archs data ->
-        bodies r imports exports lbls consts types regs archs data b1 
-          (fun ss2 imports exports lbls consts types regs archs data ->
-            k (cons(If(c,ss1,ss2))) imports exports lbls consts types regs archs data))
+      bodies r imps exports lbls ks consts types regs archs data b2
+      (fun ss1 imps exports lbls ks consts types regs archs data ->
+        bodies r imps exports lbls ks consts types regs archs data b1 
+          (fun ss2 imps exports lbls ks consts types regs archs data ->
+            k (cons(If(c,ss1,ss2))) imps exports lbls ks consts types regs archs data))
   | A.SwitchStmt (range,e,aa) ->
-      arms r imports exports lbls consts types regs archs data aa
-        (fun aa imports exports lbls consts types regs archs data ->
+      arms r imps exports lbls ks consts types regs archs data aa
+        (fun aa imps exports lbls ks consts types regs archs data ->
           let stmt = cons (Switch (range, e, aa)) in
-          k stmt imports exports lbls consts types regs archs data)
+          k stmt imps exports lbls ks consts types regs archs data)
   | A.LabelStmt l ->
-      k (cons (Label l)) imports exports ((r, l) :: lbls) consts types regs archs data
+      k (cons (Label l)) imps exports ((r, l) :: lbls) ks consts types regs archs data
   | A.ContStmt (n, formals) ->
-      atomic (Cont (n, List.map cformal formals))
+      let stmt = cons (Cont (n, List.map cformal formals)) in
+      k stmt imps exports lbls ((r, n) :: ks) consts types regs archs data
   | A.SpanStmt(key,v,bs)   -> 
-      bodies r imports exports lbls consts types regs archs data bs
-      (fun ss imports exports lbls consts types regs archs data ->
-        k (cons (Span (key,v,ss))) imports exports lbls consts types regs archs data)
+      bodies r imps exports lbls ks consts types regs archs data bs
+      (fun ss imps exports lbls ks consts types regs archs data ->
+        k (cons (Span (key,v,ss))) imps exports lbls ks consts types regs archs data)
   | A.AssignStmt (ls, rs) ->
       atomic (Assign (ls, rs))
   | A.CallStmt (ls, cc, p, a's, tgts, flows) ->
@@ -268,72 +283,76 @@ let rec stmt r s k =
       atomic (Return (convention cc, alt, List.map actual a's))
   | A.EmptyStmt
   | A.CommentStmt _   ->
-      k id imports exports lbls consts types regs archs data in
+      k id imps exports lbls ks consts types regs archs data in
 stmt r s k
 @ 
 Arm of a case statement.  Nothing interesting here.
 <<nast.ml>>=
-and arm r imports exports lbls consts types regs archs data a k = match a with
-| A.ArmAt (a,r) -> arm r imports exports lbls consts types regs archs data a k
+and arm r imps exports lbls ks consts types regs archs data a k = match a with
+| A.ArmAt (a,r) -> arm r imps exports lbls ks consts types regs archs data a k
 | A.Case (ranges,bs) -> 
-    bodies r imports exports lbls consts types regs archs data bs
-      (fun stmts imports exports lbls consts types regs archs data ->
-        k (ranges, stmts) imports exports lbls consts types regs archs data) 
+    bodies r imps exports lbls ks consts types regs archs data bs
+      (fun stmts imps exports lbls ks consts types regs archs data ->
+        k (ranges, stmts) imps exports lbls ks consts types regs archs data) 
 and arms r = kmap arm (fun x y -> x::y) r
 @
 A section simply accumulates data, so its continuation doesn't take an
-additional argument before [[imports]].
+additional argument before [[imps]].
 In other words, [[section]] is like [[decl]] and not like [[body]] or
 [[stmt]]. 
 <<nast.ml>>=
-let rec section r imports exports lbls consts types regs archs data s k = match s with
+let rec section r imps exports lbls ks consts types regs archs data s k = match s with
 | A.SectionAt (s,r) ->
-    section r imports exports lbls consts types regs archs data s k
+    section r imps exports lbls ks consts types regs archs data s k
 | A.Decl d ->
-    decl    r imports exports lbls consts types regs archs data d k
+    decl    r imps exports lbls ks consts types regs archs data d k
 | A.SSpan(key, v, ss) ->
-    sections r imports exports lbls consts types regs archs [] ss
-      (fun imports exports lbls pconsts ptypes pregs archs sdata ->
-        k imports exports lbls pconsts ptypes pregs archs (SSpan(key,v,sdata)::data))
+    sections r imps exports lbls ks consts types regs archs [] ss
+      (fun imps exports lbls ks pconsts ptypes pregs archs sdata ->
+        k imps exports lbls ks pconsts ptypes pregs archs (SSpan(key,v,sdata)::data))
 | A.Datum d ->
-    k imports exports lbls consts types regs archs (add_datum r d data)
+    k imps exports lbls ks consts types regs archs (add_datum r d data)
 | A.Procedure(cc,p,fs,bs) ->
-    bodies r imports exports lbls [] [] [] archs [] bs
-    (fun ss imports exports lbls pconsts ptypes pregs archs pdata ->
+    bodies r imps exports lbls [] [] [] [] archs [] bs
+    (fun ss imps exports lbls pks pconsts ptypes pregs archs pdata ->
       let cdecls = { constants = pconsts; types = ptypes } in
       let p = { cc = convention cc; name = p; formals = List.map formal fs; code = ss;
+                continuations = pks;
                 locals = List.flatten pregs; pdecls = cdecls; stackdata = pdata; } in
-      k imports exports lbls consts types regs archs (Procedure p :: data))
+      k imps exports lbls ks consts types regs archs (Procedure p :: data))
 and sections r = kmap_none section r
 @ 
 At top level, we accumulate sections, where a section is a named list of data.
 Again, we could have a declaration at top level, so we use [[cons]]
 and [[id]] as before.  
 <<nast.ml>>=
-let rec toplevel r imports exports lbls consts types regs archs data t k = 
+let rec toplevel r imps exports lbls ks consts types regs archs data t k = 
   let cons s ss = (s, r) :: ss in
   match t with
   | A.ToplevelAt(t,r) ->
-      toplevel r imports exports lbls consts types regs archs data t k
+      toplevel r imps exports lbls ks consts types regs archs data t k
   | A.Section(name, ss) ->
-      sections r imports exports lbls consts types regs archs [] ss
-        (fun imports exports lbls consts types regs archs sdata ->
-          k (cons (name, sdata)) imports exports lbls consts types regs archs data)
+      sections r imps exports lbls ks consts types regs archs [] ss
+        (fun imps exports lbls ks consts types regs archs sdata ->
+          k (cons (name, sdata)) imps exports lbls ks consts types regs archs data)
   | A.TopDecl d ->
-      decl r imports exports lbls consts types regs archs data d (k id)
+      decl r imps exports lbls ks consts types regs archs data d (k id)
   | A.TopProcedure p ->
       let t = A.Section(default_proc_section, [A.Procedure p]) in
-      toplevel r imports exports lbls consts types regs archs data t k
+      toplevel r imps exports lbls ks consts types regs archs data t k
 
 let rflatten archs =
   let add (r, archs) tail = List.fold_right (fun a t -> (r, a) :: t) archs tail in
   List.fold_right add archs []
 
 let program ts =
-  kmap toplevel (fun add t -> add t) Srcmap.null [] [] [] [] [] [] [] [] ts
-    (fun ss imports exports lbls consts types regs archs sdata ->
-      let _ = if not (null sdata) then Impossible.impossible "some toplevel data" in
-      { target = rflatten archs; imports = imports; exports = exports;
+  let checknull what l =
+    if not (null l) then Impossible.impossible ("some toplevel " ^ what) in
+  kmap toplevel (fun add t -> add t) Srcmap.null [] [] [] [] [] [] [] [] [] ts
+    (fun ss imps exports lbls ks consts types regs archs sdata ->
+      let _ = checknull "data" sdata in
+      let _ = checknull "continuations" ks in
+      { target = rflatten archs; imports = imps; exports = exports;
         code_labels = lbls; globals = List.flatten regs; sections = sdata;
         udecls = { types = types; constants = consts };
       })
