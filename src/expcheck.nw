@@ -58,6 +58,7 @@ module A = Ast
 module AT = Automaton
 module E = Error
 module F = Fenv.Dirty
+module FE = Fenv
 
 let impossible = Impossible.impossible
 let unimp = Impossible.unimp
@@ -195,14 +196,14 @@ let lvalue_name_in_env env x =
   (fun (denot,t) ->
     let w = tywidth "assigned to" t  in
     match denot with
-    | F.Variable {F.loc=l} -> AT.of_loc l, w
+    | FE.Variable {FE.loc=l} -> AT.of_loc l, w
     | _ -> 
         let what = match denot with
-        | F.Constant _ -> "constant"
-        | F.Label    _ -> "label"
-        | F.Import   _ -> "imported symbol"
-        | F.Continuation _ -> "continuation"
-        | F.Variable _ -> "register" in
+        | FE.Constant _ -> "constant"
+        | FE.Label    _ -> "label"
+        | FE.Import   _ -> "imported symbol"
+        | FE.Continuation _ -> "continuation"
+        | FE.Variable _ -> "register" in
         impossible ("asked for lvalue of " ^ what ^ " " ^ x))
 @ 
 Any name can be meaningful in an rvalue context.
@@ -214,14 +215,14 @@ let rvalue_name x =
   (fun (denot, t) ->
     let w = tywidth "named variable" t in
     let rval = match denot with
-    | F.Constant(bits)            -> E.Ok (Rtl.bits bits w)
-    | F.Label(F.Proc s)           -> E.Ok (Rtl.codesym s w)
-    | F.Label(F.Code s)           -> E.Ok (Rtl.codesym s w)
-    | F.Label(F.Data s)           -> E.Ok (Rtl.datasym s w)
-    | F.Import(_,s)               -> E.Ok (Rtl.impsym  s w)
-    | F.Continuation c            -> (c.F.escapes <- true; E.Ok (Block.base c.F.base))
-    | F.Label(F.Stack addr) -> E.Ok addr  (* a fetch would be wrong *)
-    | F.Variable _                -> emap atfetch (lvalue_name x) in
+    | FE.Constant(bits)            -> E.Ok (Rtl.bits bits w)
+    | FE.Label(FE.Proc s)           -> E.Ok (Rtl.codesym s w)
+    | FE.Label(FE.Code s)           -> E.Ok (Rtl.codesym s w)
+    | FE.Label(FE.Data s)           -> E.Ok (Rtl.datasym s w)
+    | FE.Import(_,s)               -> E.Ok (Rtl.impsym  s w)
+    | FE.Continuation c            -> (c.FE.escapes <- true; E.Ok (Block.base c.FE.base))
+    | FE.Label(FE.Stack addr) -> E.Ok addr  (* a fetch would be wrong *)
+    | FE.Variable _                -> emap atfetch (lvalue_name x) in
     E.Raise.left (rval, t))
 @ 
 Help for fetching and storing automata locations.

@@ -84,7 +84,7 @@ We can convert the return address, callee-save registers, and variable assignmen
 (from variable placement) to spans.
 <<runtimedata.mli>>=
 val ra_to_span        : wordsize:int -> Rtl.loc -> span
-val csregs_to_spans   : wordsize:int -> nvars:int -> Register.Set.t ->
+val csregs_to_spans   : wordsize:int -> Register.Set.t ->
                         (Register.t * Rtl.loc) list -> span list
 val var_asst_to_spans : Oast2ir.proc -> (int * Automaton.loc) list -> span list
 @
@@ -226,7 +226,7 @@ let mk_csreg_ix_map nvregs = snd (Register.reg_int_map nvregs)
 Using a map from registers to indices, we can easily look up the index for a
 callee-save register.
 <<runtimedata.ml>>=
-let csreg_ix nvars r regmap = -(9 + 2*(RM.find r regmap))
+let csreg_ix r regmap = -(9 + 2*(RM.find r regmap))
 @
 The rest of the indices are straightforward.
 <<runtimedata.ml>>=
@@ -518,13 +518,13 @@ Callee-save registers are stored as pairs of consecutive spans.
 The first span indicates the callee-save register.
 The second span indicates where it has been stored.
 <<runtimedata.ml>>=
-let csregs_to_spans ~wordsize ~nvars nvregs csregs =
+let csregs_to_spans ~wordsize nvregs csregs =
   let to_bits i     = Bits.S.of_int i wordsize         in 
   let csreg_map     = mk_csreg_ix_map (RS.elements nvregs) in
   let num_span      =
     (to_bits num_reg_ix, R.bits (to_bits (2 * List.length csregs)) wordsize) in
   let to_span rst (r,loc) =
-    let ix = csreg_ix nvars r csreg_map in
+    let ix = csreg_ix r csreg_map in
     (to_bits (ix-1), RU.fetch loc) ::
     (to_bits (ix), RU.fetch (R.reg r)) ::
     rst in

@@ -57,13 +57,13 @@ consequence, two modules are provided:  [[Dirty]] and [[Clean]].
 However, the interfaces of both modules still can be derived from a
 single interface [[Env]]:
 
-<<module type Env>>=
+<<exported signature [[Env]]>>=
 module type Env = sig
     type 'a info
     type 'a partial
     val  bad: unit -> 'a info
 
-    <<signature Env>>
+    <<bindings appearing in signature [[Env]]>>
 end
 @
 
@@ -90,9 +90,9 @@ of [[info]] and [[partial]].  A clean environment ensures that all
 values are present and that they are good.
 
 <<fenv.mli>>=
-<<module type Env>>
+<<exposed types shared by clean and dirty environments>>
+<<exported signature [[Env]]>>
 
-<<fenv.mli>>=
 module Dirty : Env
     with type 'a info    = 'a Error.error
     with type 'a partial = 'a option
@@ -101,8 +101,7 @@ module Clean : Env
     with type 'a info    = 'a 
     with type 'a partial = 'a 
 
-val clean: 'proc Dirty.env' -> 'proc Clean.env'
-val clean_var : Dirty.variable -> Clean.variable
+val clean : 'proc Dirty.env' -> 'proc Clean.env'
 @
 The only way to obtain a clean environment is by cleaning a dirty
 environment.  However, the dirty environment must not be really dirty: 
@@ -130,12 +129,12 @@ TO LEAK INTO THE FAT ENVIRONMENT. ---NR
 BECAUSE THE FAT ENVIRONMENT HOLDS THE ASSOCIATION BETWEEN A NAME AND ITS
 SYMBOL. WE ALREADY HAVE PLANS TO TO IMPLEMENT A LOOKUP FUNCTION IN THE
 ASSEMBLER AND TO EXPELL THE SYMBOL FROM HERE. --CL
-<<signature Env>>=
+<<bindings appearing in signature [[Env]]>>=
 type 'proc env'
 
 (* type env = Proc.t env' *)
 type scope
-<<types>>
+<<types exposed in signature [[Env]]>>
 val map : ('b -> 'a) -> 'a env' -> 'b env'
 
 val empty   : Srcmap.map -> Metrics.t -> 'proc Asm.assembler -> 'proc env'
@@ -179,7 +178,7 @@ contains all global name and type bindings.  When a procedure is
 active all its name and type bindings are in the top-scope.  A
 procedure's bindings can be saved by saving the [[top]] scope and
 re-used, by [[pop]]'ing it later.
-<<signature Env>>=
+<<bindings appearing in signature [[Env]]>>=
 val emptyscope: scope   
 val top:        'p env' -> scope            (* top empty = assert false *)
 val pop:        'p env' -> 'p env'              (* pop empty = assert false *)
@@ -203,7 +202,7 @@ To inspect the value bindings in a (local) [[scope]], [[foldv]] is
 provided:  [[foldv f s z]] applies f to all [[ventry]] values found in
 scope [[s]] together with a result value of type [['a]] passed along;
 [[z]] is the initial value for the result.
-<<signature Env>>=
+<<bindings appearing in signature [[Env]]>>=
 val foldv:      (string -> ventry -> 'a -> 'a) -> scope -> 'a -> 'a
 @  
 
@@ -258,8 +257,8 @@ run-time representation as a pointer to a pair.
 Some values finally become assembler symbols. When such a value enters
 the fat environment we reserve an assembler symbol for it. The symbol
 becomes part of the value's denotation.
-<<types>>=
-and  reghint        = RReg  of string   (* hardware reg *)
+<<exposed types shared by clean and dirty environments>>=
+type reghint        = RReg  of string   (* hardware reg *)
                     | RHint of string   (* calling convention hint *)
                     | RNone             (* none of above *)
 @
@@ -268,8 +267,8 @@ scope}.  Consequently, global registers are numbered consecutively, and
 local registers are numbered consecutively. To avoid confusion with
 hardware registers in the compiler backend, we name {\PAL} registers
 variables.
-<<types>>=
-and  variable =     { index:        int
+<<exposed types shared by clean and dirty environments>>=
+type variable =     { index:        int
                     ; rhint:        reghint
                     ; loc:          Rtl.loc
                     ; variance:     Ast.variance
@@ -278,19 +277,21 @@ and  variable =     { index:        int
 The [[int]] value in the procedure denotation is the number of local
 variables, plus the number of parameters. We need this value for the
 interpreter.
-<<types>>=
-and  kind           = Proc          of Symbol.t
+<<exposed types shared by clean and dirty environments>>=
+type kind           = Proc          of Symbol.t
                     | Code          of Symbol.t    
                     | Data          of Symbol.t
                     | Stack         of Rtl.exp  (* address of slot *)
 
-and  denotation     = Constant      of Bits.bits
+type denotation     = Constant      of Bits.bits
                     | Label         of kind
                     | Import        of string * Symbol.t
                           (* external name, assembly symbol *)
                     | Variable      of variable
                     | Continuation  of continuation
-and continuation =  { base : Block.t;   (* always empty; used only for address *)
+and continuation =  { base       : Block.t;   (* always empty; used only for address *)
+                      convention : string;
+                      formals    : (string * variable) list; (* hinted formals *)
                       mutable escapes     : bool;  (* used as rvalue *)
                       mutable cut_to      : bool;  (* mentioned in annotation *)
                       mutable unwound_to  : bool;  (* mentioned in annotation *)
@@ -300,18 +301,18 @@ and continuation =  { base : Block.t;   (* always empty; used only for address *
 The complete entry [[ventry]] for a value includes not only its
 denotation, but also its type [[Types.ty]], and its source code
 position as a [[Srcmap.rgn]] value.
-<<types>>=
+<<types exposed in signature [[Env]]>>=
 and  ventry         = Srcmap.rgn * (denotation * Types.ty) info
 @ 
 For error messages, we provide a way of saying what kind of thing a
 symbol denotes.
-<<signature Env>>=
+<<fenv.mli>>=
 val denotation's_category : denotation -> string
 @
 Bindings for types, which are also scoped, are much simpler. A
 [[tentry]] for a type includes just its source code position and the
 type it denotes:
-<<types>>=
+<<types exposed in signature [[Env]]>>=
 and  tentry         = Srcmap.rgn * Types.ty info
 @
 % ------------------------------------------------------------------ 
@@ -343,7 +344,7 @@ found.
 We had trouble with losing environments with rebound entries in module
 [[Oast2ir]]. As an experiment, I have made [[rebindv']] an imperative
 version of [[rebindv]] that updates an environment by mutation. 
-<<signature Env>>=
+<<bindings appearing in signature [[Env]]>>=
 val bindv           : string -> ventry  -> 'p env' -> 'p env'
 val rebindv         : string -> ventry  -> 'p env' -> 'p env'
 val rebindv'        : string -> ventry  -> 'p env' -> unit  (* mutates *)
@@ -358,7 +359,7 @@ scope.  The following predicate is true, if and only if a given name
 is bound in the top scope, \emph{and} the top scope is not the bottom
 scope at the same time.  It is an assertion failure to supply an
 unknown value.
-<<signature Env>>=
+<<bindings appearing in signature [[Env]]>>=
 val is_localv       : string -> 'p env' -> bool     (* *)
 @
 
@@ -376,7 +377,7 @@ to the following law:
     [[errorFlag (flagError empty) = true]]       \\
     [[errorFlag empty = false]]
 \end{tabular}
-<<signature Env>>=
+<<bindings appearing in signature [[Env]]>>=
 val flagError       : 'p env' -> 'p env'
 val errorFlag       : 'p env' -> bool
 @
@@ -393,7 +394,7 @@ symbols all imports and exports of a {\PAL} program must be registered.
 This is done with [[import]] and [[export]].  To provide meaningful
 error messages, both function receive the region of the statement at
 hand in the source code. 
-<<signature Env>>=
+<<bindings appearing in signature [[Env]]>>=
 val import: Srcmap.rgn -> string -> string -> 'p env' -> 'p env' (* import g as f *)
 val export: Srcmap.rgn -> string -> string -> 'p env' -> 'p env' (* export f as g *)
 @
@@ -401,8 +402,10 @@ The [[symbol env n]] function returns the assembly level symbol for a
 {\PAL} name [[n]]. If [[n]] is not associated with an imported or
 exported symbol, we register a new local symbol in the assembler and
 return it. Since every {\PAL} name should have exactly one associated
-symbol it is an unchecked error to call [[symbol]] twice with the same name.
-<<signature Env>>=
+symbol it is an unchecked error to call [[symbol]] twice with the same
+name.
+WHY IN THE WORLD IS THIS ERROR UNCHECKED?
+<<bindings appearing in signature [[Env]]>>=
 val symbol:   'p env' -> string -> Symbol.t
 @
 
@@ -631,8 +634,10 @@ implementation of this module.  The arguments to [[Env]] are
 implementations of [[Arg]].
 
 <<fenv.ml>>=
-<<module type Env>>
-module Env (Arg: Arg) = struct <<module Env>> end
+<<exposed types shared by clean and dirty environments>>
+<<private types shared by clean and dirty environments>>
+<<exported signature [[Env]]>>
+module Env (Arg: Arg) = struct <<body of functor [[Env]]>> end
 
 <<fenv.ml>>=
 module Dirty = Env (struct
@@ -657,14 +662,6 @@ module Clean = Env (struct
 end)
 @
 
-
-The function [[clean]] translates a dirty environment into a clean
-environment. 
-
-<<fenv.ml>>=
-<<clean function>>
-@
-
 % ------------------------------------------------------------------ 
 \subsection{The Heart of the Implementation: [[Env]]}
 % ------------------------------------------------------------------ 
@@ -673,7 +670,7 @@ The fat and the clean version of an environment share the same basic
 implementation [[Env]] which is functorized over [[Arg]]. [[Arg]]
 provides us what we need to know about good and bad values:
 
-<<module Env>>=
+<<body of functor [[Env]]>>=
 type 'a partial     = 'a Arg.partial
 type 'a info        = 'a Arg.info
 let  bad            = Arg.bad
@@ -683,7 +680,7 @@ Our interfaces includes definitions for types that capture the
 denotation of values and types. Of course, these types must be defined
 in the implementation as well.
 
-<<module Env>>=
+<<body of functor [[Env]]>>=
 type 'proc env'    =  { scopes          :    scope list (* top = hd scopes *)
                       ; srcmap          :    Srcmap.map
                       ; asm             :    'proc Asm.assembler
@@ -693,19 +690,19 @@ type 'proc env'    =  { scopes          :    scope list (* top = hd scopes *)
                       ; globals         :    string  list(* global registers *)
                       ; stackdata       :    stackdata
                       }
-
-and stackdata =       { soffset    :    int    (* current offset *)
+<<types exposed in signature [[Env]]>>
+<<private types shared by clean and dirty environments>>=
+type stackdata =      { soffset    :    int    (* current offset *)
                       ; smaxalign  :    int    (* max stackdata align constr*)
                       ; sname      :    string (* label for offset *)
                       }
-<<types>>
 @
 Imports and exports are recorded (see module \module{mangle}) to build
 a map from {\PAL} names to assembly symbols.  The [[extern]] type holds
 two sets of assembly symbols:  [[imported]] and [[exported]], and a
 map from {\PAL} names to symbols.
-<<module Env>>=
-and extern          = { imported:     Strutil.Set.t
+<<private types shared by clean and dirty environments>>=
+type extern         = { imported:     Strutil.Set.t
                       ; exported:     Strutil.Set.t
                       ; nam2sym:      Symbol.t Strutil.Map.t
                       }
@@ -713,7 +710,7 @@ and extern          = { imported:     Strutil.Set.t
 
 A [[scope]] is record of two maps for values and types respectively:
 
-<<module Env>>=
+<<body of functor [[Env]]>>=
 and scope           = { mutable venv:   ventry Strutil.Map.t
                       ; tenv:   tentry Strutil.Map.t
                       ; rindex: int   (* getIndex, nextIndex *)
@@ -731,11 +728,11 @@ error flag, and so on.
 A handy error printing function: [[r]] is a [[Srcmap.reg]] source code
 position that is used to describe the place where an error is located. 
 
-<<module Env>>=
+<<body of functor [[Env]]>>=
 let error r map msg = E.errorRegionPrt (map,r) msg 
 @
 
-<<module Env>>=
+<<fenv.ml>>=
 let denotation's_category = function
   | Label (Proc  _) -> "procedure"
   | Label (Code  _) -> "code label"
@@ -750,7 +747,7 @@ let denotation's_category = function
 \subsection{Mapping}
 % ------------------------------------------------------------------ 
 
-<<module Env>>=
+<<body of functor [[Env]]>>=
 let map f { scopes      = scopes     
           ; srcmap      = srcmap     
           ; asm         = asm        
@@ -776,7 +773,7 @@ let map f { scopes      = scopes
 % ------------------------------------------------------------------ 
 
 Given the stack semantics for scopes, the implementation is obvious. 
-<<module Env>>=
+<<body of functor [[Env]]>>=
 let empty map metrics asm =  
     { scopes    = []
     ; srcmap    = map
@@ -795,7 +792,7 @@ let empty map metrics asm =
     } 
 @
 The implementation of the [[scope]] stack provides no surprises.
-<<module Env>>=
+<<body of functor [[Env]]>>=
 let emptyscope          = { venv   = Strutil.Map.empty
                           ; tenv   = Strutil.Map.empty 
                           ; rindex = 0
@@ -816,7 +813,7 @@ let pop env = match env.scopes with
 let push env scope = { env with scopes = scope :: env.scopes } 
 @
 
-<<module Env>>=
+<<body of functor [[Env]]>>=
 let foldv f {venv=v} z = Strutil.Map.fold f v z
 @
 
@@ -825,12 +822,12 @@ let foldv f {venv=v} z = Strutil.Map.fold f v z
 \subsection{Binding and Finding Names and Values}
 % ------------------------------------------------------------------ 
 
-<<module Env>>=
+<<body of functor [[Env]]>>=
 type typedefn = (Ast.ty * string list) * Ast.region
 let addTypedefn t env = assert false
 let typedefns env = assert false
 let setTypedefns ts env = assert false
-<<module Env>>=
+<<body of functor [[Env]]>>=
 type constdefn = (Ast.ty option * string * Ast.expr) * Ast.region
 let addConstdefn t env = assert false
 let constdefns env = assert false
@@ -844,7 +841,7 @@ a bad value.
 
 Register values that use a hardware register are
 additionally recorded in the [[regdecls]] component.
-<<module Env>>=
+<<body of functor [[Env]]>>=
 let bindv name (rgn,x as ventry) env = 
     let scope = ( match env.scopes with
                 | []    -> assert false
@@ -871,7 +868,7 @@ let bindv name (rgn,x as ventry) env =
             | _ -> env
             ) 
 
-<<module Env>>=
+<<body of functor [[Env]]>>=
 let bindt name (rgn,x as tentry) env = 
     let scope = ( match env.scopes with
                 | []    -> assert false
@@ -898,7 +895,7 @@ The [[find]] functions start searching in the top of the stack and
 move to the bottom. The first binding found is returned, and
 [[Error.ErrorExn]] raised otherwise.
 
-<<module Env>>=
+<<body of functor [[Env]]>>=
 let findv name env =
     let rec loop = function
         | []    -> E.error ("unknown value: "^name)
@@ -907,7 +904,7 @@ let findv name env =
                    )
     in
         loop env.scopes
-<<module Env>>=
+<<body of functor [[Env]]>>=
 let findt name env =
     let rec loop = function
         | []    -> E.error ("unknown type: "^name)
@@ -920,7 +917,7 @@ let findt name env =
 
 The [[rebindv]] function replaces the most local binding for a name. 
 
-<<module Env>>=
+<<body of functor [[Env]]>>=
 let rebindv name x env =
     let rec loop = function
         | []    -> Impossible.impossible ("can't rebind "^name)
@@ -942,7 +939,7 @@ let rebindv' name x env =
 
 An assertion fails, if the scope stack is empty.
 
-<<module Env>>=
+<<body of functor [[Env]]>>=
 let is_localv name env = 
     ( match env.scopes with
     | []    -> assert false
@@ -961,7 +958,7 @@ error found in the static semantics of a program.  The function
 [[flagError env]] sets the flag in the returned environment,
 [[errorFlag]] returns the flag's value in [[env]].
 
-<<module Env>>=
+<<body of functor [[Env]]>>=
 let flagError env = if env.error then env else { env with error = true }
 let errorFlag env = env.error
 @
@@ -977,7 +974,7 @@ such a case is detected, an error message is issued. Details about the
 connection between {\PAL} names and assembly symbols can be found in
 \module{mangle}.
 
-<<module Env>>=
+<<body of functor [[Env]]>>=
 let import r sym name env =
     if Strutil.Set.mem sym env.extern.exported 
     then 
@@ -1018,7 +1015,7 @@ cannot register [[n]] for a symbol. We detect this by checking the sets
 of names that were registered for imported and exported symbols. In the case
 of such a collision we derive a new name from [[n]] that we use to
 generate a symbol for [[n]].
-<<module Env>>=
+<<body of functor [[Env]]>>=
 let symbol env n =
     try Strutil.Map.find n env.extern.nam2sym
     with Not_found ->
@@ -1039,7 +1036,7 @@ let symbol env n =
 
 No surprises here. The index is local to the current scope!
 
-<<module Env>>=
+<<body of functor [[Env]]>>=
 let nextIndex  env   = match env.scopes with
                        | top::t -> { env with scopes = 
                                         {top with rindex = top.rindex + 1}::t
@@ -1059,7 +1056,7 @@ let getIndex   env   = match env.scopes with
 The list of global register declarations is built in reverse order by
 [[bindv]].  So we have to reverse it when we return it.
 
-<<module Env>>=
+<<body of functor [[Env]]>>=
 let globals env = List.rev env.globals
 @
 
@@ -1072,86 +1069,29 @@ one to another.  The string typing discipline of {\ocaml} precludes
 the use of patterns in most cases such that values must be copied
 explicitly.
 
-<<clean function>>=
-let clean_rhint = function
-    | Dirty.RReg  s -> Clean.RReg  s
-    | Dirty.RHint s -> Clean.RHint s
-    | Dirty.RNone   -> Clean.RNone 
-
-
-let clean_var r =
-    { Clean.index = r.Dirty.index
-    ; Clean.rhint = clean_rhint r.Dirty.rhint
-    ; Clean.loc   = r.Dirty.loc
-    ; Clean.variance = r.Dirty.variance
-    }
-
-let clean_cont c =
-    { Clean.base = c.Dirty.base
-    ; Clean.escapes = c.Dirty.escapes
-    ; Clean.cut_to = c.Dirty.cut_to
-    ; Clean.unwound_to = c.Dirty.unwound_to
-    ; Clean.returned_to = c.Dirty.returned_to
-    }
-
-let rec clean_venv map  =
+<<fenv.ml>>=
+let clean_env map =
     let copy key data map = match data with
-        |  pos,E.Ok(denot,ty) ->
-            let denot' = match denot with
-                | Dirty.Constant(v)           -> Clean.Constant(v)
-                | Dirty.Label(Dirty.Proc s)   -> Clean.Label(Clean.Proc s)
-                | Dirty.Label(Dirty.Code s)   -> Clean.Label(Clean.Code s)
-                | Dirty.Label(Dirty.Data s)   -> Clean.Label(Clean.Data s)
-                | Dirty.Label(Dirty.Stack x)  -> Clean.Label(Clean.Stack x)
-                | Dirty.Import(s,n)           -> Clean.Import(s,n)
-                | Dirty.Variable(n)           -> Clean.Variable(clean_var n)
-                | Dirty.Continuation c        -> Clean.Continuation (clean_cont c)
-            in
-                 Strutil.Map.add key (pos,(denot',ty)) map
-        |  _  -> assert false
-    in
-        Strutil.Map.fold copy map Strutil.Map.empty      
-<<clean function>>=
-and clean_tenv map =
-    let copy key data map = match data with
-        | p, E.Ok(t) -> Strutil.Map.add key (p,t) map
-        | _          -> assert false
-    in
-        Strutil.Map.fold copy map Strutil.Map.empty
-<<clean function>>=
-and clean_extern extern =
-    { Clean.imported = extern.Dirty.imported
-    ; Clean.exported = extern.Dirty.exported
-    ; Clean.nam2sym  = extern.Dirty.nam2sym
+    | pos, E.Ok den -> Strutil.Map.add key (pos, den) map
+    | _,   E.Error  -> assert false in
+    Strutil.Map.fold copy map Strutil.Map.empty      
+@ 
+<<fenv.ml>>=
+let clean_scope s =
+    { Clean.tenv   = clean_env s.Dirty.tenv
+    ; Clean.venv   = clean_env s.Dirty.venv
+    ; Clean.rindex = s.Dirty.rindex
     }
-
-<<clean function>>=
-and clean_scope { Dirty.venv = v; Dirty.tenv = t; Dirty.rindex=i } =
-    { Clean.tenv   = clean_tenv t
-    ; Clean.venv   = clean_venv v
-    ; Clean.rindex = i
-    }
-    
-<<clean function>>=
-and clean_proc = function 
-      | Some s -> clean_scope s
-      | _      -> assert false
-
-and clean_stackdata sd =
-    { Clean.sname     = sd.Dirty.sname
-    ; Clean.soffset   = sd.Dirty.soffset
-    ; Clean.smaxalign = sd.Dirty.smaxalign
-    } 
-
-<<clean function>>=
-and clean env =
+@ 
+<<fenv.ml>>=
+let clean env =
     { Clean.scopes    = List.map clean_scope env.Dirty.scopes
     ; Clean.srcmap    = env.Dirty.srcmap 
     ; Clean.asm       = env.Dirty.asm
     ; Clean.error     = env.Dirty.error
     ; Clean.metrics   = env.Dirty.metrics
-    ; Clean.stackdata = clean_stackdata env.Dirty.stackdata
+    ; Clean.stackdata = env.Dirty.stackdata
     ; Clean.globals   = env.Dirty.globals
-    ; Clean.extern    = clean_extern env.Dirty.extern
+    ; Clean.extern    = env.Dirty.extern
     }
 @

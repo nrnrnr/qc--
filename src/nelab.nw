@@ -37,12 +37,13 @@ I'm concerned that formals and locals don't have the same type.
 <<exposed types>>=
 type 'a proc =
   { env : 'a Fenv.Dirty.env';
-    cc  : name;
+    sym : Symbol.t;  (* assembly-language symbol for this procedure *)
+    cc  : name;      (* calling convention *)
     name : name;
     spans : Runtimedata.span list;  (* enclose whole procedure *)
     formals : (index * hint * Ast.variance * Rtl.width * name) list;
-    locals  : Fenv.Dirty.variable list;
-    continuations : Fenv.Dirty.continuation list;
+    locals  : Fenv.variable list;
+    continuations : (name * Fenv.continuation) list;
     stackmem      : Block.t;
     stacklabels   : Rtl.exp list;
     code          : Elabstmt.stmt list;
@@ -75,7 +76,7 @@ type 'a compunit = {
     imports : name list;
     exports : name list;
 *)
-    globals : Fenv.Dirty.variable list;
+    globals : Fenv.variable list;
 (*
     constants : (name * bits) list;     (* maybe unnecessary *)
 *)
@@ -185,6 +186,7 @@ module A  = Ast
 module B  = Bits
 module E  = Error
 module F  = Fenv.Dirty
+module FE = Fenv
 module N  = Nast
 module R  = Rtl
 module RP = Rtl.Private
@@ -372,7 +374,7 @@ module Const = struct
             else errorf "constant %s declared with type %s has actual type bits%d"
                            name (Types.to_string t) w))
   let bind name (r, typed_exp) env = 
-    F.bindv name (r, E.ematch typed_exp (fun (b, t) -> F.Constant b, t)) env
+    F.bindv name (r, E.ematch typed_exp (fun (b, t) -> FE.Constant b, t)) env
 end
 module ConstSortBind = SortAndBind(Const)
 @ 
@@ -466,9 +468,13 @@ let proc env spans p =
   let env, conts = bind_and_return_continuations env p.N.continuations in
   let stackmem, stacklabels, env = stackdata env p.N.stackdata in
   let code = Elabstmt.elab_stmts p.N.region env p.N.code in
-  E.ematch3 code locals (E.Raise.list spans) (fun code locals spans ->
+  let _, den  = F.findv p.N.name env in
+  E.ematch4 code locals (E.Raise.list spans) den (fun code locals spans den ->
+    let sym = match den with
+    | FE.Label (FE.Proc sym), _ -> sym
+    | _ -> impossf "procedure %s is not a procedure?!" p.N.name in
     Procedure
-      { env = env; cc = p.N.cc; name = p.N.name; formals = formals;
+      { env = env; cc = p.N.cc; name = p.N.name; sym = sym; formals = formals;
         locals = locals; continuations = conts; spans = spans;
         stackmem = stackmem; stacklabels = stacklabels; code = code; }) in
 @ 
@@ -481,12 +487,18 @@ or an annotation.
 let bind_and_return_continuations env conts =
   let rec bind prev' env = function
     | [] -> env, List.rev prev'
-    | (r, name) :: ks ->
-        let addrblock =
-          Block.relative vfp ("continuation " ^ name) Block.at ~size:0 ~alignment:1 in
-        let k = { F.base = addrblock; F.escapes = false;
-                  F.cut_to = false; F.unwound_to = false; F.returned_to = false } in
-        bind (k::prev') (F.bindv name (r, E.Ok(F.Continuation k, pointerty)) env) ks in
+    | (r, (cc, name, formals)) :: ks ->
+        match (Elabstmt.elab_cformals r env formals) with
+        | E.Error -> bind prev' (F.bindv name (r, E.Error) env) ks
+        | E.Ok formals ->
+            let addrblock =
+              Block.relative vfp ("continuation " ^ name)
+              Block.at ~size:0 ~alignment:1 in
+            let k = { FE.cut_to = false; FE.unwound_to = false; FE.returned_to = false;
+                      FE.base = addrblock; FE.escapes = false; FE.convention = cc;
+                      FE.formals = formals; } in
+            let env = F.bindv name (r, E.Ok (FE.Continuation k, pointerty)) env in
+            bind ((name, k) :: prev') env ks in
   bind [] env conts in
 @ 
 \subsubsection{Easy stuff}
@@ -499,7 +511,7 @@ let bind_and_remember_import env (r, ty, imports) =
   let import env (foreign,name) =
     let env = F.import r (Aux.Option.get name foreign) name env in
     let sym = F.symbol env name in
-    let den = F.Import (Aux.Option.get name foreign, sym) in
+    let den = FE.Import (Aux.Option.get name foreign, sym) in
     let ty  = <<convert optional importing [[ty]] as long as it is pointer size>> in
     F.bindv name (r, E.Raise.right (den, ty)) env in
   foldl import env imports in
@@ -515,7 +527,7 @@ No checking for labels.  Just create the assembly-language symbol and
 give it the native pointer type.
 <<definitions of name-binding functions>>=
 let bind_code_label env (r, n) = 
-  F.bindv n (r, E.Ok (F.Label(F.Code (F.symbol env n)), pointerty)) env in
+  F.bindv n (r, E.Ok (FE.Label(FE.Code (F.symbol env n)), pointerty)) env in
 @ 
 \subsubsection{Register variables and formal parameters}
 <<to migrate to variable placer>>=
@@ -534,9 +546,10 @@ let global_loc env =
         E.Ok (AT.of_loc (Strutil.Map.find t target.T.named_locs))
       with Not_found ->
         errorf "unknown hardware register %S" r in
-    function F.Rnone -> hinted "" | F.RHint h -> hinted h | F.RReg r -> hardware r in
-
-        with Error.ErrorExn msg -> impossible msg
+    function FE.Rnone   -> hinted ""
+           | FE.RHint h -> hinted h
+           | FE.RReg r  -> hardware r in
+with Error.ErrorExn msg -> impossible msg
     in
         ( List.iter (assign env) names 
         ; AT.freeze t, Digest.string (Buffer.contents decls)    
@@ -547,23 +560,23 @@ let registers_from scope n rs env =
   let rec regs_from prev' n rs env = match rs with
   | [] ->
       let regs = E.ematch (E.Raise.list (List.rev prev')) (fun rs ->
-        List.map (function F.Variable r, _ -> r | _ -> impossf "non-register") rs) in
+        List.map (function FE.Variable r, _ -> r | _ -> impossf "non-register") rs) in
       env, regs
   | (rgn, (v, hint, t, name, hwreg)) :: rs ->
       let entry = E.seq (Elabexp.elab_ty env t) (fun ty ->
         let w     = match ty with T.Bits w -> w | T.Bool -> impossf "decl bool" in
         let loc   = (match scope with Global -> R.global | Local -> R.var) name n w in
-        let reg h = { F.index = n; F.rhint = h; F.loc = loc; F.variance = v } in
-        let den h = E.Ok (F.Variable (reg h)) in
+        let reg h = { FE.index = n; FE.rhint = h; FE.loc = loc; FE.variance = v } in
+        let den h = E.Ok (FE.Variable (reg h)) in
         let den = match hint, hwreg with
         | Some _, Some _ -> errorf rgn "can't have hint and hardware register"
         | Some _, None   -> errorf rgn "hints permissible only on formal parameters" 
-        | None,   None   -> den F.RNone
+        | None,   None   -> den FE.RNone
         | None,   Some r ->
             if scope = Local then
               errorf rgn "local register can't be mapped to hardware"
             else
-              den (F.RReg r) in
+              den (FE.RReg r) in
         E.Raise.left (den, ty)) in
       regs_from (entry::prev') (n+1) rs (F.bindv name (rgn, entry) env) in
   regs_from [] n rs env in
@@ -574,9 +587,9 @@ let formals_from n rs env =
   | (r, (hint, inv, ty, name)) :: rs ->
       match Elabexp.elab_ty env ty with
       | E.Ok (Types.Bits w as t) ->
-          let i = { F.index = n; F.variance = inv;
-                    F.loc = Rtl.var name n w; F.rhint = F.RHint hint; } in
-          let env = F.bindv name (r, E.Ok (F.Variable i, t)) env in
+          let i = { FE.index = n; FE.variance = inv;
+                    FE.loc = Rtl.var name n w; FE.rhint = FE.RHint hint; } in
+          let env = F.bindv name (r, E.Ok (FE.Variable i, t)) env in
           formals ((n, hint, inv, w, name)::prev') (n+1) rs env
       | E.Ok Types.Bool -> impossf "declared type is boolean"
       | E.Error -> formals prev' n rs (F.bindv name (r, E.Error) env) in
@@ -629,7 +642,7 @@ and stackdatum mem stacklabels' env (r, d) k =
   match d with
   | N.Datalabel l ->
       let loc = Memalloc.current mem in
-      let env = F.bindv l (r, E.Ok (F.Label (F.Stack loc), pointerty)) env in
+      let env = F.bindv l (r, E.Ok (FE.Label (FE.Stack loc), pointerty)) env in
       k mem (loc :: stacklabels') env
   | N.Align n when is2power n ->
       k (Memalloc.align mem n) stacklabels' env
@@ -683,8 +696,8 @@ let check_export env (r, ty, pairs) =
         errorf "exported value must have native pointer type"
       else
         match den with
-        | F.Label (F.Proc _ | F.Code _ | F.Data _) -> env
-        | d -> errorf "%s '%s' can't be exported" (F.denotation's_category d) name) in
+        | FE.Label (FE.Proc _ | FE.Code _ | FE.Data _) -> env
+        | d -> errorf "%s '%s' can't be exported" (FE.denotation's_category d) name) in
   let check_pair env = E.catch' env (eprint r) (check_pair env) in
   let env = match ty with
   | Some t ->
@@ -708,12 +721,12 @@ let rec datum env (r, d) =
   let errorf fmt = Printf.kprintf (fun s -> eprint r s; F.flagError env) fmt in
   match d with
   | N.Datalabel l ->
-      F.bindv l (r, E.Ok (F.Label (F.Data (F.symbol env l)), pointerty)) env
+      F.bindv l (r, E.Ok (FE.Label (FE.Data (F.symbol env l)), pointerty)) env
   | N.Align n when is2power n -> env
   | N.Align n -> errorf "alignment %d is not a power of 2" n
   | N.ReserveMem(ty,size,init) -> env
   | N.Procedure p ->
-      let den = F.Label (F.Proc (F.symbol env p.N.name)) in
+      let den = FE.Label (FE.Proc (F.symbol env p.N.name)) in
       F.bindv p.N.name (r, E.Ok (den, pointerty)) env
   | N.SSpan (_, _, ds) -> foldl datum env ds in
 @ 
@@ -725,11 +738,14 @@ let metrics = F.metrics env in
 let rec data spans ds rest = match ds with
 | [] -> (match rest with [] -> [] | (spans, ds) :: rest -> data spans ds rest)
 | (r, d) :: ds ->
+    let datalabel_meaning l = match snd (F.findv l env) with
+    | E.Ok (FE.Label (FE.Data sym), _) -> E.Ok (Datalabel sym)
+    | E.Ok _ -> impossf "data label %s stands for something else?!" l
+    | E.Error -> E.Error in
     match d with
-    | N.Datalabel l -> let l = F.symbol env l     in
-                       let d = E.Ok (Datalabel l) in d :: data spans ds rest
-    | N.Align n     -> let d = E.Ok (Align n)     in d :: data spans ds rest
-    | N.Procedure p -> let d = proc env spans p   in d :: data spans ds rest
+    | N.Datalabel l -> let d = datalabel_meaning l in d :: data spans ds rest
+    | N.Align n     -> let d = E.Ok (Align n)      in d :: data spans ds rest
+    | N.Procedure p -> let d = proc env spans p    in d :: data spans ds rest
     | N.ReserveMem(ty,size,init) ->
         let d = reserve_mem r ty size init in d :: data spans ds rest
     | N.SSpan (k, v, ds') ->

@@ -40,7 +40,7 @@ type stmt =
   | If     of exp * stmt list * stmt list
   | Switch of range option * exp * (range list * stmt list) list
   | Label  of name
-  | Cont   of name * cformal list
+  | Cont   of name * convention * cformal list
   | Span   of exp * exp * stmt list
   | Assign of Ast.name_or_mem list * Ast.guarded list
   | Call   of loc list * convention * exp  * actual list * procname list * flow
@@ -74,7 +74,7 @@ type proc = {
     formals       : (hint * Ast.variance * ty * name) marked list;
     locals        : register marked list;
     pdecls        : compile_time_defns;
-    continuations : name marked list;
+    continuations : (name * convention * cformal list) marked list;
     labels        : name marked list;  (* code labels *)
     stackdata     : datum marked list;
     code          : stmt list;
@@ -231,8 +231,10 @@ let rec stmt r s k =
   | A.LabelStmt l ->
       k (cons (Label l)) imps exports ((r, l) :: lbls) ks consts types regs archs data
   | A.ContStmt (n, formals) ->
-      let stmt = cons (Cont (n, List.map cformal formals)) in
-      k stmt imps exports lbls ((r, n) :: ks) consts types regs archs data
+      let formals = List.map cformal formals in
+      let cc      = convention None in
+      let stmt    = cons (Cont (n, cc, formals)) in
+      k stmt imps exports lbls ((r, (n,cc,formals)) :: ks) consts types regs archs data
   | A.SpanStmt(key,v,bs)   -> 
       bodies r imps exports lbls ks consts types regs archs data bs
       (fun ss imps exports lbls ks consts types regs archs data ->

@@ -65,9 +65,10 @@ indicated by [[Error.Error]] values.  The policy is as follows:
 % ------------------------------------------------------------------ 
 
 <<elabexp.ml>>=
-module A = Ast
-module E = Error
-module F = Fenv.Dirty
+module A  = Ast
+module E  = Error
+module F  = Fenv.Dirty
+module FE = Fenv
 type nm_or_mem = Ast.name_or_mem
 type link = Bits.bits Reloc.Simple.relocatable
 
@@ -168,8 +169,8 @@ let lvalue_name x =
   (fun (den,t) ->
     let w = tywidth "assigned to" t  in
     match den with
-    | F.Variable {F.loc=l} -> l, w
-    | _ -> errorf "may not assign to %s %s" (F.denotation's_category den) x) in
+    | FE.Variable {FE.loc=l} -> l, w
+    | _ -> errorf "may not assign to %s %s" (FE.denotation's_category den) x) in
 @ 
 Any name can be meaningful in an rvalue context.
 The environment is implicit.
@@ -180,14 +181,14 @@ let rvalue_name x =
   (fun (denot, t) ->
     let w = tywidth "named variable" t in
     let rval = match denot with
-    | F.Constant bits       -> E.Ok (Rtl.bits bits w)
-    | F.Label(F.Proc s)     -> E.Ok (Rtl.codesym s w)
-    | F.Label(F.Code s)     -> E.Ok (Rtl.codesym s w)
-    | F.Label(F.Data s)     -> E.Ok (Rtl.datasym s w)
-    | F.Import(_,s)         -> E.Ok (Rtl.impsym  s w)
-    | F.Continuation c      -> (c.F.escapes <- true; E.Ok (Block.base c.F.base))
-    | F.Label(F.Stack addr) -> E.Ok addr  (* a fetch would be wrong *)
-    | F.Variable _          -> emap (fun (l,w) -> Rtl.fetch l w) (lvalue_name x) in
+    | FE.Constant bits        -> E.Ok (Rtl.bits bits w)
+    | FE.Label (FE.Proc s)    -> E.Ok (Rtl.codesym s w)
+    | FE.Label (FE.Code s)    -> E.Ok (Rtl.codesym s w)
+    | FE.Label (FE.Data s)    -> E.Ok (Rtl.datasym s w)
+    | FE.Import(_,s)          -> E.Ok (Rtl.impsym  s w)
+    | FE.Continuation c       -> (c.FE.escapes <- true; E.Ok (Block.base c.FE.base))
+    | FE.Label(FE.Stack addr) -> E.Ok addr  (* a fetch would be wrong *)
+    | FE.Variable _           -> emap (fun (l,w) -> Rtl.fetch l w) (lvalue_name x) in
     E.Raise.left (rval, t)) in
 @ 
 \subsubsection{General lvalues}

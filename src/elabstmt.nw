@@ -36,7 +36,7 @@ type stmt =
   | If     of exp * stmt list * stmt list
   | Label  of name
   | Switch of range option * exp * (range list * stmt list) list
-  | Cont   of name * name hinted list
+  | Cont   of name * convention * Fenv.variable hinted list
   | Span   of Runtimedata.span * stmt list
   | Assign of rtl
   | Call   of loc hinted list * convention * exp * actual list * procname list
@@ -50,6 +50,9 @@ type stmt =
 <<exposed types>>
 val elab_stmts :
   Ast.region -> 'a Fenv.Dirty.env' -> Nast.stmt list -> stmt list Error.error
+val elab_cformals : 
+  Ast.region -> 'a Fenv.Dirty.env' -> Nast.cformal list ->
+    Fenv.variable hinted list Error.error
 @ The [[elab_*]] functions work with incomplete information,
 indicated by [[Error.Error]] values.  The policy is as follows:
 \begin{itemize}
@@ -73,6 +76,7 @@ indicated by [[Error.Error]] values.  The policy is as follows:
 module A  = Ast
 module E  = Error
 module F  = Fenv.Dirty
+module FE = Fenv
 module N  = Nast
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let is2power x = x > 0 && x land (x - 1) = 0
@@ -88,13 +92,14 @@ restrictions: if a statement is reachable by ordinary control flow, it
  had better not be a continuation.
 Similarly, it had better not be the end of the procedure body.
 <<elabstmt.ml>>=
-let elab_stmts r env =
+let elab_functions r env =
   let eprint r = E.errorRegionPrt (F.srcmap env, r) in
   let errorf r = Printf.kprintf (fun s -> eprint r s; E.Error) in
   let exp = Elabexp.elab_exp env in
   let con = Elabexp.elab_con env in
   let loc = Elabexp.elab_loc env in
   let metrics = F.metrics env in
+  <<elaboration of continuation formals>>
   let rec full_stmt r reachable s =
     <<elaboration utilities>>
     <<definitions of elaboration functions>>
@@ -107,9 +112,8 @@ let elab_stmts r env =
           | Types.Bits n -> E.error "condition in `if' is not a Boolean")
     | N.Switch (range, e, arms) -> switch range e arms
     | N.Label n -> E.Ok (Label n)
-    | N.Cont (name, formals) ->
-        let c = E.ematch (E.Raise.list (List.map cformal formals)) (fun formals ->
-                  Cont (name, formals)) in
+    | N.Cont (name, cc, formals) ->
+        let c = E.ematch (cformals formals) (fun formals -> Cont (name,cc,formals)) in
         if reachable then
           E.error "control can fall through to continuation"
         else
@@ -144,10 +148,13 @@ let elab_stmts r env =
     | s :: N.Span (_, _, []) :: ss -> jumpsss (s :: ss)
     | _ :: ss -> jumpsss ss
   and jumpsarm (_, ss) = jumpsss ss in
-  fun ss ->
+  let stmts ss =
     let falls = not (jumpsss ss) in
     let ss = stmts r true ss in
     if falls then errorf r "control falls off end of procedure" else ss
+  in stmts, cformals
+let elab_stmts    r env = fst (elab_functions r env)
+let elab_cformals r env = snd (elab_functions r env)
 @ 
 Here are a couple of basic utilities.
 We sometimes do extra checking if an expression is just a name.
@@ -167,16 +174,17 @@ let insist_pointer what t =
   else E.error (what ^ " must be a bit vector of the native pointer type") in
 @ 
 A formal parameter to a continuation must be a local register variable.
-<<elaboration utilities>>=
+<<elaboration of continuation formals>>=
 let cformal (hint, name) =
   E.seq (snd (F.findv name env)) (fun den ->
     match den with
-    | F.Variable _, _ when F.is_localv name env -> E.Ok (hint, name)
-    | F.Variable _, _ ->
+    | FE.Variable v, _ when F.is_localv name env -> E.Ok (hint, v)
+    | FE.Variable _, _ ->
         errorf r "continuation parameter '%s' may not be a global variable" name
     | d, _ ->
         errorf r "continuation parameter '%s' is a %s, not a local register variable"
-          name (F.denotation's_category d)) in
+          name (FE.denotation's_category d)) in
+let cformals formals = E.Raise.list (List.map cformal formals) in
 @
 The type of the switch expression must be matched by the guarding
 ranges of the arms.  An empty switch-statement is an error because no
@@ -298,13 +306,13 @@ We have two functions so we can issue suitable error messages.
 <<elaboration utilities>>=
 let goto_target r x = E.seq (snd (F.findv x env)) (fun (d, t) ->
   match d with 
-  | F.Label (F.Code _) when F.is_localv x env -> E.Ok x
-  | F.Label (F.Code _) -> errorf r "may not goto %s (label in another procedure)" x
-  | _                  -> errorf r "may not goto %s %s" (F.denotation's_category d)x)in
+  | FE.Label (FE.Code _) when F.is_localv x env -> E.Ok x
+  | FE.Label (FE.Code _) -> errorf r "may not goto %s (label in another procedure)" x
+  | _ -> errorf r "may not goto %s %s" (FE.denotation's_category d) x) in
 let exp_is_local_code_label r e = match exp_as_name e with
 | None -> false
 | Some x -> match snd (F.findv x env) with
-  | E.Ok (F.Label (F.Code _), _) when F.is_localv x env -> true
+  | E.Ok (FE.Label (FE.Code _), _) when F.is_localv x env -> true
   | E.Ok _ -> false
   | E.Error -> impossf "good target name came back as error" in
 @ 
@@ -391,9 +399,9 @@ obviously not a procedure.
 let reject_uncallable e = match exp_as_name e with
 | None -> ()
 | Some x -> match (snd (F.findv x env)) with
-  | E.Ok ((F.Label (F.Proc _) | F.Import (_, _) | F.Variable _), _) | E.Error -> ()
+  | E.Ok ((FE.Label (FE.Proc _) | FE.Import (_, _) | FE.Variable _), _) | E.Error -> ()
   | E.Ok (d, _) -> 
-      E.errorf "cannot call or jump to %s %s" (F.denotation's_category d) x in
+      E.errorf "cannot call or jump to %s %s" (FE.denotation's_category d) x in
 @    
 \paragraph{Checking flow annotations}
 For the moment, we elaborate flow of names into flow of names, doing only checking.
@@ -402,12 +410,12 @@ of denotations.  This might require extending the denotations.
 We'll know when we revise [[Oast2ir]].
 <<elaboration utilities>>=
 let flow r default_aborts default_returns =
-  let as_cut_to  k = k.F.cut_to <- true in
-  let as_unwinds k = k.F.unwound_to <- true in
-  let as_returns k = k.F.returned_to <- true in
+  let as_cut_to  k = k.FE.cut_to <- true in
+  let as_unwinds k = k.FE.unwound_to <- true in
+  let as_returns k = k.FE.returned_to <- true in
   let rec ks r as_what prev' ns =
     let continuation n = E.seq (snd (F.findv n env)) (function
-      | F.Continuation k, _ -> as_what k; E.Ok n
+      | FE.Continuation k, _ -> as_what k; E.Ok n
       | _ -> errorf r "%s is not a continuation" n) in
     match ns with
     | [] -> prev'
@@ -446,9 +454,9 @@ A call target must be either a procedure or an imported symbol with
 the native pointer type.
 <<elaboration utilities>>=
 let call_target r x = E.seq (snd (F.findv x env)) (function
-  | (F.Label (F.Proc _) | F.Import _), t when ispointer t -> E.Ok x
+  | (FE.Label (FE.Proc _) | FE.Import _), t when ispointer t -> E.Ok x
   | d, _ -> errorf r "target %s is a %s (must be a procedure or imported pointer)"
-          (F.denotation's_category d) x) in
+          (FE.denotation's_category d) x) in
 @
 A call of a primitive is type checked: argument types must have the
 expected types. This is done by [[Rtlop.Translate.check]].

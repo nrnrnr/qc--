@@ -65,6 +65,7 @@ module C  = Call
 module Dn = Rtl.Dn
 module E  = Error
 module F  = Fenv.Clean
+module FE = Fenv
 module G  = Cfgx.M  (* graph *)
 module N  = Nelab
 module R  = Rtl
@@ -183,21 +184,6 @@ which compiles an AST expression into an RTL expression plus a width.
 For a formal parameter or result, we use [[lvalue_name_in_env]].
 The environment must be a parameter, since we don't have it at the
 time these functions are defined.
-\nextchunklabel{ast2ir.actuals'}%
-<<environment-independent support for formals, actuals, and results>>=
-(*
-let actuals'  ew  = convert_parms (fun (h, e)       -> h, e) ew                       
-and cformals' env = convert_parms (fun (h, x)       -> h, x) (lvalue_name_in_env env) 
-and formals'  env =
-               convert_parms (fun (_, (h, _, _, x)) -> h, x) (lvalue_name_in_env env) 
-and results'  env = 
-  let rec hn = function
-    | A.NameOrMemAt (lv, _) -> hn lv
-    | A.Name(h,x)         -> h, x
-    | A.Mem(_, _, _, _)   -> impossible "mem ref as result" in
-  convert_parms hn (lvalue_name_in_env env) 
-*)
-@ These functions are instantiated in chunk~\subpageref{ast2ir.actuals}.
 @
 \subsection{The translation of continuations and flow annotations}
 
@@ -255,6 +241,7 @@ module K = struct
     ;         cut_in      : (Block.t -> Rtl.rtl) C.answer    (* move vals at cut (uses rep) *)
     ;         return_in   : (Block.t -> Rtl.rtl) C.answer    (* move vals at also returns *)
     ;         rep         : Contn.t     (* representation as C-- value (incl block) *)
+    ;         convention  : string
     ; mutable succ        : 'i G.node   (* filled in by 2nd pass time *)
     ; mutable spans       : Runtimedata.span list (* spans at the continuation *)
     }
@@ -265,34 +252,32 @@ end
 
 Our state of knowledge when we first encounter a continuation.
 <<definition of [[K.mk]], which initializes continuation information>>=
-let mk name args den rep g ~cut_in ~return_in  =
-  { escapes     = den.F.escapes
-  ; cut_to      = den.F.cut_to
-  ; returned_to = den.F.returned_to
-  ; unwound_to  = den.F.unwound_to
+let mk name den rep g ~cut_in ~return_in  =
+  { escapes     = den.FE.escapes
+  ; cut_to      = den.FE.cut_to
+  ; returned_to = den.FE.returned_to
+  ; unwound_to  = den.FE.unwound_to
   ; unwind_pc   = Idgen.ContEntry.unwind name
   ; cut_pc      = Idgen.ContEntry.cut    name
   ; return_pc   = Idgen.ContEntry.return name
-  ; rep         = if assert false then rep else rep
+  ; rep         = rep
+  ; convention  = den.FE.convention
   ; cut_in      = cut_in
   ; return_in   = return_in
   ; succ        = G.illegal g
   ; spans       = []
   }
 @ 
-The actual first pass takes place inside the [[stackdata]] function, where we have
-access to such things as calling conventions and support for formal
-parameters.
-It's a simple matter of finding the calling conventions, running the
+It's a simple matter of finding the calling convention, running the
 automata, and building the rep and the continuation.
-<<definitions of stack-data procedures>>=
-let contStmt1 state n args = 
-  let cc = ccs default_cc in
-  let cut_in    = cformals' env cc.C.cut_parms.C.in' args in
-  let return_in = cformals' env cc.C.results.C.in'   args in
-  let rep  = Contn.with_overflow target cut_in.C.overflow in
-  let k    = K.mk n args rep g ~cut_in ~return_in in
-  { state with contenv = Strutil.Map.add n k state.contenv } in
+<<function [[extend_cont]], for adding flow-graph info to continuations>>=
+let extend_cont name den = 
+  let cc        = to_cc den.FE.convention in
+  let args      = den.FE.formals in
+  let cut_in    = cformals cc.C.cut_parms.C.in' args in
+  let return_in = cformals cc.C.results.C.in'   args in
+  let rep       = Contn.with_overflow target cut_in.C.overflow in
+  K.mk name den rep g ~cut_in ~return_in in
 @
 \subsubsection{Second pass: continuations and flow annotations}
 The second pass fills in the mutable fields.
@@ -300,7 +285,7 @@ First, when we encounter the statement for the second time, we set its
 successor.
 We return an illegal node since nothing may fall through to a continuation.
 <<supporting functions for translating statements>>=
-let rec contStmt2 label args succ =
+let rec contStmt2 label succ =
   let k = continuation label in
   k.K.spans <- props;
   k.K.succ  <- succ;
@@ -415,8 +400,7 @@ NEED A DIFFERENT ENTRY POINT DEPENDING ON THE CALLING CONVENTION OF
 THE CALL SITE.  BLOG!
 <<functions that translate statements, including [[stmts]]>>=
 and generate_return_to_entry k = 
-  let convention_of k = unimp "calling convention of a continuation" in
-  let cc  = to_cc (convention_of k) in
+  let cc  = to_cc k.K.convention in
   let in' = k.K.return_in in
   let ()  = add youngblocks cc.C.overflow_alloc.C.result_allocator in'.C.overflow in
   G.set_succ (G.node_labeled g k.K.return_pc) (
@@ -457,7 +441,7 @@ and stmt  props s  succ =
       G.cbranch g e ~ifso:(stmts props so succ) ~ifnot:(stmts props not succ)
   | S.Label n              -> let l = G.node_labeled g n in (G.set_succ l succ; l)
   | S.Switch _             -> Impossible.unimp "switch"
-  | S.Cont (name, formals) -> contStmt2 name formals succ
+  | S.Cont (name, _, _)    -> contStmt2 name succ
   | S.Span (kv, bs)        -> stmts (kv :: props) bs succ
   | S.Assign rtl           -> G.instruction g rtl succ
   | S.Call (lhs, cc, e, args, targets, conts) -> call lhs cc e args targets conts succ
@@ -616,7 +600,6 @@ here anyway.
 <<definition of [[proc]], which translates one procedure>>=
 let proc proc =
   let proc_cc  = to_cc proc.N.cc in
-  let proc_sym = unimp "symbol for procedure" in
   let vfp      = target.T.vfp in (* virtual frame pointer *)
   let temps    = Talloc.Multiple.for_spaces target.T.spaces in
 @ 
@@ -688,38 +671,30 @@ Because stackdata labels are visible at any stopping point in a procedure, we as
 the spans with the label for the current procedure.
 <<definition of [[proc]], which translates one procedure>>=
   let sd_labels = ref [] in
-  let contenv = unimp "continuation environment" in
   let stackdata_spans = unimp "stackdata spans" in
-  let _ = add_spans (proc_sym#original_text, stackdata_spans) in
+  let _ = add_spans (proc.N.sym#original_text, stackdata_spans) in
+@ 
+<<definition of [[proc]], which translates one procedure>>=
+let formals  = convert_parms (fun ((_, h, _, w, _) as parm) -> h, parm)
+                             (fun (i, _, _, w, n) -> AT.of_loc (R.var n i w), w) in
+let cformals = convert_parms (fun p -> p)
+                             (fun v -> AT.of_loc v.FE.loc, RU.Width.loc v.FE.loc) in
+let actuals  = convert_parms (fun ((h, _, _) as parm) -> h, parm)
+                             (fun (_, e, w) -> e, w) in
+let results  = convert_parms (fun p -> p) (fun (l, w) -> AT.of_loc l, w) in
+@ 
 @ 
 We provide a lookup of continuation by name.
 If a continuation is used as an rvalue, we get the address of its
 representation.  
 We also mark the continuation as escaping.
 <<definition of [[proc]], which translates one procedure>>=
+  <<function [[extend_cont]], for adding flow-graph info to continuations>>
+  let contenv =
+    let add env (n, k) = Strutil.Map.add n (extend_cont n k) env in
+    List.fold_left add Strutil.Map.empty proc.N.continuations in
   let continuation l =
     try Strutil.Map.find l contenv with _ -> impossf "lost cont %s" l in
-@ 
-The penultimate step in this stage is to use the environment, continuation
-environment, and [[cont_rvalue]] function to build the expression
-translators. 
-<<obsolete definition of [[proc]], which translates one procedure>>=
-  let typed_expr, lvalue = Elabexp.elab_exp env, Elabexp.elab_loc env in
-  let expr e = fst (typed_expr e) in
-@ 
-And finally we instantiate the parameter and result translators
-defined in chunk~\subpageref{ast2ir.actuals'}.
-\nextchunklabel{ast2ir.actuals}
-<<obsolete definition of [[proc]], which translates one procedure>>=
-  let actuals = actuals' (fun e -> let e, t = typed_expr e in e, tywidth t)
-  and formals = formals' env
-  and results = results' env in
-<<definition of [[proc]], which translates one procedure>>=
-let formals = convert_parms (fun ((_, h, _, w, _) as parm) -> h, parm)
-                            (fun (i, _, _, w, n) -> AT.of_loc (R.var n i w), w) in
-let actuals = convert_parms (fun ((h, _, _) as parm) -> h, parm)
-                            (fun (_, e, w) -> e, w) in
-let results = convert_parms (fun p -> p) (fun (l, w) -> AT.of_loc l, w) in
 @ 
 \paragraph{Nonvolatile registers, which are affected by incoming parameters}
 We place a restriction on calling conventions supported by C--: a
@@ -761,9 +736,6 @@ type 'a nvr = { reg : 'a; tmp : 'a }   (* for callee-saves info *)
     let loc   = proc_cc.C.where_to_save_ra ra_in temps in
     let w     = pointersize in
     R.store loc ra_in w, loc in
-@ 
-<<definition of [[proc]], which translates one procedure>>=
-  let symbol, nvars = unimp "symbol and nvars for proc" in
 @
 For each procedure, we create a span that represents the incoming stack
 space that must be deallocated by the procedure.
@@ -779,8 +751,7 @@ Similarly, spans for the return address and callee-saves registers may be repeat
 throughout a procedure.
 <<definition of [[proc]], which translates one procedure>>=
   let ra_span = RT.ra_to_span ~wordsize:target.T.wordsize saved_ra in
-  let csregs_spans = RT.csregs_to_spans ~wordsize:target.T.wordsize ~nvars
-                                        nvregs nvr_temps in
+  let csregs_spans = RT.csregs_to_spans ~wordsize:target.T.wordsize nvregs nvr_temps in
 @ 
 \paragraph{Supporting procedures}
 We now have enough information in scope to drop in the definitions of
@@ -831,8 +802,9 @@ The main thing here is dealing with all the blocks.
 <<definition of [[proc]], which translates one procedure>>=
   let formals = List.map (fun (i, h, v, w, n) -> i, (Some h, v, Ast.BitsTy w, n))
                 proc.N.formals in
+  let nvars = List.length proc.N.formals + List.length proc.N.locals in
   let i =    
-    { Proc.symbol      = symbol
+    { Proc.symbol      = proc.N.sym
     ; Proc.cc          = proc_cc
     ; Proc.target      = target
     ; Proc.formals     = formals
@@ -921,21 +893,21 @@ let globals (base:Rtl.exp) vars =
     let decls       = Buffer.create 128 in (* initial size - grows as needed *)
     let to_loc (a:AT.loc) = (unimp "convert AT.loc to Rtl.loc" : Rtl.loc) in
     let varname loc = unimp "find name of Rtl global variable" in
-    let rec assign bindings var = match var.F.rhint with
-    | F.RNone | F.RHint _ -> 
+    let rec assign bindings var = match var.FE.rhint with
+    | FE.RNone | FE.RHint _ -> 
         (* global register w/o hardware annotation *)
-        let w     = RU.Width.loc var.F.loc in
-        let sig'  = Printf.sprintf "[%s %d]" (varname var.F.loc) w in
+        let w     = RU.Width.loc var.FE.loc in
+        let sig'  = Printf.sprintf "[%s %d]" (varname var.FE.loc) w in
         let ()    = Buffer.add_string decls sig' in
         let loc   = AT.allocate t w "" in
-        (var.F.index, loc) :: bindings   (* could do even better here *)
-    | F.RReg hw ->
+        (var.FE.index, loc) :: bindings   (* could do even better here *)
+    | FE.RReg hw ->
         (* global register with h/w annotation *)
         (try
           let loc   = AT.of_loc (Strutil.Map.find hw target.T.named_locs) in
-          let sig'  = Printf.sprintf "[%s %s]" (varname var.F.loc) hw in            
+          let sig'  = Printf.sprintf "[%s %s]" (varname var.FE.loc) hw in            
           let ()    = Buffer.add_string decls sig' in
-          (var.F.index, loc) :: bindings
+          (var.FE.index, loc) :: bindings
         with Not_found -> impossible ("unknown h/w register: "^hw)) in
     let bindings = List.fold_left assign [] vars in
     bindings, AT.freeze t, Digest.string (Buffer.contents decls)    
@@ -949,7 +921,7 @@ are too long for the linker.
 let emit_global_register_area ~export =
   let base_sym     = F.symbol env "Cmm.global_area" in
   let base         = Rtl.datasym base_sym pointersize in 
-  let bindings, area, digest = globals base (List.map Fenv.clean_var prog.N.globals) in
+  let bindings, area, digest = globals base prog.N.globals in
   let area         = area.AT.overflow in
   let digest       = "Cmm.globalsig." ^ Idcode.encode digest in
   let asm          = F.asm env in
