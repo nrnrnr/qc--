@@ -157,7 +157,44 @@ function Dummy.layout.fn(dummy, proc)
 end
 @
     
+% ------------------------------------------------------------------ 
+\paragraph{Stack Layout for the \mips}
+% ------------------------------------------------------------------ 
 
+<<Lua compiler configuration>>=
+Mips = {} or Mips
+Mips.layout = { creates='no late consts' } -- what is this for? -CL
+
+function Mips.layout.fn(dummy, proc)
+    local blocks       = Stack.blocks(proc)
+    blocks.oldblocks   = Block.overlap(32,"low" , blocks.oldblocks)  
+    blocks.youngblocks = Block.overlap(32,"high", blocks.youngblocks)
+    local layout =
+        { blocks.oldblocks
+        , blocks.vfp
+        , blocks.spills
+        , blocks.continuations
+        , blocks.stackdata
+        , blocks.youngblocks
+        , blocks.sp
+        }
+    if Debug.stack then
+        write('****** cc name = ', Stack.ccname(proc), '\n')
+        Debug.showblocks (blocks, { 'oldblocks'
+                                  , 'stackdata'
+                                  , 'vfp'
+                                  , 'continuations'
+                                  , 'spills'
+                                  , 'youngblocks'
+                                  , 'sp'
+                                  })
+    end
+    local block = Block.cat(32, layout)
+    Stack.freeze(proc, block)
+    return 1
+end
+@
+ 
 % ------------------------------------------------------------------ 
 \paragraph{Stack Layout for the $x$86} 
 % ------------------------------------------------------------------ 
@@ -440,6 +477,24 @@ Backend.x86 =
   , compile   = Compile.file
   }   
 
+
+--
+-- MIPS (32 bit, little endian)
+--
+
+Backend.mips =     
+  { target    = Targets.mips
+  , widen     = Stages.assert('proper widths')
+  , placevars = Placevar.fortran
+  , expand    = Expander.mips
+  , liveness  = Liveness.liveness
+  , ralloc    = Ralloc.color
+  , freeze    = Mips.layout
+  , rmvfp     = Stages.replace_vfp
+  , asm       = Asm.mips
+  , emit      = Driver.assemble
+  , compile   = Compile.file
+  }   
 @
 
 

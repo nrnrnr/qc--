@@ -1,0 +1,465 @@
+
+
+% ------------------------------------------------------------------ 
+\section{Back end for the MIPS}
+% ------------------------------------------------------------------ 
+
+This module defines a 32 bit little-endian {\mips} architecture.
+
+<<mips.mli>>=
+module Post : Postexpander.S
+module X    : Expander.S
+
+val target: Ast2ir.tgt
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Name and storage spaces}
+% ------------------------------------------------------------------ 
+
+A {\mips} architecture can be either little or big endian. For now, we
+assume little endianness but expect to functorize the implementation
+later.
+
+<<mips.ml>>=
+let arch        = "mips"                    (* architecture *)
+let byteorder   = Rtl.LittleEndian 
+let wordsize    = 32
+@
+
+We use the standard storage spaces, including the spaces for PC and
+condition codes. For now I'll treat floating point as 32 bit; maybe we
+need an additional spaces for 64-bit floating point values and
+temporaries.
+
+<<mips.ml>>=
+module SS   = Space.Standard32
+module A    = Automaton
+module R    = Rtl
+module RP   = Rtl.Private
+module Up   = Rtl.Up
+module Dn   = Rtl.Dn
+module SM   = Strutil.Map
+module T    = Target
+
+module Spaces = struct
+    let id = Rtl.Identity
+    let m  = SS.m byteorder [8; 16; 32]
+    let r  = SS.r 32 id [32]
+    let f  = SS.f 32 id [32]    (* what about 64-bit FP? *)
+    let t  = SS.t    id [32]    
+    let u  = SS.u    id [32]
+    let c  = SS.c  6 id [32]    (* pc, npc, cc, _, fp_mode, fp_fcmp *)
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Registers}
+% ------------------------------------------------------------------ 
+
+<<mips.ml>>=
+let locations   = SS.locations Spaces.c
+let pc          = locations.SS.pc
+let cc          = locations.SS.cc
+let npc         = locations.SS.npc
+let fp_mode     = locations.SS.fp_mode
+let fp_fcmp     = locations.SS.fp_fcmp
+let vfp         = Vfp.mk wordsize
+
+let reg n       = ('r',n,32)
+let sp          = reg 29        (* stack pointer    *)
+let ra          = reg 31        (* return address   *)
+let r0          = reg 0         (* register 0       *)
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Utilities}
+% ------------------------------------------------------------------  
+
+<<mips.ml>>=
+let unimp               = Impossible.unimp
+let impossible          = Impossible.impossible
+
+let fetch_word l        = R.fetch l   wordsize
+let store_word l e      = R.store l e wordsize
+let mem w addr          = R.mem R.none 'm' byteorder w  addr
+let reg_width (_,_,w)   = w
+@
+% ------------------------------------------------------------------ 
+\subsection{Control-flow {\rtl}s}
+% ------------------------------------------------------------------ 
+
+We generate standard control-flow {\rtl}s. The \module{ast2ir.nw} module
+inserts these into the {\cfg} it builds. 
+
+<<mips.ml>>=
+module F = Mflow.MakeStandard
+    (struct
+        let pc_lhs    = pc
+        let pc_rhs    = pc
+        let ra_reg    = R.reg ra
+        let ra_offset = 0               (* not sure *)
+     end)   
+@
+
+Module [[F]] does not provide a return instruction. A return is simply a
+jump.
+
+<<mips.ml>>=
+let return = R.store pc (fetch_word (R.reg ra))
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Postexpander}
+% ------------------------------------------------------------------ 
+
+<<mips.ml>>=
+module Post = struct
+    <<MIPS postexpander>>
+end
+
+<<MIPS postexpander>>=
+let byte_order  = byteorder
+let wordsize    = wordsize
+
+type temp       = Register.t
+type rtl        = Rtl.rtl
+type width      = Rtl.width
+type assertion  = Rtl.assertion
+type operator   = Rtl.Private.opr
+@
+
+\paragraph{Contexts}
+There is no distinction between an integer and an address.
+@
+<<MIPS postexpander>>=
+type context = Rtl.space * (Register.t -> bool)
+let icontext = 't', fun (c, _, _) -> c = 'r' || c = 't'
+let fcontext = 'u', fun (c, _, _) -> c = 'f' || c = 'u'
+let acontext = icontext
+@
+\paragraph{Addressing modes}
+<<MIPS postexpander>>=
+module Address = struct
+    type t               = Rtl.exp
+    let reg (_,_,w as r) = R.fetch (R.reg r) w 
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Load and Store}
+% ------------------------------------------------------------------ 
+
+At the moment all temporaries are 32 bit wide but in the future we will
+also have 64-bit floating point values. Therefore we want to avoid
+hard coding [[wordsize]] into loads and stores.
+
+<<MIPS postexpander>>=
+let tloc t              = Rtl.reg t
+let tval (_,_,w as t)   = R.fetch (tloc t) w
+let twidth              = reg_width
+
+let load ~dst ~addr assn =
+    let w = twidth dst in
+        assert (w = wordsize); (* remove when we have 64-bit spaces *)
+        [R.store (tloc dst) (R.fetch (mem w addr) w) w]
+    
+
+let store ~addr ~src assn =
+    let w = twidth src in
+        assert (w = wordsize); (* remove when we have 64-bit spaces *)
+        [R.store (mem w addr) (tval src) w]
+@
+
+The {\mips} provides sign- and zero-extending load operations for
+loading values smaller than [[wordsize]]. We only support operations on
+[[wordsize]].
+
+<<MIPS postexpander>>=
+let extend  op n e = R.app (R.opr op       [n; wordsize]) [e]
+let lobits     n e = R.app (R.opr "lobits" [wordsize; n]) [e]
+
+let xload op ~dst ~addr n assn =
+    let w = twidth dst in
+        assert (w = wordsize); 
+        [R.store (tloc dst)
+                 (extend op n (R.fetch (R.mem assn 'm' byteorder n addr) n)) 
+                 w]
+
+let sxload = xload "sx"
+let zxload = xload "zx"
+
+let lostore ~addr ~src n assn =
+    assert (reg_width src = wordsize);
+    [R.store (R.mem assn 'm' byteorder n addr) (lobits n (tval src)) n]
+@
+
+The general move operation only works between temporaries of the same
+width. Load immediate loads a constant into a temorary.
+
+<<MIPS postexpander>>=
+let move ~dst ~src =
+    assert (reg_width src = reg_width dst);
+    if src = dst then [] else [R.store (tloc dst) (tval src) (twidth src)]
+@
+
+Immediate load, and extended immediate load. An extended load-immediate
+can take sums and differences of compile-time constants (including late
+compile-time constants). 
+
+<<MIPS postexpander>>=
+let li  ~dst const = [R.store (tloc dst) (Up.const const) (twidth dst)]
+let lix ~dst e     = [R.store (tloc dst) e                (twidth dst)]  
+@
+
+
+% ------------------------------------------------------------------ 
+\subsubsection{Operator contexts}
+% ------------------------------------------------------------------ 
+
+We have no boolean context because boolean operations are rewritten into
+control flow.
+
+<<MIPS postexpander>>=
+let bcontext = ' ', fun _ -> false  (* should never be used *)
+let operators = Context.standard icontext fcontext acontext bcontext
+
+let resmap = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators
+let argmap = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
+@
+
+We have two maps: from operator to argument context, and from operator
+to result context.
+
+<<MIPS postexpander>>=
+let arg_contexts   (n, _) = try SM.find n argmap with Not_found -> assert false
+let result_context (n, _) = try SM.find n resmap with Not_found -> assert false
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Binary and unary operators}
+% ------------------------------------------------------------------ 
+
+<<MIPS postexpander>>=
+let unop ~dst op x =
+    [R.store (tloc dst) (R.app (Up.opr op) [tval x]) (twidth dst)]
+
+let binop ~dst op x y =
+    [R.store (tloc dst) (R.app (Up.opr op) [tval x;tval y]) (twidth dst)]
+
+let rtlop ~dst op args =
+    [R.store (tloc dst) (R.app (Up.opr op) (List.map tval args)) (twidth dst)]
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Control Flow}
+% ------------------------------------------------------------------ 
+
+On the {\mips}, the PC can be read and written.
+
+<<MIPS postexpander>>=
+let pc_lhs = pc         (* PC as assigned by branch *)
+let pc_rhs = pc         (* PC as captured by call   *)
+@
+
+\paragraph{Unconditional Branches}
+<<MIPS postexpander>>=
+let br ~tgt = [R.store pc_lhs (tval tgt)     wordsize]  (* branch reg *)
+let b  ~tgt = [R.store pc_lhs (Up.const tgt) wordsize]  (* branch     *)
+@
+
+\paragraph{Conditional Branches}
+
+We don't want to talk about the exact flags a comprison operator
+touches. The invented [[cmp_flags]] operator returns the flags as a
+comparison operation would set them.
+
+<<MIPS postexpander>>=
+let cmp_flags = R.opr "mips_cmpflags" [wordsize]
+let cmp x y   = R.store cc (R.app cmp_flags [tval x; tval y]) wordsize
+@
+
+All {\rtl} comparison opeartors are translated into target specific
+comparison operators. I am not sure this is neccessary. 
+
+<<MIPS postexpander>>=
+let cmp_opr = function
+  | "eq"            -> "mips_eq"
+  | "ne"            -> "mips_ne"
+  | "lt"            -> "mips_lt"
+  | "le"            -> "mips_le"
+  | "gt"            -> "mips_gt"
+  | "ge"            -> "mips_ge"
+  | "ltu"           -> "mips_ltu"
+  | "leu"           -> "mips_leu"
+  | "gtu"           -> "mips_gtu"
+  | "geu"           -> "mips_geu"
+  | "feq"           -> unimp "floating-point comparison"
+  | "fne"           -> unimp "floating-point comparison"
+  | "flt"           -> unimp "floating-point comparison"
+  | "fle"           -> unimp "floating-point comparison"
+  | "fgt"           -> unimp "floating-point comparison"
+  | "fge"           -> unimp "floating-point comparison"
+  | "fordered"      -> unimp "floating-point comparison"
+  | "funordered"    -> unimp "floating-point comparison"
+  | _               -> impossible "non-comparison in MIPS conditional branch"
+@ 
+
+The second important function negates a {\mips} operator.
+
+<<MIPS postexpander>>=
+let negate = function
+  | "mips_ne"       -> "mips_eq"
+  | "mips_eq"       -> "mips_ne"
+  | "mips_ge"       -> "mips_lt"
+  | "mips_gt"       -> "mips_le"
+  | "mips_le"       -> "mips_gt"
+  | "mips_lt"       -> "mips_ge"
+  | "mips_geu"      -> "mips_ltu"
+  | "mips_gtu"      -> "mips_leu"
+  | "mips_leu"      -> "mips_gtu"
+  | "mips_ltu"      -> "mips_geu"
+  | _               -> impossible 
+                        "bad comparison in expanded MIPS conditional branch"
+@ 
+
+A conditional branch is presented by a guarded assignment to the PC and
+an operation that sets the flags, using a target-specific operator.
+
+<<MIPS postexpander>>=
+let bc x (opr, ws) y ~tgt =
+    assert (ws = [wordsize]);
+    [ R.guard (R.app (R.opr (cmp_opr opr) [32]) [R.fetch cc wordsize]) 
+              (R.store pc_lhs (Up.const tgt) wordsize)  (* effect *)
+    ; cmp x y
+    ]
+@
+
+[[bnegate]] inverts the condition in a conditional branch.
+
+<<MIPS postexpander>>=
+let bnegate r = match Dn.rtl r with
+    | RP.Rtl [ RP.App((cop, [32]), [RP.Fetch (flags, 32)])  (* guard  *)
+             , RP.Store (pc, tgt, 32)]                      (* effect *)
+        when pc = Dn.loc pc_lhs && flags = Dn.loc cc ->
+        R.guard (R.app (R.opr (negate cop) [32]) [R.fetch cc wordsize]) 
+                (R.store pc_lhs (Up.exp tgt) wordsize)
+    | _ -> Impossible.impossible "ill-formed MIPS conditional branch"
+@
+
+\paragraph{Calls} Direct and indirect calls. In an indirect call the
+target is held in a register. I don't understand the [[others]]
+parameter and the documentation does not explain it.
+
+
+<<MIPS postexpander>>=
+let effects = List.map Up.effect
+let call  ~tgt ~others = 
+    [R.par (R.store pc_lhs (Up.const tgt) 32 :: effects others)]
+let callr ~tgt ~others = 
+    [R.par (R.store pc_lhs (tval tgt) 32 :: effects others)]
+@
+
+\paragraph{Cut-To}
+
+<<MIPS postexpander>>=
+let cut_to effs = [R.par (effects effs)]
+@
+
+\paragraph{No sacred instructions}
+
+<<MIPS postexpander>>=
+let don't_touch_me es = false
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Expander}
+% ------------------------------------------------------------------ 
+
+
+<<mips.ml>>=
+module X = Expander.IntFloatAddr(Post)
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Spill and reload}
+% ------------------------------------------------------------------ 
+
+The register allocator needs to spill and reload values; we have to
+provide the instructions.
+
+<<mips.ml>>=
+let spill  p t l = [A.store l (Post.tval t) (Post.twidth t)]
+let reload p t l = 
+    let w = Post.twidth t in [R.store (Post.tloc t) (Automaton.fetch l w) w]
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Global Variables}
+% ------------------------------------------------------------------ 
+
+When a Global {\PAL} variable names no hardware register to live in, the
+variable is passed through to following automaton to obtain its
+location.
+
+THIS AUTOMATON SEEMS QUITE UNIVERSAL FOR 32 BIT ARCHITECTURES. MOVE IT
+TO Automaton.Standard32?
+
+<<mips.ml>>=
+let ( **> ) f x = f x
+let globals base = 
+  let width w = if      w <= 8  then 8  
+                else if w <= 16 then 16 
+                else Aux.round_up_to 32 w in
+  let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
+  A.at ~start:base **> A.widen width **> A.align_to align **>
+  A.overflow ~memsize:8 
+             ~byteorder:byteorder 
+             ~growth:Memalloc.Up 
+             ~max_alignment:4
+@
+
+% ------------------------------------------------------------------ 
+\subsection{The target record}
+% ------------------------------------------------------------------ 
+
+<<mips.ml>>=
+let c_convention = Mipscall.c (fun ra -> (R.store pc ra wordsize)) 
+                              (F.cutto (Rtl.reg sp))
+
+let target =
+    { T.name                = "mips"
+    ; T.byteorder           = byteorder
+    ; T.wordsize            = wordsize
+    ; T.pointersize         = wordsize
+    ; T.alignment           = 4             (* not sure *)
+    ; T.memsize             = 8
+    ; T.spaces              = [ Spaces.m
+                              ; Spaces.r
+                              ; Spaces.f
+                              ; Spaces.t
+                              ; Spaces.u
+                              ; Spaces.c
+                              ]
+    ; T.float               = "ieee754"
+    ; T.spill               = spill
+    ; T.reload              = reload
+
+    ; T.vfp                 = vfp
+    ; T.bnegate             = F.bnegate cc
+    ; T.goto                = F.goto
+    ; T.jump                = F.jump
+    ; T.call                = F.call
+    ; T.branch              = F.branch
+    
+    ; T.cc                  = (fun _ -> c_convention)
+    ; T.globals             = globals
+    ; T.is_rounding_mode    = (fun loc -> false)
+    ; T.named_locs          = Strutil.Map.empty
+    
+    ; T.data_section        = "data"
+    ; T.charset             = "latin1" (* REMOVE THIS FROM TARGET.T *)
+    }    
+

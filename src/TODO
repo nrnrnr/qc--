@@ -1,155 +1,108 @@
-uint64.ml           conversion float -> int64, int64 -> float
-                    unsigned operations on int64, depends on C implementation
-                    TODO: C code not portable, missing operations?
+o Remove Symlinks in src/, make copies from old files to files with new
+  names and add them to CVS, remove old files.
 
-impossible.ml       exception for checked run-time errors
-                    TODO: client code uses different techniques to raise
-                    errors: assertions, standard exceptions    
+o Clarify signed/unsigned conversion in Bits. The documentation there
+  seems out of date with what is really happening.
 
-aux.ml              bits and pieces, Option.get, Bijection
-                    TODO: is the Bijection module used?        
+o Block.cathl, Block.overlap: Both these functions should take any number
+  of args, which could be blocks or lists of blocks.  Default width if it
+  turns out empty should be backend.target.wordsize.  This may be easier
+  to program in Lua than Caml.
 
-idgen.ml            name generator for labels, offsets, ...    
-                    TODO: add more generators when needed
+o : nr@labrador 11691 ; ./tqc hello.c--
+  file hello.c--, line 7, character 21 - line 11, character 4 Error: types of
+  +initial values do not match declared type
+  Error: compilation aborted because of errors.
+  Error: Exit with exit code 1
 
-error.ml            error propagation combinators
-                    TODO: nothing (move to lib/?)
+  Several things about the error message should be improved:
 
-base.ml             base types for partial evaluation 
-                    TODO: ??    
+      * the source coordinates use too much space
+      * the message should give both types in question
+      * the last line of the message serves no useful purpose that I can see
+      * I'm skeptical about the penultimate line also
 
-bits.ml             bitvector, conversion to/from string (int,float,char)
-                    TODO: limited to 64bits because based on unit64,
-                          supports only 64 bits floating point values
-                      
-bitops.ml           operations on Bits (for constant evaluation)
-                    TODO: almost nothing implemented, heavy interaction
-                          with partial evaluation
+o frame layout and use of the stack pointer to support tail calls
+  on x86
 
-this.ml             automatically generated file with version information
-                    TODO: nothing
+o test cases and stack measurements for tail vs non-tail on x86
 
-ast.ml              abstract syntax tree, generated from ASDL spec
-                    scanning of Bits depends on Bits.to_[ifc]bits
-                    TODO: get rid of ASDL, syntax for constant strings
+o Lua support for calling conventions 
 
-astUtil.ml          automatically generated from ASDL spec
-                    TODO: nothing
-                    
-parse.ml            parser, generated from Yacc spec
-                    TODO: syntax for guarded assignment, constant strings
+o calling convention and frame layout for sparc as a hard test
+  case
 
-types.ml            data types describing C-- types (bits/bool).
-                    TODO: review handling of polymorphic return types
+o calling conv and layout for other platforms?
 
-value.ml            Types for primitive operators and compile-, link-,
-                    and runt-time.
-                    TODO: everything
+o fix Bits to use the Uint64 operations when needed (e.g., in ltu)
+  Drop Uint64.add and Uint64.sub, since they are identical to the
+  Int64 versions.
 
-mangle.ml           name mangling and mapping of C-- to assembly symbols
-                    TODO: probably complete
-                        
-expcheck.ml         Type check for AST expression
-                    TODO: review    
-                         
-rtl.ml              RTL definition, manipulation; private and public view
-                    TODO: probably complete
-                        
-dummy.ml            wordsize, pointersize, etc for a dummy target
-                    TODO: get rid of
-                    
-fenv.ml             fat environment
-                    TODO: nothing
+o Test suite:  
 
-topsort.ml          topological sorting functor
-                    TODO: nothing (move to lib/?)    
+    improve quality and understanding of test suite
 
-scan.ml             scanner for C--, generated from Lex spec
-                    TODO: constant strings, review pragma design
+    `short': excludes the long tests; run by lazy developers
 
-astpp.ml            pretty printer for AST
-                    TODO: constant strings
-                    
-rtleval.ml          evaluator for RTL expression
-                    TODO: design for link-time expressions, review,
-                          implementation of primitive operations        
+    `test': includes all tests, but runs a test on multiple targets only when
+              it is actually useful to do so; run by thorough developers
 
-elab.ml             check of static semantic of a PAL program
-                    TODO: evaluation of constant expression does not 
-                          use Rtleval, some errors are not detected
-                          and are cought in later phases (which?) 
-                              
-register.ml         abstraction for register-like values
-                    TODO: spill, reload, assign do not respect machine
-                          invariant 
-
-rtlutil.ml          analysis functions for RTLs
-                    TODO: Rtlutil.width exp was deprecated but is
-                          used for Area implementation    
-
-area.ml             abstraction for continuous memory blocks
-                    TODO: design and implementation of overlay, concat
-                     
-const.ml            Equations (constraints?) 
-                    for symbolic compile time expressions.
-                    TODO: review, implement
-                    
-automaton.ml        Automaton for resource allocation, esp. for
-                    calling conventions
-                    TODO: review implementation, add more automaton
-                          for calling convention
-
-target2.ml          Description of a target architecture
-                    TODO: review, use Rtl.spacedesc more uniformely? Add
-                          functions for spill, assign, reload here?    
-
-asm2.ml             Abstract assembler functor. 
-                    TODO: instruction must become more complex, don't know
-                          how to express this in OCaml's module language    
-                          review interface for emitting link-time
-                          constants - mismatch with rtleval
-
-cmdline.ml          asbtract syntax for command line  
-                    TODO: nothing
-
-driver.ml           driver for various actions initiated by command line
-                    flag.     
-                    TODOL nothing
-
-main.ml             main() function
-                    TODO: nothing
-
------------------------------------------------------------------- 
-
-The following modules are currently not linked into the binary:
-
-cfg3                Control-flow graph (CFG)
-                    TODO: properties (live sets, spans)
-                          review implementation
-
-lifetime            intervals of point, represent lifetime of registers
-                    in CFG 
-                    TODO: nothing
-
-live                liveness analysis for CFG
-                    TODO: nothing
-
-copyinout           functions that implement virtual copyin/out nodes 
-                    TODO: fix data flow annotations, review
-
-ast3ir              Translation of AST to CFG/ASM
-                    TODO: review, primStmt, switchStmt, spanStmt, data-flow
-                          annotations, design stack layout, initialized data,
-                          continuation representation, data-flow edges for
-                          continuations
-
-linscan             Linear scan register allocator
-                    TODO: fix spilling, connect implementation to rest 
-                          of the compiler
-
-rtl2ast             Translation of RTLs to AST (for debugging)
-                    TODO: C-- has not syntax for RTL.space - translation
-                          schemes are not well behaved.
+    `redundant': everything; run by the nightly cron job
 
 
+    Of course, we'll need additional rules for specific tests, e.g., run
+    just the x86-assembly tests, but this is a start.
+
+o move knowledge of symbols entirely into the assembler, and expunge
+  Symbol.t from the front end of the compiler.  Arrange for
+  unannounced symbols to be local by default.
+
+o Alter Idgen so that generated symbols, if they make to the assembly
+  language, begin with "L". (may ultimately have to property of the assembler)
+
+o provide a much more flexible writedot function: first parm is name of
+  file to write, or stdout if left nil second parm is table with fields
+  compress and live, or both false if left nil table should also support
+  other dot properties...     figure out correct strategy to use this
+  function in the pipeline, then, finally expunge Asm.dot
+
+o Make the front end aware of the target and make these enhancements:
+
+      * Front end must reject unknown calling convention, unknown registers.
+      
+      * Front end must check the calling convention of a jump is the same as
+        the enclosing procedure. 
+      
+      * The target must advertise to the front end the maximum alignment it
+        can support in stackdata.  This is tough because it's a cc property.
+        Then the front end can issue a sensible error message instead of a
+        core dump.
+  
+
+o retire Bitops.nw, moving any useful stuff into Bits
+
+o Introduce an abstract type for link-time constant expressions, which
+  can be freely converted to Rtl.exp, but which only an assembler can
+  build from an Rtl.exp.  (The rep can be Rtl.exp).  Then introduce an
+  assembler method that converts from Rtl.exp to linkexp option.  In
+  the front end, use this method to check that initialized data is
+  handled correctly.  Use the Reladdr module to build a `standard'
+  implementation that most assemblers will use, and finally expunge
+  the Reloc module.
+
+o add assembler support for querying whether an expression is a
+  link-time constant expression, and use Rtl.exp as the interface for 
+
+o possible demo back end for another platform (estimate difficulty)
+
+o fix bug in astasm: 8-bit initialized data is rendered as 32-bit
+  data.  Also, too many top-level sections for readability.
+
+o use least common multiple for alignment in memalloc (careful special cases)
+  or else be sure that every alignment is a power of 2
+
+o place variables using automata --- start with stack placement
+
+o in Luaiolib, make open and close conform to Lua 4.0 or something else
+  rational.
 

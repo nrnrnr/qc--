@@ -1,0 +1,264 @@
+
+% ------------------------------------------------------------------ 
+\section{{\mips} calling conventions}
+% ------------------------------------------------------------------ 
+
+This module implements calling conventions for the {\mips}. The
+parameters represent the machine instructions to implement [[return]]
+and [[cut to]].
+
+<<mipscall.mli>>=
+val c: return_to: (Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
+@
+
+The implementation is based on the book \emph{mips Risc Architecture} by
+Gerry Kane, published by Prentice Hall. However, the calling convention
+specification on page D-22 is only correct, when all floating point
+values $fn$ are considered double precision values, rather single or
+double precision.
+
+A better source for the calling convention is the LCC compiler, which
+implements it in this short function:
+
+<<implementation of {\mips} calling convention in LCC>>=
+static Symbol argreg(int argno, int offset, int ty, int sz, int ty0) {
+        assert((offset&3) == 0);
+        if (offset > 12)
+                return NULL;
+        else if (argno == 0 && ty == F)
+                return freg2[12];
+        else if (argno == 1 && ty == F && ty0 == F)
+                return freg2[14];
+        else if (argno == 1 && ty == F && sz == 8)
+                return d6;  /* Pair! */
+        else
+                return ireg[(offset/4) + 4];
+}
+@
+
+[[argno]] is the zero-based index of the parameter, and [[ty0]] the type
+of argument zero. Offset is the total size of all preceding arguments,
+each a multiple of 4 bytes. This is crucial, because the last line
+choses a register not by the argument index, but by the total size of
+preceeding arguments.
+
+
+\emph{Spreading the {\mips} backend across several files increases the
+chance of inconsistencies. Each file defines the byteorder and certain
+registers. Is this a real problem? -- CL}
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation of {\mips} calling conventions}
+% ------------------------------------------------------------------ 
+
+<<mipscall.ml>>=
+module A  = Automaton
+module C  = Call
+module R  = Rtl
+module RP = Rtl.Private
+module RS = Register.Set
+module RU = Rtlutil
+module T  = Target
+
+let impossible = Impossible.impossible
+let unimp      = Impossible.unimp
+let sprintf    = Printf.sprintf
+@
+
+\paragraph{Registers}
+
+A non-volatile register can be used in a procedure if its initial value
+is restored upon exit. Such a register is also called callee-saved. A
+volatile register can be used without saving and restoring. Registers
+that are neither volatile nor non-volatile are unavailable for register
+allocation.
+
+How do we deal with the return address [[ra]] ([[$31]])? It needs to be
+saved by it is not available for register allocation? For now I treat it
+as non-volatile and it is part of [[nvl_int]]
+
+<<mipscall.ml>>=
+let r n     = ('r',n,32)
+let f n     = ('f',n,32)
+let vfp     = Vfp.mk 32
+
+let rec from first ~upto = 
+    if first > upto then [] else first :: from (first+1) ~upto
+@
+
+Calling conventions treat floating point registers specially; therefore
+we have separate lists for them.
+
+<<mipscall.ml>>=
+let vol_int  = List.map r (from 2  ~upto:15 @ [24;25])
+let nvl_int  = List.map r (from 16 ~upto:23 @ [30;31])
+let vol_fp   = List.map f (from 0  ~upto:18)
+let nvl_fp   = List.map f (from 20 ~upto:30)
+@
+
+Non-volatile registers are saved somewhere in the frame. Currently, we
+cannnot provide dedicated locations.
+
+<<mipscall.ml>>=
+let saved_nvr temps =
+    let t = Talloc.Multiple.loc temps 't' in
+    let u = Talloc.Multiple.loc temps 'u' in
+        function
+        | ('r',_,w) -> t w
+        | ('f',_,w) -> u w
+        | (s  ,i,_) -> impossible (sprintf "cannot save $%c%d" s i)
+@
+
+\paragraph{Conventions}
+
+The documentation of the calling convention is incomplete. The alignment
+of the stack pointer is not explicitly mentioned but I assume it to be
+4-byte aligned and each element on the stack also to be 4-byte aligned.
+
+<<mipscall.ml>>=
+let ra        = R.reg (r 31)            (* return address *)
+let sp        = R.reg (r 29)            (* stack pointer  *)
+let spval     = R.fetch sp 32
+let growth    = Memalloc.Down           (* stack grows down *)
+let byteorder = R.LittleEndian         
+let sp_align  = 4                       (* SP always 4-byte aligned *)
+
+let std_sp_location = 
+    RU.add 32 vfp (R.late "minus frame size" 32)
+
+let ( **> ) f x   = f x
+let (  *> ) f g x = f (g x)
+
+let badwidth (msg:string) (w:int) = 
+    impossible (sprintf "unsupported (rounded) width %d in MIPS: %s" w msg)
+
+let fatal _ = 
+    impossible "fatal error in MIPS automaton"
+@
+
+\paragraph{C~return results}
+
+A C~function returns an integer (up to 64 bits wide) in [[$2]] and
+[[$3]], a floating-point result (up to two double-precision values) in
+[[$f0]] \dots [[$f3]].
+
+<<mipscall.ml>>=
+let results =
+    A.hint_choice
+        [ ((=) "float"),  
+            A.widen (Aux.round_up_to ~multiple_of: 32)              *>
+            A.widths [32;64] ~errormsg:(badwidth "MIPS FP return")  *>
+            A.useregs [f 0; f 1; f 2; f 3] ~errormsg:fatal
+        ; (fun _ ->true), 
+            A.widen (Aux.round_up_to ~multiple_of: 32)              *>
+            A.widths [32;64] ~errormsg:(badwidth "MIPS return")     *>  
+            A.useregs [r 2; r 3] ~errormsg:fatal
+        ] **>
+    A.no_overflow 4 "multiple return values for MIPS C"    
+@
+
+\paragraph{C~procedure parameters}
+
+I don't know how to implement the parameter-passing convention using the
+building blocks from the \module{automaton.nw} module. The simple
+convention here should work for integer argument lists.
+
+<<mipscall.ml>>=
+let arguments =
+    A.hint_choice
+        [ ((=) "float"),
+            A.widen (Aux.round_up_to ~multiple_of:32)        *>
+            A.useregs [f 12; f 14] ~errormsg:fatal   (* INCORRECT!!! *)
+        ; (fun _ -> true),
+            A.widen (Aux.round_up_to ~multiple_of:32)        *>
+            A.useregs [r 4; r 5; r 6; r 7] ~errormsg:fatal 
+        ] **>
+    A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
+@
+        
+\paragraph{C~cut-to parameters}
+
+Since this is strictly internal calling convention, we can use whatever
+we like. We use all volatile registers.
+
+<<mipscall.ml>>=
+let cut_args = 
+    A.hint_choice
+        [ ((=) "float"),
+            A.widen (Aux.round_up_to ~multiple_of:32)        *>
+            A.useregs vol_fp  ~errormsg:fatal 
+        ; (fun _ -> true),
+            A.widen (Aux.round_up_to ~multiple_of:32)        *>
+            A.useregs vol_int ~errormsg:fatal 
+        ] **>
+    A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Putting it together} 
+% ------------------------------------------------------------------ 
+
+<<transformations>>=
+let call_actuals  =
+  C.outgoing ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at arguments) 
+    ~autosp:(fun r  -> Block.base r.A.overflow)
+    ~postsp:(fun sp -> sp) in  
+
+let prolog  =
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at arguments)
+    ~autosp:(fun _ -> vfp)
+    ~postsp:(fun _ -> std_sp_location) in
+
+let call_results  =
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at results)
+    ~autosp:(fun r -> Block.base r.A.overflow)
+    ~postsp:(fun _ -> std_sp_location) in
+
+let epilog  =
+  C.outgoing ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at results)
+    ~autosp:(fun r -> Block.base r.A.overflow)
+    ~postsp:(fun _ -> vfp) in
+
+let also_cuts_to =
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at cut_args)
+    ~autosp:(fun r -> std_sp_location)
+    ~postsp:(fun _ -> std_sp_location) in
+
+let cut_actuals base  =
+   C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base cut_args)
+     ~autosp:(fun r -> spval)
+     ~postsp:(fun _ -> spval) in
+
+
+<<mipscall.ml>>=
+let c ~return_to cut = 
+    <<transformations>>
+    let return k n ~ra =
+        if k = 0 & n = 0 then return_to ra
+        else impossible "alternate return using C calling convention" in
+    { C.name            = "C"
+    ; C.jump_ok         = false
+    ; C.call_parms      = { C.in' = prolog;       C.out = call_actuals}
+    ; C.cut_parms       = { C.in' = also_cuts_to; C.out = cut_actuals}
+    ; C.results         = { C.in' = call_results; C.out = epilog}
+
+    ; C.stack_growth    = growth
+    ; C.stable_sp_loc   = std_sp_location
+    ; C.replace_vfp     = Cfgx.Vfp.replace_with ~sp
+    ; C.sp_align        = sp_align
+    ; C.pre_nvregs      = RS.union (RS.of_list nvl_int) (RS.of_list nvl_fp)
+    ; C.volregs         = RS.union (RS.of_list vol_int) (RS.of_list vol_fp)
+    ; C.saved_nvr       = saved_nvr
+    ; C.cutto           = cut
+    ; C.return          = return
+    ; C.ra_on_entry      = (fun _   -> R.fetch ra 32)
+    ; C.where_to_save_ra = (fun _ t -> ra)
+    ; C.ra_on_exit       = (fun t b -> ra)
+    }
+@
+

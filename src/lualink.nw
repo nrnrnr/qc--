@@ -233,6 +233,8 @@ C.register_module "Asm"
                             (Dotasm.asm ~compress:false ~live:true)
   ; "x86" , V.efunc (Map.outchan **-> V.result Map.asm) 
                             (X86asm.make Cfgutil.emit)
+  ; "mips", V.efunc (Map.outchan **-> V.result Map.asm) 
+                            (Mipsasm.make Cfgutil.emit)
   ; "interp32l" , V.efunc (Map.outchan **-> V.result Map.asm) 
             (Interpasm.asm' ~byteorder:Rtl.LittleEndian ~memsize:8 ~ptrsize:32)
   ; "interp32b" , V.efunc (Map.outchan **-> V.result Map.asm) 
@@ -307,8 +309,8 @@ C.register_module "Driver"
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Expander"
-  [ "x86f" , V.efunc (V.value **-> Map.proc **-> V.result V.bool) 
-                            X86.X.cfg
+  [ "x86f" , V.efunc (V.value **-> Map.proc **-> V.result V.bool) X86.X.cfg
+  ; "mips" , V.efunc (V.value **-> Map.proc **-> V.result V.bool) Mips.X.cfg
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Liveness"
@@ -352,6 +354,7 @@ C.register_module "Targets"
   [ "dummy32l", Map.new_target.V.embed Dummy.dummy32l'
   ; "dummy32b", Map.new_target.V.embed Dummy.dummy32b'
   ; "x86",      Map.new_target.V.embed X86.target
+  ; "mips",     Map.new_target.V.embed Mips.target
   ; "interp",   Map.new_target.V.embed Interp.target'
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
