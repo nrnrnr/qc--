@@ -238,6 +238,7 @@ CGStages = { liveness = mkS("liveness", CG.liveness)
            , pCFG = mkS("pCFG", CG.pCFG)
            }
 
+function makeInitInfo () return CG.makeInitInfo() end
 function makeBuild (colors)
     CGStages.build = mkS("build", CG.makeBuild(colors)) end
 
@@ -260,26 +261,29 @@ live = single(CGStages.liveness)
 function graphColoring (colors)
   makeBuild(colors);
   return
-     share(initInfo, "cgInfo",
+     share(makeInitInfo(), "cgInfo",
         seq {fix(
                seq {ignore(seq
                       { single(CGStages.liveness)
-, pcfg
-, prLive
                       , single(CGStages.build)
-, pcg
                       , single(CGStages.makeWorklist)
                       , fix(
                           unless_do(single(CGStages.simplify),
                                     unless_do(single(CGStages.coalesce),
                                        unless_do(single(CGStages.freeze),
                                           single(CGStages.selectSpill)))))
-, pcg
+,pcg
                       , single(CGStages.assignColors)} )
                    , when_do(single(CGStages.haveSpilledNodes),
-                             single(CGStages.resetProgram))
+seq {
+pcg,
+                             single(CGStages.resetProgram)
+, pcg
+})
                    } )
-          , seq {single(CGStages.updateProgram),single(CGStages.applyColors)}
+          , seq { single(CGStages.updateProgram)
+				, single(CGStages.applyColors)
+				}
           } )
     end
 

@@ -125,7 +125,7 @@ let rec live (node:G.node) =
 @
 
 The [[after]] function computes the union of the live-in sets of a node's
-successors.
+successors. This union forms the live-out set for the current node.
 
 <<struct Make>>=
 (*
@@ -158,8 +158,10 @@ let process changed node =
            ) 
 @
 
-The [[process]] function, which updates the live set of a node, is
-repeatedly applied to all nodes in [[cfg]].  This is done until
+First, we make sure we clear the [[liveout]] sets for all the nodes -
+this ensures that any obsolete liveness information is discarded before
+we begin.  The [[process]] function, which updates the live set of a node,
+is repeatedly applied to all nodes in [[cfg]].  This is done until
 [[process]] does not change any live set which means the fix point is
 reached.  We use [[G.scan_bwd]] to implement an iteration function
 that iterates mostly backwards (reverse control-flow direction) over
@@ -172,6 +174,8 @@ let liveness cfg =
         let first = G.number (G.first cfg)     in
         let limit = G.number (G.last  cfg) + 1 in
             G.scan_bwd cfg first limit f z     in
+    let _ = fold cfg (fun n () ->
+						(G.property n).P.liveout <- Register.Set.empty) () in
     let changed     = ref false                           in
     let iter cfg f  = fold cfg (fun node () -> f node) () in
     let rec loop n = 

@@ -210,6 +210,15 @@ module Cheats = struct
                     )
              else None
 
+    let source node =
+        match Rtlutil.RTLType.singleAssignment (G.rtl node) with
+        | Some (s, _) -> s
+        | _ -> assert false
+    let dest node =
+        match Rtlutil.RTLType.singleAssignment (G.rtl node) with
+        | Some (_, d) -> d
+        | _ -> assert false
+
 	let cfgSay = Verbose.say 18
     let print_cfg cfg =
         cfgSay ["CFG\n===\n"];
@@ -217,8 +226,9 @@ module Cheats = struct
         cfgSay ["END CFG\n===\n"]
     let pCFG _ {Proc.cfg = cfg} = print_cfg cfg; false
 
+	let filterOut el lst = List.filter (fun x -> x <> el) lst
     let rewrite ({Proc.cfg = cfg; Proc.priv = a; Proc.target = target}
-            as proc) spillees coalescedMoves =
+            as proc) spillees =
         let spill_slot ((_,_,w):Register.t) =
             Automaton.to_loc (Automaton.ty a w None) in
         let smPairs = List.map (fun s -> (s, spill_slot s)) spillees in 
@@ -230,11 +240,23 @@ module Cheats = struct
                                 | Some tmp -> tmp::tmps)
                 newTemps smPairs)
         in
-            print_cfg cfg;
-            List.iter (fun n -> Cfg3.gm_delete_assign n;
-                    Cfg3.gm_enumerate cfg;
-                    print_cfg cfg) coalescedMoves;
             fold_fwd cfg (updateNode smPairs) []
+
+
+	let removeCoalescedMoves cfg coalescedMoves =
+            List.iter (fun n -> cfgSay [ string_of_int (Cfg3.number n)
+					                   ; " "
+					                   ; Register.print (source n)
+					                   ; " -> "
+									   ; Register.print (dest n)
+									   ; " "
+									   ; Rtldebug.rtl_to_string (Cfg3.rtl n)
+									   ; "\n"
+									   ]
+									   (*; print_cfg cfg*)
+									   ;Cfg3.gm_delete_assign n;
+                    Cfg3.gm_enumerate cfg) coalescedMoves
+			
 (*
 (* reserve a spill slot using automaton *)
 
@@ -247,14 +269,6 @@ module Cheats = struct
 
     (* Not really cheats anymore.... *)
 
-    let source node =
-        match Rtlutil.RTLType.singleAssignment (G.rtl node) with
-        | Some (s, _) -> s
-        | _ -> assert false
-    let dest node =
-        match Rtlutil.RTLType.singleAssignment (G.rtl node) with
-        | Some (_, d) -> d
-        | _ -> assert false
 
     (*
      * singleAssignment returns a (Register.t * Register.t) option
@@ -301,7 +315,9 @@ procedure Main()\\
 
 
 <<color graph algorithm>>=
-let initInfo = { adjSet = RegPairSet.empty
+let makeInitInfo _ =
+	T2'.map.V.embed (CGInfo
+               { adjSet = RegPairSet.empty
                ; adjListMap = RM.empty
                ; degreeMap = RM.empty
                ; moveListMap = RM.empty
@@ -324,8 +340,7 @@ let initInfo = { adjSet = RegPairSet.empty
                ; activeMoves = []
                ; colors = []
                ; k = 0
-               }
-
+               })
 
 let haveSpilledNodes param _ = match T2'.map.V.project param with
     | CGInfo cg -> not (empty cg.spilledNodes)
@@ -351,11 +366,9 @@ This algorithm annotates each node in the (\cfg) with a live-in set.
 
 <<livenessAnalysis>>=
 (* dummy implementation *)
-let liveness _ proc = LI.liveness proc.Proc.cfg; true
-let writedot compress _ proc =
-  print_string (Cfgutil.cfg2dot compress proc.Proc.name proc.Proc.cfg);
-  flush stdout;
-  false
+let liveness _ {Proc.cfg = cfg} =
+	cfgSay [Cfgutil.cfg2dot true "cfg" cfg];
+	LI.liveness cfg; true
 
 (*
 let livenessStage = { Backplane.name = "liveness"
@@ -737,17 +750,32 @@ match T2'.map.V.project param with
 			then RM.find (getAlias temp cg) cmap
 		    else temp in
         let colorTemp temp =
+			(* Find a non-spill neighbor and spill it. *)
+			let spillNeighbor temp =
+				let neigh =
+					try (List.find (fun t -> not(List.mem t cg.spills
+												|| List.mem t cg.spilledNodes))
+						   (listMapFind temp cg.adjListMap))
+					with Not_found -> raise GraphColoring in
+					( cg.spilledNodes <- neigh::cg.spilledNodes
+					; cg.coloredNodes <- List.filter (fun n -> n <> neigh)
+											cg.coloredNodes
+				    ; cg.colorMap <- RM.remove neigh cg.colorMap)
+			in
             let removeUsedColor colors temp =
                 if List.mem (getAlias temp cg) (cg.coloredNodes @ cg.precolored)
                 then
-                    filterOut (colorLookup (getAlias temp cg) cg.colorMap) colors
+                   filterOut (colorLookup (getAlias temp cg) cg.colorMap) colors
                 else colors in
             let okColors =
                 List.fold_left removeUsedColor (Cheats.possibleColors cg)
                                (listMapFind temp cg.adjListMap)
             in
                 (match okColors with
-                 | [] -> cg.spilledNodes <- temp::cg.spilledNodes
+                 | [] ->
+				 	if List.mem temp cg.spills
+					then spillNeighbor temp
+					else cg.spilledNodes <- temp::cg.spilledNodes
                  | color::rst ->
                     cg.coloredNodes <- union temp cg.coloredNodes;
                     cg.colorMap <- RM.add temp color cg.colorMap) in
@@ -756,20 +784,18 @@ match T2'.map.V.project param with
                 cg.selectStack <- [] in
         let colorCoalescedNodes () =
             let setColor temp = 
-cfgSay ["coloring temp: "; Register.print temp ^ "\n"];
                 cg.colorMap <- RM.add temp (RM.find (getAlias temp cg)
                                             cg.colorMap) cg.colorMap
             in
                 List.iter setColor cg.coalescedNodes in
         let _ = colorSelectStack () in
-let _ = print_cgInfo cg in
         let _ = match cg.spilledNodes with
 			  | [] -> colorCoalescedNodes ()
 	          | _ -> () in
             (* remove short spill temps from the spill list *)
-		let _ = cg.spilledNodes <- (List.fold_right filterOut cg.spills
-		           	                        cg.spilledNodes @ cg.spills) in
 	(*
+		let _ = cg.spilledNodes <- (List.fold_right filterOut cg.spills
+		           	                        cg.spilledNodes) in
         let _ = match cg.spilledNodes with
             | [] -> ()
             | _ -> cg.spilledNodes <- List.fold_right filterOut cg.spills
@@ -786,9 +812,12 @@ let applyColors param {Proc.cfg = cfg; Proc.mangle = mangle; Proc.target = targe
     let subst = function
       | temp when Cheats.is_tmp temp target ->
   		  (try RM.find temp cg.colorMap
-                     with Not_found -> print_cgInfo cg; cfgSay ["\n";
-(Register.print temp); "\n"];raise
-(UncoloredTemp temp))
+                     with Not_found -> print_cgInfo cg;
+					                   cfgSay [ "\n"
+									          ; (Register.print temp)
+											  ; "\n"
+											  ];
+									   raise (UncoloredTemp temp))
 	  | t -> t
     in
         ( Cheats.fold_fwd cfg
@@ -800,7 +829,9 @@ let applyColors param {Proc.cfg = cfg; Proc.mangle = mangle; Proc.target = targe
 let resetProgram param proc =
     match T2'.map.V.project param with (CGInfo cg) ->
     (* handle addition of temps (those in spilledNodes) *)
-    let newTemps = Cheats.rewrite proc cg.spilledNodes cg.coalescedMoves in (* set of all new temps added *)
+    let newTemps = Cheats.rewrite proc cg.spilledNodes in (* set of all new temps added *)
+    let _ = cg.initial <- cg.coloredNodes @ cg.coalescedNodes @ newTemps in
+    let _ = cg.spills <- cg.spills @ newTemps in
     let _ = cg.adjSet <- RegPairSet.empty in
     let _ = cg.adjListMap <- RM.empty in
     let _ = cg.degreeMap <- RM.empty in
@@ -811,7 +842,6 @@ let resetProgram param proc =
     let _ = cg.freezeWorklist <- [] in
     let _ = cg.spillWorklist <- [] in
     let _ = cg.spilledNodes <- [] in
-    let _ = cg.initial <- cg.coloredNodes @ cg.coalescedNodes @ newTemps in
     let _ = cg.coloredNodes <- [] in
     let _ = cg.coalescedNodes <- [] in
     let _ = cg.selectStack <- [] in
@@ -819,14 +849,13 @@ let resetProgram param proc =
     let _ = cg.constrainedMoves <- [] in
     let _ = cg.frozenMoves <- [] in
     let _ = cg.worklistMoves <- [] in
-    let _ = cg.spills <- cg.spills @ newTemps in
     let _ = cg.activeMoves <- [] in
         true
 
-let updateProgram param proc =
+let updateProgram param {Proc.cfg = cfg} =
     match T2'.map.V.project param with (CGInfo cg) ->
     (* handle addition of temps (those in spilledNodes) *)
-    let newTemps = Cheats.rewrite proc cg.spilledNodes cg.coalescedMoves in (* set of all new temps added *)
+    let _ = Cheats.removeCoalescedMoves cfg cg.coalescedMoves in (* set of all new temps added *)
         true
 
 (*
@@ -927,14 +956,14 @@ let proc = T3'.map
 let ( **-> ) = V.( **-> )
 let stageFnType = V.value **-> proc **-> V.result V.bool
 let stageFn = (V.pfunc stageFnType).V.embed
-let pf ty = (V.pfunc ty).V.embed
-let stage_maker ty = 
-  (V.pfunc (ty **-> V.result (V.pfunc stageFnType))).V.embed
+let param2StageFn =
+        (V.pfunc (V.value **-> V.result (V.pfunc stageFnType))).V.embed
+let param2value =
+        (V.pfunc (V.value **-> V.result V.value)).V.embed
 
 let graph_coloring_module =
         [ "liveness",         stageFn liveness
-        ; "writedot",         stage_maker (V.bool) writedot
-        ; "makeBuild",        stage_maker (V.value) makeBuildStage
+        ; "makeBuild",        param2StageFn build
         ; "makeWorklist",     stageFn makeWorklist
         ; "simplify",         stageFn simplify
         ; "coalesce",         stageFn coalesce
@@ -942,16 +971,17 @@ let graph_coloring_module =
         ; "selectSpill",      stageFn selectSpill
         ; "assignColors",     stageFn assignColors
         ; "haveSpilledNodes", stageFn haveSpilledNodes
-        ; "resetProgram",     stageFn resetProgram
-        ; "updateProgram",    stageFn updateProgram
+        ; "resetProgram",   stageFn resetProgram
+        ; "updateProgram",   stageFn updateProgram
         ; "applyColors",      stageFn applyColors
         ; "printCG",          stageFn printCGInfo
         ; "printCFGLive",     stageFn printCFGLive
         ; "pCFG",             stageFn Cheats.pCFG
+        ; "makeInitInfo",     param2value makeInitInfo
         ]
 
 let graph_coloring_globals =
-        [ "initInfo", T2'.map.V.embed (CGInfo initInfo)
+        [
 (*
         ; "dgraph", T3'.map.V.embed dgraph
 *)
