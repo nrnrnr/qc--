@@ -37,6 +37,11 @@ module type S = sig
 
   val setfallback : state -> string -> value -> value
     (* sets fallback, returns previous one *)
+  val register_globals :           (string * value) list -> state -> unit
+    (* registers values as named global variables *)
+  val register_module  : string -> (string * value) list -> state -> unit
+    (* register_module t l inserts members of l into global table t, 
+       creating t if needed *)
 end
 @ 
 <<luainterp.ml>>=
@@ -56,6 +61,7 @@ module Make3  (T : Lualib.COMBINED_TYPE)
     type value = Value.value
     <<interp toplevel>>
     <<interp fallbacks>>
+    <<interp registration>>
     <<interp tests>>
   end
   module Core = struct
@@ -645,3 +651,16 @@ let dump_state g =
   stab g.V.fallbacks "\n";
   default_error_fallback g [V.String "Stack trace is:"]
 
+@ 
+<<interp registration>>=
+let register_globals l g =
+  List.iter (fun (k, v) -> V.Table.bind g.V.globals (V.String k) v) l
+
+let register_module tabname members g =
+  let t = getglobal g (V.String tabname) in
+  let t = match t with
+  | V.Nil       -> V.Table.create (List.length members)
+  | V.Table t   -> t
+  | _           -> error g ("Global value " ^ tabname ^ " is not (table or nil)") in
+  let _ = V.Table.bind g.V.globals (V.String tabname) (V.Table t) in
+    List.iter (fun (k, v) -> V.Table.bind t (V.String k) v) members

@@ -279,6 +279,12 @@ module type CORE = sig
   val setfallback : V.state -> string -> V.value -> V.value
     (* sets fallback, returns previous one *)
   val apply : V.value -> V.state -> V.value list -> V.value list
+
+  val register_globals :           (string * V.value) list -> V.state -> unit
+    (* registers values as named global variables *)
+  val register_module  : string -> (string * V.value) list -> V.state -> unit
+    (* register_module t l inserts members of l into global table t, 
+       creating t if needed *)
 end
 @ 
 All a library does is add values to the initial state of an
@@ -391,6 +397,11 @@ module type INTERP_CORE = sig
 
   val setfallback : state -> string -> value -> value
     (* sets fallback, returns previous one *)
+  val register_globals :           (string * value) list -> state -> unit
+    (* registers values as named global variables *)
+  val register_module  : string -> (string * value) list -> state -> unit
+    (* register_module t l inserts members of l into global table t, 
+       creating t if needed *)
 end
 
 module MakeCore
