@@ -290,13 +290,28 @@ associated costs of one prevent that they are applied indefinitely.
 
 =head2 COSTS
 
-Rules have an associated non-negative cost.  The cost of a rule is the
-sum of cost of its arguments and its own cost. If a rule has no explicit
-cost, it defaults to zero.  The cost of arguments are computed at
-run-time. The rule's own cost is either static, or dynamic. In the
-dynamic case the user provides a cost expression that is evaluated at
-run-time. The values of terminal variables in the pattern are available
-for the cost expression.
+A Rule has an associated non-negative cost which is computed at run
+time.  The cost of a rule is the sum of cost of its arguments and its
+explicitly specified cost. If a rule has no explicit cost, it defaults to
+zero.  The rule's cost specification is either static, or dynamic.  A
+static cost is a non-negative integer; a dynamic cost is an expression
+that is evaluated at run-time. The values of terminal variables of
+I<unnested> patterns are available in the cost expression.  Thus, the
+cost of a rule thus can depend on constructor arguments.
+
+In the example below, the first cost is dynamic, the second static. A
+dynamic cost expression is enclosed in C<{:> and C<:}>, like other
+literal OCaml code.
+
+    str    : STR(x: string) [{: String.length x :}]     {: x :}
+    str    : CONS(x: string, y:string)    [2]           {: x ^ y :}
+
+Note that it is impossible to use a variable from a nested pattern in
+the cost expression. However, such a variable I<is> visible in the
+action.  See the example below:
+
+    t      : X(x:int, Y(y:int)) [{: y is invisible here :}] {: x + y :} 
+
 
 =head1 THE GENERATED CODE
 
@@ -410,7 +425,7 @@ SUCH DAMAGE.
 
 =head1 SEE ALSO
 
-ocaml(1)
+ocaml(1), http://www.ocaml.org/
 
 Fraser and Hanson: "Engineering a Simple, Efficient Code Generator
 Generator", ACM Letters on Programming Languages and Systems 1, 3 (Sep
