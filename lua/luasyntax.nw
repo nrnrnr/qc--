@@ -348,6 +348,7 @@ rule token = parse      (* raise Error in case of error *)
     eof         { fun map ->  P.EOF }
   | ws+         { fun map ->  token lexbuf map }
   | nl          { fun map -> nl lexbuf map ; token lexbuf map }
+  
   | nl '$'      { fun map -> (* skip pragma line *)
                   ( nl lexbuf map
                   ; skip lexbuf map
@@ -359,7 +360,25 @@ rule token = parse      (* raise Error in case of error *)
                   else
                     error "illegal character" 
                 }
-                
+       
+  | nl "$line" ws+ { fun map -> line_pragma lexbuf map }
+  | nl "$file" ws+ { fun map -> file_pragma lexbuf map }  
+  
+  | "$line" ws+ { fun map -> 
+                  if Lexing.lexeme_start lexbuf = 0 then 
+                    line_pragma lexbuf map 
+                  else 
+                    error "illegal $line pragma" 
+                }
+  | "$file" ws+ { fun map -> 
+                  if Lexing.lexeme_start lexbuf = 0 then
+                    file_pragma lexbuf map 
+                  else 
+                    error "illegal $file pragma"
+                }  
+  
+
+       
   | '#'         { fun map ->  (* skip # line if it's the first line *)
                   if Lexing.lexeme_start lexbuf = 0 then 
                     skip lexbuf map     
@@ -417,14 +436,46 @@ and skip = parse        (* skip to end of line *)
   | [^'\n']+    { fun map ->  skip lexbuf map }
   | nl          { fun map ->  nl lexbuf map ; token lexbuf map }
 
+and file_pragma = parse
+    eof         { fun map -> error "illegal $file pragma" }
+  | [^'\n']+    { fun map -> 
+                    let file = get lexbuf in
+                    let loc  = (file, 1, 1) in
+                    let pos  = Lexing.lexeme_start lexbuf in 
+                        ( Srcmap.sync map pos loc
+                        ; token lexbuf map
+                        )
+                }
+  | _           { fun map -> error "illegal character in $file pragma" }
+
+and line_pragma = parse
+    eof         { fun map -> error "illegal $file pragma" }
+  | digit+      { fun map -> 
+                    let s       = get lexbuf in
+                    let line    = int_of_string s in
+                    let pos     = Lexing.lexeme_start lexbuf in 
+                    let (f,l,c) = Srcmap.last map in
+                        ( Srcmap.sync map pos (f,line,1)
+                        ; token lexbuf map
+                        )
+                }        
+  | _           { fun map -> error "illegal character in $line pragma" }
+        
+
+
+
 and longstring = parse  (* parse a [[ .. ]] string *)
     eof         { fun n map buf -> error "end of file in [[..]] string" }
   | "]]"        { fun n map buf ->
                     if n = 1 then P.STRING (Buffer.contents buf) 
-                    else (Buffer.add_string buf "]]"; longstring lexbuf (n-1) map buf)
+                    else ( Buffer.add_string buf "]]"
+                         ; longstring lexbuf (n-1) map buf
+                         )
                 }
   | "[["        { fun n map buf ->
-                    (Buffer.add_string buf "[["; longstring lexbuf (n+1) map buf)
+                    ( Buffer.add_string buf "[["
+                    ; longstring lexbuf (n+1) map buf
+                    )
                 }
   | [^']' '[' '\n']+
   | ']' 
