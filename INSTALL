@@ -1,0 +1,84 @@
+
+
+                Building the QC-- The Quick C-- Compiler
+
+This documents describes how to build the QC-- compiler from source
+code and lays out a road map of the source code.
+
+Prerequisites
+
+The compiler is written in the functional programming language
+Objective Caml (http://caml.inria.fr). Most of the source code is
+written as a literate program using the Noweb literate programming
+tool.  The documentation is intended to be formatted with for the
+LaTeX type setting system. The build process is controlled by the
+make-like tool mk. Mk is the build tool of the Plan 9 operating system.
+
+To build the compiler from source code you need:
+
+        * Objective Caml 3.00 installation
+        * mk 
+        * Noweb 2.9
+        * LaTeX
+
+Building
+
+The recursive build process is controlled by mkfile's for mk. All
+mkfile's include the file config/ocaml.mk that contains the rules for
+compiling OCaml source files. It is thus the central file to changes
+paths or compiler options.
+
+        config/ocaml.mk         mk rules for OCaml
+        mkfile                  top-level mkfile
+        cllib/mkfile
+        src/mkfile
+        test/mkfile
+
+To compile everuthing call mk in this directory:
+
+        % mk
+
+This starts the compilation process. The resultin files are:
+
+        bin/qc--            qc-- native code binary 
+        man/man1/qc--.1     manual page
+
+To execute the test suite you can also call the test target:
+
+        % mk test
+
+
+Roadmap
+
+The source code of the compiler is split into different directories. 
+The top level mkfile knows the dependencies between them and makes
+them in the right order.  Files shared by many directories go into the
+lib/ directory which is initially empty.  Once all shared files are in
+place development can be continued in the sub-directories and the
+mkfiles provided there. Refer to the mkfiles for the high level
+targets available in each directory.
+
+    src/        Main sources for the c-- compiler
+
+    asdl/       OCaml sources for the runtime system of AsdlGen
+                generated code.
+
+    cllib/      Library of OCaml modules for pretty printing and
+                and parsing.
+
+    config/     Global rule set for compiling OCaml sources and other 
+                global files.
+    
+    aug99/      Sources for an earlier implementation of c--.
+
+    man/        Initially empty. Contains manual page after
+                compilation. 
+
+    bin/        Initially empty. Contains binary after compilation.
+
+    lib/        Initially empty. Contains library modules during
+                compilation.
+
+    examples/   Some c-- sources. Not very up to date.
+
+    test/       Code for testing.
