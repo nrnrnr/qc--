@@ -56,7 +56,7 @@ treating a control-flow graph as an instruction.
 
 <<ASM>>=
 Asm2.S with type instruction = Proc.t
-       and  type init        = (Cfg3.cfg -> Automaton.t -> unit)
+       and  type init        = (Proc.t -> Target2.t -> unit)
 @
 
 
@@ -64,7 +64,7 @@ Asm2.S with type instruction = Proc.t
 module Make (A: <<ASM>>) : sig
     val translate: Fenv.Clean.env 
                 -> Target2.t 
-                -> (optimizer: Cfg3.cfg -> Automaton.t -> unit)
+                -> (optimizer: Proc.t -> Target2.t -> unit)
                 -> Ast.program 
                 -> A.asm
 end
@@ -894,6 +894,7 @@ let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) =
     let ()    = G.gm_enumerate cfg in
     let i =    
         { Proc.name     = name
+        ; Proc.cc       = cc
         ; Proc.cfg      = cfg
         ; Proc.mangle   = mangle
         ; Proc.incoming = incoming   (* incoming area *)   
@@ -1166,7 +1167,7 @@ should be exported but currently it is not.
 \end{quote}
 
 <<Make translate program>>=
-let translate env target (optimizer: Cfg3.cfg -> Automaton.t -> unit) prog =
+let translate env target optimizer prog =
     let mangle   = Asm.mangle (F.nam2sym env) in 
     let base_sym = mangle "global base" in
     let base     = Rtl.link base_sym target.Target.pointersize in (*XXX*)

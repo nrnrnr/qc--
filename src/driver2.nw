@@ -17,11 +17,11 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
     type asm        (* assembly code                      *)
     type ast        (* abstract syntax                    *)
     type env        (* environment/symbol table           *)
-    type cfg        (* control-flow graph for a procedure *)
     type doc        (* printable document                 *)
     type target     (* target architecture                *)
-    type frame      (* container for stack slots          *)
-    type optimize  = cfg -> frame -> unit 
+    type proc       (* procedure representation in back-end, includes
+                       cfg, calling convention *)
+    type optimize  = proc -> target -> unit
 
     val dummy:      target                  (* our only target right now *)
     
@@ -74,26 +74,23 @@ module Export : sig
     module AsmT     : Lua.USERDATA
     module AstT     : Lua.USERDATA
     module EnvT     : Lua.USERDATA
-    module CfgT     : Lua.USERDATA with type 'a t = Cfg3.cfg
-    module TargetT  : Lua.USERDATA
+    module ProcT    : Lua.USERDATA with type 'a t = Proc.t
+    module TargetT  : Lua.USERDATA with type 'a t = Target2.t
     module DocT     : Lua.USERDATA
-    module FrameT   : Lua.USERDATA
 
     module MakeLib  
       (AsmV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AsmT.t)
       (AstV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AstT.t 
                                   and  type 'a combined = 'a AsmV.combined)
       (EnvV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a EnvT.t 
-                                  and  type 'a combined = 'a AstV.combined)
-      (CfgV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a CfgT.t 
-                                  and  type 'a combined = 'a EnvV.combined)
+                                  and  type 'a combined = 'a AsmV.combined)
+      (ProcV   : Lua.Lib.TYPEVIEW with type 'a t        = 'a ProcT.t
+                                  and  type 'a combined = 'a AsmV.combined)
       (TargetV : Lua.Lib.TYPEVIEW with type 'a t        = 'a TargetT.t 
-                                  and  type 'a combined = 'a CfgV.combined)
+                                  and  type 'a combined = 'a AsmV.combined)
       (DocV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a DocT.t 
-                                  and  type 'a combined = 'a TargetV.combined)
-      (FrameV  : Lua.Lib.TYPEVIEW with type 'a t        = 'a FrameT.t 
-                                  and  type 'a combined = 'a DocV.combined)
-        : Lua.Lib.TYPEFUL with type 'a combined = 'a FrameV.combined 
+                                  and  type 'a combined = 'a AsmV.combined)
+        : Lua.Lib.TYPEFUL with type 'a combined = 'a AsmV.combined 
 end
 @
 
@@ -114,9 +111,9 @@ module Personality = struct
     
     let target = Target2.dummy
 
-    let ext (p:Proc.t) target (optimizer: Cfg3.cfg -> Automaton.t -> unit) = 
-        let () = optimizer p.Proc.cfg p.Proc.priv in 
-        let () = p.Proc.freeze p in
+    let ext (p:Proc.t) target (optimizer: Proc.t -> Target2.t -> unit) = 
+        let () = optimizer p target in
+        let () = p.Proc.freeze p    in
             Cfg3.ast p.Proc.cfg p.Proc.name p.Proc.mangle target
 end
 module E   = Error
@@ -129,10 +126,9 @@ type asm        = Asm.asm
 type ast        = Srcmap.map * Ast.program
 type env        = Fenv.Clean.env
 type doc        = Pp.doc
-type cfg        = Cfg3.cfg
+type proc       = Proc.t
 type target     = Target2.t
-type frame      = Automaton.t
-type optimize   = cfg -> frame -> unit
+type optimize   = proc -> target -> unit 
 
 <<Caml>>=
 
@@ -259,11 +255,11 @@ module EnvT = struct
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<env>" 
 end
-module CfgT = struct
-    type 'a t       = Caml.cfg
-    let tname       = "cfg"
+module ProcT = struct
+    type 'a t       = Caml.proc
+    let tname       = "proc"
     let eq _        = fun x y -> x = y
-    let to_string _ = fun t -> "<cfg>" 
+    let to_string _ = fun t -> ("<proc "^t.Proc.name^">") 
 end
 module TargetT = struct
     type 'a t       = Caml.target
@@ -277,12 +273,6 @@ module DocT = struct
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<doc>" 
 end
-module FrameT = struct
-    type 'a t       = Caml.frame
-    let tname       = "frame"
-    let eq _        = fun x y -> x = y
-    let to_string _ = fun t -> "<frame>" 
-end
 
 <<MakeLib>>
 @
@@ -294,15 +284,13 @@ module MakeLib
                               and  type 'a combined = 'a AsmV.combined)
   (EnvV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a EnvT.t 
                               and  type 'a combined = 'a AsmV.combined)
-  (CfgV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a CfgT.t 
+  (ProcV   : Lua.Lib.TYPEVIEW with type 'a t        = 'a ProcT.t
                               and  type 'a combined = 'a AsmV.combined)
   (TargetV : Lua.Lib.TYPEVIEW with type 'a t        = 'a TargetT.t 
                               and  type 'a combined = 'a AsmV.combined)
   (DocV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a DocT.t 
                               and  type 'a combined = 'a AsmV.combined)
-  (FrameV  : Lua.Lib.TYPEVIEW with type 'a t        = 'a FrameT.t 
-                              and  type 'a combined = 'a AsmV.combined)
-    : Lua.Lib.TYPEFUL with type 'a combined = 'a FrameV.combined =
+    : Lua.Lib.TYPEFUL with type 'a combined = 'a AsmV.combined =
 
 struct
   type 'a combined = 'a AsmV.combined
@@ -346,11 +334,10 @@ module Map = struct
     let ast       = AstV.makemap    V.userdata V.projection
     let asm       = AsmV.makemap    V.userdata V.projection
     let env       = EnvV.makemap    V.userdata V.projection
-    let cfg       = CfgV.makemap    V.userdata V.projection
+    let proc      = ProcV.makemap   V.userdata V.projection
     let doc       = DocV.makemap    V.userdata V.projection
-    let frame     = FrameV.makemap  V.userdata V.projection
     let target    = TargetV.makemap V.userdata V.projection
-    let optimize  = V.func (cfg **-> frame **-> V.runit)
+    let optimize  = V.func (proc **-> target **-> V.runit)
 end
 
 let targets =
