@@ -7,9 +7,23 @@ Parameter [[rm]] contains the hardware rounding modes.
 <<widen.mli>>=
 val float : rm:Rtl.exp -> int list -> Rtl.rtl -> Rtl.rtl
   (* widen all floating-point operations *)
+@ 
 
+<<widen.mli>>=
 val store_const : int -> Rtl.rtl -> Rtl.rtl
   (* l := k   =>   l := lobits(k') *)
+
+val dpwiden : Rtl.rtl -> Rtl.rtl
+  (* do integer widening using dynamic programming *)
+
+val widenlocs : Rtl.rtl -> Rtl.rtl
+  (* This is supposed to widen locations *)
+
+@ 
+
+<<widen.mli>>=
+val badwiden : Rtl.rtl -> Rtl.rtl
+  (* do integer widening without using dynamic programming *)
 
 val width_cost : Rtl.rtl -> (int * int * int)
   (* count extension and truncation operations (#sign, #zero, #lobits) *)
@@ -19,20 +33,19 @@ val app_count : Rtl.rtl -> int
   (* this probably shouldn't be here...it just counts the number of
      RP.App present in the rtl *)
 
-val dpwiden : Rtl.rtl -> Rtl.rtl
-  (* do integer widening using dynamic programming *)
-
-val badwiden : Rtl.rtl -> Rtl.rtl
-  (* do integer widening using dynamic programming *)
-
 val time : ('a -> 'b) -> 'a -> 'b
 @ 
+
 <<widen.ml>>=
 module R = Rtl
 module RP = Rtl.Private
 
 module Down = Rtl.Dn
 module Up   = Rtl.Up
+
+let print_debug = false
+
+exception Abort_unknown
 @ 
 We're given [[goodwidths]], and our goal is to change all
 floating-point operations in an RTL to be using one of the widths in
@@ -200,74 +213,6 @@ let store_const goodwidth rtl = match Down.rtl rtl with
   | _ -> rtl
 @ 
 
-<<widen.ml>>=
-let width_cost r =
-  let rec count_loc c = function
-    | RP.Mem(_,_,_,e,_) -> do_count c e
-    | RP.Slice(_,_,l)   -> count_loc c l
-    | _                 -> failwith "count_loc can only handle mem and slice"
-  and do_count ((sx, zx, lo) as c) = function
-    | RP.Const _ -> c
-    | RP.Fetch(l, w) -> c
-(* considering sx(const) the same as const *)
-    | RP.App ((("sx"|"zx"), _), [(RP.Const _ | RP.Fetch _)]) -> c
-    | RP.App (("sx", _), [arg]) -> do_count (sx+1, zx, lo) arg
-    | RP.App (("zx", _), [arg]) -> do_count (sx, zx+1, lo) arg
-    | RP.App (("lobits", _), [RP.Const(RP.Bits _)]) -> c
-    | RP.App (("lobits", _), [arg]) -> do_count (sx, zx, lo+1) arg
-    | RP.App ((opname, _), args) -> List.fold_left do_count c args
-  in
-  let do_count_guard counts (g, eff) =
-    let counts' = 
-      match eff with
-      | RP.Store(l, r, w) -> do_count counts r
-      | RP.Kill l         -> counts
-    in
-    do_count counts' g
-  in
-  let rtl = Rtlutil.ToReadableString.rtl in
-  let _ = Printf.printf "Counting %s\n" (rtl r) in
-  let (sx, zx, lo) =
-    let RP.Rtl es = Down.rtl r in
-    List.fold_left do_count_guard (0, 0, 0) es
-  in
-  Printf.printf "Counted %i sx, %i zx, %i lo\n" sx zx lo;
-  (sx, zx, lo)
-@ 
-
-<<widen.ml>>=
-let app_count r =
-  let rec count_loc c = function
-    | RP.Mem(_,_,_,e,_) -> do_count c e
-    | RP.Slice(_,_,l)   -> count_loc c l
-    | _                 -> failwith "count_loc can only handle mem and slice"
-  and do_count c = function
-    | RP.Const _     -> c
-    | RP.Fetch(l, w) -> c
-
-    | RP.App ((("sx"|"zx"), _), [(RP.Const _ | RP.Fetch _)]) -> c
-    | RP.App (("lobits", _),    [RP.Const(RP.Bits _)])       -> c
-
-    | RP.App (_, args) -> 1 + List.fold_left do_count c args
-  in
-  let do_count_guard c (g, eff) =
-    let c' = 
-      match eff with
-      | RP.Store(l, r, w) -> do_count c r
-      | RP.Kill l         -> c
-    in
-    do_count c' g
-  in
-  let rtl = Rtlutil.ToReadableString.rtl in
-  let _ = Printf.printf "Counting %s\n" (rtl r) in
-  let count =
-    let RP.Rtl es = Down.rtl r in
-    List.fold_left do_count_guard 0 es
-  in
-  Printf.printf "Counted %i ops\n" count;
-  count
-@ 
-
 \subsection{DP Integer Widening}
 
 <<widen.ml>>=
@@ -353,9 +298,9 @@ let subsume_fill_rule soln =
 let natural_rule soln =
   let create fill' = {soln with fill = fill'; n = soln.w} in    
   if width soln = index soln && fill soln = G then
-    [create S; create Z]
+    [create Z; create S]
   else if fill soln = S || fill soln = Z then
-    [create S; create Z]
+    [create Z; create S]
   else []
 @ 
 
@@ -363,8 +308,8 @@ let natural_rule soln =
 let fill_rule soln =
   let n = index soln in
   let w = width soln in
-  let sx_exists = find_exts_to w "sx" <> [] in
   let zx_exists = find_exts_to w "zx" <> [] in
+  let sx_exists = find_exts_to w "sx" <> [] in
   let lo_exists = find_exts_from w "lobits" <> [] in
   let create fill' ext =
     { soln with
@@ -373,9 +318,9 @@ let fill_rule soln =
       fill = fill' }
   in
   if fill soln = G && lo_exists then
-    let sx_solns = if sx_exists then [create S "sx"] else [] in
     let zx_solns = if zx_exists then [create Z "zx"] else [] in
-    let solns    = sx_solns @ zx_solns in
+    let sx_solns = if sx_exists then [create S "sx"] else [] in
+    let solns    = zx_solns @ sx_solns in
     List.find_all (fun s -> s.n <= s.w) solns (* is this necessary *)
   else []
 @ 
@@ -401,8 +346,8 @@ let widen_sigma soln =
 let widen_garbage soln =
   if fill soln = G then
     let w          = width soln in
-    let sx_widths = find_exts_from w "sx" in
     let zx_widths = find_exts_from w "zx" in
+    let sx_widths = find_exts_from w "sx" in
     let create fill' ext ws =
       let (_, w') = monomorphic ext ws in
       { soln with
@@ -410,7 +355,7 @@ let widen_garbage soln =
         cost = soln.cost + 1;
         w = w' }
     in
-    List.map (create S "sx") sx_widths @ List.map (create Z "zx") zx_widths
+    List.map (create Z "zx") zx_widths @ List.map (create S "sx") sx_widths
   else []
 @ 
 
@@ -466,7 +411,11 @@ let mksolutions_var e w =
 
 <<combine solutions>>=
 let mksolutions_op args_solns opname ws args =
-  let (args_indices, result_index) = monomorphic opname ws in
+  let (args_indices, result_index) = 
+    try monomorphic opname ws
+    with Not_found -> raise Abort_unknown
+  in
+
   let args_solns = map2_find_all (fun n s -> s.n <= n) args_indices args_solns in
 
   let m_widths = machine_widths m opname in
@@ -484,6 +433,7 @@ let mksolutions_op args_solns opname ws args =
   let solns_widths_and_taus = cross_pair_filter has_taus solns_and_widths taus in
   
   let mkopsoln ((solns, ((_,w'), ws')), (_,t)) =
+    let ws' = List.filter (fun x -> x > 1) ws' in
     { e    = RP.App((opname, ws), args);
       cost = List.fold_left (+) 0 (List.map cost solns);
       e'   = RP.App((opname, ws'), List.map ast' solns);
@@ -530,12 +480,12 @@ let mksolutions_trunc ws arg_solnss =
 <<combine solutions>>=
 let ast_combine solns = function
   | RP.Const(RP.Bool b) as e -> mksolutions_lit_bool e
-  | RP.Const(RP.Bits b) as e -> (mksolutions_lit_bits S e) @ (mksolutions_lit_bits Z e)
+  | RP.Const(RP.Bits b) as e -> (mksolutions_lit_bits Z e) @ (mksolutions_lit_bits S e)
   | (RP.Const(RP.Link(_,_,w)|RP.Late(_,w)) | RP.Fetch(_,w)) as e -> mksolutions_var e w
   | RP.App((("sx"|"zx" as ext),   ws), [arg]) -> mksolutions_ext ext ws solns
   | RP.App(("lobits",             ws), [arg]) -> mksolutions_trunc ws solns
   | RP.App((opname,               ws), args) -> mksolutions_op solns opname ws args
-  | _  -> failwith "ast_combine couldn't handle the rtl"
+  | _  -> failwith "Widen.ast_combine couldn't handle the rtl"
 @ 
 
 <<bottom-up transform>>=
@@ -563,7 +513,6 @@ let is_sigma s = fill s = S || fill s = Z
 @ 
 <<solution utilities>>=
 let subst_fill s tau = {s with fill = tau}
-let minbits i = 31  (* CHANGE THIS! *)
 @ 
 
 <<solution utilities>>=
@@ -608,7 +557,7 @@ let cross_list_all xss =
         combinations current' rest
   in
   match xss with
-  | [] | [_] -> []
+  | [] -> []
   | xs :: rest -> combinations (nest_each xs) rest
 @ 
 
@@ -641,9 +590,9 @@ let monomorphic opname ws =
   | ("mulx"|"mulux"), [n] -> [n;n], 2*n
   | ("sx"|"zx"|"lobits"), [n;w] -> [n], w
   | _ ->
-      Printf.printf "!!! %s at " opname;
-      ignore (List.map (Printf.printf "%i, ") ws);
-      Printf.printf "!!!\n";
+      if print_debug then Printf.eprintf "!!! %s at " opname;
+      if print_debug then ignore (List.map (Printf.eprintf "%i, ") ws);
+      if print_debug then (Printf.eprintf "!!!\n"; flush stderr);
       raise Not_found
 
 let ext_of_fill = function
@@ -685,7 +634,7 @@ let op_fill_types =
             [G;Z],Z;
             [G;G],G]
   ; "rem", [[S;S],S]
-
+  ; "quot", [[S;S],S]
   ; "eq",     [[S;S],Z;
                [Z;Z],Z]
   ; "ge",     [[S;S],S]
@@ -703,55 +652,6 @@ let op_fill_types =
   ; "ne",     [[S;S],Z;
                [Z;Z],Z]
   ; "not",    [[Z],Z]
-  ]
-
-let test_m : machine_env =
-  [ "sx",     [32;64]
-  ; "sx",     [16;64]
-  ; "sx",     [ 8;64]
-  ; "sx",     [ 1;64]
-  ; "zx",     [32;64]
-  ; "zx",     [16;64]
-  ; "zx",     [ 8;64]
-  ; "zx",     [ 1;64]
-  ; "lobits", [64;32]
-  ; "lobits", [64;16]
-  ; "lobits", [64;8]
-  ; "lobits", [64;1]
-  ; "sxlo",   [64;64]
-  ; "zxlo",   [64;64]
-  ; "add",    [64]
-  ; "and",    [64]
-  ; "com",    [64]
-  ; "div",    [64]
-  ; "divu",   [64]
-  ; "mod",    [64]
-  ; "modu",   [64]
-  ; "mul",    [64]
-  ; "mulx",   [64]
-  ; "mulux",  [64]
-  ; "neg",    [64]
-  ; "or",     [64]
-  ; "quot",   [64]
-  ; "rem",    [64]
-  ; "shl",    [64]
-  ; "shra",   [64]
-  ; "shrl",   [64]
-  ; "sub",    [64]
-  ; "xor",    [64]
-  ; "literal",[64]
-
-  ; "eq",     [64;1]
-  ; "ge",     [64;1]
-  ; "geu",    [64;1]
-  ; "gt",     [64;1]
-  ; "gtu",    [64;1]
-  ; "le",     [64;1]
-  ; "leu",    [64;1]
-  ; "lt",     [64;1]
-  ; "ltu",    [64;1]
-  ; "ne",     [64;1]
-  ; "not",    [1]
   ]
 
 let ia64 : machine_env =
@@ -794,7 +694,50 @@ let ia64 : machine_env =
   ; "not",    [1]
   ]
 
-let m = test_m
+let x86 : machine_env =
+  [ "sx",     [8;32]
+  ; "sx",     [16;32]
+  ; "zx",     [8;32]
+  ; "zx",     [8;32]
+  ; "lobits", [32;8]
+  ; "lobits", [32;16]
+  ; "sxlo",   [32;32]
+  ; "zxlo",   [32;32]
+  ; "add",    [32]
+  ; "and",    [32]
+  ; "com",    [32]
+  ; "div",    [32]
+  ; "divu",   [32]
+  ; "mod",    [32]
+  ; "modu",   [32]
+  ; "mul",    [32]
+  ; "mulx",   [32]
+  ; "mulux",  [32]
+  ; "neg",    [32]
+  ; "or",     [32]
+  ; "quot",   [32]
+  ; "rem",    [32]
+  ; "shl",    [32]
+  ; "shra",   [32]
+  ; "shrl",   [32]
+  ; "sub",    [32]
+  ; "xor",    [32]
+  ; "literal",[32]
+
+  ; "eq",     [32;1]
+  ; "ge",     [32;1]
+  ; "geu",    [32;1]
+  ; "gt",     [32;1]
+  ; "gtu",    [32;1]
+  ; "le",     [32;1]
+  ; "leu",    [32;1]
+  ; "lt",     [32;1]
+  ; "ltu",    [32;1]
+  ; "ne",     [32;1]
+  ; "not",    [1]
+  ]
+
+let m = x86
 
 let machine_has menv opname ws = List.mem (opname,ws) menv
 
@@ -813,49 +756,180 @@ let find_exts_to w extname =
                         | _ -> failwith "ill formed machine env") ext_widths
 @ 
 
+I'll choose in the [[widen_guard]] code to find a solution of type Z,
+just to match what some C-- frontends seem to want to do...not that it matters.
 <<widen.ml>>=
 let dpwiden r =
+  let targetwidth = 32 in
   let find_best_soln r tau w =
     let solns  = all_solutions r in
     let solns  = List.find_all (fun s -> width s = w && fill s = tau) solns in
     (minimum_cost solns).e'
   in
   let rec widen_loc = function
-    | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,w,find_best_soln e Z 64,a)
+    | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,w,find_best_soln e Z targetwidth, a)
     | RP.Slice(w,i,l)      -> RP.Slice(w,i, widen_loc l)
     | l                    -> l
   in
   let widen_guard (g, eff) =
     let effsoln = 
       match eff with
-      | RP.Store(l, r, w) -> RP.Store(widen_loc l, find_best_soln r S w, w)
+      | RP.Store(l, r, w) -> RP.Store(widen_loc l, find_best_soln r Z w, w)
       | RP.Kill l         -> RP.Kill (widen_loc l)
     in
     let gsoln = find_best_soln g Z 1 in
     (gsoln, effsoln)
   in
   let rtl = Rtlutil.ToReadableString.rtl in
-  let () = Printf.printf "Widening %s\n" (rtl r) in
+(*  let () = if print_debug then (Printf.eprintf "Widening %s\n" (rtl r); flush stderr) in *)
   let r' =
-    let RP.Rtl es = Down.rtl r in
-    Up.rtl (RP.Rtl (List.map widen_guard es))
+    try
+      let RP.Rtl es = Down.rtl r in
+      Up.rtl (RP.Rtl (List.map widen_guard es))
+    with Abort_unknown -> r
   in
   let () = 
-    if (rtl r') <> (rtl r) then Printf.printf "\\->      %s\n" (rtl r')
+    if print_debug && (rtl r') <> (rtl r) then
+      (Printf.eprintf "Widening %s\n" (rtl r); 
+       Printf.eprintf "\\->      %s\n" (rtl r'); flush stderr)
   in
   r'
+@ 
+
+We don't touch registers because actual hardware registers should
+already be at the right width---otherwise there is something wrong
+with the frontend.  We also don't touch memory references or slices.
+I'm not sure what the right way to deal with globals is---maybe they
+should be widened and maybe not.  So for now, we only handle the
+``Var'' case.  For now, we always do zero extension when extension is
+necessary.  I choose to do zx instead of sx here to be consistent with
+choices that seem to be made by frontends for QC--.  (So I don't start
+failing tests).
+<<widen.ml>>=
+let widenlocs r =
+  let targetwidth = 32 in
+  let tostr = Rtlutil.ToReadableString.rtl in
+  let lo n e = RP.App(("lobits", [targetwidth; n]), [e]) in
+  let rec widen_loc = function
+    | RP.Mem(sp, agg, w, e, a) -> RP.Mem(sp, agg, w, widen_exp e, a)
+    | RP.Slice(w, i, l)        -> RP.Slice(w, i, widen_loc l)
+    | l                        -> l
+  and widen_exp = function
+    | (RP.Fetch(RP.Var(name, i, vw), fw)) as e ->
+        if vw <> fw then failwith "Shouldn't fetch and var widths be the same?"
+        else if vw < targetwidth
+        then lo vw (RP.Fetch(RP.Var(name, i, targetwidth), targetwidth))
+        else e
+    | RP.Fetch(l, w) -> RP.Fetch(widen_loc l, w)
+    | RP.App(opr, es) -> RP.App(opr, List.map widen_exp es)
+    | e -> e
+  in
+  let widen_guarded (g, eff) =
+    let eff' = 
+      match eff with
+      | RP.Store(RP.Var(name, i, vw), r, sw) ->
+          if vw <> sw then failwith "Shouldn't store and var widths be the same?"
+          else if vw < targetwidth
+          then RP.Store(RP.Var(name, i, targetwidth),
+                        RP.App(("zx", [vw; targetwidth]), [widen_exp r]),
+                        targetwidth)
+          else RP.Store(RP.Var(name, i, vw), widen_exp r, sw)
+      | RP.Store(l, r, w) -> RP.Store(widen_loc l, widen_exp r, w)
+      | RP.Kill l         -> RP.Kill (widen_loc l)
+    in
+    (widen_exp g, eff')
+  in
+  let r' =
+    let RP.Rtl es = Down.rtl r in
+    Up.rtl (RP.Rtl (List.map widen_guarded es))
+  in
+  let () =
+    if print_debug && r' <> r then
+      (Printf.eprintf "rewritten to %s\n" (tostr r'); flush stderr)
+  in
+  r'
+@ 
+
+\subsection{Counting operations and testing}
+<<widen.ml>>=
+let width_cost r =
+  let rec count_loc c = function
+    | RP.Mem(_,_,_,e,_) -> do_count c e
+    | RP.Slice(_,_,l)   -> count_loc c l
+    | _                 -> failwith "count_loc can only handle mem and slice"
+  and do_count ((sx, zx, lo) as c) = function
+    | RP.Const _ -> c
+    | RP.Fetch(l, w) -> c
+(* considering sx(const) the same as const *)
+    | RP.App ((("sx"|"zx"), _), [(RP.Const _ | RP.Fetch _)]) -> c
+    | RP.App (("sx", _), [arg]) -> do_count (sx+1, zx, lo) arg
+    | RP.App (("zx", _), [arg]) -> do_count (sx, zx+1, lo) arg
+    | RP.App (("lobits", _), [RP.Const(RP.Bits _)]) -> c
+    | RP.App (("lobits", _), [arg]) -> do_count (sx, zx, lo+1) arg
+    | RP.App ((opname, _), args) -> List.fold_left do_count c args
+  in
+  let do_count_guard counts (g, eff) =
+    let counts' = 
+      match eff with
+      | RP.Store(l, r, w) -> do_count counts r
+      | RP.Kill l         -> counts
+    in
+    do_count counts' g
+  in
+  let rtl = Rtlutil.ToReadableString.rtl in
+  let _ = if print_debug then (Printf.eprintf "Counting %s\n" (rtl r); flush stderr) in
+  let (sx, zx, lo) =
+    let RP.Rtl es = Down.rtl r in
+    List.fold_left do_count_guard (0, 0, 0) es
+  in
+  Printf.eprintf "Counted %i sx, %i zx, %i lo\n" sx zx lo;
+  (sx, zx, lo)
+@ 
+
+<<widen.ml>>=
+let app_count r =
+  let rec count_loc c = function
+    | RP.Mem(_,_,_,e,_) -> do_count c e
+    | RP.Slice(_,_,l)   -> count_loc c l
+    | _                 -> failwith "count_loc can only handle mem and slice"
+  and do_count c = function
+    | RP.Const _     -> c
+    | RP.Fetch(l, w) -> c
+
+    | RP.App ((("sx"|"zx"), _), [(RP.Const _ | RP.Fetch _)]) -> c
+    | RP.App (("lobits", _),    [RP.Const(RP.Bits _)])       -> c
+
+    | RP.App (_, args) -> 1 + List.fold_left do_count c args
+  in
+  let do_count_guard c (g, eff) =
+    let c' = 
+      match eff with
+      | RP.Store(l, r, w) -> do_count c r
+      | RP.Kill l         -> c
+    in
+    do_count c' g
+  in
+  let rtl = Rtlutil.ToReadableString.rtl in
+  let _ = if print_debug then (Printf.eprintf "Counting %s\n" (rtl r); flush stderr) in
+  let count =
+    let RP.Rtl es = Down.rtl r in
+    List.fold_left do_count_guard 0 es
+  in
+  Printf.eprintf "Counted %i ops\n" count;
+  count
 @ 
 
 The old version of DP widening didn't print out the cost.
 <<old>>=
 let dpwiden r =
+  let targetwidth = 32 in
   let find_best_soln r tau w =
     let solns  = all_solutions r in
     let solns  = List.find_all (fun s -> width s = w && fill s = tau) solns in
     (minimum_cost solns).e'
   in
   let rec widen_loc = function
-    | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,w,find_best_soln e Z 64,a)
+    | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,w,find_best_soln e Z targetwidth,a)
     | RP.Slice(w,i,l)      -> RP.Slice(w,i, widen_loc l)
     | l                    -> l
   in
@@ -869,13 +943,14 @@ let dpwiden r =
     (gsoln, effsoln)
   in
   let rtl = Rtlutil.ToReadableString.rtl in
-  let () = Printf.printf "Widening %s\n" (rtl r) in
+  let () = if print_debug then (Printf.eprintf "Widening %s\n" (rtl r); flush stderr)in
   let r' =
     let RP.Rtl es = Down.rtl r in
     Up.rtl (RP.Rtl (List.map widen_guard es))
   in
   let () = 
-    if (rtl r') <> (rtl r) then Printf.printf "\\->      %s\n" (rtl r')
+    if print_debug && (rtl r') <> (rtl r) then
+      (Printf.eprintf "\\->      %s\n" (rtl r'); flush stderr)
   in
   r'
 @ 
@@ -893,6 +968,7 @@ let time f x =
 
 <<widen.ml>>=
 let badwiden r =
+  let targetwidth = 64 in
   let extract1 f x = match x with
   | ([t1'], t') -> f t1' t'
   | _ -> failwith "expected singleton"
@@ -948,10 +1024,10 @@ let badwiden r =
         else 
           maybe_do_ext argsoln tau w w'
     | RP.App((("sx"|"zx" as ext), [n;w]), [arg]) ->
-        let argsoln = find_best_soln arg tau n 64 in
+        let argsoln = find_best_soln arg tau n targetwidth in
         argsoln
     | RP.App(("lobits", [w;n]), [arg]) -> 
-        let argsoln = find_best_soln arg tau n 64 in
+        let argsoln = find_best_soln arg tau n targetwidth in
         argsoln
 
       (* operators *)
@@ -983,7 +1059,7 @@ let badwiden r =
     | _ -> failwith "find_best_soln couldn't match"
   in
   let rec widen_loc = function
-    | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,64,find_best_soln e Z w 64,a)
+    | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,targetwidth,find_best_soln e Z w targetwidth,a)
     | RP.Slice(w,i,l)      -> RP.Slice(w,i, widen_loc l)
     | l                    -> l
   in
@@ -992,10 +1068,10 @@ let badwiden r =
       match eff with
       | RP.Store(l, r, w) -> 
           let r' = 
-            if w < 64 then
-              RP.App(("lobits", [64;w]), [find_best_soln r S w 64])
+            if w < targetwidth then
+              RP.App(("lobits", [targetwidth;w]), [find_best_soln r S w targetwidth])
             else
-              find_best_soln r S w 64
+              find_best_soln r S w targetwidth
           in
           RP.Store(widen_loc l, r', w)
       | RP.Kill l         -> RP.Kill (widen_loc l)
@@ -1004,11 +1080,11 @@ let badwiden r =
     (gsoln, effsoln)
   in
   let rtl = Rtlutil.ToReadableString.rtl in
-  let () = Printf.printf "Widening %s\n" (rtl r) in
+  let () = if print_debug then (Printf.eprintf "Widening %s\n" (rtl r); flush stderr) in
   let r' =
-    let RP.Rtl es = Down.rtl r in
-    Up.rtl (RP.Rtl (List.map widen_guard es))
+      let RP.Rtl es = Down.rtl r in
+      Up.rtl (RP.Rtl (List.map widen_guard es))
   in
-  let () = Printf.printf "Widened to %s\n" (rtl r') in
+  let () = if print_debug then (Printf.eprintf "Widened to %s\n" (rtl r'); flush stderr) in
   r'
 @ 

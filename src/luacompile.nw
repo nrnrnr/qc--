@@ -593,9 +593,10 @@ function Opt.standard(backend, asm, B)
     emit_data = Opt.verb(B.stage { name = "emit_data", fn = backend.emit_data(asm)})
   end
   local x = B.seq
-    { Opt.verb(backend.placevars)  or Stages.null
-    , Opt.verb(Optimize.simplify_exps) or Stages.null
+    { 
+      Opt.verb(backend.placevars)  or Stages.null
     , Opt.verb(backend.widen)      or Stages.null
+    , Opt.verb(Optimize.simplify_exps) or Stages.null
     , Opt.verb(backend.preopt)     or Stages.null
     , Opt.verb(backend.pic)        or Stages.null
     , Opt.verb(backend.expand)     or Stages.null
@@ -786,11 +787,38 @@ Backend.widentest2 =
   , compile   = Compile.file
   }
 
+-- x86w is for widening x86 code
+-- You must switch the order of optimizations so that `widen' runs before `placevars'
+
+Backend.x86w =
+  { target    = Targets.x86
+  , widen     = NewBackplane.seq
+                   { Widen.widenlocs,
+                     Widen.dpwiden,
+                     Stages.assert('proper widths') }
+  , placevars = NewBackplane.seq
+                   { Placevar.context(Placevar.x86, "x86"),
+                     Widen.x86_floats, Widen.store_const(32) }
+  , preopt    = Optimize.remove_nops
+--  , pic       = NewBackplane.seq { Pic.x86, Stages.assert('proper pic') }
+  , expand    = Expander.x86
+  , liveness  = Liveness.liveness
+  , ralloc    = Ralloc.dls
+  , freeze    = X86.layout
+  , rmvfp     = NewBackplane.seq
+		   { Stages.replace_vfp,
+		     Optimize.remove_nops }
+  , asm       = Asm.x86
+  , emit      = Driver.assemble
+  , emit_data = Runtime.emit_data
+  , compile   = Compile.file
+  }   
+
 --
 -- x86 backends
 --
 
-Backend.x86 =     
+Backend.x86 =
   { target    = Targets.x86
   , placevars = Placevar.context(Placevar.x86, "x86")
   , widen     = NewBackplane.seq

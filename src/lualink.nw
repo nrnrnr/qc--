@@ -643,12 +643,17 @@ let badwiden _ proc =
   G.iter_nodes (G.update_instr Widen.badwiden) proc.Proc.cfg;
   1
 in
+let widenlocs _ proc =
+  G.iter_nodes (G.update_instr Widen.widenlocs) proc.Proc.cfg;
+  1
+in
 C.register_module "Widen" 
  [ "x86_floats", V.efunc (V.value **-> Map.proc **->> V.int) (floats [80])
  ; "store_const",
        V.efunc (V.int **->> V.func (V.value **-> Map.proc **->> V.int)) const
  ; "width_cost", V.efunc (V.value **-> Map.proc **->> V.int) width_cost
  ; "dpwiden", V.efunc (V.value **-> Map.proc **->> V.int) dpwiden
+ ; "widenlocs", V.efunc (V.value **-> Map.proc **->> V.int) widenlocs
  ; "badwiden", V.efunc (V.value **-> Map.proc **->> V.int) badwiden
  ; "op_count", V.efunc (V.value **-> Map.proc **->> V.int) op_count
  ] g;
