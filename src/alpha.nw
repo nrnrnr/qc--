@@ -422,15 +422,25 @@ let bnegate r =
 
 \paragraph{Calls} In an indirect call the target is held in a register,
 otherwise it is an immediate constant. The [[other]] effects are those
-that don't assign to the program counter. 
+that don't assign to the program counter. We add here the [[ldgp]]
+instruction that must follow a [[jsr]] to set \$gp. The semantics of
+[[ldgp]] are captured by a target-specific operator.
 
 <<Alpha postexpander>>=
+let alpha_gp = R.opr "alpha_gp" []   (* takes on argument *)
+let ldgp_ra  = R.store (R.reg gp) 
+                       (R.app alpha_gp [fetch_word (R.reg ra)]) wordsize      
+
 let effects = List.map Up.effect
 let call  ~tgt ~others = 
-    [R.par (R.store pc_lhs (Up.const tgt) wordsize :: effects others)]
-
+    [ ldgp_ra
+    ; R.par (R.store pc_lhs (Up.const tgt) wordsize :: effects others)
+    ]
+    
 let callr ~tgt ~others = 
-    [R.par (R.store pc_lhs (tval tgt) wordsize :: effects others)]
+    [ ldgp_ra
+    ; R.par (R.store pc_lhs (tval tgt) wordsize :: effects others)
+    ]
 @
 
 \paragraph{Cut-To}
@@ -439,7 +449,7 @@ let callr ~tgt ~others =
 let cut_to effs = [R.par (effects effs)]
 @
 
-\paragraph{No Sacred instructions}
+\paragraph{Sacred instructions}
 
 <<Alpha postexpander>>=
 let don't_touch_me es = false
