@@ -1,0 +1,273 @@
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+
+% ------------------------------------------------------------------ 
+\section{Abstract \PAL}
+% ------------------------------------------------------------------ 
+
+After a {\PAL} program has been parsed and its static semantics have
+been checked it is transformed into a more abstract representation. 
+It is based on a data-flow graph which embeds register transfer lists
+in its nodes.  Register transfer lists (\rtl{}s)provide a machine and
+target independent way to capture the meaning of statements and
+machine-level operations.  The representation of {\rtl}s and the flow
+graph is defined in {\asdl} to allow for the interchange of these
+intermediate formats with other tools.
+
+% ------------------------------------------------------------------ 
+\subsection{Register Transfer Lists (\rtl)}
+% ------------------------------------------------------------------ 
+
+Register transfer lists capture the meaning of storing values into
+memory or register locations.  They are used as part of the asbtract
+representation of {\PAL}.  The meaning of a register transfer list is
+well defined and especially independent from any properties of a
+target architecture because no hidden assumptions exist.  This
+implementation uses {\asdl} to define the syntax of {\rtl}s.
+
+A [[space]] describes some kind of memery, like a set of registers or
+main memory.  The number of [[spaces]] is a property of a target
+architecture and thus can not be fixed here with a sum type.  The
+[[char]] type provides a big enough cardinality and is nice to print
+and remember.
+ 
+[[register]] represents a named {\PAL} register and [[width]] a number
+of bits which corresponds to the {\PAL} [[bits]]$k$ types.
+  
+<<module rtl>>=
+char_view   = (int)     -- mapped to char
+
+<<>>=
+space       = (char_view)
+register    = (string)
+width       = (int)
+@
+
+We want to represent assertions for specific properties but have not
+yet found a representation. Since {\asdl} provides no abstract type we
+abuse [[int]].
+
+<<>>=
+assertion   = (int)
+@
+
+An operator for values at run-time is represented by its name and a
+list of [[width]]s.  Each [[width]] corresponds to a $\forall$-bound
+variable in the type scheme of the operator's type.  From the type
+scheme and the [[width list]] a monomorphic type of the operator can
+be deduced.
+
+<<>>=
+op          = (string, width*)
+@
+
+Expressions provide values to be stored in [[locations]] as well as
+addresses local to a [[space]].  An expression can access constant
+values and values fetched from memory.  A fetch from memory makes the
+[[width]] number of fetched bits explicit.  A label denotes a {\PAL}
+data- or goto-label and its type. 
+
+<<>>=
+expr        = Const     (string)                -- view
+            | Fetch     (location,width) 
+            | App       (op, expr list)
+            | Label     (string, width)
+@
+
+A location describes a memory location or register on the target
+architecture or a {\PAL} register. The code generation will remove all
+{\PAL} registers and provide memory locations for them. A memory
+[[cell]] lives in an address [[space]] at the address denoted by
+[[expr]]. In order to fetch [[width]] bits at once several memory
+units from the chosen [[space]] must be aggregated. For example, a 32
+bit fetch must aggregate 4 8-bit values when the memory space is made
+by 8-bit bytes. The aggregation is described by a value of the type
+[[aggregation]]. 
+
+<<>>=
+location    = Cell      (space, aggregation, width, expr, assertion)
+            | Var       (register, width)
+@
+
+<<>>=
+aggregation = BigEndian
+            | LittleEndian
+            | Identity
+@
+
+An [[effect]] is describes an assignemt ov a [[width]] bits value obtained
+from an expression [[expr]], or a [[Kill]]. A killed location contains an
+undefined value.
+
+<<>>=
+effect      = Store     (location, expr, width)
+            | Kill      (location)
+@
+
+A guarded effect is pair of an expression and an effect. The effect takes
+place, if and only if the expression evaluates to [[true]].      
+
+<<>>=
+guarded     = (expr,effect)
+@
+
+And finally, a \emph{register transfer list} is a list of guarded
+effects. When a {\rtl} is evaluated, first all guarding expressions
+are evaluated and then all effects of the guards that evaluated to
+true become effective simultaneously.
+
+<<>>=
+rtl         = Rtl       (guarded*)
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Data Flow Graph}
+% ------------------------------------------------------------------ 
+
+The abstract syntax of a {\PAL} program is translated into a flow
+graph. The graph consists of labeled entry nodes which point to other,
+non-labaled notes. 
+
+A [[graph]] is an association list of labeled nodes. The actual
+representation inside the compiler is defined by a view below.
+
+<<module fgraph>>=
+graph       = (entry*)          -- overridden by view
+entry       = (label,node)
+@
+
+A [[label]] is either a name or a number.  Numbers will be typically
+used for automatically generated labels where names in the source file
+can be used for labels, too.  A list of labels is used for lists of
+goto-targets and continuations; these are uniformely called
+[[targets]].
+
+<<>>=
+label       = Name      (string)
+            | Number    (int)
+
+targets     = (label*)
+@
+
+A node represents {\PAL} on an abstract level. For every statement a
+corresponding node exists. Procedures are represented by [[CopyIn]]
+and [[CopyOut]] nodes which model parameter passing into and out of
+procedures. 
+
+<<>>=
+node        = Branch    (rtl.expr, label, label)
+            | Exit      (int)
+            | Assign    (rtl.rtl, node)
+            | Goto      (rtl.expr, targets)
+            | Jump      (rtl.expr, targets)
+            | Entry     (cont*, node)
+            | Call      (rtl.expr, cont)
+            | CopyIn    (formal*,context,convention,node)
+            | CopyOut   (actual*,context,convention,node)
+@
+
+A [[context]] describes where parameters are passed: into a procedure, out
+of a procedure, or into a continuation.
+
+<<>>=
+context     = ProcParameters
+            | ProcResults
+            | ContParameters
+@
+
+A formal parameter is a variable, an actual parameter an expression. Both
+can be hinted and have a [[width]], i.e.~a type.
+
+<<>>=
+formal      = (variable, rtl.width, hint?)
+actual      = (rtl.expr, rtl.width, hint?)
+@
+
+<<>>=
+cont        = ( node    normal
+              , label*  cuts
+              , label*  unwinds
+              , label*  returns
+              , label?  aborts
+              )
+@
+
+<<>>=
+variable    = (string)
+hint        = (string)
+convention  = (string)
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Views}
+% ------------------------------------------------------------------ 
+
+{\asdl} does not provide every type we need. Views allow to express
+new types in term of supported types. So we define some mappings
+between data types here.
+
+<<view ocaml>>=
+rtl.char_view <= {
+    natural_type:   char
+    wrapper:        Char.chr    (* int -> char *)
+    unwrapper:      Char.code   (* char -> int *)
+}
+@
+
+{\asdl} allows not to mix user provided type declarations with its
+generated type declarations.  User declared type can go only into an
+epilogue or prologue which is not sufficient to define a view for
+[[graph]] using a map created from [[Map.Make]].  So we provide to
+function [[to_map]] and [[of_map]] which implement a view manually.
+
+<<>>=
+module fgraph <= interface_epilogue
+%%
+module M : Map.S with type key = label
+type map = node M.t     
+
+val  to_map: graph -> map
+val  of_map: map   -> graph
+%%
+@
+
+<<>>=
+module fgraph <= implementation_epilogue
+%%
+module M    = Map.Make (struct type t=label let compare=compare end)
+type map    = node M.t
+
+let to_map entries =
+    let enter map (label,node) = M.add label node map in
+    List.fold_left enter M.empty entries
+
+let of_map map =
+    let get label node l = (label,node) :: l in
+    M.fold get map []
+
+%%
+@
+
+% ------------------------------------------------------------------ 
+\subsection{The \asdl-definition}
+% ------------------------------------------------------------------ 
+
+<<ir.asdl>>=
+module rtl {
+    <<module rtl>>
+}
+
+module fgraph (imports rtl) {
+    <<module fgraph>>
+}
+
+view OCaml {
+<<view ocaml>>
+}
+@
+
