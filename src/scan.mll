@@ -125,9 +125,13 @@
         ; ("to"             , TO)
         ; ("unicode"        , UNICODE)
         ; ("unwinds"        , UNWINDS)
+
+        (* pragmas *)
+
+        ; ("line"           , LINE)
         |]
-    
 }
+
 
 (* declarations *)
 
@@ -203,8 +207,9 @@ rule token = parse
   | "float" nat { let s = substr 5 0 (get lexbuf) in
                   FLOATn (int_of_string s)
                 }
-  | id          { let s = get lexbuf in 
-                  try keyword s with Not_found -> ID s
+  | id          { let s  = get lexbuf in 
+                  let k  = try keyword s with Not_found -> ID s in
+                    if k = PRAGMA then pragma1 lexbuf else k  
                 } 
   (*
   | float       { FLT (float_of_string (get lexbuf)) }
@@ -298,6 +303,61 @@ and string = parse
   | _                           { fun buf ->
                                   lexerror lexbuf "illegal character in string"
                                 }
+
+(* handle pragmas *)
+
+(* find the identifier (target) of the pragma and return the
+   corresponding keyword in case it is known *)
+
+and pragma1 = parse
+    eof                 { EOF }
+  | ws+                 { pragma1 lexbuf }
+  | tab                 { tab lexbuf; pragma1 lexbuf }
+  | nl                  { nl lexbuf; pragma1 lexbuf } 
+  | id                  { let s  = get lexbuf in 
+                          try keyword s with Not_found -> pragma2 lexbuf
+                        }
+  | _                   { lexerror lexbuf "id for pragma expected" }
+
+(* look for the body of the pragma and call pragma3 to skip over it *)
+
+and pragma2 = parse
+    eof                 { lexerror lexbuf "pragma body expected" }
+  | ws+                 { pragma2 lexbuf }
+  | tab                 { tab lexbuf; pragma2 lexbuf }
+  | nl                  { nl lexbuf; pragma2 lexbuf }
+  | '{'                 { pragma3 lexbuf 0 }
+  | _                   { lexerror lexbuf "pragma body expected" }
+
+(* skip an unknown pragma.  We must recognize strings, comments, and
+   character literals because they might contain the terminating
+   character (to be done). *)
+
+and pragma3 = parse
+    eof                         { fun level ->
+                                  lexerror lexbuf "unterminated pragma" 
+                                }
+  | [^ '{' '}' '\n' '\t']+      { fun level ->
+                                  pragma3 lexbuf level
+                                }
+  | nl                          { fun level ->
+                                  nl lexbuf; pragma3 lexbuf level 
+                                }
+  | tab                         { fun level -> 
+                                  tab lexbuf; pragma3 lexbuf level
+                                }
+  | '{'                         { fun level -> 
+                                  pragma3 lexbuf (level+1)
+                                }
+  | '}'                         { fun level ->
+                                  if   level = 0 
+                                  then token lexbuf
+                                  else pragma3 lexbuf (level-1)
+                                }
+  | _                           { fun level ->
+                                  pragma3 lexbuf level 
+                                }
+
 {
 
     let tok2str = function
@@ -341,6 +401,10 @@ and string = parse
     | TO                -> "TO"
     | UNICODE           -> "UNICODE"
     | UNWINDS           -> "UNWINDS"
+
+    (* pragmas *)
+
+    | LINE              -> "LINE"
 
     | AMPERSAND(s)      -> "AMPERSAND(" ^ s ^ ")"
     | BAR(s)            -> "BAR(" ^ s ^ ")"

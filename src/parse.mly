@@ -1,5 +1,7 @@
 /*
 // $Id$
+// 
+// Expect 2 shift/reduce conflicts.
 */
 
 %{
@@ -74,6 +76,10 @@ let rec varsOnly = function
 %token UNICODE
 %token UNWINDS
 
+/* pragmas */
+
+%token LINE
+
 /* infix and prefix operators */
 
 %token <string> EEQ NEQ LT LEQ GT GEQ
@@ -114,16 +120,15 @@ program     :   toplevels                             { rev $1 }
 toplevels   :   toplevels toplevel                    { $2::$1 }
             |   /**/                                  { []     }
 
+pragma      :   LINE LBRACE INT RBRACE                { Pragma }
+            |   PRAGMA LBRACE RBRACE                  { Pragma } 
+
 toplevel    :   IMPORT ty names  SEMI                 { Import($2,rev $3)  }
             |   EXPORT    names  SEMI                 { Export(rev $2)     }
             |   CONST LBRACE constants RBRACE         { Const(rev $3)      }
             |   GLOBAL LBRACE registers RBRACE        { Global($3)         } 
             |   SECTION STR LBRACE section RBRACE     { Section($2,rev $4) }
-            /*
-            |   procedure                             { $1                 }
-            |   PRAGMA ID LBRACE RBRACE               {                    }
-            */
-
+            |   pragma                                { $1 }
 
 section     :   section procedure                     { $2 :: $1        }
             |   section datum                         { Datum($2) :: $1 }
