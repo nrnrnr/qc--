@@ -1,12 +1,8 @@
-
-
+#
 # imports LRTLHEAP and MACHINEREGEX
 #
-# Lrtl(1) is in a non-standard bin/ directory. Therefore I include the
-# full path to it. Would it be better to extend $PATH? --CL
 
-
-LRTL=/usr/share/smlnj/bin/lrtl 
+LRTL=lrtl
 
 ^($MACHINEREGEX).ml'$' ($MACHINEREGEX).mli'$':R: '\1'.sled '\1'.rtl $LRTLHEAP
 	$LRTL -inst $stem1
