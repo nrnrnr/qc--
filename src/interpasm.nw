@@ -1,0 +1,286 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% ------------------------------------------------------------------ 
+\section{Lua Assembler}
+% ------------------------------------------------------------------ 
+
+This is an assembler that emits Lua code in the format expected by the 
+{\qcc} interpreter. 
+It implements the [[Asm3.assembler]] interface for assemblers in the 
+{\qcc} compiler.
+
+Since {\PAL} has no natural \emph{native pointer size} like assemblers
+for real machines it receives a functor argument of type [[PERSONALITY]]
+that defines the size of pointers and words. 
+
+<<PERSONALITY>>=
+module type PERSONALITY = sig
+    val target: Target2.t
+end
+@
+
+The assembler constructor receives the output channel for the assembler. 
+
+<<S>>=
+module type S = sig
+    val asm: out_channel -> Asm3.assembler
+end    
+
+<<interpasm.mli>>=
+<<PERSONALITY>>
+<<S>>
+module Make(P: PERSONALITY): S 
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The implementation provides no surprises. It emits Lua code to [[stdout]]
+and shuts down when the [[emit]] method is called.
+
+<<interpasm.ml>>=
+module T        = Target2
+module Asm      = Asm3
+module G        = Cfg4
+module GU       = Cfgutil
+module RL       = Rtltolua
+
+<<PERSONALITY>>
+<<S>>
+module Make (P: PERSONALITY):S = struct
+    <<Make>>
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Auxiliaries}
+% ------------------------------------------------------------------ 
+
+<<Make>>=
+let quoted  s      = "\"" ^ s ^ "\""
+let braced  s      = "{"  ^ s ^ "}"
+
+let luafunc f args = "CMM." ^ f ^ quoted args ^ "\n"
+
+(* sz : int , d : string list *)
+let initdata sz d  = luafunc "data" (string_of_int sz ^ "," ^
+                                     (braced (String.concat "," 
+                                                 (List.map quoted d))))
+ 
+let hexbits v      = Printf.sprintf "0x%Lx" (Bits.U.to_int64 v)
+
+exception Unsupported of string
+let unsupported msg = raise (Unsupported msg)
+type reloc = Bits.bits Reloc.Simple.relocatable 
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Name Mangling}
+% ------------------------------------------------------------------ 
+
+Since we emit {\PAL} code we have to make sure that symbols respect the
+{\PAL} naming conventions. The \module{mangle} module provides name
+mangling support. To highlight the destinction between names and symbols
+we prefix every symbol with [[sym]].
+
+<<Make>>=
+let spec =
+    let reserved = [] (* add reserved words here *)
+    in
+    let id = function
+        | 'a'..'z'
+        | '0'..'9'
+        | 'A'..'Z'
+        | '.' 
+        | '_' 
+        | '$' 
+        | '@'      -> true
+        | _        -> false in
+    let replace = function
+        | x when id x -> x
+        | _           -> '@' 
+        in    
+            { Mangle.preprocess = (fun x -> "sym:"^x)  
+            ; Mangle.replace    = replace
+            ; Mangle.reserved   = reserved
+            ; Mangle.avoid      = (fun x -> x ^ "$")
+            }
+@
+
+
+% ------------------------------------------------------------------ 
+\subsubsection{Classes for symbols}
+% ------------------------------------------------------------------ 
+
+<<Make>>=
+class symbol (n:string) : Symbol.t = 
+object(this)
+    method text    = n
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{The assembler class}
+% ------------------------------------------------------------------ 
+
+The assembler maintains mutable state for:
+
+\begin{itemize}
+\item the actual section the assembler is in,
+\item exported symbols,
+\item imported symbols,
+\item completed sections in reverse order,
+\item declarations in the current section in reverse order.
+\end{itemize}
+
+Most methods append a declaration to the current section---[[append]]
+provides a private method for this.
+
+The [[init]] argument for the constructor provides a chance to open a
+file or similar. We don't use it at the momement.
+
+<<Make>>=
+type init  = unit
+type i    = Proc.t
+
+class asm (fd:out_channel): Asm.assembler = 
+object (this)
+    val         _fd       = fd
+
+    val mutable _luacode  = ([] : string list) (* rev'ed *)
+
+    val mutable _section  = "this can't happen"
+    val mutable _exported = Strutil.Set.empty
+    val mutable _imported = Strutil.Set.empty
+
+    val         _mangle   = Mangle.mk spec
+    val         _fprintf  = output_string fd
+
+    method private append s =
+        _luacode <- s :: _luacode
+
+
+    (* -- declare symbols -- *)
+    method import s =
+        ( _imported <- Strutil.Set.add s _imported
+        ; new symbol (_mangle s)
+        )
+        
+    method export s =
+        ( _exported <- Strutil.Set.add s _exported
+        ; new symbol (_mangle s)
+        )
+        
+    (* FIX what is local supposed to do ? *)
+    method local  s = 
+        new symbol (_mangle s)
+
+
+    (* -- sections -- *)
+    method section s =
+        ( this#append (luafunc "end_section" "")
+        ; this#append (luafunc "section"     s )
+        ; _section <- s
+        )
+
+    method current = 
+        _section
+            
+    (* define symbols *)        
+    method label (s: Symbol.t) = 
+        this#append (luafunc "define_label" s#text)
+    
+    (* FIX can we ignore constants here? *)
+    method const (s: Symbol.t) (b:Bits.bits) = 
+        ()
+
+    (* set location counter *)
+    method org n =
+        unsupported "no location counter in this implementation"
+
+    method align n =
+        if n <> 1 then this#append (luafunc "align" (string_of_int n))
+
+    method addloc n = 
+        if n <> 0 then this#append (luafunc "skip"  (string_of_int n))
+
+    (* instructions *)
+    method cfg_instr (cfg:G.cfg) (symbol:Symbol.t) = 
+        GU.emit cfg (fun rtl () -> RL.rtl rtl _fd)
+		            (fun sym () -> this#label sym)
+                    ()
+
+    (* -- emit data -- *)
+
+    (* zeroes emits n zeroes as initialized data *)
+    method zeroes (n:int) =
+        let rec  z   = function
+            | 0 -> []
+			| n -> 0 :: z (n-1) in
+        if n > 0 then
+            this#append (initdata (P.target.T.memsize) 
+						          (List.map string_of_int (z n)))
+        else
+            ()
+    
+    method value (v:Bits.bits) = 
+        let sz = Bits.width v in
+        let i  = hexbits v    in
+            this#append (initdata sz [i])
+        
+    method addr (a: reloc) = 
+        match Reloc.Simple.normalize a with
+		| None,   bits -> 
+			this#append (initdata (Bits.width bits) [(hexbits bits)])
+		| Some s, bits ->
+			this#append (luafunc "emit_raddr" 
+						         (s#text ^ "," ^ (hexbits bits)))
+
+    (* should we consider throwing the comments in as Lua comments? *)
+    method comment s = ()
+
+    method private imports =
+        match Strutil.Set.elements _imported with
+        | []    -> ""
+        | names -> luafunc "imports" 
+			               (braced (String.concat "," 
+										     (Strutil.Set.elements _imported)))
+
+    method private exports =
+        match Strutil.Set.elements _exported with
+        | []    -> ""
+        | names -> luafunc "exports" 
+			               (braced (String.concat "," 
+											 (Strutil.Set.elements _exported)))
+    
+    (* -- Advertise pointer sizes and such for this assembler -- *)
+
+    method private personality =
+          luafunc "memsize"   (string_of_int P.target.T.memsize)
+        ^ luafunc "byteorder" ( match P.target.T.byteorder with
+		                        | Rtl.BigEndian    -> "BIG"
+							    | Rtl.LittleEndian -> "LITTLE"
+							    | _                -> assert false
+                              )
+        ^ luafunc "ptrsize"   (string_of_int P.target.T.pointersize)
+    
+    (* emit takes the declarations in _luacode and completes them to a
+       Lua/C-- program. Imports and exports are announced according to the
+       names registered in _imported, _exported *)
+
+    method emit = 
+        let toplevel = this#imports ^ this#exports ^ this#personality in
+        let sections = String.concat "," (List.rev _luacode)          in
+        _fprintf (toplevel ^ sections)
+
+end    
+@
+
+% ------------------------------------------------------------------ 
+\section{Assember Constructor Function}
+% ------------------------------------------------------------------ 
+
+<<Make>>=
+let asm fd = new asm fd
+@
