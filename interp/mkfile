@@ -71,7 +71,8 @@ test:VQ:
 	(cd test; mk $MKFLAGS test)
 
 clean:V:
-	rm -f *.o *.cmm.c-- *.cmm.qs $NAME DEPEND
+	rm -f *.o *.cmm.qs $NAME DEPEND
+	rm -f *.cmm-x86-linux.c-- *.cmm-sparc-solaris.c--
 	(cd clients; mk clean)
 
 clean.opt:V: clean
@@ -260,6 +261,8 @@ booted-cmm:V: $BOOTED_CORESRCS $BOOTED_CLIENTSRCS
 %.cmm-$config_arch.qs:D: %.cmm-$config_arch.c--
   $QCC -interp -stop .qs -o $target $prereq
 
+boot:V: booted-interp.opt
+
 booted-interp.opt:D: $QCC $BOOTED_COREOBJS $BOOTED_CLIENTSRCS
   $QCC -globals -o $target $BOOTED_COREOBJS $BOOTED_CLIENTSRCS $LCC_LIBS $LIBS 
 
@@ -294,6 +297,7 @@ NWINCFILES = ${NWFILES:%.nw=%.inc}
 
 # INTERFACES should be in a sensible order so the print-out makes sense
 INTERFACES = cmmfloat.nw \
+	     util.nw \
              types.nw \
              value.nw \
              stack.nw \

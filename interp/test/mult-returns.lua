@@ -1,7 +1,7 @@
 -- [mult-returns.lua] Procedure [main] should print out 5 twice.
 -- Tests: procedure calls, alternate return continuations
 --
---- ./regr "../../bin/qc--interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
+--- ./regr "$INTERP $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
 
 CMM.exports({ "main" })
 CMM.imports({ "cmmprint32" })

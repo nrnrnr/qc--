@@ -1,7 +1,7 @@
 -- [factorial.lua] Procedure [main] should print out 7 and then 7! = 5040
 -- Tests: recursive procedure calls & default returns, some operators
 --
---- ./regr "../../bin/qc--interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
+--- ./regr "$INTERP $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
 
 CMM.exports({ "main" })
 CMM.imports({ "cmmprint16" })

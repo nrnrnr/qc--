@@ -1,4 +1,4 @@
---- ./regr "../../bin/qc--interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
+--- ./regr "$INTERP $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
 
 -- begin assembly code
 

@@ -65,7 +65,7 @@ Why [[<features.h>]] is required is beyond me.
 extern void cmm_err     (const char *fmt);
 extern void cmm_err_wint(const char *fmt, const int   i);
 
-static unsigned cmm_round_to_fe(unsigned round) {
+static unsigned cmm_round_to_fe(cmm_round round) {
   switch(round) {
     case CMM_ROUND_NEAREST : return FE_TONEAREST;
     case CMM_ROUND_DOWN    : return FE_DOWNWARD;
@@ -75,7 +75,7 @@ static unsigned cmm_round_to_fe(unsigned round) {
   }
 }
   
-static unsigned cmm_round_of_fe(unsigned round) {
+static cmm_round cmm_round_of_fe(unsigned round) {
   switch(round) {
     case FE_TONEAREST  : return CMM_ROUND_NEAREST;
     case FE_DOWNWARD   : return CMM_ROUND_DOWN;
@@ -85,14 +85,18 @@ static unsigned cmm_round_of_fe(unsigned round) {
   }
 }
 
-void cmm_setround(unsigned rm) {
+void cmm_setround(cmm_round rm) {
   if (fesetround(cmm_round_to_fe(rm)) != 0) 
     cmm_err("could not set floating-pt rounding mode");
 }
 
-unsigned cmm_getround(void) {
+cmm_round cmm_getround(void) {
   return cmm_round_of_fe(fegetround());
 }
+
+/* the next two decls are needed for bootstrapping with lcc */
+extern double nearbyint(double x);
+extern float nearbyintf(float x);
 
 int    cmm_isnan     (double x) { return isnan(x);      }
 int    cmm_isnanf    (float  x) { return isnan(x);      }
@@ -114,7 +118,7 @@ Other functions are approximated.
 extern void cmm_err     (const char *fmt);
 extern void cmm_err_wint(const char *fmt, const int   i);
 
-static unsigned cmm_round_to_fp(unsigned round) {
+static unsigned cmm_round_to_fp(cmm_round round) {
   switch(round) {
     case CMM_ROUND_NEAREST : return FP_RN;
     case CMM_ROUND_DOWN    : return FP_RM;
@@ -124,7 +128,7 @@ static unsigned cmm_round_to_fp(unsigned round) {
   }
 }
   
-static unsigned cmm_round_of_fp(unsigned round) {
+static cmm_round cmm_round_of_fp(unsigned round) {
   switch(round) {
     case FP_RN : return CMM_ROUND_NEAREST;
     case FP_RM : return CMM_ROUND_DOWN;
@@ -134,12 +138,12 @@ static unsigned cmm_round_of_fp(unsigned round) {
   }
 }
 
-void cmm_setround(unsigned rm) {
+void cmm_setround(cmm_round rm) {
   if (fpsetround(cmm_round_to_fp(rm)) != 0) 
     cmm_assert(0, "could not set floating-pt rounding mode");
 }
 
-unsigned cmm_getround(void) {
+cmm_round cmm_getround(void) {
   return cmm_round_of_fp(fpgetround());
 }
 
@@ -171,7 +175,7 @@ float cmm_fabsf(float x) { return (float) fabs((double) x); }
 extern void cmm_err     (const char *fmt);
 extern void cmm_err_wint(const char *fmt, const int   i);
 
-void cmm_setround(unsigned rm) {
+void cmm_setround(cmm_round rm) {
   static int warned = 0;
   if (!warned) {
     warned = 1;
@@ -179,7 +183,7 @@ void cmm_setround(unsigned rm) {
   }
 }
 
-unsigned cmm_getround(void) {
+cmm_round cmm_getround(void) {
   static int warned = 0;
   if (!warned) {
     warned = 1;

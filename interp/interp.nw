@@ -843,18 +843,16 @@ int lua_copy_block_contents(lua_State *L) {
 \paragraph{Helper Functions}
 % ----------------------------------------------------------------------------
 
-Such functions in the API of the NJ Machine-Code Toolkit as [[apply_closure]] require error-handling functions that take a format string indicating the error and a variable number of arguments supplying values formatted by the string.
-Our implementation of [[error]] is taken from page 174 of Kernighan and Ritchie's \emph{The C Programming Language: Second Edition}.
-
+Such functions in the API of the NJ Machine-Code Toolkit as
+[[apply_closure]] require error-handling functions that take a format
+string indicating the error and a variable number of arguments
+supplying values formatted by the string. 
+Because we cannot compile a variadic function into {\PAL},
+we are going to cheat like crazy
 <<bytecode generation>>=
-void error(char *fmt, ...) {
-  va_list args;
-
-  va_start(args, fmt);
-  fprintf(stderr, "error: ");
-  vfprintf(stderr, fmt, args);
-  fprintf(stderr, "\n");
-  va_end(args);
+static void mclib_error(const char *fmt, const char *arg) {
+  fprintf(stderr, "Fatal error in machine-code toolkit: ");
+  fprintf(stderr, fmt, arg);
   exit(1);
 }
 @ 
@@ -961,7 +959,7 @@ We must then make sure to apply all closures stored away in the C [[closures]] a
 <<perform bytecode relocation>>=
   /* apply closures in closure table */
   for (cl = closures_base; cl < closures_free; cl++) {
-    apply_closure(*cl, cl_emitm, error);
+    apply_closure(*cl, cl_emitm, (FailCont) mclib_error);
   }
 
   /* reclaim memory */

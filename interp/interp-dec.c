@@ -292,14 +292,9 @@ int lua_copy_block_contents(lua_State *L) {
 
   return 0;
 }
-void error(char *fmt, ...) {
-  va_list args;
-
-  va_start(args, fmt);
-  fprintf(stderr, "error: ");
-  vfprintf(stderr, fmt, args);
-  fprintf(stderr, "\n");
-  va_end(args);
+static void mclib_error(const char *fmt, const char *arg) {
+  fprintf(stderr, "Fatal error in machine-code toolkit: ");
+  fprintf(stderr, fmt, arg);
   exit(1);
 }
 int load_assembly_unit(char *s, assembly_unit_type source_type) {
@@ -346,7 +341,7 @@ int load_assembly_unit(char *s, assembly_unit_type source_type) {
       }
       /* apply closures in closure table */
       for (cl = closures_base; cl < closures_free; cl++) {
-        apply_closure(*cl, cl_emitm, error);
+        apply_closure(*cl, cl_emitm, (FailCont) mclib_error);
       }
 
       /* reclaim memory */
@@ -459,7 +454,7 @@ void run_interp(thread *t) {
       { 
         next = (((MATCH_p) + 0));
         
-        #line 960 "interp.m"
+        #line 955 "interp.m"
         cmm_err("unsupported instruction encoutered");
         
         
@@ -476,7 +471,7 @@ void run_interp(thread *t) {
               unsigned p = MATCH_w_32_8 /* bits32 at 8 */;
               next = (((MATCH_p) + 5));
               
-              #line 941 "interp.m"
+              #line 936 "interp.m"
                {
                                                  curr_proc = (procedure *) p;
                                                  pc = next;
@@ -492,7 +487,7 @@ void run_interp(thread *t) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 945 "interp.m"
+              #line 940 "interp.m"
                {
                                                  curr_proc = NULL;
                                                  cmm_err("procedure missing return/jump statement");
@@ -514,7 +509,7 @@ void run_interp(thread *t) {
               unsigned v = MATCH_w_32_8 /* bits32 at 8 */;
               next = (((MATCH_p) + 6));
               
-              #line 442 "interp.m"
+              #line 437 "interp.m"
                if (width > 32) {  /* FIX this could be better */
                                                    width = sizeof(MP_T);
                                                  }
@@ -541,7 +536,7 @@ void run_interp(thread *t) {
               unsigned sz = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 4));
               
-              #line 502 "interp.m"
+              #line 497 "interp.m"
                {
                                                  assert(bo == DEF_BYTE_ORDER);
                                                  assert(al == DEF_ALIGN);
@@ -579,7 +574,7 @@ void run_interp(thread *t) {
               unsigned sz = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 4));
               
-              #line 472 "interp.m"
+              #line 467 "interp.m"
                {
                                                  assert(bo == DEF_BYTE_ORDER);
                                                  assert(al == DEF_ALIGN);
@@ -616,7 +611,7 @@ void run_interp(thread *t) {
               unsigned sz = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 4));
               
-              #line 488 "interp.m"
+              #line 483 "interp.m"
                {
                                                  assert(bo == DEF_BYTE_ORDER);
                                                  assert(al == DEF_ALIGN);
@@ -645,7 +640,7 @@ void run_interp(thread *t) {
               unsigned n = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 2));
               
-              #line 534 "interp.m"
+              #line 529 "interp.m"
                cmm_assert(arguments + n < arguments_limit,
                                                         "invalid register index to argument space");
                                                  PUSH(arguments[n], values); pc = next;
@@ -663,7 +658,7 @@ void run_interp(thread *t) {
               unsigned n = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 2));
               
-              #line 531 "interp.m"
+              #line 526 "interp.m"
                cmm_assert(arguments + n < arguments_limit,
                                                         "invalid register index to argument space");
                                                  arguments[n] = POP(values); pc = next;
@@ -681,7 +676,7 @@ void run_interp(thread *t) {
               unsigned n = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 2));
               
-              #line 450 "interp.m"
+              #line 445 "interp.m"
                 locals[n] = POP(values); pc = next;
               
               
@@ -697,7 +692,7 @@ void run_interp(thread *t) {
               unsigned n = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 2));
               
-              #line 451 "interp.m"
+              #line 446 "interp.m"
                globals[n] = POP(values); pc = next;
               
               
@@ -713,7 +708,7 @@ void run_interp(thread *t) {
               unsigned n = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 2));
               
-              #line 448 "interp.m"
+              #line 443 "interp.m"
                PUSH( locals[n], values); pc = next;
               
               
@@ -729,7 +724,7 @@ void run_interp(thread *t) {
               unsigned n = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 2));
               
-              #line 449 "interp.m"
+              #line 444 "interp.m"
                PUSH(globals[n], values); pc = next;
               
               
@@ -745,7 +740,7 @@ void run_interp(thread *t) {
               unsigned n = MATCH_w_16_8 & 0xffff /* bits16 at 8 */;
               next = (((MATCH_p) + 3));
               
-              #line 450 "interp.m"
+              #line 445 "interp.m"
                 locals[n] = POP(values); pc = next;
               
               
@@ -761,7 +756,7 @@ void run_interp(thread *t) {
               unsigned n = MATCH_w_16_8 & 0xffff /* bits16 at 8 */;
               next = (((MATCH_p) + 3));
               
-              #line 451 "interp.m"
+              #line 446 "interp.m"
                globals[n] = POP(values); pc = next;
               
               
@@ -777,7 +772,7 @@ void run_interp(thread *t) {
               unsigned n = MATCH_w_16_8 & 0xffff /* bits16 at 8 */;
               next = (((MATCH_p) + 3));
               
-              #line 448 "interp.m"
+              #line 443 "interp.m"
                PUSH( locals[n], values); pc = next;
               
               
@@ -793,7 +788,7 @@ void run_interp(thread *t) {
               unsigned n = MATCH_w_16_8 & 0xffff /* bits16 at 8 */;
               next = (((MATCH_p) + 3));
               
-              #line 449 "interp.m"
+              #line 444 "interp.m"
                PUSH(globals[n], values); pc = next;
               
               
@@ -809,7 +804,7 @@ void run_interp(thread *t) {
               unsigned n = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 2));
               
-              #line 452 "interp.m"
+              #line 447 "interp.m"
                UNDERFLOW_CHECK(values, 2);
                                                  if (STACK_ELT(values, -1).bool) {
                                                    locals[n] = STACK_ELT(values, 0);
@@ -831,7 +826,7 @@ void run_interp(thread *t) {
               unsigned n = MATCH_w_16_8 & 0xffff /* bits16 at 8 */;
               next = (((MATCH_p) + 3));
               
-              #line 452 "interp.m"
+              #line 447 "interp.m"
                UNDERFLOW_CHECK(values, 2);
                                                  if (STACK_ELT(values, -1).bool) {
                                                    locals[n] = STACK_ELT(values, 0);
@@ -853,7 +848,7 @@ void run_interp(thread *t) {
               unsigned n = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 2));
               
-              #line 459 "interp.m"
+              #line 454 "interp.m"
                UNDERFLOW_CHECK(values, 2);
                                                  if (STACK_ELT(values, -1).bool) {
                                                    globals[n] = STACK_ELT(values, 0);
@@ -874,7 +869,7 @@ void run_interp(thread *t) {
               unsigned n = MATCH_w_16_8 & 0xffff /* bits16 at 8 */;
               next = (((MATCH_p) + 3));
               
-              #line 459 "interp.m"
+              #line 454 "interp.m"
                UNDERFLOW_CHECK(values, 2);
                                                  if (STACK_ELT(values, -1).bool) {
                                                    globals[n] = STACK_ELT(values, 0);
@@ -892,7 +887,7 @@ void run_interp(thread *t) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 537 "interp.m"
+              #line 532 "interp.m"
                { 
                                                  value v = POP(values);
                                                  pc      = (bytecodeptr) v.ptr;
@@ -911,7 +906,7 @@ void run_interp(thread *t) {
               unsigned a = MATCH_w_32_8 /* bits32 at 8 */;
               next = (((MATCH_p) + 5));
               
-              #line 541 "interp.m"
+              #line 536 "interp.m"
                {
                                                  value v = POP(values);
                                                  if (v.bool) {
@@ -932,7 +927,7 @@ void run_interp(thread *t) {
               unsigned a = MATCH_w_32_8 /* bits32 at 8 */;
               next = (((MATCH_p) + 5));
               
-              #line 547 "interp.m"
+              #line 542 "interp.m"
                {
                                                  value v = POP(values);
                                                  if (!v.bool) {
@@ -956,7 +951,7 @@ void run_interp(thread *t) {
               unsigned b = MATCH_w_32_40 /* bits32 at 40 */;
               next = (((MATCH_p) + 9));
               
-              #line 553 "interp.m"
+              #line 548 "interp.m"
                {
                                                  value v = POP(values);
                                                  pc      = (bytecodeptr) (v.bool ? a : b);
@@ -975,7 +970,7 @@ void run_interp(thread *t) {
               unsigned a = MATCH_w_32_8 /* bits32 at 8 */;
               next = (((MATCH_p) + 5));
               
-              #line 588 "interp.m"
+              #line 583 "interp.m"
                {
                                                  value        v;
                                                  CMM_label   *lbl;
@@ -1157,7 +1152,7 @@ void run_interp(thread *t) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 758 "interp.m"
+              #line 753 "interp.m"
                {
                                                  value      v;
                                                  CMM_label *lbl;
@@ -1213,7 +1208,7 @@ void run_interp(thread *t) {
               unsigned i = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 3));
               
-              #line 796 "interp.m"
+              #line 791 "interp.m"
                { 
                                                  lua_State *L;
               
@@ -1297,7 +1292,7 @@ void run_interp(thread *t) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 868 "interp.m"
+              #line 863 "interp.m"
                {
                                                  value         v;
                                                  /* CMM_label    *lbl; */
@@ -1382,7 +1377,7 @@ void run_interp(thread *t) {
             { 
               next = (((MATCH_p) + 0));
               
-              #line 960 "interp.m"
+              #line 955 "interp.m"
               cmm_err("unsupported instruction encoutered");
               
               
@@ -1398,7 +1393,7 @@ void run_interp(thread *t) {
               unsigned s = MATCH_w_32_8 /* bits32 at 8 */;
               next = (((MATCH_p) + 5));
               
-              #line 557 "interp.m"
+              #line 552 "interp.m"
                {
                                                  CMM_label *lbl = (CMM_label *) s;
                                                  value      v   = value_zero();
@@ -1444,7 +1439,7 @@ void run_interp(thread *t) {
               unsigned o = MATCH_w_32_8 /* bits32 at 8 */;
               next = (((MATCH_p) + 5));
               
-              #line 519 "interp.m"
+              #line 514 "interp.m"
                values = (((operator *) o)->f)(values); 
                                                  /* REMOVE this print_value_stack call */
                                                  print_value_stack(values.s_free, values.s_base, 
@@ -1461,7 +1456,7 @@ void run_interp(thread *t) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 524 "interp.m"
+              #line 519 "interp.m"
                PUSH(to_CMM_value(cmm_getround(),2), values);
                                                  pc = next;
               
@@ -1475,7 +1470,7 @@ void run_interp(thread *t) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 526 "interp.m"
+              #line 521 "interp.m"
                {
                                                  value v  = POP(values);
                                                  cmm_setround(v.bits2);
@@ -1492,7 +1487,7 @@ void run_interp(thread *t) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 465 "interp.m"
+              #line 460 "interp.m"
                {
                                                  value v = value_zero();
                                                  v.ptr   = (void *) stackdata;
@@ -1511,7 +1506,7 @@ void run_interp(thread *t) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 949 "interp.m"
+              #line 944 "interp.m"
                {
                                                    int saved_verbosity = verbosity;
                                                    verbosity           = 1;
@@ -1531,7 +1526,7 @@ void run_interp(thread *t) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 957 "interp.m"
+              #line 952 "interp.m"
                {
                                            cmm_err("fell off end of a C-- section");
                                            }
@@ -1546,7 +1541,7 @@ void run_interp(thread *t) {
   } 
 }
 
-#line 962 "interp.m"
+#line 957 "interp.m"
 
       if (err_occurred || done) break;
     }
