@@ -564,7 +564,12 @@ and line = parse
                                 )
                         }
   | nat                 { fun map l -> 
-                          line lexbuf map (int_of_string (get lexbuf))
+                          
+                          (* inline the l' expression caused an
+                          int_of_string failure with ocamlopt *)
+                          
+                          let l' = int_of_string (get lexbuf)
+                          in  line lexbuf map l'
                         }
   | _                   { fun map l -> 
                           error lexbuf map 
@@ -722,10 +727,12 @@ where the leftmost symbol has index 1.
 
 <<parse.mly>>=
 
-let p  () = (Parsing.symbol_start (), Parsing.symbol_end())
-let pn n  = (Parsing.rhs_start n, Parsing.rhs_end n)
-let px () = (Parsing.symbol_start ())
-let atoi  = int_of_string
+let p  ()  = (Parsing.symbol_start (), Parsing.symbol_end())
+let pn n   = (Parsing.rhs_start n, Parsing.rhs_end n)
+let px ()  = (Parsing.symbol_start ())
+let atoi x = try int_of_string x
+             with Failure _ -> assert false
+            
 %}
 
 /* keywords, symbols, flags */
