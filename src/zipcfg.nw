@@ -274,7 +274,7 @@ first-to-last order, as suitable for use in a forward dataflow problem.
 <<zipcfg.mli>>=
 val postorder_dfs : graph -> Rep.block list
 @ 
-For layout, we fold over pairs of type [[block * label aoption]] in
+For layout, we fold over pairs of type [[block * label option]] in
 layout order.
 The [[label]], if any, identifies the block that will be the layout
 successor of the current block.
@@ -715,7 +715,7 @@ let add_blocks blocks (focus, newblocks) =
 let succs = function
   | Exit                  -> []
   | Branch  (_, l)        -> [fst l]
-  | Cbranch (_, t, f)     -> [fst t; fst f]  (* order meets layout constraint *)
+  | Cbranch (_, t, f)     -> [fst f; fst t]  (* order meets layout constraint *)
   | Mbranch (_, edges)    -> List.map fst edges
   | Call    c             -> List.map (fun e -> fst e.node) c.cal_contedges
   | Cut     (_, edges, _) -> List.map (fun e -> fst e.node) edges
@@ -748,8 +748,8 @@ let postorder_dfs g =
   and get_children block =
     let uids = succs (last (unzip block)) in
     (*List.map (Blocks.find blocks) uids*)
-    List.fold_right (fun bid rst -> try Blocks.find blocks bid :: rst
-                                    with Not_found -> rst) uids []
+    List.fold_left (fun rst bid -> try Blocks.find blocks bid :: rst
+                                   with Not_found -> rst) [] uids
   and vchildren block children cont acc visited = 
     let rec next children acc visited = match children with
       | [] -> cont (block :: acc) visited

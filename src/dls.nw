@@ -354,6 +354,7 @@ let rpo_dfs cfg =
 @
 <<dls algorithm>>=
 let dls _ (cfg, ({Proc.cc = cc; Proc.target = tgt} as proc)) =
+  let () = Debug.eprintf "dls" "DLS(%s)\n" proc.Proc.symbol#original_text in
   <<set up [[spillMap]]>>
   let ((cfg, proc), _) = Optimize.trim_unreachable_code () (cfg, proc) in
   if Debug.on "dls" then <<print [[cfg]] plus live-in and live-out sets>>;
@@ -401,11 +402,12 @@ let alloc_block prefs (blockmap, predmap) bid pred_ids =
   <<define functions [[entry_inmap]] and [[label_inmap]] to help find the inmap>>
 
   let add_middle head rtls_lst =
-    let add head rtls =
-      List.fold_left (fun h r -> GR.Head (h, GR.Instruction r)) head rtls in
-    List.fold_left add head rtls_lst in
+    let add rtls head =
+      List.fold_right (fun r h -> GR.Head (h, GR.Instruction r)) rtls head in
+    List.fold_right add rtls_lst head in
 
   (* first: *)
+  let () = Debug.eprintf "dls" "choosing varmaps for first\n" in
   let varOutf = match first with
     | GR.Entry   -> let vm = entry_inmap () in (setVarIn bid vm; vm)
     | GR.Label _ ->
@@ -433,17 +435,26 @@ let alloc_block prefs (blockmap, predmap) bid pred_ids =
     | GR.Tail (m, t) ->
         let live_out_w_spans = live_out in
         let rtl = GR.mid_instr m in
+        let () = Debug.eprintf "dls" "choosing varmaps for middle: %s\n"
+                               (Rtlutil.ToString.rtl rtl) in
         let defs = defsm m in
         let uses = usesm m in
         let (varIn, varDefs, varOut, spills, reloads) =
           choose_varMaps prefs (Some rtl) inmap 
                          ~defs ~uses ~live_in ~live_out ~live_out_w_spans in
+        let () = if Debug.on "dls" then begin
+                   Printf.eprintf "spills:";
+                   List.iter (fun s -> Printf.eprintf " %s"
+                     (String.concat " " (List.map Rtlutil.ToString.rtl s))) spills;
+                   Printf.eprintf "\n" end in
         let m' = G.new_rtlm (rewrite_rtl tgt ~varIn ~varDefs rtl) m in
         let head = add_middle (add_middle head spills) reloads in
         alloc_tail varOut live_outs (GR.Head (head, m')) t
     | GR.Last l ->
         let live_out_w_spans = R.promote_rxset (G.add_live_spansl l lo) in
         let rtl = GR.last_instr l in
+        let () = Debug.eprintf "dls" "choosing varmaps for last: %s\n"
+                               (Rtlutil.ToString.rtl rtl) in
         let defs = defsl l in
         let uses = usesl l in
         let (varIn, varDefs, varOut, spills, reloads) =
@@ -577,11 +588,10 @@ So, we have a separate defmap and outmap, where the defmap keeps any dead defini
 <<[[choose_varMaps]] finds varIn and varOut maps for a node>>=
   let inmap, outmap = VM.sync_maps inmap outmap in (* NECESSARY? *)
   let defmap = outmap in
-  (*VM.print "nearly outmap" outmap;*)
   let outmap = expire_dead_defs outmap in
-  (*VM.print "final  inmap" inmap;*)
-  (*VM.print "final outmap" outmap;*)
-  (*Printf.eprintf "final choose_varMaps called on %s\n" (G.print_node node);*)
+  if Debug.on "dls" then VM.print "inmap"  inmap;
+  if Debug.on "dls" then VM.print "defmap" defmap;
+  if Debug.on "dls" then VM.print "outmap" outmap;
   inmap, defmap, outmap, spills, reloads in
 @
 In [[expire_last_uses]], the guard supports instructions such as $x := x + y$; where
@@ -636,12 +646,14 @@ varmaps because we may have to set a spill location for the temp.
 
   <<define [[assign]], [[move]], [[store]], and [[load]]>>
 
-  let spill temp map =
-    let spill_loc = get_spill_loc temp in
-    VM.spill temp spill_loc map in
+  let spill temp map = VM.spill temp (get_spill_loc temp) map in
   let spill_reg guard (map, spills as z) reg =
     match VM.reg_contents map reg with
-    | Some t when guard t -> (spill t map, store' t reg :: spills)
+    | Some t when guard t ->
+        let map' = spill t map in
+        (match (VM.var_locs' map t).VM.mem with
+         | Some _ -> (map', spills)
+         | None   -> (map', store' t reg :: spills))
     | _                   -> z in
 @
 %-------------------------------------------------------------------
@@ -779,10 +791,8 @@ let shuffle (blockmap, predmap) pred_id succ_id =
         (blockname (UM.find pred_id blockmap)) (blockname (UM.find succ_id blockmap));
   let pred_vm = getVarOut pred_id in
   let succ_vm = getVarIn  succ_id in
-	(*
-  VM.print "pred:" pred_vm;
-  VM.print "succ:" succ_vm;
-	*)
+  if Debug.on "dls" then VM.print "pred:" pred_vm;
+  if Debug.on "dls" then VM.print "succ:" succ_vm;
   <<define [[shuffle_around]] and [[shuffle_between]]>>
   match GR.last (GR.unzip (UM.find pred_id blockmap)) with
   | GR.Mbranch _ | GR.Call _ | GR.Cut _ ->
@@ -967,6 +977,7 @@ let move temp ((_,_,ms),_,c as dst) src =
   ((fun vm -> VM.add_reg temp dst (make_reg_empty dst vm)),
    [Rtl.store (Rtl.reg dst) (Rtl.fetch (Rtl.reg src) w) w]) in
 let store' temp src = 
+  let () = Debug.eprintf "dls" "spilling %s from %s\n" (printReg temp) (printReg src) in
   let loc = get_spill_loc temp in
   (tgt.Target.spill  space src loc) in
 let store temp src =
@@ -1139,8 +1150,9 @@ begin
   let print_block b =
     let _, last = GR.goto_end (GR.unzip b) in
     let set = Register.SetX.to_string in
-    Printf.eprintf "Block %s: live_out_last { %s }\n"
-                   (blockname b) (set (Live.live_out_last last)) in
+    let live_out = try set (Live.live_out_last last)
+                   with Not_found -> "$$Not_found$$" in
+    Printf.eprintf "Block %s: live_out_last { %s }\n" (blockname b) live_out in
   G.iter_blocks print_block cfg
 end
 <<print varmaps>>=

@@ -208,7 +208,10 @@ let replace_with ~sp =
       let rtl = Simplify.rtl (replace_vfp vfp i) in
       D.Rewrite (G.single_last (G.new_rtll rtl l))
     else
-      let a = note_sp_changes down vfp k in
+      (* [[Cut]] instructions change the sp to a non-constant offset of the vfp *)
+      let a = match l with 
+        | GR.Cut _ -> Dn.exp (R.late "this can't happen (vfp)" w), unknown
+        | _        -> note_sp_changes down vfp k in
       D.Dataflow (fun set -> GR.iter_succs (fun u -> set u a) l) in
 
   let repl =
