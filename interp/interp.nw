@@ -454,7 +454,7 @@ int    lua_copy_block_contents(lua_State *L);
 To load an entire assembly unit into memory (i.e., generate bytecode for it and store the bytecode in memory), we create the main bytecode generation function [[load_assembly_unit]].
 This function takes a string with the name of the source file to be loaded as an assembly unit or the string to be loaded itself, and whether a filename or source string is being passed in; it returns an error code indicates success/failure.
 <<function prototypes>>=
-int load_assembly_unit(char *s, assembly_unit_type ty);
+int load_assembly_unit(char *s, assembly_unit_type source_type);
 @ 
 
 % ----------------------------------------------------------------------------
@@ -508,7 +508,10 @@ void cmm_interp_close(void);
 There are two major sorts of errors we expect to encounter during the interpreter's execution: errors occuring during the loading of assembly files, and errors occurring during the interpreting of bytecode in memory.
 We make use of the C standard library's [[setjmp]] and [[longjmp]] functions for error handling; they essentially allow us to perform non-local returns to two main sites.
 Whenever we must raise an error, we simply call helper function [[cmm_err]], which prints an appropriate message and then [[longjmp]]s to appropriate error-handling site (either the site of assembly file loading or the site of assembly file interpreting).
+This use of non-local return allows, for example, an interactive interpreter to continue execution even after attempting to load a bad source file or execute a successfully-loaded yet error-ridden program.
+
 [[cmm_err]] is given a error format string and a variable length argument list.
+\emph{Note that [[cmm_err]] should only ever be called by a function that properly sets [[errorjmp]] or a function called by such a function.}
 
 <<function prototypes>>=
 void cmm_err(char *fmt, ...);
@@ -521,10 +524,21 @@ static jmp_buf errorjmp;
 @  
 
 As minor helper macros, we use [[mem_assert]] to catch errors that occur when there is a memory allocation error and [[cmm_assert]] to make assertions with better error messages.
-[[mem_assert]] should do nothing unless [[ptr]] is [[NULL]].
+
+[[mem_assert]] should be used after memory allocation to confirm that the allocation was successful.
+Its use should differ from that of [[cmm_assert]] in the following way: a [[mem_assert]] error signifies that the interpreter has simply run out of memory, whereas a [[cmm_assert]] error signifies that something has gone \emph{logically} wrong in the interpreter or in input source code.
+
+[[cmm_assert]] and [[mem_assert]] call [[cmm_err]]; as such, calling them 
+does not necessarily result in an exit to the system but potentially allows an
+interactive interpreter to try to recover.
+The C standard library's [[assert]] macro should be used whenever an immediate
+system exit is desired (calls to [[assert]] imply horrible errors from which
+we would rather not recover).
+
+\emph{Because [[mem_assert]] and [[cmm_assert]] call [[cmm_err]] in their bodies, they should only be called where it is legal to call [[cmm_err]] (see above).}
 
 <<faux prototypes>>=
-void mem_assert(void *ptr);
+void mem_assert(int boolean_expression_result);
 void cmm_assert(int assertion, const char *err_msg);
 @ 
 
@@ -770,9 +784,9 @@ void cmm_err(char *fmt, ...) {
 To help catch memory allocation errors, we provide macro [[mem_assert]].
 
 <<macro definitions>>=
-#define mem_assert(PTR) ((PTR) != NULL ? (void)0 \
-                                       : cmm_err("memory allocation error " \
-                                                 "<"__FILE__":%d>", __LINE__))
+#define mem_assert(EXP) ((EXP) ? (void)0 \
+                               : cmm_err("memory error " \
+                                         "<"__FILE__":%d>", __LINE__))
 @ 
 
 To allow failed assertions to generate better error messages, we provide [[cmm_assert]].
@@ -984,20 +998,18 @@ void error(char *fmt, ...) {
 % ----------------------------------------------------------------------------
 
 To load an assembly unit, we make use of the functions defined above.
-As a side effect, [[load_assembly_unit]] changes the current assembly unit ([[unit]]).
-Although we do not explicitly use [[au]], the call to [[new_assembly_unit]] is absolutely necessary.
-It just happens that we don't need to do anything with [[au]] for the moment.
+As a side effect, [[load_assembly_unit]] changes the current assembly unit ([[unit]]) using the helper function [[enter_new_assembly_unit]].
 
 <<bytecode generation>>=
-int load_assembly_unit(char *s, assembly_unit_type ty) {
+int load_assembly_unit(char *s, assembly_unit_type source_type) {
   lua_State     *L  = assembly_units_table.L;
   RClosure      *cl;
-  assembly_unit *au = new_assembly_unit(L);
 
-  assert(au);
+  /* enter a new assembly unit */
+  enter_new_assembly_unit(L);
 
   if (setjmp(errorjmp)) {
-    if (ty == SRC_FILE) {
+    if (source_type == SRC_FILE) {
       fprintf(stderr, "error: unrecoverable error; cannot finish loading "
                       "file [%s]\n", s);
     } else {
@@ -1006,13 +1018,13 @@ int load_assembly_unit(char *s, assembly_unit_type ty) {
     }
     return 1;
   } else {
-    if (ty == SRC_FILE) {
+    if (source_type == SRC_FILE) {
       <<run Lua source file [[s]]>>
-    } else if (ty == SRC_STRING) {
+    } else if (source_type == SRC_STRING) {
       <<run Lua source string [[s]]>>
     } else {
-      assert(ty == SRC_STDIN);
-      assert(s  == NULL);
+      assert(source_type == SRC_STDIN);  /* this can't happen */
+      assert(s           == NULL);       /* this can happen if client errs */
       <<run Lua source code on [[stdin]]>>
     }
     <<perform bytecode relocation>>
@@ -1123,7 +1135,7 @@ Finally, we get to the main part of the interpreter.  We start by initializing t
   
   t->stack_free = (void *) (((actptr) t->stack_free) - 1);
   act = (actptr) t->stack_free;
-  assert(act >= (actptr) t->stack_base);
+  mem_assert(act >= (actptr) t->stack_base);
 
   <<copy suspended state from [[act]] into local C variables>>
 
@@ -1371,14 +1383,17 @@ The encoding function [[lua_CMM_push_symbol]] writes a pointer to a [[CMM_label]
                            CMM_label *lbl = (CMM_label *) s;
                            value      v;
 
-                           if (lbl == NULL) {
-                             cmm_err("cannot push value of undefined symbol");
-                           }
+                           assert(lbl != NULL);   /* this can't happen */
 
                            switch (lbl->ty) {
                            case CMM_LABEL:
                              {
-                             unsigned loc = location(lbl->lbl.raddr);
+							 unsigned loc;
+							 cmm_assert(location_known(lbl->lbl.raddr),
+										"cannot push value of undefined "
+										"symbol");
+
+                             loc = location(lbl->lbl.raddr);
                              v = VIEW(loc, value);
                              break;
                              }
@@ -1432,6 +1447,8 @@ We pop a pointer to a C [[procedure]] structure off the value stack, and derefer
                              <<save current activation info in a stack record>>
 
                              <<allocate and update memory for new activation>>
+
+                             curr_proc = proc;
                            }
 @
 
@@ -1458,20 +1475,22 @@ When the matching statement is executed once more during the next cycle of the [
 
 <<allocate and update memory for new activation>>=
                           /* allocate memory, update state of the machine */
-                           assert(location_known(proc->raddr));
+                           cmm_assert(location_known(proc->raddr),
+                                      "cannot call undefined procedure");
+
                            pc            = (bytecodeptr) location(proc->raddr);
 
                            locals        = t->stack_free;
                            t->stack_free = (void *) (((sptr) t->stack_free) +
                                                      proc->num_locals);
                            locals_end    = (sptr) (t->stack_free);
-                           assert(t->stack_free <= t->stack_limit);
+                           mem_assert(t->stack_free <= t->stack_limit);
 
                            stackdata     = t->stack_free;
                            t->stack_free = (void *)(((dataptr) t->stack_free) +
                                                    proc->stackdata_size);
                            stackdata_end = (dataptr) (t->stack_free);
-                           assert(t->stack_free <= t->stack_limit);
+                           mem_assert(t->stack_free <= t->stack_limit);
 
                            /* CALLEE */
                            saved->callee = (actptr) stackdata_end;
@@ -1481,6 +1500,7 @@ When the matching statement is executed once more during the next cycle of the [
 
 C calls can be tricky to perform because we need to specially call any registered C function by casting a stored function pointer to the correct C type and dereferencing it.
 Unfortunately we cannot support an infinite number of C function types.
+\emph{We need to create a partial stack record at all C calls so that the runtime system may inspect the currently active frame; we need to restore the partial record in case the runtime system modified any of its contents.}
 
 \useops{CCall}
 <<perform C call>>=
@@ -1490,10 +1510,39 @@ Unfortunately we cannot support an infinite number of C function types.
                            lua_State    *L = c_func_table.L;
                            unsigned int  i = lbl->lbl.cfunc_id;
 
+                           /* save current info in partial stack record */
+                           {
+                             actptr saved = (actptr) t->stack_free;
+                             t->stack_free = (void *) (saved + 1);
+                             mem_assert(t->stack_free <= t->stack_limit);
+
+                             saved->pc            = pc;
+                             saved->locals        = locals;
+                             saved->locals_end    = locals_end;
+                             saved->stackdata     = stackdata;
+                             saved->stackdata_end = stackdata_end;
+                             /* we set kappa to NULL to signify partiality */
+                             saved->kappa         = NULL;
+                             saved->callee        = NULL;
+                             saved->u             = u;
+                           }
+
                            <<[[call_helper]] $\leftarrow$ pointer to C caller>>
                            <<[[f]] $\leftarrow$ pointer to C function>>
 
                            <<use [[call_helper]] to call [[f]]>>
+
+                           /* restore needed info from partial stack record */
+                           {
+                             actptr saved  = ((actptr) t->stack_free) - 1;
+                             t->stack_free = (void *) saved;
+
+                             locals        = saved->locals;
+                             locals_end    = saved->locals_end;
+                             stackdata     = saved->stackdata_end;
+                             stackdata_end = saved->stackdata_end;
+                             u             = saved->u;
+                           }
 
                            pc = next;
                            }
@@ -1556,13 +1605,13 @@ Once more, we pop a [[procedure]] struct pointer off the value stack for informa
                            lbl  = VIEW(v, CMM_label *);
                            ASSERT_EMPTY(values);
 
-                           if (lbl->ty != CMM_PROCEDURE) {
-                             cmm_err("target label not a procedure");
-                           }
+                           cmm_assert(lbl->ty == CMM_PROCEDURE,
+                                      "target label not a procedure");
                            proc = lbl->lbl.proc;
                            assert(proc != NULL);
 
-                           assert(location_known(proc->raddr));
+                           cmm_assert(location_known(proc->raddr),
+                                      "cannot call undefined procedure");
                            pc   = (bytecodeptr) location(proc->raddr);
 
                            <<reuse dead local memory for new activation>>
@@ -1570,6 +1619,8 @@ Once more, we pop a [[procedure]] struct pointer off the value stack for informa
                            /* deal with uid : */
                            dies_uid(u);
                            u = new_uid(t);
+
+                           curr_proc = proc;
                            }
 @ 
 
@@ -1581,7 +1632,7 @@ We do need to make sure, though, that there is enough room on this stacks for th
                                                          proc->num_locals);
                            stackdata_end = stackdata + proc->stackdata_size;
                            t->stack_free = (void *) stackdata_end;
-                           assert(t->stack_free <= t->stack_limit);
+                           mem_assert(t->stack_free <= t->stack_limit);
 @ 
 
 We implement both return rules with one matching case.
@@ -1593,7 +1644,7 @@ We implement both return rules with one matching case.
                            lua_State *L;
 
                            ASSERT_EMPTY(values);
-                           assert(i <= count);
+                           assert(i <= count);       /* this can't happen */
                            
                            /* FIX for now we allow walking off stack */
                            if (locals == t->stack_base) {
@@ -1626,8 +1677,11 @@ We simply copy pointers to restore information from the activation record stored
                            L = caller->kappa->also_returns_to.L;
                            lua_pushtable(L, caller->kappa->also_returns_to);
 
-                           /* FIX we here assert that count = |returns| */
-                           assert(count == lua_getn(L, -1));
+                           /* we here assert that count = |returns| */
+                           cmm_assert(count == lua_getn(L, -1),
+                                      "continuation count in return stmt. "
+                                      "does not match number of return "
+                                      "continuations");
 
                            if (i == count) {
                              pc = caller->pc;
@@ -1646,7 +1700,9 @@ We simply copy pointers to restore information from the activation record stored
                              }
                              lua_pop(L, 1); /* pop label */
 
-                             assert(location_known(CMM_label_raddr(lbl)));
+                             cmm_assert(location_known(CMM_label_raddr(lbl)),
+										"cannot return to undefined "
+										"continuation");
                              pc = CMM_label_location(lbl);
                            }
                            lua_pop(L, 1); /* pop table */
@@ -1672,7 +1728,6 @@ We restore state information from the destination activation and recover memory 
                            CMM_label    *lbl;
                            continuation *cont;
                            bytecodeptr   cont_pc;
-                           actptr        saved;
 
                            v   = POP(values);
                            lbl = VIEW(v, CMM_label *);
@@ -1722,19 +1777,19 @@ We also must ensure that [[cont->dest_act]] was listed as a valid ``also cuts to
                             */
 @
 
-If we are cutting to a continuation across different threads, we must make sure to save the cutting activation's information in a partial record (partial because there are no call-site annotations).
-Remember that [[pc]] is the current program counter and that we must store away [[next]] so that we do not end up in an infinite loop.
+If we are cutting to a continuation across different threads (or if we are 
+making a call out to a C function), we must make sure to save the cutting 
+activation's information in a partial record (partial because there are no 
+call-site annotations and the [[callee]] is set to [[NULL]]).
+Remember that [[pc]] is the current program counter and that we must store 
+away [[next]] so that we do not end up in an infinite loop.
 
 <<save current info in a partial stack record>>=
+                               {
                                /* save needed info in activation record */
-                               saved = (actptr) t->stack_free;
+                               actptr saved = (actptr) t->stack_free;
                                t->stack_free = (void *) (saved + 1);
-                               assert(t->stack_free <= t->stack_limit);
-
-                               /*
-                               saved = t->callstack_free++;
-                               assert(t->callstack_free <= t->callstack_limit);
-                               */ 
+                               mem_assert(t->stack_free <= t->stack_limit);
 
                                saved->pc            = next;
                                saved->locals        = locals;
@@ -1745,6 +1800,7 @@ Remember that [[pc]] is the current program counter and that we must store away 
                                saved->kappa         = NULL;
                                saved->callee        = NULL;
                                saved->u             = u;
+                               }
 @
 
 We next kill off all applications ``above'' [[dest_act]] in the activation chain of the destination thread.\footnote{When we say ``above'', we refer to the transitive closure of the following relation: a callee's activation is directly ``above'' its caller's activation if they are in the same thread.}
@@ -1799,6 +1855,8 @@ And its brother, [[END_PROC]].
 <<matching statement>>=
     | END_PROC()        => {
                            curr_proc = NULL;
+
+                           cmm_err("procedure missing return/jump statement");
                            }
 @ 
 

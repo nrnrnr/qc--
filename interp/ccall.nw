@@ -148,8 +148,9 @@ void register_c_func(const char *name, void *f, const char *sig) {
     lua_gettable(L, -3);
     if (!lua_isnil(L, -1)) {
        lua_pop(L, 3); /* pop nil, string copy, table */
-       cmm_err("cannot register C function \"%s\"; "
-               "a label of that name already exists", name);
+       fprintf(stderr, "cannot register C function \"%s\"; "
+                       "a label of that name already exists", name);
+       exit(1);
     }
     lua_pop(L, 1); /* pop nil */
 
@@ -173,8 +174,9 @@ void register_c_func(const char *name, void *f, const char *sig) {
       lua_tag(L, -1) != lua_c_sig_tag ||
       (caller = lua_touserdata(L, -1)) == NULL)
   {
-    cmm_err("cannot register C function with unsupported type signature"
-            "was given type signature [%s]", sig);
+    fprintf(stderr, "cannot register C function with unsupported type "
+                    "signature; was given type signature [%s]", sig);
+    exit(1);
   }
   lua_insert(L, -2); /* swap positions of caller pointer and sig table */
   lua_pop(L, 1);     /* pop the sig table */

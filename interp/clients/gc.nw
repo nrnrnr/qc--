@@ -26,7 +26,12 @@ where [[foo.c--]] is the {\PAL} source file, [[qc--]] is the {\qcc} compiler
 executable, and [[gc_client]] is the compiled version of [[gc.c]] (which
 is implemented in this file).
 
-The [[-v]] switch to [[gc_client]] turns on high verbosity.
+The [[-v]] switch to [[gc_client]] turns on higher verbosity.
+An additional [[-v]] switch turns on highest verbosity.
+
+The [[-]] switch to [[gc_client]] (which may not be used in conjunction with
+a filename given on the command line) tells [[gc_client]] to read from
+[[stdin]].
 
 % ------------------------------------------------------------------ 
 \section{Implementation}
@@ -57,6 +62,7 @@ Its implementation is split across files [[gc.h]] and [[gc.c]].
 #include <stdlib.h>
 #include <string.h>
 #include "ccall.h"
+#include "span.h"
 
 <<global variable definitions>>
 
@@ -208,6 +214,7 @@ static unsigned char *hp = NULL, *heaplimit;  /* used for every allocation */
 static unsigned int nalloc;
 static unsigned int ncollections;
 static unsigned int ncopied;
+static unsigned int ncopied_this_time;
 @ 
 
 <<start garbage collection services>>=
@@ -219,11 +226,12 @@ static unsigned int ncopied;
   heaplimit = fromspace + semispacesize;
   hp        = fromspace;
 
-  nalloc    = ncollections = ncopied = 0;
+  nalloc    = ncollections = ncopied = ncopied_this_time = 0;
 @ 
 
 Explicitly shutting down the garbage collector allows us to free heap-allocated
-space used by the alllocator.
+space used by the alllocator (and optionally print out some statistics about
+the collector).
 
 <<shut down garbage collection services>>=
   semispacesize = 0;
@@ -249,7 +257,7 @@ DOCUMENTATION HERE
 <<garbage collection functions>>=
 void *alloc(void *ty) {
   unsigned char *m;
-  heap_tag      *tag;
+  heap_tag      *htag;
 
   unsigned  size = (unsigned) (((u_int8 *) ty)[0]);
 
@@ -257,21 +265,28 @@ void *alloc(void *ty) {
   if (size < sizeof(void *)) { size = sizeof(void *); }
   size += sizeof(heap_tag);
 
-  if (hp + size > heaplimit)
+  if (hp + size > heaplimit) {
+    if (gc_verbosity) {
+      printf("Need more memory; starting up garbage collector\n");
+    }
     gc();
+  }
 
-  if (hp + size > heaplimit)
+  if (hp + size > heaplimit) {
+    if (gc_verbosity)
+      printf("GC didn't scrounge up enough; enlarging the heap\n\n");
     gc_growheap(semispacesize + GROWTH_UNIT);
+  }
 
   assert(hp < heaplimit);
 
   m   = hp;
   hp += size;
 
-  tag = (heap_tag *) m;
-  tag->forward = 0;
-  tag->size    = size - sizeof(heap_tag);
-  tag->ty      = (u_int8 *) ty;
+  htag = (heap_tag *) m;
+  htag->forward = 0;
+  htag->size    = size - sizeof(heap_tag);
+  htag->ty      = (u_int8 *) ty;
 
   /* update stats */
   nalloc++;
@@ -298,6 +313,7 @@ void gc(void) {
 
   /* update stats */
   ncollections++;
+  ncopied_this_time = 0;
 
   /* perform copy */
   gc_copy();
@@ -307,13 +323,11 @@ void gc(void) {
   fromspace = tospace;
   tospace   = temp;
 
-  /* OPTIONAL add code to conditionally enlarge heap */
+  /* OPTIONAL add code to conditionally enlarge heap for optimal efficiency */
 
   /* output stats if gc verbosity level is high */
   if (gc_verbosity) {
-    printf("-- the garbage collector was called --");
     gc_printstats();
-    printf("\n");
   }
 }
 @ 
@@ -383,7 +397,7 @@ void gc_copy(void) {
 <<scan roots in local activations>>=
 {
   do {
-    Cmm_Dataptr d = Cmm_GetDescriptor(a, GC);
+    unsigned char *d = (unsigned char *) Cmm_GetDescriptor(a, GC);
 
     if (d != NULL) {
       unsigned  var_count = Cmm_LocalVarCount(a);
@@ -392,9 +406,15 @@ void gc_copy(void) {
       for (i = 0; i < var_count; i++) {
         if (d[i]) {
           /* we've found a root pointer... */
-		  void **var = Cmm_FindLocalVar(a, i); /* var is ptr to the rootptr */
+
+          /* var is ptr to the rootptr */
+		  void **var = (void **) Cmm_FindLocalVar(a, i); 
+
 		  if (var != NULL) {
-			*var = gc_forward(*var);           /* update rootptr            */
+            if (gc_verbosity > 1) {
+              printf("(var #%u is a non-null root pointer)\n", i);
+            }
+			*var = gc_forward(*var);  /* update rootptr */
 		  }
         }
       }
@@ -405,11 +425,12 @@ void gc_copy(void) {
 
 <<scan roots in globals>>=
 {
-  unsigned    var_count = Cmm_GlobalCount();
-  Cmm_Dataptr d         = Cmm_GetDescriptor(a, GC_GLOBALS);
+  unsigned       var_count = Cmm_GlobalCount();
+  unsigned char *d         = (unsigned char *) 
+                                         Cmm_GetDescriptor(a, GC_GLOBALS);
 
   unsigned i;
-  for (i = 0; i < var_count; i++) {
+  for (i = 0; d && i < var_count; i++) {
     assert(globals_backup);
     if (d[i]) {
       /* we've found a root pointer... */
@@ -423,14 +444,15 @@ void gc_copy(void) {
 @ 
 
 <<scan objects [[*scanp]]>>=
-for (; scanp < hp; scanp += fullsize(scanp)) {
-  u_int8   *ty_info = tag(scanp)->ty;
+for (scanp += sizeof(heap_tag); scanp < hp; scanp += fullsize(scanp)) {
+  heap_tag *htag    = tag(scanp);
+  u_int8   *ty_info = htag->ty;
 
   unsigned  i;
   for (i = 0; i < ty_info[0]; i++) {
     /* scan the object at *scanp */
     if (ty_info[i + 1]) {
-      void **ptr = (void **) (&(ty_info[i + 1]));
+      void **ptr = (void **) (scanp + i);
 
       if (ptr != NULL) {
         /* we've found a pointer... */
@@ -451,8 +473,8 @@ DOCUMENTATION
 
 <<macro definitions>>=
 #define isinspace(LOC, SPACE) \
-((SPACE) <= (unsigned char *) (LOC) && \
-(unsigned char *) (LOC) < (SPACE) + semispacesize)
+((SPACE) <= ((unsigned char *) (LOC)) && \
+((unsigned char *) (LOC)) < (SPACE) + semispacesize)
 @ 
 
 DOCUMENTATION
@@ -463,11 +485,12 @@ DOCUMENTATION
 void *gc_forward(void *rootptr) {
   if (isinspace(rootptr, tospace)) {
     return rootptr;
-  } else {
-    assert(isinspace(rootptr, fromspace));
+  } else if (isinspace(rootptr, fromspace)) {
     if (tag(rootptr)->forward) {
-      assert(isinspace(*((void **) rootptr), tospace));
-      return *((void **) rootptr);
+      void **forwarded_to = *((void **) rootptr);
+
+      assert(isinspace(forwarded_to, tospace));
+      return forwarded_to;
     } else {
       void *m;
 
@@ -487,9 +510,13 @@ void *gc_forward(void *rootptr) {
 
       /* update stats */
       ncopied++;
+      ncopied_this_time++;
 
       return m;
     }
+  } else {
+    /* WHY WOULD WE BE HERE? */
+    return rootptr;
   }
 }
 @
@@ -502,10 +529,12 @@ void gc_printstats(void);
 
 <<garbage collection functions>>=
 void gc_printstats(void) {
-  printf("[Mem stats:     allocated %d heap size %d ratio %.2f]\n",
+  printf("[This time:     found and copied %u live objects]\n",
+		 ncopied_this_time);
+  printf("[Mem stats:     allocated %u objects ; heap size %u ratio %.2f]\n",
 		 nalloc, 2 * semispacesize, (float) nalloc / (2 * semispacesize));
-  printf("[Total GC work: %d collections ; copied %d objects ; "
-         "%.2f copies/allocation]\n",
+  printf("[Total GC work: %u collections ; copied %u objects ; "
+         "%.2f copies/allocation]\n\n",
 		 ncollections, ncopied, (float) ncopied / nalloc);
 }
 @ 
@@ -538,11 +567,14 @@ quit--at least for now.
 @
 
 <<global variable definitions>>=
-static char     *filename = NULL;
+static char     *filename     = NULL;
+static int       src_selected = 0;
 @ 
 
-The driver opens transactions with the {\PAL} interpreter (passing it sizes for the interpreter's value stack and argument-passing space), registers a few C functions with the interpreter, flexes its muscles a bit, and closes interaction 
-with the interpreter.
+The driver opens transactions with the {\PAL} interpreter (passing it sizes 
+for the interpreter's value stack and argument-passing space), registers a 
+few C functions with the interpreter, flexes its muscles a bit, and closes 
+interaction with the interpreter.
 
 <<application driver>>=
 int main(int argc, char *argv[]) {
@@ -586,14 +618,26 @@ static unsigned int gc_verbosity = 0;
   int i;
   for (i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-v") == 0) {
-      gc_verbosity = 1;
+      gc_verbosity++;
+    } else if (strcmp(argv[i], "-") == 0) {
+      if (src_selected) {
+        fprintf(stderr, "error: canot load from more than one source\n");
+        exit(1);
+      }
+      filename     = NULL;
+      src_selected = 1;
     } else {
-      if (filename != NULL) {
+      if (src_selected) {
         fprintf(stderr, "error: cannot load more than one file\n");
         exit(1);
       }
-      filename = argv[i];
+      filename     = argv[i];
+      src_selected = 1;
     }
+  }
+
+  if (gc_verbosity > 1) {
+    span_verbosity = 1;
   }
 }
 @ 
@@ -610,12 +654,14 @@ static void     *globals_backup = NULL;
 DOCUMENTATION HERE
 
 <<run {\PAL} code>>=
-if (filename == NULL) {
+if (!src_selected) {
   fprintf(stderr, "error: nothing to do\n");
   exit(1);
 }
 
-if (load_assembly_unit(filename, SRC_FILE) != 0)
+if (filename == NULL && load_assembly_unit(NULL, SRC_STDIN) != 0)
+  exit(1);
+else if (load_assembly_unit(filename, SRC_FILE) != 0)
   exit(1);
 
 <<lookup and run procedure [[main]] in {\PAL} code>>
@@ -662,7 +708,9 @@ DOCUMENTATION HERE
   {
     Cmm_Dataptr d = Cmm_GetDescriptor(Cmm_YoungestActivation(curr_thread), 
                                       GC_globals_backup);
-    assert(d);
-    *((void **) d) = globals_backup;
+    /* THIS DOESN'T WORK FOR NOW
+       assert(d);
+       *((void **) d) = globals_backup;
+    */
   }
 @

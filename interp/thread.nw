@@ -33,7 +33,7 @@ The pointers in the [[thread]] structure are used to perform this allocation as 
 
 <<type definitions>>=
 typedef struct {
-  unsigned int next_frame_id;
+  unsigned int   next_frame_id;
 
   void          *stack_base;
   void          *stack_limit;
@@ -52,29 +52,48 @@ stack.
 
 \begin{verbatim}
 
-   |---------|<--- t->stack_base
-   |         |
-   | locals0 |   
-   |_________|   This is a sample stack.  The top is the oldest part; growth
-   |         |   is here drawn toward the bottom.  In the implementation,
-   | stackd0 |   growth is toward increasing addresses.
-   |_________|     When creating space for a new activation, we first create
-   |         |   space for locals, then space for stackdata.  The activation
-   |  act0   |   record is stored locally in C until we must leave it for
-   |---------|   some reason (cut/call/etc.).  Then, we store the activation
-   | locals1 |   at the extremum, after its locals and stackdata.
-   |---------|     At this point, we store locals and stackdata for the next
-   | stackd1 |   activation.
-   |         |   
-   |         |
-   |---------|<--- t->stack_free
-   |         |
-   |         |
+ The stack in a non-suspended thread:
+
+   |----------|<--- t->stack_base
+   |          |
+   | locals_0 |
+   |__________|
+   |          |     
+   | stackd_0 |
+   |__________|
+   |          |
+   |  act_0   | frame # 0 (oldest frame)
+___|__________|_____________
+   |          |
+   | locals_1 | frame # 1 (youngest frame)
+   |__________|
+   |          |
+   | stackd_0 |
+   |          |
+---|----------|<--- t->stack_free
+   |          |
+   |          | free space on stack
 
 
-
-   |         |
-   |---------|<--- t->stack_limit
+   |          |
+   |----------|<--- t->stack_limit
+   
+This is a diagram of a sample non-suspended thread's stack.  The top of the
+drawing represents the oldest end of the stack; growth is drawn toward the
+bottom.  (In our implementation, growth is directed toward increasing
+addresses.)
+  When creating space for a new frame on the stack, we create space for locals,
+then we create space for stackdata.  The activation record for a currently-
+running frame is not actually stored away on the stack until we must leave
+the frame for some reason (cut/call/etc.).  Until then, the activation record
+for the currently running frame is actually distributed across local C
+variables.
+  When we must leave a frame or suspend a frame's thread (in order to return 
+control to the runtime system or to cut to another thread), we write the
+thread's youngest frame's activation record to the stack's extremum--just
+beyond the youngest frame's stackdata space (at t->stack_free).  
+  If we simply made a C-- call, we create space for the new activation frame's
+locals and stackdata, and continue onwards.
 
 \end{verbatim}
 

@@ -122,6 +122,7 @@ The implementation of the {\PAL} runtime system is contained within [[runtime.c]
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include "interp.h"
 #include "value.h"
 #include "activation.h"
@@ -129,10 +130,14 @@ The implementation of the {\PAL} runtime system is contained within [[runtime.c]
 #include "ccall.h"
 #include "span.h"
 
+<<internal function prototypes>>
+
 <<thread functions>>
 <<stack-walking functions>>
 <<global register functions>>
 <<controlling the interpreter>>
+
+<<internal helpers>>
 @ 
 
 % ----------------------------------------------------------------------------
@@ -290,7 +295,7 @@ int Cmm_isOldestActivation(const Cmm_Activation *a) {
 
 Cmm_Activation *Cmm_NextActivation(const Cmm_Activation *a) {
   if (Cmm_isOldestActivation(a)) {
-    cmm_err("[runtime system] already at oldest activation in thread");
+    runtime_sys_err("[runtime system] already at oldest activation in thread");
   }
 
   return (Cmm_Activation *) (((activation *) (a->locals)) - 1);
@@ -303,7 +308,8 @@ int Cmm_ChangeActivation(Cmm_Activation **a) {
     return 0;
   else {
     (*a) = ((actptr) ((*a)->locals)) - 1;
-    t->stack_free = (void *) (((actptr) (*a)) + 1);
+    /* LOOK AT THIS!!! */
+    /* t->stack_free = (void *) (((actptr) (*a)) + 1); */
     return 1;
   }
 }
@@ -354,7 +360,7 @@ Cmm_Cont *Cmm_GetCont(const Cmm_Activation *a, Cmm_Word token) {
         (lbl = lua_touserdata(L, -1)) == NULL)
     {
       lua_pop(L, 2); /* pop bogus value, table */
-      cmm_err("invalid continuation index given to Cmm_GetCont");
+      runtime_sys_err("invalid continuation index given to Cmm_GetCont");
     }
 
     act->pc = CMM_label_location(lbl);
@@ -468,5 +474,41 @@ directory.  If all fails, we signal an error.
 <<controlling the interpreter>>=
 void Cmm_close(void) {
   cmm_interp_close();
+}
+@ 
+
+% ----------------------------------------------------------------------------
+\subsection{Error Handling}
+% ----------------------------------------------------------------------------
+
+If an error is encountered in one of the runtime system's functions, a call
+is made to private internal helper [[runtime_sys_err]].
+
+<<internal function prototypes>>=
+void runtime_sys_err(char *fmt, ...);
+@ 
+
+This function is given an error message's format string and a variable number
+of arguments.
+
+Callers of this function should expect it \emph{not} to return.
+
+<<internal helpers>>=
+void runtime_sys_err(char *fmt, ...) {
+  va_list args;
+
+  if (fmt != NULL) {
+    fprintf(stderr, "error: ");
+
+    va_start(args, fmt);
+    vfprintf(stderr, fmt, args);
+
+    fprintf(stderr, "\n");
+  }
+
+  fprintf(stderr, "error: C-- runtime system error; cannot continue");
+  va_end(args);
+
+  exit(1);
 }
 @ 

@@ -59,7 +59,7 @@ We provide a function that may be used at runtime to find the value associated
 with a particular PC and token.
 
 <<function prototypes>>=
-unsigned span_find_value(unsigned real_pc, unsigned token);
+unsigned span_find_value(unsigned real_pc, unsigned tok);
 @ 
 
 % ----------------------------------------------------------------------------
@@ -90,6 +90,17 @@ extern table  span_table;
 
 <<global variable definitions>>=
 table span_table;
+@ 
+
+To help debug the span implementation, we have a verbosity level--just for
+spans.
+
+<<global variable declarations>>=
+extern int span_verbosity;
+@ 
+
+<<global variable definitions>>=
+int span_verbosity = 0;
 @ 
 
 % ----------------------------------------------------------------------------
@@ -186,7 +197,15 @@ void span_table_begin(table t, unsigned tok, const char *lbl) {
     sp = span_new();
 
     /* we create a new RAddr to refer to the curr lc in the curr block */
+    {
+      RLabel rl = label_new("<span-begin>");
+      label_define(rl, 0);
+      sp->pc_begin = addr_new(rl, 0);
+    }
+
+/*
     sp->pc_begin = addr_new(block_label(crb()), block_lc(crb()));
+*/
     sp->pc_end   = NULL;
 
     sp->enclosing_span = curr_span_within_get(tok);
@@ -209,12 +228,22 @@ void span_table_begin(table t, unsigned tok, const char *lbl) {
 
 void span_table_end  (table t, unsigned tok) {
   span *curr_span_within = curr_span_within_get(tok);
+
   cmm_assert(curr_span_within != NULL, 
              "cannot end span; we are not within one");
+  cmm_assert(curr_span_within->pc_end == NULL,
+             "internal span error -- attempted to close already ended span");
 
   /* create new RAddr */
-  
+  {
+    RLabel rl = label_new("<span-end>");
+    label_define(rl, 0);
+    curr_span_within->pc_end = addr_new(rl, 0);
+  }
+
+/*
   curr_span_within->pc_end = addr_new(block_label(crb()), block_lc(crb()));
+*/
 
   /* update curr_span_within */
   /* FIX this needs to allow curr_span_within to be a table mapping
@@ -274,7 +303,10 @@ static void curr_span_within_set(unsigned tok, span *sp) {
   lua_assert_istable(L, -1, "internal error -- cannot set curr_span_within!");
 
   lua_pushstring(L, LUA_CURR_SPAN_WITHIN);
-  lua_pushusertag(L, (void *) sp, lua_span_tag);
+  if (sp != NULL)
+    lua_pushusertag(L, (void *) sp, lua_span_tag);
+  else
+    lua_pushnil(L);
   lua_settable(L, -3);
 
   lua_pop(L, 2); /* pop this token's table, general span table */
@@ -286,13 +318,13 @@ static void curr_span_within_set(unsigned tok, span *sp) {
 % ----------------------------------------------------------------------------
 
 <<function definitions>>=
-unsigned span_find_value(unsigned real_pc, unsigned token) {
+unsigned span_find_value(unsigned real_pc, unsigned tok) {
   lua_State *L = span_table.L;
   span      *sp, *last_matching_span = NULL;
-  unsigned   low, middle, high;
+  int        low, middle, high;
 
   lua_pushtable(L, span_table);
-  lua_pushusertag(L, (void *) token, lua_span_token_tag);
+  lua_pushusertag(L, (void *) tok, lua_span_token_tag);
   lua_gettable(L, -2);
   if (!lua_istable(L, -1)) {
     lua_pop(L, 2); /* pop bogus value, table */
@@ -326,7 +358,9 @@ current program counter ([[real_pc]]).
         (sp = (span *) lua_touserdata(L, -1)) == NULL)
     {
       lua_pop(L, 3); /* pop bogus value, 2 tables */
-      cmm_err("internal error -- invalid span value");
+      fprintf(stderr, "internal error -- invalid span value at index %u:%d", 
+              tok, middle);
+      exit(1);
     }
     lua_pop(L, 1); /* pop span */
 
@@ -354,17 +388,28 @@ current program counter ([[real_pc]]).
         (sp = (span *) lua_touserdata(L, -1)) == NULL)
       {
         lua_pop(L, 3); /* pop bogus value, 2 tables */
-        cmm_err("internal error -- invalid span value");
+        fprintf(stderr, "internal error -- invalid span value at index %u:%d", 
+                tok, middle);
+        exit(1);
       }
       lua_pop(L, 1); /* pop span */
 
-      if (real_pc < location(sp->pc_begin)) {
+      if (real_pc < location(sp->pc_begin) || middle >= high) {
         lua_pop(L, 2); /* pop 2 tables */
         cmm_assert(location_known(CMM_label_raddr(last_matching_span->value)),
                    "span value references undefined label");
+
+        if (span_verbosity) {
+          printf("--- got descriptor for activation of [%s]\n",
+                 CMM_label_raddr(last_matching_span->value)->label->name);
+        }
+
         return (unsigned) CMM_label_location(last_matching_span->value);
       } else {
         last_matching_span = sp;
       }
     }
+
+    /* we should never get down here */
+    assert(0);
 @ 
