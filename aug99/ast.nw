@@ -24,11 +24,9 @@ cont_name    = (string)          -- Name of a continuation
 label_name   = (string)          -- Name of a label in a procedure
 segment_name = (string)
 
+var_names    = (var_name*)
+
 alignment = (int bytes)       -- Align on an n-byte boundary
-
-primop_name = (string)
-
-char = (int)            -- ASDL has no char type!
 @ 
 A [[var_name]] is the name of a \emph{variable}; that is, a 
 procedure argument, local variable, or global register.  You can't take
@@ -52,23 +50,38 @@ in the module, including before the declaration site.
 <<definitions>>=
 program = (decl*) 
 
-decl = Import( const_name name, mangling_info mangle )
-     | Export( const_name name, mangling_info mangle )
+decl = Import( const_name, mangling_info )
+     | Export( const_name, mangling_info )
+
+     | Global( global_info )
 
      | Const( const_name, compile_static_expr value )
-     | Data( segment_name? segment, datum* data )
 
-     | Procedure( segment_name? segment
-                , calling_convention? conv
-                , const_name name
-                , formal* formals
-                , stmt* body
-                )
-     | Global   (global_info)
-     | SpanDecl (compile_static_expr token, link_static_expr value, decl*)
+     | DefaultLiteralSize( int )
+
+     | Segment( segment_name?, seg_contents* )
+
 global_info = (var_name name, type, string? register)
-@ 
 
+seg_contents 
+	= Datum( datum )
+
+        | Procedure( calling_convention? conv
+                   , const_name name
+                   , formal* formals
+                   , stmt* body
+                   )
+
+        | SpanDecl (compile_static_expr token, link_static_expr value, seg_contents*)
+
+@ 
+The order of [[seg_contents]] in a [[Segment]] is significant: things are laid out strictly
+sequentially.  You can even put some static data just before a procedure.
+
+The order of [[decl]]s in a [[program]] is {\em not} significant, {\em except}
+that multiple uses of [[Segment]] with the same [[segment_name]] are equivalent
+to a single [[Segment]] with the [[seg_contents]] concatenated.
+ 
 %-------------------------------------------------------
 \subsection{Data blocks}
 %-------------------------------------------------------
@@ -83,8 +96,8 @@ initialized memory.%
 \footnote{So to convert UTF-8 to abstract syntax, the lexer will need
 to know the byte order of the target machine.}
 <<definitions>>=
-datum = Align( alignment alignment )
-      | DataLabel( const_name name )
+datum = Align( alignment )
+      | DataLabel( const_name )
       | InitializedData( type, link_static_expr value )
       | InitializedBlock( string memory_contents )
       | UninitializedData( type, int how_many )
@@ -100,7 +113,7 @@ passing.
 Along with types, the hints label transitions in a Bailey-Davidson
 automaton \cite{bailey:formal}.
 <<definitions>>=
-formal = Formal( type type, var_name name )
+formal = Formal( hint?, type, var_name )
 @ 
 
 %-------------------------------------------------------
@@ -113,8 +126,8 @@ no nested scopes---the scope of a declaration is the entire procedure.
 (If you prefer, all declarations are logically gathered together
 and placed at the top.)
 <<definitions>>=
-stmt = VarDecl( var_name name, type type )
-     | StackDecl( datum* data )         -- No initialisation allowed
+stmt = VarDecl( var_name, type )
+     | StackDecl( datum )  	       -- No initialisation allowed
      <<other constructors for [[stmt]]>>
 @ Note that an alignment in a stack declaration might well entail a
 run-time cost, depending on the alignment of the stack pointer called
@@ -124,7 +137,7 @@ for under the calling convention.
 <<other constructors for [[stmt]]>>=
 | Assignments( assignment* )
 <<definitions>>=
-assignment = Assign ( lvalue lhs, expr rhs )
+assignment = Assign ( lvalue, expr )
 lvalue     = Var( var_name name )
            | Mem( expr address, alignment, type )
 @ 
@@ -134,16 +147,14 @@ construct can be treated as syntactic sugar.
 <<other constructors for [[stmt]]>>=
 | IfThenElse( boolean_expr condition, stmt* then, stmt* else)
 | GoTo ( expr target, label_name* possible_targets )
-| Label( label_name name )
+| Label( label_name )
 @ If the list of possible target labels is empty, the target address
 must be the name of a label.
 @
 Continuations are a bit like labels, except they may take parameters,
 and their values are not known until run time.
 <<other constructors for [[stmt]]>>=
-| Continuation( cont_name name, var_names? formals)
-<<definitions>>=
-var_names = (var_name*)
+| Continuation( cont_name, var_names? formals)
 @
 The switch statement is like the Modula-3 case statement, except that
 ranges $l\mathtt{..}h$, when $l \mathrel{>_u} h$, are given a ``wrap
@@ -156,7 +167,7 @@ form $\mathit{lo} \le x < \mathit{hi}$.}
 | Switch( expr scrutinee, switch_alt* alts )
 <<definitions>>=
 switch_alt = Alt( range* ranges, stmt* rhs )
-range      = (int lo, int? hi)
+range      = (compile_static_expr lo, compile_static_expr? hi)
 @ 
 Calls, jumps, and invocation may all have hints about the calling
 convention.
@@ -165,7 +176,7 @@ convention.
         , calling_convention? conv
         , expr address
         , actual* actuals
-        , call_annotation* annotations
+        , possible_continuation* 
         )
 | Jump  ( calling_convention? conv
         , expr address
@@ -176,11 +187,11 @@ convention.
       	, actual* actuals
         )
 <<definitions>>=
-actual = (string? hint, expr value)
-call_annotation = CutsTo    (cont_name cont)
-                | UnwindsTo (cont_name cont)
-                | ReturnsTo (cont_name cont)
-                | Aborts
+actual = (hint?, expr value)
+possible_continuation = CutsTo    (cont_name cont)
+                      | UnwindsTo (cont_name cont)
+                      | ReturnsTo (cont_name cont)
+                      | Aborts
 @ Returns also bear hints about the values returned, but they need not
 identify the calling convention, as that is implicit in the definition
 of the procedure.
@@ -199,14 +210,21 @@ Spans can cover statements as well as declarations
 As when initializing data, the lexer erases distinctions among
 different sorts of string literals.
 <<definitions>>=
-expr = SimpleLit( simple_lit value )
-     | StringLiteral( string value )
+expr = BitsLiteral( int? width, big_int value )
+     | StringLiteral( string memory_contents )
 
      | Fetch( lvalue )
+@  A constant "[[n]]" appears as [[Fetch( Var( n ) )]].
+Such a thing isn't *really* an lvalue, but it makes things easy for
+the parser.
 
-     | PrimOp( primop_name op, expr* args )
-@ Do primops need more structure?  I think not.
+<<definitions>>=
+     | PrimOp( primop, expr* args )
 @
+Characters (both ASCII and Unicode) are expressed as a [[BitsLiteral]].
+A [[StringLiteral]] is an abbreviation for an [[InitialisedBlock]] labelled
+with a fresh label, [[n]], replacing the [[StringLiteral]] with [[Const(n)]].
+
 The value of a [[compile_static_expr]] can be computed at compile time.
 The value of a [[link_static_expr]] can be computed at link time.
 A [[boolean_expr]] must have type [[bool]].
@@ -227,18 +245,12 @@ type = BitsType(  int width )
      | FloatType( int width )
 @ 
 
+
 %-------------------------------------------------------
-\subsection{Literals}
+\subsection{Primitive operations}
 %-------------------------------------------------------
 
-Each literal has a well defined size, independent of the context in
-which it appears.
-Therefore, we need some way of specifying the size.
-<<definitions>>=
-simple_lit = Bits( int value )
-           | AsciiChar( char value )
-           | UnicodeChar( string value )  -- Two ASCII chards in UTF8
-@ 
+primop = (string)
 
 %-------------------------------------------------------
 \subsection{Name mangling and calling conventions}
