@@ -507,8 +507,11 @@ let rec to_temp' context e = match e with
   <<cases for sign-extending and zero-extending divides>>
   | RP.App (op, args) ->
       let (temps, is) =
-        List.split (List.map2 (fun c e -> to_temp (contextmap c) e)
-                      (Post.arg_contexts op) args)
+        try
+          List.split (List.map2 (fun c e -> to_temp (contextmap c) e)
+                        (Post.arg_contexts op) args)
+        with Invalid_argument (_) ->
+          Impossible.impossible (Printf.sprintf "bad arity for operator %s" (fst op))
       in
       let w = width e in
       let t = alloc_direct (Post.result_context op) w in
