@@ -22,20 +22,20 @@ section "text"
     {
         $r31 = ($r31+-24);
         $t1 = $r30;
-        initialize continuations:l5:
-        proc body start:l4:
+        Linitialize continuations:l5:
+        Lproc body start:l4:
         ii = 1;
         ij = 2;
         ik = 0;
         il = 0;
-        $c0 when %geu[32](ij, 2) = sym@join@l7;
-        join:l13:
-        $c0 = sym@join@l8;
-        join:l7:
+        $c0 when %geu[32](ij, 2) = sym@Ljoin@l7;
+        Ljoin:l13:
+        $c0 = sym@Ljoin@l8;
+        Ljoin:l7:
         ik = 3;
         il = 4;
-        $c0 = sym@join@l8;
-        join:l8:
+        $c0 = sym@Ljoin@l8;
+        Ljoin:l8:
         iitotal = (((ii+ij)+ik)+il);
         $r0 = iitotal;
         $r31 = ($r31+24);

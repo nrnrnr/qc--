@@ -25,8 +25,8 @@ section "text"
         $r31 = ($r31+-24);
         i = $r0;
         $t1 = $r30;
-        initialize continuations:l6:
-        proc body start:l5:
+        Linitialize continuations:l6:
+        Lproc body start:l5:
         $r0, $r1 = %neg[32](i), -99;
         $r31 = ($r31+24);
         $c0 = $t1;
@@ -40,17 +40,17 @@ section "text"
         $r31 = ($r31+-24);
         iargc, iargv = $r0, $r1;
         $t1 = $r30;
-        initialize continuations:l15:
-        proc body start:l14:
+        Linitialize continuations:l15:
+        Lproc body start:l14:
         $r0 = -33;
         $c0, $r30 = sym@f, ($c0+4);
-        join:l22:
+        Ljoin:l22:
         $r31 = $r31;
         // the preceding node is merely asserted
         x, y = $r0, $r1;
         $r0, $r1, $r2 = sym@fmt, x, y;
         $c0, $r30 = sym@printf, ($c0+4);
-        join:l19:
+        Ljoin:l19:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = 0;

@@ -67,11 +67,11 @@ section "text"
         $r31 = ($r31+-24);
         iargc, iargv = $r0, $r1;
         $t1 = $r30;
-        initialize continuations:l6:
-        proc body start:l5:
+        Linitialize continuations:l6:
+        Lproc body start:l5:
         $r0 = 0xab54e2a3::bits32;
         $c0, $r30 = sym@callee, ($c0+4);
-        join:l10:
+        Ljoin:l10:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r31 = ($r31+24);
@@ -86,21 +86,21 @@ section "text"
         $r31 = ($r31+-24);
         i0 = $r0;
         $t1 = $r30;
-        initialize continuations:l17:
-        proc body start:l16:
-        $c0 when %ne[32](i0, 0xab54e2a3::bits32) = sym@join@l26;
-        join:l27:
+        Linitialize continuations:l17:
+        Lproc body start:l16:
+        $c0 when %ne[32](i0, 0xab54e2a3::bits32) = sym@Ljoin@l26;
+        Ljoin:l27:
         $r0 = sym@success;
         $c0, $r30 = sym@printf, ($c0+4);
-        join:l21:
+        Ljoin:l21:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l26:
+        Ljoin:l26:
         $r0 = sym@failed;
         $c0, $r30 = sym@printf, ($c0+4);
-        join:l25:
+        Ljoin:l25:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r31 = ($r31+24);

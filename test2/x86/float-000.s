@@ -46,8 +46,8 @@ main:
 	leal 12(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
-initialize_continuations_l4:
-proc_body_start_l3:
+Linitialize_continuations_l4:
+Lproc_body_start_l3:
 	leal fmt,%eax
 	movl $-12,%ecx
 	leal 12(%esp), %edx
@@ -60,22 +60,22 @@ proc_body_start_l3:
 	fildq (%eax)
 	fistpq (%ecx)
 	call printf
-join_l8:
+Ljoin_l8:
 	movl $0,%eax
 	leal 12(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l15:
+Lstackdata_l15:
 .long 0
 .section .pcmap
-.long join_l8
-.long frame_l16
+.long Ljoin_l8
+.long Lframe_l16
 .section .pcmap_data
-frame_l16:
+Lframe_l16:
 .long 0xfffffff4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l15
+.long Lstackdata_l15
 .long 0x80000008
 .long 0x80000002
 .long 0x80000000

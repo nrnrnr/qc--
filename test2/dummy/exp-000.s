@@ -25,8 +25,8 @@ section "text"
         $r31 = ($r31+-24);
         x = $r0;
         $t1 = $r30;
-        initialize continuations:l6:
-        proc body start:l5:
+        Linitialize continuations:l6:
+        Lproc body start:l5:
         $r0 = bits32[(x+x)];
         $r31 = ($r31+24);
         $c0 = $t1;
@@ -40,18 +40,18 @@ section "text"
         $r31 = ($r31+-24);
         argc, argv = $r0, $r1;
         $t1 = $r30;
-        initialize continuations:l15:
-        proc body start:l14:
+        Linitialize continuations:l15:
+        Lproc body start:l14:
         bits32[($r31+24)] = 0xdeadbeef::bits32;
         $r0 = %divu[32](($r31+24), 2);
         $c0, $r30 = sym@q, ($c0+4);
-        join:l22:
+        Ljoin:l22:
         $r31 = $r31;
         // the preceding node is merely asserted
         n = $r0;
         $r0, $r1 = sym@fmt, n;
         $c0, $r30 = sym@printf, ($c0+4);
-        join:l19:
+        Ljoin:l19:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = 0;

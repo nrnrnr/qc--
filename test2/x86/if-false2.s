@@ -14,12 +14,12 @@ main:
 	movl %esp,%ecx
 	addl %edx,%ecx
 	movl (%ecx),%edx
-initialize_continuations_l4:
-proc_body_start_l3:
-join_l7:
+Linitialize_continuations_l4:
+Lproc_body_start_l3:
+Ljoin_l7:
 	movl $0,%eax
 	ret
 .section .pcmap_data
-stackdata_l15:
+Lstackdata_l15:
 .long 0
 .section .text

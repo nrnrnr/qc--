@@ -22,8 +22,8 @@ call3:
 	movl (%edx),%eax
 	leal 20(%esp), %edx
 	movl (%edx),%edx
-initialize_continuations_l4:
-proc_body_start_l3:
+Linitialize_continuations_l4:
+Lproc_body_start_l3:
 	movl %eax,8(%esp)
 	movl 4(%esp),%eax
 	movl %ecx,12(%esp)
@@ -47,6 +47,6 @@ proc_body_start_l3:
 	movl -24(%esp),%ecx
 	jmp *%ecx
 .section .pcmap_data
-stackdata_l13:
+Lstackdata_l13:
 .long 0
 .section .text

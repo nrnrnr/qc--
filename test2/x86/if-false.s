@@ -14,9 +14,9 @@ main:
 	movl %esp,%ecx
 	addl %edx,%ecx
 	movl (%ecx),%edx
-initialize_continuations_l4:
-proc_body_start_l3:
-join_l8:
+Linitialize_continuations_l4:
+Lproc_body_start_l3:
+Ljoin_l8:
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
@@ -25,6 +25,6 @@ join_l8:
 	movl %ecx,(%eax)
 	ret
 .section .pcmap_data
-stackdata_l16:
+Lstackdata_l16:
 .long 0
 .section .text

@@ -19,8 +19,8 @@ main:
 	leal 28(%esp), %edx
 	addl %eax,%edx
 	movl (%edx),%eax
-initialize_continuations_l4:
-proc_body_start_l3:
+Linitialize_continuations_l4:
+Lproc_body_start_l3:
 	movl $1,%eax
 	movl $-1067450368,%edx
 	movl $-12,%ecx
@@ -61,23 +61,23 @@ proc_body_start_l3:
 	movl (%edx),%eax
 	movl %eax,(%ecx)
 	call printf
-join_l8:
+Ljoin_l8:
 	movl $0,%eax
 	movl 20(%esp),%ebx
 	leal 28(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l15:
+Lstackdata_l15:
 .long 0
 .section .pcmap
-.long join_l8
-.long frame_l16
+.long Ljoin_l8
+.long Lframe_l16
 .section .pcmap_data
-frame_l16:
+Lframe_l16:
 .long 0xffffffe4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l15
+.long Lstackdata_l15
 .long 0x80000008
 .long 0x80000005
 .long 0x80000000

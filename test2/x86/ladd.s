@@ -15,8 +15,8 @@ main:
 	leal 56(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
-initialize_continuations_l4:
-proc_body_start_l3:
+Linitialize_continuations_l4:
+Lproc_body_start_l3:
 	movl $-2147483648,%eax
 	movl $-28,%ecx
 	leal 56(%esp), %edx
@@ -54,7 +54,7 @@ proc_body_start_l3:
 	fildq (%ecx)
 	fistpq (%eax)
 	call ladd
-join_l11:
+Ljoin_l11:
 	movl $-12,%ecx
 	movl %ebx,52(%esp)
 	leal 56(%esp), %ebx
@@ -94,23 +94,23 @@ join_l11:
 	fildq (%edx)
 	fistpq (%ebx)
 	call printf
-join_l8:
+Ljoin_l8:
 	movl $0,%eax
 	movl 52(%esp),%ebx
 	leal 56(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l18:
+Lstackdata_l18:
 .long 0
 .section .pcmap
-.long join_l11
-.long frame_l19
+.long Ljoin_l11
+.long Lframe_l19
 .section .pcmap_data
-frame_l19:
+Lframe_l19:
 .long 0xffffffc8
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l18
+.long Lstackdata_l18
 .long 0x80000008
 .long 0x80000005
 .long 0x80000000
@@ -129,14 +129,14 @@ frame_l19:
 .long 0xffffffec
 .long 0xfffffff4
 .section .pcmap
-.long join_l8
-.long frame_l20
+.long Ljoin_l8
+.long Lframe_l20
 .section .pcmap_data
-frame_l20:
+Lframe_l20:
 .long 0xffffffc8
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l18
+.long Lstackdata_l18
 .long 0x80000008
 .long 0x80000005
 .long 0x80000000

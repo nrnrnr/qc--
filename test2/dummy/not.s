@@ -25,14 +25,14 @@ section "text"
         $r31 = ($r31+-24);
         i, j = $r0, $r1;
         $t1 = $r30;
-        initialize continuations:l6:
-        proc body start:l5:
-        $c0 when %not[](%lt[32](i, j)) = sym@join@l9;
-        join:l10:
+        Linitialize continuations:l6:
+        Lproc body start:l5:
+        $c0 when %not[](%lt[32](i, j)) = sym@Ljoin@l9;
+        Ljoin:l10:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l9:
+        Ljoin:l9:
         $r0 = 1;
         $r31 = ($r31+24);
         $c0 = $t1;
@@ -46,29 +46,29 @@ section "text"
         $r31 = ($r31+-24);
         argc, argv = $r0, $r1;
         $t1 = $r30;
-        initialize continuations:l18:
-        proc body start:l17:
+        Linitialize continuations:l18:
+        Lproc body start:l17:
         $r0, $r1 = 987, 33;
         $c0, $r30 = sym@ge, ($c0+4);
-        join:l31:
+        Ljoin:l31:
         $r31 = $r31;
         // the preceding node is merely asserted
         a = $r0;
         $r0, $r1 = 33, 987;
         $c0, $r30 = sym@ge, ($c0+4);
-        join:l28:
+        Ljoin:l28:
         $r31 = $r31;
         // the preceding node is merely asserted
         b = $r0;
         $r0, $r1 = 987, 987;
         $c0, $r30 = sym@ge, ($c0+4);
-        join:l25:
+        Ljoin:l25:
         $r31 = $r31;
         // the preceding node is merely asserted
         c = $r0;
         $r0, $r1, $r2, $r3 = sym@answer, a, b, c;
         $c0, $r30 = sym@printf, ($c0+4);
-        join:l22:
+        Ljoin:l22:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = 0;

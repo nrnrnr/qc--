@@ -57,11 +57,11 @@ section "text"
         $r31 = ($r31+-24);
         iargc, iargv = $r0, $r1;
         $t1 = $r30;
-        initialize continuations:l5:
-        proc body start:l4:
+        Linitialize continuations:l5:
+        Lproc body start:l4:
         $r0 = sym@my_data;
         $c0, $r30 = sym@printf, ($c0+4);
-        join:l9:
+        Ljoin:l9:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r31 = ($r31+24);

@@ -67,18 +67,18 @@ section "text"
         $r31 = ($r31+-32);
         iargc, iargv = $r0, $r1;
         $t1 = $r30;
-        initialize continuations:l14:
+        Linitialize continuations:l14:
         bits32[($r31+24)], bits32[($r31+28)] = sym@k@C10, $r31;
-        proc body start:l13:
+        Lproc body start:l13:
         n = 0;
         $r0 = ($r31+24);
         $c0, $r30 = sym@f, ($c0+4);
-        join:l25:
+        Ljoin:l25:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0, $r1 = sym@nocut, n;
         $c0, $r30 = sym@printf, ($c0+4);
-        join:l22:
+        Ljoin:l22:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r31 = ($r31+32);
@@ -89,7 +89,7 @@ section "text"
         n = $r0;
         $r0, $r1 = (sym@nocut+3), n;
         $c0, $r30 = sym@printf, ($c0+4);
-        join:l18:
+        Ljoin:l18:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r31 = ($r31+32);
@@ -104,16 +104,16 @@ section "text"
         $r31 = ($r31+-24);
         k = $r0;
         $t1 = $r30;
-        initialize continuations:l31:
-        proc body start:l30:
+        Linitialize continuations:l31:
+        Lproc body start:l30:
         $r0 = k;
         $c0, $r30 = sym@g, ($c0+4);
-        join:l38:
+        Ljoin:l38:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = sym@ret;
         $c0, $r30 = sym@printf, ($c0+4);
-        join:l35:
+        Ljoin:l35:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r31 = ($r31+24);
@@ -128,16 +128,16 @@ section "text"
         $r31 = ($r31+-24);
         k = $r0;
         $t1 = $r30;
-        initialize continuations:l45:
-        proc body start:l44:
+        Linitialize continuations:l45:
+        Lproc body start:l44:
         $r0 = k;
         $c0, $r30 = sym@h, ($c0+4);
-        join:l52:
+        Ljoin:l52:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = sym@ret;
         $c0, $r30 = sym@printf, ($c0+4);
-        join:l49:
+        Ljoin:l49:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r31 = ($r31+24);
@@ -152,8 +152,8 @@ section "text"
         $r31 = ($r31+-24);
         k = $r0;
         $t1 = $r30;
-        initialize continuations:l59:
-        proc body start:l58:
+        Linitialize continuations:l59:
+        Lproc body start:l58:
         $r0 = 99;
         $r31, $c0 = bits32[(k+4)], bits32[k];
     }

@@ -30,8 +30,8 @@ fmt:
 .section .text
 main:
 	leal -28(%esp), %esp
-initialize_continuations_l4:
-proc_body_start_l3:
+Linitialize_continuations_l4:
+Lproc_body_start_l3:
 	leal y,%eax
 	flds (%eax)
 	leal x,%eax
@@ -63,7 +63,7 @@ proc_body_start_l3:
 	addl %eax,%edx
 	fstpl (%edx)
 	call printf
-join_l8:
+Ljoin_l8:
 	leal 28(%esp), %eax
 	movl $0,%ecx
 	leal 28(%esp), %edx
@@ -73,17 +73,17 @@ join_l8:
 	leal 28(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l15:
+Lstackdata_l15:
 .long 0
 .section .pcmap
-.long join_l8
-.long frame_l16
+.long Ljoin_l8
+.long Lframe_l16
 .section .pcmap_data
-frame_l16:
+Lframe_l16:
 .long 0xffffffe4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l15
+.long Lstackdata_l15
 .long 0x80000008
 .long 0x80000000
 .long 0x80000000

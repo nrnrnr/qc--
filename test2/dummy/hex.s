@@ -31,17 +31,17 @@ section "text"
         $r31 = ($r31+-24);
         argc, argv = $r0, $r1;
         $t1 = $r30;
-        initialize continuations:l5:
-        proc body start:l4:
+        Linitialize continuations:l5:
+        Lproc body start:l4:
         $r0 = sym@notzero;
         $c0, $r30 = sym@strlen, ($c0+4);
-        join:l12:
+        Ljoin:l12:
         $r31 = $r31;
         // the preceding node is merely asserted
         n = $r0;
         $r0, $r1, $r2 = sym@answer, n, %zx[8,32](bits8[sym@notzero]);
         $c0, $r30 = sym@printf, ($c0+4);
-        join:l9:
+        Ljoin:l9:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = 0;

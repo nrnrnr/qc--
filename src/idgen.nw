@@ -86,25 +86,10 @@ by a unique number.
 <<idgen.ml>>=
 let id kind s =
     ( incr count
-    ; Printf.sprintf "%s:%c%d" s kind !count
-    )
-@ 
-Cooking to remove order dependencies for transition to new front end.
-<<horribly hacked idgen.ml>>=
-let count2 = ref 0
-let id kind s =
-    ( if s = "stackdata" && kind = 'o' then incr count2 else incr count;
-      if s = "proc body start" then incr count;
-if false then Printf.eprintf "Idgen.%c '%s' (#%d)\n" kind s (!count);
-if s = "stackdata" && kind = 'o' then
-    Printf.sprintf "%s:%c%d" s kind (!count+5000+ !count2)
-else
-    Printf.sprintf "%s:%c%d" s kind (if kind = 'C' then !count + 1 else !count)
+    ; Printf.sprintf "%s%s:%c%d" (if kind == 'l' then "L" else "") s kind !count
     )
 @
-
 The kind of a name is encoded by a single letter in the name.
-
 <<idgen.ml>>=
 let label   = id 'l' 
 let offset  = id 'o'

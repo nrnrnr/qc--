@@ -53,8 +53,8 @@ tiger_main:
 	leal 76(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
-initialize_continuations_l10:
-proc_body_start_l9:
+Linitialize_continuations_l10:
+Lproc_body_start_l9:
 	movl $-12,%ecx
 	leal 76(%esp), %edx
 	addl %ecx,%edx
@@ -69,14 +69,14 @@ proc_body_start_l9:
 	movl %ebp,36(%esp)
 	movl %ebx,32(%esp)
 	call tig_alloc
-join_l61:
+Ljoin_l61:
 	movl $11,%ecx
 	jmp Lloop_start_25
 Lloop_start_25:
 	movl $0,%edx
 	cmpl %edx,%ecx
-	jne join_l57
-join_l58:
+	jne Ljoin_l57
+Ljoin_l58:
 	jmp Lloop_end_24
 Lloop_end_24:
 	movl $10,%edx
@@ -108,7 +108,7 @@ Lloop_end_24:
 	addl %edx,%ebp
 	movl %eax,(%ebp)
 	call tig_bounds_check
-join_l56:
+Ljoin_l56:
 	movl $71,%eax
 	movl $8,%ecx
 	movl $4,%edx
@@ -140,7 +140,7 @@ join_l56:
 	addl %ecx,%edx
 	movl %eax,(%edx)
 	call tig_bounds_check
-join_l53:
+Ljoin_l53:
 	movl $71,%eax
 	movl $16,%ecx
 	movl $4,%edx
@@ -172,7 +172,7 @@ join_l53:
 	addl %ecx,%edx
 	movl %eax,(%edx)
 	call tig_bounds_check
-join_l50:
+Ljoin_l50:
 	movl $71,%eax
 	movl $24,%ecx
 	movl $4,%edx
@@ -204,7 +204,7 @@ join_l50:
 	addl %ecx,%edx
 	movl %eax,(%edx)
 	call tig_bounds_check
-join_l47:
+Ljoin_l47:
 	movl $71,%eax
 	movl $32,%ecx
 	movl $4,%edx
@@ -236,7 +236,7 @@ join_l47:
 	addl %ecx,%edx
 	movl %eax,(%edx)
 	call tig_bounds_check
-join_l44:
+Ljoin_l44:
 	movl $71,%eax
 	movl $40,%ecx
 	movl $4,%edx
@@ -253,7 +253,7 @@ join_l44:
 	addl %edx,%ecx
 	movl %eax,(%ecx)
 	call tig_print
-join_l41:
+Ljoin_l41:
 	movl $4,%eax
 	movl $-12,%ecx
 	leal 76(%esp), %edx
@@ -265,20 +265,20 @@ join_l41:
 	movl (%edx),%eax
 	movl %eax,(%ecx)
 	call tig_sizea
-join_l38:
+Ljoin_l38:
 	movl $-76,%ecx
 	leal 76(%esp), %edx
 	addl %ecx,%edx
 	movl %eax,(%edx)
 	call tig_printi
-join_l35:
+Ljoin_l35:
 	leal Lgbl_29,%eax
 	movl $-76,%ecx
 	leal 76(%esp), %edx
 	addl %ecx,%edx
 	movl %eax,(%edx)
 	call tig_print
-join_l32:
+Ljoin_l32:
 	movl $0,%eax
 	movl $8,%ecx
 	movl $-12,%edx
@@ -296,18 +296,18 @@ Lloop_start_32:
 	movl (%ecx),%eax
 	movl $9,%ecx
 	cmpl %ecx,%eax
-	jle if_true_l65
-if_false_l66:
+	jle Lif_true_l65
+Lif_false_l66:
 	movl $0,%eax
-	jmp end_if_l67
-if_true_l65:
+	jmp Lend_if_l67
+Lif_true_l65:
 	movl $1,%eax
-	jmp end_if_l67
-end_if_l67:
+	jmp Lend_if_l67
+Lend_if_l67:
 	movl $0,%ecx
 	cmpl %ecx,%eax
-	jne join_l28
-join_l29:
+	jne Ljoin_l28
+Ljoin_l29:
 	jmp Lloop_end_30
 Lloop_end_30:
 	leal Lgbl_29,%eax
@@ -316,7 +316,7 @@ Lloop_end_30:
 	addl %ecx,%ebx
 	movl %eax,(%ebx)
 	call tig_print
-join_l15:
+Ljoin_l15:
 	leal 76(%esp), %edx
 	movl $0,%ecx
 	leal 76(%esp), %edi
@@ -329,7 +329,7 @@ join_l15:
 	movl 44(%esp),%edi
 	leal 76(%esp), %esp
 	ret
-join_l28:
+Ljoin_l28:
 	jmp Lloop_body_33
 Lloop_body_33:
 	movl $4,%eax
@@ -358,7 +358,7 @@ Lloop_body_33:
 	addl %ecx,%ebx
 	movl %eax,(%ebx)
 	call tig_bounds_check
-join_l27:
+Ljoin_l27:
 	movl $4,%eax
 	movl $8,%ecx
 	movl $-12,%edx
@@ -382,20 +382,20 @@ join_l27:
 	movl (%eax),%ebx
 	movl %ebx,(%edx)
 	call tig_chr
-join_l24:
+Ljoin_l24:
 	movl $-76,%ecx
 	leal 76(%esp), %edx
 	addl %ecx,%edx
 	movl %eax,(%edx)
 	call tig_print
-join_l21:
+Ljoin_l21:
 	leal Lgbl_31,%eax
 	movl $-76,%ecx
 	leal 76(%esp), %edx
 	addl %ecx,%edx
 	movl %eax,(%edx)
 	call tig_print
-join_l18:
+Ljoin_l18:
 	movl $1,%eax
 	movl $8,%ebx
 	movl $-12,%ecx
@@ -411,7 +411,7 @@ join_l18:
 	addl %eax,%ecx
 	movl %ebx,(%ecx)
 	jmp Lloop_start_32
-join_l57:
+Ljoin_l57:
 	jmp Lloop_body_26
 Lloop_body_26:
 	movl $80,%edx
@@ -441,18 +441,18 @@ killer_C7:
 	leal 76(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l71:
+Lstackdata_l71:
 .long 1
 .long 0xfffffff4
 .section .pcmap
-.long join_l61
-.long frame_l72
+.long Ljoin_l61
+.long Lframe_l72
 .section .pcmap_data
-frame_l72:
+Lframe_l72:
 .long 0xffffffb4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l71
+.long Lstackdata_l71
 .long 0x80000008
 .long 0x80000006
 .long 0x80000002
@@ -474,14 +474,14 @@ frame_l72:
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
-.long join_l56
-.long frame_l73
+.long Ljoin_l56
+.long Lframe_l73
 .section .pcmap_data
-frame_l73:
+Lframe_l73:
 .long 0xffffffb4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l71
+.long Lstackdata_l71
 .long 0x80000008
 .long 0x80000006
 .long 0x80000002
@@ -503,14 +503,14 @@ frame_l73:
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
-.long join_l53
-.long frame_l74
+.long Ljoin_l53
+.long Lframe_l74
 .section .pcmap_data
-frame_l74:
+Lframe_l74:
 .long 0xffffffb4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l71
+.long Lstackdata_l71
 .long 0x80000008
 .long 0x80000006
 .long 0x80000002
@@ -532,14 +532,14 @@ frame_l74:
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
-.long join_l50
-.long frame_l75
+.long Ljoin_l50
+.long Lframe_l75
 .section .pcmap_data
-frame_l75:
+Lframe_l75:
 .long 0xffffffb4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l71
+.long Lstackdata_l71
 .long 0x80000008
 .long 0x80000006
 .long 0x80000002
@@ -561,14 +561,14 @@ frame_l75:
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
-.long join_l47
-.long frame_l76
+.long Ljoin_l47
+.long Lframe_l76
 .section .pcmap_data
-frame_l76:
+Lframe_l76:
 .long 0xffffffb4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l71
+.long Lstackdata_l71
 .long 0x80000008
 .long 0x80000006
 .long 0x80000002
@@ -590,14 +590,14 @@ frame_l76:
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
-.long join_l44
-.long frame_l77
+.long Ljoin_l44
+.long Lframe_l77
 .section .pcmap_data
-frame_l77:
+Lframe_l77:
 .long 0xffffffb4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l71
+.long Lstackdata_l71
 .long 0x80000008
 .long 0x80000006
 .long 0x80000002
@@ -619,14 +619,14 @@ frame_l77:
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
-.long join_l41
-.long frame_l78
+.long Ljoin_l41
+.long Lframe_l78
 .section .pcmap_data
-frame_l78:
+Lframe_l78:
 .long 0xffffffb4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l71
+.long Lstackdata_l71
 .long 0x80000008
 .long 0x80000006
 .long 0x80000002
@@ -648,14 +648,14 @@ frame_l78:
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
-.long join_l38
-.long frame_l79
+.long Ljoin_l38
+.long Lframe_l79
 .section .pcmap_data
-frame_l79:
+Lframe_l79:
 .long 0xffffffb4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l71
+.long Lstackdata_l71
 .long 0x80000008
 .long 0x80000006
 .long 0x80000002
@@ -677,14 +677,14 @@ frame_l79:
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
-.long join_l35
-.long frame_l80
+.long Ljoin_l35
+.long Lframe_l80
 .section .pcmap_data
-frame_l80:
+Lframe_l80:
 .long 0xffffffb4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l71
+.long Lstackdata_l71
 .long 0x80000008
 .long 0x80000006
 .long 0x80000002
@@ -706,14 +706,14 @@ frame_l80:
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
-.long join_l32
-.long frame_l81
+.long Ljoin_l32
+.long Lframe_l81
 .section .pcmap_data
-frame_l81:
+Lframe_l81:
 .long 0xffffffb4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l71
+.long Lstackdata_l71
 .long 0x80000008
 .long 0x80000006
 .long 0x80000002
@@ -735,14 +735,14 @@ frame_l81:
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
-.long join_l27
-.long frame_l82
+.long Ljoin_l27
+.long Lframe_l82
 .section .pcmap_data
-frame_l82:
+Lframe_l82:
 .long 0xffffffb4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l71
+.long Lstackdata_l71
 .long 0x80000008
 .long 0x80000006
 .long 0x80000002
@@ -764,14 +764,14 @@ frame_l82:
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
-.long join_l24
-.long frame_l83
+.long Ljoin_l24
+.long Lframe_l83
 .section .pcmap_data
-frame_l83:
+Lframe_l83:
 .long 0xffffffb4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l71
+.long Lstackdata_l71
 .long 0x80000008
 .long 0x80000006
 .long 0x80000002
@@ -793,14 +793,14 @@ frame_l83:
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
-.long join_l21
-.long frame_l84
+.long Ljoin_l21
+.long Lframe_l84
 .section .pcmap_data
-frame_l84:
+Lframe_l84:
 .long 0xffffffb4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l71
+.long Lstackdata_l71
 .long 0x80000008
 .long 0x80000006
 .long 0x80000002
@@ -822,14 +822,14 @@ frame_l84:
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
-.long join_l18
-.long frame_l85
+.long Ljoin_l18
+.long Lframe_l85
 .section .pcmap_data
-frame_l85:
+Lframe_l85:
 .long 0xffffffb4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l71
+.long Lstackdata_l71
 .long 0x80000008
 .long 0x80000006
 .long 0x80000002
@@ -851,14 +851,14 @@ frame_l85:
 .long 0
 .long tiger_main_gc_data
 .section .pcmap
-.long join_l15
-.long frame_l86
+.long Ljoin_l15
+.long Lframe_l86
 .section .pcmap_data
-frame_l86:
+Lframe_l86:
 .long 0xffffffb4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l71
+.long Lstackdata_l71
 .long 0x80000008
 .long 0x80000006
 .long 0x80000002

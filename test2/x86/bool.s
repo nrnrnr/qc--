@@ -14,28 +14,28 @@ main:
 	movl %esp,%edx
 	addl %ecx,%edx
 	movl (%edx),%ecx
-initialize_continuations_l5:
-proc_body_start_l4:
+Linitialize_continuations_l5:
+Lproc_body_start_l4:
 	movl $3,%eax
 	call tryout
-join_l12:
+Ljoin_l12:
 	movl $4,%eax
 	call tryout
-join_l9:
+Ljoin_l9:
 	movl $0,%eax
 	ret
 .section .pcmap_data
-stackdata_l18:
+Lstackdata_l18:
 .long 0
 .section .pcmap
-.long join_l12
-.long frame_l19
+.long Ljoin_l12
+.long Lframe_l19
 .section .pcmap_data
-frame_l19:
+Lframe_l19:
 .long 0x80000000
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l18
+.long Lstackdata_l18
 .long 0x80000008
 .long 0x80000002
 .long 0x80000000
@@ -51,14 +51,14 @@ frame_l19:
 .long 0
 .long 0
 .section .pcmap
-.long join_l9
-.long frame_l20
+.long Ljoin_l9
+.long Lframe_l20
 .section .pcmap_data
-frame_l20:
+Lframe_l20:
 .long 0x80000000
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l18
+.long Lstackdata_l18
 .long 0x80000008
 .long 0x80000002
 .long 0x80000000
@@ -79,22 +79,22 @@ tryout:
 	leal -16(%esp), %esp
 	leal 16(%esp), %ecx
 	movl (%ecx),%edx
-initialize_continuations_l23:
-proc_body_start_l22:
+Linitialize_continuations_l23:
+Lproc_body_start_l22:
 	movl $1,%ecx
 	movl %edx,8(%esp)
 	movl %eax,%edx
 	andl %ecx,%edx
 	movl $0,%ecx
 	cmpl %ecx,%edx
-	jne join_l29
-join_l30:
+	jne Ljoin_l29
+Ljoin_l30:
 	leal z,%ecx
-	jmp join_l28
-join_l29:
+	jmp Ljoin_l28
+Ljoin_l29:
 	leal nz,%ecx
-	jmp join_l28
-join_l28:
+	jmp Ljoin_l28
+Ljoin_l28:
 	movl $-16,%edx
 	movl %eax,12(%esp)
 	leal 16(%esp), %eax
@@ -106,7 +106,7 @@ join_l28:
 	movl 12(%esp),%eax
 	movl %eax,(%ecx)
 	call printf
-join_l27:
+Ljoin_l27:
 	movl $0,%eax
 	leal 16(%esp), %ecx
 	addl %eax,%ecx
@@ -115,17 +115,17 @@ join_l27:
 	leal 16(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l36:
+Lstackdata_l36:
 .long 0
 .section .pcmap
-.long join_l27
-.long frame_l37
+.long Ljoin_l27
+.long Lframe_l37
 .section .pcmap_data
-frame_l37:
+Lframe_l37:
 .long 0xfffffff0
 .long 0x80000004
 .long 0xfffffff8
-.long stackdata_l36
+.long Lstackdata_l36
 .long 0x80000008
 .long 0x80000002
 .long 0x80000000
