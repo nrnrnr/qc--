@@ -59,7 +59,6 @@ Lproc_body_start_l5:
 	movl $0,%edi
 	btl $0,%edi
 	adcl %esi,%ebx
-	movl $0,%ebx
 	lahf
 	shrl $8, %eax
 	shll $31, %eax
@@ -147,7 +146,6 @@ Lproc_body_start_l17:
 	movl $0,%edi
 	btl $0,%edi
 	sbbl %esi,%ebx
-	movl $0,%ebx
 	lahf
 	shrl $8, %eax
 	shll $31, %eax

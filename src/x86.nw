@@ -51,9 +51,6 @@ let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let ( =$  ) = Register.eq
 let ( =/  ) = RU.Eq.loc
 let ( =// ) = RU.Eq.exp
-
-let (<:>) = PX.(<:>)
-let rtl r = PX.Rtl r
 @ 
 At initialization, we register the x86 machine invariant as a property
 for the optimization backplane.
@@ -91,11 +88,9 @@ are standard.
 The rounding mode is part of the floating-point control register. 
 <<x86.ml>>=
 let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
-let rounding_model = R.slice 2 ~lsb:10 Rg.fpuctl
-let rounding_mode  = R.fetch rounding_model 2
-let fpuctl_reg = match Dn.loc Rg.fpuctl with
-  | RP.Reg r -> r | _ -> impossf "unexpected rep of FPU control register"
-let rounding_mode_reg = Register.Slice (2, 10, fpuctl_reg)
+let rounding_mode_reg = Register.Slice (2, 10, Rg.fpuctl)
+let rounding_model    = R.slice 2 ~lsb:10 (R.reg Rg.fpuctl)
+let rounding_mode     = R.fetch rounding_model 2
 
 module Post = struct
   <<x86 postexpander>>
@@ -166,11 +161,18 @@ end
 @ 
 \subsubsection{Basic locations, flags, and helper functions}
 
+The rest of the compiler deals in locations, expressions, and RTLs.
+But the postexpander deals primarily with temporaries and blocks.
+Here are some functions to help smooth over the differences.
 Here are some utility functions for computing locations, values, and widths.
 <<x86 postexpander>>= 
-let tempwidth = Register.width
-let temploc t = Rtl.reg t
-let tempval t = R.fetch (temploc t) (tempwidth t)
+let (<:>) = PX.(<:>)
+let rtl r = PX.Rtl r
+
+let tempwidth     = Register.width
+let temploc t     = Rtl.reg t
+let tempval t     = R.fetch (temploc t) (tempwidth t)
+let tempstore t e = PX.Rtl (R.store (temploc t) e (tempwidth t))
 let mem addr  = R.mem R.none mspace (R.C 4) addr  (* single word in memory *)
 
 let upint32 n = RO.unsigned 32 n
@@ -179,8 +181,7 @@ let upint8  n = RO.unsigned 8  n
 And another for doing shifts.  Parameter [[op]] should be, e.g., 
 [[RO.shl]].
 <<x86 postexpander>>= 
-let shift dst op n =
-  rtl (R.store (temploc dst) (op 32 (tempval dst) (RO.unsigned 32 n)) 32) 
+let shift dst op n = tempstore dst (op 32 (tempval dst) (RO.unsigned 32 n))
 @ 
 Here are some important locations and values.
 <<x86 postexpander>>=
@@ -235,7 +236,7 @@ width of everything is~32.
 <<x86 postexpander>>=
 let load ~dst ~addr assn =
   assert (tempwidth dst = 32);
-  rtl (R.store (temploc dst) (R.fetch (R.mem assn mspace (R.C 4) addr) 32) 32)
+  tempstore dst (R.fetch (R.mem assn mspace (R.C 4) addr) 32)
 let store ~addr ~src assn =
   assert (tempwidth src = 32);
   rtl (R.store (R.mem assn mspace (R.C 4) addr) (tempval src) 32)
@@ -245,13 +246,11 @@ It's a bit bogus to use EAX to do the [[lostore]], but we have no easy
 way of asking for a temporary that supports low-store instructions.
 <<x86 postexpander>>=
 let sxload ~dst ~addr n assn =
-  if tempwidth dst <> 32 then Impossible.unimp "widening of temporaries";
-  rtl (R.store (temploc dst)
-             (RO.sx n 32 (R.fetch (R.mem assn mspace (mcount n) addr) n)) 32)
+  assert (tempwidth dst = 32);
+  tempstore dst (RO.sx n 32 (R.fetch (R.mem assn mspace (mcount n) addr) n)) 
 let zxload ~dst ~addr n assn =
   assert (tempwidth dst = 32);
-  rtl (R.store (temploc dst)
-             (RO.zx n 32 (R.fetch (R.mem assn mspace (mcount n) addr) n)) 32)
+  tempstore dst (RO.zx n 32 (R.fetch (R.mem assn mspace (mcount n) addr) n))
 let lostore ~addr ~src n assn =
   assert (tempwidth src = 32);
   rtl (R.store eax (tempval src) 32) <:>
@@ -260,7 +259,7 @@ let lostore ~addr ~src n assn =
 Register-register moves involve only integer registers, so life is
 easy and good.
 <<x86 postexpander>>=
-let move_rtl dst src = rtl (R.store (temploc dst) (tempval src) (tempwidth src))
+let move_rtl dst src = tempstore dst (tempval src)
 let move ~dst ~src   = if Register.eq dst src then PX.Nop else move_rtl dst src
 @ 
 Because there's only one size of temporary in this back end, we don't
@@ -271,8 +270,8 @@ let aggregate ~dst      ~src = impossf "aggregate on x86"
 @ 
 Load immediate is also a simple move.
 <<x86 postexpander>>=
-let li  ~dst const = rtl (R.store (temploc dst) (Up.const const) (tempwidth dst))
-let lix ~dst e     = rtl (R.store (temploc dst) e                (tempwidth dst))
+let li  ~dst const = tempstore dst (Up.const const)
+let lix ~dst e     = tempstore dst e
 @ 
 \subsubsection{Operator contexts}
 Here are contexts for all the operators.
@@ -351,18 +350,15 @@ Instead, division is part of the general [[binop]], with operands in
 [[x]]~and~[[y]] and result in [[dst]].
 <<cases in [[binop]] to handle integer division>>=
 | "mod" ->
-    let modexp = Rewrite.(mod) 32 (tempval x) (tempval y) in
-    PX.Expand.block (rtl (R.store (temploc dst) modexp 32))
+    PX.Expand.block (tempstore dst (Rewrite.(mod) 32 (tempval x) (tempval y)) )
 | ("div" | "divu" | "quot" | "modu" | "rem") as opname ->
     let unsigned = opname =$= "divu" || opname =$= "modu" in
     let w = 32 in
     let sethi hreg lreg = (* set hreg to make divide come out right *)
-      let hloc = temploc hreg in
       if unsigned then
-        rtl (R.store hloc (RO.unsigned w 0) w)
+        tempstore hreg (RO.unsigned w 0)
       else
-        rtl (R.store hloc (tempval lreg) w) <:>
-        rtl (R.store hloc (RO.shra w (R.fetch hloc w) (RO.unsigned w (w-1))) w) in
+        tempstore hreg (tempval lreg) <:> shift hreg RO.shra (w-1) in
     let regpair = Rewrite.regpair ~hi:(tempval Rg.edx) ~lo:(tempval Rg.eax) in
     let q, r    = if unsigned then "divu", "modu" else "quot", "rem" in
     let div     = R.par [R.store eax (R.app (R.opr q [w]) [regpair; tempval y]) w;
@@ -409,7 +405,7 @@ be synthesized using a rewrite rule.
 let inplace op op32 x = match op32 with
 | "neg"    -> rtl (R.par [R.store (temploc x) (R.app (Up.opr op) [tempval x]) 32;
                           negflags (tempval x) 32])
-| "com"    -> rtl (R.store (temploc x) (R.app (Up.opr op) [tempval x]) (tempwidth x))
+| "com"    -> tempstore x (R.app (Up.opr op) [tempval x])
 | op       -> impossf "non-unary operator %%%s in x86 unop" op
 
 let unop ~dst op x = match at32 op with
@@ -454,13 +450,11 @@ plus the instructions needed to get the value into the register.
 COULD THIS FUNCTION BE A CANDIDATE FOR A GENERAL POSTEXPANDER UTILITY?
 <<x86 postexpander>>=
 let weird_tmp tmp z = match z with
-| PX.WTemp (Register.Reg t) -> t, PX.Nop
-| PX.WTemp (Register.Slice (w, 0, t)) -> t, PX.Nop
+| PX.WTemp (Register.Reg t)             -> t, PX.Nop
+| PX.WTemp (Register.Slice (w, 0, t))   -> t, PX.Nop
 | PX.WTemp (Register.Slice (w, lsb, t)) -> 
-    tmp,
-    move tmp t <:>
-    rtl (R.store (temploc tmp) (RO.shrl 32 (tempval tmp) (RO.unsigned 32 lsb)) 32)
-| PX.WBits b -> tmp, rtl (R.store (temploc tmp) (R.bits (Bits.Ops.zx 32 b) 32) 32)
+    tmp, move tmp t <:> tempstore tmp (RO.shrl 32 (tempval tmp) (RO.unsigned 32 lsb))
+| PX.WBits b -> tmp, tempstore tmp (R.bits (Bits.Ops.zx 32 b) 32)
 @ 
 I don't want to model the details of the flags, so I provide a
 function to insert a new carry bit.
@@ -501,10 +495,9 @@ let wrdrop  ~dst:(fill, dt) op x y z =
     match at32 op with "carry" -> true | "borrow" -> false | _ -> impossf "wrdrop" in
   let t = talloc 't' 32 in
   wrdop ~dst:t ((if is_add then "addc" else "subb"), [32]) x y z <:>
-  rtl (R.store (temploc dt) (R.bits (Bits.zero 32) 32) 32) <:>
   lahf <:> 
-  rtl (R.store eax (RO.shrl 32 (RU.fetch eax) (R.bits (Bits.U.of_int 8 32) 32)) 32) <:>
-  rtl (R.store (temploc dt) (R.fetch eax 32) 32) <:>
+  shift Rg.eax RO.shrl 8 <:>
+  tempstore dt (R.fetch eax 32) <:>
   match fill with
   | PX.HighAny -> PX.Nop
   | PX.HighZ   -> shift dt RO.shl 31 <:> shift dt RO.shrl 31  (* zxlo *)
@@ -534,9 +527,9 @@ as requested.
 <<x86 postexpander>>=
 let hwget ~dst:(fill,dt) ~src =
   if Register.eqx src rounding_mode_reg then
-    let slot      = PX.Alloc.slot 16 in
-    rtl (slot.A.store (R.fetch Rg.fpuctl 16) 16) <:>                   (* fnstcw *)
-    rtl (R.store (temploc dt) (RO.zx 16 32 (slot.A.fetch 16)) 32) <:>  (* movzwl *)
+    let slot = PX.Alloc.slot 16 in
+    rtl (slot.A.store (tempval Rg.fpuctl) 16)    <:>  (* fnstcw *)
+    tempstore dt (RO.zx 16 32 (slot.A.fetch 16)) <:>  (* movzwl *)
     match fill with
     | PX.HighAny -> shift dt RO.shrl 10
     | PX.HighZ   -> shift dt RO.shl 20 <:> shift dt RO.shrl 30
@@ -553,14 +546,14 @@ let hwset ~dst ~src =
     let slot      = PX.Alloc.slot 16 in
     let t         = PX.Alloc.temp 't' 32 in
     let t2, ldsrc = weird_tmp (PX.Alloc.temp 't' 32) src in
-    rtl (slot.A.store (R.fetch Rg.fpuctl 16) 16) <:>                  (* fnstcw *)
-    rtl (R.store (temploc t) (RO.zx 16 32 (slot.A.fetch 16)) 32) <:>  (* movzwl *)
+    rtl (slot.A.store (tempval Rg.fpuctl) 16)      <:> (* fnstcw *)
+    tempstore t (RO.zx 16 32 (slot.A.fetch 16))    <:> (* movzwl *)
     with_lflags t and32 (tempval t) rmask_clear 32 <:>      (* mask out round bits *)
     ldsrc <:>
     shift t2 RO.shl 10 <:>
     with_lflags t or32 (tempval t) (tempval t2) 32 <:>
     rtl (slot.A.store (RO.lobits 32 16 (tempval t)) 16) <:>      
-    rtl (R.store Rg.fpuctl (slot.A.fetch 16) 16)                   (* fldcw *)
+    tempstore Rg.fpuctl (slot.A.fetch 16)                   (* fldcw *)
   else
     impossf "setting unexposed hardware register"
 @ 

@@ -20,7 +20,7 @@ val ax : Rtl.loc
 val cl : Rtl.loc
 
 val espace : Register.space
-val fpuctl : Rtl.loc
+val fpuctl : Register.t
 val fputag : Rtl.loc
 val fpustatus : Rtl.loc
 val fpcc   : Rtl.loc
@@ -45,9 +45,9 @@ let cl = R.slice  8 ~lsb:0 (R.reg ecx)
 @ 
 <<x86regs.ml>>=
 let espace = ('e', Rtl.Identity, Cell.of_size 16)
-let fpuc n = Rtl.reg (espace, n, Rtl.C 1)
+let fpuc n = (espace, n, Rtl.C 1)
 let fpuctl    = fpuc 0
-let fputag    = fpuc 2
+let fputag    = Rtl.reg (fpuc 2)
 let fpustatus = Rtl.reg (espace, 1, Rtl.C 1)
 let fpcc = Rtl.slice 3 ~lsb:8 fpustatus (* ignores bit 14 == C3 [probably OK] *)
 @ 
