@@ -1,0 +1,88 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+<<check2.ml>>=
+module Error = struct
+  type 'a error = Ok of 'a | Error
+  module Raise = struct
+let list xs =
+    let rec loop acc = function
+        | []            -> Ok (List.rev acc)
+        | (Ok x)::xs    -> loop (x::acc) xs
+        | Error::xs     -> Error 
+    in      
+        loop [] xs
+
+let pair = function
+    | (Ok x, Ok y)          -> Ok (x,y)
+    | _                     -> Error
+        
+let left = function
+    | (Ok x, y)             -> Ok (x,y)
+    | _                     -> Error
+
+let right = function
+    | (x, Ok y)             -> Ok (x,y)
+    | _                     -> Error
+  end
+end
+
+module type Env = sig
+  type env (* fat environment, which may be dirty *)
+  type clean_env
+    (* fat environment, static type system guarantees no errors anywhere *)
+
+  val lower : env -> clean_env Error.error
+    (* if an error occurred anywhere, returns Error.Error *)
+
+  val errorOccurred : env -> env
+    (* Obeys these laws:
+         lower (errorOccurred env) = Error.Error 
+         errorOccurred (errorOccurred env) = errorOccurred env 
+       and otherwise, errorOccurred env is indistinguishable from env.
+     *)
+end
+
+module type Ast = sig
+  type prog  (* a program *)
+  type proc  (* a procedure *)
+  val procs : prog -> proc list  (* all procedures in a program *)
+  val name  : proc -> string     (* name of a procedure *)
+end
+
+module Checker (E: Env) (A: Ast) = struct
+  module type Elab = sig  (* produces environments *)
+    val global : A.prog -> E.env  (* build global environment *)
+    val proc   : A.proc -> E.env -> E.env (* given global env, return local env *)
+  end
+
+  module type Check = sig (* performs ``non-environmental'' static-semantic checks *)
+    val global : A.prog -> E.env -> E.env
+      (* checks everything *except* procedures:
+           global p env = env,                    if p passes its checks
+                        = E.errorOccurred env,    otherwise
+         Precondition: env must be the result of calling Elab.global p;
+         otherwise it's an unchecked run-time error.
+       *)
+    val proc : A.proc -> E.env -> E.env
+      (* static-semantic checks for one procedure (e.g., conditions have type bool):
+           proc p env = env,                    if p passes its checks
+                      = E.errorOccurred env,    otherwise
+         Precondition: env must be p's local environment; otherwise it's an unchecked
+         run-time error.
+       *)
+  end
+
+  module FrontEnd (Elab : Elab) (Check : Check) = struct
+    let elab : A.prog -> (E.clean_env * (string * E.clean_env) list) Error.error =
+      let proc : E.env -> A.proc -> E.env (* elaborate, then check *) =
+        fun env p -> Check.proc p (Elab.proc p env)      in
+      let global : E.env -> A.prog -> E.env (* elaborate, then check *) =
+        fun env p -> Check.global p (Elab.global p)      in
+      fun p ->
+        let env = Elab.global p                   in
+        let proc p = Error.Raise.right (A.name p, E.lower (proc env p))   in
+          Error.Raise.pair (E.lower env, Error.Raise.list (List.map proc (A.procs p)))
+  end
+end
+
+
+  
