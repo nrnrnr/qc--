@@ -401,7 +401,6 @@ int lua_CMM_procedure(lua_State *L) {
 @ 
 <<[[lbl]] $\leftarrow$ [[CMM_label]] for the procedure>>=
   name = Atom_string(lua_tostring(L, -4));
-  proc = procedure_new();
 
   lua_pushvalue(L, -4);       /* make copy of procedure name */
   lbl  = get_label(L, name);
@@ -411,6 +410,13 @@ int lua_CMM_procedure(lua_State *L) {
                  "a label by that name already exists", name);
   }
 
+  /* see if someone else referenced this label as a procedure */
+  if (lbl->ty == CMM_PROCEDURE && lbl->lbl.proc != NULL)
+    proc = lbl->lbl.proc;
+  else /* otherwise allocate a new procedure struct */
+    proc = procedure_new();
+
+  /* initialize procedure struct */
   proc->raddr          = lbl->lbl.raddr;
   label_define(proc->raddr->label, 0);
   proc->num_locals     = (unsigned int) lua_tonumber(L, -3);
@@ -572,41 +578,34 @@ int lua_CMM_imports(lua_State *L) {
   exports = lua_gettop(L);
   lua_pushnil(L);
   while (lua_next(L, imports) != 0) {
-    CMM_label  *lbl, *imported_label;
-    const char *str;
+    CMM_label  *lbl;
+    const char *str = lua_tostring(L, -1);
 
     /* key is at -2, value is at -1 */
     lua_pushvalue(L, -1); /* duplicate value (label name) atop the stack */
 
-    str = lua_tostring(L, -1);
-    lbl = get_label(L, str);
-
-    /* RRO: should we allow this? */
-    if (CMM_label_defined(lbl)) {
-      lua_pop(L, 4);
-      cmm_err_wstr("cannot import label \"%s\"; "
-                   "label by that name already exists",
-                   str);
-    }
-
+    /* look for label in existing exports table */
     lua_gettable(L, exports);
-    
     if (!lua_isuserdata(L, -1) ||
         lua_tag(L, -1) != lua_CMM_label_tag ||
-        (imported_label = (CMM_label *) lua_touserdata(L, -1)) == NULL)
+        (lbl = (CMM_label *) lua_touserdata(L, -1)) == NULL)
     {
-      /* if it's not yet defined, we need to define it! */
-
+      /* if it's not yet defined in exports, we need to define it! */
+      lua_pop(L, 1); /* pop whatever the value was */
+      lbl = get_label(L, str);
+      
       /* pop whatever the value was */
-      lua_pop(L, 1);
       lua_pushstring(L, str); /* push string */
       lua_pushusertag(L, (void *) lbl, lua_CMM_label_tag);
       lua_settable(L, exports);
     } else {
-      lua_pop(L, 1); /* pop CMM_label */
+      /* otherwise, we grab the existing label and inform this unit about it */
 
-      /* copy label contents */
-      *lbl = *imported_label;
+      /* label string is at -2, CMM_label is at -1 */
+      lua_pushtable(L, unit->label_table);
+      lua_insert(L, -3); /* move table below string, label */
+      lua_settable(L, -3);
+      lua_pop(L, 1); /* pop the table */
     }
   }
 
@@ -899,9 +898,12 @@ int lua_CMM_emit_raddr(lua_State *L) {
   sym = Atom_string(lua_tostring(L, -1));
   lbl = get_label(L, sym);
 
-  /* make sure label is not a C function */
-  if (lbl->ty == CMM_CFUNCTION)
-    cmm_err_wstr("cannot emit the address of C function '%s'", sym);
+  /* if label is a C function, we emit a pointer to its CMM_label  */
+  if (lbl->ty == CMM_CFUNCTION) {
+    /* RRO: will this have the desired effect with function pointers? */
+    emitm((unsigned long) lbl, sizeof(void *));
+    return 0;
+  }
 
   found_raddr = CMM_label_raddr(lbl);
   assert(found_raddr != NULL);
@@ -968,6 +970,8 @@ int lua_CMM_push_symbol(lua_State *L) {
   sym = Atom_string(lua_tostring(L, -1));
 
   lbl = get_label(L, sym);
+
+  /* RRO: should error-check type mismatches here?? */
 
   /* emit instruction */
   push_symbol((unsigned) lbl);
