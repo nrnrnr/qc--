@@ -53,7 +53,11 @@ The [[files_nonwhite_equivalent]] function compares two files,
 ignoring whitespace entirely. 
 It returns [[true]] if and only 
 if the two files contain identical nonwhite characters.
-If a file cannot be opened, an exception is raised as by [[open_in]].
+If a file cannot be opened, this function returns [[nil]].
+
+\item [[Util.file_exists(filename)]]
+Return [[true]] if and only if [[filename]] exists.
+
 
 \item [[Util.tcopy(table)]]
 
@@ -98,6 +102,7 @@ module MakeLib (C: Lua.Lib.CORE) = struct
       ; "catch",           V.caml_func catch_lua
       ; "redirect_stdout", V.efunc (V.option V.string **->> V.unit) redirect_stdout
       ; "redirect_stderr", V.efunc (V.option V.string **->> V.unit) redirect_stderr
+      ; "file_exists",   V.efunc (V.string **->> V.bool)          file_exists
       ; "files_nonwhite_equivalent",   V.efunc (V.string **-> V.string **->> V.bool) files_nonwhite_equivalent
       ; "call",            V.efunc (V.value **-> V.list V.value **-> V.resultvs)
                            (function V.Function (_, f) -> f
@@ -202,6 +207,9 @@ let redir fh =
       
 let redirect_stdout = redir U.stdout
 let redirect_stderr = redir U.stderr
+@
+<<utility functions>>=
+let file_exists fname = try Unix.access fname [Unix.F_OK]; true with _ -> false
 @
 Compare files ignoring whitespace. All whitespace characters are
 converted into single space character using a simple one character

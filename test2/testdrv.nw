@@ -181,9 +181,22 @@ given file.
 <<testdrv.lua>>=
 Test.sdiff_options = ''  -- .s files used to get a 'diff -y'
 function Test.on_error[".s"](expected, output)
-  local cmd = format("diff %s %s %s", Test.sdiff_options, expected, output)
-  Test.log(cmd)
-  execute(cmd)
+  if Util.file_exists(expected) then
+    local cmd = format("diff %s %s %s", Test.sdiff_options, expected, output)
+    Test.log(cmd)
+    execute(cmd)
+  else
+    local linecount = 10
+    local cmd = format([[if [ `wc -c < %s` -le %d ]; then
+        echo "Unexpected nonempty output follows:" ; cat %s
+      else
+        echo "Unexpected nonempty output; first %d lines follow:"
+        head -%d %s
+        echo "..."
+      fi]], output, linecount, output, linecount, linecount, output)
+    Test.log(format("show_nonempty %d %s", linecount, output))
+    execute(cmd)
+  end
 end
 Test.on_error[".1"]  = Test.on_error[".s"]
 Test.on_error[".2"]  = Test.on_error[".s"]
@@ -205,12 +218,10 @@ function Test.error(file, expected, actual, ext)
   if Test.verbose then
     if Test.on_error[basename] then
       Test.on_error[basename](expected, actual)
+    elseif (Test.on_error[ext]) then
+      Test.on_error[ext](expected, actual)
     else
-      if (Test.on_error[ext]) then
-        Test.on_error[ext](expected, actual)
-      else
-        print(format("FAILED %s\n", expected))
-      end
+      print(format("FAILED %s\n", expected))
     end
   end
 end
@@ -328,7 +339,9 @@ function Test.check_update_file(inputs, file, i)
   elseif ext == ".1"  then exp = inputs.stdout
   elseif ext == ".2"  then exp = inputs.stderr end
 
-  local equiv = Util.files_nonwhite_equivalent(exp, file)
+  local nonempty = Util.file_exists(exp)
+  local comparee = nonempty and exp or "/dev/null" 
+  local equiv = Util.files_nonwhite_equivalent(comparee, file)
   if not equiv then
     if Test.update then
       write(format("[new %s] ", exp))
@@ -336,7 +349,11 @@ function Test.check_update_file(inputs, file, i)
         print(format(" !! error moving file %s to %s !!", file,  exp))
       end
     else
-      Test.log("%s does not match output", exp)
+      if nonempty then
+        Test.log("%s output does not match %s", ext, exp)
+      else
+        Test.log("%s output is unexpectedly not empty", ext)
+      end
       Test.error(inputs.source, exp, file, ext)
       inputs.diffs = inputs.diffs .. " " .. ext
     end
@@ -347,7 +364,11 @@ function Test.check_update_file(inputs, file, i)
         write(format("(%s unchanged) ", exp))
       end
     else
-      Test.log("%s matches output", exp)
+      if nonempty then
+        Test.log("%s output matches %s output (as expected)", ext, exp)
+      else
+        Test.log("%s output is empty (as expected)", ext)
+      end
     end
   end
   return 0
@@ -699,20 +720,23 @@ function Test.complete_test_table(files)
                Caml.Filename.chop_extension(Caml.Filename.basename(files.source[1]))
   local exp  = Caml.Filename.concat(Test.results, name)
 
-  files.name = files.name or name
+  files.name   = files.name   or name
 
   files.stdin = files.stdin or "/dev/null"
+  files.outdir = files.outdir or "output"
+
   Test.compute_filename(files, "stdin",  Test.source)
-  Test.compute_filename(files, "stdout", Test.results, name, ".1")
-  Test.compute_filename(files, "stderr", Test.results, name, ".2")
+  Test.compute_filename(files, "stdout", files.outdir, name, ".1")
+  Test.compute_filename(files, "stderr", files.outdir, name, ".2")
 
   if type(files.asm)    == 'string' then files.asm    = { files.asm } end
   if type(files.asmout) == 'string' then files.asmout = { files.asmout } end
   if type(files.asmerr) == 'string' then files.asmerr = { files.asmerr } end
 
+
   Test.compute_filenames(files, "asm",    Test.results, files.source, ".s")
-  Test.compute_filenames(files, "asmout", Test.results, files.source, ".s1")
-  Test.compute_filenames(files, "asmerr", Test.results, files.source, ".s2")
+  Test.compute_filenames(files, "asmout", files.outdir, files.source, ".s1")
+  Test.compute_filenames(files, "asmerr", files.outdir, files.source, ".s2")
 
   files.runnable = files.runnable or "true"
   if files.runnable ~= "true" then files.runnable = nil end

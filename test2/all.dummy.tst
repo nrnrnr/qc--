@@ -11,17 +11,17 @@ Test.files = { "add.c--"
              , "eqasolve-000.c--"
              , "exp-000.c--"
              , "exp-001.c--"
-             , "exp-002.c--"
-             , "exp-003.c--"
-             , "fadd.c--"
-             , "float-000.c--"
-             , "float-001.c--"
+             , { source = "exp-002.c--", asmerr = 'dummy/exp-002.s2' }
+             , { source = "exp-003.c--", asmerr = 'dummy/exp-003.s2' }
+             , { source = "fadd.c--", asmerr = 'dummy/fadd.s2' }
+             , { source = "float-000.c--", asmerr = 'dummy/float-000.s2' }
+             , { source = "float-001.c--", asmerr = 'dummy/float-001.s2' }
              , "hello.c--"
 	     , "hex.c--"
              , "non-local-cut.c--"
              , "not.c--"
              , "ralloc-000.c--"
-             , "rnd2.c--"
+             , { source = "rnd2.c--", asmerr = 'dummy/rnd2.s2' }
              , "sub.c--"
              , "test-000.c--"
              , "test-001.c--"
@@ -77,7 +77,11 @@ Test.files = { "add.c--"
 
 local i = 1
 while Test.files[i] do
-  a = {source=Test.files[i], runnable="false"}
-  Test.files[i] = a
+  local file = Test.files[i]
+  if type(file) == 'string' then
+    file = { source = file }
+  end
+  file.runnable = 'false'
+  Test.files[i] = file
   i = i + 1
 end
