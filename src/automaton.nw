@@ -71,12 +71,20 @@ run, the automaton returns abstract locations [[loc]].  The type
 abbreviations for alignment, width, and size are only for
 documentation purposes.
 
+\begin{quote}\it
+    The class types behind [[spec]], [[t]], and [[loc]] must be exposed.
+    Otherwise a specification for an automaton can only specified here
+    and target specific knowledge would spread out of the
+    [[Targets]] module to here. -- CL 
+\end{quote}
+
 <<automaton.mli>>=
 type spec  (* specification of an automaton (immutable) *)
 type t     (* an automaton (mutable) *)
 type loc   (* a location provided by an automaton *)
 
-val dummy: spec    (* spec to create a dummy automaton *)
+val dummy:  spec    (* calling convention dummy automaton *)
+val global: spec    (* global variable    dummy automaton *)
 @
 
 Supply an address of the overflow area, and get back an automaton in
@@ -175,7 +183,9 @@ module Dummy = struct
     <<Dummy struct>>
 end
 
-let dummy = new Dummy.dummy 
+let dummy  = new Dummy.dummy 
+let global = new Dummy.global
+
 let of_loc loc            = Dummy.of_rtl_loc loc
 @
 
@@ -184,11 +194,16 @@ let of_loc loc            = Dummy.of_rtl_loc loc
 % ------------------------------------------------------------------ 
 
 The [[Dummy]] module makes some assumptions about the current
-architecture and implements an automaton that provides
-word size aligned locations in memory. 
+architecture and implements an automaton that provides word size aligned
+locations in memory. 
 
 \begin{quote}\it
     This needs a review. I'm not sure about alignments and widths. --CL
+
+    As noted above, the interface needs to be changed such that the
+    automaton for a target can be defined outside this module. For the
+    time beeing, I will duplicate some target specific knowledge here.
+    -- CL
 \end{quote}
 
 <<Dummy struct>>=
@@ -215,6 +230,22 @@ end
 
 let memloc addr = 
     new dummyloc (Rtl.cell Rtl.none memspace byteorder memsize addr)
+
+    
+let const n width = Rtl.bits (Bits.of_int n width) width
+let fpcond n      = Rtl.cell Rtl.none 'd' Rtl.Identity  2 (const n 2)
+    
+let hwloc = function
+    | "IEEE 754 rounding modes"         -> new dummyloc (fpcond 0)
+    | "IEEE 754 comparison results"     -> new dummyloc (fpcond 1)
+    | _                                 -> assert false
+    
+let named_registers =
+  [ "IEEE 754 rounding modes",     fpcond 0
+  ; "IEEE 754 comparison results", fpcond 1
+  ] 
+    
+
 let of_rtl_loc loc = 
     new dummyloc loc
 
@@ -230,11 +261,34 @@ object (self)
     method ty  width  hint = 
         let _     = assert (_frozen = false)           in
         (* assertions above *)
-        let n     = width / memsize                    in (* how many cells*)
+        let n     = max (width / memsize) 1            in (* how many cells*)
         let addr  = Area.location _area                in
         let align = wordsize / memsize                 in
         let ()    = _area <- Area.alloc _area n        in (* allocate ..*)
         let ()    = _area <- Area.align _area align in (* and align  *)
             memloc addr
+end
+
+class global (base:Rtl.exp): automaton =
+object (self)
+    val mutable _area   = Area.align (Area.mk base) (wordsize/memsize)
+    val mutable _frozen = false
+    
+    method freeze ()       =
+        let _ = _frozen <- true in
+            Area.freeze _area 
+    
+    method ty width hint = 
+        let _     = assert (_frozen = false)           in
+        (* assertions above *)
+        match hint with 
+        | None ->
+            let n     = max (width / memsize) 1            in 
+            let addr  = Area.location _area                in
+            let align = wordsize / memsize                 in
+            let ()    = _area <- Area.alloc _area n        in 
+            let ()    = _area <- Area.align _area align in 
+                memloc addr
+        | Some x -> hwloc x          
 end
 @

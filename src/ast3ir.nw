@@ -416,7 +416,8 @@ entered under the name of the register to a map.
 The [[globals]] function pushes all global registers through a target
 specific automaton to obtain locations for each of them.  A location
 is added to a register's denoation in the environment.  The updated
-environment plus the area of memory that hold global registers.
+environment plus the area of memory that hold global registersi are
+returned as a pair.
 
 When different compilation units are linked together they all must
 declare exactly the same global registers. We compute a cryptographic
@@ -1284,7 +1285,7 @@ let translate env target ~optimizer prog =
     let base_sym   = F.symbol env "global base" in
     let base     = Rtl.link base_sym target.Target.pointersize in 
     let env
-       ,area
+       ,area    
        ,digest   = globals env target base (F.globals env) in
     let digest   = String.escaped digest in
     let asm      = F.asm env in
@@ -1292,6 +1293,7 @@ let translate env target ~optimizer prog =
                    ; asm#section (target.Target.data_section)
                    ; asm#comment "memory for global registers"
                    ; asm#align area.Area.align
+                   ; asm#label base_sym
                    ; asm#addloc area.Area.size
                    )
     in   
