@@ -10,12 +10,12 @@ Cmm.global_area:
 .text
 _main:
 	leal -208(%esp), %esp
-	movl %eax,12(%esp)
+	movl %eax,8(%esp)
 	movl $4,%ecx
 	leal 208(%esp), %eax
 	addl %ecx,%eax
 	movl (%eax),%eax
-	movl %eax,8(%esp)
+	movl %eax,12(%esp)
 	nop
 	leal 208(%esp), %eax
 	movl (%eax),%eax
@@ -222,7 +222,7 @@ join_l52:
 	movl $1,%ebx
 	jmp _i_33
 _i_33:
-	movl 12(%esp),%eax
+	movl 8(%esp),%eax
 	cmpl %eax,%ebx
 	jl join_l42
 join_l97:
@@ -234,7 +234,7 @@ _i_30:
 	movl $2,%ecx
 	movl %ebx,%eax
 	shll %cl, %eax
-	movl 16(%esp),%ecx
+	movl 20(%esp),%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
 	movl $1,%ecx
