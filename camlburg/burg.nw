@@ -45,6 +45,7 @@ sure this really works.
 
 
 <<burg.ml>>=
+<<sorting rules by cost>>
 module CodeGen = struct
     <<CodeGen>>
 end
@@ -62,14 +63,21 @@ The cost associated with a rule is a [[Code.exp]] value. In pratice it
 is limited to be a non-negative integer or a raw code fragment. Our
 total order assigns the smallest cost to raw code fragments.
 
-<<burg logic>>=
-let costcmp x y = match x, y with
-    | C.Int x , C.Int y  -> compare x y
-    | C.Raw x , C.Raw y  -> compare x y
-    | C.Int _ , C.Raw _  -> 1
-    | C.Raw _ , C.Int _  -> -1
+<<sorting rules by cost>>=
+let cost_order x y = match x, y with
+    | C.Int x , C.Int y  -> compare x y     
+    | C.Raw x , C.Raw y  -> compare x y     
+    | C.Int _ , C.Raw _  -> 1               (* raw is smaller *)
+    | C.Raw _ , C.Int _  -> -1              (* raw is smaller *)
     | _                  -> assert false    (* can't happen *)
 @    
+
+We continue the cost order to rules, i.e.~we define an order that sorts
+rules by cost:
+
+<<sorting rules by cost>>=
+let rule_order x y = cost_order x.S.cost y.S.cost
+@
 
 Normalized rules can be divded into two disjoint classes, depending on
 their right hand side:
@@ -93,8 +101,12 @@ Each class of rules is treated differently for code generation. With
 build simultaneously two data structures, one for each class:
 
 \begin{itemize}
-\item A map from the right hand nonterminal of a chain rule to the rules
-      that have this non-terminal on their right hand side.
+\item A map from the right hand nonterminal of a chain rule to the
+      chain rules that have this non-terminal on their right hand side.
+      For example, the chain rules $x:y$, $x:z$, $a:b$, $a:y$ lead to
+      the map $y \mapsto [a:y, x:y]$, $b \mapsto [a:b]$, $z \mapsto
+      [x:z]$. 
+
 \item A map from constructors to the rules using them.
 \end{itemize}
 
@@ -248,7 +260,16 @@ let chain_fn src rule =
                                                     a) 
                                  ])
                        (C.id x))
-                       
+@                       
+
+
+When a nonterminal is updated, the nonterminals connected to this one by
+chain rules must be also updated. We want to update these chained
+nonterminals in an order, such that the nonterminal with the small
+additional costs are updated first. This requires to sort the cain rules
+by their cost. 
+
+<<CodeGen>>=
 (*
     fun nt x ->
         if nt.cost >= x.number.cost then
@@ -256,10 +277,9 @@ let chain_fn src rule =
         else
             (* composed chain_fn *) { x with number = nt }
 *)
-
 let update_fn src chainrules =
-    let arg  = C.recordwith x [src, C.id nt] 
-    and chns = List.map (chain_fn src) chainrules
+    let arg     = C.recordwith x [src, C.id nt]             
+    and chns    = List.map (chain_fn src) (List.sort rule_order chainrules)
     in    
         C.fun' [C.var' nt; C.var' x]
                (C.if' (geq (C.longid [nt;camlburg;cost]) 
