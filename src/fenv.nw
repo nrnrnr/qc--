@@ -268,12 +268,14 @@ and  reghint        = RReg  of string   (* hardware reg *)
                     | RNone             (* none of above *)
 @
 
-A register has an [[index]] that identifies it \emph{within its scope}.
-Consequently, global registers are numbered consecutively, and local
-registers are numbered consecutively.
+{\PAL} A register has an [[index]] that identifies it \emph{within its
+scope}.  Consequently, global registers are numbered consecutively, and
+local registers are numbered consecutively. To avoid confusion with
+hardware registers in the compiler backend, we name {\PAL} registers
+variables.
 
 <<types>>=
-and  register =     { index:        int
+and  variable =     { index:        int
                     ; rhint:        reghint
                     ; loc:          Automaton.loc option
                     }
@@ -292,7 +294,7 @@ and  kind           = Proc          of Symbol.t * scope partial * int
 and  denotation     = Constant      of Bits.bits
                     | Label         of kind
                     | Import        of string option * Symbol.t
-                    | Register      of register
+                    | Variable      of variable
                     | Continuation  of string * Symbol.t   (* MEANING??? *)
                           (* String is internal name for link-time
                              constant to be added to sp (vfp?) to get
@@ -997,7 +999,7 @@ let bindv name (rgn,x as ventry) env =
         let scope = { scope with venv = Strutil.Map.add name ventry scope.venv} in
         let env   = { env with scopes = scope :: List.tl env.scopes } in
             ( match Arg.asgood x with
-            | Some(Register _,_) when List.length env.scopes = 1 ->
+            | Some(Variable _,_) when List.length env.scopes = 1 ->
                   (* this is a global register declaration *)
                   { env with globals = name :: env.globals }
             | _ -> env
@@ -1309,7 +1311,7 @@ let rec clean_venv map  =
                 | Dirty.Label(Dirty.Data s)   -> Clean.Label(Clean.Data s)
                 | Dirty.Label(Dirty.Stack x)  -> Clean.Label(Clean.Stack x)
                 | Dirty.Import(s,n)           -> Clean.Import(s,n)
-                | Dirty.Register(n)           -> Clean.Register(clean_reg n)
+                | Dirty.Variable(n)           -> Clean.Variable(clean_reg n)
                 | Dirty.Continuation(n,s)     -> Clean.Continuation(n,s)
             in
                  Strutil.Map.add key (pos,(denot',ty)) map

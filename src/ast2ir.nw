@@ -198,8 +198,8 @@ let lvalue_name_in_env env x =
   let (_,(denot,t)) = F.findv x env in
   let w = tywidth t                 in
   match denot with
-  | F.Register({F.loc=Some l}) -> l, w
-  | F.Register({F.index=i;F.loc=None}) ->
+  | F.Variable({F.loc=Some l}) -> l, w
+  | F.Variable({F.index=i;F.loc=None}) ->
       if F.is_localv x env then
         AT.of_loc (Rtl.var x i w), w
       else 
@@ -210,7 +210,7 @@ let lvalue_name_in_env env x =
       | F.Label    _ -> "label"
       | F.Import   _ -> "imported symbol"
       | F.Continuation _ -> "continuation"
-      | F.Register _ -> "register" in
+      | F.Variable _ -> "register" in
       impossible ("asked for lvalue of " ^ what ^ " " ^ x)
 @ 
 Any name can be meaningful in an rvalue context.
@@ -229,7 +229,7 @@ let rvalue_name x =
   | F.Continuation(st,_)        -> cont_rvalue x st w
   | F.Label(F.Stack(None))      -> impossible ("no location for "^x)
   | F.Label(F.Stack(Some addr)) -> addr  (* a fetch would be wrong *)
-  | F.Register _                -> atfetch (lvalue_name x) in
+  | F.Variable _                -> atfetch (lvalue_name x) in
   rval, t
 @ 
 Help for fetching and storing automata locations.
@@ -1153,7 +1153,7 @@ let globals (base:Rtl.exp) names =
     let rec assign env n =
         try 
             ( match F.findv n env with
-            | rgn, (F.Register(reg), ty) ->
+            | rgn, (F.Variable(reg), ty) ->
                 let h  = match reg.F.rhint with
                          | F.RReg x -> x     (* h/w register *)
                          | _        -> "" in
@@ -1162,7 +1162,7 @@ let globals (base:Rtl.exp) names =
                 let sign  = Printf.sprintf "[%d <%s>]" w h  in
                 let ()    = Buffer.add_string decls sign    in
                 let loc   = AT.allocate t w h in
-                let entry = (rgn, (F.Register({reg with F.loc = Some loc}),ty)) 
+                let entry = (rgn, (F.Variable({reg with F.loc = Some loc}),ty)) 
                 in 
                     F.rebindv' n entry env
             | _ -> impossible ("global register " ^ n ^ " not in environment")
