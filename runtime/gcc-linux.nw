@@ -1,11 +1,16 @@
 % -*- mode: Noweb; noweb-code-mode: c-mode -*-
 % $Id$
 
+@
+
 % ---------------------------------------------------------------------------
 \section{Walking GCC-Linux Stack Frames}
 % ---------------------------------------------------------------------------
-This version of the gcc stack walker assumes that a frame pointer is
-being used (no --fomit-frame-pointer). Every function stores the frame
+This version of the gcc stack walker is based on the System~V AVI for
+the i386 platform.
+We
+ assume that a frame pointer is
+being used (no [[--fomit-frame-pointer]]). Every function stores the frame
 pointer in [[EBP]], and this register is saved at the top of each
 stack frame on entry.
 <<gcc-linux.c>>=
@@ -30,8 +35,16 @@ void Cmm_init_c_frame(Cmm_Activation *a, char *young_in_overflow) {
 extern struct cmm_activation_methods *Cmm_cmm_frame_methods;
 <<gcc-linux.c>>=
 @
-I know how to restore EBP, but not the other regs.
-The [[qc--]] client needs to kill all regs before calling a C function.
+The ABI says that registers must be saved, but it does not say where.
+For this reason, we can restore only EBP---not the other regs.
+If it needs access to variables held in registers, a {\PAL} program
+will need to kill all registers, e.g., by using the [["paranoid C"]]
+convention to call into the run-time system.
+
+We identify the oldest activation by seeing a ``caller's EBP'' equal
+to zero.
+(This as claimed by the ``Process Initialization'' section of the
+``Operating-System Interface'' chapter of the ABI.)
 <<gcc-linux.c>>=
 #define NOISY 0
 
@@ -49,24 +62,26 @@ int Cmm_c_change_activation(Cmm_Activation *a) {
     <<possibly shout about finishing tries>>
     return 0;
   }
-  for(i = 0; i < NUM_REGS; i++)
+  for(i = 0; i < NUM_REGS; i++)  /* registers cannot be restored */
     a->regs[i] = NULL;
   a->regs[EBP] = (Cmm_Word*)a->vfp;  /* point to location of caller's EBP */
+
   ra = ((Cmm_Codeptr *)a->vfp)[1];
-  a->pc = ra;  /* for debugging only */
   entry = Cmm_lookup_entry(ra);
-  if (entry) {
+  if (entry) { /* next frame is a C-- frame */
     if (Cmm_is_thread_start_frame(entry, ra))
       return 0;  /* such a frame must not be seen */
     a->rtdata = entry;
-    /* deallocation point = vfp + 8
+    /* deallocation point = vfp + 8         (because caller deallocates args)
        deallocation point = callervfp + entry->outalloc
 
        so  callervfp = vfp + 8 - entry-outalloc  */
     a->vfp += 8 - Cmm_as_offset(entry->outalloc);
+    a->pc = ra;  /* for debugging only */
     a->methods = Cmm_cmm_frame_methods;
   } else {
     a->vfp = (char *)callerebp;
+    a->pc  = ra;  /* for debugging only */
   }
   return 1;
 }

@@ -261,48 +261,50 @@ and the other to the data associated with the stopping point:
   asm#addr (Reloc.Simple.of_sum Rtl.codesym (asm#local stop_l) zero);
   asm#addr (Reloc.Simple.of_sum Rtl.datasym frame_label        zero);
 @
-The second area keeps track of the size of the frame, the size of the incoming overflow
-block that the procedure must deallocate, the location of the return address,
-a pointer to the stackdata table, the locations of registers, the local variables,
-the spans, and the continuations (CONTINUATIONS ARE NOT YET IMPLEMENTED).
-The layout looks like:
+The second area keeps track of the per-PC information.
+A~picture of
+the layout appears below;
+[[L]]~stands for a coded machine location,
+[[I]]~stands for an integer, 
+and
+[[P]]~stands for a pointer (address).
 \begin{verbatim}
 .section pcmap_data
 frame_data_lbl:
-+--------------------+
-| frame_size         |
-+--------------------+
-| overflow_size      |
-+--------------------+
-| return_address     |
-+--------------------+
-| stackdata_table    |
-+--------------------+
-| num registers * 2  |
-+--------------------+
-| num locals         |
-+--------------------+
-| num spans          |
-+--------------------+
-| cont block size    |
-+--------------------+
-| registers          |
-+--------------------+
-| locals             |
-+--------------------+  <--- cont offsets are from here
-| num continuations  |
-| cont 1 offset      |
-|     ...            |
-| cont n offset      |
-| --------------     |
-| cont 1 block       |
-|     ...            |
-| cont n block       |
-+--------------------+
-| spans              |
-+--------------------+
++--------------------------+
+| L : incoming dealloc pt  |
++--------------------------+
+| L : outgoing dealloc pt  |
++--------------------------+
+| L : return address       |
++--------------------------+
+| P : stackdata_table      |
++--------------------------+
+| I : num registers        |
++--------------------------+
+| I : num locals           |
++--------------------------+
+| I : num spans            |
++--------------------------+
+| I : cont block size      |
++--------------------------+
+| registers (I : index, L : location) * |
++--------------------------+
+| locals (L : location) *  |
++--------------------------+  <--- cont offsets are from here
+| num continuations        |
+| cont 1 offset            |
+|     ...                  |
+| cont n offset            |
+| --------------           |
+| cont 1 block             |
+|     ...                  |
+| cont n block             |
++--------------------------+
+| spans                    |
++--------------------------+
 \end{verbatim}
-
+@
 We emit each of these blocks in order, beginning with the \PAL\ internal spans.
 <<emit frame data>>=
 asm#section "pcmap_data";
@@ -345,7 +347,7 @@ We cover each section of the frame data in detail.
 In addition to emitting spans as assembly data, we provide functions
 to convert each type of data (frame size, register contents, locals, etc.)
 to spans.
-
+@
 % ------------------------------------------------------------------ 
 \subsubsection{Conversion to/from spans}
 % ------------------------------------------------------------------ 
@@ -365,18 +367,19 @@ stack offset.
 We distinguish between the three cases by using the two high bits as tags and using the
 rest of the word to indicate the value's location.
 \begin{enumerate}
-\item Dead - The value is dead at this point in the procedure.
+\item Dead --- The value is dead at this point in the procedure.
 The two high bits are 0b00. Since a dead value has no location, we just emit 0x0.
-\item Register - The value is stored in a register.
+\item Register --- The value is stored in a register.
 The two high bits are 0b01. Of the remaining $n$ bits, the low $n/2$
 bits hold an index indicating the register, and the high $n/2$ bits hold an offset into
 the register (in case the value is not stored in the low bits of the register).
-\item Offset - The value is stored on the stack, at a fixed offset from the virtual
+\item Offset --- The value is stored on the stack, at a fixed offset from the virtual
 frame pointer.
-The two high bits are 0b1s, where s is a sign bit.
-The remaining bits store the magnitude of the offset from the virtual frame pointer.
+The high bit is 0b1.
+The remaining bits store the offset from the virtual frame pointer (in
+the usual two's-complement representation).
 \end{enumerate}
-
+@
 First, we define a slew of helpers to emit the different types of values.
 <<define functions for emitting data>>=
 <<define [[simplify_exp]] to simplify rtl expressions>>

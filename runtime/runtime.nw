@@ -279,7 +279,7 @@ static int normal_change(Cmm_Activation *a) {
   vfp = a->vfp;
   update_saved_regs(a, a);
   <<possibly shout about caller's EBP>>
-  a->pc      = *(Cmm_Codeptr*)(a->vfp + Cmm_as_offset(calleedata->return_addressp));
+  a->pc      = *(Cmm_Codeptr*)locptr(a, calleedata->return_addressp);
   callerdata = Cmm_lookup_entry(a->pc);
   a->rtdata  = callerdata;
 
@@ -383,7 +383,8 @@ Cmm_Cont* Cmm_MakeUnwindCont(Cmm_Activation *a, Cmm_Word index, ...) {
 
   assert(a->rtdata);
   conts = continuations(a->rtdata);
-  <<fail if [[index]] is out of bounds for [[conts]]>>
+  if (index >= conts->num_entries)
+    die("C-- run-time error: index %d out of bounds in Cmm_MakeUnwindCont");
   block = (struct contblock *) ((Cmm_Word *) conts + conts->entries[index]);
   <<write variadic parameters into [[block->vars]]>>
 
@@ -441,14 +442,6 @@ switch(block->vars[i].ctype) {
   case UNSIGNEDLONGLONG: ASSIGN (unsigned long long, unsigned long long); break;
   case ADDRESS:          ASSIGN (void *,             void *);             break;
   default: assert(0);
-}
-@ 
-<<fail if [[index]] is out of bounds for [[conts]]>>=
-if (index >= conts->num_entries) {
-  fprintf(stderr,
-          "C-- run-time error: index %d is out of bounds in Cmm_MakeUnwindCont\n",
-          index);
-  abort();
 }
 @
 % ---------------------------------------------------------------------------
@@ -523,16 +516,16 @@ activation.
 void* Cmm_FindLocalVar(const Cmm_Activation *a, unsigned n) {
   pc_map_entry* entry = a->rtdata;
   assert(entry);
-  if (n >= entry->num_locals) {
-    fprintf(stderr, "C-- run-time error: local var index out of range\n");
-    assert(0);
-  }
+  if (n >= entry->num_locals)
+    die("local var index %d out of range", n);
   return locptr(a, locals(entry)[n]);
 }
 @
 If a location is in a register, a pointer into the saved
 register is returned. Otherwise, a pointer into the stack where the
 register is saved is returned.
+<<declarations of private functions>>=
+static Cmm_Word *locptr(const Cmm_Activation *a, location l);
 <<private functions>>=
 static Cmm_Word *locptr(const Cmm_Activation *a, location l) {
   int reg;
@@ -541,22 +534,16 @@ static Cmm_Word *locptr(const Cmm_Activation *a, location l) {
       reg = Cmm_as_register(l);
       assert(a);
       assert(a->regs);
-      if (a->regs[reg] == NULL) {
-        fprintf(stderr, "C-- run-time error: Tried to find a value in a\n"
-                        "register that could not be recovered. Most likely cause:\n"
-                        "calling a C function without using a calling\n"
-                        "convention that kills all the callee-save registers\n"
-                        "(e.g. \"paranoid C\").\n");
-        abort();
-      }
+      if (a->regs[reg] == NULL) 
+        die("Tried to find a value in an unrecoverable register.\n"
+            "Probable cause: calling C without using the \"paranoid C\" convention.");
       return a->regs[reg];
     case DEAD:
       return NULL;
     case OFFSET:
       return (Cmm_Word *)(a->vfp + Cmm_as_offset(l));
     default:
-      assert(0);
-      abort();
+      die("this can't happen --- badly coded location");
       return 0;
   }
 }
@@ -575,17 +562,14 @@ void* Cmm_FindStackLabel(const Cmm_Activation *a, unsigned n) {
   pc_map_entry* entry = a->rtdata;
   struct sd *sdt = entry->stackdata_table;
   assert(sdt);
-
-  if (n >= sdt->num_entries) {
-    fprintf(stderr, "C-- run-time error: Stack data index %d out of range [0..%d)\n", n, sdt->num_entries);
-    abort();
-  }
-
+  if (n >= sdt->num_entries)
+     die("Stack data index %d out of range [0..%d)\n", n, sdt->num_entries);
   return locptr(a, sdt->entries[n]);
 }
 @ 
-\subsection{{\PAL} runtime}
+\subsection{Run-time functions written in {\PAL}}
 
+Function [[Cmm_CutTo]] is a convenience; it is easy to write in~{\PAL}.
 <<cut.c-->>=
 target byteorder little;
 export Cmm_CutTo;
@@ -720,7 +704,6 @@ struct cmm_cont {
   Cmm_Word*   sp;
 };
 @ 
-@ 
 \subsection{Putting it together}
 <<runtime.c>>=
 #include <assert.h>
@@ -737,4 +720,15 @@ struct cmm_cont {
 <<private functions>>
 <<implementations of public functions>>
 @ 
+<<declarations of private functions>>=
+static void die(char *msg,...);
 <<private functions>>=
+static void die(char *msg,...) {   /* see K&R 2nd ed, page 174 */
+  va_list args;
+  va_start(args,msg);
+  fprintf(stderr, "C-- run-time error: ");
+  vfprintf(stderr, msg, args);
+  fprintf(stderr,"\n");
+  va_end(args);
+  abort();
+}

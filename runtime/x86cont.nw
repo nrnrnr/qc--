@@ -23,4 +23,9 @@ Cmm_unwindcont_pc:
   movl 44(%esp), %edi; movl (%edi), %edi 
   movl 32(%esp), %esp  # restore %esp
   jmp *__cmm_unwind_pc
-@
+@ N.B. The code above is not thread-safe.  The right solution is to
+pick a designated register as a scratch register for unwind
+continuations.  This register should be used to hold the program
+counter.  The compiler should mark the flow edge (from the call site
+to the unwind continuation) as killing the scratch register.
+

@@ -1,28 +1,12 @@
 % -*- mode: Noweb; noweb-code-mode: c-mode -*-
 % $Id$
 
+@
 % ---------------------------------------------------------------------------
 \section{PC Map}
 % ---------------------------------------------------------------------------
-This file provides an interface to the runtime data emitted by the
-compiler. The runtime data is in a table indexed by PC. For each call
-site and continuation, there is an entry in the [[pcmap]] section
-which points to the runtime data. The actual runtime data is placed in
-the [[pcmap_data]] section. Both of these are collected up, sorted by
-PC, and placed in the a data section by the system linker. Below is an
-example linker script for x86 Linux that makes the pcmap available to
-the runtime system.
-<<pcmap.ld>>=
-SECTIONS {
- .rodata : {
-   . =  (. + 3) & ~ 3;
-   Cmm_pc_map = .;
-   *(.pcmap)
-   Cmm_pc_map_limit = .;
-   *(.pcmap_data)
- }
-}
-@
+This file provides an interface to the run-time data emitted by the
+compiler. 
 <<pcmap.h>>=
 #ifndef PC_MAP_H
 #define PC_MAP_H
@@ -46,7 +30,7 @@ int      Cmm_as_offset  (location l);
 #define isdead(LOC) ((LOC).l == 0)
 @ 
 The [[pc_map_index]] and [[pc_map_entry]] structs below are used to
-access the PC map table and runtime data entries emitted by the
+access the PC map table and run-time data entries emitted by the
 compiler. A more detailed description of the layout and contents of
 the emitted data can be found in the file [[src/runtimedata.nw]].
 N.B. although the [[pc_map_index]] definition is exact, the
@@ -64,7 +48,7 @@ typedef struct cmm_pc_map_entry pc_map_entry;
 struct cmm_pc_map_entry {
   location   inalloc;          /* incoming dealloc point on stack (always offset) */
   location   outalloc;         /* outgoing dealloc point on stack (always offset) */
-  location   return_addressp;  /* always an offset??? (dead in oldest frame) */
+  location   return_addressp;  /* where return address is saved */
   struct sd *stackdata_table;
   Cmm_Word   num_registers;
   Cmm_Word   num_locals;
@@ -72,17 +56,30 @@ struct cmm_pc_map_entry {
   Cmm_Word   cont_block_size;
   location   data[2]; /* registers, locals, continuations, spans */
 };
-
+@ 
+Here are the individual pieces.
+The stack-data array stores the location of each [[stackdata]] label.
+<<exported type, procedure, and macro declarations>>=
 struct sd {
   unsigned num_entries;
   location entries[1];  /* variable length */
 };
-
+@ 
+Information about callee-saved registers gives the index of a register
+and the location in which the value of the register is saved.
+<<exported type, procedure, and macro declarations>>=
 struct reg {
   unsigned index;               /* machine-specific index */
   location saved;               /* where saved (or dead) */
 };
-
+@ 
+The structure for [[also unwinds to]] continuations is more
+complicated.
+Each call site contains a list of entries.  
+A~single entry is represented by a [[contblock]], which is of variable
+size because each continuation may take a different number of
+parameters. 
+<<exported type, procedure, and macro declarations>>=
 struct conts {
   unsigned num_entries;
   int entries[1]; /* variable length (offset of contblock) */
@@ -97,7 +94,22 @@ struct contblock {
     Cmm_Word ctype;
   } vars[1]; /* variable length */
 };
-
+@ 
+The compiler and run-time system must agree on the representation of
+C~types.
+The [[ctype]] field above would be declared [[enum ctypes]] except
+that we can't rely on a C~compiler to give an enum a predictable size
+and alignemnt.
+<<exported type, procedure, and macro declarations>>=
+enum ctypes { CHAR = 0, DOUBLE = 1, FLOAT = 2, INT = 3, LONGDOUBLE = 4, LONGINT = 5
+            , LONGLONGINT = 6, SHORT = 7, SIGNEDCHAR = 8, UNSIGNEDCHAR = 9
+            , UNSIGNEDLONG = 10, UNSIGNEDSHORT = 11, UNSIGNEDINT = 12
+            , UNSIGNEDLONGLONG = 13, ADDRESS = 14 
+            };
+@ 
+Here is the address arithmetic that provides access to different parts
+of an entry.
+<<exported type, procedure, and macro declarations>>=
 #define registers(e)     ((struct reg*)((e)->data))
 #define locals(e)        (((e)->data) + 2 * (e)->num_registers)
 #define continuations(e) (struct conts *) (((e)->data) + 2 * (e)->num_registers \
@@ -105,24 +117,22 @@ struct contblock {
 #define spans(e)         (((Cmm_Word*)(e)->data) + 2 * (e)->num_registers \
                                                  + (e)->num_locals  \
                                                  + (e)->cont_block_size)
-
+@
+Finally, here is where we get entries: we can look them up by PC, or
+we have special entries for unknown procedures (the empty entry) and
+for start-of-thread activations.
+<<exported type, procedure, and macro declarations>>=
 pc_map_entry* Cmm_lookup_entry(const Cmm_Codeptr caller);
 pc_map_entry* Cmm_empty_pcmap_entry;
 pc_map_entry* Cmm_thread_start_up_pcmap_entry;
 pc_map_entry* Cmm_thread_start_dn_pcmap_entry;
+@ 
+We provide some functions for debugging.
+<<exported type, procedure, and macro declarations>>=
 void Cmm_show_map(); /* for debugging */
 void Cmm_show_map_entry(pc_map_entry *entry, int index, Cmm_Codeptr ra);
-@
-<<exported type, procedure, and macro declarations>>=
-enum ctypes { CHAR = 0, DOUBLE = 1, FLOAT = 2, INT = 3, LONGDOUBLE = 4, LONGINT = 5
-            , LONGLONGINT = 6, SHORT = 7, SIGNEDCHAR = 8, UNSIGNEDCHAR = 9
-            , UNSIGNEDLONG = 10, UNSIGNEDSHORT = 11, UNSIGNEDINT = 12
-            , UNSIGNEDLONGLONG = 13, ADDRESS = 14 
-            };
-
 @ 
-The runtime system expects the symbols [[Cmm_pc_map]] and
-[[Cmm_pc_map_limit]] to be emitted by the linker.
+\subsection{Implementation}
 <<pcmap.c>>=
 #include <stdio.h>
 #include <stdlib.h>
@@ -131,11 +141,18 @@ The runtime system expects the symbols [[Cmm_pc_map]] and
 #include "qc--runtime.h"
 #include "pcmap.h"
 @ 
+\subsubsection{Hand-written map entries}
+Here are the hand-written map entries, together with some support for
+creating locations.
 <<pcmap.c>>=
 #define MKOFFSET(N) { (1 << (sizeof(location)*8 - 1)) | (N) }
 #define MKDEAD      { 0 }
 static struct sd nostackdata = { 0, { MKDEAD } };
-
+@ 
+An unknown functions has no stackdata, registers, locals, spans, or
+continuations, 
+and we don't know any relations on allocation points.
+<<pcmap.c>>=
 static struct cmm_pc_map_entry empty = {
   MKOFFSET(0),
   MKOFFSET(0),
@@ -144,7 +161,12 @@ static struct cmm_pc_map_entry empty = {
   0, 0, 0, 0, { MKDEAD }
 };
 pc_map_entry* Cmm_empty_pcmap_entry = &empty;
-
+@ 
+A thread-start activation contains two locals, whose locations depend
+on the direction of stack growth.
+Because such a frame is never walked (it has a special, trivial
+[[change]] method), we don't store anything about deallocation points.
+<<pcmap.c>>=
 static struct cmm_pc_map_entry startdn = {
   MKOFFSET(0),
   MKOFFSET(0),
@@ -161,16 +183,22 @@ static struct cmm_pc_map_entry startup = {
 };
 pc_map_entry* Cmm_thread_start_up_pcmap_entry = &startup;
 pc_map_entry* Cmm_thread_start_dn_pcmap_entry = &startdn;
+@ 
+\subsubsection{Entry lookup by~PC}
 
+The labels [[Cmm_pc_map]] and [[Cmm_pc_map_limit]] are inserted by the
+linker script in chunk [[<<pcmap.ld>>]].
 <<pcmap.c>>=
 extern pc_map_index Cmm_pc_map[];
 extern pc_map_index Cmm_pc_map_limit[];
 #define pc_map_size (Cmm_pc_map_limit - Cmm_pc_map)
 @ 
-If we can rely on the linker (or the compiler) to sort the entries by PC, then the
-lookup function can do binary search.
-Otherwise we have to do a linear search.
+If we could rely on the compiler to sort the entries by PC, then the
+lookup function could always do binary search.
+But there have been bugs, so we have to check, and if entries are not
+sorted, we use linear search.
 
+Here's where we check for sorting.
 Two adjacent entries with \emph{equal} PCs are considered OK.
 This can happen if a call site annotated with [[never returns]] is
 followed immediately by a continuation, for example.
@@ -184,7 +212,9 @@ static int is_sorted(void) {
     }
   return 1;
 }
-
+@ 
+Here's the binary search for the sorted case.
+<<pcmap.c>>=
 static int compare(const void *x, const void *y) {
   const pc_map_index *p = y;
   return (unsigned) x - (unsigned) p->ra;
@@ -198,27 +228,28 @@ static pc_map_entry *binlookup(const Cmm_Codeptr caller) {
   else
     return NULL;
 }
-
+@ 
+Here's the linear search for the unsorted case.
+<<pcmap.c>>=
 static pc_map_entry* linlookup(const Cmm_Codeptr caller) {
   unsigned i = 0;
-  for(i = 0; i < pc_map_size; ++i) {
-    if (Cmm_pc_map[i].ra == caller) {
+  for(i = 0; i < pc_map_size; ++i)
+    if (Cmm_pc_map[i].ra == caller)
       return Cmm_pc_map[i].entry;
-    }
-  }
   return NULL;
 }
-
-static pc_map_entry *(*lookup)(const Cmm_Codeptr caller) = NULL;
-
-pc_map_entry*
-Cmm_lookup_entry(const Cmm_Codeptr caller)
+@ 
+We cache the search function in [[lookup]].
+<<pcmap.c>>=
+pc_map_entry* Cmm_lookup_entry(const Cmm_Codeptr caller)
 {
+  static pc_map_entry *(*lookup)(const Cmm_Codeptr caller) = NULL;
   if (lookup == NULL)
     lookup = is_sorted() ? binlookup : linlookup;
   return lookup(caller);
 }
 @ 
+And this is for debugging!
 <<conditionally spray information about the [[pc_map]] array>>=
 { char *debug = getenv("QCDEBUG");
   if (debug && strstr(debug, "pcmap")) {
@@ -232,12 +263,12 @@ Cmm_lookup_entry(const Cmm_Codeptr caller)
   }
 }
 @ 
+\subsubsection{Locations}
+
 The compiler encodes the type in the top two bits. Registers are given
 the encoding [[01]], dead variables are given [[00]], and offsets are
 prefixed with 1. See [[emit_data]] in [[src/runtimedata.nw]] for more
 details.
-<<exported type, procedure, and macro declarations>>=
-
 <<pcmap.c>>=
 #define GOODBITS (sizeof(local)*8 - 2)
 
@@ -249,7 +280,8 @@ loctype Cmm_loctype(location l) {
   else
     return (loctype) local;
 }
-
+@ 
+<<pcmap.c>>=
 unsigned Cmm_as_register(location l) {
   int local = l.l;
   int mask   = GOODBITS / 2;
@@ -265,14 +297,15 @@ unsigned Cmm_as_register(location l) {
 }
 @ 
 <<pcmap.c>>=
-signed
-Cmm_as_offset(location l) {
+signed Cmm_as_offset(location l) {
   int local = l.l;
   return (local @<< 1) >> 1;
 }
 @ 
-[[show_map]] dumps out all of the runtime data. It is only useful for
-debugging the [[qc--]] runtime system.
+\subsubsection{Debugging support}
+
+[[show_map]] dumps out all of the run-time data. It is only useful for
+debugging the [[qc--]] run-time system.
 <<pcmap.c>>=
 static void printloc(location loc) {
   switch (Cmm_loctype(loc)) {
@@ -290,7 +323,7 @@ static void printloc(location loc) {
       break;
   }
 }
-
+<<pcmap.c>>=
 <<private show functions>>
 
 void Cmm_show_map(void) {
@@ -300,7 +333,7 @@ void Cmm_show_map(void) {
     Cmm_show_map_entry(idx->entry, idx - Cmm_pc_map, idx->ra);
   }
 }
-
+<<pcmap.c>>=
 void Cmm_show_map_entry(pc_map_entry *entry, int index, Cmm_Codeptr ra) {
   struct sd *sdt;
   char *indent = index < 0 ? "    " : "";
@@ -330,7 +363,7 @@ void Cmm_show_map_entry(pc_map_entry *entry, int index, Cmm_Codeptr ra) {
   <<show continuations>>
   <<show stack-data table [[sdt]]>>
 }
-
+@ 
 <<show stack-data table [[sdt]]>>=
 assert(sdt);
 if (sdt->num_entries == 0) {
@@ -343,9 +376,8 @@ if (sdt->num_entries == 0) {
     printf("\n");
   }
 }
-
+@ 
 <<show registers>>=
-
 {
   int r = entry->num_registers;
   int i;
@@ -356,7 +388,7 @@ if (sdt->num_entries == 0) {
     printf("\n");
   }
 }
-
+@
 <<show locals>>=
 {
   int n = entry->num_locals;
@@ -371,7 +403,7 @@ if (sdt->num_entries == 0) {
     }
   }
 }
-
+@ 
 <<show continuations>>=
 {
   int i;
@@ -385,7 +417,7 @@ if (sdt->num_entries == 0) {
       show_cont(conts, i, indent);
   }
 }
-
+@ 
 <<private show functions>>=
 const char *typestring(enum ctypes t) {
 #define xx(T) case T: return #T;
@@ -397,7 +429,7 @@ const char *typestring(enum ctypes t) {
     default: return "unknown-type";
   }
 }
-
+@
 <<private show functions>>=
 static void show_cont(struct conts *conts, int contnum, const char *indent) {
   struct contblock *block;
@@ -414,3 +446,26 @@ static void show_cont(struct conts *conts, int contnum, const char *indent) {
   printf(">\n");
 }
 @ 
+\subsection{Linker script}
+
+The run-time data is in a table indexed by PC. For each call
+site and continuation, there is an entry in the [[pcmap]] section
+which points to the run-time data. The actual run-time data is placed in
+the [[pcmap_data]] section. Both of these are collected up
+and placed in the a data section by the system linker. Below is an
+example linker script for x86 Linux that makes the PC~map available to
+the run-time system.
+<<pcmap.ld>>=
+SECTIONS {
+ .rodata : {
+   . =  (. + 3) & ~ 3;
+   Cmm_pc_map = .;
+   *(.pcmap)
+   Cmm_pc_map_limit = .;
+   *(.pcmap_data)
+ }
+}
+@ If the compiler is careful to sort PC-map entries within each
+compilation unit, this linker script will ensure they are sorted
+overall.
+@
