@@ -21,9 +21,38 @@ versions of mk from Unix v7 or similar, you will need to upgrade.
 To build the compiler from source code you need:
 
         * Objective Caml 3.02 installation with bug fix for nested
-          modules (which Christian will tell people where to find)
+          modules (see Patching OCaml 3.02 below)
         * Noweb 2.9 or better
         * LaTeX
+
+The abstract syntax for C-- is specified in ASDL. We provide the library
+files in asdl/ and generated sources in src/. However, we do not provide
+the generator which means there is no way to re-compile the ASDL
+specification. We might get rid of the ASDL specifications in the
+future.
+
+
+Patching OCaml 3.02
+
+OCaml 3.02 needs a bug fix before it can compile all sources in the lua/
+directory. The patch is provided as ocaml-3.02.patch. To apply it you
+need the source code for OCaml 3.02. Unpack them an CD into the
+ocaml-3.02/typing directory to apply the patch:
+
+    tar zxvf ocaml-3.02.tar.gz
+    cd ocaml-3.02/typing
+    patch -p1 < /some/where/ocaml-3.02.patch
+    cd ..
+    ./configure
+    make world
+    make opt
+    make install
+
+Then continue to build OCaml as usual from its top-level. 
+
+We expect the patch to be part of the next OCaml release such that this
+step won't be necessary in the future.
+
 
 Building mk
 
@@ -44,13 +73,17 @@ paths or compiler options.
 
 To compile everything call mk in this directory:
 
-        % mk depend
-        % mk
+        % mk 
 
 This starts the compilation process. The resulting files are:
 
-        bin/qc--            qc-- native code binary 
+        bin/qc--            qc-- byte code code binary 
         man/man1/qc--.1     manual page
+
+If the OCaml native code compiler ocamlopt is supported in your platform
+and is installed you can also create a native code binary qc--.opt:
+
+        % mk all.opt
 
 To execute the test suite you can also call the test target:
 

@@ -1,0 +1,93 @@
+From Xavier.Leroy@inria.fr Tue Jul 31 04:23:10 2001
+Received: from concorde.inria.fr (concorde.inria.fr [192.93.2.39])
+	by wally.eecs.harvard.edu (8.10.0/8.10.0) with ESMTP id f6V8N9e32260;
+	Tue, 31 Jul 2001 04:23:09 -0400 (EDT)
+Received: from pauillac.inria.fr (pauillac.inria.fr [128.93.11.35])
+	by concorde.inria.fr (8.11.1/8.10.0) with ESMTP id f6V8N8P13014;
+	Tue, 31 Jul 2001 10:23:08 +0200 (MET DST)
+Received: (from xleroy@localhost) by pauillac.inria.fr (8.7.6/8.7.3) id KAA03426; Tue, 31 Jul 2001 10:23:08 +0200 (MET DST)
+Date: Tue, 31 Jul 2001 10:23:08 +0200
+From: Xavier Leroy <Xavier.Leroy@inria.fr>
+To: lindig@eecs.harvard.edu, nr@eecs.harvard.edu
+Cc: Caml bug tracking system <caml-bugs@pauillac.inria.fr>
+Subject: Re: 3.02 compiler overflows stack on *.mli (PR#460)
+Message-ID: <20010731102308.A2778@pauillac.inria.fr>
+References: <200107301953.VAA30946@pauillac.inria.fr>
+Mime-Version: 1.0
+Content-Type: text/plain; charset=us-ascii
+X-Mailer: Mutt 1.0i
+In-Reply-To: <200107301953.VAA30946@pauillac.inria.fr>; from lindig@eecs.harvard.edu on Mon, Jul 30, 2001 at 09:53:24PM +0200
+Status: RO
+X-Status: A
+Content-Length: 2263
+Lines: 68
+
+> the OCaml 3.02 compiler does not like to compile this interface if a
+> compiled interface already exists:
+> 
+> /tmp > cat test.mli
+> module type MM = sig
+> end
+> 
+> module A : sig
+>   module type T = sig
+>      module T : MM
+>   end
+> end
+> 
+> module EmptyT : A.T
+> 
+> /tmp > ocamlc -c -g test.mli            # first time - works ok
+> /tmp > ocamlc -c -g test.mli            # opens test.cmi over and over
+> Uncaught exception: Stack overflow
+
+That's a very interesting bug, and I believe it's been around for
+years -- probably since Caml Special Light.  I think I have fixed it.
+Since you're obviously using the module system intensively, would you
+agree to test the fix?  The patch (against 3.02) is attached below.
+
+(One reason I'm asking you to test is that the fix renders module
+type-checking exponential in the nesting depth of structures,  I think
+that should be OK in practice, but if you notice a major slowdown,
+please tell me and I'll try to address the efficiency issue.)
+
+Best wishes,
+
+- Xavier Leroy
+
+Index: typing/env.ml
+===================================================================
+RCS file: /net/pauillac/caml/repository/csl/typing/env.ml,v
+retrieving revision 1.38
+diff -u -r1.38 env.ml
+--- typing/env.ml	2000/04/10 14:59:00	1.38
++++ typing/env.ml	2001/07/31 08:17:07
+@@ -465,7 +465,7 @@
+             let comps = components_of_module !env sub path mty in
+             c.comp_components <-
+               Tbl.add (Ident.name id) (comps, !pos) c.comp_components;
+-            env := store_components id path comps !env;
++            env := store_module id path mty !env;
+             incr pos
+         | Tsig_modtype(id, decl) ->
+             let decl' = Subst.modtype_declaration sub decl in
+@@ -591,18 +591,6 @@
+     classes = env.classes;
+     cltypes = env.cltypes;
+     summary = Env_modtype(env.summary, id, info) }
+-
+-and store_components id path comps env =
+-  { values = env.values;
+-    constrs = env.constrs;
+-    labels = env.labels;
+-    types = env.types;
+-    modules = env.modules;
+-    modtypes = env.modtypes;
+-    components = Ident.add id (path, comps) env.components;
+-    classes = env.classes;
+-    cltypes = env.cltypes;
+-    summary = env.summary }
+ 
+ and store_class id path desc env =
+   { values = env.values;
+
