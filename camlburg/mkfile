@@ -33,29 +33,39 @@ HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
 DVI  =          `echo *.nw       | sed 's/\.nw/.dvi/g;'`
 PS   =          `echo *.nw       | sed 's/\.nw/.ps/g;'`
 
+# ------------------------------------------------------------------ 
 # files that belong to the runtime system
+# ------------------------------------------------------------------ 
 RTCMO =         camlburg.cmo camlburg.cmi camlburg.mli 
 RTCMX =         camlburg.cmx camlburg.cmi camlburg.mli camlburg.o
+
+# ------------------------------------------------------------------ 
+# high level (virtual) targets
+# ------------------------------------------------------------------ 
 
 all:V:          ocamlburg      runtime     man
 all.opt:V:      ocamlburg.opt  runtime.opt man 
 
 update:V:       $RTCMO all 
-                cp $RTCMO       $LIBDIR
-                cp ocamlburg       $BINDIR
-                cp ocamlburg.1     $MANDIR/man1
-                
+                cp $RTCMO           $LIBDIR
+                cp ocamlburg        $BINDIR
+                cp ocamlburg.1      $MANDIR/man1
+                cp ocamlburgfix     $BINDIR
+                cp ocamlburgfix.1   $MANDIR/man1
+
 update.opt:V:   $RTCMX all.opt 
                 cp $RTCMX       $LIBDIR
                 cp ocamlburg.opt   $BINDIR
                 test -f $BINDIR/ocamlburg || cp ocamlburg.opt $BINDIR/ocamlburg
                 cp ocamlburg.1     $MANDIR/man1
+                cp ocamlburgfix     $BINDIR
+                cp ocamlburgfix.1   $MANDIR/man1
     
 dvi:V:          $DVI
 html:V:         $HTML
 ps:V:           $PS
 
-man:V:          ocamlburg.1 
+man:V:          ocamlburg.1 ocamlburgfix.1
 
 test:VQ:        sample.cmo iburg.cmo
 
@@ -168,6 +178,12 @@ parse.output:   parse.mly
 ocamlburg.pod:  main.nw
                 $NOTANGLE -R$target $prereq > $target
 
+ocamlburgfix.1:D: ocamlburgfix
+                $POD2MAN ocamlburgfix > $target
+
+ocamlburgfix-man.html:D: ocamlburgfix
+                $POD2HTML ocamlburgfix > $target
+                
 # ------------------------------------------------------------------ 
 # Examples
 # ------------------------------------------------------------------ 
@@ -208,22 +224,23 @@ nofake-man.html:    nofake
                 $POD2HTML nofake > $target
 
 
-EXPORT =        README DEPEND Makefile                      \
-                iburg.mlb                                   \
-                ocamlburg.1 ocamlburg-man.html              \
-                nofake nofake.1 nofake-man.html nofake.html \
-                burg.nw burg.html                           \
-                camlburg.nw camlburg.html                   \
-                code.nw code.html                           \
-                lex.nw lex.html                             \
-                main.nw main.html                           \
-                norm.nw norm.html                           \
-                parse.nw parse.html                         \
-                parseerror.nw parseerror.html               \
-                pp.nw pp.html                               \
-                sample.nw sample.html                       \
-                spec.nw spec.html                           \
-                srcmap.nw srcmap.html                       \
+EXPORT =        README DEPEND Makefile                            \
+                iburg.mlb                                         \
+                ocamlburg.1 ocamlburg-man.html                    \
+                nofake nofake.1 nofake-man.html nofake.html       \
+                ocamlburgfix ocamlburgfix.1 ocamlburgfix-man.html \
+                burg.nw burg.html                                 \
+                camlburg.nw camlburg.html                         \
+                code.nw code.html                                 \
+                lex.nw lex.html                                   \
+                main.nw main.html                                 \
+                norm.nw norm.html                                 \
+                parse.nw parse.html                               \
+                parseerror.nw parseerror.html                     \
+                pp.nw pp.html                                     \
+                sample.nw sample.html                             \
+                spec.nw spec.html                                 \
+                srcmap.nw srcmap.html                             \
 
 tidy:V:         $HTML nofake-man.html ocamlburg-man.html
                 tidy -f /dev/null -im $prereq || exit 0
