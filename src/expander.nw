@@ -219,8 +219,32 @@ let context t =
         prerr_string ("No temporary spaces in target " ^ t.T.name ^ "\n");
         flush stderr;
         assert false in
+  let float_regexp = Str.regexp ".*[Ff]loat.*" in
+  let is_float_space s = Str.string_match float_regexp s.S.doc 0 in
+  let is_float_temp s = is_temp s && is_float_space s  in
+  let float_temp = 
+    try (List.find is_float_temp t.T.spaces).S.space
+      with Not_found -> first_temp  in
 
-  (fun loc -> mem_like (space_of loc)), fun _ -> first_temp
+  let float_like =
+    List.fold_right
+      (fun s rest ->
+         if s.S.classification <> S.Mem && is_float_space s then
+           fun c -> c = s.S.space || rest c
+         else
+           rest)
+      t.T.spaces (fun _ -> false) in
+
+  let float_ops = ["fcmp"; "fadd"; "fsub"; "fdiv"; "fmul"; "fabs"; "fneg"; "fsqrt"] in
+  let is_float_op op = List.exists ((=) op) float_ops in
+
+  let is_float_exp = function
+    | RP.Const _ -> false
+    | RP.Fetch (loc, _) -> float_like (space_of loc)
+    | RP.App ((op, _), args) -> is_float_op op  in
+
+  (fun loc -> mem_like (space_of loc)),
+  fun e -> if is_float_exp e then float_temp else first_temp
 @ 
 <<expander.ml>>=
 module G  = Cfg3
