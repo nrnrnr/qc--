@@ -1,0 +1,175 @@
+
+\input{macros.tex}
+
+% l2h substitution cfg CFG
+% l2h substitution dots ...
+% l2h substitution AST AST
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Evaluation of {\small RTL}s}
+% ------------------------------------------------------------------ 
+
+This modules allows to evaluate compile- and link-time
+\rtl-expressions.  Expressions must not contain references to
+\rtl-locations but may contain variables.  The meaning of these
+variables is provided by a [[lookup]] function that is passed into the
+evaluator.  A lookup on a variable must return a {\rtl}
+\emph{constant}.  Only a minimal number of checks is performed because
+it is assumed that expression have been type-checked before.  In
+particular, any of the following conditions lead to checked run-time
+error:
+
+\begin{itemize}
+\item Typing error
+\item Use of an unknown primitive
+\item Use of a link-time value in a compile-time expression.
+\end{itemize}
+
+Errors are reported by raising the [[Not_constant]] exception.
+ 
+<<rtleval.mli>>=
+exception Not_constant
+@
+
+The functions [[compile]] and [[link]] evaluate compile-time and
+link-time expressions respectively.  The variants [[compile]] and
+[[compile']] differ in the aspect that [[compile]] is intended for
+expressions that evaluate to a [[Bits.bits]] value, where [[compile']]
+evaluates expressions that also can have a boolean value. 
+
+These are
+represented by {\rtl} constant values which do not have a separate
+type such that 
+
+
+
+<<rtleval.mli>>=
+type 'a lookup = string -> 'a Error.error       (* look up constant(!) *)
+
+val compile : Rtl.exp lookup -> Rtl.exp -> Bits.bits (* Not_constant *)
+val compile': Rtl.exp lookup -> Rtl.exp -> Rtl.exp   (* Not_constant *)
+val link    : Rtl.exp lookup -> Rtl.exp -> Rtl.exp   (* Not_constant *)
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<rtleval.ml>>=
+module E  = Error
+module R  = Rtl
+module RP = Rtl.Private
+
+exception Not_constant
+exception Bool_expression
+
+type 'a lookup = string -> 'a E.error
+
+module CompileTime = struct
+    <<CompileTime>>
+end
+
+module LinkTime = struct
+    <<LinkTime>>
+end
+
+let compile  = CompileTime.eval
+let compile' = CompileTime.eval'
+let link     = LinkTime.eval
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Compile-Time Expressions}
+% ------------------------------------------------------------------ 
+
+<<CompileTime>>=
+module StrMap = Map.Make(struct type t=string let compare=compare end)
+
+let zero = function
+    | [RP.Bits(x);RP.Bits(y)] -> E.Ok(RP.Bits(Bits.zero (Bits.width x)))
+    | _                       -> E.Error
+
+let true' = function
+    | [RP.Bits(_);RP.Bits(_)] -> E.Ok(RP.Bool(true))
+    | _                       -> E.Error
+
+let ops =
+    let ops = 
+        [  "add"    , zero  
+        ;  "+"      , zero  
+        ;  "sub"    , zero  
+        ;  "-"      , zero  
+        ;  "mult"   , zero  
+        ;  "shl"    , zero  
+        ;  "shra"   , zero  
+        ;  "shrl"   , zero  
+        ;  "<<"     , zero  
+        ;  ">>"     , zero  
+        ;  "*"      , zero  
+        ;  "eq"     , true' 
+        ;  "=="     , true' 
+        ;  "<="     , true' 
+        ;  ">="     , true' 
+        ;  ">"      , true' 
+        ;  "<"      , true' 
+        ;  "!="     , true' 
+        ]
+    in
+        List.fold_left 
+                (fun map (key,f) -> StrMap.add key f map)
+                StrMap.empty 
+                ops
+
+let rec app lookup (op,wl) exps =
+    let f    = try E.Ok(StrMap.find op ops) with Not_found -> E.Error in
+    let args = Error.Raise.list (List.map (exp lookup) exps)          in    
+        Error.seqPair (f,args) (fun (f,args) -> f args)
+        
+and fetch lookup = function
+    | RP.Var(x,index,w)   -> E.sequence (lookup x) (fun x ->
+                             ( match Rtl.Convert.exp x with
+                             | RP.Const(c) -> E.Ok(c)
+                             | _           -> E.Error
+                             )) 
+    | RP.Cell _           -> E.Error
+    | RP.Slice _          -> E.Error
+
+and exp lookup = function
+    | RP.Const c          -> E.Ok(c)
+    | RP.Fetch(loc,width) -> fetch lookup loc 
+    | RP.App(opr,exps)    -> app lookup opr exps
+
+let eval' lookup e =
+    match exp lookup (R.Convert.exp e) with
+    | E.Error 
+    | E.Ok(RP.Link _) -> raise Not_constant
+    | E.Ok(x)         -> Rtl.Revert.exp (RP.Const x)    
+
+let eval  lookup e =
+    match exp lookup (R.Convert.exp e) with
+    | E.Error 
+    | E.Ok(RP.Link _) 
+    | E.Ok(RP.Bool _)      -> raise Not_constant
+    | E.Ok(RP.Bits b)      -> b
+@
+
+ 
+% ------------------------------------------------------------------ 
+\subsubsection{Link-Time Expressions}
+% ------------------------------------------------------------------ 
+
+<<LinkTime>>=
+let eval lookup exp = assert false
+@
