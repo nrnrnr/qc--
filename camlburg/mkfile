@@ -1,9 +1,35 @@
-SRC=myList.ml pprint.ml syntax.ml code.ml spec.ml image.ml pc.ml token.ml lex.ml parse.ml norm.ml burg.ml main.ml 
-BIN=`echo $SRC | sed 's/\.mli/.cmi/g;s/\.ml /.cmo /g;s/.ml$/.cmo/'`
+ML=	myList.ml	\
+	pprint.ml	\
+	syntax.ml	\
+	code.ml		\
+	spec.ml		\
+	image.ml	\
+	pcagain.ml	\
+	token.ml	\
+	lex.ml		\
+	parse.ml	\
+	norm.ml		\
+	burg.ml		\
+	main.ml		\
+	
+MLI=			\
+	burg.mli	\
+	code.mli	\
+	image.mli	\
+	norm.mli	\
+	parse.mli	\
+	pprint.mli	\
+	spec.mli	\
+	syntax.mli	\
+	myList.mli	\
+	
+CMO=`echo $ML | sed 's/\.ml/.cmo/g'`
+
 TEST=test.ml test2.ml
 
-
 <../config/ocaml.mk
+
+all:V: mlburg
 
 LIBDIR=../lib
 OCAMLC_FLAGS=-I $LIBDIR
@@ -19,7 +45,6 @@ LINE =          '# %L "%F"%N'
 %.mli: %.nw
 	notangle -L"$LINE" -R$target $prereq > $target
 
-all:V: mlburg
 
 lex.mll: lex.nw
 	notangle -R$target $prereq > $target
@@ -27,8 +52,8 @@ lex.mll: lex.nw
 main.ml: burg.nw
 	notangle -L"$LINE" -R$target $prereq > $target
 
-mlburg: $BIN
-	ocamlc -o $target $prereq
+mlburg: $CMO
+	$OCAMLC $OCAMLC_FLAGS -o $target cllib.cma $prereq 
 
 clean:V:
 	rm -f *.cmi *.cmo
@@ -48,7 +73,7 @@ test:V: sample.cmo
 	mlburg $stem1.mlb > $target
 
 a.out:	test.cmo test2.cmo
-	ocamlc -o $target $prereq
+	$OCAMLC -o $target $prereq
 
 test.ml: ss.ml gen.ml
 	cat $prereq > $target
@@ -62,8 +87,8 @@ token.ml: lex.nw
 <DEPEND
 
 depend:V: DEPEND
-DEPEND: $SRC 
-	ocamldep *.ml *.mli > DEPEND
+DEPEND: $ML $MLI
+	$OCAMLDEP $prereq > DEPEND
 
 ss.ml:
 	# do nothing
