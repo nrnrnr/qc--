@@ -51,6 +51,10 @@ module Standard32 : sig
   val p :  count:int -> generator          (* predicate registers *)
   val w :               generator          (* predicate temps *)
   val c :  count:int -> generator          (* control and special registers *)
+  type 'a locations = { pc : 'a; npc : 'a; cc : 'a }
+  val locations : c:t -> Rtl.loc locations
+        (* apply to c space to get standard locations *)
+  val indices : int locations (* standard indices in c space *)
 end
 @
 
@@ -63,7 +67,7 @@ type t  =
     ; doc:              string          (* informal doc string *)       
     ; cellwidth:        int             (* bits *)
     ; indexwidth:       int             (* bits *)
-    ; indexlimit:       int option      (* None = 2^indexwidth *)
+    ; indexlimit:       int option      (* None = 2 ** indexwidth *)
     ; aggregation:      Rtl.aggregation      
     ; widths:           int list        (* widths of supported aggregates *)
     ; classification:   classification  
@@ -234,20 +238,19 @@ module Standard32 = struct
                            ; aggregation = agg; widths = ws
                            ; classification = Reg
                            } 
+
+  type 'a locations = { pc : 'a; npc : 'a; cc : 'a }
+  let locations ~c = match c with
+    { space = space; cellwidth = cw; aggregation = bo; indexwidth = iw } ->
+    if space <> 'c' then
+      Impossible.impossible ("Standard locations from space " ^ Char.escaped space);
+    let rindex n = Rtl.bits (Bits.U.of_int n iw) iw in
+    let cell n = Rtl.cell Rtl.none space bo cw (rindex n) in
+    { pc = cell 0; npc = cell 1; cc = cell 2 }
+  let indices = { pc = 0; npc = 1; cc = 2 }
 end
+@ 
+<<space.ml>>=
+
 @
-
-A [[Rtl.space]] denotes a memory space, the details of a particular
-space are covered by a space descriptor [[t]]:  
-
-type t  =
-    { space:            Rtl.space       (* space being described *)
-    ; doc:              string          (* informal doc string *)       
-    ; cellwidth:        int             (* bits *)
-    ; indexwidth:       int             (* bits *)
-    ; indexlimit:       int option      (* None = 2^indexwidth *)
-    ; aggregation:      Rtl.aggregation      
-    ; widths:           int list        (* widths of supported aggregates *)
-    ; classification:   classification  
-    }
 

@@ -24,7 +24,7 @@ module Spaces : sig
   val t : Space.t
   val f : Space.t
   val u : Space.t
-  val c : Space.t   (* PC at 0 and condition codes at 1 *)
+  val c : Space.t   (* PC at 0 and condition codes at 2 *)
 end
 module Post : Postexpander.S
 module X    : Expander.S
@@ -35,8 +35,8 @@ val target : Target2.t
 <<x86.ml>>=
 let arch = "x86"                (* architecture name *)
 @ 
-We use the standard storage spaces, with the PC as [[$c[0]]] and the
-condition codes as [[$c[1]]].
+We use the standard storage spaces, with the PC and
+condition codes in their standard locations from [[Space.Standard32]].
 We pretend that the machine is a 32-bit machine, which simplifies a lot.
 <<x86.ml>>=
 module Spaces = struct
@@ -109,8 +109,8 @@ ARGUMENT TO SUBFLAGS AND ADDFLAGS.  THIS WILL MEAN CHANGES IN THE
 RECOGNIZER, OF COURSE.
 <<x86 expander>>=
 let rindex = Address.rindex
-let eflags = R.cell R.none 'c' byte_order 32 (rindex 1)  (* condition codes *)
-let pc     = R.cell R.none 'c' byte_order 32 (rindex 0)  (* program counter *)
+module SS = Space.Standard32
+let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
 let eax    = R.cell R.none 'r' byte_order 32 (rindex 0)
 let edx    = R.cell R.none 'r' byte_order 32 (rindex 2)
 let subflags x y w = R.store eflags (R.app (R.opr "x86_subflags" [w]) [x; y]) 32
@@ -335,8 +335,6 @@ and so one, would jump.
 
 <<x86 expander>>=
 <<important functions on $x$86 operators>>
-let eflags =
-  R.cell R.none 'c' Spaces.bo 32 (R.bits (Bits.U.of_int 1 32) 32)
 let cmp x y =
   R.store eflags (R.app (R.opr "x86_subflags" [32]) [tempval x; tempval y]) 32
 let bc x (opr, ws) y ~tgt =

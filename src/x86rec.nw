@@ -11,16 +11,22 @@
 \section{Intel $x$86 Recognizer}
 % ------------------------------------------------------------------ 
 
-This module provides a [[to_asm]] function that recognizes an Intel
+%%Grades: B Subsystem Later
+
+This module provides functions that recognize an Intel
 $x$86 RTL.
 As an experiment, the recognizer is implemented using BURG rules.
-If the instruction is recognized, it is coverable with cost~0.
+If the instruction is recognized, it is coverable with small cost.
+(Perhaps one day, the cost could be bytes of code.)
 If it is not recognized, there is a catchall rule that recognizes
-anything with cost~1 (I~hope).
+anything with cost~100 (I~hope).
+
+WARNING: THIS RECOGNIZER DOES NOT (YET) RECOGNIZE KILLS.
 
 <<x86rec.mli>>=
-module M (* (I: X86i.S with type t = Sledlib.String.t)*) : sig
-  val to_string : Rtl.rtl -> string
+module M : sig
+  val to_asm      : Rtl.rtl -> string
+  val is_instruction : Rtl.rtl -> bool
 end
 <<x86rec.mlb>>=
 %head {: <<modules>> :}
@@ -52,6 +58,7 @@ module RP = Rtl.Private
 module RU = Rtlutil
 module N  = Nativeint
 module S  = Space
+module SS = Space.Standard32
 module T  = Target2
 module Up  = Rtl.Revert       (* Convert Up    to abstract repr. *)
 module W  = Rtlutil.Width 
@@ -144,8 +151,8 @@ regl:      Reg('r', n, w) {: regname w n :}
 eaddrl: regl  {: regl :}
 reg: Fetch(regl, w) {: regl :}
 meml:   Mem(reg, w) {: "(" ^ reg ^ ")" :}  -- indir
-disp: App2("add", reg, const) {:  const ^ "(" ^ reg ^ ")" :}
-disp: App2("add", const, reg) {:  const ^ "(" ^ reg ^ ")" :}
+disp: Add(reg, const) {:  const ^ "(" ^ reg ^ ")" :}
+disp: Add(const, reg) {:  const ^ "(" ^ reg ^ ")" :}
 meml: Mem(disp, w) {: disp :}
 meml: Mem(lconst, w) {: lconst :}
 eaddrl: meml {: meml :}
@@ -159,8 +166,8 @@ goes.
 <<rules>>=
 immed : lconst {: lconst :}
 immed : const  {: "$" ^ const :}
-immed : App2("add", lconst, const) {:  lconst ^ "+" ^ const :}
-immed : App2("add", const, lconst) {:  lconst ^ "+" ^ const :}
+immed : Add(lconst, const) {:  lconst ^ "+" ^ const :}
+immed : Add(const, lconst) {:  lconst ^ "+" ^ const :}
 @ 
 Move, load, and store instructions.
 Because the machine can do eaddr/reg
@@ -177,24 +184,24 @@ inst: Store(dst:regl, src:eaddr, w)
   {: cat ["mov"; suffix w; " "; src; ","; dst] :}
 
 -- sign extension
-inst: Store(dst:eaddrl, App1("sx", Fetch(src:regl, nw:w)), w)
+inst: Store(dst:eaddrl, Sx(Fetch(src:regl, nw:w)), w)
   {: cat ["movs"; suffix nw; suffix w; " "; src; ","; dst] :}
 
-inst: Store(dst:regl, App1("sx", Fetch(src:eaddrl, nw:w)), w)
+inst: Store(dst:regl, Sx(Fetch(src:eaddrl, nw:w)), w)
   {: cat ["movs"; suffix nw; suffix w; " "; src; ","; dst] :}
 
 -- zero extension
-inst: Store(dst:eaddrl, App1("zx", Fetch(src:regl, nw:w)), w)
+inst: Store(dst:eaddrl, Zx(Fetch(src:regl, nw:w)), w)
   {: cat ["movz"; suffix nw; suffix w; " "; src; ","; dst] :}
 
-inst: Store(dst:regl, App1("zx", Fetch(src:eaddrl, nw:w)), w)
+inst: Store(dst:regl, Zx(Fetch(src:eaddrl, nw:w)), w)
   {: cat ["movz"; suffix nw; suffix w; " "; src; ","; dst] :}
 
 -- moving low bits (relies on proper name of source)
-inst: Store(dst:eaddrl, App1("lobits", Fetch(Reg('r', n, rw:w), fw:w)), nw:w)
+inst: Store(dst:eaddrl, Lobits(Fetch(Reg('r', n, rw:w), fw:w)), nw:w)
   {: cat ["mov"; suffix nw; " "; regname nw n; ","; dst] :}
 
-inst: Store(dst:regl, App1("lobits", src:mem), nw:w)
+inst: Store(dst:regl, Lobits(src:mem), nw:w)
   {: cat ["mov"; suffix nw; " "; src; ","; dst] :}
 @ 
 Arithmetic.
@@ -211,9 +218,9 @@ inst: Withaflags(dst:eaddrl, "sub", src:reg, w, "x86_subflags")
 inst: Withaflags(dst:regl, "sub", src:eaddr, w, "x86_subflags")
   {: cat ["sub"; suffix w; " "; src; ","; dst] :}
 
-inst: Setflags(App2("x86_subflags", l:eaddr, r:reg))
+inst: Setflags(X86_subflags(l:eaddr, r:reg))
   {: cat ["cmp"; suffix 32; " "; l; ","; r] :} -- POSSIBLE BUG IN WIDTH
-inst: Setflags(App2("x86_subflags", l:reg, r:eaddr))
+inst: Setflags(X86_subflags(l:reg, r:eaddr))
   {: cat ["cmp"; suffix 32; " "; l; ","; r] :} -- POSSIBLE BUG IN WIDTH
 
 inst: Withlflags(dst:eaddrl, logical:string, src:reg, w, "x86_logicflags")
@@ -231,49 +238,48 @@ inst: Withlflags(dst:regl, logical:string, src:eaddr, w, "x86_logicflags")
 Return.
 <<rules>>=
 esp : Reg('r', n, w) [{: guard (n = 4 && w = 32):}] {: () :}
-eip : Reg('c', n, w) [{: guard (n = 0 && w = 32):}] {: () :}
-pop: Store(esp, App2("add", Fetch(esp, w), four), sw:w) {: () :}
+eip : Reg('c', n, w) [{: guard (n = SS.indices.SS.pc && w = 32):}] {: () :}
+pop: Store(esp, Add(Fetch(esp, w), four), sw:w) {: () :}
 pop:  Llr(esp, "add", four, w) {: () :}
 push: Llr(esp, "sub", four, w) {: () :}
 stacktop: Mem(Fetch(esp, w), mw:w) [{:guard (mw = 32):}] {: () :}
-stacknext: Mem(App2("sub", Fetch(esp, w), four), mw:w) [{:guard (mw = 32):}] {: () :}
+stacknext: Mem(Sub(Fetch(esp, w), four), mw:w) [{:guard (mw = 32):}] {: () :}
 inst: Par(Goto(Fetch(stacktop, w)),pop) {: "ret" :}
 inst: Par(Goto(eaddr),Par(Store(stacknext, Fetch(eip, x:w), y:w), push))
         {: "call " ^ eaddr :}
 inst: Goto(eaddr)            {: "jmp " ^ eaddr :}
 inst: Jcc(cc:string, lconst) {: "j" ^ cc ^ " " ^ lconst :}
-@ 
-Debugging rules.
-<<rules>>=
-inst: Store(meml, Fetch(reg, nw:w), w) [1] {: "<store reg into mem>" :}
-inst: Store(meml, Fetch(reg, nw:w), w) [1] {: "<store eaddr into mem>" :}
-
-inst: Store(meml, any, w) [2] {: "<store " ^ any ^ " into mem>" :}
-inst: Store(any, eaddr, w) [2] {: "<store " ^ eaddr ^ " into " ^ any ^ ">" :}
-
-
-inst: Store (dst:any, src:any, w) [5]
-  {: "Store(" ^ dst ^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
-
--- inst: any [10] {: "<" ^ any ^ ">" :}
 
 <<rules>>=
 inst: Nop() {: "nop" :}
-
+@ 
+Debugging rules.
 <<rules>>=
-any: True () {: "True" :}
+-- inst: any [100] {: "<" ^ any ^ ">" :}
+
+any: True  () {: "True"  :}
 any: False () {: "False" :}
 any: Link(symbol, width) {: "Link(" ^ symbol#text ^ "," ^ string_of_int width ^ ")" :}
 any: Late(string, width) {: "Late(" ^ string ^ "," ^ string_of_int width ^")" :}
 any: Bits(bits) {: "Bits(b)" :}
 any: Fetch (any, w) {: "Fetch(" ^ any ^ "," ^ string_of_int w ^ ")" :}
-any: App1(string, any)       {: "App1(" ^ string ^ "," ^ any ^ ")" :}
-any: App2(string, one:any, two:any)  {: "App2(" ^ string ^ "," ^ one ^ "," ^ two ^ ")" :}
-any: App3(string, one:any, two:any, three:any)
-    {: "App3(" ^ string ^ "," ^ one ^ "," ^ two ^ "," ^ three ^ ")" :}
+
+any: Add(x:any, y:any) {: "Add(" ^ x ^ ", " ^ y ^ ")" :}
+any: Sx(any) {: "Sx(" ^ any ^ ")" :}
+any: Zx(any) {: "Zx(" ^ any ^ ")" :}
+any: Lobits(any) {: "Lobits(" ^ any ^ ")" :}
+any: X86_subflags(l:any, r:any) {: "X86_subflags(" ^ l ^ ", " ^ r ^ ")" :}
+
+
 any: Mem(any, w) {: "Mem(" ^any ^ "," ^ string_of_int w ^ ")" :}
-any: Reg(char, n, w) {: "Reg('" ^ Char.escaped char ^ "'," ^ string_of_int n ^ "," ^ string_of_int w ^ ")" :}
-any: Store (dst:any, src:any, w) {: "Store(" ^ dst ^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
+any: Reg(char, n, w)
+  {: "Reg('" ^ Char.escaped char ^ "'," ^ string_of_int n ^ "," ^
+               string_of_int w ^ ")"
+   :}
+
+any: Store (dst:any, src:any, w)
+ {: "Store(" ^ dst ^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
+any: Kill(any) {: "Kill(" ^ any ^ ")" :}
 
 any: Guarded(guard:any, any) {: "Guarded(" ^ guard ^ "," ^ any ^ ")" :}
 any: Par(l:any, r:any) {: "Par(" ^ l ^ "," ^ r ^ ")" :}
@@ -291,66 +297,6 @@ any: Withlflags(dst:any, string, src:any, w, fo:string)
       ","^ fo ^ ")" :}
 
 any: Jcc(string, any) {: "Jcc(" ^ string ^ "," ^ any ^ ")" :}
-
-
-<<more rules>>=
-guard:      True()  {: return I.ba :}
-guard:      False() {: return I.bn :}
-
-<<more rules>>=
-guard:      App2("eq",  reg, rc) [1]     {: branch I.be      reg rc :}
-guard:      App2("ge",  reg, rc) [1]     {: branch I.bge     reg rc :}
-guard:      App2("geu", rc, reg) [1]     {: branch I.bleu    reg rc :}
-guard:      App2("gt",  reg, rc) [1]     {: branch I.bg      reg rc :}
-guard:      App2("gtu", reg, rc) [1]     {: branch I.bgu     reg rc :}
-guard:      App2("le",  reg, rc) [1]     {: branch I.ble     reg rc :}
-guard:      App2("leu", reg, rc) [1]     {: branch I.bleu    reg rc :}
-guard:      App2("lt",  reg, rc) [1]     {: branch I.bl      reg rc :}
-guard:      App2("ltu", rc, reg) [1]     {: branch I.bgu     reg rc :}
-guard:      App2("ne",  reg, rc) [1]     {: branch I.bne     reg rc :}
-@
-
-{\PAL}'s primitive operators show up in expressions and are mapped to
-{\sparc} instructions.
-
-<<head>>=
-let iprim2 i reg rc = assert false
-let iprim1 i reg = assert false
-<<more rules>>=
-reg:        App2("add", reg, rc) [1]    {: iprim2  I.add   reg rc :}
-reg:        App2("and", reg, rc) [1]    {: iprim2  I.and_  reg rc :}
-reg:        App2("sub", reg, rc) [1]    {: iprim2  I.sub   reg rc :}
-reg:        App2("shl", reg, rc) [1]    {: iprim2  I.sll   reg rc :}
-reg:        App2("shra", reg, rc) [1]   {: iprim2  I.sra   reg rc :}
-reg:        App2("shrl", reg, rc) [1]   {: iprim2  I.srl   reg rc :}
-reg:        App2("xor", reg, rc) [1]    {: iprim2  I.xor   reg rc :}
-reg:        App1("com", reg) [1]        {: iprim1  I.not2  reg :}
-reg:        App1("neg", reg) [1]        {: iprim1  I.neg2  reg :}
-@
-
-Here are rule to cover opeartors we cannot handle.
-
-<<more rules>>=
-reg:        App1(o:string, reg)     [2] {: error ("cannot handle "^o) :}
-reg:        App2(o:string, reg, rc) [2] {: error ("cannot handle "^o) :}
-reg:        App3(string, x:reg, y:reg, z:reg)  [2] {: error "app3" :}
-@
-
-Instructions are classified into branches, calls, and so on. 
-
-<<more rules>>=
-rtl:        Branch(guard, reloc) [1]
-            {:
-                guard >>= fun branch ->
-                exec (branch reloc) >>= fun () ->
-                exec (I.nop)    (* delay slot *)
-            :}
-
-rtl:        Goto(reloc) [1]     {: exec (I.ba reloc) >>= fun () ->
-                                   exec (I.nop) (* delay slot *)
-                                :}
-rtl:        Return()            {: exec (ret) (* jmpl %r31+8, %g0 *) :}
-rtl:        Simple(stmt) [1]    {: stmt >>= fun s -> return ()   :}    
 @
 
 
@@ -360,6 +306,15 @@ rtl:        Simple(stmt) [1]    {: stmt >>= fun s -> return ()   :}
 
 Because it is much easier in {\ocaml} than in {\burg}, we
 decompose applications and complex {\rtl}s here.
+<<special cases for particular operators>>=
+| RP.App(("add", [w]), [x; y]) -> conAdd (exp x) (exp y)
+| RP.App(("sub", [w]), [x; y]) -> conSub (exp x) (exp y)
+| RP.App(("sx", [n;w]), [x])   -> conSx  (exp x)
+| RP.App(("zx", [n;w]), [x])   -> conZx  (exp x)
+| RP.App(("lobits", [w;n]), [x])   -> conLobits (exp x)
+| RP.App(("x86_subflags", [w]), [x; y]) -> conX86_subflags (exp x) (exp y)
+| RP.App((("add"|"sub"|"sx"|"zx"|"lobits"|"x86_subflags") as op, _), _) ->
+    Impossible.impossible ("ill-formed " ^ op)
 
 <<tail>>=  
 let const = function
@@ -372,10 +327,8 @@ let const = function
 let rec exp = function
   | RP.Const(k)               -> const (k)
   | RP.Fetch(l,w)             -> conFetch (loc l) w
-  | RP.App((o,_),[x])         -> conApp1 o (exp x)
-  | RP.App((o,_),[x;y])       -> conApp2 o (exp x) (exp y)
-  | RP.App((o,_),[x;y;z])     -> conApp3 o (exp x) (exp y) (exp z)
-  | RP.App(_,_)               -> error "too many arguments in application"
+  <<special cases for particular operators>>
+  | RP.App((o,_),_)           -> error ("unknown operator " ^ o)
 
 and loc = function
   | RP.Cell('m', aff, w, e, ass) -> conMem (exp e) w
@@ -389,26 +342,27 @@ and stmt = function
   | RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w) when l = l' ->
       conLlr (loc l) o (exp r) w
   | RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits b), ass), r, w)
-    when (Bits.U.to_int b = 0) ->
+    when (Bits.U.to_int b = SS.indices.SS.pc) ->
       conGoto (exp r)
   | RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits b), ass), r, w)
-    when (Bits.S.to_int b = 1) ->
+    when (Bits.S.to_int b = SS.indices.SS.cc) ->
       conSetflags (exp r)
   | RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits b), ass), r, w) ->
       error ("set $c["^string_of_int (Bits.U.to_int b)^"]")
   | RP.Store(RP.Cell('c', _, _, index, ass), r, w) ->
       error ("set $c["^RU.ToReadableString.exp (Up.exp index)^"]")
   | RP.Store(l,e,w)           -> conStore (loc l) (exp e) w
-  | RP.Kill(loc)              -> error "cannot handle kill"
+  | RP.Kill(l)                -> conKill (loc l)
 @
 <<horrible pattern match for [[Withflags]]>>=
 | [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
   ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l'']], [[r']])>>)
-  ] when l = l' && l = l'' && r = r' && Bits.U.to_int flag_index = 1 ->
+  ] when l = l' && l = l'' && r = r' && Bits.U.to_int flag_index = SS.indices.SS.cc ->
       conWithaflags (loc l) o (exp r) w fo
 | [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
   ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>)
-  ] when l = l' && l = l'' && r = r' && o = o' && Bits.U.to_int flag_index = 1 ->
+  ] when l = l' && l = l'' && r = r' && o = o'
+    && Bits.U.to_int flag_index = SS.indices.SS.cc ->
       conWithlflags (loc l) o (exp r) w fo
 <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>=
 RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w) 
@@ -435,10 +389,10 @@ and geffects = function
 and guarded g s = match g with
 | RP.Const(RP.Bool b) -> if b then stmt s else conNop()
 | RP.App((compare, [32]), [RP.Fetch(RP.Cell('c', _, _, RP.Const(RP.Bits n), _), _)])
-    when Bits.U.to_int n = 1 && begins_x86_ compare ->
+    when Bits.U.to_int n = SS.indices.SS.cc && begins_x86_ compare ->
       (match s with
       | RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits b), _), r, w)
-        when (Bits.U.to_int b = 0) ->
+        when (Bits.U.to_int b = SS.indices.SS.pc) ->
           conJcc (String.sub compare 4 (String.length compare - 4)) (exp r)
       | _ -> error "guard on x86 non-branch")
 | _ -> conGuarded (exp g) (stmt s)
@@ -451,7 +405,7 @@ When this plan is executed, it returns a monadic value that includes the
 desired expanded instructionss.
 
 <<tail>>=
-let to_string (r: R.rtl) = 
+let to_asm (r: R.rtl) = 
     try
         let plan = rtl (Down.rtl r) in
         plan.inst.Camlburg.action ()
@@ -466,4 +420,16 @@ let to_string (r: R.rtl) =
             ; " error in recognizer: " ^ msg (*assert false*)
             )
 
+let is_instruction r =
+    try
+        let plan = rtl (Down.rtl r) in
+        plan.inst.Camlburg.cost < 100  (* should be true, but shade this... *)
+    with 
+        | Camlburg.Uncovered -> false
+        | Error(msg) ->
+            ( List.iter prerr_string
+                [ "recognizer error: "; msg; " on "; RU.ToReadableString.rtl r; "\n"
+                ]
+            ; false
+            )
 @                        
