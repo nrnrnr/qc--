@@ -1,0 +1,197 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\input{macros.tex}
+
+% l2h substitution cfg CFG
+% l2h substitution dots ...
+% l2h substitution AST AST
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Liveness Analysis}
+% ------------------------------------------------------------------ 
+
+Liveness analysis determines for every node in a flow graph (see
+module \module{cfg2}) the set of variables that will be used in any of
+its succeeding nodes.  This set of variables is called the \emph{live
+set}.  Since nodes use and define variables, liveness is actually only
+defined \emph{between} adjacent notes.  Therefore, the set of live
+variables associated with each node in a control flow graph denotes
+the variables that are live \emph{before} the node at hand.
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+The [[liveness]] function annotates the nodes in a control-flow graph
+[[cfg]] with the set of live registers \emph{before} that node.
+
+<<live.mli>>=
+module Make (G: Cfg2.S) : sig
+    val liveness: G.cfg -> unit
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The implementation is a functorized over the control-flow graph to
+make dependencies more explicit. At the moment this is not strictly
+necessary, because we have only one implementation for the control
+flow graph and the liveness analysis.
+
+<<live.ml>>=
+module R = Register.Set
+module Make(G: Cfg2.S) = struct
+    <<struct Make>>
+end
+
+@
+
+The set of live variables of a node are basically the union of live
+variables from its successors.  The [[union]] function unites a list
+of sets.
+
+<<struct Make>>=
+let (union: Register.Set.t list -> Register.Set.t) = 
+        List.fold_left R.union R.empty            
+@
+
+The registers read and written by an {\rtl} are advertised by
+[[RtlUtil.read_write_lists]].  It receives two functions that recieve
+the read and written registers repectively.  Since the order in which
+locations are passed to these functions is unspecified it is in
+ingeneral impossible to use a single set that represents the set live
+variables.  We therefore use the function [[rw_sets]] that returns a
+pair $(r,w)$ of two sets.
+
+<<struct Make>>=
+let (reg: Rtl.space -> int -> Rtl.width -> Register.t) = fun 
+    space index width -> (space,index,width)
+
+let add_left  space index width (left,right) = 
+    (Register.Set.add (reg space index width) left, right)
+
+let add_right  space index width (left,right) = 
+    (left, Register.Set.add (reg space index width) right)
+
+let rw: Rtl.rtl -> (Register.Set.t * Register.Set.t) = fun rtl ->
+    let empty = (Register.Set.empty, Register.Set.empty) in
+        Rtlutil.read_write_lists add_left add_right rtl empty
+@
+    
+The [[live]] function computes the set of variable live \emph{before}
+[[node]].  It does so by looking at the live sets of its successors. 
+The idea is, that variables live at successor nodes must be either
+defined by this node, or must be live before this node as well.  The
+details depend on the kind of [[node]].  
+
+Most nodes include an [[rtl]]; we calculate the read/write sets from
+the [[rtl]] using [[rw]].  In the [[standard]] case, the live set can
+be deduced from the [[rtl]] alone whitout looking a the kind of its
+node:
+
+\begin{itemize}
+\item A variables live after the node are also live before it,
+\item minus the variables that are written by the rtl,
+\item plus the variables that are read by the rtl.
+\end{itemize}
+
+$$\mathit{live} = 
+    ( \mathit{after} 
+      \setminus \mathit{written}
+    ) \cup \mathit{read}
+$$
+
+<<struct Make>>=
+let rec standard cfg node rtl =
+    let (read,write) = rw rtl                                       in
+    let live         = Register.Set.diff (after cfg node) write     in
+        Register.Set.union live read   
+@
+
+The [[after]] function computes the union of the live sets of a node's
+successors.
+
+<<struct Make>>=
+and after cfg node = union (List.map (live cfg) (G.succ cfg node)) 
+@
+
+<<struct Make>>=
+and live: G.cfg -> G.node' -> Register.Set.t = fun cfg node -> 
+    match G.kind node with
+    | G.Goto   (rtl,_) -> standard  cfg node rtl
+    
+    | G.Call   (rtl,_) -> standard  cfg node rtl (* wrong *)
+    | G.Assign  rtl    -> standard  cfg node rtl
+    | G.Branch (rtl,_) -> standard  cfg node rtl
+    | G.Label _        -> after cfg node
+    | G.Jump   (rtl,_) -> standard  cfg node rtl 
+    | G.Cutto  (rtl,_) -> standard  cfg node rtl
+    | G.Return _       -> Register.Set.empty
+    | G.Exit           -> Register.Set.empty
+@
+
+Computing the live sets of a control-flow graph (\cfg) is a fix-point
+problem:  you have to do it as long as doing so changes the result. 
+After computing a new live set for a node we compare it to the set
+currently stored in the node.  If both differ the mutable
+[[changed]] flag is set.  
+
+<<struct Make>>=
+let process cfg changed node =
+    let l = live cfg node in
+        if l <> G.live node then
+            ( changed := true; G.set_live node l )
+        else
+            ()
+@
+
+A return, jump, or cutto statement on the {\PAL} level in translated
+into a sequence of assignment nodes, representing a copy-out node, and
+a return, jump, or cutto node, respectively.  This creates a problem,
+because from the final node it can't be deduced that the register's
+used for passing arguments should be live.  They are read by the
+preceding nodes but not by the final node.  We therefore must correct
+the live sets for these somehow by propagating liveness information
+from predecessors to jump, return, and cutto nodes.  However, we don't
+know how far to look back for this since we we don't know which of the
+previous nodes resulted from the translation of a copy node.
+
+The data flow rules implemented in [[live]] state, that no variables
+are live before a jump, return, or cutto. These nodes are preceded by
+copy-out nodes, i.e. assign nodes, which read 
+
+The [[process]] function, which updates the live set of a node, is
+repeatedly applied to all nodes in [[cfg]].  This is done until
+[[process]] does not change any live set which means the fix point is
+reached. 
+
+\begin{quote}\it
+    Propagate live sets from [[return]], [[cutto]], [[jump]] to [[exit]].
+\end{quote}
+
+<<struct Make>>=
+let liveness cfg =
+    let changed = ref false in
+    let rec loop () = 
+        ( changed := false
+        ; G.iter cfg (process cfg changed)
+        ; if !changed then loop () else ()
+        )
+    in loop ()
+@
+
+

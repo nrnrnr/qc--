@@ -1,0 +1,483 @@
+
+\input{macros.tex}
+
+% l2h substitution cfg CFG
+% l2h substitution dots ...
+% l2h substitution ast AST
+% l2h substitution AST AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ################################################################## 
+\section{Control Flow Graph}
+% ################################################################## 
+
+The dynamic part of a procedure is represented by a control flow
+graph (\cfg):  nodes represent statements, and edges possible flow of
+control between statements.  This interface allows to build a control
+flow graph for a procedure.  Many aspects are left abstract to foster
+different implementations.
+
+The interface is divided into two parts:  the first defines types that
+are used in the interface and also shared among all implementations. 
+The second part defines a module type [[S]] that describes the
+interface for building, inspecting, and altering a flow graph. 
+
+<<cfg2.mli>>=
+module type S = sig
+    <<signature S>>
+end
+<<signature S>>
+@
+
+<<signature S>>=
+<<concrete types>>
+<<abstract types and values>>
+@
+
+For the nodes of a {\cfg} at least two plausible designs exist:  the
+information a node represents can be either target-specific or not.  A
+target-independent node is in later phases of the backend replaced by
+a target-specific {\rtl}.  If a node is target specific right from the
+start all kinds of nodes can be represented as {\rtl}s.  On the other
+hand, target-specific informations must be used when nodes are
+created.  We have decided to strive for greater uniform in the back
+end and use target-specific nodes.
+
+
+% ------------------------------------------------------------------ 
+\subsection{Shared Types}
+% ------------------------------------------------------------------ 
+
+A control flow graph is cyclic in general.  In order to express cycles
+while building the graph nodes can be labeled and referred to by name. 
+In particular it is possible to use these names before its defining
+label exists.
+
+<<concrete types>>=
+type label      = string
+@
+
+{\PAL} continuations can be used to model exception handling.  Nodes
+that can transfer control to a continuation are annotated with a
+[[cuts]] value that lists the different possible nodes/continuations.
+
+<<concrete types>>=
+type cuts =     { cuts    : label list
+                ; unwinds : label list
+                ; returns : label list
+                ; aborts  : bool
+                }
+@
+
+When arguments and results to and from procedures are passed around
+with [[copy]] nodes, a [[context]] value identifies the exact purpose
+of a copy.  This information is necessary to find the right calling
+convention to implement the copying. 
+                
+A formal parameter is a variable, an actual parameter an expression. 
+Both can have optional hints, and have a [[width]], i.e.~a type. 
+
+<<concrete types>>=
+type formal =   { name:      string 
+                ; width:     Rtl.width       (* bits *)
+                ; hint:      string option   (* C-- hint *)
+                ; index:     int             (* run-time API *)
+                } 
+
+type actual     = Rtl.exp 
+                * Rtl.width 
+                * string option               (* hint *)
+                
+type context    = ProcParameters
+                | ProcResults
+                | ContParameters
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Construction}
+% ------------------------------------------------------------------ 
+
+A control flow graph (\cfg) is an abstract value [[cfg]] that includes
+nodes which have successor nodes.  Although a control flow graph is an
+arbitrary graph in general, this interface demands that the graph is
+created in a linear order that basically defines the code layout of
+machine instructions. 
+
+Nodes have to have properties---notably, span bindings. A node's
+properties are fixed upon its creation.
+
+\begin{itemize}
+\item Span bindings allow to mark regions of source code with a
+      compile-time constant key, and a link-time constant value.
+\item Comments attached to nodes by [[add_comment]] help to debug
+      generated code. A comment must not contain a newline character. 
+\end{itemize}
+
+
+<<abstract types and values>>=
+module Props: sig
+    type t
+    val empty: t
+    val comment: t -> string -> t
+end
+@
+
+A control-flow graph [[cfg]] is created from a list of [[nodes]] where
+the first node in the list is the graph's entry node, and the last
+node its exit node.  Nodes are created by construction functions, like
+[[exit]] or [[branch]], which are detailed below. 
+
+<<abstract types and values>>=
+exception Error of string       
+type node
+type cfg
+val freeze: node list -> cfg (* raises Error if node list empty *) 
+@
+
+Nodes that can be reached from a given node at run-time are called the
+nodes \emph{succesors}.  During construction of a node, two methods
+exist to specify its successors:  [[label]] nodes are referred to by
+their name.  For some nodes, like the [[assign]] node, the successor
+is the node following it in the node list that is constructed.  For
+other nodes, like [[goto]], the following node in the list has no
+special meaning. Nodes that have the node following them as a
+successor are marked with [[(*succ*)]] below.
+
+Every node includes a mutable set of variables for liveness analysis. 
+For this reason every node can only participate in one [[cfg]] value: 
+sharing of nodes between different control-flow graphs is asking for
+trouble.
+
+The {\rtl}s passed to node creation functions are in general
+target-specific.  For example:  the target of a [[goto]] can be
+described by an target-independent [[Rtl.exp]] value.  The [[rtl]]
+implementing the [[goto]] is target specific. 
+
+<<abstract types and values>>=
+val exit:                             Props.t -> node
+val goto:   Rtl.rtl  -> label list -> Props.t -> node
+val jump:   Rtl.rtl  -> label list -> Props.t -> node
+val cutto:  Rtl.rtl  -> cuts       -> Props.t -> node
+val return: int -> int             -> Props.t -> node
+                                              
+val call:   Rtl.rtl  -> cuts       -> Props.t -> node (*succ*)
+val assign: Rtl.rtl                -> Props.t -> node (*succ*)
+val branch: Rtl.rtl  -> label      -> Props.t -> node (*succ*)
+val label:  label                  -> Props.t -> node (*succ*)
+
+val copyi:  formal list -> context -> Target.cc -> Props.t -> node (*succ*)
+val copyo:  actual list -> context -> Target.cc -> Props.t -> node (*succ*) 
+@
+
+The [[copyi]] and [[copyo]] functions actually do not create a single
+node each, but sequences of [[assign]] nodes.  Analysis functions for
+a {\cfg} will thus never report a [[copyi]] or [[copyo]] node.
+
+
+% ------------------------------------------------------------------ 
+\subsection{Analysis}\label{sect:cfgliveness}
+% ------------------------------------------------------------------ 
+
+The following functions allow to inspect a {\cfg}.  One of the most
+important functions is [[succ]] that returns a list of all nodes
+directly reachable (in the control-flow sense) from a given node. 
+Everything in a flow graph should be reachable from the [[entry]]
+node.  Note, that nodes reported by the analysis functions have type
+[[node']] that is different from the type [[node]] that was used by
+the construction functions.
+
+Finding the successors of a node requires to resolve labels. In case
+an undefined label is found in this process, an assertion failure is
+raised. 
+
+<<abstract types and values>>=
+type node'
+val entry: cfg -> node' 
+val succ:  cfg -> node' -> node' list (* assertion: no undefined labels *)
+@
+
+The [[kind]] function reports a node's flavor and most of the data
+that was used to create it.
+
+<<concrete types>>=
+type  kind      = Goto          of Rtl.rtl * label list 
+                | Jump          of Rtl.rtl * label list 
+                | Cutto         of Rtl.rtl * cuts       
+                | Return        of int * int             
+                | Call          of Rtl.rtl * cuts       
+                | Assign        of Rtl.rtl               
+                | Branch        of Rtl.rtl * label      
+                | Label         of label                   
+                | Exit
+@
+
+<<abstract types and values>>=
+val kind: node' -> kind
+@
+
+Liveness analysis (module \module{liveness}) determines the set of
+variables \emph{live before} a given node.  This set [[live]] is
+stored in every node and can be updated by side effect using
+[[set_live]] -- see below. 
+
+<<concrete types>>=
+type set = Register.Set.t
+
+<<abstract types and values>>=
+val live:     node' -> set
+@
+
+\begin{quote}\it
+        We currently have no function to inspect the properties of a
+        node. 
+\end{quote}
+
+% ------------------------------------------------------------------ 
+\subsection{Manipulation}
+% ------------------------------------------------------------------ 
+
+The [[live]] set of a node can be set to a new value using
+[[set_Live]]:
+
+<<abstract types and values>>=
+val set_live: node' -> set -> unit
+@
+
+To apply a function to all nodes of a [[cfg]] call [[iter]].  The
+function walks over the list of nodes from back to front.  Since most
+control flows from front to back, [[iter]] is well suited for data
+flow problems like liveness analysis, that prefer backward walks over
+the control flow.
+
+<<abstract types and values>>=
+val iter:   cfg -> (node' -> unit) -> unit
+@
+
+The code expansion-step in the compiler back end expands single
+[[rtl]] values into a list.  The [[expand]] function supports this by
+walking over an [[cfg]] and passing all relevant nodes to an expansion
+function.  The result is then used to build a new and expanded [[cfg]]
+value.
+
+<<abstract types and values>>=
+val expand: cfg -> (Rtl.rtl -> Rtl.rtl list) -> cfg
+@
+
+
+% ################################################################## 
+\subsection{Implementation}
+% ################################################################## 
+
+The implementation re-uses the generative type declarations and the
+signature [[S]] as it is defined in the internet. The interesting
+stuff that implements this signature comes next.
+
+<<cfg2.ml>>=
+module type S = sig
+    <<signature S>> 
+end
+<<concrete types>>
+<<implementation of S>>    
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Properties}
+% ------------------------------------------------------------------ 
+
+The implementation for properties is ``preliminary''. We yet have no
+real idea about it.
+
+<<implementation of S>>=
+module Props = struct
+    type t = unit
+    let empty = ()
+    let comment () str = ()
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Construction Functions}
+% ------------------------------------------------------------------ 
+
+A [[node]] during construction of a [[cfg]] bundles its [[kind]], live
+set and properties. A [[node']] on the other hand is a list of
+[[nodes]] such that we have access to the succesor of a given node.
+
+<<implementation of S>>=
+module StrMap = Map.Make(struct type t=label let compare=compare end)
+
+exception       Error of string (* general purpose *)
+type node =     { kind:         kind
+                ; mutable live: set
+                ; props:        Props.t
+                }
+type node'      = node list   
+@
+
+A [[cfg]] holds the list of all nodes plus an index that resolves all
+labels. The [[index]] is a map from a [[label]] to a [[node']].
+
+<<implementation of S>>=
+type cfg =      { entry: node'
+                ; index: node' StrMap.t
+                }
+@
+
+The [[node]] construction function helps to set up nodes properly.
+In particular the [[live]] is initialized to the empty set.
+Constructing nodes provides no surprises. The interface provides no
+value added services like inventing labels or linearizing code. This
+must be done by the client where all the other logic for constructing
+the control-flow graph is anyway.
+
+<<implementation of S>>=
+let node props kind =
+    { kind  = kind
+    ; live  = Register.Set.empty
+    ; props = props
+    }
+
+let exit              props = node props (Exit)             
+let goto   exp labels props = node props (Goto(exp,labels))
+let jump   exp labels props = node props (Jump(exp,labels))
+let cutto  exp cuts   props = node props (Cutto(exp,cuts)) 
+let return    x y     props = node props (Return(x,y))    
+let call   exp cuts   props = node props (Call(exp,cuts))
+let assign rtl        props = node props (Assign(rtl))  
+let label  l          props = node props (Label(l))    
+let branch exp label  props = node props (Branch(exp,label)) 
+
+<<implementation of S>>=
+let copyo formals context cc props = Impossible.unimp "Cfg.copyo"
+let copyi actuals context cc props = Impossible.unimp "Cfg.copyi"
+@
+
+The [[freeze]] function computes an [[index]] from labels to the node
+it precedes.  This map is used to look up labels when computing
+successors. It is illegal to build a completely empty [[cfg]]---it
+must have at leat an [[exit]] node.
+
+The [[index]] function walks over the list of nodes and puts every
+node following a label into a map under the name of the label.
+
+<<implementation of S>>=
+let rec index map = function
+    | x::nodes -> 
+        ( match x.kind with
+        |  Label(label) -> index (StrMap.add label nodes map) nodes
+        |  _            -> index map nodes
+        )
+    | []                -> map
+    
+let freeze = function
+    | []    -> raise (Error "freeze: empty list of nodes")
+    | nodes -> 
+        { entry = nodes
+        ; index = index StrMap.empty nodes
+        }   
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Analysis}
+% ------------------------------------------------------------------     
+
+Analysis functions return [[node']] values, which are actually list of
+[[node]] (without quote) values. The [[entry]] point of a [[cfg]] is
+the first [[node]] in the list, and thus the entire list as a
+[[node']] value.
+
+<<implementation of S>>=
+let entry = function
+    | {entry=x::xx as nodes} -> nodes
+    | {entry=[]}             -> []
+@
+  
+The [[live]] and [[kind]] functions simply report what is there.
+
+<<implementation of S>>=
+let live = function
+    | x::xx -> x.live
+    | []    -> assert false
+
+let kind = function
+    | x::xx -> x.kind
+    | []    -> assert false
+@
+
+The successors of a node depend on the kind of the node. Some nodes name
+successors by names, for others the following node in the list of node is
+a successor. The [[lookup]] function uses the [[cfg.index]] to resolve
+names. If a name is not found because it was never defined by a label
+this is an internal error. User programs with undefined labels are
+rejected; at this stage all labels must be defined.
+    
+<<implementation of S>>=
+let lookup cfg label =
+    try StrMap.find label cfg.index
+    with Not_found -> assert false
+
+let lookup_cuts cfg cuts =
+    let targets = List.map (lookup cfg) in
+    List.concat [ targets cuts.cuts
+                ; targets cuts.unwinds
+                ; targets cuts.returns
+                ]
+@
+
+The [[succ]] function looks at the kind of node and collects its
+successors. 
+                
+<<implementation of S>>=
+let succ cfg = function
+    | []          -> assert false
+    | node::next -> 
+        ( match node.kind with 
+        | Goto(_,labels) -> List.map (lookup cfg) labels
+        | Jump(_,labels) -> List.map (lookup cfg) labels
+        | Cutto(_,cuts)  -> lookup_cuts cfg cuts
+        | Return _       -> []
+        | Call(_,cuts)   -> next::(lookup_cuts cfg cuts)  
+        | Assign _       -> [next]
+        | Branch(_,label)-> [next;lookup cfg label]
+        | Label _        -> [next]
+        | Exit           -> []
+        )                           
+@
+        
+% ------------------------------------------------------------------ 
+\subsection{Manipulation}
+% ------------------------------------------------------------------ 
+        
+The functions for manipulation of [[cfgs]] are mostly not yet
+implemented. 
+
+<<implementation of S>>=
+let set_live node set = match node with
+    | x::xx -> x.live <- set
+    | []    -> assert false
+
+let expand cfg f = Impossible.unimp "Cfg.expand"
+@
+
+The [[iter]] function is \emph{not} tail-recursive: before we process
+the actual node, we have to process all following nodes first.
+
+<<implementation of S>>=
+let iter cfg f = 
+    let rec loop = function
+        | []             -> ()
+        | n::nn as node' -> loop nn; f node'
+    in
+        loop cfg.entry
+@
