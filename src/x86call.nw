@@ -13,6 +13,18 @@ val cmm : return_to:(Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
 val notail: return_to:(Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
   (* C-- calling convention without tail calls *)
 @ 
+
+\paragraph{Debugging support}
+
+Dumps automata to [[stdout]]. The two arguments are the widths and hints
+to try in every state of the automaton to reach the next state. These
+functions are exported to Lua.
+
+<<x86call.mli>>=
+val dump_c_proc:    int list -> string list -> unit
+val dump_c_cutto:   int list -> string list -> unit
+@
+
 \section{Implementation of X86 calling conventions}
 We use these abbreviations:
 <<x86call.ml>>=
@@ -258,3 +270,15 @@ let c   = conv "C"   false { call = c_arguments;   results=c_results;   cutto=cu
 let cmm = conv "C--" true  { call = cmm_arguments; results=cmm_results; cutto=cut_args}
 let notail= conv "notail" false
               { call = cmm_arguments; results=cmm_results; cutto=cut_args}
+
+let dump automaton widths hints = 
+    Automatongraph.print 
+        ~mk:(fun () -> A.at (Rtl.bits (Bits.zero 32) 32) automaton)
+        ~widths:[32;16]
+        ~hints:["float";"int"]
+        
+let dump_c_proc  = dump c_arguments 
+let dump_c_cutto = dump cut_args
+@
+
+              

@@ -1,0 +1,204 @@
+
+% ------------------------------------------------------------------ 
+\section{Automaton-Graph}
+% ------------------------------------------------------------------ 
+
+The Quick {\PAL} compiler represents a calling convention as an
+automaton [[Automaton.t]]. When a client supplies a \emph{type} to an
+automaton it advances to a new state. A type is a pair of an integer and
+a string, representing a width in bits and a so-called hint. The state
+of an automaton comprises a set of register locations and the alignment
+of a memory block. We are interested in a graph representation of the
+reachable states: states form the nodes, and transitions the edges of
+the graph. For any realistic calling convention the set of reachable
+states in its automaton and the corresponding edges should be finite.
+The module traverses this state graph and emits it for analysis.
+
+Function [[print]] takes a function [[mk]], that creates an automaton in
+its initial state a list of widths, and list of hints. It prints all
+edges of the automaton to [[stdout]].  The widths and hints are used to
+construct requests: in every state of the automaton, every combination
+of a width and a hint are explored to reach a new state.
+
+<<automatongraph.mli>>=
+val print:  mk:(unit -> Automaton.t) 
+                     -> widths:int list -> hints:string list 
+                     -> unit
+@
+
+
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The basic idea is simple: we start from the initial state of an
+automaton and explore all outgoing edges. An edge is labeled with a
+type, which is a pair of a width and a hint. As long as we find new
+edges we continue depth first. The graph should be finite because a
+typical calling convention has only a limited set of registers and a
+limited set of stack alignments. Once the graph is explored, we can
+print it.
+
+The state of an automaton can only be observed after is was
+\emph{frozen}. This presents a small dificulty: to observe a given
+state, we have to freeze it. But to follow a new edge we need an
+unfrozen automaton, thus we have to re-construct the automaton's state
+such that we can make the transition. To do that, we maintain a
+\emph{path} of types that allows to reconstruct the state automaton,
+starting from the initial state of an automaton. This in turn requires,
+to create an automaton in its inital state when needed.
+
+
+<<automatongraph.ml>>=
+module A    = Automaton
+let sprintf = Printf.sprintf
+let printf  = Printf.printf
+@
+
+A type is a pair of a width and a hint. Types label the edges of the
+graph. A path is a list of types and indirectly describes the state of
+an automaton: starting from the initial state the types from the path
+are fed into the automaton, which advances its state accordingly.
+
+<<automatongraph.ml>>=
+type ty =       int * string                    (* width, hint     *)
+type path =     ty list                         (* leads to a node *)
+@
+
+A [[node]] is the observable state of an automaton. It is the ordered
+list of allocated registers and the alignment of the next slot in the
+overflow memory edge. To simplify node equality we represent allocated
+registers as (ordered or normalized) list, rather than as a set.
+
+<<automatongraph.ml>>=
+type node    =  { regs:     Register.t list     (* ordered *)
+                ; align:    int
+                }
+@
+
+An [[edge]] connects two nodes and is labeled with a type.
+
+<<automatongraph.ml>>=
+type edge =     { src:      node
+                ; label:    ty
+                ; dst:      node
+                }
+@
+
+A graph is a set of nodes and edges. Since edges are pairs of nodes, it
+would be enough to have just a set of edges. 
+
+<<automatongraph.ml>>=
+module ES = Set.Make(struct type t=edge let compare=compare end)                
+module NS = Set.Make(struct type t=node let compare=compare end)
+
+type graph =    { nodes:    NS.t
+                ; edges:    ES.t
+                }
+@
+
+We have a membership predicate for edges and a function to [[add]]
+edges. The invariant is, that we only add edges whose source node is
+already part of the graph.
+
+<<automatongraph.ml>>=
+let mem edge graph = ES.mem  edge graph.edges
+let add edge graph =
+    assert (NS.mem edge.src graph.nodes);
+    { graph with edges = ES.add edge graph.edges
+               ; nodes = NS.add edge.dst graph.nodes } 
+@
+
+For debugging, the [[ToString]] module provides us with function to
+represent all our types as strings. Feel free to improve this.
+
+<<automatongraph.ml>>=
+module ToString = struct
+    let register (sp,i,_) = sprintf "$%c%i" sp i
+    let ty (width,hint)   = sprintf "%d/%s" width hint
+    let align n           = sprintf "%i:" n
+    let node s            = String.concat "" 
+                                ((align s.align)::List.map register s.regs)
+    let edge e            = sprintf "%s--%s-->%s"
+                                (node  e.src)
+                                (ty    e.label)
+                                (node  e.dst)
+    let graph g           = String.concat "\n" 
+                                (List.map edge (ES.elements g.edges))
+end
+@
+
+[[combine]] forms the product of two lists. We use it to compute all
+possible edge labels from a list of widths and hints.
+
+<<automatongraph.ml>>=
+let combine xs ys =
+    let pair x y = (x,y) in
+        List.concat (List.map (fun w -> List.map (pair w) ys) xs)
+@
+
+[[goto]] takes function [[mk]] that creates an automaton in its inital
+state and a [[path]] of types. It feeds [[path]] through the automaton,
+observes its final state, and returns it as a [[node]].
+
+<<automatongraph.ml>>=
+let goto mk path =
+    let t    = mk ()                        in
+    let ()   = List.iter (fun (w,h) -> ignore (A.allocate t w h)) path in
+    let res  = A.freeze t in
+        { regs  = Register.Set.elements res.A.regs_used     (* ordered! *)
+        ; align = res.A.align_state
+        }
+@
+
+The heart of the algorithm are the two mutually recursice functions
+[[dfs]] and [[follow]]. The depth-search function [[dfs]] explores a
+[[graph]] in all direction, starting from one [[node]]. [[Follow]]
+specifically explores a [[node]] by following a potentially new edge
+labeled with [[ty]].
+
+Both functions take common arguments [[mk]], [[dirs]], [[path]], and the
+current [[graph]]. [[mk]] creates the automaton under investigation in
+its initial state when applied to [[()]]. [[dirs]] is the list of all
+labels for outgoing edges that are explored from the current node.
+[[path]] allows to reconstruct the state of the current [[node]] by
+passing it with [[mk]] to [[goto]].
+
+From the current node, we follow an edge labeled with [[ty]]. If this
+edge hasn't be seen before, it is added to the graph and we move to the
+node at its end. From there we explore all outgoing edges recursively
+depth first.
+
+<<automatongraph.ml>>=
+let rec follow (mk:unit->Automaton.t) (dirs: ty list) graph path node ty =
+    let path  = path @ [ty] in
+    let node' = goto mk path in
+    let edge  = { src = node; label=ty; dst=node' } in
+    if mem edge graph then
+        graph
+    else
+        dfs mk dirs (add edge graph) path node'
+
+and dfs mk dirs graph path node =   (* call this *)
+    List.fold_left 
+        (fun graph ty -> follow mk dirs graph path node ty) graph dirs
+@
+
+
+Finally, here is the function we export. The list [[dirs]] of all
+potential edge labels is the product of all widths and hints. Function
+[[mk]] creates an automaton in its initials state. The initial graph
+contains the node corresponding to the initial state and is otherwise
+empty.
+  
+<<automatongraph.ml>>=
+let print ~mk ~widths ~hints = 
+    let dump g  = ES.iter (fun e -> print_endline (ToString.edge e)) g.edges in
+    let dirs    = combine widths hints in
+    let init    = {regs=[]; align=0}   in
+    let graph   = { nodes = NS.add init NS.empty; edges = ES.empty } in
+    let graph   = dfs mk dirs graph [] {regs=[]; align=0} in
+        dump graph
+@
+

@@ -224,16 +224,6 @@ dirs:V:
                 for i in bin lib man man/man1 lua/std; do
                     [ -d $i ] || mkdir $i
                 done
-                # create symbolic links for renamed files in src/
-                # this will go away
-#   [ -h src/asm.nw ]           || ln -s asm3.nw     src/asm.nw
-#   [ -h src/driver.nw ]        || ln -s driver2.nw  src/driver.nw
-#   [ -h src/main.nw ]          || ln -s main2.nw    src/main.nw
-#   [ -h src/simplify.nw ]      || ln -s rtleval2.nw src/simplify.nw
-#   [ -h src/rtleqn.nw ]        || ln -s const2.nw   src/rtleqn.nw
-#   [ -h src/target.nw ]        || ln -s target2.nw  src/target.nw 
-#   [ -h src/interpemitrtl.nw ] || ln -s rtltolua.nw src/interpemitrtl.nw
-#   [ -h src/astpp.nw ]         || ln -s ast.nw      src/astpp.nw
 
 # ------------------------------------------------------------------ 
 # build distribution

@@ -4,6 +4,11 @@
 \section{{\mips} calling conventions}
 % ------------------------------------------------------------------ 
 
+\emph{Spreading the {\mips} backend across several files increases the
+chance of inconsistencies. Each file defines the byteorder and certain
+registers. Is this a real problem? It definitely makes it harder to define
+a little and a big-endian {\mips} backend. --CL}
+
 This module implements calling conventions for the {\mips}. The
 parameters represent the machine instructions to implement [[return]]
 and [[cut to]].
@@ -43,10 +48,15 @@ each a multiple of 4 bytes. This is crucial, because the last line
 chooses a register not by the argument index, but by the total size of
 preceding arguments.
 
+\paragraph{Debugging} For debugging we provide functions that dump 
+automata that are part of the calling convention to [[stdout]]. The two
+arguments are the width and hints to try in every state of an automaton.
 
-\emph{Spreading the {\mips} backend across several files increases the
-chance of inconsistencies. Each file defines the byteorder and certain
-registers. Is this a real problem? -- CL}
+<<mispcall.mli>>=
+val dump_proc:      int list -> string list -> unit
+val dump_return:    int list -> string list -> unit
+val dump_cutto:     int list -> string list -> unit
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation of {\mips} calling conventions}
@@ -112,7 +122,7 @@ let saved_nvr temps =
 
 Stack pointer alignment is tricky. It is not mentioned in the
 architecture manual and also seems to depend on the operating system.
-The SGI IRIX 5.x require 8-byte alignment, SGI IRIX 6.x 16-byte
+The SGI IRIX 5.x requires 8-byte alignment, SGI IRIX 6.x 16-byte
 alignment. LCC therefore always uses 16-byte alignment.
 
 <<mipscall.ml>>=
@@ -174,6 +184,8 @@ let arguments =
             A.useregs [r 4; r 5; r 6; r 7] ~errormsg:fatal 
         ] **>
     A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
+@
+
 @ 
 To support varargs, each argument registers maps to a particular
 location, and there are overlapping locations for integer and
@@ -290,5 +302,22 @@ let c ~return_to cut =
     ; C.where_to_save_ra = (fun _ t -> Talloc.Multiple.loc t 't' 32)
     ; C.ra_on_exit       = (fun t b -> t)
     }
+@
+
+\paragraph{Support for Debugging} 
+
+This code should ultimately moved close to the \module{call.nw} module
+such that it is available for all calling conventions. The polymorphic
+nature of [[Call.t]] make this difficult rigth now.
+
+<<mipscall.ml>>=
+let dump automaton widths hints = 
+    Automatongraph.print 
+        ~mk:(fun () -> A.at (Rtl.bits (Bits.zero 32) 32) automaton)
+        ~widths ~hints
+        
+let dump_proc     = dump (arguments ())
+let dump_return   = dump results
+let dump_cutto    = dump cut_args
 @
 
