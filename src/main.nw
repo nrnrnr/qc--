@@ -47,7 +47,7 @@ type cmd =        | Help
                   | Asdl     of string
                   | PP       of string * int
                   | Check    of string
-                  | IR       of string
+                  | Compile  of string * string (* target, file *)
 @
 
 The concrete syntax of the command line is specified through the
@@ -68,8 +68,17 @@ let cmd_version   = literal "-version"      --> fun _ -> Cmdline.Version
 let cmd_lex       = literal "-lex" **> any  --> fun s -> Cmdline.Lex(s) 
 let cmd_asdl      = literal "-asdl" **> any --> fun s -> Cmdline.Asdl(s) 
 let cmd_check     = literal "-check" **>any --> fun s -> Cmdline.Check(s) 
-let cmd_ir        = literal "-ir" **> any   --> fun s -> Cmdline.IR(s)
 let cmd_default   = any                     --> fun s -> Cmdline.Check(s)
+
+let cmd_compile   = ( literal "-c" **> 
+                      literal "-target" **> any *** any 
+                      --> fun (t,f) -> Cmdline.Compile(t,f)
+                    )
+                   ||| 
+                    ( literal "-target" **> any ***
+                      literal "-c" **> any
+                      --> fun (t,f) -> Cmdline.Compile(t,f)
+                    )
 
 let cmd_width     = literal "-w" **> any    
                     --> fun s -> (try  int_of_string s 
@@ -98,7 +107,7 @@ let cmdline       = (  cmd_version
                    ||| cmd_asdl 
                    ||| cmd_pp
                    ||| cmd_check
-                   ||| cmd_ir
+                   ||| cmd_compile
                    ||| cmd_default 
                     ) **< Pc.eof
 @
@@ -201,7 +210,8 @@ B<qc-- -pp> [ B<-w> I<width> ] I<file.c-->
 
 B<qc-- -check> I<file.c-->
 
-B<qc-- -ir> I<file.c-->
+B<qc-- -c> B<-target> I<target> I<file.c-->
+B<qc-- -target> I<target> B<-c> I<file.c-->
 
 =head1 DESCRIPTION
 
@@ -248,11 +258,12 @@ Check the static semantics of I<file>. Error messages are written to
 stdout. In case of errors in the static semantics of I<file> the
 compiler exits with an exit code different from 0.
 
-=item B<-ir> I<file>
+=item B<-c> B<-target> I<target> I<file>
 
 Check the static semantics of I<file> and compile it (internally) to
-abstract C--. This is a development flag and produces no interesting
-output. 
+abstract C--.  Assume we are compile for target platform I<target>. 
+This is a development flag and produces no interesting output. The
+I<target> is ignored for the moment.
 
 =back
 

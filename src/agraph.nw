@@ -120,12 +120,20 @@ to have to pass properties to every node-creation function.  So
 instead, we add a new type:  [[unode]], for ``unmarked node.'' We then
 use [[bind]] to add properties.
 
+\begin{itemize}
+\item Span bindings allow to mark regions of source code with a
+      compile-time constant key, and a link-time constant value.
+\item Comments attached to nodes by [[add_comment]] help to debug
+      generated code. A comment must not contain a newline character. 
+\end{itemize}
+
 <<module Props>>=
 module Props : sig 
     type properties
 
-    val empty : properties
-    val add_span : Bits.bits -> Rtl.const -> properties -> properties
+    val empty       : properties
+    val add_span    : Bits.bits -> Rtl.const -> properties -> properties
+    val add_comment : string -> properties -> properties 
 end    
 @
 
@@ -144,16 +152,22 @@ end
 @ 
 
 We make new graphs, representing a single procedure, with
-[[Make.graph]].
+[[Make.graph]]. A graph is initialized with some abstract value of
+type [[ginit]].
 
 <<constructor functions>>=
-val graph : unit -> graph (* build a new flow graph *)
+type ginit
+val  graph : ginit -> graph (* build a new flow graph *)
 @ 
 
 Every node belongs to exactly one graph.  The graph might have to be
 an explicit argument to the function that builds the node, or if the
 constructor function takes another node, the graph is implicit, since
 if two nodes are related they belong to the same graph.
+
+<<>>=
+val graph_of : node -> graph
+@
 
 We start translating back to front, with the [[exit]] node.  As we
 build the flow graph, we always have edges that provide the control

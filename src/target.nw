@@ -1,0 +1,151 @@
+
+\input{macros.tex}
+
+
+% l2h substitution dots ...
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Target}
+% ------------------------------------------------------------------ 
+
+The {\qcc} compiler aims to be a cross-compiler which means the same
+compiler can compile {\PAL} programs for different target platforms. 
+To inform especially the code generating phases of the compiler about
+a platform's idiosyncrasies, they are bundeled together into a type
+[[info]], that is provided by this module.
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+The interface merely provides a type [[info]] that bundles a platform's
+properties. These are:
+
+\begin{itemize}
+\item The byteoreder, or endianness.
+\item The sizes in bits for pointers and words
+\item The smallest number of bits in an adresseable memory unit. This
+      is typically a byte, i.e.~8 bits.
+\item Norms that define the interpretation of characters and floating point
+      numbers.
+\item A map [[conv]] of calling conventions.
+\item An automaton that determines the allocation of hardware registers
+      for global registers.  
+\end{itemize}
+
+<<target.mli>>=
+module StrMap : Map.S with type key = string
+
+<<type conv>>
+<<type info>>
+@
+
+\begin{quote}
+\emph{Candidates for [[info]]: the target assembler, the list of
+strings to initialize the target assembler}
+\end{quote}
+
+<<type info>>=
+type info =     { name          : string (* name of this target *)
+                ; byteorder     : Rtl.aggregation
+                ; wordsize      : int
+                ; pointersize   : int
+                ; memsize       : int           
+                ; float         : string (* like "ieee754" *) 
+                ; charset       : string (* like "latin1" - belongs here? *) 
+                ; conv          : conv StrMap.t
+                ; registers     : Automaton.t (* global reg allocation *)
+                }
+@
+
+A single target can support mutiple calling conventions. A
+convention [[conv]] includes:
+
+\begin{itemize}
+\item A location [[sp]] for the stack pointer.
+\item Automata that determine register for parameters passed to a
+      procedure ([[procin]]), returned by a procedure ([[procout]]),
+      or passed to a continuation ([[contin]]).
+\end{itemize}      
+
+<<type conv>>=
+type conv =     { sp            : Rtl.location (* stack pointer *)
+                ; procin        : Automaton.t
+                ; procout       : Automaton.t
+                ; contin        : Automaton.t
+                }
+@
+
+
+Some target platform properties are stated in a {\PAL} program. The
+[[validate]] function checks that the claims made there are compatible
+with a given platform:
+
+<<target.mli>>=
+val validate: Fenv.Clean.env -> info -> bool
+@
+
+In case the informations found in the fat environment are
+incompatible, an error message is issued as a side effect and
+[[false]] is returned.  On the other hand, ff the source code and the
+target are found to be compatible, the result is [[true]].
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<target.ml>>=
+module F      = Fenv.Clean
+module E      = Error
+module StrMap = Map.Make(struct type t=string let compare=compare end)
+@
+
+An implementatio first has to provide to type already declared in the
+interface: 
+
+<<>>=
+<<type conv>>
+<<type info>>
+@
+
+The [[valid]] predicate just checks entries that can be checked and
+emits error messages if informations do not match.
+
+<<>>=
+let validate env info = 
+    let error x = 
+        ( E.errorPrt ("The target declartion for "^x^" is not compatible with the actual target") 
+        ; false
+        ) in
+        if      ( match (F.findEndianness env), info.byteorder with
+                | F.Big   , Rtl.BigEndian    -> false
+                | F.Little, Rtl.LittleEndian -> false 
+                | _                          -> true
+                )
+        then    error "endianness"
+        else if F.findMemsize env <> info.memsize
+        then    error "memsize"
+        else if F.findWordsize env <> info.wordsize
+        then    error "wordsize"
+        else if F.findPointersize env <> info.pointersize
+        then    error "pointersize"
+        else if F.findFloat env <> info.float
+        then    error "float"
+        else if F.findCharset env <> info.charset
+        then    error "charset"
+        else true
+@
+
+

@@ -31,16 +31,6 @@ interface to conform to the module type [[S]] provided here.
 module type S = sig
     <<module type s>>
 end
-
-<<unused>>=
-module type ASM = sig
-    type instruction 
-    type proc_info
-end
-
-module Make (A: ASM): S 
-    with type instruction = A.instruction
-    with type proc_info   = A.proc_info
 @
 
 % ------------------------------------------------------------------ 
@@ -167,14 +157,14 @@ imported symbols, no value is yet bound to them.
 
 <<module type s>>=
 type symbol
-type name    = string
+type sym     (* use mangle to create a sym *)
 type size    = int
 type align   = int
 
-val import  : name -> action
-val export  : name -> action
-val local   : name -> action
-val common  : name -> size -> align -> section -> action
+val import  : sym -> action
+val export  : sym -> action
+val local   : sym -> action
+val common  : sym -> size -> align -> section -> action
 @
 
 After the declarations are [[append]]ed to the current [[asm]] program
@@ -186,7 +176,7 @@ symbols and exactly one value must be bound to every other declared
 symbol.
 
 <<>>=
-val lookup          : name -> asm -> symbol
+val lookup          : sym -> asm -> symbol
 val define_label    : symbol -> action
 val define_const    : symbol -> Bits.bits -> action
 @
@@ -195,7 +185,7 @@ To make the handling of local symbols easier, [[define_local]] is
 provided: 
 
 <<>>=
-val define_local    : name -> action
+val define_local    : sym -> action
 @
 
 The action [[define_local]] defines a symbol like [[local]] and
@@ -274,5 +264,5 @@ depends on the set of symbols imported and exported from an assembly
 program, as explained in \module{mangle}.
 
 <<>>=
-val mangle: Mangle.mangler      (* string -> string *)
+val mangle: string -> sym
 @

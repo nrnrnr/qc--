@@ -28,8 +28,6 @@ semantics have been found correct it is translated into abstract
 \subsection{Interface}
 % ------------------------------------------------------------------ 
 
-Currently empty.
-
 <<ast2ir.mli>>=
 (* empty *)
 @
@@ -60,10 +58,10 @@ module Expr = struct    (* Expressions *)
     <<module Expr>>
 end
 
+
 module Make
-  (G   : Agraph.S)      
-  (Asm : Asm2.S with type instruction = G.node) 
-  (CC  : Callconv.S) =
+  (G   : Agraph.S with type Make.ginit  = unit  )      
+  (Asm : Asm2.S   with type instruction = G.node) =
 struct
     module GM = G.Make
     <<module Make>> 
@@ -86,7 +84,6 @@ let default_convention         = "C--"              (* gospel truth *)
 let default_assertion          = -1                 (* unused *)
 let default_memory             = 'm'                (* Rtl.space *)
 let toplevel_section           = "toplevel"         (* bogus *)
-let stackdata                  = "stackdata base"
 @
 
 <<>>=
@@ -102,32 +99,12 @@ let bits = function
     | _        -> assert false
 @
 
-[[byteorder]] returns the byteorder as recorded in the environment. 
-
-<<>>=
-let byteorder env = match F.findEndianness env with
-    | F.Big     -> Rtl.BigEndian
-    | F.Little  -> Rtl.LittleEndian
-@
-
 [[un_const]] should take a compile-time constant expression and
 produce a small itneger.  [[un_const]] is surely the wrong name.
 
 <<>>=
 let un_const e = 333 (* bogus *)
 @ 
-
-The target dependent sizes of pointers and words are recorded in the
-fat environment.  The following two functions provide access to them. 
-Additionally [[wordBits]] and [[pointerBits]] provide the bit sizes of
-both.
-
-<<>>=
-let wordBits env        = F.findWordsize env 
-let wordTy env          = T.bits (wordBits env)
-let pointerBits env     = F.findPointersize env
-let pointerTy env       = T.bits (pointerBits env)
-@
 
 Function composition is not provided by the {\ocaml} standard library. 
 We provide it here:  [[f << g]] is a function that applies [[f]] to
@@ -191,9 +168,9 @@ The following function translates an [[Ast.actual]] parameter into a
 [[Fgraph.actual]].
 
 <<>>=
-let rec actual env (hint, e) = 
-    let width = bits (Expr.tyExpr env e) in
-    let e     = expr env e               in
+let rec actual env (target: Target.info) (hint, e) = 
+    let width = bits (Expr.tyExpr env target e) in
+    let e     = expr env target e               in
         (e, width, hint)
 @
  
@@ -212,8 +189,8 @@ labels, continuations) must have been rejected by the static semantics
 check.
 
 <<>>=
-and lvalue env = function
-    | A.LValueAt(x,_)          -> lvalue env x
+and lvalue env (target: Target.info) = function
+    | A.LValueAt(x,_)          -> lvalue env target x
     | A.Var(hint,x)            -> 
         let ((_,s),(denot,t)) = F.findv x env in 
             ( match denot with
@@ -231,12 +208,12 @@ and lvalue env = function
                                       )
             | _                -> assert false (* impossible *)
             )
-    | A.Mem(t,e,a)             -> let width = ty env t      in
+    | A.Mem(t,e,a)             -> let width = ty env t in
                                   Rtl.Cell
                                       ( default_memory
-                                      , byteorder env 
+                                      , target.Target.byteorder
                                       , width
-                                      , expr env e
+                                      , expr env target e
                                       , default_assertion
                                       )
 @
@@ -251,8 +228,8 @@ must be translated and inparticular variables denoting stackdata and
 continuations can't show up here.
 
 <<>>=
-and variable env = function
-    | A.LValueAt(x,_) -> variable env x
+and variable (env: F.env) (target: Target.info) = function
+    | A.LValueAt(x,_) -> variable env target x
     | A.Var(hint,x)   ->
         let ((_,s),(denot,t)) = F.findv x env in 
             ( match denot with
@@ -283,32 +260,32 @@ and variable env = function
     | A.Mem (t,e,a)            -> let width = ty env t      in
                                   let cell = Rtl.Cell
                                       ( default_memory
-                                      , byteorder env 
+                                      , target.Target.byteorder
                                       , width
-                                      , expr env e
+                                      , expr env target e
                                       , default_assertion
                                       ) in 
                                    Rtl.Fetch(cell,width)
                                     
             
 <<>>=
-and primOp env op args =
-    let o = Expr.op env op args 
+and primOp env (target: Target.info) op args =
+    let o = Expr.op env target op args 
     in
-        Rtl.App(o, List.map (expr env) args)
+        Rtl.App(o, List.map (expr env target) args)
 
-and expr env = function 
-    | A.ExprAt(x,_)         -> expr env x
-    | A.Int( i, None)       -> Rtl.Const(Rtl.Bits(i,wordBits env))
+and expr env (target: Target.info) = function 
+    | A.ExprAt(x,_)         -> expr env target x
+    | A.Int( i, None)       -> Rtl.Const(Rtl.Bits(i,target.Target.wordsize))
     | A.Int( i, Some t)     -> Rtl.Const(Rtl.Bits(i,ty env t))
-    | A.Float( f, None)     -> Rtl.Const(Rtl.Bits(f,wordBits env))
+    | A.Float( f, None)     -> Rtl.Const(Rtl.Bits(f,target.Target.wordsize))
     | A.Float( f, Some t)   -> Rtl.Const(Rtl.Bits(f,ty env t))
-    | A.Char( c, None)      -> Rtl.Const(Rtl.Bits(c,wordBits env))
+    | A.Char( c, None)      -> Rtl.Const(Rtl.Bits(c,target.Target.wordsize))
     | A.Char( c, Some t)    -> Rtl.Const(Rtl.Bits(c,ty env t))
-    | A.Fetch(v)            -> variable env v
-    | A.BinOp(l,op,r)       -> primOp env op [l;r]
-    | A.UnOp(op,e)          -> primOp env op [e]
-    | A.PrimOp(op,xs)       -> primOp env op (List.map snd xs) (* ignore hints*)
+    | A.Fetch(v)            -> variable env target v
+    | A.BinOp(l,op,r)       -> primOp env target op [l;r]
+    | A.UnOp(op,e)          -> primOp env target op [e]
+    | A.PrimOp(op,xs)       -> primOp env target op (List.map snd xs) (* ignore hints*)
 @    
 
 % ------------------------------------------------------------------ 
@@ -340,7 +317,7 @@ environment, which doesn't change.  [[s]] is the statement being
 translated.  We return a new flow-graph node. 
 
 <<>>=
-let rec body env props graph after bb =
+let rec body env target props graph after bb =
     let decorate n       = G.bind props n           in
     let rec stmt s after = match s with
         | A.StmtAt(x,_)     -> stmt x after
@@ -358,7 +335,8 @@ let rec body env props graph after bb =
 | A.AssignStmt(lhs,rhs) ->
     let effects = 
         List.map2 (fun lhs rhs -> 
-                   R.assign (lvalue env lhs) (expr env rhs)) lhs rhs
+                   R.assign (lvalue env target lhs) 
+                            (expr env target rhs)) lhs rhs
     in 
         decorate (GM.assign (R.par effects) after) 
 
@@ -366,7 +344,7 @@ let rec body env props graph after bb =
 | A.IfStmt ( e, ss1, ss2) ->
     let node1 = List.fold_right stmt ss1 after  in
     let node2 = List.fold_right stmt ss2 after  in
-        decorate (GM.branch (expr env e) node1 node2)
+        decorate (GM.branch (expr env target e) node1 node2)
 @
 
 <<cases for translating statements>>=
@@ -374,7 +352,7 @@ let rec body env props graph after bb =
     let const n         = A.Int (Bits.of_int n Bits.maxwidth, None)        in
     let (cont, count)   = Aux.Option.get (const 0, const 0) alt            in
     let cc              = Aux.Option.get default_convention cc             in
-    let actuals         = List.map (actual env) args                       in
+    let actuals         = List.map (actual env target) args                in
     let cout a          = decorate (GM.copy_out actuals G.ProcResults cc a)in
     let ret  a          = decorate (GM.return graph
                                     (un_const cont) (un_const count))      in
@@ -407,11 +385,12 @@ node.
                      | A.Mem _         -> assert false            in
     let cc         = Aux.Option.get default_convention cc         in
     let cout after = if args <> []
-                     then decorate (GM.copy_out (List.map (actual env) args)
+                     then decorate (GM.copy_out 
+                                   (List.map (actual env target) args)
                                     G.ProcParameters cc after)
                      else after                                   in
     let cont after = flows (GM.empty_cont after) fs               in
-    let call after = decorate (GM.call (expr env e) (cont after)) in
+    let call after = decorate (GM.call (expr env target e) (cont after)) in
     let cin  after = if lhs <> []
                      then decorate (GM.copy_in (List.map lvalue lhs)
                                        G.ProcResults cc after)
@@ -433,7 +412,8 @@ A continuation is represented by a labeled node.  This node is a
         (lbl << cin) after
 
 <<cases for translating statements>>=
-| A.EmptyStmt -> after
+| A.EmptyStmt     -> after
+| A.CommentStmt _ -> after
 @
 
 A tail call is a [[jump]] statement. The parameters, if any, are
@@ -445,11 +425,11 @@ sequence of statements.
 <<cases for translating statements>>=
 | A.JumpStmt(cc,e,args,ts) ->
     let cc         = Aux.Option.get default_convention cc     in
-    let args       = List.map (actual env) args               in
+    let args       = List.map (actual env target) args               in
     let cout after = if args <> [] then 
                         decorate (GM.copy_out args G.ProcParameters cc after)
                      else after                               in
-    let jump after = decorate (GM.jump graph (expr env e) ts) in
+    let jump after = decorate (GM.jump graph (expr env target e) ts) in
         (cout << jump) after 
 @
 
@@ -457,7 +437,7 @@ The translation of a [[goto]] statement is straight forward; the
 [[after]] node is unused because it can't be reached.
 
 <<cases for translating statements>>=
-| A.GotoStmt(e,ts) -> decorate (GM.goto graph (expr env e) ts) 
+| A.GotoStmt(e,ts) -> decorate (GM.goto graph (expr env target e) ts) 
 @
 
 A [[span]]'s attributes are a compile-time constant value and a
@@ -473,7 +453,7 @@ link-time constant.
                 | Rtl.Const(c)                -> c
                 | _                           -> assert false
                 ) in
-        body env (G.Props.add_span key value props) graph after ss
+        body env target (G.Props.add_span key value props) graph after ss
 @
 
 
@@ -513,7 +493,7 @@ environment belonging to a procedure.  The local environment [[env]]
 for a procedure is found in its entry in the fat environment.
 
 <<module Make>>=
-and proc env props (asm: Asm.asm) (cc,n,fs,bb) =  
+and proc env (target: Target.info) props (asm: Asm.asm) (cc,n,fs,bb) =  
     let decorate n = G.bind props n                              in
     let env        = match F.findv n env with
                      | _,(F.Label(F.Proc {F.env = e}),_) -> e
@@ -524,7 +504,7 @@ and proc env props (asm: Asm.asm) (cc,n,fs,bb) =
     let entry a    = decorate (GM.entry a)                       in
     let copy  a    = decorate (GM.copy_in (List.map frml fs)
                                           G.ProcParameters cc a) in
-    let bdy   a    = body env props graph a  bb                  in
+    let bdy   a    = body env target props graph a  bb           in
     let exit       = decorate (GM.exit graph)                    in
     let node       = (entry << copy << bdy) exit                 in
          asm ++ Asm.instr node
@@ -545,8 +525,8 @@ and ldecl env after = after
 <<module Make>>=
 let initialized_data asm expr = assert false
 
-let rec init env asm = function
-    | A.InitAt(x,_)   -> init env asm x
+let rec init env target asm = function
+    | A.InitAt(x,_)   -> init env target asm x
     | A.InitExprs(es) -> foldl initialized_data asm es
     | A.InitStr(s)    -> assert false
     | A.InitUStr(s)   -> assert false
@@ -573,8 +553,8 @@ memory used by a declaration is the size of the base-type times the
 number of values of this type. 
 
 <<>>=
-let memdecl env asm t size ini = 
-    let sizeof = ty env t / (F.findMemsize env) (* no. of memsized objs *) in
+let memdecl env target asm t size ini = 
+    let sizeof = ty env t / target.Target.memsize (* no. of memsized objs *) in
     let n      = ( match size with
                  | A.DynSize    -> init_size ini
                  | A.NoSize     -> 1
@@ -582,7 +562,7 @@ let memdecl env asm t size ini =
                  ) in
         ( match ini with
         | None    -> asm ++ Asm.zeroes (n * sizeof)
-        | Some ii -> init env asm ii
+        | Some ii -> init env target asm ii
         )
 @
 
@@ -598,11 +578,11 @@ Global data declarations, on the other hand, must be translated to
 assembly actions.
  
 <<module Make>>=
-let rec datum env asm = function
-    | A.DatumAt(x,_)        -> datum env asm x
+let rec datum env target asm = function
+    | A.DatumAt(x,_)        -> datum env target asm x
     | A.Label(n)            -> asm ++ Asm.define_local (mangle n)
     | A.Align(a)            -> asm ++ Asm.align a 
-    | A.MemDecl(t,m,init)   -> memdecl env asm t m init
+    | A.MemDecl(t,m,init)   -> memdecl env target asm t m init
 @
     
 % ------------------------------------------------------------------ 
@@ -616,25 +596,13 @@ need so way to record such an assignment.  All other locations for
 global registers are determined by an automaton, see module
 \module{callconv}. 
 
-<<>>=
-and gdecl env (asm: Asm.asm) = function
-    | A.DeclAt(x,_)    -> gdecl env asm x
-    | A.Registers( rs) -> asm (* todo *)
-     
-    | A.Import( t, ns) -> asm (* skip *)
-    | A.Export( t, ns) -> asm (* skip *)
-    | A.Const (t,n,e)  -> asm (* skip *)
-    | A.Typedef (t,nn) -> asm (* skip *)
-    | A.Target (arch)  -> asm (* skip *)
-    | A.Pragma         -> asm (* skip *)
-
 <<module Make>>=
-let rec section env props (asm: Asm.asm) = function
-    | A.SectionAt(x,_)     -> section env props asm x
-    | A.Decl(d)            -> gdecl env asm d 
-    | A.Datum( d)          -> datum env asm d
-    | A.Procedure(p)       -> proc env props asm p
-    | A.SSpan( e1, e2, ss) -> assert false
+let rec section env target props (asm: Asm.asm) = function
+    | A.SectionAt(x,_)     -> section env target props asm x
+    | A.Decl(d)            -> asm
+    | A.Datum( d)          -> datum env target asm d
+    | A.Procedure(p)       -> proc env target props asm p
+    | A.SSpan( e1, e2, ss) -> assert false (* how? *)
 @            
 
 What to do with top-level procedures? They should go into some section
@@ -642,13 +610,14 @@ because otherwise they will end up in whatever section is currently
 active which just seems wrong.
 
 <<module Make>>=
-let rec toplevel env asm = function
-    | A.ToplevelAt(x, _)  -> toplevel env asm x
+let rec toplevel env target asm = function
+    | A.ToplevelAt(x, _)  -> toplevel env target asm x
     | A.Section(name, ss) -> let asm = asm ++ Asm.section name  
-                             in  foldl (section env G.Props.empty) asm ss
-    | A.TopDecl(d)        -> gdecl env asm d
+                             in  foldl (section env target G.Props.empty) 
+                                       asm ss
+    | A.TopDecl(d)        -> asm (* nothing to do here *)
     | A.TopProcedure(p)   -> let asm = asm ++ Asm.section toplevel_section  
-                             in proc env G.Props.empty asm p
+                             in proc env target G.Props.empty asm p
 @
 
 
@@ -663,17 +632,30 @@ are registered in the fat environment.  For details, see modules
 
 <<>>=
 let exports env asm = 
-    Fenv.StrSet.fold (fun s asm -> asm ++ Asm.export s) (F.exported env) asm
+    Fenv.StrSet.fold (fun s asm -> asm ++ Asm.export (Asm.mangle s)) 
+    (F.exported env) asm
 
 let imports env asm =
-    Fenv.StrSet.fold (fun s asm -> asm ++ Asm.import s) (F.imported env) asm
+    Fenv.StrSet.fold (fun s asm -> asm ++ Asm.import (Asm.mangle s)) 
+    (F.imported env) asm
+
+(* assign global registers *)
 
 <<>>=
-let program env tt asm = 
+let program env target asm tt = 
     let asm = exports env asm in
     let asm = imports env asm in
-        foldl (toplevel env) asm 
+        foldl (toplevel env target) asm 
 @
+
+An assembly program is initialized with a list of strings.  These are
+probably target dependent and should be provided by [[target]].
+
+<<>>=
+let translate env target prog =
+    let asm = Asm.init [] in
+        program env target asm prog
+@    
 
 % ------------------------------------------------------------------ 
 \subsection{{\rtl} Auxiliaries}
@@ -709,13 +691,13 @@ let rec evalTy env = function
     | A.BitsTy(size) -> Types.Bits size
     | A.AliasTy(n)   -> snd (F.findt n env)
 
-let rec tyFetch env = function
-    | A.LValueAt(x,r) -> tyFetch env x
+let rec tyFetch env (target: Target.info) = function
+    | A.LValueAt(x,r) -> tyFetch env target x
     | A.Var(hint,id)  -> (match F.findv id env with (attr,(_,t)) -> t)
     | A.Mem (t,e,a)   -> 
-        let te    = tyExpr env e       in       (* unused *)
-        let t'    = evalTy env t       in       
-        let align = Aux.Option.get 1 a in
+        let te    = tyExpr env target e in       (* unused *)
+        let t'    = evalTy env t        in       
+        let align = Aux.Option.get 1 a  in
             t'
 @       
 
@@ -724,29 +706,29 @@ All primitive runtime operators will go into their own module
 [[Primitives]].  So we have to fix the [[lookup]] later.
 
 <<>>=
-and tyPrimOp env op args =
-    let at = List.map (tyExpr env) args          in
+and tyPrimOp env target op args =
+    let at = List.map (tyExpr env target) args          in
     let ot = snd (Value.Ops.lookup op Value.ops) in
         Types.appl ot at
 
-and op env o args =
-    let at = List.map (tyExpr env) args          in
+and op env target o args =
+    let at = List.map (tyExpr env target) args          in
     let ot = snd (Value.Ops.lookup o Value.ops) in
         o,Types.widthlist ot at
 
 <<>>=
-and tyExpr env = function
-    | A.ExprAt(x,r)            -> tyExpr env x
+and tyExpr env (target: Target.info) = function
+    | A.ExprAt(x,r)            -> tyExpr env target x
     | A.Int   (str, Some t)    -> evalTy env t
-    | A.Int   (str, None)      -> wordTy env
+    | A.Int   (str, None)      -> T.bits target.Target.wordsize
     | A.Float (str, Some t)    -> evalTy env t
-    | A.Float (str, None)      -> wordTy env
+    | A.Float (str, None)      -> T.bits target.Target.wordsize
     | A.Char  (str, Some t)    -> evalTy env t
-    | A.Char  (str, None)      -> wordTy env
-    | A.Fetch (v)              -> tyFetch env v
-    | A.BinOp (l,op,r)         -> tyPrimOp env op [l;r]
-    | A.UnOp  (op,expr)        -> tyPrimOp env op [expr]
-    | A.PrimOp(op,args)        -> tyPrimOp env op (List.map snd args)
+    | A.Char  (str, None)      -> T.bits target.Target.wordsize
+    | A.Fetch (v)              -> tyFetch env target v
+    | A.BinOp (l,op,r)         -> tyPrimOp env target op [l;r]
+    | A.UnOp  (op,expr)        -> tyPrimOp env target op [expr]
+    | A.PrimOp(op,args)        -> tyPrimOp env target op (List.map snd args)
 @
 
 

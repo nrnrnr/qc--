@@ -432,7 +432,8 @@ let pointerTy env = E.seq (F.findPointersize env)
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Processing \texttt{target},\texttt{im}-, and \texttt{export} declarations}
+\subsection{Processing \texttt{target}, \texttt{im}-, and 
+            \texttt{export} declarations}
 % ------------------------------------------------------------------ 
 
 <<module Targets>>=
@@ -467,6 +468,7 @@ and stmt r env = function
     | A.CutStmt _       -> env
     | A.ReturnStmt _    -> env
     | A.EmptyStmt       -> env
+    | A.CommentStmt _   -> env
 
 <<>>=
 and import r env (s,name) =
@@ -556,6 +558,7 @@ and stmt r dd = function
     | A.CutStmt _    -> dd
     | A.ReturnStmt _ -> dd
     | A.EmptyStmt    -> dd
+    | A.CommentStmt _-> dd 
 <<>>=
 and decl r dd = function
     | A.DeclAt(x,r)     -> decl r dd x
@@ -766,6 +769,7 @@ and stmt r dd = function
     | A.CutStmt     _   -> dd
     | A.ReturnStmt  _   -> dd
     | A.EmptyStmt       -> dd
+    | A.CommentStmt _   -> dd
 
 <<>>=
 let rec section r dd = function
@@ -1181,7 +1185,6 @@ let proc r env (_,name,ff,bb as p) =
     let x    = { F.env    = None
                ; F.sdata  = None
                ; F.salign = None 
-               ; F.sbase  = Idgen.id' (name ^ "sbase")
                } in
     let t    = E.ematch (pointerTy env) (fun p -> F.Label(F.Proc(x)),p) in
     let env  = foldl (body r F.Global) env bb     in 
@@ -1868,6 +1871,7 @@ and stmt env = function
     | A.SwitchStmt x    -> switchStmt env x
     | A.LabelStmt x     -> env        (* nothing to do *)
     | A.EmptyStmt       -> env        (* nothing to do *)  
+    | A.CommentStmt _   -> env
 
 @
 

@@ -16,7 +16,7 @@
 % l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
 
 % ------------------------------------------------------------------ 
-\section{Calling Conventions}
+\section{Automaton for Calling Conventions}
 % ------------------------------------------------------------------ 
 
 Each target platform requires an implementation of its procedure
@@ -27,58 +27,7 @@ W.~Davidson have shown in \cite{bailey:davidson:95} that the process of
 choosing registers to pass values can be modeled with finite state
 automata.  The automaton receives a stream of enriched {\PAL} types
 and the automaton responds for each data type with a location that the
-parameter is passed in.  However, the calling convention includes much
-more details like which registers to use as a stack pointer and so on. 
-This module provides an unified interface to calling conventions for
-all targets.
-
-
-% ------------------------------------------------------------------ 
-\subsection{Interface}
-% ------------------------------------------------------------------ 
-
-The interface to calling conventions is divided in two parts:  a
-general part and a part for using automata for passing values from and
-to procedures.  The interface to automata is used to describe the
-general interface and thus comes first in the file describing the
-interface.
-
-<<callconv.mli>>=
-module type S = sig 
-    <<module type s>>   (* trick; we don't have an implementation yet *)
-end
-@
-
-<<module type s>>=
-module Automaton : sig
-    <<sig automaton>>
-end
-<<sig general>>
-@
-
-% ------------------------------------------------------------------ 
-\subsection{General Calling Convention Interface}
-% ------------------------------------------------------------------ 
-
-The various aspects of a calling convention are bundled into one type
-[[convention]]. The individual components are:
-
-\begin{itemize}
-\item The stack pointer [[sp]]. The stack pointer is used to address
-      elements of a procedure's activation record at run-time. 
-\end{itemize}
-
-<<sig general>>=
-type convention = { sp:     Rtl.location
-                    (* more to come *)
-                  }
-@
-
-A platform's calling convention can be accessed directly as a value. 
-
-<<>>=                  
-val convention:   convention (* the actual convention *)
-@
+parameter is passed in.
 
 % ------------------------------------------------------------------ 
 \subsection{Interface to Automaton}
@@ -94,7 +43,7 @@ procedures and continuations.  The difference between these two
 aspects of the interface are expressed by using sub-modules for them
 in the interface.
 
-<<sig automaton>>=
+<<automaton.mli>>=
 <<basic types>>
 
 module Run  : sig <<signature run>>   end
@@ -110,11 +59,10 @@ enough to find the location a parameter of that value is passed in.
 Calling conventions usually not only only rely on the size of a
 parameter, but to some degree on its purpose, too.  A type from the
 perspective of calling conventions is thus a tuple of a {\PAL} type
-and a hintr. A [[reghint]] can either specify a hardware register
-directly, or an annotation like [["float"]], or nothing. 
+and a hint. 
 
 <<basic types>>= 
-type ty = Types.ty * Fenv.Clean.reghint
+type ty = Types.ty * string option
 @
 
 An automaton is used at a caller's side to find the locations 
@@ -134,7 +82,7 @@ Of course, there is the automaton itself.  An automaton maintains
 an internal actual state that changes when the automaton is run.  
 
 <<>>=
-type automaton
+type t
 @
 
 % ------------------------------------------------------------------ 
@@ -145,19 +93,11 @@ This sub-module defines everything an automaton's client needs to
 know.  Especially all details about a calling convention is left
 abstract.
 
-Use [[reset]], to get an automaton that is in its initial state.  The
-initial state of an automaton is not fixed but depends on informations
-that are in general not known at the time an automaton is constructed: 
-{\PAL} permits to assign hardware registers to global {\PAL}
-registers.  Of course, assigned hardware registers can not be used for
-other registers and so the initial state of an automaton depends on
-it.  The list of pre-assigned hardware registers is passed to
-[[reset]].  To list of hardware registers used by a program is
-maintained by the fat environment and can be obtained from there using
-[[Fenv.hwregs]]. 
+Use [[reset]], to put an automaton into its initial state. The initial
+state of an automaton is defined when it is constructed and thus fixed.
 
 <<signature run>>=
-val reset: automaton -> string list -> automaton
+val reset: t -> t
 @
 
 Running an automaton means to ask for the [[location]] of a [[ty]]. 
@@ -173,7 +113,7 @@ automaton when it was [[reset]]. The location in respond to the [[ty]]
 value will be the hardware register that was previously announced.
 
 <<>>=
-val next: automaton -> ty -> location * automaton (* Error.ErrorExn *)
+val next: t -> ty -> location * t (* Error.ErrorExn *)
 @
 
 The code generator not only needs to know where parameters are stored,
@@ -189,7 +129,7 @@ between two states and thus it is returned by the [[next]] function.
 type overflow   = { size:   int   (* overflow area in memsize units *)
                   ; align:  int   (* alignment in memsize units     *)
                   }
-val overflow: automaton -> overflow
+val overflow: t -> overflow
 @
 
 % ------------------------------------------------------------------ 
@@ -211,7 +151,7 @@ type state
 
 Since conceptually an infinite number of parameters can be placed in
 memory, a pure finite state automaton can not keep track of the
-consumed locations.  We thus assume that an [[automaton]] contains
+consumed locations.  We thus assume that an automaton contains
 some form of counter that keeps track of parameters in memory in order
 to use still a finite number of states.  The [[info]] type represents
 this counter, and the [[info]] function returns this information for
@@ -219,27 +159,19 @@ an automaton:
 
 <<>>=
 type info
-val info: automaton -> info
+val info: t -> info
 @
 
-We separate the issues of building an automaton and putting it into
-its initial state. The reason to do so is that the initial state
-depends on informations that are usually unknown at the time the
-automaton is built. The function [[Run.reset]] puts an automaton into
-its initial state.
 
 To build an automaton, start with [[make]].  This function receives
-the [[info]] value belonging to its initial state.  Although the
-initial state depends on information not available yet we believe, that
-the [[info]] counter's value is the same for any initial state and
-thus it is supplied here.
+the initial state of the automaton.
 
 <<>>=
-val make    : info -> automaton   
+val make    : state -> t   
 @
 
 A \emph{transition} from one state to another describes which
-locations to use for the type [[ty]] that caused this transition.  So
+locations to use for the type [[ty]] that guards this transition.  So
 a transition between two states is labeled with two informations:  a
 type [[ty]] and a location.  Locations in memory (opposed to those in
 registers) depend on previous parameters placed into memory.  This
@@ -248,7 +180,7 @@ automaton.  A transition is thus added to an automaton by specifying
 two states, a type, and an [[info]] dependent [[location]].
        
 <<>>=
-val add: automaton -> state -> ty -> (info -> location) -> state -> automaton
+val add: t -> state -> ty -> (info -> location) -> state -> t
 @
 
 % ------------------------------------------------------------------ 
@@ -256,4 +188,3 @@ val add: automaton -> state -> ty -> (info -> location) -> state -> automaton
 % ------------------------------------------------------------------ 
 
 An implementation is postponed.
-
