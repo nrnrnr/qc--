@@ -32,13 +32,12 @@ To establish the connection between simple positions and complex
 locations these two views must be \textit{synchronized}.  The result
 of all synchronizations is a source map.  The views must synchronize
 whenever advancing in the stream of characters is different from
-moving to the next column in the postion's view.  This happens
-typically at the following points in a source code:
+moving to the next column in the position's view.  This happens
+typically at the following points in a source file:
 
 \begin{itemize} 
+\item Starting with a new source file.
 \item Beginning of a new line.
-\item Changing of the input file, when the input comes from multiple 
-      files.
 \item A tab character skips some columns.
 \item Some directive like [[#line]] from the C pre-processor
       indicates a non-linearity in the source code. 
@@ -71,8 +70,8 @@ point for position 0 should be placed into it.
 % ------------------------------------------------------------------  
 
 Position are non negative characters counts in the input stream.  They
-are represented by [[pos]].  A continous region in the input
-stream consists of the first charcter in the span and the first one
+are represented by [[pos]].  A continuous region in the input
+stream consists of the first character in the span and the first one
 following it.
 
 <<srcmap.mli>>= 
@@ -90,7 +89,7 @@ type location       = string    (* file   *)
                     * int       (* column *)
 
 @ A source map is a mutable data structure with an undisclosed
-reperesentation.  A source map should never be empty but should
+representation.  A source map should never be empty but should
 contain a synchronization point for [[pos]] 0.
 
 <<srcmap.mli>>=
@@ -100,13 +99,19 @@ val empty :         map
 
 @ A synchronization is announced with [[sync]].  It synchronizes a
 position [[pos]] with a [[location]].  A common case is the
-synchronizaton for a new line trough [[nl]].  A new line stays in the
+synchronization for a new line trough [[nl]].  A new line stays in the
 same file as the previous sync point is on the next next.  The [[pos]]
 passed to [[nl]] is the first character of the new line.
 
 <<srcmap.mli>>=
 val sync :          map -> pos -> location -> unit
 val nl :            map -> pos -> unit
+
+@ [[last]] returns the location of the last sync point. It is useful
+to get the current file name and line number.
+
+<<srcmap.mli>>=
+val last :          map -> location
 
 @ The corresponding location for a position can be obtained with
 [[location]].  For debugging a source map can be dumped to stdout
@@ -116,7 +121,7 @@ using [[dump]].
 val location :      map -> pos -> location
 val dump:           map -> unit
 
-@ To make positions meaningful they can be bundeled with a source map
+@ To make positions meaningful they can be bundled with a source map
 that keeps track of their origins. 
 
 <<srcmap.mli>>= 
@@ -148,9 +153,9 @@ quadruple.
 <<srcmap.ml>>=
 type syncpoint      = pos * location
 
-@ We have chosen to use an array to implement a source map. Binary
-search can be used to implement the lookup representation and is
-compact in memory. When the array fills up the old array is copied
+@ We have chosen to use an array to implement a source map.  Binary
+search can be used to implement the lookup representation and an array
+is compact in memory.  When the array fills up the old array is copied
 into a new one twice of the size of the old. 
 
 Using an array also requires the restriction mentioned above:  sync
@@ -176,14 +181,13 @@ type position       = map * pos
 type region         = map * reg
 
 @ The [[top]] component maintains the index of the first free position
-in the [[points]] array.
-
-In \ocaml~every array cell must be initialized upon creation.  We use
-[[undefined]] for this.  The initial size of the array is [[size]].
+in the [[points]] array.  In \ocaml~every array cell must be
+initialized upon creation.  We use [[undefined]] for this.  The
+initial size of the array is [[size]].
 
 <<srcmap.ml>>=
 
-let size        =  2
+let size        =  2    (* small to test alloc *)
 let undefined   =  (0, ("undefined", -1, -1))    
 
 <<srcmap.ml>>= 
@@ -194,7 +198,7 @@ let empty =
     }    
 
 @ To prevent that the array fills up [[alloc]] makes sure there is at
-least space for the next sync point.  In case the array is filled it
+least space for the next sync point.  In case the array is full it
 copies the existing array into a new one, twice as the size of the
 old. 
 
@@ -229,7 +233,17 @@ let sync srcmap pos (file,line,col) =
         ; srcmap.points.(top) <- (pos,location')
         ; srcmap.top <- srcmap.top + 1
         )
-        
+
+@ [[last]] returns the location of the last sync point. It is useful
+to get the current file name and line number.
+
+<<srcmap.ml>>=
+
+let last map =
+    ( assert (map.top > 0)
+    ; snd map.points.(map.top-1)
+    )
+       
 @ Entering a sync point for a new line is so common that it deserves
 its own function.  The sync point is actually at the position
 following the newline character because we know that this will be at the
@@ -239,9 +253,10 @@ last sync point.
 
 <<srcmap.ml>>=
 
-let nl srcmap pos = 
-    let (_,(file, line, _)) = srcmap.points.(srcmap.top-1) in
-        sync srcmap pos (file, line+1, 1)
+let nl map pos = 
+    let (file, line, _) = last map in
+        sync map pos (file, line+1, 1)
+
         
 @ Function [[cmp]] compares a [[pos]] with a [[(pos,location)]]
 pair; the [[pos]] is the one we like to find in the array.
