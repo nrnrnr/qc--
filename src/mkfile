@@ -46,6 +46,7 @@ MANDIR =    ../man
 # we compile byte code for profiling
 # OCAMLC =        ocamlcp -p a    
 
+OCAMLC =        ocamlcp -p f    
 OCAMLC_FLAGS =  -I $LIBDIR
 OCAMLO_FLAGS =  -I $LIBDIR
 
@@ -56,7 +57,7 @@ OCAMLO_FLAGS =  -I $LIBDIR
 all:V:          $NAME
 
 update:V:       $BINDIR/$NAME           \
-                $BINDIR/$NAME.byte      \
+                $BINDIR/$NAME.prof      \
                 $MANDIR/man1/$NAME.1    \
 
 clean:V:        nwclean 
@@ -205,8 +206,16 @@ parse.mly       \
 scan.mll:       parser.nw
                 eval $MISCTANGLE
 
-$NAME.pod:      main.nw
+#
+# include the yacc grammar in the manual for reference
+#
+
+$NAME.pod:      main.nw parse.output
                 eval $MISCTANGLE
+                echo '/##grammar##/d
+                     .r !grep "^  *[0-9]" parse.output
+                     wq' | ed $NAME.pod
+                 
 
 ast.inc:        ast.nw         
                 eval $NOWEAVE -delay $prereq > $target
@@ -250,7 +259,7 @@ $NAME.opt:      $CMX
 $BINDIR/$NAME:          $NAME.opt
                         cp $prereq $target
 
-$BINDIR/$NAME.byte:     $NAME
+$BINDIR/$NAME.prof:     $NAME
                         cp $prereq $target
 
 $MANDIR/man1/$NAME.1:   $NAME.1

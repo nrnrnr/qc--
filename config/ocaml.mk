@@ -40,7 +40,9 @@ POD2HTML =      pod2html
 %.ml:           %.mll
                 $OCAMLLEX $stem.mll
 
-%.mli %.ml:     %.mly
+%.mli           \
+%.ml            \
+%.output:       %.mly
                 $OCAMLYACC -v $stem.mly
 
 %.sig:          %.ml
@@ -57,7 +59,7 @@ POD2HTML =      pod2html
                 $POD2MAN   --release="Version $VERSION"         \
                            --center=$NAME                       \
                            --section=5 $prereq > $target
-#%.html:        %.pod
-#               $POD2HTML  --title=$(NAME) $prereq > $target
+%-man.html:     %.pod
+                $POD2HTML  --title=$(NAME) $prereq > $target
 
 
