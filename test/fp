@@ -1,0 +1,32 @@
+#! /bin/sh
+
+# interrupt handler
+
+trap "rm -f $tmp/$this.$$.* ; exit 1" 1 2 3 15
+
+
+this="`basename $0`"
+tmp="${TMP:-/tmp}"
+qc="../bin/qc--"
+
+# check command line
+
+if [ $# -ne 1 ]; then
+    echo "usage: $this file.c--"    
+fi
+
+file="$1"
+
+# three rounds
+
+$qc -pp $file           > $tmp/$this.$$.1
+$qc -pp $tmp/$this.$$.1 > $tmp/$this.$$.2
+$qc -pp $tmp/$this.$$.2 > $tmp/$this.$$.3
+
+diff -c $tmp/$this.$$.2 $tmp/$this.$$.3 || echo ">>> $file "
+rc="$?"
+
+# clean up and return
+
+rm -f $tmp/$this.$$.*
+exit $rc
