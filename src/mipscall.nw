@@ -252,32 +252,37 @@ a parameter.
 
 <<mipscall.ml>>=
 let new_arguments () =
-    let ctr = ref 0 in
-    let exc = A.Exclude.of_pairs spaces [] in
+    let bits = ref 0 in
+    let arg  = ref 0 in
     A.widen (Aux.round_up_to ~multiple_of: 32) **>
     A.widths [32;64] ~errormsg:(badwidth "MIPS argument") **>
-    A.bitcounter ctr **>
+    A.bitcounter bits **>
+    A.argcounter arg  **>
     A.first_choice 
     [ A.is_hint "float",
         A.choice
-        [ (fun h w -> h = "float" && w = 64),
-            A.sharedregs exc [d 12; d 14] ~errormsg:fatal
-        ; (fun h w -> h = "float" && w = 32),
-            A.sharedregs exc [f 12; f 14] ~errormsg:fatal
+        [ (fun h w -> h = "float" && w = 64 && !arg = 1),
+            A.useregs [d 12] ~errormsg:fatal
+        ; (fun h w -> h = "float" && w = 32 && !arg = 1),
+            A.useregs [f 12]~errormsg:fatal
+        ; (fun h w -> h = "float" && w = 64 && !arg = 2),
+            A.useregs [d 14] ~errormsg:fatal
+        ; (fun h w -> h = "float" && w = 32 && !arg = 2),
+            A.useregs [f 14]~errormsg:fatal
         ; A.is_any, 
             A.unit
         ] 
     ; A.is_any,
         A.choice
         [ (fun h w -> h = "float" && w = 64),
-            A.offsetregs ctr [d 12; l 6]
+            A.offsetregs bits [d 12; l 6]
         ; A.is_any,
             A.unit
         ]  
     ] **>
     A.choice
     [ A.is_width 32,
-        A.offsetregs ctr [r 4; r 5; r 6; r 7] 
+        A.offsetregs bits [r 4; r 5; r 6; r 7] 
     ; A.is_any,
         A.unit
     ] **>
