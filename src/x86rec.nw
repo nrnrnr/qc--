@@ -130,7 +130,9 @@ The recognizer uses these nonterminals:
 \begin{tabularx}{\linewidth}{@{}>{\ttfamily}lX@{}}
     \emph{Nonterminal} & \emph{Meaning} \\ 
 regl& A location corresponding to a register\\
+regpairl& A location corresponding to a register pair\\
 reg& A value corresponding to a register\\
+regpair& A value corresponding to a register pair\\
 meml& A location in memory\\
 mem& A value in memory\\
 eaddrl& An effective address in an lvalue context (a location to be
@@ -188,6 +190,7 @@ accessible using the standard addressing modes.
 We've omitted the indexed modes, which use two registers.
 <<rules>>=
 regl : Reg('r', n, w) {: regname w n :}
+regpairl : RegPair(reg1:regl,reg2:regl) {: reg2 :}
 meml : Mem(reg,  w)   {: "(" ^ reg ^ ")" :}  -- indir
 meml : Mem(disp, w)   {: disp :}
 meml : Mem(lconst, w) {: lconst :}
@@ -202,9 +205,10 @@ eaddrl : meml {: meml :}
 To get a value for any of these, we fetch.
 We can also use a link-time constant as an effective address.
 <<rules>>=
-reg   : Fetch(regl,   w) {: regl   :}
-mem   : Fetch(meml,   w) {: meml   :}
-eaddr : Fetch(eaddrl, w) {: eaddrl :}
+reg     : Fetch(regl    , w) {: regl     :}
+regpair : Fetch(regpairl, w) {: regpairl :}
+mem     : Fetch(meml    , w) {: meml     :}
+eaddr   : Fetch(eaddrl  , w) {: eaddrl   :}
 -- eaddr : lconst {: lconst :} -- absolute addressing mode
 -- indexed modes to come
 @ 
@@ -267,9 +271,6 @@ inst : Store(dst:regl, disp, w) [{:guard (w = 32):}]
 inst : Llr(dst:regl, "add", const, w) [{:guard (w=32):}]
   {: cat ["leal "; const; "("; dst; ")"; ", "; dst] :}
 
-inst : Llr(dst:regl, "mul_trunc", src:reg, w) [{:guard (w=32):}]
-  {: cat ["imul "; src; ", "; dst] :}
-
 inst : Withaflags(dst:eaddrl, "add", src:reg, w, "x86_addflags")
   {: cat ["add"; suffix w; " "; src; ","; dst] :}
 
@@ -281,6 +282,19 @@ inst : Withaflags(dst:eaddrl, "sub", src:reg, w, "x86_subflags")
 
 inst : Withaflags(dst:regl, "sub", src:eaddr, w, "x86_subflags")
   {: cat ["sub"; suffix w; " "; src; ","; dst] :}
+
+inst : Withaflags(dst:eaddrl, "mul_trunc", src:reg, w, "x86_mulflags")
+  {: cat ["imul "; suffix w; " "; src; ", "; dst] :}
+
+inst : Withaflags(dst:regl, "mul_trunc", src:eaddr, w, "x86_mulflags")
+  {: cat ["imul"; suffix w; " "; src; ","; dst] :}
+
+inst : Withaflags(dst:regpairl, "div", src:reg, w, "x86_divflags")
+  {: cat ["idiv"; suffix w; " "; src; ", "; dst] :}
+
+inst : Llr(dst:regl, "shra", immed, w)
+  {: cat ["sar "; immed; ","; dst] :}
+
 @ 
 N.B. The crazy AT\&T assembly language does comparisons backward.
 <<rules>>=
@@ -445,6 +459,14 @@ and effect = function
   | RP.Store(l,e,w)                   -> conStore (loc l) (exp e) w
   | RP.Kill(l)                        -> conKill (loc l)
 @
+We attempt to recognize register pairs.
+<<code to follow the labeler>>=  
+and regpair = function
+  | RP.App(("or",_),[ RP.App(("shl",_), [RP.App(("sx",_), [RP.Fetch(r1,_)]);_])
+                    ; RP.App(("sx",_),                    [RP.Fetch(r2,_)])])
+      -> conRegPair (loc r1) (loc r2)
+  | x -> Impossible.impossible "Argument is not a register pair"
+@
 The truly ghastly stuff is the stuff that recognizes multiple
 effects that set flags.
 <<code to follow the labeler>>=  
@@ -478,6 +500,10 @@ Oh, the joy of the flags\ldots
   ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l'']], [[r']])>>)
   ] when l = l' && l = l'' && r = r' && flag_index = SS.indices.SS.cc ->
       conWithaflags (loc l) o (exp r) w fo
+| [ (RP.Const(RP.Bool true), <<pattern for [[d]] := rp:[[l1/l2]] [[o]] [[r]] at [[w]]>>)
+  ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l1'/l2']], [[r']])>>)
+  ] when l1 = l1' && l2 = l2' && r = r' && flag_index = SS.indices.SS.cc ->
+      conWithaflags (regpair rp) o (exp r) w fo
 | [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
   ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>)
   ] when l = l' && l = l'' && r = r' && o = o'
@@ -488,6 +514,19 @@ RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w)
 <<pattern for flags := [[fo]] ([[l'']], [[r']])>>=
 RP.Store(RP.Reg('c', flag_index, _),
          RP.App((fo, _), [RP.Fetch(l'',_); r']), _)
+<<pattern for [[d]] := rp:[[l1/l2]] [[o]] [[r]] at [[w]]>>=
+RP.Store(d, RP.App((o, _),
+                   [ (RP.App(("or",_), [ RP.App(("shl",_),
+                                          [RP.App(("sx",_), [RP.Fetch(l1,_)]);_])
+                                      ;    RP.App(("sx",_), [RP.Fetch(l2,_)])]) as rp)
+                   ; r]), w)
+<<pattern for flags := [[fo]] ([[l1'/l2']], [[r']])>>=
+RP.Store(RP.Reg('c', flag_index, _),
+         RP.App((fo, _), 
+                   [ RP.App(("or",_), [ RP.App(("shl",_),
+                                          [RP.App(("sx",_), [RP.Fetch(l1',_)]);_])
+                          ;                RP.App(("sx",_), [RP.Fetch(l2',_)])])
+                   ; r']), _)
 <<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>=
 RP.Store(RP.Reg('c', flag_index, _),
          RP.App((fo, _), [RP.App ((o', _), [RP.Fetch(l'',_); r'])]), _)
