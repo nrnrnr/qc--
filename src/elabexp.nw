@@ -31,7 +31,7 @@ ONE PROBLEM REMAINS: WE COULD ACCEPT A HINT ON A PRIMITIVE CALL.
 <<elabexp.mli>>=
 type nm_or_mem = Ast.name_or_mem
 type link = Bits.bits Reloc.Simple.relocatable
-val elab_ty : 'a Fenv.Dirty.env' -> Ast.ty   -> Types.ty                Error.error
+val elab_ty : 'a Fenv.Dirty.env' -> Ast.ty   -> Rtl.width                Error.error
 val elab_loc: 'a Fenv.Dirty.env' -> nm_or_mem-> (Rtl.loc   * Rtl.width) Error.error
 val elab_exp: 'a Fenv.Dirty.env' -> Ast.expr -> (Rtl.exp   * Types.ty)  Error.error
 val elab_con: 'a Fenv.Dirty.env' -> Ast.expr -> (Bits.bits * Rtl.width) Error.error
@@ -148,7 +148,7 @@ let tywidth a_bad_thing = function
 
 let emap f x = E.ematch x f
 
-let elab_ty env =
+let elab_full_ty env =
   let catch r = E.catch (E.errorRegionPrt (F.srcmap env, r)) in
   let rec elab = function
     | A.TyAt (x,r)    -> catch r elab x
@@ -156,7 +156,8 @@ let elab_ty env =
     | A.TypeSynonym n -> snd (F.findt n env) in
   catch Srcmap.null elab
 
-let astwidth msg env = emap (tywidth msg) << elab_ty env
+let astwidth msg env = emap (tywidth msg) << elab_full_ty env
+let elab_ty env = astwidth "expressed in abstract syntax" env
 @
 \subsubsection{The meanings of names}
 

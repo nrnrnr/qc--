@@ -10,37 +10,33 @@
 \section{Normalized Abstract-Syntax Tree}
 
 This is an AST, except we sort and organize everything.
+The key types are [[stmt]], [[proc]], and~[[t]].
+We begin with common abbreviations.
 <<exposed types>>=
+type ty  = Ast.ty
 type exp = Ast.expr
 type loc = Ast.name_or_mem
+
+type 'a marked = Ast.region * 'a
+
 type name = string
 type hint = string
 type convention = string
-type procname   = string
-type label      = string
-
-type range = Ast.range
-type ty = Ast.ty
-@ 
-Here we have register variables,
-continuation parameters, actual parameters.
-<<exposed types>>=
-type register = Ast.register
-type cformal  = Ast.region * hint * name
-type actual   = hint * exp
-@ 
-Flow annotations on calls and cut to.
-<<exposed types>>=
-type flow  = Ast.flow list
-type alias = Ast.mem  list
 @
 Statements.  
 <<exposed types>>=
+type cformal  = Ast.region * hint * name
+type actual   = hint * exp
+type flow     = Ast.flow list
+type alias    = Ast.mem  list
+type range    = Ast.range
+type procname = string
+type label    = string
 type stmt =
   | StmtAt of stmt * Ast.region
   | If     of exp * stmt list * stmt list
   | Switch of range option * exp * (range list * stmt list) list
-  | Label  of name
+  | Label  of label
   | Cont   of name * convention * cformal list
   | Span   of exp * exp * stmt list
   | Assign of loc list * Ast.guarded list
@@ -56,13 +52,12 @@ Because these are scoped, we accumulate these definitions in each
 procedure \emph{and} in the unit as a whole.
 Therefore they have their own type.
 <<exposed types>>=
-type typedefn     = ty * string list
-type constdefn = ty option * string * exp
-type 'a marked    = Ast.region * 'a
+type typedefn  = ty * name list
+type constdefn = ty option * name * exp
 type compile_time_defns = {
-    types     : typedefn  marked list;
-    constants : constdefn marked list;
-  }
+  types     : typedefn  marked list;
+  constants : constdefn marked list;
+}
 @ 
 Here is a normalized form of procedures and of (possibly initialized) data.
 Initialized data, as well as data in the form of [[SSpan]] and
@@ -73,7 +68,7 @@ type proc = {
     cc            : convention;
     name          : name;
     formals       : (hint * Ast.variance * ty * name) marked list;
-    locals        : register marked list;
+    locals        : Ast.register marked list;
     pdecls        : compile_time_defns;
     continuations : (name * convention * cformal list) marked list;
     labels        : name marked list;  (* code labels *)
@@ -84,22 +79,21 @@ and  datum =
   | Datalabel  of name
   | Align      of int
   | ReserveMem of ty * Ast.memsize * Ast.init option (*init always none on stackdata*)
-  | Procedure  of proc
-  | SSpan      of exp * exp * datum marked list
-and void = Void of void
+  | Procedure  of proc                               (* never on stackdata *)
+  | SSpan      of exp * exp * datum marked list      (* never on stackdata *)
 @ 
 And last, the normal form of a compilation unit.
 <<exposed types>>=
 type section = name * datum marked list
 type t = {
-    target   : Ast.arch marked list;
-    imports  : (Ast.region * Ast.ty option * Ast.import list) list;
-    exports  : (Ast.region * Ast.ty option * Ast.export list) list;
-    globals  : register marked list;
-    code_labels : name marked list list;
-    udecls   : compile_time_defns;
-    sections : section list
-  }
+  target   : Ast.arch marked list;
+  imports  : (Ast.region * Ast.ty option * Ast.import list) list;
+  exports  : (Ast.region * Ast.ty option * Ast.export list) list;
+  globals  : Ast.register marked list;
+  code_labels : name marked list list;
+  udecls   : compile_time_defns;
+  sections : section list
+}
 @ 
 <<nast.mli>>=
 <<exposed types>>
@@ -262,7 +256,9 @@ let rec stmt r s k =
   | A.CommentStmt _   ->
       k id imps exports lbls ks consts types regs archs data in
 stmt r s k
-@ 
+@ PERHAPS IT SHOULD BE POSSIBLE TO SET THE CALLING CONVENTION FOR CUT TO
+AND FOR CONTINUATION?
+@
 Arm of a case statement.  Nothing interesting here.
 <<nast.ml>>=
 and arm r imps exports lbls ks consts types regs archs data a k = match a with

@@ -8,39 +8,20 @@
 
 This is more my idea of an elaborated representation.
 <<exposed types>>=
-type bits = Bits.bits
-type exp  = Rtl.exp
-type loc  = Rtl.loc
-type rtl  = Rtl.rtl
 type name = string
-type size = int
 type hint = string
-type index = int
-type convention = string
-type procname   = string
-type label      = string
-type linktime   = Bits.bits Reloc.Simple.relocatable
-
-type ty = Types.ty
-@ 
-Here we have register variables (which double as formal parameters),
-continuation parameters, actual parameters.
-<<exposed types>>=
-type runtime_access = Invisible | Invariant | Variant
-
-type register = runtime_access * hint * ty * name (* ? *)
-type cformal  = hint * name
-type actual   = hint * exp
 @ 
 Procedures and sections in nice normal form.
-I'm concerned that formals and locals don't have the same type.
+It's depressing that formals and locals don't have the same type.
 <<exposed types>>=
+type index = int
+type linktime = Bits.bits Reloc.Simple.relocatable
 type 'a proc =
-  { env : 'a Fenv.Dirty.env';
-    sym : Symbol.t;  (* assembly-language symbol for this procedure *)
-    cc  : name;      (* calling convention *)
-    name : name;
-    spans : (Bits.bits * linktime) list;  (* enclose whole procedure *)
+  { env     : 'a Fenv.Dirty.env';
+    sym     : Symbol.t;  (* assembly-language symbol for this procedure *)
+    cc      : string;    (* calling convention *)
+    name    : name;
+    spans   : (Bits.bits * linktime) list;  (* enclose whole procedure *)
     formals : (index * hint * Ast.variance * Rtl.width * name) list;
     locals  : Fenv.variable list;
     continuations : (name * Fenv.continuation) list;
@@ -58,28 +39,12 @@ type 'a datum =
 
 type 'a section = name * 'a datum list
 @ 
-And last, the target and compilation unit.
+And last, a compilation unit.
 <<exposed types>>=
-type xtarget = {
-  memsize : int;
-  byteorder:      Rtl.aggregation   ; (* big/little endian, id *)
-  wordsize:       int               ; (* bits *)
-  pointersize:    int               ; (* bits *)
-  floatrep : string;
-  charset  : string;                 (*????*)
-}
 type 'a compunit = {
-(*
-    target  : target;
-    imports : name list;
-    exports : name list;
-*)
-    globals : (name * Fenv.variable) list;
-(*
-    constants : (name * bits) list;     (* maybe unnecessary *)
-*)
-    sections : 'a section list;
-  }
+  globals : (name * Fenv.variable) list;
+  sections : 'a section list;
+}
 @ 
 <<nelab.mli>>=
 <<exposed types>>
@@ -219,14 +184,6 @@ about type declarations.
 \subsection{Auxiliaries}
 % ------------------------------------------------------------------ 
 
-The non-terminal symbol [[lvalue]] is used in different contexts that
-we would like to distinguish: only in the [[Call]] context lvalues may
-carry hints for calling conventions.
-<<auxiliaries>>=
-type context = Assign     (* x,y = y,x  *)
-             | Call       (* x,y = f()  *)
-             | PrimCall   (* x,y = %f() *)
-@
 Fold is the most frequently used higher order function in this module. 
 We therefore like a short name.  Unlike its cousin
 [[List.fold_right]], [[foldl]] is tail-recursive.
@@ -334,7 +291,7 @@ module Type = struct
   end
   let what = "type"
   type rhs = Types.ty
-  let eval env (_, (t, _)) = Elabexp.elab_ty env t
+  let eval env (_, (t, _)) = E.ematch (Elabexp.elab_ty env t) (fun w -> Types.Bits w)
   let bind = F.bindt
 end
 module TypeSortBind = SortAndBind(Type)
@@ -369,10 +326,10 @@ module Const = struct
       match ty with
       | None -> E.Ok (b, Types.Bits w)
       | Some ty ->
-          E.seq (Elabexp.elab_ty env ty) (fun t ->
-            if t =*= Types.Bits w then E.Ok (b, t)
-            else errorf "constant %s declared with type %s has actual type bits%d"
-                           name (Types.to_string t) w))
+          E.seq (Elabexp.elab_ty env ty) (fun w' ->
+            if w = w' then E.Ok (b, Types.Bits w)
+            else errorf "constant %s declared with type bits%d has actual type bits%d"
+                           name w' w))
   let bind name (r, typed_exp) env = 
     F.bindv name (r, E.ematch typed_exp (fun (b, t) -> FE.Constant b, t)) env
 end
@@ -518,10 +475,10 @@ let bind_and_remember_import env (r, ty, imports) =
   foldl import env imports in
 <<convert optional importing [[ty]] as long as it is pointer size>>=
 match ty with None -> E.Ok pointerty
-| Some t -> E.seq (Elabexp.elab_ty env t) (fun t ->
-    if t =*= pointerty then E.Ok pointerty
-    else errorf r "imported type %s is inconsistent with native pointer type %s"
-        (Types.to_string t) (Types.to_string pointerty))
+| Some t -> E.seq (Elabexp.elab_ty env t) (fun w ->
+    if w =*= metrics.Metrics.pointersize then E.Ok pointerty
+    else errorf r "imported type bits%d is inconsistent with native pointer type %s"
+        w (Types.to_string pointerty))
 @ 
 \paragraph{Labels}
 No checking for labels.  Just create the assembly-language symbol and
@@ -566,8 +523,7 @@ let registers_from scope n rs env =
         List.map unreg rs) in
       env, regs
   | (rgn, (v, hint, t, name, hwreg)) :: rs ->
-      let entry = E.seq (Elabexp.elab_ty env t) (fun ty ->
-        let w     = match ty with T.Bits w -> w | T.Bool -> impossf "decl bool" in
+      let entry = E.seq (Elabexp.elab_ty env t) (fun w ->
         let loc   = (match scope with Global -> R.global | Local -> R.var) name n w in
         let reg h = { FE.index = n; FE.rhint = h; FE.loc = loc; FE.variance = v } in
         let den h = E.Ok (FE.Variable (reg h)) in
@@ -582,7 +538,7 @@ let registers_from scope n rs env =
             (match scope with
             | Local  -> errorf rgn "local register can't be mapped to hardware"
             | Global -> den (FE.RReg r)) in
-        E.Raise.left (den, ty)) in
+        E.Raise.left (den, Types.Bits w)) in
       let named = E.Raise.right (name, entry) in
       regs_from (named::prev') (n+1) rs (F.bindv name (rgn, entry) env) in
   regs_from [] n rs env in
@@ -592,12 +548,11 @@ let formals_from n rs env =
   | [] -> env, n, List.rev prev'
   | (r, (hint, inv, ty, name)) :: rs ->
       match Elabexp.elab_ty env ty with
-      | E.Ok (Types.Bits w as t) ->
+      | E.Ok w ->
           let i = { FE.index = n; FE.variance = inv;
                     FE.loc = Rtl.var name n w; FE.rhint = FE.RHint hint; } in
-          let env = F.bindv name (r, E.Ok (FE.Variable i, t)) env in
+          let env = F.bindv name (r, E.Ok (FE.Variable i, Types.Bits w)) env in
           formals ((n, hint, inv, w, name)::prev') (n+1) rs env
-      | E.Ok Types.Bool -> impossf "declared type is boolean"
       | E.Error -> formals prev' n rs (F.bindv name (r, E.Error) env) in
   formals [] n rs env in
 @ 
@@ -658,8 +613,7 @@ and stackdatum mem stacklabels' env (r, d) k =
   | N.ReserveMem(ty,size,None) ->
       (match Elabexp.elab_ty env ty with
       | E.Error -> k mem stacklabels' env
-      | E.Ok Types.Bool -> impossf "boolean type in abstract syntax"
-      | E.Ok (Types.Bits w) ->
+      | E.Ok w ->
           let finish size =
             if w mod memsize = 0 then
               k (Memalloc.allocate mem (size * (w / memsize))) stacklabels' env
@@ -707,8 +661,8 @@ let check_export env (r, ty, pairs) =
   let check_pair env = E.catch' env (eprint r) (check_pair env) in
   let env = match ty with
   | Some t ->
-      E.seq' env (Elabexp.elab_ty env t) (fun ty ->
-        if Pervasives.(<>) ty pointerty then
+      E.seq' env (Elabexp.elab_ty env t) (fun w ->
+        if w <> metrics.Metrics.pointersize then
           errorf "exported value must have native pointer type"
         else
           env)
@@ -774,18 +728,16 @@ match the size specification, and the type of the expressions must
 match the declared type.
 <<definitions of elaboration functions for data>>=
 and reserve_mem r ty size idata =
-    E.seq2 (Elabexp.elab_ty env ty) (init_size r size) (fun ty n ->
+    E.seq2 (Elabexp.elab_ty env ty) (init_size r size) (fun w n ->
       match idata with
       | None ->
-          (match ty with
-          | Types.Bits w when w mod memsize = 0 ->
-              E.Ok (UninitializedData (Aux.Option.get 1 n * (w / memsize)))
-          | Types.Bits w ->
-              errorf r "width %d of initialized data is not a multiple of memsize = %d"
-                w memsize
-          | Types.Bool -> Impossible.impossible "boolean type from ast")
+          if w mod memsize = 0 then
+            E.Ok (UninitializedData (Aux.Option.get 1 n * (w / memsize)))
+          else
+            errorf r "width %d of initialized data is not a multiple of memsize = %d"
+              w memsize
       | Some i ->
-          E.seq (init r ty i) (fun inits ->
+          E.seq (init r (Types.Bits w) i) (fun inits ->
             let rcount = List.length inits in
             let lcount = Aux.Option.get rcount n in
             if      rcount > lcount then errorf r "too many initial values"

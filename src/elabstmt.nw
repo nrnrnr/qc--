@@ -11,38 +11,41 @@
 \section{Elaborating Statements}
 % ------------------------------------------------------------------ 
 
-WE COULD CHOOSE TO ATTACH SPANS HERE, BUT MAYBE IT'S NOT WORTH THE BOTHER.
+We could choose to attach spans here, but because the compiler has to
+create and attach internal spans later in, it's probably not worth
+doing here.
 
+We begin with the same sort of abbreviations used in [[Nast]].
 <<exposed types>>=
 type exp = Rtl.exp
-type rtl = Rtl.rtl
 type loc = Rtl.loc * Rtl.width
-type convention = string
-type hint = string
-type actual = hint * exp * Rtl.width
+type rtl = Rtl.rtl
+
 type name = string
-type linktime = Bits.bits Reloc.Simple.relocatable
+type hint = string
+type convention = string
+<<exposed types>>=
+type actual = hint * exp * Rtl.width
 type 'a hinted = hint * 'a
+type 'a flow  = { cuts : 'a list; unwinds : 'a list; areturns : 'a list;
+                  returns : bool; aborts : bool }
+type 'a cflow = { ccuts : 'a list; caborts : bool }
+type 'a alias = { reads : 'a; writes : 'a }
 type range = Bits.bits * Bits.bits   (* lo `leu` x `leu` hi, as in manual *)
 type procname = string
-type 'a flow = { cuts : 'a list; unwinds : 'a list; areturns : 'a list;
-              returns : bool; aborts : bool }
-type 'a alias = { reads : 'a; writes : 'a }
-type 'a cflow = {
-    ccuts : 'a list;
-    caborts : bool;
-  }
+type label    = string
+type linktime = Bits.bits Reloc.Simple.relocatable
 
 type stmt =
   | If     of exp * stmt list * stmt list
-  | Label  of name
   | Switch of range option * exp * (range list * stmt list) list
+  | Label  of label
   | Cont   of name * convention * Fenv.variable hinted list
   | Span   of (Bits.bits * linktime) * stmt list
   | Assign of rtl
   | Call   of loc hinted list * convention * exp * actual list * procname list
             * name flow * name list option alias
-  | Goto   of exp * name list
+  | Goto   of exp * label list
   | Jump   of convention * exp * actual list * procname list
   | Cut    of convention * exp * actual list * name cflow 
   | Return of convention * int * int * actual list
