@@ -1,0 +1,352 @@
+
+\documentclass[11pt]{article}
+\usepackage{noweb}
+\usepackage{path}
+
+\newcommand\ocaml{{\small OCAML}}
+
+\noweboptions{smallcode,breakcode}
+
+\title{A Sample Client for OCaml-Lua}
+\author{Christian Lindig \\ \texttt{lindig@eecs.harvard.edu}}
+
+% ------------------------------------------------------------------ 
+\begin{document}
+\maketitle
+% ------------------------------------------------------------------ 
+
+This document demonstrates how to extend and embed a Lua interpreter
+into an {\ocaml} application. We regard this document as a
+complement to the more detailed documents [[lua.nw]] and [[newlib.nw]]
+that document the general case while we focus on the simpler common
+case.
+
+\section{Prerequisites}
+
+The Lua interpreter comes as a library [[lua-std.cma]] and many
+interface files [[lua*.cmi]]. All must be found by the {\ocaml}
+compiler; the compiler can be directed to the library using the [[-I]]
+flag. When compiling for native code, the Lua interpreter comes as the
+additional files [[lua-std.cmxa]] and [[lua-std.a]].
+
+When we assume that our application is implemented by a module
+[[Luaclient]] whose source code resides in [[luaclient.ml]], our [[Makefile]]
+looks like this:
+
+<<Makefile>>=
+INTERP          = std
+OCAMLC          = ocamlc
+OCAMLC_FLAGS    =
+
+luaclient: lua-$(INTERP).cma luaclient.cmo
+        $(OCAMLC) $(OCAMLC_FLAGS) -o $@ unix.cma lua-$(INTERP).cma luaclient.cmo
+@
+
+The [[Makefile]] links together the [[luaclient]] binary from the library,
+the application code, and the Unix module that is required by the Lua
+code.
+
+\section{The Big Picture}
+
+The Lua interpreter is highly functorized and must be linked together
+before it can be used. Since we want to use Lua to control our
+application, we have to extend the Lua interpreter with new primitives
+that our application implements. These extensions, too, have to be
+linked into the interpreter. At run time, finally, we have to pass
+control to the newly created interpreter.
+
+<<luaclient.ml>>=
+<<Linking the Interpreter [[I]]>>
+
+let main () =
+    let argv    = Array.to_list Sys.argv in
+    let this    = Filename.basename (List.hd argv) in
+    let args    = List.tl argv in
+    let state   = I.mk () in (* fresh Lua interpreter *)
+    let eval e  = ignore (I.dostring state e) in
+       ( List.iter eval args
+       ; exit 0
+       )
+
+let _ = main ()         (* alternatively use: module G = Lua.Run(I) *)
+@
+
+The interpreter implementation resides in module [[I]]. Several active
+interpreters can co-exist because the global state for an interpreter is
+kept as an explicit value. In our simple [[main]] function we create a
+new interpreter (state) and evaluate all command line arguments inside.
+In a more realistic application we probably would evaluate some startup
+code from a file. In any case, the code we evaluate can use new
+primitives that we have added to the interpreter and therefore controls
+our application.
+
+If we just want to type in Lua code interactively we don't even need to
+write our own [[main]]. Instead, we can use
+    
+    $$[[module G = Lua.Run(I)]]$$
+
+which adds a [[main]] function with a read-eval-print loop.    
+
+As an example for application-specific data types, we add two new Lua
+types to the interpreter. A character type (Lua only knows strings), and
+a polymorphic pair type. Both come with functions to create and observe
+them. 
+
+From a Lua user's point of view the two new types are so-called [[userdata]]
+types whose values are accessed from funtions in the tables [[Char]] and
+[[Pair]] that act as modules. For example, [[x=Pair.mk("one",2)]] creates a pair
+value of a string and a number. Each component can be observed by
+[[Pair.fst(x)]] and [[Pair.snd(x)]], respectively.
+
+\section{Linking together the interpreter}
+
+An interpreter is linked together from a parser and a core, which in
+turn takes our user-defined types [[T]] and a library module [[L]] that
+depends on them. We will almost always use the standard parser such that
+the main task is to construct new types and code that uses them.
+
+<<Linking the Interpreter [[I]]>>=
+<<user defined types [[T]]>>
+<<library module [[L]]>>
+
+module I =			    (* interpreter *)  
+    Lua.MakeInterp
+	(Lua.Parser.MakeStandard)
+	(Lua.MakeCore (T) (L))
+@
+
+Each user-supplied Lua type is implemented in a module of its own. We link
+all of them together into one module [[T]] that we pass into the
+[[MakeCore]] functor. The [[T]] module contains sub-modules, one for each
+argument, that we name for convenience.
+
+<<user defined types [[T]]>>=
+<<module [[LuaChar]]>>
+<<module [[Pair]]>>
+
+module T =			    (* new types *)
+    Lua.Lib.Combine.T3              (* T3 == link 3 modules *)
+	(LuaChar)                   (* T1 *)
+	(Pair)                      (* T2 *)    
+	(Luaiolib.T)                (* T3 *)
+
+module LuaCharT     = T.T1
+module PairT        = T.T2
+module LuaioT       = T.T3
+@
+
+The primitive types and functions supplied by the standard interpreter
+are themselves split across several modules. Thus, we could build an
+extra-small interpreter by omitting what we don't use. Usually we want
+all we can get and link [[L]] together like here:
+
+<<library module [[L]]>>=
+<<new primitives>>
+module X = Lua.Lib.Extend (PairT)   (* any of LuaCharT, PairT, LuaioT *)
+module L  =
+    Lua.Lib.Combine.L4  (* L4 == combine 4 libraries *)
+	(Luaiolib.Make(LuaioT))
+	(X (Luastrlib.M))
+	(X (Luamathlib.M))
+	(MakeLib (LuaCharT) (PairT))
+@
+
+The IO, math, and string library are standard; our own code resides in
+[[MakeLib]] and is parametrized over the new Lua types ([[LuaCharT]],
+[[PairT]]) that we have introduced.  Because the string and math
+libraries have signature [[Lua.BARE]] they need to be extended with a
+type (any will do), before they can be combined with others.
+
+\section{New primitive types and functions}
+
+Most of the code above provides necessary infrastructure. The real work
+is implementing new primitive Lua types and functions. 
+
+Most often we want to add not just new functionality but add also an
+application-specific type to the Lua interpreter. Each type is
+represented by a module of module type [[Lua.USERDATA]]. As an example,
+we add a new type that represent characters. The [[LuaChar]] module
+provides: an {\ocaml} representation for the new type, a name of the
+type, an equality predicate, and a function to represent a datum as a
+string.
+
+<<module [[LuaChar]]>>=
+module LuaChar = struct
+    type 'a t	    = char
+    let tname	    = "char"
+    let eq _	    = fun x y -> x = y
+    let to_string   = fun _ c -> String.make 1 c 
+end
+@
+
+As a somewhat more complicated example we also add a polymorphic pair
+that works with all Lua values. Although we don't know the
+representation of Lua values here, we do know that the type parameter
+[['a]] of [[t]] represents the actual value data type of the
+interpreter. Therefore, our representation is simply a polymorphic pair.
+The foresight of the interpreter's designer also helps us with the
+problem of printing values in the [[to_string]] function: the first
+parameter [[f]] to [[to_string]] is a function that prints any value,
+such that [[(f x)]] gives us the string of value [[x]].
+
+Usually we have functions to work with the new types. We can implement
+them outside or inside the module that provides the type. In the case of
+[[Pair]], we added [[mk]], [[fst]], and [[snd]].
+
+<<module [[Pair]]>>=
+module Pair = struct
+    type 'a t	    = 'a * 'a
+    let tname	    = "pair"
+    let eq _	    = fun x y -> x = y
+    let to_string   = fun f (x,y) -> Printf.sprintf "(%s,%s)" (f x) (f y)
+    let mk  x y     = (x,y)
+    let fst         = fst
+    let snd         = snd
+end
+@
+
+The approved way to link together the modules that extend an interpreter
+is to write a [[MakeLib]] functor. It has an argument for each new type, where
+each but the first one comes with a sharing constraint for the
+[[combined]] type. Intuitively, these constraints ensure that all
+modules use the same representation for values in the interpreter.
+
+Note, that the arguments to [[MakeLib]] are \emph{not} the modules
+[[LuaChar]] and [[Pair]] that we just have defined, but the ones
+re-exported by the \path|Lua.Lib.Combine.T|$n$ functor.
+
+<<new primitives>>=
+module MakeLib 
+    (CharV: Lua.Lib.TYPEVIEW with type 'a t        = 'a LuaChar.t)
+    (PairV: Lua.Lib.TYPEVIEW with type 'a t        = 'a Pair.t
+                             and  type 'a combined = 'a CharV.combined)
+	: Lua.Lib.TYPEFUL with type 'a combined = 'a CharV.combined = struct
+	
+    type 'a combined = 'a PairV.combined
+    module M (C: Lua.Lib.CORE with type 'a V.userdata' = 'a combined) = struct
+	module V = C.V
+	let ( **-> ) = V.( **-> )
+        <<register new functions in interpreter>>
+    end (* M *)
+end (* MakeLib *)
+@
+
+Finally we have to register the new functions in the interpreter. The
+most important aspect is the conversion back and forth between the value
+representation in the interpreter, and our (much simpler) representation
+that we have provided in [[LuaChar]] and [[Pair]]. It is good practice
+to collect these conversion functions into one module [[Map]] with a
+function for each type.
+
+<<register new functions in interpreter>>=
+module Map = struct
+    let pair = PairV.makemap V.userdata V.projection
+    let char = CharV.makemap V.userdata V.projection
+end    
+
+let init g = 
+    <<register [[Pair]]>>
+    <<register [[Char]]>> 
+    <<register [[Caml]]>>
+    Lua.Lib.StringList.of_list [] (* return value of init *)
+@
+
+Once we have [[Map]], we can provide a mapping between a Lua name like
+[[Pair.mk]] and its {\ocaml} implementation. The [[register_module]]
+function takes a list of (name, value) pairs, where a value can be a
+function. The conversion between the interpreter's internal
+representation and our's is provided by a clever infix function [[**->]]
+that makes the conversion function look like a function type. The
+[[Map]] module is here essential to name the user-defined argument
+types. 
+
+<<register [[Pair]]>>=    
+C.register_module "Pair"
+    [ "mk", V.efunc (V.value **-> V.value **-> V.result Map.pair) Pair.mk
+    ; "fst",V.efunc (Map.pair **-> V.result V.value)              Pair.fst
+    ; "snd",V.efunc (Map.pair **-> V.result V.value)              Pair.snd
+    ] g;
+@
+
+The registration of the [[Char]] module shows how to deal with errors in
+conversions. [[Char.mk]] expects a string whose first character is used
+to create the new character value. But what if this string is empty? We
+catch this problem here where we have the core interpreters's [[error]]
+function available, rather in [[LuaChar]], where we don't.  The argument
+[[g]] is the global interpreter state that must be passed to [[error]].
+State [[g]] is an argument to [[init]] inside whose body we are.  Error
+reporting isn't a problem for [[Pair]] because all functions in [[Pair]]
+are total.
+
+<<register [[Char]]>>=
+C.register_module "Char"
+    [ "mk", V.efunc (V.string **-> V.result Map.char)
+            (function 
+            | "" -> C.error g "Char.mk: empty string"   
+            | s  -> s.[0]
+            )
+    ] g;        
+@
+
+Sometimes we want to add functionality for existing types without adding
+a new type. This case is easy because we simply can add the new
+functions without having to define extra modules for types. As an
+example, we provide functions on strings from the {\ocaml} standard
+library. To avoid name space pollution we introduce an extra layer
+[[Filename]] since these functions come from the {\ocaml} [[Filename]]
+module. From within Lua, the new functions part of the [[Caml.Filename]]
+table.
+
+<<register [[Caml]]>>=
+C.register_module "Caml" 
+    ["Filename" , V.Table (V.Table.of_list 
+        [ "checksuffix", V.efunc (V.string **-> V.string **-> V.result V.bool)
+            Filename.check_suffix
+        ; "chopsuffix",  V.efunc (V.string **-> V.result V.string)
+            Filename.chop_extension
+        ])
+    ] g;
+@
+
+With all explanations the client of our interpreter looks quite big. In fact,
+it is just about 100 lines long. Taking a look at the [[luaclient.ml]]
+gives us the more linear perspective of the compiler which is also
+instructive to understand this code.
+
+\section{Running the interpreter}
+
+After we have compiled and linked our client with the [[lua-std.cma]]
+library we can run it. Our [[main]] function simply evaluates all
+command line arguments from left to right. The example below shows, that
+our extensions are indeed part of the interpreter.
+
+<<run>>=
+% ./luaclient 'c=Char.mk("x")' 'print(c)'
+x
+
+% ./luaclient 'x=Pair.mk("one",2)' 'print(x)' 'print(Pair.fst(x))'
+(one,2)
+one
+
+% ./luaclient 'print(Caml.Filename.chopsuffix("foo.bar"))'
+foo
+@
+
+If your Lua code is in a file, a [[dofile("file.lua")]] will make the
+interpreter read and execute it. This is useful for repetitive testing.
+
+\section{Further reading}
+
+This document provides a first recipe to embed the Lua interpreter into
+an application but it cannot explain every detail. The next document you
+should try to understand is Section 1.1 Values in [[lua.nw]] that
+documents the Lua {\small API}. In particular, Section 1.1 lists all
+conversion functions that are available to map values between their
+{\ocaml} and Lua representation. The rest of [[lua.nw]] explains the
+multiple ways libraries can be combined and is important when you want
+to combine more than 10 libraries or types, or you want to go to the
+limits in other ways.
+
+% ------------------------------------------------------------------ 
+\end{document}
+% ------------------------------------------------------------------ 

@@ -1,0 +1,94 @@
+
+------------------------------------------------------------------ 
+ $Id$
+------------------------------------------------------------------ 
+
+                    README for STANDALONE.patch
+
+The Quick C-- Compiler from http://www.cminusminus.org/ contains an
+implementation of Lua 2.5 in Objective Caml. Lua (http://www.lua.org/)
+is an extension language designed to be embedded into an application.
+In case of Quick C--, Lua controls the compiler's back end, which a
+programmer can customize by writing Lua code. The Lua implementation is a
+real gem, unfortunately it relies on the build infrastructure from the
+rest of the compiler. Since the compiler uses non-standard tools like
+mk(1) and the literate programming system NoWEB, building the Lua
+interpreter requires some effort. The STANDALONE.patch provides a
+workaround such that you can build the Lua interpreter from source with
+standard tools.
+
+PREREQUISITES
+
+The Quick C-- compiler is written in Objective Caml. You need the
+following tools to build just the interpreter if you use the 
+STANDALONE.patch:
+
+(1) Objective Caml 3.0[46]
+(2) Perl
+(3) GNU Make
+(4) Standard Unix tools: sed    (probably forgot some here)
+
+
+BUILDING THE INTERPRETER
+
+(1) Obtain the Quick C-- source code tar file from
+    http://www.cminusminus.org/dist/.
+
+(2) Unpack the tar file and cd into the qc--/lua directory.
+
+        cd qc--/lua
+        
+(2) Apply the patch: 
+
+        patch < STANDALONE.patch
+        chmod +x nofake
+
+(4) Check the head of the Makefile but usually the default settings
+    should just work.
+
+(5)     make depend
+        make all
+
+    This builds the interpreter and demo clients.
+    
+(6) Read luaclient.html. This documents explains how to embed the
+    interpreter into an application. Play with the luaclient binary and
+    take a look at the luaclient target in Makefile.
+
+(7) The language definition of C-Lua is part of the directory: refman.ps
+
+(8) If you want to use the interpreter in your own applications you need
+    to copy the following files to some place where ocamlc(1) can find
+    them:
+
+    lua-std.cma 
+    lua*.cmi
+
+CAVEAT
+
+The STANDALONE.patch is not part of the Quick C-- source tree and might
+be out of sync with the latest version. 
+
+When using the full Quick C-- build system, several variants of the Lua
+interpreter can be built. The STANDALONE.patch only supports building
+the "std" variant.
+
+Since all sources are literate programs extensive documentation can be
+built. However, this requires the Quick C-- build infrastructure 
+
+COPYRIGHT
+
+The STANDALONE.patch is in the public domain. Please check the license
+of for the Quick C-- source code.
+
+CONTACT
+
+The Lua implementation is by Norman Ramsey <nr@eecs.harvard.edu>, the
+standalone patch by Christian Lindig <lindig@eecs.harvard.edu>. See also
+http://www.cminusminus.org/
+
+If you make changes to the interpreter or to the demo client
+(luaclient.nw) *please* edit the *.nw files and *not* the derived files
+*.ml and *.mli. Only send patches for *.nw files!
+
+

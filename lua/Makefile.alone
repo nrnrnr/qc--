@@ -1,0 +1,235 @@
+# vim:ts=8 noet: 
+#
+# $Id$
+#
+# This Makefile builds the Lua libraries and demo clients. As its main
+# feature, it does not depend on the build infrastructure from the Quick
+# C-- projekt. Since the Quick C-- project uses mk(1) as a build tool,
+# there is a good chance that this Makefile is out of sync with the
+# corresponding mkfile.
+#
+# What to do:
+# (1) run "make all"
+# (2) read luaclient.html   (source is luaclient.nw)
+# (3) read lua.nw	    (optional)
+
+
+# -- lua configuration --
+# -- the 'std' configuration is the only one supported here.
+
+INTERP =        std
+
+# -- ocaml --
+
+OCAML =         ocaml
+OCAMLC =        ocamlc 
+OCAMLO =        ocamlopt 
+OCAMLTOP =      ocamlmktop
+OCAMLDEP =      ocamldep
+OCAMLYACC =     ocamlyacc
+OCAMLLEX =      ocamllex
+
+OCAMLC_FLAGS =  -I $(INTERP)
+OCAMLO_FLAGS =  -I $(INTERP)
+
+%.cmi:          %.mli
+		$(OCAMLC) $(OCAMLC_FLAGS) -c $<
+
+%.cmo:          %.ml
+		$(OCAMLC) $(OCAMLC_FLAGS) -c $<
+
+%.cmx:          %.ml
+		$(OCAMLO) $(OCAMLO_FLAGS) -c $<
+
+%.ml:           %.mll
+		$(OCAMLLEX) $<
+
+%.mli %.ml:     %.mly
+		$(OCAMLYACC) $<
+
+# -- noweb --
+
+NOTANGLE =      notangle
+NOTANGLE =      ./nofake
+LINE =          \# %L "%F"%N
+
+%.ml:           %.nw
+		$(NOTANGLE) -L'$(LINE)' -R$@ $< > $@
+
+%.mli:          %.nw
+		$(NOTANGLE) -L'$(LINE)' -R$@ $< > $@
+
+# -- high-level targets --
+
+all:            lua-$(INTERP).cma   oclua-$(INTERP)	    luaclient
+all.opt:        lua-$(INTERP).cmxa  oclua-$(INTERP).opt
+
+test:		luaclient
+		./luaclient 'print("test passed")'
+
+depend:         DEPEND.$(INTERP) 
+
+clean.opt:
+		rm -f *.cmx *.o
+		rm -f *.cmxa *.a 
+		rm -f *~
+
+clean:          clean.opt
+		rm -f *.cmi *.cmo 
+		rm -f *.cma
+		rm -f *~
+
+clobber:  	clean
+		rm -f *.ml *.mli *.mly *.mll
+		rm -f luaparsex.output tspecl lspecl *.icn
+		rm -f *.aux *.log *.dvi *.toc *.tex *.inc
+		rm -f oclua-* oclua-*.opt *.cma *.cmxa *.a 
+		rm -f lua.ps
+		rm -f DEPEND*
+
+# -- lua library, files are in link order
+
+LIBML =         srcmap.ml       \
+                log.ml          \
+		luahash.ml      \
+		luafloat.ml     \
+		luavalue.ml     \
+		luaast.ml       \
+		luaparser.ml    \
+		luascanner.ml   \
+		luabaselib.ml   \
+		lualib.ml                   \
+		$(INTERP)/luainterp.ml      \
+		luarun.ml       \
+		lua.ml          \
+		luastrlib.ml    \
+		luamathlib.ml   \
+		luaiolib.ml     \
+
+# -- interfaces in alphabetical order
+
+LIBMLI =        log.mli         \
+		lua.mli         \
+		luaast.mli      \
+		luabaselib.mli  \
+		$(INTERP)/luainterp.mli   \
+		luaiolib.mli    \
+		lualib.mli      \
+		luamathlib.mli  \
+		luaparser.mli   \
+		luarun.mli      \
+		luastrlib.mli   \
+		luavalue.mli    \
+		luahash.mli     \
+                srcmap.mli      \
+
+LIBCMO =        $(addsuffix .cmo,$(basename $(LIBML)))
+LIBCMX =        $(addsuffix .cmx,$(basename $(LIBML)))
+LIBOBJ =        $(addsuffix .o  ,$(basename $(LIBML)))
+
+# -- code for interactive interpreter
+
+ML =		main.ml
+CMO =		$(addsuffix .cmo,$(basename $(ML)))
+CMX =		$(addsuffix .cmx,$(basename $(ML)))
+
+# -- libraries
+
+lua-$(INTERP).cma:	$(LIBCMO) $(LIBCMI)
+	    $(OCAMLC) $(OCAMLC_FLAGS) -a -o $@ $(LIBCMO)
+
+lua-$(INTERP).cmxa:  $(LIBCMX) $(LIBCMI)
+	    $(OCAMLO) $(OCAMLO_FLAGS) -a -o $@ $(LIBCMX)
+
+# -- standalone binaries
+
+oclua-$(INTERP):	lua-$(INTERP).cma $(CMO)
+	    $(OCAMLC) $(OCAMLC_FLAGS) -o $@ unix.cma lua-$(INTERP).cma $(CMO)
+
+oclua-$(INTERP).opt:    lua-$(INTERP).cmxa $(CMX)
+	    $(OCAMLO) $(OCAMLO_FLAGS) -o $@ unix.cmxa lua-$(INTERP).cmxa $(CMX)
+
+# -- sample client
+
+luaclient:		lua-$(INTERP).cma luaclient.cmo
+	    $(OCAMLC) $(OCAMLC_FLAGS) -o $@ unix.cma lua-$(INTERP).cma luaclient.cmo
+
+# -- sample client documentation
+
+luaclient.tex:	luaclient.nw
+		noweave -delay $< > $@
+
+luaclient.html:	luaclient.tex
+		hevea nw.hva $<
+		tidy -f /dev/null -im $@
+
+PATCHFILES =	README.STANDALONE Makefile luaclient.nw    \
+		luaclient.html srcmap.nw nw.hva		    \
+		nofake
+
+STANDALONE.patch:	$(PATCHFILES)
+		diff -c --from-file=/dev/null $(PATCHFILES) > $@ || true
+
+STANDALONE.tar:		$(PATCHFILES)
+		tar chvf $@ $(PATCHFILES)
+
+# -- dependencies
+
+SCAN =          $(LIBML) $(LIBMLI) main.ml bench.ml luaclient.ml
+
+
+DEPEND.$(INTERP):   $(SCAN)
+		$(OCAMLDEP) -I $(INTERP) $(SCAN) > $@
+
+-include DEPEND.$(INTERP)
+
+# --- targets, not covered by generic rules
+
+luaparsex.mly: luasyntax.nw
+		[ -r $@ ] && chmod +w $@ || true
+		$(NOTANGLE) -Rluaparser.mly $< | \
+		sed "s/','/COMMA/g;	\
+		    s/'{'/LBRA/g;	\
+		    s/'}'/RBRA/g;	\
+		    s/'<'/LT/g;		\
+		    s/'>'/GT/g;		\
+		    s/':'/COLON/g;	\
+		    s/';'/SEMI/g;	\
+		    s/'\\^'/HAT/g;	\
+		    s/'\\*'/STAR/g;	\
+		    s@'/'@SLASH@g;	\
+		    s/'('/LPAR/g;	\
+		    s/')'/RPAR/g;	\
+		    s/'='/GETS/g;	\
+		    s/'+'/PLUS/g;	\
+		    s/'-'/MINUS/g;	\
+		    s/'\\.'/DOT/g;	\
+		    s/'\\['/LSQ/g;	\
+		    s/'\\]'/RSQ/g" > $@
+		chmod -w $@
+
+
+luascanner.mll: luasyntax.nw
+		$(NOTANGLE) -R$@ $< > $@
+
+luafloat.mll:   luavalue.nw
+		$(NOTANGLE) -R$@ $< > $@
+
+luaparser.ml:   luaparsex.ml
+		cp $< $@
+
+luaparser.mli:  luaparsex.mli luasyntax.nw
+		(sed '/^val /,$$d' luaparsex.mli;    \
+		$(NOTANGLE) -L'$(LINE)' -R$@ luasyntax.nw) > $@
+
+# -- we use a little trick to emulate the '-filter nocond' option used
+# -- in the mkfile
+std/luainterp.ml:   stdluainterp.nw
+		sed 's/ ((std))>>/>>/' $< | \
+		$(NOTANGLE) -L'$(LINE)' -R`basename $@` > $@
+		
+std/luainterp.mli:  stdluainterp.nw
+		sed 's/ ((std))>>/>>/' $< | \
+		$(NOTANGLE) -L'$(LINE)' -R`basename $@` > $@
+
+
