@@ -350,29 +350,45 @@ let rec flows cont = function
 @
 
 % ------------------------------------------------------------------ 
-\paragraph{Statements} 
+\paragraph{Procedure Body} 
 % ------------------------------------------------------------------ 
+
+A procedure's body includes statements, declarations, and stack data. 
+Statements are translated into an abstract flow graph, while
+declarations are translated into abstract assembly code.  Since
+statements and declarations can be mixed arbitrarily, their
+translation can not be separated.  So the translation of a body
+produces two results:  a flwo graph, and abstract assembly code.  To
+make the handling of this pair easier, and to anticipate future
+additions, they are bundled together as a new type [[ic]]
+(intermediate code).  \ocaml's [[with]] syntax for functional record
+``updates'' makes the handling of this type especially easy.
+
+<<>>=
+type ic         = { node:       G.node
+                  ; asm:        asm
+                  }
+@
 
 A statement is part of a [[body]]; the [[body]] function receives
 arguments that we need for all statements:  [[env]] is the clean
 environment, which doesn't change.  [[s]] is the statement being
-translated.  We return a new flow-graph node.  [[after]] is a
-representation of the entire flow graph, with a pointer to the node
-that follows this statement. 
+translated.  We return a new flow-graph node.  [[ic]] is a
+representation of the node and assembly code following this statement. 
 
 <<>>=
-let rec body env props graph after bb =
+let rec body env props graph (ic: ic) bb =
     let decorate n       = G.bind props n           in
     let rec stmt s after = match s with
         | A.StmtAt(x,_)     -> stmt x after
         <<cases for translating statements>>        in
-    let rec body b after = match b with
-        | A.BodyAt(x, _)    -> body x after
-        | A.DeclBody(d)     -> after (* ignore decls *)
-        | A.StmtBody(s)     -> stmt s after
-        | A.DataBody(dd)    -> after (* ignore data for the moment *)
+    let rec body b ic = match b with
+        | A.BodyAt(x, _)    -> body x ic
+        | A.DeclBody(d)     -> assert false  (* to do *)
+        | A.StmtBody(s)     -> stmt s ic
+        | A.DataBody(dd)    -> assert false  (* to do *)
     in
-        List.fold_right body bb after
+        List.fold_right body bb ic
 @
 
 <<cases for translating statements>>=
@@ -381,25 +397,28 @@ let rec body env props graph after bb =
         List.map2 (fun lhs rhs -> 
                    R.assign (lvalue env lhs) (expr env rhs)) lhs rhs
     in 
-        decorate (GM.assign (R.par effects) after)
+        { ic with node = decorate (GM.assign (R.par effects) ic.node) }
 
 <<cases for translating statements>>=
 | A.IfStmt ( e, ss1, ss2) ->
-    let n1 = List.fold_right stmt ss1 after in
-    let n2 = List.fold_right stmt ss2 after in
-    decorate (GM.branch (expr env e) n1 n2)
+    let ic1 = List.fold_right stmt ss1 ic in
+    let ic2 = List.fold_right stmt ss2 ic1 in
+    { ic2 with node = decorate (GM.branch (expr env e) ic1.node ic2.node) }
 @
 
 <<cases for translating statements>>=
 | A.ReturnStmt(cc, alt, args) ->
-    let const n = A.Int (Bits.of_int n Bits.maxwidth, None)   in
-    let (cont, count) = Aux.Option.get (const 0, const 0) alt in
-    let cc = Aux.Option.get default_convention cc             in
-        decorate (GM.copy_out (List.map (actual env) args) G.ProcResults cc (
-        decorate (GM.return graph (un_const cont) (un_const count))))
+    let const n         = A.Int (Bits.of_int n Bits.maxwidth, None)        in
+    let (cont, count)   = Aux.Option.get (const 0, const 0) alt            in
+    let cc              = Aux.Option.get default_convention cc             in
+    let actuals         = List.map (actual env) args                       in
+    let cout a          = decorate (GM.copy_out actuals G.ProcResults cc a)in
+    let ret  a          = decorate (GM.return graph
+                                    (un_const cont) (un_const count))      in
+        { ic with node = (cout << ret) ic.node }
 
 <<cases for translating statements>>=
-| A.LabelStmt(n)                       -> decorate (GM.label n after)
+| A.LabelStmt(n)       -> {ic with node = decorate (GM.label n ic.node)}
 @
 
 
@@ -434,7 +453,7 @@ node.
                      then decorate (GM.copy_in (List.map lvalue lhs)
                                        G.ProcResults cc after)
                      else after                                   in
-        (cout << call << cin) after
+        { ic with node = (cout << call << cin) ic.node }
 @
 
 A continuation is represented by a labeled node.  This node is a
@@ -448,7 +467,7 @@ A continuation is represented by a labeled node.  This node is a
                     then decorate (GM.copy_in args G.ContParameters cc after)
                     else after                                          in
     let lbl after = decorate (GM.label n after)                         in
-        (lbl << cin) after
+        { ic with node = (lbl << cin) ic.node }
 
 <<cases for translating statements>>=
 | A.EmptyStmt -> after
@@ -468,14 +487,15 @@ sequence of statements.
                         decorate (GM.copy_out args G.ProcParameters cc after)
                      else after                               in
     let jump after = decorate (GM.jump graph (expr env e) ts) in
-        (cout << jump) after
+        { ic with node = (cout << jump) ic.node }
 @
 
 The translation of a [[goto]] statement is straight forward; the
 [[after]] node is unused because it can't be reached.
 
 <<cases for translating statements>>=
-| A.GotoStmt(e,ts) -> decorate (GM.goto graph (expr env e) ts)
+| A.GotoStmt(e,ts) -> 
+        { ic with node = decorate (GM.goto graph (expr env e) ts) }
 @
 
 A [[span]]'s attributes are a compile-time constant value and a
@@ -491,7 +511,7 @@ link-time constant.
                 | Rtl.Const(c)                -> c
                 | _                           -> assert false
                 ) in
-        body env (G.Props.add_span key value props) graph after ss
+        body env (G.Props.add_span key value props) graph ic ss
 @
 
 
@@ -539,16 +559,19 @@ and proc env props (asm: asm) (cc,n,fs,bb) =
     let graph      = GM.graph () (* fresh graph for this proc *)   in
     let cc         = Aux.Option.get default_convention cc          in
     let frml       = fun (h,i,t,n) -> (n,ty env t,h)               in
-    let entry a    = decorate (GM.entry a)                         in
-    let copy  a    = decorate (GM.copy_in (List.map frml fs)
-                     G.ProcParameters cc a)                        in
-    let bdy   a    = body env props graph a bb                     in
-    let exit       = decorate (GM.exit graph)                      in
+    let entry ic   = { ic with node = decorate (GM.entry ic.node)} in
+    let copy  ic   = { ic with node = decorate (GM.copy_in (List.map frml fs)
+                       G.ProcParameters cc ic.node) }              in
+    let bdy   ic   = body env props graph ic bb                    in
+    let exit       = { node = decorate (GM.exit graph)
+                     ; asm  = asm
+                     }                                             in
+    let ic         = (entry << copy << bdy) exit                   in
     let sym        = Asm.Local(n)                                  in
         (  Asm.Function sym
-        ^^ Asm.DefineSymbolHere(sym)
-        ^^ Asm.EmitInstruction ((entry << copy << bdy) exit)
-        ^^ asm
+        ^^ Asm.DefineSymbolHere sym
+        ^^ Asm.EmitInstruction ic.node
+        ^^ ic.asm
         )
 @   
     
