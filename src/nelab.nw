@@ -609,6 +609,7 @@ and evalExpr env =
 
 We assume here the elaboration of expressions and lvalues.
 <<nelab.ml>>=
+type scope = Local | Global
 let elab lvalue typed_expr srcmap asm ast =
   E.ematch (Metrics.of_ast srcmap ast.N.target) (fun metrics ->
     let errorf r =
@@ -620,12 +621,17 @@ let elab lvalue typed_expr srcmap asm ast =
     let env = TypeSortBind. bind_sortable_definitions env ast.N.udecls.N.types in
     let env = ConstSortBind.bind_sortable_definitions env ast.N.udecls.N.constants in
     let env = foldl bind_import env ast.N.imports in
-    let env = foldl bind_reg env (registers_from 0 ast.N.globals) in
+    let env = registers_from Global 0 ast.N.globals env in
     let env = foldl bind_code_label env ast.N.code_labels in
     let env = foldl bind_section_labels env ast.N.sections in
     let env = check_exports env ast.N.exports in
     env)
 @ 
+\subsubsection{Easy stuff}
+
+\paragraph{Imports}
+Imports have to be the native pointer size.
+I SUSPECT THAT ``IMPORT AS'' IS IMPLEMENTED INCORRECTLY.
 <<definitions of name-binding functions>>=
 let bind_import env (r, ty, imports) = 
   let import env (foreign,name) =
@@ -641,12 +647,35 @@ match ty with None -> E.Ok pointerty
     else errorf r "imported type %s is inconsistent with native pointer type %s"
         (Types.to_string t) (Types.to_string pointerty))
 @ 
+\paragraph{Labels}
+No checking for labels.  Just create the assembly-language symbol and
+give it the native pointer type.
 <<definitions of name-binding functions>>=
-let bind_code_label env (r, n) = unimp "code-label binding" in
+let bind_code_label env (r, n) = 
+  F.bindv n (r, E.Ok (F.Label(F.Code (F.symbol env n)), pointerty)) env in
 @ 
+\subsubsection{Register variables}
 <<definitions of name-binding functions>>=
-let bind_reg env _ = unimp "register binding" in
-let registers_from n rs = unimp "register elaboration and numbering" in
+let rec registers_from scope n rs env =
+  let register env (rgn, r) k = match r with
+  | (_,Some h,t,name,Some x) -> E.error "can't have hint and hardware register"
+  | (_,h,t,name,Some x) when scope = Local ->
+      E.error "local registers can't be mapped to hardware"
+  | (v,h,t,name,reg) ->
+      let i = { F.index = n
+              ; F.rhint = ( match h,reg with
+                          | None  , None   -> F.RNone
+                          | Some h, None   -> F.RHint h
+                          | None  , Some r -> F.RReg r
+                          | _ -> assert false
+                          ) 
+              ; F.loc   = None
+              ; F.variance = v
+              } in
+      k (F.bindv name (rgn, E.Raise.right (F.Variable i, Type.evalTy env t)) env) in
+  match rs with
+  | [] -> env
+  | r :: rs -> register env r (registers_from scope (n+1) rs) in
 @ 
 <<definitions of name-binding functions>>=
 let bind_section_labels env _ = unimp "section-label binding" in
@@ -667,7 +696,6 @@ let rec ty r env = function
     | A.TypeSynonym(n)      -> snd (F.findt n env)
 @
 <<module Env>>=
-type scope = Local | Global
 @
 The following functions traverse the abstract syntax of the global or
 local scope and enter all names into the environment -- except for
@@ -687,22 +715,6 @@ names and assembly level names easier.
 <<module Env>>=
 @ 
 <<module Env>>=
-let register r scope env = function
-    | (_,Some h,t,name,Some x) -> E.error "can't have hint and hardware register"
-    | (_,h,t,name,Some x) when scope = Local ->
-        E.error "local registers can't be mapped to hardware"
-    | (_,h,t,name,reg) ->
-        let i = { F.index = F.getIndex env
-                ; F.rhint = ( match h,reg with
-                            | None  , None   -> F.RNone
-                            | Some h, None   -> F.RHint h
-                            | None  , Some r -> F.RReg r
-                            | _ -> assert false
-                            ) 
-                ; F.loc   = None
-                } in
-        F.bindv name (r, E.ematch (ty r env t)
-                          (fun t -> F.Variable i, t)) (F.nextIndex env)
 @
 A [[datum]] label is a [[F.Label(F.Data)]] when the datum belongs to a
 top-level datum, and a [[F.Label(F.Stack)]] when the datum belongs to
@@ -748,10 +760,6 @@ let rec stmt r scope env = function
     | A.IfStmt ( e, ss1, ss2)     ->
         foldl (body r scope) (foldl (body r scope) env ss1) ss2
     | A.LabelStmt(n) ->
-        let sym    = F.symbol env n in
-        let ventry = (E.ematch (pointerTy env) 
-                     (fun p -> F.Label(F.Code sym),p)) in
-            F.bindv n (r,ventry) env
     | A.SpanStmt(e1,e2,ss)        ->
         foldl (body r scope) env ss
     | A.SwitchStmt (range,e,arms) ->
