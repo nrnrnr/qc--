@@ -361,31 +361,14 @@ let to_bits e = match Dn.exp e with
     | _                    -> assert false 
 @
 % ------------------------------------------------------------------ 
-\subsection{Sorting type declarations}
+\subsection{Sorting and binding type and constant declarations}
 % ------------------------------------------------------------------ 
 
-Here's how we sort type definitions.
-<<nelab.ml>>=
-module TypeDecl = struct
-  type decl = N.typedefn N.marked
-  let defines (_, (_,names)) = names
-  let uses    (_, (t,_    )) =
-    let rec u = function 
-      | A.BitsTy _    -> []
-      | A.AliasTy x   -> [x]
-      | A.TyAt (t, _) -> u t in
-    u t
-end
-module TypeSort = Topsort.Make(TypeDecl)
 @
 Here's the code to generically bind definitions that have to be
 sorted.
-When a cycle is found in the list [[ds]] of declarations it is
-removed and we sort and bind the remaining declarations.
-Time is no object
-because we have an illegal {\PAL} program.  When no cycle exists,
-declarations are processed in topological order by [[bind_one]],
-which enters them into [[env]].
+Type~[[d]] is the declaration, which we have to be able to sort,
+evaluate, and bind.
 <<nelab.ml>>=
 module type SB = sig
   type d
@@ -395,6 +378,14 @@ module type SB = sig
   val eval : 'a F.env' -> Decl.decl -> rhs E.error
   val bind : string -> rhs E.error N.marked -> 'a F.env' -> 'a F.env'
 end
+@ 
+When a cycle is found in the list [[ds]] of declarations it is
+removed and we sort and bind the remaining declarations.
+Time is no object
+because we have an illegal {\PAL} program.  When no cycle exists,
+declarations are processed in topological order by [[bind_one]],
+which enters them into [[env]].
+<<nelab.ml>>=
 module SortAndBind (D : SB) = struct
   module Sort = Topsort.Make (D.Decl)
   let bind_sortable_definitions env ds =
@@ -432,154 +423,100 @@ let report_cycle env ds =
       (D.what ^ " definition for "^(List.hd (D.Decl.defines d))^" is cyclic") in
   List.iter report ds in
 @
-================================================================
-
-
-After type declarations have been collected they are sorted
-topologically to get the right order to process them.  Sorting 
-fails if declarations are circular; this is reported by an
-exception.  In that case offending declarations are taken out and the
-sorting is repeated.  We end up with a fat environment that binds all
-names for types of the actual scope.
-
-Names defined by declarations found in cycles are bound to [[E.Error]]
-in the (fat) environment.
+\subsubsection{Types}
+Here's how we sort and bind type definitions.
 <<nelab.ml>>=
-let bindError env decls = 
-  let bind env ((_,names),r) = 
-    foldl (fun env n -> F.bindt n (r,E.Error) env) env names in 
-  foldl bind (F.flagError env) decls
-@
-A [[typedef]] declares multiple names.  This function binds all
-[[names]] to the same [[ty]] in [[scope]]. 
-<<nelab.ml>>=
-let bindt names attr ty env =
-  foldl (fun env n -> F.bindt n (attr,ty) env) env names
-@
-Processing a type declaration means to bind all declared names to the
-type in the environment. When the type [[t]] is undefined names are bound
-to [[E.Error]]. 
-<<nelab.ml>>=
-let rec doTypeDecl env ((t,names),r) = 
-    let t   = evalTy env t in
-    let env = match t with
-        | E.Error -> F.flagError env
-        | _       -> env
-    in bindt names r t env 
-@
-When cycles are found in the list of declarations they are reported.
-Their source code positions were attached to them during their
-collection. 
-<<nelab.ml>>=
-let reportCycle env decls = 
-    let report = function 
-        | ((t,n::nn),r) ->  error r env ("typedef for "^n^" is cyclic")
-        | _             ->  assert false (* list of names empty *) in
-    List.iter report decls      
-@
-When a cycle is found in the list [[ds]] of type declarations it is
-removed from the list of declarations and the process of sorting and
-processing is started over.  We don't care that this takes time
-because we have an illegal {\PAL} program.  When no cycle exists,
-declarations are processed in topological order by [[doTypeDecl]]
-which enters them into [[env]].
-<<xxxnelab.ml>>=
-let bindTypeDefns env =
-  let rec bindAll env ds =
-    try
-      foldl doTypeDecl env (DeclSort.sort ds)
-    with DeclSort.Cycle offending ->
-      let ds    = ds -- offending         in
-      let env   = bindError env offending in
-      ( reportCycle env offending ; bindAll env ds ) in
-  bindAll env (F.typedefns env)
-@
-% ------------------------------------------------------------------ 
-\subsection{Collecting constant declarations}
-% ------------------------------------------------------------------ 
-
-\paragraph{Const} Constant declarations are processed next.  Like type
-declarations they can refer to each other and thus can not be
-processed in the order of appearance.  Thus, they are collected for a
-given scope, sorted and processed.  This binds them into a user
-provided environment.
-<<nelab.ml>>=
-module Consts = struct
-    module Decl      = struct <<module CDecl>>   end
-    module DeclSort  = Topsort.Make(Decl)
-    <<module Eval>> 
+module Type = struct
+  type d = N.typedefn
+  module Decl = struct
+    type decl = N.typedefn N.marked
+    let defines (_, (_,names)) = names
+    let uses    (_, (t,_    )) =
+      let rec u = function 
+        | A.BitsTy _    -> []
+        | A.AliasTy x   -> [x]
+        | A.TyAt (t, _) -> u t in
+      u t
+  end
+  let what = "type"
+  type rhs = Types.ty
+  let rec evalTy env = function
+    | A.TyAt(x,r)    -> E.catch (error r env) (evalTy env) x
+    | A.BitsTy(size) -> E.Ok(Types.Bits size)
+    | A.AliasTy(n)   -> snd (F.findt n env)
+  let eval env (_, (t, _)) = evalTy env t
+  let bind = F.bindt
 end
-@
-Constant declarations are special because every declaration's type and
-value can depend on other declarations.  They thus must be
-topologically sorted before their types and values can be computed. 
-The following functions walk over the abstract syntax and collect
-constant declarations in a list.  As we walk we remember the last
-source code position annotation we came across and use it for the
-declaration we find. 
-
-Local constant declarations are only found in the [[body]] of
-procedures and [[span]] statements.  Global constant declarations are
-part of [[section]s and their [[span]]s.
+module TypeSortBind = SortAndBind(Type)
 @
 % ------------------------------------------------------------------ 
-\subsection{Sorting Constant Declarations}
-% ------------------------------------------------------------------  
+\subsubsection{Constants}
+% ------------------------------------------------------------------ 
 
-Module [[CDecl]] captures what is important to sort declarations:  A
-declaration defines a name (multiple in general) and refers to other
-names.  
-<<module CDecl>>=
-type decl = Ofenv.Dirty.constdefn
-@
-A [[const]] declaration defines the name it declares. That was simple.
-<<module CDecl>>=
-let defines ((t,name,expr),r) = [name]
-@
+A constant declaration must declare a value of type [[bits]]; although
+it is syntactically and type-wise possible to declare a boolean value
+this is not permitted. The optionally provided type must match the
+actual type of the defining expression.
+<<nelab.ml>>=
+module Const = struct
+  type d = Ast.expr N.constdefn
+  <<utility functions for constants>>
+  module Decl = struct
+    type decl = d N.marked
+    let defines (_, (t,name,expr)) = [name]
+    let uses    (_, (t,name,expr)) = freeExprVars expr []
+  end
+  let what = "constant"
+  type rhs = Rtl.exp * Types.ty
+  let eval env (r, (ty, name, e)) =
+    let errorf x =
+      Printf.kprintf (fun s -> E.errorRegionPrt (F.srcmap env, r) s; E.Error) x in
+    E.seq (evalExpr env e) (fun (e, t) ->
+      if t = Types.bool then errorf "constant has type bool but must have a bits type"
+      else
+        match ty with
+        | None -> E.Ok (e, t)
+        | Some ty ->
+            E.seq (Type.evalTy env ty) (fun t' ->
+              if t = t' then E.Ok (e, t)
+              else errorf "constant %s declared with type %s has actual type %s"
+                           name (Types.to_string t') (Types.to_string t)))
+  let bind name (r, typed_exp) env = 
+    F.bindv name (r, E.ematch typed_exp (fun (e, t) -> F.Constant(to_bits e), t)) env
+end
+module ConstSortBind = SortAndBind(Const)
+@ 
 A constant expression can refer to other constant and link-time
 constants.  To find the right topological order it is only important
 to find other constants.  Of course, these can not be syntactically
 distinguished and so we will collect all free variables of an
-expression.  This leads to used names, that are not constants and that
+expression.  This leads to used names that are not constants and that
 appear to be undefined from the perspective of the topological
 [[sort]] function.  But [[sort]] assumes that these undeclared names
 do not depend on any constant---which is correct. 
 
 The [[freeExprVars]] function returns all names referenced in an
 expression. A constant expression depends on all of them.
-
-We like to avoid costly append operations.  Since the order of our
-result does not matter we can easily code an efficient [[join]]
-functions:  this one returns the elements of two lists in one list.
-<<module CDecl>>=
-let rec join l = foldl (fun x y -> y :: x) l
+<<utility functions for constants>>=
+let rec freeExprVars e tail = match e with
+| A.ExprAt(x,_)     -> freeExprVars x tail
+| A.Fetch(lvalue)   -> freeLValueVars lvalue tail
+| A.BinOp(e1,_,e2)  -> freeExprVars e1 (freeExprVars e2 tail)
+| A.UnOp(_,e)       -> freeExprVars e tail
+| A.PrimOp(_,args)  -> foldl (fun t (_,e) -> freeExprVars e t) tail args
+| A.Int _           -> tail
+| A.Float _         -> tail
+| A.Char _          -> tail
 @ 
-<<module CDecl>>=
-let rec freeExprVars = function
-    | A.ExprAt(x,_)     -> freeExprVars x
-    | A.Fetch(lvalue)   -> freeLValueVars lvalue
-    | A.BinOp(e1,_,e2)  -> join (freeExprVars e1) (freeExprVars e2)
-    | A.UnOp(_,e)       -> freeExprVars e
-    | A.PrimOp(_,args)  -> foldl (fun l (_,e) -> join l (freeExprVars e)) [] args
-    | A.Int _           -> []
-    | A.Float _         -> []
-    | A.Char _          -> []
-@ 
-<<module CDecl>>=
-and freeLValueVars = function
-    | A.NameOrMemAt(x,r)   -> freeLValueVars x
-    | A.Mem(_,e,_, _)      -> freeExprVars e
-    | A.Name(_,name)       -> [name]
-@
-A constant declaration uses all names in its defining expression.
-These should be names of other constant expression but we don't know
-this yet.
-<<module CDecl>>=
-let rec uses ((t,n,e),r) = freeExprVars e
+<<utility functions for constants>>=
+and freeLValueVars l tail = match l with
+| A.NameOrMemAt(x,r) -> freeLValueVars x tail
+| A.Mem(_,e,_, _)    -> freeExprVars e tail
+| A.Name(_,name)     -> if List.mem name tail then tail else name :: tail
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Evaluating constant declarations}
+\subsubsection {Evaluating constant declarations}
 % ------------------------------------------------------------------ 
 
 \begin{quote}\it
@@ -618,15 +555,15 @@ of a type and a value.
 
 [[literalExpr]] must be outside the [[let rec]] because it is
 polymorphic.
-<<module Eval>>=
+<<utility functions for constants>>=
 let literalExpr env v ty cvt  =
     E.ematch ty
     ( function 
     | T.Bool            -> E.error "a named constant value must have type bitsXX"
-    | T.Bits width as t -> (t, R.bits (cvt v width) width) 
+    | T.Bits width as t -> (R.bits (cvt v width) width, t) 
     )
 @ 
-<<module Eval>>=
+<<utility functions for constants>>=
 let rec evalFetch env = function
     | A.NameOrMemAt(x,r) -> E.catch (error r env) (evalFetch env) x
     | A.Mem (_,_,_,_)    -> E.error "memory access in const declaration"
@@ -634,22 +571,22 @@ let rec evalFetch env = function
             ( match snd (F.findv id env) with
             | E.Error                -> E.Error
             | E.Ok(F.Constant(bits),ty) -> 
-                E.Ok(ty, R.bits bits (B.width bits))
+                E.Ok(R.bits bits (B.width bits), ty)
             | _ -> E.error ("access of non-constant "^id)
             ) 
 @
 Applications to primitives operators must be type checked. Only if the
 type check passes we apply the values to the implementation [[f]] of the
 operator and get the result.  Both result and type are returned.
-<<module Eval>>=
+<<utility functions for constants>>=
 and evalPrimOp env op args =
     E.ematch (E.Raise.list (List.map (evalExpr env) args))
     (fun args ->
-        let t,v    = List.split args                 in
+        let v,t    = List.split args                 in
         let rt,opr = Rtlop.Translate.operator op t   in
         let e      = Simplify.exp (Rtl.app opr v)    in
             ( match Dn.exp e with
-            | RP.Const(RP.Bits _) -> rt, e
+            | RP.Const(RP.Bits _) -> e, rt
             | _     -> E.error ("not a compile-time operator: "^op)
             )
     )
@@ -658,7 +595,7 @@ The {\AST} contains literal values as strings. The reason is that the
 width of a literal cannot be known when the literal is parsed. Here we
 know the exact type and thus are able to parse the literal into a
 [[Bits.bits]] value.
-<<module Eval>>=
+<<utility functions for constants>>=
 and evalExprs env es = E.Raise.list (List.map (evalExpr env) es)
 and evalExpr env = function
     | A.ExprAt(x,r)       -> E.catch (error r env) (evalExpr env) x
@@ -673,79 +610,6 @@ and evalExpr env = function
     | A.BinOp  (l,op,r)   -> evalPrimOp env op [l;r]
     | A.UnOp   (op,expr)  -> evalPrimOp env op [expr]
     | A.PrimOp (op,args)  -> evalPrimOp env op (List.map snd args)
-@
-Names defined by declarations found in cycles are bound to [[E.Error]]
-in the (fat) environment. Additionally, an error is marked in the
-environment. 
-<<module Eval>>=
-let bindError env decls = 
-  let bind env ((_,name,_),r) = F.bindv name (r,E.Error) env in
-  foldl bind (F.flagError env) decls
-@
-This function reports an error for all names defined by declarations
-that were found to be cyclic.
-<<module Eval>>=
-let reportCycle env decls = 
-  let report ((t,n,e),r) =
-    error r env ("const declaration for "^n^" is cyclic") in
-  List.iter report decls      
-@
-A constant declaration must declare a value of type [[bits]]; although
-it is syntactically and type-wise possible to declare a boolean value
-this is not permitted. The optionally provided type must match the
-actual type of the defining expression.
-
-The [[doConstDecl]] evaluates the expression for a constant declaration
-and optionally its type. Only when both succeed, the resulting type
-matches the given type, and is not [[bool]], the name is bound to the
-type and value in the environment.
-<<module Eval>>=
-let doConstDecl env ((ty,name,expr),r) = 
-    let consistent t = match ty with None -> true | Some t' -> t'=t in
-    let reg          = F.srcmap env, r                              in
-    let entry = E.seq (evalExpr env expr) 
-        ( function
-        | (t,exp) when t <> Types.bool 
-                -> E.Ok(F.Constant(to_bits exp),t)
-        | (t,v) -> 
-            ( E.errorRegionPrt reg 
-                    "constant has type bool but must have type bits"
-            ; E.Error
-            )
-        ) in
-    let entry = (* check user provided type against inferred type *)
-        ( match ty with 
-        | None    -> entry
-        | Some t' -> E.seq (E.Raise.pair (entry, evalTy env t')) 
-                    ( function
-                    | (v,t), t' when t = t' -> entry
-                    | _ -> ( E.errorRegionPrt reg 
-                            ( "type declared for constant "
-                            ^ name
-                            ^ " does not match actual type")
-                           ; E.Error
-                           )
-                    )
-         ) 
-    in 
-         let env = match entry with
-            | E.Error -> (F.flagError env)
-            | _       -> env
-         in F.bindv name (r,entry) env
-@
-The [[bindConstants]] function sorts and processes constant declarations. The
-result is an enlarged [[env]] that contains bindings for the declared
-constants.
-<<module Eval>>=
-let bindConstants env =
-  let rec bindAll env ds =
-    try
-      foldl doConstDecl env (DeclSort.sort ds)
-    with DeclSort.Cycle offending ->
-      let ds'  = ds --  offending in
-      let env' = bindError env offending in
-      ( reportCycle env offending ; bindAll env' ds') in
-  bindAll env (F.constdefns env)
 @
 
 % ------------------------------------------------------------------ 
