@@ -201,7 +201,8 @@ strings or comments it branches into special contexts.
 Originally the [[#]] character for the CPP line pragma was recognized only
 after a newline. This broke the scanner when the very first line of a
 file contained a line pragme. This fix is the recognize the [[#]]
-character everywhere.
+everywhere but only when it is the first character scanned it
+indicates a line directive.
 
 <<bug: works-002.c-->>=
 # 2 "xxx.nw"
@@ -214,7 +215,15 @@ rule token = parse
   | ws+         { fun map -> token lexbuf map }
   | tab         { fun map -> tab lexbuf map; token lexbuf map }
   | nl          { fun map -> nl lexbuf map ; token lexbuf map }
-  | '#'         { fun map -> line lexbuf map 0; token lexbuf map }
+  | nl '#'      { fun map -> line lexbuf map 0; token lexbuf map }
+  | '#'         { fun map -> 
+                  if Lexing.lexeme_start lexbuf = 0 then 
+                        ( line lexbuf map 0
+                        ; token lexbuf map
+                        )
+                  else
+                        error lexbuf map "illegal character" 
+                }
 
   | ";"         { fun map -> SEMI         }
   | ":"         { fun map -> COLON        }
