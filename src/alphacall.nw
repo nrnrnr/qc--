@@ -8,16 +8,7 @@ This module implements calling conventions for the Alpha. The
 parameters represent the machine instructions to implement [[return]]
 and [[cut to]].
 
-The [[cmm]] convention is an experimental test of the [[Callspec]]
-module.
-
 <<alphacall.mli>>=
-val c   : return_to: (Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
-val cmm0: return_to: (Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
-val cmm1: return_to: (Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
-val cmm2: return_to: (Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
-val cmm3: return_to: (Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
-
 val cconv :
   return_to:(Rtl.exp -> Rtl.rtl) -> 
   Mflow.cut_args Target.map -> 
@@ -34,19 +25,6 @@ register~27 is live and holds the address of the called procedure, or
 that on exit, register~26 is live and must hold the return address.
 It's probably easier to manage register~26.
 
-
-\paragraph{Debugging} For debugging we provide functions that dump 
-automata that are part of the calling convention to [[stdout]]. The two
-arguments are the width and hints to try in every state of an automaton.
-
-<<alphacall.mli>>=
-val dump_proc:      int list -> string list -> unit
-val dump_return:    int list -> string list -> unit
-val dump_cutto:     int list -> string list -> unit
-val paths_proc:      int list -> string list -> unit
-val paths_return:    int list -> string list -> unit
-val paths_cutto:     int list -> string list -> unit
-@
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation of Alpha calling conventions}
@@ -140,10 +118,11 @@ let fatal _ =
 And in Lua:
 
 <<Alpha calling convention automata in Lua>>=
-A             = Automaton
-Alpha         = Alpha         or {}
-Alpha.cc      = Alpha.cc      or {}
-Alpha.cc["C"] = Alpha.cc["C"] or {}
+A               = Automaton
+Alpha           = Alpha           or {}
+Alpha.cc        = Alpha.cc        or {}
+Alpha.cc["C"]   = Alpha.cc["C"]   or {}
+Alpha.cc["cmm"] = Alpha.cc["cmm"] or {}
 
 function round_mult_64 (k) return Util.round_up_mult(64, k) end
 
@@ -165,23 +144,10 @@ Alpha.vol_int = (r(0) .. r(8)) .. (r(16) .. r(26))  -- includes r0-f8, r16-f26
 A C~function returns an integer (up to 64 bits wide) in [[$0]], a
 floating-point result (up to two 64-bit values) in [[$f0]] and [[$f1]].
 
+old comment --
 THIS IS PROBABLY A BUG!  [[useregs]] CREATES MUTABLE STATE, SO IF A
 COMPILATION UNIT HAS MULTIPLE CALL SITES THAT RETURN THE SAME HINT, WE
 SHOULD SEE A FAILURE HERE.
-<<alphacall.ml>>=
-let results =
-    A.choice
-        [ (A.is_hint "float"),  
-            A.widen (Aux.round_up_to ~multiple_of: 64)            *>
-            A.widths [64] ~errormsg:(badwidth "Alpha FP return")  *>
-            A.useregs [f 0; f 1] ~errormsg:fatal
-        ; A.is_any,
-            A.widen (Aux.round_up_to ~multiple_of: 64)            *>
-            A.widths [64] ~errormsg:(badwidth "Alpha return")     *>  
-            A.useregs [r 0] ~errormsg:fatal
-        ]
-@
-And in Lua:
 <<Alpha calling convention automata in Lua>>=
 Alpha.cc["C"].results =
   { A.widen(round_mult_64)
@@ -191,12 +157,16 @@ Alpha.cc["C"].results =
              }
   }
 @ 
-As an alternative we provide [[cmm_results]] that returns every result
-in memory. This is for experiments with custom calling conventions.
-<<alphacall.ml>>=
-let cmm_results =
-    A.widths [64] ~errormsg:(badwidth "can only return 64-bit values") *>
-    A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up ~max_alignment:sp_align
+As an alternative we provide calling convention [[cmm]] that returns
+every result in memory. This is for experiments with custom calling
+conventions.
+<<Alpha calling convention automata in Lua>>=
+Alpha.cc["cmm"].results =
+  { A.widths { 64 }
+  , A.overflow { memsize = 8, byteorder = Alpha.byteorder, growth = "up"
+               , max_alignment = Alpha.sp_align
+               }
+  }
 @
 
 \paragraph{C~procedure parameters}
@@ -229,22 +199,6 @@ remaining register to satisfy the request.
 Note that the direction of [[growth]] in the overflow block is
 independent of the stack growth. 
         
-<<alphacall.ml>>=        
-let arguments () = 
-    let ctr = "bits" in
-    (A.bitcounter ctr *>
-    A.choice
-        [ A.is_hint "float",
-          A.widths [64] ~errormsg:(badwidth "Alpha FP call") *> 
-          A.regs_by_bits ctr [f 16; f 17; f 18; f 19; f 20; f 21]
-        ; A.is_any,
-          A.widen (Aux.round_up_to ~multiple_of:64) *>
-          A.regs_by_bits ctr [r 16; r 17; r 18; r 19; r 20; r 21]
-        ]) *>  
-  A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up ~max_alignment:sp_align
-@          
-
-And in Lua:
 <<Alpha calling convention automata in Lua>>=
 Alpha.cc["C"].call =
   { A.bitcounter("bits")
@@ -258,25 +212,14 @@ Alpha.cc["C"].call =
   , A.overflow { memsize = 8, byteorder = Alpha.byteorder, growth = "up"
                , max_alignment = Alpha.sp_align }
   }
+
+Alpha.cc["cmm"].call  = Alpha.cc["C"].call
 @
 
 \paragraph{C~cut-to parameters}
 
 Since this is strictly an internal calling convention, we can use
 whatever we like. We use all volatile registers.
-<<alphacall.ml>>=
-let cut_args = 
-    A.choice
-        [ (A.is_hint "float"),
-            A.widen (Aux.round_up_to ~multiple_of:64)        *>
-            A.useregs vol_fp  ~errormsg:fatal 
-        ; A.is_any,
-            A.widen (Aux.round_up_to ~multiple_of:64)        *>
-            A.useregs vol_int ~errormsg:fatal 
-        ] *>
-    A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
-@
-And in Lua:
 <<Alpha calling convention automata in Lua>>=
 Alpha.cc["C"].cutto =
  { A.widen(round_mult_64)
@@ -286,6 +229,8 @@ Alpha.cc["C"].cutto =
  , A.overflow { memsize = 8, byteorder = Alpha.byteorder, growth = Alpha.growth
               , max_alignment = Alpha.sp_align }
  }
+
+Alpha.cc["cmm"].cutto = Alpha.cc["C"].cutto
 @
 
 % ------------------------------------------------------------------ 
@@ -308,27 +253,27 @@ hope the code below reflects this.
 let prolog =
   let autosp = (fun _ -> vfp) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at stage.A.call)
+    ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at spec.A.call)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
-	  ~insp:(fun a _ _ -> autosp a) in
+      ~insp:(fun a _ _ -> autosp a) in
 
 let epilog =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at stage.A.results)
+    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at spec.A.results)
     ~autosp:(fun r -> std_sp_location)
     ~postsp:(fun _ _ -> vfp) in
 
 let call_actuals =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at stage.A.call)
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at spec.A.call)
     ~autosp:(fun r  -> std_sp_location)
     ~postsp:(fun _ sp -> sp) in  
 
 let call_results =
   let autosp = (fun r -> std_sp_location) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at stage.A.results)
+    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at spec.A.results)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
     ~insp:(fun a _ _ -> autosp a) in
@@ -337,13 +282,13 @@ let call_results =
 let also_cuts_to =
   let autosp = (fun r -> std_sp_location) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at stage.A.cutto)
+    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at spec.A.cutto)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
-	  ~insp:(fun a _ _ -> autosp a) in
+      ~insp:(fun a _ _ -> autosp a) in
 
 let cut_actuals base  =
-   C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base stage.A.cutto)
+   C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base spec.A.cutto)
      ~autosp:(fun r -> spval)
      ~postsp:(fun _ _ -> spval) in
 
@@ -352,10 +297,10 @@ let rtn return_to k n ~ra =
     if k = 0 & n = 0 then return_to ra
     else impossible "alternate return using C calling convention" 
 
-let new_c ~return_to cut stage = 
+let c ~return_to cut spec = 
     <<transformations>>
     { C.name            = "C"
-	; C.overflow_alloc  = { C.parameter_deallocator = C.Caller
+    ; C.overflow_alloc  = { C.parameter_deallocator = C.Caller
                           ; C.result_allocator      = C.Caller
                           }
     ; C.call_parms      = { C.in' = prolog       ; C.out = call_actuals }
@@ -377,48 +322,21 @@ let new_c ~return_to cut stage =
     ; C.sp_on_jump       = (fun _ _ -> Rtl.null)
     }
 
-let c ~return_to cut =
-  new_c ~return_to cut
-    { A.call = arguments() ; A.results = results ; A.cutto = cut_args }
-
-let cconv ~return_to cut ccname stage = 
-  let f =
-    match ccname with
-(*
-    | "cmm0" -> cmm0
-	| "cmm1" -> cmm1
-	| "cmm2" -> cmm2
-*)
-	| _      -> new_c
-  in f ~return_to cut stage
 @
 
-And in Lua we simply:
+And in Lua we need only register the defined conventions.
 <<Alpha calling convention automata in Lua>>=
--- register the new calling convention!
+-- register the new calling conventions!
 Backend.alpha.target = A.register_cc(Backend.alpha.target, "C", Alpha.cc["C"])
+Backend.alpha.target = A.register_cc(Backend.alpha.target, "cmm0",
+                                     Alpha.cc["C"])
+Backend.alpha.target = A.register_cc(Backend.alpha.target, "cmm1",
+                                     Alpha.cc["C"])
+Backend.alpha.target = A.register_cc(Backend.alpha.target, "cmm2",
+                                     Alpha.cc["C"])
+Backend.alpha.target = A.register_cc(Backend.alpha.target, "cmm3",
+                                     Alpha.cc["cmm"])
 @ 
-
-\paragraph{Support for Debugging} 
-
-This code should ultimately moved close to the \module{call.nw} module
-such that it is available for all calling conventions. The polymorphic
-nature of [[Call.t]] make this difficult rigth now.
-
-<<alphacall.ml>>=
-let dump what automaton widths hints = 
-        what 
-        ~mk:(fun () -> A.at (Rtl.bits (Bits.zero wordsize) wordsize) 
-                            (automaton ()))
-        ~widths ~hints
-        
-let dump_proc     = dump Automatongraph.print arguments
-let dump_return   = dump Automatongraph.print (fun () -> results)
-let dump_cutto    = dump Automatongraph.print (fun () -> cut_args)
-let paths_proc     = dump Automatongraph.paths arguments
-let paths_return   = dump Automatongraph.paths (fun () -> results)
-let paths_cutto    = dump Automatongraph.paths (fun () -> cut_args)
-@
 
 \paragraph{Test of new calling convention specification} Module
 \module{callspec} provides a new interface to build a calling
@@ -430,11 +348,11 @@ location of the return address on exit. It has to be in \$26. Using
 <<alphacall.ml>>=
 module CS = Callspec
 
-let template = (* conservative spec *)
+let template spec = (* conservative spec *)
         { CS.name           = "cmm"
-        ; CS.call           = arguments
-        ; CS.results        = (fun () -> results)   
-        ; CS.cutto          = (fun () -> cut_args)
+        ; CS.call           = (fun () -> spec.A.call)
+        ; CS.results        = (fun () -> spec.A.results)
+        ; CS.cutto          = (fun () -> spec.A.cutto)
         ; CS.stack_growth   = Memalloc.Down
         ; CS.overflow       = CS.overflow C.Caller C.Caller
         ; CS.sp             = r 30
@@ -461,24 +379,36 @@ specification. Here are calling conventions that we derive from our
 template.
 
 <<alphacall.ml>>=
-let cmm0 ~return_to cut = cc return_to cut 
+let cmm0 ~return_to cut spec = let template = template spec in
+    cc return_to cut 
     { template with CS.name     = "cmm0"
                   ; CS.overflow = CS.overflow C.Caller C.Caller 
     }
-let cmm1 ~return_to cut = cc return_to cut 
+let cmm1 ~return_to cut spec = let template = template spec in 
+    cc return_to cut 
     { template with CS.name     = "cmm1"
                   ; CS.overflow = CS.overflow C.Caller C.Callee 
     }
-let cmm2 ~return_to cut = cc return_to cut 
+let cmm2 ~return_to cut spec = let template = template spec in
+    cc return_to cut 
     { template with CS.name     = "cmm2"
                   ; CS.overflow = CS.overflow C.Callee C.Caller 
     }
-let cmm3 ~return_to cut = cc return_to cut 
+let cmm3 ~return_to cut spec = let template = template spec in
+    cc return_to cut 
     { template with CS.name     = "cmm3"
                   ; CS.overflow = CS.overflow C.Callee C.Callee 
-                  ; CS.results  = (fun () -> cmm_results)
     }
 @
-                                                   
-    
 
+And now the lookup function.
+<<alphacall.ml>>=
+let cconv ~return_to cut ccname spec = 
+  let f =
+    match ccname with
+    | "cmm0" -> cmm0
+    | "cmm1" -> cmm1
+    | "cmm2" -> cmm2
+    | _      -> c
+  in f ~return_to cut spec
+@

@@ -732,22 +732,6 @@ let downrtl = Down.rtl
 let uploc   = Up.loc
 let upexp   = Up.exp
 
-@ 
-
-This is an ugly wart.  The only reason we need to distinguish [[cmm]]
-from [[notail]] is to tell whether a tail call is permitted, but this
-information is actually encapsulated in the stack-frame layout,
-\emph{not} in the [[Call.t]].
-<<x86.ml>>=
-let c_convention =
-  X86call.c      (fun ra -> pop_with (fun ra -> store pc ra)) (F.cutto PX.esp)
-let cmm_convention =
-  X86call.cmm    (fun ra -> pop_with (fun ra -> store pc ra)) (F.cutto PX.esp)
-let notail_convention =
-  X86call.notail (fun ra -> pop_with (fun ra -> store pc ra)) (F.cutto PX.esp)
-let c'_convention = (* uses Callspec implementation *)
-  X86call.c'     (fun ra -> pop_with (fun ra -> store pc ra)) (F.cutto PX.esp)
-
 module A = Automaton
 let ( *> ) = A.( *> )
 let globals base = 
@@ -784,12 +768,6 @@ let target =
                 ; T.project = F.call.T.project (* should be OK *)
                 } 
   ; T.branch  = F.branch
-
-  ; T.cc = (function "C" | "c" -> c_convention
-            | "C--" | "c--"    -> cmm_convention
-            | "C'"  | "c'"     -> c'_convention (* uses Callspec *) 
-            | "notail"         -> notail_convention
-            | cc -> Impossible.impossible ("unsupported calling convention "^cc))
 
   ; T.cc_specs         = A.init_cc
   ; T.cc_spec_to_auto  = X86call.cconv 

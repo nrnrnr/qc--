@@ -446,12 +446,6 @@ let globals base =
 % ------------------------------------------------------------------ 
 
 <<mips.ml>>=
-let c_convention = Mipscall.c (fun ra -> (R.store pc ra wordsize)) 
-                              (F.cutto (Rtl.reg sp))
-
-let c'_convention = Mipscall.c' (fun ra -> (R.store pc ra wordsize)) 
-                              (F.cutto (Rtl.reg sp))
-
 let target =
     { T.name                = "mips"
     ; T.byteorder           = byteorder
@@ -478,13 +472,6 @@ let target =
     ; T.call                = F.call
     ; T.branch              = F.branch
     
-    ; T.cc                  = (function 
-                              | "c"  | "C"  -> c_convention
-                              | "c'" | "C'" -> c'_convention
-                              | x -> impossible (Printf.sprintf 
-                                    "unknown calling convention %s" x)
-                              )
-
     ; T.cc_specs            = A.init_cc
     ; T.cc_spec_to_auto     = Mipscall.cconv 
                                 ~return_to:(fun ra -> (R.store pc ra wordsize))

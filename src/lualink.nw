@@ -290,7 +290,7 @@ let overflow memsize bo growth max_alignment =
 
 let choice_funs f choices =
   let rec choice cs = match cs with
-  |	pred :: s :: rest ->
+  | pred :: s :: rest ->
       let camlpred = match pred with
         | V.String   h -> Automaton.is_hint  h
         | V.Number   _ -> Automaton.is_width (V.int.V.project pred)
@@ -304,8 +304,8 @@ let choice_funs f choices =
                              ((V.list Map.ccstage).V.project s) Automaton.unit
       in
         (camlpred, stage) :: (choice rest)
-  |	[] -> []
-  |	_  -> raise (V.Projection (V.Nil, "choice predicate/stage list"))
+  | [] -> []
+  | _  -> raise (V.Projection (V.Nil, "choice predicate/stage list"))
   in
   f (choice choices) in
 
@@ -316,8 +316,8 @@ let register_cc t name tbl =
      | V.Table stages ->
          let stages = (V.list Map.ccstage).V.project value in
          List.fold_right Automaton.( *> ) stages Automaton.unit
-	 | V.Userdata _   -> Map.ccstage.V.project value
-	 | _              ->
+     | V.Userdata _   -> Map.ccstage.V.project value
+     | _              ->
          raise (V.Projection (value, "automaton stage/stage list")) in
   Call.register_cc t name ~call:(getfield "call")
      ~results:(getfield "results") ~cutto:(getfield "cutto") in
@@ -447,9 +447,6 @@ C.register_module "Driver"
   ; "reinit"    , V.efunc (V.unit  **-> V.runit)  Driver.reinit
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
-let old_dump =   V.efunc ((V.list V.int)    **-> (* widths *)
-                      (V.list V.string) **-> (* hints  *)
-                       V.result V.unit) in
 let dump = V.efunc (Map.new_target **-> V.string **-> (V.list V.int) **->
                     (V.list V.string) **->> V.unit) in
 
@@ -470,22 +467,6 @@ C.register_module "Debug"
       ; "proc_all_paths", V.efunc (V.unit **-> V.runit) 
                           (fun () -> Mipscall.paths_proc'
                           [32,"int";32,"float";64,"float"])
-      ; "proc",           old_dump Mipscall.dump_proc
-      ; "cutto",          old_dump Mipscall.dump_cutto
-      ; "proc_paths",     old_dump Mipscall.paths_proc
-      ; "cutto_paths",    old_dump Mipscall.paths_cutto
-      ])
-   ;"Alpha" , V.Table (V.Table.of_list 
-      [ "proc",           old_dump Alphacall.dump_proc
-      ; "cutto",          old_dump Alphacall.dump_cutto
-      ; "proc_paths",     old_dump Alphacall.paths_proc
-      ; "cutto_paths",    old_dump Alphacall.paths_cutto
-      ])
-  ;"X86" , V.Table (V.Table.of_list 
-      [ "c_proc",         old_dump X86call.dump_c_proc
-      ; "c_cutto",        old_dump X86call.dump_c_cutto
-      ; "c_proc_paths",   old_dump X86call.paths_c_proc
-      ; "c_cutto_paths",  old_dump X86call.paths_c_cutto
       ])
   ] g;
 @
