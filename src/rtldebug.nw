@@ -1,16 +1,19 @@
+% vim: ts=8 sw=4 et:
 
-% ------------------------------------------------------------------ 
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
 % Quality    ::=    A|B|C|D|E
 % Importance ::=    Central|Subsystem|Peripheral
 % Urgency    ::=    Immediate|Soon|Later
 %
 % Example (at beginning of line): %%Grades: B Central Soon
+
+% ------------------------------------------------------------------ 
 \section{Functions for Debugging RTLs}
 % ------------------------------------------------------------------ 
 
 <<rtldebug.mli>>=
-val typecheck:     Rtl.rtl -> unit      (* prints rtl to stdout, traps *)
+exception TypeCheck of Rtl.rtl
+val typecheck:     Rtl.rtl -> unit      (* raises TypeCheck *)
 @
 
 % ------------------------------------------------------------------ 
@@ -19,8 +22,8 @@ val typecheck:     Rtl.rtl -> unit      (* prints rtl to stdout, traps *)
 
 <<rtldebug.ml>>=
 module RP = Rtl.Private
-exception TypeCheck of string
-let fail rtl = raise (TypeCheck (Rtlutil.ToString.rtl rtl))
+exception TypeCheck of Rtl.rtl
+let fail rtl = raise (TypeCheck (rtl))
 
 let typecheck (r:Rtl.rtl) =
     let width n ty = match ty with

@@ -979,58 +979,6 @@ let init_cont env (cfg:G.cfg) (target:Target.t) (cc:Target.cc)
         ignore (List.fold_left G.gm_insert_assign_after (G.entry cfg) rtls)
     
 @
-In the [[freeze]] function we fix the stack layout. The results in an
-equation system whose solution determines the values of symbolic
-compile-time constants. A substitution replaces all these symbolic
-values with expressions in the body of the procedure. In another step,
-all {\rtl}s in a {\cfg} are simplified, using constant folding.
-
-We are hardcoding the stack layout here for all targets. This seems a
-bad idea.
-<<This code moved to Stackstage>>=
-let freeze (p:Proc.t) = 
-    let stack = [ p.Proc.incoming
-                ; p.Proc.stackd
-                ; p.Proc.conts
-                ; AT.freeze p.Proc.priv
-                ; p.Proc.outgoing               (* our stack layout *) 
-                ] in
-    let pointer  = p.Proc.target.Target2.pointersize in            
-    let stack    = Block.cat_list stack in
-    let eqns     = p.Proc.eqns @ (Block.constraints stack) in
-    let solution = 
-        try Const2.solve pointer eqns 
-        with Const2.Can'tSolve -> Impossible.impossible 
-                ("can't solve equations in "^ p.Proc.symbol#text)    
-    in            
-    let ()       = assert (solution.Const2.dependent = []) in
-    let ()       = assert (solution.Const2.known <>    []) in
-    let map      = Strutil.assoc2map solution.Const2.known     in
-    (*
-     * let ()       = List.iter 
-     *               (fun (key,_) -> Printf.printf "%s\n" key) 
-     *                solution.Const2.known in 
-     *)
-    (* The guard protects the subst function. If the guard is true
-     * the subst function is applied to an expression *)
-    let guard    = function
-        | RP.Const(RP.Late(_)) -> true
-        | _                    -> false in
-    
-    (* This is the guareded substitution - we replace certain RP.Late
-       values *)
-    let rec subst (e:RP.exp) = match e with              
-        | RP.Const(RP.Late(x,_)) -> 
-            ( try Rtl.Convert.exp (Strutil.Map.find x map) with 
-            | Not_found -> 
-                if false then e else Impossible.impossible ("cannot find: "^x)
-            )  
-        | x -> x in
-    let () = Cfgutil.subst p.Proc.cfg (Rtlutil.Subst2.exp ~guard ~map:subst)
-    and () = Cfgutil.subst p.Proc.cfg Rtleval2.rtl (* const folding *)
-    in
-        ()
-
 <<Make procedure>>=
 let proc env target optimizer (cconv,name,args,bdy) = 
     let symbol,scope = match F.findv name env with
@@ -1093,7 +1041,7 @@ let proc env target optimizer (cconv,name,args,bdy) =
     let conts    =
         match Strutil.Map.fold (fun _ c rst -> c :: rst) state.conts [] with
         | [] -> Block.mk (Rtl.late "bogus" pointer) 0 1 (*XXX*)
-        | conts -> List.fold_left (fun b c -> Block.cat c.Contn.block b) 
+        | conts -> List.fold_left (fun b c -> Block.cathl c.Contn.block b) 
                         (List.hd conts).Contn.block (List.tl conts) in 
     (* order cfg *)
     let ()    = G.gm_enumerate cfg in

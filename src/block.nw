@@ -1,4 +1,5 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 et sw=4:
 % Area.nw is going to be replaced by this module. It is much simpler and
 % purely functional.
 
@@ -64,7 +65,7 @@ are concatenated: in $[x,y,z]$ the $x$ is a the top, not the bottom.
 
 Two blocks whose data are live at the same time can be concatenated into
 one bigger block. Inside the new block, the data from the first block
-occupies the lower addresses, and the second block the higher addresses.
+occupies the higher addresses, and the second block the lower addresses.
 Both address spaces do not overlap. Between those two blocks might be a
 gap to fulfill the alignment requirements of both blocks.
 
@@ -78,8 +79,8 @@ necessary to make it adjusted.
 <<block.mli>>=
 type placement = High | Low
 
-val cat:        t -> t -> t                  (* cat x y : x and y adjacent with x at
-                                                *higher* address *)
+val cathl:      t -> t -> t                  (* cat x y : x and y adjacent 
+                                                with x at *higher* address *)  
 val overlap:    placement -> t -> t -> t     (* req: arguments are adjusted *)
 val adjust:     t -> t                       (* result is adjusted *)
 @
@@ -89,7 +90,7 @@ this module in terms of the above primitives; it is a checked run-time
 error when the argument lists are empty.
 
 <<block.mli>>=
-val cat_list:       t list -> t
+val cathl_list:       t list -> t
 val overlap_list:   placement -> t list -> t
 @
 
@@ -198,7 +199,7 @@ confusion here which block goes into low memory and which into high
 memory. Block [[x]] sits on top of [[y]].
 
 <<block.ml>>=
-let cat x y =
+let cathl x y =
     let size' = align (size y) (alignment x) in
         { base          = base y
         ; size          = size' + size x
@@ -242,7 +243,7 @@ let overlap place x y =
 Not essential, but convenient functions.
 
 <<block.ml>>=
-let cat_list       ts = List.fold_left cat         (List.hd ts) (List.tl ts)
+let cathl_list     ts = List.fold_left cathl       (List.hd ts) (List.tl ts)
 let overlap_list p ts = List.fold_left (overlap p) (List.hd ts) (List.tl ts)
 @
 
@@ -272,7 +273,7 @@ reporting functions receive a function [[error]] that expects a string.
 <<Block primitives for Lua>>=
 let cat error = function
     | [] -> error "Block.cat: empty argument list"
-    | bs -> cat_list bs
+    | bs -> cathl_list bs
 
 let overlap error placement blocks = match (placement, blocks) with
     | _     , [] -> error "Block.overlap: empty block list"
