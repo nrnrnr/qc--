@@ -9,8 +9,8 @@
 OCAML =         ocaml
 # use the following for execution profiling
 OCAMLC =        ocamlcp -p a    
-OCAMLC =        ocamlc
-OCAMLO =        ocamlopt
+OCAMLC =        ocamlc -g
+OCAMLO =        ocamlopt 
 OCAMLTOP =      ocamlmktop
 OCAMLDEP =      ocamldep
 OCAMLYACC =     ocamlyacc
