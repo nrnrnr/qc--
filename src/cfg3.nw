@@ -192,8 +192,11 @@ val kills:      node -> locs            (* locs killed by node  *)
 
 (* node mutators *)
 val set_rtl:        node -> (Rtl.rtl -> Rtl.rtl) -> unit
-val set_property:   node -> property -> unit 
 
+(* property is mutable!
+ * val set_property:   node -> property -> unit 
+ *)
+ 
 (* continuation bundle constructor *)
 val conts: cuts:node list -> unwinds:node list -> 
            returns:node list -> aborts: bool -> conts 
@@ -437,8 +440,8 @@ functions.
 \item [[set_rtl: node -> (Rtl.rtl -> Rtl.rtl) -> unit]]:
 Set the {\rtl} of a node to a new value using a mapping function.
 
-\item [[set_property:  node -> property -> unit]]:
-Set the properties associated with the [[node]] at hand.
+% \item [[set_property:  node -> property -> unit]]:
+% Set the properties associated with the [[node]] at hand.
 \end{itemize}
 
 % ------------------------------------------------------------------ 
@@ -701,7 +704,11 @@ let gm_insert_dataflow_between ~defs ~uses ~kills ~src ~dst =
         ; node#upd_succ (fun n -> dst)
         )
 
-let gm_enumerate (cfg:cfg) = cfg#enumerate
+let gm_enumerate (cfg:cfg) = 
+    if cfg#enumerated then      (* risky if out #enumerated lies *)
+        ()
+    else    
+        cfg#enumerate
 @    
  
 Many node observations simply invoke a node's method. 
@@ -722,7 +729,9 @@ let kills       (node:node) = node#kills
 let set_rtl     (node:node) (map:Rtl.rtl -> Rtl.rtl) =
     node#set_rtl (map node#rtl)
 
-let set_property (node:node) (p:property) = node#set_property p
+(* 
+ * let set_property (node:node) (p:property) = node#set_property p
+ *)
 @
 
 The [[ast]] method returns an [[Ast.proc]] value. All names in the
@@ -739,8 +748,10 @@ let ast (cfg:cfg) (name:string) (mangle:string->string) (target:Target2.t) =
 @
 
 <<implementation>>=
-let set_live node locs =
-    let p = node#property in
+let set_live (node:node) locs =
+    let p     = node#property in
+    let locs' = Property.get_live p in
+    let ()    = assert (Register.Set.subset locs' locs) in
         Property.set_live p locs
 
 let get_live node =
@@ -878,7 +889,9 @@ and node = object
     method unlink_pred: node -> unit    (* remove in-edge from to pred node *) 
     method upd_succ:    (node -> node) -> unit (* redirect succs of this *)
     method set_rtl:     Rtl.rtl -> unit (* set rtl to new value *)
-    method set_property: property -> unit (* set property *)
+    (* 
+     * method set_property: property -> unit (* set property *)
+     *)
     method set_number:  int -> unit     (* defines number *)
 
     method defs:        locs            (* defined by this *)
@@ -1277,8 +1290,10 @@ object(this)
     method kills =
         Register.Set.empty
 
-    method set_property (p:property) = 
-        _prop <- p 
+    (* 
+     * method set_property (p:property) = 
+     *   _prop <- p 
+     *)
 
     method set_number i =
         _num <- i
@@ -1300,7 +1315,12 @@ object(this)
     
     (* comment about node kind *)
     method comment =
-        Printf.sprintf "node %d" _id
+        let this = (this :> node) in
+        let live = Property.get_live (this#property) in 
+            Printf.sprintf "node: %d live: %s" 
+                           _id 
+                           (Register.print_set live)
+            
 
     method ast (mangle:string->string) (target:Target2.t) = 
         let this    = (this :> node) in
@@ -1711,7 +1731,13 @@ object (this)
     method uses   = _uses
     method kills  = _kills
 
-    method comment = super#comment ^ " dataflow"    
+    method comment = 
+          super#comment 
+        ^ (Printf.sprintf "defs: %s uses: %s kills: %s"
+                          (Register.print_set _defs)
+                          (Register.print_set _uses)
+                          (Register.print_set _kills)
+          ) 
 
     method ast mangle target =
         let labels       = super#ast mangle target           in

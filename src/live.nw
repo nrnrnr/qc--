@@ -45,7 +45,16 @@ module type CFG = sig
     include Cfg3.S
     val get_live: node -> locs          (* access to live sets *)
     val set_live: node -> locs -> unit
-end
+end with
+    type locs = Register.Set.t          
+@
+
+\begin{quote}\it
+    Should [[Cfg3.S]] provide an equality predicate for [[Cfg3.loc]]
+    values? Here we are basically breaking the abstraction of
+    locations. --CL
+\end{quote}
+
 
 <<live.mli>>=
 <<CFG>>
@@ -97,13 +106,14 @@ $$\mathit{live} =
 $$
 
 <<struct Make>>=
-let rec live: G.node -> Register.Set.t = fun node -> 
+let rec live (node:G.node) =
     let defs         = G.defs    node                      in
     let uses         = G.uses    node                      in
     let kills        = G.kills   node                      in
     let live         = Register.Set.diff (after node) defs in
     let live         = Register.Set.diff live kills        in 
-        Register.Set.union live uses
+    let live         = Register.Set.union live uses        in 
+        Register.Set.union (G.get_live node) live
 @
 
 The [[after]] function computes the union of the live sets of a node's
@@ -123,30 +133,44 @@ flag is set.
 
 <<struct Make>>=
 let process changed node =
-    let l = live node in
-        if l <>  G.get_live node then
-            ( changed := true; G.set_live node l )
+    let l  = live node in
+    let _  = assert (Register.Set.subset (G.get_live node) l) in 
+        if Register.Set.equal l (G.get_live node) then
+           ()   (* changed := false *)
         else
-            ()
+           ( changed := true
+           ; G.set_live node l
+           (* Printf.printf "id=%d\n" (G.number node) *)
+           ) 
 @
 
 The [[process]] function, which updates the live set of a node, is
 repeatedly applied to all nodes in [[cfg]].  This is done until
 [[process]] does not change any live set which means the fix point is
-reached.  We use [[G.fold_bwd]] to implement an iteration function
+reached.  We use [[G.scan_bwd]] to implement an iteration function
 that iterates mostly backwards (reverse control-flow direction) over
 the {\cfg}.
 
 <<struct Make>>=
 let liveness cfg =
-    let changed = ref false                                in
-    let iter cfg f = G.fold_bwd cfg (fun node () -> f node) () in
-    let rec loop () = 
+    let () = G.gm_enumerate cfg in
+    let fold cfg f z =
+        let first = G.number (G.first cfg)     in
+        let limit = G.number (G.last  cfg) + 1 in
+            G.scan_bwd cfg first limit f z     in
+    let changed     = ref false                           in
+    let iter cfg f  = fold cfg (fun node () -> f node) () in
+    let rec loop n = 
         ( changed := false
         ; iter cfg (process changed) 
-        ; if !changed then loop () else ()
+        ; if !changed && n < 1000 then 
+            loop (n+1) 
+          else if n >= 1000 then
+                assert false    (* does not terminate? *)
+          else
+                ()              (* ok *)        
         )
-    in loop ()
+    in loop 0
 @
 
 

@@ -55,6 +55,15 @@ val to_loc: (Rtl.space -> Rtl.spacedescr) -> t -> Rtl.loc
 val of_loc: Rtl.loc -> t                     (* Invalid_argument *)
 @
 
+For debugging we sometimes want to print a register, or a set of
+registers:
+
+<<register.mli>>=
+val print: t -> string         
+val print_set: Set.t -> string
+@
+
+
 % ------------------------------------------------------------------ 
 \section{Implementation}
 % ------------------------------------------------------------------ 
@@ -105,5 +114,14 @@ let spill_slot automaton (sp,index,width) =
         loc
 @
 
+% ------------------------------------------------------------------ 
+\subsection{For Debugging Only}
+% ------------------------------------------------------------------ 
+
+<<register.ml>>=
+let print (sp,index,width) = Printf.sprintf "$%c[%d](%d)" sp index width
+let print_set set          = 
+    String.concat " " (Set.fold (fun t acc -> (print t)::acc) set []) 
+@
     
 

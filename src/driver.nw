@@ -173,8 +173,16 @@ let check file =
 \subsubsection{A {\PAL} to {\PAL} compiler}
 % ------------------------------------------------------------------ 
 
-The following [[Mangle.symbol]] value is used to construct a
-[[Mangle.mangler]] function that respects the syntax of {\PAL}.
+We create an assembler that has [[Proc.t]] values as instructions. Our
+first translation step (module \module{ast3ir}) translates to this
+assembler. The assembler requires a function [[ext]] to emit procedures;
+it is provided by the [[Personality]] module. Since the assembler emits
+{\PAL} abtract syntax (\AST), the emitter [[ext]] for a procedure also
+translates to {\AST}.
+
+<<driver.ml>>=    
+module L   = Live.Make(Cfg3)
+@
 
 The [[compile]] compiles a source file from {\PAL} to {\PAL}.  The
 [[target]] provided from the command line is currently ignored.  Code
@@ -185,19 +193,11 @@ passed.
 module Personality = struct
     let target                             = Target2.dummy
     type instr                             = Proc.t
-    let ext p target init  
-        = Cfg3.ast p.Proc.cfg p.Proc.name p.Proc.mangle target
+    let ext (p:Proc.t) target init = 
+        let cfg = L.liveness p.Proc.cfg in      (* experimental *)
+        Cfg3.ast p.Proc.cfg p.Proc.name p.Proc.mangle target
 end    
-@
 
-We create an assembler that has [[Proc.t]] values as instructions. Our
-first translation step (module \module{ast3ir}) translates to this
-assembler. The assembler requires a function [[ext]] to emit procedures;
-it is provided by the [[Personality]] module. Since the assembler emits
-{\PAL} abtract syntax (\AST), the emitter [[ext]] for a procedure also
-translates to {\AST}.
-
-<<driver.ml>>=    
 module Asm = Asm2ast.Make(Personality) 
 module IR  = Ast3ir.Make (Asm)
 
