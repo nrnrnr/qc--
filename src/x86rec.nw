@@ -79,6 +79,7 @@ let cat = String.concat ""
 @   
 The [[guard]] function turns a predicate into a cost.
 <<head>>=
+let infinity = C.inf_cost
 let guard b = if b then 0 else C.inf_cost
 @ 
 <<head>>=
@@ -198,11 +199,33 @@ inst: Store(dst:regl, App1("lobits", src:mem), nw:w)
 @ 
 Arithmetic.
 <<rules>>=
-inst: Withflags(dst:eaddrl, "add", src:reg, w, "x86_aflags")
+inst: Withaflags(dst:eaddrl, "add", src:reg, w, "x86_addflags")
   {: cat ["add"; suffix w; " "; src; ","; dst] :}
 
-inst: Withflags(dst:regl, "add", src:eaddr, w, "x86_aflags")
+inst: Withaflags(dst:regl, "add", src:eaddr, w, "x86_addflags")
   {: cat ["add"; suffix w; " "; src; ","; dst] :}
+
+inst: Withaflags(dst:eaddrl, "sub", src:reg, w, "x86_subflags")
+  {: cat ["sub"; suffix w; " "; src; ","; dst] :}
+
+inst: Withaflags(dst:regl, "sub", src:eaddr, w, "x86_subflags")
+  {: cat ["sub"; suffix w; " "; src; ","; dst] :}
+
+inst: Setflags(App2("x86_subflags", l:eaddr, r:reg))
+  {: cat ["cmp"; suffix 32; " "; l; ","; r] :} -- POSSIBLE BUG IN WIDTH
+inst: Setflags(App2("x86_subflags", l:reg, r:eaddr))
+  {: cat ["cmp"; suffix 32; " "; l; ","; r] :} -- POSSIBLE BUG IN WIDTH
+
+inst: Withlflags(dst:eaddrl, logical:string, src:reg, w, "x86_logicflags")
+  [{: match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]
+  {: cat [logical; suffix w; " "; src; ","; dst] :}
+
+inst: Withlflags(dst:regl, logical:string, src:eaddr, w, "x86_logicflags")
+  [{: match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]
+  {: cat [logical; suffix w; " "; src; ","; dst] :}
+
+
+
 
 @ 
 Return.
@@ -217,6 +240,8 @@ stacknext: Mem(App2("sub", Fetch(esp, w), four), mw:w) [{:guard (mw = 32):}] {: 
 inst: Par(Goto(Fetch(stacktop, w)),pop) {: "ret" :}
 inst: Par(Goto(eaddr),Par(Store(stacknext, Fetch(eip, x:w), y:w), push))
         {: "call " ^ eaddr :}
+inst: Goto(eaddr)            {: "jmp " ^ eaddr :}
+inst: Jcc(cc:string, lconst) {: "j" ^ cc ^ " " ^ lconst :}
 @ 
 Debugging rules.
 <<rules>>=
@@ -257,11 +282,15 @@ any: Setflags(any) {: "Setflags(" ^ any ^ ")" :}
 any: Llr(dst:any, string, src:any, w) 
   {: "Llr(" ^ dst ^","^string^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
 
-any: Withflags(dst:any, string, src:any, w, fo:string) 
-  {: "Withflags(" ^ dst ^","^string^ "," ^ src ^ "," ^ string_of_int w ^ 
+any: Withaflags(dst:any, string, src:any, w, fo:string) 
+  {: "Withaflags(" ^ dst ^","^string^ "," ^ src ^ "," ^ string_of_int w ^ 
       ","^ fo ^ ")" :}
 
+any: Withlflags(dst:any, string, src:any, w, fo:string) 
+  {: "Withlflags(" ^ dst ^","^string^ "," ^ src ^ "," ^ string_of_int w ^ 
+      ","^ fo ^ ")" :}
 
+any: Jcc(string, any) {: "Jcc(" ^ string ^ "," ^ any ^ ")" :}
 
 
 <<more rules>>=
@@ -374,14 +403,21 @@ and stmt = function
 @
 <<horrible pattern match for [[Withflags]]>>=
 | [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
+  ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l'']], [[r']])>>)
+  ] when l = l' && l = l'' && r = r' && Bits.U.to_int flag_index = 1 ->
+      conWithaflags (loc l) o (exp r) w fo
+| [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
   ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>)
   ] when l = l' && l = l'' && r = r' && o = o' && Bits.U.to_int flag_index = 1 ->
-      conWithflags (loc l) o (exp r) w fo
+      conWithlflags (loc l) o (exp r) w fo
 <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>=
 RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w) 
+<<pattern for flags := [[fo]] ([[l'']], [[r']])>>=
+RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits flag_index), ass), 
+         RP.App((fo, _), [RP.Fetch(l'',_); r']), _)
 <<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>=
 RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits flag_index), ass), 
-         RP.App((fo, _), [RP.App((o', _), [RP.Fetch(l'',_); r'])]), _)
+         RP.App((fo, _), [RP.App ((o', _), [RP.Fetch(l'',_); r'])]), _)
 @ 
 We classify an {\rtl} here and pass it to the appropriate rule in the
 rule set. The encoding of special instructions is shared between the
@@ -398,7 +434,16 @@ and geffects = function
     | (g, s) :: t -> conPar (guarded g s) (geffects t)
 and guarded g s = match g with
 | RP.Const(RP.Bool b) -> if b then stmt s else conNop()
+| RP.App((compare, [32]), [RP.Fetch(RP.Cell('c', _, _, RP.Const(RP.Bits n), _), _)])
+    when Bits.U.to_int n = 1 && begins_x86_ compare ->
+      (match s with
+      | RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits b), _), r, w)
+        when (Bits.U.to_int b = 0) ->
+          conJcc (String.sub compare 4 (String.length compare - 4)) (exp r)
+      | _ -> error "guard on x86 non-branch")
 | _ -> conGuarded (exp g) (stmt s)
+and begins_x86_ s =
+  String.length s >= 4 && s.[0] = 'x' && s.[1] = '8' && s.[2] = '6' && s.[3] = '_'
 @
 
 The [[rtl]] function returns (the best) plan to rewrite a given {\rtl}.

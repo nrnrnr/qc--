@@ -6,13 +6,23 @@
 % Urgency    ::=    Immediate|Soon|Later
 %
 % Example (at beginning of line): %%Grades: B Central Soon
-\section{Toy code expander}
 
-The goal here is to create a toy code expander so that we can test
-register allocation and some other kinds of analyses and
-transformations.  To explain what is happening, I use the following
-conventions:
+%%Grades: C Subsystem Soon
 
+\section{A generic, parameterized code expander}
+
+A back end is obligated to expand code to RTLs.
+To make retargeting easier, we provide here a generic code expander
+that reduces the machine-dependent obligation.
+If the machine can move date, operate on temporary registers, and
+provide a few simple control-flow operations, this module does the
+rest.
+In other words, this module expands an RTL into a sequence of much
+simpler RTLs.
+The target-dependent code is relegated to a \emph{postexpander}.
+
+To explain what is happening, I use the following
+conventions:\\
 \begin{tabular}{@{\quad}ll}
 $t$& any temporary or register-like space\\
 $m$& any memory-like space\\
@@ -20,8 +30,8 @@ $k$& any constant\\
 $\oplus$& any RTL operator\\
 \end{tabular}
 
-Our goal is to reduce RTLs to the following forms:
-
+We reduce RTLs to the following forms:
+(THIS TABLE SHOULD BE CHECKED FOR CONSISTENCY WITH THE OTHER STUFF)
 {\def\gets{\mathrel{:=}}%
 $$\begin{array}{rcl@{\mskip10mu}l}
 m[t_l] & \gets & t     &\mbox{store}\\
@@ -29,12 +39,10 @@ t      & \gets & m[t_l]&\mbox{load} \\
 t_1    & \gets & t_2   &\mbox{move} \\
 t      & \gets & k     &\mbox{constant}\\
 t      & \gets & \oplus(t_1, \ldots, t_n) & \mbox{ALU}\\
-\multicolumn4{@{}l@{}}{\mbox{\parbox{\linewidth}{\noindent
-  And it should be extended to include the following variations:}}}\\
 m[t_l] & \gets & \mathtt{lobits}_n(t)     &\mbox{store byte/halfword}\\
-t      & \gets & \mathtt{sx} m[t_l]       &\mbox{load signed b/h} \\
-t      & \gets & \mathtt{zx} m[t_l]       &\mbox{load unsigned b/h} \\
-b \rightarrow \mathit{PC}& \gets & L &\mbox{conditional branch}\\
+t      & \gets & \mathtt{sx}(m[t_l])       &\mbox{load signed b/h} \\
+t      & \gets & \mathtt{zx}(m[t_l])       &\mbox{load unsigned b/h} \\
+t \mathbin? t \rightarrow \mathit{PC}& \gets & L &\mbox{conditional branch}\\
 \end{array}
 $$}
 @
@@ -73,6 +81,8 @@ N.B.~Machines such as MIPS support [[bit]] by instructions such as SLT
 front end (sadly).
 \end{itemize}
 @
+\begin{quote}\em
+Aside:
 I'm contemplating how we might create a hand-written expander that can
 easily be specialized to establish ``most of'' the machine invariant
 for many different targets, without relying so heavily on peephole
@@ -87,17 +97,14 @@ One possibility, then, would be to make an ``address context''
 function dynamic through Lua.
 Care would have to be taken to avoid paying for an expensive identity
 function (embedding/projection) at every application of such a function.
+\end{quote}
 @
+\subsection{The target-dependent postexpander}
 Here is a tentative signature for a postpass for an integer/float
 machine.
+These are the operations every target must implement.
 <<postexpander.mli>>=
 <<postexpander>>
-(* won't work; see below 
-module MakeSpills (X : S) : sig
-  val spill  : X.temp -> Rtl.loc -> Rtl.rtl list
-  val reload : X.temp -> Rtl.loc -> Rtl.rtl list
-end
-*)
 <<postexpander.ml>>=
 <<postexpander>>
 <<postexpander>>=
@@ -159,8 +166,10 @@ val rtlop : dst:temp -> operator -> temp list    -> rtl list
 The arguments to the functions above must satisfy the invariants that the
 temporaries are in the spaces the expander expects.
 It announces these spaces through argument and result contexts.
+The context names a temporary space from which to draw temporaries and
+it also says when a temporary satisfies that context.
 <<generic expansion operations>>=
-type context = (width -> temp) * (Register.t -> bool)
+type context = Rtl.space * (Register.t -> bool)
 val icontext : context (* for ints *)
 val fcontext : context (* for floats *)
 val acontext : context (* for addresses *)
@@ -201,55 +210,22 @@ val bnegate : rtl -> rtl  (* swap the condition in a conditional branch *)
 instruction that may legitimately be passed to [[bnegate]].
 @
 
-\subsection{Onward to an implementation?}
+\subsection{Onward to an implementation}
 
-\paragraph{Old, old doco from the toy expander days}
-This is not quite what a real code expander does, but it should
-suffice for experiments.
-The context has three parts, all of which require knowledge of the
-target machine:
-\begin{itemize}
-\item
-Look at a location and say whether it is memory-like.
-It is a checked run-time error to ask if a variable is memory-like
-(this is not a property of the target but is the result of decisions
-made higher up).
-\item
-Given a temporary space and a width, return a fresh temporary from
-that space, suitably aggregated to the given width.
-It is an \emph{unchecked} run-time error to ask for an unsupported
-width.
-\item
-Given an expression, return a temporary space that would be suited to
-hold the result of the expression.
-\end{itemize}
-<<expander.mli>>=
-type context 
-  = (Rtl.Private.loc -> bool)           (* say if a location is memory-like *)
-  * (Rtl.Private.exp -> Rtl.space)      (* find a temp space to hold this exp *)
-val context : Target2.t -> context
-val expand : Talloc.Multiple.t -> context -> Rtl.rtl -> Rtl.rtl list
-  (* returns *last* instruction at *head* of list (reverse execution order) *)
-val cfg : 'a -> Proc.t -> bool
-@ 
-\paragraph{The new stuff --- the good stuff}
+The [[Proc.t]] gives the expander a supply of temporaries.
 <<expander.mli>>=
 module type S = sig
-  val expand : Rtl.rtl -> Rtl.rtl list
+  val expand : Proc.t -> Rtl.rtl -> Rtl.rtl list
   val cfg    : 'a -> Proc.t -> bool
 end 
 module IntFloatAddr (Post : Postexpander.S) : S
-   (* THERE IS A BUG IN THIS CODE.  IT DOES NOT SHARE THE TEMP SUPPLY CORRECTLY *)
 @ 
 Here are some abbreviations and utilities.
 <<expander.ml>>=
 module type S = sig
-  val expand : Rtl.rtl -> Rtl.rtl list
+  val expand : Proc.t -> Rtl.rtl -> Rtl.rtl list
   val cfg    : 'a -> Proc.t -> bool
 end 
-
-let warn     b msg = if b     then Error.warningPrt msg
-let warn_not b msg = if not b then Error.warningPrt msg
 
 module R  = Rtl
 module RP = Rtl.Private
@@ -260,19 +236,13 @@ module T  = Target2
 module Up = Rtl.Revert
 module Down = Rtl.Convert
 
-let up   = Rtl.Revert.exp
-let down = Rtl.Convert.exp
-let uploc= Rtl.Revert.loc
-let downloc= Rtl.Convert.loc
-
 let upassn = Rtl.Revert.assertion
 
-let fetch l = RP.Fetch (downloc l, RU.Width.loc l)
-
-let width e = RU.Width.exp (up e)
+let fetch l = RP.Fetch (Down.loc l, RU.Width.loc l)
+let width e = RU.Width.exp (Up.exp e)
 @ 
 To avoid quadratric list append, I use John Hughes's
-continuation-passing list operations.
+continuation-passing list representation.
 <<expander.ml>>=
 let empty = fun l -> l
 let unit x = fun l -> x :: l
@@ -286,69 +256,12 @@ let rec concat = function
   | [x; y; z] -> x @@ y @@ z (* premature optimization is the root of all evil *)
   | h::t -> h @@ concat t
 @ 
-The core of the expander is a function [[to_temp]], which takes an
-expression and returns a pair containing a list of instructions and a
-temporary such that executing those instructions develops the
-expression into that temporary.
-<<expander.ml>>=
-type context 
-  = (Rtl.Private.loc -> bool)           (* say if a location is memory-like *)
-  * (Rtl.Private.exp -> Rtl.space)      (* find a temp space to hold this exp *)
-
-let expand temps (mem_like, space_for) =
-  let temp_for = Talloc.Multiple.loc temps in
-  let rec to_temp e = match e with
-    | RP.Const k ->
-        let w = width e in
-        let t = temp_for (space_for e) w in
-        (t:R.loc), unit (R.store t (up e) w)
-    | RP.Fetch (l, w) ->
-        if mem_like l then
-          let t = temp_for (space_for e) w in
-          let l, is = loc l in
-          (t:R.loc), (R.store t (R.fetch l w) w @:: is)
-        else
-          uploc l, empty
-    | RP.App (op, args) ->
-        let (temps, is) = List.split (List.map to_temp args) in
-        let w = width e in
-        let t = temp_for (space_for e) w in
-        t, (R.store t (up (RP.App (op, List.map fetch temps))) w @:: concat is)
-  <<other expander functions>>
-  and rtl r = match Rtl.Convert.rtl r with
-  | RP.Rtl [(g, RP.Store (left, right, w))] ->
-      assign g left right w
-  | _ -> unit r (* no expansion takes place *)
-  in fun r -> rtl r []
-@ 
-
-It would be good to do something with multiple assignments and with
-guards, but for now I keep things very simple.
-
-The remaining functions are simple.
-<<other expander functions>>=
-and assign g left right w =
-  let r, is  = to_temp right in
-  let l, is' = loc left in
-  R.guard (up g) (R.store l (R.fetch r w) w) @:: is @@ is'
-
-and loc l =
-  if mem_like l then
-    match l with
-    | RP.Cell (space, agg, w, addr, prop) ->
-        let addr, is = to_temp addr in
-        uploc (RP.Cell (space, agg, w, fetch addr, prop)), is
-    | _ -> assert false (* any mem-like location must be a cell *)
-  else
-    uploc l, empty
-@ 
 % ----------------------------------------------------------------
 \subsection{A generic expander}
 % ----------------------------------------------------------------
 
 <<expander.ml>>=
 module IntFloatAddr (Post : Postexpander.S) = struct
-  <<generic expander utilities>>
   <<generic expander>>
   <<generic flow-graph expander>>
 end
@@ -371,7 +284,6 @@ let temp_in_context ((space, n, w) as t) context instructions =
   else
     let t' = alloc context w in
     t', to_hughes (Post.move t' t) @@ instructions
-<<context guessing>>
 @ 
 It's questionable whether the byte order of a register should be fixed
 to that of memory, but so be it.
@@ -380,6 +292,8 @@ let temploc (space, n, w) =
   Rtl.cell Rtl.none space Post.byte_order w
            (Rtl.bits (Bits.U.of_int n Post.wordsize) Post.wordsize)
 @ 
+Some debugging code is most helpful.
+To activite, try \texttt{VERBOSITY=5~qc--}.
 <<generic expander>>=
 module D = struct (* debugging *)
     let strings = Verbose.say 5 
@@ -391,88 +305,129 @@ module D = struct (* debugging *)
     let temp (s, n, w) =
       "$" ^ Char.escaped s ^ "[" ^ int n ^ "] : " ^ int w ^ " loc" 
 end
-let expand =
-  let rec to_temp context e =
-    let _ = D.strings ["Targeting "; D.exp e; "...\n"] in
-    let t, is = to_temp' context e in
-    let _ = D.strings ["Targeted "; D.exp e; " => "; D.temp t; " by \n"] in
-    let _ = D.pr_is is in
-    t, is
-  and to_temp' context e = match e with
-    | RP.Const k ->
-        let w = width e in
-        let t = alloc context w in
-        t, to_hughes (Post.li t k)
-    | RP.Fetch (RP.Cell ('m', agg, w, addr, assn), w') ->
-        let t = alloc context w in
-        let a, is = address addr in
-        assert (agg = Post.byte_order);
-        assert (w = w');
-        t, to_hughes (Post.load t a (upassn assn)) @@ is
-    | RP.Fetch (RP.Cell (space, agg, w, RP.Const (RP.Bits b), assn), w') ->
-        assert (w = w');
-        temp_in_context (space, Bits.U.to_int b, w) context empty
-    | RP.Fetch _ ->
-        Impossible.impossible "memory-like access to non-memory space"
-    <<cases for sign-extending and zero-extending loads>>
-    | RP.App (op, args) ->
-        let (temps, is) =
-          List.split (List.map2 (fun c e -> to_temp c e) (Post.arg_contexts op) args)
-        in
-        let w = width e in
-        let t = alloc (Post.result_context op) w in
-        let compute = match temps with
-        | [x; y] -> Post.binop t op x y  (* see note on binary operators below *)
-        | [x]    -> Post.unop  t op x
-        | _      -> Post.rtlop t op temps
-        in
-        temp_in_context t context (to_hughes compute @@ concat is)
-  <<other generic expander functions>>
-  and rtl r =
-    let is = rtl' r in
-    let _ = D.strings ["Expanded "; D.rtl r; " into\n"]; D.pr_is is in
-    is
-  and rtl' r = match Down.rtl r with
-  | RP.Rtl [(g, RP.Store (left, right, w))] ->
-      guarded g left right w
-  | _ -> unit r (* no expansion takes place *)
+@ 
+Within the expander, we try to build an allocator eagerly, which means
+we use a different form of context than in the postexpander.
+(The postexpander can't provide an ``allocating context'' directly,
+because the supply of temporaries is in the [[Proc.t]] and is not
+available until we actually have a procedure in which to expand.)
+<<generic expander>>=
+let expand proc =
+  let contextmap (space, checker) =
+    (Talloc.Multiple.reg proc.Proc.temps space, checker) in
+  let icontext = contextmap Post.icontext in
+  let acontext = contextmap Post.acontext in
+  let fcontext = contextmap Post.fcontext in
+  <<context guessing>>
+  let alloc_direct (space, _) = Talloc.Multiple.reg proc.Proc.temps space in
+  <<definitions of [[to_temp]], [[rtl]] and all the other generic expander functions>>
   in fun r -> rtl r []
+@ 
+Unprimed versions of functions issue debugging screeds; primed
+versions do the real work.
+<<definitions of [[to_temp]], [[rtl]] and all the other generic expander functions>>=
+let rec to_temp context e =
+  let _ = D.strings ["Targeting "; D.exp e; "...\n"] in
+  let t, is = to_temp' context e in
+  let _ = D.strings ["Targeted "; D.exp e; " => "; D.temp t; " by \n"] in
+  let _ = D.pr_is is in
+  t, is
+and to_temp' context e = match e with
+  | RP.Const k ->
+      let w = width e in
+      let t = alloc context w in
+      t, to_hughes (Post.li t k)
+  | RP.Fetch (RP.Cell ('m', agg, w, addr, assn), w') ->
+      let t = alloc context w in
+      let a, is = address addr in
+      assert (agg = Post.byte_order);
+      assert (w = w');
+      t, to_hughes (Post.load t a (upassn assn)) @@ is
+  | RP.Fetch (RP.Cell (space, agg, w, RP.Const (RP.Bits b), assn), w') ->
+      assert (w = w');
+      temp_in_context (space, Bits.U.to_int b, w) context empty
+  | RP.Fetch _ ->
+      Impossible.impossible "memory-like access to non-memory space"
+  <<cases for sign-extending and zero-extending loads>>
+  <<cases for sign-extending and zero-extending divides>>
+  | RP.App (op, args) ->
+      let (temps, is) =
+        List.split (List.map2 (fun c e -> to_temp (contextmap c) e)
+                      (Post.arg_contexts op) args)
+      in
+      let w = width e in
+      let t = alloc_direct (Post.result_context op) w in
+      let compute = match temps with
+      | [x; y] -> Post.binop t op x y  (* see note on binary operators below *)
+      | [x]    -> Post.unop  t op x
+      | _      -> Post.rtlop t op temps
+      in
+      temp_in_context t context (to_hughes compute @@ concat is)
+<<other generic expander functions>>
+and rtl r =
+  let is = rtl' r in
+  let _ = D.strings ["Expanded "; D.rtl r; " into\n"]; D.pr_is is in
+  is
+and rtl' r = match Down.rtl r with
+| RP.Rtl [(g, RP.Store (left, right, w))] ->
+    guarded g left right w
+| _ -> unit r (* no expansion takes place *)
 @ The note on binary operators is that eventually the generic expander
-should be extended so it can deal with a two-address target machine.
-The generic expander should (somehow) divine whether the operation is 
+might be extended so it can deal with a two-address target machine.
+The generic expander might (somehow) divine whether the operation is 
 in $L \mathrel{:=} L \oplus R$ form or in $R \mathrel{:=} L \oplus R$ form,
 and it should call appropriate supporting functions in the target.
+On the other hand, we could just rely on peephole optimization\ldots
 @
 Sign-extending and zero-extending loads are done into integer registers only.
-This fact is documented in the [[POST]] interface.
+This fact is documented in the postexpander interface.
 <<cases for sign-extending and zero-extending loads>>=
 | RP.App (("sx", [n; w]), [RP.Fetch (RP.Cell ('m', agg, n', addr, assn), n'')]) ->
     assert (n == n' && n' == n'');
-    let t = alloc Post.icontext w in
+    let t = alloc icontext w in
     let a, is = address addr in
     assert (agg = Post.byte_order);
     temp_in_context t context (to_hughes (Post.sxload t a n (upassn assn)) @@ is)
 | RP.App (("zx", [n; w]), [RP.Fetch (RP.Cell ('m', agg, n', addr, assn), n'')]) ->
     assert (n == n' && n' == n'');
-    let t = alloc Post.icontext w in
+    let t = alloc icontext w in
     let a, is = address addr in
     assert (agg = Post.byte_order);
     temp_in_context t context (to_hughes (Post.zxload t a n (upassn assn)) @@ is)
+@ 
+Division is going to be a real problem; I can just tell.
+Here's a hack which is untested and probably useless.
+<<cases for sign-extending and zero-extending divides>>=
+| RP.App ((("divu"|"modu") as divmod, [w; n]), [RP.App (("zx", [n'; w']), [x]); y])
+  when w = w' && n = n' ->
+    let t = alloc icontext n in
+    let tx, isx = to_temp icontext x in
+    let ty, isy = to_temp icontext y in
+    let divmod = Post.binop t ((divmod ^ "_trunc"), [n]) tx ty in
+    temp_in_context t context (to_hughes (divmod) @@ isy @@ isx)
 @
 We might one day support multiple addressing modes, but for now, just registers. 
 <<other generic expander functions>>=
 and address exp =
-  let t, is = to_temp Post.acontext exp
+  let t, is = to_temp acontext exp
   in  Post.Address.reg t, is
 @
 It would be good to do something with multiple assignments and with
-guards, but for now I keep things very simple.
+guards,\footnote{For example, if a guard uses a non-comparison, Boolean
+operator, it would be a fine thing to compile it to control flow.}
+but for now I keep things very simple.
 
-(Need to be able to compile a guard to control flow.)
-The remaining functions are simple.
+The type system tells us that anything in a guard must be a Boolean
+operator or a comparison operator.\footnote
+{Finally we get a payoff from NR's obsession with the distinction
+between [[bool]] and [[#1 bits]].}
+To compile a Boolean, we require that
+a guarded effect with a nontrivial guard always be expanded into
+a sequence that ends in a conditional branch.
+To compile a comparison, we rely on the postexpander.
 
-POSSIBLY REFERENCES TO [[Post.pc_lhs]] SHOULD BE REPLACED BY USING
-[[Target2.goto.project]] AND FRIENDS.
+This expander can't handle predicated instructions; a nontrival guard
+may appear on a conditional branch only.
 <<other generic expander functions>>=
 and guarded g left right w =
   match g with
@@ -487,7 +442,7 @@ and guarded g left right w =
   | RP.App ((("conj" | "disj"), []), [g]) ->
       Impossible.unimp "conjunction or disjunction in generic code expander"
   | RP.App (cmp, [x; y]) ->
-      if left = downloc Post.pc_lhs then
+      if left = Down.loc Post.pc_lhs then
         let context = cmp_context cmp in
         let xt, xis = to_temp context x in
         let yt, yis = to_temp context y in
@@ -495,22 +450,24 @@ and guarded g left right w =
         | RP.Const c -> to_hughes (Post.bc xt cmp yt c) @@ yis @@ xis
         | _ -> Impossible.unimp "conditional branch to computed location"
       else
-        begin
-          Impossible.unimp "guard on other than conditional branch";
-          (* this case is bogus *)
-          let r, is  = to_temp (guess_context right) right in
-          let l, is' = loc left in
-          R.guard (up g) (R.store l (R.fetch (temploc r) w) w) @:: is @@ is'
-        end
+        Impossible.unimp "guard on other than conditional branch";
   | RP.App (cmp, _) ->
       Impossible.unimp "non-binary comparison in guard"
+@ 
+POSSIBLY  REFERENCES TO [[Post.pc_lhs]] SHOULD BE REPLACED BY USING
+[[Target2.goto.project]] AND FRIENDS.  IN GENERAL, WE NEED TO SEE
+ABOUT MERGING SIMILAR INFORMATION IN THE [[Target]] AND
+[[Postexpander.S]] INTERFACES.
+@
+An assignment is either a goto, a store, or a computation where we put
+somethign in a temporary.
 <<other generic expander functions>>=
 and assign left right w =
-  if left = downloc Post.pc_lhs then
+  if left = Down.loc Post.pc_lhs then
     match right with
     | RP.Const c -> to_hughes (Post.b c)
     | _ ->
-        let r, is = to_temp Post.acontext right in
+        let r, is = to_temp acontext right in
         to_hughes (Post.br r) @@ is
   else
     match left with
@@ -529,38 +486,40 @@ and assign left right w =
         Impossible.impossible "memory-like access to non-memory space"
 <<\emph{pattern [[->]] action} for low-bit store>>=
 RP.App (("lobits", [w; n]), [rhs]) ->
-  let r, is = to_temp Post.icontext rhs in
+  let r, is = to_temp icontext rhs in
   to_hughes (Post.lostore a r n (upassn assn)) @@ is' @@ is
 @ 
 This function is based on the dreadful hack that every floating-point
 comparison begins with [[f]] and no other comparison does.
-<<generic expander utilities>>=
+<<context guessing>>=
 let cmp_context (oprname, ws) =
-  if oprname.[0] = 'f' then Post.fcontext else Post.icontext
+  if oprname.[0] = 'f' then fcontext else icontext in
 @   
-<<other generic expander functions>>=
-and loc l =
+This is old stuff left over.
+<<definitions of [[to_temp]], [[rtl]] and all the other generic expander functions>>=
+in let rec old_general_guard g left right w =
+  (* this case is bogus *)
+  let r, is  = to_temp (guess_context right) right in
+  let l, is' = old_loc left in
+  R.guard (Up.exp g) (R.store l (R.fetch (temploc r) w) w) @:: is @@ is'
+and old_loc l =
   match l with
   | RP.Cell ('m', agg, w, addr, assn) ->
-      let addr, is = to_temp (Post.acontext) addr in
-      uploc (RP.Cell ('m', agg, w, fetch (temploc addr), assn)), is
-  | _ -> uploc l, empty
-
+      let addr, is = to_temp (acontext) addr in
+      Up.loc (RP.Cell ('m', agg, w, fetch (temploc addr), assn)), is
+  | _ -> Up.loc l, empty
 @
 
 We guess a context based on right-hand side.
 <<context guessing>>=
 let guess_context = function
-  | RP.Const k -> Post.icontext
+  | RP.Const k -> icontext
   | RP.Fetch (RP.Cell (space, agg, w, RP.Const (RP.Bits b), assn), w') when
-      (space = 'f' || space = 'u') -> Post.fcontext
-  | RP.Fetch _ -> Post.icontext
-  | RP.App (op, args) -> Post.result_context op
+      (space = 'f' || space = 'u') -> fcontext
+  | RP.Fetch _ -> icontext
+  | RP.App (op, args) -> contextmap (Post.result_context op) in
 @ 
-We can see a problem here.  The [[Proc.t]] contains a supply of
-temporaries, and there's a different supply hidden inside the generic
-expander (in the [[Post]] functor argument).
-It's not clear how to link things together correctly.
+Here we expand every RTL in a flow graph.
 <<generic flow-graph expander>>=
 module G  = Cfg4
 module GU = Cfgutil
@@ -571,144 +530,21 @@ let cfg _ proc =
   let nodes = GU.fold_bwd g (fun x y -> x::y) [] in
   let modified = ref false in
   let exp n =
-    match expand (G.instr n) with
-    | last :: preds ->
-        ignore (List.fold_left (fun n i -> G.gm_insert_assign_before i n) n preds);
-        G.upd_instr n (fun _ -> last);
-        (match preds with [] -> () | _ :: _ -> modified := true)
-    | [] -> assert false in
+      match expand proc (G.instr n) with
+      | last :: preds ->
+          ignore (List.fold_left (fun n i -> G.gm_insert_assign_before i n) n preds);
+          G.upd_instr n (fun _ -> last);
+          (match preds with [] -> () | _ :: _ -> modified := true)
+      | [] ->
+          G.upd_instr n (fun _ -> R.par [])
+            (*don't set modified := true --- hope for the best*)
+  in
   List.iter exp nodes;
   !modified
 @
 
-% ------------------------------------------------------------------ 
-\subsection{Test Code}
-% ------------------------------------------------------------------ 
-
-This is some code I wrote to play with the expander in an interactive
-interpreter.
-
-<<rename this to compile it into expander.ml>>=
-module Test = struct
-    <<Test>>
-end    
-
-<<Test>>=
-let truth      = RP.Const(RP.Bool true)
-let const n    = RP.Const(RP.Bits(Bits.of_int n 32))
-let loc n      = RP.Cell('m', R.Identity, 32, const n, 1)
-let add x y    = RP.App(("add",[32]),[x; y])
-let assign l r = RP.Store(l,r,32)
-
-let mem_like = function
-    | RP.Cell('m',_,_,_,_) -> true
-    | _                    -> false
-
-let count = ref 0
-let tmp_for sp width =
-    let () = count := !count + 1 in
-    let l  = RP.Cell(sp, R.Identity, width, const !count, 1) in
-        Rtl.Revert.loc l
-
-let rtl        = let left  = loc 0 in
-                 let right = add (const 2) (add (const 3) (const 4)) in
-                    RP.Rtl([truth,assign left right])
-@
-
-The [[rtl]] above is translated into the following sequence (in reverse
-execution order):
-
-\begin{quote}
-\begin{verbatim}
-$m[$t[30::bits32]] = $t[29::bits32];
-$t[29::bits32]     = %add($t[25::bits32], $t[28::bits32]);
-$t[25::bits32]     = 2::bits32;
-$t[28::bits32]     = %add($t[26::bits32], $t[27::bits32]);
-$t[26::bits32]     = 3::bits32;
-$t[27::bits32]     = 4::bits32;
-$t[30::bits32]     = 0::bits32;
-\end{verbatim}
-\end{quote}
-
-
-@
-Contexts.  This is jury-rigged, since in real life the expander knows
-all about the machine and doesn't need a context.
-<<expander.ml>>=
-let context t =
-  let rec space_of = function
-    | RP.Cell (s, _, _, _, _) -> s
-    | RP.Var (_, _, _) -> assert false
-    | RP.Slice (_, _, l) -> space_of l in
-  let mem_like =
-    List.fold_right
-      (fun s rest ->
-         if s.S.classification = S.Mem then
-           fun c -> c = s.S.space || rest c
-         else
-           rest)
-      t.T.spaces (fun _ -> false) in
-
-  let is_temp s = match s.S.classification with
-  | S.Temp _    -> true
-  |        _    -> false  in
-  let first_temp w =
-    try (List.find (fun s -> is_temp s && s.S.cellwidth = w) t.T.spaces).S.space
-      with Not_found ->
-        prerr_string ("No temporary spaces in target " ^ t.T.name ^ "\n");
-        flush stderr;
-        assert false in
-  let float_regexp = Str.regexp ".*[Ff]loat.*" in
-  let is_float_space s = Str.string_match float_regexp s.S.doc 0 in
-  let is_float_temp s = is_temp s && is_float_space s  in
-  let float_temp w = 
-    try (List.find is_float_temp t.T.spaces).S.space
-      with Not_found -> first_temp w in
-
-  let float_like =
-    List.fold_right
-      (fun s rest ->
-         if s.S.classification <> S.Mem && is_float_space s then
-           fun c -> c = s.S.space || rest c
-         else
-           rest)
-      t.T.spaces (fun _ -> false) in
-
-  let float_ops = ["fcmp"; "fadd"; "fsub"; "fdiv"; "fmul"; "fabs"; "fneg"; "fsqrt"] in
-  let is_float_op op = List.exists ((=) op) float_ops in
-
-  let is_float_exp = function
-    | RP.Const _ -> false
-    | RP.Fetch (loc, _) -> float_like (space_of loc)
-    | RP.App ((op, _), args) -> is_float_op op  in
-
-  ( (fun loc -> mem_like (space_of loc))
-  , (fun e -> if is_float_exp e then 
-                float_temp (Rtlutil.Width.exp (Rtl.Revert.exp e))
-             else 
-                first_temp (Rtlutil.Width.exp (Rtl.Revert.exp e)))
-  )              
 @ 
-<<expander.ml>>=
-module G  = Cfg4
-module GU = Cfgutil
-let cfg _ proc =
-  let g = proc.Proc.cfg in
-  let t = proc.Proc.target in
-  let _ = G.gm_enumerate g in
-  let nodes = GU.fold_bwd g (fun x y -> x::y) [] in
-  let expand = expand proc.Proc.temps (context t) in
-  let modified = ref false in
-  let exp n =
-    match expand (G.instr n) with
-    | last :: preds ->
-        ignore (List.fold_left (fun n i -> G.gm_insert_assign_before i n) n preds);
-        G.upd_instr n (fun _ -> last);
-        (match preds with [] -> () | _ :: _ -> modified := true)
-    | [] -> assert false in
-  List.iter exp nodes;
-  !modified
-@ 
+Enables profiling to work even on infinite loop...
 <<expander.ml>>=
 let _ = Sys.set_signal Sys.sigterm (Sys.Signal_handle (fun _ -> exit 0))
 @ 

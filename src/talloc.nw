@@ -39,7 +39,6 @@ been allocated.  [[Single.for_space]] creates a fresh allocator.  The
 space passed to [[Single.for_space]] must be a temporary space.
 Functions [[reg]] and [[loc]] provide different interfaces to the
 allocator.  It may be useful to partially apply [[reg]] to [[t]].
-
 <<talloc.mli>>=
 module Single : sig
   type t       (* an allocator for one space -- a mutable type *)
@@ -99,10 +98,21 @@ module Single = struct
 end
 @ 
 <<use [[width]] to make [[k]] be the next index, updating [[next]]>>=
+(*
+let () = if not (existsEq width space.S.widths) then
+           Impossible.impossible ("Asked for temporary in space `" ^
+                                  space.S.doc ^ "' with unsupported width " ^
+                                  string_of_int width) in
+*)
 let n = divide width in
-(* could check to see if width is supported ... *)
 let k = !next in
 let _ = next := k + n in
+<<auxiliaries>>=
+let existsEq v =
+  let rec exists = function
+  | [] -> false
+  | h :: t -> h = v || exists t
+  in exists
 @ 
 <<talloc.ml>>=
 module Multiple = struct

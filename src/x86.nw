@@ -90,11 +90,9 @@ type operator = Rtl.Private.opr
 @ 
 Here are the spaces.
 <<x86 expander>>=
-type context = (width -> temp) * (Register.t -> bool)
-let icontext = Talloc.Single.reg (Talloc.Single.for_space Spaces.t),
-               fun (c, _, _) -> c = 'r' || c = 't'
-let fcontext = Talloc.Single.reg (Talloc.Single.for_space Spaces.u),
-               fun (c, _, _) -> c = 'f' || c = 'u'
+type context = Rtl.space * (Register.t -> bool)
+let icontext = 't', fun (c, _, _) -> c = 'r' || c = 't'
+let fcontext = 'u', fun (c, _, _) -> c = 'f' || c = 'u'
 let acontext = icontext
 @ 
 <<x86 expander>>=
@@ -106,12 +104,18 @@ module Address = struct
 end
 @ 
 We need to record the various side effects.
+IF WE WANT TO MAKE BORROW AND CARRY WORK, WE WILL NEED TO PASS A THIRD
+ARGUMENT TO SUBFLAGS AND ADDFLAGS.  THIS WILL MEAN CHANGES IN THE
+RECOGNIZER, OF COURSE.
 <<x86 expander>>=
 let rindex = Address.rindex
 let eflags = R.cell R.none 'c' byte_order 32 (rindex 1)  (* condition codes *)
 let pc     = R.cell R.none 'c' byte_order 32 (rindex 0)  (* program counter *)
-let lflags result = R.store eflags (R.app (R.opr "x86_lflags" []) [result]) 32
-let aflags result = R.store eflags (R.app (R.opr "x86_aflags" []) [result]) 32
+let eax    = R.cell R.none 'r' byte_order 32 (rindex 0)
+let edx    = R.cell R.none 'r' byte_order 32 (rindex 2)
+let subflags x y w = R.store eflags (R.app (R.opr "x86_subflags" [w]) [x; y]) 32
+let addflags x y w = R.store eflags (R.app (R.opr "x86_addflags" [w]) [x; y]) 32
+let logicflags exp w = R.store eflags (R.app (R.opr "x86_logicflags" [w]) [exp]) 32
 
 let temploc (space, n, w) = Rtl.cell Rtl.none space byte_order w (rindex n)
 let tempval ((space, n, w) as t) = R.fetch (temploc t) w
@@ -135,7 +139,7 @@ I assume the sign-extending loads and stores are there.
 let extend opname n e = R.app (R.opr opname   [n; 32]) [e]
 let lobits        n e = R.app (R.opr "lobits" [32; n]) [e]
 let sxload ~dst:((_, _, w) as dst) ~addr n assn =
-  assert (w = 32);
+  if w <> 32 then Impossible.unimp "widening of temporaries";
   [as_mov (R.store (temploc dst)
              (extend "sx" n (R.fetch (R.cell assn 'm' byte_order n addr) n)) 32)]
 let zxload ~dst:((_, _, w) as dst) ~addr n assn =
@@ -244,17 +248,55 @@ let result_context (n, _) = SM.find n resmap
 Operator hell (or heaven).
 We start with binary operators in $L \mathrel{:=} L \oplus R$ form.
 <<x86 expander>>=
-let with_flags setflags dst exp =
-  R.par [R.store (temploc dst) exp (width dst); setflags exp]
+let with_flags setflags dst op x y w =
+  let x = tempval x in
+  let y = tempval y in
+  let exp = R.app op [x; y] in
+  R.par [R.store (temploc dst) exp w; setflags x y w]
 
-let llr op x y move = match op with
-| "add", [32] -> with_flags aflags x (R.app (upop op) [tempval x; tempval y]) :: move
-| "add", [n]  -> Impossible.unimp (string_of_int n ^ "-bit add")
-| "add", _    -> Impossible.impossible "ill-formed add"
-| _           ->
+let with_lflags dst op x y w =
+  let x = tempval x in
+  let y = tempval y in
+  let exp = R.app op [x; y] in
+  R.par [R.store (temploc dst) exp w; logicflags exp w]
+
+let at32 = function
+  | opr, [32] -> opr
+  | opr, [n]  -> Impossible.unimp ("%" ^ opr ^ string_of_int n ^ "(...)")
+  | opr, _    -> Impossible.impossible ("ill-formed " ^ opr)
+
+let llr op x y move = match at32 op with
+| "add" -> with_flags addflags x (upop op) x y 32 :: move
+| "sub" -> with_flags subflags x (upop op) x y 32 :: move
+| ("and"|"or"|"xor") -> with_lflags x (upop op) x y 32 :: move
+| _  ->
     R.store (temploc x) (R.app (upop op) [tempval x; tempval y]) (width x) :: move
 
-let binop ~dst op x y = llr op dst y (move dst x)
+
+let regpairv x y =
+  let rval r = R.fetch r 32 in
+  let zxreg l = R.app (R.opr "zx" [32; 64]) [rval l] in
+  let shl v = R.app (R.opr "shl" [64]) [v; R.bits (Bits.U.of_int 32 32) 32]
+  in R.app (R.opr "or" [64]) [shl (zxreg x); zxreg y]
+
+let binop ~dst op x y = match at32 op with
+(*
+| "divu_trunc" ->
+    let (ialloc, _) = icontext in
+    let tmpd = ialloc 32 in
+    let tmpa = ialloc 32 in
+    let divmod =
+      R.par [ R.store eax (R.app (R.opr "divu", [64;32]) [regpairv edx eax; tempval y])
+            ; R.store edx (R.app (R.opr "modu", [64;32]) [regpairv edx eax; tempval y])
+            ; R.kill eflags
+            ]  in
+    [ move_rtl eax tmpa; move_rtl edx tmpd    (* restore *)
+    ; move_rtl dst eax; divmod                (* divide *)
+    ; move_rtl eax x; R.store eax 0 32
+    ; move_rtl tmpa eax; move_rtl tmpd edx    (* save *)
+    ]
+*)
+| _ -> llr op dst y (move dst x)
 @ 
 Other operators are surely wrong.
 <<x86 expander>>=
@@ -278,7 +320,11 @@ let b  ~tgt = [R.store pc_lhs (upconst tgt) 32]
 To implement the comparisons, we define new operators that are private
 to the $x$86 architecture. 
 \begin{itemize}
-\item [[x86_cmp]] returns what goes into the flags after a [[cmp]]
+\item [[x86_subflags]] returns what goes into the flags after a
+[[sub]] or [[cmp]]
+instruction.
+\item [[x86_addflags]] returns what goes into the flags after a
+[[add]] or [[adc]]
 instruction.
 \item
 Operators [[x86_a]], [[x86_ae]], and so on, accept one argument, the
@@ -292,7 +338,7 @@ and so one, would jump.
 let eflags =
   R.cell R.none 'c' Spaces.bo 32 (R.bits (Bits.U.of_int 1 32) 32)
 let cmp x y =
-  R.store eflags (R.app (R.opr "cmp" [32]) [tempval x; tempval y]) 32
+  R.store eflags (R.app (R.opr "x86_subflags" [32]) [tempval x; tempval y]) 32
 let bc x (opr, ws) y ~tgt =
   assert (ws = [32]);
   [ R.guard (R.app (R.opr (cmpopr opr) [32]) [R.fetch eflags 32]) 
