@@ -583,15 +583,15 @@ and location' = function
                            | Rtl.LittleEndian -> 'L' in
             let space   =  Printf.sprintf "$%c(%d%c)" sp width a in   
             let aligned = if ass = 1 then None else Some ass in 
-            A.Mem(A.AliasTy space,expr' e,aligned)
+            A.Mem(A.AliasTy space,expr' e,aligned, [])
         | Low ->
-            A.Mem(A.BitsTy width,expr' e, if ass = 1 then None else Some ass))
+            A.Mem(A.BitsTy width,expr' e, (if ass = 1 then None else Some ass), []))
     | R.Reg(sp,i,w) -> 
         (match !the_verbosity with
         | High ->
             let space   =  Printf.sprintf "$%c(%d)" sp w in   
             let s       = string_of_int i in
-            A.Mem(A.AliasTy space,A.Int(s,None), None)
+            A.Mem(A.AliasTy space,A.Int(s,None), None, [])
         | Low -> A.Name(None, Printf.sprintf "$%c%d" sp i))
     | R.Var (name,_,width)       -> A.Name(None,name)
     | R.Slice (w,i,loc)          -> location' loc (*XXX*)

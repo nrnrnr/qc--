@@ -164,7 +164,7 @@
             | "ast_Mem" -> let ty1 = (sexp_rd_ty s_) in
               let expr1 = (sexp_rd_expr s_) in
               let aligned_opt1 = (SexpPkl.rd_option sexp_rd_aligned s_) in
-              Ast.Mem(ty1, expr1, aligned_opt1)
+              Ast.Mem(ty1, expr1, aligned_opt1, raise (Failure "no asdlGen"))
             | _ -> (SexpPkl.die ()))
           (* end match *) in
         begin
@@ -910,12 +910,13 @@
             (sexp_wr_name name1 s_);
             (SexpPkl.wr_rp s_)
           end
-        | (Ast.Mem(ty1, expr1, aligned_opt1)) -> begin
+        | (Ast.Mem(ty1, expr1, aligned_opt1, alias_sets)) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_Mem" s_);
             (sexp_wr_ty ty1 s_);
             (sexp_wr_expr expr1 s_);
             (SexpPkl.wr_option sexp_wr_aligned aligned_opt1 s_);
+            raise (Failure "no asdlGen");
             (SexpPkl.wr_rp s_)
           end)
       (* end match *)

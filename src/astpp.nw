@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 %
 % $Id$
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
@@ -156,14 +157,20 @@ let rec lvalue = function
     | A.NameOrMemAt(x,_)   -> lvalue x
     | A.Name(None,x)     -> id x
     | A.Name(Some h,x)   -> str h ^/ id x
-    | A.Mem(t,e,a)      -> 
+    | A.Mem(t,e,aligned,aliasing) -> 
         ~~ ty t 
         ^^ P.text "["
         ^^ expr e 
-        ^^ begin match a with 
+        ^^ begin match aligned with 
                 | Some i -> P.break ^^ P.text "aligned" ^/ int i 
                 | None   -> P.empty
            end 
+        ^^ begin match aliasing with 
+     	         | [] -> P.empty 
+                 | n :: ns ->
+                    let head = P.break ^^ P.text "in" ^/ P.text n in
+                    List.fold_left (fun h n -> h ^^ P.text "," ^/ P.text n) head ns
+           end	
         ^^ P.text "]"
 @
 

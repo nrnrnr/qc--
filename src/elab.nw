@@ -907,8 +907,8 @@ let rec freeExprVars = function
 <<module CDecl>>=
 and freeLValueVars = function
     | A.NameOrMemAt(x,r)   -> freeLValueVars x
-    | A.Mem(_,e,_)      -> freeExprVars e
-    | A.Name(_,name)     -> [name]
+    | A.Mem(_,e,_, _)      -> freeExprVars e
+    | A.Name(_,name)       -> [name]
 @
 A constant declaration uses all names in its defining expression.
 These should be names of other constant expression but we don't know
@@ -971,7 +971,7 @@ let literalExpr env v ty cvt  =
 <<module Eval>>=
 let rec evalFetch env = function
     | A.NameOrMemAt(x,r) -> E.catch (error r env) (evalFetch env) x
-    | A.Mem (_,_,_)   -> E.error "memory access in const declaration"
+    | A.Mem (_,_,_,_)    -> E.error "memory access in const declaration"
     | A.Name(hint,id)  -> 
             ( match snd (F.findv id env) with
             | E.Error                -> E.Error
@@ -1431,9 +1431,9 @@ let rec lvalue context env = function
         | _, (F.Variable _,t) -> t
         | _                   -> E.error ("not a register: "^name)
         )
-    | A.Mem(t,e,a) when context <> Assign -> 
+    | A.Mem(t,e,a,_) when context <> Assign -> 
         E.error "no memory assignment allowed in this context"
-    | A.Mem(t,e,a)           -> 
+    | A.Mem(t,e,aligned,aliasing) -> 
         let msg1   = "alignment not a power of 2"                in
         let msg2   = "type must be a multiple of target memsize" in
         let msg3   = "unknown target memsize"                    in
@@ -1444,7 +1444,7 @@ let rec lvalue context env = function
             | Some a                       -> ()
             | None                         -> () 
         in
-            ( align a (* check alignment constraint *)
+            ( align aligned (* check alignment constraint *)
             ; E.ematchQuad ( evalTy env t
                            , tyExpr env e
                            , F.findMemsize env

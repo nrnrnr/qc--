@@ -13,6 +13,7 @@
   and hint = (StdPrims.std_string)
   and reg = (StdPrims.std_string)
   and target = (StdPrims.std_string)
+  and alias_set = (StdPrims.std_string)
   and size = (StdPrims.std_int)
   and align = (StdPrims.std_int)
   and aligned = (StdPrims.std_int)
@@ -26,7 +27,7 @@
   and name_or_mem =
         NameOrMemAt of (name_or_mem * region)
       | Name of (hint option * name)
-      | Mem of (ty * expr * aligned option)
+      | Mem of (ty * expr * aligned option * alias_set list)
   
   and actual = (hint option * expr)
   and expr =
