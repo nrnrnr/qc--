@@ -27,12 +27,12 @@ For code generation, the compiler translates the dynamic part of a
 a target-specific register-transfer list {\rtl} that later is
 translated into machine instructions. 
  
-Once a procedure is translated into an initial {\cfg} it is analyzed
-and according to the results rewritten gradually in a semantics
-preserving way.  Analysis includes liveness analysis, modifications
-include establishing the machine invariant that every {\rtl} is
-representable by a machine instruction, and modifications resulting
-from register allocation and spilling.
+Once a procedure is translated into an initial {\cfg} it is analyzed and
+according to the results rewritten gradually in a semantics preserving
+way.  Analysis includes liveness analysis, modifications include
+establishing the machine invariant that every {\rtl} is representable by
+a machine instruction, and modifications resulting from register
+allocation and spilling.
 
 Nodes of a {\cfg} can take part in two relations simultaneously: 
 \begin{enumerate}
@@ -128,7 +128,7 @@ behaviors, the following naming scheme is used:
 
 For debugging we offer a translation of a {\cfg} to {\PAL} abstract
 syntax (\AST). This can be translated back to plain text using the
-{\AST} pretty-printer. The [[ast]] function receives a name mangler that
+{\AST} pretty-printer. The [[ast]] function receives a name r that
 must be used for all names that are included in the {\cfg} and
 translated to {\AST}. 
 
@@ -212,7 +212,6 @@ val conts: cuts:node list -> unwinds:node list ->
 
 (* observation *)
 val ast:    cfg -> name:string                  (* of procedure *)
-                -> (mangle:string -> string)    (* C-- name mangler *)
                 -> target:Target2.t             (* to translate RTLs *)
                 -> Ast.proc
 @
@@ -509,9 +508,9 @@ Construct a continuation bundle from the arguments.
 \item [[ast]] returns an {\PAL} abstract syntax tree (\AST) representing
       the {\cfg}. This is intended as a debugging tool to make the
       {\cfg} visible using a pretty-printer for the {\AST} (c.f.~module
-      \module{ast}). The function receives a \emph{mangler} for names.
-      This mangler must respect the {\PAL} rules for names. See module
-      \module{mangle} for details.
+      \module{ast}). The function receives a \emph{r} for names.
+      This r must respect the {\PAL} rules for names. See module
+      \module{} for details.
 
 \end{itemize}
 
@@ -615,9 +614,8 @@ let exit cfg =
     cfg#exit
 
 
-let node_ast node target =
-    node#ast (fun s -> s) target
-
+let node_ast node target = 
+    node#ast target
 
 let first cfg = 
     assert (cfg#enumerated);
@@ -771,15 +769,15 @@ let set_rtl     (node:node) (map:Rtl.rtl -> Rtl.rtl) =
 @
 
 The [[ast]] method returns an [[Ast.proc]] value. All names in the
-resulting {\AST} must be mangled using [[mangle]]. 
+resulting {\AST} must be d using [[]]. 
 
 <<implementation>>=
-let ast (cfg:cfg) (name:string) (mangle:string->string) (target:Target2.t) = 
+let ast (cfg:cfg) (name:string) (target:Target2.t) = 
     cfg#test;   (* check integrity *)    
     ( None
-    , mangle name
+    , name
     , []
-    , cfg#ast mangle target
+    , cfg#ast target
     )
 @ 
 % ------------------------------------------------------------------ 
@@ -813,9 +811,7 @@ class type cfg = object
     method enumeration: node array      (* req: enumerated *)
     method get_id:      unit -> int     (* unique *)
     method test:        unit            (* test integrity of this *)
-    method ast:         (mangle:string->string) 
-                        -> Target2.t
-                        -> Ast.body list 
+    method ast:         Target2.t -> Ast.body list 
 end
 @
 
@@ -866,10 +862,7 @@ end
 
 \item [[ast]] returns a {\PAL} representation of [[this]]. More
       precisely, it returns the abstract syntax of a procedure's body
-      that represents [[this]] {\cfg}. The [[ast]] method receives a
-      \emph{mangler} function that is used to transform labels and
-      symbolic constants within  [[this]] to {\PAL} syntax. See module
-      \module{mangle} for details.
+      that represents [[this]] {\cfg}. 
 
 \end{itemize}
 
@@ -904,9 +897,7 @@ and node = object
     method insert_assign_on_edges_from: Rtl.rtl -> before:node -> node (* new node *)
 
     method comment:     string          (* included into ast *)
-    method ast:         mangle:(string->string) 
-                        -> Target2.t
-                        -> Ast.body list
+    method ast:         Target2.t -> Ast.body list
     method linorder:    node option * node list (* immediate/delayed succs *)
 
     (* for debugging only *)
@@ -965,8 +956,8 @@ end
       dynamic dispatch.
 
 \item [[ast]] returns a representation of the node as abstract {\PAL}
-      syntax. The method receives a \emph{mangler} function that is used 
-      to transform labels into {\PAL} syntax. See \module{mangle} for
+      syntax. The method receives a \emph{r} function that is used 
+      to transform labels into {\PAL} syntax. See \module{} for
       details. 
 \end{itemize}      
 
@@ -1233,14 +1224,14 @@ object (this)
 
 
     (* create AST of this *)
-    method ast (mangle:string -> string) (target:Target2.t) =
+    method ast  (target:Target2.t) =
         let this = (this :> cfg) in
         if not this#enumerated then this#enumerate else ();
         let enum          = 
             match _enumeration with 
             | Some x -> x 
             | _      -> assert false                  in
-        let f node result = node#ast mangle target :: result in
+        let f node result = node#ast target :: result in
             List.concat (Array.fold_right f enum [])
             
 end
@@ -1362,9 +1353,9 @@ object(this)
                              "with succ: " ^ string_of_int n#id ^ "\n")
                          (this#succ) ""
 
-    method ast (mangle:string->string) (target:Target2.t) = 
+    method ast  (target:Target2.t) = 
         let this    = (this :> node) in
-        let label l = stmt (A.LabelStmt (mangle l#text)) in
+        let label l = stmt (A.LabelStmt (l#text)) in
         let labels  = List.map label _symbols in
         (**) let comment = stmt (A.CommentStmt (this#comment)) in 
         (*
@@ -1565,9 +1556,9 @@ link to its successor, but is not linked from any other node.
             )
         
 
-    method ast mangle target =
-        let labels = super#ast mangle target in
-        let s      = R2A.rtl mangle _rtl in
+    method ast target =
+        let labels = super#ast target in
+        let s      = R2A.rtl  _rtl in
             labels@[stmt s]
 
     method comment = super#comment ^ " assign"    
@@ -1596,8 +1587,8 @@ object (this)
 
     method comment = super#comment ^ " return"    
 
-    method ast mangle target =
-        let labels = super#ast mangle target    in
+    method ast target =
+        let labels = super#ast target    in
         let s      = A.ReturnStmt(None,None,[]) in
             labels@[stmt s]
         
@@ -1625,10 +1616,10 @@ object (this)
 
     method comment = super#comment ^ "goto"    
     
-    method ast mangle target =
-        let labels = super#ast mangle target      in
+    method ast target =
+        let labels = super#ast target      in
         let exp    = target.T.goto.T.project _rtl in
-        let exp    = R2A.expr mangle exp          in
+        let exp    = R2A.expr  exp    in
         let s      = A.GotoStmt (exp, [])         in
             labels@[stmt s]
 
@@ -1654,10 +1645,10 @@ object (this)
     
     method linorder = (None, [_exit])
     
-    method ast mangle target =
-        let labels = super#ast mangle target      in
+    method ast target =
+        let labels = super#ast target      in
         let exp    = target.T.jump.T.project _rtl in
-        let exp    = R2A.expr mangle exp          in
+        let exp    = R2A.expr  exp          in
         let s      = A.JumpStmt (None,exp, [],[]) in
             labels@[stmt s]
     
@@ -1692,10 +1683,10 @@ object (this)
     
     method comment = super#comment ^ " call"    
 
-    method ast mangle target =
-        let labels = super#ast mangle target      in
+    method ast target =
+        let labels = super#ast target      in
         let exp    = target.T.call.T.project _rtl in
-        let exp    = R2A.expr mangle exp          in
+        let exp    = R2A.expr  exp          in
         let s      = A.CallStmt ([], None, exp, [], [], []) in
             labels@[stmt s]
 
@@ -1730,10 +1721,10 @@ object (this)
     
     method comment = super#comment ^ " cutto"    
 
-    method ast mangle target =
-        let labels = super#ast mangle target      in
+    method ast target =
+        let labels = super#ast target      in
         let exp    = target.T.cutto.T.project _rtl in
-        let exp    = R2A.expr mangle exp          in
+        let exp    = R2A.expr  exp          in
         let s      = A.CutStmt (exp, [], [])      in
             labels@[stmt s]
     
@@ -1767,11 +1758,11 @@ object (this)
         ; _ifnot <- map _ifnot
         )
 
-    method ast mangle target =
-        let labels       = super#ast mangle target           in
+    method ast target =
+        let labels       = super#ast target           in
         let guard,label = target.T.branch.T.project _rtl     in
-        let guard        = R2A.expr mangle guard             in
-        let label        = R2A.expr mangle label             in
+        let guard        = R2A.expr  guard             in
+        let label        = R2A.expr  label             in
         let goto         = A.GotoStmt (label,[])             in
         let s            = A.IfStmt (guard, [stmt goto], []) in
             labels@[stmt s]
@@ -1819,8 +1810,8 @@ object (this)
                           (Register.print_set _kills)
           ) 
 
-    method ast mangle target =
-        let labels       = super#ast mangle target           in
+    method ast target =
+        let labels       = super#ast target           in
         let s            = A.CommentStmt("dataflow node")    in
             labels@[stmt s]
 

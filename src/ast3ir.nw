@@ -830,7 +830,7 @@ let freeze (p:Proc.t) =
         ()
 
 
-let proc env target mangle optimizer asm (cconv,name,args,bdy) = 
+let proc env target optimizer asm (cconv,name,args,bdy) = 
     let symbol,scope = match F.findv name env with
                       | _,(F.Label(F.Proc (sym,scope)),_) -> sym,scope
                       | _                          -> assert false in
@@ -898,7 +898,6 @@ let proc env target mangle optimizer asm (cconv,name,args,bdy) =
         ; Proc.target   = target
         ; Proc.temps    = Talloc.Multiple.for_spaces target.Target.spaces
         ; Proc.cfg      = cfg
-        ; Proc.mangle   = mangle
         ; Proc.incoming = incoming   (* incoming area *)   
         ; Proc.outgoing = outgoing   (* outgoing area *)   
         ; Proc.stackd   = stackd     (* stack data *)
@@ -1068,8 +1067,8 @@ Global data declarations, on the other hand, must be translated to
 assembly actions.
  
 <<Make memory declarations>>=
-let rec datum env target mangle asm = function
-    | A.DatumAt(x,_)        -> datum env target mangle asm x
+let rec datum env target asm = function
+    | A.DatumAt(x,_)        -> datum env target asm x
     | A.Label(n)            -> let s = match F.findv n env with
                                | _,(F.Label(F.Data(s)),_) -> s 
                                | _ -> assert false in 
@@ -1096,19 +1095,19 @@ accordingly.  The next time we come across a procedure, the properties
 including the span will be used.
 
 <<Make toplevel>>=
-let rec sspan env target mangle optimizer asm (e1,e2,ss) =    
+let rec sspan env target optimizer asm (e1,e2,ss) =    
     let key   = compile_const env target      e1 in
     let value = link_const    env target  asm e2 in
     (* construct props value, pass it to section. not implemented *)
-        List.iter (section env target mangle optimizer asm) ss 
+        List.iter (section env target optimizer asm) ss 
 
 <<Make toplevel>>=
-and section env target mangle optimizer asm = function
-    | A.SectionAt(x,_)     -> section env target mangle optimizer asm x
+and section env target optimizer asm = function
+    | A.SectionAt(x,_)     -> section env target optimizer asm x
     | A.Decl(d)            -> ()
-    | A.Datum( d)          -> datum   env target mangle asm d
-    | A.Procedure(p)       -> proc    env target mangle optimizer asm p
-    | A.SSpan ss           -> sspan   env target mangle optimizer asm ss
+    | A.Datum( d)          -> datum   env target asm d
+    | A.Procedure(p)       -> proc    env target optimizer asm p
+    | A.SSpan ss           -> sspan   env target optimizer asm ss
 @            
 
 What to do with top-level procedures? They should go into some section
@@ -1116,14 +1115,14 @@ because otherwise they will end up in whatever section is currently
 active which just seems wrong.
 
 <<Make toplevel>>=
-let rec toplevel env target mangle optimizer asm = function
-    | A.ToplevelAt(x, _)  -> toplevel env target mangle optimizer asm x
+let rec toplevel env target optimizer asm = function
+    | A.ToplevelAt(x, _)  -> toplevel env target optimizer asm x
     | A.Section(name, ss) -> 
-        let () = asm#section (mangle name)in  
-            List.iter (section env target mangle (*props*) optimizer asm) ss
+        let () = asm#section (name)in  
+            List.iter (section env target (*props*) optimizer asm) ss
     | A.TopDecl(d)        -> ()
     | A.TopProcedure(p)   -> let () = asm#section default_section  in 
-                              proc env target mangle optimizer asm p
+                              proc env target optimizer asm p
 @
 
 
@@ -1136,14 +1135,14 @@ everything goes into a meaningful section, the first action is to
 start the [[text]] section.
                       
 <<Make translate program>>=
-let program env target mangle asm optimizer tt = 
+let program env target asm optimizer tt = 
     let () = asm#section "text"           in
-        List.iter (toplevel env target mangle optimizer asm) tt
+        List.iter (toplevel env target optimizer asm) tt
 @
 
 The finger print [[disgest]] for global register declarations is a 16
 character long string of unprintable characters. We make it printable by
-applying the {\ocaml} escaping rules and [[mangle]]. Note: this symbol
+applying the {\ocaml} escaping rules. Note: this symbol
 should be exported but currently it is not.
 
 \begin{quote}\it
@@ -1155,7 +1154,6 @@ should be exported but currently it is not.
 
 <<Make translate program>>=
 let translate env target optimizer prog =
-    let mangle     = fun s -> s           in  (*XXX get rid of this! *)
     let base_sym   = F.symbol env "global base" in
     let base     = Rtl.link base_sym target.Target.pointersize in 
     let env
@@ -1170,7 +1168,7 @@ let translate env target optimizer prog =
                    ; asm#addloc area.Area.size
                    )
     in   
-        ( program env target mangle asm optimizer prog 
+        ( program env target asm optimizer prog 
         ; asm
         )
 @    

@@ -35,17 +35,14 @@ to a {\PAL} statement.
 % ------------------------------------------------------------------ 
 
 The [[translate]] function takes an {\rtl} and produces a statement
-list, describing the effect of the {\rtl}.  When a variable name is
-created from a name found in an {\rtl}, it is passed through a mangling
-function that is also passed to [[translate]].  This gives [[translate]]
-a chance to re-write names such that they obey to the {\PAL} syntax.
-See also module \module{mangle}.
+list, describing the effect of the {\rtl}.  
 
 <<rtl2ast.mli>>=
-val expr:      (string -> string) -> Rtl.exp  -> Ast.expr 
-val rtl:       (string -> string) -> Rtl.rtl  -> Ast.stmt 
-type verbosity = Low | High  (* default is High --- more accurate *)
-val verbosity : verbosity -> verbosity (* returns old value *)
+val expr:           Rtl.exp  -> Ast.expr 
+val rtl:            Rtl.rtl  -> Ast.stmt 
+
+type verbosity =    Low | High             (* default is High   *)
+val verbosity:      verbosity -> verbosity (* returns old value *)
 @
 
 % ------------------------------------------------------------------ 
@@ -69,76 +66,76 @@ let verbosity v =
 <<rtl2ast.ml>>=
 let bits n             = A.BitsTy n
 
-let const mangle = function
+let const = function
     | R.Bool(_)      -> assert false    (* impossible *)
     | R.Bits(b,w)    ->  A.Int((b,w)
                               ,if !the_verbosity = High 
                                then Some (bits w) 
                                else None)
                      
-    | R.Link(sym,w)  -> A.Fetch(A.Var(None, mangle (sym#text)))
-    | R.Late(name,w) -> A.Fetch(A.Var(None, mangle name)) (*XXX ok? *)
+    | R.Link(sym,w)  -> A.Fetch(A.Var(None, (sym#text)))
+    | R.Late(name,w) -> A.Fetch(A.Var(None, name)) (*XXX ok? *)
 @
 
 <<rtl2ast.ml>>=
-let rec expr' mangle = function
-    | R.Const c         -> const mangle c
-    | R.Fetch(loc,_)    -> A.Fetch(location' mangle loc)
-    | R.App((op,ww),ee) -> let actual e = (None, expr' mangle e) in
+let rec expr' = function
+    | R.Const c         -> const c
+    | R.Fetch(loc,_)    -> A.Fetch(location' loc)
+    | R.App((op,ww),ee) -> let actual e = (None, expr' e) in
                            match ee with
                            | [l; r] when op = "add" || op = "sub" ->
                                   let op = if op = "add" then "+" else "-" in
-                                  A.BinOp(expr' mangle l, op, expr' mangle r)
+                                  A.BinOp(expr' l, op, expr' r)
                            | _ -> A.PrimOp(op, List.map actual ee)
 @
 
 N.B. This code might possibly look up the location in a machine-dependent map
-in case it needs to mangle the name of a hardware register variable.
+in case it needs to the name of a hardware register variable.
 
 A translation of {\rtl} locations to {\PAL} is not semantic preserving
 because {\PAL} has no notion of spaces. The translation here turns a
 space into a (named) type, which is neither wrong nor right.
 
 <<rtl2ast.ml>>=
-and location' mangle = function 
+and location' = function 
     | R.Cell (sp,agg,width,e,ass) ->
-        let space   = mangle (Printf.sprintf "$%c" sp) in
+        let space   = (Printf.sprintf "$%c" sp) in
         let aligned = if ass = 1 then None else Some ass in 
-        A.Mem(A.AliasTy space,expr' mangle e,aligned)
-    | R.Var (name,_,width)       -> A.Var(None,mangle name)
+        A.Mem(A.AliasTy space,expr' e,aligned)
+    | R.Var (name,_,width)       -> A.Var(None,name)
     | R.Slice _                  -> assert false 
                                     (*should convert as special reg name*)
 
 let (@<<) f g  = fun x -> f (g x)
-let expr m     = expr' m @<< Rtl.Convert.exp
-let location m = location' m @<< Rtl.Convert.loc
+let expr       = expr'     @<< Rtl.Convert.exp
+let location   = location' @<< Rtl.Convert.loc
 
 @
 
 A [[kill]] is translated into an assignment of [[%undef()]].
 
 <<rtl2ast.ml>>=
-let rec effect mangle guard = function
+let rec effect guard = function
     | R.Kill   loc       -> 
         let width = Rtlutil.Width.loc  (Rtl.Revert.loc loc)       in
         let undef = R.App(("undef",[width]),[]) in
-            effect mangle guard (R.Store(loc, undef, width))
+            effect guard (R.Store(loc, undef, width))
     | R.Store  (loc,e,w) ->
-            (location' mangle loc,(guard, expr' mangle e))
+            (location' loc,(guard, expr' e))
 
-let guard mangle = function
+let guard = function
   | R.Const (R.Bool true) -> None
-  | g -> Some (expr' mangle g)  
+  | g -> Some (expr' g)  
 
-let guarded mangle (g, eff) = effect mangle (guard mangle g) eff
+let guarded (g, eff) = effect (guard g) eff
 
-let rtl' mangle (R.Rtl gg) = 
+let rtl' (R.Rtl gg) = 
   match gg with
   | [] -> A.EmptyStmt
   | _ :: _ ->
-    let pairs    = List.map (guarded mangle) gg in
+    let pairs    = List.map (guarded ) gg in
     let lhs, rhs = List.split pairs             in
         A.AssignStmt(lhs,rhs)
-let rtl mangle = rtl' mangle @<< Rtl.Convert.rtl
+let rtl = rtl' @<< Rtl.Convert.rtl
 @
 
