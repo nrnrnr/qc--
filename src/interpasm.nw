@@ -81,8 +81,8 @@ type reloc = Bits.bits Reloc.Simple.relocatable
 \subsubsection{Name Mangling}
 % ------------------------------------------------------------------ 
 
-Since we emit {\PAL} code we have to make sure that symbols respect the
-{\PAL} naming conventions. The \module{mangle} module provides name
+Since we emit Lua code we have to make sure that symbols respect
+naming conventions. The \module{mangle} module provides name
 mangling support. To highlight the destinction between names and symbols
 we prefix every symbol with [[sym]].
 
@@ -101,9 +101,11 @@ let spec =
         | _        -> false in
     let replace = function
         | x when id x -> x
-        | _           -> '@' 
+  (*    | _           -> '@'  *)
+        | x           -> x
         in    
-            { Mangle.preprocess = (fun x -> "sym:"^x)  
+            { (* Mangle.preprocess = (fun x -> "sym:"^x) *)
+              Mangle.preprocess = (fun x -> x)
             ; Mangle.replace    = replace
             ; Mangle.reserved   = reserved
             ; Mangle.avoid      = (fun x -> x ^ "$")
@@ -162,12 +164,12 @@ object (this)
 
     (* -- declare symbols -- *)
     method import s =
-        ( _imported <- Strutil.Set.add s _imported
+        ( _imported <- Strutil.Set.add (_mangle s) _imported
         ; new symbol (_mangle s)
         )
         
     method export s =
-        ( _exported <- Strutil.Set.add s _exported
+        ( _exported <- Strutil.Set.add (_mangle s) _exported
         ; new symbol (_mangle s)
         )
         
