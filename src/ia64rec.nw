@@ -1,0 +1,198 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{IA-64 Recognizer}
+
+This module provides code that recognizes IA-64 RTLs.
+It is implemented using BURG rules.
+
+<<ia64rec.mli>>=
+val to_asm : Rtl.rtl -> string
+@ 
+
+A few abbreviations.
+<<modules>>=
+module RU = Rtlutil
+module RP = Rtl.Private
+module SS = Space.Standard64
+module Down = Rtl.Dn
+@ 
+<<ia64rec.mlb>>=
+%head {: <<modules>> 
+         <<code to precede the labeler>>
+      :}
+%tail {: <<code to follow the labeler>>
+      :}
+
+%term <<names of types of terminals>>
+
+%%
+<<rules>>
+@ 
+
+\subsection{Utilities}
+<<code to precede the labeler>>=
+let cat = String.concat ""
+let infinity = Camlburg.inf_cost
+let guard b = if b then 0 else infinity
+
+exception Error of string
+let error msg = raise (Error msg)
+@ 
+
+\subsection{Recognizer terminals, nonterminals, and constructors}
+
+<<names of types of terminals>>=
+n w bits symbol
+@ 
+
+\subsection{Recognizer Rules}
+
+\paragraph{Constants}
+<<rules>>=
+const  : Bits(b:bits)  [{: guard (Bits.width b = 64) :}]  {: native b :}
+@ 
+
+\paragraph{Location Types}
+<<rules>>=
+reg   : Fetch(regl, w) {: regl :}
+regl  : Reg('r', n, w) {: "r" ^ string_of_int n :}
+
+eregl : regl  {: regl :}
+eregl : bregl {: bregl :}
+
+mem   : Fetch(meml, w) {: meml :}
+meml  : Mem(reg, w)    {: "[" ^ reg ^ "]" :} -- indirect
+
+reg_or_const : reg   {: reg :}
+reg_or_const : const {: const :}
+@ 
+
+\paragraph{Data movement}
+<<rules>>=
+-- register move
+inst : Store(dst:eregl, src:reg, w)
+  {: cat ["mov"; " " ; dst ; " = " ; src] :}
+
+-- memory load
+inst : Store(dst:regl, src:mem, w)
+  {: cat ["ld8"; " "; dst; " = "; src] :}
+
+inst : Store(dst:meml, src:reg, w)
+  {: cat ["st8"; " "; dst; " = "; src] :}
+@ 
+
+\paragraph{Arithmetic}
+<<rules>>=
+inst : Store(dst:regl, Add(x:reg_or_const, y:reg), w)
+  {: cat ["add"; " "; dst; " = "; x; ", "; y] :}
+@ 
+
+\paragraph{Control Flow}
+<<rules>>=
+-- return
+inst : Goto
+@ 
+
+\subsection{Interfacing {\rtl}s with the Expander}
+
+<<special cases for particular operators>>=
+| RP.App(("and", [w]), [x; y]) -> conAnd (exp x) (exp y)
+| RP.App(("or",  [w]), [x; y]) -> conOr (exp x) (exp y)
+| RP.App(("xor", [w]), [x; y]) -> conXor (exp x) (exp y)
+| RP.App(("com", [w]), [x])    -> conCom (exp x)
+| RP.App(("add", [w]), [x; y]) -> conAdd (exp x) (exp y)
+| RP.App(("sub", [w]), [x; y]) -> conSub (exp x) (exp y)
+(*| RP.App(("neg", [w]), [x])    -> conNeg (exp x)*)
+| RP.App(("mul_trunc", [w]), [x; y]) -> conMul_trunc (exp x) (exp y)
+| RP.App(("sx",  [n;w]), [x])   -> conSx  (exp x)
+| RP.App(("zx",  [n;w]), [x])   -> conZx  (exp x)
+| RP.App(("f2f", [n;w]), [x; rm])   -> conF2f n w (exp x) (* need to assert rm *)
+| RP.App(("f2i", [n;w]), [x; rm])   -> conF2i n w (exp x) (* need to assert rm *)
+| RP.App(("i2f", [n;w]), [x; rm])   -> conI2f n w (exp x) (* need to assert rm *)
+| RP.App(("fadd", [w]), [x; y; rm]) -> conFadd (exp x) (exp y) (* need to assert rm *)
+| RP.App(("fsub", [w]), [x; y; rm]) -> conFsub (exp x) (exp y) (* need to assert rm *)
+| RP.App(("fmul", [w]), [x; y; rm]) -> conFmul (exp x) (exp y) (* need to assert rm *)
+| RP.App(("fdiv", [w]), [x; y; rm]) -> conFdiv (exp x) (exp y) (* need to assert rm *)
+| RP.App(("fneg", [w]), [x]) -> conFneg (exp x)
+| RP.App(("fabs", [w]), [x]) -> conFabs (exp x)
+| RP.App(("lobits", [w;n]), [x])   -> conLobits (exp x) n
+| RP.App(("bitInsert", [w; n]), [lsb; dst; src]) ->
+    conBitInsert (exp lsb) (exp dst) (exp src)
+| RP.App(("bitExtract", [w; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
+| RP.App((("add"|"sub"|"mul_trunc"|"sx"|"zx"|"lobits"|"bitInsert"|
+           "bitExtract"|"fabs"|"fneg"|"fdiv"|"fmul"|"fsub"|"fadd"|"f2f"|"f2i"|
+           "i2f"|"and"|"or"|"xor"|"com") as op, ws), xs)->
+    Impossible.impossible
+      (Printf.sprintf
+         "operator %%%s specialized to %d widths & applied to %d arguments"
+         op (List.length ws) (List.length xs))
+@
+And now we convert between RTLs and Burg constructors.
+<<code to follow the labeler>>=  
+let const = function
+  | RP.Bool(true)             -> conTrue  ()
+  | RP.Bool(false)            -> conFalse ()
+  | RP.Link(s,w)              -> conLink s w
+  | RP.Late(s,w)              -> conLate s w
+  | RP.Bits(b)                -> conBits(b)
+<<code to follow the labeler>>=  
+let rec exp = function
+  | RP.Const(k)               -> const (k)
+  | RP.Fetch(l,w)             -> conFetch (loc l) w
+  <<special cases for particular operators>>
+  | RP.App((o,_),_)           -> error ("unknown operator " ^ o)
+<<code to follow the labeler>>=  
+and loc l = match l with
+  | RP.Mem('m', aff, w, e, ass) -> conMem (exp e) w
+  | RP.Mem('f', aff, w, e, ass) -> conFpreg (exp e)
+  | RP.Reg(sp, i, w)          -> conReg sp i w 
+  | RP.Mem(_, _, _, _, _)     -> error "non-mem, non-reg cell"
+  | RP.Var(s, i, w)           -> error "var found"
+  | RP.Slice(w,i,l)           -> (*error "cannot handle slice"*)
+      conSlice w i (loc l)
+@ 
+We recognize some special forms of single effects:
+<<code to follow the labeler>>=  
+and effect = function
+  | RP.Store(RP.Reg('c',i, w),r,_) 
+    when (i = SS.indices.SS.pc)       -> conGoto (exp r)
+  | RP.Store(RP.Reg('c',i, _), r, w)  -> error ("set $c["^string_of_int i^"]")
+  | RP.Store(l,e,w)                   -> conStore (loc l) (exp e) w
+  | RP.Kill(l)                        -> conKill (loc l)
+@
+We attempt to recognize register pairs.
+<<code to follow the labeler>>=  
+and regpair = function
+  | RP.App(("or",_),[ RP.App(("shl",_), [RP.App(("sx",_), [RP.Fetch(r1,_)]);_])
+                    ; RP.App(("sx",_),                    [RP.Fetch(r2,_)])])
+      -> conRegPair (loc r1) (loc r2)
+  | x -> Impossible.impossible "Argument is not a register pair"
+@
+<<code to follow the labeler>>=
+and rtl (RP.Rtl es) = geffects es
+and geffects = function
+    | [] -> conNop ()
+    | [g, s] -> guarded g s
+    | (g, s) :: t -> conPar (guarded g s) (geffects t)
+and guarded g eff = match g with
+| RP.Const(RP.Bool b) -> if b then effect eff else conNop()
+| _ -> conGuarded (exp g) (effect eff)
+@ 
+
+\subsection{The exported recognizer}
+
+We try not to immediately halt if something goes wrong but instead drop error messages into the assembly language.
+
+<<code to follow the labeler>>=
+let errmsg r msg =
+  List.iter prerr_string
+    [ "recognizer error: "; msg; " on "; RU.ToReadableString.rtl r; "\n" ]
+
+let to_asm r =
+  try
+    let plan = rtl (Down.rtl r) in
+    plan.inst.Camlburg.action ()
+  with 
+  | Camlburg.Uncovered -> cat [" not an instruction: " ; RU.ToReadableString.rtl r]
+  | Error msg -> (errmsg r msg; " error in recognizer: " ^ msg)
+@ 
