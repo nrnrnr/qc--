@@ -76,33 +76,37 @@ stream consists of the first character in the span and the first one
 following it.
 
 <<srcmap.mli>>= 
-
 type pos            = int
 type reg            = pos * pos
+@
+The [[null]] region is sometimes used a special value when no real
+region information is available and.
 
-@ Programmers think in terms of locations, describing a line and
+<<>>=
+val null            : reg
+@
+
+Programmers think in terms of locations, describing a line and
 column in a file; they have type [[loc]].  I have chosen to use a
 tuple to represent a location instead of a record type.  There is some
 danger of confusing lines and columns because they share the same
 type.  Records avoid this but have other drawbacks:  labels must be
 unique which leads to long names and ugly pattern matching.
 
-<<srcmap.mli>>=
- 
+<<>>=
 type location       = string    (* file   *)
                     * int       (* line   *)
                     * int       (* column *)
-
-@ A source map is a mutable data structure with an undisclosed
+@
+A source map is a mutable data structure with an undisclosed
 representation.  A source map should never be empty but should
 contain a synchronization point for [[pos]] 0.
 
-<<srcmap.mli>>=
+<<>>=
 type map
-
 val empty :         map
-
-@ A synchronization is announced with [[sync]].  It synchronizes a
+@
+A synchronization is announced with [[sync]].  It synchronizes a
 position [[pos]] with a [[location]].  A common case is the
 synchronization for a new line trough [[nl]].  A new line stays in the
 same file as the previous sync point and advances one line.  The
@@ -110,40 +114,39 @@ same file as the previous sync point and advances one line.  The
 line.  Another common case are tab characters which we currently
 ignore.
 
-<<srcmap.mli>>=
+<<>>=
 val sync :          map -> pos -> location -> unit
 val nl :            map -> pos -> unit
-
-@ [[last]] returns the location of the last sync point. It is useful
+@
+[[last]] returns the location of the last sync point. It is useful
 to get the current file name and line number.
 
-<<srcmap.mli>>=
+<<>>=
 val last :          map -> location
-
-@ The corresponding location for a position can be obtained with
+@
+The corresponding location for a position can be obtained with
 [[location]].  For debugging a source map can be dumped to stdout
 using [[dump]]. 
 
-<<srcmap.mli>>=
+<<>>=
 val location :      map -> pos -> location
 val dump:           map -> unit
-
-@ To make positions meaningful they can be bundled with a source map
+@
+To make positions meaningful they can be bundled with a source map
 that keeps track of their origins. 
 
-<<srcmap.mli>>= 
+<<>>= 
 type point          = map * pos
 type region         = map * reg
+@
+The [[Str]] module provides string representations for points and regions.
 
-@ The [[Str]] module provides string representations for points and regions.
-
-<<srcmap.mli>>=
+<<>>=
 module Str:
 sig
     val point       : point  -> string
     val region      : region -> string
 end
-
 @
 
 % ------------------------------------------------------------------  
@@ -161,6 +164,8 @@ type reg            = pos * pos
 type location       = string    (* file   *)
                     * int       (* line   *)
                     * int       (* column *)
+<<>>=
+let null = (0,0)
 @
 
 A [[syncpoint]] associates a [[pos]] with a [[location]]. To
@@ -349,7 +354,10 @@ module Str = struct
         let (file,line,column) = location map pos in
             Printf.sprintf "file %s, line %d, character %d" file line column
     
-    let region (map,(left,right)) = 
+    let region (map,reg) =
+        match reg with 
+        | (0,0)        -> Printf.sprintf "??"
+        | (left,right) -> 
         let (file1,l1,col1) = location map left   in
         let (file2,l2,col2) = location map right  in
             if file1 = file2 && l1 = l2 then
