@@ -206,10 +206,34 @@ val of_stringc  : string -> width -> bits
 @
 
 [[bits]] values can be created from integers.
+For each integer, we imagine a two's-complement representation with an
+infinite number of bits.
+For any particular integer, only finitely many bits at the least
+significant end may vary; the remaining infinite number of bits are
+all identical.
+If the integer is nonnegative, these identical bits are all zeroes;
+if the integer is negative, they are all ones.
+We refer to these identical bits as ``the sign bit.''
+
+The \emph{natural width} of an integer value is the one less than the
+minimum~$i$ 
+such that $\forall k \ge i$, bit~$k$ is identical to the sign bit.
+For example, the width of the integer value~7 is~3.
+
+If $\mathit{cvt}$ stands for any of the four functions below, calling
+$\mathit{cvt}~i~k$ raises the [[Size]] exception if and only if $k$~is
+less than the natural width of~$i$.
+If the conversion does \emph{not} raise the [[Size]] exception, the
+resulting bit vector contains bits~0 through $k-1$ of (the two's
+complement representation of)~$i$, where bit~$0$ is the least
+significant bit.
+A~consequence of this definition is that whenever the conversion does
+\emph{not} raise the [[Size]] exception, we are guaranteed that
+whenever $k' >= k$, bit~$k'$ of~$i$ is identical to bit~$k-1$ of~$i$. 
 <<interface>>=
-val of_int       : int       -> width -> bits  (* Size *)
+val of_int       : int          -> width -> bits  (* Size *)
+val of_int64     : int64        -> width -> bits  (* Size *)
 val of_std_int   : Base.std_int -> width -> bits  (* Size *)
-val of_int64     : int64     -> width -> bits  (* Size *)
 val of_nativeint : Base.std_nativeint -> width -> bits  (* Size *)
 @
 
@@ -220,6 +244,8 @@ val of_nativeint : Base.std_nativeint -> width -> bits  (* Size *)
 A [[bits]] value can be converted to an integer or string.  If the
 [[bits]] do not fit into an [[int]], [[Overflow]] is raised. 
 
+\emph{Each of these functions should come in two versions: one that
+sign-extends and one that zero-extends.}
 <<interface>>=
 type radix      = Oct
                 | Dec
