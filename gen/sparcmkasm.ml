@@ -88,42 +88,42 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let ldsb address rd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-                  "LDSB ") (Sledlib.String.of_string "[")) 
+                  "ldsb ") (Sledlib.String.of_string "[")) 
               (print_address address)) (Sledlib.String.of_string "], ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
     
     let ldsh address rd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-                  "LDSH ") (Sledlib.String.of_string "[")) 
+                  "ldsh ") (Sledlib.String.of_string "[")) 
               (print_address address)) (Sledlib.String.of_string "], ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
     
     let ldub address rd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-                  "LDUB ") (Sledlib.String.of_string "[")) 
+                  "ldub ") (Sledlib.String.of_string "[")) 
               (print_address address)) (Sledlib.String.of_string "], ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
     
     let lduh address rd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-                  "LDUH ") (Sledlib.String.of_string "[")) 
+                  "lduh ") (Sledlib.String.of_string "[")) 
               (print_address address)) (Sledlib.String.of_string "], ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
     
     let ld address rd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-                  "LD ") (Sledlib.String.of_string "[")) 
+                  "ld ") (Sledlib.String.of_string "[")) 
               (print_address address)) (Sledlib.String.of_string "], ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
     
     let ldstub address rd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-                  "LDSTUB ") (Sledlib.String.of_string "[")) 
+                  "ldstub ") (Sledlib.String.of_string "[")) 
               (print_address address)) (Sledlib.String.of_string "], ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
     
@@ -137,7 +137,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let ldd address rd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-                  "LDD ") (Sledlib.String.of_string "[")) 
+                  "ldd ") (Sledlib.String.of_string "[")) 
               (print_address address)) (Sledlib.String.of_string "], ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
     
@@ -172,28 +172,28 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let stb rd address = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.of_string "STB ") (print_unsigned_rs2 rd)) 
+                (Sledlib.String.of_string "stb ") (print_unsigned_rs2 rd)) 
               (Sledlib.String.of_string ", [")) (print_address address)) 
           (Sledlib.String.of_string "]")) (Sledlib.String.of_string "\n")
     
     let sth rd address = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.of_string "STH ") (print_unsigned_rs2 rd)) 
+                (Sledlib.String.of_string "sth ") (print_unsigned_rs2 rd)) 
               (Sledlib.String.of_string ", [")) (print_address address)) 
           (Sledlib.String.of_string "]")) (Sledlib.String.of_string "\n")
     
     let st rd address = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.of_string "ST ") (print_unsigned_rs2 rd)) 
+                (Sledlib.String.of_string "st ") (print_unsigned_rs2 rd)) 
               (Sledlib.String.of_string ", [")) (print_address address)) 
           (Sledlib.String.of_string "]")) (Sledlib.String.of_string "\n")
     
     let std rd address = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.of_string "STD ") (print_unsigned_rs2 rd)) 
+                (Sledlib.String.of_string "std ") (print_unsigned_rs2 rd)) 
               (Sledlib.String.of_string ", [")) (print_address address)) 
           (Sledlib.String.of_string "]")) (Sledlib.String.of_string "\n")
     
@@ -235,7 +235,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let ldsba regaddr asi rd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                  (Sledlib.String.cat (Sledlib.String.of_string "LDSBA ") 
+                  (Sledlib.String.cat (Sledlib.String.of_string "ldsba ") 
                     (Sledlib.String.of_string "[")) (print_regaddr regaddr)) 
                 (Sledlib.String.of_string "]")) (print_unsigned_asi asi)) 
             (Sledlib.String.of_string ", ")) (print_unsigned_rs2 rd)) 
@@ -244,7 +244,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let ldsha regaddr asi rd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                  (Sledlib.String.cat (Sledlib.String.of_string "LDSHA ") 
+                  (Sledlib.String.cat (Sledlib.String.of_string "ldsha ") 
                     (Sledlib.String.of_string "[")) (print_regaddr regaddr)) 
                 (Sledlib.String.of_string "]")) (print_unsigned_asi asi)) 
             (Sledlib.String.of_string ", ")) (print_unsigned_rs2 rd)) 
@@ -253,7 +253,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let lduba regaddr asi rd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                  (Sledlib.String.cat (Sledlib.String.of_string "LDUBA ") 
+                  (Sledlib.String.cat (Sledlib.String.of_string "lduba ") 
                     (Sledlib.String.of_string "[")) (print_regaddr regaddr)) 
                 (Sledlib.String.of_string "]")) (print_unsigned_asi asi)) 
             (Sledlib.String.of_string ", ")) (print_unsigned_rs2 rd)) 
@@ -262,7 +262,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let lduha regaddr asi rd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                  (Sledlib.String.cat (Sledlib.String.of_string "LDUHA ") 
+                  (Sledlib.String.cat (Sledlib.String.of_string "lduha ") 
                     (Sledlib.String.of_string "[")) (print_regaddr regaddr)) 
                 (Sledlib.String.of_string "]")) (print_unsigned_asi asi)) 
             (Sledlib.String.of_string ", ")) (print_unsigned_rs2 rd)) 
@@ -271,7 +271,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let lda regaddr asi rd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                  (Sledlib.String.cat (Sledlib.String.of_string "LDA ") 
+                  (Sledlib.String.cat (Sledlib.String.of_string "lda ") 
                     (Sledlib.String.of_string "[")) (print_regaddr regaddr)) 
                 (Sledlib.String.of_string "]")) (print_unsigned_asi asi)) 
             (Sledlib.String.of_string ", ")) (print_unsigned_rs2 rd)) 
@@ -280,7 +280,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let ldstuba regaddr asi rd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                  (Sledlib.String.cat (Sledlib.String.of_string "LDSTUBA ") 
+                  (Sledlib.String.cat (Sledlib.String.of_string "ldstuba ") 
                     (Sledlib.String.of_string "[")) (print_regaddr regaddr)) 
                 (Sledlib.String.of_string "]")) (print_unsigned_asi asi)) 
             (Sledlib.String.of_string ", ")) (print_unsigned_rs2 rd)) 
@@ -289,7 +289,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let swapa regaddr asi rd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                  (Sledlib.String.cat (Sledlib.String.of_string "SWAPA ") 
+                  (Sledlib.String.cat (Sledlib.String.of_string "swapa ") 
                     (Sledlib.String.of_string "[")) (print_regaddr regaddr)) 
                 (Sledlib.String.of_string "]")) (print_unsigned_asi asi)) 
             (Sledlib.String.of_string ", ")) (print_unsigned_rs2 rd)) 
@@ -298,7 +298,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let ldda regaddr asi rd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                  (Sledlib.String.cat (Sledlib.String.of_string "LDDA ") 
+                  (Sledlib.String.cat (Sledlib.String.of_string "ldda ") 
                     (Sledlib.String.of_string "[")) (print_regaddr regaddr)) 
                 (Sledlib.String.of_string "]")) (print_unsigned_asi asi)) 
             (Sledlib.String.of_string ", ")) (print_unsigned_rs2 rd)) 
@@ -307,7 +307,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let stba rd regaddr asi = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                  (Sledlib.String.of_string "STBA ") (print_unsigned_rs2 rd)) 
+                  (Sledlib.String.of_string "stba ") (print_unsigned_rs2 rd)) 
                 (Sledlib.String.of_string ", [")) (print_regaddr regaddr)) 
             (Sledlib.String.of_string "]")) (print_unsigned_asi asi)) 
         (Sledlib.String.of_string "\n")
@@ -315,7 +315,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let stha rd regaddr asi = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                  (Sledlib.String.of_string "STHA ") (print_unsigned_rs2 rd)) 
+                  (Sledlib.String.of_string "stha ") (print_unsigned_rs2 rd)) 
                 (Sledlib.String.of_string ", [")) (print_regaddr regaddr)) 
             (Sledlib.String.of_string "]")) (print_unsigned_asi asi)) 
         (Sledlib.String.of_string "\n")
@@ -323,7 +323,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let sta rd regaddr asi = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                  (Sledlib.String.of_string "STA ") (print_unsigned_rs2 rd)) 
+                  (Sledlib.String.of_string "sta ") (print_unsigned_rs2 rd)) 
                 (Sledlib.String.of_string ", [")) (print_regaddr regaddr)) 
             (Sledlib.String.of_string "]")) (print_unsigned_asi asi)) 
         (Sledlib.String.of_string "\n")
@@ -331,7 +331,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let stda rd regaddr asi = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
             (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                  (Sledlib.String.of_string "STDA ") (print_unsigned_rs2 rd)) 
+                  (Sledlib.String.of_string "stda ") (print_unsigned_rs2 rd)) 
                 (Sledlib.String.of_string ", [")) (print_regaddr regaddr)) 
             (Sledlib.String.of_string "]")) (print_unsigned_asi asi)) 
         (Sledlib.String.of_string "\n")
@@ -442,13 +442,13 @@ module M (R : Sledlib.RELOC_PRINT) = struct
           (print_unsigned_rs1i rdi)) (Sledlib.String.of_string "\n")
     
     let stbar () = 
-      Sledlib.String.cat (Sledlib.String.of_string "STBAR") 
+      Sledlib.String.cat (Sledlib.String.of_string "stbar") 
         (Sledlib.String.of_string "\n")
     
     let and_ rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "AND ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "and ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -456,7 +456,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let andcc rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "ANDcc ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "andcc ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -464,7 +464,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let andn rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "ANDN ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "andn ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -472,7 +472,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let andncc rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "ANDNcc ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "andncc ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -480,7 +480,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let or_ rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "OR ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "or ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -488,7 +488,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let orcc rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "ORcc ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "orcc ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -496,7 +496,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let orn rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "ORN ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "orn ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -504,7 +504,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let orncc rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "ORNcc ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "orncc ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -512,7 +512,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let xor rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "XOR ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "xor ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -520,7 +520,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let xorcc rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "XORcc ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "xorcc ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -528,7 +528,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let xnor rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "XNOR ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "xnor ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -536,7 +536,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let xnorcc rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "XNORcc ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "xnorcc ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -544,7 +544,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let sll rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "SLL ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "sll ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -552,7 +552,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let srl rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "SRL ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "srl ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -560,7 +560,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let sra rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "SRA ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "sra ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -568,7 +568,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let add rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "ADD ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "add ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -576,7 +576,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let addcc rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "ADDcc ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "addcc ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -584,7 +584,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let addx rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "ADDX ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "addx ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -592,7 +592,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let addxcc rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "ADDXcc ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "addxcc ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -600,7 +600,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let taddcc rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "TADDcc ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "taddcc ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -608,7 +608,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let taddcctv rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "TADDccTV ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "taddcctv ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -616,7 +616,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let sub rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "SUB ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "sub ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -624,7 +624,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let subcc rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "SUBcc ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "subcc ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -632,7 +632,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let subx rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "SUBX ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "subx ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -640,7 +640,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let subxcc rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "SUBXcc ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "subxcc ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -648,7 +648,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let tsubcc rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "TSUBcc ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "tsubcc ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -656,7 +656,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let tsubcctv rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "TSUBccTV ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "tsubcctv ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -664,7 +664,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let umul rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "UMUL ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "umul ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -672,7 +672,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let smul rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "SMUL ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "smul ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -680,7 +680,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let umulcc rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "UMULcc ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "umulcc ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -688,7 +688,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let smulcc rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "SMULcc ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "smulcc ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -696,7 +696,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let udiv rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "UDIV ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "udiv ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -704,7 +704,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let sdiv rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "SDIV ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "sdiv ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -712,7 +712,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let udivcc rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "UDIVcc ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "udivcc ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -720,7 +720,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let sdivcc rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "SDIVcc ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "sdivcc ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -728,7 +728,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let save rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "SAVE ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "save ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
@@ -736,489 +736,489 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let restore rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "RESTORE ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "restore ") 
                   (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
     
     let bn target = 
-      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "BN ") 
+      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "bn ") 
           (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bn_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BN,a ") (R.to_string print_unsigned_target target)) 
+            "bn,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let be target = 
-      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "BE ") 
+      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "be ") 
           (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let be_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BE,a ") (R.to_string print_unsigned_target target)) 
+            "be,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let ble target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BLE ") (R.to_string print_unsigned_target target)) 
+            "ble ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let ble_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BLE,a ") (R.to_string print_unsigned_target target)) 
+            "ble,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bl target = 
-      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "BL ") 
+      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "bl ") 
           (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bl_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BL,a ") (R.to_string print_unsigned_target target)) 
+            "bl,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bleu target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BLEU ") (R.to_string print_unsigned_target target)) 
+            "bleu ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bleu_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BLEU,a ") (R.to_string print_unsigned_target target)) 
+            "bleu,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bcs target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BCS ") (R.to_string print_unsigned_target target)) 
+            "bcs ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bcs_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BCS,a ") (R.to_string print_unsigned_target target)) 
+            "bcs,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bneg target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BNEG ") (R.to_string print_unsigned_target target)) 
+            "bneg ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bneg_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BNEG,a ") (R.to_string print_unsigned_target target)) 
+            "bneg,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bvs target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BVS ") (R.to_string print_unsigned_target target)) 
+            "bvs ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bvs_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BVS,a ") (R.to_string print_unsigned_target target)) 
+            "bvs,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let ba target = 
-      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "BA ") 
+      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "ba ") 
           (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let ba_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BA,a ") (R.to_string print_unsigned_target target)) 
+            "ba,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bne target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BNE ") (R.to_string print_unsigned_target target)) 
+            "bne ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bne_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BNE,a ") (R.to_string print_unsigned_target target)) 
+            "bne,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bg target = 
-      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "BG ") 
+      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "bg ") 
           (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bg_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BG,a ") (R.to_string print_unsigned_target target)) 
+            "bg,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bge target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BGE ") (R.to_string print_unsigned_target target)) 
+            "bge ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bge_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BGE,a ") (R.to_string print_unsigned_target target)) 
+            "bge,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bgu target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BGU ") (R.to_string print_unsigned_target target)) 
+            "bgu ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bgu_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BGU,a ") (R.to_string print_unsigned_target target)) 
+            "bgu,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bcc target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BCC ") (R.to_string print_unsigned_target target)) 
+            "bcc ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bcc_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BCC,a ") (R.to_string print_unsigned_target target)) 
+            "bcc,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bpos target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BPOS ") (R.to_string print_unsigned_target target)) 
+            "bpos ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bpos_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BPOS,a ") (R.to_string print_unsigned_target target)) 
+            "bpos,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bvc target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BVC ") (R.to_string print_unsigned_target target)) 
+            "bvc ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let bvc_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "BVC,a ") (R.to_string print_unsigned_target target)) 
+            "bvc,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbn target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBN ") (R.to_string print_unsigned_target target)) 
+            "fbn ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbn_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBN,a ") (R.to_string print_unsigned_target target)) 
+            "fbn,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbne target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBNE ") (R.to_string print_unsigned_target target)) 
+            "fbne ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbne_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBNE,a ") (R.to_string print_unsigned_target target)) 
+            "fbne,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fblg target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBLG ") (R.to_string print_unsigned_target target)) 
+            "fblg ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fblg_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBLG,a ") (R.to_string print_unsigned_target target)) 
+            "fblg,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbul target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBUL ") (R.to_string print_unsigned_target target)) 
+            "fbul ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbul_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBUL,a ") (R.to_string print_unsigned_target target)) 
+            "fbul,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbl target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBL ") (R.to_string print_unsigned_target target)) 
+            "fbl ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbl_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBL,a ") (R.to_string print_unsigned_target target)) 
+            "fbl,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbug target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBUG ") (R.to_string print_unsigned_target target)) 
+            "fbug ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbug_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBUG,a ") (R.to_string print_unsigned_target target)) 
+            "fbug,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbg target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBG ") (R.to_string print_unsigned_target target)) 
+            "fbg ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbg_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBG,a ") (R.to_string print_unsigned_target target)) 
+            "fbg,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbu target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBU ") (R.to_string print_unsigned_target target)) 
+            "fbu ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbu_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBU,a ") (R.to_string print_unsigned_target target)) 
+            "fbu,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fba target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBA ") (R.to_string print_unsigned_target target)) 
+            "fba ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fba_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBA,a ") (R.to_string print_unsigned_target target)) 
+            "fba,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbe target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBE ") (R.to_string print_unsigned_target target)) 
+            "fbe ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbe_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBE,a ") (R.to_string print_unsigned_target target)) 
+            "fbe,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbue target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBUE ") (R.to_string print_unsigned_target target)) 
+            "fbue ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbue_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBUE,a ") (R.to_string print_unsigned_target target)) 
+            "fbue,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbge target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBGE ") (R.to_string print_unsigned_target target)) 
+            "fbge ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbge_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBGE,a ") (R.to_string print_unsigned_target target)) 
+            "fbge,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbuge target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBUGE ") (R.to_string print_unsigned_target target)) 
+            "fbuge ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbuge_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBUGE,a ") (R.to_string print_unsigned_target target)) 
+            "fbuge,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fble target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBLE ") (R.to_string print_unsigned_target target)) 
+            "fble ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fble_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBLE,a ") (R.to_string print_unsigned_target target)) 
+            "fble,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbule target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBULE ") (R.to_string print_unsigned_target target)) 
+            "fbule ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbule_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBULE,a ") (R.to_string print_unsigned_target target)) 
+            "fbule,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbo target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBO ") (R.to_string print_unsigned_target target)) 
+            "fbo ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let fbo_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FBO,a ") (R.to_string print_unsigned_target target)) 
+            "fbo,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cbn target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CBN ") (R.to_string print_unsigned_target target)) 
+            "cbn ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cbn_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CBN,a ") (R.to_string print_unsigned_target target)) 
+            "cbn,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb123 target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB123 ") (R.to_string print_unsigned_target target)) 
+            "cb123 ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb123_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB123,a ") (R.to_string print_unsigned_target target)) 
+            "cb123,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb12 target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB12 ") (R.to_string print_unsigned_target target)) 
+            "cb12 ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb12_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB12,a ") (R.to_string print_unsigned_target target)) 
+            "cb12,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb13 target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB13 ") (R.to_string print_unsigned_target target)) 
+            "cb13 ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb13_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB13,a ") (R.to_string print_unsigned_target target)) 
+            "cb13,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb1 target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB1 ") (R.to_string print_unsigned_target target)) 
+            "cb1 ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb1_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB1,a ") (R.to_string print_unsigned_target target)) 
+            "cb1,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb23 target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB23 ") (R.to_string print_unsigned_target target)) 
+            "cb23 ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb23_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB23,a ") (R.to_string print_unsigned_target target)) 
+            "cb23,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb2 target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB2 ") (R.to_string print_unsigned_target target)) 
+            "cb2 ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb2_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB2,a ") (R.to_string print_unsigned_target target)) 
+            "cb2,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb3 target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB3 ") (R.to_string print_unsigned_target target)) 
+            "cb3 ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb3_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB3,a ") (R.to_string print_unsigned_target target)) 
+            "cb3,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cba target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CBA ") (R.to_string print_unsigned_target target)) 
+            "cba ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cba_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CBA,a ") (R.to_string print_unsigned_target target)) 
+            "cba,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb0 target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB0 ") (R.to_string print_unsigned_target target)) 
+            "cb0 ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb0_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB0,a ") (R.to_string print_unsigned_target target)) 
+            "cb0,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb03 target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB03 ") (R.to_string print_unsigned_target target)) 
+            "cb03 ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb03_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB03,a ") (R.to_string print_unsigned_target target)) 
+            "cb03,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb02 target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB02 ") (R.to_string print_unsigned_target target)) 
+            "cb02 ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb02_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB02,a ") (R.to_string print_unsigned_target target)) 
+            "cb02,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb023 target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB023 ") (R.to_string print_unsigned_target target)) 
+            "cb023 ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb023_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB023,a ") (R.to_string print_unsigned_target target)) 
+            "cb023,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb01 target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB01 ") (R.to_string print_unsigned_target target)) 
+            "cb01 ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb01_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB01,a ") (R.to_string print_unsigned_target target)) 
+            "cb01,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb013 target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB013 ") (R.to_string print_unsigned_target target)) 
+            "cb013 ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb013_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB013,a ") (R.to_string print_unsigned_target target)) 
+            "cb013,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb012 target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB012 ") (R.to_string print_unsigned_target target)) 
+            "cb012 ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let cb012_a target = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "CB012,a ") (R.to_string print_unsigned_target target)) 
+            "cb012,a ") (R.to_string print_unsigned_target target)) 
         (Sledlib.String.of_string "\n")
     
     let call target = 
@@ -1228,116 +1228,116 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     
     let fmovs fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FMOVs ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fmovs ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fnegs fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FNEGs ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fnegs ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fabss fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FABSs ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fabss ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fsqrts fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FSQRTs ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fsqrts ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fsqrtd fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FSQRTd ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fsqrtd ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fsqrtq fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FSQRTq ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fsqrtq ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fitos fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FiTOs ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fitos ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fstoi fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FsTOi ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fstoi ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fitod fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FiTOd ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fitod ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fstod fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FsTOd ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fstod ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fitoq fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FiTOq ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fitoq ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fstoq fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FsTOq ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fstoq ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fdtoi fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FdTOi ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fdtoi ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fdtos fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FdTOs ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fdtos ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fqtos fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FqTOs ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fqtos ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fqtoi fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FqTOi ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fqtoi ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fqtod fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FqTOd ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fqtod ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fdtoq fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FdTOq ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fdtoq ") 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fadds fs1 fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "FADDs ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "fadds ") 
                   (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
@@ -1345,7 +1345,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let fsubs fs1 fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "FSUBs ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "fsubs ") 
                   (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
@@ -1353,7 +1353,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let fmuls fs1 fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "FMULs ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "fmuls ") 
                   (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
@@ -1361,7 +1361,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let fdivs fs1 fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "FDIVs ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "fdivs ") 
                   (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
@@ -1369,7 +1369,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let faddd fs1 fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "FADDd ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "faddd ") 
                   (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
@@ -1377,7 +1377,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let fsubd fs1 fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "FSUBd ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "fsubd ") 
                   (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
@@ -1385,7 +1385,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let fmuld fs1 fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "FMULd ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "fmuld ") 
                   (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
@@ -1393,7 +1393,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let fdivd fs1 fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "FDIVd ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "fdivd ") 
                   (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
@@ -1401,7 +1401,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let faddq fs1 fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "FADDq ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "faddq ") 
                   (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
@@ -1409,7 +1409,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let fsubq fs1 fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "FSUBq ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "fsubq ") 
                   (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
@@ -1417,7 +1417,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let fmulq fs1 fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "FMULq ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "fmulq ") 
                   (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
@@ -1425,7 +1425,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let fdivq fs1 fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "FDIVq ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "fdivq ") 
                   (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
@@ -1433,7 +1433,7 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let fsmuld fs1 fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "FsMULd ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "fsmuld ") 
                   (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
@@ -1441,132 +1441,132 @@ module M (R : Sledlib.RELOC_PRINT) = struct
     let fdmulq fs1 fs2 fd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "FdMULq ") 
+                (Sledlib.String.cat (Sledlib.String.of_string "fdmulq ") 
                   (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
               (print_unsigned_fd fs2)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fd)) (Sledlib.String.of_string "\n")
     
     let fcmps fs1 fs2 = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FCMPs ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fcmps ") 
               (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fs2)) (Sledlib.String.of_string "\n")
     
     let fcmpes fs1 fs2 = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FCMPEs ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fcmpes ") 
               (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fs2)) (Sledlib.String.of_string "\n")
     
     let fcmpd fs1 fs2 = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FCMPd ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fcmpd ") 
               (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fs2)) (Sledlib.String.of_string "\n")
     
     let fcmped fs1 fs2 = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FCMPEd ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fcmped ") 
               (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fs2)) (Sledlib.String.of_string "\n")
     
     let fcmpq fs1 fs2 = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FCMPq ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fcmpq ") 
               (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fs2)) (Sledlib.String.of_string "\n")
     
     let fcmpeq fs1 fs2 = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "FCMPEq ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "fcmpeq ") 
               (print_unsigned_fd fs1)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_fd fs2)) (Sledlib.String.of_string "\n")
     
     let nop () = 
-      Sledlib.String.cat (Sledlib.String.of_string "NOP") 
+      Sledlib.String.cat (Sledlib.String.of_string "nop") 
         (Sledlib.String.of_string "\n")
     
     let flush address = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "FLUSH ") (print_address address)) (Sledlib.String.of_string "\n")
+            "flush ") (print_address address)) (Sledlib.String.of_string "\n")
     
     let jmpl address rd = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-            (Sledlib.String.cat (Sledlib.String.of_string "JMPL ") 
+            (Sledlib.String.cat (Sledlib.String.of_string "jmpl ") 
               (print_address address)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
     
     let rett address = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "RETT ") (print_address address)) (Sledlib.String.of_string "\n")
+            "rett ") (print_address address)) (Sledlib.String.of_string "\n")
     
     let tn address = 
-      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "TN ") 
+      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "tn ") 
           (print_address address)) (Sledlib.String.of_string "\n")
     
     let te address = 
-      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "TE ") 
+      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "te ") 
           (print_address address)) (Sledlib.String.of_string "\n")
     
     let tle address = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "TLE ") (print_address address)) (Sledlib.String.of_string "\n")
+            "tle ") (print_address address)) (Sledlib.String.of_string "\n")
     
     let tl address = 
-      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "TL ") 
+      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "tl ") 
           (print_address address)) (Sledlib.String.of_string "\n")
     
     let tleu address = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "TLEU ") (print_address address)) (Sledlib.String.of_string "\n")
+            "tleu ") (print_address address)) (Sledlib.String.of_string "\n")
     
     let tcs address = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "TCS ") (print_address address)) (Sledlib.String.of_string "\n")
+            "tcs ") (print_address address)) (Sledlib.String.of_string "\n")
     
     let tneg address = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "TNEG ") (print_address address)) (Sledlib.String.of_string "\n")
+            "tneg ") (print_address address)) (Sledlib.String.of_string "\n")
     
     let tvs address = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "TVS ") (print_address address)) (Sledlib.String.of_string "\n")
+            "tvs ") (print_address address)) (Sledlib.String.of_string "\n")
     
     let ta address = 
-      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "TA ") 
+      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "ta ") 
           (print_address address)) (Sledlib.String.of_string "\n")
     
     let tne address = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "TNE ") (print_address address)) (Sledlib.String.of_string "\n")
+            "tne ") (print_address address)) (Sledlib.String.of_string "\n")
     
     let tg address = 
-      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "TG ") 
+      Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string "tg ") 
           (print_address address)) (Sledlib.String.of_string "\n")
     
     let tge address = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "TGE ") (print_address address)) (Sledlib.String.of_string "\n")
+            "tge ") (print_address address)) (Sledlib.String.of_string "\n")
     
     let tgu address = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "TGU ") (print_address address)) (Sledlib.String.of_string "\n")
+            "tgu ") (print_address address)) (Sledlib.String.of_string "\n")
     
     let tcc address = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "TCC ") (print_address address)) (Sledlib.String.of_string "\n")
+            "tcc ") (print_address address)) (Sledlib.String.of_string "\n")
     
     let tpos address = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "TPOS ") (print_address address)) (Sledlib.String.of_string "\n")
+            "tpos ") (print_address address)) (Sledlib.String.of_string "\n")
     
     let tvc address = 
       Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.of_string 
-            "TVC ") (print_address address)) (Sledlib.String.of_string "\n")
+            "tvc ") (print_address address)) (Sledlib.String.of_string "\n")
     
     let unimp imm22 = 
       Sledlib.String.cat (Sledlib.String.cat 
-          (Sledlib.String.of_string "UNIMP ") (print_unsigned_imm22 imm22)) 
+          (Sledlib.String.of_string "unimp ") (print_unsigned_imm22 imm22)) 
         (Sledlib.String.of_string "\n")
     
     let sethi n rd = 
