@@ -435,11 +435,13 @@ The basic blocks are enumerated in no particular order.
 Within a basic block, we enumerate nodes in order.
 If the client mutates the graph, we make no guarantees about what
 nodes may be visited.
+We can also fold over the nodes in the layout order.
 <<graph and node observers>>=
 val iter_nodes : ('i node -> unit)           -> 'i cfg -> unit
 val iter_heads : ('i node -> unit)           -> 'i cfg -> unit
 val fold_nodes : ('i node -> 'a -> 'a) -> 'a -> 'i cfg -> 'a
 val fold_heads : ('i node -> 'a -> 'a) -> 'a -> 'i cfg -> 'a
+val fold_layout: ('i node -> 'a -> 'a) -> 'a -> 'i cfg -> 'a
 @ 
 \paragraph{Observing data flow}
 As noted above a node can contribute defs, uses, and kills to each
@@ -745,6 +747,7 @@ type ('i, 'n, 'e) cal = { mutable cal_i         : 'i
                         ;         cal_spans     : (Bits.bits * Rtl.exp) list
                         ; mutable cal_pred      : 'n
                         ; mutable cal_contedges : 'e array
+                        ; mutable cal_lsucc     : 'n
                         ;         cal_fx        : X.fx
                         ; mutable cal_uses      : regs
                         }
@@ -966,7 +969,7 @@ let succs node = match node with
   | Jum j -> [j.jum_succ]
   | Ret r -> [r.ret_succ]
   | Ent e -> [e.ent_succ]
-  | Cbr c -> uniq [c.cbr_true; c.cbr_false]
+  | Cbr c -> uniq [c.cbr_false; c.cbr_true]
   | Imp i -> uniq [i.imp_succ; i.imp_exit_succ]
   | Mbr m -> uniq (Array.to_list m.mbr_succs)
   | Cal c -> uniq (Array.to_list (ce_getnodes c.cal_contedges))
@@ -1039,6 +1042,28 @@ let fold_nodes f zero cfg =
 let iter_nodes f = fold_nodes (fun n () -> f n) ()
 let iter_heads f = fold_heads (fun n () -> f n) ()
 
+<<join node set operations>>
+let cps_postorder_dfs g cons nil cont =
+  let rec vnode node cont acc visited =
+    if been_visited node visited then
+      cont acc visited
+    else
+      vchildren node (succs node) cont acc (add node visited)
+  and vchildren node children cont acc visited = 
+    let rec next children acc visited = match children with
+      | [] -> cont (cons node acc) visited
+      | n::rst -> vnode n (next rst) acc visited in
+    next children acc visited in
+  vnode (entry g) cont nil emptyset
+
+let rev_postorder_dfs g cons nil =
+  let snoc node build = fun tail -> build (cons node tail) in
+    cps_postorder_dfs g snoc (fun x -> x) (fun build _ -> build nil)
+
+let postorder_dfs g cons nil =
+  cps_postorder_dfs g cons nil (fun x _ -> x)
+
+
 (* should this fn be defined on exi and ill?
    when there are cont edges, do we still need to cover the regular edges?*)
 let union_over_outedges node ~noflow ~flow =
@@ -1072,18 +1097,21 @@ let add_inedge_uses node regs = match node with
 The only graph mutation occurs via the set successors functions. 
 The rest of the CFG implementation also uses these mutators.
 <<set successors>>=
+let mk_join cfg labels ~preds ~lpred ~succ =
+  let join = Joi { joi_labels = labels
+                 ; joi_cfg    = cfg
+                 ; joi_preds  = preds
+                 ; joi_succ   = succ
+                 ; joi_lpred  = lpred
+                 ; joi_jx     = X.jx ()
+                 } in
+  let () =
+    List.iter (fun l -> cfg.label_map <- SM.add l join cfg.label_map) labels in
+  join
+
 let node_labeled cfg label =
   try SM.find label cfg.label_map
-  with Not_found ->
-    let join = Joi { joi_labels = [label]
-                   ; joi_cfg    = cfg
-                   ; joi_preds  = []
-                   ; joi_succ   = cfg.ill
-                   ; joi_lpred  = cfg.ill
-                   ; joi_jx     = X.jx ()
-                   } in
-    let () = cfg.label_map <- SM.add label join cfg.label_map in
-    join
+  with Not_found -> mk_join cfg [label] ~preds:[] ~lpred:cfg.ill ~succ:cfg.ill
 @
 The successor of a branch node must be a join point.
 [[join_leading_to]] inserts such a join point, if necessary.
@@ -1273,14 +1301,28 @@ let update_instr upd node = match node with
   | Imp i -> ()
   | Ill _ -> ()
   | Boot  -> imposs "update_instr undefined on boot nodes"
+
+let fold_layout f zero cfg = rev_postorder_dfs cfg f zero
 @
 
 
 <<graph construction and copying>>=
+let mk_entry succ =
+  Ent { ent_succ = succ
+      ; ent_nx   = X.nx ()
+      }
+let mk_exit cfg labels ~preds ~lpred =
+  Exi { exi_cfg    = cfg
+      ; exi_labels = labels
+      ; exi_preds  = []
+      ; exi_lpred  = cfg.ill
+      ; exi_jx     = X.jx ()
+      }
+
 let mk i_info label_supply =
-  let entry = { ent_succ = Boot
-              ; ent_nx   = X.nx ()
-              } in
+  let entry = match mk_entry Boot with
+              | Ent e -> e
+              | _     -> imposs "mk_entry returned non-entry node" in
   let cfg = { entry     = Ent entry
             ; exit      = Boot
             ; ill       = Boot
@@ -1289,12 +1331,7 @@ let mk i_info label_supply =
             ; mk_label  = label_supply
             } in
   let ill = illegal cfg in
-  let exit  = Exi { exi_cfg  = cfg
-                  ; exi_labels = [label_supply "exit"]
-                  ; exi_preds = []
-                  ; exi_lpred = ill
-                  ; exi_jx   = X.jx ()
-                  } in
+  let exit = mk_exit cfg [label_supply "exit"] ~preds:[] ~lpred:ill in
   let ()  = cfg.ill        <- ill in
   let ()  = entry.ent_succ <- ill in
   let ()  = cfg.exit       <- exit in
@@ -1309,28 +1346,16 @@ let copy info transform cfg =
                 ; mk_label  = cfg.mk_label
                 } in
   let ()  = new_cfg.ill <- illegal new_cfg in
+  let lookup join =
+    try SM.find (label join) new_cfg.label_map
+    with Not_found -> 
+      mk_join new_cfg (labels join) ~preds:[] ~lpred:new_cfg.ill
+              ~succ:new_cfg.ill in
+  let ce_lookup ce =
+    let n' = lookup ce.node in
+    {ce with node = n'} in
+  let convert_contedges contedges = Array.map ce_lookup contedges in
   let convert node succ =
-    let lookup join = assert false in
-    (*
-      try SM.find (label join) new_cfg.label_map
-      with Not_found -> 
-      *)
-
-    (*
-      try  (SM.find (label join) new_cfg.label_map, map)
-      with Not_found _ ->
-        let join' = node_labeled new_cfg (label join) in
-        match join' with
-        | Joi j' -> j'.joi_labels <- j.joi_labels
-        | _      -> imposs "error in copying join point"
-
-      in
-      *)
-    let ce_lookup ce =
-      let n' = lookup ce.node in
-      {ce with node = n'} in
-    let update_contedges contedges =
-      Array.map ce_lookup contedges in
     match node with
     | Ins i -> instruction new_cfg (transform i.ins_i) ~succ
     | Ass a -> assertion   new_cfg (transform a.ass_i) ~succ
@@ -1343,38 +1368,47 @@ let copy info transform cfg =
                            ~ifnot:(lookup c.cbr_false)
     | Ret r -> return      new_cfg (transform r.ret_i) ~uses:r.ret_uses
     | Imp i -> impossible  new_cfg ~succ
-    | Ill i -> illegal     new_cfg
+    | Ill i -> new_cfg.ill
     | Mbr m ->
       mbranch new_cfg (transform m.mbr_i)
        ~targets:(Array.fold_right (fun t rst -> lookup t :: rst)
                                   m.mbr_succs [])
-    | Cal c -> (* We can't extract the input to the call constructor *)
-      let ce_lst          = update_contedges c.cal_contedges in
-      Cal { cal_i         = transform c.cal_i
-          ; cal_spans     = c.cal_spans
-          ; cal_pred      = illegal new_cfg
-          ; cal_contedges = ce_lst
-          ; cal_fx        = X.fx ()
-          ; cal_uses      = c.cal_uses
-          }
+    | Cal c ->
+      let ce_lst = convert_contedges c.cal_contedges in
+      mk_call (transform c.cal_i) c.cal_spans ~pred:new_cfg.ill
+              ~contedges:ce_lst ~lsucc:new_cfg.ill ~uses:c.cal_uses
     | Cut c ->
-      let cuts_to = Array.to_list (update_contedges c.cut_contedges) in
+      let cuts_to = Array.to_list (convert_contedges c.cut_contedges) in
       cut_to new_cfg (transform c.cut_i) ~cuts_to ~aborts:false ~uses:c.cut_uses
-    | Joi j -> lookup j
-    | Exi e -> Exi { e with exi_cfg   = new_cfg
-                   ;        exi_preds = []
-                   ;        exi_lpred = illegal new_cfg
-                   ;        exi_jx    = X.jx ()
-                   }
-    | Ent e -> Ent { ent_succ = succ
-                   ; ent_nx   = X.nx ()
-                   }
+    | Joi j ->
+      let join = lookup node in
+      (set_succ join succ; join)
+    | Exi e ->
+      let exit = mk_exit new_cfg (labels cfg.exit) ~preds:[]
+                         ~lpred:new_cfg.ill in
+      (new_cfg.exit <- exit; exit)
+    | Ent e ->
+      let ent = mk_entry succ in
+      (new_cfg.entry <- ent; ent)
     | Boot  -> undef "copy" "boot" in
-    new_cfg
+  let () = match postorder_dfs cfg convert new_cfg.ill with
+           | Ent _ -> ()
+           | _     -> imposs "postorder_dfs didn't end with entry node" in
+  new_cfg
 @
 
 <<node constructors with interesting control flow edges>>=
 let join_leading_to_ce ce = {ce with node = join_leading_to ce.node}
+
+let mk_call i spans ~pred ~contedges ~lsucc ~uses =
+    Cal { cal_i         = i
+        ; cal_spans     = spans
+        ; cal_pred      = pred
+        ; cal_contedges = contedges
+        ; cal_lsucc     = lsucc
+        ; cal_fx        = X.fx ()
+        ; cal_uses      = uses
+        }
 
 let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts ~uses ~defs ~kills
                ~spans =
@@ -1389,14 +1423,8 @@ let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts ~uses ~defs ~kills
   let abort       = if aborts then [new_cedge cfg.exit] else [] in
   let edgelist    = List.flatten [altrets; succ; unwinds_to; cuts_to; abort] in
   let illedge     = fun {kills=k; defs=d; node=n} -> {kills=k; defs=d; node=cfg.ill} in
-  let cal =
-    Cal { cal_i         = i
-        ; cal_spans     = spans
-        ; cal_pred      = cfg.ill
-        ; cal_contedges = Array.of_list (List.map illedge edgelist)
-        ; cal_fx        = X.fx ()
-        ; cal_uses      = uses
-        } in
+  let contedges = Array.of_list (List.map illedge edgelist) in
+  let cal = mk_call i spans ~pred:cfg.ill ~contedges ~lsucc:cfg.ill ~uses in
   let ()  = Aux.foldri (fun i n () -> set_succ_n cal i ~succ:n.node)
                        edgelist () in
   cal
@@ -1513,6 +1541,7 @@ let illegal cfg = Ill { ill_nx  = X.nx ()
                       ; ill_cfg = cfg
                       }
 @
+
 Node equality is the most important utility of all.
 We cannot safely compare nodes with [[==]], because the node type is
 an algebraic data type, and the Caml implementation is free to
@@ -1580,10 +1609,17 @@ let merge_joins j1 j2 succ lpred = match j1, j2 with
   | _                -> undef "merge_joins" "non-join"
 @
 
-Creation of illegal nodes is common.
-
 <<graph utilities>>=
 let heads cfg = cfg.entry :: SM.fold (fun _ h rst -> h::rst) cfg.label_map []
+@
+
+<<join node set operations>>=
+module SS = Strutil.Set
+let emptyset = SS.empty
+let add n s = SS.add (label n) s
+let member n s = SS.mem (label n) s
+let been_visited node v = is_join node && member node v
+let add node v = if is_join node then add node v else v 
 @
 
 
