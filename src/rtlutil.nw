@@ -66,6 +66,16 @@ module Subst: sig
 end
 @
 
+Register allocation may benefit from knowing whether an {\rtl} represents a
+move instruction.
+
+<<rtlutil.mli>>=
+module RTLType: sig
+	val isMoveInst:		Rtl.rtl -> bool
+end
+@
+
+
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
@@ -84,6 +94,10 @@ end
 module Subst = struct
     <<Subst>>
 end    
+
+module RTLType = struct
+	<<RTLType>>
+end
 @
 
 
@@ -222,3 +236,16 @@ let exp map rtl =
         Rtl.Revert.rtl (subst (Rtl.Convert.rtl rtl))
 @
 
+
+<<RTLType>>=
+(* first fn find _uncond_ store; separate fn to find unconditional kills;
+   explicitly use kill instead of _ *)
+let isMoveInst rtl =
+	let rec isMove rtls move = match rtls with
+		| [] -> move
+		| (, RP.Store(_, _, _))::rst -> if move then false else isMove rst true
+		| _::rst -> isMove rst move
+	in
+		match (Rtl.Convert.rtl rtl) with RP.Rtl guardeds ->
+			isMove guardeds false
+@
