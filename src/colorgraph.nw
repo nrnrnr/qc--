@@ -790,11 +790,11 @@ let conservative neighbors cg =
 
 <<coalesce move>>=
 let rec getAlias node cg =
-    try
-        if node.list = Coalesced
-        then getAlias (RM.find (RM.find node.v cg.aliasMap) cg.regToItem) cg
-        else node.v
-    with Not_found -> Impossible.impossible "Not_found in Colorgraph.getAlias"
+  try
+    if node.list = Coalesced
+    then getAlias (RM.find (RM.find node.v cg.aliasMap) cg.regToItem) cg
+    else node.v
+  with Not_found -> Impossible.impossible "Not_found in Colorgraph.getAlias"
 @
 
 [[combine]] coalesces the temp [[v]] with the temp [[u]]. [[v]]'s neighbors
@@ -900,16 +900,16 @@ The [[GraphColoring]] exception is raised if the graph is uncolorable.
 <<assignColors>>=
 exception GraphColoring
 
-let assignColors cg {Proc.target = target} =
+let assignColors cg {Proc.target = target; Proc.cfg = cfg} =
     <<colorTemp>>
     let colorSelectStack () =
         let () = ilg_iter colorTemp (!(cg.tempLG SelectStack)) in
 		if not (!(cg.tempLG SelectStack) = None)
-   		then Impossible.impossible "No temporaries??"	in
+   		then Impossible.impossible "Failed to color a temp?"   in
     let colorCoalescedTemps () =
         let setColor temp = 
             cg.colorMap <-
-				RM.add temp.v (RM.find (getAlias temp cg) cg.colorMap) cg.colorMap in
+				RM.add temp.v (colorLookup temp.v cg.colorMap) cg.colorMap in
 		ilg_iter setColor (!(cg.tempLG Coalesced)) in
     let () = colorSelectStack () in
     let () = match !(cg.tempLG Spilled) with
@@ -928,18 +928,18 @@ decision, currently arbitrary.
 
 <<colorTemp>>=
 let colorLookup temp cmap =
-	if is_tmp target temp
-	then RM.find (getAlias (RM.find temp cg.regToItem) cg) cmap
-	else temp in
+  let t = getAlias (RM.find temp cg.regToItem) cg in
+  if is_tmp target t
+  then try RM.find t cmap
+       with Not_found -> Impossible.impossible "colorLookup(): uncolored temp"
+  else t in
 
 let colorTemp temp =
 	let removeUsedColor colors adjTemp =
 		let t = RM.find (getAlias adjTemp cg) cg.regToItem in
 		if t.list = Colored || t.list = Precolored
-		then
-		   RS.remove (colorLookup t.v cg.colorMap) colors
+		then RS.remove (colorLookup t.v cg.colorMap) colors
 		else colors in
-
 	let possColors = possibleColors target cg temp.v in
 	let okColors =
 		List.fold_left removeUsedColor possColors (listMapFind temp.v cg.adjListMap) in
