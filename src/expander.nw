@@ -245,9 +245,22 @@ val bc      : temp -> operator -> temp -> tgt:Rtl.Private.const -> rtl list
 val bnegate : rtl -> rtl  (* swap the condition in a conditional branch *)
 @ The last (head) instruction from [[bc]] is the \emph{only}
 instruction that may legitimately be passed to [[bnegate]].
+@ 
+The postexpander must be able to call direct and indirect.
+<<generic expansion operations>>=
+val callr : tgt:temp              -> others:Rtl.Private.effect list -> rtl list
+val call  : tgt:Rtl.Private.const -> others:Rtl.Private.effect list -> rtl list
 @
-This signature doesn't seem to mention call or cut to.
-Perhaps these operations are coordinated through the [[Mflow]] module?
+The [[cut to]] is as created by the target-dependent code, except
+right-hand sides have been expanded to temporaries.
+<<generic expansion operations>>=
+val cut_to : Rtl.Private.effect list -> rtl list
+@
+The postexpander may insist on having some instructions untouched.
+This is possible only for an instruction with multiple effects and a
+single guard.
+<<generic expansion operations>>=
+val don't_touch_me : Rtl.Private.effect list -> bool
 @
 
 \subsection{Implementation outline}
@@ -331,6 +344,8 @@ It will also work with integer/float machines, since we can make
 address registers a synonym for integer registers.
 <<expander.ml>>=
 module IntFloatAddr (Post : Postexpander.S) = struct
+  let pc_lhs = Down.loc Post.pc_lhs
+  let pc_rhs = Down.loc Post.pc_rhs
   <<generic expander>>
   <<generic flow-graph expander>>
 end
@@ -551,7 +566,9 @@ function is trivial.
 <<other generic expander functions>>=
 and rtl' r = match Down.rtl r with
 | RP.Rtl [(g, RP.Store (left, right, w))] -> guarded g left right w
-| _ -> unit r (* no expansion takes place *)
+| RP.Rtl [(g, RP.Kill _)] -> unit (R.par []) (* IS THIS A CHEAT? *)
+| RP.Rtl [] -> unit r  (* a nop is a nop is a nop *)
+| RP.Rtl ((_::_::_) as effs) -> (<<handle RTL with multiple effects [[effs]]>>)
 @ 
 The type system tells us that anything in a guard must be a Boolean
 operator or a comparison operator.\footnote
@@ -576,7 +593,7 @@ and guarded g left right w =
       Impossible.unimp "conjunction or disjunction in generic code expander"
       (* one day to be expanded into control flow *)
   | RP.App (cmp, [x; y]) ->
-      if left = Down.loc Post.pc_lhs then
+      if left = pc_lhs then
         let context = cmp_context cmp in
         let xt, xis = to_temp context x in
         let yt, yis = to_temp context y in
@@ -587,7 +604,7 @@ and guarded g left right w =
         Impossible.unimp "guard on other than conditional branch";
   | RP.App (cmp, _) ->
       Impossible.unimp "non-binary comparison in guard"
-@ POSSIBLY  REFERENCES TO [[Post.pc_lhs]] SHOULD BE REPLACED BY USING
+@ POSSIBLY  REFERENCES TO [[pc_lhs]] SHOULD BE REPLACED BY USING
 [[Target2.goto.project]] AND FRIENDS.  IN GENERAL, WE NEED TO SEE
 ABOUT MERGING SIMILAR INFORMATION IN THE [[Target]] AND
 [[Postexpander.S]] INTERFACES.
@@ -596,7 +613,7 @@ An assignment is either a goto, a store, or a computation where we put
 something in a temporary.
 <<other generic expander functions>>=
 and assign left right w =
-  if left = Down.loc Post.pc_lhs then  (* unconditional branch *)
+  if left = pc_lhs then  (* unconditional branch *)
     match right with
     | RP.Const c -> to_hughes (Post.b c)
     | _ ->
@@ -612,15 +629,101 @@ and assign left right w =
         | _ ->
             let r, is = to_temp (guess_context right) right in
             to_hughes (Post.store a r (upassn assn)) @@ is' @@ is)
+    | RP.Mem (_, _, _, _, _) ->
+        Impossible.unimp "memory space other than 'm'"
     | RP.Reg (space, i, w) -> (* computation *)
         let r, is = to_temp (guess_context right) right in
         to_hughes (Post.move ~dst:(space, i, w) ~src:r) @@ is
-    | _ ->
-        Impossible.impossible "memory-like access to non-memory space"
+    | RP.Var (_,_,_) -> Impossible.impossible "variable passed to code expander"
+    | RP.Slice (_,_,_) -> Impossible.unimp "slice"
 <<\emph{pattern [[->]] action} for low-bit store>>=
 RP.App (("lobits", [w; n]), [rhs]) ->
   let r, is = to_temp icontext rhs in
   to_hughes (Post.lostore a r n (upassn assn)) @@ is' @@ is
+@ 
+Something with multiple effects is either a call, a [[cut to]], or a
+shuffle.
+In all three cases, the guard had better be trivial.
+<<handle RTL with multiple effects [[effs]]>>=
+let strip_trivial_guards l =
+  List.fold_right
+    (fun (g, e) l ->
+      match g with RP.Const (RP.Bool b) -> if b then e :: l else l
+      | _ -> Impossible.unimp "multiple effects with a nontrivial guard") l [] in
+let has_pc_on_left = function
+  | RP.Store (pc, _, _) -> pc = pc_lhs
+  | RP.Kill _ -> false in
+let has_pc_on_right = function
+  | RP.Store (_, e, _) -> RU.HasLoc.exp ((=) pc_rhs) e
+  | RP.Kill _ -> false in
+<<support for call, [[cut to]], and shuffle>>
+let effs = strip_trivial_guards effs in
+if Post.don't_touch_me effs then
+  R.par (List.map Up.effect effs) @:: empty
+else
+  if List.exists has_pc_on_left effs then
+    if List.exists has_pc_on_right effs then
+      make_call effs
+    else
+      make_cut_to effs
+  else
+    make_shuffle effs
+@ 
+<<support for call, [[cut to]], and shuffle>>=
+let (<<) f g x = f (g x) in
+let make_call effs = 
+  let others = List.filter (not << has_pc_on_left) effs in
+  match List.filter has_pc_on_left effs with
+  | [RP.Store(pc, RP.Const c, _)] -> to_hughes (Post.call c others)
+  | [RP.Store(pc, e, _)] ->
+      let t, is = to_temp acontext e in
+      to_hughes (Post.callr t others) @@ is
+  | _ -> Impossible.impossible "multiple pc := e in call" in
+@ 
+<<support for call, [[cut to]], and shuffle>>=
+let make_cut_to effs =
+  let expand e (preds, effs) = match e with
+    | RP.Store (l, r, w) ->
+        let t, is = to_temp (guess_context r) r in
+        (is @@ preds, RP.Store(l, RP.Fetch(RP.Reg t, w), w) :: effs)
+    | RP.Kill l -> (preds, RP.Kill l :: effs) in
+  let preds, effs = List.fold_right expand effs (empty, []) in
+  to_hughes (Post.cut_to effs) @@ preds in
+@ 
+Shuffle would be cooler if we carefully arranged to make things
+push-like, but never mind.
+As it is, we look for an effect that can go first (because its
+left-hand side doesn't alias with any other right-hand-side), and if
+we don't find one, we introduce a new temporary.
+<<support for call, [[cut to]], and shuffle>>=
+let make_shuffle effs =
+  let strip_store = function
+    | RP.Store (l, r, w) -> (l, r, w)
+    | RP.Kill _ -> Impossible.impossible "kill in shuffle" in
+  let rec shuffle = function
+    | [(l, r, w)] -> assign l r w
+    | [] -> empty
+    | ((l, (r:RP.exp), w) :: rest) as effs ->
+        <<definition of [[try_first_effect]]>>
+        try_first_effect effs
+          (fun (l, r, w) rest -> shuffle rest @@ assign l r w)
+          (fun () ->
+            let t = alloc (guess_context r) w in
+            assign l (RP.Fetch (RP.Reg t, w)) w @@
+            shuffle rest @@
+            assign (RP.Reg t) r w)
+  in shuffle (List.map strip_store effs) in
+<<definition of [[try_first_effect]]>>=
+let try_first_effect effects succ fail =
+  let rec maybe bad = function
+    | [] -> fail()
+    | (l, r, w) :: rest ->
+        let alias (_, r, _) = RU.MayAlias.exp' l r in
+        if not (List.exists alias bad || List.exists alias rest) then
+          succ (l, r, w) (List.rev_append bad rest)
+        else
+          maybe ((l, r, w) :: bad) rest in
+  maybe [] effects in
 @ 
 \subsection{Debugging the expander}
 These wrapper functions show what the expander [[rtl]] and register

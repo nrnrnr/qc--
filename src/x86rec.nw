@@ -285,14 +285,23 @@ inst : Withlflags(dst:regl, logical:string, src:eaddr, w, "x86_logicflags")
 \paragraph{Control flow}
 The simple jumps are easy.
 <<rules>>=
-inst : Goto(eaddr)            {: "jmp " ^ eaddr :}
+target : Fetch(eaddrl, w) {: "*" ^ eaddrl :}
+target : lconst {: lconst :} 
+inst : Goto(target)            {: "jmp " ^ target :}
 inst : Jcc(cc:string, lconst) {: "j" ^ cc ^ " " ^ lconst :}
 @ 
-Call and return require manipulating the stack pointer [[esp]] and
+Call, [[cut to]],  and return require manipulating the stack pointer
+[[esp]] and 
 program counter [[eip]].
 <<rules>>=
 esp : Reg('r', n, w) [{: guard (n = 4 && w = 32):}]                {: () :}
 eip : Reg('c', n, w) [{: guard (n = SS.indices.SS.pc && w = 32):}] {: () :}
+@ 
+The [[cut to]] is supposed to look atomic, but it is a sequence of two
+instructions. 
+<<rules>>=
+inst : Par(Goto(target),Store(esp,frame:eaddr,w))
+  {: cat ["movl "; frame; ", %esp; jmp "; target] :}
 @ 
 There are two ways to recognize a pop, depending on whether the ML
 code sees it as an $L \mathrel{:=} L \oplus R$ instruction.

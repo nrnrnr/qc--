@@ -74,8 +74,8 @@ end
 <<x86.ml>>=
 module R    = Rtl
 module RP   = Rtl.Private
-module Up   = Rtl.Revert
-module Down = Rtl.Convert
+module Up   = Rtl.Up
+module Down = Rtl.Dn
 
 module Post = struct
   <<x86 postexpander>>
@@ -106,9 +106,7 @@ The only addressing mode is the obvious one.
 <<x86 postexpander>>=
 module Address = struct
   type t = Rtl.exp
-  let rindex n = R.bits (Bits.U.of_int n wordsize) wordsize
-  let reg (space, n, w) = 
-    R.fetch (R.cell R.none space byte_order w (rindex n)) w
+  let reg (space, n, w) = R.fetch (R.reg (space, n, w)) w
 end
 @ 
 \subsubsection{Basic locations, flags, and helper functions}
@@ -116,11 +114,10 @@ We need to record the various side effects.
 
 Here are some utility functions for computing locations, values, and widths.
 <<x86 postexpander>>= 
-let rindex = Address.rindex
-let temploc   (space, n, w)       = Rtl.cell Rtl.none space byte_order w (rindex n)
+let temploc  t = Rtl.reg t
 let tempval  ((space, n, w) as t) = R.fetch (temploc t) w
 let tempwidth (space, n, w)       = w
-let mem addr = R.cell R.none 'm' byte_order 32 addr
+let mem addr = R.mem R.none 'm' byte_order 32 addr
 @ 
 Here are some important locations.
 <<x86 postexpander>>=
@@ -128,6 +125,7 @@ let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
 let eax = temploc ('r', 0, 32)
 let edx = temploc ('r', 2, 32)
 let esp = temploc ('r', 4, 32)
+let espreg = ('r', 4, 32)
 @ 
 Here are some invented operators that hide the real truth about what
 happens to the flags.
@@ -147,10 +145,10 @@ width of everything is~32.
 <<x86 postexpander>>=
 let load ~dst:((_, _, w) as dst) ~addr assn =
   assert (w = 32);
-  [R.store (temploc dst) (R.fetch (R.cell assn 'm' byte_order 32 addr) 32) 32]
+  [R.store (temploc dst) (R.fetch (R.mem assn 'm' byte_order 32 addr) 32) 32]
 let store ~addr ~src:((_, _, w) as src) assn =
   assert (w = 32);
-  [R.store (R.cell assn 'm' byte_order 32 addr) (tempval src) 32]
+  [R.store (R.mem assn 'm' byte_order 32 addr) (tempval src) 32]
 @ 
 The Pentium provides sign-extending loads and stores.
 <<x86 postexpander>>=
@@ -159,14 +157,14 @@ let lobits        n e = R.app (R.opr "lobits" [32; n]) [e]
 let sxload ~dst:((_, _, w) as dst) ~addr n assn =
   if w <> 32 then Impossible.unimp "widening of temporaries";
   [R.store (temploc dst)
-             (extend "sx" n (R.fetch (R.cell assn 'm' byte_order n addr) n)) 32]
+             (extend "sx" n (R.fetch (R.mem assn 'm' byte_order n addr) n)) 32]
 let zxload ~dst:((_, _, w) as dst) ~addr n assn =
   assert (w = 32);
   [R.store (temploc dst)
-             (extend "zx" n (R.fetch (R.cell assn 'm' byte_order n addr) n)) 32]
+             (extend "zx" n (R.fetch (R.mem assn 'm' byte_order n addr) n)) 32]
 let lostore ~addr ~src:((_, _, w) as src) n assn =
   assert (w = 32);
-  [R.store (R.cell assn 'm' byte_order n addr) (lobits n (tempval src)) n]
+  [R.store (R.mem assn 'm' byte_order n addr) (lobits n (tempval src)) n]
 @ 
 This code hasn't yet been checked for compatility with floating point.
 <<x86 postexpander>>=
@@ -367,6 +365,28 @@ instructions, but I~think we can stick with the simple ones for now.
 <<x86 postexpander>>=
 let br ~tgt = [R.store pc_lhs (tempval tgt) 32]
 let b  ~tgt = [R.store pc_lhs (upconst tgt) 32]
+@ 
+The call instructions came from us, so we can rely on the single extra effects pushing the program counter.
+<<x86 postexpander>>=
+let effects = List.map Up.effect
+let call  ~tgt ~others = [R.par (R.store pc_lhs (upconst tgt) 32 :: effects others)]
+let callr ~tgt ~others = [R.par (R.store pc_lhs (tempval tgt) 32 :: effects others)]
+@ 
+The [[cut to]] is our own little conspiracy.
+<<x86 postexpander>>=
+let cut_to effs = [R.par (effects effs)]
+@ 
+We don't touch anything that pops the PC.
+That means the return instruction!
+<<x86 postexpander>>=
+let don't_touch_me = 
+  let lowpc = Down.loc pc in
+  function
+  | [ RP.Store (pc', _, _)
+    ; RP.Store (RP.Reg sp, RP.App (("add", [32]), [RP.Fetch (RP.Reg sp2, _);
+                                                      RP.Const (RP.Bits b)]), _)] ->
+      pc' = lowpc & sp = espreg & sp2 = espreg & Bits.S.to_int b = 4
+  | _ -> false
 @
 To implement the comparisons, we define new operators that are private
 to the $x$86 architecture. 
@@ -535,10 +555,10 @@ let target =
                    (fun (newpc, newsp) ->
                      let assign loc e =
                        Rtl.store loc e (Rtlutil.Width.exp e) in
-                       Rtl.par [assign PX.esp newsp; assign pc newpc])
+                       Rtl.par [assign pc newpc; assign PX.esp newsp])
                  ; T.project = (fun r -> match downrtl r with
-                                  | RP.Rtl [ (_, RP.Store(_, nsp, _))
-                                           ; (_, RP.Store(_ , npc, _))] ->
+                                  | RP.Rtl [ (_, RP.Store(_, npc, _))
+                                           ; (_, RP.Store(_, nsp, _))] ->
                                     (upexp nsp, upexp npc)
                                   | _ -> Impossible.impossible "projected non-cutto")
                  }

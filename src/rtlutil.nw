@@ -78,6 +78,14 @@ end
 @    
 
 % ------------------------------------------------------------------ 
+\subsection{Location search}
+% ------------------------------------------------------------------ 
+<<rtlutil.mli>>=
+module HasLoc : sig
+  val exp : (Rtl.Private.loc -> bool) -> Rtl.Private.exp -> bool
+end
+@ 
+% ------------------------------------------------------------------ 
 \subsection{Aliasing}
 % ------------------------------------------------------------------ 
 
@@ -97,6 +105,7 @@ module MayAlias : sig
   val regs : Register.t -> Register.t -> bool   
   val locs : Rtl.loc -> Rtl.loc -> bool  (* useful to partially apply *)
   val exp  : Rtl.loc -> Rtl.exp -> bool  (* useful to partially apply *)
+  val exp' : Rtl.Private.loc -> Rtl.Private.exp -> bool  (* useful to partially apply *)
 end
 @
 
@@ -790,7 +799,13 @@ module MayAlias = struct
       | RP.App (_, es') :: es -> has es (es' :: ess) in
     has [e] []
 
+  let exp' l = has_loc (locs' l)
+
   let exp l =
-    let alias = has_loc (locs' (Down.loc l)) in
+    let alias = exp' (Down.loc l) in
     fun e -> alias (Down.exp e)
+end
+<<rtlutil.ml>>=
+module HasLoc = struct
+  let exp = MayAlias.has_loc
 end
