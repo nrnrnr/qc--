@@ -1,0 +1,25 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Images of internal data structures}
+
+This module contains ways of printing internal data structures so we
+can debug.
+<<image.mli>>=
+val rule : Spec.rule -> unit
+@ 
+<<image.ml>>=
+module S = Spec
+module C = Code
+let rec tree = function
+  | S.Tree (c, args)           -> C.Apply (C.id c, C.Tuple (List.map tree args))
+  | S.Var (n, ty) when n == ty -> C.id n
+  | S.Var (n, ty)              -> C.id (n ^ ":" ^ ty)
+  | S.Const (S.Int    n)       -> C.Int n
+  | S.Const (S.String n)       -> C.String n
+
+let rule (nt, t, cost, code) =
+  let apply f a = C.Apply (f, a) in
+  let e = List.fold_left apply (C.id nt) [C.id ":"; tree t; C.List [cost];
+                                          C.id "{:"; code; C.id ":}"] in
+  Code.pprint e; Format.print_newline()
+
