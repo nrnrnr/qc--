@@ -128,13 +128,13 @@ Any floating-point result is automatically widened to 80~bits, and
 an integer result is widened to 32~bits.
 <<x86call.ml>>=
 let results iregs = 
-  A.hint_choice
-     [ ((=) "float"),   A.widen  (Aux.round_up_to ~multiple_of:80) *>
-                        A.widths [80] ~errormsg:(badwidth "x86 floating return") *>
-                        A.useregs [('f', 0, 80)] ~errormsg:imp
-     ; (fun _ -> true), A.widen  (Aux.round_up_to ~multiple_of:32) *>
-                        A.widths [32] ~errormsg:(badwidth "x86 return convention") *>
-                        A.useregs iregs ~errormsg:imp
+  A.choice
+     [ A.is_hint "float",  A.widen  (Aux.round_up_to ~multiple_of:80) *>
+                           A.widths [80] ~errormsg:(badwidth "x86 floating return") *>
+                           A.useregs [('f', 0, 80)] ~errormsg:imp
+     ; A.is_any,           A.widen  (Aux.round_up_to ~multiple_of:32) *>
+                           A.widths [32] ~errormsg:(badwidth "x86 return convention") *>
+                           A.useregs iregs ~errormsg:imp
      ]
 let c_results = results [eax] **> A.no_overflow 4 "multiple return values for x86 C"
 @

@@ -140,12 +140,12 @@ floating-point result (up to two 64-bit values) in [[$f0]] and [[$f1]].
 
 <<alphacall.ml>>=
 let results =
-    A.hint_choice
-        [ ((=) "float"),  
+    A.choice
+        [ (A.is_hint "float"),  
             A.widen (Aux.round_up_to ~multiple_of: 64)              *>
             A.widths [64] ~errormsg:(badwidth "Alpha FP return")  *>
             A.useregs [f 0; f 1] ~errormsg:fatal
-        ; (fun _ ->true), 
+        ; A.is_any,
             A.widen (Aux.round_up_to ~multiple_of: 64)              *>
             A.widths [64] ~errormsg:(badwidth "Alpha return")     *>  
             A.useregs [r 0] ~errormsg:fatal
@@ -225,11 +225,11 @@ Since this is strictly internal calling convention, we can use whatever
 we like. We use all volatile registers.
 <<alphacall.ml>>=
 let cut_args = 
-    A.hint_choice
-        [ ((=) "float"),
+    A.choice
+        [ (A.is_hint "float"),
             A.widen (Aux.round_up_to ~multiple_of:64)        *>
             A.useregs vol_fp  ~errormsg:fatal 
-        ; (fun _ -> true),
+        ; A.is_any,
             A.widen (Aux.round_up_to ~multiple_of:64)        *>
             A.useregs vol_int ~errormsg:fatal 
         ] **>

@@ -210,7 +210,7 @@ For a big-endian machine, it isn't.
 It is an unchecked run-time error for [[f]] to return a result that is
 less than its argument.
 <<exported values>>=
-val widen : (int -> int) -> stage
+val widen  : (int -> int) -> stage
 @ We expect stages such as
 [[Automaton.widen (Aux.round_up_to ~multiple_of:32)]] 
 to be useful.
@@ -238,6 +238,11 @@ val useregs : Register.t list -> errormsg:(int -> Register.t list -> string) -> 
 @ The [[useregs]] stage is stateful; a register handed out in response
 to an earlier request cannot be used to satisfy a later request.
 @
+See the paper for this.
+<<exported values>>=
+val counter    : int ref -> stage
+val offsetregs : int ref -> Register.t list -> stage
+@
 \paragraph{Combination of multiple stages}
 It can be useful to hand out different registers from different piles.
 For example, we might want to use floating-point registers to satisfy
@@ -249,16 +254,18 @@ for describing C~conventions (C~varargs hell), but it should be useful
 for {\PAL} conventions.
 
 The idea is that for an allocation, we use the first stage for which
-the hint predicate is satisfied.
+the predicate is satisfied.
 It is a checked run-time error if no predicate is satisfied.
 <<automaton.mli>>=
-val hint_choice : ((string -> bool) * stage) list -> stage
-@ We also provide a general predicate (hint and
-width) instead of the hint alone---but the hint alone seems to be the
-common case.
-<<automaton.mli>>=
 val choice : ((string -> int -> bool) * stage) list -> stage
-@
+@ To help create predicates we provide the [[is_hint]] and
+[[is_width]] functions.
+<<automaton.mli>>=
+val is_hint  : string -> (string -> int -> bool)
+val is_width : int    -> (string -> int -> bool)
+val is_any   :           (string -> int -> bool)
+@ 
+
 \paragraph{Exclusion and interference of registers}
 For the MIPS calling convention, we need additional goodies.
 One is that by convention, the use of some registers excludes the use
@@ -617,8 +624,53 @@ let hint_choice choices =
   choice (List.map (fun (hp, s) -> ((fun h w -> hp h), s)) choices)
 let hint_choice = wrap_choice hint_choice
 let choice      = wrap_choice choice
-@ 
 
+let is_hint  h' h w = h = h'
+let is_width w' h w = w = w'
+let is_any      h w = true
+@ 
+\paragraph{Register assignment by offset}
+<<automaton.ml>>=
+let counter n next =
+  { freeze = next.freeze
+  ; allocate =
+      (fun ~width ~alignment ~hint ->
+         (n := !n + width; next.allocate ~width ~alignment ~hint))
+  } 
+let counter n = wrap (counter n)
+
+<<automaton.ml>>=
+let rec drop_regs w regs =
+  if w <= 0 then
+    regs
+  else
+    match regs with
+    | (s, n, w') :: rest -> drop_regs (w - w') rest
+    | []                 -> []
+
+let offsetregs n regs next =
+  let state = { avail = regs; used = RS.empty } in
+  let alloc ~width ~alignment ~hint =
+    let offset = !n - width in
+    state.avail <- drop_regs offset regs;
+    try
+      let (_, _, w) as r = getreg state in
+      if w = width then
+        of_loc (R.reg r)
+      else if w < width then
+        Impossible.unimp "register aggregation"
+      else
+        Impossible.unimp "auto-widening for register requests"
+    with Failure _ -> next.allocate width alignment hint in
+  let freeze regs mems =
+    <<prattle about registers used by [[offsetregs]]>>;
+    next.freeze (RS.union state.used regs) mems in
+  { freeze = freeze; allocate = alloc }
+let offsetregs n regs = wrap (offsetregs n regs)
+<<prattle about registers used by [[offsetregs]]>>=
+let used = List.map regstring (RS.elements state.used) in
+Verbose.say 2 ["offsetregs automaton uses regs: "; String.concat ", " used; "\n"]
+@ 
 \paragraph{Exclusion}
 <<automaton.ml>>=
 module Exclude = struct
