@@ -5,7 +5,9 @@
 % Importance ::=    Central|Subsystem|Peripheral
 % Urgency    ::=    Immediate|Soon|Later
 %
-% Example (at beginning of line): %%Grades: B Central Soon
+%%Grades: D Peripheral Later
+
+\section{Placing variables into suitable temporary locations}
 <<placevar.mli>>=
 module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.t')
             (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Proc.t and type 'a
@@ -13,7 +15,7 @@ module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.t')
     : Lua.Lib.TYPEFUL with type 'a combined = 'a BackplaneT.combined
 
 @ 
-
+Boilerplate for linking to Lua.
 <<placevar.ml>>=
 module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.t')
             (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Proc.t and type 'a
@@ -32,30 +34,37 @@ combined = 'a BackplaneT.combined)
     end
   end
 @
-
+\subsection{Fortran-style variable placer}
+The key datastructure is [[tMap]], which maps the index of a variable
+to the temporary cell that the variable will occupy.
+Function [[walkRtl]] at once builds up the map and replaces each
+variable with its temporary location.
 <<builtins>>=
-	module RP = Rtl.Private
-	module TM = Map.Make(struct type t = int let compare = compare end)
+module RP = Rtl.Private
+module TM = Map.Make(struct type t = int let compare = compare end)
 
-	let placeVars _ {Proc.cfg = cfg; Proc.target = target; Proc.temps = temps} =
-		<<walk RTL>>
-		let updateNode node tMap = 
-			let newRtl, tMap' = walkRtl (G.instr node) tMap in
-			let _ = G.upd_instr node (fun _ -> newRtl) in
-				tMap' in
-		let _ = Cfgutil.fold_fwd cfg updateNode TM.empty in
-        true
+let placeVars _ {Proc.cfg = cfg; Proc.target = target; Proc.temps = temps} =
+	<<walk RTL>>
+	let updateNode node tMap = 
+		let newRtl, tMap' = walkRtl (G.instr node) tMap in
+		let _ = G.upd_instr node (fun _ -> newRtl) in
+			tMap' in
+	let _ = Cfgutil.fold_fwd cfg updateNode TM.empty in
+true
 
-	let proc = ProcT.makemap V.userdata V.projection
-	let ( **-> ) = V.( **-> )
-	let stageFn = (V.pfunc (V.value **-> proc **-> V.result V.bool)).V.embed
+let proc = ProcT.makemap V.userdata V.projection
+let ( **-> ) = V.( **-> )
+let stageFn = (V.pfunc (V.value **-> proc **-> V.result V.bool)).V.embed
 
-    let placevar_module = [ "placeVars", stageFn placeVars
-                          ; "expander",  stageFn Expander.cfg
-                          ]
+let placevar_module = [ "placeVars", stageFn placeVars
+                      ; "expander",  stageFn Expander.cfg
+                      ]
 @
-
-
+We use the Fortran convention for placing variables: anything named
+with I~through~N is an INteger, and anything else is floating point.
+Anything other than 32~bits is shoved into a 32-bit temporary.
+This makes no sense to me, and I don't see how it can possibly do
+anything useful.
 <<walk RTL>>=
 (* NOTE: using space 't' is hopeful, but ultimately bogus. *)
 let new_tmp name w =
@@ -64,8 +73,8 @@ let new_tmp name w =
                -> Talloc.Multiple.loc temps 't' w
     |   n, 32  -> Talloc.Multiple.loc temps 'u' w 
     |   n, 64 when (compare name "i" >= 0) && (compare name "n" <= 0)
-              -> Talloc.Multiple.loc temps 't' 32
-    |   n, 64 -> Talloc.Multiple.loc temps 'u' 32
+               -> Talloc.Multiple.loc temps 't' 32
+    |   n, 64  -> Talloc.Multiple.loc temps 'u' 32
     |   n, 16  -> Talloc.Multiple.loc temps 't' 32
     |   n, 8   -> Talloc.Multiple.loc temps 't' 32
 	(*
@@ -74,7 +83,9 @@ let new_tmp name w =
     |  _       -> Impossible.impossible 
                     (Printf.sprintf "asked for temporay %s (%d wide)" name w)
 in
-
+@ 
+Old diagnostics?
+<<walk RTL>>=
 let print_var (s, i, w) = 
     Verbose.say 18 ["VAR: "
                    ; s 
@@ -85,7 +96,10 @@ let print_var (s, i, w) =
                    ; "\n" 
                    ] 
 in
-   
+@    
+A standard recursive tree walk.
+The interesting case is [[RP.Var]] in [[walkLoc]].
+<<walk RTL>>=
 let rec walkLoc loc tMap = match loc with
 	| RP.Cell (sp, ag, w, e, ass) ->
 		let e', tMap' = walkExp e tMap in
