@@ -61,7 +61,7 @@ used in the compiler that wait to be unified: \path|Reloc| and one in
 clearly. The problem stems for an anticipated use for both textual
 assemblers and binary emitters. Especially the role of symbols is not
 clear and should be explained with respect to the better known textual
-assemblers.
+assemblers. 
 
 \end{itemize}
 
@@ -77,6 +77,9 @@ problem is solved in \path|Rtlop|. The above explanation of operator
 specialization is not entirely correct. The specializing parameter is
 not a formal argument of a primitive, but part of its \emph{width list}.
 --CL}
+
+The function \path|proc| that controlls the translation of a procedure
+in module \path|Ast3ir| must be broken up and cleaned up. 
 
 According to the {\PAL} manual, integer multiplication \path|%mul| is
 quasi-polymorphic in its result and thus must be used as in \path|%mul32|.
@@ -210,7 +213,20 @@ now believe that the \emph{construction} of a {\cfg} should not require
 any machine-specific knowledge to allow for the easy implementation of
 {\cfg} transformations.
 
-The {\PAL} language construct \path|span| is unsupported.
+
+At least one operation in the current implementation of the {\cfg}
+requires the introduction of a new label together with a new symbol for
+that label. Symbols are issued by an assembler, but this context is
+missing. As a hack, a symbol is created locally. However, this is wrong
+because it does not reflect the rules of the actual assembler. I would
+like to see a design where new branches can be introduced without
+worries about target specific symbols. This plays into the observation,
+that {\PAL} has really two classes of labels: local labels introduced by
+the translation of statements like \path|if|, and global labels that are
+define in a {\PAL} source file. At least local branches should not
+depend on symbols.
+
+he {\PAL} language construct \path|span| is unsupported.
 
 The {\PAL} language construct \path|switch| is unsupported.
 
