@@ -39,6 +39,7 @@ INTERP       =  std
 PROFILE      =  -p
 OCAMLC_FLAGS = 	-I $INTERP -I $LIBDIR -g
 OCAMLO_FLAGS =	-I $INTERP -I $LIBDIR $PROFILE
+# if you change -I flags here, also change when $OCAMLDEP is used
 
 NWSRC=`echo *.nw`
 NWHTML=${NWSRC:%.nw=%.html}
@@ -146,15 +147,15 @@ lua-$INTERP.cmxa:	$LIBCMX	$LIBCMI
 # implicitly built when lua-std.cmxa is built.
 
 $LIBDIR/lua.cma:Q: lua-std.cma $LIBMLI $LIBCMI dirs
-		cmp -s lua-std.cma $target || cp -v lua-std.cma $target
+		cp -v lua-std.cma $target
 		for f in $LIBMLI $LIBCMI
 		do
 		    cmp -s $f $LIBDIR/$f || cp -v $f $LIBDIR
 		done
 
 $LIBDIR/lua.cmxa:Q: lua-std.cmxa $LIBMLI $LIBCMI dirs
-		cmp -s lua-std.cmxa $target || cp -v lua-std.cma $target
-		cmp -s lua-std.a    $LIBDIR/lua.a || cp -v lua-std.a $LIBDIR/lua.a
+		cp -v lua-std.cmxa $target
+		cp -v lua-std.a $LIBDIR/lua.a
 		for f in $LIBMLI $LIBCMI
 		do
 		    cmp -s $f $LIBDIR/$f || cp -v $f $LIBDIR
@@ -279,7 +280,7 @@ dirs:VQ:
 	done    
 
 DEPEND.$INTERP: $SCAN
-	$OCAMLDEP $prereq > $target
+	$OCAMLDEP -I $INTERP -I $LIBDIR $prereq > $target
 
 
 <DEPEND.$INTERP
