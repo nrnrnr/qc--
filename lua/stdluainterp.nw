@@ -435,12 +435,15 @@ let rec extend rho = function
   | _ -> rho
 @ 
 <<interp toplevel>>=
-let block_compiler (srcmap, debug) =
+let block_compiler srcmap =
   let high_local_limit = ref 0 in
   let localref n = if n >= !high_local_limit then high_local_limit := n+1 in
   let local_size () = !high_local_limit in
-  <<definitions of [[block]], [[stmt]], and friends>>
-  in  (block:string list -> A.block -> 'a cont -> (V.value list -> 'a) -> 'a cont), local_size
+  let bcomp ~debug =
+      <<definitions of [[block]], [[stmt]], and friends>>
+      in block
+  in  (bcomp: debug:bool -> string list -> A.block -> 'a cont -> (V.value list -> 'a)
+              -> 'a cont), local_size
 @ 
 For statements (although not for expressions), the ordinary and return
 continuations can be static parameters.  This setup approximates
@@ -450,15 +453,16 @@ loops work.
 let rec stmt rho s theta ret = match s with
   | A.Stmt' (charpos, s) ->
       if debug then
+        (* might make interesting example for paper *)
         let where = Srcmap.location srcmap charpos in
-        let n = ref None in
-        let restore g = g.V.currentloc <- !n in
-        let restore_cont g l = (restore g; theta g l) in
-        let run_cont =
-          fun g l -> stmt rho s restore_cont (fun ans -> restore g; ret ans) g l in
-        fun g l -> ( n := g.V.currentloc
+        let restore = ref (fun () -> ()) in  (* will restore currentloc *)
+        let theta' g l = (!restore(); theta g l) in
+        let ret' ans   = (!restore(); ret ans) in
+        let stheta = stmt rho s theta' ret' in
+        fun g l -> let n = g.V.currentloc in
+                   ( restore := (fun () -> g.V.currentloc <- n)
                    ; g.V.currentloc <- Some where
-                   ; run_cont g l
+                   ; stheta g l
                    ) 
             (* hard to maintain current line if exn raised ... *)
       else
@@ -577,10 +581,11 @@ let with_stack info g f x =
   answer
 
 let value_list = V.list V.value
-let lambda srcdbg (file, line, col) args varargs body =
+let lambda (src, debug) (file, line, col) args varargs body =
   let rho = let args' = List.rev args in if varargs then "arg" :: args' else args' in
-  let block, count = block_compiler srcdbg in
-  let body = block rho body (fun g l -> []) (fun results -> results) in
+  let block, count = block_compiler src in
+  let block = (block : debug:bool -> string list -> A.block -> 'a cont -> (V.value list -> 'a) -> 'a cont) in
+  let body = block ~debug rho body (fun g l -> []) (fun results -> results) in
   let n = count() in
   let info = V.info file line in
   info, 
@@ -606,6 +611,7 @@ let funname = function
   | A.Lindex (e, e') -> expname e ^ "[" ^ expname e' ^ "]"
 let func (info, f) = V.Function (info, f)
 let chunk ((smap, dbg) as srcdbg) block rho = function
+  | A.Debug _ -> assert false (* must never get here *)
   | A.Statement s -> block rho [s]
   | A.Fundef (pos, f, args, varargs, body) ->
       let v = func (lambda srcdbg (Srcmap.location smap pos) args varargs body) in
@@ -625,13 +631,15 @@ let wrap f x = let l = f x in (prerr_string "function returned ";
                                l)
 
 let compile ~srcdbg cs = 
-  let block, count = block_compiler srcdbg in
-  let block = (block : string list -> A.block -> 'a cont -> (V.value list -> 'a) -> 'a cont) in
+  let block, count = block_compiler (fst srcdbg) in
+  let block = (block : debug:bool -> string list -> A.block -> 'a cont -> (V.value list -> 'a) -> 'a cont) in
   let ret = fun results -> results in
-  let rec chunks rho = function
+  let rec chunks ((smap, debug) as srcdbg) rho = function
     | [] -> fun g l -> []
-    | h :: t -> chunk srcdbg block rho h (chunks (extendchunk rho h) t) ret in
-  let theta = chunks [] cs in
+    | A.Debug dbg :: t -> chunks (smap, dbg) rho t
+    | h :: t -> chunk srcdbg (block ~debug) rho h
+                (chunks srcdbg (extendchunk rho h) t) ret in
+  let theta = chunks srcdbg [] cs in
   let locals = Array.make (count()) V.Nil in
   fun g -> theta g locals
 @ 

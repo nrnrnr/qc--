@@ -15,14 +15,14 @@ that is inspired by Olivier Danvy's work on type-directed partial
 evaluation. 
 This file sketches some of the supporting details, focusing on the
 embedding and projection, which is the new part.
-<<oldinterp.mli>>=
+<<luainterp.mli>>=
 <<signatures>>
-module Make3  (T : Lualib.COMBINED_TYPE)
+module Make (T : Lualib.COMBINED_TYPE)
                   (L : Lualib.TYPEFUL with type 'a combined = 'a T.t) :
     S with type 'a Value.userdata'  = 'a T.t
 @ 
 \subsection{Implementation}
-<<oldinterp.ml>>=
+<<luainterp.ml>>=
 <<signatures>>
 @ 
 <<signatures>>=
@@ -50,9 +50,9 @@ module type S = sig
        creating t if needed *)
 end
 @ 
-<<oldinterp.ml>>=
-module Make3  (T : Lualib.COMBINED_TYPE)
-                  (L : Lualib.TYPEFUL with type 'a combined = 'a T.t) :
+<<luainterp.ml>>=
+module Make (T : Lualib.COMBINED_TYPE)
+            (L : Lualib.TYPEFUL with type 'a combined = 'a T.t) :
     S with type 'a Value.userdata'  = 'a T.t = struct
   module U = struct
     type 'a t = 'a T.t
@@ -81,7 +81,7 @@ module Make3  (T : Lualib.COMBINED_TYPE)
     L'.init g;
     g
 
-end (* Make3 *)
+end (* Make *)
 @ 
 <<new-style state function>>=
 module This = struct
@@ -532,6 +532,7 @@ let funname = function
   | A.Lindex (e, e') -> expname e ^ "[" ^ expname e' ^ "]"
 let func (info, f) = V.Function (info, f)
 let chunk ((smap, dbg) as srcdbg) rho = function
+  | A.Debug _ -> assert false
   | A.Statement s -> stmt srcdbg rho s
   | A.Fundef (pos, f, args, varargs, body) ->
       let v = func (lambda srcdbg (Srcmap.location smap pos) args varargs body) in
@@ -557,13 +558,16 @@ let wrap f x = let l = f x in (prerr_string "function returned ";
 
 let compile ~srcdbg cs = 
   let locals = Array.make (chunklocals cs) V.Nil in
-  let rec chunks rho = function
+  let rec chunks srcdbg rho = function
     | [] -> fun g -> []
+    | A.Debug dbg :: t ->
+        let (src, _) = srcdbg in
+        chunks (src, dbg) rho t
     | h :: t ->
-        let h' = chunk srcdbg rho h in
-        let t' = chunks (extendchunk rho h) t in
+        let h' = chunk  srcdbg rho h in
+        let t' = chunks srcdbg (extendchunk rho h) t in
         fun g -> h' (fun g l -> t' g) (fun results -> results) g locals
-  in chunks [] cs
+  in chunks srcdbg [] cs
 @ 
 <<interp toplevel>>=
 let setfallback g fbname fb =
