@@ -43,16 +43,16 @@ Cmm_Cont       *Cmm_RunThread   (Cmm_Cont *k);
 % ----------------------------------------------------------------------------
 
 <<function prototypes>>=
-Cmm_Activation *Cmm_YoungestActivation(const Cmm_Cont *t);
-int             Cmm_isOldestActivation(const Cmm_Activation *a);
-Cmm_Activation *Cmm_NextActivation(const Cmm_Activation *a);
-int             Cmm_ChangeActivation(Cmm_Activation **a);
-void           *Cmm_FindLocalVar(const Cmm_Activation *a, unsigned n);
-unsigned        Cmm_LocalVarCount(const Cmm_Activation *a);
-void           *Cmm_FindDeadLocalVar(const Cmm_Activation *a, unsigned n);
-void           *Cmm_FindStackData(const Cmm_Activation *a, unsigned n);
-Cmm_Dataptr     Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token);
-Cmm_Cont       *Cmm_GetUnwindCont(const Cmm_Activation *a, Cmm_Word index);
+Cmm_Activation  Cmm_YoungestActivation(const Cmm_Cont *t);
+int             Cmm_isOldestActivation(const Cmm_Activation a);
+Cmm_Activation  Cmm_NextActivation(const Cmm_Activation a);
+int             Cmm_ChangeActivation(Cmm_Activation *a);
+void           *Cmm_FindLocalVar(const Cmm_Activation a, unsigned n);
+unsigned        Cmm_LocalVarCount(const Cmm_Activation a);
+void           *Cmm_FindDeadLocalVar(const Cmm_Activation a, unsigned n);
+void           *Cmm_FindStackData(const Cmm_Activation a, unsigned n);
+Cmm_Dataptr     Cmm_GetDescriptor(const Cmm_Activation a, Cmm_Word token);
+Cmm_Cont       *Cmm_GetUnwindCont(const Cmm_Activation a, Cmm_Word index);
 @ 
 
 % ----------------------------------------------------------------------------
@@ -154,10 +154,11 @@ typedef CMM_label   *Cmm_Codeptr;
 @ 
 
 [[Cmm_Dataptr]] and [[Cmm_Activation]] are simply renamed (and capitalized) versions of their counterparts ([[dataptr]] and [[activation]]).
+Note that we hide the fact that [[activation]]s are pointers.
 
 <<type definitions>>=
 typedef dataptr      Cmm_Dataptr;
-typedef activation   Cmm_Activation;
+typedef activation  *Cmm_Activation;
 @ 
 
 The next type definition is confusing, though.  A [[Cmm_Cont]] is actually a [[thread]]; we need to keep track of more information than simply a stack pointer and a program counter (we also need to maintain and propagate lists of dead
@@ -196,31 +197,31 @@ Cmm_Cont *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n,
 
   /* FIX -- MACHINE SPECIFIC */
   char *bootstring = (char *) malloc(sizeof(char) * 1024);
-  sprintf(bootstring, "CMM.imports({ '%s' })               \n"
+  sprintf(bootstring, "CMM.imports({'%s'})\n"
 
-                      "CMM.exports({ '_boot_proc_%u', "
-                                   " '_boot_x_%u'   , "
-                                   " '_boot_f_%u'   })     \n"
+                      "CMM.exports({'_boot_proc_%u',"
+                                   "'_boot_x_%u',"
+                                   "'_boot_f_%u'})\n"
 
-                      "CMM.section('_boot_section_%u')     \n"
-                      "CMM.align(%d)                       \n"
-                      "CMM.define_label('_boot_x_%u')      \n"
-                      "CMM.skip(%d)                        \n"
+                      "CMM.section('_boot_section_%u')\n"
+                      "CMM.align(%d)\n"
+                      "CMM.define_label('_boot_x_%u')\n"
+                      "CMM.skip(%d)\n"
 
-                      "CMM.define_label('_boot_f_%u')      \n"
-                      "CMM.skip(%d)                        \n"
-                      "CMM.procedure('_boot_proc_%u',1,0)  \n"
-                      "CMM.push_symbol('_boot_x_%u')       \n"
+                      "CMM.define_label('_boot_f_%u')\n"
+                      "CMM.skip(%d)\n"
+                      "CMM.procedure('_boot_proc_%u',1,0)\n"
+                      "CMM.push_symbol('_boot_x_%u')\n"
 
-                      "CMM.fetch(%d,%s,%d)                 \n"
-                      "CMM.store_arg(0)                    \n"
-                      "CMM.push_symbol('_boot_f_%u')       \n"
+                      "CMM.fetch(%d,%s,%d)\n"
+                      "CMM.store_arg(0)\n"
+                      "CMM.push_symbol('_boot_f_%u')\n"
 
-                      "CMM.fetch(%d,%s,%d)                 \n"
+                      "CMM.fetch(%d,%s,%d)\n"
 
-                      "CMM.call({}, {}, {}, 0)             \n"
-                      "CMM.cmm_return(0, 0)                \n"
-                      "CMM.end_section()                   \n",
+                      "CMM.call({}, {}, {}, 0)\n"
+                      "CMM.cmm_return(0, 0)\n"
+                      "CMM.end_section()\n",
 
                       CMM_label_raddr(((CMM_label *) f))->label->name, 
                       boot_id, boot_id, boot_id,
@@ -290,9 +291,9 @@ module for details).
 [[Cmm_YoungestActivation]] simply returns the newest activation record on
 the thread's stack (it should be located at [[t->stack_free - sizeof(activation)]]).
 <<stack-walking functions>>=
-Cmm_Activation *Cmm_YoungestActivation(const Cmm_Cont *t) {
+Cmm_Activation Cmm_YoungestActivation(const Cmm_Cont *t) {
   assert(t->stack_free > t->stack_base);
-  return (Cmm_Activation *) (((activation *) t->stack_free) - 1);
+  return (Cmm_Activation) (((activation *) t->stack_free) - 1);
 }
 @ 
 
@@ -300,7 +301,7 @@ Cmm_Activation *Cmm_YoungestActivation(const Cmm_Cont *t) {
 the given activation is at the beginning of the thread's stack (is located
 at [[t->stack_base]]).
 <<stack-walking functions>>=
-int Cmm_isOldestActivation(const Cmm_Activation *a) {
+int Cmm_isOldestActivation(const Cmm_Activation a) {
   thread *t = find_thread(a->u);
 
   return (t->stack_base == a->locals);
@@ -313,12 +314,12 @@ is located just before the given activation's associated local variable space
 Note that this function does not in any way actually pop activations off
 the stack; it merely observes the next youngest activation.
 <<stack-walking functions>>=
-Cmm_Activation *Cmm_NextActivation(const Cmm_Activation *a) {
+Cmm_Activation Cmm_NextActivation(const Cmm_Activation a) {
   if (Cmm_isOldestActivation(a)) {
     runtime_sys_err("[runtime system] already at oldest activation in thread");
   }
 
-  return (Cmm_Activation *) (((activation *) (a->locals)) - 1);
+  return (Cmm_Activation) (((activation *) (a->locals)) - 1);
 }
 @ 
 
@@ -326,7 +327,7 @@ Cmm_Activation *Cmm_NextActivation(const Cmm_Activation *a) {
 conditionally changes a given activation handle--depending on whether we
 have walked off the stack or not.
 <<stack-walking functions>>=
-int Cmm_ChangeActivation(Cmm_Activation **a) {
+int Cmm_ChangeActivation(Cmm_Activation *a) {
   thread *t = find_thread((*a)->u);
 
   if (t->stack_base == (*a)->locals)
@@ -341,7 +342,7 @@ int Cmm_ChangeActivation(Cmm_Activation **a) {
 [[Cmm_FindLocalVar]] returns a pointer to local variable number [[n]] in the
 given activation.
 <<stack-walking functions>>=
-void *Cmm_FindLocalVar(const Cmm_Activation *a, unsigned n) {
+void *Cmm_FindLocalVar(const Cmm_Activation a, unsigned n) {
   return (void *) (a->locals + n);
 }
 @ 
@@ -349,7 +350,7 @@ void *Cmm_FindLocalVar(const Cmm_Activation *a, unsigned n) {
 [[Cmm_LocalVarCount]] returns the number of local variables in the given
 activation.
 <<stack-walking functions>>=
-unsigned Cmm_LocalVarCount(const Cmm_Activation *a) {
+unsigned Cmm_LocalVarCount(const Cmm_Activation a) {
   return (unsigned) (a->locals_end - a->locals);
 }
 @ 
@@ -360,7 +361,7 @@ We look at the activation [[a]], which might be dead.
 If its [[locals]] pointer appears to be valid, we dereference it--offset by
 [[n]]; otherwise, we return [[NULL]].
 <<stack-walking functions>>=
-void *Cmm_FindDeadLocalVar(const Cmm_Activation *a, unsigned n) {
+void *Cmm_FindDeadLocalVar(const Cmm_Activation a, unsigned n) {
   thread *t = find_thread(a->u);
 
   if ((void *) a->locals >= t->stack_free 
@@ -377,7 +378,7 @@ void *Cmm_FindDeadLocalVar(const Cmm_Activation *a, unsigned n) {
 associated with the given activation's [[n]]th stackdata label.
 \emph{This function is unimplemented and causes an error message for now.}
 <<stack-walking functions>>=
-void *Cmm_FindStackData(const Cmm_Activation *a, unsigned n) {
+void *Cmm_FindStackData(const Cmm_Activation a, unsigned n) {
   runtime_sys_err("[runtime system] Cmm_FindStackData unimplemented");
 
   /* we should not get down here for now */
@@ -389,7 +390,7 @@ void *Cmm_FindStackData(const Cmm_Activation *a, unsigned n) {
 Fortunately, the [[span]] module exports [[span_find_value]] to take care of 
 the job.
 <<stack-walking functions>>=
-Cmm_Dataptr Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token) {
+Cmm_Dataptr Cmm_GetDescriptor(const Cmm_Activation a, Cmm_Word token) {
   return (Cmm_Dataptr) span_find_value((unsigned) a->pc, (unsigned) token);
 }
 @ 
@@ -404,7 +405,7 @@ as [[a]] and (2) is younger than [[a]], after the [[Cmm_Cont]] returned by
 [[Cmm_GetUnwindCont]] is cut to.
 \emph{Also note that the [[thread]] structure representing the thread in which [[a]] sits may not properly be freed, especially if [[Cmm_GetUnwindCont]] is used at some point.}
 <<stack-walking functions>>=
-Cmm_Cont *Cmm_GetUnwindCont(const Cmm_Activation *a, Cmm_Word index) {
+Cmm_Cont *Cmm_GetUnwindCont(const Cmm_Activation a, Cmm_Word index) {
   thread      *t      = find_thread(a->u),
               *new_t;
   lua_State   *L      = lua_interpreter;
@@ -539,10 +540,10 @@ being updated.
 
 <<load in the standard basis and store error code in [[rc]]>>=
   {
-    char *standard_basis = "function CMM.c_call(s)   \n"
-                           "CMM.push_symbol(s)       \n"
-                           "CMM.call({}, {}, {}, 0)  \n"
-                           "end                      \n";
+    char *standard_basis = "function CMM.c_call(s)    \n"
+                           "  CMM.push_symbol(s)      \n"
+                           "  CMM.call({}, {}, {}, 0) \n"
+                           "end                       \n";
 
     rc = load_assembly_unit(standard_basis, SRC_STRING);
   }

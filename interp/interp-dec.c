@@ -382,7 +382,7 @@ void run_interp(thread *t) {
     uid          u;
 
     actptr       caller;
-    char        *name = NULL;
+    const char  *name = NULL;
 
     assert(t != NULL);
     
