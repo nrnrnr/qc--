@@ -189,18 +189,16 @@ The SPARC has no 8-byte emission unit, so I fake one, assuming big-endian order.
 method value (v:Bits.bits) = 
   let altfmt = Bits.to_hex_or_decimal_string ~declimit:256 in
   match Bits.width v with
-  |  8 -> fprintf _fd ".byte %s\n" (decbits v)
+  |  8 -> fprintf _fd ".byte %Ld\n" (Bits.S.to_int64 v)
   | 16 -> fprintf _fd ".word %s\n" (altfmt v)
   | 32 -> fprintf _fd ".long %s\n" (altfmt v)
   | 64 ->
       let i = Bits.U.to_int64 v in
-      output_string _fd (Int64.format ".long 0x%x\n" (Int64.shift_right_logical i 32));
-      output_string _fd (Int64.format ".long 0x%x\n" (Int64.logand i mask32))
+      fprintf _fd ".long 0x%Lx\n" (Int64.logand i mask32);
+      fprintf _fd ".long 0x%Lx\n" (Int64.shift_right_logical i 32)
   | w -> Impossible.unimp ("emission width " ^ string_of_int w ^ " in x86 assembler")
 <<utilities>>=
 let mask32 = Int64.pred (Int64.shift_left Int64.one 32)
-let hexbits b = Int64.format "0x%x" (Bits.U.to_int64 b)
-let decbits b = Int64.format "%d"   (Bits.S.to_int64 b)
 @ 
 <<assembly methods>>=            
 method addr a =
@@ -210,7 +208,7 @@ method addr a =
       if Bits.Ops.eq bits (Bits.zero 32) then
         fprintf _fd ".long %s\n" s#mangled_text
       else
-        fprintf _fd ".long %s + %s\n" s#mangled_text (hexbits bits) 
+        fprintf _fd ".long %s + 0x%Lx\n" s#mangled_text (Bits.U.to_int64 bits) 
 @ 
 <<assembly methods>>=
 method emit = ()
@@ -219,7 +217,7 @@ method emit = ()
 method comment s = fprintf _fd "/* %s */\n" s
 
 method const (s: Symbol.t) (b:Bits.bits) = 
-  fprintf _fd ".set %s, %s" s#mangled_text (hexbits b)
+  fprintf _fd ".set %s, 0x%Lx" s#mangled_text (Bits.U.to_int64 b)
 @ 
 This almost certainly doesn't work---we must linearize the flow graph
 and know to emit labels.

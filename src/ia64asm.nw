@@ -20,11 +20,9 @@ module SM = Strutil.Map
 <<definitions>>
 let make emitter fd = new asm emitter fd
 @ 
-
 <<utilities>>=
 let fprintf = Printf.fprintf
 @ 
-
 <<definition of [[manglespec]] (for the name mangler)>>=
 let spec =
     let reserved = [] in        (* list reserved words here so we can avoid them *)
@@ -93,19 +91,13 @@ method zeroes (n:int) = fprintf _fd ".skip %d\n" n
 method value (v:Bits.bits) = 
   let altfmt = Bits.to_hex_or_decimal_string ~declimit:256 in
   match Bits.width v with
-  |  8  -> fprintf _fd "data1 %s\n"  (decbits v)
-  | 16  -> fprintf _fd "data2 %s\n" (altfmt v)
+  |  8  -> fprintf _fd "data1 %Ld\n" (Bits.S.to_int64 v)
+  | 16  -> fprintf _fd "data2 %s\n"  (altfmt v)
   | 32  -> fprintf _fd "data4 %s\n"  (altfmt v)
   | 64  -> fprintf _fd "data8 %s\n"  (altfmt v)
   | 128 -> fprintf _fd "data16 %s\n" (altfmt v)
   | w -> Impossible.unimp ("emission width " ^ string_of_int w ^ " in IA64 assembler")
 @ 
-
-<<utilities>>=
-let hexbits b = Int64.format "0x%x" (Bits.U.to_int64 b)
-let decbits b = Int64.format "%d"   (Bits.S.to_int64 b)
-@ 
-
 <<assembly methods>>=
 method addr a =
   match Reloc.Simple.normalize a with
@@ -114,7 +106,7 @@ method addr a =
       if Bits.Ops.eq bits (Bits.zero 64) then
         fprintf _fd "data8 %s\n" s#mangled_text
       else
-        fprintf _fd "data8 %s + %s\n" s#mangled_text (hexbits bits)
+        fprintf _fd "data8 %s + 0x%Lx\n" s#mangled_text (Bits.U.to_int64 bits)
 @ 
 
 <<assembly methods>>=
@@ -125,7 +117,6 @@ method emit = ()
 method comment s = fprintf _fd "/* %s */\n" s
 
 method const (s: Symbol.t) (b:Bits.bits) = 
-  (*fprintf _fd ".set %s, %s" s#mangled_text (hexbits b)*)
   Impossible.unimp "Don't know how to make a constant for IA64"
 @ 
 

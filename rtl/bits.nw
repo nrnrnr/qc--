@@ -344,9 +344,9 @@ let to_decimal_string (i,w) = Printf.sprintf "%Ld" i
 let to_hex_or_decimal_string ~declimit (i,w) =
   assert (declimit >= 0);
   if Uint64.lt i (I.of_int declimit) then
-    Printf.sprintf "%Ld" i
+    Int64.format "%d" i
   else
-    Printf.sprintf "0x%Lx" i
+    Int64.format "0x%x" i
 @
 
 % ------------------------------------------------------------------ 
@@ -514,9 +514,9 @@ let of_string str w =
 
 let to_int (i,w) =
     if I.of_int min_int <= i && i <= I.of_int max_int then
-        I.to_int i
+      I.to_int i
     else
-        raise Overflow
+      raise Overflow
 
 let to_native (i,w) =
     if  I.of_nativeint Nativeint.min_int <= i && 
@@ -545,16 +545,13 @@ let mask i w =
     else
         i
 @
-
-The [[fits_unsiged]] predicate is true, if the (positive) number [[i]]
+The [[fits_unsigned]] predicate is true, if the (positive) number [[i]]
 can be represented in [[w]] (unsigned) bits. We check that bits the
 $64-w$ most significant bits are zero.
-
 <<implementation U>>=
 let fits_unsigned i w =
     assert (w = 64 || i >= I.zero);
     w = 64 or (I.shift_right_logical i w) = I.zero
-
 
 let of_int i w =
     check w;
@@ -611,8 +608,6 @@ let to_int64 (i,w) =
     let i = mask i w in
     i 
 @
- 
-
 % ------------------------------------------------------------------ 
 \subsubsection{Strings}
 % ------------------------------------------------------------------ 
@@ -624,7 +619,6 @@ First, we have to find out whether the string at hand denotes a
 character, integer, or floating point number. A character starts with an
 single quote, a floating-point number includes either a dot, an [[e]],
 or an [[E]], everything else must be an integer.
-
 <<string scanning>>=
 <<parse int>>
 <<parse float>>
@@ -645,12 +639,9 @@ let string (s:string) (w:int) =
     else
         int s w
 @        
-    
-
 This implementation cannot read very large decimal and octal number
 representations. They would have to set the sign bit which they don't.
 However, hexadecimal representations can use all 64 bits.
-
 <<parse int>>=
 let int str w =
     let len    = String.length str in
@@ -664,16 +655,19 @@ let int str w =
                 I.of_string str
         with Failure _ -> syntax ("syntax error in constant: "^str)    
 @
-
-Floating point numbers are unimplemented. 
-
+For a floating-point literal, we trust the Caml compiler to produce
+the right bit pattern.
+Probably not our best idea ever.
 <<parse float>>=
 let float str w = 
   try 
-    let _ = float_of_string str in Impossible.unimp "floating-point literals"
+    let x = float_of_string str in
+    match w with
+    | 32 -> Uint64.Cast.float32 x
+    | 64 -> Int64.bits_of_float x
+    | _ -> Unsupported.floatlit w
   with Failure _ -> syntax ("syntax error in constant: "^str)
-
-
+@ 
 <<parse char>>=
 let char str w =
     let str = String.sub str 1 (String.length str - 2) in

@@ -26,7 +26,7 @@ Test.files = { "add.c--"
              , norun("exp-003.c--")
              , "fadd.c--"
 	     , { source="fargres.c--", other='src/double.c' }
-             , norun("float-000.c--")
+             , "float-000.c--"
              , norun("float-001.c--")
              , 'float-002.c--'
              , 'float-003.c--'

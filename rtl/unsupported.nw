@@ -19,6 +19,7 @@ val automaton_widths : int -> 'a
 val automaton_widen  : have:int -> want:int -> 'a
 val div_and_mod : unit -> 'a
 val div_overflows : unit -> 'a
+val floatlit : int -> 'a
 @ 
 <<unsupported.ml>>=
 exception Unsupported
@@ -143,3 +144,12 @@ let div_overflows_n = getn (fun _ ->
 
 let div_overflows () = fail (nosupport "overflow detection for division") div_overflows_n []
 
+@ 
+<<unsupported.ml>>=
+let floatlit = getn (ex1 (fun n ->
+    [ "On this target, floating-point literals can be either 32 or 64 bits wide.";
+      s "You asked for a literal of %d bits.  You could try %%f2f%d(<literal>)." n n;
+    ]))
+
+let floatlit d =
+  fail (nosupport (s "%d-bit floating-point literal" d)) floatlit [d]
