@@ -118,28 +118,47 @@ defines commonly used functions. Later we will compile the corresponding
 string into the compiler such that it is always available. During
 development it is easier to have an external file.
 
+Command line arguments are evaluated as follows:
+
+\begin{itemize}
+\item From left to right, all arguments to [[-e]] are collected.
+\item When the next command line argument is [[-i]]:
+    \begin{itemize}
+    \item All remaining arguments are passed to Lua as [[Sys.argv]]. 
+    \item The collected arguments to [[-e]] are evaluated from left to right. 
+    \item The interpreter reads input from stdin.
+    \end{itemize}
+\item When the next command line argument is not [[-e]]:
+    \begin{itemize}
+    \item All remaining arguments are passed to Lua as [[Sys.argv]]. 
+    \item The collected arguments to [[-e]] are evaluated from left to right. 
+    \end{itemize}
+\end{itemize}
+
 <<main2.ml>>=
 let main () =
     let argv        = Array.to_list Sys.argv in
     let this        = Filename.basename (List.hd argv) in
     let args        = List.tl argv in
-    let usage       = "usage: " ^ this ^ " -e 'lua commands' [arg arg ..]" in
+    let usage       = "usage: " ^ this ^ " -e 'arg' [arg arg ..]" in
     let state       = I.state () in (* fresh Lua state *)       
+    let evaluate e  = ignore (I.dostring state e) in
         try 
-            let rec loop = function
-                | ("-e"::code::args) -> 
-                    ( ignore (I.dostring  state code)
-                    ; loop args
-                    )
+            let rec loop todo = function
+                | ("-e"::code::args) -> loop (code::todo) args
                 | ["-e"] -> E.error usage
                 | ("-i"::args) -> 
                     ( export_argv state args
+                    ; List.iter evaluate (List.rev todo)
                     ; run_interactive state stdin
                     )
-                | args -> export_argv state args
+                | args -> 
+                    ( export_argv state args
+                    ; List.iter evaluate (List.rev todo)
+                    )
             in
                 ( ignore(I.dofile state "qc--.lua")     (* startup *)
-                ; loop args                             (* cmdline *)
+                ; loop [] args                          (* cmdline *)
                 )
         with
             E.ErrorExn(msg) -> 
