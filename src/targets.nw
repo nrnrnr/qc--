@@ -62,9 +62,7 @@ type 'a map = 'a T.map =
     \hline
     Index        & Purpose               \\
     \hline
-    0            & PC                    \\
-    1            & SP                    \\
-    2            & Return                \\
+    31            & SP                    \\
     \dots        & general purpose       \\
     \end{tabular}
 \end{center}    
@@ -73,11 +71,13 @@ type 'a map = 'a T.map =
 <<targets.ml>>=
 let const n width = Rtl.bits (Bits.of_int n width) width
 let reg n         = Rtl.cell Rtl.none 'r' Rtl.Identity 32 (const n 5)
+let pc = Rtl.cell Rtl.none 'c' Rtl.Identity 32 (const 0 1)
+let mem addr = Rtl.cell Rtl.none 'm' Rtl.BigEndian 32 addr
 let assign loc e  = Rtl.store loc e (Rtlutil.Width.exp e)       
     
 (* this is total nonsense - it's just for toying around *)
 
-let goto_embed e     = assign (reg 0) e
+let goto_embed e     = assign pc e
 let goto_project rtl = match R.Convert.rtl rtl with
     | RP.Rtl([(_,RP.Store(loc,exp,width))]) -> R.Revert.exp exp
     | _                                     -> assert false
@@ -88,7 +88,7 @@ let goto =
     ; project = goto_project
     }
 
-let branch_embed (e,addr) = R.guard e (assign (reg 0) addr)
+let branch_embed (e,addr) = R.guard e (assign pc addr)
 let branch_project rtl  = match R.Convert.rtl rtl with
     | RP.Rtl([(e,RP.Store(loc,addr,width))]) -> ( R.Revert.exp e
                                                 , R.Revert.exp addr
@@ -102,8 +102,8 @@ let branch =
 
 
 let cc =
-    { T.sp      = reg 1
-    ; T.return  = assign (reg 2) (R.fetch (reg 1) 32)
+    { T.sp      = reg 31
+    ; T.return  = assign pc (R.fetch (mem (R.fetch (reg 31) 32)) 32)
     ; T.proc    = Automaton.dummy
     ; T.cont    = Automaton.dummy
     ; T.ret     = Automaton.dummy
@@ -144,7 +144,17 @@ let spaces =
                       } 
           ; S.doc         = "general-purpose temporaries"
           }
-          
+
+    ;     { S.space = 'c'
+          ; S.cellwidth   = 32
+          ; S.aggregation = Rtl.Identity
+          ; S.indexwidth  = 1
+          ; S.indexlimit  = Some 2
+          ; S.aggsize     = [1]
+          ; S.classification = S.Fixed
+          ; S.doc         = "control and status registers"
+          } 
+
     ]      
 @
 
