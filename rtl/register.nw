@@ -62,6 +62,13 @@ val promote_x     : x -> t
 val rset_to_rxset : Set.t  -> SetX.t
 val promote_rxset : SetX.t -> Set.t
 @
+We sometimes need to map a list of registers into a compact set of integers.
+[[reg_int_map]] maps a list of $n$ integers into the numbers $[0..n-1]$, in
+alphanumeric order (by space, then index).
+Additionally, we return the number of registers in the first element of the pair.
+<<register.mli>>=
+val reg_int_map : t list -> int * int Map.t
+@
 Registers are exported to Lua as a new \emph{userdata} type.
 <<register.mli>>=
 module RT (C : Lua.Lib.CORE) : sig
@@ -111,6 +118,15 @@ let rset_to_rxset set = Set.fold (fun r rst -> SetX.add (Reg r) rst) set SetX.em
 let promote_rxset set =
   SetX.fold (fun r rst -> match r with | Reg r | Slice (_,_,r) -> Set.add r rst)
             set Set.empty
+@
+Creating the integer map is rather simple.
+<<register.ml>>=
+let reg_int_map regs =
+  let order = List.sort (fun (s1,i1,_) (s2,i2,_) -> match compare s1 s2 with
+                                                    | 0 -> compare i1 i2
+                                                    | n -> n)
+                        regs in
+  (List.fold_left (fun (i,map) r -> (i+1, Map.add r i map)) (0, Map.empty) order)
 @
 The [[RT]] module creates an embedding/projection pair for registers.
 <<register.ml>>=
