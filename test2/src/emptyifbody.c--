@@ -1,0 +1,29 @@
+target 
+         byteorder little
+         memsize 8
+         wordsize 32
+         pointersize 32
+         float "ieee754";
+
+         bits2 System.rounding_mode = "IEEE 754 rounding mode";
+
+import printf;
+export main;
+
+foreign "C" main(bits32 argc, bits32 argv) {
+
+ bits32 p;
+
+ p = %zx32(%bit(%disjoin(%bool(%lobits1(1::bits32)), %bool(%lobits1(0::bits32)))));
+
+ p = %f2i32(0xc0600000::bits32, System.rounding_mode); 
+
+ if(%eq(p, 1::bits32)) {} // Empty body -- don't crash!!
+
+ foreign "C" printf("address" fmt);
+ return;
+}
+
+section "data" {
+  fmt: bits8[] "Disjunction, conversion, empty if-body: works.\n\0";
+}
