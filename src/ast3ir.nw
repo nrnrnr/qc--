@@ -808,7 +808,12 @@ let create_cont (a:Automaton.t) (sp:Rtl.loc) (env:F.env) (label:string) =
         
 let init_cont (cfg:G.cfg) (c:Cont.t) =
   ignore (List.fold_left G.gm_insert_assign_after (G.entry cfg) (Cont.init c))
+@
 
+In the [[freeze]] function we fix the stack layout. The results in an
+equation system whose solution determines the values of symbolic
+compile-time constants. A substitution replaces all these symbolic
+values with expressions in the body of the procedure.
 
 <<Make procedure>>=
 let freeze (p:Proc.t) = 
@@ -821,17 +826,22 @@ let freeze (p:Proc.t) =
     let solution = Const.solve eqns in
     let ()       = assert (solution.Const.dependent = []) in
     let map      = Strutil.assoc2map solution.Const.known     in
+    
+    (* The guard protects the subst function. If the guard is true
+     * the subst function is applied to an expression *)
+    let guard    = function
+        | RP.Const(RP.Link(_)) -> true
+        | _                    -> false in
+    
+    (* This is the guareded substitution - we replace certain RP.Link 
+     * values *)
     let rec subst (e:RP.exp) = match e with              
         | RP.Const(RP.Link(x,_)) -> 
             ( try Rtl.Convert.exp (Strutil.Map.find x map) with 
             | Not_found -> e
             )  
-        | RP.App(op,exprs) -> RP.App (op, List.map subst exprs)
-        | RP.Fetch(RP.Cell(sp,agg,w,e,ass),w')  ->
-            RP.Fetch(RP.Cell(sp,agg,w,subst e,ass),w')
-        | _ -> e in
-    let subst' e = Rtl.Revert.exp (subst (Rtl.Convert.exp e)) in
-    let ()       = Cfgutil.subst p.Proc.cfg (Rtlutil.Subst.exp subst')
+        | x -> x in
+    let ()       = Cfgutil.subst p.Proc.cfg (Rtlutil.Subst2.exp guard subst)
     in
         ()
 

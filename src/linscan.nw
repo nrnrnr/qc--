@@ -378,18 +378,19 @@ let spill_slot (a:Automaton.t) ((_,w,_):Register.t) =
 
 let replace_tmp proc node tmp lifetimes next_tmp spill =
   let iter cfg f = Cfgutil.fold_fwd cfg (fun node () -> G.set_rtl node f) () in
-  let lifetime   = lookup lifetimes                                    in
-  let cfg        = G.cfg node                                          in
+  let lifetime   = lookup lifetimes                                 in
+  let cfg        = G.cfg node                                       in
   match find_reg proc lifetimes tmp with
   | Some r -> (* successfully found a hardware register r *)
       let lifetimes = RM.add r (LT.union (lifetime r) (lifetime tmp))
-                               lifetimes                               in
-      let lifetimes = RM.remove tmp lifetimes                          in
-      let ()        = iter cfg (Rtlutil.Subst.reg (replace tmp r))     in
+                               lifetimes                            in
+      let lookup    = Target2.space proc.Proc.target                in
+      let lifetimes = RM.remove tmp lifetimes                       in
+      let ()        = iter cfg (Rtlutil.Subst2.reg lookup (replace tmp r)) in
           next_tmp lifetimes
   | None -> (* out of register - must spill *)
-      let spillee, interval = find_spillee lifetimes tmp node          in
-      let mem               = spill_slot proc.Proc.priv spillee        in
+      let spillee, interval = find_spillee lifetimes tmp node       in
+      let mem               = spill_slot proc.Proc.priv spillee     in
           spill proc spillee mem interval
 @
 
@@ -650,6 +651,7 @@ and update proc interval spillee mem node =
     upd_incoming proc.Proc.target interval spillee mem node ;    
     let reads, writes = reads_writes (G.rtl node) spillee in
     let target = proc.Proc.target in
+    let lookup = Target2.space target in
         if reads || writes then 
             ( let tmp   = Talloc.Multiple.reg_like proc.Proc.temps spillee in
               let subst = fun x -> if x = spillee then tmp else x in 
@@ -659,7 +661,7 @@ and update proc interval spillee mem node =
               ; if writes then 
                     ignore (List.fold_left G.gm_insert_assign_after node
                               (target.T.spill  (T.space target) tmp mem))
-              ; G.set_rtl node (Rtlutil.Subst.reg subst)
+              ; G.set_rtl node (Rtlutil.Subst2.reg lookup subst)
               )
             );
     upd_outgoing target interval spillee mem node       
