@@ -67,6 +67,8 @@ values and list of values.
 module E  = Error
 module R  = Rtl
 module RP = Rtl.Private
+module D  = Rtl.Convert (* Down *)
+module U  = Rtl.Revert  (* Up *)
 module RS = Reloc.Simple
 
 
@@ -98,13 +100,17 @@ compile-time functions over [[Bits.bits]] are defined.
 
 <<Make>>=
 module CompileTime = struct
-    let apply (op,_ as opr) exps =
-        let args = List.map (fun e -> Rtlop.Impl.Bits e) exps in
+    let project = function
+        | RP.Const(RP.Bits(b)) -> b
+        | _                    -> assert false
+    
+    let embed b = R.bits b (Bits.width b)
+    
+    let apply (op,_ as opr) args =
         let f    = try Rtlop.Impl.lookup (Rtl.Revert.opr opr)
                    with Not_found -> E.error ("unknown operator "^op)
-        in match f args with
-            | Rtlop.Impl.Bits b -> b
-            | _                 -> assert false
+        in    
+            project (D.exp (f (List.map embed args)))
 end
 @
 

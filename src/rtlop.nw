@@ -34,10 +34,7 @@ operators.
 
 <<rtlop.mli>>=
 module Impl : sig
-    type value  = Bits of Bits.bits
-                | Bool of bool
-
-    val lookup: Rtl.opr -> (value list -> value)        (* Not_found *)
+    val lookup: Rtl.opr -> Rtl.exp list -> Rtl.exp       (* Not_found *)
 end
 @
 
@@ -188,42 +185,46 @@ let mono op =
 This is totally bogus.
 
 <<CT>>=
-module B = Bits
+module B  = Bits
+module R  = Rtl
+module RP = Rtl.Private
+module D  = Rtl.Convert (* Down *)
+module U  = Rtl.Revert  (* Up *)
 
-type value  = Bits of Bits.bits
-            | Bool of bool
+let zero args = match List.map D.exp args with 
+    | [RP.Const(RP.Bits(x))
+      ;RP.Const(RP.Bits(y))] -> let w = B.width x in
+                                R.bits (B.zero w) w
+    | _                      -> assert false
 
-let zero = function
-    | [Bits(x);Bits(y)] -> Bits(B.zero (B.width x))
-    | _                 -> assert false
+let ii2i op args = match List.map D.exp args with
+    | [RP.Const(RP.Bits(x))
+      ;RP.Const(RP.Bits(y))] ->
+        let wx = Bits.width x      in
+        let wy = Bits.width y      in
+        let x  = Bits.S.to_int64 x in
+        let y  = Bits.S.to_int64 y in
+        let _  = assert (wx = wy)  in 
+           R.bits (Bits.S.of_int64 (op x y) wx) wx
+    | _ -> assert false
 
-let ii2i op = function (* int x int -> int *)
-    | [Bits(x);Bits(y)] -> let wx = Bits.width x      in
-                           let wy = Bits.width y      in
-                           let x  = Bits.S.to_int64 x in
-                           let y  = Bits.S.to_int64 y in
-                           let _  = assert (wx = wy)  in 
-                               Bits (Bits.S.of_int64 (op x y) wx)
-    | _                 -> assert false
-
-let ii2b op = function (* int x int -> bool *)
-    | [Bits(x);Bits(y)] -> let wx = Bits.width x      in
-                           let wy = Bits.width y      in
-                           let x  = Bits.S.to_int64 x in
-                           let y  = Bits.S.to_int64 y in
-                           let _  = assert (wx = wy)  in 
-                               Bool (op x y)
-    | _                 -> assert false
+let ii2b op args = match List.map D.exp args with
+    | [RP.Const(RP.Bits(x))
+      ;RP.Const(RP.Bits(y))] -> 
+        let wx = Bits.width x      in
+        let wy = Bits.width y      in
+        let x  = Bits.S.to_int64 x in
+        let y  = Bits.S.to_int64 y in
+        let _  = assert (wx = wy)  in 
+            R.bool (op x y)
+    | _  -> assert false
 
 
-
-let neg = function
-    | [Bits(x)]     -> Bits(B.zero (B.width x))
+let neg args = match List.map D.exp args with 
+    | [RP.Const(RP.Bits(x))] ->
+        let w = B.width x in
+        R.bits (B.zero w) w
     | _             -> assert false
-
-let true' = function
-    | [Bits(_);Bits(_)] -> Bool(true)
-    | _                 -> assert false
 
 let ops = Strutil.assoc2map
     [  "add"    , (ii2i Int64.add)

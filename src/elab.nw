@@ -143,9 +143,9 @@ module Consts : sig
              
     module Eval: sig
         val evalExpr  : Fenv.Dirty.env -> Ast.expr 
-                        -> (Types.ty * Rtlop.Impl.value) Error.error
+                        -> (Types.ty * Rtl.exp) Error.error
         val evalExprs : Fenv.Dirty.env -> Ast.expr list 
-                        -> (Types.ty * Rtlop.Impl.value) list Error.error
+                        -> (Types.ty * Rtl.exp) list Error.error
         val doConst   : Fenv.Dirty.env -> Decl.decl list 
                         -> Fenv.Dirty.env
     end
@@ -194,6 +194,10 @@ module E  = Error
 module A  = Ast
 module F  = Fenv.Dirty
 module B  = Bits
+module R  = Rtl
+module RP = Rtl.Private
+module D  = Rtl.Convert
+module U  = Rtl.Revert
 @
 
 An outlined in the introduction, an environment must be built up before
@@ -455,6 +459,13 @@ let pointerTy env = E.seq (F.findPointersize env)
                   )                
 @
 
+Project a [[Rtl.exp]] value to a [[Bits.bits]] value.
+
+<<auxiliaries>>=
+let to_bits e = match D.exp e with
+    | RP.Const(RP.Bits(b)) -> b
+    | _                    -> assert false 
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Processing \texttt{target}, \texttt{im}-, and 
@@ -948,7 +959,8 @@ let rec evalFetch env = function
     | A.Var(hint,id)  -> 
             ( match snd (F.findv id env) with
             | E.Error                -> E.Error
-            | E.Ok(F.Constant(bits),ty) -> E.Ok(ty, Rtlop.Impl.Bits bits)
+            | E.Ok(F.Constant(bits),ty) -> 
+                E.Ok(ty, R.bits bits (B.width bits))
             | _ -> E.error ("access of non-constant "^id)
             ) 
 @
@@ -980,7 +992,7 @@ and literalExpr env str ty (cvt: string -> int -> Bits.bits) =
     E.ematch ty
     ( function 
     | T.Bool            -> E.error "a value must have type bitsXX"
-    | T.Bits width as t -> (t, Rtlop.Impl.Bits (cvt str width)) 
+    | T.Bits width as t -> (t, R.bits (cvt str width) width) 
     )
     
 <<module Eval>>=
@@ -1038,8 +1050,8 @@ let doConstDecl env ((ty,name,expr),r) =
     let reg          = F.srcmap env, r                              in
     let entry = E.seq (evalExpr env expr) 
         ( function
-        | (t,Rtlop.Impl.Bits bits) when t <> Types.bool 
-                -> E.Ok(F.Constant(bits),t)
+        | (t,exp) when t <> Types.bool 
+                -> E.Ok(F.Constant(to_bits exp),t)
         | (t,v) -> 
             ( E.errorRegionPrt reg 
                     "constant has type bool but must have type bits"
@@ -1445,8 +1457,8 @@ let memsize env = function
     | A.NoSize        -> E.Ok(Some 1)
     | A.FixSize(e)    -> E.ematch (Consts.Eval.evalExpr env e)
         ( function 
-        | Types.Bits(_), Rtlop.Impl.Bits(bits) ->
-            let size = try Bits.U.to_int bits with
+        | Types.Bits(_), exp ->
+            let size = try Bits.U.to_int (to_bits exp) with
                        Bits.Overflow -> E.error "size too big"
             in 
                 if size > 0 then Some (size)
@@ -1836,14 +1848,13 @@ and returnStmt env (cc,alt,args) =
             let e2' = constExpr env e2 in
                 E.seq' (F.flagError env) (E.Raise.triple (e1',e2',wordTy env))
                 ( function 
-                | (tx, Rtlop.Impl.Bits(x)),(ty, Rtlop.Impl.Bits(y)),w -> if
+                | (tx, x),(ty, y),w when
                    (  tx = w
                    && ty = w
-                   && Bits.S.to_int x >= 0 
-                   && Bits.S.to_int y >= 0 
-                   && Bits.S.to_int x <= Bits.S.to_int y
-                   ) then env 
-                     else E.error "illegal <x/y> combination"
+                   && Bits.S.to_int (to_bits x) >= 0 
+                   && Bits.S.to_int (to_bits y) >= 0 
+                   && Bits.S.to_int (to_bits x) <= Bits.S.to_int (to_bits y)
+                   )  -> env 
                 | _ -> E.error "illegal <x/y> combination"
                 )
 @
