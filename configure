@@ -108,6 +108,27 @@ sub search {
     return "";
 }
 
+# blarg
+
+sub searchx {
+    my $file = shift (@_);
+
+    printf(LOG "searching for %-20s", $file); 
+    while ($f = shift (@_)) {
+        my $x = "$f/$file";
+        if (-f $x) {
+            `$x a -nt b 2>&1 > /dev/null`;
+            $r = $? ^ 0x100;
+            if ($r == 0 || $r == 1) {
+                print LOG "found $x\n";
+                return $x;
+            }
+        }
+    }
+    print LOG "not found\n";
+    return "";
+}
+
 #
 # compile and run a small C program to find out about architecture
 #
@@ -232,7 +253,7 @@ $x{ocaml_version}   = $x{ocamlc}       &&(`$x{ocamlc} -v 2>&1` =~ /(\d\.\d\d)/)
 $x{notangle}        = $x{notangle}     || search("notangle",@path); 
 $x{cpif}            = $x{cpif}         || search("cpif", @path);
 $x{awk}             = $x{awk}          || search("awk", @path);
-$x{test}            = $x{test}         || search("test", @path);
+$x{test}            = $x{test}         || searchx("test", @path);
 $x{cc}              = $x{cc}           || search("gcc",@path) 
                                        || search("cc",@path)  
                                        || search("lcc",@path); 
