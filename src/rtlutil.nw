@@ -43,16 +43,6 @@ module Width: sig
     val exp:    Rtl.exp -> int
     val exp':   Rtl.Private.exp -> int
 end 
-@ 
-% ------------------------------------------------------------------ 
-\subsection{Operator search}
-% ------------------------------------------------------------------ 
-
-We can search all the operators in sight
-<<rtlutil.mli>>=
-module ExistsOpr : sig
-  val rtl : (Rtl.opr -> bool) -> Rtl.rtl -> bool
-end 
 @
 
 % ------------------------------------------------------------------ 
@@ -114,16 +104,32 @@ module ReadWriteKill: sig
     val sets: Rtl.rtl -> Register.SetX.t * Register.SetX.t * Register.SetX.t
     val sets_promote: Rtl.rtl -> Register.Set.t * Register.Set.t * Register.Set.t
 end
+@ 
+% ------------------------------------------------------------------ 
+\subsection{Search}
+% ------------------------------------------------------------------ 
+
+We can search for operators, locations, or constants satisfying a
+given predicate.
+<<rtlutil.mli>>=
+module Exists : sig
+  module Opr : sig
+    val rtl : (Rtl.opr -> bool) -> Rtl.rtl -> bool
+  end
+  module Loc : sig
+    val exp : (Rtl.Private.loc -> bool) -> Rtl.Private.exp -> bool
+    val rtl : (Rtl.Private.loc -> bool) -> Rtl.Private.rtl -> bool
+  end
+  module Const : sig
+    val rtl : (Rtl.Private.const -> bool) -> Rtl.rtl -> bool
+  end
+end 
 @    
 
 % ------------------------------------------------------------------ 
 \subsection{Location search}
 % ------------------------------------------------------------------ 
 <<rtlutil.mli>>=
-module HasLoc : sig
-  val exp : (Rtl.Private.loc -> bool) -> Rtl.Private.exp -> bool
-  val rtl : (Rtl.Private.loc -> bool) -> Rtl.Private.rtl -> bool
-end
 @ 
 % ------------------------------------------------------------------ 
 \subsection{Aliasing}
@@ -981,16 +987,6 @@ sym n sym' n'];
     fun e -> alias (Down.exp e)
 end
 <<rtlutil.ml>>=
-module HasLoc = struct
-  let exp = MayAlias.has_loc
-  let rtl p =
-    let exp = exp p in
-    let effect = function
-      | RP.Store (l, r, w) -> exp r || exp (RP.Fetch (l, w))
-      | RP.Kill l          -> exp (RP.Fetch (l, 0)) in (* width cheat is OK *)
-    let ge (guard, eff) = exp guard || effect eff in
-    fun (RP.Rtl ges) -> List.exists ge ges
-end
 @ 
 \section{Reassociating arithemtic}
 <<rtlutil.ml>>=
@@ -1027,22 +1023,53 @@ let add w =
 @ 
 \subsection{Operator search}
 <<rtlutil.ml>>=
-module ExistsOpr = struct
-  let rtl p =
-    let rec rtl (RP.Rtl gs) = List.exists guarded gs
-    and guarded (g, eff) = exp g || effect eff
-    and effect = function
-      | RP.Store (lhs, rhs, _)    -> loc lhs || exp rhs
-      | RP.Kill lhs               -> loc lhs
-    and loc = function
-      | RP.Mem (_, _, _, addr, _) -> exp addr
-      | RP.Reg r                  -> false
-      | RP.Slice (_, _, l)        -> loc l
-      | RP.Var _                  -> false
-      | RP.Global _               -> false
-    and exp = function
-      | RP.Const _                -> false
-      | RP.Fetch (l, w)           -> loc l
-      | RP.App (opr, es)          -> p (Rtl.Up.opr opr) || List.exists exp es in
-    fun r -> rtl (Rtl.Dn.rtl r)
+module Exists = struct
+  module Loc = struct
+    let exp = MayAlias.has_loc
+    let rtl p =
+      let exp = exp p in
+      let effect = function
+        | RP.Store (l, r, w) -> exp r || exp (RP.Fetch (l, w))
+        | RP.Kill l          -> exp (RP.Fetch (l, 0)) in (* width cheat is OK *)
+      let ge (guard, eff) = exp guard || effect eff in
+      fun (RP.Rtl ges) -> List.exists ge ges
+  end
+  module Opr = struct
+    let rtl p =
+      let rec rtl (RP.Rtl gs) = List.exists guarded gs
+      and guarded (g, eff) = exp g || effect eff
+      and effect = function
+        | RP.Store (lhs, rhs, _)    -> loc lhs || exp rhs
+        | RP.Kill lhs               -> loc lhs
+      and loc = function
+        | RP.Mem (_, _, _, addr, _) -> exp addr
+        | RP.Reg r                  -> false
+        | RP.Slice (_, _, l)        -> loc l
+        | RP.Var _                  -> false
+        | RP.Global _               -> false
+      and exp = function
+        | RP.Const _                -> false
+        | RP.Fetch (l, w)           -> loc l
+        | RP.App (opr, es)          -> p (Rtl.Up.opr opr) || List.exists exp es in
+      fun r -> rtl (Rtl.Dn.rtl r)
+  end
+  module Const = struct
+    let rtl const_ftn =
+      let rec rtl (RP.Rtl gs) = List.exists guarded gs
+      and guarded (e, eff) = exp e || effect eff
+      and effect eff = match eff with
+        | RP.Store(RP.Reg('c',_,_), _, _) -> false
+        | RP.Store(l, e, _) -> loc l || exp e
+        | _ -> false
+      and loc l = match l with
+        | RP.Mem(_,_,_,e,_) -> exp e
+        | RP.Slice(_,_,l')  -> loc l'
+        | _ -> false
+      and exp e = match e with
+        | RP.Const c     -> const c
+        | RP.Fetch(l, _) -> loc l
+        | RP.App(_, es)  -> List.exists exp es
+      and const c = const_ftn c in
+      fun r -> rtl (R.Dn.rtl r)
+  end
 end 
