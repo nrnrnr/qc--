@@ -65,12 +65,6 @@ lib.opt:V:      dirs
                     (echo "# entering $i" && cd $i && mk $MKFLAGS update.opt)
                 done
 
-export:V:
-                for i in camlburg tools
-                do 
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS $target)
-                done
-
 precompile:     
                 echo "this target has become obsolete"                
 
