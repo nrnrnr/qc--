@@ -1,0 +1,222 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Back end for IA-64}
+
+<<ia64.mli>>=
+val arch : string
+module Spaces : sig
+  val m : Space.t
+  val r : Space.t
+  val t : Space.t
+  val f : Space.t
+  val u : Space.t
+  val c : Space.t   (* PC at 0 *)
+end
+
+module Post : Postexpander.S
+module X    : Expander.S
+val target : Ast2ir.tgt
+@ 
+
+
+\subsection{Name and Storage Spaces}
+<<ia64.ml>>=
+module SS = Space.Standard64
+let arch = "ia64"
+@ 
+
+<<ia64.ml>>=
+module Spaces = struct
+  module S = Space
+  let bo = Rtl.LittleEndian
+  let id = Rtl.Identity
+  let m = Space.Standard64.m bo [8; 16; 32; 64]
+  let r = Space.Standard64.r 128 id [64]
+  let t = Space.Standard64.t     id [64]
+  let f = S.checked { S.space = 'f'; S.doc = "floating-point registers"
+                    ; S.cellwidth = 82
+                    ; S.indexwith = 7 ; S.indexlimit = Some 127
+                    ; S.aggregation = id; S.widths = [82]
+                    ; S.classification = S.Reg
+                    }
+  let all_floats = { S.stands_for = 'f'; S.index_ok = (fun _ -> true)
+                   ; S.set_doc = "all floating-point registers"
+                   } 
+  let u = S.checked { S.space = 'u'; S.doc = "floating-point temporaries"
+                    ; S.cellwidth = 82
+
+					(* What is the significance of a 31-bit indexwidth? *)
+                    ; S.indexwidth = 31; S.indexlimit = None
+                    ; S.aggregation = id; S.widths = [82]
+                    ; S.classification = S.Temp all_floats
+                    }
+  let c = Space.Standard64.c 1 id [64]
+end
+
+let creg n = R.reg ('c', n, 64)
+let pc = creg 0  (* instruction pointer / program counter *)
+@ 
+
+\subsection{Postexpander}
+<<ia64.ml>>=
+module R = Rtl
+module RP   = Rtl.Private
+module Up   = Rtl.Up
+module Down = Rtl.Dn
+
+module Post = struct
+  <<ia64 postexpander>>
+end
+@ 
+<<ia64 postexpander>>=
+let byte_order = Rtl.LittleEndian
+let wordsize   = 64
+@ 
+The postexpander may need to allocate temporaries.
+<<ia64 postexpander>>=
+let talloc = ref None
+let remember_allocatore ta = talloc := Some ta
+@ 
+\paragraph{Utility Functions}
+<<ia64 postexpander>>=
+let temploc  t = Rtl.reg t
+let tempval  ((space, n, w) as t) = R.fetch (temploc t) w
+let tempwidth (space, n, w)       = w
+let tempstore tmp exp = R.store (temploc tmp) exp (tempwidth tmp)
+let mem addr = R.mem R.none 'm' byte_order 64 addr
+
+let ui s = Printf.eprintf "*** unimp %s" s; []
+@ 
+\paragraph{Contexts}
+Addresses go in the integer registers, so we use these contexts:
+<<ia64 postexpander>>=
+type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
+let icontext = Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't'
+let fcontext = Talloc.Multiple.reg 'u', fun (c, _, _) -> c = 'f' || c = 'u'
+let acontext = icontext
+@ 
+\paragraph{Addressing modes}
+The only addressing mode is the obvious one (and we have no stack).
+<<ia64 postexpander>>=
+module Address = struct
+  type t = Rtl.exp
+  let reg (space, n, w) = R.fetch (R.reg (space, n, w)) w
+end
+include Postexpander.Nostack(Address)
+@ 
+\subsubsection{Data Movement}
+We treat the Itanium strictly as a 64-bit machine, so we assume the width of
+everything is~64.
+<<ia64 postexpander>>=
+let load ~dst:((_, _, w) as dst) ~addr assn =
+  assert (w = 64);
+  [R.store (temploc dst) (R.fetch (R.mem assn 'm' byte_order 64 addr) 64) 64]
+let store ~addr ~src:((_, _, w) as src) assn =
+  assert (w = 64);
+  [R.store (R.mem assn 'm' byte_order 64 addr) (tempval src) 64]
+@ 
+We also provide sixn-extending loads and stores:
+<<x86 postexpander>>=
+let extend opname n e = R.app (R.opr opname   [n; 64]) [e]
+let lobits        n e = R.app (R.opr "lobits" [64; n]) [e]
+let sxload ~dst:((_, _, w) as dst) ~addr n assn =
+  if w <> 64 then Impossible.unimp "widening of temporaries";
+  [R.store (temploc dst)
+             (extend "sx" n (R.fetch (R.mem assn 'm' byte_order n addr) n)) 64]
+let zxload ~dst:((_, _, w) as dst) ~addr n assn =
+  assert (w = 64);
+  [R.store (temploc dst)
+             (extend "zx" n (R.fetch (R.mem assn 'm' byte_order n addr) n)) 64]
+let lostore ~addr ~src:((_, _, w) as src) n assn =
+  assert (w = 64);
+  [ R.store (R.mem assn 'm' byte_order n addr) 
+            (lobits n (R.fetch (temploc src) n)) n
+            (* we diverge from Pentium here; don't understand *)
+  ]
+@ 
+This code comes from x86.nw, which is not sure of floating-point compatability:
+<<ia64 postexpander>>=
+let move_rtl dst src = R.store (temploc dst) (tempval src) (tempwidth src)
+let move ~dst ~src   = if dst = src then [] else [move_rtl dst src]
+
+let li  ~dst const = [R.store (temploc dst) (Up.const const) (tempwidth dst)]
+let lix ~dst e     = [R.store (temploc dst) e                (tempwidth dst)]
+@ 
+\subsubsection{Operator Contexts}
+<<ia64 postexpander>>=
+module SM = Strutil.Map
+let operators = Context.standard icontext fcontext rcontext acontext bcontext
+let resmap    = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators
+let argmap    = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
+let arg_contexts   (n, _) = try SM.find n argmap 
+                            with Not_found -> Impossible.impossible 
+                                    ("cannot find arg context for "^n)
+let result_context (n, _) = try SM.find n resmap
+                            with Not_found -> Impossible.impossible
+                                    ("cannot find result context for "^n)
+
+let rtlop ~dst op tmpl = [tempstore dst 
+	                      (R.app (Up.opr op) (List.map tempval tmpl))]
+
+let binop ~dst op tmp1 tmp2 = rtlop dst op [tmp1;tmp2]
+let unop  ~dst op tmp       = rtlop dst op [tmp]
+
+let block_copy ~dst assn1 ~src assn2 width = ui "block_copy"
+@
+\subsubsection{Control Flow}
+We hope there's only one PC on the Itanium.
+<<ia64 postexpander>>=
+let pc_lhs = pc
+let pc_rhs = pc
+
+let br ~tgt = [R.store pc_lhs (tempval  tgt) 64]
+let b  ~tgt = [R.store pc_lhs (Up.const tgt) 64]
+
+let effects = List.map Up.effect
+let call  ~tgt ~others = [R.par (R.store pc_lhs (Up.const tgt) 64 :: effects others)]
+let callr ~tgt ~others = [R.par (R.store pc_lhs (tempval tgt) 64 :: effects others)]
+
+let cut_to effs = [R.par (effects effs)]
+
+let bc x (opr, ws) y ~tgt =
+  assert (ws = [64]);
+  R.guard (R.app (R.opr opr ws) (List.map tempval [x;y]))
+          (R.store pc_lhs (Up.const tgt) 64)
+
+let bnegate r = match Down.rtl r with
+| RP.Rtl [g, RP.Store(pc, tgt, 64) as eff] when pc = Down.loc pc_lhs ->
+     Up.rtl (RP.Rtl [RP.App(("not", [64]), [g]), eff])
+| _ -> Impossible.impossible "ill-formed IA64 conditional branch"
+@
+
+\subsection{Building the Target}
+<<ia64.ml>>=
+module T = Target
+@ 
+
+\subsection{Variable Placement}
+The machine accepts 32, 64, and 82-bit floating-point values.
+We deem any 82-bit value a float and examine the hints on all other values
+to classify them.
+
+<<ia64.ml>>=
+let warning s = Printf.eprintf "backend warning: %s\n" s
+let placevars = 
+  let is_float      hint w = w = 82 || (hint = "float" && (w = 32 || w = 64)) in
+  let strange_float hint w = w = 82 && hint <> "float" in
+  let strange_int   hint w = hint = "float" && not (is_float hint w) in
+  let warn ~width:w ~alignment:a ~hint:h =
+      if strange_float h w then
+        warning "82-bit variable not hinted float but will go as float anyway"
+      else if strange_int h w then
+        warning
+          (Printf.sprintf "%d-bit variable hinted float but will go as integer" w) in
+  let mk_stage ~temps =
+    A.choice
+      [ is_float,               A.widen (Aux.round_up_to ~multiple_of: 82) *>
+                                  temps 'u'; 
+        (fun h w -> w <= 64),   A.widen (fun _ -> 64) *> temps 't';
+        A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
+      ] in
+  Placevar.mk_automaton ~warn ~vfp:target.T.vfp mk_stage
+@ 
