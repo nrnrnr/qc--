@@ -264,30 +264,34 @@ let idwidth id env = match F.findv id env with (attr,(_,t)) -> width t
 \subsection{Continuation Bundles}
 % ------------------------------------------------------------------ 
 
-A continuation bundle on the {\AST} level is a record of names, and a
-record of nodes of the {\cfg} level.  The continuations function
+A continuation bundle on the {\AST} level is a record of names, and an
+asbtract type at the {\cfg} level.  The continuations function
 translates from the former to the latter.
 
 <<Make continuation bundles>>=
+type conts =    { cuts    : G.node list
+                ; unwinds : G.node list
+                ; returns : G.node list
+                ; aborts  : bool
+                }
+
 let continuations ast cfg =
     let lookup = List.map (G.lookup cfg)  in
     let rec loop conts = function
         | (A.FlowAt(f,_)):: ff -> 
             loop conts (f::ff)
         | (A.CutsTo n)   :: ff -> 
-            loop {conts with G.cuts    = lookup n @ conts.G.cuts   } ff
+            loop {conts with cuts    = lookup n @ conts.cuts   } ff
         | (A.UnwindsTo n):: ff -> 
-            loop {conts with G.unwinds = lookup n @ conts.G.unwinds} ff
+            loop {conts with unwinds = lookup n @ conts.unwinds} ff
         | (A.ReturnsTo n):: ff -> 
-            loop {conts with G.returns = lookup n @ conts.G.returns} ff
+            loop {conts with returns = lookup n @ conts.returns} ff
         | (A.Aborts)     :: ff -> 
-            loop {conts with G.aborts   = true                     } ff 
+            loop {conts with aborts  = true                     } ff 
         | []                   -> conts in
-    let empty =
-        { G.cuts = []; G.unwinds = []; G.returns = []; G.aborts = false
-        } 
-    in
-        loop empty ast
+    let empty = { cuts = []; unwinds = []; returns = [] ; aborts = false } in
+    let conts = loop empty ast in
+        G.conts conts.cuts conts.unwinds conts.returns conts.aborts
 @
 
 % ------------------------------------------------------------------ 

@@ -126,11 +126,13 @@ type cfg
 type t = cfg                    (* Cfg.t looks JustBetter *)
 type node
 type locs = Register.Set.t      (* locations for liveness analysis *)
+type conts
 
 (* abstract type for data inside nodes *)
 type property
 
-<<type conts>>
+val conts: cuts:node list -> unwinds:node list -> 
+           returns:node list -> aborts: bool -> conts 
  
 (* cfg creation *)
 val mk:         unit -> cfg
@@ -301,13 +303,6 @@ on them take different arguments:  the graph a node belongs to, an
 continuation bundle that includes several nodes, denoting
 continuations that can be reached from that node.
 
-<<type conts>>=
-type conts =    { cuts    : node list
-                ; unwinds : node list
-                ; returns : node list
-                ; aborts  : bool
-                }
-@
 
 The creation of a node also adds it to the {\cfg}; because of this,
 all node creating functions are marked as graph mutators.  Graph
@@ -489,6 +484,7 @@ Set the properties associated with the [[node]] at hand.
 module type S = sig
     <<types and ops>>
 end
+<<types and ops>>
 @
 
 % ------------------------------------------------------------------ 
@@ -522,15 +518,22 @@ module X = struct
 end
 
 type cfg        = X.cfg           (* class type cfg  *)
-type t          = cfg             (* alias           *)
 type node       = X.node          (* class type node *)
-<<type conts>>                    (* continuation bundle *)
+type t          = X.cfg           (* alias           *)
+type conts      = X.conts
 @
 
 The implementation of most functions refer to methods of the involved
 objects and therefore quite short.
 
 <<cfg3.ml>>=
+let conts ~cuts ~unwinds ~returns ~aborts =
+    { X.cuts    = cuts
+    ; X.unwinds = unwinds
+    ; X.returns = returns
+    ; X.aborts  = aborts
+    }
+
 let mk () = new X.graph
 
 <<cfg3.ml>>=
@@ -589,6 +592,8 @@ let gm_insert_dataflow_between ~defs ~uses ~kills ~src ~dst =
         ( src#upd_succ (fun n -> if n = dst then node else n)
         ; node#upd_succ (fun n -> dst)
         )
+
+let gm_enumerate (cfg:cfg) = assert false
     
     
 <<cfg3.ml>>=
@@ -732,7 +737,11 @@ end
 
 <<module X>>=
 module NodeSet = Set.Make(struct type t=node   let compare=compare end)
-<<type conts>>
+type conts =    { cuts    : node list
+                ; unwinds : node list
+                ; returns : node list
+                ; aborts  : bool
+                }
 
 let compare x y = compare x#id y#id
 @
