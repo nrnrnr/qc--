@@ -205,9 +205,20 @@ A register is a special kind of location. The [[reg]] function uses
 
 <<Subst>>=
 let reg (f:Register.t -> Register.t) rtl = 
-    let aux = fun loc -> 
+	let rec auxExp sp width exp = match exp with
+      | RP.Const (RP.Bits bits) ->
+            let register            = (sp, Bits.to_int bits, width)  in
+            let index_width         = Bits.width bits                in
+            let (_,index',_) = f register (* transform! *)    in
+  			RP.Const (RP.Bits (Bits.of_std_int index' index_width))
+      | RP.Fetch(l, w) ->
+            RP.Fetch(Rtl.Convert.loc (aux (Rtl.Revert.loc l)), w)
+      | RP.App(opr, exps) ->
+			RP.App(opr, List.map (auxExp sp width) exps)
+	  | x -> x		(* not a register *)
+    and aux = fun loc -> 
         ( match Rtl.Convert.loc loc with
-        | Rtl.Private.Cell (sp, agg, width ,RP.Const(RP.Bits bits) ,ass) ->
+        | Rtl.Private.Cell (sp, agg, width, (RP.Const(RP.Bits bits) as exp), ass) ->
             ( try
                 let register            = (sp, Bits.to_int bits, width)  in
                 let index_width         = Bits.width bits                in
@@ -216,13 +227,27 @@ let reg (f:Register.t -> Register.t) rtl =
                     ( sp'
                     , agg
                     , width'
-                    , RP.Const (RP.Bits (Bits.of_std_int index' index_width))
+                    , auxExp sp width exp
                     , ass
                     ) 
                 in 
                     Rtl.Revert.loc loc'
               with Bits.Overflow -> loc (* not a register *)
             )
+        | Rtl.Private.Cell (sp, agg, width, (RP.Fetch _ as exp), ass) ->
+			Rtl.Revert.loc (Rtl.Private.Cell ( sp
+					                         , agg
+											 , width
+											 , auxExp sp width exp
+											 , ass
+											 ))
+        | Rtl.Private.Cell (sp, agg, width, (RP.App(opr, exps) as exp), ass) ->
+			Rtl.Revert.loc (Rtl.Private.Cell ( sp
+						                     , agg
+											 , width
+											 , auxExp sp width exp
+											 , ass
+											 ))
         | _                    -> loc   (* not a register *)
         )
     in

@@ -59,87 +59,6 @@ Every move instruction is in one and only one of these lists:
 module G = Cfg3
 
 module T = Target2
-module Cheats = struct
-    let fold_fwd g = Cfg3.scan_fwd g (Cfg3.number (Cfg3.first g))
-                                     (Cfg3.number (Cfg3.last g) + 1)
-    let register_count _ = 15
-    let makeReg i = 'Z', i, 32
-    let possibleColors _ = List.map makeReg [1;2;3;4;5;6;7;8;9;10;11;12;13;14;15]
-        
-
-    let reads_writes rtl loc =
-        let reads  sp index width (r,w) = (r || loc = (sp,index,width), w) in
-        let writes sp index width (r,w) = (r, w || loc = (sp,index,width)) in
-        Rtlutil.ReadWrite.fold reads writes rtl (false,false)
-
-    let gm_insert_lst_before lst node =
-        let _ = List.fold_right G.gm_insert_assign_before lst node
-		in ()
-    let gm_insert_lst_after lst node =
-        let _ = List.fold_left G.gm_insert_assign_after node lst
-		in ()
-    let update proc (spillee, mem) node =
-        let target = proc.Proc.target in
-        let reads, writes = reads_writes (G.rtl node) spillee in
-            if reads || writes then
-                    ( let tmp   = Talloc.Multiple.reg_like proc.Proc.temps spillee in
-                      let subst = fun x -> if x = spillee then tmp else x in 
-                      ( if reads  then 
-                            (gm_insert_lst_before 
-                                (target.T.reload (T.space target) tmp mem) node)
-                      ; if writes then 
-                            (gm_insert_lst_after  
-                                (target.T.spill  (T.space target) tmp mem) node)
-                      ; G.set_rtl node (Rtlutil.Subst.reg subst)
-                      )
-                    ; Some tmp
-                    )
-             else None
-
-    let spill ({Proc.cfg = cfg; Proc.priv = a; Proc.target = target} as proc) spillees =
-        let spill_slot ((_,w,_):Register.t) =
-            Automaton.to_loc (Automaton.ty a w None) in
-        let smPairs = List.map (fun s -> (s, spill_slot s)) spillees in 
-        (* newTemps is an accumulating param *)
-        let updateNode smPairs node newTemps =
-            (List.fold_left
-                (fun tmps sm -> match update proc sm node with
-                                | None -> tmps
-                                | Some tmp -> tmp::tmps)
-                newTemps smPairs)
-        in
-            fold_fwd cfg (updateNode smPairs) []
-(*
-(* reserve a spill slot using automaton *)
-
-
-      let mem = spill_slot automaton spillee
-*)
-(*
-    let (newTemps, newGraph) = Cheats.spill cfg cg.spilledNodes in (* set of all new temps added *)
-*)
-
-    (* Not really cheats anymore.... *)
-
-    let source node =
-        match Rtlutil.RTLType.singleAssignment (G.rtl node) with
-        | Some (s, _) -> s
-        | _ -> assert false
-    let dest node =
-        match Rtlutil.RTLType.singleAssignment (G.rtl node) with
-        | Some (_, d) -> d
-        | _ -> assert false
-
-    (*
-     * singleAssignment returns a (Register.t * Register.t) option
-     * First get the assignment, then verify that the source and dest are
-     * in the same reg. space
-     *)
-    let isMoveInstruction node =
-        match Rtlutil.RTLType.singleAssignment (G.rtl node) with
-        | Some ((s1,_,_), (s2,_,_)) -> s1 = s2
-        | None -> false
-end
 
 
 module CompareRegPair = struct
@@ -181,8 +100,165 @@ type colorGraph = { mutable adjSet : RegPairSet.t
                   ; mutable frozenMoves : move list
                   ; mutable worklistMoves : move list
                   ; mutable activeMoves : move list
-                  ;         k : int
+                  ; mutable colors : int list
+                  ; mutable k : int
                   }
+@
+
+<<print CGInfo>>=
+let regLists cgInfo =
+               [ ("Precolored", cgInfo.precolored)
+               ; ("Initial", cgInfo.initial)
+               ; ("Spills", cgInfo.spills)
+               ; ("SimplifyWorklist", cgInfo.simplifyWorklist)
+               ; ("FreezeWorklist", cgInfo.freezeWorklist)
+               ; ("SpillWorklist", cgInfo.spillWorklist)
+               ; ("SpilledNodes", cgInfo.spilledNodes)
+               ; ("CoalescedNodes", cgInfo.coalescedNodes)
+               ; ("ColoredNodes", cgInfo.coloredNodes)
+               ; ("SelectStack", cgInfo.selectStack)
+               ]
+let moveLists cgInfo =
+                [ ("coalescedMoves", cgInfo.coalescedMoves)
+                ; ("ConstrainedMoves", cgInfo.constrainedMoves)
+                ; ("FrozenMoves", cgInfo.frozenMoves)
+                ; ("WorklistMoves", cgInfo.worklistMoves)
+                ; ("ActiveMoves", cgInfo.activeMoves)
+                ]
+
+let printReg (s, i, w) = prerr_char '('; prerr_char s;
+                         prerr_string ", "; prerr_int i;
+                         prerr_string ", "; prerr_int w; prerr_char ')'
+let printMove node = printReg (Cheats.source node);
+                     prerr_string " -> ";
+					 printReg (Cheats.dest node)
+let printColorMap cm =
+	prerr_string "    ColorMap:\n";
+	RM.iter (fun tmp reg -> prerr_string "        ";
+							printReg tmp; prerr_string " -> ";
+							printReg reg; prerr_newline ()) cm
+let print_cgInfo cgInfo =
+    let _ = prerr_string "\nCGINFO\n" in
+    let printItemList pr (name, itemlist) = match itemlist with
+        | [] -> ()
+        | itemlist ->
+            let indent = "        " in
+            prerr_string ("    " ^ name ^ ":\n"); 
+            List.iter (fun r -> prerr_string indent; pr r;
+                               prerr_newline ()) itemlist in
+	let printReglist lst  = printItemList printReg lst in
+	let printMovelist lst = printItemList printMove lst in
+	let printAdjListMember key lst =
+		prerr_string "        "; printReg key; prerr_string ": ";
+		List.iter (fun r -> prerr_string ", "; printReg r) lst;
+		prerr_newline(); flush stderr in
+	let printAdjListMap am =
+		let _ = prerr_string "    AdjListMap:\n" in
+		RM.iter printAdjListMember am
+		
+    in
+	    printAdjListMap cgInfo.adjListMap;
+        List.iter printReglist (regLists cgInfo);
+        List.iter printMovelist (moveLists cgInfo);
+	    printColorMap cgInfo.colorMap;
+		flush stderr
+
+let printCGInfo param _ = match T2'.map.V.project param with
+    | CGInfo cg -> print_cgInfo cg; true
+@
+
+<<cheats>>=
+module Cheats = struct
+    let fold_fwd g = Cfg3.scan_fwd g (Cfg3.number (Cfg3.first g))
+                                     (Cfg3.number (Cfg3.last g) + 1)
+    (*
+    let register_count _ = 15
+    let possibleColors _ = List.map makeReg [1;2;3;4;5;6;7;8;9;10;11;12;13;14;15]
+    *)
+    let register_count cg = List.length cg.colors
+    let makeReg i = 'r', i, 32
+    let possibleColors cg = List.map makeReg cg.colors
+        
+
+    let reads_writes rtl loc =
+        let reads  sp index width (r,w) = (r || loc = (sp,index,width), w) in
+        let writes sp index width (r,w) = (r, w || loc = (sp,index,width)) in
+        Rtlutil.ReadWrite.fold reads writes rtl (false,false)
+
+    let gm_insert_lst_before lst node =
+        let _ = List.fold_right G.gm_insert_assign_before lst node
+        in ()
+    let gm_insert_lst_after lst node =
+        let _ = List.fold_left G.gm_insert_assign_after node lst
+        in ()
+    let update proc (spillee, mem) node =
+        let target = proc.Proc.target in
+        let reads, writes = reads_writes (G.rtl node) spillee in
+            if reads || writes then
+                    ( let tmp   = Talloc.Multiple.reg_like proc.Proc.temps spillee in
+                      let subst = fun x -> if x = spillee then tmp else x in 
+                      ( if reads  then 
+                            (gm_insert_lst_before 
+                                (target.T.reload (T.space target) tmp mem) node)
+                      ; if writes then 
+                            (gm_insert_lst_after  
+                                (target.T.spill  (T.space target) tmp mem) node)
+                      ; G.set_rtl node (Rtlutil.Subst.reg subst)
+                      )
+                    ; Some tmp
+                    )
+             else None
+
+    let rewrite ({Proc.cfg = cfg; Proc.priv = a; Proc.target = target}
+            as proc) spillees coalescedMoves =
+        let spill_slot ((_,_,w):Register.t) =
+            Automaton.to_loc (Automaton.ty a w None) in
+        let smPairs = List.map (fun s -> (s, spill_slot s)) spillees in 
+        (* newTemps is an accumulating param *)
+        let updateNode smPairs node newTemps =
+            (List.fold_left
+                (fun tmps sm -> match update proc sm node with
+                                | None -> tmps
+                                | Some tmp -> tmp::tmps)
+                newTemps smPairs)
+        in
+            List.iter Cfg3.gm_delete_assign coalescedMoves;
+            fold_fwd cfg (updateNode smPairs) []
+(*
+(* reserve a spill slot using automaton *)
+
+
+      let mem = spill_slot automaton spillee
+*)
+(*
+    let (newTemps, newGraph) = Cheats.spill cfg cg.spilledNodes in (* set of all new temps added *)
+*)
+
+    (* Not really cheats anymore.... *)
+
+    let source node =
+        match Rtlutil.RTLType.singleAssignment (G.rtl node) with
+        | Some (s, _) -> s
+        | _ -> assert false
+    let dest node =
+        match Rtlutil.RTLType.singleAssignment (G.rtl node) with
+        | Some (_, d) -> d
+        | _ -> assert false
+
+    (*
+     * singleAssignment returns a (Register.t * Register.t) option
+     * First get the assignment, then verify that the source and dest are
+     * in the same reg. space
+     *)
+	let is_tmp (s,_,_) target = match (Target2.space target) s with
+	  | {Space.classification = Space.Temp _} -> true
+	  | _ -> false
+    let isMoveInstruction node t =
+        match Rtlutil.RTLType.singleAssignment (G.rtl node) with
+        | Some ((s1,_,_) as r1, (s2,_,_) as r2)
+			when is_tmp r1 t -> s1 = s2
+        | _ -> false
+end
 @
 
 %-------------------------------------------------------------------
@@ -235,7 +311,8 @@ let initInfo = { adjSet = RegPairSet.empty
                ; frozenMoves = []
                ; worklistMoves = []
                ; activeMoves = []
-               ; k = Cheats.register_count ()
+               ; colors = []
+               ; k = 0
                }
 
 
@@ -314,39 +391,51 @@ let addEdge u v cg =
             in ()
 
 let resetDegree cg temp =
-    cg.degreeMap <- RM.add temp (cg.k - (Cheats.register_count temp)) cg.degreeMap
+    cg.degreeMap <-
+		RM.add temp (cg.k - (Cheats.register_count cg)) cg.degreeMap
 
-let build cgInfo {Proc.cfg = cfg} =
-(*
-    match cgInfo with
-        | U.Other (P.CGInfo cg) ->
-*)
-match T2'.map.V.project cgInfo with
-    CGInfo cg ->
+let printCFGLive _ {Proc.cfg = cfg} =
+	let printNodeLive node _ =
+		let live = (G.property node).P.liveout in
+		prerr_string "LIVE "; prerr_int (G.number node); prerr_string ": "; RS.iter printReg live; prerr_newline ();
+	    flush stderr in
+	Cheats.fold_fwd cfg printNodeLive (); false
+
+let build colors cgInfo {Proc.cfg = cfg; Proc.target = target} =
+match ((V.list V.int).V.project colors, T2'.map.V.project cgInfo) with
+(colors, CGInfo cg) -> (cg.colors <- colors; cg.k <- List.length colors);
             let addInterference node () =
-                let live = (G.property node).P.live in
+                let live = (G.property node).P.liveout in
                 let defs = G.defs node in
                 let uses = G.uses node in
                 let live =
-                    if Cheats.isMoveInstruction node
+                    if Cheats.isMoveInstruction node target
                     then
                         (cg.moveListMap <- RS.fold (listMapAdd node)
                                             (RS.union defs uses) cg.moveListMap;
                         cg.worklistMoves <- node::cg.worklistMoves;
-                        RS.fold RS.remove uses live)
-                    else live in
-                let live = RS.union live defs in
+						RS.diff live uses)
+					else live in
+				let live = RS.union live defs in
                 let _ = RS.iter (resetDegree cg) defs in
                 let addAllEdges def =
                     RS.iter (fun liveNode -> addEdge liveNode def cg) live
                 in
                     RS.iter addAllEdges defs in
             let _ = Cheats.fold_fwd cfg addInterference () in
-            let _ = cg.initial <- Cheats.fold_fwd cfg
-                        (fun node rst -> (Register.Set.elements (G.defs node))
-                                         @ rst) []
-            in
+            let regs = Cheats.fold_fwd cfg
+                        (fun node rst ->
+						    (Register.Set.union
+							    (Register.Set.union (G.defs node)
+								                    (G.uses node))
+                                rst)) Register.Set.empty in
+			let temps, pregs =
+				List.partition (fun r -> Cheats.is_tmp r target)
+                               (Register.Set.elements regs) in
+			let _ = cg.initial <- temps in
+			let _ = cg.precolored <- pregs in
                 true
+let makeBuildStage colors = build colors 
         
 
 (*
@@ -426,7 +515,7 @@ let enableMoves temps cg =
 
 let listAdd el lst = if not (List.mem el lst) then el::lst else lst
 
-let decrementDegree cg temp =
+let decrementDegree cg target temp =
     let d = RM.find temp cg.degreeMap in
     let _ = cg.degreeMap <- RM.add temp (d - 1) cg.degreeMap in
         if d = cg.k
@@ -435,18 +524,20 @@ let decrementDegree cg temp =
             cg.spillWorklist <- filterOut temp cg.spillWorklist;
             if moveRelated temp cg
             then cg.freezeWorklist <- listAdd temp cg.freezeWorklist
-            else cg.simplifyWorklist <- listAdd temp cg.simplifyWorklist
+            else if Cheats.is_tmp temp target
+			     then cg.simplifyWorklist <- listAdd temp cg.simplifyWorklist
+				 else ()
         
 exception GraphColoring
 
-let simplify param _ = (*match param with*)
+let simplify param {Proc.target = t} = (*match param with*)
 match T2'.map.V.project param with
     | CGInfo cg ->
         (match cg.simplifyWorklist with
         | temp::rst ->
             let _ = cg.simplifyWorklist <- rst in
             let _ = cg.selectStack <- temp::cg.selectStack in
-            let _ = RS.iter (decrementDegree cg) (adjacent temp cg) in
+            let _ = RS.iter (decrementDegree cg t) (adjacent temp cg) in
                 true
         | _ -> false)
 
@@ -490,16 +581,17 @@ let rec getAlias node cg =
     then getAlias (RM.find node cg.aliasMap) cg
     else node
 
-let combine u v cg =
+let combine target u v cg =
     let _ = if List.mem v cg.freezeWorklist
             then cg.freezeWorklist <- filterOut v cg.freezeWorklist
             else cg.spillWorklist <- filterOut v cg.spillWorklist in
-    let _ = cg.coalescedNodes <- v::cg.coalescedNodes in
+    let _ = cg.coalescedNodes <- union v cg.coalescedNodes in
     let _ = cg.aliasMap <- RM.add v u cg.aliasMap in
     let _ = cg.moveListMap <- listMapUnion (listMapFind v cg.moveListMap)
                                            u cg.moveListMap in
     let _ = enableMoves (RS.add v RS.empty) cg in
-    let _ = RS.iter (fun temp -> addEdge temp u cg; decrementDegree cg temp)
+    let _ = RS.iter (fun temp -> addEdge temp u cg;
+			                     decrementDegree cg target temp)
                       (adjacent v cg) in
         if (numMapFind u cg.degreeMap >= cg.k) && (List.mem u cg.freezeWorklist)
         then
@@ -507,7 +599,7 @@ let combine u v cg =
             cg.spillWorklist <- filterOut u cg.spillWorklist
 
 
-let coalesce param _ =
+let coalesce param {Proc.target = target} =
 match T2'.map.V.project param with
     | CGInfo cg ->
         (match cg.worklistMoves with
@@ -535,27 +627,12 @@ match T2'.map.V.project param with
                                           cg))
                      then
                         (cg.coalescedMoves <- union move cg.coalescedMoves;
-                         combine u v cg;
+                         combine target u v cg;
                          addWorklist u cg)
                 else
                     cg.activeMoves <- move::cg.activeMoves
             in
                 true
-        | _ -> false)
-
-let recklessCoalesce param _ =
-match T2'.map.V.project param with
-    | CGInfo cg ->
-        (match cg.worklistMoves with
-        | move::rstMoves ->
-            let x = Cheats.source move in
-            let y = Cheats.dest move in
-            let (u, v) = if List.mem y cg.precolored then (y, x) else (x, y) in
-            let _ = cg.worklistMoves <- rstMoves in
-                (cg.coalescedMoves <- union move cg.coalescedMoves;
-                 combine u v cg;
-                 addWorklist u cg;
-                 true)
         | _ -> false)
 
 (*
@@ -637,17 +714,21 @@ match T2'.map.V.project param with
                 true
          | _ -> false)
 
-let assignColors param _ =
+let assignColors param {Proc.target = target} =
 match T2'.map.V.project param with
     | CGInfo cg ->
+		let colorLookup temp cmap =
+			if Cheats.is_tmp temp target
+			then RM.find (getAlias temp cg) cmap
+		    else temp in
         let colorTemp temp =
             let removeUsedColor colors temp =
                 if List.mem (getAlias temp cg) (cg.coloredNodes @ cg.precolored)
                 then
-                    filterOut (RM.find (getAlias temp cg) cg.colorMap) colors
+                    filterOut (colorLookup (getAlias temp cg) cg.colorMap) colors
                 else colors in
             let okColors =
-                List.fold_left removeUsedColor (Cheats.possibleColors temp)
+                List.fold_left removeUsedColor (Cheats.possibleColors cg)
                                (listMapFind temp cg.adjListMap)
             in
                 (match okColors with
@@ -667,29 +748,40 @@ match T2'.map.V.project param with
         let _ = colorSelectStack () in
         let _ = colorCoalescedNodes () in
             (* remove short spill temps from the spill list *)
+	let _ = cg.spilledNodes <- (List.fold_right filterOut cg.spills
+	cg.spilledNodes @ cg.spills)in
+	(*
         let _ = match cg.spilledNodes with
             | [] -> ()
             | _ -> cg.spilledNodes <- List.fold_right filterOut cg.spills
                                                       cg.spilledNodes;
-                   if empty cg.spilledNodes then raise GraphColoring
-        in
+print_cgInfo cg;
+if empty cg.spilledNodes then raise GraphColoring
+in
+	*)
             true
 
 exception UncoloredTemp of color
-let applyColors param {Proc.cfg = cfg} =
+let applyColors param {Proc.cfg = cfg; Proc.mangle = mangle; Proc.target = target} =
     match T2'.map.V.project param with (CGInfo cg) ->
-    let subst temp = try RM.find temp cg.colorMap
-                     with Not_found -> raise (UncoloredTemp temp)
+    let subst = function
+      | temp when Cheats.is_tmp temp target ->
+  		  (try RM.find temp cg.colorMap
+                     with Not_found -> print_cgInfo cg;prerr_string "\n";
+prerr_string (Register.print temp); prerr_newline(); flush stderr;raise
+(UncoloredTemp temp))
+	  | t -> t
     in
-        (Cheats.fold_fwd cfg
-            (fun node () -> G.set_rtl node (Rtlutil.Subst.reg subst)) ()
+        ( Cheats.fold_fwd cfg
+            (fun node () -> prerr_int (G.number node);
+			 prerr_string (": " ^ Rtldebug.rtl_to_string (Cfg3.rtl node) ^ "\n"); flush stderr; G.set_rtl node (Rtlutil.Subst.reg subst)) ()
         ; true)
 
 
 let rewriteProgram param proc =
     match T2'.map.V.project param with (CGInfo cg) ->
     (* handle addition of temps (those in spilledNodes) *)
-    let newTemps = Cheats.spill proc cg.spilledNodes in (* set of all new temps added *)
+    let newTemps = Cheats.rewrite proc cg.spilledNodes cg.coalescedMoves in (* set of all new temps added *)
     let _ = cg.adjSet <- RegPairSet.empty in
     let _ = cg.adjListMap <- RM.empty in
     let _ = cg.degreeMap <- RM.empty in
@@ -769,6 +861,7 @@ combined = 'a T1.combined)
     type 'a combined = 'a T1.combined
     module M (Interp : Lua.Lib.CORE with type 'a V.userdata' = 'a T1.combined) = struct
         module V = Interp.V
+        <<cheats>>
         module T1' = struct
             let map = T1.makemap V.userdata V.projection
         end
@@ -793,6 +886,7 @@ combined = 'a T1.combined)
 <<graph coloring builtins>>=
 let {V.embed = embed; V.project = project} = T2.makemap V.userdata V.projection
 
+    <<print CGInfo>>
     <<livenessAnalysis>>
     <<build>>
     <<makeWorklist>>
@@ -806,11 +900,15 @@ let {V.embed = embed; V.project = project} = T2.makemap V.userdata V.projection
 
 let proc = T3'.map
 let ( **-> ) = V.( **-> )
-let stageFn = (V.pfunc (V.value **-> proc **-> V.result V.bool)).V.embed
+let stageFnType = V.value **-> proc **-> V.result V.bool
+let stageFn = (V.pfunc stageFnType).V.embed
+let param2StageFn =
+        (V.pfunc (V.value **->
+                V.result (V.pfunc stageFnType))).V.embed
 
 let graph_coloring_module =
         [ "liveness",         stageFn liveness
-        ; "build",            stageFn build
+        ; "makeBuild",        param2StageFn makeBuildStage
         ; "makeWorklist",     stageFn makeWorklist
         ; "simplify",         stageFn simplify
         ; "coalesce",         stageFn coalesce
@@ -820,6 +918,8 @@ let graph_coloring_module =
         ; "haveSpilledNodes", stageFn haveSpilledNodes
         ; "rewriteProgram",   stageFn rewriteProgram
         ; "applyColors",      stageFn applyColors
+        ; "printCG",          stageFn printCGInfo
+        ; "printCFGLive",     stageFn printCFGLive
         ]
 
 let graph_coloring_globals =

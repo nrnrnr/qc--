@@ -24,21 +24,21 @@
 
 Liveness analysis determines for every node in a flow graph (see
 module \module{cfg3}) the set of locations that will be used in that
-node or any of its successors.  More formally a location $x$ is live
-before a node $n$, if and only if $x$ is \emph{used} by $n$ or there
-exists a path to a node that uses $x$ without crossing a definition or
-kill of $x$.  A set of live variables is called the \emph{live set}. 
-Since nodes use, define, and kill variables, liveness is actually only
-defined \emph{between} adjacent notes.  Therefore, the set of live
-variables associated with each node in a control flow graph denotes
-the variables that are live \emph{before} the node at hand.
+node's successors.  More formally a location $x$ is live after a node
+$n$, if and only if there exists a path to a node that uses $x$
+without crossing a definition or kill of $x$. A set of live variables
+is called the \emph{liveout set}. Since nodes use, define, and kill
+variables, liveness is actually only defined \emph{between} adjacent
+notes.  Therefore, the set of liveout variables associated with each
+node in a control flow graph denotes the variables that are live
+\emph{after} the node at hand.
 
 % ------------------------------------------------------------------ 
 \subsection{Interface}
 % ------------------------------------------------------------------ 
 
 The [[liveness]] function annotates the nodes in a control-flow graph
-[[cfg]] with the set of live registers \emph{before} that node.
+[[cfg]] with the set of live registers \emph{after} that node.
 
 <<CFG>>=
 module type CFG = Cfg3.S with type locs = Register.Set.t          
@@ -73,12 +73,11 @@ module Make (G: CFG) = struct
 end
 @
 
-The [[live]] function computes the set of registers live \emph{before}
-[[node]].  It does so by looking at the live sets of its successors
-and the registers defined, killed, and used by the current [[node]]. 
-The idea is, that variables live at successor nodes must be either
-defined by this node, or must be live before this node as well.  The
-details depend on the kind of [[node]]. 
+The [[live]] function computes the set of registers live \emph{after}
+[[node]].  It does so by looking at the liveout sets of its successors
+and the registers defined, killed, and used by the successors [[node]]. 
+The idea is, that variables live before successor nodes must be must be
+live after this node as well.  The details depend on the kind of [[node]]. 
 
 \begin{itemize}
 \item A variables live after the node are also live before it,
@@ -103,6 +102,18 @@ $$
 
 <<struct Make>>=
 let rec live (node:G.node) =
+    let ( ++ ) = Register.Set.union in
+    let ( -- ) = Register.Set.diff in
+    let live_in n =
+        let defs         = G.defs    node                      in
+        let uses         = G.uses    node                      in
+        let kills        = G.kills   node                      in
+             (((G.property n).P.liveout -- (G.defs n)) -- (G.kills n))
+                        ++ G.uses n
+    in
+        List.fold_left (fun set x -> R.union (live_in x) set) R.empty
+                       (G.succ node)
+(*
     let defs         = G.defs    node                      in
     let uses         = G.uses    node                      in
     let kills        = G.kills   node                      in
@@ -110,15 +121,22 @@ let rec live (node:G.node) =
     let live         = Register.Set.diff live kills        in 
     let live         = Register.Set.union live uses        in 
         Register.Set.union (G.property node).P.live live
+*)
 @
 
-The [[after]] function computes the union of the live sets of a node's
+The [[after]] function computes the union of the live-in sets of a node's
 successors.
 
 <<struct Make>>=
+(*
 and after node = 
-    List.fold_left (fun set x -> R.union (G.property x).P.live set) R.empty
+    let ( ++ ) = Register.Set.union in
+    let ( -- ) = Register.Set.diff in
+    let live_in n = (((G.property n).P.live -- (G.defs n)) -- (G.kills n))
+                    ++ G.uses n
+    List.fold_left (fun set x -> R.union (live_in x) set) R.empty
                    (G.succ node)
+				   *)
 @
 
 Computing the live sets of a control-flow graph (\cfg) is a fix-point
@@ -130,12 +148,12 @@ flag is set.
 <<struct Make>>=
 let process changed node =
     let l  = live node in
-    let _  = assert (Register.Set.subset (G.property node).P.live l) in 
-        if Register.Set.equal l (G.property node).P.live then
+    let _  = assert (Register.Set.subset (G.property node).P.liveout l) in 
+        if Register.Set.equal l (G.property node).P.liveout then
            ()   (* changed := false *)
         else
            ( changed := true
-           ; (G.property node).P.live <- l
+           ; (G.property node).P.liveout <- l
            (* Printf.printf "id=%d\n" (G.number node) *)
            ) 
 @
@@ -168,5 +186,3 @@ let liveness cfg =
         )
     in loop 0
 @
-
-

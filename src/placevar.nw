@@ -53,7 +53,8 @@ combined = 'a BackplaneT.combined)
 (* NOTE: using space 't' is hopeful, but ultimately bogus. *)
 let new_tmp = Talloc.Multiple.loc temps 't' in
 let print_var (s, i, w) = prerr_string ("VAR: " ^ s ^ " " ^ string_of_int i ^
-                                        " " ^ string_of_int w ^ "\n") in
+                                        " " ^ string_of_int w ^ "\n");
+                          flush stderr in
 let rec walkLoc loc tMap = match loc with
 	| RP.Cell (sp, ag, w, e, ass) ->
 		let e', tMap' = walkExp e tMap in
@@ -62,6 +63,10 @@ let rec walkLoc loc tMap = match loc with
 		(try TM.find i tMap, tMap
 		 with Not_found ->
 			let _ = print_var (s, i, w) in
+(*
+			let t = Rtl.Convert.loc (Register.to_loc (Target2.space target)
+                                                     (new_tmp ('t', i, w))) in
+			*)
 			let t = Rtl.Convert.loc (new_tmp w) in
 			(t, TM.add i t tMap))
 	| RP.Slice (w, i, l) ->
