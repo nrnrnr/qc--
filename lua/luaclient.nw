@@ -127,13 +127,13 @@ argument, that we name for convenience.
 
 module T =			    (* new types *)
     Lua.Lib.Combine.T3              (* T3 == link 3 modules *)
-	(LuaChar)                   (* T1 *)
-	(Pair)                      (* T2 *)    
-	(Luaiolib.T)                (* T3 *)
+	(LuaChar)                   (* TV1 *)
+	(Pair)                      (* TV2 *)    
+	(Luaiolib.T)                (* TV3 *)
 
-module LuaCharT     = T.T1
-module PairT        = T.T2
-module LuaioT       = T.T3
+module LuaCharT     = T.TV1
+module PairT        = T.TV2
+module LuaioT       = T.TV3
 @
 
 The primitive types and functions supplied by the standard interpreter
@@ -143,12 +143,13 @@ all we can get and link [[L]] together like here:
 
 <<library module [[L]]>>=
 <<new primitives>>
-module X = Lua.Lib.Extend (T)
+module W = Lua.Lib.WithType (T)
 module C  =
-    Lua.Lib.Combine.C4  (* C4 == combine 4 code modules *)
+    Lua.Lib.Combine.C5  (* C5 == combine 4 code modules *)
 	(Luaiolib.Make(LuaioT))
-	(X (Luastrlib.M))
-	(X (Luamathlib.M))
+        (Luacamllib.Make(LuaioT))
+	(W (Luastrlib.M))
+	(W (Luamathlib.M))
 	(MakeLib (LuaCharT) (PairT))
 @
 
@@ -227,6 +228,7 @@ module MakeLib
     module M (C: Lua.Lib.CORE with type 'a V.userdata' = 'a userdata') = struct
 	module V = C.V
 	let ( **-> ) = V.( **-> )
+	let ( **->> ) x y = x **-> V.result y
         <<register new functions in interpreter>>
     end (* M *)
 end (* MakeLib *)
@@ -248,7 +250,7 @@ end
 let init g = 
     <<register [[Pair]]>>
     <<register [[Char]]>> 
-    <<register [[Caml]]>>
+    <<register [[Example]]>>
     Lua.Lib.StringList.of_list [] (* return value of init *)
 @
 
@@ -263,9 +265,9 @@ types.
 
 <<register [[Pair]]>>=    
 C.register_module "Pair"
-    [ "mk", V.efunc (V.value **-> V.value **-> V.result Map.pair) Pair.mk
-    ; "fst",V.efunc (Map.pair **-> V.result V.value)              Pair.fst
-    ; "snd",V.efunc (Map.pair **-> V.result V.value)              Pair.snd
+    [ "mk", V.efunc (V.value **-> V.value **->> Map.pair) Pair.mk
+    ; "fst",V.efunc (Map.pair **->> V.value)              Pair.fst
+    ; "snd",V.efunc (Map.pair **->> V.value)              Pair.snd
     ] g;
 @
 
@@ -281,7 +283,7 @@ are total.
 
 <<register [[Char]]>>=
 C.register_module "Char"
-    [ "mk", V.efunc (V.string **-> V.result Map.char)
+    [ "mk", V.efunc (V.string **->> Map.char)
             (function 
             | "" -> C.error g "Char.mk: empty string"   
             | s  -> s.[0]
@@ -292,20 +294,13 @@ C.register_module "Char"
 Sometimes we want to add functionality for existing types without adding
 a new type. This case is easy because we simply can add the new
 functions without having to define extra modules for types. As an
-example, we provide functions on strings from the {\ocaml} standard
+example, we provide some functions from the {\ocaml} standard
 library. To avoid name space pollution we introduce an extra layer
-[[Filename]] since these functions come from the {\ocaml} [[Filename]]
-module. From within Lua, the new functions part of the [[Caml.Filename]]
-table.
-
-<<register [[Caml]]>>=
-C.register_module "Caml" 
-    ["Filename" , V.Table (V.Table.of_list 
-        [ "checksuffix", V.efunc (V.string **-> V.string **-> V.result V.bool)
-            Filename.check_suffix
-        ; "chopsuffix",  V.efunc (V.string **-> V.result V.string)
-            Filename.chop_extension
-        ])
+[[Example]].
+<<register [[Example]]>>=
+C.register_module "Example" 
+    ["argv",   (V.list V.string).V.embed (Array.to_list Sys.argv);
+     "getenv", V.efunc (V.string **->> V.string) Sys.getenv;
     ] g;
 @
 
@@ -329,7 +324,7 @@ x
 (one,2)
 one
 
-% ./luaclient 'print(Caml.Filename.chopsuffix("foo.bar"))'
+% ./luaclient 'print(Caml.Filename.chop_extension("foo.bar"))'
 foo
 @
 

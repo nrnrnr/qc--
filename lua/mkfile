@@ -101,13 +101,15 @@ xluaclient.html:	luaclient.tex
 		tidy -f /dev/null -im $target
 
 
-ALONE=luasyntax.nw lua.nw luaast.nw luabaselib.nw luahash.nw luaiolib.nw lualib.nw \
+ALONE=luasyntax.nw lua.nw luaast.nw luabaselib.nw luahash.nw \
+	luaiolib.nw luacamllib.nw lualib.nw \
         luamathlib.nw luarun.nw luastrlib.nw luavalue.nw\
         log.nw ../cllib/srcmap.nw\
         main.nw bench.nw\
         luaclient.nw luaclient.html\
         stdluainterp.nw\
         Makefile.alone README.ALONE\
+	refman.ps \
         ../bin/nofake nw.hva
 
 
@@ -147,6 +149,7 @@ LIBML = 	log.ml		\
 		luastrlib.ml	\
 		luamathlib.ml	\
 		luaiolib.ml	\
+		luacamllib.ml	\
 
 LIBCMO = ${LIBML:%.ml=%.cmo}
 LIBCMX = ${LIBML:%.ml=%.cmx}
@@ -160,6 +163,7 @@ LIBMLI = 	log.mli		\
 		lua.mli		\
 		luaast.mli	\
 		luabaselib.mli	\
+		luacamllib.mli	\
 		$INTERP/luainterp.mli	\
 		luaiolib.mli	\
 		lualib.mli	\
@@ -222,6 +226,9 @@ oclbench-$INTERP:	lua-$INTERP.cma bench.cmo
 
 oclbench-$INTERP$PROFILE.opt: 	lua-$INTERP.cmxa bench.cmx
 	$OCAMLO $OCAMLO_FLAGS -o $target unix.cmxa cllib.cmxa $prereq 
+
+luaclient: lua-$INTERP.cma luaclient.cmo
+	$OCAMLC $OCAMLC_FLAGS -o $target unix.cma cllib.cma lua-$INTERP.cma luaclient.cmo
 
 
 # ------------------------------------------------------------------ 
