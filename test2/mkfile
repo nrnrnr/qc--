@@ -1,0 +1,134 @@
+# This first post is dedicated to vim: ts=8 sw=4 et: 
+#
+# ------------------------------------------------------------------  
+# Test suite organization:
+#
+#   src/file.c--            test case
+#   src/file.0              input for test case binary
+#
+#   x86/linux/file.s        assembly output for file.s
+#   x86/linux/file.s1       compiler stdout while compiling file.c--
+#   x86/linux/file.s2       compiler stderr while compiling file.s2
+#   x86/linux/file.1        stdout when test binary is run (with file.0) 
+#   x86/linux/file.2        stderr when test binary is run (with file.0)
+#
+# To add a new test case 'foo':
+#
+#   (1) add src/foo.c--
+#   (2) add src/foo.0       if the compiled foo needs input from stdin
+#   (3) mk  src/foo.record  runs foo.c-- for all targets, records outputs
+#   (4) cvs add src/foo.* target/foo.*
+#
+# To run an individual test src/foo.c-- on all targets: 
+#
+#   mk src/foo.test  
+#
+# Note: the command line of qc-- will change and we will have to update
+# both this mkfile and testqc to do the right thing. In particular, one 
+# the -o flag works, we will also have to update all test cases.
+#
+# ------------------------------------------------------------------ 
+# Variables
+# ------------------------------------------------------------------ 
+
+TOP =           ..
+<               $TOP/config/noweb.mk
+
+QC =            $TOP/bin/qc--
+TESTS =         `echo src/*.c--`
+TARGETS =       x86/linux dummy
+
+# flags passed to the test script. See testqc.nw for documentation.
+
+TESTFLAGS =     -nosyntax -v
+TESTFLAGS =     
+
+# ------------------------------------------------------------------ 
+# High level virtual targets. 
+# all            - run all test on all targets
+# *-record       - update test cases for a target; use with care
+# ------------------------------------------------------------------ 
+
+all:V:              dummy-test x86linux-test
+
+dummy-record:V:     ${TESTS:src/%.c--=dummy/%.s} 
+x86linux-record:V:  ${TESTS:src/%.c--=x86/linux/%.s} 
+
+clean:V:            
+                    rm -f *.dvi *.log *.aux *.inc *.tex *.toc
+
+clobber:V:          clean
+                    rm -f testqc
+
+# ------------------------------------------------------------------ 
+# Rules for individual test cases
+# mk src/foo.test   - run test for foo.c--
+# mk src/foo.record - record output for foo.c--
+# ------------------------------------------------------------------ 
+
+%.test:V:       %.c-- testqc
+                for t in $TARGETS; do
+                    ./testqc $TESTFLAGS -v -target=$t $stem.c--
+                done    
+
+%.record:V:     %.c-- 
+                for t in $TARGETS; do
+                    mk $t/`basename $stem`.s
+                done    
+
+# ------------------------------------------------------------------ 
+# Tests for the different targets 
+# ------------------------------------------------------------------ 
+
+dummy-test:QV:  testqc
+                echo "# testing target dummy"
+                echo -n "# "
+                for f in $TESTS; do
+                    ./testqc $TESTFLAGS -target=dummy $f
+                    echo -n '.'
+                done
+                echo 
+
+x86linux-test:QV:  testqc
+                echo "# testing target x86/linux"
+                echo -n "# "
+                for f in $TESTS; do
+                    ./testqc $TESTFLAGS -target=x86/linux $f
+                    echo -n '.'
+                done
+                echo
+
+
+# ------------------------------------------------------------------ 
+# The test script
+# ------------------------------------------------------------------ 
+
+testqc:D:       testqc.nw
+                echo "#! /usr/bin/perl -w "      >  $target
+                $NOTANGLE -L -R$target testqc.nw >> $target
+                chmod +x $target
+
+
+# ------------------------------------------------------------------ 
+# record output
+# ------------------------------------------------------------------ 
+
+dummy/%.s:      src/%.c--
+                t="dummy"
+                b="backend=Backend.old"
+                $QC $b -c ./src/$stem.c-- 2> $t/$stem.s2 > $t/$stem.s1 || true
+                touch $t/$stem.s
+                touch $t/$stem.1
+                touch $t/$stem.2
+                touch src/$stem.0
+
+x86/linux/%.s:  src/%.c--
+                t="x86/linux"
+                b="backend=Backend.x86"
+                $QC $b -c ./src/$stem.c-- 2> $t/$stem.s2 > $t/$stem.s1 || true
+                touch $t/$stem.s
+                touch $t/$stem.1
+                touch $t/$stem.2
+                touch src/$stem.0
+
+

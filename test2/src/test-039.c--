@@ -1,0 +1,57 @@
+
+// execute the commands below to use this file as a test case
+//
+/// ./fp test-039.c--
+/// ./regr "../bin/qc-- -e 'CommandLineOption.check()' $SELF" $REGRFLAGS 
+
+target byteorder big;
+
+
+section "text" 
+{
+
+    export sp1;
+    sp1 (bits32 n)
+    {
+        bits32 s,p;
+        if n == 0 {
+           return (1,1);
+        } else {
+            s, p = sp1(n-1);
+            return (s+n, p*n);
+        }
+    }
+            
+    export sp2;
+    sp2 (bits32 n)
+    {
+        jump sp2_help(n,1,1);
+    }
+
+    sp2_help (bits32 n, bits32 s, bits32 p)
+    {
+        if n==1 {
+            return (s,p);
+        } else {
+            jump sp2_help(n-1, s+n, p*n);
+        }
+        
+    }
+
+    export sp3;
+    sp3 (bits32 n)
+    {
+        bits32 s, p;
+        s = 1; p = 1;
+
+        loop:
+        if n == 1 {
+            return (s, p);
+        } else {
+            s = s+n;
+            p = p*n;
+            n = n-1;
+            goto loop;
+        }
+    }
+}
