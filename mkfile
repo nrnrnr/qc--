@@ -15,26 +15,44 @@ VERSION =       `date +%Y%m%d`
 # SUBDIRS are made from left to right - order matters
 # ------------------------------------------------------------------ 
 
-SUBDIRS =       cllib lua asdl src 
+SRC     =       src
+LIBSRC  =       cllib lua asdl
+SUBDIRS =       $LIBSRC $SRC
 
 # ------------------------------------------------------------------ 
 # high level targets
 # ------------------------------------------------------------------ 
-# this does not work: "all: depend update" because dependencies are
-# not satisfied from left to right.
+# all:          build the compiler
+# lib:          build just the lib/ directory, but not the compiler
+# depend:       update dependencies (recursive)
+# clean:        remove non-source files (recursive)
+# test:         run test suite
 
-all:V:          depend 
-                for i in $SUBDIRS; 
+all:V:          lib
+                for i in $SRC; 
                 do 
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS update)
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS update.opt)
+                done
+                    
                 done
 
-all.opt:V:      depend 
-                for i in $SUBDIRS; 
+all.opt:V:      lib.opt 
+                for i in $SRC; 
                 do 
                     (echo "# entering $i" && cd $i && mk $MKFLAGS update.opt)
                 done
 
+lib:V:          depend
+                for i in $LIBSRC; 
+                do 
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS update)
+                done
+
+lib.opt:V:      depend
+                for i in $LIBSRC; 
+                do 
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS update.opt)
+                done
 
 depend          \
 html            \
@@ -56,18 +74,3 @@ dirs:V:
                 for i in bin lib man man/man1; do
                     [ -d $i ] || mkdir $i
                 done
-
-# ------------------------------------------------------------------ 
-# build distributions
-# ------------------------------------------------------------------ 
-
-SRCDIST =       $NAME-$VERSION.tar.gz
-
-srcdist:V:      clean 
-                ln -s . $NAME-$VERSION
-                tar cvhf -                                  \
-                    `./config/dist.sh -src                  \
-                    | sed -e "s|^\.|$NAME-$VERSION|"`       \
-                    | gzip -c > $SRCDIST
-                rm -f $NAME-$VERSION
-
