@@ -174,9 +174,6 @@ module type S = sig
     val tsubcctv : 
       rs1:nativeint (*[0..31]*) -> reg_or_imm:reg_or_imm -> 
       rd:nativeint (*[0..31]*) -> t
-    val mulscc : 
-      rs1:nativeint (*[0..31]*) -> reg_or_imm:reg_or_imm -> 
-      rd:nativeint (*[0..31]*) -> t
     val umul : 
       rs1:nativeint (*[0..31]*) -> reg_or_imm:reg_or_imm -> 
       rd:nativeint (*[0..31]*) -> t

@@ -661,14 +661,6 @@ module M (R : Sledlib.RELOC_PRINT) = struct
               (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
           (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
     
-    let mulscc rs1 reg_or_imm rd = 
-      Sledlib.String.cat (Sledlib.String.cat 
-          (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
-                (Sledlib.String.cat (Sledlib.String.of_string "MULScc ") 
-                  (print_unsigned_rs2 rs1)) (Sledlib.String.of_string ", ")) 
-              (print_reg_or_imm reg_or_imm)) (Sledlib.String.of_string ", ")) 
-          (print_unsigned_rs2 rd)) (Sledlib.String.of_string "\n")
-    
     let umul rs1 reg_or_imm rd = 
       Sledlib.String.cat (Sledlib.String.cat 
           (Sledlib.String.cat (Sledlib.String.cat (Sledlib.String.cat 
