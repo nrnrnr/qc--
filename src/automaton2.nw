@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 % vim: ts=8 sw=4 et:
 %
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
@@ -123,13 +124,11 @@ target-specific parameters and policy-specific parameters.
 \emph{Unfortuntately, we cannot use the [[Target2.t]] here because it
 would introduce a circular dependency.}
 
-The [[policy]] arguments controls the automatons behavior: when [[up]]
-is true, slots are allocated from low to high memory. The [[alignment]]
-is used for the alignment of the individual slots, and the resulting
-memory block as a whole.
-
-\emph{Maybe we have to offer more control over alignment. -- CL}
-
+The ``policy'' argument control the automaton's behavior: when [[up]]
+is true, slots are allocated from low to high memory. 
+When [[alignment]] is true, every slot is aligned on its size. 
+When false, no slot is aligned. 
+The alignment of the resulting block is the maxmimum alignment of any slot.
 <<automaton2.mli>>=
 module Memory: sig
     type target = 
@@ -139,13 +138,7 @@ module Memory: sig
         ; memsize:          int                 (* in bits *)
         }
 
-    type policy =
-        { up:               bool                (* allocate from lo to hi mem *)
-        ; alignment:        int                 (* in memsize *)
-        }
-        
-
-    val mk: target -> policy -> Rtl.exp (*base*) -> automaton
+    val mk: target -> up:bool -> aligned:bool -> Rtl.exp (*base*) -> automaton
 end
 @
 
@@ -197,16 +190,11 @@ module Memory = struct
         ; pointersize:      int                 (* in bits *)
         ; memsize:          int                 (* in bits *)
         }
-
-    type policy =
-        { up:               bool                (* allocate from lo to hi mem *)
-        ; alignment:        int                 (* in memsize *)
-        }
         
     <<class loc>>
     <<class t>>
     
-    let mk target policy base = new t target policy base
+    let mk target ~up ~aligned base = new t target up aligned base
 end    
 @
 
@@ -232,13 +220,14 @@ with [[_block]]. Depending on [[T.up]] the [[_block]] grows on its high
 or low end.
 
 <<class t>>=
-class t (target:target) (policy:policy) (base:Rtl.exp): automaton =
+class t (target:target) up aligned (base:Rtl.exp): automaton =
 object (this)
-    val mutable _block  = Block.mk base 0 policy.alignment  (* initial block *)
+    val mutable _block  = Block.mk base 0 1  (* initial block *)
     val mutable _frozen = false
+    val mutable _maxalign = 1
     
     method freeze () =
-        ( _block  <- Block.adjust _block 
+        ( _block  <- Block.adjust (Block.cathl _block (Block.mk base 0 _maxalign))
         ; _frozen <- true 
         ; _block  (* return block *)
         )
@@ -254,11 +243,13 @@ object (this)
         let ()      = assert (_frozen = false)           
         and ()      = assert (width mod target.memsize = 0) 
         and bytes   = width / target.memsize in
+        let setmax () = if _maxalign < bytes then _maxalign <- bytes in
+	let align = if aligned then (setmax(); bytes) else 1 in
         match hint with 
         | Some x -> assert false (* hints not supported *)
         | None ->
-            let slot = Block.mk this#slotaddress bytes policy.alignment in
-                ( if policy.up then
+            let slot = Block.mk this#slotaddress bytes align in
+                ( if up then
                     _block <- Block.cathl slot _block 
                   else
                     _block <- Block.cathl _block slot 
@@ -266,6 +257,3 @@ object (this)
                 )                
 end
 @
-
-
-

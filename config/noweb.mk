@@ -62,9 +62,9 @@ NOWEBBREAKCODE=no
 	\usepackage{hyperref}
 	\usepackage{path}
 	\usepackage[dvips]{graphicx}
-	\pagestyle{noweb}
 	`if [ $NOWEBBREAKCODE = yes ]; then echo '\noweboptions{breakcode}'; fi`
 	\input{$TOP/config/macros.tex}
+	\pagestyle{noweb}
 	EOF
 	awk '/^%  *inc:  */ { $1 = ""; $2 = ""; printf "%s ", $0 }' $stem.inc
 	tr '\n' ' ' <<EOF

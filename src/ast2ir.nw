@@ -36,68 +36,77 @@
 WORK STILL TO BE DONE:
 \begin{itemize}
 \item
-CREATE SUITABLE NAMING CONVENTION SO WE KNOW THE ENTRY POINT FOR EACH
-CONTINUATION.  PROBABLY MANAGE THIS BY A CHANGE TO IDGEN.
+REPLACE STACK POINTER WITH VIRTUAL FRAME POINTER.
 \item
-ESCAPE/CUT/RETURN/UNWIND ANALYSIS FOR CONTINUATIONS
-\item
-RECORD SET OF THINGS DEFINED AT EACH ENTRY POINT OF EACH CONTINUATION.
-THERE IS GOING TO BE A PROBLEM HERE, BECAUSE WE HAVE NO WAY TO RECORD
-A DEFINITION OF A VARIABLE, BUT THIS IS WHAT THE UNWIND OPERATION DOES.
-\item
-FIX THE STACKDATA MODULE
+RECORD SET OF THINGS DEFINED AT THE ``UNWOUND TO'' ENTRY POINT OF A CONTINUATION.
+THERE IS A PROBLEM HERE, BECAUSE WE HAVE NO WAY TO RECORD
+A DEFINITION OF A VARIABLE, BUT THIS IS WHAT THE UNWIND OPERATION
+DOES.
+PERHAPS THE ASSERTION NODE WILL DO THE TRICK.
 \end{itemize}
 
 
 
-
+@
 % ------------------------------------------------------------------ 
 \section{Translation to Intermediate Representation}
 % ------------------------------------------------------------------ 
 
-The [[translate]] function takes an environment, the actual target and
-a program and translates it into an abstract assembler program.  The
-assembler is functorized over the data type of instructions. This module
-puts a whole procedure body into a single instruction by basically
-treating a control-flow graph as an instruction. 
+This module does \emph{lots} of translation: 
+each procedure to a [[Proc.t]], and everything else down to the
+assembly level.
+The [[Proc.t]] is embedded into the assembly program as a single
+instruction. 
 
 We put the [[Target.t]] parameter first always because we first put
 the less-specific information before the more-specific information.
+
+The functor parameters and the parameter of type [[string->Call.t]]
+will all go away once the new flow graph ([[Cfg]]) takes over the compiler.
 <<ast2ir.mli>>=
 module Make (G : Cfg.S) (Call : Call.S with type node = Rtl.rtl G.node) : sig
-val translate: Target2.t
-            -> Fenv.Clean.env 
-            -> (string -> Call.t)
-            -> optimizer: (Proc.t -> unit)
-            -> Ast.program 
-            -> Asm3.assembler
+  val translate :  Target2.t
+                -> Fenv.Clean.env 
+                -> (string -> Call.t)
+                -> optimizer: (Proc.t -> unit)
+                -> Ast.program 
+                -> Asm3.assembler
 end
 @
-
-TODO: RESTRUCTURE CODE SO THAT FAT ENVIRONMENT AND TARGET ARE SIMPLY
-CAPTURED AT TOP LEVEL AND NEED NOT BE PASSED HITHER AND YON.
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
+
+Typical abbreviations.
 <<ast2ir.ml>>=
 module T  = Target2
 module A  = Ast
 module E  = Error
 module F  = Fenv.Clean
 module AT = Automaton2
-
-<<auxiliaries>>
-
-module G  = Cfg
-module IO = struct end 
+module AM = Automaton2.Memory
 module R  = Rtl
 module RP = Rtl.Private
 module RU = Rtlutil
 module RS = Register.Set
 module Up = Rtl.Revert
 module Dn = Rtl.Convert
+@ 
+Utility functions and so on.
+<<ast2ir.ml>>=
+<<auxiliaries>>
+@
+The implementation is functorized because at the time this module was
+first written, the flow-graph and calling-convention modules did not exist.
 
+There's some trickiness in the denotations of expressions, because
+there are two scopes: toplevel scope and procedure scope.
+We therefore instantiate [[expr]], [[exprtype]], and [[lvalue]] twice:
+once at top level and once instead each procedure.
+The first instantiation is visible here; the second appears in 
+[[<<definition of [[proc]], which translates one procedure>>]].
+<<ast2ir.ml>>=
 module Make (G : Cfg.S) (C : Call.S with type node = Rtl.rtl G.node) = struct
   <<statement-related types>>
   <<module [[K]], for continution info>>
@@ -105,21 +114,25 @@ module Make (G : Cfg.S) (C : Call.S with type node = Rtl.rtl G.node) = struct
   type 'a csr = { reg : 'a; tmp : 'a; w : int }   (* for callee-saves info *)
 
   let translate target env ccs ~optimizer =
+    let pointersize = target.T.pointersize in
+    <<definition of [[lvalue_name_in_env]]>> in
+    <<environment-independent support for formals, actuals, and results>> in
     let exprfuns env contenv cont_rvalue =
       <<definition of function [[exprtype]]>> in
-      <<meanings of variables as [[lvalue_name]] and [[rvalue_name]]>> in
+      let lvalue_name = lvalue_name_in_env env in
+      <<definition of [[rvalue_name]]>> in
       <<mutually recursive nest of [[expr]] and [[lvalue]]>> in
       expr, exprtype, lvalue  in
-    let impcont _ _ _ = Impossible.impossible "continuation at top level" in
+    let impcont _ _ _ = impossible "continuation at top level" in
     let expr, exprtype, lvalue = exprfuns env Strutil.Map.empty impcont in
     <<definitions of [[compile_const]], [[eval_const]], and [[link_const]]>> in
-    <<definition of [[stackdata]]>> in
+    <<definition of [[proc]], which translates one procedure>> in
     <<definition of [[proc]], which translates one procedure>> in
     <<definition of [[globals]]>> in
-    <<Make memory declarations>> in
-    <<Make toplevel>> in
-    <<Make translate program>> in
-  translate
+    <<function [[datum]], for initialized and uninitialized data>> in
+    <<function [[toplevel]], for emitting toplevel items>> in
+    <<function [[program]], which translates an entire program>> in
+  program
 end
 @
 
@@ -127,95 +140,98 @@ end
 \subsection{Auxiliaries}
 % ------------------------------------------------------------------ 
 
+Some usual suspects.
+<<auxiliaries>>=
+let (<<) f g = fun x -> f (g x) (* function composition *)
+let impossible = Impossible.impossible
+@ 
+Some defaults (probably should be elsewhere).
 <<auxiliaries>>=
 let default_cc          = "C--"
 let default_space       = ('m':Rtl.space)
-let default_section     = "text"
-
-let (<<) f g = fun x -> f (g x) (* function composition *)
-
-(* val width : 'a Types.t -> 'a *)
-let width = function
-    | Types.Bits n -> n
-    | Types.Bool   -> Impossible.impossible "ast2ir.width of type bool"
-
-(* val astty : F.env -> A.ty -> Types.ty *)
-let rec astty env = function
-    | A.TyAt(x,r)  -> astty env x
-    | A.BitsTy(n)  -> Types.bits n
-    | A.AliasTy(x) -> snd (F.findt x env)
-
-(* val astwidth : F.env -> A.ty -> int *)
-let astwidth env = width << (astty env) 
-
-let foldl = List.fold_left
 @
-
-We often know that the address of a block has the form $b+k$, where $b$
-is a known address and $k$ some unkown offset. The function [[offset]]
-provides returns an {\rtl} address of this form, where $k$ is
-represented as a fresh late compile time constant.
+\subsubsection {Conversion from type to width}
+\nwaddbox{tywidth  : 'a Types.t -> 'a}
+\nwaddbox{astty    : F.env -> A.ty -> Types.ty}
+\nwaddbox{astwidth : F.env -> A.ty -> int}
+\deeperbox{2pt}
 <<auxiliaries>>=
-let offset base ptrwidth =
-    let k = Rtl.late (Idgen.offset "Ast2ir.offset") ptrwidth in
-        Rtl.app (Rtl.opr "add" [ptrwidth]) [base;k] 
+let tywidth = function
+  | Types.Bits n -> n
+  | Types.Bool   ->
+      impossible "width of type bool"
+
+let rec astty env = function
+  | A.TyAt(x,r)  -> astty env x
+  | A.BitsTy(n)  -> Types.bits n
+  | A.AliasTy(x) -> snd (F.findt x env)
+
+let astwidth env = tywidth << (astty env) 
 @
 
 
 @
-\subsection{Names}
+\subsection{Names and expressions}
+\subsubsection{The meanings of names}
 
 Only the name of a {\PAL} register variable is meaningful in an lvalue
-context;
-other names names are meaningful only in rvalue contexts.
-\nwaddbox{val lvalue_name : env -> target -> name -> AT.loc * Rtl.width}
-\nwaddbox{val rvalue_name : env -> target -> name -> Rtl.exp}
-\deeperbox{28pt}
-<<meanings of variables as [[lvalue_name]] and [[rvalue_name]]>>=
-let rec lvalue_name x = 
+context.
+The environment is explicit.
+\nwaddbox{lvalue_name_in_inv : F.env -> name -> AT.loc * Rtl.width}
+\deeperbox{16pt}
+<<definition of [[lvalue_name_in_env]]>>=
+let lvalue_name_in_env env x = 
   let (_,(denot,t)) = F.findv x env in
-  let w = width t                   in
+  let w = tywidth t                 in
   match denot with
   | F.Register({F.loc=Some l}) -> l, w
   | F.Register({F.index=i;F.loc=None}) ->
       if F.is_localv x env then
         AT.of_loc (Rtl.var x i w), w
       else 
-        Impossible.impossible "global variable without location"
-  | _ -> Impossible.impossible "asked for lvalue of non-register name"
-and rvalue_name x =
-    let (_,(denot,t)) = F.findv x env in
-    let w = width t in
-    match denot with
-    | F.Constant(bits)            -> Rtl.bits bits w
-    | F.Label(F.Proc (s,_,_))     -> Rtl.link s w
-    | F.Label(F.Code s)           -> Rtl.link s w
-    | F.Label(F.Data s)           -> Rtl.link s w
-    | F.Import(_,s)               -> Rtl.link s w
-    | F.Continuation(st,_)        -> cont_rvalue x st w
-    | F.Label(F.Stack(None))      -> Impossible.impossible "Ast2ir.Make.variable"
-    | F.Label(F.Stack(Some addr)) -> addr  (* a fetch would be wrong *)
-    | F.Register _                -> atfetch (lvalue_name x)
+        impossible "global variable without location"
+  | _ -> impossible "asked for lvalue of non-register name"
+@ 
+Any name can be meaningful in an rvalue context.
+The environment is implicit.
+\nwaddbox{val rvalue_name : name -> Rtl.exp}
+<<definition of [[rvalue_name]]>>=
+let rvalue_name x =
+  let (_,(denot,t)) = F.findv x env in
+  let w = tywidth t in
+  match denot with
+  | F.Constant(bits)            -> Rtl.bits bits w
+  | F.Label(F.Proc (s,_,_))     -> Rtl.link s w
+  | F.Label(F.Code s)           -> Rtl.link s w
+  | F.Label(F.Data s)           -> Rtl.link s w
+  | F.Import(_,s)               -> Rtl.link s w
+  | F.Continuation(st,_)        -> cont_rvalue x st w
+  | F.Label(F.Stack(None))      -> impossible "Ast2ir.Make.variable"
+  | F.Label(F.Stack(Some addr)) -> addr  (* a fetch would be wrong *)
+  | F.Register _                -> atfetch (lvalue_name x)
+@ 
+Help for fetching and storing automata locations.
 <<auxiliaries>>=
-let atfetch (loc, w) = loc#fetch w
+let atfetch (loc, w)     = loc#fetch w
 let atstore (loc, w) exp = loc#store exp w
 @ 
-\subsubsection{Lvalues}
+\subsubsection{General lvalues}
 
+Again, the environment is implicit.
 \nwaddbox{lvalue : Ast.lvalue -> AT.loc * Rtl.width}
 \deeperbox{14pt}
 <<mutually recursive nest of [[expr]] and [[lvalue]]>>=
 let rec lvalue lhs = match lhs with
-    | A.LValueAt(lhs,_)   -> lvalue lhs
-    | A.Var(hint,x)       -> lvalue_name x 
-    | A.Mem(t,addr,align) ->
-        let w    = astwidth env t in
-        let assn = match align with None -> Rtl.none | Some n -> Rtl.aligned n in
-        AT.of_loc (Rtl.cell assn default_space target.T.byteorder w (expr addr)), w
+  | A.LValueAt(lhs,_)   -> lvalue lhs
+  | A.Var(hint,x)       -> lvalue_name x 
+  | A.Mem(t,addr,align) ->
+      let w    = astwidth env t in
+      let assn = match align with None -> Rtl.none | Some n -> Rtl.aligned n in
+      AT.of_loc (Rtl.cell assn default_space target.T.byteorder w (expr addr)), w
 @ 
 
 % ------------------------------------------------------------------ 
-\subsection{Expression Types}
+\subsubsection{Expression Types}
 % ------------------------------------------------------------------ 
 
 We use the generic [[Expcheck]] module to find an expression's type.
@@ -227,7 +243,7 @@ CAN ANYTHING BE DONE, E.G., BY FUNCTORIZING [[Expcheck]]?
 <<definition of function [[exprtype]]>>=
 let exprtype exp =
     let word      = Error.Ok (Types.bits target.T.wordsize)    in
-    let pointer   = Error.Ok (Types.bits target.T.pointersize) in
+    let pointer   = Error.Ok (Types.bits pointersize) in
     let tlookup   = fun x -> Error.Ok (snd (F.findt x env))         in
     let vlookup   = fun x -> Error.Ok (match (F.findv x env) with
                                       | (_,(_,t)) -> t 
@@ -239,69 +255,32 @@ let exprtype exp =
             } 
     in try ( match Expcheck.check e exp with
            | Error.Ok(t) -> t
-           | Error.Error -> Impossible.impossible "error exp post checking"
+           | Error.Error -> impossible "error exp post checking"
            )
-       with Error.ErrorExn msg -> Impossible.impossible "error exn post checking"
+       with Error.ErrorExn msg -> impossible "error exn post checking"
 @
 
-
-
-
 % ------------------------------------------------------------------ 
-\subsection{Expression Translation}
+\subsubsection{Expression Translation}
 % ------------------------------------------------------------------ 
 
-Each expressions denotes a value.
 It may be possible to evalute an expression at compile time, link time, or
-run time.  The translation of a variable depends on its
-denotation. (DO WE MEAN BINDING TIME HERE?)
-
+run time. 
 We should evaluate constant expressions as EARLY as possible. Module
 \module{rtleval} does this for link-time expressions and could possibly
 be extended.
 @
-
-A continuation has two labels: one for its code ([[x]]), and one that is
-used as its value ([[label]]). The label is later re-written to a
-pointer expression that denotes a pair of values in the activation
-record. The label is part of the continuation's denotation.
-\begin{quote}\it
-    The translation of continuations in \path|Ast2ir| is bogus. A
-    continuation \emph{value} is a pointer into the stack where two values
-    are stored: a pointer to the code of the continuation, and a stack
-    pointer. The current representation of a continuation value is a
-    link-time constant, which is wrong. A continuation \emph{value} is a
-    late compile-time expression: a sum of the stack pointer value and some
-    late compile-time constant. The stack pointer in turn, depends on the
-    currently active calling convention. -- CL (Wed May 15 16:58:46 EDT 2002)
-\end{quote}
-
-For example, we expect the following C--:
-\begin{alltt}
-p () {
-    continuation k():
-}
-\end{alltt}
-to be translated into the following:
-\begin{alltt}
-sym@p()
-{
-    $m[sp + sym@k + 4] = sym@k;
-    $m[sp + sym@k]     = sp;
-    sym@k:
-}
-\end{alltt}
-
-<<definition of function [[variable]]>>=
-@
-
 \begin{quote}\it
     Since evaluation and type-checking are separated, types in nested
     expressions are checked multiple times. This introduces a
     quadratic complexity. QUADRATIC IN WHAT SIZE??
     The only way to avoid this, as far as I can
     see, is a combined bottom-up evaluation and type checking. --CL
-
+    I THINK THIS WOULD BE AN EXCELLENT THING TO DO.  IT WOULD MEAN
+    CHANGING THE POST-ELABORATION REPRESENTATION OF THE PROGRAM FROM
+    AN ABSTRACT-SYNTAX TREE TO A SANER INTERMEDIATE FORM.  THIS TOO COULD
+    BE A GOOD THING. ---NR
+@
     Link-time constants are not atomic but have an expression structure.
     We should try to push some operators down into link time constants:
     The sum of a symbol and a constant can be represented as a link-time
@@ -314,7 +293,6 @@ sym@p()
     IDENTIFY WHICH LINK-TIME CONSTANT EXPRESSIONS CAN BE EMITTED AS
     INIIALIZED DATA. ---NR
 \end{quote}
-    
 <<mutually recursive nest of [[expr]] and [[lvalue]]>>=
 and expr exp = 
   let prim op args =
@@ -328,10 +306,10 @@ and expr exp =
     | None    -> default_width in
   match exp with
   | A.ExprAt(x,_)     -> expr x
-  | A.Int(str,t)      -> literal  str (const word t) Bits.U.of_string
-  | A.Float(str,t)    -> literal  str (const word t) Bits.U.of_string
-  | A.Char(str,t)     -> literal  str (const word t) Bits.U.of_string
-     (*FLOAT AND CHARACTER LITERALS LOOK VERY BOGUS TO ME*)
+  | A.Int(str,t)      -> literal str (const word t) Bits.U.of_string
+  | A.Float(str,t)    -> literal str (const word t) Bits.U.of_string
+  | A.Char(str,t)     -> literal str (const word t) Bits.U.of_string
+     (*FLOAT AND CHARACTER LITERALS LOOK SUSPICIOUS TO ME*)
   | A.Fetch(v)        -> atfetch (lvalue v)
   | A.BinOp (l,op,r)  -> prim op [l;r]
   | A.UnOp  (op,e)    -> prim op [e]
@@ -359,7 +337,7 @@ and link_const    asm exp =
     | RP.App(("sub",_),[RP.Const(RP.Link(l,w)); RP.Const(RP.Link(l',w'))]) ->
         Impossible.unimp "difference of link-time constants"
     | e ->
-        Impossible.impossible
+        impossible
           ("Bad link-time constant " ^ Rtlutil.ToReadableString.exp (Up.exp e))
 @
 
@@ -367,11 +345,8 @@ and link_const    asm exp =
 \subsection{Continuation Bundles}
 % ------------------------------------------------------------------ 
 
-A continuation bundle on the {\AST} level is a record of names, and an
-asbtract type at the {\cfg} level.  The continuations function
-translates from the former to the latter.
-PERHAPS IT LOSES TOO MUCH INFORMATION TO GET JUST THE NODES?
-
+A continuation bundle on the {\AST} level is a record of names.
+At the flow-graph level we keep track of nodes and dataflow.
 <<statement-related types>>=
 type 'i conts = { cuts    : 'i G.contedge list
                 ; unwinds : 'i G.contedge list
@@ -379,85 +354,88 @@ type 'i conts = { cuts    : 'i G.contedge list
                 ; aborts  : bool
                 }
 @ 
-We have to associate the correct entry point with a continuation.
-This depends on how the continuation is used.
-Perhaps a change to [[Idgen]] will be in order.
+We use the remembered labels to associate the correct entry point with
+each continuation, depending on how the continuation is used.
 <<Make continuation bundles>>=
 let continuations cc ast =
   let volregs = cc.C.volregs in                 (* volatile registers *)
   let allregs = RS.union volregs cc.C.nvregs in (* all registers *)
-  let unwind_entry_point n = G.node_labeled g ((continuation n).K.unwind_pc) in
-  let return_entry_point n = G.node_labeled g ((continuation n).K.return_pc) in
-  let    cut_entry_point n = G.node_labeled g ((continuation n).K.cut_pc)    in
-  let as_cut_to n =
-    { G.defs = assert false; G.kills = allregs; G.node = cut_entry_point n } in
-    (* AWAITS RECORDED DEFINITIONS FOR CONTINUATION ENTRY *)
-  let as_unwinds n =
-    { G.defs = noregs; G.kills = volregs; G.node = unwind_entry_point n } in
+  let entry n = G.node_labeled g n in
+  let as_cut_to k =
+    k.K.cut_to <- true;
+    { G.defs = k.K.cut_in.C.regs; G.kills = allregs ; G.node = entry k.K.cut_pc } in
+  let as_unwinds k =
+    k.K.unwound_to <- true;
+    { G.defs = noregs; G.kills = volregs; G.node = entry k.K.unwind_pc } in
     (* defs are variables and so can't be a register set.  NEED ANOTHER MECHANISM *)
-  let as_returns n =
-    { G.defs = assert false; G.kills = volregs; G.node = return_entry_point n } in
-  let rec loop conts = function
-        | A.FlowAt (f,_) :: ff -> 
-            loop conts (f::ff)
-        | (A.CutsTo n)   :: ff -> 
-            loop {conts with cuts    = List.map as_cut_to n  @ conts.cuts   } ff
-        | (A.UnwindsTo n):: ff -> 
-            loop {conts with unwinds = List.map as_unwinds n @ conts.unwinds} ff
-        | (A.ReturnsTo n):: ff -> 
-            loop {conts with returns = List.map as_returns n @ conts.returns} ff
-        | (A.Aborts)     :: ff -> 
-            loop {conts with aborts  = true                     } ff 
-        | []                   -> conts in
-    let empty = { cuts = []; unwinds = []; returns = [] ; aborts = false } in
-    loop empty ast
+  let as_returns k =
+    k.K.returned_to <- true;
+    { G.defs = k.K.return_in.C.regs; G.kills = volregs; G.node=entry k.K.return_pc } in
+  let contmap f = List.map (f << continuation) in
+  let rec add f cs = match f with (* avoid list reversal! *)
+    | A.FlowAt(f,_)  -> add f cs
+    | A.CutsTo ns    -> { cs with cuts    = contmap as_cut_to  ns @ cs.cuts    }
+    | A.UnwindsTo ns -> { cs with unwinds = contmap as_unwinds ns @ cs.unwinds }
+    | A.ReturnsTo ns -> { cs with returns = contmap as_returns ns @ cs.returns }
+    | A.Aborts       -> { cs with aborts  = true                               } in
+  let empty = { cuts = []; unwinds = []; returns = [] ; aborts = false } in
+  List.fold_right add ast empty
 @
 
 % ------------------------------------------------------------------
-\subsection{Formal and Actual Parameters}
+\subsection{Actual Parameters, Formal Parameters, and Results}
 % ------------------------------------------------------------------ 
 
-For either formals or actuals, we need a sequence of hint/width pairs
+For actuals, formals, or results, we need a sequence of hint/width pairs
 to feed to the calling convention.
-For each formal, we need the corresponding location, and for each
+For a formal or result, we need the corresponding location, and for each
 actual, the corresponding value.
-\nwaddbox{pre_actuals : Ast.actual list -> (hint * width) list * Rtl.exp list}
-\nwaddbox{pre_results : Ast.lvalue list -> (hint * width) list * Rtl.loc list}
-\nwaddbox{pre_formals : Ast.formal list -> (hint * width) list * Rtl.loc list}
-\nwaddbox{pre_cformals : Ast.cformal list -> (hint * width) list * Rtl.loc list}
-<<Make formals and actuals>>=
-let varwidth x = let (_,(denot,t)) = F.findv x env in width t in
-let splitfold hw e l =
-  List.fold_right (fun x (hws, es) -> (hw x :: hws, e x :: es) ) l ([], []) in
-let pre_actuals l =
-  splitfold (fun (h, e) -> (h, width (exprtype e))) (fun (h, e) -> expr e) l
-and pre_results l = 
-  let rec hw = function
-    | A.LValueAt (lv, _) -> hw lv
-    | A.Var(hint,x)      -> hint, varwidth x
-    | A.Mem(_, _, _)     -> Impossible.impossible "mem ref as result" in
-  splitfold hw (fst << lvalue) l 
-and pre_formals l = 
-  let hw  (h, _, _, x) = h, varwidth x in
-  let loc (h, _, _, x) = fst (lvalue (A.Var(h, x))) in
-  splitfold hw loc l 
-and pre_cformals l = 
-  let hw  (h,  x) = h, varwidth x in
-  let loc (h,  x) = fst (lvalue (A.Var(h, x))) in
-  splitfold hw loc l in
-let combine_convention f convention l =
-  let hw, parms = f l in
-  convention hw, parms in
-let actuals = combine_convention pre_actuals
-and results = combine_convention pre_results
-and formals = combine_convention pre_formals
-and cformals = combine_convention pre_cformals
+We do the dirty work with a higher-order function.
+Argument [[hint_parm]] splits the abstract syntax into a hint and
+a ``parameter''.
+Argument [[cvt]] takes a ``parameter'' and produces a converted
+parameter (location or expression), plus the width of the parameter.
+The later parameter [[conv]] is a calling convention, which we apply
+here for convenience.
+<<environment-independent support for formals, actuals, and results>>=
+let convert_parms hint_parm cvt =
+  let add x (hws, parms) =
+    let hint, parm = hint_parm x in
+    let parm, w = cvt parm in
+    (hint, w) :: hws, parm :: parms in
+  fun conv l ->
+    let hws, parms = List.fold_right add l ([], []) in
+    conv hws, parms in
+@ 
+We instantiate this code four ways.
+For an actual parameter, the [[cvt]] parameter is the function [[ew]],
+which compiles an AST expression into an RTL expression plus a width.
+For a formal parameter or result, we use [[lvalue_name_in_env]].
+The environment must be a parameter, since we don't have it at the
+time these functions are defined.
+<<environment-independent support for formals, actuals, and results>>=
+let actuals'  ew  = convert_parms (fun (h, e)       -> h, e) ew                       
+and formals'  env = convert_parms (fun (h, _, _, x) -> h, x) (lvalue_name_in_env env) 
+and cformals' env = convert_parms (fun (h, x)       -> h, x) (lvalue_name_in_env env) 
+and results'  env = 
+  let rec hn = function
+    | A.LValueAt (lv, _) -> hn lv
+    | A.Var(h,x)         -> h, x
+    | A.Mem(_, _, _)     -> impossible "mem ref as result" in
+  convert_parms hn (lvalue_name_in_env env) 
+@ 
+At a later point, we can finish instantiating these functions.
+<<using [[env]] and [[expr]], build funs for formals, actuals, and results>>=
+let actuals  = actuals'  (fun e -> expr e, tywidth (exprtype e))
+and formals  = formals'  env
+and results  = results'  env
+and cformals = cformals' env
 @
-
 \begin{quote}\it
     As NR pointed out, hints on global registers have no semantics in 
     {\qcc}. They thus must be ignored when computing parameter
     passing. --CL
+    I DON'T UNDERSTAND THIS COMMENT.  PLEASE EXPLAIN.
 \end{quote} 
 @
     
@@ -466,23 +444,24 @@ and cformals = combine_convention pre_cformals
 \subsection{Global Registers}
 % ------------------------------------------------------------------ 
 
-The global registers of a {\PAL} program are assigned to hardware
-register or memory locations using a target specific automaton.  Each
-assignment results in an abstract [[AT.loc]] value that is
+The [[globals]] function pushes all global register variables through 
+a target-specific automaton, which  assigns each global 
+variable to  a hardware
+register or memory location.
+Each variable is represented by an [[AT.loc]], which is
+added to the variable's denotation in the environment.
+The location is also
 entered under the name of the register to a map.
  
-The [[globals]] function pushes all global registers through a target
-specific automaton to obtain locations for each of them.  A location
-is added to a register's denoation in the environment.  The updated
-environment plus the area of memory that hold global registersi are
-returned as a pair.
-
-When different compilation units are linked together they all must
+All compilation units in a program must
 declare exactly the same global registers. We compute a cryptographic
-hash value for all global register declarations as a finger print. The
-finger print is a string of 16 characters which are not guaranteed to be
+hash value for all global-register declarations as a fingerprint. The
+fingerprint is a string of 16 characters, which may not be
 printable.
 
+Function [[globals]] returns the enriched 
+environment, the block of memory that holds overflow global variables,
+and a fingerprint of the declarations.
 <<definition of [[globals]]>>=
 let globals (base:Rtl.exp) names =
     let t = AT.mk target.T.globals base in
@@ -490,11 +469,11 @@ let globals (base:Rtl.exp) names =
     let rec assign env n =
         try 
             ( match F.findv n env with
-            | (rgn,(F.Register(reg),ty)) ->
+            | rgn, (F.Register(reg), ty) ->
                 let h,h'  = match reg.F.rhint with
                             | F.RReg x -> Some x, x     (* h/w register *)
                             | _        -> None  , "" in
-                let w     = width ty in
+                let w     = tywidth ty in
                 (* sig is string representation of this declaration *)
                 let sign  = Printf.sprintf "[%d <%s>]" w h' in
                 let ()    = Buffer.add_string decls sign    in
@@ -502,9 +481,9 @@ let globals (base:Rtl.exp) names =
                 let entry = ( rgn
                             , (F.Register({reg with F.loc = Some loc}),ty)
                             ) in F.rebindv n entry env
-            | _ -> Impossible.impossible "Ast2ir.Make.globals"
+            | _ -> impossible ("global register " ^ n ^ " not in environment")
             )
-        with Error.ErrorExn msg -> Impossible.impossible msg
+        with Error.ErrorExn msg -> impossible msg
     in
     let env = List.fold_left assign env names in
         env, AT.freeze t, Digest.string (Buffer.contents decls)    
@@ -512,72 +491,71 @@ let globals (base:Rtl.exp) names =
 
 
 % ------------------------------------------------------------------ 
-\subsection{Statements}
+\subsection{Simple Statements}
 % ------------------------------------------------------------------ 
 
-The translation of statements in a procedure body requires a bunch of
-value that are passed as a functional [[state]] value around. Using
-\ocaml's functional record update this allows to add more informations
-as needed without breaking any code.
-
-<<statement-related types>>=
-type cfg = R.rtl G.cfg
-type node = R.rtl G.node
-@
-
+The [[bodies]] and [[body]] functions simply thread the translations
+of statements.
+They maintain a current successor and a current set of (span)
+properties.
 <<functions that translate statements, including [[bodies]]>>=
-let rec bodies bs succ = List.fold_right body bs succ
-and body b succ = match b with
-  | A.BodyAt(x, _)       -> body x succ
+let rec bodies props bs succ = List.fold_right (body props) bs succ
+and     body   props b  succ = match b with
+  | A.BodyAt(x, _)       -> body props x succ
   | A.DeclBody(d)        -> succ (* nothing to be done *)
-  | A.StmtBody(s)        -> stmt s succ
+  | A.StmtBody(s)        -> stmt props s succ
   | A.DataBody(dd)       -> succ (* already done *)
-and stmt s succ = match s with
-  | A.StmtAt(x,r)        -> stmt x succ
-  | A.SpanStmt    x      -> Impossible.unimp "span"
-  | A.IfStmt (e, ifso, ifnot) ->
-      G.cbranch g (expr e) ~ifso:(bodies ifso succ) ~ifnot:(bodies ifnot succ)
-  | A.SwitchStmt  x      -> Impossible.unimp "switch"
-  | A.LabelStmt   n      -> G.node_labeled g n
-  | A.ContStmt    x      -> contStmt x succ
-  | A.AssignStmt (lhs, rhs) ->
+@ 
+We do the simple statements inline,
+but interprocedural control flow is complicated enough to warrant
+out-of-line functions (as will [[switch]]).
+<<functions that translate statements, including [[bodies]]>>=
+and stmt props s succ =
+  <<supporting functions for translating statements>> in
+  match s with
+  | A.StmtAt(x,r)              -> stmt props x succ
+  | A.SpanStmt(key, value, bs) ->
+      bodies ((compile_const key, expr value) :: props) bs succ
+  | A.AssignStmt (lhs, rhs)    ->
       let effect lhs (guard,rhs) =
         let rtl = atstore (lvalue lhs) (expr rhs) in
-        ( match guard with
+        match guard with
         | None   -> rtl
-        | Some g -> Rtl.guard (expr g) rtl
-        ) in
+        | Some g -> Rtl.guard (expr g) rtl in
       G.instruction g (Rtl.par (List.map2 effect lhs rhs)) succ
-  | A.CallStmt    x      -> callStmt x succ
-  | A.PrimStmt    x      -> Impossible.unimp "primitive"
+  | A.IfStmt (e, so, not)  ->
+      G.cbranch g (expr e) ~ifso:(bodies props so succ) ~ifnot:(bodies props not succ)
+  | A.LabelStmt n          -> G.node_labeled g n
   | A.GotoStmt (e, labels) ->
-     let e = expr e in
-     (match Dn.exp e with
-     | RP.Const (RP.Link (sym, w)) ->
-         G.branch g ~target:(G.node_labeled g (sym#text))
-     | _ ->
-         let i = target.T.goto.T.embed e in
-         let targets = List.map (G.node_labeled g) labels in
-         G.mbranch g i targets
-     )
-  | A.JumpStmt    x      -> jumpStmt   x
-  | A.CutStmt     x      -> cutStmt    x 
-  | A.ReturnStmt  x      -> returnStmt x 
-  | A.EmptyStmt          -> succ
-  | A.CommentStmt _      -> succ
+     (match Dn.exp (expr e) with
+     | RP.Const (RP.Link (sym, w)) -> G.branch g ~target:(G.node_labeled g (sym#text))
+     | e -> let instr   = target.T.goto.T.embed (Up.exp e) in
+            let targets = List.map (G.node_labeled g) labels in
+            G.mbranch g instr targets)
+  | A.ContStmt    x -> contStmt   x succ
+  | A.CallStmt    x -> callStmt   x succ
+  | A.JumpStmt    x -> jumpStmt   x
+  | A.CutStmt     x -> cutStmt    x 
+  | A.ReturnStmt  x -> returnStmt x 
+  | A.SwitchStmt  x -> Impossible.unimp "switch"
+  | A.PrimStmt    x -> Impossible.unimp "primitive"
+  | A.EmptyStmt     -> succ
+  | A.CommentStmt _ -> succ
 @
+\subsection{Interprocedural control and data flow}
 The outgoing overflow parameters passed by a tail-call go into the
 \emph{incoming} area of the current activation.
 N.B.~We don't use the [[targets]] list, which is there for future
 interprocedural optimization and call-graph analysis.
-<<functions that translate statements, including [[bodies]]>>=
-and jumpStmt (cconv,e,args,targets (*unused*)) = 
+<<supporting functions for translating statements>>=
+let rec jumpStmt (cconv,e,args,targets (*unused*)) = 
     let cc = ccs (Aux.Option.get default_cc cconv)    in
     let out, actuals = actuals cc.C.call_actuals args in
     let jumpi   = target.T.jump.T.embed (expr e) in
     let () = add_inparms out.C.overflow in  (* outgoing jump overflow = incoming *)
     G.instruction g out.C.pre_sp            **>
     G.instruction g (out.C.shuffle actuals) **>
+    G.instruction g restore_csrs            **>
     G.instruction g out.C.post_sp           **>
     G.jump        g jumpi ~targets ~uses:(RS.union out.C.regs cc.C.nvregs)
 <<auxiliaries>>=
@@ -607,37 +585,30 @@ let noregs = Register.Set.empty
 
 \begin{figure}
 \centerline{\includegraphics[width=\hsize]{../figures/callstmt}}
-\caption{\label{fig:ast2ir:call} Principle translation of a call
-statement. A data-flow node expresses inter-procedural data-flow.}
+\caption{Principal translation of a call statement. A dataflow node
+         expresses interprocedural dataflow.} 
+\label{fig:ast2ir:call} 
 \end{figure}
-
-\begin{quote}\it
-    We need data-flow-edges for the conintuations, too. --CL
-\end{quote}
-
-
-THIS CODE NEEDS RE-DOING.  IT MAY MAKE MORE SENSE TO GRAB THE
-DENOTATIONS OF THE ANNOTATIONS AND NOT THE NODES.
-<<functions that translate statements, including [[bodies]]>>=
+<<supporting functions for translating statements>>=
 and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ = 
-    let cc = ccs (Aux.Option.get default_cc cconv)    in
-    let out, actuals = actuals cc.C.call_actuals args in
-    let in', results = results cc.C.call_results lhs  in
-    let calli = target.T.call.T.embed (expr e)        in
-    let conts = continuations cc conts                in
-    let () = add_outparms out.C.overflow in  (* outgoing overflow parms *)
-    let () = add_outparms in'.C.overflow in  (* incoming overflow res = out parms *)
-    G.instruction g out.C.pre_sp            **>
-    G.instruction g (out.C.shuffle actuals) **>
-    G.instruction g out.C.post_sp           **>
-    G.call        g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
-                          ~altrets:conts.returns ~unwinds_to:conts.unwinds
-                          ~cuts_to:conts.cuts ~aborts:conts.aborts           **>
-    G.assertion   g (R.store cc.C.sp in'.C.sploc target.T.pointersize)       **>
-    G.instruction g in'.C.pre_sp            **>  (* DOUBTS ABOUT THIS *)
-    G.instruction g (in'.C.shuffle results) **>
-    G.instruction g in'.C.post_sp           **>
-    succ
+  let cc = ccs (Aux.Option.get default_cc cconv)    in
+  let out, actuals = actuals cc.C.call_actuals args in
+  let in', results = results cc.C.call_results lhs  in
+  let calli = target.T.call.T.embed (expr e)        in
+  let conts = continuations cc conts                in
+  let () = add_outparms out.C.overflow in  (* outgoing overflow parms *)
+  let () = add_outparms in'.C.overflow in  (* incoming overflow res = out parms *)
+  G.instruction g out.C.pre_sp            **>
+  G.instruction g (out.C.shuffle actuals) **>
+  G.instruction g out.C.post_sp           **>
+  G.call        g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
+                        ~altrets:conts.returns ~unwinds_to:conts.unwinds
+                        ~cuts_to:conts.cuts ~aborts:conts.aborts ~spans:props  **>
+  G.assertion   g (R.store cc.C.sp in'.C.sploc pointersize)           **>
+  G.instruction g in'.C.pre_sp            **>  (* DOUBTS ABOUT THIS *)
+  G.instruction g (in'.C.shuffle results) **>
+  G.instruction g in'.C.post_sp           **>
+  succ
 <<auxiliaries>>=
 let ( **> ) f x = f ~succ:x
 let succfold f = List.fold_right (fun x y -> f x ~succ:y)
@@ -645,7 +616,7 @@ let succfold f = List.fold_right (fun x y -> f x ~succ:y)
 A procedure returns value in the \emph{incoming} area of its
 activation but uses the \emph{copy-out} method.  Don't get confused
 and refer to the big picture in \module{stack}. 
-<<functions that translate statements, including [[bodies]]>>=
+<<supporting functions for translating statements>>=
 and returnStmt (cconv, kont, args) = 
 (* SHOULD RETURN BEAR A CALLING CONVENTION, OR DOES IT GET THE CONVENTION OF THE BODY? *)
     let cc = ccs (Aux.Option.get default_cc cconv)    in
@@ -663,63 +634,7 @@ and returnStmt (cconv, kont, args) =
     G.instruction g restore_csrs            **>
     G.instruction g out.C.post_sp           **>
     G.return      g reti ~uses:(RS.union out.C.regs cc.C.nvregs)
-@
-The continuation code fills in the blanks left during the first pass.
-<<functions that translate statements, including [[bodies]]>>=
-and contStmt (label,args) succ =
-  let cc = ccs default_cc in
-  let in', formals = cformals cc.C.also_cuts_to args in
-  let base =
-    R.link ((F.asm env)#local (label^"base for bogosity")) target.T.pointersize in
-  let rep = Contn.with_overflow target base in'.C.overflow in
-  (continuation label).K.trans <-
-    Some { K.succ = succ; K.rep = rep; K.cut_in = in'; K.cutformals = formals };
-  G.illegal g (* should be not reached *)
 @ 
-The rest of the compilation happens at the end of the procedure.
-<<functions that translate statements, including [[bodies]]>>=
-and finish_compiling_continuation k =
-  begin
-    if k.K.cut_to then
-      generate_cut_to_entry k
-    else if k.K.escapes then
-      assert false; (* MUST BIND LABEL SOMEWHERE SENSIBLE *)
-    if k.K.returned_to then
-      generate_return_to_entry k;
-    if k.K.unwound_to then
-      generate_return_to_entry k;
-  end
-
-and generate_cut_to_entry k =
-  let trans = ktrans k in
-  let in', formals = trans.K.cut_in, trans.K.cutformals in
-  G.set_succ (G.node_labeled g k.K.cut_pc) (
-  G.instruction g in'.C.pre_sp              **>
-  G.instruction g (in'.C.shuffle formals)   **>
-  G.instruction g in'.C.post_sp             **>
-  trans.K.succ)
-
-and generate_return_to_entry k = 
-  let cc = ccs default_cc in
-  let in', formals = cformals cc.C.also_returns_to k.K.formals in
-  G.set_succ (G.node_labeled g k.K.return_pc) (
-  G.instruction g in'.C.pre_sp              **>
-  G.instruction g (in'.C.shuffle formals)   **>
-  G.instruction g in'.C.post_sp             **>
-  (ktrans k).K.succ)
-
-and generate_unwind_to_entry k = 
-  let assign_unspecified_to args = R.par [] in (* BOGUS *)
-  G.set_succ (G.node_labeled g k.K.unwind_pc) (
-  G.assertion g (assign_unspecified_to formals) **>  (* in lieu of dataflow *)
-  (ktrans k).K.succ)
-
-and ktrans k = match k.K.trans with Some t -> t | None -> impossible "missing trans"
-<<auxiliaries>>=
-let impossible = Impossible.impossible
-@
-
-
 A [[cut to]] instruction passes arguments according to a calling convention.
 Each continuation has its own overflow area. The [[copyout]] routine returns
 an [[area]] that corresponds to the overflow area. Since this area may
@@ -735,21 +650,64 @@ ALSO SHOULD USE [[Contn]]!!
 
 NEED A SYSTEMATIC APPROACH TO ARGS/RESULTS, AS WELL AS TO DATAFLOW NODES.
 
-<<functions that translate statements, including [[bodies]]>>=
+<<supporting functions for translating statements>>=
 and cutStmt (e, args, conts) = 
   (* PERHAPS IT SHOULD BE POSSIBLE TO SET THE CALLING CONVENTION FOR CUT TO
      AND FOR CONTINUATION? *)
   let cc = ccs default_cc in
   let out, actuals = actuals cc.C.cut_to_actuals args in
-  let contn = expr e in
-  let ptr       = target.T.pointersize                    in
-  let mem       = target.T.memsize                        in
-  let cuti  = target.T.cutto.T.embed
-      (cc.C.sp, Contn.sp_exp ptr mem contn,Contn.pc_exp ptr mem contn) in
+  let cuti  = (*target.T.cutto.T.embed*) (assert false) (expr e) in
   let ()    = add_constraints (Block.constraints out.C.overflow) in
   let conts = continuations cc conts in
   G.instruction g (out.C.shuffle actuals) **>
   G.cut_to      g cuti ~cuts_to:conts.cuts ~aborts: conts.aborts ~uses:out.C.regs
+@
+\subsubsection{Continuations and their entry points}
+The continuation code fills in the blanks left during the first pass.
+<<supporting functions for translating statements>>=
+and contStmt (label,args) succ =
+  (continuation label).K.succ <- succ;
+  G.illegal g (* should be not reached *)
+@ 
+The rest of the compilation happens at the end of the procedure.
+<<functions that translate statements, including [[bodies]]>>=
+and finish_compiling_continuation k =
+  begin
+    if k.K.cut_to then
+      generate_cut_to_entry k
+    else if k.K.escapes then
+      generate_cut_to_entry k; (* COULD DO LESS?  BIND LABEL SOMEWHERE SENSIBLE? *)
+    if k.K.returned_to then
+      generate_return_to_entry k;
+    if k.K.unwound_to then
+      generate_return_to_entry k;
+  end
+
+and generate_cut_to_entry k =
+  let in', formals = k.K.cut_in, k.K.formals in
+  G.set_succ (G.node_labeled g k.K.cut_pc) (
+  G.instruction g in'.C.pre_sp              **>
+  G.instruction g (in'.C.shuffle formals)   **>
+  G.instruction g in'.C.post_sp             **>
+  k.K.succ)
+
+and generate_return_to_entry k = 
+  let cc = ccs default_cc in
+  let in', formals = k.K.return_in, k.K.formals in
+  let () = add_outparms in'.C.overflow in
+  G.set_succ (G.node_labeled g k.K.return_pc) (
+  G.instruction g in'.C.pre_sp              **>
+  G.instruction g (in'.C.shuffle formals)   **>
+  G.instruction g in'.C.post_sp             **>
+  k.K.succ)
+
+and generate_unwind_to_entry k = 
+  let assign_unspecified_to args = R.par [] in (* BOGUS *)
+  G.set_succ (G.node_labeled g k.K.unwind_pc) (
+  G.assertion g (assign_unspecified_to formals) **>  (* in lieu of dataflow *)
+  k.K.succ)
+@
+
 @
 
 % ------------------------------------------------------------------ 
@@ -764,39 +722,46 @@ and cutStmt (e, args, conts) =
 For each continuation we have reserved memory on the stack that must be
 initialized when the procedure is entered. The following function
 provides nodes that do the initialization.
-<<definition of [[init_cont_nodes]]>>=
-let init_cont_nodes contmap ~succ =
-  let one_node cname cargs succ = 
-    (* WHAT IS THE CONVENTION THAT MAKES THIS THE CUT-TO ENTRY POINT? *)
-    let c = contn_of cname cargs in
-    let pc = match F.findv cname env with
-         | (_, (F.Continuation(r,s),_)) -> Rtl.link s target.T.pointersize
-         | _ -> Impossible.impossible "forgot continuation" in
-    succfold (G.instruction g) (Contn.init_code c proc_cc.C.sp pc) succ
-  in Strutil.Map.fold one_node contmap succ
+<<definition of [[insert_init_cont_nodes]]>>=
+let insert_init_cont_nodes contmap init_node =
+  let one_node cname k succ = 
+    if k.K.escapes then
+      let pc    = exp_of_label k.K.cut_pc in
+      succfold (G.instruction g) (Contn.init_code k.K.rep proc_cc.C.sp pc) succ
+    else
+      succ
+  in G.set_succ init_node (Strutil.Map.fold one_node contmap (G.succ init_node))
 @ 
 <<definition of [[proc]], which translates one procedure>>=
-let proc (cconv,procname,args,procbody) = 
+let proc containing_spans (cconv,procname,args,procbody) = 
     let proc_cc = ccs (Aux.Option.get default_cc cconv) in
     let symbol, scope, vars =
       match F.findv procname env with
       | _,(F.Label(F.Proc (sym,scope,i)),_) -> sym, scope, i
-      | _ -> Impossible.impossible "no environment for procedure" in
-    let env = F.push env scope  in  (* activate local scope *)
+      | _ -> impossible "no environment for procedure" in
 
-    let pointer     = target.T.pointersize in
-    let sp          = Rtl.fetch (proc_cc.C.sp) pointer in (* stack pointer *)
+    let exp_of_label l = R.link ((F.asm env)#local l) pointersize in
+    let exp_to_label e = match Dn.exp e with
+    | RP.Const(RP.Link (l, _)) -> l # text
+    | _ -> impossible "bad label projection" in
+    let info = { G.goto = { T.embed = target.T.goto.T.embed << exp_of_label
+                          ; T.project = exp_to_label << target.T.goto.T.project }
+               } in
+    let g = G.mk info Idgen.label in (* empty control-flow graph *)
+
+    let sp          = Rtl.fetch (proc_cc.C.sp) pointersize in (* stack pointer *)
 
     (* symbolic late compile-time constants to be used for stack areas *)
     (* THERE ARE LOTS OF THESE.  WHERE ARE THEY USED? *)
-    let sp_offset k = Rtl.app (Rtl.opr "add" [pointer]) [sp;k] in
-    let stack       = sp_offset (Rtl.late "stackdata" pointer) in
-    let inb         = sp_offset (Rtl.late "inbase"    pointer) in
-    let outb        = sp_offset (Rtl.late "outbase"   pointer) in
-    let privb       = sp_offset (Rtl.late "private"   pointer) in
+    let sp_offset k = Rtl.app (Rtl.opr "add" [pointersize]) [sp;k] in
+    let stack       = sp_offset (Rtl.late "stackdata" pointersize) in
+    let inb         = sp_offset (Rtl.late "inbase"    pointersize) in
+    let outb        = sp_offset (Rtl.late "outbase"   pointersize) in
 
-    (* calculate amount of user stack data - mutates env! *)
-    let stackd, contenv = stackdata target env (Memalloc.mk stack) procbody in
+    (* calculate amount of user stack data - rebinds env! *)
+    <<definition of [[stackdata]]>> in
+    let env, stackd, contenv =
+      stackdata target (F.push env scope) (Memalloc.mk stack) procbody in
 
     (* define all the mutable state here *)
     let outblocks = ref [] in
@@ -806,26 +771,14 @@ let proc (cconv,procname,args,procbody) =
     let constraints = ref [] in
     let add_constraints c = (constraints := c :: !constraints) in
 
-    let of_label l = R.link ((F.asm env)#local l) target.T.pointersize in
-    let to_label e = match Dn.exp e with
-    | RP.Const(RP.Link (l, _)) -> l # text
-    | _ -> Impossible.impossible "bad label projection" in
 
-    let info = { G.goto = { T.embed = target.T.goto.T.embed << of_label
-                          ; T.project = to_label << target.T.goto.T.project }
-               } in
-    let g = G.mk info Idgen.label in (* empty control-flow graph *)
-
-      (* AWAIT A PROPER HANDLING OF CONTINUATION ENTRY POINTS *)
     let continuation l =
-      try Strutil.Map.find l contenv with _ -> Impossible.impossible "lost cont" in
-    let contn_of l args = assert false in (* AWAITS UNDERSTANDING CONTINUATIONS *)
-
+      try Strutil.Map.find l contenv with _ -> impossible "lost cont" in
     let cont_rvalue cname coffset w =
       (continuation cname).K.escapes <- true;
       sp_offset (Rtl.late coffset w) in
-    let expr, exprtype, lvalue = exprfuns env contenv cont_rvalue in
 
+    let expr, exprtype, lvalue = exprfuns env contenv cont_rvalue in
 
     (* compute temps, save_csrs, restore_csrs *)
     let temps = Talloc.Multiple.for_spaces target.T.spaces in
@@ -839,38 +792,36 @@ let proc (cconv,procname,args,procbody) =
       R.par (List.map (fun i -> R.store i.reg (R.fetch i.tmp i.w) i.w) csr_info) in
 
     <<Make continuation bundles>> in
-    <<Make formals and actuals>> in    
+    <<using [[env]] and [[expr]], build funs for formals, actuals, and results>> in    
     <<functions that translate statements, including [[bodies]]>> in
-    <<definition of [[init_cont_nodes]]>> in
+    <<definition of [[insert_init_cont_nodes]]>> in
 
 
-    (* priv provides spill slots etc *)    
-    let priv        = AT.mk (ignore proc_cc; assert false) privb in
-
-    (* dummy area in outgoing area because the the body of the procedure
-       might not create any. This would confuse Area.overlap below *)
-    let () = add_outparms (Block.mk outb 0 1) in   
     (* translate body of procedure *)
 
     (* build CFG for body *)                    
     let in', formals = formals proc_cc.C.prolog args  in
       (* CALLING CONV PROBABLY NEEDS MORE INFO TO GET PROPER POST STACK POINTER *)
+    let initcont = G.node_labeled g (Idgen.label "initialize continuations") in
+    let labeln node ~succ = (G.set_succ node succ; node) in
     let () = G.set_succ (G.entry g) (
       G.instruction g in'.C.pre_sp            **>
       G.instruction g (in'.C.shuffle formals) **>
       G.instruction g in'.C.post_sp           **>
       G.instruction g save_csrs               **>
-      init_cont_nodes contenv                 **>
-      bodies procbody (G.exit g)) in
+      labeln initcont                         **>
+      bodies containing_spans procbody (G.exit g)) in
 
-    let incoming = Block.overlap_list Block.Low  (!inblocks)  in
-    let outgoing = Block.overlap_list Block.High (!outblocks) in
+    let () = insert_init_cont_nodes contenv initcont in
+      (* THESE PLACEMENTS ARE WRONG.  THEY DEPEND ON THE DIRECTION OF STACK GROWTH *)
+    let incoming = Block.overlap_list pointersize Block.Low  (!inblocks)  in
+    let outgoing = Block.overlap_list pointersize Block.High (!outblocks) in
     
     let contblocks =
       let addblock name k blocks =
         finish_compiling_continuation k;
-        if k.K.escapes then Contn.rep (ktrans k).K.rep :: blocks else blocks in
-      Block.cathl_list pointer (Strutil.Map.fold addblock contenv []) in
+        if k.K.escapes then Contn.rep k.K.rep :: blocks else blocks in
+      Block.cathl_list pointersize (Strutil.Map.fold addblock contenv []) in
 
     let i =    
         { Proc.symbol   = symbol
@@ -881,16 +832,41 @@ let proc (cconv,procname,args,procbody) =
         ; Proc.incoming = incoming   (* incoming   block *)   
         ; Proc.outgoing = outgoing   (* outgoing   block *)   
         ; Proc.stackd   = stackd     (* stack data block *)
-        ; Proc.priv     = priv       (* Automaton for spill loc, etc *)
+        ; Proc.priv     = AM.mk (amtarget target) ~up:true ~aligned:true
+                                       (sp_offset (Rtl.late "private" pointersize))
         ; Proc.eqns     = List.concat (!constraints)
         ; Proc.conts    = contblocks
         ; Proc.vars     = vars       (* number of variables *)
         ; Proc.varMap   = Proc.VarMap.empty
         } in
     optimizer i (* runs optimizer, freezes, and assembles proc *)
+<<auxiliaries>>=
+let amtarget { T.pointersize = p; T.wordsize = w; T.memsize = m; T.byteorder = b } =
+ { AM.pointersize = p; AM.wordsize = w; AM.memsize = m; AM.byteorder = b }
 @
         
 \subsection{Continuation hell}
+
+
+As an example, we expect the following {\PAL} 
+\begin{alltt}
+p () {
+    return k
+    continuation k():
+}
+\end{alltt}
+to be translated into the following:
+\begin{alltt}
+sym@p()
+{
+    $m[sp + sym@k + 4] = sym@k;
+    $m[sp + sym@k]     = sp;
+    return sp + sum@k
+    sym@k:
+}
+\end{alltt}
+
+
 If a continuation escapes, we need a representation.
 If it is cut to, returned to, or unwound to, we need to make sure the
 relevant label is associated with real flow-graph nodes that do
@@ -899,37 +875,39 @@ This happens as a late step in translation.
 <<module [[K]], for continution info>>=
 module K = struct
   type label = string
-  type 'i translation =
-    { succ   : 'i G.node                (* code following k *)
-    ; rep    : Contn.t                  (* representation including overflow block *)
-    ; cut_in : Automaton2.loc C.answer  (* code to move vals at cut (uses rep) *)
-    ; cutformals : Automaton2.loc list  (* where parms go at cut *)
-    } 
-  (* THE FOLLOWING TYPE SHOULD BECOME THE DENOTATION OF A CONTINUATION
-     IN THE FAT ENVIRONMENT *)
+  (* COULD THE FOLLOWING TYPE BECOME THE DENOTATION OF A CONTINUATION
+     IN THE FAT ENVIRONMENT?? *)
   type 'i t =
     { mutable escapes     : bool        (* properties of how it is used *)
     ; mutable cut_to      : bool
     ; mutable returned_to : bool
     ; mutable unwound_to  : bool
-    ;         formals     : A.cformal list  (* parameters with hints *)
+(*    ;         formals     : A.cformal list  (* parameters with hints *) *)
     ;         unwind_pc   : label       (* labels may or may not be used *)
     ;         cut_pc      : label
     ;         return_pc   : label
-    ; mutable trans       : 'i translation option (* created on demand *)
+    ;         rep         : Contn.t     (* representation as C-- value (incl block) *)
+    ;         cut_in      : Automaton2.loc C.answer  (* move vals at cut (uses rep) *)
+    ;         return_in   : Automaton2.loc C.answer  (* move vals at also returns *)
+    ;         formals     : Automaton2.loc list   (* where parms go at cut/return *)
+    ; mutable succ        : 'i G.node             (* filled in at translation time *)
     }
 
 
-  let mk name args =
+  let mk name args rep formals g ~cut_in ~return_in  =
     { escapes     = false
     ; cut_to      = false
     ; returned_to = false
     ; unwound_to  = false
-    ; formals     = args
+(*    ; formals     = args *)
     ; unwind_pc   = Idgen.ContEntry.unwind name
     ; cut_pc      = Idgen.ContEntry.cut    name
     ; return_pc   = Idgen.ContEntry.return name
-    ; trans       = None
+    ; rep         = rep
+    ; cut_in      = cut_in
+    ; return_in   = return_in
+    ; formals     = formals
+    ; succ        = G.illegal g
     }
 end
 @
@@ -952,15 +930,15 @@ type 'i stackdata_state =
     }
 @ 
 <<definition of [[stackdata]]>>=
-let stackdata target env priv bb =
+let stackdata target env sd bb =
   <<definitions of stack-data procedures>> in
   let state = 
     { env    = env
-    ; mem    = priv
+    ; mem    = sd
     ; conts  = Strutil.Map.empty
     } in
-  let state = foldl body state bb in 
-  Memalloc.freeze state.mem, state.conts
+  let state = bodies state bb in 
+  state.env, Memalloc.freeze state.mem, state.conts
 
 <<definitions of stack-data procedures>>=
 let rec stackdatum state = function
@@ -974,120 +952,99 @@ let rec stackdatum state = function
                     F.rebindv l (r,(F.Label(F.Stack(Some loc)),t)) 
                               env
                 }
-            | _ -> assert false
+            | _ -> impossible "duplicate stack labels"
             )
     | A.Align n -> { state with mem = Memalloc.align state.mem n} 
     | A.MemDecl(ty,size,None) ->
         let w = astwidth env ty in
         let s = ( match size with 
                 | A.NoSize     -> 1 
-                | A.DynSize    -> assert false (* impossible *)
+                | A.DynSize    -> impossible "dynamic memory size"
                 | A.FixSize(e) -> 
                     Bits.U.to_int (compile_const e)
                 ) in
         let n = s * w / target.T.memsize in
             { state with mem = Memalloc.allocate state.mem n} 
                 
-    | _ -> assert false (* illegal memory initializer *)
+    | _ -> impossible "initialized memory on stack"
 
 and stmt state = function 
     | A.StmtAt(x,r)        -> stmt state x
-    | A.SpanStmt    x      -> Impossible.unimp "span"
-    | A.IfStmt      x      -> ifStmt        state x
+    | A.SpanStmt(_,_,bs)   -> bodies state bs
+    | A.IfStmt      x      -> ifStmt state x
     | A.SwitchStmt  x      -> Impossible.unimp "switch"
     | A.ContStmt(n,args)   ->
-        { state with conts = Strutil.Map.add n (K.mk n args) state.conts }
+        let cc = ccs default_cc in
+        let cut_in,    formals = cformals' state.env cc.C.also_cuts_to    args in
+        let return_in, _       = cformals' state.env cc.C.also_returns_to args in
+        let base = exp_of_label (n^"base for bogosity") in
+        let rep  = Contn.with_overflow target base cut_in.C.overflow in
+        let k    = K.mk n args rep formals g ~cut_in ~return_in in
+        { state with conts = Strutil.Map.add n k state.conts }
     | _                    -> state
 
-and body state = function 
+and bodies state = List.fold_left body state
+and body   state = function 
     | A.BodyAt(x, _)        -> body state x
     | A.DeclBody(d)         -> state (* nothing to be done *)
     | A.StmtBody(s)         -> stmt state s 
-    | A.DataBody(data)      -> foldl stackdatum state data
+    | A.DataBody(data)      -> List.fold_left stackdatum state data
 
 and ifStmt state (e,ifso,ifnot) =
-    let state = foldl body state ifso  in
-    let state = foldl body state ifnot in
+    let state = bodies state ifso  in
+    let state = bodies state ifnot in
     state
 @
       
 % ------------------------------------------------------------------ 
-\subsection{Global Memory declarations}
+\subsection{Initialized and uninitialized data}
 % ------------------------------------------------------------------ 
 
+A [[datum]] can appear globally inside a section or a section-level
+[[span]] and locally inside a procedure as \texttt{stackdata}.  
+This code translates global data into assembly actions;
+the [[stackdata]] function handles stack data.
+<<function [[datum]], for initialized and uninitialized data>>=
+let rec datum asm = 
+  <<support functions for initialized and uninitialized data>> in
+  function
+    | A.DatumAt(x,_)        -> datum asm x
+    | A.Label(n)            -> let s = match F.findv n env with
+                               | _,(F.Label(F.Data(s)),_) -> s 
+                               | _ -> impossible "unbound data label" in 
+                               asm#label s
+    | A.Align(a)            -> asm#align a 
+    | A.MemDecl(t,m,init)   -> memdecl asm t m init
+@ 
 \begin{quote}\it
     The [[Asm]] interface for emitting link-time expressions is
     incompatible with the [[Rtl]]s that represent link-time expressions.
     --CL
 \end{quote}
-
-<<Make memory declarations>>=
-let rec initialized_data asm expr = 
-        asm#addr (link_const asm expr)
+Initialized data is handled by the [[init]] function.
+<<support functions for initialized and uninitialized data>>=
+let rec initialized_data asm expr = asm#addr (link_const asm expr)
 
 and init asm = function
     | A.InitAt(x,_)   -> init asm x
     | A.InitExprs(es) -> List.iter (initialized_data asm) es
-    | A.InitUStr(_)      (*XXX*)
-    | A.InitStr(_)    -> (*XXX*)
-        Impossible.unimp "strings as initialized data not implemented"
+    | A.InitUStr(_)      
+    | A.InitStr(_)    -> Impossible.unimp "strings as initialized data"
 @
-
-In order to reserve memory for data we have to know how many objects
-an sequence of initializing expressions defined. This number is
-returned by [[init_size]].
-
-<<Make memory declarations>>=
-and init_size = function
-    | None   -> 1
-    | Some i -> let rec loop = function 
-                    | A.InitAt(x,_)   -> loop x
-                    | A.InitExprs(es) -> List.length es
-                    | A.InitStr(s)    -> assert false
-                    | A.InitUStr(s)   -> assert false
-                in 
-                    loop i 
-@
-
-Data can be declared initialized or un-initialized. The amount of
-memory used by a declaration is the size of the base-type times the
+Uninitialized data gets an amount of memory equal to
+the size of the base type times the
 number of values of this type. 
-
-<<Make memory declarations>>=
+<<support functions for initialized and uninitialized data>>=
 and memdecl asm t size ini = 
-    let sizeof  = astwidth env t / target.T.memsize          in
-    let const e = Bits.U.to_int (compile_const e)     in
-    let n      = ( match size with
-                 | A.DynSize    -> init_size ini
-                 | A.NoSize     -> 1
-                 | A.FixSize(e) -> const e
-                 ) in
-        ( match ini with
-        | None    -> asm#zeroes (n * sizeof)
-        | Some ii -> init asm ii
-        )
-@
-
-Data can be declared globally inside a section or a section-level
-[[span]] and locally, inside a procedure as [[stackdata]].  The former
-is directly translated into assembly action that reserve memory inside
-a section, the latter becomes just an amount of memory that is
-allocated inside a procedure's activation record.  Since the amount of
-stack allocated data and the offsets associated with labels inside of
-it are already entered into the fat environment (by
-[[Elab.Check.stackdatum]]), stack data declaration can be ignored. 
-Global data declarations, on the other hand, must be translated to
-assembly actions.
- 
-<<Make memory declarations>>=
-and datum asm = function
-    | A.DatumAt(x,_)        -> datum asm x
-    | A.Label(n)            -> let s = match F.findv n env with
-                               | _,(F.Label(F.Data(s)),_) -> s 
-                               | _ -> assert false in 
-                               asm#label s
-    | A.Align(a)            -> asm#align a 
-    | A.MemDecl(t,m,init)   -> memdecl asm t m init
+  match ini with
+  | Some ii -> init asm ii
+  | None    -> 
+      let count = match size with
+        | A.DynSize   -> 1
+        | A.NoSize    -> 1
+        | A.FixSize e -> Bits.U.to_int (compile_const e) in
+      let base_size = astwidth env t / target.T.memsize in
+      asm#zeroes (count * base_size)
 @
 
  
@@ -1099,43 +1056,36 @@ All global declarations have been processed at this stage and thus can
 be ignored.  The only exception are (global) register declarations. 
 Global registers can name a hardware register they are placed in.  We
 need ia way to record such an assignment.  All other locations for
-global registers are determined by an automaton, see module
-\module{callconv}. 
+global registers are determined by an automaton.
 
 A [[span]] on the section level must be pushed to the statement level: 
 when we come across a [[span]] we modify the properties [[props]]
 accordingly.  The next time we come across a procedure, the properties
 including the span will be used.
+<<supporting code for toplevel items>>=
+let rec sspan props asm (e1,e2,ss) =    
+    let key   = compile_const e1 in
+    let value = expr          e2 in  (* must be link-time constant *)
+    let props = (key, value) :: props in
+    List.iter (section props asm) ss 
 
-<<Make toplevel>>=
-let rec sspan asm (e1,e2,ss) =    
-    let key   = compile_const     e1 in
-    let value = link_const    asm e2 in
-    (* construct props value, pass it to section. not implemented *)
-        List.iter (section asm) ss 
-
-<<Make toplevel>>=
-and section asm = function
-    | A.SectionAt(x,_)     -> section asm x
-    | A.Decl(d)            -> ()
-    | A.Datum( d)          -> datum   asm d
-    | A.Procedure(p)       -> proc    p
-    | A.SSpan ss           -> sspan   asm ss
+<<supporting code for toplevel items>>=
+and section props asm = function
+    | A.SectionAt(x,_) -> section props asm x
+    | A.Decl(d)        -> ()
+    | A.Datum( d)      -> datum asm d
+    | A.Procedure(p)   -> proc  props p
+    | A.SSpan ss       -> sspan props asm ss
 @            
 
-What to do with top-level procedures? They should go into some section
-because otherwise they will end up in whatever section is currently
-active which just seems wrong.
-
-<<Make toplevel>>=
-and toplevel asm = function
+<<function [[toplevel]], for emitting toplevel items>>=
+let rec toplevel asm = 
+  <<supporting code for toplevel items>> in
+  function
     | A.ToplevelAt(x, _)  -> toplevel asm x
-    | A.Section(name, ss) -> 
-        let () = asm#section (name)in  
-            List.iter (section (*props*) asm) ss
+    | A.Section(name, ss) -> begin asm#section name; List.iter (section [] asm) ss end
     | A.TopDecl(d)        -> ()
-    | A.TopProcedure(p)   -> let () = asm#section default_section  in 
-                             proc p
+    | A.TopProcedure(p)   -> begin asm#section "text"; proc [] p end
 @
 
 
@@ -1143,46 +1093,52 @@ and toplevel asm = function
 \subsubsection{Program}
 % ------------------------------------------------------------------ 
 
-The assembler maintains a current section. To guarantee that
-everything goes into a meaningful section, the first action is to
-start the [[text]] section.  SEEMS SLIGHTLY BOGUS.  PLEASE EXPLAIN?
-                      
-<<Make translate program>>=
-let rec program asm tt = 
-    let () = asm#section "text"           in
-        List.iter (toplevel asm) tt
-@
-
-The finger print [[disgest]] for global register declarations is a 16
-character long string of unprintable characters. We make it printable by
-applying the {\ocaml} escaping rules. Note: this symbol
-should be exported but currently it is not.
-
-\begin{quote}\it
+To translate a program, we emit all its top-level items.                      
+THE TREATMENT OF THE GLOBAL-REGISTER AREA IS NOT YET CORRECT.
+\begin{itemize}
+\item
     The memory block for global registers should go into one compilation
-    unit and be imported by all others. Currently we just emit it
+    unit and be imported by all others.  OR PERHAPS IT SHOULD BE
+    SUPPLIED AT RUN TIME BY THE FRONT END?
+ Currently we just emit it
     because we are far from linking several {\PAL} compilation units.
-    This has to be fixed. --CL
-\end{quote}
+\item
+We don't correctly manage the fingerprint of the global-register
+declarations.
+\end{itemize}
+<<function [[program]], which translates an entire program>>=
+let program prog =
+  let asm = F.asm env in
+  <<supporting functions for fooling with the global-register area>> in
+  export_global_register_area ();
+  (* asm#section "text";  -- should be unnecessary *)
+  List.iter (toplevel asm) prog;
+  asm
+@
+The fingerprint [[digest]] for global register declarations is a
+16-character string of unprintable characters. We make it printable by 
+applying the {\ocaml} escaping rules. 
+<<supporting functions for fooling with the global-register area>>=
+let import_global_register area () =
+  Impossible.unimp "cross-module linkage for global registers"
 
-<<Make translate program>>=
-and translate prog =
-    let base_sym = F.symbol env "Cmm_private_global_area" in
-    let base     = Rtl.link base_sym target.T.pointersize in 
-    let env
-       ,area    
-       ,digest   = globals base (F.globals env) in
-    let digest   = String.escaped digest in
-    let asm      = F.asm env in
-    let ()       = ( () (* asm#export digest *)
-                   ; asm#section (target.T.data_section)
-                   ; asm#comment "memory for global registers"
-                   ; asm#align (Block.alignment area)
-                   ; asm#label base_sym
-                   ; asm#addloc (Block.size area)
-                   )
-    in   
-        ( program asm prog 
-        ; asm
-        )
-@    
+and export_global_register_area () =
+  let base_sym = F.symbol env "Cmm_private_global_area" in
+  let base     = Rtl.link base_sym pointersize in 
+  let env
+     ,area    
+     ,digest   = globals base (F.globals env) in
+  let digest   = String.escaped digest in
+  let asm      = F.asm env in
+  let digest   = asm#export digest in
+  begin
+    asm#section (target.T.data_section);
+    asm#comment "memory for global registers";
+    asm#align (Block.alignment area);
+    asm#label base_sym;
+    asm#label digest;
+    asm#addloc (Block.size area)
+  end
+@ This stuff should probably be imported by digest, not by the conventional
+name [[base_sym]].
+@

@@ -17,12 +17,6 @@
 \section{Memory Blocks}
 % ------------------------------------------------------------------ 
 
-\begin{quote}\it It would be nice to have an \emph{empty} block that
-    acts as a unit for the [[cat]] and [[overlap]] operations.
-    This way operations on block lists became well defined. The problem
-    is the address expression: what width should it have? -- CL
-\end{quote}
-
 This module defines memory blocks that can be composed into complex
 blocks. The main application is the definition of a procedure's stack
 frame. However, this module is completely general.
@@ -85,13 +79,14 @@ val overlap:    placement -> t -> t -> t
 val adjust:     t -> t                       (* result is adjusted *)
 @
 
-Convenient functions -- they could be easily implemented outside
-this module in terms of the above primitives; it is a checked run-time
-error when the argument lists are empty.
-
+Convenient functions, which could be implemented outside
+this module in terms of the primitives above.
+If asked to operate on an empty list of blocks, they return an empty
+block whose base address is the virtual frame pointer plus a fresh
+link-time constant. 
 <<block.mli>>=
 val cathl_list:     Rtl.width -> t list -> t
-val overlap_list:   placement -> t list -> t
+val overlap_list:   Rtl.width -> placement -> t list -> t
 @
 
 % ------------------------------------------------------------------ 
@@ -127,8 +122,8 @@ module Lua: sig
     val size:       t -> int
     val alignment:  t -> int
     val adjust:     t -> t
-    val cat:        int -> t list -> t
-    val overlap:    (string -> t) -> string -> t list -> t
+    val cat:        Rtl.width -> t list -> t
+    val overlap:    (string -> placement) -> Rtl.width -> string -> t list -> t
     val mk:         t -> int (*size*) -> int -> string option -> t
 end
 @
@@ -237,10 +232,19 @@ let overlap place x y =
 Not essential, but convenient functions.
 
 <<block.ml>>=
+let offset base name ptrwidth =
+    let k = Rtl.late (Idgen.offset name) ptrwidth in
+        Rtl.app (Rtl.opr "add" [ptrwidth]) [base;k] 
+
+let empty w =
+  mk ~base:(offset (Vfp.mk w) (Idgen.offset "empty block") w) ~size:0 ~alignment:1
+
 let cathl_list w = function
-  | [] -> mk ~base:(Rtl.late (Idgen.offset "empty block") w) ~size:0 ~alignment:1
+  | [] -> empty w
   | b :: bs -> List.fold_left cathl b bs
-let overlap_list p ts = List.fold_left (overlap p) (List.hd ts) (List.tl ts)
+let overlap_list w p = function
+  | [] -> empty w
+  | b :: bs -> List.fold_left (overlap p) b bs
 @
 
 % ------------------------------------------------------------------ 
@@ -268,11 +272,10 @@ reporting functions receive a function [[error]] that expects a string.
 <<Block primitives for Lua>>=
 let cat = cathl_list
 
-let overlap error placement blocks = match (placement, blocks) with
-    | _     , [] -> error "Block.overlap: empty block list"
-    | "high", bs -> overlap_list High bs
-    | "low" , bs -> overlap_list Low  bs
-    | _          -> error "Block.overlap: 'high' or 'low' expected"
+let overlap error w placement blocks =
+  let placement = match placement with "high" -> High | "low" -> Low
+                  | p -> error ("bad placement '" ^ p ^ "' in Block.overlap") in
+  overlap_list w placement blocks
 @    
 
 The Lua version for [[mk']] is significantly different from the {\ocaml}
@@ -283,10 +286,6 @@ provide a name for the constant that is fed into [[Idgen]] to make it
 unique.
 
 <<Block primitives for Lua>>=
-let offset base name ptrwidth =
-    let k = Rtl.late (Idgen.offset name) ptrwidth in
-        Rtl.app (Rtl.opr "add" [ptrwidth]) [base;k] 
-
 let mk block size alignment name =
     let name  = Aux.Option.get "Block.mk" name in (* name for late *)
     let width = Rtlutil.Width.exp (base block) in (* width of addr *)  
