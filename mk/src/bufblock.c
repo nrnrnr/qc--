@@ -6,7 +6,7 @@ Revisions Copyright © 2001 Norman Ramsey.  All rights reserved.
 #include	"mk.h"
 
 static Bufblock *freelist;
-#define	QUANTA	4096
+#define	QUANTA	8192
 
 Bufblock *
 newbuf(void)

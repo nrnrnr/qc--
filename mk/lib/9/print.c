@@ -5,7 +5,7 @@ Revisions Copyright © 2001 Norman Ramsey.  All rights reserved.
 */
 #include "lib9.h"
 
-#define	SIZE	4096
+#define	SIZE	8192
 extern	int	printcol;
 static	int	errcount = { 0 };
 static	char	errmsg[] = "print errors";

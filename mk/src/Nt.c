@@ -87,7 +87,7 @@ dirtime(char *dir, char *path)
 {
 	Dir d;
 	void *t;
-	char buf[4096];
+	char buf[8192];
 	HANDLE	handle;
 	WIN32_FIND_DATA	wfd;
 
@@ -201,7 +201,7 @@ childadd(HANDLE h, int pid)
 static DWORD WINAPI
 spinoff(HANDLE in, HANDLE out, char *args, char *cmd, Envy *e)
 {
-	char args2[4096], path[MAX_PATH], *s, *eb;
+	char args2[8192], path[MAX_PATH], *s, *eb;
 	STARTUPINFO si;
 	PROCESS_INFORMATION pi;
 	Symtab *sym;

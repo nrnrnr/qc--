@@ -8,7 +8,7 @@ Revisions Copyright © 2001 Norman Ramsey.  All rights reserved.
 void
 bulkmtime(char *dir)
 {
-	char buf[4096];
+	char buf[8196];
 	char *ss;
 	char *s;
 	Dir db;

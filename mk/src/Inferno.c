@@ -141,7 +141,7 @@ dirtime(char *dir, char *path)
 	int i, fd, n;
 	void *t;
 	Dir db[32];
-	char buf[4096];
+	char buf[8192];
 
 	fd = open(dir, OREAD);
 	if(fd >= 0) {
