@@ -63,17 +63,37 @@ end
 \subsubsection{Common Types}
 % ------------------------------------------------------------------ 
 
-All common types are types aliases that are maily used to make the
+All common types are types aliases that are mainly used to make the
 signatures more readable.  A [[space]] describes some kind of memory,
 like a set of registers or main memory.  The number of [[spaces]] is a
 property of a target architecture and thus can not be fixed here with
 a sum type.  The [[char]] type provides a big enough cardinality and
 is nice to print and remember.  A [[width]] is a number of bits which
-corresponds to the {\PAL} [[bits]]$k$ types.
+corresponds to the {\PAL} [[bits]]$k$ types. 
   
 <<COMMON>>=
 type space      = char  (* conventional, but typically 'm'=memory, 'r'=register, .. *)
 type width      = int   (* width in bits                *)
+
+type aggregation= BigEndian
+                | LittleEndian
+                | Identity
+@
+
+A [[Rtl.space]] denotes a memory space, the details of a particular
+space are covered by a space descriptor [[spacedescr]]:  Every cell in
+a given space is [[cellwidth]] bits wide.  When cells are aggregated
+in the space, the [[byteorder]] scheme is used.  Cells are addressed
+by integer expressions, each is [[addrwidth]] wide.  In the case of
+memory [[addrwidth]] is size of a pointer, in the case of registers
+[[addrwidth]] is typically just wide enough to address all registers,
+for example 5 bits for 32 registers. 
+
+<<COMMON>>=               
+type spacedescr = { cellwidth: int              (* bits *)
+                  ; addrwidth: int              (* bits *)
+                  ; byteorder: aggregation      
+                  }
 @
 
 
@@ -112,7 +132,7 @@ A [[loc]] may be
 \item A \emph{cell} that belongs to some [[space]], where it has an
       address [[exp]].  We always have an [[assertion]] that tells us
       facts about the possible run-time values of the address.  These
-      assertions represent guarantees made by the front end.
+      assertions represent guarantees made by the front end. 
 
 \item A named {\PAL} variable [[var]].
 
@@ -260,15 +280,8 @@ and  loc       = Cell       of space
                 | Slice     of width     (* number of bits in loc *)
                             *  int       (* index of least-significant bit of slice *)
                             *  loc  (* location from which slice is drawn *)
-@ Bits are numbered with the least-significant bit as bit~0.
-@
-
-
-<<COMMON>>=
-type  aggregation           = BigEndian
-                            | LittleEndian
-                            | Identity
-@
+@ 
+Bits are numbered with the least-significant bit as bit~0.
 
 An [[effect]] is describes an assignment of a [[width]] bits value obtained
 from an expression [[exp]], or a [[Kill]]. A killed location contains an

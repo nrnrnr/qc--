@@ -21,9 +21,18 @@
 \section{Register}
 % ################################################################## 
 
-The control-flow graph (module \module{cfg2}) store register sets in
-nodes which are used by the liveness analysis. This module provides a
-type definition for a register and sets over them.
+A [[Register.t]] describes a target-specific register-like location. 
+Such a location includes hardware-registers, spill-locations for
+hardware-register or temporaries. The destinguishing feature of a
+register is its fixed address within its space: the address is an
+integer rather than a general expression.
+
+A [[t]] value includes the target-specific [[space]], its address
+within that space, and the [[width]] of the addressed cell.  Other
+details, like the width of of addressing expression or the aggregation
+scheme of multiple cells is associated with the [[space]], but not
+included in a [[t]] value.  They can, however, obtained from the
+[[Target.t]] description of the target the register belongs to.
 
 <<type t>>=
 type t = Rtl.space * Base.std_int * Rtl.width
@@ -35,25 +44,27 @@ module Set: Set.S with type elt = t
 module Map: Map.S with type key = t
 @
 
-A register is a special case of a location.  We would like to have a
-function that maps a register to a location.  However, what should be
-the width of the index expression?
+A register is a special case of a location.  We would like to have 
+functions that converts between these two. Of course, a [[Rtl.loc]] is
+more general and thus only values denoting a register can be
+converted. Applying other values is a checked run-time error.
+
+The space description supplied to [[to_loc]] must fit to the space of
+the first argument, otherwise it is a checked run-time error.
 
 <<not yet implemented>>=
-val loc: t -> Rtl.loc
+val to_loc: t -> Rtl.spacedescr -> Rtl.loc   (* Invalid_argument *)
+val of_loc: Rtl.loc -> t                     (* Invalid_argument *)
 @
-
-\begin{quote}\it
-    Registers live inside an {\rtl} and thus have some context. We try
-    to substitute registers but never look at them in isolation and
-    therefore hope to do without the above function. --CL
-\end{quote}
 
 % ------------------------------------------------------------------ 
 \section{Implementation}
 % ------------------------------------------------------------------ 
 
 <<register.ml>>=
+module R  = Rtl
+module RP = Rtl.Private
+
 <<type t>>
 
 module Compare = struct
@@ -62,5 +73,25 @@ module Compare = struct
 end
 module Set = Set.Make(Compare)
 module Map = Map.Make(Compare)
+
+let to_loc (sp,index,width) spec =
+    let _     = if (width <> spec.R.cellwidth) then
+                         invalid_arg "Register.to_loc"        in
+    let agg   = spec.R.byteorder                              in
+    let bits  = Bits.of_int index spec.R.addrwidth            in
+    let addr  = Rtl.bits bits spec.R.addrwidth                in
+        Rtl.cell Rtl.none sp spec.R.byteorder width addr
+
+let of_loc loc = match Rtl.Convert.loc loc with
+    | RP.Cell(sp,_,width,exp,_) -> 
+        let exp   = Rtl.Revert.exp exp in
+        let index = ( match Rtleval.compile Rtleval.empty exp with
+                    | Error.Ok(bits) -> Bits.to_int bits
+                    | Error.Error    -> invalid_arg "Register.of_loc"
+                    )
+        in
+            (sp,index,width)
+    | _                         -> invalid_arg "Register.of_loc"
 @
+
 

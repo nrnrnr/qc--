@@ -102,8 +102,20 @@ val fetch : loc -> width:int -> Rtl.exp
 val store : loc -> Rtl.exp -> width:int -> Rtl.rtl
 @
 
-When all allocations are done [[freeze]] the automaton. In response
-it returns the space allocated in the overflow [[area]]. 
+Because locations are abstract they can handle difficult cases where
+a value is stored in part in a hardware register and in part in
+memory.  Some complicated calling conventions may require such
+difficult concepts of a location.  However, the very most cases are
+much simpler and we like to represent those as [[Rtl.loc]] values,
+which are also very general but can't deal with values split into
+different memory spaces.  The following function allows to transform a
+sufficiently simple [[loc]] value to a [[Rtl.loc]] value.  If a
+conversion is not possible, [[Invalid_argument]] is raised as a
+checked run-time error.
+
+<<automaton.mli>>=
+val to_loc : loc -> Rtl.loc
+@
 
 <<automaton.mli>>=
 val freeze : t -> Area.t
@@ -127,6 +139,7 @@ provide entirely different implementations.
 class type location = object
     method fetch:   width:int -> Rtl.exp
     method store:   Rtl.exp -> width:int -> Rtl.rtl
+    method to_loc:  Rtl.loc
 end
 
 class type automaton = object
@@ -150,6 +163,7 @@ let freeze t          = t#freeze ()
 
 let fetch loc ~width      = loc#fetch ~width
 let store loc expr ~width = loc#store expr ~width
+let to_loc loc            = loc#to_loc
 @
 
 As a first implementation we provide an automaton that puts everything
@@ -194,6 +208,7 @@ object
     
     method store expr ~width = Rtl.store _loc expr width 
     method fetch ~width      = Rtl.fetch _loc width
+    method to_loc            = _loc
 end
 
 class dummy (base:Rtl.exp): automaton =
@@ -216,4 +231,4 @@ object (self)
         let ()   = _area <- Area.align _area wordsize in (* and align  *)
             new dummyloc addr
 end
-
+@

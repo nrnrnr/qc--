@@ -30,7 +30,6 @@ be passed at run-time (rather than by a module, which can not).
 <<target2.mli>>=
 <<type cc>>
 <<type map>>
-<<type space>>
 <<type t>>
 val dummy: t        (* our only target for now *)
 @
@@ -134,7 +133,7 @@ allocatable:    Register.t list;
 
 A target has many address spaces:  main memory, different register
 sets, temporaries.  A [[Rtl.loc]] value describes a location within
-such a space.  Each space is homogenous in the sense that all its
+such a space.  Each space is homogeneous in the sense that all its
 cells have the same width.  When cells within one space are aggregated
 a common aggregation scheme is used, described by a space-specific
 [[Rtl.aggregation]] value.  The cells within a space are addressed by
@@ -142,20 +141,13 @@ an integer expression denoting their \emph{address}.  All address
 expressions for a space share a common width.  For example, memory
 might by addressed by 32-bit wide addresses, registers by 5-bit wide
 addresses. 
-
-<<type space>>=
-type space =    { cellwidth:    int
-                ; aggregation:  Rtl.aggregation
-                ; addrwidth:    int
-                }
-@
                 
-The [[space]] function returns a description of a given
-space. It is a checked run-time error to ask for the description of an
-unknown space.
+The [[space]] function returns a description of a given space.  It is
+a checked run-time error to ask for the description of an unknown
+space.
 
 <<components of t>>=
-space:          Rtl.space -> space;
+space:          Rtl.space -> Rtl.spacedescr
 @
 
 \begin{quote}\it
@@ -175,6 +167,7 @@ The implementation does not hold any surprises. We use module [[Map]]
 to implement lookup tables for registers and calling conventions.
 
 <<target2.ml>>=
+module R       = Rtl
 module StrMap  = Map.Make(struct type t=string let compare=compare end)
 module CharMap = Map.Make(struct type t=char   let compare=compare end)
 
@@ -193,7 +186,6 @@ module CharUtil = MapUtil(CharMap)
 
 <<type map>>
 <<type cc>>
-<<type space>>
 <<type t>>
 <<dummy>>
 @
@@ -205,9 +197,9 @@ let m = { embed   = (fun _ -> assert false)
         }
 
 let spaces = CharUtil.list2map
-    [('m',{ cellwidth   =Dummy.wordsize
-          ; aggregation =Dummy.byteorder 
-          ; addrwidth   =Dummy.pointersize
+    [('m',{ R.cellwidth   =Dummy.wordsize
+          ; R.byteorder   =Dummy.byteorder 
+          ; R.addrwidth   =Dummy.pointersize
           })
     ]      
           
