@@ -6,81 +6,106 @@
 
 Register allocation is responsible for replacing temporary registers (temps)
 in the control-flow graph (\cfg) with hardware registers. Liveness analysis
-is performed before register allocation begins, annotating each node of the
-\cfg with the list of registers (temps and pre-assigned hardware registers)
-that are alive at the node. Using this information, we can construct an
+is performed prior to register allocation, annotating each node of the 
+\cfg \ with the list of registers (temps and pre-assigned hardware registers)
+that are alive at the node. Using this information, we construct an
 interference graph with nodes for each of the temporaries and edges between
-temporaries that are alive at the same time.
+temporaries that are live at the same time.
 
-Temporaries that are alive at the same time must be placed in different
-registers. This requirement reduces directly to the graph coloring
-requirement that nodes sharing an edge must be assigned different colors.
-Register allocation is carried out by performing graph coloring on the
-interference graph, with the hardware registers serving as the colors. If
-the graph cannot be colored with the given set of registers, then we spill
-the uncolorable temps to memory and attempt to color the new graph.
-
-Move instructions between two temporaries that do not interfere can be
-removed from the graph in a process known as coalescing. Conservative
-coalescing ensures that the graph will not be rendered uncolorable by the
-coalescences. Two non-exclusive heuristics have been developed to determine
-when it is safe to coalesce: the Briggs heuristic and the George and Appel
-heuristic.
+Temporaries that interfere must be placed in different registers. This
+requirement reduces directly to the graph coloring goal of assigning
+different colors to nodes that share graph edges. Register allocation
+is carried out by performing graph coloring on the interference graph,
+with the hardware registers serving as the colors. If the graph cannot
+be colored, we spill the uncolorable temps to memory and attempt to color
+the new graph.
 
 % ------------------------------------------------------------------ 
 \subsection{Overview}
 % ------------------------------------------------------------------ 
 
 We implement Lal George and Andrew Appel's iterated register coalescing
-algorithm. Before the grah coloring begins, liveness analysis is performed
-and the interference graph is built. The interference graph is represented
-redundantly by an adjacency set and by adjacency lists. The adjacency set
+algorithm. Before the graph coloring begins, liveness analysis is performed,
+and the interference graph is built. The interference graph is redundantly
+represented by an adjacency set and by adjacency lists. The adjacency set
 maintains a set of all the edges in the graph. The adjacency lists are
-stored in a hash table, with each node mapped to a list of its neighbors.
-The purpose of the redundancy is to optimize the processes of testing whether
-two nodes are adjacent and of finding all neighbors of a node. Additionally,
-the degree (approximately the number of neighbors) of each node is maintained.
+stored in a hash table, with each node mapped to the list of its neighbors.
+The purpose of the redundancy is to optimize both the process of testing
+whether two nodes are adjacent and of finding all neighbors of a node.
 
-The center of the algorithm is a choice between four possible actions. The
-first possible choice is always selected:
+In addition to building the graph, we also initialize the degree of each
+temp in the graph. The degree of a temp is the number of registers (both temps
+and hardware registers) with which the temp interferes.
+
+Before the actual graph coloring process begins, temps are separated into
+worklists, based on their degree and whether they are involved in a move
+instruction (move-related).
+
+The basis of the graph coloring algorithm is the observation that low-degree
+temps (temps that have fewer than K neighbors, where K is the number of colors)
+can be colored easily, so they can be removed from the graph. If the rest of
+the graph is colorable, then the graph will remain colorable when we restore
+the temps we removed. As we remove these temps, we place them on the
+[[selectStack]], which provides the order we will assign colors.
+
+If there are no low-degree, non-move-related temps remaining in the graph,
+we attempt to coalesce. We can coalesce two temps into a single temp by
+removing move instructions involving two temps that do not interfere, and
+using one of the temps in place of the other. By using conservative heuristics,
+we can ensure that the graph will not be rendered uncolorable by the
+coalescences. Two heuristics have been developed for conservative coalescing:
+the Briggs heuristic and the George heuristic.
+
+If there are no low-degree, non-move-related temps in the graph, we freeze
+one of the move-related temps. Freezing a temp means that we will no longer
+attempt to coalesce moves in which the temp is involved; this also frees the
+temp for removal from the graph, since it becomes a low-degree,
+non-move-related temp.
+
+The graph may be uncolorable if only high-degree temps remain; however,
+instead of assuming that we must spill a node, we choose a high-degree node,
+remove it from the graph, and place it on the [[selectStack]].
+
+This process of removing temps from the graph is summarized by the following
+options. The first applicable choice is always selected, and the decision
+is repeated until the graph is empty:
 \begin{enumerate}
 \item Attempt to remove non-move-related, low-degree temps from the graph and
-      place them on the [[selectStack]]. (Low-degree temps have fewer than K
-      neighbors, where K is the number of colors.)
+      place them on the [[selectStack]].
 \item If there are no low-degree temps, then attempt to coalesce move-related
       temps.
 \item If there is a move-related temp of low-degree, then we [[freeze]] the
       moves in which this temp is involved (meaning we will no longer try to
       coalesce them), allowing this temp and possibly others to be placed on the
       [[selectStack]].
-\item Otherwise, a significant-degree temp will be chosen as a spill
+\item Otherwise, a significant-degree temp will be chosen as a potential spill
       candidate and placed on the [[selectStack]].
 \end{enumerate}
 
 After all the temps have been placed on the [[selectStack]], they must be
-assigned colors. If a temp cannot be assigned a color (it's neighbors are
-using all the available colors), then it must be spilled. In this case, the
-temp must be spilled to memory; [[rewriteProgram]] is called to add spill
-temps, fetch instructiong, and store instructions to the \cfg. Graph coloring
-must start over from the point of liveness analysis if any temps are spilled. 
-If all the temps can be assigned colors without requiring any spilling, then
-the temps are replaced by the assigned registers in the \cfg, and register
-allocation is complete.
+assigned colors. If a temp cannot be assigned a color (its neighbors are
+using all the available colors), then it must be spilled to memory.
+[[rewriteProgram]] is called to add spill temps, fetch instructions, and
+store instructions to the \cfg. Graph coloring must start over from the
+point of liveness analysis if any temps are spilled. If all the temps can
+be assigned colors without requiring any spilling, then the temps are replaced
+by the assigned registers in the \cfg, and register allocation is complete.
 
-Register allocation must handle temporaries in different register spaces and
-constructs of irregular architectures, including register pairs. Multiple
-register spaces are supported by initializing the degree of each temp to
-degree[t] = (K - R) + N, where K is the total number of registers in all
-register spaces, R is the number of registers in the register space for temp
-t, and N is the number of neighbors of t. This trick avoids the overhead of
-having to actually create interferences between t and registers in different
-register spaces.
+Additionally, register allocation must handle temporaries in different
+register spaces and constructs of irregular architectures, including register
+pairs. With multiple register spaces, we want to restrict each temp to the
+set of hardware registers in which it will fit. This is equivalent to adding
+interference edges between each temp and the hardware registers in which it
+cannot be placed. However, we can avoid the trouble of adding these
+edges by simply updating the degree of the node to indicate that it
+interferes with physical registers in other register spaces.
 
 Traditionally, register pairs have been handled by adding extra edges in the
-interference graph, but this is not yet handled in this allocator.
+interference graph, but this is not yet implemented in this allocator.
+Additionally, Smith and Holloway suggest that this provides an inaccurate
+representation - more thought must be committed here.
 
-handle multiple register spaces
-K may be inaccurate on irregular register sets (smith, holloway)
+
 
 from Appel 244:
 \begin{quote}
@@ -119,8 +144,6 @@ module RS       = Register.Set
 module LI       = Live.Make(G)
 @
 
-CHANGE THIS TO "EDGES"
-
 <<graph coloring types>>=
 module CompareEdge = struct
     type t = Register.t * Register.t
@@ -141,14 +164,14 @@ let is_tmp (s,_,_) target = Target2.is_tmp target s
 
 The [[colorGraph]] record type represents the interference graph and maintains
 the current state of the graph coloring.
-The choice between lists and sets is not always obvious and
-should be revisited for each case individually. 
+The choice between lists and sets is not always obvious and should be
+revisited for each case individually. 
 
 \begin{itemize}
 \item [[adjSet]] - a set of all edges in the interference graph, where an edge
                    is represented by a pair of registers
 \item [[adjListMap]] - a map from a temp [[t]] to the list of temps that
-				       interfere with [[t]]
+                       interfere with [[t]]
 \item [[degreeMap]] - a map containing the current degree of each temp
 \item [[moveListMap]] - a map from a temp to the list of move instructions it is
                         involved in
@@ -218,8 +241,8 @@ type colorGraph = { mutable adjSet : EdgeSet.t
 the set of valid colors.
 
 <<init cgInfo>>=
-    let makeInitInfo colors =
-        let col = Cheats.makeRegs colors in
+    let makeInitInfo _ =
+		embed
            { adjSet = EdgeSet.empty
            ; adjListMap = RM.empty
            ; degreeMap = RM.empty
@@ -241,10 +264,15 @@ the set of valid colors.
            ; frozenMoves = []
            ; worklistMoves = []
            ; activeMoves = []
-           ; colors = col
-           ; k = List.length col
+           ; colors = []
+           ; k = 0
            }
-    let makeInitInfo colors = embed (makeInitInfo (V.table.V.project colors))
+
+    let setColors cgInfo colors =
+		(cgInfo.colors <- colors;
+		 cgInfo.k      <- List.length colors)
+    let setColors cgInfo {Proc.cc = colors} =
+		setColors (project cgInfo) colors.Target2.allocatable; false
 @
 
 We include two observers for the [[colorGraph]] type. [[possibleColors]]
@@ -270,7 +298,7 @@ argument temp could be placed.
 %-------------------------------------------------------------------
 
 %-------------------------------------------------------------------
-\subsubsection{LivenessAnalysis}
+\subsubsection{Liveness Analysis}
 %-------------------------------------------------------------------
 
 The liveness analysis algorithm is implemented in the [[live]] module.
@@ -287,9 +315,9 @@ let liveness _ {Proc.cfg = cfg} =
 %-------------------------------------------------------------------
 
 Using the liveness information, we can build the interference graph by
-scanning the \cfg and recording temps that interfere.
+scanning the \cfg  and recording temps that interfere.
 The build stage requires that liveness analysis has been performed on the
-\cfg and the cgInfo data structure has been initialized.
+\cfg  and the cgInfo data structure has been initialized.
 
 When we reset the degree of a temp, it should not necessarily be reset to 0
 because the temp must interfere with registers in other register spaces.
@@ -359,6 +387,7 @@ interfere with each other. If [[node]] is a move instruction of the form
 $t_1 = t_2$, then $t_2$ will not be live after this instruction;
 furthermore, we track this instruction and the temps involved for possible
 coalescing.
+
 TEST CASE: try a swap instruction (defs must interfere with each other).
 
 <<addInterference>>=
@@ -431,8 +460,8 @@ let moveRelated temp cg =
 \subsubsection{Simplify}
 %-------------------------------------------------------------------
 
-The [[simplify]] stage of graph coloring removes the easy-to-color temps in the
-[[simplifyWorklist]] from the interference graph. As temps are removed from
+The [[simplify]] stage of graph coloring removes the easy-to-color temps in 
+the [[simplifyWorklist]] from the interference graph. As temps are removed from
 the graph, the degrees of adjacent temps will decrease, possibly changing
 high-degree temps into easily colored low-degree temps and allowing
 previously constrained moves to be coalesced.
@@ -468,14 +497,14 @@ When the degree of a temp is decremented, we also check whether the temp is
 now of low-degree. If so, we enable moves in which this temp is involved, and
 we place the temp on the appropriate worklist.
 
-\it
+\begin{quote} \it
 I'm not sure about whether we ever need to go through the process of
 decrementing the degree of a hardware register - the decrement of the degree
 should do nothing, butwill this ever do anything useful with regards to move
 instructions? Something to figure out...
 
 -JD
-\it
+\end{quote}
 
 <<remove temp>>=
 let decrementDegree cg target temp =
@@ -517,38 +546,38 @@ There are four possible cases for moves on the [[worklistMoves]] list:
 <<coalesce move>>
 
 let coalesce cg {Proc.target = target} =
-        (match cg.worklistMoves with
-        | move::rstMoves ->
-            let x = source move in
-            let y = dest move in
-            let (u, v) = if List.mem y cg.precolored then (y, x) else (x, y) in
-            let _ = cg.worklistMoves <- rstMoves in
-            let _ =
-                if u = v
-                then
+    (match cg.worklistMoves with
+    | move::rstMoves ->
+        let x = source move in
+        let y = dest move in
+        let (u, v) = if List.mem y cg.precolored then (y, x) else (x, y) in
+        let _ = cg.worklistMoves <- rstMoves in
+        let _ =
+            if u = v
+            then
+                (cg.coalescedMoves <- union move cg.coalescedMoves;
+                 addWorklist u cg)
+            else if (List.mem v cg.precolored) || (EdgeSet.mem (u, v) cg.adjSet)
+                 then
+                    (cg.constrainedMoves <- move::cg.constrainedMoves;
+                     addWorklist u cg;
+                     addWorklist v cg)
+            else if ((List.mem u cg.precolored) &&
+                     (RS.fold (fun t rst -> (ok t u cg) && rst)
+                                    (adjacent v cg) true)
+                    || ((not (List.mem u cg.precolored)) &&
+                        (conservative (RS.elements (RS.union (adjacent u cg)
+                                                       (adjacent v cg))))
+                                      cg))
+                 then
                     (cg.coalescedMoves <- union move cg.coalescedMoves;
+                     combine target u v cg;
                      addWorklist u cg)
-                else if (List.mem v cg.precolored) || (EdgeSet.mem (u, v) cg.adjSet)
-                     then
-                        (cg.constrainedMoves <- move::cg.constrainedMoves;
-                         addWorklist u cg;
-                         addWorklist v cg)
-                else if ((List.mem u cg.precolored) &&
-                         (RS.fold (fun t rst -> (ok t u cg) && rst)
-                                        (adjacent v cg) true)
-                        || ((not (List.mem u cg.precolored)) &&
-                            (conservative (RS.elements (RS.union (adjacent u cg)
-                                                           (adjacent v cg))))
-                                          cg))
-                     then
-                        (cg.coalescedMoves <- union move cg.coalescedMoves;
-                         combine target u v cg;
-                         addWorklist u cg)
-                else
-                    cg.activeMoves <- move::cg.activeMoves
-            in
-                true
-        | _ -> false)
+            else
+                cg.activeMoves <- move::cg.activeMoves
+        in
+            true
+    | _ -> false)
 let coalesce cg = coalesce (project cg)
 @
 
@@ -1168,6 +1197,7 @@ let graph_coloring_module =
         ; "printCFGLive",     stageFn printCFGLive
         ; "pCFG",             stageFn pCFG
         ; "makeInitInfo",     param2value makeInitInfo
+        ; "setColors",        stageFn setColors
         ; "writedot",         param2StageFn writedot
         ]
 
