@@ -4,6 +4,7 @@ Revisions Copyright © 1999, 2000 Vita Nuova Limited.  All rights reserved.
 Revisions Copyright © 2001 Norman Ramsey.  All rights reserved.  
 */
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <errno.h>
@@ -12,7 +13,7 @@ Revisions Copyright © 2001 Norman Ramsey.  All rights reserved.
 #include <fcntl.h>
 #include <setjmp.h>
 #include <float.h>
-#if 0 /* do not exist on Solaris */
+#if 0 /* do not exist on Solaris, not needed? -- CL */
 #include <endian.h>
 #include <features.h>
 #endif 
@@ -22,7 +23,7 @@ Revisions Copyright © 2001 Norman Ramsey.  All rights reserved.
 
 #define	nil		((void*)0)
 
-#ifdef PEDANTIC_ANSI
+#if defined(PEDANTIC_ANSI) || defined(__STRICT_ANSI__)
 typedef unsigned long	ulong;
 typedef unsigned short	ushort;
 #endif
@@ -116,7 +117,7 @@ struct Dir
 	int	mtime;
 	ulong	length;
 	ushort	type;
-	ushort	dev;
+	dev_t	dev;
 } Dir;
 
 /*
