@@ -1,131 +1,181 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 et sw=4:
 
-
-% l2h substitution cfg CFG
-% l2h substitution dots ...
-% l2h substitution AST AST
-% l2h substitution ast AST
-% l2h substitution rtl RTL
-% l2h substitution ir IR
-% l2h substitution noweb NOWEB
-% l2h substitution qcc QC--
-% l2h substitution C C--
-% l2h substitution PAL C--
-% l2h substitution pal C--
-% l2h substitution asdl ASDL
-% l2h substitution ocaml OCaml
-% l2h substitution forall forall
-% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
-
-\input{../config/macros.tex}
+% TODO: parsing a floating point number from a string to a bits value.
 
 % ------------------------------------------------------------------ 
-\section{Bits -- low level representation of values}
+\section{Bits -- Low-Level Representation of Values}
 % ------------------------------------------------------------------ 
 
-Values in {\PAL} can be either of type [[bool]] or [[bits]].  While
-[[bool]] values can be represented by the {\ocaml} type [[bool]],
-[[bits]] require a data structure.  Conceptually a [[bits]] value can
-hold a declared but arbitrary large number of bits. 
+This module provides an abstract bit vector type [[bits]]. It is used
+for holding {\PAL} values.
+
+Bit values can be converted to and from numbers and strings. Conversion
+implies an \emph{interpretation} of a value. Most commonly, values can
+be interpreted as signed or unsigned integers.  Therefore, constructors
+and observers of [[bits]] values are organized along these lines. The
+conversions try hard not to assume a certain representation for {\ocaml}
+integers. The conversion is soley defined with respect to the range
+[[max_int]] \dots [[min_int]]  of an {\ocaml} data type. However, we in
+addition assume that $[[min_int]] = -2^{k-1}$ and $[[max_int]] =
+2^{k-1}-1$ for some $k$, such that the cardinality of the integer range
+is $2^k$.  The current {\ocaml} manual does not guarantee this property
+explicitly, but the {\ocaml} implementation supports it.
+
+The maximum width of a bit vector is implementation dependent; however,
+it is checked error to exceed it.
 
 % ------------------------------------------------------------------ 
 \subsection{Interface}
 % ------------------------------------------------------------------ 
 
-@ 
-A [[bits]] value has a [[width]] which is the number of bits it can
-hold. The conversion of [[bits]] from and to other representations can
-cause overflows which are reported by an exception [[Overflow]].
-Requests for an unsupported [[width]] results in a [[Size]] exception.
-Currently 64 bits and less are supported.
+A [[bits]] value has an observable fixed [[width]] that is the number of
+bits it can hold. The simplest [[bits]] value is [[zero]], a [[width]]
+long bit vector of zeros. 
 
 <<bits.mli ((evaluating))>>=
 type width      = int
-type bitvector (* abstract *)
-type bits       = bitvector * width
-(* type t       = bits 
- *)
+
+type bits      
+type t          = bits 
+
+val width       : bits -> width         (* observer *)
+val zero        : width -> t            (* constructor *)
 @ 
 
-The evaluating and residualizing instantiations provide the same
-interface to [[bits]].
+If a conversion fails, it raises an exception. The [[Overflow]]
+exception indicates that the target range is too small for a give
+conversion; the [[Syntax]] exception indicates a syntax violation when a
+number of built from a string that violates the syntax. Roughly, the
+syntax for numbers follows the {\PAL} syntax. For the details of
+strings, see below.
+
 <<bits.mli ((evaluating))>>=
-<<interface>>
-@ 
+exception Overflow
+exception Syntax of string
 
-The width of a [[bits]] value is determined when it is created. 
-Even though it is exposed in the representation, we can also use the
-[[width]] function to get access to it. In case the requested size
-is not supported by the implementation [[Size]] is raised. The
-[[maxwidth]] is the maximal width supported by an implementation.
+<<bits.mli ((evaluating))>>=
+module S: sig  (* signed *) 
+    <<interface S>>
+end
 
-Note: In the {\qcc} compiler [[Bits.bits]] is used to hold interger,
-floating point, and character literals. The type of the these literals,
-i.e. their \emph{widths}, is recorded in an external value that is
-typically called \emph{width}. This external type is the relevant source
-of information. The use of the [[width]] function is therefore
-deprecated.
-
-<<interface>>=
-val width       : bits -> width
-val maxwidth    : width
-@
-
-The [[fits]] predicate is true, if and only if a given [[bits]] value
-fits into width.  N.B. this is a property of the \emph{width} of the
-argument, not of its \emph{value}.  In particular, a 32-bit
-representation of the integer~1 does not ``[[fits]]'' into 16~bits,
-even though the value can easily be represented in 16~bits.
-
-The width must mot be greater than [[maxwidth]],
-otherwise the [[Size]] exception is raised which indicates a problem
-with the limits of an implementation.
-
-<<interface>>=
-val fits        : bits -> width -> bool
-@
-
-The [[setSize]] function updates the size information of a [[bits]]
-value. This is a dangerous operation since the new size may violate
-the assumption that the current value fits into that size. Thus,
-[[Overflow]] is raised, when this assumption is violated by the new size.
-\emph{NR finds this definition insufficiently precise.
-It's only used in one place---\module{elab}.  Perhaps we can find a
-better way to express this?}
-
-\begin{quote}\it
-    The name is misleading and [[cast]] might be a better name. The
-    function returns a new [[bits]] value of size [[width]] and raises
-    [[Overflow]] if the given value does not fit in. The problem is,
-    what is the definition of [[fit]] if we consider signed values? This
-    seems to be ill-defined. -- CL
-\end{quote}
-
-<<interface>>=
-val setSize     : bits -> width -> bits
-@
-
-Function [[cast n b]] returns the [[n]] least significant bits of [[b]]
-as a value of width [[n]].
-
-<<interface>>=
-val cast        : int -> bits -> bits
+module U: sig (* unsigned *)
+    <<interface U>>
+end
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{Creation of \texttt{bits} values}
+\subsection{Signed Constructors}
 % ------------------------------------------------------------------ 
 
-A [[bits]] value is usually created from a string representation as
-part of a {\PAL} source program. The string representation include
-integer, floating point, and character representations:
+A constructor takes a signed value $v$ and creates a [[bits]] value $b$
+of a given [[width]] $w$. The value $v$ is encoded as a two's complement
+integer of width $w$. If $w$ is too small for this encoding ($v <
+-2^{w-1}$ or $2^{w-1} \le v$), the constructor raises [[Overflow]].
+
+$$v = \sum_{i=0}^{w-2} 2^i \times b_i - 2^{w-1} \times b_{w-1}$$
+
+
+<<interface S>>=
+val of_int:     int         -> width -> t       (* Overflow *)
+val of_native:  nativeint   -> width -> t       (* Overflow *)
+val of_int64:   int64       -> width -> t       (* Overflow *)
+val of_string:  string      -> width -> t   (* Overflow, Syntax *)
+@
+
+For the format of the strings accepted by [[of_string]], see the section
+below.
+
+% ------------------------------------------------------------------ 
+\subsection{Signed Observers}
+% ------------------------------------------------------------------ 
+
+A signed observer treats a bit vector $b$ of width $w$ as a number $v$
+in two's complement representation. The observer converts it to a
+(signed) {\ocaml} number. For the conversion to succeed, the number must
+be within the range of the target type ($[[min_int]] \le v \le
+[[max_int]]$), otherwise the conversion raises [[Overflow]]. 
+
+$$v = \sum_{i=0}^{w-2} 2^i \times b_i - 2^{w-1} \times b_{w-1}$$
+
+This guarantees $-2^{w-1} \le v < 2^{w-1}$.
+
+<<interface S>>=
+val to_int:     t -> int                        (* Overflow *)
+val to_native:  t -> nativeint                  (* Overflow *)
+val to_int64:   t -> int64                      (* Overflow *)
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Unsigned Constructors}
+% ------------------------------------------------------------------ 
+
+An unsigned constructor takes a (signed) number $v$, and computes an
+unsigned number $v'$ from it. 
+
+$$v' = v \bmod 2^k, \quad\mbox{where $[[min_int]]=-2^{k-1}$}$$
+
+The [[min_int]] and [[max_int]] values are the ones that are associated
+with the type representing $v$.  
+
+The derived number $v'$ is the unsigned interpretation of the signed
+number $v$. If $v' < 2^w$ holds, $v'$ is represented as a bit vector of
+length $w < k$, using an unsigned interpretation. Otherwise, the
+constructor function raises [[Overflow]]. 
+
+$$v' = \sum_{i=0}^{w-1} 2^i \times b_i$$
+
+<<interface U>>=
+val of_int:     int         -> width -> t       
+val of_native:  nativeint   -> width -> t       
+val of_int64:   int64       -> width -> t       
+val of_string:  string      -> width -> t            (* Overflow, Syntax *)
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Unsigned Observers}
+% ------------------------------------------------------------------ 
+
+An unsigned observer takes a bit vector $b$ of length $w$ and interprets
+it as an unsigned number $v$:
+
+$$v = \sum_{i=0}^{w-1} 2^i \times b_i$$
+
+The conversion returns a signed number $v'$ that is related to $v$ as
+follows:
+
+$$v' = \cases{v                   
+                & \quad if $0 \le v \le [[max_int]]$\cr
+              v + 2 \times [[min_int]]     
+                & \quad if $[[max_int]] < v \le [[max_int]]
+                                              - [[min_int]]$ \cr
+              \mathit{overflow}
+                & \quad otherwise}
+$$
+
+This means that $-2^{k-1} \le v' < 2^{k-1}$ and $v = v' \bmod 2^k$,
+where $[[min_int]] = -2^{k-1}$ and $[[max_int]] = 2^{k-1}-1$.
+Intuitively, the sign bit in the target type is treated as if it were a
+regular bit. The consequence is, that a value larger than [[max_int]]
+becomes negative. 
+
+<<interface U>>=
+val to_int:     t -> int                        (* Overflow *)
+val to_native:  t -> nativeint                  (* Overflow *)
+val to_int64:   t -> int64                      (* Overflow *)
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Syntax for Strings}
+% ------------------------------------------------------------------ 
+
+A [[bits]] value can be created from a string representation. The string
+describes an integer, character, or floating-point literal.
 
 \begin{enumerate}
 \item The integer string representation can use a decimal, octal, or
       hexadecimal radix.  The characters to represent the respective
-      radices in strings are shown below.  Conversion to and from
-      strings always considers a [[bits]] value as an unsigned
-      integer.
+      radices in strings are shown below.  
 
         \begin{tabular}{ll}
         Radix        & characters \\
@@ -145,25 +195,12 @@ integer, floating point, and character representations:
       \item All other strings are considered as strings with decimal numbers.
       \end{itemize}
 
-      A [[Failure "of_string"]] exception is raised when the string
-      contains illegal characters. 
+      A [[Syntax]] exception is raised when the string contains illegal
+      characters. 
 
-\item The floating point representation [[float]] can be decribed by the
-      following small grammar that is also used in the {\PAL} lexer:
-
-      \begin{quote}
-      \begin{verbatim}
-    let digit       = ['0'-'9']
-    let nat         = digit+
-    let frac        = nat '.' nat
-    let exp         = ['e''E'] sign? nat
-    let float       = frac exp? 
-                    | nat exp
-      \end{verbatim}
-      \end{quote}
-
-\item The character representation honors the C escape sequences.
-      Otherwise stands each character for itself.
+\item A character is enclosed in single quotes like in [['a']]. The
+      character representation honors the C escape sequences.
+      Otherwise, each character stands for itself.
       
        \begin{quote}
         \begin{tabular}{ll}
@@ -185,286 +222,314 @@ integer, floating point, and character representations:
                             & The value of \textit{octdigit} sequence \\
         \end{tabular}
         \end{quote} 
+
+\item The floating point representation [[float]] can be described by the
+      following small grammar that is also used in the {\PAL} lexer:
+
+      \begin{quote}
+      \begin{verbatim}
+    let digit       = ['0'-'9']
+    let nat         = digit+
+    let frac        = nat '.' nat
+    let exp         = ['e''E'] sign? nat
+    let float       = frac exp? 
+                    | nat exp
+      \end{verbatim}
+      \end{quote}
+
+     \emph{We have to say something about the width of floating point
+     numbers.}
+
 \end{enumerate}
 
-The following functions create [[bits]] values from strings. The
-exception [[Syntax]] is raised in case of syntactical errors of the
-string representation.  [[Size]] is raised when the requested
-[[[width]] is not supported by the implementation.  [[Overflow]] is
-raised when the specified [[width]] is too small to hold the value
-given by the string representation.
-
-<<interface>>=
-exception Overflow
-exception Size
-exception Syntax of string
-
-<<interface>>=
-val of_stringi  : string -> width -> bits (* Size, Overflow, Syntax *)
-val of_stringf  : string -> width -> bits
-val of_stringc  : string -> width -> bits
-@
-
-[[bits]] values can be created from integers.
-For each integer, we imagine a two's-complement representation with an
-infinite number of bits.
-For any particular integer, only finitely many bits at the least
-significant end may vary; the remaining infinite number of bits are
-all identical.
-If the integer is nonnegative, these identical bits are all zeroes;
-if the integer is negative, they are all ones.
-We refer to these identical bits as ``the sign bit.''
-
-The \emph{natural width} of an integer value is the one less than the
-minimum~$i$ 
-such that $\forall k \ge i$, bit~$k$ is identical to the sign bit.
-For example, the width of the integer value~7 is~3.
-
-If $\mathit{cvt}$ stands for any of the four functions below, calling
-$\mathit{cvt}~i~k$ raises the [[Size]] exception if and only if $k$~is
-less than the natural width of~$i$.
-If the conversion does \emph{not} raise the [[Size]] exception, the
-resulting bit vector contains bits~0 through $k-1$ of (the two's
-complement representation of)~$i$, where bit~$0$ is the least
-significant bit.
-A~consequence of this definition is that whenever the conversion does
-\emph{not} raise the [[Size]] exception, we are guaranteed that
-whenever $k' >= k$, bit~$k'$ of~$i$ is identical to bit~$k-1$ of~$i$. 
-<<interface>>=
-val of_int       : int          -> width -> bits  (* Size *)
-val of_int64     : int64        -> width -> bits  (* Size *)
-val of_std_int   : Base.std_int -> width -> bits  (* Size *)
-val of_nativeint : Base.std_nativeint -> width -> bits  (* Size *)
-@
 
 % ------------------------------------------------------------------ 
-\subsubsection{Converting \texttt{bits} values}
+\subsubsection{Residualizing Interface}
 % ------------------------------------------------------------------ 
 
-A [[bits]] value can be converted to an integer or string.  If the
-[[bits]] do not fit into an [[int]], [[Overflow]] is raised. 
+The evaluating and residualizing instantiations provide the same
+interface to [[bits]].
 
-\emph{Each of these functions should come in two versions: one that
-sign-extends and one that zero-extends.}
-<<interface>>=
-type radix      = Oct
-                | Dec
-                | Hex
-
-val to_int       : bits -> Base.std_int                 (* raises Overflow *)
-val to_nativeint : bits -> Base.std_nativeint           (* raises Overflow *)
-val to_int64     : bits -> int64                        (* raises Overflow *)
-val to_string    : radix option -> bits -> Base.std_string
-@
-
-% ------------------------------------------------------------------ 
-\subsubsection{Operations on [[bits]]}
-% ------------------------------------------------------------------ 
-
-<<interface>>=
-val zero        : width -> bits
-@
-
+\begin{quote}\it
+    The interface to this module has changed completely. Now I don't
+    know what to do with the residualizing interface. -- CL
+\end{quote}
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
-A [[bits]] is represented as an [[int64]].  The reason not to
-implement arbitrary large bit vectors is the need for IEEE 754
-floating point operations:  an [[int64]] value can be considered as a
-C [[float]] value of 64 bits for which floating point operations are
-available. Unsigned operations on [[int64]] values are provided by the
-[[Uint64]] module.
+A [[bits]] value is represented as an [[int64]], whose standard
+operations consider it to be signed.  Unsigned operations on [[int64]]
+values are provided by the [[Uint64]] module.
 
 <<bits.ml ((evaluating))>>=
 module I = Int64        (* signed   operations *)
-module U = Uint64       (* unsigned operations *)
 
 exception Overflow
-exception Size
 exception Syntax of string
+exception UnsupportedWidth
 
-let syntax msg = raise (Syntax msg)
+let syntax msg  = raise (Syntax msg)
+let overflow () = raise Overflow
 @
 
-% ------------------------------------------------------------------ 
-\subsubsection{Auxiliaries}
-% ------------------------------------------------------------------ 
-
-Values of type [[bits]] are represented as pairs of width and value.
+Values of type [[bits]] are represented as pairs of width and [[bits64]]
+value. Whenever for the the width $k < 64$ holds, we maintain the
+following invariant: the $64-k$ most significant bits equal the sign
+bit $k-1$ of $b$.
 
 <<bits.ml ((evaluating))>>=
 type width      = int
-type bitvector  = int64
 type bits       = int64 * width
-@
+type t          = bits 
 
-<<bits.ml ((evaluating))>>=
-let maxwidth    = 64
 let width (_,w) = w
+let check w     = if w <= 0 || w > 64 then raise UnsupportedWidth else ()  
+let zero w      = check w; (I.zero, w)
 @
 
-Operations on [[bits]] frequently must [[check]] that the requested
-with is inside the implementation's limits and an actual value fits
-into that many bits.  The [[check]] function raises [[Size]] or
-[[Overflow]] in case the mentioned rules are violated.
-
 <<bits.ml ((evaluating))>>=
-let fits (bits,width') width =
-    if (width <= 0) || (width > 64) 
-    then raise Size
+<<string scanning>>
+module S = struct
+    <<implementation S>>
+end
+
+module U = struct
+    <<implementation U>>
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Signed Interpretation}
+% ------------------------------------------------------------------ 
+
+
+The [[fits]] predicate is [[true]], if a (signed) [[int64]] value [[i]]
+can be represented as a two's complement in $w$ bits,  and [[false]]
+otherwise. We check that the $64-w$ msb equal the sign bit.
+
+<<implementation S>>=
+let fits_signed i w =
+    w = 64 or
+    let i' = I.shift_right i (w-1) in i' = I.zero || i' = I.minus_one  
+
+let of_int i w =
+    check w;
+    let i' = I.of_int i in
+    if fits_signed i' w then (i',w) else overflow () 
+    
+let of_native i w =
+    check w;
+    let i' = I.of_nativeint i in
+    if fits_signed i' w then (i',w) else overflow ()
+
+let of_int64 i w =
+    check w;
+    if fits_signed i w then (i,w) else overflow ()
+
+let of_string str w =
+    check w;
+    let i = string str w in
+        if fits_signed i w then (i,w) else overflow ()
+
+let to_int (i,w) =
+    if I.of_int min_int <= i && i <= I.of_int max_int then
+        I.to_int i
+    else
+        overflow ()
+
+let to_native (i,w) =
+    if  I.of_nativeint Nativeint.min_int <= i && 
+        i <= I.of_nativeint Nativeint.max_int 
+    then
+        I.to_nativeint i
+    else
+        overflow ()
+
+let to_int64 (i,w) = i
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Unsigned Interpretation}
+% ------------------------------------------------------------------ 
+
+The [[sx64]] operation takes an [[int64]] value and masks the $w$ least
+significant bits ($w-1, \dots, 0$) such that the remaining $64 - w$ most
+significant bit are equal to bit $w-1$, the sign bit of a vector of
+length $w$. We use this to establish our invariant that unused bits
+equal the sign bit.
+
+<<implementation U>>=
+let sx64 i w =
+    let w' = 64-w in
+    I.shift_right (I.shift_left i w') w'
+@
+
+The [[mask]] operation returns the [[w]] least significant bits of an
+[[int64]] value.
+
+<<implementation U>>=
+let mask i w =
+    if w < 64 then 
+        let m = I.shift_right_logical I.minus_one (64-w) in
+        I.logand i m
+    else
+        i
+@
+
+The [[fits_unsiged]] predicate is true, if the (positive) number [[i]]
+can be represented in [[w]] (unsigned) bits. We check that bits the
+$64-w$ most significant bits are zero.
+
+<<implementation U>>=
+let fits_unsigned i w =
+    assert (w = 64 || i >= I.zero);
+    w = 64 or (I.shift_right_logical i w) = I.zero
+
+
+let of_int i w =
+    check w;
+    let i' = I.of_int i in 
+    let i' = if i' < I.zero 
+             then I.sub i' (I.shift_left (I.of_int min_int) 1)  
+             else i' 
+    in
+        if fits_unsigned i' w then (sx64 i' w, w) else overflow ()
+
+let of_native i w =
+    check w;
+    let i' = I.of_nativeint i in 
+    let i' = if i' < I.zero 
+             then I.sub i' (I.shift_left (I.of_nativeint Nativeint.min_int) 1) 
+             else i' 
+    in
+        if fits_unsigned i' w then (sx64 i' w, w) else overflow ()
+
+let of_int64 i w =
+    check w;
+    if fits_unsigned i w then (sx64 i w, w) else overflow ()
+
+let of_string str w =
+    check w;
+    let i = string str w in
+        if fits_unsigned i w then (i, w) else overflow ()
+
+let to_int (i,w) = 
+    let i = mask i w in
+    if i <= I.of_int max_int then
+        I.to_int i
     else 
-		(width = 64) || (U.le bits (U.shl width I.one))
-@
-
+        let i' = I.add i (I.shift_left (I.of_int min_int) 1)  in
+        if i' < I.of_int max_int then
+            I.to_int i'
+        else
+            overflow ()
  
-<<bits.ml ((evaluating))>>=
-let check width uint64 =
-    if not (fits (uint64,maxwidth) width)
-	then raise Overflow
-    else () (* ok *)
+let to_native (i,w) = 
+    let i = mask i w in
+    if i <= I.of_nativeint Nativeint.max_int then
+        I.to_nativeint i
+    else 
+        let i' = I.add i (I.shift_left (I.of_nativeint Nativeint.min_int) 1) in
+        if i' < I.of_nativeint Nativeint.max_int then
+            I.to_nativeint i'
+        else
+            overflow ()
+
+let to_int64 (i,w) = 
+    let i = mask i w in
+    i 
+@
+ 
+
+% ------------------------------------------------------------------ 
+\subsubsection{Strings}
+% ------------------------------------------------------------------ 
+
+A number in string representation is unsigned. We parse the string and
+return a 64-bit vector for the value.  
+
+First, we have to find out whether the string at hand denotes a
+character, integer, or floating point number. A character starts with an
+single quote, a floating-point number includes either a dot, an [[e]],
+or an [[E]], everything else must be an integer.
+
+<<string scanning>>=
+<<parse int>>
+<<parse float>>
+<<parse char>>
+
+let string (s:string) (w:int) =
+    assert (String.length s > 0);
+    if s.[0] = '\'' then
+        char s w 
+    else if (String.contains s '.' || String.contains s 'e' ||
+             String.contains s 'E')  then
+        float s w
+    else
+        int s w
+@        
+    
+
+This implementation cannot read very large decimal and octal number
+representations. They would have to set the sign bit which they don't.
+However, hexadecimal representations can use all 64 bits.
+
+<<parse int>>=
+let int str w =
+    let len    = String.length str in
+        try  
+            if len > 2 && str.[0] = '0' && (str.[1] = 'x' || str.[1] = 'X') 
+            then 
+                I.of_string str
+            else if len > 2 && str.[0] = '0' then
+                I.of_string ("0o"^str)
+            else
+                I.of_string str
+        with Failure _ -> syntax ("syntax error in constant: "^str)    
 @
 
-[[setSize]] sets the size of a [[bits]] value and raises [[Overflow]]
-in case the size is too small.
+Floating point numbers are unimplemented. 
 
-<<bits.ml ((evaluating))>>=
-let setSize (b,w as bits) width =
-    if not (fits bits width)
-    then raise Overflow
-    else (b,width)
-@
+<<parse float>>=
+let float str w = 
+    try 
+        let _ = float_of_string str in I.zero
+    with Failure _ -> syntax ("syntax error in constant: "^str)
 
-[[cast]] returns the least [[n]] significant bits by simply using [[n]]
-as the width of the returned value. To be really safe we could use a
-mask to zero out the insignificant bits.
 
-<<bits.ml ((evaluating))>>=
-let cast n (b,w) =
-    assert (n <= w && n >= 0);
-    (b, n)
+<<parse char>>=
+let char str w =
+    let str = String.sub str 1 (String.length str - 2) in
+    let len = String.length str in
+        try
+            if   len = 0 
+            then assert false
+            else if str.[0] = '\\' && len > 1 
+            then match str.[1] with
+            | 'a'  when len = 2 -> I.of_int 7
+            | 'b'  when len = 2 -> I.of_int 8
+            | 'n'  when len = 2 -> I.of_int 10
+            | 'r'  when len = 2 -> I.of_int 13
+            | 't'  when len = 2 -> I.of_int 9
+            | '\\' when len = 2 -> I.of_int 92
+            | '\'' when len = 2 -> I.of_int 39
+            | '"'  when len = 2 -> I.of_int 34
+            | '?'  when len = 2 -> I.of_int 63
+            | 'x'  when len = 2 -> I.of_string ("0"  ^ str)
+            | '0' .. '7'        -> I.of_string ("0o" ^ str) 
+            | _                 -> syntax ("syntax error: "^str)
+            else                   I.of_int (Char.code str.[0])
+        with Failure _          -> syntax ("syntax error: "^str)
 @    
     
-% ------------------------------------------------------------------ 
-\subsubsection{Creation of \texttt{bits} values}
-% ------------------------------------------------------------------ 
-
-<<bits.ml ((evaluating))>>=
-let of_stringi str width =
-    let len    = String.length str in
-    let uint64 = ( match str.[0] with
-                 | '0' when len > 1 -> U.of_string ("0o"^str)
-                 | _                -> U.of_string str
-                 ) in
-        try
-            ( check width uint64
-            ; (uint64,width)
-            )
-        with
-            Failure _ -> syntax ("syntax error in constant: "^str)
-         
-<<bits.ml ((evaluating))>>=
-let of_stringf str width =
-    if   width <> 64 
-    then raise Size
-    else try (U.of_float (float_of_string str),width) with
-         | Failure _ -> syntax ("syntax error in constant: "^str)
-
-<<bits.ml ((evaluating))>>=
-let of_stringc str width =
-    let len = String.length str in
-    let c   = 
-            try
-                if   len = 0 
-                then assert false
-                else if str.[0] = '\\' && len > 1 
-                then match str.[1] with
-                | 'a'  when len = 2 -> U.of_int 7
-                | 'b'  when len = 2 -> U.of_int 8
-                | 'n'  when len = 2 -> U.of_int 10
-                | 'r'  when len = 2 -> U.of_int 13
-                | 't'  when len = 2 -> U.of_int 9
-                | '\\' when len = 2 -> U.of_int 92
-                | '\'' when len = 2 -> U.of_int 39
-                | '"'  when len = 2 -> U.of_int 34
-                | '?'  when len = 2 -> U.of_int 63
-                | 'x'  when len = 2 -> U.of_string ("0"  ^ str)
-                | '0' .. '7'        -> U.of_string ("0o" ^ str) 
-                | _                 -> syntax ("syntax error: "^str)
-                else                   U.of_int (Char.code str.[0])
-            with Failure _          -> syntax ("syntax error: "^str)
-        in
-            ( check width c
-            ; (c, width)
-            ) 
-    
-<<bits.ml ((evaluating))>>=
-let of_int i width =
-    let uint64 = U.of_int i in
-        ( check width uint64
-        ; (uint64,width)
-        )
-let of_std_int = of_int
-<<bits.ml ((evaluating))>>=
-let of_int64 i width =
-    ( check width i
-    ; (i,width)
-    )
-
-let of_nativeint i width = of_int64 (I.of_nativeint i) width
-@
-    
-% ------------------------------------------------------------------ 
-\subsubsection{Conversions}
-% ------------------------------------------------------------------ 
-
-The [[to_int]] function checks that the [[bits]] value can be
-represented as a positive integer and raises [[Overflow]] otherwise. 
-
-<<bits.ml ((evaluating))>>=
-let to_int (uint64,width) =
-    if uint64 > I.of_int(max_int) then
-        raise (Overflow)
-    else
-        I.to_int uint64
-@
-Similarly for native integers.  The test is bogus, but there's no easy
-way to find out if [[width]] is small enough to fit into the width of
-[[nativeint]], because we're not given the width of [[nativeint]].
-<<bits.ml ((evaluating))>>=
-let to_nativeint (uint64,width) =
-    if I.logand uint64 (I.of_nativeint Nativeint.max_int) = uint64 then
-        I.to_nativeint uint64
-    else
-        raise (Overflow)
-@
-This is buggy: the [[I.to_string]] function considers the [[bits]]
-value as a signed integer. We also ignore the radix for the moment.
-
-<<bits.ml ((evaluating))>>=
-type radix      = Oct
-                | Dec
-                | Hex
-
-let to_string radix (uint64,width) = I.to_string uint64 (* wrong *)
-
-let to_int64 (uint64,width) = uint64
-@
-
-% ------------------------------------------------------------------ 
-\subsubsection{Operations on [[bits]]}
-% ------------------------------------------------------------------ 
-
-<<bits.ml ((evaluating))>>=
-let zero w =
-    let z = U.of_int 0 in
-    ( check w z
-    ; (z,w) 
-    )
-@
-
+% ================================================================== 
 \section{Residualizing instantiation}
+% ================================================================== 
+
+\emph{I don't know what to do with this. -- CL}
 
 This section is written just as a copy-and-pase of the code above. We
 must implement a residualizing instantiation of all the functions

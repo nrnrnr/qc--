@@ -52,18 +52,26 @@ combined = 'a BackplaneT.combined)
 
 <<walk RTL>>=
 (* NOTE: using space 't' is hopeful, but ultimately bogus. *)
-let new_tmp name =
-	if (compare name "i" >= 0) && (compare name "n" <= 0)
-	then Talloc.Multiple.loc temps 't'
-	else Talloc.Multiple.loc temps 'u' in
-let print_var (s, i, w) = Verbose.say 18 ["VAR: "
-                                         ; s 
-										 ; " " 
-										 ; string_of_int i 
-										 ; " " 
-										 ; string_of_int w 
-										 ; "\n"
-										 ] in
+let new_tmp name w =
+    match name, w with
+    |   n, 32 when (compare name "i" >= 0) && (compare name "n" <= 0)
+               -> Talloc.Multiple.loc temps 't' w
+    |   n, 32  -> Talloc.Multiple.loc temps 'u' w 
+    |   n, 8   -> Talloc.Multiple.loc temps 'v' w
+    |  _       -> Impossible.impossible 
+                    (Printf.sprintf "asked for temporay %s (%d wide)" name w)
+in
+
+let print_var (s, i, w) = 
+    Verbose.say 18 ["VAR: "
+                   ; s 
+                   ; " " 
+                   ; string_of_int i 
+                   ; " " 
+                   ; string_of_int w 
+                   ; "\n" 
+                   ] 
+in
    
 let rec walkLoc loc tMap = match loc with
 	| RP.Cell (sp, ag, w, e, ass) ->

@@ -4,13 +4,20 @@
 \section{Operations on bit vectors}
 % ----------------------------------------------------------------
 
-This module encapsulates operations on bit vectors.
-Its primary use will be to support constant evaluation, but
-it is also used to evaluate `early' expressions during RTL creation.
+This module encapsulates operations on bit vectors.  Its primary use
+will be to support constant evaluation, but it is also used to evaluate
+`early' expressions during {\rtl} creation. Another mayor client is the
+encoding and decoding of instructions in {\rtl} representation.
+
+I would argue that these operations belong into the [[Bits]] module
+because the representation of [[Bits.bits]] value are abstract. An
+implementation here does not have access to the representation and thus
+must use observes.
+
 %
 <<bitops.mli ((evaluating))>>=
 (*module Bitops*)
-type t = Bits.bits
+type t     = Bits.t
 type width = Bits.width
 @ 
 Standard RTL operators
@@ -31,7 +38,12 @@ val zx : t -> width -> t
 val shl  : t -> t -> t
 val shra : t -> t -> t
 val shrl : t -> t -> t
+@
 
+The next two operators are not defined in {\PAL}. Would someone please
+explain their semantics.
+
+<<bitops.mli ((evaluating))>>=
 (* extractions a painless specialty *)
 val bitExtract : lsb:int -> t -> width -> t
 val bitInsert  : lsb:int -> wide:t -> narrow:t -> t
@@ -52,46 +64,118 @@ val round_up : t
 
 @ 
 Testing for widths.
+
 <<bitops.mli ((evaluating))>>=
 val fits_signed : t -> width -> bool
   (* fits_signed v w == v can be narrowed to width w, then
          sign-extended to its original width, without changing its value *)
+
 val fits_unsigned : t -> width -> bool
   (* fits_signed v w == v can be narrowed to width w, then
          zero-extended to its original width, without changing its value *)
 @
-
-
 
 % ----------------------------------------------------------------
 \subsection{Implementation}
 % ----------------------------------------------------------------
 
 <<bitops.ml ((evaluating))>>=
-type t = Bits.bits
-type width = Bits.width
-let eq x y = x = y
-let ne x y = x <> y
+module B = Bits
+module I = Int64
+
+type t      = B.t
+type width  = B.width
 
 exception Impossible of string
 let impossible msg = raise (Impossible msg)
-let unimp msg = impossible ("not implemented: "^msg)
+let unimp      msg = impossible ("not implemented: "^msg)
+@
 
-let lt x y = unimp "lt"
-let le x y = unimp "le"
-let gt x y = unimp "gt"
-let ge x y = unimp "ge"
+The following implementation relies heavily on the (hidden) internal
+representation of [[bits]] values. Syntactically different values could
+still represent the same value. Think about sets and it becomes obvious.
+--CL.
 
-let sx x w = unimp "sx"
-let zx x w = unimp "zx"
+<<bad idea>>=
+let eq x y  = x = y
+let ne x y  = x <> y
+@
 
-let com x = unimp "com"
+We do not check the width of operations here, because we know that they
+must be equal. This ensures type checking.
 
-let fits_signed x w = unimp "fits_signed"
-let fits_unsigned x w = unimp "fits_unsigned"
+<<bitops.ml ((evaluating))>>=
+let myassert x = () (* there is a width inconsistency in the subcc RTL *)
+let eq x y = myassert (B.width x = B.width y); B.S.to_int64 x =  B.S.to_int64 y
+let ne x y = myassert (B.width x = B.width y); not (eq x y)
+let lt x y = myassert (B.width x = B.width y); B.S.to_int64 x <  B.S.to_int64 y
+let le x y = myassert (B.width x = B.width y); B.S.to_int64 x <= B.S.to_int64 y
+let gt x y = myassert (B.width x = B.width y); B.S.to_int64 x >  B.S.to_int64 y
+let ge x y = myassert (B.width x = B.width y); B.S.to_int64 x >= B.S.to_int64 y
 
-let bitExtract ~lsb _ _           = unimp "bitExtract"
-let bitInsert  ~lsb ~wide ~narrow = unimp "bitInsert"
+let sx x w = 
+    assert (w > B.width x && w <= 64);
+    let i = B.S.to_int64 x in
+        B.S.of_int64 i w
+
+let sx64 i w =
+    let w' = 64-w in
+    I.shift_right (I.shift_left i w') w'
+@
+
+[[Mask]] returns the [[w]] least significant bits of [[i]].
+
+<<bitops.ml ((evaluating))>>=
+let mask i w =
+    if w < 64 then 
+        let m = I.shift_right_logical I.minus_one (64-w) in
+        I.logand i m
+    else
+        i
+
+<<bitops.ml ((evaluating))>>=
+let zx x w = 
+    assert (w > B.width x && w <= 64);
+    let i  = B.U.to_int64 x in
+        if i > I.zero || w = 64 then
+            B.U.of_int64 i w
+        else    
+            B.U.of_int64 (mask i (B.width x)) w
+
+let com x = 
+    let w = B.width x    in
+    let i = B.U.to_int64 x in
+        B.U.of_int64 (I.lognot i) w
+
+let fits_signed x w = 
+    assert (w > 0 && w <= 64);
+    let i = B.S.to_int64 x in
+        w = 64 or
+        let i' = I.shift_right i (w-1) in i' = I.zero || i' = I.minus_one  
+
+let fits_unsigned x w = 
+    assert (w > 0 && w <= 64);
+    let i = B.U.to_int64 x in
+        w = 64 or (I.shift_right_logical i w) = I.zero
+
+let bitExtract ~lsb x w = 
+    let w' = B.width x in
+    assert (w > 0 && lsb + w < w');
+    let i  = B.U.to_int64 x             in
+    let i' = mask (I.shift_right i w) w in
+        B.U.of_int64 i' w
+    
+let bitInsert ~lsb ~wide ~narrow =
+    let w  = B.U.to_int64 wide   
+    and n  = B.U.to_int64 narrow 
+    and ww = B.width wide   
+    and wn = B.width narrow 
+    in
+        assert (lsb + wn < ww);
+        let n' = I.shift_left n lsb 
+        and w' = I.logand w (I.lognot (I.shift_left (mask I.minus_one wn) lsb))
+        in
+            B.U.of_int64 (I.logor n' w') ww
 @
 
 We can't use [[unimp]] for the following values because the
@@ -114,32 +198,43 @@ Here are some useful IEEE 754 constants, taken from C header files:
     would be the task for the platform specific implementation of the
     primitives to present the result in the right form.
 
-    The question and consequences apply to the rounding modes.
+    The question and consequences apply to the rounding modes, too.
 \end{quote}
 
 <<bitops.ml ((evaluating))>>=
-let dummy = Bits.zero 32
+let float_lt        = Bits.U.of_int 0 2
+let float_gt        = Bits.U.of_int 1 2
+let float_eq        = Bits.U.of_int 2 2
+let unordered       = Bits.U.of_int 3 2
 
-let float_lt        = dummy
-let float_gt        = dummy
-let float_eq        = dummy
-let unordered       = dummy
+let round_nearest   = Bits.U.of_int 0 2
+let round_down      = Bits.U.of_int 1 2
+let round_up        = Bits.U.of_int 2 2
+let round_zero      = Bits.U.of_int 3 2
 
-let round_nearest   = Bits.of_int 0 2
-let round_down      = Bits.of_int 1 2
-let round_up        = Bits.of_int 2 2
-let round_zero      = Bits.of_int 3 2
+let shift f x k = 
+    let k  = B.U.to_int k   in
+    let i  = B.U.to_int64 x in
+    let w  = B.width x      in
+    let i' = mask (f i k) w in
+        B.U.of_int64 i' w
 
-let shl  _ _ = unimp "shifts"
-let shra _ _ = unimp "shifts"
-let shrl _ _ = unimp "shifts"
+let shl  x k = shift I.shift_left  x k
+let shra x k = shift I.shift_right x k 
+let shrl x k = shift I.shift_right_logical x k
+@ 
 
-@ \section{Residualising instantiation}
+% ================================================================
+\section{Residualising instantiation}
+% ================================================================
+
+\emph{I don't know what to do with this code. Currently it is not
+compiled into the compiler. --CL}
 
 
-% ----------------------------------------------------------------
+% ================================================================
 \section{Operations on bit vectors}
-% ----------------------------------------------------------------
+% ================================================================
 
 This module encapsulates operations on bit vectors.
 Its primary use will be to support constant evaluation, but

@@ -1,3 +1,5 @@
+* The conversion from and to a Bits.bits value is under specified. 
+
 * We suspect an impedance mismatch between various representations of
   link-time constants.  Observation #1: an RTL is built with a
   Reladdr.symbol, not a full Reladdr.t.  It is unclear to us which is
@@ -84,13 +86,12 @@
   would be to raise the standard exception Invalid_argument. The
   problem of tracking its cause remains the same. 
 
-
 * Spilling hardware registers is not save: if [[spillee]] is a
   hardware register, it is re-loaded into a new temporary that
   substitutes the hardware register in nodes. However, the hardware
   register might the there because a calling convention demands it.
-  --CL
-
+  This applies to the Linear Scan Allocator; I'm not sure what the
+  coloring allocator does.
 
 * I don't know how to find the data-flow annotations/nodes for continuations.
 
@@ -113,12 +114,8 @@
   link-time expressions.  The implementation for link-time
   expressions is missing. 
 
-* Value.Ops is making things a bit ugly when it comes to abstract RTL 
-  operators.  Rethink it in light of the more abstract RTL interface.
-  Some of the ugliness comes to light in the use of the Ast2ir.Expr.op function.
-
 * look up IEEE 754 floating-point codes and get rid of the worst unimps
-  in bitops.nw
+  in bitops.nw. 
 
 * asdlGen:
 
@@ -130,7 +127,14 @@
   When a view maps foo to char the M.bar type becomes Bar of char, but
   M.foo is still int. 
   
-
 * Implement charset, character, and string handling as proposed by NR
   in the changes file.  The current handling of characters and
   strings must be replaced. 
+
+* When a litarl value is scanned (into a Bits.bits) value its width is
+  unknown. The width cannot be processed in the scanner because it can
+  be a symbolic value that the scanner cannot know. I consider this
+  today a design flaw of the language. A possible solution is to store
+  the string in the AST until the width is known. Once it is known, the
+  value is stored inside the symbol table. -- CL
+  intot  

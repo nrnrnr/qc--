@@ -1,24 +1,41 @@
 % vim: ts=8 sw=4 et:
 
 % ------------------------------------------------------------------ 
-\section{Sparc Instruction Subset}
+\section{Minisparc}
 % ------------------------------------------------------------------ 
 
 Until we can generate constructor functions for {\sparc} instructions I
-will use these hand-coded constructors. All {\rtl}s are derived from the
-automatically generated {\rtl}s but altered to work accept both
+will use these hand-coded encoder and decoder. All {\rtl}s are derived
+from the automatically generated {\rtl}s but altered to work accept both
 temporaries and registers.
 
 
-<<minisparc.mli>>=
-module Reloc: Sledlib.RELOCATABLE with type symbol = Reladdr.symbol
+% ------------------------------------------------------------------ 
+\subsection{Encoder Interface}
+% ------------------------------------------------------------------ 
 
-type t          = Rtl.rtl
-type reg_or_imm = Rtl.exp
-type address    = Rtl.exp
-type regaddr    = Rtl.exp
-type reg        = Rtl.loc
-type target     = nativeint Reloc.relocatable
+The encoder provides functions to encode {\sparc} instructions as
+{\rtl}s. The encoder is parameterized over the representation of
+relocatable addresses.
+
+
+<<module types>>=
+module type S     = sig <<S>> end
+
+<<msparcenc.mli>>=
+<<module types>>
+module Mk(Reloc: Sledlib.RELOCATABLE with type symbol = Reladdr.symbol): S 
+    with type target = nativeint Reloc.relocatable
+    and  type t      = Rtl.rtl
+@
+
+<<S>>=
+type t          
+type reg_or_imm 
+type address    
+type regaddr    
+type reg        
+type target     
 
 val reg         : Rtl.space -> int -> reg
 
@@ -29,10 +46,11 @@ val generala    : reg -> reg_or_imm -> address
 val dispa       : reg -> nativeint (*[~4096..4095]*) -> address
 val absolutea   : nativeint (*[~4096..4095]*) -> address
 val indexa      : reg -> reg -> address
+val indirecta   : reg -> address
 
 (* instructions *)
-val add : reg -> Rtl.exp -> reg -> t
-val and_ : reg -> Rtl.exp -> reg -> t
+val add : reg -> reg_or_imm -> reg -> t
+val and_ : reg -> reg_or_imm -> reg -> t
 val ba : target -> t
 val be : target -> t
 val bg : target -> t
@@ -42,6 +60,7 @@ val bl : target -> t
 val ble : target -> t
 val bleu : target -> t
 val bn : target -> t
+val bne : target -> t
 val subcc : reg -> reg_or_imm -> reg -> t
 val cmp : reg -> reg_or_imm -> t
 val fmovs : reg -> reg -> t
@@ -64,25 +83,31 @@ val xor : reg -> reg_or_imm -> reg -> t
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Implementation}
+\subsection{Enocoder Implementation}
 % ------------------------------------------------------------------ 
 
-<<minisparc.ml>>=
-module R     = Rtl
-module NI    = Nativeint
-module Reloc = Sledlib.MkReloc(struct type symbol = Reladdr.symbol end)
 
+<<msparcenc.ml>>=
+<<module types>>
+module R  = Rtl
+module NI = Nativeint
+module Mk(Reloc: Sledlib.RELOCATABLE with type symbol = Reladdr.symbol) = 
+    struct 
+        <<Mk Encoder>> 
+    end    
+
+<<Mk Encoder>>=
 type t          = Rtl.rtl
 type reg_or_imm = Rtl.exp
 type address    = Rtl.exp
 type regaddr    = Rtl.exp
 type reg        = Rtl.loc
-type target     = Reloc.t
+type target     = nativeint Reloc.relocatable
 
-let r n = (R.cell R.none 'r' R.Identity 32 (R.bits (Bits.of_nativeint n 5) 5))
-let f n = (R.cell R.none 'f' R.Identity 32 (R.bits (Bits.of_nativeint n 5) 5))
-let t n = (R.cell R.none 't' R.Identity 32 (R.bits (Bits.of_nativeint n 16) 16))
-let u n = (R.cell R.none 'u' R.Identity 32 (R.bits (Bits.of_nativeint n 16) 16))
+let r n = (R.cell R.none 'r' R.Identity 32 (R.bits (Bits.U.of_native n 5) 5))
+let f n = (R.cell R.none 'f' R.Identity 32 (R.bits (Bits.U.of_native n 5) 5))
+let t n = (R.cell R.none 't' R.Identity 32 (R.bits (Bits.U.of_native n 16) 16))
+let u n = (R.cell R.none 'u' R.Identity 32 (R.bits (Bits.U.of_native n 16) 16))
 
 let reg sp n = match sp with
     | 'r' -> r (NI.of_int n)
@@ -96,10 +121,10 @@ let r0   = r NI.zero
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Adressing Modes}
+\subsection{Encoder: Adressing Modes}
 % ------------------------------------------------------------------ 
 
-<<minisparc.ml>>=
+<<Mk Encoder>>=
 exception Failure of string list (* raised on failure to encode *)
 
 let fail l                  = raise (Failure l)
@@ -111,7 +136,7 @@ let check_simm13 simm13 =
    
 let imode simm13 = 
     ( check_simm13 simm13     
-    ; Rtl.bits (Bitops.sx (Bits.of_nativeint simm13 13) 32) 32
+    ; Rtl.bits (Bitops.sx (Bits.U.of_native simm13 13) 32) 32
     )
 
 let rmode rs2     = Rtl.fetch rs2 32
@@ -124,40 +149,42 @@ let dispa rs1 simm13 =
     ( check_simm13 simm13
     ; Rtl.app (Rtl.opr "add" [32]) 
         [ Rtl.fetch rs1 32
-        ; Rtl.bits (Bitops.sx (Bits.of_nativeint simm13 13) 32) 32
+        ; Rtl.bits (Bitops.sx (Bits.U.of_native simm13 13) 32) 32
         ]
     )
 
 let absolutea simm13 = 
     ( check_simm13 simm13
-    ; Rtl.bits (Bitops.sx (Bits.of_nativeint simm13 13) 32) 32
+    ; Rtl.bits (Bitops.sx (Bits.U.of_native simm13 13) 32) 32
     )
 
 let indexa rs1 rs2 = 
   Rtl.app (Rtl.opr "add" [32]) [Rtl.fetch rs1 32; Rtl.fetch rs2 32]
+
+let indirecta rs1 = Rtl.fetch rs1 32
 @
 
 A [[target]] inside an instruction is a relocatable address. It is
 represented by an expression that is either a 32-bit value, or a sum of
 symbol and a 32-bit value. The recognizer knows about this convention.
 
-<<minisparc.ml>>=
+<<Mk Encoder>>=
 let target t =
     match Reloc.normalize t with
-    | None  , c -> Rtl.bits (Bits.of_nativeint c 32)  32
+    | None  , c -> Rtl.bits (Bits.U.of_native c 32)  32
     | Some s, c -> Rtl.app (Rtl.opr "add" [32]) 
                     [ Rtl.link s 32
-                    ; Rtl.bits (Bits.of_nativeint c 32) 32
+                    ; Rtl.bits (Bits.U.of_native c 32) 32
                     ]
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Instructions}
+\subsection{Encoder: Instructions}
 % ------------------------------------------------------------------ 
 
 We only implement instructions we actually use.
 
-<<minisparc.ml>>=
+<<Mk Encoder>>=
 let add rs1 reg_or_imm rd = 
     Rtl.store rd 
         (Rtl.app (Rtl.opr "add" [32]) [Rtl.fetch rs1 32; reg_or_imm]) 32
@@ -168,129 +195,139 @@ let and_ rs1 reg_or_imm rd =
 
 let ba t = 
     Rtl.store (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits 
-        (Bits.of_int 5 3) 3)) (target t) 32
+        (Bits.U.of_int 5 3) 3)) (target t) 32
 
 let be t = 
   Rtl.guard (Rtl.app (Rtl.opr "ne" [1]) [Rtl.fetch (Rtl.slice 1 22 (Rtl.cell 
-            Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3) 3))) 1; 
-      Rtl.bits (Bits.of_int 0 1) 1]) (Rtl.store 
-      (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 5 3) 3)) 
+            Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 0 3) 3))) 1; 
+      Rtl.bits (Bits.U.of_int 0 1) 1]) (Rtl.store 
+      (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 5 3) 3)) 
       (target t) 32)
 
 let bg t = 
   Rtl.guard (Rtl.app (Rtl.opr "ne" [1]) [Rtl.app (Rtl.opr "com" [1]) [Rtl.app 
           (Rtl.opr "or" [1]) [Rtl.fetch (Rtl.slice 1 22 (Rtl.cell Rtl.none 
-                'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3) 3))) 1; 
+                'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 0 3) 3))) 1; 
           Rtl.app (Rtl.opr "xor" [1]) [Rtl.fetch (Rtl.slice 1 23 (Rtl.cell 
-                  Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3) 
+                  Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 0 3) 
                     3))) 1; Rtl.fetch (Rtl.slice 1 21 (Rtl.cell Rtl.none 'i' 
-                  Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3) 3))) 1]]]; 
-      Rtl.bits (Bits.of_int 0 1) 1]) (Rtl.store 
-      (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 5 3) 3)) 
+                  Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 0 3) 3))) 1]]]; 
+      Rtl.bits (Bits.U.of_int 0 1) 1]) (Rtl.store 
+      (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 5 3) 3)) 
       (target t) 32)
 
 let bge t = 
   Rtl.guard (Rtl.app (Rtl.opr "ne" [1]) [Rtl.app (Rtl.opr "com" [1]) 
         [Rtl.app (Rtl.opr "xor" [1]) [Rtl.fetch (Rtl.slice 1 23 (Rtl.cell 
-                Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3) 3))) 
+                Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 0 3) 3))) 
             1; Rtl.fetch (Rtl.slice 1 21 (Rtl.cell Rtl.none 'i' Rtl.Identity 
-                32 (Rtl.bits (Bits.of_int 0 3) 3))) 1]]; Rtl.bits 
-        (Bits.of_int 0 1) 1]) (Rtl.store 
-      (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 5 3) 3)) 
+                32 (Rtl.bits (Bits.U.of_int 0 3) 3))) 1]]; Rtl.bits 
+        (Bits.U.of_int 0 1) 1]) (Rtl.store 
+      (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 5 3) 3)) 
       (target t) 32)
 
 let bgu t = 
   Rtl.guard (Rtl.app (Rtl.opr "ne" [1]) [Rtl.app (Rtl.opr "com" [1]) 
         [Rtl.app (Rtl.opr "or" [1]) [Rtl.fetch (Rtl.slice 1 20 (Rtl.cell 
-                Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3) 3))) 
+                Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 0 3) 3))) 
             1; Rtl.fetch (Rtl.slice 1 22 (Rtl.cell Rtl.none 'i' Rtl.Identity 
-                32 (Rtl.bits (Bits.of_int 0 3) 3))) 1]]; Rtl.bits 
-        (Bits.of_int 0 1) 1]) (Rtl.store 
-      (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 5 3) 3)) 
+                32 (Rtl.bits (Bits.U.of_int 0 3) 3))) 1]]; Rtl.bits 
+        (Bits.U.of_int 0 1) 1]) (Rtl.store 
+      (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 5 3) 3)) 
       (target t) 32)
 
 let bl t = 
   Rtl.guard (Rtl.app (Rtl.opr "ne" [1]) [Rtl.app (Rtl.opr "xor" [1]) 
         [Rtl.fetch (Rtl.slice 1 23 (Rtl.cell Rtl.none 'i' Rtl.Identity 32 
-              (Rtl.bits (Bits.of_int 0 3) 3))) 1; Rtl.fetch 
+              (Rtl.bits (Bits.U.of_int 0 3) 3))) 1; Rtl.fetch 
           (Rtl.slice 1 21 (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits 
-                (Bits.of_int 0 3) 3))) 1]; Rtl.bits (Bits.of_int 0 1) 1]) 
-    (Rtl.store (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 
+                (Bits.U.of_int 0 3) 3))) 1]; Rtl.bits (Bits.U.of_int 0 1) 1]) 
+    (Rtl.store (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 
             5 3) 3)) (target t) 32)
 
 let ble t = 
   Rtl.guard (Rtl.app (Rtl.opr "ne" [1]) [Rtl.app (Rtl.opr "or" [1]) 
         [Rtl.fetch (Rtl.slice 1 22 (Rtl.cell Rtl.none 'i' Rtl.Identity 32 
-              (Rtl.bits (Bits.of_int 0 3) 3))) 1; Rtl.app (Rtl.opr "xor" [1]) 
+              (Rtl.bits (Bits.U.of_int 0 3) 3))) 1; Rtl.app (Rtl.opr "xor" [1]) 
           [Rtl.fetch (Rtl.slice 1 23 (Rtl.cell Rtl.none 'i' Rtl.Identity 32 
-                (Rtl.bits (Bits.of_int 0 3) 3))) 1; Rtl.fetch 
+                (Rtl.bits (Bits.U.of_int 0 3) 3))) 1; Rtl.fetch 
             (Rtl.slice 1 21 (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits 
-                  (Bits.of_int 0 3) 3))) 1]]; Rtl.bits (Bits.of_int 0 1) 1]) 
-    (Rtl.store (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 
+                  (Bits.U.of_int 0 3) 3))) 1]]; Rtl.bits (Bits.U.of_int 0 1) 1]) 
+    (Rtl.store (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 
             5 3) 3)) (target t) 32)
 
 let bleu t = 
   Rtl.guard (Rtl.app (Rtl.opr "ne" [1]) [Rtl.app (Rtl.opr "or" [1]) 
         [Rtl.fetch (Rtl.slice 1 20 (Rtl.cell Rtl.none 'i' Rtl.Identity 32 
-              (Rtl.bits (Bits.of_int 0 3) 3))) 1; Rtl.fetch 
+              (Rtl.bits (Bits.U.of_int 0 3) 3))) 1; Rtl.fetch 
           (Rtl.slice 1 22 (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits 
-                (Bits.of_int 0 3) 3))) 1]; Rtl.bits (Bits.of_int 0 1) 1]) 
-    (Rtl.store (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 
+                (Bits.U.of_int 0 3) 3))) 1]; Rtl.bits (Bits.U.of_int 0 1) 1]) 
+    (Rtl.store (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 
             5 3) 3)) (target t) 32)
 
 let bn t = 
   Rtl.guard (Rtl.bool false) (Rtl.store 
-      (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 5 3) 3)) 
+      (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 5 3) 3)) 
       (target t) 32)
+
+
+let bne t = 
+  Rtl.guard (Rtl.app (Rtl.opr "ne" [1]) [Rtl.app (Rtl.opr "com" [1]) 
+        [Rtl.fetch (Rtl.slice 1 22 (Rtl.cell Rtl.none 'i' Rtl.Identity 32 
+              (Rtl.bits (Bits.U.of_int 0 3) 3))) 1]; Rtl.bits (Bits.U.of_int 0 1) 
+        1]) (Rtl.store 
+      (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 5 3) 3)) 
+      (target t) 32)
+
 
 let subcc rs1 reg_or_imm rd = Rtl.par [Rtl.store rd (Rtl.app
     (Rtl.opr "sub" [32]) [Rtl.fetch rs1 32; reg_or_imm]) 32;
     Rtl.guard (Rtl.app (Rtl.opr "lt" [32]) [Rtl.app (Rtl.opr "sub" [32])
-    [Rtl.fetch rs1 32; reg_or_imm]; Rtl.bits (Bits.of_int 0 32) 32])
+    [Rtl.fetch rs1 32; reg_or_imm]; Rtl.bits (Bits.U.of_int 0 32) 32])
     (Rtl.store (Rtl.slice 1 23 (Rtl.cell Rtl.none 'i' Rtl.Identity 32
-    (Rtl.bits (Bits.of_int 0 3) 3))) (Rtl.bits (Bits.of_int 1 1) 1) 1);
+    (Rtl.bits (Bits.U.of_int 0 3) 3))) (Rtl.bits (Bits.U.of_int 1 1) 1) 1);
     Rtl.guard (Rtl.app (Rtl.opr "ge" [32]) [Rtl.app (Rtl.opr "sub" [32])
-    [Rtl.fetch rs1 32; reg_or_imm]; Rtl.bits (Bits.of_int 0 32) 32])
+    [Rtl.fetch rs1 32; reg_or_imm]; Rtl.bits (Bits.U.of_int 0 32) 32])
     (Rtl.store (Rtl.slice 1 23 (Rtl.cell Rtl.none 'i' Rtl.Identity 32
-    (Rtl.bits (Bits.of_int 0 3) 3))) (Rtl.bits (Bits.of_int 0 1) 1) 1);
+    (Rtl.bits (Bits.U.of_int 0 3) 3))) (Rtl.bits (Bits.U.of_int 0 1) 1) 1);
     Rtl.guard (Rtl.app (Rtl.opr "eq" [32]) [Rtl.app (Rtl.opr "sub" [32])
-    [Rtl.fetch rs1 32; reg_or_imm]; Rtl.bits (Bits.of_int 0 32) 32])
+    [Rtl.fetch rs1 32; reg_or_imm]; Rtl.bits (Bits.U.of_int 0 32) 32])
     (Rtl.store (Rtl.slice 1 22 (Rtl.cell Rtl.none 'i' Rtl.Identity 32
-    (Rtl.bits (Bits.of_int 0 3) 3))) (Rtl.bits (Bits.of_int 1 1) 1) 1);
+    (Rtl.bits (Bits.U.of_int 0 3) 3))) (Rtl.bits (Bits.U.of_int 1 1) 1) 1);
     Rtl.guard (Rtl.app (Rtl.opr "ne" [32]) [Rtl.app (Rtl.opr "sub" [32])
-    [Rtl.fetch rs1 32; reg_or_imm]; Rtl.bits (Bits.of_int 0 32) 32])
+    [Rtl.fetch rs1 32; reg_or_imm]; Rtl.bits (Bits.U.of_int 0 32) 32])
     (Rtl.store (Rtl.slice 1 22 (Rtl.cell Rtl.none 'i' Rtl.Identity 32
-    (Rtl.bits (Bits.of_int 0 3) 3))) (Rtl.bits (Bits.of_int 0 1) 1) 1);
+    (Rtl.bits (Bits.U.of_int 0 3) 3))) (Rtl.bits (Bits.U.of_int 0 1) 1) 1);
     Rtl.guard (Rtl.app (Rtl.opr "conjoin" []) [Rtl.app (Rtl.opr "ne"
     [1]) [Rtl.app (Rtl.opr "bitExtract" [32; 32; 1]) [Rtl.bits
-    (Bits.of_int 31 32) 32; Rtl.fetch rs1 32]; Rtl.app (Rtl.opr
-    "bitExtract" [32; 32; 1]) [Rtl.bits (Bits.of_int 31 32) 32;
+    (Bits.U.of_int 31 32) 32; Rtl.fetch rs1 32]; Rtl.app (Rtl.opr
+    "bitExtract" [32; 32; 1]) [Rtl.bits (Bits.U.of_int 31 32) 32;
     reg_or_imm]]; Rtl.app (Rtl.opr "ne" [1]) [Rtl.app (Rtl.opr
-    "bitExtract" [32; 32; 1]) [Rtl.bits (Bits.of_int 31 32) 32;
+    "bitExtract" [32; 32; 1]) [Rtl.bits (Bits.U.of_int 31 32) 32;
     Rtl.fetch rs1 32]; Rtl.app (Rtl.opr "bitExtract" [32; 32; 1])
-    [Rtl.bits (Bits.of_int 31 32) 32; Rtl.app (Rtl.opr "sub" [32])
+    [Rtl.bits (Bits.U.of_int 31 32) 32; Rtl.app (Rtl.opr "sub" [32])
     [Rtl.fetch rs1 32; reg_or_imm]]]]) (Rtl.store (Rtl.slice 1 21
-    (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3)
-    3))) (Rtl.bits (Bits.of_int 1 1) 1) 1); Rtl.guard (Rtl.app (Rtl.opr
+    (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 0 3)
+    3))) (Rtl.bits (Bits.U.of_int 1 1) 1) 1); Rtl.guard (Rtl.app (Rtl.opr
     "conjoin" []) [Rtl.app (Rtl.opr "ne" [1]) [Rtl.app (Rtl.opr
-    "bitExtract" [32; 32; 1]) [Rtl.bits (Bits.of_int 31 32) 32;
+    "bitExtract" [32; 32; 1]) [Rtl.bits (Bits.U.of_int 31 32) 32;
     Rtl.fetch rs1 32]; Rtl.app (Rtl.opr "bitExtract" [32; 32; 1])
-    [Rtl.bits (Bits.of_int 31 32) 32; reg_or_imm]]; Rtl.app (Rtl.opr
+    [Rtl.bits (Bits.U.of_int 31 32) 32; reg_or_imm]]; Rtl.app (Rtl.opr
     "eq" [1]) [Rtl.app (Rtl.opr "bitExtract" [32; 32; 1]) [Rtl.bits
-    (Bits.of_int 31 32) 32; Rtl.fetch rs1 32]; Rtl.app (Rtl.opr
-    "bitExtract" [32; 32; 1]) [Rtl.bits (Bits.of_int 31 32) 32; Rtl.app
+    (Bits.U.of_int 31 32) 32; Rtl.fetch rs1 32]; Rtl.app (Rtl.opr
+    "bitExtract" [32; 32; 1]) [Rtl.bits (Bits.U.of_int 31 32) 32; Rtl.app
     (Rtl.opr "sub" [32]) [Rtl.fetch rs1 32; reg_or_imm]]]])
     (Rtl.store (Rtl.slice 1 21 (Rtl.cell Rtl.none 'i' Rtl.Identity 32
-    (Rtl.bits (Bits.of_int 0 3) 3))) (Rtl.bits (Bits.of_int 0 1) 1) 1);
+    (Rtl.bits (Bits.U.of_int 0 3) 3))) (Rtl.bits (Bits.U.of_int 0 1) 1) 1);
     Rtl.guard (Rtl.app (Rtl.opr "eq" [1]) [Rtl.app (Rtl.opr "bitExtract"
-    [32; 32; 1]) [Rtl.bits (Bits.of_int 31 32) 32; Rtl.fetch rs1
+    [32; 32; 1]) [Rtl.bits (Bits.U.of_int 31 32) 32; Rtl.fetch rs1
     32]; Rtl.app (Rtl.opr "bitExtract" [32; 32; 1]) [Rtl.bits
-    (Bits.of_int 31 32) 32; reg_or_imm]]) (Rtl.store (Rtl.slice 1 21
-    (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3)
-    3))) (Rtl.bits (Bits.of_int 0 1) 1) 1); Rtl.store (Rtl.slice 1 20
-    (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.of_int 0 3)
+    (Bits.U.of_int 31 32) 32; reg_or_imm]]) (Rtl.store (Rtl.slice 1 21
+    (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 0 3)
+    3))) (Rtl.bits (Bits.U.of_int 0 1) 1) 1); Rtl.store (Rtl.slice 1 20
+    (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 0 3)
     3))) (Rtl.app (Rtl.opr "borrow" [32]) [Rtl.fetch rs1 32;
-    reg_or_imm; Rtl.bits (Bits.of_int 0 1) 1]) 1]
+    reg_or_imm; Rtl.bits (Bits.U.of_int 0 1) 1]) 1]
 
 let cmp rs1 reg_or_imm = 
     subcc rs1 reg_or_imm r0
@@ -301,11 +338,11 @@ let fmovs fs2 fd =
 
 let ld address rd = 
     Rtl.store rd 
-        (Rtl.fetch (Rtl.cell Rtl.none 'm' Rtl.Identity 32 address) 32) 32
+        (Rtl.fetch (Rtl.cell Rtl.none 'm' Rtl.BigEndian 32 address) 32) 32
 
 let ldf address fd = 
     Rtl.store fd 
-        (Rtl.fetch (Rtl.cell Rtl.none 'm' Rtl.Identity 32 address) 32) 32
+        (Rtl.fetch (Rtl.cell Rtl.none 'm' Rtl.BigEndian 32 address) 32) 32
 
 let or_ rs1 reg_or_imm rd = 
     Rtl.store rd 
@@ -329,32 +366,594 @@ let nop = Rtl.par []    (* XXX just guessed *)
 
 let sethi n rd = 
     Rtl.store rd (Rtl.bits 
-        (Bitops.bitInsert 0 (Bits.of_nativeint n 32) (Bits.of_int 0 10)) 32) 32
+        (Bitops.bitInsert 0 (Bits.U.of_native n 32) (Bits.U.of_int 0 10)) 32) 32
 
 let sll rs1 reg_or_imm rd = 
     Rtl.store rd (Rtl.app (Rtl.opr "shl" [32; 5]) 
         [Rtl.fetch rs1 32; Rtl.app (Rtl.opr "bitExtract" 
-            [32; 32; 5]) [Rtl.bits (Bits.of_int 0 32) 32; reg_or_imm]]) 32
+            [32; 32; 5]) [Rtl.bits (Bits.U.of_int 0 32) 32; reg_or_imm]]) 32
 
 let sra rs1 reg_or_imm rd = 
     Rtl.store rd (Rtl.app (Rtl.opr "shra" [32; 5]) 
         [Rtl.fetch rs1 32; Rtl.app (Rtl.opr "bitExtract" 
-            [32; 32; 5]) [Rtl.bits (Bits.of_int 0 32) 32; reg_or_imm]]) 32
+            [32; 32; 5]) [Rtl.bits (Bits.U.of_int 0 32) 32; reg_or_imm]]) 32
 
 let srl rs1 reg_or_imm rd = 
     Rtl.store rd (Rtl.app (Rtl.opr "shrl" [32; 5]) 
         [Rtl.fetch rs1 32; Rtl.app (Rtl.opr "bitExtract" 
-            [32; 32; 5]) [Rtl.bits (Bits.of_int 0 32) 32; reg_or_imm]]) 32
+            [32; 32; 5]) [Rtl.bits (Bits.U.of_int 0 32) 32; reg_or_imm]]) 32
 
 let st rd address = 
-    Rtl.store (Rtl.cell Rtl.none 'm' Rtl.Identity 32 address) 
+    Rtl.store (Rtl.cell Rtl.none 'm' Rtl.BigEndian 32 address) 
         (Rtl.fetch rd 32) 32
 
 let stf fd address = 
-    Rtl.store (Rtl.cell Rtl.none 'm' Rtl.Identity 32 address) 
+    Rtl.store (Rtl.cell Rtl.none 'm' Rtl.BigEndian 32 address) 
         (Rtl.fetch fd 32) 32
 
 let xor rs1 reg_or_imm rd = 
     Rtl.store rd (Rtl.app (Rtl.opr "xor" [32]) 
       [Rtl.fetch rs1 32; reg_or_imm]) 32
 @
+
+
+% ------------------------------------------------------------------ 
+\subsection{Decoder: Interface}
+% ------------------------------------------------------------------ 
+
+The decoder recognizes {\sparc} instructions in {\rtl} representations:
+the [[decode]] functions returns the recognized instruction which then
+can be emitted using functionality from [[Instruction]]. If [[decode]]
+does not recognize the {\rtl} it is applied to, it raises
+[[Sledlib.Failure]].
+
+<<msparcdec.mli>>=
+module Mk(Reloc: Sledlib.RELOC_PRINT with type symbol = Reladdr.symbol):
+sig
+    module Instruction: Sparc.S with type t = Sledlib.String.t
+    val decode : Rtl.rtl -> Instruction.t   (* Sledlib.Failure *)
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Decoder: Implementation}
+% ------------------------------------------------------------------ 
+
+The decoder recognizes {\sparc} instructions in {\rtl} representation
+and calls a corresponding function that emits it. The decoder is
+parameterized over the representation of relocatable addresses.
+
+<<msparcdec.ml>>=
+module Mk(Reloc: Sledlib.RELOC_PRINT with type symbol = Reladdr.symbol) = 
+struct 
+    <<Mk Decoder>>
+end
+@
+
+First, we create an emitter. It provides an abstract representation for
+{\sparc} instructions and functions to emit them.
+
+<<Mk Decoder>>=
+module Instruction = Sparcmkasm.M (Reloc)
+@
+
+Next, some abbreviations. They are used by the machine generated code
+that we use as a template.
+
+<<Mk Decoder>>=
+module RP = Rtl.Private
+module B  = Bits
+module BO = Bitops
+@
+
+The heart of the decode is one big pattern matching function that
+decomposes a {\sparc} instruction in {\rtl} representation and calls the
+emitter.
+
+<<Mk Decoder>>=
+<<target decoder>>
+
+let decode rtl = match Rtl.Convert.rtl rtl with
+    <<instructions>>
+  | _ -> ( prerr_endline (Rtlutil.ToString.rtl rtl)
+         ; Sledlib.fail [ "above RTL is not an instruction" ]
+         )
+@        
+
+<<instructions>>=
+| RP.Rtl [(RP.Const (RP.Bool true), 
+        RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
+          RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+              RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
+                Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] -> 
+           Instruction.add (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
+
+| RP.Rtl [(RP.Const (RP.Bool true), 
+          RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
+            RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+                RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg373)]), 
+            32))] 
+      when Base.to_bool (Bitops.fits_signed arg373 13) -> 
+           Instruction.add (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg373)) (Bits.U.to_native rd) 
+
+<<instructions>>=
+| RP.Rtl [(RP.Const (RP.Bool true), 
+          RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
+            RP.App (("and", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+                RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg139)]), 
+            32))] 
+      when Base.to_bool (Bitops.fits_signed arg139 13) -> 
+           Instruction.and_ (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg139)) (Bits.U.to_native rd) 
+@
+
+A relocatable address inside an instruction can take either form: a
+literal value, or a sum of a symbol and a literal value. We match the
+relocatable address with [[t]] and pass it to [[traget]] to (re-)
+construct a relocatable value.
+
+<<target decoder>>=
+let target = function
+    | RP.Const (RP.Bits b) -> 
+        Reloc.of_const (Bits.U.to_native b)
+    | RP.App (("add", [32]),[RP.Const (RP.Link(s,_)); RP.Const (RP.Bits b)]) ->
+        Reloc.of_sum s (Bits.U.to_native b) 
+    | _ -> Sledlib.fail ["illformed relocatable address"]
+
+<<instructions>>=
+| RP.Rtl [(RP.Const (RP.Bool true), 
+          RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5649), 
+            _), t, 32))] 
+      when Base.to_bool (Bitops.eq arg5649 (Bits.U.of_int 5 3)) -> 
+           Instruction.ba (target t) 
+@
+
+<<instructions>>=
+| RP.Rtl [(RP.App (("ne", [1]), [RP.Fetch (RP.Slice (1, 22, 
+    RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5624), _)), 
+    1); RP.Const (RP.Bits arg5625)]), 
+  RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5626), 
+    _), t, 32))] 
+when Base.to_bool (Bitops.eq arg5624 (Bits.U.of_int 0 3) && Bitops.eq 
+    arg5625 (Bits.U.of_int 0 1) && Bitops.eq arg5626 
+    (Bits.U.of_int 5 3)) -> Instruction.be (target t)
+@
+
+
+<<instructions>>=
+| RP.Rtl [(RP.App (("ne", [1]), [RP.App (("com", [1]), 
+    [RP.App (("or", [1]), [RP.Fetch (RP.Slice (1, 22, RP.Cell ('i', 
+          Rtl.Identity, 32, RP.Const (RP.Bits arg5655), _)), 1); 
+        RP.App (("xor", [1]), [RP.Fetch (RP.Slice (1, 23, RP.Cell ('i', 
+              Rtl.Identity, 32, RP.Const (RP.Bits arg5654), _)), 1); 
+            RP.Fetch (RP.Slice (1, 21, RP.Cell ('i', Rtl.Identity, 32, 
+                RP.Const (RP.Bits arg5653), _)), 1)])])]); 
+    RP.Const (RP.Bits arg5656)]), 
+  RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5657), 
+    _), t, 32))] 
+when Base.to_bool (Bitops.eq arg5655 (Bits.U.of_int 0 3) && Bitops.eq 
+    arg5654 (Bits.U.of_int 0 3) && Bitops.eq arg5653 (Bits.U.of_int 0 3) && 
+  Bitops.eq arg5656 (Bits.U.of_int 0 1) && Bitops.eq arg5657 
+    (Bits.U.of_int 5 3)) -> Instruction.bg (target t)
+
+<<instructions>>=
+| RP.Rtl [(RP.App (("ne", [1]), [RP.App (("com", [1]), 
+    [RP.App (("xor", [1]), [RP.Fetch (RP.Slice (1, 23, RP.Cell ('i', 
+          Rtl.Identity, 32, RP.Const (RP.Bits arg5659), _)), 1); 
+        RP.Fetch (RP.Slice (1, 21, RP.Cell ('i', Rtl.Identity, 32, 
+            RP.Const (RP.Bits arg5658), _)), 1)])]); 
+    RP.Const (RP.Bits arg5660)]), 
+  RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5661), 
+    _), t, 32))] 
+when Base.to_bool (Bitops.eq arg5659 (Bits.U.of_int 0 3) && Bitops.eq 
+    arg5658 (Bits.U.of_int 0 3) && Bitops.eq arg5660 (Bits.U.of_int 0 1) && 
+  Bitops.eq arg5661 (Bits.U.of_int 5 3)) -> 
+   Instruction.bge (target t)
+
+<<instructions>>=
+| RP.Rtl [(RP.App (("ne", [1]), [RP.App (("com", [1]), 
+    [RP.App (("or", [1]), [RP.Fetch (RP.Slice (1, 20, RP.Cell ('i', 
+          Rtl.Identity, 32, RP.Const (RP.Bits arg5663), _)), 1); 
+        RP.Fetch (RP.Slice (1, 22, RP.Cell ('i', Rtl.Identity, 32, 
+            RP.Const (RP.Bits arg5662), _)), 1)])]); 
+    RP.Const (RP.Bits arg5664)]), 
+  RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5665), 
+    _), t, 32))] 
+when Base.to_bool (Bitops.eq arg5663 (Bits.U.of_int 0 3) && Bitops.eq 
+    arg5662 (Bits.U.of_int 0 3) && Bitops.eq arg5664 (Bits.U.of_int 0 1) && 
+  Bitops.eq arg5665 (Bits.U.of_int 5 3)) -> 
+   Instruction.bgu (target t) 
+
+<<instructions>>=
+| RP.Rtl [(RP.App (("ne", [1]), [RP.App (("xor", [1]), 
+    [RP.Fetch (RP.Slice (1, 23, RP.Cell ('i', Rtl.Identity, 32, 
+        RP.Const (RP.Bits arg5633), _)), 1); RP.Fetch (RP.Slice (1, 21, 
+        RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5632), 
+          _)), 1)]); RP.Const (RP.Bits arg5634)]), 
+  RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5635), 
+    _), t, 32))] 
+when Base.to_bool (Bitops.eq arg5633 (Bits.U.of_int 0 3) && Bitops.eq 
+    arg5632 (Bits.U.of_int 0 3) && Bitops.eq arg5634 (Bits.U.of_int 0 1) && 
+  Bitops.eq arg5635 (Bits.U.of_int 5 3)) -> 
+   Instruction.bl (target t)
+
+<<instructions>>=
+| RP.Rtl [(RP.App (("ne", [1]), 
+  [RP.App (("or", [1]), [RP.Fetch (RP.Slice (1, 22, RP.Cell ('i', 
+        Rtl.Identity, 32, RP.Const (RP.Bits arg5629), _)), 1); 
+      RP.App (("xor", [1]), [RP.Fetch (RP.Slice (1, 23, RP.Cell ('i', 
+            Rtl.Identity, 32, RP.Const (RP.Bits arg5628), _)), 1); 
+          RP.Fetch (RP.Slice (1, 21, RP.Cell ('i', Rtl.Identity, 32, 
+              RP.Const (RP.Bits arg5627), _)), 1)])]); 
+    RP.Const (RP.Bits arg5630)]), 
+  RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5631), 
+    _), t, 32))] 
+when Base.to_bool (Bitops.eq arg5629 (Bits.U.of_int 0 3) && Bitops.eq 
+    arg5628 (Bits.U.of_int 0 3) && Bitops.eq arg5627 (Bits.U.of_int 0 3) && 
+  Bitops.eq arg5630 (Bits.U.of_int 0 1) && Bitops.eq arg5631 
+    (Bits.U.of_int 5 3)) -> Instruction.ble (target t)
+      
+<<instructions>>=
+| RP.Rtl [(RP.App (("ne", [1]), [RP.App (("or", [1]), 
+    [RP.Fetch (RP.Slice (1, 20, RP.Cell ('i', Rtl.Identity, 32, 
+        RP.Const (RP.Bits arg5637), _)), 1); RP.Fetch (RP.Slice (1, 22, 
+        RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5636), 
+          _)), 1)]); RP.Const (RP.Bits arg5638)]), 
+  RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5639), 
+    _), t, 32))] 
+when Base.to_bool (Bitops.eq arg5637 (Bits.U.of_int 0 3) && Bitops.eq 
+    arg5636 (Bits.U.of_int 0 3) && Bitops.eq arg5638 (Bits.U.of_int 0 1) && 
+  Bitops.eq arg5639 (Bits.U.of_int 5 3)) -> 
+   Instruction.bleu (target t) 
+
+<<instructions>>=
+| RP.Rtl [(RP.Const (RP.Bool false), 
+  RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5623), 
+    _), t, 32))] 
+when Base.to_bool (Bitops.eq arg5623 (Bits.U.of_int 5 3)) -> 
+   Instruction.bn (target t)
+@   
+
+<<instructions>>=
+| RP.Rtl [(RP.App (("ne", [1]), 
+  [RP.App (("com", [1]), [RP.Fetch (RP.Slice (1, 22, 
+      RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5650), _)), 
+      1)]); RP.Const (RP.Bits arg5651)]), 
+  RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5652), 
+    _), t, 32))] 
+when Base.to_bool (Bitops.eq arg5650 (Bits.U.of_int 0 3) && Bitops.eq 
+    arg5651 (Bits.U.of_int 0 1) && Bitops.eq arg5652 
+    (Bits.U.of_int 5 3)) -> Instruction.bne (target t)
+    
+
+<<instructions>>=
+| RP.Rtl [(RP.Const (RP.Bool true), 
+  RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
+    RP.App (("sub", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+        RP.Const (RP.Bits rs1''''''''''''), _), 32); 
+        RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+          RP.Const (RP.Bits rs2''''''''''), _), 32)]), 32)); 
+  (RP.App (("lt", [32]), 
+    [RP.App (("sub", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+        RP.Const (RP.Bits rs1'''''''''''), _), 32); 
+        RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+          RP.Const (RP.Bits rs2'''''''''), _), 32)]); 
+      RP.Const (RP.Bits arg729)]), RP.Store (RP.Slice (1, 23, 
+      RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg730), _)), 
+      RP.Const (RP.Bits arg731), 1)); (RP.App (("ge", [32]), 
+    [RP.App (("sub", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+        RP.Const (RP.Bits rs1''''''''''), _), 32); 
+        RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+          RP.Const (RP.Bits rs2''''''''), _), 32)]); 
+      RP.Const (RP.Bits arg726)]), RP.Store (RP.Slice (1, 23, 
+      RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg727), _)), 
+      RP.Const (RP.Bits arg728), 1)); (RP.App (("eq", [32]), 
+    [RP.App (("sub", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+        RP.Const (RP.Bits rs1'''''''''), _), 32); 
+        RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+          RP.Const (RP.Bits rs2'''''''), _), 32)]); 
+      RP.Const (RP.Bits arg723)]), RP.Store (RP.Slice (1, 22, 
+      RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg724), _)), 
+      RP.Const (RP.Bits arg725), 1)); (RP.App (("ne", [32]), 
+    [RP.App (("sub", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+        RP.Const (RP.Bits rs1''''''''), _), 32); 
+        RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+          RP.Const (RP.Bits rs2''''''), _), 32)]); 
+      RP.Const (RP.Bits arg720)]), RP.Store (RP.Slice (1, 22, 
+      RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg721), _)), 
+      RP.Const (RP.Bits arg722), 1)); (RP.App (("conjoin", []), 
+    [RP.App (("ne", [1]), [RP.App (("bitExtract", [32; 32; 1]), 
+        [RP.Const (RP.Bits arg717); RP.Fetch (RP.Cell ('r', 
+            Rtl.Identity, 32, RP.Const (RP.Bits rs1'''''''), _), 32)]); 
+        RP.App (("bitExtract", [32; 32; 1]), 
+          [RP.Const (RP.Bits arg716); 
+            RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+              RP.Const (RP.Bits rs2'''''), _), 32)])]); 
+      RP.App (("ne", [1]), [RP.App (("bitExtract", [32; 32; 1]), 
+          [RP.Const (RP.Bits arg715); RP.Fetch (RP.Cell ('r', 
+              Rtl.Identity, 32, RP.Const (RP.Bits rs1''''''), _), 
+              32)]); RP.App (("bitExtract", [32; 32; 1]), 
+            [RP.Const (RP.Bits arg714); RP.App (("sub", [32]), 
+                [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+                  RP.Const (RP.Bits rs1'''''), _), 32); 
+                  RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+                    RP.Const (RP.Bits rs2''''), _), 32)])])])]), 
+    RP.Store (RP.Slice (1, 21, 
+      RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg718), _)), 
+      RP.Const (RP.Bits arg719), 1)); (RP.App (("conjoin", []), 
+    [RP.App (("ne", [1]), [RP.App (("bitExtract", [32; 32; 1]), 
+        [RP.Const (RP.Bits arg711); RP.Fetch (RP.Cell ('r', 
+            Rtl.Identity, 32, RP.Const (RP.Bits rs1''''), _), 32)]); 
+        RP.App (("bitExtract", [32; 32; 1]), 
+          [RP.Const (RP.Bits arg710); RP.Fetch (RP.Cell ('r', 
+              Rtl.Identity, 32, RP.Const (RP.Bits rs2'''), _), 32)])]); 
+      RP.App (("eq", [1]), [RP.App (("bitExtract", [32; 32; 1]), 
+          [RP.Const (RP.Bits arg709); RP.Fetch (RP.Cell ('r', 
+              Rtl.Identity, 32, RP.Const (RP.Bits rs1'''), _), 32)]); 
+          RP.App (("bitExtract", [32; 32; 1]), 
+            [RP.Const (RP.Bits arg708); 
+              RP.App (("sub", [32]), [RP.Fetch (RP.Cell ('r', 
+                  Rtl.Identity, 32, RP.Const (RP.Bits rs1''), _), 32); 
+                  RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+                    RP.Const (RP.Bits rs2''), _), 32)])])])]), 
+    RP.Store (RP.Slice (1, 21, RP.Cell ('i', Rtl.Identity, 32, 
+        RP.Const (RP.Bits arg712), _)), RP.Const (RP.Bits arg713), 1)); 
+  (RP.App (("eq", [1]), [RP.App (("bitExtract", [32; 32; 1]), 
+      [RP.Const (RP.Bits arg705); RP.Fetch (RP.Cell ('r', Rtl.Identity, 
+          32, RP.Const (RP.Bits rs1'), _), 32)]); 
+      RP.App (("bitExtract", [32; 32; 1]), 
+        [RP.Const (RP.Bits arg704); RP.Fetch (RP.Cell ('r', 
+            Rtl.Identity, 32, RP.Const (RP.Bits rs2'), _), 32)])]), 
+    RP.Store (RP.Slice (1, 21, RP.Cell ('i', Rtl.Identity, 32, 
+        RP.Const (RP.Bits arg706), _)), RP.Const (RP.Bits arg707), 1)); 
+  (RP.Const (RP.Bool true), RP.Store (RP.Slice (1, 20, 
+      RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg702), _)), 
+      RP.App (("borrow", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
+          32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
+            Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32); 
+          RP.Const (RP.Bits arg703)]), 1))] 
+when Base.to_bool (rs1 = rs1'''''''''''' && rs2 = rs2'''''''''' && 
+  rs1 = rs1''''''''''' && rs2 = rs2''''''''' && rs1 = rs1'''''''''' && 
+  rs2 = rs2'''''''' && rs1 = rs1''''''''' && rs2 = rs2''''''' && 
+  rs1 = rs1'''''''' && rs2 = rs2'''''' && rs1 = rs1''''''' && 
+  rs2 = rs2''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
+  rs2 = rs2'''' && rs1 = rs1'''' && rs2 = rs2''' && rs1 = rs1''' && 
+  rs1 = rs1'' && rs2 = rs2'' && rs1 = rs1' && rs2 = rs2' && (Bitops.eq 
+    arg729 (Bits.U.of_int 0 32) && Bitops.eq arg730 (Bits.U.of_int 0 3) && 
+  Bitops.eq arg731 (Bits.U.of_int 1 1) && Bitops.eq arg726 (Bits.U.of_int 0 
+      32) && Bitops.eq arg727 (Bits.U.of_int 0 3) && Bitops.eq arg728 
+    (Bits.U.of_int 0 1) && Bitops.eq arg723 (Bits.U.of_int 0 32) && 
+  Bitops.eq arg724 (Bits.U.of_int 0 3) && Bitops.eq arg725 (Bits.U.of_int 1 
+      1) && Bitops.eq arg720 (Bits.U.of_int 0 32) && Bitops.eq arg721 
+    (Bits.U.of_int 0 3) && Bitops.eq arg722 (Bits.U.of_int 0 1) && 
+  Bitops.eq arg717 (Bits.U.of_int 31 32) && Bitops.eq arg716 (Bits.U.of_int 
+      31 32) && Bitops.eq arg715 (Bits.U.of_int 31 32) && Bitops.eq 
+    arg714 (Bits.U.of_int 31 32) && Bitops.eq arg718 (Bits.U.of_int 0 3) && 
+  Bitops.eq arg719 (Bits.U.of_int 1 1) && Bitops.eq arg711 
+    (Bits.U.of_int 31 32) && Bitops.eq arg710 (Bits.U.of_int 31 32) && 
+  Bitops.eq arg709 (Bits.U.of_int 31 32) && Bitops.eq arg708 (Bits.U.of_int 
+      31 32) && Bitops.eq arg712 (Bits.U.of_int 0 3) && Bitops.eq arg713 
+    (Bits.U.of_int 0 1) && Bitops.eq arg705 (Bits.U.of_int 31 32) && 
+  Bitops.eq arg704 (Bits.U.of_int 31 32) && Bitops.eq arg706 (Bits.U.of_int 
+      0 3) && Bitops.eq arg707 (Bits.U.of_int 0 1) && Bitops.eq arg702 
+    (Bits.U.of_int 0 3) && Bitops.eq arg703 (Bits.U.of_int 0 1))) -> 
+   Instruction.subcc (Bits.U.to_native rs1) (Instruction.rmode 
+         (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
+
+| RP.Rtl [(RP.Const (RP.Bool true), 
+  RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
+    RP.App (("sub", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+        RP.Const (RP.Bits rs1''''''''''''), _), 32); 
+        RP.Const (RP.Bits arg701)]), 32)); (RP.App (("lt", [32]), 
+    [RP.App (("sub", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+        RP.Const (RP.Bits rs1'''''''''''), _), 32); 
+        RP.Const (RP.Bits arg697)]); RP.Const (RP.Bits arg698)]), 
+    RP.Store (RP.Slice (1, 23, 
+      RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg699), _)), 
+      RP.Const (RP.Bits arg700), 1)); (RP.App (("ge", [32]), 
+    [RP.App (("sub", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+        RP.Const (RP.Bits rs1''''''''''), _), 32); 
+        RP.Const (RP.Bits arg693)]); RP.Const (RP.Bits arg694)]), 
+    RP.Store (RP.Slice (1, 23, 
+      RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg695), _)), 
+      RP.Const (RP.Bits arg696), 1)); (RP.App (("eq", [32]), 
+    [RP.App (("sub", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+        RP.Const (RP.Bits rs1'''''''''), _), 32); 
+        RP.Const (RP.Bits arg689)]); RP.Const (RP.Bits arg690)]), 
+    RP.Store (RP.Slice (1, 22, 
+      RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg691), _)), 
+      RP.Const (RP.Bits arg692), 1)); (RP.App (("ne", [32]), 
+    [RP.App (("sub", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+        RP.Const (RP.Bits rs1''''''''), _), 32); 
+        RP.Const (RP.Bits arg685)]); RP.Const (RP.Bits arg686)]), 
+    RP.Store (RP.Slice (1, 22, 
+      RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg687), _)), 
+      RP.Const (RP.Bits arg688), 1)); (RP.App (("conjoin", []), 
+    [RP.App (("ne", [1]), [RP.App (("bitExtract", [32; 32; 1]), 
+        [RP.Const (RP.Bits arg681); RP.Fetch (RP.Cell ('r', 
+            Rtl.Identity, 32, RP.Const (RP.Bits rs1'''''''), _), 32)]); 
+        RP.Const (RP.Bits arg682)]); 
+      RP.App (("ne", [1]), [RP.App (("bitExtract", [32; 32; 1]), 
+          [RP.Const (RP.Bits arg680); RP.Fetch (RP.Cell ('r', 
+              Rtl.Identity, 32, RP.Const (RP.Bits rs1''''''), _), 
+              32)]); RP.App (("bitExtract", [32; 32; 1]), 
+            [RP.Const (RP.Bits arg679); RP.App (("sub", [32]), 
+                [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+                  RP.Const (RP.Bits rs1'''''), _), 32); 
+                  RP.Const (RP.Bits arg678)])])])]), 
+    RP.Store (RP.Slice (1, 21, 
+      RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg683), _)), 
+      RP.Const (RP.Bits arg684), 1)); (RP.App (("conjoin", []), 
+    [RP.App (("ne", [1]), [RP.App (("bitExtract", [32; 32; 1]), 
+        [RP.Const (RP.Bits arg674); RP.Fetch (RP.Cell ('r', 
+            Rtl.Identity, 32, RP.Const (RP.Bits rs1''''), _), 32)]); 
+        RP.Const (RP.Bits arg675)]); 
+      RP.App (("eq", [1]), [RP.App (("bitExtract", [32; 32; 1]), 
+          [RP.Const (RP.Bits arg673); RP.Fetch (RP.Cell ('r', 
+              Rtl.Identity, 32, RP.Const (RP.Bits rs1'''), _), 32)]); 
+          RP.App (("bitExtract", [32; 32; 1]), 
+            [RP.Const (RP.Bits arg672); 
+              RP.App (("sub", [32]), [RP.Fetch (RP.Cell ('r', 
+                  Rtl.Identity, 32, RP.Const (RP.Bits rs1''), _), 32); 
+                  RP.Const (RP.Bits arg671)])])])]), 
+    RP.Store (RP.Slice (1, 21, RP.Cell ('i', Rtl.Identity, 32, 
+        RP.Const (RP.Bits arg676), _)), RP.Const (RP.Bits arg677), 1)); 
+  (RP.App (("eq", [1]), [RP.App (("bitExtract", [32; 32; 1]), 
+      [RP.Const (RP.Bits arg667); RP.Fetch (RP.Cell ('r', Rtl.Identity, 
+          32, RP.Const (RP.Bits rs1'), _), 32)]); 
+      RP.Const (RP.Bits arg668)]), RP.Store (RP.Slice (1, 21, 
+      RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg669), _)), 
+      RP.Const (RP.Bits arg670), 1)); 
+  (RP.Const (RP.Bool true), RP.Store (RP.Slice (1, 20, 
+      RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg664), _)), 
+      RP.App (("borrow", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
+          32, RP.Const (RP.Bits rs1), _), 32); 
+          RP.Const (RP.Bits arg666); RP.Const (RP.Bits arg665)]), 1))] 
+when true (* Base.to_bool (rs1 = rs1'''''''''''' && rs1 = rs1''''''''''' && 
+  rs1 = rs1'''''''''' && rs1 = rs1''''''''' && rs1 = rs1'''''''' && 
+  rs1 = rs1''''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
+  rs1 = rs1'''' && rs1 = rs1''' && rs1 = rs1'' && rs1 = rs1' && 
+  (Bitops.fits_signed arg701 13 && Bitops.eq arg698 (Bits.U.of_int 0 
+      32) && Bitops.eq arg699 (Bits.U.of_int 0 3) && Bitops.eq arg700 
+    (Bits.U.of_int 1 1) && Bitops.eq arg694 (Bits.U.of_int 0 32) && 
+  Bitops.eq arg695 (Bits.U.of_int 0 3) && Bitops.eq arg696 (Bits.U.of_int 0 
+      1) && Bitops.eq arg690 (Bits.U.of_int 0 32) && Bitops.eq arg691 
+    (Bits.U.of_int 0 3) && Bitops.eq arg692 (Bits.U.of_int 1 1) && 
+  Bitops.eq arg686 (Bits.U.of_int 0 32) && Bitops.eq arg687 (Bits.U.of_int 
+      0 3) && Bitops.eq arg688 (Bits.U.of_int 0 1) && Bitops.eq arg681 
+    (Bits.U.of_int 31 32) && Bitops.eq arg680 (Bits.U.of_int 31 32) && 
+  Bitops.eq arg679 (Bits.U.of_int 31 32) && Bitops.eq arg683 (Bits.U.of_int 
+      0 3) && Bitops.eq arg684 (Bits.U.of_int 1 1) && Bitops.eq arg674 
+    (Bits.U.of_int 31 32) && Bitops.eq arg673 (Bits.U.of_int 31 32) && 
+  Bitops.eq arg672 (Bits.U.of_int 31 32) && Bitops.eq arg676 (Bits.U.of_int 
+      0 3) && Bitops.eq arg677 (Bits.U.of_int 0 1) && Bitops.eq arg667 
+    (Bits.U.of_int 31 32) && Bitops.eq arg669 (Bits.U.of_int 0 3) && 
+  Bitops.eq arg670 (Bits.U.of_int 0 1) && Bitops.eq arg664 
+    (Bits.U.of_int 0 3) && Bitops.eq arg665 (Bits.U.of_int 0 1))) *) -> 
+   Instruction.subcc (Bits.U.to_native rs1) (Instruction.imode 
+         (Bits.U.to_native arg701)) (Bits.U.to_native rd) 
+
+
+| RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
+    32, RP.Const (RP.Bits fd), _), RP.Fetch (RP.Cell ('f', Rtl.Identity, 
+    32, RP.Const (RP.Bits fs2), _), 32), 32))] -> 
+    Instruction.fmovs (Bits.U.to_native fs2) (Bits.U.to_native fd) 
+
+| RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
+    32, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('m', 
+      Rtl.BigEndian, 32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', 
+          Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
+          RP.Const (RP.Bits arg13)]), _), 32), 32))] 
+when Base.to_bool (Bitops.fits_signed arg13 13) -> 
+   Instruction.ld (Instruction.generala (Bits.U.to_native rs1) 
+         (Instruction.imode (Bits.U.to_native arg13))) 
+     (Bits.U.to_native rd) 
+
+| RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
+    32, RP.Const (RP.Bits fd), _), RP.Fetch (RP.Cell ('m', 
+      Rtl.BigEndian, 32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', 
+          Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
+          RP.Const (RP.Bits arg37)]), _), 32), 32))] 
+when Base.to_bool (Bitops.fits_signed arg37 13) -> 
+   Instruction.ldf (Instruction.generala (Bits.U.to_native rs1) 
+         (Instruction.imode (Bits.U.to_native arg37))) 
+     (Bits.U.to_native fd) 
+
+| RP.Rtl [(RP.Const (RP.Bool true), 
+  RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
+    RP.App (("or", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+        RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg215)]), 
+    32))] 
+when Base.to_bool (Bitops.fits_signed arg215 13) -> 
+   Instruction.or_ (Bits.U.to_native rs1) (Instruction.imode 
+         (Bits.U.to_native arg215)) (Bits.U.to_native rd) 
+      
+| RP.Rtl [(RP.Const (RP.Bool true), 
+  RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
+    RP.App (("sub", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+        RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg663)]), 
+    32))] 
+when Base.to_bool (Bitops.fits_signed arg663 13) -> 
+   Instruction.sub (Bits.U.to_native rs1) (Instruction.imode 
+         (Bits.U.to_native arg663)) (Bits.U.to_native rd) 
+
+| RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
+  32, RP.Const (RP.Bits rd), _), RP.App (("xor", [32]), 
+    [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rs1), 
+      _), 32); RP.App (("com", [32]), [RP.Fetch (RP.Cell ('r', 
+          Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)])]), 
+  32))] -> 
+   Instruction.xnor (Bits.U.to_native rs1) (Instruction.rmode 
+         (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
+
+| RP.Rtl [] -> Instruction.nop ()
+
+| RP.Rtl [(RP.Const (RP.Bool true), 
+  RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
+    RP.App (("shl", [32; 5]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
+        32, RP.Const (RP.Bits rs1), _), 32); RP.App (("bitExtract", 
+          [32; 32; 5]), [RP.Const (RP.Bits arg368); 
+            RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+              RP.Const (RP.Bits rs2), _), 32)])]), 32))] 
+when Base.to_bool (Bitops.eq arg368 (Bits.U.of_int 0 32)) -> 
+   Instruction.sll (Bits.U.to_native rs1) (Instruction.rmode 
+         (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
+
+| RP.Rtl [(RP.Const (RP.Bool true), 
+  RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
+    RP.App (("shra", [32; 5]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
+        32, RP.Const (RP.Bits rs1), _), 32); RP.App (("bitExtract", 
+          [32; 32; 5]), [RP.Const (RP.Bits arg372); 
+            RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+              RP.Const (RP.Bits rs2), _), 32)])]), 32))] 
+when Base.to_bool (Bitops.eq arg372 (Bits.U.of_int 0 32)) -> 
+   Instruction.sra (Bits.U.to_native rs1) (Instruction.rmode 
+         (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
+
+| RP.Rtl [(RP.Const (RP.Bool true), 
+  RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
+    RP.App (("shrl", [32; 5]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
+        32, RP.Const (RP.Bits rs1), _), 32); RP.App (("bitExtract", 
+          [32; 32; 5]), [RP.Const (RP.Bits arg370); 
+            RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+              RP.Const (RP.Bits rs2), _), 32)])]), 32))] 
+when Base.to_bool (Bitops.eq arg370 (Bits.U.of_int 0 32)) -> 
+   Instruction.srl (Bits.U.to_native rs1) (Instruction.rmode 
+         (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
+
+| RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.BigEndian, 
+    32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
+        32, RP.Const (RP.Bits rs1), _), 32); 
+        RP.Const (RP.Bits arg67)]), _), RP.Fetch (RP.Cell ('r', 
+      Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 32), 32))] 
+when Base.to_bool (Bitops.fits_signed arg67 13) -> 
+   Instruction.st (Bits.U.to_native rd) 
+     (Instruction.generala (Bits.U.to_native rs1) 
+       (Instruction.imode (Bits.U.to_native arg67))) 
+
+| RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.BigEndian, 
+    32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
+        32, RP.Const (RP.Bits rs1), _), 32); 
+        RP.Const (RP.Bits arg73)]), _), RP.Fetch (RP.Cell ('f', 
+      Rtl.Identity, 32, RP.Const (RP.Bits fd), _), 32), 32))] 
+when Base.to_bool (Bitops.fits_signed arg73 13) -> 
+   Instruction.stf (Bits.U.to_native fd) 
+     (Instruction.generala (Bits.U.to_native rs1) 
+       (Instruction.imode (Bits.U.to_native arg73))) 
+
+| RP.Rtl [(RP.Const (RP.Bool true), 
+  RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
+    RP.App (("xor", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+        RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg291)]), 
+    32))] 
+when Base.to_bool (Bitops.fits_signed arg291 13) -> 
+   Instruction.xor (Bits.U.to_native rs1) (Instruction.imode 
+         (Bits.U.to_native arg291)) (Bits.U.to_native rd) 
+@
+
+
+
+
+

@@ -418,10 +418,5 @@ module type S = sig
     val clrh : address:address -> t
     val set : val_:nativeint -> rd:nativeint (*[0..31]*) -> t 
   end
-
 module type Maker = 
   functor (Reloc : Sledlib.RELOCATABLE) -> S with module Reloc = Reloc
-
-
-
-

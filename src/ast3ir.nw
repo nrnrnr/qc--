@@ -247,14 +247,15 @@ and prim env target op args =
 
 and expr env target exp = 
     let word = target.Target.wordsize in
+    let literal str width cvt = Rtl.bits (cvt str width) width in
     let const default_width = function
         | Some ty -> astwidth env ty
         | None    -> default_width
     in match exp with
         | A.ExprAt(x,_)     -> expr env target x
-        | A.Int(bits,t)     -> Rtl.bits bits (const word t)
-        | A.Float(bits,t)   -> Rtl.bits bits (const word t)
-        | A.Char(bits,t)    -> Rtl.bits bits (const word t)
+        | A.Int(str,t)      -> literal  str (const word t) Bits.U.of_string
+        | A.Float(str,t)    -> literal  str (const word t) Bits.U.of_string
+        | A.Char(str,t)     -> literal  str (const word t) Bits.U.of_string
         | A.Fetch(v)        -> fetch env target v
         | A.BinOp (l,op,r)  -> prim env target op [l;r]
         | A.UnOp  (op,e)    -> prim env target op [e]
@@ -553,7 +554,7 @@ sequence, otherwise it branches to a provided label.
 \let\i\textit
 
 The translation is summarized by the following function $\C{\cdot}~f$
-that takes a boolean expression $e$ and a continuatio $f$ to branch if
+that takes a boolean expression $e$ and a continuation $f$ to branch if
 the expression evaluates to false. The result is a sequence of nodes,
 that branches to $f$ if $e$ is false, and falls through otherwise.
 
@@ -825,7 +826,7 @@ and refer to the big picture in \module{stack}.
 
 <<Make statements>>=
 and returnStmt state (cconv, kont, args) = 
-    let const e = Bits.to_int (compile_const state.env state.target e)     in
+    let const e = Bits.S.to_int (compile_const state.env state.target e)     in
     let cc      = state.target.Target.cc (Aux.Option.get default_cc cconv) in
     let (x,y)   = match kont with
                   | None       -> (0,0) (* default *)
@@ -1081,7 +1082,7 @@ module StackData = struct
                     | A.NoSize     -> 1 
                     | A.DynSize    -> assert false (* impossible *)
                     | A.FixSize(e) -> 
-                        Bits.to_int (compile_const state.env state.target e)
+                        Bits.U.to_int (compile_const state.env state.target e)
                     ) in
             let n = s * w / state.target.Target.memsize in
                 { state with mem = Area.alloc state.mem n} 
@@ -1171,7 +1172,7 @@ number of values of this type.
 <<Make memory declarations>>=
 let memdecl (env:F.env) target asm t size ini = 
     let sizeof  = astwidth env t / target.Target.memsize          in
-    let const e = Bits.to_int (compile_const env target e)     in
+    let const e = Bits.U.to_int (compile_const env target e)     in
     let n      = ( match size with
                  | A.DynSize    -> init_size ini
                  | A.NoSize     -> 1

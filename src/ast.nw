@@ -208,59 +208,15 @@ stmt        = StmtAt        (stmt, region)
             | CommentStmt   (string)
 @
 
-Constant integer, floating point, and character values are represented
-as they appear in the source code.  The [[Bits.bits]] data type is
-intended to hold all constants.  Unfortunately we do not yet know the
-a constant's width which is determined by an implicit or optional
-type.  We store all constants at the maximal width supported by our
-implementation and have to check later that is does not exceed the
-requested width.  This is especially bogus for floating point literals
-since their representation depends on the bit width.  The design of
-all this must be re-thought.  As Norman pointed out, constants are not
-the same as literals but we treat literals as constants right now. 
-Currently we only support 64 bit floating point numbers and thus our
-only choice is the right one.
-
-
-<<ast declaration>>=
-ibits       = (string)      -- view of Bits.bits 
-fbits       = (string)      -- view of Bits.bits
-cbits       = (string)      -- view of Bits.bits
-
-<<ast.view>>=
-ast.ibits <= {
-    natural_type:   Bits.bits
-    wrapper:        to_ibits 
-    unwrapper:      of_bits
-}
-
-ast.fbits <= {
-    natural_type:   Bits.bits
-    wrapper:        to_fbits 
-    unwrapper:      of_bits
-}
-
-ast.cbits <= {
-    natural_type:   Bits.bits
-    wrapper:        to_cbits 
-    unwrapper:      of_bits
-}
-
-module ast <= implementation_prologue
-%%
-let of_bits  bits  = Bits.to_string None bits
-
-let to_ibits str   = Bits.of_stringi str Bits.maxwidth
-let to_fbits str   = Bits.of_stringf str Bits.maxwidth
-let to_cbits str   = Bits.of_stringc str Bits.maxwidth
-%%
-@
+Literal constants pose a problem becaus their (bit) width cannot be
+resolved during scanning and parsing. Therefore we store strings and
+scan them later, once we know the width.
 
 <<ast declaration>>=
 expr        = ExprAt        (expr, region)
-            | Int           (ibits,ty?)
-            | Float         (fbits,ty?)
-            | Char          (cbits,ty?)
+            | Int           (string,ty?)
+            | Float         (string,ty?)
+            | Char          (string,ty?)
             | Fetch         (lvalue)
             | BinOp         (expr, op, expr)
             | UnOp          (op, expr)
@@ -386,8 +342,6 @@ let zip   = List.combine
 
 let id i        = P.text i
 let int n       = P.text (string_of_int n)
-let intlit n    = P.text (Bits.to_string None n)
-let float f     = P.text (Bits.to_string None f)
 let semi        = P.text ";"
 @
 
@@ -403,7 +357,6 @@ Todo:  write functions that escape unprintable characters in literals.
 
 <<astpp.ml>>=
 let str s       = P.text ("\"" ^ String.escaped s ^ "\"")
-let char c      = P.text (Bits.to_string None c)
 
 <<astpp.ml>>=
 let rec ty = function
@@ -445,12 +398,12 @@ and actuals xs = P.agrp (P.text "(" ^^ P.commalist actual xs ^^ P.text ")")
 <<astpp.ml>>=
 and expr = function
     | A.ExprAt(x,_)             -> expr x
-    | A.Int( i, None)           -> intlit i
-    | A.Int( i, Some t)         -> intlit i ^^ P.text "::" ^^ ty t
-    | A.Float( f, None)         -> float f
-    | A.Float( f, Some t)       -> float f ^^ P.text "::" ^^ ty t
-    | A.Char( c, None)          -> char c 
-    | A.Char( c, Some t)        -> char c ^^ P.text "::" ^^ ty t
+    | A.Int( i, None)           -> P.text i
+    | A.Int( i, Some t)         -> P.text i ^^ P.text "::" ^^ ty t
+    | A.Float( f, None)         -> P.text f
+    | A.Float( f, Some t)       -> P.text f ^^ P.text "::" ^^ ty t
+    | A.Char( c, None)          -> P.text c 
+    | A.Char( c, Some t)        -> P.text c ^^ P.text "::" ^^ ty t
     | A.Fetch(v)                -> lvalue v
     | A.BinOp(l,op,r)           -> P.agrp begin
                                  ~~ P.text "(" ^^ expr l

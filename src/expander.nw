@@ -211,10 +211,10 @@ let context t =
       t.T.spaces (fun _ -> false) in
 
   let is_temp s = match s.S.classification with
-  | S.Temp _ -> true
-  | _ -> false  in
-  let first_temp =
-    try (List.find is_temp t.T.spaces).S.space
+  | S.Temp _    -> true
+  |        _    -> false  in
+  let first_temp w =
+    try (List.find (fun s -> is_temp s && s.S.cellwidth = w) t.T.spaces).S.space
       with Not_found ->
         prerr_string ("No temporary spaces in target " ^ t.T.name ^ "\n");
         flush stderr;
@@ -222,9 +222,9 @@ let context t =
   let float_regexp = Str.regexp ".*[Ff]loat.*" in
   let is_float_space s = Str.string_match float_regexp s.S.doc 0 in
   let is_float_temp s = is_temp s && is_float_space s  in
-  let float_temp = 
+  let float_temp w = 
     try (List.find is_float_temp t.T.spaces).S.space
-      with Not_found -> first_temp  in
+      with Not_found -> first_temp w in
 
   let float_like =
     List.fold_right
@@ -243,8 +243,12 @@ let context t =
     | RP.Fetch (loc, _) -> float_like (space_of loc)
     | RP.App ((op, _), args) -> is_float_op op  in
 
-  (fun loc -> mem_like (space_of loc)),
-  fun e -> if is_float_exp e then float_temp else first_temp
+  ( (fun loc -> mem_like (space_of loc))
+  , (fun e -> if is_float_exp e then 
+                float_temp (Rtlutil.Width.exp (Rtl.Revert.exp e))
+             else 
+                first_temp (Rtlutil.Width.exp (Rtl.Revert.exp e)))
+  )              
 @ 
 <<expander.ml>>=
 module G  = Cfg4

@@ -16,9 +16,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                     RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg1)]), 
                 _), 8)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg1 13) -> 
-           Instruction.ldsb (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.imode (Bits.to_nativeint arg1))) 
-             (Bits.to_nativeint rd) 
+           Instruction.ldsb (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.imode (Bits.U.to_native arg1))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -27,9 +27,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
               8)]), 32))] -> 
-           Instruction.ldsb (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.rmode (Bits.to_nativeint rs2))) 
-             (Bits.to_nativeint rd) 
+           Instruction.ldsb (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.rmode (Bits.U.to_native rs2))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("sx", [8; 32]), 
@@ -38,16 +38,16 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                     RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg2)]), 
                 _), 8)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg2 13) -> 
-           Instruction.ldsb (Instruction.dispa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint arg2)) (Bits.to_nativeint rd) 
+           Instruction.ldsb (Instruction.dispa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native arg2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
             RP.App (("sx", [8; 32]), [RP.Fetch (RP.Cell ('m', Rtl.Identity, 8, 
                 RP.Const (RP.Bits arg3), _), 8)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg3 13) -> 
-           Instruction.ldsb (Instruction.absolutea (Bits.to_nativeint arg3)) 
-             (Bits.to_nativeint rd) 
+           Instruction.ldsb (Instruction.absolutea (Bits.U.to_native arg3)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -56,16 +56,16 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
               8)]), 32))] -> 
-           Instruction.ldsb (Instruction.indexa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+           Instruction.ldsb (Instruction.indexa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
           32, RP.Const (RP.Bits rd), _), RP.App (("sx", [8; 32]), 
             [RP.Fetch (RP.Cell ('m', Rtl.Identity, 8, RP.Fetch (RP.Cell ('r', 
                 Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32), _), 8)]), 
           32))] -> 
-           Instruction.ldsb (Instruction.indirecta (Bits.to_nativeint rs1)) 
-             (Bits.to_nativeint rd) 
+           Instruction.ldsb (Instruction.indirecta (Bits.U.to_native rs1)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("sx", [16; 32]), 
@@ -74,9 +74,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                     RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg4)]), 
                 _), 16)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg4 13) -> 
-           Instruction.ldsh (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.imode (Bits.to_nativeint arg4))) 
-             (Bits.to_nativeint rd) 
+           Instruction.ldsh (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.imode (Bits.U.to_native arg4))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -85,9 +85,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
               16)]), 32))] -> 
-           Instruction.ldsh (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.rmode (Bits.to_nativeint rs2))) 
-             (Bits.to_nativeint rd) 
+           Instruction.ldsh (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.rmode (Bits.U.to_native rs2))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("sx", [16; 32]), 
@@ -96,16 +96,16 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                     RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg5)]), 
                 _), 16)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg5 13) -> 
-           Instruction.ldsh (Instruction.dispa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint arg5)) (Bits.to_nativeint rd) 
+           Instruction.ldsh (Instruction.dispa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native arg5)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
             RP.App (("sx", [16; 32]), [RP.Fetch (RP.Cell ('m', Rtl.Identity, 
                 16, RP.Const (RP.Bits arg6), _), 16)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg6 13) -> 
-           Instruction.ldsh (Instruction.absolutea (Bits.to_nativeint arg6)) 
-             (Bits.to_nativeint rd) 
+           Instruction.ldsh (Instruction.absolutea (Bits.U.to_native arg6)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -114,16 +114,16 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
               16)]), 32))] -> 
-           Instruction.ldsh (Instruction.indexa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+           Instruction.ldsh (Instruction.indexa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
           32, RP.Const (RP.Bits rd), _), RP.App (("sx", [16; 32]), 
             [RP.Fetch (RP.Cell ('m', Rtl.Identity, 16, RP.Fetch (RP.Cell ('r', 
                 Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32), _), 16)]), 
           32))] -> 
-           Instruction.ldsh (Instruction.indirecta (Bits.to_nativeint rs1)) 
-             (Bits.to_nativeint rd) 
+           Instruction.ldsh (Instruction.indirecta (Bits.U.to_native rs1)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("zx", [8; 32]), 
@@ -132,9 +132,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                     RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg7)]), 
                 _), 8)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg7 13) -> 
-           Instruction.ldub (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.imode (Bits.to_nativeint arg7))) 
-             (Bits.to_nativeint rd) 
+           Instruction.ldub (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.imode (Bits.U.to_native arg7))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -143,9 +143,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
               8)]), 32))] -> 
-           Instruction.ldub (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.rmode (Bits.to_nativeint rs2))) 
-             (Bits.to_nativeint rd) 
+           Instruction.ldub (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.rmode (Bits.U.to_native rs2))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("zx", [8; 32]), 
@@ -154,16 +154,16 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                     RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg8)]), 
                 _), 8)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg8 13) -> 
-           Instruction.ldub (Instruction.dispa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint arg8)) (Bits.to_nativeint rd) 
+           Instruction.ldub (Instruction.dispa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native arg8)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
             RP.App (("zx", [8; 32]), [RP.Fetch (RP.Cell ('m', Rtl.Identity, 8, 
                 RP.Const (RP.Bits arg9), _), 8)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg9 13) -> 
-           Instruction.ldub (Instruction.absolutea (Bits.to_nativeint arg9)) 
-             (Bits.to_nativeint rd) 
+           Instruction.ldub (Instruction.absolutea (Bits.U.to_native arg9)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -172,16 +172,16 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
               8)]), 32))] -> 
-           Instruction.ldub (Instruction.indexa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+           Instruction.ldub (Instruction.indexa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
           32, RP.Const (RP.Bits rd), _), RP.App (("zx", [8; 32]), 
             [RP.Fetch (RP.Cell ('m', Rtl.Identity, 8, RP.Fetch (RP.Cell ('r', 
                 Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32), _), 8)]), 
           32))] -> 
-           Instruction.ldub (Instruction.indirecta (Bits.to_nativeint rs1)) 
-             (Bits.to_nativeint rd) 
+           Instruction.ldub (Instruction.indirecta (Bits.U.to_native rs1)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -190,9 +190,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                     Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                     RP.Const (RP.Bits arg10)]), _), 16)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg10 13) -> 
-           Instruction.lduh (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.imode (Bits.to_nativeint arg10))) 
-             (Bits.to_nativeint rd) 
+           Instruction.lduh (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.imode (Bits.U.to_native arg10))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -201,9 +201,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
               16)]), 32))] -> 
-           Instruction.lduh (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.rmode (Bits.to_nativeint rs2))) 
-             (Bits.to_nativeint rd) 
+           Instruction.lduh (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.rmode (Bits.U.to_native rs2))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -212,16 +212,16 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                     Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                     RP.Const (RP.Bits arg11)]), _), 16)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg11 13) -> 
-           Instruction.lduh (Instruction.dispa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint arg11)) (Bits.to_nativeint rd) 
+           Instruction.lduh (Instruction.dispa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native arg11)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
             RP.App (("zx", [16; 32]), [RP.Fetch (RP.Cell ('m', Rtl.Identity, 
                 16, RP.Const (RP.Bits arg12), _), 16)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg12 13) -> 
-           Instruction.lduh (Instruction.absolutea (Bits.to_nativeint arg12)) 
-             (Bits.to_nativeint rd) 
+           Instruction.lduh (Instruction.absolutea (Bits.U.to_native arg12)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -230,16 +230,16 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
               16)]), 32))] -> 
-           Instruction.lduh (Instruction.indexa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+           Instruction.lduh (Instruction.indexa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
           32, RP.Const (RP.Bits rd), _), RP.App (("zx", [16; 32]), 
             [RP.Fetch (RP.Cell ('m', Rtl.Identity, 16, RP.Fetch (RP.Cell ('r', 
                 Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32), _), 16)]), 
           32))] -> 
-           Instruction.lduh (Instruction.indirecta (Bits.to_nativeint rs1)) 
-             (Bits.to_nativeint rd) 
+           Instruction.lduh (Instruction.indirecta (Bits.U.to_native rs1)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('m', 
@@ -247,9 +247,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg13)]), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg13 13) -> 
-           Instruction.ld (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.imode (Bits.to_nativeint arg13))) 
-             (Bits.to_nativeint rd) 
+           Instruction.ld (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.imode (Bits.U.to_native arg13))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
           32, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
@@ -257,9 +257,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 32), 
           32))] -> 
-           Instruction.ld (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.rmode (Bits.to_nativeint rs2))) 
-             (Bits.to_nativeint rd) 
+           Instruction.ld (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.rmode (Bits.U.to_native rs2))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('m', 
@@ -267,15 +267,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg14)]), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg14 13) -> 
-           Instruction.ld (Instruction.dispa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint arg14)) (Bits.to_nativeint rd) 
+           Instruction.ld (Instruction.dispa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native arg14)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('m', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg15), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg15 13) -> 
-           Instruction.ld (Instruction.absolutea (Bits.to_nativeint arg15)) 
-             (Bits.to_nativeint rd) 
+           Instruction.ld (Instruction.absolutea (Bits.U.to_native arg15)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
           32, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
@@ -283,15 +283,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 32), 
           32))] -> 
-           Instruction.ld (Instruction.indexa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+           Instruction.ld (Instruction.indexa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
           32, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
             32, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rs1), _), 32), _), 32), 32))] -> 
-           Instruction.ld (Instruction.indirecta (Bits.to_nativeint rs1)) 
-             (Bits.to_nativeint rd) 
+           Instruction.ld (Instruction.indirecta (Bits.U.to_native rs1)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -304,10 +304,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg16)]), 
               _), RP.Const (RP.Bits arg17), 8))] 
       when Base.to_bool (rs1 = rs1' && (Bitops.fits_signed arg18 13 && 
-          Bitops.eq arg17 (Bits.of_int 255 8))) -> 
-           Instruction.ldstub (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.imode (Bits.to_nativeint arg18))) 
-             (Bits.to_nativeint rd) 
+          Bitops.eq arg17 (Bits.U.of_int 255 8))) -> 
+           Instruction.ldstub (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.imode (Bits.U.to_native arg18))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("zx", [8; 32]), 
@@ -322,10 +322,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
               RP.Const (RP.Bits arg19), 8))] 
       when Base.to_bool 
-          (rs1 = rs1' && rs2 = rs2' && Bitops.eq arg19 (Bits.of_int 255 8)) -> 
-           Instruction.ldstub (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.rmode (Bits.to_nativeint rs2))) 
-             (Bits.to_nativeint rd) 
+          (rs1 = rs1' && rs2 = rs2' && Bitops.eq arg19 (Bits.U.of_int 255 8)) -> 
+           Instruction.ldstub (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.rmode (Bits.U.to_native rs2))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -338,9 +338,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg20)]), 
               _), RP.Const (RP.Bits arg21), 8))] 
       when Base.to_bool (rs1 = rs1' && (Bitops.fits_signed arg22 13 && 
-          Bitops.eq arg21 (Bits.of_int 255 8))) -> 
-           Instruction.ldstub (Instruction.dispa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint arg22)) (Bits.to_nativeint rd) 
+          Bitops.eq arg21 (Bits.U.of_int 255 8))) -> 
+           Instruction.ldstub (Instruction.dispa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native arg22)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -349,9 +349,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           (RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 8, 
               RP.Const (RP.Bits arg23), _), RP.Const (RP.Bits arg24), 8))] 
       when Base.to_bool (Bitops.fits_signed arg25 13 && Bitops.eq arg24 
-            (Bits.of_int 255 8)) -> 
-           Instruction.ldstub (Instruction.absolutea (Bits.to_nativeint arg25)) 
-             (Bits.to_nativeint rd) 
+            (Bits.U.of_int 255 8)) -> 
+           Instruction.ldstub (Instruction.absolutea (Bits.U.to_native arg25)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("zx", [8; 32]), 
@@ -366,9 +366,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
               RP.Const (RP.Bits arg26), 8))] 
       when Base.to_bool 
-          (rs1 = rs1' && rs2 = rs2' && Bitops.eq arg26 (Bits.of_int 255 8)) -> 
-           Instruction.ldstub (Instruction.indexa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+          (rs1 = rs1' && rs2 = rs2' && Bitops.eq arg26 (Bits.U.of_int 255 8)) -> 
+           Instruction.ldstub (Instruction.indexa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("zx", [8; 32]), 
@@ -378,9 +378,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.Store (RP.Cell ('m', Rtl.Identity, 8, RP.Fetch (RP.Cell ('r', 
                 Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32), _), 
               RP.Const (RP.Bits arg27), 8))] 
-      when Base.to_bool (rs1 = rs1' && Bitops.eq arg27 (Bits.of_int 255 8)) -> 
-           Instruction.ldstub (Instruction.indirecta (Bits.to_nativeint rs1)) 
-             (Bits.to_nativeint rd) 
+      when Base.to_bool (rs1 = rs1' && Bitops.eq arg27 (Bits.U.of_int 255 8)) -> 
+           Instruction.ldstub (Instruction.indirecta (Bits.U.to_native rs1)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd'), _), 
@@ -394,9 +394,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 32), 32))] 
       when Base.to_bool 
           (rd = rd' && rs1 = rs1' && Bitops.fits_signed arg29 13) -> 
-           Instruction.swap_ (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.imode (Bits.to_nativeint arg29))) 
-             (Bits.to_nativeint rd) 
+           Instruction.swap_ (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.imode (Bits.U.to_native arg29))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd'), _), RP.Fetch (RP.Cell ('m', 
@@ -411,9 +411,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), 
                 _), 32), 32))] 
       when Base.to_bool (rd = rd' && rs1 = rs1' && rs2 = rs2') -> 
-           Instruction.swap_ (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.rmode (Bits.to_nativeint rs2))) 
-             (Bits.to_nativeint rd) 
+           Instruction.swap_ (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.rmode (Bits.U.to_native rs2))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd'), _), 
@@ -427,8 +427,8 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 32), 32))] 
       when Base.to_bool 
           (rd = rd' && rs1 = rs1' && Bitops.fits_signed arg31 13) -> 
-           Instruction.swap_ (Instruction.dispa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint arg31)) (Bits.to_nativeint rd) 
+           Instruction.swap_ (Instruction.dispa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native arg31)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd'), _), RP.Fetch (RP.Cell ('m', 
@@ -437,8 +437,8 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.Const (RP.Bits arg32), _), RP.Fetch (RP.Cell ('r', 
                 Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 32), 32))] 
       when Base.to_bool (rd = rd' && Bitops.fits_signed arg33 13) -> 
-           Instruction.swap_ (Instruction.absolutea (Bits.to_nativeint arg33)) 
-             (Bits.to_nativeint rd) 
+           Instruction.swap_ (Instruction.absolutea (Bits.U.to_native arg33)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd'), _), RP.Fetch (RP.Cell ('m', 
@@ -453,8 +453,8 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), 
                 _), 32), 32))] 
       when Base.to_bool (rd = rd' && rs1 = rs1' && rs2 = rs2') -> 
-           Instruction.swap_ (Instruction.indexa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+           Instruction.swap_ (Instruction.indexa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd'), _), 
@@ -465,8 +465,8 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits rs1), _), 32), _), RP.Fetch (RP.Cell ('r', 
                 Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 32), 32))] 
       when Base.to_bool (rd = rd' && rs1 = rs1') -> 
-           Instruction.swap_ (Instruction.indirecta (Bits.to_nativeint rs1)) 
-             (Bits.to_nativeint rd) 
+           Instruction.swap_ (Instruction.indirecta (Bits.U.to_native rs1)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             64, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('m', 
@@ -474,9 +474,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg34)]), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg34 13) -> 
-           Instruction.ldd (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.imode (Bits.to_nativeint arg34))) 
-             (Bits.to_nativeint rd) 
+           Instruction.ldd (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.imode (Bits.U.to_native arg34))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
           64, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
@@ -484,9 +484,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 64), 
           64))] -> 
-           Instruction.ldd (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.rmode (Bits.to_nativeint rs2))) 
-             (Bits.to_nativeint rd) 
+           Instruction.ldd (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.rmode (Bits.U.to_native rs2))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             64, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('m', 
@@ -494,15 +494,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg35)]), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg35 13) -> 
-           Instruction.ldd (Instruction.dispa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint arg35)) (Bits.to_nativeint rd) 
+           Instruction.ldd (Instruction.dispa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native arg35)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             64, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('m', 
               Rtl.Identity, 64, RP.Const (RP.Bits arg36), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg36 13) -> 
-           Instruction.ldd (Instruction.absolutea (Bits.to_nativeint arg36)) 
-             (Bits.to_nativeint rd) 
+           Instruction.ldd (Instruction.absolutea (Bits.U.to_native arg36)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
           64, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
@@ -510,15 +510,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 64), 
           64))] -> 
-           Instruction.ldd (Instruction.indexa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+           Instruction.ldd (Instruction.indexa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
           64, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
             64, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rs1), _), 32), _), 64), 64))] -> 
-           Instruction.ldd (Instruction.indirecta (Bits.to_nativeint rs1)) 
-             (Bits.to_nativeint rd) 
+           Instruction.ldd (Instruction.indirecta (Bits.U.to_native rs1)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
             32, RP.Const (RP.Bits fd), _), RP.Fetch (RP.Cell ('m', 
@@ -526,9 +526,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg37)]), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg37 13) -> 
-           Instruction.ldf (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.imode (Bits.to_nativeint arg37))) 
-             (Bits.to_nativeint fd) 
+           Instruction.ldf (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.imode (Bits.U.to_native arg37))) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
           32, RP.Const (RP.Bits fd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
@@ -536,9 +536,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 32), 
           32))] -> 
-           Instruction.ldf (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.rmode (Bits.to_nativeint rs2))) 
-             (Bits.to_nativeint fd) 
+           Instruction.ldf (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.rmode (Bits.U.to_native rs2))) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
             32, RP.Const (RP.Bits fd), _), RP.Fetch (RP.Cell ('m', 
@@ -546,15 +546,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg38)]), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg38 13) -> 
-           Instruction.ldf (Instruction.dispa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint arg38)) (Bits.to_nativeint fd) 
+           Instruction.ldf (Instruction.dispa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native arg38)) (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
             32, RP.Const (RP.Bits fd), _), RP.Fetch (RP.Cell ('m', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg39), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg39 13) -> 
-           Instruction.ldf (Instruction.absolutea (Bits.to_nativeint arg39)) 
-             (Bits.to_nativeint fd) 
+           Instruction.ldf (Instruction.absolutea (Bits.U.to_native arg39)) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
           32, RP.Const (RP.Bits fd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
@@ -562,15 +562,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 32), 
           32))] -> 
-           Instruction.ldf (Instruction.indexa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint fd) 
+           Instruction.ldf (Instruction.indexa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
           32, RP.Const (RP.Bits fd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
             32, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rs1), _), 32), _), 32), 32))] -> 
-           Instruction.ldf (Instruction.indirecta (Bits.to_nativeint rs1)) 
-             (Bits.to_nativeint fd) 
+           Instruction.ldf (Instruction.indirecta (Bits.U.to_native rs1)) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
             64, RP.Const (RP.Bits fd), _), RP.Fetch (RP.Cell ('m', 
@@ -578,9 +578,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg40)]), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg40 13) -> 
-           Instruction.lddf (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.imode (Bits.to_nativeint arg40))) 
-             (Bits.to_nativeint fd) 
+           Instruction.lddf (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.imode (Bits.U.to_native arg40))) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
           64, RP.Const (RP.Bits fd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
@@ -588,9 +588,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 64), 
           64))] -> 
-           Instruction.lddf (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.rmode (Bits.to_nativeint rs2))) 
-             (Bits.to_nativeint fd) 
+           Instruction.lddf (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.rmode (Bits.U.to_native rs2))) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
             64, RP.Const (RP.Bits fd), _), RP.Fetch (RP.Cell ('m', 
@@ -598,15 +598,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg41)]), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg41 13) -> 
-           Instruction.lddf (Instruction.dispa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint arg41)) (Bits.to_nativeint fd) 
+           Instruction.lddf (Instruction.dispa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native arg41)) (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
             64, RP.Const (RP.Bits fd), _), RP.Fetch (RP.Cell ('m', 
               Rtl.Identity, 64, RP.Const (RP.Bits arg42), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg42 13) -> 
-           Instruction.lddf (Instruction.absolutea (Bits.to_nativeint arg42)) 
-             (Bits.to_nativeint fd) 
+           Instruction.lddf (Instruction.absolutea (Bits.U.to_native arg42)) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
           64, RP.Const (RP.Bits fd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
@@ -614,15 +614,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 64), 
           64))] -> 
-           Instruction.lddf (Instruction.indexa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint fd) 
+           Instruction.lddf (Instruction.indexa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
           64, RP.Const (RP.Bits fd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
             64, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rs1), _), 32), _), 64), 64))] -> 
-           Instruction.lddf (Instruction.indirecta (Bits.to_nativeint rs1)) 
-             (Bits.to_nativeint fd) 
+           Instruction.lddf (Instruction.indirecta (Bits.U.to_native rs1)) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('c', Rtl.Identity, 
             32, RP.Const (RP.Bits cd), _), RP.Fetch (RP.Cell ('m', 
@@ -630,9 +630,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg43)]), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg43 13) -> 
-           Instruction.ldc (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.imode (Bits.to_nativeint arg43))) 
-             (Bits.to_nativeint cd) 
+           Instruction.ldc (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.imode (Bits.U.to_native arg43))) 
+             (Bits.U.to_native cd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('c', Rtl.Identity, 
           32, RP.Const (RP.Bits cd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
@@ -640,9 +640,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 32), 
           32))] -> 
-           Instruction.ldc (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.rmode (Bits.to_nativeint rs2))) 
-             (Bits.to_nativeint cd) 
+           Instruction.ldc (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.rmode (Bits.U.to_native rs2))) 
+             (Bits.U.to_native cd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('c', Rtl.Identity, 
             32, RP.Const (RP.Bits cd), _), RP.Fetch (RP.Cell ('m', 
@@ -650,15 +650,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg44)]), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg44 13) -> 
-           Instruction.ldc (Instruction.dispa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint arg44)) (Bits.to_nativeint cd) 
+           Instruction.ldc (Instruction.dispa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native arg44)) (Bits.U.to_native cd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('c', Rtl.Identity, 
             32, RP.Const (RP.Bits cd), _), RP.Fetch (RP.Cell ('m', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg45), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg45 13) -> 
-           Instruction.ldc (Instruction.absolutea (Bits.to_nativeint arg45)) 
-             (Bits.to_nativeint cd) 
+           Instruction.ldc (Instruction.absolutea (Bits.U.to_native arg45)) 
+             (Bits.U.to_native cd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('c', Rtl.Identity, 
           32, RP.Const (RP.Bits cd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
@@ -666,15 +666,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 32), 
           32))] -> 
-           Instruction.ldc (Instruction.indexa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint cd) 
+           Instruction.ldc (Instruction.indexa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native cd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('c', Rtl.Identity, 
           32, RP.Const (RP.Bits cd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
             32, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rs1), _), 32), _), 32), 32))] -> 
-           Instruction.ldc (Instruction.indirecta (Bits.to_nativeint rs1)) 
-             (Bits.to_nativeint cd) 
+           Instruction.ldc (Instruction.indirecta (Bits.U.to_native rs1)) 
+             (Bits.U.to_native cd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('c', Rtl.Identity, 
             64, RP.Const (RP.Bits cd), _), RP.Fetch (RP.Cell ('m', 
@@ -682,9 +682,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg46)]), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg46 13) -> 
-           Instruction.lddc (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.imode (Bits.to_nativeint arg46))) 
-             (Bits.to_nativeint cd) 
+           Instruction.lddc (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.imode (Bits.U.to_native arg46))) 
+             (Bits.U.to_native cd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('c', Rtl.Identity, 
           64, RP.Const (RP.Bits cd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
@@ -692,9 +692,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 64), 
           64))] -> 
-           Instruction.lddc (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.rmode (Bits.to_nativeint rs2))) 
-             (Bits.to_nativeint cd) 
+           Instruction.lddc (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.rmode (Bits.U.to_native rs2))) 
+             (Bits.U.to_native cd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('c', Rtl.Identity, 
             64, RP.Const (RP.Bits cd), _), RP.Fetch (RP.Cell ('m', 
@@ -702,15 +702,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg47)]), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg47 13) -> 
-           Instruction.lddc (Instruction.dispa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint arg47)) (Bits.to_nativeint cd) 
+           Instruction.lddc (Instruction.dispa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native arg47)) (Bits.U.to_native cd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('c', Rtl.Identity, 
             64, RP.Const (RP.Bits cd), _), RP.Fetch (RP.Cell ('m', 
               Rtl.Identity, 64, RP.Const (RP.Bits arg48), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg48 13) -> 
-           Instruction.lddc (Instruction.absolutea (Bits.to_nativeint arg48)) 
-             (Bits.to_nativeint cd) 
+           Instruction.lddc (Instruction.absolutea (Bits.U.to_native arg48)) 
+             (Bits.U.to_native cd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('c', Rtl.Identity, 
           64, RP.Const (RP.Bits cd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
@@ -718,15 +718,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 64), 
           64))] -> 
-           Instruction.lddc (Instruction.indexa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint cd) 
+           Instruction.lddc (Instruction.indexa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native cd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('c', Rtl.Identity, 
           64, RP.Const (RP.Bits cd), _), RP.Fetch (RP.Cell ('m', Rtl.Identity, 
             64, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rs1), _), 32), _), 64), 64))] -> 
-           Instruction.lddc (Instruction.indirecta (Bits.to_nativeint rs1)) 
-             (Bits.to_nativeint cd) 
+           Instruction.lddc (Instruction.indirecta (Bits.U.to_native rs1)) 
+             (Bits.U.to_native cd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             8, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -735,10 +735,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               [32; 32; 8]), [RP.Const (RP.Bits arg50); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 32)]), 8))] 
       when Base.to_bool (Bitops.fits_signed arg49 13 && Bitops.eq arg50 
-            (Bits.of_int 0 32)) -> 
-           Instruction.stb (Bits.to_nativeint rd) 
-             (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.imode (Bits.to_nativeint arg49))) 
+            (Bits.U.of_int 0 32)) -> 
+           Instruction.stb (Bits.U.to_native rd) 
+             (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.imode (Bits.U.to_native arg49))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             8, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -747,10 +747,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.App (("bitExtract", [32; 32; 8]), 
               [RP.Const (RP.Bits arg51); RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rd), _), 32)]), 8))] 
-      when Base.to_bool (Bitops.eq arg51 (Bits.of_int 0 32)) -> 
-           Instruction.stb (Bits.to_nativeint rd) 
-             (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.rmode (Bits.to_nativeint rs2))) 
+      when Base.to_bool (Bitops.eq arg51 (Bits.U.of_int 0 32)) -> 
+           Instruction.stb (Bits.U.to_native rd) 
+             (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.rmode (Bits.U.to_native rs2))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             8, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -759,18 +759,18 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               [32; 32; 8]), [RP.Const (RP.Bits arg53); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 32)]), 8))] 
       when Base.to_bool (Bitops.fits_signed arg52 13 && Bitops.eq arg53 
-            (Bits.of_int 0 32)) -> 
-           Instruction.stb (Bits.to_nativeint rd) (Instruction.dispa 
-                 (Bits.to_nativeint rs1) (Bits.to_nativeint arg52)) 
+            (Bits.U.of_int 0 32)) -> 
+           Instruction.stb (Bits.U.to_native rd) (Instruction.dispa 
+                 (Bits.U.to_native rs1) (Bits.U.to_native arg52)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             8, RP.Const (RP.Bits arg54), _), RP.App (("bitExtract", 
               [32; 32; 8]), [RP.Const (RP.Bits arg55); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 32)]), 8))] 
       when Base.to_bool (Bitops.fits_signed arg54 13 && Bitops.eq arg55 
-            (Bits.of_int 0 32)) -> 
-           Instruction.stb (Bits.to_nativeint rd) 
-             (Instruction.absolutea (Bits.to_nativeint arg54)) 
+            (Bits.U.of_int 0 32)) -> 
+           Instruction.stb (Bits.U.to_native rd) 
+             (Instruction.absolutea (Bits.U.to_native arg54)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             8, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -779,18 +779,18 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.App (("bitExtract", [32; 32; 8]), 
               [RP.Const (RP.Bits arg56); RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rd), _), 32)]), 8))] 
-      when Base.to_bool (Bitops.eq arg56 (Bits.of_int 0 32)) -> 
-           Instruction.stb (Bits.to_nativeint rd) (Instruction.indexa 
-                 (Bits.to_nativeint rs1) (Bits.to_nativeint rs2)) 
+      when Base.to_bool (Bitops.eq arg56 (Bits.U.of_int 0 32)) -> 
+           Instruction.stb (Bits.U.to_native rd) (Instruction.indexa 
+                 (Bits.U.to_native rs1) (Bits.U.to_native rs2)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             8, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rs1), _), 32), _), RP.App (("bitExtract", 
               [32; 32; 8]), [RP.Const (RP.Bits arg57); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 32)]), 8))] 
-      when Base.to_bool (Bitops.eq arg57 (Bits.of_int 0 32)) -> 
-           Instruction.stb (Bits.to_nativeint rd) 
-             (Instruction.indirecta (Bits.to_nativeint rs1)) 
+      when Base.to_bool (Bitops.eq arg57 (Bits.U.of_int 0 32)) -> 
+           Instruction.stb (Bits.U.to_native rd) 
+             (Instruction.indirecta (Bits.U.to_native rs1)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             16, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -799,10 +799,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               [32; 32; 16]), [RP.Const (RP.Bits arg59); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 32)]), 16))] 
       when Base.to_bool (Bitops.fits_signed arg58 13 && Bitops.eq arg59 
-            (Bits.of_int 0 32)) -> 
-           Instruction.sth (Bits.to_nativeint rd) 
-             (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.imode (Bits.to_nativeint arg58))) 
+            (Bits.U.of_int 0 32)) -> 
+           Instruction.sth (Bits.U.to_native rd) 
+             (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.imode (Bits.U.to_native arg58))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             16, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -811,10 +811,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.App (("bitExtract", [32; 32; 16]), 
               [RP.Const (RP.Bits arg60); RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rd), _), 32)]), 16))] 
-      when Base.to_bool (Bitops.eq arg60 (Bits.of_int 0 32)) -> 
-           Instruction.sth (Bits.to_nativeint rd) 
-             (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.rmode (Bits.to_nativeint rs2))) 
+      when Base.to_bool (Bitops.eq arg60 (Bits.U.of_int 0 32)) -> 
+           Instruction.sth (Bits.U.to_native rd) 
+             (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.rmode (Bits.U.to_native rs2))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             16, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -823,18 +823,18 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               [32; 32; 16]), [RP.Const (RP.Bits arg62); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 32)]), 16))] 
       when Base.to_bool (Bitops.fits_signed arg61 13 && Bitops.eq arg62 
-            (Bits.of_int 0 32)) -> 
-           Instruction.sth (Bits.to_nativeint rd) (Instruction.dispa 
-                 (Bits.to_nativeint rs1) (Bits.to_nativeint arg61)) 
+            (Bits.U.of_int 0 32)) -> 
+           Instruction.sth (Bits.U.to_native rd) (Instruction.dispa 
+                 (Bits.U.to_native rs1) (Bits.U.to_native arg61)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             16, RP.Const (RP.Bits arg63), _), RP.App (("bitExtract", 
               [32; 32; 16]), [RP.Const (RP.Bits arg64); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 32)]), 16))] 
       when Base.to_bool (Bitops.fits_signed arg63 13 && Bitops.eq arg64 
-            (Bits.of_int 0 32)) -> 
-           Instruction.sth (Bits.to_nativeint rd) 
-             (Instruction.absolutea (Bits.to_nativeint arg63)) 
+            (Bits.U.of_int 0 32)) -> 
+           Instruction.sth (Bits.U.to_native rd) 
+             (Instruction.absolutea (Bits.U.to_native arg63)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             16, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -843,18 +843,18 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.App (("bitExtract", [32; 32; 16]), 
               [RP.Const (RP.Bits arg65); RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rd), _), 32)]), 16))] 
-      when Base.to_bool (Bitops.eq arg65 (Bits.of_int 0 32)) -> 
-           Instruction.sth (Bits.to_nativeint rd) (Instruction.indexa 
-                 (Bits.to_nativeint rs1) (Bits.to_nativeint rs2)) 
+      when Base.to_bool (Bitops.eq arg65 (Bits.U.of_int 0 32)) -> 
+           Instruction.sth (Bits.U.to_native rd) (Instruction.indexa 
+                 (Bits.U.to_native rs1) (Bits.U.to_native rs2)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             16, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rs1), _), 32), _), RP.App (("bitExtract", 
               [32; 32; 16]), [RP.Const (RP.Bits arg66); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 32)]), 16))] 
-      when Base.to_bool (Bitops.eq arg66 (Bits.of_int 0 32)) -> 
-           Instruction.sth (Bits.to_nativeint rd) 
-             (Instruction.indirecta (Bits.to_nativeint rs1)) 
+      when Base.to_bool (Bitops.eq arg66 (Bits.U.of_int 0 32)) -> 
+           Instruction.sth (Bits.U.to_native rd) 
+             (Instruction.indirecta (Bits.U.to_native rs1)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -862,9 +862,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits arg67)]), _), RP.Fetch (RP.Cell ('r', 
               Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg67 13) -> 
-           Instruction.st (Bits.to_nativeint rd) 
-             (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.imode (Bits.to_nativeint arg67))) 
+           Instruction.st (Bits.U.to_native rd) 
+             (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.imode (Bits.U.to_native arg67))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
@@ -872,9 +872,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
           RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
             32), 32))] -> 
-           Instruction.st (Bits.to_nativeint rd) 
-             (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.rmode (Bits.to_nativeint rs2))) 
+           Instruction.st (Bits.U.to_native rd) 
+             (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.rmode (Bits.U.to_native rs2))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -882,15 +882,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits arg68)]), _), RP.Fetch (RP.Cell ('r', 
               Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg68 13) -> 
-           Instruction.st (Bits.to_nativeint rd) (Instruction.dispa 
-                 (Bits.to_nativeint rs1) (Bits.to_nativeint arg68)) 
+           Instruction.st (Bits.U.to_native rd) (Instruction.dispa 
+                 (Bits.U.to_native rs1) (Bits.U.to_native arg68)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.Const (RP.Bits arg69), _), RP.Fetch (RP.Cell ('r', 
               Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg69 13) -> 
-           Instruction.st (Bits.to_nativeint rd) 
-             (Instruction.absolutea (Bits.to_nativeint arg69)) 
+           Instruction.st (Bits.U.to_native rd) 
+             (Instruction.absolutea (Bits.U.to_native arg69)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
@@ -898,15 +898,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
           RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
             32), 32))] -> 
-           Instruction.st (Bits.to_nativeint rd) (Instruction.indexa 
-                 (Bits.to_nativeint rs1) (Bits.to_nativeint rs2)) 
+           Instruction.st (Bits.U.to_native rd) (Instruction.indexa 
+                 (Bits.U.to_native rs1) (Bits.U.to_native rs2)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           32, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rs1), 
             _), 32), _), RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
             RP.Const (RP.Bits rd), _), 32), 32))] -> 
-           Instruction.st (Bits.to_nativeint rd) 
-             (Instruction.indirecta (Bits.to_nativeint rs1)) 
+           Instruction.st (Bits.U.to_native rd) 
+             (Instruction.indirecta (Bits.U.to_native rs1)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             64, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -914,9 +914,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits arg70)]), _), RP.Fetch (RP.Cell ('r', 
               Rtl.Identity, 64, RP.Const (RP.Bits rd), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg70 13) -> 
-           Instruction.std (Bits.to_nativeint rd) 
-             (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.imode (Bits.to_nativeint arg70))) 
+           Instruction.std (Bits.U.to_native rd) 
+             (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.imode (Bits.U.to_native arg70))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           64, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
@@ -924,9 +924,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
           RP.Fetch (RP.Cell ('r', Rtl.Identity, 64, RP.Const (RP.Bits rd), _), 
             64), 64))] -> 
-           Instruction.std (Bits.to_nativeint rd) 
-             (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.rmode (Bits.to_nativeint rs2))) 
+           Instruction.std (Bits.U.to_native rd) 
+             (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.rmode (Bits.U.to_native rs2))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             64, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -934,15 +934,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits arg71)]), _), RP.Fetch (RP.Cell ('r', 
               Rtl.Identity, 64, RP.Const (RP.Bits rd), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg71 13) -> 
-           Instruction.std (Bits.to_nativeint rd) (Instruction.dispa 
-                 (Bits.to_nativeint rs1) (Bits.to_nativeint arg71)) 
+           Instruction.std (Bits.U.to_native rd) (Instruction.dispa 
+                 (Bits.U.to_native rs1) (Bits.U.to_native arg71)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             64, RP.Const (RP.Bits arg72), _), RP.Fetch (RP.Cell ('r', 
               Rtl.Identity, 64, RP.Const (RP.Bits rd), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg72 13) -> 
-           Instruction.std (Bits.to_nativeint rd) 
-             (Instruction.absolutea (Bits.to_nativeint arg72)) 
+           Instruction.std (Bits.U.to_native rd) 
+             (Instruction.absolutea (Bits.U.to_native arg72)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           64, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
@@ -950,15 +950,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
           RP.Fetch (RP.Cell ('r', Rtl.Identity, 64, RP.Const (RP.Bits rd), _), 
             64), 64))] -> 
-           Instruction.std (Bits.to_nativeint rd) (Instruction.indexa 
-                 (Bits.to_nativeint rs1) (Bits.to_nativeint rs2)) 
+           Instruction.std (Bits.U.to_native rd) (Instruction.indexa 
+                 (Bits.U.to_native rs1) (Bits.U.to_native rs2)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           64, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rs1), 
             _), 32), _), RP.Fetch (RP.Cell ('r', Rtl.Identity, 64, 
             RP.Const (RP.Bits rd), _), 64), 64))] -> 
-           Instruction.std (Bits.to_nativeint rd) 
-             (Instruction.indirecta (Bits.to_nativeint rs1)) 
+           Instruction.std (Bits.U.to_native rd) 
+             (Instruction.indirecta (Bits.U.to_native rs1)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -966,9 +966,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits arg73)]), _), RP.Fetch (RP.Cell ('f', 
               Rtl.Identity, 32, RP.Const (RP.Bits fd), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg73 13) -> 
-           Instruction.stf (Bits.to_nativeint fd) 
-             (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.imode (Bits.to_nativeint arg73))) 
+           Instruction.stf (Bits.U.to_native fd) 
+             (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.imode (Bits.U.to_native arg73))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
@@ -976,9 +976,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
           RP.Fetch (RP.Cell ('f', Rtl.Identity, 32, RP.Const (RP.Bits fd), _), 
             32), 32))] -> 
-           Instruction.stf (Bits.to_nativeint fd) 
-             (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.rmode (Bits.to_nativeint rs2))) 
+           Instruction.stf (Bits.U.to_native fd) 
+             (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.rmode (Bits.U.to_native rs2))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -986,15 +986,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits arg74)]), _), RP.Fetch (RP.Cell ('f', 
               Rtl.Identity, 32, RP.Const (RP.Bits fd), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg74 13) -> 
-           Instruction.stf (Bits.to_nativeint fd) (Instruction.dispa 
-                 (Bits.to_nativeint rs1) (Bits.to_nativeint arg74)) 
+           Instruction.stf (Bits.U.to_native fd) (Instruction.dispa 
+                 (Bits.U.to_native rs1) (Bits.U.to_native arg74)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.Const (RP.Bits arg75), _), RP.Fetch (RP.Cell ('f', 
               Rtl.Identity, 32, RP.Const (RP.Bits fd), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg75 13) -> 
-           Instruction.stf (Bits.to_nativeint fd) 
-             (Instruction.absolutea (Bits.to_nativeint arg75)) 
+           Instruction.stf (Bits.U.to_native fd) 
+             (Instruction.absolutea (Bits.U.to_native arg75)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
@@ -1002,15 +1002,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
           RP.Fetch (RP.Cell ('f', Rtl.Identity, 32, RP.Const (RP.Bits fd), _), 
             32), 32))] -> 
-           Instruction.stf (Bits.to_nativeint fd) (Instruction.indexa 
-                 (Bits.to_nativeint rs1) (Bits.to_nativeint rs2)) 
+           Instruction.stf (Bits.U.to_native fd) (Instruction.indexa 
+                 (Bits.U.to_native rs1) (Bits.U.to_native rs2)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           32, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rs1), 
             _), 32), _), RP.Fetch (RP.Cell ('f', Rtl.Identity, 32, 
             RP.Const (RP.Bits fd), _), 32), 32))] -> 
-           Instruction.stf (Bits.to_nativeint fd) 
-             (Instruction.indirecta (Bits.to_nativeint rs1)) 
+           Instruction.stf (Bits.U.to_native fd) 
+             (Instruction.indirecta (Bits.U.to_native rs1)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             64, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -1018,9 +1018,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits arg76)]), _), RP.Fetch (RP.Cell ('f', 
               Rtl.Identity, 64, RP.Const (RP.Bits fd), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg76 13) -> 
-           Instruction.stdf (Bits.to_nativeint fd) 
-             (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.imode (Bits.to_nativeint arg76))) 
+           Instruction.stdf (Bits.U.to_native fd) 
+             (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.imode (Bits.U.to_native arg76))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           64, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
@@ -1028,9 +1028,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
           RP.Fetch (RP.Cell ('f', Rtl.Identity, 64, RP.Const (RP.Bits fd), _), 
             64), 64))] -> 
-           Instruction.stdf (Bits.to_nativeint fd) 
-             (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.rmode (Bits.to_nativeint rs2))) 
+           Instruction.stdf (Bits.U.to_native fd) 
+             (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.rmode (Bits.U.to_native rs2))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             64, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -1038,15 +1038,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits arg77)]), _), RP.Fetch (RP.Cell ('f', 
               Rtl.Identity, 64, RP.Const (RP.Bits fd), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg77 13) -> 
-           Instruction.stdf (Bits.to_nativeint fd) (Instruction.dispa 
-                 (Bits.to_nativeint rs1) (Bits.to_nativeint arg77)) 
+           Instruction.stdf (Bits.U.to_native fd) (Instruction.dispa 
+                 (Bits.U.to_native rs1) (Bits.U.to_native arg77)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             64, RP.Const (RP.Bits arg78), _), RP.Fetch (RP.Cell ('f', 
               Rtl.Identity, 64, RP.Const (RP.Bits fd), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg78 13) -> 
-           Instruction.stdf (Bits.to_nativeint fd) 
-             (Instruction.absolutea (Bits.to_nativeint arg78)) 
+           Instruction.stdf (Bits.U.to_native fd) 
+             (Instruction.absolutea (Bits.U.to_native arg78)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           64, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
@@ -1054,15 +1054,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
           RP.Fetch (RP.Cell ('f', Rtl.Identity, 64, RP.Const (RP.Bits fd), _), 
             64), 64))] -> 
-           Instruction.stdf (Bits.to_nativeint fd) (Instruction.indexa 
-                 (Bits.to_nativeint rs1) (Bits.to_nativeint rs2)) 
+           Instruction.stdf (Bits.U.to_native fd) (Instruction.indexa 
+                 (Bits.U.to_native rs1) (Bits.U.to_native rs2)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           64, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rs1), 
             _), 32), _), RP.Fetch (RP.Cell ('f', Rtl.Identity, 64, 
             RP.Const (RP.Bits fd), _), 64), 64))] -> 
-           Instruction.stdf (Bits.to_nativeint fd) 
-             (Instruction.indirecta (Bits.to_nativeint rs1)) 
+           Instruction.stdf (Bits.U.to_native fd) 
+             (Instruction.indirecta (Bits.U.to_native rs1)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -1070,9 +1070,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits arg79)]), _), RP.Fetch (RP.Cell ('c', 
               Rtl.Identity, 32, RP.Const (RP.Bits cd), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg79 13) -> 
-           Instruction.stc (Bits.to_nativeint cd) 
-             (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.imode (Bits.to_nativeint arg79))) 
+           Instruction.stc (Bits.U.to_native cd) 
+             (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.imode (Bits.U.to_native arg79))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
@@ -1080,9 +1080,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
           RP.Fetch (RP.Cell ('c', Rtl.Identity, 32, RP.Const (RP.Bits cd), _), 
             32), 32))] -> 
-           Instruction.stc (Bits.to_nativeint cd) 
-             (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.rmode (Bits.to_nativeint rs2))) 
+           Instruction.stc (Bits.U.to_native cd) 
+             (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.rmode (Bits.U.to_native rs2))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -1090,15 +1090,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits arg80)]), _), RP.Fetch (RP.Cell ('c', 
               Rtl.Identity, 32, RP.Const (RP.Bits cd), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg80 13) -> 
-           Instruction.stc (Bits.to_nativeint cd) (Instruction.dispa 
-                 (Bits.to_nativeint rs1) (Bits.to_nativeint arg80)) 
+           Instruction.stc (Bits.U.to_native cd) (Instruction.dispa 
+                 (Bits.U.to_native rs1) (Bits.U.to_native arg80)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.Const (RP.Bits arg81), _), RP.Fetch (RP.Cell ('c', 
               Rtl.Identity, 32, RP.Const (RP.Bits cd), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg81 13) -> 
-           Instruction.stc (Bits.to_nativeint cd) 
-             (Instruction.absolutea (Bits.to_nativeint arg81)) 
+           Instruction.stc (Bits.U.to_native cd) 
+             (Instruction.absolutea (Bits.U.to_native arg81)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
@@ -1106,15 +1106,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
           RP.Fetch (RP.Cell ('c', Rtl.Identity, 32, RP.Const (RP.Bits cd), _), 
             32), 32))] -> 
-           Instruction.stc (Bits.to_nativeint cd) (Instruction.indexa 
-                 (Bits.to_nativeint rs1) (Bits.to_nativeint rs2)) 
+           Instruction.stc (Bits.U.to_native cd) (Instruction.indexa 
+                 (Bits.U.to_native rs1) (Bits.U.to_native rs2)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           32, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rs1), 
             _), 32), _), RP.Fetch (RP.Cell ('c', Rtl.Identity, 32, 
             RP.Const (RP.Bits cd), _), 32), 32))] -> 
-           Instruction.stc (Bits.to_nativeint cd) 
-             (Instruction.indirecta (Bits.to_nativeint rs1)) 
+           Instruction.stc (Bits.U.to_native cd) 
+             (Instruction.indirecta (Bits.U.to_native rs1)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             64, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -1122,9 +1122,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits arg82)]), _), RP.Fetch (RP.Cell ('c', 
               Rtl.Identity, 64, RP.Const (RP.Bits cd), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg82 13) -> 
-           Instruction.stdc (Bits.to_nativeint cd) 
-             (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.imode (Bits.to_nativeint arg82))) 
+           Instruction.stdc (Bits.U.to_native cd) 
+             (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.imode (Bits.U.to_native arg82))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           64, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
@@ -1132,9 +1132,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
           RP.Fetch (RP.Cell ('c', Rtl.Identity, 64, RP.Const (RP.Bits cd), _), 
             64), 64))] -> 
-           Instruction.stdc (Bits.to_nativeint cd) 
-             (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.rmode (Bits.to_nativeint rs2))) 
+           Instruction.stdc (Bits.U.to_native cd) 
+             (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.rmode (Bits.U.to_native rs2))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             64, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -1142,15 +1142,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits arg83)]), _), RP.Fetch (RP.Cell ('c', 
               Rtl.Identity, 64, RP.Const (RP.Bits cd), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg83 13) -> 
-           Instruction.stdc (Bits.to_nativeint cd) (Instruction.dispa 
-                 (Bits.to_nativeint rs1) (Bits.to_nativeint arg83)) 
+           Instruction.stdc (Bits.U.to_native cd) (Instruction.dispa 
+                 (Bits.U.to_native rs1) (Bits.U.to_native arg83)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             64, RP.Const (RP.Bits arg84), _), RP.Fetch (RP.Cell ('c', 
               Rtl.Identity, 64, RP.Const (RP.Bits cd), _), 64), 64))] 
       when Base.to_bool (Bitops.fits_signed arg84 13) -> 
-           Instruction.stdc (Bits.to_nativeint cd) 
-             (Instruction.absolutea (Bits.to_nativeint arg84)) 
+           Instruction.stdc (Bits.U.to_native cd) 
+             (Instruction.absolutea (Bits.U.to_native arg84)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           64, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
@@ -1158,15 +1158,15 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
           RP.Fetch (RP.Cell ('c', Rtl.Identity, 64, RP.Const (RP.Bits cd), _), 
             64), 64))] -> 
-           Instruction.stdc (Bits.to_nativeint cd) (Instruction.indexa 
-                 (Bits.to_nativeint rs1) (Bits.to_nativeint rs2)) 
+           Instruction.stdc (Bits.U.to_native cd) (Instruction.indexa 
+                 (Bits.U.to_native rs1) (Bits.U.to_native rs2)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
           64, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rs1), 
             _), 32), _), RP.Fetch (RP.Cell ('c', Rtl.Identity, 64, 
             RP.Const (RP.Bits cd), _), 64), 64))] -> 
-           Instruction.stdc (Bits.to_nativeint cd) 
-             (Instruction.indirecta (Bits.to_nativeint rs1)) 
+           Instruction.stdc (Bits.U.to_native cd) 
+             (Instruction.indirecta (Bits.U.to_native rs1)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('F', Rtl.Identity, 
             32, RP.Const (RP.Bits arg85), _), RP.Fetch (RP.Cell ('m', 
@@ -1174,9 +1174,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg86)]), _), 32), 32))] 
       when Base.to_bool 
-          (Bitops.fits_signed arg86 13 && Bitops.eq arg85 (Bits.of_int 0 1)) -> 
-           Instruction.ldfsr (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.imode (Bits.to_nativeint arg86))) 
+          (Bitops.fits_signed arg86 13 && Bitops.eq arg85 (Bits.U.of_int 0 1)) -> 
+           Instruction.ldfsr (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.imode (Bits.U.to_native arg86))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('F', Rtl.Identity, 
             32, RP.Const (RP.Bits arg87), _), RP.Fetch (RP.Cell ('m', 
@@ -1184,9 +1184,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
                     RP.Const (RP.Bits rs2), _), 32)]), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg87 (Bits.of_int 0 1)) -> 
-           Instruction.ldfsr (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.rmode (Bits.to_nativeint rs2))) 
+      when Base.to_bool (Bitops.eq arg87 (Bits.U.of_int 0 1)) -> 
+           Instruction.ldfsr (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.rmode (Bits.U.to_native rs2))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('F', Rtl.Identity, 
             32, RP.Const (RP.Bits arg88), _), RP.Fetch (RP.Cell ('m', 
@@ -1194,41 +1194,41 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg89)]), _), 32), 32))] 
       when Base.to_bool 
-          (Bitops.fits_signed arg89 13 && Bitops.eq arg88 (Bits.of_int 0 1)) -> 
-           Instruction.ldfsr (Instruction.dispa (Bits.to_nativeint rs1) 
-               (Bits.to_nativeint arg89)) 
+          (Bitops.fits_signed arg89 13 && Bitops.eq arg88 (Bits.U.of_int 0 1)) -> 
+           Instruction.ldfsr (Instruction.dispa (Bits.U.to_native rs1) 
+               (Bits.U.to_native arg89)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('F', Rtl.Identity, 
             32, RP.Const (RP.Bits arg90), _), RP.Fetch (RP.Cell ('m', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg91), _), 32), 32))] 
       when Base.to_bool 
-          (Bitops.fits_signed arg91 13 && Bitops.eq arg90 (Bits.of_int 0 1)) -> 
-           Instruction.ldfsr (Instruction.absolutea (Bits.to_nativeint arg91)) 
+          (Bitops.fits_signed arg91 13 && Bitops.eq arg90 (Bits.U.of_int 0 1)) -> 
+           Instruction.ldfsr (Instruction.absolutea (Bits.U.to_native arg91)) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('F', Rtl.Identity, 
             32, RP.Const (RP.Bits arg92), _), RP.Fetch (RP.Cell ('m', 
               Rtl.Identity, 32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
                     RP.Const (RP.Bits rs2), _), 32)]), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg92 (Bits.of_int 0 1)) -> 
-           Instruction.ldfsr (Instruction.indexa (Bits.to_nativeint rs1) 
-               (Bits.to_nativeint rs2)) 
+      when Base.to_bool (Bitops.eq arg92 (Bits.U.of_int 0 1)) -> 
+           Instruction.ldfsr (Instruction.indexa (Bits.U.to_native rs1) 
+               (Bits.U.to_native rs2)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('F', Rtl.Identity, 
             32, RP.Const (RP.Bits arg93), _), RP.Fetch (RP.Cell ('m', 
               Rtl.Identity, 32, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
                 RP.Const (RP.Bits rs1), _), 32), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg93 (Bits.of_int 0 1)) -> 
-           Instruction.ldfsr (Instruction.indirecta (Bits.to_nativeint rs1)) 
+      when Base.to_bool (Bitops.eq arg93 (Bits.U.of_int 0 1)) -> 
+           Instruction.ldfsr (Instruction.indirecta (Bits.U.to_native rs1)) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('C', Rtl.Identity, 
             32, RP.Const (RP.Bits arg94), _), RP.Fetch (RP.Cell ('m', 
               Rtl.Identity, 32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg95)]), _), 32), 32))] 
       when Base.to_bool 
-          (Bitops.fits_signed arg95 13 && Bitops.eq arg94 (Bits.of_int 0 1)) -> 
-           Instruction.ldcsr (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.imode (Bits.to_nativeint arg95))) 
+          (Bitops.fits_signed arg95 13 && Bitops.eq arg94 (Bits.U.of_int 0 1)) -> 
+           Instruction.ldcsr (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.imode (Bits.U.to_native arg95))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('C', Rtl.Identity, 
             32, RP.Const (RP.Bits arg96), _), RP.Fetch (RP.Cell ('m', 
@@ -1236,9 +1236,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
                     RP.Const (RP.Bits rs2), _), 32)]), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg96 (Bits.of_int 0 1)) -> 
-           Instruction.ldcsr (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.rmode (Bits.to_nativeint rs2))) 
+      when Base.to_bool (Bitops.eq arg96 (Bits.U.of_int 0 1)) -> 
+           Instruction.ldcsr (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.rmode (Bits.U.to_native rs2))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('C', Rtl.Identity, 
             32, RP.Const (RP.Bits arg97), _), RP.Fetch (RP.Cell ('m', 
@@ -1246,41 +1246,41 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg98)]), _), 32), 32))] 
       when Base.to_bool 
-          (Bitops.fits_signed arg98 13 && Bitops.eq arg97 (Bits.of_int 0 1)) -> 
-           Instruction.ldcsr (Instruction.dispa (Bits.to_nativeint rs1) 
-               (Bits.to_nativeint arg98)) 
+          (Bitops.fits_signed arg98 13 && Bitops.eq arg97 (Bits.U.of_int 0 1)) -> 
+           Instruction.ldcsr (Instruction.dispa (Bits.U.to_native rs1) 
+               (Bits.U.to_native arg98)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('C', Rtl.Identity, 
             32, RP.Const (RP.Bits arg99), _), RP.Fetch (RP.Cell ('m', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg100), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg100 13 && Bitops.eq arg99 
-            (Bits.of_int 0 1)) -> 
-           Instruction.ldcsr (Instruction.absolutea (Bits.to_nativeint arg100)) 
+            (Bits.U.of_int 0 1)) -> 
+           Instruction.ldcsr (Instruction.absolutea (Bits.U.to_native arg100)) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('C', Rtl.Identity, 
             32, RP.Const (RP.Bits arg101), _), RP.Fetch (RP.Cell ('m', 
               Rtl.Identity, 32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
                     RP.Const (RP.Bits rs2), _), 32)]), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg101 (Bits.of_int 0 1)) -> 
-           Instruction.ldcsr (Instruction.indexa (Bits.to_nativeint rs1) 
-               (Bits.to_nativeint rs2)) 
+      when Base.to_bool (Bitops.eq arg101 (Bits.U.of_int 0 1)) -> 
+           Instruction.ldcsr (Instruction.indexa (Bits.U.to_native rs1) 
+               (Bits.U.to_native rs2)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('C', Rtl.Identity, 
             32, RP.Const (RP.Bits arg102), _), RP.Fetch (RP.Cell ('m', 
               Rtl.Identity, 32, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
                 RP.Const (RP.Bits rs1), _), 32), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg102 (Bits.of_int 0 1)) -> 
-           Instruction.ldcsr (Instruction.indirecta (Bits.to_nativeint rs1)) 
+      when Base.to_bool (Bitops.eq arg102 (Bits.U.of_int 0 1)) -> 
+           Instruction.ldcsr (Instruction.indirecta (Bits.U.to_native rs1)) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                 32, RP.Const (RP.Bits rs1), _), 32); 
                 RP.Const (RP.Bits arg103)]), _), RP.Fetch (RP.Cell ('F', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg104), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg103 13 && Bitops.eq arg104 
-            (Bits.of_int 0 1)) -> 
-           Instruction.stfsr (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.imode (Bits.to_nativeint arg103))) 
+            (Bits.U.of_int 0 1)) -> 
+           Instruction.stfsr (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.imode (Bits.U.to_native arg103))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -1288,9 +1288,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
             RP.Fetch (RP.Cell ('F', Rtl.Identity, 32, 
               RP.Const (RP.Bits arg105), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg105 (Bits.of_int 0 1)) -> 
-           Instruction.stfsr (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.rmode (Bits.to_nativeint rs2))) 
+      when Base.to_bool (Bitops.eq arg105 (Bits.U.of_int 0 1)) -> 
+           Instruction.stfsr (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.rmode (Bits.U.to_native rs2))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -1298,41 +1298,41 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits arg106)]), _), RP.Fetch (RP.Cell ('F', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg107), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg106 13 && Bitops.eq arg107 
-            (Bits.of_int 0 1)) -> 
-           Instruction.stfsr (Instruction.dispa (Bits.to_nativeint rs1) 
-               (Bits.to_nativeint arg106)) 
+            (Bits.U.of_int 0 1)) -> 
+           Instruction.stfsr (Instruction.dispa (Bits.U.to_native rs1) 
+               (Bits.U.to_native arg106)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.Const (RP.Bits arg108), _), RP.Fetch (RP.Cell ('F', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg109), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg108 13 && Bitops.eq arg109 
-            (Bits.of_int 0 1)) -> 
-           Instruction.stfsr (Instruction.absolutea (Bits.to_nativeint arg108)) 
+            (Bits.U.of_int 0 1)) -> 
+           Instruction.stfsr (Instruction.absolutea (Bits.U.to_native arg108)) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
             RP.Fetch (RP.Cell ('F', Rtl.Identity, 32, 
               RP.Const (RP.Bits arg110), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg110 (Bits.of_int 0 1)) -> 
-           Instruction.stfsr (Instruction.indexa (Bits.to_nativeint rs1) 
-               (Bits.to_nativeint rs2)) 
+      when Base.to_bool (Bitops.eq arg110 (Bits.U.of_int 0 1)) -> 
+           Instruction.stfsr (Instruction.indexa (Bits.U.to_native rs1) 
+               (Bits.U.to_native rs2)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rs1), _), 32), _), RP.Fetch (RP.Cell ('F', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg111), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg111 (Bits.of_int 0 1)) -> 
-           Instruction.stfsr (Instruction.indirecta (Bits.to_nativeint rs1)) 
+      when Base.to_bool (Bitops.eq arg111 (Bits.U.of_int 0 1)) -> 
+           Instruction.stfsr (Instruction.indirecta (Bits.U.to_native rs1)) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                 32, RP.Const (RP.Bits rs1), _), 32); 
                 RP.Const (RP.Bits arg112)]), _), RP.Fetch (RP.Cell ('C', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg113), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg112 13 && Bitops.eq arg113 
-            (Bits.of_int 0 1)) -> 
-           Instruction.stcsr (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.imode (Bits.to_nativeint arg112))) 
+            (Bits.U.of_int 0 1)) -> 
+           Instruction.stcsr (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.imode (Bits.U.to_native arg112))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -1340,9 +1340,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
             RP.Fetch (RP.Cell ('C', Rtl.Identity, 32, 
               RP.Const (RP.Bits arg114), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg114 (Bits.of_int 0 1)) -> 
-           Instruction.stcsr (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.rmode (Bits.to_nativeint rs2))) 
+      when Base.to_bool (Bitops.eq arg114 (Bits.U.of_int 0 1)) -> 
+           Instruction.stcsr (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.rmode (Bits.U.to_native rs2))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
@@ -1350,70 +1350,70 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits arg115)]), _), RP.Fetch (RP.Cell ('C', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg116), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg115 13 && Bitops.eq arg116 
-            (Bits.of_int 0 1)) -> 
-           Instruction.stcsr (Instruction.dispa (Bits.to_nativeint rs1) 
-               (Bits.to_nativeint arg115)) 
+            (Bits.U.of_int 0 1)) -> 
+           Instruction.stcsr (Instruction.dispa (Bits.U.to_native rs1) 
+               (Bits.U.to_native arg115)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.Const (RP.Bits arg117), _), RP.Fetch (RP.Cell ('C', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg118), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg117 13 && Bitops.eq arg118 
-            (Bits.of_int 0 1)) -> 
-           Instruction.stcsr (Instruction.absolutea (Bits.to_nativeint arg117)) 
+            (Bits.U.of_int 0 1)) -> 
+           Instruction.stcsr (Instruction.absolutea (Bits.U.to_native arg117)) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), _), 
             RP.Fetch (RP.Cell ('C', Rtl.Identity, 32, 
               RP.Const (RP.Bits arg119), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg119 (Bits.of_int 0 1)) -> 
-           Instruction.stcsr (Instruction.indexa (Bits.to_nativeint rs1) 
-               (Bits.to_nativeint rs2)) 
+      when Base.to_bool (Bitops.eq arg119 (Bits.U.of_int 0 1)) -> 
+           Instruction.stcsr (Instruction.indexa (Bits.U.to_native rs1) 
+               (Bits.U.to_native rs2)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('m', Rtl.Identity, 
             32, RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rs1), _), 32), _), RP.Fetch (RP.Cell ('C', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg120), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg120 (Bits.of_int 0 1)) -> 
-           Instruction.stcsr (Instruction.indirecta (Bits.to_nativeint rs1)) 
+      when Base.to_bool (Bitops.eq arg120 (Bits.U.of_int 0 1)) -> 
+           Instruction.stcsr (Instruction.indirecta (Bits.U.to_native rs1)) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('i', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg121), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg121 (Bits.of_int 3 3)) -> 
-           Instruction.rdy (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg121 (Bits.U.of_int 3 3)) -> 
+           Instruction.rdy (Bits.U.to_native rd) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('i', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg122), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg122 (Bits.of_int 0 3)) -> 
-           Instruction.rdpsr (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg122 (Bits.U.of_int 0 3)) -> 
+           Instruction.rdpsr (Bits.U.to_native rd) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('i', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg123), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg123 (Bits.of_int 1 3)) -> 
-           Instruction.rdwim (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg123 (Bits.U.of_int 1 3)) -> 
+           Instruction.rdwim (Bits.U.to_native rd) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('i', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg124), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg124 (Bits.of_int 2 3)) -> 
-           Instruction.rdtbr (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg124 (Bits.U.of_int 2 3)) -> 
+           Instruction.rdtbr (Bits.U.to_native rd) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 
             32, RP.Const (RP.Bits arg125), _), 
             RP.App (("xor", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
                 RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg126)]), 
             32))] 
       when Base.to_bool (Bitops.fits_signed arg126 13 && Bitops.eq arg125 
-            (Bits.of_int 3 3)) -> 
-           Instruction.wry (Bits.to_nativeint rs1) 
-             (Instruction.imode (Bits.to_nativeint arg126)) 
+            (Bits.U.of_int 3 3)) -> 
+           Instruction.wry (Bits.U.to_native rs1) 
+             (Instruction.imode (Bits.U.to_native arg126)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg127), 
             _), RP.App (("xor", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg127 (Bits.of_int 3 3)) -> 
-           Instruction.wry (Bits.to_nativeint rs1) 
-             (Instruction.rmode (Bits.to_nativeint rs2)) 
+      when Base.to_bool (Bitops.eq arg127 (Bits.U.of_int 3 3)) -> 
+           Instruction.wry (Bits.U.to_native rs1) 
+             (Instruction.rmode (Bits.U.to_native rs2)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 
             32, RP.Const (RP.Bits arg128), _), 
@@ -1421,18 +1421,18 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg129)]), 
             32))] 
       when Base.to_bool (Bitops.fits_signed arg129 13 && Bitops.eq arg128 
-            (Bits.of_int 0 3)) -> 
-           Instruction.wrpsr (Bits.to_nativeint rs1) 
-             (Instruction.imode (Bits.to_nativeint arg129)) 
+            (Bits.U.of_int 0 3)) -> 
+           Instruction.wrpsr (Bits.U.to_native rs1) 
+             (Instruction.imode (Bits.U.to_native arg129)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg130), 
             _), RP.App (("xor", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg130 (Bits.of_int 0 3)) -> 
-           Instruction.wrpsr (Bits.to_nativeint rs1) 
-             (Instruction.rmode (Bits.to_nativeint rs2)) 
+      when Base.to_bool (Bitops.eq arg130 (Bits.U.of_int 0 3)) -> 
+           Instruction.wrpsr (Bits.U.to_native rs1) 
+             (Instruction.rmode (Bits.U.to_native rs2)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 
             32, RP.Const (RP.Bits arg131), _), 
@@ -1440,18 +1440,18 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg132)]), 
             32))] 
       when Base.to_bool (Bitops.fits_signed arg132 13 && Bitops.eq arg131 
-            (Bits.of_int 1 3)) -> 
-           Instruction.wrwim (Bits.to_nativeint rs1) 
-             (Instruction.imode (Bits.to_nativeint arg132)) 
+            (Bits.U.of_int 1 3)) -> 
+           Instruction.wrwim (Bits.U.to_native rs1) 
+             (Instruction.imode (Bits.U.to_native arg132)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg133), 
             _), RP.App (("xor", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg133 (Bits.of_int 1 3)) -> 
-           Instruction.wrwim (Bits.to_nativeint rs1) 
-             (Instruction.rmode (Bits.to_nativeint rs2)) 
+      when Base.to_bool (Bitops.eq arg133 (Bits.U.of_int 1 3)) -> 
+           Instruction.wrwim (Bits.U.to_native rs1) 
+             (Instruction.rmode (Bits.U.to_native rs2)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 
             32, RP.Const (RP.Bits arg134), _), 
@@ -1459,39 +1459,39 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg135)]), 
             32))] 
       when Base.to_bool (Bitops.fits_signed arg135 13 && Bitops.eq arg134 
-            (Bits.of_int 2 3)) -> 
-           Instruction.wrtbr (Bits.to_nativeint rs1) 
-             (Instruction.imode (Bits.to_nativeint arg135)) 
+            (Bits.U.of_int 2 3)) -> 
+           Instruction.wrtbr (Bits.U.to_native rs1) 
+             (Instruction.imode (Bits.U.to_native arg135)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg136), 
             _), RP.App (("xor", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                 32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg136 (Bits.of_int 2 3)) -> 
-           Instruction.wrtbr (Bits.to_nativeint rs1) 
-             (Instruction.rmode (Bits.to_nativeint rs2)) 
+      when Base.to_bool (Bitops.eq arg136 (Bits.U.of_int 2 3)) -> 
+           Instruction.wrtbr (Bits.U.to_native rs1) 
+             (Instruction.rmode (Bits.U.to_native rs2)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('b', Rtl.Identity, 
             1, RP.Const (RP.Bits arg137), _), RP.Const (RP.Bits arg138), 1))] 
-      when Base.to_bool (Bitops.eq arg137 (Bits.of_int 0 1) && 
-          Bitops.eq arg138 (Bits.of_int 1 1)) -> Instruction.stbar () 
+      when Base.to_bool (Bitops.eq arg137 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg138 (Bits.U.of_int 1 1)) -> Instruction.stbar () 
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
             RP.App (("and", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
                 RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg139)]), 
             32))] 
       when Base.to_bool (Bitops.fits_signed arg139 13) -> 
-           Instruction.and_ (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg139)) (Bits.to_nativeint rd) 
+           Instruction.and_ (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg139)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
           RP.App (("and", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                 Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] -> 
-           Instruction.and_ (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+           Instruction.and_ (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -1526,18 +1526,18 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.Const (RP.Bits arg141), 1))] 
       when Base.to_bool (rs1 = rs1'''' && rs1 = rs1''' && rs1 = rs1'' && 
           rs1 = rs1' && (Bitops.fits_signed arg160 13 && Bitops.eq arg157 
-            (Bits.of_int 0 32) && Bitops.eq arg158 (Bits.of_int 0 3) && 
-          Bitops.eq arg159 (Bits.of_int 1 1) && Bitops.eq arg153 (Bits.of_int 0 
-              32) && Bitops.eq arg154 (Bits.of_int 0 3) && Bitops.eq arg155 
-            (Bits.of_int 0 1) && Bitops.eq arg149 (Bits.of_int 0 32) && 
-          Bitops.eq arg150 (Bits.of_int 0 3) && Bitops.eq arg151 
-            (Bits.of_int 1 1) && Bitops.eq arg145 (Bits.of_int 0 32) && 
-          Bitops.eq arg146 (Bits.of_int 0 3) && Bitops.eq arg147 
-            (Bits.of_int 0 1) && Bitops.eq arg142 (Bits.of_int 0 3) && 
-          Bitops.eq arg143 (Bits.of_int 0 1) && Bitops.eq arg140 
-            (Bits.of_int 0 3) && Bitops.eq arg141 (Bits.of_int 0 1))) -> 
-           Instruction.andcc (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg160)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 0 32) && Bitops.eq arg158 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg159 (Bits.U.of_int 1 1) && Bitops.eq arg153 (Bits.U.of_int 0 
+              32) && Bitops.eq arg154 (Bits.U.of_int 0 3) && Bitops.eq arg155 
+            (Bits.U.of_int 0 1) && Bitops.eq arg149 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg150 (Bits.U.of_int 0 3) && Bitops.eq arg151 
+            (Bits.U.of_int 1 1) && Bitops.eq arg145 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg146 (Bits.U.of_int 0 3) && Bitops.eq arg147 
+            (Bits.U.of_int 0 1) && Bitops.eq arg142 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg143 (Bits.U.of_int 0 1) && Bitops.eq arg140 
+            (Bits.U.of_int 0 3) && Bitops.eq arg141 (Bits.U.of_int 0 1))) -> 
+           Instruction.andcc (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg160)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -1576,18 +1576,18 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.Const (RP.Bits arg162), 1))] 
       when Base.to_bool (rs1 = rs1'''' && rs2 = rs2'''' && rs1 = rs1''' && 
           rs2 = rs2''' && rs1 = rs1'' && rs2 = rs2'' && rs1 = rs1' && 
-          rs2 = rs2' && (Bitops.eq arg174 (Bits.of_int 0 32) && Bitops.eq 
-            arg175 (Bits.of_int 0 3) && Bitops.eq arg176 (Bits.of_int 1 1) && 
-          Bitops.eq arg171 (Bits.of_int 0 32) && Bitops.eq arg172 (Bits.of_int 
-              0 3) && Bitops.eq arg173 (Bits.of_int 0 1) && Bitops.eq arg168 
-            (Bits.of_int 0 32) && Bitops.eq arg169 (Bits.of_int 0 3) && 
-          Bitops.eq arg170 (Bits.of_int 1 1) && Bitops.eq arg165 (Bits.of_int 0 
-              32) && Bitops.eq arg166 (Bits.of_int 0 3) && Bitops.eq arg167 
-            (Bits.of_int 0 1) && Bitops.eq arg163 (Bits.of_int 0 3) && 
-          Bitops.eq arg164 (Bits.of_int 0 1) && Bitops.eq arg161 
-            (Bits.of_int 0 3) && Bitops.eq arg162 (Bits.of_int 0 1))) -> 
-           Instruction.andcc (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+          rs2 = rs2' && (Bitops.eq arg174 (Bits.U.of_int 0 32) && Bitops.eq 
+            arg175 (Bits.U.of_int 0 3) && Bitops.eq arg176 (Bits.U.of_int 1 1) && 
+          Bitops.eq arg171 (Bits.U.of_int 0 32) && Bitops.eq arg172 (Bits.U.of_int 
+              0 3) && Bitops.eq arg173 (Bits.U.of_int 0 1) && Bitops.eq arg168 
+            (Bits.U.of_int 0 32) && Bitops.eq arg169 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg170 (Bits.U.of_int 1 1) && Bitops.eq arg165 (Bits.U.of_int 0 
+              32) && Bitops.eq arg166 (Bits.U.of_int 0 3) && Bitops.eq arg167 
+            (Bits.U.of_int 0 1) && Bitops.eq arg163 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg164 (Bits.U.of_int 0 1) && Bitops.eq arg161 
+            (Bits.U.of_int 0 3) && Bitops.eq arg162 (Bits.U.of_int 0 1))) -> 
+           Instruction.andcc (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -1602,8 +1602,8 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), 32); RP.App (("com", [32]), [RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)])]), 
           32))] -> 
-           Instruction.andn (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+           Instruction.andn (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -1683,18 +1683,18 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.Const (RP.Bits arg200), 1))] 
       when Base.to_bool (rs1 = rs1'''' && rs2 = rs2'''' && rs1 = rs1''' && 
           rs2 = rs2''' && rs1 = rs1'' && rs2 = rs2'' && rs1 = rs1' && 
-          rs2 = rs2' && (Bitops.eq arg212 (Bits.of_int 0 32) && Bitops.eq 
-            arg213 (Bits.of_int 0 3) && Bitops.eq arg214 (Bits.of_int 1 1) && 
-          Bitops.eq arg209 (Bits.of_int 0 32) && Bitops.eq arg210 (Bits.of_int 
-              0 3) && Bitops.eq arg211 (Bits.of_int 0 1) && Bitops.eq arg206 
-            (Bits.of_int 0 32) && Bitops.eq arg207 (Bits.of_int 0 3) && 
-          Bitops.eq arg208 (Bits.of_int 1 1) && Bitops.eq arg203 (Bits.of_int 0 
-              32) && Bitops.eq arg204 (Bits.of_int 0 3) && Bitops.eq arg205 
-            (Bits.of_int 0 1) && Bitops.eq arg201 (Bits.of_int 0 3) && 
-          Bitops.eq arg202 (Bits.of_int 0 1) && Bitops.eq arg199 
-            (Bits.of_int 0 3) && Bitops.eq arg200 (Bits.of_int 0 1))) -> 
-           Instruction.andncc (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+          rs2 = rs2' && (Bitops.eq arg212 (Bits.U.of_int 0 32) && Bitops.eq 
+            arg213 (Bits.U.of_int 0 3) && Bitops.eq arg214 (Bits.U.of_int 1 1) && 
+          Bitops.eq arg209 (Bits.U.of_int 0 32) && Bitops.eq arg210 (Bits.U.of_int 
+              0 3) && Bitops.eq arg211 (Bits.U.of_int 0 1) && Bitops.eq arg206 
+            (Bits.U.of_int 0 32) && Bitops.eq arg207 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg208 (Bits.U.of_int 1 1) && Bitops.eq arg203 (Bits.U.of_int 0 
+              32) && Bitops.eq arg204 (Bits.U.of_int 0 3) && Bitops.eq arg205 
+            (Bits.U.of_int 0 1) && Bitops.eq arg201 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg202 (Bits.U.of_int 0 1) && Bitops.eq arg199 
+            (Bits.U.of_int 0 3) && Bitops.eq arg200 (Bits.U.of_int 0 1))) -> 
+           Instruction.andncc (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -1702,16 +1702,16 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg215)]), 
             32))] 
       when Base.to_bool (Bitops.fits_signed arg215 13) -> 
-           Instruction.or_ (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg215)) (Bits.to_nativeint rd) 
+           Instruction.or_ (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg215)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
           RP.App (("or", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                 Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] -> 
-           Instruction.or_ (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+           Instruction.or_ (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -1746,18 +1746,18 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.Const (RP.Bits arg217), 1))] 
       when Base.to_bool (rs1 = rs1'''' && rs1 = rs1''' && rs1 = rs1'' && 
           rs1 = rs1' && (Bitops.fits_signed arg236 13 && Bitops.eq arg233 
-            (Bits.of_int 0 32) && Bitops.eq arg234 (Bits.of_int 0 3) && 
-          Bitops.eq arg235 (Bits.of_int 1 1) && Bitops.eq arg229 (Bits.of_int 0 
-              32) && Bitops.eq arg230 (Bits.of_int 0 3) && Bitops.eq arg231 
-            (Bits.of_int 0 1) && Bitops.eq arg225 (Bits.of_int 0 32) && 
-          Bitops.eq arg226 (Bits.of_int 0 3) && Bitops.eq arg227 
-            (Bits.of_int 1 1) && Bitops.eq arg221 (Bits.of_int 0 32) && 
-          Bitops.eq arg222 (Bits.of_int 0 3) && Bitops.eq arg223 
-            (Bits.of_int 0 1) && Bitops.eq arg218 (Bits.of_int 0 3) && 
-          Bitops.eq arg219 (Bits.of_int 0 1) && Bitops.eq arg216 
-            (Bits.of_int 0 3) && Bitops.eq arg217 (Bits.of_int 0 1))) -> 
-           Instruction.orcc (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg236)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 0 32) && Bitops.eq arg234 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg235 (Bits.U.of_int 1 1) && Bitops.eq arg229 (Bits.U.of_int 0 
+              32) && Bitops.eq arg230 (Bits.U.of_int 0 3) && Bitops.eq arg231 
+            (Bits.U.of_int 0 1) && Bitops.eq arg225 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg226 (Bits.U.of_int 0 3) && Bitops.eq arg227 
+            (Bits.U.of_int 1 1) && Bitops.eq arg221 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg222 (Bits.U.of_int 0 3) && Bitops.eq arg223 
+            (Bits.U.of_int 0 1) && Bitops.eq arg218 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg219 (Bits.U.of_int 0 1) && Bitops.eq arg216 
+            (Bits.U.of_int 0 3) && Bitops.eq arg217 (Bits.U.of_int 0 1))) -> 
+           Instruction.orcc (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg236)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -1796,18 +1796,18 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.Const (RP.Bits arg238), 1))] 
       when Base.to_bool (rs1 = rs1'''' && rs2 = rs2'''' && rs1 = rs1''' && 
           rs2 = rs2''' && rs1 = rs1'' && rs2 = rs2'' && rs1 = rs1' && 
-          rs2 = rs2' && (Bitops.eq arg250 (Bits.of_int 0 32) && Bitops.eq 
-            arg251 (Bits.of_int 0 3) && Bitops.eq arg252 (Bits.of_int 1 1) && 
-          Bitops.eq arg247 (Bits.of_int 0 32) && Bitops.eq arg248 (Bits.of_int 
-              0 3) && Bitops.eq arg249 (Bits.of_int 0 1) && Bitops.eq arg244 
-            (Bits.of_int 0 32) && Bitops.eq arg245 (Bits.of_int 0 3) && 
-          Bitops.eq arg246 (Bits.of_int 1 1) && Bitops.eq arg241 (Bits.of_int 0 
-              32) && Bitops.eq arg242 (Bits.of_int 0 3) && Bitops.eq arg243 
-            (Bits.of_int 0 1) && Bitops.eq arg239 (Bits.of_int 0 3) && 
-          Bitops.eq arg240 (Bits.of_int 0 1) && Bitops.eq arg237 
-            (Bits.of_int 0 3) && Bitops.eq arg238 (Bits.of_int 0 1))) -> 
-           Instruction.orcc (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+          rs2 = rs2' && (Bitops.eq arg250 (Bits.U.of_int 0 32) && Bitops.eq 
+            arg251 (Bits.U.of_int 0 3) && Bitops.eq arg252 (Bits.U.of_int 1 1) && 
+          Bitops.eq arg247 (Bits.U.of_int 0 32) && Bitops.eq arg248 (Bits.U.of_int 
+              0 3) && Bitops.eq arg249 (Bits.U.of_int 0 1) && Bitops.eq arg244 
+            (Bits.U.of_int 0 32) && Bitops.eq arg245 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg246 (Bits.U.of_int 1 1) && Bitops.eq arg241 (Bits.U.of_int 0 
+              32) && Bitops.eq arg242 (Bits.U.of_int 0 3) && Bitops.eq arg243 
+            (Bits.U.of_int 0 1) && Bitops.eq arg239 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg240 (Bits.U.of_int 0 1) && Bitops.eq arg237 
+            (Bits.U.of_int 0 3) && Bitops.eq arg238 (Bits.U.of_int 0 1))) -> 
+           Instruction.orcc (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -1822,8 +1822,8 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), 32); RP.App (("com", [32]), [RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)])]), 
           32))] -> 
-           Instruction.orn (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+           Instruction.orn (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -1903,18 +1903,18 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.Const (RP.Bits arg276), 1))] 
       when Base.to_bool (rs1 = rs1'''' && rs2 = rs2'''' && rs1 = rs1''' && 
           rs2 = rs2''' && rs1 = rs1'' && rs2 = rs2'' && rs1 = rs1' && 
-          rs2 = rs2' && (Bitops.eq arg288 (Bits.of_int 0 32) && Bitops.eq 
-            arg289 (Bits.of_int 0 3) && Bitops.eq arg290 (Bits.of_int 1 1) && 
-          Bitops.eq arg285 (Bits.of_int 0 32) && Bitops.eq arg286 (Bits.of_int 
-              0 3) && Bitops.eq arg287 (Bits.of_int 0 1) && Bitops.eq arg282 
-            (Bits.of_int 0 32) && Bitops.eq arg283 (Bits.of_int 0 3) && 
-          Bitops.eq arg284 (Bits.of_int 1 1) && Bitops.eq arg279 (Bits.of_int 0 
-              32) && Bitops.eq arg280 (Bits.of_int 0 3) && Bitops.eq arg281 
-            (Bits.of_int 0 1) && Bitops.eq arg277 (Bits.of_int 0 3) && 
-          Bitops.eq arg278 (Bits.of_int 0 1) && Bitops.eq arg275 
-            (Bits.of_int 0 3) && Bitops.eq arg276 (Bits.of_int 0 1))) -> 
-           Instruction.orncc (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+          rs2 = rs2' && (Bitops.eq arg288 (Bits.U.of_int 0 32) && Bitops.eq 
+            arg289 (Bits.U.of_int 0 3) && Bitops.eq arg290 (Bits.U.of_int 1 1) && 
+          Bitops.eq arg285 (Bits.U.of_int 0 32) && Bitops.eq arg286 (Bits.U.of_int 
+              0 3) && Bitops.eq arg287 (Bits.U.of_int 0 1) && Bitops.eq arg282 
+            (Bits.U.of_int 0 32) && Bitops.eq arg283 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg284 (Bits.U.of_int 1 1) && Bitops.eq arg279 (Bits.U.of_int 0 
+              32) && Bitops.eq arg280 (Bits.U.of_int 0 3) && Bitops.eq arg281 
+            (Bits.U.of_int 0 1) && Bitops.eq arg277 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg278 (Bits.U.of_int 0 1) && Bitops.eq arg275 
+            (Bits.U.of_int 0 3) && Bitops.eq arg276 (Bits.U.of_int 0 1))) -> 
+           Instruction.orncc (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -1922,16 +1922,16 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg291)]), 
             32))] 
       when Base.to_bool (Bitops.fits_signed arg291 13) -> 
-           Instruction.xor (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg291)) (Bits.to_nativeint rd) 
+           Instruction.xor (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg291)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
           RP.App (("xor", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                 Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] -> 
-           Instruction.xor (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+           Instruction.xor (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -1966,18 +1966,18 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.Const (RP.Bits arg293), 1))] 
       when Base.to_bool (rs1 = rs1'''' && rs1 = rs1''' && rs1 = rs1'' && 
           rs1 = rs1' && (Bitops.fits_signed arg312 13 && Bitops.eq arg309 
-            (Bits.of_int 0 32) && Bitops.eq arg310 (Bits.of_int 0 3) && 
-          Bitops.eq arg311 (Bits.of_int 1 1) && Bitops.eq arg305 (Bits.of_int 0 
-              32) && Bitops.eq arg306 (Bits.of_int 0 3) && Bitops.eq arg307 
-            (Bits.of_int 0 1) && Bitops.eq arg301 (Bits.of_int 0 32) && 
-          Bitops.eq arg302 (Bits.of_int 0 3) && Bitops.eq arg303 
-            (Bits.of_int 1 1) && Bitops.eq arg297 (Bits.of_int 0 32) && 
-          Bitops.eq arg298 (Bits.of_int 0 3) && Bitops.eq arg299 
-            (Bits.of_int 0 1) && Bitops.eq arg294 (Bits.of_int 0 3) && 
-          Bitops.eq arg295 (Bits.of_int 0 1) && Bitops.eq arg292 
-            (Bits.of_int 0 3) && Bitops.eq arg293 (Bits.of_int 0 1))) -> 
-           Instruction.xorcc (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg312)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 0 32) && Bitops.eq arg310 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg311 (Bits.U.of_int 1 1) && Bitops.eq arg305 (Bits.U.of_int 0 
+              32) && Bitops.eq arg306 (Bits.U.of_int 0 3) && Bitops.eq arg307 
+            (Bits.U.of_int 0 1) && Bitops.eq arg301 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg302 (Bits.U.of_int 0 3) && Bitops.eq arg303 
+            (Bits.U.of_int 1 1) && Bitops.eq arg297 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg298 (Bits.U.of_int 0 3) && Bitops.eq arg299 
+            (Bits.U.of_int 0 1) && Bitops.eq arg294 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg295 (Bits.U.of_int 0 1) && Bitops.eq arg292 
+            (Bits.U.of_int 0 3) && Bitops.eq arg293 (Bits.U.of_int 0 1))) -> 
+           Instruction.xorcc (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg312)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -2016,18 +2016,18 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.Const (RP.Bits arg314), 1))] 
       when Base.to_bool (rs1 = rs1'''' && rs2 = rs2'''' && rs1 = rs1''' && 
           rs2 = rs2''' && rs1 = rs1'' && rs2 = rs2'' && rs1 = rs1' && 
-          rs2 = rs2' && (Bitops.eq arg326 (Bits.of_int 0 32) && Bitops.eq 
-            arg327 (Bits.of_int 0 3) && Bitops.eq arg328 (Bits.of_int 1 1) && 
-          Bitops.eq arg323 (Bits.of_int 0 32) && Bitops.eq arg324 (Bits.of_int 
-              0 3) && Bitops.eq arg325 (Bits.of_int 0 1) && Bitops.eq arg320 
-            (Bits.of_int 0 32) && Bitops.eq arg321 (Bits.of_int 0 3) && 
-          Bitops.eq arg322 (Bits.of_int 1 1) && Bitops.eq arg317 (Bits.of_int 0 
-              32) && Bitops.eq arg318 (Bits.of_int 0 3) && Bitops.eq arg319 
-            (Bits.of_int 0 1) && Bitops.eq arg315 (Bits.of_int 0 3) && 
-          Bitops.eq arg316 (Bits.of_int 0 1) && Bitops.eq arg313 
-            (Bits.of_int 0 3) && Bitops.eq arg314 (Bits.of_int 0 1))) -> 
-           Instruction.xorcc (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+          rs2 = rs2' && (Bitops.eq arg326 (Bits.U.of_int 0 32) && Bitops.eq 
+            arg327 (Bits.U.of_int 0 3) && Bitops.eq arg328 (Bits.U.of_int 1 1) && 
+          Bitops.eq arg323 (Bits.U.of_int 0 32) && Bitops.eq arg324 (Bits.U.of_int 
+              0 3) && Bitops.eq arg325 (Bits.U.of_int 0 1) && Bitops.eq arg320 
+            (Bits.U.of_int 0 32) && Bitops.eq arg321 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg322 (Bits.U.of_int 1 1) && Bitops.eq arg317 (Bits.U.of_int 0 
+              32) && Bitops.eq arg318 (Bits.U.of_int 0 3) && Bitops.eq arg319 
+            (Bits.U.of_int 0 1) && Bitops.eq arg315 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg316 (Bits.U.of_int 0 1) && Bitops.eq arg313 
+            (Bits.U.of_int 0 3) && Bitops.eq arg314 (Bits.U.of_int 0 1))) -> 
+           Instruction.xorcc (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -2042,8 +2042,8 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), 32); RP.App (("com", [32]), [RP.Fetch (RP.Cell ('r', 
                   Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)])]), 
           32))] -> 
-           Instruction.xnor (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+           Instruction.xnor (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -2123,18 +2123,18 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.Const (RP.Bits arg352), 1))] 
       when Base.to_bool (rs1 = rs1'''' && rs2 = rs2'''' && rs1 = rs1''' && 
           rs2 = rs2''' && rs1 = rs1'' && rs2 = rs2'' && rs1 = rs1' && 
-          rs2 = rs2' && (Bitops.eq arg364 (Bits.of_int 0 32) && Bitops.eq 
-            arg365 (Bits.of_int 0 3) && Bitops.eq arg366 (Bits.of_int 1 1) && 
-          Bitops.eq arg361 (Bits.of_int 0 32) && Bitops.eq arg362 (Bits.of_int 
-              0 3) && Bitops.eq arg363 (Bits.of_int 0 1) && Bitops.eq arg358 
-            (Bits.of_int 0 32) && Bitops.eq arg359 (Bits.of_int 0 3) && 
-          Bitops.eq arg360 (Bits.of_int 1 1) && Bitops.eq arg355 (Bits.of_int 0 
-              32) && Bitops.eq arg356 (Bits.of_int 0 3) && Bitops.eq arg357 
-            (Bits.of_int 0 1) && Bitops.eq arg353 (Bits.of_int 0 3) && 
-          Bitops.eq arg354 (Bits.of_int 0 1) && Bitops.eq arg351 
-            (Bits.of_int 0 3) && Bitops.eq arg352 (Bits.of_int 0 1))) -> 
-           Instruction.xnorcc (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+          rs2 = rs2' && (Bitops.eq arg364 (Bits.U.of_int 0 32) && Bitops.eq 
+            arg365 (Bits.U.of_int 0 3) && Bitops.eq arg366 (Bits.U.of_int 1 1) && 
+          Bitops.eq arg361 (Bits.U.of_int 0 32) && Bitops.eq arg362 (Bits.U.of_int 
+              0 3) && Bitops.eq arg363 (Bits.U.of_int 0 1) && Bitops.eq arg358 
+            (Bits.U.of_int 0 32) && Bitops.eq arg359 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg360 (Bits.U.of_int 1 1) && Bitops.eq arg355 (Bits.U.of_int 0 
+              32) && Bitops.eq arg356 (Bits.U.of_int 0 3) && Bitops.eq arg357 
+            (Bits.U.of_int 0 1) && Bitops.eq arg353 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg354 (Bits.U.of_int 0 1) && Bitops.eq arg351 
+            (Bits.U.of_int 0 3) && Bitops.eq arg352 (Bits.U.of_int 0 1))) -> 
+           Instruction.xnorcc (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("shl", [32; 5]), 
@@ -2152,9 +2152,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   [32; 32; 5]), [RP.Const (RP.Bits arg368); 
                     RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
                       RP.Const (RP.Bits rs2), _), 32)])]), 32))] 
-      when Base.to_bool (Bitops.eq arg368 (Bits.of_int 0 32)) -> 
-           Instruction.sll (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg368 (Bits.U.of_int 0 32)) -> 
+           Instruction.sll (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("shrl", [32; 5]), 
@@ -2172,9 +2172,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   [32; 32; 5]), [RP.Const (RP.Bits arg370); 
                     RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
                       RP.Const (RP.Bits rs2), _), 32)])]), 32))] 
-      when Base.to_bool (Bitops.eq arg370 (Bits.of_int 0 32)) -> 
-           Instruction.srl (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg370 (Bits.U.of_int 0 32)) -> 
+           Instruction.srl (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("shra", [32; 5]), 
@@ -2192,9 +2192,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   [32; 32; 5]), [RP.Const (RP.Bits arg372); 
                     RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
                       RP.Const (RP.Bits rs2), _), 32)])]), 32))] 
-      when Base.to_bool (Bitops.eq arg372 (Bits.of_int 0 32)) -> 
-           Instruction.sra (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg372 (Bits.U.of_int 0 32)) -> 
+           Instruction.sra (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -2202,16 +2202,16 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg373)]), 
             32))] 
       when Base.to_bool (Bitops.fits_signed arg373 13) -> 
-           Instruction.add (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg373)) (Bits.to_nativeint rd) 
+           Instruction.add (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg373)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
           RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                 Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] -> 
-           Instruction.add (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+           Instruction.add (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -2286,25 +2286,25 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           rs1 = rs1'''''''''' && rs1 = rs1''''''''' && rs1 = rs1'''''''' && 
           rs1 = rs1''''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
           rs1 = rs1'''' && rs1 = rs1''' && rs1 = rs1'' && rs1 = rs1' && 
-          (Bitops.fits_signed arg411 13 && Bitops.eq arg408 (Bits.of_int 0 
-              32) && Bitops.eq arg409 (Bits.of_int 0 3) && Bitops.eq arg410 
-            (Bits.of_int 1 1) && Bitops.eq arg404 (Bits.of_int 0 32) && 
-          Bitops.eq arg405 (Bits.of_int 0 3) && Bitops.eq arg406 (Bits.of_int 0 
-              1) && Bitops.eq arg400 (Bits.of_int 0 32) && Bitops.eq arg401 
-            (Bits.of_int 0 3) && Bitops.eq arg402 (Bits.of_int 1 1) && 
-          Bitops.eq arg396 (Bits.of_int 0 32) && Bitops.eq arg397 (Bits.of_int 
-              0 3) && Bitops.eq arg398 (Bits.of_int 0 1) && Bitops.eq arg391 
-            (Bits.of_int 31 32) && Bitops.eq arg390 (Bits.of_int 31 32) && 
-          Bitops.eq arg389 (Bits.of_int 31 32) && Bitops.eq arg393 (Bits.of_int 
-              0 3) && Bitops.eq arg394 (Bits.of_int 1 1) && Bitops.eq arg384 
-            (Bits.of_int 31 32) && Bitops.eq arg383 (Bits.of_int 31 32) && 
-          Bitops.eq arg382 (Bits.of_int 31 32) && Bitops.eq arg386 (Bits.of_int 
-              0 3) && Bitops.eq arg387 (Bits.of_int 0 1) && Bitops.eq arg377 
-            (Bits.of_int 31 32) && Bitops.eq arg379 (Bits.of_int 0 3) && 
-          Bitops.eq arg380 (Bits.of_int 0 1) && Bitops.eq arg374 
-            (Bits.of_int 0 3) && Bitops.eq arg375 (Bits.of_int 0 1))) -> 
-           Instruction.addcc (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg411)) (Bits.to_nativeint rd) 
+          (Bitops.fits_signed arg411 13 && Bitops.eq arg408 (Bits.U.of_int 0 
+              32) && Bitops.eq arg409 (Bits.U.of_int 0 3) && Bitops.eq arg410 
+            (Bits.U.of_int 1 1) && Bitops.eq arg404 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg405 (Bits.U.of_int 0 3) && Bitops.eq arg406 (Bits.U.of_int 0 
+              1) && Bitops.eq arg400 (Bits.U.of_int 0 32) && Bitops.eq arg401 
+            (Bits.U.of_int 0 3) && Bitops.eq arg402 (Bits.U.of_int 1 1) && 
+          Bitops.eq arg396 (Bits.U.of_int 0 32) && Bitops.eq arg397 (Bits.U.of_int 
+              0 3) && Bitops.eq arg398 (Bits.U.of_int 0 1) && Bitops.eq arg391 
+            (Bits.U.of_int 31 32) && Bitops.eq arg390 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg389 (Bits.U.of_int 31 32) && Bitops.eq arg393 (Bits.U.of_int 
+              0 3) && Bitops.eq arg394 (Bits.U.of_int 1 1) && Bitops.eq arg384 
+            (Bits.U.of_int 31 32) && Bitops.eq arg383 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg382 (Bits.U.of_int 31 32) && Bitops.eq arg386 (Bits.U.of_int 
+              0 3) && Bitops.eq arg387 (Bits.U.of_int 0 1) && Bitops.eq arg377 
+            (Bits.U.of_int 31 32) && Bitops.eq arg379 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg380 (Bits.U.of_int 0 1) && Bitops.eq arg374 
+            (Bits.U.of_int 0 3) && Bitops.eq arg375 (Bits.U.of_int 0 1))) -> 
+           Instruction.addcc (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg411)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -2398,26 +2398,26 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           rs2 = rs2''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
           rs2 = rs2'''' && rs1 = rs1'''' && rs2 = rs2''' && rs1 = rs1''' && 
           rs1 = rs1'' && rs2 = rs2'' && rs1 = rs1' && rs2 = rs2' && (Bitops.eq 
-            arg439 (Bits.of_int 0 32) && Bitops.eq arg440 (Bits.of_int 0 3) && 
-          Bitops.eq arg441 (Bits.of_int 1 1) && Bitops.eq arg436 (Bits.of_int 0 
-              32) && Bitops.eq arg437 (Bits.of_int 0 3) && Bitops.eq arg438 
-            (Bits.of_int 0 1) && Bitops.eq arg433 (Bits.of_int 0 32) && 
-          Bitops.eq arg434 (Bits.of_int 0 3) && Bitops.eq arg435 (Bits.of_int 1 
-              1) && Bitops.eq arg430 (Bits.of_int 0 32) && Bitops.eq arg431 
-            (Bits.of_int 0 3) && Bitops.eq arg432 (Bits.of_int 0 1) && 
-          Bitops.eq arg427 (Bits.of_int 31 32) && Bitops.eq arg426 (Bits.of_int 
-              31 32) && Bitops.eq arg425 (Bits.of_int 31 32) && Bitops.eq 
-            arg424 (Bits.of_int 31 32) && Bitops.eq arg428 (Bits.of_int 0 3) && 
-          Bitops.eq arg429 (Bits.of_int 1 1) && Bitops.eq arg421 
-            (Bits.of_int 31 32) && Bitops.eq arg420 (Bits.of_int 31 32) && 
-          Bitops.eq arg419 (Bits.of_int 31 32) && Bitops.eq arg418 (Bits.of_int 
-              31 32) && Bitops.eq arg422 (Bits.of_int 0 3) && Bitops.eq arg423 
-            (Bits.of_int 0 1) && Bitops.eq arg415 (Bits.of_int 31 32) && 
-          Bitops.eq arg414 (Bits.of_int 31 32) && Bitops.eq arg416 (Bits.of_int 
-              0 3) && Bitops.eq arg417 (Bits.of_int 0 1) && Bitops.eq arg412 
-            (Bits.of_int 0 3) && Bitops.eq arg413 (Bits.of_int 0 1))) -> 
-           Instruction.addcc (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+            arg439 (Bits.U.of_int 0 32) && Bitops.eq arg440 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg441 (Bits.U.of_int 1 1) && Bitops.eq arg436 (Bits.U.of_int 0 
+              32) && Bitops.eq arg437 (Bits.U.of_int 0 3) && Bitops.eq arg438 
+            (Bits.U.of_int 0 1) && Bitops.eq arg433 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg434 (Bits.U.of_int 0 3) && Bitops.eq arg435 (Bits.U.of_int 1 
+              1) && Bitops.eq arg430 (Bits.U.of_int 0 32) && Bitops.eq arg431 
+            (Bits.U.of_int 0 3) && Bitops.eq arg432 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg427 (Bits.U.of_int 31 32) && Bitops.eq arg426 (Bits.U.of_int 
+              31 32) && Bitops.eq arg425 (Bits.U.of_int 31 32) && Bitops.eq 
+            arg424 (Bits.U.of_int 31 32) && Bitops.eq arg428 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg429 (Bits.U.of_int 1 1) && Bitops.eq arg421 
+            (Bits.U.of_int 31 32) && Bitops.eq arg420 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg419 (Bits.U.of_int 31 32) && Bitops.eq arg418 (Bits.U.of_int 
+              31 32) && Bitops.eq arg422 (Bits.U.of_int 0 3) && Bitops.eq arg423 
+            (Bits.U.of_int 0 1) && Bitops.eq arg415 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg414 (Bits.U.of_int 31 32) && Bitops.eq arg416 (Bits.U.of_int 
+              0 3) && Bitops.eq arg417 (Bits.U.of_int 0 1) && Bitops.eq arg412 
+            (Bits.U.of_int 0 3) && Bitops.eq arg413 (Bits.U.of_int 0 1))) -> 
+           Instruction.addcc (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("add", [32]), 
@@ -2427,9 +2427,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   [RP.Fetch (RP.Slice (1, 20, RP.Cell ('i', Rtl.Identity, 32, 
                       RP.Const (RP.Bits arg442), _)), 1)])]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg443 13 && Bitops.eq arg442 
-            (Bits.of_int 0 3)) -> 
-           Instruction.addx (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg443)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 0 3)) -> 
+           Instruction.addx (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg443)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("add", [32]), 
@@ -2439,9 +2439,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.App (("zx", [1; 32]), 
                   [RP.Fetch (RP.Slice (1, 20, RP.Cell ('i', Rtl.Identity, 32, 
                       RP.Const (RP.Bits arg444), _)), 1)])]), 32))] 
-      when Base.to_bool (Bitops.eq arg444 (Bits.of_int 0 3)) -> 
-           Instruction.addx (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg444 (Bits.U.of_int 0 3)) -> 
+           Instruction.addx (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("add", [32]), 
@@ -2536,29 +2536,29 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           rs1 = rs1'''''''''' && rs1 = rs1''''''''' && rs1 = rs1'''''''' && 
           rs1 = rs1''''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
           rs1 = rs1'''' && rs1 = rs1''' && rs1 = rs1'' && rs1 = rs1' && 
-          (Bitops.fits_signed arg489 13 && Bitops.eq arg488 (Bits.of_int 0 
-              3) && Bitops.eq arg483 (Bits.of_int 0 3) && Bitops.eq arg485 
-            (Bits.of_int 0 32) && Bitops.eq arg486 (Bits.of_int 0 3) && 
-          Bitops.eq arg487 (Bits.of_int 1 1) && Bitops.eq arg478 (Bits.of_int 0 
-              3) && Bitops.eq arg480 (Bits.of_int 0 32) && Bitops.eq arg481 
-            (Bits.of_int 0 3) && Bitops.eq arg482 (Bits.of_int 0 1) && 
-          Bitops.eq arg473 (Bits.of_int 0 3) && Bitops.eq arg475 (Bits.of_int 0 
-              32) && Bitops.eq arg476 (Bits.of_int 0 3) && Bitops.eq arg477 
-            (Bits.of_int 1 1) && Bitops.eq arg468 (Bits.of_int 0 3) && 
-          Bitops.eq arg470 (Bits.of_int 0 32) && Bitops.eq arg471 (Bits.of_int 
-              0 3) && Bitops.eq arg472 (Bits.of_int 0 1) && Bitops.eq arg464 
-            (Bits.of_int 31 32) && Bitops.eq arg463 (Bits.of_int 31 32) && 
-          Bitops.eq arg462 (Bits.of_int 31 32) && Bitops.eq arg460 (Bits.of_int 
-              0 3) && Bitops.eq arg466 (Bits.of_int 0 3) && Bitops.eq arg467 
-            (Bits.of_int 1 1) && Bitops.eq arg456 (Bits.of_int 31 32) && 
-          Bitops.eq arg455 (Bits.of_int 31 32) && Bitops.eq arg454 (Bits.of_int 
-              31 32) && Bitops.eq arg452 (Bits.of_int 0 3) && Bitops.eq arg458 
-            (Bits.of_int 0 3) && Bitops.eq arg459 (Bits.of_int 0 1) && 
-          Bitops.eq arg448 (Bits.of_int 31 32) && Bitops.eq arg450 (Bits.of_int 
-              0 3) && Bitops.eq arg451 (Bits.of_int 0 1) && Bitops.eq arg445 
-            (Bits.of_int 0 3) && Bitops.eq arg446 (Bits.of_int 0 3))) -> 
-           Instruction.addxcc (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg489)) (Bits.to_nativeint rd) 
+          (Bitops.fits_signed arg489 13 && Bitops.eq arg488 (Bits.U.of_int 0 
+              3) && Bitops.eq arg483 (Bits.U.of_int 0 3) && Bitops.eq arg485 
+            (Bits.U.of_int 0 32) && Bitops.eq arg486 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg487 (Bits.U.of_int 1 1) && Bitops.eq arg478 (Bits.U.of_int 0 
+              3) && Bitops.eq arg480 (Bits.U.of_int 0 32) && Bitops.eq arg481 
+            (Bits.U.of_int 0 3) && Bitops.eq arg482 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg473 (Bits.U.of_int 0 3) && Bitops.eq arg475 (Bits.U.of_int 0 
+              32) && Bitops.eq arg476 (Bits.U.of_int 0 3) && Bitops.eq arg477 
+            (Bits.U.of_int 1 1) && Bitops.eq arg468 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg470 (Bits.U.of_int 0 32) && Bitops.eq arg471 (Bits.U.of_int 
+              0 3) && Bitops.eq arg472 (Bits.U.of_int 0 1) && Bitops.eq arg464 
+            (Bits.U.of_int 31 32) && Bitops.eq arg463 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg462 (Bits.U.of_int 31 32) && Bitops.eq arg460 (Bits.U.of_int 
+              0 3) && Bitops.eq arg466 (Bits.U.of_int 0 3) && Bitops.eq arg467 
+            (Bits.U.of_int 1 1) && Bitops.eq arg456 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg455 (Bits.U.of_int 31 32) && Bitops.eq arg454 (Bits.U.of_int 
+              31 32) && Bitops.eq arg452 (Bits.U.of_int 0 3) && Bitops.eq arg458 
+            (Bits.U.of_int 0 3) && Bitops.eq arg459 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg448 (Bits.U.of_int 31 32) && Bitops.eq arg450 (Bits.U.of_int 
+              0 3) && Bitops.eq arg451 (Bits.U.of_int 0 1) && Bitops.eq arg445 
+            (Bits.U.of_int 0 3) && Bitops.eq arg446 (Bits.U.of_int 0 3))) -> 
+           Instruction.addxcc (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg489)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("add", [32]), 
@@ -2672,30 +2672,30 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           rs2 = rs2''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
           rs2 = rs2'''' && rs1 = rs1'''' && rs2 = rs2''' && rs1 = rs1''' && 
           rs1 = rs1'' && rs2 = rs2'' && rs1 = rs1' && rs2 = rs2' && (Bitops.eq 
-            arg526 (Bits.of_int 0 3) && Bitops.eq arg522 (Bits.of_int 0 3) && 
-          Bitops.eq arg523 (Bits.of_int 0 32) && Bitops.eq arg524 (Bits.of_int 
-              0 3) && Bitops.eq arg525 (Bits.of_int 1 1) && Bitops.eq arg518 
-            (Bits.of_int 0 3) && Bitops.eq arg519 (Bits.of_int 0 32) && 
-          Bitops.eq arg520 (Bits.of_int 0 3) && Bitops.eq arg521 (Bits.of_int 0 
-              1) && Bitops.eq arg514 (Bits.of_int 0 3) && Bitops.eq arg515 
-            (Bits.of_int 0 32) && Bitops.eq arg516 (Bits.of_int 0 3) && 
-          Bitops.eq arg517 (Bits.of_int 1 1) && Bitops.eq arg510 (Bits.of_int 0 
-              3) && Bitops.eq arg511 (Bits.of_int 0 32) && Bitops.eq arg512 
-            (Bits.of_int 0 3) && Bitops.eq arg513 (Bits.of_int 0 1) && 
-          Bitops.eq arg507 (Bits.of_int 31 32) && Bitops.eq arg506 (Bits.of_int 
-              31 32) && Bitops.eq arg505 (Bits.of_int 31 32) && Bitops.eq 
-            arg504 (Bits.of_int 31 32) && Bitops.eq arg503 (Bits.of_int 0 3) && 
-          Bitops.eq arg508 (Bits.of_int 0 3) && Bitops.eq arg509 (Bits.of_int 1 
-              1) && Bitops.eq arg500 (Bits.of_int 31 32) && Bitops.eq arg499 
-            (Bits.of_int 31 32) && Bitops.eq arg498 (Bits.of_int 31 32) && 
-          Bitops.eq arg497 (Bits.of_int 31 32) && Bitops.eq arg496 (Bits.of_int 
-              0 3) && Bitops.eq arg501 (Bits.of_int 0 3) && Bitops.eq arg502 
-            (Bits.of_int 0 1) && Bitops.eq arg493 (Bits.of_int 31 32) && 
-          Bitops.eq arg492 (Bits.of_int 31 32) && Bitops.eq arg494 (Bits.of_int 
-              0 3) && Bitops.eq arg495 (Bits.of_int 0 1) && Bitops.eq arg490 
-            (Bits.of_int 0 3) && Bitops.eq arg491 (Bits.of_int 0 3))) -> 
-           Instruction.addxcc (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+            arg526 (Bits.U.of_int 0 3) && Bitops.eq arg522 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg523 (Bits.U.of_int 0 32) && Bitops.eq arg524 (Bits.U.of_int 
+              0 3) && Bitops.eq arg525 (Bits.U.of_int 1 1) && Bitops.eq arg518 
+            (Bits.U.of_int 0 3) && Bitops.eq arg519 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg520 (Bits.U.of_int 0 3) && Bitops.eq arg521 (Bits.U.of_int 0 
+              1) && Bitops.eq arg514 (Bits.U.of_int 0 3) && Bitops.eq arg515 
+            (Bits.U.of_int 0 32) && Bitops.eq arg516 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg517 (Bits.U.of_int 1 1) && Bitops.eq arg510 (Bits.U.of_int 0 
+              3) && Bitops.eq arg511 (Bits.U.of_int 0 32) && Bitops.eq arg512 
+            (Bits.U.of_int 0 3) && Bitops.eq arg513 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg507 (Bits.U.of_int 31 32) && Bitops.eq arg506 (Bits.U.of_int 
+              31 32) && Bitops.eq arg505 (Bits.U.of_int 31 32) && Bitops.eq 
+            arg504 (Bits.U.of_int 31 32) && Bitops.eq arg503 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg508 (Bits.U.of_int 0 3) && Bitops.eq arg509 (Bits.U.of_int 1 
+              1) && Bitops.eq arg500 (Bits.U.of_int 31 32) && Bitops.eq arg499 
+            (Bits.U.of_int 31 32) && Bitops.eq arg498 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg497 (Bits.U.of_int 31 32) && Bitops.eq arg496 (Bits.U.of_int 
+              0 3) && Bitops.eq arg501 (Bits.U.of_int 0 3) && Bitops.eq arg502 
+            (Bits.U.of_int 0 1) && Bitops.eq arg493 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg492 (Bits.U.of_int 31 32) && Bitops.eq arg494 (Bits.U.of_int 
+              0 3) && Bitops.eq arg495 (Bits.U.of_int 0 1) && Bitops.eq arg490 
+            (Bits.U.of_int 0 3) && Bitops.eq arg491 (Bits.U.of_int 0 3))) -> 
+           Instruction.addxcc (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -2770,25 +2770,25 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           rs1 = rs1'''''''''' && rs1 = rs1''''''''' && rs1 = rs1'''''''' && 
           rs1 = rs1''''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
           rs1 = rs1'''' && rs1 = rs1''' && rs1 = rs1'' && rs1 = rs1' && 
-          (Bitops.fits_signed arg564 13 && Bitops.eq arg561 (Bits.of_int 0 
-              32) && Bitops.eq arg562 (Bits.of_int 0 3) && Bitops.eq arg563 
-            (Bits.of_int 1 1) && Bitops.eq arg557 (Bits.of_int 0 32) && 
-          Bitops.eq arg558 (Bits.of_int 0 3) && Bitops.eq arg559 (Bits.of_int 0 
-              1) && Bitops.eq arg553 (Bits.of_int 0 32) && Bitops.eq arg554 
-            (Bits.of_int 0 3) && Bitops.eq arg555 (Bits.of_int 1 1) && 
-          Bitops.eq arg549 (Bits.of_int 0 32) && Bitops.eq arg550 (Bits.of_int 
-              0 3) && Bitops.eq arg551 (Bits.of_int 0 1) && Bitops.eq arg544 
-            (Bits.of_int 31 32) && Bitops.eq arg543 (Bits.of_int 31 32) && 
-          Bitops.eq arg542 (Bits.of_int 31 32) && Bitops.eq arg546 (Bits.of_int 
-              0 3) && Bitops.eq arg547 (Bits.of_int 1 1) && Bitops.eq arg537 
-            (Bits.of_int 31 32) && Bitops.eq arg536 (Bits.of_int 31 32) && 
-          Bitops.eq arg535 (Bits.of_int 31 32) && Bitops.eq arg539 (Bits.of_int 
-              0 3) && Bitops.eq arg540 (Bits.of_int 0 1) && Bitops.eq arg530 
-            (Bits.of_int 31 32) && Bitops.eq arg532 (Bits.of_int 0 3) && 
-          Bitops.eq arg533 (Bits.of_int 0 1) && Bitops.eq arg527 
-            (Bits.of_int 0 3) && Bitops.eq arg528 (Bits.of_int 0 1))) -> 
-           Instruction.taddcc (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg564)) (Bits.to_nativeint rd) 
+          (Bitops.fits_signed arg564 13 && Bitops.eq arg561 (Bits.U.of_int 0 
+              32) && Bitops.eq arg562 (Bits.U.of_int 0 3) && Bitops.eq arg563 
+            (Bits.U.of_int 1 1) && Bitops.eq arg557 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg558 (Bits.U.of_int 0 3) && Bitops.eq arg559 (Bits.U.of_int 0 
+              1) && Bitops.eq arg553 (Bits.U.of_int 0 32) && Bitops.eq arg554 
+            (Bits.U.of_int 0 3) && Bitops.eq arg555 (Bits.U.of_int 1 1) && 
+          Bitops.eq arg549 (Bits.U.of_int 0 32) && Bitops.eq arg550 (Bits.U.of_int 
+              0 3) && Bitops.eq arg551 (Bits.U.of_int 0 1) && Bitops.eq arg544 
+            (Bits.U.of_int 31 32) && Bitops.eq arg543 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg542 (Bits.U.of_int 31 32) && Bitops.eq arg546 (Bits.U.of_int 
+              0 3) && Bitops.eq arg547 (Bits.U.of_int 1 1) && Bitops.eq arg537 
+            (Bits.U.of_int 31 32) && Bitops.eq arg536 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg535 (Bits.U.of_int 31 32) && Bitops.eq arg539 (Bits.U.of_int 
+              0 3) && Bitops.eq arg540 (Bits.U.of_int 0 1) && Bitops.eq arg530 
+            (Bits.U.of_int 31 32) && Bitops.eq arg532 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg533 (Bits.U.of_int 0 1) && Bitops.eq arg527 
+            (Bits.U.of_int 0 3) && Bitops.eq arg528 (Bits.U.of_int 0 1))) -> 
+           Instruction.taddcc (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg564)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -2882,26 +2882,26 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           rs2 = rs2''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
           rs2 = rs2'''' && rs1 = rs1'''' && rs2 = rs2''' && rs1 = rs1''' && 
           rs1 = rs1'' && rs2 = rs2'' && rs1 = rs1' && rs2 = rs2' && (Bitops.eq 
-            arg592 (Bits.of_int 0 32) && Bitops.eq arg593 (Bits.of_int 0 3) && 
-          Bitops.eq arg594 (Bits.of_int 1 1) && Bitops.eq arg589 (Bits.of_int 0 
-              32) && Bitops.eq arg590 (Bits.of_int 0 3) && Bitops.eq arg591 
-            (Bits.of_int 0 1) && Bitops.eq arg586 (Bits.of_int 0 32) && 
-          Bitops.eq arg587 (Bits.of_int 0 3) && Bitops.eq arg588 (Bits.of_int 1 
-              1) && Bitops.eq arg583 (Bits.of_int 0 32) && Bitops.eq arg584 
-            (Bits.of_int 0 3) && Bitops.eq arg585 (Bits.of_int 0 1) && 
-          Bitops.eq arg580 (Bits.of_int 31 32) && Bitops.eq arg579 (Bits.of_int 
-              31 32) && Bitops.eq arg578 (Bits.of_int 31 32) && Bitops.eq 
-            arg577 (Bits.of_int 31 32) && Bitops.eq arg581 (Bits.of_int 0 3) && 
-          Bitops.eq arg582 (Bits.of_int 1 1) && Bitops.eq arg574 
-            (Bits.of_int 31 32) && Bitops.eq arg573 (Bits.of_int 31 32) && 
-          Bitops.eq arg572 (Bits.of_int 31 32) && Bitops.eq arg571 (Bits.of_int 
-              31 32) && Bitops.eq arg575 (Bits.of_int 0 3) && Bitops.eq arg576 
-            (Bits.of_int 0 1) && Bitops.eq arg568 (Bits.of_int 31 32) && 
-          Bitops.eq arg567 (Bits.of_int 31 32) && Bitops.eq arg569 (Bits.of_int 
-              0 3) && Bitops.eq arg570 (Bits.of_int 0 1) && Bitops.eq arg565 
-            (Bits.of_int 0 3) && Bitops.eq arg566 (Bits.of_int 0 1))) -> 
-           Instruction.taddcc (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+            arg592 (Bits.U.of_int 0 32) && Bitops.eq arg593 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg594 (Bits.U.of_int 1 1) && Bitops.eq arg589 (Bits.U.of_int 0 
+              32) && Bitops.eq arg590 (Bits.U.of_int 0 3) && Bitops.eq arg591 
+            (Bits.U.of_int 0 1) && Bitops.eq arg586 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg587 (Bits.U.of_int 0 3) && Bitops.eq arg588 (Bits.U.of_int 1 
+              1) && Bitops.eq arg583 (Bits.U.of_int 0 32) && Bitops.eq arg584 
+            (Bits.U.of_int 0 3) && Bitops.eq arg585 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg580 (Bits.U.of_int 31 32) && Bitops.eq arg579 (Bits.U.of_int 
+              31 32) && Bitops.eq arg578 (Bits.U.of_int 31 32) && Bitops.eq 
+            arg577 (Bits.U.of_int 31 32) && Bitops.eq arg581 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg582 (Bits.U.of_int 1 1) && Bitops.eq arg574 
+            (Bits.U.of_int 31 32) && Bitops.eq arg573 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg572 (Bits.U.of_int 31 32) && Bitops.eq arg571 (Bits.U.of_int 
+              31 32) && Bitops.eq arg575 (Bits.U.of_int 0 3) && Bitops.eq arg576 
+            (Bits.U.of_int 0 1) && Bitops.eq arg568 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg567 (Bits.U.of_int 31 32) && Bitops.eq arg569 (Bits.U.of_int 
+              0 3) && Bitops.eq arg570 (Bits.U.of_int 0 1) && Bitops.eq arg565 
+            (Bits.U.of_int 0 3) && Bitops.eq arg566 (Bits.U.of_int 0 1))) -> 
+           Instruction.taddcc (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -2976,25 +2976,25 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           rs1 = rs1'''''''''' && rs1 = rs1''''''''' && rs1 = rs1'''''''' && 
           rs1 = rs1''''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
           rs1 = rs1'''' && rs1 = rs1''' && rs1 = rs1'' && rs1 = rs1' && 
-          (Bitops.fits_signed arg632 13 && Bitops.eq arg629 (Bits.of_int 0 
-              32) && Bitops.eq arg630 (Bits.of_int 0 3) && Bitops.eq arg631 
-            (Bits.of_int 1 1) && Bitops.eq arg625 (Bits.of_int 0 32) && 
-          Bitops.eq arg626 (Bits.of_int 0 3) && Bitops.eq arg627 (Bits.of_int 0 
-              1) && Bitops.eq arg621 (Bits.of_int 0 32) && Bitops.eq arg622 
-            (Bits.of_int 0 3) && Bitops.eq arg623 (Bits.of_int 1 1) && 
-          Bitops.eq arg617 (Bits.of_int 0 32) && Bitops.eq arg618 (Bits.of_int 
-              0 3) && Bitops.eq arg619 (Bits.of_int 0 1) && Bitops.eq arg612 
-            (Bits.of_int 31 32) && Bitops.eq arg611 (Bits.of_int 31 32) && 
-          Bitops.eq arg610 (Bits.of_int 31 32) && Bitops.eq arg614 (Bits.of_int 
-              0 3) && Bitops.eq arg615 (Bits.of_int 1 1) && Bitops.eq arg605 
-            (Bits.of_int 31 32) && Bitops.eq arg604 (Bits.of_int 31 32) && 
-          Bitops.eq arg603 (Bits.of_int 31 32) && Bitops.eq arg607 (Bits.of_int 
-              0 3) && Bitops.eq arg608 (Bits.of_int 0 1) && Bitops.eq arg598 
-            (Bits.of_int 31 32) && Bitops.eq arg600 (Bits.of_int 0 3) && 
-          Bitops.eq arg601 (Bits.of_int 0 1) && Bitops.eq arg595 
-            (Bits.of_int 0 3) && Bitops.eq arg596 (Bits.of_int 0 1))) -> 
-           Instruction.taddcctv (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg632)) (Bits.to_nativeint rd) 
+          (Bitops.fits_signed arg632 13 && Bitops.eq arg629 (Bits.U.of_int 0 
+              32) && Bitops.eq arg630 (Bits.U.of_int 0 3) && Bitops.eq arg631 
+            (Bits.U.of_int 1 1) && Bitops.eq arg625 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg626 (Bits.U.of_int 0 3) && Bitops.eq arg627 (Bits.U.of_int 0 
+              1) && Bitops.eq arg621 (Bits.U.of_int 0 32) && Bitops.eq arg622 
+            (Bits.U.of_int 0 3) && Bitops.eq arg623 (Bits.U.of_int 1 1) && 
+          Bitops.eq arg617 (Bits.U.of_int 0 32) && Bitops.eq arg618 (Bits.U.of_int 
+              0 3) && Bitops.eq arg619 (Bits.U.of_int 0 1) && Bitops.eq arg612 
+            (Bits.U.of_int 31 32) && Bitops.eq arg611 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg610 (Bits.U.of_int 31 32) && Bitops.eq arg614 (Bits.U.of_int 
+              0 3) && Bitops.eq arg615 (Bits.U.of_int 1 1) && Bitops.eq arg605 
+            (Bits.U.of_int 31 32) && Bitops.eq arg604 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg603 (Bits.U.of_int 31 32) && Bitops.eq arg607 (Bits.U.of_int 
+              0 3) && Bitops.eq arg608 (Bits.U.of_int 0 1) && Bitops.eq arg598 
+            (Bits.U.of_int 31 32) && Bitops.eq arg600 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg601 (Bits.U.of_int 0 1) && Bitops.eq arg595 
+            (Bits.U.of_int 0 3) && Bitops.eq arg596 (Bits.U.of_int 0 1))) -> 
+           Instruction.taddcctv (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg632)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -3088,26 +3088,26 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           rs2 = rs2''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
           rs2 = rs2'''' && rs1 = rs1'''' && rs2 = rs2''' && rs1 = rs1''' && 
           rs1 = rs1'' && rs2 = rs2'' && rs1 = rs1' && rs2 = rs2' && (Bitops.eq 
-            arg660 (Bits.of_int 0 32) && Bitops.eq arg661 (Bits.of_int 0 3) && 
-          Bitops.eq arg662 (Bits.of_int 1 1) && Bitops.eq arg657 (Bits.of_int 0 
-              32) && Bitops.eq arg658 (Bits.of_int 0 3) && Bitops.eq arg659 
-            (Bits.of_int 0 1) && Bitops.eq arg654 (Bits.of_int 0 32) && 
-          Bitops.eq arg655 (Bits.of_int 0 3) && Bitops.eq arg656 (Bits.of_int 1 
-              1) && Bitops.eq arg651 (Bits.of_int 0 32) && Bitops.eq arg652 
-            (Bits.of_int 0 3) && Bitops.eq arg653 (Bits.of_int 0 1) && 
-          Bitops.eq arg648 (Bits.of_int 31 32) && Bitops.eq arg647 (Bits.of_int 
-              31 32) && Bitops.eq arg646 (Bits.of_int 31 32) && Bitops.eq 
-            arg645 (Bits.of_int 31 32) && Bitops.eq arg649 (Bits.of_int 0 3) && 
-          Bitops.eq arg650 (Bits.of_int 1 1) && Bitops.eq arg642 
-            (Bits.of_int 31 32) && Bitops.eq arg641 (Bits.of_int 31 32) && 
-          Bitops.eq arg640 (Bits.of_int 31 32) && Bitops.eq arg639 (Bits.of_int 
-              31 32) && Bitops.eq arg643 (Bits.of_int 0 3) && Bitops.eq arg644 
-            (Bits.of_int 0 1) && Bitops.eq arg636 (Bits.of_int 31 32) && 
-          Bitops.eq arg635 (Bits.of_int 31 32) && Bitops.eq arg637 (Bits.of_int 
-              0 3) && Bitops.eq arg638 (Bits.of_int 0 1) && Bitops.eq arg633 
-            (Bits.of_int 0 3) && Bitops.eq arg634 (Bits.of_int 0 1))) -> 
-           Instruction.taddcctv (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+            arg660 (Bits.U.of_int 0 32) && Bitops.eq arg661 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg662 (Bits.U.of_int 1 1) && Bitops.eq arg657 (Bits.U.of_int 0 
+              32) && Bitops.eq arg658 (Bits.U.of_int 0 3) && Bitops.eq arg659 
+            (Bits.U.of_int 0 1) && Bitops.eq arg654 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg655 (Bits.U.of_int 0 3) && Bitops.eq arg656 (Bits.U.of_int 1 
+              1) && Bitops.eq arg651 (Bits.U.of_int 0 32) && Bitops.eq arg652 
+            (Bits.U.of_int 0 3) && Bitops.eq arg653 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg648 (Bits.U.of_int 31 32) && Bitops.eq arg647 (Bits.U.of_int 
+              31 32) && Bitops.eq arg646 (Bits.U.of_int 31 32) && Bitops.eq 
+            arg645 (Bits.U.of_int 31 32) && Bitops.eq arg649 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg650 (Bits.U.of_int 1 1) && Bitops.eq arg642 
+            (Bits.U.of_int 31 32) && Bitops.eq arg641 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg640 (Bits.U.of_int 31 32) && Bitops.eq arg639 (Bits.U.of_int 
+              31 32) && Bitops.eq arg643 (Bits.U.of_int 0 3) && Bitops.eq arg644 
+            (Bits.U.of_int 0 1) && Bitops.eq arg636 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg635 (Bits.U.of_int 31 32) && Bitops.eq arg637 (Bits.U.of_int 
+              0 3) && Bitops.eq arg638 (Bits.U.of_int 0 1) && Bitops.eq arg633 
+            (Bits.U.of_int 0 3) && Bitops.eq arg634 (Bits.U.of_int 0 1))) -> 
+           Instruction.taddcctv (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -3115,16 +3115,16 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg663)]), 
             32))] 
       when Base.to_bool (Bitops.fits_signed arg663 13) -> 
-           Instruction.sub (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg663)) (Bits.to_nativeint rd) 
+           Instruction.sub (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg663)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
           RP.App (("sub", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                 Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] -> 
-           Instruction.sub (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+           Instruction.sub (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -3199,25 +3199,25 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           rs1 = rs1'''''''''' && rs1 = rs1''''''''' && rs1 = rs1'''''''' && 
           rs1 = rs1''''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
           rs1 = rs1'''' && rs1 = rs1''' && rs1 = rs1'' && rs1 = rs1' && 
-          (Bitops.fits_signed arg701 13 && Bitops.eq arg698 (Bits.of_int 0 
-              32) && Bitops.eq arg699 (Bits.of_int 0 3) && Bitops.eq arg700 
-            (Bits.of_int 1 1) && Bitops.eq arg694 (Bits.of_int 0 32) && 
-          Bitops.eq arg695 (Bits.of_int 0 3) && Bitops.eq arg696 (Bits.of_int 0 
-              1) && Bitops.eq arg690 (Bits.of_int 0 32) && Bitops.eq arg691 
-            (Bits.of_int 0 3) && Bitops.eq arg692 (Bits.of_int 1 1) && 
-          Bitops.eq arg686 (Bits.of_int 0 32) && Bitops.eq arg687 (Bits.of_int 
-              0 3) && Bitops.eq arg688 (Bits.of_int 0 1) && Bitops.eq arg681 
-            (Bits.of_int 31 32) && Bitops.eq arg680 (Bits.of_int 31 32) && 
-          Bitops.eq arg679 (Bits.of_int 31 32) && Bitops.eq arg683 (Bits.of_int 
-              0 3) && Bitops.eq arg684 (Bits.of_int 1 1) && Bitops.eq arg674 
-            (Bits.of_int 31 32) && Bitops.eq arg673 (Bits.of_int 31 32) && 
-          Bitops.eq arg672 (Bits.of_int 31 32) && Bitops.eq arg676 (Bits.of_int 
-              0 3) && Bitops.eq arg677 (Bits.of_int 0 1) && Bitops.eq arg667 
-            (Bits.of_int 31 32) && Bitops.eq arg669 (Bits.of_int 0 3) && 
-          Bitops.eq arg670 (Bits.of_int 0 1) && Bitops.eq arg664 
-            (Bits.of_int 0 3) && Bitops.eq arg665 (Bits.of_int 0 1))) -> 
-           Instruction.subcc (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg701)) (Bits.to_nativeint rd) 
+          (Bitops.fits_signed arg701 13 && Bitops.eq arg698 (Bits.U.of_int 0 
+              32) && Bitops.eq arg699 (Bits.U.of_int 0 3) && Bitops.eq arg700 
+            (Bits.U.of_int 1 1) && Bitops.eq arg694 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg695 (Bits.U.of_int 0 3) && Bitops.eq arg696 (Bits.U.of_int 0 
+              1) && Bitops.eq arg690 (Bits.U.of_int 0 32) && Bitops.eq arg691 
+            (Bits.U.of_int 0 3) && Bitops.eq arg692 (Bits.U.of_int 1 1) && 
+          Bitops.eq arg686 (Bits.U.of_int 0 32) && Bitops.eq arg687 (Bits.U.of_int 
+              0 3) && Bitops.eq arg688 (Bits.U.of_int 0 1) && Bitops.eq arg681 
+            (Bits.U.of_int 31 32) && Bitops.eq arg680 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg679 (Bits.U.of_int 31 32) && Bitops.eq arg683 (Bits.U.of_int 
+              0 3) && Bitops.eq arg684 (Bits.U.of_int 1 1) && Bitops.eq arg674 
+            (Bits.U.of_int 31 32) && Bitops.eq arg673 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg672 (Bits.U.of_int 31 32) && Bitops.eq arg676 (Bits.U.of_int 
+              0 3) && Bitops.eq arg677 (Bits.U.of_int 0 1) && Bitops.eq arg667 
+            (Bits.U.of_int 31 32) && Bitops.eq arg669 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg670 (Bits.U.of_int 0 1) && Bitops.eq arg664 
+            (Bits.U.of_int 0 3) && Bitops.eq arg665 (Bits.U.of_int 0 1))) -> 
+           Instruction.subcc (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg701)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -3311,26 +3311,26 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           rs2 = rs2''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
           rs2 = rs2'''' && rs1 = rs1'''' && rs2 = rs2''' && rs1 = rs1''' && 
           rs1 = rs1'' && rs2 = rs2'' && rs1 = rs1' && rs2 = rs2' && (Bitops.eq 
-            arg729 (Bits.of_int 0 32) && Bitops.eq arg730 (Bits.of_int 0 3) && 
-          Bitops.eq arg731 (Bits.of_int 1 1) && Bitops.eq arg726 (Bits.of_int 0 
-              32) && Bitops.eq arg727 (Bits.of_int 0 3) && Bitops.eq arg728 
-            (Bits.of_int 0 1) && Bitops.eq arg723 (Bits.of_int 0 32) && 
-          Bitops.eq arg724 (Bits.of_int 0 3) && Bitops.eq arg725 (Bits.of_int 1 
-              1) && Bitops.eq arg720 (Bits.of_int 0 32) && Bitops.eq arg721 
-            (Bits.of_int 0 3) && Bitops.eq arg722 (Bits.of_int 0 1) && 
-          Bitops.eq arg717 (Bits.of_int 31 32) && Bitops.eq arg716 (Bits.of_int 
-              31 32) && Bitops.eq arg715 (Bits.of_int 31 32) && Bitops.eq 
-            arg714 (Bits.of_int 31 32) && Bitops.eq arg718 (Bits.of_int 0 3) && 
-          Bitops.eq arg719 (Bits.of_int 1 1) && Bitops.eq arg711 
-            (Bits.of_int 31 32) && Bitops.eq arg710 (Bits.of_int 31 32) && 
-          Bitops.eq arg709 (Bits.of_int 31 32) && Bitops.eq arg708 (Bits.of_int 
-              31 32) && Bitops.eq arg712 (Bits.of_int 0 3) && Bitops.eq arg713 
-            (Bits.of_int 0 1) && Bitops.eq arg705 (Bits.of_int 31 32) && 
-          Bitops.eq arg704 (Bits.of_int 31 32) && Bitops.eq arg706 (Bits.of_int 
-              0 3) && Bitops.eq arg707 (Bits.of_int 0 1) && Bitops.eq arg702 
-            (Bits.of_int 0 3) && Bitops.eq arg703 (Bits.of_int 0 1))) -> 
-           Instruction.subcc (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+            arg729 (Bits.U.of_int 0 32) && Bitops.eq arg730 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg731 (Bits.U.of_int 1 1) && Bitops.eq arg726 (Bits.U.of_int 0 
+              32) && Bitops.eq arg727 (Bits.U.of_int 0 3) && Bitops.eq arg728 
+            (Bits.U.of_int 0 1) && Bitops.eq arg723 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg724 (Bits.U.of_int 0 3) && Bitops.eq arg725 (Bits.U.of_int 1 
+              1) && Bitops.eq arg720 (Bits.U.of_int 0 32) && Bitops.eq arg721 
+            (Bits.U.of_int 0 3) && Bitops.eq arg722 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg717 (Bits.U.of_int 31 32) && Bitops.eq arg716 (Bits.U.of_int 
+              31 32) && Bitops.eq arg715 (Bits.U.of_int 31 32) && Bitops.eq 
+            arg714 (Bits.U.of_int 31 32) && Bitops.eq arg718 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg719 (Bits.U.of_int 1 1) && Bitops.eq arg711 
+            (Bits.U.of_int 31 32) && Bitops.eq arg710 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg709 (Bits.U.of_int 31 32) && Bitops.eq arg708 (Bits.U.of_int 
+              31 32) && Bitops.eq arg712 (Bits.U.of_int 0 3) && Bitops.eq arg713 
+            (Bits.U.of_int 0 1) && Bitops.eq arg705 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg704 (Bits.U.of_int 31 32) && Bitops.eq arg706 (Bits.U.of_int 
+              0 3) && Bitops.eq arg707 (Bits.U.of_int 0 1) && Bitops.eq arg702 
+            (Bits.U.of_int 0 3) && Bitops.eq arg703 (Bits.U.of_int 0 1))) -> 
+           Instruction.subcc (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("sub", [32]), 
@@ -3340,9 +3340,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   [RP.Fetch (RP.Slice (1, 20, RP.Cell ('i', Rtl.Identity, 32, 
                       RP.Const (RP.Bits arg732), _)), 1)])]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg733 13 && Bitops.eq arg732 
-            (Bits.of_int 0 3)) -> 
-           Instruction.subx (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg733)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 0 3)) -> 
+           Instruction.subx (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg733)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("sub", [32]), 
@@ -3352,9 +3352,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                 RP.App (("zx", [1; 32]), 
                   [RP.Fetch (RP.Slice (1, 20, RP.Cell ('i', Rtl.Identity, 32, 
                       RP.Const (RP.Bits arg734), _)), 1)])]), 32))] 
-      when Base.to_bool (Bitops.eq arg734 (Bits.of_int 0 3)) -> 
-           Instruction.subx (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg734 (Bits.U.of_int 0 3)) -> 
+           Instruction.subx (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("sub", [32]), 
@@ -3449,29 +3449,29 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           rs1 = rs1'''''''''' && rs1 = rs1''''''''' && rs1 = rs1'''''''' && 
           rs1 = rs1''''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
           rs1 = rs1'''' && rs1 = rs1''' && rs1 = rs1'' && rs1 = rs1' && 
-          (Bitops.fits_signed arg779 13 && Bitops.eq arg778 (Bits.of_int 0 
-              3) && Bitops.eq arg773 (Bits.of_int 0 3) && Bitops.eq arg775 
-            (Bits.of_int 0 32) && Bitops.eq arg776 (Bits.of_int 0 3) && 
-          Bitops.eq arg777 (Bits.of_int 1 1) && Bitops.eq arg768 (Bits.of_int 0 
-              3) && Bitops.eq arg770 (Bits.of_int 0 32) && Bitops.eq arg771 
-            (Bits.of_int 0 3) && Bitops.eq arg772 (Bits.of_int 0 1) && 
-          Bitops.eq arg763 (Bits.of_int 0 3) && Bitops.eq arg765 (Bits.of_int 0 
-              32) && Bitops.eq arg766 (Bits.of_int 0 3) && Bitops.eq arg767 
-            (Bits.of_int 1 1) && Bitops.eq arg758 (Bits.of_int 0 3) && 
-          Bitops.eq arg760 (Bits.of_int 0 32) && Bitops.eq arg761 (Bits.of_int 
-              0 3) && Bitops.eq arg762 (Bits.of_int 0 1) && Bitops.eq arg754 
-            (Bits.of_int 31 32) && Bitops.eq arg753 (Bits.of_int 31 32) && 
-          Bitops.eq arg752 (Bits.of_int 31 32) && Bitops.eq arg750 (Bits.of_int 
-              0 3) && Bitops.eq arg756 (Bits.of_int 0 3) && Bitops.eq arg757 
-            (Bits.of_int 1 1) && Bitops.eq arg746 (Bits.of_int 31 32) && 
-          Bitops.eq arg745 (Bits.of_int 31 32) && Bitops.eq arg744 (Bits.of_int 
-              31 32) && Bitops.eq arg742 (Bits.of_int 0 3) && Bitops.eq arg748 
-            (Bits.of_int 0 3) && Bitops.eq arg749 (Bits.of_int 0 1) && 
-          Bitops.eq arg738 (Bits.of_int 31 32) && Bitops.eq arg740 (Bits.of_int 
-              0 3) && Bitops.eq arg741 (Bits.of_int 0 1) && Bitops.eq arg735 
-            (Bits.of_int 0 3) && Bitops.eq arg736 (Bits.of_int 0 3))) -> 
-           Instruction.subxcc (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg779)) (Bits.to_nativeint rd) 
+          (Bitops.fits_signed arg779 13 && Bitops.eq arg778 (Bits.U.of_int 0 
+              3) && Bitops.eq arg773 (Bits.U.of_int 0 3) && Bitops.eq arg775 
+            (Bits.U.of_int 0 32) && Bitops.eq arg776 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg777 (Bits.U.of_int 1 1) && Bitops.eq arg768 (Bits.U.of_int 0 
+              3) && Bitops.eq arg770 (Bits.U.of_int 0 32) && Bitops.eq arg771 
+            (Bits.U.of_int 0 3) && Bitops.eq arg772 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg763 (Bits.U.of_int 0 3) && Bitops.eq arg765 (Bits.U.of_int 0 
+              32) && Bitops.eq arg766 (Bits.U.of_int 0 3) && Bitops.eq arg767 
+            (Bits.U.of_int 1 1) && Bitops.eq arg758 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg760 (Bits.U.of_int 0 32) && Bitops.eq arg761 (Bits.U.of_int 
+              0 3) && Bitops.eq arg762 (Bits.U.of_int 0 1) && Bitops.eq arg754 
+            (Bits.U.of_int 31 32) && Bitops.eq arg753 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg752 (Bits.U.of_int 31 32) && Bitops.eq arg750 (Bits.U.of_int 
+              0 3) && Bitops.eq arg756 (Bits.U.of_int 0 3) && Bitops.eq arg757 
+            (Bits.U.of_int 1 1) && Bitops.eq arg746 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg745 (Bits.U.of_int 31 32) && Bitops.eq arg744 (Bits.U.of_int 
+              31 32) && Bitops.eq arg742 (Bits.U.of_int 0 3) && Bitops.eq arg748 
+            (Bits.U.of_int 0 3) && Bitops.eq arg749 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg738 (Bits.U.of_int 31 32) && Bitops.eq arg740 (Bits.U.of_int 
+              0 3) && Bitops.eq arg741 (Bits.U.of_int 0 1) && Bitops.eq arg735 
+            (Bits.U.of_int 0 3) && Bitops.eq arg736 (Bits.U.of_int 0 3))) -> 
+           Instruction.subxcc (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg779)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("sub", [32]), 
@@ -3585,30 +3585,30 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           rs2 = rs2''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
           rs2 = rs2'''' && rs1 = rs1'''' && rs2 = rs2''' && rs1 = rs1''' && 
           rs1 = rs1'' && rs2 = rs2'' && rs1 = rs1' && rs2 = rs2' && (Bitops.eq 
-            arg816 (Bits.of_int 0 3) && Bitops.eq arg812 (Bits.of_int 0 3) && 
-          Bitops.eq arg813 (Bits.of_int 0 32) && Bitops.eq arg814 (Bits.of_int 
-              0 3) && Bitops.eq arg815 (Bits.of_int 1 1) && Bitops.eq arg808 
-            (Bits.of_int 0 3) && Bitops.eq arg809 (Bits.of_int 0 32) && 
-          Bitops.eq arg810 (Bits.of_int 0 3) && Bitops.eq arg811 (Bits.of_int 0 
-              1) && Bitops.eq arg804 (Bits.of_int 0 3) && Bitops.eq arg805 
-            (Bits.of_int 0 32) && Bitops.eq arg806 (Bits.of_int 0 3) && 
-          Bitops.eq arg807 (Bits.of_int 1 1) && Bitops.eq arg800 (Bits.of_int 0 
-              3) && Bitops.eq arg801 (Bits.of_int 0 32) && Bitops.eq arg802 
-            (Bits.of_int 0 3) && Bitops.eq arg803 (Bits.of_int 0 1) && 
-          Bitops.eq arg797 (Bits.of_int 31 32) && Bitops.eq arg796 (Bits.of_int 
-              31 32) && Bitops.eq arg795 (Bits.of_int 31 32) && Bitops.eq 
-            arg794 (Bits.of_int 31 32) && Bitops.eq arg793 (Bits.of_int 0 3) && 
-          Bitops.eq arg798 (Bits.of_int 0 3) && Bitops.eq arg799 (Bits.of_int 1 
-              1) && Bitops.eq arg790 (Bits.of_int 31 32) && Bitops.eq arg789 
-            (Bits.of_int 31 32) && Bitops.eq arg788 (Bits.of_int 31 32) && 
-          Bitops.eq arg787 (Bits.of_int 31 32) && Bitops.eq arg786 (Bits.of_int 
-              0 3) && Bitops.eq arg791 (Bits.of_int 0 3) && Bitops.eq arg792 
-            (Bits.of_int 0 1) && Bitops.eq arg783 (Bits.of_int 31 32) && 
-          Bitops.eq arg782 (Bits.of_int 31 32) && Bitops.eq arg784 (Bits.of_int 
-              0 3) && Bitops.eq arg785 (Bits.of_int 0 1) && Bitops.eq arg780 
-            (Bits.of_int 0 3) && Bitops.eq arg781 (Bits.of_int 0 3))) -> 
-           Instruction.subxcc (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+            arg816 (Bits.U.of_int 0 3) && Bitops.eq arg812 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg813 (Bits.U.of_int 0 32) && Bitops.eq arg814 (Bits.U.of_int 
+              0 3) && Bitops.eq arg815 (Bits.U.of_int 1 1) && Bitops.eq arg808 
+            (Bits.U.of_int 0 3) && Bitops.eq arg809 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg810 (Bits.U.of_int 0 3) && Bitops.eq arg811 (Bits.U.of_int 0 
+              1) && Bitops.eq arg804 (Bits.U.of_int 0 3) && Bitops.eq arg805 
+            (Bits.U.of_int 0 32) && Bitops.eq arg806 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg807 (Bits.U.of_int 1 1) && Bitops.eq arg800 (Bits.U.of_int 0 
+              3) && Bitops.eq arg801 (Bits.U.of_int 0 32) && Bitops.eq arg802 
+            (Bits.U.of_int 0 3) && Bitops.eq arg803 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg797 (Bits.U.of_int 31 32) && Bitops.eq arg796 (Bits.U.of_int 
+              31 32) && Bitops.eq arg795 (Bits.U.of_int 31 32) && Bitops.eq 
+            arg794 (Bits.U.of_int 31 32) && Bitops.eq arg793 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg798 (Bits.U.of_int 0 3) && Bitops.eq arg799 (Bits.U.of_int 1 
+              1) && Bitops.eq arg790 (Bits.U.of_int 31 32) && Bitops.eq arg789 
+            (Bits.U.of_int 31 32) && Bitops.eq arg788 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg787 (Bits.U.of_int 31 32) && Bitops.eq arg786 (Bits.U.of_int 
+              0 3) && Bitops.eq arg791 (Bits.U.of_int 0 3) && Bitops.eq arg792 
+            (Bits.U.of_int 0 1) && Bitops.eq arg783 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg782 (Bits.U.of_int 31 32) && Bitops.eq arg784 (Bits.U.of_int 
+              0 3) && Bitops.eq arg785 (Bits.U.of_int 0 1) && Bitops.eq arg780 
+            (Bits.U.of_int 0 3) && Bitops.eq arg781 (Bits.U.of_int 0 3))) -> 
+           Instruction.subxcc (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -3683,25 +3683,25 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           rs1 = rs1'''''''''' && rs1 = rs1''''''''' && rs1 = rs1'''''''' && 
           rs1 = rs1''''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
           rs1 = rs1'''' && rs1 = rs1''' && rs1 = rs1'' && rs1 = rs1' && 
-          (Bitops.fits_signed arg854 13 && Bitops.eq arg851 (Bits.of_int 0 
-              32) && Bitops.eq arg852 (Bits.of_int 0 3) && Bitops.eq arg853 
-            (Bits.of_int 1 1) && Bitops.eq arg847 (Bits.of_int 0 32) && 
-          Bitops.eq arg848 (Bits.of_int 0 3) && Bitops.eq arg849 (Bits.of_int 0 
-              1) && Bitops.eq arg843 (Bits.of_int 0 32) && Bitops.eq arg844 
-            (Bits.of_int 0 3) && Bitops.eq arg845 (Bits.of_int 1 1) && 
-          Bitops.eq arg839 (Bits.of_int 0 32) && Bitops.eq arg840 (Bits.of_int 
-              0 3) && Bitops.eq arg841 (Bits.of_int 0 1) && Bitops.eq arg834 
-            (Bits.of_int 31 32) && Bitops.eq arg833 (Bits.of_int 31 32) && 
-          Bitops.eq arg832 (Bits.of_int 31 32) && Bitops.eq arg836 (Bits.of_int 
-              0 3) && Bitops.eq arg837 (Bits.of_int 1 1) && Bitops.eq arg827 
-            (Bits.of_int 31 32) && Bitops.eq arg826 (Bits.of_int 31 32) && 
-          Bitops.eq arg825 (Bits.of_int 31 32) && Bitops.eq arg829 (Bits.of_int 
-              0 3) && Bitops.eq arg830 (Bits.of_int 0 1) && Bitops.eq arg820 
-            (Bits.of_int 31 32) && Bitops.eq arg822 (Bits.of_int 0 3) && 
-          Bitops.eq arg823 (Bits.of_int 0 1) && Bitops.eq arg817 
-            (Bits.of_int 0 3) && Bitops.eq arg818 (Bits.of_int 0 1))) -> 
-           Instruction.tsubcc (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg854)) (Bits.to_nativeint rd) 
+          (Bitops.fits_signed arg854 13 && Bitops.eq arg851 (Bits.U.of_int 0 
+              32) && Bitops.eq arg852 (Bits.U.of_int 0 3) && Bitops.eq arg853 
+            (Bits.U.of_int 1 1) && Bitops.eq arg847 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg848 (Bits.U.of_int 0 3) && Bitops.eq arg849 (Bits.U.of_int 0 
+              1) && Bitops.eq arg843 (Bits.U.of_int 0 32) && Bitops.eq arg844 
+            (Bits.U.of_int 0 3) && Bitops.eq arg845 (Bits.U.of_int 1 1) && 
+          Bitops.eq arg839 (Bits.U.of_int 0 32) && Bitops.eq arg840 (Bits.U.of_int 
+              0 3) && Bitops.eq arg841 (Bits.U.of_int 0 1) && Bitops.eq arg834 
+            (Bits.U.of_int 31 32) && Bitops.eq arg833 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg832 (Bits.U.of_int 31 32) && Bitops.eq arg836 (Bits.U.of_int 
+              0 3) && Bitops.eq arg837 (Bits.U.of_int 1 1) && Bitops.eq arg827 
+            (Bits.U.of_int 31 32) && Bitops.eq arg826 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg825 (Bits.U.of_int 31 32) && Bitops.eq arg829 (Bits.U.of_int 
+              0 3) && Bitops.eq arg830 (Bits.U.of_int 0 1) && Bitops.eq arg820 
+            (Bits.U.of_int 31 32) && Bitops.eq arg822 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg823 (Bits.U.of_int 0 1) && Bitops.eq arg817 
+            (Bits.U.of_int 0 3) && Bitops.eq arg818 (Bits.U.of_int 0 1))) -> 
+           Instruction.tsubcc (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg854)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -3795,26 +3795,26 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           rs2 = rs2''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
           rs2 = rs2'''' && rs1 = rs1'''' && rs2 = rs2''' && rs1 = rs1''' && 
           rs1 = rs1'' && rs2 = rs2'' && rs1 = rs1' && rs2 = rs2' && (Bitops.eq 
-            arg882 (Bits.of_int 0 32) && Bitops.eq arg883 (Bits.of_int 0 3) && 
-          Bitops.eq arg884 (Bits.of_int 1 1) && Bitops.eq arg879 (Bits.of_int 0 
-              32) && Bitops.eq arg880 (Bits.of_int 0 3) && Bitops.eq arg881 
-            (Bits.of_int 0 1) && Bitops.eq arg876 (Bits.of_int 0 32) && 
-          Bitops.eq arg877 (Bits.of_int 0 3) && Bitops.eq arg878 (Bits.of_int 1 
-              1) && Bitops.eq arg873 (Bits.of_int 0 32) && Bitops.eq arg874 
-            (Bits.of_int 0 3) && Bitops.eq arg875 (Bits.of_int 0 1) && 
-          Bitops.eq arg870 (Bits.of_int 31 32) && Bitops.eq arg869 (Bits.of_int 
-              31 32) && Bitops.eq arg868 (Bits.of_int 31 32) && Bitops.eq 
-            arg867 (Bits.of_int 31 32) && Bitops.eq arg871 (Bits.of_int 0 3) && 
-          Bitops.eq arg872 (Bits.of_int 1 1) && Bitops.eq arg864 
-            (Bits.of_int 31 32) && Bitops.eq arg863 (Bits.of_int 31 32) && 
-          Bitops.eq arg862 (Bits.of_int 31 32) && Bitops.eq arg861 (Bits.of_int 
-              31 32) && Bitops.eq arg865 (Bits.of_int 0 3) && Bitops.eq arg866 
-            (Bits.of_int 0 1) && Bitops.eq arg858 (Bits.of_int 31 32) && 
-          Bitops.eq arg857 (Bits.of_int 31 32) && Bitops.eq arg859 (Bits.of_int 
-              0 3) && Bitops.eq arg860 (Bits.of_int 0 1) && Bitops.eq arg855 
-            (Bits.of_int 0 3) && Bitops.eq arg856 (Bits.of_int 0 1))) -> 
-           Instruction.tsubcc (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+            arg882 (Bits.U.of_int 0 32) && Bitops.eq arg883 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg884 (Bits.U.of_int 1 1) && Bitops.eq arg879 (Bits.U.of_int 0 
+              32) && Bitops.eq arg880 (Bits.U.of_int 0 3) && Bitops.eq arg881 
+            (Bits.U.of_int 0 1) && Bitops.eq arg876 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg877 (Bits.U.of_int 0 3) && Bitops.eq arg878 (Bits.U.of_int 1 
+              1) && Bitops.eq arg873 (Bits.U.of_int 0 32) && Bitops.eq arg874 
+            (Bits.U.of_int 0 3) && Bitops.eq arg875 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg870 (Bits.U.of_int 31 32) && Bitops.eq arg869 (Bits.U.of_int 
+              31 32) && Bitops.eq arg868 (Bits.U.of_int 31 32) && Bitops.eq 
+            arg867 (Bits.U.of_int 31 32) && Bitops.eq arg871 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg872 (Bits.U.of_int 1 1) && Bitops.eq arg864 
+            (Bits.U.of_int 31 32) && Bitops.eq arg863 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg862 (Bits.U.of_int 31 32) && Bitops.eq arg861 (Bits.U.of_int 
+              31 32) && Bitops.eq arg865 (Bits.U.of_int 0 3) && Bitops.eq arg866 
+            (Bits.U.of_int 0 1) && Bitops.eq arg858 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg857 (Bits.U.of_int 31 32) && Bitops.eq arg859 (Bits.U.of_int 
+              0 3) && Bitops.eq arg860 (Bits.U.of_int 0 1) && Bitops.eq arg855 
+            (Bits.U.of_int 0 3) && Bitops.eq arg856 (Bits.U.of_int 0 1))) -> 
+           Instruction.tsubcc (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -3889,25 +3889,25 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           rs1 = rs1'''''''''' && rs1 = rs1''''''''' && rs1 = rs1'''''''' && 
           rs1 = rs1''''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
           rs1 = rs1'''' && rs1 = rs1''' && rs1 = rs1'' && rs1 = rs1' && 
-          (Bitops.fits_signed arg922 13 && Bitops.eq arg919 (Bits.of_int 0 
-              32) && Bitops.eq arg920 (Bits.of_int 0 3) && Bitops.eq arg921 
-            (Bits.of_int 1 1) && Bitops.eq arg915 (Bits.of_int 0 32) && 
-          Bitops.eq arg916 (Bits.of_int 0 3) && Bitops.eq arg917 (Bits.of_int 0 
-              1) && Bitops.eq arg911 (Bits.of_int 0 32) && Bitops.eq arg912 
-            (Bits.of_int 0 3) && Bitops.eq arg913 (Bits.of_int 1 1) && 
-          Bitops.eq arg907 (Bits.of_int 0 32) && Bitops.eq arg908 (Bits.of_int 
-              0 3) && Bitops.eq arg909 (Bits.of_int 0 1) && Bitops.eq arg902 
-            (Bits.of_int 31 32) && Bitops.eq arg901 (Bits.of_int 31 32) && 
-          Bitops.eq arg900 (Bits.of_int 31 32) && Bitops.eq arg904 (Bits.of_int 
-              0 3) && Bitops.eq arg905 (Bits.of_int 1 1) && Bitops.eq arg895 
-            (Bits.of_int 31 32) && Bitops.eq arg894 (Bits.of_int 31 32) && 
-          Bitops.eq arg893 (Bits.of_int 31 32) && Bitops.eq arg897 (Bits.of_int 
-              0 3) && Bitops.eq arg898 (Bits.of_int 0 1) && Bitops.eq arg888 
-            (Bits.of_int 31 32) && Bitops.eq arg890 (Bits.of_int 0 3) && 
-          Bitops.eq arg891 (Bits.of_int 0 1) && Bitops.eq arg885 
-            (Bits.of_int 0 3) && Bitops.eq arg886 (Bits.of_int 0 1))) -> 
-           Instruction.tsubcctv (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg922)) (Bits.to_nativeint rd) 
+          (Bitops.fits_signed arg922 13 && Bitops.eq arg919 (Bits.U.of_int 0 
+              32) && Bitops.eq arg920 (Bits.U.of_int 0 3) && Bitops.eq arg921 
+            (Bits.U.of_int 1 1) && Bitops.eq arg915 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg916 (Bits.U.of_int 0 3) && Bitops.eq arg917 (Bits.U.of_int 0 
+              1) && Bitops.eq arg911 (Bits.U.of_int 0 32) && Bitops.eq arg912 
+            (Bits.U.of_int 0 3) && Bitops.eq arg913 (Bits.U.of_int 1 1) && 
+          Bitops.eq arg907 (Bits.U.of_int 0 32) && Bitops.eq arg908 (Bits.U.of_int 
+              0 3) && Bitops.eq arg909 (Bits.U.of_int 0 1) && Bitops.eq arg902 
+            (Bits.U.of_int 31 32) && Bitops.eq arg901 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg900 (Bits.U.of_int 31 32) && Bitops.eq arg904 (Bits.U.of_int 
+              0 3) && Bitops.eq arg905 (Bits.U.of_int 1 1) && Bitops.eq arg895 
+            (Bits.U.of_int 31 32) && Bitops.eq arg894 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg893 (Bits.U.of_int 31 32) && Bitops.eq arg897 (Bits.U.of_int 
+              0 3) && Bitops.eq arg898 (Bits.U.of_int 0 1) && Bitops.eq arg888 
+            (Bits.U.of_int 31 32) && Bitops.eq arg890 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg891 (Bits.U.of_int 0 1) && Bitops.eq arg885 
+            (Bits.U.of_int 0 3) && Bitops.eq arg886 (Bits.U.of_int 0 1))) -> 
+           Instruction.tsubcctv (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg922)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
@@ -4001,26 +4001,26 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           rs2 = rs2''''' && rs1 = rs1'''''' && rs1 = rs1''''' && 
           rs2 = rs2'''' && rs1 = rs1'''' && rs2 = rs2''' && rs1 = rs1''' && 
           rs1 = rs1'' && rs2 = rs2'' && rs1 = rs1' && rs2 = rs2' && (Bitops.eq 
-            arg950 (Bits.of_int 0 32) && Bitops.eq arg951 (Bits.of_int 0 3) && 
-          Bitops.eq arg952 (Bits.of_int 1 1) && Bitops.eq arg947 (Bits.of_int 0 
-              32) && Bitops.eq arg948 (Bits.of_int 0 3) && Bitops.eq arg949 
-            (Bits.of_int 0 1) && Bitops.eq arg944 (Bits.of_int 0 32) && 
-          Bitops.eq arg945 (Bits.of_int 0 3) && Bitops.eq arg946 (Bits.of_int 1 
-              1) && Bitops.eq arg941 (Bits.of_int 0 32) && Bitops.eq arg942 
-            (Bits.of_int 0 3) && Bitops.eq arg943 (Bits.of_int 0 1) && 
-          Bitops.eq arg938 (Bits.of_int 31 32) && Bitops.eq arg937 (Bits.of_int 
-              31 32) && Bitops.eq arg936 (Bits.of_int 31 32) && Bitops.eq 
-            arg935 (Bits.of_int 31 32) && Bitops.eq arg939 (Bits.of_int 0 3) && 
-          Bitops.eq arg940 (Bits.of_int 1 1) && Bitops.eq arg932 
-            (Bits.of_int 31 32) && Bitops.eq arg931 (Bits.of_int 31 32) && 
-          Bitops.eq arg930 (Bits.of_int 31 32) && Bitops.eq arg929 (Bits.of_int 
-              31 32) && Bitops.eq arg933 (Bits.of_int 0 3) && Bitops.eq arg934 
-            (Bits.of_int 0 1) && Bitops.eq arg926 (Bits.of_int 31 32) && 
-          Bitops.eq arg925 (Bits.of_int 31 32) && Bitops.eq arg927 (Bits.of_int 
-              0 3) && Bitops.eq arg928 (Bits.of_int 0 1) && Bitops.eq arg923 
-            (Bits.of_int 0 3) && Bitops.eq arg924 (Bits.of_int 0 1))) -> 
-           Instruction.tsubcctv (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+            arg950 (Bits.U.of_int 0 32) && Bitops.eq arg951 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg952 (Bits.U.of_int 1 1) && Bitops.eq arg947 (Bits.U.of_int 0 
+              32) && Bitops.eq arg948 (Bits.U.of_int 0 3) && Bitops.eq arg949 
+            (Bits.U.of_int 0 1) && Bitops.eq arg944 (Bits.U.of_int 0 32) && 
+          Bitops.eq arg945 (Bits.U.of_int 0 3) && Bitops.eq arg946 (Bits.U.of_int 1 
+              1) && Bitops.eq arg941 (Bits.U.of_int 0 32) && Bitops.eq arg942 
+            (Bits.U.of_int 0 3) && Bitops.eq arg943 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg938 (Bits.U.of_int 31 32) && Bitops.eq arg937 (Bits.U.of_int 
+              31 32) && Bitops.eq arg936 (Bits.U.of_int 31 32) && Bitops.eq 
+            arg935 (Bits.U.of_int 31 32) && Bitops.eq arg939 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg940 (Bits.U.of_int 1 1) && Bitops.eq arg932 
+            (Bits.U.of_int 31 32) && Bitops.eq arg931 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg930 (Bits.U.of_int 31 32) && Bitops.eq arg929 (Bits.U.of_int 
+              31 32) && Bitops.eq arg933 (Bits.U.of_int 0 3) && Bitops.eq arg934 
+            (Bits.U.of_int 0 1) && Bitops.eq arg926 (Bits.U.of_int 31 32) && 
+          Bitops.eq arg925 (Bits.U.of_int 31 32) && Bitops.eq arg927 (Bits.U.of_int 
+              0 3) && Bitops.eq arg928 (Bits.U.of_int 0 1) && Bitops.eq arg923 
+            (Bits.U.of_int 0 3) && Bitops.eq arg924 (Bits.U.of_int 0 1))) -> 
+           Instruction.tsubcctv (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 
             32, RP.Const (RP.Bits arg955), _), 
@@ -4035,10 +4035,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                       Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                       RP.Const (RP.Bits arg953)])]), 32))] 
       when Base.to_bool (rs1 = rs1' && (Bitops.fits_signed arg956 13 && 
-          Bitops.eq arg955 (Bits.of_int 3 3) && Bitops.eq arg957 
-            (Bits.of_int 32 32) && Bitops.eq arg954 (Bits.of_int 0 32))) -> 
-           Instruction.umul (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg956)) (Bits.to_nativeint rd) 
+          Bitops.eq arg955 (Bits.U.of_int 3 3) && Bitops.eq arg957 
+            (Bits.U.of_int 32 32) && Bitops.eq arg954 (Bits.U.of_int 0 32))) -> 
+           Instruction.umul (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg956)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 
             32, RP.Const (RP.Bits arg959), _), RP.App (("bitExtract", [64; 32; 
@@ -4054,10 +4054,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                       RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
                         RP.Const (RP.Bits rs2), _), 32)])]), 32))] 
       when Base.to_bool (rs1 = rs1' && rs2 = rs2' && 
-          (Bitops.eq arg959 (Bits.of_int 3 3) && Bitops.eq arg960 
-            (Bits.of_int 32 32) && Bitops.eq arg958 (Bits.of_int 0 32))) -> 
-           Instruction.umul (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+          (Bitops.eq arg959 (Bits.U.of_int 3 3) && Bitops.eq arg960 
+            (Bits.U.of_int 32 32) && Bitops.eq arg958 (Bits.U.of_int 0 32))) -> 
+           Instruction.umul (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 
             32, RP.Const (RP.Bits arg963), _), 
@@ -4072,10 +4072,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                       Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
                       RP.Const (RP.Bits arg961)])]), 32))] 
       when Base.to_bool (rs1 = rs1' && (Bitops.fits_signed arg964 13 && 
-          Bitops.eq arg963 (Bits.of_int 3 3) && Bitops.eq arg965 
-            (Bits.of_int 32 32) && Bitops.eq arg962 (Bits.of_int 0 32))) -> 
-           Instruction.smul (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg964)) (Bits.to_nativeint rd) 
+          Bitops.eq arg963 (Bits.U.of_int 3 3) && Bitops.eq arg965 
+            (Bits.U.of_int 32 32) && Bitops.eq arg962 (Bits.U.of_int 0 32))) -> 
+           Instruction.smul (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg964)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 
             32, RP.Const (RP.Bits arg967), _), RP.App (("bitExtract", [64; 32; 
@@ -4091,10 +4091,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                       RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
                         RP.Const (RP.Bits rs2), _), 32)])]), 32))] 
       when Base.to_bool (rs1 = rs1' && rs2 = rs2' && 
-          (Bitops.eq arg967 (Bits.of_int 3 3) && Bitops.eq arg968 
-            (Bits.of_int 32 32) && Bitops.eq arg966 (Bits.of_int 0 32))) -> 
-           Instruction.smul (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+          (Bitops.eq arg967 (Bits.U.of_int 3 3) && Bitops.eq arg968 
+            (Bits.U.of_int 32 32) && Bitops.eq arg966 (Bits.U.of_int 0 32))) -> 
+           Instruction.smul (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 
             32, RP.Const (RP.Bits arg991), _), 
@@ -4137,20 +4137,20 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.Const (RP.Bits arg970), 1))] 
       when Base.to_bool (rs1 = rs1''''' && rs1 = rs1'''' && rs1 = rs1''' && 
           rs1 = rs1'' && rs1 = rs1' && (Bitops.fits_signed arg992 13 && 
-          Bitops.eq arg991 (Bits.of_int 3 3) && Bitops.eq arg993 (Bits.of_int 
-              32 32) && Bitops.eq arg990 (Bits.of_int 0 32) && Bitops.eq arg986 
-            (Bits.of_int 0 64) && Bitops.eq arg987 (Bits.of_int 0 3) && 
-          Bitops.eq arg988 (Bits.of_int 1 1) && Bitops.eq arg982 (Bits.of_int 0 
-              64) && Bitops.eq arg983 (Bits.of_int 0 3) && Bitops.eq arg984 
-            (Bits.of_int 0 1) && Bitops.eq arg978 (Bits.of_int 0 64) && 
-          Bitops.eq arg979 (Bits.of_int 0 3) && Bitops.eq arg980 
-            (Bits.of_int 1 1) && Bitops.eq arg974 (Bits.of_int 0 64) && 
-          Bitops.eq arg975 (Bits.of_int 0 3) && Bitops.eq arg976 
-            (Bits.of_int 0 1) && Bitops.eq arg971 (Bits.of_int 0 3) && 
-          Bitops.eq arg972 (Bits.of_int 0 1) && Bitops.eq arg969 
-            (Bits.of_int 0 3) && Bitops.eq arg970 (Bits.of_int 0 1))) -> 
-           Instruction.umulcc (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg992)) (Bits.to_nativeint rd) 
+          Bitops.eq arg991 (Bits.U.of_int 3 3) && Bitops.eq arg993 (Bits.U.of_int 
+              32 32) && Bitops.eq arg990 (Bits.U.of_int 0 32) && Bitops.eq arg986 
+            (Bits.U.of_int 0 64) && Bitops.eq arg987 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg988 (Bits.U.of_int 1 1) && Bitops.eq arg982 (Bits.U.of_int 0 
+              64) && Bitops.eq arg983 (Bits.U.of_int 0 3) && Bitops.eq arg984 
+            (Bits.U.of_int 0 1) && Bitops.eq arg978 (Bits.U.of_int 0 64) && 
+          Bitops.eq arg979 (Bits.U.of_int 0 3) && Bitops.eq arg980 
+            (Bits.U.of_int 1 1) && Bitops.eq arg974 (Bits.U.of_int 0 64) && 
+          Bitops.eq arg975 (Bits.U.of_int 0 3) && Bitops.eq arg976 
+            (Bits.U.of_int 0 1) && Bitops.eq arg971 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg972 (Bits.U.of_int 0 1) && Bitops.eq arg969 
+            (Bits.U.of_int 0 3) && Bitops.eq arg970 (Bits.U.of_int 0 1))) -> 
+           Instruction.umulcc (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg992)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 
             32, RP.Const (RP.Bits arg1011), _), 
@@ -4199,20 +4199,20 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
       when Base.to_bool (rs1 = rs1''''' && rs2 = rs2''''' && rs1 = rs1'''' && 
           rs2 = rs2'''' && rs1 = rs1''' && rs2 = rs2''' && rs1 = rs1'' && 
           rs2 = rs2'' && rs1 = rs1' && rs2 = rs2' && (Bitops.eq arg1011 
-            (Bits.of_int 3 3) && Bitops.eq arg1012 (Bits.of_int 32 32) && 
-          Bitops.eq arg1010 (Bits.of_int 0 32) && Bitops.eq arg1007 
-            (Bits.of_int 0 64) && Bitops.eq arg1008 (Bits.of_int 0 3) && 
-          Bitops.eq arg1009 (Bits.of_int 1 1) && Bitops.eq arg1004 (Bits.of_int 
-              0 64) && Bitops.eq arg1005 (Bits.of_int 0 3) && Bitops.eq arg1006 
-            (Bits.of_int 0 1) && Bitops.eq arg1001 (Bits.of_int 0 64) && 
-          Bitops.eq arg1002 (Bits.of_int 0 3) && Bitops.eq arg1003 
-            (Bits.of_int 1 1) && Bitops.eq arg998 (Bits.of_int 0 64) && 
-          Bitops.eq arg999 (Bits.of_int 0 3) && Bitops.eq arg1000 
-            (Bits.of_int 0 1) && Bitops.eq arg996 (Bits.of_int 0 3) && 
-          Bitops.eq arg997 (Bits.of_int 0 1) && Bitops.eq arg994 
-            (Bits.of_int 0 3) && Bitops.eq arg995 (Bits.of_int 0 1))) -> 
-           Instruction.umulcc (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 3 3) && Bitops.eq arg1012 (Bits.U.of_int 32 32) && 
+          Bitops.eq arg1010 (Bits.U.of_int 0 32) && Bitops.eq arg1007 
+            (Bits.U.of_int 0 64) && Bitops.eq arg1008 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg1009 (Bits.U.of_int 1 1) && Bitops.eq arg1004 (Bits.U.of_int 
+              0 64) && Bitops.eq arg1005 (Bits.U.of_int 0 3) && Bitops.eq arg1006 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1001 (Bits.U.of_int 0 64) && 
+          Bitops.eq arg1002 (Bits.U.of_int 0 3) && Bitops.eq arg1003 
+            (Bits.U.of_int 1 1) && Bitops.eq arg998 (Bits.U.of_int 0 64) && 
+          Bitops.eq arg999 (Bits.U.of_int 0 3) && Bitops.eq arg1000 
+            (Bits.U.of_int 0 1) && Bitops.eq arg996 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg997 (Bits.U.of_int 0 1) && Bitops.eq arg994 
+            (Bits.U.of_int 0 3) && Bitops.eq arg995 (Bits.U.of_int 0 1))) -> 
+           Instruction.umulcc (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 
             32, RP.Const (RP.Bits arg1035), _), 
@@ -4256,20 +4256,20 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.Const (RP.Bits arg1014), 1))] 
       when Base.to_bool (rs1 = rs1''''' && rs1 = rs1'''' && rs1 = rs1''' && 
           rs1 = rs1'' && rs1 = rs1' && (Bitops.fits_signed arg1036 13 && 
-          Bitops.eq arg1035 (Bits.of_int 3 3) && Bitops.eq arg1037 (Bits.of_int 
-              32 32) && Bitops.eq arg1034 (Bits.of_int 0 32) && Bitops.eq 
-            arg1030 (Bits.of_int 0 64) && Bitops.eq arg1031 (Bits.of_int 0 
-              3) && Bitops.eq arg1032 (Bits.of_int 1 1) && Bitops.eq arg1026 
-            (Bits.of_int 0 64) && Bitops.eq arg1027 (Bits.of_int 0 3) && 
-          Bitops.eq arg1028 (Bits.of_int 0 1) && Bitops.eq arg1022 (Bits.of_int 
-              0 64) && Bitops.eq arg1023 (Bits.of_int 0 3) && Bitops.eq arg1024 
-            (Bits.of_int 1 1) && Bitops.eq arg1018 (Bits.of_int 0 64) && 
-          Bitops.eq arg1019 (Bits.of_int 0 3) && Bitops.eq arg1020 
-            (Bits.of_int 0 1) && Bitops.eq arg1015 (Bits.of_int 0 3) && 
-          Bitops.eq arg1016 (Bits.of_int 0 1) && Bitops.eq arg1013 
-            (Bits.of_int 0 3) && Bitops.eq arg1014 (Bits.of_int 0 1))) -> 
-           Instruction.smulcc (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg1036)) (Bits.to_nativeint rd) 
+          Bitops.eq arg1035 (Bits.U.of_int 3 3) && Bitops.eq arg1037 (Bits.U.of_int 
+              32 32) && Bitops.eq arg1034 (Bits.U.of_int 0 32) && Bitops.eq 
+            arg1030 (Bits.U.of_int 0 64) && Bitops.eq arg1031 (Bits.U.of_int 0 
+              3) && Bitops.eq arg1032 (Bits.U.of_int 1 1) && Bitops.eq arg1026 
+            (Bits.U.of_int 0 64) && Bitops.eq arg1027 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg1028 (Bits.U.of_int 0 1) && Bitops.eq arg1022 (Bits.U.of_int 
+              0 64) && Bitops.eq arg1023 (Bits.U.of_int 0 3) && Bitops.eq arg1024 
+            (Bits.U.of_int 1 1) && Bitops.eq arg1018 (Bits.U.of_int 0 64) && 
+          Bitops.eq arg1019 (Bits.U.of_int 0 3) && Bitops.eq arg1020 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1015 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg1016 (Bits.U.of_int 0 1) && Bitops.eq arg1013 
+            (Bits.U.of_int 0 3) && Bitops.eq arg1014 (Bits.U.of_int 0 1))) -> 
+           Instruction.smulcc (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg1036)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 
             32, RP.Const (RP.Bits arg1055), _), 
@@ -4318,20 +4318,20 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
       when Base.to_bool (rs1 = rs1''''' && rs2 = rs2''''' && rs1 = rs1'''' && 
           rs2 = rs2'''' && rs1 = rs1''' && rs2 = rs2''' && rs1 = rs1'' && 
           rs2 = rs2'' && rs1 = rs1' && rs2 = rs2' && (Bitops.eq arg1055 
-            (Bits.of_int 3 3) && Bitops.eq arg1056 (Bits.of_int 32 32) && 
-          Bitops.eq arg1054 (Bits.of_int 0 32) && Bitops.eq arg1051 
-            (Bits.of_int 0 64) && Bitops.eq arg1052 (Bits.of_int 0 3) && 
-          Bitops.eq arg1053 (Bits.of_int 1 1) && Bitops.eq arg1048 (Bits.of_int 
-              0 64) && Bitops.eq arg1049 (Bits.of_int 0 3) && Bitops.eq arg1050 
-            (Bits.of_int 0 1) && Bitops.eq arg1045 (Bits.of_int 0 64) && 
-          Bitops.eq arg1046 (Bits.of_int 0 3) && Bitops.eq arg1047 
-            (Bits.of_int 1 1) && Bitops.eq arg1042 (Bits.of_int 0 64) && 
-          Bitops.eq arg1043 (Bits.of_int 0 3) && Bitops.eq arg1044 
-            (Bits.of_int 0 1) && Bitops.eq arg1040 (Bits.of_int 0 3) && 
-          Bitops.eq arg1041 (Bits.of_int 0 1) && Bitops.eq arg1038 
-            (Bits.of_int 0 3) && Bitops.eq arg1039 (Bits.of_int 0 1))) -> 
-           Instruction.smulcc (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 3 3) && Bitops.eq arg1056 (Bits.U.of_int 32 32) && 
+          Bitops.eq arg1054 (Bits.U.of_int 0 32) && Bitops.eq arg1051 
+            (Bits.U.of_int 0 64) && Bitops.eq arg1052 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg1053 (Bits.U.of_int 1 1) && Bitops.eq arg1048 (Bits.U.of_int 
+              0 64) && Bitops.eq arg1049 (Bits.U.of_int 0 3) && Bitops.eq arg1050 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1045 (Bits.U.of_int 0 64) && 
+          Bitops.eq arg1046 (Bits.U.of_int 0 3) && Bitops.eq arg1047 
+            (Bits.U.of_int 1 1) && Bitops.eq arg1042 (Bits.U.of_int 0 64) && 
+          Bitops.eq arg1043 (Bits.U.of_int 0 3) && Bitops.eq arg1044 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1040 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg1041 (Bits.U.of_int 0 1) && Bitops.eq arg1038 
+            (Bits.U.of_int 0 3) && Bitops.eq arg1039 (Bits.U.of_int 0 1))) -> 
+           Instruction.smulcc (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("bitExtract", [64; 32; 
@@ -4357,10 +4357,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                       [32; 32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
                         RP.Const (RP.Bits rs2), _), 32)])])]), 32))] 
       when Base.to_bool 
-          (Bitops.eq arg1063 (Bits.of_int 0 32) && Bitops.eq arg1062 
-            (Bits.of_int 32 32) && Bitops.eq arg1061 (Bits.of_int 3 3)) -> 
-           Instruction.udiv (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+          (Bitops.eq arg1063 (Bits.U.of_int 0 32) && Bitops.eq arg1062 
+            (Bits.U.of_int 32 32) && Bitops.eq arg1061 (Bits.U.of_int 3 3)) -> 
+           Instruction.udiv (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("bitExtract", [64; 32; 
@@ -4386,10 +4386,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                       [32; 32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
                         RP.Const (RP.Bits rs2), _), 32)])])]), 32))] 
       when Base.to_bool 
-          (Bitops.eq arg1070 (Bits.of_int 0 32) && Bitops.eq arg1069 
-            (Bits.of_int 32 32) && Bitops.eq arg1068 (Bits.of_int 3 3)) -> 
-           Instruction.sdiv (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+          (Bitops.eq arg1070 (Bits.U.of_int 0 32) && Bitops.eq arg1069 
+            (Bits.U.of_int 32 32) && Bitops.eq arg1068 (Bits.U.of_int 3 3)) -> 
+           Instruction.sdiv (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("bitExtract", [64; 32; 
@@ -4539,29 +4539,29 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
       when Base.to_bool (rs1 = rs1''''' && rs2 = rs2''''' && rs1 = rs1'''' && 
           rs2 = rs2'''' && rs1 = rs1''' && rs2 = rs2''' && rs1 = rs1'' && 
           rs2 = rs2'' && rs1 = rs1' && rs2 = rs2' && (Bitops.eq arg1140 
-            (Bits.of_int 0 32) && Bitops.eq arg1139 (Bits.of_int 32 32) && 
-          Bitops.eq arg1138 (Bits.of_int 3 3) && Bitops.eq arg1134 
-            (Bits.of_int 0 32) && Bitops.eq arg1133 (Bits.of_int 32 32) && 
-          Bitops.eq arg1132 (Bits.of_int 3 3) && Bitops.eq arg1135 
-            (Bits.of_int 0 32) && Bitops.eq arg1136 (Bits.of_int 0 3) && 
-          Bitops.eq arg1137 (Bits.of_int 1 1) && Bitops.eq arg1128 
-            (Bits.of_int 0 32) && Bitops.eq arg1127 (Bits.of_int 32 32) && 
-          Bitops.eq arg1126 (Bits.of_int 3 3) && Bitops.eq arg1129 
-            (Bits.of_int 0 32) && Bitops.eq arg1130 (Bits.of_int 0 3) && 
-          Bitops.eq arg1131 (Bits.of_int 0 1) && Bitops.eq arg1122 
-            (Bits.of_int 0 32) && Bitops.eq arg1121 (Bits.of_int 32 32) && 
-          Bitops.eq arg1120 (Bits.of_int 3 3) && Bitops.eq arg1123 
-            (Bits.of_int 0 32) && Bitops.eq arg1124 (Bits.of_int 0 3) && 
-          Bitops.eq arg1125 (Bits.of_int 1 1) && Bitops.eq arg1116 
-            (Bits.of_int 0 32) && Bitops.eq arg1115 (Bits.of_int 32 32) && 
-          Bitops.eq arg1114 (Bits.of_int 3 3) && Bitops.eq arg1117 
-            (Bits.of_int 0 32) && Bitops.eq arg1118 (Bits.of_int 0 3) && 
-          Bitops.eq arg1119 (Bits.of_int 0 1) && Bitops.eq arg1111 
-            (Bits.of_int 0 3) && Bitops.eq arg1113 (Bits.of_int 32 32) && 
-          Bitops.eq arg1112 (Bits.of_int 3 3) && Bitops.eq arg1109 
-            (Bits.of_int 0 3) && Bitops.eq arg1110 (Bits.of_int 0 1))) -> 
-           Instruction.udivcc (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1139 (Bits.U.of_int 32 32) && 
+          Bitops.eq arg1138 (Bits.U.of_int 3 3) && Bitops.eq arg1134 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1133 (Bits.U.of_int 32 32) && 
+          Bitops.eq arg1132 (Bits.U.of_int 3 3) && Bitops.eq arg1135 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1136 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg1137 (Bits.U.of_int 1 1) && Bitops.eq arg1128 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1127 (Bits.U.of_int 32 32) && 
+          Bitops.eq arg1126 (Bits.U.of_int 3 3) && Bitops.eq arg1129 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1130 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg1131 (Bits.U.of_int 0 1) && Bitops.eq arg1122 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1121 (Bits.U.of_int 32 32) && 
+          Bitops.eq arg1120 (Bits.U.of_int 3 3) && Bitops.eq arg1123 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1124 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg1125 (Bits.U.of_int 1 1) && Bitops.eq arg1116 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1115 (Bits.U.of_int 32 32) && 
+          Bitops.eq arg1114 (Bits.U.of_int 3 3) && Bitops.eq arg1117 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1118 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg1119 (Bits.U.of_int 0 1) && Bitops.eq arg1111 
+            (Bits.U.of_int 0 3) && Bitops.eq arg1113 (Bits.U.of_int 32 32) && 
+          Bitops.eq arg1112 (Bits.U.of_int 3 3) && Bitops.eq arg1109 
+            (Bits.U.of_int 0 3) && Bitops.eq arg1110 (Bits.U.of_int 0 1))) -> 
+           Instruction.udivcc (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits rd), _), RP.App (("bitExtract", [64; 32; 
@@ -4711,29 +4711,29 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
       when Base.to_bool (rs1 = rs1''''' && rs2 = rs2''''' && rs1 = rs1'''' && 
           rs2 = rs2'''' && rs1 = rs1''' && rs2 = rs2''' && rs1 = rs1'' && 
           rs2 = rs2'' && rs1 = rs1' && rs2 = rs2' && (Bitops.eq arg1210 
-            (Bits.of_int 0 32) && Bitops.eq arg1209 (Bits.of_int 32 32) && 
-          Bitops.eq arg1208 (Bits.of_int 3 3) && Bitops.eq arg1204 
-            (Bits.of_int 0 32) && Bitops.eq arg1203 (Bits.of_int 32 32) && 
-          Bitops.eq arg1202 (Bits.of_int 3 3) && Bitops.eq arg1205 
-            (Bits.of_int 0 32) && Bitops.eq arg1206 (Bits.of_int 0 3) && 
-          Bitops.eq arg1207 (Bits.of_int 1 1) && Bitops.eq arg1198 
-            (Bits.of_int 0 32) && Bitops.eq arg1197 (Bits.of_int 32 32) && 
-          Bitops.eq arg1196 (Bits.of_int 3 3) && Bitops.eq arg1199 
-            (Bits.of_int 0 32) && Bitops.eq arg1200 (Bits.of_int 0 3) && 
-          Bitops.eq arg1201 (Bits.of_int 0 1) && Bitops.eq arg1192 
-            (Bits.of_int 0 32) && Bitops.eq arg1191 (Bits.of_int 32 32) && 
-          Bitops.eq arg1190 (Bits.of_int 3 3) && Bitops.eq arg1193 
-            (Bits.of_int 0 32) && Bitops.eq arg1194 (Bits.of_int 0 3) && 
-          Bitops.eq arg1195 (Bits.of_int 1 1) && Bitops.eq arg1186 
-            (Bits.of_int 0 32) && Bitops.eq arg1185 (Bits.of_int 32 32) && 
-          Bitops.eq arg1184 (Bits.of_int 3 3) && Bitops.eq arg1187 
-            (Bits.of_int 0 32) && Bitops.eq arg1188 (Bits.of_int 0 3) && 
-          Bitops.eq arg1189 (Bits.of_int 0 1) && Bitops.eq arg1181 
-            (Bits.of_int 0 3) && Bitops.eq arg1183 (Bits.of_int 32 32) && 
-          Bitops.eq arg1182 (Bits.of_int 3 3) && Bitops.eq arg1179 
-            (Bits.of_int 0 3) && Bitops.eq arg1180 (Bits.of_int 0 1))) -> 
-           Instruction.sdivcc (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1209 (Bits.U.of_int 32 32) && 
+          Bitops.eq arg1208 (Bits.U.of_int 3 3) && Bitops.eq arg1204 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1203 (Bits.U.of_int 32 32) && 
+          Bitops.eq arg1202 (Bits.U.of_int 3 3) && Bitops.eq arg1205 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1206 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg1207 (Bits.U.of_int 1 1) && Bitops.eq arg1198 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1197 (Bits.U.of_int 32 32) && 
+          Bitops.eq arg1196 (Bits.U.of_int 3 3) && Bitops.eq arg1199 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1200 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg1201 (Bits.U.of_int 0 1) && Bitops.eq arg1192 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1191 (Bits.U.of_int 32 32) && 
+          Bitops.eq arg1190 (Bits.U.of_int 3 3) && Bitops.eq arg1193 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1194 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg1195 (Bits.U.of_int 1 1) && Bitops.eq arg1186 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1185 (Bits.U.of_int 32 32) && 
+          Bitops.eq arg1184 (Bits.U.of_int 3 3) && Bitops.eq arg1187 
+            (Bits.U.of_int 0 32) && Bitops.eq arg1188 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg1189 (Bits.U.of_int 0 1) && Bitops.eq arg1181 
+            (Bits.U.of_int 0 3) && Bitops.eq arg1183 (Bits.U.of_int 32 32) && 
+          Bitops.eq arg1182 (Bits.U.of_int 3 3) && Bitops.eq arg1179 
+            (Bits.U.of_int 0 3) && Bitops.eq arg1180 (Bits.U.of_int 0 1))) -> 
+           Instruction.sdivcc (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg1276), _), RP.Fetch (RP.Cell ('r', 
@@ -4849,57 +4849,57 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg1211)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg1211 13 && Bitops.eq arg1276 
-            (Bits.of_int 24 5) && Bitops.eq arg1277 (Bits.of_int 8 5) && 
-          Bitops.eq arg1274 (Bits.of_int 25 5) && Bitops.eq arg1275 
-            (Bits.of_int 9 5) && Bitops.eq arg1272 (Bits.of_int 26 5) && 
-          Bitops.eq arg1273 (Bits.of_int 10 5) && Bitops.eq arg1270 
-            (Bits.of_int 27 5) && Bitops.eq arg1271 (Bits.of_int 11 5) && 
-          Bitops.eq arg1268 (Bits.of_int 28 5) && Bitops.eq arg1269 
-            (Bits.of_int 12 5) && Bitops.eq arg1266 (Bits.of_int 29 5) && 
-          Bitops.eq arg1267 (Bits.of_int 13 5) && Bitops.eq arg1264 
-            (Bits.of_int 30 5) && Bitops.eq arg1265 (Bits.of_int 14 5) && 
-          Bitops.eq arg1262 (Bits.of_int 31 5) && Bitops.eq arg1263 
-            (Bits.of_int 15 5) && Bitops.eq arg1259 (Bits.of_int 0 1) && 
-          Bitops.eq arg1260 (Bits.of_int 8 32) && Bitops.eq arg1261 
-            (Bits.of_int 16 5) && Bitops.eq arg1256 (Bits.of_int 0 1) && 
-          Bitops.eq arg1257 (Bits.of_int 9 32) && Bitops.eq arg1258 
-            (Bits.of_int 17 5) && Bitops.eq arg1253 (Bits.of_int 0 1) && 
-          Bitops.eq arg1254 (Bits.of_int 10 32) && Bitops.eq arg1255 
-            (Bits.of_int 18 5) && Bitops.eq arg1250 (Bits.of_int 0 1) && 
-          Bitops.eq arg1251 (Bits.of_int 11 32) && Bitops.eq arg1252 
-            (Bits.of_int 19 5) && Bitops.eq arg1247 (Bits.of_int 0 1) && 
-          Bitops.eq arg1248 (Bits.of_int 12 32) && Bitops.eq arg1249 
-            (Bits.of_int 20 5) && Bitops.eq arg1244 (Bits.of_int 0 1) && 
-          Bitops.eq arg1245 (Bits.of_int 13 32) && Bitops.eq arg1246 
-            (Bits.of_int 21 5) && Bitops.eq arg1241 (Bits.of_int 0 1) && 
-          Bitops.eq arg1242 (Bits.of_int 14 32) && Bitops.eq arg1243 
-            (Bits.of_int 22 5) && Bitops.eq arg1238 (Bits.of_int 0 1) && 
-          Bitops.eq arg1239 (Bits.of_int 15 32) && Bitops.eq arg1240 
-            (Bits.of_int 23 5) && Bitops.eq arg1236 (Bits.of_int 0 1) && 
-          Bitops.eq arg1237 (Bits.of_int 24 5) && Bitops.eq arg1233 
-            (Bits.of_int 0 1) && Bitops.eq arg1234 (Bits.of_int 1 32) && 
-          Bitops.eq arg1235 (Bits.of_int 25 5) && Bitops.eq arg1230 
-            (Bits.of_int 0 1) && Bitops.eq arg1231 (Bits.of_int 2 32) && 
-          Bitops.eq arg1232 (Bits.of_int 26 5) && Bitops.eq arg1227 
-            (Bits.of_int 0 1) && Bitops.eq arg1228 (Bits.of_int 3 32) && 
-          Bitops.eq arg1229 (Bits.of_int 27 5) && Bitops.eq arg1224 
-            (Bits.of_int 0 1) && Bitops.eq arg1225 (Bits.of_int 4 32) && 
-          Bitops.eq arg1226 (Bits.of_int 28 5) && Bitops.eq arg1221 
-            (Bits.of_int 0 1) && Bitops.eq arg1222 (Bits.of_int 5 32) && 
-          Bitops.eq arg1223 (Bits.of_int 29 5) && Bitops.eq arg1218 
-            (Bits.of_int 0 1) && Bitops.eq arg1219 (Bits.of_int 6 32) && 
-          Bitops.eq arg1220 (Bits.of_int 30 5) && Bitops.eq arg1215 
-            (Bits.of_int 0 1) && Bitops.eq arg1216 (Bits.of_int 7 32) && 
-          Bitops.eq arg1217 (Bits.of_int 31 5) && Bitops.eq arg1212 
-            (Bits.of_int 0 1) && Bitops.eq arg1213 (Bits.of_int 0 1) && 
-          Bitops.eq arg1214 (Bits.of_int 16 32) && Bitops.ne rd 
-            (Bits.of_int 24 5) && Bitops.ne rd (Bits.of_int 25 5) && Bitops.ne 
-            rd (Bits.of_int 26 5) && Bitops.ne rd (Bits.of_int 27 5) && 
-          Bitops.ne rd (Bits.of_int 28 5) && Bitops.ne rd (Bits.of_int 29 5) && 
-          Bitops.ne rd (Bits.of_int 30 5) && Bitops.ne rd 
-            (Bits.of_int 31 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg1211)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 24 5) && Bitops.eq arg1277 (Bits.U.of_int 8 5) && 
+          Bitops.eq arg1274 (Bits.U.of_int 25 5) && Bitops.eq arg1275 
+            (Bits.U.of_int 9 5) && Bitops.eq arg1272 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg1273 (Bits.U.of_int 10 5) && Bitops.eq arg1270 
+            (Bits.U.of_int 27 5) && Bitops.eq arg1271 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg1268 (Bits.U.of_int 28 5) && Bitops.eq arg1269 
+            (Bits.U.of_int 12 5) && Bitops.eq arg1266 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg1267 (Bits.U.of_int 13 5) && Bitops.eq arg1264 
+            (Bits.U.of_int 30 5) && Bitops.eq arg1265 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg1262 (Bits.U.of_int 31 5) && Bitops.eq arg1263 
+            (Bits.U.of_int 15 5) && Bitops.eq arg1259 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1260 (Bits.U.of_int 8 32) && Bitops.eq arg1261 
+            (Bits.U.of_int 16 5) && Bitops.eq arg1256 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1257 (Bits.U.of_int 9 32) && Bitops.eq arg1258 
+            (Bits.U.of_int 17 5) && Bitops.eq arg1253 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1254 (Bits.U.of_int 10 32) && Bitops.eq arg1255 
+            (Bits.U.of_int 18 5) && Bitops.eq arg1250 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1251 (Bits.U.of_int 11 32) && Bitops.eq arg1252 
+            (Bits.U.of_int 19 5) && Bitops.eq arg1247 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1248 (Bits.U.of_int 12 32) && Bitops.eq arg1249 
+            (Bits.U.of_int 20 5) && Bitops.eq arg1244 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1245 (Bits.U.of_int 13 32) && Bitops.eq arg1246 
+            (Bits.U.of_int 21 5) && Bitops.eq arg1241 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1242 (Bits.U.of_int 14 32) && Bitops.eq arg1243 
+            (Bits.U.of_int 22 5) && Bitops.eq arg1238 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1239 (Bits.U.of_int 15 32) && Bitops.eq arg1240 
+            (Bits.U.of_int 23 5) && Bitops.eq arg1236 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1237 (Bits.U.of_int 24 5) && Bitops.eq arg1233 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1234 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg1235 (Bits.U.of_int 25 5) && Bitops.eq arg1230 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1231 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg1232 (Bits.U.of_int 26 5) && Bitops.eq arg1227 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1228 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg1229 (Bits.U.of_int 27 5) && Bitops.eq arg1224 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1225 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg1226 (Bits.U.of_int 28 5) && Bitops.eq arg1221 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1222 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg1223 (Bits.U.of_int 29 5) && Bitops.eq arg1218 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1219 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg1220 (Bits.U.of_int 30 5) && Bitops.eq arg1215 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1216 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg1217 (Bits.U.of_int 31 5) && Bitops.eq arg1212 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1213 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1214 (Bits.U.of_int 16 32) && Bitops.ne rd 
+            (Bits.U.of_int 24 5) && Bitops.ne rd (Bits.U.of_int 25 5) && Bitops.ne 
+            rd (Bits.U.of_int 26 5) && Bitops.ne rd (Bits.U.of_int 27 5) && 
+          Bitops.ne rd (Bits.U.of_int 28 5) && Bitops.ne rd (Bits.U.of_int 29 5) && 
+          Bitops.ne rd (Bits.U.of_int 30 5) && Bitops.ne rd 
+            (Bits.U.of_int 31 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg1211)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg1341), _), RP.Fetch (RP.Cell ('r', 
@@ -5012,51 +5012,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg1278)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg1278 13 && Bitops.eq arg1341 
-            (Bits.of_int 24 5) && Bitops.eq arg1342 (Bits.of_int 8 5) && 
-          Bitops.eq arg1339 (Bits.of_int 25 5) && Bitops.eq arg1340 
-            (Bits.of_int 9 5) && Bitops.eq arg1337 (Bits.of_int 26 5) && 
-          Bitops.eq arg1338 (Bits.of_int 10 5) && Bitops.eq arg1335 
-            (Bits.of_int 27 5) && Bitops.eq arg1336 (Bits.of_int 11 5) && 
-          Bitops.eq arg1333 (Bits.of_int 28 5) && Bitops.eq arg1334 
-            (Bits.of_int 12 5) && Bitops.eq arg1331 (Bits.of_int 29 5) && 
-          Bitops.eq arg1332 (Bits.of_int 13 5) && Bitops.eq arg1329 
-            (Bits.of_int 30 5) && Bitops.eq arg1330 (Bits.of_int 14 5) && 
-          Bitops.eq arg1326 (Bits.of_int 0 1) && Bitops.eq arg1327 
-            (Bits.of_int 8 32) && Bitops.eq arg1328 (Bits.of_int 16 5) && 
-          Bitops.eq arg1323 (Bits.of_int 0 1) && Bitops.eq arg1324 
-            (Bits.of_int 9 32) && Bitops.eq arg1325 (Bits.of_int 17 5) && 
-          Bitops.eq arg1320 (Bits.of_int 0 1) && Bitops.eq arg1321 
-            (Bits.of_int 10 32) && Bitops.eq arg1322 (Bits.of_int 18 5) && 
-          Bitops.eq arg1317 (Bits.of_int 0 1) && Bitops.eq arg1318 
-            (Bits.of_int 11 32) && Bitops.eq arg1319 (Bits.of_int 19 5) && 
-          Bitops.eq arg1314 (Bits.of_int 0 1) && Bitops.eq arg1315 
-            (Bits.of_int 12 32) && Bitops.eq arg1316 (Bits.of_int 20 5) && 
-          Bitops.eq arg1311 (Bits.of_int 0 1) && Bitops.eq arg1312 
-            (Bits.of_int 13 32) && Bitops.eq arg1313 (Bits.of_int 21 5) && 
-          Bitops.eq arg1308 (Bits.of_int 0 1) && Bitops.eq arg1309 
-            (Bits.of_int 14 32) && Bitops.eq arg1310 (Bits.of_int 22 5) && 
-          Bitops.eq arg1305 (Bits.of_int 0 1) && Bitops.eq arg1306 
-            (Bits.of_int 15 32) && Bitops.eq arg1307 (Bits.of_int 23 5) && 
-          Bitops.eq arg1303 (Bits.of_int 0 1) && Bitops.eq arg1304 
-            (Bits.of_int 24 5) && Bitops.eq arg1300 (Bits.of_int 0 1) && 
-          Bitops.eq arg1301 (Bits.of_int 1 32) && Bitops.eq arg1302 
-            (Bits.of_int 25 5) && Bitops.eq arg1297 (Bits.of_int 0 1) && 
-          Bitops.eq arg1298 (Bits.of_int 2 32) && Bitops.eq arg1299 
-            (Bits.of_int 26 5) && Bitops.eq arg1294 (Bits.of_int 0 1) && 
-          Bitops.eq arg1295 (Bits.of_int 3 32) && Bitops.eq arg1296 
-            (Bits.of_int 27 5) && Bitops.eq arg1291 (Bits.of_int 0 1) && 
-          Bitops.eq arg1292 (Bits.of_int 4 32) && Bitops.eq arg1293 
-            (Bits.of_int 28 5) && Bitops.eq arg1288 (Bits.of_int 0 1) && 
-          Bitops.eq arg1289 (Bits.of_int 5 32) && Bitops.eq arg1290 
-            (Bits.of_int 29 5) && Bitops.eq arg1285 (Bits.of_int 0 1) && 
-          Bitops.eq arg1286 (Bits.of_int 6 32) && Bitops.eq arg1287 
-            (Bits.of_int 30 5) && Bitops.eq arg1282 (Bits.of_int 0 1) && 
-          Bitops.eq arg1283 (Bits.of_int 7 32) && Bitops.eq arg1284 
-            (Bits.of_int 31 5) && Bitops.eq arg1279 (Bits.of_int 0 1) && 
-          Bitops.eq arg1280 (Bits.of_int 0 1) && Bitops.eq arg1281 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 31 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg1278)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 24 5) && Bitops.eq arg1342 (Bits.U.of_int 8 5) && 
+          Bitops.eq arg1339 (Bits.U.of_int 25 5) && Bitops.eq arg1340 
+            (Bits.U.of_int 9 5) && Bitops.eq arg1337 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg1338 (Bits.U.of_int 10 5) && Bitops.eq arg1335 
+            (Bits.U.of_int 27 5) && Bitops.eq arg1336 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg1333 (Bits.U.of_int 28 5) && Bitops.eq arg1334 
+            (Bits.U.of_int 12 5) && Bitops.eq arg1331 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg1332 (Bits.U.of_int 13 5) && Bitops.eq arg1329 
+            (Bits.U.of_int 30 5) && Bitops.eq arg1330 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg1326 (Bits.U.of_int 0 1) && Bitops.eq arg1327 
+            (Bits.U.of_int 8 32) && Bitops.eq arg1328 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg1323 (Bits.U.of_int 0 1) && Bitops.eq arg1324 
+            (Bits.U.of_int 9 32) && Bitops.eq arg1325 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg1320 (Bits.U.of_int 0 1) && Bitops.eq arg1321 
+            (Bits.U.of_int 10 32) && Bitops.eq arg1322 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg1317 (Bits.U.of_int 0 1) && Bitops.eq arg1318 
+            (Bits.U.of_int 11 32) && Bitops.eq arg1319 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg1314 (Bits.U.of_int 0 1) && Bitops.eq arg1315 
+            (Bits.U.of_int 12 32) && Bitops.eq arg1316 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg1311 (Bits.U.of_int 0 1) && Bitops.eq arg1312 
+            (Bits.U.of_int 13 32) && Bitops.eq arg1313 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg1308 (Bits.U.of_int 0 1) && Bitops.eq arg1309 
+            (Bits.U.of_int 14 32) && Bitops.eq arg1310 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg1305 (Bits.U.of_int 0 1) && Bitops.eq arg1306 
+            (Bits.U.of_int 15 32) && Bitops.eq arg1307 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg1303 (Bits.U.of_int 0 1) && Bitops.eq arg1304 
+            (Bits.U.of_int 24 5) && Bitops.eq arg1300 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1301 (Bits.U.of_int 1 32) && Bitops.eq arg1302 
+            (Bits.U.of_int 25 5) && Bitops.eq arg1297 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1298 (Bits.U.of_int 2 32) && Bitops.eq arg1299 
+            (Bits.U.of_int 26 5) && Bitops.eq arg1294 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1295 (Bits.U.of_int 3 32) && Bitops.eq arg1296 
+            (Bits.U.of_int 27 5) && Bitops.eq arg1291 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1292 (Bits.U.of_int 4 32) && Bitops.eq arg1293 
+            (Bits.U.of_int 28 5) && Bitops.eq arg1288 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1289 (Bits.U.of_int 5 32) && Bitops.eq arg1290 
+            (Bits.U.of_int 29 5) && Bitops.eq arg1285 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1286 (Bits.U.of_int 6 32) && Bitops.eq arg1287 
+            (Bits.U.of_int 30 5) && Bitops.eq arg1282 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1283 (Bits.U.of_int 7 32) && Bitops.eq arg1284 
+            (Bits.U.of_int 31 5) && Bitops.eq arg1279 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1280 (Bits.U.of_int 0 1) && Bitops.eq arg1281 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 31 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg1278)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg1406), _), RP.Fetch (RP.Cell ('r', 
@@ -5169,51 +5169,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg1343)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg1343 13 && Bitops.eq arg1406 
-            (Bits.of_int 24 5) && Bitops.eq arg1407 (Bits.of_int 8 5) && 
-          Bitops.eq arg1404 (Bits.of_int 25 5) && Bitops.eq arg1405 
-            (Bits.of_int 9 5) && Bitops.eq arg1402 (Bits.of_int 26 5) && 
-          Bitops.eq arg1403 (Bits.of_int 10 5) && Bitops.eq arg1400 
-            (Bits.of_int 27 5) && Bitops.eq arg1401 (Bits.of_int 11 5) && 
-          Bitops.eq arg1398 (Bits.of_int 28 5) && Bitops.eq arg1399 
-            (Bits.of_int 12 5) && Bitops.eq arg1396 (Bits.of_int 29 5) && 
-          Bitops.eq arg1397 (Bits.of_int 13 5) && Bitops.eq arg1394 
-            (Bits.of_int 31 5) && Bitops.eq arg1395 (Bits.of_int 15 5) && 
-          Bitops.eq arg1391 (Bits.of_int 0 1) && Bitops.eq arg1392 
-            (Bits.of_int 8 32) && Bitops.eq arg1393 (Bits.of_int 16 5) && 
-          Bitops.eq arg1388 (Bits.of_int 0 1) && Bitops.eq arg1389 
-            (Bits.of_int 9 32) && Bitops.eq arg1390 (Bits.of_int 17 5) && 
-          Bitops.eq arg1385 (Bits.of_int 0 1) && Bitops.eq arg1386 
-            (Bits.of_int 10 32) && Bitops.eq arg1387 (Bits.of_int 18 5) && 
-          Bitops.eq arg1382 (Bits.of_int 0 1) && Bitops.eq arg1383 
-            (Bits.of_int 11 32) && Bitops.eq arg1384 (Bits.of_int 19 5) && 
-          Bitops.eq arg1379 (Bits.of_int 0 1) && Bitops.eq arg1380 
-            (Bits.of_int 12 32) && Bitops.eq arg1381 (Bits.of_int 20 5) && 
-          Bitops.eq arg1376 (Bits.of_int 0 1) && Bitops.eq arg1377 
-            (Bits.of_int 13 32) && Bitops.eq arg1378 (Bits.of_int 21 5) && 
-          Bitops.eq arg1373 (Bits.of_int 0 1) && Bitops.eq arg1374 
-            (Bits.of_int 14 32) && Bitops.eq arg1375 (Bits.of_int 22 5) && 
-          Bitops.eq arg1370 (Bits.of_int 0 1) && Bitops.eq arg1371 
-            (Bits.of_int 15 32) && Bitops.eq arg1372 (Bits.of_int 23 5) && 
-          Bitops.eq arg1368 (Bits.of_int 0 1) && Bitops.eq arg1369 
-            (Bits.of_int 24 5) && Bitops.eq arg1365 (Bits.of_int 0 1) && 
-          Bitops.eq arg1366 (Bits.of_int 1 32) && Bitops.eq arg1367 
-            (Bits.of_int 25 5) && Bitops.eq arg1362 (Bits.of_int 0 1) && 
-          Bitops.eq arg1363 (Bits.of_int 2 32) && Bitops.eq arg1364 
-            (Bits.of_int 26 5) && Bitops.eq arg1359 (Bits.of_int 0 1) && 
-          Bitops.eq arg1360 (Bits.of_int 3 32) && Bitops.eq arg1361 
-            (Bits.of_int 27 5) && Bitops.eq arg1356 (Bits.of_int 0 1) && 
-          Bitops.eq arg1357 (Bits.of_int 4 32) && Bitops.eq arg1358 
-            (Bits.of_int 28 5) && Bitops.eq arg1353 (Bits.of_int 0 1) && 
-          Bitops.eq arg1354 (Bits.of_int 5 32) && Bitops.eq arg1355 
-            (Bits.of_int 29 5) && Bitops.eq arg1350 (Bits.of_int 0 1) && 
-          Bitops.eq arg1351 (Bits.of_int 6 32) && Bitops.eq arg1352 
-            (Bits.of_int 30 5) && Bitops.eq arg1347 (Bits.of_int 0 1) && 
-          Bitops.eq arg1348 (Bits.of_int 7 32) && Bitops.eq arg1349 
-            (Bits.of_int 31 5) && Bitops.eq arg1344 (Bits.of_int 0 1) && 
-          Bitops.eq arg1345 (Bits.of_int 0 1) && Bitops.eq arg1346 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 30 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg1343)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 24 5) && Bitops.eq arg1407 (Bits.U.of_int 8 5) && 
+          Bitops.eq arg1404 (Bits.U.of_int 25 5) && Bitops.eq arg1405 
+            (Bits.U.of_int 9 5) && Bitops.eq arg1402 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg1403 (Bits.U.of_int 10 5) && Bitops.eq arg1400 
+            (Bits.U.of_int 27 5) && Bitops.eq arg1401 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg1398 (Bits.U.of_int 28 5) && Bitops.eq arg1399 
+            (Bits.U.of_int 12 5) && Bitops.eq arg1396 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg1397 (Bits.U.of_int 13 5) && Bitops.eq arg1394 
+            (Bits.U.of_int 31 5) && Bitops.eq arg1395 (Bits.U.of_int 15 5) && 
+          Bitops.eq arg1391 (Bits.U.of_int 0 1) && Bitops.eq arg1392 
+            (Bits.U.of_int 8 32) && Bitops.eq arg1393 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg1388 (Bits.U.of_int 0 1) && Bitops.eq arg1389 
+            (Bits.U.of_int 9 32) && Bitops.eq arg1390 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg1385 (Bits.U.of_int 0 1) && Bitops.eq arg1386 
+            (Bits.U.of_int 10 32) && Bitops.eq arg1387 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg1382 (Bits.U.of_int 0 1) && Bitops.eq arg1383 
+            (Bits.U.of_int 11 32) && Bitops.eq arg1384 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg1379 (Bits.U.of_int 0 1) && Bitops.eq arg1380 
+            (Bits.U.of_int 12 32) && Bitops.eq arg1381 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg1376 (Bits.U.of_int 0 1) && Bitops.eq arg1377 
+            (Bits.U.of_int 13 32) && Bitops.eq arg1378 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg1373 (Bits.U.of_int 0 1) && Bitops.eq arg1374 
+            (Bits.U.of_int 14 32) && Bitops.eq arg1375 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg1370 (Bits.U.of_int 0 1) && Bitops.eq arg1371 
+            (Bits.U.of_int 15 32) && Bitops.eq arg1372 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg1368 (Bits.U.of_int 0 1) && Bitops.eq arg1369 
+            (Bits.U.of_int 24 5) && Bitops.eq arg1365 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1366 (Bits.U.of_int 1 32) && Bitops.eq arg1367 
+            (Bits.U.of_int 25 5) && Bitops.eq arg1362 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1363 (Bits.U.of_int 2 32) && Bitops.eq arg1364 
+            (Bits.U.of_int 26 5) && Bitops.eq arg1359 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1360 (Bits.U.of_int 3 32) && Bitops.eq arg1361 
+            (Bits.U.of_int 27 5) && Bitops.eq arg1356 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1357 (Bits.U.of_int 4 32) && Bitops.eq arg1358 
+            (Bits.U.of_int 28 5) && Bitops.eq arg1353 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1354 (Bits.U.of_int 5 32) && Bitops.eq arg1355 
+            (Bits.U.of_int 29 5) && Bitops.eq arg1350 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1351 (Bits.U.of_int 6 32) && Bitops.eq arg1352 
+            (Bits.U.of_int 30 5) && Bitops.eq arg1347 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1348 (Bits.U.of_int 7 32) && Bitops.eq arg1349 
+            (Bits.U.of_int 31 5) && Bitops.eq arg1344 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1345 (Bits.U.of_int 0 1) && Bitops.eq arg1346 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 30 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg1343)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg1471), _), RP.Fetch (RP.Cell ('r', 
@@ -5326,51 +5326,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg1408)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg1408 13 && Bitops.eq arg1471 
-            (Bits.of_int 24 5) && Bitops.eq arg1472 (Bits.of_int 8 5) && 
-          Bitops.eq arg1469 (Bits.of_int 25 5) && Bitops.eq arg1470 
-            (Bits.of_int 9 5) && Bitops.eq arg1467 (Bits.of_int 26 5) && 
-          Bitops.eq arg1468 (Bits.of_int 10 5) && Bitops.eq arg1465 
-            (Bits.of_int 27 5) && Bitops.eq arg1466 (Bits.of_int 11 5) && 
-          Bitops.eq arg1463 (Bits.of_int 28 5) && Bitops.eq arg1464 
-            (Bits.of_int 12 5) && Bitops.eq arg1461 (Bits.of_int 30 5) && 
-          Bitops.eq arg1462 (Bits.of_int 14 5) && Bitops.eq arg1459 
-            (Bits.of_int 31 5) && Bitops.eq arg1460 (Bits.of_int 15 5) && 
-          Bitops.eq arg1456 (Bits.of_int 0 1) && Bitops.eq arg1457 
-            (Bits.of_int 8 32) && Bitops.eq arg1458 (Bits.of_int 16 5) && 
-          Bitops.eq arg1453 (Bits.of_int 0 1) && Bitops.eq arg1454 
-            (Bits.of_int 9 32) && Bitops.eq arg1455 (Bits.of_int 17 5) && 
-          Bitops.eq arg1450 (Bits.of_int 0 1) && Bitops.eq arg1451 
-            (Bits.of_int 10 32) && Bitops.eq arg1452 (Bits.of_int 18 5) && 
-          Bitops.eq arg1447 (Bits.of_int 0 1) && Bitops.eq arg1448 
-            (Bits.of_int 11 32) && Bitops.eq arg1449 (Bits.of_int 19 5) && 
-          Bitops.eq arg1444 (Bits.of_int 0 1) && Bitops.eq arg1445 
-            (Bits.of_int 12 32) && Bitops.eq arg1446 (Bits.of_int 20 5) && 
-          Bitops.eq arg1441 (Bits.of_int 0 1) && Bitops.eq arg1442 
-            (Bits.of_int 13 32) && Bitops.eq arg1443 (Bits.of_int 21 5) && 
-          Bitops.eq arg1438 (Bits.of_int 0 1) && Bitops.eq arg1439 
-            (Bits.of_int 14 32) && Bitops.eq arg1440 (Bits.of_int 22 5) && 
-          Bitops.eq arg1435 (Bits.of_int 0 1) && Bitops.eq arg1436 
-            (Bits.of_int 15 32) && Bitops.eq arg1437 (Bits.of_int 23 5) && 
-          Bitops.eq arg1433 (Bits.of_int 0 1) && Bitops.eq arg1434 
-            (Bits.of_int 24 5) && Bitops.eq arg1430 (Bits.of_int 0 1) && 
-          Bitops.eq arg1431 (Bits.of_int 1 32) && Bitops.eq arg1432 
-            (Bits.of_int 25 5) && Bitops.eq arg1427 (Bits.of_int 0 1) && 
-          Bitops.eq arg1428 (Bits.of_int 2 32) && Bitops.eq arg1429 
-            (Bits.of_int 26 5) && Bitops.eq arg1424 (Bits.of_int 0 1) && 
-          Bitops.eq arg1425 (Bits.of_int 3 32) && Bitops.eq arg1426 
-            (Bits.of_int 27 5) && Bitops.eq arg1421 (Bits.of_int 0 1) && 
-          Bitops.eq arg1422 (Bits.of_int 4 32) && Bitops.eq arg1423 
-            (Bits.of_int 28 5) && Bitops.eq arg1418 (Bits.of_int 0 1) && 
-          Bitops.eq arg1419 (Bits.of_int 5 32) && Bitops.eq arg1420 
-            (Bits.of_int 29 5) && Bitops.eq arg1415 (Bits.of_int 0 1) && 
-          Bitops.eq arg1416 (Bits.of_int 6 32) && Bitops.eq arg1417 
-            (Bits.of_int 30 5) && Bitops.eq arg1412 (Bits.of_int 0 1) && 
-          Bitops.eq arg1413 (Bits.of_int 7 32) && Bitops.eq arg1414 
-            (Bits.of_int 31 5) && Bitops.eq arg1409 (Bits.of_int 0 1) && 
-          Bitops.eq arg1410 (Bits.of_int 0 1) && Bitops.eq arg1411 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 29 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg1408)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 24 5) && Bitops.eq arg1472 (Bits.U.of_int 8 5) && 
+          Bitops.eq arg1469 (Bits.U.of_int 25 5) && Bitops.eq arg1470 
+            (Bits.U.of_int 9 5) && Bitops.eq arg1467 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg1468 (Bits.U.of_int 10 5) && Bitops.eq arg1465 
+            (Bits.U.of_int 27 5) && Bitops.eq arg1466 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg1463 (Bits.U.of_int 28 5) && Bitops.eq arg1464 
+            (Bits.U.of_int 12 5) && Bitops.eq arg1461 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg1462 (Bits.U.of_int 14 5) && Bitops.eq arg1459 
+            (Bits.U.of_int 31 5) && Bitops.eq arg1460 (Bits.U.of_int 15 5) && 
+          Bitops.eq arg1456 (Bits.U.of_int 0 1) && Bitops.eq arg1457 
+            (Bits.U.of_int 8 32) && Bitops.eq arg1458 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg1453 (Bits.U.of_int 0 1) && Bitops.eq arg1454 
+            (Bits.U.of_int 9 32) && Bitops.eq arg1455 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg1450 (Bits.U.of_int 0 1) && Bitops.eq arg1451 
+            (Bits.U.of_int 10 32) && Bitops.eq arg1452 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg1447 (Bits.U.of_int 0 1) && Bitops.eq arg1448 
+            (Bits.U.of_int 11 32) && Bitops.eq arg1449 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg1444 (Bits.U.of_int 0 1) && Bitops.eq arg1445 
+            (Bits.U.of_int 12 32) && Bitops.eq arg1446 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg1441 (Bits.U.of_int 0 1) && Bitops.eq arg1442 
+            (Bits.U.of_int 13 32) && Bitops.eq arg1443 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg1438 (Bits.U.of_int 0 1) && Bitops.eq arg1439 
+            (Bits.U.of_int 14 32) && Bitops.eq arg1440 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg1435 (Bits.U.of_int 0 1) && Bitops.eq arg1436 
+            (Bits.U.of_int 15 32) && Bitops.eq arg1437 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg1433 (Bits.U.of_int 0 1) && Bitops.eq arg1434 
+            (Bits.U.of_int 24 5) && Bitops.eq arg1430 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1431 (Bits.U.of_int 1 32) && Bitops.eq arg1432 
+            (Bits.U.of_int 25 5) && Bitops.eq arg1427 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1428 (Bits.U.of_int 2 32) && Bitops.eq arg1429 
+            (Bits.U.of_int 26 5) && Bitops.eq arg1424 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1425 (Bits.U.of_int 3 32) && Bitops.eq arg1426 
+            (Bits.U.of_int 27 5) && Bitops.eq arg1421 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1422 (Bits.U.of_int 4 32) && Bitops.eq arg1423 
+            (Bits.U.of_int 28 5) && Bitops.eq arg1418 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1419 (Bits.U.of_int 5 32) && Bitops.eq arg1420 
+            (Bits.U.of_int 29 5) && Bitops.eq arg1415 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1416 (Bits.U.of_int 6 32) && Bitops.eq arg1417 
+            (Bits.U.of_int 30 5) && Bitops.eq arg1412 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1413 (Bits.U.of_int 7 32) && Bitops.eq arg1414 
+            (Bits.U.of_int 31 5) && Bitops.eq arg1409 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1410 (Bits.U.of_int 0 1) && Bitops.eq arg1411 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 29 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg1408)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg1536), _), RP.Fetch (RP.Cell ('r', 
@@ -5483,51 +5483,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg1473)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg1473 13 && Bitops.eq arg1536 
-            (Bits.of_int 24 5) && Bitops.eq arg1537 (Bits.of_int 8 5) && 
-          Bitops.eq arg1534 (Bits.of_int 25 5) && Bitops.eq arg1535 
-            (Bits.of_int 9 5) && Bitops.eq arg1532 (Bits.of_int 26 5) && 
-          Bitops.eq arg1533 (Bits.of_int 10 5) && Bitops.eq arg1530 
-            (Bits.of_int 27 5) && Bitops.eq arg1531 (Bits.of_int 11 5) && 
-          Bitops.eq arg1528 (Bits.of_int 29 5) && Bitops.eq arg1529 
-            (Bits.of_int 13 5) && Bitops.eq arg1526 (Bits.of_int 30 5) && 
-          Bitops.eq arg1527 (Bits.of_int 14 5) && Bitops.eq arg1524 
-            (Bits.of_int 31 5) && Bitops.eq arg1525 (Bits.of_int 15 5) && 
-          Bitops.eq arg1521 (Bits.of_int 0 1) && Bitops.eq arg1522 
-            (Bits.of_int 8 32) && Bitops.eq arg1523 (Bits.of_int 16 5) && 
-          Bitops.eq arg1518 (Bits.of_int 0 1) && Bitops.eq arg1519 
-            (Bits.of_int 9 32) && Bitops.eq arg1520 (Bits.of_int 17 5) && 
-          Bitops.eq arg1515 (Bits.of_int 0 1) && Bitops.eq arg1516 
-            (Bits.of_int 10 32) && Bitops.eq arg1517 (Bits.of_int 18 5) && 
-          Bitops.eq arg1512 (Bits.of_int 0 1) && Bitops.eq arg1513 
-            (Bits.of_int 11 32) && Bitops.eq arg1514 (Bits.of_int 19 5) && 
-          Bitops.eq arg1509 (Bits.of_int 0 1) && Bitops.eq arg1510 
-            (Bits.of_int 12 32) && Bitops.eq arg1511 (Bits.of_int 20 5) && 
-          Bitops.eq arg1506 (Bits.of_int 0 1) && Bitops.eq arg1507 
-            (Bits.of_int 13 32) && Bitops.eq arg1508 (Bits.of_int 21 5) && 
-          Bitops.eq arg1503 (Bits.of_int 0 1) && Bitops.eq arg1504 
-            (Bits.of_int 14 32) && Bitops.eq arg1505 (Bits.of_int 22 5) && 
-          Bitops.eq arg1500 (Bits.of_int 0 1) && Bitops.eq arg1501 
-            (Bits.of_int 15 32) && Bitops.eq arg1502 (Bits.of_int 23 5) && 
-          Bitops.eq arg1498 (Bits.of_int 0 1) && Bitops.eq arg1499 
-            (Bits.of_int 24 5) && Bitops.eq arg1495 (Bits.of_int 0 1) && 
-          Bitops.eq arg1496 (Bits.of_int 1 32) && Bitops.eq arg1497 
-            (Bits.of_int 25 5) && Bitops.eq arg1492 (Bits.of_int 0 1) && 
-          Bitops.eq arg1493 (Bits.of_int 2 32) && Bitops.eq arg1494 
-            (Bits.of_int 26 5) && Bitops.eq arg1489 (Bits.of_int 0 1) && 
-          Bitops.eq arg1490 (Bits.of_int 3 32) && Bitops.eq arg1491 
-            (Bits.of_int 27 5) && Bitops.eq arg1486 (Bits.of_int 0 1) && 
-          Bitops.eq arg1487 (Bits.of_int 4 32) && Bitops.eq arg1488 
-            (Bits.of_int 28 5) && Bitops.eq arg1483 (Bits.of_int 0 1) && 
-          Bitops.eq arg1484 (Bits.of_int 5 32) && Bitops.eq arg1485 
-            (Bits.of_int 29 5) && Bitops.eq arg1480 (Bits.of_int 0 1) && 
-          Bitops.eq arg1481 (Bits.of_int 6 32) && Bitops.eq arg1482 
-            (Bits.of_int 30 5) && Bitops.eq arg1477 (Bits.of_int 0 1) && 
-          Bitops.eq arg1478 (Bits.of_int 7 32) && Bitops.eq arg1479 
-            (Bits.of_int 31 5) && Bitops.eq arg1474 (Bits.of_int 0 1) && 
-          Bitops.eq arg1475 (Bits.of_int 0 1) && Bitops.eq arg1476 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 28 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg1473)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 24 5) && Bitops.eq arg1537 (Bits.U.of_int 8 5) && 
+          Bitops.eq arg1534 (Bits.U.of_int 25 5) && Bitops.eq arg1535 
+            (Bits.U.of_int 9 5) && Bitops.eq arg1532 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg1533 (Bits.U.of_int 10 5) && Bitops.eq arg1530 
+            (Bits.U.of_int 27 5) && Bitops.eq arg1531 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg1528 (Bits.U.of_int 29 5) && Bitops.eq arg1529 
+            (Bits.U.of_int 13 5) && Bitops.eq arg1526 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg1527 (Bits.U.of_int 14 5) && Bitops.eq arg1524 
+            (Bits.U.of_int 31 5) && Bitops.eq arg1525 (Bits.U.of_int 15 5) && 
+          Bitops.eq arg1521 (Bits.U.of_int 0 1) && Bitops.eq arg1522 
+            (Bits.U.of_int 8 32) && Bitops.eq arg1523 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg1518 (Bits.U.of_int 0 1) && Bitops.eq arg1519 
+            (Bits.U.of_int 9 32) && Bitops.eq arg1520 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg1515 (Bits.U.of_int 0 1) && Bitops.eq arg1516 
+            (Bits.U.of_int 10 32) && Bitops.eq arg1517 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg1512 (Bits.U.of_int 0 1) && Bitops.eq arg1513 
+            (Bits.U.of_int 11 32) && Bitops.eq arg1514 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg1509 (Bits.U.of_int 0 1) && Bitops.eq arg1510 
+            (Bits.U.of_int 12 32) && Bitops.eq arg1511 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg1506 (Bits.U.of_int 0 1) && Bitops.eq arg1507 
+            (Bits.U.of_int 13 32) && Bitops.eq arg1508 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg1503 (Bits.U.of_int 0 1) && Bitops.eq arg1504 
+            (Bits.U.of_int 14 32) && Bitops.eq arg1505 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg1500 (Bits.U.of_int 0 1) && Bitops.eq arg1501 
+            (Bits.U.of_int 15 32) && Bitops.eq arg1502 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg1498 (Bits.U.of_int 0 1) && Bitops.eq arg1499 
+            (Bits.U.of_int 24 5) && Bitops.eq arg1495 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1496 (Bits.U.of_int 1 32) && Bitops.eq arg1497 
+            (Bits.U.of_int 25 5) && Bitops.eq arg1492 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1493 (Bits.U.of_int 2 32) && Bitops.eq arg1494 
+            (Bits.U.of_int 26 5) && Bitops.eq arg1489 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1490 (Bits.U.of_int 3 32) && Bitops.eq arg1491 
+            (Bits.U.of_int 27 5) && Bitops.eq arg1486 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1487 (Bits.U.of_int 4 32) && Bitops.eq arg1488 
+            (Bits.U.of_int 28 5) && Bitops.eq arg1483 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1484 (Bits.U.of_int 5 32) && Bitops.eq arg1485 
+            (Bits.U.of_int 29 5) && Bitops.eq arg1480 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1481 (Bits.U.of_int 6 32) && Bitops.eq arg1482 
+            (Bits.U.of_int 30 5) && Bitops.eq arg1477 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1478 (Bits.U.of_int 7 32) && Bitops.eq arg1479 
+            (Bits.U.of_int 31 5) && Bitops.eq arg1474 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1475 (Bits.U.of_int 0 1) && Bitops.eq arg1476 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 28 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg1473)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg1601), _), RP.Fetch (RP.Cell ('r', 
@@ -5640,51 +5640,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg1538)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg1538 13 && Bitops.eq arg1601 
-            (Bits.of_int 24 5) && Bitops.eq arg1602 (Bits.of_int 8 5) && 
-          Bitops.eq arg1599 (Bits.of_int 25 5) && Bitops.eq arg1600 
-            (Bits.of_int 9 5) && Bitops.eq arg1597 (Bits.of_int 26 5) && 
-          Bitops.eq arg1598 (Bits.of_int 10 5) && Bitops.eq arg1595 
-            (Bits.of_int 28 5) && Bitops.eq arg1596 (Bits.of_int 12 5) && 
-          Bitops.eq arg1593 (Bits.of_int 29 5) && Bitops.eq arg1594 
-            (Bits.of_int 13 5) && Bitops.eq arg1591 (Bits.of_int 30 5) && 
-          Bitops.eq arg1592 (Bits.of_int 14 5) && Bitops.eq arg1589 
-            (Bits.of_int 31 5) && Bitops.eq arg1590 (Bits.of_int 15 5) && 
-          Bitops.eq arg1586 (Bits.of_int 0 1) && Bitops.eq arg1587 
-            (Bits.of_int 8 32) && Bitops.eq arg1588 (Bits.of_int 16 5) && 
-          Bitops.eq arg1583 (Bits.of_int 0 1) && Bitops.eq arg1584 
-            (Bits.of_int 9 32) && Bitops.eq arg1585 (Bits.of_int 17 5) && 
-          Bitops.eq arg1580 (Bits.of_int 0 1) && Bitops.eq arg1581 
-            (Bits.of_int 10 32) && Bitops.eq arg1582 (Bits.of_int 18 5) && 
-          Bitops.eq arg1577 (Bits.of_int 0 1) && Bitops.eq arg1578 
-            (Bits.of_int 11 32) && Bitops.eq arg1579 (Bits.of_int 19 5) && 
-          Bitops.eq arg1574 (Bits.of_int 0 1) && Bitops.eq arg1575 
-            (Bits.of_int 12 32) && Bitops.eq arg1576 (Bits.of_int 20 5) && 
-          Bitops.eq arg1571 (Bits.of_int 0 1) && Bitops.eq arg1572 
-            (Bits.of_int 13 32) && Bitops.eq arg1573 (Bits.of_int 21 5) && 
-          Bitops.eq arg1568 (Bits.of_int 0 1) && Bitops.eq arg1569 
-            (Bits.of_int 14 32) && Bitops.eq arg1570 (Bits.of_int 22 5) && 
-          Bitops.eq arg1565 (Bits.of_int 0 1) && Bitops.eq arg1566 
-            (Bits.of_int 15 32) && Bitops.eq arg1567 (Bits.of_int 23 5) && 
-          Bitops.eq arg1563 (Bits.of_int 0 1) && Bitops.eq arg1564 
-            (Bits.of_int 24 5) && Bitops.eq arg1560 (Bits.of_int 0 1) && 
-          Bitops.eq arg1561 (Bits.of_int 1 32) && Bitops.eq arg1562 
-            (Bits.of_int 25 5) && Bitops.eq arg1557 (Bits.of_int 0 1) && 
-          Bitops.eq arg1558 (Bits.of_int 2 32) && Bitops.eq arg1559 
-            (Bits.of_int 26 5) && Bitops.eq arg1554 (Bits.of_int 0 1) && 
-          Bitops.eq arg1555 (Bits.of_int 3 32) && Bitops.eq arg1556 
-            (Bits.of_int 27 5) && Bitops.eq arg1551 (Bits.of_int 0 1) && 
-          Bitops.eq arg1552 (Bits.of_int 4 32) && Bitops.eq arg1553 
-            (Bits.of_int 28 5) && Bitops.eq arg1548 (Bits.of_int 0 1) && 
-          Bitops.eq arg1549 (Bits.of_int 5 32) && Bitops.eq arg1550 
-            (Bits.of_int 29 5) && Bitops.eq arg1545 (Bits.of_int 0 1) && 
-          Bitops.eq arg1546 (Bits.of_int 6 32) && Bitops.eq arg1547 
-            (Bits.of_int 30 5) && Bitops.eq arg1542 (Bits.of_int 0 1) && 
-          Bitops.eq arg1543 (Bits.of_int 7 32) && Bitops.eq arg1544 
-            (Bits.of_int 31 5) && Bitops.eq arg1539 (Bits.of_int 0 1) && 
-          Bitops.eq arg1540 (Bits.of_int 0 1) && Bitops.eq arg1541 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 27 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg1538)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 24 5) && Bitops.eq arg1602 (Bits.U.of_int 8 5) && 
+          Bitops.eq arg1599 (Bits.U.of_int 25 5) && Bitops.eq arg1600 
+            (Bits.U.of_int 9 5) && Bitops.eq arg1597 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg1598 (Bits.U.of_int 10 5) && Bitops.eq arg1595 
+            (Bits.U.of_int 28 5) && Bitops.eq arg1596 (Bits.U.of_int 12 5) && 
+          Bitops.eq arg1593 (Bits.U.of_int 29 5) && Bitops.eq arg1594 
+            (Bits.U.of_int 13 5) && Bitops.eq arg1591 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg1592 (Bits.U.of_int 14 5) && Bitops.eq arg1589 
+            (Bits.U.of_int 31 5) && Bitops.eq arg1590 (Bits.U.of_int 15 5) && 
+          Bitops.eq arg1586 (Bits.U.of_int 0 1) && Bitops.eq arg1587 
+            (Bits.U.of_int 8 32) && Bitops.eq arg1588 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg1583 (Bits.U.of_int 0 1) && Bitops.eq arg1584 
+            (Bits.U.of_int 9 32) && Bitops.eq arg1585 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg1580 (Bits.U.of_int 0 1) && Bitops.eq arg1581 
+            (Bits.U.of_int 10 32) && Bitops.eq arg1582 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg1577 (Bits.U.of_int 0 1) && Bitops.eq arg1578 
+            (Bits.U.of_int 11 32) && Bitops.eq arg1579 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg1574 (Bits.U.of_int 0 1) && Bitops.eq arg1575 
+            (Bits.U.of_int 12 32) && Bitops.eq arg1576 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg1571 (Bits.U.of_int 0 1) && Bitops.eq arg1572 
+            (Bits.U.of_int 13 32) && Bitops.eq arg1573 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg1568 (Bits.U.of_int 0 1) && Bitops.eq arg1569 
+            (Bits.U.of_int 14 32) && Bitops.eq arg1570 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg1565 (Bits.U.of_int 0 1) && Bitops.eq arg1566 
+            (Bits.U.of_int 15 32) && Bitops.eq arg1567 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg1563 (Bits.U.of_int 0 1) && Bitops.eq arg1564 
+            (Bits.U.of_int 24 5) && Bitops.eq arg1560 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1561 (Bits.U.of_int 1 32) && Bitops.eq arg1562 
+            (Bits.U.of_int 25 5) && Bitops.eq arg1557 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1558 (Bits.U.of_int 2 32) && Bitops.eq arg1559 
+            (Bits.U.of_int 26 5) && Bitops.eq arg1554 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1555 (Bits.U.of_int 3 32) && Bitops.eq arg1556 
+            (Bits.U.of_int 27 5) && Bitops.eq arg1551 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1552 (Bits.U.of_int 4 32) && Bitops.eq arg1553 
+            (Bits.U.of_int 28 5) && Bitops.eq arg1548 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1549 (Bits.U.of_int 5 32) && Bitops.eq arg1550 
+            (Bits.U.of_int 29 5) && Bitops.eq arg1545 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1546 (Bits.U.of_int 6 32) && Bitops.eq arg1547 
+            (Bits.U.of_int 30 5) && Bitops.eq arg1542 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1543 (Bits.U.of_int 7 32) && Bitops.eq arg1544 
+            (Bits.U.of_int 31 5) && Bitops.eq arg1539 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1540 (Bits.U.of_int 0 1) && Bitops.eq arg1541 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 27 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg1538)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg1666), _), RP.Fetch (RP.Cell ('r', 
@@ -5797,51 +5797,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg1603)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg1603 13 && Bitops.eq arg1666 
-            (Bits.of_int 24 5) && Bitops.eq arg1667 (Bits.of_int 8 5) && 
-          Bitops.eq arg1664 (Bits.of_int 25 5) && Bitops.eq arg1665 
-            (Bits.of_int 9 5) && Bitops.eq arg1662 (Bits.of_int 27 5) && 
-          Bitops.eq arg1663 (Bits.of_int 11 5) && Bitops.eq arg1660 
-            (Bits.of_int 28 5) && Bitops.eq arg1661 (Bits.of_int 12 5) && 
-          Bitops.eq arg1658 (Bits.of_int 29 5) && Bitops.eq arg1659 
-            (Bits.of_int 13 5) && Bitops.eq arg1656 (Bits.of_int 30 5) && 
-          Bitops.eq arg1657 (Bits.of_int 14 5) && Bitops.eq arg1654 
-            (Bits.of_int 31 5) && Bitops.eq arg1655 (Bits.of_int 15 5) && 
-          Bitops.eq arg1651 (Bits.of_int 0 1) && Bitops.eq arg1652 
-            (Bits.of_int 8 32) && Bitops.eq arg1653 (Bits.of_int 16 5) && 
-          Bitops.eq arg1648 (Bits.of_int 0 1) && Bitops.eq arg1649 
-            (Bits.of_int 9 32) && Bitops.eq arg1650 (Bits.of_int 17 5) && 
-          Bitops.eq arg1645 (Bits.of_int 0 1) && Bitops.eq arg1646 
-            (Bits.of_int 10 32) && Bitops.eq arg1647 (Bits.of_int 18 5) && 
-          Bitops.eq arg1642 (Bits.of_int 0 1) && Bitops.eq arg1643 
-            (Bits.of_int 11 32) && Bitops.eq arg1644 (Bits.of_int 19 5) && 
-          Bitops.eq arg1639 (Bits.of_int 0 1) && Bitops.eq arg1640 
-            (Bits.of_int 12 32) && Bitops.eq arg1641 (Bits.of_int 20 5) && 
-          Bitops.eq arg1636 (Bits.of_int 0 1) && Bitops.eq arg1637 
-            (Bits.of_int 13 32) && Bitops.eq arg1638 (Bits.of_int 21 5) && 
-          Bitops.eq arg1633 (Bits.of_int 0 1) && Bitops.eq arg1634 
-            (Bits.of_int 14 32) && Bitops.eq arg1635 (Bits.of_int 22 5) && 
-          Bitops.eq arg1630 (Bits.of_int 0 1) && Bitops.eq arg1631 
-            (Bits.of_int 15 32) && Bitops.eq arg1632 (Bits.of_int 23 5) && 
-          Bitops.eq arg1628 (Bits.of_int 0 1) && Bitops.eq arg1629 
-            (Bits.of_int 24 5) && Bitops.eq arg1625 (Bits.of_int 0 1) && 
-          Bitops.eq arg1626 (Bits.of_int 1 32) && Bitops.eq arg1627 
-            (Bits.of_int 25 5) && Bitops.eq arg1622 (Bits.of_int 0 1) && 
-          Bitops.eq arg1623 (Bits.of_int 2 32) && Bitops.eq arg1624 
-            (Bits.of_int 26 5) && Bitops.eq arg1619 (Bits.of_int 0 1) && 
-          Bitops.eq arg1620 (Bits.of_int 3 32) && Bitops.eq arg1621 
-            (Bits.of_int 27 5) && Bitops.eq arg1616 (Bits.of_int 0 1) && 
-          Bitops.eq arg1617 (Bits.of_int 4 32) && Bitops.eq arg1618 
-            (Bits.of_int 28 5) && Bitops.eq arg1613 (Bits.of_int 0 1) && 
-          Bitops.eq arg1614 (Bits.of_int 5 32) && Bitops.eq arg1615 
-            (Bits.of_int 29 5) && Bitops.eq arg1610 (Bits.of_int 0 1) && 
-          Bitops.eq arg1611 (Bits.of_int 6 32) && Bitops.eq arg1612 
-            (Bits.of_int 30 5) && Bitops.eq arg1607 (Bits.of_int 0 1) && 
-          Bitops.eq arg1608 (Bits.of_int 7 32) && Bitops.eq arg1609 
-            (Bits.of_int 31 5) && Bitops.eq arg1604 (Bits.of_int 0 1) && 
-          Bitops.eq arg1605 (Bits.of_int 0 1) && Bitops.eq arg1606 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 26 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg1603)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 24 5) && Bitops.eq arg1667 (Bits.U.of_int 8 5) && 
+          Bitops.eq arg1664 (Bits.U.of_int 25 5) && Bitops.eq arg1665 
+            (Bits.U.of_int 9 5) && Bitops.eq arg1662 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg1663 (Bits.U.of_int 11 5) && Bitops.eq arg1660 
+            (Bits.U.of_int 28 5) && Bitops.eq arg1661 (Bits.U.of_int 12 5) && 
+          Bitops.eq arg1658 (Bits.U.of_int 29 5) && Bitops.eq arg1659 
+            (Bits.U.of_int 13 5) && Bitops.eq arg1656 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg1657 (Bits.U.of_int 14 5) && Bitops.eq arg1654 
+            (Bits.U.of_int 31 5) && Bitops.eq arg1655 (Bits.U.of_int 15 5) && 
+          Bitops.eq arg1651 (Bits.U.of_int 0 1) && Bitops.eq arg1652 
+            (Bits.U.of_int 8 32) && Bitops.eq arg1653 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg1648 (Bits.U.of_int 0 1) && Bitops.eq arg1649 
+            (Bits.U.of_int 9 32) && Bitops.eq arg1650 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg1645 (Bits.U.of_int 0 1) && Bitops.eq arg1646 
+            (Bits.U.of_int 10 32) && Bitops.eq arg1647 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg1642 (Bits.U.of_int 0 1) && Bitops.eq arg1643 
+            (Bits.U.of_int 11 32) && Bitops.eq arg1644 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg1639 (Bits.U.of_int 0 1) && Bitops.eq arg1640 
+            (Bits.U.of_int 12 32) && Bitops.eq arg1641 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg1636 (Bits.U.of_int 0 1) && Bitops.eq arg1637 
+            (Bits.U.of_int 13 32) && Bitops.eq arg1638 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg1633 (Bits.U.of_int 0 1) && Bitops.eq arg1634 
+            (Bits.U.of_int 14 32) && Bitops.eq arg1635 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg1630 (Bits.U.of_int 0 1) && Bitops.eq arg1631 
+            (Bits.U.of_int 15 32) && Bitops.eq arg1632 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg1628 (Bits.U.of_int 0 1) && Bitops.eq arg1629 
+            (Bits.U.of_int 24 5) && Bitops.eq arg1625 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1626 (Bits.U.of_int 1 32) && Bitops.eq arg1627 
+            (Bits.U.of_int 25 5) && Bitops.eq arg1622 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1623 (Bits.U.of_int 2 32) && Bitops.eq arg1624 
+            (Bits.U.of_int 26 5) && Bitops.eq arg1619 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1620 (Bits.U.of_int 3 32) && Bitops.eq arg1621 
+            (Bits.U.of_int 27 5) && Bitops.eq arg1616 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1617 (Bits.U.of_int 4 32) && Bitops.eq arg1618 
+            (Bits.U.of_int 28 5) && Bitops.eq arg1613 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1614 (Bits.U.of_int 5 32) && Bitops.eq arg1615 
+            (Bits.U.of_int 29 5) && Bitops.eq arg1610 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1611 (Bits.U.of_int 6 32) && Bitops.eq arg1612 
+            (Bits.U.of_int 30 5) && Bitops.eq arg1607 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1608 (Bits.U.of_int 7 32) && Bitops.eq arg1609 
+            (Bits.U.of_int 31 5) && Bitops.eq arg1604 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1605 (Bits.U.of_int 0 1) && Bitops.eq arg1606 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 26 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg1603)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg1731), _), RP.Fetch (RP.Cell ('r', 
@@ -5954,51 +5954,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg1668)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg1668 13 && Bitops.eq arg1731 
-            (Bits.of_int 24 5) && Bitops.eq arg1732 (Bits.of_int 8 5) && 
-          Bitops.eq arg1729 (Bits.of_int 26 5) && Bitops.eq arg1730 
-            (Bits.of_int 10 5) && Bitops.eq arg1727 (Bits.of_int 27 5) && 
-          Bitops.eq arg1728 (Bits.of_int 11 5) && Bitops.eq arg1725 
-            (Bits.of_int 28 5) && Bitops.eq arg1726 (Bits.of_int 12 5) && 
-          Bitops.eq arg1723 (Bits.of_int 29 5) && Bitops.eq arg1724 
-            (Bits.of_int 13 5) && Bitops.eq arg1721 (Bits.of_int 30 5) && 
-          Bitops.eq arg1722 (Bits.of_int 14 5) && Bitops.eq arg1719 
-            (Bits.of_int 31 5) && Bitops.eq arg1720 (Bits.of_int 15 5) && 
-          Bitops.eq arg1716 (Bits.of_int 0 1) && Bitops.eq arg1717 
-            (Bits.of_int 8 32) && Bitops.eq arg1718 (Bits.of_int 16 5) && 
-          Bitops.eq arg1713 (Bits.of_int 0 1) && Bitops.eq arg1714 
-            (Bits.of_int 9 32) && Bitops.eq arg1715 (Bits.of_int 17 5) && 
-          Bitops.eq arg1710 (Bits.of_int 0 1) && Bitops.eq arg1711 
-            (Bits.of_int 10 32) && Bitops.eq arg1712 (Bits.of_int 18 5) && 
-          Bitops.eq arg1707 (Bits.of_int 0 1) && Bitops.eq arg1708 
-            (Bits.of_int 11 32) && Bitops.eq arg1709 (Bits.of_int 19 5) && 
-          Bitops.eq arg1704 (Bits.of_int 0 1) && Bitops.eq arg1705 
-            (Bits.of_int 12 32) && Bitops.eq arg1706 (Bits.of_int 20 5) && 
-          Bitops.eq arg1701 (Bits.of_int 0 1) && Bitops.eq arg1702 
-            (Bits.of_int 13 32) && Bitops.eq arg1703 (Bits.of_int 21 5) && 
-          Bitops.eq arg1698 (Bits.of_int 0 1) && Bitops.eq arg1699 
-            (Bits.of_int 14 32) && Bitops.eq arg1700 (Bits.of_int 22 5) && 
-          Bitops.eq arg1695 (Bits.of_int 0 1) && Bitops.eq arg1696 
-            (Bits.of_int 15 32) && Bitops.eq arg1697 (Bits.of_int 23 5) && 
-          Bitops.eq arg1693 (Bits.of_int 0 1) && Bitops.eq arg1694 
-            (Bits.of_int 24 5) && Bitops.eq arg1690 (Bits.of_int 0 1) && 
-          Bitops.eq arg1691 (Bits.of_int 1 32) && Bitops.eq arg1692 
-            (Bits.of_int 25 5) && Bitops.eq arg1687 (Bits.of_int 0 1) && 
-          Bitops.eq arg1688 (Bits.of_int 2 32) && Bitops.eq arg1689 
-            (Bits.of_int 26 5) && Bitops.eq arg1684 (Bits.of_int 0 1) && 
-          Bitops.eq arg1685 (Bits.of_int 3 32) && Bitops.eq arg1686 
-            (Bits.of_int 27 5) && Bitops.eq arg1681 (Bits.of_int 0 1) && 
-          Bitops.eq arg1682 (Bits.of_int 4 32) && Bitops.eq arg1683 
-            (Bits.of_int 28 5) && Bitops.eq arg1678 (Bits.of_int 0 1) && 
-          Bitops.eq arg1679 (Bits.of_int 5 32) && Bitops.eq arg1680 
-            (Bits.of_int 29 5) && Bitops.eq arg1675 (Bits.of_int 0 1) && 
-          Bitops.eq arg1676 (Bits.of_int 6 32) && Bitops.eq arg1677 
-            (Bits.of_int 30 5) && Bitops.eq arg1672 (Bits.of_int 0 1) && 
-          Bitops.eq arg1673 (Bits.of_int 7 32) && Bitops.eq arg1674 
-            (Bits.of_int 31 5) && Bitops.eq arg1669 (Bits.of_int 0 1) && 
-          Bitops.eq arg1670 (Bits.of_int 0 1) && Bitops.eq arg1671 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 25 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg1668)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 24 5) && Bitops.eq arg1732 (Bits.U.of_int 8 5) && 
+          Bitops.eq arg1729 (Bits.U.of_int 26 5) && Bitops.eq arg1730 
+            (Bits.U.of_int 10 5) && Bitops.eq arg1727 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg1728 (Bits.U.of_int 11 5) && Bitops.eq arg1725 
+            (Bits.U.of_int 28 5) && Bitops.eq arg1726 (Bits.U.of_int 12 5) && 
+          Bitops.eq arg1723 (Bits.U.of_int 29 5) && Bitops.eq arg1724 
+            (Bits.U.of_int 13 5) && Bitops.eq arg1721 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg1722 (Bits.U.of_int 14 5) && Bitops.eq arg1719 
+            (Bits.U.of_int 31 5) && Bitops.eq arg1720 (Bits.U.of_int 15 5) && 
+          Bitops.eq arg1716 (Bits.U.of_int 0 1) && Bitops.eq arg1717 
+            (Bits.U.of_int 8 32) && Bitops.eq arg1718 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg1713 (Bits.U.of_int 0 1) && Bitops.eq arg1714 
+            (Bits.U.of_int 9 32) && Bitops.eq arg1715 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg1710 (Bits.U.of_int 0 1) && Bitops.eq arg1711 
+            (Bits.U.of_int 10 32) && Bitops.eq arg1712 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg1707 (Bits.U.of_int 0 1) && Bitops.eq arg1708 
+            (Bits.U.of_int 11 32) && Bitops.eq arg1709 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg1704 (Bits.U.of_int 0 1) && Bitops.eq arg1705 
+            (Bits.U.of_int 12 32) && Bitops.eq arg1706 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg1701 (Bits.U.of_int 0 1) && Bitops.eq arg1702 
+            (Bits.U.of_int 13 32) && Bitops.eq arg1703 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg1698 (Bits.U.of_int 0 1) && Bitops.eq arg1699 
+            (Bits.U.of_int 14 32) && Bitops.eq arg1700 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg1695 (Bits.U.of_int 0 1) && Bitops.eq arg1696 
+            (Bits.U.of_int 15 32) && Bitops.eq arg1697 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg1693 (Bits.U.of_int 0 1) && Bitops.eq arg1694 
+            (Bits.U.of_int 24 5) && Bitops.eq arg1690 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1691 (Bits.U.of_int 1 32) && Bitops.eq arg1692 
+            (Bits.U.of_int 25 5) && Bitops.eq arg1687 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1688 (Bits.U.of_int 2 32) && Bitops.eq arg1689 
+            (Bits.U.of_int 26 5) && Bitops.eq arg1684 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1685 (Bits.U.of_int 3 32) && Bitops.eq arg1686 
+            (Bits.U.of_int 27 5) && Bitops.eq arg1681 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1682 (Bits.U.of_int 4 32) && Bitops.eq arg1683 
+            (Bits.U.of_int 28 5) && Bitops.eq arg1678 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1679 (Bits.U.of_int 5 32) && Bitops.eq arg1680 
+            (Bits.U.of_int 29 5) && Bitops.eq arg1675 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1676 (Bits.U.of_int 6 32) && Bitops.eq arg1677 
+            (Bits.U.of_int 30 5) && Bitops.eq arg1672 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1673 (Bits.U.of_int 7 32) && Bitops.eq arg1674 
+            (Bits.U.of_int 31 5) && Bitops.eq arg1669 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1670 (Bits.U.of_int 0 1) && Bitops.eq arg1671 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 25 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg1668)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg1796), _), RP.Fetch (RP.Cell ('r', 
@@ -6111,51 +6111,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg1733)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg1733 13 && Bitops.eq arg1796 
-            (Bits.of_int 25 5) && Bitops.eq arg1797 (Bits.of_int 9 5) && 
-          Bitops.eq arg1794 (Bits.of_int 26 5) && Bitops.eq arg1795 
-            (Bits.of_int 10 5) && Bitops.eq arg1792 (Bits.of_int 27 5) && 
-          Bitops.eq arg1793 (Bits.of_int 11 5) && Bitops.eq arg1790 
-            (Bits.of_int 28 5) && Bitops.eq arg1791 (Bits.of_int 12 5) && 
-          Bitops.eq arg1788 (Bits.of_int 29 5) && Bitops.eq arg1789 
-            (Bits.of_int 13 5) && Bitops.eq arg1786 (Bits.of_int 30 5) && 
-          Bitops.eq arg1787 (Bits.of_int 14 5) && Bitops.eq arg1784 
-            (Bits.of_int 31 5) && Bitops.eq arg1785 (Bits.of_int 15 5) && 
-          Bitops.eq arg1781 (Bits.of_int 0 1) && Bitops.eq arg1782 
-            (Bits.of_int 8 32) && Bitops.eq arg1783 (Bits.of_int 16 5) && 
-          Bitops.eq arg1778 (Bits.of_int 0 1) && Bitops.eq arg1779 
-            (Bits.of_int 9 32) && Bitops.eq arg1780 (Bits.of_int 17 5) && 
-          Bitops.eq arg1775 (Bits.of_int 0 1) && Bitops.eq arg1776 
-            (Bits.of_int 10 32) && Bitops.eq arg1777 (Bits.of_int 18 5) && 
-          Bitops.eq arg1772 (Bits.of_int 0 1) && Bitops.eq arg1773 
-            (Bits.of_int 11 32) && Bitops.eq arg1774 (Bits.of_int 19 5) && 
-          Bitops.eq arg1769 (Bits.of_int 0 1) && Bitops.eq arg1770 
-            (Bits.of_int 12 32) && Bitops.eq arg1771 (Bits.of_int 20 5) && 
-          Bitops.eq arg1766 (Bits.of_int 0 1) && Bitops.eq arg1767 
-            (Bits.of_int 13 32) && Bitops.eq arg1768 (Bits.of_int 21 5) && 
-          Bitops.eq arg1763 (Bits.of_int 0 1) && Bitops.eq arg1764 
-            (Bits.of_int 14 32) && Bitops.eq arg1765 (Bits.of_int 22 5) && 
-          Bitops.eq arg1760 (Bits.of_int 0 1) && Bitops.eq arg1761 
-            (Bits.of_int 15 32) && Bitops.eq arg1762 (Bits.of_int 23 5) && 
-          Bitops.eq arg1758 (Bits.of_int 0 1) && Bitops.eq arg1759 
-            (Bits.of_int 24 5) && Bitops.eq arg1755 (Bits.of_int 0 1) && 
-          Bitops.eq arg1756 (Bits.of_int 1 32) && Bitops.eq arg1757 
-            (Bits.of_int 25 5) && Bitops.eq arg1752 (Bits.of_int 0 1) && 
-          Bitops.eq arg1753 (Bits.of_int 2 32) && Bitops.eq arg1754 
-            (Bits.of_int 26 5) && Bitops.eq arg1749 (Bits.of_int 0 1) && 
-          Bitops.eq arg1750 (Bits.of_int 3 32) && Bitops.eq arg1751 
-            (Bits.of_int 27 5) && Bitops.eq arg1746 (Bits.of_int 0 1) && 
-          Bitops.eq arg1747 (Bits.of_int 4 32) && Bitops.eq arg1748 
-            (Bits.of_int 28 5) && Bitops.eq arg1743 (Bits.of_int 0 1) && 
-          Bitops.eq arg1744 (Bits.of_int 5 32) && Bitops.eq arg1745 
-            (Bits.of_int 29 5) && Bitops.eq arg1740 (Bits.of_int 0 1) && 
-          Bitops.eq arg1741 (Bits.of_int 6 32) && Bitops.eq arg1742 
-            (Bits.of_int 30 5) && Bitops.eq arg1737 (Bits.of_int 0 1) && 
-          Bitops.eq arg1738 (Bits.of_int 7 32) && Bitops.eq arg1739 
-            (Bits.of_int 31 5) && Bitops.eq arg1734 (Bits.of_int 0 1) && 
-          Bitops.eq arg1735 (Bits.of_int 0 1) && Bitops.eq arg1736 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 24 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg1733)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 25 5) && Bitops.eq arg1797 (Bits.U.of_int 9 5) && 
+          Bitops.eq arg1794 (Bits.U.of_int 26 5) && Bitops.eq arg1795 
+            (Bits.U.of_int 10 5) && Bitops.eq arg1792 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg1793 (Bits.U.of_int 11 5) && Bitops.eq arg1790 
+            (Bits.U.of_int 28 5) && Bitops.eq arg1791 (Bits.U.of_int 12 5) && 
+          Bitops.eq arg1788 (Bits.U.of_int 29 5) && Bitops.eq arg1789 
+            (Bits.U.of_int 13 5) && Bitops.eq arg1786 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg1787 (Bits.U.of_int 14 5) && Bitops.eq arg1784 
+            (Bits.U.of_int 31 5) && Bitops.eq arg1785 (Bits.U.of_int 15 5) && 
+          Bitops.eq arg1781 (Bits.U.of_int 0 1) && Bitops.eq arg1782 
+            (Bits.U.of_int 8 32) && Bitops.eq arg1783 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg1778 (Bits.U.of_int 0 1) && Bitops.eq arg1779 
+            (Bits.U.of_int 9 32) && Bitops.eq arg1780 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg1775 (Bits.U.of_int 0 1) && Bitops.eq arg1776 
+            (Bits.U.of_int 10 32) && Bitops.eq arg1777 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg1772 (Bits.U.of_int 0 1) && Bitops.eq arg1773 
+            (Bits.U.of_int 11 32) && Bitops.eq arg1774 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg1769 (Bits.U.of_int 0 1) && Bitops.eq arg1770 
+            (Bits.U.of_int 12 32) && Bitops.eq arg1771 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg1766 (Bits.U.of_int 0 1) && Bitops.eq arg1767 
+            (Bits.U.of_int 13 32) && Bitops.eq arg1768 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg1763 (Bits.U.of_int 0 1) && Bitops.eq arg1764 
+            (Bits.U.of_int 14 32) && Bitops.eq arg1765 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg1760 (Bits.U.of_int 0 1) && Bitops.eq arg1761 
+            (Bits.U.of_int 15 32) && Bitops.eq arg1762 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg1758 (Bits.U.of_int 0 1) && Bitops.eq arg1759 
+            (Bits.U.of_int 24 5) && Bitops.eq arg1755 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1756 (Bits.U.of_int 1 32) && Bitops.eq arg1757 
+            (Bits.U.of_int 25 5) && Bitops.eq arg1752 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1753 (Bits.U.of_int 2 32) && Bitops.eq arg1754 
+            (Bits.U.of_int 26 5) && Bitops.eq arg1749 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1750 (Bits.U.of_int 3 32) && Bitops.eq arg1751 
+            (Bits.U.of_int 27 5) && Bitops.eq arg1746 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1747 (Bits.U.of_int 4 32) && Bitops.eq arg1748 
+            (Bits.U.of_int 28 5) && Bitops.eq arg1743 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1744 (Bits.U.of_int 5 32) && Bitops.eq arg1745 
+            (Bits.U.of_int 29 5) && Bitops.eq arg1740 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1741 (Bits.U.of_int 6 32) && Bitops.eq arg1742 
+            (Bits.U.of_int 30 5) && Bitops.eq arg1737 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1738 (Bits.U.of_int 7 32) && Bitops.eq arg1739 
+            (Bits.U.of_int 31 5) && Bitops.eq arg1734 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1735 (Bits.U.of_int 0 1) && Bitops.eq arg1736 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 24 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg1733)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg1862), _), RP.Fetch (RP.Cell ('r', 
@@ -6270,57 +6270,57 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg1862 (Bits.of_int 24 5) && Bitops.eq 
-            arg1863 (Bits.of_int 8 5) && Bitops.eq arg1860 
-            (Bits.of_int 25 5) && Bitops.eq arg1861 (Bits.of_int 9 5) && 
-          Bitops.eq arg1858 (Bits.of_int 26 5) && Bitops.eq arg1859 
-            (Bits.of_int 10 5) && Bitops.eq arg1856 (Bits.of_int 27 5) && 
-          Bitops.eq arg1857 (Bits.of_int 11 5) && Bitops.eq arg1854 
-            (Bits.of_int 28 5) && Bitops.eq arg1855 (Bits.of_int 12 5) && 
-          Bitops.eq arg1852 (Bits.of_int 29 5) && Bitops.eq arg1853 
-            (Bits.of_int 13 5) && Bitops.eq arg1850 (Bits.of_int 30 5) && 
-          Bitops.eq arg1851 (Bits.of_int 14 5) && Bitops.eq arg1848 
-            (Bits.of_int 31 5) && Bitops.eq arg1849 (Bits.of_int 15 5) && 
-          Bitops.eq arg1845 (Bits.of_int 0 1) && Bitops.eq arg1846 
-            (Bits.of_int 8 32) && Bitops.eq arg1847 (Bits.of_int 16 5) && 
-          Bitops.eq arg1842 (Bits.of_int 0 1) && Bitops.eq arg1843 
-            (Bits.of_int 9 32) && Bitops.eq arg1844 (Bits.of_int 17 5) && 
-          Bitops.eq arg1839 (Bits.of_int 0 1) && Bitops.eq arg1840 
-            (Bits.of_int 10 32) && Bitops.eq arg1841 (Bits.of_int 18 5) && 
-          Bitops.eq arg1836 (Bits.of_int 0 1) && Bitops.eq arg1837 
-            (Bits.of_int 11 32) && Bitops.eq arg1838 (Bits.of_int 19 5) && 
-          Bitops.eq arg1833 (Bits.of_int 0 1) && Bitops.eq arg1834 
-            (Bits.of_int 12 32) && Bitops.eq arg1835 (Bits.of_int 20 5) && 
-          Bitops.eq arg1830 (Bits.of_int 0 1) && Bitops.eq arg1831 
-            (Bits.of_int 13 32) && Bitops.eq arg1832 (Bits.of_int 21 5) && 
-          Bitops.eq arg1827 (Bits.of_int 0 1) && Bitops.eq arg1828 
-            (Bits.of_int 14 32) && Bitops.eq arg1829 (Bits.of_int 22 5) && 
-          Bitops.eq arg1824 (Bits.of_int 0 1) && Bitops.eq arg1825 
-            (Bits.of_int 15 32) && Bitops.eq arg1826 (Bits.of_int 23 5) && 
-          Bitops.eq arg1822 (Bits.of_int 0 1) && Bitops.eq arg1823 
-            (Bits.of_int 24 5) && Bitops.eq arg1819 (Bits.of_int 0 1) && 
-          Bitops.eq arg1820 (Bits.of_int 1 32) && Bitops.eq arg1821 
-            (Bits.of_int 25 5) && Bitops.eq arg1816 (Bits.of_int 0 1) && 
-          Bitops.eq arg1817 (Bits.of_int 2 32) && Bitops.eq arg1818 
-            (Bits.of_int 26 5) && Bitops.eq arg1813 (Bits.of_int 0 1) && 
-          Bitops.eq arg1814 (Bits.of_int 3 32) && Bitops.eq arg1815 
-            (Bits.of_int 27 5) && Bitops.eq arg1810 (Bits.of_int 0 1) && 
-          Bitops.eq arg1811 (Bits.of_int 4 32) && Bitops.eq arg1812 
-            (Bits.of_int 28 5) && Bitops.eq arg1807 (Bits.of_int 0 1) && 
-          Bitops.eq arg1808 (Bits.of_int 5 32) && Bitops.eq arg1809 
-            (Bits.of_int 29 5) && Bitops.eq arg1804 (Bits.of_int 0 1) && 
-          Bitops.eq arg1805 (Bits.of_int 6 32) && Bitops.eq arg1806 
-            (Bits.of_int 30 5) && Bitops.eq arg1801 (Bits.of_int 0 1) && 
-          Bitops.eq arg1802 (Bits.of_int 7 32) && Bitops.eq arg1803 
-            (Bits.of_int 31 5) && Bitops.eq arg1798 (Bits.of_int 0 1) && 
-          Bitops.eq arg1799 (Bits.of_int 0 1) && Bitops.eq arg1800 
-            (Bits.of_int 16 32) && Bitops.ne rd (Bits.of_int 24 5) && Bitops.ne 
-            rd (Bits.of_int 25 5) && Bitops.ne rd (Bits.of_int 26 5) && 
-          Bitops.ne rd (Bits.of_int 27 5) && Bitops.ne rd (Bits.of_int 28 5) && 
-          Bitops.ne rd (Bits.of_int 29 5) && Bitops.ne rd (Bits.of_int 30 5) && 
-          Bitops.ne rd (Bits.of_int 31 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg1862 (Bits.U.of_int 24 5) && Bitops.eq 
+            arg1863 (Bits.U.of_int 8 5) && Bitops.eq arg1860 
+            (Bits.U.of_int 25 5) && Bitops.eq arg1861 (Bits.U.of_int 9 5) && 
+          Bitops.eq arg1858 (Bits.U.of_int 26 5) && Bitops.eq arg1859 
+            (Bits.U.of_int 10 5) && Bitops.eq arg1856 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg1857 (Bits.U.of_int 11 5) && Bitops.eq arg1854 
+            (Bits.U.of_int 28 5) && Bitops.eq arg1855 (Bits.U.of_int 12 5) && 
+          Bitops.eq arg1852 (Bits.U.of_int 29 5) && Bitops.eq arg1853 
+            (Bits.U.of_int 13 5) && Bitops.eq arg1850 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg1851 (Bits.U.of_int 14 5) && Bitops.eq arg1848 
+            (Bits.U.of_int 31 5) && Bitops.eq arg1849 (Bits.U.of_int 15 5) && 
+          Bitops.eq arg1845 (Bits.U.of_int 0 1) && Bitops.eq arg1846 
+            (Bits.U.of_int 8 32) && Bitops.eq arg1847 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg1842 (Bits.U.of_int 0 1) && Bitops.eq arg1843 
+            (Bits.U.of_int 9 32) && Bitops.eq arg1844 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg1839 (Bits.U.of_int 0 1) && Bitops.eq arg1840 
+            (Bits.U.of_int 10 32) && Bitops.eq arg1841 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg1836 (Bits.U.of_int 0 1) && Bitops.eq arg1837 
+            (Bits.U.of_int 11 32) && Bitops.eq arg1838 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg1833 (Bits.U.of_int 0 1) && Bitops.eq arg1834 
+            (Bits.U.of_int 12 32) && Bitops.eq arg1835 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg1830 (Bits.U.of_int 0 1) && Bitops.eq arg1831 
+            (Bits.U.of_int 13 32) && Bitops.eq arg1832 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg1827 (Bits.U.of_int 0 1) && Bitops.eq arg1828 
+            (Bits.U.of_int 14 32) && Bitops.eq arg1829 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg1824 (Bits.U.of_int 0 1) && Bitops.eq arg1825 
+            (Bits.U.of_int 15 32) && Bitops.eq arg1826 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg1822 (Bits.U.of_int 0 1) && Bitops.eq arg1823 
+            (Bits.U.of_int 24 5) && Bitops.eq arg1819 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1820 (Bits.U.of_int 1 32) && Bitops.eq arg1821 
+            (Bits.U.of_int 25 5) && Bitops.eq arg1816 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1817 (Bits.U.of_int 2 32) && Bitops.eq arg1818 
+            (Bits.U.of_int 26 5) && Bitops.eq arg1813 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1814 (Bits.U.of_int 3 32) && Bitops.eq arg1815 
+            (Bits.U.of_int 27 5) && Bitops.eq arg1810 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1811 (Bits.U.of_int 4 32) && Bitops.eq arg1812 
+            (Bits.U.of_int 28 5) && Bitops.eq arg1807 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1808 (Bits.U.of_int 5 32) && Bitops.eq arg1809 
+            (Bits.U.of_int 29 5) && Bitops.eq arg1804 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1805 (Bits.U.of_int 6 32) && Bitops.eq arg1806 
+            (Bits.U.of_int 30 5) && Bitops.eq arg1801 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1802 (Bits.U.of_int 7 32) && Bitops.eq arg1803 
+            (Bits.U.of_int 31 5) && Bitops.eq arg1798 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg1799 (Bits.U.of_int 0 1) && Bitops.eq arg1800 
+            (Bits.U.of_int 16 32) && Bitops.ne rd (Bits.U.of_int 24 5) && Bitops.ne 
+            rd (Bits.U.of_int 25 5) && Bitops.ne rd (Bits.U.of_int 26 5) && 
+          Bitops.ne rd (Bits.U.of_int 27 5) && Bitops.ne rd (Bits.U.of_int 28 5) && 
+          Bitops.ne rd (Bits.U.of_int 29 5) && Bitops.ne rd (Bits.U.of_int 30 5) && 
+          Bitops.ne rd (Bits.U.of_int 31 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg1926), _), RP.Fetch (RP.Cell ('r', 
@@ -6432,52 +6432,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg1926 (Bits.of_int 24 5) && Bitops.eq 
-            arg1927 (Bits.of_int 8 5) && Bitops.eq arg1924 
-            (Bits.of_int 25 5) && Bitops.eq arg1925 (Bits.of_int 9 5) && 
-          Bitops.eq arg1922 (Bits.of_int 26 5) && Bitops.eq arg1923 
-            (Bits.of_int 10 5) && Bitops.eq arg1920 (Bits.of_int 27 5) && 
-          Bitops.eq arg1921 (Bits.of_int 11 5) && Bitops.eq arg1918 
-            (Bits.of_int 28 5) && Bitops.eq arg1919 (Bits.of_int 12 5) && 
-          Bitops.eq arg1916 (Bits.of_int 29 5) && Bitops.eq arg1917 
-            (Bits.of_int 13 5) && Bitops.eq arg1914 (Bits.of_int 30 5) && 
-          Bitops.eq arg1915 (Bits.of_int 14 5) && Bitops.eq arg1911 
-            (Bits.of_int 0 1) && Bitops.eq arg1912 (Bits.of_int 8 32) && 
-          Bitops.eq arg1913 (Bits.of_int 16 5) && Bitops.eq arg1908 
-            (Bits.of_int 0 1) && Bitops.eq arg1909 (Bits.of_int 9 32) && 
-          Bitops.eq arg1910 (Bits.of_int 17 5) && Bitops.eq arg1905 
-            (Bits.of_int 0 1) && Bitops.eq arg1906 (Bits.of_int 10 32) && 
-          Bitops.eq arg1907 (Bits.of_int 18 5) && Bitops.eq arg1902 
-            (Bits.of_int 0 1) && Bitops.eq arg1903 (Bits.of_int 11 32) && 
-          Bitops.eq arg1904 (Bits.of_int 19 5) && Bitops.eq arg1899 
-            (Bits.of_int 0 1) && Bitops.eq arg1900 (Bits.of_int 12 32) && 
-          Bitops.eq arg1901 (Bits.of_int 20 5) && Bitops.eq arg1896 
-            (Bits.of_int 0 1) && Bitops.eq arg1897 (Bits.of_int 13 32) && 
-          Bitops.eq arg1898 (Bits.of_int 21 5) && Bitops.eq arg1893 
-            (Bits.of_int 0 1) && Bitops.eq arg1894 (Bits.of_int 14 32) && 
-          Bitops.eq arg1895 (Bits.of_int 22 5) && Bitops.eq arg1890 
-            (Bits.of_int 0 1) && Bitops.eq arg1891 (Bits.of_int 15 32) && 
-          Bitops.eq arg1892 (Bits.of_int 23 5) && Bitops.eq arg1888 
-            (Bits.of_int 0 1) && Bitops.eq arg1889 (Bits.of_int 24 5) && 
-          Bitops.eq arg1885 (Bits.of_int 0 1) && Bitops.eq arg1886 
-            (Bits.of_int 1 32) && Bitops.eq arg1887 (Bits.of_int 25 5) && 
-          Bitops.eq arg1882 (Bits.of_int 0 1) && Bitops.eq arg1883 
-            (Bits.of_int 2 32) && Bitops.eq arg1884 (Bits.of_int 26 5) && 
-          Bitops.eq arg1879 (Bits.of_int 0 1) && Bitops.eq arg1880 
-            (Bits.of_int 3 32) && Bitops.eq arg1881 (Bits.of_int 27 5) && 
-          Bitops.eq arg1876 (Bits.of_int 0 1) && Bitops.eq arg1877 
-            (Bits.of_int 4 32) && Bitops.eq arg1878 (Bits.of_int 28 5) && 
-          Bitops.eq arg1873 (Bits.of_int 0 1) && Bitops.eq arg1874 
-            (Bits.of_int 5 32) && Bitops.eq arg1875 (Bits.of_int 29 5) && 
-          Bitops.eq arg1870 (Bits.of_int 0 1) && Bitops.eq arg1871 
-            (Bits.of_int 6 32) && Bitops.eq arg1872 (Bits.of_int 30 5) && 
-          Bitops.eq arg1867 (Bits.of_int 0 1) && Bitops.eq arg1868 
-            (Bits.of_int 7 32) && Bitops.eq arg1869 (Bits.of_int 31 5) && 
-          Bitops.eq arg1864 (Bits.of_int 0 1) && Bitops.eq arg1865 
-            (Bits.of_int 0 1) && Bitops.eq arg1866 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 31 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg1926 (Bits.U.of_int 24 5) && Bitops.eq 
+            arg1927 (Bits.U.of_int 8 5) && Bitops.eq arg1924 
+            (Bits.U.of_int 25 5) && Bitops.eq arg1925 (Bits.U.of_int 9 5) && 
+          Bitops.eq arg1922 (Bits.U.of_int 26 5) && Bitops.eq arg1923 
+            (Bits.U.of_int 10 5) && Bitops.eq arg1920 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg1921 (Bits.U.of_int 11 5) && Bitops.eq arg1918 
+            (Bits.U.of_int 28 5) && Bitops.eq arg1919 (Bits.U.of_int 12 5) && 
+          Bitops.eq arg1916 (Bits.U.of_int 29 5) && Bitops.eq arg1917 
+            (Bits.U.of_int 13 5) && Bitops.eq arg1914 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg1915 (Bits.U.of_int 14 5) && Bitops.eq arg1911 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1912 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg1913 (Bits.U.of_int 16 5) && Bitops.eq arg1908 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1909 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg1910 (Bits.U.of_int 17 5) && Bitops.eq arg1905 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1906 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg1907 (Bits.U.of_int 18 5) && Bitops.eq arg1902 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1903 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg1904 (Bits.U.of_int 19 5) && Bitops.eq arg1899 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1900 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg1901 (Bits.U.of_int 20 5) && Bitops.eq arg1896 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1897 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg1898 (Bits.U.of_int 21 5) && Bitops.eq arg1893 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1894 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg1895 (Bits.U.of_int 22 5) && Bitops.eq arg1890 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1891 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg1892 (Bits.U.of_int 23 5) && Bitops.eq arg1888 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1889 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg1885 (Bits.U.of_int 0 1) && Bitops.eq arg1886 
+            (Bits.U.of_int 1 32) && Bitops.eq arg1887 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg1882 (Bits.U.of_int 0 1) && Bitops.eq arg1883 
+            (Bits.U.of_int 2 32) && Bitops.eq arg1884 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg1879 (Bits.U.of_int 0 1) && Bitops.eq arg1880 
+            (Bits.U.of_int 3 32) && Bitops.eq arg1881 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg1876 (Bits.U.of_int 0 1) && Bitops.eq arg1877 
+            (Bits.U.of_int 4 32) && Bitops.eq arg1878 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg1873 (Bits.U.of_int 0 1) && Bitops.eq arg1874 
+            (Bits.U.of_int 5 32) && Bitops.eq arg1875 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg1870 (Bits.U.of_int 0 1) && Bitops.eq arg1871 
+            (Bits.U.of_int 6 32) && Bitops.eq arg1872 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg1867 (Bits.U.of_int 0 1) && Bitops.eq arg1868 
+            (Bits.U.of_int 7 32) && Bitops.eq arg1869 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg1864 (Bits.U.of_int 0 1) && Bitops.eq arg1865 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1866 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 31 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg1990), _), RP.Fetch (RP.Cell ('r', 
@@ -6589,52 +6589,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg1990 (Bits.of_int 24 5) && Bitops.eq 
-            arg1991 (Bits.of_int 8 5) && Bitops.eq arg1988 
-            (Bits.of_int 25 5) && Bitops.eq arg1989 (Bits.of_int 9 5) && 
-          Bitops.eq arg1986 (Bits.of_int 26 5) && Bitops.eq arg1987 
-            (Bits.of_int 10 5) && Bitops.eq arg1984 (Bits.of_int 27 5) && 
-          Bitops.eq arg1985 (Bits.of_int 11 5) && Bitops.eq arg1982 
-            (Bits.of_int 28 5) && Bitops.eq arg1983 (Bits.of_int 12 5) && 
-          Bitops.eq arg1980 (Bits.of_int 29 5) && Bitops.eq arg1981 
-            (Bits.of_int 13 5) && Bitops.eq arg1978 (Bits.of_int 31 5) && 
-          Bitops.eq arg1979 (Bits.of_int 15 5) && Bitops.eq arg1975 
-            (Bits.of_int 0 1) && Bitops.eq arg1976 (Bits.of_int 8 32) && 
-          Bitops.eq arg1977 (Bits.of_int 16 5) && Bitops.eq arg1972 
-            (Bits.of_int 0 1) && Bitops.eq arg1973 (Bits.of_int 9 32) && 
-          Bitops.eq arg1974 (Bits.of_int 17 5) && Bitops.eq arg1969 
-            (Bits.of_int 0 1) && Bitops.eq arg1970 (Bits.of_int 10 32) && 
-          Bitops.eq arg1971 (Bits.of_int 18 5) && Bitops.eq arg1966 
-            (Bits.of_int 0 1) && Bitops.eq arg1967 (Bits.of_int 11 32) && 
-          Bitops.eq arg1968 (Bits.of_int 19 5) && Bitops.eq arg1963 
-            (Bits.of_int 0 1) && Bitops.eq arg1964 (Bits.of_int 12 32) && 
-          Bitops.eq arg1965 (Bits.of_int 20 5) && Bitops.eq arg1960 
-            (Bits.of_int 0 1) && Bitops.eq arg1961 (Bits.of_int 13 32) && 
-          Bitops.eq arg1962 (Bits.of_int 21 5) && Bitops.eq arg1957 
-            (Bits.of_int 0 1) && Bitops.eq arg1958 (Bits.of_int 14 32) && 
-          Bitops.eq arg1959 (Bits.of_int 22 5) && Bitops.eq arg1954 
-            (Bits.of_int 0 1) && Bitops.eq arg1955 (Bits.of_int 15 32) && 
-          Bitops.eq arg1956 (Bits.of_int 23 5) && Bitops.eq arg1952 
-            (Bits.of_int 0 1) && Bitops.eq arg1953 (Bits.of_int 24 5) && 
-          Bitops.eq arg1949 (Bits.of_int 0 1) && Bitops.eq arg1950 
-            (Bits.of_int 1 32) && Bitops.eq arg1951 (Bits.of_int 25 5) && 
-          Bitops.eq arg1946 (Bits.of_int 0 1) && Bitops.eq arg1947 
-            (Bits.of_int 2 32) && Bitops.eq arg1948 (Bits.of_int 26 5) && 
-          Bitops.eq arg1943 (Bits.of_int 0 1) && Bitops.eq arg1944 
-            (Bits.of_int 3 32) && Bitops.eq arg1945 (Bits.of_int 27 5) && 
-          Bitops.eq arg1940 (Bits.of_int 0 1) && Bitops.eq arg1941 
-            (Bits.of_int 4 32) && Bitops.eq arg1942 (Bits.of_int 28 5) && 
-          Bitops.eq arg1937 (Bits.of_int 0 1) && Bitops.eq arg1938 
-            (Bits.of_int 5 32) && Bitops.eq arg1939 (Bits.of_int 29 5) && 
-          Bitops.eq arg1934 (Bits.of_int 0 1) && Bitops.eq arg1935 
-            (Bits.of_int 6 32) && Bitops.eq arg1936 (Bits.of_int 30 5) && 
-          Bitops.eq arg1931 (Bits.of_int 0 1) && Bitops.eq arg1932 
-            (Bits.of_int 7 32) && Bitops.eq arg1933 (Bits.of_int 31 5) && 
-          Bitops.eq arg1928 (Bits.of_int 0 1) && Bitops.eq arg1929 
-            (Bits.of_int 0 1) && Bitops.eq arg1930 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 30 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg1990 (Bits.U.of_int 24 5) && Bitops.eq 
+            arg1991 (Bits.U.of_int 8 5) && Bitops.eq arg1988 
+            (Bits.U.of_int 25 5) && Bitops.eq arg1989 (Bits.U.of_int 9 5) && 
+          Bitops.eq arg1986 (Bits.U.of_int 26 5) && Bitops.eq arg1987 
+            (Bits.U.of_int 10 5) && Bitops.eq arg1984 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg1985 (Bits.U.of_int 11 5) && Bitops.eq arg1982 
+            (Bits.U.of_int 28 5) && Bitops.eq arg1983 (Bits.U.of_int 12 5) && 
+          Bitops.eq arg1980 (Bits.U.of_int 29 5) && Bitops.eq arg1981 
+            (Bits.U.of_int 13 5) && Bitops.eq arg1978 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg1979 (Bits.U.of_int 15 5) && Bitops.eq arg1975 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1976 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg1977 (Bits.U.of_int 16 5) && Bitops.eq arg1972 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1973 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg1974 (Bits.U.of_int 17 5) && Bitops.eq arg1969 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1970 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg1971 (Bits.U.of_int 18 5) && Bitops.eq arg1966 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1967 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg1968 (Bits.U.of_int 19 5) && Bitops.eq arg1963 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1964 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg1965 (Bits.U.of_int 20 5) && Bitops.eq arg1960 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1961 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg1962 (Bits.U.of_int 21 5) && Bitops.eq arg1957 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1958 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg1959 (Bits.U.of_int 22 5) && Bitops.eq arg1954 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1955 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg1956 (Bits.U.of_int 23 5) && Bitops.eq arg1952 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1953 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg1949 (Bits.U.of_int 0 1) && Bitops.eq arg1950 
+            (Bits.U.of_int 1 32) && Bitops.eq arg1951 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg1946 (Bits.U.of_int 0 1) && Bitops.eq arg1947 
+            (Bits.U.of_int 2 32) && Bitops.eq arg1948 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg1943 (Bits.U.of_int 0 1) && Bitops.eq arg1944 
+            (Bits.U.of_int 3 32) && Bitops.eq arg1945 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg1940 (Bits.U.of_int 0 1) && Bitops.eq arg1941 
+            (Bits.U.of_int 4 32) && Bitops.eq arg1942 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg1937 (Bits.U.of_int 0 1) && Bitops.eq arg1938 
+            (Bits.U.of_int 5 32) && Bitops.eq arg1939 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg1934 (Bits.U.of_int 0 1) && Bitops.eq arg1935 
+            (Bits.U.of_int 6 32) && Bitops.eq arg1936 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg1931 (Bits.U.of_int 0 1) && Bitops.eq arg1932 
+            (Bits.U.of_int 7 32) && Bitops.eq arg1933 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg1928 (Bits.U.of_int 0 1) && Bitops.eq arg1929 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1930 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 30 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg2054), _), RP.Fetch (RP.Cell ('r', 
@@ -6746,52 +6746,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg2054 (Bits.of_int 24 5) && Bitops.eq 
-            arg2055 (Bits.of_int 8 5) && Bitops.eq arg2052 
-            (Bits.of_int 25 5) && Bitops.eq arg2053 (Bits.of_int 9 5) && 
-          Bitops.eq arg2050 (Bits.of_int 26 5) && Bitops.eq arg2051 
-            (Bits.of_int 10 5) && Bitops.eq arg2048 (Bits.of_int 27 5) && 
-          Bitops.eq arg2049 (Bits.of_int 11 5) && Bitops.eq arg2046 
-            (Bits.of_int 28 5) && Bitops.eq arg2047 (Bits.of_int 12 5) && 
-          Bitops.eq arg2044 (Bits.of_int 30 5) && Bitops.eq arg2045 
-            (Bits.of_int 14 5) && Bitops.eq arg2042 (Bits.of_int 31 5) && 
-          Bitops.eq arg2043 (Bits.of_int 15 5) && Bitops.eq arg2039 
-            (Bits.of_int 0 1) && Bitops.eq arg2040 (Bits.of_int 8 32) && 
-          Bitops.eq arg2041 (Bits.of_int 16 5) && Bitops.eq arg2036 
-            (Bits.of_int 0 1) && Bitops.eq arg2037 (Bits.of_int 9 32) && 
-          Bitops.eq arg2038 (Bits.of_int 17 5) && Bitops.eq arg2033 
-            (Bits.of_int 0 1) && Bitops.eq arg2034 (Bits.of_int 10 32) && 
-          Bitops.eq arg2035 (Bits.of_int 18 5) && Bitops.eq arg2030 
-            (Bits.of_int 0 1) && Bitops.eq arg2031 (Bits.of_int 11 32) && 
-          Bitops.eq arg2032 (Bits.of_int 19 5) && Bitops.eq arg2027 
-            (Bits.of_int 0 1) && Bitops.eq arg2028 (Bits.of_int 12 32) && 
-          Bitops.eq arg2029 (Bits.of_int 20 5) && Bitops.eq arg2024 
-            (Bits.of_int 0 1) && Bitops.eq arg2025 (Bits.of_int 13 32) && 
-          Bitops.eq arg2026 (Bits.of_int 21 5) && Bitops.eq arg2021 
-            (Bits.of_int 0 1) && Bitops.eq arg2022 (Bits.of_int 14 32) && 
-          Bitops.eq arg2023 (Bits.of_int 22 5) && Bitops.eq arg2018 
-            (Bits.of_int 0 1) && Bitops.eq arg2019 (Bits.of_int 15 32) && 
-          Bitops.eq arg2020 (Bits.of_int 23 5) && Bitops.eq arg2016 
-            (Bits.of_int 0 1) && Bitops.eq arg2017 (Bits.of_int 24 5) && 
-          Bitops.eq arg2013 (Bits.of_int 0 1) && Bitops.eq arg2014 
-            (Bits.of_int 1 32) && Bitops.eq arg2015 (Bits.of_int 25 5) && 
-          Bitops.eq arg2010 (Bits.of_int 0 1) && Bitops.eq arg2011 
-            (Bits.of_int 2 32) && Bitops.eq arg2012 (Bits.of_int 26 5) && 
-          Bitops.eq arg2007 (Bits.of_int 0 1) && Bitops.eq arg2008 
-            (Bits.of_int 3 32) && Bitops.eq arg2009 (Bits.of_int 27 5) && 
-          Bitops.eq arg2004 (Bits.of_int 0 1) && Bitops.eq arg2005 
-            (Bits.of_int 4 32) && Bitops.eq arg2006 (Bits.of_int 28 5) && 
-          Bitops.eq arg2001 (Bits.of_int 0 1) && Bitops.eq arg2002 
-            (Bits.of_int 5 32) && Bitops.eq arg2003 (Bits.of_int 29 5) && 
-          Bitops.eq arg1998 (Bits.of_int 0 1) && Bitops.eq arg1999 
-            (Bits.of_int 6 32) && Bitops.eq arg2000 (Bits.of_int 30 5) && 
-          Bitops.eq arg1995 (Bits.of_int 0 1) && Bitops.eq arg1996 
-            (Bits.of_int 7 32) && Bitops.eq arg1997 (Bits.of_int 31 5) && 
-          Bitops.eq arg1992 (Bits.of_int 0 1) && Bitops.eq arg1993 
-            (Bits.of_int 0 1) && Bitops.eq arg1994 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 29 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg2054 (Bits.U.of_int 24 5) && Bitops.eq 
+            arg2055 (Bits.U.of_int 8 5) && Bitops.eq arg2052 
+            (Bits.U.of_int 25 5) && Bitops.eq arg2053 (Bits.U.of_int 9 5) && 
+          Bitops.eq arg2050 (Bits.U.of_int 26 5) && Bitops.eq arg2051 
+            (Bits.U.of_int 10 5) && Bitops.eq arg2048 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2049 (Bits.U.of_int 11 5) && Bitops.eq arg2046 
+            (Bits.U.of_int 28 5) && Bitops.eq arg2047 (Bits.U.of_int 12 5) && 
+          Bitops.eq arg2044 (Bits.U.of_int 30 5) && Bitops.eq arg2045 
+            (Bits.U.of_int 14 5) && Bitops.eq arg2042 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2043 (Bits.U.of_int 15 5) && Bitops.eq arg2039 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2040 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg2041 (Bits.U.of_int 16 5) && Bitops.eq arg2036 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2037 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg2038 (Bits.U.of_int 17 5) && Bitops.eq arg2033 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2034 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg2035 (Bits.U.of_int 18 5) && Bitops.eq arg2030 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2031 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg2032 (Bits.U.of_int 19 5) && Bitops.eq arg2027 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2028 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg2029 (Bits.U.of_int 20 5) && Bitops.eq arg2024 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2025 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg2026 (Bits.U.of_int 21 5) && Bitops.eq arg2021 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2022 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg2023 (Bits.U.of_int 22 5) && Bitops.eq arg2018 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2019 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg2020 (Bits.U.of_int 23 5) && Bitops.eq arg2016 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2017 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2013 (Bits.U.of_int 0 1) && Bitops.eq arg2014 
+            (Bits.U.of_int 1 32) && Bitops.eq arg2015 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg2010 (Bits.U.of_int 0 1) && Bitops.eq arg2011 
+            (Bits.U.of_int 2 32) && Bitops.eq arg2012 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg2007 (Bits.U.of_int 0 1) && Bitops.eq arg2008 
+            (Bits.U.of_int 3 32) && Bitops.eq arg2009 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2004 (Bits.U.of_int 0 1) && Bitops.eq arg2005 
+            (Bits.U.of_int 4 32) && Bitops.eq arg2006 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2001 (Bits.U.of_int 0 1) && Bitops.eq arg2002 
+            (Bits.U.of_int 5 32) && Bitops.eq arg2003 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg1998 (Bits.U.of_int 0 1) && Bitops.eq arg1999 
+            (Bits.U.of_int 6 32) && Bitops.eq arg2000 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg1995 (Bits.U.of_int 0 1) && Bitops.eq arg1996 
+            (Bits.U.of_int 7 32) && Bitops.eq arg1997 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg1992 (Bits.U.of_int 0 1) && Bitops.eq arg1993 
+            (Bits.U.of_int 0 1) && Bitops.eq arg1994 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 29 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg2118), _), RP.Fetch (RP.Cell ('r', 
@@ -6903,52 +6903,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg2118 (Bits.of_int 24 5) && Bitops.eq 
-            arg2119 (Bits.of_int 8 5) && Bitops.eq arg2116 
-            (Bits.of_int 25 5) && Bitops.eq arg2117 (Bits.of_int 9 5) && 
-          Bitops.eq arg2114 (Bits.of_int 26 5) && Bitops.eq arg2115 
-            (Bits.of_int 10 5) && Bitops.eq arg2112 (Bits.of_int 27 5) && 
-          Bitops.eq arg2113 (Bits.of_int 11 5) && Bitops.eq arg2110 
-            (Bits.of_int 29 5) && Bitops.eq arg2111 (Bits.of_int 13 5) && 
-          Bitops.eq arg2108 (Bits.of_int 30 5) && Bitops.eq arg2109 
-            (Bits.of_int 14 5) && Bitops.eq arg2106 (Bits.of_int 31 5) && 
-          Bitops.eq arg2107 (Bits.of_int 15 5) && Bitops.eq arg2103 
-            (Bits.of_int 0 1) && Bitops.eq arg2104 (Bits.of_int 8 32) && 
-          Bitops.eq arg2105 (Bits.of_int 16 5) && Bitops.eq arg2100 
-            (Bits.of_int 0 1) && Bitops.eq arg2101 (Bits.of_int 9 32) && 
-          Bitops.eq arg2102 (Bits.of_int 17 5) && Bitops.eq arg2097 
-            (Bits.of_int 0 1) && Bitops.eq arg2098 (Bits.of_int 10 32) && 
-          Bitops.eq arg2099 (Bits.of_int 18 5) && Bitops.eq arg2094 
-            (Bits.of_int 0 1) && Bitops.eq arg2095 (Bits.of_int 11 32) && 
-          Bitops.eq arg2096 (Bits.of_int 19 5) && Bitops.eq arg2091 
-            (Bits.of_int 0 1) && Bitops.eq arg2092 (Bits.of_int 12 32) && 
-          Bitops.eq arg2093 (Bits.of_int 20 5) && Bitops.eq arg2088 
-            (Bits.of_int 0 1) && Bitops.eq arg2089 (Bits.of_int 13 32) && 
-          Bitops.eq arg2090 (Bits.of_int 21 5) && Bitops.eq arg2085 
-            (Bits.of_int 0 1) && Bitops.eq arg2086 (Bits.of_int 14 32) && 
-          Bitops.eq arg2087 (Bits.of_int 22 5) && Bitops.eq arg2082 
-            (Bits.of_int 0 1) && Bitops.eq arg2083 (Bits.of_int 15 32) && 
-          Bitops.eq arg2084 (Bits.of_int 23 5) && Bitops.eq arg2080 
-            (Bits.of_int 0 1) && Bitops.eq arg2081 (Bits.of_int 24 5) && 
-          Bitops.eq arg2077 (Bits.of_int 0 1) && Bitops.eq arg2078 
-            (Bits.of_int 1 32) && Bitops.eq arg2079 (Bits.of_int 25 5) && 
-          Bitops.eq arg2074 (Bits.of_int 0 1) && Bitops.eq arg2075 
-            (Bits.of_int 2 32) && Bitops.eq arg2076 (Bits.of_int 26 5) && 
-          Bitops.eq arg2071 (Bits.of_int 0 1) && Bitops.eq arg2072 
-            (Bits.of_int 3 32) && Bitops.eq arg2073 (Bits.of_int 27 5) && 
-          Bitops.eq arg2068 (Bits.of_int 0 1) && Bitops.eq arg2069 
-            (Bits.of_int 4 32) && Bitops.eq arg2070 (Bits.of_int 28 5) && 
-          Bitops.eq arg2065 (Bits.of_int 0 1) && Bitops.eq arg2066 
-            (Bits.of_int 5 32) && Bitops.eq arg2067 (Bits.of_int 29 5) && 
-          Bitops.eq arg2062 (Bits.of_int 0 1) && Bitops.eq arg2063 
-            (Bits.of_int 6 32) && Bitops.eq arg2064 (Bits.of_int 30 5) && 
-          Bitops.eq arg2059 (Bits.of_int 0 1) && Bitops.eq arg2060 
-            (Bits.of_int 7 32) && Bitops.eq arg2061 (Bits.of_int 31 5) && 
-          Bitops.eq arg2056 (Bits.of_int 0 1) && Bitops.eq arg2057 
-            (Bits.of_int 0 1) && Bitops.eq arg2058 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 28 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg2118 (Bits.U.of_int 24 5) && Bitops.eq 
+            arg2119 (Bits.U.of_int 8 5) && Bitops.eq arg2116 
+            (Bits.U.of_int 25 5) && Bitops.eq arg2117 (Bits.U.of_int 9 5) && 
+          Bitops.eq arg2114 (Bits.U.of_int 26 5) && Bitops.eq arg2115 
+            (Bits.U.of_int 10 5) && Bitops.eq arg2112 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2113 (Bits.U.of_int 11 5) && Bitops.eq arg2110 
+            (Bits.U.of_int 29 5) && Bitops.eq arg2111 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg2108 (Bits.U.of_int 30 5) && Bitops.eq arg2109 
+            (Bits.U.of_int 14 5) && Bitops.eq arg2106 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2107 (Bits.U.of_int 15 5) && Bitops.eq arg2103 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2104 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg2105 (Bits.U.of_int 16 5) && Bitops.eq arg2100 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2101 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg2102 (Bits.U.of_int 17 5) && Bitops.eq arg2097 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2098 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg2099 (Bits.U.of_int 18 5) && Bitops.eq arg2094 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2095 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg2096 (Bits.U.of_int 19 5) && Bitops.eq arg2091 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2092 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg2093 (Bits.U.of_int 20 5) && Bitops.eq arg2088 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2089 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg2090 (Bits.U.of_int 21 5) && Bitops.eq arg2085 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2086 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg2087 (Bits.U.of_int 22 5) && Bitops.eq arg2082 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2083 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg2084 (Bits.U.of_int 23 5) && Bitops.eq arg2080 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2081 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2077 (Bits.U.of_int 0 1) && Bitops.eq arg2078 
+            (Bits.U.of_int 1 32) && Bitops.eq arg2079 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg2074 (Bits.U.of_int 0 1) && Bitops.eq arg2075 
+            (Bits.U.of_int 2 32) && Bitops.eq arg2076 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg2071 (Bits.U.of_int 0 1) && Bitops.eq arg2072 
+            (Bits.U.of_int 3 32) && Bitops.eq arg2073 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2068 (Bits.U.of_int 0 1) && Bitops.eq arg2069 
+            (Bits.U.of_int 4 32) && Bitops.eq arg2070 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2065 (Bits.U.of_int 0 1) && Bitops.eq arg2066 
+            (Bits.U.of_int 5 32) && Bitops.eq arg2067 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg2062 (Bits.U.of_int 0 1) && Bitops.eq arg2063 
+            (Bits.U.of_int 6 32) && Bitops.eq arg2064 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2059 (Bits.U.of_int 0 1) && Bitops.eq arg2060 
+            (Bits.U.of_int 7 32) && Bitops.eq arg2061 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2056 (Bits.U.of_int 0 1) && Bitops.eq arg2057 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2058 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 28 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg2182), _), RP.Fetch (RP.Cell ('r', 
@@ -7060,52 +7060,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg2182 (Bits.of_int 24 5) && Bitops.eq 
-            arg2183 (Bits.of_int 8 5) && Bitops.eq arg2180 
-            (Bits.of_int 25 5) && Bitops.eq arg2181 (Bits.of_int 9 5) && 
-          Bitops.eq arg2178 (Bits.of_int 26 5) && Bitops.eq arg2179 
-            (Bits.of_int 10 5) && Bitops.eq arg2176 (Bits.of_int 28 5) && 
-          Bitops.eq arg2177 (Bits.of_int 12 5) && Bitops.eq arg2174 
-            (Bits.of_int 29 5) && Bitops.eq arg2175 (Bits.of_int 13 5) && 
-          Bitops.eq arg2172 (Bits.of_int 30 5) && Bitops.eq arg2173 
-            (Bits.of_int 14 5) && Bitops.eq arg2170 (Bits.of_int 31 5) && 
-          Bitops.eq arg2171 (Bits.of_int 15 5) && Bitops.eq arg2167 
-            (Bits.of_int 0 1) && Bitops.eq arg2168 (Bits.of_int 8 32) && 
-          Bitops.eq arg2169 (Bits.of_int 16 5) && Bitops.eq arg2164 
-            (Bits.of_int 0 1) && Bitops.eq arg2165 (Bits.of_int 9 32) && 
-          Bitops.eq arg2166 (Bits.of_int 17 5) && Bitops.eq arg2161 
-            (Bits.of_int 0 1) && Bitops.eq arg2162 (Bits.of_int 10 32) && 
-          Bitops.eq arg2163 (Bits.of_int 18 5) && Bitops.eq arg2158 
-            (Bits.of_int 0 1) && Bitops.eq arg2159 (Bits.of_int 11 32) && 
-          Bitops.eq arg2160 (Bits.of_int 19 5) && Bitops.eq arg2155 
-            (Bits.of_int 0 1) && Bitops.eq arg2156 (Bits.of_int 12 32) && 
-          Bitops.eq arg2157 (Bits.of_int 20 5) && Bitops.eq arg2152 
-            (Bits.of_int 0 1) && Bitops.eq arg2153 (Bits.of_int 13 32) && 
-          Bitops.eq arg2154 (Bits.of_int 21 5) && Bitops.eq arg2149 
-            (Bits.of_int 0 1) && Bitops.eq arg2150 (Bits.of_int 14 32) && 
-          Bitops.eq arg2151 (Bits.of_int 22 5) && Bitops.eq arg2146 
-            (Bits.of_int 0 1) && Bitops.eq arg2147 (Bits.of_int 15 32) && 
-          Bitops.eq arg2148 (Bits.of_int 23 5) && Bitops.eq arg2144 
-            (Bits.of_int 0 1) && Bitops.eq arg2145 (Bits.of_int 24 5) && 
-          Bitops.eq arg2141 (Bits.of_int 0 1) && Bitops.eq arg2142 
-            (Bits.of_int 1 32) && Bitops.eq arg2143 (Bits.of_int 25 5) && 
-          Bitops.eq arg2138 (Bits.of_int 0 1) && Bitops.eq arg2139 
-            (Bits.of_int 2 32) && Bitops.eq arg2140 (Bits.of_int 26 5) && 
-          Bitops.eq arg2135 (Bits.of_int 0 1) && Bitops.eq arg2136 
-            (Bits.of_int 3 32) && Bitops.eq arg2137 (Bits.of_int 27 5) && 
-          Bitops.eq arg2132 (Bits.of_int 0 1) && Bitops.eq arg2133 
-            (Bits.of_int 4 32) && Bitops.eq arg2134 (Bits.of_int 28 5) && 
-          Bitops.eq arg2129 (Bits.of_int 0 1) && Bitops.eq arg2130 
-            (Bits.of_int 5 32) && Bitops.eq arg2131 (Bits.of_int 29 5) && 
-          Bitops.eq arg2126 (Bits.of_int 0 1) && Bitops.eq arg2127 
-            (Bits.of_int 6 32) && Bitops.eq arg2128 (Bits.of_int 30 5) && 
-          Bitops.eq arg2123 (Bits.of_int 0 1) && Bitops.eq arg2124 
-            (Bits.of_int 7 32) && Bitops.eq arg2125 (Bits.of_int 31 5) && 
-          Bitops.eq arg2120 (Bits.of_int 0 1) && Bitops.eq arg2121 
-            (Bits.of_int 0 1) && Bitops.eq arg2122 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 27 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg2182 (Bits.U.of_int 24 5) && Bitops.eq 
+            arg2183 (Bits.U.of_int 8 5) && Bitops.eq arg2180 
+            (Bits.U.of_int 25 5) && Bitops.eq arg2181 (Bits.U.of_int 9 5) && 
+          Bitops.eq arg2178 (Bits.U.of_int 26 5) && Bitops.eq arg2179 
+            (Bits.U.of_int 10 5) && Bitops.eq arg2176 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2177 (Bits.U.of_int 12 5) && Bitops.eq arg2174 
+            (Bits.U.of_int 29 5) && Bitops.eq arg2175 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg2172 (Bits.U.of_int 30 5) && Bitops.eq arg2173 
+            (Bits.U.of_int 14 5) && Bitops.eq arg2170 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2171 (Bits.U.of_int 15 5) && Bitops.eq arg2167 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2168 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg2169 (Bits.U.of_int 16 5) && Bitops.eq arg2164 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2165 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg2166 (Bits.U.of_int 17 5) && Bitops.eq arg2161 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2162 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg2163 (Bits.U.of_int 18 5) && Bitops.eq arg2158 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2159 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg2160 (Bits.U.of_int 19 5) && Bitops.eq arg2155 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2156 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg2157 (Bits.U.of_int 20 5) && Bitops.eq arg2152 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2153 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg2154 (Bits.U.of_int 21 5) && Bitops.eq arg2149 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2150 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg2151 (Bits.U.of_int 22 5) && Bitops.eq arg2146 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2147 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg2148 (Bits.U.of_int 23 5) && Bitops.eq arg2144 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2145 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2141 (Bits.U.of_int 0 1) && Bitops.eq arg2142 
+            (Bits.U.of_int 1 32) && Bitops.eq arg2143 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg2138 (Bits.U.of_int 0 1) && Bitops.eq arg2139 
+            (Bits.U.of_int 2 32) && Bitops.eq arg2140 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg2135 (Bits.U.of_int 0 1) && Bitops.eq arg2136 
+            (Bits.U.of_int 3 32) && Bitops.eq arg2137 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2132 (Bits.U.of_int 0 1) && Bitops.eq arg2133 
+            (Bits.U.of_int 4 32) && Bitops.eq arg2134 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2129 (Bits.U.of_int 0 1) && Bitops.eq arg2130 
+            (Bits.U.of_int 5 32) && Bitops.eq arg2131 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg2126 (Bits.U.of_int 0 1) && Bitops.eq arg2127 
+            (Bits.U.of_int 6 32) && Bitops.eq arg2128 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2123 (Bits.U.of_int 0 1) && Bitops.eq arg2124 
+            (Bits.U.of_int 7 32) && Bitops.eq arg2125 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2120 (Bits.U.of_int 0 1) && Bitops.eq arg2121 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2122 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 27 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg2246), _), RP.Fetch (RP.Cell ('r', 
@@ -7217,52 +7217,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg2246 (Bits.of_int 24 5) && Bitops.eq 
-            arg2247 (Bits.of_int 8 5) && Bitops.eq arg2244 
-            (Bits.of_int 25 5) && Bitops.eq arg2245 (Bits.of_int 9 5) && 
-          Bitops.eq arg2242 (Bits.of_int 27 5) && Bitops.eq arg2243 
-            (Bits.of_int 11 5) && Bitops.eq arg2240 (Bits.of_int 28 5) && 
-          Bitops.eq arg2241 (Bits.of_int 12 5) && Bitops.eq arg2238 
-            (Bits.of_int 29 5) && Bitops.eq arg2239 (Bits.of_int 13 5) && 
-          Bitops.eq arg2236 (Bits.of_int 30 5) && Bitops.eq arg2237 
-            (Bits.of_int 14 5) && Bitops.eq arg2234 (Bits.of_int 31 5) && 
-          Bitops.eq arg2235 (Bits.of_int 15 5) && Bitops.eq arg2231 
-            (Bits.of_int 0 1) && Bitops.eq arg2232 (Bits.of_int 8 32) && 
-          Bitops.eq arg2233 (Bits.of_int 16 5) && Bitops.eq arg2228 
-            (Bits.of_int 0 1) && Bitops.eq arg2229 (Bits.of_int 9 32) && 
-          Bitops.eq arg2230 (Bits.of_int 17 5) && Bitops.eq arg2225 
-            (Bits.of_int 0 1) && Bitops.eq arg2226 (Bits.of_int 10 32) && 
-          Bitops.eq arg2227 (Bits.of_int 18 5) && Bitops.eq arg2222 
-            (Bits.of_int 0 1) && Bitops.eq arg2223 (Bits.of_int 11 32) && 
-          Bitops.eq arg2224 (Bits.of_int 19 5) && Bitops.eq arg2219 
-            (Bits.of_int 0 1) && Bitops.eq arg2220 (Bits.of_int 12 32) && 
-          Bitops.eq arg2221 (Bits.of_int 20 5) && Bitops.eq arg2216 
-            (Bits.of_int 0 1) && Bitops.eq arg2217 (Bits.of_int 13 32) && 
-          Bitops.eq arg2218 (Bits.of_int 21 5) && Bitops.eq arg2213 
-            (Bits.of_int 0 1) && Bitops.eq arg2214 (Bits.of_int 14 32) && 
-          Bitops.eq arg2215 (Bits.of_int 22 5) && Bitops.eq arg2210 
-            (Bits.of_int 0 1) && Bitops.eq arg2211 (Bits.of_int 15 32) && 
-          Bitops.eq arg2212 (Bits.of_int 23 5) && Bitops.eq arg2208 
-            (Bits.of_int 0 1) && Bitops.eq arg2209 (Bits.of_int 24 5) && 
-          Bitops.eq arg2205 (Bits.of_int 0 1) && Bitops.eq arg2206 
-            (Bits.of_int 1 32) && Bitops.eq arg2207 (Bits.of_int 25 5) && 
-          Bitops.eq arg2202 (Bits.of_int 0 1) && Bitops.eq arg2203 
-            (Bits.of_int 2 32) && Bitops.eq arg2204 (Bits.of_int 26 5) && 
-          Bitops.eq arg2199 (Bits.of_int 0 1) && Bitops.eq arg2200 
-            (Bits.of_int 3 32) && Bitops.eq arg2201 (Bits.of_int 27 5) && 
-          Bitops.eq arg2196 (Bits.of_int 0 1) && Bitops.eq arg2197 
-            (Bits.of_int 4 32) && Bitops.eq arg2198 (Bits.of_int 28 5) && 
-          Bitops.eq arg2193 (Bits.of_int 0 1) && Bitops.eq arg2194 
-            (Bits.of_int 5 32) && Bitops.eq arg2195 (Bits.of_int 29 5) && 
-          Bitops.eq arg2190 (Bits.of_int 0 1) && Bitops.eq arg2191 
-            (Bits.of_int 6 32) && Bitops.eq arg2192 (Bits.of_int 30 5) && 
-          Bitops.eq arg2187 (Bits.of_int 0 1) && Bitops.eq arg2188 
-            (Bits.of_int 7 32) && Bitops.eq arg2189 (Bits.of_int 31 5) && 
-          Bitops.eq arg2184 (Bits.of_int 0 1) && Bitops.eq arg2185 
-            (Bits.of_int 0 1) && Bitops.eq arg2186 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 26 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg2246 (Bits.U.of_int 24 5) && Bitops.eq 
+            arg2247 (Bits.U.of_int 8 5) && Bitops.eq arg2244 
+            (Bits.U.of_int 25 5) && Bitops.eq arg2245 (Bits.U.of_int 9 5) && 
+          Bitops.eq arg2242 (Bits.U.of_int 27 5) && Bitops.eq arg2243 
+            (Bits.U.of_int 11 5) && Bitops.eq arg2240 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2241 (Bits.U.of_int 12 5) && Bitops.eq arg2238 
+            (Bits.U.of_int 29 5) && Bitops.eq arg2239 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg2236 (Bits.U.of_int 30 5) && Bitops.eq arg2237 
+            (Bits.U.of_int 14 5) && Bitops.eq arg2234 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2235 (Bits.U.of_int 15 5) && Bitops.eq arg2231 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2232 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg2233 (Bits.U.of_int 16 5) && Bitops.eq arg2228 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2229 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg2230 (Bits.U.of_int 17 5) && Bitops.eq arg2225 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2226 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg2227 (Bits.U.of_int 18 5) && Bitops.eq arg2222 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2223 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg2224 (Bits.U.of_int 19 5) && Bitops.eq arg2219 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2220 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg2221 (Bits.U.of_int 20 5) && Bitops.eq arg2216 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2217 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg2218 (Bits.U.of_int 21 5) && Bitops.eq arg2213 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2214 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg2215 (Bits.U.of_int 22 5) && Bitops.eq arg2210 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2211 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg2212 (Bits.U.of_int 23 5) && Bitops.eq arg2208 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2209 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2205 (Bits.U.of_int 0 1) && Bitops.eq arg2206 
+            (Bits.U.of_int 1 32) && Bitops.eq arg2207 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg2202 (Bits.U.of_int 0 1) && Bitops.eq arg2203 
+            (Bits.U.of_int 2 32) && Bitops.eq arg2204 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg2199 (Bits.U.of_int 0 1) && Bitops.eq arg2200 
+            (Bits.U.of_int 3 32) && Bitops.eq arg2201 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2196 (Bits.U.of_int 0 1) && Bitops.eq arg2197 
+            (Bits.U.of_int 4 32) && Bitops.eq arg2198 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2193 (Bits.U.of_int 0 1) && Bitops.eq arg2194 
+            (Bits.U.of_int 5 32) && Bitops.eq arg2195 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg2190 (Bits.U.of_int 0 1) && Bitops.eq arg2191 
+            (Bits.U.of_int 6 32) && Bitops.eq arg2192 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2187 (Bits.U.of_int 0 1) && Bitops.eq arg2188 
+            (Bits.U.of_int 7 32) && Bitops.eq arg2189 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2184 (Bits.U.of_int 0 1) && Bitops.eq arg2185 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2186 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 26 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg2310), _), RP.Fetch (RP.Cell ('r', 
@@ -7374,52 +7374,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg2310 (Bits.of_int 24 5) && Bitops.eq 
-            arg2311 (Bits.of_int 8 5) && Bitops.eq arg2308 
-            (Bits.of_int 26 5) && Bitops.eq arg2309 (Bits.of_int 10 5) && 
-          Bitops.eq arg2306 (Bits.of_int 27 5) && Bitops.eq arg2307 
-            (Bits.of_int 11 5) && Bitops.eq arg2304 (Bits.of_int 28 5) && 
-          Bitops.eq arg2305 (Bits.of_int 12 5) && Bitops.eq arg2302 
-            (Bits.of_int 29 5) && Bitops.eq arg2303 (Bits.of_int 13 5) && 
-          Bitops.eq arg2300 (Bits.of_int 30 5) && Bitops.eq arg2301 
-            (Bits.of_int 14 5) && Bitops.eq arg2298 (Bits.of_int 31 5) && 
-          Bitops.eq arg2299 (Bits.of_int 15 5) && Bitops.eq arg2295 
-            (Bits.of_int 0 1) && Bitops.eq arg2296 (Bits.of_int 8 32) && 
-          Bitops.eq arg2297 (Bits.of_int 16 5) && Bitops.eq arg2292 
-            (Bits.of_int 0 1) && Bitops.eq arg2293 (Bits.of_int 9 32) && 
-          Bitops.eq arg2294 (Bits.of_int 17 5) && Bitops.eq arg2289 
-            (Bits.of_int 0 1) && Bitops.eq arg2290 (Bits.of_int 10 32) && 
-          Bitops.eq arg2291 (Bits.of_int 18 5) && Bitops.eq arg2286 
-            (Bits.of_int 0 1) && Bitops.eq arg2287 (Bits.of_int 11 32) && 
-          Bitops.eq arg2288 (Bits.of_int 19 5) && Bitops.eq arg2283 
-            (Bits.of_int 0 1) && Bitops.eq arg2284 (Bits.of_int 12 32) && 
-          Bitops.eq arg2285 (Bits.of_int 20 5) && Bitops.eq arg2280 
-            (Bits.of_int 0 1) && Bitops.eq arg2281 (Bits.of_int 13 32) && 
-          Bitops.eq arg2282 (Bits.of_int 21 5) && Bitops.eq arg2277 
-            (Bits.of_int 0 1) && Bitops.eq arg2278 (Bits.of_int 14 32) && 
-          Bitops.eq arg2279 (Bits.of_int 22 5) && Bitops.eq arg2274 
-            (Bits.of_int 0 1) && Bitops.eq arg2275 (Bits.of_int 15 32) && 
-          Bitops.eq arg2276 (Bits.of_int 23 5) && Bitops.eq arg2272 
-            (Bits.of_int 0 1) && Bitops.eq arg2273 (Bits.of_int 24 5) && 
-          Bitops.eq arg2269 (Bits.of_int 0 1) && Bitops.eq arg2270 
-            (Bits.of_int 1 32) && Bitops.eq arg2271 (Bits.of_int 25 5) && 
-          Bitops.eq arg2266 (Bits.of_int 0 1) && Bitops.eq arg2267 
-            (Bits.of_int 2 32) && Bitops.eq arg2268 (Bits.of_int 26 5) && 
-          Bitops.eq arg2263 (Bits.of_int 0 1) && Bitops.eq arg2264 
-            (Bits.of_int 3 32) && Bitops.eq arg2265 (Bits.of_int 27 5) && 
-          Bitops.eq arg2260 (Bits.of_int 0 1) && Bitops.eq arg2261 
-            (Bits.of_int 4 32) && Bitops.eq arg2262 (Bits.of_int 28 5) && 
-          Bitops.eq arg2257 (Bits.of_int 0 1) && Bitops.eq arg2258 
-            (Bits.of_int 5 32) && Bitops.eq arg2259 (Bits.of_int 29 5) && 
-          Bitops.eq arg2254 (Bits.of_int 0 1) && Bitops.eq arg2255 
-            (Bits.of_int 6 32) && Bitops.eq arg2256 (Bits.of_int 30 5) && 
-          Bitops.eq arg2251 (Bits.of_int 0 1) && Bitops.eq arg2252 
-            (Bits.of_int 7 32) && Bitops.eq arg2253 (Bits.of_int 31 5) && 
-          Bitops.eq arg2248 (Bits.of_int 0 1) && Bitops.eq arg2249 
-            (Bits.of_int 0 1) && Bitops.eq arg2250 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 25 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg2310 (Bits.U.of_int 24 5) && Bitops.eq 
+            arg2311 (Bits.U.of_int 8 5) && Bitops.eq arg2308 
+            (Bits.U.of_int 26 5) && Bitops.eq arg2309 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg2306 (Bits.U.of_int 27 5) && Bitops.eq arg2307 
+            (Bits.U.of_int 11 5) && Bitops.eq arg2304 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2305 (Bits.U.of_int 12 5) && Bitops.eq arg2302 
+            (Bits.U.of_int 29 5) && Bitops.eq arg2303 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg2300 (Bits.U.of_int 30 5) && Bitops.eq arg2301 
+            (Bits.U.of_int 14 5) && Bitops.eq arg2298 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2299 (Bits.U.of_int 15 5) && Bitops.eq arg2295 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2296 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg2297 (Bits.U.of_int 16 5) && Bitops.eq arg2292 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2293 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg2294 (Bits.U.of_int 17 5) && Bitops.eq arg2289 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2290 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg2291 (Bits.U.of_int 18 5) && Bitops.eq arg2286 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2287 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg2288 (Bits.U.of_int 19 5) && Bitops.eq arg2283 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2284 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg2285 (Bits.U.of_int 20 5) && Bitops.eq arg2280 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2281 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg2282 (Bits.U.of_int 21 5) && Bitops.eq arg2277 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2278 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg2279 (Bits.U.of_int 22 5) && Bitops.eq arg2274 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2275 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg2276 (Bits.U.of_int 23 5) && Bitops.eq arg2272 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2273 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2269 (Bits.U.of_int 0 1) && Bitops.eq arg2270 
+            (Bits.U.of_int 1 32) && Bitops.eq arg2271 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg2266 (Bits.U.of_int 0 1) && Bitops.eq arg2267 
+            (Bits.U.of_int 2 32) && Bitops.eq arg2268 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg2263 (Bits.U.of_int 0 1) && Bitops.eq arg2264 
+            (Bits.U.of_int 3 32) && Bitops.eq arg2265 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2260 (Bits.U.of_int 0 1) && Bitops.eq arg2261 
+            (Bits.U.of_int 4 32) && Bitops.eq arg2262 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2257 (Bits.U.of_int 0 1) && Bitops.eq arg2258 
+            (Bits.U.of_int 5 32) && Bitops.eq arg2259 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg2254 (Bits.U.of_int 0 1) && Bitops.eq arg2255 
+            (Bits.U.of_int 6 32) && Bitops.eq arg2256 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2251 (Bits.U.of_int 0 1) && Bitops.eq arg2252 
+            (Bits.U.of_int 7 32) && Bitops.eq arg2253 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2248 (Bits.U.of_int 0 1) && Bitops.eq arg2249 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2250 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 25 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg2374), _), RP.Fetch (RP.Cell ('r', 
@@ -7531,52 +7531,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg2374 (Bits.of_int 25 5) && Bitops.eq 
-            arg2375 (Bits.of_int 9 5) && Bitops.eq arg2372 
-            (Bits.of_int 26 5) && Bitops.eq arg2373 (Bits.of_int 10 5) && 
-          Bitops.eq arg2370 (Bits.of_int 27 5) && Bitops.eq arg2371 
-            (Bits.of_int 11 5) && Bitops.eq arg2368 (Bits.of_int 28 5) && 
-          Bitops.eq arg2369 (Bits.of_int 12 5) && Bitops.eq arg2366 
-            (Bits.of_int 29 5) && Bitops.eq arg2367 (Bits.of_int 13 5) && 
-          Bitops.eq arg2364 (Bits.of_int 30 5) && Bitops.eq arg2365 
-            (Bits.of_int 14 5) && Bitops.eq arg2362 (Bits.of_int 31 5) && 
-          Bitops.eq arg2363 (Bits.of_int 15 5) && Bitops.eq arg2359 
-            (Bits.of_int 0 1) && Bitops.eq arg2360 (Bits.of_int 8 32) && 
-          Bitops.eq arg2361 (Bits.of_int 16 5) && Bitops.eq arg2356 
-            (Bits.of_int 0 1) && Bitops.eq arg2357 (Bits.of_int 9 32) && 
-          Bitops.eq arg2358 (Bits.of_int 17 5) && Bitops.eq arg2353 
-            (Bits.of_int 0 1) && Bitops.eq arg2354 (Bits.of_int 10 32) && 
-          Bitops.eq arg2355 (Bits.of_int 18 5) && Bitops.eq arg2350 
-            (Bits.of_int 0 1) && Bitops.eq arg2351 (Bits.of_int 11 32) && 
-          Bitops.eq arg2352 (Bits.of_int 19 5) && Bitops.eq arg2347 
-            (Bits.of_int 0 1) && Bitops.eq arg2348 (Bits.of_int 12 32) && 
-          Bitops.eq arg2349 (Bits.of_int 20 5) && Bitops.eq arg2344 
-            (Bits.of_int 0 1) && Bitops.eq arg2345 (Bits.of_int 13 32) && 
-          Bitops.eq arg2346 (Bits.of_int 21 5) && Bitops.eq arg2341 
-            (Bits.of_int 0 1) && Bitops.eq arg2342 (Bits.of_int 14 32) && 
-          Bitops.eq arg2343 (Bits.of_int 22 5) && Bitops.eq arg2338 
-            (Bits.of_int 0 1) && Bitops.eq arg2339 (Bits.of_int 15 32) && 
-          Bitops.eq arg2340 (Bits.of_int 23 5) && Bitops.eq arg2336 
-            (Bits.of_int 0 1) && Bitops.eq arg2337 (Bits.of_int 24 5) && 
-          Bitops.eq arg2333 (Bits.of_int 0 1) && Bitops.eq arg2334 
-            (Bits.of_int 1 32) && Bitops.eq arg2335 (Bits.of_int 25 5) && 
-          Bitops.eq arg2330 (Bits.of_int 0 1) && Bitops.eq arg2331 
-            (Bits.of_int 2 32) && Bitops.eq arg2332 (Bits.of_int 26 5) && 
-          Bitops.eq arg2327 (Bits.of_int 0 1) && Bitops.eq arg2328 
-            (Bits.of_int 3 32) && Bitops.eq arg2329 (Bits.of_int 27 5) && 
-          Bitops.eq arg2324 (Bits.of_int 0 1) && Bitops.eq arg2325 
-            (Bits.of_int 4 32) && Bitops.eq arg2326 (Bits.of_int 28 5) && 
-          Bitops.eq arg2321 (Bits.of_int 0 1) && Bitops.eq arg2322 
-            (Bits.of_int 5 32) && Bitops.eq arg2323 (Bits.of_int 29 5) && 
-          Bitops.eq arg2318 (Bits.of_int 0 1) && Bitops.eq arg2319 
-            (Bits.of_int 6 32) && Bitops.eq arg2320 (Bits.of_int 30 5) && 
-          Bitops.eq arg2315 (Bits.of_int 0 1) && Bitops.eq arg2316 
-            (Bits.of_int 7 32) && Bitops.eq arg2317 (Bits.of_int 31 5) && 
-          Bitops.eq arg2312 (Bits.of_int 0 1) && Bitops.eq arg2313 
-            (Bits.of_int 0 1) && Bitops.eq arg2314 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 24 5)) -> 
-           Instruction.save (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg2374 (Bits.U.of_int 25 5) && Bitops.eq 
+            arg2375 (Bits.U.of_int 9 5) && Bitops.eq arg2372 
+            (Bits.U.of_int 26 5) && Bitops.eq arg2373 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg2370 (Bits.U.of_int 27 5) && Bitops.eq arg2371 
+            (Bits.U.of_int 11 5) && Bitops.eq arg2368 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2369 (Bits.U.of_int 12 5) && Bitops.eq arg2366 
+            (Bits.U.of_int 29 5) && Bitops.eq arg2367 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg2364 (Bits.U.of_int 30 5) && Bitops.eq arg2365 
+            (Bits.U.of_int 14 5) && Bitops.eq arg2362 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2363 (Bits.U.of_int 15 5) && Bitops.eq arg2359 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2360 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg2361 (Bits.U.of_int 16 5) && Bitops.eq arg2356 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2357 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg2358 (Bits.U.of_int 17 5) && Bitops.eq arg2353 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2354 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg2355 (Bits.U.of_int 18 5) && Bitops.eq arg2350 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2351 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg2352 (Bits.U.of_int 19 5) && Bitops.eq arg2347 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2348 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg2349 (Bits.U.of_int 20 5) && Bitops.eq arg2344 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2345 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg2346 (Bits.U.of_int 21 5) && Bitops.eq arg2341 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2342 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg2343 (Bits.U.of_int 22 5) && Bitops.eq arg2338 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2339 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg2340 (Bits.U.of_int 23 5) && Bitops.eq arg2336 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2337 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2333 (Bits.U.of_int 0 1) && Bitops.eq arg2334 
+            (Bits.U.of_int 1 32) && Bitops.eq arg2335 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg2330 (Bits.U.of_int 0 1) && Bitops.eq arg2331 
+            (Bits.U.of_int 2 32) && Bitops.eq arg2332 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg2327 (Bits.U.of_int 0 1) && Bitops.eq arg2328 
+            (Bits.U.of_int 3 32) && Bitops.eq arg2329 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2324 (Bits.U.of_int 0 1) && Bitops.eq arg2325 
+            (Bits.U.of_int 4 32) && Bitops.eq arg2326 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2321 (Bits.U.of_int 0 1) && Bitops.eq arg2322 
+            (Bits.U.of_int 5 32) && Bitops.eq arg2323 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg2318 (Bits.U.of_int 0 1) && Bitops.eq arg2319 
+            (Bits.U.of_int 6 32) && Bitops.eq arg2320 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2315 (Bits.U.of_int 0 1) && Bitops.eq arg2316 
+            (Bits.U.of_int 7 32) && Bitops.eq arg2317 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2312 (Bits.U.of_int 0 1) && Bitops.eq arg2313 
+            (Bits.U.of_int 0 1) && Bitops.eq arg2314 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 24 5)) -> 
+           Instruction.save (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg2442), _), RP.Fetch (RP.Cell ('r', 
@@ -7708,65 +7708,65 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg2376)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg2376 13 && Bitops.eq arg2442 
-            (Bits.of_int 8 5) && Bitops.eq arg2443 (Bits.of_int 24 5) && 
-          Bitops.eq arg2440 (Bits.of_int 9 5) && Bitops.eq arg2441 
-            (Bits.of_int 25 5) && Bitops.eq arg2438 (Bits.of_int 10 5) && 
-          Bitops.eq arg2439 (Bits.of_int 26 5) && Bitops.eq arg2436 
-            (Bits.of_int 11 5) && Bitops.eq arg2437 (Bits.of_int 27 5) && 
-          Bitops.eq arg2434 (Bits.of_int 12 5) && Bitops.eq arg2435 
-            (Bits.of_int 28 5) && Bitops.eq arg2432 (Bits.of_int 13 5) && 
-          Bitops.eq arg2433 (Bits.of_int 29 5) && Bitops.eq arg2430 
-            (Bits.of_int 14 5) && Bitops.eq arg2431 (Bits.of_int 30 5) && 
-          Bitops.eq arg2428 (Bits.of_int 15 5) && Bitops.eq arg2429 
-            (Bits.of_int 31 5) && Bitops.eq arg2425 (Bits.of_int 16 5) && 
-          Bitops.eq arg2426 (Bits.of_int 0 1) && Bitops.eq arg2427 
-            (Bits.of_int 8 32) && Bitops.eq arg2422 (Bits.of_int 17 5) && 
-          Bitops.eq arg2423 (Bits.of_int 0 1) && Bitops.eq arg2424 
-            (Bits.of_int 7 32) && Bitops.eq arg2419 (Bits.of_int 18 5) && 
-          Bitops.eq arg2420 (Bits.of_int 0 1) && Bitops.eq arg2421 
-            (Bits.of_int 6 32) && Bitops.eq arg2416 (Bits.of_int 19 5) && 
-          Bitops.eq arg2417 (Bits.of_int 0 1) && Bitops.eq arg2418 
-            (Bits.of_int 5 32) && Bitops.eq arg2413 (Bits.of_int 20 5) && 
-          Bitops.eq arg2414 (Bits.of_int 0 1) && Bitops.eq arg2415 
-            (Bits.of_int 4 32) && Bitops.eq arg2410 (Bits.of_int 21 5) && 
-          Bitops.eq arg2411 (Bits.of_int 0 1) && Bitops.eq arg2412 
-            (Bits.of_int 3 32) && Bitops.eq arg2407 (Bits.of_int 22 5) && 
-          Bitops.eq arg2408 (Bits.of_int 0 1) && Bitops.eq arg2409 
-            (Bits.of_int 2 32) && Bitops.eq arg2404 (Bits.of_int 23 5) && 
-          Bitops.eq arg2405 (Bits.of_int 0 1) && Bitops.eq arg2406 
-            (Bits.of_int 1 32) && Bitops.eq arg2401 (Bits.of_int 24 5) && 
-          Bitops.eq arg2402 (Bits.of_int 0 1) && Bitops.eq arg2403 
-            (Bits.of_int 16 32) && Bitops.eq arg2398 (Bits.of_int 25 5) && 
-          Bitops.eq arg2399 (Bits.of_int 0 1) && Bitops.eq arg2400 
-            (Bits.of_int 15 32) && Bitops.eq arg2395 (Bits.of_int 26 5) && 
-          Bitops.eq arg2396 (Bits.of_int 0 1) && Bitops.eq arg2397 
-            (Bits.of_int 14 32) && Bitops.eq arg2392 (Bits.of_int 27 5) && 
-          Bitops.eq arg2393 (Bits.of_int 0 1) && Bitops.eq arg2394 
-            (Bits.of_int 13 32) && Bitops.eq arg2389 (Bits.of_int 28 5) && 
-          Bitops.eq arg2390 (Bits.of_int 0 1) && Bitops.eq arg2391 
-            (Bits.of_int 12 32) && Bitops.eq arg2386 (Bits.of_int 29 5) && 
-          Bitops.eq arg2387 (Bits.of_int 0 1) && Bitops.eq arg2388 
-            (Bits.of_int 11 32) && Bitops.eq arg2383 (Bits.of_int 30 5) && 
-          Bitops.eq arg2384 (Bits.of_int 0 1) && Bitops.eq arg2385 
-            (Bits.of_int 10 32) && Bitops.eq arg2380 (Bits.of_int 31 5) && 
-          Bitops.eq arg2381 (Bits.of_int 0 1) && Bitops.eq arg2382 
-            (Bits.of_int 9 32) && Bitops.eq arg2377 (Bits.of_int 0 1) && 
-          Bitops.eq arg2378 (Bits.of_int 0 1) && Bitops.eq arg2379 
-            (Bits.of_int 16 32) && Bitops.ne rd (Bits.of_int 8 5) && Bitops.ne 
-            rd (Bits.of_int 9 5) && Bitops.ne rd (Bits.of_int 10 5) && 
-          Bitops.ne rd (Bits.of_int 11 5) && Bitops.ne rd (Bits.of_int 12 5) && 
-          Bitops.ne rd (Bits.of_int 13 5) && Bitops.ne rd (Bits.of_int 14 5) && 
-          Bitops.ne rd (Bits.of_int 15 5) && Bitops.ne rd (Bits.of_int 16 5) && 
-          Bitops.ne rd (Bits.of_int 17 5) && Bitops.ne rd (Bits.of_int 18 5) && 
-          Bitops.ne rd (Bits.of_int 19 5) && Bitops.ne rd (Bits.of_int 20 5) && 
-          Bitops.ne rd (Bits.of_int 21 5) && Bitops.ne rd (Bits.of_int 22 5) && 
-          Bitops.ne rd (Bits.of_int 23 5) && Bitops.ne rd (Bits.of_int 24 5) && 
-          Bitops.ne rd (Bits.of_int 25 5) && Bitops.ne rd (Bits.of_int 26 5) && 
-          Bitops.ne rd (Bits.of_int 27 5) && Bitops.ne rd (Bits.of_int 28 5) && 
-          Bitops.ne rd (Bits.of_int 29 5) && Bitops.ne rd (Bits.of_int 30 5) && 
-          Bitops.ne rd (Bits.of_int 31 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg2376)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg2443 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2440 (Bits.U.of_int 9 5) && Bitops.eq arg2441 
+            (Bits.U.of_int 25 5) && Bitops.eq arg2438 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg2439 (Bits.U.of_int 26 5) && Bitops.eq arg2436 
+            (Bits.U.of_int 11 5) && Bitops.eq arg2437 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2434 (Bits.U.of_int 12 5) && Bitops.eq arg2435 
+            (Bits.U.of_int 28 5) && Bitops.eq arg2432 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg2433 (Bits.U.of_int 29 5) && Bitops.eq arg2430 
+            (Bits.U.of_int 14 5) && Bitops.eq arg2431 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2428 (Bits.U.of_int 15 5) && Bitops.eq arg2429 
+            (Bits.U.of_int 31 5) && Bitops.eq arg2425 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg2426 (Bits.U.of_int 0 1) && Bitops.eq arg2427 
+            (Bits.U.of_int 8 32) && Bitops.eq arg2422 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg2423 (Bits.U.of_int 0 1) && Bitops.eq arg2424 
+            (Bits.U.of_int 7 32) && Bitops.eq arg2419 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg2420 (Bits.U.of_int 0 1) && Bitops.eq arg2421 
+            (Bits.U.of_int 6 32) && Bitops.eq arg2416 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg2417 (Bits.U.of_int 0 1) && Bitops.eq arg2418 
+            (Bits.U.of_int 5 32) && Bitops.eq arg2413 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg2414 (Bits.U.of_int 0 1) && Bitops.eq arg2415 
+            (Bits.U.of_int 4 32) && Bitops.eq arg2410 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg2411 (Bits.U.of_int 0 1) && Bitops.eq arg2412 
+            (Bits.U.of_int 3 32) && Bitops.eq arg2407 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg2408 (Bits.U.of_int 0 1) && Bitops.eq arg2409 
+            (Bits.U.of_int 2 32) && Bitops.eq arg2404 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg2405 (Bits.U.of_int 0 1) && Bitops.eq arg2406 
+            (Bits.U.of_int 1 32) && Bitops.eq arg2401 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2402 (Bits.U.of_int 0 1) && Bitops.eq arg2403 
+            (Bits.U.of_int 16 32) && Bitops.eq arg2398 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg2399 (Bits.U.of_int 0 1) && Bitops.eq arg2400 
+            (Bits.U.of_int 15 32) && Bitops.eq arg2395 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg2396 (Bits.U.of_int 0 1) && Bitops.eq arg2397 
+            (Bits.U.of_int 14 32) && Bitops.eq arg2392 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2393 (Bits.U.of_int 0 1) && Bitops.eq arg2394 
+            (Bits.U.of_int 13 32) && Bitops.eq arg2389 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2390 (Bits.U.of_int 0 1) && Bitops.eq arg2391 
+            (Bits.U.of_int 12 32) && Bitops.eq arg2386 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg2387 (Bits.U.of_int 0 1) && Bitops.eq arg2388 
+            (Bits.U.of_int 11 32) && Bitops.eq arg2383 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2384 (Bits.U.of_int 0 1) && Bitops.eq arg2385 
+            (Bits.U.of_int 10 32) && Bitops.eq arg2380 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2381 (Bits.U.of_int 0 1) && Bitops.eq arg2382 
+            (Bits.U.of_int 9 32) && Bitops.eq arg2377 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg2378 (Bits.U.of_int 0 1) && Bitops.eq arg2379 
+            (Bits.U.of_int 16 32) && Bitops.ne rd (Bits.U.of_int 8 5) && Bitops.ne 
+            rd (Bits.U.of_int 9 5) && Bitops.ne rd (Bits.U.of_int 10 5) && 
+          Bitops.ne rd (Bits.U.of_int 11 5) && Bitops.ne rd (Bits.U.of_int 12 5) && 
+          Bitops.ne rd (Bits.U.of_int 13 5) && Bitops.ne rd (Bits.U.of_int 14 5) && 
+          Bitops.ne rd (Bits.U.of_int 15 5) && Bitops.ne rd (Bits.U.of_int 16 5) && 
+          Bitops.ne rd (Bits.U.of_int 17 5) && Bitops.ne rd (Bits.U.of_int 18 5) && 
+          Bitops.ne rd (Bits.U.of_int 19 5) && Bitops.ne rd (Bits.U.of_int 20 5) && 
+          Bitops.ne rd (Bits.U.of_int 21 5) && Bitops.ne rd (Bits.U.of_int 22 5) && 
+          Bitops.ne rd (Bits.U.of_int 23 5) && Bitops.ne rd (Bits.U.of_int 24 5) && 
+          Bitops.ne rd (Bits.U.of_int 25 5) && Bitops.ne rd (Bits.U.of_int 26 5) && 
+          Bitops.ne rd (Bits.U.of_int 27 5) && Bitops.ne rd (Bits.U.of_int 28 5) && 
+          Bitops.ne rd (Bits.U.of_int 29 5) && Bitops.ne rd (Bits.U.of_int 30 5) && 
+          Bitops.ne rd (Bits.U.of_int 31 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg2376)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg2507), _), RP.Fetch (RP.Cell ('r', 
@@ -7892,51 +7892,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg2444)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg2444 13 && Bitops.eq arg2507 
-            (Bits.of_int 8 5) && Bitops.eq arg2508 (Bits.of_int 24 5) && 
-          Bitops.eq arg2505 (Bits.of_int 9 5) && Bitops.eq arg2506 
-            (Bits.of_int 25 5) && Bitops.eq arg2503 (Bits.of_int 10 5) && 
-          Bitops.eq arg2504 (Bits.of_int 26 5) && Bitops.eq arg2501 
-            (Bits.of_int 11 5) && Bitops.eq arg2502 (Bits.of_int 27 5) && 
-          Bitops.eq arg2499 (Bits.of_int 12 5) && Bitops.eq arg2500 
-            (Bits.of_int 28 5) && Bitops.eq arg2497 (Bits.of_int 13 5) && 
-          Bitops.eq arg2498 (Bits.of_int 29 5) && Bitops.eq arg2495 
-            (Bits.of_int 14 5) && Bitops.eq arg2496 (Bits.of_int 30 5) && 
-          Bitops.eq arg2493 (Bits.of_int 15 5) && Bitops.eq arg2494 
-            (Bits.of_int 31 5) && Bitops.eq arg2490 (Bits.of_int 16 5) && 
-          Bitops.eq arg2491 (Bits.of_int 0 1) && Bitops.eq arg2492 
-            (Bits.of_int 8 32) && Bitops.eq arg2487 (Bits.of_int 17 5) && 
-          Bitops.eq arg2488 (Bits.of_int 0 1) && Bitops.eq arg2489 
-            (Bits.of_int 7 32) && Bitops.eq arg2484 (Bits.of_int 18 5) && 
-          Bitops.eq arg2485 (Bits.of_int 0 1) && Bitops.eq arg2486 
-            (Bits.of_int 6 32) && Bitops.eq arg2481 (Bits.of_int 19 5) && 
-          Bitops.eq arg2482 (Bits.of_int 0 1) && Bitops.eq arg2483 
-            (Bits.of_int 5 32) && Bitops.eq arg2478 (Bits.of_int 20 5) && 
-          Bitops.eq arg2479 (Bits.of_int 0 1) && Bitops.eq arg2480 
-            (Bits.of_int 4 32) && Bitops.eq arg2475 (Bits.of_int 21 5) && 
-          Bitops.eq arg2476 (Bits.of_int 0 1) && Bitops.eq arg2477 
-            (Bits.of_int 3 32) && Bitops.eq arg2472 (Bits.of_int 22 5) && 
-          Bitops.eq arg2473 (Bits.of_int 0 1) && Bitops.eq arg2474 
-            (Bits.of_int 2 32) && Bitops.eq arg2469 (Bits.of_int 23 5) && 
-          Bitops.eq arg2470 (Bits.of_int 0 1) && Bitops.eq arg2471 
-            (Bits.of_int 1 32) && Bitops.eq arg2466 (Bits.of_int 24 5) && 
-          Bitops.eq arg2467 (Bits.of_int 0 1) && Bitops.eq arg2468 
-            (Bits.of_int 16 32) && Bitops.eq arg2463 (Bits.of_int 25 5) && 
-          Bitops.eq arg2464 (Bits.of_int 0 1) && Bitops.eq arg2465 
-            (Bits.of_int 15 32) && Bitops.eq arg2460 (Bits.of_int 26 5) && 
-          Bitops.eq arg2461 (Bits.of_int 0 1) && Bitops.eq arg2462 
-            (Bits.of_int 14 32) && Bitops.eq arg2457 (Bits.of_int 27 5) && 
-          Bitops.eq arg2458 (Bits.of_int 0 1) && Bitops.eq arg2459 
-            (Bits.of_int 13 32) && Bitops.eq arg2454 (Bits.of_int 28 5) && 
-          Bitops.eq arg2455 (Bits.of_int 0 1) && Bitops.eq arg2456 
-            (Bits.of_int 12 32) && Bitops.eq arg2451 (Bits.of_int 29 5) && 
-          Bitops.eq arg2452 (Bits.of_int 0 1) && Bitops.eq arg2453 
-            (Bits.of_int 11 32) && Bitops.eq arg2448 (Bits.of_int 30 5) && 
-          Bitops.eq arg2449 (Bits.of_int 0 1) && Bitops.eq arg2450 
-            (Bits.of_int 10 32) && Bitops.eq arg2445 (Bits.of_int 0 1) && 
-          Bitops.eq arg2446 (Bits.of_int 0 1) && Bitops.eq arg2447 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 31 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg2444)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg2508 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2505 (Bits.U.of_int 9 5) && Bitops.eq arg2506 
+            (Bits.U.of_int 25 5) && Bitops.eq arg2503 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg2504 (Bits.U.of_int 26 5) && Bitops.eq arg2501 
+            (Bits.U.of_int 11 5) && Bitops.eq arg2502 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2499 (Bits.U.of_int 12 5) && Bitops.eq arg2500 
+            (Bits.U.of_int 28 5) && Bitops.eq arg2497 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg2498 (Bits.U.of_int 29 5) && Bitops.eq arg2495 
+            (Bits.U.of_int 14 5) && Bitops.eq arg2496 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2493 (Bits.U.of_int 15 5) && Bitops.eq arg2494 
+            (Bits.U.of_int 31 5) && Bitops.eq arg2490 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg2491 (Bits.U.of_int 0 1) && Bitops.eq arg2492 
+            (Bits.U.of_int 8 32) && Bitops.eq arg2487 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg2488 (Bits.U.of_int 0 1) && Bitops.eq arg2489 
+            (Bits.U.of_int 7 32) && Bitops.eq arg2484 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg2485 (Bits.U.of_int 0 1) && Bitops.eq arg2486 
+            (Bits.U.of_int 6 32) && Bitops.eq arg2481 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg2482 (Bits.U.of_int 0 1) && Bitops.eq arg2483 
+            (Bits.U.of_int 5 32) && Bitops.eq arg2478 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg2479 (Bits.U.of_int 0 1) && Bitops.eq arg2480 
+            (Bits.U.of_int 4 32) && Bitops.eq arg2475 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg2476 (Bits.U.of_int 0 1) && Bitops.eq arg2477 
+            (Bits.U.of_int 3 32) && Bitops.eq arg2472 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg2473 (Bits.U.of_int 0 1) && Bitops.eq arg2474 
+            (Bits.U.of_int 2 32) && Bitops.eq arg2469 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg2470 (Bits.U.of_int 0 1) && Bitops.eq arg2471 
+            (Bits.U.of_int 1 32) && Bitops.eq arg2466 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2467 (Bits.U.of_int 0 1) && Bitops.eq arg2468 
+            (Bits.U.of_int 16 32) && Bitops.eq arg2463 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg2464 (Bits.U.of_int 0 1) && Bitops.eq arg2465 
+            (Bits.U.of_int 15 32) && Bitops.eq arg2460 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg2461 (Bits.U.of_int 0 1) && Bitops.eq arg2462 
+            (Bits.U.of_int 14 32) && Bitops.eq arg2457 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2458 (Bits.U.of_int 0 1) && Bitops.eq arg2459 
+            (Bits.U.of_int 13 32) && Bitops.eq arg2454 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2455 (Bits.U.of_int 0 1) && Bitops.eq arg2456 
+            (Bits.U.of_int 12 32) && Bitops.eq arg2451 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg2452 (Bits.U.of_int 0 1) && Bitops.eq arg2453 
+            (Bits.U.of_int 11 32) && Bitops.eq arg2448 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2449 (Bits.U.of_int 0 1) && Bitops.eq arg2450 
+            (Bits.U.of_int 10 32) && Bitops.eq arg2445 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg2446 (Bits.U.of_int 0 1) && Bitops.eq arg2447 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 31 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg2444)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg2572), _), RP.Fetch (RP.Cell ('r', 
@@ -8062,51 +8062,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg2509)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg2509 13 && Bitops.eq arg2572 
-            (Bits.of_int 8 5) && Bitops.eq arg2573 (Bits.of_int 24 5) && 
-          Bitops.eq arg2570 (Bits.of_int 9 5) && Bitops.eq arg2571 
-            (Bits.of_int 25 5) && Bitops.eq arg2568 (Bits.of_int 10 5) && 
-          Bitops.eq arg2569 (Bits.of_int 26 5) && Bitops.eq arg2566 
-            (Bits.of_int 11 5) && Bitops.eq arg2567 (Bits.of_int 27 5) && 
-          Bitops.eq arg2564 (Bits.of_int 12 5) && Bitops.eq arg2565 
-            (Bits.of_int 28 5) && Bitops.eq arg2562 (Bits.of_int 13 5) && 
-          Bitops.eq arg2563 (Bits.of_int 29 5) && Bitops.eq arg2560 
-            (Bits.of_int 14 5) && Bitops.eq arg2561 (Bits.of_int 30 5) && 
-          Bitops.eq arg2558 (Bits.of_int 15 5) && Bitops.eq arg2559 
-            (Bits.of_int 31 5) && Bitops.eq arg2555 (Bits.of_int 16 5) && 
-          Bitops.eq arg2556 (Bits.of_int 0 1) && Bitops.eq arg2557 
-            (Bits.of_int 8 32) && Bitops.eq arg2552 (Bits.of_int 17 5) && 
-          Bitops.eq arg2553 (Bits.of_int 0 1) && Bitops.eq arg2554 
-            (Bits.of_int 7 32) && Bitops.eq arg2549 (Bits.of_int 18 5) && 
-          Bitops.eq arg2550 (Bits.of_int 0 1) && Bitops.eq arg2551 
-            (Bits.of_int 6 32) && Bitops.eq arg2546 (Bits.of_int 19 5) && 
-          Bitops.eq arg2547 (Bits.of_int 0 1) && Bitops.eq arg2548 
-            (Bits.of_int 5 32) && Bitops.eq arg2543 (Bits.of_int 20 5) && 
-          Bitops.eq arg2544 (Bits.of_int 0 1) && Bitops.eq arg2545 
-            (Bits.of_int 4 32) && Bitops.eq arg2540 (Bits.of_int 21 5) && 
-          Bitops.eq arg2541 (Bits.of_int 0 1) && Bitops.eq arg2542 
-            (Bits.of_int 3 32) && Bitops.eq arg2537 (Bits.of_int 22 5) && 
-          Bitops.eq arg2538 (Bits.of_int 0 1) && Bitops.eq arg2539 
-            (Bits.of_int 2 32) && Bitops.eq arg2534 (Bits.of_int 23 5) && 
-          Bitops.eq arg2535 (Bits.of_int 0 1) && Bitops.eq arg2536 
-            (Bits.of_int 1 32) && Bitops.eq arg2531 (Bits.of_int 24 5) && 
-          Bitops.eq arg2532 (Bits.of_int 0 1) && Bitops.eq arg2533 
-            (Bits.of_int 16 32) && Bitops.eq arg2528 (Bits.of_int 25 5) && 
-          Bitops.eq arg2529 (Bits.of_int 0 1) && Bitops.eq arg2530 
-            (Bits.of_int 15 32) && Bitops.eq arg2525 (Bits.of_int 26 5) && 
-          Bitops.eq arg2526 (Bits.of_int 0 1) && Bitops.eq arg2527 
-            (Bits.of_int 14 32) && Bitops.eq arg2522 (Bits.of_int 27 5) && 
-          Bitops.eq arg2523 (Bits.of_int 0 1) && Bitops.eq arg2524 
-            (Bits.of_int 13 32) && Bitops.eq arg2519 (Bits.of_int 28 5) && 
-          Bitops.eq arg2520 (Bits.of_int 0 1) && Bitops.eq arg2521 
-            (Bits.of_int 12 32) && Bitops.eq arg2516 (Bits.of_int 29 5) && 
-          Bitops.eq arg2517 (Bits.of_int 0 1) && Bitops.eq arg2518 
-            (Bits.of_int 11 32) && Bitops.eq arg2513 (Bits.of_int 31 5) && 
-          Bitops.eq arg2514 (Bits.of_int 0 1) && Bitops.eq arg2515 
-            (Bits.of_int 9 32) && Bitops.eq arg2510 (Bits.of_int 0 1) && 
-          Bitops.eq arg2511 (Bits.of_int 0 1) && Bitops.eq arg2512 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 30 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg2509)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg2573 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2570 (Bits.U.of_int 9 5) && Bitops.eq arg2571 
+            (Bits.U.of_int 25 5) && Bitops.eq arg2568 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg2569 (Bits.U.of_int 26 5) && Bitops.eq arg2566 
+            (Bits.U.of_int 11 5) && Bitops.eq arg2567 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2564 (Bits.U.of_int 12 5) && Bitops.eq arg2565 
+            (Bits.U.of_int 28 5) && Bitops.eq arg2562 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg2563 (Bits.U.of_int 29 5) && Bitops.eq arg2560 
+            (Bits.U.of_int 14 5) && Bitops.eq arg2561 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2558 (Bits.U.of_int 15 5) && Bitops.eq arg2559 
+            (Bits.U.of_int 31 5) && Bitops.eq arg2555 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg2556 (Bits.U.of_int 0 1) && Bitops.eq arg2557 
+            (Bits.U.of_int 8 32) && Bitops.eq arg2552 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg2553 (Bits.U.of_int 0 1) && Bitops.eq arg2554 
+            (Bits.U.of_int 7 32) && Bitops.eq arg2549 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg2550 (Bits.U.of_int 0 1) && Bitops.eq arg2551 
+            (Bits.U.of_int 6 32) && Bitops.eq arg2546 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg2547 (Bits.U.of_int 0 1) && Bitops.eq arg2548 
+            (Bits.U.of_int 5 32) && Bitops.eq arg2543 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg2544 (Bits.U.of_int 0 1) && Bitops.eq arg2545 
+            (Bits.U.of_int 4 32) && Bitops.eq arg2540 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg2541 (Bits.U.of_int 0 1) && Bitops.eq arg2542 
+            (Bits.U.of_int 3 32) && Bitops.eq arg2537 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg2538 (Bits.U.of_int 0 1) && Bitops.eq arg2539 
+            (Bits.U.of_int 2 32) && Bitops.eq arg2534 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg2535 (Bits.U.of_int 0 1) && Bitops.eq arg2536 
+            (Bits.U.of_int 1 32) && Bitops.eq arg2531 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2532 (Bits.U.of_int 0 1) && Bitops.eq arg2533 
+            (Bits.U.of_int 16 32) && Bitops.eq arg2528 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg2529 (Bits.U.of_int 0 1) && Bitops.eq arg2530 
+            (Bits.U.of_int 15 32) && Bitops.eq arg2525 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg2526 (Bits.U.of_int 0 1) && Bitops.eq arg2527 
+            (Bits.U.of_int 14 32) && Bitops.eq arg2522 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2523 (Bits.U.of_int 0 1) && Bitops.eq arg2524 
+            (Bits.U.of_int 13 32) && Bitops.eq arg2519 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2520 (Bits.U.of_int 0 1) && Bitops.eq arg2521 
+            (Bits.U.of_int 12 32) && Bitops.eq arg2516 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg2517 (Bits.U.of_int 0 1) && Bitops.eq arg2518 
+            (Bits.U.of_int 11 32) && Bitops.eq arg2513 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2514 (Bits.U.of_int 0 1) && Bitops.eq arg2515 
+            (Bits.U.of_int 9 32) && Bitops.eq arg2510 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg2511 (Bits.U.of_int 0 1) && Bitops.eq arg2512 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 30 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg2509)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg2637), _), RP.Fetch (RP.Cell ('r', 
@@ -8232,51 +8232,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg2574)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg2574 13 && Bitops.eq arg2637 
-            (Bits.of_int 8 5) && Bitops.eq arg2638 (Bits.of_int 24 5) && 
-          Bitops.eq arg2635 (Bits.of_int 9 5) && Bitops.eq arg2636 
-            (Bits.of_int 25 5) && Bitops.eq arg2633 (Bits.of_int 10 5) && 
-          Bitops.eq arg2634 (Bits.of_int 26 5) && Bitops.eq arg2631 
-            (Bits.of_int 11 5) && Bitops.eq arg2632 (Bits.of_int 27 5) && 
-          Bitops.eq arg2629 (Bits.of_int 12 5) && Bitops.eq arg2630 
-            (Bits.of_int 28 5) && Bitops.eq arg2627 (Bits.of_int 13 5) && 
-          Bitops.eq arg2628 (Bits.of_int 29 5) && Bitops.eq arg2625 
-            (Bits.of_int 14 5) && Bitops.eq arg2626 (Bits.of_int 30 5) && 
-          Bitops.eq arg2623 (Bits.of_int 15 5) && Bitops.eq arg2624 
-            (Bits.of_int 31 5) && Bitops.eq arg2620 (Bits.of_int 16 5) && 
-          Bitops.eq arg2621 (Bits.of_int 0 1) && Bitops.eq arg2622 
-            (Bits.of_int 8 32) && Bitops.eq arg2617 (Bits.of_int 17 5) && 
-          Bitops.eq arg2618 (Bits.of_int 0 1) && Bitops.eq arg2619 
-            (Bits.of_int 7 32) && Bitops.eq arg2614 (Bits.of_int 18 5) && 
-          Bitops.eq arg2615 (Bits.of_int 0 1) && Bitops.eq arg2616 
-            (Bits.of_int 6 32) && Bitops.eq arg2611 (Bits.of_int 19 5) && 
-          Bitops.eq arg2612 (Bits.of_int 0 1) && Bitops.eq arg2613 
-            (Bits.of_int 5 32) && Bitops.eq arg2608 (Bits.of_int 20 5) && 
-          Bitops.eq arg2609 (Bits.of_int 0 1) && Bitops.eq arg2610 
-            (Bits.of_int 4 32) && Bitops.eq arg2605 (Bits.of_int 21 5) && 
-          Bitops.eq arg2606 (Bits.of_int 0 1) && Bitops.eq arg2607 
-            (Bits.of_int 3 32) && Bitops.eq arg2602 (Bits.of_int 22 5) && 
-          Bitops.eq arg2603 (Bits.of_int 0 1) && Bitops.eq arg2604 
-            (Bits.of_int 2 32) && Bitops.eq arg2599 (Bits.of_int 23 5) && 
-          Bitops.eq arg2600 (Bits.of_int 0 1) && Bitops.eq arg2601 
-            (Bits.of_int 1 32) && Bitops.eq arg2596 (Bits.of_int 24 5) && 
-          Bitops.eq arg2597 (Bits.of_int 0 1) && Bitops.eq arg2598 
-            (Bits.of_int 16 32) && Bitops.eq arg2593 (Bits.of_int 25 5) && 
-          Bitops.eq arg2594 (Bits.of_int 0 1) && Bitops.eq arg2595 
-            (Bits.of_int 15 32) && Bitops.eq arg2590 (Bits.of_int 26 5) && 
-          Bitops.eq arg2591 (Bits.of_int 0 1) && Bitops.eq arg2592 
-            (Bits.of_int 14 32) && Bitops.eq arg2587 (Bits.of_int 27 5) && 
-          Bitops.eq arg2588 (Bits.of_int 0 1) && Bitops.eq arg2589 
-            (Bits.of_int 13 32) && Bitops.eq arg2584 (Bits.of_int 28 5) && 
-          Bitops.eq arg2585 (Bits.of_int 0 1) && Bitops.eq arg2586 
-            (Bits.of_int 12 32) && Bitops.eq arg2581 (Bits.of_int 30 5) && 
-          Bitops.eq arg2582 (Bits.of_int 0 1) && Bitops.eq arg2583 
-            (Bits.of_int 10 32) && Bitops.eq arg2578 (Bits.of_int 31 5) && 
-          Bitops.eq arg2579 (Bits.of_int 0 1) && Bitops.eq arg2580 
-            (Bits.of_int 9 32) && Bitops.eq arg2575 (Bits.of_int 0 1) && 
-          Bitops.eq arg2576 (Bits.of_int 0 1) && Bitops.eq arg2577 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 29 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg2574)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg2638 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2635 (Bits.U.of_int 9 5) && Bitops.eq arg2636 
+            (Bits.U.of_int 25 5) && Bitops.eq arg2633 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg2634 (Bits.U.of_int 26 5) && Bitops.eq arg2631 
+            (Bits.U.of_int 11 5) && Bitops.eq arg2632 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2629 (Bits.U.of_int 12 5) && Bitops.eq arg2630 
+            (Bits.U.of_int 28 5) && Bitops.eq arg2627 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg2628 (Bits.U.of_int 29 5) && Bitops.eq arg2625 
+            (Bits.U.of_int 14 5) && Bitops.eq arg2626 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2623 (Bits.U.of_int 15 5) && Bitops.eq arg2624 
+            (Bits.U.of_int 31 5) && Bitops.eq arg2620 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg2621 (Bits.U.of_int 0 1) && Bitops.eq arg2622 
+            (Bits.U.of_int 8 32) && Bitops.eq arg2617 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg2618 (Bits.U.of_int 0 1) && Bitops.eq arg2619 
+            (Bits.U.of_int 7 32) && Bitops.eq arg2614 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg2615 (Bits.U.of_int 0 1) && Bitops.eq arg2616 
+            (Bits.U.of_int 6 32) && Bitops.eq arg2611 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg2612 (Bits.U.of_int 0 1) && Bitops.eq arg2613 
+            (Bits.U.of_int 5 32) && Bitops.eq arg2608 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg2609 (Bits.U.of_int 0 1) && Bitops.eq arg2610 
+            (Bits.U.of_int 4 32) && Bitops.eq arg2605 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg2606 (Bits.U.of_int 0 1) && Bitops.eq arg2607 
+            (Bits.U.of_int 3 32) && Bitops.eq arg2602 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg2603 (Bits.U.of_int 0 1) && Bitops.eq arg2604 
+            (Bits.U.of_int 2 32) && Bitops.eq arg2599 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg2600 (Bits.U.of_int 0 1) && Bitops.eq arg2601 
+            (Bits.U.of_int 1 32) && Bitops.eq arg2596 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2597 (Bits.U.of_int 0 1) && Bitops.eq arg2598 
+            (Bits.U.of_int 16 32) && Bitops.eq arg2593 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg2594 (Bits.U.of_int 0 1) && Bitops.eq arg2595 
+            (Bits.U.of_int 15 32) && Bitops.eq arg2590 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg2591 (Bits.U.of_int 0 1) && Bitops.eq arg2592 
+            (Bits.U.of_int 14 32) && Bitops.eq arg2587 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2588 (Bits.U.of_int 0 1) && Bitops.eq arg2589 
+            (Bits.U.of_int 13 32) && Bitops.eq arg2584 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2585 (Bits.U.of_int 0 1) && Bitops.eq arg2586 
+            (Bits.U.of_int 12 32) && Bitops.eq arg2581 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2582 (Bits.U.of_int 0 1) && Bitops.eq arg2583 
+            (Bits.U.of_int 10 32) && Bitops.eq arg2578 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2579 (Bits.U.of_int 0 1) && Bitops.eq arg2580 
+            (Bits.U.of_int 9 32) && Bitops.eq arg2575 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg2576 (Bits.U.of_int 0 1) && Bitops.eq arg2577 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 29 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg2574)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg2702), _), RP.Fetch (RP.Cell ('r', 
@@ -8402,51 +8402,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg2639)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg2639 13 && Bitops.eq arg2702 
-            (Bits.of_int 8 5) && Bitops.eq arg2703 (Bits.of_int 24 5) && 
-          Bitops.eq arg2700 (Bits.of_int 9 5) && Bitops.eq arg2701 
-            (Bits.of_int 25 5) && Bitops.eq arg2698 (Bits.of_int 10 5) && 
-          Bitops.eq arg2699 (Bits.of_int 26 5) && Bitops.eq arg2696 
-            (Bits.of_int 11 5) && Bitops.eq arg2697 (Bits.of_int 27 5) && 
-          Bitops.eq arg2694 (Bits.of_int 12 5) && Bitops.eq arg2695 
-            (Bits.of_int 28 5) && Bitops.eq arg2692 (Bits.of_int 13 5) && 
-          Bitops.eq arg2693 (Bits.of_int 29 5) && Bitops.eq arg2690 
-            (Bits.of_int 14 5) && Bitops.eq arg2691 (Bits.of_int 30 5) && 
-          Bitops.eq arg2688 (Bits.of_int 15 5) && Bitops.eq arg2689 
-            (Bits.of_int 31 5) && Bitops.eq arg2685 (Bits.of_int 16 5) && 
-          Bitops.eq arg2686 (Bits.of_int 0 1) && Bitops.eq arg2687 
-            (Bits.of_int 8 32) && Bitops.eq arg2682 (Bits.of_int 17 5) && 
-          Bitops.eq arg2683 (Bits.of_int 0 1) && Bitops.eq arg2684 
-            (Bits.of_int 7 32) && Bitops.eq arg2679 (Bits.of_int 18 5) && 
-          Bitops.eq arg2680 (Bits.of_int 0 1) && Bitops.eq arg2681 
-            (Bits.of_int 6 32) && Bitops.eq arg2676 (Bits.of_int 19 5) && 
-          Bitops.eq arg2677 (Bits.of_int 0 1) && Bitops.eq arg2678 
-            (Bits.of_int 5 32) && Bitops.eq arg2673 (Bits.of_int 20 5) && 
-          Bitops.eq arg2674 (Bits.of_int 0 1) && Bitops.eq arg2675 
-            (Bits.of_int 4 32) && Bitops.eq arg2670 (Bits.of_int 21 5) && 
-          Bitops.eq arg2671 (Bits.of_int 0 1) && Bitops.eq arg2672 
-            (Bits.of_int 3 32) && Bitops.eq arg2667 (Bits.of_int 22 5) && 
-          Bitops.eq arg2668 (Bits.of_int 0 1) && Bitops.eq arg2669 
-            (Bits.of_int 2 32) && Bitops.eq arg2664 (Bits.of_int 23 5) && 
-          Bitops.eq arg2665 (Bits.of_int 0 1) && Bitops.eq arg2666 
-            (Bits.of_int 1 32) && Bitops.eq arg2661 (Bits.of_int 24 5) && 
-          Bitops.eq arg2662 (Bits.of_int 0 1) && Bitops.eq arg2663 
-            (Bits.of_int 16 32) && Bitops.eq arg2658 (Bits.of_int 25 5) && 
-          Bitops.eq arg2659 (Bits.of_int 0 1) && Bitops.eq arg2660 
-            (Bits.of_int 15 32) && Bitops.eq arg2655 (Bits.of_int 26 5) && 
-          Bitops.eq arg2656 (Bits.of_int 0 1) && Bitops.eq arg2657 
-            (Bits.of_int 14 32) && Bitops.eq arg2652 (Bits.of_int 27 5) && 
-          Bitops.eq arg2653 (Bits.of_int 0 1) && Bitops.eq arg2654 
-            (Bits.of_int 13 32) && Bitops.eq arg2649 (Bits.of_int 29 5) && 
-          Bitops.eq arg2650 (Bits.of_int 0 1) && Bitops.eq arg2651 
-            (Bits.of_int 11 32) && Bitops.eq arg2646 (Bits.of_int 30 5) && 
-          Bitops.eq arg2647 (Bits.of_int 0 1) && Bitops.eq arg2648 
-            (Bits.of_int 10 32) && Bitops.eq arg2643 (Bits.of_int 31 5) && 
-          Bitops.eq arg2644 (Bits.of_int 0 1) && Bitops.eq arg2645 
-            (Bits.of_int 9 32) && Bitops.eq arg2640 (Bits.of_int 0 1) && 
-          Bitops.eq arg2641 (Bits.of_int 0 1) && Bitops.eq arg2642 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 28 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg2639)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg2703 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2700 (Bits.U.of_int 9 5) && Bitops.eq arg2701 
+            (Bits.U.of_int 25 5) && Bitops.eq arg2698 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg2699 (Bits.U.of_int 26 5) && Bitops.eq arg2696 
+            (Bits.U.of_int 11 5) && Bitops.eq arg2697 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2694 (Bits.U.of_int 12 5) && Bitops.eq arg2695 
+            (Bits.U.of_int 28 5) && Bitops.eq arg2692 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg2693 (Bits.U.of_int 29 5) && Bitops.eq arg2690 
+            (Bits.U.of_int 14 5) && Bitops.eq arg2691 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2688 (Bits.U.of_int 15 5) && Bitops.eq arg2689 
+            (Bits.U.of_int 31 5) && Bitops.eq arg2685 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg2686 (Bits.U.of_int 0 1) && Bitops.eq arg2687 
+            (Bits.U.of_int 8 32) && Bitops.eq arg2682 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg2683 (Bits.U.of_int 0 1) && Bitops.eq arg2684 
+            (Bits.U.of_int 7 32) && Bitops.eq arg2679 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg2680 (Bits.U.of_int 0 1) && Bitops.eq arg2681 
+            (Bits.U.of_int 6 32) && Bitops.eq arg2676 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg2677 (Bits.U.of_int 0 1) && Bitops.eq arg2678 
+            (Bits.U.of_int 5 32) && Bitops.eq arg2673 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg2674 (Bits.U.of_int 0 1) && Bitops.eq arg2675 
+            (Bits.U.of_int 4 32) && Bitops.eq arg2670 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg2671 (Bits.U.of_int 0 1) && Bitops.eq arg2672 
+            (Bits.U.of_int 3 32) && Bitops.eq arg2667 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg2668 (Bits.U.of_int 0 1) && Bitops.eq arg2669 
+            (Bits.U.of_int 2 32) && Bitops.eq arg2664 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg2665 (Bits.U.of_int 0 1) && Bitops.eq arg2666 
+            (Bits.U.of_int 1 32) && Bitops.eq arg2661 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2662 (Bits.U.of_int 0 1) && Bitops.eq arg2663 
+            (Bits.U.of_int 16 32) && Bitops.eq arg2658 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg2659 (Bits.U.of_int 0 1) && Bitops.eq arg2660 
+            (Bits.U.of_int 15 32) && Bitops.eq arg2655 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg2656 (Bits.U.of_int 0 1) && Bitops.eq arg2657 
+            (Bits.U.of_int 14 32) && Bitops.eq arg2652 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2653 (Bits.U.of_int 0 1) && Bitops.eq arg2654 
+            (Bits.U.of_int 13 32) && Bitops.eq arg2649 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg2650 (Bits.U.of_int 0 1) && Bitops.eq arg2651 
+            (Bits.U.of_int 11 32) && Bitops.eq arg2646 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2647 (Bits.U.of_int 0 1) && Bitops.eq arg2648 
+            (Bits.U.of_int 10 32) && Bitops.eq arg2643 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2644 (Bits.U.of_int 0 1) && Bitops.eq arg2645 
+            (Bits.U.of_int 9 32) && Bitops.eq arg2640 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg2641 (Bits.U.of_int 0 1) && Bitops.eq arg2642 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 28 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg2639)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg2767), _), RP.Fetch (RP.Cell ('r', 
@@ -8572,51 +8572,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg2704)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg2704 13 && Bitops.eq arg2767 
-            (Bits.of_int 8 5) && Bitops.eq arg2768 (Bits.of_int 24 5) && 
-          Bitops.eq arg2765 (Bits.of_int 9 5) && Bitops.eq arg2766 
-            (Bits.of_int 25 5) && Bitops.eq arg2763 (Bits.of_int 10 5) && 
-          Bitops.eq arg2764 (Bits.of_int 26 5) && Bitops.eq arg2761 
-            (Bits.of_int 11 5) && Bitops.eq arg2762 (Bits.of_int 27 5) && 
-          Bitops.eq arg2759 (Bits.of_int 12 5) && Bitops.eq arg2760 
-            (Bits.of_int 28 5) && Bitops.eq arg2757 (Bits.of_int 13 5) && 
-          Bitops.eq arg2758 (Bits.of_int 29 5) && Bitops.eq arg2755 
-            (Bits.of_int 14 5) && Bitops.eq arg2756 (Bits.of_int 30 5) && 
-          Bitops.eq arg2753 (Bits.of_int 15 5) && Bitops.eq arg2754 
-            (Bits.of_int 31 5) && Bitops.eq arg2750 (Bits.of_int 16 5) && 
-          Bitops.eq arg2751 (Bits.of_int 0 1) && Bitops.eq arg2752 
-            (Bits.of_int 8 32) && Bitops.eq arg2747 (Bits.of_int 17 5) && 
-          Bitops.eq arg2748 (Bits.of_int 0 1) && Bitops.eq arg2749 
-            (Bits.of_int 7 32) && Bitops.eq arg2744 (Bits.of_int 18 5) && 
-          Bitops.eq arg2745 (Bits.of_int 0 1) && Bitops.eq arg2746 
-            (Bits.of_int 6 32) && Bitops.eq arg2741 (Bits.of_int 19 5) && 
-          Bitops.eq arg2742 (Bits.of_int 0 1) && Bitops.eq arg2743 
-            (Bits.of_int 5 32) && Bitops.eq arg2738 (Bits.of_int 20 5) && 
-          Bitops.eq arg2739 (Bits.of_int 0 1) && Bitops.eq arg2740 
-            (Bits.of_int 4 32) && Bitops.eq arg2735 (Bits.of_int 21 5) && 
-          Bitops.eq arg2736 (Bits.of_int 0 1) && Bitops.eq arg2737 
-            (Bits.of_int 3 32) && Bitops.eq arg2732 (Bits.of_int 22 5) && 
-          Bitops.eq arg2733 (Bits.of_int 0 1) && Bitops.eq arg2734 
-            (Bits.of_int 2 32) && Bitops.eq arg2729 (Bits.of_int 23 5) && 
-          Bitops.eq arg2730 (Bits.of_int 0 1) && Bitops.eq arg2731 
-            (Bits.of_int 1 32) && Bitops.eq arg2726 (Bits.of_int 24 5) && 
-          Bitops.eq arg2727 (Bits.of_int 0 1) && Bitops.eq arg2728 
-            (Bits.of_int 16 32) && Bitops.eq arg2723 (Bits.of_int 25 5) && 
-          Bitops.eq arg2724 (Bits.of_int 0 1) && Bitops.eq arg2725 
-            (Bits.of_int 15 32) && Bitops.eq arg2720 (Bits.of_int 26 5) && 
-          Bitops.eq arg2721 (Bits.of_int 0 1) && Bitops.eq arg2722 
-            (Bits.of_int 14 32) && Bitops.eq arg2717 (Bits.of_int 28 5) && 
-          Bitops.eq arg2718 (Bits.of_int 0 1) && Bitops.eq arg2719 
-            (Bits.of_int 12 32) && Bitops.eq arg2714 (Bits.of_int 29 5) && 
-          Bitops.eq arg2715 (Bits.of_int 0 1) && Bitops.eq arg2716 
-            (Bits.of_int 11 32) && Bitops.eq arg2711 (Bits.of_int 30 5) && 
-          Bitops.eq arg2712 (Bits.of_int 0 1) && Bitops.eq arg2713 
-            (Bits.of_int 10 32) && Bitops.eq arg2708 (Bits.of_int 31 5) && 
-          Bitops.eq arg2709 (Bits.of_int 0 1) && Bitops.eq arg2710 
-            (Bits.of_int 9 32) && Bitops.eq arg2705 (Bits.of_int 0 1) && 
-          Bitops.eq arg2706 (Bits.of_int 0 1) && Bitops.eq arg2707 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 27 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg2704)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg2768 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2765 (Bits.U.of_int 9 5) && Bitops.eq arg2766 
+            (Bits.U.of_int 25 5) && Bitops.eq arg2763 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg2764 (Bits.U.of_int 26 5) && Bitops.eq arg2761 
+            (Bits.U.of_int 11 5) && Bitops.eq arg2762 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2759 (Bits.U.of_int 12 5) && Bitops.eq arg2760 
+            (Bits.U.of_int 28 5) && Bitops.eq arg2757 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg2758 (Bits.U.of_int 29 5) && Bitops.eq arg2755 
+            (Bits.U.of_int 14 5) && Bitops.eq arg2756 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2753 (Bits.U.of_int 15 5) && Bitops.eq arg2754 
+            (Bits.U.of_int 31 5) && Bitops.eq arg2750 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg2751 (Bits.U.of_int 0 1) && Bitops.eq arg2752 
+            (Bits.U.of_int 8 32) && Bitops.eq arg2747 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg2748 (Bits.U.of_int 0 1) && Bitops.eq arg2749 
+            (Bits.U.of_int 7 32) && Bitops.eq arg2744 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg2745 (Bits.U.of_int 0 1) && Bitops.eq arg2746 
+            (Bits.U.of_int 6 32) && Bitops.eq arg2741 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg2742 (Bits.U.of_int 0 1) && Bitops.eq arg2743 
+            (Bits.U.of_int 5 32) && Bitops.eq arg2738 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg2739 (Bits.U.of_int 0 1) && Bitops.eq arg2740 
+            (Bits.U.of_int 4 32) && Bitops.eq arg2735 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg2736 (Bits.U.of_int 0 1) && Bitops.eq arg2737 
+            (Bits.U.of_int 3 32) && Bitops.eq arg2732 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg2733 (Bits.U.of_int 0 1) && Bitops.eq arg2734 
+            (Bits.U.of_int 2 32) && Bitops.eq arg2729 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg2730 (Bits.U.of_int 0 1) && Bitops.eq arg2731 
+            (Bits.U.of_int 1 32) && Bitops.eq arg2726 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2727 (Bits.U.of_int 0 1) && Bitops.eq arg2728 
+            (Bits.U.of_int 16 32) && Bitops.eq arg2723 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg2724 (Bits.U.of_int 0 1) && Bitops.eq arg2725 
+            (Bits.U.of_int 15 32) && Bitops.eq arg2720 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg2721 (Bits.U.of_int 0 1) && Bitops.eq arg2722 
+            (Bits.U.of_int 14 32) && Bitops.eq arg2717 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2718 (Bits.U.of_int 0 1) && Bitops.eq arg2719 
+            (Bits.U.of_int 12 32) && Bitops.eq arg2714 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg2715 (Bits.U.of_int 0 1) && Bitops.eq arg2716 
+            (Bits.U.of_int 11 32) && Bitops.eq arg2711 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2712 (Bits.U.of_int 0 1) && Bitops.eq arg2713 
+            (Bits.U.of_int 10 32) && Bitops.eq arg2708 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2709 (Bits.U.of_int 0 1) && Bitops.eq arg2710 
+            (Bits.U.of_int 9 32) && Bitops.eq arg2705 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg2706 (Bits.U.of_int 0 1) && Bitops.eq arg2707 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 27 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg2704)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg2832), _), RP.Fetch (RP.Cell ('r', 
@@ -8742,51 +8742,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg2769)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg2769 13 && Bitops.eq arg2832 
-            (Bits.of_int 8 5) && Bitops.eq arg2833 (Bits.of_int 24 5) && 
-          Bitops.eq arg2830 (Bits.of_int 9 5) && Bitops.eq arg2831 
-            (Bits.of_int 25 5) && Bitops.eq arg2828 (Bits.of_int 10 5) && 
-          Bitops.eq arg2829 (Bits.of_int 26 5) && Bitops.eq arg2826 
-            (Bits.of_int 11 5) && Bitops.eq arg2827 (Bits.of_int 27 5) && 
-          Bitops.eq arg2824 (Bits.of_int 12 5) && Bitops.eq arg2825 
-            (Bits.of_int 28 5) && Bitops.eq arg2822 (Bits.of_int 13 5) && 
-          Bitops.eq arg2823 (Bits.of_int 29 5) && Bitops.eq arg2820 
-            (Bits.of_int 14 5) && Bitops.eq arg2821 (Bits.of_int 30 5) && 
-          Bitops.eq arg2818 (Bits.of_int 15 5) && Bitops.eq arg2819 
-            (Bits.of_int 31 5) && Bitops.eq arg2815 (Bits.of_int 16 5) && 
-          Bitops.eq arg2816 (Bits.of_int 0 1) && Bitops.eq arg2817 
-            (Bits.of_int 8 32) && Bitops.eq arg2812 (Bits.of_int 17 5) && 
-          Bitops.eq arg2813 (Bits.of_int 0 1) && Bitops.eq arg2814 
-            (Bits.of_int 7 32) && Bitops.eq arg2809 (Bits.of_int 18 5) && 
-          Bitops.eq arg2810 (Bits.of_int 0 1) && Bitops.eq arg2811 
-            (Bits.of_int 6 32) && Bitops.eq arg2806 (Bits.of_int 19 5) && 
-          Bitops.eq arg2807 (Bits.of_int 0 1) && Bitops.eq arg2808 
-            (Bits.of_int 5 32) && Bitops.eq arg2803 (Bits.of_int 20 5) && 
-          Bitops.eq arg2804 (Bits.of_int 0 1) && Bitops.eq arg2805 
-            (Bits.of_int 4 32) && Bitops.eq arg2800 (Bits.of_int 21 5) && 
-          Bitops.eq arg2801 (Bits.of_int 0 1) && Bitops.eq arg2802 
-            (Bits.of_int 3 32) && Bitops.eq arg2797 (Bits.of_int 22 5) && 
-          Bitops.eq arg2798 (Bits.of_int 0 1) && Bitops.eq arg2799 
-            (Bits.of_int 2 32) && Bitops.eq arg2794 (Bits.of_int 23 5) && 
-          Bitops.eq arg2795 (Bits.of_int 0 1) && Bitops.eq arg2796 
-            (Bits.of_int 1 32) && Bitops.eq arg2791 (Bits.of_int 24 5) && 
-          Bitops.eq arg2792 (Bits.of_int 0 1) && Bitops.eq arg2793 
-            (Bits.of_int 16 32) && Bitops.eq arg2788 (Bits.of_int 25 5) && 
-          Bitops.eq arg2789 (Bits.of_int 0 1) && Bitops.eq arg2790 
-            (Bits.of_int 15 32) && Bitops.eq arg2785 (Bits.of_int 27 5) && 
-          Bitops.eq arg2786 (Bits.of_int 0 1) && Bitops.eq arg2787 
-            (Bits.of_int 13 32) && Bitops.eq arg2782 (Bits.of_int 28 5) && 
-          Bitops.eq arg2783 (Bits.of_int 0 1) && Bitops.eq arg2784 
-            (Bits.of_int 12 32) && Bitops.eq arg2779 (Bits.of_int 29 5) && 
-          Bitops.eq arg2780 (Bits.of_int 0 1) && Bitops.eq arg2781 
-            (Bits.of_int 11 32) && Bitops.eq arg2776 (Bits.of_int 30 5) && 
-          Bitops.eq arg2777 (Bits.of_int 0 1) && Bitops.eq arg2778 
-            (Bits.of_int 10 32) && Bitops.eq arg2773 (Bits.of_int 31 5) && 
-          Bitops.eq arg2774 (Bits.of_int 0 1) && Bitops.eq arg2775 
-            (Bits.of_int 9 32) && Bitops.eq arg2770 (Bits.of_int 0 1) && 
-          Bitops.eq arg2771 (Bits.of_int 0 1) && Bitops.eq arg2772 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 26 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg2769)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg2833 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2830 (Bits.U.of_int 9 5) && Bitops.eq arg2831 
+            (Bits.U.of_int 25 5) && Bitops.eq arg2828 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg2829 (Bits.U.of_int 26 5) && Bitops.eq arg2826 
+            (Bits.U.of_int 11 5) && Bitops.eq arg2827 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2824 (Bits.U.of_int 12 5) && Bitops.eq arg2825 
+            (Bits.U.of_int 28 5) && Bitops.eq arg2822 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg2823 (Bits.U.of_int 29 5) && Bitops.eq arg2820 
+            (Bits.U.of_int 14 5) && Bitops.eq arg2821 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2818 (Bits.U.of_int 15 5) && Bitops.eq arg2819 
+            (Bits.U.of_int 31 5) && Bitops.eq arg2815 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg2816 (Bits.U.of_int 0 1) && Bitops.eq arg2817 
+            (Bits.U.of_int 8 32) && Bitops.eq arg2812 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg2813 (Bits.U.of_int 0 1) && Bitops.eq arg2814 
+            (Bits.U.of_int 7 32) && Bitops.eq arg2809 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg2810 (Bits.U.of_int 0 1) && Bitops.eq arg2811 
+            (Bits.U.of_int 6 32) && Bitops.eq arg2806 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg2807 (Bits.U.of_int 0 1) && Bitops.eq arg2808 
+            (Bits.U.of_int 5 32) && Bitops.eq arg2803 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg2804 (Bits.U.of_int 0 1) && Bitops.eq arg2805 
+            (Bits.U.of_int 4 32) && Bitops.eq arg2800 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg2801 (Bits.U.of_int 0 1) && Bitops.eq arg2802 
+            (Bits.U.of_int 3 32) && Bitops.eq arg2797 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg2798 (Bits.U.of_int 0 1) && Bitops.eq arg2799 
+            (Bits.U.of_int 2 32) && Bitops.eq arg2794 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg2795 (Bits.U.of_int 0 1) && Bitops.eq arg2796 
+            (Bits.U.of_int 1 32) && Bitops.eq arg2791 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2792 (Bits.U.of_int 0 1) && Bitops.eq arg2793 
+            (Bits.U.of_int 16 32) && Bitops.eq arg2788 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg2789 (Bits.U.of_int 0 1) && Bitops.eq arg2790 
+            (Bits.U.of_int 15 32) && Bitops.eq arg2785 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2786 (Bits.U.of_int 0 1) && Bitops.eq arg2787 
+            (Bits.U.of_int 13 32) && Bitops.eq arg2782 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2783 (Bits.U.of_int 0 1) && Bitops.eq arg2784 
+            (Bits.U.of_int 12 32) && Bitops.eq arg2779 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg2780 (Bits.U.of_int 0 1) && Bitops.eq arg2781 
+            (Bits.U.of_int 11 32) && Bitops.eq arg2776 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2777 (Bits.U.of_int 0 1) && Bitops.eq arg2778 
+            (Bits.U.of_int 10 32) && Bitops.eq arg2773 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2774 (Bits.U.of_int 0 1) && Bitops.eq arg2775 
+            (Bits.U.of_int 9 32) && Bitops.eq arg2770 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg2771 (Bits.U.of_int 0 1) && Bitops.eq arg2772 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 26 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg2769)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg2897), _), RP.Fetch (RP.Cell ('r', 
@@ -8912,51 +8912,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg2834)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg2834 13 && Bitops.eq arg2897 
-            (Bits.of_int 8 5) && Bitops.eq arg2898 (Bits.of_int 24 5) && 
-          Bitops.eq arg2895 (Bits.of_int 9 5) && Bitops.eq arg2896 
-            (Bits.of_int 25 5) && Bitops.eq arg2893 (Bits.of_int 10 5) && 
-          Bitops.eq arg2894 (Bits.of_int 26 5) && Bitops.eq arg2891 
-            (Bits.of_int 11 5) && Bitops.eq arg2892 (Bits.of_int 27 5) && 
-          Bitops.eq arg2889 (Bits.of_int 12 5) && Bitops.eq arg2890 
-            (Bits.of_int 28 5) && Bitops.eq arg2887 (Bits.of_int 13 5) && 
-          Bitops.eq arg2888 (Bits.of_int 29 5) && Bitops.eq arg2885 
-            (Bits.of_int 14 5) && Bitops.eq arg2886 (Bits.of_int 30 5) && 
-          Bitops.eq arg2883 (Bits.of_int 15 5) && Bitops.eq arg2884 
-            (Bits.of_int 31 5) && Bitops.eq arg2880 (Bits.of_int 16 5) && 
-          Bitops.eq arg2881 (Bits.of_int 0 1) && Bitops.eq arg2882 
-            (Bits.of_int 8 32) && Bitops.eq arg2877 (Bits.of_int 17 5) && 
-          Bitops.eq arg2878 (Bits.of_int 0 1) && Bitops.eq arg2879 
-            (Bits.of_int 7 32) && Bitops.eq arg2874 (Bits.of_int 18 5) && 
-          Bitops.eq arg2875 (Bits.of_int 0 1) && Bitops.eq arg2876 
-            (Bits.of_int 6 32) && Bitops.eq arg2871 (Bits.of_int 19 5) && 
-          Bitops.eq arg2872 (Bits.of_int 0 1) && Bitops.eq arg2873 
-            (Bits.of_int 5 32) && Bitops.eq arg2868 (Bits.of_int 20 5) && 
-          Bitops.eq arg2869 (Bits.of_int 0 1) && Bitops.eq arg2870 
-            (Bits.of_int 4 32) && Bitops.eq arg2865 (Bits.of_int 21 5) && 
-          Bitops.eq arg2866 (Bits.of_int 0 1) && Bitops.eq arg2867 
-            (Bits.of_int 3 32) && Bitops.eq arg2862 (Bits.of_int 22 5) && 
-          Bitops.eq arg2863 (Bits.of_int 0 1) && Bitops.eq arg2864 
-            (Bits.of_int 2 32) && Bitops.eq arg2859 (Bits.of_int 23 5) && 
-          Bitops.eq arg2860 (Bits.of_int 0 1) && Bitops.eq arg2861 
-            (Bits.of_int 1 32) && Bitops.eq arg2856 (Bits.of_int 24 5) && 
-          Bitops.eq arg2857 (Bits.of_int 0 1) && Bitops.eq arg2858 
-            (Bits.of_int 16 32) && Bitops.eq arg2853 (Bits.of_int 26 5) && 
-          Bitops.eq arg2854 (Bits.of_int 0 1) && Bitops.eq arg2855 
-            (Bits.of_int 14 32) && Bitops.eq arg2850 (Bits.of_int 27 5) && 
-          Bitops.eq arg2851 (Bits.of_int 0 1) && Bitops.eq arg2852 
-            (Bits.of_int 13 32) && Bitops.eq arg2847 (Bits.of_int 28 5) && 
-          Bitops.eq arg2848 (Bits.of_int 0 1) && Bitops.eq arg2849 
-            (Bits.of_int 12 32) && Bitops.eq arg2844 (Bits.of_int 29 5) && 
-          Bitops.eq arg2845 (Bits.of_int 0 1) && Bitops.eq arg2846 
-            (Bits.of_int 11 32) && Bitops.eq arg2841 (Bits.of_int 30 5) && 
-          Bitops.eq arg2842 (Bits.of_int 0 1) && Bitops.eq arg2843 
-            (Bits.of_int 10 32) && Bitops.eq arg2838 (Bits.of_int 31 5) && 
-          Bitops.eq arg2839 (Bits.of_int 0 1) && Bitops.eq arg2840 
-            (Bits.of_int 9 32) && Bitops.eq arg2835 (Bits.of_int 0 1) && 
-          Bitops.eq arg2836 (Bits.of_int 0 1) && Bitops.eq arg2837 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 25 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg2834)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg2898 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2895 (Bits.U.of_int 9 5) && Bitops.eq arg2896 
+            (Bits.U.of_int 25 5) && Bitops.eq arg2893 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg2894 (Bits.U.of_int 26 5) && Bitops.eq arg2891 
+            (Bits.U.of_int 11 5) && Bitops.eq arg2892 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2889 (Bits.U.of_int 12 5) && Bitops.eq arg2890 
+            (Bits.U.of_int 28 5) && Bitops.eq arg2887 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg2888 (Bits.U.of_int 29 5) && Bitops.eq arg2885 
+            (Bits.U.of_int 14 5) && Bitops.eq arg2886 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2883 (Bits.U.of_int 15 5) && Bitops.eq arg2884 
+            (Bits.U.of_int 31 5) && Bitops.eq arg2880 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg2881 (Bits.U.of_int 0 1) && Bitops.eq arg2882 
+            (Bits.U.of_int 8 32) && Bitops.eq arg2877 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg2878 (Bits.U.of_int 0 1) && Bitops.eq arg2879 
+            (Bits.U.of_int 7 32) && Bitops.eq arg2874 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg2875 (Bits.U.of_int 0 1) && Bitops.eq arg2876 
+            (Bits.U.of_int 6 32) && Bitops.eq arg2871 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg2872 (Bits.U.of_int 0 1) && Bitops.eq arg2873 
+            (Bits.U.of_int 5 32) && Bitops.eq arg2868 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg2869 (Bits.U.of_int 0 1) && Bitops.eq arg2870 
+            (Bits.U.of_int 4 32) && Bitops.eq arg2865 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg2866 (Bits.U.of_int 0 1) && Bitops.eq arg2867 
+            (Bits.U.of_int 3 32) && Bitops.eq arg2862 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg2863 (Bits.U.of_int 0 1) && Bitops.eq arg2864 
+            (Bits.U.of_int 2 32) && Bitops.eq arg2859 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg2860 (Bits.U.of_int 0 1) && Bitops.eq arg2861 
+            (Bits.U.of_int 1 32) && Bitops.eq arg2856 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2857 (Bits.U.of_int 0 1) && Bitops.eq arg2858 
+            (Bits.U.of_int 16 32) && Bitops.eq arg2853 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg2854 (Bits.U.of_int 0 1) && Bitops.eq arg2855 
+            (Bits.U.of_int 14 32) && Bitops.eq arg2850 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2851 (Bits.U.of_int 0 1) && Bitops.eq arg2852 
+            (Bits.U.of_int 13 32) && Bitops.eq arg2847 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2848 (Bits.U.of_int 0 1) && Bitops.eq arg2849 
+            (Bits.U.of_int 12 32) && Bitops.eq arg2844 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg2845 (Bits.U.of_int 0 1) && Bitops.eq arg2846 
+            (Bits.U.of_int 11 32) && Bitops.eq arg2841 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2842 (Bits.U.of_int 0 1) && Bitops.eq arg2843 
+            (Bits.U.of_int 10 32) && Bitops.eq arg2838 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2839 (Bits.U.of_int 0 1) && Bitops.eq arg2840 
+            (Bits.U.of_int 9 32) && Bitops.eq arg2835 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg2836 (Bits.U.of_int 0 1) && Bitops.eq arg2837 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 25 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg2834)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg2962), _), RP.Fetch (RP.Cell ('r', 
@@ -9082,51 +9082,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg2899)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg2899 13 && Bitops.eq arg2962 
-            (Bits.of_int 8 5) && Bitops.eq arg2963 (Bits.of_int 24 5) && 
-          Bitops.eq arg2960 (Bits.of_int 9 5) && Bitops.eq arg2961 
-            (Bits.of_int 25 5) && Bitops.eq arg2958 (Bits.of_int 10 5) && 
-          Bitops.eq arg2959 (Bits.of_int 26 5) && Bitops.eq arg2956 
-            (Bits.of_int 11 5) && Bitops.eq arg2957 (Bits.of_int 27 5) && 
-          Bitops.eq arg2954 (Bits.of_int 12 5) && Bitops.eq arg2955 
-            (Bits.of_int 28 5) && Bitops.eq arg2952 (Bits.of_int 13 5) && 
-          Bitops.eq arg2953 (Bits.of_int 29 5) && Bitops.eq arg2950 
-            (Bits.of_int 14 5) && Bitops.eq arg2951 (Bits.of_int 30 5) && 
-          Bitops.eq arg2948 (Bits.of_int 15 5) && Bitops.eq arg2949 
-            (Bits.of_int 31 5) && Bitops.eq arg2945 (Bits.of_int 16 5) && 
-          Bitops.eq arg2946 (Bits.of_int 0 1) && Bitops.eq arg2947 
-            (Bits.of_int 8 32) && Bitops.eq arg2942 (Bits.of_int 17 5) && 
-          Bitops.eq arg2943 (Bits.of_int 0 1) && Bitops.eq arg2944 
-            (Bits.of_int 7 32) && Bitops.eq arg2939 (Bits.of_int 18 5) && 
-          Bitops.eq arg2940 (Bits.of_int 0 1) && Bitops.eq arg2941 
-            (Bits.of_int 6 32) && Bitops.eq arg2936 (Bits.of_int 19 5) && 
-          Bitops.eq arg2937 (Bits.of_int 0 1) && Bitops.eq arg2938 
-            (Bits.of_int 5 32) && Bitops.eq arg2933 (Bits.of_int 20 5) && 
-          Bitops.eq arg2934 (Bits.of_int 0 1) && Bitops.eq arg2935 
-            (Bits.of_int 4 32) && Bitops.eq arg2930 (Bits.of_int 21 5) && 
-          Bitops.eq arg2931 (Bits.of_int 0 1) && Bitops.eq arg2932 
-            (Bits.of_int 3 32) && Bitops.eq arg2927 (Bits.of_int 22 5) && 
-          Bitops.eq arg2928 (Bits.of_int 0 1) && Bitops.eq arg2929 
-            (Bits.of_int 2 32) && Bitops.eq arg2924 (Bits.of_int 23 5) && 
-          Bitops.eq arg2925 (Bits.of_int 0 1) && Bitops.eq arg2926 
-            (Bits.of_int 1 32) && Bitops.eq arg2921 (Bits.of_int 25 5) && 
-          Bitops.eq arg2922 (Bits.of_int 0 1) && Bitops.eq arg2923 
-            (Bits.of_int 15 32) && Bitops.eq arg2918 (Bits.of_int 26 5) && 
-          Bitops.eq arg2919 (Bits.of_int 0 1) && Bitops.eq arg2920 
-            (Bits.of_int 14 32) && Bitops.eq arg2915 (Bits.of_int 27 5) && 
-          Bitops.eq arg2916 (Bits.of_int 0 1) && Bitops.eq arg2917 
-            (Bits.of_int 13 32) && Bitops.eq arg2912 (Bits.of_int 28 5) && 
-          Bitops.eq arg2913 (Bits.of_int 0 1) && Bitops.eq arg2914 
-            (Bits.of_int 12 32) && Bitops.eq arg2909 (Bits.of_int 29 5) && 
-          Bitops.eq arg2910 (Bits.of_int 0 1) && Bitops.eq arg2911 
-            (Bits.of_int 11 32) && Bitops.eq arg2906 (Bits.of_int 30 5) && 
-          Bitops.eq arg2907 (Bits.of_int 0 1) && Bitops.eq arg2908 
-            (Bits.of_int 10 32) && Bitops.eq arg2903 (Bits.of_int 31 5) && 
-          Bitops.eq arg2904 (Bits.of_int 0 1) && Bitops.eq arg2905 
-            (Bits.of_int 9 32) && Bitops.eq arg2900 (Bits.of_int 0 1) && 
-          Bitops.eq arg2901 (Bits.of_int 0 1) && Bitops.eq arg2902 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 24 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg2899)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg2963 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2960 (Bits.U.of_int 9 5) && Bitops.eq arg2961 
+            (Bits.U.of_int 25 5) && Bitops.eq arg2958 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg2959 (Bits.U.of_int 26 5) && Bitops.eq arg2956 
+            (Bits.U.of_int 11 5) && Bitops.eq arg2957 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2954 (Bits.U.of_int 12 5) && Bitops.eq arg2955 
+            (Bits.U.of_int 28 5) && Bitops.eq arg2952 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg2953 (Bits.U.of_int 29 5) && Bitops.eq arg2950 
+            (Bits.U.of_int 14 5) && Bitops.eq arg2951 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2948 (Bits.U.of_int 15 5) && Bitops.eq arg2949 
+            (Bits.U.of_int 31 5) && Bitops.eq arg2945 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg2946 (Bits.U.of_int 0 1) && Bitops.eq arg2947 
+            (Bits.U.of_int 8 32) && Bitops.eq arg2942 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg2943 (Bits.U.of_int 0 1) && Bitops.eq arg2944 
+            (Bits.U.of_int 7 32) && Bitops.eq arg2939 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg2940 (Bits.U.of_int 0 1) && Bitops.eq arg2941 
+            (Bits.U.of_int 6 32) && Bitops.eq arg2936 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg2937 (Bits.U.of_int 0 1) && Bitops.eq arg2938 
+            (Bits.U.of_int 5 32) && Bitops.eq arg2933 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg2934 (Bits.U.of_int 0 1) && Bitops.eq arg2935 
+            (Bits.U.of_int 4 32) && Bitops.eq arg2930 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg2931 (Bits.U.of_int 0 1) && Bitops.eq arg2932 
+            (Bits.U.of_int 3 32) && Bitops.eq arg2927 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg2928 (Bits.U.of_int 0 1) && Bitops.eq arg2929 
+            (Bits.U.of_int 2 32) && Bitops.eq arg2924 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg2925 (Bits.U.of_int 0 1) && Bitops.eq arg2926 
+            (Bits.U.of_int 1 32) && Bitops.eq arg2921 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg2922 (Bits.U.of_int 0 1) && Bitops.eq arg2923 
+            (Bits.U.of_int 15 32) && Bitops.eq arg2918 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg2919 (Bits.U.of_int 0 1) && Bitops.eq arg2920 
+            (Bits.U.of_int 14 32) && Bitops.eq arg2915 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2916 (Bits.U.of_int 0 1) && Bitops.eq arg2917 
+            (Bits.U.of_int 13 32) && Bitops.eq arg2912 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2913 (Bits.U.of_int 0 1) && Bitops.eq arg2914 
+            (Bits.U.of_int 12 32) && Bitops.eq arg2909 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg2910 (Bits.U.of_int 0 1) && Bitops.eq arg2911 
+            (Bits.U.of_int 11 32) && Bitops.eq arg2906 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2907 (Bits.U.of_int 0 1) && Bitops.eq arg2908 
+            (Bits.U.of_int 10 32) && Bitops.eq arg2903 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2904 (Bits.U.of_int 0 1) && Bitops.eq arg2905 
+            (Bits.U.of_int 9 32) && Bitops.eq arg2900 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg2901 (Bits.U.of_int 0 1) && Bitops.eq arg2902 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 24 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg2899)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg3027), _), RP.Fetch (RP.Cell ('r', 
@@ -9252,51 +9252,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg2964)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg2964 13 && Bitops.eq arg3027 
-            (Bits.of_int 8 5) && Bitops.eq arg3028 (Bits.of_int 24 5) && 
-          Bitops.eq arg3025 (Bits.of_int 9 5) && Bitops.eq arg3026 
-            (Bits.of_int 25 5) && Bitops.eq arg3023 (Bits.of_int 10 5) && 
-          Bitops.eq arg3024 (Bits.of_int 26 5) && Bitops.eq arg3021 
-            (Bits.of_int 11 5) && Bitops.eq arg3022 (Bits.of_int 27 5) && 
-          Bitops.eq arg3019 (Bits.of_int 12 5) && Bitops.eq arg3020 
-            (Bits.of_int 28 5) && Bitops.eq arg3017 (Bits.of_int 13 5) && 
-          Bitops.eq arg3018 (Bits.of_int 29 5) && Bitops.eq arg3015 
-            (Bits.of_int 14 5) && Bitops.eq arg3016 (Bits.of_int 30 5) && 
-          Bitops.eq arg3013 (Bits.of_int 15 5) && Bitops.eq arg3014 
-            (Bits.of_int 31 5) && Bitops.eq arg3010 (Bits.of_int 16 5) && 
-          Bitops.eq arg3011 (Bits.of_int 0 1) && Bitops.eq arg3012 
-            (Bits.of_int 8 32) && Bitops.eq arg3007 (Bits.of_int 17 5) && 
-          Bitops.eq arg3008 (Bits.of_int 0 1) && Bitops.eq arg3009 
-            (Bits.of_int 7 32) && Bitops.eq arg3004 (Bits.of_int 18 5) && 
-          Bitops.eq arg3005 (Bits.of_int 0 1) && Bitops.eq arg3006 
-            (Bits.of_int 6 32) && Bitops.eq arg3001 (Bits.of_int 19 5) && 
-          Bitops.eq arg3002 (Bits.of_int 0 1) && Bitops.eq arg3003 
-            (Bits.of_int 5 32) && Bitops.eq arg2998 (Bits.of_int 20 5) && 
-          Bitops.eq arg2999 (Bits.of_int 0 1) && Bitops.eq arg3000 
-            (Bits.of_int 4 32) && Bitops.eq arg2995 (Bits.of_int 21 5) && 
-          Bitops.eq arg2996 (Bits.of_int 0 1) && Bitops.eq arg2997 
-            (Bits.of_int 3 32) && Bitops.eq arg2992 (Bits.of_int 22 5) && 
-          Bitops.eq arg2993 (Bits.of_int 0 1) && Bitops.eq arg2994 
-            (Bits.of_int 2 32) && Bitops.eq arg2989 (Bits.of_int 24 5) && 
-          Bitops.eq arg2990 (Bits.of_int 0 1) && Bitops.eq arg2991 
-            (Bits.of_int 16 32) && Bitops.eq arg2986 (Bits.of_int 25 5) && 
-          Bitops.eq arg2987 (Bits.of_int 0 1) && Bitops.eq arg2988 
-            (Bits.of_int 15 32) && Bitops.eq arg2983 (Bits.of_int 26 5) && 
-          Bitops.eq arg2984 (Bits.of_int 0 1) && Bitops.eq arg2985 
-            (Bits.of_int 14 32) && Bitops.eq arg2980 (Bits.of_int 27 5) && 
-          Bitops.eq arg2981 (Bits.of_int 0 1) && Bitops.eq arg2982 
-            (Bits.of_int 13 32) && Bitops.eq arg2977 (Bits.of_int 28 5) && 
-          Bitops.eq arg2978 (Bits.of_int 0 1) && Bitops.eq arg2979 
-            (Bits.of_int 12 32) && Bitops.eq arg2974 (Bits.of_int 29 5) && 
-          Bitops.eq arg2975 (Bits.of_int 0 1) && Bitops.eq arg2976 
-            (Bits.of_int 11 32) && Bitops.eq arg2971 (Bits.of_int 30 5) && 
-          Bitops.eq arg2972 (Bits.of_int 0 1) && Bitops.eq arg2973 
-            (Bits.of_int 10 32) && Bitops.eq arg2968 (Bits.of_int 31 5) && 
-          Bitops.eq arg2969 (Bits.of_int 0 1) && Bitops.eq arg2970 
-            (Bits.of_int 9 32) && Bitops.eq arg2965 (Bits.of_int 0 1) && 
-          Bitops.eq arg2966 (Bits.of_int 0 1) && Bitops.eq arg2967 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 23 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg2964)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg3028 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3025 (Bits.U.of_int 9 5) && Bitops.eq arg3026 
+            (Bits.U.of_int 25 5) && Bitops.eq arg3023 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg3024 (Bits.U.of_int 26 5) && Bitops.eq arg3021 
+            (Bits.U.of_int 11 5) && Bitops.eq arg3022 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3019 (Bits.U.of_int 12 5) && Bitops.eq arg3020 
+            (Bits.U.of_int 28 5) && Bitops.eq arg3017 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg3018 (Bits.U.of_int 29 5) && Bitops.eq arg3015 
+            (Bits.U.of_int 14 5) && Bitops.eq arg3016 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg3013 (Bits.U.of_int 15 5) && Bitops.eq arg3014 
+            (Bits.U.of_int 31 5) && Bitops.eq arg3010 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg3011 (Bits.U.of_int 0 1) && Bitops.eq arg3012 
+            (Bits.U.of_int 8 32) && Bitops.eq arg3007 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg3008 (Bits.U.of_int 0 1) && Bitops.eq arg3009 
+            (Bits.U.of_int 7 32) && Bitops.eq arg3004 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg3005 (Bits.U.of_int 0 1) && Bitops.eq arg3006 
+            (Bits.U.of_int 6 32) && Bitops.eq arg3001 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg3002 (Bits.U.of_int 0 1) && Bitops.eq arg3003 
+            (Bits.U.of_int 5 32) && Bitops.eq arg2998 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg2999 (Bits.U.of_int 0 1) && Bitops.eq arg3000 
+            (Bits.U.of_int 4 32) && Bitops.eq arg2995 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg2996 (Bits.U.of_int 0 1) && Bitops.eq arg2997 
+            (Bits.U.of_int 3 32) && Bitops.eq arg2992 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg2993 (Bits.U.of_int 0 1) && Bitops.eq arg2994 
+            (Bits.U.of_int 2 32) && Bitops.eq arg2989 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg2990 (Bits.U.of_int 0 1) && Bitops.eq arg2991 
+            (Bits.U.of_int 16 32) && Bitops.eq arg2986 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg2987 (Bits.U.of_int 0 1) && Bitops.eq arg2988 
+            (Bits.U.of_int 15 32) && Bitops.eq arg2983 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg2984 (Bits.U.of_int 0 1) && Bitops.eq arg2985 
+            (Bits.U.of_int 14 32) && Bitops.eq arg2980 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg2981 (Bits.U.of_int 0 1) && Bitops.eq arg2982 
+            (Bits.U.of_int 13 32) && Bitops.eq arg2977 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg2978 (Bits.U.of_int 0 1) && Bitops.eq arg2979 
+            (Bits.U.of_int 12 32) && Bitops.eq arg2974 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg2975 (Bits.U.of_int 0 1) && Bitops.eq arg2976 
+            (Bits.U.of_int 11 32) && Bitops.eq arg2971 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg2972 (Bits.U.of_int 0 1) && Bitops.eq arg2973 
+            (Bits.U.of_int 10 32) && Bitops.eq arg2968 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg2969 (Bits.U.of_int 0 1) && Bitops.eq arg2970 
+            (Bits.U.of_int 9 32) && Bitops.eq arg2965 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg2966 (Bits.U.of_int 0 1) && Bitops.eq arg2967 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 23 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg2964)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg3092), _), RP.Fetch (RP.Cell ('r', 
@@ -9422,51 +9422,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg3029)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg3029 13 && Bitops.eq arg3092 
-            (Bits.of_int 8 5) && Bitops.eq arg3093 (Bits.of_int 24 5) && 
-          Bitops.eq arg3090 (Bits.of_int 9 5) && Bitops.eq arg3091 
-            (Bits.of_int 25 5) && Bitops.eq arg3088 (Bits.of_int 10 5) && 
-          Bitops.eq arg3089 (Bits.of_int 26 5) && Bitops.eq arg3086 
-            (Bits.of_int 11 5) && Bitops.eq arg3087 (Bits.of_int 27 5) && 
-          Bitops.eq arg3084 (Bits.of_int 12 5) && Bitops.eq arg3085 
-            (Bits.of_int 28 5) && Bitops.eq arg3082 (Bits.of_int 13 5) && 
-          Bitops.eq arg3083 (Bits.of_int 29 5) && Bitops.eq arg3080 
-            (Bits.of_int 14 5) && Bitops.eq arg3081 (Bits.of_int 30 5) && 
-          Bitops.eq arg3078 (Bits.of_int 15 5) && Bitops.eq arg3079 
-            (Bits.of_int 31 5) && Bitops.eq arg3075 (Bits.of_int 16 5) && 
-          Bitops.eq arg3076 (Bits.of_int 0 1) && Bitops.eq arg3077 
-            (Bits.of_int 8 32) && Bitops.eq arg3072 (Bits.of_int 17 5) && 
-          Bitops.eq arg3073 (Bits.of_int 0 1) && Bitops.eq arg3074 
-            (Bits.of_int 7 32) && Bitops.eq arg3069 (Bits.of_int 18 5) && 
-          Bitops.eq arg3070 (Bits.of_int 0 1) && Bitops.eq arg3071 
-            (Bits.of_int 6 32) && Bitops.eq arg3066 (Bits.of_int 19 5) && 
-          Bitops.eq arg3067 (Bits.of_int 0 1) && Bitops.eq arg3068 
-            (Bits.of_int 5 32) && Bitops.eq arg3063 (Bits.of_int 20 5) && 
-          Bitops.eq arg3064 (Bits.of_int 0 1) && Bitops.eq arg3065 
-            (Bits.of_int 4 32) && Bitops.eq arg3060 (Bits.of_int 21 5) && 
-          Bitops.eq arg3061 (Bits.of_int 0 1) && Bitops.eq arg3062 
-            (Bits.of_int 3 32) && Bitops.eq arg3057 (Bits.of_int 23 5) && 
-          Bitops.eq arg3058 (Bits.of_int 0 1) && Bitops.eq arg3059 
-            (Bits.of_int 1 32) && Bitops.eq arg3054 (Bits.of_int 24 5) && 
-          Bitops.eq arg3055 (Bits.of_int 0 1) && Bitops.eq arg3056 
-            (Bits.of_int 16 32) && Bitops.eq arg3051 (Bits.of_int 25 5) && 
-          Bitops.eq arg3052 (Bits.of_int 0 1) && Bitops.eq arg3053 
-            (Bits.of_int 15 32) && Bitops.eq arg3048 (Bits.of_int 26 5) && 
-          Bitops.eq arg3049 (Bits.of_int 0 1) && Bitops.eq arg3050 
-            (Bits.of_int 14 32) && Bitops.eq arg3045 (Bits.of_int 27 5) && 
-          Bitops.eq arg3046 (Bits.of_int 0 1) && Bitops.eq arg3047 
-            (Bits.of_int 13 32) && Bitops.eq arg3042 (Bits.of_int 28 5) && 
-          Bitops.eq arg3043 (Bits.of_int 0 1) && Bitops.eq arg3044 
-            (Bits.of_int 12 32) && Bitops.eq arg3039 (Bits.of_int 29 5) && 
-          Bitops.eq arg3040 (Bits.of_int 0 1) && Bitops.eq arg3041 
-            (Bits.of_int 11 32) && Bitops.eq arg3036 (Bits.of_int 30 5) && 
-          Bitops.eq arg3037 (Bits.of_int 0 1) && Bitops.eq arg3038 
-            (Bits.of_int 10 32) && Bitops.eq arg3033 (Bits.of_int 31 5) && 
-          Bitops.eq arg3034 (Bits.of_int 0 1) && Bitops.eq arg3035 
-            (Bits.of_int 9 32) && Bitops.eq arg3030 (Bits.of_int 0 1) && 
-          Bitops.eq arg3031 (Bits.of_int 0 1) && Bitops.eq arg3032 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 22 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg3029)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg3093 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3090 (Bits.U.of_int 9 5) && Bitops.eq arg3091 
+            (Bits.U.of_int 25 5) && Bitops.eq arg3088 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg3089 (Bits.U.of_int 26 5) && Bitops.eq arg3086 
+            (Bits.U.of_int 11 5) && Bitops.eq arg3087 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3084 (Bits.U.of_int 12 5) && Bitops.eq arg3085 
+            (Bits.U.of_int 28 5) && Bitops.eq arg3082 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg3083 (Bits.U.of_int 29 5) && Bitops.eq arg3080 
+            (Bits.U.of_int 14 5) && Bitops.eq arg3081 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg3078 (Bits.U.of_int 15 5) && Bitops.eq arg3079 
+            (Bits.U.of_int 31 5) && Bitops.eq arg3075 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg3076 (Bits.U.of_int 0 1) && Bitops.eq arg3077 
+            (Bits.U.of_int 8 32) && Bitops.eq arg3072 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg3073 (Bits.U.of_int 0 1) && Bitops.eq arg3074 
+            (Bits.U.of_int 7 32) && Bitops.eq arg3069 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg3070 (Bits.U.of_int 0 1) && Bitops.eq arg3071 
+            (Bits.U.of_int 6 32) && Bitops.eq arg3066 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg3067 (Bits.U.of_int 0 1) && Bitops.eq arg3068 
+            (Bits.U.of_int 5 32) && Bitops.eq arg3063 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg3064 (Bits.U.of_int 0 1) && Bitops.eq arg3065 
+            (Bits.U.of_int 4 32) && Bitops.eq arg3060 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg3061 (Bits.U.of_int 0 1) && Bitops.eq arg3062 
+            (Bits.U.of_int 3 32) && Bitops.eq arg3057 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg3058 (Bits.U.of_int 0 1) && Bitops.eq arg3059 
+            (Bits.U.of_int 1 32) && Bitops.eq arg3054 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3055 (Bits.U.of_int 0 1) && Bitops.eq arg3056 
+            (Bits.U.of_int 16 32) && Bitops.eq arg3051 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg3052 (Bits.U.of_int 0 1) && Bitops.eq arg3053 
+            (Bits.U.of_int 15 32) && Bitops.eq arg3048 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg3049 (Bits.U.of_int 0 1) && Bitops.eq arg3050 
+            (Bits.U.of_int 14 32) && Bitops.eq arg3045 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3046 (Bits.U.of_int 0 1) && Bitops.eq arg3047 
+            (Bits.U.of_int 13 32) && Bitops.eq arg3042 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg3043 (Bits.U.of_int 0 1) && Bitops.eq arg3044 
+            (Bits.U.of_int 12 32) && Bitops.eq arg3039 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg3040 (Bits.U.of_int 0 1) && Bitops.eq arg3041 
+            (Bits.U.of_int 11 32) && Bitops.eq arg3036 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg3037 (Bits.U.of_int 0 1) && Bitops.eq arg3038 
+            (Bits.U.of_int 10 32) && Bitops.eq arg3033 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg3034 (Bits.U.of_int 0 1) && Bitops.eq arg3035 
+            (Bits.U.of_int 9 32) && Bitops.eq arg3030 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg3031 (Bits.U.of_int 0 1) && Bitops.eq arg3032 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 22 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg3029)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg3157), _), RP.Fetch (RP.Cell ('r', 
@@ -9592,51 +9592,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg3094)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg3094 13 && Bitops.eq arg3157 
-            (Bits.of_int 8 5) && Bitops.eq arg3158 (Bits.of_int 24 5) && 
-          Bitops.eq arg3155 (Bits.of_int 9 5) && Bitops.eq arg3156 
-            (Bits.of_int 25 5) && Bitops.eq arg3153 (Bits.of_int 10 5) && 
-          Bitops.eq arg3154 (Bits.of_int 26 5) && Bitops.eq arg3151 
-            (Bits.of_int 11 5) && Bitops.eq arg3152 (Bits.of_int 27 5) && 
-          Bitops.eq arg3149 (Bits.of_int 12 5) && Bitops.eq arg3150 
-            (Bits.of_int 28 5) && Bitops.eq arg3147 (Bits.of_int 13 5) && 
-          Bitops.eq arg3148 (Bits.of_int 29 5) && Bitops.eq arg3145 
-            (Bits.of_int 14 5) && Bitops.eq arg3146 (Bits.of_int 30 5) && 
-          Bitops.eq arg3143 (Bits.of_int 15 5) && Bitops.eq arg3144 
-            (Bits.of_int 31 5) && Bitops.eq arg3140 (Bits.of_int 16 5) && 
-          Bitops.eq arg3141 (Bits.of_int 0 1) && Bitops.eq arg3142 
-            (Bits.of_int 8 32) && Bitops.eq arg3137 (Bits.of_int 17 5) && 
-          Bitops.eq arg3138 (Bits.of_int 0 1) && Bitops.eq arg3139 
-            (Bits.of_int 7 32) && Bitops.eq arg3134 (Bits.of_int 18 5) && 
-          Bitops.eq arg3135 (Bits.of_int 0 1) && Bitops.eq arg3136 
-            (Bits.of_int 6 32) && Bitops.eq arg3131 (Bits.of_int 19 5) && 
-          Bitops.eq arg3132 (Bits.of_int 0 1) && Bitops.eq arg3133 
-            (Bits.of_int 5 32) && Bitops.eq arg3128 (Bits.of_int 20 5) && 
-          Bitops.eq arg3129 (Bits.of_int 0 1) && Bitops.eq arg3130 
-            (Bits.of_int 4 32) && Bitops.eq arg3125 (Bits.of_int 22 5) && 
-          Bitops.eq arg3126 (Bits.of_int 0 1) && Bitops.eq arg3127 
-            (Bits.of_int 2 32) && Bitops.eq arg3122 (Bits.of_int 23 5) && 
-          Bitops.eq arg3123 (Bits.of_int 0 1) && Bitops.eq arg3124 
-            (Bits.of_int 1 32) && Bitops.eq arg3119 (Bits.of_int 24 5) && 
-          Bitops.eq arg3120 (Bits.of_int 0 1) && Bitops.eq arg3121 
-            (Bits.of_int 16 32) && Bitops.eq arg3116 (Bits.of_int 25 5) && 
-          Bitops.eq arg3117 (Bits.of_int 0 1) && Bitops.eq arg3118 
-            (Bits.of_int 15 32) && Bitops.eq arg3113 (Bits.of_int 26 5) && 
-          Bitops.eq arg3114 (Bits.of_int 0 1) && Bitops.eq arg3115 
-            (Bits.of_int 14 32) && Bitops.eq arg3110 (Bits.of_int 27 5) && 
-          Bitops.eq arg3111 (Bits.of_int 0 1) && Bitops.eq arg3112 
-            (Bits.of_int 13 32) && Bitops.eq arg3107 (Bits.of_int 28 5) && 
-          Bitops.eq arg3108 (Bits.of_int 0 1) && Bitops.eq arg3109 
-            (Bits.of_int 12 32) && Bitops.eq arg3104 (Bits.of_int 29 5) && 
-          Bitops.eq arg3105 (Bits.of_int 0 1) && Bitops.eq arg3106 
-            (Bits.of_int 11 32) && Bitops.eq arg3101 (Bits.of_int 30 5) && 
-          Bitops.eq arg3102 (Bits.of_int 0 1) && Bitops.eq arg3103 
-            (Bits.of_int 10 32) && Bitops.eq arg3098 (Bits.of_int 31 5) && 
-          Bitops.eq arg3099 (Bits.of_int 0 1) && Bitops.eq arg3100 
-            (Bits.of_int 9 32) && Bitops.eq arg3095 (Bits.of_int 0 1) && 
-          Bitops.eq arg3096 (Bits.of_int 0 1) && Bitops.eq arg3097 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 21 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg3094)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg3158 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3155 (Bits.U.of_int 9 5) && Bitops.eq arg3156 
+            (Bits.U.of_int 25 5) && Bitops.eq arg3153 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg3154 (Bits.U.of_int 26 5) && Bitops.eq arg3151 
+            (Bits.U.of_int 11 5) && Bitops.eq arg3152 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3149 (Bits.U.of_int 12 5) && Bitops.eq arg3150 
+            (Bits.U.of_int 28 5) && Bitops.eq arg3147 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg3148 (Bits.U.of_int 29 5) && Bitops.eq arg3145 
+            (Bits.U.of_int 14 5) && Bitops.eq arg3146 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg3143 (Bits.U.of_int 15 5) && Bitops.eq arg3144 
+            (Bits.U.of_int 31 5) && Bitops.eq arg3140 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg3141 (Bits.U.of_int 0 1) && Bitops.eq arg3142 
+            (Bits.U.of_int 8 32) && Bitops.eq arg3137 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg3138 (Bits.U.of_int 0 1) && Bitops.eq arg3139 
+            (Bits.U.of_int 7 32) && Bitops.eq arg3134 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg3135 (Bits.U.of_int 0 1) && Bitops.eq arg3136 
+            (Bits.U.of_int 6 32) && Bitops.eq arg3131 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg3132 (Bits.U.of_int 0 1) && Bitops.eq arg3133 
+            (Bits.U.of_int 5 32) && Bitops.eq arg3128 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg3129 (Bits.U.of_int 0 1) && Bitops.eq arg3130 
+            (Bits.U.of_int 4 32) && Bitops.eq arg3125 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg3126 (Bits.U.of_int 0 1) && Bitops.eq arg3127 
+            (Bits.U.of_int 2 32) && Bitops.eq arg3122 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg3123 (Bits.U.of_int 0 1) && Bitops.eq arg3124 
+            (Bits.U.of_int 1 32) && Bitops.eq arg3119 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3120 (Bits.U.of_int 0 1) && Bitops.eq arg3121 
+            (Bits.U.of_int 16 32) && Bitops.eq arg3116 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg3117 (Bits.U.of_int 0 1) && Bitops.eq arg3118 
+            (Bits.U.of_int 15 32) && Bitops.eq arg3113 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg3114 (Bits.U.of_int 0 1) && Bitops.eq arg3115 
+            (Bits.U.of_int 14 32) && Bitops.eq arg3110 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3111 (Bits.U.of_int 0 1) && Bitops.eq arg3112 
+            (Bits.U.of_int 13 32) && Bitops.eq arg3107 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg3108 (Bits.U.of_int 0 1) && Bitops.eq arg3109 
+            (Bits.U.of_int 12 32) && Bitops.eq arg3104 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg3105 (Bits.U.of_int 0 1) && Bitops.eq arg3106 
+            (Bits.U.of_int 11 32) && Bitops.eq arg3101 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg3102 (Bits.U.of_int 0 1) && Bitops.eq arg3103 
+            (Bits.U.of_int 10 32) && Bitops.eq arg3098 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg3099 (Bits.U.of_int 0 1) && Bitops.eq arg3100 
+            (Bits.U.of_int 9 32) && Bitops.eq arg3095 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg3096 (Bits.U.of_int 0 1) && Bitops.eq arg3097 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 21 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg3094)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg3222), _), RP.Fetch (RP.Cell ('r', 
@@ -9762,51 +9762,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg3159)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg3159 13 && Bitops.eq arg3222 
-            (Bits.of_int 8 5) && Bitops.eq arg3223 (Bits.of_int 24 5) && 
-          Bitops.eq arg3220 (Bits.of_int 9 5) && Bitops.eq arg3221 
-            (Bits.of_int 25 5) && Bitops.eq arg3218 (Bits.of_int 10 5) && 
-          Bitops.eq arg3219 (Bits.of_int 26 5) && Bitops.eq arg3216 
-            (Bits.of_int 11 5) && Bitops.eq arg3217 (Bits.of_int 27 5) && 
-          Bitops.eq arg3214 (Bits.of_int 12 5) && Bitops.eq arg3215 
-            (Bits.of_int 28 5) && Bitops.eq arg3212 (Bits.of_int 13 5) && 
-          Bitops.eq arg3213 (Bits.of_int 29 5) && Bitops.eq arg3210 
-            (Bits.of_int 14 5) && Bitops.eq arg3211 (Bits.of_int 30 5) && 
-          Bitops.eq arg3208 (Bits.of_int 15 5) && Bitops.eq arg3209 
-            (Bits.of_int 31 5) && Bitops.eq arg3205 (Bits.of_int 16 5) && 
-          Bitops.eq arg3206 (Bits.of_int 0 1) && Bitops.eq arg3207 
-            (Bits.of_int 8 32) && Bitops.eq arg3202 (Bits.of_int 17 5) && 
-          Bitops.eq arg3203 (Bits.of_int 0 1) && Bitops.eq arg3204 
-            (Bits.of_int 7 32) && Bitops.eq arg3199 (Bits.of_int 18 5) && 
-          Bitops.eq arg3200 (Bits.of_int 0 1) && Bitops.eq arg3201 
-            (Bits.of_int 6 32) && Bitops.eq arg3196 (Bits.of_int 19 5) && 
-          Bitops.eq arg3197 (Bits.of_int 0 1) && Bitops.eq arg3198 
-            (Bits.of_int 5 32) && Bitops.eq arg3193 (Bits.of_int 21 5) && 
-          Bitops.eq arg3194 (Bits.of_int 0 1) && Bitops.eq arg3195 
-            (Bits.of_int 3 32) && Bitops.eq arg3190 (Bits.of_int 22 5) && 
-          Bitops.eq arg3191 (Bits.of_int 0 1) && Bitops.eq arg3192 
-            (Bits.of_int 2 32) && Bitops.eq arg3187 (Bits.of_int 23 5) && 
-          Bitops.eq arg3188 (Bits.of_int 0 1) && Bitops.eq arg3189 
-            (Bits.of_int 1 32) && Bitops.eq arg3184 (Bits.of_int 24 5) && 
-          Bitops.eq arg3185 (Bits.of_int 0 1) && Bitops.eq arg3186 
-            (Bits.of_int 16 32) && Bitops.eq arg3181 (Bits.of_int 25 5) && 
-          Bitops.eq arg3182 (Bits.of_int 0 1) && Bitops.eq arg3183 
-            (Bits.of_int 15 32) && Bitops.eq arg3178 (Bits.of_int 26 5) && 
-          Bitops.eq arg3179 (Bits.of_int 0 1) && Bitops.eq arg3180 
-            (Bits.of_int 14 32) && Bitops.eq arg3175 (Bits.of_int 27 5) && 
-          Bitops.eq arg3176 (Bits.of_int 0 1) && Bitops.eq arg3177 
-            (Bits.of_int 13 32) && Bitops.eq arg3172 (Bits.of_int 28 5) && 
-          Bitops.eq arg3173 (Bits.of_int 0 1) && Bitops.eq arg3174 
-            (Bits.of_int 12 32) && Bitops.eq arg3169 (Bits.of_int 29 5) && 
-          Bitops.eq arg3170 (Bits.of_int 0 1) && Bitops.eq arg3171 
-            (Bits.of_int 11 32) && Bitops.eq arg3166 (Bits.of_int 30 5) && 
-          Bitops.eq arg3167 (Bits.of_int 0 1) && Bitops.eq arg3168 
-            (Bits.of_int 10 32) && Bitops.eq arg3163 (Bits.of_int 31 5) && 
-          Bitops.eq arg3164 (Bits.of_int 0 1) && Bitops.eq arg3165 
-            (Bits.of_int 9 32) && Bitops.eq arg3160 (Bits.of_int 0 1) && 
-          Bitops.eq arg3161 (Bits.of_int 0 1) && Bitops.eq arg3162 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 20 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg3159)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg3223 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3220 (Bits.U.of_int 9 5) && Bitops.eq arg3221 
+            (Bits.U.of_int 25 5) && Bitops.eq arg3218 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg3219 (Bits.U.of_int 26 5) && Bitops.eq arg3216 
+            (Bits.U.of_int 11 5) && Bitops.eq arg3217 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3214 (Bits.U.of_int 12 5) && Bitops.eq arg3215 
+            (Bits.U.of_int 28 5) && Bitops.eq arg3212 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg3213 (Bits.U.of_int 29 5) && Bitops.eq arg3210 
+            (Bits.U.of_int 14 5) && Bitops.eq arg3211 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg3208 (Bits.U.of_int 15 5) && Bitops.eq arg3209 
+            (Bits.U.of_int 31 5) && Bitops.eq arg3205 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg3206 (Bits.U.of_int 0 1) && Bitops.eq arg3207 
+            (Bits.U.of_int 8 32) && Bitops.eq arg3202 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg3203 (Bits.U.of_int 0 1) && Bitops.eq arg3204 
+            (Bits.U.of_int 7 32) && Bitops.eq arg3199 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg3200 (Bits.U.of_int 0 1) && Bitops.eq arg3201 
+            (Bits.U.of_int 6 32) && Bitops.eq arg3196 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg3197 (Bits.U.of_int 0 1) && Bitops.eq arg3198 
+            (Bits.U.of_int 5 32) && Bitops.eq arg3193 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg3194 (Bits.U.of_int 0 1) && Bitops.eq arg3195 
+            (Bits.U.of_int 3 32) && Bitops.eq arg3190 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg3191 (Bits.U.of_int 0 1) && Bitops.eq arg3192 
+            (Bits.U.of_int 2 32) && Bitops.eq arg3187 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg3188 (Bits.U.of_int 0 1) && Bitops.eq arg3189 
+            (Bits.U.of_int 1 32) && Bitops.eq arg3184 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3185 (Bits.U.of_int 0 1) && Bitops.eq arg3186 
+            (Bits.U.of_int 16 32) && Bitops.eq arg3181 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg3182 (Bits.U.of_int 0 1) && Bitops.eq arg3183 
+            (Bits.U.of_int 15 32) && Bitops.eq arg3178 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg3179 (Bits.U.of_int 0 1) && Bitops.eq arg3180 
+            (Bits.U.of_int 14 32) && Bitops.eq arg3175 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3176 (Bits.U.of_int 0 1) && Bitops.eq arg3177 
+            (Bits.U.of_int 13 32) && Bitops.eq arg3172 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg3173 (Bits.U.of_int 0 1) && Bitops.eq arg3174 
+            (Bits.U.of_int 12 32) && Bitops.eq arg3169 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg3170 (Bits.U.of_int 0 1) && Bitops.eq arg3171 
+            (Bits.U.of_int 11 32) && Bitops.eq arg3166 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg3167 (Bits.U.of_int 0 1) && Bitops.eq arg3168 
+            (Bits.U.of_int 10 32) && Bitops.eq arg3163 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg3164 (Bits.U.of_int 0 1) && Bitops.eq arg3165 
+            (Bits.U.of_int 9 32) && Bitops.eq arg3160 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg3161 (Bits.U.of_int 0 1) && Bitops.eq arg3162 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 20 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg3159)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg3287), _), RP.Fetch (RP.Cell ('r', 
@@ -9932,51 +9932,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg3224)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg3224 13 && Bitops.eq arg3287 
-            (Bits.of_int 8 5) && Bitops.eq arg3288 (Bits.of_int 24 5) && 
-          Bitops.eq arg3285 (Bits.of_int 9 5) && Bitops.eq arg3286 
-            (Bits.of_int 25 5) && Bitops.eq arg3283 (Bits.of_int 10 5) && 
-          Bitops.eq arg3284 (Bits.of_int 26 5) && Bitops.eq arg3281 
-            (Bits.of_int 11 5) && Bitops.eq arg3282 (Bits.of_int 27 5) && 
-          Bitops.eq arg3279 (Bits.of_int 12 5) && Bitops.eq arg3280 
-            (Bits.of_int 28 5) && Bitops.eq arg3277 (Bits.of_int 13 5) && 
-          Bitops.eq arg3278 (Bits.of_int 29 5) && Bitops.eq arg3275 
-            (Bits.of_int 14 5) && Bitops.eq arg3276 (Bits.of_int 30 5) && 
-          Bitops.eq arg3273 (Bits.of_int 15 5) && Bitops.eq arg3274 
-            (Bits.of_int 31 5) && Bitops.eq arg3270 (Bits.of_int 16 5) && 
-          Bitops.eq arg3271 (Bits.of_int 0 1) && Bitops.eq arg3272 
-            (Bits.of_int 8 32) && Bitops.eq arg3267 (Bits.of_int 17 5) && 
-          Bitops.eq arg3268 (Bits.of_int 0 1) && Bitops.eq arg3269 
-            (Bits.of_int 7 32) && Bitops.eq arg3264 (Bits.of_int 18 5) && 
-          Bitops.eq arg3265 (Bits.of_int 0 1) && Bitops.eq arg3266 
-            (Bits.of_int 6 32) && Bitops.eq arg3261 (Bits.of_int 20 5) && 
-          Bitops.eq arg3262 (Bits.of_int 0 1) && Bitops.eq arg3263 
-            (Bits.of_int 4 32) && Bitops.eq arg3258 (Bits.of_int 21 5) && 
-          Bitops.eq arg3259 (Bits.of_int 0 1) && Bitops.eq arg3260 
-            (Bits.of_int 3 32) && Bitops.eq arg3255 (Bits.of_int 22 5) && 
-          Bitops.eq arg3256 (Bits.of_int 0 1) && Bitops.eq arg3257 
-            (Bits.of_int 2 32) && Bitops.eq arg3252 (Bits.of_int 23 5) && 
-          Bitops.eq arg3253 (Bits.of_int 0 1) && Bitops.eq arg3254 
-            (Bits.of_int 1 32) && Bitops.eq arg3249 (Bits.of_int 24 5) && 
-          Bitops.eq arg3250 (Bits.of_int 0 1) && Bitops.eq arg3251 
-            (Bits.of_int 16 32) && Bitops.eq arg3246 (Bits.of_int 25 5) && 
-          Bitops.eq arg3247 (Bits.of_int 0 1) && Bitops.eq arg3248 
-            (Bits.of_int 15 32) && Bitops.eq arg3243 (Bits.of_int 26 5) && 
-          Bitops.eq arg3244 (Bits.of_int 0 1) && Bitops.eq arg3245 
-            (Bits.of_int 14 32) && Bitops.eq arg3240 (Bits.of_int 27 5) && 
-          Bitops.eq arg3241 (Bits.of_int 0 1) && Bitops.eq arg3242 
-            (Bits.of_int 13 32) && Bitops.eq arg3237 (Bits.of_int 28 5) && 
-          Bitops.eq arg3238 (Bits.of_int 0 1) && Bitops.eq arg3239 
-            (Bits.of_int 12 32) && Bitops.eq arg3234 (Bits.of_int 29 5) && 
-          Bitops.eq arg3235 (Bits.of_int 0 1) && Bitops.eq arg3236 
-            (Bits.of_int 11 32) && Bitops.eq arg3231 (Bits.of_int 30 5) && 
-          Bitops.eq arg3232 (Bits.of_int 0 1) && Bitops.eq arg3233 
-            (Bits.of_int 10 32) && Bitops.eq arg3228 (Bits.of_int 31 5) && 
-          Bitops.eq arg3229 (Bits.of_int 0 1) && Bitops.eq arg3230 
-            (Bits.of_int 9 32) && Bitops.eq arg3225 (Bits.of_int 0 1) && 
-          Bitops.eq arg3226 (Bits.of_int 0 1) && Bitops.eq arg3227 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 19 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg3224)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg3288 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3285 (Bits.U.of_int 9 5) && Bitops.eq arg3286 
+            (Bits.U.of_int 25 5) && Bitops.eq arg3283 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg3284 (Bits.U.of_int 26 5) && Bitops.eq arg3281 
+            (Bits.U.of_int 11 5) && Bitops.eq arg3282 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3279 (Bits.U.of_int 12 5) && Bitops.eq arg3280 
+            (Bits.U.of_int 28 5) && Bitops.eq arg3277 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg3278 (Bits.U.of_int 29 5) && Bitops.eq arg3275 
+            (Bits.U.of_int 14 5) && Bitops.eq arg3276 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg3273 (Bits.U.of_int 15 5) && Bitops.eq arg3274 
+            (Bits.U.of_int 31 5) && Bitops.eq arg3270 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg3271 (Bits.U.of_int 0 1) && Bitops.eq arg3272 
+            (Bits.U.of_int 8 32) && Bitops.eq arg3267 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg3268 (Bits.U.of_int 0 1) && Bitops.eq arg3269 
+            (Bits.U.of_int 7 32) && Bitops.eq arg3264 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg3265 (Bits.U.of_int 0 1) && Bitops.eq arg3266 
+            (Bits.U.of_int 6 32) && Bitops.eq arg3261 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg3262 (Bits.U.of_int 0 1) && Bitops.eq arg3263 
+            (Bits.U.of_int 4 32) && Bitops.eq arg3258 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg3259 (Bits.U.of_int 0 1) && Bitops.eq arg3260 
+            (Bits.U.of_int 3 32) && Bitops.eq arg3255 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg3256 (Bits.U.of_int 0 1) && Bitops.eq arg3257 
+            (Bits.U.of_int 2 32) && Bitops.eq arg3252 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg3253 (Bits.U.of_int 0 1) && Bitops.eq arg3254 
+            (Bits.U.of_int 1 32) && Bitops.eq arg3249 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3250 (Bits.U.of_int 0 1) && Bitops.eq arg3251 
+            (Bits.U.of_int 16 32) && Bitops.eq arg3246 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg3247 (Bits.U.of_int 0 1) && Bitops.eq arg3248 
+            (Bits.U.of_int 15 32) && Bitops.eq arg3243 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg3244 (Bits.U.of_int 0 1) && Bitops.eq arg3245 
+            (Bits.U.of_int 14 32) && Bitops.eq arg3240 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3241 (Bits.U.of_int 0 1) && Bitops.eq arg3242 
+            (Bits.U.of_int 13 32) && Bitops.eq arg3237 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg3238 (Bits.U.of_int 0 1) && Bitops.eq arg3239 
+            (Bits.U.of_int 12 32) && Bitops.eq arg3234 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg3235 (Bits.U.of_int 0 1) && Bitops.eq arg3236 
+            (Bits.U.of_int 11 32) && Bitops.eq arg3231 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg3232 (Bits.U.of_int 0 1) && Bitops.eq arg3233 
+            (Bits.U.of_int 10 32) && Bitops.eq arg3228 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg3229 (Bits.U.of_int 0 1) && Bitops.eq arg3230 
+            (Bits.U.of_int 9 32) && Bitops.eq arg3225 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg3226 (Bits.U.of_int 0 1) && Bitops.eq arg3227 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 19 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg3224)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg3352), _), RP.Fetch (RP.Cell ('r', 
@@ -10102,51 +10102,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg3289)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg3289 13 && Bitops.eq arg3352 
-            (Bits.of_int 8 5) && Bitops.eq arg3353 (Bits.of_int 24 5) && 
-          Bitops.eq arg3350 (Bits.of_int 9 5) && Bitops.eq arg3351 
-            (Bits.of_int 25 5) && Bitops.eq arg3348 (Bits.of_int 10 5) && 
-          Bitops.eq arg3349 (Bits.of_int 26 5) && Bitops.eq arg3346 
-            (Bits.of_int 11 5) && Bitops.eq arg3347 (Bits.of_int 27 5) && 
-          Bitops.eq arg3344 (Bits.of_int 12 5) && Bitops.eq arg3345 
-            (Bits.of_int 28 5) && Bitops.eq arg3342 (Bits.of_int 13 5) && 
-          Bitops.eq arg3343 (Bits.of_int 29 5) && Bitops.eq arg3340 
-            (Bits.of_int 14 5) && Bitops.eq arg3341 (Bits.of_int 30 5) && 
-          Bitops.eq arg3338 (Bits.of_int 15 5) && Bitops.eq arg3339 
-            (Bits.of_int 31 5) && Bitops.eq arg3335 (Bits.of_int 16 5) && 
-          Bitops.eq arg3336 (Bits.of_int 0 1) && Bitops.eq arg3337 
-            (Bits.of_int 8 32) && Bitops.eq arg3332 (Bits.of_int 17 5) && 
-          Bitops.eq arg3333 (Bits.of_int 0 1) && Bitops.eq arg3334 
-            (Bits.of_int 7 32) && Bitops.eq arg3329 (Bits.of_int 19 5) && 
-          Bitops.eq arg3330 (Bits.of_int 0 1) && Bitops.eq arg3331 
-            (Bits.of_int 5 32) && Bitops.eq arg3326 (Bits.of_int 20 5) && 
-          Bitops.eq arg3327 (Bits.of_int 0 1) && Bitops.eq arg3328 
-            (Bits.of_int 4 32) && Bitops.eq arg3323 (Bits.of_int 21 5) && 
-          Bitops.eq arg3324 (Bits.of_int 0 1) && Bitops.eq arg3325 
-            (Bits.of_int 3 32) && Bitops.eq arg3320 (Bits.of_int 22 5) && 
-          Bitops.eq arg3321 (Bits.of_int 0 1) && Bitops.eq arg3322 
-            (Bits.of_int 2 32) && Bitops.eq arg3317 (Bits.of_int 23 5) && 
-          Bitops.eq arg3318 (Bits.of_int 0 1) && Bitops.eq arg3319 
-            (Bits.of_int 1 32) && Bitops.eq arg3314 (Bits.of_int 24 5) && 
-          Bitops.eq arg3315 (Bits.of_int 0 1) && Bitops.eq arg3316 
-            (Bits.of_int 16 32) && Bitops.eq arg3311 (Bits.of_int 25 5) && 
-          Bitops.eq arg3312 (Bits.of_int 0 1) && Bitops.eq arg3313 
-            (Bits.of_int 15 32) && Bitops.eq arg3308 (Bits.of_int 26 5) && 
-          Bitops.eq arg3309 (Bits.of_int 0 1) && Bitops.eq arg3310 
-            (Bits.of_int 14 32) && Bitops.eq arg3305 (Bits.of_int 27 5) && 
-          Bitops.eq arg3306 (Bits.of_int 0 1) && Bitops.eq arg3307 
-            (Bits.of_int 13 32) && Bitops.eq arg3302 (Bits.of_int 28 5) && 
-          Bitops.eq arg3303 (Bits.of_int 0 1) && Bitops.eq arg3304 
-            (Bits.of_int 12 32) && Bitops.eq arg3299 (Bits.of_int 29 5) && 
-          Bitops.eq arg3300 (Bits.of_int 0 1) && Bitops.eq arg3301 
-            (Bits.of_int 11 32) && Bitops.eq arg3296 (Bits.of_int 30 5) && 
-          Bitops.eq arg3297 (Bits.of_int 0 1) && Bitops.eq arg3298 
-            (Bits.of_int 10 32) && Bitops.eq arg3293 (Bits.of_int 31 5) && 
-          Bitops.eq arg3294 (Bits.of_int 0 1) && Bitops.eq arg3295 
-            (Bits.of_int 9 32) && Bitops.eq arg3290 (Bits.of_int 0 1) && 
-          Bitops.eq arg3291 (Bits.of_int 0 1) && Bitops.eq arg3292 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 18 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg3289)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg3353 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3350 (Bits.U.of_int 9 5) && Bitops.eq arg3351 
+            (Bits.U.of_int 25 5) && Bitops.eq arg3348 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg3349 (Bits.U.of_int 26 5) && Bitops.eq arg3346 
+            (Bits.U.of_int 11 5) && Bitops.eq arg3347 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3344 (Bits.U.of_int 12 5) && Bitops.eq arg3345 
+            (Bits.U.of_int 28 5) && Bitops.eq arg3342 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg3343 (Bits.U.of_int 29 5) && Bitops.eq arg3340 
+            (Bits.U.of_int 14 5) && Bitops.eq arg3341 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg3338 (Bits.U.of_int 15 5) && Bitops.eq arg3339 
+            (Bits.U.of_int 31 5) && Bitops.eq arg3335 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg3336 (Bits.U.of_int 0 1) && Bitops.eq arg3337 
+            (Bits.U.of_int 8 32) && Bitops.eq arg3332 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg3333 (Bits.U.of_int 0 1) && Bitops.eq arg3334 
+            (Bits.U.of_int 7 32) && Bitops.eq arg3329 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg3330 (Bits.U.of_int 0 1) && Bitops.eq arg3331 
+            (Bits.U.of_int 5 32) && Bitops.eq arg3326 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg3327 (Bits.U.of_int 0 1) && Bitops.eq arg3328 
+            (Bits.U.of_int 4 32) && Bitops.eq arg3323 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg3324 (Bits.U.of_int 0 1) && Bitops.eq arg3325 
+            (Bits.U.of_int 3 32) && Bitops.eq arg3320 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg3321 (Bits.U.of_int 0 1) && Bitops.eq arg3322 
+            (Bits.U.of_int 2 32) && Bitops.eq arg3317 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg3318 (Bits.U.of_int 0 1) && Bitops.eq arg3319 
+            (Bits.U.of_int 1 32) && Bitops.eq arg3314 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3315 (Bits.U.of_int 0 1) && Bitops.eq arg3316 
+            (Bits.U.of_int 16 32) && Bitops.eq arg3311 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg3312 (Bits.U.of_int 0 1) && Bitops.eq arg3313 
+            (Bits.U.of_int 15 32) && Bitops.eq arg3308 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg3309 (Bits.U.of_int 0 1) && Bitops.eq arg3310 
+            (Bits.U.of_int 14 32) && Bitops.eq arg3305 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3306 (Bits.U.of_int 0 1) && Bitops.eq arg3307 
+            (Bits.U.of_int 13 32) && Bitops.eq arg3302 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg3303 (Bits.U.of_int 0 1) && Bitops.eq arg3304 
+            (Bits.U.of_int 12 32) && Bitops.eq arg3299 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg3300 (Bits.U.of_int 0 1) && Bitops.eq arg3301 
+            (Bits.U.of_int 11 32) && Bitops.eq arg3296 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg3297 (Bits.U.of_int 0 1) && Bitops.eq arg3298 
+            (Bits.U.of_int 10 32) && Bitops.eq arg3293 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg3294 (Bits.U.of_int 0 1) && Bitops.eq arg3295 
+            (Bits.U.of_int 9 32) && Bitops.eq arg3290 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg3291 (Bits.U.of_int 0 1) && Bitops.eq arg3292 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 18 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg3289)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg3417), _), RP.Fetch (RP.Cell ('r', 
@@ -10272,51 +10272,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg3354)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg3354 13 && Bitops.eq arg3417 
-            (Bits.of_int 8 5) && Bitops.eq arg3418 (Bits.of_int 24 5) && 
-          Bitops.eq arg3415 (Bits.of_int 9 5) && Bitops.eq arg3416 
-            (Bits.of_int 25 5) && Bitops.eq arg3413 (Bits.of_int 10 5) && 
-          Bitops.eq arg3414 (Bits.of_int 26 5) && Bitops.eq arg3411 
-            (Bits.of_int 11 5) && Bitops.eq arg3412 (Bits.of_int 27 5) && 
-          Bitops.eq arg3409 (Bits.of_int 12 5) && Bitops.eq arg3410 
-            (Bits.of_int 28 5) && Bitops.eq arg3407 (Bits.of_int 13 5) && 
-          Bitops.eq arg3408 (Bits.of_int 29 5) && Bitops.eq arg3405 
-            (Bits.of_int 14 5) && Bitops.eq arg3406 (Bits.of_int 30 5) && 
-          Bitops.eq arg3403 (Bits.of_int 15 5) && Bitops.eq arg3404 
-            (Bits.of_int 31 5) && Bitops.eq arg3400 (Bits.of_int 16 5) && 
-          Bitops.eq arg3401 (Bits.of_int 0 1) && Bitops.eq arg3402 
-            (Bits.of_int 8 32) && Bitops.eq arg3397 (Bits.of_int 18 5) && 
-          Bitops.eq arg3398 (Bits.of_int 0 1) && Bitops.eq arg3399 
-            (Bits.of_int 6 32) && Bitops.eq arg3394 (Bits.of_int 19 5) && 
-          Bitops.eq arg3395 (Bits.of_int 0 1) && Bitops.eq arg3396 
-            (Bits.of_int 5 32) && Bitops.eq arg3391 (Bits.of_int 20 5) && 
-          Bitops.eq arg3392 (Bits.of_int 0 1) && Bitops.eq arg3393 
-            (Bits.of_int 4 32) && Bitops.eq arg3388 (Bits.of_int 21 5) && 
-          Bitops.eq arg3389 (Bits.of_int 0 1) && Bitops.eq arg3390 
-            (Bits.of_int 3 32) && Bitops.eq arg3385 (Bits.of_int 22 5) && 
-          Bitops.eq arg3386 (Bits.of_int 0 1) && Bitops.eq arg3387 
-            (Bits.of_int 2 32) && Bitops.eq arg3382 (Bits.of_int 23 5) && 
-          Bitops.eq arg3383 (Bits.of_int 0 1) && Bitops.eq arg3384 
-            (Bits.of_int 1 32) && Bitops.eq arg3379 (Bits.of_int 24 5) && 
-          Bitops.eq arg3380 (Bits.of_int 0 1) && Bitops.eq arg3381 
-            (Bits.of_int 16 32) && Bitops.eq arg3376 (Bits.of_int 25 5) && 
-          Bitops.eq arg3377 (Bits.of_int 0 1) && Bitops.eq arg3378 
-            (Bits.of_int 15 32) && Bitops.eq arg3373 (Bits.of_int 26 5) && 
-          Bitops.eq arg3374 (Bits.of_int 0 1) && Bitops.eq arg3375 
-            (Bits.of_int 14 32) && Bitops.eq arg3370 (Bits.of_int 27 5) && 
-          Bitops.eq arg3371 (Bits.of_int 0 1) && Bitops.eq arg3372 
-            (Bits.of_int 13 32) && Bitops.eq arg3367 (Bits.of_int 28 5) && 
-          Bitops.eq arg3368 (Bits.of_int 0 1) && Bitops.eq arg3369 
-            (Bits.of_int 12 32) && Bitops.eq arg3364 (Bits.of_int 29 5) && 
-          Bitops.eq arg3365 (Bits.of_int 0 1) && Bitops.eq arg3366 
-            (Bits.of_int 11 32) && Bitops.eq arg3361 (Bits.of_int 30 5) && 
-          Bitops.eq arg3362 (Bits.of_int 0 1) && Bitops.eq arg3363 
-            (Bits.of_int 10 32) && Bitops.eq arg3358 (Bits.of_int 31 5) && 
-          Bitops.eq arg3359 (Bits.of_int 0 1) && Bitops.eq arg3360 
-            (Bits.of_int 9 32) && Bitops.eq arg3355 (Bits.of_int 0 1) && 
-          Bitops.eq arg3356 (Bits.of_int 0 1) && Bitops.eq arg3357 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 17 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg3354)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg3418 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3415 (Bits.U.of_int 9 5) && Bitops.eq arg3416 
+            (Bits.U.of_int 25 5) && Bitops.eq arg3413 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg3414 (Bits.U.of_int 26 5) && Bitops.eq arg3411 
+            (Bits.U.of_int 11 5) && Bitops.eq arg3412 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3409 (Bits.U.of_int 12 5) && Bitops.eq arg3410 
+            (Bits.U.of_int 28 5) && Bitops.eq arg3407 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg3408 (Bits.U.of_int 29 5) && Bitops.eq arg3405 
+            (Bits.U.of_int 14 5) && Bitops.eq arg3406 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg3403 (Bits.U.of_int 15 5) && Bitops.eq arg3404 
+            (Bits.U.of_int 31 5) && Bitops.eq arg3400 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg3401 (Bits.U.of_int 0 1) && Bitops.eq arg3402 
+            (Bits.U.of_int 8 32) && Bitops.eq arg3397 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg3398 (Bits.U.of_int 0 1) && Bitops.eq arg3399 
+            (Bits.U.of_int 6 32) && Bitops.eq arg3394 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg3395 (Bits.U.of_int 0 1) && Bitops.eq arg3396 
+            (Bits.U.of_int 5 32) && Bitops.eq arg3391 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg3392 (Bits.U.of_int 0 1) && Bitops.eq arg3393 
+            (Bits.U.of_int 4 32) && Bitops.eq arg3388 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg3389 (Bits.U.of_int 0 1) && Bitops.eq arg3390 
+            (Bits.U.of_int 3 32) && Bitops.eq arg3385 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg3386 (Bits.U.of_int 0 1) && Bitops.eq arg3387 
+            (Bits.U.of_int 2 32) && Bitops.eq arg3382 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg3383 (Bits.U.of_int 0 1) && Bitops.eq arg3384 
+            (Bits.U.of_int 1 32) && Bitops.eq arg3379 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3380 (Bits.U.of_int 0 1) && Bitops.eq arg3381 
+            (Bits.U.of_int 16 32) && Bitops.eq arg3376 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg3377 (Bits.U.of_int 0 1) && Bitops.eq arg3378 
+            (Bits.U.of_int 15 32) && Bitops.eq arg3373 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg3374 (Bits.U.of_int 0 1) && Bitops.eq arg3375 
+            (Bits.U.of_int 14 32) && Bitops.eq arg3370 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3371 (Bits.U.of_int 0 1) && Bitops.eq arg3372 
+            (Bits.U.of_int 13 32) && Bitops.eq arg3367 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg3368 (Bits.U.of_int 0 1) && Bitops.eq arg3369 
+            (Bits.U.of_int 12 32) && Bitops.eq arg3364 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg3365 (Bits.U.of_int 0 1) && Bitops.eq arg3366 
+            (Bits.U.of_int 11 32) && Bitops.eq arg3361 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg3362 (Bits.U.of_int 0 1) && Bitops.eq arg3363 
+            (Bits.U.of_int 10 32) && Bitops.eq arg3358 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg3359 (Bits.U.of_int 0 1) && Bitops.eq arg3360 
+            (Bits.U.of_int 9 32) && Bitops.eq arg3355 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg3356 (Bits.U.of_int 0 1) && Bitops.eq arg3357 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 17 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg3354)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg3482), _), RP.Fetch (RP.Cell ('r', 
@@ -10442,51 +10442,51 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg3419)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg3419 13 && Bitops.eq arg3482 
-            (Bits.of_int 8 5) && Bitops.eq arg3483 (Bits.of_int 24 5) && 
-          Bitops.eq arg3480 (Bits.of_int 9 5) && Bitops.eq arg3481 
-            (Bits.of_int 25 5) && Bitops.eq arg3478 (Bits.of_int 10 5) && 
-          Bitops.eq arg3479 (Bits.of_int 26 5) && Bitops.eq arg3476 
-            (Bits.of_int 11 5) && Bitops.eq arg3477 (Bits.of_int 27 5) && 
-          Bitops.eq arg3474 (Bits.of_int 12 5) && Bitops.eq arg3475 
-            (Bits.of_int 28 5) && Bitops.eq arg3472 (Bits.of_int 13 5) && 
-          Bitops.eq arg3473 (Bits.of_int 29 5) && Bitops.eq arg3470 
-            (Bits.of_int 14 5) && Bitops.eq arg3471 (Bits.of_int 30 5) && 
-          Bitops.eq arg3468 (Bits.of_int 15 5) && Bitops.eq arg3469 
-            (Bits.of_int 31 5) && Bitops.eq arg3465 (Bits.of_int 17 5) && 
-          Bitops.eq arg3466 (Bits.of_int 0 1) && Bitops.eq arg3467 
-            (Bits.of_int 7 32) && Bitops.eq arg3462 (Bits.of_int 18 5) && 
-          Bitops.eq arg3463 (Bits.of_int 0 1) && Bitops.eq arg3464 
-            (Bits.of_int 6 32) && Bitops.eq arg3459 (Bits.of_int 19 5) && 
-          Bitops.eq arg3460 (Bits.of_int 0 1) && Bitops.eq arg3461 
-            (Bits.of_int 5 32) && Bitops.eq arg3456 (Bits.of_int 20 5) && 
-          Bitops.eq arg3457 (Bits.of_int 0 1) && Bitops.eq arg3458 
-            (Bits.of_int 4 32) && Bitops.eq arg3453 (Bits.of_int 21 5) && 
-          Bitops.eq arg3454 (Bits.of_int 0 1) && Bitops.eq arg3455 
-            (Bits.of_int 3 32) && Bitops.eq arg3450 (Bits.of_int 22 5) && 
-          Bitops.eq arg3451 (Bits.of_int 0 1) && Bitops.eq arg3452 
-            (Bits.of_int 2 32) && Bitops.eq arg3447 (Bits.of_int 23 5) && 
-          Bitops.eq arg3448 (Bits.of_int 0 1) && Bitops.eq arg3449 
-            (Bits.of_int 1 32) && Bitops.eq arg3444 (Bits.of_int 24 5) && 
-          Bitops.eq arg3445 (Bits.of_int 0 1) && Bitops.eq arg3446 
-            (Bits.of_int 16 32) && Bitops.eq arg3441 (Bits.of_int 25 5) && 
-          Bitops.eq arg3442 (Bits.of_int 0 1) && Bitops.eq arg3443 
-            (Bits.of_int 15 32) && Bitops.eq arg3438 (Bits.of_int 26 5) && 
-          Bitops.eq arg3439 (Bits.of_int 0 1) && Bitops.eq arg3440 
-            (Bits.of_int 14 32) && Bitops.eq arg3435 (Bits.of_int 27 5) && 
-          Bitops.eq arg3436 (Bits.of_int 0 1) && Bitops.eq arg3437 
-            (Bits.of_int 13 32) && Bitops.eq arg3432 (Bits.of_int 28 5) && 
-          Bitops.eq arg3433 (Bits.of_int 0 1) && Bitops.eq arg3434 
-            (Bits.of_int 12 32) && Bitops.eq arg3429 (Bits.of_int 29 5) && 
-          Bitops.eq arg3430 (Bits.of_int 0 1) && Bitops.eq arg3431 
-            (Bits.of_int 11 32) && Bitops.eq arg3426 (Bits.of_int 30 5) && 
-          Bitops.eq arg3427 (Bits.of_int 0 1) && Bitops.eq arg3428 
-            (Bits.of_int 10 32) && Bitops.eq arg3423 (Bits.of_int 31 5) && 
-          Bitops.eq arg3424 (Bits.of_int 0 1) && Bitops.eq arg3425 
-            (Bits.of_int 9 32) && Bitops.eq arg3420 (Bits.of_int 0 1) && 
-          Bitops.eq arg3421 (Bits.of_int 0 1) && Bitops.eq arg3422 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 16 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg3419)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg3483 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3480 (Bits.U.of_int 9 5) && Bitops.eq arg3481 
+            (Bits.U.of_int 25 5) && Bitops.eq arg3478 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg3479 (Bits.U.of_int 26 5) && Bitops.eq arg3476 
+            (Bits.U.of_int 11 5) && Bitops.eq arg3477 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3474 (Bits.U.of_int 12 5) && Bitops.eq arg3475 
+            (Bits.U.of_int 28 5) && Bitops.eq arg3472 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg3473 (Bits.U.of_int 29 5) && Bitops.eq arg3470 
+            (Bits.U.of_int 14 5) && Bitops.eq arg3471 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg3468 (Bits.U.of_int 15 5) && Bitops.eq arg3469 
+            (Bits.U.of_int 31 5) && Bitops.eq arg3465 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg3466 (Bits.U.of_int 0 1) && Bitops.eq arg3467 
+            (Bits.U.of_int 7 32) && Bitops.eq arg3462 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg3463 (Bits.U.of_int 0 1) && Bitops.eq arg3464 
+            (Bits.U.of_int 6 32) && Bitops.eq arg3459 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg3460 (Bits.U.of_int 0 1) && Bitops.eq arg3461 
+            (Bits.U.of_int 5 32) && Bitops.eq arg3456 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg3457 (Bits.U.of_int 0 1) && Bitops.eq arg3458 
+            (Bits.U.of_int 4 32) && Bitops.eq arg3453 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg3454 (Bits.U.of_int 0 1) && Bitops.eq arg3455 
+            (Bits.U.of_int 3 32) && Bitops.eq arg3450 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg3451 (Bits.U.of_int 0 1) && Bitops.eq arg3452 
+            (Bits.U.of_int 2 32) && Bitops.eq arg3447 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg3448 (Bits.U.of_int 0 1) && Bitops.eq arg3449 
+            (Bits.U.of_int 1 32) && Bitops.eq arg3444 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3445 (Bits.U.of_int 0 1) && Bitops.eq arg3446 
+            (Bits.U.of_int 16 32) && Bitops.eq arg3441 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg3442 (Bits.U.of_int 0 1) && Bitops.eq arg3443 
+            (Bits.U.of_int 15 32) && Bitops.eq arg3438 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg3439 (Bits.U.of_int 0 1) && Bitops.eq arg3440 
+            (Bits.U.of_int 14 32) && Bitops.eq arg3435 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3436 (Bits.U.of_int 0 1) && Bitops.eq arg3437 
+            (Bits.U.of_int 13 32) && Bitops.eq arg3432 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg3433 (Bits.U.of_int 0 1) && Bitops.eq arg3434 
+            (Bits.U.of_int 12 32) && Bitops.eq arg3429 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg3430 (Bits.U.of_int 0 1) && Bitops.eq arg3431 
+            (Bits.U.of_int 11 32) && Bitops.eq arg3426 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg3427 (Bits.U.of_int 0 1) && Bitops.eq arg3428 
+            (Bits.U.of_int 10 32) && Bitops.eq arg3423 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg3424 (Bits.U.of_int 0 1) && Bitops.eq arg3425 
+            (Bits.U.of_int 9 32) && Bitops.eq arg3420 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg3421 (Bits.U.of_int 0 1) && Bitops.eq arg3422 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 16 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg3419)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg3548), _), RP.Fetch (RP.Cell ('r', 
@@ -10615,52 +10615,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg3484)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg3484 13 && Bitops.eq arg3548 
-            (Bits.of_int 8 5) && Bitops.eq arg3549 (Bits.of_int 24 5) && 
-          Bitops.eq arg3546 (Bits.of_int 9 5) && Bitops.eq arg3547 
-            (Bits.of_int 25 5) && Bitops.eq arg3544 (Bits.of_int 10 5) && 
-          Bitops.eq arg3545 (Bits.of_int 26 5) && Bitops.eq arg3542 
-            (Bits.of_int 11 5) && Bitops.eq arg3543 (Bits.of_int 27 5) && 
-          Bitops.eq arg3540 (Bits.of_int 12 5) && Bitops.eq arg3541 
-            (Bits.of_int 28 5) && Bitops.eq arg3538 (Bits.of_int 13 5) && 
-          Bitops.eq arg3539 (Bits.of_int 29 5) && Bitops.eq arg3536 
-            (Bits.of_int 14 5) && Bitops.eq arg3537 (Bits.of_int 30 5) && 
-          Bitops.eq arg3533 (Bits.of_int 16 5) && Bitops.eq arg3534 
-            (Bits.of_int 0 1) && Bitops.eq arg3535 (Bits.of_int 8 32) && 
-          Bitops.eq arg3530 (Bits.of_int 17 5) && Bitops.eq arg3531 
-            (Bits.of_int 0 1) && Bitops.eq arg3532 (Bits.of_int 7 32) && 
-          Bitops.eq arg3527 (Bits.of_int 18 5) && Bitops.eq arg3528 
-            (Bits.of_int 0 1) && Bitops.eq arg3529 (Bits.of_int 6 32) && 
-          Bitops.eq arg3524 (Bits.of_int 19 5) && Bitops.eq arg3525 
-            (Bits.of_int 0 1) && Bitops.eq arg3526 (Bits.of_int 5 32) && 
-          Bitops.eq arg3521 (Bits.of_int 20 5) && Bitops.eq arg3522 
-            (Bits.of_int 0 1) && Bitops.eq arg3523 (Bits.of_int 4 32) && 
-          Bitops.eq arg3518 (Bits.of_int 21 5) && Bitops.eq arg3519 
-            (Bits.of_int 0 1) && Bitops.eq arg3520 (Bits.of_int 3 32) && 
-          Bitops.eq arg3515 (Bits.of_int 22 5) && Bitops.eq arg3516 
-            (Bits.of_int 0 1) && Bitops.eq arg3517 (Bits.of_int 2 32) && 
-          Bitops.eq arg3512 (Bits.of_int 23 5) && Bitops.eq arg3513 
-            (Bits.of_int 0 1) && Bitops.eq arg3514 (Bits.of_int 1 32) && 
-          Bitops.eq arg3509 (Bits.of_int 24 5) && Bitops.eq arg3510 
-            (Bits.of_int 0 1) && Bitops.eq arg3511 (Bits.of_int 16 32) && 
-          Bitops.eq arg3506 (Bits.of_int 25 5) && Bitops.eq arg3507 
-            (Bits.of_int 0 1) && Bitops.eq arg3508 (Bits.of_int 15 32) && 
-          Bitops.eq arg3503 (Bits.of_int 26 5) && Bitops.eq arg3504 
-            (Bits.of_int 0 1) && Bitops.eq arg3505 (Bits.of_int 14 32) && 
-          Bitops.eq arg3500 (Bits.of_int 27 5) && Bitops.eq arg3501 
-            (Bits.of_int 0 1) && Bitops.eq arg3502 (Bits.of_int 13 32) && 
-          Bitops.eq arg3497 (Bits.of_int 28 5) && Bitops.eq arg3498 
-            (Bits.of_int 0 1) && Bitops.eq arg3499 (Bits.of_int 12 32) && 
-          Bitops.eq arg3494 (Bits.of_int 29 5) && Bitops.eq arg3495 
-            (Bits.of_int 0 1) && Bitops.eq arg3496 (Bits.of_int 11 32) && 
-          Bitops.eq arg3491 (Bits.of_int 30 5) && Bitops.eq arg3492 
-            (Bits.of_int 0 1) && Bitops.eq arg3493 (Bits.of_int 10 32) && 
-          Bitops.eq arg3488 (Bits.of_int 31 5) && Bitops.eq arg3489 
-            (Bits.of_int 0 1) && Bitops.eq arg3490 (Bits.of_int 9 32) && 
-          Bitops.eq arg3485 (Bits.of_int 0 1) && Bitops.eq arg3486 
-            (Bits.of_int 0 1) && Bitops.eq arg3487 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 15 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg3484)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg3549 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3546 (Bits.U.of_int 9 5) && Bitops.eq arg3547 
+            (Bits.U.of_int 25 5) && Bitops.eq arg3544 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg3545 (Bits.U.of_int 26 5) && Bitops.eq arg3542 
+            (Bits.U.of_int 11 5) && Bitops.eq arg3543 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3540 (Bits.U.of_int 12 5) && Bitops.eq arg3541 
+            (Bits.U.of_int 28 5) && Bitops.eq arg3538 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg3539 (Bits.U.of_int 29 5) && Bitops.eq arg3536 
+            (Bits.U.of_int 14 5) && Bitops.eq arg3537 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg3533 (Bits.U.of_int 16 5) && Bitops.eq arg3534 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3535 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg3530 (Bits.U.of_int 17 5) && Bitops.eq arg3531 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3532 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg3527 (Bits.U.of_int 18 5) && Bitops.eq arg3528 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3529 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg3524 (Bits.U.of_int 19 5) && Bitops.eq arg3525 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3526 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg3521 (Bits.U.of_int 20 5) && Bitops.eq arg3522 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3523 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg3518 (Bits.U.of_int 21 5) && Bitops.eq arg3519 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3520 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg3515 (Bits.U.of_int 22 5) && Bitops.eq arg3516 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3517 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg3512 (Bits.U.of_int 23 5) && Bitops.eq arg3513 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3514 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg3509 (Bits.U.of_int 24 5) && Bitops.eq arg3510 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3511 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg3506 (Bits.U.of_int 25 5) && Bitops.eq arg3507 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3508 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg3503 (Bits.U.of_int 26 5) && Bitops.eq arg3504 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3505 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg3500 (Bits.U.of_int 27 5) && Bitops.eq arg3501 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3502 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg3497 (Bits.U.of_int 28 5) && Bitops.eq arg3498 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3499 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg3494 (Bits.U.of_int 29 5) && Bitops.eq arg3495 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3496 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg3491 (Bits.U.of_int 30 5) && Bitops.eq arg3492 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3493 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg3488 (Bits.U.of_int 31 5) && Bitops.eq arg3489 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3490 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg3485 (Bits.U.of_int 0 1) && Bitops.eq arg3486 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3487 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 15 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg3484)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg3614), _), RP.Fetch (RP.Cell ('r', 
@@ -10789,52 +10789,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg3550)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg3550 13 && Bitops.eq arg3614 
-            (Bits.of_int 8 5) && Bitops.eq arg3615 (Bits.of_int 24 5) && 
-          Bitops.eq arg3612 (Bits.of_int 9 5) && Bitops.eq arg3613 
-            (Bits.of_int 25 5) && Bitops.eq arg3610 (Bits.of_int 10 5) && 
-          Bitops.eq arg3611 (Bits.of_int 26 5) && Bitops.eq arg3608 
-            (Bits.of_int 11 5) && Bitops.eq arg3609 (Bits.of_int 27 5) && 
-          Bitops.eq arg3606 (Bits.of_int 12 5) && Bitops.eq arg3607 
-            (Bits.of_int 28 5) && Bitops.eq arg3604 (Bits.of_int 13 5) && 
-          Bitops.eq arg3605 (Bits.of_int 29 5) && Bitops.eq arg3602 
-            (Bits.of_int 15 5) && Bitops.eq arg3603 (Bits.of_int 31 5) && 
-          Bitops.eq arg3599 (Bits.of_int 16 5) && Bitops.eq arg3600 
-            (Bits.of_int 0 1) && Bitops.eq arg3601 (Bits.of_int 8 32) && 
-          Bitops.eq arg3596 (Bits.of_int 17 5) && Bitops.eq arg3597 
-            (Bits.of_int 0 1) && Bitops.eq arg3598 (Bits.of_int 7 32) && 
-          Bitops.eq arg3593 (Bits.of_int 18 5) && Bitops.eq arg3594 
-            (Bits.of_int 0 1) && Bitops.eq arg3595 (Bits.of_int 6 32) && 
-          Bitops.eq arg3590 (Bits.of_int 19 5) && Bitops.eq arg3591 
-            (Bits.of_int 0 1) && Bitops.eq arg3592 (Bits.of_int 5 32) && 
-          Bitops.eq arg3587 (Bits.of_int 20 5) && Bitops.eq arg3588 
-            (Bits.of_int 0 1) && Bitops.eq arg3589 (Bits.of_int 4 32) && 
-          Bitops.eq arg3584 (Bits.of_int 21 5) && Bitops.eq arg3585 
-            (Bits.of_int 0 1) && Bitops.eq arg3586 (Bits.of_int 3 32) && 
-          Bitops.eq arg3581 (Bits.of_int 22 5) && Bitops.eq arg3582 
-            (Bits.of_int 0 1) && Bitops.eq arg3583 (Bits.of_int 2 32) && 
-          Bitops.eq arg3578 (Bits.of_int 23 5) && Bitops.eq arg3579 
-            (Bits.of_int 0 1) && Bitops.eq arg3580 (Bits.of_int 1 32) && 
-          Bitops.eq arg3575 (Bits.of_int 24 5) && Bitops.eq arg3576 
-            (Bits.of_int 0 1) && Bitops.eq arg3577 (Bits.of_int 16 32) && 
-          Bitops.eq arg3572 (Bits.of_int 25 5) && Bitops.eq arg3573 
-            (Bits.of_int 0 1) && Bitops.eq arg3574 (Bits.of_int 15 32) && 
-          Bitops.eq arg3569 (Bits.of_int 26 5) && Bitops.eq arg3570 
-            (Bits.of_int 0 1) && Bitops.eq arg3571 (Bits.of_int 14 32) && 
-          Bitops.eq arg3566 (Bits.of_int 27 5) && Bitops.eq arg3567 
-            (Bits.of_int 0 1) && Bitops.eq arg3568 (Bits.of_int 13 32) && 
-          Bitops.eq arg3563 (Bits.of_int 28 5) && Bitops.eq arg3564 
-            (Bits.of_int 0 1) && Bitops.eq arg3565 (Bits.of_int 12 32) && 
-          Bitops.eq arg3560 (Bits.of_int 29 5) && Bitops.eq arg3561 
-            (Bits.of_int 0 1) && Bitops.eq arg3562 (Bits.of_int 11 32) && 
-          Bitops.eq arg3557 (Bits.of_int 30 5) && Bitops.eq arg3558 
-            (Bits.of_int 0 1) && Bitops.eq arg3559 (Bits.of_int 10 32) && 
-          Bitops.eq arg3554 (Bits.of_int 31 5) && Bitops.eq arg3555 
-            (Bits.of_int 0 1) && Bitops.eq arg3556 (Bits.of_int 9 32) && 
-          Bitops.eq arg3551 (Bits.of_int 0 1) && Bitops.eq arg3552 
-            (Bits.of_int 0 1) && Bitops.eq arg3553 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 14 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg3550)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg3615 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3612 (Bits.U.of_int 9 5) && Bitops.eq arg3613 
+            (Bits.U.of_int 25 5) && Bitops.eq arg3610 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg3611 (Bits.U.of_int 26 5) && Bitops.eq arg3608 
+            (Bits.U.of_int 11 5) && Bitops.eq arg3609 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3606 (Bits.U.of_int 12 5) && Bitops.eq arg3607 
+            (Bits.U.of_int 28 5) && Bitops.eq arg3604 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg3605 (Bits.U.of_int 29 5) && Bitops.eq arg3602 
+            (Bits.U.of_int 15 5) && Bitops.eq arg3603 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg3599 (Bits.U.of_int 16 5) && Bitops.eq arg3600 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3601 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg3596 (Bits.U.of_int 17 5) && Bitops.eq arg3597 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3598 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg3593 (Bits.U.of_int 18 5) && Bitops.eq arg3594 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3595 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg3590 (Bits.U.of_int 19 5) && Bitops.eq arg3591 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3592 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg3587 (Bits.U.of_int 20 5) && Bitops.eq arg3588 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3589 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg3584 (Bits.U.of_int 21 5) && Bitops.eq arg3585 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3586 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg3581 (Bits.U.of_int 22 5) && Bitops.eq arg3582 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3583 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg3578 (Bits.U.of_int 23 5) && Bitops.eq arg3579 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3580 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg3575 (Bits.U.of_int 24 5) && Bitops.eq arg3576 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3577 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg3572 (Bits.U.of_int 25 5) && Bitops.eq arg3573 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3574 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg3569 (Bits.U.of_int 26 5) && Bitops.eq arg3570 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3571 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg3566 (Bits.U.of_int 27 5) && Bitops.eq arg3567 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3568 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg3563 (Bits.U.of_int 28 5) && Bitops.eq arg3564 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3565 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg3560 (Bits.U.of_int 29 5) && Bitops.eq arg3561 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3562 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg3557 (Bits.U.of_int 30 5) && Bitops.eq arg3558 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3559 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg3554 (Bits.U.of_int 31 5) && Bitops.eq arg3555 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3556 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg3551 (Bits.U.of_int 0 1) && Bitops.eq arg3552 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3553 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 14 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg3550)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg3680), _), RP.Fetch (RP.Cell ('r', 
@@ -10963,52 +10963,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg3616)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg3616 13 && Bitops.eq arg3680 
-            (Bits.of_int 8 5) && Bitops.eq arg3681 (Bits.of_int 24 5) && 
-          Bitops.eq arg3678 (Bits.of_int 9 5) && Bitops.eq arg3679 
-            (Bits.of_int 25 5) && Bitops.eq arg3676 (Bits.of_int 10 5) && 
-          Bitops.eq arg3677 (Bits.of_int 26 5) && Bitops.eq arg3674 
-            (Bits.of_int 11 5) && Bitops.eq arg3675 (Bits.of_int 27 5) && 
-          Bitops.eq arg3672 (Bits.of_int 12 5) && Bitops.eq arg3673 
-            (Bits.of_int 28 5) && Bitops.eq arg3670 (Bits.of_int 14 5) && 
-          Bitops.eq arg3671 (Bits.of_int 30 5) && Bitops.eq arg3668 
-            (Bits.of_int 15 5) && Bitops.eq arg3669 (Bits.of_int 31 5) && 
-          Bitops.eq arg3665 (Bits.of_int 16 5) && Bitops.eq arg3666 
-            (Bits.of_int 0 1) && Bitops.eq arg3667 (Bits.of_int 8 32) && 
-          Bitops.eq arg3662 (Bits.of_int 17 5) && Bitops.eq arg3663 
-            (Bits.of_int 0 1) && Bitops.eq arg3664 (Bits.of_int 7 32) && 
-          Bitops.eq arg3659 (Bits.of_int 18 5) && Bitops.eq arg3660 
-            (Bits.of_int 0 1) && Bitops.eq arg3661 (Bits.of_int 6 32) && 
-          Bitops.eq arg3656 (Bits.of_int 19 5) && Bitops.eq arg3657 
-            (Bits.of_int 0 1) && Bitops.eq arg3658 (Bits.of_int 5 32) && 
-          Bitops.eq arg3653 (Bits.of_int 20 5) && Bitops.eq arg3654 
-            (Bits.of_int 0 1) && Bitops.eq arg3655 (Bits.of_int 4 32) && 
-          Bitops.eq arg3650 (Bits.of_int 21 5) && Bitops.eq arg3651 
-            (Bits.of_int 0 1) && Bitops.eq arg3652 (Bits.of_int 3 32) && 
-          Bitops.eq arg3647 (Bits.of_int 22 5) && Bitops.eq arg3648 
-            (Bits.of_int 0 1) && Bitops.eq arg3649 (Bits.of_int 2 32) && 
-          Bitops.eq arg3644 (Bits.of_int 23 5) && Bitops.eq arg3645 
-            (Bits.of_int 0 1) && Bitops.eq arg3646 (Bits.of_int 1 32) && 
-          Bitops.eq arg3641 (Bits.of_int 24 5) && Bitops.eq arg3642 
-            (Bits.of_int 0 1) && Bitops.eq arg3643 (Bits.of_int 16 32) && 
-          Bitops.eq arg3638 (Bits.of_int 25 5) && Bitops.eq arg3639 
-            (Bits.of_int 0 1) && Bitops.eq arg3640 (Bits.of_int 15 32) && 
-          Bitops.eq arg3635 (Bits.of_int 26 5) && Bitops.eq arg3636 
-            (Bits.of_int 0 1) && Bitops.eq arg3637 (Bits.of_int 14 32) && 
-          Bitops.eq arg3632 (Bits.of_int 27 5) && Bitops.eq arg3633 
-            (Bits.of_int 0 1) && Bitops.eq arg3634 (Bits.of_int 13 32) && 
-          Bitops.eq arg3629 (Bits.of_int 28 5) && Bitops.eq arg3630 
-            (Bits.of_int 0 1) && Bitops.eq arg3631 (Bits.of_int 12 32) && 
-          Bitops.eq arg3626 (Bits.of_int 29 5) && Bitops.eq arg3627 
-            (Bits.of_int 0 1) && Bitops.eq arg3628 (Bits.of_int 11 32) && 
-          Bitops.eq arg3623 (Bits.of_int 30 5) && Bitops.eq arg3624 
-            (Bits.of_int 0 1) && Bitops.eq arg3625 (Bits.of_int 10 32) && 
-          Bitops.eq arg3620 (Bits.of_int 31 5) && Bitops.eq arg3621 
-            (Bits.of_int 0 1) && Bitops.eq arg3622 (Bits.of_int 9 32) && 
-          Bitops.eq arg3617 (Bits.of_int 0 1) && Bitops.eq arg3618 
-            (Bits.of_int 0 1) && Bitops.eq arg3619 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 13 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg3616)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg3681 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3678 (Bits.U.of_int 9 5) && Bitops.eq arg3679 
+            (Bits.U.of_int 25 5) && Bitops.eq arg3676 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg3677 (Bits.U.of_int 26 5) && Bitops.eq arg3674 
+            (Bits.U.of_int 11 5) && Bitops.eq arg3675 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3672 (Bits.U.of_int 12 5) && Bitops.eq arg3673 
+            (Bits.U.of_int 28 5) && Bitops.eq arg3670 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg3671 (Bits.U.of_int 30 5) && Bitops.eq arg3668 
+            (Bits.U.of_int 15 5) && Bitops.eq arg3669 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg3665 (Bits.U.of_int 16 5) && Bitops.eq arg3666 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3667 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg3662 (Bits.U.of_int 17 5) && Bitops.eq arg3663 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3664 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg3659 (Bits.U.of_int 18 5) && Bitops.eq arg3660 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3661 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg3656 (Bits.U.of_int 19 5) && Bitops.eq arg3657 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3658 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg3653 (Bits.U.of_int 20 5) && Bitops.eq arg3654 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3655 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg3650 (Bits.U.of_int 21 5) && Bitops.eq arg3651 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3652 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg3647 (Bits.U.of_int 22 5) && Bitops.eq arg3648 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3649 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg3644 (Bits.U.of_int 23 5) && Bitops.eq arg3645 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3646 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg3641 (Bits.U.of_int 24 5) && Bitops.eq arg3642 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3643 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg3638 (Bits.U.of_int 25 5) && Bitops.eq arg3639 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3640 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg3635 (Bits.U.of_int 26 5) && Bitops.eq arg3636 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3637 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg3632 (Bits.U.of_int 27 5) && Bitops.eq arg3633 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3634 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg3629 (Bits.U.of_int 28 5) && Bitops.eq arg3630 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3631 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg3626 (Bits.U.of_int 29 5) && Bitops.eq arg3627 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3628 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg3623 (Bits.U.of_int 30 5) && Bitops.eq arg3624 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3625 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg3620 (Bits.U.of_int 31 5) && Bitops.eq arg3621 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3622 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg3617 (Bits.U.of_int 0 1) && Bitops.eq arg3618 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3619 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 13 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg3616)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg3746), _), RP.Fetch (RP.Cell ('r', 
@@ -11137,52 +11137,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg3682)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg3682 13 && Bitops.eq arg3746 
-            (Bits.of_int 8 5) && Bitops.eq arg3747 (Bits.of_int 24 5) && 
-          Bitops.eq arg3744 (Bits.of_int 9 5) && Bitops.eq arg3745 
-            (Bits.of_int 25 5) && Bitops.eq arg3742 (Bits.of_int 10 5) && 
-          Bitops.eq arg3743 (Bits.of_int 26 5) && Bitops.eq arg3740 
-            (Bits.of_int 11 5) && Bitops.eq arg3741 (Bits.of_int 27 5) && 
-          Bitops.eq arg3738 (Bits.of_int 13 5) && Bitops.eq arg3739 
-            (Bits.of_int 29 5) && Bitops.eq arg3736 (Bits.of_int 14 5) && 
-          Bitops.eq arg3737 (Bits.of_int 30 5) && Bitops.eq arg3734 
-            (Bits.of_int 15 5) && Bitops.eq arg3735 (Bits.of_int 31 5) && 
-          Bitops.eq arg3731 (Bits.of_int 16 5) && Bitops.eq arg3732 
-            (Bits.of_int 0 1) && Bitops.eq arg3733 (Bits.of_int 8 32) && 
-          Bitops.eq arg3728 (Bits.of_int 17 5) && Bitops.eq arg3729 
-            (Bits.of_int 0 1) && Bitops.eq arg3730 (Bits.of_int 7 32) && 
-          Bitops.eq arg3725 (Bits.of_int 18 5) && Bitops.eq arg3726 
-            (Bits.of_int 0 1) && Bitops.eq arg3727 (Bits.of_int 6 32) && 
-          Bitops.eq arg3722 (Bits.of_int 19 5) && Bitops.eq arg3723 
-            (Bits.of_int 0 1) && Bitops.eq arg3724 (Bits.of_int 5 32) && 
-          Bitops.eq arg3719 (Bits.of_int 20 5) && Bitops.eq arg3720 
-            (Bits.of_int 0 1) && Bitops.eq arg3721 (Bits.of_int 4 32) && 
-          Bitops.eq arg3716 (Bits.of_int 21 5) && Bitops.eq arg3717 
-            (Bits.of_int 0 1) && Bitops.eq arg3718 (Bits.of_int 3 32) && 
-          Bitops.eq arg3713 (Bits.of_int 22 5) && Bitops.eq arg3714 
-            (Bits.of_int 0 1) && Bitops.eq arg3715 (Bits.of_int 2 32) && 
-          Bitops.eq arg3710 (Bits.of_int 23 5) && Bitops.eq arg3711 
-            (Bits.of_int 0 1) && Bitops.eq arg3712 (Bits.of_int 1 32) && 
-          Bitops.eq arg3707 (Bits.of_int 24 5) && Bitops.eq arg3708 
-            (Bits.of_int 0 1) && Bitops.eq arg3709 (Bits.of_int 16 32) && 
-          Bitops.eq arg3704 (Bits.of_int 25 5) && Bitops.eq arg3705 
-            (Bits.of_int 0 1) && Bitops.eq arg3706 (Bits.of_int 15 32) && 
-          Bitops.eq arg3701 (Bits.of_int 26 5) && Bitops.eq arg3702 
-            (Bits.of_int 0 1) && Bitops.eq arg3703 (Bits.of_int 14 32) && 
-          Bitops.eq arg3698 (Bits.of_int 27 5) && Bitops.eq arg3699 
-            (Bits.of_int 0 1) && Bitops.eq arg3700 (Bits.of_int 13 32) && 
-          Bitops.eq arg3695 (Bits.of_int 28 5) && Bitops.eq arg3696 
-            (Bits.of_int 0 1) && Bitops.eq arg3697 (Bits.of_int 12 32) && 
-          Bitops.eq arg3692 (Bits.of_int 29 5) && Bitops.eq arg3693 
-            (Bits.of_int 0 1) && Bitops.eq arg3694 (Bits.of_int 11 32) && 
-          Bitops.eq arg3689 (Bits.of_int 30 5) && Bitops.eq arg3690 
-            (Bits.of_int 0 1) && Bitops.eq arg3691 (Bits.of_int 10 32) && 
-          Bitops.eq arg3686 (Bits.of_int 31 5) && Bitops.eq arg3687 
-            (Bits.of_int 0 1) && Bitops.eq arg3688 (Bits.of_int 9 32) && 
-          Bitops.eq arg3683 (Bits.of_int 0 1) && Bitops.eq arg3684 
-            (Bits.of_int 0 1) && Bitops.eq arg3685 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 12 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg3682)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg3747 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3744 (Bits.U.of_int 9 5) && Bitops.eq arg3745 
+            (Bits.U.of_int 25 5) && Bitops.eq arg3742 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg3743 (Bits.U.of_int 26 5) && Bitops.eq arg3740 
+            (Bits.U.of_int 11 5) && Bitops.eq arg3741 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg3738 (Bits.U.of_int 13 5) && Bitops.eq arg3739 
+            (Bits.U.of_int 29 5) && Bitops.eq arg3736 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg3737 (Bits.U.of_int 30 5) && Bitops.eq arg3734 
+            (Bits.U.of_int 15 5) && Bitops.eq arg3735 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg3731 (Bits.U.of_int 16 5) && Bitops.eq arg3732 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3733 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg3728 (Bits.U.of_int 17 5) && Bitops.eq arg3729 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3730 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg3725 (Bits.U.of_int 18 5) && Bitops.eq arg3726 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3727 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg3722 (Bits.U.of_int 19 5) && Bitops.eq arg3723 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3724 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg3719 (Bits.U.of_int 20 5) && Bitops.eq arg3720 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3721 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg3716 (Bits.U.of_int 21 5) && Bitops.eq arg3717 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3718 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg3713 (Bits.U.of_int 22 5) && Bitops.eq arg3714 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3715 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg3710 (Bits.U.of_int 23 5) && Bitops.eq arg3711 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3712 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg3707 (Bits.U.of_int 24 5) && Bitops.eq arg3708 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3709 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg3704 (Bits.U.of_int 25 5) && Bitops.eq arg3705 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3706 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg3701 (Bits.U.of_int 26 5) && Bitops.eq arg3702 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3703 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg3698 (Bits.U.of_int 27 5) && Bitops.eq arg3699 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3700 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg3695 (Bits.U.of_int 28 5) && Bitops.eq arg3696 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3697 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg3692 (Bits.U.of_int 29 5) && Bitops.eq arg3693 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3694 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg3689 (Bits.U.of_int 30 5) && Bitops.eq arg3690 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3691 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg3686 (Bits.U.of_int 31 5) && Bitops.eq arg3687 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3688 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg3683 (Bits.U.of_int 0 1) && Bitops.eq arg3684 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3685 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 12 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg3682)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg3812), _), RP.Fetch (RP.Cell ('r', 
@@ -11311,52 +11311,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg3748)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg3748 13 && Bitops.eq arg3812 
-            (Bits.of_int 8 5) && Bitops.eq arg3813 (Bits.of_int 24 5) && 
-          Bitops.eq arg3810 (Bits.of_int 9 5) && Bitops.eq arg3811 
-            (Bits.of_int 25 5) && Bitops.eq arg3808 (Bits.of_int 10 5) && 
-          Bitops.eq arg3809 (Bits.of_int 26 5) && Bitops.eq arg3806 
-            (Bits.of_int 12 5) && Bitops.eq arg3807 (Bits.of_int 28 5) && 
-          Bitops.eq arg3804 (Bits.of_int 13 5) && Bitops.eq arg3805 
-            (Bits.of_int 29 5) && Bitops.eq arg3802 (Bits.of_int 14 5) && 
-          Bitops.eq arg3803 (Bits.of_int 30 5) && Bitops.eq arg3800 
-            (Bits.of_int 15 5) && Bitops.eq arg3801 (Bits.of_int 31 5) && 
-          Bitops.eq arg3797 (Bits.of_int 16 5) && Bitops.eq arg3798 
-            (Bits.of_int 0 1) && Bitops.eq arg3799 (Bits.of_int 8 32) && 
-          Bitops.eq arg3794 (Bits.of_int 17 5) && Bitops.eq arg3795 
-            (Bits.of_int 0 1) && Bitops.eq arg3796 (Bits.of_int 7 32) && 
-          Bitops.eq arg3791 (Bits.of_int 18 5) && Bitops.eq arg3792 
-            (Bits.of_int 0 1) && Bitops.eq arg3793 (Bits.of_int 6 32) && 
-          Bitops.eq arg3788 (Bits.of_int 19 5) && Bitops.eq arg3789 
-            (Bits.of_int 0 1) && Bitops.eq arg3790 (Bits.of_int 5 32) && 
-          Bitops.eq arg3785 (Bits.of_int 20 5) && Bitops.eq arg3786 
-            (Bits.of_int 0 1) && Bitops.eq arg3787 (Bits.of_int 4 32) && 
-          Bitops.eq arg3782 (Bits.of_int 21 5) && Bitops.eq arg3783 
-            (Bits.of_int 0 1) && Bitops.eq arg3784 (Bits.of_int 3 32) && 
-          Bitops.eq arg3779 (Bits.of_int 22 5) && Bitops.eq arg3780 
-            (Bits.of_int 0 1) && Bitops.eq arg3781 (Bits.of_int 2 32) && 
-          Bitops.eq arg3776 (Bits.of_int 23 5) && Bitops.eq arg3777 
-            (Bits.of_int 0 1) && Bitops.eq arg3778 (Bits.of_int 1 32) && 
-          Bitops.eq arg3773 (Bits.of_int 24 5) && Bitops.eq arg3774 
-            (Bits.of_int 0 1) && Bitops.eq arg3775 (Bits.of_int 16 32) && 
-          Bitops.eq arg3770 (Bits.of_int 25 5) && Bitops.eq arg3771 
-            (Bits.of_int 0 1) && Bitops.eq arg3772 (Bits.of_int 15 32) && 
-          Bitops.eq arg3767 (Bits.of_int 26 5) && Bitops.eq arg3768 
-            (Bits.of_int 0 1) && Bitops.eq arg3769 (Bits.of_int 14 32) && 
-          Bitops.eq arg3764 (Bits.of_int 27 5) && Bitops.eq arg3765 
-            (Bits.of_int 0 1) && Bitops.eq arg3766 (Bits.of_int 13 32) && 
-          Bitops.eq arg3761 (Bits.of_int 28 5) && Bitops.eq arg3762 
-            (Bits.of_int 0 1) && Bitops.eq arg3763 (Bits.of_int 12 32) && 
-          Bitops.eq arg3758 (Bits.of_int 29 5) && Bitops.eq arg3759 
-            (Bits.of_int 0 1) && Bitops.eq arg3760 (Bits.of_int 11 32) && 
-          Bitops.eq arg3755 (Bits.of_int 30 5) && Bitops.eq arg3756 
-            (Bits.of_int 0 1) && Bitops.eq arg3757 (Bits.of_int 10 32) && 
-          Bitops.eq arg3752 (Bits.of_int 31 5) && Bitops.eq arg3753 
-            (Bits.of_int 0 1) && Bitops.eq arg3754 (Bits.of_int 9 32) && 
-          Bitops.eq arg3749 (Bits.of_int 0 1) && Bitops.eq arg3750 
-            (Bits.of_int 0 1) && Bitops.eq arg3751 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 11 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg3748)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg3813 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3810 (Bits.U.of_int 9 5) && Bitops.eq arg3811 
+            (Bits.U.of_int 25 5) && Bitops.eq arg3808 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg3809 (Bits.U.of_int 26 5) && Bitops.eq arg3806 
+            (Bits.U.of_int 12 5) && Bitops.eq arg3807 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg3804 (Bits.U.of_int 13 5) && Bitops.eq arg3805 
+            (Bits.U.of_int 29 5) && Bitops.eq arg3802 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg3803 (Bits.U.of_int 30 5) && Bitops.eq arg3800 
+            (Bits.U.of_int 15 5) && Bitops.eq arg3801 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg3797 (Bits.U.of_int 16 5) && Bitops.eq arg3798 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3799 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg3794 (Bits.U.of_int 17 5) && Bitops.eq arg3795 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3796 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg3791 (Bits.U.of_int 18 5) && Bitops.eq arg3792 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3793 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg3788 (Bits.U.of_int 19 5) && Bitops.eq arg3789 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3790 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg3785 (Bits.U.of_int 20 5) && Bitops.eq arg3786 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3787 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg3782 (Bits.U.of_int 21 5) && Bitops.eq arg3783 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3784 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg3779 (Bits.U.of_int 22 5) && Bitops.eq arg3780 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3781 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg3776 (Bits.U.of_int 23 5) && Bitops.eq arg3777 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3778 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg3773 (Bits.U.of_int 24 5) && Bitops.eq arg3774 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3775 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg3770 (Bits.U.of_int 25 5) && Bitops.eq arg3771 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3772 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg3767 (Bits.U.of_int 26 5) && Bitops.eq arg3768 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3769 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg3764 (Bits.U.of_int 27 5) && Bitops.eq arg3765 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3766 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg3761 (Bits.U.of_int 28 5) && Bitops.eq arg3762 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3763 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg3758 (Bits.U.of_int 29 5) && Bitops.eq arg3759 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3760 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg3755 (Bits.U.of_int 30 5) && Bitops.eq arg3756 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3757 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg3752 (Bits.U.of_int 31 5) && Bitops.eq arg3753 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3754 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg3749 (Bits.U.of_int 0 1) && Bitops.eq arg3750 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3751 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 11 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg3748)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg3878), _), RP.Fetch (RP.Cell ('r', 
@@ -11485,52 +11485,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg3814)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg3814 13 && Bitops.eq arg3878 
-            (Bits.of_int 8 5) && Bitops.eq arg3879 (Bits.of_int 24 5) && 
-          Bitops.eq arg3876 (Bits.of_int 9 5) && Bitops.eq arg3877 
-            (Bits.of_int 25 5) && Bitops.eq arg3874 (Bits.of_int 11 5) && 
-          Bitops.eq arg3875 (Bits.of_int 27 5) && Bitops.eq arg3872 
-            (Bits.of_int 12 5) && Bitops.eq arg3873 (Bits.of_int 28 5) && 
-          Bitops.eq arg3870 (Bits.of_int 13 5) && Bitops.eq arg3871 
-            (Bits.of_int 29 5) && Bitops.eq arg3868 (Bits.of_int 14 5) && 
-          Bitops.eq arg3869 (Bits.of_int 30 5) && Bitops.eq arg3866 
-            (Bits.of_int 15 5) && Bitops.eq arg3867 (Bits.of_int 31 5) && 
-          Bitops.eq arg3863 (Bits.of_int 16 5) && Bitops.eq arg3864 
-            (Bits.of_int 0 1) && Bitops.eq arg3865 (Bits.of_int 8 32) && 
-          Bitops.eq arg3860 (Bits.of_int 17 5) && Bitops.eq arg3861 
-            (Bits.of_int 0 1) && Bitops.eq arg3862 (Bits.of_int 7 32) && 
-          Bitops.eq arg3857 (Bits.of_int 18 5) && Bitops.eq arg3858 
-            (Bits.of_int 0 1) && Bitops.eq arg3859 (Bits.of_int 6 32) && 
-          Bitops.eq arg3854 (Bits.of_int 19 5) && Bitops.eq arg3855 
-            (Bits.of_int 0 1) && Bitops.eq arg3856 (Bits.of_int 5 32) && 
-          Bitops.eq arg3851 (Bits.of_int 20 5) && Bitops.eq arg3852 
-            (Bits.of_int 0 1) && Bitops.eq arg3853 (Bits.of_int 4 32) && 
-          Bitops.eq arg3848 (Bits.of_int 21 5) && Bitops.eq arg3849 
-            (Bits.of_int 0 1) && Bitops.eq arg3850 (Bits.of_int 3 32) && 
-          Bitops.eq arg3845 (Bits.of_int 22 5) && Bitops.eq arg3846 
-            (Bits.of_int 0 1) && Bitops.eq arg3847 (Bits.of_int 2 32) && 
-          Bitops.eq arg3842 (Bits.of_int 23 5) && Bitops.eq arg3843 
-            (Bits.of_int 0 1) && Bitops.eq arg3844 (Bits.of_int 1 32) && 
-          Bitops.eq arg3839 (Bits.of_int 24 5) && Bitops.eq arg3840 
-            (Bits.of_int 0 1) && Bitops.eq arg3841 (Bits.of_int 16 32) && 
-          Bitops.eq arg3836 (Bits.of_int 25 5) && Bitops.eq arg3837 
-            (Bits.of_int 0 1) && Bitops.eq arg3838 (Bits.of_int 15 32) && 
-          Bitops.eq arg3833 (Bits.of_int 26 5) && Bitops.eq arg3834 
-            (Bits.of_int 0 1) && Bitops.eq arg3835 (Bits.of_int 14 32) && 
-          Bitops.eq arg3830 (Bits.of_int 27 5) && Bitops.eq arg3831 
-            (Bits.of_int 0 1) && Bitops.eq arg3832 (Bits.of_int 13 32) && 
-          Bitops.eq arg3827 (Bits.of_int 28 5) && Bitops.eq arg3828 
-            (Bits.of_int 0 1) && Bitops.eq arg3829 (Bits.of_int 12 32) && 
-          Bitops.eq arg3824 (Bits.of_int 29 5) && Bitops.eq arg3825 
-            (Bits.of_int 0 1) && Bitops.eq arg3826 (Bits.of_int 11 32) && 
-          Bitops.eq arg3821 (Bits.of_int 30 5) && Bitops.eq arg3822 
-            (Bits.of_int 0 1) && Bitops.eq arg3823 (Bits.of_int 10 32) && 
-          Bitops.eq arg3818 (Bits.of_int 31 5) && Bitops.eq arg3819 
-            (Bits.of_int 0 1) && Bitops.eq arg3820 (Bits.of_int 9 32) && 
-          Bitops.eq arg3815 (Bits.of_int 0 1) && Bitops.eq arg3816 
-            (Bits.of_int 0 1) && Bitops.eq arg3817 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 10 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg3814)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg3879 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3876 (Bits.U.of_int 9 5) && Bitops.eq arg3877 
+            (Bits.U.of_int 25 5) && Bitops.eq arg3874 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg3875 (Bits.U.of_int 27 5) && Bitops.eq arg3872 
+            (Bits.U.of_int 12 5) && Bitops.eq arg3873 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg3870 (Bits.U.of_int 13 5) && Bitops.eq arg3871 
+            (Bits.U.of_int 29 5) && Bitops.eq arg3868 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg3869 (Bits.U.of_int 30 5) && Bitops.eq arg3866 
+            (Bits.U.of_int 15 5) && Bitops.eq arg3867 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg3863 (Bits.U.of_int 16 5) && Bitops.eq arg3864 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3865 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg3860 (Bits.U.of_int 17 5) && Bitops.eq arg3861 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3862 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg3857 (Bits.U.of_int 18 5) && Bitops.eq arg3858 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3859 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg3854 (Bits.U.of_int 19 5) && Bitops.eq arg3855 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3856 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg3851 (Bits.U.of_int 20 5) && Bitops.eq arg3852 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3853 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg3848 (Bits.U.of_int 21 5) && Bitops.eq arg3849 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3850 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg3845 (Bits.U.of_int 22 5) && Bitops.eq arg3846 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3847 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg3842 (Bits.U.of_int 23 5) && Bitops.eq arg3843 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3844 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg3839 (Bits.U.of_int 24 5) && Bitops.eq arg3840 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3841 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg3836 (Bits.U.of_int 25 5) && Bitops.eq arg3837 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3838 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg3833 (Bits.U.of_int 26 5) && Bitops.eq arg3834 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3835 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg3830 (Bits.U.of_int 27 5) && Bitops.eq arg3831 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3832 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg3827 (Bits.U.of_int 28 5) && Bitops.eq arg3828 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3829 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg3824 (Bits.U.of_int 29 5) && Bitops.eq arg3825 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3826 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg3821 (Bits.U.of_int 30 5) && Bitops.eq arg3822 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3823 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg3818 (Bits.U.of_int 31 5) && Bitops.eq arg3819 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3820 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg3815 (Bits.U.of_int 0 1) && Bitops.eq arg3816 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3817 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 10 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg3814)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg3944), _), RP.Fetch (RP.Cell ('r', 
@@ -11659,52 +11659,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg3880)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg3880 13 && Bitops.eq arg3944 
-            (Bits.of_int 8 5) && Bitops.eq arg3945 (Bits.of_int 24 5) && 
-          Bitops.eq arg3942 (Bits.of_int 10 5) && Bitops.eq arg3943 
-            (Bits.of_int 26 5) && Bitops.eq arg3940 (Bits.of_int 11 5) && 
-          Bitops.eq arg3941 (Bits.of_int 27 5) && Bitops.eq arg3938 
-            (Bits.of_int 12 5) && Bitops.eq arg3939 (Bits.of_int 28 5) && 
-          Bitops.eq arg3936 (Bits.of_int 13 5) && Bitops.eq arg3937 
-            (Bits.of_int 29 5) && Bitops.eq arg3934 (Bits.of_int 14 5) && 
-          Bitops.eq arg3935 (Bits.of_int 30 5) && Bitops.eq arg3932 
-            (Bits.of_int 15 5) && Bitops.eq arg3933 (Bits.of_int 31 5) && 
-          Bitops.eq arg3929 (Bits.of_int 16 5) && Bitops.eq arg3930 
-            (Bits.of_int 0 1) && Bitops.eq arg3931 (Bits.of_int 8 32) && 
-          Bitops.eq arg3926 (Bits.of_int 17 5) && Bitops.eq arg3927 
-            (Bits.of_int 0 1) && Bitops.eq arg3928 (Bits.of_int 7 32) && 
-          Bitops.eq arg3923 (Bits.of_int 18 5) && Bitops.eq arg3924 
-            (Bits.of_int 0 1) && Bitops.eq arg3925 (Bits.of_int 6 32) && 
-          Bitops.eq arg3920 (Bits.of_int 19 5) && Bitops.eq arg3921 
-            (Bits.of_int 0 1) && Bitops.eq arg3922 (Bits.of_int 5 32) && 
-          Bitops.eq arg3917 (Bits.of_int 20 5) && Bitops.eq arg3918 
-            (Bits.of_int 0 1) && Bitops.eq arg3919 (Bits.of_int 4 32) && 
-          Bitops.eq arg3914 (Bits.of_int 21 5) && Bitops.eq arg3915 
-            (Bits.of_int 0 1) && Bitops.eq arg3916 (Bits.of_int 3 32) && 
-          Bitops.eq arg3911 (Bits.of_int 22 5) && Bitops.eq arg3912 
-            (Bits.of_int 0 1) && Bitops.eq arg3913 (Bits.of_int 2 32) && 
-          Bitops.eq arg3908 (Bits.of_int 23 5) && Bitops.eq arg3909 
-            (Bits.of_int 0 1) && Bitops.eq arg3910 (Bits.of_int 1 32) && 
-          Bitops.eq arg3905 (Bits.of_int 24 5) && Bitops.eq arg3906 
-            (Bits.of_int 0 1) && Bitops.eq arg3907 (Bits.of_int 16 32) && 
-          Bitops.eq arg3902 (Bits.of_int 25 5) && Bitops.eq arg3903 
-            (Bits.of_int 0 1) && Bitops.eq arg3904 (Bits.of_int 15 32) && 
-          Bitops.eq arg3899 (Bits.of_int 26 5) && Bitops.eq arg3900 
-            (Bits.of_int 0 1) && Bitops.eq arg3901 (Bits.of_int 14 32) && 
-          Bitops.eq arg3896 (Bits.of_int 27 5) && Bitops.eq arg3897 
-            (Bits.of_int 0 1) && Bitops.eq arg3898 (Bits.of_int 13 32) && 
-          Bitops.eq arg3893 (Bits.of_int 28 5) && Bitops.eq arg3894 
-            (Bits.of_int 0 1) && Bitops.eq arg3895 (Bits.of_int 12 32) && 
-          Bitops.eq arg3890 (Bits.of_int 29 5) && Bitops.eq arg3891 
-            (Bits.of_int 0 1) && Bitops.eq arg3892 (Bits.of_int 11 32) && 
-          Bitops.eq arg3887 (Bits.of_int 30 5) && Bitops.eq arg3888 
-            (Bits.of_int 0 1) && Bitops.eq arg3889 (Bits.of_int 10 32) && 
-          Bitops.eq arg3884 (Bits.of_int 31 5) && Bitops.eq arg3885 
-            (Bits.of_int 0 1) && Bitops.eq arg3886 (Bits.of_int 9 32) && 
-          Bitops.eq arg3881 (Bits.of_int 0 1) && Bitops.eq arg3882 
-            (Bits.of_int 0 1) && Bitops.eq arg3883 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 9 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg3880)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg3945 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg3942 (Bits.U.of_int 10 5) && Bitops.eq arg3943 
+            (Bits.U.of_int 26 5) && Bitops.eq arg3940 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg3941 (Bits.U.of_int 27 5) && Bitops.eq arg3938 
+            (Bits.U.of_int 12 5) && Bitops.eq arg3939 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg3936 (Bits.U.of_int 13 5) && Bitops.eq arg3937 
+            (Bits.U.of_int 29 5) && Bitops.eq arg3934 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg3935 (Bits.U.of_int 30 5) && Bitops.eq arg3932 
+            (Bits.U.of_int 15 5) && Bitops.eq arg3933 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg3929 (Bits.U.of_int 16 5) && Bitops.eq arg3930 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3931 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg3926 (Bits.U.of_int 17 5) && Bitops.eq arg3927 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3928 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg3923 (Bits.U.of_int 18 5) && Bitops.eq arg3924 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3925 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg3920 (Bits.U.of_int 19 5) && Bitops.eq arg3921 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3922 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg3917 (Bits.U.of_int 20 5) && Bitops.eq arg3918 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3919 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg3914 (Bits.U.of_int 21 5) && Bitops.eq arg3915 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3916 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg3911 (Bits.U.of_int 22 5) && Bitops.eq arg3912 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3913 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg3908 (Bits.U.of_int 23 5) && Bitops.eq arg3909 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3910 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg3905 (Bits.U.of_int 24 5) && Bitops.eq arg3906 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3907 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg3902 (Bits.U.of_int 25 5) && Bitops.eq arg3903 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3904 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg3899 (Bits.U.of_int 26 5) && Bitops.eq arg3900 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3901 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg3896 (Bits.U.of_int 27 5) && Bitops.eq arg3897 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3898 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg3893 (Bits.U.of_int 28 5) && Bitops.eq arg3894 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3895 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg3890 (Bits.U.of_int 29 5) && Bitops.eq arg3891 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3892 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg3887 (Bits.U.of_int 30 5) && Bitops.eq arg3888 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3889 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg3884 (Bits.U.of_int 31 5) && Bitops.eq arg3885 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3886 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg3881 (Bits.U.of_int 0 1) && Bitops.eq arg3882 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3883 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 9 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg3880)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg4010), _), RP.Fetch (RP.Cell ('r', 
@@ -11833,52 +11833,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   32, RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg3946)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg3946 13 && Bitops.eq arg4010 
-            (Bits.of_int 9 5) && Bitops.eq arg4011 (Bits.of_int 25 5) && 
-          Bitops.eq arg4008 (Bits.of_int 10 5) && Bitops.eq arg4009 
-            (Bits.of_int 26 5) && Bitops.eq arg4006 (Bits.of_int 11 5) && 
-          Bitops.eq arg4007 (Bits.of_int 27 5) && Bitops.eq arg4004 
-            (Bits.of_int 12 5) && Bitops.eq arg4005 (Bits.of_int 28 5) && 
-          Bitops.eq arg4002 (Bits.of_int 13 5) && Bitops.eq arg4003 
-            (Bits.of_int 29 5) && Bitops.eq arg4000 (Bits.of_int 14 5) && 
-          Bitops.eq arg4001 (Bits.of_int 30 5) && Bitops.eq arg3998 
-            (Bits.of_int 15 5) && Bitops.eq arg3999 (Bits.of_int 31 5) && 
-          Bitops.eq arg3995 (Bits.of_int 16 5) && Bitops.eq arg3996 
-            (Bits.of_int 0 1) && Bitops.eq arg3997 (Bits.of_int 8 32) && 
-          Bitops.eq arg3992 (Bits.of_int 17 5) && Bitops.eq arg3993 
-            (Bits.of_int 0 1) && Bitops.eq arg3994 (Bits.of_int 7 32) && 
-          Bitops.eq arg3989 (Bits.of_int 18 5) && Bitops.eq arg3990 
-            (Bits.of_int 0 1) && Bitops.eq arg3991 (Bits.of_int 6 32) && 
-          Bitops.eq arg3986 (Bits.of_int 19 5) && Bitops.eq arg3987 
-            (Bits.of_int 0 1) && Bitops.eq arg3988 (Bits.of_int 5 32) && 
-          Bitops.eq arg3983 (Bits.of_int 20 5) && Bitops.eq arg3984 
-            (Bits.of_int 0 1) && Bitops.eq arg3985 (Bits.of_int 4 32) && 
-          Bitops.eq arg3980 (Bits.of_int 21 5) && Bitops.eq arg3981 
-            (Bits.of_int 0 1) && Bitops.eq arg3982 (Bits.of_int 3 32) && 
-          Bitops.eq arg3977 (Bits.of_int 22 5) && Bitops.eq arg3978 
-            (Bits.of_int 0 1) && Bitops.eq arg3979 (Bits.of_int 2 32) && 
-          Bitops.eq arg3974 (Bits.of_int 23 5) && Bitops.eq arg3975 
-            (Bits.of_int 0 1) && Bitops.eq arg3976 (Bits.of_int 1 32) && 
-          Bitops.eq arg3971 (Bits.of_int 24 5) && Bitops.eq arg3972 
-            (Bits.of_int 0 1) && Bitops.eq arg3973 (Bits.of_int 16 32) && 
-          Bitops.eq arg3968 (Bits.of_int 25 5) && Bitops.eq arg3969 
-            (Bits.of_int 0 1) && Bitops.eq arg3970 (Bits.of_int 15 32) && 
-          Bitops.eq arg3965 (Bits.of_int 26 5) && Bitops.eq arg3966 
-            (Bits.of_int 0 1) && Bitops.eq arg3967 (Bits.of_int 14 32) && 
-          Bitops.eq arg3962 (Bits.of_int 27 5) && Bitops.eq arg3963 
-            (Bits.of_int 0 1) && Bitops.eq arg3964 (Bits.of_int 13 32) && 
-          Bitops.eq arg3959 (Bits.of_int 28 5) && Bitops.eq arg3960 
-            (Bits.of_int 0 1) && Bitops.eq arg3961 (Bits.of_int 12 32) && 
-          Bitops.eq arg3956 (Bits.of_int 29 5) && Bitops.eq arg3957 
-            (Bits.of_int 0 1) && Bitops.eq arg3958 (Bits.of_int 11 32) && 
-          Bitops.eq arg3953 (Bits.of_int 30 5) && Bitops.eq arg3954 
-            (Bits.of_int 0 1) && Bitops.eq arg3955 (Bits.of_int 10 32) && 
-          Bitops.eq arg3950 (Bits.of_int 31 5) && Bitops.eq arg3951 
-            (Bits.of_int 0 1) && Bitops.eq arg3952 (Bits.of_int 9 32) && 
-          Bitops.eq arg3947 (Bits.of_int 0 1) && Bitops.eq arg3948 
-            (Bits.of_int 0 1) && Bitops.eq arg3949 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 8 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.imode 
-                 (Bits.to_nativeint arg3946)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 9 5) && Bitops.eq arg4011 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg4008 (Bits.U.of_int 10 5) && Bitops.eq arg4009 
+            (Bits.U.of_int 26 5) && Bitops.eq arg4006 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg4007 (Bits.U.of_int 27 5) && Bitops.eq arg4004 
+            (Bits.U.of_int 12 5) && Bitops.eq arg4005 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg4002 (Bits.U.of_int 13 5) && Bitops.eq arg4003 
+            (Bits.U.of_int 29 5) && Bitops.eq arg4000 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg4001 (Bits.U.of_int 30 5) && Bitops.eq arg3998 
+            (Bits.U.of_int 15 5) && Bitops.eq arg3999 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg3995 (Bits.U.of_int 16 5) && Bitops.eq arg3996 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3997 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg3992 (Bits.U.of_int 17 5) && Bitops.eq arg3993 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3994 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg3989 (Bits.U.of_int 18 5) && Bitops.eq arg3990 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3991 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg3986 (Bits.U.of_int 19 5) && Bitops.eq arg3987 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3988 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg3983 (Bits.U.of_int 20 5) && Bitops.eq arg3984 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3985 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg3980 (Bits.U.of_int 21 5) && Bitops.eq arg3981 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3982 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg3977 (Bits.U.of_int 22 5) && Bitops.eq arg3978 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3979 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg3974 (Bits.U.of_int 23 5) && Bitops.eq arg3975 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3976 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg3971 (Bits.U.of_int 24 5) && Bitops.eq arg3972 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3973 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg3968 (Bits.U.of_int 25 5) && Bitops.eq arg3969 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3970 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg3965 (Bits.U.of_int 26 5) && Bitops.eq arg3966 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3967 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg3962 (Bits.U.of_int 27 5) && Bitops.eq arg3963 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3964 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg3959 (Bits.U.of_int 28 5) && Bitops.eq arg3960 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3961 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg3956 (Bits.U.of_int 29 5) && Bitops.eq arg3957 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3958 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg3953 (Bits.U.of_int 30 5) && Bitops.eq arg3954 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3955 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg3950 (Bits.U.of_int 31 5) && Bitops.eq arg3951 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3952 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg3947 (Bits.U.of_int 0 1) && Bitops.eq arg3948 
+            (Bits.U.of_int 0 1) && Bitops.eq arg3949 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 8 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.imode 
+                 (Bits.U.to_native arg3946)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg4077), _), RP.Fetch (RP.Cell ('r', 
@@ -12009,66 +12009,66 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg4077 (Bits.of_int 8 5) && Bitops.eq 
-            arg4078 (Bits.of_int 24 5) && Bitops.eq arg4075 
-            (Bits.of_int 9 5) && Bitops.eq arg4076 (Bits.of_int 25 5) && 
-          Bitops.eq arg4073 (Bits.of_int 10 5) && Bitops.eq arg4074 
-            (Bits.of_int 26 5) && Bitops.eq arg4071 (Bits.of_int 11 5) && 
-          Bitops.eq arg4072 (Bits.of_int 27 5) && Bitops.eq arg4069 
-            (Bits.of_int 12 5) && Bitops.eq arg4070 (Bits.of_int 28 5) && 
-          Bitops.eq arg4067 (Bits.of_int 13 5) && Bitops.eq arg4068 
-            (Bits.of_int 29 5) && Bitops.eq arg4065 (Bits.of_int 14 5) && 
-          Bitops.eq arg4066 (Bits.of_int 30 5) && Bitops.eq arg4063 
-            (Bits.of_int 15 5) && Bitops.eq arg4064 (Bits.of_int 31 5) && 
-          Bitops.eq arg4060 (Bits.of_int 16 5) && Bitops.eq arg4061 
-            (Bits.of_int 0 1) && Bitops.eq arg4062 (Bits.of_int 8 32) && 
-          Bitops.eq arg4057 (Bits.of_int 17 5) && Bitops.eq arg4058 
-            (Bits.of_int 0 1) && Bitops.eq arg4059 (Bits.of_int 7 32) && 
-          Bitops.eq arg4054 (Bits.of_int 18 5) && Bitops.eq arg4055 
-            (Bits.of_int 0 1) && Bitops.eq arg4056 (Bits.of_int 6 32) && 
-          Bitops.eq arg4051 (Bits.of_int 19 5) && Bitops.eq arg4052 
-            (Bits.of_int 0 1) && Bitops.eq arg4053 (Bits.of_int 5 32) && 
-          Bitops.eq arg4048 (Bits.of_int 20 5) && Bitops.eq arg4049 
-            (Bits.of_int 0 1) && Bitops.eq arg4050 (Bits.of_int 4 32) && 
-          Bitops.eq arg4045 (Bits.of_int 21 5) && Bitops.eq arg4046 
-            (Bits.of_int 0 1) && Bitops.eq arg4047 (Bits.of_int 3 32) && 
-          Bitops.eq arg4042 (Bits.of_int 22 5) && Bitops.eq arg4043 
-            (Bits.of_int 0 1) && Bitops.eq arg4044 (Bits.of_int 2 32) && 
-          Bitops.eq arg4039 (Bits.of_int 23 5) && Bitops.eq arg4040 
-            (Bits.of_int 0 1) && Bitops.eq arg4041 (Bits.of_int 1 32) && 
-          Bitops.eq arg4036 (Bits.of_int 24 5) && Bitops.eq arg4037 
-            (Bits.of_int 0 1) && Bitops.eq arg4038 (Bits.of_int 16 32) && 
-          Bitops.eq arg4033 (Bits.of_int 25 5) && Bitops.eq arg4034 
-            (Bits.of_int 0 1) && Bitops.eq arg4035 (Bits.of_int 15 32) && 
-          Bitops.eq arg4030 (Bits.of_int 26 5) && Bitops.eq arg4031 
-            (Bits.of_int 0 1) && Bitops.eq arg4032 (Bits.of_int 14 32) && 
-          Bitops.eq arg4027 (Bits.of_int 27 5) && Bitops.eq arg4028 
-            (Bits.of_int 0 1) && Bitops.eq arg4029 (Bits.of_int 13 32) && 
-          Bitops.eq arg4024 (Bits.of_int 28 5) && Bitops.eq arg4025 
-            (Bits.of_int 0 1) && Bitops.eq arg4026 (Bits.of_int 12 32) && 
-          Bitops.eq arg4021 (Bits.of_int 29 5) && Bitops.eq arg4022 
-            (Bits.of_int 0 1) && Bitops.eq arg4023 (Bits.of_int 11 32) && 
-          Bitops.eq arg4018 (Bits.of_int 30 5) && Bitops.eq arg4019 
-            (Bits.of_int 0 1) && Bitops.eq arg4020 (Bits.of_int 10 32) && 
-          Bitops.eq arg4015 (Bits.of_int 31 5) && Bitops.eq arg4016 
-            (Bits.of_int 0 1) && Bitops.eq arg4017 (Bits.of_int 9 32) && 
-          Bitops.eq arg4012 (Bits.of_int 0 1) && Bitops.eq arg4013 
-            (Bits.of_int 0 1) && Bitops.eq arg4014 (Bits.of_int 16 32) && 
-          Bitops.ne rd (Bits.of_int 8 5) && Bitops.ne rd (Bits.of_int 9 5) && 
-          Bitops.ne rd (Bits.of_int 10 5) && Bitops.ne rd (Bits.of_int 11 5) && 
-          Bitops.ne rd (Bits.of_int 12 5) && Bitops.ne rd (Bits.of_int 13 5) && 
-          Bitops.ne rd (Bits.of_int 14 5) && Bitops.ne rd (Bits.of_int 15 5) && 
-          Bitops.ne rd (Bits.of_int 16 5) && Bitops.ne rd (Bits.of_int 17 5) && 
-          Bitops.ne rd (Bits.of_int 18 5) && Bitops.ne rd (Bits.of_int 19 5) && 
-          Bitops.ne rd (Bits.of_int 20 5) && Bitops.ne rd (Bits.of_int 21 5) && 
-          Bitops.ne rd (Bits.of_int 22 5) && Bitops.ne rd (Bits.of_int 23 5) && 
-          Bitops.ne rd (Bits.of_int 24 5) && Bitops.ne rd (Bits.of_int 25 5) && 
-          Bitops.ne rd (Bits.of_int 26 5) && Bitops.ne rd (Bits.of_int 27 5) && 
-          Bitops.ne rd (Bits.of_int 28 5) && Bitops.ne rd (Bits.of_int 29 5) && 
-          Bitops.ne rd (Bits.of_int 30 5) && Bitops.ne rd 
-            (Bits.of_int 31 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg4077 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg4078 (Bits.U.of_int 24 5) && Bitops.eq arg4075 
+            (Bits.U.of_int 9 5) && Bitops.eq arg4076 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg4073 (Bits.U.of_int 10 5) && Bitops.eq arg4074 
+            (Bits.U.of_int 26 5) && Bitops.eq arg4071 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg4072 (Bits.U.of_int 27 5) && Bitops.eq arg4069 
+            (Bits.U.of_int 12 5) && Bitops.eq arg4070 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg4067 (Bits.U.of_int 13 5) && Bitops.eq arg4068 
+            (Bits.U.of_int 29 5) && Bitops.eq arg4065 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg4066 (Bits.U.of_int 30 5) && Bitops.eq arg4063 
+            (Bits.U.of_int 15 5) && Bitops.eq arg4064 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg4060 (Bits.U.of_int 16 5) && Bitops.eq arg4061 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4062 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg4057 (Bits.U.of_int 17 5) && Bitops.eq arg4058 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4059 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg4054 (Bits.U.of_int 18 5) && Bitops.eq arg4055 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4056 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg4051 (Bits.U.of_int 19 5) && Bitops.eq arg4052 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4053 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg4048 (Bits.U.of_int 20 5) && Bitops.eq arg4049 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4050 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg4045 (Bits.U.of_int 21 5) && Bitops.eq arg4046 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4047 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg4042 (Bits.U.of_int 22 5) && Bitops.eq arg4043 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4044 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg4039 (Bits.U.of_int 23 5) && Bitops.eq arg4040 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4041 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg4036 (Bits.U.of_int 24 5) && Bitops.eq arg4037 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4038 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg4033 (Bits.U.of_int 25 5) && Bitops.eq arg4034 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4035 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg4030 (Bits.U.of_int 26 5) && Bitops.eq arg4031 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4032 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg4027 (Bits.U.of_int 27 5) && Bitops.eq arg4028 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4029 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg4024 (Bits.U.of_int 28 5) && Bitops.eq arg4025 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4026 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg4021 (Bits.U.of_int 29 5) && Bitops.eq arg4022 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4023 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg4018 (Bits.U.of_int 30 5) && Bitops.eq arg4019 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4020 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg4015 (Bits.U.of_int 31 5) && Bitops.eq arg4016 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4017 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg4012 (Bits.U.of_int 0 1) && Bitops.eq arg4013 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4014 (Bits.U.of_int 16 32) && 
+          Bitops.ne rd (Bits.U.of_int 8 5) && Bitops.ne rd (Bits.U.of_int 9 5) && 
+          Bitops.ne rd (Bits.U.of_int 10 5) && Bitops.ne rd (Bits.U.of_int 11 5) && 
+          Bitops.ne rd (Bits.U.of_int 12 5) && Bitops.ne rd (Bits.U.of_int 13 5) && 
+          Bitops.ne rd (Bits.U.of_int 14 5) && Bitops.ne rd (Bits.U.of_int 15 5) && 
+          Bitops.ne rd (Bits.U.of_int 16 5) && Bitops.ne rd (Bits.U.of_int 17 5) && 
+          Bitops.ne rd (Bits.U.of_int 18 5) && Bitops.ne rd (Bits.U.of_int 19 5) && 
+          Bitops.ne rd (Bits.U.of_int 20 5) && Bitops.ne rd (Bits.U.of_int 21 5) && 
+          Bitops.ne rd (Bits.U.of_int 22 5) && Bitops.ne rd (Bits.U.of_int 23 5) && 
+          Bitops.ne rd (Bits.U.of_int 24 5) && Bitops.ne rd (Bits.U.of_int 25 5) && 
+          Bitops.ne rd (Bits.U.of_int 26 5) && Bitops.ne rd (Bits.U.of_int 27 5) && 
+          Bitops.ne rd (Bits.U.of_int 28 5) && Bitops.ne rd (Bits.U.of_int 29 5) && 
+          Bitops.ne rd (Bits.U.of_int 30 5) && Bitops.ne rd 
+            (Bits.U.of_int 31 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg4141), _), RP.Fetch (RP.Cell ('r', 
@@ -12193,52 +12193,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg4141 (Bits.of_int 8 5) && Bitops.eq 
-            arg4142 (Bits.of_int 24 5) && Bitops.eq arg4139 
-            (Bits.of_int 9 5) && Bitops.eq arg4140 (Bits.of_int 25 5) && 
-          Bitops.eq arg4137 (Bits.of_int 10 5) && Bitops.eq arg4138 
-            (Bits.of_int 26 5) && Bitops.eq arg4135 (Bits.of_int 11 5) && 
-          Bitops.eq arg4136 (Bits.of_int 27 5) && Bitops.eq arg4133 
-            (Bits.of_int 12 5) && Bitops.eq arg4134 (Bits.of_int 28 5) && 
-          Bitops.eq arg4131 (Bits.of_int 13 5) && Bitops.eq arg4132 
-            (Bits.of_int 29 5) && Bitops.eq arg4129 (Bits.of_int 14 5) && 
-          Bitops.eq arg4130 (Bits.of_int 30 5) && Bitops.eq arg4127 
-            (Bits.of_int 15 5) && Bitops.eq arg4128 (Bits.of_int 31 5) && 
-          Bitops.eq arg4124 (Bits.of_int 16 5) && Bitops.eq arg4125 
-            (Bits.of_int 0 1) && Bitops.eq arg4126 (Bits.of_int 8 32) && 
-          Bitops.eq arg4121 (Bits.of_int 17 5) && Bitops.eq arg4122 
-            (Bits.of_int 0 1) && Bitops.eq arg4123 (Bits.of_int 7 32) && 
-          Bitops.eq arg4118 (Bits.of_int 18 5) && Bitops.eq arg4119 
-            (Bits.of_int 0 1) && Bitops.eq arg4120 (Bits.of_int 6 32) && 
-          Bitops.eq arg4115 (Bits.of_int 19 5) && Bitops.eq arg4116 
-            (Bits.of_int 0 1) && Bitops.eq arg4117 (Bits.of_int 5 32) && 
-          Bitops.eq arg4112 (Bits.of_int 20 5) && Bitops.eq arg4113 
-            (Bits.of_int 0 1) && Bitops.eq arg4114 (Bits.of_int 4 32) && 
-          Bitops.eq arg4109 (Bits.of_int 21 5) && Bitops.eq arg4110 
-            (Bits.of_int 0 1) && Bitops.eq arg4111 (Bits.of_int 3 32) && 
-          Bitops.eq arg4106 (Bits.of_int 22 5) && Bitops.eq arg4107 
-            (Bits.of_int 0 1) && Bitops.eq arg4108 (Bits.of_int 2 32) && 
-          Bitops.eq arg4103 (Bits.of_int 23 5) && Bitops.eq arg4104 
-            (Bits.of_int 0 1) && Bitops.eq arg4105 (Bits.of_int 1 32) && 
-          Bitops.eq arg4100 (Bits.of_int 24 5) && Bitops.eq arg4101 
-            (Bits.of_int 0 1) && Bitops.eq arg4102 (Bits.of_int 16 32) && 
-          Bitops.eq arg4097 (Bits.of_int 25 5) && Bitops.eq arg4098 
-            (Bits.of_int 0 1) && Bitops.eq arg4099 (Bits.of_int 15 32) && 
-          Bitops.eq arg4094 (Bits.of_int 26 5) && Bitops.eq arg4095 
-            (Bits.of_int 0 1) && Bitops.eq arg4096 (Bits.of_int 14 32) && 
-          Bitops.eq arg4091 (Bits.of_int 27 5) && Bitops.eq arg4092 
-            (Bits.of_int 0 1) && Bitops.eq arg4093 (Bits.of_int 13 32) && 
-          Bitops.eq arg4088 (Bits.of_int 28 5) && Bitops.eq arg4089 
-            (Bits.of_int 0 1) && Bitops.eq arg4090 (Bits.of_int 12 32) && 
-          Bitops.eq arg4085 (Bits.of_int 29 5) && Bitops.eq arg4086 
-            (Bits.of_int 0 1) && Bitops.eq arg4087 (Bits.of_int 11 32) && 
-          Bitops.eq arg4082 (Bits.of_int 30 5) && Bitops.eq arg4083 
-            (Bits.of_int 0 1) && Bitops.eq arg4084 (Bits.of_int 10 32) && 
-          Bitops.eq arg4079 (Bits.of_int 0 1) && Bitops.eq arg4080 
-            (Bits.of_int 0 1) && Bitops.eq arg4081 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 31 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg4141 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg4142 (Bits.U.of_int 24 5) && Bitops.eq arg4139 
+            (Bits.U.of_int 9 5) && Bitops.eq arg4140 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg4137 (Bits.U.of_int 10 5) && Bitops.eq arg4138 
+            (Bits.U.of_int 26 5) && Bitops.eq arg4135 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg4136 (Bits.U.of_int 27 5) && Bitops.eq arg4133 
+            (Bits.U.of_int 12 5) && Bitops.eq arg4134 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg4131 (Bits.U.of_int 13 5) && Bitops.eq arg4132 
+            (Bits.U.of_int 29 5) && Bitops.eq arg4129 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg4130 (Bits.U.of_int 30 5) && Bitops.eq arg4127 
+            (Bits.U.of_int 15 5) && Bitops.eq arg4128 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg4124 (Bits.U.of_int 16 5) && Bitops.eq arg4125 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4126 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg4121 (Bits.U.of_int 17 5) && Bitops.eq arg4122 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4123 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg4118 (Bits.U.of_int 18 5) && Bitops.eq arg4119 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4120 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg4115 (Bits.U.of_int 19 5) && Bitops.eq arg4116 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4117 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg4112 (Bits.U.of_int 20 5) && Bitops.eq arg4113 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4114 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg4109 (Bits.U.of_int 21 5) && Bitops.eq arg4110 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4111 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg4106 (Bits.U.of_int 22 5) && Bitops.eq arg4107 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4108 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg4103 (Bits.U.of_int 23 5) && Bitops.eq arg4104 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4105 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg4100 (Bits.U.of_int 24 5) && Bitops.eq arg4101 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4102 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg4097 (Bits.U.of_int 25 5) && Bitops.eq arg4098 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4099 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg4094 (Bits.U.of_int 26 5) && Bitops.eq arg4095 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4096 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg4091 (Bits.U.of_int 27 5) && Bitops.eq arg4092 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4093 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg4088 (Bits.U.of_int 28 5) && Bitops.eq arg4089 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4090 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg4085 (Bits.U.of_int 29 5) && Bitops.eq arg4086 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4087 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg4082 (Bits.U.of_int 30 5) && Bitops.eq arg4083 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4084 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg4079 (Bits.U.of_int 0 1) && Bitops.eq arg4080 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4081 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 31 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg4205), _), RP.Fetch (RP.Cell ('r', 
@@ -12363,52 +12363,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg4205 (Bits.of_int 8 5) && Bitops.eq 
-            arg4206 (Bits.of_int 24 5) && Bitops.eq arg4203 
-            (Bits.of_int 9 5) && Bitops.eq arg4204 (Bits.of_int 25 5) && 
-          Bitops.eq arg4201 (Bits.of_int 10 5) && Bitops.eq arg4202 
-            (Bits.of_int 26 5) && Bitops.eq arg4199 (Bits.of_int 11 5) && 
-          Bitops.eq arg4200 (Bits.of_int 27 5) && Bitops.eq arg4197 
-            (Bits.of_int 12 5) && Bitops.eq arg4198 (Bits.of_int 28 5) && 
-          Bitops.eq arg4195 (Bits.of_int 13 5) && Bitops.eq arg4196 
-            (Bits.of_int 29 5) && Bitops.eq arg4193 (Bits.of_int 14 5) && 
-          Bitops.eq arg4194 (Bits.of_int 30 5) && Bitops.eq arg4191 
-            (Bits.of_int 15 5) && Bitops.eq arg4192 (Bits.of_int 31 5) && 
-          Bitops.eq arg4188 (Bits.of_int 16 5) && Bitops.eq arg4189 
-            (Bits.of_int 0 1) && Bitops.eq arg4190 (Bits.of_int 8 32) && 
-          Bitops.eq arg4185 (Bits.of_int 17 5) && Bitops.eq arg4186 
-            (Bits.of_int 0 1) && Bitops.eq arg4187 (Bits.of_int 7 32) && 
-          Bitops.eq arg4182 (Bits.of_int 18 5) && Bitops.eq arg4183 
-            (Bits.of_int 0 1) && Bitops.eq arg4184 (Bits.of_int 6 32) && 
-          Bitops.eq arg4179 (Bits.of_int 19 5) && Bitops.eq arg4180 
-            (Bits.of_int 0 1) && Bitops.eq arg4181 (Bits.of_int 5 32) && 
-          Bitops.eq arg4176 (Bits.of_int 20 5) && Bitops.eq arg4177 
-            (Bits.of_int 0 1) && Bitops.eq arg4178 (Bits.of_int 4 32) && 
-          Bitops.eq arg4173 (Bits.of_int 21 5) && Bitops.eq arg4174 
-            (Bits.of_int 0 1) && Bitops.eq arg4175 (Bits.of_int 3 32) && 
-          Bitops.eq arg4170 (Bits.of_int 22 5) && Bitops.eq arg4171 
-            (Bits.of_int 0 1) && Bitops.eq arg4172 (Bits.of_int 2 32) && 
-          Bitops.eq arg4167 (Bits.of_int 23 5) && Bitops.eq arg4168 
-            (Bits.of_int 0 1) && Bitops.eq arg4169 (Bits.of_int 1 32) && 
-          Bitops.eq arg4164 (Bits.of_int 24 5) && Bitops.eq arg4165 
-            (Bits.of_int 0 1) && Bitops.eq arg4166 (Bits.of_int 16 32) && 
-          Bitops.eq arg4161 (Bits.of_int 25 5) && Bitops.eq arg4162 
-            (Bits.of_int 0 1) && Bitops.eq arg4163 (Bits.of_int 15 32) && 
-          Bitops.eq arg4158 (Bits.of_int 26 5) && Bitops.eq arg4159 
-            (Bits.of_int 0 1) && Bitops.eq arg4160 (Bits.of_int 14 32) && 
-          Bitops.eq arg4155 (Bits.of_int 27 5) && Bitops.eq arg4156 
-            (Bits.of_int 0 1) && Bitops.eq arg4157 (Bits.of_int 13 32) && 
-          Bitops.eq arg4152 (Bits.of_int 28 5) && Bitops.eq arg4153 
-            (Bits.of_int 0 1) && Bitops.eq arg4154 (Bits.of_int 12 32) && 
-          Bitops.eq arg4149 (Bits.of_int 29 5) && Bitops.eq arg4150 
-            (Bits.of_int 0 1) && Bitops.eq arg4151 (Bits.of_int 11 32) && 
-          Bitops.eq arg4146 (Bits.of_int 31 5) && Bitops.eq arg4147 
-            (Bits.of_int 0 1) && Bitops.eq arg4148 (Bits.of_int 9 32) && 
-          Bitops.eq arg4143 (Bits.of_int 0 1) && Bitops.eq arg4144 
-            (Bits.of_int 0 1) && Bitops.eq arg4145 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 30 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg4205 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg4206 (Bits.U.of_int 24 5) && Bitops.eq arg4203 
+            (Bits.U.of_int 9 5) && Bitops.eq arg4204 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg4201 (Bits.U.of_int 10 5) && Bitops.eq arg4202 
+            (Bits.U.of_int 26 5) && Bitops.eq arg4199 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg4200 (Bits.U.of_int 27 5) && Bitops.eq arg4197 
+            (Bits.U.of_int 12 5) && Bitops.eq arg4198 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg4195 (Bits.U.of_int 13 5) && Bitops.eq arg4196 
+            (Bits.U.of_int 29 5) && Bitops.eq arg4193 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg4194 (Bits.U.of_int 30 5) && Bitops.eq arg4191 
+            (Bits.U.of_int 15 5) && Bitops.eq arg4192 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg4188 (Bits.U.of_int 16 5) && Bitops.eq arg4189 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4190 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg4185 (Bits.U.of_int 17 5) && Bitops.eq arg4186 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4187 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg4182 (Bits.U.of_int 18 5) && Bitops.eq arg4183 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4184 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg4179 (Bits.U.of_int 19 5) && Bitops.eq arg4180 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4181 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg4176 (Bits.U.of_int 20 5) && Bitops.eq arg4177 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4178 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg4173 (Bits.U.of_int 21 5) && Bitops.eq arg4174 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4175 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg4170 (Bits.U.of_int 22 5) && Bitops.eq arg4171 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4172 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg4167 (Bits.U.of_int 23 5) && Bitops.eq arg4168 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4169 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg4164 (Bits.U.of_int 24 5) && Bitops.eq arg4165 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4166 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg4161 (Bits.U.of_int 25 5) && Bitops.eq arg4162 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4163 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg4158 (Bits.U.of_int 26 5) && Bitops.eq arg4159 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4160 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg4155 (Bits.U.of_int 27 5) && Bitops.eq arg4156 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4157 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg4152 (Bits.U.of_int 28 5) && Bitops.eq arg4153 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4154 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg4149 (Bits.U.of_int 29 5) && Bitops.eq arg4150 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4151 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg4146 (Bits.U.of_int 31 5) && Bitops.eq arg4147 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4148 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg4143 (Bits.U.of_int 0 1) && Bitops.eq arg4144 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4145 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 30 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg4269), _), RP.Fetch (RP.Cell ('r', 
@@ -12533,52 +12533,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg4269 (Bits.of_int 8 5) && Bitops.eq 
-            arg4270 (Bits.of_int 24 5) && Bitops.eq arg4267 
-            (Bits.of_int 9 5) && Bitops.eq arg4268 (Bits.of_int 25 5) && 
-          Bitops.eq arg4265 (Bits.of_int 10 5) && Bitops.eq arg4266 
-            (Bits.of_int 26 5) && Bitops.eq arg4263 (Bits.of_int 11 5) && 
-          Bitops.eq arg4264 (Bits.of_int 27 5) && Bitops.eq arg4261 
-            (Bits.of_int 12 5) && Bitops.eq arg4262 (Bits.of_int 28 5) && 
-          Bitops.eq arg4259 (Bits.of_int 13 5) && Bitops.eq arg4260 
-            (Bits.of_int 29 5) && Bitops.eq arg4257 (Bits.of_int 14 5) && 
-          Bitops.eq arg4258 (Bits.of_int 30 5) && Bitops.eq arg4255 
-            (Bits.of_int 15 5) && Bitops.eq arg4256 (Bits.of_int 31 5) && 
-          Bitops.eq arg4252 (Bits.of_int 16 5) && Bitops.eq arg4253 
-            (Bits.of_int 0 1) && Bitops.eq arg4254 (Bits.of_int 8 32) && 
-          Bitops.eq arg4249 (Bits.of_int 17 5) && Bitops.eq arg4250 
-            (Bits.of_int 0 1) && Bitops.eq arg4251 (Bits.of_int 7 32) && 
-          Bitops.eq arg4246 (Bits.of_int 18 5) && Bitops.eq arg4247 
-            (Bits.of_int 0 1) && Bitops.eq arg4248 (Bits.of_int 6 32) && 
-          Bitops.eq arg4243 (Bits.of_int 19 5) && Bitops.eq arg4244 
-            (Bits.of_int 0 1) && Bitops.eq arg4245 (Bits.of_int 5 32) && 
-          Bitops.eq arg4240 (Bits.of_int 20 5) && Bitops.eq arg4241 
-            (Bits.of_int 0 1) && Bitops.eq arg4242 (Bits.of_int 4 32) && 
-          Bitops.eq arg4237 (Bits.of_int 21 5) && Bitops.eq arg4238 
-            (Bits.of_int 0 1) && Bitops.eq arg4239 (Bits.of_int 3 32) && 
-          Bitops.eq arg4234 (Bits.of_int 22 5) && Bitops.eq arg4235 
-            (Bits.of_int 0 1) && Bitops.eq arg4236 (Bits.of_int 2 32) && 
-          Bitops.eq arg4231 (Bits.of_int 23 5) && Bitops.eq arg4232 
-            (Bits.of_int 0 1) && Bitops.eq arg4233 (Bits.of_int 1 32) && 
-          Bitops.eq arg4228 (Bits.of_int 24 5) && Bitops.eq arg4229 
-            (Bits.of_int 0 1) && Bitops.eq arg4230 (Bits.of_int 16 32) && 
-          Bitops.eq arg4225 (Bits.of_int 25 5) && Bitops.eq arg4226 
-            (Bits.of_int 0 1) && Bitops.eq arg4227 (Bits.of_int 15 32) && 
-          Bitops.eq arg4222 (Bits.of_int 26 5) && Bitops.eq arg4223 
-            (Bits.of_int 0 1) && Bitops.eq arg4224 (Bits.of_int 14 32) && 
-          Bitops.eq arg4219 (Bits.of_int 27 5) && Bitops.eq arg4220 
-            (Bits.of_int 0 1) && Bitops.eq arg4221 (Bits.of_int 13 32) && 
-          Bitops.eq arg4216 (Bits.of_int 28 5) && Bitops.eq arg4217 
-            (Bits.of_int 0 1) && Bitops.eq arg4218 (Bits.of_int 12 32) && 
-          Bitops.eq arg4213 (Bits.of_int 30 5) && Bitops.eq arg4214 
-            (Bits.of_int 0 1) && Bitops.eq arg4215 (Bits.of_int 10 32) && 
-          Bitops.eq arg4210 (Bits.of_int 31 5) && Bitops.eq arg4211 
-            (Bits.of_int 0 1) && Bitops.eq arg4212 (Bits.of_int 9 32) && 
-          Bitops.eq arg4207 (Bits.of_int 0 1) && Bitops.eq arg4208 
-            (Bits.of_int 0 1) && Bitops.eq arg4209 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 29 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg4269 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg4270 (Bits.U.of_int 24 5) && Bitops.eq arg4267 
+            (Bits.U.of_int 9 5) && Bitops.eq arg4268 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg4265 (Bits.U.of_int 10 5) && Bitops.eq arg4266 
+            (Bits.U.of_int 26 5) && Bitops.eq arg4263 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg4264 (Bits.U.of_int 27 5) && Bitops.eq arg4261 
+            (Bits.U.of_int 12 5) && Bitops.eq arg4262 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg4259 (Bits.U.of_int 13 5) && Bitops.eq arg4260 
+            (Bits.U.of_int 29 5) && Bitops.eq arg4257 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg4258 (Bits.U.of_int 30 5) && Bitops.eq arg4255 
+            (Bits.U.of_int 15 5) && Bitops.eq arg4256 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg4252 (Bits.U.of_int 16 5) && Bitops.eq arg4253 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4254 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg4249 (Bits.U.of_int 17 5) && Bitops.eq arg4250 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4251 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg4246 (Bits.U.of_int 18 5) && Bitops.eq arg4247 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4248 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg4243 (Bits.U.of_int 19 5) && Bitops.eq arg4244 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4245 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg4240 (Bits.U.of_int 20 5) && Bitops.eq arg4241 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4242 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg4237 (Bits.U.of_int 21 5) && Bitops.eq arg4238 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4239 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg4234 (Bits.U.of_int 22 5) && Bitops.eq arg4235 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4236 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg4231 (Bits.U.of_int 23 5) && Bitops.eq arg4232 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4233 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg4228 (Bits.U.of_int 24 5) && Bitops.eq arg4229 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4230 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg4225 (Bits.U.of_int 25 5) && Bitops.eq arg4226 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4227 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg4222 (Bits.U.of_int 26 5) && Bitops.eq arg4223 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4224 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg4219 (Bits.U.of_int 27 5) && Bitops.eq arg4220 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4221 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg4216 (Bits.U.of_int 28 5) && Bitops.eq arg4217 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4218 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg4213 (Bits.U.of_int 30 5) && Bitops.eq arg4214 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4215 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg4210 (Bits.U.of_int 31 5) && Bitops.eq arg4211 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4212 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg4207 (Bits.U.of_int 0 1) && Bitops.eq arg4208 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4209 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 29 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg4333), _), RP.Fetch (RP.Cell ('r', 
@@ -12703,52 +12703,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg4333 (Bits.of_int 8 5) && Bitops.eq 
-            arg4334 (Bits.of_int 24 5) && Bitops.eq arg4331 
-            (Bits.of_int 9 5) && Bitops.eq arg4332 (Bits.of_int 25 5) && 
-          Bitops.eq arg4329 (Bits.of_int 10 5) && Bitops.eq arg4330 
-            (Bits.of_int 26 5) && Bitops.eq arg4327 (Bits.of_int 11 5) && 
-          Bitops.eq arg4328 (Bits.of_int 27 5) && Bitops.eq arg4325 
-            (Bits.of_int 12 5) && Bitops.eq arg4326 (Bits.of_int 28 5) && 
-          Bitops.eq arg4323 (Bits.of_int 13 5) && Bitops.eq arg4324 
-            (Bits.of_int 29 5) && Bitops.eq arg4321 (Bits.of_int 14 5) && 
-          Bitops.eq arg4322 (Bits.of_int 30 5) && Bitops.eq arg4319 
-            (Bits.of_int 15 5) && Bitops.eq arg4320 (Bits.of_int 31 5) && 
-          Bitops.eq arg4316 (Bits.of_int 16 5) && Bitops.eq arg4317 
-            (Bits.of_int 0 1) && Bitops.eq arg4318 (Bits.of_int 8 32) && 
-          Bitops.eq arg4313 (Bits.of_int 17 5) && Bitops.eq arg4314 
-            (Bits.of_int 0 1) && Bitops.eq arg4315 (Bits.of_int 7 32) && 
-          Bitops.eq arg4310 (Bits.of_int 18 5) && Bitops.eq arg4311 
-            (Bits.of_int 0 1) && Bitops.eq arg4312 (Bits.of_int 6 32) && 
-          Bitops.eq arg4307 (Bits.of_int 19 5) && Bitops.eq arg4308 
-            (Bits.of_int 0 1) && Bitops.eq arg4309 (Bits.of_int 5 32) && 
-          Bitops.eq arg4304 (Bits.of_int 20 5) && Bitops.eq arg4305 
-            (Bits.of_int 0 1) && Bitops.eq arg4306 (Bits.of_int 4 32) && 
-          Bitops.eq arg4301 (Bits.of_int 21 5) && Bitops.eq arg4302 
-            (Bits.of_int 0 1) && Bitops.eq arg4303 (Bits.of_int 3 32) && 
-          Bitops.eq arg4298 (Bits.of_int 22 5) && Bitops.eq arg4299 
-            (Bits.of_int 0 1) && Bitops.eq arg4300 (Bits.of_int 2 32) && 
-          Bitops.eq arg4295 (Bits.of_int 23 5) && Bitops.eq arg4296 
-            (Bits.of_int 0 1) && Bitops.eq arg4297 (Bits.of_int 1 32) && 
-          Bitops.eq arg4292 (Bits.of_int 24 5) && Bitops.eq arg4293 
-            (Bits.of_int 0 1) && Bitops.eq arg4294 (Bits.of_int 16 32) && 
-          Bitops.eq arg4289 (Bits.of_int 25 5) && Bitops.eq arg4290 
-            (Bits.of_int 0 1) && Bitops.eq arg4291 (Bits.of_int 15 32) && 
-          Bitops.eq arg4286 (Bits.of_int 26 5) && Bitops.eq arg4287 
-            (Bits.of_int 0 1) && Bitops.eq arg4288 (Bits.of_int 14 32) && 
-          Bitops.eq arg4283 (Bits.of_int 27 5) && Bitops.eq arg4284 
-            (Bits.of_int 0 1) && Bitops.eq arg4285 (Bits.of_int 13 32) && 
-          Bitops.eq arg4280 (Bits.of_int 29 5) && Bitops.eq arg4281 
-            (Bits.of_int 0 1) && Bitops.eq arg4282 (Bits.of_int 11 32) && 
-          Bitops.eq arg4277 (Bits.of_int 30 5) && Bitops.eq arg4278 
-            (Bits.of_int 0 1) && Bitops.eq arg4279 (Bits.of_int 10 32) && 
-          Bitops.eq arg4274 (Bits.of_int 31 5) && Bitops.eq arg4275 
-            (Bits.of_int 0 1) && Bitops.eq arg4276 (Bits.of_int 9 32) && 
-          Bitops.eq arg4271 (Bits.of_int 0 1) && Bitops.eq arg4272 
-            (Bits.of_int 0 1) && Bitops.eq arg4273 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 28 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg4333 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg4334 (Bits.U.of_int 24 5) && Bitops.eq arg4331 
+            (Bits.U.of_int 9 5) && Bitops.eq arg4332 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg4329 (Bits.U.of_int 10 5) && Bitops.eq arg4330 
+            (Bits.U.of_int 26 5) && Bitops.eq arg4327 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg4328 (Bits.U.of_int 27 5) && Bitops.eq arg4325 
+            (Bits.U.of_int 12 5) && Bitops.eq arg4326 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg4323 (Bits.U.of_int 13 5) && Bitops.eq arg4324 
+            (Bits.U.of_int 29 5) && Bitops.eq arg4321 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg4322 (Bits.U.of_int 30 5) && Bitops.eq arg4319 
+            (Bits.U.of_int 15 5) && Bitops.eq arg4320 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg4316 (Bits.U.of_int 16 5) && Bitops.eq arg4317 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4318 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg4313 (Bits.U.of_int 17 5) && Bitops.eq arg4314 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4315 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg4310 (Bits.U.of_int 18 5) && Bitops.eq arg4311 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4312 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg4307 (Bits.U.of_int 19 5) && Bitops.eq arg4308 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4309 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg4304 (Bits.U.of_int 20 5) && Bitops.eq arg4305 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4306 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg4301 (Bits.U.of_int 21 5) && Bitops.eq arg4302 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4303 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg4298 (Bits.U.of_int 22 5) && Bitops.eq arg4299 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4300 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg4295 (Bits.U.of_int 23 5) && Bitops.eq arg4296 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4297 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg4292 (Bits.U.of_int 24 5) && Bitops.eq arg4293 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4294 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg4289 (Bits.U.of_int 25 5) && Bitops.eq arg4290 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4291 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg4286 (Bits.U.of_int 26 5) && Bitops.eq arg4287 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4288 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg4283 (Bits.U.of_int 27 5) && Bitops.eq arg4284 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4285 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg4280 (Bits.U.of_int 29 5) && Bitops.eq arg4281 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4282 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg4277 (Bits.U.of_int 30 5) && Bitops.eq arg4278 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4279 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg4274 (Bits.U.of_int 31 5) && Bitops.eq arg4275 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4276 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg4271 (Bits.U.of_int 0 1) && Bitops.eq arg4272 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4273 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 28 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg4397), _), RP.Fetch (RP.Cell ('r', 
@@ -12873,52 +12873,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg4397 (Bits.of_int 8 5) && Bitops.eq 
-            arg4398 (Bits.of_int 24 5) && Bitops.eq arg4395 
-            (Bits.of_int 9 5) && Bitops.eq arg4396 (Bits.of_int 25 5) && 
-          Bitops.eq arg4393 (Bits.of_int 10 5) && Bitops.eq arg4394 
-            (Bits.of_int 26 5) && Bitops.eq arg4391 (Bits.of_int 11 5) && 
-          Bitops.eq arg4392 (Bits.of_int 27 5) && Bitops.eq arg4389 
-            (Bits.of_int 12 5) && Bitops.eq arg4390 (Bits.of_int 28 5) && 
-          Bitops.eq arg4387 (Bits.of_int 13 5) && Bitops.eq arg4388 
-            (Bits.of_int 29 5) && Bitops.eq arg4385 (Bits.of_int 14 5) && 
-          Bitops.eq arg4386 (Bits.of_int 30 5) && Bitops.eq arg4383 
-            (Bits.of_int 15 5) && Bitops.eq arg4384 (Bits.of_int 31 5) && 
-          Bitops.eq arg4380 (Bits.of_int 16 5) && Bitops.eq arg4381 
-            (Bits.of_int 0 1) && Bitops.eq arg4382 (Bits.of_int 8 32) && 
-          Bitops.eq arg4377 (Bits.of_int 17 5) && Bitops.eq arg4378 
-            (Bits.of_int 0 1) && Bitops.eq arg4379 (Bits.of_int 7 32) && 
-          Bitops.eq arg4374 (Bits.of_int 18 5) && Bitops.eq arg4375 
-            (Bits.of_int 0 1) && Bitops.eq arg4376 (Bits.of_int 6 32) && 
-          Bitops.eq arg4371 (Bits.of_int 19 5) && Bitops.eq arg4372 
-            (Bits.of_int 0 1) && Bitops.eq arg4373 (Bits.of_int 5 32) && 
-          Bitops.eq arg4368 (Bits.of_int 20 5) && Bitops.eq arg4369 
-            (Bits.of_int 0 1) && Bitops.eq arg4370 (Bits.of_int 4 32) && 
-          Bitops.eq arg4365 (Bits.of_int 21 5) && Bitops.eq arg4366 
-            (Bits.of_int 0 1) && Bitops.eq arg4367 (Bits.of_int 3 32) && 
-          Bitops.eq arg4362 (Bits.of_int 22 5) && Bitops.eq arg4363 
-            (Bits.of_int 0 1) && Bitops.eq arg4364 (Bits.of_int 2 32) && 
-          Bitops.eq arg4359 (Bits.of_int 23 5) && Bitops.eq arg4360 
-            (Bits.of_int 0 1) && Bitops.eq arg4361 (Bits.of_int 1 32) && 
-          Bitops.eq arg4356 (Bits.of_int 24 5) && Bitops.eq arg4357 
-            (Bits.of_int 0 1) && Bitops.eq arg4358 (Bits.of_int 16 32) && 
-          Bitops.eq arg4353 (Bits.of_int 25 5) && Bitops.eq arg4354 
-            (Bits.of_int 0 1) && Bitops.eq arg4355 (Bits.of_int 15 32) && 
-          Bitops.eq arg4350 (Bits.of_int 26 5) && Bitops.eq arg4351 
-            (Bits.of_int 0 1) && Bitops.eq arg4352 (Bits.of_int 14 32) && 
-          Bitops.eq arg4347 (Bits.of_int 28 5) && Bitops.eq arg4348 
-            (Bits.of_int 0 1) && Bitops.eq arg4349 (Bits.of_int 12 32) && 
-          Bitops.eq arg4344 (Bits.of_int 29 5) && Bitops.eq arg4345 
-            (Bits.of_int 0 1) && Bitops.eq arg4346 (Bits.of_int 11 32) && 
-          Bitops.eq arg4341 (Bits.of_int 30 5) && Bitops.eq arg4342 
-            (Bits.of_int 0 1) && Bitops.eq arg4343 (Bits.of_int 10 32) && 
-          Bitops.eq arg4338 (Bits.of_int 31 5) && Bitops.eq arg4339 
-            (Bits.of_int 0 1) && Bitops.eq arg4340 (Bits.of_int 9 32) && 
-          Bitops.eq arg4335 (Bits.of_int 0 1) && Bitops.eq arg4336 
-            (Bits.of_int 0 1) && Bitops.eq arg4337 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 27 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg4397 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg4398 (Bits.U.of_int 24 5) && Bitops.eq arg4395 
+            (Bits.U.of_int 9 5) && Bitops.eq arg4396 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg4393 (Bits.U.of_int 10 5) && Bitops.eq arg4394 
+            (Bits.U.of_int 26 5) && Bitops.eq arg4391 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg4392 (Bits.U.of_int 27 5) && Bitops.eq arg4389 
+            (Bits.U.of_int 12 5) && Bitops.eq arg4390 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg4387 (Bits.U.of_int 13 5) && Bitops.eq arg4388 
+            (Bits.U.of_int 29 5) && Bitops.eq arg4385 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg4386 (Bits.U.of_int 30 5) && Bitops.eq arg4383 
+            (Bits.U.of_int 15 5) && Bitops.eq arg4384 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg4380 (Bits.U.of_int 16 5) && Bitops.eq arg4381 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4382 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg4377 (Bits.U.of_int 17 5) && Bitops.eq arg4378 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4379 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg4374 (Bits.U.of_int 18 5) && Bitops.eq arg4375 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4376 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg4371 (Bits.U.of_int 19 5) && Bitops.eq arg4372 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4373 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg4368 (Bits.U.of_int 20 5) && Bitops.eq arg4369 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4370 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg4365 (Bits.U.of_int 21 5) && Bitops.eq arg4366 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4367 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg4362 (Bits.U.of_int 22 5) && Bitops.eq arg4363 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4364 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg4359 (Bits.U.of_int 23 5) && Bitops.eq arg4360 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4361 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg4356 (Bits.U.of_int 24 5) && Bitops.eq arg4357 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4358 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg4353 (Bits.U.of_int 25 5) && Bitops.eq arg4354 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4355 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg4350 (Bits.U.of_int 26 5) && Bitops.eq arg4351 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4352 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg4347 (Bits.U.of_int 28 5) && Bitops.eq arg4348 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4349 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg4344 (Bits.U.of_int 29 5) && Bitops.eq arg4345 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4346 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg4341 (Bits.U.of_int 30 5) && Bitops.eq arg4342 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4343 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg4338 (Bits.U.of_int 31 5) && Bitops.eq arg4339 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4340 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg4335 (Bits.U.of_int 0 1) && Bitops.eq arg4336 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4337 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 27 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg4461), _), RP.Fetch (RP.Cell ('r', 
@@ -13043,52 +13043,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg4461 (Bits.of_int 8 5) && Bitops.eq 
-            arg4462 (Bits.of_int 24 5) && Bitops.eq arg4459 
-            (Bits.of_int 9 5) && Bitops.eq arg4460 (Bits.of_int 25 5) && 
-          Bitops.eq arg4457 (Bits.of_int 10 5) && Bitops.eq arg4458 
-            (Bits.of_int 26 5) && Bitops.eq arg4455 (Bits.of_int 11 5) && 
-          Bitops.eq arg4456 (Bits.of_int 27 5) && Bitops.eq arg4453 
-            (Bits.of_int 12 5) && Bitops.eq arg4454 (Bits.of_int 28 5) && 
-          Bitops.eq arg4451 (Bits.of_int 13 5) && Bitops.eq arg4452 
-            (Bits.of_int 29 5) && Bitops.eq arg4449 (Bits.of_int 14 5) && 
-          Bitops.eq arg4450 (Bits.of_int 30 5) && Bitops.eq arg4447 
-            (Bits.of_int 15 5) && Bitops.eq arg4448 (Bits.of_int 31 5) && 
-          Bitops.eq arg4444 (Bits.of_int 16 5) && Bitops.eq arg4445 
-            (Bits.of_int 0 1) && Bitops.eq arg4446 (Bits.of_int 8 32) && 
-          Bitops.eq arg4441 (Bits.of_int 17 5) && Bitops.eq arg4442 
-            (Bits.of_int 0 1) && Bitops.eq arg4443 (Bits.of_int 7 32) && 
-          Bitops.eq arg4438 (Bits.of_int 18 5) && Bitops.eq arg4439 
-            (Bits.of_int 0 1) && Bitops.eq arg4440 (Bits.of_int 6 32) && 
-          Bitops.eq arg4435 (Bits.of_int 19 5) && Bitops.eq arg4436 
-            (Bits.of_int 0 1) && Bitops.eq arg4437 (Bits.of_int 5 32) && 
-          Bitops.eq arg4432 (Bits.of_int 20 5) && Bitops.eq arg4433 
-            (Bits.of_int 0 1) && Bitops.eq arg4434 (Bits.of_int 4 32) && 
-          Bitops.eq arg4429 (Bits.of_int 21 5) && Bitops.eq arg4430 
-            (Bits.of_int 0 1) && Bitops.eq arg4431 (Bits.of_int 3 32) && 
-          Bitops.eq arg4426 (Bits.of_int 22 5) && Bitops.eq arg4427 
-            (Bits.of_int 0 1) && Bitops.eq arg4428 (Bits.of_int 2 32) && 
-          Bitops.eq arg4423 (Bits.of_int 23 5) && Bitops.eq arg4424 
-            (Bits.of_int 0 1) && Bitops.eq arg4425 (Bits.of_int 1 32) && 
-          Bitops.eq arg4420 (Bits.of_int 24 5) && Bitops.eq arg4421 
-            (Bits.of_int 0 1) && Bitops.eq arg4422 (Bits.of_int 16 32) && 
-          Bitops.eq arg4417 (Bits.of_int 25 5) && Bitops.eq arg4418 
-            (Bits.of_int 0 1) && Bitops.eq arg4419 (Bits.of_int 15 32) && 
-          Bitops.eq arg4414 (Bits.of_int 27 5) && Bitops.eq arg4415 
-            (Bits.of_int 0 1) && Bitops.eq arg4416 (Bits.of_int 13 32) && 
-          Bitops.eq arg4411 (Bits.of_int 28 5) && Bitops.eq arg4412 
-            (Bits.of_int 0 1) && Bitops.eq arg4413 (Bits.of_int 12 32) && 
-          Bitops.eq arg4408 (Bits.of_int 29 5) && Bitops.eq arg4409 
-            (Bits.of_int 0 1) && Bitops.eq arg4410 (Bits.of_int 11 32) && 
-          Bitops.eq arg4405 (Bits.of_int 30 5) && Bitops.eq arg4406 
-            (Bits.of_int 0 1) && Bitops.eq arg4407 (Bits.of_int 10 32) && 
-          Bitops.eq arg4402 (Bits.of_int 31 5) && Bitops.eq arg4403 
-            (Bits.of_int 0 1) && Bitops.eq arg4404 (Bits.of_int 9 32) && 
-          Bitops.eq arg4399 (Bits.of_int 0 1) && Bitops.eq arg4400 
-            (Bits.of_int 0 1) && Bitops.eq arg4401 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 26 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg4461 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg4462 (Bits.U.of_int 24 5) && Bitops.eq arg4459 
+            (Bits.U.of_int 9 5) && Bitops.eq arg4460 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg4457 (Bits.U.of_int 10 5) && Bitops.eq arg4458 
+            (Bits.U.of_int 26 5) && Bitops.eq arg4455 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg4456 (Bits.U.of_int 27 5) && Bitops.eq arg4453 
+            (Bits.U.of_int 12 5) && Bitops.eq arg4454 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg4451 (Bits.U.of_int 13 5) && Bitops.eq arg4452 
+            (Bits.U.of_int 29 5) && Bitops.eq arg4449 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg4450 (Bits.U.of_int 30 5) && Bitops.eq arg4447 
+            (Bits.U.of_int 15 5) && Bitops.eq arg4448 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg4444 (Bits.U.of_int 16 5) && Bitops.eq arg4445 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4446 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg4441 (Bits.U.of_int 17 5) && Bitops.eq arg4442 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4443 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg4438 (Bits.U.of_int 18 5) && Bitops.eq arg4439 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4440 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg4435 (Bits.U.of_int 19 5) && Bitops.eq arg4436 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4437 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg4432 (Bits.U.of_int 20 5) && Bitops.eq arg4433 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4434 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg4429 (Bits.U.of_int 21 5) && Bitops.eq arg4430 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4431 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg4426 (Bits.U.of_int 22 5) && Bitops.eq arg4427 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4428 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg4423 (Bits.U.of_int 23 5) && Bitops.eq arg4424 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4425 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg4420 (Bits.U.of_int 24 5) && Bitops.eq arg4421 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4422 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg4417 (Bits.U.of_int 25 5) && Bitops.eq arg4418 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4419 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg4414 (Bits.U.of_int 27 5) && Bitops.eq arg4415 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4416 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg4411 (Bits.U.of_int 28 5) && Bitops.eq arg4412 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4413 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg4408 (Bits.U.of_int 29 5) && Bitops.eq arg4409 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4410 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg4405 (Bits.U.of_int 30 5) && Bitops.eq arg4406 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4407 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg4402 (Bits.U.of_int 31 5) && Bitops.eq arg4403 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4404 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg4399 (Bits.U.of_int 0 1) && Bitops.eq arg4400 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4401 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 26 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg4525), _), RP.Fetch (RP.Cell ('r', 
@@ -13213,52 +13213,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg4525 (Bits.of_int 8 5) && Bitops.eq 
-            arg4526 (Bits.of_int 24 5) && Bitops.eq arg4523 
-            (Bits.of_int 9 5) && Bitops.eq arg4524 (Bits.of_int 25 5) && 
-          Bitops.eq arg4521 (Bits.of_int 10 5) && Bitops.eq arg4522 
-            (Bits.of_int 26 5) && Bitops.eq arg4519 (Bits.of_int 11 5) && 
-          Bitops.eq arg4520 (Bits.of_int 27 5) && Bitops.eq arg4517 
-            (Bits.of_int 12 5) && Bitops.eq arg4518 (Bits.of_int 28 5) && 
-          Bitops.eq arg4515 (Bits.of_int 13 5) && Bitops.eq arg4516 
-            (Bits.of_int 29 5) && Bitops.eq arg4513 (Bits.of_int 14 5) && 
-          Bitops.eq arg4514 (Bits.of_int 30 5) && Bitops.eq arg4511 
-            (Bits.of_int 15 5) && Bitops.eq arg4512 (Bits.of_int 31 5) && 
-          Bitops.eq arg4508 (Bits.of_int 16 5) && Bitops.eq arg4509 
-            (Bits.of_int 0 1) && Bitops.eq arg4510 (Bits.of_int 8 32) && 
-          Bitops.eq arg4505 (Bits.of_int 17 5) && Bitops.eq arg4506 
-            (Bits.of_int 0 1) && Bitops.eq arg4507 (Bits.of_int 7 32) && 
-          Bitops.eq arg4502 (Bits.of_int 18 5) && Bitops.eq arg4503 
-            (Bits.of_int 0 1) && Bitops.eq arg4504 (Bits.of_int 6 32) && 
-          Bitops.eq arg4499 (Bits.of_int 19 5) && Bitops.eq arg4500 
-            (Bits.of_int 0 1) && Bitops.eq arg4501 (Bits.of_int 5 32) && 
-          Bitops.eq arg4496 (Bits.of_int 20 5) && Bitops.eq arg4497 
-            (Bits.of_int 0 1) && Bitops.eq arg4498 (Bits.of_int 4 32) && 
-          Bitops.eq arg4493 (Bits.of_int 21 5) && Bitops.eq arg4494 
-            (Bits.of_int 0 1) && Bitops.eq arg4495 (Bits.of_int 3 32) && 
-          Bitops.eq arg4490 (Bits.of_int 22 5) && Bitops.eq arg4491 
-            (Bits.of_int 0 1) && Bitops.eq arg4492 (Bits.of_int 2 32) && 
-          Bitops.eq arg4487 (Bits.of_int 23 5) && Bitops.eq arg4488 
-            (Bits.of_int 0 1) && Bitops.eq arg4489 (Bits.of_int 1 32) && 
-          Bitops.eq arg4484 (Bits.of_int 24 5) && Bitops.eq arg4485 
-            (Bits.of_int 0 1) && Bitops.eq arg4486 (Bits.of_int 16 32) && 
-          Bitops.eq arg4481 (Bits.of_int 26 5) && Bitops.eq arg4482 
-            (Bits.of_int 0 1) && Bitops.eq arg4483 (Bits.of_int 14 32) && 
-          Bitops.eq arg4478 (Bits.of_int 27 5) && Bitops.eq arg4479 
-            (Bits.of_int 0 1) && Bitops.eq arg4480 (Bits.of_int 13 32) && 
-          Bitops.eq arg4475 (Bits.of_int 28 5) && Bitops.eq arg4476 
-            (Bits.of_int 0 1) && Bitops.eq arg4477 (Bits.of_int 12 32) && 
-          Bitops.eq arg4472 (Bits.of_int 29 5) && Bitops.eq arg4473 
-            (Bits.of_int 0 1) && Bitops.eq arg4474 (Bits.of_int 11 32) && 
-          Bitops.eq arg4469 (Bits.of_int 30 5) && Bitops.eq arg4470 
-            (Bits.of_int 0 1) && Bitops.eq arg4471 (Bits.of_int 10 32) && 
-          Bitops.eq arg4466 (Bits.of_int 31 5) && Bitops.eq arg4467 
-            (Bits.of_int 0 1) && Bitops.eq arg4468 (Bits.of_int 9 32) && 
-          Bitops.eq arg4463 (Bits.of_int 0 1) && Bitops.eq arg4464 
-            (Bits.of_int 0 1) && Bitops.eq arg4465 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 25 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg4525 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg4526 (Bits.U.of_int 24 5) && Bitops.eq arg4523 
+            (Bits.U.of_int 9 5) && Bitops.eq arg4524 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg4521 (Bits.U.of_int 10 5) && Bitops.eq arg4522 
+            (Bits.U.of_int 26 5) && Bitops.eq arg4519 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg4520 (Bits.U.of_int 27 5) && Bitops.eq arg4517 
+            (Bits.U.of_int 12 5) && Bitops.eq arg4518 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg4515 (Bits.U.of_int 13 5) && Bitops.eq arg4516 
+            (Bits.U.of_int 29 5) && Bitops.eq arg4513 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg4514 (Bits.U.of_int 30 5) && Bitops.eq arg4511 
+            (Bits.U.of_int 15 5) && Bitops.eq arg4512 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg4508 (Bits.U.of_int 16 5) && Bitops.eq arg4509 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4510 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg4505 (Bits.U.of_int 17 5) && Bitops.eq arg4506 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4507 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg4502 (Bits.U.of_int 18 5) && Bitops.eq arg4503 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4504 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg4499 (Bits.U.of_int 19 5) && Bitops.eq arg4500 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4501 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg4496 (Bits.U.of_int 20 5) && Bitops.eq arg4497 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4498 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg4493 (Bits.U.of_int 21 5) && Bitops.eq arg4494 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4495 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg4490 (Bits.U.of_int 22 5) && Bitops.eq arg4491 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4492 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg4487 (Bits.U.of_int 23 5) && Bitops.eq arg4488 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4489 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg4484 (Bits.U.of_int 24 5) && Bitops.eq arg4485 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4486 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg4481 (Bits.U.of_int 26 5) && Bitops.eq arg4482 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4483 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg4478 (Bits.U.of_int 27 5) && Bitops.eq arg4479 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4480 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg4475 (Bits.U.of_int 28 5) && Bitops.eq arg4476 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4477 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg4472 (Bits.U.of_int 29 5) && Bitops.eq arg4473 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4474 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg4469 (Bits.U.of_int 30 5) && Bitops.eq arg4470 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4471 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg4466 (Bits.U.of_int 31 5) && Bitops.eq arg4467 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4468 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg4463 (Bits.U.of_int 0 1) && Bitops.eq arg4464 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4465 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 25 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg4589), _), RP.Fetch (RP.Cell ('r', 
@@ -13383,52 +13383,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg4589 (Bits.of_int 8 5) && Bitops.eq 
-            arg4590 (Bits.of_int 24 5) && Bitops.eq arg4587 
-            (Bits.of_int 9 5) && Bitops.eq arg4588 (Bits.of_int 25 5) && 
-          Bitops.eq arg4585 (Bits.of_int 10 5) && Bitops.eq arg4586 
-            (Bits.of_int 26 5) && Bitops.eq arg4583 (Bits.of_int 11 5) && 
-          Bitops.eq arg4584 (Bits.of_int 27 5) && Bitops.eq arg4581 
-            (Bits.of_int 12 5) && Bitops.eq arg4582 (Bits.of_int 28 5) && 
-          Bitops.eq arg4579 (Bits.of_int 13 5) && Bitops.eq arg4580 
-            (Bits.of_int 29 5) && Bitops.eq arg4577 (Bits.of_int 14 5) && 
-          Bitops.eq arg4578 (Bits.of_int 30 5) && Bitops.eq arg4575 
-            (Bits.of_int 15 5) && Bitops.eq arg4576 (Bits.of_int 31 5) && 
-          Bitops.eq arg4572 (Bits.of_int 16 5) && Bitops.eq arg4573 
-            (Bits.of_int 0 1) && Bitops.eq arg4574 (Bits.of_int 8 32) && 
-          Bitops.eq arg4569 (Bits.of_int 17 5) && Bitops.eq arg4570 
-            (Bits.of_int 0 1) && Bitops.eq arg4571 (Bits.of_int 7 32) && 
-          Bitops.eq arg4566 (Bits.of_int 18 5) && Bitops.eq arg4567 
-            (Bits.of_int 0 1) && Bitops.eq arg4568 (Bits.of_int 6 32) && 
-          Bitops.eq arg4563 (Bits.of_int 19 5) && Bitops.eq arg4564 
-            (Bits.of_int 0 1) && Bitops.eq arg4565 (Bits.of_int 5 32) && 
-          Bitops.eq arg4560 (Bits.of_int 20 5) && Bitops.eq arg4561 
-            (Bits.of_int 0 1) && Bitops.eq arg4562 (Bits.of_int 4 32) && 
-          Bitops.eq arg4557 (Bits.of_int 21 5) && Bitops.eq arg4558 
-            (Bits.of_int 0 1) && Bitops.eq arg4559 (Bits.of_int 3 32) && 
-          Bitops.eq arg4554 (Bits.of_int 22 5) && Bitops.eq arg4555 
-            (Bits.of_int 0 1) && Bitops.eq arg4556 (Bits.of_int 2 32) && 
-          Bitops.eq arg4551 (Bits.of_int 23 5) && Bitops.eq arg4552 
-            (Bits.of_int 0 1) && Bitops.eq arg4553 (Bits.of_int 1 32) && 
-          Bitops.eq arg4548 (Bits.of_int 25 5) && Bitops.eq arg4549 
-            (Bits.of_int 0 1) && Bitops.eq arg4550 (Bits.of_int 15 32) && 
-          Bitops.eq arg4545 (Bits.of_int 26 5) && Bitops.eq arg4546 
-            (Bits.of_int 0 1) && Bitops.eq arg4547 (Bits.of_int 14 32) && 
-          Bitops.eq arg4542 (Bits.of_int 27 5) && Bitops.eq arg4543 
-            (Bits.of_int 0 1) && Bitops.eq arg4544 (Bits.of_int 13 32) && 
-          Bitops.eq arg4539 (Bits.of_int 28 5) && Bitops.eq arg4540 
-            (Bits.of_int 0 1) && Bitops.eq arg4541 (Bits.of_int 12 32) && 
-          Bitops.eq arg4536 (Bits.of_int 29 5) && Bitops.eq arg4537 
-            (Bits.of_int 0 1) && Bitops.eq arg4538 (Bits.of_int 11 32) && 
-          Bitops.eq arg4533 (Bits.of_int 30 5) && Bitops.eq arg4534 
-            (Bits.of_int 0 1) && Bitops.eq arg4535 (Bits.of_int 10 32) && 
-          Bitops.eq arg4530 (Bits.of_int 31 5) && Bitops.eq arg4531 
-            (Bits.of_int 0 1) && Bitops.eq arg4532 (Bits.of_int 9 32) && 
-          Bitops.eq arg4527 (Bits.of_int 0 1) && Bitops.eq arg4528 
-            (Bits.of_int 0 1) && Bitops.eq arg4529 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 24 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg4589 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg4590 (Bits.U.of_int 24 5) && Bitops.eq arg4587 
+            (Bits.U.of_int 9 5) && Bitops.eq arg4588 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg4585 (Bits.U.of_int 10 5) && Bitops.eq arg4586 
+            (Bits.U.of_int 26 5) && Bitops.eq arg4583 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg4584 (Bits.U.of_int 27 5) && Bitops.eq arg4581 
+            (Bits.U.of_int 12 5) && Bitops.eq arg4582 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg4579 (Bits.U.of_int 13 5) && Bitops.eq arg4580 
+            (Bits.U.of_int 29 5) && Bitops.eq arg4577 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg4578 (Bits.U.of_int 30 5) && Bitops.eq arg4575 
+            (Bits.U.of_int 15 5) && Bitops.eq arg4576 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg4572 (Bits.U.of_int 16 5) && Bitops.eq arg4573 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4574 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg4569 (Bits.U.of_int 17 5) && Bitops.eq arg4570 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4571 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg4566 (Bits.U.of_int 18 5) && Bitops.eq arg4567 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4568 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg4563 (Bits.U.of_int 19 5) && Bitops.eq arg4564 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4565 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg4560 (Bits.U.of_int 20 5) && Bitops.eq arg4561 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4562 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg4557 (Bits.U.of_int 21 5) && Bitops.eq arg4558 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4559 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg4554 (Bits.U.of_int 22 5) && Bitops.eq arg4555 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4556 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg4551 (Bits.U.of_int 23 5) && Bitops.eq arg4552 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4553 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg4548 (Bits.U.of_int 25 5) && Bitops.eq arg4549 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4550 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg4545 (Bits.U.of_int 26 5) && Bitops.eq arg4546 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4547 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg4542 (Bits.U.of_int 27 5) && Bitops.eq arg4543 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4544 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg4539 (Bits.U.of_int 28 5) && Bitops.eq arg4540 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4541 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg4536 (Bits.U.of_int 29 5) && Bitops.eq arg4537 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4538 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg4533 (Bits.U.of_int 30 5) && Bitops.eq arg4534 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4535 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg4530 (Bits.U.of_int 31 5) && Bitops.eq arg4531 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4532 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg4527 (Bits.U.of_int 0 1) && Bitops.eq arg4528 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4529 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 24 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg4653), _), RP.Fetch (RP.Cell ('r', 
@@ -13553,52 +13553,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg4653 (Bits.of_int 8 5) && Bitops.eq 
-            arg4654 (Bits.of_int 24 5) && Bitops.eq arg4651 
-            (Bits.of_int 9 5) && Bitops.eq arg4652 (Bits.of_int 25 5) && 
-          Bitops.eq arg4649 (Bits.of_int 10 5) && Bitops.eq arg4650 
-            (Bits.of_int 26 5) && Bitops.eq arg4647 (Bits.of_int 11 5) && 
-          Bitops.eq arg4648 (Bits.of_int 27 5) && Bitops.eq arg4645 
-            (Bits.of_int 12 5) && Bitops.eq arg4646 (Bits.of_int 28 5) && 
-          Bitops.eq arg4643 (Bits.of_int 13 5) && Bitops.eq arg4644 
-            (Bits.of_int 29 5) && Bitops.eq arg4641 (Bits.of_int 14 5) && 
-          Bitops.eq arg4642 (Bits.of_int 30 5) && Bitops.eq arg4639 
-            (Bits.of_int 15 5) && Bitops.eq arg4640 (Bits.of_int 31 5) && 
-          Bitops.eq arg4636 (Bits.of_int 16 5) && Bitops.eq arg4637 
-            (Bits.of_int 0 1) && Bitops.eq arg4638 (Bits.of_int 8 32) && 
-          Bitops.eq arg4633 (Bits.of_int 17 5) && Bitops.eq arg4634 
-            (Bits.of_int 0 1) && Bitops.eq arg4635 (Bits.of_int 7 32) && 
-          Bitops.eq arg4630 (Bits.of_int 18 5) && Bitops.eq arg4631 
-            (Bits.of_int 0 1) && Bitops.eq arg4632 (Bits.of_int 6 32) && 
-          Bitops.eq arg4627 (Bits.of_int 19 5) && Bitops.eq arg4628 
-            (Bits.of_int 0 1) && Bitops.eq arg4629 (Bits.of_int 5 32) && 
-          Bitops.eq arg4624 (Bits.of_int 20 5) && Bitops.eq arg4625 
-            (Bits.of_int 0 1) && Bitops.eq arg4626 (Bits.of_int 4 32) && 
-          Bitops.eq arg4621 (Bits.of_int 21 5) && Bitops.eq arg4622 
-            (Bits.of_int 0 1) && Bitops.eq arg4623 (Bits.of_int 3 32) && 
-          Bitops.eq arg4618 (Bits.of_int 22 5) && Bitops.eq arg4619 
-            (Bits.of_int 0 1) && Bitops.eq arg4620 (Bits.of_int 2 32) && 
-          Bitops.eq arg4615 (Bits.of_int 24 5) && Bitops.eq arg4616 
-            (Bits.of_int 0 1) && Bitops.eq arg4617 (Bits.of_int 16 32) && 
-          Bitops.eq arg4612 (Bits.of_int 25 5) && Bitops.eq arg4613 
-            (Bits.of_int 0 1) && Bitops.eq arg4614 (Bits.of_int 15 32) && 
-          Bitops.eq arg4609 (Bits.of_int 26 5) && Bitops.eq arg4610 
-            (Bits.of_int 0 1) && Bitops.eq arg4611 (Bits.of_int 14 32) && 
-          Bitops.eq arg4606 (Bits.of_int 27 5) && Bitops.eq arg4607 
-            (Bits.of_int 0 1) && Bitops.eq arg4608 (Bits.of_int 13 32) && 
-          Bitops.eq arg4603 (Bits.of_int 28 5) && Bitops.eq arg4604 
-            (Bits.of_int 0 1) && Bitops.eq arg4605 (Bits.of_int 12 32) && 
-          Bitops.eq arg4600 (Bits.of_int 29 5) && Bitops.eq arg4601 
-            (Bits.of_int 0 1) && Bitops.eq arg4602 (Bits.of_int 11 32) && 
-          Bitops.eq arg4597 (Bits.of_int 30 5) && Bitops.eq arg4598 
-            (Bits.of_int 0 1) && Bitops.eq arg4599 (Bits.of_int 10 32) && 
-          Bitops.eq arg4594 (Bits.of_int 31 5) && Bitops.eq arg4595 
-            (Bits.of_int 0 1) && Bitops.eq arg4596 (Bits.of_int 9 32) && 
-          Bitops.eq arg4591 (Bits.of_int 0 1) && Bitops.eq arg4592 
-            (Bits.of_int 0 1) && Bitops.eq arg4593 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 23 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg4653 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg4654 (Bits.U.of_int 24 5) && Bitops.eq arg4651 
+            (Bits.U.of_int 9 5) && Bitops.eq arg4652 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg4649 (Bits.U.of_int 10 5) && Bitops.eq arg4650 
+            (Bits.U.of_int 26 5) && Bitops.eq arg4647 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg4648 (Bits.U.of_int 27 5) && Bitops.eq arg4645 
+            (Bits.U.of_int 12 5) && Bitops.eq arg4646 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg4643 (Bits.U.of_int 13 5) && Bitops.eq arg4644 
+            (Bits.U.of_int 29 5) && Bitops.eq arg4641 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg4642 (Bits.U.of_int 30 5) && Bitops.eq arg4639 
+            (Bits.U.of_int 15 5) && Bitops.eq arg4640 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg4636 (Bits.U.of_int 16 5) && Bitops.eq arg4637 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4638 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg4633 (Bits.U.of_int 17 5) && Bitops.eq arg4634 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4635 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg4630 (Bits.U.of_int 18 5) && Bitops.eq arg4631 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4632 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg4627 (Bits.U.of_int 19 5) && Bitops.eq arg4628 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4629 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg4624 (Bits.U.of_int 20 5) && Bitops.eq arg4625 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4626 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg4621 (Bits.U.of_int 21 5) && Bitops.eq arg4622 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4623 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg4618 (Bits.U.of_int 22 5) && Bitops.eq arg4619 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4620 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg4615 (Bits.U.of_int 24 5) && Bitops.eq arg4616 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4617 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg4612 (Bits.U.of_int 25 5) && Bitops.eq arg4613 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4614 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg4609 (Bits.U.of_int 26 5) && Bitops.eq arg4610 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4611 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg4606 (Bits.U.of_int 27 5) && Bitops.eq arg4607 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4608 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg4603 (Bits.U.of_int 28 5) && Bitops.eq arg4604 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4605 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg4600 (Bits.U.of_int 29 5) && Bitops.eq arg4601 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4602 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg4597 (Bits.U.of_int 30 5) && Bitops.eq arg4598 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4599 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg4594 (Bits.U.of_int 31 5) && Bitops.eq arg4595 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4596 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg4591 (Bits.U.of_int 0 1) && Bitops.eq arg4592 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4593 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 23 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg4717), _), RP.Fetch (RP.Cell ('r', 
@@ -13723,52 +13723,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg4717 (Bits.of_int 8 5) && Bitops.eq 
-            arg4718 (Bits.of_int 24 5) && Bitops.eq arg4715 
-            (Bits.of_int 9 5) && Bitops.eq arg4716 (Bits.of_int 25 5) && 
-          Bitops.eq arg4713 (Bits.of_int 10 5) && Bitops.eq arg4714 
-            (Bits.of_int 26 5) && Bitops.eq arg4711 (Bits.of_int 11 5) && 
-          Bitops.eq arg4712 (Bits.of_int 27 5) && Bitops.eq arg4709 
-            (Bits.of_int 12 5) && Bitops.eq arg4710 (Bits.of_int 28 5) && 
-          Bitops.eq arg4707 (Bits.of_int 13 5) && Bitops.eq arg4708 
-            (Bits.of_int 29 5) && Bitops.eq arg4705 (Bits.of_int 14 5) && 
-          Bitops.eq arg4706 (Bits.of_int 30 5) && Bitops.eq arg4703 
-            (Bits.of_int 15 5) && Bitops.eq arg4704 (Bits.of_int 31 5) && 
-          Bitops.eq arg4700 (Bits.of_int 16 5) && Bitops.eq arg4701 
-            (Bits.of_int 0 1) && Bitops.eq arg4702 (Bits.of_int 8 32) && 
-          Bitops.eq arg4697 (Bits.of_int 17 5) && Bitops.eq arg4698 
-            (Bits.of_int 0 1) && Bitops.eq arg4699 (Bits.of_int 7 32) && 
-          Bitops.eq arg4694 (Bits.of_int 18 5) && Bitops.eq arg4695 
-            (Bits.of_int 0 1) && Bitops.eq arg4696 (Bits.of_int 6 32) && 
-          Bitops.eq arg4691 (Bits.of_int 19 5) && Bitops.eq arg4692 
-            (Bits.of_int 0 1) && Bitops.eq arg4693 (Bits.of_int 5 32) && 
-          Bitops.eq arg4688 (Bits.of_int 20 5) && Bitops.eq arg4689 
-            (Bits.of_int 0 1) && Bitops.eq arg4690 (Bits.of_int 4 32) && 
-          Bitops.eq arg4685 (Bits.of_int 21 5) && Bitops.eq arg4686 
-            (Bits.of_int 0 1) && Bitops.eq arg4687 (Bits.of_int 3 32) && 
-          Bitops.eq arg4682 (Bits.of_int 23 5) && Bitops.eq arg4683 
-            (Bits.of_int 0 1) && Bitops.eq arg4684 (Bits.of_int 1 32) && 
-          Bitops.eq arg4679 (Bits.of_int 24 5) && Bitops.eq arg4680 
-            (Bits.of_int 0 1) && Bitops.eq arg4681 (Bits.of_int 16 32) && 
-          Bitops.eq arg4676 (Bits.of_int 25 5) && Bitops.eq arg4677 
-            (Bits.of_int 0 1) && Bitops.eq arg4678 (Bits.of_int 15 32) && 
-          Bitops.eq arg4673 (Bits.of_int 26 5) && Bitops.eq arg4674 
-            (Bits.of_int 0 1) && Bitops.eq arg4675 (Bits.of_int 14 32) && 
-          Bitops.eq arg4670 (Bits.of_int 27 5) && Bitops.eq arg4671 
-            (Bits.of_int 0 1) && Bitops.eq arg4672 (Bits.of_int 13 32) && 
-          Bitops.eq arg4667 (Bits.of_int 28 5) && Bitops.eq arg4668 
-            (Bits.of_int 0 1) && Bitops.eq arg4669 (Bits.of_int 12 32) && 
-          Bitops.eq arg4664 (Bits.of_int 29 5) && Bitops.eq arg4665 
-            (Bits.of_int 0 1) && Bitops.eq arg4666 (Bits.of_int 11 32) && 
-          Bitops.eq arg4661 (Bits.of_int 30 5) && Bitops.eq arg4662 
-            (Bits.of_int 0 1) && Bitops.eq arg4663 (Bits.of_int 10 32) && 
-          Bitops.eq arg4658 (Bits.of_int 31 5) && Bitops.eq arg4659 
-            (Bits.of_int 0 1) && Bitops.eq arg4660 (Bits.of_int 9 32) && 
-          Bitops.eq arg4655 (Bits.of_int 0 1) && Bitops.eq arg4656 
-            (Bits.of_int 0 1) && Bitops.eq arg4657 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 22 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg4717 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg4718 (Bits.U.of_int 24 5) && Bitops.eq arg4715 
+            (Bits.U.of_int 9 5) && Bitops.eq arg4716 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg4713 (Bits.U.of_int 10 5) && Bitops.eq arg4714 
+            (Bits.U.of_int 26 5) && Bitops.eq arg4711 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg4712 (Bits.U.of_int 27 5) && Bitops.eq arg4709 
+            (Bits.U.of_int 12 5) && Bitops.eq arg4710 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg4707 (Bits.U.of_int 13 5) && Bitops.eq arg4708 
+            (Bits.U.of_int 29 5) && Bitops.eq arg4705 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg4706 (Bits.U.of_int 30 5) && Bitops.eq arg4703 
+            (Bits.U.of_int 15 5) && Bitops.eq arg4704 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg4700 (Bits.U.of_int 16 5) && Bitops.eq arg4701 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4702 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg4697 (Bits.U.of_int 17 5) && Bitops.eq arg4698 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4699 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg4694 (Bits.U.of_int 18 5) && Bitops.eq arg4695 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4696 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg4691 (Bits.U.of_int 19 5) && Bitops.eq arg4692 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4693 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg4688 (Bits.U.of_int 20 5) && Bitops.eq arg4689 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4690 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg4685 (Bits.U.of_int 21 5) && Bitops.eq arg4686 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4687 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg4682 (Bits.U.of_int 23 5) && Bitops.eq arg4683 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4684 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg4679 (Bits.U.of_int 24 5) && Bitops.eq arg4680 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4681 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg4676 (Bits.U.of_int 25 5) && Bitops.eq arg4677 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4678 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg4673 (Bits.U.of_int 26 5) && Bitops.eq arg4674 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4675 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg4670 (Bits.U.of_int 27 5) && Bitops.eq arg4671 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4672 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg4667 (Bits.U.of_int 28 5) && Bitops.eq arg4668 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4669 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg4664 (Bits.U.of_int 29 5) && Bitops.eq arg4665 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4666 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg4661 (Bits.U.of_int 30 5) && Bitops.eq arg4662 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4663 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg4658 (Bits.U.of_int 31 5) && Bitops.eq arg4659 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4660 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg4655 (Bits.U.of_int 0 1) && Bitops.eq arg4656 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4657 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 22 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg4781), _), RP.Fetch (RP.Cell ('r', 
@@ -13893,52 +13893,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg4781 (Bits.of_int 8 5) && Bitops.eq 
-            arg4782 (Bits.of_int 24 5) && Bitops.eq arg4779 
-            (Bits.of_int 9 5) && Bitops.eq arg4780 (Bits.of_int 25 5) && 
-          Bitops.eq arg4777 (Bits.of_int 10 5) && Bitops.eq arg4778 
-            (Bits.of_int 26 5) && Bitops.eq arg4775 (Bits.of_int 11 5) && 
-          Bitops.eq arg4776 (Bits.of_int 27 5) && Bitops.eq arg4773 
-            (Bits.of_int 12 5) && Bitops.eq arg4774 (Bits.of_int 28 5) && 
-          Bitops.eq arg4771 (Bits.of_int 13 5) && Bitops.eq arg4772 
-            (Bits.of_int 29 5) && Bitops.eq arg4769 (Bits.of_int 14 5) && 
-          Bitops.eq arg4770 (Bits.of_int 30 5) && Bitops.eq arg4767 
-            (Bits.of_int 15 5) && Bitops.eq arg4768 (Bits.of_int 31 5) && 
-          Bitops.eq arg4764 (Bits.of_int 16 5) && Bitops.eq arg4765 
-            (Bits.of_int 0 1) && Bitops.eq arg4766 (Bits.of_int 8 32) && 
-          Bitops.eq arg4761 (Bits.of_int 17 5) && Bitops.eq arg4762 
-            (Bits.of_int 0 1) && Bitops.eq arg4763 (Bits.of_int 7 32) && 
-          Bitops.eq arg4758 (Bits.of_int 18 5) && Bitops.eq arg4759 
-            (Bits.of_int 0 1) && Bitops.eq arg4760 (Bits.of_int 6 32) && 
-          Bitops.eq arg4755 (Bits.of_int 19 5) && Bitops.eq arg4756 
-            (Bits.of_int 0 1) && Bitops.eq arg4757 (Bits.of_int 5 32) && 
-          Bitops.eq arg4752 (Bits.of_int 20 5) && Bitops.eq arg4753 
-            (Bits.of_int 0 1) && Bitops.eq arg4754 (Bits.of_int 4 32) && 
-          Bitops.eq arg4749 (Bits.of_int 22 5) && Bitops.eq arg4750 
-            (Bits.of_int 0 1) && Bitops.eq arg4751 (Bits.of_int 2 32) && 
-          Bitops.eq arg4746 (Bits.of_int 23 5) && Bitops.eq arg4747 
-            (Bits.of_int 0 1) && Bitops.eq arg4748 (Bits.of_int 1 32) && 
-          Bitops.eq arg4743 (Bits.of_int 24 5) && Bitops.eq arg4744 
-            (Bits.of_int 0 1) && Bitops.eq arg4745 (Bits.of_int 16 32) && 
-          Bitops.eq arg4740 (Bits.of_int 25 5) && Bitops.eq arg4741 
-            (Bits.of_int 0 1) && Bitops.eq arg4742 (Bits.of_int 15 32) && 
-          Bitops.eq arg4737 (Bits.of_int 26 5) && Bitops.eq arg4738 
-            (Bits.of_int 0 1) && Bitops.eq arg4739 (Bits.of_int 14 32) && 
-          Bitops.eq arg4734 (Bits.of_int 27 5) && Bitops.eq arg4735 
-            (Bits.of_int 0 1) && Bitops.eq arg4736 (Bits.of_int 13 32) && 
-          Bitops.eq arg4731 (Bits.of_int 28 5) && Bitops.eq arg4732 
-            (Bits.of_int 0 1) && Bitops.eq arg4733 (Bits.of_int 12 32) && 
-          Bitops.eq arg4728 (Bits.of_int 29 5) && Bitops.eq arg4729 
-            (Bits.of_int 0 1) && Bitops.eq arg4730 (Bits.of_int 11 32) && 
-          Bitops.eq arg4725 (Bits.of_int 30 5) && Bitops.eq arg4726 
-            (Bits.of_int 0 1) && Bitops.eq arg4727 (Bits.of_int 10 32) && 
-          Bitops.eq arg4722 (Bits.of_int 31 5) && Bitops.eq arg4723 
-            (Bits.of_int 0 1) && Bitops.eq arg4724 (Bits.of_int 9 32) && 
-          Bitops.eq arg4719 (Bits.of_int 0 1) && Bitops.eq arg4720 
-            (Bits.of_int 0 1) && Bitops.eq arg4721 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 21 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg4781 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg4782 (Bits.U.of_int 24 5) && Bitops.eq arg4779 
+            (Bits.U.of_int 9 5) && Bitops.eq arg4780 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg4777 (Bits.U.of_int 10 5) && Bitops.eq arg4778 
+            (Bits.U.of_int 26 5) && Bitops.eq arg4775 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg4776 (Bits.U.of_int 27 5) && Bitops.eq arg4773 
+            (Bits.U.of_int 12 5) && Bitops.eq arg4774 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg4771 (Bits.U.of_int 13 5) && Bitops.eq arg4772 
+            (Bits.U.of_int 29 5) && Bitops.eq arg4769 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg4770 (Bits.U.of_int 30 5) && Bitops.eq arg4767 
+            (Bits.U.of_int 15 5) && Bitops.eq arg4768 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg4764 (Bits.U.of_int 16 5) && Bitops.eq arg4765 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4766 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg4761 (Bits.U.of_int 17 5) && Bitops.eq arg4762 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4763 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg4758 (Bits.U.of_int 18 5) && Bitops.eq arg4759 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4760 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg4755 (Bits.U.of_int 19 5) && Bitops.eq arg4756 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4757 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg4752 (Bits.U.of_int 20 5) && Bitops.eq arg4753 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4754 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg4749 (Bits.U.of_int 22 5) && Bitops.eq arg4750 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4751 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg4746 (Bits.U.of_int 23 5) && Bitops.eq arg4747 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4748 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg4743 (Bits.U.of_int 24 5) && Bitops.eq arg4744 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4745 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg4740 (Bits.U.of_int 25 5) && Bitops.eq arg4741 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4742 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg4737 (Bits.U.of_int 26 5) && Bitops.eq arg4738 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4739 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg4734 (Bits.U.of_int 27 5) && Bitops.eq arg4735 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4736 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg4731 (Bits.U.of_int 28 5) && Bitops.eq arg4732 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4733 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg4728 (Bits.U.of_int 29 5) && Bitops.eq arg4729 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4730 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg4725 (Bits.U.of_int 30 5) && Bitops.eq arg4726 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4727 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg4722 (Bits.U.of_int 31 5) && Bitops.eq arg4723 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4724 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg4719 (Bits.U.of_int 0 1) && Bitops.eq arg4720 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4721 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 21 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg4845), _), RP.Fetch (RP.Cell ('r', 
@@ -14063,52 +14063,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg4845 (Bits.of_int 8 5) && Bitops.eq 
-            arg4846 (Bits.of_int 24 5) && Bitops.eq arg4843 
-            (Bits.of_int 9 5) && Bitops.eq arg4844 (Bits.of_int 25 5) && 
-          Bitops.eq arg4841 (Bits.of_int 10 5) && Bitops.eq arg4842 
-            (Bits.of_int 26 5) && Bitops.eq arg4839 (Bits.of_int 11 5) && 
-          Bitops.eq arg4840 (Bits.of_int 27 5) && Bitops.eq arg4837 
-            (Bits.of_int 12 5) && Bitops.eq arg4838 (Bits.of_int 28 5) && 
-          Bitops.eq arg4835 (Bits.of_int 13 5) && Bitops.eq arg4836 
-            (Bits.of_int 29 5) && Bitops.eq arg4833 (Bits.of_int 14 5) && 
-          Bitops.eq arg4834 (Bits.of_int 30 5) && Bitops.eq arg4831 
-            (Bits.of_int 15 5) && Bitops.eq arg4832 (Bits.of_int 31 5) && 
-          Bitops.eq arg4828 (Bits.of_int 16 5) && Bitops.eq arg4829 
-            (Bits.of_int 0 1) && Bitops.eq arg4830 (Bits.of_int 8 32) && 
-          Bitops.eq arg4825 (Bits.of_int 17 5) && Bitops.eq arg4826 
-            (Bits.of_int 0 1) && Bitops.eq arg4827 (Bits.of_int 7 32) && 
-          Bitops.eq arg4822 (Bits.of_int 18 5) && Bitops.eq arg4823 
-            (Bits.of_int 0 1) && Bitops.eq arg4824 (Bits.of_int 6 32) && 
-          Bitops.eq arg4819 (Bits.of_int 19 5) && Bitops.eq arg4820 
-            (Bits.of_int 0 1) && Bitops.eq arg4821 (Bits.of_int 5 32) && 
-          Bitops.eq arg4816 (Bits.of_int 21 5) && Bitops.eq arg4817 
-            (Bits.of_int 0 1) && Bitops.eq arg4818 (Bits.of_int 3 32) && 
-          Bitops.eq arg4813 (Bits.of_int 22 5) && Bitops.eq arg4814 
-            (Bits.of_int 0 1) && Bitops.eq arg4815 (Bits.of_int 2 32) && 
-          Bitops.eq arg4810 (Bits.of_int 23 5) && Bitops.eq arg4811 
-            (Bits.of_int 0 1) && Bitops.eq arg4812 (Bits.of_int 1 32) && 
-          Bitops.eq arg4807 (Bits.of_int 24 5) && Bitops.eq arg4808 
-            (Bits.of_int 0 1) && Bitops.eq arg4809 (Bits.of_int 16 32) && 
-          Bitops.eq arg4804 (Bits.of_int 25 5) && Bitops.eq arg4805 
-            (Bits.of_int 0 1) && Bitops.eq arg4806 (Bits.of_int 15 32) && 
-          Bitops.eq arg4801 (Bits.of_int 26 5) && Bitops.eq arg4802 
-            (Bits.of_int 0 1) && Bitops.eq arg4803 (Bits.of_int 14 32) && 
-          Bitops.eq arg4798 (Bits.of_int 27 5) && Bitops.eq arg4799 
-            (Bits.of_int 0 1) && Bitops.eq arg4800 (Bits.of_int 13 32) && 
-          Bitops.eq arg4795 (Bits.of_int 28 5) && Bitops.eq arg4796 
-            (Bits.of_int 0 1) && Bitops.eq arg4797 (Bits.of_int 12 32) && 
-          Bitops.eq arg4792 (Bits.of_int 29 5) && Bitops.eq arg4793 
-            (Bits.of_int 0 1) && Bitops.eq arg4794 (Bits.of_int 11 32) && 
-          Bitops.eq arg4789 (Bits.of_int 30 5) && Bitops.eq arg4790 
-            (Bits.of_int 0 1) && Bitops.eq arg4791 (Bits.of_int 10 32) && 
-          Bitops.eq arg4786 (Bits.of_int 31 5) && Bitops.eq arg4787 
-            (Bits.of_int 0 1) && Bitops.eq arg4788 (Bits.of_int 9 32) && 
-          Bitops.eq arg4783 (Bits.of_int 0 1) && Bitops.eq arg4784 
-            (Bits.of_int 0 1) && Bitops.eq arg4785 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 20 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg4845 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg4846 (Bits.U.of_int 24 5) && Bitops.eq arg4843 
+            (Bits.U.of_int 9 5) && Bitops.eq arg4844 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg4841 (Bits.U.of_int 10 5) && Bitops.eq arg4842 
+            (Bits.U.of_int 26 5) && Bitops.eq arg4839 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg4840 (Bits.U.of_int 27 5) && Bitops.eq arg4837 
+            (Bits.U.of_int 12 5) && Bitops.eq arg4838 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg4835 (Bits.U.of_int 13 5) && Bitops.eq arg4836 
+            (Bits.U.of_int 29 5) && Bitops.eq arg4833 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg4834 (Bits.U.of_int 30 5) && Bitops.eq arg4831 
+            (Bits.U.of_int 15 5) && Bitops.eq arg4832 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg4828 (Bits.U.of_int 16 5) && Bitops.eq arg4829 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4830 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg4825 (Bits.U.of_int 17 5) && Bitops.eq arg4826 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4827 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg4822 (Bits.U.of_int 18 5) && Bitops.eq arg4823 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4824 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg4819 (Bits.U.of_int 19 5) && Bitops.eq arg4820 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4821 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg4816 (Bits.U.of_int 21 5) && Bitops.eq arg4817 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4818 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg4813 (Bits.U.of_int 22 5) && Bitops.eq arg4814 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4815 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg4810 (Bits.U.of_int 23 5) && Bitops.eq arg4811 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4812 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg4807 (Bits.U.of_int 24 5) && Bitops.eq arg4808 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4809 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg4804 (Bits.U.of_int 25 5) && Bitops.eq arg4805 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4806 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg4801 (Bits.U.of_int 26 5) && Bitops.eq arg4802 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4803 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg4798 (Bits.U.of_int 27 5) && Bitops.eq arg4799 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4800 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg4795 (Bits.U.of_int 28 5) && Bitops.eq arg4796 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4797 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg4792 (Bits.U.of_int 29 5) && Bitops.eq arg4793 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4794 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg4789 (Bits.U.of_int 30 5) && Bitops.eq arg4790 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4791 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg4786 (Bits.U.of_int 31 5) && Bitops.eq arg4787 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4788 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg4783 (Bits.U.of_int 0 1) && Bitops.eq arg4784 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4785 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 20 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg4909), _), RP.Fetch (RP.Cell ('r', 
@@ -14233,52 +14233,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg4909 (Bits.of_int 8 5) && Bitops.eq 
-            arg4910 (Bits.of_int 24 5) && Bitops.eq arg4907 
-            (Bits.of_int 9 5) && Bitops.eq arg4908 (Bits.of_int 25 5) && 
-          Bitops.eq arg4905 (Bits.of_int 10 5) && Bitops.eq arg4906 
-            (Bits.of_int 26 5) && Bitops.eq arg4903 (Bits.of_int 11 5) && 
-          Bitops.eq arg4904 (Bits.of_int 27 5) && Bitops.eq arg4901 
-            (Bits.of_int 12 5) && Bitops.eq arg4902 (Bits.of_int 28 5) && 
-          Bitops.eq arg4899 (Bits.of_int 13 5) && Bitops.eq arg4900 
-            (Bits.of_int 29 5) && Bitops.eq arg4897 (Bits.of_int 14 5) && 
-          Bitops.eq arg4898 (Bits.of_int 30 5) && Bitops.eq arg4895 
-            (Bits.of_int 15 5) && Bitops.eq arg4896 (Bits.of_int 31 5) && 
-          Bitops.eq arg4892 (Bits.of_int 16 5) && Bitops.eq arg4893 
-            (Bits.of_int 0 1) && Bitops.eq arg4894 (Bits.of_int 8 32) && 
-          Bitops.eq arg4889 (Bits.of_int 17 5) && Bitops.eq arg4890 
-            (Bits.of_int 0 1) && Bitops.eq arg4891 (Bits.of_int 7 32) && 
-          Bitops.eq arg4886 (Bits.of_int 18 5) && Bitops.eq arg4887 
-            (Bits.of_int 0 1) && Bitops.eq arg4888 (Bits.of_int 6 32) && 
-          Bitops.eq arg4883 (Bits.of_int 20 5) && Bitops.eq arg4884 
-            (Bits.of_int 0 1) && Bitops.eq arg4885 (Bits.of_int 4 32) && 
-          Bitops.eq arg4880 (Bits.of_int 21 5) && Bitops.eq arg4881 
-            (Bits.of_int 0 1) && Bitops.eq arg4882 (Bits.of_int 3 32) && 
-          Bitops.eq arg4877 (Bits.of_int 22 5) && Bitops.eq arg4878 
-            (Bits.of_int 0 1) && Bitops.eq arg4879 (Bits.of_int 2 32) && 
-          Bitops.eq arg4874 (Bits.of_int 23 5) && Bitops.eq arg4875 
-            (Bits.of_int 0 1) && Bitops.eq arg4876 (Bits.of_int 1 32) && 
-          Bitops.eq arg4871 (Bits.of_int 24 5) && Bitops.eq arg4872 
-            (Bits.of_int 0 1) && Bitops.eq arg4873 (Bits.of_int 16 32) && 
-          Bitops.eq arg4868 (Bits.of_int 25 5) && Bitops.eq arg4869 
-            (Bits.of_int 0 1) && Bitops.eq arg4870 (Bits.of_int 15 32) && 
-          Bitops.eq arg4865 (Bits.of_int 26 5) && Bitops.eq arg4866 
-            (Bits.of_int 0 1) && Bitops.eq arg4867 (Bits.of_int 14 32) && 
-          Bitops.eq arg4862 (Bits.of_int 27 5) && Bitops.eq arg4863 
-            (Bits.of_int 0 1) && Bitops.eq arg4864 (Bits.of_int 13 32) && 
-          Bitops.eq arg4859 (Bits.of_int 28 5) && Bitops.eq arg4860 
-            (Bits.of_int 0 1) && Bitops.eq arg4861 (Bits.of_int 12 32) && 
-          Bitops.eq arg4856 (Bits.of_int 29 5) && Bitops.eq arg4857 
-            (Bits.of_int 0 1) && Bitops.eq arg4858 (Bits.of_int 11 32) && 
-          Bitops.eq arg4853 (Bits.of_int 30 5) && Bitops.eq arg4854 
-            (Bits.of_int 0 1) && Bitops.eq arg4855 (Bits.of_int 10 32) && 
-          Bitops.eq arg4850 (Bits.of_int 31 5) && Bitops.eq arg4851 
-            (Bits.of_int 0 1) && Bitops.eq arg4852 (Bits.of_int 9 32) && 
-          Bitops.eq arg4847 (Bits.of_int 0 1) && Bitops.eq arg4848 
-            (Bits.of_int 0 1) && Bitops.eq arg4849 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 19 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg4909 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg4910 (Bits.U.of_int 24 5) && Bitops.eq arg4907 
+            (Bits.U.of_int 9 5) && Bitops.eq arg4908 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg4905 (Bits.U.of_int 10 5) && Bitops.eq arg4906 
+            (Bits.U.of_int 26 5) && Bitops.eq arg4903 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg4904 (Bits.U.of_int 27 5) && Bitops.eq arg4901 
+            (Bits.U.of_int 12 5) && Bitops.eq arg4902 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg4899 (Bits.U.of_int 13 5) && Bitops.eq arg4900 
+            (Bits.U.of_int 29 5) && Bitops.eq arg4897 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg4898 (Bits.U.of_int 30 5) && Bitops.eq arg4895 
+            (Bits.U.of_int 15 5) && Bitops.eq arg4896 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg4892 (Bits.U.of_int 16 5) && Bitops.eq arg4893 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4894 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg4889 (Bits.U.of_int 17 5) && Bitops.eq arg4890 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4891 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg4886 (Bits.U.of_int 18 5) && Bitops.eq arg4887 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4888 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg4883 (Bits.U.of_int 20 5) && Bitops.eq arg4884 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4885 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg4880 (Bits.U.of_int 21 5) && Bitops.eq arg4881 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4882 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg4877 (Bits.U.of_int 22 5) && Bitops.eq arg4878 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4879 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg4874 (Bits.U.of_int 23 5) && Bitops.eq arg4875 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4876 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg4871 (Bits.U.of_int 24 5) && Bitops.eq arg4872 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4873 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg4868 (Bits.U.of_int 25 5) && Bitops.eq arg4869 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4870 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg4865 (Bits.U.of_int 26 5) && Bitops.eq arg4866 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4867 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg4862 (Bits.U.of_int 27 5) && Bitops.eq arg4863 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4864 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg4859 (Bits.U.of_int 28 5) && Bitops.eq arg4860 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4861 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg4856 (Bits.U.of_int 29 5) && Bitops.eq arg4857 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4858 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg4853 (Bits.U.of_int 30 5) && Bitops.eq arg4854 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4855 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg4850 (Bits.U.of_int 31 5) && Bitops.eq arg4851 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4852 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg4847 (Bits.U.of_int 0 1) && Bitops.eq arg4848 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4849 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 19 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg4973), _), RP.Fetch (RP.Cell ('r', 
@@ -14403,52 +14403,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg4973 (Bits.of_int 8 5) && Bitops.eq 
-            arg4974 (Bits.of_int 24 5) && Bitops.eq arg4971 
-            (Bits.of_int 9 5) && Bitops.eq arg4972 (Bits.of_int 25 5) && 
-          Bitops.eq arg4969 (Bits.of_int 10 5) && Bitops.eq arg4970 
-            (Bits.of_int 26 5) && Bitops.eq arg4967 (Bits.of_int 11 5) && 
-          Bitops.eq arg4968 (Bits.of_int 27 5) && Bitops.eq arg4965 
-            (Bits.of_int 12 5) && Bitops.eq arg4966 (Bits.of_int 28 5) && 
-          Bitops.eq arg4963 (Bits.of_int 13 5) && Bitops.eq arg4964 
-            (Bits.of_int 29 5) && Bitops.eq arg4961 (Bits.of_int 14 5) && 
-          Bitops.eq arg4962 (Bits.of_int 30 5) && Bitops.eq arg4959 
-            (Bits.of_int 15 5) && Bitops.eq arg4960 (Bits.of_int 31 5) && 
-          Bitops.eq arg4956 (Bits.of_int 16 5) && Bitops.eq arg4957 
-            (Bits.of_int 0 1) && Bitops.eq arg4958 (Bits.of_int 8 32) && 
-          Bitops.eq arg4953 (Bits.of_int 17 5) && Bitops.eq arg4954 
-            (Bits.of_int 0 1) && Bitops.eq arg4955 (Bits.of_int 7 32) && 
-          Bitops.eq arg4950 (Bits.of_int 19 5) && Bitops.eq arg4951 
-            (Bits.of_int 0 1) && Bitops.eq arg4952 (Bits.of_int 5 32) && 
-          Bitops.eq arg4947 (Bits.of_int 20 5) && Bitops.eq arg4948 
-            (Bits.of_int 0 1) && Bitops.eq arg4949 (Bits.of_int 4 32) && 
-          Bitops.eq arg4944 (Bits.of_int 21 5) && Bitops.eq arg4945 
-            (Bits.of_int 0 1) && Bitops.eq arg4946 (Bits.of_int 3 32) && 
-          Bitops.eq arg4941 (Bits.of_int 22 5) && Bitops.eq arg4942 
-            (Bits.of_int 0 1) && Bitops.eq arg4943 (Bits.of_int 2 32) && 
-          Bitops.eq arg4938 (Bits.of_int 23 5) && Bitops.eq arg4939 
-            (Bits.of_int 0 1) && Bitops.eq arg4940 (Bits.of_int 1 32) && 
-          Bitops.eq arg4935 (Bits.of_int 24 5) && Bitops.eq arg4936 
-            (Bits.of_int 0 1) && Bitops.eq arg4937 (Bits.of_int 16 32) && 
-          Bitops.eq arg4932 (Bits.of_int 25 5) && Bitops.eq arg4933 
-            (Bits.of_int 0 1) && Bitops.eq arg4934 (Bits.of_int 15 32) && 
-          Bitops.eq arg4929 (Bits.of_int 26 5) && Bitops.eq arg4930 
-            (Bits.of_int 0 1) && Bitops.eq arg4931 (Bits.of_int 14 32) && 
-          Bitops.eq arg4926 (Bits.of_int 27 5) && Bitops.eq arg4927 
-            (Bits.of_int 0 1) && Bitops.eq arg4928 (Bits.of_int 13 32) && 
-          Bitops.eq arg4923 (Bits.of_int 28 5) && Bitops.eq arg4924 
-            (Bits.of_int 0 1) && Bitops.eq arg4925 (Bits.of_int 12 32) && 
-          Bitops.eq arg4920 (Bits.of_int 29 5) && Bitops.eq arg4921 
-            (Bits.of_int 0 1) && Bitops.eq arg4922 (Bits.of_int 11 32) && 
-          Bitops.eq arg4917 (Bits.of_int 30 5) && Bitops.eq arg4918 
-            (Bits.of_int 0 1) && Bitops.eq arg4919 (Bits.of_int 10 32) && 
-          Bitops.eq arg4914 (Bits.of_int 31 5) && Bitops.eq arg4915 
-            (Bits.of_int 0 1) && Bitops.eq arg4916 (Bits.of_int 9 32) && 
-          Bitops.eq arg4911 (Bits.of_int 0 1) && Bitops.eq arg4912 
-            (Bits.of_int 0 1) && Bitops.eq arg4913 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 18 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg4973 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg4974 (Bits.U.of_int 24 5) && Bitops.eq arg4971 
+            (Bits.U.of_int 9 5) && Bitops.eq arg4972 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg4969 (Bits.U.of_int 10 5) && Bitops.eq arg4970 
+            (Bits.U.of_int 26 5) && Bitops.eq arg4967 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg4968 (Bits.U.of_int 27 5) && Bitops.eq arg4965 
+            (Bits.U.of_int 12 5) && Bitops.eq arg4966 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg4963 (Bits.U.of_int 13 5) && Bitops.eq arg4964 
+            (Bits.U.of_int 29 5) && Bitops.eq arg4961 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg4962 (Bits.U.of_int 30 5) && Bitops.eq arg4959 
+            (Bits.U.of_int 15 5) && Bitops.eq arg4960 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg4956 (Bits.U.of_int 16 5) && Bitops.eq arg4957 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4958 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg4953 (Bits.U.of_int 17 5) && Bitops.eq arg4954 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4955 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg4950 (Bits.U.of_int 19 5) && Bitops.eq arg4951 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4952 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg4947 (Bits.U.of_int 20 5) && Bitops.eq arg4948 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4949 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg4944 (Bits.U.of_int 21 5) && Bitops.eq arg4945 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4946 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg4941 (Bits.U.of_int 22 5) && Bitops.eq arg4942 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4943 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg4938 (Bits.U.of_int 23 5) && Bitops.eq arg4939 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4940 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg4935 (Bits.U.of_int 24 5) && Bitops.eq arg4936 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4937 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg4932 (Bits.U.of_int 25 5) && Bitops.eq arg4933 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4934 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg4929 (Bits.U.of_int 26 5) && Bitops.eq arg4930 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4931 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg4926 (Bits.U.of_int 27 5) && Bitops.eq arg4927 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4928 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg4923 (Bits.U.of_int 28 5) && Bitops.eq arg4924 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4925 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg4920 (Bits.U.of_int 29 5) && Bitops.eq arg4921 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4922 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg4917 (Bits.U.of_int 30 5) && Bitops.eq arg4918 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4919 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg4914 (Bits.U.of_int 31 5) && Bitops.eq arg4915 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4916 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg4911 (Bits.U.of_int 0 1) && Bitops.eq arg4912 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4913 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 18 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg5037), _), RP.Fetch (RP.Cell ('r', 
@@ -14573,52 +14573,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5037 (Bits.of_int 8 5) && Bitops.eq 
-            arg5038 (Bits.of_int 24 5) && Bitops.eq arg5035 
-            (Bits.of_int 9 5) && Bitops.eq arg5036 (Bits.of_int 25 5) && 
-          Bitops.eq arg5033 (Bits.of_int 10 5) && Bitops.eq arg5034 
-            (Bits.of_int 26 5) && Bitops.eq arg5031 (Bits.of_int 11 5) && 
-          Bitops.eq arg5032 (Bits.of_int 27 5) && Bitops.eq arg5029 
-            (Bits.of_int 12 5) && Bitops.eq arg5030 (Bits.of_int 28 5) && 
-          Bitops.eq arg5027 (Bits.of_int 13 5) && Bitops.eq arg5028 
-            (Bits.of_int 29 5) && Bitops.eq arg5025 (Bits.of_int 14 5) && 
-          Bitops.eq arg5026 (Bits.of_int 30 5) && Bitops.eq arg5023 
-            (Bits.of_int 15 5) && Bitops.eq arg5024 (Bits.of_int 31 5) && 
-          Bitops.eq arg5020 (Bits.of_int 16 5) && Bitops.eq arg5021 
-            (Bits.of_int 0 1) && Bitops.eq arg5022 (Bits.of_int 8 32) && 
-          Bitops.eq arg5017 (Bits.of_int 18 5) && Bitops.eq arg5018 
-            (Bits.of_int 0 1) && Bitops.eq arg5019 (Bits.of_int 6 32) && 
-          Bitops.eq arg5014 (Bits.of_int 19 5) && Bitops.eq arg5015 
-            (Bits.of_int 0 1) && Bitops.eq arg5016 (Bits.of_int 5 32) && 
-          Bitops.eq arg5011 (Bits.of_int 20 5) && Bitops.eq arg5012 
-            (Bits.of_int 0 1) && Bitops.eq arg5013 (Bits.of_int 4 32) && 
-          Bitops.eq arg5008 (Bits.of_int 21 5) && Bitops.eq arg5009 
-            (Bits.of_int 0 1) && Bitops.eq arg5010 (Bits.of_int 3 32) && 
-          Bitops.eq arg5005 (Bits.of_int 22 5) && Bitops.eq arg5006 
-            (Bits.of_int 0 1) && Bitops.eq arg5007 (Bits.of_int 2 32) && 
-          Bitops.eq arg5002 (Bits.of_int 23 5) && Bitops.eq arg5003 
-            (Bits.of_int 0 1) && Bitops.eq arg5004 (Bits.of_int 1 32) && 
-          Bitops.eq arg4999 (Bits.of_int 24 5) && Bitops.eq arg5000 
-            (Bits.of_int 0 1) && Bitops.eq arg5001 (Bits.of_int 16 32) && 
-          Bitops.eq arg4996 (Bits.of_int 25 5) && Bitops.eq arg4997 
-            (Bits.of_int 0 1) && Bitops.eq arg4998 (Bits.of_int 15 32) && 
-          Bitops.eq arg4993 (Bits.of_int 26 5) && Bitops.eq arg4994 
-            (Bits.of_int 0 1) && Bitops.eq arg4995 (Bits.of_int 14 32) && 
-          Bitops.eq arg4990 (Bits.of_int 27 5) && Bitops.eq arg4991 
-            (Bits.of_int 0 1) && Bitops.eq arg4992 (Bits.of_int 13 32) && 
-          Bitops.eq arg4987 (Bits.of_int 28 5) && Bitops.eq arg4988 
-            (Bits.of_int 0 1) && Bitops.eq arg4989 (Bits.of_int 12 32) && 
-          Bitops.eq arg4984 (Bits.of_int 29 5) && Bitops.eq arg4985 
-            (Bits.of_int 0 1) && Bitops.eq arg4986 (Bits.of_int 11 32) && 
-          Bitops.eq arg4981 (Bits.of_int 30 5) && Bitops.eq arg4982 
-            (Bits.of_int 0 1) && Bitops.eq arg4983 (Bits.of_int 10 32) && 
-          Bitops.eq arg4978 (Bits.of_int 31 5) && Bitops.eq arg4979 
-            (Bits.of_int 0 1) && Bitops.eq arg4980 (Bits.of_int 9 32) && 
-          Bitops.eq arg4975 (Bits.of_int 0 1) && Bitops.eq arg4976 
-            (Bits.of_int 0 1) && Bitops.eq arg4977 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 17 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg5037 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg5038 (Bits.U.of_int 24 5) && Bitops.eq arg5035 
+            (Bits.U.of_int 9 5) && Bitops.eq arg5036 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg5033 (Bits.U.of_int 10 5) && Bitops.eq arg5034 
+            (Bits.U.of_int 26 5) && Bitops.eq arg5031 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg5032 (Bits.U.of_int 27 5) && Bitops.eq arg5029 
+            (Bits.U.of_int 12 5) && Bitops.eq arg5030 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg5027 (Bits.U.of_int 13 5) && Bitops.eq arg5028 
+            (Bits.U.of_int 29 5) && Bitops.eq arg5025 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg5026 (Bits.U.of_int 30 5) && Bitops.eq arg5023 
+            (Bits.U.of_int 15 5) && Bitops.eq arg5024 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg5020 (Bits.U.of_int 16 5) && Bitops.eq arg5021 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5022 (Bits.U.of_int 8 32) && 
+          Bitops.eq arg5017 (Bits.U.of_int 18 5) && Bitops.eq arg5018 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5019 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg5014 (Bits.U.of_int 19 5) && Bitops.eq arg5015 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5016 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg5011 (Bits.U.of_int 20 5) && Bitops.eq arg5012 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5013 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg5008 (Bits.U.of_int 21 5) && Bitops.eq arg5009 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5010 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg5005 (Bits.U.of_int 22 5) && Bitops.eq arg5006 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5007 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg5002 (Bits.U.of_int 23 5) && Bitops.eq arg5003 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5004 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg4999 (Bits.U.of_int 24 5) && Bitops.eq arg5000 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5001 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg4996 (Bits.U.of_int 25 5) && Bitops.eq arg4997 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4998 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg4993 (Bits.U.of_int 26 5) && Bitops.eq arg4994 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4995 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg4990 (Bits.U.of_int 27 5) && Bitops.eq arg4991 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4992 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg4987 (Bits.U.of_int 28 5) && Bitops.eq arg4988 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4989 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg4984 (Bits.U.of_int 29 5) && Bitops.eq arg4985 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4986 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg4981 (Bits.U.of_int 30 5) && Bitops.eq arg4982 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4983 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg4978 (Bits.U.of_int 31 5) && Bitops.eq arg4979 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4980 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg4975 (Bits.U.of_int 0 1) && Bitops.eq arg4976 
+            (Bits.U.of_int 0 1) && Bitops.eq arg4977 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 17 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg5101), _), RP.Fetch (RP.Cell ('r', 
@@ -14743,52 +14743,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5101 (Bits.of_int 8 5) && Bitops.eq 
-            arg5102 (Bits.of_int 24 5) && Bitops.eq arg5099 
-            (Bits.of_int 9 5) && Bitops.eq arg5100 (Bits.of_int 25 5) && 
-          Bitops.eq arg5097 (Bits.of_int 10 5) && Bitops.eq arg5098 
-            (Bits.of_int 26 5) && Bitops.eq arg5095 (Bits.of_int 11 5) && 
-          Bitops.eq arg5096 (Bits.of_int 27 5) && Bitops.eq arg5093 
-            (Bits.of_int 12 5) && Bitops.eq arg5094 (Bits.of_int 28 5) && 
-          Bitops.eq arg5091 (Bits.of_int 13 5) && Bitops.eq arg5092 
-            (Bits.of_int 29 5) && Bitops.eq arg5089 (Bits.of_int 14 5) && 
-          Bitops.eq arg5090 (Bits.of_int 30 5) && Bitops.eq arg5087 
-            (Bits.of_int 15 5) && Bitops.eq arg5088 (Bits.of_int 31 5) && 
-          Bitops.eq arg5084 (Bits.of_int 17 5) && Bitops.eq arg5085 
-            (Bits.of_int 0 1) && Bitops.eq arg5086 (Bits.of_int 7 32) && 
-          Bitops.eq arg5081 (Bits.of_int 18 5) && Bitops.eq arg5082 
-            (Bits.of_int 0 1) && Bitops.eq arg5083 (Bits.of_int 6 32) && 
-          Bitops.eq arg5078 (Bits.of_int 19 5) && Bitops.eq arg5079 
-            (Bits.of_int 0 1) && Bitops.eq arg5080 (Bits.of_int 5 32) && 
-          Bitops.eq arg5075 (Bits.of_int 20 5) && Bitops.eq arg5076 
-            (Bits.of_int 0 1) && Bitops.eq arg5077 (Bits.of_int 4 32) && 
-          Bitops.eq arg5072 (Bits.of_int 21 5) && Bitops.eq arg5073 
-            (Bits.of_int 0 1) && Bitops.eq arg5074 (Bits.of_int 3 32) && 
-          Bitops.eq arg5069 (Bits.of_int 22 5) && Bitops.eq arg5070 
-            (Bits.of_int 0 1) && Bitops.eq arg5071 (Bits.of_int 2 32) && 
-          Bitops.eq arg5066 (Bits.of_int 23 5) && Bitops.eq arg5067 
-            (Bits.of_int 0 1) && Bitops.eq arg5068 (Bits.of_int 1 32) && 
-          Bitops.eq arg5063 (Bits.of_int 24 5) && Bitops.eq arg5064 
-            (Bits.of_int 0 1) && Bitops.eq arg5065 (Bits.of_int 16 32) && 
-          Bitops.eq arg5060 (Bits.of_int 25 5) && Bitops.eq arg5061 
-            (Bits.of_int 0 1) && Bitops.eq arg5062 (Bits.of_int 15 32) && 
-          Bitops.eq arg5057 (Bits.of_int 26 5) && Bitops.eq arg5058 
-            (Bits.of_int 0 1) && Bitops.eq arg5059 (Bits.of_int 14 32) && 
-          Bitops.eq arg5054 (Bits.of_int 27 5) && Bitops.eq arg5055 
-            (Bits.of_int 0 1) && Bitops.eq arg5056 (Bits.of_int 13 32) && 
-          Bitops.eq arg5051 (Bits.of_int 28 5) && Bitops.eq arg5052 
-            (Bits.of_int 0 1) && Bitops.eq arg5053 (Bits.of_int 12 32) && 
-          Bitops.eq arg5048 (Bits.of_int 29 5) && Bitops.eq arg5049 
-            (Bits.of_int 0 1) && Bitops.eq arg5050 (Bits.of_int 11 32) && 
-          Bitops.eq arg5045 (Bits.of_int 30 5) && Bitops.eq arg5046 
-            (Bits.of_int 0 1) && Bitops.eq arg5047 (Bits.of_int 10 32) && 
-          Bitops.eq arg5042 (Bits.of_int 31 5) && Bitops.eq arg5043 
-            (Bits.of_int 0 1) && Bitops.eq arg5044 (Bits.of_int 9 32) && 
-          Bitops.eq arg5039 (Bits.of_int 0 1) && Bitops.eq arg5040 
-            (Bits.of_int 0 1) && Bitops.eq arg5041 (Bits.of_int 16 32) && 
-          Bitops.eq rd (Bits.of_int 16 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg5101 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg5102 (Bits.U.of_int 24 5) && Bitops.eq arg5099 
+            (Bits.U.of_int 9 5) && Bitops.eq arg5100 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg5097 (Bits.U.of_int 10 5) && Bitops.eq arg5098 
+            (Bits.U.of_int 26 5) && Bitops.eq arg5095 (Bits.U.of_int 11 5) && 
+          Bitops.eq arg5096 (Bits.U.of_int 27 5) && Bitops.eq arg5093 
+            (Bits.U.of_int 12 5) && Bitops.eq arg5094 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg5091 (Bits.U.of_int 13 5) && Bitops.eq arg5092 
+            (Bits.U.of_int 29 5) && Bitops.eq arg5089 (Bits.U.of_int 14 5) && 
+          Bitops.eq arg5090 (Bits.U.of_int 30 5) && Bitops.eq arg5087 
+            (Bits.U.of_int 15 5) && Bitops.eq arg5088 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg5084 (Bits.U.of_int 17 5) && Bitops.eq arg5085 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5086 (Bits.U.of_int 7 32) && 
+          Bitops.eq arg5081 (Bits.U.of_int 18 5) && Bitops.eq arg5082 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5083 (Bits.U.of_int 6 32) && 
+          Bitops.eq arg5078 (Bits.U.of_int 19 5) && Bitops.eq arg5079 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5080 (Bits.U.of_int 5 32) && 
+          Bitops.eq arg5075 (Bits.U.of_int 20 5) && Bitops.eq arg5076 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5077 (Bits.U.of_int 4 32) && 
+          Bitops.eq arg5072 (Bits.U.of_int 21 5) && Bitops.eq arg5073 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5074 (Bits.U.of_int 3 32) && 
+          Bitops.eq arg5069 (Bits.U.of_int 22 5) && Bitops.eq arg5070 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5071 (Bits.U.of_int 2 32) && 
+          Bitops.eq arg5066 (Bits.U.of_int 23 5) && Bitops.eq arg5067 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5068 (Bits.U.of_int 1 32) && 
+          Bitops.eq arg5063 (Bits.U.of_int 24 5) && Bitops.eq arg5064 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5065 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg5060 (Bits.U.of_int 25 5) && Bitops.eq arg5061 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5062 (Bits.U.of_int 15 32) && 
+          Bitops.eq arg5057 (Bits.U.of_int 26 5) && Bitops.eq arg5058 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5059 (Bits.U.of_int 14 32) && 
+          Bitops.eq arg5054 (Bits.U.of_int 27 5) && Bitops.eq arg5055 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5056 (Bits.U.of_int 13 32) && 
+          Bitops.eq arg5051 (Bits.U.of_int 28 5) && Bitops.eq arg5052 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5053 (Bits.U.of_int 12 32) && 
+          Bitops.eq arg5048 (Bits.U.of_int 29 5) && Bitops.eq arg5049 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5050 (Bits.U.of_int 11 32) && 
+          Bitops.eq arg5045 (Bits.U.of_int 30 5) && Bitops.eq arg5046 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5047 (Bits.U.of_int 10 32) && 
+          Bitops.eq arg5042 (Bits.U.of_int 31 5) && Bitops.eq arg5043 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5044 (Bits.U.of_int 9 32) && 
+          Bitops.eq arg5039 (Bits.U.of_int 0 1) && Bitops.eq arg5040 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5041 (Bits.U.of_int 16 32) && 
+          Bitops.eq rd (Bits.U.of_int 16 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg5166), _), RP.Fetch (RP.Cell ('r', 
@@ -14916,52 +14916,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5166 (Bits.of_int 8 5) && Bitops.eq 
-            arg5167 (Bits.of_int 24 5) && Bitops.eq arg5164 (Bits.of_int 9 
-              5) && Bitops.eq arg5165 (Bits.of_int 25 5) && Bitops.eq arg5162 
-            (Bits.of_int 10 5) && Bitops.eq arg5163 (Bits.of_int 26 5) && 
-          Bitops.eq arg5160 (Bits.of_int 11 5) && Bitops.eq arg5161 
-            (Bits.of_int 27 5) && Bitops.eq arg5158 (Bits.of_int 12 5) && 
-          Bitops.eq arg5159 (Bits.of_int 28 5) && Bitops.eq arg5156 
-            (Bits.of_int 13 5) && Bitops.eq arg5157 (Bits.of_int 29 5) && 
-          Bitops.eq arg5154 (Bits.of_int 14 5) && Bitops.eq arg5155 
-            (Bits.of_int 30 5) && Bitops.eq arg5151 (Bits.of_int 16 5) && 
-          Bitops.eq arg5152 (Bits.of_int 0 1) && Bitops.eq arg5153 
-            (Bits.of_int 8 32) && Bitops.eq arg5148 (Bits.of_int 17 5) && 
-          Bitops.eq arg5149 (Bits.of_int 0 1) && Bitops.eq arg5150 
-            (Bits.of_int 7 32) && Bitops.eq arg5145 (Bits.of_int 18 5) && 
-          Bitops.eq arg5146 (Bits.of_int 0 1) && Bitops.eq arg5147 
-            (Bits.of_int 6 32) && Bitops.eq arg5142 (Bits.of_int 19 5) && 
-          Bitops.eq arg5143 (Bits.of_int 0 1) && Bitops.eq arg5144 
-            (Bits.of_int 5 32) && Bitops.eq arg5139 (Bits.of_int 20 5) && 
-          Bitops.eq arg5140 (Bits.of_int 0 1) && Bitops.eq arg5141 
-            (Bits.of_int 4 32) && Bitops.eq arg5136 (Bits.of_int 21 5) && 
-          Bitops.eq arg5137 (Bits.of_int 0 1) && Bitops.eq arg5138 
-            (Bits.of_int 3 32) && Bitops.eq arg5133 (Bits.of_int 22 5) && 
-          Bitops.eq arg5134 (Bits.of_int 0 1) && Bitops.eq arg5135 
-            (Bits.of_int 2 32) && Bitops.eq arg5130 (Bits.of_int 23 5) && 
-          Bitops.eq arg5131 (Bits.of_int 0 1) && Bitops.eq arg5132 
-            (Bits.of_int 1 32) && Bitops.eq arg5127 (Bits.of_int 24 5) && 
-          Bitops.eq arg5128 (Bits.of_int 0 1) && Bitops.eq arg5129 
-            (Bits.of_int 16 32) && Bitops.eq arg5124 (Bits.of_int 25 5) && 
-          Bitops.eq arg5125 (Bits.of_int 0 1) && Bitops.eq arg5126 
-            (Bits.of_int 15 32) && Bitops.eq arg5121 (Bits.of_int 26 5) && 
-          Bitops.eq arg5122 (Bits.of_int 0 1) && Bitops.eq arg5123 
-            (Bits.of_int 14 32) && Bitops.eq arg5118 (Bits.of_int 27 5) && 
-          Bitops.eq arg5119 (Bits.of_int 0 1) && Bitops.eq arg5120 
-            (Bits.of_int 13 32) && Bitops.eq arg5115 (Bits.of_int 28 5) && 
-          Bitops.eq arg5116 (Bits.of_int 0 1) && Bitops.eq arg5117 
-            (Bits.of_int 12 32) && Bitops.eq arg5112 (Bits.of_int 29 5) && 
-          Bitops.eq arg5113 (Bits.of_int 0 1) && Bitops.eq arg5114 
-            (Bits.of_int 11 32) && Bitops.eq arg5109 (Bits.of_int 30 5) && 
-          Bitops.eq arg5110 (Bits.of_int 0 1) && Bitops.eq arg5111 
-            (Bits.of_int 10 32) && Bitops.eq arg5106 (Bits.of_int 31 5) && 
-          Bitops.eq arg5107 (Bits.of_int 0 1) && Bitops.eq arg5108 
-            (Bits.of_int 9 32) && Bitops.eq arg5103 (Bits.of_int 0 1) && 
-          Bitops.eq arg5104 (Bits.of_int 0 1) && Bitops.eq arg5105 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 15 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg5166 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg5167 (Bits.U.of_int 24 5) && Bitops.eq arg5164 (Bits.U.of_int 9 
+              5) && Bitops.eq arg5165 (Bits.U.of_int 25 5) && Bitops.eq arg5162 
+            (Bits.U.of_int 10 5) && Bitops.eq arg5163 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg5160 (Bits.U.of_int 11 5) && Bitops.eq arg5161 
+            (Bits.U.of_int 27 5) && Bitops.eq arg5158 (Bits.U.of_int 12 5) && 
+          Bitops.eq arg5159 (Bits.U.of_int 28 5) && Bitops.eq arg5156 
+            (Bits.U.of_int 13 5) && Bitops.eq arg5157 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg5154 (Bits.U.of_int 14 5) && Bitops.eq arg5155 
+            (Bits.U.of_int 30 5) && Bitops.eq arg5151 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg5152 (Bits.U.of_int 0 1) && Bitops.eq arg5153 
+            (Bits.U.of_int 8 32) && Bitops.eq arg5148 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg5149 (Bits.U.of_int 0 1) && Bitops.eq arg5150 
+            (Bits.U.of_int 7 32) && Bitops.eq arg5145 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg5146 (Bits.U.of_int 0 1) && Bitops.eq arg5147 
+            (Bits.U.of_int 6 32) && Bitops.eq arg5142 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg5143 (Bits.U.of_int 0 1) && Bitops.eq arg5144 
+            (Bits.U.of_int 5 32) && Bitops.eq arg5139 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg5140 (Bits.U.of_int 0 1) && Bitops.eq arg5141 
+            (Bits.U.of_int 4 32) && Bitops.eq arg5136 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg5137 (Bits.U.of_int 0 1) && Bitops.eq arg5138 
+            (Bits.U.of_int 3 32) && Bitops.eq arg5133 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg5134 (Bits.U.of_int 0 1) && Bitops.eq arg5135 
+            (Bits.U.of_int 2 32) && Bitops.eq arg5130 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg5131 (Bits.U.of_int 0 1) && Bitops.eq arg5132 
+            (Bits.U.of_int 1 32) && Bitops.eq arg5127 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg5128 (Bits.U.of_int 0 1) && Bitops.eq arg5129 
+            (Bits.U.of_int 16 32) && Bitops.eq arg5124 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg5125 (Bits.U.of_int 0 1) && Bitops.eq arg5126 
+            (Bits.U.of_int 15 32) && Bitops.eq arg5121 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg5122 (Bits.U.of_int 0 1) && Bitops.eq arg5123 
+            (Bits.U.of_int 14 32) && Bitops.eq arg5118 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg5119 (Bits.U.of_int 0 1) && Bitops.eq arg5120 
+            (Bits.U.of_int 13 32) && Bitops.eq arg5115 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg5116 (Bits.U.of_int 0 1) && Bitops.eq arg5117 
+            (Bits.U.of_int 12 32) && Bitops.eq arg5112 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg5113 (Bits.U.of_int 0 1) && Bitops.eq arg5114 
+            (Bits.U.of_int 11 32) && Bitops.eq arg5109 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg5110 (Bits.U.of_int 0 1) && Bitops.eq arg5111 
+            (Bits.U.of_int 10 32) && Bitops.eq arg5106 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg5107 (Bits.U.of_int 0 1) && Bitops.eq arg5108 
+            (Bits.U.of_int 9 32) && Bitops.eq arg5103 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5104 (Bits.U.of_int 0 1) && Bitops.eq arg5105 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 15 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg5231), _), RP.Fetch (RP.Cell ('r', 
@@ -15089,52 +15089,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5231 (Bits.of_int 8 5) && Bitops.eq 
-            arg5232 (Bits.of_int 24 5) && Bitops.eq arg5229 (Bits.of_int 9 
-              5) && Bitops.eq arg5230 (Bits.of_int 25 5) && Bitops.eq arg5227 
-            (Bits.of_int 10 5) && Bitops.eq arg5228 (Bits.of_int 26 5) && 
-          Bitops.eq arg5225 (Bits.of_int 11 5) && Bitops.eq arg5226 
-            (Bits.of_int 27 5) && Bitops.eq arg5223 (Bits.of_int 12 5) && 
-          Bitops.eq arg5224 (Bits.of_int 28 5) && Bitops.eq arg5221 
-            (Bits.of_int 13 5) && Bitops.eq arg5222 (Bits.of_int 29 5) && 
-          Bitops.eq arg5219 (Bits.of_int 15 5) && Bitops.eq arg5220 
-            (Bits.of_int 31 5) && Bitops.eq arg5216 (Bits.of_int 16 5) && 
-          Bitops.eq arg5217 (Bits.of_int 0 1) && Bitops.eq arg5218 
-            (Bits.of_int 8 32) && Bitops.eq arg5213 (Bits.of_int 17 5) && 
-          Bitops.eq arg5214 (Bits.of_int 0 1) && Bitops.eq arg5215 
-            (Bits.of_int 7 32) && Bitops.eq arg5210 (Bits.of_int 18 5) && 
-          Bitops.eq arg5211 (Bits.of_int 0 1) && Bitops.eq arg5212 
-            (Bits.of_int 6 32) && Bitops.eq arg5207 (Bits.of_int 19 5) && 
-          Bitops.eq arg5208 (Bits.of_int 0 1) && Bitops.eq arg5209 
-            (Bits.of_int 5 32) && Bitops.eq arg5204 (Bits.of_int 20 5) && 
-          Bitops.eq arg5205 (Bits.of_int 0 1) && Bitops.eq arg5206 
-            (Bits.of_int 4 32) && Bitops.eq arg5201 (Bits.of_int 21 5) && 
-          Bitops.eq arg5202 (Bits.of_int 0 1) && Bitops.eq arg5203 
-            (Bits.of_int 3 32) && Bitops.eq arg5198 (Bits.of_int 22 5) && 
-          Bitops.eq arg5199 (Bits.of_int 0 1) && Bitops.eq arg5200 
-            (Bits.of_int 2 32) && Bitops.eq arg5195 (Bits.of_int 23 5) && 
-          Bitops.eq arg5196 (Bits.of_int 0 1) && Bitops.eq arg5197 
-            (Bits.of_int 1 32) && Bitops.eq arg5192 (Bits.of_int 24 5) && 
-          Bitops.eq arg5193 (Bits.of_int 0 1) && Bitops.eq arg5194 
-            (Bits.of_int 16 32) && Bitops.eq arg5189 (Bits.of_int 25 5) && 
-          Bitops.eq arg5190 (Bits.of_int 0 1) && Bitops.eq arg5191 
-            (Bits.of_int 15 32) && Bitops.eq arg5186 (Bits.of_int 26 5) && 
-          Bitops.eq arg5187 (Bits.of_int 0 1) && Bitops.eq arg5188 
-            (Bits.of_int 14 32) && Bitops.eq arg5183 (Bits.of_int 27 5) && 
-          Bitops.eq arg5184 (Bits.of_int 0 1) && Bitops.eq arg5185 
-            (Bits.of_int 13 32) && Bitops.eq arg5180 (Bits.of_int 28 5) && 
-          Bitops.eq arg5181 (Bits.of_int 0 1) && Bitops.eq arg5182 
-            (Bits.of_int 12 32) && Bitops.eq arg5177 (Bits.of_int 29 5) && 
-          Bitops.eq arg5178 (Bits.of_int 0 1) && Bitops.eq arg5179 
-            (Bits.of_int 11 32) && Bitops.eq arg5174 (Bits.of_int 30 5) && 
-          Bitops.eq arg5175 (Bits.of_int 0 1) && Bitops.eq arg5176 
-            (Bits.of_int 10 32) && Bitops.eq arg5171 (Bits.of_int 31 5) && 
-          Bitops.eq arg5172 (Bits.of_int 0 1) && Bitops.eq arg5173 
-            (Bits.of_int 9 32) && Bitops.eq arg5168 (Bits.of_int 0 1) && 
-          Bitops.eq arg5169 (Bits.of_int 0 1) && Bitops.eq arg5170 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 14 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg5231 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg5232 (Bits.U.of_int 24 5) && Bitops.eq arg5229 (Bits.U.of_int 9 
+              5) && Bitops.eq arg5230 (Bits.U.of_int 25 5) && Bitops.eq arg5227 
+            (Bits.U.of_int 10 5) && Bitops.eq arg5228 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg5225 (Bits.U.of_int 11 5) && Bitops.eq arg5226 
+            (Bits.U.of_int 27 5) && Bitops.eq arg5223 (Bits.U.of_int 12 5) && 
+          Bitops.eq arg5224 (Bits.U.of_int 28 5) && Bitops.eq arg5221 
+            (Bits.U.of_int 13 5) && Bitops.eq arg5222 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg5219 (Bits.U.of_int 15 5) && Bitops.eq arg5220 
+            (Bits.U.of_int 31 5) && Bitops.eq arg5216 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg5217 (Bits.U.of_int 0 1) && Bitops.eq arg5218 
+            (Bits.U.of_int 8 32) && Bitops.eq arg5213 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg5214 (Bits.U.of_int 0 1) && Bitops.eq arg5215 
+            (Bits.U.of_int 7 32) && Bitops.eq arg5210 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg5211 (Bits.U.of_int 0 1) && Bitops.eq arg5212 
+            (Bits.U.of_int 6 32) && Bitops.eq arg5207 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg5208 (Bits.U.of_int 0 1) && Bitops.eq arg5209 
+            (Bits.U.of_int 5 32) && Bitops.eq arg5204 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg5205 (Bits.U.of_int 0 1) && Bitops.eq arg5206 
+            (Bits.U.of_int 4 32) && Bitops.eq arg5201 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg5202 (Bits.U.of_int 0 1) && Bitops.eq arg5203 
+            (Bits.U.of_int 3 32) && Bitops.eq arg5198 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg5199 (Bits.U.of_int 0 1) && Bitops.eq arg5200 
+            (Bits.U.of_int 2 32) && Bitops.eq arg5195 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg5196 (Bits.U.of_int 0 1) && Bitops.eq arg5197 
+            (Bits.U.of_int 1 32) && Bitops.eq arg5192 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg5193 (Bits.U.of_int 0 1) && Bitops.eq arg5194 
+            (Bits.U.of_int 16 32) && Bitops.eq arg5189 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg5190 (Bits.U.of_int 0 1) && Bitops.eq arg5191 
+            (Bits.U.of_int 15 32) && Bitops.eq arg5186 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg5187 (Bits.U.of_int 0 1) && Bitops.eq arg5188 
+            (Bits.U.of_int 14 32) && Bitops.eq arg5183 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg5184 (Bits.U.of_int 0 1) && Bitops.eq arg5185 
+            (Bits.U.of_int 13 32) && Bitops.eq arg5180 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg5181 (Bits.U.of_int 0 1) && Bitops.eq arg5182 
+            (Bits.U.of_int 12 32) && Bitops.eq arg5177 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg5178 (Bits.U.of_int 0 1) && Bitops.eq arg5179 
+            (Bits.U.of_int 11 32) && Bitops.eq arg5174 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg5175 (Bits.U.of_int 0 1) && Bitops.eq arg5176 
+            (Bits.U.of_int 10 32) && Bitops.eq arg5171 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg5172 (Bits.U.of_int 0 1) && Bitops.eq arg5173 
+            (Bits.U.of_int 9 32) && Bitops.eq arg5168 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5169 (Bits.U.of_int 0 1) && Bitops.eq arg5170 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 14 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg5296), _), RP.Fetch (RP.Cell ('r', 
@@ -15262,52 +15262,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5296 (Bits.of_int 8 5) && Bitops.eq 
-            arg5297 (Bits.of_int 24 5) && Bitops.eq arg5294 (Bits.of_int 9 
-              5) && Bitops.eq arg5295 (Bits.of_int 25 5) && Bitops.eq arg5292 
-            (Bits.of_int 10 5) && Bitops.eq arg5293 (Bits.of_int 26 5) && 
-          Bitops.eq arg5290 (Bits.of_int 11 5) && Bitops.eq arg5291 
-            (Bits.of_int 27 5) && Bitops.eq arg5288 (Bits.of_int 12 5) && 
-          Bitops.eq arg5289 (Bits.of_int 28 5) && Bitops.eq arg5286 
-            (Bits.of_int 14 5) && Bitops.eq arg5287 (Bits.of_int 30 5) && 
-          Bitops.eq arg5284 (Bits.of_int 15 5) && Bitops.eq arg5285 
-            (Bits.of_int 31 5) && Bitops.eq arg5281 (Bits.of_int 16 5) && 
-          Bitops.eq arg5282 (Bits.of_int 0 1) && Bitops.eq arg5283 
-            (Bits.of_int 8 32) && Bitops.eq arg5278 (Bits.of_int 17 5) && 
-          Bitops.eq arg5279 (Bits.of_int 0 1) && Bitops.eq arg5280 
-            (Bits.of_int 7 32) && Bitops.eq arg5275 (Bits.of_int 18 5) && 
-          Bitops.eq arg5276 (Bits.of_int 0 1) && Bitops.eq arg5277 
-            (Bits.of_int 6 32) && Bitops.eq arg5272 (Bits.of_int 19 5) && 
-          Bitops.eq arg5273 (Bits.of_int 0 1) && Bitops.eq arg5274 
-            (Bits.of_int 5 32) && Bitops.eq arg5269 (Bits.of_int 20 5) && 
-          Bitops.eq arg5270 (Bits.of_int 0 1) && Bitops.eq arg5271 
-            (Bits.of_int 4 32) && Bitops.eq arg5266 (Bits.of_int 21 5) && 
-          Bitops.eq arg5267 (Bits.of_int 0 1) && Bitops.eq arg5268 
-            (Bits.of_int 3 32) && Bitops.eq arg5263 (Bits.of_int 22 5) && 
-          Bitops.eq arg5264 (Bits.of_int 0 1) && Bitops.eq arg5265 
-            (Bits.of_int 2 32) && Bitops.eq arg5260 (Bits.of_int 23 5) && 
-          Bitops.eq arg5261 (Bits.of_int 0 1) && Bitops.eq arg5262 
-            (Bits.of_int 1 32) && Bitops.eq arg5257 (Bits.of_int 24 5) && 
-          Bitops.eq arg5258 (Bits.of_int 0 1) && Bitops.eq arg5259 
-            (Bits.of_int 16 32) && Bitops.eq arg5254 (Bits.of_int 25 5) && 
-          Bitops.eq arg5255 (Bits.of_int 0 1) && Bitops.eq arg5256 
-            (Bits.of_int 15 32) && Bitops.eq arg5251 (Bits.of_int 26 5) && 
-          Bitops.eq arg5252 (Bits.of_int 0 1) && Bitops.eq arg5253 
-            (Bits.of_int 14 32) && Bitops.eq arg5248 (Bits.of_int 27 5) && 
-          Bitops.eq arg5249 (Bits.of_int 0 1) && Bitops.eq arg5250 
-            (Bits.of_int 13 32) && Bitops.eq arg5245 (Bits.of_int 28 5) && 
-          Bitops.eq arg5246 (Bits.of_int 0 1) && Bitops.eq arg5247 
-            (Bits.of_int 12 32) && Bitops.eq arg5242 (Bits.of_int 29 5) && 
-          Bitops.eq arg5243 (Bits.of_int 0 1) && Bitops.eq arg5244 
-            (Bits.of_int 11 32) && Bitops.eq arg5239 (Bits.of_int 30 5) && 
-          Bitops.eq arg5240 (Bits.of_int 0 1) && Bitops.eq arg5241 
-            (Bits.of_int 10 32) && Bitops.eq arg5236 (Bits.of_int 31 5) && 
-          Bitops.eq arg5237 (Bits.of_int 0 1) && Bitops.eq arg5238 
-            (Bits.of_int 9 32) && Bitops.eq arg5233 (Bits.of_int 0 1) && 
-          Bitops.eq arg5234 (Bits.of_int 0 1) && Bitops.eq arg5235 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 13 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg5296 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg5297 (Bits.U.of_int 24 5) && Bitops.eq arg5294 (Bits.U.of_int 9 
+              5) && Bitops.eq arg5295 (Bits.U.of_int 25 5) && Bitops.eq arg5292 
+            (Bits.U.of_int 10 5) && Bitops.eq arg5293 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg5290 (Bits.U.of_int 11 5) && Bitops.eq arg5291 
+            (Bits.U.of_int 27 5) && Bitops.eq arg5288 (Bits.U.of_int 12 5) && 
+          Bitops.eq arg5289 (Bits.U.of_int 28 5) && Bitops.eq arg5286 
+            (Bits.U.of_int 14 5) && Bitops.eq arg5287 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg5284 (Bits.U.of_int 15 5) && Bitops.eq arg5285 
+            (Bits.U.of_int 31 5) && Bitops.eq arg5281 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg5282 (Bits.U.of_int 0 1) && Bitops.eq arg5283 
+            (Bits.U.of_int 8 32) && Bitops.eq arg5278 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg5279 (Bits.U.of_int 0 1) && Bitops.eq arg5280 
+            (Bits.U.of_int 7 32) && Bitops.eq arg5275 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg5276 (Bits.U.of_int 0 1) && Bitops.eq arg5277 
+            (Bits.U.of_int 6 32) && Bitops.eq arg5272 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg5273 (Bits.U.of_int 0 1) && Bitops.eq arg5274 
+            (Bits.U.of_int 5 32) && Bitops.eq arg5269 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg5270 (Bits.U.of_int 0 1) && Bitops.eq arg5271 
+            (Bits.U.of_int 4 32) && Bitops.eq arg5266 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg5267 (Bits.U.of_int 0 1) && Bitops.eq arg5268 
+            (Bits.U.of_int 3 32) && Bitops.eq arg5263 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg5264 (Bits.U.of_int 0 1) && Bitops.eq arg5265 
+            (Bits.U.of_int 2 32) && Bitops.eq arg5260 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg5261 (Bits.U.of_int 0 1) && Bitops.eq arg5262 
+            (Bits.U.of_int 1 32) && Bitops.eq arg5257 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg5258 (Bits.U.of_int 0 1) && Bitops.eq arg5259 
+            (Bits.U.of_int 16 32) && Bitops.eq arg5254 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg5255 (Bits.U.of_int 0 1) && Bitops.eq arg5256 
+            (Bits.U.of_int 15 32) && Bitops.eq arg5251 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg5252 (Bits.U.of_int 0 1) && Bitops.eq arg5253 
+            (Bits.U.of_int 14 32) && Bitops.eq arg5248 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg5249 (Bits.U.of_int 0 1) && Bitops.eq arg5250 
+            (Bits.U.of_int 13 32) && Bitops.eq arg5245 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg5246 (Bits.U.of_int 0 1) && Bitops.eq arg5247 
+            (Bits.U.of_int 12 32) && Bitops.eq arg5242 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg5243 (Bits.U.of_int 0 1) && Bitops.eq arg5244 
+            (Bits.U.of_int 11 32) && Bitops.eq arg5239 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg5240 (Bits.U.of_int 0 1) && Bitops.eq arg5241 
+            (Bits.U.of_int 10 32) && Bitops.eq arg5236 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg5237 (Bits.U.of_int 0 1) && Bitops.eq arg5238 
+            (Bits.U.of_int 9 32) && Bitops.eq arg5233 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5234 (Bits.U.of_int 0 1) && Bitops.eq arg5235 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 13 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg5361), _), RP.Fetch (RP.Cell ('r', 
@@ -15435,52 +15435,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5361 (Bits.of_int 8 5) && Bitops.eq 
-            arg5362 (Bits.of_int 24 5) && Bitops.eq arg5359 (Bits.of_int 9 
-              5) && Bitops.eq arg5360 (Bits.of_int 25 5) && Bitops.eq arg5357 
-            (Bits.of_int 10 5) && Bitops.eq arg5358 (Bits.of_int 26 5) && 
-          Bitops.eq arg5355 (Bits.of_int 11 5) && Bitops.eq arg5356 
-            (Bits.of_int 27 5) && Bitops.eq arg5353 (Bits.of_int 13 5) && 
-          Bitops.eq arg5354 (Bits.of_int 29 5) && Bitops.eq arg5351 
-            (Bits.of_int 14 5) && Bitops.eq arg5352 (Bits.of_int 30 5) && 
-          Bitops.eq arg5349 (Bits.of_int 15 5) && Bitops.eq arg5350 
-            (Bits.of_int 31 5) && Bitops.eq arg5346 (Bits.of_int 16 5) && 
-          Bitops.eq arg5347 (Bits.of_int 0 1) && Bitops.eq arg5348 
-            (Bits.of_int 8 32) && Bitops.eq arg5343 (Bits.of_int 17 5) && 
-          Bitops.eq arg5344 (Bits.of_int 0 1) && Bitops.eq arg5345 
-            (Bits.of_int 7 32) && Bitops.eq arg5340 (Bits.of_int 18 5) && 
-          Bitops.eq arg5341 (Bits.of_int 0 1) && Bitops.eq arg5342 
-            (Bits.of_int 6 32) && Bitops.eq arg5337 (Bits.of_int 19 5) && 
-          Bitops.eq arg5338 (Bits.of_int 0 1) && Bitops.eq arg5339 
-            (Bits.of_int 5 32) && Bitops.eq arg5334 (Bits.of_int 20 5) && 
-          Bitops.eq arg5335 (Bits.of_int 0 1) && Bitops.eq arg5336 
-            (Bits.of_int 4 32) && Bitops.eq arg5331 (Bits.of_int 21 5) && 
-          Bitops.eq arg5332 (Bits.of_int 0 1) && Bitops.eq arg5333 
-            (Bits.of_int 3 32) && Bitops.eq arg5328 (Bits.of_int 22 5) && 
-          Bitops.eq arg5329 (Bits.of_int 0 1) && Bitops.eq arg5330 
-            (Bits.of_int 2 32) && Bitops.eq arg5325 (Bits.of_int 23 5) && 
-          Bitops.eq arg5326 (Bits.of_int 0 1) && Bitops.eq arg5327 
-            (Bits.of_int 1 32) && Bitops.eq arg5322 (Bits.of_int 24 5) && 
-          Bitops.eq arg5323 (Bits.of_int 0 1) && Bitops.eq arg5324 
-            (Bits.of_int 16 32) && Bitops.eq arg5319 (Bits.of_int 25 5) && 
-          Bitops.eq arg5320 (Bits.of_int 0 1) && Bitops.eq arg5321 
-            (Bits.of_int 15 32) && Bitops.eq arg5316 (Bits.of_int 26 5) && 
-          Bitops.eq arg5317 (Bits.of_int 0 1) && Bitops.eq arg5318 
-            (Bits.of_int 14 32) && Bitops.eq arg5313 (Bits.of_int 27 5) && 
-          Bitops.eq arg5314 (Bits.of_int 0 1) && Bitops.eq arg5315 
-            (Bits.of_int 13 32) && Bitops.eq arg5310 (Bits.of_int 28 5) && 
-          Bitops.eq arg5311 (Bits.of_int 0 1) && Bitops.eq arg5312 
-            (Bits.of_int 12 32) && Bitops.eq arg5307 (Bits.of_int 29 5) && 
-          Bitops.eq arg5308 (Bits.of_int 0 1) && Bitops.eq arg5309 
-            (Bits.of_int 11 32) && Bitops.eq arg5304 (Bits.of_int 30 5) && 
-          Bitops.eq arg5305 (Bits.of_int 0 1) && Bitops.eq arg5306 
-            (Bits.of_int 10 32) && Bitops.eq arg5301 (Bits.of_int 31 5) && 
-          Bitops.eq arg5302 (Bits.of_int 0 1) && Bitops.eq arg5303 
-            (Bits.of_int 9 32) && Bitops.eq arg5298 (Bits.of_int 0 1) && 
-          Bitops.eq arg5299 (Bits.of_int 0 1) && Bitops.eq arg5300 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 12 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg5361 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg5362 (Bits.U.of_int 24 5) && Bitops.eq arg5359 (Bits.U.of_int 9 
+              5) && Bitops.eq arg5360 (Bits.U.of_int 25 5) && Bitops.eq arg5357 
+            (Bits.U.of_int 10 5) && Bitops.eq arg5358 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg5355 (Bits.U.of_int 11 5) && Bitops.eq arg5356 
+            (Bits.U.of_int 27 5) && Bitops.eq arg5353 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg5354 (Bits.U.of_int 29 5) && Bitops.eq arg5351 
+            (Bits.U.of_int 14 5) && Bitops.eq arg5352 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg5349 (Bits.U.of_int 15 5) && Bitops.eq arg5350 
+            (Bits.U.of_int 31 5) && Bitops.eq arg5346 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg5347 (Bits.U.of_int 0 1) && Bitops.eq arg5348 
+            (Bits.U.of_int 8 32) && Bitops.eq arg5343 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg5344 (Bits.U.of_int 0 1) && Bitops.eq arg5345 
+            (Bits.U.of_int 7 32) && Bitops.eq arg5340 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg5341 (Bits.U.of_int 0 1) && Bitops.eq arg5342 
+            (Bits.U.of_int 6 32) && Bitops.eq arg5337 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg5338 (Bits.U.of_int 0 1) && Bitops.eq arg5339 
+            (Bits.U.of_int 5 32) && Bitops.eq arg5334 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg5335 (Bits.U.of_int 0 1) && Bitops.eq arg5336 
+            (Bits.U.of_int 4 32) && Bitops.eq arg5331 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg5332 (Bits.U.of_int 0 1) && Bitops.eq arg5333 
+            (Bits.U.of_int 3 32) && Bitops.eq arg5328 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg5329 (Bits.U.of_int 0 1) && Bitops.eq arg5330 
+            (Bits.U.of_int 2 32) && Bitops.eq arg5325 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg5326 (Bits.U.of_int 0 1) && Bitops.eq arg5327 
+            (Bits.U.of_int 1 32) && Bitops.eq arg5322 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg5323 (Bits.U.of_int 0 1) && Bitops.eq arg5324 
+            (Bits.U.of_int 16 32) && Bitops.eq arg5319 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg5320 (Bits.U.of_int 0 1) && Bitops.eq arg5321 
+            (Bits.U.of_int 15 32) && Bitops.eq arg5316 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg5317 (Bits.U.of_int 0 1) && Bitops.eq arg5318 
+            (Bits.U.of_int 14 32) && Bitops.eq arg5313 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg5314 (Bits.U.of_int 0 1) && Bitops.eq arg5315 
+            (Bits.U.of_int 13 32) && Bitops.eq arg5310 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg5311 (Bits.U.of_int 0 1) && Bitops.eq arg5312 
+            (Bits.U.of_int 12 32) && Bitops.eq arg5307 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg5308 (Bits.U.of_int 0 1) && Bitops.eq arg5309 
+            (Bits.U.of_int 11 32) && Bitops.eq arg5304 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg5305 (Bits.U.of_int 0 1) && Bitops.eq arg5306 
+            (Bits.U.of_int 10 32) && Bitops.eq arg5301 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg5302 (Bits.U.of_int 0 1) && Bitops.eq arg5303 
+            (Bits.U.of_int 9 32) && Bitops.eq arg5298 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5299 (Bits.U.of_int 0 1) && Bitops.eq arg5300 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 12 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg5426), _), RP.Fetch (RP.Cell ('r', 
@@ -15608,52 +15608,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5426 (Bits.of_int 8 5) && Bitops.eq 
-            arg5427 (Bits.of_int 24 5) && Bitops.eq arg5424 (Bits.of_int 9 
-              5) && Bitops.eq arg5425 (Bits.of_int 25 5) && Bitops.eq arg5422 
-            (Bits.of_int 10 5) && Bitops.eq arg5423 (Bits.of_int 26 5) && 
-          Bitops.eq arg5420 (Bits.of_int 12 5) && Bitops.eq arg5421 
-            (Bits.of_int 28 5) && Bitops.eq arg5418 (Bits.of_int 13 5) && 
-          Bitops.eq arg5419 (Bits.of_int 29 5) && Bitops.eq arg5416 
-            (Bits.of_int 14 5) && Bitops.eq arg5417 (Bits.of_int 30 5) && 
-          Bitops.eq arg5414 (Bits.of_int 15 5) && Bitops.eq arg5415 
-            (Bits.of_int 31 5) && Bitops.eq arg5411 (Bits.of_int 16 5) && 
-          Bitops.eq arg5412 (Bits.of_int 0 1) && Bitops.eq arg5413 
-            (Bits.of_int 8 32) && Bitops.eq arg5408 (Bits.of_int 17 5) && 
-          Bitops.eq arg5409 (Bits.of_int 0 1) && Bitops.eq arg5410 
-            (Bits.of_int 7 32) && Bitops.eq arg5405 (Bits.of_int 18 5) && 
-          Bitops.eq arg5406 (Bits.of_int 0 1) && Bitops.eq arg5407 
-            (Bits.of_int 6 32) && Bitops.eq arg5402 (Bits.of_int 19 5) && 
-          Bitops.eq arg5403 (Bits.of_int 0 1) && Bitops.eq arg5404 
-            (Bits.of_int 5 32) && Bitops.eq arg5399 (Bits.of_int 20 5) && 
-          Bitops.eq arg5400 (Bits.of_int 0 1) && Bitops.eq arg5401 
-            (Bits.of_int 4 32) && Bitops.eq arg5396 (Bits.of_int 21 5) && 
-          Bitops.eq arg5397 (Bits.of_int 0 1) && Bitops.eq arg5398 
-            (Bits.of_int 3 32) && Bitops.eq arg5393 (Bits.of_int 22 5) && 
-          Bitops.eq arg5394 (Bits.of_int 0 1) && Bitops.eq arg5395 
-            (Bits.of_int 2 32) && Bitops.eq arg5390 (Bits.of_int 23 5) && 
-          Bitops.eq arg5391 (Bits.of_int 0 1) && Bitops.eq arg5392 
-            (Bits.of_int 1 32) && Bitops.eq arg5387 (Bits.of_int 24 5) && 
-          Bitops.eq arg5388 (Bits.of_int 0 1) && Bitops.eq arg5389 
-            (Bits.of_int 16 32) && Bitops.eq arg5384 (Bits.of_int 25 5) && 
-          Bitops.eq arg5385 (Bits.of_int 0 1) && Bitops.eq arg5386 
-            (Bits.of_int 15 32) && Bitops.eq arg5381 (Bits.of_int 26 5) && 
-          Bitops.eq arg5382 (Bits.of_int 0 1) && Bitops.eq arg5383 
-            (Bits.of_int 14 32) && Bitops.eq arg5378 (Bits.of_int 27 5) && 
-          Bitops.eq arg5379 (Bits.of_int 0 1) && Bitops.eq arg5380 
-            (Bits.of_int 13 32) && Bitops.eq arg5375 (Bits.of_int 28 5) && 
-          Bitops.eq arg5376 (Bits.of_int 0 1) && Bitops.eq arg5377 
-            (Bits.of_int 12 32) && Bitops.eq arg5372 (Bits.of_int 29 5) && 
-          Bitops.eq arg5373 (Bits.of_int 0 1) && Bitops.eq arg5374 
-            (Bits.of_int 11 32) && Bitops.eq arg5369 (Bits.of_int 30 5) && 
-          Bitops.eq arg5370 (Bits.of_int 0 1) && Bitops.eq arg5371 
-            (Bits.of_int 10 32) && Bitops.eq arg5366 (Bits.of_int 31 5) && 
-          Bitops.eq arg5367 (Bits.of_int 0 1) && Bitops.eq arg5368 
-            (Bits.of_int 9 32) && Bitops.eq arg5363 (Bits.of_int 0 1) && 
-          Bitops.eq arg5364 (Bits.of_int 0 1) && Bitops.eq arg5365 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 11 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg5426 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg5427 (Bits.U.of_int 24 5) && Bitops.eq arg5424 (Bits.U.of_int 9 
+              5) && Bitops.eq arg5425 (Bits.U.of_int 25 5) && Bitops.eq arg5422 
+            (Bits.U.of_int 10 5) && Bitops.eq arg5423 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg5420 (Bits.U.of_int 12 5) && Bitops.eq arg5421 
+            (Bits.U.of_int 28 5) && Bitops.eq arg5418 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg5419 (Bits.U.of_int 29 5) && Bitops.eq arg5416 
+            (Bits.U.of_int 14 5) && Bitops.eq arg5417 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg5414 (Bits.U.of_int 15 5) && Bitops.eq arg5415 
+            (Bits.U.of_int 31 5) && Bitops.eq arg5411 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg5412 (Bits.U.of_int 0 1) && Bitops.eq arg5413 
+            (Bits.U.of_int 8 32) && Bitops.eq arg5408 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg5409 (Bits.U.of_int 0 1) && Bitops.eq arg5410 
+            (Bits.U.of_int 7 32) && Bitops.eq arg5405 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg5406 (Bits.U.of_int 0 1) && Bitops.eq arg5407 
+            (Bits.U.of_int 6 32) && Bitops.eq arg5402 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg5403 (Bits.U.of_int 0 1) && Bitops.eq arg5404 
+            (Bits.U.of_int 5 32) && Bitops.eq arg5399 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg5400 (Bits.U.of_int 0 1) && Bitops.eq arg5401 
+            (Bits.U.of_int 4 32) && Bitops.eq arg5396 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg5397 (Bits.U.of_int 0 1) && Bitops.eq arg5398 
+            (Bits.U.of_int 3 32) && Bitops.eq arg5393 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg5394 (Bits.U.of_int 0 1) && Bitops.eq arg5395 
+            (Bits.U.of_int 2 32) && Bitops.eq arg5390 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg5391 (Bits.U.of_int 0 1) && Bitops.eq arg5392 
+            (Bits.U.of_int 1 32) && Bitops.eq arg5387 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg5388 (Bits.U.of_int 0 1) && Bitops.eq arg5389 
+            (Bits.U.of_int 16 32) && Bitops.eq arg5384 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg5385 (Bits.U.of_int 0 1) && Bitops.eq arg5386 
+            (Bits.U.of_int 15 32) && Bitops.eq arg5381 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg5382 (Bits.U.of_int 0 1) && Bitops.eq arg5383 
+            (Bits.U.of_int 14 32) && Bitops.eq arg5378 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg5379 (Bits.U.of_int 0 1) && Bitops.eq arg5380 
+            (Bits.U.of_int 13 32) && Bitops.eq arg5375 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg5376 (Bits.U.of_int 0 1) && Bitops.eq arg5377 
+            (Bits.U.of_int 12 32) && Bitops.eq arg5372 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg5373 (Bits.U.of_int 0 1) && Bitops.eq arg5374 
+            (Bits.U.of_int 11 32) && Bitops.eq arg5369 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg5370 (Bits.U.of_int 0 1) && Bitops.eq arg5371 
+            (Bits.U.of_int 10 32) && Bitops.eq arg5366 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg5367 (Bits.U.of_int 0 1) && Bitops.eq arg5368 
+            (Bits.U.of_int 9 32) && Bitops.eq arg5363 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5364 (Bits.U.of_int 0 1) && Bitops.eq arg5365 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 11 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg5491), _), RP.Fetch (RP.Cell ('r', 
@@ -15781,52 +15781,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5491 (Bits.of_int 8 5) && Bitops.eq 
-            arg5492 (Bits.of_int 24 5) && Bitops.eq arg5489 (Bits.of_int 9 
-              5) && Bitops.eq arg5490 (Bits.of_int 25 5) && Bitops.eq arg5487 
-            (Bits.of_int 11 5) && Bitops.eq arg5488 (Bits.of_int 27 5) && 
-          Bitops.eq arg5485 (Bits.of_int 12 5) && Bitops.eq arg5486 
-            (Bits.of_int 28 5) && Bitops.eq arg5483 (Bits.of_int 13 5) && 
-          Bitops.eq arg5484 (Bits.of_int 29 5) && Bitops.eq arg5481 
-            (Bits.of_int 14 5) && Bitops.eq arg5482 (Bits.of_int 30 5) && 
-          Bitops.eq arg5479 (Bits.of_int 15 5) && Bitops.eq arg5480 
-            (Bits.of_int 31 5) && Bitops.eq arg5476 (Bits.of_int 16 5) && 
-          Bitops.eq arg5477 (Bits.of_int 0 1) && Bitops.eq arg5478 
-            (Bits.of_int 8 32) && Bitops.eq arg5473 (Bits.of_int 17 5) && 
-          Bitops.eq arg5474 (Bits.of_int 0 1) && Bitops.eq arg5475 
-            (Bits.of_int 7 32) && Bitops.eq arg5470 (Bits.of_int 18 5) && 
-          Bitops.eq arg5471 (Bits.of_int 0 1) && Bitops.eq arg5472 
-            (Bits.of_int 6 32) && Bitops.eq arg5467 (Bits.of_int 19 5) && 
-          Bitops.eq arg5468 (Bits.of_int 0 1) && Bitops.eq arg5469 
-            (Bits.of_int 5 32) && Bitops.eq arg5464 (Bits.of_int 20 5) && 
-          Bitops.eq arg5465 (Bits.of_int 0 1) && Bitops.eq arg5466 
-            (Bits.of_int 4 32) && Bitops.eq arg5461 (Bits.of_int 21 5) && 
-          Bitops.eq arg5462 (Bits.of_int 0 1) && Bitops.eq arg5463 
-            (Bits.of_int 3 32) && Bitops.eq arg5458 (Bits.of_int 22 5) && 
-          Bitops.eq arg5459 (Bits.of_int 0 1) && Bitops.eq arg5460 
-            (Bits.of_int 2 32) && Bitops.eq arg5455 (Bits.of_int 23 5) && 
-          Bitops.eq arg5456 (Bits.of_int 0 1) && Bitops.eq arg5457 
-            (Bits.of_int 1 32) && Bitops.eq arg5452 (Bits.of_int 24 5) && 
-          Bitops.eq arg5453 (Bits.of_int 0 1) && Bitops.eq arg5454 
-            (Bits.of_int 16 32) && Bitops.eq arg5449 (Bits.of_int 25 5) && 
-          Bitops.eq arg5450 (Bits.of_int 0 1) && Bitops.eq arg5451 
-            (Bits.of_int 15 32) && Bitops.eq arg5446 (Bits.of_int 26 5) && 
-          Bitops.eq arg5447 (Bits.of_int 0 1) && Bitops.eq arg5448 
-            (Bits.of_int 14 32) && Bitops.eq arg5443 (Bits.of_int 27 5) && 
-          Bitops.eq arg5444 (Bits.of_int 0 1) && Bitops.eq arg5445 
-            (Bits.of_int 13 32) && Bitops.eq arg5440 (Bits.of_int 28 5) && 
-          Bitops.eq arg5441 (Bits.of_int 0 1) && Bitops.eq arg5442 
-            (Bits.of_int 12 32) && Bitops.eq arg5437 (Bits.of_int 29 5) && 
-          Bitops.eq arg5438 (Bits.of_int 0 1) && Bitops.eq arg5439 
-            (Bits.of_int 11 32) && Bitops.eq arg5434 (Bits.of_int 30 5) && 
-          Bitops.eq arg5435 (Bits.of_int 0 1) && Bitops.eq arg5436 
-            (Bits.of_int 10 32) && Bitops.eq arg5431 (Bits.of_int 31 5) && 
-          Bitops.eq arg5432 (Bits.of_int 0 1) && Bitops.eq arg5433 
-            (Bits.of_int 9 32) && Bitops.eq arg5428 (Bits.of_int 0 1) && 
-          Bitops.eq arg5429 (Bits.of_int 0 1) && Bitops.eq arg5430 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 10 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg5491 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg5492 (Bits.U.of_int 24 5) && Bitops.eq arg5489 (Bits.U.of_int 9 
+              5) && Bitops.eq arg5490 (Bits.U.of_int 25 5) && Bitops.eq arg5487 
+            (Bits.U.of_int 11 5) && Bitops.eq arg5488 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg5485 (Bits.U.of_int 12 5) && Bitops.eq arg5486 
+            (Bits.U.of_int 28 5) && Bitops.eq arg5483 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg5484 (Bits.U.of_int 29 5) && Bitops.eq arg5481 
+            (Bits.U.of_int 14 5) && Bitops.eq arg5482 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg5479 (Bits.U.of_int 15 5) && Bitops.eq arg5480 
+            (Bits.U.of_int 31 5) && Bitops.eq arg5476 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg5477 (Bits.U.of_int 0 1) && Bitops.eq arg5478 
+            (Bits.U.of_int 8 32) && Bitops.eq arg5473 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg5474 (Bits.U.of_int 0 1) && Bitops.eq arg5475 
+            (Bits.U.of_int 7 32) && Bitops.eq arg5470 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg5471 (Bits.U.of_int 0 1) && Bitops.eq arg5472 
+            (Bits.U.of_int 6 32) && Bitops.eq arg5467 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg5468 (Bits.U.of_int 0 1) && Bitops.eq arg5469 
+            (Bits.U.of_int 5 32) && Bitops.eq arg5464 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg5465 (Bits.U.of_int 0 1) && Bitops.eq arg5466 
+            (Bits.U.of_int 4 32) && Bitops.eq arg5461 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg5462 (Bits.U.of_int 0 1) && Bitops.eq arg5463 
+            (Bits.U.of_int 3 32) && Bitops.eq arg5458 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg5459 (Bits.U.of_int 0 1) && Bitops.eq arg5460 
+            (Bits.U.of_int 2 32) && Bitops.eq arg5455 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg5456 (Bits.U.of_int 0 1) && Bitops.eq arg5457 
+            (Bits.U.of_int 1 32) && Bitops.eq arg5452 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg5453 (Bits.U.of_int 0 1) && Bitops.eq arg5454 
+            (Bits.U.of_int 16 32) && Bitops.eq arg5449 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg5450 (Bits.U.of_int 0 1) && Bitops.eq arg5451 
+            (Bits.U.of_int 15 32) && Bitops.eq arg5446 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg5447 (Bits.U.of_int 0 1) && Bitops.eq arg5448 
+            (Bits.U.of_int 14 32) && Bitops.eq arg5443 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg5444 (Bits.U.of_int 0 1) && Bitops.eq arg5445 
+            (Bits.U.of_int 13 32) && Bitops.eq arg5440 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg5441 (Bits.U.of_int 0 1) && Bitops.eq arg5442 
+            (Bits.U.of_int 12 32) && Bitops.eq arg5437 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg5438 (Bits.U.of_int 0 1) && Bitops.eq arg5439 
+            (Bits.U.of_int 11 32) && Bitops.eq arg5434 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg5435 (Bits.U.of_int 0 1) && Bitops.eq arg5436 
+            (Bits.U.of_int 10 32) && Bitops.eq arg5431 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg5432 (Bits.U.of_int 0 1) && Bitops.eq arg5433 
+            (Bits.U.of_int 9 32) && Bitops.eq arg5428 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5429 (Bits.U.of_int 0 1) && Bitops.eq arg5430 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 10 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg5556), _), RP.Fetch (RP.Cell ('r', 
@@ -15954,52 +15954,52 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5556 (Bits.of_int 8 5) && Bitops.eq 
-            arg5557 (Bits.of_int 24 5) && Bitops.eq arg5554 (Bits.of_int 10 
-              5) && Bitops.eq arg5555 (Bits.of_int 26 5) && Bitops.eq arg5552 
-            (Bits.of_int 11 5) && Bitops.eq arg5553 (Bits.of_int 27 5) && 
-          Bitops.eq arg5550 (Bits.of_int 12 5) && Bitops.eq arg5551 
-            (Bits.of_int 28 5) && Bitops.eq arg5548 (Bits.of_int 13 5) && 
-          Bitops.eq arg5549 (Bits.of_int 29 5) && Bitops.eq arg5546 
-            (Bits.of_int 14 5) && Bitops.eq arg5547 (Bits.of_int 30 5) && 
-          Bitops.eq arg5544 (Bits.of_int 15 5) && Bitops.eq arg5545 
-            (Bits.of_int 31 5) && Bitops.eq arg5541 (Bits.of_int 16 5) && 
-          Bitops.eq arg5542 (Bits.of_int 0 1) && Bitops.eq arg5543 
-            (Bits.of_int 8 32) && Bitops.eq arg5538 (Bits.of_int 17 5) && 
-          Bitops.eq arg5539 (Bits.of_int 0 1) && Bitops.eq arg5540 
-            (Bits.of_int 7 32) && Bitops.eq arg5535 (Bits.of_int 18 5) && 
-          Bitops.eq arg5536 (Bits.of_int 0 1) && Bitops.eq arg5537 
-            (Bits.of_int 6 32) && Bitops.eq arg5532 (Bits.of_int 19 5) && 
-          Bitops.eq arg5533 (Bits.of_int 0 1) && Bitops.eq arg5534 
-            (Bits.of_int 5 32) && Bitops.eq arg5529 (Bits.of_int 20 5) && 
-          Bitops.eq arg5530 (Bits.of_int 0 1) && Bitops.eq arg5531 
-            (Bits.of_int 4 32) && Bitops.eq arg5526 (Bits.of_int 21 5) && 
-          Bitops.eq arg5527 (Bits.of_int 0 1) && Bitops.eq arg5528 
-            (Bits.of_int 3 32) && Bitops.eq arg5523 (Bits.of_int 22 5) && 
-          Bitops.eq arg5524 (Bits.of_int 0 1) && Bitops.eq arg5525 
-            (Bits.of_int 2 32) && Bitops.eq arg5520 (Bits.of_int 23 5) && 
-          Bitops.eq arg5521 (Bits.of_int 0 1) && Bitops.eq arg5522 
-            (Bits.of_int 1 32) && Bitops.eq arg5517 (Bits.of_int 24 5) && 
-          Bitops.eq arg5518 (Bits.of_int 0 1) && Bitops.eq arg5519 
-            (Bits.of_int 16 32) && Bitops.eq arg5514 (Bits.of_int 25 5) && 
-          Bitops.eq arg5515 (Bits.of_int 0 1) && Bitops.eq arg5516 
-            (Bits.of_int 15 32) && Bitops.eq arg5511 (Bits.of_int 26 5) && 
-          Bitops.eq arg5512 (Bits.of_int 0 1) && Bitops.eq arg5513 
-            (Bits.of_int 14 32) && Bitops.eq arg5508 (Bits.of_int 27 5) && 
-          Bitops.eq arg5509 (Bits.of_int 0 1) && Bitops.eq arg5510 
-            (Bits.of_int 13 32) && Bitops.eq arg5505 (Bits.of_int 28 5) && 
-          Bitops.eq arg5506 (Bits.of_int 0 1) && Bitops.eq arg5507 
-            (Bits.of_int 12 32) && Bitops.eq arg5502 (Bits.of_int 29 5) && 
-          Bitops.eq arg5503 (Bits.of_int 0 1) && Bitops.eq arg5504 
-            (Bits.of_int 11 32) && Bitops.eq arg5499 (Bits.of_int 30 5) && 
-          Bitops.eq arg5500 (Bits.of_int 0 1) && Bitops.eq arg5501 
-            (Bits.of_int 10 32) && Bitops.eq arg5496 (Bits.of_int 31 5) && 
-          Bitops.eq arg5497 (Bits.of_int 0 1) && Bitops.eq arg5498 
-            (Bits.of_int 9 32) && Bitops.eq arg5493 (Bits.of_int 0 1) && 
-          Bitops.eq arg5494 (Bits.of_int 0 1) && Bitops.eq arg5495 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 9 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg5556 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg5557 (Bits.U.of_int 24 5) && Bitops.eq arg5554 (Bits.U.of_int 10 
+              5) && Bitops.eq arg5555 (Bits.U.of_int 26 5) && Bitops.eq arg5552 
+            (Bits.U.of_int 11 5) && Bitops.eq arg5553 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg5550 (Bits.U.of_int 12 5) && Bitops.eq arg5551 
+            (Bits.U.of_int 28 5) && Bitops.eq arg5548 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg5549 (Bits.U.of_int 29 5) && Bitops.eq arg5546 
+            (Bits.U.of_int 14 5) && Bitops.eq arg5547 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg5544 (Bits.U.of_int 15 5) && Bitops.eq arg5545 
+            (Bits.U.of_int 31 5) && Bitops.eq arg5541 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg5542 (Bits.U.of_int 0 1) && Bitops.eq arg5543 
+            (Bits.U.of_int 8 32) && Bitops.eq arg5538 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg5539 (Bits.U.of_int 0 1) && Bitops.eq arg5540 
+            (Bits.U.of_int 7 32) && Bitops.eq arg5535 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg5536 (Bits.U.of_int 0 1) && Bitops.eq arg5537 
+            (Bits.U.of_int 6 32) && Bitops.eq arg5532 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg5533 (Bits.U.of_int 0 1) && Bitops.eq arg5534 
+            (Bits.U.of_int 5 32) && Bitops.eq arg5529 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg5530 (Bits.U.of_int 0 1) && Bitops.eq arg5531 
+            (Bits.U.of_int 4 32) && Bitops.eq arg5526 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg5527 (Bits.U.of_int 0 1) && Bitops.eq arg5528 
+            (Bits.U.of_int 3 32) && Bitops.eq arg5523 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg5524 (Bits.U.of_int 0 1) && Bitops.eq arg5525 
+            (Bits.U.of_int 2 32) && Bitops.eq arg5520 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg5521 (Bits.U.of_int 0 1) && Bitops.eq arg5522 
+            (Bits.U.of_int 1 32) && Bitops.eq arg5517 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg5518 (Bits.U.of_int 0 1) && Bitops.eq arg5519 
+            (Bits.U.of_int 16 32) && Bitops.eq arg5514 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg5515 (Bits.U.of_int 0 1) && Bitops.eq arg5516 
+            (Bits.U.of_int 15 32) && Bitops.eq arg5511 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg5512 (Bits.U.of_int 0 1) && Bitops.eq arg5513 
+            (Bits.U.of_int 14 32) && Bitops.eq arg5508 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg5509 (Bits.U.of_int 0 1) && Bitops.eq arg5510 
+            (Bits.U.of_int 13 32) && Bitops.eq arg5505 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg5506 (Bits.U.of_int 0 1) && Bitops.eq arg5507 
+            (Bits.U.of_int 12 32) && Bitops.eq arg5502 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg5503 (Bits.U.of_int 0 1) && Bitops.eq arg5504 
+            (Bits.U.of_int 11 32) && Bitops.eq arg5499 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg5500 (Bits.U.of_int 0 1) && Bitops.eq arg5501 
+            (Bits.U.of_int 10 32) && Bitops.eq arg5496 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg5497 (Bits.U.of_int 0 1) && Bitops.eq arg5498 
+            (Bits.U.of_int 9 32) && Bitops.eq arg5493 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5494 (Bits.U.of_int 0 1) && Bitops.eq arg5495 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 9 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg5621), _), RP.Fetch (RP.Cell ('r', 
@@ -16127,66 +16127,66 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               _), RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 
                   32, RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5621 (Bits.of_int 9 5) && Bitops.eq 
-            arg5622 (Bits.of_int 25 5) && Bitops.eq arg5619 (Bits.of_int 10 
-              5) && Bitops.eq arg5620 (Bits.of_int 26 5) && Bitops.eq arg5617 
-            (Bits.of_int 11 5) && Bitops.eq arg5618 (Bits.of_int 27 5) && 
-          Bitops.eq arg5615 (Bits.of_int 12 5) && Bitops.eq arg5616 
-            (Bits.of_int 28 5) && Bitops.eq arg5613 (Bits.of_int 13 5) && 
-          Bitops.eq arg5614 (Bits.of_int 29 5) && Bitops.eq arg5611 
-            (Bits.of_int 14 5) && Bitops.eq arg5612 (Bits.of_int 30 5) && 
-          Bitops.eq arg5609 (Bits.of_int 15 5) && Bitops.eq arg5610 
-            (Bits.of_int 31 5) && Bitops.eq arg5606 (Bits.of_int 16 5) && 
-          Bitops.eq arg5607 (Bits.of_int 0 1) && Bitops.eq arg5608 
-            (Bits.of_int 8 32) && Bitops.eq arg5603 (Bits.of_int 17 5) && 
-          Bitops.eq arg5604 (Bits.of_int 0 1) && Bitops.eq arg5605 
-            (Bits.of_int 7 32) && Bitops.eq arg5600 (Bits.of_int 18 5) && 
-          Bitops.eq arg5601 (Bits.of_int 0 1) && Bitops.eq arg5602 
-            (Bits.of_int 6 32) && Bitops.eq arg5597 (Bits.of_int 19 5) && 
-          Bitops.eq arg5598 (Bits.of_int 0 1) && Bitops.eq arg5599 
-            (Bits.of_int 5 32) && Bitops.eq arg5594 (Bits.of_int 20 5) && 
-          Bitops.eq arg5595 (Bits.of_int 0 1) && Bitops.eq arg5596 
-            (Bits.of_int 4 32) && Bitops.eq arg5591 (Bits.of_int 21 5) && 
-          Bitops.eq arg5592 (Bits.of_int 0 1) && Bitops.eq arg5593 
-            (Bits.of_int 3 32) && Bitops.eq arg5588 (Bits.of_int 22 5) && 
-          Bitops.eq arg5589 (Bits.of_int 0 1) && Bitops.eq arg5590 
-            (Bits.of_int 2 32) && Bitops.eq arg5585 (Bits.of_int 23 5) && 
-          Bitops.eq arg5586 (Bits.of_int 0 1) && Bitops.eq arg5587 
-            (Bits.of_int 1 32) && Bitops.eq arg5582 (Bits.of_int 24 5) && 
-          Bitops.eq arg5583 (Bits.of_int 0 1) && Bitops.eq arg5584 
-            (Bits.of_int 16 32) && Bitops.eq arg5579 (Bits.of_int 25 5) && 
-          Bitops.eq arg5580 (Bits.of_int 0 1) && Bitops.eq arg5581 
-            (Bits.of_int 15 32) && Bitops.eq arg5576 (Bits.of_int 26 5) && 
-          Bitops.eq arg5577 (Bits.of_int 0 1) && Bitops.eq arg5578 
-            (Bits.of_int 14 32) && Bitops.eq arg5573 (Bits.of_int 27 5) && 
-          Bitops.eq arg5574 (Bits.of_int 0 1) && Bitops.eq arg5575 
-            (Bits.of_int 13 32) && Bitops.eq arg5570 (Bits.of_int 28 5) && 
-          Bitops.eq arg5571 (Bits.of_int 0 1) && Bitops.eq arg5572 
-            (Bits.of_int 12 32) && Bitops.eq arg5567 (Bits.of_int 29 5) && 
-          Bitops.eq arg5568 (Bits.of_int 0 1) && Bitops.eq arg5569 
-            (Bits.of_int 11 32) && Bitops.eq arg5564 (Bits.of_int 30 5) && 
-          Bitops.eq arg5565 (Bits.of_int 0 1) && Bitops.eq arg5566 
-            (Bits.of_int 10 32) && Bitops.eq arg5561 (Bits.of_int 31 5) && 
-          Bitops.eq arg5562 (Bits.of_int 0 1) && Bitops.eq arg5563 
-            (Bits.of_int 9 32) && Bitops.eq arg5558 (Bits.of_int 0 1) && 
-          Bitops.eq arg5559 (Bits.of_int 0 1) && Bitops.eq arg5560 
-            (Bits.of_int 16 32) && Bitops.eq rd (Bits.of_int 8 5)) -> 
-           Instruction.restore (Bits.to_nativeint rs1) (Instruction.rmode 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg5621 (Bits.U.of_int 9 5) && Bitops.eq 
+            arg5622 (Bits.U.of_int 25 5) && Bitops.eq arg5619 (Bits.U.of_int 10 
+              5) && Bitops.eq arg5620 (Bits.U.of_int 26 5) && Bitops.eq arg5617 
+            (Bits.U.of_int 11 5) && Bitops.eq arg5618 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg5615 (Bits.U.of_int 12 5) && Bitops.eq arg5616 
+            (Bits.U.of_int 28 5) && Bitops.eq arg5613 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg5614 (Bits.U.of_int 29 5) && Bitops.eq arg5611 
+            (Bits.U.of_int 14 5) && Bitops.eq arg5612 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg5609 (Bits.U.of_int 15 5) && Bitops.eq arg5610 
+            (Bits.U.of_int 31 5) && Bitops.eq arg5606 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg5607 (Bits.U.of_int 0 1) && Bitops.eq arg5608 
+            (Bits.U.of_int 8 32) && Bitops.eq arg5603 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg5604 (Bits.U.of_int 0 1) && Bitops.eq arg5605 
+            (Bits.U.of_int 7 32) && Bitops.eq arg5600 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg5601 (Bits.U.of_int 0 1) && Bitops.eq arg5602 
+            (Bits.U.of_int 6 32) && Bitops.eq arg5597 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg5598 (Bits.U.of_int 0 1) && Bitops.eq arg5599 
+            (Bits.U.of_int 5 32) && Bitops.eq arg5594 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg5595 (Bits.U.of_int 0 1) && Bitops.eq arg5596 
+            (Bits.U.of_int 4 32) && Bitops.eq arg5591 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg5592 (Bits.U.of_int 0 1) && Bitops.eq arg5593 
+            (Bits.U.of_int 3 32) && Bitops.eq arg5588 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg5589 (Bits.U.of_int 0 1) && Bitops.eq arg5590 
+            (Bits.U.of_int 2 32) && Bitops.eq arg5585 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg5586 (Bits.U.of_int 0 1) && Bitops.eq arg5587 
+            (Bits.U.of_int 1 32) && Bitops.eq arg5582 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg5583 (Bits.U.of_int 0 1) && Bitops.eq arg5584 
+            (Bits.U.of_int 16 32) && Bitops.eq arg5579 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg5580 (Bits.U.of_int 0 1) && Bitops.eq arg5581 
+            (Bits.U.of_int 15 32) && Bitops.eq arg5576 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg5577 (Bits.U.of_int 0 1) && Bitops.eq arg5578 
+            (Bits.U.of_int 14 32) && Bitops.eq arg5573 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg5574 (Bits.U.of_int 0 1) && Bitops.eq arg5575 
+            (Bits.U.of_int 13 32) && Bitops.eq arg5570 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg5571 (Bits.U.of_int 0 1) && Bitops.eq arg5572 
+            (Bits.U.of_int 12 32) && Bitops.eq arg5567 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg5568 (Bits.U.of_int 0 1) && Bitops.eq arg5569 
+            (Bits.U.of_int 11 32) && Bitops.eq arg5564 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg5565 (Bits.U.of_int 0 1) && Bitops.eq arg5566 
+            (Bits.U.of_int 10 32) && Bitops.eq arg5561 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg5562 (Bits.U.of_int 0 1) && Bitops.eq arg5563 
+            (Bits.U.of_int 9 32) && Bitops.eq arg5558 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5559 (Bits.U.of_int 0 1) && Bitops.eq arg5560 
+            (Bits.U.of_int 16 32) && Bitops.eq rd (Bits.U.of_int 8 5)) -> 
+           Instruction.restore (Bits.U.to_native rs1) (Instruction.rmode 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool false), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5623), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5623 (Bits.of_int 5 3)) -> 
-           Instruction.bn (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5623 (Bits.U.of_int 5 3)) -> 
+           Instruction.bn (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("ne", [1]), [RP.Fetch (RP.Slice (1, 22, 
             RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5624), _)), 
             1); RP.Const (RP.Bits arg5625)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5626), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5624 (Bits.of_int 0 3) && Bitops.eq 
-            arg5625 (Bits.of_int 0 1) && Bitops.eq arg5626 
-            (Bits.of_int 5 3)) -> Instruction.be (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5624 (Bits.U.of_int 0 3) && Bitops.eq 
+            arg5625 (Bits.U.of_int 0 1) && Bitops.eq arg5626 
+            (Bits.U.of_int 5 3)) -> Instruction.be (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("ne", [1]), 
           [RP.App (("or", [1]), [RP.Fetch (RP.Slice (1, 22, RP.Cell ('i', 
                 Rtl.Identity, 32, RP.Const (RP.Bits arg5629), _)), 1); 
@@ -16197,10 +16197,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.Const (RP.Bits arg5630)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5631), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5629 (Bits.of_int 0 3) && Bitops.eq 
-            arg5628 (Bits.of_int 0 3) && Bitops.eq arg5627 (Bits.of_int 0 3) && 
-          Bitops.eq arg5630 (Bits.of_int 0 1) && Bitops.eq arg5631 
-            (Bits.of_int 5 3)) -> Instruction.ble (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5629 (Bits.U.of_int 0 3) && Bitops.eq 
+            arg5628 (Bits.U.of_int 0 3) && Bitops.eq arg5627 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg5630 (Bits.U.of_int 0 1) && Bitops.eq arg5631 
+            (Bits.U.of_int 5 3)) -> Instruction.ble (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("ne", [1]), [RP.App (("xor", [1]), 
             [RP.Fetch (RP.Slice (1, 23, RP.Cell ('i', Rtl.Identity, 32, 
                 RP.Const (RP.Bits arg5633), _)), 1); RP.Fetch (RP.Slice (1, 21, 
@@ -16208,10 +16208,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   _)), 1)]); RP.Const (RP.Bits arg5634)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5635), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5633 (Bits.of_int 0 3) && Bitops.eq 
-            arg5632 (Bits.of_int 0 3) && Bitops.eq arg5634 (Bits.of_int 0 1) && 
-          Bitops.eq arg5635 (Bits.of_int 5 3)) -> 
-           Instruction.bl (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5633 (Bits.U.of_int 0 3) && Bitops.eq 
+            arg5632 (Bits.U.of_int 0 3) && Bitops.eq arg5634 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5635 (Bits.U.of_int 5 3)) -> 
+           Instruction.bl (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("ne", [1]), [RP.App (("or", [1]), 
             [RP.Fetch (RP.Slice (1, 20, RP.Cell ('i', Rtl.Identity, 32, 
                 RP.Const (RP.Bits arg5637), _)), 1); RP.Fetch (RP.Slice (1, 22, 
@@ -16219,48 +16219,48 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   _)), 1)]); RP.Const (RP.Bits arg5638)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5639), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5637 (Bits.of_int 0 3) && Bitops.eq 
-            arg5636 (Bits.of_int 0 3) && Bitops.eq arg5638 (Bits.of_int 0 1) && 
-          Bitops.eq arg5639 (Bits.of_int 5 3)) -> 
-           Instruction.bleu (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5637 (Bits.U.of_int 0 3) && Bitops.eq 
+            arg5636 (Bits.U.of_int 0 3) && Bitops.eq arg5638 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5639 (Bits.U.of_int 5 3)) -> 
+           Instruction.bleu (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("ne", [1]), [RP.Fetch (RP.Slice (1, 20, 
             RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5640), _)), 
             1); RP.Const (RP.Bits arg5641)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5642), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5640 (Bits.of_int 0 3) && Bitops.eq 
-            arg5641 (Bits.of_int 0 1) && Bitops.eq arg5642 
-            (Bits.of_int 5 3)) -> Instruction.bcs (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5640 (Bits.U.of_int 0 3) && Bitops.eq 
+            arg5641 (Bits.U.of_int 0 1) && Bitops.eq arg5642 
+            (Bits.U.of_int 5 3)) -> Instruction.bcs (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("ne", [1]), [RP.Fetch (RP.Slice (1, 23, 
             RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5643), _)), 
             1); RP.Const (RP.Bits arg5644)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5645), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5643 (Bits.of_int 0 3) && Bitops.eq 
-            arg5644 (Bits.of_int 0 1) && Bitops.eq arg5645 
-            (Bits.of_int 5 3)) -> Instruction.bneg (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5643 (Bits.U.of_int 0 3) && Bitops.eq 
+            arg5644 (Bits.U.of_int 0 1) && Bitops.eq arg5645 
+            (Bits.U.of_int 5 3)) -> Instruction.bneg (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("ne", [1]), [RP.Fetch (RP.Slice (1, 21, 
             RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5646), _)), 
             1); RP.Const (RP.Bits arg5647)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5648), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5646 (Bits.of_int 0 3) && Bitops.eq 
-            arg5647 (Bits.of_int 0 1) && Bitops.eq arg5648 
-            (Bits.of_int 5 3)) -> Instruction.bvs (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5646 (Bits.U.of_int 0 3) && Bitops.eq 
+            arg5647 (Bits.U.of_int 0 1) && Bitops.eq arg5648 
+            (Bits.U.of_int 5 3)) -> Instruction.bvs (Bits.U.to_native target) 
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5649), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5649 (Bits.of_int 5 3)) -> 
-           Instruction.ba (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5649 (Bits.U.of_int 5 3)) -> 
+           Instruction.ba (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("ne", [1]), 
           [RP.App (("com", [1]), [RP.Fetch (RP.Slice (1, 22, 
               RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5650), _)), 
               1)]); RP.Const (RP.Bits arg5651)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5652), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5650 (Bits.of_int 0 3) && Bitops.eq 
-            arg5651 (Bits.of_int 0 1) && Bitops.eq arg5652 
-            (Bits.of_int 5 3)) -> Instruction.bne (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5650 (Bits.U.of_int 0 3) && Bitops.eq 
+            arg5651 (Bits.U.of_int 0 1) && Bitops.eq arg5652 
+            (Bits.U.of_int 5 3)) -> Instruction.bne (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("ne", [1]), [RP.App (("com", [1]), 
             [RP.App (("or", [1]), [RP.Fetch (RP.Slice (1, 22, RP.Cell ('i', 
                   Rtl.Identity, 32, RP.Const (RP.Bits arg5655), _)), 1); 
@@ -16271,10 +16271,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.Const (RP.Bits arg5656)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5657), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5655 (Bits.of_int 0 3) && Bitops.eq 
-            arg5654 (Bits.of_int 0 3) && Bitops.eq arg5653 (Bits.of_int 0 3) && 
-          Bitops.eq arg5656 (Bits.of_int 0 1) && Bitops.eq arg5657 
-            (Bits.of_int 5 3)) -> Instruction.bg (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5655 (Bits.U.of_int 0 3) && Bitops.eq 
+            arg5654 (Bits.U.of_int 0 3) && Bitops.eq arg5653 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg5656 (Bits.U.of_int 0 1) && Bitops.eq arg5657 
+            (Bits.U.of_int 5 3)) -> Instruction.bg (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("ne", [1]), [RP.App (("com", [1]), 
             [RP.App (("xor", [1]), [RP.Fetch (RP.Slice (1, 23, RP.Cell ('i', 
                   Rtl.Identity, 32, RP.Const (RP.Bits arg5659), _)), 1); 
@@ -16283,10 +16283,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.Const (RP.Bits arg5660)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5661), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5659 (Bits.of_int 0 3) && Bitops.eq 
-            arg5658 (Bits.of_int 0 3) && Bitops.eq arg5660 (Bits.of_int 0 1) && 
-          Bitops.eq arg5661 (Bits.of_int 5 3)) -> 
-           Instruction.bge (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5659 (Bits.U.of_int 0 3) && Bitops.eq 
+            arg5658 (Bits.U.of_int 0 3) && Bitops.eq arg5660 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5661 (Bits.U.of_int 5 3)) -> 
+           Instruction.bge (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("ne", [1]), [RP.App (("com", [1]), 
             [RP.App (("or", [1]), [RP.Fetch (RP.Slice (1, 20, RP.Cell ('i', 
                   Rtl.Identity, 32, RP.Const (RP.Bits arg5663), _)), 1); 
@@ -16295,37 +16295,37 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.Const (RP.Bits arg5664)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5665), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5663 (Bits.of_int 0 3) && Bitops.eq 
-            arg5662 (Bits.of_int 0 3) && Bitops.eq arg5664 (Bits.of_int 0 1) && 
-          Bitops.eq arg5665 (Bits.of_int 5 3)) -> 
-           Instruction.bgu (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5663 (Bits.U.of_int 0 3) && Bitops.eq 
+            arg5662 (Bits.U.of_int 0 3) && Bitops.eq arg5664 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5665 (Bits.U.of_int 5 3)) -> 
+           Instruction.bgu (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("ne", [1]), 
           [RP.App (("com", [1]), [RP.Fetch (RP.Slice (1, 20, 
               RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5666), _)), 
               1)]); RP.Const (RP.Bits arg5667)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5668), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5666 (Bits.of_int 0 3) && Bitops.eq 
-            arg5667 (Bits.of_int 0 1) && Bitops.eq arg5668 
-            (Bits.of_int 5 3)) -> Instruction.bcc (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5666 (Bits.U.of_int 0 3) && Bitops.eq 
+            arg5667 (Bits.U.of_int 0 1) && Bitops.eq arg5668 
+            (Bits.U.of_int 5 3)) -> Instruction.bcc (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("ne", [1]), 
           [RP.App (("com", [1]), [RP.Fetch (RP.Slice (1, 23, 
               RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5669), _)), 
               1)]); RP.Const (RP.Bits arg5670)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5671), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5669 (Bits.of_int 0 3) && Bitops.eq 
-            arg5670 (Bits.of_int 0 1) && Bitops.eq arg5671 
-            (Bits.of_int 5 3)) -> Instruction.bpos (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5669 (Bits.U.of_int 0 3) && Bitops.eq 
+            arg5670 (Bits.U.of_int 0 1) && Bitops.eq arg5671 
+            (Bits.U.of_int 5 3)) -> Instruction.bpos (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("ne", [1]), 
           [RP.App (("com", [1]), [RP.Fetch (RP.Slice (1, 21, 
               RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5672), _)), 
               1)]); RP.Const (RP.Bits arg5673)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5674), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5672 (Bits.of_int 0 3) && Bitops.eq 
-            arg5673 (Bits.of_int 0 1) && Bitops.eq arg5674 
-            (Bits.of_int 5 3)) -> Instruction.bvc (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5672 (Bits.U.of_int 0 3) && Bitops.eq 
+            arg5673 (Bits.U.of_int 0 1) && Bitops.eq arg5674 
+            (Bits.U.of_int 5 3)) -> Instruction.bvc (Bits.U.to_native target) 
       | RP.Rtl [] -> Instruction.fbn (Nativeint.of_int 0) 
       | RP.Rtl [(RP.App (("eq", [2]), [RP.Fetch (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5687), _)), 
@@ -16352,16 +16352,16 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.Store (RP.Cell ('i', Rtl.Identity, 32, 
               RP.Const (RP.Bits arg5681), _), RP.Const (RP.Bits target), 32))] 
       when Base.to_bool (target = target'' && target = target' && (Bitops.eq 
-            arg5687 (Bits.of_int 0 1) && Bitops.eq arg5688 Bitops.float_lt && 
-          Bitops.eq arg5689 (Bits.of_int 5 3) && Bitops.eq arg5684 
-            (Bits.of_int 0 1) && Bitops.eq arg5685 Bitops.float_lt && Bitops.eq 
-            arg5682 (Bits.of_int 0 1) && Bitops.eq arg5683 Bitops.float_gt && 
-          Bitops.eq arg5686 (Bits.of_int 5 3) && Bitops.eq arg5679 
-            (Bits.of_int 0 1) && Bitops.eq arg5680 Bitops.float_lt && Bitops.eq 
-            arg5677 (Bits.of_int 0 1) && Bitops.eq arg5678 Bitops.float_gt && 
-          Bitops.eq arg5675 (Bits.of_int 0 1) && Bitops.eq arg5676 
-            Bitops.unordered && Bitops.eq arg5681 (Bits.of_int 5 3))) -> 
-           Instruction.fbne (Bits.to_nativeint target) 
+            arg5687 (Bits.U.of_int 0 1) && Bitops.eq arg5688 Bitops.float_lt && 
+          Bitops.eq arg5689 (Bits.U.of_int 5 3) && Bitops.eq arg5684 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5685 Bitops.float_lt && Bitops.eq 
+            arg5682 (Bits.U.of_int 0 1) && Bitops.eq arg5683 Bitops.float_gt && 
+          Bitops.eq arg5686 (Bits.U.of_int 5 3) && Bitops.eq arg5679 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5680 Bitops.float_lt && Bitops.eq 
+            arg5677 (Bits.U.of_int 0 1) && Bitops.eq arg5678 Bitops.float_gt && 
+          Bitops.eq arg5675 (Bits.U.of_int 0 1) && Bitops.eq arg5676 
+            Bitops.unordered && Bitops.eq arg5681 (Bits.U.of_int 5 3))) -> 
+           Instruction.fbne (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("eq", [2]), [RP.Fetch (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5695), _)), 
             2); RP.Const (RP.Bits arg5696)]), 
@@ -16376,11 +16376,11 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.Store (RP.Cell ('i', Rtl.Identity, 32, 
               RP.Const (RP.Bits arg5694), _), RP.Const (RP.Bits target), 32))] 
       when Base.to_bool (target = target' && (Bitops.eq arg5695 
-            (Bits.of_int 0 1) && Bitops.eq arg5696 Bitops.float_lt && Bitops.eq 
-            arg5697 (Bits.of_int 5 3) && Bitops.eq arg5692 (Bits.of_int 0 1) && 
-          Bitops.eq arg5693 Bitops.float_lt && Bitops.eq arg5690 (Bits.of_int 0 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5696 Bitops.float_lt && Bitops.eq 
+            arg5697 (Bits.U.of_int 5 3) && Bitops.eq arg5692 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5693 Bitops.float_lt && Bitops.eq arg5690 (Bits.U.of_int 0 
               1) && Bitops.eq arg5691 Bitops.float_gt && Bitops.eq arg5694 
-            (Bits.of_int 5 3))) -> Instruction.fblg (Bits.to_nativeint target) 
+            (Bits.U.of_int 5 3))) -> Instruction.fblg (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("eq", [2]), [RP.Fetch (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5703), _)), 
             2); RP.Const (RP.Bits arg5704)]), 
@@ -16395,19 +16395,19 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.Store (RP.Cell ('i', Rtl.Identity, 32, 
               RP.Const (RP.Bits arg5702), _), RP.Const (RP.Bits target), 32))] 
       when Base.to_bool (target = target' && (Bitops.eq arg5703 
-            (Bits.of_int 0 1) && Bitops.eq arg5704 Bitops.float_lt && Bitops.eq 
-            arg5705 (Bits.of_int 5 3) && Bitops.eq arg5700 (Bits.of_int 0 1) && 
-          Bitops.eq arg5701 Bitops.float_lt && Bitops.eq arg5698 (Bits.of_int 0 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5704 Bitops.float_lt && Bitops.eq 
+            arg5705 (Bits.U.of_int 5 3) && Bitops.eq arg5700 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5701 Bitops.float_lt && Bitops.eq arg5698 (Bits.U.of_int 0 
               1) && Bitops.eq arg5699 Bitops.unordered && Bitops.eq arg5702 
-            (Bits.of_int 5 3))) -> Instruction.fbul (Bits.to_nativeint target) 
+            (Bits.U.of_int 5 3))) -> Instruction.fbul (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("eq", [2]), [RP.Fetch (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5706), _)), 
             2); RP.Const (RP.Bits arg5707)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5708), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5706 (Bits.of_int 0 1) && Bitops.eq 
-            arg5707 Bitops.float_lt && Bitops.eq arg5708 (Bits.of_int 5 3)) -> 
-           Instruction.fbl (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5706 (Bits.U.of_int 0 1) && Bitops.eq 
+            arg5707 Bitops.float_lt && Bitops.eq arg5708 (Bits.U.of_int 5 3)) -> 
+           Instruction.fbl (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("eq", [2]), [RP.Fetch (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5714), _)), 
             2); RP.Const (RP.Bits arg5715)]), 
@@ -16422,40 +16422,40 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.Store (RP.Cell ('i', Rtl.Identity, 32, 
               RP.Const (RP.Bits arg5713), _), RP.Const (RP.Bits target), 32))] 
       when Base.to_bool (target = target' && (Bitops.eq arg5714 
-            (Bits.of_int 0 1) && Bitops.eq arg5715 Bitops.float_gt && Bitops.eq 
-            arg5716 (Bits.of_int 5 3) && Bitops.eq arg5711 (Bits.of_int 0 1) && 
-          Bitops.eq arg5712 Bitops.float_gt && Bitops.eq arg5709 (Bits.of_int 0 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5715 Bitops.float_gt && Bitops.eq 
+            arg5716 (Bits.U.of_int 5 3) && Bitops.eq arg5711 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5712 Bitops.float_gt && Bitops.eq arg5709 (Bits.U.of_int 0 
               1) && Bitops.eq arg5710 Bitops.unordered && Bitops.eq arg5713 
-            (Bits.of_int 5 3))) -> Instruction.fbug (Bits.to_nativeint target) 
+            (Bits.U.of_int 5 3))) -> Instruction.fbug (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("eq", [2]), [RP.Fetch (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5717), _)), 
             2); RP.Const (RP.Bits arg5718)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5719), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5717 (Bits.of_int 0 1) && Bitops.eq 
-            arg5718 Bitops.float_gt && Bitops.eq arg5719 (Bits.of_int 5 3)) -> 
-           Instruction.fbg (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5717 (Bits.U.of_int 0 1) && Bitops.eq 
+            arg5718 Bitops.float_gt && Bitops.eq arg5719 (Bits.U.of_int 5 3)) -> 
+           Instruction.fbg (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("eq", [2]), [RP.Fetch (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5720), _)), 
             2); RP.Const (RP.Bits arg5721)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5722), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5720 (Bits.of_int 0 1) && Bitops.eq 
-            arg5721 Bitops.unordered && Bitops.eq arg5722 (Bits.of_int 5 3)) -> 
-           Instruction.fbu (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5720 (Bits.U.of_int 0 1) && Bitops.eq 
+            arg5721 Bitops.unordered && Bitops.eq arg5722 (Bits.U.of_int 5 3)) -> 
+           Instruction.fbu (Bits.U.to_native target) 
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5723), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5723 (Bits.of_int 5 3)) -> 
-           Instruction.fba (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5723 (Bits.U.of_int 5 3)) -> 
+           Instruction.fba (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("eq", [2]), [RP.Fetch (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5724), _)), 
             2); RP.Const (RP.Bits arg5725)]), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5726), 
             _), RP.Const (RP.Bits target), 32))] 
-      when Base.to_bool (Bitops.eq arg5724 (Bits.of_int 0 1) && Bitops.eq 
-            arg5725 Bitops.float_eq && Bitops.eq arg5726 (Bits.of_int 5 3)) -> 
-           Instruction.fbe (Bits.to_nativeint target) 
+      when Base.to_bool (Bitops.eq arg5724 (Bits.U.of_int 0 1) && Bitops.eq 
+            arg5725 Bitops.float_eq && Bitops.eq arg5726 (Bits.U.of_int 5 3)) -> 
+           Instruction.fbe (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("eq", [2]), [RP.Fetch (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5732), _)), 
             2); RP.Const (RP.Bits arg5733)]), 
@@ -16470,11 +16470,11 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.Store (RP.Cell ('i', Rtl.Identity, 32, 
               RP.Const (RP.Bits arg5731), _), RP.Const (RP.Bits target), 32))] 
       when Base.to_bool (target = target' && (Bitops.eq arg5732 
-            (Bits.of_int 0 1) && Bitops.eq arg5733 Bitops.float_eq && Bitops.eq 
-            arg5734 (Bits.of_int 5 3) && Bitops.eq arg5729 (Bits.of_int 0 1) && 
-          Bitops.eq arg5730 Bitops.float_eq && Bitops.eq arg5727 (Bits.of_int 0 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5733 Bitops.float_eq && Bitops.eq 
+            arg5734 (Bits.U.of_int 5 3) && Bitops.eq arg5729 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5730 Bitops.float_eq && Bitops.eq arg5727 (Bits.U.of_int 0 
               1) && Bitops.eq arg5728 Bitops.unordered && Bitops.eq arg5731 
-            (Bits.of_int 5 3))) -> Instruction.fbue (Bits.to_nativeint target) 
+            (Bits.U.of_int 5 3))) -> Instruction.fbue (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("eq", [2]), [RP.Fetch (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5740), _)), 
             2); RP.Const (RP.Bits arg5741)]), 
@@ -16489,11 +16489,11 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.Store (RP.Cell ('i', Rtl.Identity, 32, 
               RP.Const (RP.Bits arg5739), _), RP.Const (RP.Bits target), 32))] 
       when Base.to_bool (target = target' && (Bitops.eq arg5740 
-            (Bits.of_int 0 1) && Bitops.eq arg5741 Bitops.float_eq && Bitops.eq 
-            arg5742 (Bits.of_int 5 3) && Bitops.eq arg5737 (Bits.of_int 0 1) && 
-          Bitops.eq arg5738 Bitops.float_eq && Bitops.eq arg5735 (Bits.of_int 0 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5741 Bitops.float_eq && Bitops.eq 
+            arg5742 (Bits.U.of_int 5 3) && Bitops.eq arg5737 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5738 Bitops.float_eq && Bitops.eq arg5735 (Bits.U.of_int 0 
               1) && Bitops.eq arg5736 Bitops.float_gt && Bitops.eq arg5739 
-            (Bits.of_int 5 3))) -> Instruction.fbge (Bits.to_nativeint target) 
+            (Bits.U.of_int 5 3))) -> Instruction.fbge (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("eq", [2]), [RP.Fetch (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5755), _)), 
             2); RP.Const (RP.Bits arg5756)]), 
@@ -16519,16 +16519,16 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.Store (RP.Cell ('i', Rtl.Identity, 32, 
               RP.Const (RP.Bits arg5749), _), RP.Const (RP.Bits target), 32))] 
       when Base.to_bool (target = target'' && target = target' && (Bitops.eq 
-            arg5755 (Bits.of_int 0 1) && Bitops.eq arg5756 Bitops.float_eq && 
-          Bitops.eq arg5757 (Bits.of_int 5 3) && Bitops.eq arg5752 
-            (Bits.of_int 0 1) && Bitops.eq arg5753 Bitops.float_eq && Bitops.eq 
-            arg5750 (Bits.of_int 0 1) && Bitops.eq arg5751 Bitops.float_gt && 
-          Bitops.eq arg5754 (Bits.of_int 5 3) && Bitops.eq arg5747 
-            (Bits.of_int 0 1) && Bitops.eq arg5748 Bitops.float_eq && Bitops.eq 
-            arg5745 (Bits.of_int 0 1) && Bitops.eq arg5746 Bitops.float_gt && 
-          Bitops.eq arg5743 (Bits.of_int 0 1) && Bitops.eq arg5744 
-            Bitops.unordered && Bitops.eq arg5749 (Bits.of_int 5 3))) -> 
-           Instruction.fbuge (Bits.to_nativeint target) 
+            arg5755 (Bits.U.of_int 0 1) && Bitops.eq arg5756 Bitops.float_eq && 
+          Bitops.eq arg5757 (Bits.U.of_int 5 3) && Bitops.eq arg5752 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5753 Bitops.float_eq && Bitops.eq 
+            arg5750 (Bits.U.of_int 0 1) && Bitops.eq arg5751 Bitops.float_gt && 
+          Bitops.eq arg5754 (Bits.U.of_int 5 3) && Bitops.eq arg5747 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5748 Bitops.float_eq && Bitops.eq 
+            arg5745 (Bits.U.of_int 0 1) && Bitops.eq arg5746 Bitops.float_gt && 
+          Bitops.eq arg5743 (Bits.U.of_int 0 1) && Bitops.eq arg5744 
+            Bitops.unordered && Bitops.eq arg5749 (Bits.U.of_int 5 3))) -> 
+           Instruction.fbuge (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("eq", [2]), [RP.Fetch (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5763), _)), 
             2); RP.Const (RP.Bits arg5764)]), 
@@ -16543,11 +16543,11 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.Store (RP.Cell ('i', Rtl.Identity, 32, 
               RP.Const (RP.Bits arg5762), _), RP.Const (RP.Bits target), 32))] 
       when Base.to_bool (target = target' && (Bitops.eq arg5763 
-            (Bits.of_int 0 1) && Bitops.eq arg5764 Bitops.float_eq && Bitops.eq 
-            arg5765 (Bits.of_int 5 3) && Bitops.eq arg5760 (Bits.of_int 0 1) && 
-          Bitops.eq arg5761 Bitops.float_eq && Bitops.eq arg5758 (Bits.of_int 0 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5764 Bitops.float_eq && Bitops.eq 
+            arg5765 (Bits.U.of_int 5 3) && Bitops.eq arg5760 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5761 Bitops.float_eq && Bitops.eq arg5758 (Bits.U.of_int 0 
               1) && Bitops.eq arg5759 Bitops.float_lt && Bitops.eq arg5762 
-            (Bits.of_int 5 3))) -> Instruction.fble (Bits.to_nativeint target) 
+            (Bits.U.of_int 5 3))) -> Instruction.fble (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("eq", [2]), [RP.Fetch (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5778), _)), 
             2); RP.Const (RP.Bits arg5779)]), 
@@ -16573,16 +16573,16 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.Store (RP.Cell ('i', Rtl.Identity, 32, 
               RP.Const (RP.Bits arg5772), _), RP.Const (RP.Bits target), 32))] 
       when Base.to_bool (target = target'' && target = target' && (Bitops.eq 
-            arg5778 (Bits.of_int 0 1) && Bitops.eq arg5779 Bitops.float_eq && 
-          Bitops.eq arg5780 (Bits.of_int 5 3) && Bitops.eq arg5775 
-            (Bits.of_int 0 1) && Bitops.eq arg5776 Bitops.float_eq && Bitops.eq 
-            arg5773 (Bits.of_int 0 1) && Bitops.eq arg5774 Bitops.float_lt && 
-          Bitops.eq arg5777 (Bits.of_int 5 3) && Bitops.eq arg5770 
-            (Bits.of_int 0 1) && Bitops.eq arg5771 Bitops.float_eq && Bitops.eq 
-            arg5768 (Bits.of_int 0 1) && Bitops.eq arg5769 Bitops.float_lt && 
-          Bitops.eq arg5766 (Bits.of_int 0 1) && Bitops.eq arg5767 
-            Bitops.unordered && Bitops.eq arg5772 (Bits.of_int 5 3))) -> 
-           Instruction.fbule (Bits.to_nativeint target) 
+            arg5778 (Bits.U.of_int 0 1) && Bitops.eq arg5779 Bitops.float_eq && 
+          Bitops.eq arg5780 (Bits.U.of_int 5 3) && Bitops.eq arg5775 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5776 Bitops.float_eq && Bitops.eq 
+            arg5773 (Bits.U.of_int 0 1) && Bitops.eq arg5774 Bitops.float_lt && 
+          Bitops.eq arg5777 (Bits.U.of_int 5 3) && Bitops.eq arg5770 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5771 Bitops.float_eq && Bitops.eq 
+            arg5768 (Bits.U.of_int 0 1) && Bitops.eq arg5769 Bitops.float_lt && 
+          Bitops.eq arg5766 (Bits.U.of_int 0 1) && Bitops.eq arg5767 
+            Bitops.unordered && Bitops.eq arg5772 (Bits.U.of_int 5 3))) -> 
+           Instruction.fbule (Bits.U.to_native target) 
       | RP.Rtl [(RP.App (("eq", [2]), [RP.Fetch (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5793), _)), 
             2); RP.Const (RP.Bits arg5794)]), 
@@ -16608,147 +16608,147 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
             RP.Store (RP.Cell ('i', Rtl.Identity, 32, 
               RP.Const (RP.Bits arg5787), _), RP.Const (RP.Bits target), 32))] 
       when Base.to_bool (target = target'' && target = target' && 
-          (Bitops.eq arg5793 (Bits.of_int 0 1) && Bitops.eq arg5794 
-            Bitops.float_eq && Bitops.eq arg5795 (Bits.of_int 5 3) && Bitops.eq 
-            arg5790 (Bits.of_int 0 1) && Bitops.eq arg5791 Bitops.float_eq && 
-          Bitops.eq arg5788 (Bits.of_int 0 1) && Bitops.eq arg5789 
-            Bitops.float_lt && Bitops.eq arg5792 (Bits.of_int 5 3) && Bitops.eq 
-            arg5785 (Bits.of_int 0 1) && Bitops.eq arg5786 Bitops.float_eq && 
-          Bitops.eq arg5783 (Bits.of_int 0 1) && Bitops.eq arg5784 
-            Bitops.float_lt && Bitops.eq arg5781 (Bits.of_int 0 1) && Bitops.eq 
-            arg5782 Bitops.float_gt && Bitops.eq arg5787 (Bits.of_int 5 3))) -> 
-           Instruction.fbo (Bits.to_nativeint target) 
+          (Bitops.eq arg5793 (Bits.U.of_int 0 1) && Bitops.eq arg5794 
+            Bitops.float_eq && Bitops.eq arg5795 (Bits.U.of_int 5 3) && Bitops.eq 
+            arg5790 (Bits.U.of_int 0 1) && Bitops.eq arg5791 Bitops.float_eq && 
+          Bitops.eq arg5788 (Bits.U.of_int 0 1) && Bitops.eq arg5789 
+            Bitops.float_lt && Bitops.eq arg5792 (Bits.U.of_int 5 3) && Bitops.eq 
+            arg5785 (Bits.U.of_int 0 1) && Bitops.eq arg5786 Bitops.float_eq && 
+          Bitops.eq arg5783 (Bits.U.of_int 0 1) && Bitops.eq arg5784 
+            Bitops.float_lt && Bitops.eq arg5781 (Bits.U.of_int 0 1) && Bitops.eq 
+            arg5782 Bitops.float_gt && Bitops.eq arg5787 (Bits.U.of_int 5 3))) -> 
+           Instruction.fbo (Bits.U.to_native target) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
           32, RP.Const (RP.Bits fd), _), RP.Fetch (RP.Cell ('f', Rtl.Identity, 
             32, RP.Const (RP.Bits fs2), _), 32), 32))] -> 
-           Instruction.fmovs (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+           Instruction.fmovs (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('f', Rtl.Identity, 32, RP.Const (RP.Bits fd), _), 
           RP.App (("fneg", [32]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 32, 
               RP.Const (RP.Bits fs2), _), 32)]), 32))] -> 
-           Instruction.fnegs (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+           Instruction.fnegs (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('f', Rtl.Identity, 32, RP.Const (RP.Bits fd), _), 
           RP.App (("fabs", [32]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 32, 
               RP.Const (RP.Bits fs2), _), 32)]), 32))] -> 
-           Instruction.fabss (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+           Instruction.fabss (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 32, RP.Const (RP.Bits fd), _), 
             RP.App (("fsqrt", [32]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 32, 
                 RP.Const (RP.Bits fs2), _), 32); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5796), _)), 2)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5796 (Bits.of_int 0 1)) -> 
-           Instruction.fsqrts (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5796 (Bits.U.of_int 0 1)) -> 
+           Instruction.fsqrts (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 64, RP.Const (RP.Bits fd), _), 
             RP.App (("fsqrt", [64]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 64, 
                 RP.Const (RP.Bits fs2), _), 64); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5797), _)), 2)]), 64))] 
-      when Base.to_bool (Bitops.eq arg5797 (Bits.of_int 0 1)) -> 
-           Instruction.fsqrtd (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5797 (Bits.U.of_int 0 1)) -> 
+           Instruction.fsqrtd (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 128, RP.Const (RP.Bits fd), _), 
             RP.App (("fsqrt", [128]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 
                 128, RP.Const (RP.Bits fs2), _), 128); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5798), _)), 2)]), 128))] 
-      when Base.to_bool (Bitops.eq arg5798 (Bits.of_int 0 1)) -> 
-           Instruction.fsqrtq (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5798 (Bits.U.of_int 0 1)) -> 
+           Instruction.fsqrtq (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 32, RP.Const (RP.Bits fd), _), 
             RP.App (("i2f", [32; 32]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 
                 32, RP.Const (RP.Bits fs2), _), 32); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5799), _)), 2)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5799 (Bits.of_int 0 1)) -> 
-           Instruction.fitos (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5799 (Bits.U.of_int 0 1)) -> 
+           Instruction.fitos (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
             32, RP.Const (RP.Bits fd), _), RP.App (("f2i", [32; 32]), 
               [RP.Fetch (RP.Cell ('f', Rtl.Identity, 32, 
                 RP.Const (RP.Bits fs2), _), 32); RP.Const (RP.Bits arg5800)]), 
             32))] 
       when Base.to_bool (Bitops.eq arg5800 Bitops.round_zero) -> 
-           Instruction.fstoi (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+           Instruction.fstoi (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 64, RP.Const (RP.Bits fd), _), 
             RP.App (("i2f", [32; 64]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 
                 32, RP.Const (RP.Bits fs2), _), 32); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5801), _)), 2)]), 64))] 
-      when Base.to_bool (Bitops.eq arg5801 (Bits.of_int 0 1)) -> 
-           Instruction.fitod (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5801 (Bits.U.of_int 0 1)) -> 
+           Instruction.fitod (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 64, RP.Const (RP.Bits fd), _), 
             RP.App (("f2f", [32; 64]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 
                 32, RP.Const (RP.Bits fs2), _), 32); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5802), _)), 2)]), 64))] 
-      when Base.to_bool (Bitops.eq arg5802 (Bits.of_int 0 1)) -> 
-           Instruction.fstod (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5802 (Bits.U.of_int 0 1)) -> 
+           Instruction.fstod (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 128, RP.Const (RP.Bits fd), _), 
             RP.App (("i2f", [32; 128]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 
                 32, RP.Const (RP.Bits fs2), _), 32); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5803), _)), 2)]), 128))] 
-      when Base.to_bool (Bitops.eq arg5803 (Bits.of_int 0 1)) -> 
-           Instruction.fitoq (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5803 (Bits.U.of_int 0 1)) -> 
+           Instruction.fitoq (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 128, RP.Const (RP.Bits fd), _), 
             RP.App (("f2f", [32; 128]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 
                 32, RP.Const (RP.Bits fs2), _), 32); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5804), _)), 2)]), 128))] 
-      when Base.to_bool (Bitops.eq arg5804 (Bits.of_int 0 1)) -> 
-           Instruction.fstoq (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5804 (Bits.U.of_int 0 1)) -> 
+           Instruction.fstoq (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
             32, RP.Const (RP.Bits fd), _), RP.App (("f2i", [64; 32]), 
               [RP.Fetch (RP.Cell ('f', Rtl.Identity, 64, 
                 RP.Const (RP.Bits fs2), _), 64); RP.Const (RP.Bits arg5805)]), 
             32))] 
       when Base.to_bool (Bitops.eq arg5805 Bitops.round_zero) -> 
-           Instruction.fdtoi (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+           Instruction.fdtoi (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 32, RP.Const (RP.Bits fd), _), 
             RP.App (("f2f", [64; 32]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 
                 64, RP.Const (RP.Bits fs2), _), 64); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5806), _)), 2)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5806 (Bits.of_int 0 1)) -> 
-           Instruction.fdtos (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5806 (Bits.U.of_int 0 1)) -> 
+           Instruction.fdtos (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 32, RP.Const (RP.Bits fd), _), 
             RP.App (("f2f", [128; 32]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 
                 128, RP.Const (RP.Bits fs2), _), 128); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5807), _)), 2)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5807 (Bits.of_int 0 1)) -> 
-           Instruction.fqtos (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5807 (Bits.U.of_int 0 1)) -> 
+           Instruction.fqtos (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
             32, RP.Const (RP.Bits fd), _), RP.App (("f2i", [128; 32]), 
               [RP.Fetch (RP.Cell ('f', Rtl.Identity, 128, 
                 RP.Const (RP.Bits fs2), _), 128); RP.Const (RP.Bits arg5808)]), 
             32))] 
       when Base.to_bool (Bitops.eq arg5808 Bitops.round_zero) -> 
-           Instruction.fqtoi (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+           Instruction.fqtoi (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 64, RP.Const (RP.Bits fd), _), 
             RP.App (("f2f", [128; 64]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 
                 128, RP.Const (RP.Bits fs2), _), 128); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5809), _)), 2)]), 64))] 
-      when Base.to_bool (Bitops.eq arg5809 (Bits.of_int 0 1)) -> 
-           Instruction.fqtod (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5809 (Bits.U.of_int 0 1)) -> 
+           Instruction.fqtod (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 128, RP.Const (RP.Bits fd), _), 
             RP.App (("f2f", [64; 128]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 
                 64, RP.Const (RP.Bits fs2), _), 64); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5810), _)), 2)]), 128))] 
-      when Base.to_bool (Bitops.eq arg5810 (Bits.of_int 0 1)) -> 
-           Instruction.fdtoq (Bits.to_nativeint fs2) (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5810 (Bits.U.of_int 0 1)) -> 
+           Instruction.fdtoq (Bits.U.to_native fs2) (Bits.U.to_native fd) 
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 32, RP.Const (RP.Bits fd), _), 
             RP.App (("fadd", [32]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 32, 
@@ -16756,9 +16756,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits fs2), _), 32); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5811), _)), 2)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5811 (Bits.of_int 0 1)) -> 
-           Instruction.fadds (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
-             (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5811 (Bits.U.of_int 0 1)) -> 
+           Instruction.fadds (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 32, RP.Const (RP.Bits fd), _), 
@@ -16767,9 +16767,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits fs2), _), 32); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5812), _)), 2)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5812 (Bits.of_int 0 1)) -> 
-           Instruction.fsubs (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
-             (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5812 (Bits.U.of_int 0 1)) -> 
+           Instruction.fsubs (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 32, RP.Const (RP.Bits fd), _), 
@@ -16778,9 +16778,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits fs2), _), 32); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5813), _)), 2)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5813 (Bits.of_int 0 1)) -> 
-           Instruction.fmuls (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
-             (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5813 (Bits.U.of_int 0 1)) -> 
+           Instruction.fmuls (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 32, RP.Const (RP.Bits fd), _), 
@@ -16789,9 +16789,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 32, RP.Const (RP.Bits fs2), _), 32); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5814), _)), 2)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5814 (Bits.of_int 0 1)) -> 
-           Instruction.fdivs (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
-             (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5814 (Bits.U.of_int 0 1)) -> 
+           Instruction.fdivs (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 64, RP.Const (RP.Bits fd), _), 
@@ -16800,9 +16800,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 64, RP.Const (RP.Bits fs2), _), 64); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5815), _)), 2)]), 64))] 
-      when Base.to_bool (Bitops.eq arg5815 (Bits.of_int 0 1)) -> 
-           Instruction.faddd (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
-             (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5815 (Bits.U.of_int 0 1)) -> 
+           Instruction.faddd (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 64, RP.Const (RP.Bits fd), _), 
@@ -16811,9 +16811,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 64, RP.Const (RP.Bits fs2), _), 64); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5816), _)), 2)]), 64))] 
-      when Base.to_bool (Bitops.eq arg5816 (Bits.of_int 0 1)) -> 
-           Instruction.fsubd (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
-             (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5816 (Bits.U.of_int 0 1)) -> 
+           Instruction.fsubd (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 64, RP.Const (RP.Bits fd), _), 
@@ -16822,9 +16822,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 64, RP.Const (RP.Bits fs2), _), 64); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5817), _)), 2)]), 64))] 
-      when Base.to_bool (Bitops.eq arg5817 (Bits.of_int 0 1)) -> 
-           Instruction.fmuld (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
-             (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5817 (Bits.U.of_int 0 1)) -> 
+           Instruction.fmuld (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 64, RP.Const (RP.Bits fd), _), 
@@ -16833,9 +16833,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 64, RP.Const (RP.Bits fs2), _), 64); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5818), _)), 2)]), 64))] 
-      when Base.to_bool (Bitops.eq arg5818 (Bits.of_int 0 1)) -> 
-           Instruction.fdivd (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
-             (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5818 (Bits.U.of_int 0 1)) -> 
+           Instruction.fdivd (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 128, RP.Const (RP.Bits fd), _), 
@@ -16844,9 +16844,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 128, RP.Const (RP.Bits fs2), _), 128); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5819), _)), 2)]), 128))] 
-      when Base.to_bool (Bitops.eq arg5819 (Bits.of_int 0 1)) -> 
-           Instruction.faddq (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
-             (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5819 (Bits.U.of_int 0 1)) -> 
+           Instruction.faddq (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 128, RP.Const (RP.Bits fd), _), 
@@ -16855,9 +16855,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 128, RP.Const (RP.Bits fs2), _), 128); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5820), _)), 2)]), 128))] 
-      when Base.to_bool (Bitops.eq arg5820 (Bits.of_int 0 1)) -> 
-           Instruction.fsubq (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
-             (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5820 (Bits.U.of_int 0 1)) -> 
+           Instruction.fsubq (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 128, RP.Const (RP.Bits fd), _), 
@@ -16866,9 +16866,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 128, RP.Const (RP.Bits fs2), _), 128); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5821), _)), 2)]), 128))] 
-      when Base.to_bool (Bitops.eq arg5821 (Bits.of_int 0 1)) -> 
-           Instruction.fmulq (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
-             (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5821 (Bits.U.of_int 0 1)) -> 
+           Instruction.fmulq (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('f', Rtl.Identity, 128, RP.Const (RP.Bits fd), _), 
@@ -16877,68 +16877,68 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   Rtl.Identity, 128, RP.Const (RP.Bits fs2), _), 128); 
                 RP.Fetch (RP.Slice (2, 30, RP.Cell ('F', Rtl.Identity, 32, 
                     RP.Const (RP.Bits arg5822), _)), 2)]), 128))] 
-      when Base.to_bool (Bitops.eq arg5822 (Bits.of_int 0 1)) -> 
-           Instruction.fdivq (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
-             (Bits.to_nativeint fd) 
+      when Base.to_bool (Bitops.eq arg5822 (Bits.U.of_int 0 1)) -> 
+           Instruction.fdivq (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('f', Rtl.Identity, 64, RP.Const (RP.Bits fd), _), 
           RP.App (("fmulx", [32; 64]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 
               32, RP.Const (RP.Bits fs1), _), 32); RP.Fetch (RP.Cell ('f', 
                 Rtl.Identity, 32, RP.Const (RP.Bits fs2), _), 32)]), 64))] -> 
-           Instruction.fsmuld (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
-             (Bits.to_nativeint fd) 
+           Instruction.fsmuld (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
         RP.Store (RP.Cell ('f', Rtl.Identity, 128, RP.Const (RP.Bits fd), _), 
           RP.App (("fmulx", [64; 128]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 
               64, RP.Const (RP.Bits fs1), _), 64); RP.Fetch (RP.Cell ('f', 
                 Rtl.Identity, 64, RP.Const (RP.Bits fs2), _), 64)]), 128))] -> 
-           Instruction.fdmulq (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
-             (Bits.to_nativeint fd) 
+           Instruction.fdmulq (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
+             (Bits.U.to_native fd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5823), _)), 
             RP.App (("fcmp", [32]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 32, 
                 RP.Const (RP.Bits fs1), _), 32); RP.Fetch (RP.Cell ('f', 
                   Rtl.Identity, 32, RP.Const (RP.Bits fs2), _), 32)]), 2))] 
-      when Base.to_bool (Bitops.eq arg5823 (Bits.of_int 0 1)) -> 
-           Instruction.fcmps (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
+      when Base.to_bool (Bitops.eq arg5823 (Bits.U.of_int 0 1)) -> 
+           Instruction.fcmps (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5824), _)), 
             RP.App (("fcmp", [32]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 32, 
                 RP.Const (RP.Bits fs1), _), 32); RP.Fetch (RP.Cell ('f', 
                   Rtl.Identity, 32, RP.Const (RP.Bits fs2), _), 32)]), 2))] 
-      when Base.to_bool (Bitops.eq arg5824 (Bits.of_int 0 1)) -> 
-           Instruction.fcmpes (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
+      when Base.to_bool (Bitops.eq arg5824 (Bits.U.of_int 0 1)) -> 
+           Instruction.fcmpes (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5825), _)), 
             RP.App (("fcmp", [64]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 64, 
                 RP.Const (RP.Bits fs1), _), 64); RP.Fetch (RP.Cell ('f', 
                   Rtl.Identity, 64, RP.Const (RP.Bits fs2), _), 64)]), 2))] 
-      when Base.to_bool (Bitops.eq arg5825 (Bits.of_int 0 1)) -> 
-           Instruction.fcmpd (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
+      when Base.to_bool (Bitops.eq arg5825 (Bits.U.of_int 0 1)) -> 
+           Instruction.fcmpd (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5826), _)), 
             RP.App (("fcmp", [64]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 64, 
                 RP.Const (RP.Bits fs1), _), 64); RP.Fetch (RP.Cell ('f', 
                   Rtl.Identity, 64, RP.Const (RP.Bits fs2), _), 64)]), 2))] 
-      when Base.to_bool (Bitops.eq arg5826 (Bits.of_int 0 1)) -> 
-           Instruction.fcmped (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
+      when Base.to_bool (Bitops.eq arg5826 (Bits.U.of_int 0 1)) -> 
+           Instruction.fcmped (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5827), _)), 
             RP.App (("fcmp", [128]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 
                 128, RP.Const (RP.Bits fs1), _), 128); RP.Fetch (RP.Cell ('f', 
                   Rtl.Identity, 128, RP.Const (RP.Bits fs2), _), 128)]), 2))] 
-      when Base.to_bool (Bitops.eq arg5827 (Bits.of_int 0 1)) -> 
-           Instruction.fcmpq (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
+      when Base.to_bool (Bitops.eq arg5827 (Bits.U.of_int 0 1)) -> 
+           Instruction.fcmpq (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Slice (2, 10, 
             RP.Cell ('F', Rtl.Identity, 32, RP.Const (RP.Bits arg5828), _)), 
             RP.App (("fcmp", [128]), [RP.Fetch (RP.Cell ('f', Rtl.Identity, 
                 128, RP.Const (RP.Bits fs1), _), 128); RP.Fetch (RP.Cell ('f', 
                   Rtl.Identity, 128, RP.Const (RP.Bits fs2), _), 128)]), 2))] 
-      when Base.to_bool (Bitops.eq arg5828 (Bits.of_int 0 1)) -> 
-           Instruction.fcmpeq (Bits.to_nativeint fs1) (Bits.to_nativeint fs2) 
+      when Base.to_bool (Bitops.eq arg5828 (Bits.U.of_int 0 1)) -> 
+           Instruction.fcmpeq (Bits.U.to_native fs1) (Bits.U.to_native fs2) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 
             32, RP.Const (RP.Bits arg5830), _), 
             RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
@@ -16948,10 +16948,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('i', Rtl.Identity, 
                 32, RP.Const (RP.Bits arg5829), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg5831 13 && Bitops.eq arg5830 
-            (Bits.of_int 5 3) && Bitops.eq arg5829 (Bits.of_int 4 3)) -> 
-           Instruction.jmpl (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.imode (Bits.to_nativeint arg5831))) 
-             (Bits.to_nativeint rd) 
+            (Bits.U.of_int 5 3) && Bitops.eq arg5829 (Bits.U.of_int 4 3)) -> 
+           Instruction.jmpl (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.imode (Bits.U.to_native arg5831))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5833), 
@@ -16961,11 +16961,11 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           (RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('i', Rtl.Identity, 
                 32, RP.Const (RP.Bits arg5832), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg5833 (Bits.of_int 5 3) && Bitops.eq 
-            arg5832 (Bits.of_int 4 3)) -> 
-           Instruction.jmpl (Instruction.generala (Bits.to_nativeint rs1) 
-                 (Instruction.rmode (Bits.to_nativeint rs2))) 
-             (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg5833 (Bits.U.of_int 5 3) && Bitops.eq 
+            arg5832 (Bits.U.of_int 4 3)) -> 
+           Instruction.jmpl (Instruction.generala (Bits.U.to_native rs1) 
+                 (Instruction.rmode (Bits.U.to_native rs2))) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 
             32, RP.Const (RP.Bits arg5835), _), 
@@ -16976,9 +16976,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('i', Rtl.Identity, 
                 32, RP.Const (RP.Bits arg5834), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg5836 13 && Bitops.eq arg5835 
-            (Bits.of_int 5 3) && Bitops.eq arg5834 (Bits.of_int 4 3)) -> 
-           Instruction.jmpl (Instruction.dispa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint arg5836)) (Bits.to_nativeint rd) 
+            (Bits.U.of_int 5 3) && Bitops.eq arg5834 (Bits.U.of_int 4 3)) -> 
+           Instruction.jmpl (Instruction.dispa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native arg5836)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5838), 
@@ -16987,9 +16987,9 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('i', Rtl.Identity, 
                 32, RP.Const (RP.Bits arg5837), _), 32), 32))] 
       when Base.to_bool (Bitops.fits_signed arg5839 13 && Bitops.eq arg5838 
-            (Bits.of_int 5 3) && Bitops.eq arg5837 (Bits.of_int 4 3)) -> 
-           Instruction.jmpl (Instruction.absolutea (Bits.to_nativeint arg5839)) 
-             (Bits.to_nativeint rd) 
+            (Bits.U.of_int 5 3) && Bitops.eq arg5837 (Bits.U.of_int 4 3)) -> 
+           Instruction.jmpl (Instruction.absolutea (Bits.U.to_native arg5839)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), 
           RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits arg5841), 
@@ -16999,10 +16999,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           (RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('i', Rtl.Identity, 
                 32, RP.Const (RP.Bits arg5840), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg5841 (Bits.of_int 5 3) && Bitops.eq 
-            arg5840 (Bits.of_int 4 3)) -> 
-           Instruction.jmpl (Instruction.indexa (Bits.to_nativeint rs1) 
-                 (Bits.to_nativeint rs2)) (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg5841 (Bits.U.of_int 5 3) && Bitops.eq 
+            arg5840 (Bits.U.of_int 4 3)) -> 
+           Instruction.jmpl (Instruction.indexa (Bits.U.to_native rs1) 
+                 (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 
             32, RP.Const (RP.Bits arg5843), _), RP.Fetch (RP.Cell ('r', 
@@ -17010,10 +17010,10 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           (RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 32, 
               RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('i', Rtl.Identity, 
                 32, RP.Const (RP.Bits arg5842), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg5843 (Bits.of_int 5 3) && Bitops.eq 
-            arg5842 (Bits.of_int 4 3)) -> 
-           Instruction.jmpl (Instruction.indirecta (Bits.to_nativeint rs1)) 
-             (Bits.to_nativeint rd) 
+      when Base.to_bool (Bitops.eq arg5843 (Bits.U.of_int 5 3) && Bitops.eq 
+            arg5842 (Bits.U.of_int 4 3)) -> 
+           Instruction.jmpl (Instruction.indirecta (Bits.U.to_native rs1)) 
+             (Bits.U.to_native rd) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg5915), _), RP.Fetch (RP.Cell ('r', 
@@ -17152,55 +17152,55 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg5845)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg5845 13 && Bitops.eq arg5915 
-            (Bits.of_int 8 5) && Bitops.eq arg5916 (Bits.of_int 24 5) && 
-          Bitops.eq arg5913 (Bits.of_int 9 5) && Bitops.eq arg5914 
-            (Bits.of_int 25 5) && Bitops.eq arg5911 (Bits.of_int 10 5) && 
-          Bitops.eq arg5912 (Bits.of_int 26 5) && Bitops.eq arg5909 
-            (Bits.of_int 11 5) && Bitops.eq arg5910 (Bits.of_int 27 5) && 
-          Bitops.eq arg5907 (Bits.of_int 12 5) && Bitops.eq arg5908 
-            (Bits.of_int 28 5) && Bitops.eq arg5905 (Bits.of_int 13 5) && 
-          Bitops.eq arg5906 (Bits.of_int 29 5) && Bitops.eq arg5903 
-            (Bits.of_int 14 5) && Bitops.eq arg5904 (Bits.of_int 30 5) && 
-          Bitops.eq arg5901 (Bits.of_int 15 5) && Bitops.eq arg5902 
-            (Bits.of_int 31 5) && Bitops.eq arg5898 (Bits.of_int 16 5) && 
-          Bitops.eq arg5899 (Bits.of_int 0 1) && Bitops.eq arg5900 
-            (Bits.of_int 8 32) && Bitops.eq arg5895 (Bits.of_int 17 5) && 
-          Bitops.eq arg5896 (Bits.of_int 0 1) && Bitops.eq arg5897 
-            (Bits.of_int 7 32) && Bitops.eq arg5892 (Bits.of_int 18 5) && 
-          Bitops.eq arg5893 (Bits.of_int 0 1) && Bitops.eq arg5894 
-            (Bits.of_int 6 32) && Bitops.eq arg5889 (Bits.of_int 19 5) && 
-          Bitops.eq arg5890 (Bits.of_int 0 1) && Bitops.eq arg5891 
-            (Bits.of_int 5 32) && Bitops.eq arg5886 (Bits.of_int 20 5) && 
-          Bitops.eq arg5887 (Bits.of_int 0 1) && Bitops.eq arg5888 
-            (Bits.of_int 4 32) && Bitops.eq arg5883 (Bits.of_int 21 5) && 
-          Bitops.eq arg5884 (Bits.of_int 0 1) && Bitops.eq arg5885 
-            (Bits.of_int 3 32) && Bitops.eq arg5880 (Bits.of_int 22 5) && 
-          Bitops.eq arg5881 (Bits.of_int 0 1) && Bitops.eq arg5882 
-            (Bits.of_int 2 32) && Bitops.eq arg5877 (Bits.of_int 23 5) && 
-          Bitops.eq arg5878 (Bits.of_int 0 1) && Bitops.eq arg5879 
-            (Bits.of_int 1 32) && Bitops.eq arg5874 (Bits.of_int 24 5) && 
-          Bitops.eq arg5875 (Bits.of_int 0 1) && Bitops.eq arg5876 
-            (Bits.of_int 16 32) && Bitops.eq arg5871 (Bits.of_int 25 5) && 
-          Bitops.eq arg5872 (Bits.of_int 0 1) && Bitops.eq arg5873 
-            (Bits.of_int 15 32) && Bitops.eq arg5868 (Bits.of_int 26 5) && 
-          Bitops.eq arg5869 (Bits.of_int 0 1) && Bitops.eq arg5870 
-            (Bits.of_int 14 32) && Bitops.eq arg5865 (Bits.of_int 27 5) && 
-          Bitops.eq arg5866 (Bits.of_int 0 1) && Bitops.eq arg5867 
-            (Bits.of_int 13 32) && Bitops.eq arg5862 (Bits.of_int 28 5) && 
-          Bitops.eq arg5863 (Bits.of_int 0 1) && Bitops.eq arg5864 
-            (Bits.of_int 12 32) && Bitops.eq arg5859 (Bits.of_int 29 5) && 
-          Bitops.eq arg5860 (Bits.of_int 0 1) && Bitops.eq arg5861 
-            (Bits.of_int 11 32) && Bitops.eq arg5856 (Bits.of_int 30 5) && 
-          Bitops.eq arg5857 (Bits.of_int 0 1) && Bitops.eq arg5858 
-            (Bits.of_int 10 32) && Bitops.eq arg5853 (Bits.of_int 31 5) && 
-          Bitops.eq arg5854 (Bits.of_int 0 1) && Bitops.eq arg5855 (Bits.of_int 
-              9 32) && Bitops.eq arg5850 (Bits.of_int 0 1) && Bitops.eq arg5851 
-            (Bits.of_int 0 1) && Bitops.eq arg5852 (Bits.of_int 16 32) && 
-          Bitops.eq arg5848 (Bits.of_int 0 3) && Bitops.eq arg5849 (Bits.of_int 
-              0 3) && Bitops.eq arg5846 (Bits.of_int 0 3) && Bitops.eq arg5847 
-            (Bits.of_int 1 1) && Bitops.eq arg5844 (Bits.of_int 5 3)) -> 
-           Instruction.rett (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.imode (Bits.to_nativeint arg5845))) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg5916 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg5913 (Bits.U.of_int 9 5) && Bitops.eq arg5914 
+            (Bits.U.of_int 25 5) && Bitops.eq arg5911 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg5912 (Bits.U.of_int 26 5) && Bitops.eq arg5909 
+            (Bits.U.of_int 11 5) && Bitops.eq arg5910 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg5907 (Bits.U.of_int 12 5) && Bitops.eq arg5908 
+            (Bits.U.of_int 28 5) && Bitops.eq arg5905 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg5906 (Bits.U.of_int 29 5) && Bitops.eq arg5903 
+            (Bits.U.of_int 14 5) && Bitops.eq arg5904 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg5901 (Bits.U.of_int 15 5) && Bitops.eq arg5902 
+            (Bits.U.of_int 31 5) && Bitops.eq arg5898 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg5899 (Bits.U.of_int 0 1) && Bitops.eq arg5900 
+            (Bits.U.of_int 8 32) && Bitops.eq arg5895 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg5896 (Bits.U.of_int 0 1) && Bitops.eq arg5897 
+            (Bits.U.of_int 7 32) && Bitops.eq arg5892 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg5893 (Bits.U.of_int 0 1) && Bitops.eq arg5894 
+            (Bits.U.of_int 6 32) && Bitops.eq arg5889 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg5890 (Bits.U.of_int 0 1) && Bitops.eq arg5891 
+            (Bits.U.of_int 5 32) && Bitops.eq arg5886 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg5887 (Bits.U.of_int 0 1) && Bitops.eq arg5888 
+            (Bits.U.of_int 4 32) && Bitops.eq arg5883 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg5884 (Bits.U.of_int 0 1) && Bitops.eq arg5885 
+            (Bits.U.of_int 3 32) && Bitops.eq arg5880 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg5881 (Bits.U.of_int 0 1) && Bitops.eq arg5882 
+            (Bits.U.of_int 2 32) && Bitops.eq arg5877 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg5878 (Bits.U.of_int 0 1) && Bitops.eq arg5879 
+            (Bits.U.of_int 1 32) && Bitops.eq arg5874 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg5875 (Bits.U.of_int 0 1) && Bitops.eq arg5876 
+            (Bits.U.of_int 16 32) && Bitops.eq arg5871 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg5872 (Bits.U.of_int 0 1) && Bitops.eq arg5873 
+            (Bits.U.of_int 15 32) && Bitops.eq arg5868 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg5869 (Bits.U.of_int 0 1) && Bitops.eq arg5870 
+            (Bits.U.of_int 14 32) && Bitops.eq arg5865 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg5866 (Bits.U.of_int 0 1) && Bitops.eq arg5867 
+            (Bits.U.of_int 13 32) && Bitops.eq arg5862 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg5863 (Bits.U.of_int 0 1) && Bitops.eq arg5864 
+            (Bits.U.of_int 12 32) && Bitops.eq arg5859 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg5860 (Bits.U.of_int 0 1) && Bitops.eq arg5861 
+            (Bits.U.of_int 11 32) && Bitops.eq arg5856 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg5857 (Bits.U.of_int 0 1) && Bitops.eq arg5858 
+            (Bits.U.of_int 10 32) && Bitops.eq arg5853 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg5854 (Bits.U.of_int 0 1) && Bitops.eq arg5855 (Bits.U.of_int 
+              9 32) && Bitops.eq arg5850 (Bits.U.of_int 0 1) && Bitops.eq arg5851 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5852 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg5848 (Bits.U.of_int 0 3) && Bitops.eq arg5849 (Bits.U.of_int 
+              0 3) && Bitops.eq arg5846 (Bits.U.of_int 0 3) && Bitops.eq arg5847 
+            (Bits.U.of_int 1 1) && Bitops.eq arg5844 (Bits.U.of_int 5 3)) -> 
+           Instruction.rett (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.imode (Bits.U.to_native arg5845))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg5987), _), RP.Fetch (RP.Cell ('r', 
@@ -17338,56 +17338,56 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
                   RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg5987 (Bits.of_int 8 5) && Bitops.eq 
-            arg5988 (Bits.of_int 24 5) && Bitops.eq arg5985 (Bits.of_int 9 
-              5) && Bitops.eq arg5986 (Bits.of_int 25 5) && Bitops.eq arg5983 
-            (Bits.of_int 10 5) && Bitops.eq arg5984 (Bits.of_int 26 5) && 
-          Bitops.eq arg5981 (Bits.of_int 11 5) && Bitops.eq arg5982 
-            (Bits.of_int 27 5) && Bitops.eq arg5979 (Bits.of_int 12 5) && 
-          Bitops.eq arg5980 (Bits.of_int 28 5) && Bitops.eq arg5977 
-            (Bits.of_int 13 5) && Bitops.eq arg5978 (Bits.of_int 29 5) && 
-          Bitops.eq arg5975 (Bits.of_int 14 5) && Bitops.eq arg5976 
-            (Bits.of_int 30 5) && Bitops.eq arg5973 (Bits.of_int 15 5) && 
-          Bitops.eq arg5974 (Bits.of_int 31 5) && Bitops.eq arg5970 
-            (Bits.of_int 16 5) && Bitops.eq arg5971 (Bits.of_int 0 1) && 
-          Bitops.eq arg5972 (Bits.of_int 8 32) && Bitops.eq arg5967 
-            (Bits.of_int 17 5) && Bitops.eq arg5968 (Bits.of_int 0 1) && 
-          Bitops.eq arg5969 (Bits.of_int 7 32) && Bitops.eq arg5964 
-            (Bits.of_int 18 5) && Bitops.eq arg5965 (Bits.of_int 0 1) && 
-          Bitops.eq arg5966 (Bits.of_int 6 32) && Bitops.eq arg5961 
-            (Bits.of_int 19 5) && Bitops.eq arg5962 (Bits.of_int 0 1) && 
-          Bitops.eq arg5963 (Bits.of_int 5 32) && Bitops.eq arg5958 
-            (Bits.of_int 20 5) && Bitops.eq arg5959 (Bits.of_int 0 1) && 
-          Bitops.eq arg5960 (Bits.of_int 4 32) && Bitops.eq arg5955 
-            (Bits.of_int 21 5) && Bitops.eq arg5956 (Bits.of_int 0 1) && 
-          Bitops.eq arg5957 (Bits.of_int 3 32) && Bitops.eq arg5952 
-            (Bits.of_int 22 5) && Bitops.eq arg5953 (Bits.of_int 0 1) && 
-          Bitops.eq arg5954 (Bits.of_int 2 32) && Bitops.eq arg5949 
-            (Bits.of_int 23 5) && Bitops.eq arg5950 (Bits.of_int 0 1) && 
-          Bitops.eq arg5951 (Bits.of_int 1 32) && Bitops.eq arg5946 
-            (Bits.of_int 24 5) && Bitops.eq arg5947 (Bits.of_int 0 1) && 
-          Bitops.eq arg5948 (Bits.of_int 16 32) && Bitops.eq arg5943 
-            (Bits.of_int 25 5) && Bitops.eq arg5944 (Bits.of_int 0 1) && 
-          Bitops.eq arg5945 (Bits.of_int 15 32) && Bitops.eq arg5940 
-            (Bits.of_int 26 5) && Bitops.eq arg5941 (Bits.of_int 0 1) && 
-          Bitops.eq arg5942 (Bits.of_int 14 32) && Bitops.eq arg5937 
-            (Bits.of_int 27 5) && Bitops.eq arg5938 (Bits.of_int 0 1) && 
-          Bitops.eq arg5939 (Bits.of_int 13 32) && Bitops.eq arg5934 
-            (Bits.of_int 28 5) && Bitops.eq arg5935 (Bits.of_int 0 1) && 
-          Bitops.eq arg5936 (Bits.of_int 12 32) && Bitops.eq arg5931 
-            (Bits.of_int 29 5) && Bitops.eq arg5932 (Bits.of_int 0 1) && 
-          Bitops.eq arg5933 (Bits.of_int 11 32) && Bitops.eq arg5928 
-            (Bits.of_int 30 5) && Bitops.eq arg5929 (Bits.of_int 0 1) && 
-          Bitops.eq arg5930 (Bits.of_int 10 32) && Bitops.eq arg5925 
-            (Bits.of_int 31 5) && Bitops.eq arg5926 (Bits.of_int 0 1) && 
-          Bitops.eq arg5927 (Bits.of_int 9 32) && Bitops.eq arg5922 
-            (Bits.of_int 0 1) && Bitops.eq arg5923 (Bits.of_int 0 1) && 
-          Bitops.eq arg5924 (Bits.of_int 16 32) && Bitops.eq arg5920 
-            (Bits.of_int 0 3) && Bitops.eq arg5921 (Bits.of_int 0 3) && 
-          Bitops.eq arg5918 (Bits.of_int 0 3) && Bitops.eq arg5919 
-            (Bits.of_int 1 1) && Bitops.eq arg5917 (Bits.of_int 5 3)) -> 
-           Instruction.rett (Instruction.generala (Bits.to_nativeint rs1) 
-               (Instruction.rmode (Bits.to_nativeint rs2))) 
+      when Base.to_bool (Bitops.eq arg5987 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg5988 (Bits.U.of_int 24 5) && Bitops.eq arg5985 (Bits.U.of_int 9 
+              5) && Bitops.eq arg5986 (Bits.U.of_int 25 5) && Bitops.eq arg5983 
+            (Bits.U.of_int 10 5) && Bitops.eq arg5984 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg5981 (Bits.U.of_int 11 5) && Bitops.eq arg5982 
+            (Bits.U.of_int 27 5) && Bitops.eq arg5979 (Bits.U.of_int 12 5) && 
+          Bitops.eq arg5980 (Bits.U.of_int 28 5) && Bitops.eq arg5977 
+            (Bits.U.of_int 13 5) && Bitops.eq arg5978 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg5975 (Bits.U.of_int 14 5) && Bitops.eq arg5976 
+            (Bits.U.of_int 30 5) && Bitops.eq arg5973 (Bits.U.of_int 15 5) && 
+          Bitops.eq arg5974 (Bits.U.of_int 31 5) && Bitops.eq arg5970 
+            (Bits.U.of_int 16 5) && Bitops.eq arg5971 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5972 (Bits.U.of_int 8 32) && Bitops.eq arg5967 
+            (Bits.U.of_int 17 5) && Bitops.eq arg5968 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5969 (Bits.U.of_int 7 32) && Bitops.eq arg5964 
+            (Bits.U.of_int 18 5) && Bitops.eq arg5965 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5966 (Bits.U.of_int 6 32) && Bitops.eq arg5961 
+            (Bits.U.of_int 19 5) && Bitops.eq arg5962 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5963 (Bits.U.of_int 5 32) && Bitops.eq arg5958 
+            (Bits.U.of_int 20 5) && Bitops.eq arg5959 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5960 (Bits.U.of_int 4 32) && Bitops.eq arg5955 
+            (Bits.U.of_int 21 5) && Bitops.eq arg5956 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5957 (Bits.U.of_int 3 32) && Bitops.eq arg5952 
+            (Bits.U.of_int 22 5) && Bitops.eq arg5953 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5954 (Bits.U.of_int 2 32) && Bitops.eq arg5949 
+            (Bits.U.of_int 23 5) && Bitops.eq arg5950 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5951 (Bits.U.of_int 1 32) && Bitops.eq arg5946 
+            (Bits.U.of_int 24 5) && Bitops.eq arg5947 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5948 (Bits.U.of_int 16 32) && Bitops.eq arg5943 
+            (Bits.U.of_int 25 5) && Bitops.eq arg5944 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5945 (Bits.U.of_int 15 32) && Bitops.eq arg5940 
+            (Bits.U.of_int 26 5) && Bitops.eq arg5941 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5942 (Bits.U.of_int 14 32) && Bitops.eq arg5937 
+            (Bits.U.of_int 27 5) && Bitops.eq arg5938 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5939 (Bits.U.of_int 13 32) && Bitops.eq arg5934 
+            (Bits.U.of_int 28 5) && Bitops.eq arg5935 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5936 (Bits.U.of_int 12 32) && Bitops.eq arg5931 
+            (Bits.U.of_int 29 5) && Bitops.eq arg5932 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5933 (Bits.U.of_int 11 32) && Bitops.eq arg5928 
+            (Bits.U.of_int 30 5) && Bitops.eq arg5929 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5930 (Bits.U.of_int 10 32) && Bitops.eq arg5925 
+            (Bits.U.of_int 31 5) && Bitops.eq arg5926 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5927 (Bits.U.of_int 9 32) && Bitops.eq arg5922 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5923 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg5924 (Bits.U.of_int 16 32) && Bitops.eq arg5920 
+            (Bits.U.of_int 0 3) && Bitops.eq arg5921 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg5918 (Bits.U.of_int 0 3) && Bitops.eq arg5919 
+            (Bits.U.of_int 1 1) && Bitops.eq arg5917 (Bits.U.of_int 5 3)) -> 
+           Instruction.rett (Instruction.generala (Bits.U.to_native rs1) 
+               (Instruction.rmode (Bits.U.to_native rs2))) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg6060), _), RP.Fetch (RP.Cell ('r', 
@@ -17526,55 +17526,55 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
                   RP.Const (RP.Bits rs1), _), 32); 
                   RP.Const (RP.Bits arg5990)]), 32))] 
       when Base.to_bool (Bitops.fits_signed arg5990 13 && Bitops.eq arg6060 
-            (Bits.of_int 8 5) && Bitops.eq arg6061 (Bits.of_int 24 5) && 
-          Bitops.eq arg6058 (Bits.of_int 9 5) && Bitops.eq arg6059 
-            (Bits.of_int 25 5) && Bitops.eq arg6056 (Bits.of_int 10 5) && 
-          Bitops.eq arg6057 (Bits.of_int 26 5) && Bitops.eq arg6054 
-            (Bits.of_int 11 5) && Bitops.eq arg6055 (Bits.of_int 27 5) && 
-          Bitops.eq arg6052 (Bits.of_int 12 5) && Bitops.eq arg6053 
-            (Bits.of_int 28 5) && Bitops.eq arg6050 (Bits.of_int 13 5) && 
-          Bitops.eq arg6051 (Bits.of_int 29 5) && Bitops.eq arg6048 
-            (Bits.of_int 14 5) && Bitops.eq arg6049 (Bits.of_int 30 5) && 
-          Bitops.eq arg6046 (Bits.of_int 15 5) && Bitops.eq arg6047 
-            (Bits.of_int 31 5) && Bitops.eq arg6043 (Bits.of_int 16 5) && 
-          Bitops.eq arg6044 (Bits.of_int 0 1) && Bitops.eq arg6045 
-            (Bits.of_int 8 32) && Bitops.eq arg6040 (Bits.of_int 17 5) && 
-          Bitops.eq arg6041 (Bits.of_int 0 1) && Bitops.eq arg6042 
-            (Bits.of_int 7 32) && Bitops.eq arg6037 (Bits.of_int 18 5) && 
-          Bitops.eq arg6038 (Bits.of_int 0 1) && Bitops.eq arg6039 
-            (Bits.of_int 6 32) && Bitops.eq arg6034 (Bits.of_int 19 5) && 
-          Bitops.eq arg6035 (Bits.of_int 0 1) && Bitops.eq arg6036 
-            (Bits.of_int 5 32) && Bitops.eq arg6031 (Bits.of_int 20 5) && 
-          Bitops.eq arg6032 (Bits.of_int 0 1) && Bitops.eq arg6033 
-            (Bits.of_int 4 32) && Bitops.eq arg6028 (Bits.of_int 21 5) && 
-          Bitops.eq arg6029 (Bits.of_int 0 1) && Bitops.eq arg6030 
-            (Bits.of_int 3 32) && Bitops.eq arg6025 (Bits.of_int 22 5) && 
-          Bitops.eq arg6026 (Bits.of_int 0 1) && Bitops.eq arg6027 
-            (Bits.of_int 2 32) && Bitops.eq arg6022 (Bits.of_int 23 5) && 
-          Bitops.eq arg6023 (Bits.of_int 0 1) && Bitops.eq arg6024 
-            (Bits.of_int 1 32) && Bitops.eq arg6019 (Bits.of_int 24 5) && 
-          Bitops.eq arg6020 (Bits.of_int 0 1) && Bitops.eq arg6021 
-            (Bits.of_int 16 32) && Bitops.eq arg6016 (Bits.of_int 25 5) && 
-          Bitops.eq arg6017 (Bits.of_int 0 1) && Bitops.eq arg6018 
-            (Bits.of_int 15 32) && Bitops.eq arg6013 (Bits.of_int 26 5) && 
-          Bitops.eq arg6014 (Bits.of_int 0 1) && Bitops.eq arg6015 
-            (Bits.of_int 14 32) && Bitops.eq arg6010 (Bits.of_int 27 5) && 
-          Bitops.eq arg6011 (Bits.of_int 0 1) && Bitops.eq arg6012 
-            (Bits.of_int 13 32) && Bitops.eq arg6007 (Bits.of_int 28 5) && 
-          Bitops.eq arg6008 (Bits.of_int 0 1) && Bitops.eq arg6009 
-            (Bits.of_int 12 32) && Bitops.eq arg6004 (Bits.of_int 29 5) && 
-          Bitops.eq arg6005 (Bits.of_int 0 1) && Bitops.eq arg6006 
-            (Bits.of_int 11 32) && Bitops.eq arg6001 (Bits.of_int 30 5) && 
-          Bitops.eq arg6002 (Bits.of_int 0 1) && Bitops.eq arg6003 
-            (Bits.of_int 10 32) && Bitops.eq arg5998 (Bits.of_int 31 5) && 
-          Bitops.eq arg5999 (Bits.of_int 0 1) && Bitops.eq arg6000 (Bits.of_int 
-              9 32) && Bitops.eq arg5995 (Bits.of_int 0 1) && Bitops.eq arg5996 
-            (Bits.of_int 0 1) && Bitops.eq arg5997 (Bits.of_int 16 32) && 
-          Bitops.eq arg5993 (Bits.of_int 0 3) && Bitops.eq arg5994 (Bits.of_int 
-              0 3) && Bitops.eq arg5991 (Bits.of_int 0 3) && Bitops.eq arg5992 
-            (Bits.of_int 1 1) && Bitops.eq arg5989 (Bits.of_int 5 3)) -> 
-           Instruction.rett (Instruction.dispa (Bits.to_nativeint rs1) 
-               (Bits.to_nativeint arg5990)) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg6061 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg6058 (Bits.U.of_int 9 5) && Bitops.eq arg6059 
+            (Bits.U.of_int 25 5) && Bitops.eq arg6056 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg6057 (Bits.U.of_int 26 5) && Bitops.eq arg6054 
+            (Bits.U.of_int 11 5) && Bitops.eq arg6055 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg6052 (Bits.U.of_int 12 5) && Bitops.eq arg6053 
+            (Bits.U.of_int 28 5) && Bitops.eq arg6050 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg6051 (Bits.U.of_int 29 5) && Bitops.eq arg6048 
+            (Bits.U.of_int 14 5) && Bitops.eq arg6049 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg6046 (Bits.U.of_int 15 5) && Bitops.eq arg6047 
+            (Bits.U.of_int 31 5) && Bitops.eq arg6043 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg6044 (Bits.U.of_int 0 1) && Bitops.eq arg6045 
+            (Bits.U.of_int 8 32) && Bitops.eq arg6040 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg6041 (Bits.U.of_int 0 1) && Bitops.eq arg6042 
+            (Bits.U.of_int 7 32) && Bitops.eq arg6037 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg6038 (Bits.U.of_int 0 1) && Bitops.eq arg6039 
+            (Bits.U.of_int 6 32) && Bitops.eq arg6034 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg6035 (Bits.U.of_int 0 1) && Bitops.eq arg6036 
+            (Bits.U.of_int 5 32) && Bitops.eq arg6031 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg6032 (Bits.U.of_int 0 1) && Bitops.eq arg6033 
+            (Bits.U.of_int 4 32) && Bitops.eq arg6028 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg6029 (Bits.U.of_int 0 1) && Bitops.eq arg6030 
+            (Bits.U.of_int 3 32) && Bitops.eq arg6025 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg6026 (Bits.U.of_int 0 1) && Bitops.eq arg6027 
+            (Bits.U.of_int 2 32) && Bitops.eq arg6022 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg6023 (Bits.U.of_int 0 1) && Bitops.eq arg6024 
+            (Bits.U.of_int 1 32) && Bitops.eq arg6019 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg6020 (Bits.U.of_int 0 1) && Bitops.eq arg6021 
+            (Bits.U.of_int 16 32) && Bitops.eq arg6016 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg6017 (Bits.U.of_int 0 1) && Bitops.eq arg6018 
+            (Bits.U.of_int 15 32) && Bitops.eq arg6013 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg6014 (Bits.U.of_int 0 1) && Bitops.eq arg6015 
+            (Bits.U.of_int 14 32) && Bitops.eq arg6010 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg6011 (Bits.U.of_int 0 1) && Bitops.eq arg6012 
+            (Bits.U.of_int 13 32) && Bitops.eq arg6007 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg6008 (Bits.U.of_int 0 1) && Bitops.eq arg6009 
+            (Bits.U.of_int 12 32) && Bitops.eq arg6004 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg6005 (Bits.U.of_int 0 1) && Bitops.eq arg6006 
+            (Bits.U.of_int 11 32) && Bitops.eq arg6001 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg6002 (Bits.U.of_int 0 1) && Bitops.eq arg6003 
+            (Bits.U.of_int 10 32) && Bitops.eq arg5998 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg5999 (Bits.U.of_int 0 1) && Bitops.eq arg6000 (Bits.U.of_int 
+              9 32) && Bitops.eq arg5995 (Bits.U.of_int 0 1) && Bitops.eq arg5996 
+            (Bits.U.of_int 0 1) && Bitops.eq arg5997 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg5993 (Bits.U.of_int 0 3) && Bitops.eq arg5994 (Bits.U.of_int 
+              0 3) && Bitops.eq arg5991 (Bits.U.of_int 0 3) && Bitops.eq arg5992 
+            (Bits.U.of_int 1 1) && Bitops.eq arg5989 (Bits.U.of_int 5 3)) -> 
+           Instruction.rett (Instruction.dispa (Bits.U.to_native rs1) 
+               (Bits.U.to_native arg5990)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg6133), _), RP.Fetch (RP.Cell ('r', 
@@ -17711,54 +17711,54 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           (RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 32, 
               RP.Const (RP.Bits arg6062), _), RP.Const (RP.Bits arg6063), 32))] 
       when Base.to_bool (Bitops.fits_signed arg6063 13 && Bitops.eq arg6133 
-            (Bits.of_int 8 5) && Bitops.eq arg6134 (Bits.of_int 24 5) && 
-          Bitops.eq arg6131 (Bits.of_int 9 5) && Bitops.eq arg6132 
-            (Bits.of_int 25 5) && Bitops.eq arg6129 (Bits.of_int 10 5) && 
-          Bitops.eq arg6130 (Bits.of_int 26 5) && Bitops.eq arg6127 
-            (Bits.of_int 11 5) && Bitops.eq arg6128 (Bits.of_int 27 5) && 
-          Bitops.eq arg6125 (Bits.of_int 12 5) && Bitops.eq arg6126 
-            (Bits.of_int 28 5) && Bitops.eq arg6123 (Bits.of_int 13 5) && 
-          Bitops.eq arg6124 (Bits.of_int 29 5) && Bitops.eq arg6121 
-            (Bits.of_int 14 5) && Bitops.eq arg6122 (Bits.of_int 30 5) && 
-          Bitops.eq arg6119 (Bits.of_int 15 5) && Bitops.eq arg6120 
-            (Bits.of_int 31 5) && Bitops.eq arg6116 (Bits.of_int 16 5) && 
-          Bitops.eq arg6117 (Bits.of_int 0 1) && Bitops.eq arg6118 
-            (Bits.of_int 8 32) && Bitops.eq arg6113 (Bits.of_int 17 5) && 
-          Bitops.eq arg6114 (Bits.of_int 0 1) && Bitops.eq arg6115 
-            (Bits.of_int 7 32) && Bitops.eq arg6110 (Bits.of_int 18 5) && 
-          Bitops.eq arg6111 (Bits.of_int 0 1) && Bitops.eq arg6112 
-            (Bits.of_int 6 32) && Bitops.eq arg6107 (Bits.of_int 19 5) && 
-          Bitops.eq arg6108 (Bits.of_int 0 1) && Bitops.eq arg6109 
-            (Bits.of_int 5 32) && Bitops.eq arg6104 (Bits.of_int 20 5) && 
-          Bitops.eq arg6105 (Bits.of_int 0 1) && Bitops.eq arg6106 
-            (Bits.of_int 4 32) && Bitops.eq arg6101 (Bits.of_int 21 5) && 
-          Bitops.eq arg6102 (Bits.of_int 0 1) && Bitops.eq arg6103 
-            (Bits.of_int 3 32) && Bitops.eq arg6098 (Bits.of_int 22 5) && 
-          Bitops.eq arg6099 (Bits.of_int 0 1) && Bitops.eq arg6100 
-            (Bits.of_int 2 32) && Bitops.eq arg6095 (Bits.of_int 23 5) && 
-          Bitops.eq arg6096 (Bits.of_int 0 1) && Bitops.eq arg6097 
-            (Bits.of_int 1 32) && Bitops.eq arg6092 (Bits.of_int 24 5) && 
-          Bitops.eq arg6093 (Bits.of_int 0 1) && Bitops.eq arg6094 
-            (Bits.of_int 16 32) && Bitops.eq arg6089 (Bits.of_int 25 5) && 
-          Bitops.eq arg6090 (Bits.of_int 0 1) && Bitops.eq arg6091 
-            (Bits.of_int 15 32) && Bitops.eq arg6086 (Bits.of_int 26 5) && 
-          Bitops.eq arg6087 (Bits.of_int 0 1) && Bitops.eq arg6088 
-            (Bits.of_int 14 32) && Bitops.eq arg6083 (Bits.of_int 27 5) && 
-          Bitops.eq arg6084 (Bits.of_int 0 1) && Bitops.eq arg6085 
-            (Bits.of_int 13 32) && Bitops.eq arg6080 (Bits.of_int 28 5) && 
-          Bitops.eq arg6081 (Bits.of_int 0 1) && Bitops.eq arg6082 
-            (Bits.of_int 12 32) && Bitops.eq arg6077 (Bits.of_int 29 5) && 
-          Bitops.eq arg6078 (Bits.of_int 0 1) && Bitops.eq arg6079 
-            (Bits.of_int 11 32) && Bitops.eq arg6074 (Bits.of_int 30 5) && 
-          Bitops.eq arg6075 (Bits.of_int 0 1) && Bitops.eq arg6076 
-            (Bits.of_int 10 32) && Bitops.eq arg6071 (Bits.of_int 31 5) && 
-          Bitops.eq arg6072 (Bits.of_int 0 1) && Bitops.eq arg6073 (Bits.of_int 
-              9 32) && Bitops.eq arg6068 (Bits.of_int 0 1) && Bitops.eq arg6069 
-            (Bits.of_int 0 1) && Bitops.eq arg6070 (Bits.of_int 16 32) && 
-          Bitops.eq arg6066 (Bits.of_int 0 3) && Bitops.eq arg6067 (Bits.of_int 
-              0 3) && Bitops.eq arg6064 (Bits.of_int 0 3) && Bitops.eq arg6065 
-            (Bits.of_int 1 1) && Bitops.eq arg6062 (Bits.of_int 5 3)) -> 
-           Instruction.rett (Instruction.absolutea (Bits.to_nativeint arg6063)) 
+            (Bits.U.of_int 8 5) && Bitops.eq arg6134 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg6131 (Bits.U.of_int 9 5) && Bitops.eq arg6132 
+            (Bits.U.of_int 25 5) && Bitops.eq arg6129 (Bits.U.of_int 10 5) && 
+          Bitops.eq arg6130 (Bits.U.of_int 26 5) && Bitops.eq arg6127 
+            (Bits.U.of_int 11 5) && Bitops.eq arg6128 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg6125 (Bits.U.of_int 12 5) && Bitops.eq arg6126 
+            (Bits.U.of_int 28 5) && Bitops.eq arg6123 (Bits.U.of_int 13 5) && 
+          Bitops.eq arg6124 (Bits.U.of_int 29 5) && Bitops.eq arg6121 
+            (Bits.U.of_int 14 5) && Bitops.eq arg6122 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg6119 (Bits.U.of_int 15 5) && Bitops.eq arg6120 
+            (Bits.U.of_int 31 5) && Bitops.eq arg6116 (Bits.U.of_int 16 5) && 
+          Bitops.eq arg6117 (Bits.U.of_int 0 1) && Bitops.eq arg6118 
+            (Bits.U.of_int 8 32) && Bitops.eq arg6113 (Bits.U.of_int 17 5) && 
+          Bitops.eq arg6114 (Bits.U.of_int 0 1) && Bitops.eq arg6115 
+            (Bits.U.of_int 7 32) && Bitops.eq arg6110 (Bits.U.of_int 18 5) && 
+          Bitops.eq arg6111 (Bits.U.of_int 0 1) && Bitops.eq arg6112 
+            (Bits.U.of_int 6 32) && Bitops.eq arg6107 (Bits.U.of_int 19 5) && 
+          Bitops.eq arg6108 (Bits.U.of_int 0 1) && Bitops.eq arg6109 
+            (Bits.U.of_int 5 32) && Bitops.eq arg6104 (Bits.U.of_int 20 5) && 
+          Bitops.eq arg6105 (Bits.U.of_int 0 1) && Bitops.eq arg6106 
+            (Bits.U.of_int 4 32) && Bitops.eq arg6101 (Bits.U.of_int 21 5) && 
+          Bitops.eq arg6102 (Bits.U.of_int 0 1) && Bitops.eq arg6103 
+            (Bits.U.of_int 3 32) && Bitops.eq arg6098 (Bits.U.of_int 22 5) && 
+          Bitops.eq arg6099 (Bits.U.of_int 0 1) && Bitops.eq arg6100 
+            (Bits.U.of_int 2 32) && Bitops.eq arg6095 (Bits.U.of_int 23 5) && 
+          Bitops.eq arg6096 (Bits.U.of_int 0 1) && Bitops.eq arg6097 
+            (Bits.U.of_int 1 32) && Bitops.eq arg6092 (Bits.U.of_int 24 5) && 
+          Bitops.eq arg6093 (Bits.U.of_int 0 1) && Bitops.eq arg6094 
+            (Bits.U.of_int 16 32) && Bitops.eq arg6089 (Bits.U.of_int 25 5) && 
+          Bitops.eq arg6090 (Bits.U.of_int 0 1) && Bitops.eq arg6091 
+            (Bits.U.of_int 15 32) && Bitops.eq arg6086 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg6087 (Bits.U.of_int 0 1) && Bitops.eq arg6088 
+            (Bits.U.of_int 14 32) && Bitops.eq arg6083 (Bits.U.of_int 27 5) && 
+          Bitops.eq arg6084 (Bits.U.of_int 0 1) && Bitops.eq arg6085 
+            (Bits.U.of_int 13 32) && Bitops.eq arg6080 (Bits.U.of_int 28 5) && 
+          Bitops.eq arg6081 (Bits.U.of_int 0 1) && Bitops.eq arg6082 
+            (Bits.U.of_int 12 32) && Bitops.eq arg6077 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg6078 (Bits.U.of_int 0 1) && Bitops.eq arg6079 
+            (Bits.U.of_int 11 32) && Bitops.eq arg6074 (Bits.U.of_int 30 5) && 
+          Bitops.eq arg6075 (Bits.U.of_int 0 1) && Bitops.eq arg6076 
+            (Bits.U.of_int 10 32) && Bitops.eq arg6071 (Bits.U.of_int 31 5) && 
+          Bitops.eq arg6072 (Bits.U.of_int 0 1) && Bitops.eq arg6073 (Bits.U.of_int 
+              9 32) && Bitops.eq arg6068 (Bits.U.of_int 0 1) && Bitops.eq arg6069 
+            (Bits.U.of_int 0 1) && Bitops.eq arg6070 (Bits.U.of_int 16 32) && 
+          Bitops.eq arg6066 (Bits.U.of_int 0 3) && Bitops.eq arg6067 (Bits.U.of_int 
+              0 3) && Bitops.eq arg6064 (Bits.U.of_int 0 3) && Bitops.eq arg6065 
+            (Bits.U.of_int 1 1) && Bitops.eq arg6062 (Bits.U.of_int 5 3)) -> 
+           Instruction.rett (Instruction.absolutea (Bits.U.to_native arg6063)) 
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg6205), _), RP.Fetch (RP.Cell ('r', 
               Rtl.Identity, 32, RP.Const (RP.Bits arg6206), _), 32), 32)); 
@@ -17895,56 +17895,56 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
               RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
                   RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
                     Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] 
-      when Base.to_bool (Bitops.eq arg6205 (Bits.of_int 8 5) && Bitops.eq 
-            arg6206 (Bits.of_int 24 5) && Bitops.eq arg6203 (Bits.of_int 9 
-              5) && Bitops.eq arg6204 (Bits.of_int 25 5) && Bitops.eq arg6201 
-            (Bits.of_int 10 5) && Bitops.eq arg6202 (Bits.of_int 26 5) && 
-          Bitops.eq arg6199 (Bits.of_int 11 5) && Bitops.eq arg6200 
-            (Bits.of_int 27 5) && Bitops.eq arg6197 (Bits.of_int 12 5) && 
-          Bitops.eq arg6198 (Bits.of_int 28 5) && Bitops.eq arg6195 
-            (Bits.of_int 13 5) && Bitops.eq arg6196 (Bits.of_int 29 5) && 
-          Bitops.eq arg6193 (Bits.of_int 14 5) && Bitops.eq arg6194 
-            (Bits.of_int 30 5) && Bitops.eq arg6191 (Bits.of_int 15 5) && 
-          Bitops.eq arg6192 (Bits.of_int 31 5) && Bitops.eq arg6188 
-            (Bits.of_int 16 5) && Bitops.eq arg6189 (Bits.of_int 0 1) && 
-          Bitops.eq arg6190 (Bits.of_int 8 32) && Bitops.eq arg6185 
-            (Bits.of_int 17 5) && Bitops.eq arg6186 (Bits.of_int 0 1) && 
-          Bitops.eq arg6187 (Bits.of_int 7 32) && Bitops.eq arg6182 
-            (Bits.of_int 18 5) && Bitops.eq arg6183 (Bits.of_int 0 1) && 
-          Bitops.eq arg6184 (Bits.of_int 6 32) && Bitops.eq arg6179 
-            (Bits.of_int 19 5) && Bitops.eq arg6180 (Bits.of_int 0 1) && 
-          Bitops.eq arg6181 (Bits.of_int 5 32) && Bitops.eq arg6176 
-            (Bits.of_int 20 5) && Bitops.eq arg6177 (Bits.of_int 0 1) && 
-          Bitops.eq arg6178 (Bits.of_int 4 32) && Bitops.eq arg6173 
-            (Bits.of_int 21 5) && Bitops.eq arg6174 (Bits.of_int 0 1) && 
-          Bitops.eq arg6175 (Bits.of_int 3 32) && Bitops.eq arg6170 
-            (Bits.of_int 22 5) && Bitops.eq arg6171 (Bits.of_int 0 1) && 
-          Bitops.eq arg6172 (Bits.of_int 2 32) && Bitops.eq arg6167 
-            (Bits.of_int 23 5) && Bitops.eq arg6168 (Bits.of_int 0 1) && 
-          Bitops.eq arg6169 (Bits.of_int 1 32) && Bitops.eq arg6164 
-            (Bits.of_int 24 5) && Bitops.eq arg6165 (Bits.of_int 0 1) && 
-          Bitops.eq arg6166 (Bits.of_int 16 32) && Bitops.eq arg6161 
-            (Bits.of_int 25 5) && Bitops.eq arg6162 (Bits.of_int 0 1) && 
-          Bitops.eq arg6163 (Bits.of_int 15 32) && Bitops.eq arg6158 
-            (Bits.of_int 26 5) && Bitops.eq arg6159 (Bits.of_int 0 1) && 
-          Bitops.eq arg6160 (Bits.of_int 14 32) && Bitops.eq arg6155 
-            (Bits.of_int 27 5) && Bitops.eq arg6156 (Bits.of_int 0 1) && 
-          Bitops.eq arg6157 (Bits.of_int 13 32) && Bitops.eq arg6152 
-            (Bits.of_int 28 5) && Bitops.eq arg6153 (Bits.of_int 0 1) && 
-          Bitops.eq arg6154 (Bits.of_int 12 32) && Bitops.eq arg6149 
-            (Bits.of_int 29 5) && Bitops.eq arg6150 (Bits.of_int 0 1) && 
-          Bitops.eq arg6151 (Bits.of_int 11 32) && Bitops.eq arg6146 
-            (Bits.of_int 30 5) && Bitops.eq arg6147 (Bits.of_int 0 1) && 
-          Bitops.eq arg6148 (Bits.of_int 10 32) && Bitops.eq arg6143 
-            (Bits.of_int 31 5) && Bitops.eq arg6144 (Bits.of_int 0 1) && 
-          Bitops.eq arg6145 (Bits.of_int 9 32) && Bitops.eq arg6140 
-            (Bits.of_int 0 1) && Bitops.eq arg6141 (Bits.of_int 0 1) && 
-          Bitops.eq arg6142 (Bits.of_int 16 32) && Bitops.eq arg6138 
-            (Bits.of_int 0 3) && Bitops.eq arg6139 (Bits.of_int 0 3) && 
-          Bitops.eq arg6136 (Bits.of_int 0 3) && Bitops.eq arg6137 
-            (Bits.of_int 1 1) && Bitops.eq arg6135 (Bits.of_int 5 3)) -> 
-           Instruction.rett (Instruction.indexa (Bits.to_nativeint rs1) 
-               (Bits.to_nativeint rs2)) 
+      when Base.to_bool (Bitops.eq arg6205 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg6206 (Bits.U.of_int 24 5) && Bitops.eq arg6203 (Bits.U.of_int 9 
+              5) && Bitops.eq arg6204 (Bits.U.of_int 25 5) && Bitops.eq arg6201 
+            (Bits.U.of_int 10 5) && Bitops.eq arg6202 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg6199 (Bits.U.of_int 11 5) && Bitops.eq arg6200 
+            (Bits.U.of_int 27 5) && Bitops.eq arg6197 (Bits.U.of_int 12 5) && 
+          Bitops.eq arg6198 (Bits.U.of_int 28 5) && Bitops.eq arg6195 
+            (Bits.U.of_int 13 5) && Bitops.eq arg6196 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg6193 (Bits.U.of_int 14 5) && Bitops.eq arg6194 
+            (Bits.U.of_int 30 5) && Bitops.eq arg6191 (Bits.U.of_int 15 5) && 
+          Bitops.eq arg6192 (Bits.U.of_int 31 5) && Bitops.eq arg6188 
+            (Bits.U.of_int 16 5) && Bitops.eq arg6189 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6190 (Bits.U.of_int 8 32) && Bitops.eq arg6185 
+            (Bits.U.of_int 17 5) && Bitops.eq arg6186 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6187 (Bits.U.of_int 7 32) && Bitops.eq arg6182 
+            (Bits.U.of_int 18 5) && Bitops.eq arg6183 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6184 (Bits.U.of_int 6 32) && Bitops.eq arg6179 
+            (Bits.U.of_int 19 5) && Bitops.eq arg6180 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6181 (Bits.U.of_int 5 32) && Bitops.eq arg6176 
+            (Bits.U.of_int 20 5) && Bitops.eq arg6177 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6178 (Bits.U.of_int 4 32) && Bitops.eq arg6173 
+            (Bits.U.of_int 21 5) && Bitops.eq arg6174 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6175 (Bits.U.of_int 3 32) && Bitops.eq arg6170 
+            (Bits.U.of_int 22 5) && Bitops.eq arg6171 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6172 (Bits.U.of_int 2 32) && Bitops.eq arg6167 
+            (Bits.U.of_int 23 5) && Bitops.eq arg6168 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6169 (Bits.U.of_int 1 32) && Bitops.eq arg6164 
+            (Bits.U.of_int 24 5) && Bitops.eq arg6165 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6166 (Bits.U.of_int 16 32) && Bitops.eq arg6161 
+            (Bits.U.of_int 25 5) && Bitops.eq arg6162 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6163 (Bits.U.of_int 15 32) && Bitops.eq arg6158 
+            (Bits.U.of_int 26 5) && Bitops.eq arg6159 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6160 (Bits.U.of_int 14 32) && Bitops.eq arg6155 
+            (Bits.U.of_int 27 5) && Bitops.eq arg6156 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6157 (Bits.U.of_int 13 32) && Bitops.eq arg6152 
+            (Bits.U.of_int 28 5) && Bitops.eq arg6153 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6154 (Bits.U.of_int 12 32) && Bitops.eq arg6149 
+            (Bits.U.of_int 29 5) && Bitops.eq arg6150 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6151 (Bits.U.of_int 11 32) && Bitops.eq arg6146 
+            (Bits.U.of_int 30 5) && Bitops.eq arg6147 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6148 (Bits.U.of_int 10 32) && Bitops.eq arg6143 
+            (Bits.U.of_int 31 5) && Bitops.eq arg6144 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6145 (Bits.U.of_int 9 32) && Bitops.eq arg6140 
+            (Bits.U.of_int 0 1) && Bitops.eq arg6141 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6142 (Bits.U.of_int 16 32) && Bitops.eq arg6138 
+            (Bits.U.of_int 0 3) && Bitops.eq arg6139 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg6136 (Bits.U.of_int 0 3) && Bitops.eq arg6137 
+            (Bits.U.of_int 1 1) && Bitops.eq arg6135 (Bits.U.of_int 5 3)) -> 
+           Instruction.rett (Instruction.indexa (Bits.U.to_native rs1) 
+               (Bits.U.to_native rs2)) 
       
       | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
             32, RP.Const (RP.Bits arg6277), _), RP.Fetch (RP.Cell ('r', 
@@ -18081,55 +18081,55 @@ module Make (Instruction : Sparc.S with type 'a Reloc.relocatable = 'a) =
           (RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 32, 
               RP.Const (RP.Bits arg6207), _), RP.Fetch (RP.Cell ('r', 
                 Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32), 32))] 
-      when Base.to_bool (Bitops.eq arg6277 (Bits.of_int 8 5) && Bitops.eq 
-            arg6278 (Bits.of_int 24 5) && Bitops.eq arg6275 (Bits.of_int 9 
-              5) && Bitops.eq arg6276 (Bits.of_int 25 5) && Bitops.eq arg6273 
-            (Bits.of_int 10 5) && Bitops.eq arg6274 (Bits.of_int 26 5) && 
-          Bitops.eq arg6271 (Bits.of_int 11 5) && Bitops.eq arg6272 
-            (Bits.of_int 27 5) && Bitops.eq arg6269 (Bits.of_int 12 5) && 
-          Bitops.eq arg6270 (Bits.of_int 28 5) && Bitops.eq arg6267 
-            (Bits.of_int 13 5) && Bitops.eq arg6268 (Bits.of_int 29 5) && 
-          Bitops.eq arg6265 (Bits.of_int 14 5) && Bitops.eq arg6266 
-            (Bits.of_int 30 5) && Bitops.eq arg6263 (Bits.of_int 15 5) && 
-          Bitops.eq arg6264 (Bits.of_int 31 5) && Bitops.eq arg6260 
-            (Bits.of_int 16 5) && Bitops.eq arg6261 (Bits.of_int 0 1) && 
-          Bitops.eq arg6262 (Bits.of_int 8 32) && Bitops.eq arg6257 
-            (Bits.of_int 17 5) && Bitops.eq arg6258 (Bits.of_int 0 1) && 
-          Bitops.eq arg6259 (Bits.of_int 7 32) && Bitops.eq arg6254 
-            (Bits.of_int 18 5) && Bitops.eq arg6255 (Bits.of_int 0 1) && 
-          Bitops.eq arg6256 (Bits.of_int 6 32) && Bitops.eq arg6251 
-            (Bits.of_int 19 5) && Bitops.eq arg6252 (Bits.of_int 0 1) && 
-          Bitops.eq arg6253 (Bits.of_int 5 32) && Bitops.eq arg6248 
-            (Bits.of_int 20 5) && Bitops.eq arg6249 (Bits.of_int 0 1) && 
-          Bitops.eq arg6250 (Bits.of_int 4 32) && Bitops.eq arg6245 
-            (Bits.of_int 21 5) && Bitops.eq arg6246 (Bits.of_int 0 1) && 
-          Bitops.eq arg6247 (Bits.of_int 3 32) && Bitops.eq arg6242 
-            (Bits.of_int 22 5) && Bitops.eq arg6243 (Bits.of_int 0 1) && 
-          Bitops.eq arg6244 (Bits.of_int 2 32) && Bitops.eq arg6239 
-            (Bits.of_int 23 5) && Bitops.eq arg6240 (Bits.of_int 0 1) && 
-          Bitops.eq arg6241 (Bits.of_int 1 32) && Bitops.eq arg6236 
-            (Bits.of_int 24 5) && Bitops.eq arg6237 (Bits.of_int 0 1) && 
-          Bitops.eq arg6238 (Bits.of_int 16 32) && Bitops.eq arg6233 
-            (Bits.of_int 25 5) && Bitops.eq arg6234 (Bits.of_int 0 1) && 
-          Bitops.eq arg6235 (Bits.of_int 15 32) && Bitops.eq arg6230 
-            (Bits.of_int 26 5) && Bitops.eq arg6231 (Bits.of_int 0 1) && 
-          Bitops.eq arg6232 (Bits.of_int 14 32) && Bitops.eq arg6227 
-            (Bits.of_int 27 5) && Bitops.eq arg6228 (Bits.of_int 0 1) && 
-          Bitops.eq arg6229 (Bits.of_int 13 32) && Bitops.eq arg6224 
-            (Bits.of_int 28 5) && Bitops.eq arg6225 (Bits.of_int 0 1) && 
-          Bitops.eq arg6226 (Bits.of_int 12 32) && Bitops.eq arg6221 
-            (Bits.of_int 29 5) && Bitops.eq arg6222 (Bits.of_int 0 1) && 
-          Bitops.eq arg6223 (Bits.of_int 11 32) && Bitops.eq arg6218 
-            (Bits.of_int 30 5) && Bitops.eq arg6219 (Bits.of_int 0 1) && 
-          Bitops.eq arg6220 (Bits.of_int 10 32) && Bitops.eq arg6215 
-            (Bits.of_int 31 5) && Bitops.eq arg6216 (Bits.of_int 0 1) && 
-          Bitops.eq arg6217 (Bits.of_int 9 32) && Bitops.eq arg6212 
-            (Bits.of_int 0 1) && Bitops.eq arg6213 (Bits.of_int 0 1) && 
-          Bitops.eq arg6214 (Bits.of_int 16 32) && Bitops.eq arg6210 
-            (Bits.of_int 0 3) && Bitops.eq arg6211 (Bits.of_int 0 3) && 
-          Bitops.eq arg6208 (Bits.of_int 0 3) && Bitops.eq arg6209 
-            (Bits.of_int 1 1) && Bitops.eq arg6207 (Bits.of_int 5 3)) -> 
-           Instruction.rett (Instruction.indirecta (Bits.to_nativeint rs1)) 
+      when Base.to_bool (Bitops.eq arg6277 (Bits.U.of_int 8 5) && Bitops.eq 
+            arg6278 (Bits.U.of_int 24 5) && Bitops.eq arg6275 (Bits.U.of_int 9 
+              5) && Bitops.eq arg6276 (Bits.U.of_int 25 5) && Bitops.eq arg6273 
+            (Bits.U.of_int 10 5) && Bitops.eq arg6274 (Bits.U.of_int 26 5) && 
+          Bitops.eq arg6271 (Bits.U.of_int 11 5) && Bitops.eq arg6272 
+            (Bits.U.of_int 27 5) && Bitops.eq arg6269 (Bits.U.of_int 12 5) && 
+          Bitops.eq arg6270 (Bits.U.of_int 28 5) && Bitops.eq arg6267 
+            (Bits.U.of_int 13 5) && Bitops.eq arg6268 (Bits.U.of_int 29 5) && 
+          Bitops.eq arg6265 (Bits.U.of_int 14 5) && Bitops.eq arg6266 
+            (Bits.U.of_int 30 5) && Bitops.eq arg6263 (Bits.U.of_int 15 5) && 
+          Bitops.eq arg6264 (Bits.U.of_int 31 5) && Bitops.eq arg6260 
+            (Bits.U.of_int 16 5) && Bitops.eq arg6261 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6262 (Bits.U.of_int 8 32) && Bitops.eq arg6257 
+            (Bits.U.of_int 17 5) && Bitops.eq arg6258 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6259 (Bits.U.of_int 7 32) && Bitops.eq arg6254 
+            (Bits.U.of_int 18 5) && Bitops.eq arg6255 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6256 (Bits.U.of_int 6 32) && Bitops.eq arg6251 
+            (Bits.U.of_int 19 5) && Bitops.eq arg6252 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6253 (Bits.U.of_int 5 32) && Bitops.eq arg6248 
+            (Bits.U.of_int 20 5) && Bitops.eq arg6249 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6250 (Bits.U.of_int 4 32) && Bitops.eq arg6245 
+            (Bits.U.of_int 21 5) && Bitops.eq arg6246 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6247 (Bits.U.of_int 3 32) && Bitops.eq arg6242 
+            (Bits.U.of_int 22 5) && Bitops.eq arg6243 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6244 (Bits.U.of_int 2 32) && Bitops.eq arg6239 
+            (Bits.U.of_int 23 5) && Bitops.eq arg6240 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6241 (Bits.U.of_int 1 32) && Bitops.eq arg6236 
+            (Bits.U.of_int 24 5) && Bitops.eq arg6237 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6238 (Bits.U.of_int 16 32) && Bitops.eq arg6233 
+            (Bits.U.of_int 25 5) && Bitops.eq arg6234 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6235 (Bits.U.of_int 15 32) && Bitops.eq arg6230 
+            (Bits.U.of_int 26 5) && Bitops.eq arg6231 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6232 (Bits.U.of_int 14 32) && Bitops.eq arg6227 
+            (Bits.U.of_int 27 5) && Bitops.eq arg6228 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6229 (Bits.U.of_int 13 32) && Bitops.eq arg6224 
+            (Bits.U.of_int 28 5) && Bitops.eq arg6225 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6226 (Bits.U.of_int 12 32) && Bitops.eq arg6221 
+            (Bits.U.of_int 29 5) && Bitops.eq arg6222 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6223 (Bits.U.of_int 11 32) && Bitops.eq arg6218 
+            (Bits.U.of_int 30 5) && Bitops.eq arg6219 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6220 (Bits.U.of_int 10 32) && Bitops.eq arg6215 
+            (Bits.U.of_int 31 5) && Bitops.eq arg6216 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6217 (Bits.U.of_int 9 32) && Bitops.eq arg6212 
+            (Bits.U.of_int 0 1) && Bitops.eq arg6213 (Bits.U.of_int 0 1) && 
+          Bitops.eq arg6214 (Bits.U.of_int 16 32) && Bitops.eq arg6210 
+            (Bits.U.of_int 0 3) && Bitops.eq arg6211 (Bits.U.of_int 0 3) && 
+          Bitops.eq arg6208 (Bits.U.of_int 0 3) && Bitops.eq arg6209 
+            (Bits.U.of_int 1 1) && Bitops.eq arg6207 (Bits.U.of_int 5 3)) -> 
+           Instruction.rett (Instruction.indirecta (Bits.U.to_native rs1)) 
       | RP.Rtl [] -> 
            Instruction.tn (Instruction.generala (Nativeint.of_int 0) 
                (Instruction.imode (Nativeint.of_int 0))) 

@@ -81,6 +81,14 @@ clean:V:
                 for i in $SUBDIRS; do (cd $i && mk $MKFLAGS $target); done
                 find bin lib man -name 'CVS' -prune -o -type f -exec rm '{}' \;
 
+clobber:V:      
+                find bin lib man -name 'CVS' -prune -o -type f -exec rm '{}' \;
+                for i in $SUBDIRS; 
+                do 
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS $target)
+                done
+                
+                
 test:V:         all
                 cd test && mk $target
 

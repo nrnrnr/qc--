@@ -111,12 +111,13 @@ module Spill = struct
             let dst_loc = Register.to_loc lookup dst  in
                 Rtl.store dst_loc (Rtl.fetch src_loc src_w)  dst_w
 
-    let spill lookup (sp,index,width as reg) loc =
-        if Rtlutil.Width.loc loc <> width then
-            invalid_arg "Target2.spill size mismatch"
+    let spill lookup (sp,index,w as reg) loc =
+        let w' = Rtlutil.Width.loc loc in
+        if w <> w' then invalid_arg 
+            (Printf.sprintf "Target2.spill size mismatch: %d <- %c(%d)" w' sp w)
         else
             let reg_loc = Register.to_loc lookup reg in
-            let rtl     = Rtl.store loc (Rtl.fetch reg_loc width) width in
+            let rtl     = Rtl.store loc (Rtl.fetch reg_loc w) w in
                 [rtl]
 
     let reload lookup (sp,index,width as reg) loc =
@@ -153,6 +154,16 @@ let spaces =
           ; S.aggsize     = [1]
           ; S.classification = S.Reg
           ; S.doc         = "floating-point registers"
+          } 
+
+    ;     { S.space = 'g'
+          ; S.cellwidth   = 8
+          ; S.aggregation = Rtl.Identity
+          ; S.indexwidth  = 5
+          ; S.indexlimit  = None
+          ; S.aggsize     = [1]
+          ; S.classification = S.Reg
+          ; S.doc         = "generail-purpose registers"
           } 
 
     ;     { S.space = 'd'
@@ -204,6 +215,21 @@ let spaces =
           ; S.doc         = "floating-point temporaries"
           }
 
+
+    ;     { S.space = 'v'
+          ; S.cellwidth   = 8
+          ; S.aggregation = Rtl.Identity
+          ; S.indexwidth  = 16
+          ; S.indexlimit  = None
+          ; S.aggsize     = [1]
+          ; S.classification =
+               S.Temp { S.stands_for = 'g'
+                      ; S.index_ok   = (fun _ -> true)
+                      ; S.set_doc    = "any register"
+                      } 
+          ; S.doc         = "8-bit temporaries"
+          }
+
     ;     { S.space = 'c'
           ; S.cellwidth   = 32
           ; S.aggregation = Rtl.Identity
@@ -216,7 +242,7 @@ let spaces =
 
     ]     
 
-let const n width = Rtl.bits (Bits.of_int n width) width
+let const n width = Rtl.bits (Bits.U.of_int n width) width
 let fpcond n      = Rtl.cell Rtl.none 'd' Rtl.Identity  2 (const n 2)
 let reg n         = Rtl.cell Rtl.none 'r' Rtl.Identity 32 (const n 5)
 let pc            = Rtl.cell Rtl.none 'c' Rtl.Identity 32 (const 0 1)
@@ -274,7 +300,7 @@ let cc =
 <<DummyTarget>>=
 let target = 
     { T.name            = "dummy"
-    ; T.byteorder       = Rtl.LittleEndian
+    ; T.byteorder       = Rtl.BigEndian
     ; T.wordsize        = 32
     ; T.pointersize     = 32
     ; T.memsize         = 8
@@ -330,7 +356,7 @@ let spaces =
 
     ;     { S.space = 'm'
           ; S.cellwidth   = 8
-          ; S.aggregation = Rtl.LittleEndian
+          ; S.aggregation = Rtl.BigEndian
           ; S.indexwidth  = 32
           ; S.indexlimit  = None
           ; S.aggsize     = [1;2;4]
@@ -367,10 +393,10 @@ let spaces =
           ; S.doc         = "floating-point temporaries"
           }
 
-    ;     { S.space = 'c'
+    ;     { S.space = 'i'
           ; S.cellwidth   = 32
           ; S.aggregation = Rtl.Identity
-          ; S.indexwidth  = 5
+          ; S.indexwidth  = 3
           ; S.indexlimit  = Some 6
           ; S.aggsize     = [1]
           ; S.classification = S.Fixed
@@ -389,7 +415,7 @@ spaces. This encoding is private between a target and its code expander.
 
 <<SparcTarget>>=
 let special sp guard exp =
-    let const n width = Rtl.bits (Bits.of_int n width) width in
+    let const n width = Rtl.bits (Bits.U.of_int n width) width in
     let cell          = R.cell R.none sp R.Identity 32 (const 0 32) in
         R.guard guard (R.store cell exp 32)
 
@@ -400,8 +426,8 @@ let project rtl = match D.rtl rtl with
         )
     | _ -> assert false      
         
-let false' = R.bool false
-let (>>) f g x = f (g x)
+let false'      = R.bool false
+let (>>) f g x  = f (g x)
 
 
 let goto  =
@@ -430,7 +456,7 @@ let branch =
     }
 
 let sp = 
-    let r14 = R.bits (Bits.of_int 14 5) 5 in
+    let r14 = R.bits (Bits.U.of_int 14 5) 5 in
     R.cell R.none 'r' R.Identity 32 r14
 
 let cc =

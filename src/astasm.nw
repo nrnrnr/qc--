@@ -58,11 +58,11 @@ end
 <<Make>>=
 let pointer     = A.BitsTy(P.target.T.pointersize)
 let bits n      = A.BitsTy n
-let int n       = A.Int( Bits.of_int n P.target.T.wordsize
+let int n       = A.Int( string_of_int n
                        , Some (bits P.target.T.wordsize)
                        )
 let one         = int 1 (* wordsize *)
-let zero        = A.Int( Bits.of_int 0 P.target.T.memsize
+let zero        = A.Int( "0"
                        , Some (bits P.target.T.memsize)
                        ) (* memsize *)
 
@@ -134,7 +134,7 @@ the same width as a pointer.
 let reladdr (a:Reladdr.t) =
     let (int64,symbols) = Reladdr.expr a in (* get generic representation *)
     let width           = P.target.T.pointersize in
-    let const (i:int64) = A.Int(Bits.of_int64 i width, Some pointer) in
+    let const (i:int64) = A.Int(Printf.sprintf "%Lx" i, Some pointer) in
     let sym   s         = A.Fetch (A.Var(None,s#text)) in
     let rec loop e = function
         | []                     -> e
@@ -216,7 +216,8 @@ object (this)
         this#append (A.Datum(A.Label s#text))
     
     method const (s: Reladdr.symbol) (b:Bits.bits) =
-        let bits = A.Int(b,Some (bits (Bits.width b))) in
+        let i = Printf.sprintf "0x%Lx" (Bits.U.to_int64 b) in 
+        let bits = A.Int(i,Some (bits (Bits.width b))) in
         this#append (A.Decl(A.Const(None,s#text,bits)))
 
     (* set location counter *)
@@ -255,7 +256,8 @@ object (this)
     
     method value (v:Bits.bits) = 
         let ty   = bits (Bits.width v)              in
-        let init = A.InitExprs([A.Int(v, Some ty)]) in
+        let i    = Printf.sprintf "0x%Lx" (Bits.U.to_int64 v) in
+        let init = A.InitExprs([A.Int(i, Some ty)]) in
             this#append (A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
             
     method addr (a:Reladdr.t) = 

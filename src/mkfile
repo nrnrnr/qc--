@@ -58,11 +58,11 @@ all.opt:V:  $NAME.opt   qc--.lua
 
 update:V:   $BINDIR/$NAME                 \
             $MANDIR/man1/$NAME.1          \
-            $MANDIR/man1/${NAME}grammar.1 \
+            $MANDIR/man1/${NAME}grammar.1 
 
 update.opt:V: $BINDIR/$NAME.opt            \
-            $MANDIR/man1/$NAME.1          \
-            $MANDIR/man1/${NAME}grammar.1 \
+            $MANDIR/man1/$NAME.1           \
+            $MANDIR/man1/${NAME}grammar.1 
 
 # files that we like to pre-compile for a source distribution because
 # the tool creating them is unpopular
@@ -92,11 +92,12 @@ clean:V:
             rm -f *.ml *.mli *.c *.mly *.mll this.in
             rm -f *.sig *.sml
             rm -f *.dvi *.log *.aux *.bbl *.blb *.blg *.toc
-	    for i in *.nw; do rm -f "`basename $i .nw`.tex"; done
+            for i in *.nw; do rm -f "`basename $i .nw`.tex"; done
             rm -f parse.output
             rm -f *.html *.1 *.ps *.pod
             rm -f *~
             rm -f *.inc
+            rm -f *.lua 
     
 clobber:V:  clean
             rm -f $NAME $NAME.opt newer
@@ -152,11 +153,14 @@ ML =            impossible.ml    \
                 cfgutil.ml       \
                 expander.ml      \
                 dummyexpander.ml \
-                #sparcexpander.ml \
+                msparcenc.ml     \
+                msparcdec.ml     \
+                sparcexpander.ml \
                 backplane.ml     \
                 proc.ml          \
                 astasm.ml        \
-		#sparcasm.ml      \
+		# sparcasm.ml      \
+                msparcasm.ml     \
                 dotasm.ml        \
                 asdlasm.ml       \
                 placevar.ml      \
@@ -207,6 +211,8 @@ MLI =           area.mli        \
                 luautil.mli     \
                 mangle.mli      \
                 main2.mli       \
+                msparcenc.mli   \
+                msparcdec.mli   \
                 parse.mli       \
                 placevar.mli    \
                 proc.mli        \
@@ -220,7 +226,8 @@ MLI =           area.mli        \
                 rtlx.mli        \
                 scan.mli        \
                 space.mli       \
-		#sparcasm.mli	\
+		# sparcasm.mli	\
+                msparcasm.mli   \
                 strutil.mli     \
                 talloc.mli      \
                 target2.mli     \
@@ -248,7 +255,7 @@ SCAN =          $ML $MLI        \
 <../config/ocaml.mk
 
 OCAMLC_FLAGS =  -I $LIBDIR -ccopt -L$LIBDIR -g
-OCAMLO_FLAGS =  -I $LIBDIR -ccopt -L$LIBDIR -g -ccopt -static 
+OCAMLO_FLAGS =  -I $LIBDIR -ccopt -L$LIBDIR -p -ccopt -static 
 
 <../config/noweb.mk
 
@@ -322,23 +329,14 @@ modules.tex:V: $INC
 # concatenate all asdl files to one file and pass it to the asdlGen
 # compiler. The noweb files defining the asdl files also contain 
 # views for some of the definined types. So first all asdl files are
-# concatenated and then all views.
+# concatenated and then all views. Update: we no longer use views and
+# thus things got simpler. 
 
-ASDL =          ast.asdl   
-VIEWS =         ast.view  
-SMLVIEWS =      
+ocaml.asdl:     ast.asdl
+                cp $prereq $target
 
-ocaml.asdl:     $ASDL $VIEWS
-                cat $ASDL           >  $target
-                echo "view OCaml {" >> $target
-                cat $VIEWS          >> $target
-                echo "}"            >> $target
-
-sml.asdl:       $ASDL $SMLVIEWS
-                cat $ASDL           >  $target
-                echo "view SML {"   >> $target
-                cat $SMLVIEWS       >> $target
-                echo "}"            >> $target
+sml.asdl:       ast.asdl
+                cp $prereq $target
 
 ast.ml          \
 ast.mli         \
@@ -437,6 +435,22 @@ sparcexpander.ml:   sparcexpander.mlb $MLBURG
                     $MLBURG sparcexpander.mlb > $target
 
 sparcexpander.mlb:  sparcexpander.nw
+                    $NOTANGLE -L"$LINE" -R$target $prereq > $target
+
+# ------------------------------------------------------------------ 
+# The Minisparc Encoder, Decoder -- experimental for CL
+# ------------------------------------------------------------------ 
+
+msparcenc.mli:      minisparc.nw
+                    $NOTANGLE -L"$LINE" -R$target $prereq > $target
+
+msparcenc.ml:       minisparc.nw
+                    $NOTANGLE -L"$LINE" -R$target $prereq > $target
+                    
+msparcdec.mli:      minisparc.nw
+                    $NOTANGLE -L"$LINE" -R$target $prereq > $target
+                    
+msparcdec.ml:       minisparc.nw
                     $NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 # ------------------------------------------------------------------

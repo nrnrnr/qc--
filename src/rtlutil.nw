@@ -217,7 +217,7 @@ application on the outermost level.
 <<Width>>=
 let exp e = match Rtl.Convert.exp e with
     | RP.Const(RP.Bool _)     -> assert false
-    | RP.Const(RP.Bits (_,w)) -> w
+    | RP.Const(RP.Bits b)     -> Bits.width b
     | RP.Const(RP.Link (_,w)) -> w
     | RP.Const(RP.Late (_,w)) -> w
     | RP.Fetch(_,w)           -> w
@@ -242,9 +242,8 @@ let fold ~(read:'a observer) ~(write:'a observer) =
         | RP.Store (lhs, rhs, _) -> loc write (exp z rhs) lhs
         | RP.Kill lhs -> loc write z lhs
       and loc which z l = match l with
-        | RP.Cell (space, _, w, RP.Const (RP.Bits (index, w')), _) ->
-            (try which space (Bits.to_int (index, w')) w (z:'a)
-             with Bits.Overflow -> z)
+        | RP.Cell (space, _, w, RP.Const (RP.Bits b), _) ->
+            (try which space (Bits.U.to_int b) w (z:'a) with Bits.Overflow -> z)
         | RP.Cell (space, _, w, index, _) -> exp z index
         | RP.Slice (_, _, l) -> index z l
         | RP.Var _ -> z
@@ -323,7 +322,7 @@ integer.
 <<Subst2>>=
 let is_register = function
     | RP.Cell (_,_,_,RP.Const(RP.Bits b),_) ->
-        ( try  let _ = Bits.to_int b in true with 
+        ( try  let _ = Bits.U.to_int b in true with 
         | Bits.Overflow -> false
         )
     | _                 -> false
@@ -334,7 +333,7 @@ and width.
 
 <<Subst2>>=
 let loc2reg = function
-    | RP.Cell (sp,_,w,RP.Const(RP.Bits b),_) -> (sp,Bits.to_int b,w)
+    | RP.Cell (sp,_,w,RP.Const(RP.Bits b),_) -> (sp,Bits.U.to_int b,w)
     | _                                      -> assert false
 @
 
@@ -344,13 +343,14 @@ expression is a space property.
 
 <<Subst2>>=
 let reg2loc lookup (sp,index,w) =
-    let space      = lookup sp in
+    let space      = try lookup sp with Not_found ->
+        Impossible.impossible (Printf.sprintf "can't find space '%c'" sp) in
     let ()         = () (* assert (w = space.Space.cellwidth) *) in 
     let indexwidth = space.Space.indexwidth in 
         RP.Cell ( sp
                 , space.Space.aggregation
                 , w
-                , RP.Const(RP.Bits(Bits.of_int index indexwidth))
+                , RP.Const(RP.Bits(Bits.U.of_int index indexwidth))
                 , 1 (* not provided by Space *)
                 )
 
@@ -412,11 +412,13 @@ let verbosity v =
 let bits n             = A.BitsTy n
 
 let const = function
-    | R.Bool(_)      -> assert false    (* impossible *)
-    | R.Bits(b,w)    ->  A.Int((b,w)
-                              ,if !the_verbosity = High 
-                               then Some (bits w) 
-                               else None)
+    | R.Bool(true)   ->  A.PrimOp ("true", [])
+    | R.Bool(false)  ->  A.PrimOp ("false", [])
+    | R.Bits b       ->  A.Int( string_of_int (Bits.U.to_int b)
+                              , if !the_verbosity = High 
+                                then Some (bits (Bits.width b)) 
+                                else None
+                              )
                      
     | R.Link(sym,w)  -> A.Fetch(A.Var(None, (sym#text)))
     | R.Late(name,w) -> A.Fetch(A.Var(None, name)) (*XXX ok? *)
@@ -445,7 +447,11 @@ space into a (named) type, which is neither wrong nor right.
 and location' = function 
     | R.Cell (sp,agg,width,e,ass) ->
      (* let space   =  Printf.sprintf "$%c" sp           in *)
-        let space   =  Printf.sprintf "$%c(%d)" sp width in   
+        let a       =  match agg with
+                       | Rtl.Identity     -> 'I'
+                       | Rtl.BigEndian    -> 'B'
+                       | Rtl.LittleEndian -> 'L' in
+        let space   =  Printf.sprintf "$%c(%d%c)" sp width a in   
         let aligned = if ass = 1 then None else Some ass in 
         A.Mem(A.AliasTy space,expr' e,aligned)
     | R.Var (name,_,width)       -> A.Var(None,name)
@@ -497,8 +503,69 @@ pretty-print it into a string. To avoid newlines in the string we pass
 
 
 <<ToString>>=
+
+module P  = Pp
+module R  = Rtl
+module RP = Rtl.Private 
+
+let (^^)   = P.(^^)
+let (^/)   = P.(^/)
+
+let indent x = P.nest 4 (P.break ^^ x)
+let int i    = P.text (string_of_int i)
+let str s    = P.text s
+let char c   = P.text (Printf.sprintf "'%c'" c)
+
+let tuple docs = 
+    let id x = x in
+    P.agrp (P.text "(" ^^ P.list (P.text "," ^^ P.break) id docs ^^ P.text ")")
+    
+let apply c args = P.agrp(str c ^^ indent(tuple args))
+
+let aggregation = function
+    | R.BigEndian       -> P.text "BE"
+    | R.LittleEndian    -> P.text "LE"
+    | R.Identity        -> P.text "ID"
+
+let opr (name, ws) =
+    tuple [str name; tuple (List.map int ws)]
+
+let const = function
+    | RP.Bool(b)        -> apply "Bool"  [str (if b then "true" else "false")]
+    | RP.Bits(b)        -> apply "Bits"  [ int (Bits.U.to_int b)
+                                         ; int (Bits.width b)
+                                         ]
+    | RP.Link(r,w)      -> apply "Link"  [str r#text; int w]
+    | RP.Late(s,w)      -> apply "Late"  [str s; int w]
+
+
+let rec exp = function
+    | RP.Const(k)       -> apply "Const" [const k]
+    | RP.Fetch(l,w)     -> apply "Fetch" [loc l; int w]
+    | RP.App(o,es)      -> apply "App"   [opr o; tuple (List.map exp es)] 
+    
+and loc = function
+    | RP.Cell(sp, agg, w, e, ass) -> 
+        apply "Cell" [char sp; aggregation agg; int w; exp e]
+    | RP.Var(name, index, w) ->
+        apply "Var" [str name; int index; int w]
+    | RP.Slice(w, i, l) ->
+        apply "Slice" [int w; int i; loc l]
+        
+
+let effect = function
+    | RP.Store(l,e,w) -> apply "Store" [loc l; exp e; int w]
+    | RP.Kill(l)      -> apply "Kill"  [loc l]  
+
+let guarded (g, e) =
+    tuple [exp g; effect e]
+
+let rtl' (RP.Rtl x) =
+    apply "Rtl" (List.map guarded x)
+    
 let rtl r =
-    let stmt = ToAST.rtl r in
-    let pp   = Astpp.stmt stmt              in
-        Pp.ppToString max_int (* line width *) pp
+    let pp = rtl' (R.Convert.rtl r) in
+        Pp.ppToString 66 (* line width *) pp
 @
+
+

@@ -174,27 +174,6 @@ let _ = Array.iter (fun (str,tok) -> Hashtbl.add keywords str tok)
     |]
 @
 
-Literals (integer, floating point, character) are stored as
-[[Bits.bits]] in the abstract syntax. This is not quite right as
-explained in the definition of the abstract syntax \module{ast}. Below
-are conversion functions that take strings as arguments and returns a
-[[Bits.bits]] value using the maximum width [[Bits.maxwidth]]. The
-\emph{type} of a literal, i.e.~its width, is a seperate from the width
-of the internal size of the bit vector. A bitvector of width 64 can hold
-an integer of type [[bits32]] (but not vice versa). For the types of
-expressions see the \module{expcheck} module.
-
-<<prolog>>=
-let str2bits f str =
-    try f str Bits.maxwidth with
-    | Bits.Size     -> E.error "literal too large for this implementation"
-    | Bits.Overflow -> assert false (* can't happen - we use maxwidth *)
-
-let stri2bits str = str2bits Bits.of_stringi str
-let strf2bits str = str2bits Bits.of_stringf str
-let strc2bits str = str2bits Bits.of_stringc str 
-@
-
 % ------------------------------------------------------------------  
 \subsection{Declarations for Regular Expressions}
 % ------------------------------------------------------------------  
@@ -319,8 +298,8 @@ the reserved word [[pragma]] the [[PRAGMA]] token is returned by
                   let s = substr 1 0 (get lexbuf)
                   in P.PRIMOP(s)
                 }
-  | float       { fun map -> P.FLT (strf2bits (get lexbuf)) }
-  | int         { fun map -> P.INT (stri2bits (get lexbuf)) }
+  | float       { fun map -> P.FLT (get lexbuf) }
+  | int         { fun map -> P.INT (get lexbuf) }
   
   | "/*"        { fun map -> comment1 lexbuf map }
   | cxxcomment  { fun map -> token lexbuf map (* skip comment *) }
@@ -336,24 +315,25 @@ the reserved word [[pragma]] the [[PRAGMA]] token is returned by
 % ------------------------------------------------------------------  
 
 The interpretation functions for escaped characters are not yet
-written. Currently the string representation is returned.
+written. Currently the string representation is returned. The string
+representation \emph{includes} the delimiting single quotes! 
 
 <<scan.mll>>=
 and character = parse
     printable      "'"          { fun map -> 
-                                  let s = substr 0 (-1) (get lexbuf) in
-                                  P.CHAR  (strc2bits s)
+                                  let s = get lexbuf in
+                                  P.CHAR  ("'"^s)
                                 }
   
   | '\\' escape    "'"          { fun map -> 
-                                  let s = substr 0 (-1) (get lexbuf) in
-                                  P.CHAR  (strc2bits s)
+                                  let s = get lexbuf in
+                                  P.CHAR  ("'"^s)
                                 }
 
   
   | '\\' ['x' 'X'] hex+ "'"     { fun map -> 
-                                  let s = substr 0 (-1) (get lexbuf) in
-                                  P.CHAR  (strc2bits s)
+                                  let s = get lexbuf in
+                                  P.CHAR  ("'"^s)
                                 }
                                   
   | _                           { fun map ->
@@ -738,14 +718,15 @@ together with their positions.
     | P.UMINUS(s)         -> "UMINUS" ^     s ^ ")"
     
     
-    | P.ID(s)             -> "ID(" ^        s                  ^ ")"
-    | P.STR(s)            -> "STR(" ^       s                  ^ ")"
-    | P.INFIXOP(s)        -> "INFIXOP(" ^   s                  ^ ")"
-    | P.PRIMOP(s)         -> "PRIMOP(" ^    s                  ^ ")"
-    | P.INT(i)            -> "INT(" ^  Bits.to_string None   i ^ ")"
-    | P.FLT(f)            -> "FLT(" ^  Bits.to_string None   f ^ ")"
-    | P.CHAR(c)           -> "CHAR(" ^ Bits.to_string None   c ^ ")"
-    | P.BITSn(i)          -> "BITSn(" ^ string_of_int i        ^ ")"
+    | P.ID(s)             -> "ID(" ^        s ^ ")"
+    | P.STR(s)            -> "STR(" ^       s ^ ")"
+    | P.INFIXOP(s)        -> "INFIXOP(" ^   s ^ ")"
+    | P.PRIMOP(s)         -> "PRIMOP(" ^    s ^ ")"
+    | P.INT(s)            -> "INT(" ^       s ^ ")"
+    | P.FLT(s)            -> "FLT(" ^       s ^ ")"
+    | P.CHAR(s)           -> "CHAR(" ^      s ^ ")"
+
+    | P.BITSn(i)          -> "BITSn(" ^ string_of_int i ^ ")"
 
 } (* end of epilog *)
 @
@@ -788,21 +769,26 @@ let mkRegs v (hint,ty,regs) =
     let r (id,reg) = (v, hint, ty, id, reg) 
     in
         List.map r regs
+
 <<helper functions>>=
 let mkTypedefs ty names =
     List.map (fun n -> A.Typedef(n,ty)) names
 @            
 
-The [[[bits2int]] function takes a [[bits]] value and returns its integer
-value; additionally it takes care of possible overflows.
+The [[[str2int]] function takes the string representation of an integer
+and returns its value. We cannot use [[int_of_string]] directly because
+we take a string starting with [[0]] (zero) as an octal value.
 
 <<helper functions>>=
-let bits2int b = 
-    try
-        Bits.to_int b
-    with
-        Bits.Overflow -> E.error "Constant exceeds implementation limits"
-@
+let str2int str =
+    let len    = String.length str in
+        try match str.[0] with
+                 | '0' when len > 1 -> int_of_string ("0o"^str)
+                 | _                -> int_of_string str
+        with
+            Failure _ -> Error.error ("syntax error in constant: "^str)
+            (* should not happen except for overflows *)    
+@         
 
 <<parse.mly>>=
 %token ABORTS ALIGN ALIGNED ALSO AS AMPERSAND BIG BYTEORDER CASE COLON CCOLON
@@ -834,9 +820,10 @@ let bits2int b =
 %token <string>         ID
 %token <string>         STR
 %token <int>            BITSn
-%token <Bits.bits>      INT
-%token <Bits.bits>      FLT
-%token <Bits.bits>      CHAR
+
+%token <string>         INT
+%token <string>         FLT
+%token <string>         CHAR
 @
 
 The precedence of tokens from lowest to highest precedence.
@@ -899,13 +886,13 @@ decl        :   INVARIANT REGISTER registers SEMI
             |   TYPEDEF ty names SEMI          { A.Typedef($2,rev $3)      }
             |   TARGET properties SEMI         { A.Target(rev $2)          }
 <<parse.mly>>=
-property    :   MEMSIZE INT                    { A.Memsize(bits2int $2)      }
+property    :   MEMSIZE INT                    { A.Memsize(str2int $2)      }
             |   BYTEORDER BIG                  { A.ByteorderBig              }
             |   BYTEORDER LITTLE               { A.ByteorderLittle           }
             |   FLOATREPR STR                  { A.FloatRepr $2              }
             |   CHARSET STR                    { A.Charset $2                }
-            |   PTRSIZE INT                    { A.PointerSize (bits2int $2) }
-            |   WRDSIZE INT                    { A.WordSize (bits2int $2)    }
+            |   PTRSIZE INT                    { A.PointerSize (str2int $2) }
+            |   WRDSIZE INT                    { A.WordSize (str2int $2)    }
 
 <<parse.mly>>=
 properties  :   properties property            { $2 :: $1 }
@@ -916,7 +903,7 @@ span        :   SPAN exprAt expr
 <<parse.mly>>=
 datumAt     :   datum                          { A.DatumAt($1,p()) }
 datum       :   ID COLON                       { A.Label $1 }
-            |   ALIGN INT SEMI                 { A.Align (bits2int $2) }
+            |   ALIGN INT SEMI                 { A.Align (str2int $2) }
             |   tyAt size initAt SEMI          { A.MemDecl($1,$2,Some $3)}
             |   tyAt size        SEMI          { A.MemDecl($1,$2,None)}
             |   tyAt      initAt SEMI          { A.MemDecl($1,A.NoSize,Some $2)}
@@ -995,7 +982,7 @@ data        :   data  datumAt                  { $2 :: $1 }
 
 conv        :   FOREIGN STR                    { Some $2 }
 
-aligned     :   ALIGNED INT                    { Some (bits2int $2) }
+aligned     :   ALIGNED INT                    { Some (str2int $2) }
 
 flowAt      :   flow                           { A.FlowAt($1,p()) }
 flow        :   ALSO CUTS     TO names         { A.CutsTo($4)     }

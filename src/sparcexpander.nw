@@ -16,14 +16,19 @@ specification.
 <<sparcexpander.mlb>>=
 %head {: <<modules>> :}
 %head {: 
-    module Make (I: Sparc2.S) = struct 
-    module IR = I.Reloc    
+    module Make 
+        (Reloc: Sledlib.RELOCATABLE with type symbol = Reladdr.symbol) 
+        (I:     Msparcenc.S with type t      = Rtl.rtl
+                            with type target = nativeint Reloc.relocatable         
+        ) =
+    struct    
 :}
 
 %head {: <<head>> :}
 <<terminal types>>
 %tail {: <<tail>> :}
 %tail {: end (* of Make *) :}
+
 %%
 <<rules>>
 @
@@ -53,7 +58,8 @@ chatch the exception because all errors are fatal.
 
 <<head>>=
 exception Error of string
-let error msg = raise (Error msg)
+let error msg     = raise (Error msg)
+let error_rtl rtl = error (RU.ToString.rtl rtl) 
 @
 
 Many transformations return both a list of instructions and a location
@@ -95,7 +101,7 @@ let ftmp w = fun (_,tmp as state) ->
 % ------------------------------------------------------------------ 
 
 <<head>>=
-let native      = B.to_nativeint
+let native      = B.U.to_native
 
 let is_imm b = 
     let i:nativeint = native b in 
@@ -123,7 +129,29 @@ The following address is on the stack and used to move data between
 integer and floating-point registers.
 
 <<head>>=
-let tmp = I.generala fp (I.imode (N.of_int (-8)))
+(* let tmp = I.generala fp (I.imode (N.of_int (-8))) *)
+
+let tmp = I.generala fp (I.imode (N.of_int (8)))
+@
+
+A synthetic instruction that might be represented by a sequence of
+instructions cannot be defined by the instruction encoder [[I]] but only
+here. In particular, we have to implement the [[set]] instruction, which
+can expand into two instructions, depending on the size of the argument
+[[i]]. See the {\sparc} manual, Section A.3 for details.
+
+<<head>>=
+let set (i: nativeint) (reg: I.reg) =
+    let hi i = N.shift_right_logical i 10           (* 22 msb *)
+    and lo i = N.logand i (N.of_int 0b1111111111)   (* 10 lsb *)
+    in
+        if (N.logor i (N.of_int 0x1fff)) = N.zero then
+            exec (I.sethi (hi i) reg)
+        else if N.of_int (-4096) <= i or i <= (N.of_int 4096) then
+            exec (I.or_ r0 (I.imode i) reg)
+        else
+            exec (I.sethi (hi i) reg) >>= fun () ->
+            exec (I.or_ reg (I.imode (lo i)) reg)
 @
 
 % ------------------------------------------------------------------ 
@@ -168,8 +196,8 @@ The following table summarizes the nonterminals from the rule set.
 An address for a call or a branch is relocatable. 
 
 <<rules>>=
-reloc:      Bits(b:bits)        {: IR.early (native b)              :}
-reloc:      Link(symbol,width)  {: IR.late (symbol#text) (N.zero)   :}
+reloc:      Bits(b:bits)        {: Reloc.of_const (native b)        :}
+reloc:      Link(symbol,width)  {: Reloc.of_sum   symbol N.zero     :} 
 
 <<rules>>=
 const:      Bits(b:bits)        {: native b :}
@@ -189,13 +217,13 @@ rc:         const13 {: return (I.imode const13)             :}
 reg:        const13 [1]
             {: 
                 itmp 32 >>= fun t ->
-                exec (I.set const13 t) >>= fun () -> 
+                set const13 t >>= fun () -> 
                 return t
             :}    
 reg:        const [1] 
             {: 
                 itmp 32 >>= fun t ->
-                exec (I.set const t) >>= fun () -> 
+                set const t >>= fun () -> 
                 return t
             :}
 @
@@ -306,6 +334,7 @@ higher-oder function [[(R.loc -> R.rtl) m]].
 guard:      True()  {: return I.ba :}
 guard:      False() {: return I.bn :}
 
+<<rules>>=
 guard:      App2("eq", reg, rc) [1]
             {:  reg >>= fun reg -> rc >>= fun rc ->
                 exec (I.cmp reg rc) >>= fun () -> return I.be
@@ -361,11 +390,13 @@ reg:        App2("and", reg, rc) [1]
                 reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
                 exec (I.and_ r rc t) >>= fun () -> return t
             :}    
+
 reg:        App2("sub", reg, rc) [1]
             {:
-                reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
-                exec (I.sub r rc t) >>= fun () -> return t
+                reg >>= fun r -> rc >>= fun rc' -> itmp 32 >>= fun t ->
+                exec (I.sub r rc' t) >>= fun () -> return t
             :}    
+
 reg:        App2("shl", reg, rc) [1]
             {:
                 reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
@@ -399,6 +430,7 @@ reg:        App1("neg", reg) [1]
                 exec (I.neg2 r t) >>= fun () -> return t
             :}
 
+<<rules>>=
 reg:        App1(o:string, reg)     [2] {: error ("cannot handle "^o) :}
 reg:        App2(o:string, reg, rc) [2] {: error ("cannot handle "^o) :}
 reg:        App3(string, x:reg, y:reg, z:reg)  [2] {: error "app3" :}
@@ -410,11 +442,16 @@ Instructions are classified into branches, calls, and so on.
 rtl:        Branch(guard, reloc) [1]
             {:
                 guard >>= fun branch ->
-                exec (branch ~target:reloc)
+                exec (branch reloc)
             :}
 
-rtl:        Simple(stmt) [1] {: return () :}    
-rtl:        Nop() [1]        {: exec (I.nop ()):}
+rtl:        Goto(reloc) [1]
+            {:
+                exec (I.ba reloc)
+            :}
+
+rtl:        Simple(stmt) [1] {: stmt >>= fun s -> return ()   :}    
+rtl:        Nop() [1]        {: exec I.nop  :}
 @
 
 
@@ -459,10 +496,11 @@ code expander and a target description. See module \module{targets}.
 and rtl = function
     | RP.Rtl([])                            -> conNop ()
     | RP.Rtl([(RP.Const(RP.Bool(true)),s)]) -> conSimple (stmt s)
-    | RP.Rtl([(g,RP.Store(RP.Cell(sp,_,_,_,_),e,_))]) ->
+    | RP.Rtl([(g,RP.Store(RP.Cell(sp,_,_,_,_),e,_))]) as rtl ->
         ( match sp with
         | 'B' -> conBranch (exp g) (exp e) 
-        | _   -> assert false
+        | 'G' -> conGoto   (exp e)
+        | _   -> error_rtl (U.rtl rtl)
         )
     | RP.Rtl(_) as rtl -> 
             ( List.iter prerr_endline
@@ -509,17 +547,17 @@ under mutation.
 [[Cfg]] expands all {\rtl}s of a procedure and returns [[true]], if the 
 structure of the procedure's {\cfg} had to be modified.
 
-<<tail off>>=
+<<tail>>=
 let cfg proc =
     let nodes       = GU.fold_bwd proc.Proc.cfg (fun n ns -> n::ns) []
     and tmps        = proc.Proc.temps   (* source for temporaries *)
     and insert n i  = G.gm_insert_assign_before i n
     and modified    = ref false in
     let expnd node =
-        match expand tmps (G.rtl node) with
+        match expand tmps (G.instr node) with
         | last :: preds ->
             ( ignore (List.fold_left insert node preds)
-            ; G.set_rtl node (fun _ -> last)
+            ; G.upd_instr node (fun _ -> last)
             ; modified := (preds <> [])
             )
         | [] -> assert false 
@@ -537,8 +575,8 @@ Code expansion is part of {\qcc}'s backend that is controlled by a Lua
 interpreter. To make the expander accessible for Lua code, it is
 exported as a Lua primitive [[Sparcexpand.expand]].
 
-<<tail off>>=
-module Make (ProcT: Lua.Lib.TYPEVIEW with type 'a t = Proc.t): 
+<<tail>>=
+module Lua (ProcT: Lua.Lib.TYPEVIEW with type 'a t = Proc.t): 
     Lua.Lib.TYPEFUL with type 'a combined = 'a ProcT.combined =
 struct
     type 'a combined = 'a ProcT.combined
@@ -547,7 +585,7 @@ struct
         <<export expander>>
         let init = C.register_module "Sparcexpand" builtins
     end (*M*)    
-end (*Make*)            
+end (*Lua*)            
 
 <<export expander>>=
 module V  = C.V

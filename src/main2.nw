@@ -1,7 +1,4 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
-% l2h substitution C C--
-% l2h substitution asdl ASDL
-% l2h substitution ocaml OCaml
 % vim: ts=8 et sw=4 sts=4
 % $Id$
 
@@ -15,6 +12,20 @@ catching of exceptions, and providing the exit code.
 It is executed only for side effect, so it exports an empty interface.
 
 <<main2.mli>>=
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Back End}
+% ------------------------------------------------------------------ 
+
+Because the back end is in large parts functorized it must be assembled
+before it can be used. For the lack of a better place we do it here.
+
+<<main2.ml>>=
+module Reloc             = Sledlib.MkReloc
+                            (struct type symbol = Reladdr.symbol end)
+module MSparcRtlEncoder  = Msparcenc.Mk(Reloc)
+module MSparcRtlExpander = Sparcexpander.Make (Reloc) (MSparcRtlEncoder)
 @
 
 % ------------------------------------------------------------------ 
@@ -55,15 +66,11 @@ module L1   = Lua.Lib.Combine.L10                   (* up to 10 libraries *)
                 (Linscan.Make (T.T4))
                 (IO (Luautil.MakeLib))
                 
-(***                 
+
 module L2   = Lua.Lib.Combine.L3                    (* add up to 9 more libs *)
                 (L1)
                 (Dummyexpander.Make (T.T4))
-                (Sparcexpander.Make (T.T4))
-***)
-module L2   = Lua.Lib.Combine.L2                    (* add up to 9 more libs *)
-                (L1)
-                (Dummyexpander.Make (T.T4))
+                (MSparcRtlExpander.Lua (T.T4))
 
 module I    = Lua.MakeInterp                            (* our interpreter *)
                 (Lua.Parser.MakeStandard)
@@ -225,332 +232,60 @@ let _ = try main () with e ->
 When the compiler starts, it looks for the Lua script  [[qc--.lua]] in
 the actual directory.
 
-<<qc--.lua>>=
------------------------------------------------------------------- 
--- This file is executed when the QC-- compiler starts. It is
--- stored in the Lua variable Boot["qc--.lua"].
+<<qc--.lua>>= 
+-- 
 -- $Id$
 ------------------------------------------------------------------ 
-
+-- The Lua interpreter in the qc-- compiler loads this program 
+-- at startup. Command line arguments of the qc-- compiler later call
+-- functions defined here. To obtain the actual start-up code from 
+-- the compiler, run "qc-- -script".
 ------------------------------------------------------------------ 
--- Optimizer Backplane
--- I think these functions should go into Optimize or a similar name
--- space. I also would like to see primitives like run(), seq() and
--- others to go into their own name space. --CL
+    
 ------------------------------------------------------------------ 
-
-function mkS (nm, f)
-    return { name = nm
-           , fn = f
-           } end
-
--- Here, liveness and the other second args to "mkS" are the Caml functions
--- that have been embedded into Lua.
-
-CGStages = 
-    { liveness       = mkS("liveness",      CG.liveness)
-    , build          = mkS("build",         CG.build)
-    , setColors      = mkS("setColors",     CG.setColors)
-    , makeWorklist   = mkS("makeWorklist",  CG.makeWorklist)
-    , simplify       = mkS("simplify",      CG.simplify)
-    , coalesce       = mkS("coalesce",      CG.coalesce)
-    , freeze         = mkS("freeze",        CG.freeze)
-    , selectSpill    = mkS("selectSpill",   CG.selectSpill)
-    , assignColors   = mkS("assignColors",  CG.assignColors)
-    , haveSpilledTemps = mkS("haveSpilledTemps", CG.haveSpilledTemps)
-    , resetProgram   = mkS("resetProgram",  CG.resetProgram)
-    , updateProgram  = mkS("updateProgram", CG.updateProgram)
-    , applyColors    = mkS("applyColors",   CG.applyColors)
-    , printCG        = mkS("printCG",       CG.printCG)
-    , printCFGLive   = mkS("printCFGLive",  CG.printCFGLive)
-    , pCFG           = mkS("pCFG",          CG.pCFG)
-    , linscan        = mkS("linscan",       Linscan.allocate)
-    }
-
-function makeInitInfo (colors) 
-    return CG.makeInitInfo(colors) 
-end
-
-
--- TODO:
--- The following assumes that code expander are independent of
--- the target. But they are not. We have to refactor this such
--- that choosing a target automatically implies using the right
--- expander.
-
-CodeExpandStages = 
-    { placeVars = mkS("placeVars", PV.placeVars)
-    , generic   = mkS("expander" , PV.expander)
-    , dummy     = mkS("expander" , Dummyexpand.expand)
---  , sparc     = mkS("expander" , Sparcexpand.expand)
-    }
-
-
-codeExpand = 
-    seq({ single(CodeExpandStages.placeVars)
-        , single(CodeExpandStages.generic)
-        })
-
-codeDummyExapnd = -- experimental expander for CL
-    seq({ single(CodeExpandStages.placeVars)
-        , single(CodeExpandStages.dummy)
-        })
-   
-placeVars = single(CodeExpandStages.placeVars)
-
-pcg     = ignore(single(CGStages.printCG))
-pcfg    = ignore(single(CGStages.pCFG))
-prLive  = ignore(single(CGStages.printCFGLive))
-plive   = seq({single(CGStages.liveness), single(CGStages.printCFGLive)})
-live    = single(CGStages.liveness)
-
-makeGraph = seq { single(CGStages.liveness)
-                , single(CGStages.build)
-                }
-orderVars = seq { single(CGStages.makeWorklist)
-                , fix(unless_do(single(CGStages.simplify),
-                            unless_do(single(CGStages.coalesce),
-                                unless_do(single(CGStages.freeze),
-                                    single(CGStages.selectSpill)))))
-                }
-
-function graphColoring ()
-  return
-     share(makeInitInfo(), "cgInfo",
-        seq { single(CGStages.setColors)
-            , fix (seq 
-                   {ignore(seq
-                      { makeGraph
-                      , orderVars
-                      , pcg
-                      , single(CGStages.assignColors)
-                      })
-                   , when_do( single(CGStages.haveSpilledTemps)
-                            , seq {pcg, single(CGStages.resetProgram), pcg }
-                            )
-                   } )
-            , seq { single(CGStages.updateProgram)
-                  , single(CGStages.applyColors)
-                  }
-            })
-end
-
+-- Dump (inspect Lua name space)
+-- This code comes first such that we have it available for problems
+-- with the subsequent code.
 ------------------------------------------------------------------ 
--- Optimizer
--- to use linscan: ./qc-- -e 'Default.optimizer=linscan' -c foo.c--
------------------------------------------------------------------- 
-
--- graph coloring allocator
-function graphColoringAllocator (proc) 
-    local action = seq
-        { codeExpand
-        , graphColoring()
-        } 
-    run(action, proc, {})     
-end
-
--- linear scan allocator, experimental, will be rewritten
-function linscan (proc)
-    local action = seq
-        { codeExpand
-        , single(CGStages.linscan)
-        }
-    run(action, proc, {})    
-end 
-
--- just run the code expander, for debugging
-function expand (proc)
-    local action = seq
-        { codeExpand
-        }
-    run(action, proc, {})    
-end    
-
--- run the Burg generated dummy expander -- experimental for CL
-function dummy (proc)
-    local action = seq
-        { single(CodeExpandStages.placeVars)
-        , single(CodeExpandStages.dummy)
-        } 
-    run(action, proc, {})    
-end    
-
-
--- run the Burg generated dummy expander and the GC allocator 
-function dummygc (proc)
-    local action = seq
-        { single(CodeExpandStages.placeVars)
-        , single(CodeExpandStages.dummy)
-        , graphColoring()
-        } 
-    run(action, proc, {})    
-end    
-
--- run the Burg generated dummy expander -- experimental for CL
--- function sparc (proc)
---    local action = seq
---        { single(CodeExpandStages.placeVars)
---        , single(CodeExpandStages.sparc)
---        } 
---    run(action, proc, {})    
--- end    
-        
--- just run the variable placer
-function place (proc)
-    local action = seq
-        { single(CodeExpandStages.placeVars)
-        } 
-    run(action, proc, {})    
-end    
-        
-
------------------------------------------------------------------- 
--- Driver
--- Driver contains exported OCaml function. We add some functions
--- here to make assemblers more uniform.
------------------------------------------------------------------- 
-
-function Driver.sparc_solaris(io) return Driver.sparcasm(1  ,io) end
-function Driver.sparc_sunos(io)   return Driver.sparcasm(nil,io) end
-
------------------------------------------------------------------- 
--- Defaults
------------------------------------------------------------------- 
-
-Default = Default or {}
-Default.target          = Targets.dummy          -- target
-Default.optimizer       = graphColoringAllocator --
-Default.linewidth       = 72                     -- output line width
-Default.asm             = Driver.cmmasm          -- function io -> asm
-Default.solaris         = not nil                -- nil for SunOS
-
------------------------------------------------------------------- 
--- Main
--- High-level functions the user is most likely to use
------------------------------------------------------------------- 
-
-Main = Main or {}
-
--- check 
--- check static semantics of Sys.argv[1]
-
-function Main.check () 
-    local f = Sys.argv[1]
-    if f == nil then error("Main.check: no file in Sys.argv[1]") end
-        
-    local ast = Driver.parse(f)
-    local asm = Default.asm (Driver.stdout)
-    Driver.check(ast,asm)
-end
-
--- compile
--- compile Sys.argv[1]
--- defaults: Default.target, Default.optimizer, Default.asm
-
-function Main.compile ()
-    local f = Sys.argv[1] --- should do *all* arguments!
-    if f == nil then error("Main.compile: no file in Sys.argv[1]") end
-
-    local ast = Driver.parse(f)
-    local asm = Default.asm(Driver.stdout)    
-    local env = Driver.check(ast,asm)
-    local asm = Driver.compile(Default.optimizer, ast, Default.target, env)
-    Driver.assemble(asm)
-end    
-Main.c = Main.compile -- abbreviation
-
--- dot
--- compile Sys.argv[1], output CFG as dot(1) file
--- defaults: Default.target, Default.optimizer
-
-function Main.dot ()
-    Default.asm = Driver.dotasm
-    Main.compile ()
-end    
-Main.d = Main.dot -- abbreviation
-
--- asdl assembler outout
---
-
-function Main.asdl ()
-    Default.asm = Driver.asdlasm
-    Main.compile ()
-end    
-Main.a = Main.asdl -- abbreviation
-
--- SPARC assembler output
---
-
-function Main.sparc ()
-    if Default.solaris ~= nil then 
-        Default.asm = Driver.sparc_solaris 
-    else 
-        Default.asm = Driver.sparc_sunos
-    end
-    Main.compile ()
-end    
-
--- pretty print AST
--- prints Sys.argv[1] to stdout
---
-
-function Main.pretty ()
-    local f = Sys.argv[1]
-    if f == nil then error("Main.pretty: no file in Sys.argv[1]") end
-
-    local ast = Driver.parse(f)
-    local doc = Driver.pretty(ast)
-    Driver.print(doc,Default.linewidth)
-end    
-Main.p = Main.pretty -- abbreviation
 
 -- dump
 -- dumps the entire name space of the Lua interpreter to see what is
 -- there
 
-function Main.dumptable (name,table)
+Dump = Dump or {}
+
+function Dump.vars ()
+    local s
+    local key,val = nextvar(nil)
+    while key do
+        s = format ("%-40s%s\n",key, type(val))
+        write (s)
+        if type(val) == "table" then Dump.table (key .. ".", val) end
+        key,val = nextvar(key)
+    end
+end    
+
+function Dump.table (name,table)    -- helper for Dump.vars 
     local key,val = next(table,nil)
     local s
     while key do
         s = format("%-40s%s\n", name .. key, type(val))
         write(s)
         if type(val) == "table" then 
-            Main.dumptable (name .. key .. ".", val) 
+            Dump.table (name .. key .. ".", val) 
         end
         key,val = next(table,key)
     end
 end
 
-function Main.dumpvars ()
-    local key,val = nextvar(nil)
-    local s
-    while key do
-        s = format ("%-40s%s\n",key, type(val))
-        write (s)
-        if type(val) == "table" then Main.dumptable (key .. ".", val) end
-        key,val = nextvar(key)
-    end
-end    
-
-
 -- Dump the builtin Lua script to stdout such that the user can study 
 -- and alter it.
 
-function Main.dumpscript ()
+function Dump.script ()
     write(Boot["qc--.lua"])
 end    
-@
 
 
-
-<<qc--.lua new but not working>>=
--- 
--- $Id$
------------------------------------------------------------------- 
--- The Lua interpreter in the qc-- compiler loads this program 
--- at startup. Command line arguments of the qc-- compiler later call
--- functions defined here.
------------------------------------------------------------------- 
 
 ------------------------------------------------------------------ 
 -- Backplane
@@ -615,10 +350,12 @@ CG.orderVars = seq
                                     B.single(CG.stages.selectSpill)))))
     }
 
-CG.pcg = B.ignore(B.single(CG.stages.printCG))
+CG.pcg = 
+    B.ignore(B.single(CG.stages.printCG))
 
-CG.color = B.share
-    ( CG.makeInitInfo()
+CG.color = 
+    B.share
+    ( CG.makeInitInfo ()
     , "cgInfo"
     , B.seq 
         { B.single(CG.stages.setColors)
@@ -635,15 +372,14 @@ CG.color = B.share
                     , B.seq {CG.pcg, B.single(CG.stages.resetProgram), CG.pcg }
                     )
                 } 
-            , B.seq 
-                { B.single(CG.stages.updateProgram)
-                , B.single(CG.stages.applyColors)
-                }
-            )
+            )    
+        , B.seq 
+            { B.single(CG.stages.updateProgram)
+            , B.single(CG.stages.applyColors)
+            }
+            
         }        
     )       
-
-
 
 ------------------------------------------------------------------ 
 -- Linear-Scan Register Allocator
@@ -662,26 +398,8 @@ Expand.stages =
     { placeVars = B.mk("placeVars", PV.placeVars)
     , generic   = B.mk("expander" , PV.expander)
     , dummy     = B.mk("expander" , Dummyexpand.expand)
-    -- , sparc     = B.mk("expander" , Sparcexpand.expand)
+    , sparc     = B.mk("expander" , Sparcexpand.expand)
     }
-
-Expand.generic =
-    B.seq 
-        { B.single(Expand.stages.placeVars)
-        , B.single(Expand.stages.generic)
-        }
-
--- Expand.sparc =
--- B.seq 
---    { B.single(Expand.stages.placeVars)
---    , B.single(Expand.stages.sparc)
---    }
-
-Expand.dummy =
-    B.seq 
-        { B.single(Expand.stages.placeVars)
-        , B.single(Expand.stages.dummy)
-        }
 
 ------------------------------------------------------------------ 
 -- Defaults (independent of target)
@@ -691,101 +409,91 @@ Default = Default or {}
 
 Default.linewidth = 72          -- for text assembler
 Default.solaris   = not nil     -- for sparc
-Default.allocator = CG.color
+Default.allocator = CG.color 
 
 ------------------------------------------------------------------ 
--- Targets (Defaults by target)
+-- Optimizers (target specific)
 ------------------------------------------------------------------ 
 
-Targets = Targets or {}
+Opt = Opt or {}
 
--- Targets has two primitive entries defined in OCaml: "dummy", "sparc"
+-- helper functions
 
-function Targets.opt_dummy (proc)
+-- The functions below define the different optimizer we 
+-- can use for a function.  
+
+function Opt.dummy(proc)
     local action = seq
-        { Expand.dummy
+        { B.single(Expand.stages.placeVars)
+        , B.single(Expand.stages.generic)
         , Default.allocator
         }
     B.run(action, proc, {})
 end
 
 
--- function Target.opt_sparc (proc)
---     local action = seq
---         { Expand.sparc
---         , Default.allocator
---         }
---     B.run(action, proc, {})
--- end
+function Opt.sparc(proc)
+    local action = seq
+        { B.single(Expand.stages.placeVars)
+        , B.single(Expand.stages.sparc)
+        , Default.allocator
+        }
+    B.run(action, proc, {})
+end
+
+function Opt.sparc_dbg (proc)
+    local action = seq
+        { B.single(Expand.stages.placeVars)
+        -- , B.single(Expand.stages.sparc)
+        }
+    B.run(action, proc, {})
+end
+
+------------------------------------------------------------------ 
+-- Our Targets. Each target holds an assembler back end, an optimizer
+-- and a primitive value that describes details like byte order and
+-- sizes.
+------------------------------------------------------------------ 
+
+-- Targets has two primitive entries defined in OCaml: "dummy", "sparc"
+Targets = Targets or {}
+
+-- helper function
+function Targets.sparc_asm(io) -- helper, Lua 2.5 has no lambda functions
+    return Driver.sparcasm(Default.solaris,io)
+end    
 
 Targets.Dummy =
     { asm       = Driver.cmmasm     -- function io -> asm
-    , opt       = Targets.opt_dummy
+    , opt       = Opt.dummy
     , id        = Targets.dummy
     }
 
 Targets.Sparc =
-    { asm       = Driver.cmmasm
-    , opt       = Targets.opt_sparc
+    { asm       = Targets.sparc_asm
+    , opt       = Opt.sparc
     , id        = Targets.sparc
     }
     
+Targets.SparcDbg =
+    { asm       = Driver.cmmasm
+    , opt       = Opt.sparc_dbg
+    , id        = Targets.sparc
+    }
+
 Targets.Dot =
     { asm       = Driver.dotasm
-    , opt       = Targets.opt_dummy
+    , opt       = Opt.dummy_opt
     , id        = Targets.dummy
     }
 
 Targets.Asdl =
     { asm       = Driver.asdlasm
-    , opt       = Targets.opt_dummy
+    , opt       = Opt.dummy
     , id        = Targets.dummy
     }
 
 Targets.Default  = Targets.Dummy
-
-    
------------------------------------------------------------------- 
--- Dump (inspect Lua name space)
------------------------------------------------------------------- 
-
--- dump
--- dumps the entire name space of the Lua interpreter to see what is
--- there
-
-Dump = Dump or {}
-
-function Dump.vars ()
-    local s
-    local key,val = nextvar(nil)
-    while key do
-        s = format ("%-40s%s\n",key, type(val))
-        write (s)
-        if type(val) == "table" then Dump.table (key .. ".", val) end
-        key,val = nextvar(key)
-    end
-end    
-
-function Dump.table (name,table)    -- helper for Dump.vars 
-    local key,val = next(table,nil)
-    local s
-    while key do
-        s = format("%-40s%s\n", name .. key, type(val))
-        write(s)
-        if type(val) == "table" then 
-            Dump.table (name .. key .. ".", val) 
-        end
-        key,val = next(table,key)
-    end
-end
-
--- Dump the builtin Lua script to stdout such that the user can study 
--- and alter it.
-
-function Dump.script ()
-    write(Boot["qc--.lua"])
-end    
-
 
 ------------------------------------------------------------------ 
 -- Main
@@ -798,7 +506,9 @@ Main.Util = {} -- keep Main clean for command line options
 
 function Main.Util.getfile ()
     if Sys.argv[1] == nil then
-        error ("expected file on command line missing")
+        error ("expected file on command is line missing")
+    elseif Sys.argv[1] ~= nil and Sys.argv[2] ~= nil then
+        error ("cannot compile more than one file at a time")
     else
         return Sys.argv[1]
     end
@@ -807,7 +517,7 @@ end
 function Main.Util.cc (target,file) -- compile file
     local ast = Driver.parse(file) 
     local asm = target.asm(Driver.stdout) 
-    local env = Driver.check(ast,asm) 
+    local env = Driver.check(ast,asm) -- asm is stored in env
     local asm = Driver.compile(target.opt, ast, target.id, env)
     Driver.assemble(asm)
 end    
