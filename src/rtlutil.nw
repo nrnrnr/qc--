@@ -287,7 +287,7 @@ end
 % ------------------------------------------------------------------ 
 
 <<Width>>=   
-let loc l = match (Rtl.Convert.loc l) with
+let loc l = match (Rtl.Dn.loc l) with
     | RP.Mem(_,_,w,_,_)     -> w
     | RP.Reg(_,_,w)         -> w
     | RP.Var(_,_,w)         -> w
@@ -299,14 +299,14 @@ its implementation. We have to look it up for expressions that have an
 application on the outermost level.
 
 <<Width>>=
-let exp e = match Rtl.Convert.exp e with
+let exp e = match Rtl.Dn.exp e with
     | RP.Const(RP.Bool _)     -> assert false
     | RP.Const(RP.Bits b)     -> Bits.width b
     | RP.Const(RP.Link (_,w)) -> w
     | RP.Const(RP.Late (_,w)) -> w
     | RP.Fetch(_,w)           -> w
     | RP.App (op,_)           -> 
-        ( match snd (Rtlop.Types.mono (Rtl.Revert.opr op)) with
+        ( match snd (Rtlop.Types.mono (Rtl.Up.opr op)) with
         | Types.Bits(n) -> n
         | Types.Bool    -> assert false 
         ) 
@@ -455,8 +455,8 @@ let singleAssignment rtl =
     let rec firstAssignment rtls = match rtls with
     | [] -> (None, [])
     | (RP.Const(RP.Bool true), RP.Store(loc1, RP.Fetch(loc2, _), _))::rst ->
-        (try (Some (Register.of_loc (Rtl.Revert.loc loc1),
-                    Register.of_loc (Rtl.Revert.loc loc2)),
+        (try (Some (Register.of_loc (Rtl.Up.loc loc1),
+                    Register.of_loc (Rtl.Up.loc loc2)),
               rst)
         with Invalid_argument _ -> (None, []))
     | _::rst -> firstAssignment rst in
@@ -467,7 +467,7 @@ let singleAssignment rtl =
     | _ -> false in
     let rec allKills rtls = List.for_all isKill rtls in
 
-    let (assign, rst) = getFirstAssignment (Rtl.Convert.rtl rtl) in
+    let (assign, rst) = getFirstAssignment (Rtl.Dn.rtl rtl) in
         match assign with
         | Some _ when allKills rst -> assign
         | _ -> None
@@ -568,8 +568,8 @@ and location' = function
     
 
 let (<<) f g  = fun x -> f (g x)
-let expr       = expr'     << Rtl.Convert.exp
-let location   = location' << Rtl.Convert.loc
+let expr       = expr'     << Rtl.Dn.exp
+let location   = location' << Rtl.Dn.loc
 
 @
 
@@ -578,7 +578,7 @@ A [[kill]] is translated into an assignment of [[%undef()]].
 <<ToAST>>=
 let rec effect guard = function
     | R.Kill   loc       -> 
-        let width = Width.loc  (Rtl.Revert.loc loc)       in
+        let width = Width.loc  (Rtl.Up.loc loc)       in
         let undef = R.App(("undef",[width]),[]) in
             effect guard (R.Store(loc, undef, width))
     | R.Store  (loc,e,w) ->
@@ -597,7 +597,7 @@ let rtl' (R.Rtl gg) =
     let pairs    = List.map (guarded ) gg in
     let lhs, rhs = List.split pairs             in
         A.AssignStmt(lhs,rhs)
-let rtl = rtl' << Rtl.Convert.rtl
+let rtl = rtl' << Rtl.Dn.rtl
 @
 % ------------------------------------------------------------------ 
 \subsection{Conversion to Readable String}
@@ -649,8 +649,8 @@ and location' = function
         location' loc ^ "@[" ^ string_of_int i ^ ".." ^ string_of_int (i+w-1) ^ "]"
     
 let (<<) f g  = fun x -> f (g x)
-let expr       = expr'     << Rtl.Convert.exp
-let loc = location' << Rtl.Convert.loc
+let expr       = expr'     << Rtl.Dn.exp
+let loc = location' << Rtl.Dn.loc
 @
 
 A [[kill]] is translated into an assignment of [[%undef()]].
@@ -669,7 +669,7 @@ let rtl' (R.Rtl gg) =
   match gg with
   | [] -> "skip"
   | _ :: _ -> join " | " (List.map guarded gg)
-let rtl = rtl' << Rtl.Convert.rtl
+let rtl = rtl' << Rtl.Dn.rtl
 let exp = expr
 @
 
@@ -767,18 +767,18 @@ let rtl' (RP.Rtl x) =
     apply "Rtl" (List.map guarded x)
     
 let rtl r =
-    let pp = rtl' (R.Convert.rtl r) in
+    let pp = rtl' (R.Dn.rtl r) in
         Pp.ppToString 66 (* line width *) pp
 
 let exp e =
-    let pp = exp (R.Convert.exp e) in
+    let pp = exp (R.Dn.exp e) in
         Pp.ppToString 66 (* line width *) pp
 @
 
 \subsection{Aliasing}
 First code is not used but is to show how it should be done.
 <<rtlutil.ml>>=
-module Down = Rtl.Convert
+module Down = Rtl.Dn
 module MayAlias = struct
 
   let cells (s, i, w) = Impossible.unimp "cell counts for registers"

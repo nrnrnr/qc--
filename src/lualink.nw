@@ -215,7 +215,9 @@ let init g =
                                      **-> V.result Map.env)   Driver2.check
     ; "emit_asdl" , V.efunc (Map.ast **-> V.runit)            Driver2.emit_asdl
     ; "parse"     , V.efunc (V.string**-> V.result Map.ast)   Driver2.parse
-    ; "print"     , V.efunc (Map.doc **-> V.int **-> V.runit) Driver2.print
+    ; "print"     , V.efunc (Map.doc **-> V.int 
+                                     **-> Map.outchan
+                                     **-> V.runit)            Driver2.print
     ; "pretty"    , V.efunc (Map.ast **-> V.result Map.doc)   Driver2.pretty
     ; "scan"      , V.efunc (V.string**-> V.runit)            Driver2.scan
     ; "version"   , V.efunc (V.unit  **-> V.runit)            Driver2.version
@@ -270,12 +272,9 @@ let init g =
     [ "proc",       V.efunc (V.value **-> Map.proc **-> V.result V.int)
                             (fun _ proc -> Typecheck.proc proc; 1)
     ] g;                        
-  C.register_module "Export" 
-    [ "tolua",       V.efunc (V.value **-> Map.proc **-> V.result V.int)
-                    (fun _ proc -> 
-                        let cfg = proc.Proc.cfg 
-                        in Cfg4.interp cfg stdout;1)
-                        
+ C.register_module "Boot" 
+    [ "qc--.lua",   V.String                            This.boot
+    ; "version",    V.efunc (Map.outchan **-> V.runit)  This.version
     ] g;                        
   
   Lua.Lib.StringList.of_list [ <<lua initialization>> ]

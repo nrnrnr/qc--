@@ -113,6 +113,8 @@ $base           = ".";                  # option: -base="/some/where"
 $syntaxcheck    = 1;                    # option: -nosyntax
 $target         = undef;                # option: -target=t
 $file           = undef;                # foo.c-- without suffix .c-- 
+$cflag          = 0;                    # option: -c
+$sflag          = 0;                    # option: -S
 @
 
 The test script is broken into sub routines. A sub routine never exists
@@ -174,8 +176,8 @@ on standard output and standard error that equals the contents of file
 <<testqc>>=
 sub expect {
     my ($cmd, $stdin, $stdout, $stderr) = @_;
-    my $t1 = "$tmp.1";
-    my $t2 = "$tmp.2";
+    my $t1 = "$tmp.4";
+    my $t2 = "$tmp.5";
     my $rc;
    
     unless (-f $stdout && -f $stderr) { 
@@ -229,32 +231,18 @@ sub run {
     my $files1      = "$tstdir/$file.s1";   # expected compiler stdout
     my $files2      = "$tstdir/$file.s2";   # expected compiler stderr
         
-    # compile file to assembly code $ts, capture compiler output
-    # Currently qc-- does not have the right command line interface
-    # $cmd = "$qc -target=$target -o $ts -S $filec";
-
-    my $qctarget;   # option for qc-- that sets target
-    
-    if      ($target eq "x86/linux")    { $qctarget="backend=Backend.x86" }
-    elsif   ($target eq "dummy")        { $qctarget="backend=Backend.old" }
-    elsif   ($target eq "sparc")        { $qctarget="backend=Backend.sparc" }
-    else    { die "don't know how to translate $target" }
-    
-    $cmd = "$qc $qctarget -c $filec";
+    $cmd = "$qc backend=Backend.$target -o $ts -S $filec";
     expect ($cmd, "/dev/null", $files1, $files2) || return 0; #failed
 
-    # if we have no $ts file at this point, we are done
-    -f $ts || return 1; # success
-    
     # check for equality of $ts file, done if equal
     same($files, $ts) && return 1; # success
 
-    # Currently the qc-- does not assemble and link so we simply fail
+    # Currently qc-- does not assemble and link so we simply fail
     # here.
     return 0; # failed
     
     # assemble and link $ts file to $tx. no compiler output expected
-    $cmd = ": $qc -target=$target -o $tx";
+    $cmd = "$qc backend=$target -o $tx";
     expect ($cmd, "/dev/null", "/dev/null", "/dev/null") || return 0; #failed
 
     # run $tx file, compare for expected output
@@ -291,11 +279,14 @@ foreach (@ARGV) {
     elsif   (/^-base=(.*)$/)    { $base=$1;         }
     elsif   (/^-target=(.*$)/)  { $target=$1;       }
     elsif   (/^-nosyntax/)      { $syntaxcheck=0;   }
+    elsif   (/^-c/)             { $cflag=1;         }
+    elsif   (/^-S/)             { $sflag=1;         }
     else                        { $asm=$_           }
 }
 
-defined($asm)    or die "missing case argument: ..src/file.c--";
-defined($target) or die "missing -target=arch/os specification"; 
+defined($asm)      or die "missing case argument: ..src/file.c--";
+defined($target)   or die "missing -target=arch/os specification"; 
+$cflag and $cflag and die "can't have -c and -S together";
 
 $file = basename($asm,".c--");
 

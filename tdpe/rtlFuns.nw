@@ -75,7 +75,7 @@ let widthPrivate loc =
     RP.Cell(space, aggregation, width, exp, assertion) -> width
   | _ -> raise NoWay
 
-let width x = widthPrivate (Rtl.Convert.loc x)
+let width x = widthPrivate (Rtl.Dn.loc x)
     
 @ To note the implementation of [[foldLocsUsed]]. When we meet a
 location, we apply the folded function to it and we also descend into
@@ -92,7 +92,7 @@ let rec foldLocation f location zero =
 and foldExp f exp zero =
   match exp with
     RP.Const _ -> zero |
-    RP.Fetch (location,_) -> foldLocation f location (f (Rtl.Revert.loc location) zero) |
+    RP.Fetch (location,_) -> foldLocation f location (f (Rtl.Up.loc location) zero) |
     RP.App(op,exlist) ->
       List.fold_left (fun zero ex -> foldExp f ex zero) zero exlist
 
@@ -105,7 +105,7 @@ let foldGuarded f (ex,eff) zero =
   foldExp f ex (foldEff f eff zero)
 
 let foldLocsUsed f rtl zero =
-  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  let (RP.Rtl gl) = Rtl.Dn.rtl rtl in
   List.fold_left (fun zero g -> foldGuarded f g zero) zero gl
 
 let rec foldLocationW f location zero =
@@ -117,7 +117,7 @@ and foldExpW f exp zero =
     RP.Const _ -> zero |
     RP.Fetch (location,width) ->
       foldLocationW f location
-	(f ((Rtl.Revert.loc location),width) zero) |
+	(f ((Rtl.Up.loc location),width) zero) |
     RP.App(op,exlist) ->
       List.fold_left (fun zero ex -> foldExpW f ex zero) zero exlist
         
@@ -130,7 +130,7 @@ let foldGuardedW f (ex,eff) zero =
   foldExpW f ex (foldEffW f eff zero)
     
 let foldLocsUsedW f rtl zero =
-  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  let (RP.Rtl gl) = Rtl.Dn.rtl rtl in
   List.fold_left (fun zero g -> foldGuardedW f g zero) zero gl
 
 @ [[foldTopLocsUsed]] applies a function [[f]] to the locations used by
@@ -141,7 +141,7 @@ the indexing expression of a ``top location''.
 let rec foldTopExp f exp zero =
   match exp with
     RP.Const _ -> zero |
-    RP.Fetch (location,_) -> f (Rtl.Revert.loc location) zero |
+    RP.Fetch (location,_) -> f (Rtl.Up.loc location) zero |
     RP.App(op,exlist) ->
       List.fold_left (fun zero ex -> foldTopExp f ex zero) zero exlist
 
@@ -154,13 +154,13 @@ let foldTopGuarded f (ex,eff) zero =
   foldTopExp f ex (foldTopEff f eff zero)
 
 let foldTopLocsUsed f rtl zero =
-  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  let (RP.Rtl gl) = Rtl.Dn.rtl rtl in
   List.fold_left (fun zero g -> foldTopGuarded f g zero) zero gl
 
 let rec foldTopExpW f exp zero =
   match exp with
     RP.Const _ -> zero |
-    RP.Fetch (location,width) -> f ((Rtl.Revert.loc location),width) zero |
+    RP.Fetch (location,width) -> f ((Rtl.Up.loc location),width) zero |
     RP.App(op,exlist) ->
       List.fold_left (fun zero ex -> foldTopExpW f ex zero) zero exlist
         
@@ -173,7 +173,7 @@ let foldTopGuardedW f (ex,eff) zero =
   foldTopExpW f ex (foldTopEffW f eff zero)
     
 let foldTopLocsUsedW f rtl zero =
-  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  let (RP.Rtl gl) = Rtl.Dn.rtl rtl in
   List.fold_left (fun zero g -> foldTopGuardedW f g zero) zero gl
 
 @ Now, the implementation of [[foldLocsDefined]]. The locations
@@ -183,26 +183,26 @@ considered to be defined includes the ones that are killed as well.
 
 let foldEffDef f eff zero =
   match eff with
-    RP.Store(location,e,_) -> f (Rtl.Revert.loc location) zero
-  | RP.Kill location -> f (Rtl.Revert.loc location) zero
+    RP.Store(location,e,_) -> f (Rtl.Up.loc location) zero
+  | RP.Kill location -> f (Rtl.Up.loc location) zero
 
 let foldGuardedDef f (ex,eff) zero =
   foldEffDef f eff zero
 
 let foldLocsDefined f rtl zero =
-  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  let (RP.Rtl gl) = Rtl.Dn.rtl rtl in
   List.fold_left (fun zero g -> foldGuardedDef f g zero) zero gl
 
 let foldEffDefW f eff zero =
   match eff with
-    RP.Store(location,e,width) -> f ((Rtl.Revert.loc location),width) zero
-  | RP.Kill location -> f ((Rtl.Revert.loc location), widthPrivate location) zero
+    RP.Store(location,e,width) -> f ((Rtl.Up.loc location),width) zero
+  | RP.Kill location -> f ((Rtl.Up.loc location), widthPrivate location) zero
 
 let foldGuardedDefW f (ex,eff) zero =
   foldEffDefW f eff zero
 
 let foldLocsDefinedW f rtl zero =
-  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  let (RP.Rtl gl) = Rtl.Dn.rtl rtl in
   List.fold_left (fun zero g -> foldGuardedDefW f g zero) zero gl
 
 @ [[foldLocsAssg]] applies a function to the locations assigned by an
@@ -210,26 +210,26 @@ let foldLocsDefinedW f rtl zero =
 <<rtlFuns.ml>>=
 let foldEffAssg f eff zero =
   match eff with
-    RP.Store(location,e,_) -> f (Rtl.Revert.loc location) zero
+    RP.Store(location,e,_) -> f (Rtl.Up.loc location) zero
   | RP.Kill _ -> zero
 
 let foldGuardedAssg f (ex,eff) zero =
   foldEffAssg f eff zero
 
 let foldLocsAssg f rtl zero =
-  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  let (RP.Rtl gl) = Rtl.Dn.rtl rtl in
   List.fold_left (fun zero g -> foldGuardedAssg f g zero) zero gl
 
 let foldEffAssgW f eff zero =
   match eff with
-    RP.Store(location,e,width) -> f ((Rtl.Revert.loc location),width) zero
+    RP.Store(location,e,width) -> f ((Rtl.Up.loc location),width) zero
   | RP.Kill _ -> zero
 
 let foldGuardedAssgW f (ex,eff) zero =
   foldEffAssgW f eff zero
 
 let foldLocsAssgW f rtl zero =
-  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  let (RP.Rtl gl) = Rtl.Dn.rtl rtl in
   List.fold_left (fun zero g -> foldGuardedAssgW f g zero) zero gl
 
 @ All locations
@@ -242,20 +242,20 @@ let rec foldAllLocation f location zero =
 and foldAllExp f exp zero =
   match exp with
     RP.Const _ -> zero |
-    RP.Fetch (location,_) -> foldAllLocation f location (f (Rtl.Revert.loc location) zero) |
+    RP.Fetch (location,_) -> foldAllLocation f location (f (Rtl.Up.loc location) zero) |
     RP.App(op,exlist) ->
       List.fold_left (fun zero ex -> foldAllExp f ex zero) zero exlist
 
 let foldAllEff f eff zero =
   match eff with
-    RP.Store(location,e,_) -> foldAllExp f e (f (Rtl.Revert.loc location) zero) |
-    RP.Kill l -> foldAllLocation f l (f (Rtl.Revert.loc l) zero)
+    RP.Store(location,e,_) -> foldAllExp f e (f (Rtl.Up.loc location) zero) |
+    RP.Kill l -> foldAllLocation f l (f (Rtl.Up.loc l) zero)
 
 let foldAllGuarded f (ex,eff) zero =
   foldAllExp f ex (foldAllEff f eff zero)
 
 let foldAllLocsUsed f rtl zero =
-  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  let (RP.Rtl gl) = Rtl.Dn.rtl rtl in
   List.fold_left (fun zero g -> foldAllGuarded f g zero) zero gl
 
 let rec foldAllLocationW f location zero =
@@ -267,7 +267,7 @@ and foldAllExpW f exp zero =
     RP.Const _ -> zero
   | RP.Fetch (location,width) ->
       foldAllLocationW f location
-	(f ((Rtl.Revert.loc location),width) zero)
+	(f ((Rtl.Up.loc location),width) zero)
   | RP.App(op,exlist) ->
       List.fold_left (fun zero ex -> foldAllExpW f ex zero) zero exlist
         
@@ -280,7 +280,7 @@ let foldAllGuardedW f (ex,eff) zero =
   foldAllExpW f ex (foldAllEffW f eff zero)
     
 let foldAllLocsUsedW f rtl zero =
-  let (RP.Rtl gl) = Rtl.Convert.rtl rtl in
+  let (RP.Rtl gl) = Rtl.Dn.rtl rtl in
   List.fold_left (fun zero g -> foldAllGuardedW f g zero) zero gl
 
     

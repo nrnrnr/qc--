@@ -36,8 +36,8 @@ exception IDontKnowYet
 <<rtlMerge.ml>>=
 
 let frwdMerge rtlP1 rtlP2 isDead =
-  let (R.Rtl rtl1) = Rtl.Convert.rtl rtlP1 in
-  let (R.Rtl rtl2) = Rtl.Convert.rtl rtlP2 in
+  let (R.Rtl rtl1) = Rtl.Dn.rtl rtlP1 in
+  let (R.Rtl rtl2) = Rtl.Dn.rtl rtlP2 in
 
 @ [[constWithinDiff]] establishes if two intervals intersect. Each
 interval is defined by a constant and a length.  Returns [[false]] if
@@ -95,14 +95,14 @@ Note: for the moment we ignore guards.
   let removeDeadEffs eff rtl =
     match eff with
       (_,R.Store(l,_,_)) ->   (* should I take care of widths? *)
-        if isDead (Rtl.Revert.loc l) then rtl
+        if isDead (Rtl.Up.loc l) then rtl
         else eff::rtl
     | (_,R.Kill _) -> eff::rtl in
 
   let effsCkech eff rtl =
     match eff with
       (g,R.Store(l,_,_)) ->   (* should I take care of widths? *)
-        if isDead (Rtl.Revert.loc l) then rtl
+        if isDead (Rtl.Up.loc l) then rtl
         else eff::rtl
     | (_,R.Kill _) -> eff::rtl in
 
@@ -123,7 +123,7 @@ in [[rtl']]
   let locTopUsedRtl1 = RtlFuns.foldTopLocsUsedW (fun l ls -> l::ls) rtlP1 [] in
   let locUsedRtl1 = RtlFuns.foldTopLocsUsedW (fun l ls -> l::ls) rtlP1 [] in
   let liveRtl2 = List.fold_right removeDeadEffs rtl2 [] in
-  let liveRtlP2 = Rtl.Revert.rtl (R.Rtl liveRtl2) in
+  let liveRtlP2 = Rtl.Up.rtl (R.Rtl liveRtl2) in
   let locUsedLiveRtl2 = RtlFuns.foldAllLocsUsedW (fun l ls -> l::ls) liveRtlP2 [] in
   
   let locAssgRtl1 = RtlFuns.foldLocsDefinedW (fun l ls -> l::ls) rtlP1 [] in
@@ -131,23 +131,23 @@ in [[rtl']]
 
   let ok = if List.exists
       (fun (locBefore,w1) -> 
-        let locBefore = Rtl.Convert.loc locBefore in
+        let locBefore = Rtl.Dn.loc locBefore in
         List.exists
           (fun (locAfter,w2) ->
-            let locAfter = Rtl.Convert.loc locAfter in
+            let locAfter = Rtl.Dn.loc locAfter in
             mayOverlap (locBefore,w1) (locAfter,w2)) locUsedRtl1) locAssgLiveRtl2
   then false
   else
     List.exists
       (fun (locBefore,w1) ->
-        let locBefore = Rtl.Convert.loc locBefore in
+        let locBefore = Rtl.Dn.loc locBefore in
         List.exists
           (fun (locAfter,w2) ->
-            let locAfter = Rtl.Convert.loc locAfter in
+            let locAfter = Rtl.Dn.loc locAfter in
             mayOverlap (locBefore,w1) (locAfter,w2)) locAssgRtl1) locUsedLiveRtl2
 
   in
-  if ok then Some (Rtl.Revert.rtl (R.Rtl (rtl1@liveRtl2)))
+  if ok then Some (Rtl.Up.rtl (R.Rtl (rtl1@liveRtl2)))
   else None
 
 @ The end

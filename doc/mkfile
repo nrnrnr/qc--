@@ -1,4 +1,5 @@
 #
+# Manual pages, developer documentation, general musings
 #
 
 TOP     = ..
@@ -12,8 +13,39 @@ NOWEAVE = noweave
 PS =            cfg.ps better.ps working.ps newtarget.ps modules.ps \
                 backend.ps refactor.ps qc--.ps qc--internals.ps	
 
-all:V:          $PS
+# ------------------------------------------------------------------ 
+# High level targets
+# ------------------------------------------------------------------ 
 
+all:V:          man $PS
+
+man:V:          qc--.1 qc--internals.1
+
+update:V:       man 
+                cp qc--.1           $TOP/man/man1
+                cp qc--internals.1  $TOP/man/man1
+
+update.opt:V:   update
+
+clean:V:
+                rm -f *.dvi *.aux *.log *.toc *.ps               
+                rm -f cfg.tex modules.ps*
+                rm -f stack.tex stack.inc
+		rm -f refactor.tex refactor.inc
+                rm -f qc--.1 qc--internals.1
+
+
+clean.opt:  
+                echo "nothing to do for $target"
+                
+clobber:V:      clean                
+
+depend:V:       
+                echo "nothing to do for $target"
+
+# ------------------------------------------------------------------ 
+# The details
+# ------------------------------------------------------------------ 
 
 '^'(cfg|refactor)'\.'tex'$':RD:        '\1'.nw
                 $NOWEAVE -delay $prereq > $target 
@@ -30,9 +62,3 @@ qc--.ps:        qc--.1
 qc--internals.ps:   qc--internals.1
                 groff -man -Tps qc--internals.1 > $target 
 
-clean:V:
-                rm -f *.dvi *.aux *.log *.toc *.ps               
-                rm -f cfg.tex modules.ps*
-                rm -f stack.tex stack.inc
-		rm -f refactor.tex refactor.inc
-                rm -f qc--.1 qc--internals.1

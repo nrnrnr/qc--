@@ -57,16 +57,8 @@ DEPEND =    DEPEND.$INTERP
 all:V:      $NAME       qc--.lua
 all.opt:V:  $NAME.opt   qc--.lua
 
-update:V:   $BINDIR/$NAME                 \
-            $MANDIR/man1/$NAME.1          \
-            $MANDIR/man1/${NAME}grammar.1 
-
-update.opt:V: $BINDIR/$NAME.opt            \
-            $MANDIR/man1/$NAME.1           \
-            $MANDIR/man1/${NAME}grammar.1 
-
-dvi:V:      $NAME.dvi
-ps:V:       $NAME.ps
+update:V:   $BINDIR/$NAME     
+update.opt:V: $BINDIR/$NAME.opt
 
 depend:V:   $DEPEND
 
@@ -77,7 +69,7 @@ test:VQ:
             exit 1
 
 tx:VQ: update
-	cd ../test; mk $MKFLAGS test
+	    cd ../test; mk $MKFLAGS test
 
 dtest:V:
             ./qc-- backend=Backend.x86 -c test2.c--
@@ -148,7 +140,7 @@ ML =            topsort.ml       \
                 rtldebug.ml      \
                 rtltolua.ml      \
                 cfg4.ml          \
-		cfg.ml		\
+		cfg.ml		 \
                 cfgutil.ml       \
 		postexpander.ml	 \
                 expander.ml      \
@@ -320,13 +312,6 @@ $BINDIR/$NAME:          $NAME
 $BINDIR/$NAME.opt:      $NAME.opt
                         cp $prereq $target
 
-$MANDIR/man1/$NAME.1:   $NAME.1
-                        cp $prereq $target
-
-$MANDIR/man1/${NAME}grammar.1:   ${NAME}grammar.1
-                        cp $prereq $target
-
-
 # ------------------------------------------------------------------
 # LaTeX documentation
 # ------------------------------------------------------------------
@@ -335,8 +320,6 @@ $MANDIR/man1/${NAME}grammar.1:   ${NAME}grammar.1
 HTML =          `echo *.nw                             | sed 's/\.nw/.html/g'`
 INC  =          `echo *.nw  ../cllib/*.nw ../test/*.nw | sed 's/\.nw/.inc/g'`
 
-
-$NAME.dvi:      $INC
 
 html:V:         $HTML 
 
@@ -384,9 +367,9 @@ this.mli:D:     main2.nw
                 $NOTANGLE -L"$LINE" -R$target $prereq > $target
 this.in:D:      main2.nw
                 $NOTANGLE -L"$LINE" -R$target $prereq > $target
-qc--.lua:D:     main2.nw colorgraph.nw
-                $NOTANGLE -L'$file "%F"%N$line %L%N' -R$target $prereq > $target
 
+qc--.lua:D:     luadriver.nw
+                $NOTANGLE -L'$file "%F"%N$line %L%N' -R$target $prereq > $target
 
 astpp.mli:D:    ast.nw
                 $NOTANGLE -L"$LINE" -R$target $prereq > $target
@@ -399,19 +382,6 @@ scan.mll:D:     parser.nw
                 $NOTANGLE -R$target $prereq > $target
 scan.mli:D:     parser.nw
                 $NOTANGLE -L"$LINE" -R$target $prereq > $target
-
-#
-# include the yacc grammar in the manual for reference
-#
-
-$NAME.pod:D:    main2.nw 
-    $NOTANGLE -R$target $prereq > $target
-
-${NAME}grammar.pod:D:    main2.nw parse.output
-    $NOTANGLE  -R$target $prereq > $target
-    echo '/##grammar##/d
-    .r !grep "^  *[0-9]" parse.output
-    wq' | ed ${NAME}grammar.pod
 
 # ------------------------------------------------------------------ 
 # MLburg generated files

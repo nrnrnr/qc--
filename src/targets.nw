@@ -50,8 +50,8 @@ output and must be visible in {\ocaml}.
 module A  = Automaton2
 module AM = Automaton2.Memory
 module R  = Rtl
-module D  = Rtl.Convert (* Down *)
-module U  = Rtl.Revert  (* Up *)
+module D  = Rtl.Dn (* Down *)
+module U  = Rtl.Up  (* Up *)
 module RP = Rtl.Private
 module S  = Space
 module T  = Target2
@@ -289,8 +289,8 @@ let spaces =
 (* this is total nonsense - it's just for toying around *)
 
 let goto_embed e     = assign pc e
-let goto_project rtl = match R.Convert.rtl rtl with
-    | RP.Rtl([(_,RP.Store(loc,exp,width))]) -> R.Revert.exp exp
+let goto_project rtl = match R.Dn.rtl rtl with
+    | RP.Rtl([(_,RP.Store(loc,exp,width))]) -> R.Up.exp exp
     | _                                     -> assert false
 
 
@@ -300,9 +300,9 @@ let goto =
     }
 
 let branch_embed (e,addr) = R.guard e (assign pc addr)
-let branch_project rtl  = match R.Convert.rtl rtl with
-    | RP.Rtl([(e,RP.Store(loc,addr,width))]) -> ( R.Revert.exp e
-                                                , R.Revert.exp addr
+let branch_project rtl  = match R.Dn.rtl rtl with
+    | RP.Rtl([(e,RP.Store(loc,addr,width))]) -> ( R.Up.exp e
+                                                , R.Up.exp addr
                                                 )
     | _                                      -> assert false
 
@@ -430,9 +430,9 @@ The [[cc]] value describes a calling convention. It is just a toy and
 probably is not good for anything.
 
 <<DummyTarget>>=
-let downrtl = R.Convert.rtl
-let uploc   = R.Revert.loc
-let upexp   = R.Revert.exp
+let downrtl = R.Dn.rtl
+let uploc   = R.Up.loc
+let upexp   = R.Up.exp
 let cc =
     { T.sp              = reg 31
     ; T.return          = assign pc (R.fetch (mem (R.fetch (reg 31) 32)) 32)

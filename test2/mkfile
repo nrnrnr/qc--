@@ -36,7 +36,7 @@ TOP =           ..
 
 QC =            $TOP/bin/qc--
 TESTS =         `echo src/*.c--`
-TARGETS =       x86/linux dummy
+TARGETS =       x86 dummy
 
 # flags passed to the test script. See testqc.nw for documentation.
 
@@ -49,10 +49,10 @@ TESTFLAGS =
 # *-record       - update test cases for a target; use with care
 # ------------------------------------------------------------------ 
 
-all:V:              dummy-test x86linux-test
+all:V:              dummy-test x86-test
 
 dummy-record:V:     ${TESTS:src/%.c--=dummy/%.s} 
-x86linux-record:V:  ${TESTS:src/%.c--=x86/linux/%.s} 
+x86-record:V:       ${TESTS:src/%.c--=x86/%.s} 
 
 clean:V:            
                     rm -f *.dvi *.log *.aux *.inc *.tex *.toc
@@ -73,7 +73,7 @@ clobber:V:          clean
 
 %.record:V:     %.c-- 
                 for t in $TARGETS; do
-                    mk $t/`basename $stem`.s
+                    mk $MKFLAGS $t/`basename $stem`.s
                 done    
 
 # ------------------------------------------------------------------ 
@@ -89,11 +89,11 @@ dummy-test:QV:  testqc
                 done
                 echo 
 
-x86linux-test:QV:  testqc
-                echo "# testing target x86/linux"
+x86-test:QV:    testqc
+                echo "# testing target x86"
                 echo -n "# "
                 for f in $TESTS; do
-                    ./testqc $TESTFLAGS -target=x86/linux $f
+                    ./testqc $TESTFLAGS -target=x86 $f
                     echo -n '.'
                 done
                 echo
@@ -115,17 +115,19 @@ testqc:D:       testqc.nw
 
 dummy/%.s:      src/%.c--
                 t="dummy"
-                b="backend=Backend.old"
-                $QC $b -c ./src/$stem.c-- 2> $t/$stem.s2 > $t/$stem.s1 || true
+                b="backend=Backend.dummy"
+                cmd="$QC $b -S -o $t/$stem.s ./src/$stem.c--"
+                $cmd 2> $t/$stem.s2 > $t/$stem.s1 || true 
                 touch $t/$stem.s
                 touch $t/$stem.1
                 touch $t/$stem.2
                 touch src/$stem.0
 
-x86/linux/%.s:  src/%.c--
-                t="x86/linux"
+x86/%.s:        src/%.c--
+                t="x86"
                 b="backend=Backend.x86"
-                $QC $b -c ./src/$stem.c-- 2> $t/$stem.s2 > $t/$stem.s1 || true
+                cmd="$QC $b -S -o $t/$stem.s ./src/$stem.c--"
+                $cmd 2> $t/$stem.s2 > $t/$stem.s1 || true 
                 touch $t/$stem.s
                 touch $t/$stem.1
                 touch $t/$stem.2

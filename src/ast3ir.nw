@@ -75,8 +75,8 @@ module IO = Copyinout.Make(G)
 module R  = Rtl
 module RP = Rtl.Private
 module RU = Rtlutil
-module U  = Rtl.Revert
-module D  = Rtl.Convert
+module U  = Rtl.Up
+module D  = Rtl.Dn
 
 <<Make expressions>>
 <<Make constant evaluation>>
@@ -682,7 +682,7 @@ and guard state succ fail e =
         let ortl  = state.target.Target.goto.Target.embed oexp in
         let fail  = G.gm_goto state.cfg ortl [G.lookup state.cfg fl] in
         
-        let e     = R.Revert.exp e in
+        let e     = R.Up.exp e in
         let link  = Rtl.link ss state.target.Target.pointersize in
         let rtl   = state.target.Target.branch.Target.embed (e,link)  in
             G.gm_branch state.cfg rtl succ fail 
@@ -744,7 +744,7 @@ and ifStmt spans state (e,ifso,ifnot) =
     let l2goto = G.gm_goto state.cfg l2rtl [G.lookup state.cfg l_join] in
     let ifnot  = foldr (body spans) ifnot {ifso with node = l2goto} in
     
-    let e      = R.Convert.exp (expr state.env state.target e) in
+    let e      = R.Dn.exp (expr state.env state.target e) in
         guard ifnot ifso.node ifnot.node e 
         
 
@@ -991,7 +991,7 @@ and cutStmt spans state (e, args, conts) =
         | _                    -> false in
     let rec subst (e:RP.exp) = match e with              
         | RP.Const(RP.Late(x,_)) -> 
-            ( try Rtl.Convert.exp (Strutil.Map.find x map)
+            ( try Rtl.Dn.exp (Strutil.Map.find x map)
               with Not_found -> e   (* we don't know all the constants yet *)
             )  
         | x -> x in

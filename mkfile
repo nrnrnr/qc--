@@ -15,7 +15,7 @@ VERSION =       `date +%Y%m%d`
 
 SRC     =       src
 LIBSRC  =       cllib lua asdl rtl gen camlburg tools
-SUBDIRS =       $LIBSRC $SRC
+SUBDIRS =       $LIBSRC $SRC doc
 
 # A note on profiling.  Profiling is controlled in subdirectories by a
 # PROFILE variable in each mkfile.  Profiling is turned on by default,
@@ -39,43 +39,47 @@ SUBDIRS =       $LIBSRC $SRC
 
 
 all:V:          lib dirs
-                for i in $SRC; 
+                for i in $SRC doc; 
                 do 
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS depend) || exit 1
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS update) || exit 1
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
                 done
 
 dot:V:		graph.dot
 print-dot:V:	graph.ps
-	lpr $prereq
+	        lpr $prereq
 
 %.ps: %.dot:D:
-	dot -Tps $prereq > $target
+	        dot -Tps $prereq > $target
 
-DEPENDFILES=cllib/DEPEND.evaluating gen/DEPEND lua/DEPEND.std rtl/DEPEND.evaluating \
-		src/DEPEND.evaluating
+DEPENDFILES =   cllib/DEPEND.evaluating \
+                gen/DEPEND              \
+                lua/DEPEND.std          \
+                rtl/DEPEND.evaluating   \
+		src/DEPEND.evaluating   \
+
 graph.dot:D:	$DEPENDFILES
-	cat $prereq | ocamldot -landscape > $target
+	        cat $prereq | ocamldot -landscape > $target
 
 all.opt:V:      lib.opt dirs
                 for i in $SRC; 
                 do 
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS depend)    || exit 1
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS update.opt)|| exit 1
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend)    || exit 1
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt)|| exit 1
                 done
 
 lib:V:          dirs
                 for i in $LIBSRC; 
                 do 
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS depend) || exit 1
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS update) || exit 1
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
                 done
 
 lib.opt:V:      dirs
                 for i in $LIBSRC; 
                 do 
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS depend) || exit 1
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS update.opt) || exit 1
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt) || exit 1
                 done
 
 precompile:     
@@ -85,11 +89,11 @@ html            \
 dvi:V:          dirs
                 for i in $SUBDIRS; 
                 do 
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS $target) || exit 1
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS $target) || exit 1
                 done
 
 test:V:         all
-                cd test && mk $MKFLAGS $target
+                cd test2 && mk $MKFLAGS $target
 
 clean:V:        dirs
                 for i in $SUBDIRS; do (cd $i && mk $MKFLAGS $target); done
@@ -115,7 +119,7 @@ clean.opt:V:    dirs
 clobber:V:      dirs clean
                 for i in $SUBDIRS; 
                 do 
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS $target)
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS $target)
                 done
                 find bin lib man                        \
                         \( -name 'CVS'                  \

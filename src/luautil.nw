@@ -46,10 +46,26 @@ module MakeLib (C: Lua.Lib.CORE) = struct
 
     <<dofile>>
 
+    let contains g str s =
+        if s = "" then 
+            ( ignore(C.fallback "error" g 
+                        [V.String "Util.contains: sempty 2nd arg"])
+            ; false
+            )
+        else
+            String.contains str s.[0]
+
     let init g =
       C.register_module "Util"
-      [ "dosearchfile", V.efunc (V.string **-> V.value **-> V.values) (dosearchfile g)
-      ] g;
+      [ "dosearchfile",  V.efunc (V.string **-> V.value **-> V.values) 
+                         (dosearchfile g)
+      ; "checksuffix",   V.efunc (V.string **-> V.string **-> V.result V.bool)
+                         Filename.check_suffix
+      ; "chopsuffix",    V.efunc (V.string **-> V.result V.string)
+                         Filename.chop_extension
+      ; "contains",      V.efunc (V.string **-> V.string **-> V.result V.bool)
+                         (contains g) 
+      ] g;              
       Lua.Lib.StringList.empty (* OK? *)
 end
 @
@@ -116,3 +132,8 @@ let dosearchfile g file value =
         else
             dofile g (V.String file)
 @    
+
+
+
+
+

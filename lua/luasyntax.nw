@@ -452,6 +452,13 @@ and skip = parse        (* skip to end of line *)
     eof         { fun map ->  P.EOF        }
   | [^'\n']+    { fun map ->  skip lexbuf map }
   | nl          { fun map ->  nl lexbuf map ; token lexbuf map }
+  | _           { fun map ->  error     
+                                ( Printf.sprintf 
+                                  "illegal character `%s' at character %d" 
+                                  (Char.escaped (Lexing.lexeme_char lexbuf 0))
+                                  (Lexing.lexeme_start lexbuf)
+                                )  
+                }
 
 and file_pragma = parse
     eof         { fun map -> error "illegal $file pragma" }
@@ -536,6 +543,13 @@ and longstring = parse  (* parse a [[ .. ]] string *)
                    ; longstring lexbuf n map buf
                    )
                 }  
+  | _           { fun n map buf ->  error     
+                                ( Printf.sprintf 
+                                  "illegal character `%s' at character %d" 
+                                  (Char.escaped (Lexing.lexeme_char lexbuf 0))
+                                  (Lexing.lexeme_start lexbuf)
+                                )  
+                }
 
 and shortstring = parse (* parse an eos delimited string *)
     eof         { fun map eos buf -> 
