@@ -142,12 +142,13 @@ Because ASDL insists on generating a single lump of code containing
 the definitions of both [[graph]] and [[label]], this problem can't be
 solved easily.
 
-We take the easy way out and use the evil 
-``epilogue'' to define [[Ir.graph]], the rightful internal
-representation of flow graphs.
+We take the easy way out and use the evil ``epilogue'' to define
+[[Ir.graph]], the rightful internal representation of flow graphs.
+
 <<module fgraph>>=
 xgraph      = (entry*)          -- external use only; use graph inside compiler.
 entry       = (label,node)
+
 <<view ocaml>>=
 module fgraph <= interface_epilogue
 %%
@@ -272,30 +273,3 @@ view OCaml {
 <<view ocaml>>
 }
 @
-
-% ------------------------------------------------------------------ 
-\subsection{Internal flow graph representation}
-% ------------------------------------------------------------------ 
-
-<<ir.mli>>=
-module M : Map.S with type key = Fgraph.label
-
-type graph = Fgraph.node M.t
-val to_map:  Fgraph.graph -> graph
-val of_map:  graph   -> Fgraph.graph
-@
-
-<<ir.ml>>=
-module F    = Fgraph
-module M    = Map.Make (struct type t=F.label let compare=compare end)
-
-type graph  = F.node M.t
-
-let to_map entries =
-    let enter map (label,node) = M.add label node map in
-    List.fold_left enter M.empty entries
-
-let of_map map =
-    let get label node l = (label,node) :: l in
-    M.fold get map []
-@ 
