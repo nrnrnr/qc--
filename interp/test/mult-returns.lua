@@ -15,7 +15,7 @@ CMM.procedure("main", 0, 0)
    CMM.cmm_return(1, 1)
 
 -- the alternate return site prints the number 5 again
-   CMM.define_label("alt-return")
+   CMM.continuation("alt-return")
       CMM.c_call("cmmprint")
       CMM.cmm_return(0, 0)
 
