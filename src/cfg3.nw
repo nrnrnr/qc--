@@ -36,7 +36,7 @@ from register allocation and spilling.
 Nodes of a {\cfg} can take part in two relations simultaneously: 
 \begin{enumerate}
 \item Control-flow relation. These are represented by the edges
-      between nodes and model possible flow of control ar run-time. 
+      between nodes and model possible flow of control at run-time. 
 \item Order relation. For the nodes of a {\cfg} a linear order can be
       established. This order is used for code-layout and during
       analysis phases. 
@@ -85,12 +85,12 @@ The {\cfg} abstraction is characterized by the following invariants:
 \item The nodes of a {\cfg} can be numbered $1, \dots,
       |\mathit{cfg}|$.  A numbering for the nodes of a {\cfg} is
       either \emph{present} or \emph{absent}.  If and only if a
-      numbering is present, then every node of a {\cfg} has unique
+      numbering is present every node of a {\cfg} has a unique
       number.  The order is used by the code generation phase to
-      define the code layout in memory.
+      define the code layout in memory and for all graph traversals. 
       
 \item The number of outgoing edges (to successors) is constrained by a
-      node's kind. A node can have any number of successors, including
+      node's kind. A kind can have any number of successors, including
       zero, for example:
       \begin{enumerate}
       \item An assignment-node has one (control-flow) successor.
@@ -111,7 +111,7 @@ The interface below shows that graphs and nodes have an imperative
 nature.  A control-flow graph is generally built bottom-up:  all
 node-creation functions take succeeding nodes as arguments.  Functions
 can mutate a node, a graph, both, or none.  To indicate the different
-behaviors, the following name scheme is used:
+behaviors, the following naming scheme is used:
 
 \begin{itemize}
 \item Functions mutating a node or the mapping of labels to nodes are
@@ -175,6 +175,7 @@ val gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
 val gm_redirect_all:            src:node -> olddst:node -> newdst:node -> unit
 val gm_insert_assign_after:     Rtl.rtl list -> node -> unit (* see descr! *)
 val gm_insert_assign_before:    Rtl.rtl list -> node -> unit (* any node   *)
+val gm_insert_assign_between:   Rtl.rtl list -> src:node -> dst:node -> unit
 val gm_insert_dataflow_between: defs:locs -> uses:locs -> kills:locs ->
                                 src:node -> dst:node -> unit
 val gm_enumerate:               cfg -> unit (* post: enumerated cfg *)
@@ -234,7 +235,7 @@ an exit node.  Numbering of nodes is absent and no labels are defined.
 
 \begin{itemize}
 \item [[set_label:  cfg -> string -> node -> node]]: 
-Assigns label to a node.  It is a checked run-time error if the node
+Assigns a label to a node.  It is a checked run-time error if the node
 does not belong to the {\cfg}.  The labeled node is returned. Note: the
 returned node may or may not be the same as the one supplied as an
 argument. The reason is, that [[lookup]] creates an internal labeled
@@ -335,8 +336,8 @@ gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
 \subsubsection{Graph Mutation}
 % ------------------------------------------------------------------ 
 
-All graph mutations destroy node \emph{numbering} and must not be used
-while traversing a graph.
+All graph mutations destroy an existing node \emph{numbering} and must
+not be used while traversing a graph.
 
 \begin{itemize}
 \item [[gm_redirect_all: node -> olddst:node -> newdst:node -> unit]]:
@@ -345,7 +346,7 @@ The current successor [[olddst]] and the new successor [[newdst]] must
 be provided.  It is a checked run-time error if:  nodes belong to
 different {\cfg}s, or [[olddst]] is not an actual successor.
 
-Note, that if several outgoing edges of a node point to the same
+Note, if several outgoing edges of a node point to the same
 successor, they \emph{all} get updated to the new node.  Hence,
 [[gm_redirect_all]] is not fully general.
 
@@ -358,23 +359,25 @@ The (single) successor of $n$ becomes the successor of $a$ and $a$
 becomes the only successor of $n$. 
 
 \item [[gm_insert_assign_before: Rtl.rtl list -> node -> unit]]:
-Like [[insert_assign_after]], except that the assign nodes are placed
-before the node which can be any node.  
+Places a sequence of [[assign]] nodes bewfore [[node]] such that
+\emph{all} incoming edges of [[node]] lead to the first node of the
+assignment sequence instead, and [[node]] becomes the (only) successor
+of the last assign-node.
 
-
-% \item 
-% [[gm_insert_assign_between: Rtl.rtl list -> src:node -> dst:node -> unit]]:
-% Inserts assign nodes on every edge leading from [[src]] to [[dst]]. 
-% The predecessor/successor relationship of all nodes is updated to
-% reflect the insertion of the assign nodes on all affected edges.  It
-% is a checked run-time error, if no edge between [[src]] and [[dst]]
-% exists.
+\item 
+[[gm_insert_assign_between: Rtl.rtl list -> src:node -> dst:node -> unit]]:
+Inserts assign nodes on every edge leading from [[src]] to [[dst]]. 
+The predecessor/successor relationship of all nodes is updated to
+reflect the insertion of the assign nodes on all affected edges.  It
+is a checked run-time error, if no edge between [[src]] and [[dst]]
+exists.
 
 \item
 \begin{verbatim}
 gm_insert_dataflow_between: defs:locs -> uses:locs -> kills:locs ->
                             src:node -> dst:node -> unit
 \end{verbatim}
+
 Inserts a node between [[src]] and [[dst]] that announces locations
 being defined, used, and killed.  This node informs
 data-flow analysis about inter-procedural data-flow that can not be
@@ -492,7 +495,7 @@ val set_live: node -> locs -> unit
 \subsection{Putting the Interface together}
 % ------------------------------------------------------------------ 
 
-The interface announde in the module type [[S]] is directly implemented
+The interface announces in the module type [[S]] is directly implemented
 by the module. 
 
 <<cfg3.mli>>=
@@ -557,7 +560,6 @@ object-oriented implementation of nodes in module [[x]], which
 represents the lower layer.
 
 <<implementation>>=
-
 type cfg        = X.cfg             (* class type cfg  *)
 type node       = X.node            (* class type node *)
 type t          = X.cfg             (* alias           *)
@@ -565,7 +567,7 @@ type conts      = X.conts
 @
 
 The implementation of most functions refer to methods of the involved
-objects and therefore quite short.
+objects and therefore are short.
 
 <<implementation>>=
 let conts ~cuts ~unwinds ~returns ~aborts =
@@ -691,6 +693,12 @@ let gm_insert_assign_after (rtls:Rtl.rtl list) (node:node) =
     let node = List.fold_left
                     (fun n rtl -> n#insert_assign_after rtl) node rtls
     in ()
+
+let gm_insert_assign_between (rtls:Rtl.rtl list) (src:node) (dst:node) =
+    let node = List.fold_left
+                    (fun n rtl -> n#insert_assign_between rtl src) dst rtls
+    in ()
+    
 
 let gm_insert_dataflow_between ~defs ~uses ~kills ~src ~dst =
     let cfg  = src#cfg          in
@@ -900,8 +908,9 @@ and node = object
     method uses:        locs            (* used by this    *)
     method kills:       locs            (* killed by this  *)
     
-    method insert_assign_before: Rtl.rtl -> node (* returns new node *)
-    method insert_assign_after : Rtl.rtl -> node (* returns new node *)  
+    method insert_assign_before:  Rtl.rtl -> node (* returns new node *)
+    method insert_assign_after :  Rtl.rtl -> node (* returns new node *)  
+    method insert_assign_between: Rtl.rtl -> before:node -> node (* new node *)
 
     method comment:     string          (* included into ast *)
     method ast:         mangle:(string->string) 
@@ -944,6 +953,13 @@ end
       error if [[this]] is not an [[assign]] node. The successor of
       [[this]] becomes the successor of the new node, which in turn
       becomes the new successor of [[this]].
+
+\item [[insert_assign_between]] creates a new [[assign]] node from an
+      [[Rtl.rtl]] and places it between [[this]] node and the node
+      [[before]]. The new node is returned. All edges leading from the
+      [[before]] node to [[this]] node lead through the new node afer
+      the method is completed. It is a checked run-time error if no edge
+      between [[before]] and [[this]] exists.
 
 \item [[linorder]] provides constraints for the linear order of node. See
       section \ref{sect:cfg3:linorder} for details.
@@ -1314,6 +1330,15 @@ object(this)
 
     method insert_assign_after (rtl:Rtl.rtl) = 
         invalid_arg "Cfg3: add_assign_after method for non-assignment node"
+
+    method insert_assign_between (rtl:Rtl.rtl) (before:node) =
+        let ()          = assert (NodeSet.mem before _pred) in
+        let this        = (this :> node) in
+        let assign      = new assign _cfg rtl this in
+        let redirect n  = if n = this then assign else n in
+            ( before#upd_succ redirect
+            ; assign
+            )
     
     (* comment about node kind *)
     method comment = ""
