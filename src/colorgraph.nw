@@ -969,17 +969,24 @@ let applyColors cg ({Proc.cfg = cfg; Proc.target = target; Proc.varMap = vMap}) 
     with
       Not_found -> Impossible.impossible (Printf.sprintf "Uncolored temp %c%d" s i) in
   let subst t = if is_tmp target t then find t else t in
+  (* Will throw an exception on a variable that has been spilled - obviously
+     it hasn't been assigned a register; dealing with spills must be thought
+	 out and handled at spill time
   let new_placement var loc rst =
     match loc with
     | Rtl.Private.Reg t when is_tmp target t -> VM.add var (find t) rst
     | _ -> rst in
+	*)
   let subst_rtl node call_varMap =
     begin
       G.upd_instr node (Rtlutil.Subst2.reg ~map:subst);
+	  (*
       if G.is_call node then
         CallVarMap.add node (VM.fold new_placement vMap VM.empty) call_varMap
       else
         call_varMap
+		*)
+	  call_varMap
     end in
   let _ = G.fold_nodes subst_rtl CallVarMap.empty cfg in
   true
