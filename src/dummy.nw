@@ -62,6 +62,9 @@ end
 
 let ( *> ) = AN.( *> ) 
 
+(* to simplify the machine environment definition *)
+let b i = Types.Bits i
+
 module Make(A: ARCH) = struct
     let id          = Rtl.Identity
     let wordsize    = A.wordsize
@@ -94,7 +97,6 @@ module Make(A: ARCH) = struct
     <<module CC for calling conventions>>
 
     let ccspecs = {AN.call=CC.simple; AN.results=CC.simple; AN.cutto=CC.simple}
-
         (* the new-style target *)
     let target' : ((Rtl.exp -> Automaton.t), Call.t) Target.t = 
       let spaces  = [ Spaces.m 
@@ -110,7 +112,55 @@ module Make(A: ARCH) = struct
                            ] 
         ; T.cc_spec_to_auto = (fun ccname spec -> CC.conv "C--" false spec)
         ; T.is_instruction  = (fun _ -> true)
-        ; T.machine_env     = {T.ops=[]; T.literal=[]}
+(* Using the same M as x86 so that tests don't fail.
+   Not sure what the right M is for dummy. KR *)
+        ; T.machine_env = {T.ops = [
+                         "sx",      [b  8; b 32]
+                       ; "sx",      [b  1; b 32]
+                       ; "sx",      [b 16; b 32]
+                       ; "zx",      [b  1; b 32]
+                       ; "zx",      [b  8; b 32]
+                       ; "zx",      [b 16; b 32]
+                       ; "lobits",  [b 32; b  1]
+                       ; "lobits",  [b 32; b  8]
+                       ; "lobits",  [b 32; b 16]
+                       ; "lobits",  [b 32; b 32]
+                       ; "sxlo",    [b 32; b 32]
+                       ; "zxlo",    [b 32; b 32]
+                       ; "add",     [b 32]
+                       ; "and",     [b 32]
+                       ; "com",     [b 32]
+                       ; "div",     [b 32]
+                       ; "divu",    [b 32]
+                       ; "mod",     [b 32]
+                       ; "modu",    [b 32]
+                       ; "mul",     [b 32]
+                       ; "mulx",    [b 32]
+                       ; "mulux",   [b 32]
+                       ; "neg",     [b 32]
+                       ; "or",      [b 32]
+                       ; "quot",    [b 32]
+                       ; "rem",     [b 32]
+                       ; "shl",     [b 32]
+                       ; "shra",    [b 32]
+                       ; "shrl",    [b 32]
+                       ; "sub",     [b 32]
+                       ; "xor",     [b 32]
+                       ; "eq",      [b 32]
+                       ; "ge",      [b 32]
+                       ; "geu",     [b 32]
+                       ; "gt",      [b 32]
+                       ; "gtu",     [b 32]
+                       ; "le",      [b 32]
+                       ; "leu",     [b 32]
+                       ; "lt",      [b 32]
+                       ; "ltu",     [b 32]
+                       ; "ne",      [b 32]
+                       ; "not",     []
+                       ; "bool",    []
+                       ; "disjoin", []
+                       ; "bit",     []
+                   ]; T.literal = [32;64]}
         ; T.byteorder    = A.byte_order
         ; T.wordsize     = A.wordsize
         ; T.pointersize  = A.pointersize
