@@ -199,6 +199,7 @@ let negflags   x   w = R.store eflags (R.app (R.opr "x86_negflags"   [w]) [x])  
 let subflags   x y w = R.store eflags (R.app (R.opr "x86_subflags"   [w]) [x; y]) 32
 let addflags   x y w = R.store eflags (R.app (R.opr "x86_addflags"   [w]) [x; y]) 32
 let mulflags   x y w = R.store eflags (R.app (R.opr "x86_mulflags"   [w]) [x; y]) 32
+let muluxflags x y w = R.store eflags (R.app (R.opr "x86_muluxflags" [w]) [x; y]) 32
 let undefflags       = R.store eflags (R.app (R.opr "x86_undefflags" [])  [])     32
 let logicflags exp w = R.store eflags (R.app (R.opr "x86_logicflags" [w]) [exp])  32
 let shflags sh x y w =
@@ -301,9 +302,9 @@ We start our implementation with a function that provides binary
 operators in $L \mathrel{:=} L \oplus R$ form. 
 <<x86 postexpander>>=
 let llr op x y move = match at32 op with
-| "add"       -> with_flags addflags x (Up.opr op) x y 32 :: move
-| "sub"       -> with_flags subflags x (Up.opr op) x y 32 :: move
-| "mul_trunc" -> with_flags mulflags x (Up.opr op) x y 32 :: move
+| "add" -> with_flags addflags x (Up.opr op) x y 32 :: move
+| "sub" -> with_flags subflags x (Up.opr op) x y 32 :: move
+| "mul" -> with_flags mulflags x (Up.opr op) x y 32 :: move
 @
 Division is rather painful on the x86.
 We have to place the dividend in the EDX:EAX register pair, and we have to represent
@@ -339,6 +340,23 @@ until we try it with other versions of the x86 divide instruction.
                      undefflags] in
     let answer = if opname = "rem" || opname = "modu" then edx_reg else eax_reg in
     move_rtl x answer :: div :: is @ move_rtl eax_reg x :: move
+@ 
+Unsigned, extended multiplication is also painful---especially as we
+don't have any 64-bit temporaries!
+The multiplicand goes in EAX and the product winds up in 
+the EDX:EAX register pair.
+<<unused code for x86 postexpander>>=
+| "mulux" ->
+    let regpairstore hreg lreg v =
+      let lobits32 v = R.app (R.opr "lobits" [32]) [v] in
+      let hibits32 v = lobits32 (R.app (R.opr "shrl" [64])
+                                 [v; R.bits (Bits.U.of_int 32 64) 64]) in
+      R.par [R.store hreg (hibits32 v) 32; R.store lreg (lobits32 v) 32] in
+    let mulux =
+      R.par [regpairstore edx eax
+               (R.app (R.opr "mulux" [32]) [R.fetch eax 32; tempval y]);
+             muluxflags (R.fetch eax 32) (tempval y) 32] in
+    move_rtl x eax_reg :: mulux :: move_rtl eax_reg x :: move
 @ 
 I don't know why it's safe to clobber ECX here.
 The problem would arise if the {\PAL} source mentioned ECX, perhaps
@@ -547,8 +565,8 @@ let cmpfun tgt =
   | "add_overflows"  -> set_flags "add"
   | "div_overflows"  -> div_flags
   | "quot_overflows" -> div_flags
-  | "mul_overflows"  -> set_flags "mul_trunc"
-  | "mulu_overflows" -> set_flags "mulu"
+  | "mul_overflows"  -> set_flags "mul"
+  | "mulu_overflows" -> set_flags "mulux"
   | "sub_overflows"  -> set_flags "sub"
   | _ -> Impossible.impossible "non-comparison in x86 conditional branch"
 @ 

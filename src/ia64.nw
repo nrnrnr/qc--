@@ -204,9 +204,12 @@ let constant_context w = icontext
 
 let rtlop ~dst op tmpl = [tempstore dst 
 	                      (R.app (Up.opr op) (List.map tempval tmpl))]
-
+@ 
+IT BEGS EXPLANATION WHY INTEGER MULTIPLY IS BEING TRANSLATED INTO A
+FLOATING-POINT MULTIPLY!
+<<ia64 postexpander>>=
 let binop ~dst op tmp1 tmp2 = match op with
-| ("mul_trunc", ws) ->
+| ("mul", ws) ->
     let f1 = talloc 'u' 64 in
     let f2 = talloc 'u' 64 in
     let ops = [move_rtl f1 tmp1; move_rtl f2 tmp2]

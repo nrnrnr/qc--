@@ -22,6 +22,7 @@ Test.files      = {}     -- input source files
 Test.tst_file   = ""     -- name of config file
 --Test.update     = nil    -- update differing files
 Test.gen_args   = ""     -- additional arguments for generator
+Test.qc         = getenv("QC") or Sys.cmd or "../bin/qc--"
 @ 
 Lua does not have a function to get the number of entries in a table/list.
 <<testdrv.lua>>=
@@ -195,8 +196,8 @@ function Test.compare_front_ends(inputs)
       else                        why = "msgs only"
       end      
       Test.clear_status_line()
-      print(format("../bin/qc-- -v testdrv.lua newfe.lua %s %s.test \t# %s",
-                   Test.tst_file, inputs["name"], why))
+      print(format("%s -v testdrv.lua newfe.lua %s %s.test \t# %s",
+                   Test.qc, Test.tst_file, inputs["name"], why))
     else
       if diff then Test.on_error[".s"](old, new) end
       if Test.compare_failed then
@@ -334,11 +335,11 @@ function Test.run_test_case(inputs)
     if Test.verbose then
       print(format("\n## To update these files {%s } run:",
                    inputs["diffs"]))
-      print(format("# ../bin/qc-- testdrv.lua %s %s.record",
-                   Test.tst_file, inputs["name"]))
+      print(format("# %s testdrv.lua %s %s.record",
+                   Test.qc, Test.tst_file, inputs["name"]))
     else
-      print(format("../bin/qc-- -v testdrv.lua %s %s.test \t# %s %s",
-                   Test.tst_file, inputs["name"], stat, msg))
+      print(format("%s -v testdrv.lua %s %s.test \t# %s %s",
+                   Test.qc, Test.tst_file, inputs["name"], stat, msg))
     end
   end
 end

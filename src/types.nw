@@ -46,18 +46,13 @@ However, this is not the way [[zx]] is implemented in the compiler. All
 {\PAL} operators are translated to {\rtl} operators that are allowed to
 be polymorphic in the result size. The general [[sz]] operators has the
 following type:
-
 $$[[sz]]: \forall~n,m.[[bits]]n \to [[bits]]m$$
-
 The translation (in \module{rtlop}) of [[sz32]] into [[sz]] takes care
 that $m$ is bound to $32$.
 
 The second complication is introduced by multiplication operators like
-[[mulu]]:
-
-$$[[mulu]]: \forall~n,m.[[bits]]$n$ \times [[bits]]$n$ \to [[bits]]m, m
-= 2n$$
-
+[[mulx]]:
+$$[[mulx]]: \forall~n,m.[[bits]]$n$ \times [[bits]]$n$ \to [[bits]]m, m = 2n$$
 The result of a multiplication is twice as wide as the operands. This
 constraint cannot be easily expressed in the above formalism using bound
 variables. We therefore have to employ a little hack to express it.
@@ -72,7 +67,6 @@ half the width of its operands.
 The parameterized type [['a t]] describes either a type [[ty]] when 
 [['a]] equals [[int]], or a type scheme, when [['a]] is a [[size]]. In a
 type scheme the width of a value is one of the following:
-
 \begin{itemize}
 \item A constant, like 32.
 \item A bound variable. To maximize confusion, variables are identified
@@ -82,54 +76,33 @@ type scheme the width of a value is one of the following:
 \item The size of a another bound variable, times two. This is a hack to
       express the result width of a multiplication operator, as explained
       above.
-      
 \end{itemize}
-
-<<types>>=
+<<exported type definitions>>=
 type 'a t       = Bool
                 | Bits of 'a 
-                
-type key        = int
-type size       = Const     of int
-                | Var       of key
-                | Double    of key      
-                | Half      of key
-
-type ty         = int  t
+type ty         = int t
 @
-
-\emph{Rather than having a fixed operator [[Var2]] we could implement a
-map: [[Fun of key * (int -> int)]]. The key indentifies a width
-variable, and ultimately a width. We take it, and apply the function to
-obtain a new width. In our case the function is simply multiplication by
-two. I haven't thought about this, but would in the general case expect
-problems with circular dependencies among types. What is the right
-formalism here? -- CL}
-
 The type of a function is a pair of a list of operand types and a result
 type. A [[tyscheme]] describes a type scheme, a [[monotype]] the
 instance of a type scheme.
-
-<<types>>=
+<<exported type definitions>>=
 type tyscheme   = (size t) list * (size t)
 type monotype   = (int  t) list * (int  t)
 @
 
 Unlike in the formalism that uses $\forall$ to bind type variables
 explicitly, type variables in the implementation are bound implicitly:
-The [[tyscheme]] for the [[add]] and [[mulu]] primitves are encoded as
+The [[tyscheme]] for the [[add]] and [[mulx]] primitves are encoded as
 follows:
-
 \begin{quote}
     \begin{verbatim}
 add:  ([Bits(Var 1); Bits(Var 1)], Bits(Var 1))
-mulu: ([Bits(Var 1); Bits(Var 1)], Bits(Var2 1))
+mulx: ([Bits(Var 1); Bits(Var 1)], Bits(Double 1))
     \end{verbatim}
 \end{quote}
-
 The [[Var 1]] values identify the variable in the type scheme that is
 replaced by an integer when the type scheme is instantiated. In case of
-[[mulu]], the size of the result is twice the number of bits [[Var 1]]
+[[mulx]], the size of the result is twice the number of bits [[Var 1]]
 gets bound to.
 
 % ------------------------------------------------------------------ 
@@ -140,15 +113,14 @@ The [[appl]] function implements the type checking of arguments that are
 supplied to a primitive function: given the [[tyscheme]] to describe the
 primitive, and the list of argument [[ty]]s, [[appl]] returns the type
 of the primitive's result. In case the primitive's [[tyscheme]] can not
-be instantiated such that the supplied argument type match, a
-[[matchExn]] is raised.
+be instantiated such that the supplied argument type match, the error
+exception is raised.
 
-<<types>>=
-exception MatchExn
-
+Each function takes a first argument that is the name of the operator
+being applied.
 <<appl>>=
-val appl      : tyscheme -> ty list -> ty       (* raises matchExn *)
-val widthlist : tyscheme -> ty list -> int list (* raises matchExn *)
+val appl      : string -> tyscheme -> ty list -> ty       (* raises Error.ErrorExn *)
+val widthlist : string -> tyscheme -> ty list -> int list (* raises Error.ErrorExn *)
 @
 
 Instantiation of a type scheme fails  when a type scheme contains a
@@ -188,6 +160,7 @@ code pointer type [[code]], and the native data pointer type.  We
 define types for them here, but only for the moment. 
 
 <<abbrevs>>=
+type key = int
 val fixbits : int -> size t              (* fixed/constant size       *)
 val var     : key -> size t              (* variable size             *)
 val double  : key -> size t              (* doubled width - see above *)
@@ -201,7 +174,8 @@ val proc    : size t list -> size t -> tyscheme   (* build proc type  *)
 Finally, here we put together the interface file.
 
 <<types.mli>>=
-<<types>>
+type size
+<<exported type definitions>>
 <<appl>>
 <<abbrevs>>
 val to_string : ty -> string
@@ -217,21 +191,40 @@ addition to the functions provided by [[Map]] we define some helper
 functions. 
 
 <<types.ml>>=
-<<types>>  (* types from the interface definition *)
+type key        = int
+type size       = Const  of int
+                | Var    of key
+                | Double of key      
+                | Half   of key
+<<exported type definitions>>  (* types from the interface definition *)
+@
+\emph{Rather than having a fixed operator [[Double]] we could implement a
+map: [[Fun of key * (int -> int)]]. The key indentifies a width
+variable, and ultimately a width. We take it, and apply the function to
+obtain a new width. In our case the function is simply multiplication by
+two. I haven't thought about this, but would in the general case expect
+problems with circular dependencies among types. What is the right
+formalism here? -- CL}
+@ 
+<<types.ml>>=
 module E = Error
 module S = Map.Make(struct type t=key let compare=compare end)
+
+let impossible = Impossible.impossible
+
+let to_string = function
+  | Bool -> "bool"
+  | Bits n -> "bits" ^ string_of_int n
 
 let lookup key env = S.find key env 
 let dump env       = let f key data res = (key,data)::res in S.fold f env []
 @
-
 To check that the application of an operator is well typed, we
 \emph{match} the type scheme of the operator against the operand types.
 A match takes a type scheme and a type, and produces a substitution. The
 substitution records bindings for width variables, resulting from a
 match between a constant width and a variable width. These are the
 important cases:
-
 \begin{itemize}
 \item A type variable width matches with a fixed width; this leads to an
       instantiation of the variable that is recorded in the
@@ -240,7 +233,6 @@ important cases:
       instantiation must be looked up in the substitutions and checked
       against the fixed width.
 \end{itemize}
-
 The [[match]] function matches a [[tyscheme]] with a [[ty]] and
 returns a substitution.  In case of a mismatch, [[matchExn]] is
 raised. 
@@ -249,79 +241,80 @@ We never expect to see a [[Double]] constructor during matching. It should
 only show up in the result position of a function type. Since only the
 argument positions are matched, we should never see it here. However,
 a succeeding match can bind a width variable that \emph{is} mentioned in
-a [[Var2]] result position.
+a [[Double]] result position.
 
 \emph{Is it possible to define a general match function where [[Double]]
 can show up in all positions? -- CL}
-
 <<types.ml>>=
-let match' sigma = function 
-    | Bool           , Bool                          -> sigma
-    | Bits(Const(x)) , Bits(y) when x = y            -> sigma
-    
-    | Bits(Var(x))   , Bits(y) when (S.mem x sigma)  ->
-        if (lookup x sigma) = y then sigma else (raise MatchExn)
-    | Bits(Var(x))   , Bits(y)                       -> S.add x y sigma
-    
-    | Bits(Double(x)), Bits(y) when (S.mem x sigma)  ->
-        if (lookup x sigma) * 2 = y then sigma else (raise MatchExn)
-    | Bits(Double(x)), Bits(y)                       -> S.add x (y/2) sigma
-    
-    | Bits(Half(x))  , Bits(y) when (S.mem x sigma)  ->
-        if (lookup x sigma) / 2 = y then sigma else (raise MatchExn)
-    | Bits(Half(x))  , Bits(y)                      -> S.add x (y*2) sigma
-    
-    | _              , _                             -> raise MatchExn
-@
+let match' opname sigma expected actual =
+  let to_string' = function
+    | Bool -> to_string Bool
+    | Bits (Const x) -> to_string (Bits x)
+    | Bits (Var x) when S.mem x sigma -> to_string (Bits (lookup x sigma))
+    | Bits _ -> "bitsxxx (not easily identified)" in
+  let badarg () =
+    E.errorf
+      "operator %%%s expected argument of type %s, got %s (in unspecified position)"
+      opname (to_string' expected) (to_string actual) in
+  match expected, actual with
+    | Bool          , Bool                      -> sigma
+    | Bits(Const x) , Bits y when x = y         -> sigma
 
+    | Bits(Var x)   , Bits y when S.mem x sigma -> if lookup x sigma = y then sigma
+                                                   else badarg()
+    | Bits(Var x)   , Bits y                    -> S.add x y sigma
+    
+    | Bits(Double x), Bits y when S.mem x sigma ->
+        if (lookup x sigma) * 2 = y then sigma else badarg()
+    | Bits(Double x), Bits y                    -> S.add x (y/2) sigma
+    
+    | Bits(Half x)  , Bits y when S.mem x sigma ->
+        if (lookup x sigma) / 2 = y then sigma else badarg()
+    | Bits(Half x)  , Bits y                     -> S.add x (y*2) sigma
+    
+    | _             , _                          -> badarg()
+@
 The [[subst]] function applies a substitution [[sigma]] to a [[size t]]
 and returns a [[ty]].  In the context of C-- this must always succeed,
 because primitive operators are predefined and only their type schemes
 are used for matching and substitution.
-
 <<types.ml>>=
 let subst sigma = function
-    | Bool              -> Bool
-    | Bits(Const(x))    -> Bits(x)
-    | Bits(Var(x))      -> (try Bits(lookup x sigma) with Not_found -> 
+    | Bool             -> Bool
+    | Bits(Const x)    -> Bits x
+    | Bits(Var x)      -> (try Bits(lookup x sigma) with Not_found -> 
         E.error "polymorphic operator; call as %op32, indicating result size")
-    | Bits(Double(x))   -> (try Bits(2*(lookup x sigma)) with Not_found ->
-                                E.error "internal error (2) in application")
-    | Bits(Half(x))     -> (try Bits((lookup x sigma)/2) with Not_found ->
-                                E.error "internal error (3) in application")
+    | Bits(Double x)   -> (try Bits(2*(lookup x sigma)) with Not_found ->
+                                impossible "internal error (2) in application")
+    | Bits(Half x)     -> (try Bits((lookup x sigma)/2) with Not_found ->
+                                impossible "internal error (3) in application")
 @
 The [[appl]] function matches the argument types with the [[size t]]
 values at the argument positions of a [[tyscheme]].  The resulting
 substitution is applied to the result [[size t]] to get the result
 [[ty]].
 <<types.ml>>=
-let appl (args',r) args =
-    let sigma  = S.empty                                     in
-    let pairs  = try List.combine args' args with Invalid_argument _ ->
-                 E.error "wrong number of arguments passed to operator" in
-    let sigma  = ( try List.fold_left match' sigma pairs with
-                 | MatchExn -> E.error "type error in application"
-                 )                                           in
-        subst sigma r
+let wrongargs opname args' args =
+  E.errorf "operator %s expected %d arguments, got %d"
+    opname (List.length args') (List.length args)
+
+let appl opname (args',r) args =
+  let sigma = try List.fold_left2 (match' opname) S.empty args' args with
+              | Invalid_argument _ -> wrongargs opname args' args in
+  subst sigma r
 @
 The [[widthlist]] function takes the type of a primitive (a
 [[tyscheme]]) and a list of argument types and returns the sizes bound
 by the variables in the type scheme.
 <<types.ml>>=
-let widthlist (args',r) args =
-    let sigma  = S.empty                                     in
-    let pairs  = try List.combine args' args with Invalid_argument _ ->
-                 E.error "wrong number of arguments passed to operator" in
-    let sigma  = ( try List.fold_left match' sigma pairs with
-                 | MatchExn -> E.error "type error in application"
-                 )                                           in
-    let sorted = List.sort (fun (key1,val1) (key2,val2) -> compare key1 key2) 
-                 (dump sigma)                                in
-        List.map snd sorted
+let widthlist opname (args',r) args =
+  let sigma = try List.fold_left2 (match' opname) S.empty args' args with
+              | Invalid_argument _ -> wrongargs opname args' args in
+  let sorted = List.sort (fun (key1,_) (key2,_) -> compare key1 key2) (dump sigma) in
+  List.map snd sorted
 @
 The implementation of [[spilt]] uses regular expressions to split off
 a trailing number.
-
 <<types.ml>>=
 let rtlop = Str.regexp "^\\([A-Za-z0-9_]*[A-Za-z_]\\)\\([0-9]+\\)?$"
 
@@ -335,13 +328,11 @@ let split op =
     else
         Impossible.impossible ("illegal operator? '"^op^"'")
 @            
-
 [[Instantiate]] computes a monomorphic function type from a width list
 and a polymorphic [[tyscheme]] by instantiating it. The $n$-th element
 in the (zero based) width list instantiates [[Var]] $n+1$ in the
 [[tyscheme]]. It is a checked run-time error if [[tyscheme]] contains a
 variable [[Var]] $x$ where $x > |[[width]]|$. 
-
 <<types.ml>>=
 let instantiate ((args,ret):tyscheme) ~widths  =
     let inst = function
@@ -358,22 +349,14 @@ let instantiate ((args,ret):tyscheme) ~widths  =
         | Bool           -> Bool
     in (List.map inst args, inst ret)
 @        
-        
-        
-
 The implementation of the abbreviations is trivial:
-
 <<types.ml>>=
-let fixbits x        = Bits(Const(x))
-let var    x         = Bits(Var(x))
-let double x         = Bits(Double(x))
-let half   x         = Bits(Half(x))
+let fixbits x        = Bits(Const x)
+let var    x         = Bits(Var x)
+let double x         = Bits(Double x)
+let half   x         = Bits(Half x)
 let bool             = Bool
-let bits x           = Bits(x)
+let bits x           = Bits x
 let proc args res    = (args,res)
 @
-<<types.ml>>=
-let to_string = function
-  | Bool -> "bool"
-  | Bits n -> "bits" ^ string_of_int n
 

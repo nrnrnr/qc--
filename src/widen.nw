@@ -589,7 +589,9 @@ let minimum = function
   | [] -> failwith "empty list"
   | x :: rest -> List.fold_left min x rest
 @ 
-
+WHAT IS THE [[monomorphic]] FUNCTION SUPPOSED TO BE DOING??
+THIS FUNCTION SHOULD PROBABLY BE CALLING INTO [[Rtlop]], SINCE THAT'S
+WHERE TYPE INFORMATION ABOUT RTL OPERATORS IS SUPPOSED TO LIVE.
 <<helpers>>=
 let monomorphic opname ws =
   match opname, ws with
@@ -597,8 +599,8 @@ let monomorphic opname ws =
   | ("eq"|"ge"|"geu"|"gt"|"gtu"|"le"|"leu"|"lt"|"ltu"|"ne"), [n] -> [n;n], 1
   | "not", _ -> [1], 1
   | ("com"|"neg"|"popcnt"), [n] -> [n], n
-  | ("mul_trunc"|"quot"|"rem"|"mod"|"modu"|"add"|"and"|"or"|"shl"|"shra"|"shrl"|"sub"|"xor"|"div"|"divu"), [n] -> [n;n], n
-  | ("mul"|"mulu"), [n;m] -> [n;n], m
+  | ("mul"|"quot"|"rem"|"mod"|"modu"|"add"|"and"|"or"|"shl"|"shra"|"shrl"|"sub"|"xor"|"div"|"divu"), [n] -> [n;n], n
+  | ("mulx"|"mulux"), [n] -> [n;n], 2*n
   | ("sx"|"zx"|"lobits"), [n;w] -> [n], w
   | _ ->
       Printf.printf "!!! %s at " opname;
@@ -624,7 +626,6 @@ let op_fill_types =
   ; "div", [[S;S],S]
   ; "divu", [[Z;Z],Z]
   ; "mul", [[S;S],S]
-  ; "mul_trunc", [[Z;Z],Z]
   ; "shra", [[S;Z],S]
   ; "shrl", [[Z;Z],Z]
   ; "shl",  [[G;Z],G]
@@ -635,7 +636,8 @@ let op_fill_types =
            [Z;Z],Z;
            [G;G],G]
   ; "neg", [[G],G]
-  ; "mulu", [[Z;Z],Z]
+  ; "mulux", [[Z;Z],Z]
+  ; "mulx", [[S;S],S]
   ; "mod", [[S;S],S]
   ; "modu", [[Z;Z],Z]
   ; "com", [[S],S;
@@ -687,9 +689,9 @@ let test_m : machine_env =
   ; "divu",   [64]
   ; "mod",    [64]
   ; "modu",   [64]
-  ; "mul",    [64;64]
-  ; "mulu",   [64;64]
-  ; "mul_trunc", [64]
+  ; "mul",    [64]
+  ; "mulx",   [64]
+  ; "mulux",  [64]
   ; "neg",    [64]
   ; "or",     [64]
   ; "quot",   [64]
@@ -727,9 +729,9 @@ let ia64 : machine_env =
   ; "divu",   [64]
   ; "mod",    [64]
   ; "modu",   [64]
-  ; "mul",    [64;64]
-  ; "mulu",   [64;64]
-  ; "mul_trunc", [64]
+  ; "mul",    [64]
+  ; "mulx",   [64]
+  ; "mulux",  [64]
   ; "neg",    [64]
   ; "or",     [64]
   ; "quot",   [64]

@@ -22,8 +22,9 @@ the hierarchy.
 <<main.mli>>=
 @
 
-We export some command line arguments to the Lua value [[Sys.argv]]. The
-[[Sys]] table is created, if it does not exist. 
+We export command-line arguments to the Lua values
+[[Sys.cmd]] and [[Sys.argv]]. The
+[[Sys]] table is created if it does not exist. 
 
 <<main.ml>>=
 module E = Error
@@ -31,11 +32,11 @@ module I = Lualink.I
 module V = I.Value
 
 let export_argv g strings =
-    let list = V.list V.string in
-    ( I.register_module "Sys" ["argv", list.V.embed strings] g
-    )
+  I.register_module "Sys"
+    ["argv", (V.list V.string).V.embed (List.tl strings);
+     "cmd",  V.string.V.embed          (List.hd strings);
+    ] g
 @
-
 At start-up, we load the file [[qc--.lua]] into the interpreter. It
 defines commonly used functions. The file is searched along a search
 path. Typically, the [[qc--.lua]] file that is compiled into the table
@@ -43,17 +44,14 @@ path. Typically, the [[qc--.lua]] file that is compiled into the table
 
 string into the compiler such that it is always available. During
 development it is easier to have an external file.
-
 <<main.ml>>=
 let main () =
     let argv        = Array.to_list Sys.argv in
-    let this        = Filename.basename (List.hd argv) in
-    let args        = List.tl argv in
     let state       = I.mk () in (* fresh Lua state *)       
     let evaluate e  = ignore (I.dostring state e) in
     let bootscript  = "Util.dosearchfile('qc--.lua', Boot)" in
         try          
-            ( export_argv state args    (* export cmd line  *)
+            ( export_argv state argv    (* export cmd line  *)
             ; evaluate bootscript       (* boot interpreter *) 
             ; exit 0                    (* success *)
             )
@@ -64,19 +62,15 @@ let main () =
                 ; exit 2  (* failure *)
                 )
 @                
-
 In \ocaml~no [[main]] function like in C exists but simply all values
 in a module are evaluated.  However, we simulate this by evaluating
 [[main ()]]. 
-
 <<main.ml>>=
 let _ = main ()
 @
-
 During development bugs are easier to find with the debugger if we
 don't catch exceptions on the top-level. Shipping code, however,
 should use instead the following:
-
 <<main.ml unused>>=
 let _ = try main () with e -> 
         ( Printf.eprintf "%s\n" (Printexc.to_string e)

@@ -393,10 +393,10 @@ inst : Withaflags(dst:regl, "sub", src:eaddr, w, "x86_subflags")
 inst : Withaflagsunary("neg", dst:eaddrl, w, "x86_negflags")
   {: cat ["neg"; suffix w; " "; dst] :}
 
-inst : Withaflags(dst:eaddrl, "mul_trunc", src:reg, w, "x86_mulflags")
+inst : Withaflags(dst:eaddrl, "mul", src:reg, w, "x86_mulflags")
   {: cat ["imul "; suffix w; " "; src; ", "; dst] :}
 
-inst : Withaflags(dst:regl, "mul_trunc", src:eaddr, w, "x86_mulflags")
+inst : Withaflags(dst:regl, "mul", src:eaddr, w, "x86_mulflags")
   {: cat ["imul"; suffix w; " "; src; ","; dst] :}
 
 inst : Withundefflags(dst:regpairl, "quot", src:reg, w)
@@ -599,7 +599,7 @@ any : Com(x:any) {: "Com(" ^ x ^ ")" :}
 
 
 any : Add(x:any, y:any) {: "Add(" ^ x ^ ", " ^ y ^ ")" :}
-any : Mul_trunc(x:any, y:any) {: "Mul_trunc(" ^ x ^ ", " ^ y ^ ")" :}
+any : Mul(x:any, y:any) {: "Mul(" ^ x ^ ", " ^ y ^ ")" :}
 any : Fadd(x:any, y:any) {: sprintf "Fadd(%s, %s)" x y :}
 any : Fsub(x:any, y:any) {: sprintf "Fsub(%s, %s)" x y :}
 any : Fmul(x:any, y:any) {: sprintf "Fmul(%s, %s)" x y :}
@@ -675,7 +675,7 @@ constructor for each operator.
 | RP.App(("add", [w]), [x; y]) -> conAdd (exp x) (exp y)
 | RP.App(("sub", [w]), [x; y]) -> conSub (exp x) (exp y)
 (*| RP.App(("neg", [w]), [x])    -> conNeg (exp x)*)
-| RP.App(("mul_trunc", [w]), [x; y]) -> conMul_trunc (exp x) (exp y)
+| RP.App(("mul", [w]), [x; y]) -> conMul (exp x) (exp y)
 | RP.App(("sx",  [n;w]), [x])   -> conSx  (exp x)
 | RP.App(("zx",  [n;w]), [x])   -> conZx  (exp x)
 | RP.App(("f2f", [n;w]), [x; rm])   -> conF2f n w (exp x) (* need to assert rm *)
@@ -695,7 +695,7 @@ constructor for each operator.
 | RP.App(("bitInsert", [w; n]), [lsb; dst; src]) ->
     conBitInsert (exp lsb) (exp dst) (exp src)
 | RP.App(("bitExtract", [w; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
-| RP.App((("add"|"sub"|"mul_trunc"|"sx"|"zx"|"lobits"|"x86_subflags"|"bitInsert"|
+| RP.App((("add"|"sub"|"mul"|"sx"|"zx"|"lobits"|"x86_subflags"|"bitInsert"|
            "bitExtract"|"fabs"|"fneg"|"fdiv"|"fmul"|"fsub"|"fadd"|"f2f"|"f2i"|
            "i2f"|"and"|"or"|"xor"|"com") as op, ws), xs)->
     Impossible.impossible
@@ -764,7 +764,9 @@ and geffects = function
     <<horrible pattern match for [[Withflags]]>>
     | (g, s) :: t -> conPar (guarded g s) (geffects t)
 and is8 b =
-  Bits.width b > 3 & Bits.Ops.eq b (Bits.U.of_int 8 (Bits.width b))
+  Bits.width b > 3 & Bits.Ops.eq b (Bits.U.of_int 8  (Bits.width b))
+and is64 b =
+  Bits.width b > 6 & Bits.Ops.eq b (Bits.U.of_int 64 (Bits.width b))
 @ 
 Dealing with a guard is straightforward.
 Either it's trivial, it's a conditional branch, or we pass it off to
@@ -784,40 +786,49 @@ and begins_x86_ s =
   String.length s >= 4 && s.[0] = 'x' && s.[1] = '8' && s.[2] = '6' && s.[3] = '_'
 @
 Oh, the joy of the flags\ldots
+<<truepat>>=
+RP.Const(RP.Bool true)
+<<unused, horrible pattern match for [[Withflags]]>>=
+| [ (<<truepat>>, <<pattern for [[hi]] := hi32([[l]] [[o]] [[r]] at 32)>>)
+  ; (<<truepat>>, <<pattern for [[lo]] := lo32([[l']] [[o']] [[r']] at 32)>>)
+  ; (<<truepat>>, <<pattern for flags := [[fo]] ([[l'']], [[r'']])>>)
+  ] when l = l' && o = o' && r = r' && l = RP.Fetch(l'', 32) && r = r'' && is64 k64 
+      && flag_index = SS.indices.SS.cc ->
+        conPairdestwithflags (loc hi) (loc lo) (exp l) o (exp r) fo
 <<horrible pattern match for [[Withflags]]>>=
-| [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
-  ; (RP.Const(RP.Bool true), <<pattern for flags := [[%x86_undefflags()]]>>)
+| [ (<<truepat>>, <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
+  ; (<<truepat>>, <<pattern for flags := [[%x86_undefflags()]]>>)
   ] when l = l' && flag_index = SS.indices.SS.cc ->
       conWithundefflags (loc l) o (exp r) w
 <<horrible pattern match for [[Withflags]]>>=
-| [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
-  ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l'']], [[r']])>>)
+| [ (<<truepat>>, <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
+  ; (<<truepat>>, <<pattern for flags := [[fo]] ([[l'']], [[r']])>>)
   ] when l = l' && l = l'' && r = r' && flag_index = SS.indices.SS.cc ->
       conWithaflags (loc l) o (exp r) w fo
-| [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[o]] [[l']] at [[w]]>>)
-  ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] [[l'']])>>)
+| [ (<<truepat>>, <<pattern for [[l]] := [[o]] [[l']] at [[w]]>>)
+  ; (<<truepat>>, <<pattern for flags := [[fo]] [[l'']])>>)
   ] when l = l' && l = l'' && flag_index = SS.indices.SS.cc ->
       conWithaflagsunary o (loc l) w fo
-| [ (RP.Const(RP.Bool true), <<pattern for [[d]] := rp:[[l1/l2]] [[o]] [[r]] at [[w]]>>)
-  ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l1'/l2']], [[r']])>>)
+| [ (<<truepat>>, <<pattern for [[d]] := rp:[[l1/l2]] [[o]] [[r]] at [[w]]>>)
+  ; (<<truepat>>, <<pattern for flags := [[fo]] ([[l1'/l2']], [[r']])>>)
   ] when l1 = l1' && l2 = l2' && r = r' && flag_index = SS.indices.SS.cc ->
       conWithaflags (regpair rp) o (exp r) w fo
-| [ (RP.Const(RP.Bool true), <<pattern for [[d]] := rp:[[l1/l2]] [[o]] [[r]] at [[w]]>>)
-  ; (RP.Const(RP.Bool true), <<pattern for flags := [[%x86_undefflags()]]>>)
+| [ (<<truepat>>, <<pattern for [[d]] := rp:[[l1/l2]] [[o]] [[r]] at [[w]]>>)
+  ; (<<truepat>>, <<pattern for flags := [[%x86_undefflags()]]>>)
   ] when flag_index = SS.indices.SS.cc ->
       conWithundefflags (regpair rp) o (exp r) w
-| [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
-  ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>)
+| [ (<<truepat>>, <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
+  ; (<<truepat>>, <<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>)
   ] when l = l' && l = l'' && r = r' && o = o'
     && flag_index = SS.indices.SS.cc ->
       conWithlflags (loc l) o (exp r) w fo
-| [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]] at H register>>)
-  ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] [[flag_left']]>>)
+| [ (<<truepat>>, <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]] at H register>>)
+  ; (<<truepat>>, <<pattern for flags := [[fo]] [[flag_left']]>>)
   ] when is8 eightbits && is8 eightbits' && l = l' && l = l''
       && flag_left = flag_left' && flag_index = SS.indices.SS.cc ->
       conWithlflags8H (loc l) o (exp r) fo
 
-| [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]] at H register>>)
+| [ (<<truepat>>, <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]] at H register>>)
   ; _
   ] when is8 eightbits && is8 eightbits' && l = l' && l = l'' ->
       conWithlflags8H (loc l) o (exp r) "x86_mumbojumbo"
@@ -844,8 +855,18 @@ RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w)
 <<pattern for flags := [[fo]] ([[l'']], [[r']])>>=
 RP.Store(RP.Reg('c', flag_index, _),
          RP.App((fo, _), [RP.Fetch(l'',_); r']), _)
+<<pattern for flags := [[fo]] ([[l'']], [[r'']])>>=
+RP.Store(RP.Reg('c', flag_index, _),
+         RP.App((fo, _), [RP.Fetch(l'',_); r'']), _)
 <<pattern for [[l]] := [[o]] [[l']] at [[w]]>>=
 RP.Store(l, RP.App((o, _), [RP.Fetch(l',_)]), w) 
+<<pattern for [[hi]] := hi32([[l]] [[o]] [[r]] at 32)>>=
+RP.Store(hi, RP.App (("lobits", [64;32]),
+                     [RP.App (("shrl", [64]), 
+                              [RP.App((o, _), [l; r]);
+                               RP.Const (RP.Bits k32)])]), 32)
+<<pattern for [[lo]] := lo32([[l']] [[o']] [[r']] at 32)>>=
+RP.Store(lo, RP.App (("lobits", [64;32]), [RP.App((o', _), [l'; r'])]), 32)
 <<pattern for flags := [[fo]] [[l'']])>>=
 RP.Store(RP.Reg('c', flag_index, _),
          RP.App((fo, _), [RP.Fetch(l'',_)]), _)

@@ -75,19 +75,6 @@ $n$. For example, the type for [[add]] demands that all arguments and
 the result have the same width. If the type variable of the result is
 not identical to one of the arguments, the operator is polymorphic in
 its return size. 
-
-The multiplication operator [[mulXX]] is quasi-polymoprhic in its result
-size: two $n$ bits values are multioplied into one $2n$ bits result.
-This makes it hard to define the meaning of the {\PAL} infix-operator
-because its meaning would depend on its arguments. Therefore, [[*]]
-denotes a $n$ bits multiplication with a an $n$ bits result. We
-introduce a new {\rtl} operator [[mul@]] for this. Since the character
-[[@]] cannot be part a {\PAL} identifier, it cannot be used in a program
-and is thus hidden.  The operator [[mul@]] can be defined in terms of
-existing operators:
-
-$$[[%mul@]](x,y) = [[%lobits]]$n$([[%mul$n$]](x,y))$$
-
 <<Types>>=
 module T = Types
 
@@ -149,10 +136,10 @@ let optable =
   ;  "minf"         , float, [] --> T.var 1
   ;  "mod"          , int,   [T.var 1; T.var 1] --> T.var 1
   ;  "modu"         , int,   [T.var 1; T.var 1] --> T.var 1
-  ;  "mul"          , int,   [T.var 1; T.var 1] --> T.double 1 
+  ;  "mul"          , int,   [T.var 1; T.var 1] --> T.var 1 
+  ;  "mulux"        , int,   [T.var 1; T.var 1] --> T.double 1 
+  ;  "mulx"         , int,   [T.var 1; T.var 1] --> T.double 1 
   ;  "mul_overflows", bool,  [T.var 1; T.var 1] --> T.bool
-  ;  "mul_trunc"    , int,   [T.var 1; T.var 1] --> T.var 1 
-  ;  "mulu"         , int,   [T.var 1; T.var 1] --> T.double 1 
   ;  "mulu_overflows", bool, [T.var 1; T.var 1] --> T.bool
   ;  "mzero"        , float, [] --> T.var 1
   ;  "ne"           , bool,  [T.var 1; T.var 1] --> T.bool
@@ -231,18 +218,17 @@ If an operator name has a numerical component, it denotes the size of
 the result. Such a size always becomes the last element in the width
 list of an operator. 
 <<Translate>>=
-let prefix op argtys =
+let prefix opname argtys =
   try 
-    let op, retsize = T.split op in
+    let op, retsize = T.split opname in
     let opty        = Types.findopname op Types.optypes in
-    let argwidths   = T.widthlist opty argtys in
+    let argwidths   = T.widthlist opname opty argtys in
     ( match retsize with
-    | None   -> T.appl opty argtys, Rtl.opr op argwidths
-    | Some n -> T.bits n,           Rtl.opr op (argwidths@[n])
+    | None   -> T.appl opname opty argtys, Rtl.opr op argwidths
+    | Some n -> T.bits n,                  Rtl.opr op (argwidths@[n])
     )            
   with
-  | Not_found  -> Error.error ("unknown operator "^op)
-  | T.MatchExn -> Error.error "type error in application"
+  | Not_found  -> Error.errorf "unknown operator %%%s" opname
 @ 
 Infix and prefix symbols are stored in tables.
 Nothing should go wrong  in lookup because the only symbols that make
@@ -251,7 +237,7 @@ it this far should have been blessed by the parser.
 let binops = Strutil.assoc2map 
     [  "+"      , "add"
     ;  "-"      , "sub"
-    ;  "*"      , "mul_trunc"    (* see discussion of %mul above *)
+    ;  "*"      , "mul"
     ;  "/"      , "divu"
     ;  "<<"     , "shl"
     ;  ">>"     , "shrl"

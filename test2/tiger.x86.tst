@@ -7,7 +7,7 @@ Test.results = "tiger/x86"
 
 function Test.tigertest(filename, stdin)
   return { source = filename, stdin = stdin,
-           other = "tiger/runtime-x86.a" ..
+           other = "tiger/tigermain-x86.o tiger/runtime-x86.a " ..
                    "../runtime/runtime.a ../runtime/pcmap.ld"}
 end
 
