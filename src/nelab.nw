@@ -74,12 +74,24 @@ type stmt =
 @ 
 Procedures and sections in nice normal form.
 <<exposed types>>=
-type proc = {
+type oproc = {
     formals : register list;
     vars : register list;
     stackdata : datum list;
     code : stmt list;
   }
+
+type proc =
+  { env : unit Fenv.Dirty.env';
+    cc  : name;
+    name : name;
+    formals : unit list;
+    locals  : unit list;
+    continuations : unit list;
+    stackmem      : Block.t;
+    stacklabels   : Rtl.exp list;
+    code          : (Rtl.loc, Rtl.exp, Rtl.rtl) Nast.stmt list;
+  } 
 
 type content =
   | Datum of datum
@@ -607,10 +619,12 @@ and evalExpr env =
 % ------------------------------------------------------------------ 
 
 We assume here the elaboration of expressions and lvalues.
+Because of mutual recursion, we have to make two passes over procedures
 <<nelab.ml>>=
 type scope = Local | Global
 let elab lvalue typed_expr srcmap asm ast =
   E.ematch (Metrics.of_ast srcmap ast.N.target) (fun metrics ->
+    let flag = function E.Error -> F.flagError | E.Ok _ -> (fun env -> env) in
     let errorf r =
       Printf.kprintf (fun s -> E.errorRegionPrt (srcmap, r) s; E.Error) in
     let pointerty = Types.Bits metrics.Metrics.pointersize in
@@ -618,15 +632,37 @@ let elab lvalue typed_expr srcmap asm ast =
     let vfp       = Vfp.mk metrics.Metrics.wordsize in
     let memsize   = metrics.Metrics.memsize in
     <<definitions of name-binding functions>>
+    <<definitions of elaboration functions>>
     let env = F.empty srcmap metrics asm in
     let env = TypeSortBind. bind_sortable_definitions env ast.N.udecls.N.types in
     let env = ConstSortBind.bind_sortable_definitions env ast.N.udecls.N.constants in
     let env = foldl bind_import env ast.N.imports in
     let env = registers_from Global 0 ast.N.globals env in
-    let env = foldl bind_code_label env ast.N.code_labels in
-    let env = foldl bind_section_labels env ast.N.sections in
+    let env = foldl (foldl bind_code_label) env ast.N.code_labels in
+    let env = foldl bind_section_names env ast.N.sections in
+    let secs = E.Raise.list (List.map (section env) ast.N.sections) in
+    let env  = flag secs env in
     let env = check_exports env ast.N.exports in
     env)
+@
+<<definitions of procedure-processing functions>>=
+let proc env p =
+  let env = TypeSortBind. bind_sortable_definitions env p.N.pdecls.N.types in
+  let env = ConstSortBind.bind_sortable_definitions env p.N.pdecls.N.constants in
+  let env, n = formals_from p.N.formals env in
+  let env = registers_from Local n p.N.locals env in
+  let env = foldl bind_code_label env p.N.labels in  (* odd -- explain *)
+  let env = foldl bind_continuation env p.N.continuations in
+  let stackmem, stacklabels, env = stackdata env p.N.stackdata in
+  { env = env; cc = p.N.cc; name = p.N.name; formals = unimp "formals";
+    locals = unimp "locals"; continuations = unimp "continuations";
+    stackmem = stackmem; stacklabels = stacklabels; code = unimp "code"; } in
+@ 
+Continuations have an empty denotation (for now) because all that work
+is done in [[Ast2ir]]. 
+<<definitions of name-binding functions>>=
+let bind_continuation env (r, name) =
+  F.bindv name (r, E.Ok (F.Continuation, pointerty)) env in
 @ 
 \subsubsection{Easy stuff}
 
@@ -655,7 +691,7 @@ give it the native pointer type.
 let bind_code_label env (r, n) = 
   F.bindv n (r, E.Ok (F.Label(F.Code (F.symbol env n)), pointerty)) env in
 @ 
-\subsubsection{Register variables}
+\subsubsection{Register variables and formal parameters}
 <<definitions of name-binding functions>>=
 let rec registers_from scope n rs env =
   let register env (rgn, r) k = match r with
@@ -677,9 +713,17 @@ let rec registers_from scope n rs env =
   match rs with
   | [] -> env
   | r :: rs -> register env r (registers_from scope (n+1) rs) in
+<<definitions of name-binding functions>>=
+let formals_from _ = unimp "formals" in
 @ 
 <<definitions of name-binding functions>>=
-let bind_section_labels env _ = unimp "section-label binding" in
+let bind_section_names env (secname, ds) = 
+  <<definitions of data functions>>
+  foldl datum env ds in
+<<definitions of elaboration functions>>=
+let section env (secname, ds) =
+  <<definitions of procedure-processing functions>>
+  unimp "elaboration of section" in
 @ 
 <<definitions of name-binding functions>>=
 let check_exports env _ = unimp "export checking" in
@@ -697,11 +741,11 @@ We process [[stackdata]] declarations to accumulate three results:
 @ 
 The traversal is straightforward and needs little documentation.
 <<definitions of name-binding functions>>=
-let stackdata env ds =
-  <<definitions of stack-data procedures>> in
+let stackdata env =
+  <<definitions of stack-data functions>> in
   stackdata (Memalloc.relative vfp "stackdata" Memalloc.Up) [] env in
 @ 
-<<definitions of stack-data procedures>>=
+<<definitions of stack-data functions>>=
 let rec stackdata mem stacklabels' env ds = match ds with
 | [] -> Memalloc.freeze mem, List.rev stacklabels', env
 | d :: ds ->
@@ -714,7 +758,7 @@ We don't really care if [[mem]] or [[stacklabels']] becomes bad in that case.
 A [[stackdatum]] declaration must respect some constraints:  (1)~no
 initialized data, (2)~no [[[]]] used as a size, (3)~an
 alignment must be a power of two. 
-<<definitions of stack-data procedures>>=
+<<definitions of stack-data functions>>=
 and stackdatum mem stacklabels' env (r, d) k =
   let errorf fmt = Printf.kprintf
       (fun s -> error r env s; k mem stacklabels' (F.flagError env)) fmt in
@@ -751,65 +795,33 @@ and stackdatum mem stacklabels' env (r, d) k =
   | N.Procedure _ -> impossf "nested procedures"
   | N.SSpan (_, _, _) -> impossf "span in stackdata"
 @
-================================================================
 
-Global symbols are all those on the top level and section level.
-Additionally all labels for code inside procedures are also
-bound because they have global scope. When local symbols (inside a
-procedure) are bound, labels are bound a second time with a local scope
-in the environment. This helps to decide whether a symbol is local or
-global when it is accessed from inside a procedure.
+\subsubsection{Initialized data and other sectionish things}
 
-@
-A [[datum]] label is a [[F.Label(F.Data)]] when the datum belongs to a
-top-level datum, and a [[F.Label(F.Stack)]] when the datum belongs to
-a [[stackdatum]]. We thus have two functions: [[datum]] and [[stackdatum]].
-<<xxxdefinitions of name-binding functions>>=
-let data env ds =
-  <<definitions of data procedures>> in
-  data env in
-@ 
-<<definitions of data procedures>>=
-let rec data env ds = match ds with
-| [] -> env
-| d :: ds ->
-    datum mem stacklabels' env d
-      (fun mem stacklabels' env -> data mem stacklabels' env ds) 
-@ 
+Top-level data are more complicated than stackdata.
+
 Any error flags the environment and continues.
-<<definitions of data procedures>>=
-and datum (r, d) k =
-  let errorf fmt = Printf.kprintf
-      (fun s -> error r env s; k mem stacklabels' (F.flagError env)) fmt in
+The only environment operation for a toplevel datum is to bind labels.
+The rest should be drawn from ast2ir.
+<<definitions of data functions>>=
+let datum env (r, d) =
+  let errorf fmt = Printf.kprintf (fun s -> error r env s; F.flagError env) fmt in
   match d with
   | N.Datalabel l ->
-      F.bindv l (r, (F.Label (F.data (F.symbol env l)), pointerty))
-  | N.Align n ->
-      k (Memalloc.align mem n) stacklabels' env
-  | N.ReserveMem(ty,size,Some _) -> errorf "initialization not permitted for stackdata"
-  | N.ReserveMem(ty,A.DynSize,_) -> errorf "illegal size for stackdata"
-  | N.ReserveMem(ty,size,None) ->
-      (match Type.evalTy env ty with
-      | E.Error -> k mem stacklabels' env
-      | E.Ok Types.Bool -> impossf "boolean type in abstract syntax"
-      | E.Ok (Types.Bits w) ->
-          let finish size =
-            if w mod memsize = 0 then
-              k (Memalloc.allocate mem (size * (w / memsize))) stacklabels' env
-            else
-              errorf "width %d of initialized data is not a multiple of memsize %d"
-                w memsize in
-          match size with 
-          | A.NoSize    -> finish 1 
-          | A.DynSize   -> impossf "dynamic memory size"
-          | A.FixSize e ->
-              match Const.evalExpr env e with
-              | E.Ok (bits, _) -> finish (Bits.U.to_int bits)
-              | E.Error        -> k mem stacklabels' (F.flagError env)
-      )
-  | N.Procedure _ -> impossf "nested procedures"
-  | N.SSpan (_, _, _) -> impossf "span in stackdata"
-@
+      F.bindv l (r, E.Ok (F.Label (F.Data (F.symbol env l)), pointerty)) env
+  | N.Align n when is2power n -> env
+  | N.Align n -> errorf "alignment %d is not a power of 2" n
+  | N.ReserveMem(ty,size,init) -> env
+  | N.Procedure p ->
+      let n   = List.length p.N.formals + List.length p.N.locals in
+      let den = F.Label (F.Proc (F.symbol env p.N.name, None, n)) in
+      F.bindv p.N.name (r, E.Ok (den, pointerty)) env
+  | N.SSpan (_, _, _) -> unimp "section span" in
+@ 
+================================================================
+
+
+
 Continuations are local to procedures and thus they are only bound
 when in [[Local]] mode; labels have global scope, but are bound a
 second time in the local environment. This has the following advantages:
@@ -826,7 +838,7 @@ let rec stmt r scope env = function
         E.catch' env (error r env) (stmt r scope env) x
     | A.IfStmt ( e, ss1, ss2)     ->
         foldl (body r scope) (foldl (body r scope) env ss1) ss2
-    | A.LabelStmt(n) ->
+    | A.LabelStmt(n) -> MISSING
     | A.SpanStmt(e1,e2,ss)        ->
         foldl (body r scope) env ss
     | A.SwitchStmt (range,e,arms) ->
@@ -870,25 +882,6 @@ let proc r env (_,name,ff,bb as p) =
     let env     = foldl (body r Global) env bb     in 
     let env     = F.bindv name (r,ventry) env    in
         env
-@
-The high level non-terminals [[section]] and [[toplevel]] are just
-containers.  We use them to catch errors and otherwise just call the
-functions that do the real work.
-<<module Env>>=
-let rec section r env = function
-    | A.SectionAt(x,r)     -> E.catch' env (error r env) (section r env) x
-    | A.Decl(d)            -> gdecl r env d
-    | A.SSpan( e1, e2, ss) -> foldl (section r) env ss
-    | A.Datum( d)          -> datum r Global env d
-    | A.Procedure(p)       -> proc r env p
-@ 
-<<module Env>>=
-let rec toplevel r env = function 
-    | A.ToplevelAt(x, r)  -> E.catch' env (error r env) (toplevel r env) x
-    | A.Section(name, ss) -> foldl (section r) env ss
-    | A.TopDecl(d)        -> gdecl r env d
-    | A.TopProcedure(p)   -> proc r env p 
-
 @
 
 % ------------------------------------------------------------------ 
@@ -1516,27 +1509,4 @@ and proc r env (_,name,_,bb as p) =
                )                                            
     in
         F.rebindv name (r,entry) env (* update proc entry *)
-@
-The following functions deal with the top-level nonterminal symbols
-that themselves need no checking.  The real work is done at a lower
-level.
-<<check>>=
-and section r env = function
-    | A.SectionAt(x,r)     -> E.catch' (F.flagError env) (error r env) 
-                              (section r env) x
-    | A.Decl(d)            -> decl env d
-    | A.Datum( d)          -> datum env d
-    | A.Procedure(p)       -> proc r env p 
-    | A.SSpan x            -> topSpan r env x 
-@             
-<<check>>=
-let rec toplevel r env = function
-    | A.ToplevelAt(x, r)  -> E.catch' (F.flagError env) (error r env) 
-                                      (toplevel r env) x
-    | A.Section(name, ss) -> foldl (section r)  env ss
-    | A.TopDecl(d)        -> decl env d
-    | A.TopProcedure(p)   -> proc r env p
-@ 
-<<check>>=
-let global env program = foldl (toplevel Srcmap.null) env program
 @
