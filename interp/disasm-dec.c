@@ -50,7 +50,7 @@ static void print_unsigned_bits32(FILE *fd, unsigned b32) {
   asmprintf(fd, "0x%x", b32);
 }
 static void disprintreloc(FILE *fd, unsigned a) {
-  asmprintf(fd, "<address %x>", a);
+  asmprintf(fd, "<address 0x%x>", a);
 }
 
 void disassemble_instructions(FILE *fd, CMM_label *loc) {
@@ -77,7 +77,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
         
         #line 233 "disasm.m"
         {
-                 asmprintf(fd, "%x: <data: %x>\n", pc, *((u_int32 *) pc));
+                 asmprintf(fd, "0x%x: <data: %x>\n", pc, *((u_int32 *) pc));
                  next = pc + 4;
                }
         
@@ -96,7 +96,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               next = (((MATCH_p) + 5));
               
               #line 211 "disasm.m"
-                    asmprintf(fd, "%x: %s", pc, "PROCEDURE ");
+                    asmprintf(fd, "0x%x: %s", pc, "PROCEDURE ");
                     print_procedure(fd, (procedure *) a);
                     asmprintf(fd, "\n");
               
@@ -111,7 +111,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               next = (((MATCH_p) + 1));
               
               #line 215 "disasm.m"
-                    asmprintf(fd, "%x: %s", pc, "END_PROCEDURE ");
+                    asmprintf(fd, "0x%x: %s", pc, "END_PROCEDURE ");
                     asmprintf(fd, "\n");
                     return;
               
@@ -123,17 +123,17 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
         case 2: 
           { 
             { 
-              unsigned /* [0..255] */ MATCH_w_8_40 = 
-                (mem_aggregate((((MATCH_p) + 5)),DEF_BYTE_ORDER,1));
               unsigned MATCH_w_32_8 = 
                 (mem_aggregate((((MATCH_p) + 1)),DEF_BYTE_ORDER,4));
+              unsigned /* [0..255] */ MATCH_w_8_40 = 
+                (mem_aggregate((((MATCH_p) + 5)),DEF_BYTE_ORDER,1));
               unsigned b32 = MATCH_w_32_8 /* bits32 at 8 */;
               unsigned b8 = MATCH_w_8_40 & 0xff /* bits8 at 40 */;
               next = (((MATCH_p) + 6));
               
               #line 75 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "PUSH ");
+                    asmprintf(fd, "0x%x: %s", pc, "PUSH ");
                     print_unsigned_bits32(fd, b32);
                     asmprintf(fd, " : width ");
                     print_unsigned_bits8(fd, b8);
@@ -154,12 +154,12 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               unsigned /* [0..255] */ MATCH_w_8_24 = 
                 (mem_aggregate((((MATCH_p) + 3)),DEF_BYTE_ORDER,1));
               unsigned c = MATCH_w_8_24 & 0xff /* bits8c at 24 */;
-              unsigned a = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               unsigned b = MATCH_w_8_16 & 0xff /* bits8b at 16 */;
+              unsigned a = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 4));
               
               #line 85 "disasm.m"
-                    asmprintf(fd, "%x: %s", pc, "GSTORE ");
+                    asmprintf(fd, "0x%x: %s", pc, "GSTORE ");
                     print_unsigned_bits8(fd, a);
                     asmprintf(fd, "%s", " ");
                     print_byteorder(fd, b);
@@ -182,12 +182,12 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               unsigned /* [0..255] */ MATCH_w_8_24 = 
                 (mem_aggregate((((MATCH_p) + 3)),DEF_BYTE_ORDER,1));
               unsigned c = MATCH_w_8_24 & 0xff /* bits8c at 24 */;
-              unsigned a = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               unsigned b = MATCH_w_8_16 & 0xff /* bits8b at 16 */;
+              unsigned a = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 4));
               
               #line 93 "disasm.m"
-                    asmprintf(fd, "%x: %s", pc, "FETCH ");
+                    asmprintf(fd, "0x%x: %s", pc, "FETCH ");
                     print_unsigned_bits8(fd, a);
                     asmprintf(fd, "%s", " ");
                     print_byteorder(fd, b);
@@ -210,12 +210,12 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               unsigned /* [0..255] */ MATCH_w_8_24 = 
                 (mem_aggregate((((MATCH_p) + 3)),DEF_BYTE_ORDER,1));
               unsigned c = MATCH_w_8_24 & 0xff /* bits8c at 24 */;
-              unsigned a = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               unsigned b = MATCH_w_8_16 & 0xff /* bits8b at 16 */;
+              unsigned a = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 4));
               
               #line 101 "disasm.m"
-                    asmprintf(fd, "%x: %s", pc, "STORE ");
+                    asmprintf(fd, "0x%x: %s", pc, "STORE ");
                     print_unsigned_bits8(fd, a);
                     asmprintf(fd, "%s", " ");
                     print_byteorder(fd, b);
@@ -238,7 +238,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 109 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "FETCH_ARG ");
+                    asmprintf(fd, "0x%x: %s", pc, "FETCH_ARG ");
                     print_unsigned_bits8(fd, b8);
                     asmprintf(fd, "\n");
               
@@ -257,7 +257,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 113 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "STORE_ARG ");
+                    asmprintf(fd, "0x%x: %s", pc, "STORE_ARG ");
                     print_unsigned_bits8(fd, b8);
                     asmprintf(fd, "\n");
               
@@ -276,7 +276,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 117 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "STORE_LOCAL8 ");
+                    asmprintf(fd, "0x%x: %s", pc, "STORE_LOCAL8 ");
                     print_unsigned_bits8(fd, b8);
                     asmprintf(fd, "\n");
               
@@ -295,7 +295,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 121 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "STORE_GLOBAL8 ");
+                    asmprintf(fd, "0x%x: %s", pc, "STORE_GLOBAL8 ");
                     print_unsigned_bits8(fd, b8);
                     asmprintf(fd, "\n");
               
@@ -314,7 +314,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 125 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "FETCH_LOCAL8 ");
+                    asmprintf(fd, "0x%x: %s", pc, "FETCH_LOCAL8 ");
                     print_unsigned_bits8(fd, b8);
                     asmprintf(fd, "\n");
               
@@ -333,7 +333,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 129 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "FETCH_GLOBAL8 ");
+                    asmprintf(fd, "0x%x: %s", pc, "FETCH_GLOBAL8 ");
                     print_unsigned_bits8(fd, b8);
                     asmprintf(fd, "\n");
               
@@ -352,7 +352,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 133 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "STORE_LOCAL16 ");
+                    asmprintf(fd, "0x%x: %s", pc, "STORE_LOCAL16 ");
                     print_unsigned_bits16(fd, b16);
                     asmprintf(fd, "\n");
               
@@ -371,7 +371,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 137 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "STORE_GLOBAL16 ");
+                    asmprintf(fd, "0x%x: %s", pc, "STORE_GLOBAL16 ");
                     print_unsigned_bits16(fd, b16);
                     asmprintf(fd, "\n");
               
@@ -390,7 +390,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 141 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "FETCH_LOCAL16 ");
+                    asmprintf(fd, "0x%x: %s", pc, "FETCH_LOCAL16 ");
                     print_unsigned_bits16(fd, b16);
                     asmprintf(fd, "\n");
               
@@ -409,7 +409,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 145 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "FETCH_GLOBAL16 ");
+                    asmprintf(fd, "0x%x: %s", pc, "FETCH_GLOBAL16 ");
                     print_unsigned_bits16(fd, b16);
                     asmprintf(fd, "\n");
               
@@ -428,7 +428,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 149 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "GSTORE_LOCAL8 ");
+                    asmprintf(fd, "0x%x: %s", pc, "GSTORE_LOCAL8 ");
                     print_unsigned_bits8(fd, b8);
                     asmprintf(fd, "\n");
               
@@ -447,7 +447,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 153 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "GSTORE_LOCAL16 ");
+                    asmprintf(fd, "0x%x: %s", pc, "GSTORE_LOCAL16 ");
                     print_unsigned_bits16(fd, b16);
                     asmprintf(fd, "\n");
               
@@ -466,7 +466,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 157 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "GSTORE_GLOBAL8 ");
+                    asmprintf(fd, "0x%x: %s", pc, "GSTORE_GLOBAL8 ");
                     print_unsigned_bits8(fd, b8);
                     asmprintf(fd, "\n");
               
@@ -485,7 +485,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 161 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "GSTORE_GLOBAL16 ");
+                    asmprintf(fd, "0x%x: %s", pc, "GSTORE_GLOBAL16 ");
                     print_unsigned_bits16(fd, b16);
                     asmprintf(fd, "\n");
               
@@ -501,7 +501,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 165 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "GOTO");
+                    asmprintf(fd, "0x%x: %s", pc, "GOTO");
                     asmprintf(fd, "\n");
               
               
@@ -519,7 +519,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 168 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "CBRANCHT ");
+                    asmprintf(fd, "0x%x: %s", pc, "CBRANCHT ");
                     disprintreloc(fd, a);
                     asmprintf(fd, "\n");
               
@@ -538,7 +538,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 172 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "CBRANCHF ");
+                    asmprintf(fd, "0x%x: %s", pc, "CBRANCHF ");
                     disprintreloc(fd, a);
                     asmprintf(fd, "\n");
               
@@ -550,17 +550,17 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
         case 23: 
           { 
             { 
-              unsigned MATCH_w_32_40 = 
-                (mem_aggregate((((MATCH_p) + 5)),DEF_BYTE_ORDER,4));
               unsigned MATCH_w_32_8 = 
                 (mem_aggregate((((MATCH_p) + 1)),DEF_BYTE_ORDER,4));
-              unsigned a = MATCH_w_32_8 /* bits32 at 8 */;
+              unsigned MATCH_w_32_40 = 
+                (mem_aggregate((((MATCH_p) + 5)),DEF_BYTE_ORDER,4));
               unsigned b = MATCH_w_32_40 /* bits32 at 40 */;
+              unsigned a = MATCH_w_32_8 /* bits32 at 8 */;
               next = (((MATCH_p) + 9));
               
               #line 176 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "BRANCHTF ");
+                    asmprintf(fd, "0x%x: %s", pc, "BRANCHTF ");
                     disprintreloc(fd, a);
                     asmprintf(fd, "%s", " ");
                     disprintreloc(fd, b);
@@ -582,7 +582,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               #line 182 "disasm.m"
                     {
                     annotations *ann = (annotations *) a;
-                    asmprintf(fd, "%x: %s", pc, "CALL ");
+                    asmprintf(fd, "0x%x: %s", pc, "CALL ");
                     asmprintf(fd, " { also cuts to = ");
                     print_table(fd, ann->also_cuts_to);
                     asmprintf(fd, ", also unwinds to = ");
@@ -609,7 +609,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 199 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "CMM_TAIL_CALL");
+                    asmprintf(fd, "0x%x: %s", pc, "CMM_TAIL_CALL");
                     asmprintf(fd, "\n");
               
               
@@ -624,13 +624,13 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
                 (mem_aggregate((((MATCH_p) + 2)),DEF_BYTE_ORDER,1));
               unsigned /* [0..255] */ MATCH_w_8_8 = 
                 (mem_aggregate((((MATCH_p) + 1)),DEF_BYTE_ORDER,1));
-              unsigned a = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               unsigned b = MATCH_w_8_16 & 0xff /* bits8b at 16 */;
+              unsigned a = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 3));
               
               #line 202 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "RETURN ");
+                    asmprintf(fd, "0x%x: %s", pc, "RETURN ");
                     print_unsigned_bits8(fd, a);
                     asmprintf(fd, "%s", " ");
                     print_unsigned_bits8(fd, b);
@@ -648,7 +648,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 208 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "CUT");
+                    asmprintf(fd, "0x%x: %s", pc, "CUT");
                     asmprintf(fd, "\n");
               
               
@@ -663,7 +663,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 233 "disasm.m"
               {
-                       asmprintf(fd, "%x: <data: %x>\n", pc, *((u_int32 *) pc));
+                       asmprintf(fd, "0x%x: <data: %x>\n", pc, *((u_int32 *) pc));
                        next = pc + 4;
                      }
               
@@ -681,7 +681,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               next = (((MATCH_p) + 5));
               
               #line 81 "disasm.m"
-                    asmprintf(fd, "%x: %s", pc, "PUSH_SYMBOL ");
+                    asmprintf(fd, "0x%x: %s", pc, "PUSH_SYMBOL ");
                     disprintreloc(fd, a);
                     asmprintf(fd, "\n");
               
@@ -701,7 +701,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               #line 58 "disasm.m"
                     {
                       operator *o = (operator *) op;
-                      asmprintf(fd, "%x: %s", pc, "APPLY_OPERATOR ");
+                      asmprintf(fd, "0x%x: %s", pc, "APPLY_OPERATOR ");
                       asmprintf(fd, "{ name = \"%s\"", o->opname);
                       asmprintf(fd, ", num_args = %u", o->num_args);
                       asmprintf(fd, ", f = ");
@@ -727,7 +727,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               next = (((MATCH_p) + 1));
               
               #line 219 "disasm.m"
-                    asmprintf(fd, "%x: %s", pc, "FETCH ROUNDING MODE ");
+                    asmprintf(fd, "0x%x: %s", pc, "FETCH ROUNDING MODE ");
                     asmprintf(fd, "\n");
               
               
@@ -742,7 +742,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               
               #line 222 "disasm.m"
                
-                    asmprintf(fd, "%x: %s", pc, "STORE_ROUNDING MODE ");
+                    asmprintf(fd, "0x%x: %s", pc, "STORE_ROUNDING MODE ");
                     asmprintf(fd, "\n");
               
               
@@ -756,7 +756,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               next = (((MATCH_p) + 1));
               
               #line 225 "disasm.m"
-                    asmprintf(fd, "%x: %s", pc, "FETCH_SP ");
+                    asmprintf(fd, "0x%x: %s", pc, "FETCH_SP ");
                     asmprintf(fd, "\n");
               
               
@@ -770,7 +770,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               next = (((MATCH_p) + 1));
               
               #line 228 "disasm.m"
-                    asmprintf(fd, "%x: %s", pc, "BREAKPT ");
+                    asmprintf(fd, "0x%x: %s", pc, "BREAKPT ");
                     asmprintf(fd, "\n");
               
               
