@@ -1359,7 +1359,9 @@ object(this)
         let label l = stmt (A.LabelStmt (mangle l)) in
         let labels  = List.map label _labels in
         (**) let comment = stmt (A.CommentStmt (this#comment)) in 
+        (*
        Verbose.say 5 [ this#comment; "\n"];
+       *)
          (**)  
           (* comment :: *) labels
 
@@ -1547,6 +1549,7 @@ link to its successor, but is not linked from any other node.
         let pred = NodeSet.min_elt _pred                in
         let ()   = assert (pred = NodeSet.max_elt _pred) in
             ( pred#upd_succ (fun n -> if n = this then _succ else n)
+            ; List.iter _succ#add_label _labels
             ; _succ#unlink_pred this
             ; _succ#link_pred pred
             )
