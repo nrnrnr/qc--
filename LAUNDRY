@@ -1,30 +1,18 @@
-* Literal values are not constants: a constant has width (or a type),
-  while the width/type of a literal is unknown. Currently literals are treated
-  as constants which is wrong. Update: literals are stored in 64 bit
-  Bit.bits but their TYPE may be smaller.  Bits.width must never be used
-  to find the type of a literal.
+* Cfg3: transaction-based interface: which operations should be
+  protected by transactions?
 
-* Driver/Asm2ast needs a review. This is currently just some old code
-  thrown togther to make qc-- compile and link.
+* How are continuations created? The translation of a continuation must 
+  store a continuation value on the run-time stack.
+
+* How to translate the memory block resulting from global registers back
+  to C--? (Ast3ir.translate).
+
+* Link-time expression in the Asm interface are incompatible to the 
+  link-time expressions as they are calculated by Rtleval.
 
 * CFG: do we really need two methods for traversing the cfg? We have one
   based on the linear order of nodes and another unspecified one. Having
   just the one based on a linear order seem enough for me.
-
-* CFG/AST2IR: targets of a jump statement are translated into nodes. I
-  believe this is wrong because a jump target is a procedure and
-  therefore not represented by a node.
-
-* How can a labeled node tell it is only reached by [[goto]]? This
-  information is often known by the function that creates a node and
-  could passed into it. Of course, some kind of local flow-analysis
-  could also find out but this seems to be a bit complex. --CL
-
-* CFG creation: who is responsible to insert jumps and labels into the 
-  CFG such that it can be brought into linear form? This means that
-  every node with more than one predecessor must be labeled. Currently
-  the AST3IR module takes care of this but it could also be deligated to
-  the CFG module.
 
 * How are RTLs translated back to C--? C-- syntax has no way to express
   different spaces as they are present in RTLs. 
@@ -49,6 +37,9 @@
   functions. 
 
 * Should Target.t be an object? 
+ 
+* We need a uniform way to handle errors after the type-checking phase.
+  Should we use Error.ErrorExn for this and catch it simply in Driver?
 
 * Error reporting for checked run-time errors is very fractured: I
   like to use assert false because if it is raised it includes a
