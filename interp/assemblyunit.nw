@@ -10,6 +10,7 @@ This document contains the interface and implementation of {\PAL} assembly unit 
 #ifndef _ASSEMBLYUNIT_H
 #define _ASSEMBLYUNIT_H
 
+#include <cii/arena.h>
 #include <mclib.h>
 #include <lua.h>
 #include "controlflow.h"
@@ -55,6 +56,23 @@ typedef enum {
 @ 
 
 % ----------------------------------------------------------------------------
+\subsection{Managing Memory for [[assembly_unit]]s}
+% ----------------------------------------------------------------------------
+
+To abstract away from the details of memory management, this interface
+provides a function to create a new [[assembly_unit]] and a function that frees
+all existing [[assembly_unit]]s in memory.
+
+<<function prototypes>>=
+assembly_unit *assembly_unit_new(void);
+void           assembly_unit_free_all(void);
+@ 
+
+Note that [[assembly_unit_new]] returns a pointer to an \emph{uninitialized} 
+[[assembly_unit]].
+
+
+% ----------------------------------------------------------------------------
 \subsection{Utility Functions}
 % ----------------------------------------------------------------------------
 
@@ -92,10 +110,48 @@ extern procedure *curr_proc;
 #include "lualink.h"
 #include "encoding.h"
 #include "interp.h"
+#include "span.h"
 
+<<internal static variable definitions>>
 <<global variable definitions>>
 <<function definitions>>
 @
+
+% ----------------------------------------------------------------------------
+\subsection{Memory Allocation}
+% ----------------------------------------------------------------------------
+
+We make use of Hanson's ``arenas'' (see \emph{C Interfaces and Implementations})
+to assist in allocating and de-allocating memory for [[assembly_unit]]s.
+
+<<internal static variable definitions>>=
+static Arena_T assembly_unit_arena = NULL;
+@ 
+
+<<function definitions>>=
+assembly_unit *assembly_unit_new(void) {
+  assembly_unit *au;
+
+  if (assembly_unit_arena == NULL) {
+    assembly_unit_arena = Arena_new();
+    mem_assert(assembly_unit_arena);
+  }
+
+  au = (assembly_unit *) Arena_alloc(assembly_unit_arena, 
+                                     sizeof(assembly_unit),
+                                     __FILE__, __LINE__);
+  mem_assert(au);
+  return au;
+}
+
+void assembly_unit_free_all(void) {
+  if (assembly_unit_arena != NULL) {
+    Arena_free(assembly_unit_arena);
+    Arena_dispose(&assembly_unit_arena);
+    assembly_unit_arena = NULL;
+  }
+}
+@ 
 
 % ----------------------------------------------------------------------------
 \subsection{Utility Functions}
@@ -107,9 +163,7 @@ We use the constants [[#define]]d in [[machine.h]] to initialize the architectur
 assembly_unit *new_assembly_unit(lua_State *L) {
   static unsigned next_au_id = 1;
 
-  assembly_unit *au;
-
-  au = (assembly_unit *) malloc(sizeof(assembly_unit));
+  assembly_unit *au = assembly_unit_new();
   mem_assert(au);
 
   au->id          = next_au_id++;
@@ -120,6 +174,9 @@ assembly_unit *new_assembly_unit(lua_State *L) {
   au->def_section     = NULL;
   au->section_table   = fresh_table();
   au->label_table     = fresh_table();
+  au->span_table      = fresh_table();
+
+  au->section_table.L = au->label_table.L = au->span_table.L = L;
 
   /* store assembly_unit in table */
   lua_pushtable(L, assembly_units_table);
@@ -129,8 +186,9 @@ assembly_unit *new_assembly_unit(lua_State *L) {
   lua_pop(L, 1); /* pop the assembly_units_table */
 
   /* reset global variables */
-  unit      = au;
-  curr_proc = NULL;
+  unit             = au;
+  curr_proc        = NULL;
+  curr_span_within = NULL;
 
   /* create and enter default section */
   assert(lua_gettop(L) == 0);

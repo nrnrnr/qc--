@@ -14,7 +14,8 @@ typedef void (*Emitter)
     (RBlock, unsigned dest_lc, unsigned long bits, unsigned size);
 typedef void (*FailCont)(char *fmt, ...);
 typedef enum mc_alloc_pool { 
-    RBlock_pool=1, RBlock_data_pool, RLabel_pool, RAddr_pool
+  RBlock_pool=1, RBlock_data_pool, RLabel_pool, RAddr_pool, RClosure_pool,
+  relocated_pool
 } Mc_alloc_pool;
 typedef struct relocatable_address *RAddr;
 extern RBlock block_new(unsigned size);

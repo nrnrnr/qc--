@@ -15,6 +15,8 @@ This document contains the interface and implementation of {\PAL} primitive oper
 <<type definitions>>
 <<macro definitions>>
 
+<<function prototypes>>
+
 #endif /* _VALUE_H */
 @ 
 
@@ -30,7 +32,7 @@ typedef union {
   bits8   bits8;
   bits16  bits16;
   bits32  bits32;
-  bits64  bits64;
+  /*  bits64  bits64; */
   float32 float32;
   float64 float64;
 /*  float96 float96; */
@@ -43,14 +45,33 @@ typedef value *sptr;     /* stack pointer */
 typedef u_int8 *datastack;
 typedef u_int8 *dataptr;
 @
+
+% ----------------------------------------------------------------------------
+\subsection{Helper Utilities}
+% ----------------------------------------------------------------------------
+
 To ensure that {\PAL} values are properly reconciled with the C type system, we use the [[VIEW]] macro.  
 This macro takes two arguments: [[VIEW(LVALUE, T)]].  
 [[LVALUE]] is some sort of C lvalue and [[T]] is a C type.  
 The macro returns [[LVALUE]], properly viewed as a C value of type [[T]].
 
+To perform some quick internal assertions about the [[value]] type, we provide helper [[check_value_types]].
+
+<<function prototypes>>=
+void check_value_types(void);
+@ 
+
 % ----------------------------------------------------------------------------
 \section{Implementation}
 % ----------------------------------------------------------------------------
+
+<<value.c>>=
+#include "value.h"
+
+#include <assert.h>
+
+<<function definitions>>
+@ 
 
 % ----------------------------------------------------------------------------
 \subsection{Utility Macros}
@@ -61,4 +82,38 @@ On the simplest level, we need to be able to interpret the bits of a C lvalue as
 C type casting does not do the trick, as it actually changes the bit-level value being examined; instead, we define the macro [[VIEW]].
 <<macro definitions>>=
 #define VIEW(LVALUE, T)       (*((T *) (&(LVALUE))))
+@
+
+% ----------------------------------------------------------------------------
+\subsection{Sanity Check}
+% ----------------------------------------------------------------------------
+
+We perform checks to make sure that our standardized basic data types are of the expected bit widths.
+For now, we also assert that a pointer is 32-bits.
+Some of our code is dependent on this, so we want to cause an error early on if this interpreter is being executed on a machine with a different pointer-size.
+
+<<function definitions>>=
+void check_value_types (void) {
+  value v;
+  assert(sizeof(v.bits8 ) == 1);
+  assert(sizeof(v.bits16) == 2);
+  assert(sizeof(v.bits32) == 4);
+/*  assert(sizeof(v.bits64) == 8); */
+
+  assert(sizeof(v.float32) == 4);
+  assert(sizeof(v.float64) == 8);
+/*  assert(sizeof(v.float96) == 12); */
+
+  assert(sizeof(u_int8)  == 1);
+  assert(sizeof(u_int16) == 2);
+  assert(sizeof(u_int32) == 4);
+/*  assert(sizeof(u_int64) == 8); */
+
+  assert(sizeof(s_int8)  == 1);
+  assert(sizeof(s_int16) == 2);
+  assert(sizeof(s_int32) == 4);
+/*  assert(sizeof(s_int64) == 8); */
+
+  assert(sizeof(void *)   == sizeof(v.bits32));
+}
 @

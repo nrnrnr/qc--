@@ -18,6 +18,8 @@ This document contains the interface and implementation of the C  representation
 <<type definitions>>
 <<global variable declarations>>
 
+<<function prototypes>>
+
 #endif /* _CONTROLFLOW_H */
 @ 
 
@@ -45,10 +47,28 @@ typedef struct {
   unsigned int  num_locals;
   unsigned int  stackdata_size;
   continuation *cont_list;
-
-  table         span_table;
 } procedure;
 @
+
+% ----------------------------------------------------------------------------
+\subsection{Memory Management}
+% ----------------------------------------------------------------------------
+
+To abstract away from the details of memory management, this interface
+provides functions to create new [[procedure]]s, [[continuation]]s, and
+[[annotations]], as well as a function that frees \emph{all} such objects in 
+memory.
+
+<<function prototypes>>=
+procedure    *procedure_new(void);
+continuation *continuation_new(void);
+annotations  *annotations_new(void);
+
+void          controlflow_free_all(void);
+@ 
+
+Note that the  $T$[[_new]] functions return pointers to \emph{uninitialized} 
+structures.
 
 % ----------------------------------------------------------------------------
 \section{Implementation}
@@ -57,7 +77,13 @@ typedef struct {
 <<controlflow.c>>=
 #include "controlflow.h"
 
+#include <cii/arena.h>
+#include "interp.h"
+
 <<global variable definitions>>
+<<internal static variable definitions>>
+
+<<function definitions>>
 @
 
 To keep track of the current procedure, we use a global pointer.
@@ -69,3 +95,69 @@ extern procedure *curr_proc;
 <<global variable definitions>>=
 procedure *curr_proc = NULL;
 @
+
+% ----------------------------------------------------------------------------
+\subsection{Memory Allocation}
+% ----------------------------------------------------------------------------
+
+We make use of Hanson's ``arenas'' (see \emph{C Interfaces and Implementations})
+to assist in allocating and de-allocating memory for control-flow related
+structures.
+
+<<internal static variable definitions>>=
+static Arena_T controlflow_arena = NULL;
+@ 
+
+<<function definitions>>=
+procedure *procedure_new(void) {
+  procedure *proc;
+
+  if (controlflow_arena == NULL) {
+    controlflow_arena = Arena_new();
+    mem_assert(controlflow_arena);
+  }
+
+  proc = (procedure *) Arena_alloc(controlflow_arena, sizeof(procedure),
+                                   __FILE__, __LINE__);
+  mem_assert(proc);
+  return(proc);
+}
+continuation *continuation_new(void) {
+  continuation *cont;
+
+  if (controlflow_arena == NULL) {
+    controlflow_arena = Arena_new();
+    mem_assert(controlflow_arena);
+  }
+
+  cont = (continuation *) Arena_alloc(controlflow_arena, sizeof(continuation),
+                                      __FILE__, __LINE__);
+  mem_assert(cont);
+  return(cont);
+}
+annotations *annotations_new(void) {
+  annotations *ann;
+
+  if (controlflow_arena == NULL) {
+    controlflow_arena = Arena_new();
+    mem_assert(controlflow_arena);
+  }
+
+  ann = (annotations *) Arena_alloc(controlflow_arena, sizeof(annotations),
+                                    __FILE__, __LINE__);
+  mem_assert(ann);
+  return(ann);
+}
+@
+
+To free all:
+
+<<function definitions>>=
+void controlflow_free_all(void) {
+  if (controlflow_arena != NULL) {
+    Arena_free(controlflow_arena);
+    Arena_dispose(&controlflow_arena);
+    controlflow_arena = NULL;
+  }
+}
+@ 

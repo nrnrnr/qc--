@@ -15,7 +15,6 @@ This document contains the interface and implementation of the interpreter's enc
 
 <<macro definitions>>
 <<macro-generated function prototypes>>
-<<function prototypes>>
 
 #endif /* _ENCODING_H */
 @ 
@@ -55,19 +54,6 @@ int lua_CMM_end_section(lua_State *L);
 @ 
 
 % ----------------------------------------------------------------------------
-\paragraph{{\PAL} Spans}
-% ----------------------------------------------------------------------------
-
-Spans can get complicated to keep track of unless enough bookkeeping is done
-at load-time.
-We have helper functions to assist with this bookkeeping.
-
-<<function prototypes>>=
-void span_table_push(table t, unsigned tok, unsigned v);
-void span_table_pop (table t, unsigned tok);
-@ 
-
-% ----------------------------------------------------------------------------
 \section{Implementation}
 % ----------------------------------------------------------------------------
 
@@ -88,7 +74,6 @@ void span_table_pop (table t, unsigned tok);
 #include "interp.h"
 
 <<bytecode generation>>
-<<function definitions>>
 @
 
 % ----------------------------------------------------------------------------
@@ -308,8 +293,7 @@ int lua_CMM_procedure(lua_State *L) {
 @ 
 <<[[lbl]] $\leftarrow$ [[CMM_label]] for the procedure>>=
   name = Atom_string(lua_tostring(L, -3));
-  proc = (procedure *) malloc(sizeof(procedure));
-  mem_assert(proc);
+  proc = procedure_new();
 
   lua_pushvalue(L, -3);       /* make copy of procedure name */
   lbl  = get_label(L, name);
@@ -325,8 +309,6 @@ int lua_CMM_procedure(lua_State *L) {
   proc->stackdata_size = (unsigned int) lua_tonumber(L, -1);
 
   proc->cont_list      = NULL;
-  proc->span_table     = fresh_table();
-  proc->span_table.L   = L;
 
   lbl->unit = unit;
   lbl->ty = CMM_PROCEDURE;
@@ -354,8 +336,7 @@ int lua_CMM_continuation(lua_State *L) {
 @ 
 <<[[lbl]] $\leftarrow$ [[CMM_label]] for the continuation>>=
   name = Atom_string(lua_tostring(L, -1));
-  cont = (continuation *) malloc(sizeof(continuation));
-  mem_assert(cont);
+  cont = continuation_new();
 
   lua_pushvalue(L, -1);       /* make copy of continuation name */
   lbl  = get_label(L, name);
@@ -764,10 +745,10 @@ To emit the address of a symbol, [[lua_CMM_emit_raddr]] lets the Toolkit do all 
 
 <<bytecode generation>>=
 int lua_CMM_emit_raddr(lua_State *L) {
-  CMM_label *lbl;
-  RAddr      found_raddr, raddr_to_emit;
-  char      *sym;
-  int        offset;
+  CMM_label  *lbl;
+  RAddr       found_raddr, raddr_to_emit;
+  const char *sym;
+  int         offset;
 
   lua_assert_isnumber(L, -1, "emit_raddr expects an offset value (number)");
   lua_assert_isstring(L, -2, "emit_raddr expects a symbol name (string)");
@@ -814,8 +795,8 @@ An error is produced if the symbol pushed currently has no attached value.
 
 <<bytecode generation>>=
 int lua_CMM_push_symbol(lua_State *L) {
-  CMM_label *lbl;
-  char      *sym;
+  CMM_label  *lbl;
+  const char *sym;
 
   lua_assert_isstring(L, -1, "push_symbol expects a string literal");
   sym = Atom_string(lua_tostring(L, -1));
@@ -1074,8 +1055,7 @@ Initializing the [[annotations]] structure is not too difficult, and ends up pop
 We use macros [[fresh_table]] and [[lua_pushtable]] for easy table manipulation.
 
 <<[[ann]] $\leftarrow$ new, initialized [[annotations]] structure>>=
-ann = (annotations *) malloc(sizeof(annotations));
-mem_assert(ann);
+ann = annotations_new();
 
 ann->also_aborts = ((bool) lua_tonumber(L, -1));
 lua_pop(L, 1);
@@ -1157,48 +1137,3 @@ LUA_WRAP_UNARY_INDEX(gstore_global, gstore_global)
   ITERATE_CMM_FUNCS(LUA_FUNC_PROTOTYPE)
 @ 
 
-% ----------------------------------------------------------------------------
-\paragraph{Span Utility Functions}
-% ----------------------------------------------------------------------------
-
-<<function definitions>>=
-void span_table_push(table t, unsigned tok, unsigned v) {
-  lua_State *L = t.L;
-  lua_pushtable(L, t);
-
-  lua_pushnumber(L, (double) tok);
-  lua_pushvalue(L, -1);
-  lua_gettable(L, -3);
-  if (!lua_istable(L, -1)) {
-    lua_newtable(L);
-    lua_settable(L, -3);
-  } else {
-    lua_pop(L, 1); /* pop token */
-  }
-  lua_pushusertag(L, (void *) v, lua_CMM_span_value_tag);
-  lua_rawseti(L, -2, lua_getn(L, -2) + 1);
-
-  lua_pop(L, 1); /* pop table */
-}
-
-void span_table_pop(table t, unsigned tok) {
-  lua_State *L = t.L;
-  int n;
-
-  lua_pushtable(L, t);
-  lua_pushnumber(L, (double) tok);
-  lua_gettable(L, -2);
-
-  lua_assert_istable(L, -1,  "cannot end unstarted span");
-
-  n = lua_getn(L, -1);
-  if (n == 0) { 
-    cmm_err("cannot end unstarted span");
-  }
-
-  lua_pushnil(L);
-  lua_rawseti(L, -1, n);
-
-  lua_pop(L, 2); /* pop two tables */
-}
-@ 

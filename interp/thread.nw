@@ -39,22 +39,6 @@ typedef struct {
   void          *stack_limit;
   void          *stack_free;
 
-  /* STACK REDO
-
-  actstack       callstack_base;
-  actptr         callstack_limit;
-  actptr         callstack_free;
-
-  stack          locals_base;
-  sptr           locals_limit;
-  sptr           locals_free;
-
-  datastack      stackdata_base;
-  dataptr        stackdata_limit;
-  dataptr        stackdata_free;
-
-  */
-
   interval_list *dead_list;
 } thread;
 @ 
@@ -150,9 +134,6 @@ up the thread's first activation--in suspended state, of course.
 
 <<function definitions>>=
 thread *init_thread(CMM_label *lbl, void *stack_space, unsigned n) {
-  /* STACK REDO
-  int     space_size;
-  */
   void   *stack_limit = (void *) (((u_int8 *) stack_space) + n);
 
   thread *t = (thread *) malloc(sizeof(thread));
@@ -160,26 +141,8 @@ thread *init_thread(CMM_label *lbl, void *stack_space, unsigned n) {
 
   t->next_frame_id = 0;
   
-  /* STACK REDO
-  space_size = (stack_limit - stack_space) / 3;
-  */
-
   /* we carve out areas for stackdata, callstack, locals from the memory block
      handed into init_thread */
-
-  /* STACK REDO
-  t->callstack_base  = (actstack)  stack_space;
-  t->callstack_limit = (actptr)    (stack_space + space_size);
-  t->callstack_free  = t->callstack_base;
-
-  t->locals_base     = (stack)     (stack_space + space_size);
-  t->locals_limit    = (sptr)      (stack_space + (2 * space_size));
-  t->locals_free     = t->locals_base;
-
-  t->stackdata_base  = (datastack) (stack_space + (2 * space_size));
-  t->stackdata_limit = (dataptr)   stack_limit;
-  t->stackdata_free  = t->stackdata_base;
-  */
 
   t->stack_base  = stack_space;
   t->stack_limit = stack_limit;
@@ -202,10 +165,6 @@ The only difference between this suspended activation and a normal activation is
   assert(lbl->lbl.proc != NULL);
   {
     /* locals, then stackdata, then activation */
-
-    /* STACK REDO
-    activation *act   = t->callstack_free++;
-    */
 
     actptr      act;
     stack       locals;
@@ -251,16 +210,6 @@ stack layout convention.
   t->stack_free      = (void *) (((dataptr) (t->stack_free)) + 
                                  start->stackdata_size);
   stackdata_end      = t->stack_free;
-
-  /* STACK REDO
-  act->locals        = t->locals_free;
-  t->locals_free    += start->num_locals;
-  act->locals_end    = t->locals_free;
-
-  act->stackdata      = t->stackdata_free;
-  t->stackdata_free  += start->stackdata_size;
-  act->stackdata_end  = t->stackdata_free;
-  */
 @
 
 % ----------------------------------------------------------------------------

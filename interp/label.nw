@@ -57,6 +57,22 @@ table exports_table;
 @ 
 
 % ----------------------------------------------------------------------------
+\subsection{Managing Memory for [[CMM_label]]s}
+% ----------------------------------------------------------------------------
+
+To abstract away from the details of memory management, this interface
+provides a function to create a new [[CMM_label]] and a function that frees
+all existing [[CMM_label]]s in memory.
+
+<<function prototypes>>=
+CMM_label *CMM_label_new(void);
+void       CMM_label_free_all(void);
+@ 
+
+Note that [[CMM_label_new]] returns a pointer to an \emph{uninitialized} 
+[[CMM_label]].
+
+% ----------------------------------------------------------------------------
 \subsection{Helpers}
 % ----------------------------------------------------------------------------
 
@@ -91,19 +107,57 @@ CMM_label *cmm_find_export(const char *arg);
 
 #include <assert.h>
 #include <stdlib.h>
+#include <cii/arena.h>
 #include "table.h"
 #include "lualink.h"
 #include "interp.h"
 
+<<internal static variable definitions>>
 <<global variable definitions>>
 <<function definitions>>
 @
+
+% ----------------------------------------------------------------------------
+\subsection{Memory Allocation}
+% ----------------------------------------------------------------------------
+
+We make use of Hanson's ``arenas'' (see \emph{C Interfaces and Implementations})
+to assist in allocating and de-allocating memory for [[CMM_label]]s.
+
+<<internal static variable definitions>>=
+static Arena_T CMM_label_arena = NULL;
+@ 
+
+<<function definitions>>=
+CMM_label *CMM_label_new(void) {
+  CMM_label *lbl;
+
+  if (CMM_label_arena == NULL) {
+    CMM_label_arena = Arena_new();
+    mem_assert(CMM_label_arena);
+  }
+
+  lbl = (CMM_label *) Arena_alloc(CMM_label_arena, sizeof(CMM_label), 
+                                  __FILE__, __LINE__);
+  mem_assert(lbl);
+  return lbl;
+}
+
+void CMM_label_free_all(void) {
+  if (CMM_label_arena != NULL) {
+    Arena_free(CMM_label_arena);
+    Arena_dispose(&CMM_label_arena);
+    CMM_label_arena = NULL;
+  }
+}
+@ 
 
 % ----------------------------------------------------------------------------
 \subsection{Utility Macros}
 % ----------------------------------------------------------------------------
 
 Macro [[CMM_label_defined]] simplifies testing whether or not a given [[CMM_label]] has yet been defined (i.e., tied down to a location in an [[RBlock]]).
+
 <<macro definitions>>=
 #define CMM_label_defined(LBL)                            \
 (((LBL)->ty == CMM_PROCEDURE &&                           \
@@ -138,8 +192,8 @@ We look to see if there is a value associated with [[name]] in the Lua label tab
 If there is a value attached with [[name]] in the table, we return it.
 <<function definitions>>=
 CMM_label *get_label(lua_State *L, const char *name) {
-  RLabel    label;
-  RAddr     addr;
+  RLabel     label;
+  RAddr      addr;
   CMM_label *lbl;
 
   /* expects a string atop the stack ! */
@@ -172,8 +226,7 @@ If [[name]] has no non-nil value attached to it in the table, we create a new [[
     label = label_new(name);
     addr  = addr_new(label, 0);
 
-    lbl   = (CMM_label *) malloc(sizeof(CMM_label));
-    mem_assert(lbl);
+    lbl   = CMM_label_new();
 
     lbl->ty        = CMM_LABEL;
     lbl->lbl.raddr = addr;

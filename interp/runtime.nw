@@ -83,7 +83,7 @@ The runtime system exports two functions that allow the interpreter to be starte
 
 <<function prototypes>>=
 int  Cmm_open(int valstack_size, int argspace_size);
-void Cmm_close();
+void Cmm_close(void);
 @ 
 
 % ----------------------------------------------------------------------------
@@ -121,6 +121,7 @@ The implementation of the {\PAL} runtime system is contained within [[runtime.c]
 #include "runtime.h"
 
 #include <stdlib.h>
+#include <string.h>
 #include "value.h"
 #include "activation.h"
 #include "lualink.h"
@@ -226,9 +227,6 @@ Cmm_Cont *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n,
   /* initialize thread */
   t = init_thread(lbl, s, n);
   *limit_cookie = t->stack_limit;
-  /* STACK REDO
-  *limit_cookie = (void *) t->callstack_limit;
-  */
 
   /* initialize f and x placeholders in loaded bootstring unit */
   assert(location_known(CMM_label_raddr((CMM_label *) lbl)));
@@ -280,21 +278,12 @@ To find the youngest activation, determine if an activation is the oldest in its
 Cmm_Activation *Cmm_YoungestActivation(const Cmm_Cont *t) {
   assert(t->stack_free > t->stack_base);
   return (Cmm_Activation *) (((activation *) t->stack_free) - 1);
-
-  /* STACK REDO
-  assert(t->callstack_free > t->callstack_base);
-  return (Cmm_Activation *) (t->callstack_free - 1);
-  */
 }
 
 int Cmm_isOldestActivation(const Cmm_Activation *a) {
   thread *t = find_thread(a->u);
 
   return (t->stack_base == a->locals);
-
-  /* STACK REDO
-  return (t->callstack_free == t->callstack_base + 1);
-  */
 }
 
 Cmm_Activation *Cmm_NextActivation(const Cmm_Activation *a) {
@@ -303,10 +292,6 @@ Cmm_Activation *Cmm_NextActivation(const Cmm_Activation *a) {
   }
 
   return (Cmm_Activation *) (((activation *) (a->locals)) - 1);
-
-  /* STACK REDO
-  return (Cmm_Activation *) (a - 1);
-  */
 }
 
 int Cmm_ChangeActivation(Cmm_Activation **a) {
@@ -319,16 +304,6 @@ int Cmm_ChangeActivation(Cmm_Activation **a) {
     t->stack_free = (void *) (((actptr) (*a)) + 1);
     return 1;
   }
-
-  /* STACK REDO
-  if (t->callstack_free == t->callstack_base + 1)
-	return 0;
-  else {
-    (*a)--;
-    t->callstack_free--;
-    return 1;
-  }
-  */
 }
 @ 
 
@@ -366,7 +341,7 @@ Cmm_Cont *Cmm_GetCont(const Cmm_Activation *a, Cmm_Word token) {
   */
 
   if (token != 0) {
-    Cmm_Activation *act = a - 1;
+    Cmm_Activation *act = ((Cmm_Activation *) a) - 1;
     annotations    *ann = act->kappa;
     CMM_label      *lbl;
 
@@ -522,7 +497,7 @@ directory.  If all fails, we signal an error.
 @ 
 
 <<controlling the interpreter>>=
-void Cmm_close() {
+void Cmm_close(void) {
   cmm_interp_close();
 }
 @ 

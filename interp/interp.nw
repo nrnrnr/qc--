@@ -1,4 +1,4 @@
-% -*- mode: Noweb; noweb-code-mode: C-mode -*- %
+% -*- mode: Noweb; noweb-code-mode: c-mode -*- %
 \documentclass{article}
 \usepackage{noweb}
 \usepackage{amsmath}
@@ -422,6 +422,14 @@ RClosure mc_alloc_closure(unsigned size, RBlock dest_block,
 void error(char *fmt, ...);
 @
 
+Of our own volition, we provide function [[mc_free_all]] to free all memory
+allocated by [[mc_alloc]] and [[mc_alloc_closure]] since the last call to
+[[mc_free_all]]. 
+
+<<function prototypes>>=
+void mc_free_all(void);
+@ 
+
 % ----------------------------------------------------------------------------
 \paragraph{Encoding Helpers}
 % ----------------------------------------------------------------------------
@@ -471,11 +479,9 @@ int cmm_interp_open(int valstack_size, int argspace_size);
 @ 
 
 [[cmm_interp_open]] starts up Lua and prepares for future encoding and interpreting, returning a non-zero [[int]] only if an error occurred.
-We make use of helper function [[check_value_types]] to perform some assertions about the basic C types used in the interpreter's implementation; and we use [[init_interp]] to perform basic interpreter initialization (including operator registration, etc.).
+We make use of helper function [[check_value_types]] (from [[value.nw]]) to perform some assertions about the basic C types used in the interpreter's implementation; and we use [[init_interp]] to perform basic interpreter initialization (including operator registration, etc.).
 
 <<function prototypes>>=
-/* Initialization Helper Functions: */
-void   check_value_types(void);
 void   init_interp(lua_State *L, int valstack_size, int argspace_size);
 @ 
 
@@ -706,35 +712,9 @@ The utility helper functions assist in error handling and performing some sanity
 \paragraph{Sanity Checks}
 % ----------------------------------------------------------------------------
 
-Although likely unnecessary, we perform a few quick assertions to make sure that our standardized basic data types are of the expected bit widths.
-For now, we also assert that a pointer is 32-bits.
-Some of our code is dependent on this, so we want to cause an error early on if this interpreter is being executed on a machine with a different pointer-size.
+Although likely unnecessary, we perform a few quick assertions to make sure nothing horribly wrong is going on before we begin to interpret code.
 
 <<sanity checks>>=
-void check_value_types (void) {
-  value v;
-  assert(sizeof(v.bits8 ) == 1);
-  assert(sizeof(v.bits16) == 2);
-  assert(sizeof(v.bits32) == 4);
-  assert(sizeof(v.bits64) == 8);
-
-  assert(sizeof(v.float32) == 4);
-  assert(sizeof(v.float64) == 8);
-/*  assert(sizeof(v.float96) == 12); */
-
-  assert(sizeof(u_int8)  == 1);
-  assert(sizeof(u_int16) == 2);
-  assert(sizeof(u_int32) == 4);
-  assert(sizeof(u_int64) == 8);
-
-  assert(sizeof(s_int8)  == 1);
-  assert(sizeof(s_int16) == 2);
-  assert(sizeof(s_int32) == 4);
-  assert(sizeof(s_int64) == 8);
-
-  assert(sizeof(void *)   == sizeof(v.bits32));
-}
-
 void check_architecture(assembly_unit *au) {
   if (au->memsize != 8) {
     fprintf(stderr, "this interpreter can only handle a MEMSIZE of 8");
@@ -745,8 +725,8 @@ void check_architecture(assembly_unit *au) {
     exit(1);
   }
   if (au->byte_order != DEF_BYTE_ORDER) {
-    fprintf(stderr, "this interpreter can only handle LITTLE-ENDIAN memory "
-                    "access");
+    fprintf(stderr, "this interpreter can only handle native byte-order memory"
+                    " access");
     exit(1);
   }
 }
@@ -845,9 +825,23 @@ void lua_error_handle(int err_code, const char *fn) {
 
 As a client of the toolkit, our code is obligated to define functions [[mc_alloc]] and [[mc_alloc_closure]]; these functions simply must allocate memory to be used by Toolkit-generated code as ``relocatable memory blocks.''  
 
+We use David Hanson's ``arenas'' for allocation; they allow for one-shot
+de-allocation.
+
+<<global variable definitions>>=
+static Arena_T mc_arena = NULL;
+@ 
+
 <<bytecode generation>>=
-extern void *mc_alloc(int size, Mc_alloc_pool pool) {
-  void *a = (void *) malloc(size);
+void *mc_alloc(int size, Mc_alloc_pool pool) {
+  void *a;
+
+  if (mc_arena == NULL) {
+    mc_arena = Arena_new();
+    mem_assert(mc_arena);
+  }
+
+  a = (void *) Arena_alloc(mc_arena, size, __FILE__, __LINE__);
   mem_assert(a);
   return a;
 }
@@ -863,12 +857,11 @@ static RClosure  *closures_limit = NULL;
 @ 
 
 <<bytecode generation>>=
-extern RClosure mc_alloc_closure(unsigned size, RBlock dest_block, 
+RClosure mc_alloc_closure(unsigned size, RBlock dest_block, 
                                  unsigned dest_lc)
 {
   /* note: RClosure is a typedef'd struct pointer */
-  RClosure a = (RClosure) malloc(size);
-  mem_assert(a);
+  RClosure a = (RClosure) mc_alloc(size, RClosure_pool);
 
   /* store the closure in a "dynamic array" so it can later be applied */
   if (closures_free >= closures_limit) {
@@ -883,6 +876,19 @@ extern RClosure mc_alloc_closure(unsigned size, RBlock dest_block,
   (closures_free++)[0] = a;
 
   return a;
+}
+@
+
+To free all memory allocated for the Machine-code Toolkit since the last call
+to [[mc_free_all]], we simply free the contents of [[mc_arena]].
+
+<<bytecode generation>>=
+void mc_free_all(void) {
+  if (mc_arena != NULL) {
+    Arena_free(mc_arena);
+    Arena_dispose(&mc_arena);
+    mc_arena = NULL;
+  }
 }
 @ 
 
@@ -911,8 +917,12 @@ int lua_relocate_block(lua_State *L) {
   halt();
   set_block(oldbl);
 
-  loc = (void *) malloc(block_size(bl));
-  mem_assert(loc);
+  /* THIS COULD BE DANGEROUS */
+  loc = (void *) mc_alloc(block_size(bl), relocated_pool);
+
+  /* loc = (void *) malloc(block_size(bl)); */
+  /* mem_assert(loc); */
+
   set_address(bl, (unsigned) loc);
 
   lua_pop(L, 1);
@@ -980,6 +990,8 @@ int load_assembly_unit(char *s, assembly_unit_type ty) {
   lua_State     *L  = assembly_units_table.L;
   RClosure      *cl;
   assembly_unit *au = new_assembly_unit(L);
+
+  assert(au);
 
   if (setjmp(errorjmp)) {
     if (ty == SRC_FILE) {
@@ -1109,10 +1121,6 @@ Finally, we get to the main part of the interpreter.  We start by initializing t
   t->stack_free = (void *) (((actptr) t->stack_free) - 1);
   act = (actptr) t->stack_free;
   assert(act >= (actptr) t->stack_base);
-  /* STACK REDO
-  act = --t->callstack_free;
-  assert(act >= t->callstack_base);
-  */
 
   <<copy suspended state from [[act]] into local C variables>>
 
@@ -1247,18 +1255,25 @@ For now, we only support the natural byte-order of the machine on which the inte
 \useops{Guarded-Store-False}
 <<matching statement>>=
     | FETCH(sz,bo,al)   => {
+                           /* FIX actually do something with sz,bo,al */
                            assert(bo == DEF_BYTE_ORDER);
+                           assert(al == DEF_ALIGN);
+                           assert(sz >  0);
                            <<fetch value from given address>>
                            pc = next;
                            }
     | STORE(sz,bo,al)   => {
                            assert(bo == DEF_BYTE_ORDER);
+                           assert(al == DEF_ALIGN);
+                           assert(sz >  0);
                            <<store given value at given address>>
                            values -= 2;
                            pc = next;
                            }
     | GSTORE(sz,bo,al)  => {
                            assert(bo == DEF_BYTE_ORDER);
+                           assert(al == DEF_ALIGN);
+                           assert(sz >  0);
                            UNDERFLOW_CHECK(values, 3);
                            if (VIEW(STACK_ELT(values, -2), bool)) {
                              <<store given value at given address>>
@@ -1425,13 +1440,6 @@ To save the caller's activation record, we simply use the next free [[activation
                            if (t->stack_free > t->stack_limit)
                              cmm_err("ran out of stack space");
 
-                           /* STACK REDO
-                           saved = t->callstack_free++;
-
-                           if (t->callstack_free > t->callstack_limit)
-                             cmm_err("ran out of call stack space");
-                           */
-
                            saved->pc            = next;
                            saved->locals        = locals;
                            saved->locals_end    = locals_end;
@@ -1463,18 +1471,6 @@ When the matching statement is executed once more during the next cycle of the [
 
                            /* CALLEE */
                            saved->callee = (actptr) stackdata_end;
-
-                           /* STACK REDO
-                           locals        = t->locals_free;
-                           locals_end    = (t->locals_free +=
-                                                        proc->num_locals);
-                           assert(t->locals_free <= t->locals_limit);
-
-                           stackdata     = t->stackdata_free;
-                           stackdata_end = (t->stackdata_free += 
-                                                        proc->stackdata_size);
-                           assert(t->stackdata_free <= t->stackdata_limit);
-                           */
 
                            u             = new_uid(t);
 @
@@ -1577,29 +1573,11 @@ Because the old activation dies, we can simply reuse the memory chunk it used on
 We do need to make sure, though, that there is enough room on this stacks for the new activation in the case that the new activation needs more local stack memory than the dying one.
 
 <<reuse dead local memory for new activation>>=
-                           /* for now, make sure there's enough room on locals
-                              and stackdata stacks
-                            */
-                           /* STACK REDO
-                           assert(locals_end    <= t->locals_limit);
-                           assert(stackdata_end <= t->stackdata_limit);
-                           */
-
-                           /* locals ptr stays because we throw out old rho */
-                           /* stackdata ptr stays for same reason */
-
                            stackdata     = (datastack) (locals_end = locals + 
                                                          proc->num_locals);
                            stackdata_end = stackdata + proc->stackdata_size;
                            t->stack_free = (void *) stackdata_end;
                            assert(t->stack_free <= t->stack_limit);
-
-                           /* STACK REDO
-                           t->locals_free = locals_end = locals + 
-                                                         proc->num_locals;
-                           t->stackdata_free = stackdata_end = stackdata + 
-                                                         proc->stackdata_size;
-                           */
 @ 
 
 We implement both return rules with one matching case.
@@ -1615,7 +1593,12 @@ We implement both return rules with one matching case.
                            
                            /* FIX for now we allow walking off stack */
                            if (locals == t->stack_base) {
+                             /* reclaim dead space */
+                             interval_list_free(t->dead_list);
                              t->stack_free = t->stack_base;
+
+                             /* THIS COULD BE DANGEROUS */
+                             free(t);
 
                              printf("[returned from specified procedure].\n");
                              done = 1;
@@ -1626,19 +1609,7 @@ We implement both return rules with one matching case.
                            /* reclaim dead space */
                            t->stack_free = caller;
 
-                           /* STACK REDO
-                           if (t->callstack_free <= t->callstack_base) {
-                             printf("[returned from specified procedure].\n");
-                             done = 1;
-                             break;
-                           }
-
-                           caller = --(t->callstack_free);
-                           */                           
-
                            <<restore activation record stored at [[caller]]>>
-
-                           <<reclaim unneeded dead local space>>
 
                            dies_uid(u);
                            u = caller->u;
@@ -1682,15 +1653,6 @@ We simply copy pointers to restore information from the activation record stored
                            stackdata_end  = caller->stackdata_end;
 
                            caller->callee = NULL;
-@
-We adjust the current thread's pointers to reclaim space freed with the death of the callee.
-
-<<reclaim unneeded dead local space>>=
-                           /* reclaim freed space */
-                           /* STACK REDO
-                           t->locals_free    = locals_end;
-                           t->stackdata_free = stackdata_end;
-                           */
 @
 
 Next comes the cut instruction, one of the most difficult to implement.
@@ -1737,11 +1699,6 @@ We restore state information from the destination activation and recover memory 
                            /* recover freed memory */
                            t->stack_free     = cont->dest_act;
 
-                           /* STACK REDO
-                           t->callstack_free = cont->dest_act;
-                           t->locals_free    = cont->dest_act->locals_end;
-                           t->stackdata_free = cont->dest_act->stackdata_end;
-                           */
                            }
 @ 
 
@@ -1794,11 +1751,6 @@ We next kill off all applications ``above'' [[dest_act]] in the activation chain
                            dies_uid_range(
                                   (((actptr) (t->stack_free)) - 1)->u,
                                   (cont->dest_act->callee)->u);
-
-                           /* STACK REDO 
-                           dies_uid_range((t->callstack_free - 1)->u,
-                                          (cont->dest_act + 1)->u);
-                           */
 @
 
 Finally, restoring information from the destination activation is as simple as copying pointers and the old [[uid]].
@@ -1829,9 +1781,6 @@ We need to store an activation pointer within each of the activations contained 
 
                            for (c = proc->cont_list; c != NULL; c = c->next) {
                              c->dest_act = (actptr) t->stack_free;
-                             /* STACK REDO
-                             c->dest_act = t->callstack_free;
-                             */
                              c->u        = u;
                            }
 
@@ -1861,7 +1810,9 @@ The value is stored in the last entry in the token's table.
                            assert(curr_proc != NULL);
 
                            /* update current span information */
+						   /*
                            span_table_push(curr_proc->span_table, tok, v);
+						   */
 
                            pc = next;
                            }
@@ -1875,8 +1826,9 @@ For [[END_SPAN]] we simply remove the last entry from the token's table (within 
                            assert(curr_proc != NULL);
 
                            /* update current span information */
+/*
                            span_table_pop(curr_proc->span_table, tok);
-
+*/
                            pc = next;
                            }
 @
@@ -1964,6 +1916,7 @@ Putting it all together, we have [[interp.m]], the C file with NJ Machine-Code T
 <<interp.m>>=
 #include "interp.h"
 
+#include <cii/arena.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -1979,6 +1932,7 @@ Putting it all together, we have [[interp.m]], the C file with NJ Machine-Code T
 #include "encoding.h"
 #include "uid.h"
 #include "types.h"
+#include "span.h"
 #include "stack.h"
 #include "controlflow.h"
 
@@ -2147,24 +2101,23 @@ typedef u_int32 Cmm_Word;
 
 Finally, we have to properly shut down the interpreter (this code sits in [[cmm_interp_close]]).
 <<gracefully shut down>>=
-/* free malloc'd space */
 
-free(values_base);
-values_base = NULL;
+/* free allocated space */
 
-/* ARGS OK */
-free(arguments);
-arguments = NULL;
+free(values_base);       values_base   = NULL;
+free(arguments);         arguments     = NULL;
+free(globals);           globals       = NULL;
 
-free(globals);
+free(closures_base);     closures_base = NULL; 
 
-/* FIX we should do this much earlier? */
-/* FIX we need to free table data and release locks on refs to lua tables! */
+    CMM_label_free_all();
+         span_free_all();
+     operator_free_all();
+  controlflow_free_all();
+assembly_unit_free_all();
+           mc_free_all();
 
-free(closures_base);
 lua_close(lua_interp);
-
-/* FIX do we have to shut down the encoder somehow?  free memory? */
 @
 
 % ----------------------------------------------------------------------------
@@ -2189,7 +2142,7 @@ Need to add citations!!!
 
 Look through standard C header files / libraries for info on bit-standardized types: William Kahan web page, book down in the lab.
 
-Use CII: arenas for [[RBlock]]s and [[RClosure]]s, maybe sequences to store closure pointers, check out Hanson's [[malloc]] interface (that allows debugging), maybe rings for the dead set, look at dvars and [[array_t]].
+Use CII: maybe sequences to store closure pointers, check out Hanson's [[malloc]] interface (that allows debugging), maybe rings for the dead set, look at dvars and [[array_t]].
 
 Only procedures, declarations, and other sections may be in toplevel ``section.''
 
