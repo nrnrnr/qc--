@@ -379,8 +379,44 @@ compile time.}
 \section{Aim at your target}
 
 You have to build a \texttt{Target.t}.
-This code is still an embarrassing mess.
-New module \texttt{Mflow} might help.
+This abstraction is a bit of a mess, but we can break it down by
+categories. 
+\begin{enumerate} 
+\item
+The \emph{basic information} is the \texttt{name}, which you've already
+chosen, and what I'll call ``metrics:''
+\texttt{byteorder}, \texttt{wordsize}, \texttt{pointersize},
+\texttt{alignment}, and \texttt{memsize}.
+You also announce the floating-point semantics using \texttt{float}.
+You probably either use \texttt{"ieee754"} or the name of your
+machine. 
+\item
+You'll announce your \texttt{spaces}.
+\item
+The first problematic items are \texttt{spill} and \texttt{reload}.
+The interfaces to these functions are relics from the days when we
+understood things less well than we do now.
+A~future interface change will undoubtedly make it easier to write
+spill code.
+For now, we suggest you copy the code from the $x$86 back end and hope
+for the best.
+It might work.
+\item
+Your \emph{control flow} will be straightforward, if you're lucky.
+If your machine is sensible, 
+you should be able to get \texttt{goto}, \texttt{jump},
+\texttt{cutto}, \texttt{call}, and \texttt{branch} by using the functor
+\texttt{Mflow.MakeStandard}. 
+(As of 17~July~2002, the ``standard'' \texttt{cutto} is bogus.)
+\item
+\emph{Calling conventions} are not yet developed.
+Fake your \texttt{cc} field as best you can.
+\item
+The remaining items are in some way \emph{questionable}.
+For now, imitate an existing target for your \texttt{globals},
+\texttt{data\_section}, and \texttt{charset}.
+\end{enumerate}
+
 
 \section{Allocate the rest of your registers}
 
