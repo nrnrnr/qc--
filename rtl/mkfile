@@ -1,0 +1,154 @@
+# ------------------------------------------------------------------ 
+# $Id$ 
+# ------------------------------------------------------------------ 
+
+NAME =     rtllib 
+
+# ------------------------------------------------------------------ 
+# paths
+# ------------------------------------------------------------------ 
+
+TOP    =    ..
+INTERP =    evaluating
+DEPEND =    DEPEND.$INTERP
+
+LIBDIR =    ../lib
+BINDIR =    ../bin
+MANDIR =    ../man
+
+# ------------------------------------------------------------------ 
+# (high level) virtual targets
+# ------------------------------------------------------------------ 
+
+HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
+INC  =          `echo *.nw       | sed 's/\.nw/.inc/g;'`
+LIBCMX =        $NAME.cmxa
+LIBCMO =        $NAME.cma
+
+all:V:          $LIBCMO 
+all.opt:V:      $LIBCMX
+update:V:       $LIBDIR/$LIBCMO 
+update.opt:V:   $LIBDIR/$LIBCMX
+
+dvi:V:          $INC
+html:V:         $HTML
+
+test:VQ:
+                echo "nothing to be done"
+
+depend:V:       $DEPEND
+
+clean:V:    
+                rm -f *.cmo *.cmi *.cmx *.o
+                rm -f *.output
+                rm -f $LIBCMX $LIBCMO $NAME.a
+                rm -f *.ml *.mli
+                rm -f *.c
+
+clobber:V:      clean
+                rm -f $DEPEND                
+
+# ------------------------------------------------------------------ 
+# rules and tools for OCaml
+# ------------------------------------------------------------------ 
+
+<../config/ocaml.mk
+<../config/noweb.mk
+
+# compiler flags used by the rules just included
+
+OCAMLC_FLAGS =  
+OCAMLO_FLAGS =  
+
+# ------------------------------------------------------------------ 
+# important file sets
+# ------------------------------------------------------------------ 
+
+# link-order
+ML  =           reladdr.ml      \
+                uint64.ml       \
+                base.ml         \
+                bits.ml         \
+                rtl.ml          \
+                
+# alphabetical                
+MLI =           base.mli        \
+                bits.mli        \
+                reladdr.mli     \
+                rtl.mli         \
+                uint64.mli      \
+
+SCAN =          $ML $MLI
+
+CMO =           `echo $ML       | sed 's/\.ml/.cmo/g'`
+CMX =           `echo $ML       | sed 's/\.ml/.cmx/g'`
+
+OBJ =           uint64p.o
+
+# ------------------------------------------------------------------ 
+# build the libraries
+# ------------------------------------------------------------------ 
+
+$LIBCMO:        $CMO $OBJ
+		$OCAMLC $OCAMLC_FLAGS -a -o $target $prereq
+                
+
+$LIBCMX:	$CMX $OBJ
+		$OCAMLO $OCAMLO_FLAGS -a -o $target $prereq
+
+# ------------------------------------------------------------------ 
+# update hierarchy
+# ------------------------------------------------------------------ 
+
+$LIBDIR/$LIBCMO:    $LIBCMO dirs $OBJ
+		    for i in $LIBCMO *.mli *.cmi $OBJ
+                    do
+		        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR 
+		    done
+
+$LIBDIR/$LIBCMX:    $LIBCMX dirs $OBJ
+		    for i in $LIBCMX $NAME.a *.mli *.cmi $OBJ
+                    do
+		        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR
+		    done
+
+dirs:VQ:
+                    for i in $LIBDIR; do
+                        if [ ! -d $i ]; then
+                            echo "missing directory $i"
+                            echo "invoke mk from the toplevel the first time"
+                            echo "to create all directories"
+                            false
+                        fi
+                    done    
+
+# ------------------------------------------------------------------ 
+# extra rules for cases not covered by noweb.mk
+# ------------------------------------------------------------------ 
+
+uint64.cmo      \
+uint64.cmx:     uint64p.o
+
+uint64p.o:      uint64p.c
+                $OCAMLC $OCAMLC_FLAGS -c $prereq
+
+uint64p.c:      uint64.nw
+                $NOTANGLE -L -R$target $prereq > $target
+
+uint64.inc:     uint64.nw
+                $NOWEAVE -delay -autodefs c -index $prereq > $target
+
+# ------------------------------------------------------------------ 
+# recalculate dependencies
+# make sure that generators are run first
+# ------------------------------------------------------------------ 
+
+$DEPEND: 	$SCAN
+		$OCAMLDEP $SCAN > $DEPEND
+
+# ------------------------------------------------------------------ 
+# include dependencies
+# ------------------------------------------------------------------ 
+
+<$DEPEND
+

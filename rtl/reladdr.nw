@@ -1,0 +1,59 @@
+
+
+% ------------------------------------------------------------------ 
+\section{Relocatable Addresses and Assembler Symbols }
+% ------------------------------------------------------------------ 
+
+Labels and procedures in a {\PAL} compilation unit become symbols in the
+assembler output. The exact representation of a symbol depends on the
+assembler at hand. We hide the details behind a class type. Each
+assembler provides methods to create symbols that fits it. Relocatable
+addresses are constructed from symbols and 64bit integers.  We export
+them in a generic representation that a client can transform in whatever
+format it needs. To keep the number of dependencies small, we do not
+provide client-specific representations of relocatable addresses here.
+Both symbols and relocatable addresses escape the assembler that defines
+them and they become part of {\rtl}s. For this reason they are factored
+out from module \module{asm3} that defines an assembler.
+
+<<reladdr.mli>>=
+class type symbol = object
+    method text:    string          (* text representation of this *)
+end
+
+type t                              (* relocatable address *)
+type sign = Pos | Neg
+
+val bits:       int64  -> t
+val symbol:     symbol -> t
+val add:        t -> t -> t
+val sub:        t -> t -> t
+
+
+val expr:       t -> int64 * (sign * symbol) list
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+
+<<reladdr.ml>>=
+class type symbol = object
+    method text:    string          (* text representation of this *)
+end
+
+type sign = Pos | Neg
+
+type t = int64 * (sign * symbol) list
+
+let neg = function
+    | (Pos, s) -> (Neg, s)
+    | (Neg, s) -> (Pos, s)
+
+let bits   b            = (b , [])
+let symbol s            = (Int64.zero, [Pos,s])
+let add (xb,xs) (yb,ys) = (Int64.add xb yb, xs @ ys)
+let sub (xb,xs) (yb,ys) = (Int64.sub xb yb, xs @ List.map neg ys)
+let expr t              = t
+@

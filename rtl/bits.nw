@@ -1,0 +1,694 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+
+% l2h substitution cfg CFG
+% l2h substitution dots ...
+% l2h substitution AST AST
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+\input{../config/macros.tex}
+
+% ------------------------------------------------------------------ 
+\section{Bits -- low level representation of values}
+% ------------------------------------------------------------------ 
+
+Values in {\PAL} can be either of type [[bool]] or [[bits]].  While
+[[bool]] values can be represented by the {\ocaml} type [[bool]],
+[[bits]] require a data structure.  Conceptually a [[bits]] value can
+hold a declared but arbitrary large number of bits. 
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+@ 
+A [[bits]] value has a [[width]] which is the number of bits it can
+hold. The conversion of [[bits]] from and to other representations can
+cause overflows which are reported by an exception [[Overflow]].
+Requests for an unsupported [[width]] results in a [[Size]] exception.
+Currently 64 bits and less are supported.
+
+<<bits.mli ((evaluating))>>=
+type width      = int
+type bitvector (* abstract *)
+type bits       = bitvector * width
+(* type t       = bits 
+ *)
+@ 
+
+The evaluating and residualizing instantiations provide the same
+interface to [[bits]].
+<<bits.mli ((evaluating))>>=
+<<interface>>
+@ 
+
+The width of a [[bits]] value is determined when it is created. 
+Even though it is exposed in the representation, we can also use the
+[[width]] function to get access to it. In case the requested size
+is not supported by the implementation [[Size]] is raised. The
+[[maxwidth]] is the maximal width supported by an implementation.
+
+Note: In the {\qcc} compiler [[Bits.bits]] is used to hold interger,
+floating point, and character literals. The type of the these literals,
+i.e. their \emph{widths}, is recorded in an external value that is
+typically called \emph{width}. This external type is the relevant source
+of information. The use of the [[width]] function is therefore
+deprecated.
+
+<<interface>>=
+val width       : bits -> width
+val maxwidth    : width
+@
+
+The [[fits]] predicate is true, if and only if a given [[bits]] value
+fits into width.  N.B. this is a property of the \emph{width} of the
+argument, not of its \emph{value}.  In particular, a 32-bit
+representation of the integer~1 does not ``[[fits]]'' into 16~bits,
+even though the value can easily be represented in 16~bits.
+
+The width must mot be greater than [[maxwidth]],
+otherwise the [[Size]] exception is raised which indicates a problem
+with the limits of an implementation.
+
+<<interface>>=
+val fits        : bits -> width -> bool
+@
+
+The [[setSize]] function updates the size information of a [[bits]]
+value. This is a dangerous operation since the new size may violate
+the assumption that the current value fits into that size. Thus,
+[[Overflow]] is raised, when this assumption is violated by the new size.
+\emph{NR finds this definition insufficiently precise.
+It's only used in one place---\module{elab}.  Perhaps we can find a
+better way to express this?}
+<<interface>>=
+val setSize     : bits -> width -> bits
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Creation of \texttt{bits} values}
+% ------------------------------------------------------------------ 
+
+A [[bits]] value is usuallu created from a string representation as
+part of a {\PAL} source program. The string representation include
+integer, floating point, and character representations:
+
+\begin{enumerate}
+\item The integer string representation can use a decimal, octal, or
+      hexadecimal radix.  The characters to represent the respective
+      radices in strings are shown below.  Conversion to and from
+      strings always considers a [[bits]] value as an unsigned
+      integer.
+
+        \begin{tabular}{ll}
+        Radix        & characters \\
+        \hline
+        octal        & \ttfamily 0 1 2 3 4 5 6 7     \\
+        decimal      & \ttfamily 0 1 2 3 4 5 6 7 8 9 \\
+        hexadecimal  & \ttfamily 0 1 2 3 4 5 6 7 8 9 a b c d e f A B C D E F \\
+        \end{tabular}
+ 
+      The radix of a string is determined by its first two characters:
+
+      \begin{itemize}
+      \item A string starting with [[0x]] or [[0X]] is considered a
+            hexadecimal number.
+      \item A string starting with [[0]] is considered a string of octal
+            numbers.
+      \item All other strings are considered as strings with decimal numbers.
+      \end{itemize}
+
+      A [[Failure "of_string"]] exception is raised when the string
+      contains illegal characters. 
+
+\item The floating point representation [[float]] can be decribed by the
+      following small grammar that is also used in the {\PAL} lexer:
+
+      \begin{quote}
+      \begin{verbatim}
+    let digit       = ['0'-'9']
+    let nat         = digit+
+    let frac        = nat '.' nat
+    let exp         = ['e''E'] sign? nat
+    let float       = frac exp? 
+                    | nat exp
+      \end{verbatim}
+      \end{quote}
+
+\item The character representation honors the C escape sequences.
+      Otherwise stands each character for itself.
+      
+       \begin{quote}
+        \begin{tabular}{ll}
+            Escape Sequence & Interpretation \\ 
+            \hline
+            [[\a]]          & Alert (Bell) \\
+            [[\b]]          & Backspace    \\
+            [[\f]]          & Formfeed     \\
+            [[\n]]          & Newline      \\
+            [[\r]]          & Carriage Return \\
+            [[\t]]          & Horizontal Tab \\
+            [[\\]]          & Backslash    \\
+            [[\']]          & Single Quote \\
+            [[\"]]          & Double Quote \\
+            [[\?]]          & Question Mark \\
+            [[\x]]$\{\textit{hexdigit}\}$ 
+                            & The value of \textit{hexdigit} sequence \\
+            [[\]] $\{\textit{octdigit}\}$ 
+                            & The value of \textit{octdigit} sequence \\
+        \end{tabular}
+        \end{quote} 
+\end{enumerate}
+
+The following functions create [[bits]] values from strings. The
+exception [[Syntax]] is raised in case of syntactical errors of the
+string representation.  [[Size]] is raised when the requested
+[[[width]] is not supported by the implementation.  [[Overflow]] is
+raised when the specified [[width]] is too small to hold the value
+given by the string representation.
+
+<<interface>>=
+exception Overflow
+exception Size
+exception Syntax of string
+
+<<interface>>=
+val of_stringi  : string -> width -> bits (* Size, Overflow, Syntax *)
+val of_stringf  : string -> width -> bits
+val of_stringc  : string -> width -> bits
+@
+
+[[bits]] values can be created from integers.
+<<interface>>=
+val of_int       : int       -> width -> bits  (* Size *)
+val of_std_int   : Base.std_int -> width -> bits  (* Size *)
+val of_int64     : int64     -> width -> bits  (* Size *)
+val of_nativeint : Base.std_nativeint -> width -> bits  (* Size *)
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Converting \texttt{bits} values}
+% ------------------------------------------------------------------ 
+
+A [[bits]] value can be converted to an integer or string.  If the
+[[bits]] do not fit into an [[int]], [[Overflow]] is raised. 
+
+<<interface>>=
+type radix      = Oct
+                | Dec
+                | Hex
+
+val to_int       : bits -> Base.std_int                 (* raises Overflow *)
+val to_nativeint : bits -> Base.std_nativeint           (* raises Overflow *)
+val to_int64     : bits -> int64                        (* raises Overflow *)
+val to_string    : radix option -> bits -> Base.std_string
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Operations on [[bits]]}
+% ------------------------------------------------------------------ 
+
+<<interface>>=
+val zero        : width -> bits
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+A [[bits]] is represented as an [[int64]].  The reason not to
+implement arbitrary large bit vectors is the need for IEEE 754
+floating point operations:  an [[int64]] value can be considered as a
+C [[float]] value of 64 bits for which floating point operations are
+available. Unsigned operations on [[int64]] values are provided by the
+[[Uint64]] module.
+
+<<bits.ml ((evaluating))>>=
+module I = Int64        (* signed   operations *)
+module U = Uint64       (* unsigned operations *)
+
+exception Overflow
+exception Size
+exception Syntax of string
+
+let syntax msg = raise (Syntax msg)
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Auxiliaries}
+% ------------------------------------------------------------------ 
+
+Values of type [[bits]] are represented as pairs of width and value.
+
+<<bits.ml ((evaluating))>>=
+type width      = int
+type bitvector  = int64
+type bits       = int64 * width
+@
+
+<<bits.ml ((evaluating))>>=
+let maxwidth    = 64
+let width (_,w) = w
+@
+
+Operations on [[bits]] frequently must [[check]] that the requested
+with is inside the implementation's limits and an actual value fits
+into that many bits.  The [[check]] function raises [[Size]] or
+[[Overflow]] in case the mentioned rules are violated.
+
+<<bits.ml ((evaluating))>>=
+let fits (bits,width') width =
+    if (width <= 0) || (width > 64) 
+    then raise Size
+    else 
+		(width = 64) || (U.le bits (U.shl width I.one))
+@
+
+ 
+<<bits.ml ((evaluating))>>=
+let check width uint64 =
+    if not (fits (uint64,maxwidth) width)
+	then raise Overflow
+    else () (* ok *)
+@
+[[setSize]] sets the size of a [[bits]] value and raises [[Overflow]]
+in case the size is too small.
+<<bits.ml ((evaluating))>>=
+let setSize (b,w as bits) width =
+    if not (fits bits width)
+    then raise Overflow
+    else (b,width)
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Creation of \texttt{bits} values}
+% ------------------------------------------------------------------ 
+
+<<bits.ml ((evaluating))>>=
+let of_stringi str width =
+    let len    = String.length str in
+    let uint64 = ( match str.[0] with
+                 | '0' when len > 1 -> U.of_string ("0o"^str)
+                 | _                -> U.of_string str
+                 ) in
+        try
+            ( check width uint64
+            ; (uint64,width)
+            )
+        with
+            Failure _ -> syntax ("syntax error in constant: "^str)
+         
+<<bits.ml ((evaluating))>>=
+let of_stringf str width =
+    if   width <> 64 
+    then raise Size
+    else try (U.of_float (float_of_string str),width) with
+         | Failure _ -> syntax ("syntax error in constant: "^str)
+
+<<bits.ml ((evaluating))>>=
+let of_stringc str width =
+    let len = String.length str in
+    let c   = 
+            try
+                if   len = 0 
+                then assert false
+                else if str.[0] = '\\' && len > 1 
+                then match str.[1] with
+                | 'a'  when len = 2 -> U.of_int 7
+                | 'b'  when len = 2 -> U.of_int 8
+                | 'n'  when len = 2 -> U.of_int 10
+                | 'r'  when len = 2 -> U.of_int 13
+                | 't'  when len = 2 -> U.of_int 9
+                | '\\' when len = 2 -> U.of_int 92
+                | '\'' when len = 2 -> U.of_int 39
+                | '"'  when len = 2 -> U.of_int 34
+                | '?'  when len = 2 -> U.of_int 63
+                | 'x'  when len = 2 -> U.of_string ("0"  ^ str)
+                | '0' .. '7'        -> U.of_string ("0o" ^ str) 
+                | _                 -> syntax ("syntax error: "^str)
+                else                   U.of_int (Char.code str.[0])
+            with Failure _          -> syntax ("syntax error: "^str)
+        in
+            ( check width c
+            ; (c, width)
+            ) 
+    
+<<bits.ml ((evaluating))>>=
+let of_int i width =
+    let uint64 = U.of_int i in
+        ( check width uint64
+        ; (uint64,width)
+        )
+let of_std_int = of_int
+<<bits.ml ((evaluating))>>=
+let of_int64 i width =
+    ( check width i
+    ; (i,width)
+    )
+
+let of_nativeint i width = of_int64 (I.of_nativeint i) width
+@
+    
+% ------------------------------------------------------------------ 
+\subsubsection{Conversions}
+% ------------------------------------------------------------------ 
+
+The [[to_int]] function checks that the [[bits]] value can be
+represented as a positive integer and raises [[Overflow]] otherwise. 
+
+<<bits.ml ((evaluating))>>=
+let to_int (uint64,width) =
+    if uint64 > I.of_int(max_int) then
+        raise (Overflow)
+    else
+        I.to_int uint64
+@
+Similarly for native integers.  The test is bogus, but there's no easy
+way to find out if [[width]] is small enough to fit into the width of
+[[nativeint]], because we're not given the width of [[nativeint]].
+<<bits.ml ((evaluating))>>=
+let to_nativeint (uint64,width) =
+    if I.logand uint64 (I.of_nativeint Nativeint.max_int) = uint64 then
+        I.to_nativeint uint64
+    else
+        raise (Overflow)
+@
+This is buggy: the [[I.to_string]] function considers the [[bits]]
+value as a signed integer. We also ignore the radix for the moment.
+
+<<bits.ml ((evaluating))>>=
+type radix      = Oct
+                | Dec
+                | Hex
+
+let to_string radix (uint64,width) = I.to_string uint64 (* wrong *)
+
+let to_int64 (uint64,width) = uint64
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Operations on [[bits]]}
+% ------------------------------------------------------------------ 
+
+<<bits.ml ((evaluating))>>=
+let zero w =
+    let z = U.of_int 0 in
+    ( check w z
+    ; (z,w) 
+    )
+@
+
+\section{Residualizing instantiation}
+
+This section is written just as a copy-and-pase of the code above. We
+must implement a residualizing instantiation of all the functions
+aboce. Look into \module{../tdpe/tdpe} to read about the notion of
+``residualizing instantiation''.
+
+[[bits]] values are dynamic, therefore represented as a dynamic
+expression.
+
+The residualizing instance provides an optimization which has to do with
+conversions. In the code generated by the toolkit, several successive
+conversions are done to and from bits values. We attempt to remove some
+of these conversions by specialization. Our residual innstatiations of
+the conversion functions, beside creating appropriate residual-code
+expressions, maintain a tag which specifies the type of the original
+value from which the [[bits]] were created. We exploit the tag
+information to apply algebraic laws about succesive conversions, when
+applicable.
+
+Note that the residualizing instance below is not meaning preserving
+with respect to the evaluating instance above. The reason is that we
+remove some of the overflow checks, to account for general assumptions
+about the ``proper widths of [[bits]]-values''
+
+\subsection{Residualizing instantiation --- Interface}
+
+We make public both the tags on bitvectors and also the fact that
+bitvectors are dynamic values. We do so in order to be able to express
+algebraic laws about conversions in the ``bitops'' module.
+
+<<bits.mli ((residualizing))>>=
+type tag = INT | NINT | INT64 | BV
+type width      = int
+type bitvector  = (tag * Tdpe.dynamic) (* abstract *)
+type bits       = bitvector * width
+@ We provide the same interface to [[bits]] as the evaluating
+instantiation.
+<<bits.mli ((residualizing))>>=
+<<interface>>
+
+@ 
+% ------------------------------------------------------------------ 
+\subsection{Residualizing instantiation --- Implementation}
+% ------------------------------------------------------------------ 
+
+<<bits.ml ((residualizing))>>=
+module E = Error
+module I = Int64        (* signed   operations *)
+module U = Uint64       (* unsigned operations *)
+
+module Sy = Syntax
+module T = Tdpe
+
+exception Overflow
+exception Size
+exception BTA of string
+
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Auxiliaries}
+% ------------------------------------------------------------------ 
+
+Values of type [[bits]] are represented as pairs of width and value. The
+width is static, therefore will be represented as an integer.
+<<bits.ml ((residualizing))>>=
+
+type tag = INT | NINT | INT64 | BV
+type width      = int
+type bitvector  = (tag * Tdpe.dynamic)
+type bits       = bitvector * width (* width * int64 *)
+@
+
+<<bits.ml ((residualizing))>>=
+let maxwidth    = 64
+
+@ A few basic function for constructing bits. They attach the
+appropriate tags.
+<<bits.ml ((residualizing))>>=
+
+exception NotAvailable
+
+let mkBitsINT width bits = ((INT,Sy.INT bits),width)
+let mkBitsNINT width bits = ((NINT,Sy.NINT bits),width)
+let mkBitsINT64 width bits = ((INT64,Sy.INT64 bits),width)
+let mkBitsBV width bits =   raise NotAvailable
+
+let width (_,w) = w
+
+@
+Since [[width]]s are static, [[fits]] function can detect some static
+information: But there is one case which is dependent on the actual
+value of [[bits]], and in that case, we need to residualize all of it.
+
+<<bits.ml ((residualizing))>>=
+
+let fits (bits,width') width =
+  let (tg,bits) = bits in
+    if (width <= 0) || (width > 64) 
+    then raise Size
+    else (width = 64) ||
+    (T.nbe' (T.arrowN(T.pair(T.a',T.a'),T.arrow(T.a',T.booNone)))
+       (Sy.VAR "Bits.fits")
+       (Sy.INT width',bits)
+       (Sy.INT width))
+
+@ [[check]] appears to be called in static contexts only: its arguments
+are static. Therefore, we provide the evaluating interpretation. It
+inlines the definition of the evaluating instantiation of [[fits]].
+
+<<bits.ml ((residualizing))>>=
+let check width uint64 =
+  if (not(
+      if (width <= 0) || (width > 64) 
+      then raise Size
+      else (width = 64) || (U.le uint64 (U.shl width I.one))))
+  then raise Overflow
+  else ()
+@
+[[setSize]] is also called in static contexts only.
+
+<<bits.ml ((residualizing))>>=
+let setSize (b,w as bits) width =
+    if not (fits bits width)
+    then
+      raise Overflow
+    else (b,width)
+
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Creation of \texttt{bits} values}
+% ------------------------------------------------------------------ 
+
+<<bits.ml ((residualizing))>>=
+let of_stringi str width =
+    let len    = String.length str in
+    let uint64 = ( match str.[0] with
+                 | '0' when len > 1 -> U.of_string ("0o"^str)
+                 | _                -> U.of_string str
+                 ) in
+        try
+            ( check width uint64
+            ; mkBitsINT64 width uint64
+            )
+        with
+            Failure _ -> syntax ("syntax error in constant: "^str)
+         
+<<bits.ml ((residualizing))>>=
+let of_stringf str width =
+    if   width <> 64 
+    then raise Size
+    else try mkBitsINT64 width (U.of_float (float_of_string str)) with
+         | Failure _ -> syntax ("syntax error in constant: "^str)
+
+<<bits.ml ((residualizing))>>=
+let of_stringc str width =
+    let len = String.length str in
+    let c   = 
+            try
+                if   len = 0 
+                then assert false
+                else if str.[0] = '\\' && len > 1 
+                then match str.[1] with
+                | 'a'  when len = 2 -> U.of_int 7
+                | 'b'  when len = 2 -> U.of_int 8
+                | 'n'  when len = 2 -> U.of_int 10
+                | 'r'  when len = 2 -> U.of_int 13
+                | 't'  when len = 2 -> U.of_int 9
+                | '\\' when len = 2 -> U.of_int 92
+                | '\'' when len = 2 -> U.of_int 39
+                | '"'  when len = 2 -> U.of_int 34
+                | '?'  when len = 2 -> U.of_int 63
+                | 'x'  when len = 2 -> U.of_string ("0"  ^ str)
+                | '0' .. '7'        -> U.of_string ("0o" ^ str) 
+                | _                 -> syntax ("syntax error: "^str)
+                else                   U.of_int (Char.code str.[0])
+            with Failure _          -> syntax ("syntax error: "^str)
+        in
+            ( check width c;
+              mkBitsINT64 width c
+            ) 
+@ Here I need to avoid a bug
+<<bits.ml ((residualizing))>>=
+let of_int i width =
+    let uint64 = (*U.of_int i*) Int64.of_int i in
+        ( check width uint64 ;
+          mkBitsINT width i
+         )
+let of_std_int x width = ((BV,x),width)
+<<bits.ml ((residualizing))>>=
+let of_int64 i width =
+  ( check width i ;
+    mkBitsINT64 width i
+   )
+
+@ This implementation of [[Bits.of_nativeint]] is meaning preserving
+only in the restrictive assumptions mentioned at the beginning of this
+section. In the residualizing interpretation the native ints are
+dynamic, so we just construct some expression.
+<<bits.ml ((residualizing))>>=
+let of_nativeint i width =
+  ((NINT,i),width)
+
+@
+    
+% ------------------------------------------------------------------ 
+\subsubsection{Conversions}
+% ------------------------------------------------------------------ 
+
+The conversion functions implement the algebraic laws we expect to hold
+when converting between various types of values. Most of them assume
+that no exceptions are raised when converting. When no laws are
+applicable, the full residual call is generated.
+<<bits.ml ((residualizing))>>=
+
+let to_int ((tag,bitv),w) =
+  match tag with
+    INT -> bitv
+  | NINT ->
+      (match bitv with
+        Sy.INT64 i64 -> Sy.INT (Int64.to_int i64)
+      | Sy.NINT ni -> Sy.INT (ENativeint.to_int ni)
+      | Sy.INT _ -> bitv
+      | _ -> T.nbe' T.arra' (Sy.VAR "Nativeint.to_int") bitv
+      )
+  | INT64 ->
+      (match bitv with
+        Sy.INT64 i64 -> Sy.INT (Int64.to_int i64)
+      | Sy.NINT ni -> Sy.INT (ENativeint.to_int ni)
+      | Sy.INT i -> bitv
+      | _ ->
+          let (v,w1) = T.nbe' (T.arrowN(T.a',T.arrow(T.a',T.paira')))
+              (Sy.VAR "Bits.of_int64")  bitv (Sy.INT w) in 
+          T.nbe' (T.arrow(T.paira',T.a'))
+            (Sy.VAR "Bits.to_int") (v,Sy.INT w)
+      )
+  | BV -> T.nbe' (T.arrow(T.paira',T.a'))
+        (Sy.VAR "Bits.to_int") (bitv,Sy.INT w)
+
+@
+
+<<bits.ml ((residualizing))>>=
+let to_nativeint ((tag,bitv),w) = 
+  match tag with
+    INT ->
+      (match bitv with
+        Sy.INT64 i64 -> Sy.NINT (Int64.to_nativeint i64)
+      | Sy.NINT ni -> bitv
+      | Sy.INT i -> Sy.NINT (ENativeint.of_int i)
+      | _ -> T.nbe' T.arra' (Sy.VAR "Nativeint.to_int") bitv
+      )
+  | NINT -> bitv
+  | INT64 ->
+      (match bitv with
+        Sy.INT64 i64 -> Sy.NINT (Int64.to_nativeint i64)
+      | Sy.NINT ni -> bitv
+      | Sy.INT i -> Sy.NINT (ENativeint.of_int i)
+      | _ ->
+          let (v,w1) = T.nbe' (T.arrowN(T.a',T.arrow(T.a',T.paira')))
+              (Sy.VAR "Bits.of_int64")  bitv (Sy.INT w) in (* Bogus? *)
+          T.nbe' (T.arrow(T.paira',T.a')) (Sy.VAR "Bits.to_nativeint") (v,Sy.INT w)
+      )
+  | BV -> T.nbe' (T.arrow(T.paira',T.a')) (Sy.VAR "Bits.to_nativeint") (bitv,Sy.INT w)
+
+@ We need to fix this as soon as the rest gets fixed as well.
+<<bits.ml ((residualizing))>>=
+type radix      = Oct
+                | Dec
+                | Hex
+
+let to_string radix dBits = raise (BTA "Can't convert to string")
+@
+<<bits.ml ((residualizing))>>=
+let zero w =
+    let z = U.of_int 0 in
+    ( check w z
+    ; mkBitsINT w 0
+    )
+@
+
