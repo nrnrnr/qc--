@@ -1,0 +1,61 @@
+
+\documentclass[11pt]{article}
+
+\usepackage{path}
+
+\title{How to Add a New Target}
+\author{Christian Lindig}
+
+\newcommand\PAL{{\small C-{}-}}
+\newcommand\AST{{\small AST}}
+\newcommand\CFG{{\small CFG}}
+\newcommand\qcc{{\small QC-{}-}}
+\newcommand\rtl{{\small RTL}}
+\newcommand\burg{{\small BURG}}
+\newcommand\cfg{{\small CFG}}
+\newcommand\ocaml{{\small OCAML}}
+
+\parindent0pt
+\parskip1.5ex
+
+% ------------------------------------------------------------------ 
+\begin{document}
+% ------------------------------------------------------------------ 
+
+\maketitle
+
+When you want to add support for a new target architecture to the {\qcc}
+compiler, here is what you have to do.
+
+\begin{enumerate}
+\item Add a new target description to \path|Targets|. All targets are
+      exported from here to the Lua interpreter.
+
+\item Generate am emitter for assembly instructions in directory
+      \path|gen/|.
+
+\item Implement the assembler interface \path|Asm3.assembler| for the
+      new target. The \path|Mspacasm| module might work as a template.
+      There is another module \path|Sparcasm| which is currently not
+      used because I don't understand it. The assembler is exported to
+      the Lua interpreter in the \path|Driver2| module.
+
+\item Implement an {\rtl} encoder for instructions and a matching
+      decoder. See modules \path|Msparcenc| and \path|Msparcdec| for
+      examples (source file \path|minisparc.nw|). The decoder is used by
+      the assembler to decode and emit assembly code. The decoder itself
+      uses the generated emitter to emit the recognized machine
+      instruction.
+
+\item Implement a code expander and export it to Lua. Module
+      \path|Sparcexpander| could serve as a guide. The code expander
+      uses the encoder to generate instructions.      
+      
+\item Extend the driver code written in Lua in file \path|main2.nw| with
+      an optimizer (table \path|Opt|) and target (table \path|Targets|) for
+      the new architecture.
+\end{enumerate}
+
+% ------------------------------------------------------------------ 
+\end{document}
+% ------------------------------------------------------------------ 
