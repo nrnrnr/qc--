@@ -131,13 +131,27 @@ let cfg2dot ~compress ~name cfg =
   let _ = Rtlutil.ToAST.verbosity oldv in
     dotOpenGraph ^ pagesize ^ compress ^ dotnodes ^ dotedges ^ dotCloseGraph
 
+let extend_with preds nodes =
+  let module G = Cfgx.M in
+  let rec add_predecessors visited candidates = match candidates with
+  | [] -> visited
+  | node :: candidates ->
+      if List.exists (G.eq node) visited then
+        add_predecessors visited candidates
+      else
+        add_predecessors (node :: visited) (preds node @ candidates) in
+  add_predecessors nodes (List.flatten (List.map preds nodes))
+
 let new_cfg2dot ~compress ~name g =
   let module G = Cfgx.M in
-  let nodes = G.fold_nodes (fun x y -> x :: y) [] g in
+  let original_nodes = G.fold_nodes (fun x y -> x :: y) [] g in
+  let nodes = extend_with G.preds original_nodes in
+  let nodes = extend_with G.succs nodes in
   let nnodes = Aux.foldri (fun i n ns -> (i, n) :: ns) nodes [] in
   let number node = fst (List.find (fun (i, n) -> G.eq node n) nnodes) in
   let nodename node = Printf.sprintf "\"N%d\"" (number node) in
   let number_and_rtl node =
+    (if List.exists (G.eq node) original_nodes then "" else "*") ^
     let tag = "N" ^ string_of_int (number node) in
     match G.to_instr node with
     | Some rtl -> tag ^ ": " ^ String.escaped (Rtlutil.ToReadableString.rtl rtl)
@@ -155,9 +169,9 @@ let new_cfg2dot ~compress ~name g =
                          "[dir=back,style=dotted]\n" in
   let edges_leaving node tail =
     let add_edge dir edges n = dir node n :: edges in
-    let fwd = List.fold_left (add_edge edge_fwd) tail (G.succs node) in
-    let all = List.fold_left (add_edge edge_bwd) fwd (G.preds node) in
-    all in
+    let tail = List.fold_left (add_edge edge_fwd) tail (G.succs node) in
+    let tail = List.fold_left (add_edge edge_bwd) tail (G.preds node) in
+    tail in
   let oldv = Rtlutil.ToAST.verbosity Rtlutil.ToAST.Low in
   let openg  = "digraph " ^ name ^ " {\n" in
   let closeg = "}\n" in
