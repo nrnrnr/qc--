@@ -16,7 +16,24 @@ in an assertion failure.
 val locwidth  : Rtl.location -> Rtl.width
 val locwidth' : Rtl.Private.location -> Rtl.width
   (* always succeeds *)
-@
+@ 
+
+For liveness analysis, we need to know what registers are read and
+written.
+We provide a suitable catamorphism (folding operator).
+This operator runs \emph{after} creation time, and it announces
+\emph{only} locations that seem ``register-like,'' i.e., spaces
+indexed by constants.
+N.B.~it cannot distinguish fixed registers or references to fixed
+locations in memory;
+it is up to the client to ignore these as appropriate.
+This operator does, however, ignore slices, since we think they aren't
+of interest to any liveness analysis.
+(This is going to be wrong if we have to manage condition codes.)
+<<rtlutil.mli>>=
+type 'a regfun = Rtl.space -> index:int -> Rtl.width -> 'a -> 'a
+val read_write_sets : read:'a regfun -> write:'a regfun -> Rtl.rtl -> 'a -> 'a
+@ 
 <<obsolete and deprecated?>>=
 val width:      Rtl.expr -> int                 (* width of expression *)
   (* often faults with assertion failure *)
@@ -38,3 +55,31 @@ let width e = match Rtl.Convert.expr e with
     | RP.App _                -> assert false (* not implemented *)
     
 let assign l r = Rtl.store l r (width r)
+@ 
+
+<<rtlutil.ml>>=
+type 'a regfun = Rtl.space -> index:int -> Rtl.width -> 'a -> 'a
+let read_write_sets (read:'a regfun) (write:'a regfun) = 
+  let rec rtl (z:'a) (RP.Rtl gs)  = List.fold_left guarded z gs
+      and guarded z (g, eff) = exp (effect z eff) g
+      and effect z eff = match eff with
+        | RP.Store (lhs, rhs, _) -> loc write (exp z rhs) lhs
+        | RP.Kill lhs -> loc write z lhs
+      and loc which z l = match l with
+        | RP.Cell (space, _, w, RP.Const (RP.Bits (index, _)), _) ->
+            (try which space (Bits.to_int index) w (z:'a)
+             with Bits.Overflow -> z)
+        | RP.Cell (space, _, w, index, _) -> exp z index
+        | RP.Slice (_, _, l) -> index z l
+        | RP.Var _ -> z
+      and index z l = match l with
+        | RP.Cell (space, _, w, index, _) -> exp z index
+        | RP.Slice (_, _, l) -> index z l
+        | RP.Var _ -> z
+      and exp z e = match e with
+        | RP.Const _ -> z
+        | RP.Fetch (l, w) -> loc read z l
+        | RP.App (_, es) -> List.fold_left exp z es
+  in  fun r z -> rtl z (Rtl.Convert.rtl r)
+
+
