@@ -1,0 +1,246 @@
+
+\input{macros.tex}
+
+% l2h substitution cfg CFG
+% l2h substitution dots ...
+% l2h substitution AST AST
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+
+% ------------------------------------------------------------------ 
+\section{Register Allocation}
+% ------------------------------------------------------------------ 
+
+The nodes of a control flow graph initially contain temporary
+registers and hardware registers.  For translation to machine
+instructions the temporary registers must be replaced by hardware
+registers.  The register allocation process re-writes a control flow
+graph such that nodes only use hardware registers.
+
+Lifeness analysis provides the acurate lifetime of each registers. 
+The register allocator tries to map several temporary registers to
+hardware registers such that their lifetimes do not interfere.  If the
+number of available hardware registers is too small to map all
+temporary registers the register allocator runs out registers.  The
+current implementations can't do anything about it and signals this
+with an [[OutOfRegisters]] excpetion.  However, the general solution
+is to store some tempories in memory and re-load them to a hardware
+register only when they are needed.  This is called \emph{spilling}
+and is not yet implemented.
+
+The register allocator is a linear-scan allocator, basically modeled
+after Traub et al.~\cite{traub:98:pldi} but without lazy spilling. 
+It turned out that the simpler linear scan register allocator by
+Poletto \cite{poletto:99:toplas} can not handle pre-assigned hardware
+registers as they are required by calling conventions.
+
+<<linscan.mli>>=
+exception OutOfRegisters
+val allocate: Cfg2.cfg -> Cfg2.cfg (* OutOfRegisters *) 
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Construction of Register Lifetimes}
+% ------------------------------------------------------------------ 
+
+Liveness analysis (module \module{live}) annotates each node in the
+control-flow graph with the set of registers live \emph{before} that
+node.  From this we like to construct a global view that associates a
+variable with its lifetime.  This requires to walk over the
+control-flow graph and recognize the opening and closing of intervals
+where a particular variable is live.  These liveness intervals are
+than joined to form \emph{lifetime} values.
+
+Nodes in the control-flow graph are visited in a linear order and each
+node is associated with an integer [[Point.t]]. These points mark the
+opening and closing of liveness intervals. Intervals and Lifetimes
+over points are provided by the [[Lifetime.Make]] functor:
+
+<<linscan.ml>>=
+(* hack for now *)
+exception OutOfRegisters
+let allocate cfg = assert false
+@
+
+<<linscan.ml>>=
+module Point = struct
+    type t = int
+    let compare = compare
+    let zero = 0
+end
+
+module X = Lifetime.Make(Point)
+module P = Point
+module I = X.Interval
+module L = X.Lifetime
+@
+
+To detect the opening and closing of liveness intervals the algorithm
+compares the live-sets of two adjacent nodes $n_i$ and $n_{i+1}$. The
+index $i$ is the point associated with a node $n$.
+
+\begin{eqnarray*}
+    \mathit{open}  &=& \mathit{live}(n_{i+1})\setminus \mathit{live}(n_i)\\ 
+    \mathit{close} &=& \mathit{live}(n_{i})  \setminus \mathit{live}(n_{i+1})
+\end{eqnarray*}
+
+The registers in the $\mathit{open}$ set just became live and thus
+each opens a live interval $(i+1,\dots)$; conversely, all registers in
+the $\mathit{close}$ set close their previously opened interval. 
+Because lifetime intervals are open on the right hand side (cf.~module
+\module{lifetime}), the interval to be closed is $(\dots,i+1)$.  Once
+an interval is closed, it can be added to the lifetime of the
+respective variable.
+
+The lifetimes for a control-flow graph are stored in a map that
+associates registers with their lifetime.  An additional map holds the
+opening point for registers that are currently live and have a not yet
+closed liveness interval. The functions traversing the control-flow
+graph they are paired together as a value [[(op,lt)]].
+
+<<compute lifetimes>>=
+type lt = L.t Register.Map.t
+type op = P.t Register.Map.t
+@
+
+The [[open_intv r p state]] function records the opening of an interval
+for register [[t]] in the [[state]]. Dual to that, [[close_intv]] closes
+a previously opened interval by removing the register from [[op]] and adding
+a new interval to its lifetime in [[lt]]. 
+
+<<compute lifetimes>>=
+let open_intv  point (op,lt) reg = (Register.Map.add reg point op, lt)
+
+let close_intv point (op,lt) reg = 
+    let x = try Register.Map.find reg op with Not_found -> assert false in
+    let y = point in
+    let i = I.mk x y in
+    let l = try Register.Map.find reg lt with Not_found -> L.empty in
+        ( Register.Map.remove reg op
+        , Register.Map.add reg (L.mk i) lt
+        ) 
+@
+
+Given a list of registers that open or close an interval we must fold this
+list such that all registers in the list update the current state.
+
+<<compute lifetimes>>=
+let open_regs  point regs state = List.fold_left (open_intv point)  state regs
+let close_regs point regs state = List.fold_left (close_intv point) state regs
+@
+
+This is incomplete. 
+
+% ------------------------------------------------------------------ 
+\subsection{Register Allocation}
+% ------------------------------------------------------------------ 
+
+Register allocation works as follows:  at the start the majority of
+registers in a control-flow graph are temporary registers; a few nodes
+use hardware registers for calling conventions, but most hardware
+register available for register allocation are unused.  We try to
+place a temporary into a hardware register, if the lifetime of the
+temporary fits into a lifetime hole of the register.  If this
+succeeds, the temporary can be replaced by the hardware register in the
+control-flow graph.  At the same time, the the register's lifetime
+becomes more dense and it will be more difficult in the future to
+place a temporary into it.  When this case happens, we have to select
+either a temporary or a register and spill it.  As an optimization,
+the chosen register or temporary can be spilled only in parts of the
+procedure (local spilling).  Spilling requires to insert new nodes
+into the control-flow graph and invalidates all liveness information. 
+The overall effect is that a few long liveness intervals are replaced
+by a number of shorter liveness intervals for a number of new
+temporaries.  This makes it easier to place them into registers. 
+
+
+\begin{quote}
+\let\mc\multicolumn
+\def\cfg{\mathit{cfg}}
+\def\lt{\mathit{lifetime}}
+\def\v#1{\mathit{#1}}   % variable
+\def\k#1{\textbf{#1}}   % keyword
+\begin{tabular}{rl}
+\mc{2}{l}{\sc Allocate $(\cfg)$} \\
+1  & \k{forall} hardware register $r$ \k{do} $\lt[r] \gets\emptyset$ \\
+2  & \k{loop} spill:\\
+3  & \quad $\mathit{lifeness}(\cfg)$\\
+5  & \quad $\v{tmp},\v{reg} \gets \v{partition}(\v{domain}(\v{lifetime}))$\\
+   & \quad \it temporaries and hardware registers\\
+4  & \quad \k{loop} assign:\\
+6  & \quad\quad \k{if} $\v{tmp} = \emptyset$ \k{then} \k{return} $\cfg$ \\
+7  & \quad\quad $(t,r) \gets \v{select}(\v{tmp},\v{reg})$\\
+   & \quad\quad \it such that $\neg\v{overlaps}(\v{bbox}(\lt[t]),\lt[r])$\\
+8  & \quad\quad \k{if} no $(t,r)$ found \k{then}\\
+9  & \quad\quad\quad select $r \in\v{domain}(\lt)$ \\
+10 & \quad\quad\quad select interval $i \subseteq \lt[r]$\\
+11 & \quad\quad\quad $\cfg \gets \v{spill}(\cfg,r)$\\
+12 & \quad\quad\quad \k{loop} spill\\
+13 & \quad\quad \k{else}\\
+14 & \quad\quad\quad $\lt[r] \gets \lt[t] \cup \lt[r]$\\
+15 & \quad\quad\quad remove $t$ from $\lt$\\
+16 & \quad\quad\quad $\v{substitute}(\cfg,t,r)$\\
+17 & \quad\quad\quad $\v{tmp} \gets \v{tmp} \setminus \{t\}$\\
+18 & \quad\quad\quad \k{loop} assign\\
+\end{tabular}
+\end{quote}
+
+% ------------------------------------------------------------------  
+\subsubsection{Open Questions}
+% ------------------------------------------------------------------ 
+
+
+\begin{enumerate}
+\item How to select a hardware register and a temporary for placement?
+      When there are multiple choices, which is a good one? The
+      following heuristics come to mind:
+      \begin{enumerate}
+      \item Try to place temporaries with short lifetimes first. The
+      underlying assumption is, that these might be loop variables and
+      therefore should stay in registers.
+      \item Alternatively, try to place the temporaries in the order
+      that they are used. This would emulate the strategy used by
+      Poletto \cite{poletto:99:toplas}.
+      \item Take the first register that has a hole big enough to
+      accommodate the current temporary. The rationale is, that the
+      first-fit strategy works well in memory management.
+      \item Take the register that has the smallest hole to accommodate
+      the current temporary. This best-fit strategy is used by 
+      Traub et al.~\cite{traub:98:pldi}.
+      \end{enumerate}
+
+      Are there additional matching rules? For example, is it possible
+      to place a [[bits8]] temporary into a [[bits32]] register?
+
+      What about two [[bits16]] hardware register, that also can be
+      used as one [[bits32]] register. We currently assume that all
+      hardware registers are disjoint.
+
+\item How to select a register or temporary for spilling? Dual to the
+      strategy to place short-lived temporaries first, long living
+      temporaries could be candidates for spilling.  This would also
+      minimize the chance that a temporary resulting from a previous
+      spill operation would be spilled again.
+      
+      If local spilling is used, in which interval?  We have no notion
+      of register pressure to find interesting intervals.
+
+      Do we need a gain function that tells how much can be gained
+      from spilling a temporary in order to decide which
+      temporary should be spilled?
+      
+\item How to guarantee termination? Should there be an upper bound for
+      spilled temporaries or is there a better way?
+
+\end{enumerate}
