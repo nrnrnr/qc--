@@ -30,9 +30,6 @@ in \module{luautil.nw}.
 -- Evrything starts from here
 --
 
--- CMD.interact()
--- Inspect.globals()
-
 backend = Backend.dummy32b
 
 CMD.cmdline(Sys.argv)
@@ -57,7 +54,6 @@ the interpreter to stdout.
 
 [[Inspect.type]] returns the type of a table entry. It tries to be smart
 about userdata.
-
 <<Lua Boot Script>>=
 Inspect = Inspect and error('Inspect not empty') or {}
 
@@ -70,14 +66,13 @@ function Inspect.type (val)  -- identify the value
             return "userdata"
         end
     else
-        return type(val)                                                            end
+        return type(val)
+    end
 end
 @
-
 [[Inspect.globals]] and [[Inspect.table]] dump the table of all global
 variables and a regular table, respectively. Both functions recurse if
 they find a table, which they pass to [[Inspect.table]].
-
 <<Lua Boot Script>>=
 function Inspect.globals ()
     local key,val = nextvar(nil)
@@ -87,7 +82,6 @@ function Inspect.globals ()
         key,val = nextvar(key)
     end
 end    
-
 
 function Inspect.table (tabname,table)    -- helper for Inspect.vars 
     local key,val = next(table,nil)
@@ -99,7 +93,6 @@ function Inspect.table (tabname,table)    -- helper for Inspect.vars
     end
 end
 
-
 function Inspect.valname(tabname, key)
     if type(key) == "string" then
         return tabname .. "." .. key
@@ -108,11 +101,9 @@ function Inspect.valname(tabname, key)
     end
 end
 @
-
 This script is stored as a string in [[Inspect["Lua Boot Script"]]]. For
 convenience we provide an [[Inspect.script]] function that dumps it to
 stdout.
-
 <<Lua Boot Script>>=
 function Inspect.script () write(Boot["Lua Boot Script"]) end    
 @
@@ -240,17 +231,12 @@ end
 
 
 % ------------------------------------------------------------------ 
-\subsection{Stack Layout (Experimental)}
+\subsection{Stack Layout}
 % ------------------------------------------------------------------ 
-
-We are planning to define stack layouts for several targets here. So
-far, most details are not clear and we only have some experimental code
-here.
 
 A stack layout function must respect the backplane protocol: such a
 function receives two values, where the second is a [[Proc.t]] value,
 and returns boolean value.
-
 <<Lua Boot Script>>=
 Stack = Stack or error('Stack primitives missing')
 
@@ -308,7 +294,9 @@ function Stack.new_layout(dummy,proc) --- really for a C convention only
     Stack.new_freeze(proc,block)
     return 1
 end    
-
+@ 
+This code should probably move to the x86 module.
+<<Lua Boot Script>>=
 X86 = X86 or {}
 X86.layout = { creates='no late consts' }
 
@@ -333,9 +321,7 @@ function X86.layout.fn(dummy,proc) --- really for a C convention only
     Stack.new_freeze(proc,block)
     return 1
 end    
-
 @
-
 
 % ------------------------------------------------------------------ 
 \subsection{Graph-Coloring Register Allocator}
@@ -688,7 +674,7 @@ function CMD.cmdline (args)
         elseif v == "-interp"       then 
             O.interp = not nil
             backend  = Backend.interp
-        elseif Util.contains(v, "=") then dostring (v) 
+        elseif strfind(v, "=") then dostring (v) 
         elseif v == "-o" then 
             i,v    = i+1, args[i+1]
             if not v then error("argument for option -o missing") end

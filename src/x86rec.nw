@@ -279,11 +279,13 @@ inst : Withaflags(dst:eaddrl, "sub", src:reg, w, "x86_subflags")
 
 inst : Withaflags(dst:regl, "sub", src:eaddr, w, "x86_subflags")
   {: cat ["sub"; suffix w; " "; src; ","; dst] :}
-
+@ 
+N.B. The crazy AT\&T assembly language does comparisons backward.
+<<rules>>=
 inst : Setflags(X86_subflags(l:eaddr, r:reg))
-  {: cat ["cmp"; suffix 32; " "; l; ","; r] :} -- POSSIBLE BUG IN WIDTH
+  {: cat ["cmp"; suffix 32; " "; r; ","; l] :} -- POSSIBLE BUG IN WIDTH
 inst : Setflags(X86_subflags(l:reg, r:eaddr))
-  {: cat ["cmp"; suffix 32; " "; l; ","; r] :} -- POSSIBLE BUG IN WIDTH
+  {: cat ["cmp"; suffix 32; " "; r; ","; l] :} -- POSSIBLE BUG IN WIDTH
 
 inst : Withlflags(dst:eaddrl, logical:string, src:reg, w, "x86_logicflags")
   [{: match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]

@@ -1443,18 +1443,21 @@ We make two passes:
 \end{enumerate}
 <<graph and node mutators implementation>>=
 let fold_layout f zero cfg =
+  let multiple_preds = function  (* N.B. branch to exit is never needed *)
+    | Joi j -> (match j.joi_preds with _ :: _ :: _ -> true | _ -> false)
+    | _     -> false in
   let ins_branch node = match node with
     | Cbr c ->
-      if List.length (preds c.cbr_false) > 1 then
+      if multiple_preds c.cbr_false then
         set_fsucc node ~succ:(join_leading_to (branch cfg c.cbr_false))
     | Cal c ->
-      if List.length (preds (succ_n node 0)) > 1 then
+      if multiple_preds (succ_n node 0) then
         set_succ_n node 0 ~succ:(join_leading_to (branch cfg (succ_n node 0)))
     | Imp i ->
-      if List.length (preds i.imp_succ) > 1 then
+      if multiple_preds i.imp_succ then
         set_succ node ~succ:(join_leading_to (branch cfg i.imp_succ))
     | Joi _ | Ins _ | Sta _ | Ass _ | Ret _ | Ent _ ->
-      if List.length (preds (succ node)) > 1 then
+      if multiple_preds (succ node) then
         set_succ node ~succ:(branch cfg (succ node))
     | Mbr _ | Bra _ | Cut _ | Jum _ | Exi _ | Ill _ | Boot-> () in
   let () = iter_nodes ins_branch cfg in

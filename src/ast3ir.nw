@@ -1046,8 +1046,9 @@ let init_cont env (cfg:G.cfg) (target:Target.t) (cc:Target.cc) label (c:Contn.t)
     let sym  = match F.findv label env with
          | (_, (F.Continuation(r,s),_)) -> s
          | _                            -> assert false in
-    let pc   = Rtl.link sym ptr in
-        ignore (G.gm_insert_assign_after (G.entry cfg) (Contn.init_code c sp pc))
+    let pc    = Rtl.link sym ptr in
+    let pc_sp = { Mflow.new_pc = pc; Mflow.new_sp = sp } in
+    ignore (G.gm_insert_assign_after (G.entry cfg) (Contn.init_code c pc_sp))
     
 @
 <<Make procedure>>=

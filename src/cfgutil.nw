@@ -176,13 +176,10 @@ let new_cfg2dot ~compress ~live ~name g =
         | G.Impossible -> "<impossible>"
         | _ -> tag ^ "???" in
   let dotnode  node = nodename node ^ " [label=\"" ^ number_and_rtl node ^ "\"]" in
-  let liveness s =
-    let regstring (s, i, w) = Printf.sprintf "%c%d" s i in
-    String.concat ", " (List.map regstring (Register.Set.elements s)) in
   let edge_fwd from to' =
     let edge = nodename from ^ " -> " ^ nodename to' in
     if live then
-      edge ^ "[label=\"" ^ liveness (L.live_in to') ^ "\"]\n"
+      edge ^ "[label=\"" ^ Register.Set.to_string (L.live_in to') ^ "\"]\n"
     else
       edge ^ "\n" in
   let edge_bwd from to' = nodename to'  ^ " -> " ^ nodename from ^

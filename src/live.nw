@@ -36,7 +36,7 @@ edge~$e$ iff that
 edge flows to a use of~$x$ without crossing a definition or kill
 of~$x$.  
 Since our edges are simple pointers, 
-we put liveness information at the nodes node, in the form of
+we put liveness information at the nodes, in the form of
 \emph{live-in} and \emph{live-out sets}.
 The liveness of an edge is the live-in set of that edge's head.
 The live-out set is the union of the live sets on all the edges
@@ -108,7 +108,7 @@ module Make (A : Arg) = struct
   module G = A.G
   let irwk = Rtlutil.ReadWriteKill.sets
   <<liveness functions>>
-  <<code using [[Dataflow]]>>
+  (*<code using [[Dataflow]]>*)
 end
 @ 
 Here's how we get to the cached information for a node.
@@ -181,7 +181,7 @@ let set_live g =
   let nodes   = List.rev (G.postorder_dfs (fun x y -> x :: y) [] g) in
   let changed = ref false                           in
   <<definition of [[update_cache]]>> in
-  let rec loop n = (* would be sensible to choose a *good* order here *)
+  let rec loop n =
     ( changed := false
     ; List.iter update_cache nodes
     ; if !changed then
@@ -199,19 +199,24 @@ let update_cache node =
   let l    = new_live_out node in
   let info = info node in
   if RS.equal l info.cached_live_out then
-    ()   (* changed := false *)
+    ()
   else
     ( changed := true
     ; assert (RS.subset info.cached_live_out l)
     ; info.cached_live_out <- l
     ) 
 @ 
+\section{Alternative implementation using the generic dataflow support}
+
+\textbf{This code will not work and is not compiled. 
+There are several problems, not
+least of which is that the backward code in dataflow incorrectly
+assumes that a fork point does not contain an instruction.
+}
+
 Liveness is a backward dataflow problem.
 The ``info'' is the live-out set.
 At a fork, we take the union.
-I'M ALMOST CERTAIN THIS CODE WON'T WORK, FOR A VARIETY OF REASONS, NOT
-LEAST OF WHICH IS THAT THE BACKWARD CODE IN DATAFLOW INCORRECTLY
-ASSUMES THAT A FORK POINT DOES NOT CONTAIN AN INSTRUCTION.
 <<code using [[Dataflow]]>>=
 let split_info node = (info node).cached_live_out
 let merge node live =

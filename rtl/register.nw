@@ -26,143 +26,72 @@ included in a [[t]] value.  They can, however, obtained from the
 
 We cannot refer to types in module \module{rtl} because this would
 create a cyclic dependency,
-
-<<type t>>=
+<<exported types>>=
 type width = int
 type t = char * int * width       (* Rtl.space, index, Rtl.width *)
 @
-
+We provide an extended set type.
+<<exported types>>=
+module type SETX = sig
+  include Set.S
+  val of_list   : elt list -> t
+  val to_string : t -> string    (* elements sep. by commas (no braces) *)
+end
+@
 <<register.mli>>=
-<<type t>>
-module type SETX = sig include Set.S val of_list : elt list -> t end
-module Set: SETX with type elt = t
+<<exported types>>
+module Set: SETX  with type elt = t
 module Map: Map.S with type key = t
 @
-
 Registers are exported to Lua as a new \emph{userdata} type.
-
 <<register.mli>>=
 module RT (C : Lua.Lib.CORE) : sig
 	val map : t C.V.map
 end
 @
-
-A register is a special case of a [[Rtl.loc]] location.  We would like
-to have functions that converts between these two.  Of course, a
-[[Rtl.loc]] is more general and thus only values denoting a register can
-be converted.  Applying other values is a checked run-time error.
-\emph{ALERT! What is semantics of first argument to [[to_loc]]?? ---NR.}
-The [[Rtl.space]] value that is part of a register by itself does not
-include the aggregation and width of the index expression. Therefore
-[[to_loc]] receives as its first argument a map, that provides a
-complete description for a given space.
-
-THE FOLLOWING TWO FUNCTIONS WILL BE REMOVED ONCE WE HAVE COMPLETED THE
-TRANSITION TO RTL.MEM/RTL.REG.
-
-<<deprecated register.mli>>=
-val to_loc: (Rtl.space -> Space.t) -> t -> Rtl.loc   
-val of_loc: Rtl.loc -> t                     (* Invalid_argument *)
-@
-
-For debugging we sometimes want to print a register, or a set of
-registers:
-
-<<register.mli>>=
-val print: t -> string         
-val print_set: Set.t -> string
-@
-
-
 % ------------------------------------------------------------------ 
-\section{Implementation}
+\section{Implementation of registers}
 % ------------------------------------------------------------------ 
-
 <<register.ml>>=
-<<type t>>
+<<exported types>>
 
 module Compare = struct
-    <<type t>>
+    <<exported types>>
     let compare = compare
 end
-module type SETX = sig include Set.S val of_list : elt list -> t end
+<<register.ml>>=
 module Set = struct
   module S = Set.Make(Compare)
   include S
   let of_list l = List.fold_right add l empty
+  let to_string s =
+    let elt (s, i, w) = Printf.sprintf "%c%d" s i in
+    String.concat ", " (List.map elt (elements s))
 end
+<<register.ml>>=
 module Map = Map.Make(Compare)
-
-<<deprecated>>=
-module S    = Space
-
-let to_loc lookup (sp,index,width) =
-    let spec  = lookup sp                                     in
-    let agg   = spec.S.aggregation                            in
-    let bits  = Bits.U.of_int index spec.S.indexwidth         in
-    let addr  = Rtl.bits bits spec.S.indexwidth               in
-        Rtl.cell Rtl.none sp spec.S.aggregation width addr
-
-let of_loc loc = match Rtl.Dn.loc loc with
-    | RP.Cell(sp,_,width,exp,_) -> 
-        let exp   = Rtl.Up.exp exp in
-        let index = ( try Bits.U.to_int (Rtleval2.bits exp) with
-                    | Error.ErrorExn _ 
-                    | Bits.Overflow   -> invalid_arg "Register.of_loc" 
-                    )
-        in
-            (sp,index,width)
-    | _                         -> invalid_arg "Register.of_loc"
 @
-
 The [[RT]] module creates an embedding/projection pair for registers.
-
 <<register.ml>>=
-module RT (C : Lua.Lib.CORE) =
-struct
-	module V = C.V
-	let embedString = V.string.V.embed
+module RT (C : Lua.Lib.CORE) = struct
+    module V = C.V
 
-	let embedRegister (s,i,w) =
-		let labels = [ embedString "space"
-                             ; embedString "index"
-                             ; embedString "width" 
-                             ] in
-		let values = [ embedString (Char.escaped s)
-                             ; V.int.V.embed i
-                             ; V.int.V.embed w
-                             ] in
-		let newTab = (V.Table.create (List.length labels)) in
-		let () = List.iter2 
-                            (fun key data -> V.Table.bind newTab ~key ~data)
-							labels values in
-		V.Table newTab
+    let embedRegister (s,i,w) =
+      (V.record V.value).V.embed
+      [ "space", V.string.V.embed (Char.escaped s)
+      ; "index", V.int.V.embed i
+      ; "width", V.int.V.embed w
+      ] 
 
-	let projectRegister reg = match reg with
-		| V.Table reg ->
-		    let field f = V.Table.find reg (embedString f) in
-			let s = String.get 
-                                    (V.string.V.project (field "space")) 0 in
-			let i = V.int.V.project (field "index") in
-			let w = V.int.V.project (field "width") in
-			(s,i,w)
-	    | _ -> raise (V.Projection (reg, "register"))
+    let projectRegister reg = match reg with
+      | V.Table reg ->
+          let field f = V.Table.find reg (V.String f) in
+          let s = String.get (V.string.V.project (field "space")) 0 in
+          let i = V.int.V.project (field "index") in
+          let w = V.int.V.project (field "width") in
+          (s,i,w)
+      | _ -> raise (V.Projection (reg, "register"))
 
-	let map = { C.V.embed = embedRegister
-		      ; C.V.project = projectRegister
-	          }
+    let map = { V.embed = embedRegister ; V.project = projectRegister}
 end
-@
-
-% ------------------------------------------------------------------ 
-\subsection{For Debugging Only}
-% ------------------------------------------------------------------ 
-
-<<register.ml>>=
-let print (sp,index,width) = Printf.sprintf "$%c[%d](%d)" sp
-    (Base.of_std_int index) width
-let print_set set          = 
-    String.concat " " (Set.fold (fun t acc -> (print t)::acc) set []) 
-@
-    
-
+@ 

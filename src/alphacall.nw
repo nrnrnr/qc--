@@ -27,31 +27,14 @@ Information on the C~calling convention is from the Tru64 Unix Calling
 Standard for Alpha Systems dated August 2000
 (Compaq part number AA-RH9MB-TE).
 
-Values are aligned on 1-, 2-, or 4-byte boundaries.
-Doubles and long doubles are 4-byte aligned; others have the alignment
-of their size.
-
-Structures, arrays, and unions take the alignment of their most
-aligned component.
-
-From Figure 3-14,
-the return register is  [[eax]], and the volatile registers are
-[[ebx]], [[esi]], and [[edi]].
 @ 
 \paragraph{ALPHA registers and their conventional uses}
 Calling conventions refer to registers frequently, so it is
 appropriate to be able to refer to them by name.
 Lua code would do something similar.
 <<alphacall.ml>>=
-let eax = ('r', 0, 32)
-let ecx = ('r', 1, 32)
-let edx = ('r', 2, 32)
-let ebx = ('r', 3, 32)
-let esp = ('r', 4, 32)
-let ebp = ('r', 5, 32)
-let esi = ('r', 6, 32)
-let edi = ('r', 7, 32)
-let vfp = Vfp.mk 32
+let regs = Array.init 32 (fun i -> ('r', i, 64))
+let vfp = Vfp.mk 64
 @ 
 Here are the volatile and nonvolatile registers.
 N.B. In position-independent code, [[ebx]] is reserved to point to the
@@ -105,24 +88,19 @@ let imp _ = Impossible.impossible "grave miscalculation in automaton"
 @ 
 \paragraph{Automata for passing values---C~convention}
 
-For results,
-we cheat a bit: this convention is
-strictly more permissive than~C, as it permits returning one integer
-\emph{and} one floating result.
-Any floating-point result is automatically widened to 80~bits, and
-an integer result is widened to 32~bits.
+Integer results come in register~0.
 <<alphacall.ml>>=
 let results iregs base = 
   A.hint_choice
-     [ ((==) "float"),  A.widen  (Aux.round_up_to ~multiple_of:80) *>
-                        A.widths [80] ~errormsg:(badwidth "alpha floating return") *>
-                        A.useregs [('f', 0, 80)] ~errormsg:imp
-     ; (fun _ -> true), A.widen  (Aux.round_up_to ~multiple_of:32) *>
-                        A.widths [32] ~errormsg:(badwidth "alpha return convention") *>
+     [ ((==) "float"),  A.widen  (Aux.round_up_to ~multiple_of:64) *>
+                        A.widths [64] ~errormsg:(badwidth "alpha floating return") *>
+                        A.useregs [('f', 0, 64)] ~errormsg:imp
+     ; (fun _ -> true), A.widen  (Aux.round_up_to ~multiple_of:64) *>
+                        A.widths [64] ~errormsg:(badwidth "alpha return convention") *>
                         A.useregs iregs ~errormsg:imp
      ] **>
-  A.no_overflow base 4 "multiple return values for alpha C"
-let c_results = results [eax]
+  A.no_overflow base 8 "multiple return values for alpha C"
+let c_results = results [regs.(0)]
 @
 When passing procedure parameters, we put
 earlier arguments in lower addresses, so even though the

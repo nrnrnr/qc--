@@ -40,16 +40,15 @@ The observer function
 
 A continuation value is a pointer to the block. The block resides in
 the stack frame of a procedure. It initializes the block by passing the
-stack pointer location and the address of the continuation code to
+stack-pointer location and the address of the continuation code to
 [[init_code]]. The call returns a list of instructions that perform the
 initialization of the block.
-
 <<contn.mli>>=
 type t
 
-val init_code:     t -> k_sp:Rtl.exp -> k_pc:Rtl.exp -> Rtl.rtl
-val rep : t -> Block.t               (* entire cont in memory *)
-val with_overflow: ('a, 'b) Target2.t' -> overflow:Block.t -> t
+val init_code     : t -> Mflow.cut_args -> Rtl.rtl
+val rep           : t -> Block.t     (* entire cont in memory; rep is address *)
+val with_overflow : ('a, 'b) Target2.t' -> overflow:Block.t -> t
 @
 
 The [[cutto]] function takes a pointer to the continuation ([[contn]])
@@ -70,19 +69,19 @@ val get_contn : Rtl.exp * Rtl.exp -> Rtl.exp
 % ------------------------------------------------------------------ 
 
 <<contn.ml>>=
-module T = Target2
+module M = Mflow
 module R = Rtl
+module T = Target2
 
 type t =
-    { block:      Block.t     (* memory block for pair *)
-    ; sp:         Rtl.loc     (* location inside block for sp *)
-    ; pc:         Rtl.loc     (* location in block for code ptr *)
-    ; overflow:   Rtl.exp     (* base in block of overflow area *)
+    { block    : Block.t     (* memory block for pair + overflow incoming parms *)
+    ; sp       : Rtl.loc     (* location inside block for sp *)
+    ; pc       : Rtl.loc     (* location in block for code ptr *)
     }
 
-let init_code t ~k_sp ~k_pc =
-    Rtl.par [ Rtl.store t.pc k_pc (Rtlutil.Width.loc t.pc)
-            ; Rtl.store t.sp k_sp (Rtlutil.Width.loc t.sp)
+let init_code t vals =
+    Rtl.par [ Rtl.store t.pc vals.M.new_pc (Rtlutil.Width.loc t.pc)
+            ; Rtl.store t.sp vals.M.new_sp (Rtlutil.Width.loc t.sp)
             ]
 
 let rep t = t.block
@@ -103,11 +102,7 @@ let with_overflow t ~overflow =
       Block.at ~size:(2 * size) ~alignment:t.T.alignment in
   let my_rep = Block.cathl overflow my_pc_sp in
   let pc, sp = pc_sp (Block.base my_rep) t in
-  { block = my_rep
-  ; sp    = sp
-  ; pc    = pc
-  ; overflow = Block.base overflow
-  }
+  { block = my_rep; sp = sp; pc = pc }
 
 let cutto t to_rtl ~contn =
   let w = t.T.pointersize in

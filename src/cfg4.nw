@@ -667,15 +667,9 @@ object (this)
     method node_info_string = 
         let this = (this :> node) in
         let live = (this#property).Property.liveout in 
-            Printf.sprintf 
-                "num: %02d id: %d live: %s pred: %s succ: %s "
-                _num
-                _id
-                (Register.print_set live) 
-                (String.concat "," 
-                    (List.map (fun n -> string_of_int n#id) this#pred))
-                (String.concat "," 
-                    (List.map (fun n -> string_of_int n#id) this#succ))
+	let items l = String.concat "," (List.map (fun n -> string_of_int n#id) l) in
+            Printf.sprintf "num: %02d id: %d live: {%s} pred: %s succ: %s "
+            _num _id (Register.Set.to_string live) (items this#pred) (items this#succ)
 
     method is_call = false
 

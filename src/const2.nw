@@ -16,45 +16,48 @@
 \section{Equations over RTL-Expressions}
 % ------------------------------------------------------------------ 
 
-This module allows to build an equation system by equating {\rtl}
-expressions.  The equation system determines the value of late
-compile-time constants that are part of the participating expressions.
-
+This module enables a client to build and solve a system of equations.
+A term in an equation is an {\rtl} expression.  
+The module is used to solve for the values of late compile-time
+constants.
+The equations themselves typically arise from constraints in the
+[[Block]] module.
 <<const2.mli>>=
 exception Can'tSolve
 
 type t              (* equation *)
 type solution =
-    { known:        (string * Rtl.exp) list
-    ; dependent:    (string * Rtl.exp) list
+    { known:        (string * Rtl.exp) list  (* fully solved *)
+    ; dependent:    (string * Rtl.exp) list  (* depend on other variables *)
     }
 
-val equate:     Rtl.exp -> Rtl.exp -> t                     (* e1   == e2   *)
-val equate':    x:int -> Rtl.exp -> y:int -> Rtl.exp -> t   (* x+e1 == y+e2 *) 
+val equate : Rtl.exp -> Rtl.exp -> t   (* e1 == e2 *)
 
-val solve: width:int -> t list -> solution   (* Can'tSolve *)
-val to_string:  t -> string (* for debugging *)
+val solve  : width:int -> t list -> solution   (* Can'tSolve *)
+val to_string : t -> string (* for debugging *)
+@  
+The function [[equate]] creates an equation.
+The solver treats
+a list of equations as system of equations to be solved simultaneously.
+Solving treats late compile-time constants as
+variables and tries to map each one to an {\rtl} expression that is
+variable-free. 
+A~variable that can be expressed this way is \emph{known}.
+A~variable whose value can be expressed only in terms of
+other variables is \emph{dependent}. 
+A~solution contains dependent variables only if the system of
+equations does not provide enough information for a solution (e.g., if
+there were fewer equations than variables).
 @
-
-The functions [[equate]] and [[equate']] create an equation of type
-[[t]]. For convenience, [[equate']] allows to add integers to both
-equations.  A list of equations is an equation system that can be
-solved. Hence, individual equations can freely combined into lists to
-form equation systems.  Solving treats late compile-time values as
-variables and tries to express them as {\rtl} expression that are
-variable-free. Variables that can be expressed this way, are said to be
-\emph{known}. Variables whose values can only be expressed in terms of
-other variables are said to be \emph{dependent}. If a solution has
-dependent variables, the equation system had more equations that
-variables.
-
+N.B. For details of terminology see NR's solver paper in SP\&E.
+@
 Limitations: Despite the interface and the expressiveness of {\rtl}
 expressions, this is not a general equation solver. How can I make
 precise what the equation solver does without going into the details of
 operation?
-
+@
 % ------------------------------------------------------------------ 
-\subsection{Implementation}
+\section{Implementation of equations}
 % ------------------------------------------------------------------ 
 
 The implementation relies on the linear equation solver module
@@ -63,10 +66,9 @@ expression into linear form such that it can be passed to the linear
 equation solver. The general idea is that complicated (and possibly
 non-linear) terms are treated as constant with respect to equation
 solving.
-
 <<const2.ml>>=
-module D  = Rtl.Dn  (* Down *)
-module U  = Rtl.Up   (* UP *)
+module D  = Rtl.Dn
+module U  = Rtl.Up
 module RP = Rtl.Private
 
 exception Can'tSolve
@@ -75,11 +77,10 @@ type solution =
     ; dependent:    (string * Rtl.exp) list
     }
 @
-
-For actually solving equations, we represent any expression as a linear
-sum of terms.  A term is a constant, a variable, or one. An equation is
+We represent an expression as a linear
+sum of terms.  
+A term is a constant, a variable, or one ([[Unit]]). An equation is
 a sum whose value is known to be zero.
-
 <<const2.ml>>=
 type term =
     | Const of Rtl.exp
@@ -89,9 +90,7 @@ type term =
 type sum = (int * term) list
 type t   = sum                  (* equation, sum == 0 *)
 @
-
-To aid debugging, we like to have a printable representation of terms. 
-
+To aid debugging, we have a printable representation of terms. 
 <<const2.ml>>=
 module ToString = struct
     let term = function
@@ -115,24 +114,20 @@ module ToString = struct
 end
 let to_string = ToString.t
 @
-
-
 Here are constructor functions for simple sums. We use them when we
 parse an {\rtl} expression into a sum.
-
 <<const2.ml>>=
-let sym x       = [(1, Var x)]
-let int i       = if i = 0 then [] else [(i, Unit)]
-let const k     = [(1, Const (U.exp k))]
-let add x y     = x @ y
-let sub x y     = x @ List.map (fun (i,y) -> (-i,y)) y
+let sym x   = [(1, Var x)]
+let int i   = if i = 0 then [] else [(i, Unit)]
+let const k = [(1, Const (U.exp k))]
+let add x y = x @ y
+let sub x y = x @ List.map (fun (i,y) -> (-i,y)) y
 @
-
 The real work is to parse an {\rtl} expression into a sum. This requires
 in particular to recognize certain {\rtl} operators. We traverse an
-{\rtl} expression and create a sum representation for it. Everything we
+{\rtl} expression and create a sum representation for it. 
+Any expression we
 don't know how to handle becomes a constant.
-
 <<const2.ml>>=
 let exp e = 
     let rec exp = function
@@ -145,36 +140,21 @@ let exp e =
     in
         exp (D.exp e)
 @
-
-An equation is a sum whose value is zero. The [[equate]] functions
+An equation is a sum whose value is zero. The [[equate]] function
 simply subtract both sides from each other to obtain a sum of value
 zero.
-
 <<const2.ml>>=
-let equate     e1    e2 = 
-    let t  = sub (exp e1) (exp e2) in
-    (* let () = Printf.printf "0 == %s\n" (ToString.t t); flush stdout in
-     *)  
-       t
-        
-let equate' ~x e1 ~y e2 = 
-    let t  = sub (add (int x) (exp e1)) (add (int y) (exp e2)) in
-    (* let () = Printf.printf "0 == %s\n" (ToString.t t); flush stdout in
-     *)  
-       t
+let equate e1 e2 = sub (exp e1) (exp e2)
 @
-
 The linear equation solver needs to know about terms. We provide the
 structure [[T]] for it and create an instance of the equation solver for
 us. The equation solver provides (should be changed):
-
 \begin{itemize}
 \item [[T.t]]: the type for a set of equations.
 \item [[T.empty]]: the empty set.
 \item [[T.make_zero]]: adds a sum that is known to be zero to an
        equation set.
 \end{itemize}
-
 <<const2.ml>>=
 module T = struct
     type t = term
@@ -186,15 +166,13 @@ module T = struct
 end
 module Solver = Eqn.Make(T)         (* equation solver over terms *)
 @
-
 The result as it is returned by the equation solver associates a variable
 with a sum. Since we need to return {\rtl} expressions, we have to
 unparse a sum into an expression. 
-
 <<const2.ml>>=
 let rtl ~(width:int) (e:sum) = 
     let add    = Rtlutil.add width in
-    let mult   = Rtl.opr "mult" [width] in 
+    let mult   = Rtl.opr "mul_trunc" [width] in 
     let bits i = Rtl.bits (Bits.S.of_int i width) width    in 
     let late x = Rtl.late x width in
     let summand = function
@@ -212,16 +190,14 @@ let rtl ~(width:int) (e:sum) =
         | []    -> Rtl.bits (Bits.zero width) width
         | s::ss -> loop (summand s) ss 
 @
-
 Here we solve the equation system. We have a list of sums that we feed
 into the linear equation solver. Once we obtain the result, we translate
 it back to {\rtl}s. 
-
 <<const2.ml>>=
 let solve ~width sums =
     try
         let eqns   = List.fold_right Solver.make_zero sums Solver.empty in
-        let result =  Solver.solve eqns in
+        let result = Solver.solve eqns in
         let to_rtl = function (v,sum) -> (v,rtl width sum) in
                 { known     = List.map to_rtl result.Solver.known
                 ; dependent = List.map to_rtl result.Solver.dependent
@@ -229,4 +205,3 @@ let solve ~width sums =
     with
         Solver.Can'tSolve _ -> raise Can'tSolve
 @
-

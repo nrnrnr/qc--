@@ -93,6 +93,15 @@ test:V:         all
                 cd test2 && mk $MKFLAGS all
 
 # ------------------------------------------------------------------
+# line counting
+#
+# ------------------------------------------------------------------ 
+
+count:V:
+	nocount cllib/*.nw rtl/*.nw src/*.nw
+
+
+# ------------------------------------------------------------------
 # installation
 #
 # This is rudimentary install target. Refine as you see fit.

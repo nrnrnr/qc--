@@ -128,11 +128,6 @@ module AstAsm    = Astasm.Make(Personality)
 module NewAstAsm = Astasm.Make(NewPersonality)
 module InterpAsm = Interpasm.Make(Interp)
 
-(* IT IS BOGUS TO HAVE TWO ASSEMBLY TYPES HERE.
-   INSTEAD WE SHOULD USE SOME FORM OF POLYMORPHISM,
-   WHICH SHOULD START WITH
-     type 'a t = 'a Asm3.assembler
-   AND CONTINUE FROM THERE *)
 module AsmType = struct
     type 'a t       = 'a Asm3.assembler
     let tname       = "asm"
@@ -222,10 +217,6 @@ struct
 end (*MakeLib*)
 @ 
 
-Here we finally bind the exported values to names in the Lua
-interpreter. The [[compile]] function receives a lua value such that it
-can call Lua functions while it is active.
-
 <<export goodies to Lua>>=
 module Map = struct
     let compose ~lo ~hi =
@@ -261,6 +252,10 @@ module Map = struct
     let stage proc = V.func (V.value **-> proc **-> V.result V.bool)
     let block     = BlockV.makemap  V.userdata V.projection
 end
+@ 
+Here we finally bind the exported values to names in the Lua
+interpreter. The [[compile]] function receives a lua value such that it
+can call Lua functions while it is active.
 <<export goodies to Lua>>=
 let init g = 
   <<register modules to [[g]] in alphabetical order>>

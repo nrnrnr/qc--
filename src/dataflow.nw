@@ -2,36 +2,6 @@
 
 \section{Support for forward dataflow problems}
 
-To implement forward iteration of a dataflow problem:
-\begin{itemize}
-\item
-To follow a join, continue with the join's successor, then mark the
-join as followed.
-If there is a join left to be followed, follow it.
-\item
-To continue with a node, 
-\begin{itemize}
-\item
-If the node is a join, then take the current information and merge it
-into the information stored at the node.
-\begin{itemize}
-\item
-If the join is marked as followed, do nothing more with that node.
-\item
-If the join is not marked as followed, enqueue
-it to be followed.
-\end{itemize}
-\item
-If the node is not a join, propagate the dataflow over the node, and
-continue with each of the node's successors.
-\end{itemize}
-\item
-To run an iteration, start with the initial information and continue
-with the entry node.
-This should follow everything in the to-be-followed
-queue until done.
-\end{itemize}
-
 <<dataflow.mli>>=
 module Make (G : Cfg.S) : sig
   type ('i, 'a) problem =
@@ -41,9 +11,7 @@ module Make (G : Cfg.S) : sig
     ; propagate       : 'i G.node -> 'a -> 'a
     } 
   val fwd_iteration : ('i, 'a) problem -> 'i G.cfg -> bool
-  val bwd_iteration : ('i, 'a) problem -> 'i G.cfg -> bool
-  val rev_postorder_dfs  : 'i G.cfg -> ('i G.node -> 'a -> 'a) -> 'a -> 'a
-  val rev_postorder_dfs' : 'i G.cfg -> ('i G.node -> 'a -> 'a) -> 'a -> 'a
+(*val bwd_iteration : ('i, 'a) problem -> 'i G.cfg -> bool*)
 end
 <<dataflow.ml>>=
 module Make (G : Cfg.S) = struct
@@ -53,12 +21,11 @@ module Make (G : Cfg.S) = struct
     ; init_info       : 'a
     ; propagate       : 'i G.node -> 'a -> 'a
     } 
-  <<supporting functions>>
-
   <<iteration functions>>
 end
 @ 
 Revised to use the new flow-graph traversal.
+We go from each head to the next join.
 <<iteration functions>>=
 let fwd_iteration {split_info=join_info; merge_split_info= merge_join_info;
                    init_info= init_info; propagate= propagate} g =
@@ -70,316 +37,15 @@ let fwd_iteration {split_info=join_info; merge_split_info= merge_join_info;
   !changed
 
 <<forward solver functions>>=
-let rec continue info node =
+let rec follow head =
+  let info = if G.is_join head then join_info head else init_info in
+  continue info (G.succ head)
+and continue info node =
   if G.is_join node then
     merge_join_info node info
   else
     let info = propagate node info in
     List.iter (continue info) (G.succs node) 
-and follow head =
-  let info = if G.is_join head then join_info head else init_info in
-  continue info (G.succ head)
-@ 
-<<iteration functions>>=
-let bwd_iteration {split_info=fork_info; merge_split_info= merge_fork_info;
-                   init_info= init_info; propagate= propagate} g =
-  let changed = ref false in
-  let merge_fork_info n i = if merge_fork_info n i then changed := true in
-  <<backward solver functions>> in
-  follow_all (continue (G.exit g) init_info emptyqueue emptyset) emptyset;
-  !changed
-
-<<backward solver functions>>=
-let rec continue node info to_follow followed =
-  if G.is_fork node then
-    let fork = node in
-    let to_follow =
-      if member fork followed then to_follow else enqueue fork to_follow in
-    begin
-      merge_fork_info fork info;
-      to_follow
-    end
-  else
-    let info = propagate node info in
-    List.fold_left (fun to_f s -> continue s info to_f followed)
-                   to_follow (G.preds node)  in
-
-let rec follow fork to_follow followed =
-  let to_follow = continue (G.pred fork) (fork_info fork) to_follow followed in
-  follow_all to_follow (add fork followed)
-and follow_all to_follow followed =
-  dequeue to_follow
-    (fun j js ->
-      if member j followed then follow_all js followed else follow j js followed)
-    (fun () -> ())
-
-@ 
-<<supporting functions>>=
-let emptyqueue = [], []
-let enqueue x (l, r) = (l, x :: r)
-let dequeue (l, r) succ fail =
-  match l with
-  | x :: xs -> succ x (xs, r)
-  | [] -> match List.rev r with
-    | x :: xs -> succ x (xs, [])
-    | [] -> fail ()
-@ 
-<<supporting functions>>=
-module SS = Strutil.Set
-let emptyset = SS.empty
-let add n s = SS.add (G.label n) s
-let member n s = SS.mem (G.label n) s
-
-
-
-@ 
-John Dias writes: I believe this code you will give you exactly the behavior you
-desire - it's the so-called reverse postorder dfs from Omri's thesis. I
-don't think the code is transparent, so feel free to ask about it. I
-think the most subtle part is that the "reverse" comes from consing the
-list together.
-<<old stuff from John Dias>>=
-method enumerate =
-    let rec rev_postorder_dfs node (acc: node list) cont =
-        let rec handleList node lst cont acc =
-            match lst with
-            | [] -> cont (node::acc)
-            | n::rst -> rev_postorder_dfs n acc (handleList node rst cont) in
-        if node#been_visited
-        then cont acc
-        else
-            let () = node#visit in
-            handleList node (node#succ) cont acc in
-    let entry = match _entry with None -> assert false | Some n -> n  in       
-   
-    let nodes = rev_postorder_dfs entry [] (fun l -> l) in
-    let () = List.iter (fun n -> n#unvisit) nodes in
-    let _ = List.fold_left (fun num node -> node#set_number num; num + 1) 1 nodes in
-    let node_array = Array.of_list nodes in
-    let () = _unsafe_enumeration <- Some node_array in
-         _enumeration <- Some node_array
-@ 
-Here's a higher-order version that visits things catamorphically in
-the same order.  We have no visiting flags, so that part is
-unimplemented.  For the rest, I've done some tidying of argument
-lists.  I won't pretend to understand how it works, but it typechecks.
-<<supporting functions>>=
-let visit g cons nil =
-  let been_visited   node = assert false in
-  let mark_visited   node = assert false in
-  let unmark_visited node = assert false in
-  let rec rev_postorder_dfs node kont acc =
-    let rec handle_succs lst kont acc =
-      match lst with
-      | []     -> kont (cons node acc)
-      | n::rst -> rev_postorder_dfs n (handle_succs rst kont) acc in
-    if been_visited node then
-      kont acc
-    else
-      (mark_visited node;
-       handle_succs (G.succs node) kont acc) in
-  let entry = G.entry g in
-  let answer = rev_postorder_dfs entry (fun x -> x) nil in
-  let () = G.iter_nodes unmark_visited g in
-  answer
-@ 
-How do we prove each node is visited exactly once?
-Aside from the entry point, we reach a node only if we can reach one
-of its predecessors.
-We can therefore prove by induction on distance from the entry that if
-a node is reachable from the entry without touching a join point, that
-node is visited exactly once.
-We can furthermore prove that each join point, plus the entry, is
-visited exactly once.
-
-We do a depth-first graph traversal, and at each node we build up a
-continuation that 
-adding each join point to the
-visited 
-<<supporting functions>>=
-let been_visited node v = G.is_join node && member node v 
-let add node v = if G.is_join node then add node v else v 
-
-let rev_postorder_dfs g cons nil =
-  let rec dfs_visit nodes visited kont =
-    match nodes with
-    | [] -> kont nil
-    | node :: nodes ->
-        if been_visited node visited then
-          dfs_visit nodes visited kont 
-        else
-          dfs_visit (G.succs node @ nodes) (add node visited)
-            (fun acc -> cons node (kont acc)) in
-  dfs_visit [G.entry g] emptyset (fun x -> x)
-@ 
-Here's a version that's longer but avoids the unholy append.
-<<supporting functions>>=
-let rev_postorder_dfs' g cons nil =
-  let rec dfs_visit nodes nodess visited kont =
-    match nodes with
-    | node :: nodes ->
-        if been_visited node visited then
-          dfs_visit nodes nodess visited kont 
-        else
-          dfs_visit (G.succs node) (nodes :: nodess) (add node visited)
-            (fun acc -> cons node (kont acc))
-    | [] ->
-        match nodess with
-        | [] -> kont nil
-        | nodes :: nodess -> dfs_visit nodes nodess visited kont in
-  dfs_visit [G.entry g] [] emptyset (fun x -> x)
-@ 
-Here's simple preorder DFS.
-<<supporting functions>>=
-let nr_preorder_dfs g cons nil =
-  let rec dfs_visit nodes visited acc =
-    match nodes with
-    | [] -> acc
-    | node :: nodes ->
-        if been_visited node visited then
-          dfs_visit nodes visited acc
-        else
-          dfs_visit (G.succs node @ nodes) (add node visited) (cons node acc) in
-  dfs_visit [G.entry g] emptyset nil
-@ 
-Here's simple postorder DFS.  SIMPLE BUT WRONG!!!
-The problem is that the cons has to take place after the successors
-but before the rest of the nodes. 
-<<supporting functions>>=
-let nr_wrong_postorder_dfs g cons nil =
-  let rec dfs_visit nodes visited =
-    match nodes with
-    | [] -> nil
-    | node :: nodes ->
-        if been_visited node visited then
-          dfs_visit nodes visited
-        else
-          cons node (dfs_visit (G.succs node @ nodes) (add node visited)) in
-  dfs_visit [G.entry g] emptyset 
-@ 
-So let's try continuation-passing style.
-A continuation is a function that takes a partial answer and a set of
-visited nodes and produces an answer.
-<<supporting functions>>=
-type 'a cont = 'a -> SS.t -> 'a
-@ An action takes a partial answer, a visited set, a continuation, and
-returns a continuation.   This is not a classic CPS, and I suspect it
-could be simplified, but it works.
-<<supporting functions>>=
-type 'a action = 'a -> SS.t -> 'a cont -> 'a cont
-@ We compose actions by application, more or less.
-<<supporting functions>>=
-let ( **> ) f k = fun ans visited -> f ans visited k
-let postorder_dfs' g extend_answer =
-  let extend node answer visited k = k (extend_answer node answer) visited in
-  let rec vnode node answer visited k =
-         if been_visited node visited then
-           k answer visited
-         else
-           (vnodes (G.succs node) **> extend node **> k) answer (add node visited)
-      and vnodes nodes answer visited k = match nodes with
-      | [] -> k answer visited
-      | node :: nodes -> (vnode node **> vnodes nodes **> k) answer visited in
-  fun answer k -> vnode (G.entry g) answer emptyset k
-@ 
-Now we get forward and reverse postorder DFS in a trice.
-<<supporting functions>>=
-let fwd_postorder_dfs g cons nil = (* type answer = node list *)
-  postorder_dfs' g cons nil (fun x _ -> x)
-
-let bwd_postorder_dfs g cons nil = (* type answer = node list -> node list *)
-  let snoc node build = fun tail -> build (cons node tail) in
-  postorder_dfs' g snoc (fun x -> x) (fun build _ -> build nil)
-@ 
-Now let's try to do the CPS right.
-It turns out to be just a matter of changing the order of arguments.
-<<supporting functions>>=
-type 'a stmt = 'a cont -> 'a cont
-let cps_postorder_dfs' g extend_answer =
-  let ( **> ) f k = f k in
-  let rec foldl f l z = match l with [] -> z | x :: xs -> foldl f xs (f x z) in
-  let visit node k = fun answer vis -> k (extend_answer node answer) vis in
-  let rec vnode node k answer visited =
-    if been_visited node visited then
-      k answer visited
-    else
-      (foldl vnode (G.succs node) **> visit node **> k) answer (add node visited) in
-  fun answer k -> vnode (G.entry g) k answer emptyset
-<<supporting functions>>=
-let fwd_postorder_dfs_cps g cons nil = (* answer = node list *)
-  cps_postorder_dfs' g cons nil (fun x _ -> x)
-
-let bwd_postorder_dfs_cps g cons nil = (* answer = node list -> node list *)
-  let snoc node build = fun tail -> build (cons node tail) in
-  cps_postorder_dfs' g snoc (fun x -> x) (fun build _ -> build nil)
-@ 
-<<supporting functions>>=
-let ( **> ) f k = fun ans visited -> f ans visited k
-let postorder_dfs' g extend_answer =
-  let extend node answer visited k = k (extend_answer node answer) visited in
-  let rec vnode node answer visited k =
-         if been_visited node visited then
-           k answer visited
-         else
-           (vnodes (G.succs node) **> extend node **> k) answer (add node visited)
-      and vnodes nodes answer visited k = match nodes with
-      | [] -> k answer visited
-      | node :: nodes -> (vnode node **> vnodes nodes **> k) answer visited in
-  fun answer k -> vnode (G.entry g) answer emptyset k
-
-@ 
-We visit a list of nodes ([[vnodes]]) only when they are the successors of the
-current node.
-Therefore, when we are finished, the right thing to do is cons on the
-current node---thus the base case of [[vnodes]].
-<<supporting functions>>=
-let son_of_dias_postorder_dfs g cons nil =
-  let rec vnode node (acc, visited) =
-    let rec vnodes l (a,v) = match l with
-      | node :: nodes -> vnodes nodes (vnode node (a, v)) 
-      | [] -> (cons node a, v) in
-    if been_visited node visited then
-      (acc,visited)
-    else
-      vnodes (G.succs node) (acc, add node visited) in
-  fst (vnode (G.entry g) (nil, emptyset))
-@ 
-More from JD:
-To me, this is the intuitive way to do the traversal in cps.
-[[vnode]] is called on a node. If that node has not been visited, then
-[[vchildren]] is called on the node and its children. If there are no
-children, then the node is placed on the accumulated list and the
-continuation is called on the accumulated list.
-If there are children, then we call [[vnode]] to visit the first one,
-and the continuation becomes the closure formed by applying
-[[vchildren]] to the current node and the remaining children.
-<<supporting functions>>=
-let son_of_dias_cps_postorder_dfs g cons nil cont =
-  let rec vnode node cont acc visited =
-    if been_visited node visited then
-      cont acc visited
-    else
-      vchildren node (G.succs node) cont acc (add node visited)
-  and vchildren node children cont acc visited = 
-    let rec next children acc visited = match children with
-      | [] -> cont (cons node acc) visited
-      | n::rst -> vnode n (next rst) acc visited in
-    next children acc visited in
-  vnode (G.entry g) cont nil emptyset
-@ 
-Here's simple preorder BFS.
-<<supporting functions>>=
-let nr_preorder_bfs g cons nil =
-  let rec visit nodes visited acc =
-    match nodes with
-    | [] -> acc
-    | node :: nodes ->
-        if been_visited node visited then
-          visit nodes visited acc
-        else
-          visit (nodes @ G.succs node) (add node visited) (cons node acc) in
-  visit [G.entry g] emptyset nil
-@ 
 @
 <<dataflow.ml>>=
 module Test = struct
@@ -403,7 +69,6 @@ module Test = struct
       !g
       
   end
-  <<supporting functions>>
   let dotgraph g (name, visitor) =
     let add_label (n, _) labels =
       ["  "; n; " [label=\""; string_of_int (List.length labels + 1); "\"]\n"]
@@ -420,6 +85,7 @@ module Test = struct
   let emit_dot () =
     List.iter (dotgraph (G.of_edges edges))
       [ "unnumbered", (fun _ _ l -> l)
+(*
       ; "rev_postorder_dfs", rev_postorder_dfs
       ; "rev_postorder_dfs_prime", rev_postorder_dfs'
       ; "fwd_postorder_dfs", fwd_postorder_dfs
@@ -429,6 +95,7 @@ module Test = struct
       ; "son_of_diasson_of_dias_postorder_dfs", son_of_dias_postorder_dfs
       ; "nr_preorder_dfs", nr_preorder_dfs
       ; "nr_preorder_bfs", nr_preorder_bfs
+*)
       ] 
 end
 <<dataflow.mli>>=
