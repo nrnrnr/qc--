@@ -466,9 +466,8 @@ implemented.
 let set_live node set = match node with
     | x::xx -> x.live <- set
     | []    -> assert false
-
-let expand cfg f = Impossible.unimp "Cfg.expand"
 @
+
 
 The [[iter]] function is \emph{not} tail-recursive: before we process
 the actual node, we have to process all following nodes first.
@@ -480,4 +479,84 @@ let iter cfg f =
         | n::nn as node' -> loop nn; f node'
     in
         loop cfg.entry
+@
+
+The [[expand]] function takes a function [[f]] that expands a single
+[[rtl]] into a list of them in order to establish the machine
+invariant.  For efficiency we build first a list of lists and flatten
+it later.  Once we have done this we also have to re-build our index.
+
+The expansion has to preserve the kind of a node.  When a [[rtl]] is
+expanded into a list, all except the last [[rtl]] becomes an
+[[assign]] node each.  The last [[rtl]] replaces the [[rtl]] in the
+original node and thus preserves its kind.  But there is more:  each
+node has properties and a set of live registers.  The fresh nodes will
+have the same properties as the expanded nodes plus an \emph{empty}
+set of live registers.  We rely on the fact that code expansion
+happens before liveness analysis and thus all live sets are still
+empty.  We use [[assert]] to secure this assumption.
+
+its live set.  Since register sets are mutable, we have to makes
+copies to avoid sharing.
+
+[[subst]] takes a kind and returns a similar [[kind]] value with the
+[[rtl]] replaced.
+
+<<implementation of S>>=
+let subst_kind: kind -> Rtl.rtl -> kind = fun kind rtl -> match kind with
+    | Goto   (_  ,x) -> Goto (rtl,x)
+    | Call   (_  ,x) -> Call (rtl,x)
+    | Assign  _      -> Assign(rtl)
+    | Branch (_  ,x) -> Branch(rtl,x)
+    | Label  _       -> kind
+    | Jump   (_  ,x) -> Jump(rtl,x)
+    | Cutto  (_  ,x) -> Cutto(rtl,x)
+    | Return _       -> kind
+    | Exit           -> kind
+@
+
+During the expansion a list of {\rtl}s must be transformed into a list
+of nodes.  All except the last {\rtl} become an assignment node and
+the last {\rtl} replaces the {\rtl} in the node that was expanded.
+
+<<implementation of S>>=
+let rtls2nodes: node -> Rtl.rtl list -> node list = fun n rtls ->
+    let rec loop = function
+        | []    -> assert false
+        | [rtl] -> [node n.props (subst_kind n.kind rtl)]
+        | r::rr -> node n.props (Assign r) :: loop rr (* not tail rec. *)
+    in
+        ( assert (n.live = Register.Set.empty)
+        ; loop rtls
+        )
+@
+
+[[Exp]] takes the {\rtl} expansion function [[f]] and applies it to a
+node [[n]]'s {\rtl}.  The resulting [[rtl list]] is transformed into a
+list of node by [[rtls2nodes]]. 
+
+<<implementation of S>>=
+let exp: (Rtl.rtl -> Rtl.rtl list) -> node -> node list = fun f n ->
+    match n.kind with
+    | Goto   (rtl,_) -> rtls2nodes n (f rtl)
+    | Call   (rtl,_) -> rtls2nodes n (f rtl)
+    | Assign  rtl    -> rtls2nodes n (f rtl) 
+    | Branch (rtl,_) -> rtls2nodes n (f rtl)  
+    | Jump   (rtl,_) -> rtls2nodes n (f rtl)  
+    | Cutto  (rtl,_) -> rtls2nodes n (f rtl)  
+    | Label  _       -> [n]
+    | Return _       -> [n]
+    | Exit           -> [n]
+@
+
+Finally, here is the exported function [[expand]].  It applies [[f]]
+to all nodes to expand them.  After this is done, the [[index]] for
+labels must be re-computed since the list of nodes has been changed.
+
+<<implementation of S>>=
+let expand: cfg -> (Rtl.rtl -> Rtl.rtl list) -> cfg = fun cfg f ->
+    let entry = List.flatten (List.map (exp f) cfg.entry) in
+        { entry = entry
+        ; index = index StrMap.empty entry
+        }   
 @
