@@ -663,13 +663,11 @@ C.register_module "Rtlop"
   [ "Emit", (V.record V.value).V.embed
       [ "creators", V.efunc (V.unit **->> V.unit) Rtlop.Emit.creators;
       ];
-    "Types", (V.record V.value).V.embed
-      [ "mono", V.efunc (Map.opr **-> V.resultvs)
-          (fun t -> try Map.monotype_resultvs (Rtlop.Types.mono t)
-                    with Not_found -> [V.Nil]);
-        "print_shapes", V.efunc (V.unit **->> V.unit) Rtlop.Types.print_shapes;
-      ];
-    "opnames", (V.list V.string).V.embed (List.sort Pervasives.compare Rtlop.opnames);
+    "mono", V.efunc (Map.opr **-> V.resultvs)
+          (fun t -> try Map.monotype_resultvs (Rtlop.mono t) with Not_found -> [V.Nil]);
+    "print_shapes", V.efunc (V.unit **->> V.unit) Rtlop.print_shapes;
+    "opnames", V.efunc (V.unit **->> V.list V.string)
+         (fun () -> List.sort Pervasives.compare (Rtlop.opnames ()));
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Runtime"

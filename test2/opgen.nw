@@ -127,7 +127,7 @@ end
 Stride of an operator---number of memcells in the largest argument or result.
 <<opgen.lua>>=
 function Testgen.stride(t, op)
-  local result, args = Rtlop.Types.mono(op)
+  local result, args = Rtlop.mono(op)
   local n = Testgen.cellcount(t, result)
   local i = 1
   while args[i] do
@@ -211,7 +211,7 @@ function Testgen.emit(t)
       '"address" bits%d py, "address" bits%d pz) {\n',
       opname, ptr, ptr, ptr, ptr)
     Testgen.emitbody(t, op)
-    w('  foreign "C" return (%d);\n', Testgen.cellcount(t, Rtlop.Types.mono(op)))
+    w('  foreign "C" return (%d);\n', Testgen.cellcount(t, Rtlop.mono(op)))
     w('}\n\n')
     i = i + 1
   end
@@ -223,7 +223,7 @@ function Testgen.emit(t)
   w('  bits%d[] {\n', metrics.pointersize)
   Testgen.section = 'pending'
   i = 1
-  local allops = Rtlop.opnames
+  local allops = Rtlop.opnames ()
   while allops[i] do
     if not defined[allops[i]] then
       w('    %s,\n', Testgen.emitstring(allops[i]))
@@ -252,7 +252,7 @@ Testgen.argnames = { 'x', 'y', 'z' }
 
 function Testgen.emitbody(t, opr)
   local metrics = Target.metrics(t)
-  local result, args = Rtlop.Types.mono(opr)
+  local result, args = Rtlop.mono(opr)
   local tyw = { bool = 1 }
   local i = 1
   local argnames = Testgen.argnames

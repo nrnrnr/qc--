@@ -187,7 +187,7 @@ widened floating-point variable to an integer comparison operation.
 and rewrite e = match e with
   | RP.Const _      -> e
   | RP.Fetch (l, e) -> RP.Fetch(loc l, e)
-  | RP.App (op, args) when Rtlop.Types.has_floating_result (Up.opr op) ->
+  | RP.App (op, args) when Rtlop.has_floating_result (Up.opr op) ->
       Debug.eprintf "widen"
         "Warning -- rewriting (not converting) floating-point result";
       let w = Rtlutil.Width.exp' e in
@@ -216,7 +216,7 @@ Assignment requires that we know whether the right-hand side is a
 floating-point expression.  If so, [[convert]], otherwise [[rewrite]].
 <<floating-point widening>>=
 let is_floating_exp = function
-  | RP.App(op, args) -> Rtlop.Types.has_floating_result (Up.opr op)
+  | RP.App(op, args) -> Rtlop.has_floating_result (Up.opr op)
   | _ -> false in
 let guarded (g, eff) =
   let eff = match eff with
@@ -234,7 +234,7 @@ avoid rewriting the RTL, thereby reducing the load on the major heap.
 <<floating-point widening>>=
 let rtl r = 
   let needs_conversion op =
-    Rtlop.Types.has_floating_result op ||
+    Rtlop.has_floating_result op ||
     match fst (Dn.opr op) with
     | "fcmp"|"flt"|"fle"|"fgt"|"fge"|"feq"|"fne"|"fordered"|"funordered"|"f2i" -> true
     | _ -> false in
@@ -539,7 +539,7 @@ let widen_sigma m soln =
     let w          = width soln in
     let ext_widths = find_exts_from m w ext in
     let create ws =
-      match Rtlop.Types.mono (Rtl.opr ext ws) with
+      match Rtlop.mono (Rtl.opr ext ws) with
       | ([Types.Bits _], Types.Bits w') ->
           { soln with
             e' = RP.App((ext, ws), [soln.e']);
@@ -561,7 +561,7 @@ let widen_garbage m soln =
     let zx_widths = find_exts_from m w "zx" in
     let sx_widths = find_exts_from m w "sx" in
     let create fill' ext ws =
-      match Rtlop.Types.mono (Rtl.opr ext ws) with
+      match Rtlop.mono (Rtl.opr ext ws) with
       | ([Types.Bits _], Types.Bits w') ->
           { soln with
             e' = RP.App((ext, ws), [soln.e']);
@@ -630,7 +630,7 @@ let narrow_rule m soln =
     let w'           = width soln in
     let trunc_widths = find_exts_from m w' "lobits" in
     let create ws =
-      match Rtlop.Types.mono (Rtl.opr "lobits" ws) with
+      match Rtlop.mono (Rtl.opr "lobits" ws) with
       | ([Types.Bits _], Types.Bits w) ->
           { soln with
             e' = RP.App(("lobits", ws), [soln.e']);
@@ -828,7 +828,7 @@ let mksolutions_op m args_solns opname ws args =
     in
     let (a, b) = 
       if List.mem_assoc opname op_fill_types then
-        Rtlop.Types.mono (Rtl.opr opname ws)
+        Rtlop.mono (Rtl.opr opname ws)
       else raise Not_found
     in
     (List.map to_int a, to_int b)
@@ -900,7 +900,7 @@ let mksolutions_ext ext ws arg_solnss =
 
   (* find all solutions with index equal to the input width of the extension *)
   let (n, n'') =
-    match Rtlop.Types.mono (Rtl.opr ext ws) with
+    match Rtlop.mono (Rtl.opr ext ws) with
     | ([Types.Bits n], Types.Bits n'') -> (n, n'')
     | _ -> impossf "%s operator should have some type bits#n->bits#w" ext in
   (* assert that n <= n'' *)
@@ -946,7 +946,7 @@ let mksolutions_trunc ws arg_solnss =
   (* [[e]] just updates the original expression *)
   let e arg = RP.App(("lobits", ws), [arg]) in
   let (n'', n) =
-    match Rtlop.Types.mono (Rtl.opr "lobits" ws) with
+    match Rtlop.mono (Rtl.opr "lobits" ws) with
     | ([Types.Bits n''], Types.Bits n) -> (n'', n)
     | _ -> impossf "lobits operator should have some type bits#w->bits#n"
   in
