@@ -4,7 +4,7 @@ backend.ralloc = backend.ralloc or Ralloc.color
 Options.swap = 1
 
 -- compare results with files in ppc
-Test.results = Test.results or "ppc"
+Test.asmdir = Test.asmdir or "ppc"
 
 function norun(file) return { source = file, runnable="false" } end
 

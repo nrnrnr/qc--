@@ -1,7 +1,6 @@
 backend = Backend.sparc
 
--- compare results with files in x86
-Test.results = Test.results or "sparc"
+Test.asmdir = Test.asmdir or "sparc"
 
 Ld.rtend = ""  --- don't need the run-time system
 -- source files live in src directory

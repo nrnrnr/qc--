@@ -1,7 +1,7 @@
 backend = Backend.dummy
 
 -- compare results with files in dummy
-Test.results = Test.results or "dummy"
+Test.asmdir = Test.asmdir or "dummy"
 
 -- source files live in src directory
 Test.source  = "src"

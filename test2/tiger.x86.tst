@@ -2,8 +2,9 @@
 -- setup x86 backend
 backend = backend or Backend.x86
 
-Test.source  = "tiger"
-Test.results = "tiger/x86"
+Test.source = "tiger"
+Test.asmdir = "tiger/x86"
+Test.outdir = "tiger/output"
 
 function Test.tigertest(filename)
   local t

@@ -745,12 +745,10 @@ function Test.complete_test_table(files)
 
   local name = files.name or
                Caml.Filename.chop_extension(Caml.Filename.basename(files.source[1]))
-  local exp  = Caml.Filename.concat(Test.results, name)
+  files.name = files.name or name
 
-  files.name   = files.name   or name
-
-  files.stdin = files.stdin or "/dev/null"
-  files.outdir = files.outdir or "output"
+  files.stdin  = files.stdin or "/dev/null"
+  files.outdir = files.outdir or Test.outdir or "output"
 
   Test.compute_filename(files, "stdin",  Test.source)
   Test.compute_filename(files, "stdout", files.outdir, name, ".1")
@@ -761,7 +759,7 @@ function Test.complete_test_table(files)
   if type(files.asmerr) == 'string' then files.asmerr = { files.asmerr } end
 
 
-  Test.compute_filenames(files, "asm",    Test.results, files.source, ".s")
+  Test.compute_filenames(files, "asm",    Test.asmdir,  files.source, ".s")
   Test.compute_filenames(files, "asmout", files.outdir, files.source, ".s1")
   Test.compute_filenames(files, "asmerr", files.outdir, files.source, ".s2")
 

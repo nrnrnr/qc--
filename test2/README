@@ -63,7 +63,9 @@ compiler can be manipulated along with the following test driver
 specific values:
 
   Test.verbose - turn on detailed output (same as -v flag).
-  Test.results - directory containing expected results files.
+  Test.asmdir  - directory containing expected assembly-output files.
+  Test.outdir  - directory containing expected stdout, stderr, etc files.
+                 (defaults to 'output') 
   Test.source  - directory containing source files.
   Test.files   - list of source files to test.
   Test.update  - force differing files to be updated.
@@ -103,13 +105,15 @@ default name field will be "test". If a filename contains a '/' then
 it will be treated a a path relative to the current directory. If the
 filename does not contain a '/', then the file is assumed to be in the
 Test.source directory if it is a source file or a standard input file.
-Otherwise, the file is assumed to be in the Test.results directory.
+Otherwise, the file is assumed to be in the Test.asmdir directory if a
+.s file, and the Test.outdir directory otherwise..
 
 The code the assigns defaults is in function Test.complete_test_table.
 Here is an example of how defaults are assigned:
 
- Test.source  = "src"
- Test.results = "x86"
+ Test.source = "src"
+ Test.asmdir = "x86"
+ Test.outdir = "output"
  Test.files = {
   { name   = nil         ---->  "test"
   , source = "test.c"    ---->  { "src/test.c" }
@@ -154,7 +158,7 @@ named "opgen" that takes a single integer parameter.
 This configuration file:
 
   Test.source  = "."
-  Test.results = Test.results or "x86"
+  Test.asmdir = Test.asmdir or "x86"
   Test.files =
    { { name = "ops100" , source = "opgen.gen", args = "100" }
    , { name = "ops200" , source = "opgen.gen", args = "200" }
@@ -291,18 +295,18 @@ invocation of gcc:
 Q: What should I do if I want to test an alternative compiler pass,
 such as an optimization pass or replacement register allocator?
 
-A: If your testing a new component of the compiler that will produce
-different assembly language, then you may want to setup a new results
-directory and record all of the outputs. If you only expect a few
-number of cases to produce different assembly, you may want to just
-setup alternate outputs for the few cases. In either case, a new test
-file will need to be setup for the tests.
+A: If you're testing a new component of the compiler that will produce
+different assembly language, then you may want to set up new asmdir
+and outdir directories and record all of the outputs. If you only
+expect a few number of cases to produce different assembly, you may
+want to just set up alternate outputs for the few cases. In either
+case, a new test file will need to be setup for the tests.
 
 
 Things that are here
 ~~~~~~~~~~~~~~~~~~~~
 
-The files and directories living here are:
+The files and directories living here are:  [OBSOLETE DOCO]
 
    README      - this file
    src/        - source files for test cases
