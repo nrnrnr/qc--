@@ -947,13 +947,14 @@ actls       :   LPAREN  actuals RPAREN         { $2 }
 
 formals     :   formals_ optcomma              { rev $1   }
 formals_    :   formals_ COMMA formal          { $3 :: $1 }
-            |   formal                         { [p(), $1]     }
+            |   formal                         { [$1]     }
 
 actuals     :   actuals_ optcomma              { rev $1   }
 actuals_    :   actuals_ COMMA actual          { $3 :: $1 }
             |   actual                         { [$1]     }
 
-formal      :   STR INVARIANT REGISTER tyAt ID { Some $1, A.Invariant, $4, $5}
+formal      :   bare_formal                    { p(), $1 }
+bare_formal :   STR INVARIANT REGISTER tyAt ID { Some $1, A.Invariant, $4, $5}
             |   STR           REGISTER tyAt ID { Some $1, A.Variant  , $3, $4}
             |       INVARIANT REGISTER tyAt ID { None   , A.Invariant, $3, $4}
             |                 REGISTER tyAt ID { None   , A.Variant  , $2, $3}

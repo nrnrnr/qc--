@@ -312,16 +312,6 @@ reporting function for [[E.catch]]:
 <<auxiliaries>>=
 let error r env msg = E.errorRegionPrt (F.srcmap env,r) msg 
 @
-Types in the abstract syntax may be names and must be evaluated before
-they can be used.  The evaluation can fail in case the name is
-undefined and therefore an [[E.error]] type is used.
-DUPLICATE CODE HERE AND MODULE [[Type]].
-<<auxiliaries>>=
-let rec evalTy env = function
-    | A.TyAt (x,r)    -> E.catch (error r env) (evalTy env) x
-    | A.BitsTy size   -> E.Ok(Types.Bits size)
-    | A.TypeSynonym n -> snd (F.findt n env)
-@
 The static semantics of procedures are checked after everything
 else has been checked. The following function returns the list of
 procedures of a program.
@@ -434,11 +424,7 @@ module Type = struct
   end
   let what = "type"
   type rhs = Types.ty
-  let rec evalTy env = function
-    | A.TyAt(x,r)    -> E.catch (error r env) (evalTy env) x
-    | A.BitsTy(size) -> E.Ok(Types.Bits size)
-    | A.TypeSynonym(n)   -> snd (F.findt n env)
-  let eval env (_, (t, _)) = evalTy env t
+  let eval env (_, (t, _)) = Elabexp.elab_ty env t
   let bind = F.bindt
 end
 module TypeSortBind = SortAndBind(Type)
@@ -471,7 +457,7 @@ module Const = struct
         match ty with
         | None -> E.Ok (b, t)
         | Some ty ->
-            E.seq (Type.evalTy env ty) (fun t' ->
+            E.seq (Elabexp.elab_ty env ty) (fun t' ->
               if t = t' then E.Ok (b, t)
               else errorf "constant %s declared with type %s has actual type %s"
                            name (Types.to_string t') (Types.to_string t)))
@@ -593,13 +579,14 @@ know the exact type and thus are able to parse the literal into a
 and evalExprs env es = E.Raise.list (List.map (evalExpr env) es)
 and evalExpr env =
   let wordTy env = E.Ok (Types.Bits (F.metrics env).Metrics.wordsize) in
+  let ty = Elabexp.elab_ty in
   function
     | A.ExprAt(x,r)       -> E.catch (error r env) (evalExpr env) x
-    | A.Int  (n  , Some t)-> literalExpr env n (evalTy env t) B.U.of_string
+    | A.Int  (n  , Some t)-> literalExpr env n (ty     env t) B.U.of_string
     | A.Int  (n  , None)  -> literalExpr env n (wordTy env)   B.U.of_string
-    | A.Float(n  , Some t)-> literalExpr env n (evalTy env t) B.U.of_string
+    | A.Float(n  , Some t)-> literalExpr env n (ty     env t) B.U.of_string
     | A.Float(n  , None)  -> literalExpr env n (wordTy env)   B.U.of_string
-    | A.Char (n  , Some t)-> literalExpr env n (evalTy env t) B.U.of_int
+    | A.Char (n  , Some t)-> literalExpr env n (ty     env t) B.U.of_int
     | A.Char (n  , None)  -> literalExpr env n (E.Ok(T.bits 8)) B.U.of_int
     
     | A.Fetch  (v)        -> evalFetch env v
@@ -668,11 +655,14 @@ let proc env p =
     locals = unimp "locals"; continuations = unimp "continuations";
     stackmem = stackmem; stacklabels = stacklabels; code = unimp "code"; }) in
 @ 
-Continuations have an empty denotation (for now) because all that work
-is done in [[Ast2ir]]. 
+A continuation knows its address (in the form of an empty, unaligned
+block) and whether it escapes.
 <<definitions of name-binding functions>>=
 let bind_continuation env (r, name) =
-  F.bindv name (r, E.Ok (F.Continuation, pointerty)) env in
+  let addrblock =
+    Block.relative vfp ("continuation " ^ name) Block.at ~size:0 ~alignment:1 in
+  let den = F.Continuation {F.base = addrblock; F.escapes = false}, pointerty in
+  F.bindv name (r, E.Ok den) env in
 @ 
 \subsubsection{Easy stuff}
 
@@ -690,7 +680,7 @@ let bind_and_remember_import env (r, ty, imports) =
   foldl import env imports in
 <<convert optional importing [[ty]] as long as it is pointer size>>=
 match ty with None -> E.Ok pointerty
-| Some t -> E.seq (Type.evalTy env t) (fun t ->
+| Some t -> E.seq (Elabexp.elab_ty env t) (fun t ->
     if t = pointerty then E.Ok pointerty
     else errorf r "imported type %s is inconsistent with native pointer type %s"
         (Types.to_string t) (Types.to_string pointerty))
@@ -715,7 +705,7 @@ let rec registers_from scope n rs env =
         else den (F.RReg r)
     | Some _, None   -> errorf rgn "hints permissible only on formal parameters" 
     | None,   None   -> den F.RNone in
-    k (F.bindv name (rgn, E.Raise.pair (den, Type.evalTy env t)) env) in
+    k (F.bindv name (rgn, E.Raise.pair (den, Elabexp.elab_ty env t)) env) in
   match rs with
   | [] -> env
   | r :: rs -> register env r (registers_from scope (n+1) rs) in
@@ -724,7 +714,7 @@ let formals_from n rs env =
   let rec formals prev' n rs env = match rs with
   | [] -> env, n, List.rev prev'
   | (r, (hint, inv, ty, name)) :: rs ->
-      match Type.evalTy env ty with
+      match Elabexp.elab_ty env ty with
       | E.Ok t ->
           let i = { F.index = n; F.variance = inv;
                     F.loc = None; F.rhint = F.RHint hint; } in
@@ -790,7 +780,7 @@ and stackdatum mem stacklabels' env (r, d) k =
   | N.ReserveMem(ty,A.DynSize,_) -> errorf "illegal size for stackdata"
   | N.ReserveMem(ty,size,None) ->
       unimp "memdecl check";
-      (match Type.evalTy env ty with
+      (match Elabexp.elab_ty env ty with
       | E.Error -> k mem stacklabels' env
       | E.Ok Types.Bool -> impossf "boolean type in abstract syntax"
       | E.Ok (Types.Bits w) ->
@@ -838,7 +828,7 @@ let check_export env (r, ty, pairs) =
         | _ -> errorf "%s can't be exported" name) in
   let env = match ty with
   | Some t ->
-      E.seq' env (Type.evalTy env t) (fun ty ->
+      E.seq' env (Elabexp.elab_ty env t) (fun ty ->
         if ty <> pointerty then
           errorf "exported value must have native pointer type"
         else
@@ -864,8 +854,7 @@ let datum env (r, d) =
   | N.Align n -> errorf "alignment %d is not a power of 2" n
   | N.ReserveMem(ty,size,init) -> env
   | N.Procedure p ->
-      let n   = List.length p.N.formals + List.length p.N.locals in
-      let den = F.Label (F.Proc (F.symbol env p.N.name, None, n)) in
+      let den = F.Label (F.Proc (F.symbol env p.N.name)) in
       F.bindv p.N.name (r, E.Ok (den, pointerty)) env
   | N.SSpan (_, _, _) -> unimp "section span" in
 @ 
@@ -887,7 +876,7 @@ match the size specification, and the type of the expressions must
 match the declared type.
 <<definitions of elaboration functions for data>>=
 and reserve_mem r ty size idata =
-    E.seq2 (Type.evalTy env ty) (init_size r size) (fun ty n ->
+    E.seq2 (Elabexp.elab_ty env ty) (init_size r size) (fun ty n ->
       match idata with
       | None ->
           (match ty with
@@ -948,6 +937,11 @@ and init r ty i =
         errorf r "initialized Unicode string must specify type bits16" in
 @ 
 ================================================================
+
+NEXT: HANDLE CONTINUATIONS BY GIVING EACH ONE A PAIR CONSISTING OF A
+FRESH, UNBOUND, EMPTY BLOCK AND A MUTABLE BOOLEAN INDICATING WHETHER
+THE CONTINUATION ESCAPES (HAS A DYNAMIC VALUE).
+
 @
 A procedure opens a local scope:  the procedure's parameters and all
 local [[typedef]], [[const]], [[continuation]] belong to the local
@@ -1039,7 +1033,7 @@ let rec lvalue context env = function
             | None                         -> () 
         in
             ( align aligned (* check alignment constraint *)
-            ; E.ematchQuad ( evalTy env t
+            ; E.ematchQuad ( Elabexp.elab_ty env t
                            , tyExpr env e
                            , F.findMemsize env
                            , pointerTy env
@@ -1070,8 +1064,8 @@ the native code pointer type.
 let checkCallTarget env x = 
     E.seq' env (E.Raise.pair (pointerTy env,E.Raise.right (F.findv x env)))
     ( function
-    | p,(_      ,(F.Label(F.Proc(_)),_)) ->  env
-    | p,(_      ,(F.Import _     ,t)) 
+    | p,(_      ,(F.Label(F.Proc _),_)) ->  env
+    | p,(_      ,(F.Import _       ,t)) 
       when t = p                         ->  env
     | otherwise                          ->  E.error (x^" is not call target")
     )
@@ -1123,7 +1117,7 @@ let rec isNoFunction env = function
           ( match F.findv x env with
           | _       ,E.Error                    -> false (* could be proc *)
           | scope   ,E.Ok(F.Import _,_)         -> false
-          | scope   ,E.Ok(F.Label(F.Proc(_)),_) -> false
+          | scope   ,E.Ok(F.Label(F.Proc _),_) -> false
           | scope   ,E.Ok(F.Variable _,_)       -> false
           | _                                   -> true
           )        

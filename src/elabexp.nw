@@ -8,37 +8,19 @@
 % Example (at beginning of line): %%Grades: B Central Soon
 
 % ------------------------------------------------------------------ 
-\section{Typechecking Expressions}
+\section{Elaborating Expressions}
 % ------------------------------------------------------------------ 
 
-The {\qcc} compiler type checks expressions during several phases: 
-evaluation of constant expressions, static semantics, translation to
-intermediate representation.  To avoid code duplication, type checks
-for expressions are factored out into this module. 
+The {\qcc} compiler type checks expressions and converts them to RTL
+expressions. 
+None of these functions ever raises an exception.
+<<elabexp.mli>>=
+type nm_or_mem = Ast.name_or_mem
+val elab_ty : 'a Fenv.Dirty.env' -> Ast.ty   -> Types.ty                    Error.error
+val elab_exp: 'a Fenv.Dirty.env' -> Ast.expr -> (Rtl.exp * Types.ty)        Error.error
+val elab_loc: 'a Fenv.Dirty.env' -> nm_or_mem-> (Automaton.loc * Rtl.width) Error.error
 
-The type of an expression depends on the types of named values, named
-types and the target dependent word size. These are supplied as a
-record [[env]] for the [[check]] function. 
-<<types>>=
-type env = 
-    { tlookup:  string -> Types.ty       Error.error    (* type aliases *)
-    ; vlookup:  string -> Types.ty       Error.error    (* types of values *)
-    ; wordsize:           Rtl.width      
-    ; pointersize:        Rtl.width      
-    ; byteorder:          Rtl.aggregation 
-    }   
-@
-
-<<expcheck.mli>>=
-<<types>>
-val check: env -> Ast.expr -> Types.ty Error.error      (* Error.ErrorExn *)
-val exprfuns :
-  'a Fenv.Dirty.env' ->
-  (Ast.expr -> (Rtl.exp * Types.ty) Error.error) *
-  (Ast.name_or_mem -> (Automaton.loc * Rtl.width) Error.error)
- (* exprfuns env = typed_expr, lvalue *)
-@
-The [[check]] function allows to work with incomplete functions,
+@ The [[elab_*]] functions work with incomplete information,
 indicated by [[Error.Error]] values.  The policy is as follows:
 \begin{itemize}
 \item In case of a success, [[check]] returns the type of the
@@ -46,90 +28,34 @@ indicated by [[Error.Error]] values.  The policy is as follows:
 \item If the type check must use an erroneous information from the
       environment, it propagates this error and returns [[E.Error]].
 \item If the type check detects a new error, for example a type
-      inconsistency, the [[Error.ErrorExn]] exception is raised.
+      inconsistency, it issues an error message and returns
+      [[E.Error]].
+      The exception [[Error.ErrorExn]] may be used internally, but it
+      should never be raised by a top-level function.
 \end{itemize}
-
+@
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
-<<expcheck.ml>>=
+<<elabexp.ml>>=
 module A = Ast
 module AT = Automaton
 module E = Error
 module F = Fenv.Dirty
+type nm_or_mem = Ast.name_or_mem
 
-let impossible = Impossible.impossible
-let unimp = Impossible.unimp
-
-<<types>> (* from interface *)
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 
 let (@<<) f g = fun x -> f (g x) (* function composition *)
     
 let is2power x = x > 0 && x land (x - 1) = 0
-
-(* NEAR-DUPLICATION WITH Ast2ir.astty *)
-let elab env =
-  let rec astty  = function
-      | A.TyAt(x,r)  -> astty x
-      | A.BitsTy(n)  -> E.Ok(Types.bits n)
-      | A.TypeSynonym(x) -> env.tlookup x in
-
-  let astwidth _ = assert false in
-  let assertion _ = assert false in
-  let rvalue_name_or_mem _ = assert false in
-  let rec lvalue = function
-      | A.NameOrMemAt(x,r) -> lvalue x
-      | A.Name(hint,id)    -> unimp "lvalue name" (*lvalue_name id*)
-      | A.Mem(ty,e,aligned,_)     -> 
-          E.ematchTriple  (astwidth "memory access" env ty, typed_expr env e, assertion aligned)
-            (fun (w,(addre, addrt),assn) ->
-              if astwidth "address" addrt = env.pointersize then
-                AT.of_loc (Rtl.mem assn 'm' env.byteorder w addre), w
-              else
-                E.error "address's type is not the machine's pointer size")
-@
-<<expcheck.ml>>=
-and typed_expr env exp =
-  let apply op args =
-    E.ematch (E.Raise.list (List.map (typed_expr env) args))
-    (fun args ->
-      let arges, argtys = List.split args in
-      let resty,  opr   = Rtlop.Translate.operator op argtys    in
-      Rtl.app opr arges, resty) in
-            
-  let nofloat x = Impossible.unimp "floating-point literals" in
-
-  let literal default cvt v ty =
-    let w = match ty with
-    | None    -> default
-    | Some ty -> astwidth "literal bit vector" env ty  in
-    let omsg w =
-      Printf.sprintf "literal bit vector overflows when packed into %d bits" w in
-    try Rtl.bits (cvt v w) w, Types.Bits w 
-    with Bits.Overflow -> Error.error (omsg w) in
-  match exp with
-  | A.ExprAt(x,r)     -> E.catch E.errorPrt   (typed_expr env) x
-  | A.Int   (x,ty)    -> E.Ok (literal env.wordsize Bits.U.of_string x ty)
-  | A.Float (x,ty)    -> E.Ok (literal env.wordsize Bits.U.of_string x ty)
-  | A.Char  (x,ty)    -> E.Ok (literal 8            Bits.U.of_int    x ty)
-      (* perhaps suprisingly, [[Bits.U.of_string]] copes with all 
-         literal formats. Update: I have changed the type of A.Char, it
-         now contains an integer. -- CL *)
-  | A.Fetch (v)       -> rvalue_name_or_mem v
-  | A.BinOp (l,op,r)  -> apply op [l;r]
-  | A.UnOp  (op,e)    -> apply op [e]
-  | A.PrimOp(op,args) -> apply op (List.map snd args)
- 
-in typed_expr env
-
-let check env e = E.ematch (elab env e) snd
 @
 % ------------------------------------------------------------------
 \subsection{The translation of types, names, and expressions}
 % ------------------------------------------------------------------ 
 
-<<expcheck.ml>>=
+<<elabexp.ml>>=
 module M = Metrics
 <<utilities>>
 <<definition of [[lvalue_name_in_env]]>>
@@ -139,7 +65,9 @@ let exprfuns env =
   <<definition of [[rvalue_name]]>> in
   let catch r f x = E.catch (E.errorRegionPrt (F.srcmap env, r)) f x in
   <<mutually recursive nest of [[typed_expr]] and [[lvalue]]>> in
-  typed_expr, lvalue
+  catch Srcmap.null typed_expr, catch Srcmap.null lvalue
+let elab_exp env = fst (exprfuns env)
+let elab_loc env = snd (exprfuns env)
 @
 
 There are four interesting syntactic categories here:
@@ -165,6 +93,7 @@ The rest appear in a context (under [[exprfuns]]) in which the
 environment is bound to [[env]].
 @
 \subsubsection {Translation of type and conversion from type to width}
+
 \nwaddbox{tywidth  : 'a Types.t -> 'a}
 \nwaddbox{astwidth : F.env -> A.ty -> int}
 \deeperbox{2pt}
@@ -175,12 +104,15 @@ let tywidth a_bad_thing = function
 
 let emap f x = E.ematch x f
 
-let astwidth msg env =
-  let rec astty = function
-    | A.TyAt(x,r)  -> astty x
-    | A.BitsTy(n)  -> E.Ok (Types.bits n)
-    | A.TypeSynonym(x) -> snd (F.findt x env) in
-  emap (tywidth msg) << astty 
+let elab_ty env =
+  let catch r = E.catch (E.errorRegionPrt (F.srcmap env, r)) in
+  let rec elab = function
+    | A.TyAt (x,r)    -> catch r elab x
+    | A.BitsTy size   -> E.Ok (Types.Bits size)
+    | A.TypeSynonym n -> snd (F.findt n env) in
+  catch Srcmap.null elab
+
+let astwidth msg env = emap (tywidth msg) << elab_ty env
 @
 \subsubsection{The meanings of names}
 
@@ -200,7 +132,7 @@ let lvalue_name_in_env env x =
         if F.is_localv x env then
           AT.of_loc (Rtl.var x i w), w
         else 
-          impossible ("global variable "^x^" without location")
+          impossf "global variable %s without location" x
     | _ -> 
         let what = match denot with
         | F.Constant _ -> "constant"
@@ -208,7 +140,7 @@ let lvalue_name_in_env env x =
         | F.Import   _ -> "imported symbol"
         | F.Continuation _ -> "continuation"
         | F.Variable _ -> "register" in
-        impossible ("asked for lvalue of " ^ what ^ " " ^ x))
+        impossf "asked for lvalue of %s %s" what x)
 @ 
 Any name can be meaningful in an rvalue context.
 The environment is implicit.

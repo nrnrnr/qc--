@@ -278,7 +278,7 @@ The [[int]] value in the procedure denotation is the number of local
 variables, plus the number of parameters. We need this value for the
 interpreter.
 <<types>>=
-and  kind           = Proc          of Symbol.t * scope partial * int
+and  kind           = Proc          of Symbol.t
                     | Code          of Symbol.t    
                     | Data          of Symbol.t
                     | Stack         of Rtl.exp  (* address of slot *)
@@ -288,15 +288,10 @@ and  denotation     = Constant      of Bits.bits
                     | Import        of string * Symbol.t
                           (* external name, assembly symbol *)
                     | Variable      of variable
-                    | Continuation  (* meaning stored in another environment for now *)
-                          (* String is internal name for link-time
-                             constant to be added to sp (vfp?) to get
-                             continuation value?
-                             Symbol is??? *)
-                         (* DENOTATION SHOULD BE AN RTL EXP THAT COULD
-                            BE SUPPLIED TO Contn.with_overflow.  WITH
-                            THE VIRTUAL FRAME POINTER, THIS SHOULD BE
-                            EASY. *)
+                    | Continuation  of continuation
+and continuation =  { base : Block.t;   (* always empty; used only for address *)
+                      mutable escapes : bool  (* used as rvalue *)
+                    }
 @
 The complete entry [[ventry]] for a value includes not only its
 denotation, but also its type [[Types.ty]], and its source code
@@ -1072,19 +1067,23 @@ let clean_reg r =
     ; Clean.variance = r.Dirty.variance
     }
 
+let clean_cont c =
+    { Clean.base = c.Dirty.base
+    ; Clean.escapes = c.Dirty.escapes
+    }
+
 let rec clean_venv map  =
     let copy key data map = match data with
         |  pos,E.Ok(denot,ty) ->
             let denot' = match denot with
                 | Dirty.Constant(v)           -> Clean.Constant(v)
-                | Dirty.Label(Dirty.Proc(s, p,i))-> 
-                    Clean.Label(Clean.Proc(s, clean_proc p,i))
+                | Dirty.Label(Dirty.Proc s)   -> Clean.Label(Clean.Proc s)
                 | Dirty.Label(Dirty.Code s)   -> Clean.Label(Clean.Code s)
                 | Dirty.Label(Dirty.Data s)   -> Clean.Label(Clean.Data s)
                 | Dirty.Label(Dirty.Stack x)  -> Clean.Label(Clean.Stack x)
                 | Dirty.Import(s,n)           -> Clean.Import(s,n)
                 | Dirty.Variable(n)           -> Clean.Variable(clean_reg n)
-                | Dirty.Continuation          -> Clean.Continuation
+                | Dirty.Continuation c        -> Clean.Continuation (clean_cont c)
             in
                  Strutil.Map.add key (pos,(denot',ty)) map
         |  _  -> assert false
