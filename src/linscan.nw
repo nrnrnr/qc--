@@ -85,6 +85,8 @@ module X = Lifetime.Make(Point)
 module P = Point
 module I = X.Interval
 module L = X.Lifetime
+
+<<compute lifetimes>>
 @
 
 To detect the opening and closing of liveness intervals the algorithm
@@ -141,7 +143,36 @@ let open_regs  point regs state = List.fold_left (open_intv point)  state regs
 let close_regs point regs state = List.fold_left (close_intv point) state regs
 @
 
-This is incomplete. 
+After the last node of the control-flow graph is processed, all still
+open intervals must be closed.
+
+<<compute lifetimes XXX>>=
+let close_all point 
+@
+
+The [[lifetimes]] function computes a map that associates a register
+with its lifetime.  The the lifetimes are inferred from the live sets
+that are part of the control-flow graph. The initial map [[lt]] is
+supplied by the client.
+
+<<compute lifetimes XXXX>>=
+let lifetimes cfg lt =
+    let initial = (Register.Map.empty, lt) in
+    let point   = 1 in
+    let scan node (oldset, point, state) =
+        let set     = Cfg2.live node in 
+        let opening = Register.Set.diff set oldset in
+        let closing = Register.Set.diff oldset set in
+        let state   = open_regs  point (Register.Set.elements opening) state in
+        let state   = close_regs point (Register.Set.elements closing) state in
+                      (set, point+1, state)
+    in (* close all open intervals after the last node *)
+    let (os,pt,(op,lt)) = Cfg2.foldl cfg scan (Register.Set.empty, point, initial) in
+    let (os,pt,(op,lt)) = close_regs pt (Register.Set.elements op) (op,lt) in
+        lt
+                 
+@
+
 
 % ------------------------------------------------------------------ 
 \subsection{Register Allocation}
@@ -251,6 +282,28 @@ temporaries.  This makes it easier to place them into registers.
 <<linscan2.mli>>=
 <<exported module types>>
 module Make (A : Args) : S
+@
+
+The [[Arg]] module summarizes the functionality that we need from out
+environment. Since it is just a type, we can put here whatever we want
+without having to provide an implementation.
+
+\begin{quote}\it
+    Suggestions for the new [[Cfg]] module. Below in [[Args]] we seem
+    to have different names for similar operations.
+
+    \begin{verbatim}
+    module type Cfg = sig
+        module Node : sig
+            type t
+            val apply: (Rtl.rtl -> Rtl.rtl) -> t -> unit
+        end
+
+        type t
+        val apply: (Rtl.rtl -> Rtl.rtl) -> t -> unit
+    end
+    \end{verbatim}
+\end{quote}
 
 <<exported module types>>=
 module type Args = sig
@@ -264,12 +317,22 @@ module type Args = sig
   type loc = Register.t
   module LT : Map.S with type key = loc
 
-  val find_reg     : Lifetime.t LT.t -> loc -> loc option
+  (* fits s r = true, iff r can hold any value from space s *) 
+  val fits : Rtl.space -> Register.t -> bool
   val find_spillee : Lifetime.t LT.t -> loc -> loc * Lifetime.Interval.t
 end
 @ 
+
+Module type [[S]] summarizes the functionality we implement and export
+for clients.  The [[replace_temporary]] function replaces temporaries
+in a control-flow graph with hardware registers.  The function is
+implemented in a continuation-passing style and expects two
+continuations [[succeed]] and [[spill]].  The latter is used when no
+hardware register can be found to replace the chosen [[temporary]].
+
 Here's one component of an allocator.
 It is written in continuation-passing style.
+
 <<exported module types>>=
 module type S = sig
   module A : Args
@@ -282,41 +345,71 @@ module type S = sig
         spill:(A.loc -> A.Lifetime.Interval.t -> A.Cfg.cfg -> 'a)
         -> 'a
 end
+@
+
+The implemenatition must provided all the module types declared in the
+interfacse. Thanks to literate programming we can refer to the code
+chunk that was used in the interface. 
 
 <<linscan2.ml>>=
 <<exported module types>>
 
 module Make (A : Args) : S = struct
-
-  type lifetimes = A.Lifetime.t A.LT.t
-  module A = A
-
+type lifetimes = A.Lifetime.t A.LT.t
+module A = A
 open A (* never do this *)
 
+let replace n f = Cfg.replace f n           (* apply f to node n *)
+
 exception Retry of Cfg.t
-
-let replace n f = Cfg.replace f n
-
-let linscan g        (* graph *)
-            lifetime (* lifetime interval of each location *)
-            =
+let linscan cfg lifetimes =
   let alloc = <<allocator>> in
-  try Cfg.iter g alloc with Retry g -> raise (Retry g)
+  try Cfg.iter cfg alloc with Retry cfg -> raise (Retry cfg)
 
 
 <<allocator>>=
 fun node -> assert false
-@ 
+@
 
 One step in general-purpose allocation: choose a node containing
 temporaries, and replace a temporary in that node.
 <<linscan2.ml>>=
 module L = Lifetime
 
-let lookup table x = LT.find x table
-
+let lookup table x  = LT.find x table
 let replace_reg t r = fun t' -> if t = t' then r else t'
+@
 
+The [[first_fit]] function searches the domain of [[lifetimes]] to
+find a (hardware) register that can hold temporary [[t]].  It returns
+the \emph{first} register [[r]], that obeys all of the following
+conditions:
+
+\begin{enumerate}
+\item The register [[r]] can hold the same values that [[t]] can hold. 
+      This is decided using the target-specifi [[fits]] function.
+\item The bounding box of the lifetime of [[t]] does not overlap the 
+      lifetimes of [[r]].      
+\end{enmerate}
+
+<<linscan2.ml>>=
+let first_fit lifetimes t =
+    let fits' (sp,_,_ as t) r = 
+        fits sp r &&
+        not (Lifetime.overlaps (Lifetime.bbox (lookup lifetimes t)) 
+                               (lookup lifetimes r))
+    in
+    let check r lt = function
+        | None   when fits' t r -> Some r       
+        | x (* otherwise *)     -> x      
+    in
+        LT.fold check lifetimes None
+
+let find_reg = first_fit
+@
+
+
+<<linscan2.ml>>=
 let replace_temporary graph t lifetimes allocated spill =
   let lifetime = lookup lifetimes in
   match find_reg lifetimes t with
@@ -327,9 +420,6 @@ let replace_temporary graph t lifetimes allocated spill =
   | None ->
       let spillee, interval = find_spillee lifetimes t in (* chooses t or a h/w reg *)
       spill spillee interval graph
-
-
-
 
 
 <<linscan2.ml>>=
