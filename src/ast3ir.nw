@@ -90,6 +90,10 @@ let foldr = List.fold_right
 \subsection{Expression Types}
 % ------------------------------------------------------------------ 
 
+We use the generic [[Expcheck]] module to find an expression's type.
+Values from the environment are always [[Ok]] because at this stage we
+have a clean environment.
+
 <<ExprTypes>>=
     let exprtype env target exp =
         let word      = Error.Ok(Types.bits target.Target.wordsize)    in
@@ -212,6 +216,9 @@ and expr env target exp =
 % ------------------------------------------------------------------ 
 \subsection{Constant Evaluation}
 % ------------------------------------------------------------------ 
+
+For constant evaluation constants are translated to {\rtl} expressions
+which then are evaluated.
 
 <<Make constant evaluation>>=
 let compile_const env target exp =
@@ -379,15 +386,16 @@ let globals env target (base:Rtl.exp) names =
 
 <<Make statements>>=
 type state =
-    { env:          F.env
-    ; target:       Target.t
-    ; cfg:          G.t
-    ; node:         G.node
-    ; outbase:      Rtl.exp
-    ; inbase:       Rtl.exp
-    ; priv:         Area.builder
-    ; outgoing:     Area.t list
-    ; incoming:     Area.t list
+    { proc:         string           (* proc under translation (const) *)
+    ; env:          F.env            (* fat environment        (const) *)
+    ; target:       Target.t         (* current target         (const) *)
+    ; cfg:          G.t              (* CFG under construction (const) *)
+    ; node:         G.node           (* node following current unit    *)   
+    ; outbase:      Rtl.exp          (* addr of OUTGOING area          *)   
+    ; inbase:       Rtl.exp          (* addr of INCOMING ares          *)
+    ; priv:         Area.builder     (* private area on stack          *)   
+    ; outgoing:     Area.t list      (* areas to be overlayed in OUTGOING *)   
+    ; incoming:     Area.t list      (* ditto for INCOMING *)
     }
 
 let rec stmt s state = match s with
@@ -611,7 +619,8 @@ let proc env target (*props*) asm (cconv,name,args,bdy) =
     let priv        = Area.mk (Rtl.link "private" target.Target.pointersize) in
     let env, priv   = StackData.proc env target priv bdy in
     let state = 
-        { env       = env        (* fat environment *)
+        { proc      = name       (* name of this procedure *)
+        ; env       = env        (* fat environment *)
         ; target    = target     (* current target  *)
         ; cfg       = cfg        (* cfg we are building *)
         ; node      = G.exit cfg (* what follows current element in cfg *)
