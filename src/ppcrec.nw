@@ -8,7 +8,7 @@
 %
 % Example (at beginning of line): %%Grades: B Central Soon
 
-\newcommand{\syryu}[1]{#1}
+\newcommand{\syryu}[1]{}
 \newcommand{\delete}[1]{}
 
 % ------------------------------------------------------------------ 
@@ -34,7 +34,7 @@ instruction, and one to convert to an assembly-language string.
 <<ppcrec.mli>>=
 module M : sig
   val is_instruction : Rtl.rtl -> bool
-  val to_asm         : Rtl.rtl -> string
+  val to_asm         : Rtl.rtl -> string list -> string
 end
 @ 
 <<ppcrec.mlb>>=
@@ -78,7 +78,7 @@ let sprintf = Printf.sprintf
 We've had some mystery problems; in particular, we've seen the integer
 $-4$ get converted to 32~bits with its sign bit clear.
 <<code to precede the labeler>>=
-let native' w b = 
+let native' w b =
   assert (Bits.width b = w);
   Nativeint.to_string (Bits.U.to_native b)
 let native = native' 32
@@ -97,17 +97,14 @@ let suffix w = match w with
 | 32 -> "w"
 | _ -> Impossible.impossible "width in PPC not 8/16/32"
 @ 
-% ------------------------------------------------------------------ 
-\subsection{Register names}
-% ------------------------------------------------------------------ 
+Register names.
 <<code to precede the labeler>>=
 let regname n = "r" ^ string_of_int n
-
 @ 
-% ------------------------------------------------------------------ 
-\subsection{Utilities for instructions}
-% ------------------------------------------------------------------ 
+Utilities for instructions.
 <<code to precede the labeler>>=
+let imports = ref ([] : string list)
+
 let fst (x, _) = x
 let snd (_, x) = x
 
@@ -143,6 +140,37 @@ let int_storeu str suff (x_, mem) r r1 r2 =
   | (r1',None    ) -> if r1=r1' then sprintf str suff x_ r mem else "nop"
   | (r1',Some r2') -> if r1=r1' && r2=r2' 
                                 then sprintf str suff x_ r mem else "nop"
+
+let ind_addr name =
+  if List.exists ((=) name) (!imports) then "L" ^ name ^ "$stub" else name
+
+let ppc_op = function
+  | "ltu" -> ("l", "lt")
+  | "leu" -> ("l", "le")
+  | "gtu" -> ("l", "gt")
+  | "geu" -> ("l", "ge")
+  | op    -> ("" , op  )
+
+let d2h = function
+  | 0 -> "0"
+  | d ->
+    let rec d2h' d' =
+      let cv = function
+        | 10 -> "a"
+        | 11 -> "b"
+        | 12 -> "c"
+        | 13 -> "d"
+        | 14 -> "e"
+        | 15 -> "f"
+        | i  -> string_of_int i in
+      if d' > 0 then d2h' (d' / 16) ^ cv (d' mod 16) else "" in
+    d2h' d
+
+let li reg imm =
+  let i = int_of_string imm in
+  let adj = match String.get imm 0 with | '-' -> 32768 | _   -> 0 in
+  "lis " ^ reg ^ "," ^ "0x" ^ d2h (i / 65536 + adj) ^ "\n\t" ^
+  "ori " ^ reg ^ "," ^ reg ^ "," ^ (string_of_int (i mod 65536))
 @
 % ------------------------------------------------------------------ 
 \subsection{Recognizer Rules}
@@ -159,22 +187,26 @@ Terminal [[bits]] is a constant of types [[Bits.bits]]; terminal
 
 <<rules>>=
 const:  Bits(bits) [{: guard (Bits.width bits = 32) :}] {: native bits :}
-lconst: Link(symbol, w:int)      {: symbol#mangled_text :}
+lconst: Link(symbol, w:int)        {: symbol#mangled_text :}
+pic:    Diff(c1:lconst, c2:lconst) {: c1 ^ "-" ^ c2 :}
+pic:    Fetch(Mem(Diff(c1:lconst, c2:lconst), w1:int), w2:int)
+                                   {: c1 ^ "-" ^ c2 :}
 @ 
 \paragraph{Registers}
-regl: Reg('r', n:int, w:int) [{: guard (n<>0) :}] {: regname n :}
 <<rules>>=
-regl: Reg('r', n:int, w:int) {: regname n :}
+regl: Reg('r', n:int, w:int) [{: guard (n<>0) :}] {: regname n :}
 
-cial: Reg('c', 1, w:int) {: () :}
 pcl:  Reg('c', 0, w:int) {: () :}
+cial: Reg('c', 1, w:int) {: () :}
+crl:  Reg('c', 2, w:int) {: () :}
 lrl:  Reg('c', 5, w:int) {: () :}
 
 reg:                  Fetch(regl, w:int)         {: regl :}
 reg:  BitExtract(any, Fetch(regl, w:int), n:int) {: regl :}
 
-cia:  Fetch(cial, 32) {: () :}
 pc:   Fetch(pcl,  32) {: () :}
+cia:  Fetch(cial, 32) {: () :}
+cr:   Fetch(crl,  32) {: () :}
 lr:   Fetch(lrl,  32) {: () :}
 @
 
@@ -186,8 +218,9 @@ mem:  Zx(Fetch(meml, w:int)) {: (suffix w, "z", meml) :}
 mem:     Fetch(meml, w:int)  {: (suffix w, "z", meml) :}
 mem:  lconst                 {: ("h",      "a", ("", lconst)) :}
 
-addr: i_r                     {: ("",  i_r) :}
-addr: Add(reg, imm)           {: ("",  imm ^ "(" ^ reg ^ ")") :}
+addr: imm                     {: ("",  imm) :}
+addr: reg                     {: ("",  "0(" ^ reg ^ ")") :}
+addr: Add(reg, imm)           {: ("",  imm  ^ "(" ^ reg ^ ")") :}
 addr: Add(reg1:reg, reg2:reg) {: ("x", reg1 ^ "," ^ reg2) :}
 
 i_r: imm {: imm :}
@@ -196,7 +229,7 @@ i_r: reg {: reg :}
 
 \paragraph{Constant Expressions}
 <<rules>>=
-imm:  const {: const :}
+imm:   const   {: const :}
 @
 
 \paragraph{Data Movement}
@@ -205,35 +238,58 @@ Load register from memory. A load of a value smaller than 32 bits
 implies a zero or sign extension.
 
 <<rules>>=
-inst:  Store(regl, mem, 32) {: int_load "l%s%s%s %s,0(%s)" mem regl :}
+inst:  Store(regl, mem, 32) {: int_load "l%s%s%s %s,%s" mem regl :}
 inst:  Par(Store(regl1:regl, mem, 32), Llr(regl2:regl, "add", i_r, 32))
-       {: int_loadu "l%s%su%s %s,0(%s)" mem regl1 regl2 i_r :}
+       {: int_loadu "l%s%su%s %s,%s" mem regl1 regl2 i_r :}
 @
+
+Load immediate.
+<<rules>>=
+inst:  Store(regl, imm, 32) {: li regl imm :}
+@ 
 
 Store register to memory. No extension here; the 8, 16, or 32 bits are
 simply written to memory.
   
 <<rules>>=
 inst:  Store(meml, reg, w:int)
-       {: int_store  "st%s%s %s,0(%s)"  (suffix w) meml reg :}
+       {: int_store  "st%s%s %s,%s"  (suffix w) meml reg :}
 inst:  Par(Store(meml, reg, w:int), Llr(regl, "add", i_r, 32))
-       {: int_storeu "st%su%s %s,0(%s)" (suffix w) meml reg regl i_r :}
+       {: int_storeu "st%su%s %s,%s" (suffix w) meml reg regl i_r :}
 @ 
 There is a special instruction for shift left by 16 and load immediate
 that is often used when loading 32-bit constants.
 <<rules>>=
+inst:  Llr(regl, "shl", reg, w:int)
+       {: "lis "  ^ regl ^ "," ^ reg  :} 
 inst:  Store(regl, Shl(const,b:const), w:int) --[{: guard (b=16) :}]
        {: "lis " ^ regl ^ "," ^ const :}
+
 @ 
 Special purpose registers have special instructions.
 <<rules>>=
 inst:  Store(regl, lr, w:int) {: "mflr " ^ regl :}
 inst:  Store(lrl, reg, w:int) {: "mtlr " ^ reg  :}
 @ 
+
+Moves between between registers.
+<<rules>>=
+inst:  Store(regl, cr, w:int) {: "mfcr " ^ regl :}
+inst:  Store(regl, lr, w:int) {: "mflr " ^ regl :}
+inst:  Store(lrl, reg, w:int) {: "mtlr " ^ reg  :}
+@ 
+Position-independent code. The integer register r2 is used for
+position-independent code.
+
+<<rules>>=
+inst:  Store(regl, pic, 32)
+       {: "addis " ^ regl ^ ",r2,ha16(" ^ pic ^ ")\n\tla " ^ regl ^
+          ",lo16(" ^ pic ^ ")(" ^ regl ^ ")" :}
+@
 \paragraph{Control Flow}
 <<rules>>=
-inst:  Goto(lconst)        {: "b " ^ lconst :}
-inst:  Goto(Fetch(lrl,32)) {: "blr"         :}
+inst:  Goto(lconst)        {: "b " ^ ind_addr lconst :}
+inst:  Goto(Fetch(lrl,32)) {: "blr"                  :}
 @
 
 The [[next]] pattern covers the expression $PC + 4$ which denotes the
@@ -241,15 +297,86 @@ instruction following the branch instruction.
 
 <<rules>>=
 next:  Add(cia,const) {: () :}
-inst:  Par(Goto(lconst), Store(lrl,next,32)) {: "bl " ^ lconst :}
+inst:  Par(Goto(lconst), Store(lrl,next,32)) {: "bl " ^ ind_addr lconst :}
+@
+
+Here are conditional branches. The {\rtl} operator names fit the {\mips}
+assembly branch op-codes. We cannot inline the [[Cmp]] constructor
+because the [[op]] terminal symbol would be unaccessible. Only top-level
+terminals are in scope for the semantic action.
+
+<<rules>>=
+cmp:   Cmp(op:string, x:reg, y:reg) {: ("",  ppc_op op,x,y) :}
+cmp:   Cmp(op:string, x:reg, y:imm) {: ("i", ppc_op op,x,y) :}
+inst:  Guarded(cmp,Goto(lconst)) 
+       {: match cmp with
+          | (i_, (l_, op),x,y) -> "cmp" ^ l_ ^ "w" ^ i_ ^ " cr0," ^ x ^ "," ^
+                                  y ^ "\n\tb" ^ op ^ " " ^ lconst
+       :}   
 @ 
 \paragraph{Arithmetic instructions}
 
 <<rules>>=
-inst:  Llr(regl, "add", const, w:int) [{:guard (w=32):}]
-       {: "addi " ^ regl ^ "," ^ regl ^"," ^ const :}
-inst:  Llr(regl, "or",  const, w:int) [{:guard (w=32):}]
-       {: "ori "  ^ regl ^ "," ^ regl ^"," ^ const :}
+inst:  Llr(regl, "add", reg, w:int)
+       {: "add "  ^ regl ^ "," ^ regl ^ "," ^ reg   :} 
+inst:  Store(regl, Add(x:reg,y:reg), w:int)
+       {: "add "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
+inst:  Llr(regl, "add", const, w:int)
+       {: "addi " ^ regl ^ "," ^ regl ^ "," ^ const :} 
+inst:  Store(regl, Add(x:reg,y:const), w:int)
+       {: "addi " ^ regl ^ "," ^ x    ^ "," ^ y     :}
+
+inst:  Llr(regl, "sub", reg, w:int)
+       {: "sub " ^ regl ^ "," ^ regl ^ "," ^ reg   :} 
+inst:  Store(regl, Sub(x:reg,y:reg), w:int)
+       {: "sub " ^ regl ^ "," ^ x    ^ "," ^ y     :}
+
+inst:  Llr(regl, "mul_trunc", reg, w:int)
+       {: "mulhw " ^ regl ^ "," ^ regl ^ "," ^ reg   :} 
+inst:  Store(regl, Mul_trunc(x:reg,y:reg), w:int)
+       {: "mulhw " ^ regl ^ "," ^ x    ^ "," ^ y     :}
+
+inst:  Store(regl, Neg(reg), w:int) {: "neg " ^ reg ^ "," ^ reg :}
+@ 
+\paragraph{Logical instructions}
+
+<<rules>>=
+inst:  Llr(regl, "and", reg, w:int)
+       {: "and "   ^ regl ^ "," ^ regl ^ "," ^ reg   :} 
+inst:  Store(regl, And(x:reg,y:reg), w:int)
+       {: "and "   ^ regl ^ "," ^ x    ^ "," ^ y     :}
+inst:  Llr(regl, "and", const, w:int)
+       {: "andi. " ^ regl ^ "," ^ regl ^ "," ^ const :} 
+inst:  Store(regl, And(x:reg,y:const), w:int)
+       {: "andi. " ^ regl ^ "," ^ x    ^ "," ^ y     :}
+
+inst:  Llr(regl, "or", reg, w:int)
+       {: "or "  ^ regl ^ "," ^ regl ^ "," ^ reg   :} 
+inst:  Store(regl, Or(x:reg,y:reg), w:int)
+       {: "or "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
+inst:  Llr(regl, "or", const, w:int)
+       {: "ori " ^ regl ^ "," ^ regl ^ "," ^ const :} 
+inst:  Store(regl, Or(x:reg,y:const), w:int)
+       {: "ori " ^ regl ^ "," ^ x    ^ "," ^ y     :}
+
+inst:  Llr(regl, "xor", reg, w:int)
+       {: "xor "  ^ regl ^ "," ^ regl ^ "," ^ reg   :} 
+inst:  Store(regl, Xor(x:reg,y:reg), w:int)
+       {: "xor "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
+inst:  Llr(regl, "xor", const, w:int)
+       {: "xori " ^ regl ^ "," ^ regl ^ "," ^ const :} 
+inst:  Store(regl, Xor(x:reg,y:const), w:int)
+       {: "xori " ^ regl ^ "," ^ x    ^ "," ^ y     :}
+
+@
+\paragraph{Recommended Simplified Mnemonics}
+Appendix F.9 of the architecture manual describes some of the most
+commonly-used operations (such as no-op, load immediate, load address, move
+register, and complement register).
+
+<<rules>>=
+inst:  Store(regl, Mr(reg), w:int) {: "mr " ^ regl ^ "," ^ reg :}
+inst:  Store(regl, reg, w:int)     {: "mr " ^ regl ^ "," ^ reg :}
 @
 \paragraph{Other instructions}
 <<rules>>=
@@ -265,6 +392,7 @@ inst : any [100] {: "<" ^ any ^ ">" :}
 any : True  () {: "True"  :}
 any : False () {: "False" :}
 any : Link(symbol, w:int) {: "Link(" ^ symbol#mangled_text ^ "," ^ string_of_int w ^ ")" :}
+any : Diff(c1:any, c2:any) {: "Diff(" ^ c1 ^ ", " ^ c2 ^ ")" :}
 any : Late(string, w) {: "Late(" ^ string ^ "," ^ string_of_int w ^")" :}
 any : Bits(bits)     {: sprintf "Bits(%s)" (Bits.to_string bits) :}
 
@@ -272,7 +400,15 @@ any : Fetch (any, w:int) {: "Fetch(" ^ any ^ "," ^ string_of_int w ^ ")" :}
 
 any : Add(x:any, y:any) {: "Add(" ^ x ^ ", " ^ y ^ ")" :}
 any : Sub(x:any, y:any) {: "Sub(" ^ x ^ ", " ^ y ^ ")" :}
+any : Mul_trunc(x:any, y:any) {: "Mul_trunc(" ^ x ^ ", " ^ y ^ ")" :}
+any : Neg(any) {: "Neg(" ^ any ^ ")" :}
+any : And(x:any, y:any) {: "And(" ^ x ^ ", " ^ y ^ ")" :}
+any : Or(x:any, y:any) {: "Or(" ^ x ^ ", " ^ y ^ ")" :}
+any : Xor(x:any, y:any) {: "Xor(" ^ x ^ ", " ^ y ^ ")" :}
 any : Shl(x:any, y:any) {: "Shl(" ^ x ^ ", " ^ y ^ ")" :}
+any : Shra(x:any, y:any) {: "Shra(" ^ x ^ ", " ^ y ^ ")" :}
+any : Shrl(x:any, y:any) {: "Shrl(" ^ x ^ ", " ^ y ^ ")" :}
+any : Mr(any) {: "Mr(" ^ any ^ ")" :}
 any : Sx(any) {: "Sx(" ^ any ^ ")" :}
 any : Zx(any) {: "Zx(" ^ any ^ ")" :}
 any : Lobits(any, w) {: "Lobits(" ^ any ^ ", " ^ string_of_int w ^ ")" :}
@@ -307,19 +443,28 @@ The most interesting code is probably the code that maps the
 general representation of application into one that uses a unique
 constructor for each operator.
 <<special cases for particular operators>>=
-| RP.App(("add", ws), [x; y])            -> conAdd (exp x) (exp y)
-| RP.App(("sub", ws), [x; y])            -> conSub (exp x) (exp y)
-| RP.App(("shl", ws), [x; y])            -> conShl (exp x) (exp y)
+| RP.App(("add",  ws), [x; y]) -> conAdd  (exp x) (exp y)
+| RP.App(("sub",  ws), [x; y]) -> conSub  (exp x) (exp y)
+| RP.App(("mul_trunc", ws), [x; y]) -> conMul_trunc (exp x) (exp y)
+| RP.App(("neg",  ws), [x])    -> conNeg  (exp x)
+| RP.App(("and",  ws), [x; y]) -> conAnd  (exp x) (exp y)
+| RP.App(("or",   ws), [RP.Fetch(l,_) as x; RP.Fetch(l',_) as y]) ->
+  if l = l' then conMr (exp x) else conOr  (exp x) (exp y)
+| RP.App(("xor",  ws), [x; y]) -> conXor  (exp x) (exp y)
+| RP.App(("shl",  ws), [x; y]) -> conShl  (exp x) (exp y)
+| RP.App(("shra", ws), [x; y]) -> conShra (exp x) (exp y)
+| RP.App(("shrl", ws), [x; y]) -> conShrl (exp x) (exp y)
 | RP.App(("bitExtract", [w; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
 | RP.App((op, ws), [x; y]) 
-    when Strutil.Set.mem op cmp           -> conCmp op (exp x) (exp y)
+    when Strutil.Set.mem op cmp -> conCmp op (exp x) (exp y)
 @ 
 Here is the rest of the mapping.  
 <<code to follow the labeler>>=  
-let const = function
+let rec const = function
   | RP.Bool(true)             -> conTrue  ()
   | RP.Bool(false)            -> conFalse ()
   | RP.Link(s,w)              -> conLink s w
+  | RP.Diff(c1,c2)            -> conDiff (const c1) (const c2)
   | RP.Late(s,w)              -> conLate s w
   | RP.Bits(b)                -> conBits(b)
 <<code to follow the labeler>>=  
@@ -415,8 +560,9 @@ let errmsg r msg =
   List.iter prerr_string
     [ "recognizer error: "; msg; " on "; RU.ToReadableString.rtl r; "\n" ]
 
-let to_asm r =
+let to_asm r i =
   try
+    let _ = imports := i in
     let plan = rtl (Down.rtl r) in
     plan.inst.Camlburg.action ()
   with 
