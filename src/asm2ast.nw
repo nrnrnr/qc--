@@ -123,7 +123,7 @@ type size       = int
 type align      = int
 @
 
-A [[sym]] value is created from the [[mangler]].  A [[symbol]]
+A [[sym]] value is created from the [[mksym]] function.  A [[symbol]]
 represents a label that was registered in the assemblers symbol table.
 
 <<>>=
@@ -189,18 +189,19 @@ type action     = NewSection    of string
                 | Nop
 @
 
-The mangler creates [[sym]] values. This particular one is too simple
-minded. 
+The [[mksym]] function creates [[sym]] values.  Symbols ultimately
+create {\PAL} names and must be mangled for that.  This implementation
+mangles the names as part of symbols when the {\AST} is created.
 
 <<>>=
-let mangle s    = Sym s
+let mksym s    = Sym s
 @
 
 The [[append]] function adds an [[action]] to an [[asm]] value.  It
 looks at the category of an action and then creates a new [[asm]]
-value. Whenever a new section is started, the current list of actions
+value.  Whenever a new section is started, the current list of actions
 is reversed, before the now closed section is added \emph{in front} of
-the list of sections. This means, that each section is in the right
+the list of sections.  This means, that each section is in the right
 order, but the order of sections is still reversed.
 
 <<>>=
@@ -237,7 +238,9 @@ The semantics of the following functions is mostly determined by the
 assembly interface.  However, this translation to {\PAL} is imperfect
 in some cases. 
 
-[[section]] closes the [[current]] section and starts a new one.
+[[section]] closes the [[current]] section and starts a new one.  The
+names of sections are \emph{not} mangled before they are used in the
+{\AST}.
 
 <<>>=
 let section s   = NewSection s
@@ -292,12 +295,14 @@ let lookup (Sym n) asm              = Symbol.find n asm.symbols
 @
 
 
+All labels must be mangled in order to obey the {\PAL} syntax.
 
 <<>>=
-let define_label (n,c)      = CurSection(A.Datum(A.Label(n)))
+let define_label (n,c)      = CurSection(A.Datum(A.Label(P.mangle n)))
 let define_const (n,c) b    = 
-    CurSection(A.Decl(A.Const(None,n,A.Int(b,Some (bits (Bits.width b))))))  
-let define_local (Sym n)    = CurSection(A.Datum(A.Label n))
+    let bits = A.Int(b,Some (bits (Bits.width b))) 
+    in CurSection(A.Decl(A.Const(None,P.mangle n,bits)))  
+let define_local (Sym n)    = CurSection(A.Datum(A.Label (P.mangle n)))
 @
 
 This implementation does not support relocatable addresses. 
@@ -392,12 +397,22 @@ let personality =
     ]
 @
 
+The target's personality includes a map of known hardware registers. 
+Since programs a free to use these registers, we have to declare them. 
+We walk over the map, and create declarations based on the name and
+the width of the registers.  In order to avoid name clashes with user
+declared variables, we append a space to a register's name before we
+mangle it.  Of course, this convention must be respected when
+references to these registers are generated.  This applies especially
+to the translation of {\rtl}s to {\PAL} in module \module{rtl2ast}: 
+hardware registers names must be extended by a space and then mangled.
+
+
 <<>>=
 let decl name loc dd = match loc with 
     | Rtl.Cell ('r', _, w, _, _) ->
         let r = (A.Variant, None, A.BitsTy w ,P.mangle (name^" "), Some name) 
-        in
-            A.TopDecl(A.Registers([r]))::dd
+        in  r::dd
     | _ -> assert false
 
 let decls = Target.StrMap.fold decl P.target.Target.regmap []
@@ -410,7 +425,7 @@ let ast asm =
     let sections = List.map (fun (name,sect) -> A.Section(name,sect)) 
                             toplevel                    in
     let target   = A.TopDecl(A.Target personality)      in
-        target :: decls @ sections
+        target :: A.TopDecl(A.Registers(decls)) :: sections
 @
 
 

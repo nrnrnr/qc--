@@ -162,7 +162,6 @@ machine instructions.
 
 <<module Make>>=
 let (++)    = Asm.append   (* infix, left associative *)
-let mangle  = Asm.mangle   (* name mangler C-- -> ASM *)
 @
 
 The [[ty]] function returns the number of bits denoted by a type in
@@ -653,7 +652,7 @@ assembly actions.
 <<module Make>>=
 let rec datum env target asm = function
     | A.DatumAt(x,_)        -> datum env target asm x
-    | A.Label(n)            -> asm ++ Asm.define_local (mangle n)
+    | A.Label(n)            -> asm ++ Asm.define_local (Asm.mksym n)
     | A.Align(a)            -> asm ++ Asm.align a 
     | A.MemDecl(t,m,init)   -> memdecl env target asm t m init
 @
@@ -724,11 +723,11 @@ are registered in the fat environment.  For details, see modules
 
 <<>>=
 let exports env asm = 
-    Fenv.StrSet.fold (fun s asm -> asm ++ Asm.export (Asm.mangle s)) 
+    Fenv.StrSet.fold (fun s asm -> asm ++ Asm.export (Asm.mksym s)) 
     (F.exported env) asm
 
 let imports env asm =
-    Fenv.StrSet.fold (fun s asm -> asm ++ Asm.import (Asm.mangle s)) 
+    Fenv.StrSet.fold (fun s asm -> asm ++ Asm.import (Asm.mksym s)) 
     (F.imported env) asm
 @
 
@@ -770,7 +769,7 @@ let globals target decls =
                 loop map dfa rr
         
         | (name, F.RReg  h, ty) :: rr -> (* hardware register! *)
-            let reg = try Target.StrMap.find name target.Target.regmap
+            let reg = try Target.StrMap.find h target.Target.regmap
                       with Not_found -> unknown name in
             let map = StrMap.add name (reg2loc reg) map in
                 loop map dfa rr in
