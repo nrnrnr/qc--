@@ -54,6 +54,7 @@ preceding arguments.
 module A  = Automaton
 module C  = Call
 module R  = Rtl
+module Rg = Mipsregs
 module RP = Rtl.Private
 module RS = Register.Set
 module RU = Rtlutil
@@ -73,13 +74,8 @@ The return address [[ra]] is volatile.
 It can be used for register allocation, but the call instruction
 always writes it (and it is live on entry).
 <<mipscall.ml>>=
-let byteorder = R.LittleEndian         
-let mspace = ('m', byteorder, Cell.of_size 8)
-let rspace = ('r', byteorder, Cell.of_size 32)
-let fspace = ('f', byteorder, Cell.of_size 32)
-
-let r n     = (rspace, n, R.C 1)
-let f n     = (fspace, n, R.C 1)
+let r n     = (Rg.rspace, n, R.C 1)
+let f n     = (Rg.fspace, n, R.C 1)
 let vfp     = Vfp.mk 32
 @
 Calling conventions treat floating point registers specially; therefore
@@ -111,10 +107,10 @@ Mips.cc["C"] = Mips.cc["C"] or {}
 Mips.sp_align  = 16
 Mips.wordsize  = 32
 
-function reg(sp,i) 
-  return { space = sp, index = i, cellsize = Mips.wordsize, count=1 }
+function reg(sp,i,agg) 
+  return Register.create { space = sp, index = i, cellsize = 32, agg=agg }
 end
-function f(i) return (reg("f", i)) end
+function f(i) return (reg("f", i, 'little')) end
 function r(i) return (reg("r", i)) end
 
 Mips.vol_fp  = (f(0) .. f(18))
@@ -218,7 +214,7 @@ part of the frame layout. The [[Callspec]] implementation assumes that
 an overflow block is always at the extreme end of a frame, which is not
 the case here.
 <<transformations>>=
-let autoAt = A.at mspace in
+let autoAt = A.at Rg.mspace in
 let prolog =
   let autosp = (fun _  -> vfp) in
   C.incoming ~growth ~sp
@@ -314,7 +310,7 @@ let spec =
         ; CS.overflow       = CS.overflow C.Caller C.Caller
         ; CS.sp             = r 29
         ; CS.sp_align       = sp_align
-        ; CS.memspace       = mspace
+        ; CS.memspace       = Rg.mspace
         ; CS.all_regs       = RS.of_list (List.concat [nvl_int; nvl_fp;
                                                        vol_int; vol_fp])
         ; CS.nv_regs        = RS.of_list (nvl_int @ nvl_fp)

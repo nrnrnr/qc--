@@ -196,6 +196,7 @@ To make the interfaces more readable, we use these type abbreviations:
 type temp      = Register.t
 type rtl       = Rtl.rtl
 type exp       = Rtl.exp
+type address   = Rtl.exp
 type width     = Rtl.width
 type assertion = Rtl.assertion
 type operator  = Rtl.Private.opr
@@ -503,34 +504,22 @@ target's byte order.
 <<signature of a postexpander>>=
 module type S = sig
   val byte_order : Rtl.aggregation (* used to check access to memory *)
-
-  module Address : sig
-    type t
-    val reg : temp -> t
-  end
-
   <<generic expansion operations for register machines>>
   <<generic expansion operations for stack machines>>
 end
-@ A value of type [[Address.t]] is a target-dependent way of holding
-an address.  At present, the only way to create an address is by using
-a temporary, which is expected to hold the address.
-A~typical implementation will let [[Address.t]] be [[Rtl.exp]] and
-will define a [[reg]] function that simply fetches the address.
-(WORTH PUTTING IN A [[Standard.Address]] FOR THE TYPICAL IMPLEMENTATION?)
 @ 
 \subsubsection{Postexpander operations for register machines}
 
 \paragraph{Data movement}
 We provide basic load and store.
-The [[assertion]] gives the alignment of the [[Address.t]], which
+The [[assertion]] gives the alignment of the [[address]], which
 tells the postexpander 
 whether it can use a normal load or may (on some targets) need special
 unaligned load and store instructions (e.g., ``load unaligned left''
 or ``load unaligned right'').
 <<generic expansion operations for register machines>>=
-val load  : dst:temp  -> addr:Address.t -> assertion -> block
-val store : addr:Address.t -> src:temp -> assertion -> block
+val load  : dst:temp  -> addr:address -> assertion -> block
+val store : addr:address -> src:temp -> assertion -> block
 @
 We also provide sign-extending and zero extending loads
 as well as low-bit--extracting stores, all of which are used only
@@ -541,11 +530,11 @@ and narrows, should be compiled to suitable code (shifts or identity)
 somewhere upstream.
 In each case, the [[width]] is the width of the value loaded and
 stored, and the [[assertion]] gives the alignment of the
-[[Address.t]].
+[[address]].
 <<generic expansion operations for register machines>>=
-val sxload  : dst:temp  -> addr:Address.t -> width -> assertion -> block
-val zxload  : dst:temp  -> addr:Address.t -> width -> assertion -> block
-val lostore : addr:Address.t  -> src:temp -> width -> assertion -> block
+val sxload  : dst:temp  -> addr:address -> width -> assertion -> block
+val zxload  : dst:temp  -> addr:address -> width -> assertion -> block
+val lostore : addr:address  -> src:temp -> width -> assertion -> block
 @ For example, an [[sxload]] with width of~16 on a 32-bit machine
 might correspond to a ``load signed halfword'' instruction.
 A~[[lostore]] with width of~8 might correspond to ``store byte.''
@@ -628,7 +617,7 @@ val lix : dst:temp -> Rtl.exp           -> block
 Every machine should be able to do a block copy.
 <<generic expansion operations for register machines>>=
 val block_copy :
-  dst:Address.t -> assertion -> src:Address.t -> assertion -> width -> block
+  dst:address -> assertion -> src:address -> assertion -> width -> block
 @ 
 \paragraph{Computation} 
 
@@ -876,19 +865,19 @@ val converts_stack_to_temp : operator -> bool
 @
 We can push a value from memory or pop the stack into memory.
 <<generic expansion operations for stack machines>>=
-val push      : addr:Address.t -> assertion -> block
-val store_pop : addr:Address.t -> assertion -> block
+val push      : addr:address -> assertion -> block
+val store_pop : addr:address -> assertion -> block
 @ 
 We also have versions of these operations that convert between data
 formats while popping or pushing.
 We have to give the width of the value in memory.
 <<generic expansion operations for stack machines>>=
-val push_cvt      : operator -> width -> addr:Address.t -> assertion -> block
-val store_pop_cvt : operator -> width -> addr:Address.t -> assertion -> block
+val push_cvt      : operator -> width -> addr:address -> assertion -> block
+val store_pop_cvt : operator -> width -> addr:address -> assertion -> block
 @ And there might be a rounding mode
 <<generic expansion operations for stack machines>>=
-val push_cvt_rm      : operator -> warg -> width -> addr:Address.t -> assertion -> block
-val store_pop_cvt_rm : operator -> warg -> width -> addr:Address.t -> assertion -> block
+val push_cvt_rm      : operator -> warg -> width -> addr:address -> assertion -> block
+val store_pop_cvt_rm : operator -> warg -> width -> addr:address -> assertion -> block
 @ 
 We can also imagine a whole bunch of stack operations:
 [[stack_copy]], [[dup]], [[exch]], [[pop]], and more.
@@ -1682,8 +1671,8 @@ conditional branch, and pass everything over to [[expand_cbranch]].
 We might one day support multiple addressing modes, but for now, just registers. 
 <<other generic expander functions>>=
 and address room exp =
-  let t, is = to_temp room acontext exp
-  in  Post.Address.reg t, is
+  let t, is = to_temp room acontext exp in
+  R.fetch (R.reg t) (Register.width t), is
 @
 A compile-time constant is a sum or difference of compile-time constants.
 <<other generic expander functions>>=

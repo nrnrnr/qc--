@@ -4,6 +4,7 @@
 
 This module exports central information used by several parts of the
 x86 back end.
+First we have general-purpose registers.
 <<x86regs.mli>>=
 val rspace : Register.space
 val eax : Register.t
@@ -14,19 +15,39 @@ val esp : Register.t
 val ebp : Register.t
 val esi : Register.t
 val edi : Register.t
-
+@ 
+Some important 16-bit and 8-bit registers.
+These are slices,
+ so they can be exported either as [[Register.x]] or
+[[Rtl.loc]].\footnote
+{You might wonder why we don't simply make the cell size 8~bits so
+  that everything can be type [[Register.t]].
+  There are several reasons: 32-bit registers seem more natural,
+  using 32-bit cells makes the register numbering come out in a
+  relatively safe and sane fashion, and most importantly, not all
+  parts of all registers have 8-bit pieces.
+  For example, only some of the ABCD registers, and none of the
+  others, can be broken into 8-bit pieces.}
+[[Rtl.loc]] is more convenient.
+<<x86regs.mli>>=
 val ah : Rtl.loc
 val ax : Rtl.loc
 val cl : Rtl.loc
-
-val espace : Register.space
+@ 
+To help the recognizer emit assembly language, we give a way to name
+an 8-bit register.
+<<x86regs.mli>>=
+val regname8 : lsb:int -> base:int -> string
+@ 
+Floating-point control, status, condition codes, rounding mode, and so on.
+<<x86regs.mli>>=
 val fpuctl : Register.t
 val fputag : Rtl.loc
 val fpustatus : Rtl.loc
-val fpcc   : Rtl.loc
-
-val regname8 : lsb:int -> base:int -> string
+val fpcc      : Rtl.loc
+val fpround   : Register.x
 @
+\section{Implementation}
 <<x86regs.ml>>=
 module R = Rtl
 let rspace = ('r', Rtl.Identity, Cell.of_size 32)
@@ -43,17 +64,25 @@ let ah = R.slice  8 ~lsb:8 (R.reg eax)
 let ax = R.slice 16 ~lsb:0 (R.reg eax)
 let cl = R.slice  8 ~lsb:0 (R.reg ecx)
 @ 
+The floating-point condition codes actually occupy four bits.
+But because these bits are not contiguous, we let just three bits
+stand proxy for all four. 
+The alternative would be to use an [[Automaton.loc]], but the gain in
+realism isn't worth the extra complexity (especially in the recognizer).
 <<x86regs.ml>>=
 let espace = ('e', Rtl.Identity, Cell.of_size 16)
 let fpuc n = (espace, n, Rtl.C 1)
 let fpuctl    = fpuc 0
 let fputag    = Rtl.reg (fpuc 2)
-let fpustatus = Rtl.reg (espace, 1, Rtl.C 1)
-let fpcc = Rtl.slice 3 ~lsb:8 fpustatus (* ignores bit 14 == C3 [probably OK] *)
+let fpustatus = Rtl.reg (fpuc 1)
+let fpcc    = Rtl.slice 3 ~lsb:8 fpustatus (* ignores bit 14 == C3 [probably OK] *)
+let fpround = Register.Slice (2, 10, fpuctl)
 @ 
 <<x86regs.ml>>=
 let r8_lo  = [| "%al"; "%cl"; "%dl"; "%bl"|]
 let r8_hi  = [| "%ah"; "%ch"; "%dh"; "%bh"|]
 
-let regname8 ~lsb ~base =
-  if lsb = 0 then Array.get r8_lo base else Array.get r8_hi base
+let regname8 ~lsb ~base = match lsb with
+| 0 -> Array.get r8_lo base
+| 8 -> Array.get r8_hi base
+| _ -> Impossible.impossible "bad lsb in slice denoting 8-bit register"

@@ -26,12 +26,11 @@ The [[nonbool]]
 function returns a list giving standard argument and
 result contexts for each non-Boolean {\rtl} operator.
 The [[full]] function includes Boolean operators.
-The [[except]] function helps write exceptions; it is a union with
-priority to the right-hand element.
+For both functions, the [[overrides]] parameter is a list of exceptional or
+nonstandard cases.
 <<context.mli>>=
-val nonbool  : int:'c -> fp:'c -> rm:'c -> 'c op list
-val full     : int:'c -> fp:'c -> rm:'c -> bool:'c -> 'c op list
-val except   : 'c op list -> 'c op list -> 'c op list
+val nonbool  : int:'c -> fp:'c -> rm:'c -> overrides:'c op list -> 'c op list
+val full     : int:'c -> fp:'c -> rm:'c -> bool:'c -> overrides:'c op list -> 'c op list
 @  Many machines will be able to define a context by taking the
 [[nonbool]] context plus a few exceptions, e.g.,
 [[except (nonbool i f r) [exn_list]]].
@@ -61,7 +60,7 @@ val functions : t op list -> (Rtl.Private.opr -> t list) * (Rtl.Private.opr -> t
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 
 type 'c op = string * 'c list * 'c        (* op, arguments, result *)
-let nonbool ~int ~fp ~rm =
+let nonboolops ~int ~fp ~rm =
     [ "add"           , [int; int], int
     ; "addc"          , [int; int; int], int
     ; "and"           , [int; int], int
@@ -156,7 +155,9 @@ let except base exns =
   let keep (o, _, _) = not (List.exists (fun (o', _, _) -> o =$= o') exns) in
   exns @ List.filter keep base
 
-let full ~int ~fp ~rm ~bool = nonbool ~int ~fp ~rm @ boolops ~int ~fp ~bool
+let nonbool ~int ~fp ~rm ~overrides = except (nonboolops ~int ~fp ~rm) overrides
+let full ~int ~fp ~rm ~bool ~overrides =
+  except (nonboolops ~int ~fp ~rm @ boolops ~int ~fp ~bool) overrides
 @    
 <<context.ml>>=
 type t = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)

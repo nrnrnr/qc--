@@ -11,24 +11,17 @@
 
 %%Grades: I Peripheral Immediate
 
-\section{Back end for an Intel x86 subset}
+\section{Back end for a Intel x86 (32-bit subset)}
 
 \label{x86.sec}
 
-This exploratory back end is designed both to help us develop good
-procedures for writing back ends and to serve as an example.
-The names of spaces are standard.
+As of November 2004, this is the most complete and best documented of
+our back ends.
+@
+There's a lot of goo behind this thin interface:
 <<x86.mli>>=
-val arch : string                       (* name of machine*)
-module Spaces : sig
-  val m : Space.t
-  val r : Space.t
-  val t : Space.t
-  val c : Space.t   (* PC at 0 and condition codes at 2 *)
-end
-module Post : Postexpander.S
-module X    : Expander.S
-val target : Ast2ir.tgt
+module X      : Expander.S
+val target    : Ast2ir.tgt
 val placevars : Ast2ir.proc -> Automaton.t
 @ 
 \section{Implementation}
@@ -48,10 +41,7 @@ module Rg = X86regs
 module RO = Rewrite.Ops
 
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
-
-let ( =$  ) = Register.eq
-let ( =/  ) = RU.Eq.loc
-let ( =// ) = RU.Eq.exp
+let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
 @ 
 At initialization, we register the x86 machine invariant as a property
 for the optimization backplane.
@@ -59,57 +49,52 @@ for the optimization backplane.
 let _ = Backplane.M.register "x86 invariant"
     ["The x86 machine invariant.  For more explanation, see '<machine> invariant'."]
 @ 
-\subsection{Architecture name and storage spaces}
-<<x86.ml>>=
-module SS = Space.Standard32
-let arch = "x86"                (* architecture name *)
-@ 
+\subsection{Storage spaces}
+
 We use the standard storage spaces, with the PC and
 condition codes in their standard locations from [[Space.Standard32]].
 We can't use the standard \texttt{f} space because Pentium
 floating-point values are 80~bits wide.
 We pretend that the machine is a 32-bit machine, which simplifies a lot.
 <<x86.ml>>=
+module SS = Space.Standard32
 module Spaces = struct
-  module S = Space
   let bo = Rtl.LittleEndian
   let id = Rtl.Identity
-  let m = Space.Standard32.m bo [8; 16; 32]
-  let r = Space.Standard32.r 7 id [32]
-  let t = Space.Standard32.t   id  32
-  let c = Space.Standard32.c 3 id [32]
+  let m  = SS.m bo [8; 16; 32]
+  let r  = SS.r 7 id [32]
+  let t  = SS.t   id  32
+  let c  = SS.c 3 id [32]
 end
 @
 \subsection{Postexpander}
 
-
-
 Program counter and condition codes (called [[eflags]] on the Pentium)
 are standard.
-The rounding mode is part of the floating-point control register. 
+The rounding mode is a standard register. 
 <<x86.ml>>=
 let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
-let rounding_mode_reg = Register.Slice (2, 10, Rg.fpuctl)
-let rounding_model    = R.slice 2 ~lsb:10 (R.reg Rg.fpuctl)
-let rounding_mode     = R.fetch rounding_model 2
+let rounding_model = R.regx Rg.fpround
+let rounding_mode  = R.fetch rounding_model 2
 
 module Post = struct
   <<x86 postexpander>>
 end
 @ 
+Here is information about memory.
 We ought to find a good way to tie this information into the target
 metrics, so as to avoid duplication and potential inconsistency.
 <<x86 postexpander>>=
 let byte_order = Spaces.bo
-let wordsize   = 32
-let memsize    = 8
-let _, _, mcell as mspace = ('m', byte_order, Cell.of_size memsize)
-let mcount     = Cell.to_count mcell
+let mcell  = Cell.of_size 8
+let mspace = ('m', byte_order, mcell)
+let mcount = Cell.to_count mcell
 @ 
 These synonyms, which are required by the postexpander interface, are a nuisance.
 <<x86 postexpander>>=
 type temp      = Register.t
 type rtl       = Rtl.rtl
+type address   = Rtl.exp
 type width     = Rtl.width
 type assertion = Rtl.assertion
 type operator  = Rtl.Private.opr
@@ -120,12 +105,14 @@ let talloc = Postexpander.Alloc.temp
 @ 
 \paragraph {Important note about hardware registers}
 
-This postexpander freely assumes the right to clobber EAX, EBX, ECX,
+This postexpander assumes the right to clobber EAX, EBX, ECX,
 and EDX at will.
 It is therefore unsafe for any of these registers to be used as a
 global register.
 Among other restrictions, this means these registers must not be
-exposed by name.
+exposed to {\PAL} source programs by name.
+(That is, they must not appear in the [[named_locs]] field of the
+[[target]] record.)
 
 An alternative would be to save and restore each register before using it,
 but at present we don't have an optimization pass capable of
@@ -142,24 +129,18 @@ Hence there is only one context: the integer context.
 <<x86 postexpander>>=
 let icontext = C.of_space Spaces.t
 let itempwidth = 32
-let fcontext = icontext  (* required by interface *)
+let fcontext = icontext  (* oddity documented above *)
 let acontext = icontext
 let rcontext = icontext
 let constant_context w = icontext
-let arg_contexts, result_context = C.functions (C.nonbool icontext fcontext rcontext)
+let overrides = []
+let arg_contexts, result_context =
+  C.functions (C.nonbool icontext fcontext rcontext overrides)
 @ IT WOULD BE GOOD TO RESTRUCTURE THE CONTEXTS AND THE
 [[Talloc.Multiple]] INTERFACE SO THAT REQUESTING A BAD WIDTH COULD
 MAKE A SUITABLE CALL INTO [[Unsupported]].  
 AN EVEN MORE AMBITIOUS PLAN MIGHT MAKE THE WIDTHS EXPLICIT IN THE
 CONTEXT.
-@
-\paragraph{Addressing modes}
-The only addressing mode is the obvious one: register direct.
-<<x86 postexpander>>=
-module Address = struct
-  type t = Rtl.exp
-  let reg r = R.fetch (R.reg r) (Register.width r)
-end
 @ 
 \subsubsection{Basic locations, flags, and helper functions}
 
@@ -172,22 +153,19 @@ let (<:>) = PX.(<:>)
 let rtl r = PX.Rtl r
 
 let tempwidth     = Register.width
-let temploc t     = Rtl.reg t
+let temploc t     = R.reg t
 let tempval t     = R.fetch (temploc t) (tempwidth t)
-let tempstore t e = PX.Rtl (R.store (temploc t) e (tempwidth t))
-let mem addr  = R.mem R.none mspace (R.C 4) addr  (* single word in memory *)
-
-let upint32 n = RO.unsigned 32 n
-let upint8  n = RO.unsigned 8  n
+let tempstore t e = rtl (R.store (temploc t) e (tempwidth t))
+let mem addr      = R.mem R.none mspace (R.C 4) addr  (* single word in memory *)
 @ 
-And another for doing shifts.  Parameter [[op]] should be, e.g., 
-[[RO.shl]].
+And another for doing shifts.  Parameter [[op]] should be, e.g., [[RO.shl]].
+N.B.~This is actually acceptable as an instruction, since the Pentium
+does a shift-immediate em{without} touching condition codes.
 <<x86 postexpander>>= 
 let shift dst op n = tempstore dst (op 32 (tempval dst) (RO.unsigned 32 n))
 @ 
 Here are some important locations and values.
 <<x86 postexpander>>=
-let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
 let eax = temploc Rg.eax
 let ecx = temploc Rg.ecx
 let edx = temploc Rg.edx
@@ -202,7 +180,8 @@ In order to write code that transfers flags between [[eflags]] and
 [[ah]],  
 we invent a couple of machine-specific operators.
 EVENTUALLY, WE WILL WANT TO TELL THE SIMPLIFIER THAT THESE OPERATORS
-ARE HALF-INVERSES.
+ARE HALF-INVERSES (I.E.,
+$\mathtt{x86\_flags2ah}(\mathtt{x86\_ah2flags}(b)) = b$).
 IT WOULD BE GOOD TO BE ABLE TO WRITE THE CODE HERE AND REGISTER IT
 SOMEHOW. 
 <<x86 postexpander>>=
@@ -213,8 +192,10 @@ Here are more invented operators, this time to hide the real truth
 about what 
 happens to the flags.
 It's up to the recognizer to know such facts as
-$\mathtt{x86\_adcflags}(x, y, 0) = \mathtt{x86\_adcflags}(x, y)$.
+$\mathtt{x86\_adcflags}(x, y, 0) = \mathtt{x86\_addflags}(x, y)$.
 \nextchunklabel{x86.flagfuns}
+(N.B.~We have an explicit width because we might one day want to apply
+these operators to 8-~or 16-bit operands.)
 <<x86 postexpander>>=
 let c = carrybit
 let addflags   x y w = R.store eflags (R.app (R.opr "x86_addflags"   [w]) [x; y])    32
@@ -233,14 +214,12 @@ let shflags sh x y w =
 @ 
 \subsubsection{Data movement}
 Most data movement is simple assignment; the MOV instruction is quite powerful.
-Because we're treating the Pentium as a 32-bit machine, we assert the
-width of everything is~32. 
+Because the only temporaries that can be allocated are 32-bit
+temporaries, we just assume the width is~32.
 <<x86 postexpander>>=
 let load ~dst ~addr assn =
-  assert (tempwidth dst = 32);
   tempstore dst (R.fetch (R.mem assn mspace (R.C 4) addr) 32)
 let store ~addr ~src assn =
-  assert (tempwidth src = 32);
   rtl (R.store (R.mem assn mspace (R.C 4) addr) (tempval src) 32)
 @ 
 The Pentium provides sign-extending loads and stores.
@@ -248,21 +227,18 @@ It's a bit bogus to use EAX to do the [[lostore]], but we have no easy
 way of asking for a temporary that supports low-store instructions.
 <<x86 postexpander>>=
 let sxload ~dst ~addr n assn =
-  assert (tempwidth dst = 32);
   tempstore dst (RO.sx n 32 (R.fetch (R.mem assn mspace (mcount n) addr) n)) 
 let zxload ~dst ~addr n assn =
-  assert (tempwidth dst = 32);
   tempstore dst (RO.zx n 32 (R.fetch (R.mem assn mspace (mcount n) addr) n))
 let lostore ~addr ~src n assn =
-  assert (tempwidth src = 32);
   rtl (R.store eax (tempval src) 32) <:>
   rtl (R.store (R.mem assn mspace (mcount n) addr) (RO.lobits 32 n (R.fetch eax n)) n)
 @ 
 Register-register moves involve only integer registers, so life is
-easy and good.
+easy and good.  Because [[move]] is used a lot inside the postexpander,
+we do a little premature optimization.
 <<x86 postexpander>>=
-let move_rtl dst src = tempstore dst (tempval src)
-let move ~dst ~src   = if Register.eq dst src then PX.Nop else move_rtl dst src
+let move ~dst ~src = if Register.eq dst src then PX.Nop else tempstore dst (tempval src)
 @ 
 Because there's only one size of temporary in this back end, we don't
 need [[extract]] or [[aggregate]].
@@ -295,19 +271,34 @@ let with_flags setflags dst op x y w =
 let with_lflags dst op x y w =
   let exp = R.app op [x; y] in
   rtl (R.par [R.store (temploc dst) exp w; logicflags exp w])
-@ 
+@ Unfortunately, [[with_flags]] is sometimes passed a literal, so
+unlike [[with_flags]], it can't assume its arguments are temporaries.
+Therefore [[tempval]] is applied at (most) call sites.
+@
 We insist on using most operators at their natural 32-bit width, and
 this function is the forcing function that makes it so.
+Because in principle we ought to support 8- and 16-bit operators,
+widths other than 32~bits are ``unimplemented,'' not ``impossible.''
 <<x86 postexpander>>=
 let at32 = function
   | opr, [32] -> opr
-  | opr, [n]  -> Impossible.unimp ("%" ^ opr ^ string_of_int n ^ "(...)")
+  | opr, [n]  -> unimpf "operator %%%s%d(...)" opr n
   | opr, ws   -> impossf "operator %%%s specialized to %d widths" opr (List.length ws)
 @ 
 \paragraph{Binary operators}
-We start our implementation with a function that provides binary
-operators in $L \mathrel{:=} L \oplus R$ form. 
+
+On the Pentium, most binary operators are usable only
+in $L \mathrel{:=} L \oplus R$ form, which is implemented by the
+[[llr]] function.
+The exception is division: because it uses so many special registers,
+it's just as easy to implement the $D \mathrel{:=} L \oplus R$ form.
 <<x86 postexpander>>=
+<<definition of function [[llr]]>>
+let binop ~dst op x y = match at32 op with
+<<cases in [[binop]] to handle integer division>>
+| _ -> move dst x <:> llr op dst y
+@ 
+<<definition of function [[llr]]>>=
 let llr op x y = match at32 op with
 | "add" -> with_flags addflags x (Up.opr op) x y 32
 | "sub" -> with_flags subflags x (Up.opr op) x y 32
@@ -331,7 +322,7 @@ Instead, division is part of the general [[binop]], with operands in
 [[x]]~and~[[y]] and result in [[dst]].
 <<cases in [[binop]] to handle integer division>>=
 | "mod" ->
-    PX.Expand.block (tempstore dst (Rewrite.(mod) 32 (tempval x) (tempval y)) )
+    PX.Expand.block (tempstore dst (Rewrite.(mod) 32 (tempval x) (tempval y)))
 | ("div" | "divu" | "quot" | "modu" | "rem") as opname ->
     let unsigned = opname =$= "divu" || opname =$= "modu" in
     let w = 32 in
@@ -346,14 +337,15 @@ Instead, division is part of the general [[binop]], with operands in
                          R.store edx (R.app (R.opr r [w]) [regpair; tempval y]) w;
                          undefflags] in
     let finish = match opname with
-    | "quot" | "divu" -> move_rtl dst Rg.eax
-    | "rem"  | "modu" -> move_rtl dst Rg.edx
+    | "quot" | "divu" -> move dst Rg.eax
+    | "rem"  | "modu" -> move dst Rg.edx
     | "div" -> let d = Rewrite.div' w ~dst:(R.reg dst) (tempval x) (tempval y)
                          ~quot:(tempval Rg.eax) ~rem:(tempval Rg.edx) in
                PX.Expand.block d
     | _ -> impossf "division operator %%%s?" opname in
-    move_rtl Rg.eax x <:> sethi Rg.edx Rg.eax <:> rtl div <:> finish
-@ 
+    move Rg.eax x <:> sethi Rg.edx Rg.eax <:> rtl div <:> finish
+@ N.B. THE DIVISION ABOVE IS NOT WELL TYPED.
+@
 Shifts and rotates use register~CL.
 One awkward property of the machine: immediate shifts don't set the
 flags, which means a simple peephole optimizer is incapable of
@@ -361,23 +353,19 @@ substituting immediate values for shifts (because a simple optimizer
 doesn't know the effect on the flags is dead).
 <<more cases for [[llr]]>>=
 | ("shl" | "shrl" | "shra" | "rotl" | "rotr") as shop ->
-    let cl = R.fetch Rg.cl 8 in
+    let cl = RO.zx 8 32 (R.fetch Rg.cl 8) in
     let sh = exp_with_flags (shflags shop) x (R.app (Up.opr op) [tempval x; cl])
               (tempval x) cl 32 in
-    move_rtl Rg.ecx y <:> sh
-@ 
+    move Rg.ecx y <:> sh
+@ Because it's an unchecked run-time error to pass $\mathtt y \ge 32$,
+we don't have to generate code to check that [[y]]~fits in 8~bits.
+@
 <<more cases for [[llr]]>>=
 | ("and"|"or"|"xor") -> with_lflags x (Up.opr op) (tempval x) (tempval y) 32 
 @ 
 The list above should exhaust the x86 binary operators.
 <<more cases for [[llr]]>>=
 | op  -> impossf "non-binary operator %%%s in x86 binop" op
-@ 
-And here we combine the LLR operators with integer division.
-<<x86 postexpander>>=
-let binop ~dst op x y = match at32 op with
-<<cases in [[binop]] to handle integer division>>
-| _ -> move dst x <:> llr op dst y
 @ 
 \paragraph{Unary operators}
 Unary operators are done in place, except for [[popcnt]], which must
@@ -471,13 +459,13 @@ And we have to fill the result as requested by the generic expander.
 We don't use [[Rewrite]] for the fills,  because we would miss
 the opportunity to use the Pentium's special immediate-shift instructions.
 <<x86 postexpander>>=
-let wrdrop  ~dst:(fill, dt) op x y z =
+let wrdrop ~dst:(fill, dt) op x y z =
   let is_add =
     match at32 op with "carry" -> true | "borrow" -> false | _ -> impossf "wrdrop" in
   let t = talloc 't' 32 in
-  wrdop ~dst:t ((if is_add then "addc" else "subb"), [32]) x y z <:>
-  lahf <:> 
-  shift Rg.eax RO.shrl 8 <:>
+  wrdop ~dst:t ((if is_add then "addc" else "subb"), [32]) x y z <:> (* sets carry *)
+  lahf <:>                           (* load ah from flags; carry is now lsb of ah *) 
+  shift Rg.eax RO.shrl 8 <:>         (* shift carry into bit 0 of eax *)
   tempstore dt (R.fetch eax 32) <:>
   match fill with
   | PX.HighAny -> PX.Nop
@@ -486,12 +474,22 @@ let wrdrop  ~dst:(fill, dt) op x y z =
 @ 
 \paragraph{Hardware registers}
 Setting the rounding mode is an experience.
-History:
+To get an idea what to do, we disassembled the relevant function from
+GNU libc:
 \begin{verbatim}
   ar x /usr/lib/libm.a fesetround.o
   objdump -d fesetround.o
 \end{verbatim}
-Then connect the dots.
+The assembly code gave us some hints what to do.
+\begin{verbatim}
+  fnstcw stackslot
+  movzwl stackslot,%eax ; %eax is a temporary here
+  and    $0xfffff3ff,%eax
+  ... ; set %edx by shifting mode bits left 10
+  or     %edx,%eax
+  mov    %ax,stackslot
+  fldcw  stackslot
+\end{verbatim}
 (Unlike the GNU code, we do \emph{not} set the rounding mode in the
 MMX unit.)
 @ 
@@ -507,7 +505,7 @@ Then shift the rounding mode into least significant position, filling
 as requested.
 <<x86 postexpander>>=
 let hwget ~dst:(fill,dt) ~src =
-  if Register.eqx src rounding_mode_reg then
+  if Register.eqx src Rg.fpround then
     let slot = PX.Alloc.slot 16 in
     rtl (slot.A.store (tempval Rg.fpuctl) 16)    <:>  (* fnstcw *)
     tempstore dt (RO.zx 16 32 (slot.A.fetch 16)) <:>  (* movzwl *)
@@ -523,7 +521,7 @@ rounding mode into position, or into the status word, then set the
 status word.
 <<x86 postexpander>>=
 let hwset ~dst ~src =
-  if Register.eqx dst rounding_mode_reg then
+  if Register.eqx dst Rg.fpround then
     let slot      = PX.Alloc.slot 16 in
     let t         = PX.Alloc.temp 't' 32 in
     let t2, ldsrc = weird_tmp (PX.Alloc.temp 't' 32) src in
@@ -569,7 +567,9 @@ We don't touch anything that pops the PC.
 That means the return instruction!
 <<x86 postexpander>>=
 let don't_touch_me = 
-  let lowpc = Dn.loc pc in
+  let lowpc  = Dn.loc pc in
+  let ( =$ ) = Register.eq in
+  let ( =/ ) = RU.Eq.loc in
   function
   | [ RP.Store (pc', _, _)
     ; RP.Store (RP.Reg sp, RP.App (("add", [32]), [RP.Fetch (RP.Reg sp2, _);
@@ -787,8 +787,7 @@ let stack_op op = match opclass op with
 All the instructions above use the hardware rounding mode.
 Here are the explicit versions:
 <<x86 postexpander>>=
-let with_rm rm block =
-  PX.with_hw ~hard:rounding_mode_reg ~soft:rm ~temp:(talloc 't' 32) block
+let with_rm rm block = PX.with_hw ~hard:Rg.fpround ~soft:rm ~temp:(talloc 't' 32) block
 
 let push_cvt_rm op rm w ~addr assn = with_rm rm (push_cvt op w ~addr assn)
 let store_pop_cvt_rm op rm w ~addr assn =
@@ -857,9 +856,10 @@ let bc_stack op ~ifso ~ifnot = match op with
     let fstsw = rtl (R.store Rg.ax (R.fetch Rg.fpustatus 16) 16) in
     (match opname with
     | "feq" | "fne" ->
-        let logic f l r = rtl (R.par [f l r 8; logicflags r 8]) in
-        let clear_extra     = logic R.store Rg.ah (RO._and 8 ah_val (upint8 0x45)) in
-        let xor_with_eq_pat = logic R.store Rg.ah (RO.xor  8 ah_val (upint8 0x40)) in
+        let int8            = RO.unsigned 8 in
+        let logic f l r     = rtl (R.par [f l r 8; logicflags r 8]) in
+        let clear_extra     = logic R.store Rg.ah (RO._and 8 ah_val (int8 0x45)) in
+        let xor_with_eq_pat = logic R.store Rg.ah (RO.xor  8 ah_val (int8 0x40)) in
         (* at this point, ZF = 0 iff the flags showed floating eq *)
         PX.Test (setcc <:> fstsw <:> clear_extra <:> xor_with_eq_pat,
                  bc_x86 (fpcmpopr opname) ifso ifnot)
@@ -984,11 +984,11 @@ let target =
   ; T.memspace = P.mspace
   (* basic metrics and spaces are OK *)
   ; T.byteorder   = P.byte_order  
-  ; T.wordsize    = P.wordsize
-  ; T.pointersize = P.wordsize
+  ; T.wordsize    = 32
+  ; T.pointersize = 32
   ; T.vfp         = SS.vfp
   ; T.alignment = 1
-  ; T.memsize = P.memsize
+  ; T.memsize   = Cell.to_width P.mcell (R.C 1)
   ; T.spaces = spaces
   ; T.reg_ix_map          = T.mk_reg_ix_map spaces
   ; T.distinct_addr_sp = false

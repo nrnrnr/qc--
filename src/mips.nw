@@ -22,22 +22,19 @@ val placevars : Ast2ir.proc -> Automaton.t
 A {\mips} architecture can be either little or big endian. For now, we
 assume little endianness but expect to functorize the implementation
 later.
-
 <<mips.ml>>=
 let arch        = "mips"                    (* architecture *)
-let byteorder   = Rtl.LittleEndian 
 let wordsize    = 32
 @
-
 We use the standard storage spaces, including the spaces for PC and
 condition codes. For now I'll treat floating point as 32 bit; maybe we
 need an additional spaces for 64-bit floating point values and
 temporaries.
-
 <<mips.ml>>=
 module A  = Automaton
 module PX = Postexpander
 module R  = Rtl
+module Rg = Mipsregs
 module RP = Rtl.Private
 module RU = Rtlutil
 module Up = Rtl.Up
@@ -49,47 +46,6 @@ module T  = Target
 
 let rtl r = PX.Rtl r
 let (<:>) = PX.(<:>)
-
-module Spaces = struct
-    let id = Rtl.Identity
-    let m  = SS.m byteorder [8; 16; 32]
-    let r  = SS.r 32 id [32]
-    let f  = SS.f 32 id [32]    
-    let t  = SS.t    id  32
-    let u  = SS.u    id  32
-    let c  = SS.c  6 id [32]    (* pc, npc, cc, _, fp_mode, fp_fcmp *)
-
-    (* should we have spaces for int and fp register pairs? *)
-
-(*
-    let x  = { S.space          = ('x', R.Identity, 64)
-             ; S.doc            = "64-bit general-purpose temporaries"
-             ; S.cellwidth      = 64
-             ; S.indexwidth     = 32
-             ; S.indexlimit     = None
-             ; S.aggregation    = R.Identity
-             ; S.widths         = [64]
-             ; S.classification = S.Temp
-                { S.stands_for  = 'r'
-                ; S.index_ok    = (fun _ -> true)
-                ; S.set_doc     = "64-bit temporaries"
-                }
-             }   
-    let y  = { S.space          = 'y'
-             ; S.doc            = "64-bit floating-point temporaries"
-             ; S.cellwidth      = 64
-             ; S.indexwidth     = 32
-             ; S.indexlimit     = None
-             ; S.aggregation    = R.Identity
-             ; S.widths         = [64]
-             ; S.classification = S.Temp
-                { S.stands_for  = 'f'
-                ; S.index_ok    = (fun _ -> true)
-                ; S.set_doc     = "64-bit temporaries"
-                }
-             }   
-*)
-end
 @
 
 % ------------------------------------------------------------------ 
@@ -97,17 +53,10 @@ end
 % ------------------------------------------------------------------ 
 
 <<mips.ml>>=
-let locations   = SS.locations Spaces.c
-let pc          = locations.SS.pc
-let cc          = locations.SS.cc
-let npc         = locations.SS.npc
-let fp_mode     = locations.SS.fp_mode
-let fp_fcmp     = locations.SS.fp_fcmp
 let vfp         = Vfp.mk wordsize
 
-let rspace = ('r', Rtl.Identity, Cell.of_size 32)
 let dspace = ('d', Rtl.Identity, Cell.of_size 2)  (* rounding modes *)
-let reg n       = (rspace,n,Rtl.C 1)
+let reg n       = (Rg.rspace,n,Rtl.C 1)
 let sp          = reg 29        (* stack pointer    *)
 let ra          = reg 31        (* return address   *)
 let r0          = reg 0         (* register 0       *)
@@ -124,8 +73,7 @@ let impossible          = Impossible.impossible
 
 let fetch_word l        = R.fetch l   wordsize
 let store_word l e      = R.store l e wordsize
-let mcell = Cell.of_size 8
-let mspace = ('m', byteorder, mcell)
+let (_, byteorder, mcell) as mspace = Rg.mspace
 let mcount = Cell.to_count mcell
 let mem w addr          = R.mem R.none mspace (mcount w) addr
 @
@@ -138,8 +86,8 @@ inserts these into the {\cfg} it builds.
 <<mips.ml>>=
 module F = Mflow.MakeStandard
     (struct
-        let pc_lhs    = pc
-        let pc_rhs    = pc
+        let pc_lhs    = Rg.pc  (* should be PC, but recognizer is broken! *)
+        let pc_rhs    = Rg.pc
         let ra_reg    = R.reg ra
         let ra_offset = 4               (* size of call instruction *)
      end)   
@@ -147,7 +95,7 @@ module F = Mflow.MakeStandard
 Module [[F]] does not provide a return instruction. A return is simply a
 jump.
 <<mips.ml>>=
-let return = R.store pc (fetch_word (R.reg ra))
+let return = R.store Rg.pc (fetch_word (R.reg ra))
 @
 % ------------------------------------------------------------------ 
 \subsection{Postexpander}
@@ -174,12 +122,12 @@ let talloc = Postexpander.Alloc.temp
 \paragraph{Contexts}
 There is no distinction between an integer and an address.
 <<MIPS postexpander>>=
-let icontext = Context.of_space Spaces.t
-let fcontext = Context.of_space Spaces.u
+let icontext = Context.of_space Rg.Spaces.t
+let fcontext = Context.of_space Rg.Spaces.u
 let acontext = icontext
 let rcontext = (fun x y -> unimp "unsupported soft rounding mode"), Register.eq rm_reg
 
-let operators = Context.nonbool icontext fcontext rcontext
+let operators = Context.nonbool icontext fcontext rcontext []
 let arg_contexts, result_context = Context.functions operators
 let itempwidth = 32
 let constant_context w = if w = wordsize then icontext else fcontext
@@ -283,9 +231,11 @@ let wrdrop ~dst op x y z = Unsupported.singlebit ~op:(fst op)
 % ------------------------------------------------------------------ 
 
 On the {\mips}, the PC can be read and written.
+Because the assembler hides delayed branches, we temporarily get away
+with ignoring branch delays.
 <<MIPS postexpander>>=
-let pc_lhs = pc         (* PC as assigned by branch *)
-let pc_rhs = pc         (* PC as captured by call   *)
+let pc_lhs = Rg.pc         (* PC as assigned by branch *)
+let pc_rhs = Rg.pc         (* PC as captured by call   *)
 @
 \paragraph{Unconditional Branches}
 <<MIPS postexpander>>=
@@ -402,7 +352,8 @@ This variable placer is a simplified version of the x86 placer.
 let placevars = 
   let is_float    w hint _ = w <= 32 && hint =$= "float" in
   let warn ~width:w ~alignment:a ~hint:h =
-    if w > 32 then unimp (Printf.sprintf "%d-bit values not supported"  w) in
+    if w > 32 then
+      unimp (Printf.sprintf "%d-bit values (because no block copies)" w) in
   let mk_stage ~temps =
     A.choice
       [ is_float,               A.widen (Aux.round_up_to ~multiple_of: 32); 
@@ -417,12 +368,12 @@ let placevars =
 
 <<mips.ml>>=
 let target =
-    let spaces = [ Spaces.m
-                 ; Spaces.r
-                 ; Spaces.f
-                 ; Spaces.t
-                 ; Spaces.u
-                 ; Spaces.c
+    let spaces = [ Rg.Spaces.m
+                 ; Rg.Spaces.r
+                 ; Rg.Spaces.f
+                 ; Rg.Spaces.t
+                 ; Rg.Spaces.u
+                 ; Rg.Spaces.c
                  ] in
     { T.name                = "mips"
     ; T.memspace            = mspace
@@ -439,7 +390,7 @@ let target =
     ; T.reload              = reload
 
     ; T.vfp                 = vfp
-    ; T.bnegate             = F.bnegate cc
+    ; T.bnegate             = F.bnegate Rg.cc
     ; T.goto                = F.goto
     ; T.jump                = F.jump
     ; T.call                = F.call
@@ -448,7 +399,7 @@ let target =
     
     ; T.cc_specs            = A.init_cc
     ; T.cc_spec_to_auto     = Mipscall.cconv 
-                                ~return_to:(fun ra -> (R.store pc ra wordsize))
+                                ~return_to:(fun ra -> (R.store Rg.pc ra wordsize))
                                 (F.cutto (Rtl.reg sp))
     ; T.is_instruction      = Mipsrec.is_instruction
     ; T.capabilities        = T.incapable

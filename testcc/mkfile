@@ -9,8 +9,8 @@
 #
 #   mk
 #   mk x86-test     if on x86
-#   mk mips-test    if on MIPS
-#   mk alpha-test   if on Alpha
+#   mk mips-test    if on MIPS (e.g., descartes)
+#   mk alpha-test   if on Alpha (e.g., apple3, newcoke)
 #
 # If you need to run the tests on another machine, tarballs are created
 # for your convenience (<architecture>-test.tar.gz).  Simply expand them
@@ -18,8 +18,8 @@
 #
 
 TOP      = ..
-QCC      = $TOP/bin/qc--.opt
-QCCFLAGS = -v backend.emit_data=nil
+QC      = $TOP/bin/qc--.opt
+QCFLAGS = -v backend.emit_data=nil
 GEN      = ./call.pl
 CC       = cc
 
@@ -48,7 +48,7 @@ asm :V: ${ARCHS:%=%-asm}
 # A rule to pretty print a C-- source file
 
 %.pp: %.c--
-    $QCC -pp $prereq
+    $QC -pp $prereq
 
 #
 # A .sigs file contains lines of signatures for tests. Signatures are
@@ -58,22 +58,23 @@ asm :V: ${ARCHS:%=%-asm}
 #
 
 alpha-call.sigs:D:
-  $QCC tgt=Backend.alpha.target 'iwidths={64}' 'fwidths={64}' gensigs.lua > $target
+  $QC tgt=Backend.alpha.target 'iwidths={64}' 'fwidths={64}' gensigs.lua > $target
 
 x86-call.sigs:D:
-  $QCC tgt=Backend.x86.target 'iwidths={32}' 'fwidths={32, 64}' gensigs.lua > $target
+  $QC tgt=Backend.x86.target 'iwidths={32}' 'fwidths={32, 64}' gensigs.lua > $target
 
 mips-call.sigs:D:
-  $QCC tgt=Backend.mips.target 'iwidths={32}' 'fwidths={32, 64}' gensigs.lua > $target
+  # no 64-bit anything because there is no block copy?
+  $QC tgt=Backend.mips.target 'iwidths={32}' 'fwidths={32}' gensigs.lua > $target
 
 ppc-call.sigs:D:
-  $QCC tgt=Backend.ppc.target 'iwidths={32}' 'fwidths={32, 64}' gensigs.lua > $target
+  $QC tgt=Backend.ppc.target 'iwidths={32}' 'fwidths={32, 64}' gensigs.lua > $target
 
 ia64-call.sigs:D:
-  $QCC tgt=Backend.ia64.target 'iwidths={64}' 'fwidths={64}' gensigs.lua > $target
+  $QC tgt=Backend.ia64.target 'iwidths={64}' 'fwidths={64}' gensigs.lua > $target
 
 ppc-call.sigs:D:
-  $QCC tgt=Backend.ppc.target 'iwidths={32}' 'fwidths={32, 64}' gensigs.lua > $target
+  $QC tgt=Backend.ppc.target 'iwidths={32}' 'fwidths={32, 64}' gensigs.lua > $target
 
 #
 # Generate *.c-- files from one signature file. The test case generator
@@ -122,7 +123,7 @@ PPC_CMM    = ppc*.c--
 x86-asm:V:
     cd x86
 	for f in "`echo "$X86_CMM" | tr ' ' '\n'`"; do
-		../$QCC -e 'Options.globals=2' backend=Backend.x86 $QCCFLAGS \
+		../$QC -e 'Options.globals=2' backend=Backend.x86 $QCFLAGS \
 	    	 -stop .s `echo $f`
 	done
 
@@ -131,14 +132,14 @@ alpha-asm:V:
     for f in $ALPHA_CMM; do
         PATTERN=`echo $f | tr '\\\\' '*'`
         FILES=`echo $PATTERN`
-		../$QCC -e 'Options.globals=2' backend=Backend.alpha $QCCFLAGS \
+		../$QC -e 'Options.globals=2' backend=Backend.alpha $QCFLAGS \
               -stop .s $FILES
 	done
 
 mips-asm:V:
     cd mips
 	for f in "`echo "$MIPS_CMM" | tr ' ' '\n'`" ; do
-		../$QCC -e 'Options.globals=2' backend=Backend.mips $QCCFLAGS \
+		../$QC -e 'Options.globals=2' backend=Backend.mips $QCFLAGS \
 		 -stop .s `echo $f`
 	done
 
@@ -147,19 +148,19 @@ ia64-asm:V:
     for f in $IA64_CMM; do
         PATTERN=`echo $f | tr '\\\\' '*'`
         FILES=`echo $PATTERN`
-        ../$QCC -e 'Options.globals=2' backend=Backend.ia64 $QCCFLAGS \
+        ../$QC -e 'Options.globals=2' backend=Backend.ia64 $QCFLAGS \
              -stop .s $FILES
     done
 
 ppc-asm:V:
     cd ppc
 	for f in "`echo "$PPC_CMM" | tr ' ' '\n'`"; do
-		../$QCC -e 'Options.globals=2' backend=Backend.ppc $QCCFLAGS \
+		../$QC -e 'Options.globals=2' backend=Backend.ppc $QCFLAGS \
 	    	 -stop .s `echo $f`
 	done
 
 alpha%.dbg: alpha%.c--
-  $QCC -e 'Options.globals=2' backend=Backend.alpha  \
+  $QC -e 'Options.globals=2' backend=Backend.alpha  \
        backend.asm=Asm.cmm -stop .s -o $target $prereq
 
 #

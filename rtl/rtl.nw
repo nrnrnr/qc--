@@ -133,6 +133,7 @@ val aligned  : int -> assertion
 val shift    : int -> assertion -> assertion
 val mem      : assertion -> space -> count -> exp -> loc
 val reg      : Register.t -> loc
+val regx     : Register.x -> loc
 val var      : string -> index:int -> width -> loc
 val global   : string -> index:int -> width -> loc
 val slice    : width -> lsb:int -> loc -> loc
@@ -436,6 +437,9 @@ let mem assertion sp count expr = Mem(sp,count,expr,assertion)
 let var    name ~index width    = Var (name,index,width)
 let global name ~index width    = Global (name,index,width)
 let reg r                       = Reg r
+let regx = function
+  | Register.Reg r -> Reg r
+  | Register.Slice (w, lsb, r) -> Slice(w, lsb, Reg r)
 
 (* effect *)
 let rtl effect              = Rtl [(bool true, effect)]

@@ -1,0 +1,54 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{MIPS spaces and registers}
+
+This module exports central information used by several parts of the
+MIPS back end.
+<<mipsregs.mli>>=
+module Spaces : sig
+  val m : Space.t  (* memory *)
+  val r : Space.t  (* integer regs *)
+  val f : Space.t  (* floating regs *)
+  val c : Space.t  (* special registers *)
+
+  val t : Space.t  (* 32-bit integer temps *)
+  val u : Space.t  (* 32-bit floating temps *)
+end
+
+
+val pc  : Rtl.loc
+val npc : Rtl.loc
+val cc  : Rtl.loc
+
+val mspace : Rtl.space
+val rspace : Rtl.space
+val fspace : Rtl.space
+@
+<<mipsregs.ml>>=
+module R  = Rtl
+module S  = Space
+module SS = Space.Standard32
+
+let byteorder = Rtl.LittleEndian 
+let mcell = Cell.of_size 8
+let mspace = ('m', byteorder, mcell)
+@ 
+For now, register aggregation for floats but not ints.
+<<mipsregs.ml>>=
+let rspace = ('r', Rtl.Identity, Cell.of_size 32)
+let fspace = ('f', byteorder,    Cell.of_size 32)
+module Spaces = struct
+    let id = Rtl.Identity
+    let m  = SS.m byteorder [8; 16; 32]
+    let r  = SS.r 32 id [32]
+    let f  = SS.f 32 byteorder [32; 64]    
+    let t  = SS.t    id  32
+    let u  = SS.u    byteorder  32
+    let c  = SS.c  6 id [32]    (* pc, npc, cc, _, fp_mode, fp_fcmp *)
+end
+<<mipsregs.ml>>=
+let locations = SS.locations Spaces.c
+let pc        = locations.SS.pc
+let cc        = locations.SS.cc
+let npc       = locations.SS.npc
+
