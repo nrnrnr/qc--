@@ -11,7 +11,7 @@ PS2PDF=         ps2pdf
 RERUN =         Rerun (LaTeX|to get cross-references right)
 
 %.bbl:  %.bib %.aux
-        bibtex $stem 
+        BIBINPUTS="$TOP/doc:" bibtex $stem 
                     
 %.dvi:  %.tex 
         $LATEX "\\scrollmode \\input $stem.tex"
