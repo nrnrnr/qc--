@@ -1,0 +1,186 @@
+
+
+% ------------------------------------------------------------------ 
+\section{SPARC Assembler Interface}
+% ------------------------------------------------------------------ 
+
+This module provides an assembler that emits directives and instructions
+in {\sparc} assembly syntax. The interface conforms to the [[Asm3]]
+assembler interface.
+
+<<msparcasm.mli>>=
+val asm: bool (* true == Solaris *) -> out_channel -> Asm3.assembler
+@                      
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+
+<<msparcasm.ml>>=
+module Asm = Asm3
+module G   = Cfg4
+module P   = Printf
+module GU  = Cfgutil
+
+exception Unsupported of string
+let unsupported msg = raise (Unsupported msg)
+
+<<decoder>>
+<<name mangler spec>>
+<<class symbol>>
+<<class asm>>
+
+let asm solaris fd = new asm solaris fd
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{RTL Decoder}
+% ------------------------------------------------------------------ 
+
+Instructions are represented as {\rtl}s and must be recognized as
+{\sparc} instructions. The decoder here recognizes {\rtl}s and emits
+their assembler representation to [[stdout]]. This is an impedance
+mismatch because the assmebler should control the file output goes to. 
+
+\begin{quote}\it
+    The [[Sledlib.String]] library is inconvenient to use. I was missing
+    an [[empty]] value and a [[concat]] function concatentates several
+    strings. The name [[String]] might shadow the standard module of
+    that name. -- CL
+\end{quote}
+
+<<decoder>>=
+module Reloc   = Sledlib.MkReloc (struct type symbol = Reladdr.symbol end)
+module RelocPrint = struct
+    include Reloc
+
+    let to_string c2s reloc =
+        match normalize reloc with
+        | Some s, const -> 
+            List.fold_left Sledlib.String.cat (Sledlib.String.of_string "")
+                [ Sledlib.String.of_string s#text
+                ; Sledlib.String.of_string "+ ("
+                ; c2s const
+                ; Sledlib.String.of_string ")"
+                ]
+        | None  , const -> c2s const
+end
+module Decoder = Msparcdec.Mk(RelocPrint)
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Classes for symbols}
+% ------------------------------------------------------------------ 
+
+<<class symbol>>=
+class symbol (n:string) : Reladdr.symbol = object
+    method text    = n
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Name Mangling}
+% ------------------------------------------------------------------ 
+
+We have to make sure that emitted names conform to the syntax of the
+external assembler.  syntax. The [[spec]] below allows to create a name
+mangler that ensures this.
+
+Where do we plug this in exactly?
+
+<<name mangler spec>>=
+let spec =
+    let reserved = [] in        (* list reserved words here so we can
+                                   avoid them *)
+    let id = function
+        | 'a'..'z'
+        | '0'..'9'
+        | 'A'..'Z'
+        | '_'      -> true
+        | _        -> false in
+    let replace = function
+        | x when id x -> x
+        | _           -> '_' 
+        in    
+            { Mangle.preprocess = (fun x -> x)  
+            ; Mangle.replace    = replace
+            ; Mangle.reserved   = reserved
+            ; Mangle.avoid      = (fun x -> x ^ "_")
+            }
+@
+
+
+% ------------------------------------------------------------------ 
+\subsubsection{The assembler class}
+% ------------------------------------------------------------------ 
+
+<<class asm>>=
+class asm (solaris:bool) (fd:out_channel) : Asm.assembler =
+object (this)
+    val mutable _section = "this can't happen"
+    val         _solaris = solaris
+    val         _fd      = fd
+
+    (* declarations *)
+    method import s = new symbol s
+    method export s = new symbol s
+    method local  s = new symbol s
+
+    (* sections *)
+    method section s = _section <- s
+    method current   = _section
+
+    (* definitions *)
+    method label (s: Reladdr.symbol) = P.fprintf _fd "%s:\n" s#text
+    method const s b = unsupported "no assembler instruction symbol=bits"
+
+    (* locations *)
+    method org n    = unsupported "org unsupported by SPARC assembler"
+    method align  n = P.fprintf _fd ".align %d\n" n
+    method addloc n = P.fprintf _fd ".skip %d\n"  n
+
+    (* simple values *)
+    method zeroes n = 
+        for i = 1 to n do P.fprintf _fd ".byte 0\n" done
+    
+    method addr (a:Reladdr.t) = 
+        P.fprintf _fd ".word %s\n" (Reladdr.to_string a)
+
+    method value (v:Bits.bits) = 
+        match Bits.width v with
+        |  8 -> P.fprintf _fd ".byte 0x%Lx\n" (Bits.U.to_int64 v)
+        | 16 -> P.fprintf _fd ".half 0x%Lx\n" (Bits.U.to_int64 v)
+        | 32 -> P.fprintf _fd ".word 0x%Lx\n" (Bits.U.to_int64 v)
+        | 64 -> 
+            let mask32 = Int64.pred (Int64.shift_left Int64.one 32) in
+            let i      = Bits.U.to_int64 v in
+            output_string _fd 
+                (Int64.format ".word 0x%x\n" (Int64.shift_right_logical i 32));
+            output_string _fd 
+                (Int64.format ".word 0x%x\n" (Int64.logand i mask32))
+        | w ->
+            unsupported ( "emission width " ^ string_of_int w 
+                        ^ " in SPARC assembler"
+                        )
+
+    
+    (* instructions *)
+    method private instruction rtl=
+        Sledlib.String.app (output_string _fd) (Decoder.decode rtl)
+        
+    method cfg_instr (cfg:G.rtlcfg) (s:Reladdr.symbol) =
+        ( this#label s
+        ; GU.emit cfg
+                  (fun rtl () -> this#instruction rtl)
+                  (fun sym () -> this#label sym)
+                  ()
+        )          
+
+    (* etc *)
+
+    method comment s = P.fprintf _fd "/* %s */\n" s
+    method emit = ()
+end
+
+
