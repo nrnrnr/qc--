@@ -992,11 +992,11 @@ Note that if the source code asks for a bare kill, even conditional,
 we're within our rights to implement it as a nop.
 <<other generic expander functions>>=
 and rtl' hr =
-  let RP.Rtl effs = Down.rtl hr in
-  if trivially Post.don't_touch_me effs then
+  let RP.Rtl gs = Down.rtl hr in
+  if trivially Post.don't_touch_me gs then
     nunit hr
   else
-    match effs with
+    match gs with
     | [(g, RP.Store (left, right, w))] -> guarded g left right w
     | [(g, RP.Kill _)] -> nunit (R.par [])
     | [] -> nunit hr (* a nop is a nop is a nop *)
@@ -1220,7 +1220,7 @@ else
 When we know guards should be trivial, we just strip them off.
 When we don't know, we use the [[trivial]] function, which if guards
 are trivial applies a predicate and if not returns [[false]].
-\nwaddbox{trivially : (RP.guarded list -> bool) -> RP.rtl -> bool}
+\nwaddbox{trivially : (RP.effect list -> bool) -> RP.guarded list -> bool}
 <<functions for dealing with trivial guards>>=
 let strip_trivial_guards l =
   List.fold_right
