@@ -13,11 +13,6 @@ Revisions Copyright © 2001 Norman Ramsey.  All rights reserved.
 #include <fcntl.h>
 #include <setjmp.h>
 #include <float.h>
-#if 0 /* do not exist on Solaris, not needed? -- CL */
-#include <endian.h>
-#include <features.h>
-#endif 
-
 #include <unistd.h>
 #include <assert.h>
 
