@@ -242,7 +242,7 @@ function Stack.layout(dummy,proc)
                 { blocks.incoming               -- <-- high addresses
                 , blocks.stackdata
                 , blocks.continuations
-                , Block.mk(blocks.sp, 24, 16)   -- size/alignment=24/16
+                , Block.relative(blocks.sp, 'six words', 24, 16)   -- size/alignment=24/16
                 , blocks.spills
                 , blocks.outgoing
                 , blocks.sp                     -- <-- low addresses 
@@ -284,6 +284,30 @@ function Stack.new_layout(dummy,proc) --- really for a C convention only
                 }
     if Debug.stack then
       Debug.showblocks (blocks, {'incoming', 'vfp', 'stackdata', 'continuations',
+                                 'spills', 'outgoing', 'sp'})
+    end
+    local block = Block.cat(999, layout)
+    Stack.new_freeze(proc,block)
+    return 1
+end    
+
+X86 = X86 or {}
+
+function X86.layout(dummy,proc) --- really for a C convention only
+    local blocks = Stack.new_blocks(proc)
+    blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)
+    local layout = 
+                { blocks.incoming               -- <-- high addresses
+                , blocks.ra
+                , blocks.vfp
+                , blocks.stackdata
+                , blocks.continuations
+                , blocks.spills
+                , blocks.outgoing
+                , blocks.sp                     -- <-- low addresses 
+                }
+    if Debug.stack then
+      Debug.showblocks (blocks, {'incoming', 'ra', 'vfp', 'stackdata', 'continuations',
                                  'spills', 'outgoing', 'sp'})
     end
     local block = Block.cat(999, layout)
@@ -414,7 +438,7 @@ Backend.new_x86 =
   , expand    = Expander.new_x86
   , liveness  = Liveness.new_liveness
   , ralloc    = Ralloc.new_color
-  , freeze    = Stack.new_layout
+  , freeze    = X86.layout
   , rmvfp     = Stages.replace_vfp
   , asm       = Asm.new_big_dot -- Asm.new_x86
   , emit      = Driver.assemble

@@ -353,30 +353,33 @@ Here are the constructors:
 \paragraph{Observing nodes}
 We can ask what graph the node belongs to.
 <<graph and node observers>>=
-val of_node    : 'i node -> 'i cfg
+val of_node       : 'i node -> 'i cfg
 @ 
 We can ask about the kind of a node, and we can compare nodes for equality.
 <<graph and node observers>>=
-val kind       : 'i node -> kind
-val eq         : 'i node -> 'i node -> bool
+val kind          : 'i node -> kind
+val eq            : 'i node -> 'i node -> bool
 @ 
 We can also ask particular predicates that relate to the kind.
 A join node includes the exit node.
 A \emph{head} node is the head of an extended basic block; it is
 either the entry node or a join node that is not the exit node.
 <<graph and node observers>>=
-val is_join    : 'i node -> bool
-val is_fork    : 'i node -> bool
-val is_head    : 'i node -> bool
+val is_join       : 'i node -> bool
+val is_fork       : 'i node -> bool
+val is_head       : 'i node -> bool
 @ 
 We can ask for a label, or for all the labels, on a join node.
 <<graph and node observers>>=
-val label      : 'i node -> label      (* defined on any join node except exit *)
-val labels     : 'i node -> label list (* defined on any join node except exit *)
+val label         : 'i node -> label      (* defined on any join node except exit *)
+val labels        : 'i node -> label list (* defined on any join node except exit *)
 @ 
 We can ask for the instruction, if any.
+An assertion is treated as an ordinary instruction.
+If we ask for something \emph{executable}, we get only non-assertions.
 <<graph and node observers>>=
-val to_instr   : 'i node -> 'i option
+val to_instr      : 'i node -> 'i option
+val to_executable : 'i node -> 'i option
 @ 
 We can ask about the unique predecessor of a non-join node.
 It is a checked run-time error to call this function on a join,
@@ -866,7 +869,10 @@ let to_instr node = match node with
   | Joi _ -> None
   | Imp _ -> None
   | Ill _ -> None
-  | Boot  -> undef "to_instr" "boot"
+  | Boot  -> undef "to_instr or to_executable" "boot"
+let to_executable node = match node with
+  | Ass _ -> None
+  | _     -> to_instr node
 @
 Join and exit nodes must have at least one label.
 No other node has a label.

@@ -138,7 +138,8 @@ module Lua: sig
     val adjust:     t -> t
     val cat:        Rtl.width -> t list -> t
     val overlap:    (string -> placement) -> Rtl.width -> string -> t list -> t
-    val at:         t -> int (*size*) -> int -> string option -> t
+    val relative:   t -> string -> int (*size*) -> int -> t
+          (* relative to base of 1st arg *)
     val base:       t -> string  (* show base address *)
     val constraints:t -> string list
 end
@@ -275,7 +276,6 @@ module Lua = struct
     <<Block primitives for Lua>>
 end
 @
-
 Some primitives are not simply the {\ocaml} functions but need
 additionally check arguments to prevent the interpreter fail. For error
 reporting functions receive a function [[error]] that expects a string.
@@ -287,21 +287,11 @@ let overlap error w placement blocks =
                   | p -> error ("bad placement '" ^ p ^ "' in Block.overlap") in
   overlap_list w placement blocks
 @    
-
-The Lua version for [[mk']] is significantly different from the {\ocaml}
-version of [[mk]]. The address $a'$ for the new block is derived from
-the address $a$ of an existing block. We form a new address $a'=a+k$
-where $k$ is a late compile-time constant. The client can optionally
-provide a name for the constant that is fed into [[Idgen]] to make it
-unique.
-
+The Lua version of [[relative]] differs from the Caml version in that
+the anchor address is the base address of an existing block.
 <<Block primitives for Lua>>=
-let at block size alignment name =
-    let name  = Aux.Option.get "Block.at" name in (* name for late *)
-    let width = Rtlutil.Width.exp (base block) in (* width of addr *)  
-    let late  = Rtl.late name width in
-    let addr  = offset (base block) name width in
-        at addr size alignment
+let relative block name size alignment =
+  relative (base block) name at ~size ~alignment
 @
 <<Block primitives for Lua>>=
 let base block = Rtlutil.ToReadableString.exp (base block)

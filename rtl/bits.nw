@@ -49,7 +49,13 @@ val zero        : width -> t            (* constructor *)
 @ 
 \subsubsection{Arithmetic}
 <<bits.mli ((evaluating))>>=
-val add : bits -> bits -> bits
+module Ops : sig
+  val add : bits -> bits -> bits
+  val lt  : bits -> bits -> bool
+  val gt  : bits -> bits -> bool
+  val ltu : bits -> bits -> bool
+  val gtu : bits -> bits -> bool
+end
 @
 
 If a conversion fails, it raises an exception. The [[Overflow]]
@@ -294,10 +300,46 @@ let check w =
 let zero w      = check w; (I.zero, w)
 @
 
+\subsection{Sign and zero extension}
+
+The [[sx64]] operation takes an [[int64]] value and masks the $w$ least
+significant bits ($w-1, \dots, 0$) such that the remaining $64 - w$ most
+significant bit are equal to bit $w-1$, the sign bit of a vector of
+length $w$. We use this to establish our invariant that unused bits
+equal the sign bit.
 <<bits.ml ((evaluating))>>=
+let sx64 i w =
+    let w' = 64-w in
+    I.shift_right (I.shift_left i w') w'
+<<bits.ml ((evaluating))>>=
+let zx64 i w =
+    let w' = 64-w in
+    I.shift_right_logical (I.shift_left i w') w'
+@
+
+<<bits.ml ((evaluating))>>=
+module Ops = struct
+  <<bitwise operators>>
+end
+<<bitwise operators>>=
 let add (b, w) (b', w') =
   assert (w = w');
   (Int64.add b b', w)
+
+let lt (b, w) (b', w') =
+  assert (w = w');
+  let n  = sx64 b  w  in
+  let n' = sx64 b' w' in
+  n < n'
+let gt x y = lt y x
+
+let ltu (b, w) (b', w') =
+  assert (w = w');
+  (if w = 64 then Impossible.unimp "ltu on 64-bit vectors");
+  let n  = zx64 b  w  in
+  let n' = zx64 b' w' in
+  n < n'
+let gtu x y = ltu y x
 @
 <<bits.ml ((evaluating))>>=
 <<string scanning>>
@@ -364,18 +406,6 @@ let to_int64 (i,w) = i
 % ------------------------------------------------------------------ 
 \subsection{Unsigned Interpretation}
 % ------------------------------------------------------------------ 
-
-The [[sx64]] operation takes an [[int64]] value and masks the $w$ least
-significant bits ($w-1, \dots, 0$) such that the remaining $64 - w$ most
-significant bit are equal to bit $w-1$, the sign bit of a vector of
-length $w$. We use this to establish our invariant that unused bits
-equal the sign bit.
-
-<<implementation U>>=
-let sx64 i w =
-    let w' = 64-w in
-    I.shift_right (I.shift_left i w') w'
-@
 
 The [[mask]] operation returns the [[w]] least significant bits of an
 [[int64]] value.
