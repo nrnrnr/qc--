@@ -29,6 +29,7 @@ Test.files = { "add.c--"
              , norun("float-000.c--")
              , norun("float-001.c--")
              , 'float-002.c--'
+             , 'float-003.c--'
 	     , 'f2.c--'
              , "hello.c--"
 	     , "hex.c--"

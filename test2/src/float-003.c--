@@ -1,0 +1,28 @@
+target
+         byteorder little
+         memsize 8
+         wordsize 32
+         pointersize 32
+         float "ieee754";
+
+         bits2 System.rounding_mode = "IEEE 754 rounding mode";
+
+export main;
+
+foreign "C" main(bits32 argc, bits32 argv) {
+ bits32 x;
+ bits64 f;
+
+ f = %pinf64;
+ f = %NaN64(18::bits52);
+
+ if(%eq(0::bits32, 1::bits32)) { x = 0::bits32; }
+ 
+ foreign "C" printf("address" fmt, "float" f, x);
+ foreign "C" return(0);
+}
+
+section "data" {
+  fmt: bits8[] "f == %f; x == %d\n\0";
+}
+import printf;
