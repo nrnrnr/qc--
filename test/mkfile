@@ -23,7 +23,12 @@ test:VQ:        ../bin/qc-- fp regr
                 ../bin/qc-- -check $prereq 2> $target || true
 
 %.test:V:       %.c--         
-                grep '^///' $prereq | sed 's+^///++' | sh || true
+                grep '^///' $prereq | sed 's!^///!!' | sh || true
+
+xdiff:V:
+                for f in *.unexpected; do
+                    mgdiff `basename $f .unexpected`* || true
+                done
 
 # ------------------------------------------------------------------ 
 # Noweb stuff - once this is stable the generic part should go to
