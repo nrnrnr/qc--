@@ -252,7 +252,8 @@ end
 
 Our state of knowledge when we first encounter a continuation.
 <<definition of [[K.mk]], which initializes continuation information>>=
-let mk name den rep base g ~cut_in ~return_in  =
+let mk to_cc name den rep base g ~cut_in ~return_in  =
+  let ccname cc = (to_cc cc).C.name in
   (match den.FE.returned_to with [] -> ignore (Idgen.ContEntry.return name) | _ :: _ -> ());
   { escapes     = den.FE.escapes
   ; cut_to      = den.FE.cut_to
@@ -261,7 +262,7 @@ let mk name den rep base g ~cut_in ~return_in  =
   ; unwind_pc   = Idgen.ContEntry.unwind name
   ; cut_pc      = Idgen.ContEntry.cut    name
   ; return_pcs  =
-      List.map (fun cc -> (cc, Idgen.ContEntry.return name)) den.FE.returned_to
+      List.map (fun cc -> (ccname cc, Idgen.ContEntry.return name)) den.FE.returned_to
   ; rep         = rep
   ; base        = base
   ; convention  = den.FE.convention
@@ -280,7 +281,7 @@ let extend_cont name den =
   let cut_in    = cformals cc.C.cut_parms.C.in' args in
   let return_in = cformals cc.C.results.C.in'   args in
   let rep       = Contn.with_overflow target cut_in.C.overflow in
-  K.mk name den rep den.FE.base g ~cut_in ~return_in in
+  K.mk to_cc name den rep den.FE.base g ~cut_in ~return_in in
 @
 \subsubsection{Second pass: continuations and flow annotations}
 The second pass fills in the mutable fields.
