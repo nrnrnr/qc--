@@ -285,26 +285,8 @@ let rtl r  = try U.rtl (rtl' (D.rtl r))
 Here are some helper functions used below.
 
 <<RTL operator implementations>>=
-let int64 = function
-    | RP.Const(RP.Bits(x)) -> Bits.S.to_int64 x
-    | _                    -> assert false
-
-let uint64 = function
-    | RP.Const(RP.Bits(x)) -> Bits.U.to_int64 x
-    | _                    -> assert false
-
-let int = function
-    | RP.Const(RP.Bits(x)) -> Bits.S.to_int x
-    | _                    -> assert false
-
-let to_bits i w = RP.Const(RP.Bits(Bits.S.of_int64 i w))
-let to_bool b   = RP.Const(RP.Bool(b)) 
-
-let const k     = RP.Const(RP.Bits(k))
-
-let is_bits = function
-    | RP.Const(RP.Bits(_)) -> true
-    | _                    -> false
+let to_bool b = RP.Const (RP.Bool b) 
+let const k   = RP.Const (RP.Bits k)
 @
 
 \paragraph{IEEE 754 Constants} How a rounding mode is represented is
@@ -353,10 +335,11 @@ let neg ws = function
     | args      -> default "neg" ws args
     
 
-let shl w args  = match (w,args) with
-    | [w], [x;y] when is_bits x && is_bits y 
-                -> to_bits (Int64.shift_left (int64 x) (int y)) w 
+(* likely to break machine invariant on PPC? *)
+let shl w args  = match args with
+    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] -> const (Bits.Ops.shl x y)
     | _         -> default "shl" w args
+
 let sub ws args =
     let w = match ws with [w] -> w | _ -> Impossible.impossible "ill-typed add" in
     match args with
