@@ -461,10 +461,13 @@ The basic blocks are enumerated in no particular order.
 Within a basic block, we enumerate nodes in order.
 If the client mutates the graph, we make no guarantees about what
 nodes may be visited.
-We can also fold over the nodes in the layout order and in postorder
-depth-first search.
+We can also fold over the nodes in the layout order using [[fold_layout]]
+and in postorder depth-first search (following successor links from the entry node),
+using [[postorder_dfs]].
 Calling [[fold_layout]] may insert unconditional branches or reverse
 conditional branches in order to satisfy layout constraints.
+Alternatively, we can fold over the reversed graph (following predecessor links from
+the exit node) using [[reverse_podfs]].
 <<graph and node observers>>=
 val iter_nodes    : ('i node -> unit)           -> 'i cfg -> unit
 val iter_heads    : ('i node -> unit)           -> 'i cfg -> unit
@@ -472,6 +475,7 @@ val fold_nodes    : ('i node -> 'a -> 'a) -> 'a -> 'i cfg -> 'a
 val fold_heads    : ('i node -> 'a -> 'a) -> 'a -> 'i cfg -> 'a
 val fold_layout   : ('i node -> 'a -> 'a) -> 'a -> 'i cfg -> 'a
 val postorder_dfs : ('i node -> 'a -> 'a) -> 'a -> 'i cfg -> 'a
+val reverse_podfs : ('i node -> 'a -> 'a) -> 'a -> 'i cfg -> 'a
 @ 
 \paragraph{Observing data flow}
 As noted above a node can contribute defs, uses, and kills to each
@@ -553,11 +557,15 @@ val splice_on_every_edge_between : entry:'i node -> exit:'i node ->
 val splice_before : entry:'i node -> exit:'i node -> 'i node -> unit (* node is not join *)
 val splice_after  : entry:'i node -> exit:'i node -> 'i node -> unit (* node is not fork *)
 @
-It is permissible to delete any node with one predecessor and one
-successor.
-It is never legal to delete a join point.
+A node may be deleted if and only if all its predecessors are illegal.
+If a node is deleted, and its successor is
+\begin{enumerate}
+\item illegal: nothing happens
+\item join: the node is removed from the join's list of predecessors
+\item other: the node's single predecessor is set to an illegal node
+\end{enumerate}
 <<graph and node mutators>>=
-val delete        : 'i node -> unit    (* must have unique pred and succ *)
+val delete        : 'i cfg -> 'i node -> unit    (* must have unique pred and succ *)
 @
 \paragraph{Altering instructions}
 If a node carries an instruction payload, this function
@@ -683,6 +691,7 @@ module Make (X:X) : S with module X = X = struct
   <<graph utilities>>
   <<graph and node observers implementation>>
   <<printing utilities>>
+  <<remove node predecessors>>
   <<set node successors>>
 
   <<simple node constructors>>
@@ -1196,26 +1205,27 @@ THE ENTRY SEEMS GOOD FOR MAKING DECISIONS AT FORK NODES, WHEREAS PREORDER DFS
 FROM EXIT SEEMS GOOD FOR MAKING DECISIONS AT JOIN POINTS.
 <<graph and node observers implementation>>=
 <<join node set operations>>
-let cps_postorder_dfs g cons nil cont =
+let cps_postorder_dfs get_start get_children g cons nil cont =
   let rec vnode node cont acc visited =
-    if been_visited node visited then
+    if member node visited then
       cont acc visited
     else
-      vchildren node (succs node) cont acc (add node visited)
+      vchildren node (get_children node) cont acc (add node visited)
   and vchildren node children cont acc visited = 
     let rec next children acc visited = match children with
       | [] -> cont (cons node acc) visited
       | n::rst -> vnode n (next rst) acc visited in
     next children acc visited in
-  vnode (entry g) cont nil emptyset
+  vnode (get_start g) cont nil emptyset
 
-let postorder_dfs cons nil g = cps_postorder_dfs g cons nil (fun x _ -> x)
+let postorder_dfs cons nil g = cps_postorder_dfs entry succs g cons nil (fun x _ -> x)
+let reverse_podfs cons nil g = cps_postorder_dfs exit  preds g cons nil (fun x _ -> x)
 @
 Edges may have control flow.
 We need to be able to examine uses on inedges and defs/kills on outedges.
 NOTE: I STILL FEEL THAT USES/DEFS/KILLS SHOULD BE PLACED AT THE NODE - THE
 NODE IS RESPONSIBLE FOR THESE ACTIONS. THE EDGE DOESN'T ACTUALLY TAKE AN
-ACTION, WHICH IS WHERE THE LIVESETS REALLY MAKE SENSE ON THE EDGES.
+ACTION, WHICH IS WHY THE LIVE SETS MAKE SENSE ON THE EDGES.
 <<graph and node observers implementation>>=
 (* should this fn be defined on exi and ill?
    when there are cont edges, do we still need to cover the regular edges?*)
@@ -1248,10 +1258,43 @@ let add_inedge_uses node regs = match node with
   | Ret r -> regs ++ r.ret_uses
   | _     -> regs
 @ 
-The only graph mutation occurs via the set successors functions. 
-The rest of the CFG implementation also uses these mutators.
+Although only internally visible, teh [[remove_pred]] function is vital.
+For join and exit nodes, we remove [[node]] from the predecessor list.
+For other nodes, we set the predecessor to the illegal node.
+<<remove node predecessors>>=
+let remove_pred node ~old_succ =
+  let rec rem_1_list lst = match lst with
+    | [] -> imposs "remove_pred: predecessor to be removed not found"
+    | n::rst when eq n node -> rst
+    | n::rst -> n :: rem_1_list rst in
+  let rem_1_list l =
+    try rem_1_list l
+    with _ ->
+      imposs ("Error removing node from list with " ^ string_of_int (List.length l) ^ " nodes") in
+  match old_succ with
+  | Joi j -> j.joi_preds <- rem_1_list j.joi_preds
+  | Exi e -> e.exi_preds <- rem_1_list e.exi_preds
+  | Ins i -> i.ins_pred  <- (get_cfg old_succ).ill
+  | Sta i -> i.sta_pred  <- (get_cfg old_succ).ill
+  | Bra b -> b.bra_pred  <- (get_cfg old_succ).ill
+  | Cbr c -> c.cbr_pred  <- (get_cfg old_succ).ill
+  | Mbr m -> m.mbr_pred  <- (get_cfg old_succ).ill
+  | Jum j -> j.jum_pred  <- (get_cfg old_succ).ill
+  | Cal c -> c.cal_pred  <- (get_cfg old_succ).ill
+  | Ret r -> r.ret_pred  <- (get_cfg old_succ).ill
+  | Cut c -> c.cut_pred  <- (get_cfg old_succ).ill
+  | Ass a -> a.ass_pred  <- (get_cfg old_succ).ill
+  | Imp i -> i.imp_pred  <- (get_cfg old_succ).ill
+  | Ill _ -> ()
+  | Ent _ -> imposs "entry node was a successor"
+  | Boot  -> imposs "boot nodes should not live to remove_pred"
+@
 
-[[node_labelled]] is fundamental to setting the successors, since join points
+
+The set successors functions are exported through the interface and also used
+throughout the cfg implementation.
+
+[[node_labeled]] is fundamental to setting the successors, since join points
 must frequently be inserted.
 <<set node successors>>=
 let mk_join cfg labels ~preds ~lpred ~succ =
@@ -1361,34 +1404,8 @@ match node with
 | Ill _ -> undef "set_succ" "illegal"
 | Boot  -> undef "set_succ" "boot"
 @ 
-For join and exit nodes, we remove [[node]] from the predecessor list.
-For other nodes, we set the predecessor to the illegal node.
 <<modify the $n$th successor of [[node]] because [[node]] is no longer a predecessor>>=
-let rec rem_1_list lst = match lst with
-  | [] -> imposs "remove_pred: predecessor to be removed not found"
-  | n::rst when eq n node -> rst
-  | n::rst -> n :: rem_1_list rst in
-let rem_1_list l =
-  try rem_1_list l
-  with _ ->
-    imposs ("Error removing node from list with " ^ string_of_int (List.length l) ^ " nodes") in
-match old_succ with
-| Joi j -> j.joi_preds <- rem_1_list j.joi_preds
-| Exi e -> e.exi_preds <- rem_1_list e.exi_preds
-| Ins i -> i.ins_pred  <- (get_cfg old_succ).ill
-| Sta i -> i.sta_pred  <- (get_cfg old_succ).ill
-| Bra b -> b.bra_pred  <- (get_cfg old_succ).ill
-| Cbr c -> c.cbr_pred  <- (get_cfg old_succ).ill
-| Mbr m -> m.mbr_pred  <- (get_cfg old_succ).ill
-| Jum j -> j.jum_pred  <- (get_cfg old_succ).ill
-| Cal c -> c.cal_pred  <- (get_cfg old_succ).ill
-| Ret r -> r.ret_pred  <- (get_cfg old_succ).ill
-| Cut c -> c.cut_pred  <- (get_cfg old_succ).ill
-| Ass a -> a.ass_pred  <- (get_cfg old_succ).ill
-| Imp i -> i.imp_pred  <- (get_cfg old_succ).ill
-| Ill _ -> ()
-| Ent _ -> imposs "entry node was a successor"
-| Boot  -> imposs "boot nodes should not live to remove_pred"
+remove_pred node old_succ
 @
 Adding a predecessor.
 <<modify [[succ]] because [[node]] has become a predecessor>>=
@@ -1516,10 +1533,14 @@ let splice_after ~entry ~exit node =
   let succ = succ node in
   (set_succ node ~succ:entry ; set_succ exit ~succ)
 
-(* should this work on Bra? *)
-let delete node =
-  let succ = succ node in
-  (set_succ node ~succ:(get_cfg node).ill ; set_succ (pred node) ~succ)
+let delete cfg node =
+  let preds = preds node in
+  ( if   List.for_all (fun p -> kind p = Illegal)             preds 
+    then List.iter    (fun s -> remove_pred node ~old_succ:s) (succs node)
+  ; if kind node = Join
+    then cfg.label_map <- List.fold_right SM.remove (labels node) cfg.label_map
+  )
+  
 
 let update_instr upd node = match node with
   | Ins i -> i.ins_i <- upd i.ins_i
@@ -1575,7 +1596,7 @@ let fold_layout f zero cfg =
     | Mbr _ | Bra _ | Cut _ | Jum _ | Exi _ | Ill _ | Boot-> () in
   let () = iter_nodes ins_branch cfg in
   let snoc node build = fun tail -> build (f node tail) in
-  cps_postorder_dfs cfg snoc (fun x -> x) (fun build _ -> build zero)
+  cps_postorder_dfs entry succs cfg snoc (fun x -> x) (fun build _ -> build zero)
 @
 When we make exit nodes, we are careful to add the labels to the cfg's label
 map.
@@ -2008,13 +2029,12 @@ let heads cfg =
               (uniq (cfg.entry :: SM.fold (fun _ h rst -> h::rst) cfg.label_map []))
 @
 
+We have some simple operations for handling sets of nodes.
 <<join node set operations>>=
-module SS = Strutil.Set
-let emptyset = SS.empty
-let add n s = SS.add (label n) s
-let member n s = SS.mem (label n) s
-let been_visited node v = is_join node && member node v
-let add node v = if is_join node then add node v else v 
+module IS                 = Set.Make (struct type t = int let compare = compare end)
+let emptyset              = IS.empty
+let add    n set          = IS.add (num n) set
+let member n set          = IS.mem (num n) set
 @
 
 
