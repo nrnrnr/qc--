@@ -5,8 +5,6 @@ Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
 .section .data
 p:
-	nop
-	nop
 	movl %esp,%edx
 	movl (%edx),%ecx
 initialize_continuations_l3:
@@ -18,12 +16,10 @@ loop:
 	cmpl %edx,%eax
 	jge join_l5
 join_l6:
-	nop
 	movl $0,%edx
 	movl %esp,%eax
 	addl %edx,%eax
 	movl %ecx,(%eax)
-	nop
 	ret
 join_l5:
 	jmp loop

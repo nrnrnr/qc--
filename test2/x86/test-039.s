@@ -9,7 +9,6 @@ Cmm.global_area:
 .section .text
 sp1:
 	leal -20(%esp), %esp
-	nop
 	leal 20(%esp), %ecx
 	movl (%ecx),%edx
 initialize_continuations_l3:
@@ -17,23 +16,18 @@ initialize_continuations_l3:
 	cmpl %ecx,%eax
 	je join_l9
 join_l10:
-	nop
 	movl $1,%ecx
 	movl %edx,4(%esp)
 	movl %eax,%edx
 	subl %ecx,%edx
 	movl %eax,8(%esp)
 	movl %edx,%eax
-	nop
 	call sp1
 join_l7:
-	nop
 	movl $-20,%ecx
 	leal 20(%esp), %edx
 	addl %ecx,%edx
 	movl (%edx),%ecx
-	nop
-	nop
 	movl 8(%esp),%edx
 	addl %edx,%eax
 	imull %edx,%ecx
@@ -51,7 +45,6 @@ join_l7:
 	leal 20(%esp), %esp
 	ret
 join_l9:
-	nop
 	movl $1,%eax
 	movl $1,%ecx
 	movl %edx,4(%esp)
@@ -98,11 +91,9 @@ frame_l16:
 .section .text
 sp2:
 	leal -12(%esp), %esp
-	nop
 	leal 12(%esp), %edx
 	movl (%edx),%ecx
 initialize_continuations_l19:
-	nop
 	movl $1,%edx
 	movl %ecx,(%esp)
 	movl $-4,%ecx
@@ -138,7 +129,6 @@ sp2_help:
 	leal 20(%esp), %eax
 	addl %ecx,%eax
 	movl (%eax),%ecx
-	nop
 	leal 20(%esp), %eax
 	movl (%eax),%eax
 initialize_continuations_l31:
@@ -149,7 +139,6 @@ initialize_continuations_l31:
 	cmpl %edx,%ecx
 	je join_l34
 join_l35:
-	nop
 	movl $1,%edx
 	movl %eax,12(%esp)
 	movl %ecx,%eax
@@ -178,7 +167,6 @@ join_l35:
 	leal 20(%esp), %esp
 	jmp sp2_help
 join_l34:
-	nop
 	movl %eax,12(%esp)
 	movl 4(%esp),%eax
 	movl $12,%ecx
@@ -199,7 +187,6 @@ stackdata_l42:
 .section .text
 sp3:
 	leal -16(%esp), %esp
-	nop
 	leal 16(%esp), %edx
 	movl (%edx),%ecx
 initialize_continuations_l45:
@@ -226,7 +213,6 @@ join_l52:
 	movl 4(%esp),%ecx
 	jmp loop
 join_l47:
-	nop
 	movl %eax,12(%esp)
 	movl %edx,%eax
 	movl $4,%edx

@@ -6,7 +6,6 @@ Cmm.global_area:
 .section .text
 p:
 	leal -4(%esp), %esp
-	nop
 	leal 4(%esp), %edx
 	movl (%edx),%ecx
 initialize_continuations_l3:
@@ -16,7 +15,6 @@ initialize_continuations_l3:
 	movl $3,%ecx
 	addl %edx,%eax
 	addl %ecx,%eax
-	nop
 	movl $0,%ecx
 	leal 4(%esp), %edx
 	addl %ecx,%edx

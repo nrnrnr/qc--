@@ -25,10 +25,7 @@ section "text"
     sym@f()
     {
         $r31 = ($r31+-24);
-        ;
-        ;
         $t1 = $r30;
-        ;
         initialize continuations:l4:
     }
 }

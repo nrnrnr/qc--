@@ -66,58 +66,31 @@ section "text"
     {
         $r31 = ($r31+-32);
         iargc, iargv = $r0, $r1;
-        ;
         $t1 = $r30;
-        ;
         initialize continuations:l11:
         bits32[($r31+24)], bits32[($r31+28)] = sym@k@C8, $r31;
         n = 0;
-        ;
         $r0 = ($r31+24);
-        ;
         $c0, $r30 = sym@f, ($c0+4);
         join:l22:
         $r31 = $r31;
         // the preceding node is merely asserted
-        ;
-        ;
-        ;
-        ;
         $r0, $r1 = sym@nocut, n;
-        ;
         $c0, $r30 = sym@printf, ($c0+4);
         join:l19:
         $r31 = $r31;
         // the preceding node is merely asserted
-        ;
-        ;
-        ;
-        ;
-        ;
-        $t1 = $t1;
-        ;
         $r31 = ($r31+32);
         $c0 = $t1;
         k:C8:
         $r31 = $r31;
         // the preceding node is merely asserted
-        ;
         n = $r0;
-        ;
-        ;
         $r0, $r1 = (sym@nocut+3), n;
-        ;
         $c0, $r30 = sym@printf, ($c0+4);
         join:l15:
         $r31 = $r31;
         // the preceding node is merely asserted
-        ;
-        ;
-        ;
-        ;
-        ;
-        $t1 = $t1;
-        ;
         $r31 = ($r31+32);
         $c0 = $t1;
     }
@@ -129,34 +102,18 @@ section "text"
     {
         $r31 = ($r31+-24);
         k = $r0;
-        ;
         $t1 = $r30;
-        ;
         initialize continuations:l28:
-        ;
         $r0 = k;
-        ;
         $c0, $r30 = sym@g, ($c0+4);
         join:l35:
         $r31 = $r31;
         // the preceding node is merely asserted
-        ;
-        ;
-        ;
-        ;
         $r0 = sym@ret;
-        ;
         $c0, $r30 = sym@printf, ($c0+4);
         join:l32:
         $r31 = $r31;
         // the preceding node is merely asserted
-        ;
-        ;
-        ;
-        ;
-        ;
-        $t1 = $t1;
-        ;
         $r31 = ($r31+24);
         $c0 = $t1;
     }
@@ -168,34 +125,18 @@ section "text"
     {
         $r31 = ($r31+-24);
         k = $r0;
-        ;
         $t1 = $r30;
-        ;
         initialize continuations:l42:
-        ;
         $r0 = k;
-        ;
         $c0, $r30 = sym@h, ($c0+4);
         join:l49:
         $r31 = $r31;
         // the preceding node is merely asserted
-        ;
-        ;
-        ;
-        ;
         $r0 = sym@ret;
-        ;
         $c0, $r30 = sym@printf, ($c0+4);
         join:l46:
         $r31 = $r31;
         // the preceding node is merely asserted
-        ;
-        ;
-        ;
-        ;
-        ;
-        $t1 = $t1;
-        ;
         $r31 = ($r31+24);
         $c0 = $t1;
     }
@@ -207,9 +148,7 @@ section "text"
     {
         $r31 = ($r31+-24);
         k = $r0;
-        ;
         $t1 = $r30;
-        ;
         initialize continuations:l56:
         $r0 = 99;
         $r31, $c0 = bits32[(k+4)], bits32[k];

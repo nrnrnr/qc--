@@ -37,7 +37,6 @@ main:
 	leal 36(%esp), %edx
 	addl %ecx,%edx
 	movl (%edx),%ecx
-	nop
 initialize_continuations_l10:
 	leal k_C8,%ecx
 	movl $-8,%edx
@@ -52,11 +51,9 @@ initialize_continuations_l10:
 	addl %eax,%edx
 	movl %ecx,(%edx)
 	movl $0,%ecx
-	nop
 	movl $-8,%edx
 	leal 36(%esp), %eax
 	addl %edx,%eax
-	nop
 	movl %edi,20(%esp)
 	movl %esi,16(%esp)
 	movl %ebp,12(%esp)
@@ -64,9 +61,6 @@ initialize_continuations_l10:
 	movl %ecx,24(%esp)
 	call f
 join_l21:
-	nop
-	nop
-	nop
 	leal nocut,%edi
 	movl $-36,%esi
 	leal 36(%esp), %ebx
@@ -77,12 +71,8 @@ join_l21:
 	addl %ebx,%edi
 	movl 24(%esp),%ebx
 	movl %ebx,(%edi)
-	nop
 	call printf
 join_l18:
-	nop
-	nop
-	nop
 	leal 36(%esp), %eax
 	movl $0,%ecx
 	leal 36(%esp), %edx
@@ -96,9 +86,6 @@ join_l18:
 	leal 36(%esp), %esp
 	ret
 k_C8:
-	nop
-	nop
-	nop
 	movl $3,%eax
 	leal nocut,%ecx
 	addl %eax,%ecx
@@ -110,12 +97,8 @@ k_C8:
 	leal 36(%esp), %ebx
 	addl %ecx,%ebx
 	movl %edx,(%ebx)
-	nop
 	call printf
 join_l14:
-	nop
-	nop
-	nop
 	leal 36(%esp), %eax
 	movl $0,%ecx
 	leal 36(%esp), %edx
@@ -231,35 +214,25 @@ frame_l30:
 .section .text
 f:
 	leal -12(%esp), %esp
-	nop
 	leal 12(%esp), %ecx
 	movl (%ecx),%edx
 initialize_continuations_l33:
-	nop
 	movl $-12,%ecx
 	movl %eax,4(%esp)
 	leal 12(%esp), %eax
 	addl %ecx,%eax
 	movl 4(%esp),%ecx
 	movl %ecx,(%eax)
-	nop
 	movl %edx,8(%esp)
 	call g
 join_l40:
-	nop
-	nop
-	nop
 	leal ret,%eax
 	movl $-12,%ecx
 	leal 12(%esp), %edx
 	addl %ecx,%edx
 	movl %eax,(%edx)
-	nop
 	call printf
 join_l37:
-	nop
-	nop
-	nop
 	movl $0,%eax
 	leal 12(%esp), %ecx
 	addl %eax,%ecx
@@ -322,26 +295,16 @@ g:
 	leal 4(%esp), %edx
 	addl %ecx,%edx
 	movl (%edx),%eax
-	nop
 initialize_continuations_l51:
-	nop
-	nop
 	call h
 join_l58:
-	nop
-	nop
-	nop
 	leal ret,%eax
 	movl $-4,%ecx
 	leal 4(%esp), %edx
 	addl %ecx,%edx
 	movl %eax,(%edx)
-	nop
 	call printf
 join_l55:
-	nop
-	nop
-	nop
 	leal 4(%esp), %eax
 	movl $0,%ecx
 	leal 4(%esp), %edx
@@ -400,8 +363,6 @@ frame_l66:
 .section .text
 .section .text
 h:
-	nop
-	nop
 	movl %esp,%ecx
 	movl (%ecx),%edx
 initialize_continuations_l69:

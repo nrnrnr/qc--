@@ -22,14 +22,9 @@ section "text"
     {
         $r31 = ($r31+-24);
         i = $r0;
-        ;
         $t1 = $r30;
-        ;
         initialize continuations:l4:
-        ;
         $r0, $r1 = %neg[32](i), -99;
-        $t1 = $t1;
-        ;
         $r31 = ($r31+24);
         $c0 = $t1;
     }

@@ -22,9 +22,7 @@ Cmm.global_area:
 .section .text
 print:
 	leal -60(%esp), %esp
-	nop
 initialize_continuations_l3:
-	nop
 	leal i_2,%eax
 	movl $-60,%ecx
 	leal 60(%esp), %edx
@@ -96,13 +94,9 @@ initialize_continuations_l3:
 	addl %edx,%eax
 	fildq (%ecx)
 	fistpq (%eax)
-	nop
 	call printf
 join_l7:
-	nop
-	nop
 L.1:
-	nop
 	leal 60(%esp), %eax
 	movl $0,%ecx
 	leal 60(%esp), %edx
@@ -138,7 +132,6 @@ frame_l15:
 .section .text
 main:
 	leal -292(%esp), %esp
-	nop
 initialize_continuations_l18:
 	leal c,%ecx
 	movl $1,%edx
@@ -198,12 +191,8 @@ initialize_continuations_l18:
 	leal D,%edx
 	fildq (%ebx)
 	fistpq (%edx)
-	nop
-	nop
 	call print
 join_l77:
-	nop
-	nop
 	leal s,%ecx
 	movl $2,%edx
 	movl %edx,%eax
@@ -261,12 +250,8 @@ join_l77:
 	leal D,%edx
 	fildq (%ebx)
 	fistpq (%edx)
-	nop
-	nop
 	call print
 join_l74:
-	nop
-	nop
 	leal i,%ecx
 	movl $3,%edx
 	movl %edx,(%ecx)
@@ -324,12 +309,8 @@ join_l74:
 	leal D,%edx
 	fildq (%ebx)
 	fistpq (%edx)
-	nop
-	nop
 	call print
 join_l71:
-	nop
-	nop
 	leal l,%ecx
 	movl $4,%edx
 	movl %edx,(%ecx)
@@ -387,12 +368,8 @@ join_l71:
 	leal D,%edx
 	fildq (%ebx)
 	fistpq (%edx)
-	nop
-	nop
 	call print
 join_l68:
-	nop
-	nop
 	leal C,%ecx
 	movl $5,%edx
 	movl %edx,%eax
@@ -450,12 +427,8 @@ join_l68:
 	leal D,%edx
 	fildq (%ebx)
 	fistpq (%edx)
-	nop
-	nop
 	call print
 join_l65:
-	nop
-	nop
 	leal S,%ecx
 	movl $6,%edx
 	movl %edx,%eax
@@ -513,12 +486,8 @@ join_l65:
 	leal D,%edx
 	fildq (%ebx)
 	fistpq (%edx)
-	nop
-	nop
 	call print
 join_l62:
-	nop
-	nop
 	leal I,%ecx
 	movl $7,%edx
 	movl %edx,(%ecx)
@@ -590,12 +559,8 @@ join_l62:
 	leal D,%ebp
 	fildq (%edx)
 	fistpq (%ebp)
-	nop
-	nop
 	call print
 join_l59:
-	nop
-	nop
 	leal L,%ecx
 	movl $8,%edx
 	movl %edx,(%ecx)
@@ -667,12 +632,8 @@ join_l59:
 	leal D,%ebp
 	fildq (%edx)
 	fistpq (%ebp)
-	nop
-	nop
 	call print
 join_l56:
-	nop
-	nop
 	leal f,%ecx
 	leal f_5,%edx
 	movl (%edx),%ebp
@@ -974,12 +935,8 @@ L.18:
 	leal D,%ebp
 	fildq (%ecx)
 	fistpq (%ebp)
-	nop
-	nop
 	call print
 join_l45:
-	nop
-	nop
 	leal d,%ecx
 	leal f_19,%edx
 	fildq (%edx)
@@ -1281,12 +1238,8 @@ L.32:
 	leal D,%edx
 	fildq (%ecx)
 	fistpq (%edx)
-	nop
-	nop
 	call print
 join_l34:
-	nop
-	nop
 	leal D,%ecx
 	leal f_33,%edx
 	fildq (%edx)
@@ -1588,12 +1541,8 @@ L.46:
 	leal d,%eax
 	fildq (%ebp)
 	fistpq (%eax)
-	nop
-	nop
 	call print
 join_l23:
-	nop
-	nop
 	leal p,%eax
 	movl $0,%ecx
 	movl %ecx,(%eax)
@@ -1610,7 +1559,6 @@ join_l23:
 	movl %edx,(%ecx)
 	movl (%eax),%edx
 	movl %edx,(%ecx)
-	nop
 	movl $0,%ecx
 	movl %ecx,%eax
 	leal 292(%esp), %ecx

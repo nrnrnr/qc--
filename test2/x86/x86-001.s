@@ -6,7 +6,6 @@ Cmm.global_area:
 .section .text
 p:
 	leal -20(%esp), %esp
-	nop
 	leal 20(%esp), %eax
 	movl (%eax),%eax
 initialize_continuations_l3:
@@ -123,7 +122,6 @@ join_l6:
 join_l8:
 	jmp L
 L:
-	nop
 	movl $99,%eax
 	movl $0,%edx
 	leal 20(%esp), %ebx

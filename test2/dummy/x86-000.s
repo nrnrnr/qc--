@@ -21,10 +21,7 @@ section "text"
     sym@p()
     {
         $r31 = ($r31+-24);
-        ;
-        ;
         $t1 = $r30;
-        ;
         initialize continuations:l4:
         i = 1;
         j = 2;
@@ -35,10 +32,7 @@ section "text"
         bits32[i] = %sx[8,32](bits8[i]);
         bits32[j] = %zx[8,32](bits8[j]);
         ntotal = ((i+j)+k);
-        ;
         $r0 = ntotal;
-        $t1 = $t1;
-        ;
         $r31 = ($r31+24);
         $c0 = $t1;
     }

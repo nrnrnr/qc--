@@ -39,20 +39,14 @@ Cmm.global_area:
 .section .text
 main:
 	leal -8(%esp), %esp
-	nop
 initialize_continuations_l3:
-	nop
 	movl $0,%eax
 	movl $-8,%ecx
 	leal 8(%esp), %edx
 	addl %ecx,%edx
 	movl %eax,(%edx)
-	nop
 	call exit
 join_l8:
-	nop
-	nop
-	nop
 	movl $0,%eax
 	leal 8(%esp), %ecx
 	movl $0,%edx
@@ -99,7 +93,6 @@ nested:
 	leal 4(%esp), %eax
 	addl %ecx,%eax
 	movl (%eax),%ecx
-	nop
 initialize_continuations_l19:
 	movl $4,%eax
 	cmpl %eax,%edx
@@ -157,7 +150,6 @@ L.9:
 join_l25:
 	jmp L.3
 L.3:
-	nop
 	movl $0,%ecx
 	movl %ecx,%eax
 	leal 4(%esp), %ecx
@@ -175,22 +167,18 @@ stackdata_l45:
 .long 0
 .section .text
 s:
-	nop
 	movl $4,%edx
 	movl %esp,%ecx
 	addl %edx,%ecx
 	movl (%ecx),%edx
-	nop
 initialize_continuations_l48:
 L.12:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l57:
@@ -207,58 +195,45 @@ Dz:
 .skip 4, 0
 .section .text
 Dfunc:
-	nop
-	nop
 initialize_continuations_l60:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l69:
 .long 0
 .section .text
 f:
-	nop
-	nop
 initialize_continuations_l72:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l81:
 .long 0
 .section .text
 f1:
-	nop
-	nop
 initialize_continuations_l84:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l93:
 .long 0
 .section .text
 f2:
-	nop
 	movl $4,%edx
 	movl %esp,%ecx
 	addl %edx,%ecx
@@ -267,65 +242,53 @@ f2:
 	movl %esp,%ecx
 	addl %edx,%ecx
 	movl (%ecx),%edx
-	nop
 initialize_continuations_l96:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l105:
 .long 0
 .section .text
 g:
-	nop
 	movl $4,%edx
 	movl %esp,%ecx
 	addl %edx,%ecx
 	movl (%ecx),%edx
-	nop
 initialize_continuations_l108:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l117:
 .long 0
 .section .text
 h:
-	nop
 	movl $4,%edx
 	movl %esp,%ecx
 	addl %edx,%ecx
 	movl (%ecx),%edx
-	nop
 initialize_continuations_l120:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l129:
 .long 0
 .section .text
 h1:
-	nop
 	movl $4,%edx
 	movl %esp,%ecx
 	addl %edx,%ecx
@@ -334,33 +297,26 @@ h1:
 	movl %esp,%ecx
 	addl %edx,%ecx
 	movl (%ecx),%edx
-	nop
 initialize_continuations_l132:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l141:
 .long 0
 .section .text
 h2:
-	nop
-	nop
 initialize_continuations_l144:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l153:
@@ -372,17 +328,13 @@ L.23:
 .long 1
 .section .text
 set1:
-	nop
-	nop
 initialize_continuations_l156:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l165:
@@ -394,51 +346,39 @@ L.25:
 .long 2
 .section .text
 set2:
-	nop
-	nop
 initialize_continuations_l168:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l177:
 .long 0
 .section .text
 i_goo:
-	nop
-	nop
 initialize_continuations_l180:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l189:
 .long 0
 .section .text
 sss:
-	nop
-	nop
 initialize_continuations_l192:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l201:
@@ -450,38 +390,30 @@ L.29:
 .skip 4, 0
 .section .text
 rrr:
-	nop
 	movl $4,%edx
 	movl %esp,%ecx
 	addl %edx,%ecx
 	movl (%ecx),%edx
-	nop
 initialize_continuations_l204:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l213:
 .long 0
 .section .text
 setstatic:
-	nop
-	nop
 initialize_continuations_l216:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l225:
@@ -497,9 +429,7 @@ gx1:
 	addl %edx,%eax
 	fildq (%ecx)
 	fistpq (%eax)
-	nop
 initialize_continuations_l228:
-	nop
 	leal 16(%esp), %eax
 	movl $0,%ecx
 	leal 16(%esp), %edx
@@ -527,9 +457,7 @@ ff1:
 	leal 8(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
-	nop
 initialize_continuations_l240:
-	nop
 	leal 8(%esp), %eax
 	movl $0,%ecx
 	leal 8(%esp), %edx
@@ -543,7 +471,6 @@ stackdata_l249:
 .long 0
 .section .text
 gg1:
-	nop
 	movl $4,%edx
 	movl %esp,%ecx
 	addl %edx,%ecx
@@ -552,44 +479,36 @@ gg1:
 	movl %esp,%ecx
 	addl %edx,%ecx
 	movl (%ecx),%edx
-	nop
 initialize_continuations_l252:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l261:
 .long 0
 .section .text
 hh1:
-	nop
 	movl $4,%edx
 	movl %esp,%ecx
 	addl %edx,%ecx
 	movl (%ecx),%edx
-	nop
 initialize_continuations_l264:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l273:
 .long 0
 .section .text
 cmp:
-	nop
 	movl $4,%edx
 	movl %esp,%ecx
 	addl %edx,%ecx
@@ -598,50 +517,39 @@ cmp:
 	movl %esp,%ecx
 	addl %edx,%ecx
 	movl (%ecx),%edx
-	nop
 initialize_continuations_l276:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l285:
 .long 0
 .section .text
 sort:
-	nop
-	nop
 initialize_continuations_l288:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l297:
 .long 0
 .section .text
 onearg:
-	nop
-	nop
 initialize_continuations_l300:
-	nop
 	movl %esp,%edx
 	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
 	movl (%edx),%ecx
 	movl %ecx,(%eax)
-	nop
 	ret
 .section .pcmap_data
 stackdata_l309:

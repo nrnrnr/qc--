@@ -21,15 +21,8 @@ section "text"
     sym@p()
     {
         $r31 = ($r31+-24);
-        ;
-        ;
         $t1 = $r30;
-        ;
         initialize continuations:l4:
-        ;
-        ;
-        $t1 = $t1;
-        ;
         $r31 = ($r31+24);
         $c0 = $t1;
     }

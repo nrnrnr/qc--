@@ -66,24 +66,13 @@ section "text"
     {
         $r31 = ($r31+-24);
         iargc, iargv = $r0, $r1;
-        ;
         $t1 = $r30;
-        ;
         initialize continuations:l4:
-        ;
         $r0 = ab54e2a3::bits32;
-        ;
         $c0, $r30 = sym@callee, ($c0+4);
         join:l8:
         $r31 = $r31;
         // the preceding node is merely asserted
-        ;
-        ;
-        ;
-        ;
-        ;
-        $t1 = $t1;
-        ;
         $r31 = ($r31+24);
         $c0 = $t1;
     }
@@ -95,43 +84,23 @@ section "text"
     {
         $r31 = ($r31+-24);
         i0 = $r0;
-        ;
         $t1 = $r30;
-        ;
         initialize continuations:l15:
         $c0 when %ne[32](i0, ab54e2a3::bits32) = sym@join@l24;
         join:l25:
-        ;
         $r0 = sym@success;
-        ;
         $c0, $r30 = sym@printf, ($c0+4);
         join:l19:
         $r31 = $r31;
         // the preceding node is merely asserted
-        ;
-        ;
-        ;
-        ;
-        ;
-        $t1 = $t1;
-        ;
         $r31 = ($r31+24);
         $c0 = $t1;
         join:l24:
-        ;
         $r0 = sym@failed;
-        ;
         $c0, $r30 = sym@printf, ($c0+4);
         join:l23:
         $r31 = $r31;
         // the preceding node is merely asserted
-        ;
-        ;
-        ;
-        ;
-        ;
-        $t1 = $t1;
-        ;
         $r31 = ($r31+24);
         $c0 = $t1;
     }

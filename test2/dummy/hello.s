@@ -56,24 +56,13 @@ section "text"
     {
         $r31 = ($r31+-24);
         iargc, iargv = $r0, $r1;
-        ;
         $t1 = $r30;
-        ;
         initialize continuations:l4:
-        ;
         $r0 = sym@my_data;
-        ;
         $c0, $r30 = sym@printf, ($c0+4);
         join:l8:
         $r31 = $r31;
         // the preceding node is merely asserted
-        ;
-        ;
-        ;
-        ;
-        ;
-        $t1 = $t1;
-        ;
         $r31 = ($r31+24);
         $c0 = $t1;
     }

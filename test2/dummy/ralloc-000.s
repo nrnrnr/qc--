@@ -21,10 +21,7 @@ section "text"
     sym@p()
     {
         $r31 = ($r31+-24);
-        ;
-        ;
         $t1 = $r30;
-        ;
         initialize continuations:l4:
         ii = 1;
         ij = 2;
@@ -39,10 +36,7 @@ section "text"
         $c0 = sym@join@l7;
         join:l7:
         iitotal = (((ii+ij)+ik)+il);
-        ;
         $r0 = iitotal;
-        $t1 = $t1;
-        ;
         $r31 = ($r31+24);
         $c0 = $t1;
     }

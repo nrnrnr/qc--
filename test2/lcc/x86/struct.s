@@ -28,7 +28,6 @@ addpoint:
 	leal 12(%esp), %edx
 	addl %eax,%edx
 	movl (%edx),%eax
-	nop
 initialize_continuations_l3:
 	movl (%eax),%edx
 	movl %eax,4(%esp)
@@ -56,7 +55,6 @@ initialize_continuations_l3:
 	addl %edx,%ecx
 	movl %eax,(%ecx)
 L.1:
-	nop
 	leal 12(%esp), %eax
 	movl $0,%ecx
 	leal 12(%esp), %edx
@@ -79,7 +77,6 @@ canonrect:
 	leal 32(%esp), %eax
 	addl %ecx,%eax
 	movl (%eax),%ecx
-	nop
 initialize_continuations_l15:
 	movl (%ecx),%eax
 	movl %edx,(%esp)
@@ -234,7 +231,6 @@ L.25:
 	addl %ecx,%ebx
 	movl %eax,(%ebx)
 L.8:
-	nop
 	leal 32(%esp), %eax
 	movl $0,%ebx
 	leal 32(%esp), %ecx
@@ -265,7 +261,6 @@ makepoint:
 	leal 24(%esp), %edx
 	addl %eax,%edx
 	movl (%edx),%eax
-	nop
 initialize_continuations_l35:
 	movl $-8,%edx
 	movl %ecx,4(%esp)
@@ -298,7 +293,6 @@ initialize_continuations_l35:
 	addl %eax,%ebx
 	movl %ecx,(%ebx)
 L.37:
-	nop
 	leal 24(%esp), %ecx
 	movl $0,%ebx
 	leal 24(%esp), %eax
@@ -328,7 +322,6 @@ makerect:
 	leal 60(%esp), %eax
 	addl %edx,%eax
 	movl (%eax),%edx
-	nop
 initialize_continuations_l47:
 	movl (%ecx),%eax
 	movl %ecx,12(%esp)
@@ -410,7 +403,6 @@ initialize_continuations_l47:
 	addl %ebx,%edx
 	addl %ecx,%edx
 	movl %eax,(%edx)
-	nop
 	movl $-60,%eax
 	leal 60(%esp), %edx
 	addl %eax,%edx
@@ -423,13 +415,9 @@ initialize_continuations_l47:
 	leal 60(%esp), %ecx
 	addl %eax,%ecx
 	movl %edx,(%ecx)
-	nop
 	call canonrect
 join_l51:
-	nop
-	nop
 L.43:
-	nop
 	leal 60(%esp), %eax
 	movl $0,%ecx
 	leal 60(%esp), %edx
@@ -482,7 +470,6 @@ ptinrect:
 	leal 8(%esp), %eax
 	addl %ecx,%eax
 	movl (%eax),%ecx
-	nop
 initialize_continuations_l62:
 	movl (%edx),%eax
 	movl %edx,(%esp)
@@ -531,7 +518,6 @@ L.52:
 	movl $0,%eax
 	jmp L.53
 L.53:
-	nop
 	leal 8(%esp), %ebx
 	movl $0,%ecx
 	leal 8(%esp), %edx
@@ -557,7 +543,6 @@ odd:
 	leal 24(%esp), %edx
 	addl %ecx,%edx
 	movl (%edx),%ecx
-	nop
 initialize_continuations_l84:
 	movsbl (%ecx),%eax
 	movl $-4,%edx
@@ -588,7 +573,6 @@ initialize_continuations_l84:
 	addl %eax,%ecx
 	movl %edx,%eax
 	movb %al,(%ecx)
-	nop
 	leal i_61,%eax
 	movl $-24,%ecx
 	leal 24(%esp), %edx
@@ -601,12 +585,8 @@ initialize_continuations_l84:
 	leal 24(%esp), %ecx
 	addl %eax,%ecx
 	movl %edx,(%ecx)
-	nop
 	call printf
 join_l89:
-	nop
-	nop
-	nop
 	movl $0,%eax
 	leal 24(%esp), %ecx
 	movl $0,%edx
@@ -669,7 +649,6 @@ i_68:
 .section .text
 main:
 	leal -188(%esp), %esp
-	nop
 initialize_continuations_l100:
 	leal i_66,%ecx
 	movl (%ecx),%eax
@@ -782,7 +761,6 @@ initialize_continuations_l100:
 	addl %eax,%ecx
 	movl %edx,(%ecx)
 	movl $-10,%ecx
-	nop
 	movl $-76,%edx
 	leal 188(%esp), %eax
 	addl %edx,%eax
@@ -798,11 +776,8 @@ initialize_continuations_l100:
 	leal 188(%esp), %eax
 	addl %ebp,%eax
 	movl %ecx,(%eax)
-	nop
 	call makepoint
 join_l142:
-	nop
-	nop
 	movl $-84,%eax
 	leal 188(%esp), %ecx
 	addl %eax,%ecx
@@ -823,7 +798,6 @@ join_l142:
 	addl %edx,%ebp
 	addl %eax,%ebp
 	movl %ecx,(%ebp)
-	nop
 	movl $-68,%ecx
 	leal 188(%esp), %ebp
 	addl %ecx,%ebp
@@ -845,13 +819,9 @@ join_l142:
 	leal 188(%esp), %eax
 	addl %ecx,%eax
 	movl %ebp,(%eax)
-	nop
 	call addpoint
 join_l139:
-	nop
-	nop
 	movl $10,%eax
-	nop
 	movl $-52,%ecx
 	leal 188(%esp), %edx
 	addl %ecx,%edx
@@ -867,11 +837,8 @@ join_l139:
 	leal 188(%esp), %edx
 	addl %ebp,%edx
 	movl %eax,(%edx)
-	nop
 	call makepoint
 join_l136:
-	nop
-	nop
 	movl $-92,%eax
 	leal 188(%esp), %ecx
 	addl %eax,%ecx
@@ -892,7 +859,6 @@ join_l136:
 	addl %edx,%ebp
 	addl %eax,%ebp
 	movl %ecx,(%ebp)
-	nop
 	movl $-44,%ecx
 	leal 188(%esp), %ebp
 	addl %ecx,%ebp
@@ -914,12 +880,8 @@ join_l136:
 	leal 188(%esp), %eax
 	addl %ecx,%eax
 	movl %ebp,(%eax)
-	nop
 	call addpoint
 join_l133:
-	nop
-	nop
-	nop
 	movl $-116,%eax
 	leal 188(%esp), %ecx
 	addl %eax,%ecx
@@ -941,11 +903,8 @@ join_l133:
 	leal 188(%esp), %ecx
 	addl %eax,%ecx
 	movl %edx,(%ecx)
-	nop
 	call makerect
 join_l130:
-	nop
-	nop
 	movl $0,%eax
 	jmp L.72
 L.72:
@@ -980,7 +939,6 @@ join_l110:
 	addl %eax,%ecx
 	movl %edx,%eax
 	movb %al,(%ecx)
-	nop
 	movl $-4,%eax
 	leal 188(%esp), %ecx
 	addl %eax,%ecx
@@ -988,23 +946,15 @@ join_l110:
 	leal 188(%esp), %edx
 	addl %eax,%edx
 	movl %ecx,(%edx)
-	nop
 	call odd
 join_l108:
-	nop
-	nop
-	nop
 	movl $0,%eax
 	movl $-188,%ecx
 	leal 188(%esp), %edx
 	addl %ecx,%edx
 	movl %eax,(%edx)
-	nop
 	call exit
 join_l105:
-	nop
-	nop
-	nop
 	movl $0,%eax
 	leal 188(%esp), %ecx
 	movl $0,%edx
@@ -1022,7 +972,6 @@ L.69:
 	movl $3,%ecx
 	movl %eax,%ebp
 	shll %cl, %ebp
-	nop
 	movl $-100,%ecx
 	leal 188(%esp), %ebx
 	addl %ecx,%ebx
@@ -1053,13 +1002,9 @@ L.69:
 	leal 188(%esp), %edi
 	addl %edx,%edi
 	movl %ebx,(%edi)
-	nop
 	movl %eax,36(%esp)
 	call makepoint
 join_l127:
-	nop
-	nop
-	nop
 	leal i_73,%eax
 	movl $-148,%ecx
 	leal 188(%esp), %edx
@@ -1088,11 +1033,8 @@ join_l127:
 	leal 188(%esp), %edi
 	addl %edx,%edi
 	movl %eax,(%edi)
-	nop
 	call printf
 join_l124:
-	nop
-	nop
 	movl $-100,%eax
 	leal 188(%esp), %ecx
 	addl %eax,%ecx
@@ -1157,7 +1099,6 @@ join_l124:
 	addl %ebp,%ecx
 	addl %eax,%ecx
 	movl %edx,(%ecx)
-	nop
 	movl $-28,%ecx
 	leal 188(%esp), %edx
 	addl %ecx,%edx
@@ -1172,31 +1113,23 @@ join_l124:
 	leal 188(%esp), %ecx
 	addl %eax,%ecx
 	movl %edx,(%ecx)
-	nop
 	call ptinrect
 join_l121:
-	nop
-	nop
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne join_l117
 join_l118:
-	nop
 	leal i_78,%eax
 	movl $-188,%ecx
 	leal 188(%esp), %edx
 	addl %ecx,%edx
 	movl %eax,(%edx)
-	nop
 	call printf
 join_l116:
-	nop
-	nop
 	jmp L.76
 join_l117:
 	jmp L.76
 L.76:
-	nop
 	leal i_79,%eax
 	movl $-116,%ecx
 	leal 188(%esp), %edx
@@ -1241,11 +1174,8 @@ L.76:
 	leal 188(%esp), %edi
 	addl %ecx,%edi
 	movl %eax,(%edi)
-	nop
 	call printf
 join_l113:
-	nop
-	nop
 L.70:
 	movl $1,%eax
 	movl 36(%esp),%ebx

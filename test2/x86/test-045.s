@@ -9,7 +9,6 @@ str:
 .section .text
 f:
 	leal -64(%esp), %esp
-	nop
 	leal 64(%esp), %edx
 	movl (%edx),%ecx
 initialize_continuations_l3:

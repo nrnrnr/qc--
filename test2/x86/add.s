@@ -39,7 +39,6 @@ main:
 	leal 4(%esp), %edx
 	addl %ecx,%edx
 	movl (%edx),%ecx
-	nop
 initialize_continuations_l3:
 	movl $1,%ecx
 	cmpl %ecx,%eax
@@ -51,17 +50,12 @@ join_l9:
 	leal bye,%eax
 	jmp join_l8
 join_l8:
-	nop
 	movl $-4,%ecx
 	leal 4(%esp), %edx
 	addl %ecx,%edx
 	movl %eax,(%edx)
-	nop
 	call printf
 join_l7:
-	nop
-	nop
-	nop
 	leal 4(%esp), %eax
 	movl $0,%ecx
 	leal 4(%esp), %edx

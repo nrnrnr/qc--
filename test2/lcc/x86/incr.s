@@ -12,9 +12,7 @@ Cmm.global_area:
 .section .text
 main:
 	leal -4(%esp), %esp
-	nop
 initialize_continuations_l3:
-	nop
 	movl $0,%eax
 	leal 4(%esp), %edx
 	movl $0,%ecx
@@ -32,7 +30,6 @@ stackdata_l13:
 .section .text
 memchar:
 	leal -16(%esp), %esp
-	nop
 initialize_continuations_l16:
 	movl $-4,%edx
 	leal 16(%esp), %ecx
@@ -96,7 +93,6 @@ initialize_continuations_l16:
 	addl %ebp,%ecx
 	movzbl (%eax),%eax
 	movb %al,(%ecx)
-	nop
 	movl $0,%eax
 	leal 16(%esp), %ecx
 	movl $0,%ebp
@@ -116,7 +112,6 @@ stackdata_l26:
 .section .text
 memint:
 	leal -16(%esp), %esp
-	nop
 initialize_continuations_l29:
 	movl $-4,%edx
 	leal 16(%esp), %ecx
@@ -180,7 +175,6 @@ initialize_continuations_l29:
 	addl %ebx,%ebp
 	movl (%eax),%ebx
 	movl %ebx,(%ebp)
-	nop
 	movl $0,%eax
 	leal 16(%esp), %ebx
 	movl $0,%ebp
@@ -200,7 +194,6 @@ stackdata_l39:
 .section .text
 regchar:
 	leal -4(%esp), %esp
-	nop
 initialize_continuations_l42:
 	movl $1,%ecx
 	movl %edx,%eax
@@ -216,7 +209,6 @@ initialize_continuations_l42:
 	addl %edx,%eax
 	movl %eax,%edx
 	movzbl (%eax),%edx
-	nop
 	movl $0,%eax
 	leal 4(%esp), %edx
 	movl $0,%ecx
@@ -234,7 +226,6 @@ stackdata_l52:
 .section .text
 regint:
 	leal -4(%esp), %esp
-	nop
 initialize_continuations_l55:
 	movl $4,%ecx
 	movl %edx,%eax
@@ -250,7 +241,6 @@ initialize_continuations_l55:
 	addl %edx,%eax
 	movl %eax,%edx
 	movl (%eax),%edx
-	nop
 	movl $0,%eax
 	leal 4(%esp), %edx
 	movl $0,%ecx

@@ -21,19 +21,13 @@ section "text"
     sym@p()
     {
         $r31 = ($r31+-24);
-        ;
-        ;
         $t1 = $r30;
-        ;
         initialize continuations:l4:
         x = 1;
         y = 2;
         z = 3;
         total = ((x+y)+z);
-        ;
         $r0 = total;
-        $t1 = $t1;
-        ;
         $r31 = ($r31+24);
         $c0 = $t1;
     }

@@ -14,23 +14,18 @@ _main:
 	leal 208(%esp), %edx
 	addl %ecx,%edx
 	movl (%edx),%ecx
-	nop
 	leal 208(%esp), %edx
 	movl (%edx),%edx
 initialize_continuations_l3:
-	nop
 	movl %eax,(%esp)
 	leal _i_18,%eax
 	movl (%eax),%eax
-	nop
 	movl %ecx,4(%esp)
 	leal _osinit,%ecx
 	movl (%ecx),%ecx
 	movl %edx,8(%esp)
 	call *%ecx
 join_l92:
-	nop
-	nop
 	leal -8(%esp), %esp
 	movl $-180,%eax
 	leal 216(%esp), %ecx
@@ -47,82 +42,55 @@ join_l92:
 	leal 216(%esp), %edx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	nop
 	leal _xlbegin,%ecx
 	movl (%ecx),%edx
 	call *%edx
 join_l89:
-	nop
-	nop
-	nop
 	movl $8,%eax
 	movl $-180,%ecx
 	leal 208(%esp), %edx
 	addl %ecx,%edx
 	addl %eax,%edx
 	movl (%edx),%eax
-	nop
 	leal __setjmp,%edx
 	movl (%edx),%ecx
 	call *%ecx
 join_l86:
-	nop
-	nop
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je join_l82
 join_l83:
-	nop
 	leal _i_22,%eax
 	movl (%eax),%eax
-	nop
 	leal _printf,%ecx
 	movl (%ecx),%edx
 	call *%edx
 join_l81:
-	nop
-	nop
-	nop
-	nop
 	leal _osfinish,%eax
 	movl (%eax),%ecx
 	call *%ecx
 join_l78:
-	nop
-	nop
-	nop
 	movl $1,%eax
-	nop
 	leal _exit,%ecx
 	movl (%ecx),%edx
 	call *%edx
 join_l75:
-	nop
-	nop
 	jmp _i_19
 join_l82:
 	jmp _i_19
 _i_19:
-	nop
-	nop
 	leal _xlinit,%eax
 	movl (%eax),%ecx
 	call *%ecx
 join_l72:
-	nop
-	nop
-	nop
 	movl $-180,%eax
 	leal 208(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
-	nop
 	leal _xlend,%ecx
 	movl (%ecx),%edx
 	call *%edx
 join_l69:
-	nop
-	nop
 	leal -8(%esp), %esp
 	movl $-180,%eax
 	leal 216(%esp), %ecx
@@ -140,27 +108,20 @@ join_l69:
 	leal 216(%esp), %edx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	nop
 	leal _xlbegin,%ecx
 	movl (%ecx),%edx
 	call *%edx
 join_l66:
-	nop
-	nop
-	nop
 	movl $8,%eax
 	movl $-180,%ecx
 	leal 208(%esp), %edx
 	addl %ecx,%edx
 	addl %eax,%edx
 	movl (%edx),%eax
-	nop
 	leal __setjmp,%edx
 	movl (%edx),%ecx
 	call *%ecx
 join_l63:
-	nop
-	nop
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne join_l59
@@ -180,31 +141,24 @@ join_l60:
 	leal 216(%esp), %ebx
 	addl %ecx,%ebx
 	movl %edx,(%ebx)
-	nop
 	leal _xlload,%edx
 	movl (%edx),%ebx
 	call *%ebx
 join_l58:
-	nop
-	nop
 	jmp _i_23
 join_l59:
 	jmp _i_23
 _i_23:
-	nop
 	movl $8,%eax
 	movl $-180,%ecx
 	leal 208(%esp), %edx
 	addl %ecx,%edx
 	addl %eax,%edx
 	movl (%edx),%eax
-	nop
 	leal __setjmp,%edx
 	movl (%edx),%ecx
 	call *%ecx
 join_l55:
-	nop
-	nop
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne join_l51
@@ -242,27 +196,20 @@ _i_30:
 	leal 216(%esp), %edx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	nop
 	leal _xlload,%ecx
 	movl (%ecx),%edx
 	call *%edx
 join_l50:
-	nop
-	nop
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne join_l46
 join_l47:
-	nop
 	leal _i_36,%eax
 	movl (%eax),%eax
-	nop
 	leal _xlfail,%ecx
 	movl (%ecx),%edx
 	call *%edx
 join_l45:
-	nop
-	nop
 	jmp _i_34
 join_l46:
 	jmp _i_34
@@ -287,31 +234,24 @@ _i_27:
 	leal 212(%esp), %ebx
 	addl %edx,%ebx
 	movl %ecx,(%ebx)
-	nop
 	leal _xlsave,%ecx
 	movl (%ecx),%ebx
 	call *%ebx
 join_l41:
-	nop
-	nop
 	jmp _i_38
 _i_38:
 	jmp _i_37
 _i_37:
-	nop
 	movl $8,%eax
 	movl $-180,%ecx
 	leal 208(%esp), %edx
 	addl %ecx,%edx
 	addl %eax,%edx
 	movl (%edx),%eax
-	nop
 	leal __setjmp,%edx
 	movl (%edx),%ecx
 	call *%ecx
 join_l38:
-	nop
-	nop
 	movl %eax,%ecx
 	movl $0,%edx
 	cmpl %edx,%eax
@@ -321,17 +261,13 @@ join_l35:
 	cmpl %eax,%ecx
 	jne join_l32
 join_l33:
-	nop
 	leal _i_45,%eax
 	movl (%eax),%ecx
 	movl %ecx,%eax
-	nop
 	leal _stdputstr,%ecx
 	movl (%ecx),%edx
 	call *%edx
 join_l31:
-	nop
-	nop
 	jmp _i_43
 join_l32:
 	jmp _i_43
@@ -353,14 +289,10 @@ _i_43:
 	movl $0,%eax
 	leal _xldebug,%ecx
 	movl %eax,(%ecx)
-	nop
-	nop
 	leal _xlflush,%eax
 	movl (%eax),%ecx
 	call *%ecx
 join_l28:
-	nop
-	nop
 	jmp _i_40
 join_l34:
 	jmp _i_40
@@ -385,49 +317,33 @@ _i_40:
 	leal 216(%esp), %edx
 	addl %ebx,%edx
 	movl %ecx,(%edx)
-	nop
 	leal _xlread,%ecx
 	movl (%ecx),%edx
 	call *%edx
 join_l25:
-	nop
-	nop
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne join_l21
 join_l22:
 	jmp _i_39
 _i_39:
-	nop
 	movl $-180,%eax
 	leal 208(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
-	nop
 	leal _xlend,%ecx
 	movl (%ecx),%edx
 	call *%edx
 join_l14:
-	nop
-	nop
-	nop
-	nop
 	leal _osfinish,%eax
 	movl (%eax),%ecx
 	call *%ecx
 join_l11:
-	nop
-	nop
-	nop
 	movl $0,%eax
-	nop
 	leal _exit,%ecx
 	movl (%ecx),%edx
 	call *%edx
 join_l8:
-	nop
-	nop
-	nop
 	movl $0,%eax
 	movl $4,%ecx
 	leal 208(%esp), %edx
@@ -440,36 +356,28 @@ join_l8:
 join_l21:
 	jmp _i_46
 _i_46:
-	nop
 	movl $-184,%ebx
 	leal 208(%esp), %ecx
 	addl %ebx,%ecx
 	movl (%ecx),%ebx
 	movl (%ebx),%eax
-	nop
 	leal _xleval,%ebx
 	movl (%ebx),%ecx
 	call *%ecx
 join_l20:
-	nop
-	nop
 	movl $-184,%ecx
 	leal 208(%esp), %edx
 	addl %ecx,%edx
 	movl %eax,(%edx)
-	nop
 	movl $-184,%eax
 	leal 208(%esp), %edx
 	addl %eax,%edx
 	movl (%edx),%eax
 	movl (%eax),%eax
-	nop
 	leal _stdprint,%edx
 	movl (%edx),%ecx
 	call *%ecx
 join_l17:
-	nop
-	nop
 	jmp _i_38
 .section .pcmap_data
 stackdata_l98:
@@ -1247,7 +1155,6 @@ frame_l122:
 .section .text
 _stdprint:
 	leal -12(%esp), %esp
-	nop
 	leal 12(%esp), %ecx
 	movl (%ecx),%edx
 initialize_continuations_l125:
@@ -1271,29 +1178,21 @@ initialize_continuations_l125:
 	leal 20(%esp), %ebx
 	addl %edx,%ebx
 	movl %ecx,(%ebx)
-	nop
 	leal _xlprint,%ecx
 	movl (%ecx),%ebx
 	call *%ebx
 join_l132:
-	nop
-	nop
-	nop
 	movl $8,%eax
 	leal _s_stdout,%ecx
 	movl (%ecx),%edx
 	movl (%edx),%ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
-	nop
 	leal _xlterpri,%ecx
 	movl (%ecx),%edx
 	call *%edx
 join_l129:
-	nop
-	nop
 _i_48:
-	nop
 	movl $0,%eax
 	leal 12(%esp), %ecx
 	addl %eax,%ecx
@@ -1352,7 +1251,6 @@ frame_l139:
 .section .text
 _stdputstr:
 	leal -8(%esp), %esp
-	nop
 	leal 8(%esp), %ecx
 	movl (%ecx),%edx
 initialize_continuations_l142:
@@ -1370,15 +1268,11 @@ initialize_continuations_l142:
 	addl %ecx,%edx
 	movl 4(%esp),%ecx
 	movl %ecx,(%edx)
-	nop
 	leal _xlputstr,%ecx
 	movl (%ecx),%edx
 	call *%edx
 join_l146:
-	nop
-	nop
 _i_49:
-	nop
 	movl $0,%eax
 	leal 8(%esp), %ecx
 	addl %eax,%ecx
