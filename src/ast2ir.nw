@@ -396,9 +396,16 @@ let rec body env target globals props graph after bb =
 
 <<cases for translating statements>>=
 | A.AssignStmt(lhs,rhs) ->
-    let effects = List.map2 (fun lhs (guard,rhs) ->
-        R.truth,assign env target globals lhs (expr env target globals rhs)) 
-        lhs rhs
+    let effect lhs  = function 
+        | Some guard, rhs -> ( expr env target globals guard
+                             , assign env target globals lhs
+                                (expr env target globals rhs)
+                             )
+        | None      , rhs -> ( R.truth
+                             , assign env target globals lhs
+                                (expr env target globals rhs)
+                             ) in    
+    let effects = List.map2 (fun lhs rhs -> effect lhs rhs) lhs rhs
     in 
         decorate (GM.assign (Rtl.Rtl effects) after) 
 
