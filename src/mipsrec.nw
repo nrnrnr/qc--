@@ -293,8 +293,12 @@ inst:       Store(dst:regl, Add(x:reg,y:reg), 32)
 inst:       Store(dst:regl, Add(x:reg,y:imm), 32)
             {: cat ["addi"; " "; dst; ","; x; ","; y] :}
      
-@
+inst:       Store(dst:fregl, D2S(x:freg), 32)
+            {: cat ["cvt.s.d"; " "; dst; ","; x] :}
 
+inst:       Store(dst:fregl, S2D(x:freg), 64)
+            {: cat ["cvt.d.s"; " "; dst; ","; x] :}
+@
 \paragraph{Other Instructions}
 
 <<rules>>=
@@ -412,6 +416,9 @@ let cmp =
 <<special cases for [[App]]>>=
 | RP.App(("add", [w]), [x; y])            -> conAdd (exp x) (exp y)
 | RP.App(("sub", [w]), [x; y])            -> conSub (exp x) (exp y)
+| RP.App(("f2f_bogus", [32;64]), [x])     -> conS2D (exp x) 
+| RP.App(("f2f_bogus", [64;32]), [x])     -> conD2S (exp x) 
+
 | RP.App((op, [w]), [x; y]) 
     when Strutil.Set.mem op cmp           -> conCmp op (exp x) (exp y)
 @
