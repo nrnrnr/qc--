@@ -295,6 +295,7 @@ val expand : (Rep.middle -> graph) -> (Rep.last -> graph) -> graph -> graph
 Successors.
 <<declarations of [[Rep]]'s public functions>>=
 val succs : last -> uid list
+val fold_succs : (uid -> 'a -> 'a) -> last -> 'a -> 'a
 val iter_succs : (uid -> unit) -> last -> unit
 @
 <<declarations of [[Rep]]'s public functions>>=
@@ -363,7 +364,7 @@ Calling [[add_live_spans n l]] returns the union of~[[l]] with any
 registers kept live in spans.
 Spans keep register live if they may be needed to walk the stack.
 <<zipcfg.mli>>=
-val add_inedge_uses : Rep.last   -> regs -> regs
+val add_inedge_uses : Rep.last  -> regs -> regs
 val add_live_spansl : Rep.last  -> regs -> regs
 val add_live_spansf : Rep.first -> regs -> regs
 @ 
@@ -723,17 +724,19 @@ let succs = function
   | Jump    _   -> []
   | Forbidden _ -> []
 
-let iter_succs f = function
-  | Exit                  -> ()
-  | Branch  (_, l)        -> f (fst l)
-  | Cbranch (_, te, fe)   -> f (fst te); f (fst fe)  (* order meets layout constraint *)
-  | Mbranch (_, edges)    -> List.iter (fun e -> f (fst e)) edges
-  | Call    c             -> List.iter (fun e -> f (fst e.node)) c.cal_contedges
-  | Cut     (_, edges, _) -> List.iter (fun e -> f (fst e.node)) edges
-  | Return  _   -> ()
-  | Jump    _   -> ()
-  | Forbidden _ -> ()
+let fold_succs f t z = match t with
+  | Exit                  -> z
+  | Branch  (_, l)        -> f (fst l) z
+  | Cbranch (_, te, fe)   -> f (fst te) (f (fst fe) z) (* order meets layout constraint *)
+  | Mbranch (_, edges)    -> List.fold_left (fun z e -> f (fst e) z) z edges
+  | Call    c             -> List.fold_left (fun z e -> f (fst e.node) z) z c.cal_contedges
+  | Cut     (_, edges, _) -> List.fold_left (fun z e -> f (fst e.node) z) z edges
+  | Return  _   -> z
+  | Jump    _   -> z
+  | Forbidden _ -> z
 
+let iter_succs f t = fold_succs (fun t () -> f t) t ()
+@
 <<zipcfg.ml>>=
 let postorder_dfs g =
   let entry, blocks = entry g in

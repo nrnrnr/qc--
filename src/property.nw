@@ -16,11 +16,11 @@ module type S = sig
   type 'a t   (* a property *)
 
   type list
-  val list : unit -> list    (* fresh, empty property list *)
+  val list  : unit -> list    (* fresh, empty property list *)
   val clear : list -> unit   (* remove all properties *)
 
-  val get : 'a t -> list -> 'a
-  val set : 'a t -> list -> 'a -> unit
+  val get    : 'a t -> list -> 'a
+  val set    : 'a t -> list -> 'a -> unit
   val remove : 'a t -> list -> unit
 
   val prop : 'a matcher -> 'a t
@@ -28,9 +28,12 @@ end
 @ 
 <<exposed representation>>=
 type rep =
-  | Live_in of Register.SetX.t  (* to be extended... *)
-  | Vfp     of (Rtl.Private.exp * int)
-  | Avail   of Avail.t
+  | Live_in      of Register.SetX.t  (* to be extended... *)
+  | Vfp          of (Rtl.Private.exp * int)
+  | Avail        of Avail.t
+  | VarInMap     of Varmap.t
+  | VarOutMap    of Varmap.t
+  | VarCallInMap of Varmap.t
     
 type 'a matcher = { embed : 'a -> rep; project : rep -> 'a option; is : rep -> bool; }
 <<property.mli>>=

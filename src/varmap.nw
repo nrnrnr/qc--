@@ -1,0 +1,247 @@
+%cg. -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% inc: \usepackage{alltt}
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+%-------------------------------------------------------------------
+\subsection{Variable Maps}
+%-------------------------------------------------------------------
+The variable map is the fundamental data structure that maps variables to locations
+(registers and slots on the stack).
+It is a dynamic, unchecked invariant that only temps (not hardware registers) are in
+the domain of a variable map.
+
+%-------------------------------------------------------------------
+\subsubsection{Interface}
+%-------------------------------------------------------------------
+We have some simple types for temps and locations, and location sets.
+<<varmap.mli>>=
+type reg  = Register.t
+type rset = Register.Set.t
+type temp = Register.t
+type loc_pair = { reg : Register.t option; mem : Automaton.loc option }
+@
+The variable map supports standard map operations, as well as some unique operations
+that help with register allocation.
+
+We have simple constructors to create and empty map, add a temp to a map, and remove a
+temp from a map.
+<<varmap.mli>>=
+type t
+val empty            : t
+val add_reg          : temp -> Register.t    -> t -> t
+val add_mem          : temp -> Automaton.loc -> t -> t
+val spill            : temp -> Automaton.loc -> t -> t
+val remove_reg       : temp -> Register.t    -> t -> t
+val remove_mem       : temp -> Automaton.loc -> t -> t
+@
+We can also fold over a map, fold over each location a temp is in (the range), observe
+the locations where a temp is stored, observe the temp stored in a register, or print a
+map.
+<<varmap.mli>>=
+val fold             : (temp -> Register.t    -> 'a -> 'a) ->
+                       (temp -> Automaton.loc -> 'a -> 'a) -> t -> 'a -> 'a
+val filter           : (temp -> bool) -> t -> t
+val var_locs'        : t -> temp -> loc_pair
+val reg_contents     : t -> reg  -> temp option
+val print            : string -> t -> unit
+@
+The variable map also provides functions to determine which registers are available at
+a given node.
+The [[reg_classes]] datatype indicates the availability of registers.
+The function [[classify_inregs]] determines which registers are available for the temps
+used at a node.
+The function [[classify_outregs]] determines which registers are available for the temps
+defined at a node.
+<<varmap.mli>>=
+val free_reg_inregs : rset -> rset -> rset -> t -> rset -> bool -> reg -> bool
+val free_reg_outregs : rset -> rset -> t -> rset -> bool -> reg -> bool
+val alloc_inreg  : reg list -> rset -> rset -> rset -> t -> rset -> bool ->
+                   temp -> reg
+val alloc_outreg : reg list -> rset -> rset ->         t -> rset -> bool ->
+                   temp -> reg
+@
+We also provide a function that makes two variable maps consistent.
+The first map (the inmap) holds the variable that are live\_in to the node, and the
+second map (the outmap) holds the variables that are live\_out of the node.
+Because the second map may require spills to be inserted before the node, the maps have
+to be synchronized.
+<<varmap.mli>>=
+val sync_maps : t -> t -> t * t
+@
+%-------------------------------------------------------------------
+\subsubsection{Implementations}
+%-------------------------------------------------------------------
+We currently have only one implementation of a variable map.
+This implementation allows each temp to be stored in only one location at a time.
+Our representation keeps a map from temps to locations and register locations to temps
+(to facilitate the spilling function, [[reg_contents]]).
+<<varmap.ml>>=
+type reg  = Register.t
+type rset = Register.Set.t
+type temp = Register.t
+type loc_pair = { reg : Register.t option; mem : Automaton.loc option }
+module RM = Register.Map
+module RS = Register.Set
+type t = loc_pair RM.t * temp RM.t
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
+@
+The constructors and observers are simple.
+<<varmap.ml>>=
+let empty_pair       = {reg = None; mem = None}
+let def_reg pair r   = {pair with reg = r}
+let def_mem pair m   = {pair with mem = m}
+let pair_map_find    t   m = try RM.find t m with Not_found -> empty_pair
+let upd_pair_map upd t v m = RM.add t (upd (pair_map_find t m) v) m
+
+
+let empty            = (RM.empty, RM.empty)
+let remove_reg t r (vm, lm as maps) =
+    let lm' = RM.remove r lm in
+    try match (RM.find t vm).mem with
+        | None   -> (RM.remove t vm, lm')
+        | Some m as m'-> (RM.add t {reg = None; mem = m'} vm, lm')
+    with Not_found -> Impossible.impossible "DLS: Tried to remove unknown reg"
+
+let remove_mem t _ (vm, lm as maps) =
+    try match (RM.find t vm).reg with
+        | None   -> (RM.remove t vm, lm)
+        | Some r as r' -> (RM.add t {reg = r'; mem = None} vm, lm)
+    with Not_found -> Impossible.impossible "DLS: Tried to remove unknown mem"
+@
+We allow each temp to be in only one register and one memory location at a time.
+There's an interesting time vs. memory tradeoff here:
+we could change the remove function such that if it is asked to remove a
+temp from a register, it verifies that the [[vm]] map also binds the temp
+to the register -- that way, the add function need not change the [[lm]] map,
+possibly saving memory.
+location of the temp in the [[vm]] map
+<<varmap.ml>>=
+let add_reg t r (vm, lm) =
+  try let lp = RM.find t vm in
+      let lm' = match lp.reg with
+                | Some r_old -> RM.remove r_old lm
+                | None -> lm in
+      (RM.add t {lp with reg = Some r} vm, RM.add r t lm')
+  with Not_found -> (RM.add t {reg = Some r; mem = None} vm, RM.add r t lm)
+
+let add_mem t m (vm, lm) =
+  try (RM.add t {(RM.find t vm) with mem = Some m} vm, lm)
+  with Not_found -> (RM.add t {reg = None; mem = Some m} vm, lm)
+
+let spill t m (vm, lm) =
+  let fail () = Impossible.impossible "DLS: can not spill temp" in
+  try match RM.find t vm with
+      | {reg = Some r} -> (RM.add t {reg = None; mem = Some m} vm, RM.remove r lm)
+      | _ -> fail ()
+  with Not_found -> fail ()
+
+let var_locs' (vm, _) temp = RM.find temp vm
+let reg_contents (_, lm) reg = try Some (RM.find reg lm) with Not_found -> None
+let fold f_r f_m (vm, _) zero =
+  let app f t v z = match v with Some s -> f t s z | None -> z in
+  RM.fold (fun t lp z -> app f_m t lp.mem (app f_r t lp.reg z)) vm zero
+
+let filter f (vm, _ as maps) =
+  let remove temp {reg = reg} (vm, lm as maps) =
+    if f temp then maps
+    else (RM.remove temp vm, match reg with Some r -> RM.remove r lm | None -> lm) in
+  RM.fold remove vm maps
+@
+Printing is easy.
+<<varmap.ml>>=
+let printReg ((s,_,_), i, Register.C n) =
+  if n = 1 then Printf.sprintf "%c%d" s i
+  else Printf.sprintf "%c%d:%d" s i n
+let print msg (_, lm as map) =
+  ( Printf.eprintf "%s\nOneLocVarMap:\n" msg
+  ; fold (fun t (r:Register.t) () -> Printf.eprintf "%s -> %s\n" (printReg t) (printReg r))
+         (fun t m () -> Printf.eprintf "%s -> mem_loc\n" (printReg t))
+         map ()
+  ; Printf.eprintf "  Reverse map:\n"
+  ; RM.iter (fun r t -> Printf.eprintf "  %s -> %s\n" (printReg r) (printReg t)) lm
+  ; flush stderr
+  )
+@
+If the outmap spills a temp that is assigned to a register in the inmap,
+then the spill must happen in the inmap.
+Note: We fold over the outmap, with the inmap as the accumulating parameter.
+<<varmap.ml>>=
+let sync_maps inmap (om_vm,_ as outmap) =
+  (RM.fold (fun temp loc_pair (im_vm',_ as inmap') ->
+              match loc_pair.mem with
+              | Some m ->
+                if Aux.Option.is_none (pair_map_find temp im_vm').mem then
+                  add_mem temp m inmap'
+                else
+                  inmap'
+              | None   -> inmap')
+           om_vm inmap, outmap)
+@
+Any registers explicitly allocated to hardware registers are unavailable.
+Otherwise, the availability of registers depends on whether they have been assigned to
+temps (as shown by the variable map).
+<<varmap.ml>>=
+let free_reg_inregs defs live_in live_out (_, lm) regs_used t_live_past_uses r =
+  let not_in set = not (RS.mem r set) in
+  not (RM.mem r lm) && not_in regs_used && not_in live_in &&
+  not (t_live_past_uses && (RS.mem r defs || RS.mem r live_out))
+
+let free_reg_outregs defs live_out (_, lm) regs_used _ r =
+  let not_in set = not (RS.mem r set) in
+  not (RM.mem r lm) && not_in regs_used && not_in defs && not_in live_out
+
+
+(* If we have found a register to spill, we may only be able to use it for the
+   live-in part of the instruction, or it may be good long-term. *)
+type spill = NoneYet
+           | LiveInOnly of Register.t
+           | LongTerm   of Register.t
+let alloc_inreg allregs defs live_in live_out (_, lm)
+                regs_used live_past_use t =
+(*printTempList "alloc_outreg allregs: " allregs;
+printTempSet "regs_used: " regs_used;
+printTempSet "live_out: " live_out;
+printTempSet "defs: " defs;
+*)
+  let rec try_regs rs bst = match rs with
+    | [] -> (match bst with LongTerm r -> r | LiveInOnly r -> r
+             | NoneYet -> impossf "no register available for temp %s" (printReg t))
+    | r::rs ->
+        let liveinonly r = match bst with NoneYet -> LiveInOnly r | _ -> bst in
+        let longterm r = match bst with LongTerm _ -> bst | _ -> LongTerm r in
+        let not_in set = not (RS.mem r set) in
+        if not_in regs_used && not_in live_in &&
+              (not live_past_use || not_in live_out && not_in defs) then
+          if RM.mem r lm then try_regs rs (longterm r)
+          else r
+        (* won't be live out: *)
+        else if not_in regs_used && not_in live_in then try_regs rs (liveinonly r)
+        else try_regs rs bst in
+  try_regs allregs NoneYet
+
+let alloc_outreg allregs defs live_out (_, lm) regs_used _ t =
+(*printTempList "alloc_outreg allregs: " allregs;
+printTempSet "regs_used: " regs_used;
+printTempSet "live_out: " live_out;
+printTempSet "defs: " defs;
+*)
+  let rec try_regs rs bst = match rs with
+    | [] -> (match bst with LongTerm r -> r | LiveInOnly r -> r
+             | NoneYet -> impossf "no register available for temp %s" (printReg t))
+    | r::rs ->
+        let longterm r = match bst with LongTerm _ -> bst | _ -> LongTerm r in
+        let not_in set = not (RS.mem r set) in
+        if not_in regs_used && not_in live_out && not_in defs then
+          if RM.mem r lm then try_regs rs (longterm r)
+          else r
+        else try_regs rs bst in
+  try_regs allregs NoneYet
+@
+
