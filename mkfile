@@ -57,18 +57,14 @@ lib.opt:V:
                     (echo "# entering $i" && cd $i && mk $MKFLAGS update.opt)
                 done
 
-precompile:V:
-                for i in src 
-                do 
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS $target)
-                done
-                    
 export:V:
                 for i in camlburg tools
                 do 
                     (echo "# entering $i" && cd $i && mk $MKFLAGS $target)
                 done
 
+precompile:     
+                echo "this target has become obsolete"                
 
 html            \
 dvi:V:          dirs

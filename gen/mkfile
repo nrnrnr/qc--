@@ -29,6 +29,9 @@ LIBDIR =        ../lib
 BINDIR =        ../bin
 MANDIR =        ../man
 
+# extend PATH for special tools
+
+PATH   =        $PATH:/usr/share/smlnj/bin
 
 TKDIR =         /home/lair/nr/zephyr/cvs/toolkit
 TKRTL =         $TKDIR/rtl
@@ -36,7 +39,6 @@ SLEDLIBDIR =    $TKDIR
 RTLSPECDIR =    $TKRTL
 SLEDSPECDIR =   /home/lair/nr/toolkit/www/specs
 LRTLHEAPi =     /usr/share/smlnj/bin/.heap/lrtl.x86-linux
-
 
 # ------------------------------------------------------------------ 
 # (high level) virtual targets
@@ -53,6 +55,10 @@ html dvi test:VQ:
 
 depend:V:       $DEPEND
 
+# What is the policy here? Does clean remove *.ml* files that we generate
+# using special tools or not? These files are derived, but they are also
+# in the repository. I vote for not removing them because a casual user
+# would be unable to derive them again.
 
 clean:V:    
                 # sparcrec.* is precious, so we keep it
@@ -66,6 +72,8 @@ clean:V:
                 
 clobber:V:      clean
                 rm -f gen.cma gen.cmxa gen.a
+                # rm -f ast.ml* astUtil.ml*
+                # rm -f rtlasdl.ml* rtlasdlUtil.ml*
 
 # ------------------------------------------------------------------ 
 # rules and tools for OCaml
@@ -99,10 +107,19 @@ LOCAL =         sledlib.ml      \
                 sparcmkasm.ml   \
                 # sparcrec.ml   \
                 # sparcrtl.ml   \
+                ast.ml          \
+                astUtil.ml      \
+                rtlasdl.ml      \
+                rtlasdlUtil.ml  \
 
 LOCALI =        sledlib.mli     \
                 sparc.mli       \
                 sparcmkasm.mli  \
+                ast.mli         \
+                astUtil.mli     \
+                rtlasdl.mli     \
+                rtlasdlUtil.mli \
+                
 
 BAREML  =       # sparcrec.ml    
 

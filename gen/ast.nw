@@ -1,0 +1,224 @@
+%
+% $Id$
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+%
+
+% ------------------------------------------------------------------  
+\section{Abstract Syntax Definition}\label{sec:ast}
+% ------------------------------------------------------------------  
+
+The abstract syntax for \C~is not directly encoded into \ocaml~data
+types but specified as an \asdl~\cite{adsl97} definition.  The
+\asdl~compiler generates suitable data types and additionally code to
+serialize the abstract syntax.  This permits to exchange the abstract
+syntax with applications written in languages other than \ocaml~more
+easily. 
+
+The abstract syntax is specified in [[ast.asdl]]; the resulting
+modules are [[Ast]] and [[AstUtil]]. {\asdl} does not provide all the
+data types we require so we have to define some views. A view is a
+one-to-one mapping between an external representation using {\asdl}
+primitive types and and internal user-defined representation.
+
+<<ast.asdl>>=
+module ast {
+    <<ast declaration>>
+}
+@
+
+% ------------------------------------------------------------------ 
+\subsection{The \asdl-definition}
+% ------------------------------------------------------------------ 
+
+<<ast declaration>>=
+name        = (string)
+conv        = (string)  -- names for calling conventions
+hint        = (string)  -- hints for register allocation
+reg         = (string)  -- names for global registers
+target      = (string)
+size        = (int)     
+align       = (int)     -- power of 2
+aligned     = (int)     -- power of 2
+op          = (string)
+@
+
+Every important node is wrapped by a node that includes a source
+code position [[region]].  This is the character span in the input
+character stream that covers the node.  The first character in the
+stream has index 0.  The first number in a [[region]] denotes the
+first character covered by the node, the second number the first
+character \textit{after} the node.
+
+<<ast declaration>>=
+region      = (int,int) -- (* Srcmap.reg *)
+
+program     = (toplevel*)
+
+toplevel    = ToplevelAt    (toplevel, region)
+            | Section       (name, section*)
+            | TopDecl       (decl)
+            | TopProcedure  (proc)
+@
+
+<<ast declaration>>=
+section     = SectionAt     (section, region)
+            | Decl          (decl)
+            | Procedure     (proc)
+            | Datum         (datum)
+            | SSpan         (expr key, expr value, section*)
+@
+            
+Extensions to the language are syntactically covered by [[pragma]]s.
+Unknown extensions are represented by the [[Pragma]] value.
+
+<<ast declaration>>=
+decl        = DeclAt        (decl, region)
+            | Import        (ty, import*)
+            | Export        (ty?,export*)
+            | Const         (ty?,name,expr)
+            | Typedef       (ty,name*)
+            | Registers     (register*)
+            | Pragma                          
+            | Target        (arch*)
+@
+
+<<ast declaration>>=
+arch        = Memsize       (int)
+            | ByteorderBig
+            | ByteorderLittle
+            | FloatRepr     (string) -- "ieee754"
+            | Charset       (string) -- "latin1"
+            | WordSize      (int)    -- 32 (bits)
+            | PointerSize   (int)    -- 32 (bits)
+
+import      = (string?,name)
+export      = (name, string?)
+
+@
+       
+<<ast declaration>>=
+register    = (invariant, hint?, ty, name, reg?)
+proc        = (conv?, name, formal*, body*)
+
+body        = BodyAt        (body, region)
+            | DeclBody      (decl)
+            | StmtBody      (stmt)
+            | DataBody      (datum*)
+            
+memsize     = NoSize
+            | DynSize
+            | FixSize       (expr)
+                       
+datum       = DatumAt       (datum, region)
+            | Label         (name)
+            | Align         (align)
+            | MemDecl       (ty, memsize, init?)
+
+@ Escape sequence in the concrete syntax of strings and character
+literals are removed during the translation to the abstract syntax. 
+So [[InitStr]] and [[InitUStr]] do not contain escaped characters.
+
+<<ast declaration>>=
+init        = InitAt        (init, region)
+            | InitExprs     (expr*)
+            | InitStr       (string)
+            | InitUStr      (string)
+
+<<ast declaration>>=
+ty          = TyAt          (ty, region)
+            | BitsTy        (size)
+            | AliasTy       (name)
+@
+
+To encode the [[invariant]] keyword a boolean value would suffice.
+But this type is not provided by \asdl.
+
+<<ast declaration>>=
+invariant   = Invariant
+            | Variant
+
+formal      = (hint?, invariant, ty, name)
+actual      = (hint?, expr)
+cformal     = (hint?, name)
+
+<<ast declaration>>=
+flow        = FlowAt        (flow, region)
+            | CutsTo        (name*)
+            | UnwindsTo     (name*)
+            | ReturnsTo     (name*)
+            | Aborts    
+
+lvalue      = LValueAt      (lvalue, region)
+            | Var           (hint?,name)
+            | Mem           (ty, expr, aligned?)
+<<ast declaration>>=
+altcont     = (expr, expr)
+
+range       = Point         (expr)
+            | Range         (expr,expr)
+
+arm         = ArmAt         (arm, region)
+            | Case          (range*,body*)
+@
+
+We like to represent guarded multiple assignments. The guards are paired
+with the expressions defining the value to be assigned. Alternatively
+we could have made the guard of an [[lvalue]] but this would have
+complicated the already complicated analysis of lvalues further.
+             
+<<ast declaration>>=
+guarded     = (expr? guard, expr value) 
+@
+
+The abstract syntax does not distinguish an empty list of statements
+from an absent optional list of statements.  An [[if]] statement
+without an [[else]] block looks on this level like an [[if]] with an
+empty [[else]] block.
+
+Comments as represented by the [[CommentStmt]] are never generated by
+the parser.  They are used for code generation back ends that emit
+{\PAL} code. 
+ 
+<<ast declaration>>=
+stmt        = StmtAt        (stmt, region)
+            | IfStmt        (expr, body*, body*)
+            | SwitchStmt    (range?, expr, arm*)
+            | LabelStmt     (name)
+            | ContStmt      (name, cformal*)
+            | SpanStmt      (expr key, expr value, body*)
+            | AssignStmt    (lvalue*, guarded*)
+            | CallStmt      (lvalue*, conv?, expr, actual*, target*, flow*)
+            | PrimStmt      (lvalue*, conv?, name, actual*, flow*)
+            | GotoStmt      (expr, target*)
+            | JumpStmt      (conv?, expr, actual*, target*)
+            | CutStmt       (expr, actual*, flow*)
+            | ReturnStmt    (conv?, altcont?, actual*)
+            | EmptyStmt  
+            | CommentStmt   (string)
+@
+
+Literal constants pose a problem becaus their (bit) width cannot be
+resolved during scanning and parsing. Therefore we store strings and
+scan them later, once we know the width.
+
+<<ast declaration>>=
+expr        = ExprAt        (expr, region)
+            | Int           (string,ty?)
+            | Float         (string,ty?)
+            | Char          (string,ty?)
+            | Fetch         (lvalue)
+            | BinOp         (expr, op, expr)
+            | UnOp          (op, expr)
+            | PrimOp        (name, actual*)
+@
+
+Infix operators are abbreviations for primitive operations. The
+parser could perform this translation right away. But we want to
+unparse the abstract syntax back to concrete syntax and thus we keep
+them. 
+
