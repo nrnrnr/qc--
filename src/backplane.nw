@@ -513,8 +513,7 @@ combined) =
         <<backplane builtins>>
 
         type state = Interp.V.state
-        let init = Interp.register_globals backplane_builtins
-                            (* should probably be in a module *)
+        let init = Interp.register_module "Backplane" backplane_builtins
      end
   end
 @
@@ -528,21 +527,32 @@ IT SHOULD THEN APPLY SINGLE TO THE RESULT.  THIS WAY, SINGLE NEVER
 SHOWS UP AT THE LUA LEVEL. ---NR
 <<backplane builtins>>=
 let {V.embed = embed; V.project = project} = T1.makemap V.userdata V.projection
-let action = { V.embed = (fun a -> embed (Action a))
-             ; V.project = (fun v -> match project v with
-                                     | Action a -> a
-                                     | _ -> raise (V.Projection (v, "action")))
-             }
-let proc = T2.makemap V.userdata V.projection
+
 let ( **-> ) = V.( **-> )
+let proc    = T2.makemap V.userdata V.projection
 let stageFn = V.pfunc (V.value **-> proc **-> V.result V.bool)
+
+<<stage map>>
+
+let projectAsAction v =
+  match project v with
+  | Action a -> a
+  | _ -> raise (V.Projection (v, "action"))
+  
+let projectAction v = match v with
+  | V.Userdata _ -> projectAsAction v
+  | V.Table _    -> single (projectStage v)
+  | _ -> raise (V.Projection (v, "action"))
+
+let action = { V.embed   = (fun a -> embed (Action a))
+             ; V.project = projectAction 
+             }
 let inputs = { V.embed = (fun s -> (V.list V.string).V.embed (SS.elements s))
              ; V.project = (fun v ->
                                try List.fold_left (fun a b -> SS.add b a)
                                       SS.empty ((V.list V.string).V.project v)
                                with _ -> raise (V.Projection (v, "inputs")))
              }
-<<stage map>>
 @
 
 
@@ -563,7 +573,6 @@ let backplane_builtins =
   ; "single",    (V.pfunc (stage   **->             V.result action)).V.embed single
   ; "run",       (V.pfunc (action **-> proc **-> inputs **-> 
                                                     V.result V.bool)).V.embed run
-
   ]
 @
 

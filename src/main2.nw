@@ -241,6 +241,7 @@ When the compiler starts, it looks for the Lua script  [[qc--.lua]] in
 the actual directory.
 
 <<qc--.lua>>= 
+$debug 1
 -- 
 -- $Id$
 ------------------------------------------------------------------ 
@@ -302,19 +303,8 @@ end
 -- functions to create and compose stages.
 ------------------------------------------------------------------ 
 
--- Primitives are currently in the global name space. I want to change 
--- their OCaml defintions such that they are defined in their own name
--- space "Backplane".
 
-B = B or {}
-B.seq       = seq
-B.single    = single
-B.ignore    = ignore
-B.fix       = fix
-B.when_do   = when_do
-B.unless_do = unless_do
-B.run       = run
-B.share     = share
+B = Backplane
 
 function B.mk (n, f) 
     return { name = n, fn = f }
@@ -345,12 +335,12 @@ CG.stages =
     , pCFG              = B.mk("pCFG",              CG.pCFG)
     }
 
-CG.makeGraph = seq 
+CG.makeGraph = B.seq 
     { B.single(CG.stages.liveness)
     , B.single(CG.stages.build)
     }
     
-CG.orderVars = seq 
+CG.orderVars = B.seq 
     { B.single(CG.stages.makeWorklist)
     , B.fix(B.unless_do(B.single(CG.stages.simplify),
                             B.unless_do(B.single(CG.stages.coalesce),
@@ -394,7 +384,7 @@ CG.color =
 ------------------------------------------------------------------ 
 
 Linsan = Linscan or {}
-Linscan.scan = single(B.mk("linscan", Linscan.allocate))    
+Linscan.scan = B.single(B.mk("linscan", Linscan.allocate))    
 
 ------------------------------------------------------------------ 
 -- Code Expander
@@ -431,7 +421,7 @@ Opt = Opt or {}
 -- can use for a function.  
 
 function Opt.dummy(proc)
-    local action = seq
+    local action = B.seq
         { B.single(Expand.stages.placeVars)
         , B.single(Expand.stages.dummy)
         , Default.allocator
@@ -441,7 +431,7 @@ end
 
 
 function Opt.sparc(proc)
-    local action = seq
+    local action = B.seq
         { B.single(Expand.stages.placeVars)
         , B.single(Expand.stages.sparc)
         , Default.allocator
@@ -450,7 +440,7 @@ function Opt.sparc(proc)
 end
 
 function Opt.sparc_dbg (proc)
-    local action = seq
+    local action = B.seq
         { B.single(Expand.stages.placeVars)
         -- , B.single(Expand.stages.sparc)
         }
