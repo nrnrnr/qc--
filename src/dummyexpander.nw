@@ -161,13 +161,25 @@ We need a source for new temporaries; the functions [[itmp]] and
 new temporary.
 
 <<utilities>>=
+let dtmp = function
+    | 2 -> fun(rtls, tmp as state) ->
+        let const n width = R.bits (Bits.U.of_int n width) width in
+        (R.cell R.none 'd' R.Identity  2 (const 1 2), state)
+    | w  -> Impossible.impossible 
+                (Printf.sprintf "unsupported width for d-space register: %d" w)
+
 let itmp = function
     | 32 -> fun (rtls,tmp as state) -> (Talloc.Multiple.loc tmp 't' 32, state)
+    (*
     | 8  -> fun (rtls,tmp as state) -> (Talloc.Multiple.loc tmp 'v'  8, state)
+    *)
+    | 8  -> fun (rtls,tmp as state) -> (Talloc.Multiple.loc tmp 't'  32, state)
     | w  -> Impossible.impossible 
                 (Printf.sprintf "unsupported width for int register: %d" w)
 let ftmp = function
+    | 64 -> fun (rtls,tmp as state) -> (Talloc.Multiple.loc tmp 'u' 32, state)
     | 32 -> fun (rtls,tmp as state) -> (Talloc.Multiple.loc tmp 'u' 32, state)
+    | 8  -> fun (rtls,tmp as state) -> (Talloc.Multiple.loc tmp 'u' 32, state)
     | w  -> Impossible.impossible 
                 (Printf.sprintf "unsupported width for float register: %d" w)
 @
@@ -295,6 +307,16 @@ generator for a temporary for the result. Passing [[itmp]] means, that
 the result will be stored in an integer temporary.
 
 <<utilities>>=
+let app0 tmp s x =
+    let opr   = R.opr s x in
+    let exp   = R.app opr [] in
+    let width = W.exp exp in
+    tmp width >>= fun t -> 
+    (*
+    exec (R.store t exp width) >>= fun () ->
+    *)
+    return t
+
 let app1 tmp s x arg1 =
     arg1 >>= fun a1 ->
     let opr   = R.opr s x in
@@ -325,6 +347,11 @@ let app3 tmp s x arg1 arg2 arg3 =
 
 
 <<rules>>=
+dreg:       App0("float_eq", x)               {: app0 dtmp "float_eq" x :}
+dreg:       App0("float_gt", x)               {: app0 dtmp "float_gt" x :}
+dreg:       App0("float_lt", x)               {: app0 dtmp "float_lt" x :}
+dreg:       App0("unordered", x)              {: app0 dtmp "unordered" x :}
+
 ireg:       App1("com",  x, r1:ireg)          {: app1 itmp "com"  x r1 :}
 ireg:       App1("lobits", x, r1:ireg)        {: app1 itmp "lobits" x r1 :}
 ireg:       App1("neg",  x, r1:ireg)          {: app1 itmp "neg"  x r1 :}
@@ -564,6 +591,7 @@ let rec exp = function
     | RP.Const(RP.Bool(false))  -> conFalse()
     | RP.Const(k)               -> conConst(k)
     | RP.Fetch(l,w)             -> conFetch (loc l) w
+    | RP.App((o,x),[])          -> conApp0 o x
     | RP.App((o,x),[e1])        -> conApp1 o x (exp e1)
     | RP.App((o,x),[e1;e2])     -> conApp2 o x (exp e1) (exp e2)
     | RP.App((o,x),[e1;e2;e3])  -> conApp3 o x (exp e1) (exp e2) (exp e3)
