@@ -165,7 +165,7 @@ end
 Mips = {} or Mips
 Mips.layout = { creates='no late consts' } -- what is this for? -CL
 
-function Mips.layout.fn(dummy, proc)
+function Mips.layout.["C"](dummy, proc)
     local blocks       = Stack.blocks(proc)
     blocks.oldblocks   = Block.overlap(32,"low" , blocks.oldblocks)  
     blocks.youngblocks = Block.overlap(32,"low" , blocks.youngblocks)
@@ -173,13 +173,13 @@ function Mips.layout.fn(dummy, proc)
     blocks.newparams   = Block.relative(blocks.vfp, "new parameters", 16, 4)
     local layout =
         { blocks.oldblocks
-        -- , blocks.oldparams     -- moved into oldblocks
+        , blocks.oldparams     
         , blocks.vfp
         , blocks.spills
         , blocks.continuations
         , blocks.stackdata
         , blocks.youngblocks    
-        -- , blocks.newparams     -- moved into youngblocks
+        , blocks.newparams     
         , blocks.sp
         }
     if Debug.stack then
@@ -199,6 +199,50 @@ function Mips.layout.fn(dummy, proc)
     Stack.freeze(proc, block)
     return 1
 end
+
+function Mips.layout.["C'"](dummy, proc)
+    local blocks       = Stack.blocks(proc)
+    blocks.oldblocks   = Block.overlap(32,"low" , blocks.oldblocks)  
+    blocks.youngblocks = Block.overlap(32,"low" , blocks.youngblocks)
+    local layout =
+        { blocks.oldblocks
+        , blocks.vfp
+        , blocks.spills
+        , blocks.continuations
+        , blocks.stackdata
+        , blocks.youngblocks    
+        , blocks.sp
+        }
+    if Debug.stack then
+        write('****** cc name = ', Stack.ccname(proc), '\n')
+        Debug.showblocks (blocks, { 'oldblocks'
+                                  , 'stackdata'
+                                  , 'vfp'
+                                  , 'continuations'
+                                  , 'spills'
+                                  , 'youngblocks'
+                                  , 'params'
+                                  , 'sp'
+                                  })
+    end
+    local block = Block.cat(32, layout)
+    block = Block.adjust(block)
+    Stack.freeze(proc, block)
+    return 1
+end
+Mips.layout.["c'"] = Mips.layout.["C'"] 
+
+function Mips.layout.fn(dummy,proc) 
+    local cc = Stack.ccname(proc)
+    if Mips.layout[cc] == nil then
+        error("no layout for convention "..cc)
+    else    
+        return (Mips.layout[cc](dummy, proc))
+    end    
+end
+@
+
+
 @
 % ------------------------------------------------------------------ 
 \paragraph{Stack Layout for the Alpha}
