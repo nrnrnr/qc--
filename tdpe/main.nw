@@ -1,0 +1,55 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+% l2h macro exfile 1 <a href="#$1"><tt>#1</tt></a>
+
+\input{macros.tex}
+
+\section{Specialising RTL-based optimizations to machine-instruction
+  sets}
+
+This main module provides a command-line driven specialization of
+RTL-based optimization functions from qc--.
+
+<<main.ml>>=
+
+module S = Spec
+
+let idOption = 
+  ("-id",Arg.Unit(S.IdTest.pprintOutput),
+   " --- Specialize the identitity function")
+let idOption' = 
+  ("-id+",Arg.Unit(S.IdTranslationTest.pprintOutput),
+   "--- Specialize the identitity function obtained by embedding/projection to RTL")
+
+let substOption =
+  ("-fs",Arg.Unit(S.FrwdSubstTest.pprintOutput),
+   " --- Specialize the first implementation of forward substitution")
+let substOption' =
+  ("-fs+",Arg.Unit(S.FrwdSubstTest'.pprintOutput),
+   "--- Specialize the second implementation of forward substitution")
+let mergeOption =
+  ("-fm",Arg.Unit(S.FrwdMergeTest.pprintOutput),
+   " --- Specialize the implementation of instruction merging")
+
+let rwOption =
+  ("-rw",Arg.Unit(S.ReadWriteTest.pprintOutput),
+   " --- Specialize the generic read-write-locs function")
+let rwOption' =
+  ("-rw+",Arg.Unit(S.ReadWriteTest'.pprintOutput),
+   "--- Specialize the set-based read-write-sets function")
+
+let main() =
+  if Array.length(Sys.argv) > 1
+  then Arg.parse [idOption;idOption';substOption;substOption';mergeOption;rwOption;rwOption']
+      (fun s -> print_string "unknown option\n") "Available command line options:"
+  else
+    (print_string "Run \"";
+     print_string (Array.get Sys.argv 0);
+     print_string " -help\" for command-line options\n")
+
+let _ = main()
+
+@ There is no interface here.
+<<main.mli>>=
+
+@
