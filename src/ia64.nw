@@ -242,7 +242,7 @@ let b  ~tgt = [R.store pc_lhs (Up.const tgt) 64]
 
 let effects = List.map Up.effect
 let call  ~tgt ~others = [R.par (R.store pc_lhs (Up.const tgt) 64 :: effects others)]
-let callr ~tgt ~others = [R.par (R.store pc_lhs (tempval tgt) 64 :: effects others)]
+let callr ~tgt ~others = [R.par (R.store pc_lhs (tempval tgt)  64 :: effects others)]
 
 let cut_to effs = [R.par (effects effs)]
 
@@ -367,9 +367,11 @@ let spill  p t l =
   spill_expand p (Automaton.store l (Post.tempval t) (Post.tempwidth t))
 let reload p t l =
   spill_expand p (R.store (Post.temploc t) (Automaton.fetch l (Post.tempwidth t)) (Post.tempwidth t))
-
-let return_to this_ra =
-  R.par [R.store pc raloc Post.wordsize ; R.store pc raloc Post.wordsize]
+@
+JD: PREVIOUSLY, THE RETURN WAS THE FOLLOWING ASSIGNMENT DONE TWICE IN PARALLEL. WAS
+THERE A REASON FOR THAT?
+<<ia64.ml>>=
+let return_to this_ra = R.store pc raloc Post.wordsize
 @ 
 
 <<ia64.ml>>=
