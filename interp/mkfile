@@ -94,10 +94,12 @@ NWFILES    = `echo *.nw`
 
 INTERPHDRS = activation.h \
              assemblyunit.h \
+             c_features.h \
              ccall.h \
              controlflow.h \
              disasm.h \
              encoding.h \
+             float_features.h \
              interp.h \
              intervals.h \
              label.h \
@@ -183,31 +185,45 @@ clients/exn_client: $COREOBJS clients/exn.o
 ### alternately built binaries (for sparc, lcc, etc.)
 
 atac-interp:V:
-    rm -f $NAME
-    mk $MKFLAGS MODE=$MODE NOTANGLEOPTS= CC='atac gcc' sparc-interp
-    sed '/\#line/d' interp-dec.c > interp-dec.c
-    sed '/\#line/d' disasm-dec.c > disasm-dec.c
-    cp $NAME $BINDIR/$NAME
+    mk sparc-interp $MKFLAGS MODE=$MODE NOTANGLEOPTS= CC='atac gcc' 
+
+#    sed '/\#line/d' interp-dec.c > interp-dec.c
+#    sed '/\#line/d' disasm-dec.c > disasm-dec.c
 
 lcc-interp:V:
-    mk $MKFLAGS MODE=$MODE code
-    mk $MKFLAGS MODE=$MODE CC=lcc CFLAGS='-g -A -A -b $INCLUDES' $NAME
-    mk $MKFLAGS MODE=$MODE CC=lcc CFLAGS='-g -A -A -b $INCLUDES' clients/gc_client
-    mk $MKFLAGS MODE=$MODE CC=lcc CFLAGS='-g -A -A -b $INCLUDES' clients/exn_client
+    mk update \
+       $MKFLAGS MODE=$MODE \
+       C99=no_c99 IEC60559=no_iec60559 \
+       CC=lcc CFLAGS='-g -A -A -b $INCLUDES'
+    mk gc \
+       $MKFLAGS MODE=$MODE \
+       C99=no_c99 IEC60559=no_iec60559 \
+       CC=lcc CFLAGS='-g -A -A -b $INCLUDES'
+    mk exn \
+       $MKFLAGS MODE=$MODE \
+       C99=no_c99 IEC60559=no_iec60559 \
+       CC=lcc CFLAGS='-g -A -A -b $INCLUDES'
 
 sparc-interp:V:
-    mk $MKFLAGS MODE=$MODE MACHINE=sparc NOTANGLEOPTS=$NOTANGLEOPTS \
-       TOOLS=/home/lair/olinsky/bin/sparc/tools $NAME \
+    mk update \
+       $MKFLAGS MODE=$MODE MACHINE=sparc \
+       C99=no_c99 IEC60559=no_iec60559 \
+       NOTANGLEOPTS=$NOTANGLEOPTS \
+       TOOLS=/home/lair/olinsky/bin/sparc/tools \
        LUAINCLUDES=-I/home/lair/olinsky/include \
        LUALIBS='/home/lair/olinsky/lib/sparc/o/*.o' \
-    CC='$CC'
-    mk gc  $MKFLAGS MODE=$MODE MACHINE=sparc NOTANGLEOPTS=$NOTANGLEOPTS \
-           TOOLS=/home/lair/olinsky/bin/sparc/tools $NAME \
+       CC='$CC'
+    mk gc  $MKFLAGS MODE=$MODE MACHINE=sparc \
+           C99=no_c99 IEC60559=no_iec60559 \
+           NOTANGLEOPTS=$NOTANGLEOPTS \
+           TOOLS=/home/lair/olinsky/bin/sparc/tools \
            LUAINCLUDES=-I/home/lair/olinsky/include \
            LUALIBS='/home/lair/olinsky/lib/sparc/o/*.o' \
            CC='$CC'
-    mk exn $MKFLAGS MODE=$MODE MACHINE=sparc NOTANGLEOPTS=$NOTANGLEOPTS \
-           TOOLS=/home/lair/olinsky/bin/sparc/tools $NAME \
+    mk exn $MKFLAGS MODE=$MODE MACHINE=sparc \
+           C99=no_c99 IEC60559=no_iec60559 \
+           NOTANGLEOPTS=$NOTANGLEOPTS \
+           TOOLS=/home/lair/olinsky/bin/sparc/tools \
            LUAINCLUDES=-I/home/lair/olinsky/include \
            LUALIBS='/home/lair/olinsky/lib/sparc/o/*.o' \
            CC='$CC'
@@ -231,29 +247,30 @@ depend:V:   $SRCS $HDRS
 NWTEXFILES = ${NWFILES:%.nw=%.tex}
 NWINCFILES = ${NWFILES:%.nw=%.inc}
 
-INTERFACES = activation.nw \
-             assemblyunit.nw \
-             ccall.nw \
-             controlflow.nw \
-             disasm.nw \
-             encoding.nw \
-             intervals.nw \
-             label.nw \
-             lualink.nw \
-             operator.nw \
-             span.nw \
-             stack.nw \
-             table.nw \
-             thread.nw \
+# INTERFACES should be in a sensible order so the print-out makes sense
+INTERFACES = features.nw \
              types.nw \
+             value.nw \
+             stack.nw \
+             lualink.nw \
+             table.nw \
+             intervals.nw \
              uid.nw \
-             value.nw
+             activation.nw \
+             controlflow.nw \
+             label.nw \
+             thread.nw \
+             assemblyunit.nw \
+             encoding.nw \
+             operator.nw \
+             ccall.nw \
+             span.nw \
+             disasm.nw
 
 interfaces:V: interfaces.dvi
 
 interfaces.nw: $INTERFACES
     echo > interfaces.nw
-    # choosing a sensible order would be good here
     for i in $INTERFACES
     do
 	awk '/^This document contains / { next }
@@ -266,13 +283,13 @@ interfaces.nw: $INTERFACES
 	     { print }' $i >> interfaces.nw
     done
 
-doc.tex: doc.nw
+doc.tex: doc.nw interfaces.inc
 	$NOWEAVE -delay -autodefs c -index $prereq > $target
 
 inputs:V: $NWINCFILES
 	for i in $prereq; do echo "\\myinput{$i}"; done
 
-doc.dvi: $NWINCFILES
+doc.dvi:  $NWINCFILES
 
 ### some old documentation files
 
@@ -289,11 +306,18 @@ state.tex: state.inc
 bytecode.sled:D: interp.nw
 	$NOTANGLE $NOTANGLEOPTS -R$target $prereq | $CPIF $target
 
-decode.fetch:D: interp.nw
+decode.fetch:D:  interp.nw
     $NOTANGLE $NOTANGLEOPTS -R$target $prereq | $CPIF $target
 
-machine.h:D: interp.nw
+machine.h:D:     interp.nw
 	$NOTANGLE $NOTANGLEOPTS -R$target.${MACHINE-x86} $prereq | $CPIF $target
+
+c_features.h:D:     features.nw
+    $NOTANGLE $NOTANGLEOPTS -R$target.${C99-c99} $prereq | $CPIF $target
+
+float_features.h:D: features.nw
+    $NOTANGLE $NOTANGLEOPTS -R$target.${IEC60559-iec60559} $prereq \
+            | $CPIF $target
 
 '(([^/]*/)*)(.*)\.h$':RD:       '\1\3.nw'
 	$NOTANGLE $NOTANGLEOPTS -R$stem3.h $prereq | $CPIF $target
@@ -365,8 +389,8 @@ lualink.o: lualink.c lualink.h table.h interp.h activation.h types.h \
  machine.h uid.h value.h assemblyunit.h controlflow.h intervals.h \
  label.h thread.h encoding.h
 operator.o: operator.c operator.h table.h value.h types.h machine.h \
- stack.h lualink.h interp.h activation.h uid.h assemblyunit.h \
- controlflow.h intervals.h label.h thread.h
+ c_features.h float_features.h stack.h lualink.h interp.h activation.h \
+ uid.h assemblyunit.h controlflow.h intervals.h label.h thread.h
 runtime.o: runtime.c runtime.h label.h assemblyunit.h controlflow.h \
  activation.h table.h types.h machine.h uid.h value.h interp.h \
  intervals.h thread.h lualink.h ccall.h span.h
@@ -387,8 +411,8 @@ value.o: value.c value.h types.h machine.h interp.h activation.h \
  thread.h
 interp-dec.o: interp-dec.c interp.h activation.h table.h types.h \
  machine.h uid.h value.h assemblyunit.h controlflow.h intervals.h \
- label.h thread.h lualink.h encode.h ccall.h operator.h encoding.h \
- span.h stack.h
+ label.h thread.h float_features.h lualink.h encode.h ccall.h \
+ operator.h encoding.h span.h stack.h
 disasm-dec.o: disasm-dec.c disasm.h label.h assemblyunit.h \
  controlflow.h activation.h table.h types.h machine.h uid.h value.h \
  operator.h interp.h intervals.h thread.h

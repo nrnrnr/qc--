@@ -3,7 +3,7 @@
 This document contains the interface and implementation of {\PAL} primitive operators.
 
 % ----------------------------------------------------------------------------
-\section{Interface}
+\interface{Representing {\PAL} Values}{
 % ----------------------------------------------------------------------------
 
 <<value.h>>=
@@ -33,15 +33,15 @@ are as of now unsupported.
 
 <<type definitions>>=
 typedef union {
-  bool    bool;
-  bits1   bits1;
-  bits2   bits2;
-  bits8   bits8;
-  bits16  bits16;
-  bits32  bits32;
-  /*  bits64  bits64;  */  /* UNSUPPORTED for now */
+  bool    bool   ;
+  bits1   bits1  ;
+  bits2   bits2  ;
+  bits8   bits8  ;
+  bits16  bits16 ;
+  bits32  bits32 ;
+  /*  bits64  bits64 ; */
   float32 float32;
-  /*  float64 float64; */  /* UNSUPPORTED for now */
+  float64 float64;
   /*  float96 float96; */  /* UNSUPPORTED for now */
   void    *ptr;
 } value;
@@ -77,7 +77,8 @@ void check_value_types(void);
 @ 
 
 % ----------------------------------------------------------------------------
-\section{Implementation}
+} 
+\implementation{Representing {\PAL} Values}{
 % ----------------------------------------------------------------------------
 
 <<value.c>>=
@@ -118,6 +119,7 @@ value to_CMM_value(unsigned v, unsigned width) {
   case  8: val.bits8  = v; break;
   case 16: val.bits16 = v; break;
   case 32: val.bits32 = v; break;
+	/*  case 64: val.bits64 = v; break; */
   default:
     cmm_err("unsupported value type; cannot continue"); 
   }
@@ -143,22 +145,25 @@ void check_value_types (void) {
   assert(sizeof(v.bits8 ) == 1);
   assert(sizeof(v.bits16) == 2);
   assert(sizeof(v.bits32) == 4);
-/*  assert(sizeof(v.bits64) == 8); */
+  /*   assert(sizeof(v.bits64) == 8); */
 
   assert(sizeof(v.float32) == 4);
-/*  assert(sizeof(v.float64) == 8); */
+  assert(sizeof(v.float64) == 8);
 /*  assert(sizeof(v.float96) == 12); */
 
   assert(sizeof(u_int8)  == 1);
   assert(sizeof(u_int16) == 2);
   assert(sizeof(u_int32) == 4);
-/*  assert(sizeof(u_int64) == 8); */
+  /*   assert(sizeof(u_int64) == 8); */
 
   assert(sizeof(s_int8)  == 1);
   assert(sizeof(s_int16) == 2);
   assert(sizeof(s_int32) == 4);
-/*  assert(sizeof(s_int64) == 8); */
+  /*   assert(sizeof(s_int64) == 8); */
 
   assert(sizeof(void *)   == sizeof(v.bits32));
 }
 @
+
+% ----------------------------------------------------------------------------
+}

@@ -4,7 +4,7 @@ This document contains the interface and implementation of the {\PAL} run-time s
 Please see the manual for detailed information about the functions contained herein.
 
 % ----------------------------------------------------------------------------
-\section{{\PAL} Runtime System Interface}
+\interface{{\PAL} Runtime System}{
 % ----------------------------------------------------------------------------
 
 % ----------------------------------------------------------------------------
@@ -82,7 +82,8 @@ void Cmm_close(void);
 @ 
 
 % ----------------------------------------------------------------------------
-\section{Implementation for the Interpreter}
+}
+\implementation{{\PAL} Interpreter Runtime System}{
 % ----------------------------------------------------------------------------
 
 The header file for the {\PAL} runtime system is contained within [[runtime.h]].
@@ -181,7 +182,9 @@ Cmm_Cont *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n,
   static unsigned  boot_id  = 0;
   int              rc;
   thread          *t;
-  CMM_label       *lbl;
+  CMM_label       *lbl_proc,
+                  *lbl_f,
+                  *lbl_x;
 
   char            *byteorder_string = (DEF_BYTE_ORDER == BIG ? "'BIG'" 
                                                              : "'LITTLE'");
@@ -189,29 +192,35 @@ Cmm_Cont *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n,
   /* FIX -- MACHINE SPECIFIC */
   char *bootstring = (char *) malloc(sizeof(char) * 1024);
   sprintf(bootstring, "CMM.imports({ '%s' })               \n"
-                      "CMM.exports({ '_boot_proc_%u' })    \n"
+
+                      "CMM.exports({ '_boot_proc_%u', "
+                                   " '_boot_x_%u'   , "
+                                   " '_boot_f_%u'   })     \n"
+
                       "CMM.section('_boot_section_%u')     \n"
                       "CMM.align(%d)                       \n"
                       "CMM.define_label('_boot_x_%u')      \n"
                       "CMM.skip(%d)                        \n"
-                      "CMM.define_label('_boot_f_%u')      \n"
-                      "CMM.skip(4)                         \n"
-                      "CMM.procedure('_boot_proc_%u',1,0)  \n"
 
+                      "CMM.define_label('_boot_f_%u')      \n"
+                      "CMM.skip(%d)                        \n"
+                      "CMM.procedure('_boot_proc_%u',1,0)  \n"
                       "CMM.push_symbol('_boot_x_%u')       \n"
+
                       "CMM.fetch(%d,%s,%d)                 \n"
                       "CMM.store_arg(0)                    \n"
-
                       "CMM.push_symbol('_boot_f_%u')       \n"
-                      "CMM.fetch(%d,%s,%d)                 \n"
-                      "CMM.call({}, {}, {}, 0)             \n"
 
+                      "CMM.fetch(%d,%s,%d)                 \n"
+
+                      "CMM.call({}, {}, {}, 0)             \n"
                       "CMM.cmm_return(0, 0)                \n"
                       "CMM.end_section()                   \n",
 
-                      CMM_label_raddr(((CMM_label *) f))->label->name, boot_id,
-                      boot_id, DEF_ALIGN, boot_id, sizeof(value), 
+                      CMM_label_raddr(((CMM_label *) f))->label->name, 
                       boot_id, boot_id, boot_id,
+                      boot_id, DEF_ALIGN, boot_id, sizeof(value), 
+                      boot_id, sizeof(value), boot_id, boot_id,
                       8*sizeof(value *), byteorder_string, DEF_ALIGN, boot_id,
                       8*sizeof(void  *), byteorder_string, DEF_ALIGN);
 
@@ -224,20 +233,33 @@ Cmm_Cont *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n,
   }
 
   sprintf(bootstring, "_boot_proc_%u", boot_id - 1);
-  lbl = cmm_find_export(bootstring);
+  lbl_proc = cmm_find_export(bootstring);
+
+  sprintf(bootstring, "_boot_x_%u", boot_id - 1);
+  lbl_x    = cmm_find_export(bootstring);
+
+  sprintf(bootstring, "_boot_f_%u", boot_id - 1);
+  lbl_f    = cmm_find_export(bootstring);
 
   free(bootstring);
-  assert(lbl != NULL);
+  assert(lbl_proc != NULL && lbl_x != NULL && lbl_f != NULL);
 
   /* initialize thread */
-  t = init_thread(lbl, s, n);
+  t = init_thread(lbl_proc, s, n);
   *limit_cookie = t->stack_limit;
 
   /* initialize f and x placeholders in loaded bootstring unit */
-  assert(location_known(CMM_label_raddr((CMM_label *) lbl)));
+  assert(location_known(CMM_label_raddr((CMM_label *) lbl_proc)));
+  assert(location_known(CMM_label_raddr((CMM_label *) lbl_f)));
+  assert(location_known(CMM_label_raddr((CMM_label *) lbl_x)));
   {
+    void  **f_loc = ((void **) CMM_label_location(lbl_f));
+    value  *x_loc = ((value *) CMM_label_location(lbl_x));
+    
+    /*
     void  **f_loc = ((void **) CMM_label_location((CMM_label *) lbl)) - 1;
     value  *x_loc = ((value *) f_loc) - 1;
+    */
 
     /* f */
     *f_loc = (void *) f;
@@ -568,3 +590,6 @@ static void runtime_sys_err(char *fmt, ...) {
   exit(1);
 }
 @ 
+
+% ----------------------------------------------------------------------------
+}

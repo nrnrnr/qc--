@@ -3,7 +3,7 @@
 This document contains the interface and implementation of the interpreter's encoding phase.
 
 % ----------------------------------------------------------------------------
-\section{Interface}
+\interface{Bytecode Generation and Loading}{
 % ----------------------------------------------------------------------------
 
 <<encoding.h>>=
@@ -56,7 +56,8 @@ int lua_CMM_end_section(lua_State *L);
 @ 
 
 % ----------------------------------------------------------------------------
-\section{Implementation}
+}
+\implementation{Bytecode Generation and Loading}{
 % ----------------------------------------------------------------------------
 
 <<encoding.c>>=
@@ -429,8 +430,6 @@ int lua_CMM_define_label(lua_State *L) {
   addr  = lbl->lbl.raddr;
   label = addr->label;
 
-/*  if (!block_defined(label->block)) { */
-
   if (!CMM_label_defined(lbl)) {
     label_define(label, 0);
     lbl->unit = unit;
@@ -767,7 +766,7 @@ int lua_CMM_data(lua_State *L) {
     n = lua_getn(L, -1);
     for (i = 1; i <= n; i++) {
       long int num;
-      lua_rawgeti(L, -1, n);
+      lua_rawgeti(L, -1, i);
 
       lua_assert_isstring(L, -1, 
                     "data expects initialized arguments in string form (hex)");
@@ -1219,3 +1218,5 @@ And here we generate the prototypes:
   ITERATE_CMM_FUNCS(LUA_FUNC_PROTOTYPE)
 @ 
 
+% ----------------------------------------------------------------------------
+}

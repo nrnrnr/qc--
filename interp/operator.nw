@@ -3,7 +3,7 @@
 This document contains the interface and implementation of {\PAL} primitive operators.
 
 % ----------------------------------------------------------------------------
-\section{Interface}
+\interface{{\PAL} Primitive Operators}{
 % ----------------------------------------------------------------------------
 
 <<operator.h>>=
@@ -123,7 +123,8 @@ void init_operators(void);
 @ 
 
 % ----------------------------------------------------------------------------
-\section{Implementation}
+}
+\implementation{{\PAL} Primitive Operators}{
 % ----------------------------------------------------------------------------
 
 <<operator.c>>=
@@ -131,9 +132,9 @@ void init_operators(void);
 
 #include <stdlib.h>
 
-#define __USE_ISOC99 1
+#include "c_features.h"
+#include "float_features.h"    /* for rounding mode handling */
 #include <math.h>
-/* #include <fenv.h> */    /* C99 */
 
 #include "stack.h"
 #include "table.h"
@@ -238,46 +239,46 @@ We use a Lua table represented in C by global variable [[operator_table]] (of ty
 We use one macro call per operation to generate the implementations of the IEEE 594 floating-point operations called for in the {\PAL} language specification.
 <<floating-point operator definitions>>=
 /* FLOAT operators begin here. */
-/*
+NULLARYOP(float_lt , { v1 = FLOAT_LT ; }, v1, u_int8, bits2)
+NULLARYOP(float_eq , { v1 = FLOAT_EQ ; }, v1, u_int8, bits2)
+NULLARYOP(float_gt , { v1 = FLOAT_GT ; }, v1, u_int8, bits2)
+NULLARYOP(unordered, { v1 = UNORDERED; }, v1, u_int8, bits2)
 IBINARYOP(fcmp, { if isunordered(v1, v2)    ans = UNORDERED;
                   else if isgreater(v1, v2) ans = FLOAT_GT;
                   else if isless(v1, v2)    ans = FLOAT_LT;
                   else ans = FLOAT_EQ;
                 }, v1, v2, ans, float32, float32, float_comparison, 
                                 float32, float32, bits8)
-*/
-BINARYOP(feq, v1 == v2, v1,v2, float32, float32, bool, float32, float32, bool)
-BINARYOP(fge, v1 >= v2, v1,v2, float32, float32, bool, float32, float32, bool)
-BINARYOP(fgt, v1 >  v2, v1,v2, float32, float32, bool, float32, float32, bool)
-BINARYOP(fle, v1 <= v2, v1,v2, float32, float32, bool, float32, float32, bool)
-BINARYOP(flt, v1 <  v2, v1,v2, float32, float32, bool, float32, float32, bool)
-BINARYOP(fne, v1 != v2, v1,v2, float32, float32, bool, float32, float32, bool)
-/* 
-BINARYOP(fordered,   !isunordered(v1,v2), v1, v2, float32, float32, bool,
-                                                  float32, float32, bool) 
-BINARYOP(funordered, isunordered(v1, v2), v1, v2, float32, float32, bool,
-                                                  float32, float32, bool)
-*/
+BINARYOP (feq, v1 == v2, v1,v2, float32, float32, bool, float32, float32, bool)
+BINARYOP (fge, v1 >= v2, v1,v2, float32, float32, bool, float32, float32, bool)
+BINARYOP (fgt, v1 >  v2, v1,v2, float32, float32, bool, float32, float32, bool)
+BINARYOP (fle, v1 <= v2, v1,v2, float32, float32, bool, float32, float32, bool)
+BINARYOP (flt, v1 <  v2, v1,v2, float32, float32, bool, float32, float32, bool)
+BINARYOP (fne, v1 != v2, v1,v2, float32, float32, bool, float32, float32, bool)
+BINARYOP (fordered,   !isunordered(v1,v2), v1, v2, float32, float32, bool,
+                                                     float32, float32, bool) 
+BINARYOP (funordered, isunordered(v1, v2), v1, v2, float32, float32, bool,
+                                                     float32, float32, bool)
 /* NaN */
-/* NULLARYOP(round_down,    { v1 = FE_DOWNWARD;   }, v1, u_int8, bits2) */
-/* NULLARYOP(round_up,      { v1 = FE_UPWARD;     }, v1, u_int8, bits2) */
-/* NULLARYOP(round_nearest, { v1 = FE_TONEAREST;  }, v1, u_int8, bits2) */
-/* NULLARYOP(round_zero,    { v1 = FE_TOWARDZERO; }, v1, u_int8, bits2) */
+NULLARYOP  (round_down,    { v1 = FE_DOWNWARD;   }, v1, u_int8, bits2)
+NULLARYOP  (round_up,      { v1 = FE_UPWARD;     }, v1, u_int8, bits2)
+NULLARYOP  (round_nearest, { v1 = FE_TONEAREST;  }, v1, u_int8, bits2)
+NULLARYOP  (round_zero,    { v1 = FE_TOWARDZERO; }, v1, u_int8, bits2)
 /* f2f */
-UNARYOP   (f2i_hwrm , (s_int32) v1, v1, float32, s_int32, float32, bits32 )
-UNARYOP   (i2f_hwrm , (float32) v1, v1, s_int32, float32, bits32 , float32)
-T_BINARYOP(fadd_hwrm, v1 + v2,  v1, v2, float32, float32)
-T_BINARYOP(fsub_hwrm, v1 - v2,  v1, v2, float32, float32)
-T_BINARYOP(fdiv_hwrm, v1 / v2,  v1, v2, float32, float32)
-T_BINARYOP(fmul_hwrm, v1 * v2,  v1, v2, float32, float32)
+FUNARYOP   (f2i , (s_int32) v1, v1, float32, s_int32, float32, bits32 )
+FUNARYOP   (i2f , (float32) v1, v1, s_int32, float32, bits32 , float32)
+T_FBINARYOP(fadd, v1 + v2,  v1, v2, float32, float32)
+T_FBINARYOP(fsub, v1 - v2,  v1, v2, float32, float32)
+T_FBINARYOP(fdiv, v1 / v2,  v1, v2, float32, float32)
+T_FBINARYOP(fmul, v1 * v2,  v1, v2, float32, float32)
 /* fmulx */
-T_UNARYOP(fabs      , (float32) fabs((double) v1), v1, float32, float32)
-T_UNARYOP(fneg      , -(v1),                       v1, float32, float32)
-T_UNARYOP(fsqrt_hwrm, (float32) sqrt((double) v1), v1, float32, float32)
+T_UNARYOP (fabs , (float32) fabs((double) v1), v1, float32, float32)
+T_UNARYOP (fneg , -(v1),                       v1, float32, float32)
+T_FUNARYOP(fsqrt, (float32) sqrt((double) v1), v1, float32, float32)
 /* minf  */
-NULLARYOP(mzero, { v1 = (float32)     -0.0; }, v1, float32, float32)
-/* NULLARYOP(pinf,  { v1 = (float32) INFINITY; }, v1, float32, float32) */
-NULLARYOP(pzero, { v1 = (float32)      0.0; }, v1, float32, float32)  
+NULLARYOP (mzero, { v1 = (float32)     -0.0; }, v1, float32, float32)
+NULLARYOP (pinf , { v1 = (float32) INFINITY; }, v1, float32, float32)
+NULLARYOP (pzero, { v1 = (float32)      0.0; }, v1, float32, float32)  
 /* FLOAT operators end here. */
 @ 
 
@@ -312,6 +313,7 @@ IBINARYOP (div, { div_t temp = div(v1, v2);
                 },    v1,v2,ans, u_int32, u_int32,u_int32,bits32,bits32,bits32)
 BINARYOP  (divu,v1 / v2,  v1,v2, u_int16, u_int16,u_int16,bits16,bits16,bits16)
 BINARYOP  (divu,v1 / v2,  v1,v2, u_int32, u_int32,u_int32,bits32,bits32,bits32)
+BINARYOP  (eq,  v1 == v2, v1,v2, u_int8 , u_int8 ,bool,  bits2 , bits2 , bool )
 BINARYOP  (eq,  v1 == v2, v1,v2, u_int16, u_int16,bool , bits16, bits16, bool )
 BINARYOP  (eq,  v1 == v2, v1,v2, u_int32, u_int32,bool , bits32, bits32, bool )
 BINARYOP  (ge,  v1 >= v2, v1,v2, s_int16, s_int16,bool , bits16, bits16, bool )
@@ -342,6 +344,7 @@ T_BINARYOP(mul_trunc, v1 * v2, v1, v2, u_int16, bits16)
 T_BINARYOP(mul_trunc, v1 * v2, v1, v2, u_int32, bits32)
 BINARYOP  (mulu, v1 * v2, v1,v2, u_int16, u_int16,u_int32,bits16,bits16,bits32)
 BINARYOP  (mulu, v1 * v2, v1,v2, u_int8 , u_int8 ,u_int16,bits8 ,bits8 ,bits16)
+BINARYOP  (ne,   v1 !=v2, v1,v2, u_int8 , u_int8 ,bool,   bits2 ,bits2 ,bool )
 BINARYOP  (ne,   v1 !=v2, v1,v2, u_int16, u_int16,bool,   bits16,bits16,bool )
 BINARYOP  (ne,   v1 !=v2, v1,v2, u_int32, u_int32,bool,   bits32,bits32,bool )
 T_UNARYOP (neg,     -v1               , v1    , s_int16, bits16)
@@ -386,8 +389,9 @@ UNARYOP   (sx  ,    (s_int32) v1      , v1, s_int32, s_int32, bits32, bits32)
 T_BINARYOP(xor ,    v1 ^ v2           , v1, v2, s_int16, bits16)
 T_BINARYOP(xor ,    v1 ^ v2           , v1, v2, s_int32, bits32)
 UNARYOP   (zx  ,    (u_int16) v1      , v1, u_int8 , u_int16, bits8 , bits16)
-UNARYOP   (zx  ,    (u_int32) v1      , v1, u_int16, u_int32, bits16, bits32)
 UNARYOP   (zx  ,    (u_int32) v1      , v1, u_int8 , u_int32, bits8 , bits32)
+UNARYOP   (zx  ,    (u_int32) v1      , v1, u_int16, u_int32, bits16, bits32)
+UNARYOP   (zx  ,    (u_int32) v1      , v1, u_int32, u_int32, bits32, bits32)
 /* INTEGER operators end here. */
 @ 
 
@@ -451,7 +455,9 @@ And now for the hackery that lets us define and register operators with the same
 
 <<operator macro redefinition>>=
 #undef BINARYOP
+#undef FBINARYOP
 #undef UNARYOP
+#undef FUNARYOP
 #undef IBINARYOP
 #undef NULLARYOP
 #undef POPCNT
@@ -459,8 +465,15 @@ And now for the hackery that lets us define and register operators with the same
 #define BINARYOP(NAME, EXP, X, Y, TX, TY, T, BX, BY, B) \
 register_operator(#NAME, op_##NAME##_##BX##_##BY##_##B, 2, #BX "," #BY ":" #B);
 
+#define FBINARYOP(NAME, EXP, X, Y, TX, TY, T, BX, BY, B) \
+register_operator(#NAME, op_##NAME##_##BX##_##BY##_bits2_##B, 3, \
+                         #BX "," #BY ",bits2:" #B);
+
 #define UNARYOP(NAME, EXP, X, TX, T, BX, B) \
 register_operator(#NAME, op_##NAME##_##BX##_##B, 1, #BX ":" #B);
+
+#define FUNARYOP(NAME, EXP, X, TX, T, BX, B) \
+register_operator(#NAME, op_##NAME##_##BX##_bits2_##B, 2, #BX ",bits2:" #B);
 
 #define IBINARYOP(NAME, STMS, X, Y, RES, TX, TY, T, BX, BY, B) \
 register_operator(#NAME, op_##NAME##_##BX##_##BY##_##B, 2, #BX "," #BY ":" #B);
@@ -494,6 +507,20 @@ sptr op_##NAME##_##BX##_##BY##_##B (sptr values) { \
   return values-1;                           \
 }
 
+#define FBINARYOP(NAME, EXP, X, Y, TX, TY, T, BX, BY, B) \
+\
+sptr op_##NAME##_##BX##_##BY##_bits2_##B (sptr values) { \
+  TY Y;                                      \
+  TX X;                                      \
+  u_int8 _rmode;                             \
+  UNDERFLOW_CHECK(values, 2);                \
+  _rmode = VIEW(STACK_ELT(values,  0).bits2, u_int8); \
+  Y = VIEW(STACK_ELT(values, -1).BY, TY);    \
+  X = VIEW(STACK_ELT(values, -2).BX, TX);    \
+  VIEW(STACK_ELT(values, -1).B, T) = (EXP);  \
+  return values-2;                           \
+}
+
 #define UNARYOP(NAME, EXP, X, TX, T, BX, B)  \
 \
 sptr op_##NAME##_##BX##_##B (sptr values) {  \
@@ -502,6 +529,18 @@ sptr op_##NAME##_##BX##_##B (sptr values) {  \
   X = VIEW(STACK_ELT(values, 0).BX, TX);     \
   VIEW(STACK_ELT(values, 0).B, T) = (EXP);   \
   return values;                             \
+}
+
+#define FUNARYOP(NAME, EXP, X, TX, T, BX, B) \
+\
+sptr op_##NAME##_##BX##_bits2_##B (sptr values) {  \
+  TX X;                                      \
+  u_int8 _rmode;                             \
+  UNDERFLOW_CHECK(values, 1);                \
+  _rmode = VIEW(STACK_ELT(values, 0).bits2, u_int8); \
+  X = VIEW(STACK_ELT(values, 0).BX, TX);     \
+  VIEW(STACK_ELT(values, 0).B, T) = (EXP);   \
+  return values-1;                           \
 }
 @ 
 [[NULLARYOP]] and [[IBINARYOP]] are similar, but perform the result computation imperatively (allowing for arbitrary code execution of [[STMS]]).
@@ -537,8 +576,14 @@ sptr op_##NAME##_##BX##_##BY##_##B (sptr values) { \
 #define T_BINARYOP(NAME, EXP, X, Y, T, B)    \
 BINARYOP(NAME, EXP, X, Y, T, T, T, B, B, B)
 
+#define T_FBINARYOP(NAME, EXP, X, Y, T, B)   \
+FBINARYOP(NAME, EXP, X, Y, T, T, T, B, B, B)
+
 #define T_UNARYOP(NAME, EXP, X, T, B)        \
 UNARYOP(NAME, EXP, X, T, T, B, B)
+
+#define T_FUNARYOP(NAME, EXP, X, T, B)       \
+FUNARYOP(NAME, EXP, X, T, T, B, B)
 
 #define T_IBINARYOP(NAME, STMS, X, Y, RES, T, B)  \
 IBINARYOP(NAME, STMS, X, Y, RES, T, T, T, B, B, B)
@@ -571,3 +616,6 @@ T_BINARYOP(rotl, (x @<< d) + (((~(((T) ~0) >> d)) & x) @>> (sizeof(T)*8 - d)),\
 T_BINARYOP(rotr, (x >>  d) + (((~(((T) ~0) << d)) & x) << (sizeof(T)*8 - d)),\
                  x, d, T, B)
 @ 
+
+% ----------------------------------------------------------------------------
+}

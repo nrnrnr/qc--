@@ -580,12 +580,16 @@ which it is running (for example, byte order).
 
 Helper function [[infer_architecture]] tries to infer as much about the machine
 on which it runs as is possible; and based on this information inferred,
-[[mem_aggregate]] is able to properly aggregate bytes for multi-byte loads
-and stores.
+[[mem_aggregate]] is able to properly aggregate multiple unaligned bytes into
+an integer value.
+
+Helper function [[round_up]] takes a pointer and rounds it up so it is aligned
+to the current machine architecture's alignment requirement.
 
 <<function prototypes>>=
-void     infer_architecture(void);
-unsigned mem_aggregate(unsigned char *a, byte_order bo, unsigned num_bytes);
+void      infer_architecture(void);
+unsigned  mem_aggregate(unsigned char *a, byte_order bo, unsigned num_bytes);
+void     *round_up(void *);
 @ 
 
 % ----------------------------------------------------------------------------
@@ -753,7 +757,6 @@ The sizes of these stacks are specified by arguments to the [[cmm_interp_open]] 
 @
 
 <<allocate memory for argument-passing stack>>=
-  /* ARGS OK */
   arguments          = (sptr) malloc(sizeof(value) * argspace_size);
   mem_assert(arguments);
   arguments_limit    = arguments + argspace_size;
@@ -797,9 +800,8 @@ void infer_architecture(void) {
 }
 @ 
 
-Once we have inferred this byte-order information, helper [[mem_aggregate]]
-is able to properly order bytes so as to effectively allow multi-byte
-loads and stores.
+Once we have inferred this byte-order information, helpers [[mem_aggregate]]
+is able to properly order bytes so as to effectively allow multi-byte loads.
 
 <<machine-dependent details>>=
 unsigned mem_aggregate(unsigned char *a, byte_order bo, unsigned num_bytes) {
@@ -822,6 +824,16 @@ unsigned mem_aggregate(unsigned char *a, byte_order bo, unsigned num_bytes) {
   }
 
   return u;
+}
+
+void *round_up(void *p) {
+  if (DEF_ALIGN <= 1) return p;
+  {
+    unsigned long x = (unsigned long) p;
+    if (x % DEF_ALIGN == 0) return p;
+    x += DEF_ALIGN - (x % DEF_ALIGN);
+    return (void *) x;
+  }
 }
 @ 
 
@@ -848,12 +860,12 @@ which the interpreter is currently being run.
 /* FIX :  the float types are here defined in a machine-dependent manner; */
 typedef float       float32;
 typedef double      float64;
-typedef long double float96; /* this one doesn't work on liz */
+typedef long double float96;
 
 extern  byte_order DEF_BYTE_ORDER;
 
 #define DEF_MEMSIZE    8
-#define DEF_ALIGN      4
+#define DEF_ALIGN      8
 
 typedef u_int32 Cmm_Word;
 #endif /* _MACHINE_H */
@@ -868,7 +880,7 @@ typedef u_int32 Cmm_Word;
 /* FIX :  the float types are here defined in a machine-dependent manner; */
 typedef float       float32;
 typedef double      float64;
-typedef long double float96; /* this one doesn't work on liz */
+typedef long double float96;
 
 extern  byte_order DEF_BYTE_ORDER;
 
@@ -1295,6 +1307,8 @@ Finally, we get to the main part of the interpreter.  We start by initializing t
   dataptr     stackdata_end;
   uid         u;
 
+  actptr      caller;
+
   assert(t != NULL);
   
   t->stack_free = (void *) (((actptr) t->stack_free) - 1);
@@ -1332,6 +1346,7 @@ frame record.
   stackdata     = act->stackdata;
   stackdata_end = act->stackdata_end;
   u             = act->u;
+  caller        = act->caller;
 @
 
 By now we should know how many globals are used in the source {\PAL} code; this number has been stored in the global C variable [[num_globals]].
@@ -1450,14 +1465,16 @@ For now, we only support the natural byte-order of the machine on which the inte
     | FETCH(sz,bo,al)   => {
                            assert(bo == DEF_BYTE_ORDER);
                            assert(al == DEF_ALIGN);
-                           assert(sz >  0);
+                           if (sz <= 0 || sz > sizeof(value)*8)
+                             cmm_err("cannot fetch %d bits", sz);
                            <<fetch value from given address>>
                            pc = next;
                            }
     | STORE(sz,bo,al)   => {
                            assert(bo == DEF_BYTE_ORDER);
                            assert(al == DEF_ALIGN);
-                           assert(sz >  0);
+                           if (sz <= 0 || sz > sizeof(value)*8)
+                             cmm_err("cannot fetch %d bits", sz);
                            <<store given value at given address>>
                            values -= 2;
                            pc = next;
@@ -1465,7 +1482,8 @@ For now, we only support the natural byte-order of the machine on which the inte
     | GSTORE(sz,bo,al)  => {
                            assert(bo == DEF_BYTE_ORDER);
                            assert(al == DEF_ALIGN);
-                           assert(sz >  0);
+                           if (sz <= 0 || sz > sizeof(value)*8)
+                             cmm_err("cannot fetch %d bits", sz);
                            UNDERFLOW_CHECK(values, 3);
                            if (STACK_ELT(values, -2).bool) {
                              <<store given value at given address>>
@@ -1475,37 +1493,28 @@ For now, we only support the natural byte-order of the machine on which the inte
                            }
 @ 
 
-\emph{This should ultimately be fixed to work!  Note that we may be fetching more than asked to; this is bad!}
+We only support fetches and stores in the machine's natural byte-order, so we
+can simply use [[memcpy]] from [[<stdlib.h>]] and trust it to properly
+aggregate / dis-aggregate data for unaligned multi-byte loads and stores.
 
 <<fetch value from given address>>=
   {
     value *fetched       = (value *) STACK_ELT(values, 0).ptr;
+    value  v;
 
     cmm_assert(fetched != NULL, "attempted to FETCH at address NULL");
 
-    if (((unsigned) fetched) % al == 0) {
-      /* if we are properly aligned we may just dereference */
-      STACK_ELT(values, 0) = *fetched;
-    } else {
-      /* otherwise, we must carefully aggregate */
-      unsigned u = mem_aggregate((void *) fetched, bo, sizeof(value));
-      STACK_ELT(values, 0) = VIEW(u, value);
-    }
+    memcpy((void *) &v, (const void *) fetched, sz / 8);
+    STACK_ELT(values, 0) = v;
   }
 @ 
-
-\emph{STORAGE DOES NOT WORK WHEN UNALIGNED!!!}
 
 <<store given value at given address>>=
   {
     value *tostore       = (value *) STACK_ELT(values, -1).ptr;
 
     cmm_assert(tostore != NULL, "attempted to STORE to address NULL");
-
-    /* for now, just assert we are properly aligned */
-    assert(((unsigned) tostore) % al == 0);
-
-    *tostore             = STACK_ELT(values, 0);
+    memcpy(tostore, &(STACK_ELT(values, 0)), sz / 8);
   }
 @ 
 
@@ -1527,11 +1536,11 @@ rounding mode atop the value stack.
 and setting it to be the current hardware floating-point rounding mode.
 
 <<matching statement>>=
-    | FETCH_ROUND()     => /* PUSH(to_CMM_value(fegetround(), 2), values); */
+    | FETCH_ROUND()     => PUSH(to_CMM_value(fegetround(), 2), values);
                            pc = next;
     | STORE_ROUND()     => {
-                           /* value v = POP(values); */
-                           /* fesetround(v.bits2);   */
+                           value v = POP(values);
+                           fesetround(v.bits2);
                            pc      = next;
                            }
 @ 
@@ -1540,8 +1549,6 @@ Fetching and storing from the argument space is not difficult.
 \useops{Push-Arg}
 \useops{Pop-Arg}
 <<matching statement>>=
-    /* ARGS OK */
-
     | STORE_ARG(n)      => cmm_assert(arguments + n < arguments_limit,
                                   "invalid register index to argument space");
                            arguments[n] = POP(values); pc = next;
@@ -1668,7 +1675,8 @@ To save the caller's activation record, we simply use the next free [[activation
 <<save current activation info in a stack record>>=
                            /* save necessary info in activation record */
                            saved          = (actptr) t->stack_free;
-                           t->stack_free  = ((actptr) t->stack_free) + 1;
+                           t->stack_free  = round_up(
+                                              ((actptr) t->stack_free) + 1);
                            if (t->stack_free > t->stack_limit)
                              cmm_err("ran out of stack space");
 
@@ -1679,6 +1687,7 @@ To save the caller's activation record, we simply use the next free [[activation
                            saved->stackdata_end = stackdata_end;
                            saved->kappa         = ann;
                            saved->u             = u;
+						   saved->caller        = caller;
 
 						   /* also save pc in thread record */ 
 						   t->pc                = saved->pc;
@@ -1693,6 +1702,7 @@ When the matching statement is executed once more during the next cycle of the [
                                       "cannot call undefined procedure");
 
                            pc            = (bytecodeptr) location(proc->raddr);
+                           caller        = saved;
 
                            locals        = t->stack_free;
                            t->stack_free = (void *) (((sptr) t->stack_free) +
@@ -1701,9 +1711,9 @@ When the matching statement is executed once more during the next cycle of the [
                            mem_assert(t->stack_free <= t->stack_limit);
 
                            stackdata     = t->stack_free;
-                           t->stack_free = (void *)(((dataptr) t->stack_free) +
-                                             proc->stackdata_size +
-                                             proc->stackdata_size % DEF_ALIGN);
+                           t->stack_free = round_up(
+                                         (void *) (((dataptr) t->stack_free) +
+                                                   proc->stackdata_size));
                            stackdata_end = (dataptr) (t->stack_free);
                            mem_assert(t->stack_free <= t->stack_limit);
 
@@ -1728,7 +1738,7 @@ Unfortunately we cannot support an infinite number of C function types.
                            /* save current info in partial stack record */
                            {
                              actptr saved = (actptr) t->stack_free;
-                             t->stack_free = (void *) (saved + 1);
+                             t->stack_free = round_up((void *) (saved + 1));
                              mem_assert(t->stack_free <= t->stack_limit);
 
                              saved->pc            = pc;
@@ -1740,6 +1750,7 @@ Unfortunately we cannot support an infinite number of C function types.
                              saved->kappa         = NULL;
                              saved->callee        = NULL;
                              saved->u             = u;
+                             saved->caller        = caller;
 
                              /* also save pc in t */
                              t->pc                = saved->pc;
@@ -1760,6 +1771,7 @@ Unfortunately we cannot support an infinite number of C function types.
                              stackdata     = saved->stackdata_end;
                              stackdata_end = saved->stackdata_end;
                              u             = saved->u;
+                             caller        = saved->caller;
                            }
 
                            pc = next;
@@ -1803,8 +1815,6 @@ We make a call to [[call_helper]], which takes care of arranging the argument st
 We simply pass the argument stack in and get it back out again (with the pointer to the top of the stack possibly altered).
 
 <<use [[call_helper]] to call [[f]]>>=
-                           /* ARGS OK */
-
                            arguments = call_helper(arguments, f);
 @ 
 
@@ -1846,10 +1856,12 @@ Because the old activation dies, we can simply reuse the memory chunk it used on
 We do need to make sure, though, that there is enough room on this stack for the new activation in the case that the new activation needs more local stack memory than the dying one.
 
 <<reuse dead local memory for new activation>>=
+                           caller        = caller;
                            stackdata     = (datastack) (locals_end = locals + 
                                                          proc->num_locals);
-                           stackdata_end = stackdata + proc->stackdata_size +
-                                           proc->stackdata_size % DEF_ALIGN;
+                           stackdata_end = round_up(stackdata + 
+                                                    proc->stackdata_size);
+
                            t->stack_free = (void *) stackdata_end;
                            mem_assert(t->stack_free <= t->stack_limit);
 @ 
@@ -1859,7 +1871,6 @@ We implement both return rules with one matching case.
 \useops{ReturnAlt}
 <<matching statement>>=
     | RETURN(i, count)  => { 
-                           actptr     caller;
                            lua_State *L;
 
                            ASSERT_EMPTY(values);
@@ -1881,7 +1892,6 @@ We implement both return rules with one matching case.
                              done = 1;
                              break;
                            }
-                           caller        = ((actptr) locals) - 1;
 
                            /* reclaim dead space */
                            t->stack_free = caller;
@@ -1890,6 +1900,8 @@ We implement both return rules with one matching case.
 
                            dies_uid(u);
                            u = caller->u;
+
+                           caller = caller->caller;
                            }
 @ 
 
@@ -2010,7 +2022,7 @@ away [[next]] so that we do not end up in an infinite loop.
                                {
                                /* save needed info in activation record */
                                actptr saved = (actptr) t->stack_free;
-                               t->stack_free = (void *) (saved + 1);
+                               t->stack_free = round_up((void *) (saved + 1));
                                mem_assert(t->stack_free <= t->stack_limit);
 
                                saved->pc            = next;
@@ -2022,6 +2034,7 @@ away [[next]] so that we do not end up in an infinite loop.
                                saved->kappa         = NULL;
                                saved->callee        = NULL;
                                saved->u             = u;
+                               saved->caller        = caller;
 
 						       /* also save pc in thread record */ 
 						       t->pc                = saved->pc;
@@ -2034,8 +2047,8 @@ We next kill off all applications ``above'' [[dest_act]] in the activation chain
                            /* FIX if callee is NULL what does that mean? */
                            assert(cont->dest_act->callee != NULL);
                            dies_uid_range(
-                                  (((actptr) (t->stack_free)) - 1)->u,
-                                  (cont->dest_act->callee)->u);
+                               (((actptr) (t->stack_free)) - 1)->u,
+                               (cont->dest_act->callee)->u);
 @
 
 Finally, restoring information from the destination activation is as simple as copying pointers and the old [[uid]].
@@ -2048,6 +2061,7 @@ Finally, restoring information from the destination activation is as simple as c
                            stackdata     = cont->dest_act->stackdata;
                            stackdata_end = cont->dest_act->stackdata_end;
                            u             = cont->dest_act->u;
+                           caller        = cont->dest_act->caller;
 
                            cont->dest_act->callee = NULL;
 @
@@ -2186,8 +2200,8 @@ Putting it all together, we have [[interp.m]], the C file with NJ Machine-Code T
 #include <string.h>
 #include <ctype.h>
 #include <setjmp.h>
-/* #include <fenv.h> */    /* C99 */
 
+#include "float_features.h"
 #include "lualink.h"
 #include "encode.h"
 #include "ccall.h"

@@ -247,13 +247,26 @@ the collector).
 \subsubsection{The Allocator}
 % ------------------------------------------------------------------ 
 
-DOCUMENTATION HERE
+The allocator is contained in C function [[alloc]].
+This function takes a pointer to a type information record and returns a
+pointer to the allocated space.
+
+A type information record is typically stored as initialized data in {\PAL}.
+A type's record contains an 8-bit value $n$ indicating the number of bytes in 
+an object of that type, followed by an array of $n$ boolean values (stored as 
+8-bit {\PAL} values [[0::bits8]] or [[1::bits8]]); the $i$th value in this 
+array should be true ([[1]]) if and only if an object of this type contains
+a pointer that starts at the $i$th byte of the object's representation.
 
 <<function prototypes>>=
 void *alloc(void *ty);
 @ 
 
-DOCUMENTATION HERE
+To allocate space on the heap, we check to see if there is enough free space
+in [[fromspace]] to hold an object of the given type plus a heap tag (we 
+explicitly tag all heap objects to identify their types at runtime).
+If we need more space, we call [[gc]] to garbage-collect; if that is still
+not enough, we grow the heap (using [[gc_growheap]]).
 
 <<garbage collection functions>>=
 void *alloc(void *ty) {
@@ -284,10 +297,7 @@ void *alloc(void *ty) {
   m   = hp;
   hp += size;
 
-  htag = (heap_tag *) m;
-  htag->forward = 0;
-  htag->size    = size - sizeof(heap_tag);
-  htag->ty      = (u_int8 *) ty;
+  <<set up [[heap_tag]] for new object at beginning of allocated space>>
 
   /* update stats */
   nalloc++;
@@ -296,17 +306,32 @@ void *alloc(void *ty) {
 }
 @ 
 
+Setting up a [[heap_tag]] allows us to associate the allocated object with
+its size, its given type [[ty]].
+Later on, during garbage collection, we use the heap tag to indicate whether
+or not the object tagged contains forwarding pointers.
+
+<<set up [[heap_tag]] for new object at beginning of allocated space>>=
+  htag = (heap_tag *) m;
+  htag->forward = 0;
+  htag->size    = size - sizeof(heap_tag);
+  htag->ty      = (u_int8 *) ty;
+@
+
 % ------------------------------------------------------------------ 
 \subsubsection{The Collector}
 % ------------------------------------------------------------------ 
 
-DOCUMENTATION HERE
+The garbage collector is contained in function [[gc]].
+It takes no arguments and returns none.
 
 <<function prototypes>>=
 void gc(void);
 @ 
 
-DOCUMENTATION HERE
+We update statistics, perform a copy (using [[gc_copy]]), swap pointers
+into semispaces, and output statistics if the verbosity level is set high
+enough.
 
 <<garbage collection functions>>=
 void gc(void) {
@@ -337,7 +362,12 @@ void gc(void) {
 \subsubsection{Utility Functions}
 % ------------------------------------------------------------------ 
 
-DOCUMENTATION HERE
+Utility functions do quite a bit of the grunt work.
+[[gc_growheap]] grows the heap to a new size (in case the collector was not
+able to scrounge up enough free space).
+[[gc_copy]] copies live data from [[fromspace]] to [[tospace]].
+[[gc_forward]] is used by [[gc_copy]] to set up a forwarding pointer that
+allows us to preserve pointers to heap objects during and after copying.
 
 <<function prototypes>>=
 void  gc_growheap       (unsigned new_semispacesize);
@@ -345,7 +375,9 @@ void  gc_copy           (void);
 void *gc_forward        (void *rootptr);
 @ 
 
-DOCUMENTATION HERE
+[[gc_growheap]] unsurprisingly calls on [[malloc]].
+It also uses [[copy]] to copy live data into the newly [[malloc]]'d space
+before [[free]]ing the old space.
 
 <<garbage collection functions>>=
 void gc_growheap(unsigned new_semispacesize) {
@@ -370,7 +402,14 @@ void gc_growheap(unsigned new_semispacesize) {
 }
 @ 
 
-DOCUMENTATION HERE
+[[gc_copy]] implements the heart of this garbage collector.
+We start at the youngest activation in the current {\PAL} thread of execution
+and walk down the stack until we reach the oldest activation.
+At each of these activations, we look up the static pointer information 
+associated with the executing procedure to find all root pointers.
+We scan all root pointers we find local to activations, we scan all root
+pointers we find in {\PAL} global registers, and then we scan objects
+found at [[*scanp]].
 
 <<garbage collection functions>>=
 void gc_copy(void) {
@@ -394,6 +433,11 @@ void gc_copy(void) {
 #define GC_GLOBALS        2
 #define GC_globals_backup 3
 @ 
+
+Scanning roots involves the following:
+when we find a non-[[NULL]] root pointer, we call on [[gc_forward]] to copy
+the data being pointed to and then set up a forwarding pointer to the
+data's new location.
 
 <<scan roots in local activations>>=
 {
@@ -425,6 +469,11 @@ void gc_copy(void) {
 }
 @ 
 
+We similarly scan any root pointers we find in {\PAL} global registers.
+We use [[Cmm_FindGlobalVar]] to observe all global registers, and use
+[[Cmm_GetDescriptor]] to look up the pointer information associated with
+the {\PAL} code's globals.
+
 <<scan roots in globals>>=
 {
   unsigned       var_count = Cmm_GlobalCount();
@@ -444,6 +493,8 @@ void gc_copy(void) {
   }
 }
 @ 
+
+Similarly, we scan objects at [[*scanp]].
 
 <<scan objects [[*scanp]]>>=
 for (scanp += sizeof(heap_tag); scanp < hp; scanp += fullsize(scanp)) {
@@ -465,13 +516,15 @@ for (scanp += sizeof(heap_tag); scanp < hp; scanp += fullsize(scanp)) {
 }
 @ 
 
-DOCUMENTATION
+Helper [[isinspace]] simply helps us determine whether a pointer points
+to memory within a particular semispace.
 
 <<faux macro prototypes>>=
 int isinspace(void *ptr, void *semispace);
 @ 
 
-DOCUMENTATION
+We implement [[isinspace]] with a macro that performs simply pointer 
+comparison.
 
 <<macro definitions>>=
 #define isinspace(LOC, SPACE) \
@@ -479,9 +532,11 @@ DOCUMENTATION
 ((unsigned char *) (LOC)) < (SPACE) + semispacesize)
 @ 
 
-DOCUMENTATION
-
-[[gc_forward]] receives as its argument a pointer into the heap.
+[[gc_forward]] receives as its argument a pointer into the heap, copies the
+data being pointed to into [[tospace]], and returns a ``forwarding pointer''
+to this data's new location.
+[[memcpy]] performs the actual copying, and we make use of objects' heap tags
+to identify exactly how many bytes we need to copy over.
 
 <<garbage collection functions>>=
 void *gc_forward(void *rootptr) {
@@ -523,7 +578,8 @@ void *gc_forward(void *rootptr) {
 }
 @
 
-DOCUMENTATION
+[[gc_printstats]] prints some basic statistics about the garbage collector,
+mainly for debugging purposes.
 
 <<function prototypes>>=
 void gc_printstats(void);
@@ -653,8 +709,6 @@ static Cmm_Cont *curr_thread = NULL;
 static void     *globals_backup = NULL;
 @ 
 
-DOCUMENTATION HERE
-
 <<run {\PAL} code>>=
 if (!src_selected) {
   fprintf(stderr, "error: nothing to do\n");
@@ -708,8 +762,8 @@ more than one {\PAL} thread.
 }
 @ 
 
-DOCUMENTATION HERE
-THIS ISN't USED!!!
+\emph{Right now, we don't use the code below.  Instead, we send [[globals_backup]] as an argument into {\PAL} procedure [[main]].  The code below might be nicer but does not work, due to a known issue in the interpreter (a newly created thread appears to be suspended at static boot-up code and not at user-defined procedure [[main]]).}
+
 <<pass [[globals_backup]] pointer off to {\PAL} code>>=
   {
     Cmm_Dataptr d = Cmm_GetDescriptor(Cmm_YoungestActivation(curr_thread), 

@@ -14,7 +14,7 @@ code to be run through the interpreter.
 \subsection{Using the Client}
 % ------------------------------------------------------------------ 
 
-To run a {\PAL} program in file [[foo.c--]] through this front-end, the
+To run a {\PAL} program in file [[foo.c--]] through this client, the
 {\PAL} code must first be passed through the front-end of the {\qcc} compiler:
 
 \begin{verbatim}
@@ -22,13 +22,17 @@ collie% qc-- -interp -o - > foo.lua
 collie% ./exn_client foo.lua
 \end{verbatim}
 
+or possibly:
+
+\begin{verbatim}
+collie% qc-- -interp -o - | ./exn_client -
+\end{verbatim}
+
 where [[foo.c--]] is the {\PAL} source file, [[qc--]] is the {\qcc} compiler
 executable, and [[exn_client]] is the compiled version of [[exn.c]] (which
 is implemented in this file).
 
-The [[-]] switch to [[exn_client]] (which may not be used in conjunction with
-a filename given on the command line) tells [[exn_client]] to read from
-[[stdin]].
+The [[-]] switch to [[exn_client]] tells [[exn_client]] to read from [[stdin]].
 
 % ------------------------------------------------------------------ 
 \section{Implementation}
@@ -156,10 +160,52 @@ Additionally, we register a few needed functions from the standard C library.
 @ 
 
 % ------------------------------------------------------------------ 
-\subsection{Exception Dispatcher}
+\subsection{Exception Mechanism}
 % ------------------------------------------------------------------ 
 
-DOCUMENTATION HERE.
+It is the exception-handling mechanism that comprises the interesting portion
+of this front-end runtime system.
+The process of raising an exception in {\PAL} code goes as follows:
+
+\begin{itemize}
+\item When {\PAL} code needs to signal an exception, it pushes an exception
+tag and an exception argument (or 0 if no argument is needed) onto some global
+exception stack.  This stack's maintenance (allocation, deallocation, etc.) is
+the responsibility of the {\PAL} code; additionally, the {\PAL} code must 
+place a pointer to the top of this stack in its first global variable so C 
+function [[pop_exn_info]] can find it and modify it (to pop it from the stack).
+
+\item After pushing the exception information atop the stack, the 
+{\PAL} code makes a foreign C call to C function [[dispatch_exn]].  This call
+should not be expected to make a local return to the immediately next statement
+in the {\PAL} code.
+\end{itemize}
+
+To handle an exception, {\PAL} code ensure the following:
+
+\begin{itemize}
+\item Within the handler's procedure must be a [[continuation]] for each 
+handler.
+
+\item To a call that may somehow raise an exception, annotations must be
+attached.  The [[also aborts]] annotation must be included, and there must
+be an [[also unwinds to]] annotation specifying all of the handlers'
+continuations.
+\end{itemize}
+
+See below for information on exception tags.
+
+% ------------------------------------------------------------------ 
+\subsubsection{Exception Descriptors}
+% ------------------------------------------------------------------ 
+
+We define type [[exn_descriptor]] to describe and layout an exception 
+descriptor.
+The idea is that an [[exn_descriptor]] is associated with each {\PAL} procedure
+that includes exception handlers (using [[span]]s with token [[1]]).
+Typically, the contents of a procedure's exception descriptor are stored as
+initialized {\PAL} data associated with some descriptively-named label
+(e.g., [[EXN_proc1]] for {\PAL} procedure [[proc1]]).
 
 <<type definitions>>=
 typedef struct {
@@ -170,18 +216,57 @@ typedef struct {
     u_int8   takes_arg; 
   } handlers[1];
 } exn_descriptor;
+@ 
+
+[[handler_count]] is the number of exception handlers in this {\PAL} procedure.
+Following the [[handler_count]] there should be a contiguous array of
+[[handlers]].
+
+Each [[handler]] includes the following information: [[exn_tag]] -- a pointer 
+to the tag of the exception this handler catches, [[cont_num]] -- the index of
+the continuation that implements the handler (where this number is a 0-based
+index into the [[also unwinds to]] annotation at the call sites being handled
+in this procedure), and a boolean value (0 or 1) indicating whether or not
+the handler takes an argument.
+Note that this last boolean value is actually stored in an 8-bit integer.
+
+An [[exn_tag]] should generally be a pointer to a string describing the
+exception (for example, the [[exn_tag]] of [[Exn_DivByZero]] might point to
+[["Division by zero"]]).  
+These strings are typically stored in initialized {\PAL} data and associated
+with descriptively-named symbols.
+
+% ------------------------------------------------------------------ 
+\subsubsection{Exception Dispatcher}
+% ------------------------------------------------------------------ 
+
+The exception dispatcher is implemented here in two functions.
+[[pop_exn_info]] pops exception info (an exception tag and an exception
+argument) off the {\PAL} code's global exception stack and stores it in
+the variables to which it is given pointers.
+[[dispatch_exn]] does the actual control-flow work and resumes {\PAL} code
+execution in the scope of the correct exception handler; if no handler is
+found, an error is sent to the user to indicate an uncaught exception and
+program execution is terminated.
 
 <<function prototypes>>=
 void pop_exn_info(void **exn_tag, void **exn_arg);
 void dispatch_exn(void);
 @ 
 
-DOC HERE.
+We define a few constants that must be similarly defined in {\PAL} code.
+We assume that the exception information stack is pointed to by the first
+global register in the {\PAL} code ([[EXN_TOP =]] index number [[0]]).
+We also assume that the [[span]]s used to associated {\PAL} procedures with
+exception handling descriptors will use a token value of [[EXN_DESC = 1]].
 
 <<constant definitions>>=
 #define EXN_TOP  0
 #define EXN_DESC 1
 @ 
+
+We simply use and modify global variable number [[EXN_TOP]] to pop the
+exception information.
 
 <<exception dispatching functions>>=
 void pop_exn_info(void **exn_tag, void **exn_arg) {
@@ -192,7 +277,15 @@ void pop_exn_info(void **exn_tag, void **exn_arg) {
   *exn_tag  = (*exn_top)[0];
   *exn_arg  = (*exn_top)[1];
 }
+@ 
 
+[[dispatch_exn]] pops exception information, and then locates the topmost
+activation in the current {\PAL} thread of execution that is associated with
+an [[exn_descriptor]] including a handler that catches the current exception.
+If we walk off the stack, then we are dealing with an uncaught exception; in
+this case, we print an error and abort.
+
+<<exception dispatching functions>>=
 void dispatch_exn(void) {
   Cmm_Activation *a;
   void           *exn_tag, *exn_arg;
@@ -208,6 +301,25 @@ void dispatch_exn(void) {
       int i;
       for (i = 0; i < d->handler_count; i++) {
         if (d->handlers[i].exn_tag == exn_tag) {
+          <<resume code execution at this exception handler>>
+        }
+      }
+    }
+    if (!Cmm_ChangeActivation(&a)) {
+	  printf("uncaught exception: %s\n", (char *) exn_tag);
+      abort();  /* unhandled exception; abort! */
+    }
+  }
+}
+@ 
+
+If we do find a handler for the exception, we call on [[Cmm_GetUnwindCont]]
+to get a [[Cmm_Cont]] handle for the handler's implementing continuation.
+We then resume code execution at this continuation.
+
+\emph{Note that this currently works, but is not well-coded.  Ultimately, some code might need to be revised in [[interp.nw]] so we can instruct [[run_interp]] to resume at an arbitrary PC instead of dangerously calling [[RunThread]] again.}
+
+<<resume code execution at this exception handler>>=
           curr_TCB->cont = 
                   Cmm_GetUnwindCont(a, (Cmm_Word) d->handlers[i].cont_num);
 
@@ -220,16 +332,7 @@ void dispatch_exn(void) {
             Cmm_RunThread(curr_TCB->cont);
             assert(0); /* FIX this */
           }
-        }
-      }
-    }
-    if (!Cmm_ChangeActivation(&a)) {
-	  printf("uncaught exception: %s\n", (char *) exn_tag);
-      abort();  /* unhandled exception; abort! */
-    }
-  }
-}
-@ 
+@
 
 % ------------------------------------------------------------------ 
 \subsubsection{Interfacing with {\PAL}}
@@ -322,12 +425,16 @@ will be found on [[stdin]].
 \subsubsection{Flexing the {\PAL} Muscles}
 % ------------------------------------------------------------------ 
 
+Here, we simply load the code specified on the command-line, [[malloc]]
+enough space to hold a backup of its global registers, and run {\PAL} procedure
+[[main]] in the code.
+Note that we pass a pointer to this global backup space to procedure [[main]]
+of the {\PAL} code, and handle de-allocation of this space from here within C.
+
 <<global variable definitions>>=
 static Cmm_TCB  *curr_TCB       = NULL;
 static void     *globals_backup = NULL;
 @ 
-
-DOCUMENTATION HERE
 
 <<run {\PAL} code>>=
 if (!src_selected) {
