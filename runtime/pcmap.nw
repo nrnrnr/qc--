@@ -23,57 +23,93 @@ SECTIONS {
  }
 }
 @
-The [[pc_map_index]] and [[pc_map_entry]] structs below are used to
-access the PC map table, and runtime data entries emitted by the
-compiler. A more detailed description of the layout and contents of
-the emitted data can be found in the file [[src/runtimedata.nw]].
 <<pcmap.h>>=
 #ifndef PC_MAP_H
 #define PC_MAP_H
 
-typedef struct {
-  Cmm_Word    frame_size;
-  Cmm_Word    overflow_size;
-  Cmm_Codeptr return_address;
-  Cmm_Word*   stackdata_table;
-  Cmm_Word    num_registers;
-  Cmm_Word    num_locals;
-  Cmm_Word    num_spans;
-  Cmm_Word    cont_block_size;
-  Cmm_Word    data[1]; // registers, locals, continuations, spans.
-} pc_map_entry;
+<<exported type, procedure, and macro declarations>>
 
-
-#define enf(entry,field) (((pc_map_entry*)entry)->field)
-
-#define registers(e)      ((Cmm_Word*)enf(e,data))
-#define locals(e)        (((Cmm_Word*)enf(e,data)) + enf(e,num_registers))
-#define continuations(e) (((Cmm_Word*)enf(e,data)) + enf(e,num_registers) \
-                                                   + enf(e,num_locals))
-#define spans(e)         (((Cmm_Word*)enf(e,data)) + enf(e,num_registers) \
-                                                   + enf(e,num_locals)    \
-                                                   + enf(e,cont_block_size))
-
+#endif /* PC_MAP_H */
+@ 
+Locations are coded as described in [[src/runtimedata.nw]].
+A~location has one of three types: dead, register, or offset.
+To get the register number of a location with register type, pass the
+location to [[as_register]]; similarly with [[as_offset]].
+To use one of these functions with a location of the wrong type is a
+checked run-time error.
+<<exported type, procedure, and macro declarations>>=
+typedef struct coded_location { Cmm_Word l; } location;
+typedef enum { DEAD=0, REGISTER=1, OFFSET=2 } loctype; 
+loctype  Cmm_loctype(location l);
+unsigned Cmm_as_register(location l);
+int      Cmm_as_offset  (location l);
+@ 
+The [[pc_map_index]] and [[pc_map_entry]] structs below are used to
+access the PC map table and runtime data entries emitted by the
+compiler. A more detailed description of the layout and contents of
+the emitted data can be found in the file [[src/runtimedata.nw]].
+N.B. although the [[pc_map_index]] definition is exact, the
+[[pc_map_entry]] is only an approximation.
+The actual data structure has fields of varying size; hence the
+[[num_*]] fields and the macros.
+The documentation of the fields needs work.
+<<exported type, procedure, and macro declarations>>=
 typedef struct {
   Cmm_Codeptr ra;
-  pc_map_entry* entry;
+  struct cmm_pc_map_entry* entry;
 } pc_map_index;
 
+typedef struct cmm_pc_map_entry pc_map_entry;
+struct cmm_pc_map_entry {
+  location   frame_size;       // always an offset 
+  location   overflow_size;    // always an offset 
+  location   return_addressp;  // always an offset
+  struct sd *stackdata_table;
+  Cmm_Word   num_registers;
+  Cmm_Word   num_locals;
+  Cmm_Word   num_spans;
+  Cmm_Word   cont_block_size;
+  location   data[1]; // registers, locals, continuations, spans.
+};
+
+struct sd {
+  unsigned num_entries;
+  location entries[1];  // variable length
+};
+
+struct conts {
+  unsigned num_entries;
+  int entries[1]; // variable length (offset of contblock)
+};
+
+struct contblock {
+  unsigned num_vars;
+  Cmm_Codeptr pc;
+  location sp;
+  struct contarg {
+    Cmm_Word localnum;
+    Cmm_Word ctype;
+  } vars[1]; // variable length
+};
+
+#define registers(e)      ((e)->data)
+#define locals(e)        (((e)->data) + (e)->num_registers)
+#define continuations(e) (struct conts *) (((e)->data) + (e)->num_registers \
+                                                 + (e)->num_locals)
+#define spans(e)         (((Cmm_Word*)(e)->data) + (e)->num_registers \
+                                                 + (e)->num_locals  \
+                                                 + (e)->cont_block_size)
+
 pc_map_entry* Cmm_lookup_entry(const Cmm_Codeptr caller);
-
-unsigned is_dead(int local);
-unsigned decode_reg(int local);
-signed   decode_offset(int local);
-
-void Cmm_show_map(); // for debugging
-
+void Cmm_show_map(); // for debugging 
+@
+<<exported type, procedure, and macro declarations>>=
 enum ctypes { CHAR = 0, DOUBLE = 1, FLOAT = 2, INT = 3, LONGDOUBLE = 4, LONGINT = 5
             , LONGLONGINT = 6, SHORT = 7, SIGNEDCHAR = 8, UNSIGNEDCHAR = 9
             , UNSIGNEDLONG = 10, UNSIGNEDSHORT = 11, UNSIGNEDINT = 12
             , UNSIGNEDLONGLONG = 13, ADDRESS = 14 
             };
 
-#endif /* PC_MAP_H */
 @ 
 The runtime system expects the symbols [[Cmm_pc_map]] and
 [[Cmm_pc_map_limit]] to be emitted by the linker.
@@ -146,62 +182,181 @@ The compiler encodes the type in the top two bits. Registers are given
 the encoding [[01]], dead variables are given [[00]], and offsets are
 prefixed with 1. See [[emit_data]] in [[src/runtimedata.nw]] for more
 details.
+<<exported type, procedure, and macro declarations>>=
+
 <<pcmap.c>>=
 #define GOODBITS (sizeof(local)*8 - 2)
-unsigned
-decode_reg(int local) {
-  if (local > 0 && local @<< 1 < 0)
-  {
-    int mask   = GOODBITS / 2;
-    int slice  = (local & ((1 @<< GOODBITS) - 1)) >> mask;
-    int offset =  local & ((1 @<< mask    ) - 1);
 
-    if (slice) {
-      fprintf(stderr, "register slices not supported.\n");
-      assert(0);
-    }
-    return offset;
-  }
-  return 0;
+loctype Cmm_loctype(location l) {
+  int local = l.l;
+  local = local >> GOODBITS;
+  if (local & 2)
+    return OFFSET;
+  else
+    return (loctype) local;
 }
-<<pcmap.c>>=
-signed
-decode_offset(int local) {
-  assert(local < 0);
-  local <<= 1;        // GCC BUG !!
-  return local / 2;
-}
-<<pcmap.c>>=
-unsigned
-is_dead(int local) {
-  if (local >= 0 && local @<< 1 >= 0) {
-    return 1;
-  } else {
-    return 0;
+
+unsigned Cmm_as_register(location l) {
+  assert(Cmm_loctype(l) == REGISTER);
+  int local = l.l;
+  int mask   = GOODBITS / 2;
+  int slice  = (local & ((1 @<< GOODBITS) - 1)) >> mask;
+  int offset =  local & ((1 @<< mask    ) - 1);
+
+  if (slice) {
+    fprintf(stderr, "register slices not supported.\n");
+    assert(0);
   }
+  return offset;
 }
 @ 
-A linear search function is useful for debugging.
 <<pcmap.c>>=
+signed
+Cmm_as_offset(location l) {
+  int local = l.l;
+  return (local @<< 1) >> 1;
+}
 @ 
 [[show_map]] dumps out all of the runtime data. It is only useful for
 debugging the [[qc--]] runtime system.
 <<pcmap.c>>=
-void Cmm_show_map(void) {
-  unsigned i;
-  printf("pc_map_size %d\n", pc_map_size);
-  for (i = 0; i < pc_map_size; ++i) {
-    printf("%d: ra:%p  entry:%p -> frame_size:%X -> %X, overflow:%X\n"
-           "\tregs:%X,locals%X,spans:%X,size of cont block:%X\n",
-           i, Cmm_pc_map[i].ra, Cmm_pc_map[i].entry,
-           Cmm_pc_map[i].entry->frame_size,
-           decode_offset(Cmm_pc_map[i].entry->frame_size),
-           Cmm_pc_map[i].entry->overflow_size,
-           Cmm_pc_map[i].entry->num_registers,
-           Cmm_pc_map[i].entry->num_locals,
-           Cmm_pc_map[i].entry->num_spans,
-           Cmm_pc_map[i].entry->cont_block_size           
-           );
+static void printloc(location loc) {
+  switch (Cmm_loctype(loc)) {
+    case REGISTER:
+      printf ("REG %d", Cmm_as_register(loc));
+      break;
+    case DEAD:
+      printf ("DEAD");
+      break;
+    case OFFSET:
+      printf ("OFFSET %d", Cmm_as_offset(loc));
+      break;
+    default:
+      printf ("<MALFORMED %X>", loc.l);
+      break;
   }
 }
+
+<<private show functions>>
+
+void Cmm_show_map(void) {
+  pc_map_index *idx;
+  struct sd *sdt;
+  printf("pc_map_size %d\n", pc_map_size);
+  for (idx = Cmm_pc_map; idx < Cmm_pc_map_limit; idx++) {
+    printf("entry%3d @ %p (ra = %p):\n"
+           "  frame_size = %d (coded %X), overflow = %d (coded %X)\n"
+           "  num_regs = %d, num_locals = %d, num_spans = %d,"
+           " size of cont block = %d\n",
+           idx - Cmm_pc_map, idx->entry, idx->ra, 
+           Cmm_as_offset(idx->entry->frame_size),
+           idx->entry->frame_size.l,
+           Cmm_as_offset(idx->entry->overflow_size),
+           idx->entry->overflow_size.l,
+           idx->entry->num_registers,
+           idx->entry->num_locals,
+           idx->entry->num_spans,
+           idx->entry->cont_block_size);
+    sdt = idx->entry->stackdata_table;
+    <<show locals>>
+    <<show registers>>
+    <<show continuations>>
+    <<show stack-data table [[sdt]]>>
+  }
+}
+
+<<show stack-data table [[sdt]]>>=
+assert(sdt);
+if (sdt->num_entries == 0) {
+  printf ("    <no stackdata>\n");
+} else {
+  int i;
+  for (i = 0; i < sdt->num_entries; i++) {
+    printf("    stacklabel%3d = ", i);
+    printloc(sdt->entries[i]);
+    printf("\n");
+  }
+}
+
+<<show registers>>=
+
+{
+  int r = idx->entry->num_registers;
+  int i;
+  location* regs = registers(idx->entry);
+  printf("    unchanged registers:");
+  for (i = 0; i < r; i+=2) {
+    if (regs[i].l == regs[i+1].l)
+      printf(" %d", i/2);
+  }
+  printf("\n");
+  for (i = 0; i < r; i+=2) {
+    if (regs[i].l == regs[i+1].l) continue;
+    printf("      reg %2d: caller = ", i/2);
+    printloc(regs[i]);
+    printf(", callee = ");
+    printloc(regs[i+1]);
+    printf("\n");
+  }
+}
+
+<<show locals>>=
+{
+  int n = idx->entry->num_locals;
+  if (n == 0) {
+    printf("    (no locals)\n");
+  } else {
+    int i;
+    for (i = 0; i < n; i++) {
+      printf("    local%3d at ", i);
+      printloc((locals(idx->entry))[i]);
+      printf("\n");
+    }
+  }
+}
+
+<<show continuations>>=
+
+{
+  int i;
+  struct conts *conts;
+  conts = continuations(idx->entry);
+
+  if (conts->num_entries == 0) {
+    printf("    (no continuations)\n");
+  } else {
+    for (i = 0; i < conts->num_entries; i++)
+      show_cont(conts, i);
+  }
+}
+
+<<private show functions>>=
+const char *typestring(enum ctypes t) {
+#define xx(T) case T: return #T;
+  switch(t) {
+    xx(CHAR) xx(DOUBLE) xx(FLOAT) xx(INT) xx(LONGDOUBLE) xx(LONGINT)
+    xx(LONGLONGINT) xx(SHORT) xx(SIGNEDCHAR) xx(UNSIGNEDCHAR)
+    xx(UNSIGNEDLONG) xx(UNSIGNEDSHORT) xx(UNSIGNEDINT)
+    xx(UNSIGNEDLONGLONG) xx(ADDRESS) 
+    default: return "unknown-type";
+  }
+}
+
+<<private show functions>>=
+
+static void show_cont(struct conts *conts, int contnum) {
+  struct contblock *block;
+  int i;
+
+  printf("    unwind cont%2d (", contnum);
+  block = (struct contblock *) ((Cmm_Word *) conts + conts->entries[contnum]);
+  for (i = 0; i < block->num_vars; i++) {
+    printf("%s%s local%d", i > 0 ? ", " : "", typestring(block->vars[i].ctype),
+           block->vars[i].localnum);
+  }
+  printf(") = <pc=%p, sp=", block->pc);
+  printloc(block->sp);
+  printf(">\n");
+}
+
 @ 

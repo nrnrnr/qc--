@@ -364,7 +364,7 @@ let emit_offset bits = (* possibly an offset *)
    with Bits.Overflow -> imposs "Offset from vfp is too large for run-time encoding");
   asm#value (B.Ops.or' (B.Ops.shl  one (to_bits offset_w))
                        (B.Ops.shrl (B.Ops.shl (to_bits value) one) one)) in
-let emit_int i = emit_offset (Bits.S.of_int i offset_w) in
+let emit_int i = asm#value (Bits.U.of_int i wordsize) in
 let emit_reg ix offset =
   let offset_w = wordsize - 2 in
   let w'       = offset_w / 2 in
@@ -426,10 +426,10 @@ let emit_conts conts =
                                                  offset + 2 * List.length vs + 3)
                          (n+1) conts);
   let emit_cont_block (pc, sp, vars) =
-    List.iter (fun (h,i) -> emit_int i; emit_int (Ctypes.enum_int h)) vars;
-    asm#value zero;
+    emit_int (List.length vars);
     asm#addr (Reloc.Simple.of_sum Rtl.datasym (asm#local pc) zero);
-    emit_loc sp in
+    emit_loc sp;
+    List.iter (fun (h,i) -> emit_int i; emit_int (Ctypes.enum_int h)) vars in
   List.iter emit_cont_block conts in
 @
 We provide a function to simplify an expression first by flattening slices such that

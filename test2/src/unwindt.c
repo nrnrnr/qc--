@@ -1,4 +1,4 @@
-#include "../../runtime/qc--runtime.h"
+#include "qc--runtime.h"
 #include <stdio.h>
 #include <assert.h>
 

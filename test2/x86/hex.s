@@ -69,10 +69,10 @@ Lframe_l19:
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l18
-.long 0x80000008
-.long 0x80000003
-.long 0x80000000
-.long 0x80000001
+.long 8
+.long 3
+.long 0
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -84,7 +84,7 @@ Lframe_l19:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .section .pcmap
 .long Ljoin_l8
 .long Lframe_l20
@@ -94,10 +94,10 @@ Lframe_l20:
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l18
-.long 0x80000008
-.long 0x80000003
-.long 0x80000000
-.long 0x80000001
+.long 8
+.long 3
+.long 0
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -109,7 +109,7 @@ Lframe_l20:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .section .text
 .section .data
 answer:

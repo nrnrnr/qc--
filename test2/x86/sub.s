@@ -90,10 +90,10 @@ Lframe_l30:
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l29
-.long 0x80000008
-.long 0x80000004
-.long 0x80000000
-.long 0x80000001
+.long 8
+.long 4
+.long 0
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -106,7 +106,7 @@ Lframe_l30:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .section .pcmap
 .long Ljoin_l20
 .long Lframe_l31
@@ -116,10 +116,10 @@ Lframe_l31:
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l29
-.long 0x80000008
-.long 0x80000004
-.long 0x80000000
-.long 0x80000001
+.long 8
+.long 4
+.long 0
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -132,7 +132,7 @@ Lframe_l31:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .section .text
 .section .data
 fmt:

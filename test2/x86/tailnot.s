@@ -173,10 +173,10 @@ Lframe_l34:
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l33
-.long 0x80000008
-.long 0x80000007
-.long 0x80000000
-.long 0x80000001
+.long 8
+.long 7
+.long 0
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -192,7 +192,7 @@ Lframe_l34:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .section .pcmap
 .long Ljoin_l21
 .long Lframe_l35
@@ -202,10 +202,10 @@ Lframe_l35:
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l33
-.long 0x80000008
-.long 0x80000007
-.long 0x80000000
-.long 0x80000001
+.long 8
+.long 7
+.long 0
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -221,7 +221,7 @@ Lframe_l35:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .section .pcmap
 .long Ljoin_l18
 .long Lframe_l36
@@ -231,10 +231,10 @@ Lframe_l36:
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l33
-.long 0x80000008
-.long 0x80000007
-.long 0x80000000
-.long 0x80000001
+.long 8
+.long 7
+.long 0
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -250,7 +250,7 @@ Lframe_l36:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .section .pcmap
 .long Ljoin_l9
 .long Lframe_l37
@@ -260,10 +260,10 @@ Lframe_l37:
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l33
-.long 0x80000008
-.long 0x80000007
-.long 0x80000000
-.long 0x80000001
+.long 8
+.long 7
+.long 0
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -279,7 +279,7 @@ Lframe_l37:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .section .pcmap
 .long Ljoin_l13
 .long Lframe_l38
@@ -289,10 +289,10 @@ Lframe_l38:
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l33
-.long 0x80000008
-.long 0x80000007
-.long 0x80000000
-.long 0x80000001
+.long 8
+.long 7
+.long 0
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -308,7 +308,7 @@ Lframe_l38:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .section .text
 .section .text
 down:
@@ -392,10 +392,10 @@ Lframe_l54:
 .long 0x8000000c
 .long 0xffffffe4
 .long Lstackdata_l53
-.long 0x80000008
-.long 0x80000004
-.long 0x80000000
-.long 0x80000001
+.long 8
+.long 4
+.long 0
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -408,7 +408,7 @@ Lframe_l54:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .section .text
 .section .data
 goodcmp:

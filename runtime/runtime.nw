@@ -32,12 +32,17 @@ typedef struct cmm_cont {
 } Cmm_Cont;
 
 typedef struct cmm_activation {
+  struct cmm_activation_methods *methods;
   Cmm_Word*   vfp;
   Cmm_Codeptr pc;
-  Cmm_Word*   unwind_sp;
-  Cmm_Dataptr rtdata;
-  Cmm_Cont    unwind_cont;
+  struct cmm_pc_map_entry *rtdatax;
   Cmm_Word*   regs[NUM_REGS];
+  union {  // following fields are temporary space to avoid allocation
+    struct {
+      Cmm_Word* sp;
+      Cmm_Cont   k;
+    } unwind;
+  } u;
 } Cmm_Activation;
 @ 
 Functions for walking the stack.
@@ -135,9 +140,10 @@ Cmm_YoungestActivation(const Cmm_Cont* t) {
 
   //print_stack(t->sp);
 
-  a.vfp = (Cmm_Word*)((int)t->sp - decode_offset(entry->frame_size));
-  a.pc = t->pc;
-  a.rtdata = (void*)entry;
+  a.methods = NULL;
+  a.vfp    = (Cmm_Word*)((int)t->sp - Cmm_as_offset(entry->frame_size));
+  a.pc     = t->pc;
+  a.rtdatax = entry;
   for(i = 0; i < NUM_REGS; i++) {
     a.regs[i] = NULL;
   }
@@ -168,8 +174,8 @@ Cmm_NextActivation(const Cmm_Activation *a) {
   update_saved_regs(&na, a);
   //print_stack(fp);
 
-  entry = (pc_map_entry*)a->rtdata;
-  caller = (Cmm_Word*)((int)a->vfp + decode_offset((unsigned)entry->return_address));
+  entry = a->rtdatax;
+  caller = (Cmm_Word*)((int)a->vfp + Cmm_as_offset(entry->return_addressp));
   entry = Cmm_lookup_entry((Cmm_Codeptr)*caller);
           
   if (!entry) {
@@ -182,12 +188,12 @@ Cmm_NextActivation(const Cmm_Activation *a) {
   }
 
   if (entry) {
-    old_entry = (pc_map_entry*)a->rtdata;
-    na.vfp = (Cmm_Word*)((int)fp - decode_offset(entry->frame_size)
-                                 + decode_offset(old_entry->overflow_size));
+    old_entry = a->rtdatax;
+    na.vfp = (Cmm_Word*)((int)fp - Cmm_as_offset(entry->frame_size)
+                                 + Cmm_as_offset(old_entry->overflow_size));
 
     na.pc = (Cmm_Codeptr)*caller;
-    na.rtdata = (void*)entry;
+    na.rtdatax = entry;
     /* The registers were already updated above, but after a foreign walk,
        we no longer believe them. */
     if(foreign) {
@@ -232,41 +238,26 @@ point.
 extern void (*__cmm_unwindcont)();
 Cmm_Cont* Cmm_MakeUnwindCont(Cmm_Activation *a, Cmm_Word index, ...) {
   int i;
-  int num_conts;
-  Cmm_Word *conts;
-  Cmm_Word *var;
-  Cmm_Word *unwind_pc;
-  Cmm_Word *unwind_sp;
-  int offset;
-  int varnum;
-  int vartype;
+  struct conts *conts;
+  struct contblock *block;
   va_list ap;
 
-  pc_map_entry* entry = (pc_map_entry*)a->rtdata;
+  pc_map_entry* entry = a->rtdatax;
   assert(entry);
   conts = continuations(entry);
-  num_conts = decode_offset(*conts);
 
-  if(index >= num_conts) {
+  if(index >= conts->num_entries) {
     fprintf(stderr, "Cmm_MakeUnwindCont called with out-of-bounds index %d\n", index);
     assert(0);
   }
 
-  offset = decode_offset(*(conts + 1 + index));
-  var = conts + offset;
+  block = (struct contblock *) ((Cmm_Word *) conts + conts->entries[index]);
   va_start(ap, index);
-  while(*var) {
-    varnum  = decode_offset(*var);
-    vartype = decode_offset(*(var+1));
-
-    <<based on [[vartype]], assign to local variable [[varnum]] from [[ap]]>>
-    Cmm_LocalVarWritten(a, varnum);
-    var = var + 2;
+  for (i = 0; i < block->num_vars; i++) {
+    <<assign [[block->vars[i]]] from [[ap]]>>
+    Cmm_LocalVarWritten(a, block->vars[i].localnum);
   }
   va_end(ap);
-
-  unwind_pc = var + 1;
-  unwind_sp = var + 2;
 
   /* We initialize unknown registers to a bogus (but clearly live) address:
      that of the activation. Otherwise, they would dereference 0. */
@@ -278,23 +269,24 @@ Cmm_Cont* Cmm_MakeUnwindCont(Cmm_Activation *a, Cmm_Word index, ...) {
 
   /* Users are not allowed to reuse space in the activation, so we can set the PC
      and ESP to the continuation's entry point and stack pointer. */
-  a->regs[PC]  = unwind_pc;
-  a->unwind_sp = (Cmm_Word *) ((int) a->vfp + decode_offset(*unwind_sp));
-  a->regs[ESP] = (Cmm_Word *)&a->unwind_sp;
+  a->regs[PC]  = (Cmm_Word *) block->pc;
+  a->u.unwind.sp = (Cmm_Word *) ((int) a->vfp + Cmm_as_offset(block->sp));
+  a->regs[ESP] = (Cmm_Word *)&a->u.unwind.sp;
 
-  a->unwind_cont.pc = (Cmm_Codeptr) &__cmm_unwindcont;
-  a->unwind_cont.sp = (Cmm_Word *) a->regs;
+  a->u.unwind.k.pc = (Cmm_Codeptr) &__cmm_unwindcont;
+  a->u.unwind.k.sp = (Cmm_Word *) a->regs;
 
-  return(&a->unwind_cont);
+  return(&a->u.unwind.k);
 }
 @ 
 Because passing to a varargs function involves implicit promotions, we
 do the promotions that are needed.
 The [[L]] argument is the type used internally; the [[R]]~version is
 the same type as promoted for passing to a varargs function.
-<<based on [[vartype]], assign to local variable [[varnum]] from [[ap]]>>=
-#define ASSIGN(L,R) *(L*) Cmm_FindLocalVar(a, varnum) = (L) va_arg(ap, R)
-switch(vartype) {
+<<assign [[block->vars[i]]] from [[ap]]>>=
+#define ASSIGN(L,R) \
+  *(L*) Cmm_FindLocalVar(a, block->vars[i].localnum) = (L) va_arg(ap, R)
+switch(block->vars[i].ctype) {
   case CHAR:             ASSIGN (char,               int);                break;
   case DOUBLE:           ASSIGN (double,             double);             break;
   case FLOAT:            ASSIGN (float,              double);             break;
@@ -328,15 +320,16 @@ Cmm_Dataptr
 Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token) {
   int num_spans;
   Cmm_Word* descs;
-  pc_map_entry* entry = (pc_map_entry*)a->rtdata;
+  pc_map_entry* entry = a->rtdatax;
   assert(entry);
 
-  num_spans = decode_offset(entry->num_spans);
-  if(token < num_spans) {
+  num_spans = entry->num_spans;
+  if (token < num_spans) {
     descs = spans(entry);
     return (Cmm_Dataptr)descs[token];
+  } else {
+    return 0;
   }
-  return 0;
 }
 @
 % ---------------------------------------------------------------------------
@@ -366,17 +359,17 @@ activation.
 void
 update_saved_regs(Cmm_Activation* new, const Cmm_Activation* prev) {
   int i;
-  int r = decode_offset(((pc_map_entry*)(prev->rtdata))->num_registers);
-  Cmm_Word* regs = registers(prev->rtdata);
+  int r = prev->rtdatax->num_registers;
+  location* regs = registers(prev->rtdatax);
 
   for (i = 0; i < NUM_REGS; i++) {
       new->regs[i] = prev->regs[i];
   }
   
   for (i = 0; i < r; i+=2) {
-    if (regs[i] == regs[i+1]) continue;
-    new->regs[decode_reg(regs[i])] =
-      (Cmm_Word*)((int)prev->vfp + decode_offset(regs[i + 1]));
+    if (regs[i].l == regs[i+1].l) continue;
+    new->regs[Cmm_as_register(regs[i])] =
+      (Cmm_Word*)((int)prev->vfp + Cmm_as_offset(regs[i + 1]));
   }
 }
 @ 
@@ -392,10 +385,8 @@ structure.
 <<public function implementations>>=
 unsigned
 Cmm_LocalVarCount(const Cmm_Activation *a) {
-  pc_map_entry* entry = (pc_map_entry*)a->rtdata;
-  assert(a);
-  assert(a->rtdata);
-  return decode_offset(entry->num_locals);
+  assert(a && a->rtdatax);
+  return a->rtdatax->num_locals;
 }
 @ 
 Local variables are asked for by index. A pointer is returned to the
@@ -406,30 +397,36 @@ register is saved is returned.
 <<public function implementations>>=
 void*
 Cmm_FindLocalVar(const Cmm_Activation *a, unsigned n) {
-  int local, reg;
-  pc_map_entry* entry = (pc_map_entry*)a->rtdata;
-  if (n >= decode_offset(entry->num_locals)) {
-    fprintf(stderr, "local var index out of range");
+  int reg;
+  location local;
+  pc_map_entry* entry = a->rtdatax;
+  if (n >= entry->num_locals) {
+    fprintf(stderr, "C-- run-time error: local var index out of range\n");
     assert(0);
   }
   local = (locals(entry))[n];
-  if (0 != (reg = decode_reg(local))) {
-    assert(a);
-    assert(a->regs);
-    if(a->regs[reg] == NULL) {
-      fprintf(stderr, "Run-Time System Error: Tried to find a local variable in a "
-                      "register that could not be recovered. Most likely cause: "
-                      "calling a C function in your run-time without using a calling "
-                      "convention that kills all the callee-save registers "
-                      "(e.g. \"paranoid C\").\n");
+  switch (Cmm_loctype(local)) {
+    case REGISTER:
+      reg = Cmm_as_register(local);
+      assert(a);
+      assert(a->regs);
+      if (a->regs[reg] == NULL) {
+        fprintf(stderr, "Run-Time System Error: Tried to find a local variable in a "
+                        "register that could not be recovered. Most likely cause: "
+                        "calling a C function in your run-time without using a calling "
+                        "convention that kills all the callee-save registers "
+                        "(e.g. \"paranoid C\").\n");
+        assert(0);
+      }
+      return a->regs[reg];
+    case DEAD:
+      return NULL;
+    case OFFSET:
+      return (void*)((int)a->vfp + Cmm_as_offset(local));
+    default:
       assert(0);
-    }
-    return a->regs[reg];
+      return 0;
   }
-  else if (!is_dead(local)) {
-    return (void*)((int)a->vfp + decode_offset(local));
-  }
-  return 0;
 }
 @ 
 In the current implementation it is not possible to find the location
@@ -445,26 +442,26 @@ to the correct stack data table.
 <<public function implementations>>=
 void*
 Cmm_FindStackLabel(const Cmm_Activation *a, unsigned n) {
-  pc_map_entry* entry = (pc_map_entry*)a->rtdata;
-  Cmm_Word* sdt = entry->stackdata_table;
+  pc_map_entry* entry = a->rtdatax;
+  struct sd *sdt = entry->stackdata_table;
   assert(sdt);
 
-  if (n >= sdt[0]) {
-    fprintf(stderr, "Stack data index %d out of range [0..%d)\n", n, sdt[0]);
+  if (n >= sdt->num_entries) {
+    fprintf(stderr, "Stack data index %d out of range [0..%d)\n", n, sdt->num_entries);
     assert(0);
   }
 
-  return (void*)((int)a->vfp + decode_offset(sdt[n+1]));
+  return (void*)((int)a->vfp + Cmm_as_offset(sdt->entries[n]));
 }
 @ 
 % ---------------------------------------------------------------------------
 stitch things together.
 <<runtime.c>>=
-#include "qc--runtime.h"
-#include "pcmap.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include "qc--runtime.h"
+#include "pcmap.h"
 <<machine-dependent macro definitions for the implementation>>
 <<external functions>>
 <<private functions>>

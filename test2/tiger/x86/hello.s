@@ -86,10 +86,10 @@ Lframe_l15:
 .long 0x80000004
 .long 0xfffffff4
 .long Lstackdata_l14
-.long 0x80000008
-.long 0x80000004
-.long 0x80000002
-.long 0x80000001
+.long 8
+.long 4
+.long 2
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -102,7 +102,7 @@ Lframe_l15:
 .long 0
 .long 0
 .long 0xfffffff0
-.long 0x80000000
+.long 0
 .long 0
 .long tiger_main_gc_data
 .section .text

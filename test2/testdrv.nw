@@ -74,13 +74,14 @@ This is a bug in the implementation of Lua's [[tmpname]].
 <<testdrv.lua>>=
 function Test.temp_name(ext)
   local name = tmpname()
-  Test.remove(name) -- tmpname creates file
+  remove(name) -- tmpname creates file
   return(name .. (ext or ""))
 end
 @ 
 Function [[Test.remove]] removes a single file or a list.
 <<testdrv.lua>>=
 function Test.remove(...)
+  if Test.keep then return end
   local i = 1
   while arg[i] do
     if type(arg[i]) == 'table' then Util.call(Test.remove, arg[i])
@@ -393,7 +394,11 @@ function Test.check_update_file(inputs, file, i)
   local equiv = Util.files_nonwhite_equivalent(comparee, file)
   if not equiv then
     if Test.update then
-      write(format("[new %s] ", exp))
+      local trail = " "
+      if not Test.verbose then
+        trail = strrep(" ", 80 - 6 - strlen(exp)) .. "\n"
+      end
+      write(format("[new %s]%s", exp, trail))
       if not Test.record_output(file, exp) then
         print(format(" !! error recording output %s as %s !!", file,  exp))
       end
@@ -833,7 +838,6 @@ function CMD.compilertab[".record"](file)
   end
   Test.update = 1
   Test.run_test_case(entry)
-  write('\n')
 end
 @ 
 Run a single test.

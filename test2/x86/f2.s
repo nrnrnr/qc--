@@ -82,10 +82,10 @@ Lframe_l16:
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l15
-.long 0x80000008
-.long 0x80000005
-.long 0x80000000
-.long 0x80000001
+.long 8
+.long 5
+.long 0
+.long 1
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -99,7 +99,7 @@ Lframe_l16:
 .long 0
 .long 0
 .long 0xfffffff4
-.long 0x80000000
+.long 0
 .section .text
 .section .data
 fmt:
