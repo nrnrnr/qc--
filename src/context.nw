@@ -1,49 +1,39 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 % ------------------------------------------------------------------ 
 \section{Operator Contexts}
 % ------------------------------------------------------------------ 
 
-A machine has serveral location spaces; like spaces for integers,
+A machine has several location spaces; like spaces for integers,
 adddresses, or floating point value, and their respective temporaries. A
 context is an abstraction that identifies a set of spaces where a value
 can live. For example, the \emph{integer} context could contain all
 integer registers plus their temporaries. 
 
-<<context.mli>>= 
-type t = Rtl.space * (Register.t -> bool) 
-@
-
-A context [[t]] is a pair of a space and a predicate. The space
-must be used to create a temporary in that context. The predicate is
-true, iff a register belongs to the context.
-
 An operator context describes for each operand of an operator and its
 result, in which context a value lives. For example, the [[add]]
 operator of a particular machine might expect both its operands to be
 living in integer contexts, and produce a value in the integer context.
-
+We don't care about the representation of a context, so we make it a
+type parameter.
 <<context.mli>>=
-type op = string * t list * t        (* op, arguments, result *)
-@
-
+type 'c op = string * 'c list * 'c        (* op, arguments, result *)
+@ 
 On most machines operators can be described by four contexts: integer,
 floating point, address, and boolean. The [[standard]] function returns
 an association for all {\rtl} operators, that states standard operator
 contexts. 
-
 <<context.mli>>=
-val standard: int:t -> fp:t -> addr:t -> bool:t -> op list
+val standard: int:'c -> fp:'c -> addr:'c -> bool:'c -> 'c op list
 @
 
+@
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
-
 <<context.ml>>=
-type t  = Rtl.space * (Register.t -> bool) 
-type op = string * t list * t                        (* arguments, result *)
-
-let standard ~(int:t) ~(fp:t) ~(addr:t) ~(bool:t) =
+type 'c op = string * 'c list * 'c        (* op, arguments, result *)
+let standard ~int ~fp ~addr ~bool =
     [ "add"           , [int; int], int
     ; "and"           , [int; int], int
     ; "bit"           , [bool], int
