@@ -28,7 +28,7 @@ mk(char *target)
 		else {
 			if(waitup(1, (int *)0) > 0){
 				if(node->flags&(NOTMADE|BEINGMADE)){
-					assert("must be run errors", runerrs);
+					my_assert("must be run errors", runerrs);
 					break;	/* nothing more waiting */
 				}
 			}
@@ -38,7 +38,7 @@ mk(char *target)
 		waitup(-1, (int *)0);
 	while(jobs)
 		waitup(-2, (int *)0);
-	assert("target didn't get done", runerrs || (node->flags&MADE));
+	my_assert("target didn't get done", runerrs || (node->flags&MADE));
 	if(did == 0)
 		Bprint(&bout, "mk: '%s' is up to date\n", node->name);
 }

@@ -48,7 +48,7 @@ vexpand(char *w, Envy *env, Bufblock *buf)
 {
 	char *s, carry, *p, *q;
 
-	assert("vexpand no $", *w == '$');
+	my_assert("vexpand no $", *w == '$');
 	p = w+1;	/* skip dollar sign */
 	if(*p == '{') {
 		p++;

@@ -15,6 +15,7 @@ Revisions Copyright © 2001 Norman Ramsey.  All rights reserved.
 #include <float.h>
 #include <endian.h>
 #include <unistd.h>
+#include <assert.h>
 
 #define	nil		((void*)0)
 

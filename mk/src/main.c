@@ -276,7 +276,7 @@ Realloc(void *s, int n)
 }
 
 void
-assert(char *s, int n)
+my_assert(char *s, int n)
 {
 	if(!n){
 		fprintf(stderr, "mk: Assertion ``%s'' failed.\n", s);

@@ -117,7 +117,7 @@ addrules(Word *head, Word *tail, char *body, int attr, int hline, char *prog)
 {
 	Word *w;
 
-	assert("addrules args", head && body);
+	my_assert("addrules args", head && body);
 		/* tuck away first non-meta rule as default target*/
 	if(target1 == 0 && !(attr&REGEXP)){
 		for(w = head; w; w = w->next)
@@ -298,7 +298,7 @@ ipop(void)
 {
 	struct input *in, *me;
 
-	assert("pop input list", inputs != 0);
+	my_assert("pop input list", inputs != 0);
 	if(inputs->next == 0){
 		me = inputs;
 		inputs = 0;

@@ -213,7 +213,7 @@ nextslot(void)
 
 	for(i = 0; i < nproclimit; i++)
 		if(events[i].pid <= 0) return i;
-	assert("out of slots!!", 0);
+	my_assert("out of slots!!", 0);
 	return 0;	/* cyntax */
 }
 

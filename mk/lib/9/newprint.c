@@ -6,6 +6,7 @@ newprint - replacement print functions using stdio
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <assert.h>
 
 #define SIZE    4096
 

@@ -6,7 +6,7 @@ Revisions Copyright © 2001 Norman Ramsey.  All rights reserved.
 void	addrule(char*, Word*, char*, Word*, int, int, char*);
 void	addrules(Word*, Word*, char*, int, int, char*);
 void	addw(Word*, char*);
-void	assert(char*, int);
+void	my_assert(char*, int);
 int	assline(Biobuf *, Bufblock *);
 long	atimeof(int,char*);
 void	atouch(char*);
