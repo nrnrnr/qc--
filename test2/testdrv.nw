@@ -18,9 +18,11 @@ In addition to the compiler settings, the test files may set the
 following test variables:
 
 \begin{itemize}
+\item [[Test.verbose]] turn on detailed output.
 \item [[Test.results]] directory containing expected results files.
 \item [[Test.source]] directory containing source files.
 \item [[Test.files]] list of source files to test.
+\item [[Test.trust_exe]] trust output of exe over assembly.
 \end{itemize}
 
 <<example.tst>>=
@@ -48,8 +50,8 @@ driver.
 <<run output>>=
 # ../bin/qc-- testdrv.lua example.tst
 # Running Regression Tests 6/23/2003
-../bin/qc-- -v testdrv.lua example.tst src/hello.c--.test
-# 1 errors detected.
+../bin/qc-- -v testdrv.lua example.tst src/add.c--.test  # FAILED { .s } differ
+1 errors detected.
 @
 In the case of errors, a single line will be printed that can be
 executed to get more detailed information on the error.
@@ -58,25 +60,29 @@ The expected outputs can also be updated using the test driver.
 <<run output>>=
 # ../bin/qc-- -v testdrv.lua example.tst src/hello.c--.record
 # Running Regression Tests 6/23/2003
-... mumble ...
+x86/hello.s     has not changed
+x86/hello.s1    has changed             !! updating !!
+x86/hello.s2    has not changed
+x86/hello.1     has not changed
+x86/hello.2     has not changed
 @ 
 % ------------------------------------------------------------------ 
 \subsubsection{Error Handling}
 % ------------------------------------------------------------------ 
-Test configuration files may also contain custom error handlers for
+Test configuration files may contain custom error handlers for
 specific files or file types. When an error is detected, the test
-driver will first look for an error handler associated with the source
-file that has caused the error. If one is not found, then a handler
-associated with the source file extension is executed. The test driver
+driver will first look for an error handler associated with the file
+that has caused the error. If one is not found, then a handler
+associated with the file extension is executed. The test driver
 provides default error handlers for all of the known extensions.
 
-The example below adds a special error handler for the [[add.c--]]
-source file.
+The example below adds a special error handler for the asembly output
+of the [[add.c--]] source file.
 <<example.tst>>=
 function Test.on_error["add.s"](expected, output)
   -- provide special processing for detailed output
   print("error in add.c--")
-  -- call default handler for .s files
+  -- or just call default handler for .s files
   Test.on_error[".s"](expected, output)
 end
 @ 
@@ -86,10 +92,13 @@ end
 <<testdrv.lua>>=
 Test = Test and error("Test already defined") or {}
 Test.errors = 0         -- number of failures found
-Test.verbose = 0        -- provide detailed failure info
+Test.verbose = nil      -- provide detailed failure info
+Test.skip_files = nil   -- skip input source files
+Test.trust_exe = nil    -- trust exe output for test status
 Test.on_error = {}      -- error handlers
 Test.files = {}         -- input source files
-Test.skip_files = nil   -- skip input source files
+Test.tst_file = ""      -- name of config file
+Test.diffs = ""         -- mis-matched files during run of test case
 
 function Test.list_len(l)
   local i = 1
@@ -103,13 +112,27 @@ function Test.status_line(left, right)
 end
 
 function Test.clear_status_line()
-  Test.status_line("", "")
+  if Test.verbose then
+    print("") -- for pager programs
+  else
+    Test.status_line("", "")
+  end
 end
 
-function Test.expected(file, ext)
-  local bn = Caml.Filename.basename(file)
-  local cn = Caml.Filename.chop_extension(bn)
-  return Caml.Filename.concat(Test.results, cn .. ext)
+function Test.log(...)
+  if not Test.verbose then return end
+  local i = 2
+  local cmd = "\"" .. arg[1] .. "\""
+  while arg[i] do
+    if type(arg[i]) == "string" then
+      cmd = cmd .. format(",\"%s\"", arg[i])
+    else
+      cmd = cmd .. "," .. arg[i]
+    end
+    i = i + 1
+  end
+  cmd = "print(\"## \" .. format(" .. cmd .. "))"
+  dostring(cmd)
 end
 
 -- tmpname's placement of files is unpredictable
@@ -124,7 +147,7 @@ end
 <<testdrv.lua>>=
 function Test.on_error[".1"](expected, output)
   local cmd = format("diff %s %s", expected, output)
-  print("# " .. cmd)
+  Test.log(cmd)
   execute(cmd)
 end
 Test.on_error[".2"] = Test.on_error[".1"]
@@ -134,7 +157,7 @@ Test.on_error[".s2"] = Test.on_error[".1"]
 -- .s files get a 'diff -y'
 function Test.on_error[".s"](expected, output)
   local cmd = format("diff -y %s %s", expected, output)
-  print("# " .. cmd)
+  Test.log(cmd)
   execute(cmd)
 end
 
@@ -142,19 +165,18 @@ function Test.error(file, expected, actual)
   Test.clear_status_line()
   Test.errors = Test.errors + 1
   local basename = Caml.Filename.basename(expected)
-  if Test.verbose > 0 then
+  local ext = Caml.Filename.extension(expected)
+  Test.diffs = Test.diffs .. " " .. ext
+  if Test.verbose then
     if Test.on_error[basename] then
       Test.on_error[basename](expected, actual)
     else
-      local ext = Caml.Filename.extension(expected)
       if (Test.on_error[ext]) then
         Test.on_error[ext](expected, actual)
       else
         print(format("FAILED %s\n", expected))
       end
     end
-  else
-    print(format("../src/qc-- -v testdrv.lua example.tst %s.test", file))
   end
 end
 @ 
@@ -162,10 +184,17 @@ end
 \subsubection{Compile and test functions}
 % -------------------------------------------------------------------
 <<testdrv.lua>>=
+function Test.translate(f, tab)
+  CMD.translate_files(f, tab)
+  return 1
+end
+
 function Test.compile_file(file)
   local s_file = Test.temp_name(".s")
   local so = s_file .. "1"
   local se = s_file .. "2"
+
+  Test.log("compiling %s -> %s", file, s_file)
 
   Driver.reinit()
   Options.stop_at(".s")
@@ -174,9 +203,13 @@ function Test.compile_file(file)
 
   Util.redirect_stdout(so)
   Util.redirect_stderr(se)
-  CMD.translate_files(file, CMD.compilertab)
+  local status = Util.catch(Test.translate, file, CMD.compilertab)
   Util.redirect_stdout()
   Util.redirect_stderr()
+
+  if not status then
+    Test.log("Compilation errors detected")
+  end
 
   return { s_file, so, se }
 end
@@ -190,10 +223,14 @@ function Test.build_exe(s_file)
   local ld_cmd = Ld.cmd(exe_file .. " ")
   Ld.objects = ""
 
-  execute(as_cmd)
-  execute(ld_cmd)
+  Test.log(as_cmd)
+  if execute(as_cmd) ~= 0 then return nil end
+
+  Test.log(ld_cmd)
+  local rv = execute(ld_cmd)
   remove(obj_file)
 
+  if rv ~= 0 then return nil end
   return exe_file
 end
 
@@ -202,47 +239,105 @@ function Test.run_exe(exe_file)
   local se = exe_file .. ".2"
 
   local cmd = format("%s > %s 2> %s", exe_file, so, se)
+  Test.log(cmd)
   execute(cmd)
 
   return { so, se }
 end
 
-function Test.check_file(source, file)
-  local ext = Caml.Filename.extension(file)
-  local exp = Test.expected(source, ext)
-  local status = Util.compare_files(exp, file)
-  if not status then
-    Test.error(source, exp, file)
-    return nil
+-- rename does not work across filesystem boundaries
+function Test.copy_file(src, dest)
+  if not readfrom(src) then return nil end
+  if not writeto(dest) then readfrom(); return nil end
+  local l = read()
+  while l do
+    if not write(l .. "\n") then
+      readfrom()
+      writeto()
+      return nil
+    end
+    l = read() 
   end
+  writeto()
+  readfrom()
   return 1
 end
 
-function Test.run_test_case(file)
-  local out_files = Test.compile_file(file)
-  local s_file = out_files[1]
-  local so = out_files[2]
-  local se = out_files[3]
-
-  if (not Test.check_file(file, s_file)
-      or not Test.check_file(file, so)
-      or not Test.check_file(file, se))
-      and Test.verbose > 0
-  then
-    exe_file = Test.build_exe(s_file)
-    local files = Test.run_exe(exe_file)
-    local pso = files[1]
-    local pse = files[2]
-    Test.check_file(file, pso)
-    Test.check_file(file, pse)
-    remove(pso)
-    remove(pse)
-    remove(exe_file)
+function Test.check_update_file(source, file, update)
+  local ext = Caml.Filename.extension(file)
+  local bn = Caml.Filename.basename(source)
+  local cn = Caml.Filename.chop_extension(bn)
+  local exp = Caml.Filename.concat(Test.results, cn .. ext)
+  local status = Util.catch(Util.compare_files, exp, file)
+  if not status then
+    if update then
+      print(format("%s \thas changed \t\t!! updating !!", exp))
+      if not Test.copy_file(file, exp) then
+        print(format(" !! error moving file %s to %s !!", file,  exp))
+      end
+    else
+      Test.log("%s does not match output", exp)
+      Test.error(source, exp, file)
+    end
+    return 1
+  else
+    if update then
+      print(format("%s \thas not changed", exp))
+    else
+      Test.log("%s matches output", exp)
+    end
   end
+  return 0
+end
 
+function Test.run_test_case(file, update)
+  local files = Test.compile_file(file)
+  if not files then return end
+
+  local s_file = files[1]
+  local so = files[2]
+  local se = files[3]
+
+  Test.diffs = ""
+  local status = Test.check_update_file(file, s_file, update)
+               + Test.check_update_file(file, so, update)
+               + Test.check_update_file(file, se, update)
+  if update or (status > 0 and
+               (Test.trust_exe or Test.verbose))
+  then
+    local exe_file = Test.build_exe(s_file)
+    if exe_file then
+      files = Test.run_exe(exe_file)
+      local pso = files[1]
+      local pse = files[2]
+      local s = Test.check_update_file(file, pso, update)
+              + Test.check_update_file(file, pse, update)
+      if s == 0  and Test.trust_exe then
+        status = 0
+      end
+      remove(pso)
+      remove(pse)
+      remove(exe_file)
+    end
+  end
   remove(s_file)
   remove(so)
   remove(se)
+
+  if Test.diffs ~= "" then
+    local msg = format("{%s } differ", Test.diffs)
+    local stat = "FAILED"
+    if status == 0 then stat = "PASSED" end
+    if Test.verbose then
+      print(format("\n## To update these files {%s } run:",
+                   Test.diffs))
+      print(format("# ../bin/qc-- testdrv.lua %s %s.record",
+                   Test.tst_file, file))
+    else
+      print(format("../bin/qc-- -v testdrv.lua %s %s.test \t# %s %s",
+                   Test.tst_file, file, stat, msg))
+    end
+  end
 end
 @ 
 % -------------------------------------------------------------------
@@ -250,21 +345,21 @@ end
 % -------------------------------------------------------------------
 <<testdrv.lua>>=
 if CMD.compilertab[".record"] then
-  error("CMD.compilertab[.record] alread defined")
+  error("CMD.compilertab[.record] already defined")
 end
 function CMD.compilertab[".record"](file)
-  print("record not implemented")
+  Test.run_test_case(Caml.Filename.chop_extension(file), 1)
 end
 
 if CMD.compilertab[".test"] then
-  error("CMD.compilertab[.test] alread defined")
+  error("CMD.compilertab[.test] already defined")
 end
 function CMD.compilertab[".test"](file)
   Test.run_test_case(Caml.Filename.chop_extension(file))
 end
 
 if CMD.compilertab[".tst"] then
-  error("CMD.compilertab[.tst] alread defined")
+  error("CMD.compilertab[.tst] already defined")
 end
 function CMD.compilertab[".tst"](file)
   dofile(file)
@@ -282,18 +377,13 @@ function CMD.compilertab[".tst"](file)
     i = i + 1
   end
   Test.clear_status_line()
-  print(format("# %d errors detected.", Test.errors))
+  print(format("%d errors detected.", Test.errors))
 end
 @ 
 <<testdrv.lua>>=
 function CMD.whatfuns["-compile"]()
   backend = backend or Backend.x86
   CMD.translate_files(Options.argv, CMD.compilertab)
-  if Options.stop_count == 0 then
-    execute(Ld.cmd(Options.output or 'a.out'))
-  elseif Options.verbose > 0 then
-    write('Stopping at ', Options.the_stop(), '\n')
-  end    
 end
 
 function CMD.whatfuns["-interp"]()
@@ -324,9 +414,11 @@ function Test.test_redir()
 end
 
 Test.test_redir()
-print(format("# Running Regression Tests %s", date()))
-Test.verbose = Options.verbose
-Options.verbose = 0
+Test.log("Running Regression Tests %s", date())
+if Options.verbose > 0 then
+  Test.verbose = 1
+  Options.verbose = 0
+end
 
 local i = 1
 while i <= Options.argc do
@@ -336,6 +428,8 @@ while i <= Options.argc do
     if ext ~= ".test" and ext ~= ".record" then
       error("invalid command line arguments")
     end
+  elseif ext == ".tst" then
+    Test.tst_file = Options.argv[i]
   end
   i = i + 1
 end

@@ -1,0 +1,66 @@
+
+This directory contains the regression test suite for qc--. Tests are
+configured using .tst files, and run using the testdrv.lua driver for
+qc--. The files and directories living here are:
+
+   README      - this file
+   src/        - source files for test cases
+   x86/        - expected outputs for x86 backend
+   dummy/      - expected outputs for dummy backend
+   testdrv.nw  - lua test driver
+   mkfile      - mkfile for lua test driver and .tst files
+   *.tst       - test configuration files for testdrv.lua
+
+   testqc.nw   - old testqc test framework
+   mkfile.old  - mkfile for old testqc test system
+
+Using the old testqc framework
+-------------------------------------------------------------------------
+
+The old testqc framework still lives here, and can be run using
+mkfile.old. Some of the compiler outputs (.s1 and .s2) may not match
+when using testqc. See mkfile.old and testqc.nw for more information.
+
+
+Using the LUA test driver for qc--
+-------------------------------------------------------------------------
+
+The run the test file, name.tst, type:
+
+  mk name.tst
+
+This will build the test driver and execute it with the name.tst
+configuration file. The mkfile assumes that ../bin/qc-- is the binary
+you want to test with, make sure you have run a `mk update` in the src
+directory before testing.
+
+To run the driver manually:
+
+  ../bin/qc-- testdrv.lua name.tst
+
+The test driver will run through each source files listed in name.tst
+and compare the compilers output to the expected output. For each
+error detected a line will be printed that can then be executed to get
+more information on the error. For example:
+
+> mk example.tst
+../bin/qc-- testdrv.lua example.tst
+../bin/qc-- -v testdrv.lua example.tst src/add.c--.test      # FAILED { .s } differ
+../bin/qc-- -v testdrv.lua example.tst src/bits-bug.c--.test # FAILED { .s } differ
+../bin/qc-- -v testdrv.lua example.tst src/cut.c--.test      # FAILED { .s } differ
+../bin/qc-- -v testdrv.lua example.tst src/hello.c--.test    # FAILED { .s1 } differ
+4 errors detected.
+
+Executing the given lines will give detailed information, and also
+provide a command line that can be used to update the differing files.
+In the case of hello.c-- this would be:
+
+> ../bin/qc-- testdrv.lua example.tst src/hello.c--.record
+x86/hello.s     has not changed
+x86/hello.s1    has changed             !! updating !!
+x86/hello.s2    has not changed
+x86/hello.1     has not changed
+x86/hello.2     has not changed
+
+For more information on the format of the test configuration files,
+see testdrv.nw.
