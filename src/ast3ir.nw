@@ -142,23 +142,23 @@ Values from the environment are always [[Ok]] because at this stage we
 have a clean environment.
 
 <<ExprTypes>>=
-    let exprtype env target exp =
-        let word      = Error.Ok(Types.bits target.Target.wordsize)    in
-        let pointer   = Error.Ok(Types.bits target.Target.pointersize) in
-        let tlookup   = fun x -> Error.Ok(snd (F.findt x env))         in
-        let vlookup   = fun x -> Error.Ok( match (F.findv x env) with
-                                         | (_,(_,t)) -> t 
-                                         ) in
-        let e = { Expcheck.wordsize    = word
-                ; Expcheck.pointersize = pointer
-                ; Expcheck.tlookup     = tlookup
-                ; Expcheck.vlookup     = vlookup
-                } 
-        in try ( match Expcheck.check e exp with
-               | Error.Ok(t) -> t
-               | Error.Error -> assert false
-               )
-           with Error.ErrorExn msg -> assert false
+let exprtype env target exp =
+    let word      = Error.Ok(Types.bits target.Target.wordsize)    in
+    let pointer   = Error.Ok(Types.bits target.Target.pointersize) in
+    let tlookup   = fun x -> Error.Ok(snd (F.findt x env))         in
+    let vlookup   = fun x -> Error.Ok( match (F.findv x env) with
+                                     | (_,(_,t)) -> t 
+                                     ) in
+    let e = { Expcheck.wordsize    = word
+            ; Expcheck.pointersize = pointer
+            ; Expcheck.tlookup     = tlookup
+            ; Expcheck.vlookup     = vlookup
+            } 
+    in try ( match Expcheck.check e exp with
+           | Error.Ok(t) -> t
+           | Error.Error -> assert false
+           )
+       with Error.ErrorExn msg -> assert false
 @
 
 
@@ -561,7 +561,7 @@ and ifStmt state (e,ifso,ifnot) =
                    node = G.set_label state.cfg l_join s_join state.node } in  
     let ifso   = foldr body ifso state  in
     let state  = { state with (* label ifso *)
-                   node = G.set_label state.cfg l_ifso s_join ifso.node  } in 
+                   node = G.set_label state.cfg l_ifso s_ifso ifso.node  } in 
     
     let l2exp  = Rtl.link s_join state.target.Target.pointersize in
     let l2rtl  = state.target.Target.goto.Target.embed l2exp in
