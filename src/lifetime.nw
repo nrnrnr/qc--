@@ -42,15 +42,11 @@ of the following cases:
 
 If one interval precedes another, it clearly starts and ends before
 the other.  However, if two intervals overlap, this does not mean that
-they have the same starting and end point.  The [[min]] and [[max]]
-function provide another way of comparing two intervals:  [[min]]
-returns the one whose starting point is smaller than the other,
-[[max]] returns the interval whose ending point is greater than the
-other.  Please note, that [[min i j = max i j]] is possible.
-
-\begin{quote}\it
-    Do we need better names for [[min]] and [[max]]? --CL
-\end{quote}
+they have the same starting and end point.  The [[ahead]] and [[behind]]
+function provide another way of comparing two intervals:  an interval
+is [[ahead]] of another, if its starting point is smaller. An interval
+is [[behind]] another, if its ending point is greater than the one of
+the other.
 
 \begin{quote}\it
     Is a half-open interval the right design? If the highest number of
@@ -77,12 +73,13 @@ overlaps x y  = overlaps x y
 overlaps (mk x y) (mk v w) = $\neg$ (precedes (mk x y) (mk v w) 
                              $\vee$ precedes (mk v w) (mk x y))
 
-min empty i                = i
-min i empty                = i
-max empty i                = i
-max i empty                = i
-min (mk x1 y1) (mk x2 y2)  = if x1 < x2 then (mk x1 y1) else (mk x2 y2)
-max (mk x1 y1) (mk x2 y2)  = if y1 > y2 then (mk x1 y1) else (mk x2 y2)
+ahead empty  \_                 = false
+behind empty \_                 = false
+ahead (mk x y) empty            = true
+behind (mk x y) empty           = true
+
+ahead  (mk x1 y1) (mk x2 y2)    = x1 < x2 
+behind (mk x1 y1) (mk x2 y2)    = y1 > y2
 \end{quote}
 
 The implementation is a functor [[Make]] that takes the a [[Point]]
@@ -102,8 +99,8 @@ module type S = sig
     val isempty  : t -> bool
     val overlaps : t -> t -> bool
     val precedes : t -> t -> bool
-    val min      : t -> t -> t
-    val max      : t -> t -> t
+    val ahead    : t -> t -> bool
+    val behind   : t -> t -> bool
     module Set : Set.S with type elt = t
       (* Elements with different left-hand sides are ordered by that
          left-hand side.  Note the ordering here is *not* the same as
@@ -283,14 +280,14 @@ let union i1 i2 = match i1, i2 with
 @
 
 <<module Interval struct>>=
-let min i j = match i, j with
-    | i           , j when isempty i -> j
-    | i           , j when isempty j -> i
-    | (x1,y1 as i), (x2,y2 as j)     -> if Order.lt x1 x2 then i else j
-let max i j = match i, j with
-    | i           , j when isempty i -> j
-    | i           , j when isempty j -> i
-    | (x1,y1 as i), (x2,y2 as j)     -> if Order.gt y1 y2 then i else j
+let ahead i j = match i, j with
+    | i           , j when isempty i -> false
+    | i           , j when isempty j -> false
+    | (x1,y1 as i), (x2,y2 as j)     -> Order.lt x1 x2 
+let behind i j = match i, j with
+    | i           , j when isempty i -> true
+    | i           , j when isempty j -> true
+    | (x1,y1 as i), (x2,y2 as j)     -> Order.gt y1 y2
 @
 
 To order intervals, they are compared by their first component first
