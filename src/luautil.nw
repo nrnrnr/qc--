@@ -7,7 +7,7 @@
 This module introduces Lua function in the Lua table [[Util]]. 
 
 \begin{itemize}
-\item [[Util.dosearchfile(table,string)]]
+\item [[Util.dosearchfile(string,table)]]
 
 The [[dosearchfile]] function obtains a search path from the environment
 variable [[QC--LUAPATH]] and searches for the named file. If the file
@@ -40,7 +40,7 @@ module MakeLib (C: Lua.Lib.CORE) = struct
     <<dofile>>
     
     let builtins =
-    [ "dosearchfile" , func (V.table **-> V.string **-> V.runit) dosearchfile
+    [ "dosearchfile" , func (V.string **-> V.value **-> V.runit) dosearchfile
     ]
     let init = C.register_module "Util" builtins
 end
@@ -84,22 +84,32 @@ expert can clean this up. Another problem was to call [[dofile]] and
 [[dostring]]. Is there a better way then [[eval]]?
 
 <<dofile>>=
-let dofile   g file  = ignore(C.apply (V.String "dofile")   g  [file])
-let dostring g str   = ignore(C.apply (V.String "dostring") g  [str])
-let error g msg      = ignore(C.fallback "error" g [V.String msg])
+let error g msg      = C.fallback "error" g [V.String msg]
+let lookup   g f     = try Luahash.find g.V.globals (V.String f)
+                       with Not_found -> V.Nil
+let dofile   g file  = C.apply (lookup g "dofile")   g  [file]
+let dostring g str   = C.apply (lookup g "dostring") g  [str]
 
 let defaultdir       = "/usr/local/lib/qc--"    (*XXX fix XXX*)
-let dosearchfile g table file =
-    let path = try Sys.getenv "QC--LUAPATH" with Not_found -> ":*" in
+let luapath          = "QC--LUAPATH"
+let defaultpath      = ":*"
+
+let dosearchfile g file value =
+    let path = try Sys.getenv luapath with Not_found -> defaultpath in
     let dirs = split path in
     let rec search = function
         | [] -> 
-            error g ("dosearchfile: can't find `"^file^"' in path "^path)
+            error g ("dosearchfile: can't find `"^file^"' in path `"^path^"'")
         | "*" :: rem -> 
-            ( try let script = Luahash.find table (V.String file) in
-                dostring g script
-              with Not_found -> search rem
-            )
+            ( match value with
+              | V.Nil      -> search rem
+              | V.Table(t) -> 
+                 (try let script = Luahash.find t (V.String file) in
+                     dofile g script
+                 with Not_found -> search rem)
+              | _  -> 
+                error g "dosearchfile: expected nil or table as second argument"
+            )  
         | dir :: rem -> (*XXX fix system path XXX*)
             let d    = if dir = "" then defaultdir else dir in
             let path = Filename.concat dir file in
@@ -108,7 +118,7 @@ let dosearchfile g table file =
                 else search rem
     in
         if Filename.is_relative file then
-            search dirs
+            ignore (search dirs)
         else
-            dofile g (V.String file)
+            ignore (dofile g (V.String file))
 @    
