@@ -367,12 +367,12 @@ registers.
 
 <<allocator>>=
 fun node -> 
-    let allocated = fun cfg lifetimes -> ()           in (* continuation *)
-    let spill     = fun cfg loc intv  -> assert false in (* continuation *)
-        ( match find_tmp node with
+    let spill        = fun cfg loc intv  -> assert false in (* continuation *)
+    let rec allocate = fun cfg lifetimes -> match find_tmp node with
         | None     -> ()
-        | Some tmp -> replace_tmp cfg tmp lifetimes node allocated spill
-        )
+        | Some tmp -> replace_tmp cfg tmp lifetimes node allocate spill
+    in
+        allocate cfg lifetimes
 @
 
 % ------------------------------------------------------------------ 
@@ -391,7 +391,7 @@ such register can be found.
 
 \begin{quote}\it
     An alternative design would be to return a sorted list of all
-    temporaries that need to be replaced.  Lists at the head of the
+    temporaries that need to be replaced.  Temporaries at the head of the
     list should be replaced first.  However, if we re-write all nodes
     in every allocation step, including the node at hand, the list may
     contain some temporaries no longer used by that node.  --CL
