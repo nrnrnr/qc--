@@ -113,6 +113,43 @@ val freeze : t -> Block.t
 @
 
 % ------------------------------------------------------------------ 
+\subsection{Memory-based Automata}
+% ------------------------------------------------------------------ 
+
+Here we provide a generic automaton that allocates slots in memory. The
+behavior of the automaton is controlled by two sets of parameters:
+target-specific parameters and policy-specific parameters.
+
+\emph{Unfortuntately, we cannot use the [[Target2.t]] here because it
+would introduce a circular dependency.}
+
+The [[policy]] arguments controls the automatons behavior: when [[up]]
+is true, slots are allocated from low to high memory. The [[alignment]]
+is used for the alignment of the individual slots, and the resulting
+memory block as a whole.
+
+\emph{Maybe we have to offer more control over alignment. -- CL}
+
+<<automaton2.mli>>=
+module Memory: sig
+    type target = 
+        { byteorder:        Rtl.aggregation
+        ; wordsize:         int                 (* in bits *)
+        ; pointersize:      int                 (* in bits *)
+        ; memsize:          int                 (* in bits *)
+        }
+
+    type policy =
+        { up:               bool                (* allocate from lo to hi mem *)
+        ; alignment:        int                 (* in memsize *)
+        }
+        
+
+    val mk: target -> policy -> Rtl.exp (*base*) -> automaton
+end
+@
+
+% ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
@@ -146,30 +183,39 @@ let to_loc loc            = loc#to_loc
 let of_loc loc            = Impossible.unimp "Automaton.of_rtl_loc"
 @
 
+
+
 % ------------------------------------------------------------------ 
-\subsection{Sample Automaton}
+\subsection{Implementation of Memory-Based Automata}
 % ------------------------------------------------------------------ 
-
-Automata are usually target specific and thus best implemented outside
-of this module. For demonstration purposes, here is a simple automaton.
-All locations reside in memory.
-
-An automaton maintains a block of memory. When a new slot requests comes
-in, it creates a small new block for the slot and returns its address.
-The block for the slot is concatenated with the internal block and
-becomes the new block. This blocks is returned when the automaton is
-frozen.
-
-Every block for a new slot requires an address. This is taken as an
-offset from the base $b$ of the memory block: $b+v$, where $v$ is a late
-compile-time constant. Equation solving will later find the actual value
-of $v$.
 
 <<automaton2.ml>>=
-module Sample = struct <<Sample>> end
+module Memory = struct
+    type target = 
+        { byteorder:        Rtl.aggregation
+        ; wordsize:         int                 (* in bits *)
+        ; pointersize:      int                 (* in bits *)
+        ; memsize:          int                 (* in bits *)
+        }
+
+    type policy =
+        { up:               bool                (* allocate from lo to hi mem *)
+        ; alignment:        int                 (* in memsize *)
+        }
+        
+    <<class loc>>
+    <<class t>>
+    
+    let mk target policy base = new t target policy base
+end    
 @
 
-<<Sample>>=
+
+Each automaton defines an abstract location which is intended for
+complex location like a register and a memory cell pair. Since all slots
+are in memory, this is essentially a wrapper for [[Rtl.loc]].
+
+<<class loc>>=
 class loc (loc:Rtl.loc): location =
 object
     val _loc   = loc
@@ -178,34 +224,48 @@ object
     method fetch width      = Rtl.fetch _loc width
     method to_loc           = _loc
 end
+@
 
-class slots (base:Rtl.exp): automaton =
-    let memsize = 8                 (* constants go here *)
-    and pointer = 32                (* pointer size *)
-    and endianness = Rtl.BigEndian  (* byte order for sample automaton *)
-in object (this)
-    val mutable _block  = Block.mk base 0 pointer     (* initial block *)
+The automaton [[t]] maintains a block [[_block]] of memory allocated so
+far. For every new slot it allocates a small block and concatenates it
+with [[_block]]. Depending on [[T.up]] the [[_block]] grows on its high
+or low end.
+
+<<class t>>=
+class t (target:target) (policy:policy) (base:Rtl.exp): automaton =
+object (this)
+    val mutable _block  = Block.mk base 0 policy.alignment  (* initial block *)
     val mutable _frozen = false
     
     method freeze () =
-        let _ = _frozen <- true in _block  (* return block *)
-    
+        ( _block  <- Block.adjust _block 
+        ; _frozen <- true 
+        ; _block  (* return block *)
+        )
+
     method private memloc addr w = 
-        new loc (Rtl.cell Rtl.none 'm' endianness w addr)
+        new loc (Rtl.cell Rtl.none 'm' target.byteorder w addr)
     
     method private slotaddress = (* base + v *)
-        let add = Rtl.opr "add" [pointer] in
-        Rtl.app add [base; Rtl.late (Idgen.slot "slots") pointer]
+        let add = Rtl.opr "add" [target.pointersize] in
+        Rtl.app add [base; Rtl.late (Idgen.slot "slots") target.pointersize]
     
     method allocate width hint = 
         let ()      = assert (_frozen = false)           
-        and ()      = assert (width mod memsize = 0) in
+        and ()      = assert (width mod target.memsize = 0) 
+        and bytes   = width / target.memsize in
         match hint with 
         | Some x -> assert false (* hints not supported *)
         | None ->
-            let slot = Block.mk this#slotaddress (width / memsize) pointer in
-                ( _block <- Block.cathl slot _block 
+            let slot = Block.mk this#slotaddress bytes policy.alignment in
+                ( if policy.up then
+                    _block <- Block.cathl slot _block 
+                  else
+                    _block <- Block.cathl _block slot 
                 ; this#memloc (Block.base slot) width
                 )                
 end
+@
+
+
 
