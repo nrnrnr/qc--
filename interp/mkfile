@@ -35,8 +35,15 @@ VERSION   = `date +%Y%m%d`
 TOP       = ..
 BINDIR    = $TOP/bin
 LIBDIR    = $TOP/lib
+QCC       = $TOP/bin/qc--.opt
 MODE      = user
 # change to MODE=developer to turn on Toolkit features
+
+# LCC_INSTALLDIR : directory where lcc binary and liblcc.a are installed
+LCC_INSTALLDIR = /usr/local/lcc
+
+# LCC_SRCDIR : directory containing include/ subdirectory with lcc header files
+LCC_SRCDIR     = /home/lair/nr/lcc/lcc-4.2
 
 # ------------------------------------------------------------------
 # main targets
@@ -65,7 +72,7 @@ test:VQ:
 	(cd test; mk $MKFLAGS test)
 
 clean:V:
-	rm -f *.o
+	rm -f *.o *.cmm.c--
 	(cd clients; mk clean)
 
 clean.opt:V: clean
@@ -261,6 +268,46 @@ sparc-interp:V:
 	       LUAINCLUDES=-I/home/lair/olinsky/include \
 	       LUALIBS='/home/lair/olinsky/lib/sparc/o/*.o' \
 	       CC='$CC'
+
+## bootstrapped binary
+
+LCC      = $LCC_INSTALLDIR/lcc
+LCC_INC  = -I$LCC_SRCDIR/include/x86/linux $INCLUDES
+LCC_LIBS = -L$LCC_INSTALLDIR -llcc
+LCC_ARGS = -target=c-- -Wf-c--=x86/linux -Wf-c--segLIT=data ${LCC_INC:%=-Wp%}
+
+%.cmm.c--:D: %.c
+  $LCC -S $LCC_ARGS -o $target $prereq
+
+BOOTTEMP = .bootstrapping.temp.c
+
+operator.cmm.c--:D: operator.c features.nw
+  ( $NOTANGLE $NOTANGLEOPTS -Rfloat-features.h.no-iec60559 features.nw; \
+    cat operator.c) > $BOOTTEMP
+  $LCC -S $LCC_ARGS -o $target $BOOTTEMP
+  rm -f $BOOTTEMP
+
+BOOTED_CORESRCS   = ${CORESRCS:%.c=%.cmm.c--}
+BOOTED_CLIENTSRCS = ${CLIENTSRCS:%.c=%.cmm.c--}
+BOOTED_COREOBJS   = ${BOOTED_CORESRCS:%.c--=%.o}
+BOOTEDBC_COREOBJS = ${BOOTED_CORESRCS:%.c--=%.qs}
+
+%.cmm.o:D: %.cmm.c--
+  $QCC -c -o $target $prereq
+
+%.cmm.qs:D: %.cmm.c--
+  $QCC -interp -stop .qs -o $target $prereq
+
+booted-interp.opt:D: $QCC $BOOTED_COREOBJS $BOOTED_CLIENTSRCS
+  $QCC $LIBS -globals -o $target $BOOTED_COREOBJS $BOOTED_CLIENTSRCS $LCC_LIBS
+
+# cannot actually run booted-interp because of missing imports from libraries;
+# if actually interested in this, someone could write a version of client.c
+# that registers with the interpreter all functions imported from the libraries
+# in $LCC_LIBS and $LIBS
+#
+booted-interp:D: $QCC $BOOTEDBC_COREOBJS $BOOTED_CLIENTSRCS
+  $QCC -interp -globals -o $target $BOOTEDBC_COREOBJS $BOOTED_CLIENTSRCS
 
 # ------------------------------------------------------------------
 # dependency recalculation
