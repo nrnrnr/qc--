@@ -56,7 +56,11 @@ alphanumerics, underscores, and dots.
 Most assemblers, including the Gnu assembler, will accept many more
 characters.  But this way we don't have to enumerate the reserved
 words (e.g., names of registers).
-<<definitions>>=
+
+The manual says ``The name of a symbol representing a function that
+conforms to standard C calling conventions is the name of the function with
+an underscore prefix. Thus, the name of the symbol representing the
+function [[main]] would be [[_main]].''
 <<definition of [[manglespec]] (for the name mangler)>>=
 let spec =
     let reserved = [] in        (* list reserved words here so we can avoid them *)
@@ -112,17 +116,35 @@ object (this)
     <<assembly methods>>
 end
 @ 
-Importing emits nothing; identifiers that are otherwise undefined are
-automatically imported.
+Importing emits codes for indirect addressing;
+identifiers that are otherwise undefined are automatically imported.
 Maintaining the symbol table suffices.
 <<assembly methods>>=
-method import s = this#new_symbol s
+val imports = ref ([] : string list)
+
+method import s =
+  let sym  = this#new_symbol s in
+  imports := ("_" ^ s)::(!imports);
+  output_string  _fd ".picsymbol_stub\n";
+  Printf.fprintf _fd "L_%s$stub:\n" s;
+  Printf.fprintf _fd "\t.indirect_symbol _%s\n" s;
+  output_string  _fd "\tmflr r0\n";
+  Printf.fprintf _fd "\tbcl 20,31,L%s$pb\n" s;
+  Printf.fprintf _fd "L%s$pb:\n" s;
+  output_string  _fd "\tmflr r11\n";
+  Printf.fprintf _fd "\taddis r11,r11,ha16(L%s$lz-L%s$pb)\n" s s;
+  output_string  _fd "\tmtlr r0\n";
+  Printf.fprintf _fd "\tlwz r12,lo16(L%s$lz-L%s$pb)(r11)\n" s s;
+  output_string  _fd "\tmtctr r12\n";
+  Printf.fprintf _fd "\taddi r11,r11,lo16(L%s$lz-L%s$pb)\n" s s;
+  output_string  _fd "\tbctr\n";
+  output_string  _fd ".lazy_symbol_pointer\n";
+  Printf.fprintf _fd "L%s$lz:\n" s;
+  Printf.fprintf _fd "\t.indirect_symbol _%s\n" s;
+  output_string  _fd "\t.long dyld_stub_binding_helper\n";
+  sym
 @
 Exporting requires announcing as global.
-The manual says ``The name of a symbol representing a function that
-conforms to standard C calling conventions is the name of the function with
-an underscore prefix. Thus, the name of the symbol representing the
-function [[main]] would be [[_main]].''
 <<assembly methods>>=
 method export s =
   let sym = this#new_symbol s in
@@ -240,8 +262,16 @@ instruction-based assemblers.
 <<assembly methods>>=
 method private instruction rtl =
   output_string _fd "\t";
-  output_string _fd (Ppcrec.M.to_asm rtl);
+  output_string _fd (Ppcrec.M.to_asm rtl (!imports));
   output_string _fd "\n"
+
+method private emit_pic symbol =
+  let label = "L" ^ symbol#original_text in
+  output_string _fd "\tmflr r0\n";
+  output_string _fd (Printf.sprintf "\tbcl 20,31,%s\n" label);
+  output_string _fd (Printf.sprintf "%s:\n" label);
+  output_string _fd "\tmflr r2\n";
+  output_string _fd "\tmtlr r0\n";
 
 method cfg_instr proc  = 
     (* We have to emit a label/whatever for the procedure's 
@@ -249,7 +279,10 @@ method cfg_instr proc  =
     let cfg    = proc.Proc.cfg
     and symbol = proc.Proc.symbol in
     let label l = this#label (try SM.find l _syms with Not_found -> this#local l) in
+    let pic = ref false in
+    let is_pic rtl = if not(!pic) then pic := Pic.is_pic rtl in
     this#label symbol;
+    if (emitter cfg is_pic (fun _ -> ()); !pic) then this#emit_pic symbol;
     (emitter cfg (this#instruction) label : unit)
 
 <<unused utilities>>=
