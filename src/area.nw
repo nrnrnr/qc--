@@ -51,7 +51,7 @@ type builder
 val mk          : address:Rtl.exp -> builder
 val align       : builder -> int -> builder
 val alloc       : builder -> int -> builder
-val adjust      : builder -> int -> builder
+val adjust      : builder -> builder
 val location    : builder -> Rtl.exp     
 val freeze      : builder -> t
 @
@@ -74,9 +74,8 @@ val freeze      : builder -> t
       $t$-aligned. It is a checked run-time error if [[n]] is not a
       power of two.
 
-\item [[Adjust b n]] increases area [[b]] such that its size becomes 
-      a multiple on [[n]]. This is different from [[align]] because it
-      does not affect the alignment constraints of the base address.
+\item [[Adjust b]] increases area [[b]] such that its size becomes 
+      a multiple of its base-alignment. 
 
 \item After allocation is complete a block can be frozen to obtain its
       definitve size and alignment.  It is a checked run-time error to
@@ -181,14 +180,14 @@ let location b =
     let sum    = RP.App (("add",[b.width]), [b.base;offset])         in
         Rtl.Revert.exp sum
 
-let adjust b n =
-    if b.offset mod n > 0 then    
-        { b with offset = n * ((b.offset / n) + 1) }
+let adjust b =
+    if b.offset mod b.basealign > 0 then    
+        { b with offset = b.basealign * ((b.offset / b.basealign) + 1) }
     else
         b
 
 let freeze b = 
-    let b = align b b.basealign in
+    let b = adjust b in
         { address = Rtl.Revert.exp b.base 
         ; align   = b.basealign
         ; size    = b.offset
