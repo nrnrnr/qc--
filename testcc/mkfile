@@ -22,6 +22,10 @@ ASM =               `ls -1 *.c-- | sed s'/\.c--/.s/'`
 all:V:              alpha-call x86-c-call mips-call
 asm:V:              $ASM
                     
+# A rule to pretty print a C-- source file
+
+%.pp:               %.c--
+                    $QCC -pp $prereq
 
 #
 # A .sigs file contains lines of signatures for tests. Signatures are
@@ -60,6 +64,7 @@ x86-c-call:V:       x86-c-call.sigs
                     $GEN -name=$target-x -c -width=32 < $prereq
 
 mips-call:V:        mips-call.sigs
+                    $GEN -name=$target      -width=32 < $prereq
                     $GEN -name=$target-x -c -width=32 < $prereq
 
 #
