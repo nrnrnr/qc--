@@ -1,0 +1,233 @@
+% -*- mode: Noweb; noweb-code-mode: c-mode -*-
+<<optest.c>>=
+#define __USE_ISOC99 1
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <assert.h>
+#include <math.h>
+
+#define MEMSIZE(E) (sizeof(E) / sizeof(char))
+#define BITSIZE(E) (8 * MEMSIZE(E))
+#define W BITSIZE(unsigned)
+
+typedef int (*testfun)(unsigned char *pr, unsigned char *px, unsigned char *py,
+                       unsigned char *pz);
+
+typedef struct optest {
+  const char *opname;
+  testfun cmmfun;
+  testfun cfun;
+  testfun printfun;
+  int stride;
+} optest;
+
+extern struct optest optable[];
+
+extern char *unimptable[];
+
+<<utilities>>
+
+int main(int argc, char *argv[]) {
+  int count;
+  unsigned char *x, *xlim, *y, *ylim, *z, *zlim;
+  unsigned char *rc, *rcmm;
+  struct optest *test;
+  int verbose, nan; 
+  int resultsize;
+  int failures = 0;
+  printf("integer widening not tested\n");
+  <<write names of unimplemented operators>>
+  <<set [[count]], [[verbose]], and [[nan]] (or exit), according to [[argc]] and [[argv]]>>;
+  <<allocate $x$, $y$, and $z$ arrays and set variables from [[count]]>>;
+  <<set [[resultsize]] from [[optable]]>>;
+  <<allocate [[rc]] and [[rcmm]] of size [[resultsize]]>>;
+  <<fill $x$ and $y$ arrays with random bits>>;
+  for (test = &optable[0]; test->opname; test++) {
+    int stride = test->stride;
+    int failed = 0;
+    int nonzero_y = name_matches(test->opname, divisions);
+    int shift     = name_matches(test->opname, shifts);
+    unsigned yprime;
+    unsigned char *px = x, *py = y, *pz = z;
+    while (px < xlim) {
+      int s1, s2;
+      unsigned char *tpy; /* true py */
+      if (nonzero_y && *(unsigned *)py == 0)
+        continue;
+      if (shift) {
+        yprime = *(unsigned *)py % 8 * sizeof(yprime);
+        tpy = (unsigned char *)&yprime;
+      } else {
+        tpy = py;
+      }
+      s1 = test->cfun  (rc,   px, tpy, pz);
+      s2 = test->cmmfun(rcmm, px, tpy, pz);
+      assert(s1 == s2);
+      if (memcmp(rc, rcmm, s1) && !(nan && excuse_nan(nan, test, rc, rcmm, px, tpy))) {
+        failed = 1;
+        failures++;
+        printf("Failed %s\n", test->opname);
+        if (verbose > 0) {
+          printf("  C-- says ");
+          test->printfun(rcmm, px, tpy, pz);
+          printf("  C   says ");
+          test->printfun(rc, px, tpy, pz);
+          if (verbose > 1) {
+            printf("  C-- bits "); showbits(rcmm, s1);
+            printf("  C   bits "); showbits(rc,   s1);
+          }
+        }
+        break;
+      }
+      px += stride;
+      py += stride;
+      pz += stride;
+    }
+    if (!failed && verbose > 2)
+      printf("Passed %s!\n", test->opname);
+  }
+  return failures;
+}
+@ 
+<<set [[count]], [[verbose]], and [[nan]] (or exit), according to [[argc]] and [[argv]]>>=
+{ int i;
+  verbose = 0;
+  nan = 0;
+  count = 0;
+  for (i = 1; i < argc; i++) {
+    if (!strcmp(argv[i], "-v"))
+      verbose++;
+    else if (!strcmp(argv[i], "-nan"))
+      nan++;
+    else if (count == 0)
+      count = atoi(argv[i]);
+    else {
+      fprintf(stderr, "Usage: %s [-v [-v]] [count]\n", argv[0]);
+      exit(1);
+    }
+  }
+  if (count == 0)
+    count = 100;
+}
+@ 
+<<set [[resultsize]] from [[optable]]>>=
+resultsize = 0;
+for (test = &optable[0]; test->opname; test++)
+  if (resultsize < test->stride)
+    resultsize = test->stride;
+(void) resultsize;
+<<allocate [[rc]] and [[rcmm]] of size [[resultsize]]>>=
+rc = malloc(resultsize);
+assert(rc);
+rcmm = malloc(resultsize);
+assert(rcmm);
+@ 
+<<allocate $x$, $y$, and $z$ arrays and set variables from [[count]]>>=
+x = malloc(sizeof(*x) * count);
+y = malloc(sizeof(*y) * count);
+z = malloc(sizeof(*z) * count);
+assert(x != NULL && y != NULL && z != NULL);
+xlim = x + count;
+ylim = y + count;
+zlim = z + count;
+@ 
+<<fill $x$ and $y$ arrays with random bits>>=
+{   FILE *rand = fopen("/dev/urandom", "r");
+    int n;
+    if (!rand) {
+      perror("Cannot open /dev/urandom --- need a Linux box?");
+      exit(1);
+    }
+    n = fread(x, sizeof(*x), count, rand);
+    assert(n == count);
+    n = fread(y, sizeof(*y), count, rand);
+    assert(n == count);
+    fclose(rand);  
+}
+<<utilities>>=
+static void showbits(unsigned char *p, unsigned n) {
+  while (n > 0)
+    // for (; n > 0; n--)
+    printf("%02x", p[--n]);
+  printf("\n");
+}
+<<utilities>>=
+static const char *divisions[] = { "div", "divu", "quot", "mod", "modu", "rem", NULL };
+static const char *shifts[]    = { "shra", "shrl", "shl", "rotl", "rotr", NULL };
+
+static int name_matches(const char *name, const char *names[]) {
+  const char **dname;
+  for (dname = names; *dname; dname++) {
+    int len     = strlen(*dname);
+    if (!strncmp(name, *dname, len) && isdigit(name[len]))
+      return 1;
+  }
+  return 0;
+}
+@ 
+Function [[is_nan]] tells if an argument is a NaN.
+<<utilities>>=
+#define AT(P, TY) (*(TY *)(P))
+int is_nan(unsigned char *p, int stride) {
+  if (stride == sizeof(float))
+    return isnan(AT(p, float));
+  else if (stride == sizeof(double))
+    return isnan(AT(p, double));
+  else {
+    assert(0);
+    return 0;  /* not reached */
+  }
+}
+@ 
+<<utilities>>=
+int difference_is_signal(unsigned char *rc, unsigned char *rcmm, int stride) {    
+  if (stride == 32 / 8) {
+    unsigned long r1, r2;
+    assert(sizeof(unsigned long) == 32 / 8);
+    r1 = AT(rc,   unsigned long);
+    r2 = AT(rcmm, unsigned long);
+    return (r1 ^ r2) == (0x1 << 22);  /* differ only in MSB of significand */
+  } else if (stride == 64 / 8) {
+    unsigned long long r1, r2;
+    assert(sizeof(unsigned long long) == 64 / 8);
+    r1 = AT(rc,   unsigned long long);
+    r2 = AT(rcmm, unsigned long long);
+    return (r1 ^ r2) == (0x1LL << 51);  /* differ only in MSB of significand */
+  } else {
+    assert(0);
+    return 0;
+  }
+}
+@ 
+At level 1, function [[excuse_nan]] excuses bad behavior on NaN inputs.
+At level~2, it excuses confusion between signalling and non-signalling NaNs.
+<<utilities>>=
+static const char *level_1_binary_nans[] =
+  { "fadd", "fsub", "fdiv", "fmul", NULL };
+static const char *level_1_unary_nans[] =
+  { "fabs", "fneg", NULL };
+
+int excuse_nan(int nan, optest *test, unsigned char *rc, unsigned char *rcmm,
+               unsigned char *px, unsigned char *py) {
+  int stride = test->stride;
+  if (nan >= 1 && name_matches(test->opname, level_1_binary_nans)) {
+    return is_nan(rcmm, stride) && is_nan(rc, stride) &&
+          (is_nan(px, stride) || is_nan(py, stride));
+  } else if (nan >= 1 && name_matches(test->opname, level_1_unary_nans)) {
+    return is_nan(rcmm, stride) && is_nan(rc, stride) && is_nan(px, stride) &&
+           difference_is_signal(rc, rcmm, stride);
+  } else if (nan >= 2 && !strcmp(test->opname, "NaN23_32")) {
+    return difference_is_signal(rc, rcmm, 32 / 8);
+  } else if (nan >= 2 && !strcmp(test->opname, "NaN52_64")) {
+    return difference_is_signal(rc, rcmm, 64 / 8);
+  }
+  return 0;
+}    
+@ 
+<<write names of unimplemented operators>>=
+{ char **p;
+  for (p = &unimptable[0]; *p; p++)
+    printf("%%%s not implemented\n", *p);
+}

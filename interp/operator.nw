@@ -161,7 +161,8 @@ static double loophole[2];
 #define LOOPHOLE(TYFROM, TYTO, VAL) (AT(loophole, TYFROM) = (VAL), AT(loophole, TYTO))
 #define AT(ADDR, TY) (*(TY *)(ADDR))
 
-#define OP64(STUFF)   /* no 64-bit args or results in the interpreter */
+<<64-bit workarounds>>
+
 <<macro definitions>>
 <<macro synonyms>>
 
@@ -172,6 +173,24 @@ static double loophole[2];
 
 <<global variable definitions>>
 <<function definitions>>
+@ 
+I hate C, because there's no portable way to do 64-bit arithmetic.
+Here I assume the compiler supports [[long long]],
+and I do conditional compilation in hopes that long long expressions
+are 64~bits.
+<<64-bit workarounds>>=
+typedef long long ll;
+typedef unsigned long long ull;
+
+#define LL64(E) (sizeof(long long) == 64 / 8 ? (E) : (assert(0), 0))
+@
+Because the interpreter is not configured for 64-bit values on the
+stack, I use a macro to turn off operators that take 64-bit arguments
+or produce 64-bit results.
+But because other operators (overflow, carry, and borrow) use 64-bit
+integers internall, we still need the other workarounds above.
+<<64-bit workarounds>>=
+#define OP64(STUFF)   /* no 64-bit args or results in the interpreter */
 @
 % ----------------------------------------------------------------------------
 \subsection{Data Structures}
@@ -355,7 +374,7 @@ integer operation specified in the {\PAL} documentation.
 <<integer operator definitions>>=
 /* INTEGER operators begin here. */
 T_BINARYOP(add,     v1 + v2             , v1, v2,s_int16,bits16)
-OVERFLOW  (add,     +, s_int64          , v1, v2,s_int32,bits32)
+OVERFLOW  (add,     +, signed           , v1, v2,s_int32,bits32)
 T_BINARYOP(add,     v1 + v2             , v1, v2,s_int32,bits32)
 WEIRDOP   (addc,    v1 + v2 + (c&0x01)  , v1, v2, c,u_int32,u_int32,bits32,bits32)
 T_BINARYOP(and,     v1 & v2             , v1, v2,u_int16,bits16)
@@ -370,10 +389,10 @@ UNARYOP   (lobits,  v1 & 0xff           , v1    ,u_int32,u_int8 ,bits32,bits8 )
 UNARYOP   (lobits,  v1 & 0xff           , v1    ,u_int16,u_int8 ,bits16,bits8 )
 UNARYOP   (lobits,  v1 & 0x01           , v1    ,u_int32,u_int1 ,bits32,bits1 )
 UNARYOP   (bool,    v1 & 0x01           , v1    ,u_int1 ,bool   ,bits1 ,bool  )
-WEIRDOP   (borrow,   (((u_int64) v1 - (u_int64) v2 - (u_int64) (c&0x01)) >> 32) != 0, \
+WEIRDOP   (borrow,   LL64((((ull) v1 - (ull) v2 - (ull) (c&0x01)) >> 32) != 0), \
                                           v1, v2, c,u_int32,u_int1,bits32,bits1)
 WEIRDOP   (carry,    \
-  (u_int32) (((u_int64) v1 + (u_int64) v2 + (u_int64) (c&0x01)) >> 32), \
+  LL64((u_int32) (((ull) v1 + (ull) v2 + (ull) (c&0x01)) >> 32)), \
                                           v1, v2, c,u_int32,u_int1,bits32,bits1)
 T_UNARYOP (com,     ~v1                 , v1    ,u_int16,bits16)
 T_UNARYOP (com,     ~v1                 , v1    ,u_int32,bits32)
@@ -414,8 +433,8 @@ T_BINARYOP (modu, v1 % v2, v1,v2, u_int32,bits32)
 T_BINARYOP(mul  ,v1 * v2, v1,v2, s_int8 , bits8 )
 T_BINARYOP(mul  ,v1 * v2, v1,v2, s_int16, bits16)
 T_BINARYOP(mul  ,v1 * v2, v1,v2, s_int32, bits32)
-OVERFLOW  (mul,*,s_int64, v1, v2, s_int32, bits32)
-OVERFLOW  (mulu,*,u_int64, v1, v2, u_int32, bits32)
+OVERFLOW  (mul,*,signed, v1, v2, s_int32, bits32)
+OVERFLOW  (mulu,*,unsigned, v1, v2, u_int32, bits32)
 BINARYOP  (mulx ,v1 * v2, v1,v2, s_int8 , s_int8 ,s_int16,bits8 ,bits8 ,bits16)
 BINARYOP  (mulx ,v1 * v2, v1,v2, s_int16, s_int16,s_int32,bits16,bits16,bits32)
 OP64(BINARYOP  (mulx ,(s_int64) v1 * (s_int64) v2, v1,v2, s_int32, s_int32,s_int64,bits32,bits32,bits64))
@@ -466,7 +485,7 @@ T_BINARYOP(shrl,    v1 >> v2          , v1, v2, u_int32, bits32)
 T_BINARYOP(sub ,    v1 - v2           , v1, v2, s_int16, bits16)
 T_BINARYOP(sub ,    v1 - v2           , v1, v2, s_int32, bits32)
 WEIRDOP   (subb,    v1 - v2 - (b&0x01), v1, v2, b,s_int32,s_int32,bits32,bits32)
-OVERFLOW  (sub,     -, s_int64        , v1, v2, s_int32, bits32)
+OVERFLOW  (sub,     -, signed        , v1, v2, s_int32, bits32)
 UNARYOP   (sx  ,    (s_int16) v1      , v1, s_int8 , s_int16, bits8 , bits16)
 UNARYOP   (sx  ,    ((s_int32) v1 @<< 31) @>> 31, \
                                         v1, u_int1 , s_int32, bits1 , bits32)
@@ -768,9 +787,11 @@ T_BINARYOP(rotr, (x >>  d) + (((~(((T) ~0) << d)) & x) << (sizeof(T)*8 - d)),\
 @ 
 There's a certain pattern to some of the overflow operators.
 <<macro synonyms>>=
-#define OVERFLOW(NAME, OP, LONG, X, Y, T, B)   \
-  BINARYOP  (NAME##_overflows,  (LONG) (X OP Y) != (LONG) X OP (LONG) Y, X, Y, \
-             T, T, bool, B, B, bool) 
+#define OVERFLOW(NAME, OP, SIGNED, X, Y, T, B)   \
+  BINARYOP  (NAME##_overflows,  \
+             LL64 ((SIGNED long long) (X OP Y) != \
+                      (SIGNED long long) X OP (SIGNED long long) Y), \
+             X, Y, T, T, bool, B, B, bool) 
 @ 
 Implementation of [[mod]] taken from Moscow~ML.
 <<function definitions>>=

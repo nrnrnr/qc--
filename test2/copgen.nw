@@ -1,0 +1,367 @@
+% -*- mode: Noweb; noweb-code-mode: lua-mode -*-
+<<macro definitions for converting C to Lua>>=
+#define OP64(STUFF) STUFF
+#define BINARYOP(NAME, EXP, X, Y, TX, TY, T, BX, BY, B) \
+  Copgen.BINARYOP(#NAME, #EXP, #X, #Y, #TX, #TY, #T, #BX, #BY, #B)
+#define IBINARYOP(NAME, STMS, X, Y, RES, TX, TY, T, BX, BY, B) \
+  Copgen.IBINARYOP(#NAME, #STMS, #X, #Y, #RES, #TX, #TY, #T, #BX, #BY, #B)
+#define NULLARYOP(NAME, STMS, X, T, B) \
+  Copgen.NULLARYOP(#NAME, #STMS, #X, #T, #B)
+#define POPCNT(T, B) \
+  Copgen.POPCNT(#T, #B)
+#define RMBINARYOP(NAME, EXP, X, Y, TX, TY, T, BX, BY, B) \
+  Copgen.RMBINARYOP(#NAME, #EXP, #X, #Y, #TX, #TY, #T, #BX, #BY, #B)
+#define RMUNARYOP(NAME, EXP, X, TX, T, BX, B) \
+  Copgen.RMUNARYOP(#NAME, #EXP, #X, #TX, #T, #BX, #B)
+#define UNARYOP(NAME, EXP, X, TX, T, BX, B) \
+  Copgen.UNARYOP(#NAME, #EXP, #X, #TX, #T, #BX, #B)
+#define WEIRDOP(NAME, EXP, X, Y, Z, TXY, T, BXY, B) \
+  Copgen.WEIRDOP(#NAME, #EXP, #X, #Y, #Z, #TXY, #T, #BXY, #B)
+@ 
+<<copgen.lua>>=
+$debug
+
+
+<<copgen.lua>>=
+Copgen = Copgen or { }
+
+if type(CMD) == 'table' then CMD.dashe = 1 end
+
+Copgen.caps    = Target.capabilities(backend.target)
+Copgen.metrics = Target.metrics(backend.target)
+
+function w (...)  -- a valuable abbreviation
+  write(Util.call(format, arg))
+end
+
+local word  = Copgen.metrics.wordsize
+local dword = 2 * word
+local sword = word / 2
+
+w([[
+#include <assert.h>
+#include <fenv.h>
+
+#define __USE_ISOC99 1
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#define AT(ADDR, TY) (*(TY *)(ADDR))
+
+static double loophole[2];
+
+#define LOOPHOLE(TYFROM, TYTO, VAL) (AT(loophole, TYFROM) = (VAL), AT(loophole, TYTO))
+#define LL64(E) (sizeof(long long) == 64 / 8 ? (E) : (assert(0), 0))
+
+typedef double float%d;
+typedef float  float%d;
+typedef unsigned long long u_int%d;
+typedef unsigned long u_int%d;
+typedef unsigned short u_int%d;
+typedef unsigned char u_int8;
+typedef unsigned char u_int1;    /* odd, but can't be helped */
+typedef signed long long s_int%d;
+typedef signed long s_int%d;
+typedef signed short s_int%d;
+typedef signed char s_int8;
+typedef unsigned char bool;
+
+typedef unsigned long long ull;
+typedef          long long  ll;
+]], dword, word,
+    dword, word, sword,
+    dword, word, sword,
+nil)
+
+function Copgen.assertions()
+  local word  = Copgen.metrics.wordsize
+  local dword = 2 * word
+  local sword = word / 2
+  w([[
+  assert (sizeof (float%d) == (%d/8));
+  assert (sizeof (float%d) == (%d/8));
+  assert (sizeof (u_int%d) == (%d/8));
+  assert (sizeof (u_int%d) == (%d/8));
+  assert (sizeof (u_int%d) == (%d/8));
+  assert (sizeof (u_int8)  ==  1);
+  assert (sizeof (s_int%d) == (%d/8));
+  assert (sizeof (s_int%d) == (%d/8));
+  assert (sizeof (s_int%d) == (%d/8));
+  assert (sizeof (s_int8)  ==  1);
+  assert (sizeof (bool) == 1);
+]],
+  dword, dword, word, word,
+  dword, dword, word, word, sword, sword,
+  dword, dword, word, word, sword, sword,
+  nil)
+end
+
+
+write([[
+typedef enum {
+  FLOAT_LT  = 00U,
+  FLOAT_EQ  = 01U,
+  FLOAT_GT  = 02U,
+  UNORDERED = 03U
+} float_comparison;
+
+#ifndef INFINITY
+#define INFINITY (1.0/0.0)
+#endif
+]])
+
+
+
+function Copgen.at(addr, ty)
+  return format('AT(%s, %s)', addr, ty)
+end
+
+function Copgen.proto(name, width, kind)
+  kind = kind or 'test'
+  w('int c%s_%s%s(unsigned char *pr, unsigned char *px, unsigned char *py, ' ..
+                 'unsigned char *pz) {\n', kind, name, width)
+end
+
+function Copgen.finish(ty)
+  Copgen.assertions()
+  w('  return sizeof(%s);\n', ty)
+  w('}\n\n')
+end
+
+function Copgen.decl(ty, name, val)
+  w('  %s %s%s;\n', ty, name, val and (' = ' .. val) or '');
+end
+   
+function Copgen.width(t)
+  if t == 'bool' then return 1
+  elseif strfind(t, '^bits') then return strsub(t, 5)
+  else error('width of ' .. t)
+  end
+end
+
+Copgen.omit = Util.set { 'div', 'mod', 'fcmp' }
+  -- operators either omitted or done by hand
+
+function Copgen.BINARYOP(NAME, EXP, X, Y, TX, TY, T, BX, BY, B)
+  if Copgen.omit[NAME] then return end
+  local width
+  if TX == 'bool' and TY == 'bool' and T == 'bool' then
+    width = ''
+  else
+    width = Copgen.width(BX)
+  end
+  Copgen.proto(NAME, width)
+  Copgen.decl(TX, X, Copgen.at('px', TX))
+  Copgen.decl(TY, Y, Copgen.at('py', TY))
+  w('  %s = (%s);\n', Copgen.at('pr', T), EXP)
+  Copgen.finish(T)
+  Copgen.printfun(NAME, width, T, {TX, TY})
+end
+
+
+function Copgen.IBINARYOP(NAME, STMS, X, Y, RES, TX, TY, T, BX, BY, B)
+  if Copgen.omit[NAME] then return end
+  Copgen.proto(NAME, Copgen.width(BX))
+  Copgen.decl(TX, X, Copgen.at('px', TX))
+  Copgen.decl(TY, Y, Copgen.at('py', TY))
+  Copgen.decl(T,  RES)
+  w('  %s;\n', STMS)
+  w('  %s = %s;\n', Copgen.at('pr', T), RES)
+  Copgen.finish(T)
+  Copgen.printfun(NAME, width, T, {TX, TY})
+end
+
+function Copgen.RMBINARYOP(NAME, EXP, X, Y, TX, TY, T, BX, BY, B)
+  print('//rmbinaryop')
+end
+Copgen.RMBINARYOP = Copgen.BINARYOP  -- for now, ignore rounding modes
+
+
+function Copgen.WEIRDOP(NAME, EXP, X, Y, Z, TXY, T, BXY, B)
+  if Copgen.omit[NAME] then return end
+  Copgen.proto(NAME, Copgen.width(BXY))
+  Copgen.decl(TXY, X, Copgen.at('px', TXY))
+  Copgen.decl(TXY, Y, Copgen.at('py', TXY))
+  Copgen.decl('u_int1', Z, Copgen.at('pz', 'u_int1'))
+  w('  %s = (%s);\n', Copgen.at('pr', T), EXP)
+  Copgen.finish(T)
+  Copgen.printfun(NAME, Copgen.width(BXY), T, {TXY, TXY, 'u_int1'})
+end
+
+
+
+
+function Copgen.NULLARYOP(NAME, STMS, X, T, B)
+  local width = Testgen.polymorphic[NAME] and Copgen.width(B) or ''
+  Copgen.proto(NAME, width)
+  Copgen.decl(T, X)
+  w('  %s\n', STMS)
+  w('  %s = %s;\n', Copgen.at('pr', T), X)
+  Copgen.finish(T)
+  Copgen.printfun(NAME, width, T, {})
+end
+
+function Copgen.POPCNT(T, B)
+  local width = Copgen.width(B)
+  Copgen.proto('popcnt', width)
+  Copgen.decl('int', 'n');
+  Copgen.decl(T, 'x', Copgen.at('px', T))
+  w(' for(n = 0; x; x = (unsigned) x >> 1)\n')
+  w('   n += x & 1;\n')
+  w(' %s = n;\n', Copgen.at('pr', T))
+  Copgen.finish(T)
+  Copgen.printfun('popcnt', width, T, {T})
+end
+
+function Copgen.UNARYOP(NAME, EXP, X, TX, T, BX, B)
+  -- if BX == 'bits1' or B == 'bits1' then return end
+  local width
+  if Testgen.polymorphic[NAME] then
+    width = Copgen.width(BX) .. '_' .. Copgen.width(B)
+  elseif TX == 'bool' or T == 'bool' then
+    width = ''
+  elseif Copgen.width(BX) == Copgen.width(B) then
+    width = Copgen.width(BX)
+  else
+    width = Copgen.width(BX) .. '_' .. Copgen.width(B)
+  end
+  --write('// ', NAME, width, ': TX = ', TX, ', T = ', T, ', BX = ', BX, ', B = ', B, '\n')
+  Copgen.proto(NAME, width)
+  Copgen.decl(TX, X, Copgen.at('px', TX))
+  w('  %s = (%s);\n', Copgen.at('pr', T), EXP)
+  Copgen.finish(T)
+  Copgen.printfun(NAME, width, T, {TX})
+end
+
+function Copgen.RMUNARYOP(NAME, EXP, X, TX, T, BX, B)
+  print('//rmunaryop')
+end
+Copgen.RMUNARYOP = Copgen.UNARYOP -- hardware rounding
+
+
+function Copgen.div(width)
+  local int = 's_int' .. width
+  Copgen.proto('div', width)
+  Copgen.decl(int, 'x', Copgen.at('px', int))
+  Copgen.decl(int, 'y', Copgen.at('py', int))
+  Copgen.decl(int, 'z')
+  write([[  assert(y != 0);
+  if( y < 0 ) { x = - x; y = -y; }
+  if( x >= 0 ) { z = x / y; }
+  else
+        { x = - x;
+          if( x % y == 0 )
+            z = - (x /y);
+          else
+            z = - (x / y) - 1;
+        }
+]])
+  w('  %s = (%s);\n', Copgen.at('pr', int), 'z')
+  Copgen.finish(int)
+  local T = 's_int' .. width
+  Copgen.printfun('div', width, T, {T, T})
+end
+
+function Copgen.mod(width)
+  local int = 's_int' .. width
+  Copgen.proto('mod', width)
+  Copgen.decl(int, 'x', Copgen.at('px', int))
+  Copgen.decl(int, 'y', Copgen.at('py', int))
+  Copgen.decl(int, 'tmp', 'y')
+  Copgen.decl(int, 'answer')
+  write([[  assert (tmp != 0);
+  if( tmp < 0 ) { x = -x; tmp = -tmp; }
+  if( x >= 0 )
+    answer = x % tmp;
+  else {
+    x = (-x) % tmp;
+    answer = ( x == 0 )?( 0 ):( tmp - x );
+  }
+  if( y < 0 ) answer = -answer;
+]])
+  w('  %s = (%s);\n', Copgen.at('pr', int), 'answer')
+  Copgen.finish(int)
+  local T = 's_int' .. width
+  Copgen.printfun('mod', width, T, {T, T})
+end
+
+----------------------------------------------------------------
+
+function Copgen.printfun(name, width, rty, argtys)
+  Copgen.proto(name, width, 'print')
+  Copgen.printf('%%%s(', Copgen.quote(name))
+  if argtys[1] then                      Copgen.showval('px', argtys[1]) end
+  if argtys[2] then Copgen.printf(', '); Copgen.showval('py', argtys[2]) end
+  if argtys[3] then Copgen.printf(', '); Copgen.showval('pz', argtys[3]) end
+  Copgen.printf(') == ')
+  Copgen.showval('pr', rty)
+  Copgen.printf('\n')
+  w('  return 0;\n')
+  w('}\n')
+end
+  
+function Copgen.printf(fmt, ...)
+  w('  printf(%s', Copgen.quote(fmt))
+  local i = 1
+  while arg[i] do w(', %s', arg[i]) i = i + 1 end
+  w(');\n')
+end
+
+function Copgen.quote(s)
+  local escaped = '[\n\\]'
+  r = '"'
+  local i = strfind(s, escaped)
+  while i do
+    r = r .. strsub(s, 1, i-1)
+    if strsub(s, i, i) == '\n' then
+      r = r .. '\\n'
+    else
+      r = r .. '\\' .. strsub(s, i, i)
+    end
+    s = strsub(s, i+1)
+    i = strfind(s, escaped)
+  end
+  return r .. s .. '"'
+end
+
+Copgen.fmts = { u_int32 = '%08lx', u_int16 = '%04x', u_int8 = '%02x', u_int1 = '%d',
+                s_int32 = '%8ld',  s_int16 = '%4d',  s_int8 = '%2d',  s_int1 = '%d',
+                float32 = '%f', float64 = '%lf',
+                u_int64 = '%016llx',
+                s_int64 = '%16lld',
+                bool = '%d',
+              }
+
+function Copgen.showval(addr, ty)
+  local fmt = Copgen.fmts[ty] or '%x'
+  Copgen.printf(fmt, Copgen.at(addr, ty))
+end
+
+----------------------------------------------------------------
+
+local i = 1
+local itemps = Copgen.caps.itemps
+while itemps[i] do
+  Copgen.div(itemps[i])
+  Copgen.mod(itemps[i])
+  i = i + 1
+end
+
+write([[
+int ctest_copy200(unsigned char *pr, unsigned char *px, unsigned char *py, unsigned char *pz) {
+  memcpy(pr, px, 200/8);
+  return 200/8;
+}
+
+int cprint_copy200(unsigned char *pr, unsigned char *px, unsigned char *py, unsigned char *pz) {
+  int i, n;
+  n = 200;
+  for (i = 0; i < n; i++) {
+    printf("%02x", pr[i]);
+    if ((i % 30 == 29))
+      printf("\n           ");
+  }
+  printf("\n");
+  return 0;
+}
+]])

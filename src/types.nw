@@ -89,7 +89,6 @@ instance of a type scheme.
 type tyscheme   = (size t) list * (size t)
 type monotype   = (int  t) list * (int  t)
 @
-
 Unlike in the formalism that uses $\forall$ to bind type variables
 explicitly, type variables in the implementation are bound implicitly:
 The [[tyscheme]] for the [[add]] and [[mulx]] primitves are encoded as
@@ -104,7 +103,7 @@ The [[Var 1]] values identify the variable in the type scheme that is
 replaced by an integer when the type scheme is instantiated. In case of
 [[mulx]], the size of the result is twice the number of bits [[Var 1]]
 gets bound to.
-
+@
 % ------------------------------------------------------------------ 
 \subsection{Interface (Functions)}
 % ------------------------------------------------------------------ 
@@ -122,7 +121,6 @@ being applied.
 val appl      : string -> tyscheme -> ty list -> ty       (* raises Error.ErrorExn *)
 val widthlist : string -> tyscheme -> ty list -> int list (* raises Error.ErrorExn *)
 @
-
 Instantiation of a type scheme fails  when a type scheme contains a
 variable in the result position that does not also show up in an
 argument position. This indicates a checked run-time error in the type
@@ -146,9 +144,7 @@ list} that allows to reconstruct the monomorphic type from its
 polymorphic type scheme. This process is called instantiation. It is a
 checked run-time error if the width list is too short to instantiate all
 variables in the type scheme.
-
-
-
+@
 % ------------------------------------------------------------------ 
 \subsection{Useful abbreviations}
 % ------------------------------------------------------------------ 
@@ -158,7 +154,6 @@ Here are some useful definitions for them.  There are at least three
 target dependent types:  the native word type [[word]], the native
 code pointer type [[code]], and the native data pointer type.  We
 define types for them here, but only for the moment. 
-
 <<abbrevs>>=
 type key = int  (* positive *)
 val fixbits : int -> size t              (* fixed/constant size       *)
@@ -172,18 +167,15 @@ val proc    : size t list -> size t -> tyscheme   (* build proc type  *)
 val largest_key : tyscheme -> key
   (* return the largest key in the type scheme, or 0 if no keys *)
 @
-
-
 Finally, here we put together the interface file.
-
 <<types.mli>>=
 type size
 <<exported type definitions>>
 <<appl>>
 <<abbrevs>>
-val to_string : ty -> string
+val to_string     : ty -> string
+val scheme_string : tyscheme -> string
 @
-
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
@@ -192,7 +184,6 @@ A substitution associates a width variable (identified by an [[int]])
 with an integer bit width. We use a map to implement a substitution.  In
 addition to the functions provided by [[Map]] we define some helper
 functions. 
-
 <<types.ml>>=
 type key        = int
 type size       = Const  of int
@@ -213,7 +204,7 @@ formalism here? -- CL}
 module E = Error
 module S = Map.Make(struct type t=key let compare=compare end)
 
-let impossible = Impossible.impossible
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 
 let to_string = function
   | Bool -> "bool"
@@ -289,9 +280,9 @@ let subst opname sigma = function
         E.errorf "operator %%%s is polymorphic;\n    to indicate the size, \
                   use a suffix such as %%%s32" opname opname)
     | Bits(Double x)   -> (try Bits(2*(lookup x sigma)) with Not_found ->
-                                impossible "internal error (2) in application")
+                                impossf "internal error (2) in application")
     | Bits(Half x)     -> (try Bits((lookup x sigma)/2) with Not_found ->
-                                impossible "internal error (3) in application")
+                                impossf "internal error (3) in application")
 @
 The [[appl]] function matches the argument types with the [[size t]]
 values at the argument positions of a [[tyscheme]].  The resulting
@@ -330,7 +321,7 @@ let split op =
                        with Not_found -> None in
             (basename, size)
     else
-        Impossible.impossible ("illegal operator? '"^op^"'")
+        impossf "illegal operator %%%s?" op
 @            
 [[Instantiate]] computes a monomorphic function type from a width list
 and a polymorphic [[tyscheme]] by instantiating it. The $n$-th element
@@ -338,20 +329,24 @@ in the (zero based) width list instantiates [[Var]] $n+1$ in the
 [[tyscheme]]. It is a checked run-time error if [[tyscheme]] contains a
 variable [[Var]] $x$ where $x > |[[width]]|$. 
 <<types.ml>>=
+<<key size>>
 let instantiate ((args,ret):tyscheme) ~widths  =
-    let inst = function
-        | Bits (Var i)   -> ( try Bits (List.nth widths (i-1)) with 
-                            | Failure _ -> assert false
-                            ) 
-        | Bits (Double i)-> ( try Bits (2 * (List.nth widths (i-1))) with 
-                            | Failure _ -> assert false
-                            )
-        | Bits (Half i)  -> ( try Bits ((List.nth widths (i-1))/2) with 
-                            | Failure _ -> assert false
-                            )
-        | Bits (Const k) -> Bits k
-        | Bool           -> Bool
-    in (List.map inst args, inst ret)
+  if List.length widths <> largest_key (args, ret) then
+    impossf "instantiated %d-key type scheme with %d widths"
+      (largest_key (args, ret)) (List.length widths);
+  let inst = function
+    | Bits (Var i)   -> ( try Bits (List.nth widths (i-1)) with 
+                        | Failure _ -> assert false
+                        ) 
+    | Bits (Double i)-> ( try Bits (2 * (List.nth widths (i-1))) with 
+                        | Failure _ -> assert false
+                        )
+    | Bits (Half i)  -> ( try Bits ((List.nth widths (i-1))/2) with 
+                        | Failure _ -> assert false
+                        )
+    | Bits (Const k) -> Bits k
+    | Bool           -> Bool in
+  (List.map inst args, inst ret)
 @        
 The implementation of the abbreviations is trivial:
 <<types.ml>>=
@@ -363,12 +358,32 @@ let bool             = Bool
 let bits x           = Bits x
 let proc args res    = (args,res)
 @
-<<types.ml>>=
+<<key size>>=
 let largest_key (args, res) =
   let rec count k = function
     | [] -> k
     | (Bool | Bits (Const _)) :: ws -> count k ws
     | (Bits (Var n) | Bits (Double n) | Bits (Half n)) :: ws -> count (max k n) ws in
   count 0 (res :: args)
-    
+@ 
+<<types.ml>>=
+let keyname = function
+| 1 -> "n"
+| 2 -> "m"
+| n -> Printf.sprintf "t%d" (n-2)
 
+let scheme_string (args, result) =
+  let spr = Printf.sprintf in
+  let ty = function 
+    | Bits (Var i)    -> spr "#%s bits"   (keyname i)
+    | Bits (Double i) -> spr "2*#%s bits" (keyname i)
+    | Bits (Half i)   -> spr "#%s/2 bits" (keyname i)
+    | Bits (Const k)  -> spr "#%d bits"   k
+    | Bool            -> "bool" in
+  let scheme = match args with
+  | _ :: _ -> String.concat " * " (List.map ty args) ^ " -> " ^ ty result 
+  | [] -> ty result in
+  match largest_key (args, result) with
+  | 0 -> scheme
+  | n -> spr "\\/ %s . %s" (String.concat ", " (List.map keyname (Aux.from 1 ~upto:n)))
+                           scheme

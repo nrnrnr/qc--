@@ -1,0 +1,142 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+%%Grades: B Peripheral Soon
+
+\section{Operator-shape analysis}
+
+In order to know how to do code expansion, we haev to analyze what
+kinds of arguments and 
+results operators have.
+Here's where it happens.
+We call a pattern of arguments and results a ``shape,'' and we have to
+ensure that each shape is handled either in the generic expander or by
+each postexpander.
+
+We export an analysis function that the generic expander can use to
+pass the buck to the postexpander.
+<<opshape.mli>>=
+type opr = Rtl.Private.opr
+type exp = Rtl.Private.exp
+val analyze : opr -> exp list ->
+  binop:(exp -> exp -> 'a) ->
+  'a
+@ 
+\begingroup
+\def\bits#1{\mathtt{bits}\##1}
+\def\cross{\times}
+\def\arrow{\rightarrow}
+\def\bool{\mathtt{bool}}
+
+\def\optype#1{\par\noindent\hspace*{2em}$#1$\\}
+\def\oplist#1{\noindent\hangindent=4em\hangafter=1\texttt{#1}\par}
+
+\subsection{Shapes}
+
+All the shapes we know about are grouped below.
+The postexpander sees arguments and results as follows:
+\begin{itemize}
+\item
+An argument or result of type $\bits n$ gets passed in a temporary.
+\item
+An argument of type $\bits1$ or $\bits2$ is a ``weird argument'' and
+gets passed in a~[[warg]]. 
+\item
+A~result of type $\bits1$ gets returned in a [[wtemp]], which is a
+temporary plus a fill type.
+\item
+The postexpander never sees an argument of type [[bool]].
+A~result of type [[bool]] gets turned into a conditional branch.
+\item
+A~result of type $\bits{2n}$ gets returned in a pair of temporaries
+[[dsthi]] and [[dstlo]].
+\end{itemize}
+
+@
+\subsubsection{Ordinary value operators}
+
+These value operators correspond to postexpander functions [[binop]]
+and [[unop]].
+\optype{\forall  n . \bits n \cross \bits n \arrow \bits n}
+  \oplist{add, and, div, mod, \ldots}
+\optype{\forall  n . \bits n \arrow \bits n}
+  \oplist{com, neg, fabs, fneg, popcnt}
+@
+\subsubsection{Ordinary value operators with rounding mode}
+
+These value operators aren't dealt with yet.
+\optype{\forall  n . \bits n \cross \bits n \cross \bits 2 \arrow \bits n}
+  \oplist{fadd, fdiv, fmul, fsub}
+\optype{\forall  n . \bits n \cross \bits 2 \arrow \bits n}
+  \oplist{fsqrt}
+@
+\subsubsection{Comparisons}
+
+Comparisons correspond to the postexpander function~[[bc]].
+\optype{\forall  n . \bits n \cross \bits n \arrow \bool}
+  \oplist{eq, ge, gt, le, lt, ne, \ldots}
+@
+
+\subsubsection{Weird value operators}
+
+These operators correspond to postexpander functions
+[[dblop]],
+[[wrdop]],
+and
+ [[wrdrop]].
+\optype{\forall  n . \bits n \cross \bits n \arrow 2\cross\bits n}
+  \oplist{mulx, fmulx, mulux}
+\optype{\forall  n . \bits n \cross \bits n \cross \bits 1 \arrow \bits n}
+  \oplist{addc, subb}
+\optype{\forall  n . \bits n \cross \bits n \cross \bits 1 \arrow \bits 1}
+  \oplist{carry, borrow}
+@
+
+\subsubsection{Width-changers}
+
+
+Unclear how these work; mostly the generic expander composes them with
+things.  (E.g., see [[sxload]], [[zxload]], [[lostore]].)
+
+\optype{\forall  n, m . \bits n \arrow \bits m}
+  \oplist{sx, zx, lobits, NaN}
+\optype{\forall  n, m . \bits n \cross \bits 2 \arrow \bits m}
+  \oplist{f2f, f2i, i2f}
+@
+
+\subsubsection {Boolean operators}
+
+These operators are all dealt with directly by the generic expander.
+\optype{\bool \arrow \bool}
+  \oplist{not}
+\optype{bool \arrow \bits 1}
+  \oplist{bit}
+\optype{\bits 1 \arrow \bool}
+  \oplist{bool}
+\optype{bool \cross \bool \arrow \bool}
+  \oplist{conjoin, disjoin}
+@
+\subsubsection{Nullary operators}
+
+These operators are turned into constants in the simplifier.
+\optype{\bits 2}
+  \oplist{round\_up, round\_down, round\_zero, round\_nearest}
+\optype{\forall  n . \bits n}
+  \oplist{minf, pinf, mzero, pzero}
+@
+\subsection{Obsolete, unsupported operators}
+
+\optype{\forall  n . \bits n \cross \bits n \arrow \bits 2}
+  \oplist{fcmp}
+\optype{\forall  n, m . \bits n \cross \bits n \cross \bits m \arrow \bits n}
+  \oplist{bitInsert}
+\optype{\forall  n . \bits n \cross \bits n \cross \bits n \cross \bits n \cross \bits n \arrow \bits n}
+  \oplist{bitTransfer}
+
+\endgroup
