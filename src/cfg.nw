@@ -380,10 +380,6 @@ We can ask for a label, or for all the labels, on a join node.
 val label         : 'i node -> label      (* defined on any join node except exit *)
 val labels        : 'i node -> label list (* defined on any join node except exit *)
 @ 
-We can ask for spans at a call node.
-<<graph and node observers>>=
-val spans         : 'i node -> (Bits.bits * Rtl.exp) list (* defined on call nodes *)
-@
 We can ask for the instruction, if any.
 An assertion is treated as an ordinary instruction.
 If we ask for something \emph{executable}, we get only non-assertions.
@@ -643,16 +639,12 @@ val cbranch      : 'i cfg -> Rtl.exp -> ifso:'i node -> ifnot:'i node -> 'i node
 val mbranch      : 'i cfg -> 'i -> targets:'i node list -> 'i node
 val call         : 'i cfg -> 'i -> altrets:'i contedge list -> succ:'i node ->
                      unwinds_to:'i contedge list -> cuts_to:'i contedge list ->
-                     aborts:bool -> uses:regs -> defs:regs -> kills:regs -> 
-                     spans:(Bits.bits * Rtl.exp) list -> 'i node
+                     aborts:bool -> uses:regs -> defs:regs -> kills:regs -> 'i node
 val cut_to       : 'i cfg -> 'i -> cuts_to:'i contedge list -> aborts:bool ->
                      uses:regs -> 'i node
 val return       : 'i cfg -> 'i -> uses:regs -> 'i node
 @ N.B. So that a [[call]] can be composed in sequence just like an
 [[instruction]], the ordinary return from a call is called [[succ]].
-The [[spans]] argument to a [[call]] requires that the properties be
-link-time constant expressions, but this requirement is not enforced
-by the static type of the expression.
 @
 The weird nodes.
 <<graph and node constructors>>=
@@ -737,7 +729,6 @@ Suffixes:
 i    & Instruction\\
 num  & Unique Node Number\\
 labels & Multiple Labels\\
-spans & Spans\\
 contedges & Control-Flow Edges\\
 cfg  & Control-Flow Graph\\
 pred & Single Predecessor\\
@@ -821,7 +812,6 @@ In this case, the exit node is a successor of the call node.
 <<node type>>=
 type ('i, 'n, 'e) cal = {         cal_num        : int
                         ; mutable cal_i          : 'i
-                        ;         cal_spans      : (Bits.bits * Rtl.exp) list
                         ; mutable cal_pred       : 'n
                         ; mutable cal_contedges  : 'e array
                         ; mutable cal_lsucc      : 'n
@@ -959,12 +949,6 @@ let labels node = match node with
   | Joi j -> j.joi_labels
   | Exi e -> ( log "labels called on exit" ; e.exi_labels )
   | _     -> undef "labels" "non-join"
-@
-We can observe the spans at a call node.
-<<graph and node observers implementation>>=
-let spans node = match node with
-  | Cal c -> c.cal_spans
-  | _     -> undef "spans" "non-call"
 @
 [[pred]] is defined only on a node that must have only a single predecessor.
 <<graph and node observers implementation>>=
@@ -1408,7 +1392,9 @@ match node with
 | Ret r -> r.ret_succ <- single succ; succ
 | Ent e -> e.ent_succ <- single succ; succ
 | Mbr m -> ignore (mult m.mbr_succs        (fun _ -> succ)); succ
-| Cal c -> ignore (ce_mult c.cal_contedges (fun s -> {s with node = succ})); succ
+| Cal c ->
+  let succ = join_leading_to succ in
+  ignore (ce_mult c.cal_contedges (fun s -> {s with node = succ})); succ
 | Cut c -> ignore (ce_mult c.cut_contedges (fun s -> {s with node = succ})); succ
 | Bra b ->
   let succ = join_leading_to succ in
@@ -1704,7 +1690,7 @@ let copy info transform cfg =
                                   m.mbr_succs [])
     | Cal c ->
       let ce_lst = convert_contedges c.cal_contedges in
-      mk_call (transform c.cal_i) c.cal_spans ~pred:new_cfg.ill
+      mk_call (transform c.cal_i) ~pred:new_cfg.ill
               ~contedges:ce_lst ~lsucc:new_cfg.ill ~uses:c.cal_uses
               ~altrets:c.cal_altrets ~unwinds_to:c.cal_unwinds_to
               ~cuts_to:c.cal_cuts_to
@@ -1733,10 +1719,9 @@ We have to bootstrap node construction because of the way [[set_succ]] works.
 <<node constructors with interesting control flow edges>>=
 let join_leading_to_ce ce = {ce with node = join_leading_to ce.node}
 
-let mk_call i spans ~pred ~contedges ~lsucc ~uses ~altrets ~unwinds_to ~cuts_to =
+let mk_call i ~pred ~contedges ~lsucc ~uses ~altrets ~unwinds_to ~cuts_to =
     Cal { cal_num        = new_num ()
         ; cal_i          = i
-        ; cal_spans      = spans
         ; cal_pred       = pred
         ; cal_contedges  = contedges
         ; cal_lsucc      = lsucc
@@ -1747,8 +1732,7 @@ let mk_call i spans ~pred ~contedges ~lsucc ~uses ~altrets ~unwinds_to ~cuts_to 
         ; cal_cuts_to    = cuts_to
         }
 
-let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts ~uses ~defs ~kills
-               ~spans =
+let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts ~uses ~defs ~kills =
   let () = if List.length altrets > 0
            then Impossible.unimp "alternate returns not yet supported" in
   let altrets     = List.map join_leading_to_ce altrets in
@@ -1761,7 +1745,7 @@ let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts ~uses ~defs ~kills
   let illedge     = fun {kills=k; defs=d; node=n} -> {kills=k; defs=d; node=cfg.ill} in
   let contedges   = Array.of_list (List.map illedge edgelist) in
   let cal =
-    mk_call i spans ~pred:cfg.ill ~contedges ~lsucc:cfg.ill ~uses
+    mk_call i ~pred:cfg.ill ~contedges ~lsucc:cfg.ill ~uses
             ~altrets:(List.length altrets) ~unwinds_to:(List.length unwinds_to)
             ~cuts_to:(List.length cuts_to) in
   let ()  = Aux.foldri (fun i n () -> set_succ_n cal i ~succ:n.node)
