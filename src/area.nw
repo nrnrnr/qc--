@@ -206,18 +206,18 @@ a_2, \dots$ in there, one next to the other. The base address of $a_i$
 are adjusted accordingly: 
 
 <<area.ml>>=
-let concat (areas:t list) (const:Const.t) = match areas with
-    | []             -> invalid_arg "Area.concat"
-    | t::_ as areas  -> 
-        let b         = mk t.address in   (* new builder *)
-        let cat (b,const) t =  
-            let b     = align b t.align in  
-            let b     = alloc b t.size  in
-            let const = Const.make_equal (location b) t.address const in
+let concat (areas:t list) (const:Const.t) = 
+    let cat (b,const) t =  
+        let const = Const.make_equal (location b) t.address const in
+        let b     = align b t.align in  
+        let b     = alloc b t.size  in
                 (b,const)
-        in
-            let b,const = List.fold_left cat (b,const) areas in
-                freeze b, const
+    in match areas with            
+        | []             -> invalid_arg "Area.concat"
+        | t::_ as areas  -> 
+                let b       = mk t.address in   (* new builder *)
+                let b,const = List.fold_left cat (b,const) areas in
+                    freeze b, const
 @
 
 Overlapping areas requires to align either their top or bottom ends. The
