@@ -163,7 +163,7 @@ types, for those interpreters that won't use libraries or types.
 <<lualib.mli>>=
 module Empty : sig
   module Type : COMBINED_TYPE
-  module Library : TYPEFUL
+  module Library : TYPEFUL with type 'a combined = 'a Type.t
 end
 @
 \section{Implementation}
@@ -293,7 +293,7 @@ module Empty = struct
   module Type = Combine.T1 (Unused.Type)
   module Library = 
     struct
-      type 'a combined = unit
+      type 'a combined = 'a Type.t
       module M (C : CORE with type 'a V.userdata' = 'a combined) = struct
         let init g = ()
       end (*M*)
