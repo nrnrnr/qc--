@@ -39,8 +39,8 @@ type 'a proc =
   { env : 'a Fenv.Dirty.env';
     cc  : name;
     name : name;
-    spans : (Bits.bits * linktime) list;  (* enclose whole procedure *)
-    formals : (index * hint * Ast.variance * Types.ty * name) list;
+    spans : Runtimedata.span list;  (* enclose whole procedure *)
+    formals : (index * hint * Ast.variance * Rtl.width * name) list;
     locals  : Fenv.Dirty.variable list;
     continuations : Fenv.Dirty.continuation list;
     stackmem      : Block.t;
@@ -49,9 +49,9 @@ type 'a proc =
   } 
 
 type 'a datum =
-  | Datalabel         of name  (* must be asm level not source level *)
+  | Datalabel         of Symbol.t (* must be asm level not source level *)
   | Align             of int
-  | InitializedData   of (exp * ty) list
+  | InitializedData   of (linktime * Rtl.width) list
   | UninitializedData of int  (* counts the number of mems *)
   | Procedure         of 'a proc
 
@@ -577,7 +577,7 @@ let formals_from n rs env =
           let i = { F.index = n; F.variance = inv;
                     F.loc = Rtl.var name n w; F.rhint = F.RHint hint; } in
           let env = F.bindv name (r, E.Ok (F.Variable i, t)) env in
-          formals ((n, hint, inv, t, name)::prev') (n+1) rs env
+          formals ((n, hint, inv, w, name)::prev') (n+1) rs env
       | E.Ok Types.Bool -> impossf "declared type is boolean"
       | E.Error -> formals prev' n rs (F.bindv name (r, E.Error) env) in
   formals [] n rs env in
@@ -726,12 +726,8 @@ let rec data spans ds rest = match ds with
 | [] -> (match rest with [] -> [] | (spans, ds) :: rest -> data spans ds rest)
 | (r, d) :: ds ->
     match d with
-(* NEED A LOOKUP HERE TO GET ASM SYM! *)
-(*let s = match F.findv n env with
-                               | _,(F.Label(F.Data(s)),_) -> s 
-                               | _ -> impossible "unbound data label" in 
-*)
-    | N.Datalabel l -> let d = E.Ok (Datalabel l) in d :: data spans ds rest
+    | N.Datalabel l -> let l = F.symbol env l     in
+                       let d = E.Ok (Datalabel l) in d :: data spans ds rest
     | N.Align n     -> let d = E.Ok (Align n)     in d :: data spans ds rest
     | N.Procedure p -> let d = proc env spans p   in d :: data spans ds rest
     | N.ReserveMem(ty,size,init) ->
@@ -744,7 +740,7 @@ let rec data spans ds rest = match ds with
             else if vw <> metrics.Metrics.pointersize then
               errorf r "span value must be a bit vector of native pointer size"
             else
-              E.Ok (k, v)) in
+              E.Ok (Runtimedata.of_link (k, v))) in
         data (span::spans) ds' ((spans, ds) :: rest)
 @ It's unfortunate that spans are elaborated both here and in
 \module{elabstmt}, but to reuse the error messages would be more
@@ -796,14 +792,14 @@ and init r ty i =
   match i with
   | A.InitAt (x,r) -> E.catch (error r env) (init r ty) x
   | A.InitExprs(es)  ->
-      E.seq (E.Raise.list (List.map (Elabexp.elab_exp env) es)) (fun tes ->
-        if List.for_all (fun (e, t) -> t = ty) tes then
+      E.seq (E.Raise.list (List.map (Elabexp.elab_link env) es)) (fun tes ->
+        if List.for_all (fun (e, w) -> Types.Bits w = ty) tes then
           E.Ok tes
         else
           errorf r "type of an initial value does not match declared type %s"
             (Types.to_string ty))
   | A.InitStr s ->
-      let to_texpr c = R.bits (Bits.U.of_int (Char.code c) 8) 8, ty in
+      let to_texpr c = Reloc.Simple.of_const (Bits.U.of_int (Char.code c) 8), 8 in
       if ty = T.Bits 8 then
         E.Ok (Aux.String.foldr (fun c l -> to_texpr c :: l) s [])
       else

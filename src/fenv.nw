@@ -102,6 +102,7 @@ module Clean : Env
     with type 'a partial = 'a 
 
 val clean: 'proc Dirty.env' -> 'proc Clean.env'
+val clean_var : Dirty.variable -> Clean.variable
 @
 The only way to obtain a clean environment is by cleaning a dirty
 environment.  However, the dirty environment must not be really dirty: 
@@ -294,7 +295,7 @@ and continuation =  { base : Block.t;   (* always empty; used only for address *
                       mutable cut_to      : bool;  (* mentioned in annotation *)
                       mutable unwound_to  : bool;  (* mentioned in annotation *)
                       mutable returned_to : bool;  (* mentioned in annotation *)
-                    }
+                    } (* might need a convention here *)
 @
 The complete entry [[ventry]] for a value includes not only its
 denotation, but also its type [[Types.ty]], and its source code
@@ -1078,7 +1079,7 @@ let clean_rhint = function
     | Dirty.RNone   -> Clean.RNone 
 
 
-let clean_reg r =
+let clean_var r =
     { Clean.index = r.Dirty.index
     ; Clean.rhint = clean_rhint r.Dirty.rhint
     ; Clean.loc   = r.Dirty.loc
@@ -1103,7 +1104,7 @@ let rec clean_venv map  =
                 | Dirty.Label(Dirty.Data s)   -> Clean.Label(Clean.Data s)
                 | Dirty.Label(Dirty.Stack x)  -> Clean.Label(Clean.Stack x)
                 | Dirty.Import(s,n)           -> Clean.Import(s,n)
-                | Dirty.Variable(n)           -> Clean.Variable(clean_reg n)
+                | Dirty.Variable(n)           -> Clean.Variable(clean_var n)
                 | Dirty.Continuation c        -> Clean.Continuation (clean_cont c)
             in
                  Strutil.Map.add key (pos,(denot',ty)) map
