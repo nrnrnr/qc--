@@ -1,4 +1,5 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 et sw=4:
 
 \section{Machine-level control flow}
 
@@ -8,6 +9,8 @@ Basically if we know the program counter plus a few facts about return
 address, we know enough to go on with.
 (To get [[cutto]] right, we will have to add knowledge of the stack
 pointer.)
+
+
 <<mflow.mli>>=
 <<signatures>>
 <<signatures>>=
@@ -24,6 +27,7 @@ module type S = sig (* see types Target2.t and Target2.map for doco *)
   val cutto : Rtl.exp Target2.map
   val call  : Rtl.exp Target2.map
   val branch : (Rtl.exp * Rtl.exp) Target2.map
+  val return: unit    Target2.map
 end
 <<mflow.mli>>=
 module Make (Pc : PC) : S
@@ -62,6 +66,14 @@ let call = { T.embed   = (fun e -> R.par [R.store P.pc_lhs e w;
                                    | RP.Rtl [(_, RP.Store(_, e, _)); _] -> upexp e
                                    | _ -> Impossible.impossible "projected non-call")
            } 
+
+let return = 
+    { T.embed   = (fun () -> R.store P.pc_lhs (R.fetch P.ra_reg w) w)
+    ; T.project = (fun r  -> match downrtl r with
+                  | RP.Rtl [(_, RP.Store(_, _, _))] -> ()
+                  | _ -> Impossible.impossible "projected non-return"
+                  )
+    }              
 
 let branch =
   { T.embed   = (fun (cond, tgt) -> R.guard cond (goto.T.embed tgt))
