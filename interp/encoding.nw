@@ -899,6 +899,10 @@ int lua_CMM_emit_raddr(lua_State *L) {
   sym = Atom_string(lua_tostring(L, -1));
   lbl = get_label(L, sym);
 
+  /* make sure label is not a C function */
+  if (lbl->ty == CMM_CFUNCTION)
+    cmm_err_wstr("cannot emit the address of C function '%s'", sym);
+
   found_raddr = CMM_label_raddr(lbl);
   assert(found_raddr != NULL);
 
@@ -1085,13 +1089,17 @@ If the the operator is nullary, the string should be of the form
 
 <<bytecode generation>>=
 int lua_CMM_apply_operator(lua_State *L) {
-  table    op_family = fresh_table();
-  operator *op;
+  table       op_family = fresh_table();
+  operator   *op;
+  const char *opname, *wanted_widths;
 
   lua_assert_isstring(L, -1, 
              "apply_operator requires a bit-width specification");
   lua_assert_isstring(L, -2,
              "apply_operator requires an operator stem name (in string form)");
+
+  opname        = lua_tostring(L, -2);
+  wanted_widths = lua_tostring(L, -1);
 
   <<[[op_family]] $\leftarrow$ Lua table representing [[op_stem_name]]>>
   <<[[op]] $\leftarrow$ pointer to associated [[operator]] record>>
@@ -1129,8 +1137,11 @@ operator (instantiation) specified.
       lua_tag(L, -1) != lua_operator_tag ||
       (op = (operator *) lua_touserdata(L, -1)) == NULL)
   {
+    /* should we pop anything?? */
+    fprintf(stderr, "error: tried to use operator '%s' at width '%s'\n",
+                    opname, wanted_widths);
     cmm_err("operator "
-            "is not instantiated at specified type signature");
+            "is not instantiated at needed type signature");
   }
 
   lua_pop(L, 3);     /* pop op, op_family, operator_table */
