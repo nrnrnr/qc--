@@ -572,7 +572,7 @@ interprocedural optimization and call-graph analysis.
 <<supporting functions for translating statements>>=
 let rec jumpStmt (cconv,e,args,targets (*unused*)) = 
     let cc    = to_cc cconv in
-    let out   = actuals cc.C.call_actuals args in
+    let out   = actuals cc.C.call_parms.C.out args in
     let jumpi = target.T.jump.T.embed (expr e) in
     let ()    = add_oldblock out.C.overflow    in  (* jump overflow = old *)
     G.stack_adjust g out.C.pre_sp                                  **>
@@ -608,13 +608,13 @@ let noregs = Register.Set.empty
 
 <<supporting functions for translating statements>>=
 and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ = 
-  let cc    = to_cc cconv                     in
-  let out   = actuals cc.C.call_actuals args  in
-  let in'   = results cc.C.call_results lhs   in
-  let calli = target.T.call.T.embed (expr e)  in
-  let conts = continuations cc conts false    in
-  let () = add_youngblock out.C.overflow      in  (* outgoing overflow parms *)
-  let () = add_youngblock in'.C.overflow      in  (* incoming overflow results *)
+  let cc    = to_cc cconv                         in
+  let out   = actuals cc.C.call_parms.C.out args  in
+  let in'   = results cc.C.results.C.in' lhs      in
+  let calli = target.T.call.T.embed (expr e)      in
+  let conts = continuations cc conts false        in
+  let () = add_youngblock out.C.overflow          in  (* outgoing overflow parms *)
+  let () = add_youngblock in'.C.overflow          in  (* incoming overflow results *)
   G.stack_adjust g out.C.pre_sp                **>
   G.instruction  g out.C.shuffle               **>
   G.instruction  g out.C.post_sp               **>
@@ -638,7 +638,7 @@ and returnStmt (cconv, kont, args) =
   (* SHOULD RETURN BEAR A CALLING CONVENTION,
      OR DOES IT GET THE CONVENTION OF THE BODY? *)
     let cc = to_cc cconv                       in
-    let out = actuals cc.C.return_actuals args in
+    let out = actuals cc.C.results.C.out args  in
       (* WHAT ABOUT cc.C.epilog??  DO WE NEED ALTERNATE CONVENTION
          FOR ALTERNATE RETURN? *)
 let () =
@@ -682,7 +682,7 @@ and cutStmt (e, args, conts) =
      AND FOR CONTINUATION? *)
   let cc    = ccs default_cc in
   let k     = expr e in
-  let out   = actuals (cc.C.cut_to_actuals k) args in
+  let out   = actuals (cc.C.cut_parms.C.out k) args in
   let cuti  = Contn.cutto target cc.C.cutto.Target2.embed ~contn:k in
   let ()    = add_constraints (Block.constraints out.C.overflow) in
   let conts = continuations cc conts true in
@@ -849,7 +849,7 @@ let proc containing_spans (cconv,procname,args,procbody) =
     (* translate body of procedure *)
 
     (* build CFG for body *)                    
-    let in' = formals proc_cc.C.prolog args  in
+    let in' = formals proc_cc.C.call_parms.C.in' args  in
       (* CALLING CONV PROBABLY NEEDS MORE INFO TO GET PROPER POST STACK POINTER *)
     let initcont = G.node_labeled g (Idgen.label "initialize continuations") in
     let labeln node ~succ = (G.set_succ node succ; node) in
@@ -1029,8 +1029,8 @@ and stmt state = function
     | A.SwitchStmt  x      -> Impossible.unimp "switch"
     | A.ContStmt(n,args)   ->
         let cc = ccs default_cc in
-        let cut_in    = cformals' state.env cc.C.also_cuts_to    args in
-        let return_in = cformals' state.env cc.C.also_returns_to args in
+        let cut_in    = cformals' state.env cc.C.cut_parms.C.in' args in
+        let return_in = cformals' state.env cc.C.results.C.in'   args in
         let rep  = Contn.with_overflow target cut_in.C.overflow in
         let k    = K.mk n args rep g ~cut_in ~return_in in
         { state with conts = Strutil.Map.add n k state.conts }

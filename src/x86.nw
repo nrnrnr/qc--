@@ -593,7 +593,9 @@ let target =
 @ 
 <<x86.ml>>=
 let c_convention =
-  X86call.c (fun ra -> pop_with (fun ra -> store pc ra)) (F.cutto PX.esp)
+  X86call.c   (fun ra -> pop_with (fun ra -> store pc ra)) (F.cutto PX.esp)
+let cmm_convention =
+  X86call.cmm (fun ra -> pop_with (fun ra -> store pc ra)) (F.cutto PX.esp)
 
 module A = Automaton
 let ( **> ) f x = f x
@@ -632,7 +634,8 @@ let new_target =
                 } 
   ; T.branch  = F.branch
 
-  ; T.cc = (function "C" | "C--" | "c" | "c--" -> c_convention
+  ; T.cc = (function "C" | "c" -> c_convention
+            | "C--" | "c--"    -> cmm_convention
             | cc -> Impossible.impossible ("unsupported calling convention "^cc))
   ; T.globals  = globals
   ; T.is_rounding_mode = (fun loc -> loc = fpcond 0) (* see globals value *)

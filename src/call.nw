@@ -148,38 +148,34 @@ type answer =
 type 'a answer' = 'a list -> answer
 type outgoing = types -> Rtl.exp       answer'
 type incoming = types -> Automaton.loc answer'
+type ('inc, 'out) pair' = { in' : 'inc ; out : 'out }
+type pair     = (incoming, outgoing)              pair'
+type cut_pair = (incoming, (Rtl.exp -> outgoing)) pair'
 
 type t = (* part of a calling convention *)
-  (* we get 4 dual pairs *)
-  { call_actuals    : outgoing
-  ; prolog          : incoming   (* arg = procedure formals *)
-  ; epilog          : outgoing   (* arg = results returned *)
-  ; call_results    : incoming   (* normal return cont *)
-  ; cut_to_actuals  : Rtl.exp -> outgoing  
+  (* we get 3 dual pairs *)
+  { call_parms    : pair
+  ; results       : pair
+  ; cut_parms     : cut_pair
        (* exp is continuation val; used to address overflow block *)
-  ; also_cuts_to    : incoming
-  ; return_actuals  : outgoing
-  ; also_returns_to : incoming
-
-  ; stable_sp_loc   : Rtl.exp
+                  
+  ; stable_sp_loc : Rtl.exp
        (* address where sp points after prolog, sits between calls,
           and should be set to on arrival at a continuation *)
 
-  ; stack_growth : Memalloc.growth
-  ; replace_vfp  : Rtl.rtl Cfgx.M.cfg -> unit
-(*    ; sp : Rtl.loc                      (* stack pointer *)  *)
-  ; sp_align        : int             (* alignment of stack pointer at call/cut *)
-  ; ra : Rtl.loc                      (* where return address is on entry *)
-  ; nvregs : Register.Set.t           (* registers preserved across calls *)
-  ; volregs: Register.Set.t           (* registers not preserved across calls *)
-  ; saved_nvr : Talloc.Multiple.t -> Register.t -> Rtl.loc (* where to save a NVR *)
-  ; cutto  :  Mflow.cut_args Target2.map    (* newpc * newsp map*)
-  ; saved_ra  : Talloc.Multiple.t -> Rtl.loc (* where to save the return address *)
-  ; return : int -> int -> ra:Rtl.exp -> Rtl.rtl    (* alternate return *)
+  ; stack_growth  : Memalloc.growth
+  ; sp_align      : int             (* alignment of stack pointer at call/cut *)
+  ; ra            : Rtl.loc                      (* where return address is on entry *)
+  ; nvregs        : Register.Set.t           (* registers preserved across calls *)
+  ; volregs       : Register.Set.t           (* registers not preserved across calls *)
+  ; saved_nvr     : Talloc.Multiple.t -> Register.t -> Rtl.loc (* where to save NVR *)
+  ; saved_ra      : Talloc.Multiple.t -> Rtl.loc (* where to save the return address *)
+  ; return        : int -> int -> ra:Rtl.exp -> Rtl.rtl    (* alternate return *)
 (*  ; alt_return_table : node list -> node *)
-  ; stack_layout : unit
+  (* these next two encapsulate knowledge of which reg. is sp *)
+  ; replace_vfp   : Rtl.rtl Cfgx.M.cfg -> unit
+  ; cutto         : Mflow.cut_args Target2.map    (* newpc * newsp map*)
   } 
-
 @ 
 We have the beginnings of an implementation that computes incoming and
 outgoing stuff.  The [[relative_to]] parameter is pure hell and not obvious
