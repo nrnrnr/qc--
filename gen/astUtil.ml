@@ -150,17 +150,17 @@
         end
       end
   
-  and sexp_rd_lvalue s_ = 
+  and sexp_rd_name_or_mem s_ = 
       begin
         (SexpPkl.rd_lp s_);
         let tmp_ = let t = (SexpPkl.get_sym s_) in
           (match (t) with 
-              "ast_LValueAt" -> let lvalue1 = (sexp_rd_lvalue s_) in
+              "ast_NameOrMemAt" -> let name_or_mem1 = (sexp_rd_name_or_mem s_) in
               let region1 = (sexp_rd_region s_) in
-              Ast.LValueAt(lvalue1, region1)
-            | "ast_Var" -> let hint_opt1 = (SexpPkl.rd_option sexp_rd_hint s_) in
+              Ast.NameOrMemAt(name_or_mem1, region1)
+            | "ast_Name" -> let hint_opt1 = (SexpPkl.rd_option sexp_rd_hint s_) in
               let name1 = (sexp_rd_name s_) in
-              Ast.Var(hint_opt1, name1)
+              Ast.Name(hint_opt1, name1)
             | "ast_Mem" -> let ty1 = (sexp_rd_ty s_) in
               let expr1 = (sexp_rd_expr s_) in
               let aligned_opt1 = (SexpPkl.rd_option sexp_rd_aligned s_) in
@@ -203,8 +203,8 @@
             | "ast_Char" -> let string1 = (StdPrimsUtil.sexp_rd_std_string s_) in
               let ty_opt1 = (SexpPkl.rd_option sexp_rd_ty s_) in
               Ast.Char(string1, ty_opt1)
-            | "ast_Fetch" -> let lvalue1 = (sexp_rd_lvalue s_) in
-              Ast.Fetch(lvalue1)
+            | "ast_Fetch" -> let name_or_mem1 = (sexp_rd_name_or_mem s_) in
+              Ast.Fetch(name_or_mem1)
             | "ast_BinOp" -> let expr1 = (sexp_rd_expr s_) in
               let op1 = (sexp_rd_op s_) in
               let expr2 = (sexp_rd_expr s_) in
@@ -543,22 +543,22 @@
               let value = (sexp_rd_expr s_) in
               let body_list1 = (SexpPkl.rd_list sexp_rd_body s_) in
               Ast.SpanStmt(key, value, body_list1)
-            | "ast_AssignStmt" -> let lvalue_list1 = (SexpPkl.rd_list sexp_rd_lvalue s_) in
+            | "ast_AssignStmt" -> let name_or_mem_list1 = (SexpPkl.rd_list sexp_rd_name_or_mem s_) in
               let guarded_list1 = (SexpPkl.rd_list sexp_rd_guarded s_) in
-              Ast.AssignStmt(lvalue_list1, guarded_list1)
-            | "ast_CallStmt" -> let lvalue_list1 = (SexpPkl.rd_list sexp_rd_lvalue s_) in
+              Ast.AssignStmt(name_or_mem_list1, guarded_list1)
+            | "ast_CallStmt" -> let name_or_mem_list1 = (SexpPkl.rd_list sexp_rd_name_or_mem s_) in
               let conv_opt1 = (SexpPkl.rd_option sexp_rd_conv s_) in
               let expr1 = (sexp_rd_expr s_) in
               let actual_list1 = (SexpPkl.rd_list sexp_rd_actual s_) in
               let target_list1 = (SexpPkl.rd_list sexp_rd_target s_) in
               let flow_list1 = (SexpPkl.rd_list sexp_rd_flow s_) in
-              Ast.CallStmt(lvalue_list1, conv_opt1, expr1, actual_list1, target_list1, flow_list1)
-            | "ast_PrimStmt" -> let lvalue_list1 = (SexpPkl.rd_list sexp_rd_lvalue s_) in
+              Ast.CallStmt(name_or_mem_list1, conv_opt1, expr1, actual_list1, target_list1, flow_list1)
+            | "ast_PrimStmt" -> let name_or_mem_list1 = (SexpPkl.rd_list sexp_rd_name_or_mem s_) in
               let conv_opt1 = (SexpPkl.rd_option sexp_rd_conv s_) in
               let name1 = (sexp_rd_name s_) in
               let actual_list1 = (SexpPkl.rd_list sexp_rd_actual s_) in
               let flow_list1 = (SexpPkl.rd_list sexp_rd_flow s_) in
-              Ast.PrimStmt(lvalue_list1, conv_opt1, name1, actual_list1, flow_list1)
+              Ast.PrimStmt(name_or_mem_list1, conv_opt1, name1, actual_list1, flow_list1)
             | "ast_GotoStmt" -> let expr1 = (sexp_rd_expr s_) in
               let target_list1 = (SexpPkl.rd_list sexp_rd_target s_) in
               Ast.GotoStmt(expr1, target_list1)
@@ -701,8 +701,8 @@
   and sexp_rd_altcont_option s_ = 
       (SexpPkl.rd_option sexp_rd_altcont s_)
   
-  and sexp_rd_lvalue_list s_ = 
-      (SexpPkl.rd_list sexp_rd_lvalue s_)
+  and sexp_rd_name_or_mem_list s_ = 
+      (SexpPkl.rd_list sexp_rd_name_or_mem s_)
   
   and sexp_rd_flow_list s_ = 
       (SexpPkl.rd_list sexp_rd_flow s_)
@@ -894,18 +894,18 @@
           end)
       (* end match *)
   
-  and sexp_wr_lvalue x_ s_ = 
+  and sexp_wr_name_or_mem x_ s_ = 
       (match (x_) with 
-          (Ast.LValueAt(lvalue1, region1)) -> begin
+          (Ast.NameOrMemAt(name_or_mem1, region1)) -> begin
             (SexpPkl.wr_lp s_);
-            (SexpPkl.wr_sym "ast_LValueAt" s_);
-            (sexp_wr_lvalue lvalue1 s_);
+            (SexpPkl.wr_sym "ast_NameOrMemAt" s_);
+            (sexp_wr_name_or_mem name_or_mem1 s_);
             (sexp_wr_region region1 s_);
             (SexpPkl.wr_rp s_)
           end
-        | (Ast.Var(hint_opt1, name1)) -> begin
+        | (Ast.Name(hint_opt1, name1)) -> begin
             (SexpPkl.wr_lp s_);
-            (SexpPkl.wr_sym "ast_Var" s_);
+            (SexpPkl.wr_sym "ast_Name" s_);
             (SexpPkl.wr_option sexp_wr_hint hint_opt1 s_);
             (sexp_wr_name name1 s_);
             (SexpPkl.wr_rp s_)
@@ -961,10 +961,10 @@
             (SexpPkl.wr_option sexp_wr_ty ty_opt1 s_);
             (SexpPkl.wr_rp s_)
           end
-        | (Ast.Fetch(lvalue1)) -> begin
+        | (Ast.Fetch(name_or_mem1)) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_Fetch" s_);
-            (sexp_wr_lvalue lvalue1 s_);
+            (sexp_wr_name_or_mem name_or_mem1 s_);
             (SexpPkl.wr_rp s_)
           end
         | (Ast.BinOp(expr1, op1, expr2)) -> begin
@@ -1387,14 +1387,14 @@
             (SexpPkl.wr_list sexp_wr_body body_list1 s_);
             (SexpPkl.wr_rp s_)
           end
-        | (Ast.AssignStmt(lvalue_list1, guarded_list1)) -> begin
+        | (Ast.AssignStmt(name_or_mem_list1, guarded_list1)) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_AssignStmt" s_);
-            (SexpPkl.wr_list sexp_wr_lvalue lvalue_list1 s_);
+            (SexpPkl.wr_list sexp_wr_name_or_mem name_or_mem_list1 s_);
             (SexpPkl.wr_list sexp_wr_guarded guarded_list1 s_);
             (SexpPkl.wr_rp s_)
           end
-        | (Ast.CallStmt(lvalue_list1,
+        | (Ast.CallStmt(name_or_mem_list1,
             conv_opt1,
             expr1,
             actual_list1,
@@ -1402,7 +1402,7 @@
             flow_list1)) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_CallStmt" s_);
-            (SexpPkl.wr_list sexp_wr_lvalue lvalue_list1 s_);
+            (SexpPkl.wr_list sexp_wr_name_or_mem name_or_mem_list1 s_);
             (SexpPkl.wr_option sexp_wr_conv conv_opt1 s_);
             (sexp_wr_expr expr1 s_);
             (SexpPkl.wr_list sexp_wr_actual actual_list1 s_);
@@ -1410,14 +1410,14 @@
             (SexpPkl.wr_list sexp_wr_flow flow_list1 s_);
             (SexpPkl.wr_rp s_)
           end
-        | (Ast.PrimStmt(lvalue_list1,
+        | (Ast.PrimStmt(name_or_mem_list1,
             conv_opt1,
             name1,
             actual_list1,
             flow_list1)) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_PrimStmt" s_);
-            (SexpPkl.wr_list sexp_wr_lvalue lvalue_list1 s_);
+            (SexpPkl.wr_list sexp_wr_name_or_mem name_or_mem_list1 s_);
             (SexpPkl.wr_option sexp_wr_conv conv_opt1 s_);
             (sexp_wr_name name1 s_);
             (SexpPkl.wr_list sexp_wr_actual actual_list1 s_);
@@ -1609,8 +1609,8 @@
   and sexp_wr_altcont_option x_ s_ = 
       (SexpPkl.wr_option sexp_wr_altcont x_ s_)
   
-  and sexp_wr_lvalue_list x_ s_ = 
-      (SexpPkl.wr_list sexp_wr_lvalue x_ s_)
+  and sexp_wr_name_or_mem_list x_ s_ = 
+      (SexpPkl.wr_list sexp_wr_name_or_mem x_ s_)
   
   and sexp_wr_flow_list x_ s_ = 
       (SexpPkl.wr_list sexp_wr_flow x_ s_)

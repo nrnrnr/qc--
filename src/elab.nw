@@ -905,9 +905,9 @@ let rec freeExprVars = function
 
 <<module CDecl>>=
 and freeLValueVars = function
-    | A.LValueAt(x,r)   -> freeLValueVars x
+    | A.NameOrMemAt(x,r)   -> freeLValueVars x
     | A.Mem(_,e,_)      -> freeExprVars e
-    | A.Var(_,name)     -> [name]
+    | A.Name(_,name)     -> [name]
 @
 A constant declaration uses all names in its defining expression.
 These should be names of other constant expression but we don't know
@@ -960,9 +960,9 @@ of a type and a value.
 
 <<module Eval>>=
 let rec evalFetch env = function
-    | A.LValueAt(x,r) -> E.catch (error r env) (evalFetch env) x
+    | A.NameOrMemAt(x,r) -> E.catch (error r env) (evalFetch env) x
     | A.Mem (_,_,_)   -> E.error "memory access in const declaration"
-    | A.Var(hint,id)  -> 
+    | A.Name(hint,id)  -> 
             ( match snd (F.findv id env) with
             | E.Error                -> E.Error
             | E.Ok(F.Constant(bits),ty) -> 
@@ -1420,10 +1420,10 @@ memory must be an data pointer.
 
 <<check>>=
 let rec lvalue context env = function
-    | A.LValueAt(x,r)       -> E.catch (error r env) (lvalue context env) x
-    | A.Var(Some h,x) when context <> Call ->
+    | A.NameOrMemAt(x,r)       -> E.catch (error r env) (lvalue context env) x
+    | A.Name(Some h,x) when context <> Call ->
         E.error "no hint allowed in this context"
-    | A.Var(hint,name)      -> 
+    | A.Name(hint,name)      -> 
         E.ematch (E.Raise.right (F.findv name env))
         ( function
         | _, (F.Register _,t) -> t
@@ -1649,8 +1649,8 @@ function.
 <<check>>=
 let rec isGotoLabel env = function
     | A.ExprAt(x,_)                             -> isGotoLabel env x
-    | A.Fetch(A.LValueAt(x,_))                  -> isGotoLabel env (A.Fetch x)
-    | A.Fetch(A.Var(_,x))                       -> 
+    | A.Fetch(A.NameOrMemAt(x,_))               -> isGotoLabel env (A.Fetch x)
+    | A.Fetch(A.Name(_,x))                      -> 
           ( match F.findv x env with
           | _       ,E.Error                    -> false
           | scope   ,E.Ok(F.Label(F.Code(_)),_) -> true
@@ -1660,8 +1660,8 @@ let rec isGotoLabel env = function
 
 let rec isFunction env = function
     | A.ExprAt(x,_)                             -> isFunction env x
-    | A.Fetch(A.LValueAt(x,_))                  -> isFunction env (A.Fetch x)
-    | A.Fetch(A.Var(_,x))                       -> 
+    | A.Fetch(A.NameOrMemAt(x,_))                  -> isFunction env (A.Fetch x)
+    | A.Fetch(A.Name(_,x))                       -> 
           ( match F.findv x env with
           | _       ,E.Error                    -> false
           | scope   ,E.Ok(F.Import _,_)         -> true

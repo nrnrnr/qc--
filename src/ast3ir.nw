@@ -191,8 +191,8 @@ be extended.
 
 <<Make expressions>>=
 let rec fetch env target = function
-    | A.LValueAt(x,_) -> fetch env target x
-    | A.Var(hint,x)   -> variable env target hint x
+    | A.NameOrMemAt(x,_) -> fetch env target x
+    | A.Name(hint,x)   -> variable env target hint x
     | A.Mem(t,e,a)    -> 
         let width = astwidth env t in
         let cell  = 
@@ -378,8 +378,8 @@ assignment.
 
 <<Make assignment>>=
 let rec assign env target lhs exp = match lhs with
-    | A.LValueAt(lhs,_) -> assign env target lhs exp
-    | A.Var(hint,x) ->
+    | A.NameOrMemAt(lhs,_) -> assign env target lhs exp
+    | A.Name(hint,x) ->
         let (_,(denot,t)) = F.findv x env in
         let w = width t                   in
             ( match denot with
@@ -769,8 +769,8 @@ must be a label.
 and gotoStmt spans state (e,labels) =
     let rec label_of = function
         | A.ExprAt(x,_)             -> label_of x
-        | A.Fetch(A.LValueAt(x,_))  -> label_of (A.Fetch x)
-        | A.Fetch(A.Var(_,x))       -> x
+        | A.Fetch(A.NameOrMemAt(x,_))  -> label_of (A.Fetch x)
+        | A.Fetch(A.Name(_,x))       -> x
         | _                         -> assert false in
     let labels = if labels <> [] then labels else [label_of e] in
     let exp   = expr state.env state.target e  in
@@ -846,8 +846,8 @@ statement. A data-flow node expresses inter-procedural data-flow.}
 <<Make statements>>=
 and callStmt spans state (lhs,cconv, e, args, targets (*unused*), conts) = 
     let rec lvalue = function
-        | A.LValueAt(x,_) -> lvalue x
-        | A.Var x         -> formal state.env x 
+        | A.NameOrMemAt(x,_) -> lvalue x
+        | A.Name x         -> formal state.env x 
         | A.Mem _         -> assert false                        in
     let ptrsize = state.target.Target.pointersize in    
     let exp     = expr state.env state.target e    in
@@ -1252,9 +1252,9 @@ module StackData = struct
       | _ -> state
     and actual state (_,e) = expr state e
     and lvalue state l = match l with
-      | A.LValueAt (lv,_) -> lvalue state lv
+      | A.NameOrMemAt (lv,_) -> lvalue state lv
       | A.Mem (_,e,_)      -> expr   state e
-      | A.Var (_,name)     ->
+      | A.Name (_,name)     ->
             ( match F.findv name state.env with
               | (_,(F.Continuation _,_)) ->
                   {state with esc_conts = Strutil.Set.add name state.esc_conts}

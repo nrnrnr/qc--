@@ -227,8 +227,8 @@ Again, the environment is implicit.
 \deeperbox{14pt}
 <<mutually recursive nest of [[expr]] and [[lvalue]]>>=
 let rec lvalue lhs = match lhs with
-  | A.LValueAt(lhs,_)   -> lvalue lhs
-  | A.Var(hint,x)       -> lvalue_name x 
+  | A.NameOrMemAt(lhs,_)   -> lvalue lhs
+  | A.Name(hint,x)       -> lvalue_name x 
   | A.Mem(t,addr,align) ->
       let w    = astwidth env t in
       let assn = match align with None -> Rtl.none | Some n -> Rtl.aligned n in
@@ -430,8 +430,8 @@ and formals'  env = convert_parms (fun (h, _, _, x) -> h, x) (lvalue_name_in_env
 and cformals' env = convert_parms (fun (h, x)       -> h, x) (lvalue_name_in_env env) 
 and results'  env = 
   let rec hn = function
-    | A.LValueAt (lv, _) -> hn lv
-    | A.Var(h,x)         -> h, x
+    | A.NameOrMemAt (lv, _) -> hn lv
+    | A.Name(h,x)         -> h, x
     | A.Mem(_, _, _)     -> impossible "mem ref as result" in
   convert_parms hn (lvalue_name_in_env env) 
 @ 

@@ -23,9 +23,9 @@
       | BitsTy of (size)
       | AliasTy of (name)
   
-  and lvalue =
-        LValueAt of (lvalue * region)
-      | Var of (hint option * name)
+  and name_or_mem =
+        NameOrMemAt of (name_or_mem * region)
+      | Name of (hint option * name)
       | Mem of (ty * expr * aligned option)
   
   and actual = (hint option * expr)
@@ -34,7 +34,7 @@
       | Int of (StdPrims.std_string * ty option)
       | Float of (StdPrims.std_string * ty option)
       | Char of (StdPrims.std_string * ty option)
-      | Fetch of (lvalue)
+      | Fetch of (name_or_mem)
       | BinOp of (expr * op * expr)
       | UnOp of (op * expr)
       | PrimOp of (name * actual list)
@@ -108,14 +108,14 @@
       | LabelStmt of (name)
       | ContStmt of (name * cformal list)
       | SpanStmt of (expr * expr * body list)
-      | AssignStmt of (lvalue list * guarded list)
-      | CallStmt of (lvalue list *
+      | AssignStmt of (name_or_mem list * guarded list)
+      | CallStmt of (name_or_mem list *
           conv option *
           expr *
           actual list *
           target list *
           flow list)
-      | PrimStmt of (lvalue list *
+      | PrimStmt of (name_or_mem list *
           conv option *
           name *
           actual list *

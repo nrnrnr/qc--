@@ -20,7 +20,7 @@
   val sexp_rd_op : SexpPkl.instream -> Ast.op
   val sexp_rd_region : SexpPkl.instream -> Ast.region
   val sexp_rd_ty : SexpPkl.instream -> Ast.ty
-  val sexp_rd_lvalue : SexpPkl.instream -> Ast.lvalue
+  val sexp_rd_name_or_mem : SexpPkl.instream -> Ast.name_or_mem
   val sexp_rd_actual : SexpPkl.instream -> Ast.actual
   val sexp_rd_expr : SexpPkl.instream -> Ast.expr
   val sexp_rd_import : SexpPkl.instream -> Ast.import
@@ -50,7 +50,7 @@
   val sexp_rd_range_list : SexpPkl.instream -> Ast.range list
   val sexp_rd_range_option : SexpPkl.instream -> Ast.range option
   val sexp_rd_altcont_option : SexpPkl.instream -> Ast.altcont option
-  val sexp_rd_lvalue_list : SexpPkl.instream -> Ast.lvalue list
+  val sexp_rd_name_or_mem_list : SexpPkl.instream -> Ast.name_or_mem list
   val sexp_rd_flow_list : SexpPkl.instream -> Ast.flow list
   val sexp_rd_cformal_list : SexpPkl.instream -> Ast.cformal list
   val sexp_rd_actual_list : SexpPkl.instream -> Ast.actual list
@@ -84,7 +84,7 @@
   val sexp_wr_op : Ast.op -> SexpPkl.outstream -> unit
   val sexp_wr_region : Ast.region -> SexpPkl.outstream -> unit
   val sexp_wr_ty : Ast.ty -> SexpPkl.outstream -> unit
-  val sexp_wr_lvalue : Ast.lvalue -> SexpPkl.outstream -> unit
+  val sexp_wr_name_or_mem : Ast.name_or_mem -> SexpPkl.outstream -> unit
   val sexp_wr_actual : Ast.actual -> SexpPkl.outstream -> unit
   val sexp_wr_expr : Ast.expr -> SexpPkl.outstream -> unit
   val sexp_wr_import : Ast.import -> SexpPkl.outstream -> unit
@@ -116,7 +116,9 @@
   val sexp_wr_altcont_option : Ast.altcont option ->
       SexpPkl.outstream ->
       unit
-  val sexp_wr_lvalue_list : Ast.lvalue list -> SexpPkl.outstream -> unit
+  val sexp_wr_name_or_mem_list : Ast.name_or_mem list ->
+      SexpPkl.outstream ->
+      unit
   val sexp_wr_flow_list : Ast.flow list -> SexpPkl.outstream -> unit
   val sexp_wr_cformal_list : Ast.cformal list -> SexpPkl.outstream -> unit
   val sexp_wr_actual_list : Ast.actual list -> SexpPkl.outstream -> unit

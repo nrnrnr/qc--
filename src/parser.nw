@@ -994,23 +994,26 @@ flows       :   flows flowAt                   { $2 :: $1 }
 targets     :   TARGETS names                  { $2 }
             |   /**/                           { [] }
 @
-The grammar uses [[lvalue]] not only at the left hand side of
-assignments but also as part of expressions where they denote the
-values of registers and memory.  The introduction of hints for
-registers (implemented as [[opstr ID]] or similar) has lead to serious
-reduce/reduce conflicts caused by the use of [[lvalueAt]] in
+
+The grammar uses [[nameOrMem]] not only at the left hand side of
+assignments but also as part of expressions where they denote the values
+of registers and memory.  The introduction of hints for registers
+(implemented as [[opstr ID]] or similar) has lead to serious
+reduce/reduce conflicts caused by the use of [[nameOrMemAt]] in
 [[sexpr]].  One way of getting rid of them was to split the original
-[[lvalueAt]] into [[lvalueAt0]] and [[lvalueAt]]:  [[lvalueAt0]] does
-not include [[STR ID]] which is not needed for [[sexpr]].
+[[nameOrMemAt]] into [nameOrMemAt0]] and [[nameOrMemAt]]:
+[[nameOrMemAt0]] does not include [[STR ID]] which is not needed for
+[[sexpr]].
+
 
 <<parse.mly>>=
-lvalueAt    :   lvalue                         { A.LValueAt($1,p()) } 
-lvalue      :   lvalue0                        { $1 } 
-            |   STR ID                         { A.Var(Some $1,$2) } 
+nameOrMemAt :   nameOrMem                      { A.NameOrMemAt($1,p()) } 
+nameOrMem   :   nameOrMem0                     { $1 } 
+            |   STR ID                         { A.Name(Some $1,$2) } 
             
 <<parse.mly>>=
-lvalueAt0   :   lvalue0                                { A.LValueAt($1,p()) }
-lvalue0     :   ID                                     { A.Var(None, $1)    }
+nameOrMemAt0:   nameOrMem0                    { A.NameOrMemAt($1,p()) }
+nameOrMem0  :   ID                            { A.Name(None, $1)    }
             |   sty   LBRACKET exprAt aligned RBRACKET { A.Mem($1,$3,$4)    }
             |   sty   LBRACKET exprAt         RBRACKET { A.Mem($1,$3,None)  }
             |   ID    LBRACKET exprAt aligned RBRACKET
@@ -1018,9 +1021,9 @@ lvalue0     :   ID                                     { A.Var(None, $1)    }
             |   ID    LBRACKET exprAt         RBRACKET
                         { A.Mem(A.AliasTy($1),$3,None)                      }
 
-lvalues     :   lvalues_ optcomma              { rev $1   }
-lvalues_    :   lvalues_ COMMA lvalueAt        { $3 :: $1 }
-            |   lvalueAt                       { [$1]     }
+nameOrMems  :   nameOrMems_ optcomma           { rev $1   }
+nameOrMems_ :   nameOrMems_ COMMA nameOrMemAt  { $3 :: $1 }
+            |   nameOrMemAt                    { [$1]     }
 
 tyAt        :   ty                             { A.TyAt($1,p()) }
 ty          :   sty                            { $1             }
@@ -1035,28 +1038,28 @@ stmtAt      :   stmt                           { A.StmtAt($1,p())     }
 stmt        :   SEMI                           { A.EmptyStmt          }
             |   ID COLON                       { A.LabelStmt $1       }
             |   SPAN exprAt exprAt body        { A.SpanStmt($2,$3,$4) }
-            |   lvalues EQUAL exprs SEMI       
+            |   nameOrMems EQUAL exprs SEMI       
                 { A.AssignStmt($1,List.map (fun e -> None,e) $3)  }
 
-            |   lvalues EQUAL conv PPERCENT ID actls flows SEMI
+            |   nameOrMems EQUAL conv PPERCENT ID actls flows SEMI
                 { A.PrimStmt($1, $3, $5, $6, rev $7) }      
             
             |                 conv PPERCENT ID actls flows SEMI
                 { A.PrimStmt([], $1, $3, $4, rev $5) }      
             
-            |   lvalues EQUAL conv expr actls targets flows SEMI
+            |   nameOrMems EQUAL conv expr actls targets flows SEMI
                 { A.CallStmt($1, $3, $4, $5, $6, rev $7)  }
             
             |                 conv expr actls targets flows SEMI
                 { A.CallStmt([], $1, $2, $3, $4, rev $5)  }
                                           
-            |   lvalues EQUAL      PPERCENT ID actls flows SEMI
+            |   nameOrMems EQUAL      PPERCENT ID actls flows SEMI
                 { A.PrimStmt($1, None, $4, $5, rev $6)    }
             
             |                      PPERCENT ID actls flows SEMI
                 { A.PrimStmt( [], None, $2, $3, rev $4)}
             
-            |   lvalues EQUAL      expr actls targets flows SEMI
+            |   nameOrMems EQUAL      expr actls targets flows SEMI
                 { A.CallStmt($1, None, $3, $4, $5, rev $6)}
 
             |                      expr actls targets flows SEMI
@@ -1107,7 +1110,7 @@ sexpr       :   INT                            { A.Int($1, None)      }
             |   FLT CCOLON tyAt                { A.Float($1, Some $3) }
             |   CHAR                           { A.Char($1, None)     }
             |   CHAR CCOLON tyAt               { A.Char($1, Some $3)  }
-            |   lvalueAt0                      { A.Fetch $1           }
+            |   nameOrMemAt0                   { A.Fetch $1           }
             |   PRIMOP actls                   { A.PrimOp($1,$2)      }
            /*   would allow to write nullary OPs like constants
             |   PRIMOP                         { A.PrimOp($1,[]) }

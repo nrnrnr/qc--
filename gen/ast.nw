@@ -153,9 +153,10 @@ flow        = FlowAt        (flow, region)
             | ReturnsTo     (name*)
             | Aborts    
 
-lvalue      = LValueAt      (lvalue, region)
-            | Var           (hint?,name)
+name_or_mem = NameOrMemAt   (name_or_mem, region)
+            | Name          (hint?,name)
             | Mem           (ty, expr, aligned?)
+
 <<ast declaration>>=
 altcont     = (expr, expr)
 
@@ -167,8 +168,8 @@ arm         = ArmAt         (arm, region)
 @
 
 We like to represent guarded multiple assignments. The guards are paired
-with the expressions defining the value to be assigned. Alternatively
-we could have made the guard of an [[lvalue]] but this would have
+with the expressions defining the value to be assigned. Alternatively we
+could have made the guard of an [[mem_or_name]] but this would have
 complicated the already complicated analysis of lvalues further.
              
 <<ast declaration>>=
@@ -191,9 +192,9 @@ stmt        = StmtAt        (stmt, region)
             | LabelStmt     (name)
             | ContStmt      (name, cformal*)
             | SpanStmt      (expr key, expr value, body*)
-            | AssignStmt    (lvalue*, guarded*)
-            | CallStmt      (lvalue*, conv?, expr, actual*, target*, flow*)
-            | PrimStmt      (lvalue*, conv?, name, actual*, flow*)
+            | AssignStmt    (name_or_mem*, guarded*)
+            | CallStmt      (name_or_mem*, conv?, expr, actual*, target*, flow*)
+            | PrimStmt      (name_or_mem*, conv?, name, actual*, flow*)
             | GotoStmt      (expr, target*)
             | JumpStmt      (conv?, expr, actual*, target*)
             | CutStmt       (expr, actual*, flow*)
@@ -211,7 +212,7 @@ expr        = ExprAt        (expr, region)
             | Int           (string,ty?)
             | Float         (string,ty?)
             | Char          (string,ty?)
-            | Fetch         (lvalue)
+            | Fetch         (name_or_mem)
             | BinOp         (expr, op, expr)
             | UnOp          (op, expr)
             | PrimOp        (name, actual*)
