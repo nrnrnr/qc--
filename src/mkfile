@@ -44,7 +44,6 @@ MANDIR =    ../man
 #
 
 # we compile byte code for profiling
-# OCAMLC =        ocamlcp -p a    
 
 # OCAMLC =        ocamlcp -p f    
 OCAMLC_FLAGS =  -I $LIBDIR -g
@@ -56,11 +55,12 @@ OCAMLO_FLAGS =  -I $LIBDIR
 
 all:V:          $NAME
 
-update:V:       $BINDIR/$NAME           \
-                $BINDIR/$NAME.prof      \
-                $MANDIR/man1/$NAME.1    \
+update:V:       $BINDIR/$NAME                 \
+                $BINDIR/$NAME.prof            \
+                $MANDIR/man1/$NAME.1          \
+                $MANDIR/man1/${NAME}grammar.1 \
 
-clean:V:        nwclean 
+clean:V:        nwclean
                 rm -f $CMO $CMX $CMI $OBJ
                 rm -f $NAME $NAME.opt
                 rm -f this.ml scan.ml parse.ml parse.mli
@@ -75,6 +75,7 @@ nwclean:V:
                 rm -f ast.asdl astpp.mli astpp.ml
                 rm -f scan.mll parse.mly
                 rm -f main.html ast.html parser.html
+                rm -f *.pod
 
 # ------------------------------------------------------------------ 
 # important file sets
@@ -190,6 +191,7 @@ error.mli       \
 error.ml:       error.nw
                 eval $OCAMLTANGLE
 
+this.mli        \
 this.in         \
 main.ml         \
 cmdline.mli:    main.nw
@@ -210,11 +212,14 @@ scan.mll:       parser.nw
 # include the yacc grammar in the manual for reference
 #
 
-$NAME.pod:      main.nw parse.output
+$NAME.pod:      main.nw 
+                eval $MISCTANGLE
+
+${NAME}grammar.pod:      main.nw parse.output
                 eval $MISCTANGLE
                 echo '/##grammar##/d
                      .r !grep "^  *[0-9]" parse.output
-                     wq' | ed $NAME.pod
+                     wq' | ed ${NAME}grammar.pod
                  
 
 ast.inc:        ast.nw         
@@ -265,6 +270,8 @@ $BINDIR/$NAME.prof:     $NAME
 $MANDIR/man1/$NAME.1:   $NAME.1
                         cp $prereq $target
 
+$MANDIR/man1/${NAME}grammar.1:   ${NAME}grammar.1
+                        cp $prereq $target
 # ------------------------------------------------------------------ 
 # include version and name information
 # ------------------------------------------------------------------ 

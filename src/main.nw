@@ -11,10 +11,11 @@ catching of exceptions, and providing the exit code.
 The [[Main]] module opens the modules it most frequently uses:
 
 <<main.ml>>=
-open Pc                         (* parser combinators for cmd line *)
-open Error			(* error handling *)
+open Pc                     (* infix parser combinators for cmd line *)
+module E = Error
+@
 
-@ The module [[Arg]] for command line processing from the standard
+The module [[Arg]] for command line processing from the standard
 library enforces an imperative programming style and can not be used
 to parse highly structured command lines.  We use parser combinators
 from module [[Pc]] for command line processing that capture the
@@ -27,11 +28,13 @@ very simple:  the command line can ask the program for different
 actions:
 
 \begin{enumerate}
-\item Display a usage information.
-\item Display a version information.
-\item Scan a file and show the token stream.
-\item Parse a file and serialize it in \asdl~format.
-\item Parse a file and pretty print it for a given line width.
+\item Display a usage information: [[-help]].
+\item Display a version information: [[-version]].
+\item Scan a file and show the token stream: [[-lex file.c--]].
+\item Parse a file and serialize it in \asdl~format: [[-asdl file.c--]].
+\item Parse a file and pretty print it for a given line width: 
+      [[-pp -w 72 file.c--]]
+\item Check the static semantics of a file: [[-check file.c--]].
 \end{enumerate}
 
 <<cmdline.mli>>=
@@ -41,8 +44,9 @@ type cmd =        | Help
                   | Asdl     of string
                   | Pp       of string * int
                   | Check    of string
+@
 
-@ The concrete syntax of the command line is specified through the
+The concrete syntax of the command line is specified through the
 parser combinators that recognizes them. The [[Pc]] module defines
 several infix operators which makes the notation of parser combinators
 rather suggestive: [[***]], [[**>]], and [[**<]] recognize a sequence
@@ -53,11 +57,10 @@ a flag [[-pp] is passed to a function that injects the string into a
 [[Pp]] constructor that asks to parse and pretty print a file.
   
 <<main.ml>>=
-
 let default_width = 72 
 
-let cmd_help      = literal "-help"         --> return Cmdline.Help
-let cmd_version   = literal "-version"      --> return Cmdline.Version
+let cmd_help      = literal "-help"         --> fun _ -> Cmdline.Help
+let cmd_version   = literal "-version"      --> fun _ -> Cmdline.Version
 let cmd_lex       = literal "-lex" **> any  --> fun s -> Cmdline.Lex(s) 
 let cmd_asdl      = literal "-asdl" **> any --> fun s -> Cmdline.Asdl(s) 
 let cmd_check     = literal "-check" **>any --> fun s -> Cmdline.Check(s) 
@@ -71,9 +74,9 @@ let cmd_pp        = (literal "-pp" **> cmd_width *** any
                     --> fun (width,file) -> Cmdline.Pp(file,width)) 
                 ||| literal "-pp" **> any 
                     --> fun (file)       -> Cmdline.Pp(file,default_width)
-                    
+@                    
 
-@ Each parser recognizes a complete command line.  As an abbreviation
+Each parser recognizes a complete command line.  As an abbreviation
 a single file name without flags is interpreted as an argument to the
 [[-pp]] flag. 
 
@@ -91,21 +94,24 @@ let cmdline       = (  cmd_version
                    ||| cmd_pp
                    ||| cmd_check
                    ||| cmd_default 
-                    ) **< eof
+                    ) **< Pc.eof
+@
 
-@ The command line flags [[-version]] and [[-help]] trigger short
+The command line flags [[-version]] and [[-help]] trigger short
 messages going to stdout.  The [[usage]] function is also called from
 [[main]] when the command line syntax is wrong. 
 
 <<main.ml>>= 
-
 let version () =
-    Printf.printf 
-    	"%s version %s (c) 1999 Christian Lindig <lindig@eecs.harvard.edu>\n" 
-	This.name 
-	This.version
+    ( This.name     stdout 
+    ; output_string stdout " "
+    ; This.version  stdout 
+    ; output_string stdout " (c) 2000 President and Fellows of Harvard University" 
+    ; output_string stdout " http://www.cminusminus.org/"
+    )
+@
 
-
+<<>>=
 let usage this =
   let msg = 
   [   "\t -help                      (this to stdout)"
@@ -115,91 +121,93 @@ let usage this =
   ;   "\t -pp [-w width] file        (parse and pretty print file for width)"
   ;   "\t file                       (same as -pp file)"
   ] in
-    Printf.printf "%s version %s command line syntax\n" this This.version;
+    Printf.printf "%s command line syntax\n" this ;
     List.iter print_endline msg
-
-(* lex *)
-
+@
+    
+<<>>=
 let lex file =
-    let fd          = try open_in file 
-                      with Sys_error(msg) -> error msg                  in
-    let finally ()  = close_in fd                                       in
-    let lexbuf      = Lexing.from_channel fd                            in
-    let map         = Srcmap.empty                                      in
-    let scanner     = Scan.scan map                                     in
-    let rec loop lb = 
+    let fd          = try open_in file
+                      with Sys_error(msg) -> E.error msg   in
+    let finally ()  = close_in fd                          in
+    let lexbuf      = Lexing.from_channel fd               in
+    let map         = Srcmap.empty                         in
+    let scanner     = Scan.scan map                        in
+    let rec loop lb =
         match scanner lb with
             | Parse.EOF -> ()
-            | tok       -> 
+            | tok       ->
                 let (file,line,col) = Scan.location lb map in
-                let tok             = Scan.tok2str tok in
-                    ( Printf.printf "%-16s %3d %2d %s\n" file line col tok 
+                let tok             = Scan.tok2str tok     in
+                    ( Printf.printf "%-16s %3d %2d %s\n" file line col tok
                     ; loop lb
                     )
     in
         ( Srcmap.sync map 0 (file,1,1)
         ; loop lexbuf
         ; finally ()
-        ) 
+        )
+@
         
-@ For testing the parser we let the \textsc{adsl} code write the abstract
+For testing the parser we let the {\small ASDL} code write the abstract
 to stdout.
 
-<<main.ml>>= 
-
+<<>>=
 let asdl file =
     let fd          = try open_in file 
-                      with Sys_error(msg) -> error msg                  in
-    let finally ()  = close_in fd                                       in
-    let lexbuf      = Lexing.from_channel fd                            in
-    let map         = Srcmap.empty                                      in
-    let scanner     = Scan.scan map                                     in
-    let _           = Srcmap.sync map 0 (file,1,1)                      in
+                      with Sys_error(msg) -> E.error msg     in
+    let finally ()  = close_in fd                            in
+    let lexbuf      = Lexing.from_channel fd                 in
+    let map         = Srcmap.empty                           in
+    let scanner     = Scan.scan map                          in
+    let _           = Srcmap.sync map 0 (file,1,1)           in
     let asdl ()     = let ast = Parse.program scanner lexbuf in
-                         (Ok (AstUtil.sexp_wr_program ast stdout)) 
+                         (E.Ok (AstUtil.sexp_wr_program ast stdout))
         in try asdl () with
-            | Parsing.Parse_error -> 
+            | Parsing.Parse_error ->
               ( finally()
-              ; errorPointPrt (map, Lexing.lexeme_start lexbuf) "parse error"
-              ; Error
+              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) "parse error"
+              ; E.Error
               )
-            | ErrorExn msg ->
+            | E.ErrorExn msg ->
               ( finally()
-              ; errorPointPrt (map, Lexing.lexeme_start lexbuf) msg
-              ; Error
+              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) msg
+              ; E.Error
               )
-            | e ->  
+            | e ->
               ( finally()
               ; raise e
               )
 
+<<>>=
 let pp file width =
-    let fd          = try open_in file 
-                      with Sys_error(msg) -> error msg                  in
-    let finally ()  = close_in fd                                       in
-    let lexbuf      = Lexing.from_channel fd                            in
-    let map         = Srcmap.empty                                      in
-    let scanner     = Scan.scan map                                     in
-    let _           = Srcmap.sync map 0 (file,1,1)                      in
+    let fd          = try open_in file
+                      with Sys_error(msg) -> E.error msg     in
+    let finally ()  = close_in fd                            in
+    let lexbuf      = Lexing.from_channel fd                 in
+    let map         = Srcmap.empty                           in
+    let scanner     = Scan.scan map                          in
+    let _           = Srcmap.sync map 0 (file,1,1)           in
     let pp ()       = let ast = Parse.program scanner lexbuf in
-                         (Ok (Astpp.ppToFile stdout width ast)) 
+                         (E.Ok (Astpp.ppToFile stdout width ast))
         in try pp () with
-            | Parsing.Parse_error -> 
+            | Parsing.Parse_error ->
               ( finally()
-              ; errorPointPrt (map, Lexing.lexeme_start lexbuf) "parse error"
-              ; Error
+              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) "parse error"
+              ; E.Error
               )
-            | ErrorExn msg ->
+            | E.ErrorExn msg ->
               ( finally()
-              ; errorPointPrt (map, Lexing.lexeme_start lexbuf) msg
-              ; Error
+              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) msg
+              ; E.Error
               )
             | e  ->
               ( finally()
               ; raise e
               )
+@
  
-@ The [[main]] function gets the command line arguments and tries to
+The [[main]] function gets the command line arguments and tries to
 parse them using the [[cmdline]] parser.  It returns the abstract
 syntax as defined in Module [[Cmdline]] which is used to decide which
 function to call.  In case of no error all functions return here and
@@ -208,7 +216,6 @@ the program end with exit code zero.  However, in case of an error the
 zero exit code. 
 
 <<main.ml>>=
-
 let main () =
     let argv        = Array.to_list Sys.argv in
     let this        = Filename.basename (List.hd argv) in
@@ -220,25 +227,24 @@ let main () =
                          exit 1
     in
     let dispatch    = function
-        | Cmdline.Help          -> usage this ; Ok ()
-        | Cmdline.Version	-> version () ; Ok ()
-        | Cmdline.Lex(file)     -> lex file   ; Ok ()
+        | Cmdline.Help          -> usage this ; E.Ok ()
+        | Cmdline.Version	-> version () ; E.Ok ()
+        | Cmdline.Lex(file)     -> lex file   ; E.Ok ()
         | Cmdline.Asdl(file)    -> asdl file 
         | Cmdline.Pp(file,width)-> pp file width
         | Cmdline.Check(file)   -> Semant.check file
     in
-        match catch errorPrt dispatch cmd with
-            | Error -> exit 1
-            | Ok _  -> exit 0
-                
+        match E.catch E.errorPrt dispatch cmd with
+            | E.Error -> exit 1
+            | E.Ok _  -> exit 0
+@                
 
-@ In \ocaml~no [[main]] function like in C exists but simply all
-values in a module are evaluated.  However, we simulate this by
-evaluating [[main ()]]. 
+In \ocaml~no [[main]] function like in C exists but simply all values
+in a module are evaluated.  However, we simulate this by evaluating
+[[main ()]]. 
 
-<<main.ml>>=
+<<>>=
 let _ = Printexc.catch main ()
-
 @
  
 % ------------------------------------------------------------------  
@@ -259,7 +265,6 @@ filters to convert a \textsc{pod} file to \textsc{html} and \LaTeX,
 which makes it a very versatile format.
 
 <<qc--.pod>>=
-
 =head1 NAME
 
 qc-- - the quick c-- compiler
@@ -326,7 +331,29 @@ compiler exits with an exit code different from 0.
 
 =back
 
-=head1 GRAMMAR
+=head1 EXIT CODE
+
+The B<qc--> compiler returns with exit code 1 in case any error was detected
+and with exit code otherwise. 
+
+=head1 SEE ALSO
+
+http://www.cminusminus.org/, 
+http://www.cs.princeton.edu/zephyr/ASDL/
+
+=head1 AUTHOR
+
+Christian Lindig <lindig@eecs.harvard.edu>, 
+Norman Ramsey <nr@eecs.harvard.edu>
+
+@
+
+<<qc--grammar.pod>>=
+=head1 NAME
+
+qc--grammar - the c-- grammar recognized by qc--(1).
+
+=head1 DESCRIPTION
 
 During the development of the compiler it happens easily that the
 documentation of the C-- language and the language recognized by the
@@ -340,24 +367,16 @@ implementation reports an otherwise unexplainable parse error.
 ##grammar##
 
 
-=head1 EXIT CODE
-
-The B<qc--> compiler returns with exit code 1 in case any error was detected
-and with exit code otherwise. 
-
 =head1 SEE ALSO
 
-http://www.cminusminus.org/, L<asdlGen>
+http://www.cminusminus.org/, 
+http://www.cs.princeton.edu/zephyr/ASDL/
 
 =head1 AUTHOR
 
 Christian Lindig <lindig@eecs.harvard.edu>, 
 Norman Ramsey <nr@eecs.harvard.edu>
-
 @
-
-
-          
           
       
 % ------------------------------------------------------------------  
@@ -368,29 +387,41 @@ To include some version information into the main binary we provide
 the [[This]] module.  Its source code [[this.ml]] is created during
 the build process from [[this.in]].  Currently only the version
 information stays here but it is a useful place for other informations
-that change frequently.
+that change frequently.  Note, that this code should \emph{note} be
+used to control the behavior of the program.  We therefore write all
+these informations to a stream to emphasize this.
 
 <<this.in>>=
 (* do not edit - this file is created from this.in through make(1) *)
 
 let system	    = "@this@"
-let architecture    = "@arch@"
 
 @ The functions [[name]] and [[version]] decompose the [[system]]
 string to get the name and version of the system. 
 
 <<this.in>>=
-let name = 
-  try
-    let minus = String.index system '-' in
-      String.sub system 0 minus
-  with Not_found -> "not configured"
+let name channel = 
+    let s = try let minus = String.index system '-' in
+                String.sub system 0 minus
+            with Not_found -> "not configured"
+    in
+         output_string channel s
 
-let version = 
-  try
-    let minus = String.rindex system '-' in
-      String.sub system (minus + 1) (String.length system - minus - 1)
-  with Not_found -> "not configured"
+<<>>=
+let version channel = 
+    let s = try let minus = String.rindex system '-' in
+                String.sub system (minus+1) (String.length system - minus - 1)
+            with Not_found -> "not configured"
+    in
+        output_string channel s
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+<<this.mli>>=
+val name    : out_channel -> unit
+val version : out_channel -> unit 
+@
 
