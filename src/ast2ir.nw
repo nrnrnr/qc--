@@ -35,62 +35,90 @@ This module need a whole bunch of other modules.
 <<ast2ir.ml>>=
 module A  = Ast
 module E  = Error
-module R  = Rtl
 module F  = Fenv
-module G  = Fgraph
+
+(* this doesn't go here *)
+
+module type Option = sig
+  val get   : 'a -> 'a option -> 'a  (* get x (Some y) = y; get x None = x *)
+end
+
+module Option = struct
+  let get x = function Some y -> y | None -> x
+end
+
+module R = struct
+  let truth = Rtl.Const "true" (* bogus *)
+  let width_of r = 77 (* all exprs 77 bits wide - bogus *)
+  let assign l r = Rtl.Rtl [(truth, Rtl.Store(l, r, width_of r))]
+  let skip = Rtl.Rtl []
+  let par l = List.fold_right 
+               (function Rtl.Rtl l1 -> function Rtl.Rtl l2 -> Rtl.Rtl (l1 @ l2)) l skip
+end
+@ 
+[[un_const]] should take a compile-time constant expression and
+produce a small itneger.  [[un_const]] is surely the wrong name.
+<<ast2ir.ml>>=
+let un_const e = 333 (* bogus *)
+@ 
+<<ast2ir.ml>>=
+let standard_convention = "C--"  (* gospel truth *)
+module Make (G : Agraph.S) = struct
+  module GM = G.Make
 @
 
-<<>>=
+<<ast2ir.ml>>=
 let rec ty env ir = function
     | A.TyAt(x,_)       -> ty env ir x
     | A.BitsTy(n)       -> true
     | A.AliasTy(name)   -> true
 
-<<>>=
-let rec lvalue env ir = function
-    | A.LValueAt(x,_)   -> lvalue env ir x
-    | A.Var(None,x)     -> true
-    | A.Var(Some h,x)   -> true
-    | A.Mem(t,e,a)      -> true
+<<ast2ir.ml>>=
+let dummy_lvalue = Rtl.Var("dummy_variable", 32)
+let rec lvalue env = function
+    | A.LValueAt(x,_)   -> lvalue env x
+    | A.Var(None,x)     -> dummy_lvalue
+    | A.Var(Some h,x)   -> dummy_lvalue
+    | A.Mem(t,e,a)      -> dummy_lvalue
      
 
-<<>>=
-and actual env ir = function
-    | (Some hint, e) -> true
-    | (None     , e) -> true
+<<ast2ir.ml>>=
+let actuals env ir xs = true
 
-<<>>=
-and actuals env ir xs = true
+<<ast2ir.ml>>=
+let dummy_expression = Rtl.Const "99"
+let width env expr = 77 (* every expression is 77 bits wide *)
+let const n = A.Int (string_of_int n, None) (* ugly *)
+let rec expr env = function
+    | A.ExprAt(x,_)             -> expr env x
+    | A.Int( i, None)           -> dummy_expression
+    | A.Int( i, Some t)         -> dummy_expression
+    | A.Float( f, None)         -> dummy_expression
+    | A.Float( f, Some t)       -> dummy_expression
+    | A.Char( c, None)          -> dummy_expression
+    | A.Char( c, Some t)        -> dummy_expression
+    | A.Fetch(v)                -> dummy_expression
+    | A.BinOp(l,op,r)           -> dummy_expression
+    | A.UnOp(op,e)              -> dummy_expression
+    | A.PrimOp(n,xs)            -> dummy_expression
 
-<<>>=
-and expr env ir = function
-    | A.ExprAt(x,_)             -> expr env ir x
-    | A.Int( i, None)           -> true
-    | A.Int( i, Some t)         -> true
-    | A.Float( f, None)         -> true
-    | A.Float( f, Some t)       -> true
-    | A.Char( c, None)          -> true
-    | A.Char( c, Some t)        -> true
-    | A.Fetch(v)                -> true
-    | A.BinOp(l,op,r)           -> true
-    | A.UnOp(op,e)              -> true
-    | A.PrimOp(n,xs)            -> true
+<<ast2ir.ml>>=
+let actual env (hint, e) = (expr env e, width env e, hint)
 
-
-<<>>=
+<<ast2ir.ml>>=
 let memsize env ir = function
     | A.NoSize        -> true
     | A.DynSize       -> true
     | A.FixSize(e)    -> true
 
-<<>>=
+<<ast2ir.ml>>=
 let rec init env ir = function
     | A.InitAt(x,_)   -> init env ir x
     | A.InitExprs(es) -> true
     | A.InitStr(s)    -> true
     | A.InitUStr(s)   -> true
 
-<<>>=
+<<ast2ir.ml>>=
 let rec datum env ir = function
     | A.DatumAt(x,_)        -> datum env ir x
     | A.Label(n)            -> true
@@ -98,16 +126,16 @@ let rec datum env ir = function
     | A.MemDecl(t,m,Some i) -> true
     | A.MemDecl(t,m,None)   -> true
 
-<<>>=
+<<ast2ir.ml>>=
 let formal (h, v, t, n) = true
 
-<<>>=
+<<ast2ir.ml>>=
 let formals  env ir xs               = true
 let register env ir (v , t, n, reg)  = true
 let altcont  env ir (e1,e2)          = true   
 let targets env ir                   = true 
     
-<<>>=
+<<ast2ir.ml>>=
 let rec flow env ir = function
     | A.FlowAt(x,_)     -> flow env ir x
     | A.CutsTo(ns)      -> true
@@ -115,44 +143,76 @@ let rec flow env ir = function
     | A.ReturnsTo(ns)   -> true
     | A.Aborts          -> true
 
-<<>>=
+<<ast2ir.ml>>=
 let flows env ir       = true
 let conv env ir        = true
 let export env ir t ns = true
 
-<<>>=
+<<ast2ir.ml>>=
 let range env ir = function
     | A.Point(e)        -> true
     | A.Range(e1,e2)    -> true
 
-<<>>=
-let rec stmt env ir = function
-    | A.StmtAt(x,_)                        -> stmt env ir x
-    | A.IfStmt ( e, ss1, ss2)              -> true
-    | A.LabelStmt(n)                       -> true
-    | A.ContStmt(n,ns)                     -> true
-    | A.SpanStmt(e1,e2,ss)                 -> true
-    | A.AssignStmt(lhs,rhs)                -> true
-    | A.CallStmt(lhs, cc, e, args, ts, fs) -> true
-    | A.PrimStmt(lhs, cc, n, args, fs)     -> true
-    | A.GotoStmt(e,ts)                     -> true
-    | A.CutStmt(e, args, fs)               -> true
-    | A.ReturnStmt(cc, alt, args)          -> true
-    | A.JumpStmt(cc,e,args,ts)             -> true
-    | A.EmptyStmt                          -> true
-    | A.SwitchStmt (r,e,arms)              -> true
+@ 
+[[env]] is the clean environment, which doesn't change.
+[[s]] is the statement being translated.
+We return a new flow-graph node.
+[[after]] is a representation of the entire flow graph, with a pointer
+to the node that follows this statement.  
+<<ast2ir.ml>>=
+let body env props graph =
+  let rec stmt s after = match s with
+    | A.StmtAt(x,_) -> stmt x after
+    <<cases for translating statements>>
+    | _ -> assert false (* remove me in due time *)
+  in fun s -> stmt s (G.bind G.Prop.empty (GM.exit graph))
+@ 
+<<cases for translating statements>>=
+| A.AssignStmt(lhs,rhs) ->
+    let effects = 
+      List.map2 (fun lhs rhs -> R.assign (lvalue env lhs) (expr env rhs)) lhs rhs
+    in props (GM.assign (R.par effects) after)
+
+<<cases for translating statements>>=
+| A.IfStmt ( e, ss1, ss2) ->
+    let n1 = List.fold_right stmt ss1 after in
+    let n2 = List.fold_right stmt ss2 after in
+    props (GM.branch (expr env e) n1 n2)
+@
+[[un_const]] should take a compile-time constant expression and
+produce a small itneger.  [[un_const]] is surely the wrong name.
+
+We have omitted the hints!!!
+
+<<cases for translating statements>>=
+| A.ReturnStmt(cc, alt, args) ->
+    let (cont, count) = Option.get (const 0, const 0) alt in
+    let cc = Option.get standard_convention cc in
+    props (GM.copy_out (List.map (actual env) args) Fgraph.ProcResults cc (
+    props (GM.return graph (un_const cont) (un_const count))))
+<<more cases for translating statements>>=
+| A.LabelStmt(n)                       -> true
+| A.ContStmt(n,ns)                     -> true
+| A.SpanStmt(e1,e2,ss)                 -> true
+| A.CallStmt(lhs, cc, e, args, ts, fs) -> true
+| A.PrimStmt(lhs, cc, n, args, fs)     -> true
+| A.GotoStmt(e,ts)                     -> true
+| A.CutStmt(e, args, fs)               -> true
+| A.JumpStmt(cc,e,args,ts)             -> true
+| A.EmptyStmt                          -> true
+| A.SwitchStmt (r,e,arms)              -> true
         
-<<>>=
-and body env ir = function
+<<ast2ir.ml>>=
+let rec body env ir = function
     | A.BodyAt(x, _)    -> body env ir x
     | A.DeclBody(d)     -> true
     | A.StmtBody(s)     -> true
     | A.DataBody(dd)    -> true
     
-<<>>=
+<<ast2ir.ml>>=
 and proc env ir (cc,n,fs,ss) =  true
 
-<<>>=
+<<ast2ir.ml>>=
 and decl env ir = function
     | A.DeclAt(x,_)    -> decl env ir x
     | A.Import( t, ns) -> true
@@ -163,7 +223,7 @@ and decl env ir = function
     | A.Target (arch)  -> true
     | A.Pragma         -> true
 
-<<>>=
+<<ast2ir.ml>>=
 and section env ir = function
     | A.SectionAt(x,_)     -> section env ir x
     | A.Decl(d)            -> true
@@ -171,22 +231,23 @@ and section env ir = function
     | A.Procedure(p)       -> true
     | A.SSpan( e1, e2, ss) -> true
             
-<<>>=
+<<ast2ir.ml>>=
 and arm env ir = function
     | A.ArmAt(x,_)          -> arm env ir x
     | A.Case(ranges, stmts) -> true
     
-<<>>=
+<<ast2ir.ml>>=
 let rec toplevel env ir = function
     | A.ToplevelAt(x, _)  -> toplevel env ir x
     | A.Section(name, ss) -> true
     | A.TopDecl(d)        -> true
     | A.TopProcedure(p)   -> true
 
-<<>>=
+<<ast2ir.ml>>=
 let program env ir ds = true
+end (* ugh *)
 
-<<>>=
+<<ast2ir.ml>>=
 let check map program =
     let env        = F.Dirty.empty map                      in
     let env        = Elab.Env.global env program            in
