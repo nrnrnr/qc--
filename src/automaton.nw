@@ -222,9 +222,9 @@ val useregs : Register.t list -> stage
 to an earlier request cannot be used to satisfy a later request.
 @
 See the paper for these.
-<<exposed types>>=
+<<abstract types>>=
 type counter = string
-@ 
+type counterenv
 <<exported values>>=
 val bitcounter  : counter -> stage
 val regs_by_bits: counter -> Register.t list -> stage
@@ -252,14 +252,19 @@ for {\PAL} conventions.
 The idea is that for an allocation, we use the first stage for which
 the predicate is satisfied.
 It is a checked run-time error if no predicate is satisfied.
+<<abstract types>>=
+type choice_predicate = counterenv -> string -> int -> bool
 <<exported values>>=
-val choice : ((string -> int -> bool) * stage) list -> stage
+val choice : (choice_predicate * stage) list -> stage
 @ To help create predicates we provide the [[is_hint]] and
 [[is_width]] functions.
 <<exported values>>=
-val is_hint  : string -> (string -> int -> bool)
-val is_width : int    -> (string -> int -> bool)
-val is_any   :           (string -> int -> bool)
+val empty_counterenv : counterenv
+
+val is_counter : counter -> (int -> bool) -> choice_predicate
+val is_hint    : hint    -> choice_predicate
+val is_width   : int     -> choice_predicate
+val is_any     : choice_predicate
 @ 
 \paragraph{Using an automaton as a stage}
 
@@ -297,7 +302,7 @@ If no choice is ever made, the automaton freezes as the first
 alternative.
 It is a checked run-time error if no predicate is satisfied.
 <<exported values>>=
-val first_choice : ((hint -> width -> bool) * stage) list -> stage
+val first_choice : (choice_predicate * stage) list -> stage
 @ 
 
 QUESTION FOR MARK BAILEY: HAS HE CAREFULLY ANALYZED WHAT CLASS OF
@@ -328,11 +333,13 @@ val init_cc : cc_specs
 @ 
 \section{Implementation}
 
-Those internal types kept opaque in the interface:
+Those internal types not fully defined in the interface:
 <<hidden types>>=
-type counters = string -> int ref option
-type implementation = I of (start:Rtl.exp -> ctrs:counters -> methods)
+type counter    = string
+type counterenv = string -> int ref option
+type choice_predicate = counterenv -> string -> int -> bool
 
+type implementation = I of (start:Rtl.exp -> ctrs:counterenv -> methods)
 type stage = S of (implementation -> implementation)
 @ 
 
@@ -369,9 +376,11 @@ let pipeline_end = I (
 @
 All the work of the implementation is in the closures.
 <<automaton.ml>>=
+let empty_counterenv = (fun _ -> None)
+
 let at ~start (S s) =
   let I f = s pipeline_end in
-    f ~start ~ctrs:(fun _ -> None)
+    f ~start ~ctrs:empty_counterenv
 
 let of_methods t              = t
 let allocate   t ~width ~hint = t.allocate width 1 hint
@@ -386,9 +395,12 @@ let of_loc     loc            = { fetch = R.fetch loc; store = R.store loc }
 There's substantial bookkeeping in passing the start address around.
 We prefer to program in terms of [[methods]] rather than
 implementation.
-\nwaddbox{wrap        : (methods                   -> methods) -> stage}
-\nwaddbox{swrap       : (methods -> ~start:Rtl.exp -> ~ctrs:counters -> methods) -> stage}
-\nwaddbox{wrap_choice : (('a*(methods->methods)) list -> methods -> methods) -> ('a * stage) list -> stage}
+
+FIX: THESE TYPES BELOW ARE NOT CORRECT ANYMORE!!!
+\nwaddbox{wrap         : (methods                   -> methods) -> stage}
+\nwaddbox{swrap        : (methods -> ~start:Rtl.exp -> ~ctrs:counterenv -> methods) -> stage}
+\nwaddbox{wrap_choice  : (('a*(methods->methods)) list -> methods -> methods) -> ('a * stage) list -> stage}
+\nwaddbox{wrap_counter : ((methods -> methods) -> counter -> stage}
 \deeperbox{40pt}
 <<automaton.ml>>=
 let wrap  f = S (fun (I next) -> 
@@ -402,7 +414,7 @@ let wrap_choice f choices = S (fun (I next) ->
   I (fun ~start ~ctrs ->
       let choices = List.map (fun (p,(S c)) -> (p, downchoice c ~start ~ctrs))
                              choices in
-      f choices (next ~start ~ctrs)))
+      f choices (next ~start ~ctrs) ~ctrs))
 @
 The overflow block is slightly interesting.
 <<automaton.ml>>=
@@ -447,7 +459,7 @@ let freeze regs mems =
   let astate = M.num_allocated mem mod max_alignment in
   let mem    = match growth with 
                M.Up -> mem | M.Down -> M.align mem (M.alignment mem) in
-  let block = M.freeze mem in
+  let block  = M.freeze mem in
   { overflow = block; regs_used = regs; mems_used = state.mems_list @ mems
   ; align_state = astate } in
 @ 
@@ -462,9 +474,8 @@ let _ = (txstage : (allocator -> allocator) -> stage)
 <<automaton.ml>>=
 let widths ws = txstage
   (fun nalloc ~width ~alignment ~hint ->
-    if   List.exists ((=) width) ws
-    then nalloc width alignment hint
-    else Unsupported.automaton_widths width)
+    if   List.exists ((=) width) ws then nalloc width alignment hint
+                                    else Unsupported.automaton_widths width)
 @   
 Narrowing and widening.
 <<automaton.ml>>=
@@ -474,8 +485,7 @@ let narrower =
      let narrow = R.opr nopname [w; n] in 
        { fetch = (fun n   -> R.app narrow [loc.fetch w])
        ; store = (fun e n -> loc.store (R.app widen [e]) w)
-       }
-  in
+       } in
   function
   | "signed" -> narrow "lobits" "sx"
   | "float"  -> narrow "f2f_implicit_round" "f2f_implicit_round"
@@ -486,7 +496,7 @@ let widen f = txstage
   (fun nalloc ~width:n ~alignment ~hint ->
     let w   = f n in
     let loc = nalloc w alignment hint in
-    if w = n then loc else narrower hint ~n:n ~w loc)
+    if w = n then loc else narrower hint ~n ~w loc)
 
 let align_to f =
   txstage (fun nalloc ~width:w ~alignment ~hint -> nalloc w (f w) hint)
@@ -500,14 +510,14 @@ and join point, so it passes through exactly \emph{one} choice.
 But for the [[freeze]] method, we thread the call straight through the
 whole list, so it passes through \emph{all} choices.
 <<automaton.ml>>=
-let choice choices next =
+let choice choices next ~ctrs =
     let add (p, stage) alternative =
       let follows_choice = { allocate = next.allocate
                            ; freeze   = alternative.freeze } in
       let choice = stage follows_choice in
       let alloc ~width ~alignment ~hint =
-        let alloc = if p hint width then choice.allocate 
-                                    else alternative.allocate in
+        let alloc = if p ctrs hint width then choice.allocate 
+                                         else alternative.allocate in
         alloc width alignment hint in
       { allocate = alloc; freeze = choice.freeze } in
     List.fold_right add choices
@@ -515,7 +525,7 @@ let choice choices next =
       ; freeze = next.freeze }
 let choice = wrap_choice choice
 
-let first_choice choices next =
+let first_choice choices next ~ctrs =
   let choices = List.map (fun (p, c) -> (p, c next)) choices in
   let myself = ref next in (* temporary *)
   let allocate ~width ~alignment ~hint = 
@@ -523,7 +533,7 @@ let first_choice choices next =
   let freeze regs mems = (!myself).freeze regs mems in
   let first_allocate ~width ~alignment ~hint =
     let choice =
-      try snd (List.find (fun (p, _) -> p hint width) choices)
+      try snd (List.find (fun (p, _) -> p ctrs hint width) choices)
       with Not_found -> imposs "missing choice" in
     myself := choice;
     allocate width alignment hint in
@@ -534,15 +544,14 @@ let first_choice choices next =
   { allocate = allocate; freeze = freeze }
 let first_choice = wrap_choice first_choice
 
-let is_hint  h' h w = h = h'
-let is_width w' h w = w = w'
-let is_any      h w = true
-
-let new_counter i = ref i
+let is_counter c f env _ _ = match env c with Some i -> f (!i) | None -> false
+let is_hint    h'  _   h w = h = h'
+let is_width   w'  _   h w = w = w'
+let is_any         _   h w = true
 @ 
 \paragraph{Register assignment}
 <<automaton.ml>>=
-let counterwrap f label =
+let wrap_counter f label =
   S (fun (I next) ->
        I (fun ~start ~ctrs ->
            let (ctr, ctrs) = (match ctrs label with
@@ -552,39 +561,32 @@ let counterwrap f label =
               (n, fun s -> if s = label then Some n else ctrs s)) in
            f ctr (next ~start ~ctrs)))
 
-let counterstage f = counterwrap
-    (fun ctr next -> { allocate = f ctr next.allocate; freeze = next.freeze })
-
-let counter of_width ctr nalloc ~width ~alignment ~hint =
-  let loc = nalloc ~width ~alignment ~hint in
-  (ctr := !ctr + of_width width ; loc)
-
-let bitcounter = counterstage (counter (fun w -> w))
-let argcounter = counterstage (counter (fun w -> 1))
+let counter of_width =
+  let f ctr nalloc ~width ~alignment ~hint =
+    let loc = nalloc ~width ~alignment ~hint in
+    (ctr := !ctr + of_width width ; loc)
+  in (fun ctr next -> { allocate = f ctr next.allocate; freeze = next.freeze })
 @ 
 
 We'll probably need to add an argument to [[reg_placer]] when we implement
 register aggregation because [[regs_by_bits]] and [[regs_by_args]] should
 handle it differently (see document with formal semantics of these functions).
 <<automaton.ml>>=
-type regstate = { mutable avail : Register.t list
-                ; mutable used  : Register.Set.t
-                }
+type regstate = { mutable used  : Register.Set.t }
 
-let reg_placer of_width dropflag n regs next =
-  let getreg state = match state.avail with
+let reg_placer of_width n regs next =
+  let state = { used = RS.empty } in
+  let getreg = function
   |	[]      -> raise (Failure "get register")
-  |	r :: rs -> (state.avail <- rs; state.used <- RS.add r state.used; r) in
+  |	r :: rs -> (state.used <- RS.add r state.used; r) in
 
   let rec drop i regs = if i <= 0 then regs else match regs with
-  |	(s, n, w) :: rest -> drop (i - of_width w) rest
-  |	[]                 -> [] in
+  |	(_, _, w) :: rest -> drop (i - of_width w) rest
+  |	[]                -> [] in
 
-  let state = { avail = regs; used = RS.empty } in
   let alloc ~width ~alignment ~hint =
-    if dropflag then state.avail <- drop !n regs;
     try
-      let (_, _, w) as r = getreg state in
+      let (_, _, w) as r = getreg (drop !n regs) in
       if      w = width then of_loc (R.reg r)
       else if w < width then unimp "register aggregation"
       else    unimp "auto-widening for register requests"
@@ -592,14 +594,18 @@ let reg_placer of_width dropflag n regs next =
   let freeze regs mems = next.freeze (RS.union state.used regs) mems in
   { freeze = freeze; allocate = alloc }
 
-let regs_by_bits          = reg_placer (fun w -> w) true
-let regs_by_bits label rs = counterwrap (fun ctr -> regs_by_bits ctr rs) label
+let bitcounter            = counter    (fun w -> w)
+let regs_by_bits          = reg_placer (fun w -> w)
 
-let useregs               = reg_placer (fun _ -> 0) false
-let useregs regs          = wrap (useregs (ref 0) regs)
+let useregs regs          = wrap (fun next -> let c = ref 0 in
+                                   (bitcounter c) ((regs_by_bits c regs) next))
 
-let regs_by_args          = reg_placer (fun w -> 1) true
-let regs_by_args label rs = counterwrap (fun ctr -> regs_by_args ctr rs) label
+let bitcounter            = wrap_counter bitcounter
+let regs_by_bits label rs = wrap_counter (fun ctr -> regs_by_bits ctr rs) label
+
+let argcounter            = wrap_counter (counter (fun w -> 1))
+let regs_by_args          = reg_placer (fun w -> 1)
+let regs_by_args label rs = wrap_counter (fun ctr -> regs_by_args ctr rs) label
 @ 
 
 The code below seems like a promising start to implementing split

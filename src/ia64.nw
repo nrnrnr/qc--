@@ -377,9 +377,9 @@ let placevars =
           (Printf.sprintf "%d-bit variable hinted float but will go as integer" w) in
   let mk_stage ~temps =
     A.choice
-      [ is_float,               A.widen (Aux.round_up_to ~multiple_of: 82) *>
+      [ (fun _ -> is_float),    A.widen (Aux.round_up_to ~multiple_of: 82) *>
                                   temps 'u'; 
-        (fun h w -> w <= 64),   A.widen (fun _ -> 64) *> temps 't';
+        (fun _ h w -> w <= 64), A.widen (fun _ -> 64) *> temps 't';
         A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
       ] in
   Placevar.mk_automaton ~warn ~vfp:target.T.vfp mk_stage

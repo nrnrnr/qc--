@@ -313,10 +313,13 @@ let growth    = stringtab "memory growth"
 
 <<embedding/projection pairs for calling conventions>>=
 let choice_pred =
-  (V.string <@ A.is_hint)  <|>
+  (V.string <@ A.is_hint ) <|>
   (V.int    <@ A.is_width) <|>
   (V.unit   <@ (fun () -> A.is_any)) <|>
-  V.func (V.string **-> V.int **->> V.bool) in
+  (listpair (V.string) (V.func (V.int **->> V.bool)) <@ 
+      (function ((ctr,f)::_) -> A.is_counter ctr f
+              | [] -> (fun _ _ _ -> false))) <|>
+  (V.func (V.string **-> V.int **->> V.bool) <@ (fun f ctrs -> f)) in
 
 let stage stages =
   (V.list stages <@ (fun l -> List.fold_right A.( *> ) l A.unit)) <|>
@@ -369,7 +372,8 @@ C.register_module "Automaton"
   ; "widths"      , V.efunc (V.list V.int **->> stage) A.widths
 
     (* the prewritten utils ... *)
-  ; "is_any"      , V.efunc (V.string **-> V.int **->> V.bool) A.is_any
+  ; "is_any"      , V.efunc (V.string **-> V.int **->> V.bool)
+                            (A.is_any A.empty_counterenv)
 
     (* registration, although it shouldn't necessarily be in here *)
   ; "register_cc" , V.efunc (Map.new_target **-> V.string **-> V.table **->> V.unit)
