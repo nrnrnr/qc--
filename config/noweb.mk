@@ -24,19 +24,19 @@ OCAMLDEFS =     $TOP/config/autodefs.ocaml
 #
 
 
-'(([^/]*/)*)(.*)\.ml$':R:        '\1\3'.nw
+'(([^/]*/)*)(.*)\.ml$':RD:        '\1\3'.nw
 	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R$stem3.ml $prereq > $target
 
-'(([^/]*/)*)(.*)\.mli$':R:        '\1\3'.nw
+'(([^/]*/)*)(.*)\.mli$':RD:        '\1\3'.nw
 	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R$stem3.mli $prereq | cpif $target
 
-'(([^/]*/)*)(.*)\.c$':R:       '\1\3.nw'
+'(([^/]*/)*)(.*)\.c$':RD:       '\1\3.nw'
 	$NOTANGLE -L"$LINE" -R$stem3.c $prereq > $target
 
-%.view: %.nw
+%.view:D: %.nw
 	$NOTANGLE -R$target $prereq > $target
 
-%.asdl: %.nw
+%.asdl:D: %.nw
 	$NOTANGLE -R$target $prereq | $CPIF $target
 
 
