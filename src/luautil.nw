@@ -196,24 +196,29 @@ let redir fh =
 let redirect_stdout = redir U.stdout
 let redirect_stderr = redir U.stderr
 @
-Compare files ignoring whitespace.
-It would probably be better not to ignore whitespace completely but to
-treat only nonempty sequences of whitespace characters as equivalent.
+Compare files ignoring whitespace. All whitespace characters are
+converted into single space character using a simple one character
+buffer.
 <<utility functions>>=
 let files_nonwhite_equivalent f1 f2 =
-  let ch1 = open_in f1
-  and ch2 = open_in f2 in
-  let ws = function
-    | ' ' | '\t' | '\n' | '\r' -> true
-    | _ -> false
+  let sp i = i == int_of_char ' '
+  and input_chr ch = int_of_char (
+    match input_char ch with
+    | ' ' | '\t' | '\n' | '\r' -> ' '
+    | c -> c)
   in
-  let rec get_char ch =
-    try
-      let c = input_char ch in
-      if ws c then get_char ch
-      else int_of_char c
-    with
-      End_of_file -> -1
+  let ch1 = (open_in f1, ref 0)
+  and ch2 = (open_in f2, ref 0) in
+  let rec get_char (ch,buf) =
+    let last = !buf in
+    let rec scan_forward () =
+      try let chr = input_chr ch in
+          if sp last && sp chr
+          then scan_forward ()
+          else buf := chr
+      with End_of_file -> buf := -1
+    in
+    scan_forward (); last
   in
   let rec cmp_char() =
     let c1 = get_char ch1
