@@ -66,8 +66,12 @@ module G = Cfgx.M
 module IntMod = struct type t = int let compare = compare end
 module IS = Set.Make (IntMod)
 module IM = Map.Make (IntMod)
-module NodeMod = struct type t = Rtl.rtl G.node let compare = Pervasives.compare end
+module NodeMod = struct
+  type t = Rtl.rtl G.node
+  let compare n1 n2 = Pervasives.compare (G.num n1) (G.num n2)
+end
 module NM = Map.Make (NodeMod)
+module NS = Set.Make (NodeMod)
 module RM = R.Map
 module RS = R.Set
 module SM = Map.Make (struct type t = Rtl.space let compare = RU.Compare.space end)
@@ -367,15 +371,22 @@ let print_prefs msg prefs =
 The preferences come in two forms: the register order and the variable map.
 The register order indicates the order in which we assign registers.
 The variable map suggests where a variable should be placed (if there is a choice).
-We expect that the [[alloced_preds]] argument to [[update_pref_varmap]] holds all the
-predecessors of the current node that have already been handled by the register
-allocator (and therefore have useful outmaps).
+We make no assumptions that the input [[alloced_preds]] have already been allocated
+(and therefore have useful outmaps) -- this way, the callee doesn't have to allocate
+a new list with only the allocated predecessors.
+
 Currently, the choice of predecessor is arbitrary.
+
+THIS IS REALLY BAD: I'M DROPPING THE (USEFUL) PREFERENCE HINTS FROM THE SUCCESSOR
+
 <<updating preferences>>=
-let update_pref_varmap state prefs alloced_preds =
-  match alloced_preds with
-  | []   -> prefs
-  | p::_ -> { prefs with varMap = IM.find (G.num p) state.varOutMaps } in
+let update_pref_varmap state prefs preds =
+  let rec use_alloced_pred preds = match preds with
+    | [] -> prefs
+    | p::_ when is_allocated state p ->
+        { prefs with varMap = IM.find (G.num p) state.varOutMaps }
+    | p::rst -> use_alloced_pred rst in
+  use_alloced_pred preds in
 
 <<define [[avoid]] and [[aim_for]] to decrease or increase the likelihood of choosing a register>>
 let update_prefs_at_node prefs node =
@@ -502,74 +513,88 @@ let get_regs_for_space tgt regmap s =
 let flatten_regmap regmap =
   List.concat (SM.fold (fun _ regs rst -> regs::rst) regmap [])
 
-let empty_state regs =
-  ( { allocated  = IS.empty
-    ; visited    = IS.empty
-    ; spillMap   = RM.empty
-    ; varInMaps  = IM.empty
-    ; varOutMaps = IM.empty
-    }
-  , { varMap = VM.empty; regs = separate regs }
-  )
+let init_prefs regs = { varMap = VM.empty; regs = separate regs }
+let empty_state =
+  { allocated  = IS.empty
+  ; visited    = IS.empty
+  ; spillMap   = RM.empty
+  ; varInMaps  = IM.empty
+  ; varOutMaps = IM.empty
+  }
 @
-[[rpo_dfs]] traverses the cfg by a DFS, calling [[alloc_node]] in a reverse post-order.
-This order ensures that [[alloc_node]] is called on each predecessor of a node $n$
-before [[alloc_node]] is applied to $n$.
+We need to visit every node in the [[cfg]], which is trickier than one might think:
+some nodes are only reachable from the entry node or by reverse pointers from
+the exit node.
+Since nodes that are reachable only by reverse pointers from the exit node are
+unreachable, I first trim the unreachable code.
+We still need to deal with nodes that are reachable from the entry node but not from
+the exit node.
+Furthermore, we need to make sure we always allocate a node's predecessors
+before allocating the node.
 
-[[dls]] puts the allocator together: [[rpo_dfs]] is called with [[alloc_node]] to
-place each temp at a node.
-[[alloc_node]] calls [[choose_varMaps]] to decide where each temp belongs.
+First, I establish a post-order on the nodes of the graph;
+this order includes all nodes, since they are now all reachable from the entry node.
+This order is maintained in both a map and a list.
+We establish the reverse post-order by reversing the list.
 
-Note the aggressive use of continuations [[k]] to maintain tail recursion; tread
-lightly.
-<<rpo\_dfs determines the order for visiting nodes>>=
+From here on out, we can start the actual graph traversal, following predecessor edges
+from the exit node.
+Of course, some nodes can not be reached from the exit node, so we have to start
+over with them.
+We do this easily by taking the reverse post-order list and restarting our graph
+traversal from the first node on the list that has not yet been allocated.
+Note: we could start with this policy from the very beginning, instead of starting with
+the exit node.
+<<[[rpo_dfs]] determines the order for visiting nodes>>=
 <<define [[print_prefs]] to print preferences>>
 <<updating preferences>>
-let rpo_dfs (state, prefs) =
-  let (_, postorder) = G.postorder_dfs (fun n (i, map) -> (i+1, NM.add n i map))
-                                       (0, NM.empty) cfg                              in
-  let rec visit (state, prefs) node prev_delays k =
+let rpo_dfs state =
+  let _ = Optimize.trim_unreachable_code () proc in
+  let (_, po_map, po_lst) =
+    G.postorder_dfs (fun n (i, map, lst) -> (i+1, NM.add n i map, n::lst))
+                    (0, NM.empty, []) cfg                              in
+
+  let rpo_lst = List.rev po_lst in
+
+  let rec visit node k (state, prefs) =
     if is_visited state node then
-      k (state, prefs, prev_delays)
+      k state
     else
       let state = mark_visited state node                                             in
       let prefs = update_prefs_at_node prefs node                                     in
       let preds = G.preds node                                                        in
-      let unvis_preds = List.filter (fun p -> not (is_visited state p)) preds         in
-      (* Not_found case only for nodes unreachable from entry node... *)
-      let node_num = try NM.find node postorder with Not_found -> 0                   in
-      let (to_vis, to_delay) =
-        (* Not_found case only for nodes unreachable from entry node... *)
-        let comparep p = try NM.find p postorder > node_num with Not_found -> false   in
-        List.partition comparep unvis_preds                                           in
+      let node_num = try NM.find node po_map with Not_found -> 0                   in
 
-      let visit_pred node (state, prefs, delays) k =
-        let prefs = update_pref_varmap state prefs
-                                       (List.filter (is_allocated state) preds)       in
-        visit (state, prefs) node delays k                                            in
-      let alloc_curr_node (state, prefs, delays) =
-        let state, prefs =
-          if G.kind node =*= G.Illegal then state, prefs
+      let visit_pred node (state, prefs) k =
+        (* THIS DOES SOMETHING SOMEWHAT DUMB AND NOT QUITE WHAT WE WANT *)
+        let prefs = update_pref_varmap state prefs preds in
+        visit node k (state, prefs) in
+      let alloc_curr_node state =
+        let state =
+          if G.kind node =*= G.Illegal then state
           else
             let state = alloc_node state prefs node in
-            let prefs =
+            (* MAYBE SOME PREFERENCING SHOULD HAPPEN HERE, BUT IT'S NOT THIS: *)
+            (*let prefs =
               post_update_prefs node prefs (IM.find (G.num node) state.varOutMaps) in
-            state, prefs in
-        k ( state
-          , prefs
-          , (List.map (fun d -> (prefs,d)) to_delay) :: delays
-          ) in
-      let rec iter_preds preds spd =
-        match preds with
-        | []     -> alloc_curr_node spd
-        | p::rst -> visit_pred p spd (iter_preds rst) in
-      iter_preds to_vis (state, prefs, prev_delays) in
-  let id x = x in
-  let rec handle_delays (state, _, ds) = match List.concat ds with
-    | []  -> state
-    | ds  -> List.fold_left (fun s (p, n) -> handle_delays (visit (s, p) n [] id))
-                            state ds in
-  handle_delays (state, prefs, [[(prefs, G.exit cfg)]]) in
+            state, prefs in*)
+            state in
+        k state in
+
+      let visit_preds preds (s, prefs) = (* we pass the same prefs to all preds *)
+        let rec loop preds s = match preds with
+          | [] -> alloc_curr_node s
+          | p::rst when NM.find p po_map > node_num -> (* visit p first *)
+              visit_pred p (s, prefs) (loop rst)
+          | _::rst -> loop rst s in
+        loop preds s in
+      visit_preds preds (state, prefs) in
+
+  let rec finish rpo_lst state =
+    match List.filter (fun n -> not (is_visited state n)) rpo_lst with
+    | []          -> state
+    | n::_ as rst -> visit n (finish rst) (state, empty_prefs) in
+  visit (G.exit cfg) (finish rpo_lst) (state, empty_prefs) in
 @
 <<dls algorithm>>=
 let dls () ({Proc.cfg = cfg; Proc.cc = cc; Proc.target = tgt} as proc) =
@@ -583,8 +608,9 @@ let dls () ({Proc.cfg = cfg; Proc.cc = cc; Proc.target = tgt} as proc) =
   <<definition of shuffle>>
   <<choose\_varMaps finds varIn and varOut maps for a node>>
   <<alloc\_node allocates registers at a single node>>
-  <<rpo\_dfs determines the order for visiting nodes>>
-  let state = rpo_dfs (empty_state (RS.elements alloc_regset)) in
+  let empty_prefs = init_prefs (RS.elements alloc_regset) in
+  <<[[rpo_dfs]] determines the order for visiting nodes>>
+  let state = rpo_dfs empty_state in
   cleanup   cfg;
   (*Cfgutil.print_cfg cfg;*)
   (*G.iter_nodes (fun n ->
@@ -1366,12 +1392,13 @@ let rewrite_uses tgt node varOut =
   G.update_instr (Rtlutil.Subst.reg_use ~map:(make_map tgt varOut)) node
 
 (*(time fn written by John Harrison)*)
-let time f x =
+let time str f x =
   let start_time = Sys.time()  in
   let result = f x             in
   let finish_time = Sys.time() in
   print_string
-    ("CPU time (user) used by dls():"^(string_of_float(finish_time -. start_time)));
+    ("CPU time (user) used by dls(" ^ str ^ "):" ^
+     (string_of_float(finish_time -. start_time)));
   print_newline();
   result
 @
