@@ -1030,14 +1030,17 @@ procedure) are bound labels are bound a second time with a local scope
 in the environment. This helps to decide whether a symbol is local or
 global when it is accessed from inside a procedure.
 
+An imported symbol always has global scope. This was changed during
+the development of the compiler to make the mapping between {\PAL}
+names and assembly level names easier.
+
 <<>>=
-let import r scope t env (foreign,name) = 
-    bindv name (r,scope) 
+let import r t env (foreign,name) = 
+    bindv name (r,F.Global) 
         (E.ematch (ty r env t) (fun t -> F.Import foreign,t)) env
          
-    
 <<>>=
-let imports r scope env t ii          = foldl (import r scope t) env ii
+let imports r env t ii          = foldl (import r t) env ii
 let register r scope env = function
     | (_,t,name,Some x) when scope = F.Local ->
                         E.error "local registers can't be maped to hardware"
@@ -1093,7 +1096,7 @@ and arm r range scope env = function
 <<>>=
 and decl r scope env = function
     | A.DeclAt(x,r)    -> E.catch' env (error r env) (decl r scope env) x
-    | A.Import(ty,ii)  -> imports r scope env ty ii
+    | A.Import(ty,ii)  -> imports r env ty ii
     | A.Registers(rr)  -> foldl (register r scope) env rr 
     | _                -> env
 @
