@@ -636,7 +636,14 @@ let width_cost _ proc =
   1
 in
 let dpwiden _ proc =
-  G.iter_nodes (G.update_instr Widen.dpwiden) proc.Proc.cfg;
+  let upd g r = if Widen.needs_widening r then g r
+              else raise Widen.Doesn't_need_widening in
+  let f g x =
+    try 
+      G.update_instr (upd g) x
+    with Widen.Doesn't_need_widening -> ()
+  in
+  G.iter_nodes (f Widen.dpwiden) proc.Proc.cfg;
   1
 in
 let badwiden _ proc =
@@ -644,7 +651,14 @@ let badwiden _ proc =
   1
 in
 let widenlocs _ proc =
-  G.iter_nodes (G.update_instr Widen.widenlocs) proc.Proc.cfg;
+  let upd g r = if Widen.needs_widening r then g r
+              else raise Widen.Doesn't_need_widening in
+  let f g x =
+    try
+      G.update_instr (upd g) x
+    with Widen.Doesn't_need_widening -> ()
+  in
+  G.iter_nodes (f Widen.widenlocs) proc.Proc.cfg;
   1
 in
 C.register_module "Widen" 

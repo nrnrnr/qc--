@@ -19,6 +19,10 @@ val dpwiden : Rtl.rtl -> Rtl.rtl
 val widenlocs : Rtl.rtl -> Rtl.rtl
   (* This is supposed to widen locations *)
 
+exception Doesn't_need_widening
+
+val needs_widening : Rtl.rtl -> bool
+  (* Check if widths are less than the target width *)
 @ 
 
 <<widen.mli>>=
@@ -46,6 +50,7 @@ module Up   = Rtl.Up
 let print_debug = false
 
 exception Abort_unknown
+exception Doesn't_need_widening
 @ 
 We're given [[goodwidths]], and our goal is to change all
 floating-point operations in an RTL to be using one of the widths in
@@ -756,6 +761,39 @@ let find_exts_to w extname =
                         | _ -> failwith "ill formed machine env") ext_widths
 @ 
 
+<<widen.ml>>=
+let needs_widening r =
+  let targetwidth = 32 in
+  let rec loc = function
+    | RP.Mem(_,_,w,e,_) -> w < targetwidth || exp e
+    | RP.Reg(_,_,w)     -> w < targetwidth
+    | RP.Var(_,_,w)     -> w < targetwidth
+    | RP.Global(_,_,w)  -> w < targetwidth
+    | RP.Slice(w,_,l)   -> w < targetwidth || loc l
+  and exp = function
+    | RP.Fetch(l, w) -> w < targetwidth || loc l
+    | RP.App((_, ws), es) ->
+        List.exists (fun w -> w < targetwidth) ws || List.exists exp es
+    | RP.Const c -> const c
+  and const = function
+    | RP.Link(_,_,w) -> w < targetwidth
+    | RP.Diff(x,y)   -> const x || const y
+    | RP.Late(_,w)   -> w < targetwidth
+    | RP.Bits b      -> Bits.width b < targetwidth
+    | RP.Bool _      -> false
+  in
+  let guard (g, eff) =
+    let eff' =
+      match eff with
+      | RP.Store(l, r, w) -> w < targetwidth || loc l || exp r
+      | RP.Kill l -> loc l
+    in
+    eff' || exp g
+  in
+  let RP.Rtl es = Down.rtl r in
+  List.fold_left (fun b e -> b || guard e) false es
+@ 
+
 I'll choose in the [[widen_guard]] code to find a solution of type Z,
 just to match what some C-- frontends seem to want to do...not that it matters.
 <<widen.ml>>=
@@ -768,6 +806,7 @@ let dpwiden r =
   in
   let rec widen_loc = function
     | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,w,find_best_soln e Z targetwidth, a)
+(* the following might be wrong...shouldn't we update w? *)
     | RP.Slice(w,i,l)      -> RP.Slice(w,i, widen_loc l)
     | l                    -> l
   in
