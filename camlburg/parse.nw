@@ -26,7 +26,8 @@ let xxx = Some "gi"
 
 let exp_of_code c = Code.Raw [Code.Line c]
 let some_code = function T.Code c -> Some c | _ -> None
-let code = (some "{: ... :}" some_code : string producer) >> exp_of_code
+let raw_code = (some "{: ... :}" some_code : string producer)
+let code = raw_code >> exp_of_code
 
 
 let ( *$-- ) a p = !* a -- !!p >> snd
@@ -80,21 +81,26 @@ let ty = name
 type decls = { start : S.nonterm list
              ; types : (S.ty * S.nonterm list) list
              ; terms : string list
+             ; head  : string list
              }
 let decl =
-  let start nt ({ start=s; types=tys; terms=ts } as state) =
-    if List.exists ((=) nt) s then state else {start=nt::s; types=tys; terms=ts}  in
-  let addty (t, nts) { start=s; types=tys; terms=ts } =
-    { start=s; types=(t, nts)::tys; terms=ts }  in
-  let addterms terms { start=s; types=tys; terms=ts } =
-    { start=s; types=tys; terms=terms@ts }  in
+  let start nt ({ start=s; types=tys; terms=ts; head=h } as state) =
+    if List.exists ((=) nt) s then state
+    else {start=nt::s; types=tys; terms=ts; head=h}  in
+  let addty (t, nts) { start=s; types=tys; terms=ts; head=h } =
+    { start=s; types=(t, nts)::tys; terms=ts; head=h }  in
+  let addterms terms { start=s; types=tys; terms=ts; head=h } =
+    { start=s; types=tys; terms=terms@ts; head=h }  in
+  let addheader code { start=s; types=tys; terms=ts; head=h } =
+    { start=s; types=tys; terms=ts; head=h@[code] }  in
   
      key "start" nonterm                                  >> start
   || key "type"  ("<" *$-- ty *--$ ">" -- repeat nonterm) >> addty
   || key "term"  (repeat name)                            >> addterms
+  || key "head"  raw_code                                 >> addheader
   || newline                                              >> (fun _ s -> s)
 
-let decls = fold decl {start=[]; types=[]; terms=[]}
+let decls = fold decl {start=[]; types=[]; terms=[]; head=[]}
 
 let spec = !! (decls *--$ "%%" -<- repeat newline -- repeat rule -<- eof T.to_string)
 
