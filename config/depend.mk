@@ -8,14 +8,14 @@
 consistency-check:VQ:
 	[ -z "$B" ] || [ -d $B ] || mkdir -p $B
 	DOTS=`echo $B | sed "s/[^.]//g"`
-	if [ ! -z "$DOTS" ]; then
+	if [ -n "$DOTS" ]; then
 	  echo
 	  echo "Your B variable (B=$B) looks strange to me. I am quiting."
 	  echo "Maybe you set B when you wanted to set BT?"
 	  echo
 	  exit 1
 	fi
-	if [ ! -z "$PCHECK" ]; then
+	if [ -n "$PCHECK" ]; then
 	  echo
 	  echo "Your P variable looks strange to me. I am quiting."
 	  echo "P should be gprof, count, or nothing."
