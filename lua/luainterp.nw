@@ -64,6 +64,12 @@ We won't see it.
 <<signatures>>=
   val option : 'a map -> 'a option map
 @ 
+To convert a list of values, we produce a table with a binding of the
+length to the name [[n]] and bindings of the values to the numbers $1..n$.
+We won't see it.
+<<signatures>>=
+  val list : 'a map -> 'a list map
+@ 
 If for some reason a Caml function operates on Lua values, we need an
 identity pair.
 <<signatures>>=
@@ -137,6 +143,7 @@ type value
   | Table    of table
   and table = (value, value) Hashtbl.t
   and state = { globals : table; fallbacks : (string, value) Hashtbl.t }
+<<table definition>>
 @ 
 Now, for embedding and projection.  More repeats.
 <<value toplevel>>=
@@ -185,6 +192,28 @@ let unit =  { embed = (fun () -> Nil)
 let option t = { embed = (function None -> Nil | Some x -> t.embed x)
                ; project = (function Nil -> None | v -> Some (t.project v))
                }
+@ 
+<<value toplevel>>=
+let list (ty : 'a map) = 
+  let table l =
+    let n = List.length l in
+    let t = Table.create n in
+    let rec set_elems next = function
+      | [] -> Table.bind t (String "n") (Number (pervasive_float n))
+      | e :: es -> ( Table.bind t (Number next) (ty.embed e)
+                   ; set_elems (next +. 1.0) es)
+    in  (set_elems 1.0 l; Table t)
+  in
+  let untable (t:table) =
+    let n = match Table.find t (String "n") with
+    | Number x -> to_int x
+    | v -> raise (Projection (v, "length of list")) in
+    let rec elems i =
+      if i > n then []
+      else ty.project (Table.find t (Number (pervasive_float i))) :: elems (i + 1) in
+    elems 1
+  in { embed = table; project = (function Table t -> untable t
+                                        | v -> raise (Projection (v, "list"))) }
 @
 <<value toplevel>>=
 let value = { embed = (fun x -> x); project = (fun x -> x) }
@@ -248,7 +277,7 @@ let func (arrow : 'a mapf) : ((state -> 'a) map) =
 @ 
 Lua tables are very nearly Caml hash tables, except they never have
 multiple elements.
-<<value toplevel>>=
+<<table definition>>=
 module Table = struct
   let create = Hashtbl.create
   let find t k = try Hashtbl.find t k with Not_found -> Nil
@@ -306,8 +335,9 @@ and op = And | Or | Lt | Le | Gt | Ge | Eq | Ne | Concat
 
 type chunk =
   | Statement of stmt
-  | Fundef    of lval * name list * block
-  | Methdef   of exp * name * name list * block
+  | Fundef    of lval       * name list * varargs * block
+  | Methdef   of exp * name * name list * varargs * block
+and varargs = bool
 @ 
 <<signatures>>=
 module type INTERP = sig
@@ -608,29 +638,32 @@ let rec numlocals = function
 @ 
 Chunks are executed by compiling functions.
 <<interp toplevel>>=
-let lambda args body =
-  let n = List.length args + numlocals body in
-  let rho = List.rev args in
+let value_list = V.list V.value
+let lambda args varargs body =
+  let n = List.length args + (if varargs then 1 else 0) + numlocals body in
+  let rho = List.rev (if varargs then "arg" :: args else args) in
   let body = block rho body in
   fun state argv ->
     let locals = Array.make n V.Nil in
-    let rec walk n = function
-      | [] -> ()
-      | h :: t -> (Array.set locals n h; walk (n+1) t)  in
-    ( walk 0 argv
+    let rec walk n formals actuals = match formals with
+      | [] -> if varargs then Array.set locals n (value_list.V.embed actuals)
+      | f :: fs ->
+          let a, a's = match actuals with [] -> V.Nil, [] | h :: t -> h, t in
+          (Array.set locals n a; walk (n+1) fs a's)  in
+    ( walk 0 args argv
     ; body (fun g l -> []) (fun results -> results) state locals
     )
 
-let (_ : string list -> A.block -> V.state -> V.value list -> V.value list) = lambda
+let (_ : string list -> bool -> A.block -> V.state -> V.value list -> V.value list) = lambda
 @ 
 <<interp toplevel>>=
 let chunk = function
   | A.Statement s -> stmt [] s
-  | A.Fundef (f, args, body) ->
-      let v = V.Function (lambda args body) in
+  | A.Fundef (f, args, varargs, body) ->
+      let v = V.Function (lambda args varargs body) in
       stmt [] (A.Assign ([f], [A.Lit v]))
-  | A.Methdef (obj, meth, args, body) ->
-      let v = V.Function (lambda args body) in
+  | A.Methdef (obj, meth, args, varargs, body) ->
+      let v = V.Function (lambda args varargs body) in
       stmt [] (A.Assign ([A.Lindex (obj, A.Lit (V.String meth))], [A.Lit v]))
 
 let no_locals = Array.make 0 V.Nil
