@@ -624,6 +624,7 @@ module Make (X:X) : S with module X = X = struct
   and  'i contedge = { kills:regs; defs:regs; node:'i node }
   and  'i cfg = { mutable entry     : 'i node
                 ; mutable exit      : 'i node (*mutable for bootstrapping cfg*)
+                ; mutable ill       : 'i node (*mutable for bootstrapping cfg*)
                 ;         inst_info : 'i instruction_info
                 ; mutable label_map : 'i node SM.t
                 ;         mk_label  : label_supply
@@ -635,8 +636,8 @@ module Make (X:X) : S with module X = X = struct
   <<set successors>>
 
   <<simple node constructors>>
-  <<graph construction and copying>>
   <<node constructors with interesting control flow edges>>
+  <<graph construction and copying>>
 
   <<graph and node mutators implementation>>
 end
@@ -877,7 +878,6 @@ let fsucc node = match node with
   | _     -> undef "fsucc" "non-cond-branch"
 
 
-
 let succ_n node n =
   let fail ()    = raise (Invalid_argument "succ_n: illegal index") in
   let single s n = if n = 0 then s else fail ()                     in
@@ -1077,8 +1077,8 @@ let node_labeled cfg label =
     let join = Joi { joi_labels = [label]
                    ; joi_cfg    = cfg
                    ; joi_preds  = []
-                   ; joi_succ   = ill cfg
-                   ; joi_lpred  = ill cfg
+                   ; joi_succ   = cfg.ill
+                   ; joi_lpred  = cfg.ill
                    ; joi_jx     = X.jx ()
                    } in
     let () = cfg.label_map <- SM.add label join cfg.label_map in
@@ -1163,16 +1163,16 @@ let rem_1_list l =
 match old_succ with
 | Joi j -> j.joi_preds <- rem_1_list j.joi_preds
 | Exi e -> e.exi_preds <- rem_1_list e.exi_preds
-| Ins i -> i.ins_pred  <- ill (get_cfg old_succ)
-| Bra b -> b.bra_pred  <- ill (get_cfg old_succ)
-| Cbr c -> c.cbr_pred  <- ill (get_cfg old_succ)
-| Mbr m -> m.mbr_pred  <- ill (get_cfg old_succ)
-| Jum j -> j.jum_pred  <- ill (get_cfg old_succ)
-| Cal c -> c.cal_pred  <- ill (get_cfg old_succ)
-| Ret r -> r.ret_pred  <- ill (get_cfg old_succ)
-| Cut c -> c.cut_pred  <- ill (get_cfg old_succ)
-| Ass a -> a.ass_pred  <- ill (get_cfg old_succ)
-| Imp i -> i.imp_pred  <- ill (get_cfg old_succ)
+| Ins i -> i.ins_pred  <- (get_cfg old_succ).ill
+| Bra b -> b.bra_pred  <- (get_cfg old_succ).ill
+| Cbr c -> c.cbr_pred  <- (get_cfg old_succ).ill
+| Mbr m -> m.mbr_pred  <- (get_cfg old_succ).ill
+| Jum j -> j.jum_pred  <- (get_cfg old_succ).ill
+| Cal c -> c.cal_pred  <- (get_cfg old_succ).ill
+| Ret r -> r.ret_pred  <- (get_cfg old_succ).ill
+| Cut c -> c.cut_pred  <- (get_cfg old_succ).ill
+| Ass a -> a.ass_pred  <- (get_cfg old_succ).ill
+| Imp i -> i.imp_pred  <- (get_cfg old_succ).ill
 | Ill _ -> ()
 | Ent _ -> imposs "entry node was a successor"
 | Boot  -> imposs "boot nodes should not live to remove_pred"
@@ -1279,150 +1279,132 @@ let mk i_info label_supply =
               } in
   let cfg = { entry     = Ent entry
             ; exit      = Boot
+            ; ill       = Boot
             ; inst_info = i_info
             ; label_map = SM.empty
             ; mk_label  = label_supply
             } in
+  let ill = illegal cfg in
   let exit  = Exi { exi_cfg  = cfg
                   ; exi_labels = [label_supply "exit"]
                   ; exi_preds = []
-                  ; exi_lpred = ill cfg 
+                  ; exi_lpred = ill
                   ; exi_jx   = X.jx ()
                   } in
-  let ill = ill cfg in
+  let ()  = cfg.ill        <- ill in
   let ()  = entry.ent_succ <- ill in
-  let ()  = cfg.exit <- exit in
+  let ()  = cfg.exit       <- exit in
   cfg
 
 let copy info transform cfg =
-  let join_map = SM.empty in
-  let lookup = SM.find in
   let new_cfg = { entry     = Boot
                 ; exit      = Boot
+                ; ill       = Boot
                 ; inst_info = info
                 ; label_map = SM.empty
                 ; mk_label  = cfg.mk_label
                 } in
-  let rec convert node pred = match node with
-    | Ins i -> let i' = { i with ins_i    = transform i.ins_i
-                        ;        ins_pred = pred
-                        ;        ins_succ = Boot
-                        } in
-               let n' = Ins i' in
-               let () = set_succ pred n' in
-               convert i.ins_succ n'
-    | Ass a -> let a' = { a with ass_i    = transform a.ass_i
-                        ;        ass_pred = pred
-                        ;        ass_succ = Boot
-                        } in
-               let n' = Ass a' in
-               let () = set_succ pred n' in
-               convert a.ass_succ n'
-    | Bra b ->
-      let s = lookup (label b.bra_succ) join_map in
-      let b' = { b with bra_i    = transform b.bra_i
-               ;        bra_pred = pred
-               ;        bra_succ = s
-               ;        bra_lsucc = s
-               } in
-      let n' = Bra b' in
-      set_succ pred n'
-    | Jum j ->
-      let s  = lookup (label j.jum_succ) join_map in
-      let j' = { j with jum_i    = transform j.jum_i
-               ;        jum_pred = pred
-               ;        jum_succ = s
-               ;        jum_lsucc = s
-               } in
-      let n' = Jum j' in
-      set_succ pred n'
+  let ill = illegal new_cfg in
+  let ()  = new_cfg.ill <- ill in
+  let convert node succ =
+    (* if not found, join must be a join point, not exit, b/c we visit the
+       exit first *)
+    let lookup join = assert false in
+    (*
+      try  (SM.find (label join) new_cfg.label_map, map)
+      with Not_found _ ->
+        let join' = node_labeled new_cfg (label join) in
+        match join' with
+        | Joi j' -> j'.joi_labels <- j.joi_labels
+        | _      -> imposs "error in copying join point"
+
+      in
+      *)
+    let ce_lookup ce =
+      let n' = lookup ce.node in
+      {ce with node = n'} in
+    let update_contedges contedges =
+      Array.map ce_lookup contedges in
+    match node with
+    | Ins i -> instruction new_cfg (transform i.ins_i) ~succ
+    | Ass a -> assertion   new_cfg (transform a.ass_i) ~succ
+    | Bra b -> branch      new_cfg ~target:(lookup b.bra_succ)
+    | Jum j -> jump        new_cfg (transform j.jum_i) ~uses:j.jum_uses
+                                   ~targets:[]
     | Cbr c ->
-      let t  = lookup (label c.cbr_true) join_map in
-      let f  = lookup (label c.cbr_false) join_map in
-      let c' = { c with cbr_i    = transform c.cbr_i
-               ;        cbr_pred = pred
-               ;        cbr_true = t
-               ;        cbr_false = f
-               } in
-      let n' = Cbr c' in
-      set_succ pred n'
+      let (cond, _) = cfg.inst_info.branch.Ep.project c.cbr_i in
+      cbranch new_cfg cond ~ifso:(lookup c.cbr_true)
+                           ~ifnot:(lookup c.cbr_false)
+    | Ret r -> return      new_cfg (transform r.ret_i) ~uses:r.ret_uses
+    | Imp i -> impossible  new_cfg ~succ
+    | Ill i -> illegal     new_cfg
     | Mbr m ->
-      let s  = Array.map (fun n -> lookup (label n) join_map) m.mbr_succs in
-      let ls = lookup (label m.mbr_lsucc) join_map in
-      let m' = { m with mbr_i    = transform m.mbr_i
-               ;        mbr_pred = pred
-               ;        mbr_succs = s
-               ;        mbr_lsucc = ls
-               } in
-      let n' = Mbr m' in
-      set_succ pred n'
-    | Ret r ->
-      let s  = lookup (label r.ret_succ)  join_map in
-      let ls = lookup (label r.ret_lsucc) join_map in
-      let r' = { r with ret_i     = transform r.ret_i
-               ;        ret_pred  = pred
-               ;        ret_succ  = s
-               ;        ret_lsucc = ls
-               } in
-      let n' = Ret r' in
-      set_succ pred n'
-    | Imp i ->
-      let s   = lookup (label i.imp_succ)       join_map in
-      let se  = lookup (label i.imp_exit_succ)  join_map in
-      let i' = { i with imp_pred      = pred
-               ;        imp_succ      = s
-               ;        imp_exit_succ = se
-               } in
-      let n' = Imp i' in
-      set_succ pred n'
-    | _     -> Impossible.unimp "copy" in
-
-(* not finished *)
-
-  new_cfg
-(*
-let fold_heads f zero cfg = List.fold_right f (heads cfg) zero
-  iter_nodes
-  *)
+      mbranch new_cfg (transform m.mbr_i)
+       ~targets:(Array.fold_right (fun t rst -> lookup t :: rst)
+                                  m.mbr_succs [])
+    | Cal c -> (* We can't extract the input to the call constructor *)
+      let ce_lst          = update_contedges c.cal_contedges in
+      Cal { cal_i         = transform c.cal_i
+          ; cal_spans     = c.cal_spans
+          ; cal_pred      = illegal new_cfg
+          ; cal_contedges = ce_lst
+          ; cal_fx        = X.fx ()
+          ; cal_uses      = c.cal_uses
+          }
+    | Cut c ->
+      let cuts_to = Array.to_list (update_contedges c.cut_contedges) in
+      cut_to new_cfg (transform c.cut_i) ~cuts_to ~aborts:false ~uses:c.cut_uses
+    | Joi j -> lookup j
+    | Exi e -> Exi { e with exi_cfg   = new_cfg
+                   ;        exi_preds = []
+                   ;        exi_lpred = illegal new_cfg
+                   ;        exi_jx    = X.jx ()
+                   }
+    | Ent e -> Ent { ent_succ = succ
+                   ; ent_nx   = X.nx ()
+                   }
+    | Boot  -> undef "copy" "boot" in
+    new_cfg
 @
 
 <<node constructors with interesting control flow edges>>=
-let j_leads_ce ce = {ce with node = join_leading_to ce.node}
+let join_leading_to_ce ce = {ce with node = join_leading_to ce.node}
 
 let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts ~uses ~defs ~kills
                ~spans =
-  let altrets     = List.map j_leads_ce altrets in
-  let unwinds_to  = List.map j_leads_ce unwinds_to in
-  let cuts_to     = List.map j_leads_ce cuts_to in
-  let altrets     = List.map j_leads_ce altrets in
+  let () = if List.length altrets > 0
+           then Impossible.unimp "alternate returns not yet supported" in
+  let altrets     = List.map join_leading_to_ce altrets in
+  let unwinds_to  = List.map join_leading_to_ce unwinds_to in
+  let cuts_to     = List.map join_leading_to_ce cuts_to in
+  let altrets     = List.map join_leading_to_ce altrets in
   let new_cedge n = {kills = kills; defs = defs; node = n} in
   let succ        = [new_cedge succ] in
   let abort       = if aborts then [new_cedge cfg.exit] else [] in
   let edgelist    = List.flatten [altrets; succ; unwinds_to; cuts_to; abort] in
-  let ill         = ill cfg in
-  let illedge     = fun {kills=k; defs=d; node=n} -> {kills=k; defs=d; node=ill} in
+  let illedge     = fun {kills=k; defs=d; node=n} -> {kills=k; defs=d; node=cfg.ill} in
   let cal =
     Cal { cal_i         = i
         ; cal_spans     = spans
-        ; cal_pred      = ill
+        ; cal_pred      = cfg.ill
         ; cal_contedges = Array.of_list (List.map illedge edgelist)
         ; cal_fx        = X.fx ()
         ; cal_uses      = uses
         } in
-  let ()  = Aux.foldri (fun i n () -> set_succ_n cal i ~succ:n.node) edgelist () in
+  let ()  = Aux.foldri (fun i n () -> set_succ_n cal i ~succ:n.node)
+                       edgelist () in
   cal
 
 let cut_to cfg i ~cuts_to ~aborts ~uses =
-  let cuts_to     = List.map j_leads_ce cuts_to in
+  let cuts_to     = List.map join_leading_to_ce cuts_to in
   let new_cedge n = {kills = RS.empty; defs = RS.empty; node = n} in
   let aborts      = if aborts then [new_cedge cfg.exit] else [] in
     (* UNKNOWN WHETHER EDGE TO EXIT MUST KILL NVR'S.  LET US HOPE NOT. *)
   let edgelist    = List.flatten [cuts_to; aborts] in
-  let ill         = ill cfg in
-  let illedge     = fun {kills=k; defs=d; node=n} -> {kills=k; defs=d; node=ill} in
+  let illedge     = fun {kills=k; defs=d; node=n} -> {kills=k; defs=d; node=cfg.ill} in
   let cut = Cut { cut_i         = i
-                ; cut_pred      = ill
-                ; cut_lsucc     = ill
+                ; cut_pred      = cfg.ill
+                ; cut_lsucc     = cfg.ill
                 ; cut_contedges = Array.of_list (List.map illedge edgelist)
                 ; cut_fx        = X.fx ()
                 ; cut_uses      = uses
@@ -1433,20 +1415,18 @@ let cut_to cfg i ~cuts_to ~aborts ~uses =
 
 <<simple node constructors>>=
 let instruction cfg i ~succ =
-  let ill = ill cfg in
   let ins = Ins { ins_i    = i
-                ; ins_pred = ill 
-                ; ins_succ = ill
+                ; ins_pred = cfg.ill 
+                ; ins_succ = cfg.ill
                 ; ins_nx   = X.nx ()
                 } in
   let ()  = set_succ ins ~succ:succ in
   ins
 
 let assertion cfg i ~succ =
-  let ill = ill cfg in
   let ass = Ass { ass_i    = i
-                ; ass_pred = ill 
-                ; ass_succ = ill
+                ; ass_pred = cfg.ill 
+                ; ass_succ = cfg.ill
                 ; ass_nx   = X.nx ()
                 } in
   let ()  = set_succ ass ~succ:succ in
@@ -1455,19 +1435,20 @@ let assertion cfg i ~succ =
 let branch cfg ~target =
   let succ = join_leading_to ~succ:target in
   let bra = Bra { bra_i     = cfg.inst_info.goto.Ep.embed (label succ)
-                ; bra_pred  = ill cfg
-                ; bra_succ  = ill cfg
+                ; bra_pred  = cfg.ill
+                ; bra_succ  = cfg.ill
                 ; bra_lsucc = succ
                 ; bra_nx    = X.nx ()
                 } in
   let ()  = set_succ bra ~succ:succ in
   bra
 
+(* SHOULD WE ASSERT THAT THESE TARGETS ARE JOIN POINTS? *)
 let jump cfg i ~uses ~targets =
   let jum = Jum { jum_i     = i
-                ; jum_pred  = ill cfg
-                ; jum_succ  = ill cfg
-                ; jum_lsucc = ill cfg
+                ; jum_pred  = cfg.ill
+                ; jum_succ  = cfg.ill
+                ; jum_lsucc = cfg.ill
                 ; jum_nx    = X.nx ()
                 ; jum_uses  = uses
                 } in
@@ -1479,9 +1460,9 @@ let cbranch cfg cond ~ifso ~ifnot =
   let not_succ = join_leading_to ~succ:ifnot in
   let cbr = Cbr { cbr_i     = cfg.inst_info.branch.Ep.embed
                                     (cond, (label so_succ))
-                ; cbr_pred  = ill cfg
-                ; cbr_true  = ill cfg
-                ; cbr_false = ill cfg
+                ; cbr_pred  = cfg.ill
+                ; cbr_true  = cfg.ill
+                ; cbr_false = cfg.ill
                 ; cbr_fx    = X.fx ()
                 } in
   let ()  = set_tsucc cbr ~succ:so_succ  in
@@ -1489,21 +1470,22 @@ let cbranch cfg cond ~ifso ~ifnot =
   cbr
 
 let mbranch cfg i ~targets =
-  let succs = Array.make (List.length targets) (ill cfg) in
-  let mbr = Mbr { mbr_i     = i
-                ; mbr_pred  = ill cfg
-                ; mbr_succs = succs
-                ; mbr_lsucc = ill cfg
-                ; mbr_fx    = X.fx ()
-                } in
-  let ()  = Aux.foldri (fun i n () -> set_succ_n mbr i ~succ:n) targets () in
+  let targets = List.map (fun succ -> join_leading_to ~succ) targets in
+  let succs   = Array.make (List.length targets) cfg.ill in
+  let mbr     = Mbr { mbr_i     = i
+                    ; mbr_pred  = cfg.ill
+                    ; mbr_succs = succs
+                    ; mbr_lsucc = cfg.ill
+                    ; mbr_fx    = X.fx ()
+                    } in
+  let () = Aux.foldri (fun i n () -> set_succ_n mbr i ~succ:n) targets () in
   mbr
 
 let return cfg i ~uses =
   let ret = Ret { ret_i     = i
-                ; ret_pred  = ill cfg
-                ; ret_succ  = ill cfg
-                ; ret_lsucc = ill cfg
+                ; ret_pred  = cfg.ill
+                ; ret_succ  = cfg.ill
+                ; ret_lsucc = cfg.ill
                 ; ret_nx    = X.nx ()
                 ; ret_uses  = uses
                 } in
@@ -1512,16 +1494,18 @@ let return cfg i ~uses =
 
 let impossible cfg ~succ =
   let succ = join_leading_to succ in
-  let imp  = Imp { imp_pred      = ill cfg
-                 ; imp_succ      = ill cfg
-                 ; imp_exit_succ = ill cfg
+  let imp  = Imp { imp_pred      = cfg.ill
+                 ; imp_succ      = cfg.ill
+                 ; imp_exit_succ = cfg.ill
                  ; imp_fx        = X.fx ()
                  } in
   let ()   = set_succ   imp   ~succ:succ     in
   let ()   = set_succ_n imp 1 ~succ:cfg.exit in
   imp
 
-let illegal cfg = ill cfg
+let illegal cfg = Ill { ill_nx  = X.nx ()
+                      ; ill_cfg = cfg
+                      }
 @
 Node equality is the most important utility of all.
 We cannot safely compare nodes with [[==]], because the node type is
@@ -1593,10 +1577,6 @@ let merge_joins j1 j2 succ lpred = match j1, j2 with
 Creation of illegal nodes is common.
 
 <<graph utilities>>=
-let ill cfg = Ill { ill_nx  = X.nx ()
-                  ; ill_cfg = cfg
-                  }
-
 let heads cfg = cfg.entry :: SM.fold (fun _ h rst -> h::rst) cfg.label_map []
 @
 
