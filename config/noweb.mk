@@ -54,7 +54,7 @@ OCAMLDEFS =     $TOP/config/autodefs.ocaml
 	\usepackage{noweb}
 	\usepackage{tabularx}
 	\usepackage{hyperref}
-        \usepackage[dvips]{graphicx}
+	\usepackage[dvips]{graphicx}
 	\pagestyle{noweb}
 	\noweboptions{}
 	\begin{document}
@@ -62,6 +62,7 @@ OCAMLDEFS =     $TOP/config/autodefs.ocaml
 	\tableofcontents
 	\nwbegindocs{}
 	.
+	. r $TOP/config/macros.tex
 	\$
 	a
 	\bibliographystyle{alpha}
