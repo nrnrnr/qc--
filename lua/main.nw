@@ -3,8 +3,11 @@
 \section{Main loop for testing a standalone interpreter}
 
 <<main.ml>>=
-module I = Builtins.Add (Parser.MakeStandard)
+module OldI = Builtins.Add (Parser.MakeStandard)
              (Lua.Make (Io.Builtins(Builtins.String(Builtins.Math(Lua.Bottom)))))
+module I = Builtins.Add (Parser.MakeStandard)
+             (Lua.Make' (Lua.AddLayer
+                (Lua.AddLayer (Io.Layer) (Builtins.String')) (Builtins.Math')))
 module V = I.Value
 let lex map buf = Scan.token buf map
 let state = I.state()

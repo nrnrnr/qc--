@@ -4,8 +4,36 @@
 
 <<io.mli>>=
 module Builtins : Lua.MIXIN
+module Layer : Lua.LAYER_WITH_TYPE
 @ 
 <<io.ml>>=
+module Layer : Lua.LAYER_WITH_TYPE = struct
+  module U = struct
+    type 'a t = In of in_channel | Out of out_channel
+    let tname = "I/O channel"
+    let eq _ x y = match x, y with
+    | In x,    In y    -> x = y
+    | Out x,   Out y   -> x = y
+    | _, _ -> false
+    let to_string vs = function
+      | In _ -> "<input>"
+      | Out _ -> "<output>"
+    type 'a state = { mutable currentin  : in_channel
+                    ; mutable currentout : out_channel
+                    } 
+    let state () = { currentin = stdin; currentout = stdout }
+  end
+  module M (This : Lua.INTO_LAYER with type 'a t = 'a U.t and type 'a state = 'a U.state)=
+  struct
+    module V = This.Top.V
+    let ( **-> ) = V.( **-> )
+    module FB = struct include This include This.Top end
+    <<i/o builtins>>
+    let init g = 
+      List.iter (fun (k, v) -> V.Table.bind g.V.globals (V.String k) v) io_builtins
+  end
+end
+
 module Builtins (L : Lua.TIER) : Lua.TIER = struct
   module U = struct
     type 'a t = In of in_channel | Out of out_channel | Other of 'a L.U.t
@@ -35,7 +63,7 @@ module Builtins (L : Lua.TIER) : Lua.TIER = struct
       let map = { V.embed   = (fun x -> FB.map.V.embed (U.Other x))
                 ; V.project = (fun v -> match FB.map.V.project v with
                                         | U.Other x -> x
-                                        | _ -> raise (V.Projection (v, U.tname)))
+                                        | _ -> raise (V.Projection (v, L.U.tname)))
                 }
       type 'a state = 'a L.U.state
       let project_state s = (FB.project_state s).U.other

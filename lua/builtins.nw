@@ -5,19 +5,18 @@ module Math   : Lua.MIXIN
 
 
 module Add (MakeParser : Parser.MAKER) (I : Lua.INTERP) : sig
-  val do_lexbuf : sourcename:string -> I.state -> Lexing.lexbuf -> I.value list
-  val dostring  : I.state -> string -> I.value list
-  val dofile    : I.state -> string -> I.value list
-  val state : unit -> I.state
-  module Value  : Value.S 
-  module Parser : Parser.S with type chunk = I.Ast.chunk
-  module Interp : Lua.INTERP
-end with module Value = I.Value with module Interp = I
+  include Lua.INTERP
+  module Parser : Parser.S with type chunk = Ast.chunk
+  val do_lexbuf : sourcename:string -> state -> Lexing.lexbuf -> value list
+  val dostring  : state -> string -> value list
+  val dofile    : state -> string -> value list
+end with module Value = I.Value
+
+module String' : Lua.LAYER_WITHOUT_TYPE
+module Math'   : Lua.LAYER_WITHOUT_TYPE
 <<builtins.ml>>=
 module Add (MakeParser : Parser.MAKER) (I : Lua.INTERP) = struct
   module Parser = MakeParser (I.Ast)
-  module Value = I.Value
-  module Interp = I
   module P = Parser
   module V = I.Value
   <<builtins toplevel>>
@@ -64,11 +63,11 @@ module Add (MakeParser : Parser.MAKER) (I : Lua.INTERP) = struct
                      I.setfallback
     ] 
 
+  include I
   let state () =
     let g = I.state () in
     List.iter (fun (k, v) -> V.Table.bind g.V.globals (V.String k) v) builtins;
     g
-
 end
 <<builtins toplevel>>=
 let lex map buf = Scan.token buf map
@@ -175,6 +174,26 @@ let math_builtins =
   ; "randomseed", pf (V.int **-> V.runit)        Random.init
   ] 
 @ 
+<<builtins.ml>>=
+module String' (Top : Lua.TOP) = struct
+  module V = Top.V
+  module I = struct let fallback = Top.fallback end
+  let ( **-> ) = V.( **-> )
+  <<string builtins>>
+  let init g =
+    List.iter (fun (k, v) -> V.Table.bind g.V.globals (V.String k) v) string_builtins
+end
+
+module Math' (Top : Lua.TOP) = struct
+  module I = struct let fallback = Top.fallback end
+  module V = Top.V
+  let ( **-> ) = V.( **-> )
+  <<math builtins>>
+  let init g =
+    List.iter (fun (k, v) -> V.Table.bind g.V.globals (V.String k) v) math_builtins
+end
+
+
 <<builtins.ml>>=
 module String (L : Lua.TIER) = struct
   module U = L.U
