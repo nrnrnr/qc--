@@ -21,6 +21,8 @@ Revisions Copyright © 2001 Norman Ramsey.  All rights reserved.
 #if defined(PEDANTIC_ANSI) || defined(__STRICT_ANSI__)
 typedef unsigned long	ulong;
 typedef unsigned short	ushort;
+#elif defined(__FreeBSD__)      /* by wkj@eecs.harvard.edu */
+typedef unsigned long	ulong; 
 #endif
 
 typedef unsigned char	uchar;
