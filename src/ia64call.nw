@@ -50,8 +50,6 @@ let saved_nvr temps =
 @ 
 
 <<IA64 calling convention automata in Lua>>=
-Ia64.growth    = "down"
-Ia64.byteorder = "little"
 Ia64.sp_align  = 16
 Ia64.wordsize  = 64
 
@@ -90,12 +88,10 @@ Ia64.cc["C"].results =
 Ia64.cc["C"].call =
   { A.widen(64, "multiple")
   , A.bitcounter("bits")
-  , A.choice { {"float",A.is_counter("bits", lt512)}, A.useregs(f(8)..f(15))
+  , A.choice { {"float",A.counter_is("bits", lt512)}, A.useregs(f(8)..f(15))
              , A.is_any, A.regs_by_bits("bits", out(0)..out(7))
              }
-  , A.overflow { byteorder = Ia64.byteorder, growth = "up"
-               , max_alignment = Ia64.sp_align
-               } 
+  , A.overflow { growth = "up", max_alignment = Ia64.sp_align }
   }	
 @ 
 And now for some postprocessing magic to set aside the first 16-bytes at sp
@@ -119,9 +115,7 @@ let postprocess cconv =
 Ia64.cc["C"].cutto =
   { A.widen(64)
   , A.useregs(out(0) .. out(7))
-  , A.overflow { byteorder = Ia64.byteorder, growth = "up"
-               , max_alignment = Ia64.sp_align
-               }
+  , A.overflow { growth = "up", max_alignment = Ia64.sp_align }
   }
 @ 
 

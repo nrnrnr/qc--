@@ -459,10 +459,7 @@ PPC.cc["notail"] = PPC.cc["notail"] or {}
 function PPC.r(i) return({ space = "r", index = i, width = 32 }) end
 function PPC.f(i) return({ space = "f", index = i, width = 64 }) end
 
-PPC.overflow = A.overflow { byteorder     = "big"
-                          , growth        = "down"
-                          , max_alignment = 4
-                          }
+PPC.overflow = A.overflow { growth = "down", max_alignment = 4 }
 @ 
 For the C convention, the overflow block should contain space
 corresponding to all of the parameters allocated into registers. I
@@ -473,20 +470,18 @@ have to be employed here.
 <<PPC calling convention automata in Lua>>=
 PPC.cc["C"].call =
   { A.widen(32, "multiple")
-  , A.widths { 32, 64 }
   , A.bitcounter("bits")
-  , A.argcounter("args")
-  , A.choice { "float",  A.regs_by_args("args", PPC.f(1) .. PPC.r(13))
-             , A.is_any, A.regs_by_bits("bits", PPC.r(3) .. PPC.r(10))
-             }
+  , A.choice 
+      { "float", { A.widen(64), A.useregs(PPC.f(1)..PPC.f(13) ,"reserve") }
+      , A.is_any, A.regs_by_bits("bits", PPC.r(3) .. PPC.r(10), "reserve")
+      }
   , PPC.overflow
   }
 
 PPC.cc["C"].results =
-  A.choice
-    { "float" , { A.widen(64), A.useregs { PPC.f(1) }}
-    , A.is_any, { A.widen(32), A.useregs { PPC.r(3), PPC.r(4) }}
-    }
+  A.choice { "float" , { A.widen(64), A.useregs { PPC.f(1) }}
+           , A.is_any, { A.widen(32), A.useregs { PPC.r(3), PPC.r(4) }}
+           }
 
 PPC.cc["C"].cutto = { A.widen(32), PPC.overflow }
 @
@@ -518,7 +513,7 @@ let globals base =
   let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
   A.at ~start:base ~memsize:Post.memsize ~byteorder:Post.byte_order
    (A.widen width *> A.align_to align *>
-    A.overflow ~byteorder:Post.byte_order ~growth:Memalloc.Up ~max_alignment:4)
+    A.overflow ~growth:Memalloc.Up ~max_alignment:4)
 
 let spill lookup (_,_,w as reg) loc =
   [ Automaton.store loc (Rtl.fetch (Rtl.reg reg) w) w ]

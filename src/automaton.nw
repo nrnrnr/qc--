@@ -171,9 +171,7 @@ The final stage in any implementation is the overflow block.
 To make an overflow block, you need a bunch of information about the
 machine and a bunch of information about the convention.
 <<exported values>>=
-val overflow :
-  byteorder:Rtl.aggregation -> growth:Memalloc.growth ->    (* machine    *)
-  max_alignment:int -> stage                                (* convention *)
+val overflow : growth:Memalloc.growth -> max_alignment:int -> stage
 @ 
 It is possible to have {no} overflow block.
 In this case, it's up to clients to gather that only finitely many
@@ -274,7 +272,7 @@ val choice : (choice_predicate * stage) list -> stage
 <<exported values>>=
 val empty_counterenv : counterenv
 
-val is_counter : counter -> (int -> bool) -> choice_predicate
+val counter_is : counter -> (int -> bool) -> choice_predicate
 val is_hint    : hint    -> choice_predicate
 val is_width   : int     -> choice_predicate
 val is_any     : choice_predicate
@@ -443,14 +441,14 @@ The overflow block is slightly interesting.
 <<automaton.ml>>=
 type state = { mutable mem       : M.t; mutable frozen : bool
              ; mutable mems_list : R.loc list  }
-let overflow ~byteorder ~growth ~max_alignment next =
+let overflow ~growth ~max_alignment next =
   fun ~start ~memsize ~byteorder ~ctrs ->
     let mem = M.at start growth in
     let state = { mem = mem; frozen = false; mems_list = [] } in
     <<functions [[allocate]] and [[freeze]] for the overflow block>>
     { allocate = allocate; freeze = freeze }
-let overflow ~byteorder ~growth ~max_alignment = 
-  swrap (overflow ~byteorder ~growth ~max_alignment) 
+let overflow ~growth ~max_alignment = 
+  swrap (overflow ~growth ~max_alignment) 
 @ 
 To allocate, we align and increment the memory block.
 The address of the new location depends on the direction of stack growth.
@@ -568,7 +566,7 @@ let first_choice choices next ~ctrs =
   { allocate = allocate; freeze = freeze }
 let first_choice = wrap_choice first_choice
 
-let is_counter c f env _ _ = match env c with Some i -> f (!i) | None -> false
+let counter_is c f env _ _ = match env c with Some i -> f (!i) | None -> false
 let is_hint    h'  _   h w = h = h'
 let is_width   w'  _   h w = w = w'
 let is_any         _   h w = true

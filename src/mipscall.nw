@@ -83,11 +83,8 @@ always writes it (and it is live on entry).
 
 <<mipscall.ml>>=
 let r n     = ('r',n,32)
-let l n     = ('r',n,64)    (* "long" - used for 64-bit floats in 4/5, 6/7 *) 
 let f n     = ('f',n,32)
-let d n     = ('f',n,64)
 let vfp     = Vfp.mk 32
-
 @
 Calling conventions treat floating point registers specially; therefore
 we have separate lists for them.
@@ -115,18 +112,12 @@ Mips         = Mips         or {}
 Mips.cc      = Mips.cc      or {}
 Mips.cc["C"] = Mips.cc["C"] or {}
 
-function is_float64(ce, h, w)  return (h == "float") and (w == 64) end
-
-Mips.growth    = "down"
-Mips.byteorder = "little"
 Mips.sp_align  = 16
 Mips.wordsize  = 32
 
 function reg(sp,i) return({ space = sp, index = i, width = Mips.wordsize }) end
 function f(i) return (reg("f", i)) end
-function d(i) return (reg("d", i)) end
 function r(i) return (reg("r", i)) end
-function l(i) return (reg("l", i)) end
 
 Mips.vol_fp  = (f(0) .. f(18))
 Mips.vol_int = (r(2) .. r(15)) .. { r(24), r(25), r(31) }
@@ -177,85 +168,29 @@ Mips.cc["C"].results =
 
 \paragraph{C~procedure parameters}
 
-<<mipscall.ml>>=
-let spaces =
-  let module SS = Space.Standard32 in
-  let r = SS.r 32 byteorder [32; 64] in
-  let f = SS.f 32 byteorder [32; 64] in
-  function
-  | 'r' -> r
-  | 'f' -> f
-  | _   -> Impossible.impossible "register space in parameter passing"
-@
-
-We need to hang onto this code for now (because of the specialized
-MIPS dump functions).
-<<mipscall.ml>>=
-type belief = Manual | Lcc
-let who_do_you_believe = Lcc
-
-let arguments () =
-    let bits = "bits" in
-    let arg  = "args"  in
-    A.widen (Aux.round_up_to ~multiple_of: 32) *>
-    A.widths [32;64] *>
-    A.bitcounter bits *>
-    A.argcounter arg  *>
-    A.first_choice 
-    [ A.is_hint "float",
-        A.choice
-        [ A.is_hint "float",
-            (match who_do_you_believe with
-            | Manual -> A.regs_by_args arg [d 12; d 14] false
-            | Lcc ->
-               A.choice
-               [ A.is_width 64, A.regs_by_args arg [d 12; d 14] false
-               ; A.is_any     , A.regs_by_args arg [f 12; f 14] false
-               ] 
-            ) 
-        ; A.is_any,
-            A.unit
-        ] *> A.regs_by_bits bits [r 4; r 5; r 6; r 7] false
-    ; A.is_any,
-        A.choice
-        [ (fun _ h w -> h = "float" && w = 64),  (* beware int/32, float/64 *)
-            A.regs_by_args arg [d 12; l 6] false (* d12 is a placeholder; use pair r6/r7 *)
-        ; A.is_any,
-            A.regs_by_bits bits [r 4; r 5; r 6; r 7]  false
-        ]  
-    ] *>
-    A.overflow ~byteorder ~growth:Memalloc.Up 
-               ~max_alignment:sp_align
-@ 
-And in Lua:
 <<MIPS calling convention automata in Lua>>=
--- see the comments above in mipscall.nw for cc["C"].call
 -- note that there's some postprocessing magic going on in mipscall.nw too
+function Mips.alignf (size)
+  if size == 8 then return 8 else return 4 end
+end
+
 Mips.cc["C"].call =
   { A.widen (32, "multiple")
   , A.widths { 32, 64 }
+  , A.align_to(Mips.alignf)
   , A.bitcounter("bits")
+  , A.pad("bits")
   , A.argcounter("args")
   , A.first_choice { 
-      "float" , { A.choice {
-                    "float" , A.choice {
-                                64, A.regs_by_args("args", {d(12),d(14)}),
-                                32, A.regs_by_args("args", {f(12),f(14)}),
-                                A.is_any, {}
-                              },
-                    A.is_any, {}
-                  },
-                  A.regs_by_bits("bits", r(4) .. r(7))
+      "float" , A.choice {
+                  { "float", 64 }, A.regs_by_bits("bits", f(12)..f(15))
+                , "float", A.regs_by_args("args", {f(12), f(14)})
+                , A.is_any, {}
                 },
-
-      A.is_any, A.choice {
-                  is_float64, A.regs_by_args("args" , { d(12), l(6) }),
-                  A.is_any  , A.regs_by_bits("bits", r(4) .. r(7))
-                }
+      A.is_any, {}
     }
-  , A.overflow { byteorder = Mips.byteorder, growth = "up"
-               , max_alignment = Mips.sp_align
-               }
+  , A.regs_by_bits("bits", r(4)..r(7))
+  , A.overflow { growth = "up", max_alignment = Mips.sp_align }
   }
 @
 And now for postprocessing of both ML and Lua style automata specifications.
@@ -281,8 +216,7 @@ Mips.cc["C"].cutto =
   , A.choice { "float" , A.useregs(Mips.vol_fp)
              , A.is_any, A.useregs(Mips.vol_int)
              }
-  , A.overflow { byteorder = Mips.byteorder, growth = Mips.growth
-               , max_alignment = Mips.sp_align }
+  , A.overflow { growth = "up", max_alignment = Mips.sp_align }
   }
 @
 

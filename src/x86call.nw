@@ -94,8 +94,6 @@ let saved_nvr temps =
 
 And in Lua:
 <<x86 calling convention automata in Lua>>=
-X86.growth    = "down"
-X86.byteorder = "little"
 X86.sp_align  = 4
 X86.wordsize  = 32
 
@@ -168,9 +166,7 @@ the machine is little-endian.
 <<x86 calling convention automata in Lua>>=
 X86.cc["C"].call =
   { A.widen(32, "multiple")
-  , A.overflow { byteorder = X86.byteorder, growth = "up"
-               , max_alignment = X86.sp_align
-               }
+  , A.overflow { growth = "up", max_alignment = X86.sp_align }
   }
 @ 
 When passing cut-to parameters, we leave two registers open -- we must
@@ -179,9 +175,7 @@ so that we can use some registers for the cut instruction.
 X86.cc["C"].cutto =
   { A.widen(32)
   , A.useregs({X86.edx, X86.ebx, X86.esi, X86.edi, X86.ebp})
-  , A.overflow { byteorder = X86.byteorder, growth = "up"
-               , max_alignment = X86.sp_align
-               }
+  , A.overflow { growth = "up", max_alignment = X86.sp_align }
   }
 @ 
 It's worth studying these automata to see what's likely to remain
@@ -201,17 +195,13 @@ REGISTER ALLOCATOR DUMP CORE.
 -- commented out as an additional results register)
 X86.cc["C--"].results = 
   { X86.cc["C"].results
-  , A.overflow { byteorder = X86.byteorder, growth = "down"
-               , max_alignment = X86.sp_align
-               } 
+  , A.overflow { growth = "down", max_alignment = X86.sp_align }
   } 
 
 X86.cc["C--"].call =
   { A.widen(32, "multiple")
   , A.useregs { X86.eax }
-  , A.overflow { byteorder = X86.byteorder, growth = "up"
-               , max_alignment = X86.sp_align
-               }
+  , A.overflow { growth = "up", max_alignment = X86.sp_align }
   }
 
 -- all the calling conventions share the same cutto automaton specs.
