@@ -27,8 +27,14 @@ INC  =          `echo *.nw       | sed 's/\.nw/.inc/g;'`
 
 all:V:          ocamlerror      man
 all.opt:V:      ocamlerror.opt  man
-update:V:       
-update.opt:V:   
+
+update:V:       all 
+                cp ocamlerror     $BINDIR
+                cp ocamlerror.1   $MANDIR/man1
+                
+update.opt:V:   all.opt
+                cp ocamlerror.opt $BINDIR
+                cp ocamlerror.1   $MANDIR/man1
 
 dvi:V:          $INC
 html:V:         $HTML
@@ -43,12 +49,12 @@ depend:V:       $DEPEND
 clean:V:    
                 rm -f *.cmo *.cmi *.cmx *.o
                 rm -f *.output
+                rm -rf *.ml *.mll *.mli DEPEND 
+                rm -rf *.aux *.log *.dvi *.tex *.inc *.toc
                 
 clobber:V:      clean
-                rm -rf *.ml *.mll *.mli DEPEND 
                 rm -rf ocamlerror ocamlerror.opt
                 rm -rf ocamlerror.pod ocamlerror.1
-                rm -rf *.aux *.log *.dvi *.tex *.inc *.toc
 
 install:V:      all.opt
                 install -s ocamlerror.opt $prefix/bin/ocamlerror

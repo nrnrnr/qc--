@@ -14,7 +14,7 @@ VERSION =       `date +%Y%m%d`
 # ------------------------------------------------------------------ 
 
 SRC     =       src
-LIBSRC  =       cllib lua asdl rtl gen
+LIBSRC  =       cllib lua asdl rtl gen camlburg tools
 SUBDIRS =       $LIBSRC $SRC
 
 # ------------------------------------------------------------------ 
@@ -31,24 +31,28 @@ SUBDIRS =       $LIBSRC $SRC
 all:V:          lib
                 for i in $SRC; 
                 do 
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS depend)
                     (echo "# entering $i" && cd $i && mk $MKFLAGS update)
                 done
 
 all.opt:V:      lib.opt 
                 for i in $SRC; 
                 do 
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS depend)
                     (echo "# entering $i" && cd $i && mk $MKFLAGS update.opt)
                 done
 
-lib:V:          depend
+lib:V:          
                 for i in $LIBSRC; 
                 do 
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS depend)
                     (echo "# entering $i" && cd $i && mk $MKFLAGS update)
                 done
 
-lib.opt:V:      depend
+lib.opt:V:      
                 for i in $LIBSRC; 
                 do 
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS depend)
                     (echo "# entering $i" && cd $i && mk $MKFLAGS update.opt)
                 done
 
@@ -59,7 +63,6 @@ precompile:V:
                 done
                     
 
-depend          \
 html            \
 dvi:V:          dirs
                 for i in $SUBDIRS; 
