@@ -309,29 +309,30 @@ let cut_args =
 % ------------------------------------------------------------------ 
 
 <<transformations>>=
-let call_actuals  =
-  C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at (arguments ()))
-    ~autosp:(fun r  -> Block.base r.A.overflow)
-    ~postsp:(fun _ sp -> sp) in  
 
 let prolog  =
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at (arguments ()))
-    ~autosp:(fun _ -> vfp)
-    ~postsp:(fun _ _ -> std_sp_location) in
-
-let call_results  =
-  C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at results)
-    ~autosp:(fun r -> Block.base r.A.overflow)
+    ~autosp:(fun _  -> vfp)
     ~postsp:(fun _ _ -> std_sp_location) in
 
 let epilog  =
   C.outgoing ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at results)
-    ~autosp:(fun r -> Block.base r.A.overflow)
+    ~autosp:(fun r  -> std_sp_location)
     ~postsp:(fun _ _ -> vfp) in
+
+let call_actuals  =
+  C.outgoing ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at (arguments ()))
+    ~autosp:(fun r    -> std_sp_location)
+    ~postsp:(fun a sp -> Block.base a.A.overflow) in
+
+let call_results  =
+  C.incoming ~growth ~sp
+    ~mkauto:(fun ()  -> Block.srelative vfp "in ovfl results" A.at results)
+    ~autosp:(fun r   -> Block.base r.A.overflow)
+    ~postsp:(fun _ _ -> std_sp_location) in
 
 let also_cuts_to =
   C.incoming ~growth ~sp

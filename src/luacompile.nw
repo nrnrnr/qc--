@@ -168,7 +168,7 @@ Mips.layout = { creates='no late consts' } -- what is this for? -CL
 function Mips.layout.fn(dummy, proc)
     local blocks       = Stack.blocks(proc)
     blocks.oldblocks   = Block.overlap(32,"low" , blocks.oldblocks)  
-    blocks.youngblocks = Block.overlap(32,"high", blocks.youngblocks)
+    blocks.youngblocks = Block.overlap(32,"low" , blocks.youngblocks)
     local layout =
         { blocks.oldblocks
         , blocks.vfp
@@ -190,6 +190,7 @@ function Mips.layout.fn(dummy, proc)
                                   })
     end
     local block = Block.cat(32, layout)
+    block = Block.adjust(block)
     Stack.freeze(proc, block)
     return 1
 end
