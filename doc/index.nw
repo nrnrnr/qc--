@@ -1,0 +1,565 @@
+%
+% $Id$
+%
+% Use 'mk index.dvi' to build a printable file.
+
+
+% ------------------------------------------------------------------ 
+\section{The Module Landscape of the Quick C\hbox{-{}-} Compiler}
+% ------------------------------------------------------------------ 
+
+The Quick {\C} compiler currently is a collection of over one hundred
+modules. This document tries to sketch the landscape and to identify
+some landmarks for orientation.
+
+% ------------------------------------------------------------------ 
+\subsection{Driver}
+% ------------------------------------------------------------------ 
+
+The Quick {\C} compiler is held together by a few driver modules that
+interact with the user. 
+
+\begin{itemize} 
+
+\item \module{../src/main2}. The first function executed in the compiler
+is [[Main.main]]. It reads command line arguments, initializes the
+built-in Lua interpreter, catches exceptions, and defines the return
+code. 
+
+All important phases in the compiler have an interface to the Lua
+interpreter. The Lua code that controls the flow of data between phases
+is defined in module [[Main]]. After the interpreter has been booted
+with this code, function [[Main.main]] passes the command line arguments
+into the interpreter for evaluation. From there on the Lua code controls
+the compiler.
+
+\item \module{../src/driver2}. This module exports front end data
+structures and functions to the Lua interpreter. For example,
+[[Driver2]] implements a new Lua data type [[ast]] that represents the
+abstract syntax of a {\C} source file. 
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Front End}
+% ------------------------------------------------------------------ 
+
+The \emph{front end} reads a {\C} source file and translates it into a
+target-independent intermediate representation which the \emph{back end}
+will later translate to machine code. Almost all aspects of the front
+end are independent independent of the actual target. All syntactic and
+most semantic errors in a {\PAL} program are detected in the front end.
+It is the main source of error messages for the user.
+
+\begin{itemize}
+\item \module{../src/parser}. This module defines the scanner and
+parser for the {\PAL} language. The scanner is derived from an OCamlLex
+specification, the parser from an OCamlYacc specification. The main
+result from scanning and parsing is the abstract syntax tree of the
+source file.
+
+\item \module{../gen/ast}. The abstract syntax data type is derived
+from an {\asdl} specification.
+
+\item \module{../cllib/srcmap}. An OCamlYacc-generated parser represents
+a source code position in a file as a character offset from the
+beginning of the file. This representation makes it difficult to
+annotate error messages with comprehensible source code locations. The
+[[Srcmap]] module provides a translation for offset-based source code
+positions to file- and line-oriented positions. Such a map is maintained
+by the scanner and returned by the parser together with the abstract
+syntax tree of a source file.
+
+\item \module{../src/fenv}. The fat environment provides the symbol
+table of the compiler. This data structure records the denotation of
+names in the {\PAL} source file that is currently translated.
+
+\item \module{../src/elab}. This module checks the static semantics of a
+source file, reports errors, and builds up the fat environment. The
+module does not stop after the first error but uses error propagation
+combinators (\module{../src/error}) to find as many errors as possible,
+even in the presence of errors. 
+
+{\PAL} names can denote compile-time constants and type aliases. The
+corresponding compile-time expressions and type aliases are resolved by
+module [[Elab]] and the results are recorded in the fat environment.
+
+\item \module{../src/types}. The static semantics of \C~require type
+checks:  types of arguments to primitive functions must match the types
+of their formal parameters,and [[if]]-statements are governed by an
+expression of type [[bool]].  This module lays out the type language for
+this purpose.
+ 
+\item \module{../src/expcheck}. The {\qcc} compiler type checks {\AST}
+expressions during several phases: evaluation of constant expressions,
+static semantics, translation to intermediate representation.  To avoid
+code duplication, type checks for expressions are factored out into this
+module.
+
+\item \module{../src/error}. The idea of error-handling in {\qcc} is not
+to stop in all cases after an error but to mark results as either good
+or bad.  Bad values can be used for further computation although the
+overall result will be bad.  The hope is, to detect even more errors
+that are \textit{not} caused by any previous error. The
+error-propagating combinators in this module allow to make ordinary
+functions error-aware, allowing them to deal with inputs that might be
+bad.
+
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Translation to Intermediate Representation}
+% ------------------------------------------------------------------ 
+
+Front end and back end are connected by the \emph{intermediate
+representation}. During the translation, that last step of
+the front end is to create the intermediate representation of the
+program under translation.
+
+\begin{itemize} 
+
+\item \module{../src/ast3ir}.  The [[translate]]
+function takes an environment, the actual target and a program and
+translates it into an abstract assembler program.  The assembler is
+functorized over the data type of instructions. This module puts a
+procedure body into a single instruction by basically treating a
+control-flow graph as an instruction. 
+
+\item \module{../src/copyinout}. The details of how parameters are
+passed to a procedure and results are returned are covered by a calling
+convention. The implementation of a calling conventions is a sequence of
+load and store instructions that move parameters into the registers and
+memory slots. The [[Copyinout]] module creates such sequences of
+assignments nodes in the {\cfg} for parameter passing. It is used during
+the creation of the intermediate representation (by
+\module{../src/ast3ir}).
+
+\end{itemize}
+
+
+% ------------------------------------------------------------------ 
+\subsection{Intermediate Representation}
+% ------------------------------------------------------------------ 
+
+A program has two principal parts: initialized and uninitialized data
+like strings, buffers, and constants, and code. In the intermediate
+representation only code has is held in a data structure. Data is
+directly emitted to an assembler during the translation to the
+intermediate representation by module \module{../src/ast3ir}.
+
+\begin{itemize}
+
+\item \module{../src/cfg4}.  The executable part of a procedure is
+represented as a control-flow graph (\cfg). The graph is polymorphic
+over instructions that are embedded into its nodes. The most important
+specialization is when {\rtl}s are used as instruction representation.
+
+\item \module{../src/asm3}.  The \module{../src/astr3ir} module uses
+this interface to access text-based and binary assemblers. Assembler
+aspects like symbols and relocatable addresses (from module
+\module{../rtl/symbol}) escape the assembler and become part of symbol
+tables and expressions.  To avoid that all aspects of the compiler must
+be functorized over the different assemblers we have chosen to use a
+very polymorphic interface that uses Objective Caml's object system.
+
+\item \module{../src/cfgprop}. We may attach arbitrary properties to
+each node of a control-flow graph.  Because the set of properties is
+expected to evolve while the flow-graph interface remains stable, we put
+the properties in a separate module.
+
+\item \module{../src/cfgutil}. The \module{../src/cfg4} module provides
+the essential functionality for control-flow graphs ({\cfg}s). In order
+to separate essential functionality from nice-to-have functionality this
+module provides additional functions on {\cfg}s whose implementation do
+not require knowledge of the internal details of \module{../src/cfg4}.
+
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Assemblers}
+% ------------------------------------------------------------------ 
+
+An assembler is an implementation of the \module{../src/asm3} interface. 
+
+\begin{itemize} 
+
+\item \module{../src/asdlasm.nw}. This module implements
+an assembler that emits the {\rtl}s of a procedure in {\asdl} format.
+Other assembler instruction do not create output.
+
+\item \module{../src/astasm}. This is an assembler that emits {\PAL}. It
+implements the [[Asm3.assembler]] interface for assemblers in the {\qcc}
+compiler.
+
+\item \module{../src/dotasm}. This module implements an assembler that
+emits every procedure as a graph in \textsc{dot} format. The assember
+constructor receives the output channel for the assembler.
+
+\item \module{../src/msparcasm}. This module provides an assembler that
+emits directives and instructions in {\sparc} assembly syntax. The
+interface conforms to the [[Asm3]] assembler interface.
+
+\item \module{../src/sparcasm}. This is an assembler that emits SPARC
+assembly language.  It implements the [[Asm3.assembler]] interface for
+assemblers in the {\qcc} compiler.  It should be functorized to deal
+with differences between SunOS and Solaris, but to hell with SunOS.
+Unused.
+
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Stack Frame and Calling Conventions}
+% ------------------------------------------------------------------ 
+
+A procedure keeps local data at run-time in registers and in its stack
+frame. It is the compiler's responsibility to organize a the stack
+frame. The modules below all deal with memory blocks that are ultimately
+composed into a stack frame.
+
+\begin{itemize}
+
+\item \module{../src/block}. A [[Block.t]] value represents a memory
+block. Memory blocks can be composed to larger blocks. This abstraction
+is used to model slots in a stack frame, parameter passing areas in a
+frame, entire stack frames, and memory for data.
+
+\item \module{../src/memalloc}.  This module provides an applicate
+abstraction to allocate a memory block incrementally by a sequence of
+[[allocate]] and [[align]] directives.  The abstraction is similar to a
+pointer that is advanced and aligned to reserver memory. At any point
+the value of the  pointer can be used as an address. After allocation
+is complete, the [[t]] value is [[frozen]] and the allocated block is
+returned. 
+
+\item \module{../src/automaton2}. Allocation of registers for parameter
+passing and slot allocation can be hidden behind an automaton. An
+automaton knows a set of locations and hands them out in response to
+queries. A location can be a hardware register, a memory location, or a
+combination of both. The details are hidden behind a common abstraction.
+Automata are target specific and implement allocation policies.
+
+\item \module{../src/contn} A continuation is a pinter-sized {\PAL}
+\emph{value}. As such, it can be passed around and stored in registers.
+However, not all data necessary to represent a continuation fit into a
+pointer and therefore the pointer points to a pair of two values in
+memory: first, a pointer to the code belonging to a continuation, and
+second, a stack pointer value. We call this pair the continuation
+\emph{representation}. The representation is stored in the activation
+record of a procedure and is initialized when the procedure becomes
+active.  To deal with the different aspects of a continuation, this
+module provides an abstraction.
+
+\item \module{../src/eqn}, \module{../src/const2}. The memory block
+abstraction  represents constraints by equations over {\rtl}
+expressions. 
+
+The [[Const2]] module allows to build an equation system by equating
+{\rtl} expressions.  The equation system determines the value of late
+compile-time constants that are part of the participating expressions.
+For solving the equation system, equations are transformed into linear
+equations over integers.
+
+[[Eqn]] provides a solver for linear equations: the solver takes a set
+of linear equations as input and finds the values of the embedded
+variables. A linear equation has the form $\sum_{i} c_i t_i = 0$ where
+each coefficient $c_i$ is an integer and each term $t_i$ is either a
+variable ($v$) or a non-zero constant ($k$): $t ::= v | k$.
+
+\end{itemize}
+
+
+% ------------------------------------------------------------------ 
+\subsection{Register Transfer Lists}
+% ------------------------------------------------------------------ 
+
+The register transfer list (\rtl) is a central data structure in the
+compiler. A register transfer list is a general data structure that can
+represent any machine instruction. Register-transfer lists capture the
+meaning of effects, like storing values into memory or register
+location.  They are used as part of the abstract representation of
+{\PAL}.  The meaning of a register-transfer list is well defined and
+especially independent from any properties of a target architecture.
+{\rtl}s are carried in nodes of the control-flow graph and created by
+the \module{ast3ir} module.
+
+
+\begin{itemize}
+
+\item \module{../rtl/rtl}. The definition of a {\rtl}. The interface is
+divided into three parts:  \emph{public}, \emph{private}, and
+\emph{common}.  The public part provides constructor functions to build
+{\rtl}s but hides their actual implementation.  The private part reveals
+these and is intended only for parts of the back end that does
+re-writing of {\rtl}s.  Both private and public parts share
+\emph{common} types.  The public part includes function that converts
+public values into private values and thus makes their details
+accessible. 
+
+\item \module{../src/space}. The {\rtl} framework groups memory cells
+(main memory, registers, temporaries) into named spaces. The cells
+forming a space share properties but the {\rtl} framework does not
+announce them. This module provides a type to describe an {\rtl} space. 
+
+
+\item \module{../src/rtlutil}. Functions to observe and transform
+{\rtl}s. For example, function to observe the width of a location or an
+expression, substitution routines, and functions to create a string
+representation of an {\rtl}.
+
+\item \module{../src/rtlop}. This module provides the translation of a
+{\PAL} operator to an {\rtl} operator.  {\PAL} and {\rtl} operators are
+closely related: a {\PAL} operator is in general an instance of a
+polymorphic {\rtl} operator.
+
+\item \module{../src/rtleval2}. An {\rtl} expression can denote a
+compile-time, link-time, or run-time value. The goal is to evaluate any
+{\rtl} expression as early as possible to minimize computation at
+run-time. This module provides routines to evaluate {\rtl} expressions
+and to simplify {\rtl}s by evaluating expressions inside of them. The
+promise is, that the returned {\rtl}s and expressions are simpler as the
+ones provided.
+
+\item \module{../src/rtldebug}. Functions to type check an {\rtl},
+i.e.~to check its internal consistency. Used for debugging.
+
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Values (Bit Vectors)}
+% ------------------------------------------------------------------ 
+
+{\PAL} treats all values as bit vectors. Any interpretation of a value
+as an integer or floating point value is left to operators working on
+values.
+
+\begin{itemize}
+
+\item \module{../rtl/bits}.  This module provides an abstract bit vector
+type [[bits]]. It is used for holding {\PAL} values.  Bit values can be
+converted to and from numbers and strings. Conversion implies an
+\emph{interpretation} of a value. Most commonly, values can be
+interpreted as signed or unsigned integers.  Therefore, constructors and
+observers of [[bits]] values are organized along these lines. The
+conversions try hard not to assume a certain representation for {\ocaml}
+integers.
+
+\item \module{../rtl/bitops}. This module encapsulates operations on bit
+vectors.  Its primary use is to support constant evaluation, but it
+is also used to evaluate `early' expressions during {\rtl} creation.
+Another mayor client is the encoding and decoding of instructions in
+{\rtl} representation.
+
+\item \module{../gen/rtlasdl}, \module{../src/rtlx}. To allow external
+software to read {\rtl}s we have generated, we export them using
+{\asdl}.  Since the {\rtl} data type is defined as a {\ocaml} data type
+and not as a {\asdl} data type, we create an additional definition of an
+{\rtl} using the {\asdl} specification language. We then convert an
+existing {\rtl} into an \asdl-based {\rtl} which we can export.
+ 
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Registers, Liveness, and Temporaries}
+% ------------------------------------------------------------------ 
+
+A register-like location is an {\rtl} location whose address is always
+an compile-time integer constant. Because registers are central to the
+compiler, they have their own data structure and functions.
+
+\begin{itemize}
+
+\item \module{../src/register}. A [[Register.t]] describes a
+target-specific register-like location.  Such a location includes
+hardware-registers or temporaries, but not spill locations.  The
+distinguishing feature of a register is a fixed address within its
+space: the address is an integer rather than a general expression.
+
+\item \module{../src/live}. Liveness analysis determines for every node
+in a flow graph (see module \module{../src/cfg4}) the set of registers
+that will be used in that node's successors. 
+
+
+\item \module{../src/lifetime}. A lifetime is a set of disjoint
+intervals.  In the context of the {\qcc} compiler a lifetime represents
+the parts in a linear program representation a variable is live.  The
+fact that a lifetime is a set of disjoint intervals means, that a
+variable can be live in different parts of a (linearized) program that
+are not adjacent to each other.
+
+\item \module{../src/talloc}. Multiple parts of the compiler may need to
+allocate temporaries.  Here we provide simple allocators for
+temporaries.
+
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Variable Placement}
+% ------------------------------------------------------------------ 
+
+Initially, {\rtl}s as part of {\cfg} nodes include variables. They must
+be replaced by temporaries.
+
+\begin{itemize}
+\item \module{../src/placevar}. A toy variable placer.
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Register Allocation}
+% ------------------------------------------------------------------ 
+
+Register allocation replaces temporaries in {\cfg} nodes by hardware
+registers. When necessary, registers are spilled to stack slots.
+
+\begin{itemize}
+
+\item \module{../src/colorgraph}. A graph-coloring register allocator
+with whose individual components can be controlled from Lua.
+
+\item \module{../src/linscan}. A linear-scan register allocator with a
+minimal Lua interface.
+
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Lua Interpreter}
+% ------------------------------------------------------------------ 
+
+The compiler is controlled by a built-in Lua 2.5 interpreter. All
+important phases of the compiler have interfaces to Lua which allows
+them to be controlled by Lua code. The implementation of the Lua
+interpreter is in its own sub directory [[lua/]].
+
+\begin{itemize}
+
+\item \module{../lua/lua}. Central module that provides access to the
+Lua interpreter.
+
+\item \module{../src/luautil}. This module provides a new Lua primitive
+that allows to load a Lua file that is searched along a search path.
+
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Back Plane}
+% ------------------------------------------------------------------ 
+
+The backplane is a set of new Lua primitives that allows to control
+compiler phases with Lua interface from Lua.
+
+\begin{itemize}
+
+\item \module{../src/backplane}. The backplane allows the user to
+customize the backend of the compiler. The building blocks of the
+backplane are the stages between which the user can define a control
+flow. Stages represent compiler components, such as the optimizer or the
+register allocator. The backplane can also be used with a finer level of
+granularity of compiler components, such as individual optimization
+stages.
+
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Procedure Representation in the Back End}
+% ------------------------------------------------------------------ 
+
+The compiler's back end is mostly concerned with the translation of
+procedures. A procedure in the back end is represented by a record that
+groups all associated informations.
+
+\begin{itemize}
+    \item \module{../src/proc}. Data type definition for procedure
+    representation.
+\end{itemize}
+
+
+% ------------------------------------------------------------------ 
+\subsection{Targets}
+% ------------------------------------------------------------------ 
+
+The compiler has to know the properties of the target it is compiling
+code for. Here are the modules that provide the data structures and
+values for this information.
+
+\begin{itemize}
+\item \module{../src/target2}. Data structure [[Target2.t]] that
+describes a target,
+
+\item \module{../src/targets}. All targets the compiler knows about.
+Defined a number of [[Target2.t]] values. Targets are exported to Lua.
+
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Code Expansion}
+% ------------------------------------------------------------------ 
+
+A code expander expands nodes in the {\cfg} such that each node's {\rtl}
+represents a single machine instruction. Code expansion is target
+specific and handled by different modules. Each module has a Lua
+interface and thus can be selected at run-time.
+
+\begin{itemize} \item \module{../src/expander}. A toy code expander from
+the early days of the compiler.
+
+\item \module{../src/dummyexpander}. The {\rtl}s generated by the
+\module{../src/ast3ir} module violate the machine invariant that every
+{\rtl} must be representable as a machine instruction. A code-expander
+establishes this invariant by simplifying {\rtl}s. This module provides
+a toy code expander for the [[Dummy]] target. Although it would be
+possible to write a generic code expander that works for all targets, we
+keep things simple and write a specialized one. The expander is
+specified as a set of {\burg} rules.
+
+\item \module{../src/sparcexpander}. This module provides an [[expand]]
+function that re-writes an {\rtl} into a sequence of Sparc machine
+instructions. The module is parameterized over a module [[I]] that
+provides constructor functions for abstract Sparc instructions [[I.t]]
+The code expander is implemented as a {\burg} rule set. 
+
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Machine Instructions and Recognizer}
+% ------------------------------------------------------------------ 
+
+The code expander creates {\rtl}s that represent machine instructions,
+which are later matched and emitted by a recognizer. Constructor
+functions that build machine instructions and the recognizer must agree
+on the representation of individual instructions.
+
+\begin{itemize}
+\item \module{../src/minisparc}. Constructor functions and recognizer
+for the {\small SPARC}.
+
+\item \module{../gen/sparcmkasm}. Emitter for {\small SPARC}
+instructions.
+
+\item Directory [[../gen]] contains machine-generated constructor
+functions and recognizer for the {\small SPARC}. However, they are
+currently not used.
+
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Utilities}
+% ------------------------------------------------------------------ 
+
+The compiler includes a number of self-contained utility modules.
+
+\begin{itemize}
+\item Directory [[../cllib]] contains modules for pretty printing and
+parser combinators.
+
+\item \module{../src/topsort}. Topological sort function.
+\item \module{../src/idgen}. Generator for unique names.
+\item \module{../src/newer}. Tool to compare file dates; used in
+      [[mkfile]].
+\item \module{../src/strutil}. Sets and maps over strings.
+\item \module{../src/impossible}. Exception for internal errors.
+\item \module{../rtl/uint64}. Unsigned operations on 64 bit intergers.
+\item \module{../src/aux}. Various small utilities.
+\item \module{../src/base}. Type aliases for {\ocaml} base types. Once
+      used by Daniel Damien but unused as of today.
+\item \module{../src/mangle}. A name mangler; used by assemblers.
+\end{itemize}
+
+
