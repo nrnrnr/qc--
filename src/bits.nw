@@ -30,10 +30,30 @@ type width      = int
 
 The width of a [[bits]] value is determined when it is created. The
 [[width]] function provides access to it. In case the requested size
-is not supported by the implementation [[Size]] is raised.
+is not supported by the implementation [[Size]] is raised. The
+[[maxwidth]] is the maximal width supported by an implementation.
 
 <<>>=
 val width       : bits -> width
+val maxwidth    : width
+@
+
+The [[fits]] predicate is true, if and only if a given [[bits]] value
+fits into width. The width must mot be graeter than [[maxwidth]],
+otherwise the [[Size]] exception is raised which indicates a problem
+with the limits of an implementation.
+
+<<>>=
+val fits        : bits -> width -> bool
+@
+
+The [[setSize]] function updates the size information of a [[bits]]
+value. This is a dangerous operation since the new size may violate
+the assumption that the current value fits into that size. Thus,
+[[Overflow]] is raised, when this assumption is violated by the new size.
+
+<<>>=
+val setSize     : bits -> width -> bits
 @
 
 % ------------------------------------------------------------------ 
@@ -194,6 +214,7 @@ type bits       = width * int64
 @
 
 <<>>=
+let maxwidth    = 64
 let width (w,_) = w
 @
 
@@ -201,15 +222,30 @@ Operations on [[bits]] frequently must [[check]] that the requested
 with is inside the implementation's limits and an actual value fits
 into that many bits.  The [[check]] function raises [[Size]] or
 [[Overflow]] in case the mentioned rules are violated.
+
+<<>>=
+let fits (width',bits) width =
+    if (width <= 0) || (width > 64) 
+    then raise Size
+    else (width = 64) || (U.le bits (U.shl width I.one))
+@
+
  
 <<>>=
 let check width uint64 =
-    if (width <= 0) || (width > 64) then
-        raise Size
-    else if (width < 64) && (U.ge uint64 (U.shl width I.one)) then
-        raise Overflow
-    else 
-        () (* ok *)
+    if not (fits (maxwidth,uint64) width)
+    then raise Overflow
+    else () (* ok *)
+@
+
+[[setSize]] sets the size of a [[bits]] value and raises [[Overflow]]
+in case the size is too small.
+
+<<>>=
+let setSize (w,b as bits) width =
+    if not (fits bits width)
+    then raise Overflow
+    else (width,b)
 @
 
 % ------------------------------------------------------------------ 
@@ -258,7 +294,7 @@ let of_stringc str width =
                 | 'x'  when len = 2 -> U.of_string ("0"  ^ str)
                 | '0' .. '7'        -> U.of_string ("0o" ^ str) 
                 | _                 -> E.error ("syntax error: "^str)
-                else                   E.error ("syntax error: "^str)
+                else                   U.of_int (Char.code str.[0])
             with Failure _          -> E.error ("syntax error: "^str)
         in
             ( check width c

@@ -70,7 +70,14 @@ values and values fetched from memory.  A fetch from memory makes the
 data- or goto-label and its type. 
 
 <<>>=
-expr        = Const     (string)                -- view
+bits        = (int,width)       -- view for Bits.bits
+boolean     = (int)             -- view for bool
+
+const       = Bool      (boolean)
+            | Bits      (bits)
+            | Link      (string, width)         -- link time constant
+
+expr        = Const     (const)               
             | Fetch     (location,width) 
             | App       (op, expr list)
             | Label     (string, width)
@@ -234,6 +241,29 @@ rtl.space <= {
     wrapper:        Char.chr    (* int -> char *)
     unwrapper:      Char.code   (* char -> int *)
 }
+
+rtl.bits <= {
+    natural_type:   Bits.bits
+    wrapper:        to_bits 
+    unwrapper:      of_bits
+}
+
+rtl.boolean <= {
+    natural_type:   bool
+    wrapper:        to_bool
+    unwrapper:      of_bool 
+}    
+@
+
+<<>>=
+module rtl <= implementation_prologue
+%%
+let of_bits b     = (Bits.to_int b, Bits.width b)
+let to_bits (n,w) = Bits.of_int n w
+
+let to_bool i     = i <> 0
+let of_bool       = function true -> 1 | false -> 0
+%%
 @
 
 Here's the implementation of the internal representation of the graph.

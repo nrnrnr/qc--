@@ -831,26 +831,24 @@ and evalPrimOp env op args =
 and evalExprs env ee = E.Raise.list (List.map (evalExpr env) ee)
 
 <<>>=
-and literalExpr env str2bits str ty =
+and literalExpr env n ty =
     E.ematch ty
     ( function 
     | T.Bool       -> E.error "a value must have type bitsXX"
-    | T.Bits width -> 
-        ( try T.bits width, Value.Bits (str2bits str width) with
-        | Bits.Size     -> E.error "unsupported bits size" 
-        | Bits.Overflow -> E.error "value does not fit into type"
-        )
+    | T.Bits width when Bits.fits n width -> 
+        let n = Bits.setSize n width in (T.bits width, Value.Bits n)
+    | _            -> E.error "literal too large for this type"
     )
     
 <<>>=
 and evalExpr env = function
     | A.ExprAt(x,r)       -> E.catch (error r env) (evalExpr env) x
-    | A.Int  (str, Some t)-> literalExpr env Bits.of_stringi str (evalTy env t)
-    | A.Int  (str, None)  -> literalExpr env Bits.of_stringi str (E.Ok T.word)
-    | A.Float(str, Some t)-> literalExpr env Bits.of_stringf str (evalTy env t)
-    | A.Float(str, None)  -> literalExpr env Bits.of_stringf str (E.Ok T.word)
-    | A.Char (str, Some t)-> literalExpr env Bits.of_stringc str (evalTy env t)
-    | A.Char (str, None)  -> literalExpr env Bits.of_stringc str (E.Ok T.word)
+    | A.Int  (n  , Some t)-> literalExpr env n (evalTy env t)
+    | A.Int  (n  , None)  -> literalExpr env n (E.Ok T.word)
+    | A.Float(n  , Some t)-> literalExpr env n (evalTy env t)
+    | A.Float(n  , None)  -> literalExpr env n (E.Ok T.word)
+    | A.Char (n  , Some t)-> literalExpr env n (evalTy env t)
+    | A.Char (n  , None)  -> literalExpr env n (E.Ok T.word)
     
     | A.Fetch  (v)        -> evalFetch env v
     | A.BinOp  (l,op,r)   -> evalPrimOp env op [l;r]

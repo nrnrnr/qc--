@@ -1,7 +1,5 @@
 
-% l2h substitution C C--
-% l2h substitution asdl ASDL
-% l2h substitution ocaml OCaml
+\input{macros.tex}
 
 % ------------------------------------------------------------------  
 \section{Lexical Analysis}\label{sec:scanner}
@@ -53,7 +51,6 @@ tracking.
 to [[Srcmap.location]]:
 
 <<scan.mll>>= 
-
     let location lexbuf map =
         Srcmap.location map (Lexing.lexeme_start lexbuf)
      
@@ -148,6 +145,24 @@ implementation.
         ; ("unwinds"        , P.UNWINDS)
 
         |]
+@
+
+Literals (integer, floating point, character) are stored as
+[[Bits.bits]] in the abstract syntax. This is not quite right as
+explained in the definition of the abstract syntax \module{ast}. Below
+are conversion functions that take strings as arguments and returns a
+[[Bits.bits]] value using the maximum width [[Bits.maxwidth]].
+
+<<>>=
+
+let str2bits f str =
+    try f str Bits.maxwidth with
+    | Bits.Size     -> E.error "literal too large for this implementation"
+    | Bits.Overflow -> assert false (* can't happen - we use maxwidth *)
+
+let stri2bits str = str2bits Bits.of_stringi str
+let strf2bits str = str2bits Bits.of_stringf str
+let strc2bits str = str2bits Bits.of_stringc str 
 
 } (* end of prolog *)
 @
@@ -289,8 +304,8 @@ the reserved word [[pragma]] the [[PRAGMA]] token is returned by
                   let s = substr 1 0 (get lexbuf)
                   in P.PRIMOP(s)
                 }
-  | float       { fun map -> P.FLT (get lexbuf) }
-  | int         { fun map -> P.INT (get lexbuf) }
+  | float       { fun map -> P.FLT (strf2bits (get lexbuf)) }
+  | int         { fun map -> P.INT (stri2bits (get lexbuf)) }
   
   | "/*"        { fun map -> comment1 lexbuf map }
   | cxxcomment  { fun map -> token lexbuf map (* skip comment *) }
@@ -312,18 +327,18 @@ written. Currently the string representation is returned.
 and character = parse
     printable      "'"          { fun map -> 
                                   let s = substr 0 (-1) (get lexbuf) in
-                                  P.CHAR  (s)
+                                  P.CHAR  (strc2bits s)
                                 }
   
   | '\\' escape    "'"          { fun map -> 
                                   let s = substr 0 (-1) (get lexbuf) in
-                                  P.CHAR  (s)
+                                  P.CHAR  (strc2bits s)
                                 }
 
   
   | '\\' ['x' 'X'] hex+ "'"     { fun map -> 
                                   let s = substr 0 (-1) (get lexbuf) in
-                                  P.CHAR  (s)
+                                  P.CHAR  (strc2bits s)
                                 }
                                   
   | _                           { fun map ->
@@ -708,14 +723,15 @@ together with their positions.
     | P.TILDE(s)          -> "TILDE(" ^     s ^ ")"
     | P.UMINUS(s)         -> "UMINUS" ^     s ^ ")"
     
-    | P.ID(s)             -> "ID(" ^        s           ^ ")"
-    | P.STR(s)            -> "STR(" ^       s           ^ ")"
-    | P.INFIXOP(s)        -> "INFIXOP(" ^   s           ^ ")"
-    | P.PRIMOP(s)         -> "PRIMOP(" ^    s           ^ ")"
-    | P.INT(i)            -> "INT(" ^       i           ^ ")"
-    | P.FLT(f)            -> "FLT(" ^       f           ^ ")"
-    | P.CHAR(c)           -> "CHAR(" ^      c           ^ ")"
-    | P.BITSn(i)          -> "BITSn(" ^ string_of_int i ^ ")"
+    
+    | P.ID(s)             -> "ID(" ^        s                  ^ ")"
+    | P.STR(s)            -> "STR(" ^       s                  ^ ")"
+    | P.INFIXOP(s)        -> "INFIXOP(" ^   s                  ^ ")"
+    | P.PRIMOP(s)         -> "PRIMOP(" ^    s                  ^ ")"
+    | P.INT(i)            -> "INT(" ^  Bits.to_string None   i ^ ")"
+    | P.FLT(f)            -> "FLT(" ^  Bits.to_string None   f ^ ")"
+    | P.CHAR(c)           -> "CHAR(" ^ Bits.to_string None   c ^ ")"
+    | P.BITSn(i)          -> "BITSn(" ^ string_of_int i        ^ ")"
 @
 
 The following function [[lex]] takes a file name, scans the
@@ -780,31 +796,10 @@ where the leftmost symbol has index 1.
 let p  ()  = (Parsing.symbol_start (), Parsing.symbol_end())
 let pn n   = (Parsing.rhs_start n, Parsing.rhs_end n)
 let px ()  = (Parsing.symbol_start ())
-@
 
-Integer literals are returned by the scanner as a [[string]] pair. 
-The ``ascii to integer'' function [[atoi]] returns the value by
-applying [[int_of_string]]]. Values starting with a [[0]] are
-expected to be in octal notation. Since [[int_of_strings]] treats
-these as decimal numbers, we prefix them with [[0o]]. The [[0x]]
-notation is recognized by [[int_of_string]] and requires no special
-treatment. 
- 
-<<>>=
-let atoi x =
-    try 
-        ( match String.length x with
-        | 0                           -> assert false
-        | n when x.[0] = '0' && n > 1 -> int_of_string ("0o"^x)
-        | _                           -> int_of_string x
-        )
-    with Failure _ -> Error.error ("syntax error: "^x)
-@
-  
-
-<<>>=
 let rev    = List.rev
 
+<<>>=
 let mkRegs v (ty,regs) =
     let r (id,hint) = (v, ty, id, hint) 
     in
@@ -843,9 +838,9 @@ let mkTypedefs ty names =
 %token <string>         ID
 %token <string>         STR
 %token <int>            BITSn
-%token <string>         INT
-%token <string>         FLT
-%token <string>         CHAR
+%token <Bits.bits>      INT
+%token <Bits.bits>      FLT
+%token <Bits.bits>      CHAR
 @
 
 The precedence of tokens from lowest to highest precedence.
@@ -908,7 +903,7 @@ decl        :   INVARIANT REGISTER registers SEMI
             |   TYPEDEF ty names SEMI          { A.Typedef($2,rev $3)      }
             |   TARGET properties SEMI         { A.Target(rev $2)          }
 <<>>=
-property    :   MEMSIZE INT                    { A.Memsize(atoi $2) }
+property    :   MEMSIZE INT                    { A.Memsize(Bits.to_int $2) }
             |   BYTEORDER BIG                  { A.ByteorderBig     }
             |   BYTEORDER LITTLE               { A.ByteorderLittle  }
 <<>>=
@@ -920,7 +915,7 @@ span        :   SPAN exprAt expr
 <<>>=
 datumAt     :   datum                          { A.DatumAt($1,p()) }
 datum       :   ID COLON                       { A.Label $1 }
-            |   ALIGN INT SEMI                 { A.Align (atoi $2) }
+            |   ALIGN INT SEMI                 { A.Align (Bits.to_int $2) }
             |   tyAt size initAt SEMI          { A.MemDecl($1,$2,Some $3)}
             |   tyAt size        SEMI          { A.MemDecl($1,$2,None)}
             |   tyAt      initAt SEMI          { A.MemDecl($1,A.NoSize,Some $2)}
@@ -989,7 +984,7 @@ data        :   data  datumAt                  { $2 :: $1 }
 
 conv        :   FOREIGN STR                    { Some $2 }
 
-aligned     :   ALIGNED INT                    { Some (atoi $2) }
+aligned     :   ALIGNED INT                    { Some (Bits.to_int $2) }
 
 flowAt      :   flow                           { A.FlowAt($1,p()) }
 flow        :   ALSO CUTS     TO names         { A.CutsTo($4)     }

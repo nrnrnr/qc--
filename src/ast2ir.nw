@@ -5,6 +5,8 @@
 % l2h substitution ocaml OCaml
 % l2h substitution forall forall
 
+\input{macros.tex}
+
 % ------------------------------------------------------------------ 
 \section{Translation into Abstract {\PAL}}
 % ------------------------------------------------------------------ 
@@ -12,7 +14,7 @@
 After a source file has been successfully parsed and its static
 semantics have been found correct it is translated into abstract 
 {\PAL}. Abstract {\PAL} is defined by an {\asdl} description
-[[ir.asdl]] in source file [[[ir.nw]].
+[[ir.asdl]] in source file \module{ir}.
 
 % ------------------------------------------------------------------ 
 \subsection{Interface}
@@ -37,18 +39,9 @@ module A  = Ast
 module E  = Error
 module F  = Fenv
 
-(* this doesn't go here *)
-
-module type Option = sig
-  val get   : 'a -> 'a option -> 'a  (* get x (Some y) = y; get x None = x *)
-end
-
-module Option = struct
-  let get x = function Some y -> y | None -> x
-end
 
 module R = struct
-  let truth = Rtl.Const "true" (* bogus *)
+  let truth = Rtl.Const(Rtl.Bool(true))
   let width_of r = 77 (* all exprs 77 bits wide - bogus *)
   let assign l r = Rtl.Rtl [(truth, Rtl.Store(l, r, width_of r))]
   let skip = Rtl.Rtl []
@@ -86,9 +79,9 @@ let rec lvalue env = function
 let actuals env ir xs = true
 
 <<ast2ir.ml>>=
-let dummy_expression = Rtl.Const "99"
+let dummy_expression = Rtl.Const(Rtl.Bits(Bits.zero 32)) 
 let width env expr = 77 (* every expression is 77 bits wide *)
-let const n = A.Int (string_of_int n, None) (* ugly *)
+let const n = A.Int (Bits.of_int n Bits.maxwidth, None) (* ugly *)
 let rec expr env = function
     | A.ExprAt(x,_)             -> expr env x
     | A.Int( i, None)           -> dummy_expression
@@ -186,8 +179,8 @@ We have omitted the hints!!!
 
 <<cases for translating statements>>=
 | A.ReturnStmt(cc, alt, args) ->
-    let (cont, count) = Option.get (const 0, const 0) alt in
-    let cc = Option.get standard_convention cc in
+    let (cont, count) = Aux.Option.get (const 0, const 0) alt in
+    let cc = Aux.Option.get standard_convention cc in
     props (GM.copy_out (List.map (actual env) args) Fgraph.ProcResults cc (
     props (GM.return graph (un_const cont) (un_const count))))
 <<more cases for translating statements>>=

@@ -1,28 +1,52 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
+% agraph = abstract graph
+
+\input{macros.tex}
+
+% ------------------------------------------------------------------ 
 \section{An abstract view of a flow graph}
+% ------------------------------------------------------------------ 
+
+The details of a flow graph as defined in module \module{ir} are
+hidden during its construction.  This module provides an abstract
+graph interface that is mainly used by the \module{ast2ir} module.
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+The interface is captured in a signature [[S]] which is used to
+describe the result of a functor that implements it.
 
 <<agraph.mli>>=
 module type S = sig
+    <<signature S>>
+end
+
+<<signature S>>=
 type graph
-type node
 @ 
-Nodes have to have properties---notably, span bindings.
-We don't want to have to pass properties to every node-creation
-function.
-So instead, we add a new type: [[unode]], for ``unmarked node.''
-We then use [[bind]] to add properties.
-<<agraph.mli>>=
+
+Nodes have to have properties---notably, span bindings.  We don't want
+to have to pass properties to every node-creation function.  So
+instead, we add a new type:  [[unode]], for ``unmarked node.'' We then
+use [[bind]] to add properties.
+
+<<>>=
+type node
 type unode (* a node without any properties *)
 type properties
 val bind : properties -> unode -> node
-@ Types [[unode]] and [[node]] might have exactly the same
+@ 
+
+Types [[unode]] and [[node]] might have exactly the same
 representation, but by using [[node]] as arguments and returning
 [[unode]] as results, we ensure that in any well-typed program, some
-properties are bound to each node.
-@
-At the moment, the only interesting properties are span bindings.
-<<agraph.mli>>=
+properties are bound to each node.  At the moment, the only
+interesting properties are span bindings.
+
+<<>>=
 module Prop : sig (* property stuff *)
   val empty : properties
   type link_time_constant = Rtl.expr
@@ -30,38 +54,48 @@ module Prop : sig (* property stuff *)
 end
 @ 
 
-<<agraph.mli>>=
+<<>>=
 type label = string (* a label in the C-- source language *)
+@
 
+% ------------------------------------------------------------------ 
+\subsubsection{Conctruction functions}
+% ------------------------------------------------------------------ 
+
+<<>>=
 module Make : sig
   <<constructor functions>>
 end
 @ 
+
 We make new graphs with [[Make.graph]].
 <<constructor functions>>=
 val graph : unit -> graph (* build a new flow graph *)
 @ 
-Every node belongs to exactly one graph.
-The graph might have to be an explicit argument to the function that
-builds the node, or if the constructor function takes another node,
-the graph is implicit, since if two nodes are related they belong to
-the same graph.
-@
-We start translating back to front, with the exit node.
-As we build the flow graph, we always have edges that provide the
-control flow out of the node and through the graph, all the way to an
-unconditional [[goto]] or to the exit node.
+
+Every node belongs to exactly one graph.  The graph might have to be
+an explicit argument to the function that builds the node, or if the
+constructor function takes another node, the graph is implicit, since
+if two nodes are related they belong to the same graph.
+
+We start translating back to front, with the exit node.  As we build
+the flow graph, we always have edges that provide the control flow out
+of the node and through the graph, all the way to an unconditional
+[[goto]] or to the exit node.
+
 <<constructor functions>>=
 val exit : graph -> unode (* the unique exit node of this graph *)
 @ 
+
 When we specify a [[goto]], we also need to say what graph it belongs
-to.
-Also, the front end must say what the possible targets are.
-It is a checked run-time error to pass an empty list of target labels
-to [[Make.goto]].
+to.  Also, the front end must say what the possible targets are.  It
+is a checked run-time error to pass an empty list of target labels to
+[[Make.goto]].
+
 <<constructor functions>>=
 val goto : graph -> Rtl.expr -> label list -> unode
 @ 
+
 To build ordinary nodes, we pass one or two successor nodes.
 <<constructor functions>>=
 val branch  : Rtl.expr -> node -> node -> unode
@@ -71,6 +105,7 @@ val copy_out : Fgraph.actual list -> Fgraph.context -> Fgraph.convention -> node
 @ 
 To return from a {\PAL} procedure, you have to say which return
 continuation you want and what the total is.
+
 <<constructor functions>>=
 type continuation = int
 type count = int
@@ -86,8 +121,4 @@ type cont = { normal  : node
             } 
 val call : Rtl.expr -> cont -> unode
 val jump : graph -> Rtl.expr -> label list -> unode
-@ 
-Ugh.
-<<agraph.mli>>=
-end
 @ 
