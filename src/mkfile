@@ -29,19 +29,22 @@
 NAME =      qc--
 VERSION =   `date +%Y%m%d`
 
-################################################################
+# ------------------------------------------------------------------
 # paths
-################################################################
+# ------------------------------------------------------------------
 
 TOP    =    ..
 LIBDIR =    ../lib
 BINDIR =    ../bin
 MANDIR =    ../man
 
-################################################################
+
+MLBURG =    $BINDIR/mlburg
+
+# ------------------------------------------------------------------
 # (high level) virtual targets
 # be careful to use only variables that are defined above
-################################################################
+# ------------------------------------------------------------------
 # INTERP = evaluating | residualizing
 # change the variable below to extract the right variant 
 # from *.nw files
@@ -98,72 +101,73 @@ clobber:V:  clean
             rm -f $NAME $NAME.opt newer
 
 
-################################################################
+# ------------------------------------------------------------------
 # important file sets
-################################################################
+# ------------------------------------------------------------------
 
 # The order of files defines the link order.  So if you have troubles
 # with undefined symbols during linking re-order this list
 # accordingly.  No module must use any of its successors.
 
-ML =            impossible.ml  \
-                topsort.ml     \
-                eqn.ml         \
-                luautil.ml     \
-                aux.ml         \
-                strutil.ml     \
-                idgen.ml       \
-                error.ml       \
-                this.ml        \
-                ast.ml         \
-                astUtil.ml     \
-                asm3.ml        \
-                parse.ml       \
-                scan.ml        \
-                types.ml       \
-		idreloc.ml	\
-                mangle.ml      \
-                rtlasdl.ml     \
-                rtlasdlUtil.ml \
-                rtlx.ml        \
-                const.ml       \
-                space.ml       \
-                rtlop.ml       \
-                expcheck.ml    \
-                dummy.ml       \
-                astpp.ml       \
-                rtleval.ml     \
-                register.ml    \
-                rtlutil.ml     \
-                talloc.ml      \
-                area.ml        \
-                automaton.ml   \
-                target2.ml     \
-                fenv.ml        \
-                elab.ml        \
-                cont.ml        \
-                targets.ml     \
-                cfgprop.ml     \
-                rtldebug.ml    \
-                cfg3.ml        \
-                cfgutil.ml     \
-                expander.ml    \
-                backplane.ml   \
-                proc.ml        \
-                astasm.ml      \
-		sparcasm.ml	\
-                dotasm.ml      \
-                asdlasm.ml     \
-                placevar.ml    \
-                copyinout.ml   \
-                ast3ir.ml      \
-                live.ml        \
-                interval.ml    \
-                lifetime.ml    \
-                linscan.ml     \
-                colorgraph.ml  \
-                driver2.ml     \
-                main2.ml       \
+ML =            impossible.ml    \
+                topsort.ml       \
+                eqn.ml           \
+                luautil.ml       \
+                aux.ml           \
+                strutil.ml       \
+                idgen.ml         \
+                error.ml         \
+                this.ml          \
+                ast.ml           \
+                astUtil.ml       \
+                asm3.ml          \
+                parse.ml         \
+                scan.ml          \
+                types.ml         \
+		idreloc.ml       \
+                mangle.ml        \
+                rtlasdl.ml       \
+                rtlasdlUtil.ml   \
+                rtlx.ml          \
+                const.ml         \
+                space.ml         \
+                rtlop.ml         \
+                expcheck.ml      \
+                dummy.ml         \
+                astpp.ml         \
+                rtleval.ml       \
+                register.ml      \
+                rtlutil.ml       \
+                talloc.ml        \
+                area.ml          \
+                automaton.ml     \
+                target2.ml       \
+                fenv.ml          \
+                elab.ml          \
+                cont.ml          \
+                targets.ml       \
+                cfgprop.ml       \
+                rtldebug.ml      \
+                cfg3.ml          \
+                cfgutil.ml       \
+                expander.ml      \
+                dummyexpander.ml \
+                backplane.ml     \
+                proc.ml          \
+                astasm.ml        \
+		sparcasm.ml      \
+                dotasm.ml        \
+                asdlasm.ml       \
+                placevar.ml      \
+                copyinout.ml     \
+                ast3ir.ml        \
+                live.ml          \
+                interval.ml      \
+                lifetime.ml      \
+                linscan.ml       \
+                colorgraph.ml    \
+                driver2.ml       \
+                main2.ml         \
 
 # interfaces in alphabetical order
 
@@ -237,9 +241,9 @@ CMX = ${ML:%.ml=%.cmx}
 SCAN =          $ML $MLI        \
                 rtldebug.mli rtldebug.ml
 
-################################################################
+# ------------------------------------------------------------------
 # rules and tools 
-################################################################
+# ------------------------------------------------------------------
 
 <../config/ocaml.mk
 
@@ -250,17 +254,17 @@ OCAMLO_FLAGS =  -I $LIBDIR -ccopt -L$LIBDIR -ccopt -static
 
 CC =            gcc
 
-################################################################
+# ------------------------------------------------------------------
 # binaries
-################################################################
+# ------------------------------------------------------------------
 
 CMOSYS  =       unix.cma str.cma
 CMOCMM  =	cllib.cma asdl.cma lua.cma rtllib.cma gen.cma
-CMOLIBS =       $CMOSYS $CMOCMM
+CMOLIBS =       $CMOSYS $CMOCMM camlburg.cmo
 
-CMXSYS  = ${CMOSYS:%.cma=%.cmxa}
-CMXCMM  = ${CMOCMM:%.cma=%.cmxa}
-CMXLIBS =       $CMXSYS $CMXCMM
+CMXSYS  =       ${CMOSYS:%.cma=%.cmxa}
+CMXCMM  =       ${CMOCMM:%.cma=%.cmxa}
+CMXLIBS =       $CMXSYS $CMXCMM camlburg.cmx
 
 LIBSLASHCMOLIBS = ${CMOCMM:%=$LIBDIR/%}
 LIBSLASHCMXLIBS = ${CMXCMM:%=$LIBDIR/%}
@@ -273,9 +277,9 @@ $NAME:          depend-check $CMO $OBJ $LIBSLASHCMOLIBS
 $NAME.opt:      depend-check $CMX $OBJ $LIBSLASHCMXLIBS
                 $OCAMLO $OCAMLO_FLAGS         -o $target $CMXLIBS $OBJ $CMX
 
-################################################################
+# ------------------------------------------------------------------
 # copy files to their official directories
-################################################################
+# ------------------------------------------------------------------
 
 $BINDIR/$NAME:          $NAME
                         cp $prereq $target
@@ -290,9 +294,9 @@ $MANDIR/man1/${NAME}grammar.1:   ${NAME}grammar.1
                         cp $prereq $target
 
 
-################################################################
+# ------------------------------------------------------------------
 # LaTeX documentation
-################################################################
+# ------------------------------------------------------------------
 # Files we generate documentation from
 
 HTML =          `echo *.nw                             | sed 's/\.nw/.html/g'`
@@ -309,9 +313,9 @@ html:V:         $HTML
 modules.tex:V: $INC
     echo $INC | sed 's!\([a-z0-9./]*inc\)!\\input{\1}!g' | fmt -w 10 > $target
 
-################################################################
+# ------------------------------------------------------------------
 # asdl
-################################################################
+# ------------------------------------------------------------------
 
 # ASDL does not support seperate compilation:  modules referring to
 # each other must be in one file.  To overcome this limitation we
@@ -355,8 +359,9 @@ rtlasdlUtil.mli: rtlasdl.asdl
                 asdlGen --ocaml --pickler=sexp $prereq
 
 
-################ special cases, primarily for multiple sources in one .nw
-#
+# ------------------------------------------------------------------ 
+# special cases, primarily for multiple sources in one .nw
+# ------------------------------------------------------------------ 
 # these rules clutter up the mkfile, but they make the output from mk,
 # and especially from mk- n, more readable, so they are worth it.
 #
@@ -418,9 +423,19 @@ ${NAME}grammar.pod:      main2.nw parse.output
     .r !grep "^  *[0-9]" parse.output
     wq' | ed ${NAME}grammar.pod
 
-################################################################
+# ------------------------------------------------------------------ 
+# MLburg generated files
+# ------------------------------------------------------------------ 
+
+dummyexpander.ml:   dummyexpander.mlb
+                    $MLBURG $prereq > $target
+
+dummyexpander.mlb:  dummyexpander.nw
+                    $NOTANGLE -L"$LINE" -R$target $prereq > $target
+
+# ------------------------------------------------------------------
 # include version and name information
-################################################################
+# ------------------------------------------------------------------
 
 this.ml:        this.in qc--.lua
                 sed     -e "s/@this@/$NAME-$VERSION/"   \
@@ -432,11 +447,10 @@ this.ml:        this.in qc--.lua
                         qc--.lua                        >> $target    
                 echo '"'                                >> $target        
 
-################################################################
+# ------------------------------------------------------------------
 # recalculate dependencies
 # make sure that generators are ran first
-################################################################
-#
+# ------------------------------------------------------------------
 
 $DEPEND:    $SCAN
             $OCAMLDEP -I $LIBDIR $prereq > $DEPEND

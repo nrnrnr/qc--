@@ -28,7 +28,7 @@ extensions.
 <<main2.ml>>=
 module E = Error
 
-module T    = Lua.Lib.Combine.T9                         (* types *)
+module T    = Lua.Lib.Combine.T9                    (* types *)
                 (Driver2.Export.AsmT)       (* T1 *)
                 (Driver2.Export.AstT)       (* T2 *)
                 (Driver2.Export.EnvT)       (* T3 *)
@@ -41,7 +41,7 @@ module T    = Lua.Lib.Combine.T9                         (* types *)
 
 module IO   = Lua.Lib.Extend (T.T7)
 
-module L    = Lua.Lib.Combine.L10                       (* libraries *)
+module L1   = Lua.Lib.Combine.L10                   (* up to 10 libraries *)
                 (Luaiolib.Make (T.T7))
                 (IO (Luastrlib.M))
                 (IO (Luamathlib.M))
@@ -54,9 +54,13 @@ module L    = Lua.Lib.Combine.L10                       (* libraries *)
                 (Linscan.Make (T.T4))
                 (IO (Luautil.MakeLib))
                 
+module L2   = Lua.Lib.Combine.L2                    (* add up to 9 more libs *)
+                (L1)
+                (Dummyexpander.Make (T.T4))
+                
 module I    = Lua.MakeInterp                            (* our interpreter *)
                 (Lua.Parser.MakeStandard)
-                (Lua.MakeCore (T) (L))
+                (Lua.MakeCore (T) (L2))
 
 module V    = I.Value
 @
@@ -65,7 +69,7 @@ module V    = I.Value
 \subsection{Interactive Lua-Interpreter}
 % ------------------------------------------------------------------ 
 
-For extreme-debugging an interactive session with the compiler's Lua
+For extreme debugging an interactive session with the compiler's Lua
 interpreter might be helpful.
 
 <<main2.ml>>=
