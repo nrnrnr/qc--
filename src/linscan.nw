@@ -530,12 +530,13 @@ let update interval spillee mem node =
     let _ = upd_outgoing interval spillee mem node       in
     let reads, writes = reads_writes (G.rtl node) spillee in
         if (reads || writes) then 
-            ( let tmp  = A.mkTmp mem in
+            ( let tmp   = A.mkTmp mem in
+              let subst = fun x -> if x = spillee then tmp else x in 
               ( if reads  then 
                     (G.gm_insert_assign_before  node (A.assign_reg tmp mem))
               ; if writes then 
                     (G.gm_insert_assign_after   node (A.assign_loc mem tmp))
-              ; G.set_rtl node (fun rtl -> rtl (*XXX*))
+              ; G.set_rtl node (Rtlutil.Subst.reg subst)
               )
             )
         else
@@ -543,6 +544,6 @@ let update interval spillee mem node =
          
 let spiller cfg spillee mem interval =
     let first = I.left interval      in
-    let last  = I.right interval - 1 in
+    let last  = I.right interval - 1 in (* open interval semantics strikes *)
         G.scan_fwd cfg first last (fun n () -> update interval spillee mem n) ()
 @
