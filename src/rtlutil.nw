@@ -250,6 +250,7 @@ machine-readable.
 module ToString: sig
     val rtl: Rtl.rtl -> string
     val exp: Rtl.exp -> string
+    val agg: Rtl.aggregation -> string
 end
 module ToReadableString: sig
     val rtl: Rtl.rtl -> string
@@ -824,10 +825,15 @@ let tuple docs =
     
 let apply c args = P.agrp(str c ^^ indent(tuple args))
 
-let aggregation = function
+let aggregation' = function
     | R.BigEndian       -> P.text "BE"
     | R.LittleEndian    -> P.text "LE"
     | R.Identity        -> P.text "ID"
+
+let agg= function
+    | R.BigEndian       -> "big"
+    | R.LittleEndian    -> "little"
+    | R.Identity        -> "none"
 
 let opr (name, ws) =
     tuple [str name; tuple (List.map int ws)]
@@ -849,7 +855,7 @@ let rec exp = function
     
 and loc = function
     | RP.Mem(sp, agg, w, e, ass) -> 
-        apply "Mem" [char sp; aggregation agg; int w; exp e]
+        apply "Mem" [char sp; aggregation' agg; int w; exp e]
     | RP.Reg(sp,i,w) ->
         apply "Reg" [char sp; int i; int w]
     | RP.Var(name, index, w) ->

@@ -226,6 +226,12 @@ module Map = struct
        ; V.project = (fun x -> lo.V.project (hi.V.project x))
        ; V.is      = (fun x -> hi.V.is x && lo.V.is (hi.V.project x))
        } 
+    let error t =
+      { V.embed = (function Error.Error -> V.Nil | Error.Ok v -> t.V.embed v);
+        V.project = (function V.Nil -> Error.Error | v -> Error.Ok (t.V.project v));
+        V.is = (function V.Nil -> true | v -> t.V.is v);
+      }
+        
     let ast       = AstV.makemap  V.userdata V.projection
     let proc      = ProcV.makemap V.userdata V.projection
     let vasm      = AsmV.makemap  V.userdata V.projection
@@ -464,6 +470,7 @@ C.register_module "Caml"
 C.register_module "Dataflow" 
    [ "emit_dot",   V.efunc (V.unit **->> V.unit)  Dataflow.Test.emit_dot
    ] g;                        
+@ 
 <<register modules to [[g]] in alphabetical order>>=
 let new_ok (map,ast) asm =
   match Nelab.program map asm (Nast.program ast) with
@@ -486,6 +493,9 @@ C.register_module "Driver"
   ; "stdout"    , Map.outchan.V.embed             stdout(* hack *)
   ; "compile"   , V.efunc (Map.optimize Map.proc **-> V.bool **->
                            Map.ast **-> Map.new_target **-> Map.env **->> Map.asm) 
+                          Driver.ocompile
+  ; "ncompile"  , V.efunc (Map.new_target **-> Map.optimize Map.proc **-> V.bool **->
+                           Map.ast **-> Map.asm **->> Map.asm) 
                           Driver.compile
   ; "reinit"    , V.efunc (V.unit  **->> V.unit)  Driver.reinit
   ] g;

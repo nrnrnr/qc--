@@ -431,7 +431,24 @@ We do the simple statements inline,
 but interprocedural control flow is complicated enough to warrant
 out-of-line functions (as will [[switch]]).
 <<functions that translate statements, including [[stmts]]>>=
-and stmts props ss succ = List.fold_left (fun node s -> stmt props s node) succ ss
+and stmts props ss succ = List.fold_right (stmt props) ss succ
+and stmt' props s  succ =
+  Printf.eprintf "Translating %s\n" (
+  match s with
+  | S.If (e, so, not) -> "If"
+  | S.Label n              -> "Label " ^ n
+  | S.Switch _             -> "Switch"
+  | S.Cont (name, _, _)    -> "Cont"
+  | S.Span (kv, bs)        -> "Span"
+  | S.Assign rtl           -> "Assign"
+  | S.Call (lhs, cc, e, args, targets, conts) -> "Call"
+  | S.Goto (e, labels) -> "Goto"
+  | S.Jump (cc, e, args, targets) -> "Jump"
+  | S.Cut (cc, k, args, conts)    -> "Cut"
+  | S.Return (cc, i, n, args)     -> "Return");
+  stmt props s succ
+
+
 and stmt  props s  succ =
   <<supporting functions for translating statements>> in
   match s with
@@ -546,8 +563,9 @@ and call lhs cconv e args targets(*unused*) conts succ =
     succ in
   let call_succ' = G.join_leading_to call_succ in
   let cont_spans = RT.conts_to_spans target.T.wordsize in (* BOGUS FOR NOW.... *)
-  add_spans (G.label call_succ', ra_span :: overflow_size_span :: frame_size_span ::
-                                 List.concat [cont_spans; csregs_spans; props]);
+  let spans = ra_span :: overflow_size_span :: frame_size_span ::
+              List.concat [cont_spans; csregs_spans; props] in
+  let () = add_spans (G.label call_succ', spans) in
   up_to_call **> call_succ'
 @
 \paragraph{Returns}
@@ -795,13 +813,14 @@ builds most of the flow graph.
 The initialization of continuations is delayed to a third pass, so we
 create a label node [[initcont]] as a placeholder.
 The initialization code is inserted at [[initcont]] after the translation.
+WE OUGHT TO BE ABLE TO DO WITHOUT ONE OF THESE LABEL NODES.
 <<definition of [[proc]], which translates one procedure>>=
-  let bodylbl  = (Idgen.label "proc body start") in
-  let procstrt = G.node_labeled g bodylbl
-  and initcont = G.node_labeled g (Idgen.label "initialize continuations") in
+  let bodylbl = Idgen.label "proc body start" in
+  let contlbl = Idgen.label "initialize continuations" in
   let () = add oldblocks proc_cc.C.overflow_alloc.C.parameter_deallocator
                          proc_in'.C.overflow in
-  let labelnode node ~succ = (G.set_succ node succ; node) in
+  let labelnode lbl ~succ =
+    let node = G.node_labeled g lbl in (G.set_succ node succ; node) in
   let () = 
     G.set_succ (G.entry g) (
     G.stack_adjust g proc_in'.C.pre_sp    **>
@@ -809,14 +828,15 @@ The initialization code is inserted at [[initcont]] after the translation.
     G.stack_adjust g proc_in'.C.post_sp   **>
     G.instruction  g save_ra              **>
     G.instruction  g save_nvrs            **>
-    labelnode initcont                    **>
-    labelnode procstrt                    **>
+    labelnode contlbl                     **>
+    labelnode bodylbl                     **>
     stmts proc.N.spans proc.N.code (G.exit g)) in 
 @ And as promised, the third pass.
 We initialize continuations, finish compiling them, and accumulate
 their blocks into [[contblocks]].
+CAN'T WE HAVE JUST ONE INSERTION POINT?
 <<definition of [[proc]], which translates one procedure>>=
-  let () = insert_init_cont_nodes contenv initcont in
+  let () = insert_init_cont_nodes contenv (G.node_labeled g contlbl) in
   let contblocks =
     let addblock name k blocks =
       finish_compiling_continuation k;

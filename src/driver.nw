@@ -52,8 +52,15 @@ val print     : Pp.doc -> int -> out_channel -> unit
 val pretty    : 'a * Ast.toplevel list -> Pp.doc
 val scan      : string -> unit
 val version   : unit -> unit
-val compile : (Oast2ir.proc -> unit) -> bool -> 'a * Ast.program -> Oast2ir.tgt
+val ocompile : (Oast2ir.proc -> unit) -> bool -> 'a * Ast.program -> Oast2ir.tgt
                 -> Oast2ir.proc Ofenv.Clean.env' -> Oast2ir.proc Asm.assembler
+val elab : 
+  Srcmap.map * Ast.program -> 'proc Asm.assembler
+  -> ('proc Fenv.Dirty.env' * 'proc Nelab.compunit) Error.error
+val compile :
+  Ast2ir.tgt -> (Ast2ir.proc -> unit) -> bool -> (Srcmap.map * Ast.program)
+  -> Ast2ir.proc Asm.assembler -> Ast2ir.proc Asm.assembler 
+   (* raises Error.ErrorExn *)
 val reinit    : unit -> unit
 @
 
@@ -61,8 +68,10 @@ val reinit    : unit -> unit
 \subsection{Caml Implementation}
 % ------------------------------------------------------------------ 
 <<driver.ml>>=
-module E   = Error
-module F   = Ofenv.Clean
+module E = Error
+module F = Ofenv.Clean
+module M = Metrics
+module T = Target
 <<driver.ml>>=
 let version () =
     ( This.name     stdout 
@@ -166,7 +175,7 @@ let check (map,ast) (asm) =
                       Error.error "compilation aborted because of errors." in
     Ofenv.clean env
 
-let compile opt exportglobals (map,ast) target env  =
+let ocompile opt exportglobals (map,ast) target env  =
     let () = consistency_check env target in   
     Oast2ir.translate target env opt exportglobals ast 
 <<driver.ml>>=
@@ -179,4 +188,45 @@ Calling [[reinit]] will reset any mutable state that can effect the
 output. Currently only [[Idgen]] is known to have this problem.
 <<driver.ml>>=
 let reinit() = Idgen.reset()
+@ 
+\subsection{Driver support for the new front end}
+
+Metrics check.  Perhaps the [[Target.t]] should have a [[Metrics.t]] inside.
+<<driver.ml>>=
+let metrics_ok src tgt =
+  let int i = string_of_int i in
+  let string s = s in
+  let outcome = ref true in
+  let unequal property to_string source target = 
+    outcome := false;
+    Printf.eprintf "source code specifies %s %s, but target %s specifies %s %s\n"
+      property (to_string source) tgt.T.name property (to_string target) in
+  if src.M.byteorder <> tgt.T.byteorder then
+    unequal "byteorder" Rtlutil.ToString.agg src.M.byteorder tgt.T.byteorder;
+  if src.M.wordsize <> tgt.T.wordsize then
+    unequal "wordsize" int src.M.wordsize tgt.T.wordsize;
+  if src.M.pointersize <> tgt.T.pointersize then
+    unequal "pointersize" int src.M.pointersize tgt.T.pointersize;
+  if src.M.memsize <> tgt.T.memsize then
+    unequal "memsize" int src.M.memsize tgt.T.memsize;
+  if src.M.float <> Float.name tgt.T.float then
+    unequal "float" string src.M.float (Float.name tgt.T.float);
+  if src.M.charset <> tgt.T.charset then
+    unequal "charset" string src.M.charset tgt.T.charset;
+  !outcome
+@ 
+<<driver.ml>>=
+let elab (map,ast) asm = Nelab.program map asm (Nast.program ast)
+
+let compile target opt exportglobals src asm =
+  let abort () = Error.error "compilation aborted because of errors" in
+  let as_ok = function Error.Ok x -> x | Error.Error -> abort () in
+  as_ok (Error.ematch (elab src asm) (fun (env,compunit) ->
+    if metrics_ok (Fenv.Dirty.metrics env) target then
+      if Fenv.Dirty.errorFlag env then
+        abort ()
+      else
+        Ast2ir.translate target (Fenv.clean env) opt exportglobals compunit
+    else
+      Error.error "metrics of source code don't match the target"))
 @
