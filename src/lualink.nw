@@ -341,18 +341,18 @@ C.register_module "Asm"
   ; "dot" , V.efunc (Map.outchan **->> Map.asm) (Dotasm.asm ~compress:true ~live:false)
   ; "big_dot" , V.efunc (Map.outchan **->> Map.asm) 
                             (Dotasm.asm ~compress:false ~live:true)
-(*
   ; "x86" ,  V.efunc (Map.outchan **->> Map.asm) (X86asm.make Cfgutil.emit)
+(*
   ; "ppc",   V.efunc (Map.outchan **->> Map.asm) (Ppcasm.make Cfgutil.emit)
   ; "mips",  V.efunc (Map.outchan **->> Map.asm) (Mipsasm.make Cfgutil.emit)
   ; "alpha", V.efunc (Map.outchan **->> Map.asm) (Alphaasm.make Cfgutil.emit)
   ; "ia64",  V.efunc (Map.outchan **->> Map.asm) (Ia64asm.make Cfgutil.emit)
   ; "sparc", V.efunc (Map.outchan **->> Map.asm) (Sparcasm.make Cfgutil.emit)
+*)
   ; "interp32l" , V.efunc (Map.outchan **->> Map.asm) 
             (Interpasm.asm' ~byteorder:Rtl.LittleEndian ~memsize:8 ~ptrsize:32)
   ; "interp32b" , V.efunc (Map.outchan **->> Map.asm) 
             (Interpasm.asm' ~byteorder:Rtl.BigEndian ~memsize:8 ~ptrsize:32)
-*)
   ] g;
 @ 
 \paragraph{Calling-convention automata}
@@ -666,11 +666,11 @@ C.register_module "Rtlop"
       ];
     "opnames", (V.list V.string).V.embed (List.sort Pervasives.compare Rtlop.opnames);
   ] g;
-<<old register modules to [[g]] in alphabetical order>>=
+<<register modules to [[g]] in alphabetical order>>=
 C.register_module "Runtime"
-  [ "emit_data", V.efunc (Map.asm **->> (Map.stage Map.proc))
-       (fun asm _ proc -> Runtimedata.emit_as_asm proc.Proc.target asm
-                                                proc.Proc.symbol proc.Proc.cfg)
+  [ "emit_data", V.efunc (Map.asm **->> Map.stage)
+       (fun asm _ (g,proc) -> Runtimedata.emit_as_asm proc.Proc.target asm
+                                                proc.Proc.symbol g; ((g, proc), false))
   ; "reg_mapping", V.efunc (Map.target **->> V.unit) Runtimedata.print_reg_map
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
@@ -722,15 +722,15 @@ C.register_module "Target"
 C.register_module "Targets"
   [ "dummy32l", Map.target.V.embed Dummy.dummy32l'
   ; "dummy32b", Map.target.V.embed Dummy.dummy32b'
-(*
   ; "x86",      Map.target.V.embed X86.target
+(*
   ; "ppc",      Map.target.V.embed Ppc.target
   ; "mips",     Map.target.V.embed Mips.target
   ; "alpha",    Map.target.V.embed Alpha.target
   ; "ia64",     Map.target.V.embed Ia64.target
   ; "sparc",    Map.target.V.embed Sparc.target
-  ; "interp",   Map.target.V.embed Interp.target'
 *)
+  ; "interp",   Map.target.V.embed Interp.target'
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Typecheck" 
@@ -812,12 +812,11 @@ C.register_module "Widen"
  ; "widenlocs",           Map.stage.V.embed widenlocs
  ; "op_count",            Map.stage.V.embed op_count
  ] g;
-<<old register modules to [[g]] in alphabetical order>>=
+<<register modules to [[g]] in alphabetical order>>=
 let pic load_wkr use_return proc =
   let import _ = Error.error "imports not supported in PIC code" in
-  Pic.transform ~import ~load_wkr ~use_return proc;
-  1
-in
+  Pic.transform ~import ~load_wkr ~use_return proc in
+
 (* THESE WELL-KNOWN PIC REGISTERS SHOULD PROBABLY BE CONFIGURABLE IN LUA *)
 let regc5 = (('c', Rtl.Identity, Cell.of_size 32), 5, Rtl.C 1) in
 let pic_ppc _ proc = 
@@ -831,8 +830,8 @@ let pic_x86 _ proc =
   let load_wkr l = Rtl.store l (Rtl.fetch (amem espval) 32) 32 in
   pic load_wkr true proc in
 C.register_module "Pic"
- [ "ppc", V.efunc (V.value **-> Map.proc **->> V.int) pic_ppc
- ; "x86", V.efunc (V.value **-> Map.proc **->> V.int) pic_x86
+ [ "ppc", Map.stage.V.embed pic_ppc
+ ; "x86", Map.stage.V.embed pic_x86
  ] g;
 
   let namestring = function

@@ -88,7 +88,7 @@ the data as assembly by calling [[emit_as_asm]].
 The function should be partially applied to an assembler, then added
 to the optimization pipeline.
 <<runtimedata.mli>>=
-val emit_as_asm : tgt -> 'a Asm.assembler -> procsym:Symbol.t -> Zipcfg.graph -> bool
+val emit_as_asm : tgt -> 'a Asm.assembler -> procsym:Symbol.t -> Zipcfg.graph -> unit
 @
 It appears that the interpreter needs to know about user-defined spans and
 stackdata.
@@ -170,8 +170,7 @@ let emit_as_asm target asm ~procsym cfg =
   let prev_section = asm#current in
   emit_sd_spans ();
   List.iter emit_site_spans (order node_spans);
-  asm#section prev_section;
-  true
+  asm#section prev_section
 let emit_as_asm target asm ~procsym g = Impossible.unimp "emit runtimedata"
 @
 By emitting the spans in the same order that the labels are emitted,

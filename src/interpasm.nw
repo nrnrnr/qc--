@@ -11,7 +11,7 @@ assemblers in the {\qcc} compiler.
 
 <<interpasm.mli>>=
 type tgt   = ((Rtl.exp -> Automaton.t), Call.t) Target.t
-type proc' = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t
+type proc' = Zipcfg.graph * (Automaton.t, unit, Call.t, tgt) Proc.t
 
 val asm':   byteorder:Rtl.aggregation -> memsize:int -> ptrsize:int
             -> out_channel -> proc'  Asm.assembler
@@ -26,13 +26,13 @@ captured by a functor argument of signature [[PROC]]. I could not get it
 to work with polymorphism allone.
 
 <<interpasm.ml>>=
-module Asm      = Asm
-module G        = Cfgx.M
-module RP       = Rtl.Private
-module P        = Proc
+module G  = Zipcfg
+module GR = Zipcfg.Rep
+module RP = Rtl.Private
+module P  = Proc
 
 type tgt   = ((Rtl.exp -> Automaton.t), Call.t) Target.t
-type proc' = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t
+type proc' = Zipcfg.graph * (Automaton.t, unit, Call.t, tgt) Proc.t
 
 module type PROC = sig
     type proc
@@ -53,7 +53,7 @@ module New = struct
 
     (* we ask for more stackdata space than we strictly need; leftover space
        we use for storing continuation information *)
-    let emit (proc:proc) printer =
+    let emit ((cfg, proc):proc) printer =
         (* this code for emitting stackdata info. stolen from runtimedata.nw *)
         let fail () = Impossible.impossible "found illegal stackdata span value" in
         let rec extract_offset l = match Rtl.Dn.loc l with
@@ -65,11 +65,7 @@ module New = struct
 
         let stackdata_decls printer =
           (* We have to find a node with spans -- it will have stack data spans.*)
-          let find n rst =
-            match G.kind n with
-            | G.Call | G.Join -> (match G.spans n with Some ss -> Some ss | None -> rst)
-            | _ -> rst in
-          let spans = G.fold_nodes find None proc.Proc.cfg in
+          let spans = G.fold_spans (fun spans _ -> Some spans) cfg None in
           match spans with
           | Some ss ->
             let spans = Runtimedata.stackdata ss in
@@ -85,7 +81,7 @@ module New = struct
                       (Block.size proc.Proc.stackd+Block.size proc.Proc.conts))
         ; stackdata_decls printer
         ; printer ")\n"
-        ; Interpemit.proc proc printer
+        ; Interpemit.proc (cfg,proc) printer
         ; printer "CMM.end_procedure()\n"
         )
 end
