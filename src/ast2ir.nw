@@ -73,6 +73,7 @@ module RO = Rewrite.Ops
 module RP = Rtl.Private
 module RU = Rtlutil
 module RS = Register.Set
+module RSX= Register.SetX
 module S  = Elabstmt
 module SM = Strutil.Map
 module SP = Spans
@@ -89,6 +90,15 @@ let genlabel s =
 Utility functions and so on.
 <<ast2ir.ml>>=
 <<utilities>>
+@ 
+We have a problem with register sets.
+Formerly, we mostly kept sets of registers, but for liveness analysis,
+we went finer grain and tracked slices.
+Crossing this boundary seemed to be expensive, so we move the crossing
+here, to the creation of the flow graph.
+From here down, the flow graph works with slices.
+<<utilities>>=
+let rsx = Register.rset_to_rxset
 @ 
 Here are 
 some of the usual suspects.
@@ -327,14 +337,14 @@ let continuations cc ast =
   let (--)    = RS.diff in
   let as_cut_to k =
     let defs  = k.K.cut_in.C.regs in
-    { G.defs  = defs; G.kills = allregs -- defs; G.node = k.K.cut_pc } in
+    { G.defs  = rsx defs; G.kills = rsx (allregs -- defs); G.node = k.K.cut_pc } in
   let as_unwinds k =
-    { G.defs  = RS.empty; G.kills = volregs; G.node = k.K.unwind_pc } in
+    { G.defs  = RSX.empty; G.kills = rsx volregs; G.node = k.K.unwind_pc } in
     (* defs are vars and so can't be a register set. See [[splice_in_unwind_to_entry]] *)
   let as_returns k =
     let pc = K.get_return_pc cc k in
     let defs  = k.K.return_in.C.regs in
-    { G.defs  = defs; G.kills = volregs -- defs; G.node = pc } in
+    { G.defs  = rsx defs; G.kills = rsx (volregs -- defs); G.node = pc } in
   let contmap f = List.map (f << continuation) in
   { S.cuts     = contmap as_cut_to  ast.S.cuts;
     S.unwinds  = contmap as_unwinds ast.S.unwinds;
@@ -589,7 +599,7 @@ and jump cconv e args targets g =
     G.instruction  restore_nvrs                                  **>
     G.instruction  (RU.store ra_out (RU.fetch saved_ra))         **>
     G.stack_adjust jump_sp                                       **>
-    G.jump         jumpi ~targets ~uses:(RS.union out.C.regs nvregs) **>
+    G.jump         jumpi ~targets ~uses:(rsx (RS.union out.C.regs nvregs)) **>
     g
 @
 \paragraph{Calls}
@@ -621,10 +631,11 @@ and call lhs cconv e args _targets conts alias succ =
   G.stack_adjust out.C.pre_sp                                        **>
   G.instruction  out.C.shuffle                                       **>
   G.stack_adjust out.C.post_sp                                       **>
-  G.call machine e ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
-               ~altrets:conts.S.areturns ~unwinds_to:conts.S.unwinds
-               ~cuts_to:conts.S.cuts ~aborts:conts.S.aborts
-               ~reads:alias.S.reads ~writes:alias.S.writes ~spans:(Some spans) **>
+  G.call machine e
+    ~uses:(rsx out.C.regs) ~defs:(rsx in'.C.regs) ~kills:(rsx cc.C.volregs)
+    ~altrets:conts.S.areturns ~unwinds_to:conts.S.unwinds
+    ~cuts_to:conts.S.cuts ~aborts:conts.S.aborts
+    ~reads:alias.S.reads ~writes:alias.S.writes ~spans:(Some spans) **>
   (if conts.S.returns then
     G.assertion    (in'.C.insp in'.C.overflow)                       **>
     G.stack_adjust in'.C.pre_sp              (* DOUBTS ABOUT THIS *) **>
@@ -659,7 +670,7 @@ and return cconv i n args g =
   G.instruction  (RU.store ra_out (RU.fetch saved_ra))  **>
   G.instruction  restore_nvrs            **>
   G.stack_adjust out.C.post_sp           **>
-  G.return       ~exit:i reti ~uses:(RS.union out.C.regs nvregs) **>
+  G.return       ~exit:i reti ~uses:(rsx (RS.union out.C.regs nvregs)) **>
   g
 @ The code above is safe only so long as the outgoing area doesn't
 overlap with the spill area.
@@ -689,7 +700,7 @@ and cut cc k args conts g =
   let ()    = add_constraints (Block.constraints out.C.overflow) in
   let conts = ccontinuations cc conts in
   G.instruction out.C.shuffle **>
-  G.cut_to      cuti ~cuts_to:conts.S.ccuts ~aborts:conts.S.caborts ~uses:out.C.regs **>
+  G.cut_to cuti ~cuts_to:conts.S.ccuts ~aborts:conts.S.caborts ~uses:(rsx out.C.regs) **>
   g
 @ A couple of notes:
 The constraints from [[out.C.overflow]] have to get to the solver in

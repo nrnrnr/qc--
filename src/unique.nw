@@ -48,6 +48,7 @@ module type ARRAY = sig
   val make : uid list -> 'a -> 'a t
   val get  : 'a t -> uid -> 'a
   val set  : 'a t -> uid -> 'a -> unit
+  val update : 'a t -> uid -> ('a -> 'a) -> unit
 end
 @ 
 \subsection{Implementation}
@@ -82,10 +83,17 @@ module Map : MAP = struct
     fold add m m'
 end
 
-let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
 module Array : ARRAY = struct
   type 'a t = int Map.t * 'a array
-  let make _ = unimpf "array"
-  let get _ = unimpf "array"
-  let set _ = unimpf "array"
+  let make uids init =
+    let rec build uids i map = match uids with
+    | [] -> map, Array.make i init
+    | u :: us -> build us (i+1) (Map.add u i map) in
+    build uids 0 Map.empty
+
+  let get (map, a) u   = Array.get a (Map.find u map)
+  let set (map, a) u v = Array.set a (Map.find u map) v
+  let update (map, a) u f =
+    let i = Map.find u map in
+    Array.set a i (f (Array.get a i))
 end

@@ -46,8 +46,7 @@ Here are some basic types and operations:
 type uid = Unique.uid
 type label = uid * string
 
-type regs  = Register.Set.t  (* sets of regs for dataflow *)
-type xregs = Register.SetX.t (* sets of regs for dataflow *)
+type regs  = Register.SetX.t  (* sets of regs for dataflow *)
 type contedge = { kills:regs; defs:regs; node:label }
 
 module Rep : sig
@@ -236,14 +235,50 @@ first-to-last order, as suitable for use in a forward dataflow problem.
 <<zipcfg.mli>>=
 val postorder_dfs : graph -> Rep.block list
 @ 
+\paragraph{Observing nodes}
 Successors.
 <<declarations of [[Rep]]'s public functions>>=
 val succs : last -> uid list
+@
+<<declarations of [[Rep]]'s public functions>>=
+val mid_instr  : middle -> Rtl.rtl
+val last_instr : last -> Rtl.rtl  (* may be nop for, e.g., [[Exit]] *)
+@ 
+\paragraph{Observing data flow}
+As noted above a node can contribute defs, uses, and kills to each
+outedge, and a non-join node may contribute uses to each inedge.
+The access to this information is carefully crafted to support
+liveness analysis and to provide for efficient implementation in the
+common case where there is no dataflow.
+
+The [[union_over_outedges]] function is written in continuation-passing
+style.  The [[noflow]] continuation is used in the common case when an
+edge bears no dataflow information; the [[flow]] continuation is used
+in the general case.  Clients must guarantee that
+[[noflow n = flow {node=n; defs=empty; kills=empty}]].
+In the common case, [[union_over_edges]] simply applies [[noflow]] to
+its unique successor.
+
+Calling [[add_inedge_uses n l]] returns the union of~[[l]] with any
+uses on the inedge to~[[n]].
+It is defined on \emph{all} nodes, because there are no uses on the
+inedges of a join point.
+In the common case, it returns its second argument.
+Calling [[add_live_spans n l]] returns the union of~[[l]] with any
+registers kept live in spans.
+Spans keep register live if they may be needed to walk the stack.
+<<zipcfg.mli>>=
+val union_over_outedges :
+  Rep.last -> noflow:(uid -> regs) -> flow:(contedge -> regs) -> regs
+val add_inedge_uses : Rep.last   -> regs -> regs
+val add_live_spansl : Rep.last  -> regs -> regs
+val add_live_spansf : Rep.first -> regs -> regs
 @ 
 \clearpage
 \subsection{Implementation}
 <<zipcfg.ml>>=
 module R = Rtl
+module RSX = Register.SetX
 module T = Target
 module U  = Unique
 module UM = Unique.Map
@@ -269,8 +304,7 @@ It is OK to open [[Rep]] because the definition is sitting right
 here---this [[open]] does not create the stereotypical problem of a
 mysterious [[open]] from a separately compiled module.
 <<zipcfg.ml>>=
-type regs  = Register.Set.t  (* sets of regs for dataflow *)
-type xregs = Register.SetX.t (* sets of regs for dataflow *)
+type regs = Register.SetX.t (* sets of regs for dataflow *)
 type contedge = { kills:regs; defs:regs; node:label }
 
 module Rep = struct
@@ -297,6 +331,8 @@ type call = {         cal_i          : Rtl.rtl
 let id = function (Entry,_) -> entry_uid | (Label ((u, _), _, _),_) -> u
 @ 
 Convert block between forms.
+These functions are tail-recursive, so we can go as deep as we like
+without fear of stack overflow.  
 <<definitions of [[Rep]]'s public functions>>=
 let goto_start =
   let rec revapp head tail = match head with
@@ -571,3 +607,62 @@ let postorder_dfs g =
       | n::rst -> vnode n (next rst) acc visited in
     next children acc visited in
   vnode (zip entry) (fun acc _visited -> acc) [] US.empty
+@ 
+<<zipcfg.ml>>=
+
+<<zipcfg.ml>>=
+(* should this fn be defined on exi and ill?
+   when there are cont edges, do we still need to cover the regular edges?*)
+let (++) = RSX.union
+let union_over_outedges node ~noflow ~flow =
+  let noflow (u, l) = noflow u in
+  let union_contedges ce = List.fold_left (fun r s -> r ++ flow s) RSX.empty ce in
+  match node with
+  | Call c -> union_contedges c.cal_contedges
+  | Cut (_, es, _) -> union_contedges es
+  | Cbranch (c, t, f) -> noflow t ++ noflow f
+  | Mbranch (_, ls) -> List.fold_left (fun r s -> r ++ noflow s) RSX.empty ls
+  | Branch (_, l) -> noflow l
+  | Jump _
+  | Return _
+  | Exit _
+  | Forbidden _ -> RSX.empty
+  
+let add_inedge_uses node regs =
+  let reg_add  = RSX.fold RSX.add in
+  match node with
+  | Call c -> reg_add c.cal_uses regs
+  | Cut (_, _, uses) -> reg_add uses regs
+  | Jump (_, uses, _) -> reg_add uses regs
+  | Return (_, _, uses) -> reg_add uses regs
+  | Exit _ | Branch _ | Cbranch _ | Mbranch _ | Forbidden _ -> regs
+
+let span_add spans rst = match spans with
+| Some ss -> Spans.fold_live_locs RSX.add ss rst
+| None    -> rst 
+
+let add_live_spansl node regs = match node with
+| Call c -> span_add c.cal_spans regs
+| _ -> regs
+
+let add_live_spansf node regs = match node with
+| Label (_, _, sp) -> span_add (!sp) regs
+| Entry -> regs
+@ 
+<<definitions of [[Rep]]'s public functions>>=
+let mid_instr m = match m with
+| Instruction  r -> r
+| Stack_adjust r -> r
+| Assertion    r -> r
+
+let nop = Rtl.par [] 
+let last_instr l = match l with
+| Exit    _ -> nop
+| Branch  (r, _) -> r
+| Cbranch (r, _, _) -> r
+| Mbranch (r, _) -> r
+| Call    c -> c.cal_i  
+| Cut     (r, _, _) -> r
+| Return  (_, r, _) -> r
+| Jump    (r, _, _) -> r
+| Forbidden r -> r
