@@ -51,7 +51,15 @@ of interest to any liveness analysis.
 (This is going to be wrong if we have to manage condition codes.)
 <<rtlutil.mli>>=
 type 'a regfun = Rtl.space -> index:StdPrims.std_int -> Rtl.width -> 'a -> 'a
-val read_write_sets : read:'a regfun -> write:'a regfun -> Rtl.rtl -> 'a -> 'a
+val read_write_lists : read:'a regfun -> write:'a regfun -> Rtl.rtl -> 'a -> 'a
+(*
+  let read_write_sets read write rtl z =
+    let rws = read_write_lists insert_left insert_right in
+    let (readlist, writelist) = rws rtl (empty, empty) in
+    fold_left read (fold_left write z writelist) readlist
+*)
+   
+    
 @ 
 <<obsolete and deprecated?>>=
 val width:      Rtl.exp -> int                 (* width of expression *)
@@ -78,7 +86,7 @@ let assign l r = Rtl.store l r (width r)
 
 <<rtlutil.ml>>=
 type 'a regfun = Rtl.space -> index:int -> Rtl.width -> 'a -> 'a
-let read_write_sets (read:'a regfun) (write:'a regfun) = 
+let read_write_lists (read:'a regfun) (write:'a regfun) = 
   let rec rtl (z:'a) (RP.Rtl gs)  = List.fold_left guarded z gs
       and guarded z (g, eff) = exp (effect z eff) g
       and effect z eff = match eff with
