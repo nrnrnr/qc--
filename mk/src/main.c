@@ -27,6 +27,8 @@ void badusage(void);
 short buf[10000];
 #endif
 
+static Word *argvword(char **argv);
+
 int
 main(int argc, char **argv)
 {
@@ -211,8 +213,9 @@ main(int argc, char **argv)
 				if(**argv)
 					mk(*argv);
 		} else {
-			Word *head, *tail, *t;
+			Word *head, *tail, *t, *argv_word;
 
+                        head = argvword(argv); /* save before changing argv */
 			/* fake a new rule with all the args as prereqs */
 			tail = 0;
 			t = 0;
@@ -228,7 +231,6 @@ main(int argc, char **argv)
 			if(tail->next == 0)
 				mk(tail->s);
 			else {
-				head = newword("command line arguments");
 				addrules(head, tail, strdup(""), VIR, mkinline, 0);
 				mk(head->s);
 			}
@@ -294,4 +296,29 @@ regerror(char *s)
 		fprintf(stderr, "mk: %s:%d: regular expression error; %s\n",
 			infile, mkinline, s);
 	Exit();
+}
+
+static Word*
+argvword(char **argv)
+{
+        int i, len;
+        char *buf, *p;
+        Word *answer;
+
+        len = 0;
+        for (i = 0; argv[i]; i++)
+                len += strlen(argv[i]) + 1;
+        
+        buf = p = malloc(len);
+        my_assert("room for argv buffer", buf != NULL);
+        for (i = 0; argv[i]; i++) {
+                strcpy(p, argv[i]);
+                p += strlen(argv[i]);
+                *p++ = ' ';
+        }
+        p[-1] = '\0';
+        my_assert("p == buf+len", p == buf + len);
+        answer = newword(buf);
+        free(buf);
+        return answer;
 }
