@@ -1,7 +1,21 @@
 target byteorder little;
 
-export f;
+export f, main;
+import printf;
 
 f (bits32 i) {
   return (-i, -99);
+}
+
+foreign "C" main("unsigned" bits32 iargc, "address" bits32 iargv) {
+  bits32 x, y;
+
+  x, y = f(-33);
+
+  foreign "C" printf ("address" fmt, x, y);
+  foreign "C" return(0);
+}
+
+section "data" {
+  fmt: bits8[] "dual-result call to f returns %d, %d (expected 33, -99)\n\0";
 }

@@ -29,7 +29,7 @@ Test.files = { "add.c--"
              , "ovrflow.c--"
              , norun("ralloc-000.c--")
              , norun("rnd2.c--")
-             , norun("sub.c--")
+             , "sub.c--"
 	     , "switch.c--"
 	     , "tail.c--"
              , { source = {'tail2.c--', 'call3.c--'} }

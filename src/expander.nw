@@ -259,6 +259,11 @@ val acontext : context (* for addresses *)
 val constant_context : width    -> context
 val arg_contexts     : operator -> context list
 val result_context   : operator -> context
+@ 
+We have to know when a right-hand side is too big to try to cram into
+a single temporary.
+<<generic expansion operations for register machines>>=
+val itempwidth : int  (* maximum width for one integer temporary *)
 @
 Every machine should be able to do a block copy.
 <<generic expansion operations for register machines>>=
@@ -447,6 +452,7 @@ module type S = sig
 end 
 
 module A  = Automaton
+module BO = Bits.Ops
 module PX = Postexpander
 module R  = Rtl
 module RP = Rtl.Private
@@ -1149,6 +1155,7 @@ and assign_room room left right w =
             let a, is' = address room addr in
             (match right with
             | <<\emph{pattern [[->]] action} for low-bit store>>
+            | <<\emph{pattern [[->]] action} for splittable assignment>>
             | _ ->
                 if looks_like_stack_rhs right then
                   (match right with
@@ -1189,6 +1196,40 @@ RP.App ((("sx" | "zx"), [wsrc; wdst]) as op, [rhs]) ->
   (* what goes wrong if wsrc is not the width of the stack? *)
   let is = to_stack room rhs in
   is @@ is' @@ to_segment (Post.store_pop_cvt op wdst a (upassn assn))
+@ 
+A~splittable right-hand side looks like this: 
+\begin{quote}
+[[%or[64](%zx[32,64]($r0), %shl[64](%zx[32,64]($r2), 32))]]
+\end{quote}
+I FEAR I MAY BE BOTCHING THE ASSERTION IN THE STORE, ESPECIALLY WHERE
+ALIGNMENT IS CONCERNED.
+<<\emph{pattern [[->]] action} for splittable assignment>>=
+( RP.App (("or", [ww]), [RP.App (("zx", [nn;ww']), [lsw]);
+                          RP.App (("shl", [ww'']),
+                                  [RP.App (("zx", [dd;ww''']), [msw]);
+                                   RP.Const (RP.Bits nnb)])])
+| RP.App (("or", [ww]), [RP.App (("shl", [ww'']),
+                                  [RP.App (("zx", [dd;ww''']), [msw]);
+                                   RP.Const (RP.Bits nnb)]);
+                          RP.App (("zx", [nn;ww']), [lsw])])
+) when w > Post.itempwidth && agg <> Rtl.Identity && ww = ww' && ww = ww'' &&
+  ww = ww''' && dd = ww - nn && BO.eq nnb (Bits.U.of_int nn ww) ->
+    let memsize = proc.Proc.target.T.memsize in
+    assert (w mod memsize = 0 && nn mod memsize = 0);
+    let addr = Up.exp addr in
+    let assn = Up.assertion assn in
+    let lsw, msw = Up.exp lsw, Up.exp msw in
+    let offset nn = RU.addk proc.Proc.target.T.pointersize addr (nn / memsize) in
+    (match agg with
+    | Rtl.LittleEndian ->
+        rtl (R.par [R.store (R.mem assn 'm' agg nn addr) lsw nn;
+                    R.store (R.mem assn 'm' agg dd (offset nn)) msw dd])
+    | Rtl.BigEndian ->
+        rtl (R.par [R.store (R.mem assn 'm' agg dd addr) msw dd;
+                    R.store (R.mem assn 'm' agg nn (offset dd)) msw nn])
+    | Rtl.Identity ->
+        Impossible.impossible "bad aggregation in split assignment"
+    )
 @ 
 <<other generic expander functions>>=
 and fetch_slot slot w = Down.exp (A.fetch slot w)

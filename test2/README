@@ -65,12 +65,15 @@ specific values:
 
 Test.files is a table containing information about each test case.  A
 `test case' consists of multiple `source files', which are linked
-together and then run.  The test driver supports the common case in
-which a test cases has a single source file.  Each entry in Test.files
-can be either the name of a source file, for this common case, or a
-table containing detailed information about the test case. Any fields
-not provided will be given reasonable default values.  A list of the
-available fields and their default values is given below.
+together and then run.  The first source file should always be the one
+containing the main() function; this convention will ensure that the
+C-- globals work out right.  The test driver supports the common case
+in which a test case has a single source file.  Each entry in
+Test.files can be either the name of a source file, for this common
+case, or a table containing detailed information about the test
+case. Any fields not provided will be given reasonable default values.
+A list of the available fields and their default values is given
+below.
 
 field  default    description
 --------------------------------------------------------------------
@@ -100,12 +103,12 @@ Here is an example of how defaults are assigned:
  Test.results = "x86"
  Test.files = {
   { name   = nil         ---->  "test"
-  , source = "test.c"    ---->  "src/test.c"
+  , source = "test.c"    ---->  { "src/test.c" }
   , stdin  = nil         ---->  "src/test.0"
   , stdout = "../out"    ---->  "./../out"
   , stderr = nil         ---->  "x86/test.2"
-  , asm    = "ppc/tst.s" ---->  "./ppc/tst.s"
-  , asmout = "test2.s1   ---->  "x86/test2.s1"
+  , asm    = "ppc/tst.s" ---->  { "./ppc/tst.s" }
+  , asmout = "test2.s1   ---->  { "x86/test2.s1" }
   , asmerr = "/dev/null" ---->  "/dev/null"
   }
  }
