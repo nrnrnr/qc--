@@ -240,8 +240,13 @@ to an earlier request cannot be used to satisfy a later request.
 @
 See the paper for this.
 <<exported values>>=
-val counter    : int ref -> stage
+val bitcounter    : int ref -> stage
 val offsetregs : int ref -> Register.t list -> stage
+@ 
+And also see the pape for this:
+<<exported values>>=
+val argcounter : int ref -> stage
+val argnoregs  : int ref -> Register.t list -> stage
 @
 \paragraph{Combination of multiple stages}
 It can be useful to hand out different registers from different piles.
@@ -631,14 +636,14 @@ let is_any      h w = true
 @ 
 \paragraph{Register assignment by offset}
 <<automaton.ml>>=
-let counter n next =
+let somecounter of_width n next =
   { freeze = next.freeze
   ; allocate =
       (fun ~width ~alignment ~hint ->
-         (n := !n + width; next.allocate ~width ~alignment ~hint))
+         (n := !n + of_width width; next.allocate ~width ~alignment ~hint))
   } 
-let counter n = wrap (counter n)
-
+let bitcounter n = wrap (somecounter (fun w -> w) n)
+let argcounter n = wrap (somecounter (fun w -> 1) n)
 <<automaton.ml>>=
 let rec drop_regs w regs =
   if w <= 0 then
@@ -670,6 +675,36 @@ let offsetregs n regs = wrap (offsetregs n regs)
 <<prattle about registers used by [[offsetregs]]>>=
 let used = List.map regstring (RS.elements state.used) in
 Verbose.say 2 ["offsetregs automaton uses regs: "; String.concat ", " used; "\n"]
+@ 
+\paragraph{Register assignment by argument count}
+<<automaton.ml>>=
+let argnoregs n regs next =
+  let state = { avail = regs; used = RS.empty } in
+  let alloc ~width ~alignment ~hint =
+    let argno = !n - 1 in
+    let rec list_drop n l =
+      if n = 0 then
+        l
+      else
+        match l with [] -> [] | h :: t -> list_drop (n-1) t in
+    state.avail <- list_drop argno regs;
+    try
+      let (_, _, w) as r = getreg state in
+      if w = width then
+        of_loc (R.reg r)
+      else if w < width then
+        Impossible.unimp "register aggregation"
+      else
+        narrowf w width (of_loc (R.reg r))
+    with Failure _ -> next.allocate width alignment hint in
+  let freeze regs mems =
+    <<prattle about registers used by [[argnoregs]]>>;
+    next.freeze (RS.union state.used regs) mems in
+  { freeze = freeze; allocate = alloc }
+let argnoregs n regs = wrap (argnoregs n regs)
+<<prattle about registers used by [[argnoregs]]>>=
+let used = List.map regstring (RS.elements state.used) in
+Verbose.say 2 ["argnoregs automaton uses regs: "; String.concat ", " used; "\n"]
 @ 
 \paragraph{Exclusion}
 <<automaton.ml>>=
