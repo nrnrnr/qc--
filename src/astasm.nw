@@ -74,13 +74,9 @@ end
 <<Make>>=
 let pointer     = A.BitsTy(P.pointersize)
 let bits n      = A.BitsTy n
-let int n       = A.Int( string_of_int n
-                       , Some (bits P.wordsize)
-                       )
+let int n       = A.Sint( string_of_int n, Some (bits P.wordsize))
 let one         = int 1 (* wordsize *)
-let zero        = A.Int( "0"
-                       , Some (bits P.memsize)
-                       ) (* memsize *)
+let zero        = A.Sint( "0" , Some (bits P.memsize)) (* memsize *)
 
 exception Unsupported of string
 let unsupported msg = raise (Unsupported msg)
@@ -139,7 +135,7 @@ the same width as a pointer.
 <<Make>>=
 let reladdr (a:reloc) =
     let width           = P.pointersize in
-    let const (i:int64) = A.Int(Printf.sprintf "%Lx" i, Some pointer) in
+    let const (i:int64) = A.Uint(Printf.sprintf "0x%Lx" i, Some pointer) in
     let sym   s         = A.Fetch (A.Name(None,s#mangled_text)) in
         match Reloc.Simple.normalize a with
         | None  , bits -> const (Bits.S.to_int64 bits)
@@ -221,7 +217,7 @@ object (this)
     
     method const (s: Symbol.t) (b:Bits.bits) =
         let i = Printf.sprintf "0x%Lx" (Bits.U.to_int64 b) in 
-        let bits = A.Int(i,Some (bits (Bits.width b))) in
+        let bits = A.Uint(i,Some (bits (Bits.width b))) in
         this#append (A.Decl(A.Const(None,s#mangled_text,bits)))
 
     (* set location counter *)
@@ -263,7 +259,7 @@ object (this)
     method value (v:Bits.bits) = 
         let ty   = bits (Bits.width v)              in
         let i    = Printf.sprintf "0x%Lx" (Bits.U.to_int64 v) in
-        let init = A.InitExprs([A.Int(i, Some ty)]) in
+        let init = A.InitExprs([A.Uint(i, Some ty)]) in
             this#append (A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
             
     method addr (a: reloc) = 

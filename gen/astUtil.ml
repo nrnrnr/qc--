@@ -219,9 +219,12 @@
               "ast_ExprAt" -> let expr1 = (sexp_rd_expr s_) in
               let region1 = (sexp_rd_region s_) in
               Ast.ExprAt(expr1, region1)
-            | "ast_Int" -> let string1 = (StdPrimsUtil.sexp_rd_std_string s_) in
+            | "ast_Sint" -> let string1 = (StdPrimsUtil.sexp_rd_std_string s_) in
               let ty_opt1 = (SexpPkl.rd_option sexp_rd_ty s_) in
-              Ast.Int(string1, ty_opt1)
+              Ast.Sint(string1, ty_opt1)
+            | "ast_Uint" -> let string1 = (StdPrimsUtil.sexp_rd_std_string s_) in
+              let ty_opt1 = (SexpPkl.rd_option sexp_rd_ty s_) in
+              Ast.Uint(string1, ty_opt1)
             | "ast_Float" -> let string1 = (StdPrimsUtil.sexp_rd_std_string s_) in
               let ty_opt1 = (SexpPkl.rd_option sexp_rd_ty s_) in
               Ast.Float(string1, ty_opt1)
@@ -1046,9 +1049,16 @@
             (sexp_wr_region region1 s_);
             (SexpPkl.wr_rp s_)
           end
-        | (Ast.Int(string1, ty_opt1)) -> begin
+        | (Ast.Sint(string1, ty_opt1)) -> begin
             (SexpPkl.wr_lp s_);
-            (SexpPkl.wr_sym "ast_Int" s_);
+            (SexpPkl.wr_sym "ast_Sint" s_);
+            (StdPrimsUtil.sexp_wr_std_string string1 s_);
+            (SexpPkl.wr_option sexp_wr_ty ty_opt1 s_);
+            (SexpPkl.wr_rp s_)
+          end
+        | (Ast.Uint(string1, ty_opt1)) -> begin
+            (SexpPkl.wr_lp s_);
+            (SexpPkl.wr_sym "ast_Uint" s_);
             (StdPrimsUtil.sexp_wr_std_string string1 s_);
             (SexpPkl.wr_option sexp_wr_ty ty_opt1 s_);
             (SexpPkl.wr_rp s_)

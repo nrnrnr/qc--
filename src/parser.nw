@@ -74,6 +74,7 @@ We define some helpers; [[get]] returns the matched string and is
 quite intuitive when called as [[get lexbuf]].
 <<prolog>>=
 let get         = Lexing.lexeme
+let droplast s  = String.sub s 0 (String.length s - 1)
 let getchar     = Lexing.lexeme_char
 let strlen      = String.length
 let pos_start   = Lexing.lexeme_start
@@ -159,8 +160,10 @@ let escape      = ['\\' '\'' '"' 'a' 'b' 'f' 'n' 'r' 't' '?' ]
 
 let sign        = ['+' '-']
 let nat         = digit+
-let int         = '0' ['x' 'X'] hex+
-                | digit+        (* includes octal *)
+let uint        = ['1'-'9'] digit* ['u' 'U']    (* unsigned decimal *)
+let hexint      = '0' ['x' 'X'] hex+            (* hex *)
+let octint      = '0' digit*                    (* octal *)
+let sint        = ['1'-'9'] digit*         (* signed decimal *)
 let frac        = nat '.' nat
 let exp         = ['e''E'] sign? nat
 let float       = frac exp? 
@@ -260,8 +263,11 @@ the reserved word [[pragma]] the [[PRAGMA]] token is returned by
                   let s = substr 1 0 (get lexbuf)
                   in P.PRIMOP(s)
                 }
-  | float       { fun map -> P.FLT (get lexbuf) }
-  | int         { fun map -> P.INT (get lexbuf) }
+  | float       { fun map -> P.FLT  (get lexbuf) }
+  | sint        { fun map -> P.SINT (get lexbuf) }
+  | uint        { fun map -> P.UINT (droplast (get lexbuf)) }
+  | hexint      { fun map -> P.UINT (get lexbuf) }
+  | octint      { fun map -> P.UINT (get lexbuf) }
   
   | "/*"        { fun map -> comment1 lexbuf map }
   | cxxcomment  { fun map -> token lexbuf map (* skip comment *) }
@@ -718,7 +724,8 @@ together with their positions.
     | P.STR(s)            -> "STR(" ^       String.escaped s ^ ")"
     | P.INFIXOP(s)        -> "INFIXOP(" ^   s ^ ")"
     | P.PRIMOP(s)         -> "PRIMOP(" ^    s ^ ")"
-    | P.INT(s)            -> "INT(" ^       s ^ ")"
+    | P.SINT(s)           -> "SINT(" ^       s ^ ")"
+    | P.UINT(s)           -> "UINT(" ^       s ^ ")"
     | P.FLT(s)            -> "FLT(" ^       s ^ ")"
     | P.CHAR(i)           -> "CHAR(" ^ Char.escaped (Char.chr i) ^ ")"
 
@@ -773,18 +780,13 @@ let noeqdep = dep "Hardware register name without '=' is deprecated"
 let mkRegs v (hint,ty,regs) = List.map (fun (id,reg) -> (v, hint, ty, id, reg)) regs
 let mkTypedefs ty names = List.map (fun n -> A.Typedef(n,ty)) names
 @            
-The [[[str2int]] function takes the string representation of an integer
-and returns its value. We cannot use [[int_of_string]] directly because
-we take a string starting with [[0]] (zero) as an octal value.
+The [[[str2uint]] function takes the string representation of an integer
+and returns its value.
 <<helper functions>>=
-let str2int str =
-    let len    = String.length str in
-        try match str.[0] with
-                 | '0' when len > 1 -> int_of_string ("0o"^str)
-                 | _                -> int_of_string str
-        with
-            Failure _ -> Error.error ("syntax error in constant: "^str)
-            (* should not happen except for overflows *)    
+let str2uint str =
+  let b = Bits.U.of_string str Nativeint.size in
+  try Bits.U.to_int b with Bits.Overflow ->
+    Error.errorf "constant %s overflows %d-bit native integer" str (Nativeint.size-1)
 @         
 <<parse.mly>>=
 %token ABORTS ALIGN ALIGNED ALSO AS AMPERSAND BIG BYTEORDER CASE COLON CCOLON
@@ -817,7 +819,8 @@ let str2int str =
 %token <string>         STR
 %token <int>            BITSn
 
-%token <string>         INT
+%token <string>         SINT
+%token <string>         UINT
 %token <string>         FLT
 %token <int>            CHAR
 @
@@ -892,13 +895,16 @@ decl        :   INVARIANT /*----*/ registers SEMI
             |   TYPEDEF ty names SEMI          { A.Typedef($2,rev $3)      }
             |   TARGET properties SEMI         { A.Target(rev $2)          }
 <<parse.mly>>=
-property    :   MEMSIZE INT                    { A.Memsize(str2int $2)      }
-            |   BYTEORDER BIG                  { A.ByteorderBig              }
-            |   BYTEORDER LITTLE               { A.ByteorderLittle           }
-            |   FLOATREPR STR                  { A.FloatRepr $2              }
-            |   CHARSET STR                    { A.Charset $2                }
-            |   PTRSIZE INT                    { A.PointerSize (str2int $2) }
-            |   WRDSIZE INT                    { A.WordSize (str2int $2)    }
+uint        : SINT { str2uint $1 }
+            | UINT { str2uint $1 }
+
+property    :   MEMSIZE uint                   { A.Memsize $2      }
+            |   BYTEORDER BIG                  { A.ByteorderBig    }
+            |   BYTEORDER LITTLE               { A.ByteorderLittle }
+            |   FLOATREPR STR                  { A.FloatRepr $2    }
+            |   CHARSET STR                    { A.Charset $2      }
+            |   PTRSIZE uint                   { A.PointerSize $2  }
+            |   WRDSIZE uint                   { A.WordSize $2     }
 
 <<parse.mly>>=
 properties  :   properties property            { $2 :: $1 }
@@ -909,7 +915,7 @@ span        :   SPAN sexprAt exprAt
 <<parse.mly>>=
 datumAt     :   datum                          { A.DatumAt($1,p()) }
 datum       :   ID COLON                       { A.Label $1 }
-            |   ALIGN INT SEMI                 { A.Align (str2int $2) }
+            |   ALIGN uint SEMI                { A.Align $2 }
             |   tyAt size initAt SEMI          { A.MemDecl($1,$2,Some $3)}
             |   tyAt size        SEMI          { A.MemDecl($1,$2,None)}
             |   tyAt      initAt SEMI          { A.MemDecl($1,A.NoSize,Some $2)}
@@ -993,7 +999,7 @@ data        :   data  datumAt                  { $2 :: $1 }
 
 conv        :   FOREIGN STR                    { Some $2 }
 
-aligned     :   ALIGNED INT                    { str2int $2 }
+aligned     :   ALIGNED uint                   { $2 }
 
 flowAt      :   flow                           { A.FlowAt($1,p()) }
 flow        :   ALSO CUTS     TO names         { A.CutsTo($4)     }
@@ -1136,8 +1142,10 @@ arm         :   CASE ranges COLON body         { A.Case($2,$4)   }
 
 <<parse.mly>>=
 sexprAt     :   sexpr                          { A.ExprAt($1, p())    }
-sexpr       :   INT                            { A.Int($1, None)      }
-            |   INT CCOLON tyAt                { A.Int($1, Some $3)   }
+sexpr       :   SINT                           { A.Sint($1, None)      }
+            |   SINT CCOLON tyAt               { A.Sint($1, Some $3)   }
+            |   UINT                           { A.Uint($1, None)      }
+            |   UINT CCOLON tyAt               { A.Uint($1, Some $3)   }
             |   FLT                            { A.Float($1, None)    }
             |   FLT CCOLON tyAt                { A.Float($1, Some $3) }
             |   CHAR                           { A.Char($1, None)     }
@@ -1169,11 +1177,18 @@ expr:       |   sexpr                          { $1                   }
             |   exprAt GT         exprAt       { A.BinOp($1,$2,$3) }
             |   exprAt INFIXOP    exprAt       { A.PrimOp($2,[None,$1;None,$3]) }
             |   TILDE exprAt %prec TILDE       { A.UnOp($1,$2)     }
-            |   MINUS exprAt %prec UMINUS      { A.UnOp($1,$2)     }
+            |   MINUS exprAt %prec UMINUS      { uminus $2         }
 
 exprs       :   exprs_ optcomma                { rev $1   }
 exprs_      :   exprs_ COMMA exprAt            { $3 :: $1 }
             |   exprAt                         { [$1]     }
+<<helper functions>>=
+let uminus e =
+  let rec strip = function
+    | A.ExprAt(e, _) -> strip e
+    | A.Sint(s, w) -> A.Sint("-" ^ s, w)
+    | _ -> A.UnOp("-", e) in
+  strip e
 <<parse.mly>>=
 imports     :   imports_ optcomma              { rev $1           }
 imports_    :   imports_ COMMA STR AS ID       { (Some $3,$5)::$1 }

@@ -747,26 +747,19 @@ let verbosity v =
 
 <<ToAST>>=
 let bits n             = A.BitsTy n
-let bitstring b =
-  try string_of_int (Bits.S.to_int b)
-  with Bits.Overflow -> Bits.to_string b
-
 let rec const = function
     | R.Bool(true)   ->  A.PrimOp ("true", [])
     | R.Bool(false)  ->  A.PrimOp ("false", [])
-    | R.Bits b       ->  A.Int( bitstring b
-                              , match !the_verbosity with
-                                | High -> Some (bits (Bits.width b))
-                                | Low  -> None
-                              )
-                     
+    | R.Bits b       ->
+        let w = match !the_verbosity with
+        | High -> Some (bits (Bits.width b))
+        | Low  -> None in
+        (try A.Sint (string_of_int (Bits.S.to_int b), w)
+        with Bits.Overflow -> A.Uint (Bits.to_string b, w))
     | R.Link(sym,_,w) -> A.Fetch(A.Name(None, sym#mangled_text))
     | R.Diff(c1,c2)   -> A.PrimOp("-", [(None,const c1); (None,const c2)])
     | R.Late(name,w)  -> A.Fetch(A.Name(None, name)) (*XXX ok? *)
 @
-
-
-
 <<ToAST>>=
 let opr op w =
     sprintf "%s[%s]" op (String.concat "," (List.map string_of_int w))
@@ -795,7 +788,7 @@ and rvalue = function
       let e = rvalue loc in
       let e = if i = 0 then e
               else A.PrimOp("shrl", [None, e;
-                                     None, A.Int (string_of_int i, None)]) in
+                                     None, A.Sint (string_of_int i, None)]) in
       let e = A.PrimOp("lobits" ^ string_of_int w, [None, e]) in
       e
   | loc -> A.Fetch(location' loc) 
@@ -821,7 +814,7 @@ and location' = function
         | High ->
             let space   =  sprintf "$%c(%d)" sp (Cell.to_width ms c) in   
             let s       = string_of_int i in
-            A.Mem(A.TypeSynonym space,A.Int(s,None), None, [])
+            A.Mem(A.TypeSynonym space,A.Sint(s,None), None, [])
         | Low -> A.Name(None, sprintf "$%c%d" sp i))
     | R.Var    (name,_,width)   -> A.Name(None,name)
     | R.Global (name,_,width)    -> A.Name(None,name)

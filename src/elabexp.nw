@@ -251,20 +251,27 @@ and typed_expr exp =
       Rtl.app opr arges, resty) in
   let literal cvt v width = Rtl.bits (cvt v width) width, Types.Bits width in
   let literal cvt v = emap (literal cvt v) in
+  let signed, unsigned, float =
+    let cvt what cvt v width =
+      try cvt v width
+      with Bits.Overflow -> E.errorf "%s overflow in literal %s" what v in
+    cvt "signed-integer"   Bits.S.of_string,
+    cvt "unsigned-integer" Bits.U.of_string,
+    cvt "floating-point"   Bits.U.of_string in  (* surprising but true *)
   let const default_width = function
     | Some ty -> astwidth "literal constant" env ty
     | None    -> E.Ok default_width in
   match exp with
   | A.ExprAt(x,r)     -> catch r typed_expr x
-  | A.Int(str,t)      -> literal Bits.U.of_string str (const metrics.M.wordsize t) 
-  | A.Float(str,t)    -> literal Bits.U.of_string str (const metrics.M.wordsize t) 
-  | A.Char(int,t)     -> literal Bits.U.of_int    int (const 8                  t) 
-      (* perhaps suprisingly, [[Bits.U.of_string]] copes with all 
-         literal formats. Update: I have changed the type of A.Char, it
-         now contains an integer. -- CL *)
+  | A.Sint(str,t)     -> literal signed        str (const metrics.M.wordsize t) 
+  | A.Uint(str,t)     -> literal unsigned      str (const metrics.M.wordsize t) 
+  | A.Float(str,t)    -> literal float         str (const metrics.M.wordsize t) 
+  | A.Char(int,t)     -> literal Bits.U.of_int int (const 8                  t) 
   | A.Fetch(v)        -> rvalue_name_or_mem v
   | A.BinOp (l,op,r)  -> apply Rtlop.Translate.binary op [l;r]
   | A.UnOp  (op,e)    -> apply Rtlop.Translate.unary  op [e]
   | A.PrimOp(op,args) -> apply Rtlop.Translate.prefix op (List.map snd args)
-<<utilities>>=
+@ Perhaps suprisingly, [[Bits.U.of_string]] copes with all 
+         literal formats.
+@
 

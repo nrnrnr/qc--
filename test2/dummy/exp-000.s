@@ -65,93 +65,93 @@ section "text"
 
 section "data" { sym@fmt: }
 
-section "data" { bits32[1::bits32] { 6c::bits32 }; }
+section "data" { bits32[1::bits32] { 0x6c::bits32 }; }
 
-section "data" { bits32[1::bits32] { 6f::bits32 }; }
+section "data" { bits32[1::bits32] { 0x6f::bits32 }; }
 
-section "data" { bits32[1::bits32] { 6f::bits32 }; }
+section "data" { bits32[1::bits32] { 0x6f::bits32 }; }
 
-section "data" { bits32[1::bits32] { 6b::bits32 }; }
+section "data" { bits32[1::bits32] { 0x6b::bits32 }; }
 
-section "data" { bits32[1::bits32] { 75::bits32 }; }
+section "data" { bits32[1::bits32] { 0x75::bits32 }; }
 
-section "data" { bits32[1::bits32] { 70::bits32 }; }
+section "data" { bits32[1::bits32] { 0x70::bits32 }; }
 
-section "data" { bits32[1::bits32] { 20::bits32 }; }
+section "data" { bits32[1::bits32] { 0x20::bits32 }; }
 
-section "data" { bits32[1::bits32] { 72::bits32 }; }
+section "data" { bits32[1::bits32] { 0x72::bits32 }; }
 
-section "data" { bits32[1::bits32] { 65::bits32 }; }
+section "data" { bits32[1::bits32] { 0x65::bits32 }; }
 
-section "data" { bits32[1::bits32] { 74::bits32 }; }
+section "data" { bits32[1::bits32] { 0x74::bits32 }; }
 
-section "data" { bits32[1::bits32] { 75::bits32 }; }
+section "data" { bits32[1::bits32] { 0x75::bits32 }; }
 
-section "data" { bits32[1::bits32] { 72::bits32 }; }
+section "data" { bits32[1::bits32] { 0x72::bits32 }; }
 
-section "data" { bits32[1::bits32] { 6e::bits32 }; }
+section "data" { bits32[1::bits32] { 0x6e::bits32 }; }
 
-section "data" { bits32[1::bits32] { 73::bits32 }; }
+section "data" { bits32[1::bits32] { 0x73::bits32 }; }
 
-section "data" { bits32[1::bits32] { 20::bits32 }; }
+section "data" { bits32[1::bits32] { 0x20::bits32 }; }
 
-section "data" { bits32[1::bits32] { 30::bits32 }; }
+section "data" { bits32[1::bits32] { 0x30::bits32 }; }
 
-section "data" { bits32[1::bits32] { 78::bits32 }; }
+section "data" { bits32[1::bits32] { 0x78::bits32 }; }
 
-section "data" { bits32[1::bits32] { 25::bits32 }; }
+section "data" { bits32[1::bits32] { 0x25::bits32 }; }
 
-section "data" { bits32[1::bits32] { 78::bits32 }; }
+section "data" { bits32[1::bits32] { 0x78::bits32 }; }
 
-section "data" { bits32[1::bits32] { 20::bits32 }; }
+section "data" { bits32[1::bits32] { 0x20::bits32 }; }
 
-section "data" { bits32[1::bits32] { 28::bits32 }; }
+section "data" { bits32[1::bits32] { 0x28::bits32 }; }
 
-section "data" { bits32[1::bits32] { 73::bits32 }; }
+section "data" { bits32[1::bits32] { 0x73::bits32 }; }
 
-section "data" { bits32[1::bits32] { 68::bits32 }; }
+section "data" { bits32[1::bits32] { 0x68::bits32 }; }
 
-section "data" { bits32[1::bits32] { 6f::bits32 }; }
+section "data" { bits32[1::bits32] { 0x6f::bits32 }; }
 
-section "data" { bits32[1::bits32] { 75::bits32 }; }
+section "data" { bits32[1::bits32] { 0x75::bits32 }; }
 
-section "data" { bits32[1::bits32] { 6c::bits32 }; }
+section "data" { bits32[1::bits32] { 0x6c::bits32 }; }
 
-section "data" { bits32[1::bits32] { 64::bits32 }; }
+section "data" { bits32[1::bits32] { 0x64::bits32 }; }
 
-section "data" { bits32[1::bits32] { 20::bits32 }; }
+section "data" { bits32[1::bits32] { 0x20::bits32 }; }
 
-section "data" { bits32[1::bits32] { 62::bits32 }; }
+section "data" { bits32[1::bits32] { 0x62::bits32 }; }
 
-section "data" { bits32[1::bits32] { 65::bits32 }; }
+section "data" { bits32[1::bits32] { 0x65::bits32 }; }
 
-section "data" { bits32[1::bits32] { 20::bits32 }; }
+section "data" { bits32[1::bits32] { 0x20::bits32 }; }
 
-section "data" { bits32[1::bits32] { 30::bits32 }; }
+section "data" { bits32[1::bits32] { 0x30::bits32 }; }
 
-section "data" { bits32[1::bits32] { 78::bits32 }; }
+section "data" { bits32[1::bits32] { 0x78::bits32 }; }
 
-section "data" { bits32[1::bits32] { 64::bits32 }; }
+section "data" { bits32[1::bits32] { 0x64::bits32 }; }
 
-section "data" { bits32[1::bits32] { 65::bits32 }; }
+section "data" { bits32[1::bits32] { 0x65::bits32 }; }
 
-section "data" { bits32[1::bits32] { 61::bits32 }; }
+section "data" { bits32[1::bits32] { 0x61::bits32 }; }
 
-section "data" { bits32[1::bits32] { 64::bits32 }; }
+section "data" { bits32[1::bits32] { 0x64::bits32 }; }
 
-section "data" { bits32[1::bits32] { 62::bits32 }; }
+section "data" { bits32[1::bits32] { 0x62::bits32 }; }
 
-section "data" { bits32[1::bits32] { 65::bits32 }; }
+section "data" { bits32[1::bits32] { 0x65::bits32 }; }
 
-section "data" { bits32[1::bits32] { 65::bits32 }; }
+section "data" { bits32[1::bits32] { 0x65::bits32 }; }
 
-section "data" { bits32[1::bits32] { 66::bits32 }; }
+section "data" { bits32[1::bits32] { 0x66::bits32 }; }
 
-section "data" { bits32[1::bits32] { 29::bits32 }; }
+section "data" { bits32[1::bits32] { 0x29::bits32 }; }
 
-section "data" { bits32[1::bits32] { a::bits32 }; }
+section "data" { bits32[1::bits32] { 0xa::bits32 }; }
 
-section "data" { bits32[1::bits32] { 0::bits32 }; }
+section "data" { bits32[1::bits32] { 0x0::bits32 }; }
 
 section "data" {  }
 

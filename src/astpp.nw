@@ -189,31 +189,28 @@ and actual = function
 and actuals xs = P.agrp (P.text "(" ^^ P.commalist actual xs ^^ P.text ")")
 
 <<astpp.ml>>=
-and expr = function
-    | A.ExprAt(x,_)             -> expr x
-    | A.Int( i, None)           -> P.text i
-    | A.Int( i, Some t)         -> P.text i ^^ P.text "::" ^^ ty t
-    | A.Float( f, None)         -> P.text f
-    | A.Float( f, Some t)       -> P.text f ^^ P.text "::" ^^ ty t
-    | A.Char( i, None)          -> char i
-    | A.Char( i, Some t)        -> char i
-                                ^^ P.text "::" ^^ ty t
-    | A.Fetch(v)                -> lvalue v
-    | A.BinOp(l,op,r)           -> P.agrp begin
-                                 ~~ P.text "(" ^^ expr l
-                                 ^^ nest begin
-                                    ~~ P.text op
-                                    ^^ (if op =$= "%" then P.break else P.empty)
-                                    ^^ P.breakWith ""
-                                    ^^ expr r
-                                    end
-                                 ^^ P.text ")"
-                                 end
-
-    | A.UnOp(op,e)              -> P.agrp (P.text op ^^ expr e)
-    | A.PrimOp(n,xs)            -> P.agrp (P.text "%" ^^ id n ^^ actuals xs)
-
-
+and expr e = 
+    let with_ty t p = match t with None -> p | Some t -> p ^^ P.text "::" ^^ ty t in
+    match e with
+    | A.ExprAt(x,_)       -> expr x
+    | A.Sint( i, t)       -> with_ty t (P.text i)
+    | A.Uint( i, t)       ->
+        with_ty t (if String.get i 0 =<= '0' then P.text i else P.text (i^"U"))
+    | A.Float( f, t)      -> with_ty t (P.text f)
+    | A.Char( i, t)       -> with_ty t (char i)
+    | A.Fetch(v)          -> lvalue v
+    | A.BinOp(l,op,r)     -> P.agrp begin
+                           ~~ P.text "(" ^^ expr l
+                           ^^ nest begin
+                              ~~ P.text op
+                              ^^ (if op =$= "%" then P.break else P.empty)
+                              ^^ P.breakWith ""
+                              ^^ expr r
+                              end
+                           ^^ P.text ")"
+                           end
+    | A.UnOp(op,e)        -> P.agrp (P.text op ^^ expr e)
+    | A.PrimOp(n,xs)      -> P.agrp (P.text "%" ^^ id n ^^ actuals xs)
 <<astpp.ml>>=
 let memsize = function
     | A.NoSize        -> P.empty

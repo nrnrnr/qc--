@@ -33,7 +33,8 @@
   and actual = (hint option * expr)
   and expr =
         ExprAt of (expr * region)
-      | Int of (StdPrims.std_string * ty option)
+      | Sint of (StdPrims.std_string * ty option)
+      | Uint of (StdPrims.std_string * ty option)
       | Float of (StdPrims.std_string * ty option)
       | Char of (StdPrims.std_int * ty option)
       | Fetch of (name_or_mem)

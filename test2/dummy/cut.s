@@ -23,45 +23,45 @@ section "data" { bits8[0::bits32]; }
 
 section "data" { sym@nocut: }
 
-section "data" { bits32[1::bits32] { 6e::bits32 }; }
+section "data" { bits32[1::bits32] { 0x6e::bits32 }; }
 
-section "data" { bits32[1::bits32] { 6f::bits32 }; }
+section "data" { bits32[1::bits32] { 0x6f::bits32 }; }
 
-section "data" { bits32[1::bits32] { 20::bits32 }; }
+section "data" { bits32[1::bits32] { 0x20::bits32 }; }
 
-section "data" { bits32[1::bits32] { 63::bits32 }; }
+section "data" { bits32[1::bits32] { 0x63::bits32 }; }
 
-section "data" { bits32[1::bits32] { 75::bits32 }; }
+section "data" { bits32[1::bits32] { 0x75::bits32 }; }
 
-section "data" { bits32[1::bits32] { 74::bits32 }; }
+section "data" { bits32[1::bits32] { 0x74::bits32 }; }
 
-section "data" { bits32[1::bits32] { 3d::bits32 }; }
+section "data" { bits32[1::bits32] { 0x3d::bits32 }; }
 
-section "data" { bits32[1::bits32] { 25::bits32 }; }
+section "data" { bits32[1::bits32] { 0x25::bits32 }; }
 
-section "data" { bits32[1::bits32] { 64::bits32 }; }
+section "data" { bits32[1::bits32] { 0x64::bits32 }; }
 
-section "data" { bits32[1::bits32] { a::bits32 }; }
+section "data" { bits32[1::bits32] { 0xa::bits32 }; }
 
-section "data" { bits32[1::bits32] { 0::bits32 }; }
+section "data" { bits32[1::bits32] { 0x0::bits32 }; }
 
 section "data" { sym@ret: }
 
-section "data" { bits32[1::bits32] { 72::bits32 }; }
+section "data" { bits32[1::bits32] { 0x72::bits32 }; }
 
-section "data" { bits32[1::bits32] { 65::bits32 }; }
+section "data" { bits32[1::bits32] { 0x65::bits32 }; }
 
-section "data" { bits32[1::bits32] { 74::bits32 }; }
+section "data" { bits32[1::bits32] { 0x74::bits32 }; }
 
-section "data" { bits32[1::bits32] { 75::bits32 }; }
+section "data" { bits32[1::bits32] { 0x75::bits32 }; }
 
-section "data" { bits32[1::bits32] { 72::bits32 }; }
+section "data" { bits32[1::bits32] { 0x72::bits32 }; }
 
-section "data" { bits32[1::bits32] { 6e::bits32 }; }
+section "data" { bits32[1::bits32] { 0x6e::bits32 }; }
 
-section "data" { bits32[1::bits32] { a::bits32 }; }
+section "data" { bits32[1::bits32] { 0xa::bits32 }; }
 
-section "data" { bits32[1::bits32] { 0::bits32 }; }
+section "data" { bits32[1::bits32] { 0x0::bits32 }; }
 
 section "text"
 {

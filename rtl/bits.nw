@@ -334,7 +334,7 @@ module I = Int64        (* signed   operations *)
 exception Overflow
 exception Syntax of string
 
-let syntax msg  = raise (Syntax msg)
+let syntax fmt = Printf.kprintf (fun s -> raise (Syntax s)) fmt
 @ 
 Here, we want our polymorphism.
 <<bits.ml ((evaluating))>>=
@@ -671,16 +671,16 @@ representations. They would have to set the sign bit which they don't.
 However, hexadecimal representations can use all 64 bits.
 <<parse int>>=
 let int str w =
-    let len    = String.length str in
-        try  
-            if len > 2 && str.[0] =<= '0' && (str.[1] =<= 'x' || str.[1] =<= 'X') 
-            then 
-                I.of_string str
-            else if len > 2 && str.[0] =<= '0' then
-                I.of_string ("0o"^str)
-            else
-                I.of_string str
-        with Failure _ -> syntax ("syntax error in constant: "^str)    
+  let len = String.length str in
+  try  
+    if len > 2 && str.[0] =<= '0' && (str.[1] =<= 'x' || str.[1] =<= 'X') then 
+      I.of_string str
+    else if len > 2 && str.[0] =<= '0' then
+      I.of_string ("0o"^str)
+    else
+      I.of_string str
+  with Failure s ->
+    syntax "caml function '%s' failed on literal %s (syntax error or overflow)" s str
 @
 For a floating-point literal, we trust the Caml compiler to produce
 the right bit pattern.
@@ -693,31 +693,33 @@ let float str w =
     | 32 -> Uint64.Cast.float32 x
     | 64 -> Int64.bits_of_float x
     | _ -> Unsupported.floatlit w
-  with Failure _ -> syntax ("syntax error in constant: "^str)
+  with Failure s -> 
+    syntax "caml function '%s' failed on literal %s (syntax error or overflow)" s str
 @ 
 <<parse char>>=
 let char str w =
-    let str = String.sub str 1 (String.length str - 2) in
-    let len = String.length str in
-        try
-            if   len = 0 
-            then assert false
-            else if str.[0] =<= '\\' && len > 1 
-            then match str.[1] with
-            | 'a'  when len = 2 -> I.of_int 7
-            | 'b'  when len = 2 -> I.of_int 8
-            | 'n'  when len = 2 -> I.of_int 10
-            | 'r'  when len = 2 -> I.of_int 13
-            | 't'  when len = 2 -> I.of_int 9
-            | '\\' when len = 2 -> I.of_int 92
-            | '\'' when len = 2 -> I.of_int 39
-            | '"'  when len = 2 -> I.of_int 34
-            | '?'  when len = 2 -> I.of_int 63
-            | 'x'  when len = 2 -> I.of_string ("0"  ^ str)
-            | '0' .. '7'        -> I.of_string ("0o" ^ str) 
-            | _                 -> syntax ("syntax error: "^str)
-            else                   I.of_int (Char.code str.[0])
-        with Failure _          -> syntax ("syntax error: "^str)
+  let str = String.sub str 1 (String.length str - 2) in
+  let len = String.length str in
+    try
+        if   len = 0 
+        then assert false
+        else if str.[0] =<= '\\' && len > 1 
+        then match str.[1] with
+        | 'a'  when len = 2 -> I.of_int 7
+        | 'b'  when len = 2 -> I.of_int 8
+        | 'n'  when len = 2 -> I.of_int 10
+        | 'r'  when len = 2 -> I.of_int 13
+        | 't'  when len = 2 -> I.of_int 9
+        | '\\' when len = 2 -> I.of_int 92
+        | '\'' when len = 2 -> I.of_int 39
+        | '"'  when len = 2 -> I.of_int 34
+        | '?'  when len = 2 -> I.of_int 63
+        | 'x'  when len = 2 -> I.of_string ("0"  ^ str)
+        | '0' .. '7'        -> I.of_string ("0o" ^ str) 
+        | _                 -> syntax "syntax error: %s" str
+        else                   I.of_int (Char.code str.[0])
+    with Failure s ->
+      syntax "caml function '%s' failed on literal %s (syntax error or overflow)" s str
 @    
     
 % ================================================================== 
