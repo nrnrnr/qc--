@@ -39,9 +39,9 @@ FILE    :=  mk-$(VERSION)
 
 tar:		$(FILE).tar.gz
 www:		$(FILE).tar.gz
-		cp $(HOME)/../cminusminus/www/download
+		cp $(FILE).tar.gz $(HOME)/../cminusminus/www/download
 
-$(FILE).tar.gz:	    
+$(FILE).tar.gz:	Makefile    
 		ln -s . $(FILE)
 		tar czvhf $(FILE).tar.gz	\
 		`find .                         \
