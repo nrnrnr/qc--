@@ -1,0 +1,382 @@
+% -*- mode: Noweb; noweb-code-mode: c-mode -*- %
+
+% ------------------------------------------------------------------ 
+\section{An Exception-Dispatching Client}
+%  ------------------------------------------------------------------ 
+
+This file implements a simple exception-dispatching client of the {\PAL} 
+runtime system and interpreter.
+
+Implemented here is a front-end runtime system as well as some sample {\PAL}
+code to be run through the interpreter.
+
+% ------------------------------------------------------------------ 
+\subsection{Using the Client}
+% ------------------------------------------------------------------ 
+
+To run a {\PAL} program in file [[foo.c--]] through this front-end, the
+{\PAL} code must first be passed through the front-end of the {\qcc} compiler:
+
+\begin{verbatim}
+collie% qc-- -interp -o - > foo.lua
+collie% ./exn_client foo.lua
+\end{verbatim}
+
+where [[foo.c--]] is the {\PAL} source file, [[qc--]] is the {\qcc} compiler
+executable, and [[exn_client]] is the compiled version of [[exn.c]] (which
+is implemented in this file).
+
+The [[-]] switch to [[exn_client]] (which may not be used in conjunction with
+a filename given on the command line) tells [[exn_client]] to read from
+[[stdin]].
+
+% ------------------------------------------------------------------ 
+\section{Implementation}
+% ------------------------------------------------------------------ 
+
+Below is an implementation of an exception-dispatching {\PAL} client.
+It should be useful for demonstration as well as testing.
+
+Its implementation is split across files [[exn.h]] and [[exn.c]].
+
+<<exn.h>>=
+#ifndef _EXN_H
+#define _EXN_H
+
+#include "runtime.h"
+#include "types.h"
+
+<<constant definitions>>
+<<type definitions>>
+
+<<function prototypes>>
+#endif /* _EXN_H */
+@ 
+
+<<exn.c>>=
+#include "exn.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include "ccall.h"
+
+<<global variable definitions>>
+
+<<exception dispatching functions>>
+<<interpreter interaction functions>>
+<<utility functions>>
+
+<<application driver>>
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Type Definitions}
+% ------------------------------------------------------------------ 
+
+To manage threads returned by the {\PAL} runtime system, we use a [[typedef]]'d structure: [[Cmm_TCB]].
+A [[Cmm_TCB]] ({\PAL} thread control block) contains the actual thread given us by the {\PAL} runtime system, pointers to the space handed off to the system for use as an activation stack, and a ``cookie'' that points to the limit of the thread's activation stack.
+We use this cookie to tell if we've gone off the end of a stack (perhaps by returning or unwinding from the oldest activation on the stack).
+
+<<type definitions>>=
+typedef struct {
+  Cmm_Cont *cont;
+
+  void     *stack_space;
+  unsigned  stack_space_size;
+
+  void     *limit_cookie;
+} Cmm_TCB;
+@ 
+
+% ------------------------------------------------------------------ 
+\subsection{Utility Functions}
+% ------------------------------------------------------------------ 
+
+We create a few helper functions to create and destroy [[Cmm_TCB]]s.
+
+<<function prototypes>>=
+Cmm_TCB *TCB_new(void);
+void     TCB_free(Cmm_TCB *tcb);
+@ 
+
+[[TCB_new]] allocates space for the interpreter to use as activation stack space; the space is of size [[stack_space]].
+
+<<utility functions>>=
+Cmm_TCB *TCB_new(void) {
+  Cmm_Dataptr  data;
+  Cmm_TCB     *tcb = (Cmm_TCB *) malloc(sizeof(Cmm_TCB));
+  assert(tcb != NULL);
+
+  tcb->stack_space       = (Cmm_Dataptr) malloc(STACK_SIZE * sizeof(*data));
+  mem_assert(tcb->stack_space);
+  tcb->stack_space_size  = STACK_SIZE;
+
+  return tcb;
+}
+@ 
+
+[[TCB_free]] frees the space [[TCB_new]] allocated for activation stack space.
+
+<<utility functions>>=
+void TCB_free(Cmm_TCB *tcb) {
+  free(tcb->stack_space);
+
+  /* FIX make sure that 'cont' is freed? */
+  free(tcb);
+}
+@ 
+ 
+% ------------------------------------------------------------------ 
+\subsection{Interpreter Interaction}
+% ------------------------------------------------------------------ 
+
+In this client, we register a printing function with the interpreter: a simple 
+C function that takes a 32-bit [[int]], prints it, and returns it.
+
+<<function prototypes>>=
+u_int32 cmmprint32(u_int32 i);
+@ 
+
+<<interpreter interaction functions>>=
+u_int32 cmmprint32(u_int32 i) {
+  printf("[CMMPRINT] %u\n", i);
+  return i;
+}
+@ 
+To register this function, the client simply calls [[register_c_func]].
+<<register needed C functions with the interpreter>>=
+  register_c_func("cmmprint32", (void *) cmmprint32, "u_int32:u_int32");
+@ 
+
+Additionally, we register a few needed functions from the standard C library.
+<<register needed C functions with the interpreter>>=
+  register_c_func("exit"   , (void *) exit   , "int:void"        );
+  register_c_func("malloc" , (void *) malloc , "unsigned:pointer");
+  register_c_func("free"   , (void *) free   , "pointer:void"    );
+@ 
+
+% ------------------------------------------------------------------ 
+\subsection{Exception Dispatcher}
+% ------------------------------------------------------------------ 
+
+DOCUMENTATION HERE.
+
+<<type definitions>>=
+typedef struct {
+  u_int32 handler_count;
+  struct {
+    void    *exn_tag; 
+    u_int32  cont_num; 
+    u_int8   takes_arg; 
+  } handlers[1];
+} exn_descriptor;
+
+<<function prototypes>>=
+void pop_exn_info(void **exn_tag, void **exn_arg);
+void dispatch_exn(void);
+@ 
+
+DOC HERE.
+
+<<constant definitions>>=
+#define EXN_TOP  0
+#define EXN_DESC 1
+@ 
+
+<<exception dispatching functions>>=
+void pop_exn_info(void **exn_tag, void **exn_arg) {
+  /* find 'exn_base' : for now, we assume it is the first global variable */
+  void ***exn_top = (void ***) Cmm_FindGlobalVar(globals_backup, EXN_TOP);
+
+  *exn_top -= 2;
+  *exn_tag  = (*exn_top)[0];
+  *exn_arg  = (*exn_top)[1];
+}
+
+void dispatch_exn(void) {
+  Cmm_Activation *a;
+  void           *exn_tag, *exn_arg;
+
+  pop_exn_info(&exn_tag, &exn_arg);
+  a = Cmm_YoungestActivation(curr_TCB->cont);  
+
+  for (;;) {
+    exn_descriptor *d;
+    d = (exn_descriptor *) Cmm_GetDescriptor(a, EXN_DESC);
+
+    if (d) {
+      int i;
+      for (i = 0; i < d->handler_count; i++) {
+        if (d->handlers[i].exn_tag == exn_tag) {
+          curr_TCB->cont = 
+                  Cmm_GetUnwindCont(a, (Cmm_Word) d->handlers[i].cont_num);
+
+          printf("-- caught and handled exception : %s\n", (char *) exn_tag);
+
+          if (d->handlers[i].takes_arg) {
+            /* exn expects value */
+            assert(0);  /* we can't handle this now!!! */
+          } else {
+            Cmm_RunThread(curr_TCB->cont);
+            assert(0); /* FIX this */
+          }
+        }
+      }
+    }
+    if (!Cmm_ChangeActivation(&a)) {
+	  printf("uncaught exception: %s\n", (char *) exn_tag);
+      abort();  /* unhandled exception; abort! */
+    }
+  }
+}
+@ 
+
+% ------------------------------------------------------------------ 
+\subsubsection{Interfacing with {\PAL}}
+% ------------------------------------------------------------------ 
+
+To let {\PAL} code call the exception handler, we export C functions to {\PAL}
+using [[register_c_func]].
+
+<<register needed C functions with the interpreter>>=
+  register_c_func("dispatch_exn", (void *) dispatch_exn, "void:void");
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Application Driver}
+% ------------------------------------------------------------------ 
+
+To drive our application, we do some simple tests, print some results, and
+quit--at least for now.
+
+<<constant definitions>>=
+#define VALSTACK_SIZE   256
+#define ARGSPACE_SIZE   256
+#define STACK_SIZE      65536
+@
+
+<<global variable definitions>>=
+static char     *filename     = NULL;
+static int       src_selected = 0;
+@ 
+
+The driver opens transactions with the {\PAL} interpreter (passing it sizes 
+for the interpreter's value stack and argument-passing space), registers a 
+few C functions with the interpreter, flexes its muscles a bit, and closes 
+interaction with the interpreter.
+
+<<application driver>>=
+int main(int argc, char *argv[]) {
+  assert(sizeof(void *) * 8 == 32);
+
+  if (Cmm_open(VALSTACK_SIZE, ARGSPACE_SIZE) != 0) {
+    exit(1);
+  }
+
+  <<register needed C functions with the interpreter>>
+
+  if (argc > 1) {
+    <<process command line arguments>>
+  }
+
+  <<run {\PAL} code>>
+
+  Cmm_close();
+
+  return 0;
+}
+@ 
+
+% ------------------------------------------------------------------ 
+\subsubsection{Command Line Arguments}
+% ------------------------------------------------------------------ 
+
+This client allows the specification of source files on the command line.
+Alternatively, a [[-]] may be used as an argument to specify that source code
+will be found on [[stdin]].
+
+<<process command line arguments>>=
+{
+  int i;
+  for (i = 1; i < argc; i++) {
+    if (strcmp(argv[i], "-") == 0) {
+      if (src_selected) {
+        fprintf(stderr, "error: canot load from more than one source\n");
+        exit(1);
+      }
+      filename     = NULL;
+      src_selected = 1;
+    } else {
+      if (src_selected) {
+        fprintf(stderr, "error: cannot load more than one file\n");
+        exit(1);
+      }
+      filename     = argv[i];
+      src_selected = 1;
+    }
+  }
+}
+@ 
+
+% ------------------------------------------------------------------ 
+\subsubsection{Flexing the {\PAL} Muscles}
+% ------------------------------------------------------------------ 
+
+<<global variable definitions>>=
+static Cmm_TCB  *curr_TCB       = NULL;
+static void     *globals_backup = NULL;
+@ 
+
+DOCUMENTATION HERE
+
+<<run {\PAL} code>>=
+if (!src_selected) {
+  fprintf(stderr, "error: nothing to do\n");
+  exit(1);
+}
+
+if (filename == NULL && load_assembly_unit(NULL, SRC_STDIN) != 0)
+  exit(1);
+else if (load_assembly_unit(filename, SRC_FILE) != 0)
+  exit(1);
+
+<<lookup and run procedure [[main]] in {\PAL} code>>
+@ 
+
+To run procedure [[main]] in the given {\PAL} code, we use interpreter
+function [[cmm_find_export]] and runtime functions [[Cmm_CreateThread]]
+and [[Cmm_RunThread]].
+
+We create a TCB (thread control block) even though we do not intend to use
+more than one {\PAL} thread.
+
+<<lookup and run procedure [[main]] in {\PAL} code>>=
+{
+  Cmm_Codeptr  loc = cmm_find_export("main");
+  Cmm_TCB     *tcb;
+
+  if (loc == NULL) {
+    fprintf(stderr, "error: cannot find procedure main\n");
+    exit(1);
+  }
+
+  /* allocate space to store globals backup */
+  globals_backup = malloc(Cmm_GlobalSize());
+  assert(globals_backup);
+
+  tcb            = TCB_new();
+  tcb->cont      = Cmm_CreateThread( loc 
+                                   , (void *) (&globals_backup)
+                                   , tcb->stack_space
+                                   , tcb->stack_space_size
+                                   , &(tcb->limit_cookie)
+                                   );
+  curr_TCB       = tcb;
+
+  tcb->cont      = Cmm_RunThread(tcb->cont);
+  curr_TCB       = NULL;
+
+  free(globals_backup);
+  TCB_free(tcb);
+}
+@ 
