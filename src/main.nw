@@ -220,28 +220,19 @@ let main () =
                             this msg;
                          usage this;
                          exit 1
-    in try
-            ( match cmd with
-            | Cmdline.Help          -> usage this
-	    | Cmdline.Version	    -> version ()
-            | Cmdline.Lex(file)     -> lex file 
-            | Cmdline.Asdl(file)    -> asdl file 
-            | Cmdline.Pp(file,width)-> pp file width
-            | Cmdline.Check(file)   -> Semant.check file
-            );
-            exit 0
-       with 
-            | ErrorExn(point,msg)  -> 
-                ( prerr_string (Srcmap.Str.point point)
-                ; prerr_string " Error: "
-                ; List.iter prerr_string msg
-                ; prerr_newline ()
-                ; exit 1
-                )       
-            | FatalExn(msg) ->
-                ( prerr_endline ("Fatal error: " ^ msg )
-                ; exit 1
-                )
+    in
+    let ok f x      = Ok (f x) in 
+    let dispatch    = function
+        | Cmdline.Help          -> usage this
+        | Cmdline.Version	-> version ()
+        | Cmdline.Lex(file)     -> lex file 
+        | Cmdline.Asdl(file)    -> asdl file 
+        | Cmdline.Pp(file,width)-> pp file width
+        | Cmdline.Check(file)   -> Semant.check file
+    in
+        match catch error (ok dispatch) cmd with
+            | Error -> exit 1
+            | Ok _  -> exit 0
                 
 
 @ In \ocaml~no [[main]] function like in C exists but simply all
