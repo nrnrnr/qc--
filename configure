@@ -9,12 +9,12 @@
 # mk(1) from qc--/mk is already installed.
 
 #
-# which (file, dir, dir, dir, ..), call as which(file, @dirs)
+# search (file, dir, dir, dir, ..), call as search(file, @dirs)
 # search for file in @dirs and return, full path, if found, and ""
 # otherwise.
 #
 
-sub which {
+sub search {
     my $file = shift (@_);
 
     while ($f = shift (@_)) {
@@ -24,6 +24,24 @@ sub which {
         }
     }
     return "";
+}
+
+#
+# compile and run a small C program to find out about architecture
+#
+
+sub runtest {
+    unless ($cc) { die "no C compiler to run test @_" }
+    
+    my $cmd   = "$cc -o tst @_ || exit 100";
+    my $rc    = system($cmd);
+    my $signo = $rc & 127;
+    if ($signo) { die "killed by signal $signo" }
+    if ($rc >> 8 eq 100) { die "cannot run '$cmd'; no C compiler?" }
+    
+    # run test and capture output
+    my $out = `./tst` || die "$!";
+    return $out;
 }
 
 #
@@ -47,18 +65,34 @@ sub which {
 # check for various executables and versions
 #
 
-$ocamlc     = which("ocamlc",@path);
+$ocamlc     = search("ocamlc",@path);
 $ocamlv     = (`$ocamlc -v` =~ /(\d\.\d\d)/) && $1;
-$notangle   = which ("notangle",@path); 
-$cc         = which ("gcc",@path) || which ("lcc",@path) || which ("cc",@path);
-$mk         = which("mk",@path); 
-$latex      = which("latex",@path); 
-$pod2html   = which ("pod2html",@path);
-$lua_h      = which ("lua.h", @include);
-$lualib_h   = which ("lualib.h", @include);
-$liblua     = which ("liblua.a", @libs) || which ("liblua40.a", @libs);
-$liblualib  = which ("liblualib.a", @libs) || which ("liblualib40.a", @libs);
+$notangle   = search("notangle",@path); 
+$cc         = search("gcc",@path)||search ("cc",@path) || search ("lcc",@path);
+$mk         = search("mk",@path); 
+$latex      = search("latex",@path); 
+$pod2html   = search("pod2html",@path);
+$lua_h      = search("lua.h", @include);
+$lualib_h   = search("lualib.h", @include);
+$liblua     = search("liblua.a", @libs) || search("liblua40.a", @libs);
+$liblualib  = search("liblualib.a", @libs) || search("liblualib40.a", @libs);
 $luav       = $lua_h && `grep LUA_VERSION $lua_h` =~ /Lua (\d.\d)/ && $1;  
+
+#
+# run some tests ...
+# 
+
+chdir("config/aux") || die "$!";
+my $result;
+
+# .. endianness
+$result = runtest("endian.c");
+if    ($result =~ /big/)    { $endian = "big"    } 
+elsif ($result =~ /little/) { $endian = "little" } 
+else  { die "cannot determine endianess; 64 bit machine?" }    
+
+# .. wordsize
+$sizes = runtest("sizes.c");
 
 
 print <<EOF;    
@@ -76,5 +110,7 @@ print <<EOF;
     liblua:         $liblua
     liblualib:      $liblualib
     Lua Version:    $luav
+    Endianness:     $endian
+    Sizes:          $sizes
 EOF
     
