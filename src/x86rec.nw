@@ -149,6 +149,7 @@ meml: Mem(disp, w) {: disp :}
 meml: Mem(lconst, w) {: lconst :}
 eaddrl: meml {: meml :}
 eaddr: Fetch(eaddrl, w) {: eaddrl :}
+eaddr: lconst {: lconst :} -- absolute
 mem: Fetch(meml, w) {: meml :}
 -- indexed modes to come
 @ 
@@ -207,10 +208,15 @@ inst: Withflags(dst:regl, "add", src:eaddr, w, "x86_aflags")
 Return.
 <<rules>>=
 esp : Reg('r', n, w) [{: guard (n = 4 && w = 32):}] {: () :}
+eip : Reg('c', n, w) [{: guard (n = 0 && w = 32):}] {: () :}
 pop: Store(esp, App2("add", Fetch(esp, w), four), sw:w) {: () :}
-pop: Llr(esp, "add", four, w) {: () :}
+pop:  Llr(esp, "add", four, w) {: () :}
+push: Llr(esp, "sub", four, w) {: () :}
 stacktop: Mem(Fetch(esp, w), mw:w) [{:guard (mw = 32):}] {: () :}
+stacknext: Mem(App2("sub", Fetch(esp, w), four), mw:w) [{:guard (mw = 32):}] {: () :}
 inst: Par(Goto(Fetch(stacktop, w)),pop) {: "ret" :}
+inst: Par(Goto(eaddr),Par(Store(stacknext, Fetch(eip, x:w), y:w), push))
+        {: "call " ^ eaddr :}
 @ 
 Debugging rules.
 <<rules>>=
@@ -224,7 +230,7 @@ inst: Store(any, eaddr, w) [2] {: "<store " ^ eaddr ^ " into " ^ any ^ ">" :}
 inst: Store (dst:any, src:any, w) [5]
   {: "Store(" ^ dst ^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
 
-inst: any [10] {: "<" ^ any ^ ">" :}
+-- inst: any [10] {: "<" ^ any ^ ">" :}
 
 <<rules>>=
 inst: Nop() {: "nop" :}
