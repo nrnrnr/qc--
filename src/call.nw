@@ -310,8 +310,12 @@ val paths_cutto  : tgt -> string -> (int * string) list -> unit
 
 val path_2_in_overflow : tgt -> string -> unit
 
-val run_cc_on_sig : (Automaton.cc_spec -> Automaton.stage) -> 
-                    tgt -> string -> (string * int) list -> unit
+val run_cc_on_sig_and_print :
+    (Automaton.cc_spec -> Automaton.stage) -> 
+    tgt -> string -> (string * int) list -> unit
+val run_cc_on_sig_and_return :
+    (Automaton.cc_spec -> Automaton.stage) -> 
+    tgt -> string -> (string * int) list -> string list
 @ 
 
 \subsection{Implementation}
@@ -446,7 +450,7 @@ let path_2_in_overflow target ccname =
     (findpath_2_in_overflow (fun s -> s.A.call) target ccname);
   Printf.printf "\n"
 
-let run_cc_on_sig autofun target ccname tys =
+let run_cc_on_sig_and_return autofun target ccname tys =
   let loc2str loc = 
     try Rtlutil.ToReadableString.loc (A.simple loc)
     with _ -> "<split allocation>" in
@@ -458,10 +462,11 @@ let run_cc_on_sig autofun target ccname tys =
   let an        = A.at ~start:(Rtl.bits (Bits.zero wordsize) wordsize) 
                     ~memsize ~byteorder automaton in
   let allocs    = List.map (fun (h,w) -> A.allocate an ~width:w ~hint:h) tys in
-  let _         = List.iter2 (fun (h,w) loc -> 
-                               Printf.printf "%s/%d => %s\n" h w (loc2str loc))
-                    tys allocs
-  in ()
+  List.map loc2str allocs
+
+let run_cc_on_sig_and_print autofun target ccname tys =
+  let locs = run_cc_on_sig_and_return autofun target ccname tys in
+  List.iter2 (fun (h,w) loc -> Printf.printf "%s/%d => %s\n" h w loc) tys locs
 @ 
 
 \subsection{Potential new constructors for \texttt{Call.t}}
