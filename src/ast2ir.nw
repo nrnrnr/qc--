@@ -338,14 +338,17 @@ let continuations cc ast =
   let (--)    = RS.diff in
   let as_cut_to k =
     let defs  = k.K.cut_in.C.regs in
-    { G.defs  = rsx defs; G.kills = rsx (allregs -- defs); G.node = k.K.cut_pc } in
+    { G.defs  = rsx defs; G.kills = rsx (allregs -- defs); G.node = k.K.cut_pc
+    ; G.assertion = k.K.cut_in.C.insp (Contn.rep k.K.rep) } in
   let as_unwinds k =
-    { G.defs  = RSX.empty; G.kills = rsx volregs; G.node = k.K.unwind_pc } in
+    { G.defs  = RSX.empty; G.kills = rsx volregs; G.node = k.K.unwind_pc
+    ; G.assertion = proc_cc.C.sp_on_unwind proc_cc.C.stable_sp_loc } in
     (* defs are vars and so can't be a register set. See [[splice_in_unwind_to_entry]] *)
   let as_returns k =
     let pc = K.get_return_pc cc k in
     let defs  = k.K.return_in.C.regs in
-    { G.defs  = rsx defs; G.kills = rsx (volregs -- defs); G.node = pc } in
+    { G.defs  = rsx defs; G.kills = rsx (volregs -- defs); G.node = pc
+    ; G.assertion = k.K.return_in.C.insp k.K.return_in.C.overflow } in
   let contmap f = List.map (f << continuation) in
   { S.cuts     = contmap as_cut_to  ast.S.cuts;
     S.unwinds  = contmap as_unwinds ast.S.unwinds;
@@ -441,7 +444,6 @@ and splice_in_cut_to_entry k g =
   let in' = k.K.cut_in in
   let prolog =
     G.label machine k.K.cut_pc **>
-    G.assertion (in'.C.insp (Contn.rep k.K.rep))     **>
     G.stack_adjust in'.C.pre_sp   **>
     G.instruction  in'.C.shuffle  **>
     G.stack_adjust in'.C.post_sp  **>
@@ -457,7 +459,6 @@ and splice_in_return_to_entries k g =
     let ()  = add youngblocks cc.C.overflow_alloc.C.result_allocator in'.C.overflow in
     let prolog =
       G.label machine label **>
-      G.assertion    (in'.C.insp in'.C.overflow)    **>
       G.stack_adjust in'.C.pre_sp    **>
       G.instruction  in'.C.shuffle   **>
       G.stack_adjust in'.C.post_sp   **>
@@ -490,7 +491,6 @@ definitions when variables can be mutated by the run-time system.
 and splice_in_unwind_to_entry k g = 
   let prolog =
     G.label machine k.K.unwind_pc **>
-    G.assertion (proc_cc.C.sp_on_unwind proc_cc.C.stable_sp_loc) **>
     G.branch machine k.K.succ     **>
     G.entry G.empty in
   G.add_blocks g prolog
@@ -622,7 +622,7 @@ and call lhs cconv e args _targets conts alias succ =
       let args = List.map f_to_cont k.K.formals in
       (k.K.unwind_pc, k.K.unwind_sp, args) in
     List.map unwind_k conts.S.unwinds in
-  let conts = continuations cc conts             in
+  let conts = continuations cc conts in
   add youngblocks cc.C.overflow_alloc.C.parameter_deallocator out.C.overflow;
                                         (* outgoing overflow parms *)
   add youngblocks cc.C.overflow_alloc.C.result_allocator      in'.C.overflow;
@@ -635,6 +635,7 @@ and call lhs cconv e args _targets conts alias succ =
                           ~users:props ~csregs:nvr_temps
                           ~conts:(List.map label unwind_conts)
                           ~sds:sd_locs ~vars:(var_array ()) in
+  let succ_assn = if conts.S.returns then in'.C.insp in'.C.overflow else R.par [] in
   G.stack_adjust out.C.pre_sp                                        **>
   G.instruction  out.C.shuffle                                       **>
   G.stack_adjust out.C.post_sp                                       **>
@@ -642,9 +643,8 @@ and call lhs cconv e args _targets conts alias succ =
     ~uses:(rsx out.C.regs) ~defs:(rsx in'.C.regs) ~kills:(rsx cc.C.volregs)
     ~altrets:conts.S.areturns ~unwinds_to:conts.S.unwinds
     ~cuts_to:conts.S.cuts ~aborts:conts.S.aborts
-    ~reads:alias.S.reads ~writes:alias.S.writes ~spans:(Some spans) **>
+    ~reads:alias.S.reads ~writes:alias.S.writes ~spans:(Some spans) ~succ_assn **>
   (if conts.S.returns then
-    G.assertion    (in'.C.insp in'.C.overflow)                       **>
     G.stack_adjust in'.C.pre_sp              (* DOUBTS ABOUT THIS *) **>
     G.instruction  in'.C.shuffle                                     **>
     G.stack_adjust in'.C.post_sp succ

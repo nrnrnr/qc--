@@ -203,18 +203,42 @@ let replace_with ~sp =
       D.Dataflow (note_sp_changes down vfp k) in
 
   let last_outs (vfp, k) l =
+    let upd vfp rtl = Simplify.rtl (replace_vfp vfp rtl) in
+    let set_succs (vfp, k as a) =
+      let upd_cedges ces =
+        let upd ce = note_sp_changes (Dn.rtl ce.G.assertion) vfp k in
+        D.Dataflow (fun set -> List.iter (fun ce -> set (fst ce.G.node) (upd ce))
+                                         ces) in
+      match l with
+      | GR.Cut  (_, ces, _) -> upd_cedges ces
+      | GR.Call c           -> upd_cedges c.GR.cal_contedges
+      | _ -> D.Dataflow (fun set -> GR.iter_succs (fun u -> set u a) l) in
+    let rewrite_assertions l fail =
+      let upd_cedges vfp k cedges succ =
+        if List.exists (fun ce -> RU.Exists.Loc.rtl is_vfp (Dn.rtl ce.G.assertion))
+                       cedges then
+          succ (List.map (fun ce -> {ce with G.assertion = upd vfp ce.G.assertion})
+                         cedges)
+        else fail () in
+      match l with
+      | GR.Cut (i, ces, r) ->
+          let upd ces = D.Rewrite (G.single_last (GR.Cut (i, ces, r))) in
+          upd_cedges vfp k ces upd
+      | GR.Call c ->
+          let upd ces =
+            D.Rewrite (G.single_last (GR.Call { c with GR.cal_contedges = ces })) in
+          let vfp, k = note_sp_changes (Dn.rtl (GR.last_instr l)) vfp k in
+          upd_cedges vfp k c.GR.cal_contedges upd
+      | _ -> fail () in
     let i = GR.last_instr l in
-    let down = Dn.rtl i in
+    let down = Dn.rtl (GR.last_instr l) in
+    let propagate () = match l with
+      | GR.Cut _ ->  set_succs (vfp, k)
+      | _        ->  set_succs (note_sp_changes down vfp k) in
     if RU.Exists.Loc.rtl is_vfp down then
-      let rtl = Simplify.rtl (replace_vfp vfp i) in
-      D.Rewrite (G.single_last (G.new_rtll rtl l))
-    else
-      (* [[Cut]] instructions change the sp to a non-constant offset of the vfp *)
-      let a = match l with 
-        | GR.Cut _ -> Dn.exp (R.late "this can't happen (vfp)" w), unknown
-        | _        -> note_sp_changes down vfp k in
-      D.Dataflow (fun set -> GR.iter_succs (fun u -> set u a) l) in
-
+      let l = G.new_rtll (upd vfp i) l in
+      rewrite_assertions l (fun () -> D.Rewrite (G.single_last l))
+    else rewrite_assertions l propagate in
   let repl =
     { D.name = "replace vfp"; D.middle_out = middle_out; D.last_outs = last_outs; } in
   D.forward_rewrite (fact, repl) ~entry_fact:(Dn.exp spval, 0)

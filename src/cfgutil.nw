@@ -88,7 +88,6 @@ let print_block g (first, tail as block) =
     | GR.Jump      _ -> "jump"
     | GR.Forbidden  _ -> "forbidden" in
   let pr_mid m = match m with
-    | GR.Assertion    r -> pr "<assert> %s\n" (Rtlutil.ToString.rtl r)
     | GR.Instruction  r
     | GR.Stack_adjust r -> pr "%s\n" (Rtlutil.ToString.rtl r) in
   let succ_names l = String.concat " " (List.map (block_name g) (GR.succs l)) in
@@ -201,12 +200,7 @@ let cfg2dot ~compress ~live ~name g =
 <<cfgutil.ml>>=
 let cfg2ast instr g ~name =
   let block b next prev' =
-    let mid n prev' =
-      let prev' = instr (GR.mid_instr n) :: prev' in
-      let prev' = match n with
-      | GR.Assertion _ -> A.CommentStmt "the preceding node is merely asserted" :: prev'
-      | _ -> prev' in
-      prev' in
+    let mid n prev' = instr (GR.mid_instr n) :: prev' in
     let first n prev' = match n with
     | GR.Label (l,_,_) -> A.LabelStmt (snd l) :: prev'
     | GR.Entry -> prev' in

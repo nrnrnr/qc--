@@ -171,7 +171,7 @@ the type of the CFG node. For control-transfer nodes, we use the
 <<translate RTLs in CFG nodes>>=
   let cfg =
     let middle = G.map_rtlm (non_cti ~import wkr wkl) in
-    let last   = G.map_rtll (cti     ~import wkr wkl) in
+    let last   = G.map_rtll ~map_rtl:(cti ~import wkr wkl) ~map_assn:(fun r -> r) in
     G.map_nodes (fun f -> f) middle last cfg in
 @ 
 In addition to applying the PIC transformation, we also need to add
@@ -225,7 +225,7 @@ THE READS AND WRITES ANNOTATIONS ON THIS CALL COULD POSSIBLY BE BETTER...
   let call = G.call machine (R.codesym cals proc.Proc.target.T.pointersize) 
       ~altrets:[] ~unwinds_to:[] ~cuts_to:[]
       ~aborts:false ~uses:rset ~defs:rset ~kills:rset ~reads:None
-      ~writes:None ~spans:None in
+      ~writes:None ~spans:None ~succ_assn:(Rtl.par []) in
   let ret = G.return reti ~exit:0 ~uses:rset in
   let ld = G.instruction rtl in
   let ( **> ) a b = a b in

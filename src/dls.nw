@@ -416,7 +416,7 @@ let alloc_block prefs (blockmap, predmap) bid pred_ids =
             let inmap = label_inmap pred_ids in
             let live_out = R.promote_rxset lo in
             let live_out_w_spans = R.promote_rxset (G.add_live_spansf first lo) in
-            let (varIn, defMap, varOut, spills, reloads) =
+            let (varIn, midMap, defMap, varOut, spills, reloads) =
               choose_varMaps prefs None inmap ~defs:RS.empty ~uses:RS.empty
                              ~live_in ~live_out ~live_out_w_spans in
             let () = setVarIn bid varIn in
@@ -440,7 +440,7 @@ let alloc_block prefs (blockmap, predmap) bid pred_ids =
         let defs = defsm m in
         let uses = usesm m in
         let () = if Debug.on "dls" then printTempSet "liveIn: " live_in in
-        let (varIn, varDefs, varOut, spills, reloads) =
+        let (varIn, midMap, varDefs, varOut, spills, reloads) =
           choose_varMaps prefs (Some rtl) inmap 
                          ~defs ~uses ~live_in ~live_out ~live_out_w_spans in
         let () = if Debug.on "dls" then begin
@@ -458,12 +458,18 @@ let alloc_block prefs (blockmap, predmap) bid pred_ids =
                                (Rtlutil.ToString.rtl rtl) in
         let defs = defsl l in
         let uses = usesl l in
-        let (varIn, varDefs, varOut, spills, reloads) =
+        let (varIn, midMap, varDefs, varOut, spills, reloads) =
           choose_varMaps prefs (Some rtl) inmap 
                          ~defs ~uses ~live_in ~live_out ~live_out_w_spans in
-        let l' = G.new_rtll (rewrite_rtl tgt ~varIn ~varDefs rtl) l in
+        let upd = rewrite_rtl tgt ~varIn ~varDefs in
+        let l' = G.new_rtll (upd rtl) l in
+        let l' = match l' with
+          | GR.Call c ->
+              let upd_assn ce = { ce with G.assertion = upd ce.G.assertion } in
+              GR.Call { c with GR.cal_contedges = List.map upd_assn c.GR.cal_contedges }
+          | _ -> l' in
         let () = setVarOut bid varOut in
-        let () = match l' with GR.Call _ -> setCallIn bid varIn | _ -> () in
+        let () = match l' with GR.Call _ -> setCallIn bid midMap | _ -> () in
         let head = add_middle (add_middle head spills) reloads in
         l', GR.zip (GR.End (head, l')) in
   let last, block = alloc_tail varOutf live_outs (GR.First first) tail in
@@ -593,7 +599,7 @@ So, we have a separate defmap and outmap, where the defmap keeps any dead defini
   if Debug.on "dls" then VM.print "inmap"  inmap;
   if Debug.on "dls" then VM.print "defmap" defmap;
   if Debug.on "dls" then VM.print "outmap" outmap;
-  inmap, defmap, outmap, spills, reloads in
+  inmap, midmap, defmap, outmap, spills, reloads in
 @
 In [[expire_last_uses]], the guard supports instructions such as $x := x + y$; where
 both x's must be placed in the same register.

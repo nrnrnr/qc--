@@ -58,7 +58,7 @@ type uid = Unique.uid
 type label = uid * string
 
 type regs  = Register.SetX.t  (* sets of regs for dataflow *)
-type contedge = { kills:regs; defs:regs; node:label }
+type contedge = { kills:regs; defs:regs; node:label; assertion:Rtl.rtl }
 
 module Rep : sig
   <<exposed types for [[Rep]] module>>
@@ -128,7 +128,6 @@ type machine = { goto    : label -> Rtl.rtl;
 val label        : machine -> label -> zgraph -> zgraph  (* spans? *)
 val instruction  : Rtl.rtl -> zgraph -> zgraph
 val stack_adjust : Rtl.rtl -> zgraph -> zgraph
-val assertion    : Rtl.rtl -> zgraph -> zgraph
 val branch       : machine -> label -> zgraph -> zgraph
 val jump         : Rtl.rtl -> uses:regs -> targets:string list -> zgraph -> zgraph
 val cbranch      : machine -> Rtl.exp -> ifso:label -> ifnot:label -> zgraph -> zgraph
@@ -137,7 +136,7 @@ val call         : machine -> Rtl.exp -> altrets:contedge list ->
                      unwinds_to:contedge list -> cuts_to:contedge list ->
                      aborts:bool -> uses:regs -> defs:regs -> kills:regs ->
                      reads:string list option -> writes:string list option ->
-                     spans:Spans.t option -> zgraph -> zgraph
+                     spans:Spans.t option -> succ_assn:Rtl.rtl -> zgraph -> zgraph
 val cut_to       : Rtl.rtl -> cuts_to:contedge list -> aborts:bool ->
                      uses:regs -> zgraph -> zgraph
 val return       : Rtl.rtl -> exit:int -> uses:regs -> zgraph -> zgraph
@@ -184,7 +183,6 @@ and user = User of bool  (* is label a user label? *)
 type middle
   = Instruction  of Rtl.rtl
   | Stack_adjust of Rtl.rtl
-  | Assertion    of Rtl.rtl
 
 type last
   = Exit
@@ -332,7 +330,8 @@ val map_nodes :
 val new_rtlm : Rtl.rtl -> Rep.middle -> Rep.middle
 val new_rtll : Rtl.rtl -> Rep.last   -> Rep.last
 val map_rtlm : (Rtl.rtl -> Rtl.rtl) -> Rep.middle -> Rep.middle
-val map_rtll : (Rtl.rtl -> Rtl.rtl) -> Rep.last   -> Rep.last
+val map_rtll :
+  map_rtl:(Rtl.rtl -> Rtl.rtl) -> map_assn:(Rtl.rtl -> Rtl.rtl) -> Rep.last -> Rep.last
 @ 
 \paragraph{Observing data flow}
 As noted above a node can contribute defs, uses, and kills to each
@@ -398,7 +397,7 @@ here---this [[open]] does not create the stereotypical problem of a
 mysterious [[open]] from a separately compiled module.
 <<zipcfg.ml>>=
 type regs = Register.SetX.t (* sets of regs for dataflow *)
-type contedge = { kills:regs; defs:regs; node:label }
+type contedge = { kills:regs; defs:regs; node:label; assertion: Rtl.rtl }
 
 module Rep = struct
   let entry_uid = U.distinguished_uid
@@ -522,7 +521,6 @@ let consm middle g = match g with
 | _ -> impossf "focus not on entry node"
 
 let instruction  rtl g = consm (Instruction  rtl) g
-let assertion    rtl g = consm (Assertion    rtl) g
 let stack_adjust rtl g = consm (Stack_adjust rtl) g
 
 let unreachable = function
@@ -531,7 +529,6 @@ let unreachable = function
       let pr = Printf.eprintf in
       pr "warning: unreachable code?\n";
       let rec warn = function
-        | Tail (Assertion r, t) -> pr "  Assert %s\n" (Rtlutil.ToString.rtl r); warn t
         | Tail (m, t) -> pr "  %s\n" (Rtlutil.ToString.rtl (mid_instr m)); warn t
         | Last l -> pr "  %s\n"  (Rtlutil.ToString.rtl (last_instr l)) in
       warn t
@@ -657,10 +654,10 @@ let while_do cbranch machine ~body g =
 @ 
 <<zipcfg.ml>>=
 let call machine exp ~altrets ~unwinds_to ~cuts_to ~aborts
-               ~uses ~defs ~kills ~reads ~writes ~spans succ =
-  let new_cedge lbl = { kills = kills; defs = defs; node = lbl } in
+               ~uses ~defs ~kills ~reads ~writes ~spans ~succ_assn succ =
   let lbl = (uid (), Idgen.label "call successor") in
-  let edgelist = new_cedge lbl :: List.flatten [altrets; unwinds_to; cuts_to] in
+  let succ_ce = { kills = kills; defs = defs; node = lbl; assertion = succ_assn } in
+  let edgelist = succ_ce :: List.flatten [altrets; unwinds_to; cuts_to] in
   let call = 
     { cal_i = machine.call exp; cal_contedges = edgelist; cal_spans = spans;
       cal_uses = uses; cal_altrets = List.length altrets;
@@ -805,30 +802,32 @@ let new_rtll rtl l = match l with
 
 let new_rtlm rtl m = match m with
 | Instruction r  -> Instruction rtl
-| Assertion r    -> Assertion rtl
 | Stack_adjust r -> Stack_adjust rtl
 <<zipcfg.ml>>=
-let map_rtll map l = match l with
-| Exit -> l
-| Branch  (r, l) -> Branch (map r, l)
-| Cbranch (r, t, f) -> Cbranch (map r, t, f)
-| Mbranch (r, tgts) -> Mbranch (map r, tgts)
-| Call    c -> Call { c with cal_i = map c.cal_i }
-| Cut     (r, es, uses) -> Cut (map r, es, uses)
-| Return  (i, r, uses) -> Return (i, map r, uses)
-| Jump    (r, uses, tgts) -> Jump (map r, uses, tgts)
-| Forbidden r -> Forbidden (map r)
+let map_rtll ~map_rtl ~map_assn l =
+  let map_ces ces =
+    List.map (fun ce -> { ce with assertion = map_assn ce.assertion }) ces in
+  match l with
+  | Exit -> l
+  | Branch  (r, l) -> Branch (map_rtl r, l)
+  | Cbranch (r, t, f) -> Cbranch (map_rtl r, t, f)
+  | Mbranch (r, tgts) -> Mbranch (map_rtl r, tgts)
+  | Call    c -> Call { c with cal_i = map_rtl c.cal_i ;
+                               cal_contedges = map_ces c.cal_contedges }
+  | Cut     (r, es, uses) -> Cut (map_rtl r, map_ces es, uses)
+  | Return  (i, r, uses) -> Return (i, map_rtl r, uses)
+  | Jump    (r, uses, tgts) -> Jump (map_rtl r, uses, tgts)
+  | Forbidden r -> Forbidden (map_rtl r)
 
 let map_rtlm map m = match m with
 | Instruction r  -> Instruction (map r)
-| Assertion r    -> Assertion (map r)
 | Stack_adjust r -> Stack_adjust (map r)
 
 let map_rtls map g =
   let block (f, t) =
     let rec tail t = match t with
     | Tail (m, t) -> Tail (map_rtlm map m, tail t)
-    | Last l -> Last (map_rtll map l) in
+    | Last l -> Last (map_rtll ~map_rtl:map ~map_assn:map l) in
     (f, tail t) in
   UM.map block g
 
@@ -897,9 +896,8 @@ let add_live_spansf node regs = match node with
 let mid_instr m = match m with
 | Instruction  r -> r
 | Stack_adjust r -> r
-| Assertion    r -> r
 
-let is_executable = function Assertion _ -> false | _ -> true
+let is_executable _ = true
 
 let nop = Rtl.par [] 
 let last_instr l = match l with
