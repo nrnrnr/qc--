@@ -60,6 +60,7 @@ fprint(int f, char *fmt, ...)
 	return n;
 }
 
+#if 0
 int
 sprint(char *buf, char *fmt, ...)
 {
@@ -89,3 +90,4 @@ snprint(char *buf, int len, char *fmt, ...)
 	printcol = scol;
 	return out-buf;
 }
+#endif

@@ -12,7 +12,8 @@ UNNEEDED=charstod.o dirstat-posix.o dirwstat.o getuser-posix.o \
 OFILES=errstr-posix.o log-posix.o \
   create.o dirstat.o doprint.o exits.o getfields.o \
   print.o rune.o \
-  seek.o strdup.o strtoll.o utflen.o utfrrune.o utfrune.o
+  seek.o strdup.o strtoll.o utflen.o utfrrune.o utfrune.o \
+  newprint.o
 
 TARG=../lib9.a
 CFLAGS=-g -I../../include
