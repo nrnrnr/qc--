@@ -43,14 +43,12 @@ are factored out.
 <<rtl.mli>>=
 <<COMMON>>
 
-module Public: sig
-    <<PUBLIC>>
-end
-
 module Private: sig
     <<PRIVATE types>>
     <<PRIVATE values>>
 end
+
+<<PUBLIC>>
 @
 
 % ------------------------------------------------------------------ 
@@ -161,21 +159,8 @@ true become effective simultaneously.
 type rtl        = Rtl of guarded list
 @
 
-The purpose of the private interface is to exploit the implementation
-details by pattern matching, for example. Values created by the public
-interface per se are not compatible with the private types. Conversion
-functions provide access to these values. Each function is named after
-the type it converts.
 
 <<PRIVATE values>>=
-val const:      Public.const    -> const
-val expr:       Public.expr     -> expr
-val location:   Public.location -> location
-val effect:     Public.effect   -> effect
-val rtl:        Public.rtl      -> rtl
-@
-
-<<>>=
 val width:      expr -> int     (* width of expression *)
 val assign:     location -> expr -> rtl
 @
@@ -184,9 +169,9 @@ val assign:     location -> expr -> rtl
 \subsubsection{Public View}
 % ------------------------------------------------------------------ 
 
-The [[Public]] sub-module provides constructor functions for {\rtl}s.
-Using them should be the \emph{only} way to create {\rtl}s when
-translating from the abstract syntax tree.
+The public view provides constructor functions for {\rtl}s.  Using
+them should be the \emph{only} way to create {\rtl}s when translating
+from the abstract syntax tree.
 
 Constants [[const]] are part of expressions.  A constant can be a
 boolean value, a number of bits, or a link-time value, which has a
@@ -252,6 +237,26 @@ val width:      expr -> int     (* width of expression *)
 val assign:     location -> expr -> rtl
 @
 
+The purpose of the private interface is to exploit the implementation
+details by pattern matching, for example. Values created by the public
+interface per se are not compatible with the private types. Conversion
+functions provide access to these values. Each function is named after
+the type it converts.
+
+It is not possible to make the conversion functions part of
+[[Private]] without putting the public interface at the same time into
+a sub-module like [[Public]]:  there is no way to refer to a type
+outside of [[Private]] from inside [[Private]] that is also declared
+inside [[Private]]. 
+
+<<PUBLIC>>=
+val conv_const:      const    -> Private.const
+val conv_expr:       expr     -> Private.expr
+val conv_location:   location -> Private.location
+val conv_effect:     effect   -> Private.effect
+val conv_rtl:        rtl      -> Private.rtl
+@
+
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
@@ -262,14 +267,11 @@ data types.
 
 <<rtl.ml>>=
 <<COMMON>>
-
 module Private = struct
     <<Private>>
 end
 
-module Public = struct
-    <<Public>>
-end
+<<Public>>
 @
 % ------------------------------------------------------------------ 
 \subsubsection{The Private View}
@@ -286,18 +288,6 @@ The empty assertion is provided as a value [[none]].
 
 <<>>=
 let none: assertion = (-1)     
-@
-
-All conversion functions are the identity [[id]] because [[Public]]
-values are really [[Private]] values.
-
-<<>>=
-let id          = fun x -> x
-let const       = id
-let expr        = id
-let location    = id
-let effect      = id
-let rtl         = id
 @
 
 Below are simple, nonetheless frequently used functions values on
@@ -319,9 +309,9 @@ let assign l r = Rtl [(Const(Bool true), Store(l, r, width r))]
 \subsubsection{The Public View}
 % ------------------------------------------------------------------ 
 
-The implementation of the [[Public]] view basically uses the
-[[Private]] definitions such that they become compatible. However,
-this fact is hidden by the interface.
+The implementation of the public view basically uses the [[Private]]
+definitions such that they become compatible.  However, this fact is
+hidden by the interface.
 
 <<Public>>=
 type const    = Private.const
@@ -359,3 +349,16 @@ let rtl guards              = Private.Rtl(guards)
 let width  = Private.width
 let assign = Private.assign
 @
+
+All conversion functions are the identity [[id]] because public and
+private values have the same representation.
+
+<<>>=
+let id               = fun x -> x
+let conv_const       = id
+let conv_expr        = id
+let conv_location    = id
+let conv_effect      = id
+let conv_rtl         = id
+@
+
