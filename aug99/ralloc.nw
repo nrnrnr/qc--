@@ -1,0 +1,160 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Register allocation}
+
+<<interface>>=
+@
+
+\subsection{Preliminaries}
+First, some basic types and assumptions.
+
+A location is register-like if it has an offset known at compile time.
+Temporaries and hardware registers occupy distinct spaces, so we can
+tell the difference just by looking at a space.
+<<implementation>>=
+type reg_like = RTL.location     (* cell with known offset *)
+type tmp      = reg_like         (* a temporary *)
+type reg      = reg_like         (* a hardware register *)
+@ 
+<<implementation>>=
+module Allocator = functor (Imports : sig <<imports>> end) -> struct
+  open Imports
+  <<abbreviations>>
+  <<utility functions>>
+  <<allocator>>
+end
+@ 
+We assume that a set of register-like things can be implemented more
+efficiently than a set of general locations.
+<<imports>>=
+module Regset : Set.S with type elt = reg_like
+<<abbreviations>>=
+type tmp_set = Regset.t
+type reg_set = Regset.t
+@ 
+Now, there are some functions that parameterize the allocator.
+We need to know what set of hardware registers is used to hold which
+temporaries: [[hwregs_for]].
+This may depend on calling convention, so it's a dynamic parameter.
+<<allocator>>=
+let allocator (hwregs_for : tmp -> reg_set)
+              (is_tmp    : reg -> bool)
+              (selection : IRNode.atts -> RTL.rtl -> IRNode.node -> IRNode.node)
+  = <<let-bound utility functions>> <<specialized allocator>>
+@ The function [[is_tmp]] tells hardware registers from temporaries.
+This is likely to be implemented efficiently by looking at the space,
+but we don't burn that into the specification.
+
+Instruction selection takes attributes, an RTL, and a successor node.
+It returns a new node consisting of a sequence of instructions
+implementing the RTL (each bearing the attributes), followed by the
+successor.
+@
+We need to be able to map temporaries to hardware registers.
+<<imports>>=
+module Regmap : Map.S with type key = tmp
+type regmap = reg Regmap.t
+@ 
+We assume that we can find definitions and uses in an RTL.
+<<imports>>=
+module RtlFunctions : sig
+  val regs_used    : RTL.rtl -> Regset.t
+  val regs_defined : RTL.rtl -> Regset.t
+@ We can also substitute for temporaries.
+In general, we need \emph{two} maps: one for definitions, the other
+for uses:
+<<imports>>=
+  val subst_defs_uses : regmap -> regmap -> RTL.rtl -> RTL.rtl
+end
+<<abbreviations>>=
+@ 
+Finally, we need some way of getting the set of registers for which
+this node is the last use.  
+<<imports>>=
+val regs_used_last : IRNode.node -> Regset.t
+@ The value of [[regs_used_last n]] is the set of registers that are
+used in~[[n]], and for which no definition preceding~[[n]] reaches any
+use following~[[n]].
+(Registers that are both used and defined in~[[n]] are live both
+before and after~[[n]], but they are still included in
+[[regs_used_last n]], because no du edge crosses~[[n]], so they can be
+mapped to new registers if needed.)
+@
+Finally, some auxiliary functions.
+<<let-bound utility functions>>=
+let not_tmp r = not (is_tmp r) in
+let regfilter p regs = 
+  Regset.fold (fun x good -> if p x then Regset.add x good else good) regs Regset.empty
+in
+let tmps_used    rtl    = regfilter is_tmp  (RtlFunctions.regs_used    rtl) in
+let tmps_defined rtl    = regfilter is_tmp  (RtlFunctions.regs_defined rtl) in
+let regs_used_last node = regfilter not_tmp (Imports.regs_used_last node) in
+let tmps_used_last node = regfilter is_tmp  (Imports.regs_used_last node) in
+@ 
+More utilities:
+<<utility functions>>=
+let dom : regmap -> Regset.t = 
+  fun map -> Regmap.fold (fun key _ dom -> Regset.add key dom) map Regset.empty
+let range : regmap -> Regset.t = 
+  fun map -> Regmap.fold (fun _ v rg -> Regset.add v rg) map Regset.empty
+<<specialized allocator>>=
+let alloc avail tmpmap node = 
+  let invariant = Regset.union avail (dom tmpmap) in
+  let rec alloc avail tmpmap node = 
+    ( assert (Regset.equal invariant (Regset.union avail (dom tmpmap)))
+    ; <<body of [[alloc]]>>
+    )
+  in  alloc avail tmpmap node
+in alloc
+@ 
+<<abbreviations>>=
+module N = IRNode
+<<body of [[alloc]]>>=
+match node with
+| N.Assign (atts, rtl, next) -> (
+    let deads = tmps_used_last node in
+    let avail = Regset.union avail deads in
+    let defs  = tmps_defined rtl in
+      match askregs defs avail with
+      |	Some newmap ->
+	  let tmpmap' = extend (drop_dom deads tmpmap) newmap (* map after node *) in
+	  let avail = Regset.diff avail (dom newmap) in
+	  let rtl = RtlFunctions.subst_defs_uses newmap tmpmap rtl in
+	  let next = alloc avail tmpmap' next in
+  	    N.Assign(atts, rtl, next)
+      | None ->
+          let spill_candidates = Regset.diff (dom tmpmap) (tmps_used rtl) in
+                 (* spill any mapped tmp except those needed in this node *)
+          let _ = assert (not (Regset.is_empty spill_candidates)) in
+	  let spillee = farthest_used spill_candidates next in
+          let spill = <<RTL to spill [[spillee]] to memory>> in
+          let node = insert_reloads spillee node in
+          let node = selection atts spill node in (* map spill to instructions *)
+          let node = add_last_use_info node in
+	    ralloc avail tmpmap node
+    )
+| node -> 
+    let new_exp = RtlFunctions.subst_exp tmpmap 
+    in  match node with
+        <<cases where [[Node]] is not [[Assign]]>>
+@ Most other nodes are simple.
+If they have expressions, they simply need updating with the current
+temporary map.
+<<cases where [[Node]] is not [[Assign]]>>=
+| N.Exit -> node
+| N.Label _ -> node
+| N.CopyIn _ -> assert false
+| N.CopyOut _ -> assert false
+| N.CalleeSaves _ -> assert false
+| N.Branch (atts, cond, t, f) -> N.Branch(atts, new_exp cond, t, f)
+| N.Goto (atts, target, nexts) -> N.Goto (atts, new_exp target, nexts)
+| N.Call (atts, target, conts) -> N.Call (atts, new_exp target, conts)
+| N.Jump (atts, target) -> N.Jump (atts, new_exp target) 
+| N.CutTo (atts, target) -> N.CutTo (atts, new_exp target)
+| N.Yield (atts, target, conts) -> N.Yield (atts, new_exp target, conts)
+| N.Assign _ -> assert false
+@ 
+
+<<RTL to spill [[spillee]] to memory>>=
+RTL.RTL [RTL.GUARD (RTL.CONST (RTL.BOOL true, None),
+	    RTL.STORE (mem, RTL.FETCH(spill, type_of spillee), type_of spillee))]
