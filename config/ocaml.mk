@@ -60,7 +60,7 @@ OCAMLO_FLAGS=
 # these rules are a bit long to make the display nice for the user
 
 $B&.cmi:Q: $B&.mli
-	(if [ -n "$B" ]; then
+	(if $config_test -n "$B"; then
 	  cd $B;
 	  echo "(in $B) $OCAMLC $OCAMLC_FLAGS -c $stem.mli"
 	else
@@ -69,7 +69,7 @@ $B&.cmi:Q: $B&.mli
 	$OCAMLC $OCAMLC_FLAGS -c $stem.mli)
 
 $B&.cmo:Q: $B&.ml
-	(if [ -n "$B" ]; then
+	(if $config_test -n "$B"; then
 	  cd $B;
 	  echo "(in $B) $OCAMLC $INSTR $OCAMLC_FLAGS -c $stem.ml"
 	else
@@ -78,7 +78,7 @@ $B&.cmo:Q: $B&.ml
 	$OCAMLC $INSTR $OCAMLC_FLAGS -c $stem.ml)
 
 $B&.cmx:Q: $B&.ml
-	(if [ -n "$B" ]; then
+	(if $config_test -n "$B"; then
 	  cd $B;
 	  echo "(in $B) $OCAMLO $INSTR $GPROF $OCAMLO_FLAGS -c $stem.ml"
 	else

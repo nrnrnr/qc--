@@ -3,7 +3,7 @@
 # ------------------------------------------------------------------ 
 
 libupdate:VQ: all
-	([ -n "$B" ] && cd $B; [ -d ../lib ] || mkdir ../lib
+	($config_test -n "$B" && cd $B; [ -d ../lib ] || mkdir ../lib
 	for f in *.cma *.mli *.cmi; do
 	  if cmp -s $f ../lib/$f; then # sh may not know !
 	    : do nothing
@@ -14,7 +14,7 @@ libupdate:VQ: all
 	done)
 
 libupdate.opt:VQ: all.opt update
-	([ -n "$B" ] && cd $B; [ -d ../lib ] || mkdir ../lib
+	($config_test -n "$B" && cd $B; [ -d ../lib ] || mkdir ../lib
 	for f in *.cmxa *.a; do
 	  if cmp -s $f ../lib/$f; then # sh may not know !
 	    : do nothing

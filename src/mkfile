@@ -37,6 +37,7 @@ VERSION =   `cat DATE`
 
 TOP = ..
 <     $TOP/config/config.mk
+<     $TOP/config/install.mk
 
 LIBDIR =    ${B}../lib
 BINDIR =    ../bin
@@ -62,14 +63,15 @@ all.opt:V:  $NAME.opt   qc--.lua
 update:V:       $BINDIR/$NAME     
 update.opt:V:   $BINDIR/$NAME.opt
 
-install-lua:V: peephole.lua
-	for i in $prereq; do install -D $i $install_lib/$i; done
+install-lua:V: peephole.lua $install_lib
+	cp peephole.lua $install_lib
 
-install:V: all install-lua
-	install -D    $NAME     $install_bin/$NAME
+install:V: all install-lua $install_bin
+	cp $NAME $install_bin
 
 install.opt:V: install all.opt
-	install -D -s $NAME.opt $install_bin/$NAME.opt
+	cp $NAME.opt $install_bin
+	strip $install_bin/$NAME.opt
 
 depend:V:   $DEPEND
 
