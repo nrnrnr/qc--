@@ -181,16 +181,12 @@ sub c_compare {
         my $width = shift @_;
         my $val   = shift @_;
         my $v     = shift @_;
+        my $unsig = "unsigned " . lookup("$width/int");
         
-        if ($hint eq "float" && $w == 32) {
+        if ($hint eq "float") {
             print CEE <<EOF;
-            if (*(unsigned*)(&$v) != $val) {printf("failed ($val)\\n"); return;}
+            if (*($unsig*)(&$v) != $val) {printf("failed ($val)\\n"); return;}
 EOF
-        } elsif ($hint eq "float" && $w == 64) {
-            print CEE <<EOF;
-            if (*(unsigned long*)(&$v) != $val) {printf("failed ($val)\\n"); return;}
-EOF
-        
         } else {
             print CEE <<EOF;
             if ($v != $val) {printf("failed ($val)\\n"); return;}
@@ -253,9 +249,9 @@ foreach $t (@ARGV) {
 
 %ctype = 
     ( "32/int"          => "int"
-    , "32/unsigned"     => "unsigned int" 
+    , "32/unsigned"     => "unsigned" 
     , "32/float"        => "float"
-    , "64/int"          => "long int"
+    , "64/int"          => "long"
     , "64/float"        => "double"
     , "8/int"           => "char"
     );    
