@@ -67,11 +67,11 @@ let rebind kids code =
 
 <<norm.ml>>=
 let normalize rules =
-  (* put node in normal form, and return that form plus rebinding function *)
+  (* put node in normal form, and return that form plus list of free vars *)
   let rec normnode = function
-    | S.Var _   as t -> unit (t, [])
-    | S.Const _ as t -> unit (t, [])
-    | S.Tree (c, kids) ->
+    | S.Var (x, _) as t -> unit (t, [Code.Var x])
+    | S.Const _    as t -> unit (t, [])
+    | S.Tree (c, kids)  ->
         lift_list (List.map normnode kids) >>= fun kids ->
         let ktrees, kfree = List.split kids in
         lookup c ktrees >>= fun nt ->

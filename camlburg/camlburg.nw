@@ -4,12 +4,14 @@
 type cost = int
 type 'a ntrec = { cost : cost; action : unit -> 'a }
 val infinity : 'a ntrec
+val infinite_cost : cost
 val choice : (cost * (unit -> 'a)) list -> 'a ntrec
 val matches : 'a -> 'a -> cost
 <<camlburg.ml>>=
 type cost = int
 type 'a ntrec = { cost : cost; action : unit -> 'a }
-let infinity = { cost = 32767; action = fun () -> assert false }
+let infinite_cost = 32767 
+let infinity = { cost = infinite_cost; action = fun () -> assert false }
 
 let rec choice = function
   | [] -> infinity
@@ -20,5 +22,5 @@ let rec choice = function
 
 let choice = (choice : (cost * (unit -> 'a)) list -> 'a ntrec)
 
-let matches c k = if c = k then 0 else infinity.cost
+let matches c k = if c = k then 0 else infinite_cost
 

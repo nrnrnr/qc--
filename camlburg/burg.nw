@@ -14,6 +14,7 @@ val labeller  : Spec.t -> string -> labeller
 val labellers : Spec.t -> (string * labeller) list
 val labeller_pair : arity:(string -> int) ->
   (Spec.nonterm * 'a) list -> string * labeller -> string * Code.exp
+val chains : Spec.rule list -> Spec.rule list Spec.StringMap.t
 
 <<burg.ml>>=
 type flags = { trace : bool; coverage : bool }
@@ -52,6 +53,7 @@ let error s = (prerr_endline (String.concat "" s); exit 1)
 @ 
 Here's where we map tree stuff to argument stuff.
 <<burg.ml>>=
+<<chain support>>
 let labeller (spec : S.t) constructor =
   let choices = mapPartial (matchc constructor) spec.S.rules in
   fun nt ->
@@ -64,7 +66,8 @@ let labeller (spec : S.t) constructor =
           else
             Nonterm (v, ty)
       | S.Const c -> Const c
-    in List.map (fun (_, args, cost, code) -> (List.map arg args, cost, code)) choices
+    in rebind_with_chains spec nt 
+       (List.map (fun (_, args, cost, code) -> (List.map arg args, cost,code)) choices)
 
 module StringSet = S.StringSet
 module StringMap = S.StringMap
@@ -112,6 +115,12 @@ let choice (args, cost, code) =
   
 let choices l = match List.map choice l with
   | [c, a] -> C.Record ["Camlburg.cost", c; "Camlburg.action", a]
+      (* possible optimization:
+  | [c, a] -> C.let' (C.Var "_cost") c
+              C.If (C.Var "_cost < Camlburg.infinite_cost",a
+                    C.Record ["Camlburg.cost", c; "Camlburg.action", a],
+                    C.var "Camlburg.infinity")
+       *)
   | [] -> C.Qualid ["Camlburg"; "infinity"]
   | l  -> C.Apply (C.Qualid ["Camlburg"; "choice"],
                    C.List (List.map (fun (c, a) -> C.Tuple [c; a]) l))
@@ -140,7 +149,6 @@ let labeller_pair arity nts (c, (lfun : labeller)) =
 This new version of [[labeller_pair]] creates a placeholder spot where
 we can add bindings for chain rules.
 <<burg.ml>>=
-let add_chains e = e  (* placeholder to rebind using chain rules *)
 let labeller_pair arity nts (c, (lfun : labeller)) =
   let ntbindings = List.map (fun (nt, ty) -> C.Var nt, choices (lfun nt)) nts in
   let ntrec = C.Let (ntbindings, C.Record (List.map (fun (nt, _) -> nt, C.id nt) nts))
@@ -185,6 +193,7 @@ let flip f x y = f y x
 
 let cvt ({Parse.start=s; Parse.types=tys; Parse.terms=terms; Parse.head=h}, rules) = 
   let rules = Norm.normalize rules (* must do now to see new nt's *)           in
+  let chains = Burg.chains rules                                               in
   let terms = List.fold_left (flip StringSet.add) StringSet.empty terms        in
   let nts = List.fold_left (Spec.fold_rule_types (flip StringSet.add))
                            StringSet.empty rules                               in
@@ -210,6 +219,7 @@ let cvt ({Parse.start=s; Parse.types=tys; Parse.terms=terms; Parse.head=h}, rule
   ; Spec.rules = rules
   ; Spec.head  = h
   ; Spec.signatures = sigs
+  ; Spec.chains = chains
   }
 
 <<emission of phi type>>
@@ -241,6 +251,41 @@ let _ = run()
 let first_sym = function (nt, _, _, _) :: _ -> nt
                        | [] -> error ["No start symbol and no rules!"]         in
 @ 
+<<chain support>>=
+let add_chain map ((nt, t, cost, code) as rule) =
+  let chains nt = try S.StringMap.find nt map with Not_found -> [] in
+  match t with
+  | Spec.Var (_, nt) -> S.StringMap.add nt (rule :: chains nt) map
+  | _ -> map
+let chains rules = List.fold_left add_chain S.StringMap.empty rules
+@
+A chain from [[from_nt]] to [[to_nt]] could give us a lower cost for [[to]].
+<<chain support>>=
+let bind_chain from_nt to_nt cost code e =
+  (List.iter print_string [from_nt; " -> "; to_nt; "\n"]; e)
+@
+The game is this: once we have a node with potentially non-infinite
+cost, we must enumerate all the non-cyclic paths originating at that
+node, rebinding as we go.
+To implement the depth-first search, we keep a set [[visited]] which
+lists all the nodes
+<<chain support>>=
+let rebind_with_chains spec =
+  let chains nt = try S.StringMap.find nt spec.S.chains with Not_found -> [] in
+  let (>>) f g = fun x -> g (f x) in
+  let id x = x in
+  let seq x y = compare x y == 0 in
+  let rec walk nt visited =
+    if S.StringSet.mem nt visited then id
+    else rebind_all nt (chains nt) (S.StringSet.add nt visited)
+  and rebind_all nt successors visited = match successors with
+  | [] -> id
+  | h::t -> rebind nt h visited >> rebind_all nt t visited
+  and rebind nt (succ, t, cost, code) visited =
+    let _ = match t with S.Var (_, nt') when seq nt' nt -> ()
+                | _ -> assert false in
+    bind_chain nt succ cost code >> walk succ visited
+  in fun nt -> (print_string (nt^":\n"); walk nt S.StringSet.empty)
 @
 <<emission of phi type>>=
 module Ty = Syntax.Ty
@@ -268,21 +313,6 @@ let emit_nts_type nts =
   Syntax.tydef {Ty.parms = vs; Ty.name = "nonterms"; Ty.eqn = None;
                 Ty.rep = Some (Ty.Product members)}
 
-<<*>>=
-global rules
-record rule (
-  nt,				# nonterminal on LHS
-  tree,				# tree matching
-  iflag,			# consider it an `instruction'?
-  template,			# code to exec on match
-  cost,				# code to compute cost of match
-  n,				# number of this rule
-  ntcode,			# code for set of nonterms as leaves
-  packed_index,			# packed index of this rule on per-nt basis
-  treetable			# map args to paths
-)
-  # ntcode codes for the set of nonterminals appearing as leaves in tree
-
 <<test2.ml>>=
 let eval e = (Test.expfold Test.burgrec (fun x -> x) e).Test.number.Test.action()
 
@@ -294,71 +324,3 @@ let e = Add (Con 3, Mul (Con 2, Con 33))
 let n = eval e
 let _ = List.iter print_string ["e33 = "; string_of_int n; "\n"]
 @ 
-\subsection{Closing costs}
-The [[closure]] functions use chain rules to adjust costs after
-labelling.
-They are described in the LOPLAS paper.
-<<*>>=
-global chainrules, treerules
-global chains # map nonterms to rules that chain that NT 
-global chaintable # RHS -> LHS -> best rule
-
-procedure emit_chain_closure_funs()
-  local r, nt, lhs, t
-
-  <<partition [[rules]] into [[chainrules]] and [[treerules]]>>
-  chaintable := table()
-  every nt := !ntlist do
-    chaintable[nt] := delete(chainnts(nt, chainrules, table(), 0), nt)
-
-  every nt := !ntlist & *chaintable[nt] > 0 do
-    write("static void ", prefix, "_closure_", nt, " ARGS((NODEPTR_TYPE, int));")
-  write()
-  every nt := !ntlist & *chaintable[nt] > 0 do {
-    write("static void ", prefix, "_closure_", nt, "(a, c) NODEPTR_TYPE a; int c; {")
-    iwrite(2, "struct ", prefix, "_state *p = STATE_LABEL(a);")
-    every b := !chaintable[nt] & b.rule.tree == nt do
-      emit_action(2, b.rule, b.cost, b.rule.cost)
-    write("}\n")
-  }
-end
-@ 
-<<*>>=
-procedure emit_action(pre, rule, cost, cost2)
-  iwrites(pre, "if (")
-  if \Tflag then
-    writes(prefix, "_trace(", prefix, "a, ", rule.n, ", c + ", cost, ", p->cost[", 
- 	   emitted_code(rule.nt), "]), ")
-  write("c + ", cost, " < p->cost[", emitted_code(rule.nt), "]) {  /* ", 
-	rule.nt, " : ", treestring(rule.tree), " */")
-  iwrite(pre+2, "p->cost[", emitted_code(rule.nt), "] = c + ", cost, ";")
-  iwrite(pre+2, "p->rule.", prefix, "_", rule.nt, " = ", rule.packed_index, ";")
-  if *chaintable[rule.nt] > 0 then
-    iwrite(pre+2, prefix, "_closure_", rule.nt, "(a, c + ", cost2, ");")
-  iwrite(pre, "}")
-end
-@ 
-Return (chain) rules with the nonterminal on the \emph{right} side.
-What's returned is a mapping for each \emph{left} nonterminal to the
-cheapest rule for producing [[nonterm]], together with its cost.
-<<*>>=
-record bestrule(rule, cost)
-
-procedure chainnts(nonterm, rules, result, cost)
-  local r
-
-  every r := !rules & r.tree == nonterm &
-    (/result[r.nt] | cost + r.cost < result[r.nt].cost)
-  do {
-    result[r.nt] := bestrule(r, cost + r.cost)
-    chainnts(r.nt, rules, result, cost + r.cost)
-  }
-  return result
-end
-@ 
-<<partition [[rules]] into [[chainrules]] and [[treerules]]>>=
-chainrules := []
-treerules := []
-chaintable := table()
-every r := !rules do
-  put(if member(nonterms, r.tree) then chainrules else treerules, r)
