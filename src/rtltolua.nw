@@ -55,13 +55,13 @@ let commentout _  _ = "comment"
 
 let tybits b = 
   match b with
-  |	Types.Bool    -> "bool"
-  |	Types.Bits(i) -> "bits" ^ string_of_int i
+  | Types.Bool    -> "bool"
+  | Types.Bits(i) -> "bits" ^ string_of_int i
 
 let hexbits v      = quoted (Printf.sprintf "0x%Lx" (Bits.U.to_int64 v))
 
 let const f c =
-	match c with
+    match c with
     | R.Bool(true)    -> f "literal" (quoted "0x1" ^ ",1")
     | R.Bool(false)   -> f "literal" (quoted "0x0" ^ ",1")
     | R.Bits b        -> f "literal" (hexbits b ^ "," ^ 
@@ -75,14 +75,14 @@ let const f c =
 let opr op w = 
   let opty, result = Rtlop.Types.mono (Rtl.opr op w) in
   luafunc "apply_operator"  ((quoted op) ^ "," ^
-							 (quoted 
-								((String.concat "," (List.map tybits opty)) ^ 
-								 ":" ^ (tybits result))))
+                             (quoted 
+                                ((String.concat "," (List.map tybits opty)) ^ 
+                                 ":" ^ (tybits result))))
 
 let byteorder = function
-  |	Rtl.BigEndian    -> quoted "NATIVE"
-  |	Rtl.LittleEndian -> quoted "NATIVE"
-  |	Rtl.Identity     -> Impossible.impossible "rtltolua cannot handle Identity"
+  | Rtl.BigEndian    -> quoted "NATIVE"
+  | Rtl.LittleEndian -> quoted "NATIVE"
+  | Rtl.Identity     -> Impossible.impossible "rtltolua cannot handle Identity"
 
 (* what is identity? *)
 
@@ -90,41 +90,41 @@ let alignment _ = "0"
  (* string_of_int *)
 
 let rec expr' f e =
-	match e with
+    match e with
     | R.Const c           -> const f c
 
-	| R.Fetch(R.Mem (_,_,_,R.App(_,(R.Fetch(R.Reg('c',1,_),_))::ee),_), _) -> 
+    | R.Fetch(R.Mem (_,_,_,R.App(_,(R.Fetch(R.Reg('c',1,_),_))::ee),_), _) -> 
         let examine appexp =
           match appexp with
-		  |	(R.Const (R.Bool _)) -> ""
-	      | (R.Const (R.Bits _)) -> ""        
+          | (R.Const (R.Bool _)) -> ""
+          | (R.Const (R.Bits _)) -> ""        
           | (R.Const c)          -> const f c
           | (_)                  -> ""
         in
             (String.concat "\n" (List.map examine ee))
 
     | R.Fetch(loc, _)     -> 
-		let (prefix, func_f, func_suffix, args) = location' loc in
-		prefix ^ luafunc (func_f "fetch" func_suffix) args
+        let (prefix, func_f, func_suffix, args) = location' loc in
+        prefix ^ luafunc (func_f "fetch" func_suffix) args
     | R.App((op, ww), ee) -> (String.concat "\n" (List.map (expr' push) ee)) ^ 
-		                     opr op ww
+                             opr op ww
 @ 
 
 <<ToLua>>=
 and location' = function
     | R.Mem (sp, agg, width, e, ass) -> 
-		( expr' push e
+        ( expr' push e
         , valstack
-		, ""
-		, string_of_int width ^ "," ^ byteorder agg ^ "," ^ alignment ass
+        , ""
+        , string_of_int width ^ "," ^ byteorder agg ^ "," ^ alignment ass
         )
 
     | R.Reg   ('A', i, width)        -> 
-		( ""
-		, argspace
-		, "_arg"
-		, string_of_int i
-		)
+        ( ""
+        , argspace
+        , "_arg"
+        , string_of_int i
+        )
 
     | R.Reg   ('G', i, width)        ->
         ( ""
@@ -134,13 +134,13 @@ and location' = function
         )
 
     | R.Reg   (sp, i, width)         -> 
-		( ""
-		, commentout
-		, "_register"
-	  	, "'" ^ String.make 1 sp ^ "'," ^ string_of_int i)
+        ( ""
+        , commentout
+        , "_register"
+        , "'" ^ String.make 1 sp ^ "'," ^ string_of_int i)
                                         
     | R.Var   (name, index, width)   -> 
-		( ""
+        ( ""
         , valstack
         , "_local"
         , string_of_int index
@@ -169,9 +169,9 @@ let effect eff func_prefix =
     match eff with
     | R.Kill loc            -> assert false;
     | R.Store (loc, exp, w) -> 
-		let (prefix, func_f, func_suffix, args) = location' loc in
-		prefix ^ expr' push exp ^ 
-		(luafunc (func_prefix ^ func_f "store" func_suffix) args)
+        let (prefix, func_f, func_suffix, args) = location' loc in
+        prefix ^ expr' push exp ^ 
+        (luafunc (func_prefix ^ func_f "store" func_suffix) args)
 
 let guard = function
   | R.Const (R.Bool true) -> ""
