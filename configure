@@ -2,16 +2,91 @@
 #
 # $Id$
 #
-# Work in progress!
+# Work in progress! Not functional, yet.
 #
 # This is the configure script for Quick C--. Run as ./confire
 # to configure the compilation process. The script assumes that 
 # mk(1) from qc--/mk is already installed.
 
 use File::Basename;
+
+# ------------------------------------------------------------------ 
+# What we are looking for
+# ------------------------------------------------------------------ 
+
+#
+# The script tries to find the correct value for the following
+# variables. You can set these from the command line, if the script
+# cannot find them, or edit this sript directly.
+#
+
+$lua_h      = undef;  # "/path/to/lua.h"
+$lualib_h   = undef;  # /path/to/lualib.h    
+$liblua     = undef;  # /path/to/liblua.a  
+$liblualib  = undef;  # /path/to/liblualib.a
+$lua_inc    = undef;  # like "-I/usr/local/include/lua"
+$lua_lib    = undef;  # like "-L/usr/local/lib"
+
+# the binaries below are expeced to be on $PATH. It does not make
+# sense to set them since we never use the full PATH. Extend PATH
+# instead.
+
+$ocamlc     = undef; # /path/to/binary
+$ocamlc     = undef;
+$ocamlyacc  = undef;
+$notangle   = undef;
+$cpif       = undef;
+$awk        = undef;
+$cc         = undef;
+$mk         = undef;
+$latex      = undef;
+$pod2html   = undef;
+
+# these values are always tested, you cannot set them
+
+$lua_version= undef;  # from LUA_VERSION macro
+$endian     = undef;  # big/little
+$sizeof_int = undef;  # 4  
+$sizeof_ptr = undef;  # 4
+$sizeof_char= undef;  # 1
+$stdc_version= undef; # 199409 - from __STDC_VERSION__
+$arch       = undef;  # x86-linux  
+$ocamlv     = undef;  # OCaml Version, always tested
+
+# ------------------------------------------------------------------ 
+# important search paths
+#
+# Adjust to help the script find header files and libraries
+# ------------------------------------------------------------------ 
+
+@path       = split(/:/,$ENV{PATH});
+@include    = ( "/usr/include"
+              , "/usr/local/include"
+              , "/usr/include/lua40"
+              , "/usr/local/include/lua40"
+              , "/usr/local/lua/include"
+              , "/usr/include/lua"
+              , "/usr/local/gnu/include"
+              );
+@libs       = ( "/lib"
+              , "/usr/lib"
+              , "/usr/local/lib"
+              , "/usr/local/gnu/lib"
+              );
+
+# ------------------------------------------------------------------ 
+# command line handling
+# ------------------------------------------------------------------ 
+
+
+
+# ------------------------------------------------------------------ 
+# Nothing to adjust from here down
+# ------------------------------------------------------------------ 
+
 #
 # search (file, dir, dir, dir, ..), call as search(file, @dirs)
-# search for file in @dirs and return, full path, if found, and ""
+# search for file in @dirs and return, full path, if found, and undef
 # otherwise.
 #
 
@@ -20,11 +95,9 @@ sub search {
 
     while ($f = shift (@_)) {
         my $x = "$f/$file";
-        if (-f $x) { 
-            return $x; 
-        }
+        if (-f $x) { return $x }
     }
-    return "";
+    return undef;
 }
 
 #
@@ -41,85 +114,81 @@ sub runtest {
     if ($rc >> 8 eq 100) { die "cannot run '$cmd'; no C compiler?" }
     
     # run test and capture output
-    my $out = `./tst` || die "$!";
-    return $out;
+    return `./tst`;
 }
 
 #
-# important search paths
+# check for various executables and versions. Only update variable if
+# it is not already set.
+#
+# The compiler might know about directories that we do not check. Thus,
+# if we fail to find a library or header file, this does not mean the
+# compiler also won't find it. The SUN compiler comes to mind.
 #
 
-@path       = split(/:/,$ENV{PATH});
-@include    = ( "/usr/include"
-              , "/usr/local/include"
-              , "/usr/include/lua40"
-              , "/usr/local/include/lua40"
-              , "/usr/local/lua/include"
-              , "/usr/include/lua"
-              );
-@libs       = ( "/lib"
-              , "/usr/lib"
-              , "/usr/local/lib"
-              );
+$ocamlc     = $ocamlc       || search("ocamlc",@path);
+$ocamlyacc  = $ocamlyacc    || search("ocamlyacc",@path);
+$ocamlv     = $ocamlv       || (`$ocamlc -v` =~ /(\d\.\d\d)/) && $1;
+$notangle   = $notangle     || search("notangle",@path); 
+$cpif       = $cpif         || search("cpif", @path);
+$awk        = $awk          || search("awk", @path);
+$cc         = $cc           || search("gcc",@path)
+                            || search("cc",@path) 
+                            || search("lcc",@path);
+$mk         = $mk           || search("mk",@path); 
+$latex      = $latex        || search("latex",@path); 
+$pod2html   = $pod2html     || search("pod2html",@path);
+$lua_h      = $lua_h        || search("lua.h", @include);
+$lualib_h   = $lualib_h     || search("lualib.h", @include);
+$liblua     = $liblua       || search("liblua.a", @libs) 
+                            || search("liblua40.a", @libs);
+$liblualib  = $liblualib    || search("liblualib.a", @libs) 
+                            || search("liblualib40.a", @libs);
+$lua_inc    = $lua_inc      || "-I" . dirname($lua_h);
+$lua_lib    = $lua_lib      || "-L" . dirname($liblua);
 
-#
-# check for various executables and versions
-#
-
-$ocamlc     = search("ocamlc",@path);
-$ocamlv     = (`$ocamlc -v` =~ /(\d\.\d\d)/) && $1;
-$notangle   = search("notangle",@path); 
-$cc         = search("gcc",@path)||search ("cc",@path) || search ("lcc",@path);
-$mk         = search("mk",@path); 
-$latex      = search("latex",@path); 
-$pod2html   = search("pod2html",@path);
-$lua_h      = search("lua.h", @include);
-$lualib_h   = search("lualib.h", @include);
-$liblua     = search("liblua.a", @libs) || search("liblua40.a", @libs);
-$liblualib  = search("liblualib.a", @libs) || search("liblualib40.a", @libs);
-$lua_inc    = "-I" . dirname($lua_h);
-$lua_lib    = "-L" . dirname($liblua);
-
-#
-# run some tests ..
-# 
+# ------------------------------------------------------------------ 
+# Run tests. The config.c test script emits Perl code that sets
+# variables, hence the output is eval'ed.
+# ------------------------------------------------------------------ 
 
 chdir("config/aux") || die "$!";
-my $result;
+$result = runtest("$lua_inc config.c");
+eval($result) || die "cannot evaluate result from config.c"; 
+$arch=`./arch-os`;
+chop($arch);
 
-# .. endianness
-$result = runtest("endian.c");
-if    ($result =~ /big/)    { $endian = "big"    } 
-elsif ($result =~ /little/) { $endian = "little" } 
-else  { die "cannot determine endianess; 64 bit machine?" }    
-
-# .. wordsize
-$sizes = runtest("sizes.c");
-
-# .. Lua version from Lua header file
-$result = runtest ("$lua_inc lua.c");
-if ($result =~ /Lua (\d.\d)/) { $luav = $1 } 
-
-
+# ------------------------------------------------------------------ 
+# report
+# ------------------------------------------------------------------ 
 
 print <<EOF;    
     Results
     
-    ocamlc:         $ocamlc
     OCaml Version:  $ocamlv
+    ocamlc:         $ocamlc
+    ocamlyacc:      $ocamlyacc
+    
     notangle:       $notangle
+    cpif:           $cpif
+    awk:            $awk
+    
     cc:             $cc
     mk:             $mk
     latex:          $latex
     pod2html:       $pod2html
+    
     lua.h:          $lua_h
     lualib.h:       $lualib_h
     liblua:         $liblua
     liblualib:      $liblualib
     Lua -I          $lua_inc
     Lua -L          $lua_lib
-    Lua Version:    $luav
+    Lua Version:    $lua_version
+    
+    Architecture:   $arch
     Endianness:     $endian
-    Sizes:          $sizes
+    Sizes:          int:$sizeof_int int*:$sizeof_ptr char:$sizeof_char
+    C Standard:     $stdc_version
 EOF
     
