@@ -655,12 +655,12 @@ void fetch_global(unsigned /* [0..65535] */ bits16) {
 }
 
 /*****************************
-  _clofun_2 = 
-    21 cl-loc force 1 emit-at
-    1 cla force cl-loc force 1 add 4 emit-at
-    
   _clofun_3 = 
     22 cl-loc force 1 emit-at
+    1 cla force cl-loc force 1 add 4 emit-at
+    
+  _clofun_2 = 
+    21 cl-loc force 1 emit-at
     1 cla force cl-loc force 1 add 4 emit-at
     
   _clofun_4 = 
@@ -674,15 +674,15 @@ void fetch_global(unsigned /* [0..65535] */ bits16) {
   
 ****************/
 ClosurePostfix encode_clofuns[] = {
-  { _clofun_2, "21 cl-loc force 1 emit-at\n1 cla force cl-loc force 1 add 4 emit-at\n" }, 
   { _clofun_3, "22 cl-loc force 1 emit-at\n1 cla force cl-loc force 1 add 4 emit-at\n" }, 
+  { _clofun_2, "21 cl-loc force 1 emit-at\n1 cla force cl-loc force 1 add 4 emit-at\n" }, 
   { _clofun_4, "23 cl-loc force 1 emit-at\n1 cla force cl-loc force 1 add 4 emit-at\n2 cla force cl-loc force 5 add 4 emit-at\n" }, 
   { _clofun_1, "1 cla force cl-loc force 4 emit-at\n" }, 
   { (ApplyMethod) 0, (char *) 0 }
 };
 ClosurePostfix encode_clobytes[] = {
-  { _clofun_2, /* 9 */ "U\x15\x05\x15\x0f_\eCo" }, 
   { _clofun_3, /* 9 */ "U\x16\x05\x15\x0f_\eCo" }, 
+  { _clofun_2, /* 9 */ "U\x15\x05\x15\x0f_\eCo" }, 
   { _clofun_4, /* 15 */ "U\x17\x05\x15\x0f_\eCo\x95\x0f_[Co" }, 
   { _clofun_1, /* 2 */ "\x15\x85" }, 
   { (ApplyMethod) 0, (char *) 0 }
@@ -690,8 +690,8 @@ ClosurePostfix encode_clobytes[] = {
 
 /* Bytecode total is 35 */
 ClosureEmitter encode_cloemitters[] = {
-  { _clofun_2, O1_0_emitclosure }, 
   { _clofun_3, O1_0_emitclosure }, 
+  { _clofun_2, O1_0_emitclosure }, 
   { _clofun_4, O2_0_emitclosure }, 
   { _clofun_1, O1_0_emitclosure }, 
   { (ApplyMethod) 0, (void *) 0 /*type is a lie and a cheat*/ }
