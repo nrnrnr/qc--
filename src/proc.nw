@@ -38,7 +38,7 @@ type ('automaton, 'cfg, 'cc, 'tgt) t =
     ; priv:           'automaton         (* stack - spill slots etc - still open *)
     ; eqns:           Rtleqn.t list      (* eqns for compile time consts *)
     ; vars:           int                (* number of local vars + parameters *)
-    ; mutable varMap: Rtl.Private.loc VarMap.t
+    ; mutable varMap: Rtl.Private.loc VarMap.t (* where variables are stored *)
     }
 @
 
@@ -60,7 +60,7 @@ incoming overflow results, some deallocated by the
 \item [[stackd]]:              User stack data, from the [[stack data]] construct.
 \item [[conts]]:               Area on the stack where continuations are stored.
 \item [[sp]]:                  The block where the sp is stored during the procedure
-             									 body.
+                               body.
 \item [[priv]]:                Automaton that provides register-like \emph{memory}
                                locations for spill slots, continuations, etc. The 
                                memory will be allocated on the stack.
@@ -72,6 +72,7 @@ incoming overflow results, some deallocated by the
                                numbered starting from zero for the runtime system. 
                                [[vars]] is the number of parameters plus the number
                                of local variables.
+\item [[varMap]]:              A map from variables to the temps they are placed in.
 \end{itemize}
 
 <<proc.mli>>=
