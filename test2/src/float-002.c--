@@ -6,24 +6,77 @@ import printf;
 export main;
 
 foreign "C" main(bits32 argc, "address" bits32 argv) {
-  foreign "C" printf(pinf64, "float" %pinf64);
-  foreign "C" printf(pinf32, "float" %f2f64(%pinf32, rm));
-  foreign "C" printf(minf64, "float" %minf64);
-  foreign "C" printf(minf32, "float" %f2f64(%minf32, rm));
-  foreign "C" printf(pzero64, "float" %pzero64);
-  foreign "C" printf(pzero32, "float" %f2f64(%pzero32, rm));
-  foreign "C" printf(mzero64, "float" %mzero64);
-  foreign "C" printf(mzero32, "float" %f2f64(%mzero32, rm));
+
+  bits32 nan, inf, fin;
+  nan = foreign "C" isnan("float" %f2f64(%pinf32, rm));
+  inf = foreign "C" isinf("float" %f2f64(%pinf32, rm));
+  fin = foreign "C" finite("float" %f2f64(%pinf32, rm));
+  foreign "C" printf(fmt, "address" op1, "float" %f2f64(%pinf32, rm), nan, inf, fin);
+  nan = foreign "C" isnan("float" %f2f64(%minf32, rm));
+  inf = foreign "C" isinf("float" %f2f64(%minf32, rm));
+  fin = foreign "C" finite("float" %f2f64(%minf32, rm));
+  foreign "C" printf(fmt, "address" op2, "float" %f2f64(%minf32, rm), nan, inf, fin);
+  nan = foreign "C" isnan("float" %f2f64(%pzero32, rm));
+  inf = foreign "C" isinf("float" %f2f64(%pzero32, rm));
+  fin = foreign "C" finite("float" %f2f64(%pzero32, rm));
+  foreign "C" printf(fmt, "address" op3, "float" %f2f64(%pzero32, rm), nan, inf, fin);
+  nan = foreign "C" isnan("float" %f2f64(%mzero32, rm));
+  inf = foreign "C" isinf("float" %f2f64(%mzero32, rm));
+  fin = foreign "C" finite("float" %f2f64(%mzero32, rm));
+  foreign "C" printf(fmt, "address" op4, "float" %f2f64(%mzero32, rm), nan, inf, fin);
+  nan = foreign "C" isnan("float" %f2f64(%NaN32(33::bits23), rm));
+  inf = foreign "C" isinf("float" %f2f64(%NaN32(33::bits23), rm));
+  fin = foreign "C" finite("float" %f2f64(%NaN32(33::bits23), rm));
+  foreign "C" printf(fmt, "address" op5, "float" %f2f64(%NaN32(33::bits23), rm), nan, inf, fin);
+  nan = foreign "C" isnan("float" %f2f64(%NaN32(77::bits23), rm));
+  inf = foreign "C" isinf("float" %f2f64(%NaN32(77::bits23), rm));
+  fin = foreign "C" finite("float" %f2f64(%NaN32(77::bits23), rm));
+  foreign "C" printf(fmt, "address" op6, "float" %f2f64(%NaN32(77::bits23), rm), nan, inf, fin);
+  nan = foreign "C" isnan("float" %pinf64);
+  inf = foreign "C" isinf("float" %pinf64);
+  fin = foreign "C" finite("float" %pinf64);
+  foreign "C" printf(fmt, "address" op7, "float" %pinf64, nan, inf, fin);
+  nan = foreign "C" isnan("float" %minf64);
+  inf = foreign "C" isinf("float" %minf64);
+  fin = foreign "C" finite("float" %minf64);
+  foreign "C" printf(fmt, "address" op8, "float" %minf64, nan, inf, fin);
+  nan = foreign "C" isnan("float" %pzero64);
+  inf = foreign "C" isinf("float" %pzero64);
+  fin = foreign "C" finite("float" %pzero64);
+  foreign "C" printf(fmt, "address" op9, "float" %pzero64, nan, inf, fin);
+  nan = foreign "C" isnan("float" %mzero64);
+  inf = foreign "C" isinf("float" %mzero64);
+  fin = foreign "C" finite("float" %mzero64);
+  foreign "C" printf(fmt, "address" op10, "float" %mzero64, nan, inf, fin);
+  nan = foreign "C" isnan("float" %NaN64(33::bits52));
+  inf = foreign "C" isinf("float" %NaN64(33::bits52));
+  fin = foreign "C" finite("float" %NaN64(33::bits52));
+  foreign "C" printf(fmt, "address" op11, "float" %NaN64(33::bits52), nan, inf, fin);
+  nan = foreign "C" isnan("float" %NaN64(77::bits52));
+  inf = foreign "C" isinf("float" %NaN64(77::bits52));
+  fin = foreign "C" finite("float" %NaN64(77::bits52));
+  foreign "C" printf(fmt, "address" op12, "float" %NaN64(77::bits52), nan, inf, fin);
+
+
+
   foreign "C" return(0);
 }
 
 section "data" {
-  pinf64: bits8[] "64-bit pinf == %f\n\0";
-  pinf32: bits8[] "32-bit pinf == %f\n\0";
-  minf64: bits8[] "64-bit minf == %f\n\0";
-  minf32: bits8[] "32-bit minf == %f\n\0";
-  pzero64: bits8[] "64-bit pzero == %f\n\0";
-  pzero32: bits8[] "32-bit pzero == %f\n\0";
-  mzero64: bits8[] "64-bit mzero == %f\n\0";
-  mzero32: bits8[] "32-bit mzero == %f\n\0";
+  op1: bits8[] "%pinf32\0";
+  op2: bits8[] "%minf32\0";
+  op3: bits8[] "%pzero32\0";
+  op4: bits8[] "%mzero32\0";
+  op5: bits8[] "%NaN32(33::bits23)\0";
+  op6: bits8[] "%NaN32(77::bits52)\0";
+  op7: bits8[] "%pinf64\0";
+  op8: bits8[] "%minf64\0";
+  op9: bits8[] "%pzero64\0";
+  op10: bits8[] "%mzero64\0";
+  op11: bits8[] "%NaN64(33::bits23)\0";
+  op12: bits8[] "%NaN64(77::bits52)\0";
+
+  fmt: bits8[] "%20s == %9f (nan==%d, inf==%2d, finite=%d)\n\0";
 }
+
+import isnan, isinf, finite;

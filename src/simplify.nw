@@ -65,7 +65,7 @@ exception Error of string
 type reloc     = Bits.bits RS.relocatable
 
 let error msg  = raise (Error msg)
-let impossible = Impossible.impossible
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 
 module Safe = struct
     <<RTL operator implementations>>
@@ -157,7 +157,7 @@ let default op w args = RP.App((op,w),args)
 
 <<traverse RTL>>=   
 let app o w args = match o with
-    |  "NaN" 		-> default o w args
+    |  "NaN" 		-> nan w args
     |  "add" 		-> add w args
     |  "and" 		-> binop o w BO.and' args
     |  "bit" 		-> bit  w args
@@ -468,3 +468,12 @@ let minf w args = assert (args = []); match w with
 | [32|64] -> or' w [pinf w args; mzero w args]
 | _ -> default "minf" w args
 
+let nan w args =
+  let swidth = function
+    | 32 -> 23
+    | 64 -> 52
+    | _  -> Impossible.unimp "NaN at width other than 32 or 64" in
+  match w, args with
+  | [n;w], [x] when n = swidth w -> or' [w] [pinf [w] []; zx [n; w] [x]]
+  | [n;w], [x] -> impossf "significand in NaN has width %d; should be %d" n (swidth w)
+  | _ -> Impossible.impossible "ill-formed NaN"
