@@ -341,7 +341,7 @@ checks need it.
         let env = foldl (formal Srcmap.null)         env ff   in
         let env = foldl (body Srcmap.null Local)     env bb   in
             env
-end
+end (* module Env *)
 @
 
 \paragraph{Check}. The [[Check]] module implements the check of the
@@ -1158,7 +1158,7 @@ in a later phase.
 
 <<module Env>>=
 let rec stackdatum r scope env = function
-    | A.DatumAt(x,r) -> E.catch' env (error r env) (datum r scope env) x
+    | A.DatumAt(x,r) -> E.catch' env (error r env) (stackdatum r scope env) x
     | A.Label(n)     -> bindv n r
                                 (E.ematch (pointerTy env) 
                                     (fun p ->  F.Label(F.Stack(None)),p)) 
