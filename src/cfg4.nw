@@ -787,8 +787,11 @@ object(this)
  
     method interp fd =
         match _symbol with
-        | Some s -> fprintf fd "CMM.define_label('%s')\n" s#text
         | None   -> assert false
+        | Some s -> 
+            fprintf fd "CMM.define_label('%s') -- %s \n" 
+                s#text
+                "could be a continuation node"
 end
 @
 
@@ -1022,7 +1025,7 @@ object (this)
             (String.concat "," (List.map label _unwinds)) 
             (String.concat "," (List.map label _returns)) 
             (if _aborts then "1" else "0")
-            "annotations missing"
+            "cuts, unwinds, returns, aborts"
         )   
 end
 @
