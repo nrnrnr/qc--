@@ -64,13 +64,6 @@ update.opt:V: $BINDIR/$NAME.opt            \
             $MANDIR/man1/$NAME.1           \
             $MANDIR/man1/${NAME}grammar.1 
 
-# files that we like to pre-compile for a source distribution because
-# the tool creating them is unpopular. Update: these files moved to
-# gen/.
-#
-# precompile:V:   ast.mli ast.ml astUtil.mli astUtil.mli\
-#                rtlasdl.ml rtlasdl.mli rtlasdlUtil.ml rtlasdlUtil.mli
-
 dvi:V:      $NAME.dvi
 ps:V:       $NAME.ps
 
@@ -120,15 +113,11 @@ ML =            impossible.ml    \
                 idgen.ml         \
                 error.ml         \
                 this.ml          \
-                # ast.ml           \
-                # astUtil.ml       \
                 asm3.ml          \
                 parse.ml         \
                 scan.ml          \
                 types.ml         \
                 mangle.ml        \
-                # rtlasdl.ml       \
-                # rtlasdlUtil.ml   \
                 rtlx.ml          \
                 const2.ml        \
                 space.ml         \
@@ -178,10 +167,8 @@ ML =            impossible.ml    \
 
 MLI =           asm3.mli        \
                 asdlasm.mli     \
-                # ast.mli         \
                 astasm.mli      \
                 ast3ir.mli      \
-                # astUtil.mli     \
                 astpp.mli       \
                 automaton2.mli  \
                 aux.mli         \
@@ -321,43 +308,6 @@ html:V:         $HTML
 modules.tex:V: $INC
     echo $INC | sed 's!\([a-z0-9./]*inc\)!\\input{\1}!g' | fmt -w 10 > $target
 
-# ------------------------------------------------------------------
-# asdl
-# ------------------------------------------------------------------
-
-# ASDL does not support seperate compilation:  modules referring to
-# each other must be in one file.  To overcome this limitation we
-# concatenate all asdl files to one file and pass it to the asdlGen
-# compiler. The noweb files defining the asdl files also contain 
-# views for some of the definined types. So first all asdl files are
-# concatenated and then all views. Update: we no longer use views and
-# thus things got simpler. 
-
-ocaml.asdl:     ast.asdl
-                cp $prereq $target
-
-sml.asdl:       ast.asdl
-                cp $prereq $target
-
-ast.ml          \
-ast.mli         \
-astUtil.ml      \
-astUtil.mli:    ocaml.asdl
-                asdlGen --ocaml --pickler=sexp $prereq
-
-ast.sml         \
-ast.sig         \
-astUtil.sml     \
-astUtil.sig:    sml.asdl                
-                asdlGen --sml --pickler=sexp $prereq
-
-rtlasdl.ml      \
-rtlasdl.mli     \
-rtlasdlUtil.ml  \
-rtlasdlUtil.mli: rtlasdl.asdl
-                asdlGen --ocaml --pickler=sexp $prereq
-
-
 # ------------------------------------------------------------------ 
 # special cases, primarily for multiple sources in one .nw
 # ------------------------------------------------------------------ 
@@ -404,10 +354,6 @@ scan.mli:       parser.nw
 
 newer.inc:      newer.nw
                 $NOWEAVE -delay -autodefs c -index $prereq > $target
-
-
-ast.inc:        ast.nw         
-                $NOWEAVE -delay $prereq > $target
 
 #
 # include the yacc grammar in the manual for reference
