@@ -14,11 +14,5 @@ Test.files = { "add.c--"
              , "bits-bug.c--"
              , "fadd.c--"
              , "hello.c--"
+             , "ovrflow.c--"
              }
-
-function Test.on_error["add.s"](expected, output)
-  -- provide special processing for detailed output
-  print("error in add.c--")
-  -- call default handler for .s files
-  Test.on_error[".s"](expected, output)
-end

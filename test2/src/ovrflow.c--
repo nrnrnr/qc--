@@ -1,0 +1,66 @@
+target byteorder little;
+
+import bits32 printf;
+export main;
+
+section "data" {
+  no:  bits8[] "no ";
+  yes: bits8[] "overflow %d %s %d = %d\n\000";
+
+  plus: bits8[] "+\000";
+  mul : bits8[] "*\000";
+  mulu: bits8[] "<mulu>\000";
+  sub : bits8[] "-\000";
+  div : bits8[] "/\000";
+}
+
+test_ovrfl(bits32 i, bits32 j) {
+  bits32 k;
+
+  k = i + j;
+  if (%add_overflows(i, j)) { foreign "C" printf(yes, i, plus, j, k); }
+  else                      { foreign "C" printf(no , i, plus, j, k); }
+
+  k = j * i;
+  if (%mul_overflows(i, j)) { foreign "C" printf(yes, i, mul, j, k); }
+  else                      { foreign "C" printf(no , i, mul, j, k); }
+
+  k = i / j;
+  if (%div_overflows(i, j)) { foreign "C" printf(yes, i, div, j, k); }
+  else                      { foreign "C" printf(no , i, div, j, k); }
+
+  k = i - j;
+  if (%sub_overflows(i, j)) { foreign "C" printf(yes, i, sub, j, k); }
+  else                      { foreign "C" printf(no , i, sub, j, k); }
+
+  return();
+}
+
+foreign "C" main("unsigned" bits32 iargc, "address" bits32 iargv)
+{
+ test_ovrfl(2147483647, 1);
+ test_ovrfl(1, 2147483647);
+
+ test_ovrfl(0-2147483648, 1);
+ test_ovrfl(1, 0-2147483648);
+
+ test_ovrfl(2147483647, 0-1);
+ test_ovrfl(0-1, 2147483647);
+
+ /* test_ovrfl(0-2147483648, 0-1); */
+ test_ovrfl(0-1, 0-2147483648);
+
+ test_ovrfl(2147483647, 2);
+ test_ovrfl(2, 2147483647);
+
+ test_ovrfl(0-2147483648, 2);
+ test_ovrfl(2, 0-2147483648);
+
+ test_ovrfl(2147483647, 0-2);
+ test_ovrfl(0-2, 2147483647);
+
+ test_ovrfl(0-2147483648, 0-2);
+ test_ovrfl(0-2, 0-2147483648);
+
+ foreign "C" return (0);
+}
