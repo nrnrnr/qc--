@@ -3,7 +3,6 @@ Copyright © 1998, 1999 Lucent Technologies Inc.  All rights reserved.
 Revisions Copyright © 1999, 2000 Vita Nuova Limited.  All rights reserved.
 Revisions Copyright © 2001 Norman Ramsey.  All rights reserved.  
 */
-#include <features.h>
 #include <sys/types.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -13,7 +12,11 @@ Revisions Copyright © 2001 Norman Ramsey.  All rights reserved.
 #include <fcntl.h>
 #include <setjmp.h>
 #include <float.h>
+#if 0 /* do not exist on Solaris */
 #include <endian.h>
+#include <features.h>
+#endif 
+
 #include <unistd.h>
 #include <assert.h>
 
