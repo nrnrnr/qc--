@@ -1,3 +1,19 @@
+* I believe stack slots for registers (spilling, callee saved
+  registers, etc) should be managed by an automaton that itself
+  allocates memory from an Area. The private area of the stack
+  therefore is a concatenation of (at least) two Area.t: user stack
+  data and slots used by compiler and run-time system.
+
+* Area provides overlapping of areas but we need concatenation, too.
+
+* Automaton.freeze and Area.freeze should adjust the size of the area 
+  under construction such that is a multiple of the base alignment.
+  Otherwise it is not possible to to overlay areas on such that they
+  share their high ends.
+  
+* I would like build a dummy target but need some inspiration what a
+  good dummy would look like. Appel's book might help.
+
 * Spilling hardware registers is not save: if [[spillee]] is a
   hardware register, it is re-loaded into a new temporary that
   substitutes the hardware register in nodes. However, the hardware
