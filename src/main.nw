@@ -1,3 +1,6 @@
+% l2h substitution C C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
 
 \section{Main}
 
@@ -5,7 +8,7 @@ This module contains the [[main]] function that is executed when the
 \C~compiler starts.  Its main purposes are command line processing,
 catching of exceptions, and providing the exit code.
 
-The [[Main]] module opens the modules is most frequently uses:
+The [[Main]] module opens the modules it most frequently uses:
 
 <<main.ml>>=
 open Pc                         (* parser combinators for cmd line *)
@@ -45,8 +48,8 @@ rather suggestive: [[***]], [[**>]], and [[**<]] recognize a sequence
 of tokens; [[**>]] returns only the string of the right hand side as a
 semantic value. Semantic values are processed by functions defined on
 the right hand side of [[-->]]. The string recognized by [[any]] after
-a flag [[-c]] is passed to a function that injects the string into a
-[[CMDparse]] constructor that asks to parse a file.
+a flag [[-pp] is passed to a function that injects the string into a
+[[Pp]] constructor that asks to parse and pretty print a file.
   
 <<main.ml>>=
 
@@ -58,13 +61,14 @@ let cmd_lex       = literal "-lex" **> any  --> fun s -> Cmdline.Lex(s)
 let cmd_asdl      = literal "-asdl" **> any --> fun s -> Cmdline.Asdl(s) 
 let cmd_default   = any                     --> fun s -> Cmdline.Pp(s,default_width)
 
-let cmd_width     = literal "-w" **> any    --> fun s -> 
-                    (try int_of_string s with Failure(_) -> default_width)
+let cmd_width     = literal "-w" **> any    
+                    --> fun s -> (try  int_of_string s 
+                                  with Failure(_) -> default_width)
                     
-let cmd_pp        = (literal "-pp" **> cmd_width *** any --> fun (width,file) -> 
-                    Cmdline.Pp(file,width)) 
-                ||| literal "-pp" **> any --> fun (file) -> 
-                    Cmdline.Pp(file,default_width)
+let cmd_pp        = (literal "-pp" **> cmd_width *** any 
+                    --> fun (width,file) -> Cmdline.Pp(file,width)) 
+                ||| literal "-pp" **> any 
+                    --> fun (file)       -> Cmdline.Pp(file,default_width)
                     
 
 @ Each parser recognizes a complete command line.  As an abbreviation
@@ -252,13 +256,13 @@ let _ = main ()
 Writing manual pages for the Troff formatter is a tedious job.  I have
 found the highly readable \textit{plain old document} (\textsc{pod})
 format used by the Perl community very helpful.  Every Perl
-installation comes with a tool \texttt{pod2man} which creates a man
+installation comes with a \texttt{pod2man} tool which creates a man
 page from \textsc{pod} file.  Today we can assume that Perl is
 installed nearly everywhere such that the use of this tool does not
 spoils portability of our code.
 
 The format of \textsc{pod} files is documented in the \texttt{perlpod}
-manual page.  Besides the the \texttt{pod2man} filter there exist also
+manual page.  Besides the \texttt{pod2man} filter there exist other
 filters to convert a \textsc{pod} file to \textsc{html} and \LaTeX,
 which makes it a very versatile format.
 
@@ -304,7 +308,7 @@ Parse I<file> and print the abstract syntax in ASDL format to stdout.
 =item B<-pp> [ B<-w> I<width> ]I<file>
 
 Parse I<file> and write a pretty printed concrete syntax to stdout. 
-The default width for output is 72 characters can be changed with the
+The default width for output is 72 characters; it can be changed with the
 B<-w> flag. 
 
 =item B<-lex> I<file>

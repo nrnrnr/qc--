@@ -14,7 +14,7 @@
 
 
 The abstract syntax for \C~is not directly encoded into \ocaml~data
-types but specified as an \asdl~\cite{adsl97} definition.  This
+types but specified as an \asdl~\cite{adsl97} definition.  The
 \asdl~compiler generates suitable data types and additionally code to
 serialize the abstract syntax.  This permits to exchange the abstract
 syntax with applications written in languages other than \ocaml~more
@@ -39,9 +39,9 @@ align       = (int)     -- power of 2
 aligned     = (int)     -- power of 2
 op          = (string)
 
-@ Every important node is wraped by a node that includes a source code
-position [[region]].  This is the character span in the input
-character sequence that covers the node.  The first character in the
+@ Every important node is wrapped by a node that includes a source
+code position [[region]].  This is the character span in the input
+character stream that covers the node.  The first character in the
 stream has index 0.  The first number in a [[region]] denotes the
 first character covered by the node, the second number the first
 character \textit{after} the node.
@@ -90,7 +90,7 @@ datum       = DatumAt (datum, region)
             | Align (align)
             | MemDecl (ty, memsize, init?)
 
-@ Escape sequence in the concrete syntax of strings and charaxter
+@ Escape sequence in the concrete syntax of strings and character
 literals are removed during the translation to the abstract syntax. 
 So [[InitStr]] and [[InitUStr]] do not contain escaped characters.
 
@@ -225,7 +225,7 @@ val program : Ast.topdecl list -> Pp.doc
 % ------------------------------------------------------------------  
 
 The implementation builds an abstract representation of the pretty
-printed concrete synatx in a purely functional way. The abstract
+printed concrete syntax in a purely functional way. The abstract
 representation is than written to an open file.
 
 
@@ -277,7 +277,7 @@ let rec list sep f xs =
 
 let commalist f = list (text "," ^^ break) f
 
-@ A [[block]] contains object [[xs]] formatted by [[f]] and enclosed
+@ A [[block]] contains objects [[xs]] formatted by [[f]] and enclosed
 by curly braces.  Its body will be indented in case it does not fit on
 a single line.  The [[commablock]] is just a handy special case. 
 
@@ -297,6 +297,14 @@ let commablock f xs =
         ^^ list (text "," ^^ break) f xs
     end
 
+@ To indent a group we provide [[angrp]] and [[fngrp]]; [[fngrp]] is a
+nested [[fgrp]]. While inside an [[agrp]] all breaks are either turned
+into spaces or newlines, each break inside a [[fgrp]] is considered
+separately. Only breaks at the end of a line is turned into a newline
+to make new room -- as many as possible breaks are printed as spaces.
+    
+<<astpp.ml>>=
+
 let angrp x =
     agrp begin 
        ~~ nest begin
@@ -314,7 +322,7 @@ let fngrp x =
     end
 
 @ Most of the names used below refer directly to the grammar or
-abstract syntax. Since the overall purpose of this is clear we don't
+abstract syntax.  Since the overall purpose of this is clear we don't
 comment the code much.
 
 Why does the \ocaml~[[List]] module does not provide [[zip]] and
@@ -733,10 +741,6 @@ let program(ds) = vgrp begin
                     end
             
                                             
-@ The [[ppToFile]] function is the only one visible to the outside.
-
-<<astpp.ml>>=
-    
 let ppToFile fd width prog = Pp.ppToFile fd width (program prog)
                         
 @

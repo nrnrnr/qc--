@@ -29,11 +29,12 @@ type 'a error       = Error                     (* bad result  *)
                     | Ok        of 'a           (* good result *)
 
 @ At some point in a program the processing is finally aborted by
-raising an exception. We expect to find most errors while checking the
-static semantics of a \C~program. In that situation we have a source map
-to find the location of the error. However, there are other situations where
-we can not attribute an error to a specific location. We thus have
-different exceptions.
+raising an exception.  We expect to find most errors while checking
+the static semantics of a \C~program.  In that situation we have a
+source map to point the user to the the location of the error. 
+However, there are other situations where we can not attribute an
+error to a specific location.  We thus have different exceptions. 
+Function named after the exceptions help to raise them.
 
 The [[ErrorExn]] deals with errors that we can attribute to a specific
 location and that we have a source map for.  The [[FatalExn]] is for
@@ -44,7 +45,7 @@ The [[ParseExn]] should be defined inside the parser.  But the
 generated interface file for the parser does hide it to the outside so
 that it must be defined somewhere else.  Parse errors are special
 because a position the error can be attributed to is available, but no
-location map.  Function named after the exceptions help to raise them.
+location map.  
 
 <<error.mli>>=
 
@@ -64,10 +65,11 @@ val map         : ('a -> 'b) -> 'a error -> 'b error
 val sequence    : ('a -> 'b error) -> 'a error -> 'b error
 
 
-@ Raising combinators raise the constructors of an [[error]] value inside
-a complex value to the top-level. A complex value is bad when one
-of its components is bad and good otherwise. The raising combinators
-deal with the most important data types: options, lists, and tuples.
+@ Raising combinators raise the constructors of an [[error]] value
+inside a complex value to the top-level.  A complex value is bad when
+one of its components is bad and good otherwise.  The raising
+combinators deal with the most important data types:  options, lists,
+and tuples.
 
 <<error.mli>>=
 
@@ -76,15 +78,22 @@ module Raise :
     val option : 'a error option                -> 'a option error
     val list   : 'a error list                  -> 'a list error
     val pair   : 'a error * 'b error            -> ('a * 'b) error
+
+@ The [[left]] and [[right]] functions consider only one component of
+a pair when raising the constructor.
+
+<<error.mli>>=
+
     val left   : 'a error * 'b                  -> ('a * 'b) error
     val right  : 'a * 'b error                  -> ('a * 'b) error
+    
     val triple : 'a error * 'b error * 'c error -> ('a * 'b * 'c) error
     val quad   : 'a error * 'b error * 'c error * 'd error 
                   -> ('a * 'b * 'c * 'd) error
   end
 
 @ Lowering functions take a complex [[error]] value and push the
-constructor from the outer level to the values inside the [[error]]
+constructor from the top-level to the values inside the [[error]]
 value. 
 
 <<error.mli>>=
@@ -135,7 +144,7 @@ let sequence f = function
     | Error     -> Error
 
 @ Raising combinators raise the constructors of an [[error]] value inside
-a complex value to the outermost level. A complex value is bad when one
+a complex value to the top-level. A complex value is bad when one
 of its components is bad and good otherwise. The raising combinators
 deal with the most important data types: options, lists, and tuples.
 
