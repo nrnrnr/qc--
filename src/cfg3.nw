@@ -52,25 +52,34 @@ The {\cfg} abstraction is characterized by the following invariants:
       either \emph{present} or \emph{absent}.  If and only if a
       numbering is present, then every node of a {\cfg} has unique
       number. 
-\item A node belongs to exactly one {\cfg}.
-\item A node has a \emph{kind} that defines its behavior and contains
-      a matching {\rtl} defining its semantics.  
 \item The number of outgoing edges (to successors) is constrained by a
       node's kind. A node can have any number of successors, including
       zero. 
-\item A node and its neighbors, i.e.~its successors and predecessors
-      are consistent: if and only if $x \to y$, then $y \gets x$.
+\end{itemize}
+
+The nodes of a {\cfg} are characterized by the following asbtract
+invariants; 
+      
+\begin{itemize}
+\item A node belongs to exactly one {\cfg}.
+\item A node has a \emph{kind} that defines its behavior and contains
+      a matching {\rtl} defining its semantics.  
 \item A node contains a set of registers live \emph{before} it with
-      respect to the linear order.
+      respect to the control flow.  i.e.~live on one edge enetring the
+      node.
+      
+%% \item A node and its neighbors, i.e.~its successors and predecessors
+%%    are consistent: if and only if $x \to y$, then $y \gets x$.
 \end{itemize}
 
 \begin{quote}\it
     Regsiters read and written by a node are deduced from its {\rtl}. 
     However, sometimes we must pretend that a node manipulates
-    registers that are not present in its {\rtl}.  For this we need to
-    place additional register sets into a node.  I'm not sure what we
-    need here and how to specify the meaning of these registers with
-    respect to what the {\rtl} says.  --CL
+    registers that are not present in its {\rtl}: inter-procedural 
+    control and data flow affects registers beyond what is expressed
+    in a {\rtl}. In particular, registers can be \emph{defined},
+    \emph{used}, or \emph{killed} in entry, exit, cutto, jump, and
+    call nodes. We will have to add observers for these sets. --CL
 \end{quote}
 
 \begin{quote}\it
@@ -81,9 +90,9 @@ The {\cfg} abstraction is characterized by the following invariants:
 \end{quote}
 
 The interface below shows that graphs and nodes have an imperative
-nature. A control-flow graph is generally built bottom-up: all node
-creation functions take succeeding nodes as arguments. Functions can
-mutate a node, a graph, both, or none. To indicate the different
+nature.  A control-flow graph is generally built bottom-up:  all
+node-creation functions take succeeding nodes as arguments.  Functions
+can mutate a node, a graph, both, or none.  To indicate the different
 behaviors, the following name scheme is used:
 
 \begin{itemize}
@@ -93,6 +102,11 @@ behaviors, the following name scheme is used:
       (graph mutator).
 \item Observation functions have no special prefix.
 \end{itemize}
+
+\begin{quote}\it
+    NR proposes to hide a node's live-set behinf an abstract type
+    [[node_state]] that is provided by a functor argument. --CL
+\end{quote}
 
 <<types and ops>>=
 type cfg        
@@ -110,22 +124,17 @@ val set_label:  cfg -> string -> node -> unit
 val lookup:     cfg -> string -> node                 (* Not_found *)
 
 (* cfg observation *)
-val entry:      cfg -> node (* = first ?? *)
-val exit:       cfg -> node (* = last ??  *)
-val enumerated: cfg -> bool                  (* true, iff nodes are numbered *)
+val entry:      cfg -> node 
+val exit:       cfg -> node 
+
+(* cfg traversal, except fold requires (enumerated cfg)  *)
+val fold:       cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
 val first:      cfg -> node (* wrt numbering *)
 val last:       cfg -> node (* wrt numbering *)
+val scan_fwd:   cfg -> first:int -> last:int -> (node -> 'a -> 'a) -> 'a -> 'a 
+val scan_bwd:   cfg -> first:int -> last:int -> (node -> 'a -> 'a) -> 'a -> 'a
 
-(* cfg traversal *)
-val fold:       cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
-val scan_fwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
-val scan_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
-val forward:    cfg -> node -> node option (* obsolete? *)
-val backward:   cfg -> node -> node option (* obsolete? *)
-val scani_fwd:  cfg -> first:int -> last:int -> (node -> 'a -> 'a) -> 'a -> 'a 
-val scani_bwd:  cfg -> first:int -> last:int -> (node -> 'a -> 'a) -> 'a -> 'a
-
-(* add node to cfg, post: not (enumerated cfg) *)
+(* add node to cfg, ensures: not (enumerated cfg) *)
 val gm_assign:  cfg -> Rtl.rtl -> succ:node -> node
 val gm_return:  cfg -> Rtl.rtl -> int * int -> node
 val gm_goto:    cfg -> Rtl.rtl -> node list -> node
@@ -135,11 +144,11 @@ val gm_call:    cfg -> Rtl.rtl -> conts -> succ:node -> node
 val gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
 val gm_dummy:   cfg -> node
 
-(* add linear sequence of assign nodes to cfg, post: not (enumerated cfg *)
+(* add linear sequence of assign nodes to cfg, ensures: not (enumerated cfg *)
 val gm_copyi:   cfg -> formal list -> Automaton2.t -> succ:node -> node * Automaton2.t
 val gm_copyo:   cfg -> actual list -> Automaton2.t -> succ:node -> node * Automaton2.t
 
-(* cfg mutators, post: not (enumerated cfg) *)
+(* cfg mutators, ensures: not (enumerated cfg) *)
 val gm_delete:                  node -> unit
 val gm_redirect_all:            node -> from:node -> dest:node -> unit
 val gm_insert_assign_before:    node -> Rtl.rtl -> unit (* any node *)
@@ -178,10 +187,6 @@ val set_rtl:    node -> (Rtl.rtl -> Rtl.rtl) -> unit
     The {\cfg}'s unique entry node.
 \item[exit]     
     The {\cfg}'s unique exit node.
-\item[enumerated]
-    True, if the nodes of the {\cfg} are currently numbered. A
-    numbering is destroyed by any node mutation function, like adding
-    a node.
 
 \item[fold]     
     Traverses the nodes of the {\cfg} in a ``natural'' order.  It is
@@ -189,32 +194,15 @@ val set_rtl:    node -> (Rtl.rtl -> Rtl.rtl) -> unit
     calls a graph mutator.
 
 \item[scan\_fwd]
-    Like [[fold]], except that nodes are visited in their numbered
-    order.  It is a checked run-time error if no order is present.  It
-    is an unchecked run-time if [[scan_fwd]] calls a graph mutator. 
-    
-\item[scan\_bwd]
-    Like [[scan_fwd]] except that nodes are visited in the reverse order.
-
-\item[scani\_fwd]
     Scans the nodes in the [[first]] \dots [[last]] interval in enumeration
     order and passes nodes to the supplied function. Each of the following
     is a checked run-time error:  absent numbering, [[first]] greater
     than [[last]]. It is an unchecked run-time error when the supplied
     function uses any graph mutator.
 
-\item[scani\_bwd]]
-    Like [[scani_fwd]], except that the interval in reverse order,
+\item[scan\_bwd]]
+    Like [[scan_fwd]], except that the interval in reverse order,
     from [[last]] to [[first]].
-
-\item[forward]
-    The next node in numbered order or [[None]] if the [[node]]
-    argument is the last node.  It is a checked run-time error if
-    numbering is absent.
-    
-\item[backward]
-    The previous node in numbered order or [[None]] if [[node]] is the
-    first node. It is a checked run-time error is numbering is absent.
 \end{description}
 
 % ------------------------------------------------------------------     
@@ -316,14 +304,14 @@ while traversing a graph.
     only successor of $n$.
                  
 \item[insert\_assign\_after] 
-    Like [[ins_before]], except that the assign node is
+    Like [[insert_assign_before]], except that the assign node is
     placed after the node.  Since the node must be an [[assign]] node,
     it has only one outgoing edge and therefore this operation is well
     defined.  
 
 \item[enumerate]
     Establishes a numbering for all nodes of a {\cfg}; until a
-    graph mutator is called, [[numbered]] returns [[true]].
+    graph mutator is called the numbering is \emph{present}.
 \end{description}
 
 % ------------------------------------------------------------------ 
@@ -364,7 +352,7 @@ interact with other functions.
     Updates the live-set of a node.
     
 \item[set\_rtl]
-    Set the {\rtl} of a node to a new value.
+    Set the {\rtl} of a node to a new value using a maping function.
 \end{description}
 
 
@@ -396,7 +384,7 @@ end
 @
 
 Currently we have some code that expects a signature [[S]] and some
-that don't. This should be cleaned up.
+that doesn't. This should be cleaned up.
 
 <<cfg3.mli>>=
 (** dummy sigs **)
