@@ -314,10 +314,10 @@ let actual env target (hint, e) =
 \end{quote} 
 
 <<Make formals and actuals>>=
-let formal env (khint, n) = 
+let formal env (khint, n) = (* for continuations *)
     ( match snd (F.findv n env) with 
     | (F.Register {F.index=i;F.loc=None},ty) when F.is_localv n env  -> 
-        { G.repr  = G.Local (n,i)
+        { G.repr  = G.Local (n)
         ; G.width = width ty
         ; G.hint  = khint  
         } 
@@ -328,6 +328,12 @@ let formal env (khint, n) =
         } 
     | _ -> assert false
     )
+
+let procformal env (hint, inv, ty, name) = (* where goes the invariant??*)
+    { G.repr  = G.Local(name)
+    ; G.width = astwidth env ty
+    ; G.hint  = hint
+    }  
 @
     
 
@@ -407,7 +413,7 @@ and body b state = match b with
     | A.BodyAt(x, _)        -> body x state
     | A.DeclBody(d)         -> state (* nothing to be done *)
     | A.StmtBody(s)         -> stmt s state 
-    | A.DataBody(dd)        -> state (*XXX*)
+    | A.DataBody(dd)        -> state (* aleady done *)
     
 
 and labelStmt state x =
@@ -547,6 +553,12 @@ and switchStmt    state x  = Impossible.unimp "switch"
 \subsection{Procedure Translation}
 % ------------------------------------------------------------------ 
 
+(* where to invoke 
+        - code expansion 
+        - liveness analysis 
+        - register allocation ?
+*)
+
 <<Make procedure>>=
 let proc env target (*props*) asm (cconv,name,args,bdy) = 
     let cfg            = G.mk ()   in 
@@ -562,8 +574,23 @@ let proc env target (*props*) asm (cconv,name,args,bdy) =
         ; outgoing  = []
         ; inbase    = Rtl.link "inbase" target.Target.pointersize (*XXX*)
         ; outbase   = Rtl.link "outbase" target.Target.pointersize (*XXX*)
-        } in  assert false (*XXX*)
+        } in  
+    let state = foldr body bdy state in
+    let cc    = state.target.Target.cc (Aux.Option.get default_cc cconv) in
+    let atmi  = Alloc.Reg.mk cc.Target.proc  state.outbase   in
+    let args  = List.map (procformal state.env) args in
+    let copyi,atmi = G.gm_copyi state.cfg args atmi state.node    in
+    let state = 
+        { state with    
+          node     = copyi
+        ; incoming = Alloc.Reg.freeze atmi :: state.incoming
+        } in
+    let _     = G.gm_redirect_all (G.entry cfg) (G.exit cfg) state.node in
+    (* what to do with all the areas for stack data, parameter passing?
+    *)
+        asm ++ Asm.instr cfg
 @
+        
    
 % ------------------------------------------------------------------ 
 \subsection{Global Memory declarations}
