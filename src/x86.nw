@@ -33,12 +33,14 @@ module X    : Expander.S
 val target : Target2.t
 @ 
 
-\paragraph{Name}
+\subsection{Name and storage spaces}
 <<x86.ml>>=
 let arch = "x86"                (* architecture name *)
 @ 
 We use the standard storage spaces, with the PC and
 condition codes in their standard locations from [[Space.Standard32]].
+We can't use the standard \texttt{f} space because Pentium
+floating-point values are 80~bits wide.
 We pretend that the machine is a 32-bit machine, which simplifies a lot.
 <<x86.ml>>=
 module Spaces = struct
@@ -63,41 +65,44 @@ module Spaces = struct
                     ; S.aggregation = id; S.widths = [80]
                     ; S.classification = S.Temp all_floats
                     } 
-  let c = S.checked { S.space = 'c'; S.doc = "PC and condition codes"
-                    ; S.cellwidth = 32
-                    ; S.indexwidth = 31; S.indexlimit = Some 2
-                    ; S.aggregation = id; S.widths = [32]
-                    ; S.classification = S.Fixed
-                    } 
+  let c = Space.Standard32.c 3 id [32]
 end
 
+@ 
+\subsection{Postexpander}
 <<x86.ml>>=
-module R = Rtl
-module RP = Rtl.Private
+module R    = Rtl
+module RP   = Rtl.Private
+module Up   = Rtl.Revert
+module Down = Rtl.Convert
+
 module Post = struct
-  <<x86 expander>>
+  <<x86 postexpander>>
 end
 @ 
-<<x86 expander>>=
+<<x86 postexpander>>=
 let byte_order = Rtl.LittleEndian
 let wordsize = 32
 @ 
 These copies are a nuisance.
-<<x86 expander>>=
-type temp = Register.t
-type rtl = Rtl.rtl
-type width = Rtl.width
+<<x86 postexpander>>=
+type temp      = Register.t
+type rtl       = Rtl.rtl
+type width     = Rtl.width
 type assertion = Rtl.assertion
-type operator = Rtl.Private.opr
+type operator  = Rtl.Private.opr
 @ 
-Here are the spaces.
-<<x86 expander>>=
+\paragraph{Contexts}
+Addresses go in the integer registers, so we use these contexts:
+<<x86 postexpander>>=
 type context = Rtl.space * (Register.t -> bool)
 let icontext = 't', fun (c, _, _) -> c = 'r' || c = 't'
 let fcontext = 'u', fun (c, _, _) -> c = 'f' || c = 'u'
 let acontext = icontext
 @ 
-<<x86 expander>>=
+\paragraph{Addressing modes}
+The only addressing mode is the obvious one.
+<<x86 postexpander>>=
 module Address = struct
   type t = Rtl.exp
   let rindex n = R.bits (Bits.U.of_int n wordsize) wordsize
@@ -105,111 +110,133 @@ module Address = struct
     R.fetch (R.cell R.none space byte_order w (rindex n)) w
 end
 @ 
+\subsubsection{Basic locations, flags, and helper functions}
 We need to record the various side effects.
+
+Here are some utility functions for computing locations, values, and widths.
+<<x86 postexpander>>= 
+let rindex = Address.rindex
+let temploc   (space, n, w)       = Rtl.cell Rtl.none space byte_order w (rindex n)
+let tempval  ((space, n, w) as t) = R.fetch (temploc t) w
+let tempwidth (space, n, w)       = w
+let mem addr = R.cell R.none 'm' byte_order 32 addr
+@ 
+Here are some important locations.
+<<x86 postexpander>>=
+module SS = Space.Standard32
+let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
+let eax = temploc ('r', 0, 32)
+let edx = temploc ('r', 2, 32)
+let esp = temploc ('r', 4, 32)
+@ 
+Here are some invented operators that hide the real truth about what
+happens to the flags.
 IF WE WANT TO MAKE BORROW AND CARRY WORK, WE WILL NEED TO PASS A THIRD
 ARGUMENT TO SUBFLAGS AND ADDFLAGS.  THIS WILL MEAN CHANGES IN THE
 RECOGNIZER, OF COURSE.
-<<x86 expander>>=
-let rindex = Address.rindex
-module SS = Space.Standard32
-let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
-let eax    = R.cell R.none 'r' byte_order 32 (rindex 0)
-let edx    = R.cell R.none 'r' byte_order 32 (rindex 2)
-let subflags x y w = R.store eflags (R.app (R.opr "x86_subflags" [w]) [x; y]) 32
-let addflags x y w = R.store eflags (R.app (R.opr "x86_addflags" [w]) [x; y]) 32
-let logicflags exp w = R.store eflags (R.app (R.opr "x86_logicflags" [w]) [exp]) 32
-
-let temploc (space, n, w) = Rtl.cell Rtl.none space byte_order w (rindex n)
-let tempval ((space, n, w) as t) = R.fetch (temploc t) w
-let tempwidth (space, n, w) = w
-let mem addr = R.cell R.none 'm' byte_order 32 addr
 @ 
-It's not clear whether the MOV instruction sets the flags or not.
-For the moment, I assume not.
-<<x86 expander>>=
-let as_mov rtl = rtl
-
+<<x86 postexpander>>=
+let subflags   x y w = R.store eflags (R.app (R.opr "x86_subflags"   [w]) [x; y]) 32
+let addflags   x y w = R.store eflags (R.app (R.opr "x86_addflags"   [w]) [x; y]) 32
+let logicflags exp w = R.store eflags (R.app (R.opr "x86_logicflags" [w]) [exp])  32
+@ 
+\subsubsection{Data movement}
+Most data movement is simple assignment; the MOV instruction is quite powerful.
+Because we're treating the Penitum as a 32-bit machine, we assert the
+width of everything is~32. 
+<<x86 postexpander>>=
 let load ~dst:((_, _, w) as dst) ~addr assn =
   assert (w = 32);
-  [as_mov (R.store (temploc dst) (R.fetch (R.cell assn 'm' byte_order 32 addr) 32) 32)]
+  [R.store (temploc dst) (R.fetch (R.cell assn 'm' byte_order 32 addr) 32) 32]
 let store ~addr ~src:((_, _, w) as src) assn =
   assert (w = 32);
-  [as_mov (R.store (R.cell assn 'm' byte_order 32 addr) (tempval src) 32)]
+  [R.store (R.cell assn 'm' byte_order 32 addr) (tempval src) 32]
 @ 
-I assume the sign-extending loads and stores are there.
-<<x86 expander>>=
+The Pentium provides sign-extending loads and stores.
+<<x86 postexpander>>=
 let extend opname n e = R.app (R.opr opname   [n; 32]) [e]
 let lobits        n e = R.app (R.opr "lobits" [32; n]) [e]
 let sxload ~dst:((_, _, w) as dst) ~addr n assn =
   if w <> 32 then Impossible.unimp "widening of temporaries";
-  [as_mov (R.store (temploc dst)
-             (extend "sx" n (R.fetch (R.cell assn 'm' byte_order n addr) n)) 32)]
+  [R.store (temploc dst)
+             (extend "sx" n (R.fetch (R.cell assn 'm' byte_order n addr) n)) 32]
 let zxload ~dst:((_, _, w) as dst) ~addr n assn =
   assert (w = 32);
-  [as_mov (R.store (temploc dst)
-             (extend "zx" n (R.fetch (R.cell assn 'm' byte_order n addr) n)) 32)]
+  [R.store (temploc dst)
+             (extend "zx" n (R.fetch (R.cell assn 'm' byte_order n addr) n)) 32]
 let lostore ~addr ~src:((_, _, w) as src) n assn =
   assert (w = 32);
-  [as_mov (R.store (R.cell assn 'm' byte_order n addr) (lobits n (tempval src)) n)]
+  [R.store (R.cell assn 'm' byte_order n addr) (lobits n (tempval src)) n]
 @ 
-Who knows if the move instruction goes freely from int to float?
-Who knows if the flags are affected?
-It has to be looked up!
-<<x86 expander>>=
-let width (_, _, w) = w
-let move_rtl dst src = as_mov (R.store (temploc dst) (tempval src) (width src))
-let move ~dst ~src = 
-  if dst = src then [] else [move_rtl dst src]
+This code hasn't yet been checked for compatility with floating point.
+<<x86 postexpander>>=
+let move_rtl dst src = R.store (temploc dst) (tempval src) (tempwidth src)
+let move ~dst ~src   = if dst = src then [] else [move_rtl dst src]
 @ 
-Load immediate should also be a simple move.
-<<x86 expander>>=
-let upconst c = R.Revert.exp (RP.Const c)
-let li ~dst const =
-  [as_mov (R.store (temploc dst) (upconst const) (width dst))]
+Load immediate is also a simple move.
+<<x86 postexpander>>=
+let upconst c = Up.exp (RP.Const c)
+let li ~dst const = [R.store (temploc dst) (upconst const) (tempwidth dst)]
 @ 
+\subsubsection{Operator contexts}
 Here are tentative contexts for all the operators.
-Anything that has to do with [[bool]] or with rounding modes is surely wrong.
-<<x86 expander>>=
-let upop = R.Revert.opr
+Anything that has to do with rounding modes is surely wrong.
+<<x86 postexpander>>=
+let bcontext = ' ', fun _ -> false  (* should never be used *)
 let operators =
 [ "add", [icontext; icontext], icontext
 ; "and", [icontext; icontext], icontext
-; "bit", [icontext], icontext  (* BOGUS *)
+; "bit", [bcontext], icontext
 ; "bitExtract", [icontext; icontext], icontext
 ; "bitInsert", [icontext; icontext; icontext], icontext
 ; "bitTransfer", [icontext; icontext; icontext; icontext; icontext], icontext
-; "bool", [icontext], icontext   (* BOGUS *)
+; "bool", [icontext], bcontext
 ; "borrow", [icontext; icontext; icontext], icontext
+<<x86 postexpander>>=
 ; "carry", [icontext; icontext; icontext], icontext
 ; "com", [icontext], icontext
-; "conjoin", [icontext; icontext], icontext    (* BOGUS *)
-; "disjoin", [icontext; icontext], icontext   (* BOGUS *)
+; "conjoin", [bcontext; bcontext], bcontext
+; "disjoin", [bcontext; bcontext], bcontext
 ; "div", [icontext; icontext], icontext
 ; "divu", [icontext; icontext], icontext
-; "eq", [icontext; icontext], icontext
+; "eq", [icontext; icontext], bcontext
+<<x86 postexpander>>=
+; "feq", [fcontext; fcontext], bcontext
+; "fge", [fcontext; fcontext], bcontext
+; "fgt", [fcontext; fcontext], bcontext
+; "fle", [fcontext; fcontext], bcontext
+; "flt", [fcontext; fcontext], bcontext
+; "fne", [fcontext; fcontext], bcontext
+<<x86 postexpander>>=
 ; "f2f", [fcontext; fcontext], fcontext
 ; "f2i", [fcontext; fcontext], fcontext  (* conversion done in float unit?? *)
 ; "fabs", [fcontext], fcontext
 ; "fadd", [fcontext; fcontext; fcontext], fcontext  (* ROUNDING MODES *)
 ; "fcmp", [fcontext; fcontext], fcontext
 ; "fdiv", [fcontext; fcontext; fcontext], fcontext  (* ROUNDING MODES *)
+<<x86 postexpander>>=
 ; "float_eq", [], fcontext
 ; "float_gt", [], fcontext
 ; "float_lt", [], fcontext
+<<x86 postexpander>>=
 ; "fmul", [fcontext; fcontext; fcontext], fcontext  (* ROUNDING MODES *)
 ; "fmulx", [fcontext; fcontext], fcontext
 ; "fneg", [fcontext], fcontext
 ; "fsqrt", [fcontext; fcontext], fcontext  (* ROUNDING MODES *)
 ; "fsub", [fcontext; fcontext; fcontext], fcontext  (* ROUNDING MODES *)
-; "ge", [icontext; icontext], icontext
-; "geu", [icontext; icontext], icontext
-; "gt", [icontext; icontext], icontext
-; "gtu", [icontext; icontext], icontext
+<<x86 postexpander>>=
+; "ge", [icontext; icontext], bcontext
+; "geu", [icontext; icontext], bcontext
+; "gt", [icontext; icontext], bcontext
+; "gtu", [icontext; icontext], bcontext
+<<x86 postexpander>>=
 ; "i2f", [fcontext; fcontext], fcontext  (* conversion done in float unit? *)
-; "le", [icontext; icontext], icontext
-; "leu", [icontext; icontext], icontext
-; "lt", [icontext; icontext], icontext
-; "ltu", [icontext; icontext], icontext
+<<x86 postexpander>>=
+; "le", [icontext; icontext], bcontext
+; "leu", [icontext; icontext], bcontext
+; "lt", [icontext; icontext], bcontext
+; "ltu", [icontext; icontext], bcontext
+<<x86 postexpander>>=
 ; "minf", [], fcontext
 ; "mod", [icontext; icontext], icontext
 ; "modu", [icontext; icontext], icontext
@@ -217,22 +244,27 @@ let operators =
 ; "mulu", [icontext; icontext], icontext
 ; "mzero", [], fcontext
 ; "NaN", [fcontext], fcontext           (* ??? *)
-; "ne", [icontext; icontext], icontext
+<<x86 postexpander>>=
+; "ne", [icontext; icontext], bcontext
 ; "neg", [icontext], icontext
-; "not", [icontext], icontext
+; "not", [bcontext], bcontext
+<<x86 postexpander>>=
 ; "or", [icontext; icontext], icontext
 ; "pinf", [], fcontext
 ; "popcnt", [icontext], icontext
 ; "pzero", [], fcontext
+<<x86 postexpander>>=
 ; "quot", [icontext; icontext], icontext
 ; "rem", [icontext; icontext], icontext
 ; "round_down", [], icontext      (* ROUNDING MODES *)
 ; "round_nearest", [], icontext  (* ROUNDING MODES *)
 ; "round_up", [], icontext  (* ROUNDING MODES *)
 ; "round_zero", [], icontext  (* ROUNDING MODES *)
+<<x86 postexpander>>=
 ; "shl", [icontext; icontext], icontext
 ; "shra", [icontext; icontext], icontext
 ; "shrl", [icontext; icontext], icontext
+<<x86 postexpander>>=
 ; "sub", [icontext; icontext], icontext
 ; "sx", [icontext], icontext
 ; "unordered", [], fcontext
@@ -247,9 +279,12 @@ let argmap = List.fold_left (fun m (n, a, r) -> SM.add n a m) SM.empty operators
 let arg_contexts   (n, _) = SM.find n argmap
 let result_context (n, _) = SM.find n resmap
 @ 
+\subsubsection{Operator implementations (with flags)}
 Operator hell (or heaven).
-We start with binary operators in $L \mathrel{:=} L \oplus R$ form.
-<<x86 expander>>=
+We support (so far) two kinds of abstract operations on the flags.
+An arithmetic-like or comparison instruction needs {two} \emph{operands}
+to set the flags; a logical instruction needs only the \emph{result}.
+<<x86 postexpander>>=
 let with_flags setflags dst op x y w =
   let x = tempval x in
   let y = tempval y in
@@ -261,61 +296,75 @@ let with_lflags dst op x y w =
   let y = tempval y in
   let exp = R.app op [x; y] in
   R.par [R.store (temploc dst) exp w; logicflags exp w]
-
+@ 
+We insist on using most operators at their natural 32-bit width, and
+this function is the forcing function that makes it so.
+<<x86 postexpander>>=
 let at32 = function
   | opr, [32] -> opr
   | opr, [n]  -> Impossible.unimp ("%" ^ opr ^ string_of_int n ^ "(...)")
   | opr, _    -> Impossible.impossible ("ill-formed " ^ opr)
-
+@ 
+We start our implementation with a function that provides binary
+operators in $L \mathrel{:=} L \oplus R$ form. 
+<<x86 postexpander>>=
 let llr op x y move = match at32 op with
-| "add" -> with_flags addflags x (upop op) x y 32 :: move
-| "sub" -> with_flags subflags x (upop op) x y 32 :: move
-| ("and"|"or"|"xor") -> with_lflags x (upop op) x y 32 :: move
+| "add" -> with_flags addflags x (Up.opr op) x y 32 :: move
+| "sub" -> with_flags subflags x (Up.opr op) x y 32 :: move
+| ("and"|"or"|"xor") -> with_lflags x (Up.opr op) x y 32 :: move
 | _  ->
-    R.store (temploc x) (R.app (upop op) [tempval x; tempval y]) (width x) :: move
-
-
+    R.store (temploc x) (R.app (Up.opr op) [tempval x; tempval y]) (tempwidth x) :: move
+@ 
+<<x86 postexpander>>=
+let binop ~dst op x y = match at32 op with
+| _ -> llr op dst y (move dst x)
+@ 
+Multiplication and division are bound to be a nightmare.
+Here is some tentative code that will one day be generalized to ``move
+hardware registers out of the way.''
+<<x86 postexpander>>=
 let regpairv x y =
   let rval r = R.fetch r 32 in
   let zxreg l = R.app (R.opr "zx" [32; 64]) [rval l] in
   let shl v = R.app (R.opr "shl" [64]) [v; R.bits (Bits.U.of_int 32 32) 32]
   in R.app (R.opr "or" [64]) [shl (zxreg x); zxreg y]
 
-let binop ~dst op x y = match at32 op with
-(*
-| "divu_trunc" ->
+let divu_trunc icontext dst x y =
     let (ialloc, _) = icontext in
     let tmpd = ialloc 32 in
     let tmpa = ialloc 32 in
-    let divmod =
-      R.par [ R.store eax (R.app (R.opr "divu", [64;32]) [regpairv edx eax; tempval y])
-            ; R.store edx (R.app (R.opr "modu", [64;32]) [regpairv edx eax; tempval y])
-            ; R.kill eflags
-            ]  in
+    let divmod = R.par
+        [ R.store eax (R.app (R.opr "divu" [64;32]) [regpairv edx eax; tempval y]) 32
+        ; R.store edx (R.app (R.opr "modu" [64;32]) [regpairv edx eax; tempval y]) 32
+        ; R.kill eflags
+        ]  in
+    let eax = ('r', 0, 32) in
+    let edx = ('r', 2, 32) in
+    let upint n = upconst (RP.Bits(Bits.U.of_int n 32)) in
     [ move_rtl eax tmpa; move_rtl edx tmpd    (* restore *)
     ; move_rtl dst eax; divmod                (* divide *)
-    ; move_rtl eax x; R.store eax 0 32
+    ; move_rtl eax x; R.store (temploc eax) (upint 0) 32
     ; move_rtl tmpa eax; move_rtl tmpd edx    (* save *)
     ]
-*)
-| _ -> llr op dst y (move dst x)
 @ 
 Other operators are surely wrong.
-<<x86 expander>>=
+<<x86 postexpander>>=
 let unop ~dst op x =
-  [R.store (temploc dst) (R.app (upop op) [tempval x])             (width dst)]
+  [R.store (temploc dst) (R.app (Up.opr op) [tempval x])             (tempwidth dst)]
 
 let rtlop ~dst op args =
-  [R.store (temploc dst) (R.app (upop op) (List.map tempval args)) (width dst)]
+  [R.store (temploc dst) (R.app (Up.opr op) (List.map tempval args)) (tempwidth dst)]
 @ 
-\subsection{Control flow}
-<<x86 expander>>=
+\subsubsection{Control flow}
+
+There's just one PC on the Pentium.
+<<x86 postexpander>>=
 let pc_lhs = pc
 let pc_rhs = pc
 @ 
-There are some hairy semantics attached to some Pentium jumps, but
-I~think we can stick with the simple ones for now.
-<<x86 expander>>=
+There are some hairy semantics attached to some Pentium jump
+instructions, but I~think we can stick with the simple ones for now. 
+<<x86 postexpander>>=
 let br ~tgt = [R.store pc_lhs (tempval tgt) 32]
 let b  ~tgt = [R.store pc_lhs (upconst tgt) 32]
 @
@@ -333,12 +382,11 @@ Operators [[x86_a]], [[x86_ae]], and so on, accept one argument, the
 flags, and return a Boolean value that tells whether [[JA]], [[JAE]],
 and so one, would jump.
 \end{itemize}
-
-
-<<x86 expander>>=
+<<x86 postexpander>>=
 <<important functions on $x$86 operators>>
 let cmp x y =
   R.store eflags (R.app (R.opr "x86_subflags" [32]) [tempval x; tempval y]) 32
+
 let bc x (opr, ws) y ~tgt =
   assert (ws = [32]);
   [ R.guard (R.app (R.opr (cmpopr opr) [32]) [R.fetch eflags 32]) 
@@ -346,19 +394,14 @@ let bc x (opr, ws) y ~tgt =
   ; cmp x y
   ]
 
-let uprtl   = R.Revert.rtl
-let downrtl = R.Convert.rtl
-let uploc   = R.Revert.loc
-let downloc = R.Convert.loc
-
-let bnegate r = match downrtl r with
+let bnegate r = match Down.rtl r with
 | RP.Rtl [RP.App((cop, [32]), [RP.Fetch (flags, 32)]), RP.Store (pc, tgt, 32)]
-  when pc = downloc pc_lhs && flags = downloc eflags ->
-    uprtl (RP.Rtl [RP.App((cmpneg cop, [32]), [RP.Fetch (flags, 32)]),
+  when pc = Down.loc pc_lhs && flags = Down.loc eflags ->
+    Up.rtl (RP.Rtl [RP.App((cmpneg cop, [32]), [RP.Fetch (flags, 32)]),
                    RP.Store (pc, tgt, 32)])
 | _ -> Impossible.impossible "ill-formed x86 conditional branch"
 @ 
-The first important functions converts a {\PAL} operator into the
+The first ``important'' function converts a {\PAL} operator into the
 corresponding Intel operator.
 <<important functions on $x$86 operators>>=
 let cmpopr = function
@@ -397,66 +440,73 @@ let cmpneg = function
   | "x86_b" -> "x86_ae"
   | _ -> Impossible.impossible "bad comparison in expanded x86 conditional branch"
 @ 
-Some generic utilities.
+\subsection{Building the target}
+With the postexpander in place, we can build a target.
+We begin with more utility functions
 <<x86.ml>>=
 module PX = Post
-let esp = PX.temploc ('r', 4, 32)
-let espval = PX.tempval ('r', 4, 32)
-let add x y = R.app (R.opr "add" [32]) [x; y]
-let sub x y = R.app (R.opr "sub" [32]) [x; y]
-let const n = R.bits (Bits.S.of_int n 32) 32
-let mem = PX.mem
-let fetch l = R.fetch l 32
+let pc        = PX.pc
+let espval    = PX.tempval ('r', 4, 32)
+let add x y   = R.app (R.opr "add" [32]) [x; y]
+let sub x y   = R.app (R.opr "sub" [32]) [x; y]
+let const n   = R.bits (Bits.S.of_int n 32) 32
+let mem       = PX.mem
+let fetch l   = R.fetch l 32
 let store l r = R.store l r 32
-let pc = PX.pc
-
+@ 
+These functions help with instructions that push and pop.
+<<x86.ml>>=
 let pop_with f = (* rtl got by popping (f e), where e is top of stack *)
   let top = fetch (PX.mem espval) in
-  R.par [ f top; store esp (add espval (const 4)) ]
+  R.par [ f top; store PX.esp (add espval (const 4)) ]
 
 let push e = (* effect of pushing e *)
   let next_sp = sub espval (const 4) in
-  R.par [ store (mem next_sp) e; store esp next_sp ]
-
+  R.par [ store (mem next_sp) e; store PX.esp next_sp ]
+@ 
+We now build the standard control flow.
+<<x86.ml>>=
 module T = Target2
 module F = Mflow.MakeStandard (
   struct
      let pc_lhs = PX.pc_lhs
      let pc_rhs = PX.pc_rhs
      let ra_reg    = PX.temploc ('?', 99, 32) (* not used *)
-     let ra_offset = 33                      (* not used *)
+     let ra_offset = 33                       (* not used *)
   end)
-     
+@      
+There's no science here---just a lot of goo.
+The [[Target.t]] abstraction could use some thought.
 <<x86.ml>>=
 module X = Expander.IntFloatAddr (PX)
-(* expansion here causes infinite loop *)
 let spill_expand = X.expand
-let spill_expand r = [r]
-let spill  _ t l =
-  spill_expand (R.store l (PX.tempval t) (PX.tempwidth t))
-let reload _ t l =
-  spill_expand (R.store (PX.temploc t) (R.fetch l (PX.tempwidth t)) (PX.tempwidth t))
+(* expansion here once caused infinite loop *)
+let spill_expand p r = [r]
+let spill  p t l =
+  spill_expand p (R.store l (PX.tempval t) (PX.tempwidth t))
+let reload p t l =
+  spill_expand p (R.store (PX.temploc t) (R.fetch l (PX.tempwidth t)) (PX.tempwidth t))
 
+<<x86.ml>>=
 let target =
   { T.name = "x86"
-  ; T.cc = (fun _ -> 
-           { T.sp = esp
-           ; T.return = pop_with (fun ra -> store pc ra)
-           ; T.proc = Targets.dummy_automaton PX.byte_order
-           ; T.cont = Targets.dummy_automaton PX.byte_order
-           ; T.ret  = Targets.dummy_automaton PX.byte_order
-           ; T.allocatable = List.map (fun n -> ('r', n, 32)) [0; 1; 2; 3]
-           }) 
-  ; T.byteorder = PX.byte_order
-  ; T.wordsize = PX.wordsize
+
+  (* basic metrics and spaces are OK *)
+  ; T.byteorder   = PX.byte_order  
+  ; T.wordsize    = PX.wordsize
   ; T.pointersize = PX.wordsize
   ; T.alignment = 1
   ; T.memsize = 8
-  ; T.float = "ieee754"
-  ; T.charset = "latin1" (* THIS IS NONSENSE!! NOT A PROPERTY OF THE MACHINE?? *)
-  ; T.globals = Targets.dummy_automaton PX.byte_order
   ; T.spaces = [Spaces.m; Spaces.r; Spaces.t; Spaces.f; Spaces.u; Spaces.c]
-  ; T.data_section = "data"
+
+  (* Does the Pentium really implement IEEE 754?  I think so *)
+  ; T.float = "ieee754"
+
+  (* spill and reload are believed OK *)
+  ; T.spill  = spill
+  ; T.reload = reload
+
+  (* control flow is solid, except [[cutto]] is a lie *)
   ; T.goto = F.goto
   ; T.jump = F.jump
   ; T.cutto = F.cutto (* BOGUS *)
@@ -464,8 +514,20 @@ let target =
              ; T.project = F.call.T.project (* should be OK *)
              } 
   ; T.branch = F.branch
-  ; T.spill  = spill
-  ; T.reload = reload
-  ; T.stack_slots = Targets.dummy_automaton PX.byte_order
+
+  (* the calling convention is a cruel joke *)
+  ; T.cc = (fun _ -> 
+           { T.sp = PX.esp                                   (* ok *)
+           ; T.return = pop_with (fun ra -> store pc ra)     (* ok *)
+           ; T.proc = Targets.dummy_automaton PX.byte_order  (* bogus from here down *)
+           ; T.cont = Targets.dummy_automaton PX.byte_order
+           ; T.ret  = Targets.dummy_automaton PX.byte_order
+           ; T.allocatable = List.map (fun n -> ('r', n, 32)) [0; 1; 2; 3]
+           ; T.stack_slots = Targets.dummy_automaton PX.byte_order
+           })
+
+  (* bogosity *)
+  ; T.globals  = Targets.dummy_automaton PX.byte_order
+  ; T.data_section = "data" (* NOT REALL A PROPERTY OF THE TARGET MACHINE... *)
+  ; T.charset = "latin1" (* THIS IS NONSENSE!! NOT A PROPERTY OF THE MACHINE?? *)
   } 
-                          

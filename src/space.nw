@@ -20,12 +20,13 @@ temporaries) into named spaces. The cells forming a space share
 properties but the {\rtl} framework does not announce them. This module
 provides a type to describe an {\rtl} space. 
 
-\begin{quote}\it
-    I feel that the type to describe a space should go into the
-    \module{rtl} module. Values for different spaces could be still
-    defined somewhere else. NR suggested to have this separate module.
-    --CL
-\end{quote}
+%%  \begin{quote}\it
+%%      I feel that the type to describe a space should go into the
+%%      \module{rtl} module. Values for different spaces could be still
+%%      defined somewhere else. NR suggested to have this separate module.
+%%      --CL
+%%  \end{quote}
+
 The function [[checked]] asserts that its argument satisfies a few
 simple invariants, then returns that argument.
 <<space.mli>>=
@@ -91,34 +92,62 @@ type t  =
 \item [[classification]]: Classification of a space, see below.
 
 \end{itemize}
-
-A space falls into one of the following categories: memory-like,
+@
+A space falls into one of the following classifications: memory-like,
 register-like, fixed, or temporary. 
-
 <<type classification>>=
 type classification = 
     | Mem               
     | Reg               
     | Fixed
     | Temp of location_set
-@
+@ Memory-like, register-like, and fixed spaces contiain real hardware
+locations.
+A~temporary space contains only locations that stand in for hardware
+locations.
+All temporary locations are removed before code generation is
+complete. 
+(This is the job of the register allocator.)
 
+The classification of a space depends on the binding time of the
+expressions used to index cells in that space.
 \begin{itemize}
-\item A space is memory-like, if {\rtl} operands that address this space 
-      take complex expressions as addresses.
-\item A space is register-like, if {\rtl} operands that address this space
-      only take integers as adresses.
-\item A space is fixed, if it can not be addresses explicitly, but
-      {\rtl} operators address it implicitly. Typical example: status
-      register.
-\item A temporary space denotes a subset of another space that is
-      characterized by a [[location_set]] value. Example: \texttt{t} is
+\item
+ If an {\rtl} operand addressing the space denotes a value that
+      cannot be computed until run time, the space is memory-like.
+      An example of such an expression is $\mathit{SP}+12$.
+      The standard \texttt{m}~space is memory-like.
+\item
+ If every {\rtl} operand addressing the space is a compile-time
+ constant, and if the constant can ever be chosen by the compiler,
+ then the space is register-like. 
+ (In machine-language terms, a space is register-like if the values of its
+ indexing expressions can be computed from the operands of the
+ instructions that use the space.)
+ Most standard spaces are register-like, including \texttt{r},
+ \texttt{f}, and~\texttt{a}.
+\item
+ If every {\rtl} operand addressing the space is a fixed
+ constant determined by the nature of the instruction, with no choice
+ available to the compiler,
+ then the space is fixed. 
+ (In machine-language terms, a space is fixed if the values of its
+ indexing expressions are determined by the instructions that use the
+ space, and the operands of those instructions are irrelevant.)
+ The standard \texttt{c}~space is fixed.
+\item
+   A temporary space is a register-like space that is infinitely large
+   and not provided by the hardware.
+   A~location in a temporary space denotes one of a set of locations
+   drawn from a real register-like space.
+   The set is
+      characterized by a [[location_set]] value. Example: on the
+   SPARC, the \texttt{t}~space is
       a space over \texttt{r}, where the address of an \texttt{r} cell
-      is not zero.  However, currently we do not plan to use this
-      recursively: \texttt{x} is a space over \texttt{y}, that is a
-      space over \texttt{z}. Don't do that.
+      is not zero.  
+   The register allocator ultimately replaces each temporary location
+   with a real hardware location.
 \end{itemize}
-
 <<type location set>>=
 type predicate    = int -> bool
 type location_set =
@@ -160,26 +189,27 @@ let checked s =
 module Standard32 = struct
   type generator = Rtl.aggregation -> Rtl.width list -> t
   let m agg ws = checked 
-    { space = 'm'
-    ; doc = "memory"
-    ; cellwidth = 8
-    ; indexwidth = 32 
-    ; indexlimit = None
-    ; aggregation = agg
-    ; widths = ws
+    { space          = 'm'
+    ; doc            = "memory"
+    ; cellwidth      = 8
+    ; indexwidth     = 32 
+    ; indexlimit     = None
+    ; aggregation    = agg
+    ; widths         = ws
     ; classification = Mem
     } 
 
   let r ~count agg ws = checked 
-    { space = 'r'
-    ; doc = "general-purpose registers"
-    ; cellwidth = 32
-    ; indexwidth = indexwidth count
-    ; indexlimit = Some count
-    ; aggregation = agg
-    ; widths = ws
+    { space          = 'r'
+    ; doc            = "general-purpose registers"
+    ; cellwidth      = 32
+    ; indexwidth     = indexwidth count
+    ; indexlimit     = Some count
+    ; aggregation    = agg
+    ; widths         = ws
     ; classification = Reg
     } 
+
   let t agg ws   = checked { space = 't'; doc = "general-purpose temporaries"
                            ; cellwidth = 32
                            ; indexwidth = 32; indexlimit = None
@@ -246,7 +276,7 @@ module Standard32 = struct
                            ; cellwidth = 32
                            ; indexwidth = indexwidth count; indexlimit = Some count
                            ; aggregation = agg; widths = ws
-                           ; classification = Reg
+                           ; classification = Fixed
                            } 
 
   type 'a locations = { pc : 'a; npc : 'a; cc : 'a }

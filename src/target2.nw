@@ -72,13 +72,16 @@ type cc =
     (* THIS TYPE SHOULD INCLUDE INFORMATION ABOUT ALTERNATE RETURN CONTINUATIONS,
        IN PARTICULAR, HOW BIG IS EACH SLOT, AND DOES IT HOLD AN INSTRUCTION OR
        AN ADDRESS? *)
+    ; stack_slots:  Automaton2.spec (* where private data go *)
     }
+@ Continuations, spill locations and other private data of a procedures
+lives on the run-time stack. These locations are register-like (????) and
+issued by an [[Automaton2.t]] value. The specification for that automaton
+is determined by the calling convention.
 @
-
 To obtain a calling convention, pass its name to the [[cc]] component
 which will return the convention response.  It is a checked run-time
 error to ask for an unknown calling convention.
-
 <<components of t>>=
 cc: string -> cc; (* raises Error.Exn if name is unknown *)
 @
@@ -210,7 +213,7 @@ of RTLs.  I've temporarily expunged it as it seems to be unused. ---NR
 When the register allocator (see ~module{linscan}) must spill, it has to
 create {\rtl}s that move values from registers to memory (spill) and
 vice versa (reloads).  Here are two functions to create such {\rtl}s:
-
+THE FIRST ARGUMENT ALMOST CERTAINLY SHOULD BE A [[Proc.t]].
 <<components of t>>=
 spill:  (Rtl.space -> Space.t) -> Register.t -> Rtl.loc -> Rtl.rtl list;
 reload: (Rtl.space -> Space.t) -> Register.t -> Rtl.loc -> Rtl.rtl list;
@@ -221,17 +224,6 @@ element of the list is the first to be executed.  \emph{ALERT! Perhaps
 we ought to revisit these interfaces, since the role of the first
 argument is baffling. ---NR} 
 
-% ------------------------------------------------------------------ 
-\subsection{Resource Allocation on the Stack}
-% ------------------------------------------------------------------ 
-
-Continuations, spill locations and other private data of a procedures
-lives on the run-time stack. These locations are register-like and
-issued by an [[Automaton2.t]] value. The specification for that automaton
-is provided by the target.
-
-<<components of t>>=
-stack_slots:    Automaton2.spec;
 @
 
 % ------------------------------------------------------------------ 
