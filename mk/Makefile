@@ -3,9 +3,13 @@
 #  Edit the variables below if neccessary and call "make".
 # 
 
-# 1.0 released on 5 March 2002
+# 1.0 released on 5  March 2002
+# 1.1 released on 11 March 2002
 
-VERSION = 1.1
+# VERSION is incremented AFTER a release. After the release of 1.1 we are 
+# thus working for a while on 1.2.
+
+VERSION = 1.2
 
 PREFIX  = /usr/local
 BINDIR  = $(PREFIX)/bin
