@@ -22,7 +22,6 @@ fp:V:           fixpoint
                 done
 
 regression:V:   regr
-                
                 for f in error*.c-- ; do
                     g=`basename $f .c--`
                     CMD="../bin/qc-- -check $g.c--"
@@ -32,6 +31,14 @@ regression:V:   regr
 %.stderr:       %.c--
                 ./regr "../bin/qc-- -check $stem.c--" -r -err $stem.stderr 
                 head -v $stem.stderr
+
+record:V:       regr
+                for f in error*.c-- ; do
+                    g=`basename $f .c--`
+                    CMD="../bin/qc-- -check $g.c--"
+                    ./regr "$CMD" -r -x 1 -err $g.stderr || true
+                done
+
 
 scripts:V:      fixpoint regr        
 
