@@ -88,7 +88,7 @@ x86-call:V:   x86-call.sigs
                $GEN -name=x86                             -width=32 < $prereq
                $GEN -name=x86-cmm         -conv="notail"  -width=32 < $prereq
                $GEN -name=x86-x        -c                 -width=32 < $prereq
-              #$GEN -name=x86-x-cspec  -c -conv="c'"      -width=32 < $prereq
+               $GEN -name=x86-x-cspec  -c -conv="C'"      -width=32 < $prereq
 
 mips-call:V:  mips-call.sigs
                $GEN -name=mips                            -width=32 < $prereq
@@ -163,12 +163,12 @@ x86.sh:Q:
     I=$((I + 1))
     echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
   done    
-  #for f in x86-x-cspec-mn-*.s; do
-  #  g=`echo $f | sed -e "s/mn/callee/" -e "s/\.s/.c/"`
-  #  (cc $f $g && ./a.out) | tee -a x86.log | grep -v success
-  #  I=$((I + 1))
-  #  echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
-  #done
+  for f in x86-x-cspec-mn-*.s; do
+    g=`echo $f | sed -e "s/mn/callee/" -e "s/\.s/.c/"`
+    (cc $f $g && ./a.out) | tee -a x86.log | grep -v success
+    I=$((I + 1))
+    echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
+  done
   echo Completed testing x86 architecture.  Log file x86.log created.
   ' > $target  
   chmod +x $target
