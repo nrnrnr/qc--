@@ -275,20 +275,24 @@ prLive  = ignore(single(CGStages.printCFGLive))
 plive   = seq({single(CGStages.liveness), single(CGStages.printCFGLive)})
 live    = single(CGStages.liveness)
 
+makeGraph = seq { single(CGStages.liveness)
+                , single(CGStages.build)
+                }
+orderVars = seq { single(CGStages.makeWorklist)
+                , fix(unless_do(single(CGStages.simplify),
+                            unless_do(single(CGStages.coalesce),
+                                unless_do(single(CGStages.freeze),
+                                    single(CGStages.selectSpill)))))
+                }
+
 function graphColoring ()
   return
      share(makeInitInfo(), "cgInfo",
         seq { single(CGStages.setColors)
             , fix (seq 
                    {ignore(seq
-                      { single(CGStages.liveness)
-                      , single(CGStages.build)
-                      , single(CGStages.makeWorklist)
-                      , fix(
-                          unless_do(single(CGStages.simplify),
-                                    unless_do(single(CGStages.coalesce),
-                                       unless_do(single(CGStages.freeze),
-                                          single(CGStages.selectSpill)))))
+                      { makeGraph
+                      , orderVars
                       , pcg
                       , single(CGStages.assignColors)
                       })
