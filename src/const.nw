@@ -13,11 +13,25 @@ type [[bits]]$k$ and is represented as a bit vector.
 % ------------------------------------------------------------------ 
 
 <<const.mli>>=
+module Symbol :
+  sig
+    type key = string
+    type 'a env 
+    val empty : 'a env
+    val enter : key -> 'a -> 'a env -> 'a env
+    val enterList : (key * 'a) list -> 'a env -> 'a env
+    val lookup : key -> 'a env -> 'a
+    val domain : key -> 'a env -> bool
+    val fold : (key -> 'a -> 'b -> 'b) -> 'a env -> 'b -> 'b
+    val dump : 'a env -> (key * 'a) list
+  end
+
 type value
 
 val char2value  : string  -> int -> value
 val float2value : string  -> int -> value
 val int2value   : string  -> int -> value
+val constOps    : ((value list -> value) * Types.tyscheme) Symbol.env
 @
 
 
@@ -26,11 +40,47 @@ val int2value   : string  -> int -> value
 % ------------------------------------------------------------------ 
 
 <<const.ml>>=
-type value = int64
+module E          = Error
+module T          = Types
+module Comparable = struct type t=string let compare=compare end
+module Symbol     = Env.Make(Comparable)
 
-let zero = Int64.zero
+type value      = 
+                | IntConst      of int
+                | FloatConst    of float
+                | BoolConst     of bool
 
-let char2value   str size = zero
-let float2value  str size = zero
-let int2value    str size = zero
+
+let zero = IntConst(0)
+
+let char2value   str size = IntConst(Char.code str.[0])
+let float2value  str size = FloatConst(float_of_string str)
+let int2value    str size = IntConst(int_of_string str)
+
+let add  = function
+    | [IntConst(x);IntConst(y)]     -> IntConst(x+y)
+    | [FloatConst(x);FloatConst(y)] -> FloatConst(x+.y)
+    | _                             -> E.error "illegal operands"
+
+let mult  = function
+    | [IntConst(x);IntConst(y)]     -> IntConst(x*y)
+    | [FloatConst(x);FloatConst(y)] -> FloatConst(x*.y)
+    | _                             -> E.error "illegal operands"
+
+let eq    = function
+    | [IntConst(x);IntConst(y)]     -> BoolConst(x=y)
+    | [FloatConst(x);FloatConst(y)] -> BoolConst(x=y)
+    | _                             -> E.error "illegal operands"
+
+
+let constOps = Symbol.enterList
+    [  "add"    , (add  , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "+"      , (add  , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "mult"   , (mult , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "*"      , (mult , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1))
+    ;  "eq"     , (eq   , T.proc [T.bitsv 1; T.bitsv 1] T.bool)
+    ;  "=="     , (eq   , T.proc [T.bitsv 1; T.bitsv 1] T.bool)
+    ] Symbol.empty
+
 @
+

@@ -37,6 +37,28 @@ module F = Fatenv
 
 (* f:('a -> 'b -> 'a) -> init:'a -> 'b list -> 'a *)
 let foldl = List.fold_left
+@
+
+The remove offending declarations from a list we use [[exclude]]: 
+[[exclude xx yy]] returns [[xx]] without elements found in [[yy]]. 
+Since we expect [[yy]] to be very short (1 to 3 elements) we have
+chosen a naive approach for implementation.
+ 
+<<>>=
+let exclude xx yy = 
+    let _, xx' = List.partition (fun x  -> List.mem x yy) xx  in
+    xx'
+@
+
+Types in the abstract syntax may be names and must be evaluated before
+they can be used. The evaluation can fail in case the name is
+undefined and therefore an [[E.error]] type is used.
+
+<<>>=
+let rec evalTy env = function
+    | A.TyAt(x,r)    -> E.catch (E.errorRegPrt r) (evalTy env) x
+    | A.BitsTy(size) -> E.Ok(Types.Bits size)
+    | A.AliasTy(n)   -> snd (F.findt n env)
 
 <<building the type environment>>
 <<building the value environment>>
@@ -84,12 +106,24 @@ module TypeEnv = struct
 end
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Collecting Type Declarations}
+% ------------------------------------------------------------------ 
         
 <<build type env>>=
-let rec decl r dd = function
+let rec body r dd = function
+    | A.BodyAt(x,r)     -> body (Some r) dd x
+    | A.DeclBody(d)     -> decl r dd d
+    | _                 -> dd
+and decl r dd = function
     | A.DeclAt(x,r)     -> decl (Some r) dd x
     | A.Typedef(_) as d -> (d,r)::dd
     | _                 -> dd
+and stmt r dd = function
+    | A.StmtAt(x,r)     -> stmt (Some r) dd x
+    | A.SpanStmt(_,_,bb)-> foldl (body r) dd bb
+    | _                 -> dd
+
 <<>>=
 let rec section r dd = function
     | A.SectionAt(x,r)         -> section (Some r) dd x 
@@ -104,9 +138,16 @@ let rec toplevel r dd = function
     | A.TopDecl (d)       -> decl r dd d
     | _                   -> dd
 <<>>=
-let foldGlobalTypeDecls program = 
+let foldGlobalTypeDecls program =
     foldl (toplevel None) [] program
+<<>>=
+let foldLocalTypeDecls b =
+    foldl (body None) [] b
 @
+
+% ------------------------------------------------------------------ 
+\subsubsection{Processing type declarations}
+% ------------------------------------------------------------------ 
 
 After the global type declarations have been collected they are sorted
 topologically to get the right order to process them.  Sorting can
@@ -123,29 +164,15 @@ let bindError scope env decls =
         foldl (fun env name -> F.bindtError name scope env) env names
 @
 
-The remove offending declarations from a list we use [[exclude]]: 
-[[exclude xx yy]] returns [[xx]] without elements found in [[yy]]. 
-Since we expect [[yy]] to be very short (1 to 3 elements) we have
-chosen a naive approach for implementation.
- 
-<<>>=
-let exclude xx yy = 
-    let _, xx' = List.partition (fun x  -> List.mem x yy) xx  in
-    xx'
 
 <<>>=
 let bindt names ty scope env =
     foldl (fun env n -> F.bindt n (scope,ty) env) env names
 
 <<>>=
-let rec eval env = function
-    | A.TyAt(x,r)    -> E.catch (E.errorRegPrt r) (eval env) x
-    | A.BitsTy(size) -> E.Ok(Types.Bits size)
-    | A.AliasTy(n)   -> snd (F.findt n env)
-<<>>=
 let rec doTypeDecl env = function
     | A.DeclAt(x,r)      -> E.catch' env (E.errorRegPrt r) (doTypeDecl env) x
-    | A.Typedef(t,names) -> bindt names (eval env t) F.Global env
+    | A.Typedef(t,names) -> bindt names (evalTy env t) F.Global env
     | _                  -> env
 
 <<>>=
@@ -160,29 +187,33 @@ collection.
 let reportCycle decls = 
     let report = function
         | A.Typedef(t,n::nn), Some r -> 
-            E.errorRegPrt r ("typdef for "^n^" is cyclic")
+            E.errorRegPrt r ("typedef for "^n^" is cyclic")
         | A.Typedef(t,n::nn), None   -> 
-            E.errorPrt      ("typdef for "^n^" is cyclic")
+            E.errorPrt      ("typedef for "^n^" is cyclic")
         | _                     -> assert false
     in
         List.iter report decls      
 
 <<>>=
-let doGlobalTypes env program =
-    let dd             = foldGlobalTypeDecls program    in
+let doTypes is_global env dd =
     let decls          = List.map fst                   in 
     let rec bindAll dd =
         try
             let dd' = TSort.sort dd                     in
             doTypeDecls env (decls dd')
         with TSort.Cycle(offending) ->
-            let dd'  = exclude dd offending             in
-            let env' = bindError F.Global env offending in
+            let dd'   = exclude dd offending             in
+            let scope = if is_global then F.Global 
+                        else F.Local                     in
+            let env'  = bindError scope env offending in
                 ( reportCycle offending
                 ; bindAll dd'
                 )
                                                         in
         bindAll dd
+
+let doGlobalTypes env program = doTypes true  env (foldGlobalTypeDecls program)
+let doLocalTypes  env body    = doTypes false env (foldLocalTypeDecls body)
 @
 
 % ------------------------------------------------------------------ 
@@ -221,7 +252,17 @@ module ValueEnv = struct
     end
     module TSort = Topsort.Make(TV)
    
-    <<bind global values>>
+    module BindGlobals = struct
+        <<bind global values>>
+    end
+
+    module CollectConst = struct
+        <<collecting const declarations>>
+    end
+
+    module EvalConst = struct
+        <<processing const declarations>>
+    end
 end
 @
 
@@ -379,6 +420,146 @@ let program env tt = foldl toplevel env tt
 @ 
 
 % ------------------------------------------------------------------ 
+\subsection{Collecting constant declarations}
+% ------------------------------------------------------------------ 
+
+Constant declarations are a bit special because every declaration's
+type and value can depend on other declarations. They thus must be
+topologically sorted before their types and values can be computed.
+
+<<collecting const declarations>>=
+let rec body r dd = function
+    | A.BodyAt(x,r)     -> body (Some r) dd x
+    | A.DeclBody(d)     -> decl r dd d
+    | _                 -> dd
+and decl r dd = function
+    | A.DeclAt(x,r)     -> decl (Some r) dd x
+    | A.Const(_) as d   -> (d,r)::dd
+    | _                 -> dd
+and stmt r dd = function
+    | A.StmtAt(x,r)     -> stmt (Some r) dd x
+    | A.SpanStmt(_,_,bb)-> foldl (body r) dd bb
+    | _                 -> dd
+
+<<>>=
+let rec section r dd = function
+    | A.SectionAt(x,r)         -> section (Some r) dd x 
+    | A.Decl(d)                -> decl r dd d 
+    | A.SSpan( e1, e2, ss)     -> foldl (section r) dd ss
+    | A.Datum( d)              -> dd
+    | A.Procedure(p)           -> dd 
+<<>>=    
+let rec toplevel r dd = function
+    | A.ToplevelAt(x,r)   -> toplevel (Some r) dd x
+    | A.Section(_, ss)    -> foldl (section r) dd ss
+    | A.TopDecl (d)       -> decl r dd d
+    | _                   -> dd
+<<>>=
+let foldGlobalConstDecls program =
+    foldl (toplevel None) [] program
+<<>>=
+let foldLocalConstDecls b =
+    foldl (body None) [] b
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Evaluating constant declarations}
+% ------------------------------------------------------------------ 
+
+Constant declarations must be sorted topoligically before they can be
+processed. Processing includes checking their types and evaluating
+their values. Bot type and value are bound in the environment.
+
+Processing a constant declaration means to
+
+\begin{enumerate}
+\item infer its type and compare it an optionally supplied type that
+      is part of it declaration,
+\item evaluate it to its value,
+\item bind the value and the type in the environment.
+\end{enumerate}
+
+The topological sorting guarantees that every named value a constant
+declaration depends on is already processed and the name is bound in
+the environment.  The following functions type check and evaluate
+constants in a single step.  Each function returns a pair of a type
+and a value.
+ 
+<<processing const declarations>>=
+@
+
+<<>>=
+let evalExpr env expr = E.Error
+
+<<>>=
+let doConstDecl scope env = function
+    | A.Const(Some t', name, expr) -> 
+        ( match evalExpr env expr, evalTy env t' with 
+        | E.Ok(t,v),E.Ok(t') when t =t'  -> 
+            F.bindv name (scope,E.Ok(F.Constant(v),t)) env
+        | E.Ok(t,v),E.Ok(t') when t<>t'  ->
+            ( E.errorPrt ("type declared for constant "^name^" does not match actual type")
+            ; F.bindvError name scope env
+            )
+        | _ -> F.bindvError name scope env
+        )
+    | A.Const(None, name, expr) ->
+        ( match evalExpr env expr with
+        | E.Ok(t,v) -> F.bindv name (scope,E.Ok(F.Constant(v),t)) env
+        | _         -> F.bindvError name scope env
+        )
+    | _             -> assert false
+
+<<>>=
+let doConstDecls scope env dd =
+    foldl (doConstDecl scope) env dd
+@
+
+
+Names defined by declarations found in cycles are bound to [[E.Error]]
+in the (fat) environment.
+
+<<>>=
+let bindError scope env decls = 
+    let names = List.concat (List.map TV.defines decls) in 
+        foldl (fun env name -> F.bindvError name scope env) env names
+@
+<<>>=
+let reportCycle decls = 
+    let report = function
+        | A.Const(t,n,_), Some r -> 
+            E.errorRegPrt r ("const declaration for "^n^" is cyclic")
+        | A.Const(t,n,_), None   ->
+            E.errorPrt      ("const declaration for "^n^" is cyclic")
+        | _                     -> assert false
+    in
+        List.iter report decls      
+
+<<>>=
+let doConst is_global env dd =
+    let decls          = List.map fst                            in
+    let scope          = if is_global then F.Global else F.Local in
+    let rec bindAll dd =
+        try
+            let dd' = TSort.sort dd                              in
+            doConstDecls scope env (decls dd')
+        with TSort.Cycle(offending) ->
+            let dd'   = exclude dd offending                     in
+            let scope = if is_global then F.Global else F.Local  in
+            let env'  = bindError scope env offending            in
+                ( reportCycle offending
+                ; bindAll dd'
+                )
+                                                                 in
+        bindAll dd
+
+let doGlobalConst env program = 
+        doConst true  env (CollectConst.foldGlobalConstDecls program)
+let doLocalConst  env body    = 
+        doConst false env (CollectConst.foldLocalConstDecls body)
+@
+
+% ------------------------------------------------------------------ 
 \subsection{Checking a whole file}
 % ------------------------------------------------------------------ 
 
@@ -399,7 +580,7 @@ let check file =
             ; let ast        = Parse.program scanner lexbuf   in
               let env0       = F.empty                        in
               let env1       = TypeEnv.doGlobalTypes env0 ast in
-              let env2       = ValueEnv.program env1 ast      in 
+              let env2       = ValueEnv.BindGlobals.program env1 ast      in 
                  ( E.Ok ()
                  )
             )
