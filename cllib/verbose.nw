@@ -1,0 +1,14 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Diagnostic output}
+
+Uses environment level [[VERBOSITY]] to make noise.
+<<verbose.mli>>=
+val say : int -> string list -> unit
+  (* if VERBOSITY >= k, then say k l writes every string in l to stderr *)
+val verbosity : int  (* current verbosity *)
+@ 
+<<verbose.ml>>=
+let verbosity = try int_of_string (Sys.getenv "VERBOSITY") with _ -> 0
+let err l = List.iter prerr_string l; flush stderr
+let say k = if verbosity >= k then err else ignore
