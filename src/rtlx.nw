@@ -43,13 +43,14 @@ let aggregation = function
     | R.BigEndian            -> X.BigEndian
     | R.Identity             -> X.Identity
 
-let const = function
+let rec const = function
     | RP.Bool(b)             -> X.Bool (if b then 1 else 0)
     | RP.Bits(b)             -> X.Bits ( Printf.sprintf "0x%Lx"
                                             (Bits.U.to_int64 b)
                                        , Bits.width b
                                        )
     | RP.Link(sym,width)     -> X.Link (sym#mangled_text, width)
+    | RP.Diff(c1,c2)         -> X.Diff (const c1, const c2)
     | RP.Late(name,width)    -> X.Late (name, width)  
 
 let rec loc = function

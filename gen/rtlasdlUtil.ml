@@ -123,6 +123,9 @@
             | "rtlasdl_Link" -> let string1 = (StdPrimsUtil.sexp_rd_std_string s_) in
               let width1 = (sexp_rd_width s_) in
               Rtlasdl.Link(string1, width1)
+	    | "rtlasdl_Diff" -> let const1 = (sexp_rd_const s_) in
+	      let const2 = (sexp_rd_const s_) in
+	      Rtlasdl.Diff(const1, const2)
             | "rtlasdl_Late" -> let string1 = (StdPrimsUtil.sexp_rd_std_string s_) in
               let width1 = (sexp_rd_width s_) in
               Rtlasdl.Late(string1, width1)
@@ -368,6 +371,13 @@
             (sexp_wr_width width1 s_);
             (SexpPkl.wr_rp s_)
           end
+	| (Rtlasdl.Diff(const1, const2)) -> begin
+	    (SexpPkl.wr_lp s_);
+	    (SexpPkl.wr_sym "rtlasdl_Diff" s_);
+	    (sexp_wr_const const1 s_);
+	    (sexp_wr_const const2 s_);
+	    (SexpPkl.wr_rp s_)
+	  end
         | (Rtlasdl.Late(string1, width1)) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "rtlasdl_Late" s_);

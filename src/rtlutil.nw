@@ -327,13 +327,17 @@ its implementation. We have to look it up for expressions that have an
 application on the outermost level.
 
 <<Width>>=
+let rec const = function
+    | RP.Bool _     -> Impossible.impossible "asked width of Boolean"
+    | RP.Bits b     -> Bits.width b
+    | RP.Link (_,w) -> w
+    | RP.Diff (c,_) -> const c
+    | RP.Late (_,w) -> w
+
 let exp' = function
-    | RP.Const(RP.Bool _)     -> Impossible.impossible "asked width of Boolean"
-    | RP.Const(RP.Bits b)     -> Bits.width b
-    | RP.Const(RP.Link (_,w)) -> w
-    | RP.Const(RP.Late (_,w)) -> w
-    | RP.Fetch(_,w)           -> w
-    | RP.App (op,_)           -> 
+    | RP.Const(c)   -> const c
+    | RP.Fetch(_,w) -> w
+    | RP.App (op,_) -> 
         ( match snd (Rtlop.Types.mono (Rtl.Up.opr op)) with
         | Types.Bits n -> n
         | Types.Bool   -> Impossible.impossible "asked width of Boolean operator"
@@ -565,7 +569,7 @@ let bitstring b =
   try string_of_int (Bits.S.to_int b)
   with Bits.Overflow -> Bits.to_string b
 
-let const = function
+let rec const = function
     | R.Bool(true)   ->  A.PrimOp ("true", [])
     | R.Bool(false)  ->  A.PrimOp ("false", [])
     | R.Bits b       ->  A.Int( bitstring b
@@ -575,6 +579,7 @@ let const = function
                               )
                      
     | R.Link(sym,w)  -> A.Fetch(A.Name(None, (sym#mangled_text)))
+    | R.Diff(c1,c2)  -> A.PrimOp("-", [(None,const c1); (None,const c2)])
     | R.Late(name,w) -> A.Fetch(A.Name(None, name)) (*XXX ok? *)
 @
 
@@ -671,12 +676,13 @@ module T = Types
 @
 
 <<ToReadableString>>=
-let const = function
+let rec const = function
     | R.Bool(true)   ->  "true"
     | R.Bool(false)  ->  "false"
     | R.Bits b       ->  Int64.to_string (Bits.S.to_int64 b)
                      
     | R.Link(sym,w)  -> sym#mangled_text
+    | R.Diff(c1,c2)  -> (const c1) ^ "-" ^ (const c2)
     | R.Late(name,w) -> "<" ^ name ^ ">"
 @
 
@@ -750,7 +756,10 @@ let link e = match Dn.exp e with
     | RP.Const(RP.Bool _) -> true
     | RP.Const(RP.Late _) -> true
     | RP.Const(RP.Link _) -> true       
+    | RP.Const(RP.Diff _) -> true
     | RP.App(("add",_), [RP.Const(RP.Link _); RP.Const(RP.Bits _)])
+        -> true
+    | RP.App(("add",_), [RP.Const(RP.Diff _); RP.Const(RP.Bits _)])
         -> true
     | _                   -> false
 @
@@ -792,12 +801,13 @@ let aggregation = function
 let opr (name, ws) =
     tuple [str name; tuple (List.map int ws)]
 
-let const = function
+let rec const = function
     | RP.Bool(b)        -> apply "Bool"  [str (if b then "true" else "false")]
     | RP.Bits(b)        -> apply "Bits"  [ str (Int64.to_string (Bits.U.to_int64 b))
                                          ; int (Bits.width b)
                                          ]
     | RP.Link(r,w)      -> apply "Link"  [str r#mangled_text; int w]
+    | RP.Diff(c1,c2)    -> apply "Diff"  [const c1; const c2]
     | RP.Late(s,w)      -> apply "Late"  [str s; int w]
 
 
@@ -875,6 +885,7 @@ module MayAlias = struct
 
   let rec is_initialized_data = function
     | RP.Const (RP.Link(_, _)) -> true
+    | RP.Const (RP.Diff(_, _)) -> true
     | RP.App ((("add"|"sub"), [_]), [RP.Const _ as l; RP.Const _ as r]) ->
         is_initialized_data l || is_initialized_data r
     | _ -> false

@@ -306,6 +306,8 @@ and link_const    asm exp =
     match Dn.exp (Simplify.exp  (expr exp)) with
     | RP.Const(RP.Bits(b))   -> Reloc.Simple.of_const b
     | RP.Const(RP.Link(l,w)) -> Reloc.Simple.of_sum l (Bits.zero w)
+    | RP.Const(RP.Diff(c1,c2)) ->
+        Impossible.unimp "difference of link-time constants"
     | RP.App(("add",_),[RP.Const(RP.Link(l,w)); RP.Const(RP.Bits(b))]) ->
         Reloc.Simple.of_sum l b
     | RP.App(("sub",_),[RP.Const(RP.Link(l,w)); RP.Const(RP.Bits(b))]) ->
@@ -805,12 +807,14 @@ reader).
   let exp_of_label l = R.link ((F.asm env)#local l) pointersize in
   let g =
     let exp_to_label e = match Dn.exp e with
-    | RP.Const(RP.Link (l, _)) -> l#original_text
+    | RP.Const(RP.Link (l, _))
+    | RP.Const(RP.Diff (RP.Link (l, _), _)) -> l#original_text
     | _ -> impossible "bad label projection" in
     let guarded_exp_of_label (g,l) =
       (g, (R.link ((F.asm env)#local l) pointersize)) in
     let guarded_exp_to_label (e1,e2) = match (e1, Dn.exp e2) with
-    | (g, RP.Const(RP.Link (l, _))) -> (g, l#original_text)
+    | (g, RP.Const(RP.Link (l, _)))
+    | (g, RP.Const(RP.Diff (RP.Link (l, _), _))) -> (g, l#original_text)
     | _                           -> impossible "bad label projection" in
     let info = { G.goto = { T.embed = target.T.goto.T.embed << exp_of_label
                           ; T.project = exp_to_label << target.T.goto.T.project }

@@ -24,6 +24,7 @@
         Bool of (bool)
       | Bits of (bits)
       | Link of (StdPrims.std_string * width)
+      |	Diff of (const * const)
       | Late of (StdPrims.std_string * width)
   
   and loc =

@@ -1,0 +1,91 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Position-independent code (PIC)}
+
+
+<<pic.mli>>=
+val pic    : Symbol.t -> Rtl.rtl -> Rtl.rtl
+val is_pic : Rtl.rtl -> bool
+@ 
+<<pic.ml>>=
+module R = Rtl
+module RP = Rtl.Private
+module Down = Rtl.Dn
+module Up   = Rtl.Up
+
+@ 
+We scan a given rtl to determine whether it is PIC before and after
+transformation. Parameter [[const_ftn]] explains how to determine
+whether a given [[RP.const]] is PIC.
+When an effect [[RP.Store]] is an assignment to a control register,
+the value to be assigned is not a data but a function.
+<<pic.ml>>=
+let scan const_ftn r =
+  let rec rtl (RP.Rtl gs) = List.exists guarded gs
+  and guarded (e, eff) = exp e || effect eff
+  and effect eff = match eff with
+    | RP.Store(RP.Reg('c',_,_), _, _) -> false
+    | RP.Store(l, e, _) -> loc l || exp e
+    | _ -> false
+  and loc l = match l with
+    | RP.Mem(_,_,_,e,_) -> exp e
+    | RP.Slice(_,_,l')  -> loc l'
+    | _ -> false
+  and exp e = match e with
+    | RP.Const c     -> const c
+    | RP.Fetch(l, _) -> loc l
+    | RP.App(_, es)  -> List.exists exp es
+  and const c = const_ftn c in
+  rtl (R.Dn.rtl r)
+
+let is_pic = scan (fun c -> match c with | RP.Diff _ -> true | _ -> false)
+
+let pic name =
+  <<position-independent code>>
+  rtl
+@ 
+PIC is a code where a memory reference to a data ([[Link]]) exists.
+Since generated names by [[Idgen]] are also represented by [[Link]],
+we need to skip them. Their names includes a colon ``[[:]]'' character
+to avoid name chashes with existing names.
+<<position-independent code>>=
+let exists_pic = scan (fun c -> match c with
+  | RP.Link (l, _) -> not(String.contains l#original_text ':')
+  | _ -> false) in
+<<position-independent code>>=
+let wkl s w =
+  RP.Link (Symbol.unmangled (Printf.sprintf "L%s" name#original_text), w) in
+let const c = match c with
+  | RP.Link (s, w) ->
+    if String.contains s#original_text ':' then c else RP.Diff(c, wkl s w)
+  | _ -> c in
+let rec loc l = match l with
+  | RP.Mem  (s, a, w, e, a') -> RP.Mem  (s, a, w, exp e, a')
+  | RP.Slice(w, i, l')       -> RP.Slice(w, i, loc l')
+  | _ -> l
+and exp e = match e with
+  | RP.Const c       -> RP.Const (const c)
+  | RP.Fetch (l,  w) -> RP.Fetch (loc l, w)
+  | RP.App   (o, es) -> RP.App   (o, List.map exp es) in
+let effect eff = match eff with
+  | RP.Store(RP.Reg('c',_,_), _, _) -> eff
+  | RP.Store(l, e, w)               -> RP.Store(loc l, exp e, w)
+  | _ -> eff in
+let guarded (g, eff) = (exp g, effect eff) in
+@ 
+In the common case where we have no position-independent code, we 
+avoid rewriting the RTL, thereby reducing the load on the major heap.
+
+<<position-independent code>>=
+let rtl r = 
+(*  Printf.eprintf "rtl= %s...\n" (Rtlutil.ToString.rtl r); *)
+  if exists_pic r then
+    let rtl = Rtlutil.ToReadableString.rtl in
+    let _ = Verbose.eprintf 6 "Changing PIC %s...\r" (rtl r) in
+    let r' =
+      let RP.Rtl es = Down.rtl r in Up.rtl (RP.Rtl (List.map guarded es)) in
+    Verbose.eprintf 5 "Changed %s into PIC\n  %s\n" (rtl r) (rtl r');
+    r'
+  else
+    r in
+@ 

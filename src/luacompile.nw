@@ -595,6 +595,7 @@ function Opt.standard(backend, asm, B)
     , Opt.verb(Optimize.simplify_exps) or Stages.null
     , Opt.verb(backend.widen)      or Stages.null
     , Opt.verb(backend.preopt)     or Stages.null
+    , Opt.verb(backend.pic)        or Stages.null
     , Opt.verb(backend.expand)     or Stages.null
     , Opt.verb(backend.liveness)   or Stages.null
     , Opt.verb(backend.ralloc)     or Stages.null
@@ -774,6 +775,8 @@ Backend.ppc =
   , placevars = Placevar.context(Placevar.ppc, "ppc")
   , widen     = Stages.assert('proper widths')
   , preopt    = Optimize.remove_nops
+  , pic       = NewBackplane.seq
+	           { Pic.ppc_pic, Stages.assert('proper pic') }
   , expand    = Expander.ppc
   , liveness  = Liveness.liveness
   , ralloc    = Ralloc.color
