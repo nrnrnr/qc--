@@ -46,6 +46,22 @@ The control-flow graph should be refactored, as  outlined in \textit{Roadmap to
 a Better Quick C-{}- Compiler}.
 This is a major item to be covered by the ``control-flow graph working
 group.'' 
+In addition to the problems listed in that other document, the working
+group should also address the following problems.
+\begin{enumerate} 
+\item
+At least one operation in the current implementation of the {\cfg}
+requires the introduction of a new label together with a new symbol for
+that label. Symbols are issued by an assembler, but this context is
+missing. As a hack, a symbol is created locally. However, this is wrong
+because it does not reflect the rules of the actual assembler. I would
+like to see a design where new branches can be introduced without
+worries about target specific symbols. This plays into the observation,
+that {\PAL} has really two classes of labels: local labels introduced by
+the translation of statements like \path|if|, and global labels that are
+define in a {\PAL} source file. At least local branches should not
+depend on symbols.
+\end{enumerate}
 \who{Christian, Glenn, John, Kevin, and Norman.}
 \item
 \emph{Identify suitable technology for writing machine-dependent
@@ -67,6 +83,14 @@ control flow, like \path|jump|, \path|branch|, or \path|return|.  These
 hand, but are not representable as a single machine instruction on the
 other. The reason is, that they include complex expressions. The
 invariant of these {\rtl}s should be clearly defined.
+
+\emph{The solution is likely to involve reading the PC from a
+conventional location, writing a PC to a conventional location, and
+possibly a private invariant shared with the code expander. ---NR}
+\item
+How does the optimizer know if it is safe to negate the condition on a
+conditional branch without violating the machine invariant?
+And if it not safe, what can the optimizer do?
 \item
 Figure out how to \emph{reserve a stack slot in the code expander}.
 The {\small SPARC} cannot move a value from an integer register to a
@@ -96,16 +120,20 @@ For use both in variable placement and in code expansion.
 {\rtl} operators describe compile-time, link-time, and run-time
 operations. The list of \emph{operators available at compile time} is extremely
 limited.
-Someone should analyze the situation and produce:
+Someone should analyze the situation and work on the following items.
 \begin{itemize}
 \item
-Precise documentation (perhaps even formal, via Lua?) of what
- operators are supported at compile time
+We need precise documentation (perhaps even formal, via Lua?) of what
+ operators are supported at compile time.
+N.B. an ``operator'' means a fully instantiated operator at a
+ particular type, not a polymorphic promise that can be redeemed at
+ any type.
 \item
-Implementations of those operators
-\end{itemize}
+We need actual implementations of the compile-time operators.
+\item
  Some current implementations are dummies that return constant
 results; these implementations must be removed.
+\end{itemize}
 \who{Kevin.}
 \item
 Partial \emph{map of variables and callee-saves registers to locations} at
@@ -116,10 +144,15 @@ Implement \texttt{span}, with support for lookup at each call site.
 \who{John or Kevin.}
 \item
 Specify and implement \emph{calling conventions.}
+Christian is quite interested in this problem.
 \who{John or Christian.}
 \item
 Develop and successfully compile a small \emph{test suite} for SPARC,
 including some C~programs.
+Because of limitations of the compiler, it is likely that any
+C~programs we can successfully compile and run will be carefully
+crafted for this purpose.
+It is OK if these programs don't do anything useful.
 \who{Christian.}
 \item
 Implement \emph{small arithmetic}. 
@@ -175,6 +208,8 @@ map.
 Might require changes in structure of front end to make it aware of
 target, or the front end might accumulate a set of such registers and
 have the checking done as an intermediate step.
+N.B.~Christian recommends that exposing the target to the front end
+will solve this and some other problems.
 \who{Christian.}
 \item
 Ensure that the front end rejects a named calling convention that is
@@ -199,11 +234,23 @@ clear and should be explained with respect to the better known textual
 assemblers. 
 \who{Norman.}
 \item
+In the assembler interface, there is a problem with the functions used
+to emit initialized data---some ambiguity about how they are supposed
+to be used.
+Christian will identify the problem more precisely so it can be fixed.
+\who{Christian and Norman.}
+\item
 The semantics of \texttt{fcmp} should be specified precisely.
 In particular, it is not known how the results map to two-bit values.
 If the answer is target-specific, then the \texttt{Target} module should be
 adapted accordingly.
+This item has relatively low priority because the new floating-point
+comparisons are more convenient than \texttt{fcmp}.
 \who{?????}
+\item
+Alter the \texttt{lcc} back end to use the new floating-point
+comparisons.
+\who{????}
 \item
 The function \path|proc| that controls the translation of a procedure
 in module \path|Ast3ir| must be broken up and cleaned up. 
@@ -215,8 +262,15 @@ For purposes of type checking,
 this operator can be treated as a single polymorphic operator of that takes
 two operands of width~$n$ and returns a result also of width~$n$.
 For purposes of translation, however, the front end must generate a
-composition of operators: first apply \path|mul| to produce a result
-of size~$2n$, then apply \path|lobits|$n$ to the result.
+composition of operators: first apply \path|mulu| to produce a result
+of size~$2n$, then apply \path|lobits|$n$ to the result.\footnote
+{We need to check the manual to see whether \texttt{*}~abbreviates a
+signed or an unsigned multiply.}
+
+For some reason, it appears to be difficult to handle this problem in
+the front end.  
+In that case, it will be reasonable to invent a new RTL operator, a
+truncating multiply, perhaps to be called \texttt{mulu\_trunc}.
 \who{Christian.}
 \item
 The algorithm that linearizes the control-flow graph does not work
@@ -231,9 +285,12 @@ the {\cfg} design: it is neccessary to create new nodes inside the
 give up the polymorphism of the {\cfg} which wasn't working anyway. --CL
 (Tue May  7 16:44:58 EDT 2002)}.
 \item
-We need support for IEEE 754 floating-point literals, preferably using
-David Gay's C~code or other reliable reader for floating-point
-literals.
+We need support for IEEE 754 floating-point literals.
+Mapping a literal to a bit vector is quite complicated and involved
+(see papers from PLDI'96), but there should be reliable C~code on the
+net to solve this problem, so that all we have to do is integrate it
+into the compiler.
+David Gay or Will Clinger may know where to find such code.
 \who{Christian.}
 \item
 We need a policy decision about whether to support floating-point
@@ -262,6 +319,11 @@ When multiple compilation units share their global variables one of them
 must define them, while the other import them on an assembler level. No
 mechanism exists to mark the ``main'' compilation unit that defines all
 global variables.
+
+N.B.~There is already code to compute a suitable MD5 signature.
+Primarily what needs to be done is arrange suitable import/export and
+implement a command-line option that designates the ``main''
+compilation unit.
 \item
 Implement \texttt{switch}.
 \item
@@ -274,17 +336,6 @@ steps are hard-coded into the \path|freeze| function in module
 
 
 
-At least one operation in the current implementation of the {\cfg}
-requires the introduction of a new label together with a new symbol for
-that label. Symbols are issued by an assembler, but this context is
-missing. As a hack, a symbol is created locally. However, this is wrong
-because it does not reflect the rules of the actual assembler. I would
-like to see a design where new branches can be introduced without
-worries about target specific symbols. This plays into the observation,
-that {\PAL} has really two classes of labels: local labels introduced by
-the translation of statements like \path|if|, and global labels that are
-define in a {\PAL} source file. At least local branches should not
-depend on symbols.
 
 
 Expression evaluation needs to be unified. The correct way is to
