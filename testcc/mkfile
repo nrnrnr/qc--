@@ -96,6 +96,15 @@ ia64-call.sigs:D:
    Debug.path_2_in_overflow(Backend.ia64.target, "C")' \
     > $target
 
+ppc-call.sigs:D:
+  $QCC -e \
+  'Debug.paths_proc(Backend.ppc.target, "C",
+                    { { type = "int"  , widths = {32}     }
+                    , { type = "float", widths = {32, 64} }
+                    })
+   Debug.path_2_in_overflow(Backend.ppc.target, "C")' \
+    > $target
+
 #
 # Generate *.c-- files from one signature file. The test case generator
 # must know about endianness, wordsize, and the base name of the test
@@ -122,6 +131,11 @@ ia64-call:V:  ia64-call.sigs
                ../$GEN -name=ia64-i           -width=64 < ../$prereq
                ../$GEN -name=ia64-x       -c  -width=64 < ../$prereq
 
+ppc-call:V:  ppc-call.sigs
+               mkdir -p ppc ; cd ppc
+               ../$GEN -name=ppc-i           -width=32 < ../$prereq
+               ../$GEN -name=ppc-x       -c  -width=32 < ../$prereq
+
 #
 # Compile *.c-- files to *.s code. Compilation depends on the desired
 # target.
@@ -133,6 +147,7 @@ ALPHA_CMM  = ${ALPHA_NUMS:%=alpha\\[%]??.c--}
 MIPS_CMM   = mips*.c--
 IA64_NUMS  = 0 1 2 3 4 5 6 7 8 9
 IA64_CMM   = ${IA64_NUMS:%=ia64\\?[%]??.c--}
+PPC_CMM    = ppc*.c--
 
 x86-asm:V:
     cd x86
@@ -154,7 +169,7 @@ mips-asm:V:
     cd mips
 	for f in "`echo "$MIPS_CMM" | tr ' ' '\n'`" ; do
 		../$QCC -e 'Options.globals=2' backend=Backend.mips $QCCFLAGS \
-        	 -stop .s `echo $f`
+		 -stop .s `echo $f`
 	done
 
 ia64-asm:V:
@@ -165,6 +180,13 @@ ia64-asm:V:
         ../$QCC -e 'Options.globals=2' backend=Backend.ia64 $QCCFLAGS \
              -stop .s $FILES
     done
+
+ppc-asm:V:
+    cd ppc
+	for f in "`echo "$PPC_CMM" | tr ' ' '\n'`"; do
+		../$QCC -e 'Options.globals=2' backend=Backend.ppc $QCCFLAGS \
+	    	 -stop .s `echo $f`
+	done
 
 alpha%.dbg: alpha%.c--
   $QCC -e 'Options.globals=2' backend=Backend.alpha  \
