@@ -9,7 +9,7 @@ Ld.rtend = ""  --- don't need the run-time system
 Test.source  = "src"
 Test.files = { "add.c--"
              , "altret.c--"
-             , { source="altret2.c--", stdin="altret2.0" }
+             , { source="altret2.c--", stdin="altret2.0", rc=1 }
              , { source="altret3.c--", argv='src/altret3.c-- nonexists .' }
              , "arglist.c--"
              , "bits-bug.c--"
@@ -51,7 +51,7 @@ Test.files = { "add.c--"
 	     , { name='tadd22', source='tadd.c--', argv='2 2' }
 	     , { name='tadd100-', source='tadd.c--', argv='100 -1' }
 	     , { name='tadd11', source='tadd.c--', argv='-1 -1' }
-	     , { name='taddov', source='tadd.c--', argv='536870912 536870912' }
+	     , { name='taddov', source='tadd.c--', argv='536870912 536870912', rc=1 }
 	     , "tail.c--"
              , "tail_from_c.c--"
              , { source = {'tail2.c--', 'call3.c--'} }

@@ -77,6 +77,7 @@ section "text"
         Ljoin:l10:
         $r31 = $r31;
         // the preceding node is merely asserted
+        $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
     }

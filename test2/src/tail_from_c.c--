@@ -5,13 +5,15 @@ import bits32 atoi;
 export main;
 
 section "data" {
+  align 4; init_stack: bits32;
   sp_str: bits8 [] "sum: %d\nproduct: %d\n\000";
   total_str: bits8[] "Total: %d\n\000";
-  stack_address: bits8 [] "stackdata: %x\n\000";
+  stack_address: bits8 [] "stackdata difference: %x\n\000";
 }
 
 /* Tail recursion */
 sp2( bits32 i_n ) {
+  bits32[init_stack] = 0;
   jump sp2_help( i_n, 1, 1 );
 }
 
@@ -27,7 +29,11 @@ sp2_help( bits32 i_n, bits32 i_s, bits32 i_p ) {
 	i5 = 5;
 	i6 = 6;
 	i7 = 7;
-	foreign "C" printf("address" stack_address, onstack);
+  if (bits32[init_stack] != 0) {
+     foreign "C" printf("address" stack_address, onstack - bits32[init_stack]);
+  } else {
+     bits32[init_stack] = onstack;
+  }
 	i8 = i1 + i2 + i3 + i4 + i5 + i6 + i7;
   if i_n==1 {
       return( i_s, i_p );

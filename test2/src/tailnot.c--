@@ -3,24 +3,36 @@ target byteorder little;
 import printf, call3;
 export main;
 
+  
+
 foreign "C" main(bits32 argc, "address" bits32 argv) {
-  bits32 depth1, depth2;
+  bits32 depth10, depth47, depth100;
   stackdata {p: bits32[1];}
 
-  depth1 = down(p, 1, 10);
-  depth2 = down(p, 1, 100);
-  foreign "C" printf(pcmp, 100, depth2 - depth1, 10);
+  depth10  = down(p, 1, 10);
+  depth47  = down(p, 1, 47);
+  depth100 = down(p, 1, 100);
+
+  bits32 f1, offset;  //  depth = n * f1 + offset
+  f1 = (depth100 - depth10) / (100 - 10);
+  offset = depth10 - 10 * f1;
+  if (f1 >= 3 `conjoin` f1 * 47 + offset == depth47) {
+    foreign "C" printf("address" goodcmp);
+  } else {
+    foreign "C" printf("address" badcmp, depth10, depth47, depth100, f1, f1*47);
+  }
   foreign "C" return(0);
 }
 
 down(bits32 sp, bits32 i, bits32 n) {
   if (i < n) { bits32 depth; depth = call3(down, sp, i+1, n); return (depth); }
-  foreign "C" printf(pdown, n, sp - p);
   return (sp - p);
   stackdata { p: bits8[3];}
 }
 
 section "data" {
-  pcmp :  bits8[] "calling indirect down %d levels is %d bytes deeper than %d levels\n\0";
-  pdown:  bits8[] "calling indirect down %d levels uses %d bytes of stack\n\0";
+  goodcmp : bits8[]
+    "calling down 10 and 100 levels predicts 47 levels with size >= 3\n\0";
+  badcmp:  bits8[] 
+    "bad stack: d10 = %d, d47 = %d, d100 = %d, computed d1 = %d, d47 = %d\n\0";
 }

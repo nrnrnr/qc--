@@ -84,6 +84,7 @@ section "text"
         Ljoin:l22:
         $r31 = $r31;
         // the preceding node is merely asserted
+        $r0 = 1;
         $r31 = ($r31+32);
         $c0 = $t1;
         k:C10:
@@ -95,6 +96,7 @@ section "text"
         Ljoin:l18:
         $r31 = $r31;
         // the preceding node is merely asserted
+        $r0 = 0;
         $r31 = ($r31+32);
         $c0 = $t1;
     }

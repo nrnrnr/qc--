@@ -20,9 +20,9 @@ all:V:    test
 test:V:   all.dummy.tst $config_arch.test $config_arch.optest
 optest:V: $config_arch.optest
 test.opt:VQ:
-	NPROC=1 mk $MKFLAGS QC=../bin/qc--.opt test
+	NPROC=1 mk $MKFLAGS QC=../bin/qc--.opt QCFLAGS="$QCFLAGS" test
 optest.opt:VQ:
-	NPROC=1 mk $MKFLAGS QC=../bin/qc--.opt optest
+	NPROC=1 mk $MKFLAGS QC=../bin/qc--.opt QCFLAGS="$QCFLAGS" optest
 
 x86-linux.test:V: all.x86.tst rt.x86.tst lcc.x86.tst tiger.x86.tst norun.x86.tst
 powerpc-darwin.test:V: all.ppc.tst
@@ -30,7 +30,7 @@ sparc-solaris.test:V: all.sparc8.tst lcc.sparc8.tst
 
 test-lua:V: testdrv.lua
 	$NOTANGLE -L'$file "%F"%N$line %L%N' -Rexample.tst testdrv.nw > example.tst
-	$QC testdrv.lua example.tst
+	$QC testdrv.lua $QCFLAGS example.tst
 
 clean:V:            
 	rm -f *.dvi *.log *.aux *.inc *.tex *.toc *.o
@@ -52,11 +52,11 @@ testdrv.inc:D: testdrv.nw
 	$NOWEAVE -delay -filter ../config/autodefs.lua -index testdrv.nw > testdrv.inc
 
 %.tst:VQ: testdrv.lua
-	echo "# $QC testdrv.lua $target"
-	$QC testdrv.lua $target
+	echo "# $QC testdrv.lua $QCFLAGS $target"
+	$QC testdrv.lua $QCFLAGS $target
 
 %.tst.opt:VQ: testdrv.lua
-	mk QC=../bin/qc--.opt $stem.tst
+	mk QC=../bin/qc--.opt QCFLAGS="$QCFLAGS" $stem.tst
 
 # ----------------------------------------------------------------
 # operator generation for testing on random bits
@@ -99,10 +99,10 @@ optest-${config_arch}:Q: optest.o \
 
 cmmopgen-${config_arch}.c--:DQ: opgen.lua $QC
 	echo "# building operator test bed (C-- version)"
-	$QC opgen.lua -e 'Testgen.emit()' > $target
+	$QC $QCFLAGS opgen.lua -e 'Testgen.emit()' > $target
 
 cmmopgen-&.o:Q: cmmopgen-&.c-- $QC
-	$QC -c -globals cmmopgen-$stem.c--
+	$QC $QCFLAGS -c -globals cmmopgen-$stem.c--
 
 optest.c:DQ: optest.nw
 	$NOTANGLE -L -R"$target" $prereq > $target

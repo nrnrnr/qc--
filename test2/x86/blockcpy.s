@@ -221,12 +221,13 @@ Ljoin_l33:
 	movl %ecx,(%edx)
 	call print
 Ljoin_l30:
-	leal 12(%esp), %eax
+	movl $0,%eax
 	leal 12(%esp), %ecx
-	movl $0,%edx
-	addl %edx,%ecx
-	movl (%eax),%edx
-	movl %edx,(%ecx)
+	leal 12(%esp), %edx
+	movl $0,%esi
+	addl %esi,%edx
+	movl (%ecx),%esi
+	movl %esi,(%edx)
 	movl (%esp),%ebx
 	movl 4(%esp),%esi
 	movl 8(%esp),%edi

@@ -31,12 +31,12 @@ bye:
 .byte 0
 .section .text
 main:
-	leal -4(%esp), %esp
-	leal 4(%esp), %eax
+	leal -8(%esp), %esp
+	leal 8(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
 	movl (%eax),%ecx
-	leal 4(%esp), %eax
+	leal 8(%esp), %eax
 	movl $8,%edx
 	addl %edx,%eax
 	movl (%eax),%edx
@@ -52,19 +52,22 @@ Ljoin_l10:
 	leal bye,%ecx
 	jmp Ljoin_l9
 Ljoin_l9:
-	leal 4(%esp), %edx
-	movl $-4,%eax
+	leal 8(%esp), %edx
+	movl $-8,%eax
 	addl %eax,%edx
 	movl %ecx,(%edx)
 	call printf
 Ljoin_l8:
-	leal 4(%esp), %eax
-	leal 4(%esp), %ecx
-	movl $0,%edx
-	addl %edx,%ecx
-	movl (%eax),%edx
-	movl %edx,(%ecx)
-	leal 4(%esp), %esp
+	movl $0,%eax
+	leal 8(%esp), %ecx
+	leal 8(%esp), %edx
+	movl %ebx,4(%esp)
+	movl $0,%ebx
+	addl %ebx,%edx
+	movl (%ecx),%ebx
+	movl %ebx,(%edx)
+	movl 4(%esp),%ebx
+	leal 8(%esp), %esp
 	ret
 .section .pcmap_data
 Lstackdata_l18:
@@ -74,7 +77,7 @@ Lstackdata_l18:
 .long Lframe_l19
 .section .pcmap_data
 Lframe_l19:
-.long 0xfffffffc
+.long 0xfffffff8
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l18

@@ -29,31 +29,34 @@ failed:
 .byte 0
 .section .text
 main:
-	leal -4(%esp), %esp
-	leal 4(%esp), %eax
+	leal -8(%esp), %esp
+	leal 8(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
 	movl (%eax),%ecx
-	leal 4(%esp), %ecx
+	leal 8(%esp), %ecx
 	movl $8,%eax
 	addl %eax,%ecx
 	movl (%ecx),%eax
 Linitialize_continuations_l5:
 Lproc_body_start_l4:
 	movl $-1420500317,%eax
-	leal 4(%esp), %ecx
-	movl $-4,%edx
+	leal 8(%esp), %ecx
+	movl $-8,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
 	call callee
 Ljoin_l9:
-	leal 4(%esp), %eax
-	leal 4(%esp), %ecx
-	movl $0,%edx
-	addl %edx,%ecx
-	movl (%eax),%edx
-	movl %edx,(%ecx)
-	leal 4(%esp), %esp
+	movl $0,%eax
+	leal 8(%esp), %ecx
+	leal 8(%esp), %edx
+	movl %ebx,4(%esp)
+	movl $0,%ebx
+	addl %ebx,%edx
+	movl (%ecx),%ebx
+	movl %ebx,(%edx)
+	movl 4(%esp),%ebx
+	leal 8(%esp), %esp
 	ret
 .section .pcmap_data
 Lstackdata_l16:
@@ -63,7 +66,7 @@ Lstackdata_l16:
 .long Lframe_l17
 .section .pcmap_data
 Lframe_l17:
-.long 0xfffffffc
+.long 0xfffffff8
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l16

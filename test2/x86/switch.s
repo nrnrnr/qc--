@@ -7,11 +7,12 @@ Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
 .section .text
 main:
-	movl %esp,%ecx
+	leal -4(%esp), %esp
+	leal 4(%esp), %ecx
 	movl $4,%edx
 	addl %edx,%ecx
 	movl (%ecx),%edx
-	movl %esp,%edx
+	leal 4(%esp), %edx
 	movl $8,%ecx
 	addl %ecx,%edx
 	movl (%edx),%ecx
@@ -35,12 +36,16 @@ Ljoin_l12:
 	movl $-3,%eax
 	call sw
 Ljoin_l9:
-	movl %esp,%eax
-	movl %esp,%ecx
-	movl $0,%edx
-	addl %edx,%ecx
-	movl (%eax),%edx
-	movl %edx,(%ecx)
+	movl $0,%eax
+	leal 4(%esp), %ecx
+	leal 4(%esp), %edx
+	movl %ebx,(%esp)
+	movl $0,%ebx
+	addl %ebx,%edx
+	movl (%ecx),%ebx
+	movl %ebx,(%edx)
+	movl (%esp),%ebx
+	leal 4(%esp), %esp
 	ret
 .section .pcmap_data
 Lstackdata_l30:
@@ -50,7 +55,7 @@ Lstackdata_l30:
 .long Lframe_l31
 .section .pcmap_data
 Lframe_l31:
-.long 0x80000000
+.long 0xfffffffc
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l30
@@ -74,7 +79,7 @@ Lframe_l31:
 .long Lframe_l32
 .section .pcmap_data
 Lframe_l32:
-.long 0x80000000
+.long 0xfffffffc
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l30
@@ -98,7 +103,7 @@ Lframe_l32:
 .long Lframe_l33
 .section .pcmap_data
 Lframe_l33:
-.long 0x80000000
+.long 0xfffffffc
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l30
@@ -122,7 +127,7 @@ Lframe_l33:
 .long Lframe_l34
 .section .pcmap_data
 Lframe_l34:
-.long 0x80000000
+.long 0xfffffffc
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l30
@@ -146,7 +151,7 @@ Lframe_l34:
 .long Lframe_l35
 .section .pcmap_data
 Lframe_l35:
-.long 0x80000000
+.long 0xfffffffc
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l30
@@ -170,7 +175,7 @@ Lframe_l35:
 .long Lframe_l36
 .section .pcmap_data
 Lframe_l36:
-.long 0x80000000
+.long 0xfffffffc
 .long 0x80000004
 .long 0x80000000
 .long Lstackdata_l30

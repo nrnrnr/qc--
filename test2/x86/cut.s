@@ -75,12 +75,13 @@ Ljoin_l24:
 	movl %edi,(%esi)
 	call printf
 Ljoin_l21:
-	leal 36(%esp), %eax
+	movl $1,%eax
 	leal 36(%esp), %ecx
-	movl $0,%edx
-	addl %edx,%ecx
-	movl (%eax),%edx
-	movl %edx,(%ecx)
+	leal 36(%esp), %edx
+	movl $0,%esi
+	addl %esi,%edx
+	movl (%ecx),%esi
+	movl %esi,(%edx)
 	movl 8(%esp),%ebx
 	movl 12(%esp),%ebp
 	movl 16(%esp),%esi
@@ -101,12 +102,13 @@ k_C10:
 	movl %edx,(%eax)
 	call printf
 Ljoin_l17:
-	leal 36(%esp), %eax
+	movl $0,%eax
 	leal 36(%esp), %ecx
-	movl $0,%edx
-	addl %edx,%ecx
-	movl (%eax),%edx
-	movl %edx,(%ecx)
+	leal 36(%esp), %edx
+	movl $0,%ebx
+	addl %ebx,%edx
+	movl (%ecx),%ebx
+	movl %ebx,(%edx)
 	movl 8(%esp),%ebx
 	movl 12(%esp),%ebp
 	movl 16(%esp),%esi
