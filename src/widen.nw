@@ -46,18 +46,27 @@ There may be other errors lurking as well.
 Anyway [[f2f']] implements a float-to-float conversion, which may or
 may not combine with a conversion underneath it.
 <<floating-point widening>>=
+let rec make_cvt cvt s d e rm =
+  if isgood s || isgood d then
+    RP.App((cvt, [s; d]), [e; rm])
+  else
+    let w = bestwidth (max s d) in
+    let cvtleft, cvtright =
+      match cvt with
+      | "f2f" -> "f2f", "f2f"
+      | "i2f" -> "f2f", "i2f"
+      | "f2i" -> "f2i", "f2f"
+      | _ -> Impossible.impossible "unknown conversion" in
+    make_cvt cvtleft w d (make_cvt cvtright s w e rm) rm in
 let f2f' combine srcw dstw e =
-  let rec make_f2f s d e rm =
-    if isgood s || isgood d then
-      RP.App(("f2f", [s; d]), [e; rm])
-    else
-      let w = bestwidth (max s d) in
-      make_f2f w d (make_f2f s w e rm) rm in
+  let make_f2f = make_cvt "f2f" in
   if srcw = dstw then
     e
   else
     match e with 
     | RP.App(("f2f", [from; to']), [e; rm]) when combine ->
+if to' <> srcw then
+  Printf.eprintf "f2f[%d->%d] applied to f2f[%d->%d]\n" srcw dstw from to';
         assert (to' = srcw);
         make_f2f from dstw e rm
     | RP.App(("f2f_implicit_round", [from; to']), [e]) when combine ->
@@ -66,7 +75,7 @@ let f2f' combine srcw dstw e =
     | e -> 
         make_f2f srcw dstw e rm in
 let f2f = f2f' true in
-let force_f2f = f2f' false in
+let force_f2f = f2f' true in
 @ 
 Function [[convert]] takes an expression that is known to produce a
 floating-point value, and it changes the width of the expression,
@@ -84,15 +93,15 @@ let rec convert ~(from:int) ~(to':int) e =
   | RP.App (("f2f_implicit_round" , [f; t]), [x]) ->
       convert ~from:f ~to' x
   | RP.App (("i2f", [f; t]), [x; rm]) ->
-      RP.App (("i2f", [f; to']), [rewrite x; rm])
+      make_cvt "i2f" f to' (rewrite x) rm
   | RP.App ((("fabs"|"fneg") as op, [w]), [x]) -> 
-	assert (w=from);
-	RP.App((op, [to']), [cvt x])
+      assert (w=from);
+      RP.App((op, [to']), [cvt x])
   | RP.App ((("fadd"|"fsub"|"fmul"|"fdiv") as op, [w]), [x; y; rm]) -> 
-	RP.App((op, [to']), [cvt x; cvt y; rm])
+      RP.App((op, [to']), [cvt x; cvt y; rm])
   | RP.App ((("fsqrt") as op, [w]), [x; rm]) -> 
-	assert (w=from);
-	RP.App((op, [to']), [cvt x; rm])
+      assert (w=from);
+      RP.App((op, [to']), [cvt x; rm])
   | RP.App ((op, _), _) ->
       Impossible.impossible
         ("float widener widening non-float value (applied " ^ op ^ ")")
@@ -107,7 +116,7 @@ and rewrite e = match e with
       Impossible.impossible "asked to rewrite (not convert) floating-point result"
   | RP.App (("f2i", [fw; iw]), [x; rm]) ->
       let fw' = bestwidth fw in
-      RP.App (("f2i", [fw'; iw]), [convert ~from:fw ~to':fw' x; rm])
+      make_cvt "f2i" fw' iw (convert ~from:fw ~to':fw' x) rm
   | RP.App ((("fcmp"|"flt"|"fle"|"fgt"|"fge"|"feq"|"fne"|"fordered"|"funordered")
                as opname, [w]), [x; y]) ->
       let w' = bestwidth w in
