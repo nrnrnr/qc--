@@ -167,7 +167,7 @@ val prev:       node -> node option
    fold_fwd, fold_bwd, first, limit *)
 
 (* add node to cfg, ensures: not (enumerated cfg) *)
-val gm_label:   cfg -> string -> Symbol.symbol -> succ:node -> node 
+val gm_label:   cfg -> string -> Reladdr.symbol -> succ:node -> node 
 val gm_assign:  cfg -> Rtl.rtl -> succ:node -> node
 val gm_return:  cfg -> Rtl.rtl -> int * int -> node
 val gm_goto:    cfg -> Rtl.rtl -> node list -> node
@@ -611,7 +611,7 @@ let conts ~cuts ~unwinds ~returns ~aborts =
 let mk () = new X.graph
 
 <<implementation>>=
-let gm_label cfg (label:string) (sym:Symbol.symbol) (succ:node) =
+let gm_label cfg (label:string) (sym:Reladdr.symbol) (succ:node) =
     cfg#label label sym succ
 
 let lookup cfg (label:string) =
@@ -818,7 +818,7 @@ class type cfg = object
     method entry:       node            (* entry node of this *)
     method exit:        node            (* exit node of this *)
     method lookup:      string -> node  (* find labeled node *)
-    method label:       string -> Symbol.symbol -> node -> node
+    method label:       string -> Reladdr.symbol -> node -> node
                                         (* insert label before node *)
     
     method add:         node -> unit    (* add node to this; 
@@ -990,7 +990,7 @@ label, once this node is defined.
 class type labl = object
     inherit node 
     method set_succ:    node -> unit       (* set succ for this *)
-    method set_symbol:  Symbol.symbol -> unit
+    method set_symbol:  Reladdr.symbol -> unit
 end
 @
 
@@ -1420,7 +1420,7 @@ object(this)
     inherit vnode cfg Rtl.null as super
 
     val mutable _succ   = (None: node option) 
-    val mutable _symbol = (None: Symbol.symbol option)
+    val mutable _symbol = (None: Reladdr.symbol option)
 
     method set_succ node =
         ( assert (_succ = None)
