@@ -38,6 +38,7 @@ X86.cc           = X86.cc           or {}
 X86.cc["C"     ] = X86.cc["C"     ] or {}
 X86.cc["C--"   ] = X86.cc["C--"   ] or {}
 X86.cc["notail"] = X86.cc["notail"] or {}
+X86.cc["gc"]     = X86.cc["gc"]     or {}
 @ 
 \paragraph{General information}
 Information on the C~calling convention is from the SYSV ABI, Third
@@ -337,12 +338,18 @@ let conv ~calleesaves ~jump ~altret name specs ~return_to cut =
 And in Lua:
 <<x86 calling convention automata in Lua>>=
 -- register the new calling conventions!
-X86.cc["paranoid C"] = X86.cc["C"]
+X86.cc["paranoid C"]        = X86.cc["C"]
+X86.layout["paranoid C"]    = X86.layout["C"]
+
+X86.cc["gc"]                = X86.cc["C"]
+X86.layout["gc"]            = X86.layout["C"]
+
 A.register_cc(Backend.x86.target,"C"     ,    X86.cc["C"     ])
 A.register_cc(Backend.x86.target,"paranoid C",X86.cc["paranoid C"])
 A.register_cc(Backend.x86.target,"C'"    ,    X86.cc["C"     ])
 A.register_cc(Backend.x86.target,"C--"   ,    X86.cc["C--"   ])
 A.register_cc(Backend.x86.target,"notail",    X86.cc["notail"])
+A.register_cc(Backend.x86.target,"gc",        X86.cc["gc"])
 @ 
 
 % ------------------------------------------------------------------ 
@@ -390,6 +397,7 @@ let cconv ~return_to cut ccname stage =
     | "C'"          -> c'
     | "paranoid C"  -> conv ~jump:false ~altret:false ~calleesaves:false
     |  "C"          -> conv ~jump:false ~altret:false ~calleesaves:true
+    | "gc"          -> conv ~jump:false ~altret:false ~calleesaves:true
     | _ -> Unsupported.calling_convention ccname
   in f ccname stage ~return_to cut
 @
