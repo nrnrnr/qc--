@@ -1556,8 +1556,6 @@ void run_interp(thread *t) {
     }
   }
 
-  printf("---- after run_interp: %d -------\n", lua_gettop(assembly_units_table.L));
-
   errorjmp_set = 0;
 }
 
