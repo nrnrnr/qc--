@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 % vim: ts=8 sw=4 et:
 
 % ------------------------------------------------------------------ 
@@ -11,8 +12,6 @@ check the types of all {\rtls}.
 To embed the function into the back plane it takes a procedure as
 argument. The embedding into Lua is handled by the \module{lualink}
 module.
-
-
 <<typecheck.mli>>=
 val proc: Ast2ir.proc -> unit
 @
@@ -22,25 +21,16 @@ val proc: Ast2ir.proc -> unit
 % ------------------------------------------------------------------ 
 
 The implementation simply pieces together functionality: module
-\module{rtldebug.nw} provides type checking, and module \module{cfg.nw}
+\module{rtldebug.nw} provides type checking, and module \module{zipcfg.nw}
 traversal of a {\cfg}.
-
 <<typecheck.ml>>=
-module C = Cfgx.M
+let rtl =
+  fun rtl ->
+    try
+      Rtldebug.typecheck rtl
+    with
+      Rtldebug.TypeCheck r ->
+        Printf.eprintf "Ill-typed RTL %s\n" (Rtlutil.ToUnreadableString.rtl rtl)
 
-let rtl = function
-    | None     -> ()
-    | Some rtl ->
-        try
-            Rtldebug.typecheck rtl
-        with
-            Rtldebug.TypeCheck(rtl) ->
-                ( prerr_string "This RTL does not type check:\n"
-                ; prerr_endline (Rtlutil.ToUnreadableString.rtl rtl)
-                )
-
-let proc p =
-    let cfg         = p.Proc.cfg in
-    let iter cfg  f = C.fold_layout (fun node () -> f node) () cfg in
-        iter cfg (fun node -> rtl (C.to_instr node))
+let proc (cfg, p) = Zipcfg.iter_rtls rtl cfg
 @

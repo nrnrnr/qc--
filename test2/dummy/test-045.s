@@ -35,8 +35,8 @@ section "text"
     {
         $r31 = ($r31+-24);
         $t1 = $r30;
-        .Linitialize continuations:l5:
-        .Lproc body start:l4:
+        .Linitialize continuations:l4:
+        .Lproc body start:l3:
         $r31 = ($r31+24);
         $c0 = $t1;
     }

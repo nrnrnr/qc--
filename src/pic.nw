@@ -139,14 +139,15 @@ transformation on this expression.
 val transform : import:(Symbol.t -> Rtl.loc) ->
                 load_wkr:(Rtl.loc -> Rtl.rtl) ->
                 use_return:bool ->
-                Ast2ir.proc -> unit
+                Ast2ir.proc -> Ast2ir.proc * bool
 <<pic.ml>>=
-module R    = Rtl
-module RP   = Rtl.Private
-module Down = Rtl.Dn
-module Up   = Rtl.Up
-module G    = Cfgx.M
-module T    = Target
+module G  = Zipcfg
+module GR = Zipcfg.Rep
+module R  = Rtl
+module RP = Rtl.Private
+module Dn = Rtl.Dn
+module Up = Rtl.Up
+module T  = Target
 <<RTL transformations>>
 <<CFG transform>>
 @ 
@@ -155,23 +156,23 @@ associated CFG. The [[load_wkr]] function fetches the machine word at
 the location where a return instruction would look for it. This
 function might be moved into the [[Target.t]] at some point.
 <<CFG transform>>=
-let transform ~import ~load_wkr ~use_return proc =
-  let cfg  = proc.Proc.cfg
-  and wkr  = Talloc.Multiple.reg 't' proc.Proc.temps 32
+let transform ~import ~load_wkr ~use_return (cfg, proc) =
+  let wkr  = Talloc.Multiple.reg 't' proc.Proc.temps 32
   and wkl  = proc.Proc.mk_symbol (Idgen.label "pic")
   and cals = proc.Proc.mk_symbol (Idgen.label "pic fun")
   and ends = proc.Proc.mk_symbol (Idgen.label "pic end") in
   <<translate RTLs in CFG nodes>>
   <<insert PC load and well-known label into CFG>>
+  (cfg, proc), true
 @ 
 As described above, we apply two different transformation depending on
 the type of the CFG node. For control-transfer nodes, we use the
 [[cti]] transform. For other nodes, we use the [[non_cti]] transform.
 <<translate RTLs in CFG nodes>>=
-  let update_node node =
-    let txn = if G.is_cti node then cti else non_cti in
-    G.update_instr (txn ~import wkr wkl) node in
-  G.iter_nodes update_node cfg;
+  let cfg =
+    let middle = G.map_rtlm (non_cti ~import wkr wkl) in
+    let last   = G.map_rtll ~map_rtl:(cti ~import wkr wkl) ~map_assn:(fun r -> r) in
+    G.map_nodes (fun f -> f) middle last cfg in
 @ 
 In addition to applying the PIC transformation, we also need to add
 nodes to the CFG for initializing the well-known register and label.
@@ -213,26 +214,27 @@ RTL.
 THE READS AND WRITES ANNOTATIONS ON THIS CALL COULD POSSIBLY BE BETTER...
 <<insert PC load and well-known label into CFG>>=
   let rtl  = load_wkr (Rtl.reg wkr)
-  and clfn = proc.Proc.target.T.call.T.embed
-  and brfn = proc.Proc.target.T.goto.T.embed
   and reti = proc.Proc.target.T.return.T.embed ()
-  and wkln = G.node_labeled cfg wkl#original_text
-  and caln = G.node_labeled cfg cals#original_text
-  and endn = G.node_labeled cfg ends#original_text
-  and rset = Register.Set.of_list [] in
-  let ill  = G.illegal cfg in
-  let br   = G.instruction cfg (brfn (R.codesym ends 32)) ~succ:ill in
-  let call = G.call cfg (clfn (R.codesym cals 32)) ~succ:wkln
+  and endlbl = (G.uid(), ends#original_text)
+  and machine = proc.Proc.machine in
+  let wkln = G.label machine (G.uid(), wkl#original_text)
+  and caln = G.label machine (G.uid(), cals#original_text)
+  and endn = G.label machine endlbl
+  and rset = Register.SetX.empty in
+  let br   = G.branch machine endlbl in
+  let call = G.call machine (R.codesym cals proc.Proc.target.T.pointersize) 
       ~altrets:[] ~unwinds_to:[] ~cuts_to:[]
       ~aborts:false ~uses:rset ~defs:rset ~kills:rset ~reads:None
-      ~writes:None ~spans:None in
-  let ret = G.return cfg reti ~uses:rset in
-  let ld = G.instruction cfg rtl ~succ:ill in
-  let insert_pt = Cfgutil.find_join_node cfg proc.Proc.bodylbl in
-  let ( => ) a b = (G.set_succ cfg a b; b) in
-  if use_return then ignore(wkln => br => caln => ld => ret => endn)
-                else ignore(wkln =>       caln => ld        => endn);
-  G.splice_after cfg call endn insert_pt
+      ~writes:None ~spans:None ~succ_assn:(Rtl.par []) in
+  let ret = G.return reti ~exit:0 ~uses:rset in
+  let ld = G.instruction rtl in
+  let ( **> ) a b = a b in
+  let splice =
+    let g = G.entry G.empty in
+    if use_return then call **> wkln **> br **> caln **> ld **> ret **> endn g
+    else               call **> wkln **>        caln **> ld         **> endn g in
+  let cfg =
+    G.unfocus (G.splice_after (G.focus (fst proc.Proc.bodylbl) cfg) (G.unfocus splice)) in
 @
 We need to transform the [[Link]] RTLs according to the criteria
 outlined above. The [[rtl]] function takes a predicate function and
@@ -258,7 +260,7 @@ let rtl trns_sym ~import wkr wkl rtl =
   | RP.Store(l, e, w)               -> RP.Store(loc l, exp e, w)
   | _ -> eff in
   let guarded (g, eff) = (exp g, effect eff) in
-  let RP.Rtl es = Down.rtl rtl in
+  let RP.Rtl es = Dn.rtl rtl in
   Up.rtl (RP.Rtl (List.map guarded es))
 @ 
 We need two transformations: one for control-transfer instructions and

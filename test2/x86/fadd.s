@@ -38,8 +38,8 @@ main:
 	leal -32(%esp), %esp
 	leal 32(%esp), %eax
 	movl (%eax),%eax
-.Linitialize_continuations_l4:
-.Lproc_body_start_l3:
+.Linitialize_continuations_l3:
+.Lproc_body_start_l2:
 	leal y,%ecx
 	flds (%ecx)
 	leal x,%ecx
@@ -72,7 +72,7 @@ main:
 	addl %ecx,%eax
 	fstpl (%eax)
 	call printf
-.Ljoin_l8:
+.Lcall_successor_l7:
 	movl $0,%eax
 	leal 32(%esp), %ecx
 	movl $0,%edx
@@ -82,17 +82,17 @@ main:
 	leal 32(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l15:
+.Lstackdata_l14:
 .long 0
 .section .pcmap
-.long .Ljoin_l8
-.long .Lframe_l16
+.long .Lcall_successor_l7
+.long .Lframe_l15
 .section .pcmap_data
-.Lframe_l16:
+.Lframe_l15:
 .long 0x80000004
 .long 0xffffffe0
 .long 0xfffffffc
-.long .Lstackdata_l15
+.long .Lstackdata_l14
 .long 0
 .long 0
 .long 0

@@ -13,62 +13,64 @@
 \section{Dead-assignment elimination}
 
 <<dead.mli>>=
-val elim_assignments : 'a -> Ast2ir.proc -> bool
+val elim_assignments : Live.liveset Dataflowp.transformation
 @
 <<dead.ml>>=
-module G  = Cfgx.M
-module L  = Cfgx.Live
-module P  = Proc
+module D  = Dataflowp
+module G  = Zipcfg
+module GR = Zipcfg.Rep
 module R  = Register
-module RS = Register.Set
+module RS = Register.SetX
 module RP = Rtl.Private
 module S  = Rtlutil.ToString
 @ 
 <<dead.ml>>=
 let () = Debug.register "dead" "dead-assignment elimination"
 let debug fmt = Debug.eprintf "dead" fmt
-
-let get_live_in  n = R.promote_rxset (Cfgx.Live.live_in  n)
-let get_live_out n = R.promote_rxset (Cfgx.Live.live_out n)
+let epr = Printf.eprintf 
 
 <<utilities>>
-
-let add n deads =
-  if G.kind n =*= G.Instruction then
-    match G.to_executable n with
-    | None -> Impossible.impossible "non-executable instruction"
-    | Some rtl ->
-Debug.eprintf "dead" "dead: considering %s\n" (S.rtl rtl);
-        all_regs_assigned rtl
-          (fun regs ->
-             let live = get_live_out n in
-             if List.for_all (fun r -> not (RS.mem r live)) regs then
-(Debug.eprintf "dead" "dead: scheduling dead assignment %s\n" (S.rtl rtl);
-Debug.eprintf "dead" "dead: assigned to registers %s\n" (String.concat ", " (List.map S.reg regs));
-Debug.eprintf "dead" "dead: live = %s\n" (String.concat ", " (List.map S.reg (RS.elements live)));
-               n :: deads
-)
-             else
-(Debug.eprintf "dead" "dead: something is live out\n";
-Debug.eprintf "dead" "dead: live = %s\n" (String.concat ", " (List.map S.reg (RS.elements (get_live_out n))));
-               deads)
-)
-          (fun () -> List.rev deads)
-  else
-    deads
-
-let elim_assignments _ proc =
-  let deads = G.fold_nodes add [] proc.P.cfg in
-  let changed = ref false in
-  let kill node =
-    G.Tx.start_exn "dead";
-Debug.eprintf "dead" "dead: removing dead assignment %s\n" (S.rtl (match G.to_executable node with Some rtl -> rtl | None -> Impossible.impossible "noninst"));
-    Cfgutil.delete proc.P.cfg node;
-    changed := true in
-  (try List.iter kill deads with G.Tx.Exhausted -> ());
-  !changed
 @ 
-CPS to find if an RTL assigns only registers
+We must not elimnate potentially dead stack adjustments!
+<<dead.ml>>=
+let last_in l = None
+let middle_in live m = match m with
+| GR.Instruction rtl -> (* don't eliminate dead stack adjustments or assertions *)
+    all_regs_assigned rtl
+      (fun regs ->
+        if List.for_all (fun r -> not (RS.mem (R.Reg r) live)) regs then
+          (<<announce dead elimination>>; Some G.empty)
+        else
+          (<<announce dead non-elimination>>; None))
+      (fun () -> None)
+| _ -> None
+
+let first_in live f = None
+
+<<announce dead elimination>>=
+(if Debug.on "dead" then
+  begin
+    epr "dead: scheduling dead assignment %s\n" (S.rtl rtl);
+    epr "dead: assigned to registers %s\n" (String.concat ", " (List.map S.reg regs));
+    epr "dead: live = { %s }\n" (RS.to_string live);
+  end)
+<<announce dead non-elimination>>=
+(if Debug.on "dead" then
+  begin
+    epr "dead: something is live out\n";
+    epr "dead: live = { %s }\n" (RS.to_string live);
+  end)
+@ 
+<<dead.ml>>=
+let elim_assignments =
+  { D.name = "dead";
+    D.last_in = last_in; D.middle_in = middle_in; D.first_in = first_in; }
+@ 
+CPS to find if an RTL assigns only registers.
+We're making pessimistic assumptions, because if we do see a slice, we
+don't want to have to check all the may-alias relations.
+THIS IS PROBABLY A BAD IDEA---WE'LL HAVE TO BITE THE
+MAY-ALIAS BULLET SOONER OR LATER.
 <<utilities>>=
 let all_regs_assigned rtl succ fail =
   let fail () = Debug.eprintf "dead" "assigned to non-register\n"; fail () in

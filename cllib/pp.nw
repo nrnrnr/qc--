@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 \def\ocaml{\textsc{ocaml}}
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
@@ -367,31 +368,31 @@ forward except for an [[agrp]].  To decide about the mode for the
 contents of an [[agrp]] [[format]] uses [[fit]] to check, whether the
 whole group fits into the rest of the line.  In case it does, the mode
 will be [[Flat]] which means its [[break]]s will be spaces. 
-
 <<pp.ml>>=
 <<fits>>
 
-let rec format w k = function
-    | []                             -> SNil
-    | (i,m,DocNil)              :: z -> format w k z
-    | (i,m,DocCons(x,y))        :: z -> format w k ((i,m,x)::(i,m,y)::z)
-    | (i,m,DocNest(j,x))        :: z -> format w k ((i+j,m,x)::z)
-    | (i,m,DocText(s))          :: z -> SText(s ,format w (k + strlen s) z)
-    | (i,Flat, DocBreak(s))     :: z -> SText(s ,format w (k + strlen s) z)
+(* format is cps to avoid stack overflow *)
+let cons  s post z = post (SText (s, z))
+let consl i post z = post (SLine (i, z))
+let rec format w k l post = match l with
+    | []                             -> post SNil
+    | (i,m,DocNil)              :: z -> format w k z post
+    | (i,m,DocCons(x,y))        :: z -> format w k ((i,m,x)::(i,m,y)::z) post
+    | (i,m,DocNest(j,x))        :: z -> format w k ((i+j,m,x)::z) post
+    | (i,m,DocText(s))          :: z -> format w (k + strlen s) z (cons s post)
+    | (i,Flat, DocBreak(s))     :: z -> format w (k + strlen s) z (cons s post)
     | (i,Fill, DocBreak(s))     :: z -> let l = strlen s in
                                             if   fits (w - k - l) z 
-                                            then SText(s, format w (k+l) z)
-                                            else SLine(i, format w  i    z)
-    | (i,Break,DocBreak(s))     :: z -> SLine(i,format w i z)
-    | (i,m,DocGroup(GFlat ,x))  :: z -> format w k ((i,Flat ,x)::z)
-    | (i,m,DocGroup(GFill ,x))  :: z -> format w k ((i,Fill ,x)::z)
-    | (i,m,DocGroup(GBreak,x))  :: z -> format w k ((i,Break,x)::z)
+                                            then format w (k+l) z (cons s post)
+                                            else format w  i    z (consl i post)
+    | (i,Break,DocBreak(s))     :: z -> format w i z (consl i post)
+    | (i,m,DocGroup(GFlat ,x))  :: z -> format w k ((i,Flat ,x)::z) post
+    | (i,m,DocGroup(GFill ,x))  :: z -> format w k ((i,Fill ,x)::z) post
+    | (i,m,DocGroup(GBreak,x))  :: z -> format w k ((i,Break,x)::z) post
     | (i,m,DocGroup(GAuto, x))  :: z -> if fits (w-k) ((i,Flat,x)::z)
-                                        then format w k ((i,Flat ,x)::z)
-                                        else format w k ((i,Break,x)::z)
-
+                                        then format w k ((i,Flat ,x)::z) post
+                                        else format w k ((i,Break,x)::z) post
 @
-
 The [[fits]] predicate treats all groups it encounters as flat groups. 
 This implements just the policy that a group including all its sub
 groups must fit into the current line in order to have its [[break]]s
@@ -401,7 +402,6 @@ exceeds the current line width, or it reaches the end of the
 group---whatever happens first. 
 
 <<fits>>=
-
 let rec fits w = function
     | _ when w < 0                   -> false
     | []                             -> true
@@ -416,16 +416,11 @@ let rec fits w = function
 
 @ The pretty printing functions called by the user just enclose the
 user document with a virtual [[agrp]] and start [[format]]'ing.
-
 <<pp.ml>>=
-
-let ppToString w doc =
-    sdocToString  (format w 0 [0,Flat,agrp(doc)])
-
-let ppToFile oc w doc =
-    sdocToFile oc (format w 0 [0,Flat,agrp(doc)])
-
-@ ------------------------------------------------------------------ 
+let ppToString  w doc = format w 0 [0,Flat,agrp(doc)] sdocToString
+let ppToFile oc w doc = format w 0 [0,Flat,agrp(doc)] (sdocToFile oc) 
+@ 
+% ------------------------------------------------------------------ 
 \subsubsection{Useful functions}
 % ------------------------------------------------------------------ 
 

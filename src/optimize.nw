@@ -23,7 +23,7 @@ For now, we have a few simple transformations of the control-flow graph.
 We can simplify the expressions in the rtl's in a flow graph by calling
 [[simplify_exps]].
 <<optimize.mli>>=
-val simplify_exps : 'a -> Ast2ir.proc -> bool
+val simplify_exps : 'a -> Ast2ir.proc -> Ast2ir.proc * bool
 @
 It is possible to build a flow graph such that a node cannot be reached
 by following successors from the entry node, but it can be reached by
@@ -31,25 +31,25 @@ following predecessors from the exit node.
 The nodes that are unreachable by following successor edges from the entry node
 are removed by [[trim_unreachable_code]].
 <<optimize.mli>>=
-val trim_unreachable_code : 'a -> Ast2ir.proc -> bool
+val trim_unreachable_code : 'a -> Ast2ir.proc -> Ast2ir.proc * bool
 @
 It's also easy to collapse simple branch chains.
 We eliminate a branch to a join point if the branch is the only predecessor of the join
 point.
 <<optimize.mli>>=
-val collapse_branch_chains: 'a -> Ast2ir.proc -> bool
+val collapse_branch_chains: 'a -> Ast2ir.proc -> Ast2ir.proc * bool
 @ 
 Remove any instruction that leaves the machine in the same state in
 which it started.  
 This includes not only [[Rtl.null]] but also assignments of the form 
 $x \mathbin{:=} x$.
 <<optimize.mli>>=
-val remove_nops : 'a -> Ast2ir.proc -> bool
+val remove_nops : 'a -> Ast2ir.proc -> Ast2ir.proc * bool
 @ 
 Function [[validate]] does not actually do anything; it just checks
 the machine invariant.
 <<optimize.mli>>=
-val validate : 'a -> Ast2ir.proc -> bool
+val validate : 'a -> Ast2ir.proc -> Ast2ir.proc * bool
 @
 
 % ------------------------------------------------------------------ 
@@ -58,7 +58,9 @@ val validate : 'a -> Ast2ir.proc -> bool
 
 We provide each of the optimization in turn.
 <<optimize.ml>>=
-module G  = Cfgx.M
+module OG = Cfgx.M
+module G  = Zipcfg
+module GR = Zipcfg.Rep
 module P  = Proc
 module RP = Rtl.Private
 module RU = Rtlutil
@@ -66,16 +68,15 @@ module Dn = Rtl.Dn
 module Up = Rtl.Up
 module SS = Strutil.Set
 
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let not_null = function [] -> false | _ :: _ -> true
 @
 We traverse the flow graph and simplify rtl's.
 <<optimize.ml>>=
-let simplify_exps _ {Proc.cfg = cfg} =
-  let simplify_node n rst =
-    match G.to_instr n with
-    | None   -> rst
-    | Some i -> G.update_instr Simplify.rtl n; true in
-  G.fold_nodes simplify_node false cfg
+let simplify_exps _ (g, proc) =
+  let changed = ref false in
+  let g = G.map_rtls (fun r -> changed := true; Simplify.rtl r) g in
+  (g, proc), !changed
 @
 A forward dfs followed by a backwards dfs will find nodes reachable from the entry
 (following successors) and nodes reachable from the exit (following predecessors).
@@ -91,81 +92,97 @@ with the node.
 Because spans are associated with labels, we also collect the labels that are
 accessible from the entry node.
 Then we remove the unreachable spans.
+I DON'T SEE WHERE UNREACHABLE SPANS ARE EVER REMOVED. 
+CAN THE OLD CODE SIMPLY BE REMOVED?
 <<optimize.ml>>=
 let trim_unreachable_code _ ({Proc.cfg = cfg} as proc) =
   let module IS = Set.Make (struct type t = int let compare x y = x - y end) in
   let nodes_from_entry =
-    G.postorder_dfs (fun n nset -> IS.add (G.num n) nset) IS.empty cfg in
-  let nodes_from_exit  = G.reverse_podfs (fun n rst -> n :: rst) [] cfg in
-  let to_delete = List.filter (fun n -> not (IS.mem (G.num n) nodes_from_entry))
+    let add_labels n lset = 
+      if OG.is_join n then List.fold_right SS.add (OG.labels n) lset else lset in
+    OG.postorder_dfs (fun n nset -> IS.add (OG.num n) nset)
+                    IS.empty cfg in
+  let nodes_from_exit  = OG.reverse_podfs (fun n rst -> n :: rst) [] cfg in
+  let to_delete = List.filter (fun n -> not (IS.mem (OG.num n) nodes_from_entry))
                               nodes_from_exit in
-  let () = List.iter (fun n -> if G.kind n =*= G.Join then G.set_succ cfg n (G.illegal cfg))
+  let () = List.iter (fun n -> if OG.kind n =*= OG.Join then OG.set_succ cfg n (OG.illegal cfg))
                      to_delete in
   let hanging_nodes =
-    List.filter (fun n -> Pervasives.(<>) (G.kind n) G.Entry &&
-                          List.for_all (fun p -> G.kind p =*= G.Illegal) (G.preds n)) in
+    List.filter (fun n -> Pervasives.(<>) (OG.kind n) OG.Entry &&
+                          List.for_all (fun p -> OG.kind p =*= OG.Illegal) (OG.preds n)) in
   let rec delete_nodes = function
     | [] -> ()
     | n :: rst -> 
-      let succs  = G.succs n in
-      (G.delete cfg n;
+      let succs  = OG.succs n in
+      (OG.delete cfg n;
        delete_nodes (hanging_nodes succs @ rst)) in
   delete_nodes (hanging_nodes to_delete);
   not_null to_delete
+
+let trim_unreachable_code _ (g, proc) =
+  let g' = G.postorder_dfs g in
+  let changed = List.length g' < Unique.Map.size (G.to_blocks g) in
+  (G.of_block_list g', proc), changed
 @
 We find each join point with one predecessor, and if the predecessor is a branch to the
 join point, we eliminate the branch and the join point.
 I THOUGHT A BRANCH CHAIN WAS A BRANCH TO A BRANCH?
 <<optimize.ml>>=
 let collapse_branch_chains _ {Proc.cfg = cfg} =
-  let brp node = G.kind node =*= G.Branch && G.kind (G.pred node) =*= G.Join in
+  let brp node = OG.kind node =*= OG.Branch && OG.kind (OG.pred node) =*= OG.Join in
   let to_collapse =
-    G.fold_nodes (fun n rst -> if brp n then n :: rst else rst) [] cfg in
+    OG.fold_nodes (fun n rst -> if brp n then n :: rst else rst) [] cfg in
   let collapse n =
-    let j = G.pred n in
-    let s = G.succ n in
-    List.iter (fun p -> match G.kind p with
-                        | G.Cbranch ->
-                          if G.eq (G.tsucc p) j then G.set_tsucc cfg p s;
-                          if G.eq (G.fsucc p) j then G.set_fsucc cfg p s
-                        | G.Mbranch -> Impossible.unimp "redirect multiway branch"
-                        | G.Branch  -> G.set_succ cfg p s
+    let j = OG.pred n in
+    let s = OG.succ n in
+    List.iter (fun p -> match OG.kind p with
+                        | OG.Cbranch ->
+                          if OG.eq (OG.tsucc p) j then OG.set_tsucc cfg p s;
+                          if OG.eq (OG.fsucc p) j then OG.set_fsucc cfg p s
+                        | OG.Mbranch -> Impossible.unimp "redirect multiway branch"
+                        | OG.Branch  -> OG.set_succ cfg p s
                         | _ -> ())
-              (G.preds j);
-    if List.for_all (fun n -> G.kind n =*= G.Illegal) (G.preds j)
-    then (G.delete cfg j; G.delete cfg n) in
+              (OG.preds j);
+    if List.for_all (fun n -> OG.kind n =*= OG.Illegal) (OG.preds j)
+    then (OG.delete cfg j; OG.delete cfg n) in
   List.iter collapse to_collapse;
   not_null to_collapse
+let collapse_branch_chains _ = Impossible.unimp "new optimizer"
 @
 <<optimize.ml>>=
-let remove_nops _ {Proc.cfg = cfg} =
+let remove_nops _ (g, proc) =
   let changed = ref false in
   let is_nop rtl =
     let unneeded = function
       | (_, RP.Kill _) -> true
       | (_, RP.Store (l, RP.Fetch(l', w'), w)) as r -> (* assert (w=w'); *)
           if w<>w' then
-            match rtl with
-            | Some r ->
-                Impossible.impossible (Printf.sprintf "width of fetch and store don't match in %s" (RU.ToString.rtl r))
-            | None -> Impossible.impossible "width of fetch and store don't match"
-          else RU.Eq.loc l l'
+            impossf "width of fetch and store don't match in %s" (RU.ToString.rtl rtl)
+          else
+            RU.Eq.loc l l'
       | _ -> false in
-    match rtl with
-    | Some r -> let RP.Rtl effs = Dn.rtl r in List.for_all unneeded effs
-    | None -> false in
-  let remove n = Cfgutil.delete cfg n; changed := true in
-  G.iter_nodes (fun n -> if is_nop (G.to_executable n) then remove n) cfg;
-  !changed
+    let RP.Rtl effs = Dn.rtl rtl in
+    List.for_all unneeded effs in
+  let block (f, t) =
+    let rec finish t h = match t with
+    | GR.Last l -> GR.zip (GR.End (h, l))
+    | GR.Tail (m, t) when GR.is_executable m && is_nop (GR.mid_instr m) ->
+        (changed := true; finish t h)
+    | GR.Tail (m, t) -> finish t (GR.Head (h, m)) in
+    finish t (GR.First f) in
+  let g = G.of_blocks (Unique.Map.map block (G.to_blocks g)) in
+  (g, proc), !changed
 @ 
 <<optimize.ml>>=
 let badrtl r =
-  Printf.eprintf "non-target RTL: %s\n" (RU.ToString.rtl r);
-  Printf.eprintf "x86 rec says %s\n" (X86rec.M.to_asm r)
+  Printf.eprintf "non-target RTL: %s\n" (RU.ToString.rtl r)
+    (* if you want to do the following, extend Target.t with a to_asm function *)
+    (*  Printf.eprintf "x86 rec says %s\n" (X86rec.M.to_asm r) *)
   
-let validate _ proc =
-  let ok n = match G.to_executable n with
-  | Some r -> if proc.P.target.Target.is_instruction r then () else badrtl r
-  | None -> () in
-  G.iter_nodes ok proc.P.cfg;
-  false
+let validate _ (g, proc) =
+  let check r = if not (proc.P.target.Target.is_instruction r) then badrtl r else () in
+  let first _ = () in
+  let middle m = if GR.is_executable m then check (GR.mid_instr m) in
+  let last l = check (GR.last_instr l) in
+  G.iter_nodes first middle last g;
+  (g, proc), false

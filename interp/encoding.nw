@@ -234,7 +234,8 @@ F(branchtf) \
 F(call) \
 F(cmm_tail_call) \
 F(cmm_return) \
-F(cut)
+F(cut) \
+F(forbidden)
 @
 
 Now we write macros that may be used with [[ITERATE_CMM_FUNCS]]: one to
@@ -270,7 +271,6 @@ one file that may be loaded all at once.
 Note that this function need not be called from Lua for the first assembly
 unit in a source file; our default behavior includes creating a new assembly
 unit when we load in a new file anyway.
-
 <<bytecode generation>>=
 int lua_CMM_new_assembly_unit(lua_State *L) {
   enter_new_assembly_unit(L);
@@ -339,7 +339,6 @@ int lua_CMM_section(lua_State *L) {
 
     lua_pop(L, 1);       /* pop off table */
 @
-
 [[lua_CMM_section]] considers the ending of a {\PAL} section to be equivalent
 to the entering of the default, toplevel section.
 As such, [[lua_CMM_end_section]] simply calls [[lua_CMM_section]] with no
@@ -347,7 +346,6 @@ arguments on the stack (which [[lua_CMM_section]] treats as an attempt to
 enter the default section).
 Note that [[lua_CMM_end_section]] must empty the Lua stack in order to do this;
 be careful.
-
 <<bytecode generation>>=
 int lua_CMM_end_section(lua_State *L) {
   /* remove anything on the stack */
@@ -1298,12 +1296,10 @@ simple as making calls to [[get_label]] and storing the returned
   }
   lua_pop(L, 2); /* pop new table, pop argument table */
 @
-
 [[lua_CMM_cmm_return]] checks for two numbers atop the Lua stack, calls the
 [[return_]] encoding function with the [[unsigned]] casts of these two numbers,
 pops the numbers from the Lua stack, and returns 0 signifying that it returns
 no values to Lua.
-
 <<bytecode generation>>=
 int lua_CMM_cmm_return (lua_State *L) {
   unsigned index, count;
@@ -1331,6 +1327,7 @@ And now we get to the wrappers that are macro-generated:
 LUA_WRAP_NULLARY(goto_        , goto          )
 LUA_WRAP_NULLARY(cmm_tail_call, cmm_tail_call )
 LUA_WRAP_NULLARY(cut          , cut           )
+LUA_WRAP_NULLARY(forbidden    , forbidden     )
 LUA_WRAP_NULLARY(end_proc     , end_procedure )
 LUA_WRAP_NULLARY(fetch_round  , fetch_rounding)
 LUA_WRAP_NULLARY(store_round  , store_rounding)

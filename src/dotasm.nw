@@ -13,11 +13,9 @@
 This module implements an assembler that emits every procedure as a
 graph in \textsc{dot} format. The assember constructor receives the
 output channel for the assembler.
-
 <<dotasm.mli>>=
 val asm : compress:bool -> live:bool -> out_channel -> Ast2ir.proc Asm.assembler
 @                      
-
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
@@ -97,11 +95,11 @@ object (this)
       Impossible.unimp "longjmp size not set for dot -- needed for alternate returns"
 
     (* instructions *)
-    method cfg_instr (proc:'proc) =
-        let cfg = proc.Proc.cfg 
-        and s   = proc.Proc.symbol in
-        let mangle  = Mangle.mk spec in
-        output_string fd (cfg2dot ~name:(mangle s#mangled_text) cfg)
+    method cfg_instr (proc : 'proc) =
+      let (cfg, proc) = proc in
+      let s   = proc.Proc.symbol in
+      let mangle  = Mangle.mk spec in
+      output_string fd (cfg2dot ~name:(mangle s#mangled_text) cfg)
 
     method zeroes n = ()
     method value v = ()

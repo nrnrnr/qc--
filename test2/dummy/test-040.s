@@ -39,54 +39,35 @@ section "text"
     {
         $r31 = ($r31+-24);
         $t1 = $r30;
-        .Linitialize continuations:l17:
-        .Lproc body start:l16:
+        .Linitialize continuations:l18:
+        .Lproc body start:l17:
         $r0 = sym@player;
         $c0, $r30 = sym@getMove, ($c0+4);
-        .Ljoin:l34:
-        $r31 = $r31;
-        // the preceding node is merely asserted
+        .Lcall successor:l35:
         t = $r0;
         $r0 = t;
         $c0, $r30 = sym@makeMove, ($c0+4);
-        .Ljoin:l29:
-        $r31 = $r31;
-        // the preceding node is merely asserted
+        .Lcall successor:l30:
         t = bits32[sym@players];
         next = %modu[32]((next+1), t);
         $c0 = sym@finish;
-        C--:R27:
-        $r31 = $r31;
-        // the preceding node is merely asserted
-        $c0 = sym@.Ljoin@l36;
-        C--:R28:
-        $r31 = $r31;
-        // the preceding node is merely asserted
-        $c0 = sym@.Ljoin@l35;
-        C--:R32:
-        $r31 = $r31;
-        // the preceding node is merely asserted
-        $c0 = sym@.Ljoin@l36;
-        .Ljoin:l36:
+        .Lreturn_entry:l28:
+        $c0 = sym@.Lstart@of@continuation@code@l7;
+        .Lreturn_entry:l29:
+        $c0 = sym@.Lstart@of@continuation@code@l13;
+        .Lreturn_entry:l33:
+        .Lstart of continuation code:l7:
         t = bits32[bits32[(sym@player+12)]];
         $r0 = s;
         $c0, $r30 = t, ($c0+4);
-        .Ljoin:l23:
-        $r31 = $r31;
-        // the preceding node is merely asserted
+        .Lcall successor:l24:
         $c0 = sym@finish;
-        C--:R33:
-        $r31 = $r31;
-        // the preceding node is merely asserted
-        $c0 = sym@.Ljoin@l35;
-        .Ljoin:l35:
+        .Lreturn_entry:l34:
+        .Lstart of continuation code:l13:
         t = bits32[bits32[(sym@player+12)]];
         $r0 = sym@lit1;
         $c0, $r30 = t, ($c0+4);
-        .Ljoin:l20:
-        $r31 = $r31;
-        // the preceding node is merely asserted
-        $c0 = sym@finish;
+        .Lcall successor:l21:
         finish:
         movesTried = (movesTried-1);
         $r31 = ($r31+24);

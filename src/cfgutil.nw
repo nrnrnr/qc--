@@ -17,17 +17,19 @@ functionality from nice-to-have functionality this module provides
 additional functions on {\cfg}s whose implementation do not require
 knowledge of the internal details of \module{cfg3}.
 <<cfgutil.mli>>=
-val cfg2dot:    compress:bool -> live:bool -> name:string -> Rtl.rtl Cfgx.M.t -> string
-val cfg2ast: ('i -> Ast.stmt) -> 'i Cfgx.M.t -> name:string -> Ast.proc
-val emit  :   'i Cfgx.M.t -> ('i Cfgx.M.node -> unit) -> ('i -> unit) ->
-              (string -> unit) -> unit
-val delete :  'i Cfgx.M.t -> 'i Cfgx.M.node -> unit
-  (* unsplice and delete a node *)
-val print_cfg: Rtl.rtl Cfgx.M.t -> unit
-val find_join_node: 'i Cfgx.M.t -> string -> 'i Cfgx.M.node
+val cfg2dot : compress:bool -> live:bool -> name:string -> Zipcfg.graph -> string
+val cfg2ast : (Rtl.rtl -> Ast.stmt) -> Zipcfg.graph -> name:string -> Ast.proc
+val emit    : ('a, 'b, 'c, 'd) Proc.t -> Zipcfg.graph ->
+                (Zipcfg.Rep.call -> unit) -> (Rtl.rtl -> unit) ->
+                (string -> unit) -> unit
+val block_name : Zipcfg.graph -> Zipcfg.uid -> string
+val print_cfg: Zipcfg.graph -> unit
+
+type node = F of Zipcfg.Rep.first | M of Zipcfg.Rep.middle | L of Zipcfg.Rep.last
+val numbered_layout_nodes : Zipcfg.graph -> (int * node) list
+(* val delete : Zipcfg.zgraph -> Zipcfg.graph --- delete focus *)
 @
 WHAT DO [[cfg2ast]] AND [[emit]] DO? PLEASE EXPLAIN THE PARAMETERS. --CL
-
 \begin{itemize}
 \item [[limit]], [[first]]: node numbers for {\cfg} traversing functions 
       in \module{cfg3}.
@@ -55,67 +57,135 @@ WHAT DO [[cfg2ast]] AND [[emit]] DO? PLEASE EXPLAIN THE PARAMETERS. --CL
 % ------------------------------------------------------------------ 
 
 <<cfgutil.ml>>=
-module A = Ast 
-module G = Cfgx.M 
-module L = Cfgx.Live 
+module A  = Ast 
+module G  = Zipcfg
+module GR = Zipcfg.Rep
+module OG = Cfgx.M 
+module UM = Unique.Map 
+@
+<<cfgutil.ml>>=
+let block_name g uid =
+   match UM.find uid (G.to_blocks g) with
+   | GR.Entry, _ -> "<entry>"
+   | GR.Label ((_, l), _, _), _ -> l
+@
+<<cfgutil.ml>>=
+let print_block g (first, tail as block) =
+  let pr = Printf.eprintf in
+  begin
+    match first with
+    | GR.Entry -> pr "<entry>\n"
+    | GR.Label ((u, l), _, _) -> pr "%s:\n" l
+  end;
+  let lasttype = function
+    | GR.Exit        -> "exit"
+    | GR.Branch    _ -> "branch"
+    | GR.Cbranch   _ -> "cbranch"
+    | GR.Mbranch   _ -> "mbranch"
+    | GR.Call      _ -> "call"
+    | GR.Cut       _ -> "cut"
+    | GR.Return    _ -> "return"
+    | GR.Jump      _ -> "jump"
+    | GR.Forbidden  _ -> "forbidden" in
+  let pr_mid m = match m with
+    | GR.Instruction  r
+    | GR.Stack_adjust r -> pr "%s\n" (Rtlutil.ToString.rtl r) in
+  let succ_names l = String.concat " " (List.map (block_name g) (GR.succs l)) in
+  let pr_last l =
+    pr "<%s> %s [%s]\n" (lasttype l) (Rtlutil.ToString.rtl (GR.last_instr l))
+                        (succ_names l) in
+  let rec pr_tail = function
+    | GR.Tail (m, tail) ->
+        pr_mid m; pr_tail tail
+    | GR.Last GR.Exit -> pr "<exit>\n"
+    | GR.Last l -> pr_last l in
+  pr_tail tail
 
-let emit cfg call_emit rtl_emit sym_emit =
-  let labels n = if G.kind n =*= G.Join then G.labels n else [] in
-  let visit node =
-    if G.kind node =*= G.Call then call_emit node
-    else (List.iter sym_emit (labels node)
-         ; match G.to_executable node with
-           | None   -> ()
-           | Some i -> rtl_emit i
-         ) in
-  G.fold_layout (fun n () -> visit n) () cfg
-        
+let print_cfg g =
+  let blocks = G.postorder_dfs g in
+  let () = Printf.eprintf "\nBEGIN CFG\n" in
+  let () = List.iter (print_block g) blocks in
+  let () = Printf.eprintf "END CFG\n" in
+  flush stderr
+@
+<<cfgutil.ml>>=
+let matches next = match next with
+| None -> (fun _ -> false)
+| Some (u, l) -> (fun (u', l') -> Unique.eq u u')
+
+let emit proc cfg call_emit rtl_emit sym_emit =
+  let block b next () =
+    let first f () = match f with
+    | GR.Entry -> ()
+    | GR.Label ((_, l), _, _) -> sym_emit l in
+    let middle m () =
+      if GR.is_executable m then
+        rtl_emit (GR.mid_instr m) in
+    let last l () = match l with
+    | GR.Branch (_, tgt) when matches next tgt -> ()
+    | GR.Cbranch (_, _, ftgt) when not (matches next ftgt) ->
+        (rtl_emit (GR.last_instr l); rtl_emit (proc.Proc.machine.G.goto ftgt))
+    | GR.Call c -> call_emit c
+    | _ -> rtl_emit (GR.last_instr l) in
+    GR.fold_fwd_block first middle last b () in
+  G.fold_layout block () cfg
 
 <<cfgutil.ml>>=
 let extend_with preds nodes =
   let rec add_predecessors visited candidates = match candidates with
   | [] -> visited
   | node :: candidates ->
-      if List.exists (G.eq node) visited then
+      if List.exists (OG.eq node) visited then
         add_predecessors visited candidates
       else
         add_predecessors (node :: visited) (preds node @ candidates) in
   add_predecessors nodes (List.flatten (List.map preds nodes))
 
+type node = F of GR.first | M of GR.middle | L of GR.last
+
+let numbered_layout_nodes g =
+  let add_block (f, t) next (i, nodes') =
+    let (i, nodes') = (i+1, (i, F f) :: nodes') in
+    let rec tail t (i, nodes') = match t with
+    | GR.Tail (m, t) -> tail t (i+1, (i, M m) :: nodes')
+    | GR.Last (GR.Branch (_, lbl)) when next =*= Some lbl -> (i, nodes') 
+    | GR.Last l      -> (i+1, (i, L l) :: nodes') in
+    tail t (i, nodes') in
+  let _, nodes' = G.fold_layout add_block (0, []) g in
+  List.rev nodes'
+
+let id_matches u = function
+  | F GR.Entry -> Unique.eq u GR.entry_uid
+  | F (GR.Label ((u', _), _, _)) -> Unique.eq u u'
+  | L _ | M _ -> false
+
 let cfg2dot ~compress ~live ~name g =
-  let () = if live then L.set_live g in
-  let original_nodes = G.fold_layout (fun x y -> x :: y) [] g in
-  let nodes = extend_with G.preds original_nodes in
-  let nodes = extend_with G.succs nodes in
-  let nnodes = Aux.foldri (fun i n ns -> (i, n) :: ns) nodes [] in
-  let number node = fst (List.find (fun (i, n) -> G.eq node n) nnodes) in
-  let nodename node = Printf.sprintf "\"N%d\"" (number node) in
-  let number_and_rtl node =
-    (if List.exists (G.eq node) original_nodes then "" else "*") ^
-    let tag = "N" ^ string_of_int (number node) in
-    match G.to_instr node with
-    | Some rtl -> tag ^ ": " ^ String.escaped (Rtlutil.ToString.rtl rtl)
-    | None ->
-        match G.kind node with
-        | G.Join -> List.fold_right (fun l t -> l ^ ": " ^ t) (G.labels node) tag
-        | G.Entry -> "Entry"
-        | G.Exit  -> "Exit"
-        | G.Illegal -> "<illegal>"
-        | G.Impossible -> "<impossible>"
-        | _ -> tag ^ "???" in
-  let dotnode  node = nodename node ^ " [label=\"" ^ number_and_rtl node ^ "\"]" in
+  let () = if live then assert false in
+  let nodes = numbered_layout_nodes g in
+  let number u = fst (List.find (fun (i, n) -> id_matches u n) nodes) in
+  let spr = Printf.sprintf in
+  let number_and_rtl (n, node) =
+    let instr rtl = spr "N%d: %s" n (Rtlutil.ToString.rtl rtl) in
+    match node with
+    | F GR.Entry -> "Entry"
+    | F (GR.Label ((_, l), _, _)) -> spr "N%d: %s" n l
+    | M m -> instr (GR.mid_instr m)
+    | L GR.Exit -> "Exit" 
+    | L l -> instr (GR.last_instr l) in
+  let dotnode node = spr "N%d [label=%S]" (fst node) (number_and_rtl node) in
   let edge_fwd from to' =
-    let edge = nodename from ^ " -> " ^ nodename to' in
+    let edge = spr "N%d -> N%d" from to' in
     if live then
-      edge ^ "[label=\"" ^ Register.SetX.to_string (L.live_in to') ^ "\"]\n"
+      (* edge ^ "[label=\"" ^ Register.SetX.to_string (L.live_in to') ^ "\"]\n" *)
+      assert false
     else
       edge ^ "\n" in
-  let edge_bwd from to' = nodename to'  ^ " -> " ^ nodename from ^
-                         "[dir=back,style=dotted]\n" in
-  let edges_leaving node tail =
-    let add_edge dir edges n = dir node n :: edges in
-    let tail = List.fold_left (add_edge edge_fwd) tail (G.succs node) in
-    let tail = List.fold_left (add_edge edge_bwd) tail (G.preds node) in
+  let edge_bwd from to' = spr "N%d -> N%d [dir=back,style=dotted]\n" to' from in
+  let edges_leaving node tail = match snd node with
+  | F _ | M _ -> edge_fwd (fst node) (fst node + 1) :: tail
+  | L last ->
+    let add_edge dir edges u = dir (fst node) (number u) :: edges in
+    let tail = List.fold_left (add_edge edge_fwd) tail (GR.succs last) in
     tail in
   let oldv = Rtlutil.ToAST.verbosity Rtlutil.ToAST.Low in
   let openg  = "digraph " ^ name ^ " {\n" in
@@ -127,54 +197,34 @@ let cfg2dot ~compress ~live ~name g =
   let _ = Rtlutil.ToAST.verbosity oldv in
   String.concat "" (openg :: pagesize :: compress :: body)
 @
-THE FOLLOWING CODE IS BOGUS --- IT ACTUALLY NEEDS TO VISIT THE NODES
-IN LAYOUT ORDER.
 <<cfgutil.ml>>=
 let cfg2ast instr g ~name =
-  let node n tail = match G.to_instr n with
-  | Some i ->
-      let is = instr i :: tail in
-      if G.kind n =*= G.Assertion then
-        A.CommentStmt "the preceding node is merely asserted" :: is
-      else
-        is 
-  | None ->
-      match G.kind n with
-      | G.Join -> List.fold_right (fun l t -> A.LabelStmt l :: t) (G.labels n) tail
-      | G.Entry | G.Exit | G.Impossible -> tail
-      | G.Illegal -> A.CommentStmt "dangling pointer in flow graph" :: tail
-      | _ -> A.CommentStmt("unknown kind of node") :: tail
-  in
+  let block b next prev' =
+    let mid n prev' = instr (GR.mid_instr n) :: prev' in
+    let first n prev' = match n with
+    | GR.Label (l,_,_) -> A.LabelStmt (snd l) :: prev'
+    | GR.Entry -> prev' in
+    let last n prev' = match n with
+    | GR.Exit -> A.CommentStmt "exit node!" :: prev'
+    | GR.Branch (_, lbl) when matches next lbl -> prev'
+    | GR.Forbidden _ -> A.CommentStmt "forbidden to reach this point" :: prev'
+    | _ -> instr (GR.last_instr n) :: prev' in
+    let rec tail t prev' = match t with
+    | GR.Last l -> last l prev'
+    | GR.Tail (m, t) -> tail t (mid m prev') in
+    let (f, t) = b in
+    tail t (first f prev') in
   let oldv = Rtlutil.ToAST.verbosity Rtlutil.ToAST.Low in
-  let graph = G.fold_layout node [] g in
+  let stmts' = G.fold_layout block [] g in
   let _ = Rtlutil.ToAST.verbosity oldv in
     ( None
     , name
     , []
-    , List.map (fun s -> Ast.StmtBody s) (List.rev graph)
+    , List.rev_map (fun s -> Ast.StmtBody s) stmts'
     , Srcmap.null
     )
 @ 
-<<cfgutil.ml>>=
+<<old cfgutil.ml>>=
 let delete g n =
-  let pred = G.pred n in
-  let succ = G.succ n in
-  G.set_succ g n ~succ:(G.illegal g);
-  G.set_succ g pred ~succ;
-  G.delete g n
-@
-<<cfgutil.ml>>=
-let print_cfg cfg =
-  let () = Printf.eprintf "\nBEGIN CFG\n" in
-  let () = G.iter_nodes (fun n -> Printf.eprintf "%s\n" (G.print_node n)) cfg in
-  let () = Printf.eprintf "END CFG\n" in
-  flush stderr
-@
-<<cfgutil.ml>>=
-let rec find_join_node cfg lbl =
-  let f node res =
-    if G.is_join node && List.mem lbl (G.labels node)
-    then node else res
-  in
-  G.fold_heads f (G.illegal cfg) cfg
+  <<replace focus with empty subgraph>>
 @

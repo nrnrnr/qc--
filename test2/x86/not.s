@@ -19,11 +19,12 @@ ge:
 	movl (%ecx),%ecx
 	leal 20(%esp), %edx
 	movl (%edx),%edx
-.Linitialize_continuations_l5:
-.Lproc_body_start_l4:
+.Linitialize_continuations_l4:
+.Lproc_body_start_l3:
+.Lbranch_target_l13:
 	cmpl %ecx,%eax
-	jl .Ljoin_l9
-.Ljoin_l8:
+	jl .Lbranch_target_l7
+.Lbranch_target_l9:
 	movl $1,%eax
 	leal 20(%esp), %ecx
 	movl %ecx,12(%esp)
@@ -37,7 +38,7 @@ ge:
 	movl %edx,(%ecx)
 	leal 24(%esp), %esp
 	ret
-.Ljoin_l9:
+.Lbranch_target_l7:
 	movl $0,%eax
 	leal 20(%esp), %ecx
 	movl %ecx,(%esp)
@@ -79,7 +80,7 @@ main:
 	movl 24(%esp),%ecx
 	movl %ecx,(%edx)
 	call ge
-.Ljoin_l32:
+.Lcall_successor_l32:
 	leal -4(%esp), %esp
 	movl $33,%ecx
 	movl %eax,28(%esp)
@@ -92,7 +93,7 @@ main:
 	movl 32(%esp),%ecx
 	movl %ecx,(%edx)
 	call ge
-.Ljoin_l29:
+.Lcall_successor_l29:
 	leal -4(%esp), %esp
 	movl $987,%ecx
 	movl %eax,36(%esp)
@@ -105,7 +106,7 @@ main:
 	movl 40(%esp),%ecx
 	movl %ecx,(%edx)
 	call ge
-.Ljoin_l26:
+.Lcall_successor_l26:
 	leal answer,%ecx
 	leal 44(%esp), %edx
 	movl %eax,40(%esp)
@@ -128,7 +129,7 @@ main:
 	movl 40(%esp),%ecx
 	movl %ecx,(%eax)
 	call printf
-.Ljoin_l23:
+.Lcall_successor_l23:
 	movl $0,%eax
 	leal 44(%esp), %ecx
 	movl $0,%edx
@@ -141,7 +142,7 @@ main:
 .Lstackdata_l38:
 .long 0
 .section .pcmap
-.long .Ljoin_l32
+.long .Lcall_successor_l32
 .long .Lframe_l39
 .section .pcmap_data
 .Lframe_l39:
@@ -160,7 +161,7 @@ main:
 .long 0
 .long 0
 .section .pcmap
-.long .Ljoin_l29
+.long .Lcall_successor_l29
 .long .Lframe_l40
 .section .pcmap_data
 .Lframe_l40:
@@ -179,7 +180,7 @@ main:
 .long 0
 .long 0
 .section .pcmap
-.long .Ljoin_l26
+.long .Lcall_successor_l26
 .long .Lframe_l41
 .section .pcmap_data
 .Lframe_l41:
@@ -198,7 +199,7 @@ main:
 .long 0
 .long 0
 .section .pcmap
-.long .Ljoin_l23
+.long .Lcall_successor_l23
 .long .Lframe_l42
 .section .pcmap_data
 .Lframe_l42:

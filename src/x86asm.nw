@@ -19,11 +19,10 @@ It implements the
 
 The assembler constructor receives the output channel for the assembler. 
 <<x86asm.mli>>=
-type node = Rtl.rtl Cfgx.M.node
 val make : 
-  ('cfg -> (node -> unit) -> (Rtl.rtl -> unit) -> (string -> unit) -> unit) ->
-  out_channel -> ('a, 'cfg, 'b, 'c) Proc.t Asm.assembler
-  (* pass Cfgutil.emit or Cfgutil.emit *)
+  (('a, 'b, 'c, 'd) Proc.t -> 'cfg -> (Zipcfg.Rep.call -> unit) -> (Rtl.rtl -> unit) -> (string -> unit) -> unit) ->
+  out_channel -> ('cfg * ('a, 'b, 'c, 'd) Proc.t) Asm.assembler
+  (* pass Cfgutil.emit *)
 @
 
 % ------------------------------------------------------------------ 
@@ -34,11 +33,12 @@ The implementation provides no surprises. It builds up an {\AST} and
 emits it to [[stdout]] when the [[emit]] method is called.
 
 <<x86asm.ml>>=
-module G = Cfgx.M
+module G  = Zipcfg
+module GR = Zipcfg.Rep
 module SM = Strutil.Map
+module T  = Target
 <<utilities>>
 <<definitions>>
-type node = Rtl.rtl Cfgx.M.node
 let make emitter fd = new asm emitter fd
 @
 <<utilities>>=
@@ -99,7 +99,8 @@ provides a private method for this.
 <<definitions>>=
 <<definition of [[manglespec]] (for the name mangler)>>
 
-class ['a, 'b, 'c, 'd] asm emitter fd : [('a, 'b, 'c, 'd) Proc.t] Asm.assembler = 
+class ['cfg, 'a, 'b, 'c, 'd] asm emitter fd
+  : ['cfg * ('a, 'b, 'c, 'd) Proc.t] Asm.assembler = 
 object (this)
     val         _fd       = fd
     val         _mangle  = (Mangle.mk spec)   
@@ -242,31 +243,27 @@ For a call node, we first emit the call.
 Then, we emit jumps to any alternate returns.
 <<assembly methods>>=
 method private call node =
-  let longjmp node =
-    fprintf _fd "\t.byte 0xe9\n\t.long %s-.-%d\n" (_mangle (G.label node)) call_size in
-  let output_altret_jmps n =
-    let rec loop i =
-      if i > n then ()
-      else (longjmp (G.join_leading_to (G.succ_n node i)); loop (i+1)) in
-    loop 1 in
-  match G.to_executable node with
-  | None     -> ()
-  | Some rtl ->
-     ( output_string _fd "\t"
-     ; output_string _fd (X86rec.M.to_asm rtl)
-     ; output_string _fd "\n"
-     ; output_altret_jmps (G.altrets node)
-     )
-      
+  let longjmp edge = fprintf _fd "\t.byte 0xe9\n\t.long %s-.-%d\n"
+                                    (_mangle (snd edge.G.node)) call_size in
+  let rec output_altret_jumps n edges = (* emit n jumps *)
+    if n > 0 then
+      match edges with
+      | edge :: edges -> (longjmp edge; output_altret_jumps (n-1) edges) 
+      | [] -> Impossible.impossible "contedge count" in
+  begin
+    output_string _fd "\t";
+    output_string _fd (X86rec.M.to_asm node.GR.cal_i);
+    output_string _fd "\n";
+    output_altret_jumps node.GR.cal_altrets (List.tl node.GR.cal_contedges);
+  end
 
-method cfg_instr proc  = 
+method cfg_instr (cfg,proc)  = 
     (* We have to emit a label/whatever for the procedure's 
        entry point. This is what symbol is for. Simply use this#label?  *)
-    let cfg    = proc.Proc.cfg
-    and symbol = proc.Proc.symbol in
+    let symbol = proc.Proc.symbol in
     let label l = this#label (try SM.find l _syms with Not_found -> this#local l) in
     this#label symbol;
-    (emitter cfg (this#call) (this#instruction) label : unit)
+    (emitter proc cfg (this#call) (this#instruction) label : unit)
 
 <<unused utilities>>=
 module Asm = X86rec.M

@@ -1,0 +1,360 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Support for backward dataflow problems}
+
+
+A dataflow pass is based on a single dataflow fact of type~[['a]].
+Values of type~[['a]] should form a lattice.
+The dataflow engine uses the lattice structure to compute a least
+solution to a set of dataflow equations.
+The engine works by starting at the bottom and iterating to a fixed
+point, so we require the
+bottom element, a join (least upper bound) operation, and a comparison
+to find out if a value has changed (grown).
+<<exported types>>=
+type 'a fact = {
+  fact_name : string;                     (* documentation *)
+  init_info : 'a;                         (* lattice bottom element *)
+  add_info  : 'a -> 'a -> 'a;             (* lattice join (least upper bound) *)
+  changed   : old:'a -> new':'a -> bool;  (* is new one bigger? *)
+  prop      : 'a Unique.Prop.t;           (* access to mutable state by uid *)
+}
+@ Finally, we require a way to store dataflow facts in global mutable
+state, associated with unique IDs.  This capability is provided by the
+[[prop]] field.
+@
+The computation of a fact is the basis of a dataflow pass.
+A~computation takes not one but two type parameters:
+\begin{itemize}
+\item
+Type parameter [['i]] is an input, from which it should be possible to
+derived a dataflow fact of interest.
+For example, [['i]] might be equal to a fact, or it might be a tuple
+of which one element is a fact.
+\item
+Type parameter [['o]] is an output.
+\end{itemize}
+<<exported types>>=
+type 'a answer = Dataflow of 'a | Rewrite of Zipcfg.graph
+
+type ('i, 'o) computation =
+ { name      : string;
+   last_in   : Zipcfg.Rep.last -> 'o;
+   middle_in : 'i -> Zipcfg.Rep.middle -> 'o;
+   first_in  : 'i -> Zipcfg.Rep.first -> 'o;
+ } 
+@ 
+From these elements we build several kinds of passes:
+\begin{itemize}
+\item
+A pure analysis computes a fact, using that fact as input and
+output.
+\item
+A~pure transformation computes no facts but only changes the graph.
+\item
+A fully general pass both computes a fact and rewrites the graph.
+\end{itemize}
+<<exported types>>=
+type 'a analysis       = 'a fact * ('a, 'a)                  computation
+type 'a transformation =           ('a, Zipcfg.graph option) computation
+type 'a pass           = 'a fact * ('a, 'a answer)           computation
+@ Still to come: composition operators.
+@
+WE NEED TO TRACK THINGS TO DISCOVER WHETHER THE GRAPH HAS CHANGED AS A
+RESULT OF RUNNING A PASS.
+@
+<<dataflowp.mli>>=
+<<exported types>>
+<<declarations of exported values>>
+@ 
+\paragraph{Analyses (the dataflow engine)}
+The analysis function sets properties on unique IDs.
+<<declarations of exported values>>=
+val backward_anal : 'a analysis -> Zipcfg.graph -> unit
+@ The rewrite pass sets properties and also rewrites the graph.
+The Boolean result tells if the graph changed.
+<<declarations of exported values>>=
+val backward_rewrite : 'a pass -> Zipcfg.graph -> Zipcfg.graph * bool
+@ 
+\paragraph{Composition operators}
+Here we will make new passes from old ones.
+
+We can make an analysis pass, or we can 
+ combine a related analysis and transformation into a full pass.
+<<declarations of exported values>>=
+val anal : 'a analysis -> 'a pass
+val a_t  : 'a analysis -> 'a transformation -> 'a pass
+@ 
+Diagnostic help:
+<<declarations of exported values>>=
+val debug : ('a -> string) -> 'a pass -> 'a pass
+@
+\section{Implementation}
+
+<<dataflowp.ml>>=
+module G  = Zipcfg
+module GR = Zipcfg.Rep
+module P  = Unique.Prop
+module UA = Unique.Array
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
+let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
+
+<<exported types>>
+<<utilities>>
+<<definitions of exported functions>>
+@ 
+In a backward problem, we compute \emph{in} facts from \emph{out}
+facts.
+The analysis gives us [[last_in]], [[middle_in]], and [[first_in]],
+each of which computes an \emph{in} fact for one kind of node.
+We provide [[head_in]], which computes the \emph{in} fact for a first
+node followed by zero or more middle nodes.
+
+We don't compute and return the \emph{in} fact for block; instead, we
+use [[P.set]] to attach that fact to the block's unique~ID.
+We iterate until no more facts have changed.
+<<definitions of exported functions>>=
+let backward_anal (fact, comp) graph =
+  let changed = ref false in
+  let set_block_fact b =
+    let h, l = GR.goto_end (GR.unzip b) in
+    let block_in = (* 'in' fact for the block *)
+      let rec head_in h out = match h with
+        | GR.Head (h, m) -> head_in h (comp.middle_in out m)
+        | GR.First f -> comp.first_in out f in
+      head_in h (comp.last_in l) in
+    (* compare [[block_in]] with old fact and possibly update *)
+    let u = GR.id b in
+    let old_block_in = P.get fact.prop u in
+    if fact.changed ~old:old_block_in ~new':block_in then
+      begin
+        let show_block (f, t) = match f with
+        | GR.Entry -> "<entry>"
+        | GR.Label ((_, l), _, _) -> l in
+        Debug.eprintf "dataflow" "Dataflow fact '%s' changed at block %s\n"
+          fact.fact_name (show_block b);
+        P.set fact.prop u block_in;
+        match (fst b) with
+        | GR.Entry -> () (* does not count as a change for fixed-point purposes *)
+        | GR.Label _ -> changed := true
+      end in
+  (* get blocks, initialize, and iterate to fixed point *)
+  let blocks = List.rev (G.postorder_dfs graph) in
+  let init () = List.iter (fun b -> P.set fact.prop (GR.id b) fact.init_info) blocks in
+  let rec iterate n =
+    let () = changed := false in
+    let () = List.iter set_block_fact blocks in
+    if !changed then
+      if n < 1000 then iterate (n + 1)
+      else impossf "%s didn't converge in %n backward iterations" comp.name n
+    else
+      Debug.eprintf comp.name "%s converged in %d backward iterations\n" comp.name n in
+  init();
+  iterate 1
+@ 
+In the general case we solve a graph in the context of a larger subgraph.
+To do this, we need a locally modified computation that allows an
+``exit fact'' to flow into the exit node.
+<<utilities>>=
+let comp_with_exit comp exit_fact =
+  let last_in l = match l with
+  | GR.Exit -> Dataflow exit_fact
+  | _ -> comp.last_in l in
+  { comp with last_in = last_in } 
+@ 
+Given this function, we can now solve a graph simply by doing a
+backward analysis on the modified computation.
+The tricky work is in the [[answer[lmf]]] functions.
+(HOW DO WE PROVE THAT IT IS SAFE TO USE THE SHARED MUTABLE STATE
+ASSOCIATED WITH THE ENTRY NODE?)
+<<definitions of exported functions>>=
+let rec solve_graph fact comp graph exit_fact =
+  general_backward fact (comp_with_exit comp exit_fact) graph;
+  P.get fact.prop GR.entry_uid 
+and general_backward fact comp graph =
+  let changed = ref false in
+  let set_block_fact b =
+    let block_in = 
+      let rec head_in h out = match h with
+        | GR.Head (h, m) ->
+            (Debug.eprintf "dataflow" "Solving middle node %s\n"
+               (Rtlutil.ToString.rtl (GR.mid_instr m));
+             match comp.middle_in out m with
+             | Dataflow a -> head_in h a
+             | Rewrite g -> head_in h (solve_graph fact comp g out))
+        | GR.First f -> 
+            match comp.first_in out f with
+            | Dataflow a -> a
+            | Rewrite g -> solve_graph fact comp g out in
+      let h, l = GR.goto_end (GR.unzip b) in
+      match comp.last_in l with
+      | Dataflow a -> head_in h a
+      | Rewrite g -> head_in h (solve_graph fact comp g fact.init_info) in
+    let u = GR.id b in
+    let old_block_in = P.get fact.prop u in
+    if fact.changed ~old:old_block_in ~new':block_in then
+      begin
+        let show_block b = match fst b with
+        | GR.Entry -> "<entry>"
+        | GR.Label ((_, l), _, _) -> l in
+        Debug.eprintf "dataflow" "Dataflow fact '%s' changed at block %s\n"
+          fact.fact_name (show_block b);
+        P.set fact.prop u block_in;
+        match (fst b) with
+        | GR.Entry -> () (* does not count as a change for fixed-point purposes *)
+        | GR.Label _ -> changed := true
+      end in
+  let blocks = List.rev (G.postorder_dfs graph) in
+  let init () = List.iter (fun b -> P.set fact.prop (GR.id b) fact.init_info) blocks in
+  let rec iterate n =
+    let () = changed := false in
+    let () = List.iter set_block_fact blocks in
+    if !changed then
+      if n < 1000 then iterate (n + 1)
+      else impossf "%s didn't converge in %n iterations" comp.name n
+    else
+      Debug.eprintf comp.name "%s converged in %d iterations\n" comp.name n in
+  init();
+  iterate 1
+@
+We solve and rewrite in two passes: the first pass iterates to a fixed
+point to reach a dataflow solution, and the second pass uses that
+solution to rewrite the graph.
+
+The
+key job is done by [[propagate]], which propagates a fact of type~[['a]]
+between a head and tail.
+The tail is in final form; the head is still to be rewritten.
+<<definitions of exported functions>>=
+let rec solve_and_rewrite fact comp graph exit_fact changed =
+  solve_graph fact comp graph exit_fact;                              (* pass 1 *)
+  backward_rewrite fact (comp_with_exit comp exit_fact) graph changed (* pass 2 *)
+and backward_rewrite (fact : 'a fact) comp graph changed =
+  let rec rewrite_blocks rewritten fresh changed : G.graph * bool = match fresh with
+  | [] -> G.of_block_list rewritten, changed
+  | b :: bs ->
+      let rec rewrite_next_block () =
+        let h, l = GR.goto_end (GR.unzip b) in
+        match comp.last_in l with
+        | Dataflow a -> propagate h a (GR.Last l) rewritten changed
+        | Rewrite g ->
+            let g, _ = solve_and_rewrite fact comp g fact.init_info changed in
+            let a = P.get fact.prop GR.entry_uid in
+            let h, t, rewritten = splice_in_backward h g (GR.Last l) rewritten in
+            (* continue at entry of g *)
+            propagate h a t rewritten true
+      and propagate :
+            GR.head -> 'a -> GR.tail -> GR.block list -> bool -> G.graph * bool =
+        fun h out tail rewritten changed -> match h with
+        | GR.Head (h, m) -> (
+            Debug.eprintf "dataflow" "Rewriting middle node %s\n"
+              (Rtlutil.ToString.rtl (GR.mid_instr m));
+            match comp.middle_in out m with
+            | Dataflow a -> propagate h a (GR.Tail (m, tail)) rewritten changed
+            | Rewrite g ->
+                Debug.eprintf "dataflow" "Rewriting middle node...\n";
+                let g, _ = solve_and_rewrite fact comp g out changed in
+                Debug.eprintf "dataflow" "Rewrite of middle node completed\n";
+                let a = P.get fact.prop GR.entry_uid in
+                let h, t, rewritten = splice_in_backward h g tail rewritten in
+                propagate h a t rewritten true)
+        | GR.First f ->
+            match comp.first_in out f with
+            | Dataflow a ->
+                let b = (f, tail) in
+                check_property_match fact a b;
+                rewrite_blocks (b :: rewritten) bs changed
+            | Rewrite g -> impossf "rewriting a label in backward dataflow" in
+      rewrite_next_block () in
+  rewrite_blocks [] (List.rev (G.postorder_dfs graph)) changed
+
+let backward_rewrite (fact, comp) g = solve_and_rewrite fact comp g fact.init_info false
+<<utilities>>=
+let eqfact fact a a' = (* poor man's approximation of equality *)
+  not (fact.changed a a' or fact.changed a' a)
+let check_property_match fact a block =
+  match (fst block) with
+  | GR.Entry -> () (* needn't match *)
+  | GR.Label _ -> 
+      let a' = P.get fact.prop (GR.id block) in
+      if not (eqfact fact a a') then
+        impossf "property changed after supposedly reaching fixed point" 
+@
+<<utilities>>=
+module UM = Unique.Map
+let rec revapp h t = match h with
+| GR.First f -> f, t
+| GR.Head (h, m) -> revapp h (GR.Tail (m, t))
+
+let must_be_empty g =
+  if not (UM.is_empty g) then
+    impossf "entry connects to exit, but there are more blocks"
+
+let add_blocks map list =
+  let add _ b bs = b :: bs in
+  UM.fold add map list
+
+let splice_in_backward head graph tail oldblocks =
+  let gexit, gblocks = G.openz (G.exit graph) in
+  let gh, gl = GR.goto_end gexit in
+  (match gl with GR.Exit -> () | _ -> impossf "exit is not exit?!");
+  let f, t = revapp gh tail in
+  match f with
+  | GR.Entry ->
+      must_be_empty gblocks;
+      head, t, oldblocks
+  | GR.Label _ ->
+      let gentry, gblocks = G.openz (G.entry (G.of_blocks gblocks)) in
+      match GR.zip gentry with
+      | GR.Entry, t -> head, t, ((f, t) :: add_blocks gblocks oldblocks)
+      | _ -> impossf "entry is not entry?!"
+@ 
+<<utilities>>=
+let ( << ) f g = fun x -> f (g x)
+<<definitions of exported functions>>=
+let debug s (f, comp) =
+  let pr = Printf.eprintf in
+  let module RS = Rtlutil.ToString in
+  let fact dir node a = pr "%s %s for %s = %s\n" f.fact_name dir node (s a) in
+  let rewr node g = pr "%s rewrites %s to <not-shown>\n" comp.name node in
+  let wrap f nodestring node =
+    let answer = f node in
+    let () = match answer with
+    | Dataflow a -> fact "in " (nodestring node) a
+    | Rewrite g  -> rewr (nodestring node) g in
+    answer in
+  let wrapout f nodestring out node =
+    fact "out" (nodestring node) out;
+    wrap (f out) nodestring node in
+  let last_in = wrap comp.last_in (RS.rtl << GR.last_instr) in
+  let middle_in = wrapout comp.middle_in (RS.rtl << GR.mid_instr) in
+  let first_in  =
+    let first = function GR.Entry -> "<entry>" | GR.Label ((u, l), _, _) -> l in
+    wrapout comp.first_in first in
+  f, { comp with last_in = last_in; middle_in = middle_in; first_in = first_in; }
+@ 
+<<definitions of exported functions>>=
+let anal (fact, comp) =
+  let wrap  f node = Dataflow (f node) in
+  let wrap2 f out node = Dataflow (f out node) in
+  fact,
+  { name = comp.name; last_in = wrap comp.last_in;
+    middle_in = wrap2 comp.middle_in; first_in = wrap2 comp.first_in; }
+<<definitions of exported functions>>=
+let a_t (fact, comp) tx =
+ let last_in l =
+   match tx.last_in l with
+   | Some g -> Rewrite g
+   | None   -> Dataflow (comp.last_in l) in
+ let middle_in out m =
+   match tx.middle_in out m with
+   | Some g -> Rewrite g
+   | None   -> Dataflow (comp.middle_in out m) in
+ let first_in out f =
+   match tx.first_in out f with
+   | Some g -> Rewrite g
+   | None   -> Dataflow (comp.first_in out f) in
+ fact, 
+ { name    = Printf.sprintf "%s and %s" comp.name tx.name;
+   last_in = last_in; middle_in = middle_in; first_in  = first_in;
+ }

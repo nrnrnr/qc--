@@ -37,41 +37,25 @@ edge flows to a use of~$x$ without crossing a definition or kill
 of~$x$.  
 Since our edges are simple pointers, 
 we put liveness information at the nodes, in the form of
-\emph{live-in} and \emph{live-out sets}.
+\emph{live-in sets}.
 The liveness of an edge is the live-in set of that edge's head.
-The live-out set is the union of the live sets on all the edges
-flowing out of a node.
 @
 
 % ------------------------------------------------------------------ 
 \subsection{Interface}
 % ------------------------------------------------------------------ 
 
-Function [[set_live]] computes liveness information and caches the
-results in node extensions.
-The functions [[live_in]] and [[live_out]] use the cached information.
-One day we hope to get clever about minimizing the amount of
-cached information while still making [[live_in]] and [[live_out]]
-cost constant time, but that day is not yet.
+Here's the new stuff; what's below is old stuff.
 <<live.mli>>=
-type info
-val mk : unit -> info
+type uid = Zipcfg.uid
+type liveset = Register.SetX.t
 
-module type Arg = sig
-  module G : Cfg.S
-  val jx : G.X.jx -> info 
-  val nx : G.X.nx -> info   
-  val fx : G.X.fx -> info   
-end
+val live_in        : liveset Dataflowp.analysis  (* live in to each block *)
+val live_in_last   : Zipcfg.Rep.last -> liveset
+val live_in_middle : liveset -> Zipcfg.Rep.middle -> liveset
+      (* map live out to live in *)
 
-module type S = sig
-  module G : Cfg.S
-  val set_live : Rtl.rtl G.cfg -> unit
-  (* following may be run only after [[set_live]] and without mutation *)
-  val live_out : Rtl.rtl G.node -> Register.SetX.t
-  val live_in  : Rtl.rtl G.node -> Register.SetX.t
-end
-module Make (A : Arg): S with module G = A.G
+val live_out_last  : Zipcfg.Rep.last -> liveset
 @
 
 % ------------------------------------------------------------------ 
@@ -96,44 +80,19 @@ between the assignments.
 But if we perform liveness at the slice level, then promote the slices to registers, we
 will see that %eax remains live between the assignments.
 <<live.ml>>=
+module D   = Dataflowp
+module G   = Zipcfg
+module GR  = Zipcfg.Rep
+module P   = Property
 module RSX = Register.SetX
 module R   = Rtl
 
-type info = { mutable cached_live_out : RSX.t }
-let mk () = { cached_live_out = RSX.empty }
+type uid = Zipcfg.uid
+type liveset = Register.SetX.t
 @ 
-Here are the structures promised in the interface.
 <<live.ml>>=
-module type Arg = sig
-  module G : Cfg.S
-  val jx : G.X.jx -> info 
-  val nx : G.X.nx -> info   
-  val fx : G.X.fx -> info   
-end
-
-module type S = sig
-  module G : Cfg.S
-  val set_live : Rtl.rtl G.cfg -> unit
-  (* following may be run only after [[set_live]] and without mutation *)
-  val live_out : Rtl.rtl G.node -> Register.SetX.t
-  val live_in  : Rtl.rtl G.node -> Register.SetX.t
-end
-
-module Make (A : Arg) = struct 
-  module G = A.G
-  let irwk = Rtlutil.ReadWriteKill.sets
-  <<liveness functions>>
-  (*<code using [[Dataflow]]>*)
-end
+let irwk = Rtlutil.ReadWriteKill.sets
 @ N.B. [[irwk]] stands for ``instruction read write kill.''
-@
-Here's how we get to the cached information for a node.
-<<liveness functions>>=
-let info node =
-  if      G.is_join node then A.jx (G.jx node)
-  else if G.is_fork node then A.fx (G.fx node)
-  else                        A.nx (G.nx node)
-
 @
 We use these
 set operations.
@@ -142,25 +101,28 @@ remove not only~$r$ but also any slices completely contained in~$r$.
 Furthermore, we expect it never to happen that there is a slice that
 overlaps with~$r$ but is not completely contained in it.
 But we don't check.
-<<liveness functions>>=
+<<live.ml>>=
 let diff live killed =
   let is_killed r = RSX.exists (fun r' -> Register.contains r' r) killed in
   RSX.filter (fun r -> not (is_killed r)) live 
 @ 
-%
 The [[--*]] operation expresses our expectation that a killed register should
 never be live. 
-<<liveness functions>>=
+<<live.ml>>=
 let ( ++  ) = RSX.union
 let ( --  ) = diff 
 let ( --* ) live killed =
   let is_killed r = RSX.exists (fun r' -> Register.contains r' r) killed in
   if RSX.exists is_killed live then
-    (*<complain of live variables in killed set>; live--killed *)
-    Impossible.impossible "live variable is in killed set"
+    (<<complain of live variables in killed set>>; live--killed)
+    (*Impossible.impossible "live variable is in killed set"*)
   else
     live 
 <<complain of live variables in killed set>>=
+Printf.eprintf "Live vars %s in killed set { %s }\n"
+  (RSX.to_string (RSX.filter (fun x -> RSX.mem x killed) live))
+  (RSX.to_string killed)
+<<old complain of live variables in killed set>>=
 let regstring (s, i, _) = Printf.sprintf "%c%d" s i in
 let bad = RSX.elements (RSX.filter (fun x -> RSX.mem x killed) live) in
 let msg = "Live vars in killed set: " ^ String.concat ", " (List.map regstring bad) in
@@ -181,111 +143,44 @@ $$\mathit{live}_{\mathit{in}} =
       \setminus \mathit{defined} \setminus \mathit{killed}
     ) \cup \mathit{used}.
 $$
-<<liveness functions>>=
-let rec live_out node = (info node).cached_live_out
-and new_live_out node =
-  G.union_over_outedges
-    node
-    (fun n' -> live_in n')
-    (fun {G.node = n'; G.defs = d; G.kills = k} ->
-       live_in n' -- Register.rset_to_rxset d --* Register.rset_to_rxset k)
-and live_in  node =
-  let live = live_out node in  
-  let live = match G.to_instr node with
-  | None -> live
-  | Some i ->
-    let uses, defs, kills = irwk i in
-    live -- defs --* kills ++ uses in
-  G.add_live_spans node (G.add_inedge_uses node live)
+<<live.ml>>=
+let matcher = { P.embed = (fun a -> P.Live_in a);
+                P.project = (function P.Live_in a -> Some a | _ -> None);
+                P.is = (function P.Live_in a -> true | _ -> false);
+              }
+
+let prop = Unique.Prop.prop matcher
+let get = Unique.Prop.get prop
+
+let live_in_middle out mid =
+  let uses, defs, kills = irwk (GR.mid_instr mid) in
+  out -- defs --* kills ++ uses 
+
+let live_out_last last =
+  G.union_over_outedges last get
+  (fun {G.node = (u, l); G.defs = d; G.kills = k} -> get u -- d --* k) 
+
+let live_in_last last =
+  let uses, defs, kills = irwk (GR.last_instr last) in
+  let live = live_out_last last -- defs --* kills ++ uses in
+  G.add_live_spansl last (G.add_inedge_uses last live)
+
+let live_in_first out first =
+  G.add_live_spansf first out
 @ N.B. we could operate more efficiently if, instead of using [[irwk]]
 to build sets, we simply folded over the proper functions directly.
 @
-To fill the caches with correct liveness information, we empty all
-cached live sets and iterate until we reach a fixed point.
-The iteration order is unspecified, and it would probably
-be much more efficient to use a well-chosen order. 
-<<liveness functions>>=
-let set_live g =
-  G.iter_nodes (fun n -> (info n).cached_live_out <- RSX.empty) g;
-  let nodes   = List.rev (G.postorder_dfs (fun x y -> x :: y) [] g) in
-  let changed = ref false                           in
-  <<definition of [[update_cache]]>> in
-  let rec loop n =
-    ( changed := false
-    ; List.iter update_cache nodes
-    ; if !changed then
-        if n < 1000 then loop (n+1) 
-        else Impossible.impossible "liveness didn't converge in 1000 iterations"
-      else
-        Debug.eprintf "live" "set_live converged in %d iterations\n" n
-    ) in
-  loop 1
 <<live.ml>>=
-let () = Debug.register "live" "liveness analysis"
-@
-To update the cache we call [[new_live_out]] and note whether anything
-has changed.
-<<definition of [[update_cache]]>>=
-let update_cache node =
-  let l    = new_live_out node in
-  let info = info node in
-  if RSX.equal l info.cached_live_out then
-    ()
-  else
-    ( changed := true
-    ; assert (RSX.subset info.cached_live_out l)
-    ; info.cached_live_out <- l
-    ) 
+let live_in =
+ { D.fact_name = "live vars";
+   D.add_info  = (++);
+   D.changed   = (fun ~old ~new' -> RSX.cardinal new' > RSX.cardinal old);
+   D.init_info = RSX.empty;
+   D.prop      = prop
+ },
+ { D.name      = "liveness";
+   D.last_in   = live_in_last;
+   D.middle_in = live_in_middle;
+   D.first_in  = live_in_first;
+ } 
 @ 
-\section{Alternative implementation using the generic dataflow support}
-
-\textbf{This code will not work and is not compiled. 
-There are several problems, not
-least of which is that the backward code in dataflow incorrectly
-assumes that a fork point does not contain an instruction.
-}
-
-Liveness is a backward dataflow problem.
-The ``info'' is the live-out set.
-At a fork, we take the union.
-<<code using [[Dataflow]]>>=
-let split_info node = (info node).cached_live_out
-let merge node live =
-  let info = info node in
-  if RSX.subset live info.cached_live_out then
-    false
-  else
-    ( info.cached_live_out <- info.cached_live_out ++ live
-    ; true
-    ) 
-let init_info = RSX.empty
-let (with_predecessor's_outedge : Rtl.rtl G.node -> RSX.t ->
-        (RSX.t -> defs:RSX.t -> kills:RSX.t -> RSX.t) -> RSX.t) = fun _ -> assert false
-let propagate node live =
-  (info node).cached_live_out <- live;
-  let live = match G.to_instr node with
-  | None -> live
-  | Some i ->
-      let uses, defs, kills = irwk i in
-      live -- defs --* kills ++ uses in
-  let live = G.add_live_spans node (G.add_inedge_uses node live) in
-  if G.is_join node then
-    live
-  else
-    with_predecessor's_outedge (G.pred node) live
-      (fun live ~defs ~kills -> live -- defs --* kills)
-
-module D = Dataflow.Make(G)
-let set_live' =
-  let once = D.bwd_iteration { D.split_info = split_info; D.merge_split_info = merge
-                              ; D.init_info = init_info; D.propagate = propagate } in
-  fun g ->
-    let rec go n =
-      if n < 1000 then
-        if once g then
-          go (n+1)
-        else
-          Debug.eprintf "live" "set_live' converged in %d iterations\n" n
-      else
-        Impossible.impossible "liveness didn't converge in 1000 iterations";
-    in go 0

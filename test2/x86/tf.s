@@ -81,14 +81,14 @@ main:
 	movl (%eax),%eax
 	leal 32(%esp), %eax
 	movl (%eax),%eax
-.Linitialize_continuations_l4:
-.Lproc_body_start_l3:
-.Ljoin_l13:
+.Linitialize_continuations_l3:
+.Lproc_body_start_l2:
+.Lbranch_target_l13:
 	leal truth,%ecx
-.Ljoin_l12:
-.Ljoin_l11:
+.Lbranch_target_l11:
+.Lbranch_target_l9:
 	leal falsehood,%edx
-.Ljoin_l9:
+.Lbranch_target_l8:
 	movl %eax,12(%esp)
 	leal fmt,%eax
 	movl %eax,16(%esp)
@@ -112,7 +112,7 @@ main:
 	addl %ecx,%eax
 	movl %edx,(%eax)
 	call printf
-.Ljoin_l8:
+.Lcall_successor_l7:
 	movl $0,%eax
 	leal 32(%esp), %ecx
 	movl $0,%edx
@@ -122,17 +122,17 @@ main:
 	leal 32(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l21:
+.Lstackdata_l20:
 .long 0
 .section .pcmap
-.long .Ljoin_l8
-.long .Lframe_l22
+.long .Lcall_successor_l7
+.long .Lframe_l21
 .section .pcmap_data
-.Lframe_l22:
+.Lframe_l21:
 .long 0x80000004
 .long 0xffffffe0
 .long 0xffffffec
-.long .Lstackdata_l21
+.long .Lstackdata_l20
 .long 0
 .long 4
 .long 0

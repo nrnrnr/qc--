@@ -25,7 +25,7 @@ run_thread:
 	leal 40(%esp), %ecx
 	movl (%ecx),%ecx
 .Linitialize_continuations_l11:
-	leal cutback_C8,%edx
+	leal .Lcut_entry_l8,%edx
 	movl %eax,(%esp)
 	leal 40(%esp), %eax
 	movl %eax,4(%esp)
@@ -55,29 +55,30 @@ run_thread:
 	addl %eax,%edx
 	movl (%edx),%eax
 	movl (%ecx),%ecx
-	movl %edi,16(%esp)
-	movl %esi,20(%esp)
-	movl %ebp,24(%esp)
-	movl %ebx,28(%esp)
+	movl %ebx,16(%esp)
+	movl %ebp,20(%esp)
+	movl %esi,24(%esp)
+	movl %edi,28(%esp)
 	movl %eax, %esp; jmp *%ecx
-cutback_C8:
+.Lcut_entry_l8:
+.Lstart_of_continuation_code_l7:
 	movl %edx,%eax
 	leal 40(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx
 	movl 12(%esp),%edx
 	movl %edx,(%ecx)
-	movl 28(%esp),%ebx
-	movl 24(%esp),%ebp
-	movl 20(%esp),%esi
-	movl 16(%esp),%edi
+	movl 28(%esp),%edi
+	movl 24(%esp),%esi
+	movl 20(%esp),%ebp
+	movl 16(%esp),%ebx
 	leal 40(%esp), %esp
 	ret
 .section .pcmap_data
 .Lstackdata_l19:
 .long 0
 .section .pcmap
-.long cutback_C8
+.long .Lcut_entry_l8
 .long .Lframe_l20
 .section .pcmap_data
 .Lframe_l20:
@@ -89,13 +90,13 @@ cutback_C8:
 .long 2
 .long 0
 .long 1
-.long 7
-.long 0xfffffff4
-.long 9
-.long 0xfffffff0
-.long 10
-.long 0xffffffec
 .long 11
+.long 0xfffffff4
+.long 10
+.long 0xfffffff0
+.long 9
+.long 0xffffffec
+.long 7
 .long 0xffffffe8
 .long 0
 .long 0
@@ -106,8 +107,8 @@ cmm_threadfun:
 	leal -12(%esp), %esp
 	leal 12(%esp), %ecx
 	movl (%ecx),%ecx
-.Linitialize_continuations_l23:
-.Lproc_body_start_l22:
+.Linitialize_continuations_l22:
+.Lproc_body_start_l21:
 	leal 12(%esp), %edx
 	movl $-12,%ebx
 	addl %ebx,%edx
@@ -119,7 +120,7 @@ cmm_threadfun:
 	movl %eax,(%edx)
 	movl %ecx,8(%esp)
 	call fib
-.Ljoin_l26:
+.Lcall_successor_l25:
 	movl %eax,%edx
 	leal comeback,%eax
 	movl (%eax),%eax
@@ -131,28 +132,28 @@ cmm_threadfun:
 	movl (%ecx),%ecx
 	movl %eax, %esp; jmp *%ecx
 .section .pcmap_data
-.Lstackdata_l33:
+.Lstackdata_l32:
 .long 0
 .section .pcmap
-.long .Ljoin_l26
-.long .Lframe_l34
+.long .Lcall_successor_l25
+.long .Lframe_l33
 .section .pcmap_data
-.Lframe_l34:
+.Lframe_l33:
 .long 0x80000004
 .long 0xfffffff4
 .long 0xfffffffc
-.long .Lstackdata_l33
+.long .Lstackdata_l32
 .long 4
 .long 2
 .long 0
 .long 1
-.long 7
-.long 0
-.long 9
+.long 11
 .long 0
 .long 10
 .long 0
-.long 11
+.long 9
+.long 0
+.long 7
 .long 0
 .long 0
 .long 0

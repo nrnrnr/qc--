@@ -1,0 +1,172 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+%%Grades: A Peripheral Later
+
+% l2h substitution cfg CFG
+% l2h substitution dots ...
+% l2h substitution AST AST
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Liveness Analysis}
+% ------------------------------------------------------------------ 
+
+Liveness analysis determines what locations are live on entry to and
+exit from every node in a flow graph.
+Liveness is actually an edge property: a location~$x$ is live on an
+edge~$e$ iff that 
+edge flows to a use of~$x$ without crossing a definition or kill
+of~$x$.  
+Since our edges are simple pointers, 
+we put liveness information at the nodes, in the form of
+\emph{live-in sets}.
+The liveness of an edge is the live-in set of that edge's head.
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+Here's the new stuff; what's below is old stuff.
+<<live.mli>>=
+type uid = Zipcfg.uid
+type liveset = Register.SetX.t
+
+val live_in_block  : Zipcfg.graph -> (uid -> liveset)   (* live in to each block *)
+val live_in_last   : (uid -> liveset) -> Zipcfg.Rep.last -> liveset
+val live_in_middle : liveset -> Zipcfg.Rep.middle -> liveset
+      (* map live out to live in *)
+
+val live_out_last  : (uid -> liveset) -> Zipcfg.Rep.last -> liveset
+@
+
+% ------------------------------------------------------------------ 
+\section{Implementation of liveness}
+% ------------------------------------------------------------------ 
+
+Following a suggestion of John Dias, we cache live-out information at
+each node. 
+Although our liveness analysis is performed over the type [[Register.x]], we store
+only live\_out sets of type [[Register.t]].
+It is important to perform the liveness at the finer granularity of slices to
+appropriately capture liveness.
+For example, consider the code
+\begin{verbatim}
+%al = e
+...
+%ah = e'
+{use of %al}
+\end{verbatim}
+If we calculate liveness at the register level, we will think the %eax register is dead
+between the assignments.
+But if we perform liveness at the slice level, then promote the slices to registers, we
+will see that %eax remains live between the assignments.
+<<live.ml>>=
+module D   = Dataflow
+module G   = Zipcfg
+module GR  = Zipcfg.Rep
+module RSX = Register.SetX
+module R   = Rtl
+
+type uid = Zipcfg.uid
+type liveset = Register.SetX.t
+@ 
+<<live.ml>>=
+let irwk = Rtlutil.ReadWriteKill.sets
+@ N.B. [[irwk]] stands for ``instruction read write kill.''
+@
+We use these
+set operations.
+When we use [[--]] to subtract a register~$r$, we have to be sure to
+remove not only~$r$ but also any slices completely contained in~$r$.
+Furthermore, we expect it never to happen that there is a slice that
+overlaps with~$r$ but is not completely contained in it.
+But we don't check.
+<<live.ml>>=
+let diff live killed =
+  let is_killed r = RSX.exists (fun r' -> Register.contains r' r) killed in
+  RSX.filter (fun r -> not (is_killed r)) live 
+@ 
+The [[--*]] operation expresses our expectation that a killed register should
+never be live. 
+<<live.ml>>=
+let ( ++  ) = RSX.union
+let ( --  ) = diff 
+let ( --* ) live killed =
+  let is_killed r = RSX.exists (fun r' -> Register.contains r' r) killed in
+  if RSX.exists is_killed live then
+    (*<complain of live variables in killed set>; live--killed *)
+    Impossible.impossible "live variable is in killed set"
+  else
+    live 
+<<complain of live variables in killed set>>=
+let regstring (s, i, _) = Printf.sprintf "%c%d" s i in
+let bad = RSX.elements (RSX.filter (fun x -> RSX.mem x killed) live) in
+let msg = "Live vars in killed set: " ^ String.concat ", " (List.map regstring bad) in
+prerr_string msg;
+prerr_string "\n"
+@ 
+The [[live_out]] function uses the cache.
+The [[new_live_out]] function computes the live-out set afresh; it is
+used to fill the cache.
+It works by taking the union over outedges of the live-in sets of its
+successors, also accounting for any defs or kills that may be on the
+outedges. 
+Finally, the [[live_in]] function starts with the cached live-out set and
+accounts for any registers used, defined, and killed by the
+instruction in the node.
+$$\mathit{live}_{\mathit{in}} = 
+    (\mathit{live}_{\mathit{out}}
+      \setminus \mathit{defined} \setminus \mathit{killed}
+    ) \cup \mathit{used}.
+$$
+<<live.ml>>=
+let live_in_middle out mid =
+  let uses, defs, kills = irwk (GR.mid_instr mid) in
+  out -- defs --* kills ++ uses 
+
+let live_out_last blocks last =
+  G.union_over_outedges last blocks
+  (fun {G.node = (u, l); G.defs = d; G.kills = k} -> blocks u -- d --* k) 
+
+let live_in_last blocks last =
+  let uses, defs, kills = irwk (GR.last_instr last) in
+  let live = (live_out_last blocks last) -- defs --* kills ++ uses in
+  G.add_live_spansl last (G.add_inedge_uses last live)
+
+let live_in_first out first =
+  G.add_live_spansf first out
+@ N.B. we could operate more efficiently if, instead of using [[irwk]]
+to build sets, we simply folded over the proper functions directly.
+@
+<<live.ml>>=
+let liveness =
+ { D.name      = "liveness";
+   D.add_info  = (++);
+   D.changed   = (fun ~old ~new' -> RSX.cardinal new' > RSX.cardinal old);
+   D.init_info = RSX.empty;
+   D.last_in   = live_in_last;
+   D.middle_in = live_in_middle;
+   D.first_in  = live_in_first;
+ } 
+
+let live_in_block = D.backward_anal liveness
+@ 

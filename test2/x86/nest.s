@@ -16,7 +16,7 @@ nest:
 	leal 32(%esp), %eax
 	movl (%eax),%eax
 .Linitialize_continuations_l10:
-	leal k_C7,%ecx
+	leal .Lcut_entry_l7,%ecx
 	leal 32(%esp), %edx
 	movl %eax,4(%esp)
 	movl $-8,%eax
@@ -37,42 +37,43 @@ nest:
 	movl $-32,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	movl %edi,8(%esp)
-	movl %esi,12(%esp)
-	movl %ebp,16(%esp)
-	movl %ebx,20(%esp)
+	movl %ebx,8(%esp)
+	movl %ebp,12(%esp)
+	movl %esi,16(%esp)
+	movl %edi,20(%esp)
 	call trace
-.Ljoin_l15:
+.Lcall_successor_l15:
 	movl $0,%eax
 	leal 32(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx
 	movl 4(%esp),%edx
 	movl %edx,(%ecx)
-	movl 20(%esp),%ebx
-	movl 16(%esp),%ebp
-	movl 12(%esp),%esi
-	movl 8(%esp),%edi
+	movl 20(%esp),%edi
+	movl 16(%esp),%esi
+	movl 12(%esp),%ebp
+	movl 8(%esp),%ebx
 	leal 32(%esp), %esp
 	ret
-k_C7:
+.Lcut_entry_l7:
+.Lstart_of_continuation_code_l6:
 	movl $1,%eax
 	leal 32(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx
 	movl 4(%esp),%edx
 	movl %edx,(%ecx)
-	movl 20(%esp),%ebx
-	movl 16(%esp),%ebp
-	movl 12(%esp),%esi
-	movl 8(%esp),%edi
+	movl 20(%esp),%edi
+	movl 16(%esp),%esi
+	movl 12(%esp),%ebp
+	movl 8(%esp),%ebx
 	leal 32(%esp), %esp
 	ret
 .section .pcmap_data
 .Lstackdata_l21:
 .long 0
 .section .pcmap
-.long .Ljoin_l15
+.long .Lcall_successor_l15
 .long .Lframe_l22
 .section .pcmap_data
 .Lframe_l22:
@@ -84,19 +85,19 @@ k_C7:
 .long 0
 .long 2
 .long 1
-.long 7
-.long 0xfffffff4
-.long 9
-.long 0xfffffff0
-.long 10
-.long 0xffffffec
 .long 11
+.long 0xfffffff4
+.long 10
+.long 0xfffffff0
+.long 9
+.long 0xffffffec
+.long 7
 .long 0xffffffe8
 .long 0
 .long 0
 .long inner
 .section .pcmap
-.long k_C7
+.long .Lcut_entry_l7
 .long .Lframe_l23
 .section .pcmap_data
 .Lframe_l23:
@@ -108,13 +109,13 @@ k_C7:
 .long 0
 .long 2
 .long 1
-.long 7
-.long 0xfffffff4
-.long 9
-.long 0xfffffff0
-.long 10
-.long 0xffffffec
 .long 11
+.long 0xfffffff4
+.long 10
+.long 0xfffffff0
+.long 9
+.long 0xffffffec
+.long 7
 .long 0xffffffe8
 .long 0
 .long 0

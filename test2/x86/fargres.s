@@ -27,8 +27,8 @@ main:
 	movl (%eax),%eax
 	leal 20(%esp), %eax
 	movl (%eax),%eax
-.Linitialize_continuations_l4:
-.Lproc_body_start_l3:
+.Linitialize_continuations_l3:
+.Lproc_body_start_l2:
 	movl $1084227584,%ecx
 	leal 20(%esp), %edx
 	movl %eax,16(%esp)
@@ -36,7 +36,7 @@ main:
 	addl %eax,%edx
 	movl %ecx,(%edx)
 	call doubleme
-.Ljoin_l11:
+.Lcall_successor_l10:
 	leal 20(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax
@@ -55,7 +55,7 @@ main:
 	addl %ecx,%eax
 	fstpl (%eax)
 	call printf
-.Ljoin_l8:
+.Lcall_successor_l7:
 	movl $0,%eax
 	leal 20(%esp), %ecx
 	movl $0,%edx
@@ -65,17 +65,17 @@ main:
 	leal 20(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l18:
+.Lstackdata_l17:
 .long 0
 .section .pcmap
-.long .Ljoin_l11
-.long .Lframe_l19
+.long .Lcall_successor_l10
+.long .Lframe_l18
 .section .pcmap_data
-.Lframe_l19:
+.Lframe_l18:
 .long 0x80000004
 .long 0xffffffec
 .long 0xfffffffc
-.long .Lstackdata_l18
+.long .Lstackdata_l17
 .long 0
 .long 5
 .long 0
@@ -87,14 +87,14 @@ main:
 .long 0xfffffff8
 .long 0
 .section .pcmap
-.long .Ljoin_l8
-.long .Lframe_l20
+.long .Lcall_successor_l7
+.long .Lframe_l19
 .section .pcmap_data
-.Lframe_l20:
+.Lframe_l19:
 .long 0x80000004
 .long 0xffffffec
 .long 0xfffffffc
-.long .Lstackdata_l18
+.long .Lstackdata_l17
 .long 0
 .long 5
 .long 0

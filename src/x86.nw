@@ -576,6 +576,16 @@ let don't_touch_me =
     ; RP.Store (RP.Reg sp, RP.App (("add", [32]), [RP.Fetch (RP.Reg sp2, _);
                                                       RP.Const (RP.Bits b)]), _)] ->
       pc' =/ lowpc && sp =$ Rg.esp && sp2 =$ Rg.esp && Bits.S.to_int b = 4
+  | [ RP.Store (pc', (RP.App (("x86_idt_pc", []),[RP.Const (RP.Bits _)])), 32)
+    ; RP.Store (RP.Mem (('m', _, _), RP.C 4,
+                        RP.App(("sub",[32]),
+                               [RP.Fetch (RP.Reg esp, 32);
+                                RP.Const (RP.Bits b)]), _), RP.Fetch (pc'', 32), 32)
+    ; RP.Store (RP.Reg esp', RP.App (("sub",[32]), [RP.Fetch (RP.Reg esp'', 32);
+                                              RP.Const (RP.Bits b')]),
+                32)] -> 
+        pc' =/ lowpc && pc'' =/ lowpc && esp =$ Rg.esp && esp' =$ Rg.esp &&
+        esp'' =$ Rg.esp && Bits.U.to_int b = 4 && Bits.U.to_int b' = 4
   | _ -> false
 @
 To implement comparisons, we define new operators that are private
@@ -931,7 +941,9 @@ let push e = (* effect of pushing e *)
 @ 
 We now build the standard control flow.
 <<x86.ml>>=
-module T = Target
+module T  = Target
+module TY = Types
+let (-->) = TY.proc 
 module FS = Mflow.MakeStandard (
   struct
      let pc_lhs = P.pc_lhs
@@ -979,11 +991,18 @@ let globals base =
     (A.widen width *> A.align_to align *>
      A.overflow ~growth:Memalloc.Up ~max_alignment:4)
 
+let interrupt n = (* very approximate *)
+  let handler = R.app (R.opr "x86_idt_pc" []) [RO.unsigned 32 n] in
+  R.par [store pc handler; push (R.fetch pc 32)]
+let () = Rtlop.add_operator ~name:"x86_idt_pc" ~result_is_float:false
+                            ([TY.fixbits 32] --> TY.fixbits 32)
+
 let target =
   let spaces = [Spaces.m; Spaces.r; Spaces.t; Spaces.c] in
   { T.name = "x86"
   ; T.memspace = P.mspace
   ; T.max_unaligned_load = R.C 4
+  ; T.forbidden = interrupt 3
   (* basic metrics and spaces are OK *)
   ; T.byteorder   = P.byte_order  
   ; T.wordsize    = 32

@@ -50,9 +50,8 @@ variables.  The [[gamma]] environment is also used to get the original
 width of widened locations---unlike the fill type hints, this needs to
 be accurate.
 <<widen.mli>>=
-exception Don't_update
 val init_gamma_counts : unit -> unit
-val update_gamma_counts : ('a, 'b) Target.t -> Rtl.rtl -> Rtl.rtl
+val update_gamma_counts : ('a, 'b) Target.t -> Rtl.rtl -> unit
 val create_gamma : unit -> unit
 @ 
 
@@ -78,8 +77,10 @@ module RU = Rtlutil
 module Dn = Rtl.Dn
 module Up = Rtl.Up
 
+(* THIS IS PRETTY CHEESY.  WE SHOULD BE FIXING THE BUG IN THE COMPILER
+   THAT CAUSES MACHINE-DEPENDENT RTL OPERATORS TO BE UNKNOWN. *)
 let safe_has_floating_result op =
-  try Rtlop.Types.has_floating_result op with Not_found -> false
+  try Rtlop.has_floating_result op with Not_found -> false
 
 let print_debug = false
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
@@ -87,7 +88,6 @@ let null = function [] -> true | _ :: _ -> false
 
 exception Abort_unknown
 exception Doesn't_need_widening
-exception Don't_update
 @ 
 We're given [[goodwidths]], and our goal is to change all
 floating-point operations in an RTL to be using one of the widths in
@@ -549,7 +549,7 @@ let widen_sigma m soln =
     let w          = width soln in
     let ext_widths = find_exts_from m w ext in
     let create ws =
-      match Rtlop.Types.mono (Rtl.opr ext ws) with
+      match Rtlop.mono (Rtl.opr ext ws) with
       | ([Types.Bits _], Types.Bits w') ->
           { soln with
             e' = RP.App((ext, ws), [soln.e']);
@@ -571,7 +571,7 @@ let widen_garbage m soln =
     let zx_widths = find_exts_from m w "zx" in
     let sx_widths = find_exts_from m w "sx" in
     let create fill' ext ws =
-      match Rtlop.Types.mono (Rtl.opr ext ws) with
+      match Rtlop.mono (Rtl.opr ext ws) with
       | ([Types.Bits _], Types.Bits w') ->
           { soln with
             e' = RP.App((ext, ws), [soln.e']);
@@ -589,7 +589,7 @@ let insert_f2f m soln =
       let srcw = width soln in
       let dstwss = find_exts_from m srcw "f2f" in
       let create dstws =
-        match Rtlop.Types.mono (Rtl.opr "f2f" dstws) with
+        match Rtlop.mono (Rtl.opr "f2f" dstws) with
         | ([Types.Bits _; Types.Bits _], Types.Bits dstw) ->
             { soln with
               e' = RP.App(("f2f", dstws), [soln.e'; m.rm]);
@@ -606,7 +606,7 @@ let insert_i2f m soln =
       let srcw = width soln in
       let dstwss = find_exts_from m srcw "i2f" in
       let create dstws =
-        match Rtlop.Types.mono (Rtl.opr "i2f" dstws) with
+        match Rtlop.mono (Rtl.opr "i2f" dstws) with
         | ([Types.Bits _; Types.Bits _], Types.Bits dstw) ->
             { soln with
               e' = RP.App(("i2f", dstws), [soln.e'; m.rm]);
@@ -677,7 +677,7 @@ let narrow_rule m soln =
     let w'           = width soln in
     let trunc_widths = find_exts_from m w' "lobits" in
     let create ws =
-      match Rtlop.Types.mono (Rtl.opr "lobits" ws) with
+      match Rtlop.mono (Rtl.opr "lobits" ws) with
       | ([Types.Bits _], Types.Bits w) ->
           { soln with
             e' = RP.App(("lobits", ws), [soln.e']);
@@ -896,7 +896,7 @@ let mksolutions_op m args_solns opname ws args =
     in
     let (a, b) = 
       if List.mem_assoc opname op_fill_types then
-        Rtlop.Types.mono (Rtl.opr opname ws)
+        Rtlop.mono (Rtl.opr opname ws)
       else raise Not_found
     in
     (List.map to_int a, to_int b)
@@ -965,7 +965,7 @@ let mksolutions_nullary_op m opname ws =
   let monomorphic opname ws =
     let to_int = function Types.Bits n -> n | Types.Bool -> 1 in
     let (a, b) =
-      if List.mem_assoc opname op_fill_types then Rtlop.Types.mono (Rtl.opr opname ws)
+      if List.mem_assoc opname op_fill_types then Rtlop.mono (Rtl.opr opname ws)
       else raise Not_found
     in (List.map to_int a, to_int b)
   in
@@ -1010,7 +1010,7 @@ let mksolutions_ext ext ws arg_solnss =
 
   (* find all solutions with index equal to the input width of the extension *)
   let (n, n'') =
-    match Rtlop.Types.mono (Rtl.opr ext ws) with
+    match Rtlop.mono (Rtl.opr ext ws) with
     | ([Types.Bits n], Types.Bits n'') -> (n, n'')
     | _ -> impossf "%s operator should have some type bits#n->bits#w" ext in
   (* assert that n <= n'' *)
@@ -1030,7 +1030,7 @@ let mksolutions_drop_f2f ws args_solns rm =
   let s = match args_solns with [s;_] -> s | _ -> impossf "f2f arity" in
   let arg_solns = List.filter (fun s -> s.fill =*= F) s in
   let (srcw, dstw) =
-    match Rtlop.Types.mono (Rtl.opr "f2f" ws) with
+    match Rtlop.mono (Rtl.opr "f2f" ws) with
     | ([Types.Bits n; Types.Bits _], Types.Bits n') -> (n, n')
     | _ -> impossf "%%f2f should be a binary operator"
   in
@@ -1074,7 +1074,7 @@ let mksolutions_trunc ws arg_solnss =
   (* [[e]] just updates the original expression *)
   let e arg = RP.App(("lobits", ws), [arg]) in
   let (n'', n) =
-    match Rtlop.Types.mono (Rtl.opr "lobits" ws) with
+    match Rtlop.mono (Rtl.opr "lobits" ws) with
     | ([Types.Bits n''], Types.Bits n) -> (n'', n)
     | _ -> impossf "lobits operator should have some type bits#w->bits#n"
   in
@@ -1454,7 +1454,7 @@ Calling [[widen_loc]] never changes the width of the location---it
 simply fixes up any code in an addressing expression that might need
 widening. 
 <<widen.ml>>=
-let dpwiden proc r =
+let dpwiden (g,proc) r =
   let t           = proc.Proc.target in
   let targetwidth = t.Target.wordsize in
   let ptrwidth    = t.Target.pointersize in
@@ -1648,12 +1648,10 @@ let update_gamma_counts t r =
     | Z -> {c with z=c.z+i; ni = n}
     | S -> {c with s=c.s+i; ni = n}
     | H -> c (* {c with h=c.h+i; ni = n} *)
-    | F -> c
-  in
+    | F -> c in
   let update h x n t =
     if Hashtbl.mem h x then Hashtbl.replace h x (add (Hashtbl.find h x) 1 n t)
-    else Hashtbl.add h x (add {z=0; s=0; h=0; ni=n} 1 n t)
-  in
+    else Hashtbl.add h x (add {z=0; s=0; h=0; ni=n} 1 n t) in
   let targetwidth = t.Target.wordsize in
   let rec loc fty = function
     | (RP.Var(s,_,w)) -> 
@@ -1672,17 +1670,14 @@ let update_gamma_counts t r =
           ignore(List.map (fun (arg_ftys, _) -> List.map2 exp arg_ftys es) ftys);
           List.map snd ftys
         with _ -> [G])
-    | _ -> [G]
-  in
+    | _ -> [G] in
   let guard (g, eff) =
     (match eff with
     | RP.Store(l, r, w) -> List.iter (fun fty -> loc fty l) (exp G r)
     | RP.Kill l -> ());
-    ignore(exp Z g)
-  in
+    ignore(exp Z g) in
   let RP.Rtl es = Dn.rtl r in
-  List.iter guard es;
-  raise Don't_update
+  List.iter guard es
 @ 
 
 <<widen.ml>>=

@@ -7,12 +7,60 @@
 %
 % Example (at beginning of line): %%Grades: B Central Soon
 % ------------------------------------------------------------------ 
-\section{Translation of {\PAL} operators to RTL operators}
+\section{Support for RTL operators}
 % ------------------------------------------------------------------ 
 
-This module provides the translation of a {\PAL} operator to an {\rtl}
-operator.  {\PAL} and {\rtl} operators are closely related: a {\PAL}
-operator is in general an instance of a polymorphic {\rtl} operator.
+This module provides miscellaneous support for RTL operators.
+The primary goals are
+\begin{itemize}
+\item
+To keep a central repository of type information about operators,
+including machine-dependent operators that are used only in back ends.
+\item
+To help the front end translate each {\PAL} operator into an RTL
+operator.
+Typically this means filling in the type parameters, which is done
+based on the knowledge of the operator's type scheme and of the types
+of its arguments.
+\end{itemize}
+
+\paragraph{Registering operators}
+
+The official {\PAL} operators are built into this module, but every
+back end may add new operators.
+New operators should be added at program startup time, regardless of
+whether the back end is actually run.
+To name machine-dependent operators, each back end should pick a
+unique prefix, e.g., [[x86_]].
+It is a checked run-time error to register an operator twice.
+<<rtlop.mli>>=
+val add_operator : name:string -> result_is_float:bool -> Types.tyscheme -> unit
+@
+\paragraph{Extracting type information}
+
+Here are some miscellaneous functions
+that have to do with operators' types.
+Given an instantiated operator, one can get its type with [[mono]].
+One can query whether an operator's result is a floating-point value,
+which is unfortunately necessary to support an evil hack in the
+widener.
+(It would be very good if Kevin could get floating-point widening on a
+principled basis so that this could go \emph{away}.)
+The [[fold]] function enables one to visit all the operators, and
+[[print_shapes]] was useful once as a guide to hand-writing a generic
+code expander (see module [[Opshape]] for more information on shapes).
+<<rtlop.mli>>=
+val mono : Rtl.opr -> Types.monotype      (* Not_found *)
+val has_floating_result : Rtl.opr -> bool
+val fold : (string -> Types.tyscheme -> 'a -> 'a) -> 'a -> 'a
+val print_shapes : unit -> unit
+@ 
+We also provide, outside of the [[Types]] submodule, the ability to
+enumerate the names of all the operators.
+<<rtlop.mli>>=
+val opnames : unit -> string list  (* names of all source-language operators *)
+@ 
+\paragraph{Translation from surface {\PAL} into RTL operators}
 
 Three different translations are provided: for the prefix named form
 [[%name(...)]], for the infix binary form, and for the symbolic unary
@@ -23,42 +71,15 @@ Each translation returns the type of the operator's result and
 an {\rtl} operator that implements the {\PAL} operator.
 <<rtlop.mli>>=
 module Translate : sig
-    val prefix: string -> Types.ty list -> Types.ty * Rtl.opr (*ErrorExn*)
-    val binary: string -> Types.ty list -> Types.ty * Rtl.opr (*ErrorExn*)
-    val unary:  string -> Types.ty list -> Types.ty * Rtl.opr (*ErrorExn*)
-end
-@
-% ------------------------------------------------------------------ 
-\subsection{Types of RTL operators}
-% ------------------------------------------------------------------ 
-
-Note: the [[Types]] module is not intended for the casual user. There
-should be no reason why you need to know about the types of a {\rtl}
-operator. 
-
-[[Mono]] takes an [[Rtl.opr]] operator and reconstructs its monomorphic
-type (using the width list inside the operator). If the operator is
-unknown, [[Not_found]] is raised.
-<<rtlop.mli>>=
-module Types: sig
-  val mono: Rtl.opr -> Types.monotype      (* Not_found *)
-  val has_floating_result : Rtl.opr -> bool
-  val print_shapes : unit -> unit
-  val fold : (string -> Types.tyscheme -> 'a -> 'a) -> 'a -> 'a
+  val prefix : string -> Types.ty list -> Types.ty * Rtl.opr (*ErrorExn*)
+  val binary : string -> Types.ty list -> Types.ty * Rtl.opr (*ErrorExn*)
+  val unary  : string -> Types.ty list -> Types.ty * Rtl.opr (*ErrorExn*)
 end
 @ 
-\subsection{Enumerating operators}
+\paragraph {Program generation}
 
-For testing purposes, we enumerate the operators, so we can generate
-code for testing, identify operators that are not implemented, and so
-on. 
-<<rtlop.mli>>=
-val opnames : string list  (* names of all source-language operators *)
-@
-
-\subsection{Useful functions}
-
-Emit code that might be useful in the compiler.
+Calling [[Emit.creators]] emits an implementation of the functions in
+[[Rewrite.Ops]].   Handy.
 <<rtlop.mli>>=
 module Emit : sig
   val creators : unit -> unit
@@ -70,15 +91,8 @@ end
 
 <<rtlop.ml>>=
 module T = Types        (* save external Types module here *)
-
-module Types = struct
-    <<Types>>
-end
-let opnames = Types.opnames
-
-module Translate = struct
-    <<Translate>>
-end
+let (-->) = T.proc 
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 @
 
 
@@ -94,12 +108,11 @@ $n$. For example, the type for [[add]] demands that all arguments and
 the result have the same width. If the type variable of the result is
 not identical to one of the arguments, the operator is polymorphic in
 its return size. 
-<<Types>>=
-module T = Types
-
-let (-->) = T.proc 
-
-let optable = 
+<<rtlop.ml>>=
+let predefined = 
+  (* the four values below characterize the proper interpretation of a
+     result, but the only information we actually use is a Boolean
+     telling us if the result is a floating-point value *)
   let float = true in
   let int   = false in
   let code2 = false in
@@ -196,31 +209,38 @@ let optable =
   ;  "bitTransfer"  , int,   [T.var 1; T.var 1; T.var 1; T.var 1; T.var 1] --> T.var 1 
                     
   ] 
-<<Types>>=
-let optypes  = Strutil.assoc2map (List.map (fun (o, _, t) -> (o, t)) optable)
-let opfloats = Strutil.assoc2map (List.map (fun (o, f, _) -> (o, f)) optable)
+<<rtlop.ml>>=
+let optypes  = ref (Strutil.assoc2map (List.map (fun (o, _, t) -> (o, t)) predefined))
+let opfloats = ref (Strutil.assoc2map (List.map (fun (o, f, _) -> (o, f)) predefined))
 @ 
-We once printed operators' signatures
-<<Types>>=
+<<rtlop.ml>>=
+let add_operator ~name:o ~result_is_float:f t =
+  if Strutil.Map.mem o (!optypes) then
+    impossf "registered a duplicate RTL operator %%%s" o;
+  optypes  := Strutil.Map.add o t (!optypes);
+  opfloats := Strutil.Map.add o f (!opfloats)
+@ 
+We once printed operators' signatures.
+<<rtlop.ml>>=
 let print_shapes () = 
-  List.iter (fun (o, _, t) ->
-    Printf.printf "%16s : %s\n" o (Types.scheme_string t)) optable
+  Strutil.Map.iter (fun o t ->
+    Printf.printf "%16s : %s\n" o (Types.scheme_string t)) (!optypes)
 @ 
 Some operators are not visible.
 An operator is invisible if it is for internal use only or if it has
 been expunged from the {\PAL} specification.
-<<Types>>=
+<<rtlop.ml>>=
 let visible = function
   | "bitExtract" | "bitInsert" | "bitTransfer" | "f2f_implicit_round" -> false
   | "fcmp" | "float_lt" | "float_eq" | "float_gt" | "unordered" -> false (*expunged*)
   | _ -> true 
 
-let opnames = List.filter visible (List.map (fun (o, _, _) -> o) optable)
-
 let fold f z =
-  List.fold_left (fun z (o, _, t) -> if visible o then f o t z else z) z optable
+  Strutil.Map.fold (fun o t z -> if visible o then f o t z else z) (!optypes) z
+
+let opnames () = fold (fun o _ os -> o :: os) []
 @ 
-<<Types>>=
+<<rtlop.ml>>=
 let findopname name t =
   try Strutil.Map.find name t
   with Not_found ->
@@ -228,12 +248,8 @@ let findopname name t =
     ; raise Not_found
     )
 let findop op = findopname (fst (Rtl.Dn.opr op))
-
-        
-let poly op = findop op optypes
-let mono op = let _, ws = Rtl.Dn.opr op in Types.instantiate (findop op optypes) ws
-
-let has_floating_result op = findop op opfloats
+let mono op = let _, ws = Rtl.Dn.opr op in Types.instantiate (findop op (!optypes)) ws
+let has_floating_result op = findop op (!opfloats)
 @
 % ------------------------------------------------------------------ 
 \subsection{Translation from {\PAL} operators to {\rtl} operators}
@@ -261,57 +277,58 @@ value in the \emph{width list} of an {\rtl} operator.
 If an operator name has a numerical component, it denotes the size of
 the result. Such a size always becomes the last element in the width
 list of an operator. 
-<<Translate>>=
-let prefix opname argtys =
-  try 
-    let op, retsize = T.split opname in
-    let opty        = Types.findopname op Types.optypes in
-    let argwidths   = T.widthlist opname opty argtys in
-    ( match retsize with
-    | None   -> T.appl opname opty argtys, Rtl.opr op argwidths
-    | Some n -> T.bits n,                  Rtl.opr op (argwidths@[n])
-    )            
-  with
-  | Not_found  -> Error.errorf "unknown operator %%%s" opname
+<<rtlop.ml>>=
+module Translate = struct
+  let prefix opname argtys =
+    try 
+      let op, retsize = T.split opname in
+      let opty        = findopname op (!optypes) in
+      let argwidths   = T.widthlist opname opty argtys in
+      ( match retsize with
+      | None   -> T.appl opname opty argtys, Rtl.opr op argwidths
+      | Some n -> T.bits n,                  Rtl.opr op (argwidths@[n])
+      )            
+    with
+    | Not_found  -> Error.errorf "unknown operator %%%s" opname
 @ 
 Infix and prefix symbols are stored in tables.
 Nothing should go wrong  in lookup because the only symbols that make
 it this far should have been blessed by the parser.
-<<Translate>>=
-let binops = Strutil.assoc2map 
-    [  "+"      , "add"
-    ;  "-"      , "sub"
-    ;  "*"      , "mul"
-    ;  "/"      , "divu"
-    ;  "%"      , "modu"
-    ;  "<<"     , "shl"
-    ;  ">>"     , "shrl"
-    ;  "=="     , "eq"
-    ;  "<="     , "leu"
-    ;  ">="     , "geu"
-    ;  ">"      , "gtu"
-    ;  "<"      , "ltu"
-    ;  "!="     , "ne"
-    ;  "&"      , "and"
-    ;  "^"      , "xor"
-    ;  "|"      , "or"
-    ;  "!="     , "ne"
-    ] 
+<<rtlop.ml>>=
+  let binops = Strutil.assoc2map 
+      [  "+"      , "add"
+      ;  "-"      , "sub"
+      ;  "*"      , "mul"
+      ;  "/"      , "divu"
+      ;  "%"      , "modu"
+      ;  "<<"     , "shl"
+      ;  ">>"     , "shrl"
+      ;  "=="     , "eq"
+      ;  "<="     , "leu"
+      ;  ">="     , "geu"
+      ;  ">"      , "gtu"
+      ;  "<"      , "ltu"
+      ;  "!="     , "ne"
+      ;  "&"      , "and"
+      ;  "^"      , "xor"
+      ;  "|"      , "or"
+      ;  "!="     , "ne"
+      ] 
 
-let unops = Strutil.assoc2map 
-    [  "-"      , "neg"
-    ;  "~"      , "com"
-    ]
+  let unops = Strutil.assoc2map 
+      [  "-"      , "neg"
+      ;  "~"      , "com"
+      ]
 
-let binary op =
-  try prefix (Strutil.Map.find op binops) 
-  with Not_found -> Impossible.impossible ("unknown binary infix operator "^op)
+  let binary op =
+    try prefix (Strutil.Map.find op binops) 
+    with Not_found -> Impossible.impossible ("unknown binary infix operator "^op)
 
-let unary op =
-  try prefix (Strutil.Map.find op unops) 
-  with Not_found -> Impossible.impossible ("unknown unary symbolic operator "^op)
+  let unary op =
+    try prefix (Strutil.Map.find op unops) 
+    with Not_found -> Impossible.impossible ("unknown unary symbolic operator "^op)
+end
 @        
-
 <<rtlop.ml>>=
 let ws = ["w"; "w'"; "w3"; "w4"; "w5"]
 let args = ["x"; "y"; "z"; "u"; "v"]
@@ -329,7 +346,7 @@ module Emit = struct
     | "or" -> "_or"
     | n -> n
           
-  let emitop (name, _, (parms, _ as tyscheme)) =
+  let emitop name (parms, _ as tyscheme) =
     let nargs   = List.length parms in
     let nwidths = T.largest_key tyscheme in
     begin
@@ -344,5 +361,5 @@ module Emit = struct
     end
   let creators () =
     pf "(* This code generated automatically by Rtlop.Emit.creators *)\n";
-    List.iter emitop Types.optable    
+    Strutil.Map.iter emitop (!optypes)
 end    

@@ -17,24 +17,25 @@ unwind_test:
 	movl (%ecx),%ecx
 .Linitialize_continuations_l12:
 .Lproc_body_start_l11:
-	movl %ecx,(%esp)
-	movl %eax,4(%esp)
+	movl %eax,(%esp)
+	movl %ecx,4(%esp)
 	call g
-.Ljoin_l17:
+.Lcall_successor_l17:
 	movl $0,%eax
 	leal 8(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx
-	movl (%esp),%edx
+	movl 4(%esp),%edx
 	movl %edx,(%ecx)
 	leal 8(%esp), %esp
 	ret
-k1_U10:
-	movl 4(%esp),%eax
+.Lunwind_entry_l10:
+.Lstart_of_continuation_code_l8:
+	movl (%esp),%eax
 	leal 8(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx
-	movl (%esp),%edx
+	movl 4(%esp),%edx
 	movl %edx,(%ecx)
 	leal 8(%esp), %esp
 	ret
@@ -42,23 +43,23 @@ k1_U10:
 .Lstackdata_l23:
 .long 0
 .section .pcmap
-.long .Ljoin_l17
+.long .Lcall_successor_l17
 .long .Lframe_l24
 .section .pcmap_data
 .Lframe_l24:
 .long 0x80000004
 .long 0xfffffff8
-.long 0xfffffff8
+.long 0xfffffffc
 .long .Lstackdata_l23
 .long 0
 .long 1
 .long 0
 .long 7
-.long 0xfffffffc
+.long 0xfffffff8
 .long 1
 .long 2
 .long 1
-.long k1_U10
+.long .Lunwind_entry_l10
 .long 0xfffffff8
 .long 0
 .long 3
@@ -69,7 +70,7 @@ g:
 	leal 32(%esp), %eax
 	movl (%eax),%eax
 .Linitialize_continuations_l32:
-	leal k_C29,%ecx
+	leal .Lcut_entry_l29,%ecx
 	leal 32(%esp), %edx
 	movl %eax,4(%esp)
 	movl $-8,%eax
@@ -90,30 +91,32 @@ g:
 	movl $-32,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	movl %edi,8(%esp)
-	movl %esi,12(%esp)
-	movl %ebp,16(%esp)
-	movl %ebx,20(%esp)
+	movl %ebx,8(%esp)
+	movl %ebp,12(%esp)
+	movl %esi,16(%esp)
+	movl %edi,20(%esp)
 	call do_unwind
-.Lpostcall_l36:
-k_C29:
+.Lcall_successor_l36:
+	int $3
+.Lcut_entry_l29:
+.Lstart_of_continuation_code_l28:
 	movl $1,%eax
 	leal 32(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx
 	movl 4(%esp),%edx
 	movl %edx,(%ecx)
-	movl 20(%esp),%ebx
-	movl 16(%esp),%ebp
-	movl 12(%esp),%esi
-	movl 8(%esp),%edi
+	movl 20(%esp),%edi
+	movl 16(%esp),%esi
+	movl 12(%esp),%ebp
+	movl 8(%esp),%ebx
 	leal 32(%esp), %esp
 	ret
 .section .pcmap_data
 .Lstackdata_l41:
 .long 0
 .section .pcmap
-.long .Lpostcall_l36
+.long .Lcall_successor_l36
 .long .Lframe_l42
 .section .pcmap_data
 .Lframe_l42:
@@ -125,17 +128,17 @@ k_C29:
 .long 0
 .long 0
 .long 1
-.long 7
-.long 0xfffffff4
-.long 9
-.long 0xfffffff0
-.long 10
-.long 0xffffffec
 .long 11
+.long 0xfffffff4
+.long 10
+.long 0xfffffff0
+.long 9
+.long 0xffffffec
+.long 7
 .long 0xffffffe8
 .long 0
 .section .pcmap
-.long k_C29
+.long .Lcut_entry_l29
 .long .Lframe_l43
 .section .pcmap_data
 .Lframe_l43:
@@ -147,13 +150,13 @@ k_C29:
 .long 0
 .long 0
 .long 1
-.long 7
-.long 0xfffffff4
-.long 9
-.long 0xfffffff0
-.long 10
-.long 0xffffffec
 .long 11
+.long 0xfffffff4
+.long 10
+.long 0xfffffff0
+.long 9
+.long 0xffffffec
+.long 7
 .long 0xffffffe8
 .long 0
 .section .text

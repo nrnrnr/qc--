@@ -47,18 +47,18 @@ main:
 	movl (%ecx),%ecx
 	leal 12(%esp), %ecx
 	movl (%ecx),%ecx
-.Linitialize_continuations_l4:
-.Lproc_body_start_l3:
+.Linitialize_continuations_l3:
+.Lproc_body_start_l2:
+.Lbranch_target_l14:
 	movl $1,%edx
 	cmpl %edx,%eax
-	ja .Ljoin_l10
-.Ljoin_l11:
+	ja .Lbranch_target_l10
+.Lbranch_target_l9:
 	leal hello,%eax
-	jmp .Ljoin_l9
-.Ljoin_l10:
+	jmp .Lbranch_target_l8
+.Lbranch_target_l10:
 	leal bye,%eax
-	jmp .Ljoin_l9
-.Ljoin_l9:
+.Lbranch_target_l8:
 	leal 12(%esp), %edx
 	movl %eax,4(%esp)
 	movl $-12,%eax
@@ -67,7 +67,7 @@ main:
 	movl %eax,(%edx)
 	movl %ecx,8(%esp)
 	call printf
-.Ljoin_l8:
+.Lcall_successor_l7:
 	movl $0,%eax
 	leal 12(%esp), %ecx
 	movl $0,%edx
@@ -80,7 +80,7 @@ main:
 .Lstackdata_l18:
 .long 0
 .section .pcmap
-.long .Ljoin_l8
+.long .Lcall_successor_l7
 .long .Lframe_l19
 .section .pcmap_data
 .Lframe_l19:

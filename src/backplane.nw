@@ -154,6 +154,10 @@ type outputs = SS.t
 <<exported module types>>
 module Make (Arg : ARG) : S with type proc = Arg.proc
 module M : S with type proc = Ast2ir.proc
+val of_dataflow : 
+  (Zipcfg.graph -> Zipcfg.graph * bool) ->
+    'a -> (Zipcfg.graph * 'c) -> (Zipcfg.graph * 'c) * bool
+@ 
 <<exported module types>>=
 module type ARG = sig
   type proc
@@ -162,7 +166,7 @@ module type ARG = sig
 end
 module type S = sig
   type proc
-  type 'a camlFunction = 'a -> proc -> bool
+  type 'a camlFunction = 'a -> proc -> proc * bool
   val register : property:string -> explanation:string list -> unit
   val explain  : unit -> unit (* dump explanations *)
   <<stage type>>
@@ -310,25 +314,32 @@ let verbosity v =
 
 let rec runProgram arg proc = function
   | Seq actionList ->
-    let seqHelp truth (action) =
-      let result = runProgram arg proc action in
-        truth || result in
-    List.fold_left seqHelp false actionList
+    let seqHelp (proc, changed) action =
+      let proc, changed' = runProgram arg proc action in
+        proc, (changed || changed') in
+    List.fold_left seqHelp (proc, false) actionList
   | When_Do (whenExp, doExp) ->
-       runProgram arg proc whenExp && runProgram arg proc doExp
+       let proc, cond = runProgram arg proc whenExp in
+       if cond then runProgram arg proc doExp else proc, cond
   | Unless_Do (unlessExp, doExp) ->
-    runProgram arg proc unlessExp || runProgram arg proc doExp
+      let proc, cond = runProgram arg proc unlessExp in
+      if not cond then runProgram arg proc doExp else proc, cond
   | Fix action ->
-     runProgram arg proc action && runProgram arg proc (Fix action)
+      let proc, changed = runProgram arg proc action in
+      let rec fix proc =
+        let proc, changed = runProgram arg proc action in
+        if changed then fix proc else proc in
+      if changed then fix proc, changed else proc, changed
   | Ignore action ->
-    let _ = runProgram arg proc action in false
+      let proc, _ = runProgram arg proc action in proc, false
   | Single {fn = func; name = name} -> 
-    begin
-      if !the_verbosity
-      then List.iter prerr_string ["Running stage "; name; "\n"];
-      func arg proc
-    end
+      Debug.eprintf "backplane" "Backplane running stage '%s'\n" name;
+      let ans = func arg proc in
+      Debug.eprintf "backplane" "Backplane stage '%s' completed\n" name;
+      ans
   | Share (param, _, action) -> runProgram param proc action
+
+let _ = Debug.register "backplane" "print each stage of backplane as run"
 @
 
 
@@ -550,8 +561,9 @@ errors, we run the program.
 exception MismatchedParameters of string
 
 let run main proc =
+  Debug.eprintf "backplane" "checking backplane action\n";
   match stateErrors main with
-  | []   -> runProgram V.Nil proc main
+  | []   -> Debug.eprintf "backplane" "running action\n"; runProgram V.Nil proc main
   | errs -> let msg = String.concat "\n" (List.map error_string errs) in
             let pgm = printAction "  " main in
             impossf "incorrect backplane configuration:\n%s\n  ... program is:\n    %s"
@@ -590,7 +602,7 @@ type outputs = SS.t
 module Make (Arg : ARG) = struct
 
   type proc = Arg.proc
-  type 'a camlFunction = 'a -> proc -> bool
+  type 'a camlFunction = 'a -> proc -> proc * bool
 
   <<property registration>>
   <<stage type>>
@@ -614,7 +626,7 @@ that stage.
 module T : Lua.Lib.USERTYPE with type 'a t = 'a action = struct
     type 'a t = 'a action
     let tname = Arg.lua_type_name
-    let eq veq x y = x =*= y  (* flagrantly wrong *)
+    let eq veq x y = false (* safe, if flagrantly wrong *)
     let to_string vs a = printAction (makeIndent 0) a
 end
 
@@ -643,7 +655,12 @@ let {V.embed = embed; V.project = project; V.is = is} =
 let ( **-> ) = V.( **-> )
 let ( **->> ) x y = x **-> V.result y 
 let proc    = T2.makemap V.userdata V.projection
-let stageFn = V.func (V.value **-> proc **->> V.bool)
+let stage_results =
+  let em (p, b) = [proc.V.embed p; V.bool.V.embed b] in
+  let pr = function [p; b] -> (proc.V.project p, V.bool.V.project b)
+    | l -> V.projection ((V.list V.value).V.embed l) "proc * bool" in
+  V.results em pr
+let stageFn = V.func (V.value **-> proc **-> stage_results)
 
 <<stage map>>
 
@@ -672,7 +689,7 @@ let init g =
   ; "share",     V.efunc (V.value **-> V.string **-> action **->> action) share
   ; "ignore",    V.efunc (action  **->>             action) ignore
   ; "stage",     V.efunc (action  **->>             action) id
-  ; "run",       V.efunc (action  **-> proc **->>   V.bool) run
+  ; "run",       V.efunc (action  **-> proc **->    stage_results) run
   ; "verbosity", V.efunc (V.bool  **->>             V.bool) verbosity
   ; "register",  V.efunc (V.string **-> V.list V.string **->> V.unit)
                                                             (fun p e -> register p e)
@@ -884,3 +901,7 @@ let explain () =
 <<registration of standard semantic properties>>
 @ 
 
+<<backplane.ml>>=
+let of_dataflow graph_rewrite _ (g, proc) =
+  let g, changed = graph_rewrite g in
+  (g, proc), changed

@@ -76,7 +76,7 @@ type spans = Spans.t
 exception DeadValue
 val upd_spans     : (Rtl.loc -> Rtl.loc) -> spans -> unit   (* may raise DeadValue *)
 val upd_all_spans :
-  (Rtl.loc -> Rtl.loc) -> Rtl.rtl Cfgx.M.cfg -> unit   (* may raise DeadValue *)
+    (Rtl.loc -> Rtl.loc) -> Zipcfg.graph -> unit   (* may raise DeadValue *)
 @ 
 The run-time system needs to know how the registers are mapped to constants.
 <<runtimedata.mli>>=
@@ -88,8 +88,7 @@ the data as assembly by calling [[emit_as_asm]].
 The function should be partially applied to an assembler, then added
 to the optimization pipeline.
 <<runtimedata.mli>>=
-val emit_as_asm : tgt -> 'a Asm.assembler -> procsym:Symbol.t ->
-                  Rtl.rtl Cfgx.M.cfg -> bool
+val emit_as_asm : tgt -> 'a Asm.assembler -> procsym:Symbol.t -> Zipcfg.graph -> unit
 @
 It appears that the interpreter needs to know about user-defined spans and
 stackdata.
@@ -109,7 +108,8 @@ val emit_global_properties : ('a, Call.t) Target.t -> 'c Asm.assembler -> unit
 A number of shorthands are used throughout the implementation.
 <<runtimedata.ml>>=
 module B  = Bits
-module G  = Cfgx.M
+module G  = Zipcfg
+module GR = Zipcfg.Rep
 module CT = Ctypes
 module RM = Register.Map
 module RS = Register.Set
@@ -145,12 +145,7 @@ let upd_spans upd spans =
   spans.S.sds      <- List.map upd spans.S.sds;
   Array.iteri (fun i l -> spans.S.vars.(i) <- maybe_upd l) spans.S.vars
 
-let upd_all_spans upd cfg =
-  let upd_node n = match G.kind n with
-    | G.Call | G.Join -> (match G.spans n with Some ss -> upd_spans upd ss
-                                             | None    -> ())
-    | _ -> () in
-  G.iter_nodes upd_node cfg
+let upd_all_spans upd g = Zipcfg.iter_spans (upd_spans upd) g
 @
 
 % ------------------------------------------------------------------ 
@@ -164,37 +159,31 @@ Then, for each stopping point, we emit the associated spans by calling
 [[emit_site_spans]].
 <<runtimedata.ml>>=
 let emit_as_asm target asm ~procsym cfg =
-  let node_spans =
-    let add n rst = match G.kind n with
-      | G.Call | G.Join -> (match G.spans n with Some ss -> (n, ss) :: rst | _ -> rst)
-      | _ -> rst in
-    G.fold_nodes add [] cfg in
+  <<gather the [[spans]] in order>>
   let wordsize   = target.T.wordsize in
   let to_bits  i = Bits.S.of_int i wordsize  in 
   let zero       = Bits.zero wordsize in
   let one        = to_bits 1 in
-  <<define [[order]] to establish the order of the spans>>
   <<define functions for emitting data>>
   <<define [[emit_sd_spans]] and [[emit_site_spans]]>>
   let prev_section = asm#current in
   emit_sd_spans ();
-  List.iter emit_site_spans (order node_spans);
-  asm#section prev_section;
-  true
+  List.iter emit_site_spans spans;
+  asm#section prev_section
 @
-By emitting the spans in the same order that the labels are emitted,
-we can use binary search to find a span (since the labels will be
-ordered properly).
-<<define [[order]] to establish the order of the spans>>=
-let order node_spans =
-  match node_spans with
-  | []       -> node_spans
-  | (n,_)::_ ->
-    let g = G.of_node n in
-    let (_, map) =
-      G.fold_layout (fun n (i,m) -> (i+1, IM.add (G.num n) i m)) (0,IM.empty) g in
-    let num n = IM.find (G.num n) map in
-    List.sort (fun (n1,_) (n2,_) -> compare (num n1) (num n2)) node_spans in
+Along with each of the spans, we collect the label to which we attach the run-time data.
+<<gather the [[spans]] in order>>=
+let add_spans (first, _ as b) _ spans =
+  let (_, last) = GR.goto_end (GR.unzip b) in
+  let add spans (_, lbl) = function Some ss -> (lbl, ss) :: spans | None -> spans in
+  let spans = match first with
+              | GR.Label (lbl, _, ss) -> add spans lbl (!ss)
+              | GR.Entry              -> spans in
+  match last with
+  | GR.Call { GR.cal_spans = ss; GR.cal_contedges = {G.node = n} :: _ } ->
+      add spans n ss
+  | _ -> spans in
+let spans = List.rev (G.fold_layout add_spans [] cfg) in
 @
 \paragraph{Emitting Stackdata Spans}
 Stackdata spans have been attached to all the span collections.
@@ -207,7 +196,7 @@ The next $n$ words give the stackdata labels in order.
 let sd_label = asm#local (Idgen.label "stackdata") in
 
 let emit_sd_spans () =
-  match node_spans with
+  match spans with
   | (_, spans)::_ ->
       let spans = S.expose spans in
       asm#section "pcmap_data";
@@ -231,20 +220,11 @@ This data is placed in the [[pcmap_data]] section of the assembly code.
 If a stopping point is a call node, its successor is the label we are suspended at;
 otherwise, we expect the argument node to have a label.
 <<define [[emit_sd_spans]] and [[emit_site_spans]]>>=
-let emit_site_spans (node, spans) =
+let emit_site_spans (stop_l, spans) =
   let spans = S.expose spans in
-  let stop_l = match G.kind node with
-    | G.Call ->
-        let n = G.altrets node in
-        let succ = G.succ_n node n in
-        (match G.kind succ with
-         | G.Join -> G.label succ
-         | _ -> imposs "RTD found succ of call is non-join node")
-    | G.Join -> G.label node
-    | _ -> imposs "Runtimedata expected call or join node" in
   let frame_label = asm#local (Idgen.label "frame") in
   <<emit proc to run-time data map>>
-  <<emit frame data>>   in
+  <<emit frame data>> in
 @
 The first area consist of two consecutive pointers, one to the stopping point
 and the other to the data associated with the stopping point:
@@ -383,7 +363,7 @@ the usual two's-complement representation).
 First, we define a slew of helpers to emit the different types of values.
 <<define functions for emitting data>>=
 <<define [[simplify_exp]] to simplify rtl expressions>>
-let reg_ix r =
+let reg_ix (((s,_,_), i, _) as r) =
   try  RM.find r (snd target.T.reg_ix_map)
   with Not_found -> imposs "Register not found in map" in
 let emit_dead_loc      () = asm#value zero in

@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: lua-mode -*-
 
 % ------------------------------------------------------------------ 
 \section{Lua Compiler Configuration}
@@ -39,12 +40,16 @@ back end phases in the compiler. For notational brevity, we introduce an
 alias here. See \module{backplane.nw} for details.
 <<Lua compiler configuration>>=
 Stages = Stages or {}
-function Stages.nullf () return nil end
+function Stages.nullf (_, proc) return proc, nil end
 
 function Stages.assert(prop)
   return Backplane.stage { name='assert ' .. prop, creates={prop},
                               fn = Stages.nullf}
 end
+
+function Stages.hellof (_, proc) write('reached Stages.hello\n'); return proc, nil end
+
+Stages.hello = Backplane.stage { name='hello', fn = Stages.hellof}
 @
 
 % ------------------------------------------------------------------ 
@@ -172,8 +177,8 @@ function Dummy.layout.fn(dummy, proc)
                                   })
     end
     local block = Block.cat(32, layout)
-    Stack.freeze(proc, block)
-    return 1
+    proc = Stack.freeze(proc, block)
+    return proc, 1
 end
 @
     
@@ -553,7 +558,9 @@ backend and an assembler.
 Opt = Opt and error('Opt not empty') or {}
 
 function verbose(s, a, b, c, d, e, f, g, h)
-      print(s,a,b,c,d,e,f,g,h)
+  if Options.verbose > 0 then
+    write(s,a or '',b or '',c or '',d or '',e or '',f or '',g or '',h or '')
+  end
 end
 
 function Opt.verb(stage) -- needs more work (want verbosity for each stage)
@@ -564,11 +571,17 @@ function Opt.verb(stage) -- needs more work (want verbosity for each stage)
   end
 end  
 
+start_time = Caml.time()
+function pr0(a,b) print("0:" .. (Caml.time() - start_time)) return b, 1 end
+function pr1(a,b) print("1:" .. (Caml.time() - start_time)) return b, 1 end
+function pr2(a,b) print("2:" .. (Caml.time() - start_time)) return b, 1 end
+function pr3(a,b) print("3:" .. (Caml.time() - start_time)) return b, 1 end
+
 function Opt.standard(backend, asm, B)
   if not B then error("Opt.standard called without backplane argument") end
   Stages.null = B.stage {name="empty stage", fn=Stages.nullf}
   local assemble  = Driver.proc_assembler(asm) 
-	local emit_data = nil
+  local emit_data = nil
   if backend.emit_data then
     emit_data = Opt.verb(B.stage { name = "emit_data", fn = backend.emit_data(asm)})
   end
@@ -581,7 +594,6 @@ function Opt.standard(backend, asm, B)
     , Opt.verb(Optimize.simplify_exps) or Stages.null
     , Opt.verb(backend.preopt)     or Stages.null
     , Opt.verb(backend.pic)        or Stages.null
-    ----  , print_cfg -- diagnostics for Paul
     , Opt.verb(backend.expand)     or Stages.null
            --- Optimize.validate could be appropriate here, provided the recognizer
            --- can deal with temporaries...
@@ -611,8 +623,7 @@ Backplane.register ('proper pic', {
 
 Optimize.dead = 
   Backplane.stage { name='dead', creates={'no dead assignments'},
-                       uses='liveness', fn = Optimize.deadfn }
-
+                       fn = Optimize.deadfn }
 @
 % ------------------------------------------------------------------ 
 \subsection{Graph-Coloring Register Allocator}
@@ -655,6 +666,8 @@ function Compile.file(backend, emitglobals, file, out)
                 , action = Opt.standard(backend, asm, Backplane) 
                 , B = Backplane
                 }
+--    Inspect.show('target = ', backend.target)
+--    Inspect.show('opt = ', opt)
     Driver.compile(backend.target, opt, emitglobals, ast, asm,
                    Options.validate, Options.swap)
     if backend.emit then backend.emit(asm) end
@@ -666,8 +679,15 @@ and a procedure, then runs the given [[self.action]] in the
 optimization backplane.
 <<Lua compiler configuration>>=
 function Compile.run_optimizer(self,proc)
+--  write('hello: Compile.run_optimizer\n')
     local B = self.B or error("missing backplane")
-    -- verbose('running Compile.run_optimizer with ', whichB(B), '\n')
+--    write('got B\n')
+--    verbose('running Compile.run_optimizer with backplane ', tostring(B),
+--            ' and proc ', tostring(proc), '\n')
+--    verbose('action is ', tostring(self.action), '\n')
+--    verbose('type of proc is ', type(proc), '\n')
+
+    -- disastrous lua bug: local proc,changed = B.run(Stages.hello, proc)
     B.run(self.action, proc)
 end    
 @
@@ -791,6 +811,8 @@ Optimize.oimprove =
     Optimize.validate }
 
 
+_ = [[
+
 --
 -- MIPS (32 bit, little endian)
 --
@@ -898,6 +920,7 @@ Backend.sparc =
   , emit_data  = Runtime.emit_data
   , compile    = Compile.file
   }
+]]
 @
 
 % ------------------------------------------------------------------ 
@@ -913,11 +936,13 @@ even though they all come together in [[qc--.lua]].
 <<calling convention utilities>>
 
 <<x86 calling convention automata in Lua>>
+_ = [[
 <<Alpha calling convention automata in Lua>>
 <<MIPS calling convention automata in Lua>>
 <<PPC calling convention automata in Lua>>
 <<IA64 calling convention automata in Lua>>
 <<SPARC calling convention automata in Lua>>
+]]
 @ 
 <<calling convention utilities>>=
 Util = Util or {}

@@ -1,0 +1,83 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+%%Grades: A Peripheral Later
+
+
+\section{Dead-assignment elimination}
+
+<<dead.mli>>=
+val elim_assignments : Live.liveset Dataflow.transformation
+@
+<<dead.ml>>=
+module D  = Dataflow
+module G  = Zipcfg
+module GR = Zipcfg.Rep
+module R  = Register
+module RS = Register.SetX
+module RP = Rtl.Private
+module S  = Rtlutil.ToString
+@ 
+<<dead.ml>>=
+let () = Debug.register "dead" "dead-assignment elimination"
+let debug fmt = Debug.eprintf "dead" fmt
+let epr = Printf.eprintf 
+
+<<utilities>>
+
+let last_in _ l = None
+let middle_in live m =
+  if GR.is_executable m then
+    let rtl = GR.mid_instr m in
+    all_regs_assigned rtl
+      (fun regs ->
+        if List.for_all (fun r -> not (RS.mem (R.Reg r) live)) regs then
+          (<<announce dead elimination>>; Some G.empty)
+        else
+          (<<announce dead non-elimination>>; None))
+      (fun () -> None)
+  else
+    None
+let first_in live f = None
+
+<<announce dead elimination>>=
+(if Debug.on "dead" then
+  begin
+    epr "dead: scheduling dead assignment %s\n" (S.rtl rtl);
+    epr "dead: assigned to registers %s\n" (String.concat ", " (List.map S.reg regs));
+    epr "dead: live = { %s }\n" (RS.to_string live);
+  end)
+<<announce dead non-elimination>>=
+(if Debug.on "dead" then
+  begin
+    epr "dead: something is live out\n";
+    epr "dead: live = { %s }\n" (RS.to_string live);
+  end)
+@ 
+<<dead.ml>>=
+let elim_assignments = D.transformation "dead" last_in middle_in first_in
+@ 
+CPS to find if an RTL assigns only registers.
+We're making pessimistic assumptions, because if we do see a slice, we
+don't want to have to check all the may-alias relations.
+THIS IS PROBABLY A BAD IDEA---WE'LL HAVE TO BITE THE
+MAY-ALIAS BULLET SOONER OR LATER.
+<<utilities>>=
+let all_regs_assigned rtl succ fail =
+  let fail () = Debug.eprintf "dead" "assigned to non-register\n"; fail () in
+  let RP.Rtl effs = Rtl.Dn.rtl rtl in
+  let rec effects regs = function
+    | [] -> succ regs
+    | (_, RP.Store(RP.Reg r, _, _)) :: es -> effects (r::regs) es
+    | (_, RP.Store((RP.Mem _ | RP.Var _ | RP.Global _), _, _)) :: es -> fail ()
+    | (_, RP.Kill _) :: es -> effects regs es
+    | (g, RP.Store(RP.Slice(_, _, l), r, w)) :: es ->
+        effects regs ((g, RP.Store(l, r, w)) :: es) in
+  effects [] effs
+

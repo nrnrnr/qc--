@@ -1,0 +1,23 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+<<tx.mli>>=
+val decrement : name:string -> from:int -> to':int -> unit
+val remaining : unit -> int
+val set_limit : int -> unit
+@
+<<tx.ml>>=
+type t = { mutable limit : int; mutable remaining : int; mutable last : string; }
+let ts = { limit = max_int; remaining = max_int; last = "<none>"; }
+let _ = Reinit.at (fun () -> begin 
+  ts.limit <- max_int;
+  ts.remaining <- ts.limit;
+  ts.last <- "<none>";
+end)
+
+let set_limit n = ts.limit <- n; ts.remaining <- n
+let remaining () = ts.remaining
+let decrement ~name ~from ~to' =
+  assert (ts.remaining = from);
+  ts.remaining <- to';
+  ts.last <- name
+

@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
 % Quality    ::=    A|B|C|D|E
 % Importance ::=    Central|Subsystem|Peripheral
@@ -125,6 +126,8 @@ module Lua: sig
     val adjust:     t -> t
     val cat:        Rtl.width -> t list -> t
     val overlap:    Rtl.width -> placement (* "high"|"low"*) -> t list -> t   
+
+    val eq : t -> t -> bool
 end
 @
 
@@ -260,9 +263,13 @@ module Lua = struct
     let relative block name size alignment =
       relative (base block) name at ~size ~alignment
     let base block        = Rtlutil.ToString.exp (base block)
+
+    let eq b1 b2 =
+      b1.size = b2.size && b1.alignment = b1.alignment &&
+      Rtlutil.Eq.exp (Rtl.Dn.exp b1.base) (Rtl.Dn.exp b2.base) (* ignore constraints! *)
+
 end
 @
-
 Norman suggested to have overlap and concatenation functions in Lua that
 take any number of parameters which can be either blocks or lists
 (tables) of blocks. This amounts to functions that take a list of Lua

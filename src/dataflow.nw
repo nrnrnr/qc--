@@ -1,91 +1,172 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
-\section{Support for forward dataflow problems}
+\section{Support for backward dataflow problems}
 
-This documentation is written long after the event, so one may be
-suspicious of errors. 
 
-We want to solve both forward and backward problems, so we talk about
-a ``split,'' which will be a join point in one direction and a merge
-point in the other.
-A~value of type [[('i, 'a)]] problem is a dataflow problem over nodes
-with instructions represented by~[['i]] and the dataflow information
-represented by~[['a]].
-All problems incrementally build up information at each split node until we
-reach a fixed point.
-This means each split node holds suitable mutable state of type~[['a]].
-
-Each dataflow problem has these parts:
+A dataflow pass is based on a single dataflow fact of type~[['a]], but
+to describe a fully general pass requires not one but three type
+parameters:
 \begin{itemize}
 \item
-[[init_info]]: Initial (bottom) value of dataflow information.
+Type parameter [['a]] is the pass's dataflow fact.
+Values of type~[['a]] should form a lattice.
 \item
-[[propagate]]: Push the dataflow information through a non-split node.
+Type parameter [['i]] is an input, from which it should be possible to
+derived the dataflow fact.
+For example, [['i]] might be equal to~[['a]], or it might be a tuple
+of which one element is~[['a]].
 \item
-[[split_info]]: Extract the dataflow information from a split node.
-\item 
-[[merge_split_info]]:
-Using the dataflow equations, merge a new dataflow value with the
-value already stored at the split node (e.g., by taking the least
-upper bound).
-Return a Boolean indicating whether this operation changed the
-(mutable) value at the split node.
+Type parameter [['o]] is an output.
+For a pure analysis, [['o]] is equal to~[['a]].
+For a pure transformation, [['o]] is [[graph option]].
+For a combined analysis and transformation, [['o]] 
+is [['a answer]].
 \end{itemize}
+The dataflow engine computes a least solution to a set of dataflow
+equations defined by a pass.
+@
+<<dataflow.mli>>=
+<<exported types>>
+<<exported types>>=
+type uid = Zipcfg.uid
+type 'a answer = Dataflow of 'a | Rewrite of Zipcfg.graph
 
-Given a problem, [[fwd_iteration]] runs one forward iteration and
-returns a Boolean indicating whether anything changed.
-It can be repeated until it reaches a fixed point.
+type ('i, 'a, 'o) pass' =
+ { name      : string;
+   add_info  : 'a -> 'a -> 'a;  (* lattice join (least upper bound) *)
+   changed   : old:'a -> new':'a -> bool;  (* is new one bigger? *)
+   init_info : 'a;  (* lattice bottom element *)
+   last_in   : (uid -> 'i) -> Zipcfg.Rep.last -> 'o;
+   middle_in : 'i -> Zipcfg.Rep.middle -> 'o;
+   first_in  : 'i -> Zipcfg.Rep.first -> 'o;
+ } 
+
+type 'a analysis = ('a, 'a, 'a) pass'
+type 'a transformation = ('a, unit, Zipcfg.graph option) pass'
+type 'a pass = ('a, 'a, 'a answer) pass'
+<<dataflow.mli>>=
+val backward_anal : 'a analysis -> Zipcfg.graph -> (uid -> 'a)
+val backward_pass : 'a pass -> Zipcfg.graph -> (uid -> 'a)
+@ 
+<<dataflow.mli>>=
+val transformation :
+    name:string ->
+    last_in:((uid -> 'a) -> Zipcfg.Rep.last -> Zipcfg.graph option) ->
+    middle_in:('a -> Zipcfg.Rep.middle -> Zipcfg.graph option) ->
+    first_in:('a -> Zipcfg.Rep.first -> Zipcfg.graph option) ->
+    'a transformation
 @
 \section{Implementation}
 
-<<dataflow.mli>>=
-module Make (G : Cfg.S) : sig
-  type ('i, 'a) problem =
-    { split_info       : 'i G.node -> 'a
-    ; merge_split_info : 'i G.node -> 'a -> bool  (* did anything change? *)
-    ; init_info       : 'a
-    ; propagate       : 'i G.node -> 'a -> 'a
-    } 
-  val fwd_iteration : ('i, 'a) problem -> 'i G.cfg -> bool
-(*val bwd_iteration : ('i, 'a) problem -> 'i G.cfg -> bool*)
-end
 <<dataflow.ml>>=
-module Make (G : Cfg.S) = struct
-  type ('i, 'a) problem =
-    { split_info       : 'i G.node -> 'a
-    ; merge_split_info : 'i G.node -> 'a -> bool  (* did anything change? *)
-    ; init_info       : 'a
-    ; propagate       : 'i G.node -> 'a -> 'a
-    } 
-  <<iteration functions>>
-end
+module G  = Zipcfg
+module GR = Zipcfg.Rep
+module UA = Unique.Array
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
+let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
+
+<<exported types>>
 @ 
 Revised to use the new flow-graph traversal.
 We go from each head to the next join.
-<<iteration functions>>=
-let fwd_iteration {split_info=join_info; merge_split_info= merge_join_info;
-                   init_info= init_info; propagate= propagate} g =
+<<dataflow.ml>>=
+let backward anal graph =
+  let blocks = List.rev (G.postorder_dfs graph) in
+  let map = UA.make (List.map GR.id blocks) anal.init_info in
+  let find = UA.get map in
   let changed = ref false in
-  let merge_join_info n i = if merge_join_info n i then changed := true in
-  let heads = G.postorder_dfs (fun n hs -> if G.is_head n then n :: hs else hs) [] g in
-  <<forward solver functions>> in
-  List.iter follow heads;
-  !changed
+  let block b =
+    let h, l = GR.goto_end (GR.unzip b) in
+    let out = anal.last_in find l in
+    let rec prev h out = match h with
+      | GR.Head (h, m) -> prev h (anal.middle_in out m)
+      | GR.First f -> anal.first_in out f in
+    let in' = prev h out in
+    let u = GR.id b in
+    let old_in = find u in
+    if anal.changed ~old:old_in ~new':in' then
+      begin
+        UA.set map u in';
+        changed := true
+      end in
+  let rec iterate n =
+    let () = changed := false in
+    let () = List.iter block blocks in
+    if !changed then
+      if n < 1000 then iterate (n + 1)
+      else impossf "%s didn't converge in %n iterations" anal.name n
+    else
+      ( Debug.eprintf anal.name "%s converted in %d iterations\n" anal.name n ;
+        find ) in
+  iterate 1
+let backward_anal = backward
+@ 
+In the general case we solve a graph in the context of a larger subgraph.
+<<dataflow.ml>>=
+let rec solve_graph anal outer graph exit_fact =
+  let last' map l = match l with
+  | GR.Exit -> Dataflow exit_fact
+  | _ -> anal.last_in map l in
+  let anal' = { anal with last_in = last' } in
+  general_backward anal' outer graph GR.entry_uid 
+and general_backward anal outer graph =
+  let blocks = List.rev (G.postorder_dfs graph) in
+  let map = UA.make (List.map GR.id blocks) anal.init_info in
+  let find u = try UA.get map u with Not_found -> outer u in
+  let solve_graph = solve_graph anal find in
+  <<definition of [[answer]]>>
+  let changed = ref false in
+  let block b =
+    let h, l = GR.goto_end (GR.unzip b) in
+    let out = answerl l in
+    let rec prev h out = match h with
+      | GR.Head (h, m) -> answerm out m (fun a -> prev h a)
+      | GR.First f -> answerf out f in
+    let in' = prev h out in
+    let u = GR.id b in
+    let old_in = find u in
+    if anal.changed ~old:old_in ~new':in' then
+      begin
+        UA.set map u in';
+        changed := true
+      end in
+  let rec iterate n =
+    let () = changed := false in
+    let () = List.iter block blocks in
+    if !changed then
+      if n < 1000 then iterate (n + 1)
+      else impossf "%s didn't converge in %n iterations" anal.name n
+    else
+      ( Debug.eprintf anal.name "%s converted in %d iterations\n" anal.name n ;
+        find ) in
+  iterate 1
+let backward_pass anal graph =
+  general_backward anal (fun _ -> raise Not_found) graph
 
-<<forward solver functions>>=
-let rec follow head =
-  let info = if G.is_join head then join_info head else init_info in
-  continue info (G.succ head)
-and continue info node =
-  if G.is_join node then
-    merge_join_info node info
-  else
-    let info = propagate node info in
-    List.iter (continue info) (G.succs node) 
+<<definition of [[answer]]>>=
+let answerf out f = match anal.first_in out f with
+| Dataflow a -> a
+| Rewrite g -> solve_graph g out in
+
+let answerm out m k = match anal.middle_in out m with
+| Dataflow a -> k a
+| Rewrite g -> solve_graph g out in
+
+let answerl l = match anal.last_in find l with
+| Dataflow a -> a
+| Rewrite g -> solve_graph g anal.init_info in
 @
+<<dataflow.ml>>=
+let transformation ~name ~last_in ~middle_in ~first_in = {
+  name = name;
+  add_info = (fun () () -> ()); changed = (fun ~old ~new' -> false); init_info = ();
+  last_in = last_in; middle_in = middle_in; first_in = first_in;
+}
+@
+\clearpage
 We're playing fast and loose with polymorphic equality---cyclic
 comparisons might not terminate.  
-<<dataflow.ml>>=
+<<odataflow.ml>>=
 module Test = struct
   module G = struct
     type  'i cfg  = G of ('i node * 'i node list) list
@@ -136,7 +217,8 @@ module Test = struct
 *)
       ] 
 end
-<<dataflow.mli>>=
+<<odataflow.mli>>=
 module Test : sig
   val emit_dot : unit -> unit
 end
+@ 

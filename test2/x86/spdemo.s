@@ -23,18 +23,21 @@ main:
 	movl (%ecx),%ecx
 	leal 60(%esp), %edx
 	movl (%edx),%edx
-.Linitialize_continuations_l6:
-.Lproc_body_start_l5:
+.Linitialize_continuations_l5:
+.Lproc_body_start_l4:
+.Lbranch_target_l22:
 	movl %eax,16(%esp)
 	movl $1,%eax
 	movl %ecx,20(%esp)
 	movl 16(%esp),%ecx
 	cmpl %eax,%ecx
-	ja .Ljoin_l18
-.Ljoin_l19:
+	ja .Lbranch_target_l18
+.Lbranch_target_l14:
 	movl $10,%eax
-	jmp .Ljoin_l16
-.Ljoin_l18:
+.L.Lbranch_target_l13_l23:
+	movl %edx,36(%esp)
+	jmp .Lbranch_target_l13
+.Lbranch_target_l18:
 	movl $4,%eax
 	movl 20(%esp),%ecx
 	addl %eax,%ecx
@@ -51,16 +54,13 @@ main:
 	movl %ecx,(%eax)
 	movl %edx,36(%esp)
 	call atol
-.Ljoin_l17:
-	movl 36(%esp),%edx
-	jmp .Ljoin_l16
-.Ljoin_l16:
+.Lcall_successor_l17:
+.Lbranch_target_l13:
 	movl %eax,40(%esp)
-	movl %eax,%ecx
+	movl 40(%esp),%ecx
 	movl %ecx,%eax
-	movl %edx,36(%esp)
 	call sp
-.Ljoin_l13:
+.Lcall_successor_l12:
 	leal fmt,%ecx
 	movl %eax,44(%esp)
 	leal 60(%esp), %eax
@@ -88,7 +88,7 @@ main:
 	addl %ecx,%eax
 	movl %edx,(%eax)
 	call printf
-.Ljoin_l10:
+.Lcall_successor_l9:
 	movl $0,%eax
 	leal 60(%esp), %ecx
 	movl $0,%edx
@@ -98,17 +98,17 @@ main:
 	leal 60(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l25:
+.Lstackdata_l26:
 .long 0
 .section .pcmap
-.long .Ljoin_l17
-.long .Lframe_l26
+.long .Lcall_successor_l17
+.long .Lframe_l27
 .section .pcmap_data
-.Lframe_l26:
+.Lframe_l27:
 .long 0x80000004
 .long 0xffffffc4
 .long 0xffffffe8
-.long .Lstackdata_l25
+.long .Lstackdata_l26
 .long 0
 .long 5
 .long 0
@@ -120,14 +120,14 @@ main:
 .long 0
 .long 0
 .section .pcmap
-.long .Ljoin_l13
-.long .Lframe_l27
+.long .Lcall_successor_l12
+.long .Lframe_l28
 .section .pcmap_data
-.Lframe_l27:
+.Lframe_l28:
 .long 0x80000004
 .long 0xffffffc4
 .long 0xffffffe8
-.long .Lstackdata_l25
+.long .Lstackdata_l26
 .long 0
 .long 5
 .long 0
@@ -139,14 +139,14 @@ main:
 .long 0
 .long 0
 .section .pcmap
-.long .Ljoin_l10
-.long .Lframe_l28
+.long .Lcall_successor_l9
+.long .Lframe_l29
 .section .pcmap_data
-.Lframe_l28:
+.Lframe_l29:
 .long 0x80000004
 .long 0xffffffc4
 .long 0xffffffe8
-.long .Lstackdata_l25
+.long .Lstackdata_l26
 .long 0
 .long 5
 .long 0
@@ -243,65 +243,66 @@ sphelp:
 	movl (%edx),%eax
 	leal 48(%esp), %edx
 	movl (%edx),%edx
-.Linitialize_continuations_l43:
-.Lproc_body_start_l42:
+.Linitialize_continuations_l42:
+.Lproc_body_start_l41:
+.Lbranch_target_l51:
 	movl %eax,4(%esp)
 	movl $0,%eax
 	movl %ecx,8(%esp)
 	movl (%esp),%ecx
 	cmpl %eax,%ecx
-	je .Ljoin_l46
-.Ljoin_l47:
+	je .Lbranch_target_l47
+.Lbranch_target_l45:
 	movl $1,%eax
-	movl %eax,12(%esp)
+	movl %eax,28(%esp)
 	movl %ecx,%eax
-	movl 12(%esp),%ecx
+	movl 28(%esp),%ecx
 	subl %ecx,%eax
 	movl 8(%esp),%ecx
-	movl %edx,16(%esp)
+	movl %edx,12(%esp)
 	movl (%esp),%edx
 	addl %edx,%ecx
-	movl %ecx,20(%esp)
+	movl %ecx,32(%esp)
 	leal 48(%esp), %ecx
-	movl %ecx,24(%esp)
+	movl %ecx,36(%esp)
 	movl $4,%ecx
-	movl %ecx,28(%esp)
-	movl 24(%esp),%ecx
-	movl 28(%esp),%edx
+	movl %ecx,40(%esp)
+	movl 36(%esp),%ecx
+	movl 40(%esp),%edx
 	addl %edx,%ecx
-	movl 20(%esp),%edx
+	movl 32(%esp),%edx
 	movl %edx,(%ecx)
 	movl 4(%esp),%ecx
 	movl (%esp),%edx
 	imull %edx,%ecx
 	leal 48(%esp), %edx
-	movl %ecx,32(%esp)
+	movl %ecx,44(%esp)
 	movl $8,%ecx
 	addl %ecx,%edx
-	movl 32(%esp),%ecx
+	movl 44(%esp),%ecx
 	movl %ecx,(%edx)
 	leal 48(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx
-	movl 16(%esp),%edx
+	movl 12(%esp),%edx
 	movl %edx,(%ecx)
 	leal 48(%esp), %esp
 	jmp sphelp
-.Ljoin_l46:
+.Lbranch_target_l47:
 	movl 8(%esp),%eax
-	movl %edx,16(%esp)
+	movl %edx,12(%esp)
 	movl 4(%esp),%edx
 	leal 48(%esp), %ecx
-	movl %ecx,36(%esp)
+	movl %ecx,16(%esp)
 	movl $8,%ecx
-	movl %ecx,40(%esp)
-	movl 36(%esp),%ecx
-	movl %ebx,44(%esp)
-	movl 40(%esp),%ebx
+	movl %ecx,20(%esp)
+	movl 16(%esp),%ecx
+	movl %ebx,24(%esp)
+	movl 20(%esp),%ebx
 	addl %ebx,%ecx
-	movl 16(%esp),%ebx
+	movl 12(%esp),%ebx
 	movl %ebx,(%ecx)
-	movl 44(%esp),%ebx
+	movl 24(%esp),%ebx
 	leal 56(%esp), %esp
 	ret
 .section .text

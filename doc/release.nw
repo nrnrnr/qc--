@@ -4,7 +4,7 @@
 \def\PAL{\mbox{C{\texttt{-{}-}}}}
 % l2h substitution PAL C--
 \title{Release notes for the Quick~{\PAL} compiler\\
-Release 20040601}
+Release 20050331}
 \author{The Quick~{\PAL} Team}
 
 \begin{document}
@@ -54,7 +54,7 @@ you also need to read the man page for \texttt{qc--}.
 
 \label{sec:portability}
 
-As of release 20041004, Quick~{\PAL} provides some target-specific
+Since release 20041004, Quick~{\PAL} has provided some target-specific
 information at run time; to get this information try
 \begin{verbatim}
   qc-- -e 'Target.explain()'
@@ -71,7 +71,7 @@ In addition to the information emitted by the compiler, we provide the
 further information below.
 
 \subsection {Intel x86}
-As of release 20041004, Quick~{\PAL} supports only one back end, for
+As of release 20050331, Quick~{\PAL} supports only one back end, for
 Intel x86 running Linux.
 (Other back ends are in the late experimental stages.)
 
@@ -80,7 +80,6 @@ The x86 back end has these known bugs:
 \item
 The [[%NaN]] operator may produce a quiet NaN even when signalling NaN
 is called for.
-\item
 \end{itemize}
 
 
@@ -142,8 +141,8 @@ target byteorder little
 \end{verbatim}
 All but byte order can be defaulted.
 \item[Primitive operators:]
-Release 20041004 supports almost all the primitives in the {\PAL}
-specification, but not all have yet been tested.
+Release 20050331 supports all the primitives in the {\PAL}
+specification.
 For details, run \verb+qc-- -e 'Target.explain()'+.
 
 Integer primitives are supported at 32~bits.
@@ -161,10 +160,7 @@ Integer literals are supported in any width up to 64~bits.
 Floating-point literals are availabe in types [[bits32]] and
 [[bits64]] only.
 
-Each primitive that takes a rounding mode as an argument can take only
-the hardware rounding mode as an argument.
-Otherwise
-there should be no difficulty generating code for expressions
+There should be no difficulty generating code for expressions
 involving the supported primitives at width~32, plus sign-extended
 and zero-extended narrow \emph{values} (e.g., references to memory).
 Assignments of any number of bytes are also supported.
@@ -193,7 +189,7 @@ integers, bit vectors, records passed by value, and so on\\
 Quick~{\PAL} supports the same three hints in global register
 declarations. 
 \item[Names of hardware registers:]
-The only hardware register currently supported (as of 20040601) is a
+The only hardware register currently supported (as of 20050331) is a
 2-bit register named
 [["IEEE 754 rounding mode"]], which may be used as follows, for
 example: 
@@ -315,48 +311,11 @@ rounding modes.
 
 \begin{itemize}
 \item
-The back ends support computation only at the width of the target
+The back ends support computation at widths that are at most the
+natural width of the target
 machine.
-Variables and operators must use this width.
-(This one will be fixed soon.)
 \end{itemize}
 
-\subsection{Link-time constants}
-\begin{itemize}
-\item
-The only link-time constants supported are those of the form ``symbol
-+ offset.''
-We can fix this bug relatively promptly if there is a need.
-\end{itemize}
-
-
-
-\subsection{Missing operations}
-
-\begin{itemize}
-\item
-Lots of operations are missing, including
-carry, borrow, extended multiplies, and anything else that might be
-needed for large arithmetic.
-\item
-There's no automatic way to find out what operations are supported.
-(An automatic way should be available by mid-June.)
-\end{itemize}
-
-\subsection{Features missing from the language}
-
-\begin{itemize}
-\item
-The \texttt{also unwinds to} annotation does not work and may cause
-things to fail.
-\end{itemize}
-
-
-\subsection{Features missing from the run-time interface}
-\begin{itemize}
-\item
-Unwinding the stack is not yet supported.
-\end{itemize}
 
 \subsection{Poor performance}
 
@@ -490,12 +449,20 @@ thread, links to other threads, and so on.
 All of this information is outside the purview of
 {\PAL}, however.
 
-\section{Notes for release 20040601}
+\section{Notes for release 20050331}
 
+Release 20050331 incorporates a major change in Quick~{\PAL}'s
+representation of a control-flow graph.
+We hope that the new representation, unlike its five predecessors,
+will not be a bug factory.
+
+Here are some other helpful notes carried forward from previous releases:
+\begin{itemize} 
+\item 
 Don't overlook the \texttt{-globals} option (described in the man
 page), which is used to guarantee consistency of {\PAL}
 global-variable declarations across separately compiled units.
-
+\item 
 Quick~{\PAL} has a very simple peephole optimizer.
 It can reduce the size of a program by~30\% or so, but it does not
 work on all programs.
@@ -504,20 +471,21 @@ You can try it out by running
   qc--.opt Backend.x86.improve=Optimize.improve ...
 \end{verbatim}
 % If you find a program that breaks the optimizer, please send it to us.
-
+\item 
 Quick~{\PAL} has a graph-coloring register allocator, but because it
 is slow, it is turned off by default.  To turn it on, run
 \begin{verbatim}
   qc--.opt Backend.x86.ralloc=Ralloc.color ...
 \end{verbatim}
-
+\item 
 There are a few inconsistencies between the run-time interface in the
 specification and the one implemented in the Quick~{\PAL}
 interpreter. 
-
+\item 
 Normally you want to run \texttt{qc--.opt}, but if Objective Caml
 cannot build a native-code binary on your system, you can use
 \texttt{qc--} instead.
+\end{itemize}
 
 
 \section{Old notes for older releases}

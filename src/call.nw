@@ -191,13 +191,13 @@ type t = (* part of a calling convention *)
   <<fields to support the return address>>
   <<fields to support jumps>>
   ; sp_on_unwind   : Rtl.exp -> Rtl.rtl
-  ; pre_nvregs     : Register.Set.t           (* registers preserved across calls *)
-  ; volregs        : Register.Set.t           (* registers not preserved across calls *)
+  ; pre_nvregs     : Register.Set.t          (* registers preserved across calls *)
+  ; volregs        : Register.Set.t          (* registers not preserved across calls *)
   ; saved_nvr      : Talloc.Multiple.t -> Register.t -> Rtl.loc (* where to save NVR *)
   ; return         : int -> int -> ra:Rtl.exp -> Rtl.rtl    (* alternate return *)
 (*  ; alt_return_table : node list -> node *)
   (* these next two encapsulate knowledge of which reg. is sp *)
-  ; replace_vfp    : Rtl.rtl Cfgx.M.cfg -> unit
+  ; replace_vfp    : Zipcfg.graph -> Zipcfg.graph * bool
   ; cutto          : Mflow.cut_args Target.map    (* newpc * newsp map*)
   } 
 @ N.B. the [[pre_nvregs]] are all possible nonvolatile registers.
@@ -336,7 +336,7 @@ module A  = Automaton
 module Dn = Rtl.Dn
 module R  = Rtl
 module RP = Rtl.Private
-module RS = Register.Set
+module RS = Register.SetX
 module RU = Rtlutil
 module Up = Rtl.Up
 <<exported type definitions>>

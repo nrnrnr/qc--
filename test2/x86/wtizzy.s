@@ -15,8 +15,8 @@ f:
 	leal -24(%esp), %esp
 	leal 24(%esp), %eax
 	movl (%eax),%eax
-.Linitialize_continuations_l6:
-.Lproc_body_start_l5:
+.Linitialize_continuations_l5:
+.Lproc_body_start_l4:
 	movl $388380743,%ecx
 	leal 24(%esp), %edx
 	movl %eax,20(%esp)
@@ -42,7 +42,7 @@ f:
 	addl %ecx,%eax
 	fstpl (%eax)
 	call c_fun
-.Ljoin_l10:
+.Lcall_successor_l9:
 	leal 24(%esp), %eax
 	movl $0,%ecx
 	addl %ecx,%eax
@@ -51,17 +51,17 @@ f:
 	leal 24(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l17:
+.Lstackdata_l16:
 .long 0
 .section .pcmap
-.long .Ljoin_l10
-.long .Lframe_l18
+.long .Lcall_successor_l9
+.long .Lframe_l17
 .section .pcmap_data
-.Lframe_l18:
+.Lframe_l17:
 .long 0x80000004
 .long 0xffffffe8
 .long 0xfffffffc
-.long .Lstackdata_l17
+.long .Lstackdata_l16
 .long 0
 .long 0
 .long 0
@@ -89,8 +89,8 @@ c_fun:
 	fistpq (%ecx)
 	leal 40(%esp), %eax
 	movl (%eax),%eax
-.Linitialize_continuations_l21:
-.Lproc_body_start_l20:
+.Linitialize_continuations_l19:
+.Lproc_body_start_l18:
 	leal fmt,%ecx
 	leal 40(%esp), %edx
 	movl %eax,36(%esp)
@@ -114,7 +114,7 @@ c_fun:
 	fildq (%eax)
 	fistpq (%ecx)
 	call printf
-.Ljoin_l25:
+.Lcall_successor_l23:
 	leal 40(%esp), %eax
 	movl $0,%ecx
 	addl %ecx,%eax
@@ -123,17 +123,17 @@ c_fun:
 	leal 40(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l32:
+.Lstackdata_l30:
 .long 0
 .section .pcmap
-.long .Ljoin_l25
-.long .Lframe_l33
+.long .Lcall_successor_l23
+.long .Lframe_l31
 .section .pcmap_data
-.Lframe_l33:
+.Lframe_l31:
 .long 0x80000004
 .long 0xffffffd8
 .long 0xfffffffc
-.long .Lstackdata_l32
+.long .Lstackdata_l30
 .long 0
 .long 3
 .long 0
@@ -156,11 +156,11 @@ main:
 	movl (%eax),%eax
 	leal 4(%esp), %eax
 	movl (%eax),%eax
-.Linitialize_continuations_l36:
-.Lproc_body_start_l35:
+.Linitialize_continuations_l33:
+.Lproc_body_start_l32:
 	movl %eax,(%esp)
 	call f
-.Ljoin_l40:
+.Lcall_successor_l37:
 	movl $0,%eax
 	leal 4(%esp), %ecx
 	movl $0,%edx
@@ -170,17 +170,17 @@ main:
 	leal 4(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l47:
+.Lstackdata_l44:
 .long 0
 .section .pcmap
-.long .Ljoin_l40
-.long .Lframe_l48
+.long .Lcall_successor_l37
+.long .Lframe_l45
 .section .pcmap_data
-.Lframe_l48:
+.Lframe_l45:
 .long 0x80000004
 .long 0xfffffffc
 .long 0xfffffffc
-.long .Lstackdata_l47
+.long .Lstackdata_l44
 .long 0
 .long 2
 .long 0

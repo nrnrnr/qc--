@@ -23,9 +23,9 @@ main:
 	movl (%eax),%eax
 	leal 4(%esp), %eax
 	movl (%eax),%eax
-.Linitialize_continuations_l4:
-.Lproc_body_start_l3:
-.Ljoin_l8:
+.Linitialize_continuations_l3:
+.Lproc_body_start_l2:
+.Lbranch_target_l6:
 	movl $0,%ecx
 	movl %eax,(%esp)
 	movl %ecx,%eax

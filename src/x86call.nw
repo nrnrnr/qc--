@@ -377,7 +377,7 @@ let conv ~preserved ~jump ~struct' ~altret name specs ~return_to cut =
 
   ; C.stack_growth     = Memalloc.Down
   ; C.stable_sp_loc    = std_sp_location
-  ; C.replace_vfp      = Cfgx.Vfp.replace_with ~sp
+  ; C.replace_vfp      = Vfp.replace_with ~sp
   ; C.sp_align         = 4               (* alignment of stack pointer at call/cut *)
   ; C.ra_on_entry      = const (R.fetch ra 32)   (* where return address is on entry *)
   ; C.where_to_save_ra = (fun _ t -> Talloc.Multiple.loc t 't' 32)
@@ -435,7 +435,7 @@ let thread cut specs =
   ; C.results    = { C.in' = noreturn; C.out = noreturn }
   ; C.stack_growth     = Memalloc.Down
   ; C.stable_sp_loc    = std_sp_location
-  ; C.replace_vfp      = Cfgx.Vfp.replace_with ~sp
+  ; C.replace_vfp      = Vfp.replace_with ~sp
   ; C.sp_align         = 4               (* alignment of stack pointer at call/cut *)
   ; C.ra_on_entry      = const (R.fetch ra 32)   (* where return address is on entry *)
   ; C.where_to_save_ra = (fun _ t -> Talloc.Multiple.loc t 't' 32)
@@ -533,7 +533,8 @@ X86 = X86 or {}
 X86.layout = { creates='no late consts' }
 
 function X86.layout.fn(dummy,proc) --- dispatch on cc name
-  return X86.layout[Stack.ccname(proc)](dummy, proc)
+  proc, changed = X86.layout[Stack.ccname(proc)](dummy, proc)
+  return proc, changed
 end
 <<stack-frame layout functions>>=
 function X86.layout["C"](dummy,proc) --- really for a C convention only
@@ -580,8 +581,8 @@ function X86.layout["C"](dummy,proc) --- really for a C convention only
     end
     if Debug.framesize then Debug.showframesize(block,proc) end
         
-    Stack.freeze(proc,block)
-    return 1
+    proc = Stack.freeze(proc,block)
+    return proc, 1
 end    
 
 X86.layout["notail"] = X86.layout["C"]
@@ -638,8 +639,8 @@ function X86.layout["C--"](dummy,proc)
     end
     local block = Block.cat(32, layout)
     if Debug.framesize then Debug.showframesize(block,proc) end
-    Stack.freeze(proc,block)
-    return 1
+    proc = Stack.freeze(proc,block)
+    return proc, 1
 end    
 <<stack-frame layout functions>>=
 function X86.layout["C-- thread"](dummy,proc)
@@ -683,6 +684,6 @@ function X86.layout["C-- thread"](dummy,proc)
     end
     local block = Block.cat(32, layout)
     if Debug.framesize then Debug.showframesize(block,proc) end
-    Stack.freeze(proc,block)
-    return 1
+    proc = Stack.freeze(proc,block)
+    return proc, 1
 end    

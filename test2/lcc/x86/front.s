@@ -47,8 +47,8 @@ main:
 	leal -8(%esp), %esp
 	leal 8(%esp), %eax
 	movl (%eax),%eax
-.Linitialize_continuations_l27:
-.Lproc_body_start_l26:
+.Linitialize_continuations_l26:
+.Lproc_body_start_l25:
 	movl $0,%ecx
 	leal 8(%esp), %edx
 	movl %eax,4(%esp)
@@ -56,7 +56,7 @@ main:
 	addl %eax,%edx
 	movl %ecx,(%edx)
 	call exit
-.Ljoin_l32:
+.Lcall_successor_l31:
 	movl $0,%eax
 	leal 8(%esp), %ecx
 	movl $0,%edx
@@ -66,17 +66,17 @@ main:
 	leal 8(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l39:
+.Lstackdata_l38:
 .long 0
 .section .pcmap
-.long .Ljoin_l32
-.long .Lframe_l40
+.long .Lcall_successor_l31
+.long .Lframe_l39
 .section .pcmap_data
-.Lframe_l40:
+.Lframe_l39:
 .long 0x80000004
 .long 0xfffffff8
 .long 0xfffffffc
-.long .Lstackdata_l39
+.long .Lstackdata_l38
 .long 0
 .long 0
 .long 0
@@ -95,71 +95,62 @@ nested:
 	movl (%ecx),%ecx
 	leal 20(%esp), %edx
 	movl (%edx),%edx
-.Linitialize_continuations_l43:
-.Lproc_body_start_l42:
+.Linitialize_continuations_l41:
+.Lproc_body_start_l40:
+.Lbranch_target_l57:
 	movl %eax,(%esp)
 	movl $4,%eax
 	movl %ecx,4(%esp)
 	movl (%esp),%ecx
 	cmpl %eax,%ecx
-	jge .Ljoin_l57
-.Ljoin_l58:
+	jge .LL.6_l60
+.Lbranch_target_l48:
+.Lbranch_target_l52:
 	movl $114,%eax
 	movl 4(%esp),%ecx
 	cmpl %eax,%ecx
-	je .Ljoin_l56
-.Ljoin_l62:
-	movl (%esp),%ecx
+	je L.9
 	jmp L.6
-.Ljoin_l56:
-	jmp L.9
-.Ljoin_l57:
-	jmp L.6
+.LL.6_l60:
+	movl 4(%esp),%ecx
 L.6:
+.Lbranch_target_l58:
 	movl $1,%eax
+	movl (%esp),%ecx
 	cmpl %eax,%ecx
-	jne .Ljoin_l54
-.Ljoin_l55:
+	jne .LL.8_l61
+.Lbranch_target_l47:
+.Lbranch_target_l53:
 	movl $104,%eax
 	movl 4(%esp),%ecx
 	cmpl %eax,%ecx
-	je .Ljoin_l52
-.Ljoin_l53:
+	je L.9
+.Lbranch_target_l46:
+.Lbranch_target_l54:
 	movl $105,%eax
 	cmpl %eax,%ecx
-	je .Ljoin_l51
-.Ljoin_l63:
-	movl (%esp),%ecx
+	je L.9
 	jmp L.8
-.Ljoin_l51:
-	jmp L.9
-.Ljoin_l52:
-	jmp L.9
-.Ljoin_l54:
-	jmp L.8
+.LL.8_l61:
+	movl 4(%esp),%ecx
 L.8:
+.Lbranch_target_l59:
 	movl $2,%eax
+	movl (%esp),%ecx
 	cmpl %eax,%ecx
-	jne .Ljoin_l49
-.Ljoin_l50:
+	jne L.3
+.Lbranch_target_l45:
+.Lbranch_target_l55:
 	movl $111,%eax
 	movl 4(%esp),%ecx
 	cmpl %eax,%ecx
-	je .Ljoin_l47
-.Ljoin_l48:
+	je L.9
+.Lbranch_target_l44:
+.Lbranch_target_l56:
 	movl $121,%eax
 	cmpl %eax,%ecx
-	jne .Ljoin_l46
-.Ljoin_l68:
-	jmp L.9
-.Ljoin_l46:
-	jmp L.3
-.Ljoin_l47:
-	jmp L.9
+	jne L.3
 L.9:
-	jmp L.3
-.Ljoin_l49:
-	jmp L.3
 L.3:
 	movl $0,%eax
 	leal 20(%esp), %ecx
@@ -182,8 +173,8 @@ s:
 	movl (%eax),%eax
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l72:
-.Lproc_body_start_l71:
+.Linitialize_continuations_l68:
+.Lproc_body_start_l67:
 L.12:
 	movl %esp,%ecx
 	movl $0,%edx
@@ -204,8 +195,8 @@ Dz:
 Dfunc:
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l84:
-.Lproc_body_start_l83:
+.Linitialize_continuations_l79:
+.Lproc_body_start_l78:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -215,8 +206,8 @@ Dfunc:
 f:
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l96:
-.Lproc_body_start_l95:
+.Linitialize_continuations_l90:
+.Lproc_body_start_l89:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -226,8 +217,8 @@ f:
 f1:
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l108:
-.Lproc_body_start_l107:
+.Linitialize_continuations_l101:
+.Lproc_body_start_l100:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -245,8 +236,8 @@ f2:
 	movl (%eax),%eax
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l120:
-.Lproc_body_start_l119:
+.Linitialize_continuations_l112:
+.Lproc_body_start_l111:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -260,8 +251,8 @@ g:
 	movl (%eax),%eax
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l132:
-.Lproc_body_start_l131:
+.Linitialize_continuations_l123:
+.Lproc_body_start_l122:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -275,8 +266,8 @@ h:
 	movl (%eax),%eax
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l144:
-.Lproc_body_start_l143:
+.Linitialize_continuations_l134:
+.Lproc_body_start_l133:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -294,8 +285,8 @@ h1:
 	movl (%eax),%eax
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l156:
-.Lproc_body_start_l155:
+.Linitialize_continuations_l145:
+.Lproc_body_start_l144:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -305,8 +296,8 @@ h1:
 h2:
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l168:
-.Lproc_body_start_l167:
+.Linitialize_continuations_l156:
+.Lproc_body_start_l155:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -321,8 +312,8 @@ L.23:
 set1:
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l180:
-.Lproc_body_start_l179:
+.Linitialize_continuations_l167:
+.Lproc_body_start_l166:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -337,8 +328,8 @@ L.25:
 set2:
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l192:
-.Lproc_body_start_l191:
+.Linitialize_continuations_l178:
+.Lproc_body_start_l177:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -348,8 +339,8 @@ set2:
 i_goo:
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l204:
-.Lproc_body_start_l203:
+.Linitialize_continuations_l189:
+.Lproc_body_start_l188:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -359,8 +350,8 @@ i_goo:
 sss:
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l216:
-.Lproc_body_start_l215:
+.Linitialize_continuations_l200:
+.Lproc_body_start_l199:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -379,8 +370,8 @@ rrr:
 	movl (%eax),%eax
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l228:
-.Lproc_body_start_l227:
+.Linitialize_continuations_l211:
+.Lproc_body_start_l210:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -390,8 +381,8 @@ rrr:
 setstatic:
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l240:
-.Lproc_body_start_l239:
+.Linitialize_continuations_l222:
+.Lproc_body_start_l221:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -410,8 +401,8 @@ gx1:
 	fistpq (%ecx)
 	leal 16(%esp), %eax
 	movl (%eax),%eax
-.Linitialize_continuations_l252:
-.Lproc_body_start_l251:
+.Linitialize_continuations_l233:
+.Lproc_body_start_l232:
 	leal 16(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -435,8 +426,8 @@ ff1:
 	movl (%eax),%eax
 	leal 8(%esp), %eax
 	movl (%eax),%eax
-.Linitialize_continuations_l264:
-.Lproc_body_start_l263:
+.Linitialize_continuations_l244:
+.Lproc_body_start_l243:
 	leal 8(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -455,8 +446,8 @@ gg1:
 	movl (%eax),%eax
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l276:
-.Lproc_body_start_l275:
+.Linitialize_continuations_l255:
+.Lproc_body_start_l254:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -470,8 +461,8 @@ hh1:
 	movl (%eax),%eax
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l288:
-.Lproc_body_start_l287:
+.Linitialize_continuations_l266:
+.Lproc_body_start_l265:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -489,8 +480,8 @@ cmp:
 	movl (%eax),%eax
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l300:
-.Lproc_body_start_l299:
+.Linitialize_continuations_l277:
+.Lproc_body_start_l276:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -500,8 +491,8 @@ cmp:
 sort:
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l312:
-.Lproc_body_start_l311:
+.Linitialize_continuations_l288:
+.Lproc_body_start_l287:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
@@ -511,8 +502,8 @@ sort:
 onearg:
 	movl %esp,%eax
 	movl (%eax),%eax
-.Linitialize_continuations_l324:
-.Lproc_body_start_l323:
+.Linitialize_continuations_l299:
+.Lproc_body_start_l298:
 	movl %esp,%ecx
 	movl $0,%edx
 	addl %edx,%ecx
