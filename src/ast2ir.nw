@@ -721,7 +721,13 @@ and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ =
       RT.frame_size_to_span vfp base
     else RT.frame_size_to_span vfp (Rtlutil.addk (W.exp base) base
                                                  (Block.size out.C.overflow)) in
-
+  let up_to_call ~succ =
+    G.stack_adjust g out.C.pre_sp                                        **>
+    G.instruction  g out.C.shuffle                                       **>
+    G.stack_adjust g out.C.post_sp                                       **>
+    G.call g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
+                   ~altrets:conts.returns ~unwinds_to:conts.unwinds
+                   ~cuts_to:conts.cuts ~aborts:conts.aborts ~succ             in
   let call_succ  =
     G.assertion    g (in'.C.insp out.C.overflow)              **>
     G.stack_adjust g in'.C.pre_sp            **>  (* DOUBTS ABOUT THIS *)
@@ -732,13 +738,7 @@ and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ =
   let cont_spans = RT.conts_to_spans target.T.wordsize in (* BOGUS FOR NOW.... *)
   add_spans (G.label call_succ', ra_span :: overflow_size_span :: frame_size_span ::
                                  List.concat [cont_spans; csregs_spans; props]);
-  G.stack_adjust g out.C.pre_sp                                        **>
-  G.instruction  g out.C.shuffle                                       **>
-  G.stack_adjust g out.C.post_sp                                       **>
-  G.call g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
-                 ~altrets:conts.returns ~unwinds_to:conts.unwinds
-                 ~cuts_to:conts.cuts ~aborts:conts.aborts              **>
-  call_succ'
+  up_to_call **> call_succ'
 @
 \paragraph{Returns}
 In the presence of tail calls, [[f]] might call [[g]] with
