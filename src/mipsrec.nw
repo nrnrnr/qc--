@@ -119,13 +119,15 @@ symbol:     Link(x, w:int)      {: x#mangled_text :}
 
 <<rules>>=
 regl:       Reg('r', n:int, w:int)  {: reg  n :}
-regl:       Reg('f', n:int, w:int)  {: freg n :}
+fregl:      Reg('f', n:int, w:int)  {: freg n :}
 
 pcl:        Reg('c',  0, w:int) {: () :}
 spl:        Reg('r', 29, w:int) {: () :}
 ral:        Reg('r', 31, w:int) {: () :}
 
 reg:        Fetch(regl,w:int)   {: regl   :}
+freg:       Fetch(fregl,w:int)  {: fregl  :}
+
 pc:         Fetch(pcl,32)       {: () :}
 sp:         Fetch(spl,32)       {: () :}
 ra:         Fetch(ral,32)       {: () :}
@@ -172,6 +174,12 @@ inst:       Store(regl,imm,32)
 inst:       Store(regl,const,32)
             {: cat ["li"; " "; regl; ","; const] :}
 
+inst:       Store(fregl,const,32)
+            {: cat ["li.s"; " "; fregl; ","; const] :}
+
+inst:       Store(fregl,const,64)
+            {: cat ["li.d"; " "; fregl; ","; const] :}
+
 inst:       Store(regl,mem,32)
             {: cat ["l"; suffix 32; " "; regl; ","; mem] :}
 
@@ -195,6 +203,12 @@ Moves between registers.
 <<rules>>=
 inst:       Store(regl, reg, 32)
             {: cat ["move"; " "; regl; ","; reg] :}
+
+inst:       Store(fregl, freg, 32)
+            {: cat ["mov.s"; " "; fregl; ","; freg] :}
+
+inst:       Store(fregl, freg, 64)
+            {: cat ["mov.d"; " "; fregl; ","; freg] :}
 @
 
 \paragraph{Control Flow}
