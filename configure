@@ -1,18 +1,19 @@
 #! /usr/bin/perl -w
-#
 # $Id$
 #
-# Work in progress! Not functional, yet.
+# Run me at first install and after every "mk clobber" to configure the
+# build process for the Quick C-- compiler. The script assumes that
+# mk(1) from qc--/mk is already installed. See also the INSTALL file
+# in this directory.
 #
-# This is the configure script for Quick C--. Run as ./confire
-# to configure the compilation process. The script assumes that 
-# mk(1) from qc--/mk is already installed.
+# The script creates config/config.mk which you also can edit manually.
+#
 
 use File::Basename;
 
-$verbose = 0;                   # set to 1 for more output
-$config_mk = "config/config.mk";# where output is written
-%x = ();                        # hash for all the values we are looking for
+$config_mk      = "config/config.mk";       # where output is written
+$configure_log  = "configure.log";          # log file
+%x = ();                                    # hash for what we are looking for
 
 # ------------------------------------------------------------------ 
 # What we are looking for
@@ -32,9 +33,8 @@ $x{lua_inc}    = ""   ;         # -I for lua.h    "-I/usr/local/include/lua"
 $x{lua_lib}    = ""   ;         # -L for liblua.a "-L/usr/local/lib"
 $x{lua_libs}   = ""   ;         # "-llua -llualib" ld(1) flags for Lua libs
 
-# the binaries below are expeced to be on $PATH. It does not make
-# sense to set them since we never use the full PATH. Extend PATH
-# instead.
+# the binaries below are checked to be on $PATH. It does not make sense
+# to set them since we never use the full PATH. Extend PATH instead.
 
 $x{ocamlc}     = ""   ;         # "/path/to/binary"
 $x{ocamlc}     = ""   ;
@@ -60,9 +60,9 @@ $x{arch}       = ""   ;         # x86-linux
 $x{ocaml_version}     = ""   ;         # OCaml Version
 
 # ------------------------------------------------------------------ 
-# important search paths
+# Important Search Paths
 #
-# Adjust to help the script find header files and libraries
+# Adjust to help the script find header files and libraries.
 # ------------------------------------------------------------------ 
 
 @path       = split(/:/,$ENV{PATH});
@@ -81,53 +81,26 @@ $x{ocaml_version}     = ""   ;         # OCaml Version
               );
 
 # ------------------------------------------------------------------ 
-# command line handling
-# ------------------------------------------------------------------ 
-
-sub usage {
-    print <<EOF
-    
-    ./configure [options]
-
-        -v, --verbose           be more verbose
-        --prefix=/usr/local     install into the /usr/local hierarchy
-        -h, --help              this summary
-
-    Various variables can be set at the top of this script, in
-    particular lists of directories that are searched.
-EOF
-
-}
-
-foreach (@ARGV) {
-    if       (/^--?v(erbose)?$/)              { $verbose=1        }
-    elsif    (/^--?prefix=(.*)$/)             { $x{prefix}=$1     }
-    elsif    (/^--?h(elp?)$/)                 { usage(); exit 0   }  
-    else     { usage(); exit 1 }
-}
-
-# ------------------------------------------------------------------ 
 # Nothing to adjust from here down
 # ------------------------------------------------------------------ 
 
 #
-# search (file, dir, dir, dir, ..), call as search(file, @dirs)
-# search for file in @dirs and return, full path, if found, and undef
-# otherwise.
+# search (file, dir, dir, dir, ..), call as search(file, @dirs) search
+# for file in dirs and return, full path, if found, and "" otherwise.
 #
 
 sub search {
     my $file = shift (@_);
     
-    if ($verbose) { printf("searching for %-20s", $file) }
+    printf(LOG "searching for %-20s", $file); 
     while ($f = shift (@_)) {
         my $x = "$f/$file";
         if (-f $x) { 
-            if ($verbose) { print "found $x\n" }
+            print LOG "found $x\n"; 
             return $x 
         }
     }
-    if ($verbose) { print "not found!\n" }
+    print LOG "not found\n";
     return "";
 }
 
@@ -144,7 +117,7 @@ sub runtest {
     my $signo = $rc & 127;
     if ($signo) { die "killed by signal $signo" }
     if ($rc >> 8 eq 100) { 
-        print <<EOF;
+        print LOG <<EOF;
     
     Failed to run this test in config/aux: 
     
@@ -181,6 +154,66 @@ EOF
 }
 
 #
+# usage/help
+#
+
+sub usage {
+    print <<EOF;
+    
+    ./configure [options]
+
+    --prefix=/usr/local     install into the /usr/local hierarchy which
+                            is also the default
+    -h, --help              this summary
+
+    Various variables can be set at the top of this script, in
+    particular lists of directories that are searched.
+EOF
+
+}
+
+
+sub bye {
+    my $rc = shift @_;
+    close LOG || die "cannot close $configure_log: $!";
+    exit $rc;
+}
+
+
+sub failure {
+
+    print <<EOF;
+    Please see the $configure_log file for details. You have several
+    options now:
+
+    (1) Enlarge your PATH to make sure all tools are found; then run
+        this script again.
+
+    (2) If Lua-related variables are undefined, try to add more
+        directories to the list of the searched directories at the top
+        of this script. Run ./configure again.
+
+    (3) Create config/config.mk from config/config.mk.default and edit
+        it manually. No need to run this script again.
+EOF
+    bye 1;
+}
+
+sub success { bye 0; }
+
+# ------------------------------------------------------------------ 
+# We start from here with reading the command line
+# ------------------------------------------------------------------ 
+
+foreach (@ARGV) {
+    if       (/^--?prefix=(.*)$/)             { $x{prefix}=$1     }
+    elsif    (/^--?h(elp?)$/)                 { usage(); exit 0   }  
+    else     { usage(); exit 1 }
+}
+
+
+open (LOG, ">$configure_log") || die "cannot write configure.log: $!";
+
 # check for various executables and versions. Only update variable if
 # it is not already set.
 #
@@ -239,7 +272,7 @@ chdir ("../..") || die "cannot cd back to top level: $!";
 
 @missing = ();
 foreach my $v (keys %x) {
-    if (not defined($x{$v})) { print "undefined: $v\n" }
+    if (not defined($x{$v})) { print LOG "undefined: $v\n" }
     if ($x{$v} eq '')        { push(@missing,$v)       }
 }
 
@@ -247,9 +280,9 @@ foreach my $v (keys %x) {
 # report
 # ------------------------------------------------------------------ 
 
-print <<EOF;    
+print LOG <<EOF;    
 
-    Here is what the script has found:
+    Here is what $0 has found:
     
     OCAML
     ------------------------------------------------------------------ 
@@ -301,42 +334,12 @@ EOF
 
 if (@missing) {
     print <<EOF;
-
-    The following configuration variables could not be inferred:
-
-    @missing
-
-    This does not have to mean you cannot compile Quick C--. However,
-    don't be surprised if compilation fails. You have several options to
-    correct the problem:
-
-    (1) Enlarge your PATH such that all tools can be found. Your
-        current PATH is:
-
-            $ENV{PATH}
-
-        pod2html(1) is part of the Perl system
-        mk(1)       is in mk/. It must be installed before
-                    compilation.
-        notangle(1) is part of NoWEB.
-
-    (2) If Lua-related variables are undefined, try to enlarge the 
-        list of searched directories at the top of this script. Then,
-        run the script again.
-        Currently, these directories are searched for header files:
-
-            @include
-
-        And these directories are searched for library files:
-
-            @libs
-        
-    (3) Edit the config/*.mk files directly. These files contain
-        variables for tools and their options. The central configuration
-        file is config/config.mk. Copy config/config.mk.default to
-        config.mk and edit it.
+    The configure script failed to infer the value for the following
+    variables: 
+    
+        @missing
 EOF
-    exit 1;
+    failure();    
 }
     
 
@@ -347,18 +350,22 @@ EOF
 
 if ($x{ocaml_version} !~ /3\.0[456]/) {
     print <<EOF;
+
+    Configuration failed.
     
-    You need OCaml 3.0[456] to compile Quick C--. We found $x{ocaml_version}.
+    You need OCaml 3.0[456] to compile Quick C--, but we found 
+    $x{ocaml_version}. 
 EOF
-    exit 1;
+    failure();
 }
 
 if ($x{lua_version} !~ /4\./) {
     print <<EOF;
 
-    You need an installation of Lua 4.x, we found $x{lua_version}.
+    You need an installation of Lua 4.x, but we found $x{lua_version}.
+
 EOF
-    exit 1;
+    failure();
 }
    
 # ------------------------------------------------------------------ 
@@ -422,14 +429,18 @@ config_lua_libs             = -llua40 -llualib40
 config_prefix               = /usr/local
 
 EOF
-
              
 foreach $v (@export) {
     printf OUT ("config_%-20s = %s\n", $v, $x{$v});
 }
-
 close(OUT) || die "cannot close file $config_mk: $!";
 
-write "configuration written to $config_mk\n";
+print LOG "configuration written to $config_mk\n";
+print <<EOF;
+    The configuration was successful! The following files were written:
 
-exit(0);
+        log file:       $configure_log
+        configuration:  $config_mk
+
+EOF
+success();
