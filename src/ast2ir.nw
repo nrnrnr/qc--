@@ -1,0 +1,79 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+
+% ------------------------------------------------------------------ 
+\section{Translation into Abstract {\PAL}}
+% ------------------------------------------------------------------ 
+
+After a source file has been successfully parsed and its static
+semantics have been found correct it is translated into abstract 
+{\PAL}. Abstract {\PAL} is defined by an {\asdl} description
+[[ir.asdl]] in source file [[[ir.nw]].
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+This module is called from the [[Main.main]] function with the name of
+the source file; function [[ast2ir]] takes care of everything and
+reports success or failure with an [[Error.error]] value.
+
+<<ast2ir.mli>>=
+val ast2ir: string -> unit Error.error
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+This module need a whole bunch of other modules.
+
+<<ast2ir.ml>>=
+module A = Ast
+module E = Error
+module C = Check
+module R = Rtl
+module F = Fatenv
+module G = Fgraph
+@
+
+The function [[ast2ir]] scans, parses, and checks a file before the
+translation in this module can start.
+
+<<>>=
+let ast2ir file =
+    let fd          = try open_in file
+                      with Sys_error(msg) -> E.error msg    in
+    let finally ()  = close_in fd                           in
+    let lexbuf      = Lexing.from_channel fd                in
+    let map         = Srcmap.empty                          in
+    let scanner     = Scan.scan map                         in
+        try
+            ( Srcmap.sync map 0 (file,1,1)
+            ; let ast        = Parse.program scanner lexbuf in
+              let env        = F.create map                 in
+                  E.ematch (C.checkProgram env ast) 
+                  ( function
+                  | env -> () (* start translation here *)
+                  )
+            )
+        with
+            | Parsing.Parse_error ->
+              ( finally()
+              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) "parse error"
+              ; E.Error
+              )
+            | E.ErrorExn msg ->
+              ( finally()
+              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) msg
+              ; E.Error
+              )
+            | e ->
+              ( finally()
+              ; raise e
+              )
+@

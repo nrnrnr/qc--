@@ -37,6 +37,7 @@ actions:
 \item Parse a file and pretty print it for a given line width: 
       [[-pp -w 72 file.c--]]
 \item Check the static semantics of a file: [[-check file.c--]].
+\item Generate the intermediate representation of a file: [[-ir file.c--]]
 \end{enumerate}
 
 <<cmdline.mli>>=
@@ -44,8 +45,9 @@ type cmd =        | Help
                   | Version                                  
                   | Lex      of string
                   | Asdl     of string
-                  | Pp       of string * int
+                  | PP       of string * int
                   | Check    of string
+                  | IR       of string
 @
 
 The concrete syntax of the command line is specified through the
@@ -66,6 +68,7 @@ let cmd_version   = literal "-version"      --> fun _ -> Cmdline.Version
 let cmd_lex       = literal "-lex" **> any  --> fun s -> Cmdline.Lex(s) 
 let cmd_asdl      = literal "-asdl" **> any --> fun s -> Cmdline.Asdl(s) 
 let cmd_check     = literal "-check" **>any --> fun s -> Cmdline.Check(s) 
+let cmd_ir        = literal "-ir" **> any   --> fun s -> Cmdline.IR(s)
 let cmd_default   = any                     --> fun s -> Cmdline.Check(s)
 
 let cmd_width     = literal "-w" **> any    
@@ -73,9 +76,9 @@ let cmd_width     = literal "-w" **> any
                                   with Failure(_) -> default_width)
                     
 let cmd_pp        = (literal "-pp" **> cmd_width *** any 
-                    --> fun (width,file) -> Cmdline.Pp(file,width)) 
+                    --> fun (width,file) -> Cmdline.PP(file,width)) 
                 ||| literal "-pp" **> any 
-                    --> fun (file)       -> Cmdline.Pp(file,default_width)
+                    --> fun (file)       -> Cmdline.PP(file,default_width)
 @                    
 
 Each parser recognizes a complete command line.  As an abbreviation
@@ -95,6 +98,7 @@ let cmdline       = (  cmd_version
                    ||| cmd_asdl 
                    ||| cmd_pp
                    ||| cmd_check
+                   ||| cmd_ir
                    ||| cmd_default 
                     ) **< Pc.eof
 @
@@ -118,10 +122,12 @@ let usage this =
   let msg = 
   [   "\t -help                      (this to stdout)"
   ;   "\t -version                   (version to stdout)"
-  ;   "\t -lex file                  (scan file)"
-  ;   "\t -asdl file                 (parse file)"
-  ;   "\t -pp [-w width] file        (parse and pretty print file for width)"
-  ;   "\t file                       (same as -pp file)"
+  ;   "\t -lex file.c--              (scan file)"
+  ;   "\t -asdl file.c--             (parse file)"
+  ;   "\t -pp [-w width] file.c--    (parse and pretty print file for width)"
+  ;   "\t -check file.c--            (check static semantics of file)"
+  ;   "\t -ir file.c--               (create abstract c-- )"
+  ;   "\t file.c--                   (same as -check file)"
   ] in
     Printf.printf "%s command line syntax\n" this ;
     List.iter print_endline msg
@@ -182,8 +188,9 @@ let main () =
         | Cmdline.Version	-> version () ; E.Ok ()
         | Cmdline.Lex(file)     -> Scan.lex file 
         | Cmdline.Asdl(file)    -> asdl file 
-        | Cmdline.Pp(file,width)-> Astpp.pp file width
+        | Cmdline.PP(file,width)-> Astpp.pp file width
         | Cmdline.Check(file)   -> Check.check file
+        | Cmdline.IR(file)      -> Ast2ir.ast2ir file
     in
         match E.catch E.errorPrt dispatch cmd with
             | E.Error -> exit 1
@@ -230,13 +237,15 @@ B<qc-- -version>
 
 B<qc-- -help>
 
-B<qc-- -lex> I<file>
+B<qc-- -lex> I<file.c-->
 
-B<qc-- -asdl> I<file>
+B<qc-- -asdl> I<file.c-->
 
-B<qc-- -pp> [ B<-w> I<width> ] I<file>
+B<qc-- -pp> [ B<-w> I<width> ] I<file.c-->
 
-B<qc-- -check> I<file>
+B<qc-- -check> I<file.c-->
+
+B<qc-- -ir> I<file.c-->
 
 =head1 DESCRIPTION
 
@@ -283,13 +292,19 @@ Check the static semantics of I<file>. Error messages are written to
 stdout. In case of errors in the static semantics of I<file> the
 compiler exits with an exit code different from 0.
 
+=item B<-ir> I<file>
+
+Check the static semantics of I<file> and compile it (internally) to
+abstract C--. This is a development flag and produces no interesting
+output. 
 
 =back
 
 =head1 EXIT CODE
 
-The B<qc--> compiler returns with exit code 1 in case any error was detected
-and with exit code otherwise. 
+The B<qc--> compiler returns with exit code 0 of successful
+operation.  In case of errors in a source file B<qc--> returns with
+exit code 1.  Any internal compiler error leads to exit code 2.
 
 =head1 SEE ALSO
 
