@@ -28,6 +28,7 @@ module RP = Rtl.Private
 module RS = Register.Set
 module RU = Rtlutil
 module T  = Target
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 @
 And in Lua we need to:
 <<x86 calling convention automata in Lua>>=
@@ -131,8 +132,7 @@ let ( *> ) = A.( *> )
 @ 
 We provide error parameters to automata.
 <<x86call.ml>>=
-let badwidth what w = Impossible.impossible
-    ("Unsupported (rounded) width " ^ string_of_int w ^ " in x86 " ^ what)
+let badwidth what w = impossf "Unsupported (rounded) width %d in x86 %s" w what
 let imp _ = Impossible.impossible "grave miscalculation in automaton"
 @ 
 
@@ -290,18 +290,19 @@ let cut_actuals cont  =
 \paragraph{Putting together the whole convention}
 <<x86call.ml>>=
 let rtn return_to k n ~ra =
-  if k > n then
-    Impossible.impossible (Printf.sprintf "Return <k/n> has k:%d > n:%d\n" k n)
+  if k > n then impossf "Return <k/n> has k:%d > n:%d\n" k n
   else return_to ra
 
-let conv ~jump ~altret name specs ~return_to cut =
+let conv ~calleesaves ~jump ~altret name specs ~return_to cut =
   <<functions to transform automata>>
   let return k n ~ra =
     if altret then rtn return_to k n ~ra
     else if k = 0 & n = 0 then return_to ra
-    else
-      Impossible.impossible
-        (Printf.sprintf "alternate return not allowed in %s calling convention" name) in
+    else impossf "alternate return not allowed in %s calling convention" name in
+  let nvregs, volregs =
+    if calleesaves then nvregs, volregs
+    else RS.empty, RS.union nvregs volregs in
+
   { C.name       = name
   ; C.overflow_alloc  = 
       { C.parameter_deallocator = if jump then C.Callee else C.Caller
@@ -323,8 +324,7 @@ let conv ~jump ~altret name specs ~return_to cut =
                          else         (fun _ b _ -> amem (addk (Block.base b) (-4)))
   ; C.sp_on_jump       =
       if jump then (fun b _ -> RU.store sp (addk (Block.base b) (-4)))
-      else (fun _ _ -> Impossible.impossible
-                        ("tail calls not supported by " ^ name ^ " calling convention"))
+      else (fun _ _ ->impossf "tail calls not supported by %s calling convention" name)
   ; C.pre_nvregs       = nvregs          (* registers preserved across calls *)
   ; C.volregs          = volregs         (* registers not preserved across calls *)
   ; C.saved_nvr        = saved_nvr
@@ -336,10 +336,12 @@ let conv ~jump ~altret name specs ~return_to cut =
 And in Lua:
 <<x86 calling convention automata in Lua>>=
 -- register the new calling conventions!
-A.register_cc(Backend.x86.target,"C"     ,X86.cc["C"     ])
-A.register_cc(Backend.x86.target,"C'"    ,X86.cc["C"     ])
-A.register_cc(Backend.x86.target,"C--"   ,X86.cc["C--"   ])
-A.register_cc(Backend.x86.target,"notail",X86.cc["notail"])
+X86.cc["paranoid C"] = X86.cc["C"]
+A.register_cc(Backend.x86.target,"C"     ,    X86.cc["C"     ])
+A.register_cc(Backend.x86.target,"paranoid C",X86.cc["paranoid C"])
+A.register_cc(Backend.x86.target,"C'"    ,    X86.cc["C"     ])
+A.register_cc(Backend.x86.target,"C--"   ,    X86.cc["C--"   ])
+A.register_cc(Backend.x86.target,"notail",    X86.cc["notail"])
 @ 
 
 % ------------------------------------------------------------------ 
@@ -380,10 +382,12 @@ And finally, our lookup function.
 let cconv ~return_to cut ccname stage =
   let f =
     match ccname with
-    | "C--"         -> conv ~jump:true  ~altret:true
-    | "lightweight" -> conv ~jump:true  ~altret:true
-    | "notail"      -> conv ~jump:false ~altret:true
+    | "C--"         -> conv ~jump:true  ~altret:true ~calleesaves:true
+    | "lightweight" -> conv ~jump:true  ~altret:true ~calleesaves:true
+    | "notail"      -> conv ~jump:false ~altret:true ~calleesaves:true
     | "C'"          -> c'
-    |  _            -> conv ~jump:false ~altret:false
+    | "paranoid C"  -> conv ~jump:false ~altret:false ~calleesaves:false
+    |  "C"          -> conv ~jump:false ~altret:false ~calleesaves:true
+    | _ -> Unsupported.calling_convention ccname
   in f ccname stage ~return_to cut
 @

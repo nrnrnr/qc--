@@ -69,14 +69,17 @@ which is where the driver will look when compiling a file with
 extension [[".tig"]].
 <<tiger.lua>>=
 function CMD.compilertab[".tig"](file)
-  local tmp = CMD.outfilename(file, ".c--")
-  CMD.exec(Frontends.Tiger.file("tigerc") .. " " .. file .. " > " .. tmp)
-  return tmp
+  local out     = CMD.outfilename(file, ".c--")
+  local tigerc  = Frontends.Tiger.file("tigerc")
+  local options = ""
+  if Tiger.unwind then options = "-unwind" end
+  CMD.exec(tigerc .. " " .. options .. " " .. file .. " > " .. out)
+  return out
 end
 @ Function [[CMD.exec]] executes a string as a shell command,
-where the call to [[CMD.outfilename]] gives the local variable [[tmp]]
+where the call to [[CMD.outfilename]] gives the local variable [[out]]
 a file name with extension~[[.c--]]. 
-\emph{Returning} [[tmp]] is key, because it is by returning the
+\emph{Returning} [[out]] is key, because it is by returning the
      [[.c--]] file that we tell the driver to continue translating:
 it will translate the {\PAL} code into assembly language, then object
 code. 
