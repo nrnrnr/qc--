@@ -1,0 +1,313 @@
+
+% ------------------------------------------------------------------  
+\section{Parser Combinators}\label{sec:pc}
+% ------------------------------------------------------------------ 
+
+This module provides parser combinators for light weight parsing tasks
+like parsing a unix command line.  Parser combinators are higher order
+functions that implement basic parsing tasks.  By combining simple
+parsers complex parsers can be built easily.  By the use of infix
+operators the source code of such a parser resembles the grammar that
+it recognizes.  
+
+The parser combinators implemented by this module are inspired by
+Hutton's article \textit{Higher-Order Functions for Parsing}
+\cite{hutton:92:jfp}.  The parser described by Hutton use backtracking
+in case of an unsuccessfull parse and report all possible parses.  For
+efficiency the parses in this module are greedy:  there is at most one
+successful parse.  This requires to construct parsers a bit more
+carefully.
+
+% ------------------------------------------------------------------  
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+A parser takes a list of tokens [['t]] and returns a semantic value
+[['v]] together with the list of remaining tokens in the input. A
+successful parse typically means that a parser succeeds and
+returns with an empty list of remaining tokens.  Since [[parser]] is a
+keyword in \ocaml~the corresponding type was named [[par].  When a
+parser fails it raises the [[Error]] exception. 
+
+We use the following convention for type variables:  [[t]] for token,
+[[v]] for semantic value, and [[p]] for parser. 
+
+<<pc.mli>>=
+type ('t, 'v) par   = 't list -> 'v * 't list
+
+exception Error     of string
+
+@ ------------------------------------------------------------------  
+\subsubsection{Primitive Parsers}
+% ------------------------------------------------------------------ 
+
+@ The two simplest parsers are [[fail]] and [[succeed]].  The [[fail
+msg]] parser consumes no input and fails with message [[msg]].  The
+[[succeed x]] parser also does not consume any input and returns the
+semantic value [[x]].
+
+<<>>=
+val fail:       string -> 'a
+val succeed:    'v -> ('t,'v) par 
+
+@ The [[any]] parser consumes the next token and returns it as
+semantic value. It fails when there is no next token. 
+
+<<>>=
+val any: ('t,'t) par
+
+@ The [[eof]] parser succeeds when the list of tokens is empty and
+returns [[true]] as semantic value. 
+
+<<>>=
+val eof: ('t,bool) par
+
+@ The [[satisfy f]] parser uses a user supplied predicate [[f]] to
+check the next token in the input.  It succeeds when [[f]] is
+fulfilled and returns the token as semantic value.  The parser fails
+when either the input is empty or [[f]] is not fulfilled.
+
+<<>>=
+val satisfy: ('t -> bool) -> ('t,'t) par
+
+@ The [[literal x]] parser expects [[x]] as the next token and fails
+in case the input is empty or not [[x]]. When it succeeds it returns
+[[x]] as semantic value. The [[literal]] parser can be easily
+implemented with [[satisfy]] and is a handy shortcut.
+
+<<>>=
+val literal: 't -> ('t,'t) par
+
+@ ------------------------------------------------------------------  
+\subsection{Combinators}
+% ------------------------------------------------------------------ 
+
+Parser combinators take parsers, combine them, and return a new
+parser. When these combinators are defined as infix operators the
+source code of complex parsers very much looks like a grammar. 
+
+The precedence and associativity of infix operators in \ocaml~is
+determined by the first one or two symbols in an operator.  The
+precedence and fixity of any operator thus is fixed.  This makes it a
+bit harder to find operators that look good and have the right fixity. 
+Table \ref{tab:pc:infix} show the precedence and associativity of the
+operators used in this module.
+
+\begin{table}
+    \centering
+
+    \begin{tabular}{cl}
+        Operator                    & Associativity \\
+        \hline
+
+        [[***]]  [[**>]]  [[**<]]   & right \\
+        [[-->]]                     & left  \\
+        [[|||]]                     & left  \\
+    \end{tabular}
+    
+    \caption{Associativity and relative precedence of some operators.
+    The precedence of the operators decreases to the bottom of the table}
+    \label{tab:pc:infix}
+\end{table}
+
+The parser [[x *** y]] parses the input first using [[x]] and then
+using [[y]] for the remaining input. The parser succeeds when [[x]]
+and [[y]] succeed and returns a pair of semantic values. Since [[***]]
+is right associative [[x *** y *** z]] would return a [[(x,(y,z))]]
+pair as a semantic value.
+
+<<>>=
+val ( *** ): ('t,'v1) par -> ('t,'v2) par -> ('t,('v1*'v2)) par 
+
+@ When using a parser like [[literal "-" *** literal any]] the
+semantic value of the first parser is of little interest.  Therefor
+two variations of [[***]] are provided that return either the left or
+right semantic value only:  [[literal "-" **> any]] returns the right
+semantic value.  The [[**<]] combinators creates a parser that returns
+only the left semantic value. 
+
+<<>>=
+val ( **< ): ('t,'v1) par -> ('t,'v2) par -> ('t,'v1) par 
+val ( **> ): ('t,'v1) par -> ('t,'v2) par -> ('t,'v2) par 
+
+@ The [[x ||| y]] parser tries to parse the input using parser
+[[x]]. If this fails it tries [[y]]; [[x ||| y]] fails when both [[x]]
+and [[y]] fail. On success the semantic value of the first successful
+parser is returned.
+
+<<>>=
+val ( ||| ): ('t,'v)  par -> ('t,'v)  par -> ('t,'v)  par 
+
+@ To manipulate semantic values returned by a parser use the [[p -->
+f] combinator.  It takes a parser [[p]] on the left and a function
+[[f]] on the right.  The semantic value returned by [[p]] is passed to
+[[f]] and the value returned by [[f]] is the result of [[p --> f]]. 
+The [[-->]] combinator models semantic actions in a traditional Yacc
+parser. 
+
+<<>>=
+val ( --> ): ('t,'v1) par -> ('v1 -> 'v2) -> ('t,'v2) par
+
+@ When the semantic value for a parser is fixed one could use [[ p -->
+(fun _ -> x)]]. The [[return]] function does just this: [[p -->
+return x]]. So [[return]] is not a parser or parser combinator but a
+function intended to be used on the rigth hand side of [[-->]].
+
+<<>>=
+val return: 'v1 -> 'v2 -> 'v1
+
+@ The precedences of the infix operators are chosen that typical
+parsers can be written with few extra brackets:
+
+<<example>>=
+        literal "--file" **> any --> fun f -> File(f) 
+    ||| literal "--help"         --> return Help
+
+@ The [[opt p]] parser tries to use [[p]] to parse the input and returns
+[[Some x]] when [[p]] succeeds,  where [[x]] is the semantic value of
+[[p]]. In case [[p]] fails [[None]] is returned by [[opt p]].
+
+<<pc.mli>>=
+val opt: ('t,'v)  par -> ('t,'v option) par
+
+@ The [[many p]] parser tries to apply parser [[p]] as often as
+possible to the input and returns the list of semantic values produced
+by [[p]]. When [[p]] fails for the first token the returned list is
+empty. Thus, this parser never fails. Note, that [[many]] is greedy
+and thus the following parser will never succeed:
+
+<<example>>=
+    many p *** p
+
+@ All tokens suitable for [[p]] are already consumed by [[many p]] and
+thus none is left for the following [[p]].
+
+The [[some p]] parser works exactly like [[many p]] but expects at
+least one token to parse and fails otherwise. It thus returns a non
+empty list of semantic values.
+
+<<pc.mli>>=
+val some: ('t,'v)  par -> ('t,'v list) par
+
+@ The parsers [[many]], [[some]], and [[opt]] resemble the [[*]],
+[[+]], and [[?]] operator in regular expressions. But due to the greedy
+nature of [[many]] and [[some]] their behaviour is not quite the same.
+
+% ------------------------------------------------------------------  
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+Every parser returns a pair of its result and the list of remaining
+tokens.  We use the following convention for type and value variables: 
+[[t]] for token, [[ts]] for token list, [[v]] for semantic value, and
+[[p]] for parser. 
+
+<<pc.ml>>=
+exception Error of string
+let error s = raise (Error s)
+
+type ('t,'v) par = 't list -> 'v * ('t list)
+@
+
+% ------------------------------------------------------------------  
+\subsubsection{Primitive Parsers}
+% ------------------------------------------------------------------  
+
+<<>>=
+let succeed v ts = (v,ts)
+let fail msg     = error msg
+
+let any = function
+    | []        -> fail "token expected but none found"
+    | t::ts     -> succeed t ts
+
+let eof = function
+    | []        -> succeed true []
+    | _         -> fail "end of input expected but token found"
+
+let satisfy f = function 
+    | []        -> fail "satisfy parser: no input" 
+    | t::ts     -> if f t 
+                   then succeed t ts
+                   else fail "token does not satisfy predicate"
+
+let literal x = satisfy ((=) x)
+@
+
+
+% ------------------------------------------------------------------  
+\subsubsection{Parser combinators}
+% ------------------------------------------------------------------ 
+
+Complex parsers are built by combining simpler ones using the parser
+combinators like this: [[let word = many any]]. We have to be careful
+about the strict evaluation of \ocaml~when defining combinators in
+terms of other combinators. For example [[many]] could be defined like this:
+
+<<example>>=
+let rec many p =     p *** (many p) --> (fun (x,y) -> x::y  
+                 ||| succeed []
+@
+
+Defining [[word]] as [[many any]] will then lead to endless recursion
+when the module containing the definition of [[word]] is loaded.
+
+<<example>>=
+many any = any *** many any
+@
+
+Because of this we introduce extra abstractions at [[***]] and [[many]].
+
+The precedence and associativity of infix operators on \ocaml;
+operators with higher precedence come first. The table was extracted
+from the \ocaml~scanner source code
+
+<<precedence>>=
+     %right INFIXOP4                         /* **           */
+     %left  INFIXOP3 STAR                    /* * / %        */
+     %left  INFIXOP2 SUBTRACTIVE             /* + -          */
+     %right INFIXOP1                         /* @ ^          */
+     %left  INFIXOP0 EQUAL LESS GREATER      /* = < > | ^ $  */
+@
+
+<<pc.ml>>=    
+
+let ( ||| ) p1 p2 = fun ts ->
+    try p1 ts with 
+    Error _ ->  try p2 ts with
+                Error _ -> fail "all alternatives failed"
+
+let ( --> ) p f = fun ts ->
+    let (v,ts') = p ts 
+    in (f v, ts')
+
+let return x = fun _ -> x
+
+let ( *** ) p1 p2 = fun ts -> 
+    let (v1,ts1) = p1 ts  in
+    let (v2,ts2) = p2 ts1 in
+        ((v1,v2),ts2)
+
+let ( **> ) p1 p2 =
+    p1 *** p2 --> snd
+
+let ( **< ) p1 p2 =
+    p1 *** p2 --> fst
+
+let rec many p = fun ts ->
+    (      p *** (many p) --> (fun (x,y)->x::y)
+        ||| succeed []
+    ) ts 
+
+let opt p =
+        p --> (fun x -> Some x)
+    ||| succeed None
+
+let some p =
+    p *** many p --> (fun (x,y) -> x::y)
+
+@
+
+
+
+
