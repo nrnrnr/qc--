@@ -351,7 +351,8 @@ the stack; it merely observes the next youngest activation.
 <<stack-walking functions>>=
 Cmm_Activation Cmm_NextActivation(const Cmm_Activation *a) {
   if (Cmm_isOldestActivation(a)) {
-    runtime_sys_err("[runtime system] already at oldest activation in thread");
+    fprintf(stderr, "[runtime sys.] already at oldest activation in thread\n");
+    runtime_sys_err();
   }
 
   return *(a->caller);
@@ -420,9 +421,11 @@ void *Cmm_FindStackData(const Cmm_Activation *a, unsigned n) {
   /* look in table */
   lua_pushtable(L, t);
   nlabels = lua_getn(L, -1);
-  if (n >= nlabels)
-    runtime_sys_err("Cmm_FindStackData received too big of an 'n' for "
-                    "activation 'a' of procedure [%s]", a->name);
+  if (n >= nlabels) {
+    fprintf(stderr, "Cmm_FindStackData received too big of an 'n' for "
+                    "activation 'a' of procedure [%s]\n", a->name);
+    runtime_sys_err();
+  }
 
   /* grab offset and pop Lua stack elements */
   lua_rawgeti(L, -1, n+1);
@@ -461,7 +464,8 @@ Cmm_Cont Cmm_GetUnwindCont(const Cmm_Activation *a, Cmm_Word index) {
   bytecodeptr  newpc;
 
   if (Cmm_isOldestActivation(a)) {
-    runtime_sys_err("cannot unwind below oldest activation on stack");
+	fprintf(stderr, "cannot unwind below oldest activation on stack\n");
+    runtime_sys_err();
   }
 
   {
@@ -475,8 +479,9 @@ Cmm_Cont Cmm_GetUnwindCont(const Cmm_Activation *a, Cmm_Word index) {
         (lbl = lua_touserdata(L, -1)) == NULL)
     {
       lua_pop(L, 2); /* pop bogus value, table */
-      runtime_sys_err("invalid unwind index %d given to Cmm_GetUnwindCont",
+      fprintf(stderr, "invalid unwind index %d given to Cmm_GetUnwindCont\n",
                       (int) index);
+      runtime_sys_err();
     }
 
     lua_pop(L, 2);
@@ -503,8 +508,11 @@ the [[interp]] module.
 
 <<global register functions>>=
 void *Cmm_FindGlobalVar(void *gp, int n) {
-  if (n >= Cmm_GlobalCount() || n < 0)
-    runtime_sys_err("globals subscript out of range in Cmm_FindGlobalVar");
+  if (n >= Cmm_GlobalCount() || n < 0) {
+    fprintf(stderr, "globals subscript out of range in Cmm_FindGlobalVar\n");
+    runtime_sys_err();
+  }
+
   return (void *) (((value *) globals) + n);
 }
 unsigned Cmm_GlobalCount(void) {
@@ -533,9 +541,10 @@ void Cmm_SaveGlobals_helper(unsigned gpu) {
 
   if (num_globals <= 0) return;
 
-  if (gp == NULL)
-    runtime_sys_err("SaveGlobals given NULL pointer");
-  else
+  if (gp == NULL) {
+    fprintf(stderr, "SaveGlobals given NULL pointer\n");
+    runtime_sys_err();
+  } else
     gp = memcpy(gp, globals, Cmm_GlobalSize());
 }
 
@@ -544,9 +553,10 @@ void Cmm_RestoreGlobals_helper(unsigned gpu) {
 
   if (num_globals <= 0) return;
 
-  if (gp == NULL)
-    runtime_sys_err("RestoreGlobals given NULL pointer");
-  else
+  if (gp == NULL) {
+    fprintf(stderr, "RestoreGlobals given NULL pointer");
+    runtime_sys_err();
+  } else
     globals = memcpy(globals, gp, Cmm_GlobalSize());
 }
 @ 
@@ -565,9 +575,9 @@ int Cmm_open(int valstack_size, int argspace_size) {
   if (rc != 0) { return rc; }
 
   /* register any necessary C functions with C-- */
-  register_c_func("SaveGlobals",    (void *) Cmm_SaveGlobals_helper,
+  register_c_func("SaveGlobals",    (void(*)(void)) Cmm_SaveGlobals_helper,
                   "unsigned:void");
-  register_c_func("RestoreGlobals", (void *) Cmm_RestoreGlobals_helper, 
+  register_c_func("RestoreGlobals", (void(*)(void)) Cmm_RestoreGlobals_helper, 
                   "unsigned:void");
  
   <<load in the standard basis and store error code in [[rc]]>>
@@ -604,30 +614,15 @@ If an error is encountered in one of the runtime system's functions, a call
 is made to private internal helper [[runtime_sys_err]].
 
 <<internal function prototypes>>=
-static void runtime_sys_err(char *fmt, ...);
+static void runtime_sys_err(void);
 @ 
 
-This function is given an error message's format string and a variable number
-of arguments.
-
-Callers of this function should expect it \emph{not} to return.
+Callers of this function should expect it \emph{not} to return and thus
+print out any useful messages before calling it.
 
 <<internal helpers>>=
-static void runtime_sys_err(char *fmt, ...) {
-  va_list args;
-
-  if (fmt != NULL) {
-    fprintf(stderr, "error: ");
-
-    va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
-
-    fprintf(stderr, "\n");
-  }
-
+static void runtime_sys_err(void) {
   fprintf(stderr, "error: C-- runtime system error; cannot continue\n");
-  va_end(args);
-
   exit(1);
 }
 @ 

@@ -158,11 +158,15 @@ We make use of the C standard library's [[setjmp]] and [[longjmp]] functions for
 Whenever we must raise an error, we simply call helper function [[cmm_err]], which prints an appropriate message and then [[longjmp]]s to the appropriate error-handling site (either the site of assembly file loading or the site of assembly file interpreting).
 This use of non-local return allows, for example, an interactive interpreter to continue execution even after attempting to load a bad source file or execute a successfully-loaded yet error-ridden program.
 
-[[cmm_err]] is given a error format string and a variable length argument list.
+[[cmm_err]] is given a error string to print.  Cousins [[cmm_err_wstr]] and
+[[cmm_err_wint]] allow the error string to include a format specifier for
+an extra string or integer argument (respectively).
 \emph{Note that [[cmm_err]] should only ever be called by a function that properly sets [[errorjmp]] or a function called by such a function.}
 
 <<function prototypes>>=
-void cmm_err(char *fmt, ...);
+void cmm_err     (const char *fmt);
+void cmm_err_wstr(const char *fmt, const char *s);
+void cmm_err_wint(const char *fmt, const int   i);
 @ 
 
 To keep track of which error handling site to jump to, we use the global variable [[errorjmp]].
@@ -444,7 +448,8 @@ void infer_architecture(void) {
     case 0xaa: DEF_BYTE_ORDER = BIG;    break;
     case 0xdd: DEF_BYTE_ORDER = LITTLE; break;
     default:
-      error("error: machine has unknown natural byte-order");
+      fprintf(stderr, "error: machine has unknown natural byte-order\n");
+      exit(1);
   }   
 }
 @ 
@@ -472,7 +477,8 @@ unsigned mem_aggregate(unsigned char *a, byte_order bo, unsigned num_bytes) {
         u += (a[i] << ((num_bytes - i - 1) * 8));
       break;
     default:
-      error("error: cannot aggregate data in unknown byte-order");
+      fprintf(stderr, "error: cannot aggregate data in unknown byte-order\n");
+      exit(1);
   }
 
   return u;
@@ -570,25 +576,15 @@ during assembly file loading ([[load_assembly_unit]]) or during bytecode
 interpreting (or relocation).
 
 <<error-handling functions>>=
-void cmm_err(char *fmt, ...) {
-  va_list args;
-
-  if (fmt != NULL) {
-    fprintf(stderr, "error: ");
-
-    va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
-
-    fprintf(stderr, "\n");
-  }
+void cmm_err(const char *fmt) {
+  if (fmt != NULL)
+    fprintf(stderr, "error: %s\n", fmt);
 
   if (lua_linenumber != LUA_INVALIDLINE) {
       fprintf(stderr, "error: error noticed when reached "
                       "<line number %d>\n", lua_linenumber);
       lua_linenumber = LUA_INVALIDLINE;
   }
-
-  va_end(args);
 
   if (errorjmp_set)
   	longjmp(errorjmp, 1);
@@ -598,12 +594,34 @@ void cmm_err(char *fmt, ...) {
 }
 @
 
+The two functions below get cmm_err to handle [[longjmp]]ing and such.
+Theoretically they could be merged into one and implemented as a macro.
+<<error-handling functions>>=
+void cmm_err_wstr(const char *fmt, const char *s) {
+  if (fmt != NULL) {
+    fprintf(stderr, "error: ");
+    fprintf(stderr, fmt, s);
+    fprintf(stderr, "\n");
+  }
+  cmm_err((const char *) NULL);
+}
+
+void cmm_err_wint(const char *fmt, const int i) {
+  if (fmt != NULL) {
+    fprintf(stderr, "error: ");
+    fprintf(stderr, fmt, i);
+    fprintf(stderr, "\n");
+  }
+  cmm_err((const char *) NULL);
+}
+@
+
 To help catch memory allocation errors, we provide macro [[mem_assert]].
 
 <<macro definitions>>=
 #define mem_assert(EXP) ((EXP) ? (void)0 \
-                               : cmm_err("(out of) memory error " \
-                                         "<"__FILE__":%d>", __LINE__))
+                               : cmm_err_wint("(out of) memory error " \
+                                              "<"__FILE__":%d>", __LINE__))
 @ 
 
 To allow failed assertions to generate better error messages and to make it
@@ -662,9 +680,9 @@ void lua_error_handle(int err_code, const char *fn) {
   case 0:
     return;
   case LUA_ERRRUN:
-    cmm_err("run-time error while interpreting [%s]", fn);
+    cmm_err_wstr("run-time error while interpreting [%s]", fn);
   case LUA_ERRSYNTAX:
-    cmm_err("a syntax error was found in [%s]", fn);
+    cmm_err_wstr("a syntax error was found in [%s]", fn);
   case LUA_ERRMEM:
     fprintf(stderr, "error: Lua memory allocation error [%s]", fn);
     break;
@@ -672,7 +690,7 @@ void lua_error_handle(int err_code, const char *fn) {
     fprintf(stderr, "error: unrecoverable internal error [%s]", fn);
     break;
   case LUA_ERRFILE:
-    cmm_err("cannot open file [%s]", fn);
+    cmm_err_wstr("cannot open file [%s]", fn);
   }
   exit(1);
 }
@@ -1185,7 +1203,7 @@ For now, we only support the natural byte-order of the machine on which the inte
                            assert(bo == DEF_BYTE_ORDER);
                            assert(al == DEF_ALIGN);
                            if (sz <= 0 || sz > sizeof(value)*8)
-                             cmm_err("cannot fetch %d bits", sz);
+                             cmm_err_wint("cannot fetch %d bits", sz);
                            <<fetch value from given address>>
                            pc = next;
                            }
@@ -1193,7 +1211,7 @@ For now, we only support the natural byte-order of the machine on which the inte
                            assert(bo == DEF_BYTE_ORDER);
                            assert(al == DEF_ALIGN);
                            if (sz <= 0 || sz > sizeof(value)*8)
-                             cmm_err("cannot fetch %d bits", sz);
+                             cmm_err_wint("cannot fetch %d bits", sz);
                            <<store given value at given address>>
                            values.s_free -= 2;
                            pc             = next;
@@ -1202,7 +1220,7 @@ For now, we only support the natural byte-order of the machine on which the inte
                            assert(bo == DEF_BYTE_ORDER);
                            assert(al == DEF_ALIGN);
                            if (sz <= 0 || sz > sizeof(value)*8)
-                             cmm_err("cannot fetch %d bits", sz);
+                             cmm_err_wint("cannot fetch %d bits", sz);
                            UNDERFLOW_CHECK(values, 3);
                            if (STACK_ELT(values, -2).bool) {
                              <<store given value at given address>>
@@ -1282,8 +1300,8 @@ manipulating the hardware rounding mode.
                            case 1 : rm = FE_TONEAREST ; break;
                            case 2 : rm = FE_UPWARD    ; break;
                            case 3 : rm = FE_DOWNWARD  ; break;
-                           default: cmm_err("invalid rounding mode (%d)", 
-                                            v.bits2);
+                           default: cmm_err_wint("invalid rounding mode (%d)", 
+                                                 v.bits2);
                            }
 
                            cmm_assert(fesetround(rm) == 0, "could not "
@@ -1357,9 +1375,9 @@ label arithmetic); all other [[CMM_label]]s are pushed atop the stack as
                              {
                              unsigned loc;
                              if (!location_known(lbl->lbl.raddr))
-                               cmm_err("cannot push value of undefined "
-                                       "symbol \"%s\"", 
-                                       lbl->lbl.raddr->label->name);
+                               cmm_err_wstr("cannot push value of undefined "
+                                            "symbol \"%s\"", 
+                                            lbl->lbl.raddr->label->name);
 
                              loc = location(lbl->lbl.raddr);
                              v = to_CMM_value(loc, sizeof(void *) * 8);
@@ -1488,7 +1506,7 @@ Unfortunately we cannot support an infinite number of C function types.
 <<perform C call>>=
                            {
                            c_caller      call_helper;
-                           void         *f;
+                           void        (*f) (void);
                            lua_State    *L = c_func_table.L;
                            unsigned int  i = lbl->lbl.cfunc_id;
 
@@ -1586,7 +1604,7 @@ Retrieving [[call_helper]] and [[f]] simply involves some queries to Lua tables.
                            lua_gettable(L, -2);
                            if (!lua_isuserdata(L, -1) ||
                                lua_tag(L, -1) != lua_c_func_tag ||
-                               (f = lua_touserdata(L, -1)) == NULL)
+                               (f=(void(*)(void))lua_touserdata(L,-1)) == NULL)
                            {
                              lua_pop(L, 3); /* pop bogus val and 2 tables */
                              cmm_err("internal error with c call");

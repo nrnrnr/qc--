@@ -42,7 +42,7 @@ This registration mechanism does not presently allow the use of compound name
 types (i.e., non-[[typedef]]'d [[union]] or [[struct]] types).
 
 <<available exported C functions>>=
-void register_c_func(const char *name, void *f, const char *sig);
+void register_c_func(const char *name, void (*f) (void), const char *sig);
 @ 
 
 Note that the only C function that may be registered as a varargs function with
@@ -278,8 +278,8 @@ u_int32 cmmprint32(u_int32 i) {
 To register the functions, the we call [[register_c_func]].
 
 <<register needed C functions with the interpreter>>=
-  register_c_func("cmmprint16", (void *) cmmprint16, "u_int16:u_int16");
-  register_c_func("cmmprint32", (void *) cmmprint32, "u_int32:u_int32");
+  register_c_func("cmmprint16", (void(*)(void)) cmmprint16, "u_int16:u_int16");
+  register_c_func("cmmprint32", (void(*)(void)) cmmprint32, "u_int32:u_int32");
 @ 
 
 We then proceed onward to a register a number of functions in the C standard 
@@ -290,14 +290,14 @@ As such, we register it with the special sig [["printf"]].
 See the [[ccall]] module for details about this.
 
 <<register needed C functions with the interpreter>>=
-  register_c_func("putchar", (void *) putchar, "int:int" );
-  register_c_func("printf" , (void *) printf , "printf"  );
-  register_c_func("exit"   , (void *) exit   , "int:void");
-  register_c_func("getchar", (void *) getchar, "void:int");
-  register_c_func("malloc" , (void *) malloc , "unsigned:pointer"       );
-  register_c_func("strcpy" , (void *) strcpy , "pointer,pointer:pointer");
-  register_c_func("strlen" , (void *) strlen , "pointer:unsigned"       );
-  register_c_func("free"   , (void *) free   , "pointer:void");
+  register_c_func("putchar",(void(*)(void))putchar, "int:int" );
+  register_c_func("printf" ,(void(*)(void))printf , "printf"  );
+  register_c_func("exit"   ,(void(*)(void))exit   , "int:void");
+  register_c_func("getchar",(void(*)(void))getchar, "void:int");
+  register_c_func("malloc" ,(void(*)(void))malloc , "unsigned:pointer"       );
+  register_c_func("strcpy" ,(void(*)(void))strcpy , "pointer,pointer:pointer");
+  register_c_func("strlen" ,(void(*)(void))strlen , "pointer:unsigned"       );
+  register_c_func("free"   ,(void(*)(void))free   , "pointer:void");
 @ 
 
 % ----------------------------------------------------------------------------

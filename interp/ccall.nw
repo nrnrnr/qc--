@@ -41,7 +41,7 @@ calling mechanism.
 We implement ``C callers'' to aid in the C calling mechanism.
 
 <<type definitions>>=
-typedef vptr (*c_caller)(vptr, void *);
+typedef vptr (*c_caller)(vptr, void (*) (void));
 @
 
 % ----------------------------------------------------------------------------
@@ -77,7 +77,7 @@ For example, the signature for a C function that takes two [[int]]s and
 returns a [[double]] would be [["int,int:double"]].
 
 <<function prototypes>>=
-void register_c_func(const char *name, void *f, const char *sig);
+void register_c_func(const char *name, void (*f) (void), const char *sig);
 @ 
 
 Note that C functions may \emph{not} be registered with the interpreter as
@@ -145,7 +145,7 @@ exports table, and we associate the number with a table that contains the
 function's signature and pointer in the C function table.
 
 <<function definitions>>=
-void register_c_func(const char *name, void *f, const char *sig) {
+void register_c_func(const char *name, void (*f) (void), const char *sig) {
   static unsigned int id = 1;
 
   void      *caller;
@@ -162,7 +162,7 @@ void register_c_func(const char *name, void *f, const char *sig) {
   lua_settable(L, -3);
 
   lua_pushstring(L, C_FUNC_POINTER);
-  lua_pushusertag(L, f, lua_c_func_tag);
+  lua_pushusertag(L, (void *) f, lua_c_func_tag);
   lua_settable(L, -3);
 
   lua_pushstring(L, C_FUNC_NAME);
@@ -276,7 +276,7 @@ ITERATE_UNARY_C_CALLERS(UNARY_C_CALLER_PROTOTYPE)
 ITERATE_BINARY_C_CALLERS(BINARY_C_CALLER_PROTOTYPE)
 ITERATE_TERNARY_C_CALLERS(TERNARY_C_CALLER_PROTOTYPE)
 ITERATE_FOURARY_C_CALLERS(FOURARY_C_CALLER_PROTOTYPE)
-vptr c_caller_printf (vptr arguments, void *f);
+vptr c_caller_printf (vptr arguments, void (*f) (void));
 @ 
 
 % ----------------------------------------------------------------------------
@@ -364,19 +364,19 @@ function pointer, and return a new pointer to the argument-passing stack.
 
 <<macro definitions>>=
 #define NULLARY_C_CALLER_PROTOTYPE(RETTY, RETURNS) \
-vptr c_caller_void_##RETTY (vptr arguments, void *f);
+vptr c_caller_void_##RETTY (vptr arguments, void (*f) (void));
 
 #define UNARY_C_CALLER_PROTOTYPE(A, RETTY, RETURNS) \
-vptr c_caller_##A##_##RETTY (vptr arguments, void *f);
+vptr c_caller_##A##_##RETTY (vptr arguments, void (*f) (void));
 
 #define BINARY_C_CALLER_PROTOTYPE(A, B, RETTY, RETURNS) \
-vptr c_caller_##A##_##B##_##RETTY (vptr arguments, void *f);
+vptr c_caller_##A##_##B##_##RETTY (vptr arguments, void (*f) (void));
 
 #define TERNARY_C_CALLER_PROTOTYPE(A, B, C, RETTY, RETURNS) \
-vptr c_caller_##A##_##B##_##C##_##RETTY (vptr arguments, void *f);
+vptr c_caller_##A##_##B##_##C##_##RETTY (vptr arguments, void (*f) (void));
 
 #define FOURARY_C_CALLER_PROTOTYPE(A, B, C, D, RETTY, RETURNS) \
-vptr c_caller_##A##_##B##_##C##_##D##_##RETTY (vptr arguments, void *f);
+vptr c_caller_##A##_##B##_##C##_##D##_##RETTY (vptr arguments, void (*f) (void));
 @ 
 
 Registration of C callers involves a simple call to [[register_c_sig]]; this
@@ -410,7 +410,7 @@ argument-passing stack.
 
 <<macro definitions>>=
 #define NULLARY_C_CALLER(RETTY, RETURNS) \
-vptr c_caller_void_##RETTY (vptr arguments, void *f) { \
+vptr c_caller_void_##RETTY (vptr arguments, void (*f) (void)) { \
   { \
   RETTY (*f_ty) (void) = (RETTY (*) (void)) f; \
   RETURNS(RETTY retval =, (void)) f_ty(); \
@@ -418,7 +418,7 @@ vptr c_caller_void_##RETTY (vptr arguments, void *f) { \
   return arguments; \
 } }
 #define UNARY_C_CALLER(ARGTY, RETTY, RETURNS) \
-vptr c_caller_##ARGTY##_##RETTY (vptr arguments, void *f) { \
+vptr c_caller_##ARGTY##_##RETTY (vptr arguments, void (*f) (void)) { \
   { \
   RETTY (*f_ty) (ARGTY) = (RETTY (*) (ARGTY)) f; \
   RETURNS(RETTY retval =, (void)) f_ty(VIEW(arguments[0], ARGTY)); \
@@ -426,7 +426,7 @@ vptr c_caller_##ARGTY##_##RETTY (vptr arguments, void *f) { \
   return arguments; \
 } }
 #define BINARY_C_CALLER(ARGATY, ARGBTY, RETTY, RETURNS) \
-vptr c_caller_##ARGATY##_##ARGBTY##_##RETTY (vptr arguments, void *f) { \
+vptr c_caller_##ARGATY##_##ARGBTY##_##RETTY (vptr arguments,void(*f)(void)) { \
   { \
   RETTY (*f_ty) (ARGATY, ARGBTY) = (RETTY (*) (ARGATY, ARGBTY)) f; \
   RETURNS(RETTY retval =, (void)) \
@@ -437,7 +437,7 @@ vptr c_caller_##ARGATY##_##ARGBTY##_##RETTY (vptr arguments, void *f) { \
 } }
 #define TERNARY_C_CALLER(ARGATY, ARGBTY, ARGCTY, RETTY, RETURNS) \
 vptr c_caller_##ARGATY##_##ARGBTY##_##ARGCTY##_##RETTY \
-     (vptr arguments, void *f) \
+     (vptr arguments, void (*f) (void)) \
 { \
   { \
   RETTY (*f_ty) (ARGATY, ARGBTY, ARGCTY) = \
@@ -451,7 +451,7 @@ vptr c_caller_##ARGATY##_##ARGBTY##_##ARGCTY##_##RETTY \
 } }
 #define FOURARY_C_CALLER(ARGATY, ARGBTY, ARGCTY, ARGDTY, RETTY, RETURNS) \
 vptr c_caller_##ARGATY##_##ARGBTY##_##ARGCTY##_##ARGDTY##_##RETTY \
-     (vptr arguments, void *f) \
+     (vptr arguments, void (*f) (void)) \
 { \
   { \
   RETTY (*f_ty) (ARGATY, ARGBTY, ARGCTY, ARGDTY) = \
@@ -486,7 +486,7 @@ with a user-picked name (likely [[printf]]) and the special signature
 [["printf"]].
 
 <<function definitions>>=
-vptr c_caller_printf (vptr arguments, void *f) {
+vptr c_caller_printf (vptr arguments, void (*f) (void)) {
   char *fmt = (char *) arguments[0].ptr;
   int   nextarg = 1;
 

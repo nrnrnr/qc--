@@ -404,8 +404,8 @@ int lua_CMM_procedure(lua_State *L) {
   lbl  = get_label(L, name);
 
   if (CMM_label_defined(lbl)) {
-    cmm_err("cannot define procedure [%s]; "
-            "a label by that name already exists", name);
+    cmm_err_wstr("cannot define procedure [%s]; "
+                 "a label by that name already exists", name);
   }
 
   proc->raddr          = lbl->lbl.raddr;
@@ -473,7 +473,7 @@ int lua_CMM_define_label(lua_State *L) {
     label_define(label, 0);
     lbl->unit = unit;
   } else
-    cmm_err("cannot redefine label [%s]", name);
+    cmm_err_wstr("cannot redefine label [%s]", name);
 
   return 0;
 }
@@ -574,8 +574,9 @@ int lua_CMM_imports(lua_State *L) {
     lbl = get_label(L, str);
     if (CMM_label_defined(lbl)) {
       lua_pop(L, 4);
-      cmm_err("cannot import label \"%s\"; label by that name already exists",
-              str);
+      cmm_err_wstr("cannot import label \"%s\"; "
+                   "label by that name already exists",
+                   str);
     }
 
     lua_gettable(L, exports);
@@ -585,8 +586,9 @@ int lua_CMM_imports(lua_State *L) {
         (imported_label = (CMM_label *) lua_touserdata(L, -1)) == NULL)
     {
       lua_pop(L, 4);
-      cmm_err("cannot import label \"%s\"; label was not exported by any unit",
-              str);
+      cmm_err_wstr("cannot import label \"%s\"; "
+                   "label was not exported by any unit",
+                   str);
     }
 
     lua_pop(L, 1); /* pop CMM_label */
@@ -867,7 +869,8 @@ int lua_CMM_emit_raddr(lua_State *L) {
   lua_assert_isstring(L, -1, "emit_raddr expects an offset (hex string)");
   lua_assert_isstring(L, -2, "emit_raddr expects a symbol name (string)");
 
-  cmm_assert(sscanf(lua_tostring(L, -1), "%lx", &offset) == 1,
+  cmm_assert(sscanf(lua_tostring(L, -1), "%lx",
+                      (unsigned long int *) (&offset)) == 1,
              "could not parse offset; hexadecimal string literal expected");
   lua_pop(L, 1);
 
@@ -914,7 +917,8 @@ int lua_CMM_push_literal(lua_State *L) {
     mp_num = MP_fromstr(mp_num, lua_tostring(L, -2), 16, NULL);
     num    = (long int) mp_num;
   } else {
-    cmm_assert(sscanf(lua_tostring(L, -2), "%lx", &num) == 1,
+    cmm_assert(sscanf(lua_tostring(L, -2), "%lx", 
+                        (unsigned long int *) (&num)) == 1,
                "could not parse literal; hexadecimal string literal expected");
   }
 
