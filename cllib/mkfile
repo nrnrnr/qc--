@@ -37,6 +37,15 @@ all:V:          $LIBCMO $LIBCMX
 
 update:V:       $LIBDIR/$LIBCMO $LIBDIR/$LIBCMX
 
+test:V:
+                echo "nothing to be done"
+
+dvi:V:          
+                echo "nothing to be done"
+
+html:V:         $HTML
+
+
 clean:V:    
                 rm -f $CMO $CMX $CMI $OBJ
                 rm -f *.output
@@ -46,13 +55,6 @@ clean:V:
 # important file sets
 # ------------------------------------------------------------------ 
 
-MLI =           lc.mli       \
-                rc.mli       \
-                rc_parse.mli \
-                pc.mli       \
-                pp.mli       \
-                rx.mli       \
-                
 ML  =           lc.ml       \
                 rc.ml       \
                 rc_parse.ml \
@@ -70,7 +72,6 @@ GENERATED=rc_scan.ml rc_parse.ml rc_parse.mli
 CMO =           `echo $ML       | sed 's/\.ml/.cmo/g'`
 CMX =           `echo $ML       | sed 's/\.ml/.cmx/g'`
 OBJ =           `echo $ML       | sed 's/\.ml/.o/g;'`
-CMI =           `echo $ML $MLI  | sed 's/\.mli*/.cmi/g'`
 
 # ------------------------------------------------------------------ 
 # Noweb stuff - once this is stable the generic part should go to
@@ -89,6 +90,32 @@ MISCTANGLE  =   'for f in $target; do $NOTANGLE -R$f $prereq | $CPIF $f; done'
 
 HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
 
+# ------------------------------------------------------------------ 
+# Documentation
+# ------------------------------------------------------------------ 
+
+%.tex:	%.inc
+	cp $stem.inc $stem.tex
+	ed -s $stem.tex <<EOF 
+	1
+	i
+	\documentclass{article}
+	\usepackage{noweb}
+	\usepackage{tabularx}
+	\pagestyle{noweb}
+	\noweboptions{}
+	\begin{document}
+	\nwfilename{$stem.nw}
+	\nwbegindocs{}
+	.
+	\$
+	a
+	\end{document}
+	.
+	w
+	q
+	EOF 
+
 %.inc:          %.nw
                 $NOWEAVE -delay -filter ../config/autodefs.ocaml -index $prereq > $target
 
@@ -106,12 +133,6 @@ HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
 
 %.ps:           %.dvi
                 dvips -Ppdf -o $target $prereq
-
-$NAME.dvi:      main.inc ast.inc parser.inc srcmap.inc error.inc
-
-dvi:V:          $NAME.dvi
-ps:V:           $NAME.ps
-html:V:         $HTML
 
 # ------------------------------------------------------------------  
 # documents created from .nw sources
@@ -145,8 +166,6 @@ rc_parse.mly:   rc.nw
 # build the libraries
 # ------------------------------------------------------------------ 
 
-
-
 $LIBCMO:        $CMO
 		$OCAMLC $OCAMLC_FLAGS -a -o $target $prereq
                 
@@ -154,7 +173,6 @@ $LIBCMO:        $CMO
 $LIBCMX:	$CMX
 		$OCAMLO $OCAMLO_FLAGS -a -o $target $prereq
                 
-
 # ------------------------------------------------------------------ 
 # update hierarchy
 # ------------------------------------------------------------------ 
