@@ -74,8 +74,8 @@ let bo       = R.LittleEndian
 \paragraph{Automata for passing values---C~convention}
 
 <<IA64 calling convention automata in Lua>>=
-function fpreturn(h, w) return (h == "float" and w <= 82) end
-function lt512   (v)    return (v < 512)                  end
+function fpreturn(ce, h, w) return (h == "float" and w <= 82) end
+function lt512   (v)        return (v < 512)                  end
 
 Ia64.cc["C"].results =
   A.choice { fpreturn, { A.widths { 32, 64, 82 }
@@ -90,10 +90,8 @@ Ia64.cc["C"].results =
 Ia64.cc["C"].call = 
   { A.widen(64, "multiple")
   , A.bitcounter("bits")
-  , A.choice { "float", A.choice { { "bits", lt512 }, A.useregs(f(8) .. f(15))
-                                 , A.is_any         , A.unit
-                                 }
-             , A.is_any, A.regs_by_bits("bits", out(0) .. out(7))
+  , A.choice { {"float",A.is_counter("bits", lt512)}, A.useregs(f(8)..f(15))
+             , A.is_any, A.regs_by_bits("bits", out(0)..out(7))
              }
   , A.overflow { byteorder = Ia64.byteorder, growth = "up"
                , max_alignment = Ia64.sp_align

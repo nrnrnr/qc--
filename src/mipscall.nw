@@ -115,7 +115,7 @@ Mips         = Mips         or {}
 Mips.cc      = Mips.cc      or {}
 Mips.cc["C"] = Mips.cc["C"] or {}
 
-function is_float64(h, w)  return (h == "float") and (w == 64) end
+function is_float64(ce, h, w)  return (h == "float") and (w == 64) end
 
 Mips.growth    = "down"
 Mips.byteorder = "little"
@@ -196,7 +196,7 @@ let who_do_you_believe = Lcc
 
 let arguments () =
     let bits = "bits" in
-    let arg  = "arg"  in
+    let arg  = "args"  in
     A.widen (Aux.round_up_to ~multiple_of: 32) *>
     A.widths [32;64] *>
     A.bitcounter bits *>
@@ -235,21 +235,21 @@ Mips.cc["C"].call =
   { A.widen (32, "multiple")
   , A.widths { 32, 64 }
   , A.bitcounter("bits")
-  , A.argcounter("arg")
+  , A.argcounter("args")
   , A.first_choice { 
       "float" , { A.choice {
                     "float" , A.choice {
-                                64, A.regs_by_args("arg", {d(12),d(14)}),
-                                32, A.regs_by_args("arg", {f(12),f(14)}),
-                                A.is_any, A.unit
+                                64, A.regs_by_args("args", {d(12),d(14)}),
+                                32, A.regs_by_args("args", {f(12),f(14)}),
+                                A.is_any, {}
                               },
-                    A.is_any, A.unit
+                    A.is_any, {}
                   },
                   A.regs_by_bits("bits", r(4) .. r(7))
                 },
 
       A.is_any, A.choice {
-                  is_float64, A.regs_by_args("arg" , { d(12), l(6) }),
+                  is_float64, A.regs_by_args("args" , { d(12), l(6) }),
                   A.is_any  , A.regs_by_bits("bits", r(4) .. r(7))
                 }
     }

@@ -36,7 +36,7 @@ module T1 = Lua.Lib.Combine.T5
                 (AstType)                   (* T1.TV4 *)
                 (Colorgraph.NewGCT)         (* T1.TV5 *)
 
-module T    = Lua.Lib.Combine.T8            (* types *)
+module T    = Lua.Lib.Combine.T9            (* types *)
                 (T1)                        (* T.TV1 *)
                 (NewBackplane.T)            (* T.TV2 *)
                 (EnvType)                   (* T.TV3 *)
@@ -45,6 +45,7 @@ module T    = Lua.Lib.Combine.T8            (* types *)
                 (BlockType)                 (* T.TV6 *)
                 (AutomatonType)             (* T.TV7 *)
                 (CCStageType)               (* T.TV8 *)
+                (CounterenvType)            (* T.TV9 *)
 
 module T1' = Lua.Lib.Lift (T1) (T.TV1)
 
@@ -61,6 +62,7 @@ module NewTargetTV       = T.TV5
 module BlockTV           = T.TV6
 module AutomatonTV       = T.TV7
 module CCStageTV         = T.TV8
+module CounterenvTV      = T.TV9
 
 module WT = Lua.Lib.WithType (T)
 
@@ -71,7 +73,7 @@ module C =
     (WT (Luamathlib.M))
     (MakeLib 
         (AsmTV) (AstTV) (EnvTV) (NewProcTV) (NewTargetTV) (DocTV) (LuaioTV)
-        (BlockTV) (AutomatonTV) (CCStageTV))
+        (BlockTV) (AutomatonTV) (CCStageTV) (CounterenvTV))
     (Colorgraph.NewMake (NewBackplaneTV) (NewColorgraphTV) (NewProcTV))
     (Dls.Make (NewBackplaneTV) (NewProcTV))
     (WT (Luautil.MakeLib))
@@ -166,6 +168,12 @@ module CCStageType = struct
     let eq _        = fun x y -> false
     let to_string   = fun _ t -> "<cconv. stage>"
 end
+module CounterenvType = struct
+    type 'a t       = Automaton.counterenv
+    let tname       = "counterenv"
+    let eq _        = fun x y -> false
+    let to_string   = fun _ t -> "<counterenv>"
+end
 
 module MakeLib
   (AsmV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AsmType.t)
@@ -187,7 +195,9 @@ module MakeLib
                               and  type 'a combined = 'a AsmV.combined)
   (CCStageV : Lua.Lib.TYPEVIEW with type 'a t       = 'a CCStageType.t
                               and  type 'a combined = 'a AsmV.combined)
-    
+  (CounterenvV : Lua.Lib.TYPEVIEW with type 'a t    = 'a CounterenvType.t
+                              and  type 'a combined = 'a AsmV.combined)
+
     : Lua.Lib.USERCODE with type 'a userdata' = 'a AsmV.combined =
 
 struct
@@ -244,7 +254,8 @@ module Map = struct
     let block         = BlockV.makemap     V.userdata V.projection
     let automaton     = AutomatonV.makemap V.userdata V.projection
 
-    let ccstage       = CCStageV.makemap   V.userdata V.projection
+    let ccstage       = CCStageV.makemap    V.userdata V.projection
+    let counterenv    = CounterenvV.makemap V.userdata V.projection
 end
 @ 
 We also need to import Lua projection/embedding pairs defined in other modules.
@@ -312,14 +323,22 @@ let growth    = stringtab "memory growth"
 @ 
 
 <<embedding/projection pairs for calling conventions>>=
+let combine_preds l ce w h =
+  List.fold_right (fun p acc -> acc && p ce w h) l true in
+
+let choicepredty =
+  V.func (Map.counterenv **-> V.string **-> V.int **->> V.bool) in
+
+let overload_choice =
+  (V.string             <@ A.is_hint    ) <|>
+  (V.int                <@ A.is_width   ) <|>
+  choicepredty in
+
 let choice_pred =
-  (V.string <@ A.is_hint ) <|>
-  (V.int    <@ A.is_width) <|>
-  (V.unit   <@ (fun () -> A.is_any)) <|>
-  (listpair (V.string) (V.func (V.int **->> V.bool)) <@ 
-      (function ((ctr,f)::_) -> A.is_counter ctr f
-              | [] -> (fun _ _ _ -> false))) <|>
-  (V.func (V.string **-> V.int **->> V.bool) <@ (fun f ctrs -> f)) in
+  (V.string               <@ A.is_hint    ) <|>
+  (V.int                  <@ A.is_width   ) <|>
+  (V.list overload_choice <@ combine_preds) <|>
+  choicepredty in
 
 let stage stages =
   (V.list stages <@ (fun l -> List.fold_right A.( *> ) l A.unit)) <|>
@@ -384,9 +403,11 @@ C.register_module "Automaton"
   ; "widths"      , V.efunc (V.list V.int **->> stage) A.widths
 
     (* the prewritten utils ... *)
-  ; "is_any"      , V.efunc (V.string **-> V.int **->> V.bool)
-                            (A.is_any A.empty_counterenv)
-
+  ; "is_any"      , V.efunc (Map.counterenv **-> V.string **-> V.int **->> V.bool) A.is_any
+  ; "is_counter"  , V.efunc (counterty **-> (V.func (V.int **->> V.bool)) **->>
+                             (V.func (Map.counterenv **-> V.string **-> V.int **->> V.bool)))
+                      A.is_counter
+                            
     (* registration, although it shouldn't necessarily be in here *)
   ; "register_cc" , V.efunc (Map.new_target **-> V.string **-> V.table **->> V.unit)
                     register_cc
