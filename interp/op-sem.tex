@@ -1,0 +1,265 @@
+\input{interp-macros}
+
+\ops{Literal}
+{i[\pc] = (literal)\textrm{ }x}
+{\step
+  {\dstate}
+  {\state \newpc {x\cons{}V} \rho \spt g \sigma A u s}
+}
+
+\ops{PushSymbol}
+{i[\pc] = .name \andalso a = \texttt{lookup\_symbol(}name\texttt{)}}
+{\step
+  {\dstate}
+  {\state \newpc {a\cons{}V} \rho \spt g \sigma A u s}
+}
+
+\ops{Fetch}
+{i[\pc] = \mathtt{fetch}\dash{}space\dash{}size \andalso v = \texttt{aggregate(}\sigma,\$space[a],size,\mathtt{byte}\dash\mathtt{order)}}
+{\step
+  {\state \pc {a\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc {v\cons{}V} \rho \spt g \sigma A u s}
+}
+
+\ops{Store}
+{i[\pc] = \mathtt{store}\dash{}space\dash{}size \andalso {\sigma'} = \texttt{store(}\sigma,\$space[a],v,size,\mathtt{byte}\dash\mathtt{order)}}
+{\step
+  {\state \pc {v\cons{}a\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc V \rho \spt g {\sigma'} A u s}
+}
+
+\ops{Fetch-Local}
+{i[\pc] = \mathtt{fetch}\dash\mathtt{local}\dash{}x}
+{\step
+  {\dstate}
+  {\state \newpc {\rho[x]\cons{}V} \rho \spt g \sigma A u s}
+}
+
+\ops{Store-Local}
+{i[\pc] = \mathtt{store}\dash\mathtt{local}\dash{}x \andalso {\rho'} = \rho\{x\mapsto{}v\}}
+{\step
+  {\state \pc {v\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc V {\rho'} \spt g \sigma A u s}
+}
+
+\ops{Fetch-Global}
+{i[\pc] = \mathtt{fetch}\dash\mathtt{global}\dash{}x}
+{\step
+  {\dstate}
+  {\state \newpc {g[x]\cons{}V} \rho \spt g \sigma A u s}
+}
+
+\ops{Store-Global}
+{i[\pc] = \mathtt{store}\dash\mathtt{global}\dash{}x \andalso g' = g\{x\mapsto{}v\}}
+{\step
+  {\state \pc {v\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc V \rho \spt {g'} \sigma A u s}
+}
+\ops{Guarded-Store-True}
+{\twoline
+{i[\pc] = \mathtt{guarded}\dash\mathtt{store}\dash{}space\dash{}size}
+{{\sigma'} = \texttt{store(}\sigma,\$space[a],v,size,\mathtt{byte}\dash\mathtt{order)}}
+}
+{\step
+  {\state \pc {v\cons{}a\cons{}\mathtt{\#t}\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc V \rho \spt g {\sigma'} A u s}
+}
+
+
+\ops{Guarded-Store-False}
+{i[\pc] = \mathtt{guarded}\dash\mathtt{store}\dash{}space\dash{}size}
+{\step
+  {\state \pc {v\cons{}a\cons{}\mathtt{\#f}\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc V \rho \spt g \sigma A u s}
+}
+
+\ops{Guarded-Store-Local-True}
+{\twoline
+{i[\pc] = \mathtt{guarded}\dash\mathtt{store}\dash\mathtt{local}\dash{}x}
+{\rho' = \rho\{x\mapsto{}v\}}
+}
+{\step
+  {\state \pc {v\cons\mathtt{\#t}\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc V {\rho'} \spt g \sigma A u s}
+}
+
+\ops{Guarded-Store-Local-False}
+{i[\pc] = \mathtt{guarded}\dash\mathtt{store}\dash\mathtt{local}\dash{}x}
+{\step
+  {\state \pc {v\cons\mathtt{\#f}\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc V \rho \spt g \sigma A u s}
+}
+
+\ops{Guarded-Store-Global-True}
+{\twoline
+{i[\pc] = \mathtt{guarded}\dash\mathtt{store}\dash\mathtt{global}\dash{}x}
+{g' = g\{x\mapsto{}v\}}
+}
+{\step
+  {\state \pc {v\cons\mathtt{\#t}\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc V \rho \spt {g'} \sigma A u s}
+}
+
+\ops{Guarded-Store-Global-False}
+{i[\pc] = \mathtt{guarded}\dash\mathtt{store}\dash\mathtt{global}\dash{}x}
+{\step
+  {\state \pc {v\cons\mathtt{\#f}\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc V \rho \spt g \sigma A u s}
+}
+
+\ops{Push-Arg}
+{i[\pc] = \mathtt{push}\dash\mathtt{arg}}
+{\step
+  {\state \pc {v\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc V \rho \spt g \sigma {v\cons{}A} u s}
+}
+
+\ops{Pop-Arg}
+{i[\pc] = \mathtt{pop}\dash\mathtt{arg}}
+{\step
+  {\state \pc V \rho \spt g \sigma {v\cons{}A} u s}
+  {\state \newpc {v\cons{}V} \rho \spt g \sigma A u s}
+}
+
+\ops{ApplyOp}
+{\threeline{i[\pc] = operator{-size} \andalso n = \texttt{arity(}operator\texttt{)}}{(v,V') = \texttt{popn(}V,n\texttt{)}}{v' = operator(v)}}
+{\step
+  {\dstate}
+  {\state \newpc {v\cons{}V'} \rho \spt g \sigma A u s}
+}
+
+\ops{Goto}
+{i[\pc] = \mathtt{goto}}
+{\step
+  {\state \pc {\pc'\cons{}V} \rho \spt g \sigma A u s}
+  {\state {\pc'} V \rho \spt g \sigma A u s}
+}
+
+\ops{CBranchT-True}
+{i[\pc] = \mathtt{cbrancht}\dash\pc'}
+{\step
+  {\state \pc {\mathtt{\#t}\cons{}V} \rho \spt g \sigma A u s}
+  {\state {\pc'} V \rho \spt g \sigma A u s}
+}
+
+\ops{CBranchT-False}
+{i[\pc] = \mathtt{cbrancht}\dash\pc'}
+{\step
+  {\state \pc {\mathtt{\#f}\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc V \rho \spt g \sigma A u s}
+}
+
+\ops{CBranchF-True}
+{i[\pc] = \mathtt{cbranchf}\dash\pc'}
+{\step
+  {\state \pc {\mathtt{\#t}\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc V \rho \spt g \sigma A u s}
+}
+
+\ops{CBranchF-False}
+{i[\pc] = \mathtt{cbranchf}\dash\pc'}
+{\step
+  {\state \pc {\mathtt{\#f}\cons{}V} \rho \spt g \sigma A u s}
+  {\state {\pc'} V \rho \spt g \sigma A u s}
+}
+
+\ops{BranchTF-True}
+{i[\pc] = \mathtt{branchtf}\dash\pc_{t}\dash\pc_{f}}
+{\step
+  {\state \pc {\mathtt{\#t}\cons{}V} \rho \spt g \sigma A u s}
+  {\state {\pc_{t}} V \rho \spt g \sigma A u s}
+}
+
+\ops{BranchTF-False}
+{i[\pc] = \mathtt{branchtf}\dash\pc_{t}\dash\pc_{f}}
+{\step
+  {\state \pc {\mathtt{\#f}\cons{}V} \rho \spt g \sigma A u s}
+  {\state {\pc_{f}} V \rho \spt g \sigma A u s}
+}
+
+\ops{CMMCall}
+{\fiveline
+{i[\pc] = \mathtt{cmm}\dash\mathtt{call}\dash\kappa}
+{V \textrm{ is empty}}
+{P \rightarrow procPC = \pc' \andalso P \rightarrow numLocals = n \andalso P \rightarrow stackDataSize = m}
+{\rho' = \texttt{new\_env(}n\texttt{)} \andalso u' \textrm{ is a fresh, unique identifier}}
+{s' = {\act \newpc \rho \spt \kappa u}}
+}
+{\step
+  {\state \pc {P\cons{}V} \rho \spt g \sigma A u s}
+  {\state {\pc'} V {\rho'} {\spt-m} g \sigma A {u'} {s'\cons{}s}}
+}
+
+\ops{CMMTailCall}
+{\fourline
+{i[\pc] = \mathtt{cmm}\dash\mathtt{tail}\dash\mathtt{call}}
+{V \textrm{ is empty}}
+{P \rightarrow procPC = \pc' \andalso P \rightarrow numLocals = n \andalso P \rightarrow stackDataSize = m}
+{\rho' = \texttt{new\_env(}n\texttt{)} \andalso u' \textrm{ is a fresh, unique identifier}}
+}
+{\twoline
+{\step
+  {\state \pc {P\cons{}V} \rho \spt g \sigma A u s}
+  {\state {\pc'} V {\rho'} {\spt-m} g \sigma A {u'} s}
+}
+{\textrm{and } u \textrm{ becomes dead}}
+}
+
+\ops{CCall}
+{\threeline
+{i[\pc] = \mathtt{c}\dash\mathtt{call}\dash{}signature}
+{V \textrm{ is empty}}
+{(A',\sigma') = \texttt{c\_call(}a,A,\sigma,signature\texttt{)}}
+}
+{\step
+  {\dstate}
+  {\state \newpc {a\cons{}V} \rho \spt g {\sigma'} {A'} u s}
+}
+
+\ops{ReturnDefault}
+{\threeline
+{i[\pc] = \mathtt{return}\dash{}<m/m>}
+{V \textrm{ is empty}}
+{s = {\act {\pc'} {\rho'} {\spt'} \kappa {u'}}}
+}
+{\twoline
+{\step
+  {\state \pc V \rho \spt g \sigma A u {s\cons{}S}}
+  {\state {\pc'} V {\rho'} {\spt'} g \sigma A {u'} S}
+}
+{\textrm{and } u \textrm{ becomes dead}}
+}
+
+\ops{ReturnAlt}
+{\sixline
+{i[\pc] = \mathtt{return}\dash{}<n/m>}
+{V \textrm{ is empty} \andalso n < m}
+{s = {\act {\pc'} {\rho'} {\spt'} \kappa {u'}}}
+{\kappa = \bundle}
+{m = |\kappa_{r}|}
+{\pc'' = \kappa_{r}[x]}
+}
+{\twoline
+{\step
+  {\state \pc V \rho \spt g \sigma A u {s\cons{}S}}
+  {\state {\pc''} V {\rho'} {\spt'} g \sigma A {u'} S}
+}
+{\textrm{and } u \textrm{ becomes dead}}
+}
+
+\ops{Cut}
+{\nineline
+{i[\pc] = \mathtt{cut}}
+{V \textrm{ is empty}}
+{s = {\act {\pc'} {\rho'} {\spt'} \kappa {u'}}}
+{\kappa = \bundle}
+{k = \langle \pc_k, s'\cons{}s'' \rangle}
+{\pc_k \in \kappa_c}
+{s' = {\act {\pc_k} {\rho_k} {\spt_k} {\kappa_k} {u_k}}}
+{\texttt{is\_live(}u_k\texttt{)} = true}
+{\kappa_i.aborts = true \textrm{ for all activations above } s' \textrm{ in thread identified by } u_k.thread}
+}
+{\step
+  {\state \pc {k\cons{}V} \rho \spt g \sigma A u {s\cons{}S}}
+  {\state {\pc_k} V {\rho_k} {\spt_k} g \sigma A {u_k} {s''}}
+}
