@@ -83,7 +83,7 @@ type 'a compunit = {
 @ 
 <<nelab.mli>>=
 <<exposed types>>
-val program : validator -> Srcmap.map -> 'a Asm.assembler -> Nast.t ->
+val program : swap:bool -> validator -> Srcmap.map -> 'a Asm.assembler -> Nast.t ->
   ('a Fenv.Dirty.env' * 'a compunit) Error.error
 <<exposed types>>=
 type validator = Rtl.rtl -> string option
@@ -419,8 +419,8 @@ imports and exports have two effects
 
 <<nelab.ml>>=
 type scope = Local | Global
-let program validate srcmap asm ast =
-  E.seq (Metrics.of_ast srcmap ast.N.target) (fun metrics ->
+let program ~swap validate srcmap asm ast =
+  E.seq (Metrics.of_ast ~swap srcmap ast.N.target) (fun metrics ->
     let flag = function E.Error -> F.flagError | E.Ok _ -> (fun env -> env) in
     let eprint r s = E.errorRegionPrt (srcmap, r) s in
     let errorf r   = Printf.kprintf (fun s -> eprint r s; E.Error) in

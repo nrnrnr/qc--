@@ -51,11 +51,12 @@ val pretty    : 'a * Ast.toplevel list -> Pp.doc
 val scan      : string -> unit
 val version   : unit -> unit
 val elab : 
-  (Rtl.rtl -> string option) -> Srcmap.map * Ast.program -> 'proc Asm.assembler
+  swap:bool -> (Rtl.rtl -> string option) -> Srcmap.map * Ast.program
+  -> 'proc Asm.assembler
   -> ('proc Fenv.Dirty.env' * 'proc Nelab.compunit) Error.error
 val compile :
   Ast2ir.tgt -> (Ast2ir.proc -> unit) -> bool(*emitglobals*) -> (Srcmap.map * Ast.program)
-  -> Ast2ir.proc Asm.assembler -> bool(*validate*) -> unit
+  -> Ast2ir.proc Asm.assembler -> bool(*validate*) -> bool(*swap*) -> unit
    (* raises Error.ErrorExn *)
 @
 
@@ -161,13 +162,14 @@ let metrics_ok src tgt =
   !outcome
 @ 
 <<driver.ml>>=
-let elab validate (map,ast) asm = Nelab.program validate map asm (Nast.program ast)
+let elab ~swap validate (map,ast) asm =
+  Nelab.program ~swap validate map asm (Nast.program ast)
 
-let compile target opt exportglobals src asm validate =
+let compile target opt exportglobals src asm validate swap =
   let validate = if validate then Mvalidate.rtl target else (fun _ -> None) in
   let abort () = Error.error "compilation aborted because of errors" in
   let as_ok = function Error.Ok x -> x | Error.Error -> abort () in
-  as_ok (Error.ematch (elab validate src asm) (fun (env,compunit) ->
+  as_ok (Error.ematch (elab swap validate src asm) (fun (env,compunit) ->
     if metrics_ok (Fenv.Dirty.metrics env) target then
       if Fenv.Dirty.errorFlag env then
         abort ()

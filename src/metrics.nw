@@ -19,7 +19,7 @@ things are not consistent.
 <<metrics.mli>>=
 <<exposed types>>
 val default : t
-val of_ast  : Srcmap.map -> (Ast.region * Ast.arch) list -> t Error.error
+val of_ast  : swap:bool -> Srcmap.map -> (Ast.region * Ast.arch) list -> t Error.error
 @ 
 
 Field [[alignment]] is the alignment required to load or store a word
@@ -47,7 +47,7 @@ let default = {
   charset     = "latin1";
 }
 
-let of_ast map =
+let of_ast ~swap map =
   let errorf rgn =
     Printf.kprintf (fun s -> (Error.errorRegionPrt (map, rgn) s; Error.Error)) in
   let def default = function
@@ -69,30 +69,33 @@ let of_ast map =
   let merges r = merge r (fun s -> s) in
   let is_ok = function  Error.Ok _ -> true | Error.Error -> false in
 
-  let rec metrics bo w p m f c aa = match aa with
-  | [] -> if is_ok bo && is_ok w && is_ok p && is_ok m && is_ok f && is_ok c then
-            match bo with
-            | Error.Ok (Some (_, bo)) -> 
-                Error.Ok { byteorder   = bo;
-                           wordsize    = def default.wordsize    w;
-                           pointersize = def default.pointersize p;
-                           memsize     = def default.memsize     m;
-                           float       = def default.float       f;
-                           charset     = def default.charset     c;
-                         }
-            | Error.Ok None ->
-                (Error.errorPrt "target byte order not specified"; Error.Error)
-            | Error.Error   ->
-                assert false
-          else
-            Error.Error
-  | (r,A.Memsize i)      :: aa -> metrics bo w p (mergei r "memsize" i m) f c aa
-  | (r,A.ByteorderBig)   :: aa -> metrics (mergebo r Rtl.BigEndian    bo) w p m f c aa
-  | (r,A.ByteorderLittle):: aa -> metrics (mergebo r Rtl.LittleEndian bo) w p m f c aa
-  | (r,A.FloatRepr s)    :: aa -> metrics bo w p m (merges r "float" s f) c aa
-  | (r,A.WordSize i)     :: aa -> metrics bo (mergei r "wordsize" i w) p m f c aa
-  | (r,A.PointerSize i)  :: aa -> metrics bo w (mergei r "pointersize" i p) m f c aa
-  | (r,A.Charset s)      :: aa -> metrics bo w p m f (merges r "charset" s c) aa in
+  let rec metrics bo w p m f c aa =
+    let big_endian    r aa = metrics (mergebo r Rtl.BigEndian    bo) w p m f c aa in
+    let little_endian r aa = metrics (mergebo r Rtl.LittleEndian bo) w p m f c aa in
+    match aa with
+    | [] -> if is_ok bo && is_ok w && is_ok p && is_ok m && is_ok f && is_ok c then
+              match bo with
+              | Error.Ok (Some (_, bo)) -> 
+                  Error.Ok { byteorder   = bo;
+                             wordsize    = def default.wordsize    w;
+                             pointersize = def default.pointersize p;
+                             memsize     = def default.memsize     m;
+                             float       = def default.float       f;
+                             charset     = def default.charset     c;
+                           }
+              | Error.Ok None ->
+                  (Error.errorPrt "target byte order not specified"; Error.Error)
+              | Error.Error   ->
+                  assert false
+            else
+              Error.Error
+    | (r,A.Memsize i)      :: aa -> metrics bo w p (mergei r "memsize" i m) f c aa
+    | (r,A.ByteorderBig)   :: aa -> (if swap then little_endian else big_endian) r aa
+    | (r,A.ByteorderLittle):: aa -> (if swap then big_endian else little_endian) r aa
+    | (r,A.FloatRepr s)    :: aa -> metrics bo w p m (merges r "float" s f) c aa
+    | (r,A.WordSize i)     :: aa -> metrics bo (mergei r "wordsize" i w) p m f c aa
+    | (r,A.PointerSize i)  :: aa -> metrics bo w (mergei r "pointersize" i p) m f c aa
+    | (r,A.Charset s)      :: aa -> metrics bo w p m f (merges r "charset" s c) aa in
   let n = Error.Ok None in
   metrics n n n n n n
 @ 

@@ -481,7 +481,7 @@ C.register_module "Dataflow"
 @ 
 <<register modules to [[g]] in alphabetical order>>=
 let new_ok target (map,ast) asm =
-  match Nelab.program (Mvalidate.rtl target) map asm (Nast.program ast) with
+  match Nelab.program ~swap:false (Mvalidate.rtl target) map asm (Nast.program ast) with
   | Error.Error -> false
   | Error.Ok (env, _) -> not (Fenv.Dirty.errorFlag env) in
 C.register_module "Driver" 
@@ -500,7 +500,7 @@ C.register_module "Driver"
   ; "stdin"     , Map.inchan.V.embed              stdin (* hack *)
   ; "stdout"    , Map.outchan.V.embed             stdout(* hack *)
   ; "compile"  , V.efunc (Map.new_target **-> Map.optimize Map.proc **-> V.bool **->
-                           Map.ast **-> Map.asm **-> V.bool **->> V.unit) 
+                           Map.ast **-> Map.asm **-> V.bool **-> V.bool **->> V.unit) 
                           Driver.compile
   ; "reinit"    , V.efunc (V.unit  **->> V.unit)  Reinit.reset
   ] g;

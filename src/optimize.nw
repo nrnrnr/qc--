@@ -118,13 +118,12 @@ let trim_unreachable_code _ ({Proc.cfg = cfg} as proc) =
 @
 We find each join point with one predecessor, and if the predecessor is a branch to the
 join point, we eliminate the branch and the join point.
+I THOUGHT A BRANCH CHAIN WAS A BRANCH TO A BRANCH?
 <<optimize.ml>>=
 let collapse_branch_chains _ {Proc.cfg = cfg} =
-  let brp node = G.kind node = G.Branch &&
-                 let p = G.pred node in
-                 G.kind p = G.Join in
+  let brp node = G.kind node = G.Branch && G.kind (G.pred node) = G.Join in
   let to_collapse =
-    G.fold_nodes (fun n rst -> if brp n then n :: rst else rst) []  cfg in
+    G.fold_nodes (fun n rst -> if brp n then n :: rst else rst) [] cfg in
   let collapse n =
     let j = G.pred n in
     let s = G.succ n in
@@ -132,7 +131,7 @@ let collapse_branch_chains _ {Proc.cfg = cfg} =
                         | G.Cbranch ->
                           if G.eq (G.tsucc p) j then G.set_tsucc p s;
                           if G.eq (G.fsucc p) j then G.set_fsucc p s
-                        | G.Mbranch -> ()
+                        | G.Mbranch -> Impossible.unimp "redirect multiway branch"
                         | G.Branch  -> G.set_succ p s
                         | _ -> ())
               (G.preds j);
