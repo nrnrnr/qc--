@@ -45,7 +45,6 @@ $x{awk}         = ""   ;
 $x{cc}          = ""   ;
 $x{mk}          = ""   ;
 $x{latex}       = ""   ;
-$x{pod2html}    = ""   ;
 $x{test}        = ""   ;
 
 # these values are always tested, you cannot set them
@@ -186,8 +185,6 @@ sub bye {
 
 
 sub failure {
-    my $can_continue = shift @_;
-
     print <<EOF;
     Please see the $configure_log file for details. You have several
     options now:
@@ -195,26 +192,9 @@ sub failure {
     (1) Enlarge your PATH to make sure all tools are found; then run
         this script again.
 
-EOF
-if ($can_continue) {
-    print <<EOF;
-    (2) It looks as if you can continue but may not be able to
-        build either qc--interp (the Quick C-- Interpreter)
-        or some of the documentation.
-        If you want to do these things, add more directories
-        to the list of the searched directories at the top of this
-        script and run ./configure again.
+    (2) Add more directories to the list of the searched directories
+        at the top of this script and run ./configure again.
 
-EOF
-} else {
-    print <<EOF;
-    (2) It looks as if you just can't continue.  Add more directories
-        to the list of the searched directories at the top of this
-        script and run ./configure again.
-
-EOF
-}
-    print <<EOF;
     (3) Create config/config.mk from config/config.mk.default and edit
         it manually. No need to run this script again.
 EOF
@@ -259,7 +239,6 @@ $x{cc}              = $x{cc}           || search("gcc",@path)
 $x{mk}              = $x{mk}           || search("mk",@path); 
 $x{latex}           = $x{latex}        || search("latex",@path); 
 $x{has_latex}       = ($x{latex} ? "true" : "false");
-$x{pod2html}        = $x{pod2html}     || search("pod2html",@path);
 $x{lua_h}           = $x{lua_h}        || search("lua.h", @include);
 $x{lualib_h}        = $x{lualib_h}     || search("lualib.h", @include);
 $x{liblua}          = $x{liblua}       || search("liblua.so", @libs) 
@@ -329,7 +308,7 @@ foreach my $v (keys %x) {
     if (($x{$v} eq '') && ($v ne 'build_interp')) {
 		push(@missing,$v);
 
-        if ($v !~ /lua/ && $v ne "latex" && $v ne "pod2html") { $fatal = 1; }
+        if ($v !~ /lua/ && $v ne "latex") { $fatal = 1; }
 	}
 }
 
@@ -365,7 +344,6 @@ print LOG <<EOF;
     Documentation
     ------------------------------------------------------------------ 
     LaTeX:          $x{latex}
-    pod2html:       $x{pod2html}
     
     Lua
     ------------------------------------------------------------------ 
@@ -391,8 +369,6 @@ print LOG <<EOF;
 
 EOF
 
-$can_continue = 1;
-
 if (@missing) {
     print <<EOF;
     The configure script failed to infer the value for the following
@@ -401,12 +377,7 @@ if (@missing) {
         @missing
 
 EOF
-  foreach $v (@missing) {
-      if (!($v =~ /^lua/ || $v =~ /^liblua/ || $v eq "pod2html" || $v eq "latex")) {
-        $can_continue = 0;
-    }
-  }
-	if ($fatal) { failure($can_continue); }
+    if ($fatal) { failure(); }
 }
     
 
