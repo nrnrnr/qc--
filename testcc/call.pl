@@ -267,7 +267,9 @@ foreach $t (@ARGV) {
 
 $i = 0;
 while (defined($sig=<STDIN>)) {
-    
+    # RRO: hack to remove all trailing whitespace from the line
+    $sig =~ s/\ \n/\n/g;
+
     # loop over all types in one signature and build arg list
     my @args = ();
     my @ts   = split(/ +/, $sig);

@@ -19,8 +19,7 @@
 
 TOP      = ..
 QCC      = $TOP/bin/qc--.opt
-#QCCFLAGS = backend.ralloc=Ralloc.dls -v
-QCCFLAGS = -v
+QCCFLAGS = -v backend.emit_data=nil
 GEN      = ./call.pl
 CC       = cc
 
@@ -55,16 +54,14 @@ asm :V: alpha-asm  x86-asm  mips-asm
 # by specifying more widths and hints to try. This only makes sense if
 # they are actually implemented.
 #
-# Use Debug.Mips.proc_all_paths() to get all signatures relevant for the
-# MIPS. This creates 64-bit floats, but no 64-bit integers, which are
-# unknown on the MIPS.
 
 alpha-call.sigs:D:
   $QCC -e \
   'Debug.paths_proc(Backend.alpha.target, "C",
                     { { type = "int"  , widths = {64} }
                     , { type = "float", widths = {64} }
-                    })' \
+                    })
+   Debug.path_2_in_overflow(Backend.alpha.target, "C")' \
     > $target
 
 x86-call.sigs:D:
@@ -72,7 +69,8 @@ x86-call.sigs:D:
   'Debug.paths_proc(Backend.x86.target, "C",
                     { { type = "int"  , widths = {32} }
                     , { type = "float", widths = {32} }
-                    })' \
+                    })
+   Debug.path_2_in_overflow(Backend.x86.target, "C")' \
     > $target
 
 #
@@ -83,7 +81,17 @@ mips-call.sigs:D:
   'Debug.paths_proc(Backend.mips.target, "C",
                     { { type = "int"  , widths = {32} }
                     , { type = "float", widths = {32} }
-                    })' \
+                    })
+   Debug.path_2_in_overflow(Backend.mips.target, "C")' \
+    > $target
+
+ia64-call.sigs:D:
+  $QCC -e \
+  'Debug.paths_proc(Backend.ia64.target, "C",
+                    { { type = "int"  , widths = {64} }
+                    , { type = "float", widths = {64} }
+                    })
+   Debug.path_2_in_overflow(Backend.ia64.target, "C")' \
     > $target
 
 #
@@ -93,23 +101,28 @@ mips-call.sigs:D:
 #
 
 alpha-call:V: alpha-call.sigs
-               $GEN -name=alpha                           -width=64 < $prereq
-              #$GEN -name=alpha-cmm0      -conv="cmm0"    -width=64 < $prereq
-              #$GEN -name=alpha-cmm1      -conv="cmm1"    -width=64 < $prereq 
-              #$GEN -name=alpha-cmm2      -conv="cmm2"    -width=64 < $prereq
-              #$GEN -name=alpha-cmm3      -conv="cmm3"    -width=64 < $prereq 
+               $GEN -name=alpha-i                         -width=64 < $prereq
+              #$GEN -name=alpha-i-cmm0    -conv="cmm0"    -width=64 < $prereq
+              #$GEN -name=alpha-i-cmm1    -conv="cmm1"    -width=64 < $prereq 
+              #$GEN -name=alpha-i-cmm2    -conv="cmm2"    -width=64 < $prereq
+              #$GEN -name=alpha-i-cmm3    -conv="cmm3"    -width=64 < $prereq 
                $GEN -name=alpha-x      -c                 -width=64 < $prereq
+              #$GEN -name=alpha-i-spec    -conv="C'"      -width=64 < $prereq
+              #$GEN -name=alpha-x-spec -c -conv="C'"      -width=64 < $prereq
 
 x86-call:V:   x86-call.sigs             
-               $GEN -name=x86                             -width=32 < $prereq
-               $GEN -name=x86-cmm         -conv="notail"  -width=32 < $prereq
+               $GEN -name=x86-i                           -width=32 < $prereq
                $GEN -name=x86-x        -c                 -width=32 < $prereq
-               $GEN -name=x86-x-cspec  -c -conv="C'"      -width=32 < $prereq
+              #$GEN -name=x86-i-spec      -conv="C'"      -width=32 < $prereq
+              #$GEN -name=x86-x-spec   -c -conv="C'"      -width=32 < $prereq
+              #$GEN -name=x86-i-cmm       -conv="C--"     -width=32 < $prereq
+              #$GEN -name=x86-i-cmmspec   -conv="C--'"    -width=32 < $prereq
 
 mips-call:V:  mips-call.sigs
-               $GEN -name=mips                            -width=32 < $prereq
-               $GEN -name=mips-x -c                       -width=32 < $prereq
-               $GEN -name=mips-x-cspec -c -conv="C'"      -width=32 < $prereq
+               $GEN -name=mips-i                          -width=32 < $prereq
+               $GEN -name=mips-x       -c                 -width=32 < $prereq
+              #$GEN -name=mips-i-spec     -conv="C'"      -width=32 < $prereq
+              #$GEN -name=mips-x-spec  -c -conv="C'"      -width=32 < $prereq
 
 #
 # Compile *.c-- files to *.s code. Compilation depends on the desired
@@ -122,7 +135,7 @@ ALPHA_CMM  = ${ALPHA_NUMS:%=alpha\\[%]??.c--}
 MIPS_CMM   = mips*.c--
 
 x86-asm:V:
-	for f in "`echo "$X86_CMM" | tr ' ' '\n'`" ; do
+	for f in "`echo "$X86_CMM" | tr ' ' '\n'`"; do
 		$QCC -e 'Options.globals=2' backend=Backend.x86 $QCCFLAGS \
 	    	 -stop .s `echo $f`
 	done
@@ -168,23 +181,21 @@ x86.sh:Q:
   rm -f x86.log
   NFILES=`ls -1 x86*.s | wc -l`
   I=0
-  for f in x86-mn-*.s x86-cmm-mn-*.s; do
-    (cc $f && ./a.out) | tee -a x86.log | grep -v success
-    I=$((I + 1))
-    echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
-  done
-  for f in x86-x-mn-*.s; do
-    g=`echo $f | sed -e "s/mn/callee/" -e "s/\.s/.c/"`
-    (cc $f $g && ./a.out) | tee -a x86.log | grep -v success
-    I=$((I + 1))
-    echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
-  done    
-  for f in x86-x-cspec-mn-*.s; do
-    g=`echo $f | sed -e "s/mn/callee/" -e "s/\.s/.c/"`
-    (cc $f $g && ./a.out) | tee -a x86.log | grep -v success
-    I=$((I + 1))
-    echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
-  done
+  if echo x86-i-*.s | grep -v \* > /dev/null; then
+    for f in x86-i-*.s; do
+      (cc $f && ./a.out) | tee -a x86.log | grep -v success
+      I=$((I + 1))
+      echo -n -e Finished $I of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
+    done
+  fi
+  if echo x86-x*-mn-*.s | grep -v \* > /dev/null; then
+    for f in x86-x*-mn-*.s; do
+      g=`echo $f | sed -e "s/mn/callee/" -e "s/\.s/\.c/"`
+      (cc $f $g && ./a.out) | tee -a x86.log | grep -v success
+      I=$((I + 1))
+      echo -n -e Finished $I of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
+    done
+  fi
   echo Completed testing x86 architecture.  Log file x86.log created.
   ' > $target  
   chmod +x $target
@@ -195,22 +206,21 @@ alpha.sh:Q:
   rm -f alpha.log
   NFILES=`ls -1 alpha*.s | wc -l`
   I=0
-  # for f in alpha-cmm*-mn-*.s; do
-  #   (cc $f && ./a.out) | tee -a alpha.log | grep -v success
-  #   I=$((I + 1))
-  #   echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
-  # done    
-  for f in alpha-mn-*.s; do
-    (cc $f && ./a.out) | tee -a alpha.log | grep -v success
-    I=$((I + 1))
-    echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
-  done
-  for f in alpha-x-mn-*.s; do
-    g=`echo $f | sed -e 's/mn/callee/' -e 's/\.s/.c/'`
-    (cc $f $g && ./a.out) | tee -a alpha.log | grep -v success
-    I=$((I + 1))
-    echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
-  done   
+  if echo alpha-i-*.s | grep -v \* > /dev/null; then
+    for f in alpha-i-*.s; do
+      (cc $f && ./a.out) | tee -a alpha.log | grep -v success
+      I=$((I + 1))
+      echo -n -e Finished $I of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
+    done
+  fi
+  if echo alpha-x*-mn-*.s | grep -v \* > /dev/null; then
+    for f in alpha-x*-mn-*.s; do
+      g=`echo $f | sed -e "s/mn/callee/" -e "s/\.s/\.c/"`
+      (cc $f $g && ./a.out) | tee -a alpha.log | grep -v success
+      I=$((I + 1))
+      echo -n -e Finished $I of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
+    done   
+  fi
   echo Completed testing Alpha architecture.  Log file alpha.log created.
   ' > $target
   chmod +x $target
@@ -221,26 +231,23 @@ mips.sh:Q:
   rm -f mips.log
   NFILES=`ls -1 mips*.s | wc -l`
   I=0
-  for f in mips-mn-*.s; do
-    (cc -mno-abicalls -fno-pic -Wa,--no-warn $f && ./a.out) | \
-      tee -a mips.log | grep -v success
-    I=$((I + 1))
-    echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
-  done    
-  for f in mips-x-mn-*.s; do
-    g=`echo $f | sed -e 's/mn/callee/' -e 's/.s$/.c/'`
-    (cc -Wa,--no-warn $f $g && ./a.out) | \
-      tee -a mips.log | grep -v success
-    I=$((I + 1))
-    echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
-  done   
-  # for f in mips-x-cspec-mn-*.s; do
-  #   g=`echo $f | sed -e 's/mn/callee/' -e 's/.s$/.c/'`
-  #   (cc -Wa,--no-warn $f $g && ./a.out)| \
-  #     tee -a mips.log | grep -v success
-  #   I=$((I + 1))
-  #   echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
-  # done   
+  if echo mips-i-*.s | grep -v \* > /dev/null; then
+    for f in mips-i-*.s; do
+      (cc -mno-abicalls -fno-pic -Wa,--no-warn $f && ./a.out) | \
+        tee -a mips.log | grep -v success
+      I=$((I + 1))
+      echo -n -e Finished $I of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
+    done    
+  fi
+  if echo mips-x*-mn-*.s | grep -v \* > /dev/null; then
+    for f in mips-x*-mn-*.s; do
+      g=`echo $f | sed -e "s/mn/callee/" -e "s/\.s/\.c/"`
+      (cc -Wa,--no-warn $f $g && ./a.out) | \
+        tee -a mips.log | grep -v success
+      I=$((I + 1))
+      echo -n -e Finished $I of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
+    done
+  fi
   echo Completed testing MIPS architecture.  Log file mips.log created.
   ' > $target
   chmod +x $target
