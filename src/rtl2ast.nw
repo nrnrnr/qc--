@@ -1,0 +1,89 @@
+
+\input{macros.tex}
+
+
+% l2h substitution dots ...
+% l2h substitution AST AST
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Translation of {\rtl}s to {\PAL} syntax}
+% ------------------------------------------------------------------ 
+
+For debugging we like to make the intermediate code visible by
+translating in back to {\PAL} syntax.  Technically this means, that
+{\rtl}s are translated to the {\PAL} abstract syntax ({\AST}); for the
+{\AST} a pretty printer (in module \module{ast}) translates it back to
+{\small ASCII} codes. This module provides a translation from a {\rtl}
+to a {\PAL} statement.
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+The [[translate]] function takes a {\rtl} and produces a statement
+list, describing the effect of the {\rtl}.  When a variable name is
+created from a name found in an {\rtl}, it is passed through the first
+argument to [[translate]].  This gives this mangling function a chance
+to re-write names such that they obey to the {\PAL} syntax.  See also
+module \module{mangle}.
+
+<<rtl2ast.mli>>=
+val translate: (string -> string) Rtl.rtl -> Ast.stmt list
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<rtl2ast.ml>>=
+module R = Rtl
+module A = Ast
+module T = Types
+@
+
+<<>>=
+let truth              = R.Const(R.Bool(true))
+let bits n             = A.BitsTy n
+
+let const mangle = function
+    | R.Bool(_)      -> assert false
+    | R.Bits(b,w)    -> A.Int(b, Some (bits w))
+    | R.Link(name,w) -> A.Fetch(A.Var(None, mangle name))
+
+let rec expr mangle = function
+    | R.Const c         -> const mangle c
+    | R.Fetch(loc,_)    -> A.Fetch(location mangle loc)
+    | R.App((op,ww),ee) -> let actual e = (None, expr mangle e)
+                        in 
+                            A.PrimOp(mangle op, List.map actual ee)
+
+and location mangle = function 
+    | R.Cell('m',agg,width,e,_)  -> A.Mem(bits width, expr mangle e, None)
+    | R.Cell( _ ,agg,width,e,_)  -> assert false 
+    | R.Var (name,_,width)       -> A.Var(None,mangle name)
+    
+
+let effect mangle = function
+    | R.Kill   _         -> assert false
+    | R.Store  (loc,e,w) -> A.AssignStmt([location mangle loc],[expr mangle e])
+
+let guarded mangle = function
+    | (e, eff) 
+       when e = truth    -> effect mangle eff
+    | (e, eff)           -> A.IfStmt(expr mangle e, [effect mangle eff], [])
+
+let translate mangle (R.Rtl gg) = List.map (guarded mangle) gg
+@
+

@@ -1,0 +1,353 @@
+
+\input{macros.tex}
+
+% l2h substitution dots ...
+% l2h substitution AST AST
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Abstract Assembler Interface to the {\AST}}
+% ------------------------------------------------------------------ 
+
+The \module{asm2} describes an abstract interface to assemblers. This
+module provides an implementation of that interface by representing
+actions of the assembler in {\PAL}.
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+The interface is a sub-type of [[Asm2.S]]: it provides everything
+outlined there, plus some extras: 
+
+<<asm2ast.mli>>=
+<<asm interface>>
+<<extras>>
+@
+
+The main extra functionality is provided by the [[ast]] function,
+which returns an abstract {\PAL} program for an [[asm]] value. 
+Unfortunately, it is not possible for the types [[asm]] and
+[[Ast.program]] to share the same implementation. 
+
+<<extras>>=
+val ast:    asm -> Ast.program
+@
+
+Not every concept provided by the abstract assembler interface is
+provided by {\PAL}.  Trying to use unsupported features will result in
+the [[Unsuported]] exception.
+
+<<extras>>=
+exception Unsupported of string
+@
+
+The interface to the assembler ([[Asm2.S]]) is described in the module
+\module{asm2}, so we don't repeat it here.
+
+<<asm interface>>=
+type asm
+type action
+type section = string
+type proc_info
+type symbol
+type sym
+type size = int
+type align = int
+type reladdr
+type offset = unit
+type instruction = Ast.proc
+
+val append : asm -> action -> asm
+val init : string list -> asm
+val section : section -> action
+val current : asm -> section
+val proc : proc_info -> action
+val org : int -> action
+val align : int -> action
+val addloc : int -> action
+
+val import : sym -> action
+val export : sym -> action
+val local : sym -> action
+val common : sym -> size -> align -> section -> action
+val lookup : sym -> asm -> symbol       (* Not_found *)
+val define_label : symbol -> action
+val define_const : symbol -> Bits.bits -> action
+val define_local : sym -> action
+
+val offset : int -> offset                  (* Unsupported *)
+val diff : symbol -> symbol -> offset       (* Unsupported *)
+val reladdr : symbol -> offset -> reladdr   (* ignores offset *)  
+
+val instr : instruction -> action
+
+val zeroes : int -> action
+val value : Bits.bits -> action
+val addr : reladdr -> action
+val byteorder : Fenv.Clean.endianness
+val comment : string -> action
+
+val mangle : string -> sym
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+It is a bit ironic, that the interface to assemblers (module
+\module{asm2}) does not match perfectly with the abstract syntax of
+{\PAL}, the portable assembler. 
+
+The overall direction of this implementation is to find 
+
+<<asm2ast.ml>>=
+module A        = Ast
+module Symbol   = Map.Make(struct type t=string let compare=compare end)
+@
+
+
+{\PAL} does not support support all concepts provided by the abstract
+assembler interface.  Trying to use unsupported features results in an
+exception.
+ 
+<<>>=
+exception Unsupported of string
+let unsupported msg = raise (Unsupported msg)
+@
+
+An assembler is not independent from the personality of the underlying
+architecture. We have to make decisions about the personality of the
+{\PAL} code we are generating.
+
+<<>>=
+let pointer     = A.BitsTy(32)
+let wordsize    = 32
+let bits n      = A.BitsTy n
+let int n       = A.Int(Bits.of_int n wordsize, Some (bits wordsize))
+let one         = int 1
+@
+
+The following types for section names, sizes and alignments are
+dictated by the assembly interface.
+
+<<>>=
+type section    = string
+type size       = int
+type align      = int
+@
+
+<<>>=
+type symclass   = Import        
+                | Export
+                | Local
+                | Common of size * align * section
+type symbol     = string * symclass
+type sym        = Sym of string
+@                
+
+An assembler program is represented by [[asm]] and it contains: 
+
+\begin{itemize}
+\item A symbol table: the assembler interface allows to create symbols
+      that can be looked up later. Symbols are registered in the
+      symbol table.
+
+\item The name of the current section.
+
+\item A list of actions belonging to the current action. For
+      efficiency, actions are inserted at the front of the list. The list
+      is reversed we the section is closed.
+
+\item A list of sections, making up the top level of the program. Again,
+      the sections are in backward order for efficiency.  The [[ast]]
+      function reverses this list before making it accessible for
+      clients.
+\end{itemize}
+
+<<>>=
+type asm =      { symbols:      symbol Symbol.t
+                ; section:      string
+                ; actions:      A.section list
+                ; toplevel:     (string * A.section list) list
+                }
+@
+
+The initially empty {\PAL} program puts everything into the ``default''
+section.  This is admittedly ugly. 
+
+<<>>=
+let init args =
+    { symbols           = Symbol.empty
+    ; section           = "default"
+    ; actions           = []
+    ; toplevel          = []
+    }
+@
+
+An assembly [[action]] roughly corresponds to an [[Ast.section]]. 
+Unfortunately this correspondence does not always and thus actions
+must be categorized.  The effect of the [[append]] function, that adds
+an action to an assembly program depends on the category of an action.
+
+<<>>=
+type action     = NewSection    of string
+                | CurSection    of A.section
+                | DefSym        of symbol
+                | Nop
+@
+
+The mangler creates [[sym]] values. This particular one is too simple
+minded. 
+
+<<>>=
+let mangle s    = Sym s
+@
+
+The [[append]] function adds an [[action]] to an [[asm]] value.  It
+looks at the category of an action and then creates a new [[asm]]
+value. Whenever a new section is started, the current list of actions
+is reversed, before the now closed section is added \emph{in front} of
+the list of sections. This means, that each section is in the right
+order, but the order of sections is still reversed.
+
+<<>>=
+let append asm = function
+    | NewSection s -> 
+        { asm with 
+          toplevel = (asm.section, List.rev asm.actions)
+                   :: asm.toplevel
+        ; section  = s
+        ; actions  = []             
+        }
+    
+    | CurSection x ->
+        { asm with actions = x :: asm.actions }
+    | DefSym (n,c) -> 
+        if Symbol.mem n asm.symbols
+        then asm
+        else let actions = 
+            ( match c with
+            | Import   -> A.Decl(A.Import(pointer,[(None,n)])) :: asm.actions
+            | Export   -> A.Decl(A.Export(None,[(n,None)])) :: asm.actions
+            | Local    -> asm.actions (* ignored - ok ?*)
+            | Common _ -> asm.actions (* ignored *)
+            ) in { asm with 
+                   actions = actions
+                 ; symbols = Symbol.add n (n,c) asm.symbols
+                 }
+    | Nop          -> asm
+@
+
+The [[ast]] function provides the abstract {\PAL} syntax of the
+``assembly'' program.  It closes the current section and reverse the
+list of sections of [[asm.toplevel]] before returning them.
+
+<<>>=
+let ast asm = 
+    let section  = (asm.section, List.rev asm.actions) in
+    let toplevel = List.rev (section :: asm.toplevel)  in
+        List.map (fun (name,sect) -> A.Section(name,sect)) toplevel
+@
+
+
+The semantics of the following functions is mostly determined by the
+assembly interface.  Hoewever, this translation to {\PAL} is imperfect
+in some cases. 
+
+[[section]] closes the [[current]] section and starts a new one.
+
+<<>>=
+let section s   = NewSection s
+let current asm = asm.section
+@
+
+For completeness, a \emph{no-operation} is provided.
+
+<<>>=
+let nop = Nop
+@
+
+Our Assembler does not announce procedures.  Since instructions are
+{\PAL} procedures, we rely on them to do The Right Thing.
+
+<<>>=
+type proc_info = unit
+let proc () = Nop
+@
+
+{\PAL} provides no concept of a direclty accessible location counter
+and thus it can't be set.  Should the [[addloc]] be made a synonym for
+[[zeroes]]?  Since all code we are generating here are outside of
+procedures the [[align]] action must denote an alignment for data and
+can not denote an align statement.
+
+<<>>=
+let org    n = unsupported "no location counter in this implementation"
+let addloc n = unsupported "no location counter in this implementation"
+let align  n = CurSection(A.Datum(A.Align n))
+@
+
+The actions related to symbols define new symbols, which are also entered
+to the symbol table. The [[lookup]] function helps to find them.
+
+<<>>=
+let import (Sym n)                  = DefSym(n,Import)
+let export (Sym n)                  = DefSym(n,Export)
+let local  (Sym n)                  = DefSym(n,Local)
+let common (Sym n) size algn sect   = DefSym(n,Common(size,algn,sect))
+let lookup (Sym n) asm              = Symbol.find n asm.symbols
+@
+
+
+
+<<>>=
+let define_label (n,c)      = CurSection(A.Datum(A.Label(n)))
+let define_const (n,c) b    = 
+    CurSection(A.Decl(A.Const(None,n,A.Int(b,Some (bits (Bits.width b))))))  
+let define_local (Sym n)    = CurSection(A.Datum(A.Label n))
+@
+
+<<>>=
+type reladdr = sym
+type offset  = unit
+
+let offset i        = unsupported "relocatable addresses unsupported"
+let diff s s        = unsupported "relocatable addresses unsupported"
+let reladdr (n,c) () = (Sym n) 
+@
+
+<<>>=
+type instruction = A.proc
+let instr i = CurSection(A.Procedure(i))
+@
+
+<<>>=
+let zeroes n = CurSection(A.Datum(A.MemDecl(bits 8,A.FixSize(int n), None)))
+let value  v = 
+    let ty   = bits (Bits.width v)              in
+    let init = A.InitExprs([A.Int(v, Some ty)]) in
+        CurSection(A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
+let addr (Sym a)   =
+    let ty   = pointer in
+    let init = A.InitExprs([A.Fetch(A.Var(None,a))]) in
+        CurSection(A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
+@
+
+<<>>=
+let byteorder = Fenv.Clean.Big
+let comment n = Nop
+@
+
+        
