@@ -1,0 +1,274 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+
+<<prop.mli>>=
+<<exported module types>>
+<<exported module types>>=
+module type S = sig
+  type t
+  val clear : t -> unit    (* remove all properties *)
+  val make  : unit -> t    (* fresh, empty property list *)
+
+  type 'a prop = {
+    get : t -> 'a;   (* raises Not_found *)
+    set : t -> 'a -> unit;
+    remove : t -> unit;
+  }
+  val prop : unit -> 'a prop (* make a new property *)
+end
+<<prop.mli>>=
+module M : S
+@ 
+<<prop.ml>>=
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
+<<exported module types>>
+
+module M = struct
+  <<implementation>>
+end
+@ 
+<<implementation>>=
+  type hcontainer = { uid : int; update : unit -> unit; }
+  type 'a container = { make : 'a -> hcontainer;
+                        pred : hcontainer -> bool;
+                        peek : hcontainer -> 'a option; }
+        
+  let container = 
+    let n = Reinit.ref 0 in
+    fun () ->
+      let id = !n in
+      let () = n := id + 1 in
+      let r = ref None in
+      let make v = { uid = id; update = (fun () -> r := Some v); } in
+      let peek c =
+        if c.uid = id then
+          let () = c.update() in
+          let v = !r in
+          let () = r := None in
+          v
+        else
+          None in
+      let pred c = c.uid = id in
+      { make = make; pred = pred; peek = peek; }
+        
+  type void = Void of void
+
+(*  let (_ : void -> hcontainer) = container *)
+
+@ 
+<<implementation>>=
+
+type t = { mutable props : hcontainer list }
+
+let make () = { props = [] }
+let length t = List.length t.props
+let eq t t' = t == t'
+let clear t = t.props <- []
+
+
+let numPeeks: int ref = Reinit.ref 0
+let numLinks: int ref = Reinit.ref 0
+let maxLength: int ref = Reinit.ref 0
+   
+let stats () =
+  Printf.eprintf "numPeeks = %d; maxLength = %d; avg pos = %4.2f"
+    (!numPeeks) (!maxLength) (float (!numLinks) /. float (!numPeeks))
+
+type 'a prop = {
+  get : t -> 'a;   (* raises Not_found *)
+  set : t -> 'a -> unit;
+  remove : t -> unit;
+}
+
+let prop () =
+  let h = container () in
+  let peek { props = hs } =
+    let rec loop l n =
+      let update () =
+        begin
+	  numLinks := n + !numLinks;
+          if !numLinks < n then impossf  "property list numLinks overflow";
+          if n > !maxLength then maxLength := n;
+        end in
+      match l with
+      | [] -> (update (); raise Not_found)
+      | e :: l ->
+          match h.peek e with
+          | Some r -> (update (); r)
+          | None -> loop l (n+1) in
+    numPeeks := 1 + !numPeeks;
+    if !numPeeks < 1 then impossf "propery list numPeeks overflow";
+    loop hs 0 in
+  let add t v = t.props <- h.make v :: t.props in
+  let remove t = t.props <- List.filter (fun h' -> not (h.pred h')) t.props in
+  { get = peek; set = (fun t v -> (remove t; add t v)); remove = remove; }
+
+<<junk>>=
+
+==> het-container.sig <==
+(* Copyright (C) 1999-2002 Henry Cejtin, Matthew Fluet, Suresh
+ *    Jagannathan, and Stephen Weeks.
+ *
+ * MLton is released under the GNU General Public License (GPL).
+ * Please see the file MLton-LICENSE for license information.
+ *)
+signature HET_CONTAINER =
+   sig
+      type t
+
+      val new: unit -> {make: 'a -> t,
+			pred: t -> bool,
+			peek: t -> 'a option}
+   end
+
+==> property-list.sig <==
+(* Copyright (C) 1999-2002 Henry Cejtin, Matthew Fluet, Suresh
+ *    Jagannathan, and Stephen Weeks.
+ *
+ * MLton is released under the GNU General Public License (GPL).
+ * Please see the file MLton-LICENSE for license information.
+ *)
+type int = Int.t
+
+signature PROPERTY_LIST = 
+   sig
+      type t
+
+      (* remove all properties from the list *)
+      val clear: t -> unit
+      (* pointer equality of property lists *)
+      val equals: t * t -> bool
+      val length: t -> int
+      (* create an empty property list *)
+      val new: unit -> t
+      (* create a new property *)
+      val newProperty:
+	 unit -> {
+                  (* See if a property is in a property list.
+		   * NONE if it isn't.
+		   *)
+		  peek: t -> 'a option,
+		  (* Add the value of the property -- must not already exist. *)
+		  add: t * 'a -> unit,
+		  (* Remove a property from a property list.
+		   * Noop if the property isn't there.
+		   *)
+		  remove: t -> unit
+		  }
+      val stats: unit -> Layout.t
+   end
+
+==> het-container.fun <==
+(* Copyright (C) 1999-2002 Henry Cejtin, Matthew Fluet, Suresh
+ *    Jagannathan, and Stephen Weeks.
+ *
+ * MLton is released under the GNU General Public License (GPL).
+ * Please see the file MLton-LICENSE for license information.
+ *)
+functor ExnHetContainer():> HET_CONTAINER =
+   struct
+      type t = exn
+
+      fun 'a new() =
+	 let exception E of 'a
+	 in {make = E,
+	     pred = fn E _ => true | _ => false,
+	     peek = fn E x => SOME x | _ => NONE}
+	 end
+   end
+
+functor RefHetContainer():> HET_CONTAINER =
+   struct
+      type t = unit ref * (unit -> unit)
+
+      fun 'a new() =
+	 let
+	    val id = ref()
+	    val r: 'a option ref = ref NONE
+	    fun make v = (id, fn () => r := SOME v)
+	    fun peek(id', f) =
+	       if id = id' then (f(); !r before r := NONE)
+	       else NONE
+	    fun pred(id', _) = id = id'
+	 in {make = make, pred = pred, peek = peek}
+	 end
+   end
+
+==> property-list.fun <==
+(* Copyright (C) 1999-2002 Henry Cejtin, Matthew Fluet, Suresh
+ *    Jagannathan, and Stephen Weeks.
+ *
+ * MLton is released under the GNU General Public License (GPL).
+ * Please see the file MLton-LICENSE for license information.
+ *)
+functor PropertyList (H: HET_CONTAINER):> PROPERTY_LIST =
+struct
+
+datatype t = T of H.t list ref
+
+fun new (): t = T (ref [])
+
+fun length (T r) = List.length (!r)
+
+val equals = fn (T r, T r') => Ref.equals (r, r')
+
+fun clear (T hs) = hs := []
+
+val numPeeks: int ref = ref 0
+val numLinks: int ref = ref 0
+val maxLength: int ref = ref 0
+   
+fun stats () =
+   let open Layout
+   in align
+      [seq [str "numPeeks = ", Int.layout (!numPeeks)],
+       seq [str "maxLength = ", Int.layout (!maxLength)],
+       seq [str "average position in property list = ",
+	    str let open Real
+		in format (fromInt (!numLinks) / fromInt (!numPeeks),
+			   Format.fix (SOME 3))
+		end]]
+   end
+
+fun 'a newProperty () =
+   let
+      val {make, pred, peek = peekH} = H.new ()
+      fun peek (T hs) =
+	 let
+	    fun loop (l, n) =
+	       let
+		  fun update () =
+		     ((numLinks := n + !numLinks
+		       handle Overflow => Error.bug "property list numLinks overflow")
+		      ; if n > !maxLength
+			   then maxLength := n
+			else ())
+	       in case l of
+		  [] => (update (); NONE)
+		| e :: l =>
+		     case peekH e of
+			r as SOME _ => (update (); r)
+		      | NONE => loop (l, n + 1)
+	       end
+	    val _ =
+	       numPeeks := 1 + !numPeeks
+	       handle Overflow => Error.bug "propery list numPeeks overflow"
+	 in
+	    loop (!hs, 0)
+	 end
+
+      fun add (T hs, v: 'a): unit = hs := make v :: !hs
+
+      fun remove (T hs) = hs := List.remove (!hs, pred)
+   in
+      {add = add, peek = peek, remove = remove}
+   end
+
+end
