@@ -203,7 +203,6 @@ Cmm_ChangeActivation(Cmm_Activation *a) {
 % ---------------------------------------------------------------------------
 \section{Span Data}
 % ---------------------------------------------------------------------------
-
 For any activation, the client may ask for the inner-most enclosing
 span associated with a given token. The user spans are contained in the
 runtime data emitted by the compiler. Tokens must be integers greater
@@ -211,17 +210,19 @@ than or equal to zero. A table of descriptors is stored in the pc map
 entry immediately following the locals data. Using the activation
 record, the table of descriptors is looked up, and the appropriate
 entry returned.
-
 <<public function implementations>>=
 Cmm_Dataptr
 Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token) {
+  int num_spans;
   pc_map_entry* entry = (pc_map_entry*)a->rtdata;
-  if (entry) {
-    Cmm_Word* descs = spans(entry);
-    assert(token < entry->num_spans);
-    return (Cmm_Dataptr)descs[token];
-  } else {
+  assert(entry);
+
+  num_spans = decode_offset(entry->num_spans);
+  Cmm_Word* descs = spans(entry);
+  if (token > num_spans) {
     return 0;
+  } else {
+    return (Cmm_Dataptr)descs[token];
   }
 }
 @
