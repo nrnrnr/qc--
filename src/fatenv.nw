@@ -19,6 +19,11 @@ environment holds informations about:
 \subsection{Interface}
 % ------------------------------------------------------------------ 
 
+A fat environment has type [[env]]. The same [[env]] will be used for
+checking the static semantics and code generation. It therefore may
+contain some informations that are only required in some parts of the
+compiler, but not all.
+
 <<fatenv.mli>>=
 type env
 
@@ -26,40 +31,120 @@ type env
 <<function signatures>>
 @
 
+{\PAL} knows two scopes and two kinds of names that are scoped: 
+values and types declared at the top-level and section-level have
+global scope, values and types declared inside procedures have local
+scope.  A local name can shadow the same name in the global scope.
+
 <<type declarations>>=
 type scope      = Global | Local
+@
 
+Labels come in different kinds:  they denote procedures, goto-labels,
+data-labels, and stack-labels.
+
+<<>>=
 type kind       = Proc
                 | Code
                 | Data
                 | Stack
+@
+
+Most names in a fat environment are either types (of values), or
+types.  Only for constant values their actual value is known; the type
+of a value is always known, as is the type of a type-alias
+([[typedef]]). 
                     
+<<>>=
 type ty         = Types.ty
 type value      = Const.value
-type endianness = Big | Little
 
+@
+A value can denote different things: a label, a compile-time constant, a
+register, or a continuation. For constants their value is recorded.
+
+<<>>=
 type denotation = Constant of value
                 | Label    of kind
                 | Import
                 | Register
                 | Continuation
+@
 
+Names for types and values constitute two different name spaces:  the
+same name can denote a type and a value.  For both value and types a
+binding provides the scope of the binding and its denotation.  If a
+declaration is erroneous we still bind the declared name:  the
+[[Error.error]] type allows to distinguish between good and bad
+declarations. 
+
+A name in {\PAL} must never be re-declared.  To detect an attempt to
+re-declare the scope of an existing binding must be known, even when
+the declaration of that binding was erroneous.  For this reason the
+[[scope]] of a binding is not part of the [[Error.error]] type
+constructor.
+
+<<>>=
 type ventry     = scope * (denotation * ty) Error.error
 type tentry     = scope * ty                Error.error
+@ 
+
+The fat environment records the [[target]] annotation from a {\PAL}
+source code. The endianness is part of the [[target]] declaration.
+
+<<>>=
+type endianness = Big | Little
+
+@ An [[env]] holds a source map that was obtained during the parsing
+of a source code. It must be provided when the [[env]] is created such
+that is available to all code that report error in the static semantics.
 
 <<function signatures>>=                
 val create          : Srcmap.map -> env
+@
 
+The following functions bind and find names of value and types in an
+[[env]]:  [[bindv]] binds values, [[bindt]] binds types.  The
+specialized function [[bindvError]] and [[bindtError]] bind names to
+[[Error.Error]] in the value and type name space respectively.
+
+Any attempt to re-declare a name in a scope is detected by the
+[[bind*]] functions reported with an [[Error.ErrorExn]] exception.
+
+<<>>=
 val bindv           : string -> ventry  -> env -> env
 val bindt           : string -> tentry  -> env -> env
 val bindvError      : string -> scope   -> env -> env
 val bindtError      : string -> scope   -> env -> env
+@
+
+The [[find*]] functions lookup the meaning of a name in the value or
+type name space.  The result includes the scope where a name was
+bound.  In case the name is not bound an [[Error.ErrorExn]] is raised.
+
+<<>>=
 val findv           : string -> env     -> ventry
 val findt           : string -> env     -> tentry
 val findv'          : string -> env     -> (denotation * ty) Error.error
 val findt'          : string -> env     -> ty Error.error
+@
+
+The [[srcmap]] function returns the [[Srcmap.map]] value passed to
+[[create]].
+
+<<>>=
 val srcmap          : env -> Srcmap.map
 @
+
+The [[target]] declarations are bound in an [[env]].  All [[target]]
+declarations must be consistent in a {\PAL} program:  the
+[[byteorder]] of a compilation unit must be the same at every
+declaration of the byte order.  This is checked by the [[bind*]]
+functions:  after a value was bound any attempt to bind a different
+value is reported with an [[Error.ErrorExn]] exception.
+
+When no target declaration was provided, the [[find*]] functions
+return [[None]].
 
 <<>>=
 val bindMemsize     : int        -> env -> env
