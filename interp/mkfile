@@ -25,6 +25,7 @@
 #
 
 NAME      = qc--interp
+LIBNAME   = lib$NAME.a
 VERSION   = `date +%Y%m%d`
 
 # ------------------------------------------------------------------
@@ -33,6 +34,7 @@ VERSION   = `date +%Y%m%d`
 
 TOP       = ..
 BINDIR    = $TOP/bin
+LIBDIR    = $TOP/lib
 MODE      = user
 # change to MODE=developer to turn on Toolkit features
 
@@ -43,10 +45,10 @@ MODE      = user
 INTERP    = evaluating
 DEPEND    = -MM
 
-all:V:      $NAME
+all:V:      $NAME $LIBNAME
 all.opt:V:  all
 
-update:V:     $BINDIR/$NAME
+update:V:     $BINDIR/$NAME $LIBDIR/$LIBNAME
 update.opt:V: update
 
 test:VQ:
@@ -63,7 +65,7 @@ clobber:V:  clean
             rm -f clients/*.blg clients/*.inc
 	        rm -f $NWTEXFILES clients/gc.tex clients/exn.tex
             rm -f prof.out core *~
-            rm -f $NAME clients/gc_client clients/exn_client
+            rm -f $NAME $LIBNAME clients/gc_client clients/exn_client
             rm -f *.m *.i decode.fetch bytecode.sled clients/*.i
             rm -f $INTERPHDRS $INTERPSRCS
             rm -f $CLIENTHDRS $CLIENTSRCS
@@ -79,10 +81,10 @@ cleani:V:
 # ------------------------------------------------------------------
 
 <mkfile.$MODE
-<../config/c.mk
-<../config/lua.mk
-<../config/noweb.mk
-<../config/man.mk
+<$TOP/config/c.mk
+<$TOP/config/lua.mk
+<$TOP/config/noweb.mk
+<$TOP/config/man.mk
 
 LIBS         = -lm $LUALIBS
 INCLUDES     = -I./include -I./include/cii -I. $LUAINCLUDES
@@ -133,7 +135,8 @@ EXTSRCS    = arena.c \
              mp.c \
              xp.c
 
-INTERPSRCS = assemblyunit.c \
+INTERPSRCS = activation.c \
+             assemblyunit.c \
              c-features.c \
              ccall.c \
              controlflow.c \
@@ -176,6 +179,9 @@ code:V:      $SRCS $HDRS
 $BINDIR/$NAME:  $NAME
                 cp $prereq $target
 
+$LIBDIR/$LIBNAME: $LIBNAME
+                  cp $prereq $target
+
 # ------------------------------------------------------------------
 # binaries
 # ------------------------------------------------------------------
@@ -186,6 +192,8 @@ exn:V:    clients/exn_client
 
 $NAME:    $COREOBJS client.o
     $CC $CFLAGS $LIBS -o $target $COREOBJS client.o
+
+$LIBNAME: $COREOBJS $LIBLUA $LIBLUALIB
 
 clients/gc_client:  $COREOBJS clients/gc.o
     $CC $CFLAGS $LIBS -o $target $COREOBJS clients/gc.o

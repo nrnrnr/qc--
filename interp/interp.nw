@@ -169,7 +169,16 @@ To keep track of which error handling site to jump to, we use the global variabl
 
 <<global variable definitions>>=
 static jmp_buf errorjmp;
+static int     errorjmp_set = 0;
 @  
+
+When an interrupt signal occurs, we try to catch it and provide the user
+with some useful information before returning control to the system.
+We use a signal handler:
+
+<<function prototypes>>=
+void cmm_sighandler(int sig);
+@
 
 As minor helper macros, we use [[mem_assert]] to catch errors that occur when there is a memory allocation error and [[cmm_assert]] to make assertions with better error messages.
 
@@ -580,7 +589,12 @@ void cmm_err(char *fmt, ...) {
   }
 
   va_end(args);
-  longjmp(errorjmp, 1);
+
+  if (errorjmp_set)
+  	longjmp(errorjmp, 1);
+
+  /* as a default case, if we haven't setjmp, we simply exit */
+  exit(1);
 }
 @
 
@@ -599,6 +613,29 @@ in turn calls [[cmm_err]].
 <<macro definitions>>=
 #define cmm_assert(A, MSG) ((A) ? (void)0 : cmm_err(MSG))
 @ 
+
+Our signal handler does very little:
+
+<<error-handling functions>>=
+void cmm_sighandler(int sig) {
+  switch (sig) {
+  case SIGINT:
+	  cmm_err("user interrupt");
+  case SIGSEGV:
+      cmm_err("the interpreter had a SEGMENTATION FAULT");
+  default:
+      cmm_err("an unknown signal was caught");
+  }
+}
+@
+
+We also need to register our signal handler with the system with some
+code that will find its way into [[cmm_interp_open]]:
+
+<<register signal handlers>>=
+(void) signal(SIGINT , cmm_sighandler);
+(void) signal(SIGSEGV, cmm_sighandler);
+@
 
 % ----------------------------------------------------------------------------
 \subsection{Bytecode Generation}
@@ -818,7 +855,9 @@ int load_assembly_unit(char *s, assembly_unit_type source_type) {
   /* enter new assembly unit */
   assembly_unit *au = enter_new_assembly_unit(L);
 
+  errorjmp_set = 1;
   if (setjmp(errorjmp)) {
+    errorjmp_set = 0;
     /* don't try to apply closures that were created during the bad load */
     closures_free = closures_base;
 
@@ -847,6 +886,7 @@ int load_assembly_unit(char *s, assembly_unit_type source_type) {
 
   lua_linenumber = LUA_INVALIDLINE;
 
+  errorjmp_set = 0;
   return 0;
 }
 @ 
@@ -956,6 +996,7 @@ We start by initializing the internal state of the interpreter:
   uid          u;
 
   actptr       caller;
+  char        *name = NULL;
 
   assert(t != NULL);
   
@@ -994,6 +1035,7 @@ frame record.
   stackdata_end = act->stackdata_end;
   u             = act->u;
   caller        = act->caller;
+  name          = act->name;
 @
 
 By now we should know how many globals are used in the source {\PAL} code;
@@ -1027,8 +1069,15 @@ void run_interp(thread *t) {
 
   <<initialize interpreter internals, given suspended thread [[t]]>>
 
+  errorjmp_set = 1;
   if (setjmp(errorjmp)) {
+    errorjmp_set = 0;
     fprintf(stderr, "error: experienced unrecoverable runtime error\n");
+    if (name)
+	  fprintf(stderr, "| Stack trace:\n");
+      fprintf(stderr, "| 0: %s()\n", name);
+    if (caller)
+	  activation_trace(caller);
   } else {
     for (;;) {
       match [next] pc to
@@ -1042,6 +1091,8 @@ void run_interp(thread *t) {
       if (err_occurred || done) break;
     }
   }
+
+  errorjmp_set = 0;
 }
 @ 
 
@@ -1364,6 +1415,7 @@ We pop a pointer to a C [[procedure]] structure off the value stack, and derefer
                              <<allocate and update memory for new activation>>
 
                              curr_proc = proc;
+                             name      = proc->raddr->label->name;
                            }
 @
 
@@ -1385,6 +1437,7 @@ To save the caller's activation record, we simply use the next free [[activation
                            saved->kappa         = ann;
                            saved->u             = u;
 						   saved->caller        = caller;
+                           saved->name          = name;
 
 						   /* also save pc in thread record */ 
 						   t->pc                = saved->pc;
@@ -1448,10 +1501,16 @@ Unfortunately we cannot support an infinite number of C function types.
                              saved->callee        = NULL;
                              saved->u             = u;
                              saved->caller        = caller;
+                             saved->name          = name;
 
                              /* also save pc in t */
                              t->pc                = saved->pc;
+
+                             /* update info. to be used for stack traces */
+                             caller = saved;
                            }
+
+                           <<[[name]] $\leftarrow$ name of C function>>
 
                            <<[[call_helper]] $\leftarrow$ pointer to C caller>>
                            <<[[f]] $\leftarrow$ pointer to C function>>
@@ -1465,14 +1524,32 @@ Unfortunately we cannot support an infinite number of C function types.
 
                              locals        = saved->locals;
                              locals_end    = saved->locals_end;
-                             stackdata     = saved->stackdata_end;
+                             stackdata     = saved->stackdata;
                              stackdata_end = saved->stackdata_end;
                              u             = saved->u;
                              caller        = saved->caller;
+                             name          = saved->name;
                            }
 
                            pc = next;
                            }
+@
+
+We retrieve the descriptive name of the C function so we can output useful
+information during stack traces.
+
+<<[[name]] $\leftarrow$ name of C function>>=
+                           lua_pushtable(L, c_func_table);
+                           lua_rawgeti(L, -1, i);
+                           lua_pushstring(L, C_FUNC_NAME);
+                           lua_gettable(L, -2);
+                           if (!lua_isstring(L, -1)) {
+                             name = NULL;
+                           } else {
+                             name = lua_tostring(L, -1);
+                           }
+     
+                           lua_pop(L, 2);  /* pop table & retrieved value */
 @
 
 Retrieving [[call_helper]] and [[f]] simply involves some queries to Lua tables.
@@ -1546,6 +1623,7 @@ We pop a [[procedure *]] off the value stack to get the needed information about
                            dies_uid(u);
                            u = new_uid(t);
 
+                           name      = proc->raddr->label->name;
                            curr_proc = proc;
                            }
 @ 
@@ -1733,6 +1811,7 @@ away [[next]] so that we do not end up in an infinite loop.
                                saved->callee        = NULL;
                                saved->u             = u;
                                saved->caller        = caller;
+                               saved->name          = name;
 
 						       /* also save pc in thread record */ 
 						       t->pc                = saved->pc;
@@ -1760,6 +1839,7 @@ Finally, restoring information from the destination activation is as simple as c
                            stackdata_end = cont->dest_act->stackdata_end;
                            u             = cont->dest_act->u;
                            caller        = cont->dest_act->caller;
+                           name          = cont->dest_act->name;
 
                            cont->dest_act->callee = NULL;
 @
@@ -1804,7 +1884,12 @@ when it is about to interpret a certain bytecode instruction.
 
 <<matching statement>>=
     | BREAKPT()         => {
-                           pc = next;
+                             int saved_verbosity = verbosity;
+                             verbosity           = 1;
+                             print_value_stack(values.s_free, values.s_base,
+                                               "values");
+                             verbosity           = saved_verbosity;
+                             pc                  = next;
                            }
 @ 
 
@@ -1824,13 +1909,17 @@ In [[cmm_interp_open]], we get everything ready for future source-code encoding 
 <<application initialization>>=
 int cmm_interp_open(int valstack_size, int argspace_size)
 {
+  <<register signal handlers>>
+
   if (valstack_size <= 0) valstack_size = DEF_VALSTACK_SIZE;
   if (argspace_size <= 0) argspace_size = DEF_ARGSPACE_SIZE;
 
   /* FIX */
   if (argspace_size <= 4) argspace_size = 4;
 
+  errorjmp_set = 1;
   if (setjmp(errorjmp)) {
+    errorjmp_set = 0;
     fprintf(stderr, "error: unrecoverable error; quitting interpreter\n");
     return 1; /* signal error */
   } else {
@@ -1840,6 +1929,8 @@ int cmm_interp_open(int valstack_size, int argspace_size)
     <<prepare for encoding library>>
     <<initialize a Lua interpreter and the {\PAL} interpreter>>
   }
+
+  errorjmp_set = 0;
   return 0;
 }
 void cmm_interp_close(void) {
@@ -1887,6 +1978,7 @@ Putting it all together, we have [[interp.m]], the C file with NJ Machine-Code T
 #include <stdarg.h>
 #include <math.h>
 #include <setjmp.h>
+#include <signal.h>
 
 #include "float-features.h"
 #include "lualink.h"

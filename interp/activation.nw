@@ -18,6 +18,7 @@ This document contains the interface and implementation of a {\PAL} activation r
 #include "stack.h"
 
 <<type definitions>>
+<<function prototypes>>
 
 #endif /* _ACTIVATION_H */
 @ 
@@ -62,8 +63,47 @@ typedef struct activation_t {
 
   struct activation_t *caller;
   struct activation_t *callee;
+
+  char                *name;
 } activation;
 
 typedef activation *actstack;
 typedef activation *actptr;
+@
+
+% ----------------------------------------------------------------------------
+\subsection{Utility Functions}
+% ----------------------------------------------------------------------------
+
+We provide a utility function for performing a stack trace, given
+a pointer to the current activation frame.
+
+<<function prototypes>>=
+void activation_trace(activation *act);
+@
+
+% ----------------------------------------------------------------------------
+\implementation{{\PAL} Activation Frames}
+% ----------------------------------------------------------------------------
+
+<<activation.c>>=
+#include "activation.h"
+
+#include <stdio.h>
+
+<<function definitions>>
+@
+
+% ----------------------------------------------------------------------------
+\subsection{Utility Functions}
+% ----------------------------------------------------------------------------
+
+<<function definitions>>=
+void activation_trace(activation *act) {
+  int i;
+  for (i = 1; act != NULL && act->name != NULL; act = act->caller, i++)
+    fprintf(stderr, "| %d: %s()\n", i, act->name);
+
+  fprintf(stderr, "| End of Stack Trace (oldest activation was #%d)\n", i - 1);
+}
 @

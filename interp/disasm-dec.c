@@ -123,10 +123,10 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
         case 2: 
           { 
             { 
-              unsigned MATCH_w_32_8 = 
-                (mem_aggregate((((MATCH_p) + 1)),DEF_BYTE_ORDER,4));
               unsigned /* [0..255] */ MATCH_w_8_40 = 
                 (mem_aggregate((((MATCH_p) + 5)),DEF_BYTE_ORDER,1));
+              unsigned MATCH_w_32_8 = 
+                (mem_aggregate((((MATCH_p) + 1)),DEF_BYTE_ORDER,4));
               unsigned b32 = MATCH_w_32_8 /* bits32 at 8 */;
               unsigned b8 = MATCH_w_8_40 & 0xff /* bits8 at 40 */;
               next = (((MATCH_p) + 6));
@@ -154,8 +154,8 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               unsigned /* [0..255] */ MATCH_w_8_24 = 
                 (mem_aggregate((((MATCH_p) + 3)),DEF_BYTE_ORDER,1));
               unsigned c = MATCH_w_8_24 & 0xff /* bits8c at 24 */;
-              unsigned b = MATCH_w_8_16 & 0xff /* bits8b at 16 */;
               unsigned a = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
+              unsigned b = MATCH_w_8_16 & 0xff /* bits8b at 16 */;
               next = (((MATCH_p) + 4));
               
               #line 85 "disasm.m"
@@ -182,8 +182,8 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               unsigned /* [0..255] */ MATCH_w_8_24 = 
                 (mem_aggregate((((MATCH_p) + 3)),DEF_BYTE_ORDER,1));
               unsigned c = MATCH_w_8_24 & 0xff /* bits8c at 24 */;
-              unsigned b = MATCH_w_8_16 & 0xff /* bits8b at 16 */;
               unsigned a = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
+              unsigned b = MATCH_w_8_16 & 0xff /* bits8b at 16 */;
               next = (((MATCH_p) + 4));
               
               #line 93 "disasm.m"
@@ -210,8 +210,8 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               unsigned /* [0..255] */ MATCH_w_8_24 = 
                 (mem_aggregate((((MATCH_p) + 3)),DEF_BYTE_ORDER,1));
               unsigned c = MATCH_w_8_24 & 0xff /* bits8c at 24 */;
-              unsigned b = MATCH_w_8_16 & 0xff /* bits8b at 16 */;
               unsigned a = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
+              unsigned b = MATCH_w_8_16 & 0xff /* bits8b at 16 */;
               next = (((MATCH_p) + 4));
               
               #line 101 "disasm.m"
@@ -550,12 +550,12 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
         case 23: 
           { 
             { 
-              unsigned MATCH_w_32_8 = 
-                (mem_aggregate((((MATCH_p) + 1)),DEF_BYTE_ORDER,4));
               unsigned MATCH_w_32_40 = 
                 (mem_aggregate((((MATCH_p) + 5)),DEF_BYTE_ORDER,4));
-              unsigned b = MATCH_w_32_40 /* bits32 at 40 */;
+              unsigned MATCH_w_32_8 = 
+                (mem_aggregate((((MATCH_p) + 1)),DEF_BYTE_ORDER,4));
               unsigned a = MATCH_w_32_8 /* bits32 at 8 */;
+              unsigned b = MATCH_w_32_40 /* bits32 at 40 */;
               next = (((MATCH_p) + 9));
               
               #line 176 "disasm.m"
@@ -624,8 +624,8 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
                 (mem_aggregate((((MATCH_p) + 2)),DEF_BYTE_ORDER,1));
               unsigned /* [0..255] */ MATCH_w_8_8 = 
                 (mem_aggregate((((MATCH_p) + 1)),DEF_BYTE_ORDER,1));
-              unsigned b = MATCH_w_8_16 & 0xff /* bits8b at 16 */;
               unsigned a = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
+              unsigned b = MATCH_w_8_16 & 0xff /* bits8b at 16 */;
               next = (((MATCH_p) + 3));
               
               #line 202 "disasm.m"
