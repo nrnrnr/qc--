@@ -1185,24 +1185,12 @@ let isMoveInstruction t inst =
                || (is_tmp t r2 && Target.fits t s2 r1))
   | _ -> false
 @
-
-
 The interface provides the modules to embed the graph coloring functions in the
 Lua interpreter.
-
-<<support for old backplane that can be removed from colorgraph.mli>>=
+<<colorgraph.mli>>=
 module GCT : Lua.Lib.USERTYPE
 module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.action)
             (GCT : Lua.Lib.TYPEVIEW with type 'a t = 'a GCT.t
-                                  and type 'a combined = 'a BackplaneT.combined)
-            (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Proc.t
-                                  and type 'a combined = 'a BackplaneT.combined)
-       : Lua.Lib.USERCODE with type 'a userdata' = 'a BackplaneT.combined
-
-<<colorgraph.mli>>=
-module NewGCT : Lua.Lib.USERTYPE
-module NewMake (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M'.action)
-            (GCT : Lua.Lib.TYPEVIEW with type 'a t = 'a NewGCT.t
                                   and type 'a combined = 'a BackplaneT.combined)
             (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Ast2ir.proc
                                   and type 'a combined = 'a BackplaneT.combined)
@@ -1272,8 +1260,8 @@ module type LIVENESS = sig
 end
 
 <<colorgraph.ml>>=
-module NewG : GRAPH with type node = Rtl.rtl Cfgx.M.node
-                    with type cfg  = Rtl.rtl Cfgx.M.cfg = struct
+module G : GRAPH with type node = Rtl.rtl Cfgx.M.node
+                 with type cfg  = Rtl.rtl Cfgx.M.cfg = struct
   module G = Cfgx.M
   type node = Rtl.rtl G.node
   type cfg  = Rtl.rtl G.cfg
@@ -1325,7 +1313,7 @@ module NewG : GRAPH with type node = Rtl.rtl Cfgx.M.node
   let delete = G.delete
 end
 <<colorgraph.ml>>=
-module NewL : LIVENESS with type node = NewG.node = struct
+module L : LIVENESS with type node = G.node = struct
   module G = Cfgx.M
   type node = Rtl.rtl G.node
   let live_out n = R.promote_rxset (Cfgx.Live.live_out n)
@@ -1358,7 +1346,7 @@ module PreMake (G : GRAPH with type node = Rtl.rtl Cfgx.M.node
       let eq _ x y = x = y
       let to_string vs _ = "<cgInfo>"
   end
-  module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M'.action)
+  module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.action)
               (GCT : Lua.Lib.TYPEVIEW with type 'a t = 'a GCT.t
                                     and type 'a combined = 'a BackplaneT.combined)
               (ProcT : Lua.Lib.TYPEVIEW with type 'a t = P.t
@@ -1381,23 +1369,8 @@ module PreMake (G : GRAPH with type node = Rtl.rtl Cfgx.M.node
       end
     end
 end
-<<support for old backplane, can be removed from colorgraph.ml>>=
-module OldProc = struct
-  type automaton = Automaton2.t
-  type automatonspec = Automaton2.spec
-  type cfg = Cfg4.cfg
-  type cc = Automaton2.spec Target.cc'
-  type tgt = (Automaton2.spec, cc) Target.t'
-  type t = (automaton, cfg, cc, tgt) Proc.t'
-  let allocatable cc = cc.Target.allocatable
-  let spill_slot_for proc (_, _, w)  =
-    Automaton.of_old (Automaton2.allocate proc.Proc.priv w None)
-
-end
-
-module Old = PreMake (OldG) (OldL) (OldProc) (struct let name = "ColorGraph" end)
 <<colorgraph.ml>>=
-module NewProc = struct
+module Proc = struct
   module C = Call
   type automaton = Automaton.t
   type automatonspec = Rtl.exp->Automaton.t
@@ -1409,19 +1382,12 @@ module NewProc = struct
   let spill_slot_for proc (_, _, w)  = Automaton.allocate proc.Proc.priv w ""
 end
 
-module New = PreMake (NewG) (NewL) (NewProc) (struct let name = "NewColorGraph" end)
+module All = PreMake (G) (L) (Proc) (struct let name = "ColorGraph" end)
 @ 
-<<support for olf backplane, can be removed from colorgraph.ml>>=
-module GCT = Old.GCT
-module Make = Old.Make
-
 <<colorgraph.ml>>=
-module NewGCT = New.GCT
-module NewMake = New.Make
+module GCT  = All.GCT
+module Make = All.Make
 @
-
-
-
 <<graph coloring builtins>>=
     let verb   = 18
     let cfgSay = Verbose.say verb
@@ -1531,10 +1497,7 @@ function ColorGraph_init (CG, B) -- carefully don't define table
       )
 end
 
--- support for old code that can be removed
--- ColorGraph_init (ColorGraph, Backplane)
--- end of old code
-ColorGraph_init (NewColorGraph, NewBackplane)
+ColorGraph_init (ColorGraph, Backplane)
 @
 
 \subsection{Debugging support}

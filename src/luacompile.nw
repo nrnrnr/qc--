@@ -42,7 +42,7 @@ Stages = Stages or {}
 function Stages.nullf () return nil end
 
 function Stages.assert(prop)
-  return NewBackplane.stage { name='assert ' .. prop, creates={prop},
+  return Backplane.stage { name='assert ' .. prop, creates={prop},
                               fn = Stages.nullf}
 end
 @
@@ -66,7 +66,7 @@ function Stages.make_stage(t, short, long, B)
 end
 
 function Stages.of_table(fn, tbl, B)
-  B = B or NewBackplane
+  B = B or Backplane
   local stage = { fn = fn }
   <<add every key-value pair in [[tbl]] to [[stage]]>>
   return B.stage(stage)
@@ -75,7 +75,7 @@ end
 Stages.make_stage( Stages
                  , 'replace_vfp'
                  , {name='replace VFP', uses='no late consts' }
-                 , NewBackplane)
+                 , Backplane)
 
 function Placevar.context(placer, targetname)
   return Stages.of_table(Placevar.contextfn(placer), 
@@ -621,10 +621,10 @@ function Opt.standard(backend, asm, B)
 end
 
 Liveness.liveness =
-  NewBackplane.stage { name='liveness', creates='liveness', fn = Liveness.livenessfn }
+  Backplane.stage { name='liveness', creates='liveness', fn = Liveness.livenessfn }
 
 Optimize.dead = 
-  NewBackplane.stage { name='dead', creates={'no dead assignments'},
+  Backplane.stage { name='dead', creates={'no dead assignments'},
                        uses='liveness', fn = Optimize.deadfn }
 
 @
@@ -644,7 +644,7 @@ Defined in file \texttt{colorgraph.nw}.
 All register allocators are made available in the table [[Ralloc]].
 <<Lua compiler configuration>>=
 Ralloc           = Ralloc and error('Ralloc not empty') or {}
-Ralloc.color     = NewColorGraph.color
+Ralloc.color     = ColorGraph.color
 Ralloc.dls       = DLS.dls
 @
 % ------------------------------------------------------------------ 
@@ -666,8 +666,8 @@ function Compile.file(backend, emitglobals, file, out)
     local ast = Driver.parse(file)
     local asm = backend.asm(fd) 
     local opt = { apply  = Compile.run_optimizer
-                , action = Opt.standard(backend, asm, NewBackplane) 
-                , B = NewBackplane
+                , action = Opt.standard(backend, asm, Backplane) 
+                , B = Backplane
                 }
     Driver.compile(backend.target, opt, emitglobals, ast, asm, Options.validate, Options.swap)
     if backend.emit then backend.emit(asm) end
@@ -683,7 +683,7 @@ function Compile.run_optimizer(self,proc)
     -- verbose('running Compile.run_optimizer with ', whichB(B), '\n')
 
     -- please keep the following until the bug is fixed
-    if B == NewBackplane then -- demo for a bug in the backplane
+    if B == Backplane then -- demo for a bug in the backplane
         B.run(B.seq {Stages.assert('fish'),
                    B.stage {fn=Stages.nullf, uses='fish'}}, proc)
     end
@@ -731,12 +731,12 @@ end
 --
 
 Backend.dummy32l        = Backend.make  { target = Targets.dummy32l 
-                                        , rmvfp  = NewBackplane.seq
+                                        , rmvfp  = Backplane.seq
 						      { Stages.replace_vfp,
 						        Optimize.remove_nops }
                                         }
 Backend.dummy32b        = Backend.make  { target = Targets.dummy32b 
-                                        , rmvfp  = NewBackplane.seq
+                                        , rmvfp  = Backplane.seq
 						      { Stages.replace_vfp,
 						        Optimize.remove_nops }
                                         }
@@ -763,23 +763,23 @@ Backend.debug_interp.compile = Compile.file
 
 Backend.x86 =
   { target    = Targets.x86
-  , intwiden  = NewBackplane.seq
+  , intwiden  = Backplane.seq
                    { Widen.update_gamma_counts,
                      Widen.create_gamma,
                      Widen.widenlocs,
                      Widen.dpwiden }
   , placevars = Placevar.context(Placevar.x86, "x86")
-  , floatwiden = NewBackplane.seq
+  , floatwiden = Backplane.seq
                    { Widen.x86_floats,
                      Widen.store_const(32),
                      Stages.assert('proper widths') }
   , preopt    = Optimize.remove_nops
---  , pic       = NewBackplane.seq { Pic.x86, Stages.assert('proper pic') }
+--  , pic       = Backplane.seq { Pic.x86, Stages.assert('proper pic') }
   , expand    = Expander.x86
   , liveness  = Liveness.liveness
   , ralloc    = Ralloc.dls
   , freeze    = X86.layout
-  , rmvfp     = NewBackplane.seq
+  , rmvfp     = Backplane.seq
 		   { Stages.replace_vfp,
 		     Optimize.remove_nops }
   , asm       = Asm.x86
@@ -789,16 +789,16 @@ Backend.x86 =
   }   
 
 Optimize.improve =
-  NewBackplane.seq { 
+  Backplane.seq { 
     Optimize.remove_nops, 
     Optimize.validate, 
     Optimize.peephole, 
-    NewBackplane.fix (
-      NewBackplane.seq { NewBackplane.ignore (Liveness.liveness), Optimize.dead }),
+    Backplane.fix (
+      Backplane.seq { Backplane.ignore (Liveness.liveness), Optimize.dead }),
     Optimize.validate }
 
 Optimize.oimprove =
-  NewBackplane.seq { 
+  Backplane.seq { 
     Optimize.remove_nops, 
     Optimize.validate, 
     Optimize.peephole, 
@@ -817,7 +817,7 @@ Backend.mips =
   , liveness   = Liveness.liveness
   , ralloc     = Ralloc.dls
   , freeze     = Mips.layout
-  , rmvfp      = NewBackplane.seq
+  , rmvfp      = Backplane.seq
 		    { Stages.replace_vfp,
 		      Optimize.remove_nops }
   , asm        = Asm.mips
@@ -838,7 +838,7 @@ Backend.alpha =
   , liveness   = Liveness.liveness
   , ralloc     = Ralloc.dls
   , freeze     = Alpha.layout
-  , rmvfp      = NewBackplane.seq
+  , rmvfp      = Backplane.seq
 		    { Stages.replace_vfp,
 		      Optimize.remove_nops }
   , asm        = Asm.alpha
@@ -855,12 +855,12 @@ Backend.ppc =
   , placevars  = Placevar.context(Placevar.ppc, "ppc")
   , floatwiden = Stages.assert('proper widths')
   , preopt     = Optimize.remove_nops
-  , pic        = NewBackplane.seq { Pic.ppc, Stages.assert('proper pic') }
+  , pic        = Backplane.seq { Pic.ppc, Stages.assert('proper pic') }
   , expand     = Expander.ppc
   , liveness   = Liveness.liveness
   , ralloc     = Ralloc.dls
   , freeze     = PPC.layout
-  , rmvfp      = NewBackplane.seq
+  , rmvfp      = Backplane.seq
 		    { Stages.replace_vfp,
 		      Optimize.remove_nops }
   , asm        = Asm.ppc
@@ -881,7 +881,7 @@ Backend.ia64 =
   , liveness   = Liveness.liveness
   , ralloc     = Ralloc.dls
   , freeze     = Ia64.layout
-  , rmvfp      = NewBackplane.seq
+  , rmvfp      = Backplane.seq
 		    { Stages.replace_vfp,
 		      Optimize.remove_nops }
   , asm        = Asm.ia64
