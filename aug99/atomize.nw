@@ -8,7 +8,8 @@ temporaries.
 <<interface>>=
 type allocator = RTL.ty -> RTL.location (* give me a temporary *)
 
-val atomize : allocator -> IRNode.node -> RTL.rtl -> IRNode.node
+val atomize : 
+  allocator -> IRNode.keyvalue list -> IRNode.node -> RTL.rtl -> IRNode.node
   (* given a successor and an RTL, return sequence of atomized RTLs *)
 @ The following assignments are atomic:
 \begin{itemize}
@@ -42,6 +43,7 @@ type 'a preceded = 'a * RTL.rtl list
 @ Looks to me like a monad.
 We define a whole set of combinators for this.
 <<implementation>>=
+type allocator = RTL.ty -> RTL.location (* give me a temporary *)
 module New = struct
   <<monad operations>>
   let app operator args =
@@ -63,10 +65,9 @@ let map f (x, l) = (f x, l)
 let unit x = (x, [])
 let join ((x, l), l') = (x, l' @ l)
 module Lift = struct
-  let list =
+  let list l =
     let cons (h, p1') (t, p2') = (h :: t, p2' @ p1')
-    in  Listutil.foldr cons ([], [])    
-  let list : 'a preceded list -> 'a list preceded = list
+    in  Listutil.foldr cons ([], []) l
 end
 @ 
 <<implementation>>=
@@ -79,7 +80,7 @@ end
 [[exp]] develops an [[RTL.exp]] into a temporary.
 <<implementation>>=
 <<type utilities>>
-let atomize alloc =
+let reverse_rtls alloc =
   let rec exp : RTL.exp -> RTL.exp preceded =
             <<function to atomize expression>>
       and effect = function
@@ -91,10 +92,14 @@ let atomize alloc =
                        | RTL.AGG (a, c) -> New.agg a (cell c)
       and cell (RTL.CELL (space, addr)) = New.cell space (exp addr)
       and rtl (RTL.RTL guardeds) = New.rtl (List.map guarded guardeds)
-  in  rtl
+  in  fun r -> let (r, pred') = rtl r in r :: pred'
+let atomize (alloc : allocator) keyvals successor rtl =
+  Listutil.foldl (fun rtl succ -> IRNode.Assign (keyvals, rtl, succ)) successor
+                 (reverse_rtls alloc rtl)
 @ 
 <<function to atomize expression>>=
    let truth = RTL.CONST (RTL.BOOL true, None)
+in let alloc ty = (alloc ty, ty)
 in let always eff : RTL.rtl = RTL.RTL [RTL.GUARD (truth, eff)]
 in function 
    | RTL.CONST k as e -> 
