@@ -25,12 +25,14 @@ Requests for an unsupported [[width]] results in a [[Size]] exception.
 Currently 64 bits and less are supported.
 
 <<bits.mli>>=
-type bits
 type width      = int
+type bitvector (* abstract *)
+type bits       = bitvector * width
 @
 
-The width of a [[bits]] value is determined when it is created. The
-[[width]] function provides access to it. In case the requested size
+The width of a [[bits]] value is determined when it is created. 
+Even though it is exposed in the representation, we can also use the
+[[width]] function to get access to it. In case the requested size
 is not supported by the implementation [[Size]] is raised. The
 [[maxwidth]] is the maximal width supported by an implementation.
 
@@ -57,7 +59,9 @@ The [[setSize]] function updates the size information of a [[bits]]
 value. This is a dangerous operation since the new size may violate
 the assumption that the current value fits into that size. Thus,
 [[Overflow]] is raised, when this assumption is violated by the new size.
-
+\emph{NR finds this definition insufficiently precise.
+It's only used in one place---\module{elab}.  Perhaps we can find a
+better way to express this?}
 <<bits.mli>>=
 val setSize     : bits -> width -> bits
 @
@@ -215,12 +219,13 @@ Values of type [[bits]] are represented as pairs of width and value.
 
 <<bits.ml>>=
 type width      = int
-type bits       = width * int64
+type bitvector  = int64
+type bits       = int64 * width
 @
 
 <<bits.ml>>=
 let maxwidth    = 64
-let width (w,_) = w
+let width (_,w) = w
 @
 
 Operations on [[bits]] frequently must [[check]] that the requested
@@ -229,7 +234,7 @@ into that many bits.  The [[check]] function raises [[Size]] or
 [[Overflow]] in case the mentioned rules are violated.
 
 <<bits.ml>>=
-let fits (width',bits) width =
+let fits (bits,width') width =
     if (width <= 0) || (width > 64) 
     then raise Size
     else (width = 64) || (U.le bits (U.shl width I.one))
@@ -238,19 +243,17 @@ let fits (width',bits) width =
  
 <<bits.ml>>=
 let check width uint64 =
-    if not (fits (maxwidth,uint64) width)
+    if not (fits (uint64,maxwidth) width)
     then raise Overflow
     else () (* ok *)
 @
-
 [[setSize]] sets the size of a [[bits]] value and raises [[Overflow]]
 in case the size is too small.
-
 <<bits.ml>>=
-let setSize (w,b as bits) width =
+let setSize (b,w as bits) width =
     if not (fits bits width)
     then raise Overflow
-    else (width,b)
+    else (b,width)
 @
 
 % ------------------------------------------------------------------ 
@@ -266,7 +269,7 @@ let of_stringi str width =
                  ) in
         try
             ( check width uint64
-            ; (width,uint64)
+            ; (uint64,width)
             )
         with
             Failure _ -> E.error ("syntax error in constant: "^str)
@@ -275,7 +278,7 @@ let of_stringi str width =
 let of_stringf str width =
     if   width <> 64 
     then raise Size
-    else try (width,U.of_float (float_of_string str)) with
+    else try (U.of_float (float_of_string str),width) with
          | Failure _ -> E.error ("syntax error in constant: "^str)
 
 <<bits.ml>>=
@@ -303,19 +306,19 @@ let of_stringc str width =
             with Failure _          -> E.error ("syntax error: "^str)
         in
             ( check width c
-            ; (width, c)
+            ; (c, width)
             ) 
     
 <<bits.ml>>=
 let of_int i width =
     let uint64 = U.of_int i in
         ( check width uint64
-        ; (width,uint64)
+        ; (uint64,width)
         )
 <<bits.ml>>=
 let of_int64 i width =
     ( check width i
-    ; (width,i)
+    ; (i,width)
     )
 
 let of_nativeint i width = of_int64 (I.of_nativeint i) width
@@ -329,7 +332,7 @@ The [[to_int]] function checks that the [[bits]] value can be
 represented as a positive integer and raises [[Overflow]] otherwise. 
 
 <<bits.ml>>=
-let to_int (width,uint64) =
+let to_int (uint64,width) =
     if uint64 > I.of_int(max_int) then
         raise (Overflow)
     else
@@ -339,7 +342,7 @@ Similarly for native integers.  The test is bogus, but there's no easy
 way to find out if [[width]] is small enough to fit into the width of
 [[nativeint]], because we're not given the width of [[nativeint]].
 <<bits.ml>>=
-let to_nativeint (width,uint64) =
+let to_nativeint (uint64,width) =
     if I.logand uint64 (I.of_nativeint Nativeint.max_int) = uint64 then
         I.to_nativeint uint64
     else
@@ -353,7 +356,7 @@ type radix      = Oct
                 | Dec
                 | Hex
 
-let to_string radix (width,uint64) = I.to_string uint64 (* wrong *)
+let to_string radix (uint64,width) = I.to_string uint64 (* wrong *)
 @
 
 % ------------------------------------------------------------------ 
@@ -364,7 +367,7 @@ let to_string radix (width,uint64) = I.to_string uint64 (* wrong *)
 let zero w =
     let z = U.of_int 0 in
     ( check w z
-    ; (w,z) 
+    ; (z,w) 
     )
 @
 

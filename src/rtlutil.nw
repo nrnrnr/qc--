@@ -85,8 +85,8 @@ let read_write_sets (read:'a regfun) (write:'a regfun) =
         | RP.Store (lhs, rhs, _) -> loc write (exp z rhs) lhs
         | RP.Kill lhs -> loc write z lhs
       and loc which z l = match l with
-        | RP.Cell (space, _, w, RP.Const (RP.Bits (index, _)), _) ->
-            (try which space (Bits.to_int index) w (z:'a)
+        | RP.Cell (space, _, w, RP.Const (RP.Bits (index, w')), _) ->
+            (try which space (Bits.to_int (index, w')) w (z:'a)
              with Bits.Overflow -> z)
         | RP.Cell (space, _, w, index, _) -> exp z index
         | RP.Slice (_, _, l) -> index z l
