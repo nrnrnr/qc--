@@ -150,6 +150,7 @@ invariant   = Invariant
 
 formal      = (hint?, invariant, ty, name)
 actual      = (hint?, expr)
+cformal     = (hint?, name)
 
 <<>>=           
 flow        = FlowAt        (flow, region)
@@ -181,7 +182,7 @@ stmt        = StmtAt        (stmt, region)
             | IfStmt        (expr, stmt*, stmt*)
             | SwitchStmt    (range?, expr, arm*)
             | LabelStmt     (name)
-            | ContStmt      (name, name*)
+            | ContStmt      (name, cformal*)
             | SpanStmt      (expr key, expr value, body*)
             | AssignStmt    (lvalue*, expr*)
             | CallStmt      (lvalue*, conv?, expr, actual*, target*, flow*)
@@ -211,7 +212,6 @@ only choice is the right one.
 ibits       = (string)      -- view of Bits.bits 
 fbits       = (string)      -- view of Bits.bits
 cbits       = (string)      -- view of Bits.bits
-
 
 expr        = ExprAt        (expr, region)
             | Int           (ibits,ty?)
@@ -496,14 +496,24 @@ let rec datum = function
 
 <<>>=
 let formal (h, v, t, n) =
-        P.agrp begin
-        ~~ (match h with Some hint -> str hint ^^ P.break | None -> P.empty)
-        ^^ (if v = A.Invariant then P.text "invariant" ^^ P.break else P.empty)
-        ^^ ty t
-        ^/ id n
-        end
+    P.agrp begin
+    ~~ (match h with Some hint -> str hint ^^ P.break | None -> P.empty)
+    ^^ (if v = A.Invariant then P.text "invariant" ^^ P.break else P.empty)
+    ^^ ty t
+    ^/ id n
+    end
 
 let formals xs = P.agrp (P.text "(" ^^ P.commalist formal xs ^^ P.text ")")
+
+<<>>=
+let cformal (h, n) =
+    P.agrp begin
+    ~~ (match h with Some hint -> str hint ^^ P.break | None -> P.empty)
+    ^^ id n
+    end
+
+let cformals xs = P.agrp (P.text "(" ^^ P.commalist cformal xs ^^ P.text ")")
+    
 
 <<>>=                 
 let register is_global (v , t, n, reg) = 
@@ -596,13 +606,13 @@ let rec stmt = function
         ~~ id n ^^ P.text ":"
         end
         
-    | A.ContStmt(n,ns)          ->
+    | A.ContStmt(n,cf)          ->
         P.agrp begin
         ~~ P.text "continuation"
         ^^ angrp begin
            ~~ P.break
            ^^ id n
-           ^^ fngrp (P.break ^^ P.text "(" ^^ P.commalist id ns ^^ P.text ")")
+           ^^ cformals cf
            ^^ P.text ":"
            end
         end

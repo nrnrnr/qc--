@@ -973,6 +973,14 @@ formal      :   STR INVARIANT REGISTER tyAt ID { Some $1, A.Invariant, $4, $5}
             |       INVARIANT          tyAt ID { None   , A.Invariant, $2, $3}
             |                          tyAt ID { None   , A.Variant  , $1, $2}
 
+cformal     :   STR ID                         { Some $1, $2 }
+            |       ID                         { None   , $1 }
+
+cformals    :   cformals_ optcomma             { rev $1   }
+            |   /**/      optcomma             { []       }
+cformals_   :   cformals_ COMMA cformal        { $3 :: $1 }
+            |   cformal                        { [$1]     }
+
 actual      :   STR exprAt                     { Some $1, $2 }
             |       exprAt                     { None   , $1 }
 
@@ -1070,7 +1078,7 @@ stmt        :   SEMI                           { A.EmptyStmt          }
             |   IF exprAt block                     {A.IfStmt($2,$3,[])}
             |   IF exprAt block ELSE block          {A.IfStmt($2,$3,$5)}
             |   GOTO exprAt targets SEMI            {A.GotoStmt($2,$3)}
-            |   CONTINUATION ID LPAREN names0 RPAREN COLON
+            |   CONTINUATION ID LPAREN cformals RPAREN COLON
                                                     {A.ContStmt($2,$4)}
             |   CUT TO expr actls flows SEMI        {A.CutStmt($3,$4, rev $5)  }
             |   conv JUMP exprAt       targets SEMI {A.JumpStmt($1  ,$3,[],$4) }
@@ -1164,16 +1172,12 @@ names       :   names_ optcomma                { rev $1 }
 names_      :   names_ COMMA optstr ID         { $4:: $1}
             |   optstr ID                      { [$2]   }
 
-names0      :   names                          { $1 }
-            |   /**/                           { [] }
-
 optcomma    :   COMMA                          {}
             |   /**/                           {}
 
 optstr      :   STR                            { Some $1 }
             |   /**/                           { None    }
 string16    :   UNICODE LPAREN STR RPAREN      { $3 }
-
 @
 
 
