@@ -188,7 +188,9 @@ allocated by the caller.
 let prolog t = 
     C.incoming ~growth:t.stack_growth ~sp:(R.reg t.sp)
         ~mkauto:(mk_automaton t.wordsize "in call parms" t.call)
-        ~autosp:(fun _ -> vfp t.wordsize)
+                        
+        (* ~autosp:(fun _ -> vfp t.wordsize) *)
+        ~autosp:(fun a -> young_end t.wordsize t.stack_growth a.A.overflow)
         ~postsp:(fun _ _ -> std_sp_location t.wordsize) 
 @
 
@@ -198,11 +200,11 @@ deallocated by the caller and thus we cannot dealloate it.
 
 There is one problematic case: when the callee deallocates the
 pamarameter block and the caller allocates the result block, is the
-caller allowed to overlap the result with the parameter block or not?
-Currently the compiler does exactly this and thus we deallocate only up
+caller allowed to overlap the result with the parameter block?
+Currently the compiler overlaps and thus we deallocate only up
 to the young end of the result block. But in principle the result block
 could be allocated outside the parameter block and thus we could
-deallocate the paramter block completely. 
+deallocate the parameter block completely. 
 
 <<callspec.ml>>=
 let epilog t =

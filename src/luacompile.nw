@@ -242,15 +242,58 @@ function Alpha.layout["C"](dummy, proc)
 end
 @
 
+
+
 The [[cmm]] conventions are part of an experimental setup to test the
 [[callspec]] interface to define calling conventions.
 
 <<Lua compiler configuration>>=
-Alpha.layout["cmm"]  = Alpha.layout["C"]
+Alpha.layout["cmm"]  = Alpha.layout["C"]    -- defaults
 Alpha.layout["cmm0"] = Alpha.layout["C"]
 Alpha.layout["cmm1"] = Alpha.layout["C"]
 Alpha.layout["cmm2"] = Alpha.layout["C"]
 Alpha.layout["cmm3"] = Alpha.layout["C"]
+
+function Alpha.layout["cmm3"](dummy, proc)
+    local blocks       = Stack.blocks(proc)
+    blocks.oldblocks   = Block.overlap(64,"high", blocks.oldblocks)  
+    blocks.youngblocks = Block.overlap(64,"high", blocks.youngblocks)
+    local layout =
+        { blocks.oldblocks
+        , blocks.vfp
+        , blocks.spills
+        , blocks.continuations
+        , blocks.stackdata
+        , blocks.sp
+        , blocks.youngblocks
+        }
+    
+    if Debug.stack then
+      write( '****** cc name = '
+           , Stack.ccname(proc)
+           , '/'
+           , Stack.procname(proc)
+           , '\n'
+           )
+      Debug.showblocks (blocks, {'oldblocks'
+                                ,'vfp'
+                                ,'stackdata'
+                                ,'continuations'
+                                ,'spills'
+                                ,'sp'
+                                ,'youngblocks'
+                                })
+    end
+
+    local block = Block.cat(64, layout)
+    if Debug.stack then
+        local blocks = {frame = block}
+        Debug.showblocks(blocks, {'frame'})
+    end    
+    block = Block.adjust(block) -- size is multiple of 16 byte
+    Stack.freeze(proc, block)
+    return 1
+end
 
 function Alpha.layout.fn(dummy,proc) 
     local cc = Stack.ccname(proc)
