@@ -1,0 +1,126 @@
+
+\input{macros.tex}
+
+% l2h substitution cfg CFG
+% l2h substitution dots ...
+% l2h substitution AST AST
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Typechecking Expressions}
+% ------------------------------------------------------------------ 
+
+The {\qcc} compiler type checks expressions during several phases: 
+evaluation of constant expressions, static semantics, translation to
+intermediate representation.  To avoid code duplication type checks
+for expressions are factored out into this module. 
+
+The type of an expression depends on the types of named values, named
+types and the target dependent word size. These are supplied as a
+record [[env]] for the [[check]] function. 
+
+<<expcheck.mli>>=
+type env = 
+    { tlookup:  string -> Types.ty Error.error
+    ; vlookup:  string -> Types.ty Error.error
+    ; wordsize:           Types.ty Error.error
+    }   
+
+val check: env -> Ast.expr -> Types.ty Error.error
+@
+
+The [[check]] function allows to work with incomplete functions,
+indicated by [[Error.Error]] values.  The policy is as follows:
+
+\begin{itemize}
+\item In case of a success, [[check]] returns the type of the
+      expression at hand as a [[Error.Ok]] value.
+\item If the type check must use an erroneous information from the
+      environment, it propagates this error and returns [[E.Error]].
+\item If the type check detects a new error, for example a type
+      inconsistency, the [[Error.ErrorExn]] exception is raised.
+\end{itemize}
+
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<expcheck.ml>>=
+module A = Ast
+module E = Error
+
+type env = 
+    { tlookup:  string -> Types.ty Error.error
+    ; vlookup:  string -> Types.ty Error.error
+    ; wordsize:           Types.ty Error.error
+    }   
+
+let (@<<) f g = fun x -> f (g x) (* function composition *)
+    
+let rec is2power = function
+    | 1 -> true
+    | x -> x > 0 && (x mod 2) = 0 && is2power (x/2)
+
+let rec astty env  = function
+    | A.TyAt(x,r)  -> astty env x
+    | A.BitsTy(n)  -> E.Ok(Types.bits n)
+    | A.AliasTy(x) -> env.tlookup x
+
+let rec astFetch env = function
+    | A.LValueAt(x,r)   -> astFetch env x
+    | A.Var(hint,id)    -> env.vlookup id
+    | A.Mem(ty,e,a)     -> 
+        let _ = ( match a with
+                | None   -> ()
+                | Some a -> if is2power a then () else 
+                            E.error "alignment is not a power of 2"
+                ) 
+        in E.ematchTriple  (expr env e, astty env ty, env.wordsize) 
+            (fun (et,at,ws) -> 
+                if et = ws then at 
+                else E.error "memory reference by non-pointer")
+@
+
+The types for primitive operators are looked up in the [[Value]]
+model.  This is a hack; we need a model for run-time primitive
+operators. 
+
+<<expcheck.ml>>=
+and primOp env op args =
+    let argtys = (E.Raise.list @<< List.map (expr env)) args in
+    let opty   = try E.Ok(snd (Value.lookup op Value.ops))   (*XXX*)
+                 with Not_found -> E.error ("unknown operator: "^op) in
+        E.ematchPair (opty,argtys) (fun (op,args) -> Types.appl op args)
+            
+and expr env exp =
+    let optty default = function
+        | None    -> default
+        | Some t  -> astty env t       
+    in match exp with
+        | A.ExprAt(x,r)     -> expr env x
+        | A.Int   (_,ty)    -> optty env.wordsize ty
+        | A.Float (_,ty)    -> optty env.wordsize ty
+        | A.Char  (_,ty)    -> optty env.wordsize ty
+        | A.Fetch (v)       -> astFetch env v
+        | A.BinOp (l,op,r)  -> primOp env op [l;r]
+        | A.UnOp  (op,e)    -> primOp env op [e]
+        | A.PrimOp(op,args) -> primOp env op (List.map snd args)
+
+let check = expr
+@
+
+
+
+
