@@ -143,7 +143,6 @@ let talloc space = Talloc.Multiple.reg space (get_talloc ()) (* don't eta-reduce
 Addresses go in the integer registers, so we use these contexts:
 <<x86 postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-let tmr s a = Talloc.Multiple.reg s a
 let icontext = Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't'
 let fcontext = Talloc.Multiple.reg 'u', fun (c, _, _) -> c = 'f' || c = 'u'
 let fcontext = icontext  (* should be better with the stack?? *)
@@ -476,7 +475,7 @@ let bc_x86 x86opname tgt =
 
 let bc x (opr, ws) y ~tgt =
   assert (ws = [32]);
-  [ bc_x86 (cmpopr opr) tgt; cmp x y ]
+  bc_x86 (cmpopr opr) tgt :: (cmpfun tgt opr) x y
 
 let bnegate r = match Down.rtl r with
 | RP.Rtl [RP.App((cop, [32]), [RP.Fetch (flags, 32)]), RP.Store (pc, tgt, 32)]
@@ -499,6 +498,11 @@ let cmpopr = function
   | "leu" -> "x86_be"
   | "gtu" -> "x86_a"
   | "geu" -> "x86_ae"
+  | "add_overflows"
+  | "div_overflows"
+  | "mul_overflows"
+  | "mulu_overflows"
+  | "sub_overflows" -> "x86_o"
   | _ -> Impossible.impossible "non-comparison in x86 conditional branch"
 @ 
 The second important function negates an Intel operator.
@@ -511,16 +515,48 @@ let cmpneg = function
   | "x86_le" -> "x86_g"
   | "x86_l"  -> "x86_ge"
   | "x86_ae" -> "x86_b"
-  | "x86_a" -> "x86_be"
+  | "x86_a"  -> "x86_be"
   | "x86_be" -> "x86_a"
-  | "x86_b" -> "x86_ae"
+  | "x86_b"  -> "x86_ae"
   | "x86_np" -> "x86_p"
   | "x86_p"  -> "x86_np"
   | "x86_nc" -> "x86_c"
   | "x86_c"  -> "x86_nc"
   | "x86_nz" -> "x86_z"
   | "x86_z"  -> "x86_nz"
+  | "x86_o"  -> "x86_no"
+  | "x86_no" -> "x86_o"
   | _ -> Impossible.impossible "bad comparison in expanded x86 conditional branch"
+@ 
+The third important function returns the ``flag set'' function for an
+operator. This is normally just [[cmp]], but in the case of overflow,
+we need to emit arithmetic instructions to set the flags. Division is
+a bit more complex since a division overflow causes a fault. However,
+there is only one possibility for division overflow ($MIN_INT / -1$)
+to check for.
+<<important functions on $x$86 operators>>=
+let cmpfun tgt =
+  let set_flags op x y = binop (talloc 't' 32) (op, [32]) x y
+  and cmp x y = [subflags (tempval x) (tempval y) 32] in
+  let div_flags x y = set_flags "div" x y (* FAULT - FIX ME *)
+  in
+  function
+  | "eq"
+  | "ne"
+  | "lt"
+  | "le"
+  | "gt"
+  | "ge"
+  | "ltu"
+  | "leu"
+  | "gtu"
+  | "geu"            -> cmp
+  | "add_overflows"  -> set_flags "add"
+  | "div_overflows"  -> div_flags
+  | "mul_overflows"  -> set_flags "mul_trunc"
+  | "mulu_overflows" -> set_flags "mulu"
+  | "sub_overflows"  -> set_flags "sub"
+  | _ -> Impossible.impossible "non-comparison in x86 conditional branch"
 @ 
 \subsection{Stack operations}
 <<x86 postexpander>>=
