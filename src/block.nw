@@ -1,8 +1,3 @@
-% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
-% vim: ts=8 et sw=4:
-% Area.nw is going to be replaced by this module. It is much simpler and
-% purely functional.
-
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
 % Quality    ::=    A|B|C|D|E
 % Importance ::=    Central|Subsystem|Peripheral
@@ -11,50 +6,60 @@
 % Please add grades for this module below. The line must start with % "%%".
 % 
 
-%%Grades: C Subsystem Later
+%%Grades: B Subsystem Later
+
 
 % ------------------------------------------------------------------ 
 \section{Memory Blocks}
 % ------------------------------------------------------------------ 
 
-This module defines memory blocks that can be composed into complex
-blocks. The main application is the definition of a procedure's stack
-frame. However, this module is completely general.
+This module provides composable memory blocks: complex blocks composed
+from simpler blocks using two operations. Their main application is the
+construction of a stack frame. The design of the abstraction and its
+application to stack frame composition is also discussed in the paper
+\emph{Declarative Composition of Stack Frames} by Lindig and Ramsey [To
+appear in Proc. of the 14th International Conference on Compiler
+Construction, 2004, Springer].
 
-A block [[t]] is a contiguous piece of memory with a base address $b$
-and a size $s$. It covers the open address interval $[b, b+s)$. The base
-address $b$ respects the alignment requirement $a$: at run time, $b
-\bmod a = 0$ is known to hold. The base, size, and alignment are used to
-construct a block and can be observed as well.
-[[Align x n]] returns the smallest multiple of $n$ that is not smaller
-than $x$. Think of $x$ becoming $n$-aligned; this procedure is used
-when concatenating blocks, and it may be useful when we cannot access a member
-of a concatenated block.
+A block represents a contiguous piece of memory at run time,
+characterized by four properties at compile time: a base address
+expression $b$, a fixed size $s$, and a alignment requirement $a$. At
+run time, a block occoupies the address interval $b, \dots, b+s$ and $b$
+is $a$-aligned: $b \bmod a =0$ holds. The fourth property is a set of
+additional constraints for the base address that result from block
+operations. All four properties can be observed.
+
 <<block.mli>>=
 type t
 
-(* constructors *)
-val at:       base:Rtl.exp -> size:int -> alignment:int -> t
-  (* block is fixed at base *)
-val with_constraint : t -> Rtleqn.t -> t
-
-(* observers *)
 val base:           t -> Rtl.exp
 val size:           t -> int
 val alignment:      t -> int
-val align    :      int -> int -> int
 val constraints:    t -> Rtleqn.t list
-@ 
-We often wish to create a block at an unknown offset from a known
-place.
+@
+
+\paragraph{Block Creation} A block is constructed by providing a base
+address, size, and alignment.  Such a block is otherwise unconstrained.
+Usually, constraints result from block operations and there is no need
+to mention them explicitly.  Having said that, [[with_constraint]] adds
+a constraint to an existing block.
+
+<<block.mli>>=
+val at:                 base:Rtl.exp -> size:int -> alignment:int -> t
+val with_constraint:    t -> Rtleqn.t -> t
+@
+
+We often wish to create a block at an unknown offset from a known place.
 Function [[relative]] is a higher-order function that we use to solve
-this problem.
-Calling [[relative e s f]] builds an address at unknown offset from [[e]],
-     where the name [[s]] is used somehow in constructing the address
-     (for debugging).  It then calls function [[f]] on this address.
-Example use is
-[[relative vfp "slot" at ~size:0 ~alignment:1]].
-This function might more properly live in module [[Idgen]]
+this problem.  Calling [[relative e s f]] builds an address at unknown
+offset from [[e]], where the name [[s]] is used somehow in constructing
+the address (for debugging).  It then calls function [[f]] on this
+address.  Example use is [[relative vfp "slot" at ~size:0
+~alignment:1]].  This function might more properly live in module
+[[Idgen]].
+
+What does [[srelative]] do?
+
 <<block.mli>>=
 val relative  : Rtl.exp -> string -> (base:Rtl.exp  -> 'a) -> 'a
   (* construct address at unknown offset and call function *)
@@ -62,100 +67,69 @@ val srelative : Rtl.exp -> string -> (start:Rtl.exp -> 'a) -> 'a
   (* construct address at unknown offset and call function *)
 @
 
-The base address of a block is typically not fixed, but contains some
-\emph{late compile-time constants}. The values of these are determined
-by the compositions a block takes part in. Once all compositions are
-done, the final constraints can be observed and fed into an equation
-solver. The result of the constraints are values for the late
-compile-time constants. A separate substitution step must replace the
-late compile-time constants in {\rtl} expressions that emerged from the
-block operations.
-
-THIS PARAGRAPH NEEDS FIXING!
-\emph{Attention:} the semantis of [[cat]] might counter your intuition.
-The result of [[cat x y]] is one block into which [[x]] and [[y]] are
-embedded side by side. Block [[y]] occupies the lower addresses, and [[x]]
-the higher. This might be counter intuitive if you think about [[x]] and
-[[y]] as a string $(x,y)$ where $x$ is the beginning, i.e.~low end of
-the string.  The problem becomes even more apparent when lists of blocks
-are concatenated: in $[x,y,z]$ the $x$ is a the top, not the bottom.
-
-Two blocks whose data are live at the same time can be concatenated into
-one bigger block. Inside the new block, the data from the first block
-occupies the higher addresses, and the second block the lower addresses.
-Both address spaces do not overlap. Between those two blocks might be a
-gap to fulfill the alignment requirements of both blocks.
-
-Two blocks whose data are never live at the same time can be overlapped
-into one block where the two blocks share memory. In the resulting block
-the two original blocks can either share their [[Low]] or [[High]] end.
-The [[adjust]] function enlarges a block if necessary to make it
-size a multiple of its alignment.
+\paragraph{Block Operations} Block composition is guided by
+interference: Two blocks whose data are live at the same time can be
+concatenated into one bigger block that holds both. Two blocks whose
+life times are disjoint can be overlapped into one block where they
+share memory.
 
 <<block.mli>>=
-type placement = High | Low
-
-val cathl:      t -> t -> t                  (* cathl x y : x and y adjacent 
-                                                with x at *higher* address *)  
-val overlap:    placement -> t -> t -> t     
-val adjust:     t -> t                       (* result is adjusted *)
+exception OverlapHigh
+type placement      = High | Low
+val cathl:          t -> t -> t
+val overlap:        placement -> t -> t -> t   (* OverlapHigh *)
 @
 
-Convenient functions, which could be implemented outside
-this module in terms of the primitives above.
-If asked to operate on an empty list of blocks, they return an empty
-block whose base address is the virtual frame pointer plus a fresh
-link-time constant. 
+The operation [[cathl hi lo]] concatentes two block such that [[hi]]
+sits atop of [[lo]] in memory. Caution: the argument order is counter
+intuitive! The placement guarantees the alignment reuqirements of the
+constituents. For this reason, the two blocks may be not directly
+adjacent in the result, but separated by a small gap.
+
+The operation [[overlap p x y]] places [[x]] and [[y]] according to the
+placement strategy [[p]]: [[overlap Low]] aligns the two blocks at their
+lower ends, [[overlap High]] at their upper ends in the resulting block. 
+Overlapping at the high end may fail, in which case [[OverlapHigh]] is
+raised. To succeed, the size difference of [[x]] and [[y]] must be a
+multiple of the larger blocks's alignment. For this reason is
+overlapping at the high end rarely used.
+
+\paragraph{Convenience Functions} The following functions are
+implementable in terms of the primitive functions above. The list
+functions take the width of an address expression as argument.
+
+\textit{What happens when the lists are empty?}
+
 <<block.mli>>=
+val adjust:         t -> t                  (* size is multiple of alignment *)
 val cathl_list:     Rtl.width -> t list -> t
 val overlap_list:   Rtl.width -> placement -> t list -> t
 @
 
-% ------------------------------------------------------------------ 
 \subsection{Lua Interface}
-% ------------------------------------------------------------------ 
 
-Blocks are exported as abstract user data to Lua. However, not all
-operations available in {\ocaml} are also available in Lua. Blocks can
-be observed and composed, but there is no way to create primitive
-blocks. The main reason for these limitations that blocks rely on other
-data types that have no Lua representation.
+Blocks are exported as abstract user data to Lua. The [[Block.relative]]
+function does not take an address directly, but another block whose
+address $a$ is used to form a new address $a+k$, where $k$ is a late
+compile-time constant derived from the string argument. The other two
+arguments provide size and alignment.
 
-From the Lua point of view, blocks provide the following (C-style)
-signature: :
-
-<<lua block signature>>=
-block   Block.mk(block addr, int size, int alignment, string offset)
-int     Block.size(block block)
-int     Block.alignment(block)
-block   Block.adjust(block)
-block   Block.cat(block table)
-block   Block.overlap("high"|"low", block table)
-@
-
-The [[Block.mk]] function does not take an address directly, but another
-block whose address $a$ is used to form a new address $a+k$, where $k$
-is a late compile-time constant. The last string argument is optional
-and is used to build a unique compile-time constant. The other two
-arguments are identical to that of the {\ocaml} function [[mk]] and
-provide size and alignment.
 <<block.mli>>=
 module Lua: sig
+    val relative:   t -> string -> int (*size*) -> int (* align *) -> t
+    (* observer *)
+    val base:       t -> string         (* show base address *)
+    val constraints:t -> string list    (* for debugging *)
     val size:       t -> int
     val alignment:  t -> int
+    (* operations *)
     val adjust:     t -> t
     val cat:        Rtl.width -> t list -> t
-    val overlap:    Rtl.width -> placement -> t list -> t
-    val relative:   t -> string -> int (*size*) -> int -> t
-          (* relative to base of 1st arg *)
-    val base:       t -> string  (* show base address *)
-    val constraints:t -> string list
+    val overlap:    Rtl.width -> placement (* "high"|"low"*) -> t list -> t   
 end
 @
 
-% ------------------------------------------------------------------ 
 \subsection{Implementation}
-% ------------------------------------------------------------------ 
 
 <<block.ml>>=
 module C  = Rtleqn
@@ -173,67 +147,69 @@ let size t          = t.size
 let alignment t     = t.alignment
 let constraints t   = t.constraints
 
-let with_constraint t c = {t with constraints = c :: t.constraints}
-
 let at ~base ~size ~alignment =
     { base          = base
     ; size          = size
     ; alignment     = alignment
     ; constraints   = []
     }
+let with_constraint t c = {t with constraints = c :: t.constraints}
 
 let relative anchor dbg f = 
   let w = RU.Width.exp anchor in
   f ~base:(RU.add w anchor (Rtl.late (Idgen.offset dbg) w))
 let srelative anchor dbg f = relative anchor dbg (fun ~base -> f ~start:base)
+@
 
-type placement = High | Low
-@
-[[Align x n]] returns the smallest multiple of $n$ that is not smaller
-than $x$. Think of $x$ becoming $n$-aligned. 
+\paragraph{Utilities} Function [[align x n]] returns the smallest
+multiple of $n$ that is not smaller than $x$. Think of $x$ becoming
+$n$-aligned. Function [[add]] adds an integer to an {\rtl} expression
+and returns an {\rtl} expression.
+
 <<block.ml>>=
-let align x n = if x mod n = 0 then x else n * (x/n+1)
-let align x n = n * ( (x+n-1) / n)  (* one division, no control flow *)
-@
-[[Add]] adds an integer to an {\rtl} expression and returns an {\rtl}
-expression.
-<<block.ml>>=
+let align x n = Aux.round_up_to ~multiple_of:n x
 let add exp i = RU.addk (RU.Width.exp exp) exp i
 @
-The size of an adjusted block is a multiple of its alignment.
+
+Function [[offset]] creates an address relative to a [[base]] address
+using [[name]] to generate a late compile-time constant. Function
+[[empty]] provides an empty block addressed from the virtual frame
+pointer. 
+
 <<block.ml>>=
-let adjust t = { t with size = align (size t) (alignment t) }
+let offset base name ptrwidth =
+    RU.add ptrwidth base (Rtl.late (Idgen.offset name) ptrwidth)
+
+let empty ptrwidth = 
+    relative (Vfp.mk ptrwidth) "empty block" at ~size:0 ~alignment:1
 @
 
+\paragraph{Block Operations} When concatenating, we have to leave a gap
+between the first and the second block to make sure we respect the
+alignment of the second block.  We do so by virtually increasing the
+size of the first block to [[size']] which is a multiple of the second
+block's alignment. The alignment of the resulting block is the maximum
+of the two incoming alignments.
 
-When concatenating, we have to leave a gap between the first and the
-second block to make sure we respect the alignment of the second block.
-We do so by virtually increasing the size of the first block to
-[[size']] which is a multiple of the second block's alignment. The
-alignment of the resulting block is the maximum of the two incoming
-alignments.
-
-\emph{Attention:} as discussed above, there is a possibility for
-confusion here which block goes into low memory and which into high
-memory. Block [[x]] sits on top of [[y]].
 <<block.ml>>=
-let cathl x y =
-    let size' = align (size y) (alignment x) in
-        { base          = base y
-        ; size          = size' + size x
-        ; alignment     = max (alignment y) (alignment x)
-        ; constraints   = C.equate (add (base y) size') (base x)  
-                          :: (constraints y) @ (constraints x) 
+let cathl hi lo =
+    let size' = align (size lo) (alignment hi) in
+        { base          = base lo
+        ; size          = size' + size hi
+        ; alignment     = max (alignment lo) (alignment hi)
+        ; constraints   = C.equate (add (base lo) size') (base hi)  
+                          :: (constraints lo) @ (constraints hi) 
         }
 @
-When overlapping blocks, the resulting block must be large enough for
-the bigger of the two. The constraints express that either the lower
-ends align, or the higher ends.
+
+Overlapping at the high is impossible if a precondition isn't met. We
+check it and raise [[OverlapHigh]] when it is violated.
+
 <<block.ml>>=
-let overlap place x y = 
-    let x = adjust x        
-    and y = adjust y 
-    in match place with
+type placement = High | Low
+exception OverlapHigh
+
+let overlap place x y = match place with
     | Low ->      
         { base          = base x
         ; size          = max (size x) (size y)
@@ -241,22 +217,21 @@ let overlap place x y =
         ; constraints   = C.equate (base x) (base y)
                           :: (constraints x) @ (constraints y)
         }    
-    | High ->      
-        { base          = if size x > size y then base x else base y
-        ; size          = max (size x) (size y)
+    | High -> let x,y = if size x < size y then x,y else y,x in
+        if (size y - size x) mod (alignment x) <> 0 then raise OverlapHigh else
+        { base          = base x
+        ; size          = size y
         ; alignment     = max (alignment x) (alignment y)
         ; constraints   = C.equate (add (base x) (size x))
                                    (add (base y) (size y))
                           :: (constraints x) @ (constraints y)
         }           
-@        
-Not essential, but convenient functions.
+@ 
+
+\paragraph{Convenience Functions}
+
 <<block.ml>>=
-let offset base name ptrwidth =
-  RU.add ptrwidth base (Rtl.late (Idgen.offset name) ptrwidth)
-
-let empty w = relative (Vfp.mk w) "empty block" at ~size:0 ~alignment:1
-
+let adjust t = { t with size = align (size t) (alignment t) }
 let cathl_list w = function
   | [] -> empty w
   | b :: bs -> List.fold_left cathl b bs
@@ -265,38 +240,32 @@ let overlap_list w p = function
   | b :: bs -> List.fold_left (overlap p) b bs
 @
 
-% ------------------------------------------------------------------ 
-\subsection{Export to Lua}
-% ------------------------------------------------------------------ 
+\paragraph{Export to Lua} We export the block abstraction to Lua. The
+actual export is handled in module \module{lualink}. Here we just
+provide the {\ocaml} functions that implement the new Lua primitives and
+the representation [[T]] for blocks in Lua..  
 
-We export the block abstraction to Lua. The actual export is handled in
-module \module{lualink}. Here we just provide the {\ocaml} functions
-that implement the new Lua primitives and the representation [[T]] for
-blocks in Lua..
-<<block.ml>>=
-module Lua = struct
-    let size      = size
-    let alignment = alignment
-    let adjust    = adjust
-    
-    <<Block primitives for Lua>>
-end
-@
-<<Block primitives for Lua>>=
-let cat     = cathl_list
-let overlap = overlap_list
-@    
 The Lua version of [[relative]] differs from the Caml version in that
 the anchor address is the base address of an existing block.
-<<Block primitives for Lua>>=
-let relative block name size alignment =
-  relative (base block) name at ~size ~alignment
+
+<<block.ml>>= 
+module Lua = struct 
+    let size      = size 
+    let alignment = alignment 
+    let adjust    = adjust
+    let cat     = cathl_list
+    let overlap = overlap_list
+        
+    let constraints block = List.map Rtleqn.to_string (constraints block)
+
+    let relative block name size alignment =
+      relative (base block) name at ~size ~alignment
+    let base block        = Rtlutil.ToReadableString.exp (base block)
+end
 @
-<<Block primitives for Lua>>=
-let base block = Rtlutil.ToReadableString.exp (base block)
-let constraints block = List.map Rtleqn.to_string (constraints block)
-@
+
 Norman suggested to have overlap and concatenation functions in Lua that
 take any number of parameters which can be either blocks or lists
 (tables) of blocks. This amounts to functions that take a list of Lua
 values.
+
