@@ -490,8 +490,8 @@ type state =
 It is important that all areas in the [[outgoing]] list have a base
 address that is related to [[outbase]], and analogously for [[incoming]]
 and [[inbase]]. Otherwise the equations (c.f.~modules \module{eqn},
-\module{const}) that are generated when area are arranged to form an
-activation record won't be solvable.
+\module{const}) that are generated when areas are arranged to form an
+activation record will be unsolvable.
 
 
 <<Make statements>>=
@@ -527,8 +527,48 @@ and labelStmt state x =
         { state with node = G.gm_label state.cfg x s state.node }
 @
 
+An if-statement is governed by a boolean expression that has no side
+effects. A simple translation is to use this expression as a guard for a
+conditional branch to implement the if-statement. The guard finally
+becomes a guard in the {\rtl} that implements the conditional branch.
+The problem is, that the guarding expression can be quite complex and
+must be simplified before a machine instruction can be found that
+implements it. We translate a boolean expression $e$ into a sequence of
+nodes. If $e$ evaluates to true, the control flow reaches the end of the
+sequence, otherwise it branches to a provided label. 
+
+
+\begingroup % keeps definitions local
+\def\C#1{{\cal C}[\![#1]\!]}
+\let\i\textit
+
+The translation is summarized by the following function $\C\cdot$ that takes
+a boolean expression $e$ and a label $k$ to branch if the expression
+evaluates to false. The result is a sequence of nodes, that branches to
+$k$ if $e$ is false, and falls through otherwise.
+
+\begin{center}
+\begin{eqnarray*}
+    \C{\i{true}}~k              & \to & \i{nop}\\
+    \C{\i{false}}~k             & \to & \i{goto}~k\\
+    \C{x \vee y}~k              & \to & \C x~l; l: \C y~k\\
+    \C{x \wedge y}~k            & \to & \C x~k; \C y~k\\
+    \C{\lnot x}~k               & \to & \C x~l; \i{goto}~k; l:\\
+    \C{\oplus(e_1, \dots, e_n)} & \to & 
+        \i{if}(\lnot \oplus(e_1, \dots, e_n)\{\i{goto}~k\}
+\end{eqnarray*}
+\end{center}
+
+The last line covers the case of an application with a boolean result
+but non-boolean arguments. Currently only the logical operators $\lnot$,
+$\vee$, and $\wedge$ \emph{take} boolean arguments.
+
+\endgroup
+
+
+
 An if-statement is translated into a seqence of nodes such that the
-two branches are linearized.  The branch is taken is the governing
+two branches are linearized.  The branch is taken if the governing
 expression is evaluated to [[false]].  The fall-through-branch is
 taken otherwise and ends with a [[goto]] around the other branch. 
 

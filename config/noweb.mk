@@ -13,6 +13,7 @@ CPIF =          cpif
 LINE =          '# %L "%F"%N'
 
 LATEX =         latex
+PS2PDF=         ps2pdf
 RERUN =         Rerun (LaTeX|to get cross-references right)
 
 NOCOND =        $TOP/config/nocond $INTERP
@@ -93,3 +94,5 @@ NOWEBBREAKCODE=no
         dvips -Ppdf -o $target $prereq
 
 
+%.pdf:  %.ps
+        ps2pdf $prereq

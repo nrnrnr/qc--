@@ -250,16 +250,7 @@ rule token = parse
   | ws+         { fun map -> token lexbuf map }
   | tab         { fun map -> tab lexbuf map; token lexbuf map }
   | nl          { fun map -> nl lexbuf map ; token lexbuf map }
-  | nl '#'      { fun map -> line lexbuf map 0; token lexbuf map }
-  | '#'         { fun map -> 
-                  if Lexing.lexeme_start lexbuf = 0 then 
-                        ( line lexbuf map 0
-                        ; token lexbuf map
-                        )
-                  else
-                        error lexbuf map "illegal character" 
-                }
-
+  | ws* '#'     { fun map -> line lexbuf map 0; token lexbuf map }
   | ";"         { fun map -> P.SEMI         }
   | ":"         { fun map -> P.COLON        }
   | "::"        { fun map -> P.CCOLON       }
@@ -587,8 +578,12 @@ line directive is matched by the following regular expression (in the
 syntax used by \ocaml-Lex and using expressions defined above):
 
 \begin{center}
-[['#' ws+ nat '"'[^ '"']*'"' ws* '\n']]
+[[ws* '#' ws+ nat '"'[^ '"']*'"' ws* '\n']]
 \end{center}
+
+Note that {\small ANSI/ISO} C allows whitespace before and after the
+[[#]] character. Leading whitespace has already been recognized at this
+point.
 
 The meaning of a line directive
 \texttt{\#}~\textit{line}~\texttt{"}file\texttt{"} is that the

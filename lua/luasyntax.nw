@@ -263,18 +263,16 @@ end
 \subsection{Scanner}
 % ------------------------------------------------------------------ 
 
-\begin{itemize}
-\item The scanner compiles, but is untested otherwise.
-\item The entry point of the scanner is [[token]]:
-      $$[[val token : Lexing.lexbuf -> Srcmap.map -> Parser.token]]$$
+The entry point of the scanner is [[token]]:
+$$[[val token : Lexing.lexbuf -> Srcmap.map -> Parser.token]]$$
 
-      The second argument is a source map, that allows to reconstruct 
-      filename, line, and column from a character offset. The first
-      action after such a map was created using [[Srcmap.mk ()]] should
-      be a call to [[Srcmap.sync map 0 (filename,1,1)]] to establish 
-      a sync-point for the first character in the scanned character
-      stream. See the documentation of [[Srcmap]] for details.
-\end{itemize}
+The second argument is a source map, that allows to reconstruct
+filename, line, and column from a character offset. The first action
+after such a map was created using [[Srcmap.mk ()]] should be a call to
+[[Srcmap.sync map 0 (filename,1,1)]] to establish a sync-point for the
+first character in the scanned character stream. See the documentation
+of [[Srcmap]] for details.
+
 
 <<luascanner.mll>>=
 {
@@ -375,8 +373,6 @@ rule token = parse      (* raise Error in case of error *)
                   else 
                     error "illegal $file pragma"
                 }  
-  
-
        
   | '#'         { fun map ->  (* skip # line if it's the first line *)
                   if Lexing.lexeme_start lexbuf = 0 then 
@@ -459,7 +455,7 @@ and file_pragma = parse
                                 )  
                 }
 and line_pragma = parse
-    eof         { fun map -> error "illegal $file pragma" }
+    eof         { fun map -> error "illegal $line pragma" }
   | digit+      { fun map -> 
                     let s       = get lexbuf in
                     let line    = int_of_string s in
@@ -508,8 +504,10 @@ and longstring = parse  (* parse a [[ .. ]] string *)
                 }  
 
 and shortstring = parse (* parse an eos delimited string *)
-    eof         { fun map eos buf -> error ("end of file in string: " ^ Buffer.contents buf) } 
-  | '\n'        { fun map eos buf -> error ("end of line in string: " ^ Buffer.contents buf) }
+    eof         { fun map eos buf -> 
+                  error ("end of file in string: " ^ Buffer.contents buf) } 
+  | '\n'        { fun map eos buf ->
+                  error ("end of line in string: " ^ Buffer.contents buf) }
   | '\\' _      { fun map eos buf -> 
                   let c = getchar lexbuf 1 in
                   let k = match c with
