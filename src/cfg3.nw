@@ -162,7 +162,10 @@ val gm_jump:    cfg -> Rtl.rtl -> node list -> node
 val gm_cutto:   cfg -> Rtl.rtl -> conts     -> node
 val gm_call:    cfg -> Rtl.rtl -> conts -> succ:node -> node
 val gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
-val gm_dummy:   cfg -> node
+(*  used only internally - no reason to export
+ *  val gm_dummy:   cfg -> node
+ *)
+(* dataflow-design is bogus *)
 val gm_dataflow: cfg -> defs:locs -> uses:locs -> kills:locs -> succ:node -> node
 
 (* cfg mutators, ensures: not (enumerated cfg) *)
@@ -327,7 +330,7 @@ gm_cutto:   cfg -> Rtl.rtl -> conts     -> node
 gm_call:    cfg -> Rtl.rtl -> conts -> succ:node -> node
 gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
 gm_dummy:   cfg -> node
-val gm_dataflow: cfg -> def:locs -> use:locs -> kill:locs -> succ:node -> node
+gm_dataflow: cfg -> def:locs -> use:locs -> kill:locs -> succ:node -> node
 \end{verbatim}
 
 A [[dummy]] node has one successor which is initially set to itself. 
@@ -498,7 +501,371 @@ end
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
+The interface hides the details of [[node]] and [[cfg]] but it is
+clear that nodes come in different kinds, all sharing the same type
+[[node]].  In the classical functional programming style this would
+enforce a representation that supports all kinds at once and
+observation functions that distinguish between the kinds.  Existential
+types as provided by the object-oriented sub-language of {\ocaml}
+provide a better solution:  a single type like [[node]] can have
+mutiple implementations, each for every kind.  Because the
+object-oriented style also integrates with the imperative nature of
+the interface we chose to use it to implement the control-flow graph.
+To avoid name-clashes for useful names like [[cfg]] and [[node]], the
+implementation lives in its own sub-module [[X]]. The implementation
+of the exported functions refers simply to [[X]].
+
 <<cfg3.ml>>=
-(* postponed *)
+module type S = sig
+    <<types and ops>>
+end
+
+module X = struct
+    <<module X>>
+end
+
+type cfg  = X.cfg       (* class type cfg  *)
+type t    = cfg         (* alias           *)
+type node = X.node      (* class type node *)
+<<type conts>>          (* continuation bundle *)
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Object-Oriented Implementation}
+% ------------------------------------------------------------------ 
+
+The {\cfg} implementation is build around two central class types,
+[[cfg]] and [[node]], that provide the functionality of {\cfg}s and
+their nodes respectively.  The [[cfg]] class has one implementation,
+the [[node]] class one for every kind of node.  However, they all
+implement the same class type. 
+
+A [[node]] has a fixed number of outgoing edges to successors that are
+initialized when the node is created. Edges can be updated using
+[[upd_succ]] but the number of edges is fixed.
+
+The implementation of labels requires a third class type [[proxy]]
+which is a sub-class type of [[node]]. A [[proxy]] node holds a label
+for a node that is not yet defined. Its distinct feature is, that an
+edge to a successor can be added later after the proxy was created.
+This allows to point the proxy to the node that really should hold the
+label, once this node is defined.
+
+<<module X>>=
+class type cfg = object
+    method entry:       node            (* entry node of this *)
+    method exit:        node            (* exit node of this *)
+    method lookup:      string -> node  (* find labeled node *)
+    method set_label:   string -> node -> unit  (* assign label to node *)
+    
+    method add:         node -> unit    (* add node to this *)
+    method enumerate:   unit -> unit    (* enumerate all node in this *)
+    method get_id:      unit -> int     (* unique *)
+end
+@
+
+\begin{itemize}
+\item [[entry]] is the entry-node of this {\cfg}. The entry node
+      has the [[exit]] node as its successor initially.
+
+\item [[exit]] is the exit-node of this {\cfg} and is initially the successor
+      of the [[entry]] node.
+
+\item [[lookup]] returns a labeled node. If no such node exists [[lookup]]
+      creates a [[proxy]] node under that label and returns it. The
+      fact that the returned node is a [[proxy]] is hidden and can't
+      be exploited.
+
+\item [[set_label]] attaches a label to an existing [[node]] in this {\cfg}.
+      If the label was previously looked up and therefore a [[proxy]]
+      node exists under that label, the provided [[node]] becomes the
+      proxy's successor.  It is an checked run-time error if [[node]]
+      does not belong to this {\cfg}. 
+      
+\item [[add]] adds a node to this {\cfg}. 
+
+\item [[enumerate]] assigns numbers $1,2,\dots$ to the nodes in this
+      {\cfg}.
+
+\item [[get_id]] returns a unique number (in this {\cfg}) at every
+      invocation.  Used by nodes for their unique ID.
+\end{itemize}
+
+
+<<module X>>=
+and node = object
+    method cfg:         cfg             (* cfg this belongs to *)
+    method rtl:         Rtl.rtl         (* rtl of this *)
+    method id:          int             (* int of this *)
+    method number:      int             (* number of this; req:cfg enumerated *)
+    method succ:        node list       (* cf successors of this *)
+    method pred:        node list       (* cf predecessors of this *)
+
+    method link_pred:   node -> unit    (* add    in-edge from to pred node *)
+    method unlink_pred: node -> unit    (* remove in-edge from to pred node *) 
+    method upd_pred:    (node -> node) -> unit (* redirect preds of this *)
+    method upd_succ:    (node -> node) -> unit (* redirect succs of this *)
+end
+@
+
+\begin{itemize]
+\item [[cfg]] is the {\cfg} this node belongs to.
+\item [[rtl]] is the {\rtl} belonging to this node.
+\item [[id]] is the identification of this node. It is unique within
+      its [[cfg]].
+\item [[number]] the number of this node. It is a checked run-time
+      error to invoke this method if the [[cfg]] is not enumerated.
+\item [[succ]] are succeeding control-flow nodes.
+\item [[pred]] are preceding control-flow nodes.
+\item [[link_pred]] informs this node that another node has become a
+      predecessor of this node. 
+\item [[unlink_pred]] informs this node that a given node is no longer
+      a predecessor of this node. It is a checked run-time error if
+      the node at hand is not a predecessor of this node.
+\item [[upd_pred]] updates links to predecessors from [[this]] using 
+      a map-function.
+\item [[upp_succ]] updates links to successors using a map-function.
+      Note that a map-function can collapse different links to a
+      single node but can't reverse the effect.
+\end{itemize}      
+
+<<module X>>=
+class type proxy = object
+    inherit node
+    method set_succ: node -> unit       (* set succ for this *)
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Auxiliaries}
+% ------------------------------------------------------------------ 
+
+<<module X>>=
+module NodeSet = Set.Make(struct type t=node   let compare=compare end)
+<<type conts>>
+
+let compare x y = compare x#id y#id
+@
+
+The function [[nodup]] removes adjacent duplicates (according to the
+comparison function [[cmp]]) from a list.  
+
+<<module X>>=
+let rec nodup cmp = function
+    | x::(y::_ as tail) -> if cmp x y = 0 
+                           then nodup cmp tail
+                           else x :: nodup cmp tail
+    | x                 -> x
+@
+
+The [[uniq]] function returns a duplicate-free list of nodes from a
+list of nodes.  We use this function to compute duplicate-free list of
+successors and predecessors below.
+    
+<<module X>>=
+let uniq nodes = nodup compare (List.sort compare nodes)   
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Classes}
+% ------------------------------------------------------------------ 
+
+<<module X>>=
+class graph: cfg =
+object (this)
+    val         _labels         = (Hashtbl.create 47: (string,node) Hashtbl.t)
+    val         _dummies        = (Hashtbl.create 47: (string,proxy) Hashtbl.t)
+    val mutable _nodes          = NodeSet.empty
+    val mutable _id             = 0
+    val mutable _enumerated     = false
+    val mutable _enumeration    = (None: node array option)
+    val mutable _entry          = (None: node option)
+    val mutable _exit           = (None: node option)
+
+    initializer
+        let bot = new exit  (this:>cfg)     in
+        let top = new entry (this:>cfg) bot in
+            ( _entry <- Some top
+            ; _exit  <- Some bot 
+            )
+
+    method entry =
+        match _entry with
+        | None      -> assert false
+        | Some node -> node
+    
+    method exit =
+        match _exit with
+        | None      -> assert false
+        | Some node -> node
+
+    method lookup label =
+        try Hashtbl.find _labels label
+        with Not_found ->
+            try (Hashtbl.find _dummies label :> node)
+            with Not_found ->
+            let (d:proxy) = new dummy (this :> cfg) in
+                ( Hashtbl.add _dummies label d 
+                ; this#add (d :> node)
+                ; (d :> node)
+                )
+                
+    method set_label label node =
+        assert (NodeSet.mem node _nodes);       (* node#cfg = (this:>cfg) *)
+        try 
+            let d = Hashtbl.find _dummies label in
+                d#set_succ node
+        with Not_found ->
+            Hashtbl.add _labels label node
+            
+    method add node =
+        ( _enumerated <- false
+        ; _nodes <- NodeSet.add node _nodes
+        )
+
+    method enumerate () =
+        ( _enumerated <- true 
+        )
+
+    method get_id () =
+        ( _id <- _id + 1
+        ; _id
+        )
+end
+
+and virtual vnode cfg rtl =
+object(this)
+    val mutable _pred = NodeSet.empty
+    val mutable _rtl  = (rtl: Rtl.rtl)
+    val         _cfg  = cfg
+    val mutable _id   = (cfg#get_id ())
+    val mutable _num  = -1 
+    
+    initializer
+        _cfg#add (this :> node)
+
+    method cfg      = _cfg
+    method rtl      = _rtl
+    method pred     = NodeSet.elements _pred
+    method succ     = ([]: node list)   (* make virtual? *)
+    method id       = _id
+    method number   = _num
+    
+    method upd_succ map =               (* make virtual? *)
+        ()
+    
+    method link_pred node =
+        _pred <- NodeSet.add node _pred
+        
+    method unlink_pred node =
+        assert (NodeSet.mem node _pred);
+        _pred <- NodeSet.remove node _pred
+    
+    method upd_pred map =
+        let nodes = this#pred in
+        let nodes = List.map map nodes in
+        let nodes = List.fold_right NodeSet.add nodes NodeSet.empty in
+            _pred <- nodes    
+end 
+
+and virtual vcut cfg rtl (conts: conts) =
+object (this)
+    inherit vnode cfg rtl
+
+    val mutable _cuts    = conts.cuts
+    val mutable _unwinds = conts.unwinds
+    val mutable _returns = conts.returns
+    val _aborts          = conts.aborts
+
+    initializer
+        let succ = List.concat [_cuts;_unwinds;_returns] in
+            List.iter (fun n -> n#link_pred (this:>node)) succ
+
+    method virtual succ     : node list
+    method virtual upd_succ : (node -> node) -> unit
+end 
+
+and dummy cfg: proxy =
+object(this)
+    inherit vnode cfg Rtl.null
+
+    val mutable _succ = (None: node option) 
+
+    method set_succ node =
+        _succ <- Some node
+    
+    method succ =
+        match _succ with
+            | None   -> []
+            | Some n -> [n]
+    
+    method upd_succ map =
+        match _succ with
+            | None   -> ()
+            | Some n -> _succ <- Some (map n)
+end
+
+and entry cfg exit: node =
+object(this)
+    inherit vnode cfg Rtl.null
+
+    val mutable _succ = (exit:node)
+    
+    method succ = [_succ]
+    method upd_succ map = 
+        _succ <- map _succ
+end
+
+and exit cfg: node =
+object(this)
+    inherit vnode cfg Rtl.null
+end
+@
+
+class assign cfg rtl succ : node =
+object (this)
+    inherit vnode cfg rtl
+
+    val mutable _succ = succ
+
+    initializer =
+        succ # link_pred (this :> node)
+
+    method succ = [_succ]
+
+    method upd_succ map = 
+        _succ <- map _succ
+end
+
+class return cfg rtl (x,y) : node  
+object (this)  
+    inherit vnode cfg rtl
+
+    val _x = (x:int)
+    val _y = (y:int)
+end
+
+class goto cfg rtl targets : node =
+object (this)
+    inherit vnode cfg rtl
+
+    val mutable _targets = targets
+
+    initializer
+        List.iter (fun n -> n#link_pred (this :> node) _targets
+
+    method succ = uniq _targets      
+    
+    method upd_succ map =
+        _targets <- List.map map _targets 
+end
+
+class jump cfg rtl conts : node =
+object (this)
+    inherit vnode
+
+end
+
+
 @
 
