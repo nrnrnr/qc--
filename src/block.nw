@@ -5,6 +5,12 @@
 \section{Memory Blocks}
 % ------------------------------------------------------------------ 
 
+\begin{quote}\it It would be nice to have an \emph{empty} block that
+    acts as a unit for the [[cat]] and [[overlap]] operations.
+    This way operations on block lists became well defined. The problem
+    is the address expression: what width should it have? -- CL
+\end{quote}
+
 This module defines memory blocks that can be composed into complex
 blocks. The main application is the definition of a procedure's stack
 frame. However, this module is completely general.
@@ -58,6 +64,16 @@ val overlap:    placement -> t -> t -> t     (* req: arguments are adjusted *)
 val adjust:     t -> t                       (* result is adjusted *)
 @
 
+Convenient functions -- they could be easily implemented outside
+this module in terms of the above primitives; it is a checked run-time
+error when the argument lists are empty.
+
+<<block.mli>>=
+val cat_list:       t list -> t
+val overlap_list:   placement -> t list -> t
+@
+
+
 % ------------------------------------------------------------------ 
 \section{Implementation}
 % ------------------------------------------------------------------ 
@@ -104,6 +120,13 @@ let add exp i =
         Rtl.app opr [exp; Rtl.bits (Bits.S.of_int i width) width]
 @
 
+The size of an adjusted block is a multiple of its alignment.
+
+<<block.ml>>=
+let adjust t = { t with size = align (size t) (alignment t) }
+@
+
+
 When concatenating, we have to leave a gap between the first and the
 second block to make sure we respect the alignment of the second block.
 We do so by virtually increasing the size of the first block to
@@ -128,8 +151,12 @@ ends align, or the higher ends.
 
 <<block.ml>>=
 let overlap place x y = 
-    assert ((size x) mod (alignment x) = 0);
-    assert ((size y) mod (alignment y) = 0);
+    (* assert ((size x) mod (alignment x) = 0)
+     * assert ((size y) mod (alignment y) = 0)
+     *) 
+    
+    let x = adjust x        (* to avoid trouble for now *)
+    and y = adjust y in
     match place with
     | Low ->      
         { base          = base x
@@ -147,5 +174,12 @@ let overlap place x y =
                           :: (constraints x) @ (constraints y)
         }           
 
-let adjust t = { t with size = align (size t) (alignment t) }
 @        
+
+Not essential, but convenient functions.
+
+<<block.ml>>=
+let cat_list       ts = List.fold_left cat         (List.hd ts) (List.tl ts)
+let overlap_list p ts = List.fold_left (overlap p) (List.hd ts) (List.tl ts)
+@
+

@@ -1,0 +1,65 @@
+
+% ------------------------------------------------------------------ 
+\section{Automaton-Based Memory Allocation}
+% ------------------------------------------------------------------ 
+
+This module provides an applicate abstraction to allocate a memory block
+incrementally by a sequence of [[allocate]] and [[align]] directives.
+The abstraction is similar to a pointer that is advanced and aligned to
+reserver memory. At any point the value of the  pointer can be uesed as
+an address. After allocation is complete, the automaton is [[frozen]]
+and the allocated block is returned. A [[t]] value should not be used
+after it was frozen (allthough it is technically possible and safe).
+
+<<memalloc.mli>>=
+type t          (* mutable state *)
+
+val mk:         base:Rtl.exp -> t
+val allocate:   t -> size:int -> t
+val align:      t -> int -> t
+val current:    t -> Rtl.exp
+val freeze:     t -> Block.t
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<memalloc.ml>>=
+type t =
+    { base:                 Rtl.exp     (* base of block      *)
+    ; width:                int         (* width of exp       *)
+    ; size:                 int         (* size of block      *)
+    ; alignment:            int         (* alignment of block *)
+    }
+
+let mk ~base = 
+    { base      = base
+    ; width     = Rtlutil.Width.exp base
+    ; size      = 0
+    ; alignment = 1
+    }
+
+let allocate t ~size = 
+    assert (size >= 0);    
+    { t with size = t.size + size }
+
+let align    t n = (* align both size and base alignment *)
+    assert (n > 0);
+    { t with
+      alignment = max t.alignment n
+    ; size      = if t.size mod n = 0 
+                  then t.size
+                  else ((t.size / n) + 1) * n     (* next multiple of n *)
+    }
+let current t = (* base + size *)
+    let add      = Rtl.opr "add" [t.width] in
+    let offset n = Rtl.app add [t.base; 
+                                Rtl.bits (Bits.S.of_int n t.width) t.width] in
+        offset t.size
+
+let freeze t = Block.mk t.base t.size t.alignment
+@
+
+    
+    

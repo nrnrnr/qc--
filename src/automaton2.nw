@@ -6,7 +6,7 @@
 % that this modules relies on the simple Block abstraction.
 
 % ------------------------------------------------------------------ 
-\section{Automaton-Based Location Allocation}
+\section{Automaton-Based Slot Allocation}
 % ------------------------------------------------------------------ 
 
 \begin{quote}\it
@@ -66,13 +66,12 @@ its initial state.
 val mk : spec -> address:Rtl.exp -> t           
 @
 
-To allocate a new resource slot, call [[ty]].  It returns a location
-[[[loc]] and change the automaton's internal state.  I think the name
-[[ty]] was poorely chosen. I provide an alias [[allocate]] and hope to
-get rid of [[ty]] in the future.
+To allocate a new resource slot, call [[allocate]] with the width of the
+slot in \emph{bits} and an optional hint.  It returns a location
+[[[loc]] and change the automaton's internal state.  
 
 <<automaton2.mli>>=
-val ty:       t -> width:int -> hint:(string option) -> loc    
+val ty:       t -> width:int -> hint:(string option) -> loc  (* deprecated *)  
 val allocate: t -> width:int -> hint:(string option) -> loc  (* alias for ty *)
 @
 
@@ -198,8 +197,9 @@ in object (this)
         match hint with 
         | Some x -> assert false (* hints not supported *)
         | None ->
-            let slot    = Block.mk this#slotaddress (width / memsize) pointer in
-            let _block  = Block.cat _block slot in
-                this#memloc (Block.base slot) width
+            let slot = Block.mk this#slotaddress (width / memsize) pointer in
+                ( _block <- Block.cat _block slot 
+                ; this#memloc (Block.base slot) width
+                )                
 end
 

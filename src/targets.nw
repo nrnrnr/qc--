@@ -46,6 +46,7 @@ module U  = Rtl.Revert  (* Up *)
 module RP = Rtl.Private
 module S  = Space
 module T  = Target2
+module C  = Contn       (* Continuation *)
 
 type 'a map = 'a T.map =
     { embed:    ('a -> Rtl.rtl)
@@ -318,7 +319,7 @@ returned by an automaton. In our case such a location is basically an
 {\rtl} cell.
 
 <<DummyTarget>>=
-class loc (loc:Rtl.loc): Automaton.location =
+class loc (loc:Rtl.loc): Automaton2.location =
 object
     val _loc   = loc
     
@@ -333,14 +334,13 @@ location it hands out are in memory, except when a hardware register is
 explicitly requested.
 
 <<DummyTarget>>=
-class simple (base:Rtl.exp): Automaton.automaton =
+class simple' (base:Rtl.exp): Automaton2.automaton =
 object (this)
-    val mutable _area   = Area.align (Area.mk base) (wordsize/memsize)
+    val mutable _block  = Block.mk base (*size*) 0 (*align*) 8  (* block *)
     val mutable _frozen = false
     
-    method freeze ()       =
-        let _ = _frozen <- true in
-            Area.freeze _area 
+    method freeze () =
+        let _ = _frozen <- true in _block  (* return block *)
     
     method private memloc addr w = 
         new loc (Rtl.cell Rtl.none 'm' Rtl.BigEndian w addr)
@@ -351,18 +351,21 @@ object (this)
     | "IEEE 754 comparison results"     -> new loc (fpcond 1)
     | r     -> Impossible.impossible ("unknown hardware register "^r) 
     
-    method ty width hint = 
-        let _     = assert (_frozen = false)           in
-        (* assertions above *)
+    method private slotaddress = (* base + v *)
+        let add = Rtl.opr "add" [pointersize] in
+        Rtl.app add [base; Rtl.late (Idgen.slot "slots") pointersize]
+    
+    method allocate width hint = 
+        let ()      = assert (_frozen = false)           
+        and ()      = assert (width mod memsize = 0) in
         match hint with 
+        | Some x -> this#hardware x
         | None ->
-            let n     = max (width / memsize) 1            in 
-            let addr  = Area.location _area                in
-            let align = wordsize / memsize                 in
-            let ()    = _area <- Area.alloc _area n        in 
-            let ()    = _area <- Area.align _area align in 
-                this#memloc addr width
-        | Some x -> this#hardware x          
+            let slot    = Block.mk this#slotaddress 
+                                   (width / memsize) pointersize in
+            ( _block <- Block.cat _block slot 
+            ; this#memloc (Block.base slot) width
+            )
 end
 @
 
@@ -373,9 +376,9 @@ probably is not good for anything.
 let cc =
     { T.sp              = reg 31
     ; T.return          = assign pc (R.fetch (mem (R.fetch (reg 31) 32)) 32)
-    ; T.proc            = new simple
-    ; T.cont            = new simple
-    ; T.ret             = new simple
+    ; T.proc            = new simple'
+    ; T.cont            = new simple'
+    ; T.ret             = new simple'
     ; T.allocatable     = List.concat 
                             [ List.map (fun n -> ('r',n,32)) [1;2;3]
                             ; List.map (fun n -> ('f',n,32)) [1;2;3]
@@ -383,6 +386,20 @@ let cc =
                             ]
     }
  
+@
+
+The [[contn]] value describes the memory layout of continuations. More
+precisely, the pair of two pointers that are stored on the stack.
+
+<<DummyTarget>>=
+let contn (base:Rtl.exp) =
+    let add       = Rtl.opr "add" [32] in
+    let offset n  = Rtl.app add [base; Rtl.bits (Bits.S.of_int n 32) 32] in
+    let cell addr = Rtl.cell Rtl.none 'm' Rtl.BigEndian 32  addr in
+        { C.block = Block.mk ~base ~size:4 ~alignment:4
+        ; C.sp    = cell (offset 0)
+        ; C.pc    = cell (offset 4)
+        }
 @
 
 Finally, this is the complete description of the [[Dummy]] target.
@@ -396,7 +413,7 @@ let target =
     ; T.memsize         = 8
     ; T.float           = "ieee754"
     ; T.charset         = "latin1"
-    ; T.globals         = new simple
+    ; T.globals         = new simple'
     ; T.goto            = goto
     ; T.jump            = goto
     ; T.cutto           = goto
@@ -408,7 +425,8 @@ let target =
     ; T.spill           = Spill.spill
     ; T.reload          = Spill.reload
     ; T.data_section    = "data"
-    ; T.stack_slots     = new simple
+    ; T.stack_slots     = new simple'
+    ; T.contn           = contn
     }
 @ 
 
@@ -505,7 +523,7 @@ returned by an automaton. In our case such a location is basically an
 {\rtl} cell.
 
 <<SparcTarget>>=
-class loc (loc:Rtl.loc): Automaton.location =
+class loc (loc:Rtl.loc): Automaton2.location =
 object
     val _loc   = loc
     
@@ -519,15 +537,17 @@ The [[simple]] automaton is a toy that we use for all purposes. All
 location it hands out are in memory, except when a hardware register is
 explicitly requested.
 
+The automaton that works with our new Automaton and Block modules. This
+will replace the automaton above.
+
 <<SparcTarget>>=
-class simple (base:Rtl.exp): Automaton.automaton =
+class simple' (base:Rtl.exp): Automaton2.automaton =
 object (this)
-    val mutable _area   = Area.align (Area.mk base) (wordsize/memsize)
+    val mutable _block  = Block.mk base (*size*) 0 (*align*) 8  (* block *)
     val mutable _frozen = false
     
-    method freeze ()       =
-        let _ = _frozen <- true in
-            Area.freeze _area 
+    method freeze () =
+        let _ = _frozen <- true in _block  (* return block *)
     
     method private memloc addr w = 
         new loc (Rtl.cell Rtl.none 'm' Rtl.BigEndian w addr)
@@ -535,20 +555,24 @@ object (this)
     method private hardware hint = match hint with 
     | r     -> Impossible.impossible ("unknown hardware register "^r) 
     
-    method ty width hint = 
-        let _     = assert (_frozen = false)           in
-        (* assertions above *)
+    method private slotaddress = (* base + v *)
+        let add = Rtl.opr "add" [pointersize] in
+        Rtl.app add [base; Rtl.late (Idgen.slot "slots") pointersize]
+    
+    method allocate width hint = 
+        let ()      = assert (_frozen = false)           
+        and ()      = assert (width mod memsize = 0) in
         match hint with 
+        | Some x -> this#hardware x
         | None ->
-            let n     = max (width / memsize) 1            in 
-            let addr  = Area.location _area                in
-            let align = wordsize / memsize                 in
-            let ()    = _area <- Area.alloc _area n        in 
-            let ()    = _area <- Area.align _area align in 
-                this#memloc addr width
-        | Some x -> this#hardware x          
+            let slot    = Block.mk this#slotaddress 
+                                   (width / memsize) pointersize in
+            ( _block <- Block.cat _block slot 
+            ; this#memloc (Block.base slot) width
+            )
 end
 @
+
 
 The following functions encode special {\rtl}s and must be recognized by
 the code expander as such. It is not important that these {\rtl}s
@@ -607,14 +631,23 @@ let cc =
     { T.sp              = sp
     ; T.return          = special 'R' false' 
                             (R.bits (Bits.U.of_int 12345 32) 32)
-    ; T.proc            = new simple
-    ; T.cont            = new simple
-    ; T.ret             = new simple
+    ; T.proc            = new simple'
+    ; T.cont            = new simple'
+    ; T.ret             = new simple'
     ; T.allocatable     = List.concat 
                             [ List.map (fun n -> ('r',n,32)) [3;4;5]
                             ; List.map (fun n -> ('f',n,32)) [1;2;3]
                             ]
     }
+
+let contn (base:Rtl.exp) =
+    let add       = Rtl.opr "add" [32] in
+    let offset n  = Rtl.app add [base; Rtl.bits (Bits.S.of_int n 32) 32] in
+    let cell addr = Rtl.cell Rtl.none 'm' Rtl.BigEndian 32  addr in
+        { C.block = Block.mk ~base ~size:4 ~alignment:4
+        ; C.sp    = cell (offset 0)
+        ; C.pc    = cell (offset 4)
+        }
 
 let target = 
     { T.name            = "sparc"
@@ -624,7 +657,7 @@ let target =
     ; T.memsize         = 8
     ; T.float           = "ieee754"
     ; T.charset         = "latin1"
-    ; T.globals         = new simple
+    ; T.globals         = new simple'
     ; T.goto            = goto
     ; T.jump            = jump
     ; T.cutto           = cutto
@@ -636,7 +669,8 @@ let target =
     ; T.spill           = Spill.spill
     ; T.reload          = Spill.reload
     ; T.data_section    = "data"
-    ; T.stack_slots     = new simple
+    ; T.stack_slots     = new simple'
+    ; T.contn           = contn
     }
 @ 
 

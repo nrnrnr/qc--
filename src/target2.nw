@@ -32,15 +32,19 @@ be passed at run-time (rather than by a module, which can not).
 <<type cc>>
 <<type map>>
 <<type t>>
+
 <<exported functions>>
 val space : t -> Rtl.space -> Space.t
-@ The [[space]] function returns information about a particular space.
+@ 
+
+The [[space]] function returns information about a particular space.
 It is a checked run-time error to ask about a space not on the list
 for the target.
-@
+
 <<type t>>=
 type t = { <<components of t>> }
 @
+
 Every target has a descriptive name.
 <<components of t>>=
 name: string;
@@ -67,9 +71,9 @@ specifications exist.
 type cc =      
     { sp:           Rtl.loc         (* stack pointer                      *)
     ; return:       Rtl.rtl         (* machine instr passed to Cfg.return *)
-    ; proc:         Automaton.spec  (* pass parameter to a procedure      *)
-    ; cont:         Automaton.spec  (* pass parameter to a continuation   *)
-    ; ret:          Automaton.spec  (* return values                      *)
+    ; proc:         Automaton2.spec  (* pass parameter to a procedure      *)
+    ; cont:         Automaton2.spec  (* pass parameter to a continuation   *)
+    ; ret:          Automaton2.spec  (* return values                      *)
     ; allocatable:  Register.t list (* regs for reg-allocation            *)
     }
 @
@@ -99,7 +103,7 @@ pointersize:    int               ; (* bits *)
 memsize:        int               ; (* smallest addressable unit, typically 8 *)
 float:          string            ; (* "ieee754" float representation    *)
 charset:        string            ; (* "latin1"  character encoding      *)
-globals:        Automaton.spec    ; (* Automaton to allocate global vars *)
+globals:        Automaton2.spec   ; (* Automaton to allocate global vars *)
 @
 
 A target has many address spaces:  main memory, different register
@@ -220,13 +224,29 @@ argument is baffling. ---NR}
 
 Continuations, spill locations and other private data of a procedures
 lives on the run-time stack. These locations are register-like and
-issued by an [[Automaton.t]] value. The specification for that automaton
+issued by an [[Automaton2.t]] value. The specification for that automaton
 is provided by the target.
 
 <<components of t>>=
-stack_slots:    Automaton.spec
+stack_slots:    Automaton2.spec;
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Continuation Representation}
+% ------------------------------------------------------------------ 
+
+A continuation is a pointer to a pair of two pointers. The two pointers
+are a code pointer and a stack pointer value (see module
+\module{contn.nw}). The pair is stored on the stack.  The size and
+alignment of the pointers inside the stack are target dependent and thus
+defined here. 
+
+\emph{Should we use an object instead of a record to define this? --CL}
+
+<<components of t>>=
+contn:      (Rtl.exp -> Contn.t);       (* continutaion representation *)
+@
+    
 % ------------------------------------------------------------------ 
 \subsection{Compatibility with Source Code}
 % ------------------------------------------------------------------ 

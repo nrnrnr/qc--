@@ -74,6 +74,7 @@ module A        = Ast
 module T        = Types
 module E        = Error
 module F        = Fenv.Clean
+module AT       = Automaton2
 
 <<auxilliaries>>
 <<ExprTypes>>
@@ -197,6 +198,17 @@ used as its value ([[label]]). The label is later re-written to a
 pointer expression that denotes a pair of values in the activation
 record. The label is part of the continuation's denotation.
 
+\begin{quote}\it
+    The translation of continuations in \path|Ast3ir| is bogus. A
+    continuation \emph{value} is a pointer into the stack where two values
+    are stored: a pointer to the code of the continuation, and a stack
+    pointer. The current representation of a continuation value is a
+    link-time constant, which is wrong. A continuation \emph{value} is a
+    late compile-time expression: a sum of the stack pointer value and some
+    late compile-time constant. The stack pointer in turn, depends on the
+    currently active calling convention. -- CL (Wed May 15 16:58:46 EDT 2002)
+\end{quote}
+
 <<Make expressions>>=
 and variable env target hint x =
     let (_,(denot,t)) = F.findv x env in
@@ -206,7 +218,7 @@ and variable env target hint x =
     | F.Label(F.Code s)         -> Rtl.link s (width t)
     | F.Label(F.Data s)         -> Rtl.link s (width t)
     | F.Import(_,s)             -> Rtl.link s (width t)
-    | F.Continuation(_,s)       -> Rtl.link s (width t)
+    | F.Continuation(_,s)       -> Rtl.link s (width t) (*XXX wrong XXX*)
     | F.Label(F.Stack(None))  -> Impossible.impossible "Ast3ir.Make.variable"
     | F.Label(F.Stack(Some loc)) ->
         let w    = width t                                   in 
@@ -215,7 +227,7 @@ and variable env target hint x =
             Rtl.fetch cell (width t)
 
     
-    | F.Register({F.loc=Some l}) -> Automaton.fetch l (width t)
+    | F.Register({F.loc=Some l}) -> AT.fetch l (width t)
     | F.Register({F.index=i;F.loc=None}) ->
         (* local register in memory, ignoring hint *)
         if F.is_localv x env then
@@ -341,7 +353,7 @@ let rec assign env target lhs exp = match lhs with
         let (_,(denot,t)) = F.findv x env in
         let w = width t                   in
             ( match denot with
-            | F.Register({F.loc=Some l}) -> Automaton.store l exp w
+            | F.Register({F.loc=Some l}) -> AT.store l exp w
             | F.Register({F.index=i;F.loc=None}) ->
                 if F.is_localv x env then
                     Rtl.store (Rtl.var x i w) exp w
@@ -419,7 +431,7 @@ let procformal env (hint, inv, ty, name) =
 
 The global registers of a {\PAL} program are assigned to hardware
 register or memory locations using a target specific automaton.  Each
-assignment results in an abstract [[Automaton.loc]] value that is
+assignment results in an abstract [[AT.loc]] value that is
 entered under the name of the register to a map.
  
 The [[globals]] function pushes all global registers through a target
@@ -436,7 +448,7 @@ printable.
 
 <<Make global registers>>=
 let globals env target (base:Rtl.exp) names =
-    let t = Automaton.mk target.Target.globals base in
+    let t = AT.mk target.Target.globals base in
     let decls = Buffer.create 128 in (* initial size - grows as needed *)
     let rec assign env n =
         try 
@@ -449,7 +461,7 @@ let globals env target (base:Rtl.exp) names =
                 (* sig is string representation of this declaration *)
                 let sign  = Printf.sprintf "[%d <%s>]" w h' in
                 let ()    = Buffer.add_string decls sign    in
-                let loc   = Automaton.ty t w h in
+                let loc   = AT.allocate t w h in
                 let entry = ( rgn
                             , (F.Register({reg with F.loc = Some loc}),ty)
                             ) in F.rebindv n entry env
@@ -458,7 +470,7 @@ let globals env target (base:Rtl.exp) names =
         with Error.ErrorExn msg -> Impossible.impossible msg
     in
     let env = List.fold_left assign env names in
-        env, Automaton.freeze t, Digest.string (Buffer.contents decls)    
+        env, AT.freeze t, Digest.string (Buffer.contents decls)    
 @
 
 
@@ -480,9 +492,9 @@ type state =
     ; node:         G.node           (* node following current unit    *)   
     ; outbase:      Rtl.exp          (* addr of OUTGOING area          *)   
     ; inbase:       Rtl.exp          (* addr of INCOMING ares          *)
-    ; outgoing:     Area.t list      (* areas to be overlayed in OUTGOING *)   
-    ; incoming:     Area.t list      (* ditto for INCOMING *)
-    ; conts:        string list      (* local continuations *)    
+    ; outgoing:     Block.t list     (* areas to be overlayed in OUTGOING *)   
+    ; incoming:     Block.t list     (* ditto for INCOMING *)
+    ; conts:        Contn.t Strutil.Map.t   (* local continuations *)    
     }
 @
     
@@ -863,7 +875,7 @@ and collect them in [[state.conts]]. Therefore we simply add the
 and contStmt state (label,args)  = 
     let cc      = state.target.Target.cc default_cc              in
     let args    = List.map (formal state.env) args in
-    let atm     = Automaton.mk cc.Target.cont state.inbase       in
+    let atm     = AT.mk cc.Target.cont state.inbase       in
     let copy,area,uses = IO.copyin state.cfg args 
                   cc.Target.cont state.inbase state.node in
     let symbol  = match F.findv label state.env with
@@ -873,7 +885,6 @@ and contStmt state (label,args)  =
     let result  = { state with
                     node     = copy
                   ; incoming = area :: state.incoming
-                  ; conts    = label :: state.conts
                   } in
         result
 @
@@ -884,7 +895,7 @@ and contStmt state (label,args)  =
     in that activations. This is where the [[cut to]] statement puts
     the \emph{outgoing} overflow parameters. Some abstraction for a
     continuation's runt-time representation, similar to
-    [[Automaton.loc]] might be appropriate. --CL
+    [[AT.loc]] might be appropriate. --CL
 \end{quote}
 
 <<Make statements>>=
@@ -920,15 +931,22 @@ and switchStmt    state x  = Impossible.unimp "switch"
     for the procedure or is this handled on the assermbler level? --CL
 \end{quote}
 
+For each continuation we have reserved memory on the stack that must be
+initialized when the procedure is entered. The following function
+inserts this code into the procedure.
+
 <<Make procedure>>=
-let create_cont (a:Automaton.t) (sp:Rtl.loc) (env:F.env) (label:string) =
-    let reference, sym = match F.findv label env with
-        | (_, (F.Continuation(r,s),_)) -> r,s
-        | _                            -> assert false in
-    Cont.allocate a sp sym reference
-        
-let init_cont (cfg:G.cfg) (c:Cont.t) =
-  ignore (List.fold_left G.gm_insert_assign_after (G.entry cfg) (Cont.init c))
+let init_cont env (cfg:G.cfg) (target:Target.t) (cc:Target.cc) 
+                                                        label (c:Contn.t) = 
+    let ptr  = target.Target.pointersize in
+    let sp   = cc.Target.sp in
+    let sym  = match F.findv label env with
+         | (_, (F.Continuation(r,s),_)) -> s
+         | _                            -> assert false in
+    let pc   = Rtl.link sym ptr in
+    let rtls = Contn.init c sp pc in
+        ignore (List.fold_left G.gm_insert_assign_after (G.entry cfg) rtls)
+    
 @
 
 In the [[freeze]] function we fix the stack layout. The results in an
@@ -937,22 +955,31 @@ compile-time constants. A substitution replaces all these symbolic
 values with expressions in the body of the procedure. In another step,
 all {\rtl}s in a {\cfg} are simplified, using constant folding.
 
-We are hardcofing the stack layout here for all targets. This seems a
+We are hardcoding the stack layout here for all targets. This seems a
 bad idea.
+
+The
 
 <<Make procedure>>=
 let freeze (p:Proc.t) = 
     let stack = [ p.Proc.outgoing               (* our stack layout *)
                 ; p.Proc.stackd
-                ; Automaton.freeze p.Proc.priv
+                ; p.Proc.conts
+                ; AT.freeze p.Proc.priv
                 ; p.Proc.incoming
                 ] in
-    let stack,eqns = Area.concat stack p.Proc.eqns in
-    let solution = Const.solve eqns in
-    let ()       = assert (solution.Const.dependent = []) in
-    let ()       = assert (solution.Const.known <>    []) in
-    let map      = Strutil.assoc2map solution.Const.known     in
-    
+    let pointer  = p.Proc.target.Target2.pointersize in            
+    let stack    = Block.cat_list stack in
+    let eqns     = p.Proc.eqns @ (Block.constraints stack) in
+    let solution = Const2.solve pointer eqns in
+    let ()       = assert (solution.Const2.dependent = []) in
+    let ()       = assert (solution.Const2.known <>    []) in
+    let map      = Strutil.assoc2map solution.Const2.known     in
+    (*
+     * let ()       = List.iter 
+     *               (fun (key,_) -> Printf.printf "%s\n" key) 
+     *                solution.Const2.known in 
+     *)
     (* The guard protects the subst function. If the guard is true
      * the subst function is applied to an expression *)
     let guard    = function
@@ -983,26 +1010,24 @@ let proc env target optimizer asm (cconv,name,args,bdy) =
     let cc          = target.Target.cc (Aux.Option.get default_cc cconv) in
     let sp          = Rtl.fetch (cc.Target.sp) pointer in (* stack pointer *)
     let cfg         = G.mk target (Rtl.par []) in (* empty control-flow graph *)
-    (* symbolic compile-time constants to be used for stack areas *)
-    let eqns        = Const.empty pointer          in (* eqns over pointers *)
+    (* symbolic late compile-time constants to be used for stack areas *)
     let sp_offset k = Rtl.app (Rtl.opr "add" [pointer]) [sp;k] in
     let stack       = sp_offset (Rtl.late "stackdata" pointer) in
     let inb         = sp_offset (Rtl.late "inbase"    pointer) in
     let outb        = sp_offset (Rtl.late "outbase"   pointer) in
     let privb       = sp_offset (Rtl.late "private"   pointer) in
-    let eqns        = Const.make_equal sp outb eqns in
     (* calculate amount of user stack data - updates env! *)
-    let stackd      = Area.mk stack in
-    let ( env, stackd, conts) = StackData.proc env target stackd bdy in
+    let stackd      = Memalloc.mk stack in
+    let ( env, stackd, conts) = StackData.proc env target stackd cc bdy in
     (* priv provides spill slots etc *)    
-    let priv        = Automaton.mk target.Target.stack_slots privb in
+    let priv        = AT.mk target.Target.stack_slots privb in
     (* build CFG for body *)                    
     let exit_label  = Idgen.exit name in
     let exit_symbol = F.symbol env exit_label in
     let exit        = G.gm_label cfg exit_label exit_symbol (G.exit cfg) in
     (* dummy area in outgoing area because the the body of the procedure
        might not create any. This would confuse Area.overlap below *)
-    let dummy       = Area.freeze (Area.mk outb) in   
+    let dummy       = Block.mk outb 0 1 in   
     let state = (* this is needed for translation of the body *)
         { proc      = name       (* name of this procedure *)
         ; env       = env        (* fat environment *)
@@ -1013,12 +1038,12 @@ let proc env target optimizer asm (cconv,name,args,bdy) =
         ; outgoing  = [dummy]    (* overlapping areas in outgoing area *)
         ; inbase    = inb
         ; outbase   = outb
-        ; conts     = []         (* continuations *)
+        ; conts     = conts
         } in  
     (* translate body of procedure *)
     let state = foldr body bdy state in
     (* add nodes for incoming parameters *)
-    let atmi  = Automaton.mk cc.Target.proc  state.outbase   in
+    let atmi  = AT.mk cc.Target.proc  state.outbase   in
     let args  = List.map (procformal state.env) args in
     let copy,area,uses = IO.copyin state.cfg args 
                     cc.Target.proc state.inbase state.node    in
@@ -1028,12 +1053,16 @@ let proc env target optimizer asm (cconv,name,args,bdy) =
         ; incoming = area :: state.incoming
         } in
     let _     = G.gm_redirect_all (G.entry cfg) (G.exit cfg) state.node in
-    (* insert initializing assignements for continuations *)
-    let conts = List.map (create_cont priv cc.Target.sp env) state.conts in
-    let ()    = List.iter (init_cont state.cfg) conts in
-    (* prepare stack *)
-    let incoming, eqns = Area.overlap Area.EqualLowEnds state.incoming eqns in
-    let outgoing, eqns = Area.overlap Area.EqualLowEnds state.outgoing eqns in
+    (* insert initializing assignments for continuations *)
+    let () = Strutil.Map.iter (init_cont env cfg target cc) state.conts in
+
+    let incoming = Block.overlap_list Block.Low  state.incoming in
+    let outgoing = Block.overlap_list Block.High state.outgoing in
+    (*
+     * let conts    = Strutil.Map.fold (fun _ c b -> Block.cat c.Contn.block b) 
+     *                (List.tl state.conts) (List.hd state.conts) 
+     *)
+    let conts = Block.mk (Rtl.late "bogus" pointer) 0 1 in (*XXX*) 
     (* order cfg *)
     let ()    = G.gm_enumerate cfg in
     let i =    
@@ -1042,11 +1071,12 @@ let proc env target optimizer asm (cconv,name,args,bdy) =
         ; Proc.target   = target
         ; Proc.temps    = Talloc.Multiple.for_spaces target.Target.spaces
         ; Proc.cfg      = cfg
-        ; Proc.incoming = incoming   (* incoming area *)   
-        ; Proc.outgoing = outgoing   (* outgoing area *)   
-        ; Proc.stackd   = stackd     (* stack data *)
+        ; Proc.incoming = incoming   (* incoming   block *)   
+        ; Proc.outgoing = outgoing   (* outgoing   block *)   
+        ; Proc.stackd   = stackd     (* stack data block *)
         ; Proc.priv     = priv       (* Automaton for spill loc, etc *)
-        ; Proc.eqns     = eqns       (* constraints for compile-time consts *)
+        ; Proc.eqns     = [Const2.equate sp outb] 
+        ; Proc.conts    = conts
         } in
     let () = optimizer i in
     let () = (**) freeze i (**)   in
@@ -1059,29 +1089,40 @@ let proc env target optimizer asm (cconv,name,args,bdy) =
 % ------------------------------------------------------------------ 
 
 Stack data declarations may appear everywhere in a procedure body. We
-process them in a single descent into the body. Each stack data
-declaration allocates memory in the [[mem]] field of the [[state]] record
-that is passed around. A procedure must create entries for all
-continuations in its body that escape it. We simply collect all
-continuations and thus assume that they all escape. This is a gross
-simplification - a more detailed escape analysis would traverse all
-expressions in the body of a procedure and report only those
-continuations that appear in expressions. 
+process them in a single descent into the body. Allocated memory is
+tracked with a [[Memalloc.t]] value in the [[mem]] field of a [[state]]
+value.
+
+A procedure must create entries for all continuations in its body that
+escape it. We simply collect all continuations and thus assume that they
+all escape. This is a gross simplification - a more detailed escape
+analysis would traverse all expressions in the body of a procedure and
+report only those continuations that appear in expressions. 
 
 <<Make stack data declarations>>=
 module StackData = struct 
 
     type state = 
         { env:    F.env
-        ; mem:    Area.builder
+        ; mem:    Memalloc.t
         ; target: Target.t
-        ; conts:  string list
+        ; cc:     Target.cc     (* current calling convention *)  
+        ; conts:  Contn.t Strutil.Map.t
         }
 
+    let contn state name =
+        let ptr       = state.target.Target.pointersize in
+        let wrd       = state.target.Target.wordsize    in
+        let sp        = Rtl.fetch state.cc.Target.sp  ptr in
+        let add       = Rtl.opr "add" [ptr] in
+        let variable  = Rtl.late (Idgen.cont name) ptr in
+        let offset    = Rtl.app add [sp; variable] in
+            state.target.Target.contn offset
+    
     let rec stackdatum state = function
         | A.DatumAt(x,_) -> stackdatum state x
         | A.Label(l) -> 
-            let loc = Area.location state.mem in
+            let loc = Memalloc.current state.mem in
                 let x = F.findv l state.env in
                 ( match x with
                 | (r,(F.Label(F.Stack(None)),t)) ->
@@ -1091,7 +1132,7 @@ module StackData = struct
                     }
                 | _ -> assert false
                 )
-        | A.Align n -> { state with mem = Area.align state.mem n} 
+        | A.Align n -> { state with mem = Memalloc.align state.mem n} 
         | A.MemDecl(ty,size,None) ->
             let w = astwidth state.env ty in
             let s = ( match size with 
@@ -1101,7 +1142,7 @@ module StackData = struct
                         Bits.U.to_int (compile_const state.env state.target e)
                     ) in
             let n = s * w / state.target.Target.memsize in
-                { state with mem = Area.alloc state.mem n} 
+                { state with mem = Memalloc.allocate state.mem n} 
                     
         | _ -> assert false (* illegal memory initializer *)
 
@@ -1110,8 +1151,9 @@ module StackData = struct
         | A.SpanStmt    x      -> spanStmt      state x
         | A.IfStmt      x      -> ifStmt        state x
         | A.SwitchStmt  x      -> switchStmt    state x
-        | A.ContStmt(n,_)      -> { state with 
-                                    conts = n :: state.conts }
+        | A.ContStmt(n,_)      -> 
+           let c = contn state n in
+            { state with conts = Strutil.Map.add n c state.conts } 
         | _                    -> state
 
     and body state = function 
@@ -1128,15 +1170,16 @@ module StackData = struct
     and spanStmt      state x  = Impossible.unimp "span"
     and switchStmt    state x  = Impossible.unimp "switch"
 
-    let proc env target priv bb =
+    let proc env target priv cc bb =
         let state = 
             { env    = env
             ; target = target
             ; mem    = priv
-            ; conts  = []
+            ; conts  = Strutil.Map.empty
+            ; cc     = cc
             } in
         let state = foldl body state bb in 
-                (state.env, Area.freeze state.mem, state.conts)
+                (state.env, Memalloc.freeze state.mem, state.conts)
 
 end (* of module StackData *)
 @
@@ -1307,9 +1350,9 @@ let translate env target ~optimizer prog =
     let ()       = ( () (* asm#export digest *)
                    ; asm#section (target.Target.data_section)
                    ; asm#comment "memory for global registers"
-                   ; asm#align area.Area.align
+                   ; asm#align (Block.alignment area)
                    ; asm#label base_sym
-                   ; asm#addloc area.Area.size
+                   ; asm#addloc (Block.size area)
                    )
     in   
         ( program env target asm optimizer prog 
