@@ -15,6 +15,26 @@
 % l2h substitution forall forall
 % l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
 
+% Table of Contents
+%
+% Checking Static Semantics
+% Interface
+% Implementation -- The 30\,000 feet overview
+% Sub-Modules
+% Auxiliaries
+% Processing target, im-, and export declarations
+% Collecting Type declarations
+% Sorting type declarations
+% Processing type declarations
+% Collecting constant declarations
+% Sorting Constant Declarations
+% Evaluating constant declarations
+% Binding names for values like procedures and registers
+% Checking the static semantics
+% Expression types
+% Checking the static semantics
+
+
 % ------------------------------------------------------------------ 
 \section{Checking Static Semantics}
 % ------------------------------------------------------------------ 
@@ -1332,55 +1352,6 @@ let tyExpr env exp =
 
 let tyAppl opTy argTys = E.ematch argTys (Types.appl opTy) 
 @
-
-%% 
-%% ((type check expression (old)))=
-%% let rec tyFetch : F.env -> A.lvalue -> T.ty E.error = fun env -> function
-%%     | A.LValueAt(x,r) -> E.catch (error r env) (tyFetch env) x
-%%     | A.Var(hint,id)  -> snd (E.Lower.pair (snd (F.findv id env)))
-%%     | A.Mem (t,e,a)   -> 
-%%         let te    = tyExpr env e in
-%%         let t'    = evalTy env t in
-%%         let align = match a with
-%%                     | None   -> 1 (* wrong! bits / memsize *)
-%%                     | Some a when is2power a -> a
-%%                     | Some a -> E.error "alignment not a power of 2"
-%%         in
-%%             E.ematchTriple (te, te, wordTy env) 
-%%             ( function
-%%             | te, t', w when te = w -> t'
-%%             | otherwise -> E.error "memory reference by non-data pointer"
-%%             )
-%% ((type check expression (old)))=
-%%  (* tyAppl: Types.tyscheme -> Types.ty list E.error -> Types.ty E.error *)
-%% and tyAppl opTy argTys = E.ematch argTys (Types.appl opTy) 
-%% @
-%% 
-%% For now we are using the types of the primitive constant operators. 
-%% All primitive runtime operators will go into their own module
-%% [[Primitives]].  So we have to fix the [[lookup]] later.
-%% 
-%% ((type check expression (old)))=
-%% and tyPrimOp env op args =
-%%     let at = List.map (tyExpr env) args                  in
-%%     let ot = snd (Value.lookup op Value.ops) in
-%%         tyAppl ot (E.Raise.list at)
-%% 
-%% ((type check expression (old)))=
-%%  (* tyExpr: F.env -> A.exp -> Types.ty E.error *)
-%% and tyExpr env = function
-%%     | A.ExprAt(x,r) -> E.catch (error r env) (tyExpr env) x
-%%     | A.Int   (str, Some t)          -> evalTy env t
-%%     | A.Int   (str, None)            -> wordTy env
-%%     | A.Float (str, Some t)          -> evalTy env t
-%%     | A.Float (str, None)            -> wordTy env
-%%     | A.Char  (str, Some t)          -> evalTy env t
-%%     | A.Char  (str, None)            -> wordTy env
-%%     | A.Fetch (v)                    -> tyFetch env v
-%%     | A.BinOp (l,op,r)               -> tyPrimOp env op [l;r]
-%%     | A.UnOp  (op,expr)              -> tyPrimOp env op [expr]
-%%     | A.PrimOp(op,args)              -> tyPrimOp env op (List.map snd args)
-%% @
 
 % ------------------------------------------------------------------ 
 \subsubsection{Checking the static semantics}

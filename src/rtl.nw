@@ -415,10 +415,19 @@ let bool p = if p then true' else false'
 Note that the width used in a bit vector is the [[width]] argument,
 \emph{not} the width buried inside the bit vector itself.  We do things
 this way to support type-directed partial evaluation; the [[width]]
-argument is normally static. (??? I'd like to see this reviewed. --CL)
+argument is normally static. 
+
+\begin{note}\it
+    Literals are currently stored in 64 bit wide bit vectors
+    ([[Bits.bits]]). There types, however, as noted in [[Rtl.rtl]]s
+    might be smaller.  The reason is, that the types of literals are
+    unknown during scanning and parsing. So every literal is first
+    stored in maximal bit vector and gets its type assigned later. --CL
+\end{note}
+
 
 <<definitions of types and functions exported at top level>>=
-let bits (bvector, w) width = (assert (w = width); Const (Bits(bvector,width)))
+let bits (bvector, w) width = (assert (w >= width); Const (Bits(bvector,width)))
 let link name width         = Const (Link(name,width))
 let fetch loc width         = Fetch(loc,width)
 let app op exprs            = App(op,exprs)
