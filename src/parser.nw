@@ -156,6 +156,11 @@ implementation.
         ; ("unicode"        , P.UNICODE)
         ; ("unwinds"        , P.UNWINDS)
 
+        ; ("float"          , P.FLOATREPR)
+        ; ("charset"        , P.CHARSET)
+        ; ("pointersize"    , P.PTRSIZE)
+        ; ("wordsize"       , P.WRDSIZE)
+
         |]
 @
 
@@ -715,6 +720,11 @@ together with their positions.
     | P.DOTDOT            -> "DOTDOT"
     | P.SWITCH            -> "SWITCH"
 
+    | P.WRDSIZE           -> "WORSIZE"
+    | P.PTRSIZE           -> "POINTERSIZE"
+    | P.FLOATREPR         -> "FLOAT"
+    | P.CHARSET           -> "CHARSET"
+    
 
     | P.AMPERSAND(s)      -> "AMPERSAND(" ^ s ^ ")"
     | P.BAR(s)            -> "BAR(" ^       s ^ ")"
@@ -798,6 +808,7 @@ let mkTypedefs ty names =
 %token LBRACKET LITTLE LPAREN MEMSIZE PPERCENT RBRACE RBRACKET REGISTER
 %token RETURN RETURNS RPAREN SECTION SEMI SPAN STACKDATA SWITCH TARGET
 %token TARGETS TO TYPEDEF UNICODE UNWINDS
+%token WRDSIZE PTRSIZE FLOATREPR CHARSET
 
 /* pragmas */
 
@@ -885,9 +896,14 @@ decl        :   INVARIANT REGISTER registers SEMI
             |   TYPEDEF ty names SEMI          { A.Typedef($2,rev $3)      }
             |   TARGET properties SEMI         { A.Target(rev $2)          }
 <<>>=
-property    :   MEMSIZE INT                    { A.Memsize(Bits.to_int $2) }
-            |   BYTEORDER BIG                  { A.ByteorderBig     }
-            |   BYTEORDER LITTLE               { A.ByteorderLittle  }
+property    :   MEMSIZE INT                    { A.Memsize(Bits.to_int $2)      }
+            |   BYTEORDER BIG                  { A.ByteorderBig                 }
+            |   BYTEORDER LITTLE               { A.ByteorderLittle              }
+            |   FLOATREPR STR                  { A.FloatRepr $2                }
+            |   CHARSET STR                    { A.Charset $2                   }
+            |   PTRSIZE INT                    { A.PointerSize (Bits.to_int $2) }
+            |   WRDSIZE INT                    { A.WordSize (Bits,to_int $2)    }
+
 <<>>=
 properties  :   properties property            { $2 :: $1 }
             |   /**/                           { []       }
