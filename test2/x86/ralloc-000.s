@@ -5,59 +5,44 @@ Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
 .section .text
 p:
-	leal -44(%esp), %esp
+	leal -12(%esp), %esp
 	nop
-	leal 44(%esp), %eax
-	movl (%eax),%eax
-	movl %eax,40(%esp)
+	leal 12(%esp), %edx
+	movl (%edx),%ecx
 initialize_continuations_l3:
 	movl $1,%eax
-	movl $2,%ecx
-	movl %ecx,32(%esp)
-	movl $0,%ecx
-	movl %ecx,8(%esp)
-	movl 8(%esp),%ecx
+	movl $2,%edx
 	movl %ecx,(%esp)
 	movl $0,%ecx
-	movl %ecx,12(%esp)
-	movl 12(%esp),%ecx
-	movl %ecx,4(%esp)
-	movl $2,%ecx
-	movl %ecx,16(%esp)
-	movl 16(%esp),%ecx
-	movl 32(%esp),%edx
-	cmpl %ecx,%edx
+	movl %ebx,4(%esp)
+	movl $0,%ebx
+	movl %ebp,8(%esp)
+	movl $2,%ebp
+	cmpl %ebp,%edx
 	jge join_l5
 join_l13:
 	jmp join_l6
 join_l5:
-	movl $3,%ecx
-	movl %ecx,20(%esp)
-	movl 20(%esp),%ecx
-	movl %ecx,(%esp)
+	movl $3,%ebp
 	movl $4,%ecx
-	movl %ecx,24(%esp)
-	movl 24(%esp),%ecx
-	movl %ecx,4(%esp)
+	movl %ecx,%ebx
+	movl %ebp,%ecx
 	jmp join_l6
 join_l6:
-	movl 32(%esp),%ecx
+	addl %edx,%eax
 	addl %ecx,%eax
-	movl (%esp),%ecx
-	addl %ecx,%eax
-	movl 4(%esp),%ecx
-	addl %ecx,%eax
+	addl %ebx,%eax
 	nop
-	movl $0,%ecx
-	movl %ecx,36(%esp)
-	leal 44(%esp), %ecx
-	movl %ecx,28(%esp)
-	movl 28(%esp),%ecx
-	movl 36(%esp),%edx
-	addl %edx,%ecx
-	movl %ecx,28(%esp)
-	movl 28(%esp),%ecx
-	movl 40(%esp),%edx
-	movl %edx,(%ecx)
-	leal 44(%esp), %esp
+	movl $0,%ebx
+	leal 12(%esp), %ecx
+	addl %ebx,%ecx
+	movl (%esp),%ebx
+	movl %ebx,(%ecx)
+	movl 8(%esp),%ebp
+	movl 4(%esp),%ebx
+	leal 12(%esp), %esp
 	ret
+.section .pcmap_data
+stackdata_l14:
+.long 0
+.section .text

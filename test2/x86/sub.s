@@ -6,37 +6,29 @@ Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
 .section .text
 f:
-	leal -24(%esp), %esp
+	leal -8(%esp), %esp
 	nop
-	leal 24(%esp), %ecx
-	movl (%ecx),%ecx
-	movl %ecx,20(%esp)
+	leal 8(%esp), %edx
+	movl (%edx),%ecx
 initialize_continuations_l3:
 	nop
 	negl %eax
-	movl $-99,%ecx
-	movl %ecx,4(%esp)
-	movl $4,%ecx
+	movl $-99,%edx
 	movl %ecx,(%esp)
-	leal 24(%esp), %ecx
-	movl %ecx,12(%esp)
-	movl (%esp),%ecx
-	movl 12(%esp),%edx
-	addl %ecx,%edx
-	movl %edx,12(%esp)
-	movl 4(%esp),%ecx
-	movl 12(%esp),%edx
-	movl %ecx,(%edx)
-	movl $0,%ecx
-	movl %ecx,16(%esp)
-	leal 24(%esp), %ecx
-	movl %ecx,8(%esp)
-	movl 8(%esp),%ecx
-	movl 16(%esp),%edx
-	addl %edx,%ecx
-	movl %ecx,8(%esp)
-	movl 8(%esp),%ecx
-	movl 20(%esp),%edx
-	movl %edx,(%ecx)
-	leal 24(%esp), %esp
+	movl $4,%ecx
+	movl %ebx,4(%esp)
+	leal 8(%esp), %ebx
+	addl %ecx,%ebx
+	movl %edx,(%ebx)
+	movl $0,%edx
+	leal 8(%esp), %ebx
+	addl %edx,%ebx
+	movl (%esp),%edx
+	movl %edx,(%ebx)
+	movl 4(%esp),%ebx
+	leal 8(%esp), %esp
 	ret
+.section .pcmap_data
+stackdata_l11:
+.long 0
+.section .text

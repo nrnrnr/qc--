@@ -5,25 +5,24 @@ Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
 .section .text
 p:
-	leal -12(%esp), %esp
+	leal -4(%esp), %esp
 	nop
-	leal 12(%esp), %ecx
-	movl (%ecx),%ecx
-	movl %ecx,8(%esp)
+	leal 4(%esp), %edx
+	movl (%edx),%ecx
 initialize_continuations_l3:
 	nop
-	addl %eax,%eax
-	movl (%eax),%eax
-	movl $0,%ecx
-	movl %ecx,4(%esp)
-	leal 12(%esp), %ecx
+	movl %eax,%edx
+	addl %eax,%edx
+	movl (%edx),%eax
+	movl $0,%edx
 	movl %ecx,(%esp)
-	movl (%esp),%ecx
-	movl 4(%esp),%edx
+	leal 4(%esp), %ecx
 	addl %edx,%ecx
-	movl %ecx,(%esp)
-	movl (%esp),%ecx
-	movl 8(%esp),%edx
+	movl (%esp),%edx
 	movl %edx,(%ecx)
-	leal 12(%esp), %esp
+	leal 4(%esp), %esp
 	ret
+.section .pcmap_data
+stackdata_l11:
+.long 0
+.section .text

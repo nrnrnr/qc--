@@ -55,114 +55,147 @@ join_l8:
 	nop
 	movl $0,%eax
 	leal 8(%esp), %ecx
-	movl %ecx,4(%esp)
-	movl $0,%ecx
-	leal 8(%esp), %edx
-	addl %ecx,%edx
-	movl 4(%esp),%ecx
-	movl (%ecx),%ecx
-	movl %ecx,(%edx)
+	movl $0,%edx
+	movl %ebx,4(%esp)
+	leal 8(%esp), %ebx
+	addl %edx,%ebx
+	movl (%ecx),%edx
+	movl %edx,(%ebx)
+	movl 4(%esp),%ebx
 	leal 8(%esp), %esp
 	ret
+.section .pcmap_data
+stackdata_l15:
+.long 0
+.section .pcmap
+.long join_l8
+.long frame_l16
+.section .pcmap_data
+frame_l16:
+.long 0xfffffff8
+.long 0x80000004
+.long 0x80000000
+.long stackdata_l15
+.long 0x80000008
+.long 0x80000000
+.long 0x80000000
+.long 0x80000000
+.long 0x40000007
+.long 0x40000007
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
+.long 0x4000000b
+.section .text
 nested:
 	leal -4(%esp), %esp
-	movl $4,%ecx
+	movl $4,%edx
+	leal 4(%esp), %ecx
+	addl %edx,%ecx
+	movl (%ecx),%edx
+	movl $8,%ecx
 	leal 4(%esp), %eax
 	addl %ecx,%eax
-	movl (%eax),%eax
-	movl $8,%ecx
-	leal 4(%esp), %edx
-	addl %ecx,%edx
-	movl (%edx),%ecx
+	movl (%eax),%ecx
 	nop
-initialize_continuations_l17:
-	movl $4,%edx
-	cmpl %edx,%eax
-	jge join_l31
-join_l32:
-	movl $114,%edx
-	cmpl %edx,%ecx
-	je join_l30
-join_l42:
+initialize_continuations_l19:
+	movl $4,%eax
+	cmpl %eax,%edx
+	jge join_l33
+join_l34:
+	movl $114,%eax
+	cmpl %eax,%ecx
+	je join_l32
+join_l44:
 	jmp L.6
-join_l30:
+join_l32:
 	jmp L.9
-join_l31:
+join_l33:
 	jmp L.6
 L.6:
-	movl $1,%edx
-	cmpl %edx,%eax
-	jne join_l28
+	movl $1,%eax
+	cmpl %eax,%edx
+	jne join_l30
+join_l31:
+	movl $104,%eax
+	cmpl %eax,%ecx
+	je join_l28
 join_l29:
-	movl $104,%edx
-	cmpl %edx,%ecx
-	je join_l26
-join_l27:
-	movl $105,%edx
-	cmpl %edx,%ecx
-	je join_l25
-join_l41:
+	movl $105,%eax
+	cmpl %eax,%ecx
+	je join_l27
+join_l43:
 	jmp L.8
-join_l25:
-	jmp L.9
-join_l26:
+join_l27:
 	jmp L.9
 join_l28:
+	jmp L.9
+join_l30:
 	jmp L.8
 L.8:
-	movl $2,%edx
-	cmpl %edx,%eax
-	jne join_l23
-join_l24:
+	movl $2,%eax
+	cmpl %eax,%edx
+	jne join_l25
+join_l26:
 	movl $111,%eax
 	cmpl %eax,%ecx
-	je join_l21
-join_l22:
+	je join_l23
+join_l24:
 	movl $121,%eax
 	cmpl %eax,%ecx
-	jne join_l20
-join_l40:
+	jne join_l22
+join_l42:
 	jmp L.9
-join_l20:
-	jmp L.3
-join_l21:
-	jmp L.9
-L.9:
-	movl %ecx,%eax
+join_l22:
 	jmp L.3
 join_l23:
+	jmp L.9
+L.9:
+	jmp L.3
+join_l25:
 	jmp L.3
 L.3:
 	nop
-	movl $0,%eax
-	leal 4(%esp), %ecx
-	movl %ecx,(%esp)
 	movl $0,%ecx
-	leal 4(%esp), %edx
-	addl %ecx,%edx
-	movl (%esp),%ecx
-	movl (%ecx),%ecx
-	movl %ecx,(%edx)
+	movl %ecx,%eax
+	leal 4(%esp), %ecx
+	movl $0,%edx
+	movl %ebx,(%esp)
+	leal 4(%esp), %ebx
+	addl %edx,%ebx
+	movl (%ecx),%edx
+	movl %edx,(%ebx)
+	movl (%esp),%ebx
 	leal 4(%esp), %esp
 	ret
+.section .pcmap_data
+stackdata_l45:
+.long 0
+.section .text
 s:
 	nop
-	movl $4,%ecx
-	movl %esp,%eax
-	addl %ecx,%eax
-	movl (%eax),%eax
+	movl $4,%edx
+	movl %esp,%ecx
+	addl %edx,%ecx
+	movl (%ecx),%edx
 	nop
-initialize_continuations_l45:
+initialize_continuations_l48:
 L.12:
 	nop
-	movl %esp,%eax
-	movl $0,%ecx
 	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl $0,%ecx
+	movl %esp,%eax
+	addl %ecx,%eax
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l57:
+.long 0
+.section .text
 .section .data
 .align 4
 Dy:
@@ -176,131 +209,163 @@ Dz:
 Dfunc:
 	nop
 	nop
-initialize_continuations_l56:
+initialize_continuations_l60:
 	nop
-	movl %esp,%eax
-	movl $0,%ecx
 	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl $0,%ecx
+	movl %esp,%eax
+	addl %ecx,%eax
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l69:
+.long 0
+.section .text
 f:
 	nop
 	nop
-initialize_continuations_l67:
+initialize_continuations_l72:
 	nop
-	movl %esp,%eax
-	movl $0,%ecx
 	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl $0,%ecx
+	movl %esp,%eax
+	addl %ecx,%eax
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l81:
+.long 0
+.section .text
 f1:
 	nop
 	nop
-initialize_continuations_l78:
+initialize_continuations_l84:
 	nop
-	movl %esp,%eax
-	movl $0,%ecx
 	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl $0,%ecx
+	movl %esp,%eax
+	addl %ecx,%eax
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l93:
+.long 0
+.section .text
 f2:
 	nop
-	movl $4,%ecx
-	movl %esp,%eax
-	addl %ecx,%eax
-	movl (%eax),%eax
-	movl $8,%ecx
-	movl %esp,%eax
-	addl %ecx,%eax
-	movl (%eax),%eax
+	movl $4,%edx
+	movl %esp,%ecx
+	addl %edx,%ecx
+	movl (%ecx),%edx
+	movl $8,%edx
+	movl %esp,%ecx
+	addl %edx,%ecx
+	movl (%ecx),%edx
 	nop
-initialize_continuations_l89:
+initialize_continuations_l96:
 	nop
-	movl %esp,%eax
-	movl $0,%ecx
 	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl $0,%ecx
+	movl %esp,%eax
+	addl %ecx,%eax
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l105:
+.long 0
+.section .text
 g:
 	nop
-	movl $4,%ecx
+	movl $4,%edx
+	movl %esp,%ecx
+	addl %edx,%ecx
+	movl (%ecx),%edx
+	nop
+initialize_continuations_l108:
+	nop
+	movl %esp,%edx
+	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
-	movl (%eax),%eax
-	nop
-initialize_continuations_l100:
-	nop
-	movl %esp,%eax
-	movl $0,%ecx
-	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l117:
+.long 0
+.section .text
 h:
 	nop
-	movl $4,%ecx
+	movl $4,%edx
+	movl %esp,%ecx
+	addl %edx,%ecx
+	movl (%ecx),%edx
+	nop
+initialize_continuations_l120:
+	nop
+	movl %esp,%edx
+	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
-	movl (%eax),%eax
-	nop
-initialize_continuations_l111:
-	nop
-	movl %esp,%eax
-	movl $0,%ecx
-	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l129:
+.long 0
+.section .text
 h1:
 	nop
-	movl $4,%ecx
-	movl %esp,%eax
-	addl %ecx,%eax
-	movl (%eax),%eax
-	movl $8,%ecx
-	movl %esp,%eax
-	addl %ecx,%eax
-	movl (%eax),%eax
+	movl $4,%edx
+	movl %esp,%ecx
+	addl %edx,%ecx
+	movl (%ecx),%edx
+	movl $8,%edx
+	movl %esp,%ecx
+	addl %edx,%ecx
+	movl (%ecx),%edx
 	nop
-initialize_continuations_l122:
+initialize_continuations_l132:
 	nop
-	movl %esp,%eax
-	movl $0,%ecx
 	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl $0,%ecx
+	movl %esp,%eax
+	addl %ecx,%eax
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l141:
+.long 0
+.section .text
 h2:
 	nop
 	nop
-initialize_continuations_l133:
+initialize_continuations_l144:
 	nop
-	movl %esp,%eax
-	movl $0,%ecx
 	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl $0,%ecx
+	movl %esp,%eax
+	addl %ecx,%eax
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l153:
+.long 0
+.section .text
 .section .data
 .align 4
 L.23:
@@ -309,16 +374,20 @@ L.23:
 set1:
 	nop
 	nop
-initialize_continuations_l144:
+initialize_continuations_l156:
 	nop
-	movl %esp,%eax
-	movl $0,%ecx
 	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl $0,%ecx
+	movl %esp,%eax
+	addl %ecx,%eax
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l165:
+.long 0
+.section .text
 .section .data
 .align 4
 L.25:
@@ -327,42 +396,54 @@ L.25:
 set2:
 	nop
 	nop
-initialize_continuations_l155:
+initialize_continuations_l168:
 	nop
-	movl %esp,%eax
-	movl $0,%ecx
 	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl $0,%ecx
+	movl %esp,%eax
+	addl %ecx,%eax
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l177:
+.long 0
+.section .text
 i_goo:
 	nop
 	nop
-initialize_continuations_l166:
+initialize_continuations_l180:
 	nop
-	movl %esp,%eax
-	movl $0,%ecx
 	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl $0,%ecx
+	movl %esp,%eax
+	addl %ecx,%eax
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l189:
+.long 0
+.section .text
 sss:
 	nop
 	nop
-initialize_continuations_l177:
+initialize_continuations_l192:
 	nop
-	movl %esp,%eax
-	movl $0,%ecx
 	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl $0,%ecx
+	movl %esp,%eax
+	addl %ecx,%eax
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l201:
+.long 0
+.section .text
 .section .bss
 .align 4
 L.29:
@@ -370,165 +451,202 @@ L.29:
 .section .text
 rrr:
 	nop
-	movl $4,%ecx
+	movl $4,%edx
+	movl %esp,%ecx
+	addl %edx,%ecx
+	movl (%ecx),%edx
+	nop
+initialize_continuations_l204:
+	nop
+	movl %esp,%edx
+	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
-	movl (%eax),%eax
-	nop
-initialize_continuations_l188:
-	nop
-	movl %esp,%eax
-	movl $0,%ecx
-	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l213:
+.long 0
+.section .text
 setstatic:
 	nop
 	nop
-initialize_continuations_l199:
+initialize_continuations_l216:
 	nop
-	movl %esp,%eax
-	movl $0,%ecx
 	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl $0,%ecx
+	movl %esp,%eax
+	addl %ecx,%eax
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l225:
+.long 0
+.section .text
 gx1:
 	leal -16(%esp), %esp
-	movl $4,%ecx
+	movl $4,%edx
+	leal 16(%esp), %ecx
+	addl %edx,%ecx
+	movl $-16,%edx
 	leal 16(%esp), %eax
-	addl %ecx,%eax
-	movl $-16,%ecx
-	leal 16(%esp), %edx
-	addl %ecx,%edx
-	fildq (%eax)
-	fistpq (%edx)
+	addl %edx,%eax
+	fildq (%ecx)
+	fistpq (%eax)
 	nop
-initialize_continuations_l210:
+initialize_continuations_l228:
 	nop
 	leal 16(%esp), %eax
 	movl $0,%ecx
 	leal 16(%esp), %edx
 	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl (%eax),%ecx
+	movl %ecx,(%edx)
 	leal 16(%esp), %esp
 	ret
+.section .pcmap_data
+stackdata_l237:
+.long 1
+.long 0xfffffff8
+.section .text
 ff1:
 	leal -8(%esp), %esp
-	movl $4,%ecx
+	movl $4,%edx
+	leal 8(%esp), %ecx
+	addl %edx,%ecx
+	movl $-8,%edx
 	leal 8(%esp), %eax
-	addl %ecx,%eax
-	movl $-8,%ecx
-	leal 8(%esp), %edx
-	addl %ecx,%edx
-	fildq (%eax)
-	fistpq (%edx)
-	movl $12,%ecx
-	leal 8(%esp), %eax
-	addl %ecx,%eax
-	movl (%eax),%eax
+	addl %edx,%eax
+	fildq (%ecx)
+	fistpq (%eax)
+	movl $12,%eax
+	leal 8(%esp), %ecx
+	addl %eax,%ecx
+	movl (%ecx),%eax
 	nop
-initialize_continuations_l221:
+initialize_continuations_l240:
 	nop
 	leal 8(%esp), %eax
 	movl $0,%ecx
 	leal 8(%esp), %edx
 	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl (%eax),%ecx
+	movl %ecx,(%edx)
 	leal 8(%esp), %esp
 	ret
+.section .pcmap_data
+stackdata_l249:
+.long 0
+.section .text
 gg1:
 	nop
-	movl $4,%ecx
-	movl %esp,%eax
-	addl %ecx,%eax
-	movl (%eax),%eax
-	movl $8,%ecx
-	movl %esp,%eax
-	addl %ecx,%eax
-	movl (%eax),%eax
+	movl $4,%edx
+	movl %esp,%ecx
+	addl %edx,%ecx
+	movl (%ecx),%edx
+	movl $8,%edx
+	movl %esp,%ecx
+	addl %edx,%ecx
+	movl (%ecx),%edx
 	nop
-initialize_continuations_l232:
+initialize_continuations_l252:
 	nop
-	movl %esp,%eax
-	movl $0,%ecx
 	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl $0,%ecx
+	movl %esp,%eax
+	addl %ecx,%eax
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l261:
+.long 0
+.section .text
 hh1:
 	nop
-	movl $4,%ecx
+	movl $4,%edx
+	movl %esp,%ecx
+	addl %edx,%ecx
+	movl (%ecx),%edx
+	nop
+initialize_continuations_l264:
+	nop
+	movl %esp,%edx
+	movl $0,%ecx
 	movl %esp,%eax
 	addl %ecx,%eax
-	movl (%eax),%eax
-	nop
-initialize_continuations_l243:
-	nop
-	movl %esp,%eax
-	movl $0,%ecx
-	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l273:
+.long 0
+.section .text
 cmp:
 	nop
-	movl $4,%ecx
-	movl %esp,%eax
-	addl %ecx,%eax
-	movl (%eax),%eax
-	movl $8,%ecx
-	movl %esp,%eax
-	addl %ecx,%eax
-	movl (%eax),%eax
-	nop
-initialize_continuations_l254:
-	nop
-	movl %esp,%eax
-	movl $0,%ecx
-	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
-	nop
-	ret
-sort:
-	nop
-	nop
-initialize_continuations_l265:
-	nop
-	movl %esp,%eax
-	movl $0,%ecx
-	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
-	nop
-	ret
-onearg:
-	nop
+	movl $4,%edx
+	movl %esp,%ecx
+	addl %edx,%ecx
+	movl (%ecx),%edx
+	movl $8,%edx
+	movl %esp,%ecx
+	addl %edx,%ecx
+	movl (%ecx),%edx
 	nop
 initialize_continuations_l276:
 	nop
-	movl %esp,%eax
-	movl $0,%ecx
 	movl %esp,%edx
-	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl $0,%ecx
+	movl %esp,%eax
+	addl %ecx,%eax
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l285:
+.long 0
+.section .text
+sort:
+	nop
+	nop
+initialize_continuations_l288:
+	nop
+	movl %esp,%edx
+	movl $0,%ecx
+	movl %esp,%eax
+	addl %ecx,%eax
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
+	nop
+	ret
+.section .pcmap_data
+stackdata_l297:
+.long 0
+.section .text
+onearg:
+	nop
+	nop
+initialize_continuations_l300:
+	nop
+	movl %esp,%edx
+	movl $0,%ecx
+	movl %esp,%eax
+	addl %ecx,%eax
+	movl (%edx),%ecx
+	movl %ecx,(%eax)
+	nop
+	ret
+.section .pcmap_data
+stackdata_l309:
+.long 0
+.section .text
 .section .bss
 .align 4
 ss4:

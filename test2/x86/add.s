@@ -31,10 +31,10 @@ bye:
 .section .text
 main:
 	leal -4(%esp), %esp
-	movl $4,%ecx
-	leal 4(%esp), %eax
-	addl %ecx,%eax
-	movl (%eax),%eax
+	movl $4,%eax
+	leal 4(%esp), %ecx
+	addl %eax,%ecx
+	movl (%ecx),%eax
 	movl $8,%ecx
 	leal 4(%esp), %edx
 	addl %ecx,%edx
@@ -66,7 +66,35 @@ join_l7:
 	movl $0,%ecx
 	leal 4(%esp), %edx
 	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl (%eax),%ecx
+	movl %ecx,(%edx)
 	leal 4(%esp), %esp
 	ret
+.section .pcmap_data
+stackdata_l17:
+.long 0
+.section .pcmap
+.long join_l7
+.long frame_l18
+.section .pcmap_data
+frame_l18:
+.long 0xfffffffc
+.long 0x80000004
+.long 0x80000000
+.long stackdata_l17
+.long 0x80000008
+.long 0x80000003
+.long 0x80000000
+.long 0x80000000
+.long 0x40000007
+.long 0x40000007
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
+.long 0x4000000b
+.long 0
+.long 0
+.long 0
+.section .text

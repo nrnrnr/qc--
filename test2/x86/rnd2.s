@@ -7,13 +7,17 @@ Cmm.global_area:
 p:
 	nop
 	nop
-	movl %esp,%eax
-	movl (%eax),%eax
+	movl %esp,%edx
+	movl (%edx),%ecx
 initialize_continuations_l3:
 	nop
-	movl $0,%ecx
-	movl %esp,%edx
-	addl %ecx,%edx
-	movl %eax,(%edx)
+	movl $0,%edx
+	movl %esp,%eax
+	addl %edx,%eax
+	movl %ecx,(%eax)
 	nop
 	ret
+.section .pcmap_data
+stackdata_l11:
+.long 0
+.section .text

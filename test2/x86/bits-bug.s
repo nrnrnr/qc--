@@ -29,14 +29,14 @@ failed:
 .section .text
 main:
 	leal -4(%esp), %esp
-	movl $4,%ecx
-	leal 4(%esp), %eax
-	addl %ecx,%eax
-	movl (%eax),%eax
-	movl $8,%ecx
-	leal 4(%esp), %eax
-	addl %ecx,%eax
-	movl (%eax),%eax
+	movl $4,%eax
+	leal 4(%esp), %ecx
+	addl %eax,%ecx
+	movl (%ecx),%eax
+	movl $8,%eax
+	leal 4(%esp), %ecx
+	addl %eax,%ecx
+	movl (%ecx),%eax
 	nop
 initialize_continuations_l3:
 	nop
@@ -55,23 +55,50 @@ join_l7:
 	movl $0,%ecx
 	leal 4(%esp), %edx
 	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl (%eax),%ecx
+	movl %ecx,(%edx)
 	leal 4(%esp), %esp
 	ret
+.section .pcmap_data
+stackdata_l14:
+.long 0
+.section .pcmap
+.long join_l7
+.long frame_l15
+.section .pcmap_data
+frame_l15:
+.long 0xfffffffc
+.long 0x80000004
+.long 0x80000000
+.long stackdata_l14
+.long 0x80000008
+.long 0x80000002
+.long 0x80000000
+.long 0x80000000
+.long 0x40000007
+.long 0x40000007
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
+.long 0x4000000b
+.long 0
+.long 0
+.section .text
 .section .text
 callee:
 	leal -4(%esp), %esp
-	movl $4,%ecx
-	leal 4(%esp), %eax
-	addl %ecx,%eax
-	movl (%eax),%eax
+	movl $4,%eax
+	leal 4(%esp), %ecx
+	addl %eax,%ecx
+	movl (%ecx),%eax
 	nop
-initialize_continuations_l16:
+initialize_continuations_l18:
 	movl $-1420500317,%ecx
 	cmpl %ecx,%eax
-	jne join_l25
-join_l26:
+	jne join_l27
+join_l28:
 	nop
 	leal success,%eax
 	movl $-4,%ecx
@@ -80,7 +107,7 @@ join_l26:
 	movl %eax,(%edx)
 	nop
 	call printf
-join_l20:
+join_l22:
 	nop
 	nop
 	nop
@@ -88,11 +115,11 @@ join_l20:
 	movl $0,%ecx
 	leal 4(%esp), %edx
 	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl (%eax),%ecx
+	movl %ecx,(%edx)
 	leal 4(%esp), %esp
 	ret
-join_l25:
+join_l27:
 	nop
 	leal failed,%eax
 	movl $-4,%ecx
@@ -101,7 +128,7 @@ join_l25:
 	movl %eax,(%edx)
 	nop
 	call printf
-join_l24:
+join_l26:
 	nop
 	nop
 	nop
@@ -109,7 +136,55 @@ join_l24:
 	movl $0,%ecx
 	leal 4(%esp), %edx
 	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl (%eax),%ecx
+	movl %ecx,(%edx)
 	leal 4(%esp), %esp
 	ret
+.section .pcmap_data
+stackdata_l35:
+.long 0
+.section .pcmap
+.long join_l26
+.long frame_l36
+.section .pcmap_data
+frame_l36:
+.long 0xfffffffc
+.long 0x80000004
+.long 0x80000000
+.long stackdata_l35
+.long 0x80000008
+.long 0x80000001
+.long 0x80000000
+.long 0x80000000
+.long 0x40000007
+.long 0x40000007
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
+.long 0x4000000b
+.long 0
+.section .pcmap
+.long join_l22
+.long frame_l37
+.section .pcmap_data
+frame_l37:
+.long 0xfffffffc
+.long 0x80000004
+.long 0x80000000
+.long stackdata_l35
+.long 0x80000008
+.long 0x80000001
+.long 0x80000000
+.long 0x80000000
+.long 0x40000007
+.long 0x40000007
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
+.long 0x4000000b
+.long 0
+.section .text

@@ -47,22 +47,22 @@ initialize_continuations_l3:
 	movl %eax,(%edx)
 	leal x,%eax
 	flds (%eax)
-	movl $-24,%ecx
+	movl $-24,%eax
+	leal 28(%esp), %edx
+	addl %eax,%edx
+	fstpl (%edx)
+	leal y,%edx
+	flds (%edx)
+	movl $-16,%edx
 	leal 28(%esp), %eax
-	addl %ecx,%eax
-	fstpl (%eax)
-	leal y,%eax
-	flds (%eax)
-	movl $-16,%ecx
-	leal 28(%esp), %eax
-	addl %ecx,%eax
+	addl %edx,%eax
 	fstpl (%eax)
 	leal z,%eax
 	flds (%eax)
-	movl $-8,%ecx
-	leal 28(%esp), %eax
-	addl %ecx,%eax
-	fstpl (%eax)
+	movl $-8,%eax
+	leal 28(%esp), %edx
+	addl %eax,%edx
+	fstpl (%edx)
 	nop
 	call printf
 join_l7:
@@ -73,7 +73,32 @@ join_l7:
 	movl $0,%ecx
 	leal 28(%esp), %edx
 	addl %ecx,%edx
-	movl (%eax),%eax
-	movl %eax,(%edx)
+	movl (%eax),%ecx
+	movl %ecx,(%edx)
 	leal 28(%esp), %esp
 	ret
+.section .pcmap_data
+stackdata_l14:
+.long 0
+.section .pcmap
+.long join_l7
+.long frame_l15
+.section .pcmap_data
+frame_l15:
+.long 0xffffffe4
+.long 0x80000004
+.long 0x80000000
+.long stackdata_l14
+.long 0x80000008
+.long 0x80000000
+.long 0x80000000
+.long 0x80000000
+.long 0x40000007
+.long 0x40000007
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
+.long 0x4000000b
+.section .text

@@ -39,116 +39,181 @@ nl:
 .byte 0
 .section .text
 print:
-	leal -24(%esp), %esp
-	movl %eax,16(%esp)
+	leal -28(%esp), %esp
 	movl $4,%ecx
-	leal 24(%esp), %eax
-	addl %ecx,%eax
-	movl (%eax),%eax
-	movl %eax,20(%esp)
+	leal 28(%esp), %edx
+	addl %ecx,%edx
+	movl (%edx),%ecx
 	nop
-	leal 24(%esp), %eax
-	movl (%eax),%eax
-	movl %eax,12(%esp)
-	movl %ebx,8(%esp)
+	leal 28(%esp), %edx
+	movl (%edx),%edx
 initialize_continuations_l3:
-	movl $0,%ebx
+	movl %eax,8(%esp)
+	movl $0,%eax
 	jmp loop
 loop:
 	nop
-	movl $-20,%ecx
-	leal 24(%esp), %eax
-	addl %ecx,%eax
-	movl 16(%esp),%ecx
-	movl (%ecx),%ecx
-	movl %ecx,(%eax)
-	leal msg,%eax
+	movl %ecx,12(%esp)
 	movl $-24,%ecx
-	leal 24(%esp), %edx
+	movl %edx,16(%esp)
+	leal 28(%esp), %edx
 	addl %ecx,%edx
-	movl %eax,(%edx)
+	movl %ebx,20(%esp)
+	movl 8(%esp),%ecx
+	movl (%ecx),%ebx
+	movl %ebx,(%edx)
+	leal msg,%edx
+	movl $-28,%ebx
+	movl %ecx,8(%esp)
+	leal 28(%esp), %ecx
+	addl %ebx,%ecx
+	movl %edx,(%ecx)
 	nop
+	movl %eax,24(%esp)
 	call printf
 join_l12:
 	nop
 	nop
 	movl $1,%eax
-	addl %eax,%ebx
-	movl $4,%ecx
-	movl 16(%esp),%eax
-	addl %ecx,%eax
-	movl %eax,16(%esp)
-	movl 20(%esp),%eax
-	cmpl %eax,%ebx
+	movl 24(%esp),%ecx
+	addl %eax,%ecx
+	movl $4,%eax
+	movl 8(%esp),%edx
+	addl %eax,%edx
+	movl 12(%esp),%eax
+	cmpl %eax,%ecx
 	jl join_l8
 join_l9:
 	nop
-	leal nl,%edx
-	movl $-24,%ecx
-	leal 24(%esp), %eax
-	addl %ecx,%eax
-	movl %edx,(%eax)
+	leal nl,%eax
+	movl $-28,%ebx
+	leal 28(%esp), %ecx
+	addl %ebx,%ecx
+	movl %eax,(%ecx)
 	nop
 	call printf
 join_l7:
 	nop
 	nop
 	nop
-	movl $4,%ecx
-	leal 24(%esp), %eax
-	addl %ecx,%eax
-	movl 12(%esp),%ecx
-	movl %ecx,(%eax)
-	movl 8(%esp),%ebx
-	leal 28(%esp), %esp
+	movl $4,%eax
+	leal 28(%esp), %ecx
+	addl %eax,%ecx
+	movl 16(%esp),%eax
+	movl %eax,(%ecx)
+	movl 20(%esp),%ebx
+	leal 32(%esp), %esp
 	ret
 join_l8:
+	jmp join_l16
+join_l16:
+	movl %edx,8(%esp)
+	movl %eax,12(%esp)
+	movl %ecx,%eax
+	movl 12(%esp),%ecx
+	movl 20(%esp),%ebx
+	movl 16(%esp),%edx
 	jmp loop
+.section .pcmap_data
+stackdata_l19:
+.long 0
+.section .pcmap
+.long join_l12
+.long frame_l20
+.section .pcmap_data
+frame_l20:
+.long 0xffffffe4
+.long 0x80000008
+.long 0xfffffff4
+.long stackdata_l19
+.long 0x80000008
+.long 0x80000003
+.long 0x80000000
+.long 0x80000000
+.long 0x40000007
+.long 0xfffffff8
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
+.long 0x4000000b
+.long 0xffffffec
+.long 0xfffffff0
+.long 0xfffffffc
+.section .pcmap
+.long join_l7
+.long frame_l21
+.section .pcmap_data
+frame_l21:
+.long 0xffffffe4
+.long 0x80000008
+.long 0xfffffff4
+.long stackdata_l19
+.long 0x80000008
+.long 0x80000003
+.long 0x80000000
+.long 0x80000000
+.long 0x40000007
+.long 0xfffffff8
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
+.long 0x4000000b
+.long 0
+.long 0
+.long 0
+.section .text
 .section .text
 main:
-	leal -8(%esp), %esp
+	leal -12(%esp), %esp
 	nop
-	movl %esi,4(%esp)
-	movl %edi,(%esp)
-initialize_continuations_l20:
+initialize_continuations_l24:
 	leal -4(%esp), %esp
 	leal y,%eax
-	movl $4,%esi
-	movl $-12,%edx
-	leal 12(%esp), %ecx
-	addl %edx,%ecx
-	movl %esi,(%ecx)
+	movl $4,%ecx
+	movl $-16,%edx
+	movl %ebx,4(%esp)
+	leal 16(%esp), %ebx
+	addl %edx,%ebx
+	movl %ecx,(%ebx)
 	nop
 	call print
-join_l36:
+join_l40:
 	nop
 	nop
-	leal w,%esi
-	leal y,%edi
+	leal w,%eax
+	leal y,%ecx
+	movl %esi,4(%esp)
+	movl %eax,%esi
+	movl %edi,8(%esp)
+	movl %ecx,%edi
 	movl $16,%ecx
 	rep movsb
 	leal -4(%esp), %esp
 	leal y,%eax
-	movl $4,%esi
-	movl $-12,%edx
-	leal 12(%esp), %ecx
-	addl %edx,%ecx
-	movl %esi,(%ecx)
+	movl $4,%ecx
+	movl $-16,%esi
+	leal 16(%esp), %edi
+	addl %esi,%edi
+	movl %ecx,(%edi)
 	nop
 	call print
-join_l33:
+join_l37:
 	nop
 	nop
 	leal -4(%esp), %esp
 	leal z,%eax
-	movl $8,%esi
-	movl $-12,%edx
-	leal 12(%esp), %ecx
-	addl %edx,%ecx
-	movl %esi,(%ecx)
+	movl $8,%ecx
+	movl $-16,%edx
+	leal 16(%esp), %edi
+	addl %edx,%edi
+	movl %ecx,(%edi)
 	nop
 	call print
-join_l30:
+join_l34:
 	nop
 	nop
 	leal x,%esi
@@ -157,36 +222,146 @@ join_l30:
 	rep movsb
 	leal -4(%esp), %esp
 	leal z,%eax
-	movl $8,%esi
-	movl $-12,%edx
-	leal 12(%esp), %ecx
-	addl %edx,%ecx
-	movl %esi,(%ecx)
+	movl $8,%ecx
+	movl $-16,%esi
+	leal 16(%esp), %edi
+	addl %esi,%edi
+	movl %ecx,(%edi)
 	nop
 	call print
-join_l27:
+join_l31:
 	nop
 	nop
 	leal -4(%esp), %esp
 	leal w,%eax
-	movl $20,%esi
-	movl $-12,%edx
-	leal 12(%esp), %ecx
-	addl %edx,%ecx
-	movl %esi,(%ecx)
+	movl $20,%ecx
+	movl $-16,%edx
+	leal 16(%esp), %edi
+	addl %edx,%edi
+	movl %ecx,(%edi)
 	nop
 	call print
-join_l24:
+join_l28:
 	nop
 	nop
 	nop
-	leal 8(%esp), %edx
+	leal 12(%esp), %eax
 	movl $0,%ecx
-	leal 8(%esp), %eax
-	addl %ecx,%eax
-	movl (%edx),%ecx
-	movl %ecx,(%eax)
+	leal 12(%esp), %edx
+	addl %ecx,%edx
+	movl (%eax),%ecx
+	movl %ecx,(%edx)
+	movl (%esp),%ebx
 	movl 4(%esp),%esi
-	movl (%esp),%edi
-	leal 8(%esp), %esp
+	movl 8(%esp),%edi
+	leal 12(%esp), %esp
 	ret
+.section .pcmap_data
+stackdata_l46:
+.long 0
+.section .pcmap
+.long join_l40
+.long frame_l47
+.section .pcmap_data
+frame_l47:
+.long 0xfffffff4
+.long 0x80000004
+.long 0x80000000
+.long stackdata_l46
+.long 0x80000008
+.long 0x80000000
+.long 0x80000000
+.long 0x80000000
+.long 0x40000007
+.long 0xfffffff4
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
+.long 0x4000000b
+.section .pcmap
+.long join_l37
+.long frame_l48
+.section .pcmap_data
+frame_l48:
+.long 0xfffffff4
+.long 0x80000004
+.long 0x80000000
+.long stackdata_l46
+.long 0x80000008
+.long 0x80000000
+.long 0x80000000
+.long 0x80000000
+.long 0x40000007
+.long 0xfffffff4
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0xfffffff8
+.long 0x4000000b
+.long 0xfffffffc
+.section .pcmap
+.long join_l34
+.long frame_l49
+.section .pcmap_data
+frame_l49:
+.long 0xfffffff4
+.long 0x80000004
+.long 0x80000000
+.long stackdata_l46
+.long 0x80000008
+.long 0x80000000
+.long 0x80000000
+.long 0x80000000
+.long 0x40000007
+.long 0xfffffff4
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0xfffffff8
+.long 0x4000000b
+.long 0xfffffffc
+.section .pcmap
+.long join_l31
+.long frame_l50
+.section .pcmap_data
+frame_l50:
+.long 0xfffffff4
+.long 0x80000004
+.long 0x80000000
+.long stackdata_l46
+.long 0x80000008
+.long 0x80000000
+.long 0x80000000
+.long 0x80000000
+.long 0x40000007
+.long 0xfffffff4
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0xfffffff8
+.long 0x4000000b
+.long 0xfffffffc
+.section .pcmap
+.long join_l28
+.long frame_l51
+.section .pcmap_data
+frame_l51:
+.long 0xfffffff4
+.long 0x80000004
+.long 0x80000000
+.long stackdata_l46
+.long 0x80000008
+.long 0x80000000
+.long 0x80000000
+.long 0x80000000
+.long 0x40000007
+.long 0xfffffff4
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0xfffffff8
+.long 0x4000000b
+.long 0xfffffffc
+.section .text

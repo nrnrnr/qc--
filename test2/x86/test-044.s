@@ -7,8 +7,8 @@ Cmm.global_area:
 p:
 	nop
 	nop
-	movl %esp,%ecx
-	movl (%ecx),%ecx
+	movl %esp,%edx
+	movl (%edx),%ecx
 initialize_continuations_l3:
 	jmp loop
 loop:
@@ -19,12 +19,16 @@ loop:
 	jge join_l5
 join_l6:
 	nop
-	movl $0,%eax
-	movl %esp,%edx
-	addl %eax,%edx
-	movl %ecx,(%edx)
+	movl $0,%edx
+	movl %esp,%eax
+	addl %edx,%eax
+	movl %ecx,(%eax)
 	nop
 	ret
 join_l5:
 	jmp loop
+.section .pcmap_data
+stackdata_l13:
+.long 0
+.section .data
 p_end:
