@@ -81,11 +81,11 @@ not a formal argument of a primitive, but part of its \emph{width list}.
 According to the {\PAL} manual, integer multiplication \path|%mul| is
 quasi-polymorphic in its result and thus must be used as in \path|%mul32|.
 This poses a problem for the translation of the infix operator
-``\path|*|''.  What should \path|*| stand for?  Currently, \path|%mul|
+``\path|*|''.  What should \path|*| stand for?  Currently, \path|\%mul|
 is treated as monomorphic in its result size. \textit{Norman has
 clarified this: \path|*| stands for a monomorphic multiplications, the
 general multiplication is still quasi-polymorphic. Internally this is
-now implemented with two operators: \path|%mul| and \path|%mul@|. Any
+now implemented with two operators: \path|\%mul| and \path|\%mul@|. Any
 better idea? --CL (Tue Apr 30 13:15:48 EDT 2002)}
 
 The algorithm that linearizes the control-flow graph does not work
@@ -93,6 +93,13 @@ properly. It fails to detect the difference between nodes that fall into
 a label and those that jump to a label. A probable fix to the problem is
 always to jump to a label and never to fall into it. When the design of
 the {\cfg} is reconsidered, this problem should be addressed, too.
+\textit{I have worked around the problem by never falling into a label,
+but using an explicit \path|goto|. This revealed some more problems with
+the {\cfg} design: it is neccessary to create new nodes inside the
+{\cfg} and thus no target-specific knowledge should be needed. I had to
+give up the polymorphism of the {\cfg} which wasn't working anyway. --CL
+(Tue May  7 16:44:58 EDT 2002)}.
+
 
 Targets provide code that spills and reloads registers. This code must
 respect the machine invariant, but currently does not. Machine specific
@@ -172,12 +179,25 @@ feature was delayed over a discussion how to handle Unicode characters.
 The changes proposed by NR to the {\PAL} language definition might be
 relevant here.
 
-The front end is unaware of a chosen back end. This precludes it from
-rejecting certain {\PAL} programs that do type check, but that the back
-end cannot compile. Things to front end does not know: supported with of
-registers, supported width of operators, names of calling conventions,
-and hardware registers.
+The front end is in general unaware of a chosen back end. This precludes
+it from rejecting certain {\PAL} programs that do type check, but that
+the back end cannot compile. Things to front end does not know:
+supported with of registers, supported width of operators, names of
+calling conventions, and hardware registers. 
 
+The semantics of assembler symbols have leaked into the front end, the
+fat environment, and the {\cfg}. Symbols are handed out by an assembler
+which means, a reference to the current assembler must be available to
+create new symbols. Because the {\cfg} does not include such a
+reference, it is difficult to create \path|goto| nodes (during {\cfg}
+manipulation) outside the \path|Ast3IR| module.  This is related both to
+the point above, and the unclear semantics of the assembler interface,
+and symbols in particular.  I would like to avoid dealing with target
+specific symbols as much as possible and would like to delegate their
+creation into the last phases of compilation. Upon further reflection I
+now believe that the \emph{construction} of a {\cfg} should not require
+any machine-specific knowledge to allow for the easy implementation of
+{\cfg} transformations.
 
 The {\PAL} language construct \path|span| is unsupported.
 
