@@ -1,0 +1,158 @@
+
+=head1 NAME
+
+qc--internals - customizing the Quick C-- compiler
+
+=head1 SYNOPSIS
+
+B<qc--> [I<option> | I<file>] ... 
+
+=head1 DESCRIPTION
+
+B<qc--> is a compiler for the C-- language. It takes I<files>  as
+arguments and compiles, assembles, and links the I<files> into an
+executable file.  The compiler is controlled by a built-in Lua
+interpreter, running a Lua program. A user can manipulate the state of
+the running interpreter or supply a new Lua program to customize
+B<qc-->.
+
+A command line option of the form I<name>C<=>I<value> assigns I<value>
+to a variable I<name> in the running interpreter. Both I<name> and
+I<value> must follow the Lua syntax for variables and values. If not
+noted otherwise, the Lua type of a I<value> is I<string>. As a
+convention, capitalized names denote Lua tables. 
+
+Caveat: the Lua code controlling B<qc--> is in constant flux.  Anybody
+dealing with options described here is assumed to know what he or she is
+doing.
+
+=head1 OPTIONS
+
+See the user's manual qc--(1) for more options.
+
+=over
+
+=item B<target=>I<backend>
+
+B<qc--> is a cross compiler; this option causes it to generate code for
+I<backend>, where a I<backend> identifies an architecture/operating
+system platform. By default, code for the actual platform is generated.
+The following targets of type C<target> are supported:
+
+=over 20
+
+=item C<Backend.x86>
+
+I<x>86 running GNU/Linux.
+
+=item C<Backend.sparc>
+
+Sparc, running Solaris.
+
+=item C<Backend.interp>
+
+The Quick C-- interpreter.
+
+=back
+
+    Lcc does not assemble or link when code for a non-native platform is
+    generated. How should qc--(1) behave?
+
+
+
+=item B<As.path=>I<path>
+
+Define an alternate path the assembler as(1). 
+
+=item B<As.options>=I<options>
+
+Define options passed to the assembler. 
+
+=item B<Ld.path=>I<path>
+
+Define an alternate path for the linker ld(1).
+
+=item B<Ld.options>=I<options>
+
+Define options passed to the linker ld(1). Note that some other options
+like B<-L> and B<-l> are also passed to the linker.
+
+=item I<name>C<=>I<value>
+
+Assign Lua value I<value> to the Lua variable I<name>.
+
+=item B<-e> I<statement>
+
+The Lua I<statement> is passed to the Lua interpreter and executed. This
+allows to alter default settings in the interpreter or to inspect the
+interpreter. 
+
+=item B<-i>
+
+Start an interactive session with the Lua interpreter that reads from
+stdin. The session allows to inspect the Lua interpreter; most useful
+for debugging Lua code. 
+
+=back
+
+=over 4
+
+=head1 LUA STARTUP
+
+The Lua interpreter built into B<qc--> controls the compiler. At startup
+it tries to find the file C<qc--.lua> using a search path taken from the
+environment variable C<QCMMLUAPATH>.  If the environment variable is
+undefined, the default is "C<:.:*>".  A search path contains a list of
+colon separated directories. Two directory names are special: the empty
+directory refers to an implementation-dependent system-wide directory,
+like C</usr/local/lib/qc-->. The star C<*> refers to a ``directory''
+that is actually compiled into the B<qc--> executable.  With the default
+search path (empty, dot, star), B<qc--> therefore looks first in the
+system-wide directory for C<qc--.lua>, then in the current directory,
+and then takes the built-in C<qc--.lua>. 
+
+To obtain a copy of the Lua startup script C<qc--.lua>, use the
+following option: C<-e 'write(Boot["qc--.lua"])'>. When the default
+search path is used, a (modified) copy of C<qc--.lua> in the local
+directory takes precedence over other built-in C<qc--.lua> and thus can
+be used for experiments.
+
+=head1 ENVIRONMENT
+
+=over
+
+=item QCMMLUAPATH
+
+Search path for Lua code. If undefined, the default search path is
+C<:.:*>.
+
+=back
+
+=head1 SEE ALSO
+
+http://www.cminusminus.org/,
+http://www.lua.org/.
+
+qc--(1), lua(1), ld(1), as(1). 
+
+=head1 BUGS
+
+Report bugs to C<bugs@cminusminus.org>. Include a I<small> example that
+allows us to reproduce the bug. The bug tracking system can be found at
+http://www.cminusminus.org/qc--bugs/.
+
+=head1 AUTHORS
+
+Christian Lindig <lindig@eecs.harvard.edu>, 
+Norman Ramsey <nr@eecs.harvard.edu>,
+Daniel Damian <damian@eecs.harvard.edu>,
+John Dias <dias@eecs.harvard.edu>,
+Jonathan D. Eddy <eddy@fas.harvard.edu>,
+Reuben Olinsky <olinsky@eecs.harvard.edu>,
+Kevin Redwine <redwine@eecs.harvard.edu>.
+
+=head1 VERSION
+
+$Id$
+
+
