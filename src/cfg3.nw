@@ -802,6 +802,7 @@ and node = object
     method insert_assign_before: Rtl.rtl -> node (* returns new node *)
     method insert_assign_after : Rtl.rtl -> node (* returns new node *)  
 
+    method comment:     string          (* included into ast *)
     method ast:         mangle:(string->string) -> Ast.body list
     method linorder:    node option * node list (* immediate/delayed succs *)
     
@@ -843,6 +844,11 @@ end
 
 \item [[linorder]] provides contraints for the linear order of node. See
       section \ref{sect:cfg3:linorder} for details.
+
+\item [[comment]] provides a note about [[this]] node that is
+      included into the {\AST} representation by method [[ast]]. Note:
+      this must be a method and not a value field because we rely on
+      dynamic dispatch.
 
 \item [[ast]] returns a representation of the node as abstract {\PAL}
       syntax. The method receives a \emph{mangler} function that is used 
@@ -1031,6 +1037,8 @@ object (this)
         let top = new entry (this:>cfg) bot in
             ( _entry <- Some top
             ; _exit  <- Some bot 
+            ; _nodes <- NodeSet.add top _nodes
+            ; _nodes <- NodeSet.add bot _nodes
             )
 
     method entry =
@@ -1091,6 +1099,7 @@ object (this)
         ; assert (_exit  <> None)
         ; NodeSet.iter (fun n -> n#test) _nodes
         )
+
 
     (* create AST of this *)
     method ast (mangle:string -> string) =
@@ -1189,11 +1198,17 @@ object(this)
 
     method insert_assign_after (rtl:Rtl.rtl) = 
         invalid_arg "Cfg3: add_assign_after method for non-assignment node"
+    
+    (* comment about node kind *)
+    method comment =
+        "node"
 
     method ast (mangle:string->string) = 
+        let this    = (this :> node) in
         let label l = stmt (A.LabelStmt (mangle l)) in
         let labels  = List.map label _labels in
-        let id      = stmt (A.CommentStmt (string_of_int _id)) in
+        let msg     = (string_of_int _id) ^ " " ^ (this#comment) in
+        let id      = stmt (A.CommentStmt msg) in
             id::labels
 
     method virtual linorder: node option * node list
@@ -1269,6 +1284,8 @@ object(this)
           | x    -> x
         , []
         )
+
+    method comment = "proxy"    
 end
 
 (* ------------------------------------------------------------------ *) 
@@ -1285,6 +1302,7 @@ object(this)
 
     method linorder = (Some _succ, [])
     
+    method comment = "entry"    
     method succ = [_succ]
     method upd_succ map = 
         let map = upd (this :> node) map in
@@ -1298,6 +1316,7 @@ and exit cfg: node =
 object(this)
     inherit vnode cfg Rtl.null as super
 
+    method comment = "exit"    
     method linorder = (None, [])
 end
 @
@@ -1335,6 +1354,7 @@ object (this)
         let s      = R2A.rtl mangle _rtl in
             labels@[stmt s]
 
+    method comment = "assign"    
     method linorder = (Some _succ,[])
 end
 
@@ -1358,6 +1378,7 @@ object (this)
         let map = upd (this :> node) map in
         _exit <- map _exit
 
+    method comment = "return"    
     method linorder = (None, [])
 
 end
@@ -1380,6 +1401,7 @@ object (this)
         let map = upd (this :> node) map in
         _targets <- List.map map _targets 
 
+    method comment = "goto"    
     method linorder = (None, _targets)
 end
 
@@ -1402,6 +1424,7 @@ object (this)
     
     method linorder = (None, [])
     
+    method comment = "jump"    
     method upd_succ map =
         let map = upd (this :> node) map in
         ( _targets <- List.map map _targets
@@ -1432,6 +1455,7 @@ object (this)
         ; _succ     <- map _succ
         ) 
     
+    method comment = "call"    
     method linorder = 
         ( Some _succ
         , uniq(List.concat[_cuts;_unwinds;_returns])
@@ -1461,6 +1485,7 @@ object (this)
         ; _exit     <- map _exit
         ) 
     
+    method comment = "cutto"    
     method linorder = 
         ( None
         , uniq(List.concat[_cuts;_unwinds;_returns])
@@ -1495,6 +1520,7 @@ object (this)
         ( Some _ifnot
         , [_ifso]
         )
+    method comment = "branch"    
 end
 
 
@@ -1524,6 +1550,7 @@ object (this)
     method uses   = _uses
     method kills  = _kills
 
+    method comment = "dataflow"    
     method linorder =
         ( Some _succ
         , []
