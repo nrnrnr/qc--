@@ -20,7 +20,7 @@ It implements the
 The assembler constructor receives the output channel for the assembler. 
 <<x86asm.mli>>=
 val make : 
-  ('cfg -> (Zipcfg.Rep.call -> unit) -> (Rtl.rtl -> unit) -> (string -> unit) -> unit) ->
+  (('a, 'b, 'c, 'd) Proc.t -> 'cfg -> (Zipcfg.Rep.call -> unit) -> (Rtl.rtl -> unit) -> (string -> unit) -> unit) ->
   out_channel -> ('cfg * ('a, 'b, 'c, 'd) Proc.t) Asm.assembler
   (* pass Cfgutil.emit *)
 @
@@ -36,6 +36,7 @@ emits it to [[stdout]] when the [[emit]] method is called.
 module G  = Zipcfg
 module GR = Zipcfg.Rep
 module SM = Strutil.Map
+module T  = Target
 <<utilities>>
 <<definitions>>
 let make emitter fd = new asm emitter fd
@@ -264,7 +265,7 @@ method cfg_instr (cfg,proc)  =
     let symbol = proc.Proc.symbol in
     let label l = this#label (try SM.find l _syms with Not_found -> this#local l) in
     this#label symbol;
-    (emitter cfg (this#call) (this#instruction) label : unit)
+    (emitter proc cfg (this#call) (this#instruction) label : unit)
 
 <<unused utilities>>=
 module Asm = X86rec.M

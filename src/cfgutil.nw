@@ -19,8 +19,9 @@ knowledge of the internal details of \module{cfg3}.
 <<cfgutil.mli>>=
 val cfg2dot : compress:bool -> live:bool -> name:string -> Zipcfg.graph -> string
 val cfg2ast : (Rtl.rtl -> Ast.stmt) -> Zipcfg.graph -> name:string -> Ast.proc
-val emit    : Zipcfg.graph -> (Zipcfg.Rep.call -> unit) -> (Rtl.rtl -> unit) ->
-              (string -> unit) -> unit
+val emit    : ('a, 'b, 'c, 'd) Proc.t -> Zipcfg.graph ->
+                (Zipcfg.Rep.call -> unit) -> (Rtl.rtl -> unit) ->
+                (string -> unit) -> unit
 val print_cfg: Zipcfg.graph -> unit
 
 type node = F of Zipcfg.Rep.first | M of Zipcfg.Rep.middle | L of Zipcfg.Rep.last
@@ -59,12 +60,46 @@ module A  = Ast
 module G  = Zipcfg
 module GR = Zipcfg.Rep
 module OG = Cfgx.M 
+@
+<<cfgutil.ml>>=
+let print_block (first, tail as block) =
+  let pr = Printf.eprintf in
+  begin
+    match first with
+    | GR.Entry -> pr "<entry>\n"
+    | GR.Label ((u, l), _, _) -> pr "%s:\n" l
+  end;
+  let lasttype = function
+    | GR.Exit        -> "exit"
+    | GR.Branch    _ -> "branch"
+    | GR.Cbranch   _ -> "cbranch"
+    | GR.Mbranch   _ -> "mbranch"
+    | GR.Call      _ -> "call"
+    | GR.Cut       _ -> "cut"
+    | GR.Return    _ -> "return"
+    | GR.Jump      _ -> "jump"
+    | GR.Forbidden  _ -> "forbidden" in
+  let rec pr_tail = function
+    | GR.Tail (m, tail) ->
+        (pr "%s\n" (Rtlutil.ToString.rtl (GR.mid_instr m)); pr_tail tail)
+    | GR.Last GR.Exit -> pr "<exit>\n"
+    | GR.Last l -> pr "<last:%s>: %s\n" (lasttype l)
+                                        (Rtlutil.ToString.rtl (GR.last_instr l)) in
+  pr_tail tail
 
+let print_cfg g =
+  let blocks = G.postorder_dfs g in
+  let () = Printf.eprintf "\nBEGIN CFG\n" in
+  let () = List.iter print_block blocks in
+  let () = Printf.eprintf "END CFG\n" in
+  flush stderr
+@
+<<cfgutil.ml>>=
 let matches next = match next with
 | None -> (fun _ -> false)
 | Some (u, l) -> (fun (u', l') -> Unique.eq u u')
 
-let emit cfg call_emit rtl_emit sym_emit =
+let emit proc cfg call_emit rtl_emit sym_emit =
   let block b next () =
     let first f () = match f with
     | GR.Entry -> ()
@@ -74,6 +109,8 @@ let emit cfg call_emit rtl_emit sym_emit =
         rtl_emit (GR.mid_instr m) in
     let last l () = match l with
     | GR.Branch (_, tgt) when matches next tgt -> ()
+    | GR.Cbranch (_, _, ftgt) when not (matches next ftgt) ->
+        (rtl_emit (GR.last_instr l); rtl_emit (proc.Proc.machine.G.goto ftgt))
     | GR.Call c -> call_emit c
     | _ -> rtl_emit (GR.last_instr l) in
     GR.fold_fwd_block first middle last b () in
@@ -182,24 +219,3 @@ let cfg2ast instr g ~name =
 let delete g n =
   <<replace focus with empty subgraph>>
 @
-<<cfgutil.ml>>=
-let print_block (first, tail) =
-  let pr = Printf.eprintf in
-  begin
-    match first with
-    | GR.Entry -> pr "<entry>\n"
-    | GR.Label ((u, l), _, _) -> pr "%s:\n" l
-  end;
-  let rec pr_tail = function
-    | GR.Tail (m, tail) ->
-        (pr "%s\n" (Rtlutil.ToString.rtl (GR.mid_instr m)); pr_tail tail)
-    | GR.Last GR.Exit -> pr "<exit>\n"
-    | GR.Last l -> pr "<last>: %s\n" (Rtlutil.ToString.rtl (GR.last_instr l)) in
-  pr_tail tail
-
-let print_cfg g =
-  let blocks = G.postorder_dfs g in
-  let () = Printf.eprintf "\nBEGIN CFG\n" in
-  let () = List.iter print_block blocks in
-  let () = Printf.eprintf "END CFG\n" in
-  flush stderr
