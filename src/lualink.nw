@@ -188,6 +188,7 @@ struct
       let ( **-> ) = V.( **-> )
       let ( --> )  = V.( --> )
       let ( **->> ) x y = x **-> V.result y 
+      let ( *****->> ) = V.dots_arrow
       <<export goodies to Lua>>
     end (*M*)
 end (*MakeLib*)
@@ -427,6 +428,10 @@ C.register_module "Typecheck"
                          (fun _ proc -> Typecheck.proc proc; 1)
  ] g;
 <<register modules to [[g]] in alphabetical order>>=
+C.register_module "Unsupported" 
+ [ "explain", V.efunc (V.int **-> V.int *****->> V.unit) Unsupported.explain
+ ] g;
+<<register modules to [[g]] in alphabetical order>>=
 let floats ws _ proc =
   let rml = proc.Proc.target.Target.rounding_mode in
   let rm  = Rtlutil.fetch rml in
@@ -445,9 +450,6 @@ C.register_module "Widen"
         | V.Element (s, V.String n) -> s ^ "." ^ n
         | V.Element (s, V.Number x) -> s ^ "[" ^ string_of_int (int_of_float x) ^ "]"
         | V.Element (s, _         ) -> s ^ ".?" in
-C.register_module "Z" 
- [ "objname", V.efunc (V.value **->> V.string) (fun v -> namestring (V.objname g v))
- ] g;
 <<lua initialization>>=
 "Expander.x86 = { fn = Expander.x86f, uses = { 'proper widths', 'no vars' }, \
                   name = 'Expander.x86', creates = { 'x86 invariant' }, \

@@ -7,52 +7,74 @@ back end does not support.
 The virtue is that each comes with a lengthy explanation of what to do
 to fix the problem.
 <<unsupported.mli>>=
-exception Unsupported of int
-val explain : int -> unit
+exception Unsupported
+val explain : int -> int list -> unit
 
   (* Each function below always raises Unsupported *)
 
 val widen_float : int -> 'a
+val stack_width : have:int -> want:int -> 'a
 @ 
 <<unsupported.ml>>=
-exception Unsupported of int
-type state = { mutable n : int; mutable explanations : string list list }
+exception Unsupported
+type state = { mutable n : int; mutable explanations : (int list -> string list) list }
 let state = { n = 0; explanations = [] }
-type fail = unit
 
-let rememberf f ex =
+let getn f =
   let n = state.n in
   state.n <- n + 1;
-  state.explanations <- ex :: state.explanations;
-  fun x -> (
-    begin
-      Printf.eprintf "%s\n" (f x);
-      Printf.eprintf "For longer explanation run\n  %s -e 'Unsupported.explain(%d)'\n"
-        (Sys.argv.(0)) n;
-      raise (Unsupported n)
-    end : fail)
+  state.explanations <- f :: state.explanations;
+  n
 
-let remember s = rememberf (fun () -> s)
-
-let explain n =
+let fail msg code args =
+  let args = String.concat ", " (List.map string_of_int (code :: args)) in
+  Printf.eprintf "%s\n" msg;
+  Printf.eprintf "For a longer explanation run\n  %s -e 'Unsupported.explain(%s)'\n"
+        (Sys.argv.(0)) args;
+  raise Unsupported
+<<unsupported.ml>>=
+let explain n ns =
   let rec ex m l = match l with
   | [] -> Printf.printf "There is no explanation numbered %d\n" n
   | x :: xs ->
       if m = n then
-        List.iter print_string x
+        List.iter (Printf.printf "%s\n") (x ns)
       else
         ex (m-1) xs
   in ex state.n state.explanations
+
+<<unsupported.ml>>=
+let exs ss = (fun _ -> ss)
+let ex1 f = function
+  | [n] -> f n
+  | _ ->
+      ["For this explanation code, Unsupported.explain expects exactly two arguments"]
+let ex2 f = function
+  | [n; m] -> f n m
+  | _ ->
+    ["For this explanation code, Unsupported.explain expects exactly three arguments"]
 @ 
 <<unsupported.ml>>=
+let s = Printf.sprintf
 let nosupport s = "This back end does not support " ^ s
-let widen_float =
-  rememberf (fun d -> nosupport (Printf.sprintf "%d-bit floating-point computation" d))
-    [ "Floating-point operations are limited in width.  Our configuration software";
-      "isn't quite clever enough to get the acceptable width into this explanation;";
-      "consult your release notes, or try either 80 or 64 bits as the maximum";
-      "floating-point width on most targets.";
-    ]
-let fail () = Impossible.impossible "failure did not raise Unsupported"
+<<unsupported.ml>>=
+let widen_n = getn (ex1 (fun n ->
+    [ s "On this target, floating-point operations can be at most %d bits wide." n;
+      "Narrower operations can be widened using one of the stages in the Widen";
+      s "module, but anything wider than %d bits is unsupported." n;
+    ]))
 
-let widen_float d = (widen_float d; fail())
+let widen_float d =
+  fail (nosupport (s "%d-bit floating-point computation" d)) widen_n [d]
+<<unsupported.ml>>=
+let stack_width_n = getn (ex2 (fun h w ->
+  [ s "Your code tried to pass a %d-bit argument to an operator that takes its" h;
+    s "arguments on the machine stack, but on this target, only %d-bit values can" w;
+    "go on the machine stack.";
+    "(This message could be triggered if you tried to use software rounding modes";
+    "instead of hardware rounding modes in a floating-point instruction on the";
+    s "Pentium, or if you tried to use something other than %d-bit floats.)" w;
+  ]))
+let stack_width ~have ~want =
+  fail (nosupport (s "%d-bit value on the machine stack" have))
+       stack_width_n [have; want]
