@@ -15,7 +15,7 @@ VERSION =       `date +%Y%m%d`
 # SUBDIRS are made from left to right - order matters
 # ------------------------------------------------------------------ 
 
-SUBDIRS =       cllib asdl src
+SUBDIRS =       cllib asdl src 
 
 # ------------------------------------------------------------------ 
 # high level targets
@@ -27,6 +27,9 @@ update all:V:   dirs
 clean:V:
                 for i in $SUBDIRS; do (cd $i && mk $target); done
                 find bin lib man -name 'CVS' -prune -o -type f -exec rm '{}' \;
+
+test:V:         update
+                cd test && mk $target
 
 # make sure appropriate empty directories exist
 dirs:V:
