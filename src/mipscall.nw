@@ -173,10 +173,6 @@ let results =
 
 \paragraph{C~procedure parameters}
 
-I don't know how to implement the parameter-passing convention using the
-building blocks from the \module{automaton.nw} module. The simple
-convention here should work for integer argument lists.
-
 <<mipscall.ml>>=
 let spaces =
   let module SS = Space.Standard32 in
@@ -188,114 +184,11 @@ let spaces =
   | _   -> Impossible.impossible "register space in parameter passing"
 @
 
-To use my test framework I allow 64-bit integer arguments and treat them
-like 64 bit floating-point arguments. There are no 64-bit integers on
-the {\mips}. Use [[./qc-- -e 'Debug.Mips.proc_all()']] to obtain all
-relevant argument lists.
-
-After we have allocated a single integer register, we never allocate a
-floating-point register. Therefore, any integer register excludes all
-floating-point registers. Unfortunately we cannot express (with the
-exclusion relation), that once we go into the overflow block, we never
-allocate a register. Consider: [[float]], [[float]], [[int]],
-[[double]], [[int]]. The [[double]] goes into an overflow block, but
-register 7 is still unused. How do we prevent the following [[int]] to
-go there? 
-
-I believe the calling convention is correct for all 32-bit arguments. I
-am not sure about the direction arguments should grow to in the overflow
-block. Everything with 64 bit floating-point arguments is pure hell.
-
-<<mipscall.ml>>=
-let broken_arguments () =
-    let exc = A.Exclude.of_directed_pairs spaces (* directed!! *)
-            [[r 4; r 5; r 6; r 7] , [f 12; f 13; f 14; f 15] 
-            ;[f 12], [r 4]
-            ;[f 13], [r 5]
-            ;[f 14], [r 4; r 5]
-            ;[f 15], [r 4; r 5; r 6 ; r 7]
-            ;[r 5] , [r 4]
-            ;[r 6] , [r 4; r 5]
-            ;[r 7] , [r 4; r 5; r 6]
-            ] in
-
-    A.first_choice 
-    [ (fun h w -> h = "float"),
-        A.widen (Aux.round_up_to ~multiple_of: 32) *>
-        A.widths [32;64] ~errormsg:(badwidth "MIPS argument") *>
-        A.choice
-        [ (fun h w -> h="float" && w=32),
-            A.sharedregs exc [f 12; f 14; r 6; r 7] ~errormsg:fatal   
-        ; (fun h w -> w=64), (* h = "float" *)
-            A.sharedregs exc [d 12; d 14; l 6] ~errormsg:fatal
-        ; (fun h w -> w=32), 
-            A.sharedregs exc [r 4; r 5; r 6; r 7] ~errormsg:fatal
-        ] 
-    ; (fun _ _ -> true),
-        A.widen (Aux.round_up_to ~multiple_of: 32) *>
-        A.widths [32;64] ~errormsg:(badwidth "MIPS argument") *>
-        A.choice
-        [ (fun h w -> w=32),
-            A.sharedregs exc [r 4; r 5; r 6; r 7] ~errormsg:fatal
-        ; (fun h w -> w=64), (* h = "float" *)
-            A.sharedregs exc [l 4; l 6] ~errormsg:fatal
-        ]  
-    ] **>
-    A.sharedoverflow 
-        exc
-        [r 4; r 5; r 6; r 7]    (* exclude these *)
-        ~memsize:8 ~byteorder ~growth:Memalloc.Up ~max_alignment:sp_align
-@ 
-Here is a alternative implementation for the argument automaton that
-uses the number of previously allocated bits to decide the register for
-a parameter.
-<<mipscall.ml>>=
-let new_arguments () =
-    let bits = ref 0 in
-    let arg  = ref 0 in
-    A.widen (Aux.round_up_to ~multiple_of: 32) **>
-    A.widths [32;64] ~errormsg:(badwidth "MIPS argument") **>
-    A.bitcounter bits **>
-    A.argcounter arg  **>
-    A.first_choice 
-    [ A.is_hint "float",
-        A.choice
-        [ (fun h w -> h = "float" && w = 64 && !arg = 1),
-            A.useregs [d 12] ~errormsg:fatal
-        ; (fun h w -> h = "float" && w = 32 && !arg = 1),
-            A.useregs [f 12] ~errormsg:fatal
-        ; (fun h w -> h = "float" && w = 64 && !arg = 2),
-            A.useregs [d 14] ~errormsg:fatal
-        ; (fun h w -> h = "float" && w = 32 && !arg = 2),
-            A.useregs [f 14] ~errormsg:fatal
-        ; A.is_any, 
-            A.unit
-        ] 
-    ; A.is_any,
-        A.choice
-        [ (fun h w -> h = "float" && w = 64 && !arg = 2),
-            A.useregs [l 6] ~errormsg:fatal (* pair r6/r7 *)
-        ; A.is_any,
-            A.unit
-        ]  
-    ] **>
-    A.choice
-    [ A.is_width 32,
-        A.offsetregs bits [r 4; r 5; r 6; r 7] 
-    ; A.is_any,
-        A.unit
-    ] **>
-    A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up 
-               ~max_alignment:sp_align
-
-let arguments = new_arguments (* what we are actually using *)
-@
-Here is a simpler alternative implementation.
 <<mipscall.ml>>=
 type belief = Manual | Lcc
 let who_do_you_believe = Lcc
 
-let newer_arguments () =
+let arguments' () =
     let bits = ref 0 in
     let arg  = ref 0 in
     A.widen (Aux.round_up_to ~multiple_of: 32) **>
@@ -327,10 +220,17 @@ let newer_arguments () =
     ] **>
     A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up 
                ~max_alignment:sp_align
-let arguments = newer_arguments
-@
-       
 
+let prefix16bytes result =
+    let b = Block.relative vfp "16-byte block" Block.at ~size:16 ~alignment:4 
+    in    
+        { result with 
+          A.overflow = Block.cathl result.A.overflow b
+        }
+
+let arguments () =
+    A.postprocess (arguments'()) prefix16bytes  
+@
 
 \paragraph{C~cut-to parameters}
 
