@@ -143,11 +143,20 @@ type reghint        = RReg  of string   (* hardare reg *)
 type register       = { index:      int           (* for run-time API *)
                       ; rhint:      reghint       
                       }
+@
 
-type proc           = { env:        env partial
-                      ; stackdata:  int partial
-                      ; salign:     int partial (* max align constraint *)
-                      }
+The [[sbase]] component of a procedures denotation contains a name for
+an assembly symbol that hold the offset from the stackpointer sp to
+the start of the stackdata.
+
+
+<<>>=
+type proc = 
+    { env:        env partial
+    ; sdata:      int partial       (* amount of stackdata  *)
+    ; salign:     int partial       (* max align constraint *)
+    ; sbase:      string            (* symbol for proc's stackdata base *) 
+    }
 
 type kind           = Proc          of proc
                     | Code
@@ -176,7 +185,10 @@ their declarations matters and thus the fat environment provides their
 asbtract sequence:
 
 <<>>=
-type hwregs         = (string * register * Types.ty) list
+type hwregs         = ( string          (* register name        *)
+                      * reghint         (* hint on register     *)        
+                      * Types.ty        (* C-- type of register *)
+                      ) list
 @
  
 % ------------------------------------------------------------------ 
@@ -561,10 +573,12 @@ environment such that a set of all used hardware registers can be
 obtained.
 
 <<>>=
-type proc           = { env:        env partial
-                      ; stackdata:  int partial (* offset into stackdata *)
-                      ; salign:     int partial (* max align constraint *)
-                      }
+and proc = 
+    { env:        env partial
+    ; sdata:      int partial       (* amount of stackdata  *)
+    ; salign:     int partial       (* max align constraint *)
+    ; sbase:      string            (* symbol for proc's stackdata base *) 
+    }
                       
 and  kind           = Proc          of proc
                     | Code
@@ -581,9 +595,11 @@ and  ventry         = (denotation * Types.ty) Arg.info
 and  tentry         = Types.ty                Arg.info
 
 <<>>=
-and  hwregs         = (string * register * Types.ty) list
+and  hwregs         = ( string          (* register name        *)
+                      * reghint         (* hint on register     *)        
+                      * Types.ty        (* C-- type of register *)
+                      ) list
 @
-
 
 Bindings for value and types are stored in a string-map [[StrMap]]. 
 Each entry consists of attributes [[attr]] for the source code
@@ -695,9 +711,9 @@ let bindv name ((reg,scope as attr),x) env =
             ; add name (attr',Arg.bad ()) (flagError env)
             )
         else match Arg.asgood x with 
-        | Some (Register({rhint=RReg hw} as reg),t) ->
+        | Some (Register({rhint=h} as reg),t) ->
                { env with venv   = StrMap.add name (attr,x) env.venv
-               ;          hwregs = (name,reg,t) :: env.hwregs  
+               ;          hwregs = (name,h,t) :: env.hwregs  
                }          
         | _ -> { env with venv = StrMap.add name (attr,x) env.venv }
     with
@@ -943,13 +959,15 @@ let clean_scope = function
     | Dirty.Local  -> Clean.Local
     | Dirty.Global -> Clean.Global
 
+let clean_rhint = function
+    | Dirty.RReg  s -> Clean.RReg  s
+    | Dirty.RHint s -> Clean.RHint s
+    | Dirty.RNone   -> Clean.RNone 
+
+
 let clean_reg r =
     { Clean.index = r.Dirty.index
-    ; Clean.rhint = ( match r.Dirty.rhint with
-                    | Dirty.RReg  s -> Clean.RReg  s
-                    | Dirty.RHint s -> Clean.RHint s
-                    | Dirty.RNone   -> Clean.RNone 
-                    )
+    ; Clean.rhint = clean_rhint r.Dirty.rhint
     }
 
 let rec clean_venv map  =
@@ -1008,17 +1026,19 @@ and clean_asm asm =
 <<>>=
 and clean_proc = function
     |   { Dirty.env       = Some env
-        ; Dirty.stackdata = Some n 
+        ; Dirty.sdata     = Some n 
         ; Dirty.salign    = Some m 
+        ; Dirty.sbase     = b
         } ->
         { Clean.env       = clean env
-        ; Clean.stackdata = n
+        ; Clean.sdata     = n
         ; Clean.salign    = m
+        ; Clean.sbase     = b
         }
     |   _ -> assert false 
 
 and clean_hwregs regs =
-    List.map (fun (name, reg, ty) -> (name, clean_reg reg, ty)) regs
+    List.map (fun (name, hint, ty) -> (name, clean_rhint hint, ty)) regs
 
 <<>>=     
 and clean env =

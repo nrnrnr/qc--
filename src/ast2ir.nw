@@ -245,6 +245,11 @@ Not all variables as part of a {\PAL} expression are equal:  we have
 to look at a variable's denotation to check wheter they are constant
 values or locations from wich a value must be fetched. 
 
+During this first code generation step we do not translate anything
+inside of procedures to {\rtl}s. This means, only global variables
+must be translated and inparticular variables denoting stackdata and
+continuations can't show up here.
+
 <<>>=
 and variable env = function
     | A.LValueAt(x,_) -> variable env x
@@ -255,17 +260,6 @@ and variable env = function
             | F.Label(F.Proc _)-> Rtl.Const(Rtl.Link(x, bits t))
             | F.Label(F.Code)  -> Rtl.Const(Rtl.Link(x, bits t))
             | F.Label(F.Data)  -> Rtl.Const(Rtl.Link(x, bits t))
-            | F.Label(F.Stack k)-> 
-                let width   = bits t                in
-                let pointer = F.findPointersize env in 
-                let loc   = Rtl.Cell
-                    ( default_memory
-                    , byteorder env
-                    , width
-                    , assert false (* to do *)
-                    , default_assertion
-                    ) in
-                Rtl.Fetch(loc,width)
             | F.Import(None)   -> Rtl.Const(Rtl.Link(x, bits t))
             | F.Import(Some n) -> Rtl.Const(Rtl.Link(n, bits t))
             | F.Register(r)    -> 
@@ -275,15 +269,16 @@ and variable env = function
                   , scope s
                   , r.F.index
                   , ( match r.F.rhint with 
-                    | F.RReg s -> Some s
-                    | F.RHint _
-                    | F.RNone  -> None
+                    | F.RReg s  -> Some s
+                    | F.RHint _ -> None
+                    | F.RNone   -> None
                     )
                   , width
                   ) 
                 in Rtl.Fetch(loc,width)
                                   
-            | F.Continuation   -> assert false (* don't know how *)
+            | F.Label(F.Stack x) -> assert false (* impossible *)
+            | F.Continuation     -> assert false (* impossible *)
             )
     | A.Mem (t,e,a)            -> let width = ty env t      in
                                   let cell = Rtl.Cell

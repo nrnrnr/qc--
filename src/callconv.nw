@@ -110,10 +110,11 @@ enough to find the location a parameter of that value is passed in.
 Calling conventions usually not only only rely on the size of a
 parameter, but to some degree on its purpose, too.  A type from the
 perspective of calling conventions is thus a tuple of a {\PAL} type
-and a hint:
+and a hintr. A [[reghint]] can either specify a hardware register
+directly, or an annotation like [["float"]], or nothing. 
 
 <<basic types>>= 
-type ty = Types.ty * Ast.hint
+type ty = Types.ty * Fenv.Clean.reghint
 @
 
 An automaton is used at a caller's side to find the locations 
@@ -144,12 +145,19 @@ This sub-module defines everything an automaton's client needs to
 know.  Especially all details about a calling convention is left
 abstract.
 
-Use [[reset]], to get an automaton that is in its initial state.  See
-below for equations describing the actual state of an automaton
-partially.
+Use [[reset]], to get an automaton that is in its initial state.  The
+initial state of an automaton is not fixed but depends on informations
+that are in general not known at the time an automaton is constructed: 
+{\PAL} permits to assign hardware registers to global {\PAL}
+registers.  Of course, assigned hardware registers can not be used for
+other registers and so the initial state of an automaton depends on
+it.  The list of pre-assigned hardware registers is passed to
+[[reset]].  To list of hardware registers used by a program is
+maintained by the fat environment and can be obtained from there using
+[[Fenv.hwregs]]. 
 
 <<signature run>>=
-val reset: automaton -> automaton
+val reset: automaton -> string list -> automaton
 @
 
 Running an automaton means to ask for the [[location]] of a [[ty]]. 
@@ -158,6 +166,11 @@ question includes the desired [[location]] and the automaton in its
 new (internal) state.  When the automaton lacks a transition from its
 current state for the requested type, the [[Error.ErrorExn]] exception
 is raised.
+
+A [[ty]] value passed to [[next]] may include a hint for a hardware
+register. Such a hardware register must have been announced to the
+automaton when it was [[reset]]. The location in respond to the [[ty]]
+value will be the hardware register that was previously announced.
 
 <<>>=
 val next: automaton -> ty -> location * automaton (* Error.ErrorExn *)
@@ -209,23 +222,21 @@ type info
 val info: automaton -> info
 @
 
-An automaton has a current and an initial state and so it is natural
-to use a state to create an automaton and make it the initial state at
-the same time.  The initial [[info]] value must be supplied, too.  We
-introduce [[state_of]] to obtain the \emph{actual} state of an
-automaton and use it to express some rules:
+We separate the issues of building an automaton and putting it into
+its initial state. The reason to do so is that the initial state
+depends on informations that are usually unknown at the time the
+automaton is built. The function [[Run.reset]] puts an automaton into
+its initial state.
+
+To build an automaton, start with [[make]].  This function receives
+the [[info]] value belonging to its initial state.  Although the
+initial state depends on information not available yet we believe, that
+the [[info]] counter's value is the same for any initial state and
+thus it is supplied here.
 
 <<>>=
-val make    : state -> info -> automaton   
-val state_of: automaton -> state
+val make    : info -> automaton   
 @
-
-\begin{quote}
-\begin{verbatim}
-state_of (make s i)             = s
-state_of (Run.reset (make s i)) = s     
-\end{verbatim}
-\end{quote}
 
 A \emph{transition} from one state to another describes which
 locations to use for the type [[ty]] that caused this transition.  So
@@ -239,15 +250,6 @@ two states, a type, and an [[info]] dependent [[location]].
 <<>>=
 val add: automaton -> state -> ty -> (info -> location) -> state -> automaton
 @
-
-Adding a transition does not alter the state of an automaton:
-
-\begin{quote}
-\begin{verbatim}
-state_of (add a s1 t f s2) = state_of a
-info     (add a s1 t f s2) = info a
-\end{verbatim}
-\end{quote}
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}

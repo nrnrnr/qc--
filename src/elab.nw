@@ -1178,7 +1178,11 @@ let formal r env (hint, inv, ty, name) =
 
 <<>>=
 let proc r env (_,name,ff,bb as p) =
-    let x    = { F.env = None; F.stackdata = None; F.salign = None } in
+    let x    = { F.env    = None
+               ; F.sdata  = None
+               ; F.salign = None 
+               ; F.sbase  = Idgen.id' (name ^ "sbase")
+               } in
     let t    = E.ematch (pointerTy env) (fun p -> F.Label(F.Proc(x)),p) in
     let env  = foldl (body r F.Global) env bb     in 
     let env  = F.bindv name ((r,F.Global),t) env    in
@@ -1927,28 +1931,32 @@ such that the global counter for indexing registers is maintained
 across procedures.
 
 The local environment for the procedure is bound in the fat
-environment such that it can be re-used later.  This updates the
-existing entry for the procedure in the fat environment and thus
-[[rebindv]] must be used.  After the [[body]] of a procedure is
-traversed the [[offset]] equals the amount of stack data that was
-allocated there.  This number goes also into the denotation of the
-procedure.
+environment such that it can be re-used later.  This function updates
+the existing entry for the procedure in the fat environment.  After
+the [[body]] of a procedure is traversed the [[offset]] equals the
+amount of stack data that was allocated there.  This number goes also
+into the denotation of the procedure.
 
 <<>>=
 and proc r env (_,name,_,bb as p) =
-    let i    = F.getIndex env  (* save old value *)        in
-    let env' = F.setIndex env 0   (* register numbering *) in
-    let env' = F.resetOffset env' (* stackdata offset *)   in
-    let env' = Env.local env p                             in
-    let env' = foldl body env' bb                          in
-    let p    = { F.env       = Some env'
-               ; F.stackdata = Some (F.offset env)
-               ; F.salign    = Some (F.maxOffsetAlign env)
-               }                                           in
-    let t    = E.ematch (pointerTy env)
-               (fun t -> (F.Label(F.Proc(p)),t))           in
-    let env  = F.rebindv name t env                        in
-    let env  = F.setIndex env i (* set old value *)        in
+    let i    = F.getIndex env     (* save old value *)      in
+    let env' = F.setIndex env 0   (* register numbering *)  in
+    let env' = F.resetOffset env' (* stackdata offset *)    in
+    let env' = Env.local env p                              in
+    let env' = foldl body env' bb (* traverse body *)       in
+    let entry= E.ematch (snd (F.findv name env))
+               ( function
+               | (F.Label(F.Proc(p)),t) -> (* update denotation *)
+                    let p' = { p with 
+                               F.env       = Some env'
+                             ; F.sdata     = Some (F.offset env)
+                             ; F.salign    = Some (F.maxOffsetAlign env)
+                             }
+                    in F.Label(F.Proc(p')),t
+               | _ -> assert false
+               )                                            in
+    let env  = F.rebindv name entry env                     in
+    let env  = F.setIndex env i (* set old value *)         in
         if   F.errorFlag env'
         then F.flagError env
         else env
