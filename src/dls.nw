@@ -182,7 +182,7 @@ module OneLocVarMap : VarMap = struct
 @
 The constructors and observers are simple.
 <<varmap module>>=
-  let empty_pair = {reg = None; mem = None}
+  let empty_pair       = {reg = None; mem = None}
   let def_reg pair r   = {pair with reg = r}
   let def_mem pair m   = {pair with mem = m}
   let pair_to_list p   = match p with
@@ -194,9 +194,6 @@ The constructors and observers are simple.
   let upd_pair_map upd t v m = RM.add t (upd (pair_map_find t m) v) m
 
   let empty            = (RM.empty, RM.empty)
-  let add t l (vm, lm) = match l with
-    | Reg r -> (upd_pair_map def_reg t (Some r) vm, RM.add r t lm)
-    | Mem m -> (upd_pair_map def_mem t (Some m) vm, lm)
   let remove t l (vm, lm) =
     match l with
     | Reg r ->
@@ -210,6 +207,22 @@ The constructors and observers are simple.
         (RM.remove t vm, lm)
       else
         (upd_pair_map def_mem t None vm, lm)
+@
+We allow each temp to be in only one register and one memory location at a time.
+There's an interesting time vs. memory tradeoff here:
+we could change the remove function such that if it is asked to remove a
+temp from a register, it verifies that the [[vm]] map also binds the temp
+to the register -- that way, the add function need not change the [[lm]] map,
+possibly saving memory.
+location of the temp in the [[vm]] map
+<<varmap module>>=
+  let add t l (vm, lm) = match l with
+    | Reg r ->
+      let lm = match (pair_map_find t vm).reg with
+               | Some r -> RM.remove r lm
+               | None   -> lm                 in
+      (upd_pair_map def_reg t (Some r) vm, RM.add r t lm)
+    | Mem m -> (upd_pair_map def_mem t (Some m) vm, lm)
   let var_locs (vm, _) temp    = pair_to_list (RM.find temp vm)
   let reg_contents (_, lm) reg = try Some (RM.find reg lm) with Not_found -> None
   let fold f (vm, _) zero      = RM.fold (fun t ls z -> f t (pair_to_list ls) z) vm zero
@@ -267,33 +280,23 @@ Any registers explicitly allocated to hardware registers are unavailable.
 Otherwise, the availability of registers depends on whether they have been assigned to
 temps (as shown by the variable map).
 <<varmap module>>=
-  let classify_inregs tgt allregs (vm, _ as map) node =
-    let defs          = defs node                                                  in
-    let uses          = uses node                                                  in
-    let live_in       = get_live_in  node                                          in
-    let live_out      = get_live_out node                                          in
-
-    let occupied             =
-      RM.fold (fun _ l rst -> match l with | {reg = Some r} -> RS.add r rst
-                                           | _              -> rst) vm RS.empty   in
-    let hw_def_regs        = get_hw_regs tgt defs     in
-    let hw_in_regs         = get_hw_regs tgt live_in  in
-    let hw_out_regs        = get_hw_regs tgt live_out in
-    let hw_all_regs        = hw_def_regs ++ hw_in_regs ++ hw_out_regs in
+  let classify_inregs tgt allregs (vm, lm as map) node =
+    let hw_defs       = get_hw_regs tgt (defs node)                                in
+    let hw_live_in    = get_hw_regs tgt (get_live_in  node)                        in
+    let hw_live_out   = get_hw_regs tgt (get_live_out node)                        in
+    let hw_all_regs   = hw_defs ++ hw_live_in ++ hw_live_out                       in
 
     let free_regs = diff allregs hw_all_regs in
-    let (hicost, unused) = part (fun r -> RS.mem r occupied) free_regs in
+    let (hicost, unused) = part (fun r -> RM.mem r lm) free_regs in
 
     { regs_unused        = unused
     ; regs_unused_not_lo =
-       diff (inter (diff allregs hw_in_regs) (hw_out_regs ++ hw_def_regs))
-            (setFromList hicost)
+        inter allregs (((hw_live_out ++ hw_defs) -- hw_live_in) -- (setFromList hicost))
     ; regs_cheap         = []
     ; regs_hicost        = hicost
-    ; regs_unavail       = inter allregs hw_in_regs
+    ; regs_unavail       = inter allregs hw_live_in
     ; regs_unavail_if_lo = inter allregs hw_all_regs
     }
-
 @
 DOCO PAUSE HERE
 <<varmap module>>=
@@ -545,7 +548,13 @@ let rpo_dfs (state, prefs) =
 @
 <<dls algorithm>>=
 let dls () ({Proc.cfg = cfg; Proc.cc = cc; Proc.target = tgt} as proc) =
-  (*Cfgutil.print_cfg cfg;*)
+  (*
+	Cfgutil.print_cfg cfg;
+  G.iter_nodes
+    (fun n -> printTempSet (Printf.sprintf "%d live_out\n" (G.num n)) (get_live_out n);
+              printTempSet (Printf.sprintf "%d live_in\n"  (G.num n)) (get_live_in n))
+    cfg;
+	*)
   let alloc_regset = cc.Call.volregs ++ cc.Call.pre_nvregs      in
   <<define spill functions>>
   <<define [[buffer_if_succ_is_join]] to insert a nop after instr leading to join>>
@@ -592,7 +601,6 @@ let alloc_node state prefs node =
   let state = {state with allocated = IS.add (G.num node) state.allocated}       in
 
   (* Not sufficient; doesn't save any time *)
-  (*
   let free_unused_maps state n =
     let not_all_allocated lst = List.exists (fun p -> not (is_allocated state p)) lst in
     let k = G.kind n in
@@ -607,7 +615,6 @@ let alloc_node state prefs node =
                    varOutMaps = IM.remove (G.num n) state.varOutMaps}) in
   let state = List.fold_left free_unused_maps state preds              in
   let state = List.fold_left free_unused_maps state (node::succs)      in
-  *)
   state in
 @
 Before shuffling with the successors, we have to make sure that if the node is not a
@@ -952,8 +959,13 @@ If not (as in multiway-branch, call, and cut-to instructions), we need to insert
 and stores before and after the nodes.
 <<definition of shuffle>>=
 let shuffle state pred succ =
+  (*Printf.eprintf "Shuffling pred %d and succ %d\n" (G.num pred) (G.num succ);*)
   let pred_vm   = IM.find (G.num pred) state.varOutMaps in
   let succ_vm   = IM.find (G.num succ) state.varInMaps  in
+	(*
+  VM.print "pred:" pred_vm;
+  VM.print "succ:" succ_vm;
+	*)
   <<define [[shuffle_around]] and [[shuffle_between]]>>
   match G.kind pred with
   | G.Mbranch | G.Call | G.CutTo -> shuffle_around state pred succ
@@ -966,7 +978,10 @@ We also update each variable map that is changed.
 <<define [[shuffle_around]] and [[shuffle_between]]>>=
 let shuffle_around state pred succ =
   assert (G.is_join succ);
-  (*VM.print "pred:\n" pred_vm; VM.print "succ:\n" succ_vm; *)
+  (*
+	 VM.print (Printf.sprintf "\npred %d:" (G.num pred)) pred_vm;
+   VM.print (Printf.sprintf "\nsucc %d:" (G.num succ)) succ_vm;
+  *)
 
   let find_inconsistents temp succ_locs rst =
     let pred_regs, pred_mems = part_locs (VM.var_locs pred_vm temp) in
@@ -1000,13 +1015,15 @@ We update the successor's variable map to have each inconsistent temp in memory.
             nodes' succ in
 
   (* make the predecessors consistent *)
-  (*Printf.eprintf "#preds\n";
+  (*
+  Cfgutil.print_cfg cfg;
+  Printf.eprintf "#preds\n";
   List.iter (fun n -> Printf.eprintf "%d " (G.num n)) (G.preds succ);
   Printf.eprintf "\n#allocated preds\n";
   List.iter (fun n -> Printf.eprintf "%d " (G.num n))
             (List.filter (is_allocated state) (G.preds succ));
   Printf.eprintf "\n";
-  *)
+	*)
 
   let handle_pred state pred =
     let pred_vm = try IM.find (G.num pred) state.varOutMaps
@@ -1014,6 +1031,12 @@ We update the successor's variable map to have each inconsistent temp in memory.
                     (Cfgutil.print_cfg cfg;
                      Printf.eprintf "node %d; pred %d\n" (G.num succ) (G.num pred);
                      Impossible.impossible "shuffling: pred node with no outmap") in
+		(*
+    VM.print (Printf.sprintf "\npred_vm %d:" (G.num pred)) pred_vm;
+    VM.print (Printf.sprintf "\nsucc_vm %d:" (G.num succ)) succ_vm;
+    printTempSet "pred_live_out\n" (get_live_out pred);
+    printTempSet "succ_live_in\n"  (get_live_in  succ);
+		*)
     let (state, stores) =
       RS.fold (fun t (state, stores) ->
                  match part_locs (VM.var_locs pred_vm t) with
@@ -1029,9 +1052,7 @@ We update the successor's variable map to have each inconsistent temp in memory.
     let _ = List.fold_right
               (fun node pred -> (G.splice_before ~entry:node ~exit:node pred ; pred))
               nodes' pred in
-    (*Printf.eprintf "Pred %d\n" (G.num pred);
-    VM.print "new maps" pred_vm;
-    *)
+    (*VM.print "new maps" pred_vm;*)
     set_varIn (set_varOut state pred pred_vm) pred pred_vm in
   List.fold_left handle_pred state (List.filter (is_allocated state) (G.preds succ)) in
 @
@@ -1050,11 +1071,15 @@ let shuffle_between state pred succ =
       | (Mem _, Reg r::_, [])                          ->
         let state', s = store state temp r in (state', ms, ls, s::ss)
       | (_    , []      , [] )                         ->
-        (*Error.warningPrt (Printf.sprintf "Partially undefined temp %s in procedure %s"
+      (*
+        Error.warningPrt (Printf.sprintf "Partially undefined temp %s in procedure %s"
                             (printReg temp) proc.Proc.symbol#original_text);
         flush stderr;
-        *)
         state_lists
+        *)
+        Impossible.impossible
+          (Printf.sprintf "Shuffle: Temp %s allocated in pred but not succ map in %s"
+             (printReg temp) (proc.Proc.symbol#original_text))
       | (_    , _       , _  )                         ->
         VM.print "Pred VM:" pred_vm;
         VM.print "Succ VM:" succ_vm;
@@ -1081,7 +1106,7 @@ To reconcile variable maps, we need to create move, store, and load rtl's.
 <<define [[assign]], [[move]], [[store]], and [[load]]>>=
 let make_loc_empty loc vm =
   match loc with
-  | Mem _ -> vm
+  | Mem _ -> Impossible.impossible "DLS: make_loc_empty called on memory location"
   | Reg r -> match VM.reg_contents vm r with
              | Some t -> VM.remove t loc vm
              | None   -> vm                 in
@@ -1099,10 +1124,15 @@ let load state temp dst =
             tgt.Target.reload space dst loc)) in
 let make_nodes' state start_vm shuffles =
   let rec make_node_lst (s, vm, rst) (upd_vm, rtls) =
-    match rtls with
+    match rtls with (* note: rtls is a list of parallel assts *)
     | [r]    -> let vm' = upd_vm vm                                              in
                 let n   = G.instruction cfg r ~succ:(G.illegal cfg)              in
                 let s'  = mark_allocated (set_varOut (set_varIn s n vm) n vm') n in
+								(*
+                Printf.eprintf "on node %d:\n" (G.num n);
+                VM.print "vm" vm;
+                VM.print "vm'" vm';
+								*)
                 (s', vm', n::rst)
     | r::rs  -> let n   = G.instruction cfg r ~succ:(G.illegal cfg)              in
                 let s'  = mark_allocated (set_varOut (set_varIn s n vm) n vm)  n in
