@@ -547,6 +547,8 @@ It is permissible that the [[entry]] and [[exit]] be the same node.
 The reason there's no general [[splice_between]] is that it's not well
 specified in general on *which* edge between the two nodes the new
 material is inserted.
+In [[splice_on_every_edge_between]], the exit node must have only a single possible
+successor (i.e. multiway branches and conditional branches may not be the exit node).
 <<graph and node mutators>>=
 val splice_on_every_edge_between : entry:'i node -> exit:'i node ->
                                    pred:'i node  -> succ:'i node -> unit
@@ -1300,11 +1302,7 @@ let rec join_leading_to ~succ =
        if is_join p then p
        else let cfg  = get_cfg succ in
             let join = node_labeled cfg (cfg.mk_label "join") in
-            (*let () = Printf.fprintf stderr "trying to set the successor to a join node\n" in
-            let () = flush stderr in*)
             let () = if not (is_ill p) then set_succ p ~succ:join in
-            (*let () = Printf.fprintf stderr "done setting the successor to a join node\n" in
-            let () = flush stderr in*)
             let () = set_succ join ~succ:succ in  (* maybe use set_succ here? *)
             join
 @
@@ -1336,10 +1334,10 @@ and set_succ' ~single ~ce_mult ~mult ~cbr ~node ~old_succ ~succ =
   else
     begin
       ( (<<modify the $n$th successor of [[node]] because [[node]] is no longer a predecessor>>)
+      ; (<<update [[node]]'s $n$th successor field to point to [[succ]]>>)
       ; (if not (is_ill succ)
          then <<modify [[succ]] because [[node]] has become a predecessor>>
         )
-      ; (<<update [[node]]'s $n$th successor field to point to [[succ]]>>)
       )
     end
 @
@@ -1384,14 +1382,10 @@ For join and exit nodes, we remove [[node]] from the predecessor list.
 For other nodes, we set the predecessor to the illegal node.
 <<modify the $n$th successor of [[node]] because [[node]] is no longer a predecessor>>=
 let rec rem_1_list lst = match lst with
-  | [] -> ( (*Printf.fprintf stderr "pred: %d succ: %d\n" (num node) (num old_succ)
-          ; flush stderr
-          ;*) imposs "remove_pred: predecessor to be removed not found")
+  | [] -> imposs "remove_pred: predecessor to be removed not found"
   | n::rst when eq n node -> rst
-  | n::rst -> ( (*Printf.fprintf stderr "node: %d old_succ:%d n: %d\n" (num node) (num old_succ) (num n)
-              ;*) n :: rem_1_list rst) in
+  | n::rst -> n :: rem_1_list rst in
 let rem_1_list l =
-  (*let () = Printf.fprintf stderr "rem_1_lst()\n" in*)
   try rem_1_list l
   with _ ->
     imposs ("Error removing node from list with " ^ string_of_int (List.length l) ^ " nodes") in
@@ -1490,6 +1484,8 @@ let invert_cbr node = match node with
   | _     -> undef "invert_cbr" "non-cond-branch"
 @
 We are careful to order the mutations to avoid inserting extra join points.
+The exit node must have only a single possible successor (i.e. multiway branches and
+conditional branches may not be the exit node).
 <<graph and node mutators implementation>>=
 let splice_on_every_edge_between ~entry ~exit ~pred ~succ =
   let () = if not (List.exists (eq pred) (preds succ))
@@ -1499,41 +1495,15 @@ let splice_on_every_edge_between ~entry ~exit ~pred ~succ =
   let () =
     if not (List.exists (eq succ) (succs pred))
     then imposs "splice_on_every_edge_between: succ is not a successor of pred" in
-  let update_succ () =
-    let upd_pred n     = if eq n pred then exit  else n in
-    let upd_predlist l = List.fold_left (fun rst n -> upd_pred n :: rst) [] l in
-    (*let () = Printf.fprintf stderr "in update_succ\n" in
-    let () = flush stderr in*)
-    ((match succ with
-    | Joi j -> 
-      ( (*Printf.fprintf stderr "join case\n"
-      ; flush stderr
-      ;*) j.joi_preds <- upd_predlist j.joi_preds
-      ; j.joi_lpred <- upd_pred     j.joi_lpred
-      (*; Printf.fprintf stderr "done with join case\n"
-      ; flush stderr*)
-      )
-    | Exi e ->
-      ( e.exi_preds <- upd_predlist e.exi_preds
-      ; e.exi_lpred <- upd_pred     e.exi_lpred
-      )
-    | _     ->
-      ( (*Printf.fprintf stderr "general case exit:%d succ:%d\n" (num exit) (num succ)
-      ;*) set_succ exit ~succ
-      (*; Printf.fprintf stderr "returned from general case\n"
-      ; flush stderr*)
-      )
-    )
-    (*; Printf.fprintf stderr "returning from update_succ\n"
-    ; flush stderr*)) in
+  let update_succ () = set_succ exit ~succ in
   let update_pred () =
-    let upd_succ n = if eq n succ then entry else n in
+    let upd_succ n            = if eq n succ then entry else n in
     let upd_array_gen upd arr = Array.iteri (fun i n -> Array.set arr i (upd n)) arr in
-    let upd_array = upd_array_gen upd_succ in
-    let upd_contedge_array = upd_array_gen (fun ce -> {ce with node = upd_succ ce.node}) in
-    (*let () = (Printf.fprintf stderr "pred:%d entry:%d\n" (num pred) (num
-                                                                       entry))
-     in*)
+    let upd_array             = upd_array_gen upd_succ in
+    let upd_contedge_array    =
+      upd_array_gen (fun ce -> {ce with node = upd_succ ce.node}) in
+    let () = (Printf.fprintf stderr "pred:%d new:%d succ:%d\n" (num pred)
+                                                              (num entry) (num succ)) in
     match pred with
     | Cbr c ->
       ( c.cbr_true  <- upd_succ c.cbr_true
@@ -1549,17 +1519,15 @@ let splice_on_every_edge_between ~entry ~exit ~pred ~succ =
       )
     | Cal c ->
       ( upd_contedge_array c.cal_contedges 
-      (*; Printf.fprintf stderr "Trying to update call node.\n"
-      ; flush stderr*)
       ; c.cal_lsucc <- upd_succ c.cal_lsucc
-      (*; Printf.fprintf stderr "Succeeded in updating call node.\n"
-      ; flush stderr*)
       )
     | Cut c ->
       ( upd_contedge_array c.cut_contedges 
       ; c.cut_lsucc <- upd_succ c.cut_lsucc
       )
-    | _     -> set_succ pred ~succ:entry in
+    | _     -> (Printf.eprintf "setting succ\n"; flush stderr;
+                set_succ pred ~succ:entry; Printf.eprintf "done setting succ\n";
+                flush stderr ) in
   (update_pred (); update_succ ())
 
 let splice_before ~entry ~exit node =
@@ -1955,11 +1923,12 @@ let show_rtl = function
 let printReg (s, i, w) = Printf.sprintf "%c%d" s i
 let print_node node = 
       String.concat "" (List.flatten
-       [ [ string_of_int (num node)
-         ; ": "
-         ; show_rtl (to_instr node)
-         ; "\n"
-	 ]
+       [ List.flatten [ [ string_of_int (num node)
+                        ; ": "
+	                      ]
+                      ; if is_join node then labels node
+                        else [show_rtl (to_instr node)]
+                      ; [ "\n" ] ]
        ; ["Preds: "]
        ; List.fold_right (fun n rst -> Printf.sprintf "%d, " (num n) :: rst)
                          (preds node) []
