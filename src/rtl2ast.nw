@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 \input{macros.tex}
 
@@ -40,9 +41,9 @@ a chance to re-write names such that they obey to the {\PAL} syntax.
 See also module \module{mangle}.
 
 <<rtl2ast.mli>>=
-val expr:      (string -> string) -> Rtl.Private.expr  -> Ast.expr 
-val const:     (string -> string) -> Rtl.Private.const -> Ast.expr 
-val rtl:       (string -> string) -> Rtl.Private.rtl   -> Ast.stmt 
+val expr:      (string -> string) -> Rtl.expr  -> Ast.expr 
+(*val const:     (string -> string) -> Rtl.const -> Ast.expr *)
+val rtl:       (string -> string) -> Rtl.rtl   -> Ast.stmt 
 @
 
 % ------------------------------------------------------------------ 
@@ -56,7 +57,6 @@ module T = Types
 @
 
 <<>>=
-let truth              = R.Const(R.Bool(true))
 let bits n             = A.BitsTy n
 
 let const mangle = function
@@ -69,6 +69,7 @@ let const mangle = function
 let locwidth = function
     | R.Cell(_,_,w,_,_) -> w
     | R.Var(_,_,w)      -> w
+    | R.Slice(w, _, _)  -> w
 @
     
 Primitive operators in {\PAL} are monomorphic, whereas they are
@@ -77,25 +78,30 @@ specialize an operator if it is polymorphic.  Currently not
 implemented.
 
 <<>>=
-let rec expr mangle = function
+let rec expr' mangle = function
     | R.Const c         -> const mangle c
-    | R.Fetch(loc,_)    -> A.Fetch(location mangle loc)
-    | R.App((op,ww),ee) -> let actual e = (None, expr mangle e)
+    | R.Fetch(loc,_)    -> A.Fetch(location' mangle loc)
+    | R.App((op,ww),ee) -> let actual e = (None, expr' mangle e)
                            in 
                                 A.PrimOp(op, List.map actual ee)
 @
 
-The enco
-
-
+N.B. This code might possibly look up the location in a machine-dependent map
+in case it needs to mangle as the name of a hardware register variable.
 <<>>=
-and location mangle = function 
-    | R.Cell('m',agg,width,e,_)  -> A.Mem(bits width, expr mangle e, None)
+and location' mangle = function 
+    | R.Cell('m',agg,width,e,_)  -> A.Mem(bits width, expr' mangle e, None)
     | R.Cell('r',agg,width,R.Const(R.Bits(n,3)),_) ->  
         let r = Printf.sprintf "r%d " (Bits.to_int n) in
             A.Var(None, mangle r)
     | R.Cell _                   -> assert false
     | R.Var (name,_,width)       -> A.Var(None,mangle name)
+    | R.Slice _                  -> assert false (*should convert as special reg name*)
+
+let (<<) f g   = fun x -> f (g x)
+let expr m = expr' m << Rtl.Convert.expr
+let location m = location' m << Rtl.Convert.location
+
 @
 
 A [[kill]] is translated into an assignment of [[%undef()]].
@@ -107,16 +113,18 @@ let rec effect mangle guard = function
         let undef = R.App(("undef",[width]),[]) in
             effect mangle guard (R.Store(loc, undef, width))
     | R.Store  (loc,e,w) -> 
-            (location mangle loc,(guard, expr mangle e))
+            (location' mangle loc,(guard, expr' mangle e))
 
-let guarded mangle = function
-    | (e, eff) 
-       when e = truth    -> effect mangle None                   eff
-    | (e, eff)           -> effect mangle (Some (expr mangle e)) eff
+let guard mangle = function
+  | R.Const (R.Bool true) -> None
+  | g -> Some (expr' mangle g)  
 
-let rtl mangle (R.Rtl gg) = 
+let guarded mangle (g, eff) = effect mangle (guard mangle g) eff
+
+let rtl' mangle (R.Rtl gg) = 
     let pairs    = List.map (guarded mangle) gg in
     let lhs, rhs = List.split pairs             in
         A.AssignStmt(lhs,rhs)
+let rtl mangle = rtl' mangle << Rtl.Convert.rtl
 @
 

@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 \input{macros.tex}
 
@@ -144,8 +145,8 @@ thus is by far too specific.
 
 <<automaton.ml>>=
 type ty         =  Types.ty * string option
-type location   =  (Rtl.Private.expr -> Rtl.Private.effect)
-                    * Rtl.Private.expr
+type location   =  (Rtl.expr -> Rtl.rtl)
+                    * Rtl.expr
 
 let memsize     = 8  (* assumption for now, must be obtained from Fenv *)
 let pointer     = 32 (* ditto for pointer size *)
@@ -169,8 +170,8 @@ and [[write]]:
 
 <<type t>>=
 type t        =     { offset:       int
-                    ; read:         (int -> int -> Rtl.Private.expr)
-                    ; write:        (int -> int -> Rtl.Private.expr -> Rtl.Private.effect)
+                    ; read:         (int -> int -> Rtl.expr)
+                    ; write:        (int -> int -> Rtl.expr -> Rtl.rtl)
                     }
 @
 
@@ -219,28 +220,26 @@ let overflow dfa = { size  = dfa.offset
 % ------------------------------------------------------------------ 
 
 <<module build>>=
-let offset k        = Rtl.Private.Const(Rtl.Private.Bits(Bits.of_int k word,word)) 
-let add             = ("add",[word])                          
-let sum x y         = Rtl.Private.App (add,[x;y])                       
+let offset k        = Rtl.bits (Bits.of_int k word) word
+let add             = Rtl.op "add" [word]
+let sum x y         = Rtl.app add [x;y]
 
-let regsp = Rtl.Private.Cell( 'm'
-                    , agg
-                    , pointer
-                    , Rtl.Private.Const(Rtl.Private.Link("sp ",pointer))
-                    , -1
-                    )
+let regsp = Rtl.cell Rtl.none
+                     'm'
+                     agg
+                     pointer
+                     (Rtl.link "sp " pointer)
 
-let globs = Rtl.Private.Cell( 'm'
-                    , agg
-                    , pointer
-                    , Rtl.Private.Const(Rtl.Private.Link("globals ",pointer))
-                    , -1
-                    )
+let globs = Rtl.cell Rtl.none
+                     'm'
+                     agg
+                     pointer
+                     (Rtl.link "globals " pointer)
                         
-let sp loc          = Rtl.Private.Fetch(loc,word)
-let stack loc k w   = Rtl.Private.Cell('m',agg,w,sum (sp loc) (offset k),-1)    
-let read  loc k w   = Rtl.Private.Fetch(stack loc k w, w)                 
-let write loc k w   = fun e -> Rtl.Private.Store(stack loc k w, e, w)    
+let sp loc          = Rtl.fetch loc word
+let stack loc k w   = Rtl.cell Rtl.none 'm' agg w (sum (sp loc) (offset k))
+let read  loc k w   = Rtl.fetch (stack loc k w) w
+let write loc k w   = fun e -> Rtl.store (stack loc k w) e w
 @
 
 The following automaton places parameters relative to some link time

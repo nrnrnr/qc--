@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 \input{macros.tex}
 
@@ -110,7 +111,7 @@ type formal =   { name:      string
                 ; index:     int             (* run-time API *)
                 } 
 
-type actual     = Rtl.Private.expr 
+type actual     = Rtl.expr 
                 * Rtl.width 
                 * string option               (* hint *)
 @
@@ -152,7 +153,7 @@ module Props : sig
     type t          (* properties *)
 
     val empty       : t
-    val add_span    : Bits.bits -> Rtl.Private.const -> t -> t
+    val add_span    : Bits.bits -> Rtl.expr -> t -> t
     val add_comment : string -> t -> t 
 end    
     
@@ -188,9 +189,9 @@ continuation at its point of return.
 <<>>=
 (* 0 successor nodes *)
 val exit:       cfg -> unode
-val goto:       cfg -> Rtl.Private.expr -> label list -> unode
-val jump:       cfg -> Rtl.Private.expr -> label list -> unode
-val cutto:      cfg -> Rtl.Private.expr -> cuts       -> unode
+val goto:       cfg -> Rtl.expr -> label list -> unode
+val jump:       cfg -> Rtl.expr -> label list -> unode
+val cutto:      cfg -> Rtl.expr -> cuts       -> unode
 val return:     cfg -> int -> int             -> unode
 @
 
@@ -205,10 +206,10 @@ parameters, the calling convention to be used, and their [[context]].
 <<>>=
 (* 1 successor node *)
 val entry:      node -> unode                   (* unique entry node *)
-val assign:     Rtl.Private.rtl -> node -> unode
+val assign:     Rtl.rtl -> node -> unode
 val copyi:      formal list -> context -> Target.cc -> node -> unode
 val copyo:      actual list -> context -> Target.cc -> node -> unode
-val call:       Rtl.Private.expr -> node -> cuts -> unode 
+val call:       Rtl.expr -> node -> cuts -> unode 
 @
 
 A [[branch]] node has two successors: the first is taken when its
@@ -218,7 +219,7 @@ branching point is reached.
 
 <<>>=
 (* 2 successor nodes *)
-val branch  : Rtl.Private.expr -> node -> node -> unode
+val branch  : Rtl.expr -> node -> node -> unode
 @
 
 
@@ -316,17 +317,17 @@ informations will be added.
 and  kind       = Deferred
                 (* end of a path *) 
                 | Exit
-                | Goto              of Rtl.Private.expr * node list     
-                | Jump              of Rtl.Private.expr * node list
-                | Cutto             of Rtl.Private.expr * cuts
+                | Goto              of Rtl.expr * node list     
+                | Jump              of Rtl.expr * node list
+                | Cutto             of Rtl.expr * cuts
                 | Return            of int * int
                 (* one default successor *)
                 | Entry             of node
-                | Call              of Rtl.Private.expr * node * cuts
-                | Assign            of Rtl.Private.rtl * node
+                | Call              of Rtl.expr * node * cuts
+                | Assign            of Rtl.rtl * node
                 | Label             of Acfg.label * node
                 (* two successors *)
-                | Branch            of Rtl.Private.expr * node * node
+                | Branch            of Rtl.expr * node * node
 @
 
 Continuations, that a [[call] or [[cutto]] node may reach, are
@@ -357,7 +358,7 @@ number of comments and can be part of any number of spans.
 
 <<module Props>>=
 type t =        { comments:         string list
-                ; spans:            (Bits.bits * Rtl.Private.const) list
+                ; spans:            (Bits.bits * Rtl.expr) list
                 }
                         
 let empty           = { comments = []; spans = [] }
@@ -1117,14 +1118,9 @@ let copyi formals context conv after props =
             let (write,read),dfa = A.Run.next dfa (Types.bits frml.Acfg.width
                                                   , frml.Acfg.hint
                                                   ) in
-            let var = Rtl.Private.Var ( frml.Acfg.name
-                              , frml.Acfg.index
-                              , frml.Acfg.width
-                              )        in
-            let t     = Rtl.Private.Const(Rtl.Private.Bool(true))         in
-            let store = Rtl.Private.Store(var,read,frml.Acfg.width) in
-            let rtl   = Rtl.Private.Rtl [t,store]                 in
-                assign rtl (loop dfa ff) props
+            let var   = Rtl.var frml.Acfg.name frml.Acfg.index frml.Acfg.width  in
+            let store = Rtl.store var read frml.Acfg.width in
+                assign store (loop dfa ff) props
     in
         loop dfa formals
 @
@@ -1140,7 +1136,7 @@ control to code that receives the values.
 
 Constructing the {\rtl} that assigns the value of an actual parameter
 to a location is easy:  the calling convention automaton returns a
-function [[write:  Rtl.Private.expr -> Rtl.Private.effect]] that
+function [[write:  Rtl.expr -> Rtl.effect]] that
 assigns a supplied value to the right location.
               
 <<copyio>>=
@@ -1156,8 +1152,7 @@ let copyo actuals context conv after props =
             let (write,read),dfa = A.Run.next dfa ( Types.bits width
                                                   , hint
                                                   )       in
-            let t     = Rtl.Private.Const(Rtl.Private.Bool(true))         in
-            let rtl   = Rtl.Private.Rtl [t,write expr]            in
+            let rtl = write expr                          in
                 assign rtl (loop dfa ff) props
     in
         loop dfa actuals

@@ -55,7 +55,7 @@ module A  = Ast
 module T  = Types
 module E  = Error
 module F  = Fenv.Clean
-
+module RP = Rtl.Private
 
 <<auxiliaries>>
 
@@ -86,15 +86,15 @@ end
 % ------------------------------------------------------------------ 
 
 Some auxiliary bindings.  The \module{ir} module defines a [[char]]
-view for [[Rtl.Private.space]].  However, the [[char]] type is only used in
+view for [[Rtl.space]].  However, the [[char]] type is only used in
 {\asdl} data types that \emph{use} the [[space]] type, but
-[[Rtl.Private.space]] itself is still [[int]].  So we can not use this type to
+[[Rtl.space]] itself is still [[int]].  So we can not use this type to
 annotate the [[default_memory]] definition. 
 
 <<auxiliaries>>=
 let default_convention         = "C--"              (* gospel truth *)
-let default_assertion          = -1                 (* unused *)
-let default_memory             = 'm'                (* Rtl.Private.space *)
+let default_assertion          = Rtl.none
+let default_memory             = ('m' : Rtl.space)
 @
 
 Top-level procedures go into text [[text]] assembler section.
@@ -104,7 +104,7 @@ let toplevel_section           = "text"
 @
 
 <<>>=
-let dummy_expression    = Rtl.Private.Const(Rtl.Private.Bits(Bits.zero 32, 32))
+let dummy_expression    = Rtl.bits (Bits.zero 32) 32
 @
 
 [[bits]] extracts a [[width]] from a type, i.e.~the number of bits.
@@ -221,13 +221,13 @@ let rec actual env (target: Target.t) globals (hint, e) =
 \subsubsection{Expressions}
 % ------------------------------------------------------------------ 
 
-[[expr]] translates an {\small AST} expression into an [[Rtl.Private.expr]].  
+[[expr]] translates an {\small AST} expression into an [[Rtl.expr]].  
 
 A variable as part of an expression denotes a value; it is translated
-into a [[Rtl.Private.expr]].  Depending on the denotation of the variable it
+into a [[Rtl.expr]].  Depending on the denotation of the variable it
 becomes a constant of either link-time or compile-time, or something
 more complicated.  If the variable is a local register, it becomes a
-[[Rtl.Private.Var]] value, if it is global, it can be looked up in
+[[Rtl.var]] value, if it is global, it can be looked up in
 [[globals]].
 
 <<>>=
@@ -236,12 +236,12 @@ and variable (env: F.env) (target: Target.t) globals = function
     | A.Var(hint,x)   ->
         let (_,(denot,t)) = F.findv x env in 
             ( match denot with
-            | F.Constant(b)    -> Rtl.Private.Const(Rtl.Private.Bits(b, bits t))
-            | F.Label(F.Proc _)-> Rtl.Private.Const(Rtl.Private.Link(x, bits t))
-            | F.Label(F.Code)  -> Rtl.Private.Const(Rtl.Private.Link(x, bits t))
-            | F.Label(F.Data)  -> Rtl.Private.Const(Rtl.Private.Link(x, bits t))
-            | F.Import(None)   -> Rtl.Private.Const(Rtl.Private.Link(x, bits t))
-            | F.Import(Some n) -> Rtl.Private.Const(Rtl.Private.Link(n, bits t))
+            | F.Constant(b)    -> Rtl.bits b (bits t)
+            | F.Label(F.Proc _)-> Rtl.link x (bits t)
+            | F.Label(F.Code)  -> Rtl.link x (bits t)
+            | F.Label(F.Data)  -> Rtl.link x (bits t)
+            | F.Import(None)   -> Rtl.link x (bits t)
+            | F.Import(Some n) -> Rtl.link n (bits t)
             | F.Register(r)    -> 
                 ( match F.is_localv x env with
                 | false  -> let (write,read) = 
@@ -251,12 +251,8 @@ and variable (env: F.env) (target: Target.t) globals = function
                               in read
                 | true   ->  
                     let width = bits t in
-                    let loc   = Rtl.Private.Var
-                              ( x
-                              , r.F.index
-                              , width
-                              )
-                    in Rtl.Private.Fetch(loc,width)
+                    let loc   = Rtl.var x r.F.index width
+                    in Rtl.fetch loc width
                 )                  
             | F.Label(F.Stack (offset,label)) -> 
                 E.error "access to stack data not implemented"
@@ -264,30 +260,30 @@ and variable (env: F.env) (target: Target.t) globals = function
             | F.Continuation     -> assert false (* impossible *)
             )
     | A.Mem (t,e,a)            -> let width = ty env t      in
-                                  let cell = Rtl.Private.Cell
-                                      ( default_memory
-                                      , target#byteorder
-                                      , width
-                                      , expr env target globals e
-                                      , default_assertion
-                                      ) in 
-                                   Rtl.Private.Fetch(cell,width)
+                                  let cell = Rtl.cell
+                                      default_assertion
+                                      default_memory
+                                      target#byteorder
+                                      width
+                                      (expr env target globals e)
+                                      in 
+                                   Rtl.fetch cell width
                                     
             
 <<>>=
 and primOp env (target: Target.t) globals op args =
-    let o = Expr.op env target op args 
+    let (o, ws) = Expr.op env target op args 
     in
-        Rtl.Private.App(o, List.map (expr env target globals) args)
+        Rtl.app (Rtl.op o ws) (List.map (expr env target globals) args)
 
 and expr env (target: Target.t) globals = function 
     | A.ExprAt(x,_)         -> expr env target globals x
-    | A.Int( i, None)       -> Rtl.Private.Const(Rtl.Private.Bits(i,target#wordsize))
-    | A.Int( i, Some t)     -> Rtl.Private.Const(Rtl.Private.Bits(i,ty env t))
-    | A.Float( f, None)     -> Rtl.Private.Const(Rtl.Private.Bits(f,target#wordsize))
-    | A.Float( f, Some t)   -> Rtl.Private.Const(Rtl.Private.Bits(f,ty env t))
-    | A.Char( c, None)      -> Rtl.Private.Const(Rtl.Private.Bits(c,target#wordsize))
-    | A.Char( c, Some t)    -> Rtl.Private.Const(Rtl.Private.Bits(c,ty env t))
+    | A.Int( i, None)       -> Rtl.bits i (target#wordsize)
+    | A.Int( i, Some t)     -> Rtl.bits i (ty env t)
+    | A.Float( f, None)     -> Rtl.bits f (target#wordsize)
+    | A.Float( f, Some t)   -> Rtl.bits f (ty env t)
+    | A.Char( c, None)      -> Rtl.bits c (target#wordsize)
+    | A.Char( c, Some t)    -> Rtl.bits c (ty env t)
     | A.Fetch(v)            -> variable env target globals v
     | A.BinOp(l,op,r)       -> primOp env target globals op [l;r]
     | A.UnOp(op,e)          -> primOp env target globals op [e]
@@ -325,7 +321,7 @@ An assignment is an effect that is captured by an {\rtl}.  The lvalue
 of an assignment must be either a memory location, or a register.  For
 global registers, [[globals]] provides the desired effect when
 supplying the expression representing the value to be stored.  A Local
-register is represented by an [[Rtl.Private.Var]] locations which a value can
+register is represented by an [[Rtl.var]] locations which a value can
 be stored in.
 
 The last two arguments to the [[assign]] function, [[lhs]] and [[e]],
@@ -333,8 +329,11 @@ denote the lvalue of the the assignment, and the expression [[e]]
 computing the value to be stores.  The expression is already an
 {\rtl}.
 
+\emph{(There seems to be some duplication between [[assign]] and
+[[variable]], but I haven't checked carefully. ---NR}
+
 <<>>=
-let rec assign env target globals lhs (e: Rtl.Private.expr) = match lhs with
+let rec assign env target globals lhs (e: Rtl.expr) = match lhs with
     | A.LValueAt(x,_)  -> assign env target globals x e
     | A.Var(hint,x)    ->
         let (_,(denot,t)) = F.findv x env in
@@ -348,26 +347,21 @@ let rec assign env target globals lhs (e: Rtl.Private.expr) = match lhs with
                                            ) 
                         in write e
                     | true  ->
-                        let loc = Rtl.Private.Var
-                            ( x
-                            , r.F.index
-                            , width
-                            )
-                        in Rtl.Private.Store(loc, e, width)
+                        let loc = Rtl.var x r.F.index width
+                        in  Rtl.store loc e width
                     )
             | _ -> assert false (* impossible *)
             )
     | A.Mem(t,addr,a)    -> 
         let width = ty env t in
-        let loc   = Rtl.Private.Cell
-              ( default_memory
-              , target#byteorder
-              , width
-              , expr env target globals addr
-              , default_assertion
-              )
+        let loc   = Rtl.cell
+              default_assertion
+              default_memory
+              target#byteorder
+              width
+              (expr env target globals addr)
         in
-            Rtl.Private.Store(loc,e,width)       
+            Rtl.store loc e width
 @
 
 
@@ -398,18 +392,14 @@ let rec body env target globals props graph after bb =
 
 <<cases for translating statements>>=
 | A.AssignStmt(lhs,rhs) ->
-    let effect lhs  = function 
-        | Some guard, rhs -> ( expr env target globals guard
-                             , assign env target globals lhs
-                                (expr env target globals rhs)
-                             )
-        | None      , rhs -> ( R.truth
-                             , assign env target globals lhs
-                                (expr env target globals rhs)
-                             ) in    
-    let effects = List.map2 (fun lhs rhs -> effect lhs rhs) lhs rhs
+    let effect lhs (guard, rhs) =
+      let eff = assign env target globals lhs (expr env target globals rhs)  in
+      match guard with
+      | Some g -> Rtl.guard (expr env target globals g) eff
+      | None -> eff                                           in
+    let effects = List.map2 effect lhs rhs
     in 
-        decorate (GM.assign (Rtl.Private.Rtl effects) after) 
+        decorate (GM.assign (Rtl.par effects) after) 
 @
 
 The first branch of a [[branch]] node must be a label. So we have to
@@ -523,16 +513,18 @@ The translation of a [[goto]] statement is straight forward; the
 A [[span]]'s attributes are a compile-time constant value and a
 link-time constant.
 
+\emph{Something is very wrong here, but NR is not sure what\ldots}
 <<cases for translating statements>>=
 | A.SpanStmt(e1,e2,ss) ->
-    let key   = ( match dummy_expression with (* constant eval *)
-                | Rtl.Private.Const(Rtl.Private.Bits(bits,w)) -> bits
+    let key   = ( match Rtl.Convert.expr dummy_expression with (* constant eval *)
+                | RP.Const(RP.Bits(bits,w)) -> bits
                 | _                           -> assert false
                 ) in
-    let value = ( match dummy_expression with (* link-time constant *)
-                | Rtl.Private.Const(c)                -> c
+    let value = ( match Rtl.Convert.expr dummy_expression with (* link-time constant *)
+                | RP.Const(c)                -> c
                 | _                           -> assert false
                 ) in
+    let key, value = Bits.of_int 0 32, Rtl.link "you must be joking" 32  in
         body env target globals 
             (G.Props.add_span key value props) graph after ss
 @
@@ -703,14 +695,15 @@ including the span will be used.
 
 <<module Make>>=
 let rec sspan env target globals props asm (e1,e2,ss) =    
-    let key   = ( match dummy_expression with (* constant eval *)
-                | Rtl.Private.Const(Rtl.Private.Bits(bits,w)) -> bits
+    let key   = ( match Rtl.Convert.expr dummy_expression with (* constant eval *)
+                | RP.Const(RP.Bits(bits,w)) -> bits
                 | _                           -> assert false
                 ) in
-    let value = ( match dummy_expression with (* link-time constant *)
-                | Rtl.Private.Const(c)                -> c
+    let value = ( match Rtl.Convert.expr dummy_expression with (* link-time constant *)
+                | RP.Const(c)                -> c
                 | _                           -> assert false
                 ) in
+    let key, value = Bits.of_int 0 32, Rtl.link "you must be joking" 32  in
     let props = G.Props.add_span key value props 
     in
         foldl (section env target globals props) asm ss 
@@ -770,19 +763,19 @@ with an [[Automaton.location]].  Such a value consists of a function
 to write a value to a register, and an expression to read a register's
 value.
 
-Hardware registers are known as [[Rtl.Private.locations]], which differ from
+Hardware registers are known as [[Rtl.locations]], which differ from
 an [[Automaton.location]]. The function [[reg2loc]] constructs an
 [[Automaton.location]] for a hardware register.
 
 <<>>=
-let reg2loc = function
-    | Rtl.Private.Cell(spc,agg,width,e,asrt) as loc -> 
-        ( (fun e -> Rtl.Private.Store(loc,e,width))  (* store e to loc         *)
-        , Rtl.Private.Fetch(loc,width)               (* value fetched from loc *)
+let reg2loc loc = match Rtl.Convert.location loc with
+    | RP.Cell (_,_,width,_,_) -> 
+        ( (fun e -> Rtl.store loc e width)  (* store e to loc         *)
+        , Rtl.fetch loc width               (* value fetched from loc *)
         )
     | _                                     -> assert false
 
-let globals target decls =
+let globals (target:Target.t) decls =
     let unknown reg  = raise (E.ErrorExn ("unknown h/w reg: "^reg)) in
     let rec loop map dfa = function
         | []                          -> map
@@ -843,12 +836,9 @@ collect some from the actual usage patterns and then put them in their
 own module. 
 
 <<module R>>=
-let truth      = Rtl.Private.Const(Rtl.Private.Bool(true))
+let truth      = Rtl.bool true
 let width_of r = 77 (* all exprs 77 bits wide - bogus *)
-let assign l r = Rtl.Private.Rtl [(truth, Rtl.Private.Store(l, r, width_of r))]
-let skip       = Rtl.Private.Rtl []
-let par l      = List.fold_right 
-               (fun (Rtl.Private.Rtl l1) (Rtl.Private.Rtl l2) -> Rtl.Private.Rtl (l1 @ l2)) l skip
+let assign l r = Rtl.store l r (width_of r)
 @
  
 % ------------------------------------------------------------------ 

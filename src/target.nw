@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 \input{macros.tex}
 
@@ -56,7 +57,7 @@ particular context and the stack pointer used by the convention.
 
 <<class type cc>>=
 class type cc = object
-    method sp:             Rtl.Private.location    (* stack pointer *)
+    method sp:             Rtl.location    (* stack pointer *)
     method proc_param:     Automaton.t         
     method proc_result:    Automaton.t
     method cont_param:     Automaton.t  
@@ -97,7 +98,7 @@ method charset:        string                  (* "latin1"  typical    *)
 method cc:             cc StrMap.t             (* calling conv by name *)
 method cc':            string -> cc            (* Error.ErrorExn      *)
 method globals:        Automaton.t             (* global reg alloc     *)
-method registers:      Rtl.Private.location StrMap.t   (* registers by name    *)
+method registers:      Rtl.location StrMap.t   (* registers by name    *)
 @
 
 A {\PAL} source code contains some informations about the target it is
@@ -171,12 +172,11 @@ register, addressed by 4 bit number [[n]].
 
 <<>>=
 let reg n = 
-    Rtl.Private.Cell( 'r' 
-            , Rtl.BigEndian 
-            , 32
-            , Rtl.Private.Const(Rtl.Private.Bits(Bits.of_int n 4,4))
-            , -1
-            ) 
+    Rtl.cell Rtl.none
+	     'r' 
+             Rtl.BigEndian 
+             32
+             (Rtl.bits (Bits.of_int n 4) 4)
 @
 
 The class for the dummy's calling convention. A single instance is
