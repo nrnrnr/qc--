@@ -71,6 +71,8 @@ let ra          = reg 26        (* return address   *)
 let zero        = reg 31        (* always zero      *)
 let gp          = reg 29        (* global pointer   *)
 let pv          = reg 27        (* procedure value  *)
+
+let pv_loc      = R.reg pv 
 @
 
 % ------------------------------------------------------------------ 
@@ -104,59 +106,14 @@ module F = Mflow.MakeStandard
      end)   
 @
 
-To be able to load large immediate values, a procedure must set the
-\emph{global pointer) in register \$gp. This register is not preserved
-across procedure calls and thus it must be re-established after a call.
-The protocol to do this relies on register \$27 and $\26:
-
-\begin{itemize}
-\item On ontry to [[p]], the address of [[p]] is in register \$27.
-\item On exit  of [[p]], the return address is in register \$26.
-\end{itemize}
-
-Other registers could be used, but caller and callee must agree on them.
-Using \$27 and $\26, a call to and return from [[p]] looks like this:
-
-<<example for calling convention>>=
-    ...
-    jsr foo             /* ra in $26, foo in $27 */
-    ldgp $gp,0($26)     /* establish gp; $pc = $26 */
-
-
-foo:
-    ldgp $gp,0($27)     /* $27 = foo */
-    ...
-    ret ($26)
-@    
-
-The [[ldgp]] instruction can establish the global pointer using its
-\emph{own} address as it is provided registers \$27 at entry and \$26
-after a return. 
-
-Call and return are thus not single instructions, but really short
-sequences. Since our interfaces require single {\rtl}s for call and
-return, we encode them as multiple effects. Currently, we do \emph{not}
-encode the [[ldgp]] calls but simply add them in the recognizer. 
+A return must pass the return address in register \$26. See the
+discussion below in section \ref{alpha:call}. It would be better if we
+could either specify a sequence or, or had the postexpander re-write the
+{\rtl}.
 
 <<alpha.ml>>=
-let ra_val    = RU.addk wordsize (R.fetch pc wordsize) ra_offset
-let return e  = R.par [ R.store pc         e wordsize
-                      ; R.store (R.reg ra) e wordsize
-                      ]
-let call   e  = R.par [ R.store pc e wordsize
-                      ; R.store (R.reg ra) ra_val wordsize
-                      ; R.store (R.reg pv) e wordsize
-                      ] 
-let call_ep = 
-    let embed e   = call e    
-    and project r = match Dn.rtl r with
-                    | RP.Rtl([ (_,RP.Store(_,e,_));_;_])-> Up.exp e
-                    | _ -> impossible "projected non-call"
-    in
-        { Ep.embed   = embed
-        ; Ep.project = project
-        }
-@                    
+let return e = R.par [R.store pc e wordsize; R.store (R.reg ra) e wordsize]
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Postexpander}
@@ -420,26 +377,54 @@ let bnegate r =
     | _ -> Impossible.impossible "ill-formed Alpha conditional branch"
 @
 
-\paragraph{Calls} In an indirect call the target is held in a register,
-otherwise it is an immediate constant. The [[other]] effects are those
-that don't assign to the program counter. We add here the [[ldgp]]
-instruction that must follow a [[jsr]] to set \$gp. The semantics of
-[[ldgp]] are captured by a target-specific operator.
+\paragraph{Calls}\label{alpha:call} 
+
+Calls and returns must follow a protocal to allow a procedure to
+maintain its global pointer: on entry, the \$27 contains the procedure's
+address, on exit \$26 contains the return address. Both registers are
+used to load the global pointer on entry and after a return:
+
+<<example for calling convention>>=
+    ...
+    lda $27, foo
+    jsr ($27)           /* ra in $26, foo in $27 */
+    ldgp $gp,0($26)     /* establish gp; $pc = $26 */
+
+
+foo:
+    ldgp $gp,0($27)     /* $27 = foo */
+    ...
+    ret ($26)
+@    
+
+The call and return instructions in general do not use the conventional
+registers. Here we expand them such that tey do. We also add the
+[[ldgp]] instruction after a [[jsr]]. The [[ldgp]] instruction at the
+beginning of a procedure is added by the assembler module
+\module{alphaasm}.
+
+The semantics of [[ldgp]] are captured by the target-specfic operator
+[[alpha_gp]]; it takes as an argument the current PC and returns the
+global pointer. [[ldgp_ra]] assumes that the current PC is in register
+\$26. This is the case after a return, when the convention explained
+above was followed.
 
 <<Alpha postexpander>>=
-let alpha_gp = R.opr "alpha_gp" []   (* takes on argument *)
+let alpha_gp = R.opr "alpha_gp" []   (* takes one argument *)
 let ldgp_ra  = R.store (R.reg gp) 
                        (R.app alpha_gp [fetch_word (R.reg ra)]) wordsize      
 
 let effects = List.map Up.effect
 let call  ~tgt ~others = 
     [ ldgp_ra
-    ; R.par (R.store pc_lhs (Up.const tgt) wordsize :: effects others)
+    ; R.par (store_word pc_lhs (fetch_word pv_loc) :: effects others)
+    ; R.store pv_loc (Up.const tgt) wordsize
     ]
     
 let callr ~tgt ~others = 
     [ ldgp_ra
-    ; R.par (R.store pc_lhs (tval tgt) wordsize :: effects others)
+    ; R.par (store_word pc_lhs (fetch_word pv_loc) :: effects others)
+    ; R.store pv_loc (tval tgt) wordsize
     ]
 @
 
@@ -535,7 +520,7 @@ let target =
     ; T.bnegate             = F.bnegate cc
     ; T.goto                = F.goto
     ; T.jump                = F.jump
-    ; T.call                = call_ep
+    ; T.call                = F.call
     ; T.branch              = F.branch
     
     ; T.cc                  = (fun _ -> c_convention)

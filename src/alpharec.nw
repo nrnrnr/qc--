@@ -221,22 +221,26 @@ inst:       Goto(reg)
             {: sprintf "jmp (%s)" reg  :}
 @
 
-Call and return are complicated because we have to ensure that regsiters
-\$26 and \$27 are used to pass addresses. This is a bad solution,
-because we cannot optimize here.
+The [[next]] rule covers storing the address of the next instruction in
+a register. 
 
 <<rules>>=
-set_ra:     Store(ral,Add(pc,four),64)      {: () :}
-set_pv:     Store(pvl,addr,64)              {: () :}    
+next:       Store(regl,Add(pc,four),64)      {: regl :}
 
-inst:       Par(Goto(addr),Par(set_ra, set_pv))
-            {: sprintf "jsr %s" addr :}
+inst:       Par(Goto(reg),next)
+            {: sprintf "jsr %s,(%s)" next reg :}
 
 inst:       Store(gpl,GP(reg),64)
             {: sprintf "ldgp $gp, (%s)" reg :}
+@
 
-inst:       Par(Goto(reg),Store(ral,reg,64))
-            {: sprintf "mov %s, $26; ret ($26)" reg :}
+A [[return]] must pass the address it returns to in register \$26.
+Unfortunately, there the postexpander does not re-write returns, so we
+have to do it here.
+
+<<rules>>=
+inst:       Par(Goto(x:reg),Store(ral,y:reg,64))
+            {: sprintf "mov %s, $26; ret ($26) /* IMPROVE THIS */" x :}
 @
 
 Here are conditional branches. The {\rtl} operator names fit the Alpha
