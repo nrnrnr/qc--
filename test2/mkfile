@@ -49,15 +49,22 @@ testdrv.inc:D: testdrv.nw
 	echo "# $QC testdrv.lua $target"
 	$QC testdrv.lua $target
 
+opgen.lua:D:  opgen.nw
+	$NOTANGLE -L'$file "%F"%N$line %L%N' -R$target $prereq > $target
+
+
+tg.c--:D: opgen.lua $QC
+	$QC opgen.lua -e 'Testgen.emit()' > $target
+
 ################################################################
 
-opgen: opgen.o
+oopgen: oopgen.o
 	$CC $CFLAGS -o $target $prereq
 
-ops%.c--:D: opgen
-	./opgen $stem > $target
+ops%.c--:D: oopgen
+	./oopgen $stem > $target
 
-ops%: ops%.c-- `which $QC`
+'^ops([0-9]*)$':R: ops'\1'.c-- `which $QC`
 	$QC -v -globals -o $target ops$stem.c--
 
 '^optest([0-9]*)$':VR: ops'\1'

@@ -363,6 +363,7 @@ let unop ~dst op x = move dst x <:> inplace op dst
 let rtlop ~dst op args =
   rtl (R.store (temploc dst)
          (R.app (Up.opr op) (List.map tempval args)) (tempwidth dst))
+@ 
 <<x86 postexpander>>=
 let extended_multiply op y =
   let opfun, flagfun = match op with
@@ -373,13 +374,14 @@ let extended_multiply op y =
   rtl (R.par [R.store edx (RO.lobits 64 32 (RO.shrl 64 product (RO.unsigned 64 32)))32;
               R.store eax (RO.lobits 64 32 product) 32;
               flagfun (tempval Rg.eax) (tempval y) 32])
-              
+@               
+<<x86 postexpander>>=
 let dblop ~dsthi ~dstlo op x y =
   move Rg.eax x <:>
   extended_multiply (at32 op) y <:>
   move dsthi Rg.edx <:>
   move dstlo Rg.eax
-
+@ 
 <<x86 postexpander>>=
 let weird_tmp tmp z = match z with
 | PX.WTemp t -> t, PX.Nop
@@ -481,7 +483,7 @@ let bc_x86 x86opname ~ifso ~ifnot = (bc_x86_cond x86opname, ifso, ifnot)
 let bc x (opr, ws) y ~ifso ~ifnot =
   assert (ws =*= [32]);
   match opr with
-  | "div_overflows" ->
+  | "div_overflows" | "quot_overflows" ->
       let ov = Rewrite.div_overflows 32 (tempval x) (tempval y) in
       PX.Expand.cbranch (PX.Test (PX.Nop, (ov, ifso, ifnot)))
   | _ ->
@@ -548,7 +550,6 @@ to check for.
 let cmpfun =
   let set_flags op x y = binop (talloc 't' 32) (op, [32]) x y
   and cmp x y = rtl (subflags (tempval x) (tempval y) 32) in
-  let div_flags x y = Unsupported.div_overflows () in
   function
   | "eq"
   | "ne"
@@ -561,12 +562,17 @@ let cmpfun =
   | "gtu"
   | "geu"            -> cmp
   | "add_overflows"  -> set_flags "add"
-  | "div_overflows"  -> div_flags
-  | "quot_overflows" -> div_flags
   | "mul_overflows"  -> set_flags "mul"
-  | "mulu_overflows" -> set_flags "mulux"
+  | "mulu_overflows" ->
+      (fun x y ->
+        if Register.eq Rg.eax y then
+          extended_multiply "mulux" x
+        else
+          move Rg.eax x <:> extended_multiply "mulux" y)
   | "sub_overflows"  -> set_flags "sub"
-  | _ -> impossf "non-comparison in x86 conditional branch"
+  | ("div_overflows" | "quot_overflows" as o) ->
+      impossf "operator %%%s not rewritten in x86 postexpander" o
+  | o -> impossf "non-comparison %%%s in x86 conditional branch" o
 @ 
 \subsection{Stack operations}
 <<x86 postexpander>>=
@@ -877,7 +883,7 @@ let target =
   ; T.is_instruction = X86rec.M.is_instruction
 
   ; T.capabilities =   {T.memory = [8;16;32]; T.block_copy = true;
-                        T.itemps = [32]; T.ftemps = [32; 64; 80];
+                        T.itemps = [32]; T.ftemps = [32; 64];
                         T.iwiden = true; T.fwiden = true;
                         T.operators = List.map Up.opr [
                          "sx",      [ 8; 32]
@@ -925,31 +931,40 @@ let target =
                        ; "lt",      [32]
                        ; "ltu",     [32]
                        ; "ne",      [32]
-                       ; "fabs", [80]
-                       ; "fadd", [80]
-                       ; "fdiv", [80]
-                       ; "feq", [80]
-                       ; "fge", [80]
-                       ; "fgt", [80]
-                       ; "fle", [80]
-                       ; "flt", [80]
-                       ; "fne", [80]
-                       ; "fordered", [80]
-                       ; "fmul", [80]
-                       ; "fneg", [80]
-                       ; "funordered", [80]
-                       ; "fsqrt", [80]
-                       ; "fsub", [80]
+                       ; "fabs", [32]
+                       ; "fadd", [32]
+                       ; "fdiv", [32]
+                       ; "feq", [32]
+                       ; "fge", [32]
+                       ; "fgt", [32]
+                       ; "fle", [32]
+                       ; "flt", [32]
+                       ; "fne", [32]
+                       ; "fordered", [32]
+                       ; "fmul", [32]
+                       ; "fneg", [32]
+                       ; "funordered", [32]
+                       ; "fsqrt", [32]
+                       ; "fsub", [32]
+                       ; "fabs", [64]
+                       ; "fadd", [64]
+                       ; "fdiv", [64]
+                       ; "feq", [64]
+                       ; "fge", [64]
+                       ; "fgt", [64]
+                       ; "fle", [64]
+                       ; "flt", [64]
+                       ; "fne", [64]
+                       ; "fordered", [64]
+                       ; "fmul", [64]
+                       ; "fneg", [64]
+                       ; "funordered", [64]
+                       ; "fsqrt", [64]
+                       ; "fsub", [64]
                        ; "f2f", [32; 64]
                        ; "f2f", [64; 32]
-                       ; "f2f", [32; 80]
-                       ; "f2f", [80; 32]
-                       ; "f2f", [64; 80]
-                       ; "f2f", [80; 64]
                        ; "i2f", [32; 64]
-                       ; "i2f", [32; 80]
                        ; "f2i", [64; 32]
-                       ; "f2i", [80; 32]
                        ; "minf", [32]  (* from simplifier *)
                        ; "minf", [64]  (* from simplifier *)
                        ; "pinf", [32]  (* from simplifier *)
@@ -959,7 +974,7 @@ let target =
                        ; "pzero", [32]  (* from simplifier *)
                        ; "pzero", [64]  (* from simplifier *)
                        ; "NaN",   [23; 32]  (* from simplifier *)
-                       ; "NaN",   [52; 64]  (* from simplifier *)
+                    (*   ; "NaN",   [52; 64]  from simplifier *)
                        ;  "add_overflows",  [32]
                        ;  "div_overflows",  [32]
                        ;  "mul_overflows",  [32]

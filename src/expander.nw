@@ -1589,11 +1589,12 @@ Here's a hack which is untested and probably useless.
 For the bit operator, we generate two branches of control flow, create an rtl for a
 conditional branch, and pass everything over to [[expand_cbranch]].
 <<cases for converting a Boolean to a value>>=
-| RP.App (("sx", [n; w]), [RP.App (("bit", []), [e])]) ->
+| RP.App ((("sx"|"zx") as op, [n; w]), [RP.App (("bit", []), [e])]) ->
     assert (n = 1);
     let t       = alloc context w in
-    let tbranch = Post.li t (RP.Bits (Bits.S.of_int 1 w)) in
-    let fbranch = Post.li t (RP.Bits (Bits.S.of_int 0 w)) in
+    let nonzero = if op =$= "sx" then -1 else 1 in
+    let tbranch = Post.li t (RP.Bits (Bits.S.of_int nonzero w)) in
+    let fbranch = Post.li t (RP.Bits (Bits.zero w)) in
     let cond    = expand_cbranch (PX.cond (Up.exp e)) in
     t, PX.If (cond, tbranch, fbranch)
 @
@@ -1621,6 +1622,7 @@ and to_stack' room e =
                                                   (Rtl.Up.exp e));
          Unsupported.stack_width ~have:(Rtlutil.Width.exp' e)
          ~want:Post.stack_width);
+  Debug.eprintf "expander" "to_stack %s\n" (RU.ToString.exp (Up.exp e));
   match e with
   | RP.Const k ->
       Post.pushk k
@@ -1649,6 +1651,8 @@ and to_stack' room e =
       to_stack room (RP.App (f2f, [fetch_slot slot w; rm]))
   | RP.App (op, args) ->
       begin
+        Debug.eprintf "expander" "to_stack generic case for %s\n"
+          (RU.ToString.exp (Up.exp e));
         match Post.opclass op with
         | PX.Stack(dir, depth) ->
             let args = List.filter is_not_rounding_mode args in (* cheat!!! *)
@@ -1872,6 +1876,7 @@ and assign_room room left right w =
             | _ ->
                 if looks_like_stack_rhs right then
                   (match right with
+                  | <<\emph{pattern [[->]] action} for push-convert, then store-pop>>
                   | <<\emph{pattern [[->]] action} for converting store-pop>>
                   | _ -> 
                       let is = to_stack room right in
@@ -1913,6 +1918,13 @@ RP.App ((("sx" | "zx"), [wsrc; wdst]) as op, [rhs]) ->
   (* what goes wrong if wsrc is not the width of the stack? *)
   let is = to_stack room rhs in
   is <:> is' <:> Post.store_pop_cvt op wdst a (upassn assn)
+<<\emph{pattern [[->]] action} for push-convert, then store-pop>>=
+RP.App ((("f2f"|"f2i"|"i2f"), [n; w]) as op,
+        [RP.Fetch (RP.Mem ((_,agg,ms), c, srcaddr, srcassn), n'); roundingmode]) ->
+  assert (n = n' && n' = Cell.to_width ms c);
+  assert (agg =*= Post.byte_order);
+  let srca, is = address room srcaddr in
+  is <:> Post.push_cvt op n srca (upassn srcassn) <:> Post.store_pop a (upassn assn)
 @ 
 A~splittable right-hand side looks like this: 
 \begin{quote}

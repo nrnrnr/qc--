@@ -1,258 +1,331 @@
-% -*- mode: Noweb; noweb-code-mode: c-mode -*-
-<<opgen.c>>=
-#include <stdio.h>
-#include <stdlib.h>
-#include <assert.h>
+% -*- mode: Noweb; noweb-code-mode: lua-mode -*-
 
-#define MEMSIZE(E) (sizeof(E) / sizeof(char))
-#define BITSIZE(E) (8 * MEMSIZE(E))
-#define W BITSIZE(unsigned)
+\section{Generating operator tests}
 
-static void emit_array(const char *name, void *p, int n);
+The basic idea is to test C~code and {\PAL}~code on random data.
+We do this as follows:
+\begin{enumerate} 
+\item
+Define a canonical name for each operator, which is the name of the
+operator, followed by its type parameters.
+If the operator takes multiple type parameters, they are separated by
+underscores.
+Examples: [[add32]], [[sx8_32]].
+\item
+For each operator we may wish to test, define a C~function whose name
+begins with [[ctest_]], e.g., [[ctest_add32]].
+This work may or may not be done with the help of interpreter macros
+from the [[interp]] directory.
+\item
+\label{cmmgen}
+From the capability record of a back end, generate an externally callable
+implementation of each claimed operator.
+Then generate a table in which each record has the following form:
+\begin{quote}
+\textit{opname}, \textit{{\PAL}-function}, \textit{C-function}, \emph{stride}
+\end{quote}
+where \emph{stride} is the number of bytes of memory used as input.
 
-main(int argc, char *argv[]) {
-  int i, count;
-  unsigned *x, *xlim, *y, *ylim, *z, *zlim;
-  int uniq = 1;
-#define POINTERS(TY) TY *TY##px, *TY##py, *TY##pz;
-  POINTERS(unsigned)  POINTERS(int) POINTERS(float) POINTERS(double)
-  <<set [[count]] or exit, according to [[argc]] and [[argv]]>>
-  <<allocate $x$, $y$, and $z$ arrays and set variables from [[count]]>>
-  <<emit target definitions>>
-  printf("import printf; export main;\n");
-  printf("bits2 rm = \"IEEE 754 rounding mode\";\n");
-  <<fill $x$ and $y$ arrays with random bits>>
-  printf("section \"data\" {\n");
-  <<emit initialized data for $x$ and $y$ arrays>>
-  <<emit initialized data for results for each operator>>
-  <<emit printf format specifiers>>
-  printf("}\n\n");
-  <<emit comparison function>>;
-  return 0;
-}
+Each function is to have the same signature, i.e.,
+\begin{verbatim}
+  int (*f)(void *result, void *xarg, void *yarg, void *zarg);
+\end{verbatim}
+The function takes pointers to three arguments, some of which may be
+ignored, and it writes its result through the [[result]] pointer.
+The value returned is the number of bytes written.
+\item
+Have a test driver walk the table and compare {\PAL} with~C on random
+inputs. 
+\end{enumerate}
+
+The code here implements step~\ref{cmmgen}: generating the {\PAL} code
+and the table.
+
+
+<<opgen.lua>>=
+$debug 1
+Testgen = Testgen or { }
+Testgen.hard_round = 'true'  -- use hardware rounding modes
 @ 
-<<set [[count]] or exit, according to [[argc]] and [[argv]]>>=
-switch(argc) {
-  case 1: count = 100; break;
-  case 2: count = atoi(argv[1]); break;
-  default:
-    fprintf(stderr, "Usage: %s [count]\n", argv[0]);
-    exit(1);
-}
+We want to be able to emit things into the data section even when
+we're in the middle of something else.
+<<opgen.lua>>=
+Testgen.pending_data = { }
+
+function Testgen.emitdata(...)
+  if Testgen.section == 'data' then
+    Util.call(w, arg)
+  else
+    tinsert(Testgen.pending_data, Util.call(format, arg))
+  end
+end
+
+function Testgen.drain_pending(newsec)
+  local i = 1
+  while Testgen.pending_data[i] do
+    write(Testgen.pending_data[i])
+    i = i + 1
+  end
+  Testgen.pending_data = { }
+  Testgen.section = newsec
+end
 @ 
-<<allocate $x$, $y$, and $z$ arrays and set variables from [[count]]>>=
-x = malloc(sizeof(*x) * count);
-y = malloc(sizeof(*y) * count);
-z = malloc(sizeof(*z) * count);
-assert(x != NULL && y != NULL && z != NULL);
-xlim = x + count;
-ylim = y + count;
-zlim = z + count;
+Label generation.
+<<opgen.lua>>=
+Testgen.lcount = 1
+
+function Testgen.label()
+  local l = 'tL' .. Testgen.lcount
+  Testgen.lcount = Testgen.lcount + 1
+  return l
+end
 @ 
-<<emit target definitions>>=
-{ unsigned face = 0xffaaccee;
-  switch(*(unsigned char *)&face) {
-  case 0xff: printf("target byteorder big "); break;
-  case 0xee: printf("target byteorder little "); break;
-  default: assert(0);
-  }
-  printf("wordsize %d pointersize %d;\n", W, W);
-}
+We like string literals, so here's support for them.
+We accept only characters we know don't have to be escaped.
+<<opgen.lua>>=
+function Testgen.emitstring(s, l)
+  l = l or Testgen.label()
+  if strfind(s, '[^%a%d _!@#$%%^&*()[%].,-+=]') then
+    error('suspicious character in C-- literal string ' .. Inspect.image(s))
+  end
+  local data = format('  %s: bits8[] "%s\\0";\n', l, s)
+  Testgen.emitdata(data)
+  return l
+end
 @ 
-<<fill $x$ and $y$ arrays with random bits>>=
-{   FILE *rand = fopen("/dev/urandom", "r");
-    int n;
-    if (!rand) {
-      perror("Cannot open /dev/urandom --- need a Linux box?");
-      exit(1);
-    }
-    n = fread(x, sizeof(*x), count, rand);
-    assert(n == count);
-    n = fread(y, sizeof(*y), count, rand);
-    assert(n == count);
-    fclose(rand);  
-}
-<<emit initialized data for $x$ and $y$ arrays>>=
-emit_array("x", x, count);
-emit_array("y", y, count);
-<<opgen.c>>=
-static void emit_array(const char *name, void *p, int n) {
-  int i;
-  printf("  %s: bits%d[%d] {", name, W, n);
-  for (i = 0; i < n; i++) {
-    if (i % 5 == 0) printf("\n    ");
-    printf("0x%08x, ", ((unsigned *)p)[i]);
-  }
-  printf("\n  };\n");
-}
+Canonical name of an operator, as described above.
+<<opgen.lua>>=
+function Testgen.canonical_name(op)
+  local s = op.name
+  local i = 1
+  while op.widths[i] do
+    if i > 1 then s = s .. '_' end
+    s = s .. op.widths[i]
+    i = i + 1
+  end
+  return s
+end
 @ 
-<<emit initialized data for results for each operator>>=
-#define binr(TY, OP, OPNAME, ANAME, R)                      \
-  for (TY##px = (TY*)x, TY##py = (TY*)y, TY##pz = (TY*)z;               \
-       TY##px < (TY*)xlim && TY##py < (TY*)ylim && TY##pz < (TY*)zlim;  \
-       TY##px++, TY##py++, TY##pz++)                        \
-  *TY##pz = *TY##px OP (R);                                 \
-  emit_array(ANAME, z, (TY *)zlim - (TY *)z);   \
-  printf("  %s.fmt: bits8[] \"failed test: %%%%%s(0x%%08x, 0x%%08x) == 0x%%08x (expected 0x%%08x)\\n\\0\";\n", ANAME, OPNAME);
-#define binur(OP, OPNAME, ANAME, R) binr(unsigned, OP, OPNAME, ANAME, R)
-#define binu(OP, OPNAME)  binur(OP, OPNAME, OPNAME "u", *unsignedpy)
-#define binf(OP, OPNAME)  binr(float, OP, OPNAME, OPNAME "f", *floatpy)
-#define bini(OP, OPNAME)  binr(int, OP, OPNAME, OPNAME "i", *intpy)
-#define binu16(OP, OPNAME)  binur(OP, OPNAME, OPNAME "u16", *unsignedpy & 0xffff)
-#define bini16(OP, OPNAME)  binr(int, OP, OPNAME, OPNAME "i16", *intpy & 0xffff)
-#define shiftu(OP, OPNAME) binur(OP, OPNAME, OPNAME "u", *unsignedpy & 0x1f)
-#define shifti(OP, OPNAME) binr(int, OP, OPNAME, OPNAME "i", *intpy & 0x1f)
-#define infixu(OP, OPNAME) /* do nothing */
-#define infix_cmpu(OP, OPNAME) /* do nothing */
-#define cmpu(OP, OPNAME) binu(OP, OPNAME)
-#define cmpi(OP, OPNAME) bini(OP, OPNAME)
-  <<operator-macro applications>>
-#undef binr
-#undef binur
-#undef binu
-#undef binf
-#undef bini
-#undef binu16
-#undef bini16
-#undef shiftu
-#undef shifti
-#undef infixu
-#undef infix_cmpu
-#undef cmpu
-#undef cmpi
+Number of memory cells needed to represent a value.
+<<opgen.lua>>=
+function Testgen.round_up(k, n) -- round k to multiple of n
+  return n * floor((k + n - 1) / n)
+end
+
+function Testgen.cellcount(t, ty) -- number of cells to represent value of type ty
+  if not ty then error('missing argument to Testgen.cellcount') end
+  if type(ty) == 'string' then
+    return 1
+  else
+    local m = Target.metrics(t)
+    return floor((ty + m.memsize - 1) / m.memsize)
+  end
+end
 @ 
-<<operator-macro applications>>=
-binu(+, "add");
-binu(-, "sub");
-binu(/, "divu");
-binu16(/, "divu");
-binu(%, "modu");
-binu16(%, "modu");
-binu(*, "mul");
-binu(&, "and");
-binu(|, "or");
-binu(^, "xor");
-shiftu(<<, "shl");
-shiftu(>>, "shrl");
-shifti(>>, "shra");
-bini(+, "add");
-bini(-, "sub");
-bini(/, "quot");
-bini(%, "rem");
-bini16(/, "quot");
-bini16(%, "rem");
-bini(&, "and");
-bini(|, "or");
-bini(^, "xor");
-binf(+, "fadd");
-binf(-, "fsub");
-binf(/, "fdiv");
-binf(*, "fmul");
-infixu(/, "divu");
-infixu(%, "modu"); // unimplemented
-// infixu(*, "mulu"); // confusion about mult. ops
-infixu(+, "add");
-infixu(-, "sub");
-infixu(>>, "shrl");
-infixu(<<, "shl");
-infixu(&, "and");
-infixu(|, "or");
-infixu(^, "xor");
-cmpu(==, "eq");
-cmpu(!=, "ne");
-cmpu(<, "ltu");
-cmpu(>, "gtu");
-cmpu(<=, "leu");
-cmpu(>=, "geu");
-cmpi(==, "eq");
-cmpi(!=, "ne");
-cmpi(<, "lt");
-cmpi(>, "gt");
-cmpi(<=, "le");
-cmpi(>=, "ge");
-infix_cmpu(==, "eq");
-infix_cmpu(!=, "ne");
-infix_cmpu(<, "ltu");
-infix_cmpu(>, "gtu");
-infix_cmpu(<=, "leu");
-infix_cmpu(>=, "geu");
+Stride of an operator---number of memcells in the largest argument or result.
+<<opgen.lua>>=
+function Testgen.stride(t, op)
+  local result, args = Rtlop.Types.mono(op)
+  local n = Testgen.cellcount(t, result)
+  local i = 1
+  while args[i] do
+    local m = Testgen.cellcount(t, args[i])
+    if m > n then n = m end
+    i = i + 1
+  end
+  return n
+end
 @   
-<<emit comparison function>>=
-#define binap(TY, OP, OPNAME, ANAME, APP, RP)                                        \
-  printf("  i = 0;\n");                                                              \
-  printf("  L.%s.%d:\n", ANAME, ++uniq);                                             \
-  APP; \
-  printf("  if (%sz != bits%d[%s+i]) {\n", #TY, BITSIZE(TY), ANAME);                 \
-  printf("    foreign \"C\" printf(\"address\" %s.fmt,\n\tbits%d[x+i], " RP ", %sz, " \
-         "bits%d[%s+i]);\n",                                                         \
-         ANAME, BITSIZE(TY), BITSIZE(TY), #TY, BITSIZE(TY), ANAME);                  \
-  printf("    failed = failed + 1;\n");                                              \
-  printf("  }\n");                                                                   \
-  printf("  i = i + %d;\n", MEMSIZE(TY));                                            \
-  printf("  if (i < %d) { goto L.%s.%d; }\n", count * MEMSIZE(TY), ANAME, uniq);     \
+And off we go\ldots
+<<opgen.lua>>=
+function Testgen.emit(t)
+  t = t or backend or error('default back end did not get set')
+  if type(t) == 'table' then t = t.target end
+  if type(t) ~= 'userdata' then
+    error(tostring(t) .. ' is not a target')
+  end
+  local cap = Target.capabilities(t)
+  Testgen.memsizes = cap.memory or error('no memsizes?!')
+  Testgen.itemps = cap.itemps or error('no itemps?!')
+  Testgen.ftemps = cap.ftemps or error('no ftemps?!')
+  local name = Target.name(t)
+  local metrics = Target.metrics(t)
+  Target.emitmetrics(t)
+  w('bits2 rm = "IEEE 754 rounding mode";\n\n')
 
-#define binrp(TY, OP, OPNAME, ANAME, R, RP) \
-  binap(TY, OP, OPNAME, ANAME, \
-    printf("  %sz = %%%s(bits%d[x+i], " R ");\n", #TY, OPNAME,                       \
-         BITSIZE(TY), BITSIZE(TY)), RP)
+  w('section "data" {\n')
+  w('  align 8;\n')
+  w('  optable:\n')
+  w('  export optable;\n')
+  w('  bits%d[] {\n', metrics.pointersize)
+  Target.section = 'pending'
 
-#define infix(TY, OP, OPNAME, ANAME, R) \
-  binap(TY, OP, OPNAME, ANAME, \
-    printf("  %sz = bits%d[x+i] %s " R ";\n", #TY,                       \
-         BITSIZE(TY), #OP, BITSIZE(TY)), R)
+  local defined = { }
+  local i = 1
+  local ops = cap.operators
+  while ops[i] do
+    local op = ops[i]
+    defined[op.name] = 1
+    local opname = Testgen.canonical_name(op)
+    local namel = Testgen.emitstring(opname)
+    w('    %s, cmmtest_%s, ctest_%s, %d,\n',
+      namel, opname, opname, Testgen.stride(t, op))
+    Testgen.emitdata('  import ctest_%s;\n', opname)
+    i = i + 1
+  end
+  w('  };\n\n')
+  Testgen.drain_pending('data')
+  w('}\n')
 
-#define cmp(TY, OP, OPNAME, ANAME) \
-  binap(TY, OP, OPNAME, ANAME, \
-    printf("  if (%%%s(bits%d[x+i], bits%d[y+i])) { %sz = 1; } else { %sz = 0; };\n", \
-           OPNAME, BITSIZE(TY), BITSIZE(TY), #TY, #TY), "bits%d[y+y]")
+  i = 1
+  while ops[i] do
+    local op = ops[i]
+    local opname = Testgen.canonical_name(op)
+    local ptr = metrics.pointersize
+    w('foreign "C" cmmtest_%s("address" bits%d pr, "address" bits%d px, ' ..
+      '"address" bits%d py, "address" bits%d pz) {\n',
+      opname, ptr, ptr, ptr, ptr)
+    Testgen.emitbody(t, op)
+    w('  foreign "C" return (%d);\n', Testgen.cellcount(t, Rtlop.Types.mono(op)))
+    w('}\n\n')
+    i = i + 1
+  end
 
-#define infix_cmp(TY, OP, OPNAME, ANAME) \
-  binap(TY, OP, OPNAME, ANAME, \
-    printf("  if (bits%d[x+i] %s bits%d[y+i]) { %sz = 1; } else { %sz = 0; };\n", \
-           BITSIZE(TY), #OP, BITSIZE(TY), #TY, #TY), "bits%d[y+y]")
 
-#define infix_cmpu(OP, OPNAME) infix_cmp(unsigned, OP, OPNAME, OPNAME "u")
-
-#define cmpu(OP, OPNAME) cmp(unsigned, OP, OPNAME, OPNAME "u")
-#define cmpi(OP, OPNAME) cmp(int, OP, OPNAME, OPNAME "i")
-
-#define binr(TY, OP, OPNAME, ANAME, R) binrp(TY, OP, OPNAME, ANAME, R, R)
-
-#define binur(OP, OPNAME, ANAME, R) binr(unsigned, OP, OPNAME, ANAME, R)
-#define binu(OP, OPNAME)  binur(OP, OPNAME, OPNAME "u", "bits%d[y+i]")
-#define infixu(OP, OPNAME)  infix(unsigned, OP, OPNAME, OPNAME "u", "bits%d[y+i]")
-#define binf(OP, OPNAME)  \
-    binrp(float, OP, OPNAME, OPNAME "f", "bits%d[y+i], rm", "bits%d[y+i]")
-#define bini(OP, OPNAME)  binr(int, OP, OPNAME, OPNAME "i", "bits%d[y+i]")
-#define shiftu(OP, OPNAME) binur(OP, OPNAME, OPNAME "u", "bits%d[y+i] & 0x1f")
-#define shifti(OP, OPNAME) binr(int, OP, OPNAME, OPNAME "i", "bits%d[y+i] & 0x1f")
-#define binu16(OP, OPNAME)  binur(OP, OPNAME, OPNAME "u16", "bits%d[y+i] & 0xffff")
-#define bini16(OP, OPNAME)  binr(int, OP, OPNAME, OPNAME "i16", "bits%d[y+i] & 0xffff")
-  printf("foreign \"C\" main(bits%d argc, \"address\" bits%d argv) {\n", W, W);
-#define TEMP(TY)  printf("  bits%d %sz;\n", BITSIZE(TY), #TY)
-  TEMP(unsigned); TEMP(int); TEMP(float); TEMP(double);
-  printf("  bits%d i, failed;\n", W);
-  printf("  failed = 0;\n");
-  <<operator-macro applications>>
-  printf("  if (failed > 0) {\n");
-  printf("    foreign \"C\" printf (\"address\" failed.fmt, failed);\n");
-  printf("  } else {\n");
-  printf("    foreign \"C\" printf (\"address\" passed.fmt);\n");
-  printf("  }\n");
-  printf("  foreign \"C\" return (0);\n");
-  printf("}\n");
-#undef binr
-#undef binur
-#undef binu
-#undef binf
-#undef bini
-#undef binu16
-#undef shiftu
-<<emit printf format specifiers>>=
-printf("  failed.fmt: bits8[] \"%s\";\n", "failed %d tests\\n\\0");
-printf("  passed.fmt: bits8[] \"%s\";\n", "passed all tests\\n\\0");
+  --  w('target %s does *not* implement these operators:\n', name)
+  --  i = 1
+  --  local allops = Rtlop.opnames
+  --  while allops[i] do
+  --    if not defined[allops[i]] then
+  --      write(format('  %%%s\n', allops[i]))
+  --    end
+  --    i = i + 1
+  --  end
+  --  
+  --  if cap.iwiden then Target.widen_ok (name, 'integer')        end
+  --  if cap.fwiden then Target.widen_ok (name, 'floating-point') end
+  --  if cap.block_copy then <announce block-copy support> end
+end
 @ 
+<<opgen.lua>>=
 
+Testgen.floats = Util.set { 'f2f', 'f2i', 'i2f', 'fadd', 'fsub', 'fdiv', 'fmul' }
+Testgen.polymorphic =
+  Util.set { 'f2f', 'f2i', 'i2f', 'sx', 'zx', 'lobits', 'NaN', 'minf', 'pinf',
+             'mzero', 'pzero', }
+Testgen.shifts = Util.set { 'shl', 'shrl', 'shra', 'rotl', 'rotr' }
 
+Testgen.argnames = { 'x', 'y', 'z' }
 
-  
+function Testgen.emitbody(t, opr)
+  local metrics = Target.metrics(t)
+  local result, args = Rtlop.Types.mono(opr)
+  local tyw = { bool = 1 }
+  local i = 1
+  local argnames = Testgen.argnames
+  local opname = Testgen.polymorphic[opr.name] and (opr.name .. result) or opr.name
+  local apps = { opname }
+  while args[i] do
+    local arg = Testgen.getmem(metrics.memsize, 'p' .. argnames[i], args[i])
+    if Testgen.shifts[opr.name] and i == 2 then
+      arg = Testgen.app('modu', arg, opr.widths[1] .. ' :: bits' .. opr.widths[1])
+    end
+    tinsert(apps, arg)
+    i = i + 1
+  end
+  write('  ',
+        Testgen.setmem(metrics.memsize, 'pr', result, Util.call(Testgen.app, apps)),
+        ';\n')
+end
+
+function Testgen.findmin(n, l)
+  -- return smallest element in l containing n
+  local candidate
+  local i = 1
+  while l[i] do
+    local m = l[i]
+    if m >= n and (not candidate or m < candidate) then
+      candidate = m
+    end
+    i = i + 1
+  end
+  return candidate
+end
+
+function Testgen.findmemsize(ty, memsize) -- smallest legal memsize containing ty
+  return Testgen.findmin(ty, Testgen.memsizes) or Testgen.round_up(ty, memsize)
+end
+
+function Testgen.tempfor(ty)
+  return Testgen.findmin(ty, Testgen.itemps) or Testgen.findmin(ty, Testgen.ftemps)
+    or error('cannot find temporary for value of types bits' .. ty)
+end
+
+function Testgen.getmem(memsize, addr, ty)
+  if ty == 'bool' then
+    -- following generates evil 8-bit temps
+    -- return Testgen.bool(Testgen.lobits(memsize, 1, Testgen.memref(memsize, addr)))
+    local tmpwidth = Testgen.tempfor(1)
+    return Testgen.bool(Testgen.lobits(tmpwidth, 1,
+                 Testgen.zx(memsize, tmpwidth, Testgen.memref(memsize, addr)))) 
+  elseif Testgen.hard_round and ty == 2 then
+    return 'rm'
+  else
+    local tmpwidth = Testgen.tempfor(ty)
+    local multiple = Testgen.findmemsize(ty, memsize)
+    local ref = Testgen.memref(multiple, addr)
+    local tmp = Testgen.zx(multiple, tmpwidth, ref) 
+    return Testgen.lobits(tmpwidth, ty, tmp)
+  end
+end
+
+function Testgen.setmem(memsize, addr, ty, val)
+  if ty == 'bool' then
+    -- following generates evil 8-bit temps
+    -- return Testgen.memref(memsize, addr) .. ' = ' ..
+    --   Testgen.zx(1, memsize, Testgen.bit(val))
+    local tmpwidth = 32 --- bogus
+    return Testgen.memref(memsize, addr) .. ' = ' ..
+      Testgen.lobits(tmpwidth, memsize, Testgen.zx(1, tmpwidth, Testgen.bit(val)))
+  else
+    local tmpwidth = Testgen.tempfor(ty)
+    local multiple = Testgen.findmemsize(ty, memsize)
+    local tmp = Testgen.zx(ty, tmpwidth, val) 
+    local ref = Testgen.lobits(tmpwidth, multiple, tmp)
+    return Testgen.memref(multiple, addr) .. ' = ' .. ref
+  end
+end
+
+function Testgen.app(op, ...)
+  local s = '%' .. op .. '('
+  local i = 1
+  while arg[i] do s = s .. arg[i] .. ', '; i = i + 1; end
+  s = s .. ')'
+  return s
+end
+
+function Testgen.bit (v) return Testgen.app('bit',  v) end
+function Testgen.bool(v) return Testgen.app('bool', v) end
+    
+
+function Testgen.zx(n, w, v)
+  if n == w then return v
+  else return format('%%zx%d(%s)', w, v)
+  end
+end
+
+function Testgen.sx(n, w, v)
+  if n == w then return v
+  else return format('%%sx%d(%s)', w, v)
+  end
+end
+
+function Testgen.lobits(w, n, v)
+  if n == w then return v
+  else return format('%%lobits%d(%s)', n, v)
+  end
+end
+
+function Testgen.memref(size, addr)
+  return format('bits%d[%s]', size, addr)
+end

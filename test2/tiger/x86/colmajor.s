@@ -526,7 +526,7 @@ Ljoin_l48:
 	movl $0,%ecx
 	jmp Ljoin_l46
 Ljoin_l47:
-	movl $1,%ecx
+	movl $-1,%ecx
 	jmp Ljoin_l46
 Ljoin_l46:
 	jmp LifEnd_64
@@ -669,7 +669,7 @@ Ljoin_l81:
 	movl $0,%eax
 	jmp Ljoin_l79
 Ljoin_l80:
-	movl $1,%eax
+	movl $-1,%eax
 	jmp Ljoin_l79
 Ljoin_l79:
 	jmp LifEnd_90

@@ -404,6 +404,10 @@ function Target.explain(t)
   local ops = cap.operators
   w('==== Advertised capabilities of target %s ====\n\n', name)
 
+  w('target %s has these metrics:\n', name)
+  Target.emitmetrics(t, '  ')
+  w('\n')
+
   w('target %s supports memory references in these sizes:\n', name)
   Target.showtypes('  %-6s[...]\n', cap.memory, '\n')
 
@@ -510,3 +514,14 @@ function Target.showop(op)
     w('  nonstandard operator %%%s\n', op.name)
   end
 end
+@ 
+<<Lua utility functions written in Lua>>=
+function Target.emitmetrics(t, pfx)
+  local m = Target.metrics(t)
+  pfx = pfx or ''
+  w('%starget byteorder %s;\n', pfx, m.byteorder)
+  w('%starget wordsize %d pointersize %d memsize %d;\n',
+    pfx, m.wordsize, m.pointersize, m.memsize)
+  w('%starget float "%s" charset "%s";\n', pfx, m.float, m.charset)
+end
+

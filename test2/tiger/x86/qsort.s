@@ -3247,7 +3247,7 @@ Ljoin_l171:
 	movl $0,%eax
 	jmp Ljoin_l169
 Ljoin_l170:
-	movl $1,%eax
+	movl $-1,%eax
 	jmp Ljoin_l169
 Ljoin_l169:
 	jmp LifEnd_152
@@ -3398,7 +3398,7 @@ Ljoin_l174:
 	movl $0,%eax
 	jmp Ljoin_l172
 Ljoin_l173:
-	movl $1,%eax
+	movl $-1,%eax
 	jmp Ljoin_l172
 Ljoin_l172:
 	jmp LifEnd_152
@@ -3819,7 +3819,7 @@ Ljoin_l209:
 	movl $0,%eax
 	jmp Ljoin_l207
 Ljoin_l208:
-	movl $1,%eax
+	movl $-1,%eax
 	jmp Ljoin_l207
 Ljoin_l207:
 	jmp LifEnd_167
@@ -3970,7 +3970,7 @@ Ljoin_l212:
 	movl $0,%eax
 	jmp Ljoin_l210
 Ljoin_l211:
-	movl $1,%eax
+	movl $-1,%eax
 	jmp Ljoin_l210
 Ljoin_l210:
 	jmp LifEnd_167
@@ -4849,7 +4849,7 @@ Ljoin_l283:
 	movl $0,%eax
 	jmp Ljoin_l281
 Ljoin_l282:
-	movl $1,%eax
+	movl $-1,%eax
 	jmp Ljoin_l281
 Ljoin_l281:
 	jmp LifEnd_184
@@ -4918,7 +4918,7 @@ Ljoin_l280:
 	movl $0,%eax
 	jmp Ljoin_l278
 Ljoin_l279:
-	movl $1,%eax
+	movl $-1,%eax
 	jmp Ljoin_l278
 Ljoin_l278:
 	jmp LifEnd_191

@@ -139,7 +139,7 @@ Ljoin_l33:
 	movl $0,%eax
 	jmp Ljoin_l31
 Ljoin_l32:
-	movl $1,%eax
+	movl $-1,%eax
 	jmp Ljoin_l31
 Ljoin_l31:
 	jmp LifEnd_56
@@ -410,7 +410,7 @@ Ljoin_l63:
 	movl $0,%eax
 	jmp Ljoin_l61
 Ljoin_l62:
-	movl $1,%eax
+	movl $-1,%eax
 	jmp Ljoin_l61
 Ljoin_l61:
 	jmp LifEnd_69

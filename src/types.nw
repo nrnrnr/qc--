@@ -282,11 +282,12 @@ and returns a [[ty]].  In the context of C-- this must always succeed,
 because primitive operators are predefined and only their type schemes
 are used for matching and substitution.
 <<types.ml>>=
-let subst sigma = function
+let subst opname sigma = function
     | Bool             -> Bool
     | Bits(Const x)    -> Bits x
     | Bits(Var x)      -> (try Bits(lookup x sigma) with Not_found -> 
-        E.error "polymorphic operator; call as %op32, indicating result size")
+        E.errorf "operator %%%s is polymorphic;\n    to indicate the size, \
+                  use a suffix such as %%%s32" opname opname)
     | Bits(Double x)   -> (try Bits(2*(lookup x sigma)) with Not_found ->
                                 impossible "internal error (2) in application")
     | Bits(Half x)     -> (try Bits((lookup x sigma)/2) with Not_found ->
@@ -304,7 +305,7 @@ let wrongargs opname args' args =
 let appl opname (args',r) args =
   let sigma = try List.fold_left2 (match' opname) S.empty args' args with
               | Invalid_argument _ -> wrongargs opname args' args in
-  subst sigma r
+  subst opname sigma r
 @
 The [[widthlist]] function takes the type of a primitive (a
 [[tyscheme]]) and a list of argument types and returns the sizes bound

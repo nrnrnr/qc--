@@ -662,9 +662,20 @@ C.register_module "Stages"
       (fun _ proc -> proc.Proc.cc.Call.replace_vfp proc.Proc.cfg; true)
   ]  g;
 <<register modules to [[g]] in alphabetical order>>=
+let metrics t =
+  let module T = Target in
+  let em f = f.V.embed in
+  [ "byteorder",   em byteorder t.T.byteorder;
+    "wordsize",    em V.int     t.T.wordsize;
+    "pointersize", em V.int     t.T.pointersize;
+    "memsize",     em V.int     t.T.memsize;
+    "float",       em V.string  (Float.name t.T.float);
+    "charset",     em V.string  t.T.charset;
+  ] in
 C.register_module "Target"
   [ "capabilities", V.efunc (Map.target **->> Map.capabilities)
                                  (fun (t:Ast2ir.tgt) -> t.Target.capabilities);
+    "metrics",      V.efunc (Map.target **->> V.record V.value) metrics;
     "name",         V.efunc (Map.target **->> V.string) (fun t -> t.Target.name);
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
