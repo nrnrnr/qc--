@@ -1,4 +1,5 @@
 \documentclass{article}
+\usepackage[hypertex]{hyperref}
 \def\PAL{\mbox{C{\texttt{-{}-}}}}
 % l2h substitution PAL C--
 \title{Release notes for the Quick~{\PAL} compiler}
@@ -8,7 +9,85 @@
 
 \maketitle
 
-\section{Notes for forthcoming release}
+\tableofcontents
+
+\clearpage
+
+\section{Unpleasant surprises}
+
+\subsection{Floating-point computation}
+
+\begin{itemize}
+\item
+Floating-point literals aren't implemented.
+\item
+The manual presents two styles of doing floating-point comparisons,
+but only one style (\texttt{feq}, \texttt{flt}, \ldots) is actually
+implemented---you can't usefully use \texttt{fcmp}.
+\item
+The only rounding modes that are supported are the hardware rounding
+modes of the target machine.
+These need to be declared as a special global register variable, e.g.,
+\begin{verbatim}
+bits2 System.rounding_mode "IEEE 754 rounding mode";
+\end{verbatim}
+The name ``\texttt{System.rounding\_mode}'' is not special; it's the
+string literal that makes this name refer to the hardware.
+\item
+You can't usefully assign to the rounding modes or read them---all you
+can usefully do is use them in floating-point operations that require
+rounding modes.
+(This one might not be too hard to fix.)
+\end{itemize}
+
+\subsection{Widths of computation}
+
+\begin{itemize}
+\item
+The back ends support computation only at the width of the target
+machine.
+Variables and operators must use this width.
+(This one will be fixed soon.)
+\end{itemize}
+
+
+\subsection{Missing operations}
+
+\begin{itemize}
+\item
+Lots of operations are missing, including
+carry, borrow, extended multiplies, and anything else that might be
+needed for large arithmetic.
+\item
+There's no automatic way to find out what operations are supported.
+(But soon, the machine environment!)
+\end{itemize}
+
+\subsection{Features missing from the language}
+
+\begin{itemize}
+\item
+The \texttt{switch} statement is not implemented.
+\item
+The \texttt{also unwinds to} annotation does not work and may cause
+things to fail.
+\item
+The \texttt{also returns to} annotation does not work and may cause
+things to fail.
+\end{itemize}
+
+
+\subsection{Features missing from the run-time interface}
+\begin{itemize}
+\item
+Anything to do with threads is probably not there, or if there, is a
+little wacky.
+\item
+Unwinding the stack is not yet supported.
+\end{itemize}
+
+
+\section{Notes for release 20040405}
 \begin{itemize}
 \item
 Unicode string literals are not implemented
