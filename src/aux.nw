@@ -31,6 +31,10 @@ val from: int -> upto:int -> int list
 module Option : sig 
     val get: 'a -> 'a option -> 'a
 end
+
+module String : sig
+  val foldr : (char -> 'a -> 'a) -> string -> 'a -> 'a
+end
 @
 
 Here is a substring extraction function inspired by Python's [[slice]].
@@ -89,3 +93,11 @@ let substr start stop str =
     let stop  = if stop  <= 0 then String.length str + stop  else stop  in
         String.sub str start (stop - start)
 @
+<<aux.ml>>=
+module String = struct
+  let foldr f s z =
+    let rec down_from n z =
+      if n < 0 then z else down_from (n-1) (f (String.get s n) z) in
+    down_from (String.length s - 1) z
+end
+

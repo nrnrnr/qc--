@@ -132,7 +132,7 @@ type section = name * (Ast.expr, Ast.name_or_mem, assign) datum marked list
 type t = {
     target   : Ast.arch marked list;
     imports  : (Ast.region * Ast.ty option * Ast.import list) list;
-    exports  : (Ast.region * Ast.export list) list;
+    exports  : (Ast.region * Ast.ty option * Ast.export list) list;
     globals  : register marked list;
     code_labels : name marked list list;
     udecls   : Ast.expr compile_time_defns;
@@ -200,7 +200,7 @@ let rec decl r imps exports lbls ks consts types regs archs data d k = match d w
   | A.DeclAt(x,r)   -> decl r imps exports lbls ks consts types regs archs data x k
   | A.Typedef d     -> k imps exports lbls ks consts ((r,d) :: types) regs archs data
   | A.Import (t,ii) -> k ((r,t,ii)::imps) exports lbls ks consts types regs archs data
-  | A.Export (t,ee) -> k imps ((r,ee) :: exports) lbls ks consts types regs archs data
+  | A.Export (t,ee) -> k imps ((r,t,ee)::exports) lbls ks consts types regs archs data
   | A.Const d       -> k imps exports lbls ks ((r,d) :: consts)  types regs archs data
   | A.Registers rs  -> k imps exports lbls ks consts types ((r, rs) :: regs) archs data
   | A.Target    t   -> k imps exports lbls ks consts types regs ((r, t) :: archs) data

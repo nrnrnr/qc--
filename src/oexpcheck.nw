@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
 % Quality    ::=    A|B|C|D|E
@@ -97,11 +98,11 @@ and expr env exp =
 	  Printf.sprintf "literal bit vector overflows when packed into %d bits" w in
         let bmsg = "literal bit vector appears when bool expected" in
         let msg = "literal value does not match type" in
-        E.sequence w (fun t -> match t with
-                               | (Types.Bits w as t) ->
-                                 (try let _ = cvt x w in Error.Ok t
-                                  with Bits.Overflow ->   Error.error (omsg w))
-                               | Types.Bool          ->   Error.error bmsg)
+        E.seq w (fun t -> match t with
+                          | (Types.Bits w as t) ->
+                            (try let _ = cvt x w in Error.Ok t
+                             with Bits.Overflow ->   Error.error (omsg w))
+                          | Types.Bool          ->   Error.error bmsg)
     in match exp with
         | A.ExprAt(x,r)     -> expr env x
         | A.Int   (x,ty)    -> optty env.wordsize         Bits.U.of_string x ty

@@ -72,13 +72,14 @@ values of type [[error]].
 <<error.mli>>=
 val combine     : 'a error error -> 'a error
 val ematch      : 'a error -> ('a -> 'b) -> 'b error
+val ematch2     : 'a error -> 'b error -> ('a -> 'b -> 'c) -> 'c error
 val ematchPair  : 'a error * 'b error -> ('a * 'b -> 'c) -> 'c error
 val ematchTriple: 'a error * 'b error * 'c error -> 
                    ('a * 'b * 'c -> 'd) -> 'd error
 val ematchQuad  : 'a error * 'b error * 'c error * 'd error -> 
                    ('a * 'b * 'c * 'd -> 'e) -> 'e error
-val sequence    : 'a error -> ('a -> 'b error) -> 'b error
 val seq         : 'a error -> ('a -> 'b error) -> 'b error
+val seq2        : 'a error -> 'b error -> ('a -> 'b -> 'c error) -> 'c error
 val seqPair     : 'a error * 'b error -> ('a * 'b -> 'c error) -> 'c error
 val seq'        : 'b -> 'a error -> ('a -> 'b) -> 'b 
 @
@@ -354,34 +355,25 @@ let map f l =
 
 The following combinators bridge the gap between code that uses error
 propagation using the [[error]] type and code that doesn't.
-
 <<error.ml>>=
 let combine = function  
     | Ok x      -> x
     | Error     -> Error
 
 <<error.ml>>=
-let ematch x f = match x with
-    | Ok x      -> Ok (f x)
-    | Error     -> Error
-
-<<error.ml>>=
+let ematch x f = match x with Ok x -> Ok (f x) | Error -> Error
+let ematch2 x y f =
+  match x with Ok x -> (match y with  Ok y -> Ok (f x y) | _ -> Error) | _ -> Error
 let ematchPair    x2 = ematch (Raise.pair x2)
 let ematchTriple  x3 = ematch (Raise.triple x3)
 let ematchQuad    x4 = ematch (Raise.quad x4)
 
-
 <<error.ml>>=
-let sequence x f = match x with 
-    | Ok x      -> f x
-    | Error     -> Error
-
-let seq' default x f = match x with
-    | Ok x      -> f x
-    | Error     -> default
-    
-let seq          = sequence
-let seqPair x2   = sequence (Raise.pair x2)
+let seq x f = match x with Ok x -> f x | Error -> Error
+let seq2 x y f =
+  match x with Ok x -> (match y with  Ok y -> f x y | _ -> Error) | _ -> Error
+let seq' default x f = match x with Ok x -> f x | Error -> default
+let seqPair x2   = seq (Raise.pair x2)
 @
     
 % ------------------------------------------------------------------ 

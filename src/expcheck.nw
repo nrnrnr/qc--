@@ -60,6 +60,7 @@ module E = Error
 module F = Ofenv.Dirty
 
 let impossible = Impossible.impossible
+let unimp = Impossible.unimp
 
 <<types>> (* from interface *)
 
@@ -79,7 +80,7 @@ let elab env =
   let rvalue_name_or_mem _ = assert false in
   let rec lvalue = function
       | A.NameOrMemAt(x,r) -> lvalue x
-      | A.Name(hint,id)    -> assert false (*lvalue_name id*)
+      | A.Name(hint,id)    -> unimp "lvalue name" (*lvalue_name id*)
       | A.Mem(ty,e,aligned,_)     -> 
           E.ematchTriple  (astwidth "memory access" env ty, typed_expr env e, assertion aligned)
             (fun (w,(addre, addrt),assn) ->

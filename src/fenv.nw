@@ -30,12 +30,9 @@ only serves the classic symbol table purpose, but also represents some
 global state of the compiler.  It is used to pass around informations
 between the different phases of the compiler.  In particular the fat
 environment holds informations about:
-
 \begin{itemize}
 \item Values, like constants, labels for goto and data, procedures.
 \item Types, as they are declared by the [[typedef]] directive.
-\item Target architecture, as declared by the [[target]] directive.
-\item An index counter for registers.
 \item A flag that indicates a serious error.
 \end{itemize}
 
@@ -192,15 +189,11 @@ an [[env]] value, it is the only value that is passed around.  Only
 before entering or leaving a procedure the scope stack must be
 manipulated.
 \begin{itemize}
-\item  A [[scope]] caries a counter [[index]] for numbering registers.
-       The index of an [[emptyscope]] is [[0]].
-
 \item  The scope stack of an [[empty]] [[env]] is also empty. Thus, an
        [[emptyscope]] should be [[push]]'ed first.  An [[env]]
        includes a [[Srcmpa.map]] value, which is required to give
        source code positions (type [[Scrpmap.rgn]] stored in the
        environment a meaning.
-
 \item  Applying [[top]] or [[pop]] to an empty stack scope will result
        in an assertion violation.
 \end{itemize}
@@ -356,17 +349,6 @@ val findt           : string -> 'p env' -> tentry   (* Error.ErrorExn *)
 @ \emph{Think of algebraic rules that describe the interaction of bind
 and find}.
 @
-<<signature Env>>=
-type typedefn = (Ast.ty * string list) * Srcmap.rgn 
-val addTypedefn  : typedefn -> 'p env' -> 'p env'
-val typedefns    : 'p env' -> typedefn list
-val setTypedefns : typedefn list -> 'p env' -> 'p env'
-<<signature Env>>=
-type constdefn = (Ast.ty option * string * Ast.expr) * Srcmap.rgn 
-val addConstdefn  : constdefn -> 'p env' -> 'p env'
-val constdefns    : 'p env' -> constdefn list
-val setConstdefns : constdefn list -> 'p env' -> 'p env'
-@
 Sometimes is is necessary to know whether a value is bound in a local
 scope.  The following predicate is true, if and only if a given name
 is bound in the top scope, \emph{and} the top scope is not the bottom
@@ -394,37 +376,6 @@ to the following law:
 val flagError       : 'p env' -> 'p env'
 val errorFlag       : 'p env' -> bool
 @
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Register Index}
-% ------------------------------------------------------------------ 
-
-{\PAL} uses integers to identify global and local registers during
-run-time at the run-time interface.  The fat environment maintains a
-counter to facilitate the assignment of an integer to a register. The
-number of a register is local to its scope: global and local registers
-have independent numbering schemes.
-
-The current index in the current scope is returned by [[getIndex]], and
-the index is advanced by [[nextIndex]]:
-
-\emph{Should these functions work on [[scope]] values, rather than
-[[env]]?}
-
-<<signature Env>>=
-val getIndex: 'p env' -> int
-val nextIndex: 'p env' -> 'p env'
-@
-
-The above functions obey to the following rules:
-
-\begin{quote}
-\begin{verbatim}
-getIndex empty = 0
-getIndex (nextIndex env) = (getIndex env) + 1
-\end{verbatim}
-\end{quote}
 
 % ------------------------------------------------------------------ 
 \subsection{Imports, Exports, and Assembler Symbols}
@@ -438,33 +389,17 @@ symbols all imports and exports of a {\PAL} program must be registered.
 This is done with [[import]] and [[export]].  To provide meaningful
 error messages, both function receive the region of the statement at
 hand in the source code. 
-
 <<signature Env>>=
 val import: Srcmap.rgn -> string -> string -> 'p env' -> 'p env' (* import g as f *)
 val export: Srcmap.rgn -> string -> string -> 'p env' -> 'p env' (* export f as g *)
 @
-
 The [[symbol env n]] function returns the assembly level symbol for a
 {\PAL} name [[n]]. If [[n]] is not associated with an imported or
 exported symbol, we register a new local symbol in the assembler and
 return it. Since every {\PAL} name should have exactly one associated
 symbol it is an unchecked error to call [[symbol]] twice with the same name.
-
 <<signature Env>>=
 val symbol:   'p env' -> string -> Symbol.t
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Global Registers}
-% ------------------------------------------------------------------
-
-The declaration of a global register can include a hardware register
-to use.  Since the sequence of these declarations is important to
-determine the assignment of register to hardware register or memory,
-[[globals]] returns the (unique) names of global registers.
-
-<<signature Env>>=
-val globals : 'p env' -> string list
 @
 
 % ------------------------------------------------------------------ 
@@ -474,7 +409,6 @@ val globals : 'p env' -> string list
 
 A translation of {\PAL} to assembly code must create assembly level
 \emph{symbols} for {\PAL} \emph{names} that represent addresses:
-
 \begin{itemize}
 \item Procedures
 \item Goto-Labels
@@ -489,17 +423,14 @@ scope.  A name from outside a compilation unit can be used after it
 was imported; likewise can a compilation unit export a name to make it
 accessible for others.  Import and export declarations in {\PAL} allow
 to re-name an imported or exported object:
-
 \begin{quote}
     [[import]] $a$ as $c$\\
     [[export]] $c$ as $a$
 \end{quote}
-
 The {\PAL} name $c$ corresponds to the assembly level symbol $a$.  In
-the presence of re-naming, a {\PAL} name $x$ need not to not
+the presence of renaming, a {\PAL} name $x$ need not 
 correspond to the same symbol $x$ on the assembly level.  Even worse,
 imports and exports using the [[as]] feature have non-local effects:
-
 \begin{quote}
 \begin{verbatim}
 import print as p;
@@ -516,27 +447,22 @@ to find and record a corresponding assembly symbol for every {\PAL}
 name.  To make debugging easier, corresponding names on the {\PAL} and
 the assembly side should resemble each other as much as possible.
 
-% ------------------------------------------------------------------ 
 \subsubsection{The Rules}
-% ------------------------------------------------------------------ 
 
 Before we go into the details how name conflicts are found and
 resolved we like to state the rules that {\PAL} names and assembly
 symbols must adhere to.  The following rules apply both for {\PAL}
 names and assembler symbols inside a compilation units.
-
 \begin{itemize}
 \item A name (symbol) is either imported, or defined, but not both. 
       Every name (symbol) is exactly defined once.  An exported name
       (symbol) must be defined.
-
 \item It is illegal to export a name (symbol) that is imported or to
       import a name that is also exported.
 \end{itemize}
 
 According to the rules it is legal to import the same symbol under
 different names in {\PAL}:
-
 \begin{quote}
 \begin{verbatim}
 import f as g;
@@ -546,7 +472,6 @@ import f as h;
 
 A naive translation of the following code could lead to assembly code
 that violates the second rule. 
-
 \begin{quote}
 \begin{verbatim}
 import f as g;
@@ -554,7 +479,6 @@ export print as f;
 print () { ... }
 \end{verbatim}
 \end{quote}
-
 On the assembly level [[f]] is both imported and exported, because the
 corresponding symbol for [[print]] is [[f]]. The {\qcc} compiler must
 detect this problem only by looking at the {\PAL} code and reject this
@@ -571,23 +495,22 @@ $a$ is a shortcut for [[import]] $a$ [[as]] $a$, and [[export]] $c$ a
 shortcut for [[export]] $c$ [[as]] $c$.
 
 An early pass over the abstract syntax is added to the code that
-checks the static semantics.  This pass records all [[include]] and
+checks the static semantics.  This pass records all [[import]] and
 [[export]] declarations of a compilation unit.  More precisely, two
 sets and one map are built:
-
 \begin{itemize}
-\item Set $I$ of assembly symbols imported by a {\PAL}
+\item
+      Set $I$ of assembly symbols imported by a {\PAL}
       compilation unit:  [[import g]] adds [[g]] to $I$, 
       The symbol [[g]] must not be element of set $E$ (see
       below). 
-    
-\item Set $E$ of assembly symbols exported by a {\PAL}
+\item
+      Set $E$ of assembly symbols exported by a {\PAL}
       compilation unit: [[export f as g]] adds [[g]] to $E$,
       where [[g]] must be not in $I$.
-    
-\item A map $m$ from {\PAL} names to their corresponding assembly
+\item
+      A map $m$ from {\PAL} names to their corresponding assembly
       level symbols:
-      
       \begin{center}
       \begin{tabular}{ll}
       {\PAL} & added to map $m$ \\ \hline
@@ -597,8 +520,8 @@ sets and one map are built:
       [[export f as g]] & [[f]] $\mapsto$ [[g]] 
       \end{tabular}
       \end{center}
-
-\item The following equations relates $I$, $E$, and $m$:
+\item
+      The following equations relates $I$, $E$, and $m$:
       $\mathit{range}(m) = I \cup E$. 
 \end{itemize}      
 
@@ -642,7 +565,6 @@ initial map $m$.  The same is true for labels that are exported.  In
 most cases the name defined by a label can also be used as a symbol. 
 Only when the name symbol is already in use a new symbol must be
 invented and marked as used in $M$.
-
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation: Large Scale Structure}
