@@ -555,26 +555,6 @@ function Sparc.layout.fn(dummy,proc) --- dispatch on cc name
   return Sparc.layout[Stack.ccname(proc)](dummy, proc)
 end
 
---    local layout = 
---                    -- high addresses
---                { blocks.oldblocks.caller       --| incoming parameters
---                , blocks.oldblocks.callee       --| outgoing results
---                , blocks.vfp                    --  %fp
---                , blocks.stackdata              --  what goes here?
---                , blocks.continuations          --  
---                , blocks.spills                 --  temps, etc?
---                , blocks.youngblocks.caller     --| outgoing parameters
---                , blocks.youngblocks.callee     --| incoming results
---                -- Here's what's supposed to be here, but this doesn't work
---                -- right because the compiler wants to shift the %sp around
---                -- before and after calls, which we don't want.
---                -- , Block.relative(blocks.sp, "register storage", 18*4, 6*4)
---                -- , Block.relative(blocks.sp, "hidden param", 17*4, 4)
---                -- , Block.relative(blocks.sp, "register window", 16*4, 16*4)
---                , blocks.sp                     --  %sp (no space)
---                    -- low addresses 
---                }
-
 function Sparc.layout["C"](dummy,proc) --- really for a C convention only
     local blocks = Stack.blocks(proc)
     blocks.oldblocks.callee   = Block.overlap_high(32, blocks.oldblocks.callee)
@@ -602,9 +582,6 @@ function Sparc.layout["C"](dummy,proc) --- really for a C convention only
     -- sp + (16 * 4) : hidden parameter (where callee stores aggregate return)
     -- sp            : 16 words for OS to save register window
     --
-
--- used to be 26 * 4, but needs to be 23 so that outgoing parameters
--- are in the right place.  Add extra space in calling convention
 
     local linkage =
       { caller = Block.relative(blocks.vfp, "caller's linkage area", 23*4, 16)
@@ -640,7 +617,9 @@ function Sparc.layout["C"](dummy,proc) --- really for a C convention only
     if Debug.framesize then Debug.showframesize(block,proc) end
     Stack.freeze(proc,block)
     return 1
-end    
+end
+
+Sparc.layout["C--"] = Sparc.layout["C"]
 @
 
 % ------------------------------------------------------------------ 

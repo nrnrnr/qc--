@@ -21,10 +21,11 @@ let sprintf = Printf.sprintf
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 @ 
 <<SPARC calling convention automata in Lua>>=
-A                  = Automaton
-Sparc              = Sparc              or {}
-Sparc.cc           = Sparc.cc           or {}
-Sparc.cc["C"     ] = Sparc.cc["C"     ] or {}
+A = Automaton
+Sparc           = Sparc           or {}
+Sparc.cc        = Sparc.cc        or {}
+Sparc.cc["C"  ] = Sparc.cc["C"]   or {}
+Sparc.cc["C--"] = Sparc.cc["C--"] or {}
 @ 
 \paragraph{SPARC registers and their conventional uses}
 Cheats, cheats, and more cheats...
@@ -96,7 +97,7 @@ Sparc.cc["C"].call =
   { A.widen(32, "multiple")
   , A.useregs (o(0)..o(5))
   , A.overflow { growth = "up", max_alignment = Sparc.sp_align }
-  }	
+  }
 <<SPARC calling convention automata in Lua>>=
 Sparc.cc["C"].cutto =
   { A.widen(32)
@@ -104,9 +105,18 @@ Sparc.cc["C"].cutto =
   , A.overflow { growth = "up", max_alignment = Sparc.sp_align }
   }
 @ 
+<<SPARC calling convention automata in Lua>>=
+Sparc.cc["C--"].call = Sparc.cc["C"].call
+Sparc.cc["C--"].results = {
+  Sparc.cc["C"].results,
+  A.overflow { growth = "up", max_alignment = Sparc.sp_align }
+}
+Sparc.cc["C--"].cutto = Sparc.cc["C"].cutto
+@ 
 Finally we register the calling conventions.
 <<SPARC calling convention automata in Lua>>=
-A.register_cc(Backend.sparc.target, "C", Sparc.cc["C"])
+A.register_cc(Backend.sparc.target, "C",   Sparc.cc["C"])
+A.register_cc(Backend.sparc.target, "C--", Sparc.cc["C--"])
 @ 
 \subsection{Implementation based on [[Callspec]]}
 <<sparccall.ml>>=
@@ -177,18 +187,19 @@ let also_cuts_to auto =
 
 let cut_actuals auto base =
     C.outgoing ~growth:growth ~sp:sp
-        ~mkauto:(fun ()  -> A.at mspace ~start:base auto.A.cutto)
-        ~autosp:(fun r   -> R.fetch sp wordsize)
-        ~postsp:(fun _ _ -> R.fetch sp wordsize)
+        ~mkauto:(fun ()   -> A.at mspace ~start:base auto.A.cutto)
+        ~autosp:(fun r    -> std_sp_location)
+        ~postsp:(fun a sp -> std_sp_location)
 @ 
 <<sparccall.ml>>=
 let ra_on_entry block = R.fetch ra wordsize
 let where_to_save_ra ra_on_entry temp = ra
 @ 
 <<sparccall.ml>>=
-let to_call ~cutto ~return auto =
+(* Really inteded for the C convention *)
+let to_call ~cutto ~return ccname auto =
     <<it's impossible for the stack pointer to be a useful register too>>;
-    { C.name           = "C"
+    { C.name           = ccname
     ; C.overflow_alloc = c_overflow
     ; C.call_parms     = {C.in'=prolog       auto; C.out=call_actuals auto}
     ; C.cut_parms      = {C.in'=also_cuts_to auto; C.out=cut_actuals  auto}
@@ -214,31 +225,23 @@ let to_call ~cutto ~return auto =
 if Register.Set.mem spr all_regs then
   Impossible.impossible
     (Printf.sprintf "In convention \"%s\", stack pointer is also an ordinary register"
-       "C")
+       ccname)
 else
   ()
 @
 <<sparccall.ml>>=
-(*
-let prefixbytes result =
-  let b = Block.relative (Vfp.mk 32) "prefix block" Block.at ~size:3 ~alignment:8
-  in { result with A.overflow = Block.cathl b result.A.overflow }
-
-let postprocess cconv =
-    { cconv with A.call = A.postprocess cconv.A.call prefixbytes }
-*)
-
-let rtn return_to k n ~ra =
+let rtn ccname return_to k n ~ra =
     if k = 0 && n = 0 then return_to ra
-    else Impossible.impossible "alternate return using C calling convention" 
+    else Impossible.impossible ("alternate return using "^ccname^" calling convention")
 
-let c ~return_to cut auto = to_call cut (rtn return_to) auto (* postprocess auto *)
+let c ~return_to ccname cut auto = to_call cut (rtn ccname return_to) ccname auto (* postprocess auto *)
 @ 
 Here's our CC lookup function.
 <<sparccall.ml>>=
 let cconv ~return_to cut ccname stage =
   let f =
     match ccname with
-	| "C" | _ -> c
+	| "C" | "C--" -> c ccname
+        | _ -> Impossible.unimp ccname
   in f ~return_to cut stage
 @ 
