@@ -1,0 +1,290 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h substitution C C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+
+% ------------------------------------------------------------------ 
+\section{Main}\label{sect:main}
+% ------------------------------------------------------------------ 
+
+This module contains the [[main]] function that is executed when the
+\C~compiler starts.  Its main purposes are command line processing,
+catching of exceptions, and providing the exit code.
+It is executed only for side effect, so it exports an empty interface.
+
+<<main2.mli>>=
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Lua-Interpreter}
+% ------------------------------------------------------------------ 
+
+The compiler is controlled by an embedded Lua interpreter. Types and
+values of the compiler are made available as Lua primitives and allow
+the user to control the compiler. We build here an interpreter with our
+extensions.
+
+<<main2.ml>>=
+module T    = Lua.Lib.Combine.T8    
+                (Driver2.Export.AsmT)       (* T1 *)
+                (Driver2.Export.AstT)       (* T2 *)
+                (Driver2.Export.EnvT)       (* T3 *)
+                (Driver2.Export.CfgT)       (* T4 *)
+                (Driver2.Export.TargetT)    (* T5 *)
+                (Driver2.Export.DocT)       (* T6 *)
+                (Driver2.Export.FrameT)     (* T7 *)
+                (Luaiolib.T)                (* T8 *)
+
+module IO   = Lua.Lib.Extend (T.T8)
+
+module L    = Lua.Lib.Combine.L4
+                (Luaiolib.Make (T.T8))
+                (IO (Luastrlib.M))
+                (IO (Luamathlib.M))
+                (Driver2.MakeLib (T.T1) (T.T2) (T.T3) (T.T4) 
+                                 (T.T5) (T.T6) (T.T7))
+                
+module I    = Lua.MakeInterp 
+                (Lua.Parser.MakeStandard)
+                (Lua.MakeCore (T) (L))
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Command Line Processing}
+% ------------------------------------------------------------------ 
+
+The [[main]] function gets the command line arguments and tries to
+parse them. We expect a single string argument that is evaluated by the
+Lua interpreter.
+
+<<main2.ml>>=
+module E = Error
+
+let main () =
+    let argv        = Array.to_list Sys.argv in
+    let this        = Filename.basename (List.hd argv) in
+    let args        = List.tl argv in
+        try 
+            ( match args with 
+            | [code] -> I.dostring (I.state ()) code  
+            | _      -> E.error "wrong command line syntax"
+            )
+         with
+            E.ErrorExn(msg) -> 
+                ( E.errorPrt msg
+                ; E.errorPrt "Exit with exit code 1" 
+                ; exit 1  (* failure *)
+                )
+@                
+
+In \ocaml~no [[main]] function like in C exists but simply all values
+in a module are evaluated.  However, we simulate this by evaluating
+[[main ()]]. 
+
+<<main2.ml>>=
+let _ = main ()
+@
+
+During devlopment bugs are easier to find with the debugger if we
+don't catch exceptions on the top-level. Shipping code, however,
+should use instead the following:
+
+<<main2.ml unused>>=
+let _ = try main () with e -> 
+        ( Printf.eprintf "%s\n" (Printexc.to_string e)
+        ; Printf.eprintf "Please report this problem to bugs@cminusminus.org\n"
+        ; Printf.eprintf "Exit with exit code 2\n"
+        ; exit 2
+        )
+@
+ 
+% ------------------------------------------------------------------  
+\section{Manual Page}
+% ------------------------------------------------------------------  
+
+This is out of date!
+
+          
+Writing manual pages for the Troff formatter is a tedious job.  I have
+found the highly readable \textit{plain old document} (\textsc{pod})
+format used by the Perl community very helpful.  Every Perl
+installation comes with a \texttt{pod2man} tool which creates a man
+page from \textsc{pod} file.  Today we can assume that Perl is
+installed nearly everywhere such that the use of this tool does not
+spoil portability of our code.
+
+The format of \textsc{pod} files is documented in the \texttt{perlpod}
+manual page.  Besides the \texttt{pod2man} filter there exist other
+filters to convert a \textsc{pod} file to \textsc{html} and \LaTeX,
+which makes it a very versatile format.
+
+<<qc--.pod>>=
+=head1 NAME
+
+qc-- - the quick c-- compiler
+
+=head1 SYNOPSIS
+
+B<qc-- -version>
+
+B<qc-- -help>
+
+B<qc-- -lex> I<file.c-->
+
+B<qc-- -asdl> I<file.c-->
+
+B<qc-- -pp> [ B<-w> I<width> ] I<file.c-->
+
+B<qc-- -check> I<file.c-->
+
+B<qc-- -c> B<-target> I<target> I<file.c-->
+B<qc-- -target> I<target> B<-c> I<file.c-->
+
+=head1 DESCRIPTION
+
+B<qc--> compiles C-- code. The compiler is still under development and
+currently does not yet produce executable code.  However, it checks
+the syntax and static semantics of a C-- program.  The grammar
+currently accepted by B<qc--> is described in section L<"GRAMMAR">. 
+
+=head1 OPTIONS
+
+=over
+
+=item B<-version>
+
+Report the version of B<qc--> to stdout. The version is essentialy the
+date the compiler was built.
+
+=item B<-help>
+
+Print a short usage message to stdout.
+
+=item B<-asdl> I<file>
+
+Parse I<file> and print the abstract syntax in ASDL format to stdout. 
+The ASDL format is a cross-platform cross-compiler format to exchange
+an abstract syntax.  The B<-asdl> option thus exports the abstract
+syntax of a C-- program to a file which possibly can be read by
+another compiler that supports ASDL as its input format.
+
+=item B<-pp> [ B<-w> I<width> ]I<file>
+
+Parse I<file> and write a pretty printed concrete syntax to stdout. 
+The default width for output is 72 characters; it can be changed with the
+B<-w> flag. 
+
+=item B<-lex> I<file>
+
+Scan (lex) I<file> and write a representation of the tokens in I<file> 
+to stdout.
+
+=item B<-check> I<file>
+
+Check the static semantics of I<file>. Error messages are written to
+stdout. In case of errors in the static semantics of I<file> the
+compiler exits with an exit code different from 0.
+
+=item B<-c> B<-target> I<target> I<file>
+
+Check the static semantics of I<file>, compile it into internal data
+structures and back to C--. The I<target> is ignored, the C-- output is
+written to stdout. This is a development option; do not expect the
+output to be legal C--.
+
+=back
+
+=head1 EXIT CODE
+
+The B<qc--> compiler returns with exit code 0 of successful
+operation.  In case of errors in a source file B<qc--> returns with
+exit code 1.  Any internal compiler error leads to exit code 2.
+
+=head1 SEE ALSO
+
+http://www.cminusminus.org/, 
+http://www.cs.princeton.edu/zephyr/ASDL/
+
+=head1 AUTHOR
+
+Christian Lindig <lindig@eecs.harvard.edu>, 
+Norman Ramsey <nr@eecs.harvard.edu>
+@
+
+<<qc--grammar.pod>>=
+=head1 NAME
+
+qc--grammar - the c-- grammar recognized by qc--(1).
+
+=head1 DESCRIPTION
+
+During the development of the compiler it happens easily that the
+documentation of the C-- language and the language recognized by the
+compiler differ.  To give at least a hint about the language
+recognized by the implementation its grammar is presented here.  The
+grammar is created automatically from the implementation such that
+errors are less likely.  However, the grammar comes without any
+further explanation.  It is only meant as a least resort when the
+implementation reports an otherwise unexplainable parse error.
+
+##grammar##
+
+
+=head1 SEE ALSO
+
+http://www.cminusminus.org/, 
+http://www.cs.princeton.edu/zephyr/ASDL/
+
+=head1 AUTHOR
+
+Christian Lindig <lindig@eecs.harvard.edu>, 
+Norman Ramsey <nr@eecs.harvard.edu>
+@
+          
+      
+% ------------------------------------------------------------------  
+\section{This}
+% ------------------------------------------------------------------  
+
+To include some version information into the main binary we provide
+the [[This]] module.  Its source code [[this.ml]] is created during
+the build process from [[this.in]].  Currently only the version
+information stays here but it is a useful place for other informations
+that change frequently.  Note, that this code should \emph{note} be
+used to control the behavior of the program.  We therefore write all
+these informations to a stream to emphasize this.
+
+<<this.in>>=
+(* do not edit - this file is created from this.in through make(1) *)
+
+let system          = "@this@"
+
+@ The functions [[name]] and [[version]] decompose the [[system]]
+string to get the name and version of the system. 
+
+<<this.in>>=
+let name channel = 
+    let s = try let minus = String.index system '-' in
+                String.sub system 0 minus
+            with Not_found -> "not configured"
+    in
+         output_string channel s
+
+<<this.in>>=
+let version channel = 
+    let s = try let minus = String.rindex system '-' in
+                String.sub system (minus+1) (String.length system - minus - 1)
+            with Not_found -> "not configured"
+    in
+        output_string channel s
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+<<this.mli>>=
+val name    : out_channel -> unit
+val version : out_channel -> unit 
+@
+

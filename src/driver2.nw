@@ -21,7 +21,7 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
     type doc        (* printable document                 *)
     type target     (* target architecture                *)
     type frame      (* container for stack slots          *)
-    type lua        (* lua interpreter *)    
+    type lua  = Lua.Parser.token      (* fake - lua interpreter *)    
 
     val dummy:      target                  (* our only target right now *)
     
@@ -32,7 +32,7 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
     val emit_asdl:  ast -> unit             (* emit AST in ASDL format *)
     val check:      ast -> env              (* check semantics of AST  *)
 
-    val compile:    ast -> target -> env -> lua -> asm
+    val compile:    lua -> ast -> target -> env -> asm
                     (* calls optimize: cfg -> frame -> unit *)
                 
     val assemble:   asm -> doc
@@ -63,6 +63,35 @@ raised.
 \item [[print]]: prints a [[doc]] value to [[stdout]], formatting the
       output for a line width of [[width]] characters.       
 \end{itemize}
+
+<<driver2.mli>>=
+module Export : sig
+    module AsmT     : Lua.USERDATA
+    module AstT     : Lua.USERDATA
+    module EnvT     : Lua.USERDATA
+    module CfgT     : Lua.USERDATA
+    module TargetT  : Lua.USERDATA
+    module DocT     : Lua.USERDATA
+    module FrameT   : Lua.USERDATA
+end
+
+module MakeLib  
+  (AsmV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a Export.AsmT.t)
+  (AstV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a Export.AstT.t 
+                              and  type 'a combined = 'a AsmV.combined)
+  (EnvV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a Export.EnvT.t 
+                              and  type 'a combined = 'a AstV.combined)
+  (CfgV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a Export.CfgT.t 
+                              and  type 'a combined = 'a EnvV.combined)
+  (TargetV : Lua.Lib.TYPEVIEW with type 'a t        = 'a Export.TargetT.t 
+                              and  type 'a combined = 'a CfgV.combined)
+  (DocV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a Export.DocT.t 
+                              and  type 'a combined = 'a TargetV.combined)
+  (FrameV  : Lua.Lib.TYPEVIEW with type 'a t        = 'a Export.FrameT.t 
+                              and  type 'a combined = 'a DocV.combined)
+    : Lua.Lib.TYPEFUL with type 'a combined = 'a FrameV.combined 
+@
+
 
 % ------------------------------------------------------------------ 
 \subsection{Caml Implementation}
@@ -98,9 +127,10 @@ type doc    = Pp.doc
 type cfg    = Cfg3.cfg
 type target = Target2.t
 type frame  = Automaton.t
-type lua    = Lua.Parser.token (* dummy *)
+type lua    = Lua.Parser.token (* fake *)
 
 <<Caml>>=
+
 let dummy   = Target2.dummy
 
 <<Caml>>=
@@ -183,7 +213,7 @@ let check (map,ast:ast) =
         Fenv.clean env
 
 <<Caml>>=
-let compile (map,ast:ast) (target:target) (env:env) (lua:lua) =
+let compile (lua:lua) (map,ast:ast) (target:target) (env:env)  =
     let ()     = Target2.check target env        in   
         IR.translate env target lua ast 
 
@@ -206,44 +236,43 @@ module Export = struct
 end
 
 <<Export>>=
-module AsmT: Lua.Lib.USERTYPE = struct
+module AsmT = struct
     type 'a t       = Caml.asm
     let tname       = "asm"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<asm>" 
 end
-module AstT: Lua.Lib.USERTYPE with type 'a t = Caml.ast =
-  struct
+module AstT = struct
     type 'a t       = Caml.ast
     let tname       = "ast"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<ast>" 
   end
-module EnvT: Lua.Lib.USERTYPE = struct
+module EnvT = struct
     type 'a t       = Caml.env
     let tname       = "env"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<env>" 
 end
-module CfgT: Lua.Lib.USERTYPE = struct
+module CfgT = struct
     type 'a t       = Caml.cfg
     let tname       = "cfg"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<cfg>" 
 end
-module TargetT: Lua.Lib.USERTYPE = struct
+module TargetT = struct
     type 'a t       = Caml.target
     let tname       = "target"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<target>" 
 end
-module DocT: Lua.Lib.USERTYPE = struct
+module DocT = struct
     type 'a t       = Caml.doc
     let tname       = "doc"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<doc>" 
 end
-module FrameT: Lua.Lib.USERTYPE = struct
+module FrameT = struct
     type 'a t       = Caml.frame
     let tname       = "frame"
     let eq _        = fun x y -> x = y
@@ -251,17 +280,23 @@ module FrameT: Lua.Lib.USERTYPE = struct
 end
 @
 
-@
 <<driver2.ml>>=
 module MakeLib
-  (AsmV    : Lua.Lib.TYPEVIEW with type 'a t = 'a Export.AsmT.t)
-  (AstV    : Lua.Lib.TYPEVIEW with type 'a t = 'a Export.AstT.t and type 'a combined = 'a AsmV.combined)
-  (EnvV    : Lua.Lib.TYPEVIEW with type 'a t = 'a Export.EnvT.t and type 'a combined = 'a AsmV.combined)
-  (CfgV    : Lua.Lib.TYPEVIEW with type 'a t = 'a Export.CfgT.t and type 'a combined = 'a AsmV.combined)
-  (TargetV : Lua.Lib.TYPEVIEW with type 'a t = 'a Export.TargetT.t and type 'a combined = 'a AsmV.combined)
-  (DocV    : Lua.Lib.TYPEVIEW with type 'a t = 'a Export.DocT.t and type 'a combined = 'a AsmV.combined)
-  (FrameV  : Lua.Lib.TYPEVIEW with type 'a t = 'a Export.FrameT.t and type 'a combined = 'a AsmV.combined)
-    : Lua.Lib.TYPEFUL with type 'a combined = 'a AsmV.combined =
+  (AsmV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a Export.AsmT.t)
+  (AstV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a Export.AstT.t 
+                              and  type 'a combined = 'a AsmV.combined)
+  (EnvV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a Export.EnvT.t 
+                              and  type 'a combined = 'a AstV.combined)
+  (CfgV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a Export.CfgT.t 
+                              and  type 'a combined = 'a EnvV.combined)
+  (TargetV : Lua.Lib.TYPEVIEW with type 'a t        = 'a Export.TargetT.t 
+                              and  type 'a combined = 'a CfgV.combined)
+  (DocV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a Export.DocT.t 
+                              and  type 'a combined = 'a TargetV.combined)
+  (FrameV  : Lua.Lib.TYPEVIEW with type 'a t        = 'a Export.FrameT.t 
+                              and  type 'a combined = 'a DocV.combined)
+    : Lua.Lib.TYPEFUL with type 'a combined = 'a FrameV.combined =
+
 struct
   type 'a combined = 'a AsmV.combined
   module M (C : Lua.Lib.CORE with type 'a V.userdata' = 'a combined) =
@@ -275,25 +310,42 @@ struct
     end (*M*)
 end (*MakeLib*)
 @ 
+
 <<definition of [[bind_table]]>>=
 let bind_table g tabname members =
   let t = C.getglobal g (V.String tabname) in
   let t = match t with
-  | V.Nil -> V.Table.create (List.length members)
-  | V.Table t -> t
-  | _ -> C.error g ("Global value " ^ tabname ^ " is not a table") in
+  | V.Nil       -> V.Table.create (List.length members)
+  | V.Table t   -> t
+  | _           -> C.error g ("Global value " ^ tabname ^ " is not a table") in
   let _ = V.Table.bind g.V.globals (V.String tabname) (V.Table t) in
-  List.iter (fun (k, v) -> V.Table.bind t (V.String k) v) members
+      List.iter (fun (k, v) -> V.Table.bind t (V.String k) v) members
 @ 
+
 <<bind exported Lua functions to [[builtins]]>>=
-let pf t = (V.pfunc t).V.embed 
+let pf t   = (V.pfunc t).V.embed 
 let func t = (V.func t).V.embed 
 
 module Map = struct
-  let ast = AstV.makemap V.userdata V.projection
-  (* ... etc ... *)
+    let ast       = AstV.makemap V.userdata V.projection
+    let asm       = AsmV.makemap V.userdata V.projection
+    let env       = EnvV.makemap V.userdata V.projection
+    let cfg       = CfgV.makemap V.userdata V.projection
+    let doc       = DocV.makemap V.userdata V.projection
+    let frame     = FrameV.makemap V.userdata V.projection
+    let target    = TargetV.makemap V.userdata V.projection
 end
 
 let builtins =
-  [ "parse", pf (V.string **-> V.result Map.ast) Caml.parse
+  [ "parse"     , pf (V.string **-> V.result Map.ast) Caml.parse
+  ; "version"   , pf (V.string **-> V.runit)          (fun _ -> Caml.version ())
+  ; "scan"      , pf (V.string **-> V.runit)          Caml.scan
+  ; "check"     , pf (Map.ast  **-> V.result Map.env) Caml.check
+  ; "assemble"  , pf (Map.asm  **-> V.result Map.doc) Caml.assemble
+  ; "print"     , pf (Map.doc  **-> V.int **-> V.runit) Caml.print
+  ; "emit_asdl" , pf (Map.ast  **-> V.runit)          Caml.emit_asdl
+  ; "compile"   
+    , pf (Map.ast  **-> Map.target **-> Map.env **-> V.result Map.asm) 
+      (Caml.compile Luaparser.EOF)
   ] 
+@  
