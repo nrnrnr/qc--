@@ -213,6 +213,12 @@ the actual directory.
 
 <<qc--.lua>>=
 ------------------------------------------------------------------ 
+-- This file is executed when the QC-- compiler starts. It is
+-- stored in the Lua variable Boot["qc--.lua"].
+-- $Id$
+------------------------------------------------------------------ 
+
+------------------------------------------------------------------ 
 -- Optimizer Backplane
 -- I think these functions should go into Optimize or a similar name
 -- space. I also would like to see primitives like run(), seq() and
@@ -444,7 +450,7 @@ function Main.dumptable (name,table)
     end
 end
 
-function Main.dump ()
+function Main.dumpvars ()
     local key,val = nextvar(nil)
     local s
     while key do
@@ -453,6 +459,14 @@ function Main.dump ()
         if type(val) == "table" then Main.dumptable (key .. ".", val) end
         key,val = nextvar(key)
     end
+end    
+
+
+-- Dump the builtin Lua script to stdout such that the user can study 
+-- and alter it.
+
+function Main.dumpscript ()
+    write(Boot["qc--.lua"])
 end    
 @
 
@@ -488,21 +502,21 @@ B<qc--> [B<-e> I<command>] [B<-e> I<command>] B<-i> [I<arg> I<arg> ...]
 =head1 DESCRIPTION
 
 B<qc--> compiles C-- code. The compiler is still under development and
-currently does not yet produce executable code.  However, it checks
-the syntax and static semantics of a C-- program.  The grammar
-currently accepted by B<qc--> is described in section L<"GRAMMAR">. 
+currently does not produce executable code.  However, it checks the
+syntax and static semantics of a C-- program.  The grammar currently
+accepted by B<qc--> is described in L<"GRAMMAR">. 
 
 =head1 OPTIONS
 
-Unlike most compilers B<qc--> is not controlled by command line switches
-but by a built-in Lua 2.5 interpreter. Different phases of the compiler are
-available as Lua primitives such that the user can write a Lua script to
-control B<qc-->. The few existing command line switches therefore
-control the Lua interpreter, rather than the compiler directly.
+B<qc--> is controlled but by a built-in Lua 2.5 interpreter.  Compiler
+phases are available as Lua primitives such that the user can write a
+Lua script to control B<qc-->. The few existing command line switches
+therefore control the Lua interpreter, rather than the compiler
+directly.
 
-Upon start-up B<qc--> searched for the file F<qc--.lua>, executes it and
-then processes command line options in the following order: first all
-generic I<arg> arguments are passed in B<Sys.argv> to the Lua
+Upon start-up, B<qc--> searched for the file F<qc--.lua>, executes it,
+and then processes command line options in the following order: first
+all generic I<arg> arguments are passed in B<Sys.argv> to the Lua
 interpreter, then B<-e> arguments are evaluated from left to right. If
 the interactive option B<-i> is present, it is honored last.  
 
@@ -511,15 +525,15 @@ the interactive option B<-i> is present, it is honored last.
 =item B<-e> I<command>
 
 The I<command> is passed to the Lua interpreter and I<evaluated>. This
-option can be used multiple times. 
+option can be repeated.
 
 =item B<-i> 
 
 Starts an I<interactive> session with the interpreter that reads from
 stdin. All command line arguments to the right of B<-i> are considered
-as generic I<arg> arguments that are passed to the Lua interpreter.
-Therefore B<-i -e> I<arg> does not evaluate I<arg> but passes B<-e> and
-I<arg> in B<Sys.argv>.
+as generic I<arg> arguments that are passed to the Lua interpreter in
+thae B<Sys.argv> table.  Therefore, B<-i -e> I<arg> does not evaluate
+I<arg> but passes B<-e> and I<arg> in the table B<Sys.argv>.
 
 =item B<->I<x>
 
@@ -530,8 +544,8 @@ options easily.
 =item I<arg> ...
 
 The first argument that is not any of the above options starts the
-sequence of generic arguments. They are passed literally in B<Sys.argv>
-to the Lua interpreter.
+sequence of generic arguments. They are passed literally in the
+B<Sys.argv> table to the Lua interpreter.
 
 =back
 
@@ -545,7 +559,8 @@ Compile I<file.c--> for the B<Default.target>.
 
 =item B<qc--> B<-c> I<file.c-->
 
-Same as before, using an abbreviation.
+Same as before, using an abbreviation: B<Main.compile> is also defined
+as B<Main.c>.
 
 =item B<qc--> B<-e> B<'Main.check()'> I<file.c-->
 
@@ -592,23 +607,10 @@ targets, optimizer, and assembler.
 
 =back
 
-=head1 LUA STARTUP
-
-To find the Lua startup file F<qc--.lua>, B<qc--> takes the following
-steps: It reads the contents of the environment variable B<QC--LUAPATH>
-as a search path. If the environment variable is undefined, the default
-is "B<:.:*>". A search path contains a list of colon separated
-directories. Two directory names are special: the empty directory refers
-to an implementation dependent system-wide directory, like
-B</usr/local/lib/qc-->. The star B<*> refers to a directory that is part
-of the B<qc--> executable. With the default search path, B<qc-->
-therefore looks first in the system-wide directory for F<qc--.lua>, then
-in the current directory, and then takes the built-in F<qc--.lua>. 
 
 =head1 LUA DEFAULTS
 
 Defaults are stored in the Lua table B<Default>. In particular:
-
 
 =over 
 
@@ -631,6 +633,42 @@ assembler. The assembler writes its output to I<io>.
 SunOS systems.
 
 =back
+
+
+=head1 LUA STARTUP
+
+To find the Lua startup file F<qc--.lua>, B<qc--> takes the following
+steps: It reads the contents of the environment variable B<QC--LUAPATH>
+as a search path. If the environment variable is undefined, the default
+is "B<:.:*>". A search path contains a list of colon separated
+directories. Two directory names are special: the empty directory refers
+to an implementation dependent system-wide directory, like
+B</usr/local/lib/qc-->. The star B<*> refers to a directory that is part
+of the B<qc--> executable. With the default search path, B<qc-->
+therefore looks first in the system-wide directory for F<qc--.lua>, then
+in the current directory, and then takes the built-in F<qc--.lua>. 
+
+=head1 LUA CODE AND VARIABLES
+
+The Lua startup code that is embedded into the compiler is accessible
+from the Lua interpreter itself. The table B<Boot> is treated as as
+the directory B<*> in the B<QC--LUAPATH> as explained above and
+therefore B<Boot["qc--.lua"]> contains the embedded Lua code. You can
+dump it to stdout using the following command line:
+
+    qc-- -e 'Main.dumpscript()' > qc--.lua  
+    
+When you alter the file F<qc--.lua> and use the default B<QC--LUAPATH>
+environment variable, B<qc--> will read it at startup and execute it
+instead of the builtin script from B<Boot>. This is a good way to play
+with customized Lua code.
+
+To get an idea what functions and variables are defined the entire name
+space of the Lua interpreter can be dumped with the following command
+line:
+
+    qc-- -e 'Main.dumpvars()' | sort 
+
 
 =head1 LUA TYPES
 
@@ -735,8 +773,8 @@ L<dot>.
 
 http://www.cminusminus.org/, 
 http://www.lua.org/,
-http://www.cs.princeton.edu/zephyr/ASDL/
-http://www.research.att.com/sw/tools/graphviz/
+http://www.cs.princeton.edu/zephyr/ASDL/,
+http://www.research.att.com/sw/tools/graphviz/.
 
 =head1 AUTHORS
 
@@ -744,7 +782,7 @@ Christian Lindig <lindig@eecs.harvard.edu>,
 Norman Ramsey <nr@eecs.harvard.edu>,
 Daniel Damian <damian@eecs.harvard.edu>,
 John Dias <dias@eecs.harvard.edu>,
-Jonathan D. Eddy <eddy@fas.harvard.edu>
+Jonathan D. Eddy <eddy@fas.harvard.edu>.
 @
           
       
