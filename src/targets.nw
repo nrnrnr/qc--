@@ -18,8 +18,6 @@ supports.
 val dummy : Target2.t 
 val sparc : Target2.t
 val dummy_automaton : Rtl.aggregation -> Automaton2.spec
-val contn : Rtl.aggregation -> Rtl.exp -> Contn.t 
-  (* semantics baffling; see complaint at Target2.contn *)
 @
 
 The targets are exported to Lua. When the following module is initalized
@@ -55,7 +53,6 @@ module U  = Rtl.Revert  (* Up *)
 module RP = Rtl.Private
 module S  = Space
 module T  = Target2
-module C  = Contn       (* Continuation *)
 
 type 'a map = 'a T.map =
     { embed:    ('a -> Rtl.rtl)
@@ -73,7 +70,6 @@ module DummyTarget = struct
     <<DummyTarget>>
 end
 let dummy = DummyTarget.target
-let contn = DummyTarget.contn
 
 module SparcTarget = struct
     <<SparcTarget>>
@@ -176,6 +172,7 @@ end
 let memsize       = 8
 let wordsize      = 32
 let pointersize   = 32
+let alignment     = 1
 let const n width = Rtl.bits (Bits.U.of_int n width) width
 let fpcond n      = Rtl.cell Rtl.none 'd' Rtl.Identity  2 (const n 2)
 let reg n         = Rtl.cell Rtl.none 'r' Rtl.Identity 32 (const n 5)
@@ -205,6 +202,7 @@ let spaces =
           ; S.doc         = "floating-point registers"
           } 
 
+(*
     ;     { S.space = 'g'
           ; S.cellwidth   = 8
           ; S.aggregation = Rtl.Identity
@@ -214,6 +212,7 @@ let spaces =
           ; S.classification = S.Reg
           ; S.doc         = "generail-purpose registers"
           } 
+          *)
 
     ;     { S.space = 'd'
           ; S.cellwidth   = 2
@@ -259,11 +258,10 @@ let spaces =
           ; S.classification =
                S.Temp { S.stands_for = 'f'
                       ; S.index_ok   = (fun _ -> true)
-                      ; S.set_doc    = "any register"
+                      ; S.set_doc    = "fp register"
                       } 
           ; S.doc         = "floating-point temporaries"
           }
-
 
     ;     { S.space = 'v'
           ; S.cellwidth   = 8
@@ -400,26 +398,32 @@ let cc =
     ; T.cont            = new simple' Rtl.BigEndian
     ; T.ret             = new simple' Rtl.BigEndian
     ; T.allocatable     = List.concat 
-                            [ List.map (fun n -> ('r',n,32)) [1;2;3]
-                            ; List.map (fun n -> ('f',n,32)) [1;2;3]
+    (*
+          [ List.map (fun n -> ('r',n,32)) [0;1]
+          ; List.map (fun n -> ('f',n,32)) [0;1]
+          [ List.map (fun n -> ('r',n,32)) [0;1;2]
+          ; List.map (fun n -> ('f',n,32)) [0;1;2]
+          [ List.map (fun n -> ('r',n,32)) [0;1;2;3;4;5;6]
+          ; List.map (fun n -> ('f',n,32)) [0;1;2;3;4;5;6]
+     *)
+          [ List.map (fun n -> ('r',n,32)) [0;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15
+                                           ;16;17;18;19;20;21;22;23]
+          ; List.map (fun n -> ('f',n,32)) [0;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15
+                                           ;16;17;18;19;20;21;22;23]
+                      (*
+          [ List.map (fun n -> ('r',n,32)) [0;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15
+                                           ;16;17;18;19;20;21;22;23;24;25;26;27
+                                           ;28;29;30;31]
+          ; List.map (fun n -> ('f',n,32)) [0;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15
+                                           ;16;17;18;19;20;21;22;23;24;25;26;27
+                                           ;28;29;30;31]
+                     *)
+                            (*
                             ; List.map (fun n -> ('g',n,8))  [1;2;3]
+                            *)
                             ]
     }
  
-@
-
-The [[contn]] value describes the memory layout of continuations. More
-precisely, the pair of two pointers that are stored on the stack.
-
-<<DummyTarget>>=
-let contn (byte_order) (base:Rtl.exp) =
-    let add       = Rtl.opr "add" [32] in
-    let offset n  = Rtl.app add [base; Rtl.bits (Bits.S.of_int n 32) 32] in
-    let cell addr = Rtl.cell Rtl.none 'm' byte_order 32  addr in
-        { C.block = Block.mk ~base ~size:4 ~alignment:4
-        ; C.sp    = cell (offset 0)
-        ; C.pc    = cell (offset 4)
-        }
 @
 
 Finally, this is the complete description of the [[Dummy]] target.
@@ -430,6 +434,7 @@ let target =
     ; T.byteorder       = Rtl.BigEndian
     ; T.wordsize        = 32
     ; T.pointersize     = 32
+    ; T.alignment       = 1
     ; T.memsize         = 8
     ; T.float           = "ieee754"
     ; T.charset         = "latin1"
@@ -446,7 +451,6 @@ let target =
     ; T.reload          = Spill.reload
     ; T.data_section    = "data"
     ; T.stack_slots     = new simple' Rtl.BigEndian
-    ; T.contn           = contn Rtl.BigEndian
     }
 @ 
 
@@ -655,25 +659,21 @@ let cc =
     ; T.cont            = new simple' Rtl.BigEndian
     ; T.ret             = new simple' Rtl.BigEndian
     ; T.allocatable     = List.concat 
-                            [ List.map (fun n -> ('r',n,32)) [3;4;5]
-                            ; List.map (fun n -> ('f',n,32)) [1;2;3]
+                            [ List.map (fun n -> ('r',n,32)) [1;2;3;4;5;6;7;8;9;10;11;12;13;14;15
+                                                             ;16;17;18;19;20;21;22;23;24;25;26;27
+                                                             ;28;29;30;31;32]
+                            ; List.map (fun n -> ('f',n,32)) [1;2;3;4;5;6;7;8;9;10;11;12;13;14;15
+                                                             ;16;17;18;19;20;21;22;23;24;25;26;27
+                                                             ;28;29;30;31;32]
                             ]
     }
-
-let contn byte_order (base:Rtl.exp) =
-    let add       = Rtl.opr "add" [32] in
-    let offset n  = Rtl.app add [base; Rtl.bits (Bits.S.of_int n 32) 32] in
-    let cell addr = Rtl.cell Rtl.none 'm' byte_order 32  addr in
-        { C.block = Block.mk ~base ~size:4 ~alignment:4
-        ; C.sp    = cell (offset 0)
-        ; C.pc    = cell (offset 4)
-        }
 
 let target = 
     { T.name            = "sparc"
     ; T.byteorder       = Rtl.BigEndian
     ; T.wordsize        = 32
     ; T.pointersize     = 32
+    ; T.alignment       = 1
     ; T.memsize         = 8
     ; T.float           = "ieee754"
     ; T.charset         = "latin1"
@@ -690,7 +690,6 @@ let target =
     ; T.reload          = Spill.reload
     ; T.data_section    = "data"
     ; T.stack_slots     = new simple' Rtl.BigEndian
-    ; T.contn           = contn Rtl.BigEndian
     }
 @ 
 

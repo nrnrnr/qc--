@@ -28,11 +28,14 @@ type t =
     { block:      Block.t     (* memory block for pair *)
     ; sp:         Rtl.loc     (* location inside block for sp *)
     ; pc:         Rtl.loc     (* location in block for code ptr *)
+    ; overflow:   Rtl.exp     (* base in block of overflow area *)
     }
 
 (* observers *)
-val value:  t -> Rtl.exp            (* the value (pointer to pair) *)
-val init:   t -> sp:Rtl.loc -> pc:Rtl.exp -> Rtl.rtl list    
+val value:   t -> Rtl.exp            (* the value (pointer to pair) *)
+val ov_base: t -> Rtl.exp
+val init_code:    t -> sp:Rtl.loc -> pc:Rtl.exp -> Rtl.rtl list    
+val with_overflow: Target2.t -> Rtl.exp -> Block.t -> t
 @
 
 
@@ -43,7 +46,7 @@ create a continuation.
 A continuation [[value]] is a pointer to the block. The block resides in
 the stack frame of a procedure. It initializes the block by passing the
 stack pointer location and the address of the continuation code to
-[[init]]. The call returns a list of instructions that perform the
+[[init_code]]. The call returns a list of instructions that perform the
 initialization of the block.
 
 % ------------------------------------------------------------------ 
@@ -51,18 +54,36 @@ initialization of the block.
 % ------------------------------------------------------------------ 
 
 <<contn.ml>>=
+module T = Target2
+
 type t =
     { block:      Block.t     (* memory block for pair *)
     ; sp:         Rtl.loc     (* location inside block for sp *)
     ; pc:         Rtl.loc     (* location in block for code ptr *)
+    ; overflow:   Rtl.exp     (* base in block of overflow area *)
     }
 
 let value t = Block.base t.block        (* pointer to block *)
 
-let init t ~(sp:Rtl.loc) ~(pc:Rtl.exp) =
+let ov_base t = t.overflow        (* pointer to block *)
+
+let init_code t ~(sp:Rtl.loc) ~(pc:Rtl.exp) =
     let width = Rtlutil.Width.loc t.sp in
     [ Rtl.store t.pc pc width
     ; Rtl.store t.sp (Rtl.fetch sp width) width
     ]
+
+let with_overflow t base overflow =
+    let add       = Rtl.opr "add" [t.T.pointersize] in
+    let offset n  =
+		Rtl.app add [base; Rtl.bits (Bits.S.of_int n t.T.pointersize) t.T.pointersize] in
+    let cell addr = Rtl.cell Rtl.none 'm' t.T.byteorder t.T.pointersize  addr in
+	let size = t.T.pointersize / t.T.memsize in
+        { block = Block.cathl overflow (Block.mk ~base ~size:(2 * size)
+				                               ~alignment:t.T.alignment)
+        ; sp    = cell (offset size)
+        ; pc    = cell (offset 0)
+        ; overflow = Block.base overflow
+        }
 @
 

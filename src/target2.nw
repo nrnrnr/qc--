@@ -87,13 +87,17 @@ cc: string -> cc; (* raises Error.Exn if name is unknown *)
 Many of the following characteristics of a target are more or less
 obvious.  A {\PAL} source can name hardware registers for variables. 
 The [[register]] component provides the location for a given name.  We
-could remember the width for type checking as well but ee are wearing
+could remember the width for type checking as well but we are wearing
 our assembler hats for now.
+
+If [[alignment]] is 1, then the machine can read a word at any address.
+Otherwise, only a word aligned to the [[alignment]] can be read.
 
 <<components of t>>=
 byteorder:      Rtl.aggregation   ; (* big/little endian, id *)
 wordsize:       int               ; (* bits *)
 pointersize:    int               ; (* bits *)
+alignment:      int               ; (* alignment of word access *)
 memsize:        int               ; (* smallest addressable unit, typically 8 *)
 float:          string            ; (* "ieee754" float representation    *)
 charset:        string            ; (* "latin1"  character encoding      *)
@@ -227,23 +231,6 @@ is provided by the target.
 stack_slots:    Automaton2.spec;
 @
 
-% ------------------------------------------------------------------ 
-\subsection{Continuation Representation}
-% ------------------------------------------------------------------ 
-
-A continuation is a pointer to a pair of two pointers. The two pointers
-are a code pointer and a stack pointer value (see module
-\module{contn.nw}). The pair is stored on the stack.  The size and
-alignment of the pointers inside the stack are target dependent and thus
-defined here. 
-
-\emph{Should we use an object instead of a record to define this? --CL}
-
-THIS FUNCTION SEEMS UNDERSPECIFIED; WHAT IS THE ARGUMENT?
-<<components of t>>=
-contn:      Rtl.exp -> Contn.t;       (* continuation representation *)
-@
-    
 % ------------------------------------------------------------------ 
 \subsection{Compatibility with Source Code}
 % ------------------------------------------------------------------ 
