@@ -92,7 +92,6 @@ module MakeLib (C: Lua.Lib.CORE) = struct
       ; "redirect_stderr", V.efunc (V.option V.string **-> V.runit) redirect_stderr
       ; "compare_files",   V.efunc (V.string **-> V.string **-> V.result V.bool) compare_files
       ] g;
-      Lua.Lib.StringList.empty (* OK? *)
 end
 @
 A search path is easier to handle in \ocaml~when it is represented as a
@@ -117,7 +116,6 @@ The conversion of values between Lua and \ocaml~is a bit ugly. Maybe
 some expert can clean this up. Another problem was to call [[dofile]]
 and [[dostring]]. Is there a better way then [[apply]]?
 <<utility functions>>=
-let error g msg      = C.fallback "error" g [V.String msg]
 let lookup   g f     = try Luahash.find g.V.globals (V.String f)
                        with Not_found -> V.Nil
 let dofile   g file  = C.apply (lookup g "dofile")   g  file
@@ -126,50 +124,32 @@ let dostring g str   = C.apply (lookup g "dostring") g  str
 let defaultdir       = Filename.concat This.install_dir "lib/qc--"
 let luapath          = "QCMMLUAPATH"
 let defaultpath      = ".::*"                  (*XXX fix XXX*)
-
-type script =
-    | String of V.value list  (* string is script             *)
-    | File   of V.value list  (* string is filename of script *)
 @
-The code below is ugly. The problem is that [[dofile]] and [[dostring]]
-both take string arguments, but one is a file name, the other a program.
-If we cannot find the named \emph{file} we take the name as key into a
-table and eventually return the entry, which is a script, rather a the
-file name of a script. This also makes error recovery problematic.
-Currently the value returned by [[error]] is taken to be a Lua program,
-rather a file name, but this decision is arbitrary.
+We're given a search path and a filename.
+If we see [["*"]], we look for the filename in a table.
+If we see another name, we take it as a directory name and we look for
+the filename in that directory.
+The empty name stands for the default directory.
 <<utility functions>>=
 let dosearchfile g file value =
-    let path = try Sys.getenv luapath with Not_found -> defaultpath in
-    let rec search = function
-        | [] -> String (error g ( "dosearchfile: can't find `"
-                                ^ file
-                                ^ "' in path `"
-                                ^ path
-                                ^ "'"
-                                ))
-        | "*" :: rem -> 
-            ( match value with
-              | V.Nil      -> search rem
-              | V.Table(t) -> (try  String [(Luahash.find t (V.String file))] 
-                               with Not_found -> search rem)
-              | _  -> String (error g 
-                    "dosearchfile: expected nil or table as second
-                    argument")
-            )  
-        | dir :: rem -> 
-            let d    = if dir = "" then defaultdir else dir in
-            let p    = Filename.concat d file in
-                if Sys.file_exists p then
-                    File [(V.String p)]
-                else search rem
-    in
-        if Filename.is_relative file then
-            match search (split path) with
-            | File f   -> dofile g f
-            | String s -> dostring g s
-        else
-            dofile g [(V.String file)]
+  let path = try Sys.getenv luapath with Not_found -> defaultpath in
+  let rec search = function
+    | "*" :: dirs -> 
+        ( match value with
+          | V.Nil      -> search dirs
+          | V.Table t  -> (try  dostring g [Luahash.find t (V.String file)] 
+                           with Not_found -> search dirs)
+          | _  -> C.error "dosearchfile: expected nil or table as second argument"
+        )  
+    | dir :: dirs -> 
+        let d = if dir = "" then defaultdir else dir in
+        let p = Filename.concat d file in
+        if Sys.file_exists p then dofile g [V.String p] else search dirs
+    | [] -> C.error
+              (Printf.sprintf "dosearchfile: can't find `%s' in path `%s'" file path)
+  in
+      if Filename.is_relative file then search (split path) 
+      else dofile g [V.String file]
 @ 
 Function [[catch f]] returns whatever [[f]]~returns, except if
 [[f]]~raises an exception,  it returns the empty list of results.

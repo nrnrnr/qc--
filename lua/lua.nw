@@ -22,6 +22,7 @@ pairs so that Caml values can be mapped to Lua values and back again.
 module type VALUE = sig
   type 'a userdata'
   type srcloc
+  type initstate
   type value =
     | Nil
     | Number   of float
@@ -36,6 +37,7 @@ module type VALUE = sig
               ; fallbacks : (string, value) Hashtbl.t
               ; mutable callstack : activation list
               ; mutable currentloc : Srcmap.location option (* supersedes top of stack *)
+              ; startup : initstate
               }
   and activation = srcloc * Srcmap.location option
 
@@ -50,7 +52,13 @@ module type VALUE = sig
      (* 'fallback', 'global', or 'element', name *)
 
   val state : unit -> state (* empty state, without even fallbacks *)
-@ 
+  val at_init : state -> string list -> unit  (* run code at startup time *)
+  val initcode : state -> (string -> unit) -> unit (* for the implementation only *)
+@ If a library wants to register Lua code to be executed at startup
+time, it can call [[at_init]].  
+No library should ever call [[initcode]]; that function is reserved
+for the implementation, which uses it to run the registered code.
+@
 Lua tables are not quite like Caml tables, but they are close.
 <<lua.mli>>=
   module Table : sig
@@ -346,17 +354,10 @@ I/O library for an example) or it can keep the state in the
 interpreter's global variables.
 If per-interpreter state must be shared among two or more libraries,
 global variables are the only option.
-The code is a list of strings, but it is represented in a format that
-enable constant-time concatenation.
-<<library support>>=
-module StringList : sig
-  type t
-  val empty  : t
-  val append : t -> t -> t
-  val cons   : string -> t -> t
-  val apply  : t -> (string -> unit) -> unit
-  val of_list : string list -> t
-end
+The code is a list of strings, and it should be registered using the
+[[at_init]] function in the [[VALUE]] structure.
+The \emph{only} safe time to call [[at_init]] is from within an
+[[init]] function.
 @
 A \emph{bare} library does not use any user types---only the basic
 ones built into every Lua interpreter.  That means it works with any
@@ -364,7 +365,7 @@ core at all.
 <<library support>>=
 module type BARECODE = 
   functor (C : CORE) -> sig
-    val init : C.V.state -> StringList.t
+    val init : C.V.state -> unit
   end
 @
 A \emph{typeful} library won't work with just any core---it works only
@@ -375,7 +376,7 @@ typeful library depends.
 module type USERCODE = sig
   type 'a userdata'  (* the userdata' tycon of the core on which lib depends *)
   module M : functor (C : CORE with type 'a V.userdata' = 'a userdata') -> sig
-    val init : C.V.state -> StringList.t
+    val init : C.V.state -> unit
   end
 end
 @ 
@@ -441,7 +442,7 @@ one must provide a parser to make this library.
 @
 The core interpreter contains a compiler for ASTs and some other
 stuff that I might feel like documenting one day.
-The function [[mk]] provides both an initial state and the startup
+The function [[pre_mk]] provides both an initial state and the startup
 code from libraries.  The startup code is intended to be passed
 [[dostring]].   
 <<lua.mli>>=

@@ -30,6 +30,7 @@ type ('a, 'b, 'c) synonym_for_ep = ('a, 'b, 'c) ep
 module type S = sig
   type 'a userdata'
   type srcloc
+  type initstate
   type value
     = Nil
     | Number   of float
@@ -44,6 +45,7 @@ module type S = sig
               ; fallbacks : (string, value) Hashtbl.t
               ; mutable callstack : activation list
               ; mutable currentloc : Srcmap.location option (* supersedes top of stack *)
+              ; startup : initstate
               }
   and activation = srcloc * Srcmap.location option
 
@@ -58,7 +60,13 @@ module type S = sig
      (* 'fallback', 'global', or 'element', name *)
 
   val state : unit -> state (* empty state, without even fallbacks *)
-@ 
+  val at_init : state -> string list -> unit  (* run code at startup time *)
+  val initcode : state -> (string -> unit) -> unit (* for the implementation only *)
+@ If a library wants to register Lua code to be executed at startup
+time, it can call [[at_init]].  
+No library should ever call [[initcode]]; that function is reserved
+for the implementation, which uses it to run the registered code.
+@
 Lua tables are not quite like Caml tables, but they are close.
 <<signatures>>=
   module Table : sig
@@ -241,7 +249,10 @@ and state = { globals : table
             ; fallbacks : (string, value) Hashtbl.t
             ; mutable callstack : activation list
             ; mutable currentloc : Srcmap.location option (* supersedes top of stack *)
+            ; startup : initstate
             }
+and initstate =
+  { mutable init_strings : (string -> unit) -> unit; mutable initialized : bool }
 and activation = srcloc * Srcmap.location option
 @ 
 We need suitable equality.
@@ -471,11 +482,6 @@ let take1 = function  (* take one value from a list of arguments *)
   | h::t -> h
 
 let const f s = f
-let state () = 
- { globals = Table.create 50; fallbacks = Hashtbl.create 10; callstack = [];
-   currentloc = None }
-let emptystate = state()
-
 let (-->) arg result =
   { embed =   (fun f -> 
                caml_func (fun args -> [result.embed (f (arg.project (take1 args)))]))
@@ -605,3 +611,38 @@ module Table = struct
     t
 end
 @ 
+\subsection{Initialization at startup time}
+<<value toplevel>>=
+module StringList = struct
+  type t = (string -> unit) -> unit
+  let empty f = ()
+  let of_list l f = List.iter f l
+  let append l1 l2 f = l1 f; l2 f
+end
+
+let state () = 
+ { globals = Table.create 50; fallbacks = Hashtbl.create 10; callstack = [];
+   currentloc = None;
+   startup = { init_strings = StringList.empty; initialized = false; }
+ }
+
+let at_init g ss =
+  if g.startup.initialized then
+    (prerr_endline
+       "Internal Lua-ML error: called at_init after initialiation was complete";
+     exit(1))
+  else
+    g.startup.init_strings <-
+      StringList.append g.startup.init_strings (StringList.of_list ss)
+
+let initcode g =
+  if g.startup.initialized then
+    (prerr_endline "Internal Lua-ML error: a naughty client called initcode";
+     exit(1))
+  else
+    let code = g.startup.init_strings in
+    begin
+      g.startup.initialized <- true;
+      g.startup.init_strings <- StringList.empty;
+      code
+    end

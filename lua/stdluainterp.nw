@@ -104,9 +104,11 @@ module Make  (T : Luavalue.USERDATA)
   type startup_code = (string -> unit) -> unit
   let pre_mk () = (* raw state + fallbacks + library initialization + startup code*)
     let g = V.state() in
-    let () = add_fallbacks g in
-    let initcode = L'.init g in
-    g, Lualib.StringList.apply initcode
+    begin
+      add_fallbacks g;
+      L'.init g;
+      g, V.initcode g
+    end
 
 end (* Make *)
 @
