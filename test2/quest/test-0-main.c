@@ -1,97 +1,108 @@
 /* $Id$ */
-/* quest -seed 12345 -lua quest.lua -n 5 -2 -s 0 -o test-0 */
+/* ./quest -seed 12345 cmm.lua -test cmm -n 5 -2 -s 0 -o test-0 */
 
+/* These macros are defined in Lua string Quest.header, which may be
+ * re-defined from the quest command line or in file quest.lua. 
+ */
+#ifndef QUEST_FAILED
+#include <assert.h>
+#define QUEST_ASSERT(x) assert(x)
+#else
+#define QUEST_ASSERT(x) if (!(x)) failed(__LINE__)
+#endif
 
 extern int printf (char *, ...);
-
 int errors = 0;
-
 static void failed( int line )
 { printf ("failed in %s: %d\n", __FILE__, line); errors++; }
-
-double av1 = 83193.455859;
-
-extern double callee_af1 ();
-
-static void caller_bf1(  )
-{ double bv1; bv1 = callee_af1 (); if (av1 !=  bv1) failed (__LINE__); }
-
-short int av2 = 16726;
-
-double bv2 = 3401.154893;
-
-unsigned long int cv2 = 97976453UL;
-
-extern short int callee_af2 (double, unsigned long int);
-
-static void caller_bf2(  )
-{
-    short int dv2;
-    dv2 = callee_af2 (bv2, cv2); if (av2 !=  dv2) failed (__LINE__);
-}
-
-float av3 = 47943.819833;
-
-long int bv3 = 1375855961L;
-
-double cv3 = 57648.738214;
-
-float dv3 = 49143.453686;
-
-char ev3 = '\x21';
-
-extern float callee_af3 (long int, double, float, char);
-
-static void caller_bf3(  )
-{
-    float fv3;
-    fv3 = callee_af3 (bv3, cv3, dv3, ev3); if (av3 !=  fv3) failed (__LINE__);
-}
-
-char av4 = '\x26';
-
-unsigned short int bv4 = 48475;
-
-double cv4 = 56825.937554;
-
-long int dv4 = 169106757L;
-
-unsigned int ev4 = 1154655870U;
-
-char fv4 = '\x1e';
-
-unsigned char gv4 = '\x18';
-
+float av5 = 30806.259500;
+int bv5 = 1375855961;
+float cv5 = 57648.738214;
+unsigned long int dv5 = 1953251918UL;
+double ev5 = 84691.657924;
+float fv5 = 8028.224739;
+unsigned int gv5 = 904255062U;
+float hv5 = 83129.008832;
+float iv5 = 64360.493233;
 extern
-char
-callee_af4
-(unsigned short int,
+float
+callee_af5
+(int,
+float,
+unsigned long int,
 double,
-long int,
+float,
 unsigned int,
-char,
-unsigned char);
-
+float,
+float);
+static void caller_bf5(  )
+{
+    float jv5;
+    /* seed: 931216817 */
+    jv5 = callee_af5 (bv5, cv5, dv5, ev5, fv5, gv5, hv5, iv5);
+    QUEST_ASSERT (av5 ==  jv5);
+}
+double av4 = 87352.812102;
+long int bv4 = 654925312L;
+unsigned char cv4 = '\x7e';
+short int dv4 = 7565;
+unsigned char ev4 = '\x14';
+double fv4 = 90627.748213;
+double gv4 = 22841.267762;
+unsigned short int hv4 = 59858;
+extern
+double
+callee_af4
+(long int,
+unsigned char,
+short int,
+unsigned char,
+double,
+double,
+unsigned short int);
 static void caller_bf4(  )
 {
-    char hv4;
-    hv4 = callee_af4 (bv4, cv4, dv4, ev4, fv4, gv4);
-    if (av4 !=  hv4) failed (__LINE__);
+    double iv4;
+    /* seed: 459733091 */
+    iv4 = callee_af4 (bv4, cv4, dv4, ev4, fv4, gv4, hv4);
+    QUEST_ASSERT (av4 ==  iv4);
 }
-
-float av5 = 79304.984775;
-
-extern float callee_af5 ();
-
-static void caller_bf5(  )
-{ float bv5; bv5 = callee_af5 (); if (av5 !=  bv5) failed (__LINE__); }
-
+unsigned short int av3 = 55298;
+float bv3 = 35279.920397;
+long int cv3 = 623849968L;
+extern unsigned short int callee_af3 (float, long int);
+static void caller_bf3(  )
+{
+    unsigned short int dv3;
+    /* seed: 722884747 */
+    dv3 = callee_af3 (bv3, cv3);
+    QUEST_ASSERT (av3 ==  dv3);
+}
+unsigned int av2 = 127659270U;
+float bv2 = 75016.947768;
+extern unsigned int callee_af2 (float);
+static void caller_bf2(  )
+{
+    unsigned int cv2;
+    /* seed: -1067149487 */
+    cv2 = callee_af2 (bv2);
+    QUEST_ASSERT (av2 ==  cv2);
+}
+float av1 = 43887.142231;
+float bv1 = 90261.094350;
+unsigned long int cv1 = 1192478086UL;
+extern float callee_af1 (float, unsigned long int);
+static void caller_bf1(  )
+{
+    float dv1;
+    /* seed: 12345 */ dv1 = callee_af1 (bv1, cv1); QUEST_ASSERT (av1 ==  dv1);
+}
 int main( int argc, char **argv )
 {
-    caller_bf1 ();
-    caller_bf2 ();
-    caller_bf3 ();
-    caller_bf4 ();
     caller_bf5 ();
+    caller_bf4 ();
+    caller_bf3 ();
+    caller_bf2 ();
+    caller_bf1 ();
     return errors;
 }

@@ -1,82 +1,101 @@
 /* $Id$ */
 
+/* These macros are defined in Lua string Quest.header, which may be
+ * re-defined from the quest command line or in file quest.lua. 
+ */
+#ifndef QUEST_FAILED
+#include <assert.h>
+#define QUEST_ASSERT(x) assert(x)
+#else
+#define QUEST_ASSERT(x) if (!(x)) failed(__LINE__)
+#endif
 
 extern int printf (char *, ...);
-
 extern int errors;
-
 static void failed( int line )
 { printf ("failed in %s: %d\n", __FILE__, line); errors++; }
-
-extern double av1;
-
-double callee_af1(  ) { return av1; }
-
-extern short int av2;
-
-extern double bv2;
-
-extern unsigned long int cv2;
-
-short int callee_af2( double ap2, unsigned long int bp2 )
-{
-    if (bv2 !=  ap2) failed (__LINE__);
-    if (cv2 !=  bp2) failed (__LINE__);
-    return av2;
-}
-
-extern float av3;
-
-extern long int bv3;
-
-extern double cv3;
-
-extern float dv3;
-
-extern char ev3;
-
-float callee_af3( long int ap3, double bp3, float cp3, char dp3 )
-{
-    if (bv3 !=  ap3) failed (__LINE__);
-    if (cv3 !=  bp3) failed (__LINE__);
-    if (dv3 !=  cp3) failed (__LINE__);
-    if (ev3 !=  dp3) failed (__LINE__);
-    return av3;
-}
-
-extern char av4;
-
-extern unsigned short int bv4;
-
-extern double cv4;
-
-extern long int dv4;
-
-extern unsigned int ev4;
-
-extern char fv4;
-
-extern unsigned char gv4;
-
-char
-callee_af4(
-    unsigned short int ap4,
-    double bp4,
-    long int cp4,
-    unsigned int dp4,
-    char ep4,
-    unsigned char fp4
+extern float av5;
+extern int bv5;
+extern float cv5;
+extern unsigned long int dv5;
+extern double ev5;
+extern float fv5;
+extern unsigned int gv5;
+extern float hv5;
+extern float iv5;
+float
+callee_af5(
+    int ap5,
+    float bp5,
+    unsigned long int cp5,
+    double dp5,
+    float ep5,
+    unsigned int fp5,
+    float gp5,
+    float hp5
 )
 {
-    if (bv4 !=  ap4) failed (__LINE__);
-    if (cv4 !=  bp4) failed (__LINE__);
-    if (dv4 !=  cp4) failed (__LINE__);
-    if (ev4 !=  dp4) failed (__LINE__);
-    if (fv4 !=  ep4) failed (__LINE__);
-    if (gv4 !=  fp4) failed (__LINE__);
+    /* seed: 931216817 */
+    QUEST_ASSERT (bv5 ==  ap5);
+    QUEST_ASSERT (cv5 ==  bp5);
+    QUEST_ASSERT (dv5 ==  cp5);
+    QUEST_ASSERT (ev5 ==  dp5);
+    QUEST_ASSERT (fv5 ==  ep5);
+    QUEST_ASSERT (gv5 ==  fp5);
+    QUEST_ASSERT (hv5 ==  gp5);
+    QUEST_ASSERT (iv5 ==  hp5);
+    return av5;
+}
+extern double av4;
+extern long int bv4;
+extern unsigned char cv4;
+extern short int dv4;
+extern unsigned char ev4;
+extern double fv4;
+extern double gv4;
+extern unsigned short int hv4;
+double
+callee_af4(
+    long int ap4,
+    unsigned char bp4,
+    short int cp4,
+    unsigned char dp4,
+    double ep4,
+    double fp4,
+    unsigned short int gp4
+)
+{
+    /* seed: 459733091 */
+    QUEST_ASSERT (bv4 ==  ap4);
+    QUEST_ASSERT (cv4 ==  bp4);
+    QUEST_ASSERT (dv4 ==  cp4);
+    QUEST_ASSERT (ev4 ==  dp4);
+    QUEST_ASSERT (fv4 ==  ep4);
+    QUEST_ASSERT (gv4 ==  fp4);
+    QUEST_ASSERT (hv4 ==  gp4);
     return av4;
 }
-
-extern float av5;
-
-float callee_af5(  ) { return av5; }
+extern unsigned short int av3;
+extern float bv3;
+extern long int cv3;
+unsigned short int callee_af3( float ap3, long int bp3 )
+{
+    /* seed: 722884747 */
+    QUEST_ASSERT (bv3 ==  ap3);
+    QUEST_ASSERT (cv3 ==  bp3);
+    return av3;
+}
+extern unsigned int av2;
+extern float bv2;
+unsigned int callee_af2( float ap2 )
+{ /* seed: -1067149487 */ QUEST_ASSERT (bv2 ==  ap2); return av2; }
+extern float av1;
+extern float bv1;
+extern unsigned long int cv1;
+float callee_af1( float ap1, unsigned long int bp1 )
+{
+    /* seed: 12345 */
+    QUEST_ASSERT (bv1 ==  ap1);
+    QUEST_ASSERT (cv1 ==  bp1);
+    return av1;
+}

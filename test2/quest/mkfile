@@ -7,14 +7,14 @@
 #
 
 TOP = 		../..
-PATH = 		$PATH:/scratch/lindig/lcc	
+#PATH = 		$PATH:/scratch/lindig/lcc	
 
 <$TOP/config/config.mk
 <$TOP/config/c.mk
 
 
 LCC	=	lcc
-LCCFLAGS=	-target=c-- -Wf-c--=x86/linux -Wf-c--segLIT=data
+LCCFLAGS=	-target=c-- -Wf-c--=x86/linux -Wf-c--segLIT=data -DQUEST_FAILED
 
 QCMM	=	`if [ -x $TOP/bin/qc--.opt ]; then echo $TOP/bin/qc--.opt; else echo $TOP/bin/qc--; fi`
 QCMMFLAGS =	Ld.path=\"$CC\" 
@@ -50,7 +50,7 @@ generate:V:	$TESTS_C $TESTS_CMM
 clean:V:
 		rm -f *.o *-[glc][cm][cm]-[glc][cm][cm]
 clobber:V:	clean
-		rm -f *.c-- *.c
+		rm -f test*.c-- test*.c
 
 globals.o:	globals.c--
 		$QCMM -c -globals $prereq
@@ -62,19 +62,19 @@ globals.o:	globals.c--
 		$LCC $LCCFLAGS -o $target -S $stem.c
 
 %-gcc.o:	%.c
-		$CC -g -c -o $target $prereq
+		$CC -DQUEST_FAILED -g -c -o $target $prereq
 
 %-lcc.o:	%.c /usr/local/lcc/rcc
-		$LCC -g -c -o $target $stem.c
+		$LCC -DQUEST_FAILED -g -c -o $target $stem.c
 
 %-cmm.o:	%.c-- $QCMM
 		$QCMM -c -o $target $stem.c--
 
 ^test-([0-9]*)-(gcc|lcc|cmm)-(gcc|lcc|cmm)'$':R: test-'\1'-main-'\2'.o test-'\1'-callee-'\3'.o globals.o
-		$QCMM $LDFLAGS -globals -o $target $prereq 
+		$QCMM $QCMMFLAGS $LDFLAGS -globals -o $target $prereq 
 
 $TESTS_C:	
-		$QUEST -seed 12345 -lua quest.lua -n 5 -2 -s 0 -o test-0
-		$QUEST -seed 12345 -lua quest.lua -n 5 -2 -s 1 -o test-1
-		$QUEST -seed 12345 -lua quest.lua -n 5 -2 -s 2 -o test-2
+		$QUEST -seed 12345 cmm.lua -test cmm -n 5 -2 -s 0 -o test-0
+		$QUEST -seed 12345 cmm.lua -test cmm -n 5 -2 -s 1 -o test-1
+		$QUEST -seed 12345 cmm.lua -test cmm -n 5 -2 -s 2 -o test-2
 		
