@@ -103,6 +103,7 @@ between registers and memory.
 Accordingly, we need a special type of location.
 <<exposed types>>=
 type width = int
+type hint  = string
 type loc = { fetch : width -> Rtl.exp; store : Rtl.exp -> width -> Rtl.rtl }
 <<exported values>>=
 val fetch  : loc ->            width -> Rtl.exp
@@ -157,6 +158,7 @@ In addition, we expect that a client might write its own stages.
 <<exposed types>>=
 type stage = implementation -> implementation
 @ 
+\paragraph{The overflow block, if any}
 The final stage in any implementation is the overflow block.
 To make an overflow block, you need a bunch of information about the
 machine and a bunch of information about the convention.
@@ -174,6 +176,7 @@ convention.
 val no_overflow :
   base:Rtl.exp -> max_alignment:int -> errormsg:string -> implementation
 @ 
+\paragraph{Selection and adjustment of width}
 The [[widths]] stage can restrict the convention to satisfy only
 requests naming a listed width.
 <<exported values>>=
@@ -194,6 +197,7 @@ val widen : (int -> int) -> stage
 [[Automaton.widen (Aux.round_up_to ~multiple_of:32)]] 
 to be useful.
 @
+\paragraph{Adjustment of alignment}
 If a value must be allocated in memory, it needs an alignment.
 All alignments start out at~1, but we can provide a function that
 maps a width to an alignment.
@@ -204,6 +208,7 @@ but the cell size of target memory).
 <<exported values>>=
 val align_to : (int -> int) -> stage
 @ 
+\paragraph{Allocation of registers}
 Although it may not be terribly useful, we provide a simple stage that
 hands out registers sequentially.
 To satisfy a request, the stage takes the first~$n$ registers, where
@@ -213,6 +218,7 @@ If there is no such~$n$, it barfs with an error message.
 <<exported values>>=
 val useregs : Register.t list -> errormsg:(int -> Register.t list -> string) -> stage
 @ 
+\paragraph{Combination of multiple stages}
 It can be useful to hand out different registers from different piles.
 For example, we might want to use floating-point registers to satisfy
 [["float"]] requests and integer registers to satisfy other requests.
@@ -231,8 +237,84 @@ val hint_choice : ((string -> bool) * stage) list -> stage
 width?) instead of the hint alone---but the hint alone seems to be the
 common case.
 @
+\paragraph{Exclusion and interference of registers}
 For the MIPS calling convention, we need additional goodies.
+One is that by convention, the use of some registers excludes the use
+of other registers not otherwise connected.
+(I~conjecture this rule exists to make it simpler to implement
+varargs.) 
 
+For each parameter, we want a \emph{placement} in a register.
+The idea here is similar to that used in NR's work with Glenn and Mike
+on register allocation for irregular architectures: some placements
+can exclude others.
+In this compiler, a placement is a register or aggregate of registers;
+we can't support sub-register placements.
+A~value of type [[Exclude.t]] is mutable state that keeps track of
+which placements have been used.
+A~client uses the [[use]] function to announce the use of a placement
+and the [[available]] function to query the the availability of a
+placement.
+Using a placement may exclude some others, depending on the
+information passed to the [[of_pairs]]
+constructor. 
+The first argument enables the abstraction to compute the natural
+exclusion relation induced by the aliasing structure of the machine.
+The second argument provides an exclusion relation that is pure
+software convention.
+If a pair [[rs, rs']] is passed, the use of \emph{any} placement
+in~[[rs]] excludes \emph{all} the placements in [[rs']], and vice
+versa.
+(That is, the exclusion relation is symmetric.)
+<<automaton.mli>>=
+module Exclude : sig
+  type pair = Register.t list * Register.t list
+  type t  (* mutable *)
+  val of_pairs  : (char -> Space.t) -> pair list -> t
+  val use       : t -> Register.t -> unit
+  val available : t -> Register.t -> bool
+end
+@ As an example, the MIPS calling convention might use
+<<example code based on MIPS R3000 calling convention>>=
+let t = Exclude.of_pairs Mips.spaces [[r4; r5], f10; [r6; r7], f12]
+@ This code says that using \emph{either} [[r4]] or [[r5]] excludes~[[f10]],
+and symmetrically, using [[f10]] excludes \emph{both}
+[[r4]]~and~[[r5]].
+@
+We can use this thing by providing a version of [[useregs]] that uses
+shared state to keep track of which registers have been excluded.
+Notice that an excluded register is \emph{not} the same as a ``used''
+register in a result.
+<<automaton.mli>>=
+val sharedregs : 
+  Exclude.t -> Register.t list -> errormsg:(int -> Register.t list -> string) -> stage
+@
+\paragraph{Other forms of history}
+Most calling conventions keep track of little history beyond knowing
+what locations have been used.
+The MIPS convention is unusual in that the placement a second
+parameter, if of floating-point type, may be placed in one of two
+different available locations depending on the type of the first
+parameter. 
+My solution is to enable an automaton to ``become'' another on the
+basis of the first allocation request.
+Because these things can be chained, I~believe the solution may be
+general.
+
+The first time an allocation reaches this stage, we select the
+first alternative satisfying the predicate.
+Thereafter \emph{the whole automaton behaves as this alternative}.
+If no choice is ever made, the automaton freezes as the first
+alternative.
+It is a checked run-time error if no predicate is satisfied.
+<<automaton.mli>>=
+val first_choice : ((width -> hint -> bool) * stage) list -> stage
+@ 
+
+
+
+QUESTION FOR MARK BAILEY: HAS HE CAREFULLY ANALYZED WHAT CLASS OF
+AUTOMATA CAN BE SPECIFIED IN CCL?
 
 @
 \section{Implementation}
@@ -242,6 +324,7 @@ type t = implementation
 
 module R  = Rtl
 module RS = Register.Set
+module RM = Register.Map
 module RU = Rtlutil
 module B  = Block
 module M  = Memalloc
@@ -394,3 +477,100 @@ let hint_choice choices next =
     ; freeze = next.freeze }
 @ 
 
+\paragraph{Exclusion}
+<<automaton.ml>>=
+module Exclude = struct
+  type pair = Register.t list * Register.t list
+  type t = { mutable excluded : RS.t
+           ;         excludes : RS.t RM.t
+           ;         cellcount: Register.t -> int
+           }
+  <<exclusion functions>>
+end
+@ 
+I'm still feeling my way with register aggregates, but I hope I can
+store and test all components.
+<<exclusion functions>>=
+let reg_components limit (s, i, w) =
+  assert (limit > 1);
+  let w = w / limit in
+  let rec from n =
+    if n = limit then []
+    else (s, i+n, w) :: from (n+1) in
+  from 0
+@ 
+If we use something, we use everything it excludes, we use it, and we
+use all its components.
+<<exclusion functions>>=
+let map_union map key set = try RS.union set (RM.find key map) with Not_found -> set
+
+let use t r =
+  let excluded = map_union t.excludes r t.excluded in
+  let excluded = RS.add r excluded in
+  let excluded = match t.cellcount r with
+  | 1 -> excluded
+  | n -> List.fold_right RS.add (reg_components n r) excluded in
+  t.excluded <- excluded
+@ 
+Something is available if it is not excluded and if none of its
+components are excluded.
+<<exclusion functions>>=
+let rec available t r =
+  if RS.mem r t.excluded then
+    false
+  else
+    match t.cellcount r with
+    | 1 -> true
+    | n -> List.for_all (available t) (reg_components n r)
+@ 
+<<exclusion functions>>=
+let of_pairs spaces exclusions =
+  let regset l = List.fold_right RS.add l RS.empty in
+  let find map r = try RM.find map r with Not_found -> RS.empty in
+  let addx rset r map = RM.add r (map_union map r rset) map in
+  let add (rs, rs') map =
+    let map = List.fold_right (addx (regset rs')) rs  map in
+    let map = List.fold_right (addx (regset rs )) rs' map in
+    map in
+  let excludes = List.fold_right add exclusions RM.empty in
+  let cellcount (s, _, w) = w / (spaces s).Space.cellwidth in
+  { excluded = RS.empty; excludes = excludes; cellcount = cellcount }
+@ 
+<<automaton.ml>>=
+let first_choice choices next =
+  let choices = List.map (fun (p, c) -> (p, c next)) choices in
+  let myself = ref next in (* temporary *)
+  let allocate ~width ~alignment ~hint = (!myself).allocate width alignment hint in
+  let freeze regs mems = (!myself).freeze regs mems in
+  let first_allocate ~width ~alignment ~hint =
+    let choice =
+      try snd (List.find (fun (p, _) -> p width hint) choices)
+      with Not_found -> Impossible.impossible "missing choice" in
+    myself := choice;
+    allocate width alignment hint in
+  let () = try
+    myself := { allocate = first_allocate; freeze = (snd (List.hd choices)).freeze }
+  with Failure _ -> Impossible.impossible "no first choice" in
+  { allocate = allocate; freeze = freeze }
+@ 
+<<automaton.ml>>=
+let sharedregs ex regs ~errormsg next =
+  let state = { avail = regs; used = RS.empty } in
+  let rec alloc ~width ~alignment ~hint =
+    try
+      let (_, _, w) as r = getreg state in
+      if Exclude.available ex r then
+        if w = width then
+          begin
+            Exclude.use ex r;
+            of_loc (R.reg r)
+          end
+        else if w < width then
+          Impossible.unimp "register aggregation"
+        else
+          Impossible.impossible (errormsg width state.avail)
+      else
+        alloc ~width ~alignment ~hint
+    with Failure _ -> next.allocate width alignment hint in
+  let freeze regs mems = next.freeze (RS.union state.used regs) mems in
+  { freeze = freeze; allocate = alloc }
