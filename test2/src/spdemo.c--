@@ -1,0 +1,25 @@
+target byteorder little;
+
+import printf, atol;
+export main;
+
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+  bits32 n;
+  if (argc > 1) {
+    n = foreign "C" atol("address" bits32[argv+4]);
+  } else {
+    n = 10;
+  }
+  bits32 sum, product;
+  sum, product = sp(n);
+  foreign "C" printf("address" fmt, n, sum, product);
+  foreign "C" return (0);
+}
+section "data" { fmt: bits8[] "sum up to %d is %d; product is %d\n\0"; }
+sp(bits32 n) {
+  jump sphelp (n, 0, 1);
+}
+sphelp(bits32 n, bits32 s, bits32 p) {
+  if (n==0) { return(s, p); }
+  else { jump sphelp(n-1, s+n, p*n); }
+}

@@ -288,11 +288,11 @@ end
 @ 
 \paragraph{Run an executable, capturing outputs}
 <<testdrv.lua>>=
-function Test.run_exe(exe_file, stdin)
+function Test.run_exe(exe_file, stdin, argv)
   local so = exe_file .. ".1"
   local se = exe_file .. ".2"
 
-  local cmd = format("%s < %s > %s 2> %s", exe_file, stdin, so, se)
+  local cmd = format("%s %s < %s > %s 2> %s", exe_file, argv or "", stdin, so, se)
   Test.log(cmd)
   local rc = execute(cmd)
 
@@ -362,7 +362,7 @@ function Test.run_test_case(inputs)
     if all_compiles_ok then
       local exe_file = Test.build_exe(inputs, s_files)
       if exe_file then
-        local pso, pse, rc = Test.run_exe(exe_file, inputs.stdin)
+        local pso, pse, rc = Test.run_exe(exe_file, inputs.stdin, inputs.argv)
         status = Test.check_update_file(inputs, pso)
                + Test.check_update_file(inputs, pse)
                ---   + rc
@@ -440,8 +440,8 @@ function Test.iso_test_case(inputs)
   local on_exe  = on_ok and Test.build_exe(inputs, on_outputs)
   assert(off_exe, 'Cannot link unoptimized for isolation')
 
-  local pso,  pse,  rc  = on_exe and Test.run_exe(on_exe,  inputs.stdin)
-  local pso0, pse0, rc0 =            Test.run_exe(off_exe, inputs.stdin)
+  local pso,  pse,  rc  = on_exe and Test.run_exe(on_exe,  inputs.stdin, inputs.argv)
+  local pso0, pse0, rc0 =            Test.run_exe(off_exe, inputs.stdin, inputs.argv)
   local eq = Util.files_nonwhite_equivalent 
   <<insist [[ps[eo]]] and [[ps[eo]0]] enable isolation, otherwise error>>
   <<set local [[i]] such that optimizing exactly files $1..[[i]]$ fails>>
@@ -500,7 +500,7 @@ repeat
   if on_outputs[i] ~= nil then
     local exe = Test.build_exe(inputs, Test.pick_iso_files(i, on_outputs, off_outputs))
     assert(exe)
-    local pso, pse, rc = Test.run_exe(exe, inputs.stdin)
+    local pso, pse, rc = Test.run_exe(exe, inputs.stdin, inputs.argv)
     if rc ~= 0 or not eq(pso, inputs.stdout) or not eq(pse, inputs.stderr) then
       found_it = 'yes'
     else
@@ -542,7 +542,7 @@ while lo < hi - 1 do
   local exe, pso, pse, rc
   if ok then
     exe = Test.build_exe(inputs, sfiles)
-    pso, pse, rc = Test.run_exe(exe, inputs.stdin)
+    pso, pse, rc = Test.run_exe(exe, inputs.stdin, inputs.argv)
   end
 --  local img = Inspect.image
 --  write(_STDERR, 'pso=', img(pso), '; pse=', img(pse),
