@@ -327,6 +327,14 @@ function expand (proc)
     run(action, proc, {})    
 end    
 
+------------------------------------------------------------------ 
+-- Driver
+-- Driver contains exported OCaml function. We add some functions
+-- here to make assemblers more uniform.
+------------------------------------------------------------------ 
+
+function Driver.sparc_solaris(io) Driver.sparc(1,io) end
+function Driver.sparc_sunos(io)   Driver.sparc(0,io) end
 
 ------------------------------------------------------------------ 
 -- Defaults
@@ -337,6 +345,7 @@ Default.target          = Targets.dummy          -- target
 Default.optimizer       = graphColoringAllocator --
 Default.linewidth       = 72                     -- output line width
 Default.asm             = Driver.cmmasm          -- function io -> asm
+Default.solaris         = 1                      -- for SPARC
 
 ------------------------------------------------------------------ 
 -- Main
@@ -391,6 +400,18 @@ function Main.asdl ()
     Main.compile ()
 end    
 Main.a = Main.asdl -- abbreviation
+
+-- SPARC assembler output
+--
+
+function Main.sparc ()
+    if Default.solaris then 
+        Default.asm = Driver.sparc_solaris 
+    else 
+        Default.asm = Driver.sparc_sunos
+    end
+    Main.compile ()
+end    
 
 -- pretty print AST
 -- prints Sys.argv[1] to stdout
@@ -532,6 +553,44 @@ Check the static semantic of I<file.c-->.
 
 =back
 
+=head1 HIGH LEVEL LUA FUNCTIONS
+
+The following functions are intended to be called from the B<qc-->
+command line. For most of them a one-letter alias I<x> exists such that
+they can be called using the B<->I<x> notation explained above in
+L<OPTIONS>.
+
+=over
+
+=item B<Main.check()>
+
+Check static semantic of file named as first command line argument. Does
+a type check, but generated no code.
+
+=item B<Main.compile()>, B<Main.c()>
+
+Compiles the file named as the first command line argument. Uses Lua
+defaults for the targets, optimizer, and assembler. Emits to stdout.
+
+=item B<Main.dot()>, B<Main.d()>
+
+Compiles the file named as the first command line argument and emits the
+control flow graph of each procedure as a B<dot> diagram to stdout.
+Uses Lua defaults for the targets, optimizer, and assembler. 
+
+=item B<Main.asdl()>, B<Main.a()>
+
+Compiles the file named as the first command line argument and each
+procedure in ASDL format to stdout.  Uses Lua defaults for the targets,
+optimizer, and assembler. 
+
+=item B<Main.sparc()>
+
+Compiles the file named as the first command line argument to I<SPARC>
+assembly code and emits it to stdout.  Uses Lua defaults for the
+targets, optimizer, and assembler. 
+
+=back
 
 =head1 LUA STARTUP
 
@@ -542,7 +601,7 @@ is "B<:.:*>". A search path contains a list of colon separated
 directories. Two directory names are special: the empty directory refers
 to an implementation dependent system-wide directory, like
 B</usr/local/lib/qc-->. The star B<*> refers to a directory that is part
-of the B<qc--> executable. With the default search path B<qc-->
+of the B<qc--> executable. With the default search path, B<qc-->
 therefore looks first in the system-wide directory for F<qc--.lua>, then
 in the current directory, and then takes the built-in F<qc--.lua>. 
 
@@ -567,6 +626,9 @@ Code optimizer.
 
 =item B<asm>(I<io>): I<asm>. Function that creates the default
 assembler. The assembler writes its output to I<io>.
+
+=item B<solaris>: I<bool>. Flag for the I<sparc> assembler; zero on
+SunOS systems.
 
 =back
 
@@ -593,6 +655,10 @@ compiler data structures:
 =item I<optimize> Code optimizer.
 
 =item I<io> File handle for input or output.
+
+=item I<inchan> Input channel.
+
+=item I<outchan> Output channel.
 =back
 
 =head1 LUA TARGETS
@@ -606,7 +672,9 @@ compiler data structures:
 =head1 LUA DRIVER FUNCTIONS 
 
 The B<qc--> compiler is controlled by functions that consume and produce
-the above types:
+the above types. However, these functions are usually not called
+directly. Instead, higher-level Lua functions as part of the Lua startup
+script are invoked from the command line.
 
 =over
 
@@ -643,8 +711,10 @@ of I<number> characters and prints it to stdout.
 =item B<Driver.cmmasm>(I<io>). Creates an assembler that emits C-- code.
 
 =item B<Driver.dotasm>(I<io>). Creates an assembler that emits output
-for L<dot>.
 
+=item B<Driver.sparcasm>(I<bool>,I<io>). Creates an assembler that emits output
+for the I<SPARC> assembler. The boolean flag is false (zero) on SunOS
+systems.
 
 =back
 

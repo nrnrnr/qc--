@@ -194,11 +194,10 @@ val gm_insert_dataflow_between: defs:locs -> uses:locs -> kills:locs ->
                                 src:node -> dst:node -> unit
 val gm_enumerate:               cfg -> unit (* post: enumerated cfg *)
 
-
-
 (* node observation *)
 val cfg:        node -> cfg
 val rtl:        node -> Rtl.rtl
+val symbol:     node -> Reladdr.symbol option
 val succ:       node -> node list 
 val pred:       node -> node list
 val property:   node -> property
@@ -453,6 +452,10 @@ becomes the predecessor of [[node]]'s successor and vice versa.
 
 \item [[rtl: node -> Rtl.rtl]]: The {\rtl} that is part of [[node]].
 
+\item [[symbol: Reladdr.symbol option]]: If the node represents a 
+      label, it has a symbol attached to it and the [[rtl]] is the 
+      empty {\rtl}.
+
 \item [[succ: node -> node list]]: The list of control-flow successors
       of [[node]].
 
@@ -463,7 +466,6 @@ becomes the predecessor of [[node]]'s successor and vice versa.
       The property associated with this node.
       Because the [[property]] type is intended to be mutable, there
       is no need for a corresponding mutator.
- 
 
 \item [[number:  node -> int]]:  Reports the number of a node.  It is
       a checked run-time error to invoke this function if node numbering is
@@ -770,6 +772,7 @@ Many node observations simply invoke a node's method.
 <<implementation>>=
 let cfg         (node:node) = node#cfg
 let rtl         (node:node) = node#rtl
+let symbol      (node:node) = node#symbol
 let succ        (node:node) = node#succ
 let pred        (node:node) = node#pred
 let property    (node:node) = node#property
@@ -891,7 +894,8 @@ end
 <<module X>>=
 and node = object
     method cfg:         cfg             (* cfg this belongs to *)
-    method rtl:         Rtl.rtl         (* rtl of this *)
+    method rtl:         Rtl.rtl         (* symbol = [] => rtl=null*)
+    method symbol:      Reladdr.symbol option (* symbols of this *)
     method id:          int             (* int of this *)
     method number:      int             (* number of this; req:cfg enumerated *)
     method succ:        node list       (* cf successors of this *)
@@ -903,9 +907,6 @@ and node = object
     method unlink:      unit            (* unlink this from all other nodes *)
     method upd_succ:    (node -> node) -> unit (* redirect succs of this *)
     method set_rtl:     Rtl.rtl -> unit (* set rtl to new value *)
-    (* 
-     * method set_property: property -> unit (* set property *)
-     *)
     method set_number:  int -> unit     (* defines number *)
 
     method defs:        locs            (* defined by this *)
@@ -928,6 +929,8 @@ end
 \begin{itemize}
 \item [[cfg]] is the {\cfg} this node belongs to.
 \item [[rtl]] is the {\rtl} belonging to this node.
+\item [[symbol]] the symbols associated with this node. If a node has
+      a symbol, its [[rtl]] is the empty {\rtl}.
 \item [[id]] is the identification of this node. It is unique within
       its [[cfg]].
 \item [[number]] the number of this node. It is a checked run-time
@@ -1273,6 +1276,7 @@ object(this)
 
     method cfg      = _cfg
     method rtl      = _rtl
+    method symbol   = None   (* overridden in label node *)
     method pred     = NodeSet.elements _pred
     method succ     = ([]: node list)   (* make virtual? *)
     method id       = _id
@@ -1423,6 +1427,11 @@ object(this)
 
     val mutable _succ   = (None: node option) 
     val mutable _symbol = (None: Reladdr.symbol option)
+
+    method symbol =
+        ( assert (_symbol <> None) 
+        ; _symbol
+        )
 
     method set_succ node =
         ( assert (_succ = None)

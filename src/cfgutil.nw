@@ -26,7 +26,10 @@ val fold_fwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a
 val fold_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a
 val subst:      cfg -> (Rtl.rtl -> Rtl.rtl) -> unit
 val cfg2dot:    compress:bool -> name:string -> cfg -> string
-val number_and_rtl : node -> string
+val emit    :   cfg -> (Rtl.rtl -> 'a -> 'a) 
+                    -> (Reladdr.symbol -> 'a -> 'a)
+                    -> 'a
+                    -> 'a
 @
 
 \begin{itemize}
@@ -42,7 +45,9 @@ val number_and_rtl : node -> string
 \item [[cfg2dot]]: returns a {\cfg} in the \textsc{dot} input language.
        What does [[compress]]?
 
-\item [[number_and_rtl]]: some documentation would be welcome.
+\item [[emit]]: Fold over {\cfg} in enumeration order and pass {\rtl}s
+      and symbols to the provided functions. Enumerates the {\cfg} if is
+      not already enumerated.
 \end{itemize}
 
 % ------------------------------------------------------------------ 
@@ -75,23 +80,33 @@ let fold_bwd cfg f unit =
 let subst cfg (f: Rtl.rtl -> Rtl.rtl) = 
     fold_fwd cfg (fun node () -> G.set_rtl node f) () 
 @ 
+
 <<cfgutil.ml>>=
-module Cfg = Cfg3
+let emit cfg rtl_emit sym_emit unit =
+    G.gm_enumerate cfg;
+    let visit node x = match G.symbol node with
+        | None   -> rtl_emit (G.rtl node) x     
+        | Some s -> sym_emit s x            (* skip null rtl of label nodes *) 
+    in    
+        fold_fwd cfg visit unit
+        
+
+<<cfgutil.ml>>=
 let number_and_rtl node =
-  string_of_int (Cfg.number node) ^ ": " ^ Rtlutil.ToString.rtl (Cfg.rtl node)
+  string_of_int (G.number node) ^ ": " ^ Rtlutil.ToString.rtl (G.rtl node)
 
 let cfg2dot compress name cfg =
-  let nodename node = Printf.sprintf "N\"%d\"" (Cfg.number node) in
+  let nodename node = Printf.sprintf "N\"%d\"" (G.number node) in
   let dotnode  node = nodename node ^ " [label=\"" ^ number_and_rtl node ^ "\"]" in
   let edge_fwd from to' = nodename from ^ " -> " ^ nodename to'  ^ "\n" in
   let edge_bwd from to' = nodename to'  ^ " -> " ^ nodename from ^
                          "[dir=back,style=dotted]\n" in
   let edges_leaving node = (* quadratic! *)
     let add_edge dir edges n = dir node n ^ edges in
-    let fwd = List.fold_left (add_edge edge_fwd) ""  (Cfg.succ node) in
-    let bwd = List.fold_left (add_edge edge_bwd) "" (Cfg.pred node) in
+    let fwd = List.fold_left (add_edge edge_fwd) ""  (G.succ node) in
+    let bwd = List.fold_left (add_edge edge_bwd) "" (G.pred node) in
     fwd ^ bwd in
-  let _ = Cfg.gm_enumerate cfg in
+  let _ = G.gm_enumerate cfg in
   let oldv = Rtlutil.ToAST.verbosity Rtlutil.ToAST.Low in
   let dotOpenGraph = "digraph " ^ name ^ " {\n" in
   let pagesize = "  size=\"8,10.5\"\n" in

@@ -28,6 +28,7 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
     val cmmasm:     out_channel -> asm      (* C-- emitting assembler *)
     val dotasm:     out_channel -> asm      (* DOT emitting assembler *)
     val asdlasm:    out_channel -> asm      (* ASDL emitting assembler *)
+    val sparcasm:   solaris:bool -> out_channel -> asm  (* SPARC *)
     
     val version:    unit -> unit            (* print version to stdout   *)
     val scan:       file:string -> unit     (* for debugging the scanner *)
@@ -207,9 +208,10 @@ Assemblers are objects. We therefore need function to create them, Here
 are our current assemblers.
 
 <<Caml>>=
-let cmmasm  (c:out_channel) = Asm.asm     c 
-let dotasm  (c:out_channel) = Dotasm.asm  c
-let asdlasm (c:out_channel) = Asdlasm.asm c
+let cmmasm      (c:out_channel)                = Asm.asm      c 
+let dotasm      (c:out_channel)                = Dotasm.asm   c
+let asdlasm     (c:out_channel)                = Asdlasm.asm  c
+let sparcasm    (solaris:bool) (c:out_channel) = Sparcasm.make solaris c
 @
 
 The user specifies in the source code some target properties. They must
@@ -390,8 +392,10 @@ let builtins =
   ; "astasm"    , pf (Map.outchan **-> V.result Map.asm)   Caml.cmmasm (*alias*)
   ; "dotasm"    , pf (Map.outchan **-> V.result Map.asm)   Caml.dotasm
   ; "asdlasm"   , pf (Map.outchan **-> V.result Map.asm)   Caml.asdlasm
-  ; "stdin"     , Map.inchan.V.embed    stdin   (* hack, for now *)
-  ; "stdout"    , Map.outchan.V.embed   stdout  (* hack, for now *)
+  ; "sparcasm"  , pf (V.bool **-> Map.outchan 
+                             **-> V.result Map.asm)        Caml.sparcasm
+  ; "stdin"     , Map.inchan.V.embed                       stdin (* hack *)
+  ; "stdout"    , Map.outchan.V.embed                      stdout(* hack *)
   ; "compile"   , func (Map.optimize  **-> Map.ast  
                                       **-> Map.target 
                                       **-> Map.env 
