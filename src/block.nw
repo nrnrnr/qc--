@@ -83,9 +83,28 @@ val cat_list:       t list -> t
 val overlap_list:   placement -> t list -> t
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Lua Interface}
+% ------------------------------------------------------------------ 
+
+Blocks are exported as abstract user data to Lua. However, not all
+operations available in {\ocaml} are also available in Lua. Blocks can
+be observed and composed, but there is no way to create primitive
+blocks. The main reason for these limitations that blocks rely on other
+data types that have no Lua representation.
+
+From the Lua point of view, blocks provide the following signature:
+
+<<lua block signature>>=
+Block.size(block): int
+Block.alignment(block): int
+Block.adjust(block): block
+Block.cat(block list): block
+Block.overlap("high"|"low", block list): block
+@
 
 % ------------------------------------------------------------------ 
-\section{Implementation}
+\subsection{Implementation}
 % ------------------------------------------------------------------ 
 
 <<block.ml>>=
@@ -192,4 +211,9 @@ Not essential, but convenient functions.
 let cat_list       ts = List.fold_left cat         (List.hd ts) (List.tl ts)
 let overlap_list p ts = List.fold_left (overlap p) (List.hd ts) (List.tl ts)
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Export to Lua}
+% ------------------------------------------------------------------ 
+
 

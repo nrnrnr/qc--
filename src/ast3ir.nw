@@ -121,6 +121,18 @@ let foldl = List.fold_left
 let foldr = List.fold_right
 @
 
+We often know that the address of a block has the form $b+k$, where $b$
+is a known address and $k$ some unkown offset. The function [[offset]]
+provides returns an {\rtl} address of this form, where $k$ is
+represented as a fresh late compile time constant.
+
+<<auxilliaries>>=
+let offset base ptrwidth =
+    let k = Rtl.late (Idgen.offset "Ast3ir.offset") ptrwidth in
+        Rtl.app (Rtl.opr "add" [ptrwidth]) [base;k] 
+@
+
+
 
 % ------------------------------------------------------------------ 
 \subsection{Expression Types}
@@ -809,6 +821,7 @@ and callStmt state (lhs,cconv, e, args, targets (*unused*), conts) =
         | A.LValueAt(x,_) -> lvalue x
         | A.Var x         -> formal state.env x 
         | A.Mem _         -> assert false                        in
+    let ptrsize = state.target.Target.pointersize in    
     let exp     = expr state.env state.target e    in
     let cc      = state.target.Target.cc (Aux.Option.get default_cc cconv) in
     let rtl     = state.target.Target.call.Target.embed exp   in
@@ -817,10 +830,10 @@ and callStmt state (lhs,cconv, e, args, targets (*unused*), conts) =
     let rtl     = state.target.Target.call.Target.embed exp      in
     (* linking nodes from back to front: copyin<-call<-copyout *) 
     let copyi,areai,uses = IO.copyin state.cfg (List.map lvalue lhs) 
-                      cc.Target.ret state.inbase  state.node  in
+                      cc.Target.ret (offset state.inbase ptrsize) state.node  in
     let call        = G.gm_call  state.cfg rtl conts copyi in
-    let copyo,areao,defs = IO.copyout state.cfg args 
-                      cc.Target.proc state.outbase call in
+    let copyo,areao,defs = IO.copyout state.cfg args cc.Target.proc 
+                        (offset state.outbase ptrsize) call in
     let result = { state with
                      node     = copyo
                  ;   outgoing = areao :: state.outgoing
@@ -853,8 +866,10 @@ and returnStmt state (cconv, kont, args) =
     let args    = List.map
                   (actual state.env state.target) args       in
     let ret     = G.gm_return state.cfg rtl (x, y)   in
+    let ptr     = state.target.Target.pointersize in
     let copy, area, defs =
-                  IO.copyout state.cfg args cc.Target.ret state.inbase ret in
+                  IO.copyout state.cfg args cc.Target.ret 
+                    (offset state.inbase ptr) ret in
     let result  = {state with node = copy; incoming = area :: state.incoming}in
 		  (* fix data-flow *)
     let ()      = G.gm_insert_dataflow_between
@@ -871,9 +886,9 @@ and collect them in [[state.conts]]. Therefore we simply add the
 
 <<Make statements>>=
 and contStmt state (label,args)  = 
+    let ptr     = state.target.Target.pointersize in
     let cc      = state.target.Target.cc default_cc              in
     let args    = List.map (formal state.env) args in
-    let atm     = AT.mk cc.Target.cont state.inbase       in
     let copy,area,uses = IO.copyin state.cfg args 
                   cc.Target.cont state.inbase state.node in
     let symbol  = match F.findv label state.env with
@@ -956,11 +971,11 @@ We are hardcoding the stack layout here for all targets. This seems a
 bad idea.
 <<Make procedure>>=
 let freeze (p:Proc.t) = 
-    let stack = [ p.Proc.outgoing               (* our stack layout *)
+    let stack = [ p.Proc.incoming
                 ; p.Proc.stackd
                 ; p.Proc.conts
                 ; AT.freeze p.Proc.priv
-                ; p.Proc.incoming
+                ; p.Proc.outgoing               (* our stack layout *) 
                 ] in
     let pointer  = p.Proc.target.Target2.pointersize in            
     let stack    = Block.cat_list stack in
@@ -1041,7 +1056,7 @@ let proc env target optimizer (cconv,name,args,bdy) =
     (* translate body of procedure *)
     let state = foldr body bdy state in
     (* add nodes for incoming parameters *)
-    let atmi  = AT.mk cc.Target.proc  state.outbase   in
+    let atmi  = AT.mk cc.Target.proc  (offset state.outbase pointer) in
     let args  = List.map (procformal state.env) args in
     let copy,area,uses = IO.copyin state.cfg args 
                     cc.Target.proc state.inbase state.node    in

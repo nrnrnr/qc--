@@ -1,5 +1,5 @@
-% The module name const is odd. I'm sticking to it because of the
-% original module, but would like to find something better. rtleqn? 
+% vim: ts=8 sw=4 et:
+%
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
 % Quality    ::=    A|B|C|D|E
 % Importance ::=    Central|Subsystem|Peripheral
@@ -8,9 +8,11 @@
 % Example (at beginning of line): %%Grades: B Central Soon
 %
 
+% The module name const is odd. I'm sticking to it because of the
+% original module, but would like to find something better. rtleqn? 
 
 % ------------------------------------------------------------------ 
-\section{Equations over RTL-expressions}
+\section{Equations over RTL-Expressions}
 % ------------------------------------------------------------------ 
 
 This module allows to build an equation system by equating {\rtl}
@@ -30,6 +32,7 @@ val equate:     Rtl.exp -> Rtl.exp -> t                     (* e1   == e2   *)
 val equate':    x:int -> Rtl.exp -> y:int -> Rtl.exp -> t   (* x+e1 == y+e2 *) 
 
 val solve: width:int -> t list -> solution   (* Can'tSolve *)
+val to_string:  t -> string (* for debugging *)
 @
 
 The functions [[equate]] and [[equate']] create an equation of type
@@ -86,31 +89,30 @@ type sum = (int * term) list
 type t   = sum                  (* equation, sum == 0 *)
 @
 
+To aid debugging, we like to have a printable representation of terms. 
+
+<<const2.ml>>=
+module ToString = struct
+    let term = function
+        | Const(exp) -> "const:" (* ^ (Rtlutil.ToString.exp exp) *)
+        | Var(s)     -> s
+        | Unit       -> "unit"
+    let summand (i,t) = Printf.sprintf "(%d,%s)" i (term t)
+    let t sum         = String.concat "+" (List.map summand sum)
+end
+let to_string = ToString.t
+@
+
+
 Here are constructor functions for simple sums. We use them when we
 parse an {\rtl} expression into a sum.
 
 <<const2.ml>>=
 let sym x       = [(1, Var x)]
-let int i       = [(i, Unit)]
+let int i       = if i = 0 then [] else [(i, Unit)]
 let const k     = [(1, Const (U.exp k))]
 let add x y     = x @ y
 let sub x y     = x @ List.map (fun (i,y) -> (-i,y)) y
-@
-
-To help debugging, we like to have a printable representation of terms. 
-
-<<const2.ml>>=
-module ToString = struct
-    let term = function
-        | Const(exp) -> Rtlutil.ToString.exp exp
-        | Var(s)     -> s
-        | Unit       -> "1"
-
-    let summand (i, t) = Printf.sprintf "(%d,%s)" i (term t)
-
-    let sum s = String.concat "+" (List.map summand s)
-    let t s   = sum s    
-end
 @
 
 The real work is to parse an {\rtl} expression into a sum. This requires
@@ -136,8 +138,17 @@ simply subtract both sides from each other to obtain a sum of value
 zero.
 
 <<const2.ml>>=
-let equate     e1    e2 = sub (exp e1) (exp e2)
-let equate' ~x e1 ~y e2 = sub (add (int x) (exp e1)) (add (int x) (exp e2))
+let equate     e1    e2 = 
+    let t  = sub (exp e1) (exp e2) in
+    (* let () = Printf.printf "0 == %s\n" (ToString.t t); flush stdout in
+     *)
+        t
+        
+let equate' ~x e1 ~y e2 = 
+    let t  = sub (add (int x) (exp e1)) (add (int y) (exp e2)) in
+    (* let () = Printf.printf "0 == %s\n" (ToString.t t); flush stdout in
+     *)
+        t
 @
 
 The linear equation solver needs to know about terms. We provide the
