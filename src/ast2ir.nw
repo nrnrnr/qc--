@@ -234,18 +234,21 @@ representation of the entire flow graph, with a pointer to the node
 that follows this statement. 
 
 <<>>=
-let rec body env props graph after b =
-    let rec stmt s after = match s with  
+let rec body env props graph after bb =
+    let rec stmt s after = match s with
         | A.StmtAt(x,_)     -> stmt x after
         <<cases for translating statements>>
-    in 
-        match b with
-        | A.BodyAt(x, _)    -> body env props graph after x
+    in
+    let rec body b after = match b with
+        | A.BodyAt(x, _)    -> body x after
         | A.DeclBody(d)     -> after (* ignore decls *)
         | A.StmtBody(s)     -> stmt s after
         | A.DataBody(dd)    -> after (* ignore data for the moment *)
+    in
+        List.fold_right body bb (G.bind G.Props.empty (GM.exit graph))
         
 @ 
+
 
 <<cases for translating statements>>=
 | A.AssignStmt(lhs,rhs) ->
@@ -354,18 +357,42 @@ The following statements are just skipped for the moment.
 | A.SpanStmt(e1,e2,ss)                 -> after
 | A.CutStmt(e, args, fs)               -> after
 | A.SwitchStmt (r,e,arms)              -> after
-        
-<<unused>>=
-let rec body' env ir = function
-    | A.BodyAt(x, _)    -> body env ir x
-    | A.DeclBody(d)     -> true
-    | A.StmtBody(s)     -> true
-    | A.DataBody(dd)    -> true
-    
-<<>>=
-and proc env ir (cc,n,fs,ss) =  true
+@
 
-<<>>=
+% ------------------------------------------------------------------ 
+\paragraph{Procedures}
+% ------------------------------------------------------------------ 
+
+Each procedure is translated into a control flow graph that shares no
+nodes with any other control flow graph.  A procedure's control flow
+graph is anchored with a label in an [[Agraph.graph]] data structure
+under the name of the procedure. 
+
+A procedure starts with a [[CopyIn]] node that assigns the incoming
+parameters to the named registers and ends with an [[Exit]] node. The
+types of the formal parameters are bound in the local environment
+belonging to a procedure. 
+
+
+<<module Make>>=
+and proc env env props graph (cc,n,fs,bb) =  
+    let env   = match F.findv n env with 
+                | _,(F.Label(F.Proc e),_) -> e
+                | _  -> assert false                                       in
+    let cc    = Aux.Option.get default_convention cc                       in
+    let exit  = G.bind G.Props.empty (GM.exit graph)                       in
+    let bdy   = body env props graph exit bb                               in
+    let frml  = fun (h,i,t,n) -> (n,ty env t,h)                            in
+    let copy  = GM.copy_in (List.map frml fs) Fgraph.ProcParameters cc bdy in
+        props (GM.label n (props copy))
+@
+    
+    
+% ------------------------------------------------------------------ 
+\paragraph{Unused}
+% ------------------------------------------------------------------ 
+
+<<unused>>=
 and decl env ir = function
     | A.DeclAt(x,_)    -> decl env ir x
     | A.Import( t, ns) -> true
