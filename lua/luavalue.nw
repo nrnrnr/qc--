@@ -269,9 +269,16 @@ let lua_func ~file ~linedefined:line f = Function (srcloc file line, f)
 let caml_func = lua_func ~file:"(OCaml)" ~linedefined:(-1)
 @ 
 <<value toplevel>>=
+let luastring_of_float x =
+  let s = string_of_float x in
+  if String.get s (String.length s - 1) = '.' then
+    String.sub s 0 (String.length s - 1)
+  else
+    s
+
 let rec to_string = function
   | Nil             -> "nil"
-  | Number x        -> string_of_float x
+  | Number x        -> luastring_of_float x
   | String s        -> s
   | Function (_, _) -> "function"
   | Userdata u      -> U.to_string to_string u
@@ -355,7 +362,7 @@ let userdata = { embed = (fun x -> Userdata x)
 
 let string = { embed = (fun s -> String s)
              ; project = (function String s -> s 
-                                 | Number x -> string_of_float x
+                                 | Number x -> luastring_of_float x
                                  | v -> raise (Projection (v, "string")))
              ; is = (function String _ | Number _ -> true | _ -> false)
              } 
