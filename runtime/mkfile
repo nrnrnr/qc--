@@ -66,13 +66,12 @@ clobber:V: clean
 
 C = runtime.c pcmap.c gcc-linux.c
 CMM = cut.c-- thread.c--
-S = x86cont.s
 H = qc--runtime.h pcmap.h
 
 C = ${C:%.c=$B%.c}
 CMM = ${CMM:%=$B%}
 H = ${H:%.h=$B%.h}
-O = ${C:%.c=%.o} ${CMM:%.c--=%.o} ${S:%.s=%.o}
+O = ${C:%.c=%.o} ${CMM:%.c--=%.o} $config_arch.o
 
 SCAN = $C trace.c
 # <$TOP/config/depend.mk
@@ -90,13 +89,10 @@ dep-chk:V:
 $LIBA:  $O
 	ar cr $target $prereq
 
-test.exe: $O test.o trace.o pcmap.ld
+test.exe: test.o trace.o $LIBA pcmap.ld
 	gcc -o $target $prereq
 
 pcmap.ld:D: pcmap.nw
-	$NOTANGLE $prereq -R$target > $target
-
-x86cont.s: x86cont.nw
 	$NOTANGLE $prereq -R$target > $target
 
 &.o: &.s
@@ -104,6 +100,17 @@ x86cont.s: x86cont.nw
 
 &.s: &.c
 	gcc -Wall -S $stem.c
+
+# ------------------------------------------------------------------ 
+# machine-dependent code
+# ------------------------------------------------------------------ 
+
+x86-linux.o: x86cont.s
+	as -o $target $prereq
+
+x86cont.s:D: x86cont.nw
+	$NOTANGLE $prereq -R$target > $target
+
 
 # ------------------------------------------------------------------ 
 # extra rules for cases not covered by noweb.mk
