@@ -237,6 +237,28 @@ let rec evalTy env = function
     | A.AliasTy(n)   -> snd (F.findt n env)
 @
 
+The static semantics of procedures are checked after everything
+else has been checked. The following function returns the list of
+procedures of a program.
+
+<<>>=
+let procedures ast = 
+    let rec section acc = function
+        | A.SectionAt(x,_)     -> section acc x
+        | A.Decl(d)            -> acc
+        | A.Datum( d)          -> acc
+        | A.Procedure(p)       -> p::acc
+        | A.SSpan( e1, e2, ss) -> List.fold_left section acc ss
+    in   
+    let rec toplevel acc = function
+        | A.ToplevelAt(x, _)   -> toplevel acc x
+        | A.Section(name, ss)  -> List.fold_left section acc ss
+        | A.TopDecl(d)         -> acc
+        | A.TopProcedure(p)    -> p::acc
+    in
+        List.fold_left toplevel [] ast
+@    
+
 % ------------------------------------------------------------------ 
 \subsection{Building the type environment}
 % ------------------------------------------------------------------ 
