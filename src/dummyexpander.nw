@@ -201,33 +201,6 @@ location. The [[fetch]] function makes this easy.
 
 <<utilities>>=
 let fetch t = R.fetch t (W.loc t)
-
-let app1 tmp s x arg1 =
-    arg1 >>= fun a1 ->
-    let opr   = R.opr s x in
-    let exp   = R.app opr [fetch a1] in
-    let width = W.exp exp in
-    tmp width >>= fun t ->
-    exec (R.store t exp width) >>= fun () ->
-    return t
-
-let app2 tmp s x arg1 arg2 =
-    arg1 >>= fun a1 -> arg2 >>= fun a2 ->
-    let opr   = R.opr s x in
-    let exp   = R.app opr [fetch a1; fetch a2] in
-    let width = W.exp exp in
-    tmp width >>= fun t ->
-    exec (R.store t exp width) >>= fun () ->
-    return t
-
-let app3 tmp s x arg1 arg2 arg3 =
-    arg1 >>= fun a1 -> arg2 >>= fun a2 -> arg3 >>= fun a3 ->
-    let opr   = R.opr s x in
-    let exp   = R.app opr [fetch a1; fetch a2; fetch a3] in
-    let width = W.exp exp in
-    tmp width >>= fun t ->
-    exec (R.store t exp width) >>= fun () ->
-    return t
 @
 
 % ------------------------------------------------------------------ 
@@ -257,25 +230,24 @@ purpose.
 \begin{tabular}{ll}
     Nonterminal & Meaning \\ 
     \hline
-    [[ireg]]        & register holding result of integer expression\\
-                    & also used as general purpose location\\
-    [[freg]]        & register holding result of floating-point expression\\
-    [[creg]]        & control register\\
-    [[dreg]]        & 2 bit control register for FP comparison \\
+    [[ireg]]        & integer value (in register)\\
+    [[freg]]        & floating-point value (in register)\\
+    [[creg]]        & value of control register\\
+    [[dreg]]        & value of 2 bit control register for FP comparison \\
     [[mem]]         & memory location\\
+    [[icell]]       & integer register location\\
+    [[fcell]]       & floating-point register location\\
+    [[ccell]]       & control register location\\
+    [[dcell]]       & 2 bit register for FP comparison result\\
     [[const]]       & constant value\\
     [[addr]]        & memory address\\
-    [[fop]],[[rop]] & {\rtl} operator\\
     [[stmt]]        & side effect (like assignment)\\
 \end{tabular}
 
 The costs associated with burg rules usually reflect the number of
-generated {\rtl}s. In addtion, we want to penalize the conversion
+generated {\rtl}s. In addition, we want to penalize the conversion
 between integer and floating point registers. A missing cost annotation
 defaults to zero.
-
-A constant is loaded into a register. This does not work for boolean
-constants! Do we have to treat the different constants seperately?
 
 <<rules>>=
 const:      Const(k)
@@ -316,7 +288,41 @@ freg:       Fetch(fcell,width) {: fcell :}
 dreg:       Fetch(dcell,width) {: dcell :} 
 @
 
-Applications.
+Each primitive is matches by rule. The rule expresses the number of
+argument registers and their ``types''. The code below allows to keep
+the semantic action for each essential. The first argument is a
+generator for a temporary for the result. Passing [[itmp]] means, that
+the result will be stored in an integer temporary.
+
+<<utilities>>=
+let app1 tmp s x arg1 =
+    arg1 >>= fun a1 ->
+    let opr   = R.opr s x in
+    let exp   = R.app opr [fetch a1] in
+    let width = W.exp exp in
+    tmp width >>= fun t ->
+    exec (R.store t exp width) >>= fun () ->
+    return t
+
+let app2 tmp s x arg1 arg2 =
+    arg1 >>= fun a1 -> arg2 >>= fun a2 ->
+    let opr   = R.opr s x in
+    let exp   = R.app opr [fetch a1; fetch a2] in
+    let width = W.exp exp in
+    tmp width >>= fun t ->
+    exec (R.store t exp width) >>= fun () ->
+    return t
+
+let app3 tmp s x arg1 arg2 arg3 =
+    arg1 >>= fun a1 -> arg2 >>= fun a2 -> arg3 >>= fun a3 ->
+    let opr   = R.opr s x in
+    let exp   = R.app opr [fetch a1; fetch a2; fetch a3] in
+    let width = W.exp exp in
+    tmp width >>= fun t ->
+    exec (R.store t exp width) >>= fun () ->
+    return t
+@
+
 
 <<rules>>=
 ireg:       App1("com",  x, r1:ireg)          {: app1 itmp "com"  x r1 :}
@@ -351,32 +357,15 @@ freg:       App2("f2i",  x, r1:freg, r2:dreg) {: app2 itmp "f2i"  x r1 r2 :}
 freg:       App2("i2f",  x, r1:ireg, r2:dreg) {: app2 ftmp "i2f"  x r1 r2 :}
 freg:       App2("f2f",  x, r1:freg, r2:dreg) {: app2 ftmp "f2f"  x r1 r2 :}
 
+-- FP operations use a rounding mode
 freg:       App3("fadd", x, r1:freg, r2:freg, c:dreg) 
                                               {: app3 ftmp "fsub" x r1 r2 c :}
 freg:       App3("fsub", x, r1:freg, r2:freg, c:dreg) 
                                               {: app3 ftmp "fadd" x r1 r2 c :}
-
 freg:       App3("fdiv", x, r1:freg, r2:freg, c:dreg) 
                                               {: app3 ftmp "fdiv" x r1 r2 c :}
 freg:       App3("fmul", x, r1:freg, r2:freg, c:dreg) 
                                               {: app3 ftmp "fmul" x r1 r2 c :}
-
-<<rules off>>=
--- catch all rules with high costs
-ireg:       App1(s:string, x, r:ireg) [20] 
-            {: app1 itmp s x r :}
-ireg:       App2(s:string, x, r1:ireg, r2:ireg) [20] 
-            {: app2 itmp s x r1 r2 :}
-ireg:       App3(s:string, x, r1:ireg, r2:ireg, r3:ireg) [20] 
-            {: app3 itmp s x r1 r2 r3 :}
-
-freg:       App1(s:string, x, r:freg) [20] 
-            {: app1 ftmp s x r :}
-freg:       App2(s:string, x, r1:freg, r2:freg) [20] 
-            {: app2 ftmp s x r1 r2 :}
-freg:       App3(s:string, x, r1:freg, r2:freg, r3:freg) [20] 
-            {: app3 ftmp s x r1 r2 r3 :}
-
 
 <<rules>>=
 --
@@ -398,74 +387,33 @@ dreg:      App2("fcmp", x, f1:freg, f2:freg) [1]
 @
 
 
-We expect memory locations, temporaries, and hardware registers in the
-code to expand.  These locations are classified into memory and
-integer/floating-point registers.  Memory is addressed by registers
-([[addr]] is a synonym for [[ireg]], we might add [[const]] later) and
-registers are addressed by [[const]].
+A cell is either a register or a memory cell. A register has a constant
+address and needs no further re-writing. We just categorize it as
+interger, floating-point, or control register. Memory cells include
+address expressions which must be rewritten. This is enforced by the
+[[addr]] nonterminal, which stands for a register value. Hence, memory
+can only be addresses by registers in this model.
+
+<<utilities>>=
+let cell sp agg width addr ass=
+    addr >>= fun a -> return (R.cell (U.assertion ass) sp agg width a)
 
 <<rules>>=
 addr:       ireg  {: ireg >>= fun r -> return (fetch r) :}
 
-
-mem:        Cell('m', agg, width, addr, ass)
-            {:  
-                addr >>= fun a ->
-                return (R.cell (U.assertion ass) 'm' agg width a) 
-            :}
-
--- ireg == r/t (32) and g/v (8)
-icell:      Cell('r', agg, width, const, ass)
-            {: 
-                const >>= fun k ->
-                return (R.cell (U.assertion ass) 'r' agg width k) 
-            :}
-icell:      Cell('t', agg, width, const, ass)
-            {: 
-                const >>= fun k ->
-                return (R.cell (U.assertion ass) 't' agg width k) 
-            :}
-icell:       Cell('g', agg, width, const, ass)
-            {: 
-                const >>= fun k ->
-                return (R.cell (U.assertion ass) 'g' agg width k) 
-            :}
-icell:      Cell('v', agg, width, const, ass)
-            {: 
-                const >>= fun k ->
-                return (R.cell (U.assertion ass) 'v' agg width k) 
-            :}
-
--- freg == f/u (32)
-fcell:      Cell('f', agg, width, const, ass)
-            {: 
-                const >>= fun k ->
-                return (R.cell (U.assertion ass) 'f' agg width k) 
-            :}
-fcell:      Cell('u', agg, width, const, ass)
-            {: 
-                const >>= fun k ->
-                return (R.cell (U.assertion ass) 'u' agg width k) 
-            :}
-
--- dreg == d (2)
-dcell:      Cell('d', agg, width, const, ass)
-            {: 
-                const >>= fun k ->
-                return (R.cell (U.assertion ass) 'd' agg width k) 
-            :}
-
---
-ccell:      Cell('c', agg, width, const, ass)
-            {: 
-                const >>= fun k ->
-                return (R.cell (U.assertion ass) 'c' agg width k) 
-            :}
+<<rules>>=
+mem:        Cell('m', agg, width, addr, ass)  {: cell 'm' agg width addr ass :}
+icell:      Cell('r', agg, width, const, ass) {: cell 'r' agg width const ass :}
+icell:      Cell('t', agg, width, const, ass) {: cell 't' agg width const ass :}
+icell:      Cell('g', agg, width, const, ass) {: cell 'g' agg width const ass :}
+icell:      Cell('v', agg, width, const, ass) {: cell 'v' agg width const ass :}
+fcell:      Cell('f', agg, width, const, ass) {: cell 'f' agg width const ass :}
+fcell:      Cell('u', agg, width, const, ass) {: cell 'u' agg width const ass :}
+dcell:      Cell('d', agg, width, const, ass) {: cell 'd' agg width const ass :}
+ccell:      Cell('c', agg, width, const, ass) {: cell 'c' agg width const ass :}
 
 error:      Cell(x:char, agg, width, addr, ass) [10]
-            {:
-                error (Printf.sprintf "cell in space '%c'" x)
-            :}    
+            {: error (Printf.sprintf "cell in space '%c'" x) :}    
 @
 
 To make sure we can cover every {\rtl}, we allow to move integer
@@ -495,74 +443,28 @@ freg:       ireg [10]
             :} 
 @
 
-{\rtl} effects are covered by the [[stmt]] nonterminal. We allow
-only very simple assignments between registers of the same class and
+{\rtl} effects are covered by the [[stmt]] nonterminal. We allow only
+very simple assignments between registers of the same class and
 registers and memory. In particular, constants cannot be written to
 memory, and no memory-memory transfer is allowed. 
 
+<<utilities>>=
+let store left right width =
+    left >>= fun l -> right >>= fun r -> 
+    return (R.store l (R.fetch r width) width)
+
+let store' left right width =   (* right is a value, not a location *)
+    left >>= fun l -> right >>= fun r -> 
+    return (R.store l r width)
+
 <<rules>>=
--- m[addr] := r
-stmt:       Store(mem, ireg, width)
-            {: 
-                mem  >>= fun m ->
-                ireg >>= fun r ->
-                return (R.store m (R.fetch r width) width) 
-            :}
-
--- m[addr] := f
-stmt:       Store(mem, freg, width)
-            {: 
-                mem  >>= fun m ->
-                freg >>= fun r ->
-                return (R.store m (R.fetch r width) width)
-            :}
-
--- r := r        
-stmt:       Store(left:icell, right:ireg, width)
-            {:
-                left  >>= fun l ->
-                right >>= fun r ->
-                return (R.store l (R.fetch r width) width)
-            :}    
--- f := f
-stmt:       Store(left:fcell, right:freg, width)
-            {:
-                left  >>= fun l ->
-                right >>= fun r ->
-                return (R.store l (R.fetch r width) width)
-            :}    
-------------------------------------------------------------------
-stmt:       Store(left:icell, right:freg, width)
-            {:
-                left  >>= fun l ->
-                right >>= fun r ->
-                return (R.store l (R.fetch r width) width)
-            :}    
-
-
-------------------------------------------------------------------            
--- c := t (assignment to PC is the only case in the Dummy target)
-stmt:       Store(ccell, ireg, width) [1]
-            {:
-                ccell  >>= fun c ->
-                ireg  >>= fun r ->
-                return (R.store c (R.fetch r width) width)
-            :}    
--- c := k
-stmt:       Store(ccell, const, width)
-            {:
-                ccell  >>= fun c ->
-                const >>= fun k ->
-                return (R.store c k width)
-            :}    
-
--- d := d
-stmt:       Store(left:dcell, right:dreg, width)
-            {:
-                left  >>= fun l ->
-                right >>= fun r ->
-                return (R.store l (R.fetch r width) width)
-            :}    
+stmt:       Store(mem,   ireg, width)       {: store mem   ireg  width :}
+stmt:       Store(mem,   freg, width)       {: store mem   freg  width :}
+stmt:       Store(icell, ireg, width)       {: store icell ireg  width :}
+stmt:       Store(fcell, freg, width)       {: store fcell freg  width :}
+stmt:       Store(ccell, ireg, width) [1]   {: store ccell ireg  width :}
+stmt:       Store(dcell, dreg, width)       {: store dcell dreg  width :}
+stmt:       Store(ccell, const,width)       {: store' ccell const width :}
 @
 
 Currently the frontend generates guarded expression only for
@@ -631,14 +533,9 @@ rtl:        Rtl(gstmts) [1]
 Here are the cases we cannot handle (yet). 
 
 <<rules>>=
-error:      Kill()
-            {: error "cannot handle Kill" :}
-
-error:      Var()
-            {: error "Var constructor" :}
-
-error:      Slice()
-            {: error "Slice constrictor" :}
+error:      Kill()  {: error "cannot handle Kill" :}
+error:      Var()   {: error "Var constructor" :}
+error:      Slice() {: error "Slice constrictor" :}
 @
 
 % ------------------------------------------------------------------ 
