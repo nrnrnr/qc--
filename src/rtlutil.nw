@@ -141,15 +141,19 @@ compile-time constants. Substitutions for locations, registers. and
 expressions are provided by the [[Subst2]] sub-module:
 <<rtlutil.mli>>=
 module Subst2: sig
-    val loc:    guard:(Rtl.Private.loc -> bool)               
-                -> map:(Rtl.Private.loc -> Rtl.Private.loc) 
-                -> Rtl.rtl -> Rtl.rtl
+    val loc:     guard:(Rtl.Private.loc -> bool)               
+                 -> map:(Rtl.Private.loc -> Rtl.Private.loc) 
+                 -> Rtl.rtl -> Rtl.rtl
     
-    val exp:    guard:(Rtl.Private.exp -> bool)
-                -> map:(Rtl.Private.exp -> Rtl.Private.exp) 
-                -> Rtl.rtl -> Rtl.rtl
+    val exp:     guard:(Rtl.Private.exp -> bool)
+                 -> map:(Rtl.Private.exp -> Rtl.Private.exp) 
+                 -> Rtl.rtl -> Rtl.rtl
     
-    val reg:    map:(Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
+    val reg:     map:(Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
+    
+    val reg_def: map:(Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
+    
+    val reg_use: map:(Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
 end
 @
 
@@ -390,23 +394,35 @@ module DownUp = struct
     let loc f l = Rtl.Up.loc (f (Rtl.Dn.loc l))
     let exp f e = Rtl.Up.exp (f (Rtl.Dn.exp e))
 end
-
-let loc' guard map rtl = 
+@
+It is sometimes useful to apply a function only to the locations defined or
+used in an {\rtl}.
+We define a general function [[loc\_gen']] that takes two extra boolean
+arguments: [[def]] and [[use]]. These arguments indicate whether the function
+should be applied to definitions and/or uses. The [[loc]] sub-function is
+resposible for checking the [[act]] boolean variable before applying the
+function. The caller of [[loc]] pass this variable according to whether the
+location is used as a def or a use.
+<<Subst2>>=
+let loc_gen' guard map rtl ~def ~use = 
     let rec exp = function
-        | RP.Fetch (l, width)      -> RP.Fetch(loc l, width)
+        | RP.Fetch (l, width)      -> RP.Fetch(loc use l, width)
         | RP.App(opr, exprs)       -> RP.App(opr, List.map exp exprs)
         | x                        -> x
-    and loc l = if guard l then map l else match l with
+    and loc act l = if act && guard l then map l else match l with
         | RP.Mem (sp,agg,w,e,ass)  -> RP.Mem(sp, agg, w, exp e, ass)
-        | RP.Slice (w,i,l)         -> RP.Slice(w,i,loc l)
+        | RP.Slice (w,i,l)         -> RP.Slice(w,i,loc act l)
         | x                        -> x
     and effect = function
-        | RP.Store (l,e,width)     -> RP.Store(loc l, exp e, width)
-        | RP.Kill  (l)             -> RP.Kill (loc l)
+        | RP.Store (l,e,width)     -> RP.Store(loc def l, exp e, width)
+        | RP.Kill  (l)             -> RP.Kill (loc def l)
     and guarded (e,eff)            = (exp e, effect eff)
     and subst (RP.Rtl rtl)         = RP.Rtl (List.map guarded rtl)
     in    
         subst rtl
+let loc'     guard map rtl = loc_gen' guard map rtl ~def:true  ~use:true
+let loc_def' guard map rtl = loc_gen' guard map rtl ~def:true  ~use:false
+let loc_use' guard map rtl = loc_gen' guard map rtl ~def:false ~use:true
 
 let exp' guard map rtl =
     let rec exp e = if guard e then map e else match e with
@@ -431,17 +447,22 @@ For subtitutiong registers we use the substitution function for
 locations and provide it with the appropirate guard and map.
 
 <<Subst2>>=
-let reg' map rtl = 
+let reg_gen' map rtl loc' =
     let map = function RP.Reg r -> RP.Reg(map r) | _ -> assert false in
     let is_register = function
         | RP.Reg(_) -> true
         | _         -> false
     in
         loc' is_register map rtl
+let reg' map rtl     = reg_gen' map rtl loc'
+let reg_def' map rtl = reg_gen' map rtl loc_def'
+let reg_use' map rtl = reg_gen' map rtl loc_use'
 
 let exp ~guard  ~map rtl = DownUp.rtl (exp' guard  map) rtl
 let loc ~guard  ~map rtl = DownUp.rtl (loc' guard  map) rtl 
 let reg         ~map rtl = DownUp.rtl (reg'        map) rtl 
+let reg_def     ~map rtl = DownUp.rtl (reg_def'    map) rtl 
+let reg_use     ~map rtl = DownUp.rtl (reg_use'    map) rtl 
 @
 
 
