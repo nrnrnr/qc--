@@ -119,6 +119,15 @@ let tmpname _ _ =
       [V.String s]
   in tmp false 238  in
 
+let objname g v =
+  match V.objname g v with
+  | None -> "<anonymous stage>"
+  | Some (V.Fallback s) -> s
+  | Some (V.Global s) -> s
+  | Some (V.Element (s, V.String n)) -> s ^ "." ^ n
+  | Some (V.Element (s, V.Number x)) -> s ^ "[" ^ string_of_int (int_of_float x) ^ "]"
+  | Some (V.Element (s, _         )) -> s ^ ".?"   in
+
 let io_builtins =
   [ "readfrom", V.caml_func readfrom
   ; "writeto",  V.caml_func (writeto' false)
@@ -138,6 +147,7 @@ let io_builtins =
   ; "getenv",   V.pure (V.string **-> V.values)
                 (fun s -> try [V.String (Sys.getenv s)] with Not_found -> [V.Nil])
   ; "execute",  V.pure (V.string **-> V.result V.int) Sys.command
+  ; "objname",  V.impure (V.value **-> V.result V.string) objname
 (*  ; "map", V.pure (V.func (V.value **-> V.result V.value) **-> V.list V.value **-> V.result (V.list V.value))  List.map *)
   ] in
 @ 

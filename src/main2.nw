@@ -346,20 +346,13 @@ function Util.funname(x)
   return nil
 end
 @ 
-@ 
 Register-allocation support is elsewhere.
+We have [[Ralloc.color]]
+and [[Ralloc.linscan]].
 <<qc--.lua>>= 
 <<Lua startup code for [[Colorgraph]] module>>
-@ 
-<<qc--.lua>>= 
-B = Backplane
-
------------------------------------------------------------------- 
--- Linear-Scan Register Allocator
------------------------------------------------------------------- 
-
-Linscan = Linscan or {}
-Linscan.scan = B.stage { name="linscan", fn = Linscan.allocate }
+Ralloc = Ralloc or { }
+Ralloc.color = CG.color
 @ 
 The Caml code exports mostly functions, but we want stages.
 Because the embedding/projection pairs have no access to interpreter
@@ -370,6 +363,7 @@ Accordingly, we patch things here.
 -- Stage patching
 ------------------------------------------------------------------ 
 
+B = Backplane
 function Util.make_stage(t, short, long)
   if type(t[short]) == 'function' then
     t[short] = B.stage { name=long, fn = t[short] }
@@ -396,7 +390,6 @@ Default = Default or {}
 
 Default.linewidth = 72          -- for text assembler
 Default.solaris   = not nil     -- for sparc
-Default.allocator = CG.color 
 @ 
 How to do some old-world things in the new world:
 \begin{itemize}
@@ -536,7 +529,7 @@ Backend.debug =     --- debugging back end
   , placevars = Placevar.fortran
   , expand    = Expander.toy
   , liveness  = Stages.null
-  , ralloc    = CG.color
+  , ralloc    = Ralloc.color
   , freeze    = Driver.freeze
   , asm       = Asm.cmm
   , emit      = Driver.assemble
@@ -548,7 +541,7 @@ Backend.old =     --- compatible with old back end
   , placevars = Placevar.fortran
   , expand    = Expander.dummy
   , liveness  = Stages.null
-  , ralloc    = Default.allocator
+  , ralloc    = Ralloc.color
   , freeze    = Driver.freeze
   , asm       = Asm.cmm
   , emit      = Driver.assemble
@@ -718,7 +711,7 @@ B<Sys.argv> table for the Lua interpreter.
 
 =item B<qc-->  B<-e> B<'CommandLineOption.c()'> I<file.c-->
 
-Compile I<file.c--> for the B<Default.target>.
+Compile I<file.c--> for the default B<target> using the default B<backend>.
 
 =item B<qc--> B<-c> I<file.c-->
 

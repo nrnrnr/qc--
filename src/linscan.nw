@@ -755,22 +755,17 @@ struct
     type 'a combined = 'a ProcT.combined
     module M (C : Lua.Lib.CORE with type 'a V.userdata' = 'a combined) =
     struct
-        <<export linear scan allocator>>
-        let init g =
-          C.register_module "Linscan" builtins g;
-          Lua.Lib.StringList.empty (* FIX - want proper stage *)
+      module V  = C.V
+
+      let ( **-> ) = V.( **-> )
+      let proc     = ProcT.makemap V.userdata V.projection
+      let allocate = fun _ -> linscan
+      let init g =
+        C.register_module "Ralloc"
+          [ "linscan", V.pure (V.value **-> proc **-> V.result V.bool) allocate
+          ] g;
+        Lua.Lib.StringList.empty (* FIX - want proper stage *)
     end (*M*)    
 end (*Make*)            
-
-<<export linear scan allocator>>=
-module V  = C.V
-
-let ( **-> ) = V.( **-> )
-let proc     = ProcT.makemap V.userdata V.projection
-let allocate = fun _ -> linscan
-
-let builtins =
-    [ "allocate" , V.pure (V.value **-> proc **-> V.result V.bool) allocate
-    ]
 @
     

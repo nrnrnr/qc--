@@ -1102,7 +1102,7 @@ the set operations should be converted to register sets.
 
 @
 
-
+\subsection{Lua registration}
 
 <<colorgraph.ml>>=
 <<graph coloring types>>
@@ -1192,92 +1192,66 @@ let graph_coloring_module =
   ]
 
 @
+\subsubsection{Lua startup code}
 This startup code sets up the right passes.
 <<Lua startup code for [[Colorgraph]] module>>=
 ------------------------------------------------------------------ 
 -- Graph-Coloring Register Allocator
 ------------------------------------------------------------------ 
 
-CG = CG or {}   -- has some primitives
+CG = CG or error('predefined CG is nil??') -- has some primitives
 B  = Backplane
 
---- NR must fix a fault in projection to enable name lookup.  Then these names
---- could be defaulted.
-
-CG.stages =
-    { liveness          = B.stage { name="liveness",          fn=CG.liveness }
-    , build             = B.stage { name="build",             fn=CG.build }
-    , setColors         = B.stage { name="setColors",         fn=CG.setColors }
-    , makeWorklist      = B.stage { name="makeWorklist",      fn=CG.makeWorklist }
-    , simplify          = B.stage { name="simplify",          fn=CG.simplify }
-    , coalesce          = B.stage { name="coalesce",          fn=CG.coalesce }
-    , freeze            = B.stage { name="freeze",            fn=CG.freeze }
-    , selectSpill       = B.stage { name="selectSpill",       fn=CG.selectSpill }
-    , assignColors      = B.stage { name="assignColors",      fn=CG.assignColors }
-    , haveSpilledTemps  = B.stage { name="haveSpilledTemps",  fn=CG.haveSpilledTemps }
-    , resetProgram      = B.stage { name="resetProgram",      fn=CG.resetProgram }
-    , updateProgram     = B.stage { name="updateProgram",     fn=CG.updateProgram }
-    , applyColors       = B.stage { name="applyColors",       fn=CG.applyColors }
-    , printCG           = B.stage { name="printCG",           fn=CG.printCG }
-    , printCFGLive      = B.stage { name="printCFGLive",      fn=CG.printCFGLive }
-    , pCFG              = B.stage { name="pCFG",              fn=CG.pCFG }
-    }
-
 CG.makeGraph = B.seq 
-    { CG.stages.liveness
-    , CG.stages.build 
+    { CG.liveness
+    , CG.build 
     }
     
 
 CG.orderVars = B.seq 
-    { CG.stages.makeWorklist
-    , B.fix(B.unless_do(CG.stages.simplify,
-                            B.unless_do(CG.stages.coalesce,
-                                B.unless_do(CG.stages.freeze,
-                                    CG.stages.selectSpill))))
+    { CG.makeWorklist
+    , B.fix(B.unless_do(CG.simplify,
+                            B.unless_do(CG.coalesce,
+                                B.unless_do(CG.freeze,
+                                    CG.selectSpill))))
     }
 
 CG.pcg = 
-    B.ignore(CG.stages.printCG)
+    B.ignore(CG.printCG)
 
 CG.color = 
     B.share
     ( CG.makeInitInfo ()
     , "cgInfo"
     , B.seq 
-        { CG.stages.setColors
+        { CG.setColors
         , B.fix 
             ( B.seq 
                 { B.ignore (B.seq
                     { CG.makeGraph
                     , CG.orderVars
                     , CG.pcg
-                    , CG.stages.assignColors
+                    , CG.assignColors
                     })
                 , B.when_do
-                    ( CG.stages.haveSpilledTemps
-                    , B.seq {CG.pcg, CG.stages.resetProgram, CG.pcg }
+                    ( CG.haveSpilledTemps
+                    , B.seq {CG.pcg, CG.resetProgram, CG.pcg }
                     )
                 } 
             )    
         , B.seq 
-            { CG.stages.updateProgram
-            , CG.stages.applyColors
+            { CG.updateProgram
+            , CG.applyColors
             }
             
         }        
     )       
 @
 
-
-
-
-
-
+\subsection{Debugging support}
 
 Printing functions used for debugging purposes. Functions are provided for
 printing the [[cgInfo]] data structure.
-
 <<print CGInfo>>=
 let regLists cgInfo =
                [ ("Precolored", cgInfo.precolored)
