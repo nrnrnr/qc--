@@ -5,23 +5,37 @@
 % Importance ::=    Central|Subsystem|Peripheral
 % Urgency    ::=    Immediate|Soon|Later
 %
-% Example (at beginning of line): %%Grades: B Central Soon
+%%Grades: C Subsystem Soon
+
 \section{Core interpreter for Lua statements and expressions}
+
+This signature is intended as a convenient port of contact for an
+interpreter client.  
+Much of what's here is actually brought in from the [[Value]]
+submodule.
+The main things every external client will want are
+[[compile]], to compile Lua code, and [[state]], to get an initial
+state. 
+Other stuff, such as [[getglobal]], [[error]], etc., are primarily for
+use by libraries.
 <<signatures>>=
 module type S = sig
   module Value : Luavalue.S
-  module Ast : Luaast.S with module Value = Value
+  module Ast   : Luaast.S with module Value = Value
   type state = Value.state
   type value = Value.value
   exception Error of string
   val compile : srcdbg:(Srcmap.map * bool) -> Ast.chunk list -> state -> value list
-  val test : unit -> (string * value list) list
-  val state : unit -> state  (* produce a fresh, initialized state *)
-  val error : state -> string -> 'a  (* error fallback *)
+  val test    : unit -> (string * value list) list (* simple and inadequate *)
+  val state   : unit -> state           (* produce a fresh, initialized state *)
+  val error   : state -> string -> 'a   (* error fallback *)
 
   val getglobal : state -> value -> value
+    (* get the named global variable *)
+  val fallback  : string -> state -> value list -> value list
+    (* invoke named fallback on given state and arguments *)
   val with_stack  : Value.info -> state -> ('a -> 'b) -> 'a -> 'b
-  val fallback : string -> state -> value list -> value list
+    (* evaluates function with given info on activation stack *)
 
   val setfallback : state -> string -> value -> value
     (* sets fallback, returns previous one *)
@@ -32,32 +46,42 @@ module type S = sig
        creating t if needed *)
 end
 @ 
-
+To build an interpreter, one supplies module~[[T]], which gives the
+type of userdata, and module~[[L]], which gives a (combined) library.
 <<luainterp.mli>>=
 <<signatures>>
 module Make (T : Lualib.COMBINED_TYPE)
-                  (L : Lualib.TYPEFUL with type 'a combined = 'a T.t) :
+            (L : Lualib.TYPEFUL with type 'a combined = 'a T.t) :
     S with type 'a Value.userdata'  = 'a T.t
 @ 
 \subsection{Implementation}
-@ 
+Much of the implementation is strung together from elsewhere.
+Once we have a userdata type, we can make a value module.
+Then, once we know what a value is, we can make an AST (we need a
+value to represent the a literal node).
+The new stuff is embedded in module~[[I]].
+Owing to some careless management of the name space, this module forms
+both the interpreter core and also some of the top-level stuff.
+It shows up in both places because we need the interpreter core before
+we can build the library ([[L.M(Core)]]),
+and we need the library before we can build the [[state]] function,
+because the initialization has to include the initialization of the
+library. 
 <<luainterp.ml>>=
 <<signatures>>
 type answer = unit * string * bool
 module Make  (T : Lualib.COMBINED_TYPE)
-                  (L : Lualib.TYPEFUL with type 'a combined = 'a T.t) :
+             (L : Lualib.TYPEFUL with type 'a combined = 'a T.t) :
     S with type 'a Value.userdata'  = 'a T.t = struct
-  module U = struct
-    type 'a t = 'a T.t
-    let tname = T.tname
-    let eq = T.eq
-    let to_string = T.to_string
-  end
-  module Value = Luavalue.Make(U)
-  module Ast = Luaast.Make (Value)
+  module Value = Luavalue.Make(T)
+  module Ast   = Luaast.Make (Value)
   module I = struct
     type state = Value.state
     type value = Value.value
+    (* begin with internal abbreviations *)
+    module A = Ast
+    module V = Ast.Value
+    <<interp utility functions>>
     <<interp toplevel>>
     <<interp fallbacks>>
     <<interp registration>>
@@ -68,7 +92,7 @@ module Make  (T : Lualib.COMBINED_TYPE)
   end
   module L' = L.M(Core)
   include I
-  let state () =
+  let state () = (* raw state + fallbacks + library initialization *)
     let g = V.state() in
     add_fallbacks g;
     L'.init g;
@@ -76,15 +100,21 @@ module Make  (T : Lualib.COMBINED_TYPE)
 
 end (* Make *)
 @
-Abbreviate!
-<<interp toplevel>>=
-module A = Ast
-module V = Ast.Value
-@
+\subsubsection{Fallbacks}
+The error fallback is of primary interest because it's what we call
+when things go wrong. 
+The error fallback is \emph{always} supposed to raise an exception; if
+it does return a value something is horribly wrong.
+We get to the error fallback from Caml by calling the [[error]]
+function; if it doesn't raise an exception, we complain bitterly.
 <<interp fallbacks>>=
 let error g s =
   ignore (fallback "error" g [V.String s]);
   raise (Error "Error fallback returned a value")
+@ 
+Here are the definitions of the builtin fallbacks.
+Most cause errors, except the index fallbacks, which return nil by
+default. 
 <<interp fallbacks>>=
 let errorfallback s = fun g args -> fallback "error" g [V.String s]
 let arithfallback g = function
@@ -102,28 +132,17 @@ let fbs =
   ; "function",  errorfallback "call expression not a function"
   ; "error",     default_error_fallback
   ] 
-(* make default fallbacks; provide state in V *)
+@ 
+Function [[add_fallbacks]] adds the default fallbacks to an
+interpreter.
+It's used above, at initialization time.
+<<interp fallbacks>>=
 let add_fallbacks g =
   List.iter (fun (k, f) -> Hashtbl.add g.V.fallbacks k (V.caml_func f)) fbs 
 @ 
-must be able to manage stack correctly
-<<interp toplevel>>=
-let currentloc_tostack g =
-  match g.V.callstack with
-  | (info, _) :: t -> g.V.callstack <- (info, g.V.currentloc) :: t
-  | [] -> ()
-
-let currentloc_fromstack g =
-  match g.V.callstack with
-  | (info, where) :: _ -> g.V.currentloc <- where
-  | [] -> ()
-@ 
-Fallbacks can't use the ordinary [[cpscall]] because this could lead
-to an infinite loop. 
-
-\emph{Contemplating two revisions: (1)~pass state before args, as in
-the function value; (2)~get rid of continuations for calls, since they
-don't seem to be doing anything useful.}
+The default error fallback expects one error message as argument.
+It prints the message and a stack trace, and then it raises the
+[[Error]] exception.
 <<interp toplevel>>=
 exception Error of string
 let default_error_fallback g args = 
@@ -136,9 +155,19 @@ let default_error_fallback g args =
              List.iter prerr_string (V.activation_strings g a);
              prerr_endline "") g.V.callstack;
   raise (Error msg)
+@ 
+The [[fallback]] function invokes a fallback.
+It can't use the ordinary [[call]] because this could lead
+to an infinite loop. 
 
+If a fallback is a function, it is called.
+Otherwise, the [[function]] fallback is called.
+But if the [[function]] fallback is not a function, things are very
+badly wrong, and we call the \emph{default} (not the current) error
+fallback.
+(Using the default error fallback guarantees termination.)
+<<interp toplevel>>=
 <<state dumping>>
-
 let rec fallback fbname g args =
   let call f g args = match f with
   | V.Function (_, f) -> f g args
@@ -147,6 +176,13 @@ let rec fallback fbname g args =
   let fbval = try Hashtbl.find g.V.fallbacks fbname
               with Not_found -> <<fallback failure>>
   in call fbval g args
+@ 
+It should never happen that we don't have a fallback.
+But it can happen if a client registers an impure function as pure.
+If registered as pure, the function promises not to access machine
+state.
+In fact, we give it an empty state, and if the function breaks its
+promise, it can't find any fallbacks, and it may trigger this message.
 <<fallback failure>>=
 begin
   prerr_string "no fallback named `";
@@ -156,29 +192,30 @@ begin
   assert false (* can't have any unknown fallbacks *)
 end
 @ 
+\subsubsection{Function call}
 Everybody else can use a call that falls back to the fallback.
 If the types don't match, we have to do something.
 This problem has no counterpart in the C~version, in which it's up to
 each individual C~routine to worry about type mismatches.
 
 \begin{quote}\it
-    I'm not sure that the [[Invalid_argument]] excpetion should be
+    I'm not sure that the [[Invalid_argument]] exception should be
     caught here. It is hard to find the cause of the problem without a
-    stack trace. --CL
-\end{quote}
+    stack trace. ---CL
 
+   It is unclear whether CL means he wants a Caml stack trace or a Lua
+   stack trace. ---NR
+\end{quote}
 <<interp toplevel>>=
-let cpscall f args g k = match f with
+let apply f g args = match f with
   | V.Function (_, f) ->
-      k  ( try (f g args) with
+         ( try (f g args) with
          | V.Projection (v, what) -> <<projection error fallback>>
         (*** need the stack trace
          | Invalid_argument msg -> <<argument error fallback>>
          ***)
          ) 
-  | v -> k (fallback "function" g (v :: args))
-
-let apply f g args = cpscall f args g (fun x -> x)
+  | v -> fallback "function" g (v :: args)
 
 <<projection error fallback>>=
 fallback "error" g [V.String ("cannot convert value " ^ V.to_string v ^ " to " ^ what)]
@@ -388,7 +425,7 @@ and call localref c rho loc theta = match c with
       (fun g l ->
         let fv   = getlocal l loc in
         let argv = getlocals l argloc argcount in
-        theta (cpscall fv argv g (fun x -> x)) g l))
+        theta (apply fv g argv) g l))
 | A.Methcall (obj, meth, args) ->
     let mloc = loc in
     let selfloc = mloc + 1 in
@@ -400,7 +437,7 @@ and call localref c rho loc theta = match c with
         (fun g l ->
           let fv = getlocal l loc in
           let argv = getlocals l selfloc argcount in
-          theta (cpscall fv argv g (fun x -> x)) g l) in
+          theta (apply fv g argv) g l) in
     fun g l -> setlocal l mloc (index g (getlocal l selfloc) meth); theta_m g l)
 @ 
 Static environment for a statement includes list of local variables.
@@ -720,3 +757,25 @@ let register_module tabname members g =
   | _           -> error g ("Global value " ^ tabname ^ " is not (table or nil)") in
   let _ = V.Table.bind g.V.globals (V.String tabname) (V.Table t) in
     List.iter (fun (k, v) -> V.Table.bind t (V.String k) v) members
+@ 
+\subsubsection{Utility functions}
+
+The state of the interpreter includes a stack of locations, but the
+current location is not stored on the top of the stack but in the
+special field [[currentloc]].
+This representation is supposed to improve performance (though it has
+never been measured).
+Functions [[currentloc_tostack]] and [[currentloc_fromstack]] both leave the
+cache consistent with the stack, in both cases by making the eponymous
+assignment. 
+<<interp utility functions>>=
+let currentloc_tostack g =
+  match g.V.callstack with
+  | (info, _) :: t -> g.V.callstack <- (info, g.V.currentloc) :: t
+  | [] -> ()
+
+let currentloc_fromstack g =
+  match g.V.callstack with
+  | (info, where) :: _ -> g.V.currentloc <- where
+  | [] -> ()
+
