@@ -254,11 +254,13 @@ constants to be loaded directly.
 let li ~dst const =
   let con w i = R.bits (B.S.of_int i w) w in
   match const with
-  | RP.Bits b -> let l     = R.bits (BO.lobits 16 b) 16 in
-                 let h     = BO.lobits 16 (BO.shrl b (B.S.of_int 16 32)) in
+  | RP.Bits b -> let b'    = if B.compare b (B.zero 32) < 0
+                             then BO.neg b else b in
+                 let l     = R.bits (BO.lobits 16 b) 16 in
+                 let h     = BO.lobits 16 (BO.shrl b' (B.S.of_int 16 32)) in
                  let dsthi = R.slice 16 16 (R.reg dst) in
                  [ R.store dsthi (R.bits h 16) 16
-                 ; tstore  dst   (R.app (R.opr "zx" [16;32]) [l]) ]
+                 ; tstore  dst   (R.app (R.opr "sx" [16;32]) [l]) ]
   | _         -> [ tstore dst (Up.const const) ]
 @ 
 Operators...

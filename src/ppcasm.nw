@@ -35,6 +35,7 @@ emits it to [[stdout]] when the [[emit]] method is called.
 
 <<ppcasm.ml>>=
 module SM = Strutil.Map
+module G  = Cfgx.M
 <<utilities>>
 <<definitions>>
 type node = Rtl.rtl Cfgx.M.node
@@ -255,49 +256,30 @@ method comment s = fprintf _fd "; %s\n" s
 method const (s: Symbol.t) (b:Bits.bits) = 
   fprintf _fd ".set %s, 0x%Lx" s#mangled_text (Bits.U.to_int64 b)
 @ 
-For alternate returns, we need to know the size of a long jump.
-<<assembly methods>>=
-method longjmp_size () =
-  Impossible.unimp "longjmp size not set for PPC -- needed for alternate returns"
-@
-This almost certainly doesn't work---we must linearize the flow graph
-and know to emit labels.
-This code belongs elsewhere; assemblers shouldn't have to know more
-than simple instructions. 
-This means layering the abstraction with a common subtype for
-instruction-based assemblers.
 <<assembly methods>>=
 method private instruction rtl =
   output_string _fd "\t";
   output_string _fd (Ppcrec.M.to_asm rtl (!imports));
   output_string _fd "\n"
 
+method longjmp_size () = 4
 method private call node =
-  match Cfgx.M.to_executable node with
-  | None   -> ()
-  | Some i -> this#instruction i
+  let longjmp node = fprintf _fd "\tb %s\n" (_mangle (G.label node)) in
+  let output_altret_jmps n =
+    let rec loop i =
+      if i > n then ()
+      else (longjmp (G.join_leading_to (G.succ_n node i)); loop (i+1))
+    in loop 1
+  in
+  match G.to_executable node with
+  | None     -> ()
+  | Some rtl -> this#instruction rtl;
+                output_altret_jmps (G.altrets node)
 
-method private emit_pic symbol =
-  let label = "L" ^ symbol#original_text in
-  output_string _fd "\tmflr r0\n";
-  output_string _fd (Printf.sprintf "\tbcl 20,31,%s\n" label);
-  output_string _fd (Printf.sprintf "%s:\n" label);
-  output_string _fd "\tmflr r2\n";
-  output_string _fd "\tmtlr r0\n";
-
-method cfg_instr proc  = 
-    (* We have to emit a label/whatever for the procedure's 
-       entry point. This is what symbol is for. Simply use this#label?  *)
-    let cfg    = proc.Proc.cfg
-    and symbol = proc.Proc.symbol in
-    let label l = this#label (try SM.find l _syms with Not_found -> this#local l) in
-    let pic = ref false in
-    let is_pic rtl = if not(!pic) then pic := true in
-    this#label symbol;
-(*    if (emitter cfg is_pic (fun _ -> ()); !pic) then this#emit_pic symbol; *)
-    (emitter cfg (this#call) (this#instruction) label : unit)
-
-<<unused utilities>>=
-module Asm = Ppcrec.M
+method cfg_instr proc = 
+  let cfg    = proc.Proc.cfg
+  and symbol = proc.Proc.symbol in
+  let label l = this#label (try SM.find l _syms with Not_found -> this#local l) in
+  this#label symbol;
+  (emitter cfg (this#call) (this#instruction) label : unit)
 @
-
