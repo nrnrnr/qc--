@@ -55,7 +55,8 @@ module Props : sig
 end
 val bind : Props.properties -> unode -> node
 module Make : sig
-    val graph : unit -> graph
+    type ginit = string
+    val graph : ginit -> graph
     val graph_of : node -> graph
     val exit : graph -> unode
     val entry : node -> unode
@@ -73,8 +74,9 @@ end
 @
 
 <<extras>>=
-val blocks: graph -> (Rtl.rtl list) list
-val stmts : graph -> Ast.stmt list
+type block = string * Rtl.rtl list
+val blocks: graph -> block list
+val stmts : graph -> Mangle.mangler -> Ast.stmt list
 @
 
 % ------------------------------------------------------------------ 
@@ -96,17 +98,18 @@ module Make = struct
 end
 @
 
-A basic [[block]] is a list of {\rtl}s.  A [[graph]] is a list of
-basic blocks in \emph{reverse order}.  Each [[node]] contains a
-reference to the graph it belongs to.
+A basic [[block]] is a list of {\rtl}s that starts with a label.  A
+[[graph]] is a list of basic blocks in \emph{reverse order}.  Each
+[[node]] contains a reference to the graph it belongs to.
 
 <<types>>=
-type block =   Rtl.rtl list
-type graph =   { mutable bbs':      block list
+type block =   string * Rtl.rtl list    (* label and RTLs *)
+type graph =   { name:              string
+               ; mutable bbs':      block list
                }
 
-type node  =   { graph:             graph ref
-               ; rtls:              block
+type node  =   { graph:             graph 
+               ; rtls:              Rtl.rtl list
                }
 @
            
@@ -175,18 +178,20 @@ which maintains a reversed list of basic blocks.  The [[bblock]]
 function does this by side-effect.
 
 <<module Make>>=
-let graph ()   = { bbs'  = [] 
+type ginit = string
+let graph name = { name  = name
+                 ; bbs'  = [] 
                  }
 
-let terminal g = { graph = ref g 
+let terminal g = { graph = g 
                  ; rtls  = []
                  }
 
-let graph_of {graph=g} = !g 
+let graph_of {graph=g} = g
 
-let bblock n = 
-    let g = graph_of n in
-     g.bbs' <- n.rtls :: g.bbs'
+let bblock node name = 
+    let g = graph_of node in
+     g.bbs' <- (name,node.rtls) :: g.bbs'
 @
 
 Some nodes neither start or end a basic block, nor do they contribute
@@ -220,9 +225,10 @@ basic block.
 <<>>=
 let make_cont node cuts                 = node
 let call expr cont p =
-    ( bblock cont
-    ; terminal (graph_of cont)
-    ) 
+    let g = graph_of cont in
+        ( bblock cont (Idgen.id' g.name)
+        ; terminal (graph_of cont)
+        ) 
 @
 
 An [[assign]] node contributes an {\rtl} to the basic block
@@ -236,21 +242,23 @@ All other nodes start the current basic block(s). However, they also
 end the one above them.
 
 <<>>=
-let entry n p = 
-    ( bblock n
-    ; terminal (graph_of n)
-    )
+let entry n p =
+    let g = graph_of n in 
+        ( bblock n g.name
+        ; terminal g
+        )
 
 <<>>=
 let branch e t f p =
-    ( bblock t
-    ; bblock f
-    ; terminal (graph_of t)
-    )
+    let g = graph_of t in
+        ( bblock t (Idgen.id' g.name)
+        ; bblock f (Idgen.id' g.name)
+        ; terminal g
+        )
        
 <<>>=
 let label n node p =
-    ( bblock node
+    ( bblock node n
     ; terminal (graph_of node)
     )
 @
@@ -265,11 +273,17 @@ The list of basic blocks is returned by [[blocks]]:
 let blocks {bbs' = bb} = List.rev bb
 @
 
+The [[stmts]] function translates the basic blocks of a graph into a
+list of statements. Each block starts with a label which is passed
+through the mangler.
+
 <<>>=
-let stmts graph = 
-    let bb       = List.flatten (blocks graph)  in
-    let mangle s = s (* bogus *) in 
-        List.map (Rtl2ast.translate mangle) bb
+let stmts graph mangle = 
+    let bb             = blocks graph in
+    let block (n,rtls) = 
+        A.LabelStmt(mangle n) :: List.map (Rtl2ast.translate mangle) rtls
+    in
+        List.flatten (List.map block bb)
 @
 
 

@@ -30,8 +30,8 @@ semantics have been found correct it is translated into abstract
 
 <<ast2ir.mli>>=
 module Make 
-    (G      : Agraph.S) 
-    (Asm    : Asm2.S with type instruction = G.graph) :
+    (G      : Agraph.S with type Make.ginit  = string   ) 
+    (Asm    : Asm2.S   with type instruction = G.graph) :
 sig
     module StrMap: Map.S with type key = string
     type program = Automaton.location StrMap.t * Asm.asm
@@ -68,7 +68,7 @@ end
 
 
 module Make
-  (G         : Agraph.S)
+  (G         : Agraph.S with type Make.ginit = string)
   (Asm       : Asm2.S   with type instruction  = G.graph) =
 struct
     module GM     = G.Make
@@ -568,7 +568,7 @@ and proc env (target: Target.info) globals props (asm: Asm.asm) (cc,n,fs,bb) =
     let env        = match F.findv n env with
                      | _,(F.Label(F.Proc {F.env = e}),_) -> e
                      | _  -> assert false                                  in
-    let graph      = GM.graph () (* fresh graph for this proc *)           in
+    let graph      = GM.graph n  (* fresh graph for this proc *)           in
     let cc         = find_cc (Aux.Option.get default_convention cc) target in
     let entry a    = decorate (GM.entry a)                                 in
     let copy  a    = decorate (GM.copy_in                                  

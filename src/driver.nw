@@ -202,6 +202,73 @@ let dummy =
 \subsubsection{A {\PAL} to {\PAL} compiler}
 % ------------------------------------------------------------------ 
 
+        
+<<>>=       
+let cmangle =
+    let reserved =
+        [ "aborts"; "align"; "aligned"; "also"; "as"; "big"; "byteorder";
+        "case"; "const"; "continuation"; "cut"; "cuts"; "else"; "equal";
+        "export"; "foreign"; "goto"; "if"; "import"; "invariant"; "jump";
+        "little"; "memsize"; "pragma"; "register"; "return"; "returns";
+        "section"; "semi"; "span"; "stackdata"; "switch"; "target"; "targets";
+        "to"; "typedef"; "unicode"; "unwinds"; "float"; "charset";
+        "pointersize"; "wordsize"]
+    in
+    let id = function
+        | 'a'..'z'
+        | '0'..'9'
+        | 'A'..'Z'
+        | '.' 
+        | '_' 
+        | '$' 
+        | '@'      -> true
+        | _        -> false in
+    let replace = function
+        | x when id x -> x
+        | _           -> '@' in    
+        { Mangle.preprocess = (fun x -> x)
+        ; Mangle.replace    = replace
+        ; Mangle.reserved   = reserved
+        ; Mangle.avoid      = (fun x -> x ^ "$")
+        }
+
+module Personality = struct
+    let target          = dummy
+    type instruction    = Agraph2ast.graph
+    let map             = Mangle.StrMap.empty
+    let mangler         = Mangle.make cmangle map
+    let proc_of_instr i = 
+        let name  = "procedure" in
+        let stmts = Agraph2ast.stmts i mangler in
+            (None, name, [], List.map (fun s -> Ast.StmtBody s) stmts) 
+end
+
+module Asm = Asm2ast.Make(Personality)
+
+module Ast2IR = Ast2ir.Make (Agraph2ast) (Asm)
+@
+
+    
+<<>>=
+let compile target file =
+    let ast, map = ast_of file               in
+    let env      = Fenv.Dirty.empty map      in
+    let env      = Elab.Env.global   env ast in
+    let env      = Elab.Check.global env ast in
+        if Fenv.Dirty.errorFlag env = true then 1 else 
+        let env    = Fenv.clean env          in
+        let target = dummy                   in
+        let width  = 72                      in
+        let _,asm  = Ast2IR.translate env target ast in
+            ( Astpp.ppToFile stdout width (Asm.ast asm)
+            ; 0
+            )
+@
+        
+    
+
+                      
+
 
 
 % ------------------------------------------------------------------ 
@@ -222,7 +289,7 @@ let dispatch cmd =
         | Cmdline.Asdl(file)            -> asdl file      ; 0
         | Cmdline.PP(file,width)        -> pp file width  ; 0
         | Cmdline.Check(file)           -> check file
-        | Cmdline.Compile(target,file)  -> E.error "not yet implemented"
+        | Cmdline.Compile(target,file)  -> compile target file
         )
     with
         | E.ErrorExn(msg)               -> E.errorPrt msg; 1

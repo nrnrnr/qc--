@@ -1,5 +1,5 @@
 agraph.cmi: bits.cmi rtl.cmi target.cmi 
-agraph2ast.cmi: agraph.cmi bits.cmi rtl.cmi target.cmi 
+agraph2ast.cmi: agraph.cmi ast.cmi bits.cmi mangle.cmi rtl.cmi target.cmi 
 asm2.cmi: bits.cmi fenv.cmi 
 asm2ast.cmi: ast.cmi bits.cmi fenv.cmi target.cmi 
 ast.cmi: bits.cmi 
@@ -14,13 +14,14 @@ fgraph.cmi: rtl.cmi
 fgraphUtil.cmi: fgraph.cmi 
 parse.cmi: ast.cmi bits.cmi 
 rtl.cmi: bits.cmi 
+rtl2ast.cmi: ast.cmi rtl.cmi 
 rtlUtil.cmi: bits.cmi rtl.cmi 
 target.cmi: automaton.cmi fenv.cmi rtl.cmi 
 value.cmi: bits.cmi env.cmi types.cmi 
 agraph.cmo: bits.cmi rtl.cmi target.cmi agraph.cmi 
 agraph.cmx: bits.cmx rtl.cmx target.cmx agraph.cmi 
-agraph2ast.cmo: ast.cmi rtl.cmi agraph2ast.cmi 
-agraph2ast.cmx: ast.cmx rtl.cmx agraph2ast.cmi 
+agraph2ast.cmo: ast.cmi idgen.cmi rtl.cmi rtl2ast.cmi agraph2ast.cmi 
+agraph2ast.cmx: ast.cmx idgen.cmx rtl.cmx rtl2ast.cmx agraph2ast.cmi 
 asm2ast.cmo: ast.cmi bits.cmi fenv.cmi rtl.cmi target.cmi asm2ast.cmi 
 asm2ast.cmx: ast.cmx bits.cmx fenv.cmx rtl.cmx target.cmx asm2ast.cmi 
 ast.cmo: bits.cmi ast.cmi 
@@ -39,10 +40,12 @@ aux.cmo: aux.cmi
 aux.cmx: aux.cmi 
 bits.cmo: error.cmi uint64.cmi bits.cmi 
 bits.cmx: error.cmx uint64.cmx bits.cmi 
-driver.cmo: astUtil.cmi astpp.cmi automaton.cmi cmdline.cmi elab.cmi \
-    error.cmi fenv.cmi parse.cmi rtl.cmi scan.cmo srcmap.cmi target.cmi 
-driver.cmx: astUtil.cmx astpp.cmx automaton.cmx cmdline.cmi elab.cmx \
-    error.cmx fenv.cmx parse.cmx rtl.cmx scan.cmx srcmap.cmx target.cmx 
+driver.cmo: agraph2ast.cmi asm2ast.cmi ast.cmi ast2ir.cmi astUtil.cmi \
+    astpp.cmi automaton.cmi cmdline.cmi elab.cmi error.cmi fenv.cmi \
+    mangle.cmi parse.cmi rtl.cmi scan.cmo srcmap.cmi target.cmi 
+driver.cmx: agraph2ast.cmx asm2ast.cmx ast.cmx ast2ir.cmx astUtil.cmx \
+    astpp.cmx automaton.cmx cmdline.cmi elab.cmx error.cmx fenv.cmx \
+    mangle.cmx parse.cmx rtl.cmx scan.cmx srcmap.cmx target.cmx 
 elab.cmo: ast.cmi aux.cmi bits.cmi error.cmi fenv.cmi srcmap.cmi topsort.cmi \
     types.cmi value.cmi elab.cmi 
 elab.cmx: ast.cmx aux.cmx bits.cmx error.cmx fenv.cmx srcmap.cmx topsort.cmx \
@@ -71,8 +74,8 @@ phopt.cmo: rtl.cmi
 phopt.cmx: rtl.cmx 
 rtl.cmo: bits.cmi rtl.cmi 
 rtl.cmx: bits.cmx rtl.cmi 
-rtl2ast.cmo: ast.cmi rtl.cmi types.cmi 
-rtl2ast.cmx: ast.cmx rtl.cmx types.cmx 
+rtl2ast.cmo: ast.cmi rtl.cmi types.cmi rtl2ast.cmi 
+rtl2ast.cmx: ast.cmx rtl.cmx types.cmx rtl2ast.cmi 
 rtlUtil.cmo: bits.cmi rtl.cmi rtlUtil.cmi 
 rtlUtil.cmx: bits.cmx rtl.cmx rtlUtil.cmi 
 scan.cmo: bits.cmi error.cmi parse.cmi srcmap.cmi 
