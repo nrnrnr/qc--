@@ -50,11 +50,18 @@ val entry   : graph -> zgraph           (* focus on entry node *)
 val focus   : graph -> uid -> zgraph    (* focus on node with uid *)
 val unfocus : zgraph -> graph           (* lose focus *)
 @ 
-Some graph replacement and stitching:
+Subgraph replacement:
+we replace the node at the focus with a graph.
+The number of exits in the replacement graph must be equal to the
+number of successors of the focus node; otherwise it is a checked run-time
+error. 
+After replacement, the focus looks at the successor of the replacement
+graph's entry node.
 <<zipcfg.mli>>=
 val replace_focus : zgraph -> graph -> zgraph
-  (* new focus on successor of replacement graph's entry *)
-
+@ 
+Stitch two graphs together:
+<<zipcfg.mli>>=
 val followed_by : graph -> int -> graph -> graph
   (* followed_by g n g' = connect Exit n of g to entry of g' *)
 @ 
@@ -146,6 +153,8 @@ type last
                    (* exit num, inst, registers used, targets *)
 @ 
 Now the zipper:
+A [[head]] is a [[first]] followed by zero or more [[middle]]s.
+A [[tail]] is  zero or more [[middle]]s followed by a [[last]].
 <<zipcfg.ml>>=
 type head = First of first | Head of head * middle
 type tail = Last  of last  | Tail of middle * tail

@@ -22,7 +22,7 @@ HTML = ${NW:%.nw=%.html}
 TEX  = ${NW:%.nw=%.tex}
 INC  = ${NW:%.nw=%.inc}
 
-all:V:     $LIBA pcmap.ld qc--runtime.h
+all:V:     $LIBA pcmap.ld qc--runtime.h md5sums
 all.opt:V: all
 doc:V:     doc.ps
 dvi:V:     doc.dvi
@@ -98,11 +98,18 @@ dep-chk:V:
 	echo
 
 # ------------------------------------------------------------------ 
-# build the libraries
+# build libraries and checksums
 # ------------------------------------------------------------------ 
 
 $LIBA:D:  $O
 	ar cr $target $prereq
+
+md5sums:D: $O $LIBA ../test2/sign-runtime
+	../test2/sign-runtime $O $LIBA > $target
+
+../test2/sign-runtime:Q:
+	(cd ../test2; mk sign-runtime)
+
 
 test.exe: test.o trace.o $LIBA pcmap.ld
 	gcc -o $target $prereq

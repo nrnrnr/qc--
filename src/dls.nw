@@ -1156,15 +1156,7 @@ let shuffle_between state pred succ =
     | {mem = Some m} -> let state', l = load state temp succ_reg in
                         (state', ms, l::ls, ss)
     | {reg = None; mem = None} -> shuffle_err temp in
-(*  let pred_regs, pred_mems = part_locs (get_locs pred_vm temp) in
-    if List.mem (Reg succ_reg) pred_regs then state_lsts
-    else match (pred_regs, pred_mems) with   
-         | (Reg s::_, _)    -> (state, (temp, succ_reg, s)::ms, ls, ss)
-         | ([],       _::_) -> let state', l = load state temp succ_reg in
-                               (state', ms, l::ls, ss)
-         | ([],       [])   -> shuffle_err temp
-         | (_,        _)    -> fail () in
-*)
+  <<old shuffle code, part I>>
   let mems temp succ_mem (state, ms, ls, ss as state_lsts) =
     match VM.var_locs' pred_vm temp with
     | {mem = Some m} -> state_lsts
@@ -1172,6 +1164,33 @@ let shuffle_between state pred succ =
                         (state', ms, ls, s::ss)
     | {reg = None; mem = None} -> shuffle_err temp in
   let state, moves, loads, stores = VM.fold regs mems succ_vm (state,[],[],[]) in
+  <<definition of obsolete function [[find_shuffles]]>>
+  if null loads && null moves && null stores
+  then state
+  else
+    let state, moves     = do_shuffle state moves                in
+    let shuffles         = List.concat [ stores ; moves ; loads] in
+    let state, _, nodes' = make_nodes' state pred_vm shuffles    in
+    let last =
+      List.fold_right
+            (fun node pred -> (G.splice_on_every_edge_between cfg ~entry:node ~exit:node
+                                                              ~pred ~succ
+                              ; node))
+            nodes' pred in
+    let state, _ = buffer_if_succ_is_join state last in
+    state in
+<<old shuffle code, part I>>=
+(*
+ let pred_regs, pred_mems = part_locs (get_locs pred_vm temp) in
+ if List.mem (Reg succ_reg) pred_regs then state_lsts
+ else match (pred_regs, pred_mems) with   
+      | (Reg s::_, _)    -> (state, (temp, succ_reg, s)::ms, ls, ss)
+      | ([],       _::_) -> let state', l = load state temp succ_reg in
+                            (state', ms, l::ls, ss)
+      | ([],       [])   -> shuffle_err temp
+      | (_,        _)    -> fail () in
+*)
+<<definition of obsolete function [[find_shuffles]]>>=
 (*
   let find_shuffles temp succ_locs state_lists =
     let pred_regs, pred_mems = part_locs (get_locs pred_vm temp) in
@@ -1197,20 +1216,6 @@ let shuffle_between state pred succ =
     List.fold_left one_loc state_lists succ_locs in
   let state, moves, loads, stores = VM.fold find_shuffles succ_vm (state, [],[],[]) in
 *)
-  if null loads && null moves && null stores
-  then state
-  else
-    let state, moves     = do_shuffle state moves                in
-    let shuffles         = List.concat [ stores ; moves ; loads] in
-    let state, _, nodes' = make_nodes' state pred_vm shuffles    in
-    let last =
-      List.fold_right
-            (fun node pred -> (G.splice_on_every_edge_between cfg ~entry:node ~exit:node
-                                                              ~pred ~succ
-                              ; node))
-            nodes' pred in
-    let state, _ = buffer_if_succ_is_join state last in
-    state in
 @
 To reconcile variable maps, we need to create move, store, and load rtl's.
 <<define [[assign]], [[move]], [[store]], and [[load]]>>=
