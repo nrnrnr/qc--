@@ -336,8 +336,9 @@ until we try it with other versions of the x86 divide instruction.
           ] in
       sethi, pairval in
     let (is, regpair) = regpairv 32 edx_reg eax_reg in
-    let opr = if unsigned then "divu" else "quot" in
-    let div = R.par [R.store eax (R.app (R.opr opr [32;32]) [regpair; tempval y]) 32;
+    let q, r = if unsigned then "divu", "modu" else "quot", "rem" in
+    let div = R.par [R.store eax (R.app (R.opr q [32;32]) [regpair; tempval y]) 32;
+                     R.store edx (R.app (R.opr r [32;32]) [regpair; tempval y]) 32;
                      undefflags] in
     let answer = if opname = "rem" || opname = "modu" then edx_reg else eax_reg in
     move_rtl x answer :: div :: is @ move_rtl eax_reg x :: move

@@ -287,6 +287,7 @@ module ToString: sig
     val agg: Rtl.aggregation -> string
 end
 module ToReadableString: sig
+    val reg: Register.t -> string
     val rtl: Rtl.rtl -> string
     val exp: Rtl.exp -> string
     val loc: Rtl.loc -> string
@@ -791,8 +792,8 @@ module T = Types
 
 <<ToReadableString>>=
 let rec const = function
-    | R.Bool(true)    ->  "true"
-    | R.Bool(false)   ->  "false"
+    | R.Bool true     ->  "true"
+    | R.Bool false    ->  "false"
     | R.Bits b        ->  Int64.to_string (Bits.S.to_int64 b)
     | R.Link(sym,_,w) -> sym#mangled_text
     | R.Diff(c1,c2)   -> (const c1) ^ "-" ^ (const c2)
@@ -823,11 +824,12 @@ and location' = function
         let space = if sp = 'm' then "bits" ^ string_of_int width
                     else "$" ^ Char.escaped sp in
         space ^ "[" ^ expr' e ^ "]"
-    | R.Reg (sp,i,w) -> Printf.sprintf "$%s[%d]" (Char.escaped sp) i
+    | R.Reg r -> reg r
     | R.Var    (name,_,width)       -> name
     | R.Global (name,_,width)       -> name
     | R.Slice (w,i,loc)          ->
         location' loc ^ "@[" ^ string_of_int i ^ ".." ^ string_of_int (i+w-1) ^ "]"
+and reg (sp,i,w) = Printf.sprintf "$%s[%d]" (Char.escaped sp) i
     
 let (<<) f g  = fun x -> f (g x)
 let expr       = expr'     << Rtl.Dn.exp

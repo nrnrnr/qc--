@@ -440,10 +440,10 @@ inst : Withaflags(dst:regl, "mul", src:eaddri, w, "x86_mulflags")
 
 edx_eax : RegPair(edx, eax) {: () :}
 
-inst : Withundefflags(dst:edx_eax, "quot", src:eaddr, w)
+inst : Withundefflags(dst:edx_eax, "quot", "rem", src:eaddr, w)
   {: sprintf "idiv%s %s, %%eax" (suffix w) src :}
 
-inst : Withundefflags(dst:edx_eax, "divu", src:eaddr, w)
+inst : Withundefflags(dst:edx_eax, "divu", "modu", src:eaddr, w)
   {: sprintf "div%s %s, %%eax" (suffix w) src :}
 
 inst : Withaflags(dst:regl, "shl", reg_cl, w, "x86_shlflags")
@@ -855,9 +855,10 @@ RP.Const(RP.Bool true)
         conPairdestwithflags (loc hi) (loc lo) (exp l) o (exp r) fo
 <<horrible pattern match for [[Withflags]]>>=
 | [ (<<truepat>>, <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
+  ; (<<truepat>>, <<pattern for [[l2]] := [[l2']] [[o2]] [[r2]] at [[w2]]>>)
   ; (<<truepat>>, <<pattern for flags := [[%x86_undefflags()]]>>)
-  ] when l = l' && flag_index = SS.indices.SS.cc ->
-      conWithundefflags (loc l) o (exp r) w
+  ] when l = l' && l2 = l2' && w = w2 && flag_index = SS.indices.SS.cc ->
+      conWithundefflags (loc l) o o2 (exp r) w
 <<horrible pattern match for [[Withflags]]>>=
 | [ (<<truepat>>, <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
   ; (<<truepat>>, <<pattern for flags := [[fo]] ([[l'']], [[r']])>>)
@@ -876,9 +877,10 @@ RP.Const(RP.Bool true)
   ] when l1 = l1' && l2 = l2' && r = r' && flag_index = SS.indices.SS.cc ->
       conWithaflags (regpair rp) o (exp r) w fo
 | [ (<<truepat>>, <<pattern for [[d]] := rp:[[l1/l2]] [[o]] [[r]] at [[w]]>>)
+  ; (<<truepat>>, <<pattern for [[d']] := rp':[[l1'/l2']] [[o']] [[r']] at [[w']]>>)
   ; (<<truepat>>, <<pattern for flags := [[%x86_undefflags()]]>>)
-  ] when flag_index = SS.indices.SS.cc ->
-      conWithundefflags (regpair rp) o (exp r) w
+  ] when w = w' && r = r' && rp = rp' && flag_index = SS.indices.SS.cc ->
+      conWithundefflags (regpair rp) o o' (exp r) w
 | [ (<<truepat>>, <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
   ; (<<truepat>>, <<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>)
   ] when l = l' && l = l'' && r = r' && o = o'
@@ -914,6 +916,8 @@ RP.Store(RP.Reg('c', flag_index, _), RP.App(("x86_undefflags", _), []), _)
 RP.Store(RP.Reg('c', flag_index, _), RP.App((fo, _), [flag_left']), _)
 <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>=
 RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w) 
+<<pattern for [[l2]] := [[l2']] [[o2]] [[r2]] at [[w2]]>>=
+RP.Store(l2, RP.App((o2, _), [RP.Fetch(l2',_); r2]), w2) 
 <<pattern for [[l]] := [[l']] at [[w]]>>=
 RP.Store(l, RP.Fetch(l',_), w) 
 <<pattern for flags := [[fo]] ([[l'']], [[r']])>>=
@@ -943,6 +947,12 @@ RP.Store(d, RP.App((o, _),
                                [RP.App(("zx",_), [RP.Fetch(l1,_)]);_]);
                                 RP.App(("zx",_), [RP.Fetch(l2,_)])]) as rp);
     r]), w)
+<<pattern for [[d']] := rp':[[l1'/l2']] [[o']] [[r']] at [[w']]>>=
+RP.Store(d', RP.App((o', _),
+  [ (RP.App(("or",_), [ RP.App(("shl",_),
+                               [RP.App(("zx",_), [RP.Fetch(l1',_)]);_]);
+                                RP.App(("zx",_), [RP.Fetch(l2',_)])]) as rp');
+    r']), w')
 <<pattern for flags := [[fo]] ([[l1'/l2']], [[r']])>>=
 RP.Store(RP.Reg('c', flag_index, _),
          RP.App((fo, _), 

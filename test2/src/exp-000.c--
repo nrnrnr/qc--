@@ -1,5 +1,22 @@
 target byteorder little;
 
-p (bits32 x) {
+q (bits32 x) {
   return (bits32[x+x]);
 }
+
+import printf; export main;
+
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+  stackdata { align 4; p: bits32; }
+  bits32[p] = 0xdeadbeef;
+  bits32 n;
+  n = q(p `divu` 2);
+  foreign "C" printf("address" fmt, n);
+  foreign "C" return(0);
+}
+
+section "data" {
+  fmt: bits8[] "lookup returns 0x%x (should be 0xdeadbeef)\n\0";
+}
+
+  

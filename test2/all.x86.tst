@@ -16,7 +16,7 @@ Test.files = { "add.c--"
              , "arglist.c--"
              , "conj.c--"
              , norun("eqasolve-000.c--")
-             , norun("exp-000.c--")
+             , "exp-000.c--"
              , norun("exp-001.c--")
              , norun("exp-002.c--")
              , norun("exp-003.c--")

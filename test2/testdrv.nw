@@ -15,6 +15,7 @@ see the README file.
 $debug 1
 Test = Test  or {}
 Test.errors     = 0      -- number of failures found
+Test.diffs      = 0      -- number of tests passed with different assembly languages
 Test.verbose    = nil    -- provide detailed failure info
 Test.skip_files = nil    -- skip input source files
 Test.on_error   = {}     -- error handlers
@@ -58,6 +59,15 @@ function Test.clear_status_line()
   if not Test.verbose then
     write(format("%-80s\r", ""))
   end
+end
+@ 
+<<testdrv.lua>>=
+function Test.print_error_stats(n)
+  local es, ds = "s", "s"
+  if Test.errors == 1 then es = "" end
+  if Test.diffs  == 1 then ds = "" end
+  print(format("# %d error%s and %d diff%s detected out of %d tests.", 
+               Test.errors, es, Test.diffs, ds, n))
 end
 @ 
 We use [[Util.call]] to log as a printf-like function.
@@ -110,9 +120,13 @@ Test.on_error[".s2"] = Test.on_error[".s"]
 This function handles dispatching to the correct error handler.
 All errors are reported by calling this function.
 <<testdrv.lua>>=
-function Test.error(file, expected, actual)
+function Test.error(file, expected, actual, ext)
   Test.clear_status_line()
-  Test.errors = Test.errors + 1
+  if ext == ".s" then
+    Test.diffs  = Test.diffs + 1
+  else
+    Test.errors = Test.errors + 1
+  end
   local basename = Caml.Filename.basename(expected)
   local ext = Caml.Filename.extension(expected)
   if Test.verbose then
@@ -324,7 +338,7 @@ function Test.check_update_file(inputs, file, i)
       end
     else
       Test.log("%s does not match output", exp)
-      Test.error(inputs.source, exp, file)
+      Test.error(inputs.source, exp, file, ext)
       inputs.diffs = inputs.diffs .. " " .. ext
     end
     return 1
@@ -739,9 +753,7 @@ function CMD.whatfuns["-compile"]()
     i = i + 1
   end
   Test.clear_status_line()
-  local plural = "s"
-  if Test.errors == 1 then plural = "" end
-  print(format("# %d error%s detected out of %d tests.", Test.errors, plural, i - 1))
+  Test.print_error_stats(i-1)
 end
 
 function CMD.whatfuns["-interp"]()
