@@ -134,8 +134,14 @@ let node proc fd n = match C.kind n with
     (* FIX cut to is not being translated well *)
     | C.CutTo ->
         ( E.rtl fd (instr n)
-        ; fprintf fd "-- succ node of cut: %s\n"
-            (String.concat "," (List.flatten (List.map C.labels (C.succs n))))
+        ; ( let e  = match C.to_executable n with
+              | None   -> Impossible.impossible "cut w/o instruction"
+              | Some i -> Interp.target'.T.call.T.project i in
+            let e = (match Rtl.Dn.exp e with
+              | Rtl.Private.Fetch (Rtl.Private.Mem (_,_,_,exp,_), _) ->
+                 Rtl.Up.exp exp
+              | _ -> e) in
+            E.exp fd e)
         ; fprintf fd "CMM.cut()\n"
         )
     | C.Cbranch ->
