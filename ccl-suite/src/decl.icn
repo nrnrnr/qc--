@@ -1,0 +1,100 @@
+procedure C_type_promote(type)
+    static promotion_table, alias_table
+    initial {
+	promotion_table := table()
+	promotion_table["float"] := "double"
+	promotion_table["short"] := "longword"
+	promotion_table["char"] := "longword"
+	alias_table := table()
+	alias_table["long"] := "longword"
+	alias_table["int"] := "longword"
+    }
+    if \Flag_a then
+	return [\(alias_table[type[1]]),""] | type
+    else
+	return [\(promotion_table[type[1]]),""] | [\(alias_table[type[1]]),""] | type
+
+end
+
+procedure Process_C_Prototype(proto)
+    local parms, parm
+    parms := []
+    every parm := !proto[2] do
+	put(parms, [C_type_promote(parm[1]), parm[2]])
+    return [[[C_type_promote(proto[1][1]), proto[1][2]]], parms]
+end
+
+procedure Get_C_Decl()
+    local tree, line
+
+    writes("C Declaration: ")
+    while line := read() do {
+	if line ? {
+	    (tree := C_prototype()) & pos(0)
+	}
+	then {
+	    write()
+#	    unlistify(tree)
+#	    write()
+	    tree := Process_C_Prototype(tree)
+#	    unlistify(tree)
+#	    write()
+	    suspend tree
+	}
+	else
+	    write("Invalid declaration")
+	writes("C Declaration: ")
+    }
+end
+
+procedure unlistify(l)
+    local first, elem
+    if type(l) == "string" then
+	writes(l)
+    else if type(l) == "list" then {
+	writes("[")
+	every elem := !l do {
+	    if /first then
+		first := 1
+	    else
+		writes(", ")
+	    unlistify(elem)
+	}
+	writes("]")
+    }
+    return
+end
+
+procedure C_prototype()
+    local type, ident, params
+    suspend (type := C_decl_type(), ident := C_decl_ident(), file_oparen(), 
+	     params := C_parameter_list(), file_cparen(), file_space(),
+	     [[[type, ident[1]], ident[2]], params])
+end
+
+procedure C_pointer()
+    suspend (file_space(), ="*" | ="")
+end
+
+procedure C_decl_type()
+    suspend 2(file_space(), =!["void", "char", "short", "int", "long", "float", "double"] | (="struct/" || file_int()))
+end
+
+procedure C_parameter_list()
+    suspend [C_parameter()] ||| ((file_comma(), C_parameter_list()) | [])
+end
+
+procedure C_parameter()
+    local type
+    local ident
+
+    suspend (type := C_decl_type(), ident := C_decl_ident(), [[type, ident[1]], ident[2]])
+end
+
+procedure C_decl_ident()
+    suspend [C_pointer(), C_ident_only()]
+end
+
+procedure C_ident_only()
+    suspend (file_space(), tab(many(&letters ++ '_')) | (="", "<anon>"))
+end

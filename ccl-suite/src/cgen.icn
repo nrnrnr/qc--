@@ -1,0 +1,847 @@
+###############################################################################
+#
+# Copyright (c) 1995 by Mark Bailey.
+#
+# This code is distributed WITHOUT ANY WARRANTY. No claims are made as to
+# whether it serves any particular purpose or even works at all.
+#
+###############################################################################
+
+###############################################################################
+#
+# File: cgen.icn
+#
+# Author: Mark Bailey
+#
+# Created: 7/17/95
+#
+# Description:
+#
+#      
+#
+# RCS Header:
+#	$Header$
+#
+# Change Log:
+#	$Log$
+#	Revision 1.1  1995/10/01 19:00:52  mwb5y
+#	Initial revision
+#
+#
+###############################################################################
+
+###############################################################################
+#
+# Generate_C_Program - Generate a C test program from a signature
+#
+# sig:list[int] - input symbol list
+# fsa:fsa_info - the fsa that the signature was derived from
+#
+# Return:<none>
+#
+###############################################################################
+
+procedure Generate_C_Program(signature, fsa)
+    local types, name, places, rmflag, symbol
+    local args, structs, struct_tab
+    static oldname
+
+    if \Flag_f then
+	args := Build_Arg_From_Filename(Flag_f)
+    else
+	args := Build_Arg_Info(signature, fsa)
+    structs := args[2]
+    struct_tab := args[3]
+    args := args[1]
+    
+    if /Flag_f then {
+	types := [[],[]]
+	every symbol := fsa.sigma[!signature] do
+	    if /symbol.rval then
+		put(types[2], symbol)
+	    else
+		put(types[1], symbol)
+
+	places := Perform_Placement(fsa, types)
+    }
+    else
+	places := []
+
+    name := "tst."  
+    every name ||:=  Filename_Label(!args) || "."
+
+    if name ~== (\StartupName || ".") then {
+	write(&errout, "Skipping ", name);
+	return
+    }
+    else
+	StartupName := &null
+
+    Generate_C_caller_file(name, , args, places, structs, struct_tab)
+    Generate_C_callee_file(name, , args, places, structs, struct_tab)
+    if /Flag_f then {
+	write(name[1:-1])
+	if /Flag_w then
+	    read()
+    }
+    if /Flag_v then {
+	Generate_C_caller_file("va" || name, 1, args, places, structs, struct_tab)
+	Generate_C_callee_file("va" || name, 1, args, places, structs, struct_tab)
+	if /Flag_f then {
+	    write("va" || name[1:-1])
+	    if /Flag_w then
+		read()
+	}
+    }
+
+    rmflag := 1
+end
+
+
+procedure Generate_C_caller_file(name, varargs, args, places, structs, struct_tab)
+    local outfile, struct
+
+    outfile := open(name || "a.c", "w")
+
+    every write(outfile, "/* ", !places, " */")
+
+    write(outfile, "#include <stdio.h>")
+    if (!args).type == ("double" | "float") then
+	write(outfile, "typedef union { unsigned char bytes[8]; ", 
+	      "double dbl; float flt; } cvt_type;")
+    write(outfile)
+    every struct := struct_tab[key(struct_tab)] do 
+	write(outfile, "typedef struct ", struct.type, " ", struct.decl, " ",
+	      struct.type, ";")
+    Generate_C_Caller(outfile, args, structs, struct_tab, varargs)
+    write(outfile)
+    Generate_C_main(outfile, varargs)
+
+    close(outfile)
+
+end
+
+procedure Generate_C_callee_file(name, varargs, args, places, structs, struct_tab)
+    local outfile, struct
+
+    outfile := open(name || "b.c", "w")
+
+#    every write(outfile, "/* ", !places, " */")
+
+    write(outfile, "#include <stdio.h>")
+    write(outfile)
+
+    if (!args).type == ("double" | "float") then
+	write(outfile, "typedef union { unsigned char bytes[8]; ", 
+	      "double dbl; float flt; } cvt_type;")
+
+    every struct := struct_tab[key(struct_tab)] do 
+	write(outfile, "typedef struct ", struct.type, " ", struct.decl, " ",
+	      struct.type, ";")
+    
+    write(outfile)
+    Generate_C_Callee(outfile, args, structs, struct_tab, varargs)
+    write(outfile)
+    close(outfile)
+end
+
+
+procedure Generate_C_main(outfile, varargs)
+    write(outfile, "int main()")
+    write(outfile, "{")
+    if \varargs then
+	write(outfile, "    va_test_function_caller();")
+    else
+	write(outfile, "    test_function_caller();")
+    write(outfile, "    exit(0);")
+    write(outfile, "}")
+end
+
+###############################################################################
+#
+# Generate_C_Caller - Generate a C test caller
+#
+# outfile:file - output file
+# args:list[arg_info] - list of arguments
+# structs:list[arg_info] - list of only structure arguments
+# struct_tab:table(int,struct_info) - list of structure info indexed by size
+# va:int/null - generate varargs version if non-null
+#
+# Return:<none>
+#
+###############################################################################
+
+procedure Generate_C_Caller(outfile, args, structs, struct_tab, va)
+    local argi, value, comma, struct, arg, rval, i
+
+    rval := args[1]
+
+    writes(outfile, "/* ")
+    writes(outfile, rval.type, " ( ")
+    if *args[2:0] = 0 then
+	writes(outfile, "void")
+    else
+	every writes(outfile, (!args[2:0]).type, " ")
+    write(outfile, ") */")
+    write(outfile)
+
+    if \Flag_a then
+	write(outfile, "#define __STDC__")
+    if \va then {
+	write(outfile, "#ifdef __STDC__")
+	    write(outfile, rval.type, " va_test_function_callee(",
+		  args[2].type, ", ...);")
+	write(outfile, "#else")
+#	else
+	    write(outfile, rval.type, " va_test_function_callee();")
+	write(outfile, "#endif")
+    }
+    else {
+	write(outfile, "#ifdef __STDC__")
+	writes(outfile, rval.type, " test_function_callee(")
+	comma := ""
+#	if \Flag_a then {
+	    every arg := !args[2:0] do {
+		writes(outfile, comma, arg.type)
+		comma := ", "
+	    }
+#	}
+	write(outfile, ");")
+	write(outfile, "#else")
+	write(outfile, rval.type, " test_function_callee();")
+	write(outfile, "#endif")
+    }
+    
+    write(outfile)
+    writes(outfile, "void ")
+    if \va then
+	writes(outfile, "va_")
+
+    write(outfile,"test_function_caller()")
+    write(outfile,"{")
+
+    if (!args).type == ("double" | "float") then
+	write(outfile, "    cvt_type cvt;");
+
+    if rval.type ~== "void" then {
+	write(outfile,"    ", rval.type, " rval;")
+    }
+
+    every struct := !structs do 
+	write(outfile,"    static ", struct.type, " ", struct.name, " = ",
+	      struct.value, ";")
+    every arg := !args[2:0] do {
+	if arg.type == ("double" | "float") then
+	    write(outfile, "    ", arg.type, " ", arg.name, ";") 
+    }
+
+    write(outfile)
+
+    every arg := !args[2:0] do {
+	if arg.type == "double" then {
+	    Emit_Aggregate_Assignment(outfile, "cvt.bytes", arg)
+	    write(outfile, "    ", arg.name, " = cvt.dbl;")
+	}
+	if arg.type == "float" then {
+	    Emit_Aggregate_Assignment(outfile, "cvt.bytes", arg)
+	    write(outfile, "    ", arg.name, " = cvt.flt;")
+	}
+    }
+
+    writes(outfile, "    ")
+
+    if rval.type ~== "void" then {
+	writes(outfile, "rval = ")
+    }
+    if \va then
+	writes(outfile, "va_")
+    writes(outfile, "test_function_callee(")
+
+    comma := ""
+    every arg := !args[2:0] do {
+	if arg.type ? =("struct" | "double" | "float") then
+	    writes(outfile, comma, arg.name)
+	else
+	    writes(outfile, comma, arg.value)
+	comma := ", "
+    }
+    write(outfile,");")
+    if rval.type ~== "void" then {
+	if rval.type ? ="struct" then {
+	    Emit_Aggregate_Compare(outfile, rval, "rval.field", va)
+	}
+	else if rval.type == "double" then {
+	    Emit_Aggregate_Assignment(outfile, "cvt.bytes", rval)
+	    Emit_Compare(outfile, "rval", "cvt.dbl", va)
+	}
+	else if rval.type == "float" then {
+	    Emit_Aggregate_Assignment(outfile, "cvt.bytes", rval)
+	    Emit_Compare(outfile, "rval", "cvt.flt", va)
+	}
+	else
+	    Emit_Compare(outfile, "rval", rval.value, va)
+    }
+    
+    write(outfile,"}")
+end
+
+###############################################################################
+#
+# Generate_C_Callee - Generate a C test callee
+#
+# outfile:file - output file
+# args:list[arg_info] - list of arguments
+# structs:list[arg_info] - list of only structure arguments
+# struct_tab:table(int,struct_info) - list of structure info indexed by size
+# va:int/null - generate varargs version if non-null
+#
+# Return:<none>
+#
+###############################################################################
+
+procedure Generate_C_Callee(outfile, args, structs, struct_tab, va)
+    local arg_count, argi, arg, comma, rval
+    local struct_gen, struct, i
+    
+    rval := args[1]
+    struct_gen := table()
+
+    writes(outfile, "/* ")
+    writes(outfile, rval.type, " ( ")
+    if *args[2:0] = 0 then
+	writes(outfile, "void ")
+    else
+	every writes(outfile, (!args[2:0]).type, " ")
+    write(outfile, ") */")
+    write(outfile)
+
+    if \Flag_a then
+	write(outfile, "#define __STDC__")
+    if \va then {
+	if \Flag_a then
+	    write(outfile, "#define __STDC__")
+	write(outfile, "#ifdef __STDC__")
+	    write(outfile, "#include <stdarg.h>")
+#	else
+	write(outfile, "#else")
+	    write(outfile, "#include <varargs.h>")
+	write(outfile, "#endif")
+    }    
+    write(outfile)
+
+    if \va then {
+#	if \Flag_a then
+	write(outfile, "#ifdef __STDC__")
+	    write(outfile, rval.type, " va_test_function_callee(",
+		  args[2].type, " ", args[2].name, ", ...)")
+#	else
+	write(outfile, "#else")
+	    write(outfile, rval.type, " va_test_function_callee(va_alist)")
+	write(outfile, "#endif")
+    }
+    else {
+	write(outfile, "#ifdef __STDC__")
+	writes(outfile, rval.type, " test_function_callee(")
+	comma := ""
+	every arg := !args[2:0] do {
+#	    if \Flag_a then 
+		writes(outfile, comma, arg.type, " ", arg.name)
+#	    else
+#		writes(outfile, comma, arg.name)
+	    comma := ", "
+	}
+	write(outfile, ")")
+	write(outfile, "#else")
+
+	writes(outfile, rval.type, " test_function_callee(")
+	comma := ""
+	every arg := !args[2:0] do {
+	    writes(outfile, comma, arg.name)
+	    comma := ", "
+	}
+	write(outfile, ")")
+	write(outfile, "#endif")
+    }
+
+    write(outfile, "#ifndef __STDC__")
+#    if /Flag_a then
+	if \va then 
+	    write(outfile, "    va_dcl")
+	else 
+	    every arg := !args[2:0] do
+		write(outfile, "    ", arg.type, " ", arg.name, ";")
+    write(outfile, "#endif")
+    
+    write(outfile, "{")
+
+    if \va then {
+	write(outfile, "    va_list ap;")
+#	if /Flag_a then
+	write(outfile, "#ifndef __STDC__")
+	    write(outfile, "    ", args[2].type, " ", args[2].name, ";")
+	write(outfile, "#endif")
+	every arg := !args[3:0] do
+	    write(outfile, "    ", arg.type, " ", arg.name, ";")
+    }
+
+    if (!args).type == ("double" | "float") then
+	write(outfile, "    cvt_type cvt;");
+
+    if rval.type ~== "void" then {
+	write(outfile, "    ", rval.type, " rval;")
+    }
+    
+    write(outfile)
+    if \va then {
+	write(outfile, "#ifdef __STDC__")
+#	if \Flag_a then
+	    write(outfile, "    va_start(ap, ", args[2].name, ");")
+#	else {
+	write(outfile, "#else")
+	    write(outfile, "    va_start(ap);")
+	    write(outfile, "    ", args[2].name, " = va_arg(ap, ", 
+		  args[2].type, ");")
+#	}
+	write(outfile, "#endif")
+	every arg := !args[3:0] do
+	    write(outfile, "    ", arg.name, " = va_arg(ap, ", arg.type, ");")
+	write(outfile, "    va_end(ap);")
+    }
+
+    every arg := !args[2:0] do {
+	if arg.type ? ="struct" then
+	    Emit_Aggregate_Compare(outfile, arg, arg.name || ".field", va)
+	else if arg.type == "double" then {
+	    Emit_Aggregate_Assignment(outfile, "cvt.bytes", arg)
+	    Emit_Compare(outfile, arg.name, "cvt.dbl", va)
+	}
+	else if arg.type == "float" then {
+	    Emit_Aggregate_Assignment(outfile, "cvt.bytes", arg)
+	    Emit_Compare(outfile, arg.name, "cvt.flt", va)
+	}
+	else
+	    Emit_Compare(outfile, arg.name, arg.value, va)
+    }
+    if rval.type ~== "void" then {
+	if rval.type ? ="struct" then
+	    Emit_Aggregate_Assignment(outfile, "rval.field", rval)
+	else if rval.type == "double" then {
+	    Emit_Aggregate_Assignment(outfile, "cvt.bytes", rval)
+	    write(outfile, "    rval = cvt.dbl;")
+	}
+	else if rval.type == "float" then {
+	    Emit_Aggregate_Assignment(outfile, "cvt.bytes", rval)
+	    write(outfile, "    rval = cvt.flt;")
+	}
+	else
+	    write(outfile, "    rval = ", rval.value, ";")
+	write(outfile, "    return rval;")
+    }
+    write(outfile, "}")
+end
+
+###############################################################################
+#
+# Emit_Aggregate_Assignment - Generate an array assignment
+#
+# outfile:file - output file
+# name:string - array basename for assignment
+# aggregate:arg_info - info on argument (i.e. value) to be placed in aggregate
+#
+# Return:<none>
+#
+###############################################################################
+
+procedure Emit_Aggregate_Assignment(outfile, name, aggregate)
+    local i
+
+    every i := 0 to aggregate.size - 1 do {
+	write(outfile, "    ", name, "[", i, "] = ", 
+	      Hex(aggregate.svalue[i + 1]), ";")
+    }
+end
+
+###############################################################################
+#
+# Emit_Aggregate_Compare - Generate an array compare
+#
+# outfile:file - output file
+# aggregate:arg_info - info on argument (i.e. value) to be compared
+# name:string - array basename for compare
+# va:int/null - generate varargs version if non-null
+#
+# Return:<none>
+#
+###############################################################################
+
+procedure Emit_Aggregate_Compare(outfile, aggregate, name, va)
+    local i
+
+    every i := 0 to aggregate.size - 1 do {
+	write(outfile, "    if(", name, "[", i, "] != ",
+	      Hex(aggregate.svalue[i + 1]),
+	      ") {")
+	if \va then
+	    write(outfile, "        fprintf(stderr, \"Element ", i, 
+		  " is bad in ", name, " in varargs version\\n\");")
+	else
+	    write(outfile, "        fprintf(stderr, \"Element ", i, 
+		  " is bad in ", name, "\\n\");")
+	write(outfile, "        exit(1);")
+	write(outfile, "    }")
+    }
+end
+
+###############################################################################
+#
+# Emit_Compare - Generate a simple compare
+#
+# outfile:file - output file
+# name:string - value's name
+# value:string - value
+# va:int/null - generate varargs version if non-null
+#
+# Return:<none>
+#
+###############################################################################
+
+procedure Emit_Compare(outfile, name, value, va)
+    write(outfile, "    if(", name, " != ", value, ") {")
+
+    if \va then
+	write(outfile, "        fprintf(stderr, \"Bad ", name, 
+	      " in varargs version\\n\");")
+    else
+	write(outfile, "        fprintf(stderr, \"Bad ", name, "\\n\");")
+    write(outfile, "        exit(1);")
+    write(outfile, "    }")
+end
+
+procedure Filename_Label(arg)
+    local str
+
+    str := arg.type[1]
+    if arg.type ? ="struct" then
+	str ||:= arg.size
+    return str
+end
+
+record arg_info(name, type, argno, value, start, size, svalue)
+record struct_info(type, decl, size)
+
+procedure C_Struct_Decl(size)
+    return "{ unsigned char field[" || size || "]; }"
+end
+
+procedure Convert_Type_2_C_Decl(arg)
+    static map
+    initial {
+	map := table()
+	map[] := "void"
+	map["byte"] := "char"
+	map["word"] := "short"
+	map["longword"] := "long"
+	map["float"] := "float"
+	map["double"] := "double"
+	map["struct"] := "struct"
+    }
+
+    if /arg then
+	return map[]
+    
+    if \arg.type == "struct" then
+	return map[arg.type] || "_" || arg.size
+    else
+	return map[arg.type]
+end
+
+###############################################################################
+#
+# Build_Arg_Info - Construct information on arguments
+#
+# signature:list[int] - signature for function
+# fsa:fsa_info - fsa signature is based on
+#
+# Return:list[result, struts, struct_tab] where:
+# result:list[arg_info] - arg_info for each argument
+# structs:list[arg_info] - arg_info for only structure arguments
+# struct_tab:table(int,struct_info)] - struct_info indexed by size
+#
+###############################################################################
+
+procedure Build_Arg_Info(signature, fsa)
+    local result, arg, argno, structs, struct_tab, struct
+    local size, arginfo, astring
+
+    result := []
+    structs := []
+    struct_tab := table()
+    size := 0
+    argno := 1
+    if /fsa.sigma[signature[1]].rval then
+	put(result, arg_info("none", Convert_Type_2_C_Decl(), 0, , 0, 0, ))
+    
+    every arg := !signature do {
+	arginfo := arg_info(, Convert_Type_2_C_Decl(fsa.sigma[arg]), argno, ,
+			    size, fsa.sigma[arg].size, )
+	arginfo.name := arginfo.type || "_arg_" || argno
+	size +:= arginfo.size
+
+	if fsa.sigma[arg].type == "struct" then {
+	    if /struct_tab[fsa.sigma[arg].size] then {
+		struct := struct_info(arginfo.type, 
+				      C_Struct_Decl(fsa.sigma[arg].size),
+				      fsa.sigma[arg].size )
+		struct_tab[fsa.sigma[arg].size] := struct
+	    }
+	    put(structs, arginfo)
+	}
+	put(result, arginfo)
+	argno +:= 1
+    }
+    astring := Argument_String(size)
+    every arginfo := !result do {
+	arginfo.value := Generate_Argument_Value(arginfo, astring)
+	arginfo.svalue := astring[arginfo.start + 1 +:arginfo.size]
+    }
+    return [result, structs, struct_tab]
+end
+
+procedure Filename_2_Type_List(name)
+    local result, arg, type
+
+    result := []
+    name ? {
+	tab(upto('.'))
+	while (tab(upto(&cset--'.'))) do
+	    put(result,tab(many(&cset--'.')))
+    }
+    return result
+end
+
+###############################################################################
+#
+# Build_Arg_Info - Construct information on arguments
+#
+# signature:list[int] - signature for function
+# fsa:fsa_info - fsa signature is based on
+#
+# Return:list[result, struts, struct_tab] where:
+# result:list[arg_info] - arg_info for each argument
+# structs:list[arg_info] - arg_info for only structure arguments
+# struct_tab:table(int,struct_info)] - struct_info indexed by size
+#
+###############################################################################
+
+procedure Build_Arg_From_Filename(name)
+    local result, arg, argno, structs, struct_tab, struct
+    local size, arginfo, astring, asize, signature
+    static type_map, size_map
+    initial {
+	type_map := table()
+	type_map["v"] := "void"
+	type_map["c"] := "char"
+	type_map["w"] := "short"
+	type_map["l"] := "long"
+	type_map["d"] := "double"
+	type_map["f"] := "float"
+	type_map["s"] := "struct"
+	size_map := table()
+	size_map["v"] := 0
+	size_map["c"] := 1
+	size_map["w"] := 2
+	size_map["l"] := 4
+	size_map["d"] := 8
+	size_map["f"] := 4
+	size_map["s"] := 0
+    }
+
+    signature := Filename_2_Type_List(name)
+    result := []
+    structs := []
+    struct_tab := table()
+    size := 0
+    argno := 1
+    if signature[1] == "v"  then {
+	put(result, arg_info("none", Convert_Type_2_C_Decl(), 0, , 0, 0, ))
+	pop(signature)
+    }    
+
+    every arg := !signature do {
+	if arg == "s" then {
+	    arg := "w"
+	}
+	arginfo := arg_info(, type_map[arg[1:2]], argno, , size,
+			    size_map[arg[1:2]], )
+	arginfo.name := arginfo.type || "_arg_" || argno
+
+	if arg[1:2] == "s" & *arg > 1 then {
+	    arginfo.size := asize := numeric(arg[2:0])
+	    arginfo.type ||:= asize
+	    if /struct_tab[asize] then {
+		struct := struct_info(arginfo.type, C_Struct_Decl(asize), asize)
+		struct_tab[asize] := struct
+	    }
+	    put(structs, arginfo)
+	}
+	size +:= arginfo.size
+	put(result, arginfo)
+	argno +:= 1
+    }
+    astring := Argument_String(size)
+    every arginfo := !result do {
+	arginfo.value := Generate_Argument_Value(arginfo, astring)
+	arginfo.svalue := astring[arginfo.start + 1 +:arginfo.size]
+    }
+    return [result, structs, struct_tab]
+end
+
+###############################################################################
+#
+# Argument_String
+#
+# Create a string of non-repeating pairs of int values for an argument list
+#
+# size:int - size of string to generate
+# window:int - size of unique elements (in bytes). Can only have strings
+# of size 2^(8*window) unique strings.
+#
+# Return:list[int] - list of integer byte values (range 0..255)
+#
+###############################################################################
+
+procedure Argument_String(size, window)
+    local bytes, count, backup, start, chr, word
+    static str, used, alpha, lstr, len, index
+    initial alpha := Shuffle(&ascii -- '\x00' -- '\xff')
+
+    /str := ""
+    /lstr := []
+    /used := set()
+    if size <= *str then
+	return lstr
+
+    /window := 4
+    
+    start := 1
+    while *str < size do {
+	backup := &null
+	len := *str
+	every index := start to *alpha do {
+	    chr := alpha[(index + len - 1) % *alpha + 1]
+	    word := str[1 - window:0] || chr
+	    if member(used, word) then
+		next
+	    str ||:= chr
+	    if *str >= window then
+		insert(used, word)
+	    backup := 1
+	    break
+	}
+	len +:= 1
+	if /backup then {
+	    while str[-1] == alpha[((len - 1) % *alpha) + 1] do {
+		if *str >= window then
+		    delete(used, str[-window:0])
+		str := str[1:-1]
+		len -:= 1
+	    }
+	    
+	    if *str = 0 then
+		stop("Cannot generate a string that long")
+	    
+	    start := find(str[-1], alpha)
+	    chr := (len - 2) % *alpha + 1
+	    if start < chr then
+		start +:= *alpha
+
+	    start := start - chr + 2
+	    if *str >= window then
+		delete(used, str[-window:0])
+	    str := str[1:-1]
+	}
+	else
+	    start := 1
+    }
+    lstr := []
+    every put(lstr, ord(!str))
+    return lstr
+end
+
+###############################################################################
+#
+# Generate_Argument_Value
+#
+# Value for initializing an argument from an argument string
+#
+# arg:arg_info - argument whose value should be generated
+# astring:list[int] - integer values of bytes to use for all arguments
+#
+# Return:string - the value 
+#
+###############################################################################
+
+procedure Generate_Argument_Value(arg, astring)
+    local byte, value
+    
+    if arg.type ? ="struct" then {
+	value := ""
+	every byte := !astring[arg.start + 1+:arg.size] do {
+	    value ||:= Hex(byte) || ","
+	}
+	return "{ { " || value || "} }"
+    }
+    value := 0
+    every byte := !astring[arg.start + 1+:arg.size] do {
+	value := ior(ishift(value, 8), byte)
+    }
+    value := Hex(value)
+    if arg.type ? ="long" then
+	return value || "l"
+    if arg.type ? ="double" then
+	return value || "d"
+    return value
+end
+
+###############################################################################
+#
+# Shuffle - shuffle values of a cset
+#
+# values:cset
+# 
+# Return:string - a string (or list) of ordered values from the give cset
+#
+###############################################################################
+
+procedure Shuffle(values)
+    local i
+    values := string(values)
+    every i := *values to 2 by -1 do
+	values[?i] :=: values[i]
+    return values
+end
+
+###############################################################################
+#
+# Hex - Generate C hex representation for a number
+#
+# num:int the number
+# 
+# Return:string - the hex representation
+#
+###############################################################################
+
+procedure Hex(num)
+    static hextab, hexval
+    initial hextab := ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a",
+		       "b", "c", "d", "e", "f"]
+    hexval := ""
+    if num = 0 then
+	return "0x0"
+    while num > 0 do {
+	hexval := hextab[iand(num, 15) + 1] || hexval
+	num := ishift(num, -4)
+    }
+    return "0x" || hexval
+end
+

@@ -1,0 +1,839 @@
+###############################################################################
+#
+# Copyright (c) 1995 by Mark Bailey.
+#
+# This code is distributed WITHOUT ANY WARRANTY. No claims are made as to
+# whether it serves any particular purpose or even works at all.
+#
+###############################################################################
+
+###############################################################################
+#
+# File: tgen.icn
+#
+# Author: Mark Bailey
+#
+# Created: 6/4/95
+#
+# Description:
+#
+#      Test case generator
+#
+# RCS Header:
+#	$Header$
+#
+# Change Log:
+#	$Log$
+#	Revision 1.1  1995/09/28 14:47:26  mwb5y
+#	Initial revision
+#
+#
+###############################################################################
+
+link place, decl, cgen, file
+
+global FSAs
+global StartupName
+
+record signature_element(type, size)
+record input_symbol(type, size, rval)
+record output_symbol(resource, index, offset, size)
+
+global Flag_a		# Generate ANSI tests
+global Flag_c		# Generate counts of tests
+global Flag_d		# Generate debugging information
+global Flag_i   	# trace input function
+global Flag_f		# Generate specific file test
+global Flag_p		# Compute placement for single signature
+global Flag_s		# Start string
+global Flag_t		# Generate test cases
+global Flag_v		# Generate varargs tests only
+global Flag_w		# Don't wait between generation of each test case
+global Flag_Eacyclic	# Enumerate covering acyclic paths
+global Flag_Epaths	# Enumerate all acyclic paths
+global Flag_Epairs	# Enumerate pairs paths
+
+procedure main(opt)
+    local vars, decl, types, sig
+
+    # Process the command line arguments...
+
+    Flag_s := "value required"
+    Flag_f := "value required"
+    opt := Set_Arg_Flags(opt)
+
+    if Flag_f ~== "value required" then {
+	if \Flag_f then
+	    Generate_C_Program()
+	return
+    }
+    else
+	Flag_f := &null
+
+    if *opt < 1 then
+	stop("Usage: tgen [-t] <h-file>")
+
+    vars := Read_FSA_File(opt[1])
+
+    if Flag_s ~== "value required" then
+	StartupName := Flag_s
+    else
+	Flag_s := &null;
+
+    if /Flag_Epaths & /Flag_Eacyclic then
+	Flag_Epairs := 1
+
+    InfiniteModulo := vars["InfiniteModulo"]
+    InfiniteResource := vars["InfiniteResource"]
+    InfiniteResourceOffsetStart := vars["InfiniteResourceOffsetStart"]
+
+    if \Flag_i then {
+	write(&errout, "InfiniteModulo := ", image(InfiniteModulo))
+	write(&errout, "InfiniteResource := ", image(InfiniteResource))
+	write(&errout, "InfiniteResourceOffsetStart := ",
+	      image(InfiniteResourceOffsetStart))
+    }
+
+    if /InfiniteModulo then
+	stop("Must define InfiniteModulo")
+
+    if /InfiniteResource then
+	stop("Must define InfiniteResource")
+
+    if /InfiniteResourceOffsetStart then
+	stop("Must define InfiniteResourceOffsetStart")
+
+    FSAs := Build_FSAs(vars)
+
+    if \Flag_p then {
+	every decl := Get_C_Decl() do {
+	    sig := [Decl_2_Signature(FSAs["callee_epilogue"], decl[1]),
+		    Decl_2_Signature(FSAs["caller_prologue"], decl[2])]
+	    every write(!Perform_Placement(FSAs, sig))
+	    write()
+	}
+	write()
+    }
+    else {
+	Generate_Tests(FSAs)
+    }
+end
+
+####
+#
+# Set_Arg_Flags - This function sets the global argument variables from
+# their corresponding command line flags. 
+# 
+# Parameters:
+# args		: (list) : 
+#
+# Return value:
+# (list)	: A list of arguments not processed by the function. 
+# 
+####
+
+procedure Set_Arg_Flags(args)
+    local arg, var, remain
+
+    remain := []
+    args := create !args
+    every arg := |@args do {
+	
+	# Check if the argument starts with a "-". If it does, we process
+	# it, otherwise, leave it for processing later in the remain list
+	
+	if (arg[1] == "-") then {
+	    
+	    # Derive the name of the flag's variable from the flag. It is
+	    # just prepended with the string "Flag_". Thus, -D is FlagD.
+	    
+	    var := "Flag_" || arg[2:0]
+	    
+	    # If the variable doesn't exist, it is not a valid flag. Tell
+	    # the user.
+	    
+	    if variable(var) then {
+	    
+		# If the flag variables value is non-null, the flag requires a
+		# value on the command line. Look for it
+
+		if \variable(var) == "value required" then  {
+		    if not (variable(var) := @args) then
+			stop ("Value required for flag ", arg)
+		    if variable(var)[1] == "-" then
+			stop ("Value required for flag ", arg)
+		}
+		
+		# There is not a required value, just set the flag to 100.
+		
+		else
+		    variable(var) := 100
+	    }
+	    else
+		stop("No such flag: ", arg)
+	}
+
+	# This is not a flag that is processed by this function
+
+	else
+	    put(remain, arg)
+    }
+    
+    return remain
+end
+
+###############################################################################
+#
+# Read_FSA_File - Reads description of FSA's from file
+#
+# filename:string - name of file
+#
+# Returns:table(string,list[list...]|value) - table containing file variables
+#
+###############################################################################
+
+procedure Read_FSA_File(filename)
+    local line, hfile, decl, variables, result
+
+    variables := table()
+
+    if not(hfile := open(filename)) then
+	stop("Cannot open file `", filename, "'")
+
+    line := ""
+
+    every line ||:= !hfile
+
+    if not (line ? (result := file_read(), pos(0))) then {
+	stop("Rejected")
+    }
+    every decl := !result do {
+#	file_print_value(decl)
+	variables[decl[1]] := decl[2] 
+    }
+    Prepare_Tables(variables)
+
+    return variables
+end
+
+###############################################################################
+#
+# Prepare_Tables
+#
+# Manipulates FSA tables. Sets out-of-range values to null, increments all
+# array references from [0..n-1] to [1..n] values -- which is what Icon uses.
+#
+# variables:table(string,list[list...]|value) - table of variables to prepare
+#
+# Return:<none>
+#
+###############################################################################
+
+procedure Prepare_Tables(variables)
+    local name
+
+    every name := ("caller" | "callee") || ("_prologue" | "_epilogue") ||
+	("_delta") do
+	Nullify_Table(variables[name])
+
+    every name := ("caller" | "callee") || ("_prologue" | "_epilogue") ||
+	("_delta" | "_lambda")do
+	Increment_Table(variables[name])
+end
+
+###############################################################################
+#
+# Nullify_Table - Sets out-of-range values to null
+#
+# list:list[list[...], list[...], ...] - table to nullify.
+# size:int range of valid indices. N indicates values from [1..N] are valid
+#
+# Return:<none>
+#
+###############################################################################
+
+procedure Nullify_Table(list, size)
+    local index
+
+    if type(list) ~== "list" then
+	return
+
+    /size := *list
+    every index := 1 to *list do {
+	if type(list[index]) == "list" then
+	    Nullify_Table(list[index], size)
+	else
+	    if \list[index] > size - 1 then
+		list[index] := &null
+    }
+end
+
+###############################################################################
+#
+# Increment_Table - Increments all values in a "table"
+#
+# list:list[list[...], list[...], ...] - table to use
+#
+# Return:<none>
+#
+###############################################################################
+
+procedure Increment_Table(list)
+    local index
+
+    if type(list) ~== "list" then
+	return
+
+    every index := 1 to *list do {
+	if type(list[index]) == "list" then
+	    Increment_Table(list[index])
+	else
+	    \list[index] +:= 1
+    }
+end
+
+#record fsa_info(sigma, Delta, delta, lambda, symbol_map, type_map)
+record fsa_info(sigma, Delta, delta, lambda, symbol_map)
+
+###############################################################################
+#
+# Build_FSAs - construct fsa_info structures from individual variables.
+#
+# variables:table(string,list[list...]|value) - table of FSA variables
+#
+# Return:table(string,fsa_info) - table of named FSAs
+#
+###############################################################################
+
+procedure Build_FSAs(variables)
+    local fsa, FSAs, lab_no
+
+    FSAs := table()
+    every name := ("callee" | "caller") || ("_prologue" | "_epilogue") do {
+	fsa := fsa_info()
+	if not (fsa.delta := \variables[name || "_delta"]) then
+	    next
+	if not (fsa.lambda := \variables[name || "_lambda"]) then
+	    next
+	if not (fsa.sigma := \variables[name || "_sigma"]) then
+	    next
+	if not (fsa.Delta := \variables[name || "_Delta"]) then
+	    next
+	fsa.sigma := Input_Symbols(fsa.sigma)
+	fsa.Delta := Output_Symbols(fsa.Delta)
+	fsa.symbol_map := Build_Symbol_Map(fsa.sigma)
+	FSAs[name] := fsa
+    }
+    return FSAs
+end
+
+###############################################################################
+#
+# Input_Symbols - Construct input_symbol records from list form.
+#
+# labels:list[list[int|string,int,int]] - table of type, size and rval info
+#
+# Return:list[input_symbol] - corresponding list of input_symbol records
+#
+###############################################################################
+
+procedure Input_Symbols(labels)
+    local label, result, symbol
+
+    result := []
+    every label := !labels do {
+	symbol := input_symbol(label[1], label[2], label[3])
+	if symbol.rval == 0 then
+	    symbol.rval := &null
+	if \Flag_i then
+	    write(Input_Symbol_String(symbol))
+	put(result, symbol)
+    }
+    return result
+end
+
+###############################################################################
+#
+# Output_Symbols - Construct output_symbol records from list form.
+#
+# labels:list[list[outputs]] where:
+# outputs:list[int|string,list[int|string,&null,int,int],int,int]
+#	table of resource, index, offset and size info
+#
+# Return:list[output_symbol] - corresponding list of output_symbol records
+#
+###############################################################################
+
+procedure Output_Symbols(labels)
+    local label, result, symbol, index, symbols, output
+
+    result := []
+    every label := \!labels do {
+	symbols := []
+	every output := !label do {
+	    index := output[2]
+	    if \index then
+		index := output_symbol(index[1], index[2], index[3], index[4])
+	    symbol := output_symbol(output[1], index, output[3], output[4])
+	    put(symbols, symbol)
+	}
+	if \Flag_i then
+	    write(Output_String_String(symbols))
+	put(result, symbols)
+    }
+    return result
+end
+
+###############################################################################
+#
+# Output_String_String
+#
+# Construct string representation of a string of output symbols
+#
+# string:list[output_symbol] - string of output symbols to stringify
+#
+# Return:string
+#
+###############################################################################
+
+procedure Output_String_String(string)
+    local result, comma, symbol
+ 
+    result := ""
+    comma := ""
+    every symbol := !string do {
+	result ||:= comma || Output_Symbol_String(symbol) 
+	comma := ", "
+    }
+    if *string > 1 then
+	return "{" || result || "}"
+    return result
+end
+
+###############################################################################
+#
+# Output_Symbol_String - Construct string representation of output symbol
+#
+# symbol:output_symbol 
+#
+# Return:string
+#
+###############################################################################
+
+procedure Output_Symbol_String(symbol)
+    local index, size
+
+    if \symbol.index then
+	index := symbol.index.resource || "[" || symbol.index.offset || "]+"
+    else
+	index := ""
+
+    if symbol.size ~= 1 then
+	size := ":" || symbol.size + symbol.offset - 1
+    else
+	size := ""
+    return symbol.resource || "[" || index || symbol.offset || size || "]"
+end
+
+###############################################################################
+#
+# Input_Symbol_String - Construct string representation of input symbol
+#
+# symbol:intput_symbol
+#
+# Return:string
+#
+###############################################################################
+
+procedure Input_Symbol_String(symbol)
+    local rval
+    rval := symbol.type[1] || "(" || symbol.size || ")"
+    if \symbol.rval then
+	rval ||:= "/r"
+    return rval
+end
+
+###############################################################################
+#
+# Build_Symbol_Map
+#
+# Construct mapping from input symbol "name" to record. A name is just the
+# Type and size concatinated together (i.e. double8).
+#
+# symbols:list[input_symbol]
+#
+# Return:table(string,input_symbol)
+#
+###############################################################################
+
+procedure Build_Symbol_Map(symbols)
+    local symbol, symbol_map, index
+
+    symbol_map := table()
+    every symbol := symbols[index := 1 to *symbols] do
+	symbol_map[symbol.type || symbol.size] := index
+    return symbol_map
+end
+
+###############################################################################
+#
+# Generate_Tests - Generate test programs from FSA description
+#
+# FSAs:table(string,fsa_info)
+#
+# Return:<none>
+#
+###############################################################################
+
+procedure Generate_Tests(FSAs)
+    local fsa, name, total
+
+    total := 0
+    if \Flag_Eacyclic then {
+	if \Flag_c then
+	    write(&errout, "Acyclic paths: ")
+	every fsa := FSAs[name := key(FSAs)] do
+	    total := FSA_Acyclic_Paths(fsa, GenProg, total)
+	if \Flag_c then {
+	    write(&errout)
+	    write(&errout, "Total tests: ", total)
+	}
+	write(&errout)
+    }
+    total := 0
+    if \Flag_Epairs then {
+	if \Flag_c then
+	    write(&errout, "Pairs paths: ")
+	every fsa := FSAs[name := key(FSAs)] do
+	    total := FSA_Pair_Paths(fsa, GenProg, total)
+	if \Flag_c then {
+	    write(&errout)
+	    write(&errout, "Total tests: ", total)
+	    write(&errout)
+	}
+    }
+    total := 0
+    if \Flag_Epaths then {
+	if \Flag_c then
+	    write(&errout, "Paths: ")
+	every fsa := FSAs[name := key(FSAs)] do
+	    total := FSA_Paths(fsa, GenProg, total)
+	if \Flag_c then {
+	    write(&errout)
+	    write(&errout, "Total tests: ", total)
+	    write(&errout)
+	}
+    }
+end
+
+###############################################################################
+#
+# GenProg - Generate a test programs from a signature
+#
+# fsa:fsa_info - the fsa that the signature was derived from
+# sig:list[int] - input symbol list
+#
+# Return:<none>
+#
+###############################################################################
+
+procedure GenProg(fsa, sig)
+    local types, symbol, str
+    
+# no idea what this does.
+
+#    if \Flag_q then {
+#	str := ""
+#	every str ||:= Input_Symbol_String(fsa.sigma[!sig[1:0]])
+#	if str == \StartupName then {
+#	    Flag_q := &null;
+#	    StartupName := &null;
+#	}
+#	else {
+#	    return
+#	}
+#    }
+
+    if /Flag_t then {
+	writes("Sig: ")
+	every writes(Input_Symbol_String(fsa.sigma[!sig[1:0]]), " ")
+	write()
+    }
+
+    types := [[],[]]
+    every symbol := fsa.sigma[!sig] do
+	if /symbol.rval then
+	    put(types[2], symbol)
+	else
+	    put(types[1], symbol)
+
+    if \Flag_t then
+	Generate_C_Program(sig, fsa)	
+    else
+	if \Flag_d then {
+	    every write(!Perform_Placement(fsa, types))
+	    write()
+	}
+end
+
+###############################################################################
+#
+# Perform_Placement - Determine placement of arguments for a signature
+#
+# fsa:fsa_info|list[fsa_info] - the fsa that the signature was derived from
+# sig:list[list[input_symbol],list[input_symbol]] - input symbol list
+#
+# Return:list[string]
+#
+###############################################################################
+
+procedure Perform_Placement(fsa, sig)
+    local symbol
+    local placement, delta, lambda, symbol_map, sigma, Delta, result, str
+    local slist, places, output, place, count, aname
+
+    if type(fsa) == "table" then {
+	FSAs := fsa
+	places := []
+	every fsa := FSAs[name := key(FSAs)] do {
+	    if name == ("caller" | "callee") || "_epilogue" then
+		place := Perform_Placement(fsa, [sig[1],[]])
+	    else
+		place := Perform_Placement(fsa, [[],sig[2]])
+	    every put(places, !place)
+	}
+	return places
+    }
+
+    places := table()
+    result := []
+    if *sig[2] = 0 then {
+	slist := sig[1]
+	aname := "RVAL"
+    }
+    else {
+	slist := sig[2]
+	aname := "ARG"
+    }
+
+    placement := Determine_Placement(fsa, slist)
+    placement := Final_Placement(fsa, placement)
+
+    count := 1
+    every place := !placement do {
+	str := aname || "(" || count || "): "
+	str ||:= Output_String_String(place)
+	count +:= 1
+	put(result, str)
+    }
+    return result
+end
+
+###############################################################################
+#
+# Decl_2_Signature - Convert a C declaration to a signature format
+#
+# fsa:fsa_info
+# decl:list[list[list[string, string], string], ...] - C declaration
+#
+# Return:list[input_symbol] - signature
+#
+###############################################################################
+
+procedure Decl_2_Signature(fsa, alist)
+    local result, arg, type
+
+    result := []
+    every arg := !alist do {
+	type := arg[1][1]
+	case type of {
+	    "char" : type := "byte1"
+	    "short" : type := "word2"
+	    "longword" : type := "longword4"
+	    "float" : type := "float4"
+	    "double" : type := "double8"
+	    "void" : next
+	    default : {
+		if type ? ="struct/" then
+		    type := "struct" || type[8:0]
+	    }
+	}
+ 	put(result, fsa.sigma[fsa.symbol_map[type]])
+    }
+    return result
+end
+
+procedure PrintList(l)
+    if type(l) ~== "list" then {
+	writes(\l | "-", " ")
+	fail
+    }
+    writes("[ ")
+    every PrintList(!l)
+    write("] ")
+    return
+end
+
+procedure FSA_Paths(fsa, proc, total, q, path, visited, first)
+			     
+    local arc, q1
+
+    /q := 0
+    /path := []
+    /visited := set([0])
+
+    /total := 0
+    every q1 := \fsa.delta[q + 1][arc := 1 to *fsa.delta[1]] do {
+	if /Flag_a & fsa.sigma[arc].type == ("byte" | "word" | "float") then {
+	    next;
+	}
+	put(path, arc)
+	
+	if not member(visited, q1) then {
+	    insert(visited, q1)
+	    total := FSA_Paths(fsa, proc, total, q1, path, visited, 1)
+	    delete(visited, q1)
+	}
+
+	total +:= 1
+	if \Flag_c then {
+	    if total % 1000 = 0 then
+		writes(&errout, "\rTests so far: ", total)
+	}
+	else
+	    \proc(fsa, path) 
+
+	pull(path)
+    }
+    return total
+end
+
+procedure FSA_Pair_Paths(fsa, proc, total, q, path, visited, visitedl, output, outputl, trav_arcs, cycle, first)
+    local arc, q1, q_added, offset, o_added
+
+    /q := 1
+    /path := []
+    /output := set()
+    /outputl := []
+    /visited := set([1])
+    /visitedl := [1]
+    /total := 0
+
+    if /trav_arcs then {
+	trav_arcs := []
+	every put(trav_arcs, list(*!fsa.delta,0))
+	cycle := 1
+    }
+
+    every q1 := \fsa.delta[q][arc := 1 to *fsa.delta[1]] do {
+	if /Flag_a & fsa.sigma[arc].type == ("byte" | "word" | "float") then {
+	    next;
+	}
+	put(path, arc)
+	
+	offset := Infinite_Output_Offset(fsa, q, arc)
+	if member(output, \offset) then {
+	    o_added := &null
+	}
+	else {
+	    insert(output, \offset)
+	    o_added := 1
+	}
+	put(outputl,  \offset | "_");
+	push(visitedl, q1)
+	if member(visited, q1) then {
+	    q_added := &null
+	}
+	else {
+	    insert(visited, q1)
+	    q_added := q1
+	}
+	
+#	o_added := 1
+	if \o_added & \cycle & trav_arcs[q][arc] = 0 then {
+	    if \q_added then
+		trav_arcs[q][arc] := 1
+	    total := FSA_Pair_Paths(fsa, proc, total, q1, path, visited, visitedl, output, outputl,
+					trav_arcs, q_added, 1)
+	}
+
+	total +:= 1
+
+	if \Flag_c then {
+	    if total % 1000 = 0 then
+		writes(&errout, "\rTests so far: ", total)
+	}
+	else
+	    \proc(fsa, path) 
+#	every writes(!visitedl, " ")
+#	write()
+#	every writes(!outputl, " ")
+#	write()
+
+	pull(outputl)
+	delete(visited, \q_added)
+	if \o_added then
+	    delete(output, \offset)
+	pop(visitedl)
+	pull(path)
+    }
+    return total
+end
+
+procedure FSA_Acyclic_Paths(fsa, proc, total, q, path, visited, trav_arcs, first)
+    local arc, q1
+
+    /total := 0
+    /q := 1
+    /path := []
+    /visited := set([1])
+
+    if /trav_arcs then {
+	trav_arcs := []
+	every put(trav_arcs, list(*!fsa.delta,0))
+    }
+
+    every q1 := \fsa.delta[q][arc := 1 to *fsa.delta[1]] do {
+	if /Flag_a & fsa.sigma[arc].type == ("byte" | "word" | "float") then {
+	    next;
+	}
+
+	if trav_arcs[q][arc] = 1 then
+	    next
+
+	trav_arcs[q][arc] := 1
+
+	put(path, arc)
+	
+	if not member(visited, q1) then {
+	    insert(visited, q1)
+	    total := FSA_Acyclic_Paths(fsa, proc, total, q1, path, visited, trav_arcs, 1)
+	    delete(visited, q1)
+	}
+
+	total +:= 1
+
+	if \Flag_c then {
+	    if total % 1000 = 0 then
+		writes(&errout, "\rTests so far: ", total)
+	}
+	else
+	    \proc(fsa, path) 
+
+	pull(path)
+    }
+
+    return total
+end
+
+procedure Infinite_Output_Offset(fsa, q, arc)
+    local output
+    
+    output := fsa.Delta[fsa.lambda[q][arc]]
+    
+    output := output[-1]
+    if output.resource == InfiniteResource then {
+	return output.offset
+    }
+    return &null
+end

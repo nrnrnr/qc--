@@ -1,0 +1,141 @@
+procedure file_print_value(value)
+    writes(value[1], " = ")
+    file_print_value_only(value[2])
+    write()
+end
+
+procedure file_print_value_only(value)
+    if /value then
+	writes("<nl> ")
+    if type(value) == "list" then {
+	writes("[ ")
+        every (file_print_value_only(!value), writes(", "))
+	write("]")
+    }
+    else
+	writes(value, " ")
+end
+
+procedure file_read()
+    local elem, list
+
+    list := []
+    while elem := file_value() do
+	put(list, elem)
+
+    suspend list
+end
+
+# Any file value
+#
+# grammar: <table> | <constant>
+
+procedure file_value()
+    suspend file_table() | file_constant()
+end
+
+# A named table. Returns [name, value]
+#
+# grammar: <name> = <array>
+
+procedure file_table()
+    local name, value
+    suspend (name := file_name(), file_equal(), value := file_array(),
+	     [name, value])
+end
+
+# A named int. Returns [name, value]
+#
+# grammar: <name> = <int>
+
+procedure file_constant()
+    local name, value
+    suspend (name := file_name(), file_equal(), value := file_int() | file_string(),
+	     [name, value])
+end
+
+# An array delimited by "{" and "}". May be nested. Returns a list. 
+#
+# grammar: { <list> }
+
+procedure file_array()
+    suspend 2(file_obrace(), file_list(), file_cbrace())
+end
+
+# A list of array elements.
+#
+# grammar: <list> <list_elem> | <list_elem> | null
+
+procedure file_list()
+    local elem, list
+
+    list := []
+    while elem := file_list_elem() do
+	put(list, elem)
+
+    suspend list
+end
+
+# An element of a list.
+#
+# grammar: <int>, | <string>, | null | <array>,
+
+procedure file_list_elem()
+    suspend 1(file_int() | file_string() | &null, file_comma()) |
+	1(file_array(), file_comma())
+end
+
+# A name, or identifier.
+
+procedure file_name()
+    suspend (file_space(), tab(many(&letters ++ '_')))
+end
+
+# integer terminal
+
+procedure file_int()
+    suspend (file_space(), numeric(tab(many(&digits))))
+end
+
+procedure file_string()
+    suspend 3(file_space(), ="\"", tab(many(&cset -- "\"")), ="\"")
+end
+
+# "=" terminal.
+
+procedure file_equal()
+    suspend (file_space(), ="=")
+end
+
+# "{" terminal.
+
+procedure file_obrace()
+    suspend (file_space(), ="{")
+end
+
+# "}" terminal.
+
+procedure file_cbrace()
+    suspend (file_space(), ="}")
+end
+
+procedure file_oparen()
+    suspend (file_space(), ="(")
+end
+
+procedure file_cparen()
+    suspend (file_space(), =")")
+end
+
+# "," terminal.
+
+procedure file_comma()
+    suspend (file_space(), =",")
+end
+
+# Absorb any number of spaces.
+
+procedure file_space()
+    tab(many(' '))
+    suspend " "
+end

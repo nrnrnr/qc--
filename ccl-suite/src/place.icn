@@ -1,0 +1,172 @@
+###############################################################################
+#
+# Copyright (c) 1995 by Mark Bailey.
+#
+# This code is distributed WITHOUT ANY WARRANTY. No claims are made as to
+# whether it serves any particular purpose or even works at all.
+#
+###############################################################################
+
+###############################################################################
+#
+# File: place.icn
+#
+# Author: Mark Bailey
+#
+# Created: 6/19/95
+#
+# Description:
+#
+#      
+#
+# RCS Header:
+#	$Header$
+#
+# Change Log:
+#	$Log$
+#	Revision 1.1  1995/10/01 19:00:39  mwb5y
+#	Initial revision
+#
+#
+###############################################################################
+
+global InfiniteModulo
+global InfiniteResourceOffsetStart
+global InfiniteResource
+
+###############################################################################
+#
+# Determine_Placement - Determine the proper location for arguments 
+#
+# fsa:fsa_info - the fsa to use for computing placement
+# string:list[input_symbol] - signature to place.
+# 
+# Return:list[list[output,increment]] where:
+# output:list[output_symbol] - the output of placing an argument
+# increment:int - amount to increment the alignment pointer
+#
+###############################################################################
+
+procedure Determine_Placement(fsa, string)
+    local symbol, q, outputs, output, index
+
+    q := 1
+    outputs := []
+    every symbol := !string do {
+	if \Flag_d then {
+	    writes("State: ", q)
+	    writes(", Input: ", Input_Symbol_String(symbol))
+	}
+	if not (index := Find_Valid_Symbol(fsa, q, symbol)) then
+	    fail
+
+	output := [fsa.Delta[fsa.lambda[q][index[1]]], index[2]]
+	if \Flag_d then
+	    write(", Output: ", index[1], "[", Output_String_String(output[1]), "]")
+	put(outputs, output)
+	if not (q := \fsa.delta[q][index[1]]) then {
+	    write("No mapping for string")
+	}
+    }
+    if \Flag_d then
+	write("End state: ", q)
+    return outputs
+end
+
+###############################################################################
+#
+# Find_Valid_Symbol
+#
+# Find the proper input symbol to use. For constant sized types, this is 
+# straightforward. For variable sized (structs), we must find the largest
+# one in the table that has the same remainder after dividing the size by
+# InfiniteModulo.
+#
+# fsa:fsa_info - the fsa to use for computing placement
+# q:int - the current state of the fsa
+# symbol:input_symbol - the input symbol
+# 
+# Return:list[output,increment] where:
+# output:output_symbol - the output of placing an argument
+# increment:int - amount to increment the alignment pointer
+#
+###############################################################################
+
+procedure Find_Valid_Symbol(fsa, q, symbol)
+    local size, last_size, index, last_index
+
+#write("Considering label: ", Input_Symbol_String(symbol))
+    if /(index := fsa.symbol_map[symbol.type || symbol.size]) then
+	fail
+
+    if \fsa.delta[q][index] then {
+#    write("Returning label: ", Input_Symbol_String(symbol))
+#write("index is: ", index)
+	return [index, 0]
+    }
+    size := symbol.size % InfiniteModulo
+    last_size := size
+    size +:= InfiniteModulo
+#write("Considering label: ", symbol.type, " ", size)
+    while \fsa.delta[q][index := fsa.symbol_map[symbol.type || size]] do {
+	symbol.type || size
+	last_size := size
+	last_index := index
+	size +:= InfiniteModulo
+#write("Considering label: ", symbol.type, " ", size)
+    }
+#write("Returning label: ", symbol.type, " ", last_size)
+
+    return [last_index, symbol.size - last_size]
+end
+
+###############################################################################
+#
+# Final_Placement
+#
+# fsa:fsa_info - the fsa to use for computing placement
+# placement:list[list[output_symbol,int]] - list of output and increments for
+#	each argument
+#
+# Return:list[list[output_symbol]] - final outputs
+#
+###############################################################################
+
+procedure Final_Placement(fsa, placement)
+    local waterline, result, last, resource, start, places, locations, increment
+
+    waterline := table()
+    result := []
+
+    every locations := !placement do {
+#write()
+	increment := locations[2]
+	places := locations[1]
+	last := places[-1]
+	resource := last.resource
+        if resource ~== InfiniteResource then {
+            put(result, places)
+            next
+        }
+	start := last.offset
+	/waterline[resource] := InfiniteResourceOffsetStart
+#	/waterline[resource] := 0
+#write("Waterline[", resource, "]: ", waterline[resource])
+#	if waterline[resource] > start then
+	    waterline[resource] +:= Compute_Increment(waterline[resource], start, InfiniteModulo)
+#write("After incrment Waterline[", resource, "]: ", waterline[resource])
+	places := copy(places)
+	places[-1] := copy(places[-1])
+        places[-1].offset := waterline[resource]
+	waterline[resource] +:= last.size + increment
+        places[-1].size +:= increment
+#write("Waterline[", resource, "]: ", waterline[resource])
+	put(result, places)
+    }
+    return result
+end
+
+procedure Compute_Increment(X, Y, M)
+    return (M - (X % M) + (Y % M)) % M
+end
+
