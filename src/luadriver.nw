@@ -504,9 +504,7 @@ Ld.path     = "ld"          -- binary
 Ld.options  = ""            -- options
 
 Interp = Interp and error('Interp not empty') or {}
-Interp.path     = "qc--interp"
-Interp.options  = ""
-Interp.hashbang = "/usr/bin/env qc--interp" -- goes into executables
+Interp.hashbang = "#! /usr/bin/env qc-interp"
 @
 
 All logic for the command line is encapsulated in the [[CMD]] module.
@@ -688,7 +686,11 @@ function CMD.run ()
             i = i+1
         end 
         if not O.to_asm and not O.to_obj and not O.pretty then
-            CMD.link(objs, O.output)
+            if O.interp or backend == Backend.interp then
+                CMD.qs2exe(objs, O.output)
+            else
+                CMD.obj2exe(objs, O.output)
+            end    
         end
     end
     return 0
@@ -815,29 +817,17 @@ end
 @
 
 The linker takes a list of object files in a table [[objs]] and an
-optional output file. Note, that we are in quoting hell: the [[-P]]
-option typically will be multiple words and therefore we have to quote
-it. The shell-based approach to executing commands is dangerous and we
-should have an [[exec]] function that takes a list of arguments rather
-than a string.
+optional output file. 
 
 <<Lua Boot Script>>=
-function CMD.link(objs,out)
+function CMD.obj2exe(objs,out)
     local exe = out or "a.out"
     local cmd 
-    if backend ~= Backend.interp then
-        cmd = format ("%s %s -o %s"
-                     , Ld.path
-                     , Ld.options
-                     , exe
-                     )
-    else
-        cmd = format ("%s -o %s -P '%s'"
-                     , Interp.path      -- Interp.options ignored
-                     , exe
-                     , Interp.hashbang  -- what goes after #! in script
-                     )
-    end    
+    cmd = format ("%s %s -o %s"
+                 , Ld.path
+                 , Ld.options
+                 , exe
+                 )
     local i = 1
     while i <= objs.n do
         if type(objs[i]) == "string" then
@@ -845,10 +835,45 @@ function CMD.link(objs,out)
         end    
         i = i + 1
     end
-    
     CMD.exec(cmd)
     return exe
 end    
 @
 
+Lua files are linked by concatenating them with one Lua statement
+between any two files. The head of the file is a [[#!]] line taken from
+[[Interp.hashbang]]; finally, the resulting file is marked as
+executable.
+
+<<Lua Boot Script>>=
+function CMD.qs2exe(objs, out)    
+    local exe = out or "a.out"
+    local i = 1
+    local s
+    
+    if writeto(exe) == nil then CMD.error ("cannot open file "..objs[i]) end
+    write(Interp.hashbang .. "\n")
+    while i <= objs.n do
+        if type (objs[i]) == "string" then
+            if readfrom(objs[i]) == nil then
+                writeto() -- restore stdout
+                CMD.error ("cannot open file "..objs[i]) 
+            end
+            
+            s = read() -- copy file, line by line
+            while s ~= nil do
+                write(s)
+                write("\n")
+                s = read()
+            end
+            write("CMM.new_assembly_unit()\n")
+            readfrom() -- close file, restore stdin
+        end
+        i = i+1
+    end
+    writeto() -- close input, restore stdout
+    CMD.exec("chmod +x " .. exe)
+    return exe
+end    
+@
 
