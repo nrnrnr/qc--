@@ -57,13 +57,11 @@ end
 
 module Make
   (G   : Agraph.S) 
-  (Asm : Asm.S with type instruction = G.graph) = 
+  (Asm : Asm.S with type instruction = G.node) = 
 struct
     module GM = G.Make
     <<module Make>> 
 end
-
-<<toplevel>>
 @
  
 
@@ -81,6 +79,7 @@ annotate the [[default_memory]] definition.
 let default_convention         = "C--"  (* gospel truth *)
 let default_assertion          = -1     (* unused *)
 let default_memory             = 'm'    (* Rtl.space *)
+let toplevel_section           = "toplevel" (* bogus *)
 @
 
 <<>>=
@@ -131,13 +130,39 @@ the result of [[g]].  Think of data flowing from right to left.
 let (<<) f g   = fun x -> f (g x)
 @
 
+Fold is an old friend of us. We like to abbreviate its name.
+
+<<>>=
+let foldl = List.fold_left
+let foldr = List.fold_right
+@
+
+
 % ------------------------------------------------------------------ 
 \subsubsection{Module \texttt{Make}}
 % ------------------------------------------------------------------ 
 
-The implementation [[Make]] is a functor that receives an abstract
-view ([[Agraph]] -- \module{agraph}) of the flow graph as an argument.
+The implementation [[Make]] is a functor that receives two modules as
+arguments: an abstract assembler interface [[Asm]] and an abstract
+flow graph interface [[Agraph]]. The functions in [[Make]] create
+(abstract) assembly code where an instruction in the assembly code is
+a flow graph. The flow graph will in later steps replaced by real
+machine instructions.
 
+An assembly program is basically a list of [[Asm.action]] value. We
+like to avoid building this list directly and instead use a new type
+[[asm]] with a some operations.  This gives us the chance to maintain
+some state about the list constructed in order to respect constraints
+that may be attached to an assembly program.  Rather than using the
+[[::]] operator to build the list we use a function that can check its
+current argument against some state.  
+
+<<module Make>>=
+type asm                = ASM of Asm.action list
+let  empty              = ASM []
+let (^^) x (ASM y)      = ASM (x::y)
+let actions (ASM x)     = x
+@
 
 The [[ty]] function returns the number of bits denoted by a type in
 the {\small AST}.
@@ -279,26 +304,25 @@ and expr env = function
 
 
 <<>>=
-let memsize env ir = function
+let memsize env x asm = match x with
     | A.NoSize        -> true
     | A.DynSize       -> true
     | A.FixSize(e)    -> true
 
 <<module Make>>=
-let initialized_data expr asm =
-  Asm.Emit((fun e -> assert false) expr, assert false) :: asm
+let initialized_data asm expr = assert false
 
-let rec init env asm = function
-    | A.InitAt(x,_)   -> init env asm x
-    | A.InitExprs(es) -> List.fold_right initialized_data es asm
+let rec init env x asm = match x with
+    | A.InitAt(x,_)   -> init env x asm
+    | A.InitExprs(es) -> foldr initialized_data es asm
     | A.InitStr(s)    -> assert false
     | A.InitUStr(s)   -> assert false
 
 <<module Make>>=
-let rec datum env asm = function
-    | A.DatumAt(x,_)        -> datum env asm x
+let rec datum env x asm = match x with
+    | A.DatumAt(x,_)        -> datum env x asm
     | A.Label(n)            -> assert false
-    | A.Align(a)            -> Asm.Align a :: asm
+    | A.Align(a)            -> Asm.Align a ^^ asm
     | A.MemDecl(t,m,Some i) -> assert false
     | A.MemDecl(t,m,None)   -> assert false
 
@@ -495,56 +519,56 @@ and arm env ir = function
 % ------------------------------------------------------------------ 
 
 Each procedure is translated into a control flow graph that shares no
-nodes with any other control flow graph.  A procedure's control flow
-graph is anchored with a label in an [[Agraph.graph]] data structure
-with the name of the procedure. The next node is the entry node of the
-flow graph.
+nodes with any other control flow graph.  The generation of the label
+for this procedure is handled at the assembly level and not on the
+flow graph level.  Thus, the first node of the flow graph is the entry
+node.
 
-A procedure starts with a [[CopyIn]] node that assigns the incoming
-parameters to the named registers and ends with an [[Exit]] node.  The
-types of the formal parameters are bound in the local environment
-belonging to a procedure.  The local environment [[env]] for a
-procedure is found in its entry in the fat environment.
+A procedure really starts with a [[CopyIn]] node that assigns the
+incoming parameters to the named registers and ends with an [[Exit]]
+node.  The types of the formal parameters are bound in the local
+environment belonging to a procedure.  The local environment [[env]]
+for a procedure is found in its entry in the fat environment.
 
 <<module Make>>=
-and proc env props graph (cc,n,fs,bb) =  
-    let decorate n = G.bind props n                       in
+and proc env props (asm: asm) (cc,n,fs,bb) =  
+    let decorate n = G.bind props n                                in
     let env        = match F.findv n env with
                      | _,(F.Label(F.Proc e),_) -> e
-                     | _  -> assert false                 in
-    let cc         = Aux.Option.get default_convention cc in
-    let frml       = fun (h,i,t,n) -> (n,ty env t,h)      in
-    let label a    = decorate (GM.label n a)              in
-    let entry a    = decorate (GM.entry a)                in
+                     | _  -> assert false                          in
+    let graph      = GM.graph () (* fresh graph for this proc *)   in
+    let cc         = Aux.Option.get default_convention cc          in
+    let frml       = fun (h,i,t,n) -> (n,ty env t,h)               in
+    let entry a    = decorate (GM.entry a)                         in
     let copy  a    = decorate (GM.copy_in (List.map frml fs)
-                     G.ProcParameters cc a)               in
-    let bdy   a    = body env props graph a bb            in
-    let exit       = decorate (GM.exit graph)             in
-        (label << entry << copy << bdy) exit
-@
+                     G.ProcParameters cc a)                        in
+    let bdy   a    = body env props graph a bb                     in
+    let exit       = decorate (GM.exit graph)                      in
+    let sym        = Asm.Local(n)                                  in
+        (  Asm.Function sym
+        ^^ Asm.DefineSymbolHere(sym)
+        ^^ Asm.EmitInstruction ((entry << copy << bdy) exit)
+        ^^ asm
+        )
+@   
     
-    
-% ------------------------------------------------------------------ 
-\paragraph{Unused}
-% ------------------------------------------------------------------ 
-
-<<unused>>=
-and decl env ir = function
-    | A.DeclAt(x,_)    -> decl env ir x
-    | A.Import( t, ns) -> true
-    | A.Export( t, ns) -> true
-    | A.Const (t,n,e)  -> true
-    | A.Registers( rs) -> true
-    | A.Typedef (t,nn) -> true
-    | A.Target (arch)  -> true
-    | A.Pragma         -> true
+<<module Make>>=
+and decl env x (asm: asm) = match x with
+    | A.DeclAt(x,_)    -> decl env x asm
+    | A.Import( t, ns) -> assert false
+    | A.Export( t, ns) -> assert false
+    | A.Const (t,n,e)  -> asm (* skip *)
+    | A.Registers( rs) -> asm (* skip *)
+    | A.Typedef (t,nn) -> asm (* skip *)
+    | A.Target (arch)  -> asm (* skip *)
+    | A.Pragma         -> asm (* skip *)
 
 <<module Make>>=
-let rec section env asm = function
-    | A.SectionAt(x,_)     -> section env asm x
+let rec section env props x (asm: asm) = match x with
+    | A.SectionAt(x,_)     -> section env props x asm 
     | A.Decl(d)            -> assert false
     | A.Datum( d)          -> assert false
-    | A.Procedure(p)       -> proc env G.Props.empty (GM.graph()) p
+    | A.Procedure(p)       -> proc env props asm p
     | A.SSpan( e1, e2, ss) -> assert false
 @            
     
@@ -553,12 +577,19 @@ let rec section env asm = function
 \paragraph{Toplevel}
 % ------------------------------------------------------------------ 
 
-<<unused>>=
-let rec toplevel env ir = function
-    | A.ToplevelAt(x, _)  -> toplevel env ir x
-    | A.Section(name, ss) -> true
-    | A.TopDecl(d)        -> true
-    | A.TopProcedure(p)   -> true
+What to do with top-level procedures? They should go into some section
+because otherwise they will end up in whatever section is currently
+active which just seems wrong.
+
+<<module Make>>=
+let rec toplevel env x asm = match x with
+    | A.ToplevelAt(x, _)  -> toplevel env x asm 
+    | A.Section(name, ss) -> let s = foldr (section env G.Props.empty) ss asm 
+                             in Asm.Section(name) ^^ s
+    | A.TopDecl(d)        -> decl env d asm 
+    | A.TopProcedure(p)   -> (  Asm.Section(toplevel_section) 
+                             ^^ proc env G.Props.empty asm p
+                             )
 @
 
 
@@ -567,7 +598,10 @@ let rec toplevel env ir = function
 % ------------------------------------------------------------------ 
 
 <<>>=
-let program env ir ds = true
+let program env tt =
+    let asm = foldr (toplevel env) tt empty in
+        ([],actions asm) 
+      
 @
 
 % ------------------------------------------------------------------ 
@@ -645,20 +679,3 @@ and tyExpr env = function
 @
 
 
-% ------------------------------------------------------------------ 
-\subsubsection{Exported top-level functions}
-% ------------------------------------------------------------------ 
-
-We now leave the implementation of [[Make]] and return to the
-top-level of our module.  It contains functions called from module
-\module{main} in response to command line arguments to the compiler.
-
-<<toplevel>>=
-let check map program =
-    let env        = Fenv.Dirty.empty map                   in
-    let env        = Elab.Env.global env program            in
-    let env        = Elab.Check.global env program          in
-        if   Fenv.Dirty.errorFlag env
-        then E.error "compilation aborted due to errors in static semantics"
-        else Fenv.clean env
-@

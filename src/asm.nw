@@ -50,26 +50,19 @@ of strings it can use to intialize itself.
 
 <<asm.asdl>>=
 module asm {
-  program = (string* initialization_args, action*)
-  action = <<constructors for actions>>
-  <<assembly interface types>>
-}
+  <<asm types>>
+  
+  program       = (string* initialization_args, action*)
+  action        = <<constructors for actions>>
+ 
+  symbol        = <<constructors for symbols>>
+  label         = <<constructors for labels>>
+  reladdr       = <<constructors for relocatable addresses>>
+}  
 @
-
 
 {\asdl} has no abstraction, so we use [[string]] to represent an
 opaque type. 
-
-\begin{quote}\it
-    \begin{itemize}
-    \item Should constants and values be represented by [[Bits.bits]]?
-    \item Width should be denoted in bits rather than in bytes (section
-          \ref{sec:asm:values}).
-    \end{itemize}
-\end{quote}
-
-Tables \ref{tab:asm-ty}, \ref{tab:asm-int-fun}, and \ref{tab:asm-fun}
-summarize the types and functions exported by this interface.
 
 % ------------------------------------------------------------------ 
 \subsection{What the assembler does}
@@ -94,146 +87,6 @@ within sections.  To support separate compilation, names may include
 references to locations defined in other compilations; such references
 are resolved at link time.
 
-@ 
-\begin{table}
-\noindent\begin{tabularx}{\textwidth}{|l|l|X|}
-\multicolumn1{l}{Type}&\multicolumn2{l}{Abbreviation\qquad Meaning}\\
-\noalign{\smallskip}
-\hline
-[[label]]       &\emph{label}   & A label.\\
-\hline
-[[reladdr]]     &\emph{relAddr} & A relocatable address.\\
-\hline
-[[symbol]]      &\emph{sym}     & An assembly-language symbol.\\
-\hline
-[[instruction]] &\emph{instr}   & A machine instruction.\\
-\hline
-\end{tabularx}
-\caption{Types used in this interface}
-\label{tab:asm-ty}
-
-% l2h let providecommand newcommand
-\providecommand\category[1]{%
-  \noalign{\medskip}\multicolumn2{l}{\qquad \emph{#1}}\\\noalign{\smallskip}}
-% l2h macro category 1 <em>#1</em></td></tr><tr><td>
-
-\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
-\noindent\begin{tabularx}{\textwidth}{|>{\setlength\hsize{1.15\hsize}}>{\small\hangindent=2em\hangafter=1}Y|>{\setlength\hsize{0.85\hsize}}Y|}
-\category{Relocatable addresses}
-\hline
-[[Asm_newaddr  (]]\rlap{\emph{label}}\phantom{\emph{relAddr}} [[l, int offset)]]&Create address $L+k$.\\
-\hline
-[[Asm_shiftaddr(]]\emph{relAddr} [[a, int offset)]]&Create address $a+k$.\\
-\hline
-[[Asm_symreloc (Assembler, const char *)]]&Find relocatable address
-corresponding to name.\\
-\hline
-\end{tabularx}\\
-
-\caption{Other functions defined in this interface}
-\label{tab:asm-int-fun}
-
-\end{table}
-
-
-\begin{table}
-\setlength\extrarowheight{0.6pt}
-\providecommand\category[1]{%
-  \noalign{\vskip0.7\medskipamount}%
-  \multicolumn2{l}{\qquad \emph{#1}}\\
-  \noalign{\vskip0.7\smallskipamount}}
-
-\noindent\begin{tabularx}{\textwidth}{|>{\setlength\hsize{0.88\hsize}}>{\small\hangindent=1.5em\hangafter=1\raggedright\arraybackslash}X|>{\setlength\hsize{1.12\hsize}}X|}
-\category{Symbols and names}
-\hline
-[[Import(string)]]&Symbol for imported name.\\
-\hline
-[[Export(string)]]&Symbol for exported name.
-\\\hline
-[[Local (string)]]&Symbol for local (private) name.
-\\\hline
-% l2h ignore break
-[[Common(string name,]] \hfil\break[[int size, int align, string section)]]&
-Common symbol.
-\\\hline
-[[Lookup(string)]]&
-The symbol with the given name.
-\\\hline
-[[Offset(string,]] \rlap{\emph{sym}[[, int)]]}&
-A symbol defined relative to another symbol (deprecated).
-\\\hline
-\category{Actions related to symbols and names}
-\hline
-[[DefineSymbolHere (]]\emph{sym}[[)]]&
-Bind the symbol to the current location (e.g., define label).
-\\\hline
-[[DefineSymbolConst(]]\emph{sym}\rlap{[[, int)]]}&
-Bind a symbol to a constant.
-\\\hline
-[[Function(]]\emph{sym}[[)]]&
-Start a function definition.
-\\\hline
-\category{Sections and the location counter}
-\hline
-[[Section(string)]]&
-Change sections.
-\\\hline
-[[CurrentSection(void)]]&
-Return the name of the current section.
-\\\hline
-[[Org(int n)]]&
-Set the location counter to [[n]].
-\\\hline
-[[Align(int n)]]&
-Round the location counter to an [[n]]-byte boundary.
-\\\hline
-[[Addlc(int n)]]&
-Add [[n]] to the location counter.
-\\\hline
-\category{Emitting values and instructions}
-\hline
-[[EmitZeroes(int n)]]&
-Write [[n]] zero bytes.
-\\\hline
-[[EmitInstruction(]]\emph{instruction}[[)]]&
-Emit an instruction.
-\\\hline
-[[Emit(int value, int width)]]&
-Emit [[value]] ([[width]] bytes wide).
-\\\hline
-[[Emita(reladdr)]]&
-Emit a relocatable address.
-\\\hline
-[[Emitf32(int sign, int exp, int mantissa)]]&
-Emit a 32-bit IEEE float.
-\\\hline
-[[Emitf64(int sign, int exp, int mhi, int mlo)]]&
-Emit a 64-bit IEEE float.
-\\\hline
-[[Emitf32s(string)]]&
-Emit a 32-bit IEEE float (from string).
-\\\hline
-[[Emitf64s(string)]]&
-Emit a 64-bit IEEE float (from string).
-\\\hline
-\category{Miscellaneous}
-\hline
-[[Comment(string)]]&
-Insert a comment.
-\\\hline
-[[Asmtext(string)]]&
-Insert arbitrary text into the assembly language (deprecated).
-\\\hline
-\end{tabularx}
-
-\caption{More actions}
-
-\label{tab:asm-fun}
-
-\end{table}
-
-
-@
 % ------------------------------------------------------------------ 
 \subsection{Labels and relocatable addresses}
 % ------------------------------------------------------------------ 
@@ -244,10 +97,9 @@ locations or to values.  Relocatable addresses can nevertheless
 appear as operands to many machine instructions, so it is appropriate
 to use them in {\rtl}s.
 
-<<assembly interface types>>=
-label =   Symlabel (symbol)
-reladdr = <<constructors for relocatable addresses>>
-@ 
+<<constructors for labels>>=
+  Symlabel (symbol)
+@
 
 In most assemblers, a relocatable address is:
 
@@ -278,11 +130,10 @@ assembly-language symbols, as detailed below.
 \subsection{Names and symbols}
 % ------------------------------------------------------------------ 
 
-The assembler works with a \emph{single} name space.
-Names can be imported, exported, common (Fortran-style), or local to
-the compilation unit.%
-\footnote{N.B.~the name space is flat, so there is no such thing as a
-symbol that is local to a function.} 
+The assembler works with a \emph{single} name space.  Names can be
+imported, exported, common (Fortran-style), or local to the
+compilation unit.  \footnote{N.B.~the name space is flat, so there is
+no such thing as a symbol that is local to a function.}
 
 Every name is associated with a relocatable address.  Except in the
 special case of [[offset]], the [[k]]~part of the relocatable address
@@ -291,25 +142,18 @@ Imported labels are unbound.  Exported and local labels are bound
 either to locations in relocatable blocks or to integers.  Note that
 additional information is associated with common symbols.
 
-<<assembly interface types>>=
-symbol = Import (string name)
-       | Export (string name)
-       | Local (string name)
-       | Common (string name, int size, int align, string section)
-       <<other constructors for symbols>>
+<<constructors for symbols>>=
+  Import (string name)
+| Export (string name)
+| Local (string name)
+| Common (string name, int size, int align, string section)
+<<other constructors for symbols>>
 @ 
 
 It is an unchecked error to create a program that registers the same
 name in different scopes.  Multiple calls to [[Import]] with the same
 name are Ok.  It is not determined whether implementations can handle
 multiple calls of [[Export]] or [[Local]] with the same name.
-
-\iffalse
-% Irrelevant now that define uses symbols not names
-Undeclared names are
-assumed to be imported, unless they are defined,
-in which case they are assumed to be local.
-\fi
 
 A common symbol may be declared in multiple compilation units, with
 multiple sizes and alignments.  The linker reserves an area with the
@@ -434,54 +278,25 @@ instruction set.
 
 <<constructors for actions>>=
 | EmitInstruction (concrete_instruction)
-<<assembly interface types>>=
-concrete_instruction = (string)
+
+<<asm types>>=
+concrete_instruction = (string) -- view !
 @ 
 
 % ------------------------------------------------------------------ 
 \subsection{Values}\label{sec:asm:values}
 % ------------------------------------------------------------------ 
 
-\subsubsection{Integers}
-
-We can emit single integers up to the largest width supported.  The
-width is given explicitly in bytes.  We can also emit relocatable
-addresses in the native pointer size of the target
-machine.\footnote{But \emph{which} native pointer size?  The native
-code pointer size, or the native data pointer size?  A conundrum.}
+{\PAL} considers all values as a bit vector, no matter whether they
+are interpreted as integer, float, or address. Thus, a single action
+to emit a value suffices.
 
 <<constructors for actions>>=
-| Emit  (int value, int width)  -- emit value of given width (in bytes)
-| Emita (reladdr)               -- emit address
-@ 
+| Emit (bits)                   -- width in bits
 
-Although {\asdl} pickles support integers of arbitrary size, {\asdl}
-data types do not.  Therefore, if it is desired to support
-cross-assembly to a machine with a larger word size than the host
-machine, large constants will have to be emitted in pieces.  This
-requirement should not represent an undue burden because large
-constants will have to be represented using multiple host words
-anyway.
-
-\subsubsection{Floats}
-
-{\asdl}  has no floating-point values.  Small hardship; since we take
-cross-compilation as routine, we can't pass host floating-point values
-anyway.  We encode floating-point values as sign, exponent, mantissa,
-or as ASCII.  Passing the mantissa may require two words, [[mlo]] for
-the least significant 32~bits, and [[mhi]] for the remaining most
-significant bits.
-
-<<constructors for actions>>=
-| Emitf32  (int sign, int exp, int mantissa)
-| Emitf64  (int sign, int exp, int mhi, int mlo)
-| Emitf32s (string)
-| Emitf64s (string)
-@ 
-
-These functions emit {\small IEEE}~754 floating-point values of 32 and
-64 bits.  Compilers wishing to emit infinities or NaNs must use
-[[emit]] to emit the binary representation.
+<<asm types>>=
+bits = (int value, int width)   -- width in bits, view!
+@
 
 % ------------------------------------------------------------------
 \subsection{Comments}
@@ -515,6 +330,18 @@ deprecated.
 \subsection{View}
 % ------------------------------------------------------------------ 
 
+The defined using {\asdl} are not used literally in the compiler. Some
+of them are overridden by so-called views. Values are represented by
+[[Bits.bits]]: 
+
+<<asm.view>>=
+asm.bits <= {
+    natural_type:       Bits.bits
+    wrapper:            to_bits
+    unwrapper:          of_bits
+}
+@
+
 We need some {\asdl} view trickery to get an abstract [[instruction]]
 type. The code chunk [[view ocaml]] is automatically extracted to
 implement the view.
@@ -536,10 +363,12 @@ module asm <= interface_epilogue
 end (* module type S *) 
 %%
 
-
 module asm <= implementation_prologue
 %%
-    <<automatically generated asm.mli>>
+let of_bits b     = (Bits.to_int b, Bits.width b)
+let to_bits (n,w) = Bits.of_int n w
+
+<<automatically generated asm.mli>>
 
 module Make (I : Instruction) : S = struct
     type instruction = I.instruction
@@ -570,15 +399,17 @@ asm.concrete_instruction <= {
  --pickler=sexp
  --view=OCaml
  *)
-(* module type asm*)
+(* module type Asm*)
   
-    module type Instruction = sig
-      type instruction
-    end
+module type Instruction = sig
+    type instruction
+end
 
-    module type S = sig
-      type instruction
-type concrete_instruction = (StdPrims.std_string)
+module type S = sig
+    type instruction
+type bits = (StdPrims.std_int *
+      StdPrims.std_int)
+  and concrete_instruction = (StdPrims.std_string)
   and symbol =
         Import of (StdPrims.std_string)
       | Export of (StdPrims.std_string)
@@ -590,14 +421,6 @@ type concrete_instruction = (StdPrims.std_string)
       | Lookup of (StdPrims.std_string)
       | Offset of (StdPrims.std_string * symbol * StdPrims.std_int)
   
-  and label =
-        Symlabel of (symbol)
-  
-  and reladdr =
-        Newaddr of (label * StdPrims.std_int)
-      | Shiftaddr of (reladdr * StdPrims.std_int)
-      | Symreloc of (StdPrims.std_string)
-  
   and action =
         DefineSymbolHere of (symbol)
       | DefineSymbolConst of (symbol * StdPrims.std_int)
@@ -608,27 +431,24 @@ type concrete_instruction = (StdPrims.std_string)
       | Addlc of (StdPrims.std_int)
       | EmitZeroes of (StdPrims.std_int)
       | EmitInstruction of (instruction)
-      | Emit of (StdPrims.std_int * StdPrims.std_int)
-      | Emita of (reladdr)
-      | Emitf32 of (StdPrims.std_int *
-          StdPrims.std_int *
-          StdPrims.std_int)
-      | Emitf64 of (StdPrims.std_int *
-          StdPrims.std_int *
-          StdPrims.std_int *
-          StdPrims.std_int)
-      | Emitf32s of (StdPrims.std_string)
-      | Emitf64s of (StdPrims.std_string)
+      | Emit of (Bits.bits)
       | Comment of (StdPrims.std_string)
       | Asmtext of (StdPrims.std_string)
   
   and program = (StdPrims.std_string list * action list)
+  and label =
+        Symlabel of (symbol)
   
-    end (* module type S *) 
+  and reladdr =
+        Newaddr of (label * StdPrims.std_int)
+      | Shiftaddr of (reladdr * StdPrims.std_int)
+      | Symreloc of (StdPrims.std_string)
+  
+  
+end (* module type S *) 
+
+
 @
-
-
-
 
 \ifhtml
 \subsection{Index of identifiers}
