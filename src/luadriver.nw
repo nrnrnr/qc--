@@ -440,10 +440,9 @@ function verbose(s, a, b, c, d, e, f, g, h)
 end
 
 function Opt.standard(backend, asm, B)
-
--- verbose('running Opt.standard with third argument ', whichB(B), '\n')
+  -- verbose('running Opt.standard with third argument ', whichB(B), '\n')
   B = B or Backplane
--- verbose('running Opt.standard with ', whichB(B), '\n')
+  -- verbose('running Opt.standard with ', whichB(B), '\n')
   Stages.null = B.stage {name="empty stage for " .. whichB(B), fn=Stages.nullf}
   local assemble = Driver.proc_assembler(asm) 
   local x = B.seq
@@ -456,107 +455,17 @@ function Opt.standard(backend, asm, B)
     , backend.rmvfp      or Stages.null
     , B.stage { name="assemble procedure", fn = assemble }
     }
--- verbose('built a standard optimizer with ', whichB(B), '\n')
+  -- verbose('built a standard optimizer with ', whichB(B), '\n')
   return x
 end
 @
-
-% ------------------------------------------------------------------ 
-\subsection{Backends}
-% ------------------------------------------------------------------ 
-
-A backend value describes everything the compiler needs to know to
-produce code for a particular target. Many values in the description of
-a backend are primitives, and thus cannot be simply constructed in Lua.
-
-<<Lua Boot Script>>=
-Backend = Backend and error('Backend not empty') or {}
-
--- make a backend for the old backplane
-function Backend.make(b)
-  return
-    { target    = b.target    or error('target not specified')
-    , widen     = b.widen     or Stages.null
-    , placevars = b.placevars or Stages.null
-    , expand    = b.expand    or Stages.null
-    , liveness  = b.liveness  or Stages.null
-    , ralloc    = b.ralloc    or Stages.null
-    , freeze    = b.freeze    or Stack.layout
-    , asm       = b.asm       or Asm.cmm
-    , emit      = b.emit      or Driver.assemble
-    }   
-end
-
--- make a backend for the new backplane
-function Backend.new_make(b)
-  return
-    { target    = b.target    or error('target not specified')
-    , widen     = b.widen     or nil
-    , placevars = b.placevars or nil
-    , expand    = b.expand    or nil
-    , liveness  = b.liveness  or nil
-    , ralloc    = b.ralloc    or nil
-    , freeze    = b.freeze    or Dummy.layout
-    , rmvfp     = b.rmvfp     or Stages.replace_vfp  
-    , asm       = b.asm       or Asm.new_cmm
-    , emit      = b.emit      or Driver.assemble
-    }   
-end
-
--- Dummy backends, for new and old backplane
-Backend.dummy32l        = Backend.make      { target = Targets.dummy32l}
-Backend.dummy32b        = Backend.make      { target = Targets.dummy32b}
-Backend.dummy           = Backend.dummy32b      -- alias
-
-Backend.new_dummy32l    = Backend.new_make  { target = Targets.new_dummy32l }
-Backend.new_dummy32b    = Backend.new_make  { target = Targets.new_dummy32b }
-Backend.new_dummy       = Backend.new_dummy32b  -- alias
-
--- Interpreter backends, for new and old backplane
-Backend.interp          = Backend.make      { target = Targets.interp
-                                            , asm    = Asm.interp32l }
-Backend.new_interp      = Backend.new_make  { target = Targets.new_interp
-                                            , asm    = Asm.new_interp32l }
-Backend.debug_interp    = Backend.new_make  { target = Targets.new_interp
-                                            , asm    = Asm.new_cmm}
-
-Backend.x86 =     
-  { target    = Targets.x86
-  , widen     = { fn = Stages.nullf, name='assert proper widths',
-                  creates='proper widths'}
-  , placevars = Placevar.fortran
-  , expand    = Expander.x86
-  , liveness  = Liveness.liveness
-  , ralloc    = Ralloc.color
-  , freeze    = Stack.layout
-  , asm       = Asm.x86
-  , emit      = Driver.assemble
-  }   
-
-Backend.new_x86 =     
-  { target    = Targets.new_x86
-  , widen     = Stages.assert('proper widths')
-  , placevars = Placevar.new_fortran
-  , expand    = Expander.new_x86
-  , liveness  = Liveness.new_liveness
-  , ralloc    = Ralloc.new_color
-  , freeze    = X86.layout
-  , rmvfp     = Stages.replace_vfp
-  , asm       = Asm.new_x86
-  , emit      = Driver.assemble
-  }   
-
-
-
-@
-
 % ------------------------------------------------------------------ 
 \subsection{Compiler}
 % ------------------------------------------------------------------ 
 
 The [[Compile.file]] function takes the file name for a {\PAL} source
 file, a backend, and the name of the (assembly) file to produce and
-compile the file.
+compiles the file.
  
 \emph{I do not understand how the optimizer is run here. Maybe some
 clarifying words by the designer are in order. -- CL} 
@@ -612,6 +521,107 @@ function Compile.new_file(backend, file, out)
     if fd ~= Driver.stdout then close_out(fd) end -- close fd
 end    
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Backends}
+% ------------------------------------------------------------------ 
+
+A backend value describes everything the compiler needs to know to
+produce code for a particular target. Many values in the description of
+a backend are primitives, and thus cannot be simply constructed in Lua.
+
+The [[compile]] entry selects the function that actually compiles a
+file. For the old backplane targets this is [[Compile.file]], and for
+the new backplane it is [[Compile.new_file]]. Thus, just setting
+[[backplane]] to the desired value will thus be enough to setup the
+compiler.
+
+<<Lua Boot Script>>=
+Backend = Backend and error('Backend not empty') or {}
+
+-- make a backend for the old backplane
+function Backend.make(b)
+  return
+    { target    = b.target    or error('target not specified')
+    , widen     = b.widen     or Stages.null
+    , placevars = b.placevars or Stages.null
+    , expand    = b.expand    or Stages.null
+    , liveness  = b.liveness  or Stages.null
+    , ralloc    = b.ralloc    or Stages.null
+    , freeze    = b.freeze    or Stack.layout
+    , asm       = b.asm       or Asm.cmm
+    , emit      = b.emit      or Driver.assemble
+    , compile   = Compile.file
+    }   
+end
+
+-- make a backend for the new backplane
+function Backend.new_make(b)
+  return
+    { target    = b.target    or error('target not specified')
+    , widen     = b.widen     or nil
+    , placevars = b.placevars or nil
+    , expand    = b.expand    or nil
+    , liveness  = b.liveness  or nil
+    , ralloc    = b.ralloc    or nil
+    , freeze    = b.freeze    or Dummy.layout
+    , rmvfp     = b.rmvfp     or Stages.replace_vfp  
+    , asm       = b.asm       or Asm.new_cmm
+    , emit      = b.emit      or Driver.assemble
+    , compile   = Compile.new_file
+    }   
+end
+
+-- Dummy backends, for new and old backplane
+Backend.dummy32l        = Backend.make      { target = Targets.dummy32l}
+Backend.dummy32b        = Backend.make      { target = Targets.dummy32b}
+Backend.dummy           = Backend.dummy32b      -- alias
+
+Backend.new_dummy32l    = Backend.new_make  { target = Targets.new_dummy32l }
+Backend.new_dummy32b    = Backend.new_make  { target = Targets.new_dummy32b }
+Backend.new_dummy       = Backend.new_dummy32b  -- alias
+
+-- Interpreter backends, for new and old backplane
+Backend.interp          = Backend.make      { target = Targets.interp
+                                            , asm    = Asm.interp32l }
+Backend.new_interp      = Backend.new_make  { target = Targets.new_interp
+                                            , asm    = Asm.new_interp32l }
+Backend.debug_interp    = Backend.new_make  { target = Targets.new_interp
+                                            , asm    = Asm.new_cmm}
+
+-- x86 backends
+Backend.x86 =     
+  { target    = Targets.x86
+  , widen     = { fn = Stages.nullf, name='assert proper widths',
+                  creates='proper widths'}
+  , placevars = Placevar.fortran
+  , expand    = Expander.x86
+  , liveness  = Liveness.liveness
+  , ralloc    = Ralloc.color
+  , freeze    = Stack.layout
+  , asm       = Asm.x86
+  , emit      = Driver.assemble
+  , compile   = Compile.file
+  }   
+
+Backend.new_x86 =     
+  { target    = Targets.new_x86
+  , widen     = Stages.assert('proper widths')
+  , placevars = Placevar.new_fortran
+  , expand    = Expander.new_x86
+  , liveness  = Liveness.new_liveness
+  , ralloc    = Ralloc.new_color
+  , freeze    = X86.layout
+  , rmvfp     = Stages.replace_vfp
+  , asm       = Asm.new_x86
+  , emit      = Driver.assemble
+  , compile   = Compile.new_file
+  }   
+
+
+
+@
+
 
 % ------------------------------------------------------------------ 
 \subsection{Command Line Handling and Driver}
@@ -936,14 +946,14 @@ end
 function CMD.cmm2qs(file,out)
     local base = Util.chopsuffix(file)
     local qs   = out or base .. ".qs"
-    Compile.file(backend, file, qs) 
+    backend.compile(backend, file, qs)
     return qs
 end
 
 function CMD.cmm2obj(file,out)
     local base = Util.chopsuffix(file)
     local asm  = base .. ".s"
-    Compile.file(backend, file, asm) 
+    backend.compile(backend, file, asm)
     local obj  = CMD.asm2obj(asm,out)
     return obj
 end    
@@ -951,7 +961,7 @@ end
 function CMD.cmm2asm(file,out)
     local base = Util.chopsuffix(file)
     local asm  = out or base .. ".s"
-    Compile.file(backend, file, asm)
+    backend.compile(backend, file, asm)
     return asm
 end    
 
