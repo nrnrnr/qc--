@@ -11,10 +11,10 @@ This is where control flow begins for the application; this function should driv
 Below is a list of the functions that the interpreter exports and makes available for client use.
 \paragraph{Initialization}
 To open transactions between the client and the interpreter, the client must call [[Cmm_open]].
-This functions expects two arguments, indicating how much memory the interpreter should allocate for the creation of its value and argument-passing stacks, respectively.
+This functions expects two arguments, indicating how much memory the interpreter should allocate for the creation of its value stack and argument-passing space, respectively.
 If given values of 0, [[Cmm_open]] will choose a non-zero, default size.
 <<available exported C functions>>=
-int Cmm_open (int valstack_size, int argstack_size);
+int Cmm_open (int valstack_size, int argspace_size);
 @ 
 To register C functions with the interpreter so that they may be called from {\PAL} code, the interpreter exports function [[register_c_func]].
 A signature ([[sig]]) of a C function is a string containing a comma-delimited list of the C types of the function's arguments, followed by a colon and the the function's return type.
@@ -138,7 +138,7 @@ To drive our sample client application, we have a loop that prompts the user for
 <<constant definitions>>=
 #define BUFF_SIZE     256
 #define VALSTACK_SIZE 256
-#define ARGSTACK_SIZE 256
+#define ARGSPACE_SIZE 256
 @
 We parameterize activation stack size, and allow the user to modify the size at runtime.
 We thus keep [[stack_size]] (as well as a [[verbosity]] flag available globally.
@@ -146,14 +146,14 @@ We thus keep [[stack_size]] (as well as a [[verbosity]] flag available globally.
 extern int      verbosity;
 static unsigned stack_size = 65536;
 @ 
-The driver opens transactions with the {\PAL} interpreter (passing it sizes for the interpreter's value and argument-passing stacks), registers a few C functions with the interpreter (so they may be called from {\PAL}, loops through user commands, and closes interaction with the interpreter.
+The driver opens transactions with the {\PAL} interpreter (passing it sizes for the interpreter's value stack and argument-passing space), registers a few C functions with the interpreter (so they may be called from {\PAL}, loops through user commands, and closes interaction with the interpreter.
 <<application driver>>=
 int main(int argc, char *argv[]) {
   char        buff[BUFF_SIZE], *c;
   Cmm_Codeptr loc;
   Cmm_Dataptr *stack_space;
 
-  if (Cmm_open(VALSTACK_SIZE, ARGSTACK_SIZE) != 0) {
+  if (Cmm_open(VALSTACK_SIZE, ARGSPACE_SIZE) != 0) {
     exit(1);
   }
 

@@ -152,11 +152,11 @@ Pops a value and a boolean off the value stack; if the boolean is true, the valu
 [[CMM.gstore_global]]       &$(number$ [[index]]$)$                 &
 Pops a value and a boolean off the value stack; if the boolean is true, the value is stored in global variable [[index]].
 \\\hline
-[[CMM.push_arg]]            &$()$                                   &
-Pops a value off the value stack and pushes it onto the argument stack.
+[[CMM.store_arg]]           &$(number$ [[index]]$)$                 &
+Pops a value off the value stack and stores it in argument space at index [[index]].
 \\\hline
-[[CMM.pop_arg]]             &$()$                                   &
-Pops a value off the argument stack and pushes it onto the value stack.
+[[CMM.fetch_arg]]           &$(number$ [[index]]$)$                 &
+Fetches value in argument space at index [[index]] and pushes it onto the value stack.
 \\\hline
 [[CMM.apply_operator]]      &$(string$ [[stem_name]]$, string$ [[bit-widths]]$)$&
 Applies operator [[stem_name]] to some nonnegative number of values atop the value stack (popping any such values off), and pushes the result onto the stack; [[bit-widths]] is a string-based type signature for the operator (e.g., [["bits32,bits16:bits8"]]).
@@ -1036,14 +1036,14 @@ CMM_label *cmm_find_export(const char *arg);
 Finally, we get to the main function that initializes the application: the [[cmm_interp_open]] function.
 This function takes two arguments that specify the respective sizes of the value and argument-passing stacks used in the interpreter.
 <<function prototypes>>=
-int cmm_interp_open(int valstack_size, int argstack_size);
+int cmm_interp_open(int valstack_size, int argspace_size);
 @ 
 [[cmm_interp_open]] starts up Lua and prepares for future encoding and interpreting, returning a non-zero [[int]] only if an error occurred.
 We make use of helper function [[check_value_types]] to perform some assertions about the basic C types used in the interpreter's implementation; and we use [[init_interp]] to perform basic interpreter initialization (including operator registration, etc.).
 <<function prototypes>>=
 /* Initialization Helper Functions: */
 void   check_value_types(void);
-void   init_interp(lua_State *L, int valstack_size, int argstack_size);
+void   init_interp(lua_State *L, int valstack_size, int argspace_size);
 @ 
 For the sake of this interpreter's implementation and execution, we also make sure that defined [[MEMSIZE]]s and [[PTRSIZE]]s will work with the current architecture.
 <<function prototypes>>=
@@ -1094,7 +1094,7 @@ fields of longlong (64) bits64  0:63
 
 patterns
   [ DEFINE_PROC   OP             PUSH           GSTORE
-    FETCH         STORE          PUSH_ARG       POP_ARG
+    FETCH         STORE          FETCH_ARG      STORE_ARG
     STORE_LOCAL8  STORE_GLOBAL8  FETCH_LOCAL8   FETCH_GLOBAL8
     STORE_LOCAL16 STORE_GLOBAL16 FETCH_LOCAL16  FETCH_GLOBAL16
     GSTORE_LOCAL8 GSTORE_LOCAL16 GSTORE_GLOBAL8 GSTORE_GLOBAL16
@@ -1110,12 +1110,12 @@ We next define another set of patterns to ease constructor generation of similar
 <<bytecode.sled>>=
 patterns 
   any8    is STORE_LOCAL8   | STORE_GLOBAL8   | FETCH_LOCAL8  | FETCH_GLOBAL8
-           | GSTORE_LOCAL8  | GSTORE_GLOBAL8
+           | GSTORE_LOCAL8  | GSTORE_GLOBAL8  | FETCH_ARG     | STORE_ARG
   any16   is STORE_LOCAL16  | STORE_GLOBAL16  | FETCH_LOCAL16 | FETCH_GLOBAL16
            | GSTORE_LOCAL16 | GSTORE_GLOBAL16
-  any32   is PUSH  | CALL     | DEFINE_PROC | END_SPAN
-  memory  is FETCH | STORE    | GSTORE
-  nullary is HALT  | PUSH_ARG | POP_ARG  |  GOTO  |  CUT  |  CMM_TAIL_CALL
+  any32   is PUSH  | CALL   | DEFINE_PROC     | END_SPAN
+  memory  is FETCH | STORE  | GSTORE
+  nullary is HALT  |  GOTO  | CUT             |  CMM_TAIL_CALL
 @ 
 The [[relocatable]] and [[placeholder]] keywords allow us to specify that some arguments to instructions will be relocatable addresses ([[RAddr]]s).
 <<bytecode.sled>>=
@@ -1235,6 +1235,48 @@ void print_value_stack(stack s, sptr s_base, const char *s_name) {
   printf("%u\n", *s);
 }
 @ 
+
+And now for a horrible hack-helper.
+Somebody please change this.  Please.
+
+<<function prototypes>>=
+/* ARGS DELETE */
+void reverse_stack_helper (sptr arguments, stack arguments_base, sptr arguments_limit);
+@ 
+<<utility functions>>=
+void reverse_stack_helper (sptr arguments, stack arguments_base, sptr arguments_limit) {
+  unsigned size = arguments - arguments_base;
+  unsigned forwards = 0;
+  unsigned backwards = arguments - arguments_base;
+  if (size == 0) return;
+  OVERFLOW_CHECK(arguments, 1);
+  for ( ; forwards <= backwards; forwards++, backwards--) {
+    STACK_ELT(arguments, 1) = STACK_ELT(arguments, forwards - size);
+    STACK_ELT(arguments, forwards-size) = STACK_ELT(arguments, backwards-size);
+    STACK_ELT(arguments, backwards-size) = STACK_ELT(arguments, 1);
+  }
+}
+@ 
+<<macro definitions>>=
+#define reverse_stack(A) reverse_stack_helper(A, A##_base, A##_limit)
+
+#define other(S) \
+{\
+  unsigned  size      = S - S##_base;\
+  unsigned  forwards  = 0;\
+  unsigned  backwards = S - S##_base;\
+  OVERFLOW_CHECK(S, 1);\
+  for ( ; forwards <= backwards; forwards++, backwards++) {\
+    /* empty spot := st[forwards] */\
+    STACK_ELT(S, 1)                = STACK_ELT(S, forwards  - size);\
+    /* st[forwards] := st[backwards] */\
+    STACK_ELT(S, forwards  - size) = STACK_ELT(S, backwards - size);\
+    /* st[backwards] := empty spot */\
+    STACK_ELT(S, backwards - size) = STACK_ELT(S, 1);\
+  }\
+}
+@ 
+
 \subsubsection{Operator Implementation}
 Operators are mostly implemented through macro-generated functions and are instantiated at specific types.
 <<operator definitions>>=
@@ -1247,7 +1289,7 @@ The actual initial registration of operators occupies some of the body of helper
 With some preprocessor exploitation, we are able to reuse the same operator definitions to both implement the operators as functions and to register these functions with the interpreter at runtime.
 \emph{NOTE: great care must be taken to make sure that the implementation operator definitions stay above the definition of [[init_interp]]; we redefine the same macros to do different things within [[init_interp]].}
 <<utility functions>>=
-void init_interp(lua_State *L, int valstack_size, int argstack_size) {
+void init_interp(lua_State *L, int valstack_size, int argspace_size) {
   /* initialize the lua_State field of global tables */
   assembly_units_table.L = L;
   exports_table.L        = L;
@@ -1277,10 +1319,10 @@ The sizes of these stacks are specified by arguments to the [[cmm_interp_open]] 
   values             = values_base - 1;
 @
 <<allocate memory for argument-passing stack>>=
-  arguments_base     = (sptr) malloc(sizeof(value) * argstack_size);
-  mem_assert(arguments_base);
-  arguments_limit    = arguments_base + argstack_size;
-  arguments          = arguments_base - 1;
+  /* ARGS OK */
+  arguments          = (sptr) malloc(sizeof(value) * argspace_size);
+  mem_assert(arguments);
+  arguments_limit    = arguments + argspace_size;
 @
 \paragraph{Operator-Generating Macros}
 An operator implementation function must do the following: take in a pointer to a value stack, pop some number of values off the stack (possibly 0), perform some computations, and push the result value atop the stack.
@@ -1675,6 +1717,8 @@ F(pointer, pointer, unsigned, pointer, pointer, RETURNS_VAL)
 @ 
 All C callers take two arguments, an argument-passing stack and a [[void *]] function pointer, and return a new pointer to the argument-passing stack.
 <<macro definitions>>=
+/* ARGS OK */
+
 #define NULLARY_C_CALLER_PROTOTYPE(RETTY, RETURNS) \
 sptr c_caller_void_##RETTY (sptr arguments, void *f);
 
@@ -1705,49 +1749,47 @@ register_c_sig(#A "," #B "," #C "," #D ":" #RETTY, \
 @ 
 The actual implementation of the C callers are simple functions that pop the correct number of arguments from the argument-passing stack, call the indicated C function with these arguments, push the C call's return values atop the argument-passing stack, and return a new pointer to the argument-passing stack.
 <<macro definitions>>=
+/* ARGS */
+
 #define NULLARY_C_CALLER(RETTY, RETURNS) \
 sptr c_caller_void_##RETTY (sptr arguments, void *f) { \
-  RETURNS(OVERFLOW_CHECK(arguments, 1);, ) \
   { \
   RETTY (*f_ty) (void) = f; \
   RETURNS(RETTY retval =, (void)) f_ty(); \
-  RETURNS(STACK_ELT(arguments, 1) = VIEW(retval, value);, ) \
-  return RETURNS(arguments + 1, arguments); \
+  RETURNS(arguments[0] = VIEW(retval, value);, ) \
+  return arguments; \
 } }
 #define UNARY_C_CALLER(ARGTY, RETTY, RETURNS) \
 sptr c_caller_##ARGTY##_##RETTY (sptr arguments, void *f) { \
-  UNDERFLOW_CHECK(arguments, 1); \
   { \
   RETTY (*f_ty) (ARGTY) = f; \
-  RETURNS(RETTY retval =, (void)) f_ty(VIEW(STACK_ELT(arguments, 0), ARGTY)); \
-  RETURNS(STACK_ELT(arguments, 0) = VIEW(retval, value);, ) \
-  return RETURNS(arguments, arguments - 1); \
+  RETURNS(RETTY retval =, (void)) f_ty(VIEW(arguments[0], ARGTY)); \
+  RETURNS(arguments[0] = VIEW(retval, value);, ) \
+  return arguments; \
 } }
 #define BINARY_C_CALLER(ARGATY, ARGBTY, RETTY, RETURNS) \
 sptr c_caller_##ARGATY##_##ARGBTY##_##RETTY (sptr arguments, void *f) { \
-  UNDERFLOW_CHECK(arguments, 2); \
   { \
   RETTY (*f_ty) (ARGATY, ARGBTY) = f; \
   RETURNS(RETTY retval =, (void)) \
-      f_ty(VIEW(STACK_ELT(arguments, -1), ARGATY),   \
-           VIEW(STACK_ELT(arguments,  0), ARGBTY)); \
-  RETURNS(STACK_ELT(arguments, -1) = VIEW(retval, value);, ) \
-  return RETURNS(arguments - 1, arguments - 2); \
+      f_ty(VIEW(arguments[0], ARGATY), \
+           VIEW(arguments[1], ARGBTY)); \
+  RETURNS(arguments[0] = VIEW(retval, value);, ) \
+  return arguments; \
 } }
 #define FOURARY_C_CALLER(ARGATY, ARGBTY, ARGCTY, ARGDTY, RETTY, RETURNS) \
 sptr c_caller_##ARGATY##_##ARGBTY##_##ARGCTY##_##ARGDTY##_##RETTY \
      (sptr arguments, void *f) \
 { \
-  UNDERFLOW_CHECK(arguments, 4); \
   { \
   RETTY (*f_ty) (ARGATY, ARGBTY, ARGCTY, ARGDTY) = f; \
   RETURNS(RETTY retval =, (void)) \
-      f_ty(VIEW(STACK_ELT(arguments, -3), ARGATY), \
-           VIEW(STACK_ELT(arguments, -2), ARGBTY), \
-           VIEW(STACK_ELT(arguments, -1), ARGCTY), \
-           VIEW(STACK_ELT(arguments,  0), ARGDTY)); \
-  RETURNS(STACK_ELT(arguments, -3) = VIEW(retval, value);, ) \
-  return RETURNS(arguments - 3, arguments - 4); \
+      f_ty(VIEW(arguments[0], ARGATY), \
+           VIEW(arguments[1], ARGBTY), \
+           VIEW(arguments[2], ARGCTY), \
+           VIEW(arguments[3], ARGDTY)); \
+  RETURNS(arguments[0] = VIEW(retval, value);, ) \
+  return arguments; \
 } }
 @
 Last but not least, we actually generate the implementations of the C callers with a call to each of the iterators.
@@ -2173,8 +2215,8 @@ F(store_global) \
 F(gstore_local) \
 F(gstore_global) \
 F(apply_operator) \
-F(push_arg) \
-F(pop_arg) \
+F(fetch_arg) \
+F(store_arg) \
 F(goto) \
 F(cbrancht) \
 F(cbranchf) \
@@ -3137,17 +3179,17 @@ int lua_CMM_cmm_return (lua_State *L) {
 And now we get to the wrappers that are macro-generated:
 <<bytecode generation>>=
 /* LUA_WRAP_NULLARY(encodingFunctionName, nameStemForLua) */
-LUA_WRAP_NULLARY(push_arg,      push_arg     )
-LUA_WRAP_NULLARY(pop_arg,       pop_arg      )
 LUA_WRAP_NULLARY(goto_,         goto         )
 LUA_WRAP_NULLARY(cmm_tail_call, cmm_tail_call)
 LUA_WRAP_NULLARY(cut,           cut          )
 
 /* LUA_WRAP_UNARY_INDEX(encodingFunctionName, nameStemForLua) */
-LUA_WRAP_UNARY_INDEX(fetch_local,   fetch_local )
-LUA_WRAP_UNARY_INDEX(fetch_global,  fetch_global)
-LUA_WRAP_UNARY_INDEX(store_local,   store_local )
-LUA_WRAP_UNARY_INDEX(store_global,  store_global)
+LUA_WRAP_UNARY_INDEX(fetch_arg,     fetch_arg    )
+LUA_WRAP_UNARY_INDEX(store_arg,     store_arg    )
+LUA_WRAP_UNARY_INDEX(fetch_local,   fetch_local  )
+LUA_WRAP_UNARY_INDEX(fetch_global,  fetch_global )
+LUA_WRAP_UNARY_INDEX(store_local,   store_local  )
+LUA_WRAP_UNARY_INDEX(store_global,  store_global )
 LUA_WRAP_UNARY_INDEX(gstore_local,  gstore_local )
 LUA_WRAP_UNARY_INDEX(gstore_global, gstore_global)
 @ 
@@ -3376,7 +3418,6 @@ Finally, we get to the main part of the interpreter.  We start by initializing t
   /* FIX reset global variables */
   curr_proc = NULL;
   values    = values_base    - 1;
-  arguments = arguments_base - 1;
 @ 
 We copy out the stored, suspended state from [[act]] into local C variables for matters of efficiency (to reduce memory fetches).
 This means, though, that the stored activation information will become out-of-date as we proceed through interpreting; we must make sure to update it when we have to leave the activation for any reason (calls, cuts, etc.).
@@ -3527,8 +3568,14 @@ Pushing and popping to the argument stack is not difficult.
 \useops{Push-Arg}
 \useops{Pop-Arg}
 <<matching statement>>=
-    | PUSH_ARG          => PUSH(POP(values), arguments);       pc = next;
-    | POP_ARG           => PUSH(POP(arguments), values);       pc = next;
+    /* ARGS OK */
+
+    | STORE_ARG(n)      => cmm_assert(arguments + n < arguments_limit,
+                                  "invalid register index to argument space");
+                           arguments[n] = POP(values); pc = next;
+    | FETCH_ARG(n)      => cmm_assert(arguments + n < arguments_limit,
+                                  "invalid register index to argument space");
+                           PUSH(arguments[n], values); pc = next;
 @ 
 For goto and branches, we simply conditionally (or unconditionally in the case of goto) assign a new value to [[pc]].
 Although these instructions were encoded using [[RAddr]]s for arguments, the Toolkit is able to translate these addresses to actual pointers by the time we reach this matching statement.
@@ -3675,7 +3722,9 @@ Retrieving [[call_helper]] and [[f]] simply involves some queries to Lua tables.
 We make a call to [[call_helper]], which takes care of arranging the argument stack.
 We simply pass the argument stack in and get it back out again (with the pointer to the top of the stack possibly altered).
 <<use [[call_helper]] to call [[f]]>>=
-                           call_helper(arguments, f);
+                           /* ARGS OK */
+
+                           arguments = call_helper(arguments, f);
 @ 
 {\PAL} tail calls are easier to implement than regular {\PAL} procedure calls because we need not save the activation record of the calling activation.
 In fact, we must effectively kill off the calling activation (we call [[dies_uid]] to signal the death of the activation).
@@ -3995,15 +4044,18 @@ In [[cmm_interp_open]], we get everything ready for future source-code encoding 
 [[cmm_interp_close]] closes down the interpreter safely.
 <<constant definitions>>=
 #define DEF_VALSTACK_SIZE 256
-#define DEF_ARGSTACK_SIZE 256
+#define DEF_ARGSPACE_SIZE 256
 @ 
 <<application initialization>>=
-int cmm_interp_open(int valstack_size, int argstack_size)
+int cmm_interp_open(int valstack_size, int argspace_size)
 {
   lua_State   *lua_interp;
 
   if (valstack_size <= 0) valstack_size = DEF_VALSTACK_SIZE;
-  if (argstack_size <= 0) argstack_size = DEF_ARGSTACK_SIZE;
+  if (argspace_size <= 0) argspace_size = DEF_ARGSPACE_SIZE;
+
+  /* FIX */
+  if (argspace_size <= 4) argspace_size = 4;
 
   if (setjmp(errorjmp)) {
     fprintf(stderr, "error: unrecoverable error; quitting interpreter\n");
@@ -4028,7 +4080,7 @@ void cmm_interp_close(void) {
 Initializing the {\PAL} interpreter involves a simple call to helper [[init_interp]].
 This helper initializes the operator table and a few other things.
 <<initialize the {\PAL} interpreter>>= 
-  init_interp(lua_interp, valstack_size, argstack_size);
+  init_interp(lua_interp, valstack_size, argspace_size);
 @ 
 Before using the NJ Machine-Code Toolkit encoding library, we must first prepare by creating an array to store closures ([[RClosure]]s).
 <<constant definitions>>=
@@ -4106,8 +4158,8 @@ static sptr      values               = NULL;
 static stack     values_base          = NULL;
 static sptr      values_limit         = NULL;
 
+/* ARGS OK */
 static sptr      arguments            = NULL;
-static stack     arguments_base       = NULL;
 static sptr      arguments_limit      = NULL;
 
 static int       lua_assembly_unit_tag;
@@ -4175,8 +4227,9 @@ Finally, we have to properly shut down the interpreter (this code sits in [[cmm_
 free(values_base);
 values_base = NULL;
 
-free(arguments_base);
-arguments_base = NULL;
+/* ARGS OK */
+free(arguments);
+arguments = NULL;
 
 free(globals);
 
@@ -4289,11 +4342,13 @@ void disassemble_instructions(CMM_label *loc) {
       asmprintf(asmprintfd, "%s", " ");
       print_unsigned_bits8(c);
       asmprintf(asmprintfd, "\n");
-  | PUSH_ARG() => 
-      asmprintf(asmprintfd, "%x: %s", pc, "PUSH_ARG");
+  | FETCH_ARG(bits8) => 
+      asmprintf(asmprintfd, "%x: %s", pc, "FETCH_ARG ");
+      print_unsigned_bits8(bits8);
       asmprintf(asmprintfd, "\n");
-  | POP_ARG() => 
-      asmprintf(asmprintfd, "%x: %s", pc, "POP_ARG");
+  | STORE_ARG(bits8) => 
+      asmprintf(asmprintfd, "%x: %s", pc, "STORE_ARG ");
+      print_unsigned_bits8(bits8);
       asmprintf(asmprintfd, "\n");
   | STORE_LOCAL8(bits8) => 
       asmprintf(asmprintfd, "%x: %s", pc, "STORE_LOCAL8 ");
