@@ -23,8 +23,9 @@ B<qc--interp> [ I<arguments> ]
 
 B<qc--interp> is an interpreter for the C-- language.
 
-The B<arguments> may be options or filenames, and are processed in order from
-left to right, without exception.
+The B<arguments> may be options or filenames.  All options are first processed
+from left to right, and then all filenames (or B<->) are processed from
+left to right.
 
 Options begin with B<->, and are described below.
 
@@ -46,11 +47,25 @@ description of commands available in interactive mode.
 
 =over 4
 
-=item B<->
+=item B<-h>
 
-Load source code on stdin as a file.  This option may be used in combination 
-with filenames listed on the command line.  All files listed as well as the 
-source code on stdin will be loaded into the interpreter.
+Summarize options to stdout and stop with exit code C<0>.  This option is 
+incompatible with any other option.
+
+=item B<-o> I<outfile>
+
+Link specified files into I<outfile>.  If this option is used, no code
+interpreting is performed.  The files specified on the command line should
+be listed in order of dependence; a file should be listed after all files
+on which it depends.
+
+=item B<-P> I<interp_path>
+
+Specifies the path of the interpreter.  This option is only meaningful when
+used with B<-o>.  The executable produced by the B<-o> option needs to know
+where to find the B<qc--interp> binary.
+
+The default path is "/usr/bin/env qc--interp".
 
 =item B<-v>
 
@@ -58,10 +73,11 @@ Raise verbosity level to high.  This causes the interpreter to output extra
 runtime information to stdout.  Generally, this option should only be used to
 debug a source file.
 
-=item B<--help>
+=item B<->
 
-Summarize options to stdout and stop with exit code C<0>.  This option is 
-incompatible with any other option.
+Load source code on stdin as a file.  This option may be used in combination 
+with filenames listed on the command line.  All files listed as well as the 
+source code on stdin will be loaded into the interpreter.
 
 =back
 
