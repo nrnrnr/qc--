@@ -59,7 +59,7 @@ let open_span fd (token, exp) =
    let spanval, offset = viewexp dnexp
    in
       fprintf fd "CMM.begin_span(%d,'%s',%d)\n"
-      	      (Bits.S.to_int token)
+              (Bits.S.to_int token)
               (match spanval with | Some s -> s | _ -> imposs())
               offset
 
@@ -77,7 +77,7 @@ code is emitted.
 
 
 <<interpemit.ml>>=
-let node fd n = match C.kind n with
+let node proc fd n = match C.kind n with
     | C.Join | C.Exit -> 
         List.iter (fprintf fd "CMM.define_label('%s')\n") (C.labels n)
     | C.Call ->
@@ -95,7 +95,12 @@ let node fd n = match C.kind n with
         and ncuts    = C.cuts_to    n
         in
 
-        let spans   = C.spans n     in
+        let spans   = 
+          let label = C.label (C.succ_n n nreturns) in
+          try List.filter (fun (i,_) -> Bits.S.to_int i >= 0)
+                          (List.assoc label proc.Proc.spans)
+          with Not_found -> [] in
+					
         let succs   = C.succs n     in
 
         let returns = sublist succs 0                nreturns
@@ -169,6 +174,6 @@ and apply it to all nodes.
 
 <<interpemit.ml>>=
 let proc p fd =
-    let iter f cfg = C.fold_layout (fun node () -> f fd node) () cfg in
+    let iter f cfg = C.fold_layout (fun node () -> f p fd node) () cfg in
         iter node p.P.cfg
 @    
