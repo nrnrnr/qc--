@@ -379,6 +379,10 @@ We can ask for a label, or for all the labels, on a join node.
 val label         : 'i node -> label      (* defined on any join node except exit *)
 val labels        : 'i node -> label list (* defined on any join node except exit *)
 @ 
+We can ask for spans at a call node.
+<<graph and node observers>>=
+val spans         : 'i node -> (Bits.bits * Rtl.exp) list (* defined on call nodes *)
+@
 We can ask for the instruction, if any.
 An assertion is treated as an ordinary instruction.
 If we ask for something \emph{executable}, we get only non-assertions.
@@ -415,6 +419,15 @@ predecessors.
 <<graph and node observers>>=
 val preds      : 'i node -> 'i node list  (* defined on any node *)
 val succs      : 'i node -> 'i node list  (* defined on any node *)
+@
+For a call node, we may want to know how many successor edges are alternate
+returns, cuts, or unwinds.
+Functions like succ_n returns these edges in the standard order
+(alternate returns, normal return, unwinds, and cuts).
+<<graph and node observers>>=
+val altrets    : 'i node -> int           (* defined only on call nodes *)
+val cuts_to    : 'i node -> int           (* defined only on call nodes *)
+val unwinds_to : 'i node -> int           (* defined only on call nodes *)
 @
 We can ask about the kinds of control-flow instructions.
 <<graph and node observers>>=
@@ -771,42 +784,45 @@ non-local continuations.
 In this case, the exit node is a successor of the call node.
 
 <<node type>>=
-type ('i, 'n, 'e) cal = { mutable cal_i         : 'i
-                        ;         cal_spans     : (Bits.bits * Rtl.exp) list
-                        ; mutable cal_pred      : 'n
-                        ; mutable cal_contedges : 'e array
-                        ; mutable cal_lsucc     : 'n
-                        ;         cal_fx        : X.fx
-                        ; mutable cal_uses      : regs
+type ('i, 'n, 'e) cal = { mutable cal_i          : 'i
+                        ;         cal_spans      : (Bits.bits * Rtl.exp) list
+                        ; mutable cal_pred       : 'n
+                        ; mutable cal_contedges  : 'e array
+                        ; mutable cal_lsucc      : 'n
+                        ;         cal_fx         : X.fx
+                        ; mutable cal_uses       : regs
+                        ;         cal_altrets    : int
+                        ;         cal_unwinds_to : int
+                        ;         cal_cuts_to    : int
                         }
-type ('i, 'n, 'e) cut = { mutable cut_i         : 'i
-                        ; mutable cut_pred      : 'n
-                        ; mutable cut_lsucc     : 'n
-                        ; mutable cut_contedges : 'e array
-                        ;         cut_fx        : X.fx
-                        ; mutable cut_uses      : regs
+type ('i, 'n, 'e) cut = { mutable cut_i          : 'i
+                        ; mutable cut_pred       : 'n
+                        ; mutable cut_lsucc      : 'n
+                        ; mutable cut_contedges  : 'e array
+                        ;         cut_fx         : X.fx
+                        ; mutable cut_uses       : regs
                         }
-type ('i, 'n)     jum = { mutable jum_i         : 'i
-                        ; mutable jum_pred      : 'n
-                        ; mutable jum_succ      : 'n
-                        ; mutable jum_lsucc     : 'n
-                        ;         jum_nx        : X.nx
-                        ; mutable jum_uses      : regs
+type ('i, 'n)     jum = { mutable jum_i          : 'i
+                        ; mutable jum_pred       : 'n
+                        ; mutable jum_succ       : 'n
+                        ; mutable jum_lsucc      : 'n
+                        ;         jum_nx         : X.nx
+                        ; mutable jum_uses       : regs
                         }
-type ('i, 'n)     ret = { mutable ret_i         : 'i
-                        ; mutable ret_pred      : 'n
-                        ; mutable ret_succ      : 'n
-                        ; mutable ret_lsucc     : 'n
-                        ;         ret_nx        : X.nx
-                        ; mutable ret_uses      : regs
+type ('i, 'n)     ret = { mutable ret_i          : 'i
+                        ; mutable ret_pred       : 'n
+                        ; mutable ret_succ       : 'n
+                        ; mutable ret_lsucc      : 'n
+                        ;         ret_nx         : X.nx
+                        ; mutable ret_uses       : regs
                         }
-type ('i, 'n)     imp = { mutable imp_pred      : 'n
-                        ; mutable imp_succ      : 'n
-                        ; mutable imp_exit_succ : 'n
-                        ;         imp_fx        : X.fx
+type ('i, 'n)     imp = { mutable imp_pred       : 'n
+                        ; mutable imp_succ       : 'n
+                        ; mutable imp_exit_succ  : 'n
+                        ;         imp_fx         : X.fx
                         }
-type ('i, 'n, 'c) ill = {         ill_nx        : X.nx
-                        ; mutable ill_cfg       : 'c
+type ('i, 'n, 'c) ill = {         ill_nx         : X.nx
+                        ; mutable ill_cfg        : 'c
                         }
 
 
@@ -898,8 +914,14 @@ let label node = match node with
 
 let labels node = match node with
   | Joi j -> j.joi_labels
-  | Exi e -> ( log "labels called on exit" ; e.exi_labels)
+  | Exi e -> ( log "labels called on exit" ; e.exi_labels )
   | _     -> undef "labels" "non-join"
+@
+We can observe the spans at a call node.
+<<graph and node observers implementation>>=
+let spans node = match node with
+  | Cal c -> c.cal_spans
+  | _     -> undef "spans" "non-call"
 @
 [[pred]] is defined only on a node that must have only a single predecessor.
 <<graph and node observers implementation>>=
@@ -1043,6 +1065,21 @@ let succs node = match node with
   | Ill _ -> []
   | Boot  -> undef "succs" "boot"
 @
+It may be useful to find the number of alternate returns, unwinds, or
+cuts_to edges at a call node.
+Functions like succ_n returns these edges in the standard order
+(alternate returns, normal return, unwinds, and cuts).
+<<graph and node observers implementation>>=
+let altrets node = match node with
+  | Cal c -> c.cal_altrets
+  | _     -> undef "altrets" "non-call"
+let cuts_to node = match node with
+  | Cal c -> c.cal_cuts_to
+  | _     -> undef "cuts" "non-call"
+let unwinds_to node = match node with
+  | Cal c -> c.cal_unwinds_to
+  | _     -> undef "unwinds" "non-call"
+@
 We have several observers that check the type of a node.
 The jump and return nodes are not interesting forms of control flow with
 regards to a procedure's control-flow graph.
@@ -1097,8 +1134,7 @@ let entry cfg = cfg.entry
 let exit  cfg = cfg.exit
 @
 We have several functions to iterate or fold over the nodes of the graph.
-[[fold_heads]] folds over the entry node, the exit node (REALLY?), and the
-join points.
+[[fold_heads]] folds over the entry node and the join points.
 [[fold_nodes]] folds over all the nodes in the cfg.
 <<graph and node observers implementation>>=
 let fold_heads f zero cfg = List.fold_right f (heads cfg) zero
@@ -1220,8 +1256,6 @@ let rec join_leading_to ~succ =
             let () = set_succ join ~succ:succ in  (* maybe use set_succ here? *)
             join
 @
-This black magic was on NR's whiteboard, but it still needs to be
-explained :-)
 [[set_succ']] takes four steps to set the successor of [[node]] to [[succ]]
 (where [[old_succ]] is [[node]]'s successor when this function is called):
 \begin{enumerate}
@@ -1229,7 +1263,7 @@ explained :-)
   If [[succ]] is a join point or an illegal node, then it is a valid
   successor.
   But otherwise, if [[succ]] already has a legal successor, then we need to
-  insert a join point between [[succ]] and it predecessor, and use that join
+  insert a join point between [[succ]] and its predecessor, and use that join
   point as the new successor.
   We insert the join point by using [[join_leading_to]] in the recursive call.
 \item
@@ -1553,6 +1587,8 @@ let copy info transform cfg =
       let ce_lst = convert_contedges c.cal_contedges in
       mk_call (transform c.cal_i) c.cal_spans ~pred:new_cfg.ill
               ~contedges:ce_lst ~lsucc:new_cfg.ill ~uses:c.cal_uses
+              ~altrets:c.cal_altrets ~unwinds_to:c.cal_unwinds_to
+              ~cuts_to:c.cal_cuts_to
     | Cut c ->
       let cuts_to = Array.to_list (convert_contedges c.cut_contedges) in
       cut_to new_cfg (transform c.cut_i) ~cuts_to ~aborts:false ~uses:c.cut_uses
@@ -1578,14 +1614,17 @@ We have to bootstrap node construction because of the way set_succ works.
 <<node constructors with interesting control flow edges>>=
 let join_leading_to_ce ce = {ce with node = join_leading_to ce.node}
 
-let mk_call i spans ~pred ~contedges ~lsucc ~uses =
-    Cal { cal_i         = i
-        ; cal_spans     = spans
-        ; cal_pred      = pred
-        ; cal_contedges = contedges
-        ; cal_lsucc     = lsucc
-        ; cal_fx        = X.fx ()
-        ; cal_uses      = uses
+let mk_call i spans ~pred ~contedges ~lsucc ~uses ~altrets ~unwinds_to ~cuts_to =
+    Cal { cal_i          = i
+        ; cal_spans      = spans
+        ; cal_pred       = pred
+        ; cal_contedges  = contedges
+        ; cal_lsucc      = lsucc
+        ; cal_fx         = X.fx ()
+        ; cal_uses       = uses
+        ; cal_altrets    = altrets
+        ; cal_unwinds_to = unwinds_to
+        ; cal_cuts_to    = cuts_to
         }
 
 let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts ~uses ~defs ~kills
@@ -1601,8 +1640,11 @@ let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts ~uses ~defs ~kills
   let abort       = if aborts then [new_cedge cfg.exit] else [] in
   let edgelist    = List.flatten [altrets; succ; unwinds_to; cuts_to; abort] in
   let illedge     = fun {kills=k; defs=d; node=n} -> {kills=k; defs=d; node=cfg.ill} in
-  let contedges = Array.of_list (List.map illedge edgelist) in
-  let cal = mk_call i spans ~pred:cfg.ill ~contedges ~lsucc:cfg.ill ~uses in
+  let contedges   = Array.of_list (List.map illedge edgelist) in
+  let cal =
+    mk_call i spans ~pred:cfg.ill ~contedges ~lsucc:cfg.ill ~uses
+            ~altrets:(List.length altrets) ~unwinds_to:(List.length unwinds_to)
+            ~cuts_to:(List.length cuts_to) in
   let ()  = Aux.foldri (fun i n () -> set_succ_n cal i ~succ:n.node)
                        edgelist () in
   cal
@@ -1797,9 +1839,7 @@ let merge_joins j1 j2 succ lpred = match j1, j2 with
   | _                -> undef "merge_joins" "non-join"
 @
 
-Graph heads are defined as the entry node, the exit node, and the join points.
-WHY IS THE EXIT NODE A HEAD?  NR THINKS IT SHOULD NOT BE...  AND IT
-LOOKS AS IF IT ISN'T IN THE CODE?!
+Graph heads are defined as the entry node and the join points.
 <<graph utilities>>=
 let heads cfg =
   uniq (cfg.entry :: SM.fold (fun _ h rst -> h::rst) cfg.label_map [])
