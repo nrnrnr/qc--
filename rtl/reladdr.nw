@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 
 % ------------------------------------------------------------------ 
@@ -24,13 +25,17 @@ end
 type t                              (* relocatable address *)
 type sign = Pos | Neg
 
+  (* constructors *)
 val bits:       int64  -> t
 val symbol:     symbol -> t
 val add:        t -> t -> t
 val sub:        t -> t -> t
 
-
+  (* observers *)
 val expr:       t -> int64 * (sign * symbol) list
+val to_string:  t -> string
+@ String form has no parentheses and is never empty.  May have a
+leading minus but not a leading plus.
 @
 
 % ------------------------------------------------------------------ 
@@ -57,3 +62,19 @@ let add (xb,xs) (yb,ys) = (Int64.add xb yb, xs @ ys)
 let sub (xb,xs) (yb,ys) = (Int64.sub xb yb, xs @ List.map neg ys)
 let expr t              = t
 @
+Convert to list of (sign, value) pairs, then strip leading plus as needed.
+Empty list is zero.
+<<reladdr.ml>>=
+let to_string a =
+    let (int64,symbols) = expr a in (* get generic representation *)
+    let sgn = function Pos -> "+" | Neg -> "-" in
+    let cons_string (sign, sym) tail = sgn sign :: sym#text :: tail in
+    let con =
+      if int64 = Int64.zero then []
+      else if int64 > Int64.zero then ["+"; Int64.to_string int64]
+      else [Int64.to_string int64]  in
+    let l = List.fold_right cons_string symbols con in
+    match l with
+    | [] -> "0"
+    | "+" :: t -> String.concat "" t
+    | _ -> String.concat "" l

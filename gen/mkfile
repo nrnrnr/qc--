@@ -33,7 +33,7 @@ INC  =          `echo *.nw       | sed 's/\.nw/.inc/g;'`
 
 all:V:          src cmo lib
 all.opt:V:      
-update:V:       
+update:V:       update-lib
 update.opt:V:   
 
 dvi:V:          $INC
@@ -117,6 +117,7 @@ LOCALI =        sledlib.mli	\
 QCMM  =		sparcrec.ml	\
 
 CMO =           `echo $LOCAL       | sed 's/\.ml/.cmo/g'`
+CMI =           `echo $LOCALI      | sed 's/\.mli/.cmi/g'`
 cmo:V: $CMO
 CMX =           `echo $LOCAL       | sed 's/\.ml/.cmx/g'`
 OBJ =           `echo $LOCAL       | sed 's/\.ml/.o/g'`
@@ -133,6 +134,7 @@ LIBCMO =       gen.cma
 LIBCMX =       gen.cmxa
 
 lib:V: $LIBCMO
+update-lib:V: $LIBDIR/$LIBCMO
 
 $LIBCMO:        $CMO
 		$OCAMLC $OCAMLC_FLAGS -a -o $target $prereq
@@ -145,8 +147,8 @@ $LIBCMX:	$CMX
 # update hierarchy
 # ------------------------------------------------------------------ 
 
-$LIBDIR/$LIBCMO:    $LIBCMO dirs
-		    for i in $LIBCMO *.mli *.cmi 
+$LIBDIR/$LIBCMO:    $LIBCMO dirs $LOCALI $CMI
+		    for i in $LIBCMO $LOCALI $CMI
                     do
 		        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR 
 		    done
