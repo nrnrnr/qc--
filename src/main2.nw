@@ -288,11 +288,12 @@ function graphColoring (colors)
                                     unless_do(single(CGStages.coalesce),
                                        unless_do(single(CGStages.freeze),
                                           single(CGStages.selectSpill)))))
+, pcg
                       , single(CGStages.assignColors)} )
                    , when_do(single(CGStages.haveSpilledNodes),
                              single(CGStages.resetProgram))
                    } )
-          , seq {pcg,single(CGStages.updateProgram),single(CGStages.applyColors)}
+          , seq {single(CGStages.updateProgram),single(CGStages.applyColors)}
           } )
     end
 
@@ -300,7 +301,7 @@ function fullRun (colors)
     return seq({codeExpand, graphColoring(colors)}) end
 prCFG = seq({codeExpand, live})
 
-colors = {1,2,3,4}
+colors = {1,2,3}
 
 Optimize = Optimize or {}
 function Optimize.default (cfg, frame) run(pcfg, cfg, {}) end

@@ -126,36 +126,38 @@ let moveLists cgInfo =
                 ; ("ActiveMoves", cgInfo.activeMoves)
                 ]
 
-let printReg (s, i, w) = prerr_char '('; prerr_char s;
-                         prerr_string ", "; prerr_int i;
-                         prerr_string ", "; prerr_int w; prerr_char ')'
-let printMove node = printReg (Cheats.source node);
-                     prerr_string " -> ";
-					 printReg (Cheats.dest node)
+let cfgSay = Cheats.cfgSay
+let cgSay = Cheats.cfgSay
+let printReg = Register.print
+let printMove node = printReg (Cheats.source node)
+                   ^ " -> "
+				   ^ printReg (Cheats.dest node)
 let printColorMap cm =
-	prerr_string "    ColorMap:\n";
-	RM.iter (fun tmp reg -> prerr_string "        ";
-							printReg tmp; prerr_string " -> ";
-							printReg reg; prerr_newline ()) cm
+	cgSay ["    ColorMap:\n"];
+	RM.iter (fun tmp reg -> cgSay [ "        "
+							      ; printReg tmp
+								  ; " -> "
+							      ; printReg reg
+								  ; "\n"
+								  ]) cm
 let print_cgInfo cgInfo =
-    let _ = prerr_string "\nCGINFO\n" in
+    let _ = cgSay ["\nCGINFO\n"] in
     let printItemList pr (name, itemlist) = match itemlist with
         | [] -> ()
         | itemlist ->
             let indent = "        " in
-            prerr_string ("    " ^ name ^ ":\n"); 
-            List.iter (fun r -> prerr_string indent; pr r;
-                               prerr_newline ()) itemlist in
+            cgSay ["    "; name; ":\n"]; 
+            List.iter (fun r -> cgSay [indent; pr r; "\n"])
+			          itemlist in
 	let printReglist lst  = printItemList printReg lst in
 	let printMovelist lst = printItemList printMove lst in
 	let printAdjListMember key lst =
-		prerr_string "        "; printReg key; prerr_string ": ";
-		List.iter (fun r -> prerr_string ", "; printReg r) lst;
-		prerr_newline(); flush stderr in
+		cgSay ["        "; printReg key; ": "];
+		List.iter (fun r -> cgSay [", "; printReg r]) lst;
+		cgSay ["\n"]; in
 	let printAdjListMap am =
-		let _ = prerr_string "    AdjListMap:\n" in
+		let _ = cgSay ["    AdjListMap:\n"] in
 		RM.iter printAdjListMember am
-		
     in
 	    printAdjListMap cgInfo.adjListMap;
         List.iter printReglist (regLists cgInfo);
@@ -209,11 +211,11 @@ module Cheats = struct
                     )
              else None
 
+	let cfgSay = Verbose.say 18
     let print_cfg cfg =
-        prerr_string "CFG\n===\n";
-        fold_fwd cfg (fun n () -> prerr_string (Cfg3.print_node n ^
-                    "\n")) ();
-        prerr_string "END CFG\n===\n";
+        cfgSay ["CFG\n===\n"];
+        fold_fwd cfg (fun n () -> cfgSay [Cfg3.print_node n; "\n"]) ();
+        cfgSay ["END CFG\n===\n"];
         flush stderr
     let pCFG _ {Proc.cfg = cfg} = print_cfg cfg; false
 
@@ -352,7 +354,7 @@ This algorithm annotates each node in the (\cfg) with a live-in set.
 <<livenessAnalysis>>=
 (* dummy implementation *)
 let liveness _ {Proc.cfg = cfg} =
-	prerr_string (Cfgutil.cfg2dot cfg); flush stderr;
+	cfgSay [Cfgutil.cfg2dot cfg];
 	LI.liveness cfg; true
 
 (*
@@ -410,8 +412,8 @@ let resetDegree cg temp =
 let printCFGLive _ {Proc.cfg = cfg} =
 	let printNodeLive node _ =
 		let live = (G.property node).P.liveout in
-		prerr_string "LIVE "; prerr_int (G.number node); prerr_string ": "; RS.iter printReg live; prerr_newline ();
-	    flush stderr in
+		cfgSay ["LIVE "; string_of_int (G.number node); ": "];
+		cfgSay (List.map printReg (RS.elements live)); cfgSay ["\n"]; in
 	Cheats.fold_fwd cfg printNodeLive (); false
 
 let build colors cgInfo {Proc.cfg = cfg; Proc.target = target} =
@@ -754,15 +756,17 @@ match T2'.map.V.project param with
                 cg.selectStack <- [] in
         let colorCoalescedNodes () =
             let setColor temp = 
+cfgSay ["coloring temp: "; Register.print temp ^ "\n"];
                 cg.colorMap <- RM.add temp (RM.find (getAlias temp cg)
                                             cg.colorMap) cg.colorMap
             in
                 List.iter setColor cg.coalescedNodes in
         let _ = colorSelectStack () in
+let _ = print_cgInfo cg in
         let _ = colorCoalescedNodes () in
             (* remove short spill temps from the spill list *)
-	let _ = cg.spilledNodes <- (List.fold_right filterOut cg.spills
-	cg.spilledNodes @ cg.spills)in
+		let _ = cg.spilledNodes <- (List.fold_right filterOut cg.spills
+		           	                        cg.spilledNodes @ cg.spills) in
 	(*
         let _ = match cg.spilledNodes with
             | [] -> ()
