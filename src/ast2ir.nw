@@ -366,7 +366,7 @@ let rec body env props graph after bb =
     let const n = A.Int (Bits.of_int n Bits.maxwidth, None)   in
     let (cont, count) = Aux.Option.get (const 0, const 0) alt in
     let cc = Aux.Option.get default_convention cc             in
-        decorate (GM.copy_out (List.map (actual env) args) Fgraph.ProcResults cc (
+        decorate (GM.copy_out (List.map (actual env) args) G.ProcResults cc (
         decorate (GM.return graph (un_const cont) (un_const count))))
 
 <<cases for translating statements>>=
@@ -397,13 +397,13 @@ node.
     let cc         = Aux.Option.get default_convention cc         in
     let cout after = if args <> []
                      then decorate (GM.copy_out (List.map (actual env) args)
-                                    Fgraph.ProcParameters cc after)
+                                    G.ProcParameters cc after)
                      else after                                   in
     let cont after = flows (GM.empty_cont after) fs               in
     let call after = decorate (GM.call (expr env e) (cont after)) in
     let cin  after = if lhs <> []
                      then decorate (GM.copy_in (List.map lvalue lhs)
-                                       Fgraph.ProcResults cc after)
+                                       G.ProcResults cc after)
                      else after                                   in
         (cout << call << cin) after
 @
@@ -416,7 +416,7 @@ A continuation is represented by a labeled node.  This node is a
     let cc        = default_convention                                  in
     let args      = List.map (fun (hint,n) -> (n, idTy n env, hint)) ns in
     let cin after = if ns <> []
-                    then decorate (GM.copy_in args Fgraph.ContParameters cc after)
+                    then decorate (GM.copy_in args G.ContParameters cc after)
                     else after                                          in
     let lbl after = decorate (GM.label n after)                         in
         (lbl << cin) after
@@ -436,7 +436,7 @@ sequence of statements.
     let cc         = Aux.Option.get default_convention cc     in
     let args       = List.map (actual env) args               in
     let cout after = if args <> [] then 
-                        decorate (GM.copy_out args Fgraph.ProcParameters cc after)
+                        decorate (GM.copy_out args G.ProcParameters cc after)
                      else after                               in
     let jump after = decorate (GM.jump graph (expr env e) ts) in
         (cout << jump) after
@@ -503,14 +503,14 @@ procedure is found in its entry in the fat environment.
 <<module Make>>=
 and proc env env props graph (cc,n,fs,bb) =  
     let decorate n = G.bind props n                       in
-    let env        = match F.findv n env with 
+    let env        = match F.findv n env with
                      | _,(F.Label(F.Proc e),_) -> e
                      | _  -> assert false                 in
     let cc         = Aux.Option.get default_convention cc in
     let frml       = fun (h,i,t,n) -> (n,ty env t,h)      in
     let label a    = decorate (GM.label n a)              in
     let copy  a    = decorate (GM.copy_in (List.map frml fs)
-                     Fgraph.ProcParameters cc a)          in
+                     G.ProcParameters cc a)               in
     let bdy   a    = body env props graph a bb            in
     let exit       = decorate (GM.exit graph)             in
         (label << copy << bdy) exit

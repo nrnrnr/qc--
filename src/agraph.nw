@@ -43,7 +43,8 @@ module type S = sig
     type graph
     type node           (* node with properties               *)
     type unode          (* node w/o  properties               *)
-    type label = string (* a label in the C-- source language *)
+
+    <<types>>
     
     <<module Props>>
     val bind : Props.properties -> unode -> node
@@ -61,6 +62,46 @@ Nodes with and without properties have different types [[node]] and
 using [[node]] as arguments and returning [[unode]] as results, we
 ensure that in any well-typed program, some properties are bound to
 each node. 
+
+% ------------------------------------------------------------------ 
+\subsection{Types}
+% ------------------------------------------------------------------ 
+
+The details of a flow graph contain some more data types below the
+level of [[graph]], [[node]], and [[unode]]. 
+
+Certain concepts from the {\PAL} are just represented as strings:
+
+\begin{itemize}
+\item Labels, like procedure names.
+\item Variables.
+\item Hints.
+\item Calling Conventions.
+\end{itemize}
+
+<<types>>=
+type label      = string (* C-- label    *)
+type variable   = string (* C-- variable *)
+type hint       = string option
+type convention = string
+@
+
+Parameters are passed into a procdure, into a continuation, or out of
+a procedure. The three different places are covered by a [[context]].
+
+<<>>=
+type context     = ProcParameters
+                 | ProcResults
+                 | ContParameters
+@
+
+A formal parameter is a variable, an actual parameter an expression. Both
+can have optional hints, and have a [[width]], i.e.~a type. 
+
+<<>>=
+type formal      = variable * Rtl.width * hint  (* use a record? *)
+type actual      = Rtl.expr * Rtl.width * hint 
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Properties}
@@ -133,8 +174,8 @@ in creates a [[Branch]], [[Assign]], or [[Copy*]] node and returns it.
 <<constructor functions>>=
 val branch  : Rtl.expr -> node -> node -> unode
 val assign  : Rtl.rtl  -> node -> unode
-val copy_in  : Fgraph.formal list -> Fgraph.context -> Fgraph.convention -> node -> unode
-val copy_out : Fgraph.actual list -> Fgraph.context -> Fgraph.convention -> node -> unode
+val copy_in  : formal list -> context -> convention -> node -> unode
+val copy_out : actual list -> context -> convention -> node -> unode
 @ 
 
 To return from a {\PAL} procedure, you have to say which return
