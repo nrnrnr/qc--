@@ -57,7 +57,7 @@ lib.opt:V:
                 done
 
 precompile:V:
-                for i in $SRC
+                for i in src tools camlburg
                 do 
                     (echo "# entering $i" && cd $i && mk $MKFLAGS $target)
                 done
