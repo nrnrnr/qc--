@@ -7,7 +7,7 @@ all:V: doc coders
 
 doc:V: design.ps state.ps
 
-coders:V: encode.h encode.c decode-dec.c
+coders:V: encode.h encode.c interp-dec.c
 
 design.tex: design.inc
 	echo "\input{design.inc}" > $target
@@ -30,16 +30,22 @@ intervals.c:D: intervals.nw
 intervals.h:D: intervals.nw
 	$NOTANGLE -L -R$target $prereq > $target
 
-bytecode.sled:D: bytecode.nw
+bytecode.sled:D: interp.nw
 	$NOTANGLE -L -R$target $prereq > $target
 
-decode.fetch:D: bytecode.nw
+decode.fetch:D: interp.nw
 	$NOTANGLE -L -R$target $prereq > $target
 
-decode.m:D: bytecode.nw
+bcdis.m:D: interp.nw
+        $NOTANGLE -L -R$target $prereq > $target
+
+interp.m:D: interp.nw
 	$NOTANGLE -L -R$target $prereq > $target
 
-interp.h:D: bytecode.nw
+interp.h:D: interp.nw
+        $NOTANGLE -L -R$target $prereq > $target
+
+machine.h:D: interp.nw
         $NOTANGLE -L -R$target $prereq > $target
 
 encode.c encode.h: bytecode.sled
@@ -48,8 +54,14 @@ encode.c encode.h: bytecode.sled
 encode.o: encode.c encode.h
 	gcc -c -I/home/lair/olinsky/include/ -o encode.o encode.c
 
-mclib.o: 
+mclib.o: mclib.c
         gcc -g -c -I/home/lair/olinsky/include/ -o mclib.o mclib.c
+
+cii:    atom.c mem.c except.c assert.c
+        gcc -c -I/home/lair/olinsky/include/ -o atom.o   atom.c
+	gcc -c -I/home/lair/olinsky/include/ -o mem.o    mem.c
+	gcc -c -I/home/lair/olinsky/include/ -o except.o except.c
+	gcc -c -I/home/lair/olinsky/include/ -o assert.o assert.c
 
 %-dec.c:D: %.m bytecode.sled decode.fetch
 	tools -lc-cons-names -decoder $target -matcher $stem.m \
@@ -70,12 +82,16 @@ optest:V: opgen
 intervals.o: intervals.c intervals.h
         gcc -g -c -o intervals.o intervals.c
 
-decode-dec.i:D: decode-dec.c interp.h
-        rm -f $target ; gcc -I/home/lair/olinsky/include/ -E -P decode-dec.c > $target
+bcdis.o: bcdis-dec.c
+	gcc -P -E -g -c -I/home/lair/olinsky/include/ -o bcdis-dec.i bcdis-dec.c
+	gcc -g -c -o bcdis.o bcdis-dec.i
 
-interp.o: decode-dec.i intervals.h encode.h
-        gcc -g -c -o interp.o decode-dec.i
+interp-dec.i:D: interp-dec.c interp.h
+        rm -f $target ; gcc -I/home/lair/olinsky/include/ -E -P interp-dec.c > $target
 
-interp: interp.o intervals.o encode.o mclib.o
-        gcc -lm -L/home/lair/olinsky/lib/ -o interp interp.o intervals.o encode.o mclib.o /home/lair/olinsky/lib/liblua.a /home/lair/olinsky/lib/liblualib.a /home/lair/olinsky/lib/libtolua.a
+interp.o: interp-dec.i intervals.h encode.h machine.h
+        gcc -g -c -o interp.o interp-dec.i
+
+interp: interp.o intervals.o encode.o mclib.o cii bcdis.o
+        gcc -lm -L/home/lair/olinsky/lib/ -o interp interp.o intervals.o encode.o mclib.o /home/lair/olinsky/lib/liblua.a /home/lair/olinsky/lib/liblualib.a /home/lair/olinsky/lib/libtolua.a atom.o mem.o except.o assert.o bcdis.o
 
