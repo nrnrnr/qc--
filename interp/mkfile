@@ -42,31 +42,24 @@ interp.h:D: bytecode.nw
 encode.c encode.h: bytecode.sled
 	tools -lc-cons-names -encoder encode $prereq
 
-encode_tolua.c: encode.h
-        echo "#include <mclib.h>" > encode_tolua.c
-	/home/lair/olinsky/bin/tolua encode.h >> encode_tolua.c
-
 encode.o: encode.c encode.h
 	gcc -c -I/home/lair/olinsky/include/ -o encode.o encode.c
 
-encode_tolua.o: encode_tolua.c
-	gcc -c -I/home/lair/olinsky/include/ -o encode_tolua.o encode_tolua.c
-
 mclib.o: 
-        gcc -c -I/home/lair/olinsky/include/ -o mclib.o mclib.c
+        gcc -g -c -I/home/lair/olinsky/include/ -o mclib.o mclib.c
 
 %.c:D: %.m bytecode.sled decode.fetch
 	tools -lc-cons-names -decoder $target -matcher $stem.m \
 		bytecode.sled decode.fetch
 
 intervals.o: intervals.c intervals.h
-        gcc -c -o intervals.o intervals.c
+        gcc -g -c -o intervals.o intervals.c
 
 decode.i: decode.c interp.h
         rm -f decode.i ; gcc -I/home/lair/olinsky/include/ -E -P decode.c > decode.i
 
 interp.o: decode.i intervals.h encode.h
-        gcc -c -o interp.o decode.i
+        gcc -g -c -o interp.o decode.i
 
-interp: interp.o intervals.o encode.o mclib.o encode_tolua.o
-        gcc -lm -L/home/lair/olinsky/lib/ -o interp interp.o intervals.o encode.o encode_tolua.o mclib.o /home/lair/olinsky/lib/liblua.a /home/lair/olinsky/lib/liblualib.a /home/lair/olinsky/lib/libtolua.a
+interp: interp.o intervals.o encode.o mclib.o
+        gcc -lm -L/home/lair/olinsky/lib/ -o interp interp.o intervals.o encode.o mclib.o /home/lair/olinsky/lib/liblua.a /home/lair/olinsky/lib/liblualib.a /home/lair/olinsky/lib/libtolua.a
