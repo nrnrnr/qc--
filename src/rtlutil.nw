@@ -286,7 +286,7 @@ module ToUnreadableString: sig
     val exp: Rtl.exp -> string
     val agg: Rtl.aggregation -> string
 end
-module ToReadableString: sig
+module ToString: sig
     val reg: Register.t -> string
     val rtl: Rtl.rtl -> string
     val exp: Rtl.exp -> string
@@ -340,8 +340,8 @@ module ToUnreadableString = struct
     <<ToUnreadableString>>
 end
 
-module ToReadableString = struct
-    <<ToReadableString>>
+module ToString = struct
+    <<ToString>>
 end
 
 module Time = struct
@@ -784,13 +784,13 @@ let rtl = rtl' << Rtl.Dn.rtl
 \subsection{Conversion to Readable String}
 % ------------------------------------------------------------------ 
 
-<<ToReadableString>>=
+<<ToString>>=
 module R = Rtl.Private
 module A = Ast
 module T = Types
 @
 
-<<ToReadableString>>=
+<<ToString>>=
 let rec const = function
     | R.Bool true     ->  "true"
     | R.Bool false    ->  "false"
@@ -800,7 +800,7 @@ let rec const = function
     | R.Late(name,w)  -> "<" ^ name ^ ">"
 @
 
-<<ToReadableString>>=
+<<ToString>>=
 let opr op w = "%" ^ op
 
 let join = String.concat
@@ -818,7 +818,7 @@ and brexpr' e = match e with (* bracketed expression *)
     | _ -> expr' e
 @
 
-<<ToReadableString>>=
+<<ToString>>=
 and location' = function 
     | R.Mem (sp,agg,width,e,ass) ->
         let space = if sp = 'm' then "bits" ^ string_of_int width
@@ -837,7 +837,7 @@ let loc = location' << Rtl.Dn.loc
 @
 
 A [[kill]] is translated into an assignment of [[%undef()]].
-<<ToReadableString>>=
+<<ToString>>=
 let rec effect = function
     | R.Kill   loc       -> "kill " ^ location' loc
     | R.Store  (loc,e,w) -> location' loc ^ " := " ^ expr' e
@@ -1062,7 +1062,7 @@ Printf.eprintf "--> comparing stack slots %s+%d and %s+%d\n" sym n sym' n';
     let may_alias = has_loc (locs' l) in
     fun e ->
       let answer = may_alias e in
-      let module S = ToReadableString in
+      let module S = ToString in
       let debug () = 
         Printf.eprintf "*** Expression %s %s alias with location %s\n"
           (S.exp (Rtl.Up.exp e)) (if answer then " may " else " may not ")

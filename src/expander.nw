@@ -553,8 +553,8 @@ module D = struct (* debugging *)
       else
         (fun ss -> ()) 
     let int n = string_of_int n
-    let exp e = Rtlutil.ToReadableString.exp (Up.exp e) 
-    let rtl r = Rtlutil.ToReadableString.rtl r 
+    let exp e = Rtlutil.ToString.exp (Up.exp e) 
+    let rtl r = Rtlutil.ToString.rtl r 
     let pr_is   is = List.iter (fun r -> strings ["  "; rtl r; "\n"]) (seg_to_list is)
     let pr_rtls rs = List.iter (fun r -> strings ["  "; rtl r; "\n"]) (List.rev rs)
     let temp (s, n, w) =
@@ -889,7 +889,7 @@ and to_stack' room e =
   if room < 1 then
     Impossible.impossible "machine stack overflow in code generation";
   if Rtlutil.Width.exp' e <> Post.stack_width then
-     (Printf.eprintf "failing expression: %s\n" (Rtlutil.ToReadableString.exp
+     (Printf.eprintf "failing expression: %s\n" (Rtlutil.ToString.exp
                                                   (Rtl.Up.exp e));
          Unsupported.stack_width ~have:(Rtlutil.Width.exp' e)
          ~want:Post.stack_width);
@@ -1028,7 +1028,7 @@ and guarded g left right w =
   | RP.Const _ -> Impossible.impossible "non-bool constant as guard"
   | RP.Fetch _ -> Impossible.impossible "fetch as guard"
   | RP.App (cmp, [_; _]) ->
-      Printf.eprintf "guarded: %s\n" (Rtlutil.ToReadableString.exp (Up.exp g));
+      Printf.eprintf "guarded: %s\n" (Rtlutil.ToString.exp (Up.exp g));
       Impossible.unimp "guard on other than conditional branch"
   | RP.App (cmp, _) ->
       Impossible.unimp "non-binary comparison in guard"
@@ -1127,7 +1127,7 @@ and expand_cbranch_rtl g left right w ktrue kfalse =
   | RP.App (cmp, [_; _]) ->
       Impossible.unimp "guard on other than conditional branch"
   | RP.App (cmp, _) ->
-     Printf.eprintf "rtl exp: %s\n" (Rtlutil.ToReadableString.exp (Up.exp g));
+     Printf.eprintf "rtl exp: %s\n" (Rtlutil.ToString.exp (Up.exp g));
       Impossible.unimp "non-binary comparison in conditional guard"
 and expand_cbranch' rtl ktrue kfalse =
   match Down.rtl rtl with

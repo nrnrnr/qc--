@@ -220,7 +220,7 @@ module Make (Arg : ARG) = struct
 end
 <<definition of [[simp]], which is verbose>>=
 let simp rtl =
-  let str = Rtlutil.ToReadableString.rtl in
+  let str = Rtlutil.ToString.rtl in
   let rtl' = Simplify.Unsafe.rtl rtl in
   Debug.eprintf "vfp"
     "Simplified stack adjustment from %s to %s\n" (str rtl) (str rtl');
@@ -270,14 +270,14 @@ and find_k'_added_to_sp (RP.Rtl ges) =
             when sp' = sp -> find true (- (Bits.S.to_int k')) ges
           | RP.Fetch (sp', _)
             when sp' = sp -> find true 0 ges
-		  |	_ -> Printf.printf "illegal sp assignment: sp := %s\n" (RU.ToReadableString.exp (Up.exp e)) ; 0)
+		  |	_ -> Printf.printf "illegal sp assignment: sp := %s\n" (RU.ToString.exp (Up.exp e)) ; 0)
 (* RRO temp
           | _ -> Impossible.impossible ("sp assigned other than sp + k: " ^
-                                        RU.ToReadableString.exp (Up.exp e)))
+                                        RU.ToString.exp (Up.exp e)))
 *)
     | (g, RP.Store (sp', e, w)) :: ges when sp = sp' ->
         Impossible.impossible ("assigned sp with nontrivial guard " ^
-                               Rtlutil.ToReadableString.exp (Rtl.Up.exp g))
+                               Rtlutil.ToString.exp (Rtl.Up.exp g))
     | (g, RP.Kill sp') :: ges when sp = sp' -> 
         Impossible.impossible "killed sp"
     | _ :: ges -> find found k' ges in
