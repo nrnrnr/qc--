@@ -8,13 +8,13 @@ This module encapsulates operations on bit vectors.
 Its primary use will be to support constant evaluation, but
 it is also used to evaluate `early' expressions during RTL creation.
 %
-<<bitops.mli>>=
+<<bitops.mli ((evaluating))>>=
 (*module Bitops*)
 type t = Bits.bits
 type width = Bits.width
 @ 
 Standard RTL operators
-<<bitops.mli>>=
+<<bitops.mli ((evaluating))>>=
 (* comparisons *)
 val eq : t -> t -> bool
 val ne : t -> t -> bool
@@ -52,7 +52,7 @@ val round_up : t
 
 @ 
 Testing for widths.
-<<bitops.mli>>=
+<<bitops.mli ((evaluating))>>=
 val fits_signed : t -> width -> bool
   (* fits_signed v w == v can be narrowed to width w, then
          sign-extended to its original width, without changing its value *)
@@ -67,7 +67,7 @@ val fits_unsigned : t -> width -> bool
 \subsection{Implementation}
 % ----------------------------------------------------------------
 
-<<bitops.ml>>=
+<<bitops.ml ((evaluating))>>=
 type t = Bits.bits
 type width = Bits.width
 let eq x y = x = y
@@ -105,3 +105,190 @@ let round_up = unimp "floating-point stuff"
 let shl  _ _ = unimp "shifts"
 let shra _ _ = unimp "shifts"
 let shrl _ _ = unimp "shifts"
+
+@ \section{Residualising instantiation}
+
+
+% ----------------------------------------------------------------
+\section{Operations on bit vectors}
+% ----------------------------------------------------------------
+
+This module encapsulates operations on bit vectors.
+Its primary use will be to support constant evaluation, but
+it is also used to evaluate `early' expressions during RTL creation.
+%
+<<bitops.mli ((residualizing))>>=
+(*module Bitops*)
+type t = Bits.bits
+type width = Bits.width
+@ 
+Standard RTL operators
+<<bitops.mli ((residualizing))>>=
+(* comparisons *)
+val eq : t -> t -> Base.std_bool
+val lt : t -> t -> bool
+val ne : t -> t -> Base.std_bool
+val le : t -> t -> bool
+val gt : t -> t -> bool
+val ge : t -> t -> bool
+
+val eq' : t -> t -> bool
+val ne' : t -> t -> bool
+
+(* extensions *)
+val sx : t -> width -> t  (* sign extend to the given width *)
+val zx : t -> width -> t
+
+(* extractions a painless specialty *)
+val bitExtract : lsb:int -> t -> width -> t
+val bitInsert  : lsb:int -> wide:t -> narrow:t -> t
+
+(* bitwise operations *)
+val com : t -> t
+
+(* floating-point goo *)
+val float_lt : t
+val float_gt : t
+val float_eq : t
+val unordered : t
+
+val round_nearest : t
+val round_zero : t
+val round_down : t
+val round_up : t
+
+@ 
+Testing for widths.
+<<bitops.mli ((residualizing))>>=
+val fits_signed : t -> width -> Base.std_bool
+val fits_signed' : t -> width -> bool
+  (* fits_signed v w == v can be narrowed to width w, then
+         sign-extended to its original width, without changing its value *)
+val fits_unsigned : t -> width -> Base.std_bool
+val fits_unsigned' : t -> width -> bool
+  (* fits_signed v w == v can be narrowed to width w, then
+         zero-extended to its original width, without changing its value *)
+@
+
+
+
+% ----------------------------------------------------------------
+\subsection{Implementation}
+% ----------------------------------------------------------------
+
+<<bitops.ml ((residualizing))>>=
+type t = Bits.bits
+type width = Bits.width
+
+module T = Tdpe
+module Sy = Syntax
+    
+exception Unimplemented of string
+(*let unimp s = raise (Unimplemented s)*)
+
+(* some brainless solution *)
+
+let unimp s = ((Bits.BV,Sy.APP(Sy.VAR "raise",Sy.VAR "Unimplemented")),0)
+
+let bitsC = T.a'
+let bitsCP = T.pair(T.a',T.a')
+
+@ Here I am making a gross approximation. Also, maybe the implementation
+is not quite right. Also, perhaps one will want to residualize the calls
+to [[Bits.of_]] for side-effects reasons.
+<<bitops.ml ((residualizing))>>=    
+
+let commit ((tag,bitv),w) =
+  match tag with
+    Bits.INT -> Tdpe.nbe' (Tdpe.arrowN(Tdpe.a',Tdpe.arrowN(Tdpe.a',bitsC)))
+	(Sy.VAR "Bits.of_int") bitv (Sy.INT w)
+  | Bits.NINT -> Tdpe.nbe' (Tdpe.arrowN(Tdpe.a',Tdpe.arrowN(Tdpe.a',bitsC)))
+	(Sy.VAR "Bits.of_nativeint") bitv (Sy.INT w)
+  | Bits.INT64 -> Tdpe.nbe' (Tdpe.arrowN(Tdpe.a',Tdpe.arrowN(Tdpe.a',bitsC)))
+	(Sy.VAR "Bits.of_int64") bitv (Sy.INT w)
+  | Bits.BV -> bitv
+    
+
+let bits_bits_bool s ((t1,b1),w1) ((t2,b2),w2) =
+  let b1 = commit ((t1,b1),w1) in
+  let b2 = commit ((t2,b2),w2) in
+  if (w1=w2) then
+    T.nbe' (T.arrowN(bitsC,T.arrowN(bitsC,T.booNone)))
+      (Sy.VAR s) b1 b2
+  else false
+
+@ Be careful here: the sign extension should return 32 bits???
+<<bitops.ml ((residualizing))>>=
+
+
+let bits_int_bool s ((t,b),w) y = 
+  T.nbe' (T.arrow(bitsCP,T.arrow(T.a',T.boo)))
+    (Sy.VAR s) (b,Sy.INT w) (Sy.INT y)
+
+let bits_int_a' s ((t,b),w) y = 
+  T.nbe' (T.arrow(bitsCP,T.arrow(T.a',T.a')))
+    (Sy.VAR s) (b,Sy.INT w) (Sy.INT y)
+
+let bitsop s ((t,b),w) =
+  ((Bits.BV,T.nbe' (T.arrow(bitsC,T.a'))
+      (Sy.VAR s) b),
+   w)
+
+let bits_bits_a' s ((t1,b1),w1) ((t2,b2),w2) =
+  let b1 = commit ((t1,b1),w1) in
+  let b2 = commit ((t2,b2),w2) in
+  if (w1=w2) then 
+    T.nbe' (T.arrowN(bitsC,T.arrowN(bitsC,T.a'))) (Sy.VAR s)
+      b1 b2 
+  else (Sy.BOOL false)
+
+
+let eq = bits_bits_a' "Bitops.eq"
+let ne = bits_bits_a' "Bitops.ne"
+let lt = bits_bits_bool "Bitops.lt"
+let le = bits_bits_bool "Bitops.le"
+let gt = bits_bits_bool "Bitops.gt"
+let ge = bits_bits_bool "Bitops.ge"
+
+let eq' = bits_bits_bool "Bitops.eq"
+let ne' = bits_bits_bool "Bitops.ne"
+
+    
+let bits_int_bits s ((tag,bits),w) y =
+  let bv = commit ((tag,bits),w) in
+  let (b2,w2) =
+    T.nbe' (T.arrowN(bitsC,T.arrowN(T.a',bitsCP)))
+      (Sy.VAR s) bv (Sy.INT y) in
+  ((Bits.BV,b2),32)
+    
+let sx = bits_int_bits "Bitops.sx"
+let zx = bits_int_bits "Bitops.zx"
+
+let com = bitsop "Bitops.com"
+
+let fits_signed = bits_int_a' "Bitops.fits_signed"
+let fits_unsigned = bits_int_a' "Bitops.fits_unsigned"
+
+let fits_signed' = bits_int_bool "Bitops.fits_signed"
+let fits_unsigned' = bits_int_bool "Bitops.fits_unsigned"
+
+@ Here I clearly do not know what to do
+<<bitops.ml ((residualizing))>>=
+let bitExtract lsb ((t1,b1),w1) w =
+  ((Bits.BV,T.nbe' (T.arrow(T.a',T.arrow(bitsCP,T.arrow(T.a',bitsC))))
+      (Sy.VAR "Bitops.bitExtractX") (Sy.INT lsb) (b1,Sy.INT w1) (Sy.INT w)),
+   w)
+let bitInsert lsb ((t1,wide),w1) ((t2,narrow),w2) =
+  ((Bits.BV,T.nbe' (T.arrow(T.a',T.arrow(bitsCP,T.arrow(bitsCP,bitsC))))
+      (Sy.VAR "Bitops.bitInsertX") (Sy.INT lsb) (wide,Sy.INT w1) (narrow,Sy.INT w2)),
+   w2)
+
+let float_lt = unimp "floating-point stuff"
+let float_gt = unimp "floating-point stuff"
+let float_eq = unimp "floating-point stuff"
+let unordered = unimp "floating-point stuff"
+
+let round_nearest = unimp "floating-point stuff"
+let round_zero = unimp "floating-point stuff"
+let round_down = unimp "floating-point stuff"
+let round_up = unimp "floating-point stuff"
