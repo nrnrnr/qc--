@@ -22,6 +22,7 @@ val div_overflows : unit -> 'a
 val floatlit : int -> 'a
 val mulx_and_mulux : unit -> 'a
 val singlebit : op:string -> 'a
+val popcnt : notok:int -> ok:int -> 'a
 @ 
 <<unsupported.ml>>=
 exception Unsupported
@@ -170,3 +171,11 @@ let singlebit_n = getn (fun _ ->
   ])
 let singlebit ~op =
   fail (nosupport (s "the %%%s operator" op)) singlebit_n []
+<<unsupported.ml>>=
+let popcnt_n = getn (ex2 (fun good bad ->
+  [ s "Your code tried to use the %%popcnt operator on a %d-bit argument," bad;
+    s "but on this target, %%popcnt applies only to %d-bit values." good;
+  ]))
+let popcnt ~notok ~ok =
+  fail (nosupport (s "%%popcnt(bits%d)" notok))
+       popcnt_n [ok; notok]

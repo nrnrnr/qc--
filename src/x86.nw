@@ -351,14 +351,16 @@ let binop ~dst op x y = match at32 op with
 @ 
 Other operators are surely wrong.
 <<x86 postexpander>>=
-let inplace op x = match at32 op with
+let inplace op op32 x = match op32 with
 | "neg" ->
     rtl (R.par [R.store (temploc x) (R.app (Up.opr op) [tempval x]) 32;
                          negflags (tempval x) 32])
 | "lobits" -> PX.Nop  (* lobits32 is identity *)
 | _ -> rtl (R.store (temploc x) (R.app (Up.opr op) [tempval x]) (tempwidth x))
 
-let unop ~dst op x = move dst x <:> inplace op dst
+let unop ~dst op x = match at32 op with
+| "popcnt" -> PX.Expand.block (Rewrite.popcnt 32 ~dst:(temploc dst) (tempval x))
+| op32 -> move dst x <:> inplace op op32 dst
 
 let rtlop ~dst op args =
   rtl (R.store (temploc dst)
@@ -920,6 +922,7 @@ let target =
                        ; "neg",     [32]
                        ; "or",      [32]
                        ; "quot",    [32]
+                       ; "popcnt",  [32]
                        ; "rem",     [32]
                        ; "rotl",    [32]
                        ; "rotr",    [32]

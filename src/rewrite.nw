@@ -18,6 +18,7 @@ type width = Rtl.width
 type exp   = Rtl.exp
 type loc   = Rtl.loc
 type block = Postexpander.block
+type temp  = Register.t
 <<rewrite.mli>>=
 <<exported type abbreviations>>
 @ 
@@ -66,6 +67,8 @@ val modu : width -> exp -> exp -> exp
 val rem  : width -> exp -> exp -> exp
   (* uses : quot, mul, sub *)
 <<rewrite.mli>>=
+val popcnt : width -> dst:loc -> exp -> block (* for 32 bits only *)
+<<rewrite.mli>>=
 val sxlo : width -> width -> exp -> exp
   (* uses : shl, shra *)
 val zxlo : width -> width -> exp -> exp
@@ -77,6 +80,8 @@ module B  = Bits
 module BO = Bits.Ops
 module PX = Postexpander
 module R  = Rtl
+
+let (<:>) = PX.(<:>)
 
 <<exported type abbreviations>>
 
@@ -105,6 +110,40 @@ let zxlo n w x =
   let shamt = O.unsigned w (w-n) in
   O.shrl w (O.shl w x shamt) shamt
 @ 
+Population count discussed in \emph{Hacker's Delight} and also in AMD
+Athlon Optimization manual
+(\url{http://www.amd.com/us-en/assets/content_type/white_papers_and_tech_docs/22007.pdf}). 
+
+<<rewrite.ml>>=
+let popcnt w ~dst x =
+  if w <> 32 then
+    Unsupported.popcnt ~notok:w ~ok:32;
+  let u      = O.unsigned 32 in
+  let (@:=) l r = PX.Rtl (R.store l r 32) in
+  let (&)   l r = O._and 32 l r in
+  let (>>)  l r = O.shrl 32 l (u r) in
+  let (-)   l r = O.sub 32 l r in
+  let (+)   l r = O.add 32 l r in
+  let ( * ) l r = O.mul 32 l r in
+  let tmploc = dst in
+  let tmpval = R.fetch tmploc 32 in
+  let one    = u 1 in
+  let mask3  = u 0x33333333 in
+  let mask5  = R.bits (Bits.U.of_int64 0x55555555L 32) 32 in   (* Caml sign bit set *)
+  let maskF  = u 0x0F0F0F0F in 
+  let mask01 = u 0x01010101 in 
+  tmploc @:= x - ((x >> 1) & mask5) <:>
+  tmploc @:= (tmpval & mask3) + ((tmpval >> 2) & mask3)  <:>
+  tmploc @:= ((tmpval + (tmpval >> 4)) & maskF)  <:>
+  tmploc @:= ((tmpval * mask01) >> 24)   (* AMD guide *)
+@  From \emph{Hacker's Delight}, an alternative to the last line is
+\begin{verbatim}
+  tmploc @:= tmploc + (tmploc >> 8) <:>
+  tmploc @:= tmploc + (tmploc >> 16) <:>
+  tmploc @:= (tmploc & u 0x3F)
+\end{verbatim}
+@
+
 \section{Things not to be looked at}
 
 \subsection{Automatically generated helper functions}
