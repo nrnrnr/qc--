@@ -15,7 +15,9 @@
 % l2h substitution asdl ASDL
 % l2h substitution ocaml OCaml
 % l2h substitution forall forall
+% l2h substitution gets <-
 % l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
 
 % Table of Contents
 % egrep '^\\(sub)*section' ast3ir.nw 
@@ -785,19 +787,21 @@ let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) =
                       | _                        -> assert false in
     let env         = F.push env p.F.scope in  (* activate local scope *)
     let pointer     = target.Target.pointersize in
-    let cfg         = G.mk ()   in 
+    let cfg         = G.mk ()   in      (* empty control-flow graph *)
+    (* symbolic compile-time constants to be used for stack areas *)
+    let eqns        = Const.empty pointer        in (* eqns over pointers *)
+    let eqns, stack = Const.sym "stackdata" eqns in
+    let eqns, inb   = Const.sym "inbase"    eqns in
+    let eqns, outb  = Const.sym "outbase"   eqns in
+    let eqns, privb = Const.sym "private"   eqns in
     (* calculate amount of user stack data - updates env! *)
-    let stackd      = Area.mk (Rtl.link "stackd" target.Target.pointersize) in
-    let env, 
-        stackd,
-        conts       = StackData.proc env target stackd bdy in
+    let stackd      = Area.mk stack in
+    let ( env, stackd, conts) = StackData.proc env target stackd bdy in
     (* priv provides spill slots etc *)    
-    let priv        = Automaton.mk 
-                        target.Target.stack_slots
-                        (Rtl.link "private" pointer) in
+    let priv        = Automaton.mk target.Target.stack_slots privb in
     (* build CFG for body *)                    
     let exit        = G.set_label cfg (Idgen.exit name) (G.exit cfg) in
-    let state = 
+    let state = (* this is needed for translation of the body *)
         { proc      = name       (* name of this procedure *)
         ; env       = env        (* fat environment *)
         ; target    = target     (* current target  *)
@@ -805,10 +809,10 @@ let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) =
         ; node      = exit       (* what follows current element in cfg *)
         ; incoming  = []         (* overlapping areas in incoming area *)
         ; outgoing  = []         (* overlapping areas in outgoing area *)
-        ; inbase    = Rtl.link "inbase" pointer (*XXX*)
-        ; outbase   = Rtl.link "outbase" pointer (*XXX*)
+        ; inbase    = inb
+        ; outbase   = outb
         } in  
-    (* insert code that create stack slots for continuations *)
+    (* translate body of procedure *)
     let state = foldr body bdy state in
     (* add nodes for incoming parameters *)
     let cc    = state.target.Target.cc (Aux.Option.get default_cc cconv) in
@@ -822,14 +826,17 @@ let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) =
         ; incoming = area :: state.incoming
         } in
     let _     = G.gm_redirect_all (G.entry cfg) (G.exit cfg) state.node in
+    let incoming, eqns = Area.overlap Area.EqualLowEnds state.incoming eqns in
+    let outgoing, eqns = Area.overlap Area.EqualLowEnds state.outgoing eqns in
     let i =    
         { Proc.name     = name
         ; Proc.cfg      = cfg
         ; Proc.mangle   = mangle
-        ; Proc.incoming = Area.overlap Area.EqualLowEnds state.incoming
-        ; Proc.outgoing = Area.overlap Area.EqualLowEnds state.outgoing
-        ; Proc.stackd   = stackd        (* stack data *)
-        ; Proc.priv     = priv          (* Automaton for spill loc, etc *)
+        ; Proc.incoming = incoming   (* incoming area *)   
+        ; Proc.outgoing = outgoing   (* outgoing area *)   
+        ; Proc.stackd   = stackd     (* stack data *)
+        ; Proc.priv     = priv       (* Automaton for spill loc, etc *)
+        ; Proc.eqns     = eqns       (* constraints for compile-time consts *)
         } 
     in
         asm ++ Asm.instr i

@@ -24,9 +24,11 @@
 {\PAL} allows to allocate continuous memory blocks inside a
 procedure's activation (called \texttt{stack data}).  The allocation
 is not specified as one big chunk but piecewise, where for each piece
-its size and alignment requirement are known.  This module provides an
+size and alignment requirement are known.  This module provides an
 abstraction for the allocation of these piecewise allocated blocks of
-memory. 
+memory. Memory blocks can be concatenated and overlayed to form larger
+blocks. This is used in the compiler to assemble a procedure's
+activation record that consists of several blocks.
 
 During the allocation process the continuous memory block is
 represented by an abstract type [[builder]].  A still can be enlarged
@@ -84,16 +86,28 @@ overlapped in a single location in memory.  The result is a new area
 determines whether the overlapping areas share a common low or high
 end. 
 
+Of course, overlapping requires some flexibility on the side of the
+involved areas: if all areas have fixed base addresses there is no way
+to align them. Flexibility comes from \emph{symbolic compile time
+constants} (c.f. module \module{const}). These are variables whose
+values are known at compile time, which however, can be used before
+these excat values are known. A symbolic compile-time value is
+represented by an [[Rtl.link]] value and must be registered with
+[[Const.register]]. Typically, the base address of an area that is later
+aligned with other areas is a symbolic compile time constant. 
+
+When areas are overlapped or concatenated, constraints are put on their
+(symbolic) base addresses. These constraints are collected in a
+[[Const.t]] value that is later passed to [[Const.solve]] to determine
+the exact values of all involved symbolic compile time constants.
+Therefore both [[overlap]] and [[conact]] take and return [[Const.t]]
+values.
+
 <<shared types>>=
 type placement = EqualHighEnds | EqualLowEnds
 
 <<area.mli>>=
-val overlap : placement -> t list -> t  
-  (* Overlap several areas into a larger area, forcing constraints on
-     compile-time constants.  May make calls to Const.make_equal, but
-     otherwise has no side effects.  It is a checked run-time error to
-     overlap areas at the high end unless the size of every area is a
-     multiple of its alignment.  N.B. may raise Const.Cannot_solve. *)
+val overlap : placement -> t list -> Const.t -> t * Const.t
 @
 
 Areas of concurrent lifetimes can be concatenated using [[concat]],
@@ -102,9 +116,7 @@ will increase from the head to the tail of the list.  It is a checked
 run-time error to supply an empty list as an argument. 
 
 <<area.mli>>=
-val concat : t list -> t        
-    (* req: argument <> [];
-       calls Const.make_equal, may raise Const.Cannot_solve *)
+val concat : t list -> Const.t -> t * Const.t       (* req: argument <> [] *)
 @
 
 % ------------------------------------------------------------------ 
@@ -163,68 +175,83 @@ let location b =
     let offset = RP.Const(RP.Bits (Bits.of_int b.offset b.width))    in
     let sum    = RP.App (("add",[b.width]), [b.base;offset])         in
         Rtl.Revert.exp sum
-@
 
-\begin{quote}\it
-    Overlaying areas at their high end only works if the size of each area 
-    is a multiple of its base alignment. The following code in
-    [[freeze]] enforces this. Should this be up to the user by
-    providing an [[adjust]] function? --CL
-\end{quote}
-
-<<area.ml>>=
 let freeze b = 
     let b = align b b.basealign in
         { address = Rtl.Revert.exp b.base 
         ; align   = b.basealign
         ; size    = b.offset
         }
-
-let maxarea x y =
-    let _ = () (* make_equal x.address y.address *) in
-        { address = x.address
-        ; align   = max x.align y.align
-        ; size    = max x.size  y.size
-        }
 @
 
-The implementation of [[overlap]] is easy when all overlapped areas
-share the same base address and they are aligned at their lower ends: 
-the resulting area also is based on that address an the size and
-alignment requirements are the respective maximums from the overlaid
-areas. Everything else requires to accumulate equations that relate
-the base addresses of the participating areas. 
 
 \begin{quote}\it
-    We currently have the [[Const]] module for this. However, it
-    maintains a global set of equations despite the fact that
-    equations are procedure-local. Therefore I'd like to discuss the
-    interface of [[Const]] first before providing an implementation here.
-    --CL
+    Overlaying areas at their high end only works if the size of each area 
+    is a multiple of its base alignment. The following code in
+    [[freeze]] enforces this. Should this be up to the user by
+    providing an [[adjust]] function? Currently the [[freeze]] function
+    does this automatically.--CL
 \end{quote}
 
-<<area.ml>>=
-let overlap placement areas =  match (placement,areas) with
-    | _           , []      -> invalid_arg "Area.overlap"
-    | EqualLowEnds, (a::aa) -> List.fold_left maxarea a aa 
-    | _                     -> Impossible.unimp "Area.overlap"
-@
 
-The implementation of [[concat]] creates a functional [[builder]]
-value [[b]] and then allocates space in it according to the size and
-alignment of the areas.  The calls to [[make_equal]] are still missing
-because of the design questions raised above.
+When areas are overlapped or concatenated their base addresses must be
+adjusted. This only works when they contain symbolic compile-time
+constants which can be adjusted accordingly. The details are left to the
+\module{const} module that provides a [[make_equal]] function to align
+{\rtl} expressions. Calling it adds constraints to the embedded symbolic
+constants.
+
+[[Concat]] creates a new [[builder]] value and places all areas $a_1,
+a_2, \dots$ in there, one next to the other. The base address of $a_i$
+are adjusted accordingly: 
 
 <<area.ml>>=
-let concat = function
+let concat (areas:t list) (const:Const.t) = match areas with
     | []             -> invalid_arg "Area.concat"
     | t::_ as areas  -> 
-        let b       = mk t.address in   (* get base address *)
-        let cat b t =  
-            let b = align b t.align in  (*XXX call make_equal here *)
-            let b = alloc b t.size  in
-                b
+        let b         = mk t.address in   (* new builder *)
+        let cat (b,const) t =  
+            let b     = align b t.align in  
+            let b     = alloc b t.size  in
+            let const = Const.make_equal (location b) t.address const in
+                (b,const)
         in
-            freeze (List.fold_left cat b areas)
+            let b,const = List.fold_left cat (b,const) areas in
+                freeze b, const
 @
+
+Overlapping areas requires to align either their top or bottom ends. The
+[[bottom]] function aligns two areas at their low ends by equating their
+base addresses and strengthening the alignment requirements. The
+resulting area's size is the maximum of the two sizes. Converselt, the
+[[top]] function aligns two areas at their top. 
+
+<<area.ml>>=
+let bottom (x,const) y =
+    let const = Const.make_equal x.address y.address const in
+    let area  = { address = x.address
+                ; align   = max x.align y.align
+                ; size    = max x.size  y.size
+                } 
+    in
+        area, const
+
+<<area.ml>>=
+let top (x,const) y = (* x.address + x.size = y.address + y.size *) 
+    let const = Const.make_equal' x.address x.size y.address y.size const in
+    let area  = { address = x.address
+                ; align   = max x.align y.align
+                ; size    = max x.size  y.size
+                }
+    in
+        area, const
+
+let overlap placement areas const =
+    match (placement,areas) with
+    | _            ,[]      -> invalid_arg "Area.overlap"
+    | EqualLowEnds ,(a::aa) -> List.fold_left bottom (a,const) aa 
+    | EqualHighEnds,(a::aa) -> List.fold_left top    (a,const) aa
+        
+@
+
 
