@@ -85,7 +85,12 @@ module Make (G : Cfg.S) (C : Call.S with type node = Rtl.rtl G.node) = struct
   <<statement-related types>>
   <<definition of module [[StackData]]>>
   let translate target env ccs =
+    let outblocks = ref [] in
+    let inblocks  = ref [] in
+    let add_outparms b = (outblocks := b :: !outblocks) in
+    let add_inparms  b = (inblocks  := b :: !inblocks ) in
     (* BINDING THE FLOW GRAPH TO g HERE WOULD BE A FINE IDEA *)
+    let instructions g rtls = assert false in (* A USEFUL ABBREV WOULD HELP *)
     <<definition of function [[exprtype]]>> in
     <<meanings of variables as [[lvalue_name]] and [[rvalue_name]]>> in
     <<mutually recursive nest of [[expr]] and [[lvalue]]>> in
@@ -372,8 +377,12 @@ type 'i conts = { cuts    : 'i G.node list
                 }
 @ 
 THERE IS A PROBLEM HERE.  A CONTINUATION NEEDS A DIFFERENT ENTRY POINT
-DEPENDING ON HOW IT IS USED.  NR HAS SOME HANDWRITTEN NOTES ON THIS
-TOPIC.  SEE ALSO MODULE [[Call]].
+DEPENDING ON HOW IT IS USED.  THIS CODE SHOULD BE MODIFIED TO USE (AND
+LAZILY CREATE) THE CORRECT ENTRY POINT ON DEMAND.  SEE MODULE
+[[Call]], PLUS 
+NR MAY HAVE SOME HANDWRITTEN NOTES ON THIS
+TOPIC.
+FOR NOW, WE ASSUME THIS FUNCTION RETURNS THE PROPER ENTRY POINTS.
 <<Make continuation bundles>>=
 let continuations ast cfg =
     let lookup = List.map (G.node_labeled cfg)  in
@@ -402,11 +411,19 @@ format expected by the [[IO.copyout]] function.  A formal procedure
 parameter denotes a local variable, a formal continuation parameter
 either a local or \emph{global} variable.  Both are translated to the
 format expected by the [[IO.copyin]] function.
-
+\nwaddbox{actuals : Ast.actual list -> (hint * width) list * Rtl.exp list}
+\nwaddbox{results : Ast.lvalue list -> (hint * width) list * Rtl.loc list}
 <<Make formals and actuals>>=
+let splitfold hw e l =
+  List.fold_right (fun x (hws, es) -> (hw x :: hws, e x :: es) ) l ([], []) in
 let actuals l =
-  List.fold_right
-    (fun (h, e) (hw's, e's) -> (h, width (exprtype e)) :: hw's, e::e's) l ([],[])
+  splitfold (fun (h, e) -> (h, width (exprtype e))) (fun (h, e) -> expr e) l
+and results l = 
+  let rec hw = function
+    | A.LValueAt (lv, _) -> hw lv
+    | A.Var(hint,x)      -> let (_,(denot,t)) = F.findv x env in (hint, width t)
+    | A.Mem(_, _, _)     -> Impossible.impossible "mem ref as result" in
+  splitfold hw (fst << lvalue) l
 @
 
 \begin{quote}\it
@@ -797,31 +814,31 @@ DENOTATIONS OF THE ANNOTATIONS AND NOT THE NODES.
 <<Make statements>>=
 and callStmt state (lhs,cconv, e, args, targets (*unused*), conts) succ = 
     let g = state.cfg in
-    let hw's, actuals = actuals args in
-    let pieces = (ccs (Aux.Option.get default_cc cconv)).C.call_actuals hw's in
-
-
-    let rec lvalue = function
-        | A.LValueAt(x,_) -> lvalue x
-        | A.Var x         -> formal env x 
-        | A.Mem _         -> assert false                        in
+    let cc = ccs (Aux.Option.get default_cc cconv) in
     let ptrsize = target.T.pointersize in    
+    let hwout, actuals = actuals args in
+    let hwin,  results = results lhs in
+    let out = cc.C.call_actuals hwout in
+    let in' = cc.C.call_results hwin  in
+    let calli = target.T.call.T.embed (expr e)   in
+    let conts = continuations conts g                in
+    let () = add_outparms out.C.overflow in  (* outgoing overflow parms *)
+    let () = add_outparms in'.C.overflow in  (* incoming overflow res = out parms *)
+    G.instruction g out.C.pre_sp            ~succ:(
+    G.instruction g (out.C.shuffle actuals) ~succ:(
+    G.instruction g out.C.post_sp           ~succ:(
+    G.call        g calli ~altrets:conts.returns ~unwinds_to:conts.unwinds
+                          ~cuts_to:conts.cuts ~aborts:conts.aborts 
+                          ~ret:(
+    G.assertion   g (R.store cc.C.sp in'.C.sploc ptrsize) ~succ:(
+    G.instruction g in'.C.pre_sp            ~succ:(  (* DOUBTS ABOUT THIS *)
+    G.instruction g (in'.C.shuffle results) ~succ:(
+    G.instruction g in'.C.post_sp           ~succ:(
+    succ))))))))
 
-    let rtl     = target.T.call.T.embed (expr e)   in
-    let args    = assert false (*List.map actual args*)  in
-    let conts   = continuations conts g                  in
-    (* linking nodes from back to front: copyin<-call<-copyout *) 
-    let copyi,areai,uses = assert false (*IO.copyin g (List.map lvalue lhs) 
-                      cc.T.ret (offset state.inbase ptrsize) state.node*)  in
-    let call = G.call g rtl ~altrets:conts.returns ~ret:copyi
-               ~unwinds_to:conts.unwinds ~cuts_to:conts.cuts ~aborts:conts.aborts in
-    let copyo,areao,actual_defs = assert false (*IO.copyout g args cc.T.proc 
-                        (offset state.outbase ptrsize) call*) in
-    let result = { state with
-                     node     = copyo
-                 ;   outgoing = areao :: state.outgoing
-                 ;   incoming = areai :: state.incoming
-                 } in
+(*
+in
+
     (* fix data-flow *)
     let callee_saves = assert false in
     let volatile = assert false in
@@ -832,6 +849,7 @@ and callStmt state (lhs,cconv, e, args, targets (*unused*), conts) succ =
       <<insert dataflow nodes on every cut-to edge>>;
       copyo
     end
+*)
 @ 
 Those probably ought not to be done by insertion; it ought to be done
 at the time the call is built.
