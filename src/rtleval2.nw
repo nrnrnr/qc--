@@ -96,66 +96,66 @@ let app o w args = match o with
     |  "NaN" 		-> default o w args
     |  "add" 		-> add w args
     |  "and" 		-> and' w args
-    |  "bit" 		-> bit w args
-    |  "bool" 		-> bool w args
-    |  "borrow" 	-> borrow w args
-    |  "carry" 		-> carry w args
-    |  "com" 		-> com w args
-    |  "conjoin" 	-> conjoin w args
-    |  "disjoin" 	-> disjoin w args
+    |  "bit" 		-> default o w args
+    |  "bool" 		-> default o w args
+    |  "borrow" 	-> default o w args
+    |  "carry" 		-> default o w args
+    |  "com" 		-> default o w args
+    |  "conjoin" 	-> default o w args
+    |  "disjoin" 	-> default o w args
     |  "div" 		-> div w args
     |  "divu" 		-> divu w args
     |  "eq" 		-> eq w args
-    |  "f2f" 		-> f2f w args
-    |  "f2i" 		-> f2i w args
+    |  "f2f" 		-> default o w args
+    |  "f2i" 		-> default o w args
     |  "fabs" 		-> default o w args
-    |  "fadd" 		-> fadd w args
-    |  "fcmp" 		-> fcmp w args
-    |  "fdiv" 		-> fdiv w args
+    |  "fadd" 		-> default o w args
+    |  "fcmp" 		-> default o w args
+    |  "fdiv" 		-> default o w args
     |  "feq" 		-> default o w args
     |  "fge" 		-> default o w args
     |  "fgt" 		-> default o w args
     |  "fle" 		-> default o w args
-    |  "float_eq" 	-> float_eq w args
-    |  "float_gt" 	-> float_gt w args
-    |  "float_lt" 	-> float_lt w args
+    |  "float_eq" 	-> default o w args
+    |  "float_gt" 	-> default o w args
+    |  "float_lt" 	-> default o w args
     |  "flt" 		-> default o w args
-    |  "fmul" 		-> fmul w args
+    |  "fmul" 		-> default o w args
     |  "fmulx" 		-> default o w args
     |  "fne" 		-> default o w args
-    |  "fneg" 		-> fneg w args
+    |  "fneg" 		-> default o w args
     |  "fordered" 	-> default o w args
     |  "fsqrt" 		-> default o w args
-    |  "fsub" 		-> fsub w args
+    |  "fsub" 		-> default o w args
     |  "funordered" 	-> default o w args
-    |  "ge" 		-> ge w args
-    |  "geu" 		-> geu w args
-    |  "gt" 		-> gt w args
-    |  "gtu" 		-> gtu w args
-    |  "i2f" 		-> i2f w args
-    |  "le" 		-> le w args
-    |  "leu" 		-> leu w args
-    |  "lobits" 	-> lobits w args
-    |  "lt" 		-> lt w args
-    |  "ltu" 		-> ltu w args
+    |  "ge" 		-> default o w args
+    |  "geu" 		-> default o w args
+    |  "gt" 		-> default o w args
+    |  "gtu" 		-> default o w args
+    |  "i2f" 		-> default o w args
+    |  "le" 		-> default o w args
+    |  "leu" 		-> default o w args
+    |  "lobits" 	-> default o w args
+    |  "lt" 		-> default o w args
+    |  "ltu" 		-> default o w args
     |  "minf" 		-> default o w args
-    |  "mod" 		-> mod' w args
-    |  "modu" 		-> modu w args
+    |  "mod" 		-> default o w args
+    |  "modu" 		-> default o w args
     |  "mul" 		-> mul w args
     |  "mul_trunc" 	-> mul_trunc w args
     |  "mulu" 		-> mulu w args
     |  "mzero" 		-> default o w args
     |  "ne" 		-> ne w args
     |  "neg" 		-> neg w args
-    |  "not" 		-> not' w args
-    |  "or" 		-> or' w args
+    |  "not" 		-> default o w args
+    |  "or" 		-> default o w args
     |  "pinf" 		-> default o w args
     |  "popcnt" 	-> default o w args
     |  "pzero" 		-> default o w args
-    |  "quot" 		-> quot w args
-    |  "rem" 		-> rem w args
-    |  "rotl" 		-> rotl w args
-    |  "rotr" 		-> rotr w args
+    |  "quot" 		-> default o w args
+    |  "rem" 		-> default o w args
+    |  "rotl" 		-> default o w args
+    |  "rotr" 		-> default o w args
     |  "round_down" 	-> round_down w args
     |  "round_nearest" 	-> round_nearest w args
     |  "round_up" 	-> round_up w args
@@ -165,11 +165,10 @@ let app o w args = match o with
     |  "shrl" 		-> shrl w args
     |  "sub" 		-> sub w args
     |  "sx" 		-> sx w args
-    |  "unordered" 	-> unordered w args
-    |  "xor" 		-> xor w args
-    |  "zx" 		-> zx w args
-
-    |  "bitExtract" 	-> bitExtract w args
+    |  "unordered" 	-> default o w args
+    |  "xor" 		-> default o w args
+    |  "zx" 		-> default o w args
+    |  "bitExtract" 	-> default o w args
     |  "bitInsert" 	-> default o w args
     |  "bitTransfer" 	-> default o w args
     |  o                -> default o w args
@@ -235,20 +234,10 @@ let rec add w args = match (w,args) with
     | _         -> default "add" w args
     
 
-let undef w args = default "undef" w args       (* questionable *)
-
 let and' w args = match (w,args) with
     | [w],[x;y] when is_bits x && is_bits y
                 -> to_bits (Int64.logand (int64 x) (int64 y)) w
     | _ -> default "and" w args
-
-let bit w args  = default "bit" w args
-let bool w args = default "bool" w args
-let borrow w args = default "borrow" w args
-let carry w args = default "carry" w args
-let com w args  = default "com" w args
-let conjoin w args = default "conjoin" w args
-let disjoin w args = default "disjoin" w args
 
 let div w args  = match (w,args) with
     | [w],[x;y] when is_bits x && is_bits y 
@@ -262,32 +251,6 @@ let eq w args   = match (w,args) with
                 -> to_bool ((int64 x) = (int64 y)) 
     | _         -> default "eq" w args
     
-let f2f w args  = default "f2f" w args
-
-let f2i w args  = default "f2i" w args
-let fadd w args = default "fadd" w args
-let fcmp w args = default "fcmp" w args
-let fdiv w args = default "fdiv" w args
-let float_eq w args = default "float_eq" w args
-let float_gt w args = default "float_gt" w args
-let float_lt w args = default "float_lt" w args
-let fmul w args = default "fmul" w args
-let fneg w args = default "fneg" w args
-let fsub w args = default "fsub" w args
-let ge w args   = default "ge" w args
-let geu w args  = default "geu" w args
-let gt w args   = default "gt" w args
-let gt w args   = default "gt" w args
-let gtu w args  = default "gtu" w args
-let i2f w args  = default "i2f" w args
-let le w args   = default "le" w args
-let leu w args  = default "leu" w args
-let lobits w args = default "lobits" w args
-let lt w args   = default "lt" w args
-let lt w args   = default "lt" w args
-let ltu w args  = default "ltu" w args
-let mod' w args = default "mod" w args
-let modu w args = default "modu" w args
 
 let mul w args  = match (w,args) with
     | [_;r],[x;y] when is_bits x && is_bits y 
@@ -311,14 +274,6 @@ let ne w args = match (w,args) with
                 -> to_bool ((int64 x) <> (int64 y))
     | _         -> default "ne" w args
     
-let not' w args = default "not" w args
-let or' w args  = default "or" w args
-let parity w args = default "parity" w args
-let quot w args = default "quot" w args
-let rem w args  = default "rem" w args
-let rotl w args = default "rotl" w args
-let rotr w args = default "rotr" w args
-
 let shl w args  = match (w,args) with
     | [w], [x;y] when is_bits x && is_bits y 
                 -> to_bits (Int64.shift_left (int64 x) (int y)) w 
@@ -343,10 +298,4 @@ let sx w args   = match (w,args) with
     | [i;j],[x] when is_bits x
                 -> to_bits (int64 x) j
     | _         -> default "sx" w args
-
-let unordered w args = default "unordered" w args
-let xor w args  = default "xor" w args
-let zx w args   = default "zx" w args
-let bitExtract w args = default "bitExtract" w args
-@    
-
+@
