@@ -538,12 +538,13 @@ let runit =
   results (fun () -> []) 
           (function [] -> () | h :: _ -> raise (Projection (h, "unit result")))
 <<value toplevel>>=
-let dots_arrow (varargs : 'a map) (result : 'b map) : ( ('a list -> 'b) mapf ) =
+let dots_arrow (varargs : 'a map) (result : 'b map) : ('a list -> 'b) mapf =
   let apply (f : 'a list -> 'b) = 
-    fun (args : value list) -> [result.embed (f (List.map varargs.project args))] in
+    fun (args : value list) ->
+      [result.embed (f (List.map varargs.project args))] in
   let unapp (f' : value list -> value list) =
-    fun (args : 'a list) -> result.project (take1 (f' (List.map varargs.embed args)))
-  in
+    fun (args : 'a list) ->
+      result.project (take1 (f' (List.map varargs.embed args))) in
   { embed = apply; project = unapp; is = List.for_all varargs.is }
 
 
@@ -568,12 +569,12 @@ let efunc t f = (closure t).embed f
 type alt = (value list -> value list) * (value list -> bool)
 let alt t f = (t.embed f, t.is)
 let choose alts =
-  let do_nothing = (unit **-> runit).embed (fun () -> ()) in
-  let dispatch_fails = match alts with (f, _) :: _ -> f | [] -> do_nothing in
   let run args =
     let f = try fst (List.find (fun (_, is) -> is args) alts)
-            with Not_found -> dispatch_fails
-    in  f args in
+            with Not_found ->
+              let args = (list value).embed args in
+              raise (Projection (args, "arguments matching alternatives")) in
+    f args in
   caml_func run
 
 let lf = efunc (list value **-> result (list value)) List.rev
