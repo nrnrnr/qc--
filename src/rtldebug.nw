@@ -5,6 +5,7 @@
 
 <<rtldebug.mli>>=
 val rtl_to_string: Rtl.rtl -> string
+val typecheck:     Rtl.rtl -> unit      (* prints rtl to stdout, traps *)
 @
 
 % ------------------------------------------------------------------ 
@@ -16,5 +17,60 @@ let rtl_to_string rtl =
     let stmt = Rtl2ast.rtl (fun x -> x) rtl in
     let pp   = Astpp.stmt stmt              in
         Pp.ppToString 80 pp
+@
+
+<<rtldebug.ml>>=
+module RP = Rtl.Private
+exception TypeCheck
+
+let typecheck (r:Rtl.rtl) =
+    let width n ty = match ty with
+        | Types.Bits k when n = k  -> ty
+        | _                        -> raise TypeCheck in
+    let bits = function
+        | Types.Bits n             -> n
+        | _                        -> raise TypeCheck in
+    let bool = function
+        | Types.Bool               -> ()
+        | _                        -> raise TypeCheck in
+        
+    let rec exp = function
+        | RP.Fetch (l, w)          -> width w (loc l)
+        | RP.Const c               -> const c  
+        | RP.App(opr, args)        -> 
+            let argtys       = List.map exp args in
+            let opty, result = Rtlop.Types.mono (Rtl.Revert.opr opr) in
+                if opty <> argtys then  (* comparing lists of types! *)
+                    raise TypeCheck
+                else
+                    result
+            
+    
+    and const = function
+        | RP.Bool _                -> Types.Bool 
+        | RP.Bits b                -> Types.Bits (Bits.width b)
+        | RP.Link (_,w)            -> Types.Bits(w)
+    
+    and loc = function
+        | RP.Cell (ap,agg,w,e,ass) -> let _ = bits (exp e) in Types.Bits(w)
+        | RP.Slice (w,i,l)         -> let _ = bits (loc l) in Types.Bits(w)
+        | RP.Var (_,_,w)           -> Types.Bits(w)
+        
+    and effect = function
+        | RP.Store (l,e,w)         -> let _  = width w (loc l) in
+                                      let _  = width w (exp e) in
+                                      ()  
+        | RP.Kill  (l)             -> let _ = bits (loc l) in ()  
+    
+    and guarded (e,eff)            =  ( bool (exp e)
+                                      ; effect eff
+                                      )
+    and rtl (RP.Rtl rtl)           = (List.iter guarded rtl)
+    in try rtl (Rtl.Convert.rtl r) with TypeCheck -> 
+            ( prerr_endline "Type check error in RTL:"
+            ; prerr_endline (rtl_to_string r)
+            ; flush stderr
+            ; assert false
+            )
 @
 
