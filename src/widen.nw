@@ -585,10 +585,10 @@ let widen_garbage m soln =
 \]
 <<applying rules>>=
 let widen_hw m soln =
-  if Debug.on "widen" then
+(*  if Debug.on "widen" then
     Printf.eprintf "widen_hw: %s -> %s :: %s[%i] : %i\n"
        (Rtlutil.ToString.exp (Up.exp soln.e)) (Rtlutil.ToString.exp (Up.exp soln.e'))
-       (string_of_fill soln.fill) (index soln) (width soln);
+       (string_of_fill soln.fill) (index soln) (width soln); *)
   match soln.e' with
   | RP.Fetch(l,_) when m.is_hardware_register l ->
       let n  = index soln in
@@ -606,13 +606,13 @@ let widen_hw m soln =
         | S -> List.map (create "sx" S) ws
         | H -> []
       in
-      if Debug.on "widen" then
+(*      if Debug.on "widen" then
         List.iter (fun s -> Printf.eprintf 
                             "widen_hw success: %s -> %s :: %s[%i] : %i\n"
                             (RU.ToString.exp (Up.exp s.e))
                             (RU.ToString.exp (Up.exp s.e'))
                             (string_of_fill s.fill)
-                            (index s) (width s)) solns';
+                            (index s) (width s)) solns'; *)
       solns'
   | _ -> []
 @ 
@@ -763,6 +763,9 @@ let mksolutions_lit_bits litwidths tau e = match e with
   | H ->
       let f w' =
         let ext = Bits.Ops.shl (Bits.Ops.zx w' b) (Bits.S.of_int (w' - n) w') in
+        if Debug.on "widen" then
+          Printf.eprintf "%s -> %s :: H[%i] : %i\n"
+            (Bits.to_string b) (Bits.to_string ext) n w';
         {e = e; m = n; cost = 0; e' = RP.Const(RP.Bits ext); fill = H; n = w' - n; w = w'}
       in
       List.map f litwidths
@@ -1270,6 +1273,14 @@ let dpwiden proc r =
     let soln   = minimum_cost solns in
     if print_debug then Printf.eprintf "cost: %i\n" soln.cost;
     soln.e' in
+  let find_best_soln_index r tau n w =
+    let solns  = all_solutions m r in
+    let solns  = List.filter (fun s -> index s = n && width s = w && fill s =*= tau) solns in
+    let () = if null solns then
+      impossf "dpwiden couldn't widen %s" (Rtlutil.ToString.exp (Up.exp r)) in
+    let soln   = minimum_cost solns in
+    if print_debug then Printf.eprintf "cost: %i\n" soln.cost;
+    soln.e' in
   let rec widen_loc = function
     | RP.Mem(sp,w,e,a) -> RP.Mem(sp,w,find_best_soln e Z ptrwidth, a)
     | RP.Slice(w,i,l)  -> RP.Slice(w,i, widen_loc l)
@@ -1301,11 +1312,11 @@ Note that [[widen_guard]] doesn't seem to be checking the index of the result!
                  (RU.ToString.exp (Up.exp e)) (string_of_fill fill) w';
             RP.Store(l, RP.App(("lobits", [w';w]), [find_best_soln e fill w']), w)
         | RP.Store(l, r, w) ->
-            let (fill, _) = lookup_gamma (var_name (RP.Fetch(l,w))) w in
+            let (fill, n) = lookup_gamma (var_name (RP.Fetch(l,w))) w in
             if Debug.on "widen" then
-              Printf.eprintf " looking for %s -> ... :: %s[_] : %i\n"
-                 (RU.ToString.exp (Up.exp r)) (string_of_fill fill) w;
-            RP.Store(widen_loc l, find_best_soln r fill w, w)
+              Printf.eprintf " looking for %s -> ... :: %s[%i] : %i\n"
+                 (RU.ToString.exp (Up.exp r)) (string_of_fill fill) n w;
+            RP.Store(widen_loc l, find_best_soln_index r fill n w, w)
         | RP.Kill l         -> RP.Kill (widen_loc l)
       in
       let gsoln = find_best_soln g Z 1 in
@@ -1378,14 +1389,16 @@ let widenlocs t r =
   r'
 @ 
 
-Needs work: this function should only count those variables that need widening.
+Needs work: this function should only count those variables that need
+widening.
+NOTE: REMOVING THE H TYPE VOTING---SEE ANDREW WILKINS BUG FROM THE C-- LIST.
 <<widen.ml>>=
 let update_gamma_counts t r =
   let add c i n = function
     | G -> c
     | Z -> {c with z=c.z+i; ni = n}
     | S -> {c with s=c.s+i; ni = n}
-    | H -> {c with h=c.h+i; ni = n}
+    | H -> c (* {c with h=c.h+i; ni = n} *)
   in
   let update h x n t =
     if Hashtbl.mem h x then Hashtbl.replace h x (add (Hashtbl.find h x) 1 n t)
@@ -1395,7 +1408,9 @@ let update_gamma_counts t r =
   let rec loc fty = function
     | (RP.Var(s,_,w)) -> 
         if w < targetwidth then
-          (if Debug.on "gamma" then Printf.eprintf "Updating count of %s\n" s; update gamma_counts s w fty)
+          (if Debug.on "gamma" then
+            Printf.eprintf "Updating count of %s: +%s\n" s (string_of_fill fty);
+           update gamma_counts s w fty)
     | RP.Mem(_, _, e, _) -> ignore(exp fty e)
     | RP.Slice(_, _, l)  -> loc fty l
     | _ -> ()
