@@ -457,17 +457,18 @@ let path_2_in_overflow target ccname =
     (findpath_2_in_overflow (fun s -> s.A.call) target ccname);
   Printf.printf "\n"
 
-let locs aloc w =
+let locs tgt aloc w =
   let RP.Rtl gs = Dn.rtl (A.store aloc (Rtl.bits (Bits.zero w) w) w) in
   let getloc = function RP.Store (l, _, _) -> l | RP.Kill l -> l in
-  let rec add_32locs l locs = match l with
+  let cellsize s = (Target.space tgt s).Space.cellwidth in
+  let rec add_locs l locs = match l with
   | RP.Reg (s, n, w) when w <= 0 -> locs
-  | RP.Reg (s, n, w) -> Up.loc l :: add_32locs (RP.Reg (s, n+1, w-32)) locs
+  | RP.Reg (s, n, w) -> Up.loc l :: add_locs (RP.Reg (s, n+1, w-cellsize s)) locs
   | l -> Up.loc l :: locs in
-  List.fold_right (fun (_,  e) locs -> add_32locs (getloc e) locs) gs []
+  List.fold_right (fun (_,  e) locs -> add_locs (getloc e) locs) gs []
 
 let run_cc_on_sig_and_return autofun target ccname tys =
-  let loc2strs l (h, w) = List.map Rtlutil.ToReadableString.loc (locs l w) in
+  let loc2strs l (h, w) = List.map Rtlutil.ToReadableString.loc (locs target l w) in
   let wordsize  = target.Target.wordsize  in
   let memsize   = target.Target.memsize   in
   let byteorder = target.Target.byteorder in

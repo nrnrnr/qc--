@@ -85,7 +85,7 @@ module MakeLib (C: Lua.Lib.CORE) = struct
 
     let init g =
       C.register_module "Util"
-      [ "dosearchfile",    V.efunc (V.string **-> V.value **-> V.values)
+      [ "dosearchfile",    V.efunc (V.string **-> V.option V.table **-> V.values)
                            (dosearchfile g)
       ; "catch",           V.caml_func catch_lua
       ; "redirect_stdout", V.efunc (V.option V.string **-> V.runit) redirect_stdout
@@ -131,16 +131,18 @@ If we see another name, we take it as a directory name and we look for
 the filename in that directory.
 The empty name stands for the default directory.
 <<utility functions>>=
-let dosearchfile g file value =
+let dosearchfile g file boot =
   let path = try Sys.getenv luapath with Not_found -> defaultpath in
   let rec search = function
     | "*" :: dirs -> 
-        ( match value with
-          | V.Nil      -> search dirs
-          | V.Table t  -> (try  dostring g [Luahash.find t (V.String file)] 
-                           with Not_found -> search dirs)
-          | _  -> C.error "dosearchfile: expected nil or table as second argument"
-        )  
+        (match boot with
+         | None   -> search dirs
+         | Some t ->
+             let cont =
+               try let s = Luahash.find t (V.String file) in (fun () -> dostring g [s])
+               with Not_found -> (fun () -> search dirs) in
+             cont ()   (* call to dostring must be outside of handler *)
+        )
     | dir :: dirs -> 
         let d = if dir = "" then defaultdir else dir in
         let p = Filename.concat d file in

@@ -308,7 +308,10 @@ module RP      = Rtl.Private
 @
 
 <<target.ml>>=
-let space t s = List.find (fun x -> x.Space.space = s) t.spaces
+let space t s = 
+  try List.find (fun x -> x.Space.space = s) t.spaces with Not_found ->
+  Impossible.impossible
+      (Printf.sprintf "Space '%c' not found in target '%s'\n" s t.name)
 @
 <<target.ml>>=
 let is_tmp { spaces = spaces } =
