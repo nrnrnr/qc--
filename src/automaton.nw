@@ -202,14 +202,17 @@ made of [[memsize]] cells, aggregated in [[byteorder]].  The width of
 the data stored there is variant.
 
 <<Dummy struct>>=
-class dummyloc (addr:Rtl.exp): location =
+class dummyloc (loc:Rtl.loc): location =
 object
-    val _loc   = Rtl.cell Rtl.none memspace byteorder memsize addr 
+    val _loc   = loc
     
     method store expr ~width = Rtl.store _loc expr width 
     method fetch ~width      = Rtl.fetch _loc width
     method to_loc            = _loc
 end
+
+let memloc addr = new dummyloc (Rtl.cell Rtl.none memspace byteorder memsize addr)
+let of_rtl_loc loc = new dummyloc loc
 
 class dummy (base:Rtl.exp): automaton =
 object (self)
@@ -229,6 +232,6 @@ object (self)
         let addr = Area.location _area                in
         let ()   = _area <- Area.alloc _area n        in (* allocate ..*)
         let ()   = _area <- Area.align _area wordsize in (* and align  *)
-            new dummyloc addr
+            memloc addr
 end
 @
