@@ -46,15 +46,24 @@ SUBDIRS =       cllib lua asdl rtl gen camlburg tools doc src interp
 all:V:          config qc--     interp doc
 all.opt:V:      config qc--.opt interp doc
 
-config:QV:       
-	if [ -f config/config.mk ]; then : ;else
+config:QV:
+	if [ -f config/config.mk ]; then
+	if test configure -nt config/config.mk
+	then
+	  echo "============================================"
+	  echo "config.mk is out of date."
+	  echo "you must run ./configure before continuing"
+	  echo "============================================"
+	  exit 1
+	fi
+	else
 	echo "============================================"
 	echo "Run the ./configure script first!" 
 	echo "Alternatively, create config/config.mk"
 	echo "from config/config.mk.template."
 	echo "============================================"
 	exit 1
-	fi    
+	fi
 
 qc--:V:         tools lib dirs
 	for i in src 
