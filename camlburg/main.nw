@@ -27,7 +27,7 @@ let error msg = raise (Error msg)
 
 The [[read]] function reads a specification from a file and returns it
 as a [[Spec.t]] value. It catches error related to scanning and parsing
-and reports them by raising the local [[Error]] excpetion.
+and reports them by raising the local [[Error]] exception.
 
 <<main.ml>>=
 let read (file:string) =
@@ -98,3 +98,218 @@ let _ =
             ; exit 1
             )
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Manual Page}
+% ------------------------------------------------------------------ 
+
+The manual page is written in Perl's POD format. This file format can be
+translated to a variety of formats, including plain ASCII, Troff, and
+HTML.
+
+<<mlburg.pod>>=
+=head1 NAME
+
+mlburg -- Burg code generator generator for Objective Caml
+
+=head1 SYNOPSIS
+
+B<mlburg> I<spec.mlb> 
+
+=head1 DESCRIPTION
+
+B<mlburg> generates Objective Caml source code from a Burg specification
+I<spec.mlb> and emits it to stdout. The generated code implements a
+dynamic programming algorithm to cover a tree structure with minimal
+cost. 
+
+=head1 OPTIONS
+
+=over
+
+=item B<-norm> I<spec.mlb>
+
+This is an option for debugging B<mlburg>. B<Mlburg> normalizes rules
+during the translation process. In a normalized rule no constructor
+pattern has another constructor pattern as argument. When the B<-norm>
+flag is present, B<mlburg> emits the normalized rule set to stdout.
+
+
+=head1 BURG SPECIFICATION
+
+B<Mlburg> accepts a Burg specification that conforms to the following
+EBNF grammar. Terminals are enclosed double quotes, all other symbols
+are nonterminals.
+
+    spec    :   { decl } "%%" { rule }
+
+    decl    :   "%term" { ident }
+            |   "%head" code
+
+    rule    :   nonterm ":" pattern [ cost ] code
+
+    code    :   "{:" camlcode ":}"
+    cost    :   "[" number | code "]"
+    
+    pattern :   number
+            |   string
+            |   ident "(" pattern { "," pattern } ")"
+            |   ident "(" ")"
+            |   ident [ ":" ident ]
+
+A I<string> is enclosed in double quotes, a I<number> is a non-negative
+integer, I<camlcode> is arbitrary code that may include properly nested
+pairs of B<{:> and B<:}>. An identifier must start with a character and
+can be followed by characters, numbers, and underscores. Comments start
+with two hypens and go to the end of the line.  Here is an example. 
+
+    -- 
+    -- sample.mlb
+    --
+
+    %head {: (* generated from sample.mlb, do not edit *) }
+    %term int string        -- terminal type must be declared
+
+    %%
+
+    number : ADD(x:number,  y:number)     [2]    {: x + y :}
+    number : ADD(x:number,  NULL())       [1]    {: x     :}
+    number : ADD(x:number,  ADD(NULL(), z:number))  [1] {: x + z :}
+    number : SUB(n:number, m:number)             {: n-m :}
+    number : MUL(n:number, m:number)             {: n*m :}
+    number : DIV(n:number, m:number)    
+            {: if m = 0 then assert false else n/m :}
+    number : CONST(x: int)                [1]    {: x :}
+    number : CONST(0)                     [0]    {: 0 :}
+
+    str    : STR(x: string)               [1]    {: x :}
+    str    : CONS(x: string, y:string)    [2]    {: x ^ y :}
+
+    -- chain rules
+    str    : number                [1]    {: string_of_int number :}
+    number : str                   [1]    {: int_of_string str    :}
+
+Code associated with a B<%head> declaration is copied verbatim to the
+output. Its is used to declare type and values used by user code in the
+rules. A B<%term> declaration lists Objective Caml types used for
+variables in rules. In the example above, B<x:number> is a nonterminal
+variable, and B<x:string> is a terminal variable, because B<string> was
+declared as a terminal type.
+
+A rule defines a nonterminal (type) that is to the left of the colon,
+has a pattern, an optional non-negative cost, and a user-provided action. 
+A pattern is similar to a pattern in Objective Caml: it can be a literal
+value, a terminal or nonterminal variable, or have a constructor with
+more patterns as arguments. When a rule is selected and executed at
+run-time, it computes a value of the nonterminal of its left hand side.
+
+
+    -- chain rules
+    str    : number                [1]    {: string_of_int number :}
+    number : str                   [1]    {: int_of_string str    :}
+
+A variable I<x> without a type annotation stands for a nonterminal
+variable I<x>B<:>I<x>. This often allows to omit types from
+nonterminals.  The two so-called chain rules at the end of the
+specification are an example: the B<number> variable in the first rule
+stands for B<number:number> and thus matches a B<number> nonterminal
+value. Chain rules are rules that have only a non-terminal variable as
+pattern. They provide conversions between nonterminal values: a
+B<number> nonterminal value can be converted into a B<str> nonterminal
+value at cost one by the first rule. The two rules are recursive but the
+associated costs of one prevent that they are applied indefinitely.
+
+Rules have an associated costs non-negative cost.  The cost of a rule is
+the sum of cost of its arguments and its own cost, which defaults to
+zero.  The cost of arguments are computed at run-time, the rule's own
+cost is either static, or dynamic. In the dynamic case the user provides
+a cost expression that is evaluated at run-time. The values of terminal
+variables in the pattern are available for the cost expression.
+
+The purpose of the generated code is to select the rules from a set that
+match a (subject) tree at the smallest cost, according to the cost
+annotations.  The generated code contains a function for every
+constructor. For the example above, these are:
+
+    module Camlburg: sig
+        type cost = int                      
+        type 'a nt =                        
+            { cost : cost
+            ; action : unit -> 'a; 
+            } 
+        ...
+    end
+
+    type ('a, 'b, 'c, 'd) nonterm = 
+        { _ADD2     : 'a;           (* private *)
+        ; _NULL1    : 'b;           (* private *)
+        ; number    : 'c;
+        ; str       : 'd;
+        } 
+
+
+    type t =
+        ( int       Camlburg.nt     (* private *)
+        , unit      Camlburg.nt     (* private *) 
+        , int       Camlburg.nt     (* for number nonterminal *)
+        , string    Camlburg.nt     (* for str    nonterminal *)  
+        ) nonterm 
+        
+    val conNULL  : unit -> t
+    val conCONST : int -> t
+    val conSTR   : string -> t
+    val conCONS  : string -> string -> t
+    val conDIV   : t -> t -> t   
+    val conADD   : t -> t -> t   
+    val conMUL   : t -> t -> t   
+    val conSUB   : t -> t -> t   
+
+To find the cheapest cover for a subject tree, the client walks over the
+subject tree and calls the appropriate function for the actual node.  At
+a leave with an integer constant, it calls B<conCONST>. There are two
+rules for the B<CONST> constructor, depending on the integer constant
+the generated code will select the cheaper one and return a value of
+type B<t>. This value represents the user-provided code of the selected
+rule and the associated cost.  If the client comes to a node with an
+B<ADD> constructor, it calls B<conADD> and passes values as arguments
+that were returned by the above functions when the child notes were
+visited. Finally, the client comes to the root node and receives a final
+B<t> value for it. This value represents the cheapest cover for the
+subject tree. 
+
+Typically, the root node of a subject tree is covered only by a single
+nonterminal, for example the B<number> nonterminal. When the B<action>
+for this nonterminal is triggered, the user action from the rules for
+the cheapest cover are computed:
+
+    ...
+    let t = conADD(left,right) in
+        t.number.Camlburg.action ()     (* an int value *)
+
+The generated code thus has constructed a value B<t> that represents the
+cheapest set of rules (and therefore actions) that cover the walked
+tree. The B<action> field of the finally returned value gives access to
+the actions. In the example, the tree is some kind of expression tree
+and the constructed action is an evaluation. Because of the chain rules,
+tree that is covered by a B<number> value is also covered by a B<str>
+value. This allows to obtain a string value as well:
+
+    ...
+    let t = conADD(left,right) in
+        t.str.Camlburg.action ()        (* an string value *)
+
+
+
+=head1 SEE ALSO
+
+L<ocaml>. 
+
+Fraser and Hanson: "Engineering a Simple, Efficient Code Generator
+Generator", ACM Letters on Programming Languages and Systems 1, 3 (Sep
+1992), 213-226.
+
+=head1 AUTHORS
+
+Norman Ramsey <nr@eecs.harvard.edu>, Christian Lindig
+<lindig@eecs.harvard.edu>
+
