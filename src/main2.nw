@@ -237,10 +237,12 @@ CGStages = { liveness = mkS("liveness", CG.liveness)
            , selectSpill = mkS("selectSpill", CG.selectSpill)
            , assignColors = mkS("assignColors", CG.assignColors)
            , haveSpilledNodes = mkS("haveSpilledNodes", CG.haveSpilledNodes)
-           , rewriteProgram = mkS("rewriteProgram", CG.rewriteProgram)
+           , resetProgram = mkS("resetProgram", CG.resetProgram)
+           , updateProgram = mkS("updateProgram", CG.updateProgram)
            , applyColors = mkS("applyColors", CG.applyColors)
 		   , printCG = mkS("printCG", CG.printCG)
 		   , printCFGLive = mkS("printCFGLive", CG.printCFGLive)
+           , pCFG = mkS("pCFG", CG.pCFG)
            }
 
 function makeBuild (colors)
@@ -257,6 +259,7 @@ codeExpand = seq({ single(CodeExpandStages.placeVars)
 placeVars = single(CodeExpandStages.placeVars)
 
 pcg = ignore(single(CGStages.printCG))
+pcfg = ignore(single(CGStages.pCFG))
 prLive = ignore(single(CGStages.printCFGLive))
 plive = seq({single(CGStages.liveness), single(CGStages.printCFGLive)})
 live = single(CGStages.liveness)
@@ -265,9 +268,10 @@ function graphColoring (colors)
   makeBuild(colors);
   return
      share(initInfo, "cgInfo",
-        seq({fix(
-               seq({ignore(seq(
+        seq {fix(
+               seq {ignore(seq
                       { single(CGStages.liveness)
+, pcfg
 , prLive
                       , single(CGStages.build)
 , pcg
@@ -277,12 +281,12 @@ function graphColoring (colors)
                                     unless_do(single(CGStages.coalesce),
                                        unless_do(single(CGStages.freeze),
                                           single(CGStages.selectSpill)))))
-                      , single(CGStages.assignColors)}))
+                      , single(CGStages.assignColors)} )
                    , when_do(single(CGStages.haveSpilledNodes),
-                             single(CGStages.rewriteProgram))
-                   }))
-          , single(CGStages.applyColors)
-          }))
+                             single(CGStages.resetProgram))
+                   } )
+          , seq {pcg,single(CGStages.updateProgram),single(CGStages.applyColors)}
+          } )
     end
 
 function fullRun (colors) 
@@ -292,8 +296,9 @@ prCFG = seq({codeExpand, live})
 colors = {1,2,3,4}
 
 Optimize = Optimize or {}
-function Optimize.default (cfg, frame) run(graphColoring(colors), cfg, {}) end
-function Optimize.default (cfg, frame) run(codeExpand, cfg, {}) end
+function Optimize.default (cfg, frame) run(pcfg, cfg, {}) end
+--function Optimize.default (cfg, frame) run(graphColoring(colors), cfg, {}) end
+--function Optimize.default (cfg, frame) run(codeExpand, cfg, {}) end
 function Optimize.default (cfg, frame) run(fullRun(colors), cfg, {}) end
 --function Optimize.default (cfg, frame) run(prCFG, cfg, {}) end
 -- function Optimize.default () return end

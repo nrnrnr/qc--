@@ -178,6 +178,8 @@ val gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
 (* delete node from cfg, ensures not (enumerated cfg) *)
 val gm_delete_assign:           node -> unit    (* req: node is assign node *)
 
+val print_node : node -> string
+
 (* cfg mutators, ensures: not (enumerated cfg) *)
 (* all assignment insertions return the new node *)
 val gm_redirect_all:            src:node -> olddst:node -> newdst:node -> unit
@@ -734,6 +736,9 @@ let gm_enumerate (cfg:cfg) =
 let gm_delete_assign (node:node) =
     let cfg = node#cfg in
         cfg#delete node
+
+let print_node (node:node) =
+    (node#comment ^ "\n")
 @    
 
 Many node observations simply invoke a node's method. 
@@ -830,7 +835,7 @@ end
       [[false]].
 
 \item [[delete]] removes a node from this {\cfg}. This invalidates a
-      potential linerar order (i.e. enumeration) and causes
+      potential linear order (i.e. enumeration) and causes
       [[enumerated]] to be [[false]]. Calls the [[delete]] method of the
       node which is responsible for unlinking itself from other nodes in
       the {\cfg}.
@@ -1208,8 +1213,15 @@ object (this)
 
     method delete node =
         ( _nodes <- NodeSet.remove node _nodes
+;prerr_string ("\n" ^ node#comment ^ "\n")
+; flush stderr
         ; _enumeration <- None
+; prerr_string "Succ: "
+; List.iter (fun n -> prerr_int n#id) node#succ
+; prerr_string "\n"
+; flush stderr
         ; node#unlink
+;prerr_string "done unlinking\n"; flush stderr
         )
     
     (* test integrity of CFG *)
@@ -1342,6 +1354,12 @@ object(this)
                            (Register.print_set live)
     ^ " RTL: " ^ Rtldebug.rtl_to_string _rtl
         (**)    
+^ "\n" ^ List.fold_right (fun n prev -> prev ^
+                             "with pred: " ^ string_of_int n#id ^ "\n")
+                         (this#pred) ""
+^ List.fold_right (fun n succ -> succ ^
+                             "with succ: " ^ string_of_int n#id ^ "\n")
+                         (this#succ) ""
 
     method ast (mangle:string->string) (target:Target2.t) = 
         let this    = (this :> node) in
@@ -1532,10 +1550,12 @@ link to its successor, but is not linked from any other node.
 
 <<module X>>=    
     method unlink =
+let _ = prerr_string "unlink succ: "; prerr_int _succ#id; prerr_string "\n";
+flush stderr in 
         let this = (this :> node) in
         let pred = NodeSet.min_elt _pred                in
         let ()   = assert (pred = NodeSet.max_elt _pred) in
-            ( pred#upd_succ (fun n -> if n = this then succ else n)
+            ( pred#upd_succ (fun n -> if n = this then _succ else n)
             ; _succ#unlink_pred this
             ; _succ#link_pred pred
             )

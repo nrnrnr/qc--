@@ -209,6 +209,14 @@ module Cheats = struct
                     )
              else None
 
+    let print_cfg cfg =
+        prerr_string "CFG\n===\n";
+        fold_fwd cfg (fun n () -> prerr_string (Cfg3.print_node n ^
+                    "\n")) ();
+        prerr_string "END CFG\n===\n";
+        flush stderr
+    let pCFG _ {Proc.cfg = cfg} = print_cfg cfg; false
+
     let rewrite ({Proc.cfg = cfg; Proc.priv = a; Proc.target = target}
             as proc) spillees coalescedMoves =
         let spill_slot ((_,_,w):Register.t) =
@@ -222,7 +230,10 @@ module Cheats = struct
                                 | Some tmp -> tmp::tmps)
                 newTemps smPairs)
         in
-            List.iter Cfg3.gm_delete_assign coalescedMoves;
+            print_cfg cfg;
+            List.iter (fun n -> Cfg3.gm_delete_assign n;
+                    Cfg3.gm_enumerate cfg;
+                    print_cfg cfg) coalescedMoves;
             fold_fwd cfg (updateNode smPairs) []
 (*
 (* reserve a spill slot using automaton *)
@@ -778,7 +789,7 @@ prerr_string (Register.print temp); prerr_newline(); flush stderr;raise
         ; true)
 
 
-let rewriteProgram param proc =
+let resetProgram param proc =
     match T2'.map.V.project param with (CGInfo cg) ->
     (* handle addition of temps (those in spilledNodes) *)
     let newTemps = Cheats.rewrite proc cg.spilledNodes cg.coalescedMoves in (* set of all new temps added *)
@@ -802,6 +813,12 @@ let rewriteProgram param proc =
     let _ = cg.worklistMoves <- [] in
     let _ = cg.spills <- cg.spills @ newTemps in
     let _ = cg.activeMoves <- [] in
+        true
+
+let updateProgram param proc =
+    match T2'.map.V.project param with (CGInfo cg) ->
+    (* handle addition of temps (those in spilledNodes) *)
+    let newTemps = Cheats.rewrite proc cg.spilledNodes cg.coalescedMoves in (* set of all new temps added *)
         true
 
 (*
@@ -916,10 +933,12 @@ let graph_coloring_module =
         ; "selectSpill",      stageFn selectSpill
         ; "assignColors",     stageFn assignColors
         ; "haveSpilledNodes", stageFn haveSpilledNodes
-        ; "rewriteProgram",   stageFn rewriteProgram
+        ; "resetProgram",   stageFn resetProgram
+        ; "updateProgram",   stageFn updateProgram
         ; "applyColors",      stageFn applyColors
         ; "printCG",          stageFn printCGInfo
         ; "printCFGLive",     stageFn printCFGLive
+        ; "pCFG",             stageFn Cheats.pCFG
         ]
 
 let graph_coloring_globals =
