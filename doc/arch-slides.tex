@@ -1,0 +1,685 @@
+%
+% Christian Lindig
+% The Architecture of the Quick C-- Compiler
+% 19 Slides
+% Presented at 4th June 2002
+%
+
+\documentclass{seminar}
+\usepackage{semlcmss}
+\usepackage{path}
+\usepackage{alltt}
+% \usepackage[dvips]{pstcol}
+\usepackage{graphicx}
+\usepackage{semcolor}
+
+
+% ----------------------------------------------------------------------------
+% Slide Customization
+% ----------------------------------------------------------------------------
+
+\setlength{\slideheight}{7.5in}
+\setlength{\slidewidth}{10.5in}
+
+\renewcommand{\slideleftmargin}{2in}
+%\renewcommand{\sliderightmargin}{0.2in}
+\renewcommand{\slidetopmargin}{0.2in}
+\renewcommand{\slidebottommargin}{0.2in}
+
+%\definecolor{moccasin}{rgb}{1.0,0.89,0.70}
+%\definecolor{darkgreen}{rgb}{0.14,0.26,0.18}
+%\definecolor{lightgrey}{rgb}{0.90,0.90,0.90}
+%\newrgbcolor{darkblue}{0.09766 0.09766 0.4375}
+%\newrgbcolor{myblue}{.2 .36 .77}
+
+%\newslideframe{myframe}
+%    [\psset
+%        { fillstyle=solid
+%        , linewidth=0pt
+%        , fillcolor=myblue
+%        }]{\psframebox{\white #1}}    
+% \slideframe{myframe}
+
+\newrgbcolor{red}{0.95  0.27  0.30}
+
+%\slidesmag{4}
+\slideframe{none}
+\slidestyle{empty}
+\pagestyle{empty}
+\slideframewidth1pt
+\rotateheaderstrue
+
+\renewcommand{\slidefuzz}{2cm}
+
+% ----------------------------------------------------------------------------
+% Definitions
+% ----------------------------------------------------------------------------
+
+\def\heading#1{\textsf{\textit{#1}}\vskip2pt\hrule\bigskip}
+\def\subheading#1{\bigskip\textsf{\textit{#1}}\medskip}
+
+
+\def\PAL{\hbox{C-{}-}}
+
+\let\C\PAL 
+\let\pal\PAL               
+                        
+\def\sled{{\small SLED}}
+\def\sparc{{\small SPARC}}
+\def\burg{{\small BURG}}
+\def\asdl{{\small ASDL}}   
+\def\qcc{\hbox{\small QC-{}-}}  
+\def\noweb{{\small NOWEB}}
+\def\ocaml{{\small OCAML}}
+\def\rtl{{\small RTL}}    
+\def\ir{{\small IR}}      
+\def\AST{{\small AST}}   
+\def\cfg{{\small CFG}}  
+\def\stp{\textit{sp}}
+\def\lrtl{$\lambda$-{\rtl}}
+
+\def\x#1{{\red #1}}
+
+\newenvironment{code}%
+    {\begin{minipage}[t]{0.45\hsize}\begin{alltt}\small}
+    {\end{alltt}\end{minipage}}
+
+\newenvironment{half}%
+    {\begin{minipage}[t]{0.45\hsize}}
+    {\end{minipage}}
+
+
+
+% -----------------------------------------------------------------------------
+\begin{document}
+% -----------------------------------------------------------------------------
+
+\begin{slide}
+    \strut\vfill
+    {\Large\sf The Architecture of the Quick {\C} Compiler}
+    \vspace{0.5ex}\hrule\vspace{4ex}
+    {\large\textsf{Christian Lindig} 
+           \texttt{<lindig@eecs.harvard.edu>}}\\[2ex]
+    {\large\textsf{Harvard University}}\\[3ex]
+    \vfill\vfill
+\end{slide}
+
+% ----------------------------------------------------------------------------
+
+\begin{slide}
+    \heading{The Quick {\C} Compiler}
+    \begin{half}
+        \begin{itemize}
+        \item Compiles {\PAL} to (textual or binary) assembly code.
+        \item Cross compiler with multiple back ends in one binary.
+        \item Current targets: symbolic dummy target, {\small SPARC}.
+        \item Back end controlled by built-in Lua interpreter.
+        \item {\rtl}-based translation technique.
+        \item Graph-coloring and linear-scan register allocator.
+        \end{itemize}
+    \end{half}
+    \hfil
+    \begin{half}
+        \begin{itemize}
+        \item Implemented in O'Caml 3.04.
+        \item Extensively documented: literate program in NoWEB.
+        \item Circa 100 modules, about 27\,000 lines of hand-written
+              code.
+        \item Machine-generated code in front and back ends: Lex, Yacc,
+              {\small ASDL}, Burg, $\lambda$-{\rtl}.
+        \item Implementation so far tries to avoid mutable state.
+        \end{itemize}
+    \end{half}
+\end{slide}
+
+% ------------------------------------------------------------------ 
+
+\begin{slide}
+    \heading{The Front End}
+    \def\v{$\downarrow$}
+    \let\p\path
+
+    \begin{center}
+    \begin{tabular}{c@{\quad}l}
+       \path|Scan|      & records line breaks in \p|Srcmap.map|    \\
+       \v               \\ 
+       \p|Parse.token|  \\
+       \v               \\
+       \path|Parse|     & Yacc generated parser \\
+       \v               \\
+       \p|Ast.program|, & \p|Ast.program| generated from {\asdl} spec.\\
+       \p|Srcmap.map|   & source code positions\\
+       \v               & check static semantics, populate fat env.\\ 
+       \path|Elab|      & evaluate constant expressions (\p|Rtleval|)\\
+       \v               & propagates errors (\p|Error|)\\
+       \p|Ast.program|, 
+       \p|Srcmap.map|,    \\
+       \p|Fenv.Dirty.env|  \\
+    \end{tabular}   
+    \end{center}   
+\end{slide}
+
+
+% ------------------------------------------------------------------ 
+
+\begin{slide}
+    \heading{The Fat Environment (\texttt{Fenv})}
+
+    \begin{half}
+    \begin{itemize}
+    \item Provides meaning for names.
+    \item Two flavors: \emph{clean} and \emph{dirty}.
+    \item Dirty environment can contain errors.
+    \item Mostly functional, but few exceptions.
+    \end{itemize}
+    \end{half}
+    \hfil
+    \begin{code}
+type  kind = 
+    | Proc      of Symbol.t * scope partial 
+    | Code      of Symbol.t    
+    | Data      of Symbol.t
+    | Stack     of Rtl.exp option
+
+type denotation =
+    | Constant  of Bits.bits
+    | Label     of kind
+    | Import    of string option * Symbol.t
+    | Register  of register
+    | Continuation  of string * Symbol.t   
+
+type ventry = (* value entry *)
+    Srcmap.rgn * (denotation * Types.ty) info
+    \end{code}
+\end{slide}
+
+
+% ------------------------------------------------------------------ 
+
+\begin{slide}
+    \heading{Error Propagation (\texttt{Error})}
+
+    A simple value is either \path|Ok of 'a| or \path|Error|.
+    
+    A complex value is \path|Error|, if one of its internal values is
+    \path|Error|, and \path|Ok| otherwise.
+
+    Combinators allow to make regular functions error-aware. Heavily
+    used in module \path|Elab|.
+
+    \begin{alltt}\small
+val ematch      : 'a error -> ('a -> 'b) -> 'b error
+val ematchPair  : 'a error * 'b error -> ('a * 'b -> 'c) -> 'c error
+module Raise :
+  sig
+    val option : 'a error option                -> 'a option error
+    val list   : 'a error list                  -> 'a list error
+    val pair   : 'a error * 'b error            -> ('a * 'b) error
+  end
+    \end{alltt}
+\end{slide}
+
+% ------------------------------------------------------------------ 
+
+\begin{slide}
+    \heading{Register Transfer List (\texttt{Rtl})}
+
+    Universal notation for machine instructions: one data structure can
+    describe any machine instruction.
+
+    \begin{half}
+    Four important conceptual parts:
+    \begin{enumerate}
+    \item Constants (boolean, bit vectors, labels).
+    \item Expressions, denote values and addresses. 
+    \item Locations, unify memory and registers.
+    \item Operators, primitive function on values.
+    \end{enumerate}
+    \end{half}
+    \hfil
+    \begin{half}
+    Module \path|Rtl| provides two views on {\rtl}s.
+
+    Public: abstract representation, constructor functions.
+        \begin{alltt}
+bits  : Bits.bits -> width -> exp 
+late  : string    -> width -> exp
+fetch : loc       -> width -> exp
+        \end{alltt}
+
+    Private: exposed representation for pattern matching.
+          \begin{alltt}
+type exp = 
+    | Const of const               
+    | Fetch of loc * width 
+    | App   of opr * exp  list
+          \end{alltt}
+    \end{half}
+\end{slide}
+
+% ------------------------------------------------------------------ 
+
+\begin{slide}
+    \heading{Values in the Quick {\C} Compiler (\texttt{Bits})}
+
+    Conceptually, values are bit vectors whose interpretation is up to
+    the operators using them.
+
+    Practically, we support up to 64 bits as signed and unsigned
+    integers.  Floating point value support is planned, but difficult.
+
+    \begin{quote}
+    \begin{alltt}
+type t
+type width = int
+val width : t -> width
+
+module S: sig  (* signed *) 
+    val of_int:     int       -> width -> t 
+    val of_native:  nativeint -> width -> t
+    val of_string:  string    -> width -> t
+    val to_int:     t -> int
+    val to_native:  t -> nativeint
+end
+module U: sig (* unsigned *) \dots end
+    \end{alltt}
+    \end{quote}
+\end{slide}
+
+% ------------------------------------------------------------------ 
+
+\begin{slide}
+    \heading{Back End Phases}
+
+    \begin{half}
+    
+    \begin{enumerate}
+    
+    \item Creation. \path|Ast3ir| translates {\AST} to
+          \emph{intermediate representation} ({\small ASM}/{\cfg}).
+    \item Copy in/out. \path|Copyinout| expands call nodes in {\cfg} 
+          to sequence of assignments. 
+          
+    \item Variable Placement. \texttt{Place\-var} replaces variables 
+          in {\rtl}s by temporaries. 
+
+    \item Code Expansion. Every {\rtl} represents a machine instruction.
+          Yes, but \dots
+
+    \item Liveness Analysis. \path|Live| annotates {\cfg} nodes
+          with sets of live registers.
+    \end{enumerate}
+    \end{half}
+    \hfil
+    \begin{half}
+    \begin{enumerate}
+    \setcounter{enumi}{5} % ugly
+
+    \item Register Allocation. \texttt{Color\-graph} removes
+          temporaries in {\rtl}s.
+
+    \item Substitution. \path|Ast3ir| replaces \emph{late compile
+          time constants} in {\rtl}s.
+    \item Constant Folding. {\rtl}s are simplified by module \path|Ast3ir|.
+    \item Linearization. \path|Cfg4| linearizes the {\cfg}.
+    \item Recognition. A recognizer matches and emits instructions.
+    \end{enumerate}
+    \end{half}
+    
+\end{slide}
+
+% ------------------------------------------------------------------ 
+
+\begin{slide}
+    \heading{Intermediate Representation (\texttt{Asm}/\texttt{Cfg4})}
+
+    \begin{itemize}
+    \item \path|Ast3ir| controls compilation of a translation unit (a
+          file).
+    \item A compilation unit contains data and procedures. Everything
+          except procedures is immediately emitted using the assembler
+          interface \path|Asm3|.
+
+          \begin{alltt}
+method import    : string -> Symbol.t
+method align     : int -> unit
+method zeroes    : int -> unit
+method value     : Bits.bits -> unit
+          \end{alltt}
+
+    \item Procedures are translated into a control-flow graph (\cfg) and
+          pass the phases outlined before. Finally, they are emitted as
+          well:
+
+          \begin{alltt}
+method cfg_instr : Cfg4.cfg -> Symbol.t -> unit
+          \end{alltt}
+    \end{itemize}
+
+    In summary: only procedures have a tangible intermediate
+    representation. For the back end, a procedure is packed up as a
+    \path|Proc.t| value.
+\end{slide}
+
+% ------------------------------------------------------------------ 
+
+\begin{slide}
+    \heading{Back End Procedure Representation (\texttt{Proc.t})}
+
+\begin{quote}
+\begin{alltt}\small
+type t = 
+    \{ symbol:   Symbol.t            (* of procedure *)
+    ; cc:       Target2.cc          (* calling convention                   *)
+    ; target:   Target2.t           (* target of this procedure             *)
+    ; temps:    Talloc.Multiple.t   (* allocator for temporaries            *)
+    ; cfg:      Cfg4.cfg            (* control-flow graph                   *)
+    ; incoming: Block.t             (* stack - incoming area                *)
+    ; outgoing: Block.t             (* stack - outgoing area                *)
+    ; stackd:   Block.t             (* stack - user stack data              *)
+    ; conts:    Block.t             (* pairs of pointers for conts *)
+    ; priv:     Automaton2.t        (* stack - spill slots etc - still open *)
+    ; eqns:     Const2.t list       (* eqns for compile time consts *)
+    \}
+\end{alltt}
+\end{quote}
+\end{slide}
+
+
+% ------------------------------------------------------------------ 
+
+\begin{slide}
+    \heading{Control Flow Graph (\texttt{Cfg4})}
+
+    Together with {\rtl}s, our most important data structure.
+    
+    \begin{half}
+    \begin{itemize}
+    \item Imperative: nodes are objects, edges are pointers.
+    \item Every node carries an {\rtl}.
+    \item Internal implementation is object-oriented.
+    \item {\cfg} is built bottom up by \path|Ast3ir|.
+    \item Functions for mutation and traversal.
+    \end{itemize}
+    \end{half}
+    \hfil
+    \begin{code}
+mk: target:Target2.t -> nop:Rtl.rtl -> cfg
+entry:      cfg -> node   
+exit:       cfg -> node
+gm_assign:  cfg -> Rtl.rtl -> succ:node 
+                           -> node
+gm_return:  cfg -> Rtl.rtl -> int * int 
+                           -> node
+gm_goto:    cfg -> Rtl.rtl -> node list 
+                           -> node
+next:       node -> node option
+instr:      node -> Rtl.rtl
+    \end{code}
+\end{slide}
+
+% ------------------------------------------------------------------ 
+
+\begin{slide}
+    \heading{Stack Frame (\texttt{Block})}
+
+    A stack frame is an algebraic composition of memory blocks,
+    represented by \path|Block.t|.
+    
+    \begin{quote}
+    \begin{alltt}
+type t
+type placement = High | Low
+val mk         : base:Rtl.exp -> size:int -> alignment:int -> t
+val cat        : t -> t -> t
+val overlap    : placement -> t -> t -> t
+    \end{alltt}
+    \end{quote}
+    
+    Sources of blocks: stack data, initialized data, global variables, 
+    slot allocation, calling conventions.
+
+    Most blocks are allocated piecewise using an \path|Automaton2.t|
+    value that encapsulates the allocation policy.
+\end{slide}
+
+% ------------------------------------------------------------------ 
+
+\begin{slide}
+    \heading{Automata for Resource Allocation (\texttt{Automaton2})}
+
+    Abstraction for a pool of abstract \emph{locations} that can be
+    requested.  
+
+    Locations can be complex, like two registers, or a register and a
+    memory cell.
+
+    \begin{quote}
+    \begin{alltt}
+type t
+type loc    
+    
+val mk       : spec -> address:Rtl.exp -> t
+val allocate : t -> width:int -> hint:(string option) -> loc
+val fetch    : loc -> width:int -> Rtl.exp
+val store    : loc -> Rtl.exp -> width:int -> Rtl.rtl
+val freeze   : t -> Block.t
+    \end{alltt}
+    \end{quote}
+
+    Important applications: slot allocation in stack frame,
+    implementation of calling conventions. Both are part of a target
+    description (\path|Target2.t|).
+\end{slide}
+
+% ------------------------------------------------------------------ 
+
+\begin{slide}
+    \heading{Target (\texttt{Target2})}
+
+    Complex record to describe all aspects of a target. Important
+    entries:
+
+    \begin{quote}\small
+    \begin{alltt}
+spaces:  Space.t list;      (* memory, register, temporaries *)
+spill :  (Rtl.space -> Space.t) -> Register.t -> Rtl.loc -> Rtl.rtl list;
+reload:  (Rtl.space -> Space.t) -> Register.t -> Rtl.loc -> Rtl.rtl list;
+cc    :  string -> cc;      (* calling convention *)
+stack_slots:    Automaton2.spec;
+
+type cc =      
+    \{ sp:           Rtl.loc          (* stack pointer                      *)
+    ; return:       Rtl.rtl          (* machine instr passed to Cfg.return *)
+    ; proc:         Automaton2.spec  (* pass parameter to a procedure      *)
+    ; cont:         Automaton2.spec  (* pass parameter to a continuation   *)
+    ; ret:          Automaton2.spec  (* return values                      *)
+    ; allocatable:  Register.t list  (* regs for reg-allocation            *)
+    \}
+\end{alltt}
+    \end{quote}
+    
+\end{slide}
+
+% ------------------------------------------------------------------ 
+
+\begin{slide}
+    \heading{Better Living through Lua (\texttt{Main2}/\texttt{Backplane}/\texttt{Lua})}
+
+    \begin{code}
+function Main.Util.cc (target,file) 
+    local ast = Driver.parse(file) 
+    local asm = target.asm(Driver.stdout) 
+    local env = Driver.check(ast,asm) 
+    local asm = 
+        Driver.compile
+        (target.opt, ast, target.id, env)
+    Driver.assemble(asm)
+end    
+
+function Opt.sparc(proc)
+    local action = seq
+        \{ B.single(Expand.stages.placeVars)
+        , B.single(Expand.stages.sparc)
+        , Default.allocator
+        \}
+    B.run(action, proc, \{\})
+end
+    \end{code}
+    \hfil
+    \begin{half}
+    \begin{itemize}
+    \item Lua 2.5 implementation in O'Caml.
+    \item Extensions distributed accross modules.
+    \item At startup, \path|qc--| executes \verb|qc--.lua| that
+          controls the compiler. 
+    \item All important phases are accessible from Lua.
+    \item Command line arguments are handled with Lua code.
+    \item Interactive sessions with the Lua interpreter.
+    \end{itemize}
+    \end{half}
+\end{slide}    
+
+% ------------------------------------------------------------------ 
+
+\begin{slide}
+    \heading{Register Allocation (\texttt{Colorgraph})}
+    
+    Two register allocators: \emph{linear scan} and
+    \emph{graph-coloring} register allocator. 
+
+    The graph-coloring allocator is split up into phases that are
+    exported to Lua and can be configured using the Lua startup code.
+    \begin{quote}\small
+    \begin{alltt}
+CG.stages =
+    \{ liveness          = B.mk("liveness",          CG.liveness)
+    , build             = B.mk("build",             CG.build)
+    , setColors         = B.mk("setColors",         CG.setColors)
+    , makeWorklist      = B.mk("makeWorklist",      CG.makeWorklist)
+    , simplify          = B.mk("simplify",          CG.simplify)
+    , coalesce          = B.mk("coalesce",          CG.coalesce)
+    , freeze            = B.mk("freeze",            CG.freeze)
+    , selectSpill       = B.mk("selectSpill",       CG.selectSpill)
+    , assignColors      = B.mk("assignColors",      CG.assignColors)
+    , haveSpilledTemps  = B.mk("haveSpilledTemps",  CG.haveSpilledTemps)
+    , \dots
+    , applyColors       = B.mk("applyColors",       CG.applyColors)
+    , printCG           = B.mk("printCG",           CG.printCG)
+    , printCFGLive      = B.mk("printCFGLive",      CG.printCFGLive)
+    , pCFG              = B.mk("pCFG",              CG.pCFG)
+    \}
+    \end{alltt}
+    \end{quote}
+\end{slide}    
+
+% ------------------------------------------------------------------ 
+
+\begin{slide}
+    \heading{Code Expander (\texttt{Expander}, \texttt{Sparcexpander})}
+
+    An expander is target specific; it rewrites every {\rtl} in the
+    {\cfg} such that each resulting {\rtl} represents a machine
+    instruction. 
+
+    \path|Expander| is manually written, \path|Sparcexpander| and
+    \path|Dummyexpander| are generated from Burg rules.
+
+    \begin{quote}\small
+    \begin{alltt}
+addr:       App2("add", reg, rc)
+            \{: 
+                reg >>= fun r  ->
+                rc  >>= fun rc ->
+                return (I.generala r rc)
+            :\}
+
+addr:       reg         \{: reg >>= fun r -> return (I.indirecta r) :\}
+addr:       const13     \{: return (I.absolutea const13) :\}
+
+mem:        Cell('m', agg, width, addr, ass) \{: addr :\}
+
+stmt:       Store(mem, reg, width) [1]       
+            \{: mem >>= fun m -> reg >>= fun r -> exec (I.st r m) :\}    
+    \end{alltt}
+    \end{quote}
+\end{slide}
+
+% ------------------------------------------------------------------ 
+
+\begin{slide}
+    \heading{Code Constructors and Recognizer (\texttt{Msparc*})}
+
+    Currently manually modified machine-generated code.
+    
+    Encoder:
+    
+    \begin{quote}\small
+    \begin{alltt}
+let ld address rd = 
+    Rtl.store rd 
+        (Rtl.fetch (Rtl.cell Rtl.none 'm' Rtl.BigEndian 32 address) 32) 32
+    \end{alltt}
+    \end{quote}
+
+    Decoder and Emitter:
+    
+    \begin{quote}\small
+    \begin{alltt}
+| RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 
+    32, RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('m', 
+      Rtl.BigEndian, 32, RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', 
+          Rtl.Identity, 32, RP.Const (RP.Bits rs1), _), 32); 
+          RP.Const (RP.Bits arg13)]), _), 32), 32))] 
+when Base.to_bool (Bitops.fits_signed arg13 13) -> 
+   Instruction.ld (Instruction.generala (Bits.U.to_native rs1) 
+         (Instruction.imode (Bits.U.to_native arg13))) 
+     (Bits.U.to_native rd) 
+    \end{alltt}
+    \end{quote}
+\end{slide}
+
+% ------------------------------------------------------------------ 
+
+\begin{slide}
+    \heading{Source Code Organization}
+
+    \begin{minipage}[c]{0.45\hsize}\begin{alltt}\small
+CVS/        config/    mwb/
+INSTALL     doc/       ocaml-3.02.patch
+LAUNDRY     examples/  ocaml-bug/
+README      figures/   rtl/
+asdl/       gen/       specialized/
+aug99/      lib/       src/
+bin/        lua/       tdpe/
+camlburg/   man/       test/
+ccl-suite/  mk/        tmp/
+cllib/      mkfile     tools/
+   \end{alltt}\end{minipage} 
+    \hfil\vrule\hfil
+    \begin{half}
+        \begin{tabular}{ll}
+        \path|src/|     & main compiler source \\
+        \path|lua/|     & Lua interpreter source \\
+        \path|rtl/|     & {\rtl} declaration \\
+        \path|gen/|     & {\lrtl}-generated files: \\
+                        & emitter, constructors, \\
+                        & recognizer \\
+        \path|doc/|     & musings about problems \\
+        \path|cllib/|   & generic modules: pretty \\
+                        & printer, parser combinators \\
+        \path|config/|  & shared mkfile rules, \\
+                        & \LaTeX~macros\\
+    \end{tabular}
+    \end{half}
+
+    No need to remember the details: \path|mk| does it for you.
+\end{slide}
+
+% ------------------------------------------------------------------ 
+
+
+% -----------------------------------------------------------------------------
+\end{document}
+% -----------------------------------------------------------------------------
+
