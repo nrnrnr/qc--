@@ -523,7 +523,7 @@ end
 
 Labels and names for procedures have fixed types.  Types of register
 and import declarations on the other hand can refer to named types
-which may be undefined. A declaration wich refers to an undefined type
+which may be undefined. A declaration which refers to an undefined type
 is bound to [[Error.Error]].
 
 <<bind global values>>=
@@ -764,7 +764,7 @@ functions:  that returns the elements of two lists in one list.
 
 <<>>=
 let rec join l = foldl (fun x y -> y :: x) l
-    
+
 <<>>=
 let rec freeExprVars = function
     | A.ExprAt(x,_)     -> freeExprVars x
@@ -772,7 +772,7 @@ let rec freeExprVars = function
     | A.BinOp(e1,_,e2)  -> join (freeExprVars e1) (freeExprVars e2)
     | A.UnOp(_,e)       -> freeExprVars e
     | A.PrimOp(_,args)  -> 
-        List.concat (List.map (fun (_,e) -> freeExprVars e) args)
+        foldl (fun l (_,e) -> join l (freeExprVars e))  [] args
     | A.Int _           -> []
     | A.Float _         -> []
     | A.Char _          -> []
@@ -814,6 +814,7 @@ the environment.  The following functions type check and evaluate
 constants in a single step.  Each function returns a pair of a type
 and a value.
 
+
 <<processing const declarations>>=
 let rec evalFetch env = function
     | A.LValueAt(x,r) -> E.catch (error r env) (evalFetch env) x
@@ -824,6 +825,15 @@ let rec evalFetch env = function
                          | _ -> E.error ("access of non-constant "^id)
                          ) 
 @
+
+Applications to primitives operators must be type checked.  The types
+of the arguments [[at]] and the typescheme [[t]] of the operator as
+found in [[Const.Symbol]] are passed to [[Types.appl]] which returns
+the type of the result, if the type check passes.  Otherwise it raises
+an [[Error.ErrorExn]].  Only if the type check passes we apply the
+values to the implementation [[f]] of the operator and get the result. 
+Both result and type are returned.
+
 <<>>=
 let rec evalPrimOp' op env args =
     let f, t   = Const.Symbol.lookup op Const.constOps in
@@ -848,28 +858,28 @@ and evalExprs env ee =
 <<>>=
 and evalExpr env = function
 | A.ExprAt(x,r) -> E.catch (error r env) (evalExpr env) x
-| A.Int (str, Some t)           -> 
+| A.Int (str, Some t)    -> 
     ( match evalTy env t with
     | E.Error -> E.Error
     | E.Ok(t) -> E.Ok(t, Const.int2value str)
     )
-| A.Int (str, None   )           -> E.Ok(T.word     , Const.int2value str)
-| A.Float (str, Some t)         -> 
+| A.Int (str, None   )   -> E.Ok(T.word     , Const.int2value str)
+| A.Float (str, Some t)  -> 
     ( match evalTy env t with
     | E.Error -> E.Error
     | E.Ok(t) -> E.Ok(t, Const.float2value str)
     )
-| A.Float (str, None)            -> E.Ok(T.word     , Const.float2value str)
-| A.Char (str, Some t)          -> 
+| A.Float (str, None)    -> E.Ok(T.word     , Const.float2value str)
+| A.Char (str, Some t)   -> 
     ( match evalTy env t with
     | E.Error -> E.Error
     | E.Ok(t) -> E.Ok(t, Const.char2value str)
     )
-| A.Char (str, None)             -> E.Ok(T.word     , Const.char2value str)
-| A.Fetch(v)                     -> evalFetch env v
-| A.BinOp(l,op,r)                -> evalPrimOp env op [l;r]
-| A.UnOp(op,expr)                -> evalPrimOp env op [expr]
-| A.PrimOp(op,args)              -> evalPrimOp env op (List.map snd args)
+| A.Char (str, None)     -> E.Ok(T.word     , Const.char2value str)
+| A.Fetch(v)             -> evalFetch env v
+| A.BinOp(l,op,r)        -> evalPrimOp env op [l;r]
+| A.UnOp(op,expr)        -> evalPrimOp env op [expr]
+| A.PrimOp(op,args)      -> evalPrimOp env op (List.map snd args)
 @
 
 A constant declaration must declare a value of type [[bits]]; although
@@ -883,14 +893,14 @@ match the given type, and is not [[bool]] the name is bound to the
 type and value in the environment.
 
 <<>>=
-let doConstDecl scope env ((ty,name,expr),r) = 
+let doConstDecl scope env ((ty,name,expr),r) = (* UGLY UGLY UGLY *)
     match ty with 
     | Some t' -> (* type given at decl *)
         ( match evalExpr env expr, evalTy env t' with 
         | E.Ok(t,v),E.Ok(t') when t =t' && t <> Types.bool -> 
             F.bindv name (scope,E.Ok(F.Constant(v),t)) env
         | E.Ok(t,v),E.Ok(t') when t =t' && t = Types.bool -> 
-            ( E.errorPrt "contant has type bool but must have type bits"
+            ( E.errorPrt "constant has type bool but must have type bits"
             ;  F.bindvError name scope env
             )
         | E.Ok(t,v),E.Ok(t') when t<>t'  ->
@@ -904,7 +914,7 @@ let doConstDecl scope env ((ty,name,expr),r) =
         | E.Ok(t,v) when t <> Types.bool ->
             F.bindv name (scope,E.Ok(F.Constant(v),t)) env
         | E.Ok(t,v) when t = Types.bool ->
-            ( E.errorPrt "contant has type bool but must have type bits"
+            ( E.errorPrt "constant has type bool but must have type bits"
             ; F.bindvError name scope env
             ) 
         | _  -> F.bindvError name scope env
