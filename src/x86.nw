@@ -165,7 +165,9 @@ let addflags   x y w = R.store eflags (R.app (R.opr "x86_addflags"   [w]) [x; y]
 let mulflags   x y w = R.store eflags (R.app (R.opr "x86_mulflags"   [w]) [x; y]) 32
 let divflags   x y w = R.store eflags (R.app (R.opr "x86_divflags"   [w]) [x; y]) 32
 let logicflags exp w = R.store eflags (R.app (R.opr "x86_logicflags" [w]) [exp])  32
-let shlflags   x y w = R.store eflags (R.app (R.opr "x86_shlflags"   [w]) [x; y]) 32
+let shflags sh x y w =
+  let flagsop = "x86_" ^ sh ^ "flags" in
+  R.store eflags (R.app (R.opr flagsop [w]) [x; y]) 32
 @ 
 \subsubsection{Data movement}
 Most data movement is simple assignment; the MOV instruction is quite powerful.
@@ -293,11 +295,11 @@ until we try it with other versions of the x86 divide instruction.
 @ 
 I don't know why it's safe to clobber ECX here.
 <<x86 postexpander>>=
-| "shl" ->
+| ("shl" | "shrl" | "shra") as shop ->
     let cl = lobits 8 (tempval ecx_reg) in
-    let shl = exp_with_flags shlflags x (R.app (Up.opr op) [tempval x; cl])
+    let sh = exp_with_flags (shflags shop) x (R.app (Up.opr op) [tempval x; cl])
               (tempval x) cl 32 in
-    shl :: move_rtl ecx_reg y :: move
+    sh :: move_rtl ecx_reg y :: move
 <<x86 postexpander>>=
 | ("and"|"or"|"xor") -> with_lflags x (Up.opr op) x y 32 :: move
 | _  ->

@@ -63,7 +63,10 @@ happened that shouldn't have.
 exception Error of string
 let error msg = raise (Error msg)
 @
-
+We should be using [[sprintf]] more.
+<<code to precede the labeler>>=
+let sprintf = Printf.sprintf
+@ 
 
 
 % ------------------------------------------------------------------ 
@@ -191,6 +194,7 @@ We've omitted the indexed modes, which use two registers.
 <<rules>>=
 regl : Reg('r', n, w) {: regname w n :}
 regl8: Reg('r', n, w) {: regname 8 n :}
+regl_ecx: Reg('r', n, rw:w) [{: guard (n=1) :}] {: () :}
 regpairl : RegPair(reg1:regl,reg2:regl) {: reg2 :}
 meml : Mem(reg,  w)   {: "(" ^ reg ^ ")" :}  -- indir
 meml : Mem(disp, w)   {: disp :}
@@ -208,6 +212,7 @@ We can also use a link-time constant as an effective address.
 <<rules>>=
 reg     : Fetch(regl    , w) {: regl     :}
 reg8    : Lobits(Fetch(regl8, w), nw:w) [{: guard (nw=8) :}] {: regl8     :}
+reg_cl  : Lobits(Fetch(regl_ecx, w), nw:w) [{: guard (nw=8) :}] {: () :}
 regpair : Fetch(regpairl, w) {: regpairl :}
 mem     : Fetch(meml    , w) {: meml     :}
 eaddr   : Fetch(eaddrl  , w) {: eaddrl   :}
@@ -294,11 +299,26 @@ inst : Withaflags(dst:regl, "mul_trunc", src:eaddr, w, "x86_mulflags")
 inst : Withaflags(dst:regpairl, "div", src:reg, w, "x86_divflags")
   {: cat ["idiv"; suffix w; " "; src; ", "; dst] :}
 
-inst : Withaflags(dst:regl, "shl", src:reg8, w, "x86_shlflags")
-  {: cat ["shl"; suffix w; " "; src; ", "; dst] :}
+inst : Withaflags(dst:regl, "shl", reg_cl, w, "x86_shlflags")
+  {: sprintf "shl%s %%cl, %s" (suffix w) dst :}
+
+inst : Withaflags(dst:regl, "shra", reg_cl, w, "x86_shraflags")
+  {: sprintf "sar%s %%cl, %s" (suffix w) dst :}
+
+inst : Withaflags(dst:regl, "shrl", reg_cl, w, "x86_shrlflags")
+  {: sprintf "shr%s %%cl, %s" (suffix w) dst :}
+
+inst : Withaflags(dst:regl, "shl_turned_off_here", reg8, w, "x86_shlflags") [99]
+  {: sprintf "shl%s %s, %s" (suffix w) reg8 dst :}
+
+inst : Llr(dst:regl, "shl", immed, w)
+  {: sprintf "shl%s %s, %s" (suffix w) immed dst :}
 
 inst : Llr(dst:regl, "shra", immed, w)
-  {: cat ["sar "; immed; ","; dst] :}
+  {: sprintf "sar%s %s, %s" (suffix w) immed dst :}
+
+inst : Llr(dst:regl, "shrl", immed, w)
+  {: sprintf "shr%s %s, %s" (suffix w) immed dst :}
 
 @ 
 N.B. The crazy AT\&T assembly language does comparisons backward.
