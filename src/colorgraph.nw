@@ -1009,25 +1009,30 @@ let applyColors cg
 Now that we know where the temporaries have been placed, we can replace
 them in the spans.
 <<rewrite temporaries in spans>>=
-let rewrite_spans (node, ss as rst) =
-  (Verbose.eprintf verb "adding colorgraph span for node %d\n" (G.num node);
-   let get_spilled_loc tmp =
-     let (mem, spilltemps) =
-       try  RM.find tmp cg.spillMap
- 	     with Not_found -> raise RTD.DeadValue in
-     let rec try_temps tmps = match tmps with
-       | t::ts -> (try RP.Reg (RM.find t cg.colorMap) with Not_found -> try_temps ts)
-       | []    -> Dn.loc (Automatonutil.aloc mem (Register.width tmp)) in
-     try_temps spilltemps in
-   let map l = match l with
-     | RP.Reg tmp -> (try  RP.Reg (RM.find tmp cg.colorMap)
-                      with Not_found -> get_spilled_loc tmp)
-     | _          -> imposs "GC reg allocator emitting RT data: guard failed\n" in
-   let rewrite_span l =
-     let guard = function RP.Reg r -> is_tmp target r | _ -> false in
-     Rtlutil.Subst.loc_of_loc ~guard ~map l in
-   Runtimedata.upd_spans rewrite_span ss) in
-List.iter rewrite_spans proc.Proc.spans;
+let rewrite_node node =
+  let spans = match G.kind node with G.Call | G.Join -> G.spans node
+                                   | _               -> None in
+  match spans with
+  | Some ss ->
+     (Verbose.eprintf verb "adding colorgraph span for node %d\n" (G.num node);
+      let get_spilled_loc tmp =
+        let (mem, spilltemps) =
+          try  RM.find tmp cg.spillMap
+ 	        with Not_found -> raise RTD.DeadValue in
+        let rec try_temps tmps = match tmps with
+          | t::ts -> (try RP.Reg (RM.find t cg.colorMap) with Not_found -> try_temps ts)
+          | []    -> Dn.loc (Automatonutil.aloc mem (Register.width tmp)) in
+        try_temps spilltemps in
+      let map l = match l with
+        | RP.Reg tmp -> (try  RP.Reg (RM.find tmp cg.colorMap)
+                         with Not_found -> get_spilled_loc tmp)
+        | _          -> imposs "GC reg allocator emitting RT data: guard failed\n" in
+      let rewrite_span l =
+        let guard = function RP.Reg r -> is_tmp target r | _ -> false in
+        Rtlutil.Subst.loc_of_loc ~guard ~map l in
+      Runtimedata.upd_spans rewrite_span ss)
+  | None -> () in
+G.iter_nodes rewrite_node cfg;
 @
 
 %-------------------------------------------------------------------
@@ -1241,10 +1246,16 @@ let imposs = Impossible.impossible
 module type GRAPH = sig
   type cfg
   type node
+  type kind = Cfgx.M.kind
+    = Join | Instruction | StackAdjust | Branch | Cbranch | Mbranch
+    | Jump  | Call | Return | CutTo
+    | Entry | Exit | Assertion | Illegal | Impossible
   val node_labeled : cfg -> string -> node
   val instr    : node -> Rtl.rtl
   val num      : node -> int
   val illegal  : cfg -> node
+  val kind  : node -> kind
+  val spans : node -> Spans.t option
   val print_node : node -> string
   val node_info_string : node -> string
   val defs : node -> Register.Set.t  (* includes kills!!! *)
@@ -1279,6 +1290,10 @@ module G : GRAPH with type node = Rtl.rtl Cfgx.M.node
   module G = Cfgx.M
   type node = Rtl.rtl G.node
   type cfg  = Rtl.rtl G.cfg
+  type kind = Cfgx.M.kind
+    = Join | Instruction | StackAdjust | Branch | Cbranch | Mbranch
+    | Jump  | Call | Return | CutTo
+    | Entry | Exit | Assertion | Illegal | Impossible
   let print_node = G.print_node
   let node_info_string n = "???"
 
@@ -1286,6 +1301,8 @@ module G : GRAPH with type node = Rtl.rtl Cfgx.M.node
   let node_labeled = G.node_labeled 
   let instr n = Aux.Option.get nop (G.to_instr n)
   let illegal = G.illegal
+  let kind = G.kind
+  let spans = G.spans
   let preds = G.preds
   let pred  = G.pred
   let succs = G.succs

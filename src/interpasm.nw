@@ -27,6 +27,7 @@ to work with polymorphism allone.
 
 <<interpasm.ml>>=
 module Asm      = Asm
+module G        = Cfgx.M
 module RP       = Rtl.Private
 module P        = Proc
 
@@ -63,15 +64,21 @@ module New = struct
           | _ -> fail () in
 
         let stackdata_decls printer =
-          match proc.P.spans with
-          | (_,ss)::_ ->
+          (* We have to find a node with spans -- it will have stack data spans.*)
+          let find n rst =
+            match G.kind n with
+            | G.Call | G.Join -> (match G.spans n with Some ss -> Some ss | None -> rst)
+            | _ -> rst in
+          let spans = G.fold_nodes find None proc.Proc.cfg in
+          match spans with
+          | Some ss ->
             let spans = Runtimedata.stackdata ss in
             ( printer "{ "
             ; List.iter (fun e -> printer (Printf.sprintf "%d," (extract_offset e)))
                         spans
             ; printer " }"
             )
-          | [] -> printer "{}" in
+          | None -> printer "{}" in
         ( printer (Printf.sprintf "CMM.procedure ('%s',%d,%d,"
                       (proc.Proc.symbol#mangled_text)
                       proc.Proc.vars

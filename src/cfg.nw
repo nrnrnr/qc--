@@ -444,6 +444,11 @@ val is_mbr     : 'i node -> bool  (* is multiway branch *)
 val is_call    : 'i node -> bool
 val is_cut     : 'i node -> bool
 @ 
+If a graph node has spans attached, we can fetch them.
+This function is only defined on call nodes and join nodes.
+<<graph and node observers>>=
+val spans      : 'i node -> Spans.t option
+@
 We can get an extension suitable for the kind of node.
 <<graph and node observers>>=
 val jx         : 'i node -> X.jx  (* defined only on join nodes *)
@@ -610,6 +615,10 @@ jump does not.
 <<graph and node mutators>>=
 val update_instr  : ('i -> 'i) -> 'i node -> unit
 @ 
+We can attach spans to a call or join node; this function is undefined on other nodes.
+<<graph and node mutators>>=
+val set_spans     : 'i node -> Spans.t -> unit
+@
 \subsection{Constructors}
 We can make a fresh graph.
 Because the graph can insert join points at will, the client must
@@ -680,7 +689,8 @@ val mbranch      : 'i cfg -> 'i -> targets:'i node list -> 'i node
 val call         : 'i cfg -> 'i -> altrets:'i contedge list -> succ:'i node ->
                      unwinds_to:'i contedge list -> cuts_to:'i contedge list ->
                      aborts:bool -> uses:regs -> defs:regs -> kills:regs ->
-                     reads:string list option -> writes:string list option -> 'i node
+                     reads:string list option -> writes:string list option ->
+                     spans:Spans.t option -> 'i node
 val cut_to       : 'i cfg -> 'i -> cuts_to:'i contedge list -> aborts:bool ->
                      uses:regs -> 'i node
 val return       : 'i cfg -> 'i -> uses:regs -> 'i node
@@ -804,6 +814,7 @@ type ('i, 'n, 'c) joi = {         joi_num    : int
                         ; mutable joi_succ   : 'n
                         ; mutable joi_lpred  : 'n
                         ;         joi_jx     : X.jx
+                        ; mutable joi_spans  : Spans.t option
                         }
 type ('i, 'n)     ins = {         ins_num    : int
                         ; mutable ins_i      : 'i
@@ -859,6 +870,7 @@ type ('i, 'n, 'e) cal = {         cal_num        : int
                         ; mutable cal_contedges  : 'e array
                         ; mutable cal_lsucc      : 'n
                         ;         cal_fx         : X.fx
+                        ; mutable cal_spans      : Spans.t option
                         ; mutable cal_uses       : regs
                         ;         cal_altrets    : int
                         ;         cal_unwinds_to : int
@@ -1167,6 +1179,10 @@ let is_call node = match node with
 let is_cut node = match node with
   | Cut _ -> true
   | _     -> false
+let spans node = match node with
+  | Cal c -> c.cal_spans
+  | Joi j -> j.joi_spans
+  | _     -> undef_with_node (num node) "spans" "non-call or non-join"
 @
 Each node has data attached to it. We hope to limit this data to join points
 someday.
@@ -1345,7 +1361,7 @@ throughout the cfg implementation.
 [[node_labeled]] is fundamental to setting the successors, since join points
 must frequently be inserted.
 <<set node successors>>=
-let mk_join cfg labels ~preds ~lpred ~succ ~local =
+let mk_join cfg labels ~preds ~lpred ~succ ~local ~spans =
   let join = Joi { joi_num    = new_num ()
                  ; joi_local  = local
                  ; joi_labels = labels
@@ -1354,6 +1370,7 @@ let mk_join cfg labels ~preds ~lpred ~succ ~local =
                  ; joi_succ   = succ
                  ; joi_lpred  = lpred
                  ; joi_jx     = X.jx ()
+                 ; joi_spans  = spans
                  } in
   List.iter (fun l -> cfg.label_map <- SM.add l join cfg.label_map) labels;
   join
@@ -1361,7 +1378,7 @@ let mk_join cfg labels ~preds ~lpred ~succ ~local =
 let node_labeled cfg label =
   try SM.find label cfg.label_map
   with Not_found -> mk_join cfg [label] ~preds:[] ~lpred:cfg.ill ~succ:cfg.ill
-                                ~local:true
+                                ~local:true ~spans:None
 let non_local_join_labeled cfg label =
   try let n = SM.find label cfg.label_map in
       match n with
@@ -1370,7 +1387,7 @@ let non_local_join_labeled cfg label =
       | Joi _ -> n
       | _     -> imposs "CFG: non-join found in label_map"
   with Not_found -> mk_join cfg [label] ~preds:[] ~lpred:cfg.ill ~succ:cfg.ill
-                                ~local:false
+                                ~local:false ~spans:None
 @
 [[join_leading_to]] returns [[succ]] or its predecessor if one is a join point;
 otherwise, it inserts a join point between [[succ]] and its predecessor.
@@ -1635,6 +1652,12 @@ let update_instr upd node = match node with
   | Ill _ -> ()
   | Boot  -> imposs "update_instr undefined on boot nodes"
 @
+<<graph and node mutators implementation>>=
+let set_spans n spans = match n with
+  | Cal c -> c.cal_spans <- Some spans
+  | Joi j -> j.joi_spans <- Some spans
+  | _     -> undef_with_node (num n) "set_spans" "non-call or non-join"
+@
 We would like to be able to fold over the layout of the graph.
 THE CURRENT SOLUTION IS NOT NECESSARILY PERMANENT:
 We make two passes:
@@ -1733,7 +1756,7 @@ let copy info transform cfg =
     try SM.find (label join) new_cfg.label_map
     with Not_found -> 
       mk_join new_cfg (labels join) ~preds:[] ~lpred:new_cfg.ill
-              ~succ:new_cfg.ill in
+              ~succ:new_cfg.ill ~spans:join.joi_spans in
   let ce_lookup ce =
     let n' = lookup ce.node in
     {ce with node = n'} in
@@ -1763,6 +1786,7 @@ let copy info transform cfg =
               ~contedges:ce_lst ~lsucc:new_cfg.ill ~uses:c.cal_uses
               ~altrets:c.cal_altrets ~unwinds_to:c.cal_unwinds_to
               ~cuts_to:c.cal_cuts_to ~reads:c.cal_reads ~writes:c.cal_writes
+              ~spans:c.cal_spans
     | Cut c ->
       let cuts_to = Array.to_list (convert_contedges c.cut_contedges) in
       cut_to new_cfg (transform c.cut_i) ~cuts_to ~aborts:false ~uses:c.cut_uses
@@ -1790,13 +1814,14 @@ We have to bootstrap node construction because of the way [[set_succ]] works.
 let join_leading_to_ce ce = {ce with node = join_leading_to ce.node}
 
 let mk_call i ~pred ~contedges ~lsucc ~uses ~altrets ~unwinds_to ~cuts_to
-    ~reads ~writes =
+    ~reads ~writes ~spans =
     Cal { cal_num        = new_num ()
         ; cal_i          = i
         ; cal_pred       = pred
         ; cal_contedges  = contedges
         ; cal_lsucc      = lsucc
         ; cal_fx         = X.fx ()
+        ; cal_spans      = spans
         ; cal_uses       = uses
         ; cal_altrets    = altrets
         ; cal_unwinds_to = unwinds_to
@@ -1805,7 +1830,8 @@ let mk_call i ~pred ~contedges ~lsucc ~uses ~altrets ~unwinds_to ~cuts_to
         ; cal_writes     = writes 
         }
 
-let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts ~uses ~defs ~kills ~reads ~writes =
+let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts
+               ~uses ~defs ~kills ~reads ~writes ~spans =
   let altrets     = List.map join_leading_to_ce altrets in
   let unwinds_to  = List.map join_leading_to_ce unwinds_to in
   let cuts_to     = List.map join_leading_to_ce cuts_to in
@@ -1819,7 +1845,7 @@ let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts ~uses ~defs ~kills ~r
   let cal =
     mk_call i ~pred:cfg.ill ~contedges ~lsucc:cfg.ill ~uses ~reads ~writes
               ~altrets:(List.length altrets) ~unwinds_to:(List.length unwinds_to)
-              ~cuts_to:(List.length cuts_to) in
+              ~cuts_to:(List.length cuts_to) ~spans in
   let ()  = Aux.foldri (fun i n () -> set_succ_n cal i ~succ:n.node)
                        edgelist () in
   cal

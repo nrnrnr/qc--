@@ -70,10 +70,10 @@ module G  = Cfgx.M  (* graph *)
 module N  = Nelab
 module R  = Rtl
 module RP = Rtl.Private
-module RT = Runtimedata
 module RU = Rtlutil
 module RS = Register.Set
 module S  = Elabstmt
+module SP = Spans
 module T  = Target
 module Up = Rtl.Up
 module W  = Rtlutil.Width
@@ -375,10 +375,11 @@ let insert_init_cont_nodes contmap init_node =
     if k.K.escapes then
       let pc    = exp_of_code_label k.K.cut_pc in
       let sp    = proc_cc.C.stable_sp_loc      in
-      let spans = RT.to_spans ~sp:(to_mloc sp) ~prev_sp:prev_sp_loc ~ra:saved_ra
+      let spans = SP.to_spans ~sp:(to_mloc sp) ~prev_sp:prev_sp_loc ~ra:saved_ra
                               ~users:k.K.spans ~csregs:nvr_temps ~conts:[]
                               ~sds:sd_locs ~vars:(var_array ()) in
-      let () = add_spans (G.non_local_join_labeled g k.K.cut_pc, spans) in
+      let n  = G.non_local_join_labeled g k.K.cut_pc in
+      let () = G.set_spans n spans in
       let pc_sp = { Mflow.new_pc = pc; Mflow.new_sp = sp } in
       G.instruction g (Contn.init_code k.K.rep pc_sp) succ
     else
@@ -586,17 +587,16 @@ and call lhs cconv e args targets(*unused*) conts alias succ =
     | C.Caller -> to_mloc base
     | C.Callee ->
         to_mloc (Rtlutil.addk (W.exp base) base (Block.size out.C.overflow)) in
-  let spans = RT.to_spans ~sp:sp_loc ~prev_sp:prev_sp_loc ~ra:saved_ra
+  let spans = SP.to_spans ~sp:sp_loc ~prev_sp:prev_sp_loc ~ra:saved_ra
                           ~users:props ~csregs:nvr_temps ~conts:unwind_conts
                           ~sds:sd_locs ~vars:(var_array ()) in
   G.stack_adjust g out.C.pre_sp                                        **>
   G.instruction  g out.C.shuffle                                       **>
   G.stack_adjust g out.C.post_sp                                       **>
-  (fun ~succ -> add_spans (succ, spans); succ) (* add spans to call node *) **>
   G.call g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
                  ~altrets:conts.S.areturns ~unwinds_to:conts.S.unwinds
                  ~cuts_to:conts.S.cuts ~aborts:conts.S.aborts
-                 ~reads:alias.S.reads ~writes:alias.S.writes           **>
+                 ~reads:alias.S.reads ~writes:alias.S.writes ~spans:(Some spans) **>
   (if conts.S.returns then
     G.assertion    g (in'.C.insp in'.C.overflow)                       **>
     G.stack_adjust g in'.C.pre_sp              (* DOUBTS ABOUT THIS *) **>
@@ -733,14 +733,6 @@ type 'a blocklists = { mutable caller : 'a list; mutable callee : 'a list }
   | C.Callee -> blocks.callee <- b :: blocks.callee in
   let constraints         = ref [] in
   let add_constraints  c  = constraints  := c :: !constraints        in
-@   
-To avoid threading state around, we store spans as mutable state.
-Most spans are associated with specific call-sites.
-However, some spans, such as stackdata information, are accessible globally within
-the procedure; for these spans, we associate them with the current procedure's label.
-<<definition of [[proc]], which translates one procedure>>=
-  let spans        = ref [] in
-  let add_spans s  = spans := s :: !spans in
   let ptrcount =
     let _, _, c = target.T.memspace in Cell.to_count c target.T.pointersize in
   let to_mloc exp =
@@ -923,7 +915,6 @@ The main thing here is dealing with all the blocks.
     ; Proc.nvregs         = RS.cardinal nvregs (* number of non-volatile regs *)
     ; Proc.var_map        = Array.make nvars None
     ; Proc.global_map     = global_map
-    ; Proc.spans          = !spans
     ; Proc.bodylbl        = bodylbl
     } in
 @ 

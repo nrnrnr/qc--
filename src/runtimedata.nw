@@ -51,12 +51,17 @@ We expose two types of functions:
 \item A function that emits the spans as assembly.
 \end{itemize}
 The first conversion function takes a user's key and value and produces a span.
+
+We need to be able to update spans; sometimes it is easy to update all the spans
+in the control-flow graph.
 <<runtimedata.mli>>=
 type spans = Spans.t
 exception DeadValue
-val upd_spans : (Rtl.loc -> Rtl.loc) -> spans -> unit   (* may raise DeadValue *)
+val upd_spans     : (Rtl.loc -> Rtl.loc) -> spans -> unit   (* may raise DeadValue *)
+val upd_all_spans :
+  (Rtl.loc -> Rtl.loc) -> Rtl.rtl Cfgx.M.cfg -> unit   (* may raise DeadValue *)
 @ 
-The run-time system needs to know how the register are mapped to constants.
+The run-time system needs to know how the registers are mapped to constants.
 <<runtimedata.mli>>=
 type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target.t
 val print_reg_map : tgt -> unit
@@ -67,7 +72,7 @@ The function should be partially applied to an assembler, then added
 to the optimization pipeline.
 <<runtimedata.mli>>=
 val emit_as_asm : tgt -> 'a Asm.assembler -> procsym:Symbol.t ->
-                  (Rtl.rtl Cfgx.M.node * spans) list-> bool
+                  Rtl.rtl Cfgx.M.cfg -> bool
 @
 It appears that the interpreter needs to know about user-defined spans and
 stackdata.
@@ -81,29 +86,6 @@ val stackdata  : spans -> Rtl.loc list
 % ------------------------------------------------------------------ 
 A number of shorthands are used throughout the implementation.
 <<runtimedata.ml>>=
-let imposs = Impossible.impossible
-let impossf fmt = Printf.kprintf Impossible.impossible fmt
-let unimp  = Impossible.unimp
-
-type spans = Spans.t
-exception DeadValue
-let to_spans ~sp ~prev_sp ~ra ~users ~csregs ~conts ~sds ~vars =
-  { sp = sp;       prev_sp = prev_sp; ra = ra; users = users; csregs = csregs;
-    conts = conts; sds = sds;         vars = vars }
-
-(* Don't touch the user-defined spans -- not necessary *)
-let upd_spans upd spans =
-  let maybe_upd l = match l with
-    | Some l -> (try Some (upd l) with DeadValue -> None)
-    | None   -> None in
-  spans.sp      <- upd spans.sp;
-  spans.prev_sp <- upd spans.prev_sp;
-  spans.ra      <- upd spans.ra;
-  spans.csregs  <- List.map (fun (r,l) -> (r, maybe_upd l)) spans.csregs;
-  spans.conts   <- List.map (fun (pc,sp,vars) -> (pc, upd sp, vars)) spans.conts;
-  spans.sds     <- List.map upd spans.sds;
-  Array.iteri (fun i l -> spans.vars.(i) <- maybe_upd l) spans.vars
-
 module B  = Bits
 module G  = Cfgx.M
 module CT = Ctypes
@@ -115,9 +97,37 @@ module RU = Rtlutil
 module W  = Rtlutil.Width
 module Dn = Rtl.Dn
 module Up = Rtl.Up
+module S = Spans
 module T  = Target
-
 module IM = Map.Make (struct type t = int let compare = compare end)
+
+type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target.t
+type spans = S.t
+exception DeadValue
+
+let imposs = Impossible.impossible
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
+let unimp  = Impossible.unimp
+
+(* Don't touch the user-defined spans -- not necessary *)
+let upd_spans upd spans =
+  let maybe_upd l = match l with
+    | Some l -> (try Some (upd l) with DeadValue -> None)
+    | None   -> None in
+  spans.S.sp      <- upd spans.S.sp;
+  spans.S.prev_sp <- upd spans.S.prev_sp;
+  spans.S.ra      <- upd spans.S.ra;
+  spans.S.csregs  <- List.map (fun (r,l) -> (r, maybe_upd l)) spans.S.csregs;
+  spans.S.conts   <- List.map (fun (pc,sp,vars) -> (pc, upd sp, vars)) spans.S.conts;
+  spans.S.sds     <- List.map upd spans.S.sds;
+  Array.iteri (fun i l -> spans.S.vars.(i) <- maybe_upd l) spans.S.vars
+
+let upd_all_spans upd cfg =
+  let upd_node n = match G.kind n with
+    | G.Call | G.Join -> (match G.spans n with Some ss -> upd_spans upd ss
+                                             | None    -> ())
+    | _ -> () in
+  G.iter_nodes upd_node cfg
 @
 
 % ------------------------------------------------------------------ 
@@ -130,7 +140,12 @@ The stackdata spans ([[sd_spans]]) are emitted in a separate table.
 Then, for each stopping point, we emit the associated spans by calling
 [[emit_site_spans]].
 <<runtimedata.ml>>=
-let emit_as_asm target asm ~procsym node_spans =
+let emit_as_asm target asm ~procsym cfg =
+  let node_spans =
+    let add n rst = match G.kind n with
+      | G.Call | G.Join -> (match G.spans n with Some ss -> (n, ss) :: rst | _ -> rst)
+      | _ -> rst in
+    G.fold_nodes add [] cfg in
   let wordsize   = target.T.wordsize in
   let to_bits  i = Bits.S.of_int i wordsize  in 
   let zero       = Bits.zero wordsize in
@@ -161,20 +176,20 @@ let order node_spans =
 \paragraph{Emitting Stackdata Spans}
 Stackdata spans have been attached to all the span collections.
 They should all be identical, so we just pick one.
-<<define [[emit_sd_spans]] and [[emit_site_spans]]>>=
-let sd_label = asm#local (Idgen.label "stackdata") in
-@
+
 A stackdata map for $n$ stackdata labels is of size $n + 1$ words.
 The first word gives the number of stackdata labels.
 The next $n$ words give the stackdata labels in order.
 <<define [[emit_sd_spans]] and [[emit_site_spans]]>>=
+let sd_label = asm#local (Idgen.label "stackdata") in
+
 let emit_sd_spans () =
   match node_spans with
   | (_, spans)::_ ->
       asm#section "pcmap_data";
       asm#label   sd_label;
-      asm#value   (Bits.U.of_int (List.length spans.sds) target.T.wordsize);
-      List.iter   emit_loc spans.sds
+      asm#value   (Bits.U.of_int (List.length spans.S.sds) target.T.wordsize);
+      List.iter   emit_loc spans.S.sds
  | [] -> () in
 @
 \paragraph{Emitting Stopping-Point Spans}
@@ -262,26 +277,26 @@ We emit each of these blocks in order, beginning with the \PAL\ internal spans.
 <<emit frame data>>=
 asm#section "pcmap_data";
 asm#label frame_label;
-emit_loc spans.sp;
-emit_loc spans.prev_sp;
-emit_loc spans.ra;
+emit_loc spans.S.sp;
+emit_loc spans.S.prev_sp;
+emit_loc spans.S.ra;
 asm#addr (Reloc.Simple.of_sum Rtl.datasym sd_label zero);
-emit_int (List.length spans.csregs * 2);
-emit_int (Array.length spans.vars);
+emit_int (List.length spans.S.csregs * 2);
+emit_int (Array.length spans.S.vars);
 @
 The source spans are laid out by index.
 Because the indices may be sparse, we fill in any gaps with zeroes.
 <<emit frame data>>=
-let users       = List.map (fun (n,e) -> (Bits.S.to_int n,e)) spans.users in
+let users       = List.map (fun (n,e) -> (Bits.S.to_int n,e)) spans.S.users in
 let max_span_ix = List.fold_left (fun best (i,_) -> max i best) (-1) users in
 @
 And now, we fill in the rest of the data.
 <<emit frame data>>=
 emit_int (max_span_ix + 1);
-emit_int (size_cont_block spans.conts);
-List.iter emit_csreg spans.csregs;
-Array.iter emit_maybe_loc   spans.vars;
-emit_conts spans.conts;
+emit_int (size_cont_block spans.S.conts);
+List.iter emit_csreg spans.S.csregs;
+Array.iter emit_maybe_loc   spans.S.vars;
+emit_conts spans.S.conts;
 @
 The source spans are laid out by index.
 Because the indices may be sparse, we fill in any gaps with zeroes.
@@ -451,8 +466,8 @@ let simplify_loc loc =
 It appears that the interpreter needs to know about user-defined spans and
 stackdata.
 <<runtimedata.ml>>=
-let user_spans spans = spans.users
-let stackdata  spans = spans.sds
+let user_spans spans = spans.S.users
+let stackdata  spans = spans.S.sds
 @
 The run-time system needs to know how the register are mapped to constants.
 <<runtimedata.ml>>=

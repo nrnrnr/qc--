@@ -18,11 +18,12 @@ The implementation is against the ``new'' control-flow graph module
 \module{cfg.nw}.
 
 <<interpemit.ml>>=
-module C = Cfgx.M
-module P = Proc
-module E = Interpemitrtl
-module T = Target
-module R = Rtl.Private
+module C   = Cfgx.M
+module P   = Proc
+module E   = Interpemitrtl
+module T   = Target
+module R   = Rtl.Private
+module RTD = Runtimedata
 @
 
 \paragraph{Helper functions}.
@@ -96,14 +97,8 @@ let node proc printer n = match C.kind n with
         and ncuts    = C.cuts_to    n
         in
 
-        let spans   = 
-          let num = C.num (C.succ_n n nreturns) in
-          try Runtimedata.user_spans (snd (List.find (fun (n,_) -> C.num n = num)
-                                                     proc.Proc.spans))
-          with Not_found -> [] in
-					
+        let spans   = match C.spans n with Some ss -> RTD.user_spans ss | None -> [] in
         let succs   = C.succs n     in
-
         let returns = sublist succs 0                nreturns
         and cuts    = sublist succs nreturns         ncuts
         and unwinds = sublist succs (nreturns+ncuts) nunwinds
