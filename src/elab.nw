@@ -847,7 +847,7 @@ let localDecls bb =
 
 Module [[CDecl]] captures what is important to sort declarations:  A
 declaration defines a name (multiple in general) and refers to other
-names.  As said before we only sort constant declarations. 
+names.  
 
 <<module CDecl>>=
 type decl = (A.ty option * string * A.expr) * A.region
@@ -856,7 +856,7 @@ type decl = (A.ty option * string * A.expr) * A.region
 A [[const]] declaration defines the name it declares. That was simple.
 
 <<module CDecl>>=
-let rec defines ((t,name,expr),r) = [name]
+let defines ((t,name,expr),r) = [name]
 @
 
 A constant expression can refer to other constant and link-time
@@ -1024,9 +1024,10 @@ this is not permitted. The optionally provided type must match the
 actual type of the defining expression.
 
 The [[doConstDecl]] evaluates the expression for a constant declaration
-and optionally its type. Only when both succeed and the resulting type
-match the given type, and is not [[bool]] the name is bound to the
+and optionally its type. Only when both succeed, the resulting type
+matches the given type, and is not [[bool]], the name is bound to the
 type and value in the environment.
+
 
 <<module Eval>>=
 let doConstDecl env ((ty,name,expr),r) = 
@@ -1048,7 +1049,10 @@ let doConstDecl env ((ty,name,expr),r) =
         | Some t' -> E.seq (E.Raise.pair (entry, evalTy env t')) 
                     ( function
                     | (v,t), t' when t = t' -> entry
-                    | _ -> ( E.errorRegionPrt reg ("type declared for constant "^name^" does not match actual type")
+                    | _ -> ( E.errorRegionPrt reg 
+                            ( "type declared for constant "
+                            ^ name
+                            ^ " does not match actual type")
                            ; E.Error
                            )
                     )
@@ -1060,9 +1064,9 @@ let doConstDecl env ((ty,name,expr),r) =
          in F.bindv name (r,entry) env
 @
 
-The [[doConst]] function sorts and processes constant declarations. 
-Depending on its [[scope]] parameter the declared names get the
-respective scope in [[env]]; an enlarged [[env]] is returned.
+The [[doConst]] function sorts and processes constant declarations. The
+result is an enlarged [[env]] that contains bindings for the declared
+constants.
 
 <<module Eval>>=
 let doConst env dd =
