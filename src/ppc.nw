@@ -74,8 +74,8 @@ end
 The power PC has 7 different control registers.
 <<spaces>>=
 let creg n = R.reg ('c',n,32)
-let cia    = creg 0  (* current instr address (pc)       *)
-let nia    = creg 1  (* new (next) instr address         *)
+let nia    = creg 0  (* new (next) instr address         *)
+let cia    = creg 1  (* current instr address (pc)       *)
 let cr     = creg 2  (* condition register               *)
 let fpscr  = creg 3  (* flt point condition register     *)
 let xer    = creg 4  (* XER register                     *)
@@ -215,7 +215,7 @@ let unop  ~dst op tmp       = rtlop dst op [tmp]
 
 let block_copy ~dst assn1 ~src assn2 width = ui "block_copy"
 
-let br ~tgt = [R.store pc_lhs (R.fetch (R.reg tgt) wordsize) wordsize]
+let br ~tgt = [R.store pc_lhs (tval tgt) wordsize]
 let b ~tgt  = [R.store pc_lhs (Up.const tgt) wordsize]
 let bc tmp1 op tmp2 ~tgt = [ R.guard (R.app (Up.opr op) [R.bool true]) (List.hd (b tgt))
                            ; R.store (R.reg tmp1)
@@ -227,12 +227,10 @@ let bc tmp1 op tmp2 ~tgt = [ R.guard (R.app (Up.opr op) [R.bool true]) (List.hd 
 
 
 let bnegate rtl = rtl
-let callr ~tgt ~others = (R.par [ R.store lr (R.fetch pc_rhs wordsize) wordsize
-                                ; List.hd (br tgt)
-                                ]) ::  List.map Up.effect others
-let call ~tgt ~others  = (R.par [ R.store lr (R.fetch pc_rhs wordsize) wordsize
-                                ; List.hd (b tgt)
-                                ]) ::  List.map Up.effect others
+let call  ~tgt ~others = 
+    [R.par (List.hd (b  tgt) :: List.map Up.effect others)]
+let callr ~tgt ~others = 
+    [R.par (List.hd (br tgt) :: List.map Up.effect others)]
 
 let cut_to effects = [R.par (List.map Up.effect effects)]
 
@@ -265,8 +263,8 @@ module F = Mflow.MakeStandard (
   struct
     let pc_lhs = Post.pc_lhs
     let pc_rhs = Post.pc_rhs
-    let ra_reg = Rtl.reg ('?', 99, 32) (* not used *)
-    let ra_offset = 00                 (* not used *)
+    let ra_reg = R.reg ('c',5,32)
+    let ra_offset = 4                 (* size of call instruction *)
   end)
 
 module A = Automaton
