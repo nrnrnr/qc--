@@ -25,13 +25,18 @@ INC  =          `echo *.nw       | sed 's/\.nw/.inc/g;'`
 LIBCMX =        $NAME.cmxa
 LIBCMO =        $NAME.cma
 
-all:V:          $LIBCMO $LIBCMX
-update:V:       $LIBDIR/$LIBCMO $LIBDIR/$LIBCMX
+all:V:          $LIBCMO 
+all.opt:V:      $LIBCMX
+update:V:       $LIBDIR/$LIBCMO 
+update.opt:V:   $LIBDIR/$LIBCMX
+
 dvi:V:          $INC
 html:V:         $HTML
 
 test:VQ:
                 echo "nothing to be done"
+
+depend:V:       $DEPEND
 
 clean:V:    
                 rm -f *.cmo *.cmi *.cmx *.o
@@ -106,7 +111,7 @@ $LIBDIR/$LIBCMX:    $LIBCMX dirs
 		        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR
 		    done
 
-dirs:V:
+dirs:VQ:
                     for i in $LIBDIR; do
                         if [ ! -d $i ]; then
                             echo "missing directory $i"
@@ -135,7 +140,7 @@ rc_ast.ml:      rc.nw
 # make sure that generators are run first
 # ------------------------------------------------------------------ 
 
-depend:V:	$SCAN
+$DEPEND: 	$SCAN
 		$OCAMLDEP $SCAN > $DEPEND
 
 # ------------------------------------------------------------------ 

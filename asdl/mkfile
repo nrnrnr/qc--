@@ -8,6 +8,7 @@ NAME =      asdl
 # paths
 # ------------------------------------------------------------------ 
 
+TOP    =    ..
 LIBDIR =    ../lib
 BINDIR =    ../bin
 MANDIR =    ../man
@@ -33,17 +34,34 @@ OCAMLO_FLAGS =  -I $LIBDIR
 LIBCMX=$NAME.cmxa
 LIBCMO=$NAME.cma
 
-all:V:          $LIBCMO $LIBCMX
+all:V:          $LIBCMO
+all.opt:V:      $LIBCMX
 
-update:V:       $LIBDIR/$LIBCMO $LIBDIR/$LIBCMX
+update:V:       dirs $LIBDIR/$LIBCMO 
+update.opt:V:   dirs $LIBDIR/$LIBCMX
 
 clean:V:    
                 rm -f $CMO $CMX $CMI $OBJ
                 rm -f *.output
                 rm -f $LIBCMX $LIBCMO $NAME.a
 
-html:V:
-                echo "nothing to be done"
+depend:V:       DEPEND
+
+
+dvi\
+html:VQ:
+                echo "nothing to be done for $target"
+
+
+dirs:VQ:
+                for i in $LIBDIR; do
+                    if [ ! -d $i ]; then
+                        echo "missing directory $i"
+                        echo "invoke mk from the toplevel the first time"
+                        echo "to create all directories"
+                        false
+                    fi
+                done    
 
 # ------------------------------------------------------------------ 
 # important file sets
@@ -59,7 +77,7 @@ ML  =   share.ml  sexpLex.ml  sexpPkl.ml  pklInt.ml  stdPkl.ml \
 # we need to generated them before we can generated the list
 # of dependencies (see target depend)
 
-GENERATED=
+SCAN = $MLI $ML
 
 
 CMO =           `echo $ML       | sed 's/\.ml/.cmo/g'`
@@ -99,8 +117,8 @@ $LIBDIR/$LIBCMX:    $LIBCMX
 # make sure that generators are run first
 # ------------------------------------------------------------------ 
 
-depend:V:	$GENERATED
-		$OCAMLDEP *.mli *.ml > DEPEND
+DEPEND:         $SCAN
+		$OCAMLDEP $SCAN > DEPEND
 
 # ------------------------------------------------------------------ 
 # include dependencies

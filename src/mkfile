@@ -41,16 +41,29 @@ MANDIR =    ../man
 # (high level) virtual targets
 # be careful to use only variables that are defined above
 ################################################################
+# INTERP = evaluating | residualizing
+# change the variable below to extract the right variant 
+# from *.nw files
+
+INTERP =    evaluating
+DEPEND =    DEPEND.$INTERP
+
 
 all:V:      $NAME
+all.opt:V:  $NAME.opt
 
 update:V:   $BINDIR/$NAME                 \
-            $BINDIR/$NAME.prof            \
+            $MANDIR/man1/$NAME.1          \
+            $MANDIR/man1/${NAME}grammar.1 \
+
+update.opt:V: $BINDIR/$NAME.opt            \
             $MANDIR/man1/$NAME.1          \
             $MANDIR/man1/${NAME}grammar.1 \
 
 dvi:V:      $NAME.dvi
 ps:V:       $NAME.ps
+
+depend:V:   $DEPEND
 
 clean:V:        
             rm -f *.cmo *.cmx *.o
@@ -185,13 +198,6 @@ SCAN =          $ML $MLI                \
 # rules and tools 
 ################################################################
 
-# INTERP = evaluating | residualizing
-# change the variable below to extract the right variant 
-# from *.nw files
-
-INTERP =        evaluating
-DEPEND =        DEPEND.$INTERP
-
 <../config/ocaml.mk
 
 OCAMLC_FLAGS =  -I $LIBDIR -g
@@ -224,10 +230,10 @@ ocamli:         $OBJ uint64.cmo
 # copy files to their official directories
 ################################################################
 
-$BINDIR/$NAME:          $NAME.opt
+$BINDIR/$NAME:          $NAME
                         cp $prereq $target
 
-$BINDIR/$NAME.prof:     $NAME
+$BINDIR/$NAME.opt:      $NAME.opt
                         cp $prereq $target
 
 $MANDIR/man1/$NAME.1:   $NAME.1
@@ -388,7 +394,7 @@ this.ml:        this.in mkfile
 ################################################################
 #
 
-depend:V:   $SCAN
+$DEPEND:    $SCAN
             $OCAMLDEP $prereq > $DEPEND
             
 

@@ -21,15 +21,18 @@ SUBDIRS =       cllib lua asdl src
 # high level targets
 # ------------------------------------------------------------------ 
 
-all:V:          update html 
+all:V:          depend update
+all.opt:V:      depend update.opt
 
+depend          \
 update          \
+update.opt      \
 html            \
 dvi:V:          dirs
-                for i in $SUBDIRS; do (cd $i && mk $MKFLAGS $target); done
-
-depend:V:       
-                for i in src lua; do (cd $i && mk $MKFLAGS $target); done
+                for i in $SUBDIRS; 
+                do 
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS $target)
+                done
 
 clean:V:
                 for i in $SUBDIRS; do (cd $i && mk $MKFLAGS $target); done
