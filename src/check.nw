@@ -841,36 +841,19 @@ and evalPrimOp env op args =
     E.emap (evalPrimOp' op env) (evalExprs env args)
 
 <<>>=
-and evalExprs env ee =
-    let rec loop env acc = function
-        | []    -> E.Ok(acc)
-        | e::ee -> ( match evalExpr env e with
-                   | E.Ok(t, v) -> loop env ((t,v)::acc) ee
-                   | E.Error    -> E.Error
-                   )
-    in
-        loop env [] ee
+and evalExprs env ee = E.Raise.list (List.map (evalExpr env) ee)
 
 <<>>=
 and evalExpr env = function
 | A.ExprAt(x,r) -> E.catch (error r env) (evalExpr env) x
-| A.Int (str, Some t)    -> 
-    ( match evalTy env t with
-    | E.Error -> E.Error
-    | E.Ok(t) -> E.Ok(t, Const.int2value str)
-    )
+| A.Int (str, Some t)    -> E.ematch (evalTy env t) 
+    (fun t -> t, Const.int2value str)
 | A.Int (str, None   )   -> E.Ok(T.word     , Const.int2value str)
-| A.Float (str, Some t)  -> 
-    ( match evalTy env t with
-    | E.Error -> E.Error
-    | E.Ok(t) -> E.Ok(t, Const.float2value str)
-    )
+| A.Float (str, Some t)  -> E.ematch (evalTy env t)
+    (fun t -> t, Const.float2value str)
 | A.Float (str, None)    -> E.Ok(T.word     , Const.float2value str)
-| A.Char (str, Some t)   -> 
-    ( match evalTy env t with
-    | E.Error -> E.Error
-    | E.Ok(t) -> E.Ok(t, Const.char2value str)
-    )
+| A.Char (str, Some t)   -> E.ematch (evalTy env t)
+    (fun t -> t, Const.char2value str)
 | A.Char (str, None)     -> E.Ok(T.word     , Const.char2value str)
 | A.Fetch(v)             -> evalFetch env v
 | A.BinOp(l,op,r)        -> evalPrimOp env op [l;r]
@@ -1021,11 +1004,10 @@ let rec tyFetch : F.env -> A.lvalue -> F.ty E.error = fun env -> function
                     | Some a when is2power a -> a
                     | Some a -> E.error "alignment not a power of 2"
         in
-            ( match te, t' with
-            | E.Error , _         -> E.Error
-            | _       , E.Error   -> E.Error
-            | E.Ok(te), E.Ok(t') when te = Types.data -> E.Ok(t')
-            | _      -> E.error "memory reference by non-data pointer"
+            E.matchPair (te, te) 
+            ( function
+            | te, t' when te = Types.data -> t'
+            | otherwise -> E.error "memory reference by non-data pointer"
             )
 <<>>=        
  (* tyAppl: Types.tyscheme -> Types.ty list E.error -> Types.ty E.error *)
@@ -1075,6 +1057,13 @@ To evaluate constant expressions we use the code from
 let constExpr env e = ValueEnv.Eval.evalExpr env e
 @    
 
+Here is a function to check for a type and report an error in case of
+a mismatch.
+
+<<>>=
+let isTy t msg = E.emap (fun t' -> if t=t' then () else E.error msg) 
+@
+
 Initial values for memory must be either compile-time constants or
 link-time constants.  Currently we only check the types which is not
 enough; have to fix this.
@@ -1085,42 +1074,49 @@ let rec init env = function
     | A.InitExprs(es) -> E.Raise.list (List.map (tyExpr env) es)
     | A.InitStr(s)    -> E.Ok ([Types.char])
     | A.InitUStr(s)   -> E.Ok ([Types.uchar])
+@
 
+By default, memory for for value is reserved. When an explicit size is
+given, it must be positive.
+
+<<>>=
 let memsize env = function
     | A.NoSize    -> E.Ok(Some 1)
     | A.DynSize   -> E.Ok(None)
-    | A.FixSize e -> 
-        let f' = function
-            | Types.Bits(x), size 
-              when Const.val2i size > 0 -> Some (Const.val2i size)
-            | otherwise                 -> E.error "invalid size"   in
-        E.emap f' (ValueEnv.Eval.evalExpr env e)
+    | A.FixSize e -> E.ematch (ValueEnv.Eval.evalExpr env e)
+        ( function
+        | Types.Bits(x), size
+          when Const.val2i size > 0 -> Some (Const.val2i size)
+        | otherwise                 -> E.error "invalid size"   
+        ) 
+@
+A memory declaration has a type, a type, and optionally a number of
+expressions to initialize the memory.  The number of expressions must
+match the size specification, and the type of the expressions must
+match the declared type.
+
 <<>>=
 let memdecl env ty size = function 
     | None     -> E.Implode.pair (memsize env size, evalTy env ty)
-    | Some (i) -> 
-        ( match init env i, evalTy env ty with
-        | E.Error,_          -> E.Error
-        | _, E.Error         -> E.Error
-        | E.Ok tys, E.Ok ty' ->
+    | Some (i) -> E.combine (E.matchPair (init env i, evalTy env ty)
+        ( function 
+        | tys, ty' ->
             let n           = List.length tys in
             let consistent  = foldl (fun res t -> res && ty' = t) true tys in
-
             if not consistent then
-                E.error 
-                    "initial values have types different than declared type" 
-            else ( match memsize env size with
-                 | E.Ok(Some m) when n > m -> E.error "too many initial values"
-                 | E.Ok(Some m) when n < m -> E.error "too few  initial values"
-                 | E.Ok(Some m)            -> E.Ok ()
-                 | E.Ok(None)              -> E.Ok ()
-                 | E.Error                 -> E.Error
-                 )
-        )
+                E.error "initial values have types different than declared type" 
+            else E.ematch (memsize env size) 
+               ( function  
+               | Some m when n > m -> E.error "too many initial values"
+               | Some m when n < m -> E.error "too few  initial values"
+               | Some m            -> ()
+               | None              -> ()
+               )
+        ))
 @
-
 Labels must not be processed because they have been already entered
-into the environment during previous steps.
+into the environment during previous steps.  Alignments ([[memsize]]
+units) must be a power of two.
         
 <<>>=
 let rec datum env = function
@@ -1129,6 +1125,10 @@ let rec datum env = function
     | A.Align(a)       -> if is2power a then E.Ok () else 
                           E.error ("illegal alignment: " ^ string_of_int a)
     | A.MemDecl(t,m,i) -> memdecl env t m i
+@
+
+A stackdatum must not specify an expression to initialize memory.
+Alignments must be a power of two.
 
 <<>>=
 let rec stackdatum env = function
@@ -1138,33 +1138,50 @@ let rec stackdatum env = function
                              E.error ("illegal alignment: " ^ string_of_int a)
     | A.MemDecl(t,m,None) -> memdecl env t m None 
     | A.MemDecl(t,m,_   ) -> E.error "no initial values allowed for stackdata"
+@
+
+A [[goto]] target must have local scope and the native code pointer
+type.
+
 <<>>=
-let checkGotoTarget env x =
-    match F.findv x env with
-    | _       ,E.Error                 ->  E.Error
-    | F.Local ,E.Ok(F.Label(F.Code),_) ->  E.Ok ()
-    | F.Global,E.Ok(F.Label(F.Code),_) ->  E.error (x^" not a local label")
-    | _       ,E.Ok(F.Label(_)     ,_) ->  E.error (x^" not a goto  label")
-    | otherwise                        ->  E.error (x^" is not a label")
+let checkGotoTarget env x = 
+    E.ematch (E.Raise.right (F.findv x env)) 
+    ( function 
+    | F.Local , (F.Label(F.Code),_) -> ()
+    | F.Global, (F.Label(F.Code),_) -> E.error (x^" not a local label")
+    | _       , (F.Label(_)     ,_) -> E.error (x^" is not a goto label")
+    | otherwise                     -> E.error (x^" is not a label")
+    )
+@
+
+A call-target must be either a procedure, or an imported symbol with
+the native code pointer type.
+    
 <<>>=
 let checkCallTarget env x =
-    match F.findv x env with
-    | _       ,E.Error                 ->  E.Error
-    | _       ,E.Ok(F.Label(F.Proc),_) ->  E.Ok ()
-    | _       ,E.Ok(F.Import       ,t) 
-        when t = Types.code            ->  E.Ok ()
-    | otherwise                        ->  E.error (x^" is not call target")
+    E.ematch (E.Raise.right (F.findv x env))
+    ( function
+    | _       ,(F.Label(F.Proc),_) ->  ()
+    | _       ,(F.Import       ,t) 
+      when t = Types.code          ->  ()
+    | otherwise                    ->  E.error (x^" is not call target")
+    )
+
 <<>>=
 let gotoTargets env ts = E.Implode.map (checkGotoTarget env) ts 
 let callTargets env ts = E.Implode.map (checkCallTarget env) ts 
+@
+
+A [[also cuts to]] target must be a local continuation.
 
 <<>>=
 let checkFlowTarget env x =
-    match F.findv x env with
-    | _      , E.Error                -> E.Error
-    | F.Local, E.Ok(F.Continuation,_) -> E.Ok()
-    | _      , E.Ok(F.Continuation,_) -> assert false
-    | _                               -> E.error (x^" is not a continuation")
+    E.ematch (E.Raise.right (F.findv x env))
+    ( function
+    | F.Local, (F.Continuation,_) -> ()
+    | _      , (F.Continuation,_) -> assert false
+    | _                           -> E.error (x^" is not a continuation")
+    ) 
 @
 The flow annotations [[returns to]] and [[unwinds to]] is meaningless when
 used to annotate a [[cuts to]] statement. We are checking a [[cut to]] 
@@ -1203,11 +1220,13 @@ let rec isLabel env = function
     | _                                 -> false
 @
 
-An \textit{lvalue} must be a memory location or a register. We check
+An \textit{lvalue} must be a memory location or a register.  We check
 the types of both sides of an assignment and therefore return the type
-of the \textit{lvalue}. The results of a call can be only assigned to
-registers, but not memory. References to memory in that case are thus
-an error.
+of the \textit{lvalue}.  The results of a call can be only assigned to
+registers, but not memory.  A register can be identified by its
+[[denotation]].  Registers may carry hints when used to receive values
+returned by a call but not otherwise.  References to memory in a
+call-context case are an error. 
 
 <<>>=
 let lvalue context env lv =
@@ -1226,71 +1245,84 @@ let lvalue context env lv =
     | A.LValueAt (lv, r)   -> E.catch (error r env) f lv
     | A.Var(Some hint, name) 
            when context <> Call -> E.error "no hint allowed in this context"
-    | A.Var(hint,name)          -> 
-        ( match F.findv name env with
-        | _, E.Ok(F.Register,t) -> E.Ok(t)
-        | _, E.Ok(_)            -> E.error ("not a register: "^name)
-        | _, E.Error            -> E.Error
+    | A.Var(hint,name) -> E.ematch (E.Raise.right (F.findv name env))
+        ( function
+        | _, (F.Register,t) -> t
+        | _, _              -> E.error ("not a register: "^name)
         )
     | A.Mem(t, e, a) when context <> Assign  -> E.error ("not a register") 
-    | A.Mem(t, e, a)       -> 
-        ( match tyExpr env e, evalTy env t, align a with
-        | E.Ok(te), E.Ok(t), E.Ok() when not (multiMemsize t) ->
+    | A.Mem(t, e, a) -> E.matchTriple (tyExpr env e, evalTy env t, align a) 
+        ( function  
+        | te, t, () when not (multiMemsize t) ->
             E.error "type must be a mutiple of target memsize (typically bits8,16,24..)"
-        | E.Ok(te), E.Ok(t), E.Ok() when te = T.data    ->
-            E.Ok(t)         
-        | E.Ok(te), E.Ok(t), E.Ok() when te <> T.data   -> 
-            E.error "expression is not a data pointer"
-        | _                                             -> E.Error
+        | te, t, () when te = T.data          -> t         
+        | te, t, () -> E.error "expression is not a data pointer"
         )
     in
         f lv
+@
+
+An [[if]] expression must have type [[bool]].
 
 <<>>=
 let rec ifStmt env e ss1 ss2 =
-    match tyExpr env e with
-    | E.Error                   -> E.Error
-    | E.Ok(ty) when ty = T.bool -> E.Implode.pair (stmts env ss1, stmts env ss2)
-    | otherwise                 -> E.error "if-condition must be of type bool"
-
+    let seq f x = E.sequence x f in
+    seq (tyExpr env e) 
+    ( function 
+    | ty when ty = T.bool -> E.Implode.pair (stmts env ss1, stmts env ss2)
+    | otherwise           -> E.error "if-condition must be of type bool"
+    )
+@
+The key of a span must a native word type, the value a link-time native
+data pointer. We only check the types, which is not enough.
+     
 <<>>=
 and spanStmt env e1 e2 bb =
-    let f = function
-        | E.Error                           -> E.Error
-        | E.Ok (ty,value) when ty = T.word  -> E.Ok() 
-        | E.Ok (_)                          -> 
-            E.error "span key and value must be of the natural word type"
-    in
-        E.Implode.triple ( f (constExpr env e1)
-                         , f (constExpr env e2)
+    let msg1 = "span key must be of the native word type"      in 
+    let msg2 = "span value must be of the native data pointer type" in
+        E.Implode.triple ( E.ematch (constExpr env e1) 
+                           ( fun (t,v) ->
+                             if t=T.word then ()
+                             else E.error msg1
+                           )
+                         , E.ematch (constExpr env e2)
+                           ( fun (t,v) ->
+                             if t=T.data then ()
+                             else E.error msg2
+                           )  
                          , E.Implode.map (body env) bb
                          )
 @ 
 
 The target list of a [[goto]] statement may be empty only if the
-expression is a label.
+expression is a label. The [[goto]] expression must have a native code
+pointer type.
                          
 <<>>=
 and gotoStmt env e ts = 
     let t' = gotoTargets env ts in
-    let e' = match tyExpr env e with
-        | E.Error                 -> E.Error
-        | E.Ok(t) when t = T.code -> E.Ok()
-        | _                       -> 
-            E.error "goto-expression does not evaluate to a code pointer" 
+    let e' = E.ematch (tyExpr env e)
+        ( function 
+        | t when t = T.code -> ()
+        | _  -> E.error "goto-expression does not evaluate to a code pointer" 
+        )
     in 
         match ts, isLabel env e with
         | [], false   -> E.error "must specify a target list"
         | _           -> E.Implode.pair (e',t')
+@
+
+A [[cut to]] expression must have a contiuation type.
 
 <<>>=
 and cutStmt env e args fs =
     let f    = flows true env fs in
     let args = List.map (tyExpr env) (List.map snd args) in
-    let nt   = match tyExpr env e with
-                | E.Ok(t) when t = Types.cont -> E.Ok ()
-                | E.Error                     -> E.Error 
+    let nt   = E.ematch (tyExpr env e) 
+                ( function 
+                | t when t = Types.cont -> ()
                 | otherwise  -> E.error "expression not of continuation type"
+                )
     in
         E.Implode.triple (f,E.Raise.list args,nt)
 
@@ -1298,26 +1330,34 @@ and cutStmt env e args fs =
 and jumpStmt env cc e args ts =
     let t    = callTargets env ts in
     let args = List.map (tyExpr env) (List.map snd args) in
-    let et   = match tyExpr env e with
-                | E.Ok(t) when t = T.code  -> E.Ok ()
-                | otherwise                -> 
-                    E.error "jump target is not a pointer"
+    let et   = E.ematch (tyExpr env e) 
+                ( function 
+                | t when t = T.code  -> ()
+                | otherwise -> E.error "jump target is not a pointer"
+                )
     in
-        E.Implode.triple (t,E.Raise.list args, et)
+        if ts = [] && not (isLabel env e) then
+            E.error "a target annotation for this jump is missing"
+        else 
+            E.Implode.triple (t,E.Raise.list args, et)
 
 <<>>=
 and contStmt env n ns = 
-    let check n = 
-        let f = function
-            | F.Local , E.Ok(F.Register,_) -> E.Ok ()
-            | F.Global, E.Ok(F.Register,_) -> E.error (n^" is not local")  
-            | _, E.Error                   -> E.Error
-            | otherwise                    -> 
+    let check n = E.ematch (E.Raise.right (F.findv n env))
+        ( function  
+        | F.Local , (F.Register,_) -> ()
+        | F.Global, (F.Register,_) -> E.error (n^" is not local")  
+        | otherwise                -> 
                 E.error ("formal continuation parameter not a register: "^n)
-        in
-            f (F.findv n env)
+        )
     in
         E.Implode.list (List.map check ns)
+@
+
+A [[return]] may specify alternate return continuations.  The
+expressions $e_1/e_2$ must be both of the native word type and $0 \leq
+e1 \eq e_2$.
+
 <<>>=
 and returnStmt env cc alt args =
     let args  = List.map snd args  in
@@ -1333,11 +1373,18 @@ and returnStmt env cc alt args =
         | None         -> tys
         | Some (e1,e2) -> let e1' = constExpr env e1 in
                           let e2' = constExpr env e2 in
-                          ( match E.emap f (E.Raise.pair (e1',e2')) with
-                          | E.Ok(true)  -> tys
-                          | E.Ok(false) -> E.error "illegal <x/y> combination"
-                          | E.Error     -> E.Error
+                          ( E.combine (E.matchPair (e1',e2') 
+                            ( function 
+                            | x when f x -> tys
+                            | otherwise  -> E.error "illegal <x/y> combination"
+                            ))
                           )
+@
+
+An assignment must provide storage on the left hand side for every
+value on the right.  The type of a storage and the associated
+expression on the right hand side must match.  The details of the
+[[Assign]] context are handled by [[lvalue]]. 
 
 <<>>=
 and assignStmt env (lvalues,exprs) =
@@ -1346,13 +1393,20 @@ and assignStmt env (lvalues,exprs) =
                 E.error "length of lhs/rhs in assignment differs"
     in
     let pair (lhs,expr) =  
-        match lvalue Assign env lhs, tyExpr env expr with
-        | E.Ok (t), E.Ok(te) when t = te -> E.Ok()
-        | E.Error , _                    -> E.Error
-        | _       , E.Error              -> E.Error
-        | otherwise   -> E.error "type mismatch in assignment"
+        E.matchPair (lvalue Assign env lhs, tyExpr env expr) 
+        ( function 
+        | t, te when t = te -> ()
+        | otherwise         -> E.error "type mismatch in assignment"
+        )
     in
         E.Implode.map pair pairs
+@
+
+A call must name targets, unless its expression is a label or import.
+In any case must the expression have a native code pointer type.
+The details of the assignment in a [[Call]] context are handled by
+[[lvalue]].
+ 
 
 <<>>=
 and callStmt env (l,cc,e,args,ts,fs) =
@@ -1361,12 +1415,20 @@ and callStmt env (l,cc,e,args,ts,fs) =
     let fs'     = flows false env fs                in
     let args'   = List.map snd args                 in
     let argsTy  = E.Implode.map (tyExpr env) args'  in
+    let seq f x = E.sequence x f                    in    
         if ts = [] && not (isLabel env e) then
             E.error "a target annotation for this call is missing"
-        else match tyExpr env e with
-        | E.Error                 -> E.Error
-        | E.Ok(t) when t = T.code -> E.Implode.quad (lt,ts',fs',argsTy)
-        | otherwise               -> E.error "call-expression is not a pointer"
+        else seq (tyExpr env e) 
+        ( function 
+        | t when t = T.code -> E.Implode.quad (lt,ts',fs',argsTy)
+        | otherwise         -> E.error "call-expression is not a pointer"
+        )
+@
+
+A call of a promitive is type checked: argument types must have the
+expected types. This is done by [[Types.appl]]. The type for the
+primitive is currently taken from [[Const.constOps]] but this will
+change. 
              
 <<>>=
 and primStmt env (l,cc,op,args,fs) =
@@ -1377,54 +1439,60 @@ and primStmt env (l,cc,op,args,fs) =
     let argsTy = List.map (tyExpr env) args'                 in
     let rTy    = tyAppl opTy (E.Raise.list argsTy)           in
         E.Implode.triple (l,fs,rTy)
+@
+
+The type of range-expressions must match the type of the [[switch]]
+expression. 
 
 <<>>=
-and range env = function
-    | A.Point(e)     -> E.emap fst (constExpr env e)
-    | A.Range(e1,e2) -> 
-        ( match constExpr env e1, constExpr env e2 with
-        | E.Error         , _                      ->  E.Error
-        | _               , E.Error                ->  E.Error
-        | E.Ok(t1,v1)     , E.Ok(t2,v2) when t1=t2 ->  E.Ok(t1)
-        | otherwise -> E.error "Different types of lower and upper range bound"
+and range t env = function
+    | A.Point(e)     -> E.ematch (constExpr env e)
+        ( function
+        | (t',v) when t=t' -> ()
+        | otherwise -> E.error "Range type does not match expression type"
         )
+
+    | A.Range(e1,e2) -> 
+        E.matchPair (constExpr env e1, constExpr env e2) 
+        ( function 
+        | (t1,v1), (t2,v2) when t1=t && t2=t -> ()
+        | otherwise -> E.error "Range type does not match expression type"
+        )
+@
+All ranges that guard a [[switch]] arm must match the type of the
+[[switch]]-expression
+        
 <<>>=        
 and arm t env = function
     | A.ArmAt(x,r)   -> E.catch (error r env) (arm t env) x
     | A.Case(rr, ss) ->
         let ss' = stmts env ss in 
-        let rr' =
-            ( match E.Raise.list (List.map (range env) rr) with
-            | E.Ok([])     -> E.error "must specify range for this arm"
-            | E.Ok(t::tt)  -> if    List.for_all ((=) t) tt then E.Ok(t)
-                              else E.error "type inconsistencies in ranges"
-            | E.Error      -> E.Error
+        let rr' = E.Implode.map (range t env) rr in
+            ( match rr with 
+            | [] -> E.error "must specify range for this arm"
+            | _  -> E.Implode.pair (rr',ss')
             )
-        in
-            ( match ss', rr' with
-            | E.Ok(), E.Ok(_) -> rr'
-            | _               -> E.Error
-            )
+@
+
+The type of the switch expression must be matched by the guarding
+ranges of the arms.  An empty switch-statement is an error because no
+arm can match the value of the switch-expression at run-time.
+
 <<>>=                
 and switchStmt env (r, expr, arms) =
-    let et = tyExpr env expr in
-    let at = ( match E.Raise.list (List.map (arm et env) arms) with
-             | E.Ok([])    -> E.error "empty switch body"
-             | E.Ok(t::tt) -> if   List.for_all ((=) t) tt then E.Ok(t)
-                              else E.error "type inconsistencies across arms" 
-             | E.Error     -> E.Error
-             ) in
-    let rt = ( match r with
-             | None   -> et 
-             | Some r -> range env r
-             ) in
-        match E.Implode.triple (et, at, rt) with
-        | E.Ok() when et <> at -> 
-            E.error "type inconsistency between expression and arms"
-        | E.Ok() when at <> rt -> 
-            E.error "type inconsistency between expression and range"
-        | E.Ok()               -> E.Ok()
-        | E.Error              -> E.Error
+    let f t = match r with
+        | Some r -> E.Implode.pair ( E.Implode.map (arm t env) arms
+                                   , range t env r
+                                   ) 
+        | None   -> E.Implode.map (arm t env) arms in
+    let r = E.sequence f (tyExpr env expr) in
+        if arms = [] then
+            E.error "empty switch statement"
+        else r    
+@
+
+The [[body]] function checks the body of procedures which contains
+declrations and statements.
 
 <<>>=
 and body env = function
@@ -1432,6 +1500,11 @@ and body env = function
     | A.DeclBody(d)  -> decl env d
     | A.DataBody(dd) -> E.Implode.map (stackdatum env) dd 
     | A.StmtBody(s)  -> stmt env s       
+@
+
+A label-statement requires no processing because it has been
+previously enterend into the environment.
+
 <<>>=
 and stmt env = function
     | A.StmtAt(x,r)                 -> E.catch (error r env) (stmt env) x
@@ -1450,29 +1523,39 @@ and stmt env = function
     | A.SwitchStmt switch           -> switchStmt env switch         
 <<>>=
 and stmts env ss = E.Implode.map (stmt env) ss
+@
+
+Registers, continuations, and stack-labels can't be exported, all
+other labels can. An optionally declared type must match the actual
+type of the exported symbol.
 
 <<>>=
 and export' env = function
     | None, name   -> 
-        ( match F.findv' name env with
-        | E.Error                 -> E.Error
-        | E.Ok(F.Label(F.Proc),_) -> E.Ok()
-        | _                       -> E.error (name^" can't be exported")
+        E.ematch (F.findv' name env)
+        ( function
+        | F.Label(F.Proc),    _ -> ()
+        | F.Label(F.Code),    _ -> ()
+        | F.Label(F.Data),    _ -> ()
+        | _                   -> E.error (name^" can't be exported")
         )
     | Some t, name -> 
-        ( match F.findv' name env, evalTy env t with
-        | E.Error                , _        -> E.Error
-        | _                      , E.Error  -> E.Error
-        | E.Ok(F.Label(F.Proc),t), E.Ok(t')
-            when t = t'                     -> E.Ok()
-        | E.Ok(F.Label(F.Proc),t), E.Ok(t') ->
-            E.error (name^" has not declared type")
-        | _                                 -> 
-            E.error (name^" can't be exported")
+        E.matchPair (F.findv' name env, evalTy env t)
+        ( function
+        | (F.Label(F.Proc),t), t' when t = t' -> ()
+        | (F.Label(F.Code),t), t' when t = t' -> ()
+        | (F.Label(F.Data),t), t' when t = t' -> ()
+        | (F.Label(F.Proc),_), _ 
+        | (F.Label(F.Data),_), _ 
+        | (F.Label(F.Code),_), _  -> E.error (name^" has not declared type")
+        | _                       -> E.error (name^" can't be exported")
            
         )
 
 and export env t ns = E.Implode.map (fun (n,_) -> export' env (t,n)) ns
+@
+
+Declarations have already been processed. 
 
 <<>>=
 and decl env = function
@@ -1484,12 +1567,22 @@ and decl env = function
     | A.Typedef (t,nn)     -> E.Ok()
     | A.Target (arch)      -> E.Ok()
     | A.Pragma             -> E.Ok()
-    
+@
+
+Formal parameters are entered with local scope into the environment
+when a procedure is checked.
+
 <<>>=
 and formal env (hint, inv, ty, name) =
     match evalTy env ty with
     | E.Ok(t) -> F.bindv name F.Local (E.Ok(F.Register,t)) env 
     | E.Error -> F.bindvError name F.Local env
+@
+
+A procedure opens a new scope.  First all local type, value, and
+constant declarations must be entered into the environment, as well as
+formal parameters.  It should not matter whether formal parameters are
+entered before or after values and types.
     
 <<>>=
 and proc env (cc, name, ff, bb) =
@@ -1498,6 +1591,7 @@ and proc env (cc, name, ff, bb) =
     let env = ValueEnv.Bind.locals env bb             in
     let env = ValueEnv.Eval.doLocalConst env bb in
         E.Implode.map (body env) bb            
+
 
 <<>>=
 and section env = function    
@@ -1512,9 +1606,13 @@ let rec toplevel env = function
     | A.Section(name, ss)  -> E.Implode.map (section env) ss 
     | A.TopDecl(d)         -> decl env d
     | A.TopProcedure(p)    -> proc env p 
+@
 
+The [[program]] function is the entry point to check the static
+sementics of a program \emph{after} the environment has been enlarged
+with all global symbols.
+    
 <<>>=
 and program env tt = E.Implode.map (toplevel env) tt
 @
 
-@

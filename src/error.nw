@@ -73,10 +73,12 @@ The following functions offer some more convenient syntax for common
 idioms.  
 
 <<error.mli>>=
-val ematch    : 'a error -> ('a -> 'b) -> 'b error       
-                (* ematch v f = emap f e *)
-val matchPair : 'a error * 'b error -> ('a * 'b -> 'c) -> 'c error
-                (* matchPair p f = emap f (Raise.pair p) *)
+val ematch      : 'a error -> ('a -> 'b) -> 'b error       
+                  (* ematch v f = emap f e *)
+val matchPair   : 'a error * 'b error -> ('a * 'b -> 'c) -> 'c error
+                  (* matchPair p f = emap f (Raise.pair p) *)
+val matchTriple : 'a error * 'b error * 'c error -> 
+                   ('a * 'b * 'c -> 'd) -> 'd error
 @ 
 
 Lowering functions take a complex [[error]] value and push the
@@ -238,8 +240,9 @@ let quad = function
 Here come the convenience functions.
 
 <<error.ml>>=
-let ematch    v f = emap f v
-let matchPair p f = emap f (Raise.pair p)
+let ematch       x1 f = emap f x1
+let matchPair    x2 f = emap f (Raise.pair x2)
+let matchTriple  x3 f = emap f (Raise.triple x3)
 @ 
 
 Lowering functions take a complex [[error]] value and push the
