@@ -165,14 +165,18 @@ memsize, byte order, stack alignment, and growth direction are good
 candidates for defaulting.
 @
 \paragraph{Automata for passing values---{\PAL}~convention}
+N.B. YOU CANNOT AFFORD TO TAKE \emph{ALL} THE SCRATCH REGISTERS AWAY
+FROM THE ALLOCATOR.
+WE NEED A BETTER WAY OF DETECTING THIS ERROR OTHER THAN HAVING THE
+REGISTER ALLOCATOR DUMP CORE.
 <<x86call.ml>>=
 let cmm_results =
-  results (RS.elements volregs) **>
+  results [eax; ecx] **>
   A.overflow ~memsize:8 ~byteorder:bo ~growth:Memalloc.Down ~max_alignment:sp_align
 
 let cmm_arguments = 
   A.widen (Aux.round_up_to ~multiple_of:32) **>
-  A.useregs (RS.elements volregs) ~errormsg:imp **>
+  A.useregs [eax; ecx] ~errormsg:imp **>
   A.overflow ~memsize:8 ~byteorder:bo ~growth:Memalloc.Up ~max_alignment:sp_align
 @
 \paragraph{Managing the stack pointer and return address}
@@ -259,8 +263,8 @@ let conv name jump specs ~return_to cut =
   ; C.ra_on_entry      = const (R.fetch ra 32)   (* where return address is on entry *)
   ; C.where_to_save_ra = if jump then (fun _ t -> Talloc.Multiple.loc t 't' 32)
                          else         (fun _ _ -> ra)
-  ; C.ra_on_exit       = if jump then (fun _ b -> amem (addk (Block.base b) (-4)))
-                         else         (fun _ _ -> ra)
+  ; C.ra_on_exit       = if jump then (fun _ b _ -> amem (addk (Block.base b) (-4)))
+                         else         (fun _ _ _ -> ra)
   ; C.pre_nvregs       = nvregs          (* registers preserved across calls *)
   ; C.volregs          = volregs         (* registers not preserved across calls *)
   ; C.saved_nvr        = saved_nvr

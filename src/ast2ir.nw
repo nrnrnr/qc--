@@ -661,7 +661,7 @@ and jumpStmt (cconv,e,args,targets (*unused*)) =
     let cc     = to_cc cconv in
     <<insist that [[cc]] matches [[proc_cc]] and supports jumps>>
     let out    = actuals cc.C.call_parms.C.out args in
-    let ra_out = cc.C.ra_on_exit saved_ra out.C.overflow in
+    let ra_out = cc.C.ra_on_exit saved_ra out.C.overflow temps in
     let jumpi  = target.T.jump.T.embed (expr e) in
     let ()     = add_oldblock out.C.overflow    in  (* jump overflow = old *)
     G.stack_adjust g out.C.pre_sp                                  **>
@@ -711,7 +711,7 @@ and returnStmt (cconv, kont, args) =
     let cc = to_cc cconv                       in
     let out = actuals cc.C.results.C.out args  in
     <<verbosely announce the registers used by the return>>
-    let ra_out = cc.C.ra_on_exit saved_ra out.C.overflow in
+    let ra_out = cc.C.ra_on_exit saved_ra out.C.overflow temps in
     let reti =
       match kont with
       | None       ->

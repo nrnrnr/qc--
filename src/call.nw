@@ -190,9 +190,16 @@ For that, we say where we found it and we provide a supply of temps.
 <<fields to support the return address>>=
 ; where_to_save_ra : Rtl.exp -> Talloc.Multiple.t -> Rtl.loc
 @ Finally we need to say where to put it on exit.  This probably means
-leaving it where it is or putting it near an overflow block.
+leaving it where it is, putting it near an overflow block, or
+allocating it to a fresh temporary.
+(The reason a fresh temporary is useful is that it will have a very
+short lifetime and will therefore be unlikely to be spilled. 
+The problem with reusing the temporary from [[where_to_save_ra]] is
+that it is quite likely to be spilled, and the register allocator has
+been observed to insert the reload \emph{after} the stack frame has
+been deallocated, which is bad.)
 <<fields to support the return address>>=
-; ra_on_exit      : Rtl.loc -> Block.t -> Rtl.loc
+; ra_on_exit      : Rtl.loc -> Block.t -> Talloc.Multiple.t -> Rtl.loc
 @ 
 EXTENSIONS:
 \begin{itemize}
@@ -302,4 +309,60 @@ let incoming ~growth ~sp ~mkauto ~autosp ~postsp types formals =
     ; pre_sp   = R.guard (too_small growth sp postsp) setsp
     }
 @ 
+
+\subsection{Potential new constructors for \texttt{Call.t}}
+
+The idea is to have an easier way for a client to build a value of
+type [[Call.t]].
+The hope is we need change nothing above this line.
+@
+<<call.ml>>=
+<<specification for a calling convention>>
+@ 
+<<specification for a calling convention>>=
+type call_t = t
+module type SPEC = sig
+  type party = Caller | Callee
+  type overflow = { parm_deallocator : party
+                  ; result_allocator : party
+                  } 
+  val c_overflow    : overflow
+  val tail_overflow : overflow
+  type nvr_saver    = Talloc.Multiple.t -> Register.t -> Rtl.loc
+  val save_nvrs_anywhere : Space.t list -> nvr_saver
+     (* save h/w register in suitable temp space from the list *)
+     (* one day: add [[save_nvrs_in_conventional_locations]] *)
+
+  module ReturnAddress : sig
+    type style =
+      | KeepInPlace       (* leave the RA where it comes in --- probably on stack *)
+      | PutInTemporaries  (* put the RA in temporaries *)
+
+    (* values for the three RA-related functions in the Call.t *)
+    (* these functions are not needed by a client but will be used to convert
+       a Spec.t into a Call.t.  Some client may want to use such functions to 
+       modify a Call.t *)
+    val enter_in_loc : Rtl.loc -> Block.t -> Rtl.exp (* in_loc l b = fetch l *)
+    
+    val save_in_temp : Rtl.exp -> Talloc.Multiple.t -> Rtl.loc
+    val save_as_is   : Rtl.exp -> Talloc.Multiple.t -> Rtl.loc
+
+    val exit_in_temp : Rtl.exp -> Block.t -> Talloc.Multiple.t -> Rtl.loc
+    val exit_as_is   : Rtl.exp -> Block.t -> Talloc.Multiple.t -> Rtl.loc
+  end
+
+  type t =
+    { name          : string   (* canonical name of this cc *)
+    ; stack_growth  : Memalloc.growth
+    ; sp            : Register.t
+    ; sp_align      : int             (* alignment of stack pointer at call/cut *)
+    ; allregs       : Register.Set.t           (* registers visible to the allocator *)
+    ; nvregs        : Register.Set.t           (* registers preserved across calls *)
+    ; saved_nvr     : nvr_saver
+    ; ra            : Rtl.loc * ReturnAddress.style
+                                        (* where's the RA and what to do with it *)
+    } 
+
+  val to_call : t -> call_t
+end
 
