@@ -13,18 +13,19 @@ $k$& any constant\\
 $\oplus$& any RTL operator\\
 \end{tabular}
 Our goal is to reduce RTLs to the following forms:
+
 {\def\gets{\mathrel{:=}}%
-$$\begin{array}{l}
-m[t_l] \gets t\\
-t \gets m[t_l]\\
-t_1 \gets t_2\\
-t \gets k\\
-t \gets \oplus(t_1, \ldots, t_n)
+$$\begin{array}{rcl}
+m[t_l] & \gets & t\\
+t      & \gets & m[t_l]\\
+t_1    & \gets & t_2\\
+t      & \gets & k\\
+t      & \gets & \oplus(t_1, \ldots, t_n)
 \end{array}
-$$
+$$}
+
 This is not quite what a real code expander does, but it should
 suffice for experiments.
-}
 
 <<expander.mli>>=
 type context 
@@ -93,9 +94,11 @@ let expand ((mem_like : RP.loc -> bool), (temp_for : char -> int -> R.loc)) =
       assign g left right w
   | _ -> unit r (* no expansion takes place *)
   in fun r -> rtl r []
-@ It would be good to do something with multiple assignments and with
+@ 
+
+It would be good to do something with multiple assignments and with
 guards, but for now I keep things very simple.
-@
+
 The remaining functions are simple.
 <<other expander functions>>=
 and assign g left right w =
@@ -112,4 +115,40 @@ and loc l =
     | _ -> assert false (* any mem-like location must be a cell *)
   else
     uploc l, empty
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Test Code}
+% ------------------------------------------------------------------ 
+
+This is some code I wrote to play with the expander in an interactive
+interpreter.
+
+<<expander.ml>>=
+module Test = struct
+    <<Test>>
+end    
+
+<<Test>>=
+let truth      = RP.Const(RP.Bool true)
+let const n    = RP.Const(RP.Bits(Bits.of_int n 32))
+let loc n      = RP.Cell('m', R.Identity, 32, const n, 1)
+let add x y    = RP.App(("add",[32]),[x; y])
+let assign l r = RP.Store(l,r,32)
+
+let mem_like = function
+    | RP.Cell('m',_,_,_,_) -> true
+    | _                    -> false
+
+let count = ref 0
+let tmp_for sp width =
+    let () = count := !count + 1 in
+    let l  = RP.Cell(sp, R.Identity, width, const !count, 1) in
+        Rtl.Revert.loc l
+
+let rtl        = let left  = loc 0 in
+                 let right = add (const 2) (add (const 3) (const 4)) in
+                    RP.Rtl([truth,assign left right])
+@
+
 
