@@ -431,6 +431,7 @@ module type S = sig
   val cfg: 'a -> Ast2ir.proc -> bool
 end 
 
+module A  = Automaton
 module PX = Postexpander
 module R  = Rtl
 module RP = Rtl.Private
@@ -632,6 +633,7 @@ context that's not known at compile-compile time.
 \nextchunklabel{expander.contextmap}%
 <<generic expander>>=
 let expand ({Proc.cfg = cfg} as proc) =
+  <<stack-slot allocation>>
   <<flow-graph manipulation utilities>>
   let contextmap (space, checker) =
     (Talloc.Multiple.reg proc.Proc.temps space, checker) in
@@ -711,8 +713,10 @@ let rec to_temp' room context e =
       let w = width e in
       let t = alloc context w in
       t, to_segment (Post.lix t (Up.exp e))
-  | RP.Fetch (l, _) when Post.is_stack_top_proxy l ->
-      Impossible.unimp "moving stack top to temporary"
+  | RP.Fetch (l, w) when Post.is_stack_top_proxy l ->
+      let slot = exchange_slot w in
+      let t, is = to_temp room context (fetch_slot slot w) in
+      t, assign_slot room slot e w @@ is
   | RP.Fetch (RP.Mem ('m', agg, w, addr, assn), w') ->
       let t = alloc context w in
       let a, is = address room addr in
@@ -728,14 +732,20 @@ let rec to_temp' room context e =
   <<cases for sign-extending and zero-extending loads>>
   <<cases for sign-extending and zero-extending divides>>
   <<cases for converting a Boolean to a value>>
+  | RP.App (("f2i", [fw; iw]), _) as e ->
+      let slot = exchange_slot iw in
+      let t, is = to_temp room context (fetch_slot slot iw) in
+      t, assign_slot room slot e iw @@ is 
   | RP.App (("f2f_implicit_round", ws), [x]) ->
       to_temp room context (RP.App (("f2f", ws), [x; RP.Fetch(rounding_mode, 2)]))
   | RP.App (op, args) ->
       begin
         match Post.opclass op with
         | PX.Stack(dir, depth) ->
-            let is = to_stack room e in
-            Impossible.unimp "moving stack result to temporary"
+            let w = Post.stack_width in
+            let slot = exchange_slot w in
+            let t, is = to_temp room context (fetch_slot slot w) in
+            t, assign_slot room slot e w @@ is
         | PX.Register ->
             let (temps, is) =
               try
@@ -851,7 +861,7 @@ and to_stack' room e =
   if room < 1 then
     Impossible.impossible "machine stack overflow in code generation";
   if Rtlutil.Width.exp' e <> Post.stack_width then
-    Unsupported.stack_width ~have:(Rtlutil.Width.exp' e) ~want:Post.stack_width;
+    Unsupported.stack_width ~have:(Rtlutil.Width.exp' e) ~want:Post.stack_width; (* START HERE *)
   match e with
   | RP.Const k ->
       to_segment (Post.pushk k)
@@ -863,15 +873,17 @@ and to_stack' room e =
       assert (w = w');
       is @@ to_segment (Post.push a (upassn assn))
   | RP.Fetch (RP.Reg (space, i ,w), w') ->
-      let i = R.store (R.reg (space, i, w))
-                (R.app (R.opr "push onto machine stack" []) [Up.exp e]) w in
-      nunit i
-      (*Impossible.unimp "pushing a register onto the machine stack"*)
+      let slot = exchange_slot w in
+      assign_slot room slot e w @@ to_stack room (fetch_slot slot w)
   | RP.Fetch _ ->
       Impossible.impossible "memory-like access to non-memory space"
   | RP.App (("f2f_implicit_round", ws), [x]) ->
       to_stack room (RP.App (("f2f", ws), [x; RP.Fetch(rounding_mode, 2)]))
   <<cases for converting pushes>>
+  | RP.App (("i2f", [iw; fw] as i2f), [e; rm]) ->
+      let slot = exchange_slot iw in
+      assign_slot room slot e iw @@
+      to_stack room (RP.App (i2f, [fetch_slot slot iw; rm]))
   | RP.App (op, args) ->
       begin
         match Post.opclass op with
@@ -1086,8 +1098,8 @@ and expand_cbranch rtl ktrue kfalse =
 An assignment is either a goto, a store, or a computation where we put
 something in a temporary.
 <<other generic expander functions>>=
-and assign left right w =
-  let room = Post.stack_depth in
+and assign left right w = assign_room Post.stack_depth left right w
+and assign_room room left right w = 
   match right with
   | RP.App (("f2f_implicit_round", ws), [x]) ->
       assign left (RP.App (("f2f", ws), [x; RP.Fetch(rounding_mode, 2)])) w
@@ -1146,6 +1158,14 @@ RP.App ((("sx" | "zx"), [wsrc; wdst]) as op, [rhs]) ->
   (* what goes wrong if wsrc is not the width of the stack? *)
   let is = to_stack room rhs in
   is @@ is' @@ to_segment (Post.store_pop_cvt op wdst a (upassn assn))
+@ 
+<<other generic expander functions>>=
+and fetch_slot slot w = Down.exp (A.fetch slot w)
+and assign_slot room slot right w =
+  match Down.rtl (A.store slot (Up.exp right) w) with
+  | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (left, right, w))] ->
+      assign_room room left right w
+  | _ -> Impossible.impossible "stack slot is not a simple store"
 @ 
 Something with multiple effects is either a call, a [[cut to]], or a
 shuffle.
@@ -1260,6 +1280,18 @@ and to_stack room e =
   let _ = D.strings ["Pushed "; D.exp e; " by \n"] in
   let _ = D.pr_is is in
   is
+@ 
+\subsection{Stack-slot allocation}
+To move from a temporary to the stack, we may need to allocate a stack slot.
+<<stack-slot allocation>>=
+let exchange_slot =
+  let slots = ref [] in
+  function w ->
+    try List.assoc w (!slots)
+    with Not_found ->
+      let slot = A.allocate proc.Proc.priv w "" in
+      slots := (w, slot) :: !slots;
+      slot in
 @   
 \subsection{Old code no longer relevant}
 This is old stuff left over, which I might want to resurrect some day
@@ -1283,7 +1315,7 @@ let cfg _ ({Proc.cfg = cfg} as proc) =
   if proc.Proc.target.Target.memsize <> 8 then
     Impossible.unimp "may-alias detection for memsize <> 8";
   let modified = ref false in
-  let (expand_cbranch, expand_rtl) = expand proc in
+  let expand_cbranch, expand_rtl = expand proc in
   let expand_node n =
     match G.to_instr n with
     | None -> ()
