@@ -58,18 +58,18 @@ NOWEBBREAKCODE=no
 	echo "Building $target from $prereq" 1>&2
 	(tr '\n' ' ' <<EOF
 	\documentclass{article}
-	\usepackage{noweb}
 	\usepackage{tabularx,array}
 	\usepackage[hypertex]{hyperref}
 	\usepackage{path}
 	\usepackage[dvips]{graphicx}
+	\usepackage{noweb}
 	`if [ $NOWEBBREAKCODE = yes ]; then echo '\noweboptions{breakcode}'; fi`
 	\input{$TOP/config/macros.tex}
-	\pagestyle{noweb}
 	EOF
 	awk '/^%  *inc:  */ { $1 = ""; $2 = ""; printf "%s ", $0 }' $stem.inc
 	tr '\n' ' ' <<EOF
 	\begin{document}
+	\pagestyle{noweb}
 	\nwfilename{$stem.nw}
 	\tableofcontents
 	\nwbegindocs{}
