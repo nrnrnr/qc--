@@ -244,9 +244,18 @@ let choice = function
                    in string_of_int number 
            }) x)
 *)
+@
 
+Every chain rule can use its own variable to refer to the value of the right
+hand side. We thus have to bind the value of the right hand side to this
+variable [[v]].
+
+<<CodeGen>>=
 let chain_fn src rule =
-    let dst     = rule.S.nonterm
+    let v       = match rule.S.pattern with
+                  | S.Var(x, _) -> x
+                  | _           -> assert false (* not a chain rule *)
+    and dst     = rule.S.nonterm
     and c       = rule.S.cost
     and a       = rule.S.code
     and f       = C.longid ["x";src;camlburg;"action"]
@@ -256,17 +265,11 @@ let chain_fn src rule =
         C.fun' [C.var' x] 
                (apply2 (C.id (upd rule.S.nonterm))
                        (C.record [ccost  , add (C.longid [nt;camlburg;cost]) c 
-                                 ;caction, action (let' src (C.apply f C.unit)
+                                 ;caction, action (let' v (C.apply f C.unit)
                                                     a) 
                                  ])
                        (C.id x))
 @                       
-
-\begin{quote}\it
-    The [[let' src]] is wrong in case the user used a variable name
-    instead of the nonterminal.
-\end{quote}
-
 
 When a nonterminal is updated, the nonterminals connected to this one by
 chain rules must be also updated. We want to update these chained
