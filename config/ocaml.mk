@@ -7,8 +7,8 @@
 # ------------------------------------------------------------------ 
 
 OCAML =         ocaml
-OCAMLC =        ocamlc
-OCAMLO =        ocamlopt
+# OCAMLC imported from config.mk, so we can get .opt if available
+# OCAMLO imported from config.mk, so we can get .opt if available
 OCAMLTOP =      ocamlmktop
 OCAMLDEP =      ocamldep
 OCAMLYACC =     ocamlyacc

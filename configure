@@ -37,7 +37,7 @@ $x{lua_libs}    = ""   ;         # "-llua -llualib" ld(1) flags for Lua libs
 # to set them since we never use the full PATH. Extend PATH instead.
 
 $x{ocamlc}      = ""   ;         # "/path/to/binary"
-$x{ocamlc}      = ""   ;
+$x{ocamlo}      = ""   ;
 $x{ocamlyacc}   = ""   ;
 $x{notangle}    = ""   ;
 $x{cpif}        = ""   ;
@@ -227,7 +227,8 @@ open (LOG, ">$configure_log") || die "cannot write configure.log: $!";
 # compiler also won't find it. The SUN compiler comes to mind.
 #
 
-$x{ocamlc}          = $x{ocamlc}       || search("ocamlc",@path);
+$x{ocamlc} = $x{ocamlc} || search("ocamlc.opt",  @path) || search("ocamlc",  @path);
+$x{ocamlo} = $x{ocamlo} || search("ocamlopt.opt",@path) || search("ocamlopt",@path);
 $x{ocamlyacc}       = $x{ocamlyacc}    || search("ocamlyacc",@path);
 $x{ocaml_version}   = $x{ocamlc}       &&(`$x{ocamlc} -v 2>&1` =~ /(\d\.\d\d)/) 
                                        && $1;
@@ -312,6 +313,7 @@ print LOG <<EOF;
     ------------------------------------------------------------------ 
     OCaml Version:  $x{ocaml_version}
     ocamlc:         $x{ocamlc}
+    ocamlopt:       $x{ocamlo}
     ocamlyacc:      $x{ocamlyacc}
     
     NOWEB and tools
@@ -416,6 +418,8 @@ my @export = ( "arch"
              , "prefix"
              , "build_interp"
              );
+
+my @export_upper_base = ( "ocamlc", "ocamlo" );
              
 open(OUT,"> $config_mk") || die "cannot open $config_mk";
 print OUT <<EOF;
@@ -466,6 +470,10 @@ EOF
              
 foreach $v (@export) {
     printf OUT ("config_%-20s = %s\n", $v, $x{$v});
+}
+
+foreach $v (@export_upper_base) {
+    printf OUT ("%-20s = %s\n", uc $v, basename($x{$v}));
 }
 
 print OUT <<EOF;
