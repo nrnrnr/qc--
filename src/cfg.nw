@@ -43,7 +43,7 @@ A join point is the only node with multiple predecessors.
 much space do you allocate for successors whan you don't yet know how
 many there will be?}
 \item
-An \emph{straight-line code} node has exactly one predecessor and one
+A \emph{straight-line code} node has exactly one predecessor and one
 successor. 
 It models computation without interesting control flow.
 \item
@@ -59,7 +59,7 @@ counter.
 A \emph{jump} node is a lot like a branch except its successor is the
 exit node
 \item
-A \emph{conditional branch} has a unique predecessor and two
+An \emph{conditional branch} has a unique predecessor and two
 successors, which are labeled true and false.
 Each successor must be a join point.
 It contains an RTL that normally satisfies the following properties:
@@ -68,8 +68,8 @@ It contains an RTL that normally satisfies the following properties:
 It contains a single effect, which is a guarded assignment to the
 program counter.
 \item
-The value assigned to the program counter is a label (link-time
-constant) associated with the join point that is the true successor.
+The value assigned to the program counter is the label (link-time
+constant) of the true successor.
 \end{itemize}
 If the second property is not satisfied, we say the node is
 \emph{dirty}.
@@ -682,6 +682,7 @@ module Make (X:X) : S with module X = X = struct
 
   <<graph utilities>>
   <<graph and node observers implementation>>
+  <<printing utilities>>
   <<set node successors>>
 
   <<simple node constructors>>
@@ -689,7 +690,6 @@ module Make (X:X) : S with module X = X = struct
   <<graph construction and copying>>
 
   <<graph and node mutators implementation>>
-  <<printing utilities>>
 end
 @
 
@@ -1263,8 +1263,7 @@ let mk_join cfg labels ~preds ~lpred ~succ =
                  ; joi_lpred  = lpred
                  ; joi_jx     = X.jx ()
                  } in
-  let () =
-    List.iter (fun l -> cfg.label_map <- SM.add l join cfg.label_map) labels in
+  let () = List.iter (fun l -> cfg.label_map <- SM.add l join cfg.label_map) labels in
   join
 
 let node_labeled cfg label =
@@ -1785,7 +1784,7 @@ let branch cfg ~target =
                 ; bra_lsucc = succ
                 ; bra_nx    = X.nx ()
                 } in
-  let ()  = set_succ bra ~succ:succ in
+  let ()  = set_succ bra ~succ in
   bra
 
 (* SHOULD WE ASSERT THAT THESE TARGETS ARE JOIN POINTS? *)
