@@ -13,6 +13,8 @@ OCAMLDEP =	ocamldep
 OCAMLYACC =	ocamlyacc
 OCAMLLEX =	ocamllex
 
+NOFAKE =	perl -- nofake
+
 # ------------------------------------------------------------------ 
 # high level targets
 # ------------------------------------------------------------------ 
@@ -42,22 +44,22 @@ all.opt:	mlburg.opt  runtime.opt examples.opt
 		$(OCAMLYACC) -v $<
 
 %.ml:		%.nw
-		./nofake -L'# %L "%F"%N' -R$@ $< > $@
+		$(NOFAKE) -L'# %L "%F"%N' -R$@ $< > $@
 
 %.mli:		%.nw
-		./nofake -L'# %L "%F"%N' -R$@ $< > $@
+		$(NOFAKE) -L'# %L "%F"%N' -R$@ $< > $@
 		
 # ------------------------------------------------------------------ 
 # special rules to resolve ambiguities
 # ------------------------------------------------------------------ 
 
 parse.mly:	parse.nw
-		./nofake -R$@ $< > $@
+		$(NOFAKE) -R$@ $< > $@
 
 parse.ml:	parse.mly
 
 lex.mll:	lex.nw
-		./nofake -R$@ $< > $@
+		$(NOFAKE) -R$@ $< > $@
 		
 lex.ml:		lex.mll		
 
@@ -109,10 +111,10 @@ mlburg.opt:	$(CMX)
 # ------------------------------------------------------------------ 
 
 sample.mlb:	sample.nw
-		./nofake -L'# %L "%F"%N' -R$@ $< > $@
+		$(NOFAKE) -L'# %L "%F"%N' -R$@ $< > $@
 
 sampleclient.ml:    sample.nw
-		./nofake -L'# %L "%F"%N' -R$@ $< > $@
+		$(NOFAKE) -L'# %L "%F"%N' -R$@ $< > $@
 		
 iburg.ml:	iburg.mlb mlburg runtime
 		./mlburg iburg.mlb > $@

@@ -19,7 +19,7 @@ type ty =           (* very incomplete *)
     | TyID          of string       (* int *)
 
 type tyrep =        (* incomplete *)
-    | TyProd        of (string * ty) list       (* add: mutable flag *)
+    | TyProd        of (bool * string * ty) list       (* true == mutable *)
 
 type tydecl =       
     { params:       string list
@@ -43,6 +43,7 @@ and exp =
     | Raw           of (loc * string)
     | Record        of (string * exp) list
     | RecordWith    of (string * (string * exp) list)
+    | RecordUpd     of (string * (string * exp) list)
     | Seq           of exp list
     | String        of string
     | Char          of char
@@ -61,7 +62,7 @@ functions come to our rescue.
 
 <<values>>=
 val tyvar:      string -> ty
-val typrod:     (string * ty) list -> tyrep
+val typrod:     (bool * string * ty) list -> tyrep
 
 val def:        (string * exp) list -> toplevel
 
@@ -76,6 +77,7 @@ val list:       exp list -> exp
 val raw:        loc -> string -> exp
 val record:     (string * exp) list -> exp
 val recordwith: string -> (string * exp) list -> exp
+val recordupd:  string -> (string * exp) list -> exp
 val seq:        exp list -> exp
 val string:     string -> exp
 val char:       char -> exp
@@ -137,6 +139,7 @@ let longid ids              = id (String.concat "." ids)
 let raw loc code            = Raw(loc,code)
 let record bindings         = Record bindings
 let recordwith r bindings   = RecordWith(r,bindings)
+let recordupd  r bindings   = RecordUpd(r,bindings)
 let seq es                  = Seq(es)
 let string s                = String s
 let char c                  = Char c
@@ -171,8 +174,13 @@ let tyvar x = P.text ("'" ^ x)
 let tyvars vs =
     P.agrp (P.text "(" ^^ indent (P.commalist tyvar vs) ^/ P.text ")")
 
-let rec tybinding (x,e) = 
-    P.agrp (P.text x ^^ P.text ":" ^^ indent (ty e)) 
+let rec tybinding (mtbl, x, e) =
+    P.agrp begin
+    ~~ (if mtbl then P.text "mutable" ^^ P.break else P.empty) 
+    ^^ P.text x
+    ^^ P.text ":" 
+    ^^ indent (ty e)
+    end
 
 and ty = function
     | TyVar x -> tyvar x
@@ -238,6 +246,7 @@ and exp = function
     | Raw       (fragments)     -> raw fragments
     | Record    (elements)      -> record elements
     | RecordWith(r,binds)       -> recordwith r binds 
+    | RecordUpd (r,binds)       -> recordupd  r binds 
     | Seq       (exps)          -> seq exps
     | String    (s)             -> P.text ("\"" ^ (String.escaped s) ^ "\"")
     | Char      (c)             -> P.text ("'"^Char.escaped c^"'")
@@ -294,6 +303,10 @@ and recordbinding (x,e) =
     let par e = P.text "(" ^^ exp e ^^ P.text ")" in
         P.agrp (P.text x ^^ P.text " =" ^^ indent (par e)) 
 
+and recordupdate r (x,e) =
+    let par e = P.text "(" ^^ exp e ^^ P.text ")" in
+        P.agrp (P.text (r^"."^x) ^^ P.text " <-" ^^ indent (par e)) 
+
 and record bindings =
     P.agrp begin
     ~~ P.text "{"
@@ -306,6 +319,14 @@ and recordwith r bindings =
     ~~ P.text "{" ^/ P.text r ^/ P.text "with"
     ^^ indent (P.list (P.text ";" ^^ P.break) recordbinding bindings)
     ^/ P.text "}"
+    end
+
+and recordupd r bindings =
+    P.agrp begin
+    ~~ P.text "(" 
+    ^^ indent (P.list (P.text ";" ^^ P.break) (recordupdate r) bindings)
+    ^^ P.text ";" ^/ P.text r   (* return updated record *)
+    ^/ P.text ")" 
     end
 
 and case e cases = 
