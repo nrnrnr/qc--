@@ -1,4 +1,5 @@
 % l2h substitution C C--
+% l2h substitution PAL C--
 % l2h substitution asdl ASDL
 % l2h substitution ocaml OCaml
 
@@ -6,12 +7,69 @@
 \section{Testing}
 % ------------------------------------------------------------------  
 
+To increase the confidence in our implementation we like to test it. 
+And since nobody likes to test because it shows ones own bugs we
+want to reuse test cases as much as possible.  Currently we have two
+different tests:  a fixpoint test for the parser and pretty printer,
+and a regression test.  The later runs the compiler and compares its
+result to previously recorded results of the expected outcome.
+
+% ------------------------------------------------------------------ 
+\subsection{Writing a test case}
+% ------------------------------------------------------------------ 
+
+To keep the test environment as open as possible very few conventions
+exist for test cases:
+
+\begin{itemize}
+\item A test case should be a file with a [[.c--]] suffix because the
+      [[mk test]] target uses all these files as test cases.
+
+\item A test case includes shell commands to perform the test. They
+      are embedded in a {\PAL} comment:
+
+\begin{verbatim}
+ /*# execute the commands below to use this file as a test case
+./fp test-000.c--
+./regr "../bin/qc-- -check test-000.c--"  -err test-000.2 -x 1
+ #*/
+
+register bits32 x;
+register bits32 x;
+
+foo () 
+{ }
+\end{verbatim}
+
+      It is a convention to name the file for the expected output on
+      standard output and standard error after the base name of the
+      test case and using the suffix [[.1]] and [[.2]] respectively.
+
+      Please note that the closing delimiter [[#*/]] for the comment
+      must not begin at the beginning of a line because this would
+      indicate the beginning of a line re-numbering directive.
+       
+\end{itemize}
+
+In the example above the same test case is used for the fixpoint test
+[[fp]] and a regression test [[regr]].  More precisely, the compiler
+is expected to exit with an exit code of 1 ([[-x 1]]) and detect the
+second declaration of [[x]].  Its output on standard error should
+match the file [[test-000.c--]].
+
+The price for the flexibility to include many tests into the same test
+case is, that some familiarity with the available tests is required. 
+Reusing tests when a new test is added also requires to edit the test
+cases because they decide which test to use.
+
 % ------------------------------------------------------------------  
 \subsection{Fixpoint Test}
 % ------------------------------------------------------------------ 
 
 The [[qc--]] compiler can re-create the concrete syntax of a file that
-is has parsed. This is an opportunity for a fixpoint test: 
+is has parsed:  [[qc-- -pp file.c--]] writes a pretty printed form of
+[[file.c--]] to standard output.  This is an opportunity for a
+fixpoint test: 
 
 \begin{enumerate}
 \item \label{one} Parse a file and write out its concrete syntax.
@@ -20,18 +78,18 @@ is has parsed. This is an opportunity for a fixpoint test:
       one should not differ.
 \end{enumerate}
 
-Every \textit{legal} \C~input can thus be used to easily test the
-parsing and pretty printing modules of the compiler.  Doing it for the
-actual implementation, however, requires a third parsing and printing
-step before the fixpoint is reached:  when [[qc--]] parses a pragma it
-pretty prints a comment for it.  Since comments are skipped while
-scanning the next round this comment will not produce any output. 
-When this output again is parsed and printed it should be equal to the
-one just parsed. 
+Every \textit{grammatical legal} \C~input can thus be used to easily
+test the parsing and pretty printing modules of the compiler.  Doing
+it for the actual implementation, however, requires a third parsing
+and printing step before the fixpoint is reached:  when [[qc--]]
+parses a pragma it pretty prints a comment for it.  Since comments are
+skipped while scanning in the next round, this comment will not
+produce any output.  When this output again is parsed and printed it
+should be equal to the one just parsed. 
 
 A simple shell script implements the fixpoint test. 
 
-<<fixpoint>>=
+<<fp>>=
 #! /bin/sh
 
 # interrupt handler
@@ -60,13 +118,10 @@ $qc -pp $tmp/$this.$$.2 > $tmp/$this.$$.3
 diff -c $tmp/$this.$$.2 $tmp/$this.$$.3 || echo ">>> $file "
 rc="$?"
 
-
-
 # clean up and return
 
 rm -f $tmp/$this.$$.*
 exit $rc
-
 @
  
 % ------------------------------------------------------------------ 
@@ -77,7 +132,32 @@ While the fixpoint test is good to test the scanner and parser with
 legal input it it much less suited for \C~files that contain errors. 
 Here is a little script for regression testing that assists in this
 job:  it runs a command and compares the exit code, standard output,
-and standard error produced by the program with expected results.  
+and standard error produced by the program with expected results:  
+
+\begin{quote}
+    regr "qc-- -pp foo.c--" -out foo.1 -x 0
+\end{quote}
+
+This command [[regr]] runs [[qc-- -pp foo.c--]], compares the standard
+output with [[foo.1]] and the exit code with [[0]].  Any differences
+to the expected outcome are reported.  The [[regr]] script is flexible
+enough to provide optionally standard input ([[-in]]) to the command
+it runs and can compare files ([[-f]]) the commands creates with
+existing files.  Options accepted by [[regr]]:
+
+\begin{itemize}
+\item [[-in file]]: The command gets its standard input from [[file]].
+\item [[-out file]]: The standard output of the command is compared to
+      [[file]]. 
+\item [[-err file]]: The standard error output of the command is
+      compared to [[file]].
+\item [[-x n]]: The command is expected to exit with exit code [[n]].
+\item [[-f /some/file]]:  The command is expected to create a file
+      [[/some/file]]. The contents of [[/some/file]] and [[file]] in
+      the local directory are compared.
+\item [[-r]] recording mode: the output of the command is captured in
+      the respective files for later comparison.
+\end{itemize}
 
 The script can be used in a recording mode where the standard and
 error output of a command are recored in files for later comparison.

@@ -1,5 +1,3 @@
-#
-#
 
 # ------------------------------------------------------------------ 
 # paths
@@ -9,41 +7,14 @@ LIBDIR =    ../lib
 BINDIR =    ../bin
 MANDIR =    ../man
 
-# ------------------------------------------------------------------ 
-
-QC =        $BINDIR/qc--
-
 # ------------------------------------------------------------------  
 # high level targets
 # ------------------------------------------------------------------  
 
-test:V:         fp regression
-
-fp:V:           fixpoint 
-                for f in fix-*[0-9][0-9].c-- error-*.c-- ; do 
-                    ./fixpoint $f
+test:VQ:        ../bin/qc-- fp regr
+                for f in *.c--; do
+                    sed -n '/\*#/,/#\*/p' $f | sed -n '2,$p' | sh || true
                 done
-
-regression:V:   regr
-                for f in error*.c-- ; do
-                    g=`basename $f .c--`
-                    CMD="$QC -check $g.c--"
-                    ./regr "$CMD" -x 1 -err $g.stderr || true
-                done
-
-%.stderr:       %.c--
-                ./regr "$QC -check $stem.c--" -r -err $stem.stderr 
-                head -v $stem.stderr
-
-record:V:       regr
-                for f in error*.c-- ; do
-                    g=`basename $f .c--`
-                    CMD="$QC -check $g.c--"
-                    ./regr "$CMD" -r -x 1 -err $g.stderr || true
-                done
-
-
-scripts:V:      fixpoint regr        
 
 # ------------------------------------------------------------------ 
 # Noweb stuff - once this is stable the generic part should go to
@@ -71,7 +42,7 @@ HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
 # sources generated from noweb sources
 # ------------------------------------------------------------------  
 
-fixpoint        \
+fp              \
 regr:           test.nw
                 eval $MISCTANGLE
                 chmod +x $target

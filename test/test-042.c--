@@ -1,0 +1,44 @@
+
+ /*# execute the commands below to use this file as a test case
+./fp test-042.c--
+./regr "../bin/qc-- -check test-042.c--"  -err test-042.2 -x 1
+ #*/
+
+register bits32 localdata "register7";
+register bits32 initial_localdata;
+
+const I_HAVE_FINISHED = 1;
+
+run_a_closure()
+{
+    bits32 f, arg, answer, closure;
+
+    localdata = initial_localdata;
+    closure = bits32[localdata+closure_slot];
+    f   = bits32[closure];
+    arg = bits32[closure+4];
+    answer = f(arg);
+    bits32[localdata+answer_slot] = answer;
+    yield(I_HAVE_FINISHED);
+
+}
+
+
+minmaxhelp(bits32 elements, bits32 limit, bits32 min, bits32 max)
+{
+    register bits32 n;
+    
+    if (elements==limit) { return (min, max); }
+    x = bits32[elements];
+    if (x<min) { min = x; }
+    if (x>max) { max = x; }
+    jump minmaxhelp ((elements+4), limit, min, max);
+}
+
+minmax(bits32 a)
+{
+    jump
+            minmaxhelp ((a+4), ((a+4)+(4*bits32[a])), bits32[(a+4)],
+            bits32[(a+4)]);
+}
+
