@@ -48,7 +48,6 @@ val paths_cutto:     int list -> string list -> unit
 
 <<alphacall.ml>>=
 module A  = Automaton
-module AE = Automaton.Exclude
 module C  = Call
 module R  = Rtl
 module RP = Rtl.Private
@@ -137,6 +136,9 @@ let fatal _ =
 A C~function returns an integer (up to 64 bits wide) in [[$0]], a
 floating-point result (up to two 64-bit values) in [[$f0]] and [[$f1]].
 
+THIS IS PROBABLY A BUG!  [[useregs]] CREATES MUTABLE STATE, SO IF A
+COMPILATION UNIT HAS MULTIPLE CALL SITES THAT RETURN THE SAME HINT, WE
+SHOULD SEE A FAILURE HERE.
 <<alphacall.ml>>=
 let results =
     A.choice
@@ -150,10 +152,8 @@ let results =
             A.useregs [r 0] ~errormsg:fatal
         ]
 @
-
 As an alternative we provide [[cmm_results]] that returns every result
 in memory. This is for experiments with custom calling conventions.
-
 <<alphacall.ml>>=
 let cmm_results =
     A.widths [64] ~errormsg:(badwidth "can only return 64-bit values") *>
@@ -194,29 +194,6 @@ let spaces =
   | _   -> Impossible.impossible "register space in parameter passing"
 @
 
-Note that the direction of [[growth]] in the overflow block is
-independent of the stack growth. 
-
-<<alphacall.ml>>=
-let arguments () =
-  (* N.B. exc is mutable and must be made fresh each time *)
-  let exc = A.Exclude.of_pairs spaces [ [r 16] , [f 16]
-                                      ; [r 17] , [f 17]
-                                      ; [r 18] , [f 18]
-                                      ; [r 19] , [f 19]
-                                      ; [r 20] , [f 20]
-                                      ; [r 21] , [f 21]
-                                      ] in
-  A.choice   
-      [ (fun h w -> h = "float" && w = 64),
-          A.sharedregs exc [f 16; f 17; f 18; f 19; f 20; f 21] ~errormsg:fatal
-      ; (fun h w -> h <> "float" && w = 64),
-          A.widen (Aux.round_up_to ~multiple_of:64)        *>
-          A.sharedregs exc [r 16; r 17; r 18; r 19; r 20; r 21] ~errormsg:fatal
-      ] *>
-  A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up ~max_alignment:sp_align
-@
-
 Here is an alternative implementation of the parameter automaton. Rather
 than using an exclusion relation, it uses the \emph{position} of a
 parameter to determine the register it is passed in. The [[counter]]
@@ -226,7 +203,7 @@ registers as are needed to account for bits already allocated and then
 uses any remaining register to satisfy the request.
         
 <<alphacall.ml>>=        
-let arguments' () = 
+let arguments () = 
     let ctr = ref 0 in
     (A.bitcounter ctr *>
     A.choice
@@ -277,7 +254,7 @@ hope the code below reflects this.
 let prolog  =
   let autosp = (fun _ -> vfp) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at (arguments' ()))
+    ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at (arguments ()))
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
 	  ~insp:(fun a _ _ -> autosp a) in
@@ -290,7 +267,7 @@ let epilog  =
 
 let call_actuals  =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at (arguments' ()))
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at (arguments ()))
     ~autosp:(fun r  -> std_sp_location)
     ~postsp:(fun _ sp -> sp) in  
 
@@ -360,10 +337,10 @@ let dump what automaton widths hints =
                             (automaton ()))
         ~widths ~hints
         
-let dump_proc     = dump Automatongraph.print arguments'
+let dump_proc     = dump Automatongraph.print arguments
 let dump_return   = dump Automatongraph.print (fun () -> results)
 let dump_cutto    = dump Automatongraph.print (fun () -> cut_args)
-let paths_proc     = dump Automatongraph.paths arguments'
+let paths_proc     = dump Automatongraph.paths arguments
 let paths_return   = dump Automatongraph.paths (fun () -> results)
 let paths_cutto    = dump Automatongraph.paths (fun () -> cut_args)
 @
@@ -380,7 +357,7 @@ module CS = Callspec
 
 let template = (* conservative spec *)
         { CS.name           = "cmm"
-        ; CS.call           = arguments'
+        ; CS.call           = arguments
         ; CS.results        = (fun () -> results)   
         ; CS.cutto          = (fun () -> cut_args)
         ; CS.stack_growth   = Memalloc.Down
