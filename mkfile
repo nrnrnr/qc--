@@ -29,28 +29,28 @@ SUBDIRS =       $LIBSRC $SRC
 #               tools
 # export:       create *.tar.gz files for parts we publish
 
-all:V:          lib
+all:V:          lib dirs
                 for i in $SRC; 
                 do 
                     (echo "# entering $i" && cd $i && mk $MKFLAGS depend)
                     (echo "# entering $i" && cd $i && mk $MKFLAGS update)
                 done
 
-all.opt:V:      lib.opt 
+all.opt:V:      lib.opt dirs
                 for i in $SRC; 
                 do 
                     (echo "# entering $i" && cd $i && mk $MKFLAGS depend)
                     (echo "# entering $i" && cd $i && mk $MKFLAGS update.opt)
                 done
 
-lib:V:          
+lib:V:          dirs
                 for i in $LIBSRC; 
                 do 
                     (echo "# entering $i" && cd $i && mk $MKFLAGS depend)
                     (echo "# entering $i" && cd $i && mk $MKFLAGS update)
                 done
 
-lib.opt:V:      
+lib.opt:V:      dirs
                 for i in $LIBSRC; 
                 do 
                     (echo "# entering $i" && cd $i && mk $MKFLAGS depend)
@@ -73,14 +73,14 @@ dvi:V:          dirs
                     (echo "# entering $i" && cd $i && mk $MKFLAGS $target)
                 done
 
-clean:V:
+clean:V:        dirs
                 for i in $SUBDIRS; do (cd $i && mk $MKFLAGS $target); done
                 find bin lib man                        \
                         \( -name 'CVS'                  \
                         -o -name '.cvsignore'           \
                         \) -prune -o -type f -exec rm '{}' \;
 
-clobber:V:      
+clobber:V:      dirs
                 find bin lib man -name 'CVS' -prune -o -type f -exec rm '{}' \;
                 for i in $SUBDIRS; 
                 do 
