@@ -64,8 +64,10 @@ $HTMLDIR%.gif: %.dot
 	egrep -v '^  (page|size|ratio) = ' $prereq |
 	dot -Tgif | giftool -rgb white > $target
 
-$HTMLDIR%.html: %.nw
-	sh -c "mkdir $HTMLDIR 2>/dev/null; exit 0"
+WWW:
+	mkdir $prereq
+
+$HTMLDIR%.html: %.nw `echo $HTMLDIR | sed 's@/$@@'`
 	echo '\section*{Contents}
 	\tableofcontents' |
 	$NOWEAVE -filter 'elide refman:*' -filter l2h -autodefs asdl -html -index - $prereq | htmltoc > $target
@@ -111,20 +113,32 @@ doc_check:V: doc.tex
 #
 #  Targets for interfaces
 
-caml:V: asm.cmi asm.cmo iRNode.cmi iRNode.cmo cMinusMinus.cmi cMinusMinus.cmo
+caml:V: asm.cmi asm.cmo iRNode.cmi iRNode.cmo aST.cmi aST.cmo \
+	iR.cmi iR.cmo
 
 CAMLOPTS="-I /home/cellar/nr/zephyr/asdlGen-19990816/src/ocaml"
 
 asm.mli asm.ml asmUtil.mli asmUtil.ml: asm.asdl
 	camlGen --ocaml --pickler=sexp $prereq
 
-iRNode.mli iRNode.ml rTL.mli rTL.ml: rtl.asdl cmmir.asdl
+rTL.mli rTL.ml: rtl.asdl
 	camlGen --ocaml --pickler=sexp $prereq
 
-cMinusMinus.mli cMinusMinus.ml cMinusMinusUtil.mli cMinusMinusUtil.ml: ast.asdl
+iRNode.mli iRNode.ml: rtl.asdl irnode.asdl
+	camlGen --ocaml --pickler=sexp $prereq
+
+iR.mli iR.ml: ir.asdl irnode.asdl rtl.asdl ast.asdl
+	camlGen --ocaml --pickler=sexp $prereq
+
+aST.mli aST.ml aSTUtil.mli aSTUtil.ml: ast.asdl
 	camlGen --ocaml --pickler=sexp $prereq
 
 %.asdl: %.nw
+	notangle -R$target -L' --#line %-1L "%F"%N'  $prereq > $target
+
+irnode.asdl: cmmir.nw
+	notangle -R$target -L' --#line %-1L "%F"%N'  $prereq > $target
+ir.asdl: cmmir.nw
 	notangle -R$target -L' --#line %-1L "%F"%N'  $prereq > $target
 
 %.cmi: %.mli

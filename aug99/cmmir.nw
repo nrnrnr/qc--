@@ -1,4 +1,9 @@
-\section{Intermediate-code nodes}
+
+\section{Intermediate code}
+
+% l2h substitution PAL C--
+
+\subsection{Intermediate-code nodes}
 
 The design of the intermediate form is governed by the following
 desiderata:
@@ -32,7 +37,7 @@ This list is used to map from a ``node id'' to a node.
 \item
 A mapping from label and procedure names to IR~nodes.
 \end{itemize}
-<<cmmir.asdl>>=
+<<irnode.asdl>>=
 module IRNode (imports RTL) {
   <<ASDL definitions for nodes of abstract \PAL>>
 }
@@ -133,3 +138,22 @@ nodes in the flow graph.)
 proc = (string name, string? mangling, var_info* formals, var_info* locals)
 var_info = (string name, RTL.ty)
 @
+
+
+\subsection{A program in intermediate form}
+
+Although the AST and IR-node representations are independent, the full
+IR representation draws from both.
+<<ir.asdl>>=
+module IR (imports IRNode imports AST) {
+  prog = ( IRNode.graph
+         , AST.global_info* globals
+         , AST.const_name procedures
+         , label_pair* labels_and_procedures
+         , seg* segments
+         )
+  label_pair = (AST.const_name, IRNode.nodeid)
+  seg = (AST.segment_name, item*)
+  item = Datum (AST.datum)
+       | Proc  (AST.const_name procedure)
+}
