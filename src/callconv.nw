@@ -1,0 +1,265 @@
+
+\input{macros.tex}
+
+% l2h substitution dots ...
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Calling Conventions}
+% ------------------------------------------------------------------ 
+
+Each target platform requires an implementation of its procedure
+calling convention:  which arguments goes into registers and which are
+passed on the stack. Mark W.~Bailey and Jack W.~Davidson have shown in
+\cite{bailey:davidson:95} that calling conventions can be modeled as a
+finite state automata. The automaton receives a stream of data types
+as input.  They represent the data types that are passed in that order
+to a function being called.  The automaton responds for each data
+type with a register or stack position the data is passed in.
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+An automaton for calling conventions maintains a state about the
+resources being used for parameter passing.  The resources consist of
+the set of registers used for parameter passing and an alignment
+constraint for parameters passed on the stack.  The automaton does not
+maintain the exact stack \emph{position} of a parameter but only its
+alignment constraint in [[memsize]] units (which are usually bytes). 
+
+In order to name all resources at run-time strings rather than
+algebraic data types are used.
+
+<<callconv.mli>>=
+module StrSet: Set.S with type elt = string
+
+type reg       = string  (* register  like ax, dx ..           *)
+type regset    = StrSet.t
+type alignment = int     (* stack alignment constraint         *)
+type ty        = string  (* data type like bits32, float64, .. *)
+@
+
+A parameter is passed in a [[location]] that is either a set of
+registers, or an aligned stack position.  A set of registers is
+required when parameters are too large to be passed in a single
+register.  This model of a [[location]] excludes the case when one
+part of a parameter is passed in a register and the other one on the
+stack.
+
+<<>>=
+type location  = Register of reg        (* or regset, or reg list ??*)
+               | Stack    of alignment
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Constructing an Automaton}
+% ------------------------------------------------------------------ 
+
+The {\qcc} implementation does not hard-wire any particular
+calling-conventions.  Calling convention can at least in principle be
+constructed at compile time.  Therefore, this interface exposes
+functions that allow to construct the corresponding automaton.  This
+interface can be considered as being low-level.  A higher-level
+interface could provide a domain specific language to create an
+automaton from a calling conventions description.
+
+The construction of an automaton starts with an [[single]] automaton
+that contains just its initial state.  A state holds informations
+about resources that are already used for parameter passing.  In
+particular, a state holds a set of registers currently used and the
+alignment constraint for the last parameters that was passed on the
+stack. 
+
+<<>>=
+type automaton
+type state
+val single      : state -> automaton
+val state       : regset -> alignment -> state
+@
+
+A transition between two states $x$, $y$ of the \emph{same} automaton
+holds a data type $t$.  Such a transition is added by [[add_trans]] to
+an automaton.  It is a checked run-time error if any the two states
+is not part of the automaton.  The resources of the two states $x$ and
+$y$ are constraint by the following rule:  the difference between $x$
+and $y$ must be a [[location]] value.  In particular, $x$ and $y$ must
+not differ in their register sets and alignments at the same time.
+
+<<>>=
+val add_trans   : automaton -> state -> ty -> state -> automaton
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Running an Automaton}
+% ------------------------------------------------------------------ 
+
+An automaton advances from one state to the next in respond to a data
+type.  Since the interfaces makes states explicit, the actual state of
+an automaton could be held outside of the automaton data type. 
+However, this would require a client to hold an [[automaton]] and a
+[[state]] value.  To make a client's life easier an \emph{actual}
+state is maintained by an automaton.  The current state is returned by
+[[state_of]] that obeys to the rules below. 
+
+<<>>=
+val state_of: automaton -> state
+@
+
+\begin{quote}
+\begin{verbatim}
+state_of (single s) = 1
+state_of (add_trans a s1 t s2) = state_of a
+state_of (reset (single s)) = s 
+\end{verbatim}
+\end{quote}
+
+The [[reset]] function returns an automaton set to its initial state.
+
+<<>>=
+val reset: automaton -> automaton
+@
+
+An automaton responds to a type [[ty]] by returning a location for
+this type and an automaton that encapsulates the new state.  It might
+happen that the automaton lacks a transition from its current state
+for the given type, or that the difference between the old and the new
+state does not form a location.  In both cases an [[E.ErrorExn]]
+exception is raised.
+
+<<>>=
+val next: automaton -> ty -> location * automaton  (* E.ErrorExn *)
+@
+
+The automata returned by [[next]] and the [[reset]] are the same as
+the ones passed into them, except that the actual state maintained by
+the automaton has changed.  In particular, none of the transitions or
+states are altered.
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+First, here are the types that are already declared in the interface:
+
+<<callconv.ml>>=
+module E        = Error
+module StrSet   = Set.Make(struct type t=string let compare=compare end)
+
+type reg        = string
+type regset     = StrSet.t
+type alignment  = int
+type ty         = string
+
+type location   = Register of reg
+                | Stack    of alignment
+@
+
+A state is just the set of used registers and the current alignment of
+the stack. An alternative interface and implementation could also
+include the automaton a state belongs to.
+
+<<>>=
+type state      = regset * alignment
+@
+
+State transitions inside an automaton are modeled by a map from a
+[[state]] and [[ty]] pair to a [[state]]. Since sets are part of keys,
+a user defined comparison function is needed. It only takes care of
+the set component and relies on the standard [[compare]] function for
+the rest.
+
+<<>>=
+module Map      = Map.Make (struct 
+                    type t=state * ty
+                    let compare ((r1,a1),t1) ((r2,a2),t2) =
+                        match StrSet.compare r1 r2 with
+                        | 0 -> compare (a1,t1) (a2,t2)
+                        | n -> n
+                  end)
+
+type statemap   = state Map.t
+@
+
+An automaton contains of a state transition map, an initial state, and
+a current state. The [[single]] function creates an automaton from a
+state which becomes the initial and actual state of the new automaton.
+
+<<>>=
+type automaton  = { map:        statemap
+                  ; init:       state
+                  ; actual:     state
+                  }
+                
+let single s            = { map    = Map.empty 
+                          ; init   = s
+                          ; actual = s
+                          }
+@
+
+The implementations of [[state], [[state_of]], and [[reset]] are
+trivial. 
+
+<<>>=
+let state set align     = (set,align)
+let state_of a          = a.actual
+let reset a             = { a with actual = a.init }
+@
+
+A transition is added by using the originating state and the type as
+key in the map and let it point to the receiving state.
+
+<<>>=
+let add_trans a s1 ty s2 =  
+    let map = Map.add (s1,ty) s2 a.map in
+        { a with map = map }
+@
+
+The difference between two states must be a [[location]]. The rules to
+find the difference are as follows:
+
+\begin{itemize}
+\item If the sets of used registers differ, the new location is a
+      registers. The difference between the two sets must be exactly
+      one register.
+\item If the sets of registers are equal, the new location is on the
+      stack. The alignment may or may not differ between the last and
+      the new stack position.
+\end{itemize}
+
+<<>>=
+let diff (r1,a1) (r2,a2) =
+    if StrSet.equal r1 r2 
+    then Stack a2
+    else let r = StrSet.diff r1 r2 in
+         match StrSet.elements r with
+         | [x]         -> Register x
+         | _           -> E.error "calling conventions: ill-defined automaton" 
+@
+     
+The next state is looked up by using the current state and the type as
+key in the state transition map.  The difference between the old and
+the new map is the location for the parameter of type [[ty]].
+
+<<>>=
+let next a ty =
+    let s' = 
+        try Map.find (a.actual,ty) a.map 
+        with Not_found -> 
+            E.error ("calling convention automaton: no transition for "^ty) 
+    in
+        diff a.actual s', { a with actual = s' }
+@
+
+
