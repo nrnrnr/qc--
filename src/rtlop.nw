@@ -65,6 +65,18 @@ the result have the same width. If the type variable of the result is
 not identical to one of the arguments, the operator is polymorphic in
 its return size. 
 
+The multiplication operator [[mulXX]] is quasi-polymoprhic in its result
+size: two $n$ bits values are multioplied into one $2n$ bits result.
+This makes it hard to define the meaning of the {\PAL} infix-operator
+because its meaning would depend on its arguments. Therefore, [[*]]
+denotes a $n$ bits multiplication with a an $n$ bits result. We
+introduce a new {\rtl} operator [[mul@]] for this. Since the character
+[[@]] cannot be part a {\PAL} identifier, it cannot be used in a program
+and is thus hidden.  The operator [[mul@]] can be defined in terms of
+existing operators:
+
+$$[[%mul@]](x,y) = [[%lobits]]$n$([[%mul$n$]](x,y))$$
+
 <<Types>>=
 module T = Types
 (**) (* == result size is polymorphic *)
@@ -106,8 +118,9 @@ let ops = Strutil.assoc2map
     ;  "ltu"        , T.proc [T.bitsv 1; T.bitsv 1] T.bool
     ;  "mod"        , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
     ;  "modu"       , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
-(**);  "mul"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1) (*XXX*)
-(**);  "mulu"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1) (*XXX*)
+    ;  "mul@"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1) (* see above *)
+(**);  "mul"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 2) 
+(**);  "mulu"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 2) 
     ;  "neg"        , T.proc [T.bitsv 1] (T.bitsv 1)
     ;  "ne"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
     ;  "not"        , T.proc [T.bool] T.bool
@@ -174,7 +187,7 @@ value in the \emph{width list} of an {\rtl} operator.
 let alias = Strutil.assoc2map 
     [  "+"      , "add"
     ;  "-"      , "sub"
-    ;  "*"      , "mul"
+    ;  "*"      , "mul@"    (* see discussion of %mul above *)
     ;  "/"      , "div"
     ;  "<<"     , "shl"
     ;  ">>"     , "shrl"

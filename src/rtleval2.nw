@@ -17,6 +17,18 @@ val bits:   Rtl.exp -> Bits.bits    (* Error.ErrorExn, convenient function *)
 val bool:   Rtl.exp -> bool         (* Error.ErrorExn, convenient function *)
 @
 
+Futrue plans: this module exports the list of {\rtl} operators that can
+be evaluated at compile-time to Lua. Such an export is \emph{not} fully
+visible in the interface! The exported list allows to implement a
+command line option to inform the user. Since the user thinks in terms
+of {\PAL} operators, this still might not be the best solution. On the
+other hand, {\PAL} and {\rtl} operators are closely related and thus it
+might be possible to compute the {\PAL} operators from this list.
+
+<<rtleval2.mli>>=
+module Lua : Lua.Lib.BARE   (* defines table Rtleval *)
+@
+
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
@@ -63,6 +75,18 @@ let bool e = match Private.exp (D.exp e) with
              | _                    -> Error.error "not a constant condition"
 @
 
+Interface to Lua. The sub-module below is linked into the Lua
+interpreter that is part of the compiler.
+
+<<rtleval2.ml>>=
+module Lua (C: Lua.Lib.CORE) = struct
+    module V = C.V
+    <<builtins>>
+    let init = C.register_module "Rtleval" builtins
+end (*Lua*)       
+
+@
+
 % ------------------------------------------------------------------ 
 \subsection{RTL Traversal}
 % ------------------------------------------------------------------ 
@@ -105,6 +129,7 @@ let app o w args = match o with
     |  "mod"        -> mod' w args
     |  "modu"       -> modu w args
     |  "mul"        -> mul w args
+    |  "mul@"       -> mul' w args
     |  "mulu"       -> mulu w args
     |  "neg"        -> neg w args
     |  "ne"         -> ne w args
@@ -232,9 +257,14 @@ let mod' w args = default "mod" w args
 let modu w args = default "modu" w args
 
 let mul w args  = match (w,args) with
-    | [w],[x;y] when is_bits x && is_bits y 
-                -> to_bits (Int64.add (int64 x) (int64 y)) w
+    | [_;r],[x;y] when is_bits x && is_bits y 
+                -> to_bits (Int64.add (int64 x) (int64 y)) r
     | _         -> default "mul" w args
+
+let mul' w args  = match (w,args) with          (* implements %mul@ *)
+    | [n],[x;y] when is_bits x && is_bits y 
+                -> to_bits (Int64.add (int64 x) (int64 y)) n
+    | _         -> default "mul@" w args        (* rewrite to lobits(mul ..)? *)
 
 let mulu w args = default "mulu" w args
 
@@ -285,3 +315,27 @@ let xor w args  = default "xor" w args
 let zx w args   = default "zx" w args
 let bitExtract w args = default "bitExtract" w args
 @    
+
+% ------------------------------------------------------------------ 
+\subsection{Interface to Lua}
+% ------------------------------------------------------------------ 
+
+We export the list of {\rtl} operator names that we know how to evaluate
+at compile time.
+
+Should we export a list, or a function that returns a list? The latter
+would ensure that the list is conceptually read-only.
+
+<<builtins>>=
+let ( **-> ) = V.( **-> )
+let pf t     = (V.pfunc t).V.embed    (* pure Lua function *)
+
+let compile_time_ops = 
+    [ "add"; "and"; "div"; "eq"; "mul"; "neg"; "ne"; "shl"; "shra";
+      "shrl"; " sub"; "sx"]
+
+let builtins =
+    [ "compiletimeopr" , (V.list V.string).V.embed compile_time_ops
+    ]
+@
+
