@@ -58,6 +58,7 @@ val dump_proc':     (int * string) list -> unit    (* dump these types *)
 val dump_return:    int list -> string list -> unit
 val dump_cutto:     int list -> string list -> unit
 val paths_proc:      int list -> string list -> unit
+val paths_proc':     (int * string) list -> unit    (* dump these types *)
 val paths_return:    int list -> string list -> unit
 val paths_cutto:     int list -> string list -> unit
 @
@@ -264,18 +265,18 @@ let new_arguments () =
         [ (fun h w -> h = "float" && w = 64 && !arg = 1),
             A.useregs [d 12] ~errormsg:fatal
         ; (fun h w -> h = "float" && w = 32 && !arg = 1),
-            A.useregs [f 12]~errormsg:fatal
+            A.useregs [f 12] ~errormsg:fatal
         ; (fun h w -> h = "float" && w = 64 && !arg = 2),
             A.useregs [d 14] ~errormsg:fatal
         ; (fun h w -> h = "float" && w = 32 && !arg = 2),
-            A.useregs [f 14]~errormsg:fatal
+            A.useregs [f 14] ~errormsg:fatal
         ; A.is_any, 
             A.unit
         ] 
     ; A.is_any,
         A.choice
-        [ (fun h w -> h = "float" && w = 64),
-            A.offsetregs bits [d 12; l 6]
+        [ (fun h w -> h = "float" && w = 64 && !arg = 2),
+            A.useregs [l 6] ~errormsg:fatal (* pair r6/r7 *)
         ; A.is_any,
             A.unit
         ]  
@@ -405,8 +406,13 @@ let dump_proc' types =
         types
 
 
-let dump_return   = dump Automatongraph.print (fun () -> results)
-let dump_cutto    = dump Automatongraph.print (fun () -> cut_args)
+let paths_proc' types =
+    Automatongraph.paths' 
+        ~mk:(fun () -> A.at (Rtl.bits (Bits.zero 32) 32) (arguments ()))
+        types
+
+let dump_return    = dump Automatongraph.print (fun () -> results)
+let dump_cutto     = dump Automatongraph.print (fun () -> cut_args)
 let paths_proc     = dump Automatongraph.paths arguments 
 let paths_return   = dump Automatongraph.paths (fun () -> results)
 let paths_cutto    = dump Automatongraph.paths (fun () -> cut_args)
