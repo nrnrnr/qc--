@@ -13,6 +13,7 @@ pairs so that Caml values can be mapped to Lua values and back again.
 <<signatures>>=
 module type S = sig
   type userdata
+  type userstate
   type info
   type value
     = Nil
@@ -27,6 +28,7 @@ module type S = sig
               ; fallbacks : (string, value) Hashtbl.t
               ; mutable callstack : activation list
               ; mutable currentloc : Srcmap.location option (* supersedes top of stack *)
+              ; userstate : userstate
               }
   and activation = info * Srcmap.location option
 
@@ -39,6 +41,8 @@ module type S = sig
   type objname = Fallback of string | Global of string | Element of string * value
   val objname : state -> value -> objname option
      (* 'fallback', 'global', or 'element', name *)
+
+  val state : unit -> state (* empty state, without even fallbacks *)
 @ 
 Lua tables are not quite like Caml tables, but they are close.
 <<signatures>>=
@@ -63,10 +67,11 @@ tried to project and a string indicating what it tried to project to.
 @ 
 These functions enable us to convert the basic types.
 <<signatures>>=
-  val float  : float  map
-  val int    : int    map
-  val bool   : bool   map
-  val string : string map
+  val float    : float  map
+  val int      : int    map
+  val bool     : bool   map
+  val string   : string map
+  val userdata : userdata map
 @ 
 To convert a value of option type, we represent [[None]] as [[Nil]].
 Woe betide you if [[Nil]] is a valid value of your type!
@@ -130,24 +135,31 @@ appropriate [[userdata]] type.
 <<signatures>>=
 module type USERDATA = sig
   type t
+  val tname : string  (* name of this type, for projection errors *)
   val eq : t -> t -> bool
   val to_string : t -> string
+  type state
+  val state : unit -> state
 end
 <<value.mli>>=
 <<signatures>>
-module Make (U : USERDATA) : S with type userdata = U.t
+module Make (U : USERDATA) : S with type userdata  = U.t 
+                               with type userstate = U.state
 @
 \subsection{Implementation}
 <<value.ml>>=
 <<signatures>>
-module Make (U : USERDATA) : S with type userdata = U.t = struct
+module Make (U : USERDATA) : S with type userdata  = U.t 
+                               with type userstate = U.state
+= struct
   <<value toplevel>>
   <<tests>>
 end
 @ 
 I have to repeat the datatype definition.
 <<value toplevel>>=
-type userdata = U.t
+type userdata  = U.t
+type userstate = U.state
 type info = int * string * int (* unique id, filename, linedefined *)
 type value
   = Nil
@@ -162,6 +174,7 @@ and state = { globals : table
             ; fallbacks : (string, value) Hashtbl.t
             ; mutable callstack : activation list
             ; mutable currentloc : Srcmap.location option (* supersedes top of stack *)
+            ; userstate : userstate
             }
 and activation = info * Srcmap.location option
 @ 
@@ -253,9 +266,12 @@ type 'a mapf = ('a, value list -> value list) ep
 Here are the embedding/projection pairs for the simple types.
 There are subtle mismatches between Caml types and Lua types, so I do
 my best to patch them.
-Numbers are automatically converted to strings on request, but I
-haven't yet implemented the opposite conversion.
 <<value toplevel>>=
+let userdata = { embed = (fun x -> Userdata x)
+               ; project = function Userdata x -> x
+                                  | v -> raise (Projection (v, U.tname))
+               } 
+
 let string = { embed = (fun s -> String s)
              ; project = function String s -> s 
                                 | Number x -> string_of_float x
@@ -336,9 +352,10 @@ let trim1 = function  (* trim list of arguments to a single argument *)
   | h::t -> h
 
 let const f s = f
-let emptystate = 
- { globals = Table.create 0; fallbacks = Hashtbl.create 0; callstack = [];
-   currentloc = None }
+let state () = 
+ { globals = Table.create 50; fallbacks = Hashtbl.create 10; callstack = [];
+   userstate = U.state (); currentloc = None }
+let emptystate = state()
 
 let (-->) arg result =
   { embed =   (fun f -> 

@@ -3,18 +3,11 @@
 \section{Main loop for testing a standalone interpreter}
 
 <<main.ml>>=
-module Unit = struct type t = unit let to_string () = "<userdata>" let eq = (=) end
-module A = Ast.Make (Value.Make(Unit))
-module I = Lua.MkInterp (A)
-module P = Parse.Make (I.Ast)
-module B = Builtins.Make (I)
+module I = Builtins.Add (Parse.Make)
+             (Lua.Make (Io.Builtins(Builtins.String(Builtins.Math(Lua.Bottom)))))
 module V = I.Value
 let lex map buf = Scan.token buf map
-let state = I.fallbacks()
-let addlist = List.iter (fun (k, v) -> V.Table.bind state.V.globals (V.String k) v)
-let _ = addlist B.builtins
-let _ = addlist B.string_builtins
-let _ = addlist B.math_builtins
+let state = I.state()
 let dumpstate = ref false
 let showresults =
   let rec loop n = function
@@ -22,7 +15,7 @@ let showresults =
                 print_endline (V.to_string h); loop (n+1) t
     | [] -> ()
   in loop 1
-let run infile = ignore (B.dofile state infile)
+let run infile = ignore (I.dofile state infile)
 let run_interactive infile =
   let rec loop n pfx =
     let line = input_line infile in
@@ -30,7 +23,7 @@ let run_interactive infile =
       loop n (pfx ^ String.sub line 0 (String.length line - 1) ^ "\n")
     else
       begin
-        showresults (B.dostring state (pfx ^ line ^ "\n"));
+        ignore (I.dostring state (pfx ^ line ^ "\n"));
         flush stdout; flush stderr;
         loop (n+1) ""
       end

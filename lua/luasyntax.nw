@@ -2,15 +2,23 @@
 @ 
 \subsection{Parser}
 <<parse.mli>>=
-module Make (Ast : Ast.S) : sig
-  val chunks :
-    (Lexing.lexbuf  -> token) -> Lexing.lexbuf -> Ast.chunk list
+module type S = sig
+  type chunk
+  val chunks : (Lexing.lexbuf  -> token) -> Lexing.lexbuf -> chunk list
 end
+module type MAKER = functor (Ast : Ast.S) -> S with type chunk = Ast.chunk
+module Make : MAKER
 @ 
 <<parse.mly>>=
 %{
+module type S = sig
+  type chunk
+  val chunks : (Lexing.lexbuf  -> token) -> Lexing.lexbuf -> chunk list
+end
+module type MAKER = functor (Ast : Ast.S) -> S with type chunk = Ast.chunk
   module Make (Ast : Ast.S) = struct
     module A = Ast
+    type chunk = Ast.chunk
 %}
 
 %start chunks
@@ -399,7 +407,7 @@ rule token = parse      (* raise Error in case of error *)
                 { fun map ->  token lexbuf map }
   | '\''        { fun map ->  shortstring lexbuf map "'" (Buffer.create 80) }
   | '"'         { fun map ->  shortstring lexbuf map "\"" (Buffer.create 80) }
-  | "[["        { fun map ->  longstring  lexbuf map (Buffer.create 160) }
+  | "[["        { fun map ->  longstring  lexbuf 1 map (Buffer.create 160) }
 
   | _           { fun map ->  error "illegal character" } 
 
@@ -409,19 +417,26 @@ and skip = parse        (* skip to end of line *)
   | nl          { fun map ->  nl lexbuf map ; token lexbuf map }
 
 and longstring = parse  (* parse a [[ .. ]] string *)
-    eof         { fun map buf -> error "end of file in [[..]] string" }
-  | "]]"        { fun map buf -> P.STRING (Buffer.contents buf) }
-  | [^']' '\n']+
-  | ']'         { fun map buf -> 
+    eof         { fun n map buf -> error "end of file in [[..]] string" }
+  | "]]"        { fun n map buf ->
+                    if n = 1 then P.STRING (Buffer.contents buf) 
+                    else (Buffer.add_string buf "]]"; longstring lexbuf (n-1) map buf)
+                }
+  | "[["        { fun n map buf ->
+                    (Buffer.add_string buf "[["; longstring lexbuf (n+1) map buf)
+                }
+  | [^']' '[' '\n']+
+  | ']' 
+  | '['         { fun n map buf -> 
                   let s = get lexbuf in
                   ( Buffer.add_string buf s
-                  ; longstring lexbuf map buf
+                  ; longstring lexbuf n map buf
                   )
                 }
-  | nl          { fun map buf -> 
+  | nl          { fun n map buf -> 
                    ( Buffer.add_char buf '\n'
                    ; nl lexbuf map
-                   ; longstring lexbuf map buf
+                   ; longstring lexbuf n map buf
                    )
                 }  
 

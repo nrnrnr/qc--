@@ -1,16 +1,24 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 <<builtins.mli>>=
-module Make (I : Lua.INTERP) : sig
+module String : Lua.MIXIN
+module Math   : Lua.MIXIN
+
+
+module Add (MakeParser : Parse.MAKER) (I : Lua.INTERP) : sig
   val do_lexbuf : sourcename:string -> I.state -> Lexing.lexbuf -> I.value list
   val dostring  : I.state -> string -> I.value list
   val dofile    : I.state -> string -> I.value list
-  val builtins : (string * I.value) list
-  val string_builtins : (string * I.value) list
-  val math_builtins : (string * I.value) list
-end
+  val state : unit -> I.state
+  module Value  : Value.S 
+  module Parser : Parse.S with type chunk = I.Ast.chunk
+  module Interp : Lua.INTERP
+end with module Value = I.Value with module Interp = I
 <<builtins.ml>>=
-module Make (I : Lua.INTERP) = struct
-  module P = Parse.Make (I.Ast)
+module Add (MakeParser : Parse.MAKER) (I : Lua.INTERP) = struct
+  module Parser = MakeParser (I.Ast)
+  module Value = I.Value
+  module Interp = I
+  module P = Parser
   module V = I.Value
   <<builtins toplevel>>
   let ( **-> ) = V.( **-> )
@@ -55,8 +63,12 @@ module Make (I : Lua.INTERP) = struct
     ; "setfallback", (V.func (V.string **-> V.value **-> V.result V.value)).V.embed
                      I.setfallback
     ] 
-  <<string builtins>>
-  <<math builtins>>
+
+  let state () =
+    let g = I.state () in
+    List.iter (fun (k, v) -> V.Table.bind g.V.globals (V.String k) v) builtins;
+    g
+
 end
 <<builtins toplevel>>=
 let lex map buf = Scan.token buf map
@@ -162,3 +174,35 @@ let math_builtins =
   ; "random", V.caml_func (fun _ _ -> [V.Number (Random.float 1.0)])
   ; "randomseed", pf (V.int **-> V.runit)        Random.init
   ] 
+@ 
+<<builtins.ml>>=
+module String (L : Lua.TIER) = struct
+  module U = L.U
+  module M (FB : Lua.TOWER with type t = U.t and type state = U.state) = struct
+    module I = struct let fallback = FB.fallback end
+    module V = FB.V
+    let ( **-> ) = V.( **-> )
+    <<string builtins>>
+    module L' = L.M (FB)
+    let init g =
+      L'.init g;
+      List.iter (fun (k, v) -> V.Table.bind g.V.globals (V.String k) v) string_builtins
+  end
+end
+
+
+module Math (L : Lua.TIER) = struct
+  module U = L.U
+  module M (FB : Lua.TOWER with type t = U.t and type state = U.state) = struct
+    module I = struct let fallback = FB.fallback end
+    module V = FB.V
+    let ( **-> ) = V.( **-> )
+    <<math builtins>>
+    module L' = L.M (FB)
+    let init g =
+      L'.init g;
+      List.iter (fun (k, v) -> V.Table.bind g.V.globals (V.String k) v) math_builtins
+  end
+end
+
+

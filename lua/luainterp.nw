@@ -11,7 +11,10 @@ This file sketches some of the supporting details, focusing on the
 embedding and projection, which is the new part.
 <<lua.mli>>=
 <<signatures>>
-module MkInterp (XYZ : Ast.S) : INTERP (* with module Ast = XYZ *)
+module Bottom : TIER
+module Make (L : TIER) : INTERP
+  (* warning -- after making, must call Builtins.Make to get state function *)
+  (* this is a bogon *)
 @ 
 \subsection{Implementation}
 <<lua.ml>>=
@@ -28,7 +31,7 @@ module type INTERP = sig
   exception Error of string
   val compile : srcdbg:(Srcmap.map * bool) -> Ast.chunk list -> state -> value list
   val test : unit -> (string * value list) list
-  val fallbacks : unit -> state
+  val state : unit -> state  (* produce a fresh, initialized state *)
   val error : state -> string -> unit  (* error fallback *)
 
   val getglobal : state -> value -> value
@@ -38,11 +41,61 @@ module type INTERP = sig
   val setfallback : state -> string -> value -> value
     (* sets fallback, returns previous one *)
 end
+@ 
+<<signatures>>=
+(*
+module type FALLBACK = sig
+  module V : Value.S
+  val fallback : string -> V.state -> V.value list -> V.value list
+end
+
+module type LAYER = sig
+  module U : Value.USERDATA
+  module M (FB : FALLBACK) : sig
+    val init : U.t FB.V.map -> (FB.V.state -> U.state) -> FB.V.state -> unit
+  end
+end
+
+module type MIXIN = functor (L : LAYER) -> LAYER
+*)
+
+module type TOWER = sig
+  (* top of the tower *)
+  module V : Value.S
+  val fallback : string -> V.state -> V.value list -> V.value list
+
+  (* access to one tier *)
+  type t
+  val map : t V.map
+  type state 
+  val project_state : V.state -> state
+end
+
+module type TIER = sig
+  module U : Value.USERDATA
+  module M (T : TOWER with type t = U.t with type state = U.state) : sig
+    val init : T.V.state -> unit
+  end
+end
+
+module type MIXIN = functor (L : TIER) -> TIER
+
 <<lua.ml>>=
-module MkInterp (ZZZ : Ast.S) : INTERP (*with module Ast = ZZZ
-                                     with module Value = Ast.Value*) = struct 
-  module Value = ZZZ.Value
-  module Ast : Ast.S with module Value = Value = ZZZ
+module Bottom : TIER = struct
+  module U = struct
+    type t = unit
+    let tname = "<nothing>"
+    type state = unit
+    let state () = ()
+    let to_string () = "<nothing>"
+    let eq () () = true
+  end
+  module M (FB : TOWER) = struct let init _ = () end
+end
+
+module Make (L : TIER) : INTERP = struct
+  module Value = Value.Make(L.U)
+  module Ast = Ast.Make (Value)
   type state = Value.state
   type value = Value.value
   <<interp toplevel>>
@@ -74,14 +127,26 @@ let fbs =
   ; "function",  errorfallback "call expression not a function"
   ; "error",     default_error_fallback
   ] 
-let fallbacks () =
-  let t = Hashtbl.create (List.length fbs) in
-  let _ = List.iter (fun (k, f) -> Hashtbl.add t k (V.caml_func f)) fbs in
-  { V.globals = V.Table.create 50
-  ; V.fallbacks = t
-  ; V.callstack = []
-  ; V.currentloc = None
-  }
+(* make default fallbacks; provide state in V *)
+let add_fallbacks g =
+  List.iter (fun (k, f) -> Hashtbl.add g.V.fallbacks k (V.caml_func f)) fbs 
+
+module Top = struct
+  module V = Value
+  let fallback = fallback
+  type t = V.userdata
+  let map = V.userdata
+  type state = V.userstate
+  let project_state g = g.V.userstate
+end
+
+module L' = L.M(Top)
+
+let state () =
+  let g = V.state () in
+  add_fallbacks g;
+  L'.init g;
+  g
 @ 
 must be able to manage stack correctly
 <<interp toplevel>>=
@@ -516,9 +581,7 @@ let three = A.Lit (V.Number 3.0)
 
 let ret = A.Return ([nil; three])
 
-let state = 
-  { V.globals = V.Table.create 10; V.fallbacks = Hashtbl.create 10; V.callstack = [];
-    V.currentloc = None}
+let test_state = V.state ()
 
 let bogusmap = Srcmap.mk ()
 let stmts l = compile (bogusmap, false) (List.map (fun s -> A.Statement s) l)
@@ -537,17 +600,19 @@ let loop = [ gets "x" (num 10)
                ; A.Return [x]]
 
 let test _ =
-  [ "return nil and three", rtest state
-      ; "sum of three and three", sum state
-      ; "expression minus three", exp state
-      ; "result of loop", stmts loop state
+  [ "return nil and three", rtest test_state
+      ; "sum of three and three", sum test_state
+      ; "expression minus three", exp test_state
+      ; "result of loop", stmts loop test_state
   ] 
 @ 
 <<lua.ml>>=
+(*
 module U = struct type t = unit let to_string () = "<userdata>" let eq = (=) end
 module V = Value.Make (U)
 module A = Ast.Make (V)
-module T = MkInterp (A)
+*)
+module T = Make (Bottom)
 let t = T.test ()
 <<lua.mli>>=
 module T : INTERP
