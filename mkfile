@@ -17,7 +17,7 @@ VERSION =       `date +%Y%m%d`
 # SUBDIRS are made from left to right - order matters
 # ------------------------------------------------------------------ 
 
-SUBDIRS =       cllib asdl gen lua rtl camlburg tools doc src interp
+SUBDIRS =  cllib asdl gen lua rtl camlburg tools doc src runtime interp
 
 # ------------------------------------------------------------------ 
 # profiling
@@ -72,25 +72,25 @@ config:QV:
 	fi
 
 qc--:VQ:         tools lib dirs
-	for i in src; do 
+	for i in src runtime; do 
 	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update) ||
 	  exit 1
 	done
 
 qc--.opt:VQ:     tools.opt lib.opt dirs
-	for i in src; do 
+	for i in src runtime; do 
 	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update.opt) ||
 	  exit 1
 	done
 
 lib:VQ:          dirs
-	for i in runtime cllib asdl gen lua rtl; do 
+	for i in cllib asdl gen lua rtl; do 
 	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update) ||
 	  exit 1
 	done
 
 lib.opt:QV:      dirs
-	for i in runtime cllib asdl gen lua rtl
+	for i in cllib asdl gen lua rtl
 	do 
 	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update.opt) ||
 	  exit 1
@@ -247,7 +247,7 @@ clobber:V:      dirs clean
 	rm -f coverage */ocamlprof.dump
 
 # make sure appropriate empty directories exist
-dirs:V:
+dirs:VQ:
 	for i in bin lib man man/man1 lua/std; do
 	  [ -d $i ] || mkdir $i
 	done

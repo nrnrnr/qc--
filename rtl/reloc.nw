@@ -57,6 +57,23 @@ module type RELOCATABLE = sig
     val expnormalize:  
        'a relocatable -> (symbol * (symbol -> Rtl.width -> Rtl.exp)) option * 'a
 end
+<<junk>>=
+module type S = sig
+    type symbol
+    type 'a relocatable = 
+      | Const of 'a
+      | Sym   of 
+      | Sum   of 'a relocatable * 'a relocatable
+
+    val of_const:   'a           -> 'a relocatable
+    val of_sym:     (symbol -> Rtl.width -> Rtl.exp) -> symbol -> 'a relocatable
+    val add:  ('a -> 'a -> 'a) -> 'a relocatable -> 'a relocatable -> 'a relocatable
+    val sub:  ('a -> 'a -> 'a) -> 'a relocatable -> 'a relocatable -> 'a relocatable
+
+    val normalize:  'a relocatable -> symbol option * 'a
+    val expnormalize:  
+       'a relocatable -> (symbol * (symbol -> Rtl.width -> Rtl.exp)) option * 'a
+end
 @
 
 The [[MkSimple]] functor allows to build a representation easily and
