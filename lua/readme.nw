@@ -1,0 +1,107 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Please add grades for this module below. The line must start with % "%%".
+% Example (at beginning of line): %%Grades: B Central Soon
+%%Grades: B Subsystem Later
+
+\section{Guide to the source code for the Lua interpreter}
+
+This directory contains an implementation of
+Lua~2.5.
+This document is a quick guide to the source code.
+
+\paragraph{Main client codes}
+\begin{itemize}
+\item[\texttt{Lua}]
+The [[Lua]] module serves to collect together all the functionality of
+the interpreter in one interface.
+It is the single ``point of contact'' for client code.
+The interface is the important bit; the implementation is not that
+interesting.
+This is the place to look for an overview of the whole interpreter.
+To understand the individual parts, you will need to look at other
+modules.
+\end{itemize}
+
+\paragraph{Major data structures}
+\begin{itemize}
+\item[\texttt{Luaast}]
+The abstract-syntax tree for the language.
+\item[\texttt{Luavalue}]
+Definition of Lua values.
+Also, very importantly, includes type-directed technology for mapping
+between Lua values and Caml values.
+This module should be a focus of the ``how to write an interpreter in
+a HOT language'' paper.
+\end{itemize}
+
+\paragraph{Main implementation}
+\begin{itemize}
+\item[\texttt{Luainterp}]
+The interpreter.  Compiles AST into higher-order functions.
+Implements statements, expressions, and fallbacks.
+\item[\texttt{Lualib}]
+The infrastructure and machinery that enables one to construct and
+bind together separately compiled Lua libraries.
+This one is worth a paper on its own.
+\item[\texttt{Luasyntax}]
+Scanning and parsing.  Of little interest.
+\end{itemize}
+
+
+
+\paragraph{Libraries}
+\begin{itemize}
+\item[\texttt{Luabaselib}]
+The ``base library'' that must be part of every Lua interpreter
+(\texttt{dofile}, \texttt{dostring}, etc.).
+\item[\texttt{Luaiolib}]
+The I/O library.
+\item[\texttt{Luamathlib}]
+The math library.
+\item[\texttt{Luastrlib}]
+The (wait for it) string library.
+\end{itemize}
+
+\paragraph{Supporting and utility modules}
+\begin{itemize}
+\item[\texttt{Luahash}]
+A modification of the standard OCaml hash table.
+Fixed a performance bug and added functions to support Lua
+\item[\texttt{Luarun}]
+Support for building a Lua interpreter as a standalone main program
+(as opposed to embedded inside a client).
+\item[\texttt{Main}]
+A very simple client that shows how to link together a simple
+interpreter and run it as a standalone main program.
+\end{itemize}
+
+
+
+
+
+
+\paragraph{Experimental distractions}
+\begin{itemize}
+\item[\texttt{Bench}]
+A main program for running benchmarks.
+\item[\texttt{Log}]
+Used to help find a performance bug in the Caml standard hash tables.
+Should be removed at some point.
+\item[\texttt{Newlib}]
+A variation on [[Lualib]].
+I'm not sure what this is or what it is doing here.
+\item[\texttt{Oldinterp}]
+An interpreter (drop-in replacement for [[Luainterp]]?) that uses an
+ill-advised implementation technique.
+It will be measured!
+\end{itemize}
+
+
+
+
