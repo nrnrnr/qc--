@@ -78,11 +78,6 @@ type cuts =     { cuts    : label list
                 ; aborts  : bool
                 }
 @
-
-When arguments and results to and from procedures are passed around
-with [[copy]] nodes, a [[context]] value identifies the exact purpose
-of a copy.  This information is necessary to find the right calling
-convention to implement the copying. 
                 
 A formal parameter is a variable, an actual parameter an expression. 
 Both can have optional hints, and have a [[width]], i.e.~a type. 
@@ -97,10 +92,6 @@ type formal =   { name:      string
 type actual     = Rtl.exp 
                 * Rtl.width 
                 * string option               (* hint *)
-                
-type context    = ProcParameters
-                | ProcResults
-                | ContParameters
 @
 
 
@@ -167,23 +158,21 @@ implementing the [[goto]] is target specific.
 <<abstract types and values>>=
 val exit:                             Props.t -> node
 val goto:   Rtl.rtl  -> label list -> Props.t -> node
-val jump:   Rtl.rtl  -> label list -> Props.t -> node
-val cutto:  Rtl.rtl  -> cuts       -> Props.t -> node
-val return: int -> int             -> Props.t -> node
-                                              
 val call:   Rtl.rtl  -> cuts       -> Props.t -> node (*succ*)
 val assign: Rtl.rtl                -> Props.t -> node (*succ*)
 val branch: Rtl.rtl  -> label      -> Props.t -> node (*succ*)
 val label:  label                  -> Props.t -> node (*succ*)
 
-val copyi:  formal list -> context -> Target.cc -> Props.t -> node (*succ*)
-val copyo:  actual list -> context -> Target.cc -> Props.t -> node (*succ*) 
+val copyi:  formal list -> New.t -> Props.t -> node list * New.area (*succ*)
+
+val return: int*int               -> actual list -> New.t -> Props.t -> node list * New.area
+val jump:   label list -> Rtl.rtl -> actual list -> New.t -> Props.t -> node list * New.area
+val cutto:  cuts       -> Rtl.rtl -> actual list -> New.t -> Props.t -> node list * New.area
 @
 
-The [[copyi]] and [[copyo]] functions actually do not create a single
-node each, but sequences of [[assign]] nodes.  Analysis functions for
-a {\cfg} will thus never report a [[copyi]] or [[copyo]] node.
-
+The [[copyi]] function actually does not create a single node each,
+but sequences of [[assign]] nodes.  Analysis functions for a {\cfg}
+will thus never report a [[copyi]] node.
 
 % ------------------------------------------------------------------ 
 \subsection{Analysis}\label{sect:cfgliveness}
@@ -208,18 +197,23 @@ val succ:  cfg -> node' -> node' list (* assertion: no undefined labels *)
 @
 
 The [[kind]] function reports a node's flavor and most of the data
-that was used to create it.
+that was used to create it.  The liveness analysis (module
+\module{live}) ususally deduces the register usage from a node's
+{\rtl}.  In some cases liveness analysis needs some extra help
+provided by registers sets that are part of nodes.
 
 <<concrete types>>=
+type  set       = Register.Set.t
+
 type  kind      = Goto          of Rtl.rtl * label list 
-                | Jump          of Rtl.rtl * label list 
-                | Cutto         of Rtl.rtl * cuts       
-                | Return        of int * int             
                 | Call          of Rtl.rtl * cuts       
                 | Assign        of Rtl.rtl               
                 | Branch        of Rtl.rtl * label      
                 | Label         of label                   
                 | Exit
+                | Jump          of set * Rtl.rtl * label list 
+                | Cutto         of set * Rtl.rtl * cuts       
+                | Return        of set * (int*int)             
 @
 
 <<abstract types and values>>=
@@ -230,9 +224,6 @@ Liveness analysis (module \module{liveness}) determines the set of
 variables \emph{live before} a given node.  This set [[live]] is
 stored in every node and can be updated by side effect using
 [[set_live]] -- see below. 
-
-<<concrete types>>=
-type set = Register.Set.t
 
 <<abstract types and values>>=
 val live:     node' -> set
@@ -284,6 +275,7 @@ signature [[S]] as it is defined in the internet. The interesting
 stuff that implements this signature comes next.
 
 <<cfg2.ml>>=
+module A = New (* = Automaton *)
 module type S = sig
     <<signature S>> 
 end
@@ -312,7 +304,7 @@ end
 
 A [[node]] during construction of a [[cfg]] bundles its [[kind]], live
 set and properties. A [[node']] on the other hand is a list of
-[[nodes]] such that we have access to the succesor of a given node.
+[[nodes]] such that we have access to the successor of a given node.
 
 <<implementation of S>>=
 module StrMap = Map.Make(struct type t=label let compare=compare end)
@@ -350,18 +342,100 @@ let node props kind =
 
 let exit              props = node props (Exit)             
 let goto   rtl labels props = node props (Goto(rtl,labels))
-let jump   rtl labels props = node props (Jump(rtl,labels))
-let cutto  rtl cuts   props = node props (Cutto(rtl,cuts)) 
-let return    x y     props = node props (Return(x,y))    
 let call   rtl cuts   props = node props (Call(rtl,cuts))
 let assign rtl        props = node props (Assign(rtl))  
 let label  l          props = node props (Label(l))    
 let branch rtl label  props = node props (Branch(rtl,label)) 
 
 <<implementation of S>>=
-let copyo formals context cc props = Impossible.unimp "Cfg.copyo"
-let copyi actuals context cc props = Impossible.unimp "Cfg.copyi"
+let copyi actuals cc props = Impossible.unimp "Cfg.copyi"
 @
+
+
+A [[jump]], [[cutto]], or [[return]] statement exits a function. 
+These statements are not translated to a single node, but to a list of
+nodes and an overflow [[area]].  The [[area]] captures the space
+allocated in the parameter passing area on the stack.  Code that
+passes parameters is translated into a sequence of {\rtl}s which in
+turm become assignment nodes.  This sequence is terminated by a
+[[return]] node, which carries the data otherwise associated with the
+original statement.
+
+The terminating node does not include enough information for the
+liveness analysis to deduce what registers are live. We therefore
+analyze the assignment nodes we have generated to deduce the set of
+registers that are defined by it and annotate the final node with this
+set. 
+
+The [[store_actual]] function asks to calling convention automaton
+[[cc]] for a location [[loc]] to store an actual parameter and stores
+it there.  This store is represented by the [[rtl]] that is returned. 
+The automaton [[cc]] is mutated!
+
+<<implementation of S>>=
+let store_actual (cc: A.t) (expr,width,hint)  =   (* updates cc *)
+    let loc = A.ty cc width hint  in
+        A.store loc expr width
+@
+
+The next four functions help to a compute the set of registers read
+and written by a list of {\rtl}s.  Function [[rw]] returns two sets
+$(\mathit{read},\mathit{write})$ of registers read and written by a
+list of {\rtl}s.
+
+<<implementation of S>>=
+let (reg: Rtl.space -> int -> Rtl.width -> Register.t) = fun 
+    space index width -> (space,index,width)
+
+let add_left  space index width (left,right) = 
+    (Register.Set.add (reg space index width) left, right)
+
+let add_right  space index width (left,right) = 
+    (left, Register.Set.add (reg space index width) right)
+
+let rw rtls =
+    let empty      = (Register.Set.empty, Register.Set.empty)           in
+    let add rw rtl = Rtlutil.read_write_lists add_left add_right rtl rw in
+        List.fold_left add empty rtls
+@
+
+The [[return]] function generates a list of assign nodes for actual
+parameters plus a return node with liveness annotation:  all locations
+defined by the assign nodes are considered to be used by the
+[[return]] node in order to keep them live.
+        
+<<implementation of S>>=
+let return xy actuals cc props = 
+    let rtls      = List.map (store_actual cc) actuals          in
+    let assigns   = List.map (fun rtl -> assign rtl props) rtls in
+    let (use,def) = rw rtls                                     in
+    let ret       = node props (Return (def,xy))                in  
+    let area      = A.freeze cc                                 in
+        assigns@[ret], area
+@
+
+<<implementation of S>>=
+let jump labels rtl actuals cc props =
+    let rtls      = List.map (store_actual cc) actuals          in
+    let assigns   = List.map (fun rtl -> assign rtl props) rtls in
+    let (use,def) = rw rtls                                     in
+    let jump      = node props (Jump(def,rtl,labels))           in  
+    let area      = A.freeze cc                                 in
+        assigns@[jump], area
+
+<<implementation of S>>=
+let cutto cuts rtl actuals cc props =
+    let rtls      = List.map (store_actual cc) actuals          in
+    let assigns   = List.map (fun rtl -> assign rtl props) rtls in
+    let (use,def) = rw rtls                                     in
+    let jump      = node props (Cutto(def,rtl,cuts))           in  
+    let area      = A.freeze cc                                 in
+        assigns@[jump], area
+
+
+@
+
+ 
 
 The [[freeze]] function computes an [[index]] from labels to the node
 it precedes.  This map is used to look up labels when computing
@@ -443,15 +517,15 @@ let succ cfg = function
     | []          -> assert false
     | node::next -> 
         ( match node.kind with 
-        | Goto(_,labels) -> List.map (lookup cfg) labels
-        | Jump(_,labels) -> List.map (lookup cfg) labels
-        | Cutto(_,cuts)  -> lookup_cuts cfg cuts
-        | Return _       -> []
-        | Call(_,cuts)   -> next::(lookup_cuts cfg cuts)  
-        | Assign _       -> [next]
-        | Branch(_,label)-> [next;lookup cfg label]
-        | Label _        -> [next]
-        | Exit           -> []
+        | Goto(_,labels)   -> List.map (lookup cfg) labels
+        | Jump(_,_,labels) -> List.map (lookup cfg) labels
+        | Cutto(_,_,cuts)  -> lookup_cuts cfg cuts
+        | Return _         -> []
+        | Call(_,cuts)     -> next::(lookup_cuts cfg cuts)  
+        | Assign _         -> [next]
+        | Branch(_,label)  -> [next;lookup cfg label]
+        | Label _          -> [next]
+        | Exit             -> []
         )                           
 @
         
@@ -509,8 +583,8 @@ let subst_kind: kind -> Rtl.rtl -> kind = fun kind rtl -> match kind with
     | Assign  _      -> Assign(rtl)
     | Branch (_  ,x) -> Branch(rtl,x)
     | Label  _       -> kind
-    | Jump   (_  ,x) -> Jump(rtl,x)
-    | Cutto  (_  ,x) -> Cutto(rtl,x)
+    | Jump   (s,_,x) -> Jump(s,rtl,x)
+    | Cutto  (s,_,x) -> Cutto(s,rtl,x)
     | Return _       -> kind
     | Exit           -> kind
 @
@@ -538,15 +612,15 @@ list of node by [[rtls2nodes]].
 <<implementation of S>>=
 let exp: (Rtl.rtl -> Rtl.rtl list) -> node -> node list = fun f n ->
     match n.kind with
-    | Goto   (rtl,_) -> rtls2nodes n (f rtl)
-    | Call   (rtl,_) -> rtls2nodes n (f rtl)
-    | Assign  rtl    -> rtls2nodes n (f rtl) 
-    | Branch (rtl,_) -> rtls2nodes n (f rtl)  
-    | Jump   (rtl,_) -> rtls2nodes n (f rtl)  
-    | Cutto  (rtl,_) -> rtls2nodes n (f rtl)  
-    | Label  _       -> [n]
-    | Return _       -> [n]
-    | Exit           -> [n]
+    | Goto   (rtl,_)   -> rtls2nodes n (f rtl)
+    | Call   (rtl,_)   -> rtls2nodes n (f rtl)
+    | Assign  rtl      -> rtls2nodes n (f rtl) 
+    | Branch (rtl,_)   -> rtls2nodes n (f rtl)  
+    | Jump   (_,rtl,_) -> rtls2nodes n (f rtl)  
+    | Cutto  (_,rtl,_) -> rtls2nodes n (f rtl)  
+    | Label  _         -> [n]
+    | Return _         -> [n]
+    | Exit             -> [n]
 @
 
 Finally, here is the exported function [[expand]].  It applies [[f]]
