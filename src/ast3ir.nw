@@ -493,8 +493,7 @@ and body b state = match b with
     
 
 and labelStmt state x =
-    let _   = G.set_label state.cfg x state.node in
-        state    
+    { state with node = G.set_label state.cfg x state.node }
 @
 
 An if-statement is translated into a seqence of nodes such that the
@@ -517,9 +516,11 @@ taken otherwise and ends with a [[goto]] around the other branch.
 and ifStmt state (e,ifso,ifnot) =
     let l_ifso = Idgen.label state.proc in (* label for ifso/left *)
     let l_join = Idgen.label state.proc in (* label for join *)
-    let _      = G.set_label state.cfg l_join state.node in (* label join *) 
+    let state  = { state with (* label join *)
+                   node = G.set_label state.cfg l_join state.node } in  
     let ifso   = foldr body ifso state  in
-    let _      = G.set_label state.cfg l_ifso ifso.node  in (* label ifso *)
+    let state  = { state with (* label ifso *)
+                   node = G.set_label state.cfg l_ifso ifso.node  } in 
     
     let l2exp  = Rtl.link l_join state.target.Target.pointersize in
     let l2rtl  = state.target.Target.goto.Target.embed l2exp in
@@ -687,7 +688,7 @@ and contStmt state (label,args)  =
     let atm     = Automaton.mk cc.Target.cont state.inbase       in
     let copy,area,uses = IO.copyin state.cfg args 
                   cc.Target.cont state.inbase state.node in
-    let ()      = G.set_label state.cfg label copy               in
+    let copy    = G.set_label state.cfg label copy               in
     let result  = { state with
                     node     = copy
                   ; incoming = area :: state.incoming
@@ -748,8 +749,7 @@ let proc env target (*props*) asm (cconv,name,args,bdy) =
     let cfg         = G.mk ()   in 
     let priv        = Area.mk (Rtl.link "private" target.Target.pointersize) in
     let env, priv   = StackData.proc env target priv bdy in
-    let exit        = G.exit cfg in
-    let ()          = G.set_label cfg (Idgen.exit name) exit in
+    let exit        = G.set_label cfg (Idgen.exit name) (G.exit cfg) in
     let state = 
         { proc      = name       (* name of this procedure *)
         ; env       = env        (* fat environment *)

@@ -145,7 +145,7 @@ type property                   (* abstract type for data inside nodes *)
 val mk:         unit -> cfg
 
 (* label mutator/observation *)
-val set_label:  cfg -> string -> node -> unit
+val set_label:  cfg -> string -> node -> node
 val lookup:     cfg -> string -> node           (* always succeeds! *)
 
 (* cfg observation, fold order unspecified *)
@@ -230,10 +230,14 @@ an exit node.  Numbering of nodes is absent and no labels are defined.
 % ------------------------------------------------------------------ 
 
 \begin{itemize}
-\item [[set_label:  cfg -> string -> node -> unit]]: 
+\item [[set_label:  cfg -> string -> node -> node]]: 
 Assigns label to a node.  It is a checked run-time error if the node
-does not belong to the {\cfg}.  It is also a checked run-time error to
-assign a label twice.
+does not belong to the {\cfg}.  The labeled node is returned. Note: the
+returned node may or may not be the same as the one supplied as an
+argument. The reason is, that [[lookup]] creates an internal labeled
+node if the one that is asked for does not yet exist. In that case
+[[set_label]] makes the provided node a successor of the internal node
+and returns the internal node in order to get the control-flow right.
 
 \item [[lookup:  cfg -> string -> node]]: 
 Looks up a node by a label.  If a node was assigned that label before
@@ -726,7 +730,7 @@ class type cfg = object
     method entry:       node            (* entry node of this *)
     method exit:        node            (* exit node of this *)
     method lookup:      string -> node  (* find labeled node *)
-    method set_label:   string -> node -> unit  (* assign label to node *)
+    method set_label:   string -> node -> node  (* assign label to node *)
     
     method add:         node -> unit    (* add node to this; 
                                            est: enumerated = false *)
@@ -1010,7 +1014,7 @@ let upd (this:node) (map:node->node) = fun n ->
             n
 @
 
-When generating an {\AST} for each node we repeatedly have to emebd
+When generating an {\AST} for each node we repeatedly have to embed
 statements in the [[A.BodyStmt]] constructor. Using a constructor
 function makes it a little bit easier.
 
@@ -1081,10 +1085,13 @@ object (this)
         assert (NodeSet.mem node _nodes);       (* node#cfg = (this:>cfg) *)
         try 
             let d = Hashtbl.find _dummies label in
-                d#set_succ node
+                ( d#set_succ node
+                ; (d :> node)
+                )
         with Not_found ->
             ( Hashtbl.add _labels label node
             ; node#add_label label  
+            ; node
             )
 
     method add node =
@@ -1223,8 +1230,8 @@ object(this)
         let label l = stmt (A.LabelStmt (mangle l)) in
         let labels  = List.map label _labels in
         let msg     = (string_of_int _id) ^ " " ^ (this#comment) in
-        let id      = stmt (A.CommentStmt msg) in
-            id::labels
+        let id      = stmt (A.CommentStmt msg) in 
+            (* id:: *) labels
 
     method virtual linorder: node option * node list
 
