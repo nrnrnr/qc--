@@ -89,7 +89,6 @@ value.
 <<type t>>=
 type t =
     { name              : string            (* name this CC *)
-    ; wordsize          : int               (* width of SP, RA, etc *)
     ; call              : unit -> Automaton.stage
     ; results           : unit -> Automaton.stage
     ; cutto             : unit -> Automaton.stage
@@ -174,6 +173,7 @@ let young_end wordsize growth block = match growth with
     | Memalloc.Up   -> RU.addk wordsize (Block.base block) (Block.size block) 
 
 
+let wordsize t = match t.sp with (_,_,w) -> w
 let vfp wordsize             = Vfp.mk wordsize
 let std_sp_location wordsize = 
     RU.add wordsize (vfp wordsize) (R.late "minus frame size" wordsize)
@@ -198,11 +198,11 @@ allocated by the caller.
 <<callspec.ml>>=
 let prolog t = 
     C.incoming ~growth:t.stack_growth ~sp:(R.reg t.sp)
-        ~mkauto:(mk_automaton t.wordsize "in call parms" t.call)
+        ~mkauto:(mk_automaton (wordsize t) "in call parms" t.call)
                         
-        (* ~autosp:(fun _ -> vfp t.wordsize) *)
-        ~autosp:(fun a -> young_end t.wordsize t.stack_growth a.A.overflow)
-        ~postsp:(fun _ _ -> std_sp_location t.wordsize) 
+        (* ~autosp:(fun _ -> vfp (wordsize t)) *)
+        ~autosp:(fun a -> young_end (wordsize t) t.stack_growth a.A.overflow)
+        ~postsp:(fun _ _ -> std_sp_location (wordsize t)) 
 @
 
 Before the epliog, [[sp]] points at the standard location, independent
@@ -220,16 +220,16 @@ deallocate the parameter block completely.
 <<callspec.ml>>=
 let epilog t =
     C.outgoing ~growth:t.stack_growth ~sp:(R.reg t.sp)
-        ~mkauto:(mk_automaton t.wordsize "out ovfl results" t.results)
-        ~autosp:(fun r -> std_sp_location t.wordsize)
+        ~mkauto:(mk_automaton (wordsize t) "out ovfl results" t.results)
+        ~autosp:(fun r -> std_sp_location (wordsize t))
         ~postsp:(match t.overflow with
                 | {parameter_deallocator=Caller; result_allocator=Caller} ->
-                    (fun _ _ -> vfp t.wordsize) 
+                    (fun _ _ -> vfp (wordsize t)) 
                 | {parameter_deallocator=Callee; result_allocator=Caller} 
                 | {parameter_deallocator=Caller; result_allocator=Callee} 
                 | {parameter_deallocator=Callee; result_allocator=Callee} -> 
                     (fun a _ -> 
-                        young_end t.wordsize t.stack_growth a.A.overflow)
+                        young_end (wordsize t) t.stack_growth a.A.overflow)
                 )
 @
 
@@ -244,9 +244,9 @@ redundant but we cannot test for it here.
 <<callspec.ml>>=
 let call_actuals t =
     C.outgoing ~growth:t.stack_growth ~sp:(R.reg t.sp)
-        ~mkauto:(mk_automaton t.wordsize "out call parms" t.call)
-        ~autosp:(fun r  -> std_sp_location t.wordsize)
-        ~postsp:(fun a sp -> young_end t.wordsize t.stack_growth a.A.overflow)
+        ~mkauto:(mk_automaton (wordsize t) "out call parms" t.call)
+        ~autosp:(fun r  -> std_sp_location (wordsize t))
+        ~postsp:(fun a sp -> young_end (wordsize t) t.stack_growth a.A.overflow)
 @
 
 After a call the stack pointer points at the young end of the result
@@ -257,9 +257,9 @@ callee-allocated result block.
 <<callspec.ml>>=
 let call_results t =
     C.incoming ~growth:t.stack_growth ~sp:(R.reg t.sp)
-        ~mkauto:(mk_automaton t.wordsize "in ovfl results" t.results)
-        ~autosp:(fun a   -> young_end t.wordsize t.stack_growth a.A.overflow)
-        ~postsp:(fun _ _ -> std_sp_location t.wordsize) 
+        ~mkauto:(mk_automaton (wordsize t) "in ovfl results" t.results)
+        ~autosp:(fun a   -> young_end (wordsize t) t.stack_growth a.A.overflow)
+        ~postsp:(fun _ _ -> std_sp_location (wordsize t)) 
 @
 
 Parameter passing for cuts is independent of parameter passing for
@@ -268,15 +268,15 @@ procedures.
 <<callspec.ml>>=
 let also_cuts_to t =
     C.incoming ~growth:t.stack_growth ~sp:(R.reg t.sp)
-        ~mkauto:(mk_automaton t.wordsize "in cont parms" t.cutto)
-        ~autosp:(fun r   -> std_sp_location t.wordsize)
-        ~postsp:(fun _ _ -> std_sp_location t.wordsize) 
+        ~mkauto:(mk_automaton (wordsize t) "in cont parms" t.cutto)
+        ~autosp:(fun r   -> std_sp_location (wordsize t))
+        ~postsp:(fun _ _ -> std_sp_location (wordsize t)) 
 
 let cut_actuals t base  =
     C.outgoing ~growth:t.stack_growth ~sp:(R.reg t.sp) 
         ~mkauto:(fun ()  -> A.at base (t.cutto ()))
-        ~autosp:(fun r   -> R.fetch (R.reg t.sp) t.wordsize)
-        ~postsp:(fun _ _ -> R.fetch (R.reg t.sp) t.wordsize)
+        ~autosp:(fun r   -> R.fetch (R.reg t.sp) (wordsize t))
+        ~postsp:(fun _ _ -> R.fetch (R.reg t.sp) (wordsize t))
 
 @
 
@@ -284,7 +284,7 @@ On entry, the return address is in the location specified by [[t]]. We
 simply fetch it from there.
 
 <<callspec.ml>>=
-let ra_on_entry t block = R.fetch (ra t) t.wordsize
+let ra_on_entry t block = R.fetch (ra t) (wordsize t)
 @
 
 Under the [[SaveToTemp]] policy we put the return address into a
@@ -300,11 +300,11 @@ return address into a temporary on exit.
 <<callspec.ml>>=
 let ra_on_exit t saved_ra block temp = match style t with
     | ReturnAddress.KeepInPlace  -> saved_ra 
-    | ReturnAddress.SaveToTemp s -> Talloc.Multiple.loc temp s t.wordsize 
+    | ReturnAddress.SaveToTemp s -> Talloc.Multiple.loc temp s (wordsize t) 
 
 let where_to_save_ra t = fun ra_on_entry temp -> match style t with
     | ReturnAddress.KeepInPlace  -> ra t
-    | ReturnAddress.SaveToTemp s -> Talloc.Multiple.loc temp s t.wordsize 
+    | ReturnAddress.SaveToTemp s -> Talloc.Multiple.loc temp s (wordsize t) 
 
 let to_call ~cutto ~return t =
     { C.name          = t.name
@@ -314,7 +314,7 @@ let to_call ~cutto ~return t =
     ; C.results       = { C.in' = call_results t ; C.out = epilog t       }
     
     ; C.stack_growth  = t.stack_growth
-    ; C.stable_sp_loc = std_sp_location t.wordsize
+    ; C.stable_sp_loc = std_sp_location (wordsize t)
     ; C.replace_vfp   = Cfgx.Vfp.replace_with ~sp:(R.reg t.sp)
     ; C.sp_align      = t.sp_align
     ; C.ra_on_entry   = ra_on_entry t
