@@ -1,0 +1,279 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+
+@ 
+Everybody else can use a call that falls back to the fallback.
+If the types don't match, we have to do something.
+This problem has no counterpart in the C~version, in which it's up to
+each individual C~routine to worry about type mismatches.
+<<compiler ((old))>>=
+let cpscall f args g k = match f with
+  | V.Function (_, f) ->
+      k (try (f args) with
+         | V.Projection (v, what) -> <<projection error fallback>>
+         | Invalid_argument msg -> <<argument error fallback>>)
+  | v -> k (fallback "function" g (v :: args))
+
+let apply f g args = cpscall f args g (fun x -> x)
+@      
+To use a fallback or function call in a situation where we expect
+exactly one result, we adjust the results.
+We do this by maniupulating continuations.
+<<interp toplevel ((old))>>=
+let trim1 = function [] -> V.Nil | h :: t -> h
+let adjust1 (f : (V.value list -> 'answer) -> 'answer) : (V.value -> 'answer) -> 'answer =
+  fun k -> f (fun x -> k (trim1 x))
+let fb1 name state args k = k (trim1 (fallback name state args))
+@ 
+<<definitions of [[exp]] and friends ((old))>>=
+let rec exp rho = function
+  | A.Var x -> (match rho x with
+                | Global  -> fun l k -> k (getglobal g (V.String x))
+                | Local n -> fun l k -> k (Array.get l n))
+  | A.Lit v -> fun l k -> k v
+  | A.Index (tab, key) ->
+      let tab = exp rho tab in
+      let key = exp rho key in
+      fun l k -> tab l (fun t -> key l (fun v -> k (index g t v))) 
+@ 
+We could perhaps speed this up by walking the contents in advance.
+<<definitions of [[exp]] and friends ((old))>>=
+  | A.Table (lists, bindings) ->
+      let rec listbind n bs = function
+        | [] -> bs
+        | h::t -> listbind (n +. 1.0) ((V.Number n, exp rho h) :: bs) t  in
+      let rec bind bs = function
+        | [] -> bs
+        | (n, h) :: t -> bind ((V.String n, exp rho h) :: bs) t  in
+      let contents = listbind 1.0 (bind [] bindings) lists in
+      let size     = List.length contents in
+      fun l k ->
+        let t = V.Table.create size in
+        let rec walk = function
+          | [] -> k (V.Table t)
+          | (n, e) :: rest -> e l (fun v -> V.Table.bind t n v; walk rest) in
+        walk contents
+<<definitions of [[exp]] and friends ((old))>>=
+  | A.Binop (e1, op, e2) ->
+      let e1 = exp rho e1 in
+      let e2 = exp rho e2 in
+      ( match op with
+      | A.And -> fun l k -> e1 l (function V.Nil -> k V.Nil | _ -> e2 l k)
+      | A.Or  -> fun l k -> e1 l (function V.Nil -> e2 l k | v -> k v)
+      | _ -> let op = binop op in
+             fun l k -> e1 l (fun v1 -> e2 l (fun v2 -> k (op v1 v2 g))))
+  | A.Unop (op, e) ->
+      let e = exp rho e in
+      let op = unop op in
+      fun l k -> e l (fun v -> k (op v g))
+<<definitions of [[exp]] and friends ((old))>>=
+  | A.Call c ->
+      let c = call c rho in
+      fun l -> adjust1 (c l)
+@ 
+<<definitions of [[exp]] and friends ((old))>>=
+and explist rho =
+  let rec walk = function 
+    | [] -> fun l k -> k []
+    | h :: t ->
+        let h = exp rho h in
+        let t = walk t in
+        fun l k -> h l (fun v -> t l (fun vs -> k (v :: vs)))
+  in walk 
+and call c rho = match c with
+| A.Funcall (f, args) ->
+    let f    = exp rho f in
+    let args = explist rho args in
+    fun l k -> f l (fun fv -> args l (fun argv -> cpscall fv argv g k))
+| A.Methcall (obj, meth, args) ->
+    let self = exp rho obj in
+    let args = explist rho args in
+    let meth = V.String meth in
+    fun l k -> self l (fun v -> let m = index g v meth in
+               args l (fun argv -> cpscall m (v::argv) g k))
+@ 
+For statements (although not for expressions), the ordinary and return
+continuations can be static parameters.  This setup approximates
+direct threaded code.  A little ref-cell jujitsu is needed to make
+loops work.
+<<compiler ((old))>>=
+let compilers g (srcmap, debug) =
+  <<definitions of [[exp]] and friends>> in
+  let rec stmt rho s theta ret = match s with
+    | A.Stmt' (charpos, s) ->
+        if debug then
+          let where = Srcmap.location srcmap charpos in
+          let n = ref None in
+          let restore = ref (fun () -> ()) in (* will restore currentloc *) 
+          let theta' l = (!restore(); theta l) in
+          let ret' ans = (!restore(); ret ans) in
+          let stheta = stmt rho s theta' ret' in
+          fun l -> let n = g.V.currentloc in
+                   ( restore := (fun () -> g.V.currentloc <- n)
+                   ; g.V.currentloc <- Some where
+                   ; stheta l
+                   ) 
+              (* hard to maintain current line if exn raised ... *)
+        else
+          stmt rho s theta ret
+    | A.WhileDo (cond, body) ->
+        let loop_cont = ref theta in  (* to become loop continuation *)
+        let goto_head l = !loop_cont l in
+        let cond = exp (lookup rho) cond in
+        let body = block rho body goto_head ret in
+        let loop l = cond l (fun v -> if notnil v then body l else theta l) in
+        let _ = loop_cont := loop in
+        loop
+    | A.RepeatUntil (body, cond) ->
+        let loop_test = ref theta in (* to become loop-end continuation *)
+        let goto_test l = !loop_test l in
+        let cond = exp (lookup rho) cond in
+        let body = block rho body goto_test ret in
+        let loop l = cond l (fun v -> if notnil v then theta l else body l) in
+        let _ = loop_test := loop in
+        body
+    | A.If (c, t, alts, f) ->
+        let alts = (c, t) :: alts in
+        let f = block rho (match f with None -> [] | Some ss -> ss) theta ret in
+        let add (cond, body) f =
+          let cond = exp (lookup rho) cond in
+          let body = block rho body theta ret in
+          fun l -> cond l (fun v -> if notnil v then body l else f l)  in
+        List.fold_right add alts f
+    | A.Return es ->
+        let es = explist (lookup rho) es in
+        fun l -> es l ret
+    | A.Local (vs, es) ->
+        (*show_locals (List.rev_append vs rho);*)
+        stmt (List.rev_append vs rho) (A.Assign (List.map (fun x -> A.Lvar x) vs, es))
+        theta ret
+    | A.Assign (vs, [A.Call c]) ->
+        assign (lvars (lookup rho) vs) (call c (lookup rho)) theta ret
+    | A.Assign (vs, es) ->
+        assign (lvars (lookup rho) vs) (explist (lookup rho) es) theta ret
+    | A.Callstmt c -> fun l -> call c (lookup rho) l (fun _ -> theta l)
+  and block rho body theta ret = match body with
+    | [] -> theta
+    | s :: ss -> stmt rho s (block (extend rho s) ss theta ret) ret
+  and lvar rho : A.lval -> V.value array -> V.value -> unit = function
+    | A.Lvar x -> (match rho x with
+                   | Global  -> fun l v -> V.Table.bind g.V.globals (V.String x) v
+                   | Local n -> fun l v -> Array.set l n v)
+    | A.Lindex (t, key) ->
+        let t = exp rho t in
+        let key = exp rho key in
+        fun l -> t l (fun t -> key l (fun key -> (fun v -> settable g t key v)))
+  and lvars rho = function
+    | [] -> fun l vs -> ()
+    | h :: t ->
+        let h = (lvar rho h : V.value array -> V.value -> unit) in
+        let t = lvars rho t in
+        fun l ->
+          let h = h l in
+          let t = t l in
+          fun vs ->
+            let hv, tv = match vs with h::t -> h, t | [] -> V.Nil, [] in (h hv; t tv)
+  and assign left right theta ret =
+    fun l ->
+      let left = left l in
+      (right l left; theta l)
+  in stmt, block
+let stmt  g s = fst (compilers g s)
+let block g s = snd (compilers g s)
+@ 
+Function [[numlocals]] takes a sequence of statements and returns the
+maximum number of local variables declared on any path through that sequence.
+<<compiler ((old))>>=
+let rec numlocals = function
+  | [] -> 0
+  | h :: t -> numlocals t + match h with
+    | A.Stmt' (_, s)          -> numlocals [s]
+    | A.Local (vs, es)        -> List.length vs
+    | A.WhileDo     (_, body) -> numlocals body
+    | A.RepeatUntil (body, _) -> numlocals body
+    | A.If (c, t, alts, f)    ->
+        let add k (_, body) = max k (numlocals body) in
+        List.fold_left add (match f with None -> 0 | Some b -> numlocals b)
+                           ((c, t) :: alts)
+    | A.Assign _   -> 0
+    | A.Return _   -> 0
+    | A.Callstmt _ -> 0
+@ 
+Chunks are executed by compiling functions.
+<<compiler ((old))>>=
+let value_list = V.list V.value
+let lambda (g:V.state) srcdbg (file, line, col) args varargs body =
+  let n = List.length args + (if varargs then 1 else 0) + numlocals body in
+  let rho = let args' = List.rev args in if varargs then "arg" :: args' else args' in
+  let body = block g srcdbg rho body in
+  let info = V.info file line in
+  info, 
+  fun argv ->
+    let state = g in
+    let locals = Array.make n V.Nil in
+    let rec walk n formals actuals = match formals with
+      | [] -> if varargs then Array.set locals n (value_list.V.embed actuals)
+      | f :: fs ->
+          let a, a's = match actuals with [] -> V.Nil, [] | h :: t -> h, t in
+          (Array.set locals n a; walk (n+1) fs a's)  in
+    let _ = walk 0 args argv in
+    with_stack info state
+      (body (fun l -> []) (fun results -> results)) locals
+
+let (_ : V.state -> Srcmap.map * bool -> Srcmap.location -> string list -> bool -> A.block -> V.info * V.func) = lambda
+@ 
+<<compiler ((old))>>=
+let expname = function
+  | A.Var v -> v
+  | _ -> "?"
+let funname = function
+  | A.Lvar v -> v
+  | A.Lindex (e, A.Lit (V.String s)) -> expname e ^ "." ^ s
+  | A.Lindex (e, e') -> expname e ^ "[" ^ expname e' ^ "]"
+let func (info, f) = V.Function (info, f)
+let chunk ((smap, dbg) as srcdbg) rho g = function
+  | A.Debug _ -> assert false
+  | A.Statement s -> stmt g srcdbg rho s
+  | A.Fundef (pos, f, args, varargs, body) ->
+      let v = func (lambda g srcdbg (Srcmap.location smap pos) args varargs body) in
+      stmt g srcdbg rho (A.Assign ([f], [A.Lit v]))
+  | A.Methdef (pos, obj, meth, args, varargs, body) ->
+      let args = "self" :: args in
+      let v = func (lambda g srcdbg (Srcmap.location smap pos) args varargs body) in
+      stmt g srcdbg rho (A.Assign ([A.Lindex (obj, A.Lit (V.String meth))], [A.Lit v]))
+
+let rec chunklocals = function
+  | [] -> 0
+  | A.Statement s :: t -> numlocals [s] + chunklocals t
+  | _ :: t -> chunklocals t
+
+let extendchunk rho = function
+  | A.Statement s -> extend rho s
+  | _ -> rho
+
+let wrap f x = let l = f x in (prerr_string "function returned ";
+                               prerr_int (List.length l);
+                               prerr_endline " values";
+                               l)
+
+let compile ~srcdbg cs g = 
+  let locals = Array.make (chunklocals cs) V.Nil in
+  let rec chunks srcdbg rho = function
+    | [] -> fun l -> []
+    | A.Debug dbg :: t ->
+        let (src, _) = srcdbg in
+        chunks (src, dbg) rho t
+    | h :: t ->
+        let h' = chunk  srcdbg rho g h in
+        let t' = chunks srcdbg (extendchunk rho h) t in
+        h' t' (fun results -> results) in
+  let theta = chunks srcdbg [] cs in
+  fun () -> theta locals
+@ 
