@@ -17,7 +17,7 @@
 % l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
 
 % ------------------------------------------------------------------ 
-\section{Abstract Assembler Interface to the {\AST}}
+\section{Implementation of the Abstract Assembler Interface}
 % ------------------------------------------------------------------ 
 
 The \module{asm2} describes an abstract interface to assemblers. This
@@ -31,15 +31,49 @@ actions of the assembler in {\PAL}.
 The interface is a sub-type of [[Asm2.S]]: it provides everything
 outlined there, plus some extras: 
 
+<<module type s>>=
+module type S = sig
+    <<asm interface>>
+    <<extras>>
+end
+
 <<asm2ast.mli>>=
-<<asm interface>>
-<<extras>>
+<<module type s>>
+@
+
+An assembler reflects the many of the characteristics of the
+underlying target architecture.  Since {\PAL} is quite flexible with
+respect to pointer sizes, byteorder and such, we like to functorize
+our implementation over these aspects, which we call the
+\emph{personality} of the assembler.  A functor seems to be a good
+compromise between a fixed personality, and a run-time configured
+personality.
+
+The personality additionally determines the form of instructions for
+the assembler.  The implementation of this assembler treats an
+instruction like a procedure.  The precise representation of an
+instruction is hidden.  The implementation uses only the function
+[[proc_of_instr]] that translates an instruction into abstract syntax.
+
+<<module type personality>>=
+module type PERSONALITY = sig
+    val target: Target.info
+    type instruction
+    val  proc_of_instr: instruction -> Ast.proc
+end
+@
+
+<<asm2ast.mli>>=
+<<module type personality>>
+
+module Make (P: PERSONALITY): S with 
+    type instruction = P.instruction
 @
 
 The main extra functionality is provided by the [[ast]] function,
-which returns an abstract {\PAL} program for an [[asm]] value. 
-Unfortunately, it is not possible for the types [[asm]] and
-[[Ast.program]] to share the same implementation. 
+which returns an abstract {\PAL} program for an [[asm]] value. Such a
+function is necessary, because it is impossible to represent an
+[[asm]] value directly as an [[Ast.program]].
 
 <<extras>>=
 val ast:    asm -> Ast.program
@@ -47,7 +81,7 @@ val ast:    asm -> Ast.program
 
 Not every concept provided by the abstract assembler interface is
 provided by {\PAL}.  Trying to use unsupported features will result in
-the [[Unsuported]] exception.
+the [[Unsupported]] exception.
 
 <<extras>>=
 exception Unsupported of string
@@ -67,7 +101,7 @@ type size = int
 type align = int
 type reladdr
 type offset = unit
-type instruction = Ast.proc
+type instruction 
 
 val append : asm -> action -> asm
 val init : string list -> asm
@@ -82,7 +116,7 @@ val import : sym -> action
 val export : sym -> action
 val local : sym -> action
 val common : sym -> size -> align -> section -> action
-val lookup : sym -> asm -> symbol       (* Not_found *)
+val lookup : sym -> asm -> symbol           (* Not_found *)
 val define_label : symbol -> action
 val define_const : symbol -> Bits.bits -> action
 val define_local : sym -> action
@@ -106,21 +140,27 @@ val mangle : string -> sym
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
-It is a bit ironic, that the interface to assemblers (module
+It is a bit ironic, that the abstract interface to assemblers (module
 \module{asm2}) does not match perfectly with the abstract syntax of
 {\PAL}, the portable assembler. 
 
-The overall direction of this implementation is to find 
-
 <<asm2ast.ml>>=
+<<module type s>>
+<<module type personality>>
+
+module Make (P: PERSONALITY) = struct
+    type instruction = P.instruction
+
+    <<module make>>
+end
+
+<<module make>>=
 module A        = Ast
 module Symbol   = Map.Make(struct type t=string let compare=compare end)
 @
 
-
-{\PAL} does not support support all concepts provided by the abstract
-assembler interface.  Trying to use unsupported features results in an
-exception.
+The [[Unsupported]] exception is raised when using features provided
+by the interface, but not by this implementation.
  
 <<>>=
 exception Unsupported of string
@@ -128,15 +168,20 @@ let unsupported msg = raise (Unsupported msg)
 @
 
 An assembler is not independent from the personality of the underlying
-architecture. We have to make decisions about the personality of the
-{\PAL} code we are generating.
+architecture. The personality module [[P]] provides us with the
+necessary informations. The following functions helps to create types
+and values in {\AST} syntax.
 
 <<>>=
-let pointer     = A.BitsTy(32)
-let wordsize    = 32
+let pointer     = A.BitsTy(P.target.Target.pointersize)
 let bits n      = A.BitsTy n
-let int n       = A.Int(Bits.of_int n wordsize, Some (bits wordsize))
-let one         = int 1
+let int n       = A.Int( Bits.of_int n P.target.Target.wordsize
+                       , Some (bits P.target.Target.wordsize)
+                       )
+let one         = int 1 (* wordsize *)
+let zero        = A.Int( Bits.of_int 0 P.target.Target.memsize
+                       , Some (bits P.target.Target.memsize)
+                       ) (* memsize *)
 @
 
 The following types for section names, sizes and alignments are
@@ -148,6 +193,9 @@ type size       = int
 type align      = int
 @
 
+A [[sym]] value is created from the [[mangler]].  A [[symbol]]
+represents a label that was registered in the assemblers symbol table.
+
 <<>>=
 type symclass   = Import        
                 | Export
@@ -157,7 +205,7 @@ type symbol     = string * symclass
 type sym        = Sym of string
 @                
 
-An assembler program is represented by [[asm]] and it contains: 
+An assembler program is represented by an [[asm]] value; it contains: 
 
 \begin{itemize}
 \item A symbol table: the assembler interface allows to create symbols
@@ -167,8 +215,9 @@ An assembler program is represented by [[asm]] and it contains:
 \item The name of the current section.
 
 \item A list of actions belonging to the current action. For
-      efficiency, actions are inserted at the front of the list. The list
-      is reversed we the section is closed.
+      efficiency, actions are inserted at the front of the list. As a little
+      reminder, the field name is primed:  [[actions']].  The list of
+      actions is reversed we the section is closed.
 
 \item A list of sections, making up the top level of the program. Again,
       the sections are in backward order for efficiency.  The [[ast]]
@@ -179,27 +228,28 @@ An assembler program is represented by [[asm]] and it contains:
 <<>>=
 type asm =      { symbols:      symbol Symbol.t
                 ; section:      string
-                ; actions:      A.section list
-                ; toplevel:     (string * A.section list) list
+                ; actions':     A.section list
+                ; toplevel':    (string * A.section list) list
                 }
 @
 
-The initially empty {\PAL} program puts everything into the ``default''
-section.  This is admittedly ugly. 
+The initially empty {\PAL} program puts everything into the ``this
+can't happen'' section.  This is admittedly ugly. 
 
 <<>>=
 let init args =
     { symbols           = Symbol.empty
-    ; section           = "default"
-    ; actions           = []
-    ; toplevel          = []
+    ; section           = "this can't happen"
+    ; actions'          = []
+    ; toplevel'         = []
     }
 @
 
 An assembly [[action]] roughly corresponds to an [[Ast.section]]. 
-Unfortunately this correspondence does not always and thus actions
-must be categorized.  The effect of the [[append]] function, that adds
-an action to an assembly program depends on the category of an action.
+Unfortunately this correspondence does not always hold and thus
+actions must be categorized.  The effect of the [[append]] function
+that adds an action to an assembly program depends on the category of
+an action.
 
 <<>>=
 type action     = NewSection    of string
@@ -226,25 +276,27 @@ order, but the order of sections is still reversed.
 let append asm = function
     | NewSection s -> 
         { asm with 
-          toplevel = (asm.section, List.rev asm.actions)
-                   :: asm.toplevel
-        ; section  = s
-        ; actions  = []             
+          toplevel' = ( match asm.actions' with 
+                      | [] -> asm.toplevel'  (* drop empty section *)
+                      | aa -> (asm.section, List.rev aa) :: asm.toplevel'
+                      )
+        ; section   = s
+        ; actions'  = []             
         }
     
     | CurSection x ->
-        { asm with actions = x :: asm.actions }
+        { asm with actions' = x :: asm.actions' }
     | DefSym (n,c) -> 
         if Symbol.mem n asm.symbols
         then asm
         else let actions = 
             ( match c with
-            | Import   -> A.Decl(A.Import(pointer,[(None,n)])) :: asm.actions
-            | Export   -> A.Decl(A.Export(None,[(n,None)])) :: asm.actions
-            | Local    -> asm.actions (* ignored - ok ?*)
-            | Common _ -> asm.actions (* ignored *)
+            | Import   -> A.Decl(A.Import(pointer,[(None,n)])) :: asm.actions'
+            | Export   -> A.Decl(A.Export(None,[(n,None)])) :: asm.actions'
+            | Local    -> asm.actions' (* ignored - ok ?*)
+            | Common _ -> asm.actions' (* ignored *)
             ) in { asm with 
-                   actions = actions
+                   actions' = actions
                  ; symbols = Symbol.add n (n,c) asm.symbols
                  }
     | Nop          -> asm
@@ -252,18 +304,18 @@ let append asm = function
 
 The [[ast]] function provides the abstract {\PAL} syntax of the
 ``assembly'' program.  It closes the current section and reverse the
-list of sections of [[asm.toplevel]] before returning them.
+list of sections of [[asm.toplevel']] before returning them.
 
 <<>>=
 let ast asm = 
-    let section  = (asm.section, List.rev asm.actions) in
-    let toplevel = List.rev (section :: asm.toplevel)  in
+    let section  = (asm.section, List.rev asm.actions') in
+    let toplevel = List.rev (section :: asm.toplevel')  in
         List.map (fun (name,sect) -> A.Section(name,sect)) toplevel
 @
 
 
 The semantics of the following functions is mostly determined by the
-assembly interface.  Hoewever, this translation to {\PAL} is imperfect
+assembly interface.  However, this translation to {\PAL} is imperfect
 in some cases. 
 
 [[section]] closes the [[current]] section and starts a new one.
@@ -279,7 +331,7 @@ For completeness, a \emph{no-operation} is provided.
 let nop = Nop
 @
 
-Our Assembler does not announce procedures.  Since instructions are
+Our assembler does not announce procedures.  Since instructions are
 {\PAL} procedures, we rely on them to do The Right Thing.
 
 <<>>=
@@ -287,17 +339,27 @@ type proc_info = unit
 let proc () = Nop
 @
 
-{\PAL} provides no concept of a direclty accessible location counter
-and thus it can't be set.  Should the [[addloc]] be made a synonym for
-[[zeroes]]?  Since all code we are generating here are outside of
-procedures the [[align]] action must denote an alignment for data and
-can not denote an align statement.
+{\PAL} provides no concept of a directly accessible location counter
+and thus it can't be set.  Since all code we are generating here are
+outside of procedures the [[align]] action must denote an alignment
+for data and can not denote an align statement.
 
 <<>>=
 let org    n = unsupported "no location counter in this implementation"
-let addloc n = unsupported "no location counter in this implementation"
 let align  n = CurSection(A.Datum(A.Align n))
 @
+
+We represent [[addloc]] that advances the location counter by emitting
+uninitialized data.
+
+<<>>=
+let addloc n = 
+    let memsize = P.target.Target.memsize in
+    let ty      = bits memsize            in
+    let size    = int n                   in
+        CurSection(A.Datum(A.MemDecl(ty,A.FixSize(size),None)))
+@
+    
 
 The actions related to symbols define new symbols, which are also entered
 to the symbol table. The [[lookup]] function helps to find them.
@@ -319,6 +381,8 @@ let define_const (n,c) b    =
 let define_local (Sym n)    = CurSection(A.Datum(A.Label n))
 @
 
+This implementation does not support relocatable addresses. 
+
 <<>>=
 type reladdr = sym
 type offset  = unit
@@ -329,24 +393,47 @@ let reladdr (n,c) () = (Sym n)
 @
 
 <<>>=
-type instruction = A.proc
-let instr i = CurSection(A.Procedure(i))
+let instr i = CurSection(A.Procedure(P.proc_of_instr i))
 @
 
+The [[zeroes n]] function emits [[bits8[n]{0,0,...,0]], where
+[[bits8]] is the type for [[memsize]].
+
 <<>>=
-let zeroes n = CurSection(A.Datum(A.MemDecl(bits 8,A.FixSize(int n), None)))
+let zeroes n = 
+    let memsize = P.target.Target.memsize in
+    let ty      = bits memsize            in
+    let size    = int n                   in
+    let rec z   = function
+        | 0 -> []
+        | n -> zero :: z (n-1)            in
+    let init n  = Some(A.InitExprs(z n))  in
+        if n = 0 
+        then Nop
+        else CurSection(A.Datum(A.MemDecl(ty,A.FixSize(size),init n)))
+<<>>=        
 let value  v = 
     let ty   = bits (Bits.width v)              in
     let init = A.InitExprs([A.Int(v, Some ty)]) in
         CurSection(A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
+<<>>=
 let addr (Sym a)   =
     let ty   = pointer in
     let init = A.InitExprs([A.Fetch(A.Var(None,a))]) in
         CurSection(A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
-@
 
 <<>>=
-let byteorder = Fenv.Clean.Big
+let byteorder = match P.target.Target.byteorder with
+    | Rtl.BigEndian    -> Fenv.Clean.Big
+    | Rtl.LittleEndian -> Fenv.Clean.Little
+    | _                -> assert false
+@
+
+We can't emmitit comments (at the moment), because the {\AST} provides
+only a comment \emph{statement}.  Statements are part of procedures
+which this code does not deal with.
+
+<<>>=
 let comment n = Nop
 @
 
