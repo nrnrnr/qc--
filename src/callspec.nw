@@ -34,7 +34,9 @@ When a (general) register is spilled, a stack slot must be allocated. A
 
 <<callspec.mli>>=
 type nvr_saver = Talloc.Multiple.t -> Register.t -> Rtl.loc
-val save_nvrs: Space.t list -> nvr_saver
+(* suggested by NR, but not used 
+ * val save_nvrs: Space.t list -> nvr_saver
+ *)
 @
 
 \paragraph{Return Address} The return address is the address a procedure
@@ -62,7 +64,8 @@ end
 @
 
 NR suggested to provide the following functions. The problem is that an
-implementation needs to know abot which spaces to use for temporaries.
+implementation needs to know about which spaces to use for temporaries,
+conventional return addresses and other informations not available.
 They are currently unimplemented.
 
 <<suggested functions>>=
@@ -82,7 +85,7 @@ value.
 <<type t>>=
 type t =
     { name              : string            (* name this CC *)
-    ; wordsize          : int
+    ; wordsize          : int               (* width of SP, RA, etc *)
     ; call              : unit -> Automaton.implementation
     ; results           : unit -> Automaton.implementation
     ; cutto             : unit -> Automaton.implementation
@@ -136,7 +139,6 @@ let c_overflow =
 
 type nvr_saver = Talloc.Multiple.t -> Register.t -> Rtl.loc
 
-let save_nvrs spaces tmp r = assert false
 
 module ReturnAddress = struct
     type style  =
@@ -145,7 +147,13 @@ module ReturnAddress = struct
 end    
 
 <<type t>>
+@
 
+We want to abstract from the direction of stack growth. Therefore, we
+rather talking about the high and low end of a block we want to talk
+about its young or old end.
+
+<<callspec.ml>>=
 let old_end wordsize growth block = match growth with
     | Memalloc.Down -> RU.addk wordsize (Block.base block) (Block.size block)
     | Memalloc.Up   -> Block.base block
@@ -161,7 +169,12 @@ let std_sp_location wordsize =
 
 let mk_automaton wordsize block_name automaton = fun () ->
     Block.srelative (vfp wordsize) block_name A.at (automaton ())
+@
 
+Small utilities to observe the return address location and its policy
+independently.
+
+<<callspec.ml>>=
 let ra t    = fst t.ra
 let style t = snd t.ra
 @
@@ -179,8 +192,8 @@ let prolog t =
         ~postsp:(fun _ _ -> std_sp_location t.wordsize) 
 @
 
-Before the epliog, [[sp]] points at the standard location independent of
-the overflow policy. Whereever the result is placed, it must be
+Before the epliog, [[sp]] points at the standard location, independent
+of the overflow policy. Whereever the result is placed, it must be
 deallocated by the caller and thus we cannot dealloate it. 
 
 There is one problematic case: when the callee deallocates the
@@ -209,7 +222,7 @@ let epilog t =
 
 A call always allocates space for outgoing parameters, independent of
 who deallocates it.  Currently the space for results that the caller
-associates is overlapped with the block for outgoing parameters, so no
+allocates is overlapped with the block for outgoing parameters, so no
 extra action is required. The young end of the outgoing block might or
 might not be the standard location, depending on the stack layout
 specified in Lua. Therefore, the move to the young end might be
@@ -225,7 +238,7 @@ let call_actuals t =
 
 After a call the stack pointer points at the young end of the result
 overflow block. We have to move it back to the standard location. This
-might or might not be the same. If it is not, this will deallocate any
+might or might not be redundant. If it is not, this will deallocate any
 callee-allocated result block.
 
 <<callspec.ml>>=

@@ -204,10 +204,6 @@ on it.
 <<Lua compiler configuration>>=
 Alpha        = {} or Alpha
 Alpha.layout = { creates='no late consts' } -- what is this for? -CL
-
-function Alpha.layout.fn(dummy,proc) --- dispatch on cc name
-    return Alpha.layout[Stack.ccname(proc)](dummy, proc)
-end
 @
 
 The following layout assumes the stack pointer does not move,
@@ -250,10 +246,20 @@ The [[cmm]] conventions are part of an experimental setup to test the
 [[callspec]] interface to define calling conventions.
 
 <<Lua compiler configuration>>=
-function Alpha.layout["cmm0"] = Alpha.layout["C"]
-function Alpha.layout["cmm1"] = Alpha.layout["C"]
-function Alpha.layout["cmm2"] = Alpha.layout["C"]
-function Alpha.layout["cmm3"] = Alpha.layout["C"]
+Alpha.layout["cmm"]  = Alpha.layout["C"]
+Alpha.layout["cmm0"] = Alpha.layout["C"]
+Alpha.layout["cmm1"] = Alpha.layout["C"]
+Alpha.layout["cmm2"] = Alpha.layout["C"]
+Alpha.layout["cmm3"] = Alpha.layout["C"]
+
+function Alpha.layout.fn(dummy,proc) 
+    local cc = Stack.ccname(proc)
+    if Alpha.layout[cc] == nil then
+        error("no layout for convention "..cc)
+    else    
+        return (Alpha.layout[cc](dummy, proc))
+    end    
+end
 @
   
 % ------------------------------------------------------------------ 
