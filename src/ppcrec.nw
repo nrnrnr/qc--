@@ -44,7 +44,7 @@ let sprintf = Printf.sprintf
 \subsection{Utilities}
 % ------------------------------------------------------------------ 
 <<code to precede the labeler>>=
-let cat = String.concat ""
+let s = Printf.sprintf
 @   
 The [[guard]] function turns a predicate into a cost.
 <<code to precede the labeler>>=
@@ -89,8 +89,8 @@ const32:  Bits(bits) [{: guard (fits bits 32) :}] {: Bits.to_decimal_string bits
 const16:  Bits(bits) [{: guard (fits bits 16) :}] {: Bits.to_decimal_string bits :}
 
 lconst: Link(symbol, w:int)        {: symbol#mangled_text :}
-pic:    Diff(c1:lconst, c2:lconst) {: c1 ^ "-" ^ c2 :}
-pic:    Fetch(Mem(Diff(c1:lconst, c2:lconst)), w2:int) {: c1 ^ "-" ^ c2 :}
+pic:    Diff(c1:lconst, c2:lconst) {: s "%s-%s" c1 c2 :}
+pic:    Fetch(Mem(Diff(c1:lconst, c2:lconst)), w2:int) {: s "%s-%s" c1 c2 :}
 @ 
 \paragraph{Registers}
 <<rules>>=
@@ -107,62 +107,60 @@ cr:   Fetch(crl,  32) {: () :}
 lr:   Fetch(lrl,  32) {: () :}
 sp:   Fetch(spl,  32) {: () :}
 
-regl: Reg('r', n:int) [{: guard (n<>0) :}] {: "r" ^ string_of_int n :}
+regl: Reg('r', n:int) [{: guard (n<>0) :}] {: s "r%d" n :}
 reg:  Fetch(regl, 32) {: regl :}
 @
 \paragraph{Addresses}
 <<rules>>=
-addr: const16                 {: const16 ^ "(r0)"          :}
-addr: reg                     {:          "0(" ^ reg ^ ")" :}
-addr: Add(reg, const16)       {: const16 ^ "(" ^ reg ^ ")" :}
+addr: const16                 {: s "%s(r0)" const16     :}
+addr: reg                     {: s  "0(%s)" reg         :}
+addr: Add(reg, const16)       {: s "%s(%s)" const16 reg :}
 
-ndx_addr: Add(reg1:reg, reg2:reg) {: reg1 ^","^ reg2 :}
+ndx_addr: Add(reg1:reg, reg2:reg) {: s "%s,%s" reg1 reg2 :}
 @
 \paragraph{Data Movement}
 <<rules>>=
-inst: Store(regl, reg, w:int) {: "mr " ^ regl ^ "," ^ reg :}
-inst: Store(regl,  lr, w:int) {: "mflr " ^ regl :}
-inst: Store(lrl,  reg, w:int) {: "mtlr " ^ reg  :}
-inst: Store(regl,  cr, w:int) {: "mfcr " ^ regl :}
+inst: Store(regl, reg, w:int) {: s "mr %s,%s" regl reg :}
+inst: Store(regl,  lr, w:int) {: s "mflr %s" regl :}
+inst: Store(lrl,  reg, w:int) {: s "mtlr %s" reg  :}
+inst: Store(regl,  cr, w:int) {: s "mfcr %s" regl :}
 
-inst: Store(regl,                const16, 32) {: "addi " ^ regl ^",0,"^ const16 :}
-inst: Store(Slice(16, 0, regl),  const16, 16) {: "addi "  ^ regl ^",0,"^ const16 :}
-inst: Store(Slice(16, 16, regl), const16, 16) {: "addis " ^ regl ^","^ regl ^","^ const16 :}
+inst: Store(regl,                const16, 32) {: s "addi %s,0,%s" regl const16 :}
+inst: Store(Slice(16, 0, regl),  const16, 16) {: s "addi %s,0,%s" regl const16 :}
+inst: Store(Slice(16, 16, regl), const16, 16) {: s "addis %s,%s,%s" regl regl const16 :}
 
-inst: Store (regl, Fetch(Mem(addr    ),32), 32)     {: "lwz "   ^ regl ^","^ addr  :}
-inst: Store (regl, Fetch(Mem(ndx_addr),32), 32)     {: "lwzx "  ^ regl ^","^ ndx_addr :}
-inst: Store (regl, Zx(Fetch(Mem(addr),8)), 32)      {: "lbz "   ^ regl ^","^ addr  :}
-inst: Store (regl, Zx(Fetch(Mem(ndx_addr),8)), 32)  {: "lbzx "  ^ regl ^","^ ndx_addr  :}
-inst: Store (regl, Zx(Fetch(Mem(addr),16)), 32)     {: "lhz "   ^ regl ^","^ addr  :}
-inst: Store (regl, Zx(Fetch(Mem(ndx_addr),16)), 32) {: "lhzx "  ^ regl ^","^ ndx_addr  :}
-inst: Store (regl, Sx(Fetch(Mem(addr),8)), 32)      {: "lbz "   ^ regl ^","^ addr ^ "\n\t" ^
-                                                       "extsb " ^ regl ^","^ regl :}
-inst: Store (regl, Sx(Fetch(Mem(ndx_addr),8)), 32)  {: "lbzx "  ^ regl ^","^ ndx_addr ^ "\n\t" ^
-                                                       "extsb " ^ regl ^","^ regl :}
-inst: Store (regl, Sx(Fetch(Mem(addr),16)), 32)     {: "lha "   ^ regl ^","^ addr  :}
-inst: Store (regl, Sx(Fetch(Mem(ndx_addr),16)), 32) {: "lhax "  ^ regl ^","^ ndx_addr  :}
+inst: Store (regl, Fetch(Mem(addr    ),32), 32)     {: s "lwz %s,%s" regl addr  :}
+inst: Store (regl, Fetch(Mem(ndx_addr),32), 32)     {: s "lwzx %s,%s" regl ndx_addr :}
+inst: Store (regl, Zx(Fetch(Mem(addr),8)), 32)      {: s "lbz %s,%s" regl addr  :}
+inst: Store (regl, Zx(Fetch(Mem(ndx_addr),8)), 32)  {: s "lbzx %s,%s" regl ndx_addr  :}
+inst: Store (regl, Zx(Fetch(Mem(addr),16)), 32)     {: s "lhz %s,%s" regl addr  :}
+inst: Store (regl, Zx(Fetch(Mem(ndx_addr),16)), 32) {: s "lhzx %s,%s" regl ndx_addr  :}
+inst: Store (regl, Sx(Fetch(Mem(addr),8)), 32)
+    {: s "lbz %s,%s\n\textsb %s,%s" regl addr regl regl :}
+inst: Store (regl, Sx(Fetch(Mem(ndx_addr),8)), 32)
+    {: s "lbzx %s,%s\n\textsb %s,%s" regl ndx_addr regl regl :}
+inst: Store (regl, Sx(Fetch(Mem(addr),16)), 32)     {: s "lha %s,%s" regl addr  :}
+inst: Store (regl, Sx(Fetch(Mem(ndx_addr),16)), 32) {: s "lhax %s,%s" regl ndx_addr  :}
 
-inst: Store (Mem(addr    ), reg, 32)           {: "stw "  ^ reg ^","^ addr  :}   
-inst: Store (Mem(ndx_addr), reg, 32)           {: "stwx " ^ reg ^","^ ndx_addr :}
-inst: Store (Mem(addr    ), Lobits(reg, 8), 8) {: "stb "  ^ reg ^","^ addr  :}
-inst: Store (Mem(ndx_addr), Lobits(reg, 8), 8) {: "stbx " ^ reg ^","^ ndx_addr  :}
-inst: Store (Mem(addr    ), Lobits(reg,16),16) {: "sth "  ^ reg ^","^ addr  :}
-inst: Store (Mem(ndx_addr), Lobits(reg,16),16) {: "sthx " ^ reg ^","^ ndx_addr  :}
+inst: Store (Mem(addr    ), reg, 32)           {: s "stw %s,%s" reg addr  :}   
+inst: Store (Mem(ndx_addr), reg, 32)           {: s "stwx %s,%s" reg ndx_addr :}
+inst: Store (Mem(addr    ), Lobits(reg, 8), 8) {: s "stb %s,%s" reg addr  :}
+inst: Store (Mem(ndx_addr), Lobits(reg, 8), 8) {: s "stbx %s,%s" reg ndx_addr  :}
+inst: Store (Mem(addr    ), Lobits(reg,16),16) {: s "sth %s,%s" reg addr  :}
+inst: Store (Mem(ndx_addr), Lobits(reg,16),16) {: s "sthx %s,%s" reg ndx_addr  :}
 @ 
 \paragraph{Position-independent Code}
 <<rules>>=
 inst:  Store(regl, Add(reg,pic), 32)
-       {: "addis " ^ regl ^ ","^ reg ^",ha16(" ^ pic ^ ")\n\t" ^
-          "la "    ^ regl ^ ",lo16(" ^ pic ^ ")(" ^ regl ^ ")" :}
+    {: s "addis %s,%s,ha16(%s)\n\tla %s,lo16(%s)(%s)" regl reg pic regl pic regl :}
 
 inst:  Store(regl, pic, 32)
-       {: "li " ^ regl ^ ",ha16(" ^ pic ^ ")\n\t" ^
-          "la " ^ regl ^ ",lo16(" ^ pic ^ ")(" ^ regl ^ ")" :}
+    {: s "li %s,ha16(%s)\n\tla %s,lo16(%s)(%s)" regl pic regl pic regl :}
 @
 \paragraph{Control Flow}
 <<rules>>=
-inst:  Goto(lconst) {: "b " ^ ind_addr lconst :}
-inst:  Goto(lr)     {: "blr"                  :}
+inst:  Goto(lconst) {: s "b %s" (ind_addr lconst) :}
+inst:  Goto(lr)     {: "blr"                      :}
 @
 The [[cut to]] is supposed to look atomic, but it is a sequence of two
 instructions. 
@@ -174,76 +172,72 @@ instruction following the branch instruction.
 <<rules>>=
 next:  Add(cia,const32) {: () :}
 inst:  Par(Goto(lr    ), Store(lrl,next,32)) {: "blrl" :}
-inst:  Par(Goto(lconst), Store(lrl,next,32)) {: "bl " ^ ind_addr lconst :}
+inst:  Par(Goto(lconst), Store(lrl,next,32)) {: s "bl %s" (ind_addr lconst) :}
 @
-
 Here are conditional branches. The {\rtl} operator names fit the {\mips}
 assembly branch op-codes. We cannot inline the [[Cmp]] constructor
 because the [[op]] terminal symbol would be unaccessible. Only top-level
 terminals are in scope for the semantic action.
-
 <<rules>>=
-cmp:   Cmp(op:string, x:reg, y:reg) {: ("",  ppc_op op,x,y) :}
+cmp:   Cmp(op:string, x:reg, y:reg)     {: ("",  ppc_op op,x,y) :}
 cmp:   Cmp(op:string, x:reg, y:const16) {: ("i", ppc_op op,x,y) :}
 inst:  Guarded(cmp,Goto(lconst)) 
-       {: match cmp with
-          | (i_, (l_, op),x,y) -> "cmp" ^ l_ ^ "w" ^ i_ ^ " cr0," ^ x ^ "," ^
-                                  y ^ "\n\tb" ^ op ^ " " ^ lconst
+       {: let (i_, (l_, op), x, y) = cmp in
+          s "cmp%sw%s cr0,%s,%s\n\tb%s %s"  l_ i_ x y op lconst
        :}
 inst : Guarded(OvSet(Fetch(xerl,32)), Goto(lconst))
-       {: "bo " ^ lconst :}
+       {: s "bo %s" lconst :}
 @ 
 \paragraph{Instructions}
 <<rules>>=
 
-inst: Store(regl,  Add(x:reg, y:reg), 32)       {: sprintf "add  %s,%s,%s" regl x y :}
-inst: Store(regl,  Add(x:reg, y:const16), 32)   {: sprintf "addi %s,%s,%s" regl x y :}
+inst: Store(regl,  Add(x:reg, y:reg), 32)       {: s "add  %s,%s,%s" regl x y :}
+inst: Store(regl,  Add(x:reg, y:const16), 32)   {: s "addi %s,%s,%s" regl x y :}
 
-inst: Store(regl, Unop (opr:string, x:reg),           32) {: sprintf "%s  %s,%s"    opr regl x :}
-inst: Store(regl, Binop(opr:string, x:reg,y:reg),     32) {: sprintf "%s  %s,%s,%s" opr regl x y :}
-inst: Store(regl, Binop(opr:string, x:reg,y:const16), 32) {: sprintf "%si %s,%s,%s" opr regl x y :}
+inst: Store(regl, Unop (opr:string,x:reg),      32) {: s "%s  %s,%s"    opr regl x :}
+inst: Store(regl, Binop(opr:string,x:reg,y:reg),32) {: s "%s  %s,%s,%s" opr regl x y :}
+inst: Store(regl, Binop(opr:string,x:reg,y:const16), 32)
+    {: s "%si %s,%s,%s" opr regl x y :}
 @
 \paragraph{Support for debugging}
 If an RTL should fail to match, one can uncomment the following rule
 and get a printout of exactly how that RTL is represented using {\burg}
 constructors. 
 <<rules>>=
-inst : any [100] {: "<" ^ any ^ ">" :}
+inst : any [100] {: s "<%s>" any :}
 
 any : True  () {: "True"  :}
 any : False () {: "False" :}
-any : Link(symbol, w:int) {: "Link(" ^ symbol#mangled_text ^ "," ^ string_of_int w ^ ")" :}
-any : Diff(c1:any, c2:any) {: "Diff(" ^ c1 ^ ", " ^ c2 ^ ")" :}
+any : Link(symbol, w:int) {: s "Link(%s,%d)" (symbol#mangled_text) w :}
+any : Diff(c1:any, c2:any) {: s "Diff(%s, %s)" c1 c2 :}
 any : Bits(bits)     {: sprintf "Bits(%s)" (Bits.to_string bits) :}
 
-any : Fetch (any, w:int) {: "Fetch(" ^ any ^ "," ^ string_of_int w ^ ")" :}
+any : Fetch (any, w:int) {: s "Fetch(%s,%d)" any w :}
 
-any : Sx(any)           {: "Sx(" ^ any ^ ")"  :}
-any : Zx(any)           {: "Zx(" ^ any ^ ")"  :}
-any : Add(x:any, y:any) {: "Add(" ^ x ^ ", " ^ y ^ ")" :}
+any : Sx(any)           {: s "Sx(%s)" any  :}
+any : Zx(any)           {: s "Zx(%s)" any  :}
+any : Add(x:any, y:any) {: s "Add(%s, %s)" x y :}
 
-any : Unop (op:string, x:any)         {: op ^ " of " ^ x  :}
-any : Binop(op:string, x:any, y:any)  {: op ^ " of " ^ x ^ "," ^ y  :}
+any : Unop (op:string, x:any)         {: s "%s of %s" op x  :}
+any : Binop(op:string, x:any, y:any)  {: s "%s of %s,%s" op x y  :}
 
 any : Nop () {: "nop" :}
 
-any : Lobits(any, w:int) {: "Lobits(" ^ any ^ ", " ^ string_of_int w ^ ")" :}
+any : Lobits(any, w:int) {: s "Lobits(%s, %d)" any w :}
 any : BitExtract(lsb:any, y:any, n:int) {: sprintf "BitExtract(%s, %s, %d)" lsb y n :}
 
 any : Slice(w:int, n:int, y:any) {: sprintf "Slice(%d, %d, %s)" w n y :}
 
-any : Mem(any) {: "Mem(" ^any ^ ")" :}
+any : Mem(any) {: s "Mem(%s)" any :}
 any : Reg(char, n:int) {: sprintf "Reg(%s, %d)" (Char.escaped char) n :}
 
-any : Store (dst:any, src:any, w:int)
- {: "Store(" ^ dst ^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
-any : Kill(any) {: "Kill(" ^ any ^ ")" :}
+any : Store (dst:any, src:any, w:int) {: s "Store(%s,%s,%d)" dst src w :}
+any : Kill(any) {: s "Kill(%s)" any :}
 
-any : Guarded(guard:any, any) {: "Guarded(" ^ guard ^ "," ^ any ^ ")" :}
-any : Cmp(op:string, x:any, y:any)    
-                        {: cat [ "Cmp(";op;",";x;",";y;")" ] :}
-any : Par(l:any, r:any) {: "Par(" ^ l ^ "," ^ r ^ ")" :}
-any : Goto(any) {: "Goto(" ^ any ^ ")" :}
+any : Guarded(guard:any, any) {: s "Guarded(%s,%s)" guard any :}
+any : Cmp(op:string, x:any, y:any) {: s "Cmp(%s,%s,%s)" op x y :}
+any : Par(l:any, r:any) {: s "Par(%s,%s)" l r :}
+any : Goto(any) {: s "Goto(%s)" any :}
 @
 
 
@@ -347,7 +341,7 @@ let to_asm r i =
     let plan = rtl (Down.rtl r) in
     plan.inst.Camlburg.action ()
   with 
-  | Camlburg.Uncovered -> cat [" not an instruction: " ; RU.ToString.rtl r]
+  | Camlburg.Uncovered -> " not an instruction: " ^ RU.ToString.rtl r
   | Error msg -> (errmsg r msg; " error in recognizer: " ^ msg)
 
 let is_instruction r =
