@@ -38,17 +38,19 @@ val locwidth' : Rtl.Private.loc -> Rtl.width
 @ 
 
 For liveness analysis, we need to know what registers are read and
-written.
-We provide a suitable catamorphism (folding operator).
-This operator runs \emph{after} creation time, and it announces
-\emph{only} locations that seem ``register-like,'' i.e., spaces
-indexed by constants.
-N.B.~it cannot distinguish fixed registers or references to fixed
-locations in memory;
-it is up to the client to ignore these as appropriate.
-This operator does, however, ignore slices, since we think they aren't
-of interest to any liveness analysis.
-(This is going to be wrong if we have to manage condition codes.)
+written.  We provide a suitable catamorphism (folding operator).  This
+operator runs \emph{after} creation time, and it announces \emph{only}
+locations that seem ``register-like,'' i.e., spaces indexed by
+constants.  N.B.~it cannot distinguish fixed registers or references
+to fixed locations in memory; it is up to the client to ignore these
+as appropriate.  This operator does, however, ignore slices, since we
+think they aren't of interest to any liveness analysis.  (This is
+going to be wrong if we have to manage condition codes.)
+
+The order registers are announced to [[read]] and [[write]] is
+unspecified.  Beware of this when dealing with {\rtl}s that read and
+write the same register!
+
 <<rtlutil.mli>>=
 type 'a regfun = Rtl.space -> index:Base.std_int -> Rtl.width -> 'a -> 'a
 val read_write_lists : read:'a regfun -> write:'a regfun -> Rtl.rtl -> 'a -> 'a

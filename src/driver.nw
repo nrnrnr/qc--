@@ -343,6 +343,36 @@ let compile target file =
             )
 @
 
+The command line flags [[-version]] and [[-help]] trigger short
+messages going to stdout.  The [[usage]] function is also called from
+[[main]] when the command line syntax is wrong. 
+
+<<driver.ml>>=
+let version () =
+    ( This.name     stdout 
+    ; output_string stdout " "
+    ; This.version  stdout 
+    ; output_string stdout "\n(c) 2000 President and Fellows of Harvard University" 
+    ; output_string stdout "\nhttp://www.cminusminus.org/\n"
+    )
+@
+
+<<driver.ml>>=
+let usage this =
+  let msg = 
+  [   "\t -help                      (this to stdout)"
+  ;   "\t -version                   (version to stdout)"
+  ;   "\t -lex file.c--              (scan file)"
+  ;   "\t -asdl file.c--             (parse file)"
+  ;   "\t -pp [-w width] file.c--    (parse and pretty print file for width)"
+  ;   "\t -check file.c--            (check static semantics of file)"
+  ;   "\t -ir file.c--               (create abstract c-- )"
+  ;   "\t file.c--                   (same as -check file)"
+  ] in
+    Printf.printf "%s command line syntax\n" this ;
+    List.iter print_endline msg
+@
+
 % ------------------------------------------------------------------ 
 \subsection{Dispatch over command line options}
 % ------------------------------------------------------------------ 
@@ -355,8 +385,8 @@ expexted to be handled by the \module{main} module.
 let dispatch cmd = 
     try 
         ( match cmd with 
-        | Cmdline.Help                  -> assert false
-        | Cmdline.Version               -> assert false
+        | Cmdline.Help                  -> usage "qc--"   ; 0
+        | Cmdline.Version               -> version ()     ; 0
         | Cmdline.Lex(file)             -> lex  file      ; 0
         | Cmdline.Asdl(file)            -> asdl file      ; 0
         | Cmdline.PP(file,width)        -> pp file width  ; 0
