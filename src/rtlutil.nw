@@ -1,4 +1,3 @@
-% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 
 % l2h substitution cfg CFG
@@ -17,100 +16,54 @@
 % l2h substitution forall forall
 % l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
 
-\input{../config/macros.tex}
 
-% ----------------------------------------------------------------
-\section{Utility functions on RTLs}
-% ----------------------------------------------------------------
+% ------------------------------------------------------------------ 
+\section{RTL Utilities}
+% ------------------------------------------------------------------ 
 
-Code that builds or manipulates {\rtl}s tends to use the same
-functionality over and over again. We try to define some useful values
-here.
+This module provides functions to observe and transform {\rtl}s. 
 
-The [[width]] of an expression is only defined for value-expressions,
-but not for conditions.  Applying [[width]] to a condition will result
-in an assertion failure.  
+Locations and expressions have a \emph{width} that can be observed. The
+exception are expressions that use primitive functions on the outermost
+level; therefore the use of [[Width.exp]] is deprecated.
 
 <<rtlutil.mli>>=
-val locwidth  : Rtl.loc -> Rtl.width
-val locwidth' : Rtl.Private.loc -> Rtl.width (* always succeeds *)
+module Width: sig
+    val loc:    Rtl.loc -> int
+    val exp:    Rtl.exp -> int
+end 
 @
 
-For liveness analysis, we need to know what registers are read and
-written.  We provide a suitable catamorphism (folding operator).  This
-operator runs \emph{after} creation time, and it announces \emph{only}
-locations that seem ``register-like,'' i.e., spaces indexed by
-constants.  N.B.~it cannot distinguish fixed registers or references
-to fixed locations in memory; it is up to the client to ignore these
-as appropriate.  This operator does, however, ignore slices, since we
-think they aren't of interest to any liveness analysis.  (This is
-going to be wrong if we have to manage condition codes.)
-
-The order registers are announced to [[read]] and [[write]] is
-unspecified.  Beware of this when dealing with {\rtl}s that read and
-write the same register!
+A \emph{register} is an {\rtl} location that is addressed by a known
+(integer) value (c.f.~module \module{register}. These values are of
+special interest for liveness analysis and it is important to know,
+which registers are read or written by an {\rtl}. We provide two methods
+to observe an {\rtl}'s registers: [[fold]] scans an [[Rtl.rtl]] value
+and reports any register in a read or write position to a function. This
+does not require heap allocation and is therefore efficient.  The
+slightly less efficient function [[sets]] reports registers in read and
+write positions as sets.
 
 <<rtlutil.mli>>=
-type 'a regfun = Rtl.space -> index:Base.std_int -> Rtl.width -> 'a -> 'a
-val read_write_lists : read:'a regfun -> write:'a regfun -> Rtl.rtl -> 'a -> 'a
-(*
-  let read_write_sets read write rtl z =
-    let rws = read_write_lists insert_left insert_right in
-    let (readlist, writelist) = rws rtl (empty, empty) in
-    fold_left read (fold_left write z writelist) readlist
-*)
-@
-
-The [[read_write_lists]] function has the advantage that it does not
-allocate memory while it traverses a {\rtl} to find registers.  Below
-is a more convenient, but less efficient function that returns the
-registers read and written by an {\rtl} as two sets.
-
-<<rtlutil.mli>>=
-val read_write_sets: Rtl.rtl -> Register.Set.t * Register.Set.t
-@
-
-Liveness analysis and register allocation deal with [[Rtl.loc]]
-locations.  Sets and maps of locations are essential data structures.
-
-<<rtlutil.mli>>=
-module LocSet: Set.S with type elt = Rtl.loc
-@
-
-The [[loc f rtl]] function substitutes locations in [[rtl]].  Every
-location used in [[rtl]] is presented to [[f]] which can substitute it
-for a different one.
-
-<<rtlutil.mli>>=
-module Subst : sig
-    val loc: (Rtl.loc    -> Rtl.loc)    -> Rtl.rtl -> Rtl.rtl
-    val reg: (Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
+module ReadWrite: sig
+    type 'a observer = Rtl.space -> index:Base.std_int -> Rtl.width -> 'a -> 'a
+    val fold: read: 'a observer -> write: 'a observer -> Rtl.rtl -> 'a -> 'a
+    val sets: Rtl.rtl -> (Register.Set.t * Register.Set.t)
 end
-@
-    
-The predicate [[uses locs rtl]] is true, if and only if [[rtl]]
-contains any of the locations in the set [[locs]].  \emph{This should
-also go into a separate sub-module; do we need it at all?}. 
+@    
+
+Register allocation requires to re-write an {\rtl} by substituting
+registers inside. The translation of a procedure creates expressions
+that contain [[Rtl.link]] values that later must be substituted for
+compile-time constants. Substitutions for locations, registers. and
+expressions are provided by the [[Subst]] sub-module:
 
 <<rtlutil.mli>>=
-val uses : LocSet.t -> Rtl.rtl -> bool
-@
-
-The [[width]] of an expression in bits. It is a checked run-time
-errror if the expression denotes a boolean value. 
-
-\begin{quote}\it
-    This function was \emph{obsolete and deprecated} but is required
-    for the implementation of [[Area]] where the width of a pointer
-    is deduced from an expression denoting an address. --CL
-\end{quote}
-
-<<rtlutil.mli>>=
-val width:      Rtl.exp -> int  (* not implemented for applications *)
-@
-
-<<obsolete and deprecated?>>=
-val assign:     Rtl.loc -> Rtl.exp -> Rtl.rtl
+module Subst: sig
+    val loc:    (Rtl.loc    -> Rtl.loc)    -> Rtl.rtl -> Rtl.rtl
+    val reg:    (Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
+    val exp:    (Rtl.exp    -> Rtl.exp)    -> Rtl.rtl -> Rtl.rtl
+end
 @
 
 % ------------------------------------------------------------------ 
@@ -119,34 +72,47 @@ val assign:     Rtl.loc -> Rtl.exp -> Rtl.rtl
 
 <<rtlutil.ml>>=
 module RP = Rtl.Private
-let locwidth' = function
+
+module Width = struct
+    <<Width>>
+end
+
+module ReadWrite = struct
+    <<ReadWrite>>
+end
+
+module Subst = struct
+    <<Subst>>
+end    
+@
+
+
+% ------------------------------------------------------------------ 
+\subsubsection{Width of Locations and Expressions}
+% ------------------------------------------------------------------ 
+
+<<Width>>=   
+let loc l = match (Rtl.Convert.loc l) with
     | RP.Cell(_,_,w,_,_) -> w
     | RP.Var(_,_,w)      -> w
     | RP.Slice(w, _, _)  -> w
-let locwidth l = locwidth' (Rtl.Convert.loc l)
 
-let width e = match Rtl.Convert.exp e with
+let exp e = match Rtl.Convert.exp e with
     | RP.Const(RP.Bool _)     -> assert false
     | RP.Const(RP.Bits (_,w)) -> w
     | RP.Const(RP.Link (_,w)) -> w
     | RP.Fetch(_,w)           -> w
     | RP.App _                -> assert false (* not implemented *)
-    
-let assign l r = Rtl.store l r (width r)
 @
 
-Maps and sets of locations are easily defined using the [[Map]] and
-[[Set]] functors.
+% ------------------------------------------------------------------ 
+\subsubsection{Registers read and written by an RTL}
+% ------------------------------------------------------------------ 
 
-<<rtlutil.ml>>=
-module LocCompare = struct type t = Rtl.loc let compare = compare end
-module LocMap     = Map.Make(LocCompare)
-module LocSet     = Set.Make(LocCompare)
-@
+<<ReadWrite>>=
+type 'a observer = Rtl.space -> index:Base.std_int -> Rtl.width -> 'a -> 'a
 
-<<rtlutil.ml>>=
-type 'a regfun = Rtl.space -> index:Base.std_int -> Rtl.width -> 'a -> 'a
-let read_write_lists (read:'a regfun) (write:'a regfun) = 
+let fold (read:'a observer) (write:'a observer) = 
   let rec rtl (z:'a) (RP.Rtl gs)  = List.fold_left guarded z gs
       and guarded z (g, eff) = exp (effect z eff) g
       and effect z eff = match eff with
@@ -168,116 +134,81 @@ let read_write_lists (read:'a regfun) (write:'a regfun) =
         | RP.Fetch (l, w) -> loc read z l
         | RP.App (_, es) -> List.fold_left exp z es
   in  fun r z -> rtl z (Rtl.Convert.rtl r)
-@
 
-The registers read and written by an {\rtl} are advertised by
-[[RtlUtil.read_write_lists]].  It receives two functions that recieve
-the read and written registers repectively.  Since the order in which
-locations are passed to these functions is unspecified it is in
-ingeneral impossible to use a single set that represents the set live
-variables.  We therefore use the function [[rw_sets]] that returns a
-pair $(r,w)$ of two sets.
-
-<<rtlutil.ml>>=
-let read_write_sets: Rtl.rtl -> (Register.Set.t * Register.Set.t) = fun rtl ->
+let sets (rtl:Rtl.rtl) = 
     let reg space index width = (space,index,width) in
     let add_left  space index width (left,right) = 
         (Register.Set.add (reg space index width) left, right) in
     let add_right  space index width (left,right) = 
         (left, Register.Set.add (reg space index width) right) in
     let empty = (Register.Set.empty, Register.Set.empty) in
-        read_write_lists add_left add_right rtl empty
+        fold add_left add_right rtl empty
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Substitutions inside RTLs}
+% ------------------------------------------------------------------ 
 
-The [[subst map rtl]] function substitutes all locations in [[rtl]] by
-passing locations to the [[map]] function.
-
-<<rtlutil.ml>>=
-module Subst = struct
-    <<module Subst struct>>
-end
-@
-
-<<module Subst struct>>=
+<<Subst>>=
 let loc map rtl = 
-    let rec subst_exp map = function
-        | RP.Fetch (loc, width) -> RP.Fetch(subst_loc map loc, width)
-        | RP.App(opr, exprs)    -> RP.App(opr, List.map (subst_exp map) exprs)
-        | x                     -> x
-    and subst_loc map loc  = Rtl.Convert.loc (map (Rtl.Revert.loc loc)) 
-    and subst_effect map = function
-        | RP.Store (loc,exp,width) -> 
-            RP.Store(subst_loc map loc, subst_exp map exp, width)
-        | RP.Kill  (loc) -> 
-            RP.Kill (subst_loc map loc)
-    and subst_guarded map (exp,eff) =
-        (subst_exp map exp, subst_effect map eff)
-    and subst map (RP.Rtl rtl) = RP.Rtl (List.map (subst_guarded map) rtl)
+    let rec exp = function
+        | RP.Fetch (l, width)    -> RP.Fetch(loc l, width)
+        | RP.App(opr, exprs)     -> RP.App(opr, List.map exp exprs)
+        | x                      -> x
+    and loc l                    = Rtl.Convert.loc (map (Rtl.Revert.loc l)) 
+    and effect = function
+        | RP.Store (l,e,width)   -> RP.Store(loc l, exp e, width)
+        | RP.Kill  (l)           -> RP.Kill (loc l)
+    and guarded (e,eff)          = (exp e, effect eff)
+    and subst (RP.Rtl rtl)       = RP.Rtl (List.map guarded rtl)
     in    
-        Rtl.Revert.rtl (subst map (Rtl.Convert.rtl rtl))
-@    
+        Rtl.Revert.rtl (subst (Rtl.Convert.rtl rtl))
+@
 
-The [[reg]] function substitutes registers in {\rtl}s and is
-implemented in terms of the location substitution [[loc] above:  the
-[[aux]] function has type
+A register is a special kind of location. The [[reg]] function uses
+[[loc]] to traverse an {\rtl}. The register transformation function
+[[f]] is itself transformed into an location transformation function
+[[aux]] that is passed to [[loc]].
 
-$$[[(Register.t -> Register.t) -> (Rtl.loc -> Rtl.loc )]]$$ 
-
-and returns the function needed for [[loc]].  A register is the
-special case of a [[Rtl.Cell]] location where the expression for the
-address is a compile-time constant that fits into an [[integer]].  If
-the [[aux]] function can identify such a location, it takes the
-register part out of it, passes to the register-transforming function
-[[f]] and inserts the resulting register back into a location.  In
-short, the context provided by the location for the register is
-maintained.
-
-<<module Subst struct>>=
-let aux f = fun loc -> 
-    ( match Rtl.Convert.loc loc with
-    | Rtl.Private.Cell 
-        ( sp
-        , agg
-        , width
-        , Rtl.Private.Const(Rtl.Private.Bits bits)
-        , ass) ->
-        ( try
-            let register            = (sp, Bits.to_int bits, width)  in
-            let index_width         = Bits.width bits                in
-            let (sp',index',width') = f register                     in
-            let loc' = Rtl.Private.Cell
-                ( sp'
-                , agg
-                , width'
-                , Rtl.Private.Const
-                    (Rtl.Private.Bits (Bits.of_std_int index' index_width))
-                , ass) 
-            in 
-                Rtl.Revert.loc loc'
-          with Bits.Overflow -> loc
+<<Subst>>=
+let reg (f:Register.t -> Register.t) rtl = 
+    let aux = fun loc -> 
+        ( match Rtl.Convert.loc loc with
+        | Rtl.Private.Cell (sp, agg, width ,RP.Const(RP.Bits bits) ,ass) ->
+            ( try
+                let register            = (sp, Bits.to_int bits, width)  in
+                let index_width         = Bits.width bits                in
+                let (sp',index',width') = f register (* transform! *)    in
+                let loc' = Rtl.Private.Cell
+                    ( sp'
+                    , agg
+                    , width'
+                    , RP.Const (RP.Bits (Bits.of_std_int index' index_width))
+                    , ass
+                    ) 
+                in 
+                    Rtl.Revert.loc loc'
+              with Bits.Overflow -> loc (* not a register *)
+            )
+        | _                    -> loc   (* not a register *)
         )
-    | otherwise            -> loc
-    )
-
-let reg f rtl = loc (aux f) rtl
+    in
+        loc aux rtl
 @
-    
-The predicate [[uses locs rtl]] is true, if and only if [[rtl]]
-contains any of the locations in the set [[locs]].
 
-<<rtlutil.ml>>=
-let rec uses_exp locs = function
-    | RP.Fetch (loc, _    ) -> uses_loc locs loc
-    | RP.App(opr, exprs)    -> List.exists (uses_exp locs) exprs
-    | x                     -> false
-    
-and uses_effect locs = function
-    | RP.Store (loc,exp,_ ) -> uses_loc locs loc || uses_exp locs exp
-    | RP.Kill  (loc)        -> uses_loc locs loc 
-        
-and uses_loc locs loc           = LocSet.mem (Rtl.Revert.loc loc) locs
-and uses_guarded locs (exp,eff) = uses_exp locs exp || uses_effect locs eff
-and uses' locs (RP.Rtl rtl)     = List.exists (uses_guarded locs) rtl
-let uses locs rtl               = uses' locs (Rtl.Convert.rtl rtl)
+<<Subst>>=
+let exp map rtl =
+    let rec exp' e                 = Rtl.Convert.exp (map (Rtl.Revert.exp e)) 
+    and loc = function
+        | RP.Cell (ap,agg,w,e,ass) -> RP.Cell(ap, agg, w, exp' e, ass)
+        | RP.Slice (w,i,l)         -> RP.Slice(w,i,loc l)
+        | x                        -> x
+    and effect = function
+        | RP.Store (l,e,width)     -> RP.Store(loc l, exp' e, width)
+        | RP.Kill  (l)             -> RP.Kill (loc l)
+    and guarded (e,eff)            = (exp' e, effect eff)
+    and subst (RP.Rtl rtl)         = RP.Rtl (List.map guarded rtl)
+    in    
+        Rtl.Revert.rtl (subst (Rtl.Convert.rtl rtl))
 @
+

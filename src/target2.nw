@@ -340,7 +340,7 @@ let m = { embed   = (fun _ -> assert false)
 
 let const n width = Rtl.bits (Bits.of_int n width) width
 let reg n         = Rtl.cell Rtl.none 'r' Rtl.Identity 5 (const n 5)
-let assign loc e  = Rtl.store loc e (Rtlutil.width e)       
+let assign loc e  = Rtl.store loc e (Rtlutil.Width.exp e)       
     
 (* this is total nonsense - it's just for toying around *)
 
@@ -429,7 +429,7 @@ let assign lookup ~src:(src_sp,_,src_w as src) ~dst:(dst_sp,_,dst_w as dst) =
             Rtl.store dst_loc (Rtl.fetch src_loc src_w)  dst_w
 
 let spill lookup ~reg:(sp,index,width as reg) ~loc =
-    if Rtlutil.locwidth loc <> width then
+    if Rtlutil.Width.loc loc <> width then
         invalid_arg "Target2.spill size mismatch"
     else
         let reg_loc = Register.to_loc lookup reg in
@@ -437,7 +437,7 @@ let spill lookup ~reg:(sp,index,width as reg) ~loc =
             [rtl]
 
 let reload lookup ~reg:(sp,index,width as reg) ~loc =
-    if Rtlutil.locwidth loc <> width then
+    if Rtlutil.Width.loc loc <> width then
         invalid_arg "Register.spill size mismatch"
     else
         let reg_loc = Register.to_loc lookup reg  in
