@@ -1,8 +1,8 @@
 
 \input{macros.tex}
 
-
 % l2h substitution dots ...
+% l2h substitution AST AST
 % l2h substitution ast AST
 % l2h substitution rtl RTL
 % l2h substitution ir IR
@@ -34,26 +34,42 @@ environment holds informations about:
 \item Target architecture, as declared by the [[target]] directive.
 \item Source code positions, as recored by a [[Srcmap.map]].
 \item An Index counter for registers.
+\item A flag, indicating a serious error.
 \end{itemize}
 
 The fat environment comes in two variants:  a \textit{dirty} and a
 \textit{clean} one.  A dirty environment is built during the first
 phases of compilation:  names bound in a dirty environment can be
 either good or bad.  The error propagation combinators from the
-[[Error]] module are used to deal with good and bad values.  After the
-semantics of a {\PAL} program are checked and when no errors were
-found a dirty environment is known to bind only good values.  At this
-point a clean environment can be generated from the dirty one.  The
-clean environment is easier to deal with since it guarantees
+\module{error} module are used to deal with good and bad values. 
+After the semantics of a {\PAL} program are checked and when no errors
+were found a dirty environment is known to bind only good values.  At
+this point a clean environment can be generated from the dirty one. 
+The clean environment is easier to deal with since it guarantees
 statically that all its bound values are good.
-  
+
 % ------------------------------------------------------------------ 
-\subsection{Interface}
+\subsection{Interface: Clean vs.~Dirty}
 % ------------------------------------------------------------------ 
 
-The dirty and the clean environment are modeled as sub-modules
-[[Dirty]] and [[Clean]] respectively. The dirty nature of an environment
-is captured by two types [[info]] and [[partial]]:
+A dirty and a clean environment are structurally too different that
+one polymorphic implementation of an environment could provide both. 
+As a consequence, two modules are provided:  [[Dirty]] and [[Clean]]. 
+The interfaces of both modules can be derived from a single interface
+[[Env]]:
+
+<<module type Env>>=
+module type Env = sig
+    type 'a info
+    type 'a partial
+    val  bad: unit -> 'a info
+
+    <<signature Env>>
+end
+@
+
+The types [[info]] and [[partial]] are used to describe possibly
+``bad'' values in the rest of the signature.
 
 \begin{itemize}
 \item An [['a info]] is a possibly erroneous [['a]] value in a dirty
@@ -66,25 +82,11 @@ is captured by two types [[info]] and [[partial]]:
 \item The [[bad]] function creates a erroneous value of the [['a
       info]] type.  Using this function in a clean environment causes
       an assertion violation.
-
 \end{itemize}      
 
-<<module type Env>>=
-module type Env = sig
-    type 'a info
-    type 'a partial
-    val  bad: unit -> 'a info
-
-    <<signature Env>>
-end
-@
-
-A clean environment is obtained from a dirty environment by cleaning
-it.  Only a dirty environment can be transformed in a clean
-environment that contains only complete (wrt.~[[partial]]) and
-error-free (wrt.[[info]]) values.  Applying [[clean]] to an
-[[Dirty.env]] not meeting this requirement will result in an assertion
-violation. 
+The two sub-modules [[Dirty]] and [[Clean]] just differ in the meaning
+of [[info]] and [[partial]]. A clean environment that all values are
+present and that are good.
 
 <<fenv.mli>>=
 module StrSet: Set.S with type elt = string
@@ -92,6 +94,7 @@ module StrMap: Map.S with type key = string
 
 <<module type Env>>
 
+<<>>=
 module Dirty : Env
     with type 'a info    = 'a Error.error
     with type 'a partial = 'a option
@@ -100,160 +103,174 @@ module Clean : Env
     with type 'a info    = 'a 
     with type 'a partial = 'a 
 
-val clean: Dirty.env -> Clean.env 
+val clean: Dirty.env -> Clean.env
 @
 
+The only wae to obtain a clean environment is by cleaning a dirty
+environment.  However, the dirty environment must not be really dirty: 
+all informations must be provided and they must be good.  Trying to
+clean a dirty environment with bad values will result in an run-time
+error.
 
 % ------------------------------------------------------------------ 
-\subsubsection{Informations about Types and Values}
+\subsection{General Interface \texttt{Env}}
 % ------------------------------------------------------------------ 
 
-The main purpose of a fat environment [[env]] is to bind names to
-[[value]]s and types [[ty]].  Each binding has attributes [[attr]]
-that tell about its [[scope]] and the location of its declaration in
-the source code.  {\PAL} has only two scopes:  the top level and
-section level constitutes the [[Global]] scope, a procedure a
-[[Local]] level. 
+The main purpose of the fat environment is to bind values to names. 
+In {\PAL} some names have a single (global) scope, like [[target]]
+declarations, and other may have multiple scopes, like register
+declarations.  The interface provides a fat environment [[env]], that
+holds all bindings with a single scope.  To hold scoped bindings, an
+[[env]] maintains a stack of [[scope]]s.  Bindings inside an [[env]]
+may contain source code positions; in order to give these positions a
+meaning, a [[Srcmap.map]] value is required.  This value must be
+passed to [[empty]] when an [[env]] is created.
+
+The scope stack of an [[empty]] environment is empty.  This means,
+that the scope for global types and values must be [[push]]'ed to it
+after it was created.  Asking for the [[top]] scope when the stack is
+empty results in a run-time error.
 
 <<signature Env>>=
-type env
-type scope          = Global | Local
-type attr           = Srcmap.rgn * scope
-type endianness     = Big | Little
-@            
+type env 
+type scope
+<<types>>
 
-A [[value]] comes in different flavors -- the [[denotation]] of a name
-tells us the details.
+<<signature Env>>=
+val empty:      Srcmap.map -> env       (* empty scope stack *)
+val srcmap:     env -> Srcmap.map
 
-\begin{itemize}
-\item Different [[kind]] of labels are subsumed under one [[Label]]
-      constructor. 
-
-\item A procedure entry holds the environment for its local scope. 
-
-\item A constant always holds a value and never a condition. It is
-      thus of type [[Bits.bits]]. 
-\end{itemize}
-      
-<<>>=
-type reghint        = RReg  of string   (* hardare reg *)
-                    | RHint of string   (* calling convention hint *)
-                    | RNone             (* none of above *)
-
-type register       = { index:      int           (* for run-time API *)
-                      ; rhint:      reghint       
-                      }
+val emptyscope: scope   
+val top:        env -> scope            (* top empty = assert false *)
+val pop:        env -> env              (* pop empty = assert false *)
+val push:       env -> scope -> env
 @
 
-The [[sbase]] component of a procedures denotation contains a name for
-an assembly symbol that hold the offset from the stackpointer sp to
-the start of the stackdata.
+Scoped bindings are always bound in the top scope, and the stack is
+searched from top to bottom to find a binding.  To save bindings, one
+can obtain them using [[top]] and re-use them by [[push]]'ing them
+again.  This mechanism is intended to save a procedure's local
+bindings after they are computed once and to re-use them later.
 
+Since it is well known which bindings are scoped, and which are not, a
+user almost never has to think about scopes as a stack.  All functions
+dealing with bindings take an [[env]] as argument.  The implementation
+knows, whether to look for a binding inside [[env]] or the stack of
+scopes that is also part of an [[env]] value.
 
-<<>>=
+% ------------------------------------------------------------------ 
+\subsection{Bindings for Values and Types}
+% ------------------------------------------------------------------
+
+Register, label, and procedure declarations are examples for
+declarations that bind values to names.  A {\PAL} [[typedef]]
+declaration binds types to names.  These declarations are scoped:  a
+declaration inside a procedure can shadow a declaration of the same
+name at the level of the compilation unit.  The following types
+capture the structure of values in {\PAL}.
+
+\begin{itemize}
+\item A constant denotes its value directly.
+\item A register can be either bound to a hardware register, or it can
+      be annotated with a hint. Hints are used to determine calling
+      conventions (see module \module{callconv}). Each register has an
+      index that identifies it for the run-time API.
+\item Labels come in different flavors: labels in [[goto]] or inside
+      data declarations are vanilla-plain. Procedures in a clean
+      environment include the bindings for their local [[scope]] and
+      informations about the local data on the run-time stack.
+\end{itemize}
+
+<<types>>=
 type proc = 
-    { env:        env partial
+    { scope:      scope partial
     ; sdata:      int partial       (* amount of stackdata  *)
     ; salign:     int partial       (* max align constraint *)
     }
 
-type kind           = Proc          of proc
+and  reghint        = RReg  of string   (* hardare reg *)
+                    | RHint of string   (* calling convention hint *)
+                    | RNone             (* none of above *)
+
+and  register       = { index:      int           (* for run-time API *)
+                      ; rhint:      reghint       
+                      }
+and  kind           = Proc          of proc
                     | Code
                     | Data
                     | Stack         of int partial (* stack offset *)    
 
-type denotation     = Constant      of Bits.bits
+and  denotation     = Constant      of Bits.bits
                     | Label         of kind
                     | Import        of string option
                     | Register      of register
                     | Continuation
 @
 
-An entry for a value is a [[ventry]], an entry for a type a
-[[tentry]].  The type constructor [[e]] wraps an entry in the dirty
-variant of an environment and is the identity in case of a clean
-environment.
+The complete entry [[ventry]] for a value includes not only its
+denotation, but also its type [[Types.ty]], and its source code
+position as a [[Srcmap.rgn]] value.
 
-<<>>=        
-type ventry         = (denotation * Types.ty) info
-type tentry         = Types.ty                info
+<<types>>=
+and  ventry         = Srcmap.rgn * (denotation * Types.ty) info
 @
 
-Global registers can be mapped to hardware registers. The sequence of
-their declarations matters and thus the fat environment provides their
-asbtract sequence:
+Bindings for types, which are also scoped, are much simpler. A
+[[tentry]] for a type includes just its source code position and the
+type it denotes:
 
-<<>>=
-type regdecl        = ( string          (* register name        *)
-                      * reghint         (* hint on register     *)        
-                      * Types.ty        (* C-- type of register *)
-                      ) 
+<<types>>=
+and  tentry         = Srcmap.rgn * Types.ty info
 @
+
+
+% ------------------------------------------------------------------ 
+\subsection{Binding and Finding Names and Values}
+% ------------------------------------------------------------------ 
+
+The following functions bind and find names and types in an
+environment.  Since both are scoped, the scopes inside an environment
+are searched from top to bottom and the first binding found is
+returned.  The exception [[Error.ErrorExn]] is raised, if no binding can be
+found, an assertion failes.  If the stack of scopes is empty when a
+[[bind]] function is called, an [[emptyscope]] is pushed on
+the scope stack and is subsequently used for the new binding.
+
+Since it is illegal to re-bind names and values in the same scope, any
+attempt to do so is reported as an error to stdout.  Additionally the
+existing binding is re-bound to be bad in case the environment was a
+Dirty one, and the error flag (see below) is set.
  
-% ------------------------------------------------------------------ 
-\subsubsection{Type and Value Bindings}
-% ------------------------------------------------------------------ 
-
-Here are the functions that create and manipulate an environment. 
-
-<<>>=
-val empty           : Srcmap.map -> env
-val bindv           : string -> attr * ventry  -> env -> env
-val bindt           : string -> attr * tentry  -> env -> env
-val findv           : string -> env -> attr * ventry
-val findt           : string -> env -> attr * tentry
-val srcmap          : env -> Srcmap.map
+<<signature Env>>=
+val bindv           : string -> ventry  -> env -> env
+val rebindv         : string -> ventry  -> env -> env
+val bindt           : string -> tentry  -> env -> env
+val findv           : string -> env -> ventry   (* Error.ErrorExn *)
+val findt           : string -> env -> tentry   (* Error.ErrorExn *)
 @
 
-\begin{itemize}
-\item An environment is created from a  [[Srcmap.map]] value; this
-      value is returned by the [[srcmap]] function.
+\emph{Think of algebraic rules that describe the interaction of bind
+and find}.
 
-      \begin{tabular}{l}
-        [[srcmap (empty x) = x]]\\
-      \end{tabular}
-
-\item Values are bound by [[bindv]].  Any attempt to re-bind a name in
-      a given scope [[s]] results in in error-binding for the exsiting
-      binding and an error message in a dirty environment.  Re-binding
-      a value in a clean environment results in a run-time error.
-      
-      \begin{tabular}{l}
-        [[findv n (bindv n (x,y) empty) = (x,y)]] \\
-        [[bindv n ((a,s),b) (bindv n ((c,s),d) empty) = ]]\\
-        [[bindv n ((c,s),bad ()) empty]]
-      \end{tabular}
-
-\item Types are bound by [[bindt]].  The principal behaviour is
-      identical to [[bindv]] and [[findf]], i.e.~type can not be
-      re-bound.
-      
-      \begin{tabular}{l}
-        [[findt n (bindt n (x,y) empty) = (x,y)]] \\
-        [[bindt n ((a,s),b) (bindt n ((c,s),d) empty) = ]]\\
-        [[bindt n ((c,s),bad ()) empty]]
-      \end{tabular}
-\end{itemize}
-
-During the early phases pf static analysis some denotaional aspects of
-names are unknown which must be added later.  This is done using
-[[rebindv]].  Sine [[bindv]] checks for re-definitons of names it can
-not be used for this purpose.  The attributes (like source location,
-scope) associated with a name from its first binding stay the same.
+Sometimes is is necessary to know, whether a value is bound in the
+[[top env]] scope.  The following predicate is true, if and only if a
+given name is bound in the top scope, and the top scope is not the
+bottom scope at the same time. It is an assertion failure to supply an
+unknown value.
 
 <<>>=
-val rebindv     : string -> ventry -> env -> env
+val is_localv       : string -> env -> bool     (* *)
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{Error Flag}
+\subsection{Error Flag}
 % ------------------------------------------------------------------ 
 
-The fat environment also holds an error flag.  Is is set at the first
-error found in the static semantics of a program.  The function
-[[flagError env]] sets the flag in the returned environment,
-[[errorFlag]] returns the flag's value in [[env]].  The [[flagError]]
-function obeys to the following law:
+The fat environment holds an error flag.  Is is set at the first error
+found in the static semantics of a program.  The function
+[[flagError]] sets the flag in the returned environment, [[errorFlag]]
+returns the flag's value in [[env]].  The [[flagError]] function obeys
+to the following law:
 
 \begin{tabular}{l}
     [[flagError (flagError env) = flagError env]]\\
@@ -267,16 +284,15 @@ val errorFlag       : env -> bool
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{Target}
+\subsection{Target}
 % ------------------------------------------------------------------ 
 
 The environment stores informations about the target platform.  These
 data may have some defaults and is specified in a {\PAL} program by
-the [[target]] declaration.  Currently [[target memsize]] and [[target
-byteorder]] are accessible.  Once an information is bound for a target
+the [[target]] declaration.  Once an information is bound for a target
 all subsequent binds must provide the same information.  In case an
 inconsistent update is attempted the binding becomes erroneous.  In
-order to provide a meaningful error message in this case the bind
+order to provide a meaningful error message for this case, the bind
 functions receive a source code position.
 
 \begin{quote}
@@ -285,7 +301,10 @@ functions receive a source code position.
 \end{quote}
 
 
-<<>>=
+<<types>>=
+and  endianness     = Big | Little
+
+<<signature Env>>=
 val bindMemsize     : Srcmap.rgn -> int        -> env -> env
 val bindEndianness  : Srcmap.rgn -> endianness -> env -> env 
 val bindWordsize    : Srcmap.rgn -> int        -> env -> env
@@ -302,36 +321,31 @@ val findCharset     : env -> string     partial info
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{Register Index}
+\subsection{Register Index}
 % ------------------------------------------------------------------ 
 
 {\PAL} uses integers to identify global and local registers during
 run-time at the run-time interface.  The fat environment maintains a
 counter to facilitate the assignment of an integer to a register.
+The current index is returned by [[getIndex]], and the index is
+advanced by [[nextIndex]]:
 
-\begin{itemize}
-\item [[setIndex]] sets the index counter.
-\item [[getIndex]] returns the actual value of the index counter.
-\item [[incrIndex]] advances the index counter.
-\end{itemize}
+<<>>=
+val getIndex: env -> int
+val nextIndex: env -> env
+@
 
-The index-related functions obey the following laws:
+The above functions obey to the following rules:
 
 \begin{quote}
 \begin{verbatim}
-getIndex (setIndex env n) = n
-getIndex (incrIndex env) = (getIndex env) + 1
+getIndex empty = 0
+getIndex (nextIndex env) = (getIndex env) + 1
 \end{verbatim}
 \end{quote}
 
-<<>>=
-val setIndex        : env -> int -> env
-val getIndex        : env -> int
-val incrIndex       : env -> env         
-@
-
 % ------------------------------------------------------------------ 
-\subsubsection{Stackdata Offset}
+\subsection{Stackdata Offset}
 % ------------------------------------------------------------------ 
 
 Inside of a procedure uninitialized data can be declared on the stack. 
@@ -353,27 +367,28 @@ val offset          : env -> int
 
 Each procedure sets the offset to zero by calling [[resetOffset]].  A
 data declaration increments the offset by its size using
-[[incrOffset]].  The [[alignOffset n]] function advances the [[offset]]
-to the next multiple of [[n]] unless [[offset]] is already a multiple
-of [[n]].  The maximal alignment constraint is also remembered and
-returned by [[maxOffsetAlign]].  For labels and the total amount of
-[[stackdata]] [[offset]] reports the current value of the offset
-counter.
+[[incrOffset]].  The [[alignOffset n]] function advances the
+[[offset]] to the next multiple of [[n]] unless [[offset]] is already
+a multiple of [[n]].  The maximal alignment constraint is also
+remembered and returned by [[maxOffsetAlign]].  For labels and the
+total amount of [[stackdata]] [[offset]] reports the current value of
+the offset counter.
 
 Beware:  the value of [[offset]] is only meaningful in the context of
 a procedure and not a global program property.
 
 % ------------------------------------------------------------------ 
-\subsubsection{Imports and Exports}
+\subsection{Imports and Exports}
 % ------------------------------------------------------------------ 
 
-The translation process assigns certain {\PAL} \emph{names} assembly-level
-\emph{symbols}. The relation between a name and its assembly symbol is
-not straight forward, as explained in module \module{mangle}. In order
-to build a map from {\PAL} names to symbols all imports and exports of
-a {\PAL} program must be registered. This is done with [[import]] and
-[[export]]. To provide meaningful error messages, both function receive
-the region of the statement at hand in the source code. 
+The translation process assigns certain {\PAL} \emph{names}
+to assembly-level \emph{symbols}.  The relation between a name and its
+assembly symbol is not straight forward, as explained in module
+\module{mangle}.  In order to build a map from {\PAL} names to symbols
+all imports and exports of a {\PAL} program must be registered.  This
+is done with [[import]] and [[export]].  To provide meaningful error
+messages, both function receive the region of the statement at hand in
+the source code. 
 
 <<>>=
 val import: Srcmap.rgn -> string -> string -> env -> env (* import g as f *)
@@ -392,36 +407,43 @@ val nam2sym:  env -> string StrMap.t
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{Hardware Registers}
+\subsection{Hardware Registers}
 % ------------------------------------------------------------------
 
 A {\PAL} program can declare global registers to use a specific target
 hardware register.  The abstract \emph{sequence} of these declarations
-is returned by [[regdecls]]:
+is returned by [[regdecls]].  The sequence is automatically built by
+the [[bindv]] function.
 
-<<>>=
+<<types>>=
+and  regdecl        = ( string          (* register name        *)
+                      * reghint         (* hint on register     *)        
+                      * Types.ty        (* C-- type of register *)
+                      ) 
+<<signature Env>>=
 val regdecls: env -> regdecl list
 @
 
+
 % ------------------------------------------------------------------ 
-\subsection{Implementation}
+\subsection{Implementation: Large Scale Structure}
 % ------------------------------------------------------------------ 
 
 The implementation tries to exploit the commonalities between the
 [[Clean]] and [[Dirty]] module by using a functor [[Env]].  The
-factored out differences between [[Clean]] and [[Dirty]] are supplied
-as an argument [[Arg]] of type [[Arg]].  The main part of the
-implementation is thus the generic functor [[Env]] which is described
-in the following section.
+differences factored out of [[Clean]] and [[Dirty]] are supplied as an
+argument [[Arg]] of type [[Arg]].  The main part of the implementation
+is thus the generic functor [[Env]] which is described in the
+following section.
 
 <<fenv.ml>>=
-module E            = Error
+module E            = Error     (* handy abbreviations *)
 module T            = Types
 @
 
 Name spaces are implemented as polymorphic functional maps from
 [[string]] to some value.  The [[Map.Make]] functor must be provided
-with the structure of the key, i.e.~the [[string]] type. The
+with the structure of the key, i.e.~the [[string]] type.  The
 [[import]] and [[export]] functions build sets of symbol, so we need a
 set of strings, too.
 
@@ -429,18 +451,25 @@ set of strings, too.
 module Comparable   = struct type t=string let compare=compare end
 module StrMap       = Map.Make(Comparable)
 module StrSet       = Set.Make(Comparable)
+
 @
-A handy error printing function: [[r]] is a [[Srcmap.reg]] source code
-position that is used to describe the place where an error is located. 
+
+The [[Arg]] modules captures the diverse aspects of [[Clean]] and
+[[Dirty]]. Different [[Arg]] implementations are passed to functor [[Env]]
+to create [[Clean]] and [[Dirty]].
 
 <<>>=
-let error r map msg = E.errorRegionPrt (map,r) msg 
-
-<<module type Env>>
-@
-
-The [[Arg]] modules captures the aspects not common to [[Clean]] and
-[[Dirty]]:
+module type Arg = sig
+    type 'a partial
+    type 'a info
+    
+    val good    : 'a   -> 'a info
+    val asgood  : 'a info -> 'a option
+    val bad     : unit -> 'a info
+    val update  : 'a partial info -> 'a -> (unit -> unit) -> 'a partial info
+    val default : 'a   -> 'a partial info
+end
+@ 
 
 \begin{itemize}
     \item First of all, are information more vaguely represented in
@@ -462,35 +491,18 @@ The [[Arg]] modules captures the aspects not common to [[Clean]] and
 
     \item The [[asgood]] function provides a way to access [[info]]
     information.  If the information is absent, [[None]] is returned. 
-    In a [[Clean.env]] environment [[asgood]] alsways returns a
+    In a [[Clean.env]] environment [[asgood]] always returns a
     [[Some]] value.
-@
-
 \end{itemize} 
 
-<<>>=
-module type Arg = sig
-    type 'a partial
-    type 'a info
-    
-    val good    : 'a   -> 'a info
-    val asgood  : 'a info -> 'a option
-    val bad     : unit -> 'a info
-    val update  : 'a partial info -> 'a -> (unit -> unit) -> 'a partial info
-    val default : 'a   -> 'a partial info
-end
-@ 
-
-We must not use the module type [[Env]] to describe the interface of
-[[Env]]. This would hide the implementation of [[env]] which we need
-to implement [[clean]].
-
-<<>>=
-module Env (Arg: Arg) = struct <<module Env>> end
-@
-    
 Here are the two modules for the [[Clean]] and [[Dirty]] environment
-which are instances of [[Env]].
+which are instances of [[Env]], which basically is \emph{the}
+implementation of this module.  The arguments to [[Env]] are
+implementations of [[Arg]].
+
+<<>>=
+<<module type Env>>
+module Env (Arg: Arg) = struct <<module Env>> end
 
 <<>>=
 module Dirty = Env (struct
@@ -514,9 +526,9 @@ module Dirty = Env (struct
         )
 
     let default x = Error.Ok(None)
-        
 end)
 
+<<>>=
 module Clean = Env (struct
     type 'a partial             = 'a 
     type 'a info                = 'a
@@ -529,6 +541,7 @@ module Clean = Env (struct
 end)
 @
 
+
 The function [[clean]] translates a dirty environment into a clean
 environment. 
 
@@ -537,8 +550,12 @@ environment.
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Implementation of functor [[Env]]}
+\subsection{The Heart of the Implementation: [[Env]]}
 % ------------------------------------------------------------------ 
+
+The fat and the clean version of an environement share the same basic
+implementation [[Env]] which is functorized over [[Arg]]. [[Arg]]
+provides us what we need to know about good and bad values:
 
 <<module Env>>=
 type 'a partial     = 'a Arg.partial
@@ -546,68 +563,26 @@ type 'a info        = 'a Arg.info
 let  bad            = Arg.bad
 @
 
-
-Next we have to provide the type declarations. This includes the
-implementation for the [[env]] type.
-
-<<>>=
-type scope          = Global | Local
-type attr           = Srcmap.rgn * scope
-type endianness     = Big | Little
-@            
+Our interfaces includes definitions for types that capture the
+denotation of values and types. Of course, these types must be defined
+in the implementation as well.
 
 <<>>=
-type reghint        = RReg  of string   (* hardare reg *)
-                    | RHint of string   (* calling convention hint *)
-                    | RNone             (* none of above *)
-
-type register       = { index:      int           (* for run-time API *)
-                      ; rhint:      reghint       
+<<types>>
+and env            = { scopes   :      scope list (* top = hd scopes *)
+                      ; srcmap   :      Srcmap.map
+                      ; error    :      bool
+                      ; target   :      target
+                      ; asm      :      asm
+                      ; rindex   :      int   (* register index *)
+                      ; offset   :      int   (* stack data offset *)
+                      ; maxalign :      int   (* stack offset align constraint*)
+                      ; regdecls :      regdecl list  (* hardware registers *)
                       }
 @
 
-A global register can be declared to use a specific hardware register. 
-All hardware registers used by a program are remembered in the fat
-environment such that a set of all used hardware registers can be
-obtained.
-
-<<>>=
-and proc = 
-    { env:        env partial
-    ; sdata:      int partial       (* amount of stackdata  *)
-    ; salign:     int partial       (* max align constraint *)
-    }
-                      
-and  kind           = Proc          of proc
-                    | Code
-                    | Data
-                    | Stack         of int partial (* stack offset *)
-
-and  denotation     = Constant      of Bits.bits
-                    | Label         of kind
-                    | Import        of string option
-                    | Register      of register
-                    | Continuation
-
-and  ventry         = (denotation * Types.ty) Arg.info
-and  tentry         = Types.ty                Arg.info
-
-<<>>=
-and  regdecl        = ( string          (* register name        *)
-                      * reghint         (* hint on register     *)        
-                      * Types.ty        (* C-- type of register *)
-                      ) 
-@
-
-Bindings for value and types are stored in a string-map [[StrMap]]. 
-Each entry consists of attributes [[attr]] for the source code
-location and scope of an entry and detailed informations about the
-denotation of the bound name.
-
-<<>>=
-and  tenv           = (attr * tentry) StrMap.t
-and  venv           = (attr * ventry) StrMap.t
-@
+The [[target]] type captures target specific informations, like the
+byteorder, or sizes words and pointers.
 
 <<>>=
 and  target         = { memsize:      int        partial info
@@ -631,56 +606,189 @@ and asm             = { imported:     StrSet.t
                       }
 @
 
-An [[env]] is a record that holds maps for types and values. The
-target description is implemented as a record because the values bound
-are not uniform.
+A [[scope]] is record of two maps for values and types respectively:
 
 <<>>=
-and   env           = 
-                      { tenv     :      tenv
-                      ; venv     :      venv
-                      ; srcmap   :      Srcmap.map
-                      ; error    :      bool
-                      ; target   :      target
-                      ; asm      :      asm
-                      ; rindex   :      int       (* register index *)
-                      ; offset   :      int       (* stack data offset *)
-                      ; maxalign :      int       (* offset align constraint*)
-                      ; regdecls :      regdecl list  (* hardware registers *)
+and scope           = { venv:   ventry StrMap.t
+                      ; tenv:   tentry StrMap.t
                       }
-                      
+@
+
+An entire environment [[env]] contains the stack of scopes and members
+for all non-scoped information, like the target, imports and exports,
+error flag, and so on.
+
+% ------------------------------------------------------------------ 
+\subsection{Auxiliaries}
+% ------------------------------------------------------------------ 
+
+A handy error printing function: [[r]] is a [[Srcmap.reg]] source code
+position that is used to describe the place where an error is located. 
+
+<<module Env>>=
+let error r map msg = E.errorRegionPrt (map,r) msg 
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{Values}
+\subsection{Creating \texttt{env} and \texttt{scope} values}
 % ------------------------------------------------------------------ 
 
-The fat environment holds the source map for the program being
-compiled. It is required to translate the annotations in the abstract
-syntax into meaningful file, line, column notation.
+Given the stack semantics for scopes, the implementation is obvious. 
+The [[Arg.default]] function returns a [[None]] value in case the
+environment is [[Dirty]]; the defaults for a [[Clean]] environment
+should never be used because a clean environment is obtained by
+cleaning a dirty one. 
 
 <<>>=
-let empty  map      = { tenv     = StrMap.empty
-                      ; venv     = StrMap.empty
-                      ; srcmap   = map
-                      ; error    = false
-                      ; rindex   = 0
-                      ; offset   = 0 
-                      ; maxalign = 1
-                      ; regdecls = []
-                      ; target = { memsize    = Arg.default 8
-                                 ; endianness = Arg.default Little
-                                 ; word       = Arg.default 32
-                                 ; pointer    = Arg.default 32
-                                 ; float      = Arg.default "ieee754"
-                                 ; charset    = Arg.default "latin1"
-                                 }
-                      ; asm    = { imported   = StrSet.empty
-                                 ; exported   = StrSet.empty
-                                 ; nam2sym    = StrMap.empty
-                                 }
-                      } 
+let empty  map =  { scopes   = []
+                  ; srcmap   = map
+                  ; error    = false
+                  ; rindex   = 0
+                  ; offset   = 0 
+                  ; maxalign = 1
+                  ; regdecls = []
+                  ; target = { memsize    = Arg.default 8
+                             ; endianness = Arg.default Little
+                             ; word       = Arg.default 32
+                             ; pointer    = Arg.default 32
+                             ; float      = Arg.default "ieee754"
+                             ; charset    = Arg.default "latin1"
+                             }
+                  ; asm    = { imported   = StrSet.empty
+                             ; exported   = StrSet.empty
+                             ; nam2sym    = StrMap.empty
+                             }
+                  } 
 @
+
+<<>>=
+let emptyscope          = { venv  = StrMap.empty; tenv = StrMap.empty }
+let srcmap {srcmap=m}   = m
+
+let top env = match env.scopes with
+    | []    -> assert false
+    | s::ss -> s
+
+let pop env = match env.scopes with
+    | []     -> assert false
+    | s::ss  -> { env with scopes = ss }
+
+let push env scope = { env with scopes = scope :: env.scopes } 
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Binding and Finding Names and Values}
+% ------------------------------------------------------------------ 
+    
+New Bindings are recorded in the top scope; it is an assertion
+failures, if the scope stack is empty.  It is illegal to re-bind
+names:  if the name to be bound is found in the top scope, an errror
+is issued, the error flag is set, and the existing binding is re-bound
+to a bad value.  Register values that use a hardware register are
+additionally recorded in the [[regdecls]] component.
+
+<<>>=
+let bindv name (rgn,x as ventry) env = 
+    let scope = ( match env.scopes with
+                | []    -> assert false
+                | s::ss -> s
+                ) in
+    try let (rgn',x) = StrMap.find name scope.venv in
+        ( error rgn  env.srcmap ("re-declaration of value "^name)
+        ; error rgn' env.srcmap ("previously declared here")
+        ; let scope = 
+            { scope with venv = StrMap.add name (rgn',Arg.bad()) scope.venv} 
+          in
+            { env with 
+              scopes = scope :: List.tl env.scopes  
+            ; error  = true  
+            }
+        )              
+    with Not_found -> 
+        let scope = { scope with venv = StrMap.add name ventry scope.venv} in
+        let env   = { env with scopes = scope :: List.tl env.scopes } in
+            ( match Arg.asgood x with
+            | Some(Register({rhint=h} as reg),t) ->
+                  { env with regdecls = (name,h,t) :: env.regdecls }
+            | _ -> env
+            ) 
+
+<<>>=
+let bindt name (rgn,x as tentry) env = 
+    let scope = ( match env.scopes with
+                | []    -> assert false
+                | s::ss -> s
+                ) in
+    try let (rgn',x) = StrMap.find name scope.tenv in
+        ( error rgn  env.srcmap ("re-declaration of type "^name)
+        ; error rgn' env.srcmap ("previously declared here")
+        ; let scope = 
+            { scope with tenv = StrMap.add name (rgn',Arg.bad()) scope.tenv} 
+          in
+            { env with 
+              scopes = scope :: List.tl env.scopes  
+            ; error  = true
+            }
+        )              
+    with Not_found -> 
+        let scope = { scope with tenv = StrMap.add name tentry scope.tenv} in
+        let env   = { env with scopes = scope :: List.tl env.scopes } in
+            env
+@
+
+The [[find]] functions start searching in the top of the stack and
+move to the bottom. The first binding found is returned, and
+[[Error.ErrorExn]] raised otherwise.
+
+<<>>=
+let findv name env =
+    let rec loop = function
+        | []    -> E.error ("unknown value: "^name)
+        | s::ss -> ( try StrMap.find name s.venv with
+                   | Not_found -> loop ss
+                   )
+    in
+        loop env.scopes
+<<>>=
+let findt name env =
+    let rec loop = function
+        | []    -> E.error ("unknown type: "^name)
+        | s::ss -> ( try StrMap.find name s.tenv with
+                   | Not_found -> loop ss
+                   )
+    in
+        loop env.scopes
+@
+
+The [[rebindv]] function replaces the most local binding for a name. If
+the name is not bound in the environment, it is returned unaltered. 
+
+<<>>=
+let rebindv name x env =
+    let rec loop = function
+        | []    -> []
+        | s::ss -> if StrMap.mem name s.venv 
+                   then { s with venv = StrMap.add name x s.venv } :: ss
+                   else loop ss
+    in
+        { env with scopes = loop env.scopes }
+@
+
+An assertion fails, if the scope stack is empty.
+
+<<>>=
+let is_localv name env = 
+    ( match env.scopes with
+    | []    -> assert false
+    | [s]   -> false
+    | s::ss -> StrMap.mem name s.venv
+    )
+@
+    
+
+% ------------------------------------------------------------------ 
+\subsection{The Error Flag}
+% ------------------------------------------------------------------ 
 
 The fat environment also holds an error flag.  Is is set at the first
 error found in the static semantics of a program.  The function
@@ -688,84 +796,13 @@ error found in the static semantics of a program.  The function
 [[errorFlag]] returns the flag's value in [[env]].
 
 <<>>=
-let srcmap env    = env.srcmap
 let flagError env = if env.error then env else { env with error = true }
 let errorFlag env = env.error
 @
 
-When a name is re-declared we issue two error messages:  the first
-describes the actual location [[reg]] where the problem is detected,
-and the second the location of the declaration that clashes.  This one
-is also re-bound to [[Error]] to flag the problem.
-
-<<>>=
-let bindv name ((reg,scope as attr),x) env =
-    let add name x env = {env with venv = StrMap.add name x env.venv} in
-    try 
-        let (reg',scope' as attr'),_ = StrMap.find name env.venv in
-        if scope' = scope then
-            ( error reg  env.srcmap ("re-declaration of value "^name)
-            ; error reg' env.srcmap ("previously declared here")
-            ; add name (attr',Arg.bad ()) (flagError env)
-            )
-        else match Arg.asgood x with 
-        | Some (Register({rhint=h} as reg),t) ->
-               { env with venv     = StrMap.add name (attr,x) env.venv
-               ;          regdecls = (name,h,t) :: env.regdecls  
-               }          
-        | _ -> { env with venv = StrMap.add name (attr,x) env.venv }
-    with
-        Not_found -> add name (attr,x) env
-
-<<>>=
-let bindt name ((reg,scope as attr),x) env =
-    let add name x env = {env with tenv = StrMap.add name x env.tenv} in
-    try 
-        let (reg',scope' as attr'),_ = StrMap.find name env.tenv in
-        if scope' = scope then
-            ( error reg  env.srcmap ("re-declaration of type "^name)
-            ; error reg' env.srcmap ("previously declared here")
-            ; add name (attr',Arg.bad ()) (flagError env) 
-            )
-        else
-            add name (attr,x) env
-    with
-        Not_found -> add name (attr,x) env
-@
-
-The following function [[rebindv name x env]] re-binds [[name]] to
-[[x]]. Since this is only intended to update the informations for an
-existing [[name]], [[name]] must be bound in [[env]] as a value. The
-scope and source code location of the existing binding is re-used for
-the new binding.
-
-<<>>=
-let rebindv name x env = 
-    try 
-        let attr,_ = StrMap.find name env.venv in
-            { env with venv = StrMap.add name (attr,x) env.venv }
-      with Not_found -> assert false
-   
-@
-    
-The functions to lookup a value [[findv]] and a type [[findt]] raise
-an [[E.Error]] exception in case the name can not be found.
-
-<<>>=
-let findv name env =
-    try
-        StrMap.find name env.venv
-    with 
-        Not_found -> E.error ("unknown value: "^name)
-
-<<>>=
-let findt name env =
-    try
-        StrMap.find name env.tenv
-    with
-        Not_found -> E.error ("unknown type: "^name)
-@
-
+% ------------------------------------------------------------------ 
+\subsection{The \texttt{target} architecture}
+% ------------------------------------------------------------------ 
 
 The [[target]] directive in {\PAL} describes the target architecture
 an program is intended for. The information can be distributed over
@@ -845,7 +882,7 @@ let findCharset     env = env.target.charset
 @   
 
 % ------------------------------------------------------------------ 
-\subsubsection{Imports and Exports}
+\subsection{Imports and Exports}
 % ------------------------------------------------------------------ 
 
 The fat environment maintains the set of imported and exported
@@ -889,19 +926,18 @@ let nam2sym  env = env.asm.nam2sym
 
 
 % ------------------------------------------------------------------ 
-\subsubsection{Register Index}
+\subsection{Register Index}
 % ------------------------------------------------------------------ 
 
 No surprises here.
 
 <<>>=
-let setIndex   env n = { env with rindex = n}
+let nextIndex  env   = { env with rindex = env.rindex + 1}
 let getIndex   env   = env.rindex
-let incrIndex  env   = { env with rindex = env.rindex + 1}
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{Stackdata Offset}
+\subsection{Stackdata Offset}
 % ------------------------------------------------------------------ 
 
 The implementation of the [[offset]] functions for stack data are
@@ -942,21 +978,20 @@ return it.
 let regdecls env = List.rev env.regdecls
 @
 
+
+        
+        
+
 % ------------------------------------------------------------------ 
-\subsubsection{Cleaning a fat environment}
+\subsection{Cleaning a fat environment}
 % ------------------------------------------------------------------ 
 
 A [[Clean.env]] is created from a [[Dirty.env]] by copying values from
 one to another.  The string typing discipline of {\ocaml} precludes
-the use of patterns in most cases such that things must be copied
+the use of patterns in most cases such that values must be copied
 explicitly.
 
-
 <<clean function>>=
-let clean_scope = function
-    | Dirty.Local  -> Clean.Local
-    | Dirty.Global -> Clean.Global
-
 let clean_rhint = function
     | Dirty.RReg  s -> Clean.RReg  s
     | Dirty.RHint s -> Clean.RHint s
@@ -970,7 +1005,7 @@ let clean_reg r =
 
 let rec clean_venv map  =
     let copy key data map = match data with
-        |  (pos,scope),E.Ok(denot,ty) ->
+        |  pos,E.Ok(denot,ty) ->
             let denot' = match denot with
                 | Dirty.Constant(v)               -> Clean.Constant(v)
                 | Dirty.Label(Dirty.Proc(p))      -> Clean.Label(Clean.Proc(clean_proc p))
@@ -982,15 +1017,15 @@ let rec clean_venv map  =
                 | Dirty.Continuation              -> Clean.Continuation
                 | _                               -> assert false
             in
-                 StrMap.add key ((pos,clean_scope scope),(denot',ty)) map
+                 StrMap.add key (pos,(denot',ty)) map
         |  _  -> assert false
     in
         StrMap.fold copy map StrMap.empty      
 <<>>=
 and clean_tenv map =
     let copy key data map = match data with
-        | (p,s), E.Ok(t) -> StrMap.add key ((p,clean_scope s),t) map
-        | _             -> assert false
+        | p, E.Ok(t) -> StrMap.add key (p,t) map
+        | _          -> assert false
     in
         StrMap.fold copy map StrMap.empty
 <<>>=
@@ -1022,12 +1057,18 @@ and clean_asm asm =
     }
 
 <<>>=
+and clean_scope { Dirty.venv = v; Dirty.tenv = t } =
+    { Clean.tenv = clean_tenv t
+    ; Clean.venv = clean_venv v
+    }
+    
+<<>>=
 and clean_proc x = match x with
-    |   { Dirty.env       = Some env
+    |   { Dirty.scope     = Some s
         ; Dirty.sdata     = Some n 
         ; Dirty.salign    = Some m 
         } ->
-        { Clean.env       = clean env
+        { Clean.scope     = clean_scope s
         ; Clean.sdata     = n
         ; Clean.salign    = m
         }
@@ -1038,8 +1079,7 @@ and clean_regdecls regs =
 
 <<>>=     
 and clean env =
-    { Clean.tenv     = clean_tenv env.Dirty.tenv
-    ; Clean.venv     = clean_venv env.Dirty.venv
+    { Clean.scopes   = List.map clean_scope env.Dirty.scopes
     ; Clean.srcmap   = env.Dirty.srcmap 
     ; Clean.error    = env.Dirty.error
     ; Clean.target   = clean_target env.Dirty.target

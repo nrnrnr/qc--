@@ -156,10 +156,11 @@ The [[check]] command parses a file and checks its static semantics.
 
 <<>>=
 let check file = 
-    let ast, map = ast_of file               in
-    let env      = Fenv.Dirty.empty map      in
-    let env      = Elab.Env.global   env ast in
-    let env      = Elab.Check.global env ast in
+    let ast, map = ast_of file                       in
+    let env      = Fenv.Dirty.empty map              in
+    let env      = Fenv.Dirty.push env (Fenv.Dirty.emptyscope) in
+    let env      = Elab.Env.global   env ast         in
+    let env      = Elab.Check.global env ast         in
         match Fenv.Dirty.errorFlag env with
             | true  -> 1
             | false -> 0
@@ -251,14 +252,15 @@ module Ast2IR = Ast2ir.Make (Agraph2ast) (Asm)
     
 <<>>=
 let compile target file =
-    let ast, map = ast_of file               in
-    let env      = Fenv.Dirty.empty map      in
-    let env      = Elab.Env.global   env ast in
-    let env      = Elab.Check.global env ast in
-        if Fenv.Dirty.errorFlag env = true then 1 else 
-        let env    = Fenv.clean env          in
-        let target = dummy                   in
-        let width  = 72                      in
+    let ast, map = ast_of file                       in
+    let env      = Fenv.Dirty.empty map              in
+    let env      = Fenv.Dirty.push env (Fenv.Dirty.emptyscope) in
+    let env      = Elab.Env.global   env ast         in
+    let env      = Elab.Check.global env ast         in
+        if Fenv.Dirty.errorFlag env = true then 1 else
+        let env    = Fenv.clean env                  in
+        let target = dummy                           in
+        let width  = 72                              in
         let _,asm  = Ast2IR.translate env target ast in
             ( Astpp.ppToFile stdout width (Asm.ast asm)
             ; 0

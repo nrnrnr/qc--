@@ -184,8 +184,8 @@ a formal parameter.
 
 <<>>=
 let formal env n =
-    ( match F.findv n env with 
-    | (_,F.Local), (F.Register {F.index=i; F.rhint=h},ty) -> 
+    ( match snd (F.findv n env) with 
+    | (F.Register {F.index=i; F.rhint=h},ty) when F.is_localv n env  -> 
         { AG.name  = n
         ; AG.width = bits ty
         ; AG.hint  = ( match h with
@@ -195,7 +195,7 @@ let formal env n =
                      )
         ; AG.index = i
         } 
-    | (_,F.Global),(F.Register {F.index=i; F.rhint=h},ty) ->
+    | (F.Register {F.index=i; F.rhint=h},ty) ->
         assert false (* don't how to to translate global registers *)
     | _ -> assert false
     )
@@ -228,7 +228,7 @@ more complicated.  If the variable is a local register, it becomes a
 and variable (env: F.env) (target: Target.info) globals = function
     | A.LValueAt(x,_) -> variable env target globals x
     | A.Var(hint,x)   ->
-        let ((_,s),(denot,t)) = F.findv x env in 
+        let (_,(denot,t)) = F.findv x env in 
             ( match denot with
             | F.Constant(b)    -> Rtl.Const(Rtl.Bits(b, bits t))
             | F.Label(F.Proc _)-> Rtl.Const(Rtl.Link(x, bits t))
@@ -237,13 +237,13 @@ and variable (env: F.env) (target: Target.info) globals = function
             | F.Import(None)   -> Rtl.Const(Rtl.Link(x, bits t))
             | F.Import(Some n) -> Rtl.Const(Rtl.Link(n, bits t))
             | F.Register(r)    -> 
-                ( match s with
-                | F.Global -> let (write,read) = 
+                ( match F.is_localv x env with
+                | false  -> let (write,read) = 
                                 ( try StrMap.find x globals with
                                 | Not_found -> assert false
                                 )
                               in read
-                | F.Local ->  
+                | true   ->  
                     let width = bits t in
                     let loc   = Rtl.Var
                               ( x
@@ -329,17 +329,17 @@ computing the value to be stores.  The expression is already an
 let rec assign env target globals lhs (e: Rtl.expr) = match lhs with
     | A.LValueAt(x,_)  -> assign env target globals x e
     | A.Var(hint,x)    ->
-        let ((_,s),(denot,t)) = F.findv x env in
+        let (_,(denot,t)) = F.findv x env in
             ( match denot with
             | F.Register(r) ->
                 let width = bits t in
-                    ( match s with
-                    | F.Global -> 
+                    ( match F.is_localv x env with
+                    | false -> 
                         let (write,read) = ( try StrMap.find x globals with
                                            | Not_found -> assert false
                                            ) 
                         in write e
-                    | F.Local ->
+                    | true  ->
                         let loc = Rtl.Var
                             ( x
                             , r.F.index
@@ -560,7 +560,7 @@ for a procedure is found in its entry in the fat environment.
 and proc env (target: Target.info) globals props (asm: Asm.asm) (cc,n,fs,bb) =  
     let decorate n = G.bind props n                                        in
     let env        = match F.findv n env with
-                     | _,(F.Label(F.Proc {F.env = e}),_) -> e
+                     | _,(F.Label(F.Proc {F.scope = s}),_) -> F.push env s
                      | _  -> assert false                                  in
     let graph      = GM.graph n  (* fresh graph for this proc *)           in
     let cc         = find_cc (Aux.Option.get default_convention cc) target in

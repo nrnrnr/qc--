@@ -132,7 +132,7 @@ module Consts : sig
                         -> (Types.ty * Value.value) Error.error
         val evalExprs : Fenv.Dirty.env -> Ast.expr list 
                         -> (Types.ty * Value.value) list Error.error
-        val doConst   : Fenv.Dirty.scope -> Fenv.Dirty.env -> Decl.decl list 
+        val doConst   : Fenv.Dirty.env -> Decl.decl list 
                         -> Fenv.Dirty.env
     end
 
@@ -235,8 +235,8 @@ module Typedefs = struct
     <<collect type decls>>
     <<process type decls>>
 
-    let global env program      = doTypes true  env (globalDecls program)
-    let local  env (_,_,_,body) = doTypes false env (localDecls body)
+    let global env program      = doTypes env (globalDecls program)
+    let local  env (_,_,_,body) = doTypes env (localDecls body)
 end
 @
 
@@ -254,9 +254,9 @@ module Consts = struct
     module Eval      = struct <<module Eval>>    end
 
     let global env program = 
-        Eval.doConst F.Global env (Collect.globalDecls program)
+        Eval.doConst env (Collect.globalDecls program)
     let local  env (_,_,_,bb) = 
-        Eval.doConst F.Local  env (Collect.localDecls bb)
+        Eval.doConst env (Collect.localDecls bb)
 end
 @
 
@@ -310,7 +310,7 @@ checks need it.
         let env = Typedefs.local                     env proc in
         let env = Consts.local                       env proc in
         let env = foldl (formal Srcmap.null)         env ff   in
-        let env = foldl (body Srcmap.null F.Local)   env bb   in
+        let env = foldl (body Srcmap.null Local)     env bb   in
             env
 end
 @
@@ -649,9 +649,9 @@ Names defined by declarations found in cycles are bound to [[E.Error]]
 in the (fat) environment.
 
 <<process type decls>>=
-let bindError scope env decls = 
+let bindError env decls = 
     let bind env ((_,names),r) = 
-        foldl (fun env n -> F.bindt n ((r,scope),E.Error) env) env names 
+        foldl (fun env n -> F.bindt n (r,E.Error) env) env names 
     in 
         foldl bind (F.flagError env) decls
 @
@@ -674,7 +674,7 @@ let rec doTypeDecl env ((t,names),r) =
     let env = match t with
         | E.Error -> F.flagError env
         | _       -> env
-    in bindt names (r,F.Global) t env 
+    in bindt names r t env 
 @
 
 When cycles are found in the list of declarations they are reported.
@@ -698,16 +698,14 @@ declarations are processed in topological order by [[doTypeDecl]]
 which enters them into [[env]].
 
 <<>>=
-let doTypes is_global env dd =
+let doTypes env dd =
     let rec bindAll dd =
         try
-            let dd    = DeclSort.sort dd                 in
+            let dd    = DeclSort.sort dd              in
             foldl doTypeDecl env dd
         with DeclSort.Cycle(offending) ->
             let dd    = exclude dd offending          in
-            let scope = if is_global then F.Global
-                        else F.Local                  in
-            let env   = bindError scope env offending in
+            let env   = bindError env offending in
                 ( reportCycle env offending
                 ; bindAll dd
                 )
@@ -809,7 +807,7 @@ names.  As said before we only sort constant declarations.
 type decl = (A.ty option * string * A.expr) * A.region
 @
 
-A [[const]] declaration defines the name it declare. That was simple.
+A [[const]] declaration defines the name it declares. That was simple.
 
 <<>>=
 let rec defines ((t,name,expr),r) = [name]
@@ -878,21 +876,24 @@ Processing a constant declaration means to
 \end{enumerate}
 
 The topological sorting guarantees that every named value a constant
-declaration depends on is already processed and the name is bound in
-the environment.  The following functions type check and evaluate
-constants in a single step.  Each function returns a pair of a type
-and a value.
+declaration depends on, is already processed and the name is bound in
+the environment.  However, we can still encounter undefined names
+which are cought by [[F.findv]].  The following functions type check
+and evaluate constants in a single step.  Each function returns a pair
+of a type and a value. 
+
+
 
 <<module Eval>>=
 let rec evalFetch env = function
     | A.LValueAt(x,r) -> E.catch (error r env) (evalFetch env) x
     | A.Mem (_,_,_)   -> E.error "memory access in const declaration"
     | A.Var(hint,id)  -> 
-        ( match snd (F.findv id env) with
-        | E.Error                -> E.Error
-        | E.Ok(F.Constant(bits),ty) -> E.Ok(ty, Value.Bits bits)
-        | _ -> E.error ("access of non-constant "^id)
-        ) 
+            ( match snd (F.findv id env) with
+            | E.Error                -> E.Error
+            | E.Ok(F.Constant(bits),ty) -> E.Ok(ty, Value.Bits bits)
+            | _ -> E.error ("access of non-constant "^id)
+            ) 
 @
 
 Applications to primitives operators must be type checked.  The types
@@ -947,8 +948,8 @@ in the (fat) environment. Additionally, an error is marked in the
 environment. 
 
 <<module Eval>>=
-let bindError scope env decls = 
-    let bind env ((_,name,_),r) = F.bindv name ((r,scope),E.Error) env
+let bindError env decls = 
+    let bind env ((_,name,_),r) = F.bindv name (r,E.Error) env
     in
         foldl bind (F.flagError env) decls
 @
@@ -975,7 +976,7 @@ match the given type, and is not [[bool]] the name is bound to the
 type and value in the environment.
 
 <<>>=
-let doConstDecl scope env ((ty,name,expr),r) = 
+let doConstDecl env ((ty,name,expr),r) = 
     let consistent t = match ty with None -> true | Some t' -> t'=t in
     let reg          = F.srcmap env, r                              in
     let entry = E.seq (evalExpr env expr) 
@@ -1001,7 +1002,7 @@ let doConstDecl scope env ((ty,name,expr),r) =
          let env = match entry with
             | E.Error -> (F.flagError env)
             | _       -> env
-         in F.bindv name ((r,scope),entry) env
+         in F.bindv name (r,entry) env
 @
 
 The [[doConst]] function sorts and processes constant declarations. 
@@ -1009,14 +1010,14 @@ Depending on its [[scope]] parameter the declared names get the
 respective scope in [[env]]; an enlarged [[env]] is returned.
 
 <<>>=
-let doConst scope env dd =
+let doConst env dd =
     let rec bindAll env dd =
         try
             let dd' = DeclSort.sort dd                           in
-            foldl (doConstDecl scope) env dd'
+            foldl doConstDecl env dd'
         with DeclSort.Cycle(offending) ->
             let dd'   = exclude dd offending                     in
-            let env'  = bindError scope env offending            in
+            let env'  = bindError env offending                  in
                 ( reportCycle env offending
                 ; bindAll env' dd'
                 )
@@ -1040,11 +1041,14 @@ let rec ty r env = function
     | A.AliasTy(n)      -> snd (F.findt n env)
 @
 
+<<>>=
+type scope = Local | Global
+@
+
 The following functions traverse the abstract syntax of the global or
 local scope and enter all names into the environment -- except for
 constants.  The parameter [[scope]] indicates whether local or global
-symbols are bound and defines also the scope that is used when names
-are bound in the fat environment. 
+symbols are bound.
 
 Global symbols are all those on the top-level and section level.
 Additionally all labels for code inside procedures are also
@@ -1059,15 +1063,14 @@ names and assembly level names easier.
 
 <<>>=
 let import r t env (foreign,name) = 
-    bindv name (r,F.Global) 
-        (E.ematch (ty r env t) (fun t -> F.Import foreign,t)) env
+    bindv name r (E.ematch (ty r env t) (fun t -> F.Import foreign,t)) env
          
 <<>>=
 let imports r env t ii          = foldl (import r t) env ii
 let register r scope env = function
     | (_,Some h,t,name,Some x) ->
                         E.error "can't have hint and hardware register"
-    | (_,h,t,name,Some x) when scope = F.Local ->
+    | (_,h,t,name,Some x) when scope = Local ->
                         E.error "local registers can't be maped to hardware"
     | (_,h,t,name,reg) -> let i = { F.index = F.getIndex env
                                   ; F.rhint = ( match h,reg with
@@ -1078,8 +1081,8 @@ let register r scope env = function
                                               ) 
                                   }
                         in
-                            bindv name (r,scope) (E.ematch (ty r env t)
-                            (fun t -> F.Register(i),t)) (F.incrIndex env)
+                            bindv name (r) (E.ematch (ty r env t)
+                            (fun t -> F.Register(i),t)) (F.nextIndex env)
 @
 
 A [[datum]] label is a [[F.Label(F.Data)]] when the datum belongs to a
@@ -1089,7 +1092,7 @@ a [[stackdatum]]. We thus have two functions: [[datum]] and [[stackdatum]].
 <<>>=
 let rec datum r scope env = function
     | A.DatumAt(x,r) -> E.catch' env (error r env) (datum r scope env) x
-    | A.Label(n)     -> bindv n (r,scope) 
+    | A.Label(n)     -> bindv n r
                                 (E.ematch (pointerTy env) 
                                     (fun p ->  F.Label(F.Data),p)) 
                                 env
@@ -1103,7 +1106,7 @@ in a later phase.
 <<>>=
 let rec stackdatum r scope env = function
     | A.DatumAt(x,r) -> E.catch' env (error r env) (datum r scope env) x
-    | A.Label(n)     -> bindv n (r,scope) 
+    | A.Label(n)     -> bindv n r
                                 (E.ematch (pointerTy env) 
                                     (fun p ->  F.Label(F.Stack(None)),p)) 
                                 env
@@ -1111,7 +1114,7 @@ let rec stackdatum r scope env = function
 @
 
 Continuations are local to procedures and thus they are only bound
-when in [[F.Local]] mode.
+when in [[local]] mode.
 
 <<>>=
 let rec stmt r scope env = function 
@@ -1120,7 +1123,7 @@ let rec stmt r scope env = function
     | A.IfStmt ( e, ss1, ss2)     ->
         foldl (stmt r scope) (foldl (stmt r scope) env ss1) ss2
     | A.LabelStmt(n)              ->
-        bindv n (r,scope) 
+        bindv n (r) 
              (E.ematch (pointerTy env) (fun p -> F.Label(F.Code),p)) 
              env
     | A.SpanStmt(e1,e2,ss)        ->
@@ -1128,8 +1131,8 @@ let rec stmt r scope env = function
     | A.SwitchStmt (range,e,arms) ->
         foldl (arm r range scope)  env arms
     | A.ContStmt(n,ee)            ->
-        if scope=F.Global then env
-        else bindv n (r,scope) 
+        if scope=Global then env
+        else bindv n r 
                   (E.ematch (pointerTy env) (fun p -> F.Continuation,p)) 
                   env
     | otherwise                   ->
@@ -1154,8 +1157,8 @@ to bind them.
 <<>>=
 and body r scope env = function
     | A.BodyAt(x, r) -> E.catch' env (error r env) (body r scope env) x
-    | A.DeclBody(d)  -> if scope=F.Local then decl r scope env d else env 
-    | A.DataBody(dd) -> if scope=F.Local then foldl (stackdatum r scope) env dd 
+    | A.DeclBody(d)  -> if scope=Local then decl r scope env d else env 
+    | A.DataBody(dd) -> if scope=Local then foldl (stackdatum r scope) env dd 
                         else env
     | A.StmtBody(s)  -> stmt r scope env s
 @
@@ -1175,20 +1178,20 @@ let formal r env (hint, inv, ty, name) =
                                      ) 
                          }
                      in
-                         F.bindv name ((r,F.Local),(E.Ok(F.Register(i),t))) 
-                         (F.incrIndex env) 
-    | E.Error -> F.bindv name ((r,F.Local), E.Error) env
+                         F.bindv name (r,(E.Ok(F.Register(i),t))) 
+                         (F.nextIndex env) 
+    | E.Error -> F.bindv name (r, E.Error) env
 @
 
 <<>>=
 let proc r env (_,name,ff,bb as p) =
-    let x    = { F.env    = None
+    let x    = { F.scope  = None
                ; F.sdata  = None
                ; F.salign = None 
                } in
     let t    = E.ematch (pointerTy env) (fun p -> F.Label(F.Proc(x)),p) in
-    let env  = foldl (body r F.Global) env bb     in 
-    let env  = F.bindv name ((r,F.Global),t) env    in
+    let env  = foldl (body r Global) env bb     in 
+    let env  = F.bindv name (r,t) env    in
         env
 @
 
@@ -1199,16 +1202,16 @@ functions that do the real work.
 <<>>=
 let rec section r env = function
     | A.SectionAt(x,r)     -> E.catch' env (error r env) (section r env) x
-    | A.Decl(d)            -> decl r F.Global env d
+    | A.Decl(d)            -> decl r Global env d
     | A.SSpan( e1, e2, ss) -> foldl (section r) env ss
-    | A.Datum( d)          -> datum r F.Global env d
+    | A.Datum( d)          -> datum r Global env d
     | A.Procedure(p)       -> proc r env p
 
 <<>>=
 let rec toplevel r env = function 
     | A.ToplevelAt(x, r)  -> E.catch' env (error r env) (toplevel r env) x
     | A.Section(name, ss) -> foldl (section r) env ss
-    | A.TopDecl(d)        -> decl r F.Global env d
+    | A.TopDecl(d)        -> decl r Global env d
     | A.TopProcedure(p)   -> proc r env p 
 
 @
@@ -1446,10 +1449,11 @@ let rec stackdatum env = function
     | A.DatumAt(x,r)            -> E.catch' (F.flagError env) (error r env) 
                                       (stackdatum env) x
     | A.Label(n) -> 
-        let offset = F.offset env                 in
+        let offset = F.offset env                  in
         let denot  = F.Label(F.Stack(Some offset)) in
-            E.seq' (F.flagError env) (snd (F.findv n env)) (fun (_,ty) -> 
-                F.rebindv n (E.Ok(denot,ty)) env)
+        let rgn,x  = F.findv n env                 in
+            E.seq' (F.flagError env) x 
+                (fun (_,ty) -> F.rebindv n (rgn,E.Ok(denot,ty)) env)
     
     | A.Align(a) when not (is2power a) ->
         E.error ("illegal alignment: " ^ string_of_int a)
@@ -1514,12 +1518,13 @@ let export env (t,ns) = foldl (fun env (n,_) -> export' env (t,n)) env ns
 A target for a [[goto]] statement must have be a local code pointer.
 
 <<>>=
-let checkGotoTarget env x = E.seq' env (E.Raise.right (findv x env))
+let checkGotoTarget env x = E.seq' env (snd (F.findv x env))
     ( function 
-    | F.Local , (F.Label(F.Code),_) -> env
-    | F.Global, (F.Label(F.Code),_) -> E.error (x^" not a local label")
-    | _       , (F.Label(_)     ,_) -> E.error (x^" is not a goto label")
-    | otherwise                     -> E.error (x^" is not a label")
+    | (F.Label(F.Code),_) 
+        when F.is_localv x env -> env
+    | (F.Label(F.Code),_)    -> E.error (x^" not a local label")
+    | (F.Label(_)     ,_)    -> E.error (x^" is not a goto label")
+    | otherwise              -> E.error (x^" is not a label")
     )
 @
 
@@ -1544,11 +1549,10 @@ to]] statement when [[isCutTo]] is true.
 
 <<>>=
 let rec checkFlow isCutTo env f =
-    let check env x = E.seq' env (E.Raise.right (findv x env))
+    let check env x = E.seq' env (snd (F.findv x env))
         ( function
-        | F.Local, (F.Continuation,_) -> env
-        | _      , (F.Continuation,_) -> assert false
-        | _                           -> E.error (x^" is not a continuation")
+        | (F.Continuation,_) -> env
+        | _                  -> E.error (x^" is not a continuation")
         )     
     in match f with
     | A.FlowAt(x,r)     -> E.catch' (F.flagError env)
@@ -1725,10 +1729,10 @@ registers.
 
 <<>>=
 and contStmt env (n,ns) = 
-    let check env (hint,name) = E.seq' env (E.Raise.right (findv name env))
+    let check env (hint,name) = E.seq' env (snd (F.findv name env))
         ( function  
-        | F.Local , (F.Register _,_) -> env
-        | F.Global, (F.Register _,_) -> E.error (name^" is not a local register")  
+        | (F.Register _,_) when F.is_localv name env -> env
+        | (F.Register _,_) -> E.error (name^" is not a local register")  
         | _ -> E.error ("formal continuation parameter not a register: "^n)
         )
     in
@@ -1956,27 +1960,27 @@ into the denotation of the procedure.
 
 <<>>=
 and proc r env (_,name,_,bb as p) =
-    let i    = F.getIndex env     (* save old value *)      in
-    let env' = F.setIndex env 0   (* register numbering *)  in
-    let env' = F.resetOffset env' (* stackdata offset *)    in
-    let env' = Env.local env p                              in
-    let env' = foldl body env' bb (* traverse body *)       in
-    let entry= E.ematch (snd (F.findv name env))
+    let env   = F.push env F.emptyscope  (* open new scope *)   in 
+    let env   = F.resetOffset env   (* stackdata offset *)      in
+    let env   = Env.local env p                                 in
+    let env   = foldl body env bb (* traverse body *)           in
+    let scope = F.top env                                       in
+    let env   = F.pop env                                       in
+    let r,x   = try F.findv name env (* lookup this proc *)  
+                with Not_found -> assert false                  in
+    let entry = E.ematch x
                ( function
                | (F.Label(F.Proc(p)),t) -> (* update denotation *)
                     let p' = { p with 
-                               F.env       = Some env'
+                               F.scope     = Some scope
                              ; F.sdata     = Some (F.offset env)
                              ; F.salign    = Some (F.maxOffsetAlign env)
                              }
                     in F.Label(F.Proc(p')),t
                | _ -> assert false
-               )                                            in
-    let env  = F.rebindv name entry env                     in
-    let env  = F.setIndex env i (* set old value *)         in
-        if   F.errorFlag env'
-        then F.flagError env
-        else env
+               )                                            
+    in
+        F.rebindv name (r,entry) env (* update proc entry *)
 @
 
 The following functions deal with the top level non-terminal symbols
