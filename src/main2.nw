@@ -343,99 +343,14 @@ function Util.funname(x)
   return nil
 end
 @ 
-Most of the backplane code is imported directly from OCaml.
-The only bit that's easy and useful to put here is the bit that finds
-the name of a Lua function.
-<<qc--.lua>>= 
------------------------------------------------------------------- 
--- Backplane
--- The back end of the compiler is controlled by so-called stages.
--- Stages are composed by primitive functions. This module defines
--- functions to create and compose stages.
------------------------------------------------------------------- 
-
-
-B = Backplane
 @ 
-Because only a real hero is going to mess with the internals of the
-register allocator, 
-this code has no business here.
-It should be living with the other
-register-allocator source.
+Register-allocation support is elsewhere.
 <<qc--.lua>>= 
------------------------------------------------------------------- 
--- Graph-Coloring Register Allocator
------------------------------------------------------------------- 
-
-CG = CG or {}   -- has some primitives
-
---- NR must fix a fault in projection to enable name lookup.  Then these names
---- could be defaulted.
-
-CG.stages =
-    { liveness          = B.stage { name="liveness",          fn=CG.liveness }
-    , build             = B.stage { name="build",             fn=CG.build }
-    , setColors         = B.stage { name="setColors",         fn=CG.setColors }
-    , makeWorklist      = B.stage { name="makeWorklist",      fn=CG.makeWorklist }
-    , simplify          = B.stage { name="simplify",          fn=CG.simplify }
-    , coalesce          = B.stage { name="coalesce",          fn=CG.coalesce }
-    , freeze            = B.stage { name="freeze",            fn=CG.freeze }
-    , selectSpill       = B.stage { name="selectSpill",       fn=CG.selectSpill }
-    , assignColors      = B.stage { name="assignColors",      fn=CG.assignColors }
-    , haveSpilledTemps  = B.stage { name="haveSpilledTemps",  fn=CG.haveSpilledTemps }
-    , resetProgram      = B.stage { name="resetProgram",      fn=CG.resetProgram }
-    , updateProgram     = B.stage { name="updateProgram",     fn=CG.updateProgram }
-    , applyColors       = B.stage { name="applyColors",       fn=CG.applyColors }
-    , printCG           = B.stage { name="printCG",           fn=CG.printCG }
-    , printCFGLive      = B.stage { name="printCFGLive",      fn=CG.printCFGLive }
-    , pCFG              = B.stage { name="pCFG",              fn=CG.pCFG }
-    }
-
-CG.makeGraph = B.seq 
-    { CG.stages.liveness
-    , CG.stages.build 
-    }
-    
-
-CG.orderVars = B.seq 
-    { CG.stages.makeWorklist
-    , B.fix(B.unless_do(CG.stages.simplify,
-                            B.unless_do(CG.stages.coalesce,
-                                B.unless_do(CG.stages.freeze,
-                                    CG.stages.selectSpill))))
-    }
-
-CG.pcg = 
-    B.ignore(CG.stages.printCG)
-
-CG.color = 
-    B.share
-    ( CG.makeInitInfo ()
-    , "cgInfo"
-    , B.seq 
-        { CG.stages.setColors
-        , B.fix 
-            ( B.seq 
-                { B.ignore (B.seq
-                    { CG.makeGraph
-                    , CG.orderVars
-                    , CG.pcg
-                    , CG.stages.assignColors
-                    })
-                , B.when_do
-                    ( CG.stages.haveSpilledTemps
-                    , B.seq {CG.pcg, CG.stages.resetProgram, CG.pcg }
-                    )
-                } 
-            )    
-        , B.seq 
-            { CG.stages.updateProgram
-            , CG.stages.applyColors
-            }
-            
-        }        
-    )       
+<<Lua startup code for [[Colorgraph]] module>>
+@ 
 <<qc--.lua>>= 
+B = Backplane
+
 ------------------------------------------------------------------ 
 -- Linear-Scan Register Allocator
 ------------------------------------------------------------------ 
