@@ -7,6 +7,11 @@
 Cmm.globalsig.eAGCQPNUHJVGDQHYVDBFFaWcBU:
 Cmm.global_area:
 .skip 4
+.globl Cmm_stack_growth
+.section .data
+.align 4
+Cmm_stack_growth:
+.long 0xffffffffffffffff
 .section .text
 main:
 	leal -84(%esp), %esp

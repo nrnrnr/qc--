@@ -5,6 +5,11 @@
 /* memory for global registers */
 Cmm.globalsig.bcPDWKVXdYZZBPSFTVVJOBXQNc:
 Cmm.global_area:
+.globl Cmm_stack_growth
+.section .data
+.align 4
+Cmm_stack_growth:
+.long 0xffffffffffffffff
 .section .text
 main:
 	leal -56(%esp), %esp

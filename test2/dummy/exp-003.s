@@ -1526,6 +1526,7 @@ _PL_Argv,
 export bits32
 Cmm.global_area,
     Cmm.globalsig.LPcHEVFbOZHbAHHMQTLHQeIQVI,
+    Cmm_stack_growth,
     _Perl_hv_clear,
     _Perl_hv_delayfree_ent,
     _Perl_hv_delete,
@@ -1560,6 +1561,12 @@ section "data" { sym@Cmm.globalsig.LPcHEVFbOZHbAHHMQTLHQeIQVI: }
 section "data" { sym@Cmm.global_area: }
 
 section "data" { bits8[0::bits32]; }
+
+section "data" { align 4; }
+
+section "data" { sym@Cmm_stack_growth: }
+
+section "data" { bits32[1::bits32] { 0xffffffff::bits32 }; }
 
 section "rodata" { align 4; }
 

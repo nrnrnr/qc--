@@ -36,7 +36,7 @@ void rt_stack_trace(Cmm_Cont* t) {
     fflush(stdout);
     name = (char*)Cmm_GetDescriptor(&a, 1);
     printf("RTS: found activation \"%s\" pc:%X vfp:%X\n",
-           name, (unsigned)a.pc, (unsigned)a.vfpx);
+           name, (unsigned)a.pc, (unsigned)a.vfp);
     fflush(stdout);
   } while (Cmm_ChangeActivation(&a));
 }

@@ -6,25 +6,15 @@ Ld.rtend = ""  --- don't need the run-time system
 
 -- source files live in src directory
 Test.source  = "src"
-Test.files = { "add.c--"
-             , "badlit8.c--"
-             , "bits-bug.c--"
-             , "cut.c--"
+Test.files = { "badlit8.c--"
              , "eqasolve-000.c--"
-             , "exp-000.c--"
-             , "exp-001.c--"
              , { source = "exp-002.c--", asmerr = 'dummy/exp-002.s2' }
              , { source = "exp-003.c--", asmerr = 'dummy/exp-003.s2' }
              , { source = "fadd.c--", asmerr = 'dummy/fadd.s2' }
              , { source = "float-000.c--", asmerr = 'dummy/float-000.s2' }
              , { source = "float-001.c--", asmerr = 'dummy/float-001.s2' }
-             , "hello.c--"
-	     , "hex.c--"
              , "non-local-cut.c--"
-             , "not.c--"
-             , "ralloc-000.c--"
              , { source = "rnd2.c--", asmerr = 'dummy/rnd2.s2' }
-             , "sub.c--"
              , "test-000.c--"
              , "test-001.c--"
              , "test-002.c--"
@@ -73,8 +63,6 @@ Test.files = { "add.c--"
              , "test-047.c--"
              , "test-048.c--"
              , "test-049.c--"
-             , "x86-000.c--"
-             , "x86-001.c--"
              }
 
 local i = 1

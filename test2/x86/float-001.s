@@ -6,6 +6,11 @@
 Cmm.globalsig.NKZfaaEdeFZVBMDSIVLbEeKXbI:
 Cmm.global_area:
 .skip 1
+.globl Cmm_stack_growth
+.section .data
+.align 4
+Cmm_stack_growth:
+.long 0xffffffffffffffff
 .section .data
 x:
 .long 0x54411744

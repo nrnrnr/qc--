@@ -96,6 +96,11 @@ stackdata.
 <<runtimedata.mli>>=
 val user_spans : spans -> (Bits.bits * Bits.bits Reloc.Simple.relocatable) list
 val stackdata  : spans -> Rtl.loc list
+@ 
+The compiler can emit data for the run-time system, such as the
+direction of stack growth.
+<<runtimedata.mli>>=
+val emit_global_properties : ('a, Call.t) Target.t -> 'c Asm.assembler -> unit
 @
 
 % ------------------------------------------------------------------ 
@@ -501,3 +506,16 @@ let print_reg_map tgt =
   Printf.printf "Target has %d registers:\n" n;
   RM.iter (fun ((s,_,_),i,_) n -> Printf.printf "  %c[%d] -> %d\n" s i n) map
 @
+<<runtimedata.ml>>=
+let emit_global_properties target (asm:'c Asm.assembler) =
+  let cc = Call.get_cc target "C--" in
+  let growth = match cc.Call.stack_growth with Memalloc.Up -> 1 | Memalloc.Down -> -1 in
+  let wordsize = target.Target.wordsize in
+  let memsize  = target.Target.memsize in
+  let sym = asm#export "Cmm_stack_growth" in
+  asm#section "data";
+  asm#align (wordsize / memsize);
+  asm#label sym;
+  asm#value (Bits.S.of_int growth wordsize)
+  
+

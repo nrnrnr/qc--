@@ -14,7 +14,10 @@ Exn_NoMoreTiles,
     player,
     players;
 
-export bits32 Cmm.global_area, Cmm.globalsig.OSNNKPBSNCfRUUWOHSAbUQaKZU;
+export bits32
+Cmm.global_area,
+    Cmm.globalsig.OSNNKPBSNCfRUUWOHSAbUQaKZU,
+    Cmm_stack_growth;
 
 section "data" { align 4; }
 
@@ -23,6 +26,12 @@ section "data" { sym@Cmm.globalsig.OSNNKPBSNCfRUUWOHSAbUQaKZU: }
 section "data" { sym@Cmm.global_area: }
 
 section "data" { bits8[8::bits32]; }
+
+section "data" { align 4; }
+
+section "data" { sym@Cmm_stack_growth: }
+
+section "data" { bits32[1::bits32] { 0xffffffff::bits32 }; }
 
 section "text"
 {

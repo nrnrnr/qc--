@@ -56,7 +56,7 @@ void Cmm_init_c_frame(Cmm_Activation *a, char *young_in_overflow) {
   Cmm_Word ebp;
   assert(a->regs[EBP]);
   ebp = *a->regs[EBP];
-  a->vfpx = (char *) ebp;
+  a->vfp = (char *) ebp;
   a->u.cwalk.tries = 0;
 }
 
@@ -71,13 +71,13 @@ int Cmm_c_change_activation(Cmm_Activation *a) {
   pc_map_entry *entry;
   int i;
 
-  if (a->vfpx == 0) {
+  if (a->vfp == 0) {
     fprintf(stderr, "C walk ended with a->vfp = 0\n");
     return 0;
   }
 #if 0
  {
-  Cmm_Word *myebp = a->vfpx;
+  Cmm_Word *myebp = a->vfp;
   fprintf(stderr, "Leaving C activation; my ebp = %p, ra = %p, caller's EBP = %p\n",
           myebp, myebp[1], myebp[0]);
   for (i = 0; i < 3; i++) fprintf(stderr, "  arg[%d] = 0x%08x\n", i, myebp[i+2]);
@@ -85,7 +85,7 @@ int Cmm_c_change_activation(Cmm_Activation *a) {
 #endif
   for(i = 0; i < NUM_REGS; i++)
     a->regs[i] = NULL;
-  callerebp = *(Cmm_Word *)a->vfpx;
+  callerebp = *(Cmm_Word *)a->vfp;
 #if 0
   fprintf(stderr, "walked to caller %%ebp == 0x%08x\n", callerebp);
 #endif
@@ -96,20 +96,20 @@ int Cmm_c_change_activation(Cmm_Activation *a) {
 #endif
     return 0;
   }
-  ra = ((Cmm_Codeptr *)a->vfpx)[1];
+  ra = ((Cmm_Codeptr *)a->vfp)[1];
   entry = Cmm_lookup_entry(ra);
   if (entry) {
-    a->rtdatax = entry;
+    a->rtdata = entry;
     a->pc = ra;  /* probably irrelevant */
     /* deallocation point = vfp + 8
        deallocation point = callervfp + entry->outalloc
 
        so  callervfp = vfp + 8 - entry-outalloc  */
-    a->vfpx += 8 - Cmm_as_offset(entry->outalloc);
+    a->vfp += 8 - Cmm_as_offset(entry->outalloc);
     a->methods = Cmm_cmm_frame_methods;
   } else {
-    a->vfpx = (char *)callerebp;
-    a->pc   = ra;
+    a->vfp = (char *)callerebp;
+    a->pc  = ra;
   }
   return 1;
 }

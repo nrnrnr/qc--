@@ -534,6 +534,7 @@ _Class,
 export bits32
 Cmm.global_area,
     Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY,
+    Cmm_stack_growth,
     _main,
     _stdprint,
     _stdputstr;
@@ -545,6 +546,12 @@ section "data" { sym@Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY: }
 section "data" { sym@Cmm.global_area: }
 
 section "data" { bits8[0::bits32]; }
+
+section "data" { align 4; }
+
+section "data" { sym@Cmm_stack_growth: }
+
+section "data" { bits32[1::bits32] { 0xffffffff::bits32 }; }
 
 section "text"
 {
