@@ -56,20 +56,22 @@ the paper ``Exceptions Need Not Be Exceptional.''
 node = Entry (continuation*, node next)
      | Exit
      | Label (label, node)
-     | Copyin  (formal*, copy_context, string convention, node next)
-     | Copyout (actual*, copy_context, string convention, node next)
-     | Calleesaves (variable*, node next)
+     | CopyIn  (formal*, copy_context, string convention, node next)
+     | CopyOut (actual*, copy_context, string convention, node next)
+     | CalleeSaves (variable*, node next)
      | Assign (RTL.rtl, node next)
      | Branch (RTL.exp, label true, label false)	-- exp is condition
      | Goto (RTL.exp, label* targets)           	-- exp is address of target
      | Call (RTL.exp, contbund)
      | Jump (RTL.exp)
-     | Invoke (RTL.exp)
+     | CutTo (RTL.exp)
      | Yield (RTL.exp, contbund)
-attributes (keyvalue* enclosing_spans)	-- used for spans
+attributes (atts enclosing_spans)	-- used for spans
+atts = (keyvalue*)
 keyvalue = UserSpan(int token, RTL.exp value)	-- value is link-time constant
 						-- token is non-negative
 	 | LiveVars(variable*)
+         | LastUses(RTL.location*) -- the deads list
 @ On entry to a code generator,
 the RTL expressions should use no space other than the [[m]]~space (memory); 
 other spaces, including hardware registers, are reserved for the
@@ -95,8 +97,8 @@ copy_context = ProcedureParameters    -- used in call, jump, prologue
              | ContinuationParameters -- used in invoke, continuation
 @ A formal or actual carries a type and an optional hint.
 <<ASDL definitions for nodes of abstract \PAL>>=
-formal = (variable, RTL.ty, hint?) 
-actual = (RTL.exp,  RTL.ty, hint?)
+formal = (variable, RTL.width, hint?) 
+actual = (RTL.exp,  RTL.width, hint?)
 @ Note that the type is an RTL type; in particular, the distinction
 between [[bits]]$k$ and [[float]]$k$ has been folded into the hints,
 according to the following table:
@@ -157,7 +159,7 @@ in declaration order.
 nodes in the flow graph.)
 <<ASDL definitions for nodes of abstract \PAL>>=
 proc = (string name, string? mangling, node body, var_info* formals, var_info* locals)
-var_info = (string name, RTL.ty)
+var_info = (string name, RTL.width)
 @ The [[body]] of [[proc]] always starts with a [[Label]] node, then an [[Entry]] node.
 The [[name]] field of the [[proc]] must be the same as the [[string]] field (which must be present) 
 of the [[Label]] node.

@@ -7,20 +7,30 @@
 This format is based on register-transfer lists as described in
 \citeN{ramsey:embedded}, but extended so that locations and values can
 be bound late.
+There are also the following changes:
+\begin{itemize}
+\item
+We recognize the Boolean type explicitly.
+\item
+We don't put an optional [[ty]] on the [[CONST]] constructor, because
+it's never of any use.
+\end{itemize}
+Note that although expressions can have type [[bool]], only values of
+type [[#n bits]] can be fetched, stored, or put into a variable.
 <<rtl.asdl>>=
 module RTL {
   rtl      = RTL   (guarded*)
   guarded  = GUARD (exp, effect)
-  effect   = STORE (location dst, exp src, ty)
+  effect   = STORE (location dst, exp src, width)
            | KILL  (location)
            | KILLALL(space)
   cell     = CELL  (space, exp)
   location = AGG   (aggregation, cell)
-           | VAR   (string name, ty)
-  exp      = CONST (const, ty?)
-           | FETCH (location, ty)
+           | VAR   (string name, width)
+  exp      = CONST (const)
+           | FETCH (location, width)
            | APP   (operator, exp*)
-  ty = (int)  -- width in bits
+  width = (int)  -- width in bits
   space = (char)
   
   -- these are somewhat arbitrary, since ASDL doesn't have char or boolean types
@@ -30,11 +40,11 @@ module RTL {
   bool = (int)
   
   const = BOOL (bool)
-        | INT (int, ty)
-        | LINK_CONST (string name, ty)
+        | INT (int, width)
+        | LINK_CONST (string name, width)
   
   -- an operator is an operator name, possibly specialized to certain widths
-  operator = (opname, ty*)
+  operator = (opname, width*)
   opname = (identifier) --- totally bogus, but ASDL has no opaque types
   
   aggregation
