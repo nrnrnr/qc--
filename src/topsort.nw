@@ -9,12 +9,31 @@ taken into account when constants and type declarations are evaluated
 to find the meaning of each declared name.  On way is to find an order
 such that a name's meaning is entered into an environment before any
 other declaration that refers to it is processed.  Such an order is
-called an \emph{topological order}.  The idea is to collect all
+called a \emph{topological order}.  The idea is to collect all
 declarations of one kind, order them topologically, and process them. 
 The [[Topsort]] module implements topological sorting for
 declarations.
 
-The topological sorting faces some problems when dealing with
+A type declaration ([[typedef]]) for a type $x$ can either refer to a
+primitive type like bits8, or to another name $y$, which must be
+defined by another [[typedef]].  In case $x$ refers to $y$, the type
+declaration for $x$ depends on the declaration for $y$.  Bindings for
+type-names in particular) in the fat environment bind only primitive
+types to names.  So the declaration for $y$ must be entered into the
+environment before $x$ to resolve the meaning of $x$ with the help of
+previously entered type declarations. The topological order of type
+declarations with respect to their dependencies provides the right
+order to process them.
+
+Constant declaration ([[const]]) are similar to type declarations:  a
+constant expression can refer to other constants which thus must be
+processed first.  After the dependencies for constant declarations are
+recorded, constant declarations can be topologically sorted. This
+module provides an abstract view on declarations and their
+dependencies and is not tailored towards a specific kind of
+declaration to sort.
+
+The topological sort faces some problems when dealing with
 erroneous programs: 
 
 \begin{itemize}
@@ -38,12 +57,12 @@ make some assumptions and decisions:
       This permits to sort the remaining declarations. 
 \end{itemize}
 
-For a list of circular definitions no topological order exists.  This
+For a list of circular declarations no topological order exists.  This
 case is reported as an exception with a list of declarations that are
 part of a cycle.  The client of this module then has to redo the
-sorting with these modules removed from the input.
+sorting with these declaration removed from the input.
 
-This topological sort supports the case that one declration may
+This topological sort supports the case that one declaration may
 declare multiple names.  For example, a [[typedef]] can define
 multiple names for the same type.
 
@@ -54,9 +73,9 @@ multiple names for the same type.
 The [[Topsort]] module is parameterized over the declarations it can
 sort.  In case of circular declarations a list of offending
 declarations is reported with a [[Cycle]] exception.  In the normal
-case a list of declaration is returned such that no declaration
+case a list of declarationis is returned such that no declaration
 depends on any later declaration in the list.  Or, stated positively,
-all declarations only depend on their predecessors in the list.
+all declarations depend only on their predecessors in the list.
 
 <<signature S>>=
 module type S = sig
@@ -128,12 +147,14 @@ translates these to the declarations for these names.
 let succ map x =
     let uses = S.uses x in
     let find map n = try IDMap.find n map with Not_found -> [] in
-    List.concat (List.map (find map)  (S.uses x))
+    List.concat (List.map (find map) (S.uses x))
 @
 
 The map [[m]] contains for every name the declarations that define
-this name. Correct {\PAL} programs will only use one definition to
-define a name. 
+this name.  Correct {\PAL} programs will use only one definition to
+define a name.  This algorithm is difficult to understand -- please
+refer to \emph{{\small ML} for the working Programmer}
+\cite{paulson:91:ml} by Paulson for an explanation. 
 
 <<>>=
 let sort decls =
@@ -160,8 +181,9 @@ let sort decls =
 \subsection{Test}
 % ------------------------------------------------------------------ 
 
-The module [[Topsorttest]] provides a tiny example for declarations.
-It was used during development.
+The module [[Topsorttest]] provides a tiny example for declarations
+from the \emph{{\small ML} for the working Programmer}.  It was used
+interactively during development.
 
 <<topsorttest.ml>>=
 module D = struct

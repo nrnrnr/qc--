@@ -162,6 +162,14 @@ error-free.
 val errorfree       : env -> unit Error.error
 @
 
+For some opetional declarations in {\PAL} defaults exist. The
+[[setDefaults]] function enter the defaults into the environment in
+the user has not provided a declaration.
+
+<<>>=
+val setDefaults     : env -> env
+@
+
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
@@ -317,4 +325,19 @@ let errorfree env =
     let combine key (scope,x) y = E.Implode.pair (x,y)    in
     let free map = StrMap.fold combine env.venv (E.Ok())  in
         E.Implode.pair (free env.tenv, free env.venv)
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Default-bindings}
+% ------------------------------------------------------------------ 
+
+The default [[target memsize]] is [[8]].  If the user has not
+specified a memsize we set it explicitly because the static semantic
+checks need it. 
+
+<<>>=
+let setDefaults env =
+    match findMemsize env with
+    | Some x -> env
+    | None   -> bindMemsize 8 env
 @

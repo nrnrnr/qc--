@@ -25,8 +25,8 @@ value. This conversion maintains the bit patters and thus relates two
 very different numerical values.
 
 <<uint64.mli>>=
-external to_float:   int64 -> float                  = "pack_float64"
-external of_float:   float -> int64                  = "unpack_float64"
+external of_float:   float -> int64                  = "uint64_int64"
+external to_float:   int64 -> float                  = "uint64_float"
 @
 
 The following arithmetical operations consider their arguments and
@@ -34,11 +34,12 @@ return values as unsigned integers. Otherwise they implement the
 behavior of the corresponding functions in the [[Int64]] module.
 
 <<>>=
-external addu:       int64 -> int64 -> int64         = "int64_addu"
-external subu:       int64 -> int64 -> int64         = "int64_subu"
-external mulu:       int64 -> int64 -> int64         = "int64_mulu"
-external divu:       int64 -> int64 -> int64         = "int64_divu"
-external odu:        int64 -> int64 -> int64         = "int64_modu"
+external compare     int64 -> int64 -> int           = "unit64_compare"
+external addu:       int64 -> int64 -> int64         = "uint64_add"
+external subu:       int64 -> int64 -> int64         = "uint64_sub"
+external mulu:       int64 -> int64 -> int64         = "uint64_mul"
+external divu:       int64 -> int64 -> int64         = "uint64_div"
+external modu:       int64 -> int64 -> int64         = "uint64_mod"
 @
 
 % ------------------------------------------------------------------ 
@@ -56,7 +57,15 @@ It simply provides some additional operations in the same style as the
 #include <caml/config.h>
 
 <<>>=
-value unpack_float64(value f)
+value uint64_compare(value v1, value v2)
+{
+  uint64 i1 = Int64_val(v1);
+  uint64 i2 = Int64_val(v2);
+  return i1 == i2 ? Val_int(0) : i1 < i2 ? Val_int(-1) : Val_int(1);
+}
+
+<<>>=
+value uint64_int64(value f)
 {
     union { double d; int64 i; } buffer;
     buffer.d = Double_val(f);
@@ -64,7 +73,7 @@ value unpack_float64(value f)
 }
 
 <<>>=
-value pack_float64(value i)
+value uint64_float(value i)
 {
     union { double d; int64 i; } buffer;
     buffer.i = Int64_val(i);
@@ -72,19 +81,19 @@ value pack_float64(value i)
 }
 
 
-value int64_addu(value v1, value v2)  /* ML */
+value uint64_add(value v1, value v2)  /* ML */
 { return copy_int64((uint64)Int64_val(v1) + (uint64)Int64_val(v2)); }
 <<>>=
 
-value int64_subu(value v1, value v2)  /* ML */
+value uint64_sub(value v1, value v2)  /* ML */
 { return copy_int64((uint64)Int64_val(v1) - (uint64)Int64_val(v2)); }
 
 <<>>=
-value int64_mulu(value v1, value v2)  /* ML */
+value uint64_mul(value v1, value v2)  /* ML */
 { return copy_int64((uint64)Int64_val(v1) * (uint64)Int64_val(v2)); }
 
 <<>>=
-value int64_divu(value v1, value v2)  /* ML */
+value uint64_div(value v1, value v2)  /* ML */
 {
     int64 divisor = Int64_val(v2);
     if (divisor == 0) raise_zero_divide();
@@ -92,7 +101,7 @@ value int64_divu(value v1, value v2)  /* ML */
 }
 
 <<>>=
-value int64_modu(value v1, value v2)  /* ML */
+value uint64_mod(value v1, value v2)  /* ML */
 {
     int64 divisor = Int64_val(v2);
     if (divisor == 0) raise_zero_divide();
